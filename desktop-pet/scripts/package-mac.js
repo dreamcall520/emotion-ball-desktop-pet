@@ -17,6 +17,9 @@ function copyFile(root, staging, relativePath) {
 
 function prepareStaging(root) {
   const staging = path.join(root, 'desktop-pet/build/staging');
+  const rootPackage = JSON.parse(
+    fs.readFileSync(path.join(root, 'package.json'), 'utf8')
+  );
   fs.rmSync(staging, { recursive: true, force: true });
   fs.mkdirSync(staging, { recursive: true });
 
@@ -45,7 +48,7 @@ function prepareStaging(root) {
   const packageJson = {
     name: 'emotion-ball-desktop-pet',
     productName: '球球桌宠',
-    version: '0.1.0',
+    version: rootPackage.version,
     private: true,
     main: 'desktop-pet/main.js'
   };

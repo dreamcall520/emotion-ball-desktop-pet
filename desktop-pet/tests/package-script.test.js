@@ -50,6 +50,19 @@ test('打包暂存区包含菜单栏的 1x 和 Retina 2x 图标', () => {
   }
 });
 
+test('打包暂存区继承项目版本号', () => {
+  const root = path.resolve(__dirname, '../..');
+  const staging = prepareStaging(root);
+  const stagedPackage = JSON.parse(
+    fs.readFileSync(path.join(staging, 'package.json'), 'utf8')
+  );
+  const projectPackage = JSON.parse(
+    fs.readFileSync(path.join(root, 'package.json'), 'utf8')
+  );
+
+  assert.equal(stagedPackage.version, projectPackage.version);
+});
+
 test('优先复用本机已经下载好的 Electron 压缩包', () => {
   const cacheRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'electron-cache-'));
   const zipDir = path.join(cacheRoot, 'cache-key');
