@@ -1,0 +1,468 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const {
+  app,
+  BrowserWindow,
+  ipcMain,
+  Menu,
+  nativeImage,
+  screen,
+  Tray
+} = require('electron');
+const { loadSettings, saveSettings } = require('./lib/settings');
+const {
+  SIZES,
+  defaultBounds,
+  ensureVisibleBounds
+} = require('./lib/window-placement');
+const {
+  BOUNCE_TOTAL_MS,
+  bounceOffset
+} = require('./lib/window-bounce');
+
+const APP_NAME = '球球桌宠';
+const IS_SMOKE_TEST = process.env.PET_SMOKE_TEST === '1';
+
+let petWindow = null;
+let tray = null;
+let settings = null;
+let settingsFile = null;
+let dragState = null;
+let bounceState = null;
+let isQuitting = false;
+
+app.setName(APP_NAME);
+
+function writeError(scope, error) {
+  const message = error instanceof Error ? error.stack || error.message : String(error);
+  const line = `[${new Date().toISOString()}] ${scope}: ${message}\n`;
+  process.stderr.write(line);
+  try {
+    const logFile = path.join(app.getPath('userData'), 'errors.log');
+    fs.mkdirSync(path.dirname(logFile), { recursive: true });
+    fs.appendFileSync(logFile, line, 'utf8');
+  } catch (logError) {
+    process.stderr.write(`无法写入错误日志: ${logError.message}\n`);
+  }
+}
+
+function validPoint(value) {
+  if (!value || !Number.isFinite(value.x) || !Number.isFinite(value.y)) return null;
+  return { x: Math.round(value.x), y: Math.round(value.y) };
+}
+
+function fromPetWindow(event) {
+  return Boolean(
+    petWindow &&
+    !petWindow.isDestroyed() &&
+    event.sender === petWindow.webContents
+  );
+}
+
+function persistSettings() {
+  settings = saveSettings(settingsFile, settings);
+}
+
+function persistWindowPosition() {
+  if (!petWindow || petWindow.isDestroyed()) return;
+  const bounds = petWindow.getBounds();
+  settings.x = bounds.x;
+  settings.y = bounds.y;
+  persistSettings();
+}
+
+function stopWindowBounce(restorePosition = true) {
+  if (!bounceState) return;
+  const current = bounceState;
+  bounceState = null;
+  clearTimeout(current.timer);
+  if (
+    restorePosition &&
+    petWindow &&
+    !petWindow.isDestroyed()
+  ) {
+    petWindow.setPosition(current.x, current.y, false);
+  }
+}
+
+function startWindowBounce() {
+  if (
+    bounceState ||
+    !petWindow ||
+    petWindow.isDestroyed()
+  ) {
+    return;
+  }
+
+  const [x, y] = petWindow.getPosition();
+  const width = petWindow.getBounds().width;
+  const startedAt = performance.now();
+  const state = { x, y, width, startedAt, timer: null };
+  bounceState = state;
+
+  const moveNextFrame = () => {
+    if (
+      bounceState !== state ||
+      !petWindow ||
+      petWindow.isDestroyed()
+    ) {
+      return;
+    }
+
+    const elapsedMs = performance.now() - state.startedAt;
+    if (elapsedMs >= BOUNCE_TOTAL_MS) {
+      stopWindowBounce();
+      return;
+    }
+
+    petWindow.setPosition(
+      state.x,
+      state.y - bounceOffset(elapsedMs, state.width),
+      false
+    );
+    state.timer = setTimeout(moveNextFrame, 16);
+  };
+
+  moveNextFrame();
+}
+
+function currentBounds() {
+  const size = SIZES[settings.size] || SIZES.medium;
+  if (Number.isFinite(settings.x) && Number.isFinite(settings.y)) {
+    return ensureVisibleBounds(
+      { x: settings.x, y: settings.y, ...size },
+      screen.getAllDisplays(),
+      screen.getPrimaryDisplay()
+    );
+  }
+  return defaultBounds(screen.getPrimaryDisplay(), settings.size);
+}
+
+function makeWindowVisible() {
+  if (!petWindow || petWindow.isDestroyed()) return;
+  stopWindowBounce();
+  const next = ensureVisibleBounds(
+    petWindow.getBounds(),
+    screen.getAllDisplays(),
+    screen.getPrimaryDisplay()
+  );
+  petWindow.setBounds(next, false);
+  persistWindowPosition();
+}
+
+function sendCommand(command) {
+  if (!petWindow || petWindow.isDestroyed()) return;
+  petWindow.webContents.send('pet:command', command);
+}
+
+function setPetSize(sizeName) {
+  if (!SIZES[sizeName] || !petWindow || petWindow.isDestroyed()) return;
+  stopWindowBounce();
+  const current = petWindow.getBounds();
+  const size = SIZES[sizeName];
+  const proposed = {
+    x: Math.round(current.x + (current.width - size.width) / 2),
+    y: Math.round(current.y + (current.height - size.height) / 2),
+    ...size
+  };
+  const next = ensureVisibleBounds(
+    proposed,
+    screen.getAllDisplays(),
+    screen.getPrimaryDisplay()
+  );
+  settings.size = sizeName;
+  settings.x = next.x;
+  settings.y = next.y;
+  petWindow.setBounds(next, true);
+  persistSettings();
+  refreshTrayMenu();
+}
+
+function setAlwaysOnTop(enabled) {
+  settings.alwaysOnTop = Boolean(enabled);
+  if (petWindow && !petWindow.isDestroyed()) {
+    petWindow.setAlwaysOnTop(settings.alwaysOnTop, 'floating');
+  }
+  persistSettings();
+  refreshTrayMenu();
+}
+
+function resetPosition() {
+  if (!petWindow || petWindow.isDestroyed()) return;
+  stopWindowBounce();
+  const next = defaultBounds(screen.getPrimaryDisplay(), settings.size);
+  petWindow.setBounds(next, true);
+  settings.x = next.x;
+  settings.y = next.y;
+  persistSettings();
+}
+
+function loginItemEnabled() {
+  return app.isPackaged && app.getLoginItemSettings().openAtLogin;
+}
+
+function setOpenAtLogin(enabled) {
+  if (!app.isPackaged) return;
+  app.setLoginItemSettings({ openAtLogin: Boolean(enabled) });
+  const actual = app.getLoginItemSettings().openAtLogin;
+  if (actual !== Boolean(enabled)) {
+    writeError('开机启动回读不一致', `期望 ${Boolean(enabled)}，实际 ${actual}`);
+  }
+  refreshTrayMenu();
+}
+
+function sizeMenu() {
+  return [
+    ['tiny', '极小（80 × 80）'],
+    ['small', '小（120 × 120）'],
+    ['medium', '中（180 × 180）'],
+    ['large', '大（260 × 260）']
+  ].map(([value, label]) => ({
+    label,
+    type: 'radio',
+    checked: settings.size === value,
+    click: () => setPetSize(value)
+  }));
+}
+
+function menuTemplate() {
+  return [
+    { label: '随机表情', click: () => sendCommand('random') },
+    { label: '立即睡眠', click: () => sendCommand('sleep') },
+    { label: '立即唤醒', click: () => sendCommand('wake') },
+    { type: 'separator' },
+    { label: '尺寸', submenu: sizeMenu() },
+    {
+      label: '始终置顶',
+      type: 'checkbox',
+      checked: settings.alwaysOnTop,
+      click: item => setAlwaysOnTop(item.checked)
+    },
+    {
+      label: app.isPackaged ? '开机自动启动' : '开机自动启动（打包后可用）',
+      type: 'checkbox',
+      enabled: app.isPackaged,
+      checked: loginItemEnabled(),
+      click: item => setOpenAtLogin(item.checked)
+    },
+    { label: '恢复默认位置', click: resetPosition },
+    { type: 'separator' },
+    {
+      label: '退出球球',
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      }
+    }
+  ];
+}
+
+function refreshTrayMenu() {
+  if (!tray || !settings) return;
+  tray.setContextMenu(Menu.buildFromTemplate(menuTemplate()));
+}
+
+function showPetContextMenu() {
+  if (!petWindow || petWindow.isDestroyed()) return;
+  Menu.buildFromTemplate(menuTemplate()).popup({ window: petWindow });
+}
+
+function createTray() {
+  const iconPath = path.join(__dirname, 'assets/tray-iconTemplate.png');
+  const trayImage = nativeImage.createFromPath(iconPath);
+  trayImage.setTemplateImage(true);
+  tray = new Tray(trayImage);
+  tray.setToolTip(APP_NAME);
+  refreshTrayMenu();
+  tray.on('click', () => {
+    if (!petWindow || petWindow.isDestroyed()) createPetWindow();
+    else {
+      makeWindowVisible();
+      petWindow.showInactive();
+      petWindow.moveTop();
+    }
+  });
+}
+
+async function finishSmokeTest() {
+  if (!IS_SMOKE_TEST || !petWindow || petWindow.isDestroyed()) return;
+  try {
+    const ready = await petWindow.webContents.executeJavaScript(
+      'Boolean(window.__petReady)'
+    );
+    if (!ready) throw new Error('桌宠页面未完成初始化');
+
+    const startY = petWindow.getPosition()[1];
+    await petWindow.webContents.executeJavaScript(
+      'window.petDesktop.bounce(); true'
+    );
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const jumpingY = petWindow.getPosition()[1];
+    if (jumpingY >= startY) {
+      throw new Error('原生窗口未执行向上弹跳');
+    }
+
+    await new Promise(resolve => setTimeout(resolve, BOUNCE_TOTAL_MS + 100));
+    const settledY = petWindow.getPosition()[1];
+    if (settledY !== startY) {
+      throw new Error(`弹跳结束后位置未还原：${startY} -> ${settledY}`);
+    }
+
+    process.stdout.write('PET_BOUNCE_OK\n');
+    process.stdout.write('PET_SMOKE_OK\n');
+    app.exit(0);
+  } catch (error) {
+    writeError('冒烟检查失败', error);
+    app.exit(1);
+  }
+}
+
+function createPetWindow() {
+  if (petWindow && !petWindow.isDestroyed()) return petWindow;
+
+  petWindow = new BrowserWindow({
+    ...currentBounds(),
+    title: APP_NAME,
+    transparent: true,
+    frame: false,
+    resizable: false,
+    fullscreenable: false,
+    maximizable: false,
+    minimizable: false,
+    closable: true,
+    skipTaskbar: true,
+    show: false,
+    hasShadow: false,
+    backgroundColor: '#00000000',
+    alwaysOnTop: settings.alwaysOnTop,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      spellcheck: false,
+      backgroundThrottling: false,
+      devTools: !app.isPackaged
+    }
+  });
+
+  petWindow.setAlwaysOnTop(settings.alwaysOnTop, 'floating');
+  petWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  petWindow.setHiddenInMissionControl(true);
+  petWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  petWindow.webContents.on('will-navigate', event => event.preventDefault());
+  petWindow.webContents.on('did-fail-load', (_event, code, description) => {
+    writeError('页面加载失败', `${code} ${description}`);
+    if (IS_SMOKE_TEST) app.exit(1);
+  });
+  petWindow.webContents.on('render-process-gone', (_event, details) => {
+    writeError('渲染进程退出', JSON.stringify(details));
+    if (IS_SMOKE_TEST) app.exit(1);
+  });
+  petWindow.once('ready-to-show', () => {
+    if (!petWindow || petWindow.isDestroyed()) return;
+    petWindow.showInactive();
+  });
+  petWindow.webContents.once('did-finish-load', finishSmokeTest);
+  petWindow.on('closed', () => {
+    stopWindowBounce(false);
+    petWindow = null;
+  });
+
+  petWindow.loadFile(path.join(__dirname, 'index.html')).catch(error => {
+    writeError('无法打开桌宠页面', error);
+    if (IS_SMOKE_TEST) app.exit(1);
+  });
+  return petWindow;
+}
+
+function registerIpc() {
+  ipcMain.on('pet:drag-start', (event, rawPoint) => {
+    if (!fromPetWindow(event)) return;
+    const point = validPoint(rawPoint);
+    if (!point) return;
+    stopWindowBounce();
+    const [x, y] = petWindow.getPosition();
+    dragState = { pointer: point, window: { x, y } };
+  });
+
+  ipcMain.on('pet:drag-move', (event, rawPoint) => {
+    if (!fromPetWindow(event) || !dragState) return;
+    const point = validPoint(rawPoint);
+    if (!point) return;
+    petWindow.setPosition(
+      dragState.window.x + point.x - dragState.pointer.x,
+      dragState.window.y + point.y - dragState.pointer.y,
+      false
+    );
+  });
+
+  ipcMain.on('pet:drag-end', event => {
+    if (!fromPetWindow(event)) return;
+    dragState = null;
+    makeWindowVisible();
+  });
+
+  ipcMain.on('pet:bounce', event => {
+    if (!fromPetWindow(event)) return;
+    startWindowBounce();
+  });
+
+  ipcMain.on('pet:context-menu', event => {
+    if (!fromPetWindow(event)) return;
+    showPetContextMenu();
+  });
+}
+
+function registerDisplayRecovery() {
+  const recover = () => {
+    if (petWindow && !petWindow.isDestroyed()) makeWindowVisible();
+  };
+  screen.on('display-added', recover);
+  screen.on('display-removed', recover);
+  screen.on('display-metrics-changed', recover);
+}
+
+async function bootstrap() {
+  app.setActivationPolicy('accessory');
+  if (app.dock) app.dock.hide();
+  settingsFile = path.join(app.getPath('userData'), 'settings.json');
+  settings = loadSettings(settingsFile);
+  registerIpc();
+  registerDisplayRecovery();
+  createPetWindow();
+  createTray();
+}
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (!petWindow || petWindow.isDestroyed()) createPetWindow();
+    else {
+      makeWindowVisible();
+      petWindow.showInactive();
+      petWindow.moveTop();
+    }
+  });
+
+  app.on('before-quit', () => {
+    isQuitting = true;
+    stopWindowBounce();
+  });
+
+  app.on('window-all-closed', () => {
+    if (isQuitting) app.quit();
+  });
+
+  app.on('activate', () => {
+    if (!petWindow || petWindow.isDestroyed()) createPetWindow();
+  });
+
+  app.whenReady().then(bootstrap).catch(error => {
+    writeError('应用启动失败', error);
+    app.exit(1);
+  });
+}

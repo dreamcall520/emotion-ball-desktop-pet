@@ -1,0 +1,19 @@
+{
+  "name": "emotion-ball-desktop-pet",
+  "version": "0.1.0",
+  "private": true,
+  "productName": "球球桌宠",
+  "description": "球球 macOS 纯桌面宠物",
+  "main": "desktop-pet/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test desktop-pet/tests/*.test.js",
+    "smoke": "node desktop-pet/scripts/smoke-electron.js",
+    "package:mac": "node desktop-pet/scripts/package-mac.js",
+    "postinstall": "ELECTRON_GET_USE_PROXY=1 node node_modules/electron/install.js"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "electron": "43.4.1"
+  }
+}

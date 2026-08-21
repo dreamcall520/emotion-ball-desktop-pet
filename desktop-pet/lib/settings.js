@@ -1,0 +1,45 @@
+const fs = require('node:fs');
+const path = require('node:path');
+
+const DEFAULTS = Object.freeze({
+  size: 'medium',
+  x: null,
+  y: null,
+  alwaysOnTop: true
+});
+
+function normalizeSettings(raw = {}) {
+  return {
+    size: ['tiny', 'small', 'medium', 'large'].includes(raw.size)
+      ? raw.size
+      : DEFAULTS.size,
+    x: Number.isFinite(raw.x) ? Math.round(raw.x) : DEFAULTS.x,
+    y: Number.isFinite(raw.y) ? Math.round(raw.y) : DEFAULTS.y,
+    alwaysOnTop:
+      typeof raw.alwaysOnTop === 'boolean' ? raw.alwaysOnTop : DEFAULTS.alwaysOnTop
+  };
+}
+
+function loadSettings(filePath) {
+  try {
+    return normalizeSettings(JSON.parse(fs.readFileSync(filePath, 'utf8')));
+  } catch (_error) {
+    return { ...DEFAULTS };
+  }
+}
+
+function saveSettings(filePath, value) {
+  const normalized = normalizeSettings(value);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const temporary = `${filePath}.tmp`;
+  fs.writeFileSync(temporary, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8');
+  fs.renameSync(temporary, filePath);
+  return normalized;
+}
+
+module.exports = {
+  DEFAULTS,
+  normalizeSettings,
+  loadSettings,
+  saveSettings
+};
