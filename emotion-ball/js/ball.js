@@ -143,7 +143,12 @@
     bodyG.appendChild(head);
 
     function buildEye(k) {
-      var node = el('path', { fill: '#1A1A1A', stroke: 'none', 'stroke-width': '1.6' });
+      var node = el('path', {
+        class: 'eb-eye',
+        fill: '#1A1A1A',
+        stroke: 'none',
+        'stroke-width': '1.6'
+      });
       node.setAttribute('d', ringPath(EXPR[0][k]));
       return { node: node, ring: EXPR[0][k], c: centroid(EXPR[0][k]) };
     }
@@ -160,19 +165,18 @@
     var BASE_C = [centroid(EXPR[0][0]), centroid(EXPR[0][1])];
 
     /* ---- zzz 睡眠粒子：三枚字母沿右上方向循环漂浮 ---- */
-    var zzzNodes = null;
-    if (!lite) {
-      zzzNodes = [];
-      for (var zi = 0; zi < 3; zi++) {
-        var zn = el('text', {
-          x: 0, y: 0, fill: '#A8A296', opacity: '0',
-          'font-family': "'Space Grotesk', 'Noto Sans SC', sans-serif",
-          'font-weight': '700', 'font-style': 'italic', 'text-anchor': 'middle'
-        });
-        zn.textContent = 'z';
-        fxFront.appendChild(zn);
-        zzzNodes.push(zn);
-      }
+    var zzzNodes = [];
+    for (var zi = 0; zi < 3; zi++) {
+      var zn = el('text', {
+        class: 'eb-sleep-z',
+        x: 0, y: 0, fill: '#68635B', stroke: '#F3F0EA', opacity: '0',
+        'stroke-width': '1.2', 'paint-order': 'stroke fill',
+        'font-family': "'Space Grotesk', 'Noto Sans SC', sans-serif",
+        'font-weight': '700', 'font-style': 'italic', 'text-anchor': 'middle'
+      });
+      zn.textContent = 'z';
+      fxFront.appendChild(zn);
+      zzzNodes.push(zn);
     }
 
     container.appendChild(svg);
@@ -373,7 +377,7 @@
     }
 
     /* ---- 眼睛：轮廓环形变 + 球面投影 ---- */
-    function setEye(eye, pose, k, sketch, yaw) {
+    function setEye(eye, pose, k, sketch, yaw, minOpen) {
       /* d 更新：engine 传入插值后的环（引用不变则跳过）。
        * 缩放锚点用当前环自身质心 —— 眼环位置烘焙在数据里（如检索环偏向一侧），
        * 绕默认质心缩放会把位置偏差放大导致眼睛飞出身体 */
@@ -385,7 +389,7 @@
       }
 
       var base = eye.c || BASE_C[k];
-      var open = clamp(pose.open, 0.02, 2.4);
+      var open = clamp(pose.open, minOpen || 0.02, 2.4);
       var sy = clamp(pose.scaleY * open * face.eye, 0.02, 2.4);
       var sxBase = pose.scaleX * face.eye;
 
@@ -425,6 +429,29 @@
       if (stroke !== eye.lastStroke) { eye.node.style.stroke = stroke; eye.lastStroke = stroke; }
     }
 
+    /* ---- zzz 睡眠粒子：轻量模式也保留，极小尺寸使用更醒目的字号 ---- */
+    function renderZzz(now, amount) {
+      var zOn = amount > 0;
+      for (var z = 0; z < zzzNodes.length; z++) {
+        var znode = zzzNodes[z];
+        if (!zOn) {
+          if (znode.getAttribute('opacity') !== '0') znode.setAttribute('opacity', '0');
+          continue;
+        }
+        var zp = (now * 0.00033 + z / 3) % 1;
+        var maxOpacity = lite ? 0.92 : 0.8;
+        var zo = (zp < 0.18 ? zp / 0.18 : 1 - (zp - 0.18) / 0.82) * maxOpacity * amount;
+        var fontSize = lite ? 16 + zp * 10 : 12 + zp * 11;
+        var x = lite ? 172 + zp * 32 + 4 * Math.sin(zp * 9) : 180 + zp * 34 + 4 * Math.sin(zp * 9);
+        var y = lite ? 54 - zp * 42 : 48 - zp * 42;
+        znode.setAttribute('opacity', zo.toFixed(3));
+        znode.setAttribute('font-size', fontSize.toFixed(1));
+        znode.setAttribute('transform',
+          'translate(' + r2(x) + ' ' + r2(y) + ')' +
+          ' rotate(' + r2(-10 + zp * 14) + ')');
+      }
+    }
+
     /* ---- 每帧 ---- */
     function applyPose(pose) {
       var b = pose.body;
@@ -453,32 +480,16 @@
       }
 
       var yaw = b.yaw || 0;
-      setEye(eyeL, pose.left, 0, sketch, yaw);
-      setEye(eyeR, pose.right, 1, sketch, yaw);
+      var minEyeOpen = lite && (b.zzz || 0) > 0 ? 0.22 : 0.02;
+      setEye(eyeL, pose.left, 0, sketch, yaw, minEyeOpen);
+      setEye(eyeR, pose.right, 1, sketch, yaw, minEyeOpen);
+
+      renderZzz(now, b.zzz || 0);
 
       if (lite) return;
 
       var dt = prevNow ? clamp((now - prevNow) / 1000, 0.001, 0.05) : 1 / 60;
       prevNow = now;
-
-      /* ---- zzz 睡眠粒子：三枚字母错峰沿右上方向漂浮，先淡入后淡出 ---- */
-      if (zzzNodes) {
-        var zOn = (b.zzz || 0) > 0;
-        for (var z = 0; z < zzzNodes.length; z++) {
-          var znode = zzzNodes[z];
-          if (!zOn) {
-            if (znode.getAttribute('opacity') !== '0') znode.setAttribute('opacity', '0');
-            continue;
-          }
-          var zp = (now * 0.00033 + z / 3) % 1;
-          var zo = (zp < 0.18 ? zp / 0.18 : 1 - (zp - 0.18) / 0.82) * 0.8 * b.zzz;
-          znode.setAttribute('opacity', zo.toFixed(3));
-          znode.setAttribute('font-size', (12 + zp * 11).toFixed(1));
-          znode.setAttribute('transform',
-            'translate(' + r2(180 + zp * 34 + 4 * Math.sin(zp * 9)) + ' ' + r2(48 - zp * 42) + ')' +
-            ' rotate(' + r2(-10 + zp * 14) + ')');
-        }
-      }
 
       /* ---- 自旋角速度（甩带触发源） ---- */
       var dYaw = yaw - prevYaw;

@@ -292,6 +292,47 @@ async function finishSmokeTest() {
     );
     if (!ready) throw new Error('桌宠页面未完成初始化');
 
+    setPetSize('tiny');
+    await new Promise(resolve => setTimeout(resolve, 250));
+    sendCommand('sleep');
+    await new Promise(resolve => setTimeout(resolve, 1100));
+    const sleepVisual = await petWindow.webContents.executeJavaScript(`(() => {
+      const zNodes = [...document.querySelectorAll('.eb-sleep-z')];
+      const visibleZ = zNodes.filter(node => Number(node.getAttribute('opacity')) > 0.05);
+      const eyeHeights = [...document.querySelectorAll('.eb-eye')]
+        .map(node => node.getBoundingClientRect().height);
+      const hasVisibleZInsideWindow = visibleZ.some(node => {
+        const rect = node.getBoundingClientRect();
+        return rect.left >= 0 && rect.top >= 0 &&
+          rect.right <= window.innerWidth && rect.bottom <= window.innerHeight;
+      });
+      return {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        zCount: zNodes.length,
+        visibleZCount: visibleZ.length,
+        hasVisibleZInsideWindow,
+        eyeHeights
+      };
+    })()`);
+    if (sleepVisual.width !== 80 || sleepVisual.height !== 80) {
+      throw new Error(`极小尺寸错误：${sleepVisual.width} × ${sleepVisual.height}`);
+    }
+    if (sleepVisual.zCount !== 3 || sleepVisual.visibleZCount < 1) {
+      throw new Error(`极小尺寸 Zzz 不可见：${JSON.stringify(sleepVisual)}`);
+    }
+    if (!sleepVisual.hasVisibleZInsideWindow) {
+      throw new Error(`极小尺寸 Zzz 被窗口裁切：${JSON.stringify(sleepVisual)}`);
+    }
+    if (sleepVisual.eyeHeights.length !== 2 || sleepVisual.eyeHeights.some(height => height < 1.5)) {
+      throw new Error(`极小尺寸睡眼过细：${JSON.stringify(sleepVisual.eyeHeights)}`);
+    }
+    if (process.env.PET_SMOKE_SCREENSHOT) {
+      const screenshot = await petWindow.webContents.capturePage();
+      fs.writeFileSync(path.resolve(process.env.PET_SMOKE_SCREENSHOT), screenshot.toPNG());
+    }
+    process.stdout.write('PET_SLEEP_VISUAL_OK\n');
+
     const startY = petWindow.getPosition()[1];
     await petWindow.webContents.executeJavaScript(
       'window.petDesktop.bounce(); true'
