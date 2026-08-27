@@ -88,9 +88,9 @@ function interpolate(a,b,t) { return a+(b-a)*smooth(t); }
 
 文件：新增 `desktop-pet/lib/window-motion.js`、对应测试；修改 renderer、preload、main、index、engine、ball、dialogue、打包清单及其既有测试。
 
-- [ ] 在现有真实引擎/renderer测试夹具中先写失败测试：六种双击分别对应完整身体动作，rest/睡眠/锁屏/隐藏/缩放/拖动取消；再次双击旧帧失效；再来一次重播气泡关联动作；睡眠双击只唤醒。扩展宿主替身以运行真实window-motion控制器，不用预设动作成功的空mock替代。
-- [ ] 为窗口控制器先测试：一次start/stop恢复原位；接续动作取消旧计时；取消后捕获的旧回调不再发送帧或移动；靠边收敛；不持久化临时坐标；窗口销毁安全。运行目标测试确认新增断言失败。
-- [ ] 控制器使用如下接口，执行单一时间轴；停止和完成都发当前token的结束帧，销毁时不发。
+- [x] 在现有真实引擎/renderer测试夹具中先写失败测试：六种双击分别对应完整身体动作，rest/睡眠/锁屏/隐藏/缩放/拖动取消；再次双击旧帧失效；再来一次重播气泡关联动作；睡眠双击只唤醒。扩展宿主替身以运行真实window-motion控制器，不用预设动作成功的空mock替代。
+- [x] 为窗口控制器先测试：一次start/stop恢复原位；接续动作取消旧计时；取消后捕获的旧回调不再发送帧或移动；靠边收敛；不持久化临时坐标；窗口销毁安全。运行目标测试确认新增断言失败。
+- [x] 控制器使用如下接口，执行单一时间轴；停止和完成都发当前token的结束帧，销毁时不发。
 
 ```js
 createWindowMotion({ getWindow, getWorkArea, now, schedule, cancel, sendFrame });
@@ -105,9 +105,9 @@ sendFrame({ token: state.token, action: state.action, frame });
 // 每次回调首先检查current===state和窗口存活；frame.done时释放计时及恢复位置。
 ```
 
-- [ ] preload新增严格受限的 `playMotion({token,action})` 与 `onMotion(callback)`；`pet:motion-start`主进程检查发送者、锁屏、窗口可见性、token和动作白名单。已有stopMotion同时停止新旧动作。
-- [ ] engine新增 `setMotionFrame(frame)`，只接收有限数值的body和gaze；在现有表情/颜色合成之后应用身体字段，受控动作期间body.scale固定1，避免旧呼吸和预设body位移叠加。`stopMotion()`、setEmotion和销毁清理覆盖层，结束后原管线不变。ball身体transform增加 `scale(b.scale * (b.scaleX || 1), b.scale * (b.scaleY || 1))`；眼神附加偏移不覆盖原同屏逻辑，动作中可以以动作眼神为主，结束还原。
-- [ ] renderer内的双击选择和启动遵循下面的接线；先取消再建立token，禁止旧动作回调修改新状态。不要增加测试专用生产入口。
+- [x] preload新增严格受限的 `playMotion({token,action})` 与 `onMotion(callback)`；`pet:motion-start`主进程检查发送者、锁屏、窗口可见性、token和动作白名单。已有stopMotion同时停止新旧动作。
+- [x] engine新增 `setMotionFrame(frame)`，只接收有限数值的body和gaze；在现有表情/颜色合成之后应用身体字段，受控动作期间body.scale固定1，避免旧呼吸和预设body位移叠加。`stopMotion()`、setEmotion和销毁清理覆盖层，结束后原管线不变。ball身体transform增加 `scale(b.scale * (b.scaleX || 1), b.scale * (b.scaleY || 1))`；眼神附加偏移不覆盖原同屏逻辑，动作中可以以动作眼神为主，结束还原。
+- [x] renderer内的双击选择和启动遵循下面的接线；先取消再建立token，禁止旧动作回调修改新状态。不要增加测试专用生产入口。
 
 ```js
 function playReaction(action, speak = true) {
@@ -128,10 +128,10 @@ function playReaction(action, speak = true) {
 // 接收窗口生命周期stop命令时统一清理动作、排队单击、表情定时。
 ```
 
-- [ ] main主导生命周期：新动作前停旧bounce；单击bounce前停新动作；拖起、sleep/rest、隐藏、调整尺寸、显示器变化、锁屏/挂起、退出统一取消。拖动以停止动画后的实际位置建立锚点，旧回调不得拉回拖动结果。renderer缩放重建球球前清理旧token。
-- [ ] dialogue.offer扩展为兼容字符串事件或 `{event:'play', motion:<白名单>}`。五类专属短句每类至少2句、旋转至少2句，长度保持现有小气泡可容纳；同类不连续重复。响应保留气泡所绑定动作，`respond`对新动作返回 `{command:'again',motion}`，旧通用play继续返回原字符串。renderer据此重播完整动作；rest不改变睡眠规则。节流阻止新文字时，旧专属play失效并隐藏；重复/过期按钮不能重播。
-- [ ] index加载纯动作模块；package-mac显式包含新增运行文件。保留contextIsolation、sandbox、非激活窗口；不改其他权限。
-- [ ] 跑全部测试，核对旧125项回归；源代码真实窗口检查由下一任务执行。通过方案与质量检查后提交。
+- [x] main主导生命周期：新动作前停旧bounce；单击bounce前停新动作；拖起、sleep/rest、隐藏、调整尺寸、显示器变化、锁屏/挂起、退出统一取消。拖动以停止动画后的实际位置建立锚点，旧回调不得拉回拖动结果。renderer缩放重建球球前清理旧token。
+- [x] dialogue.offer扩展为兼容字符串事件或 `{event:'play', motion:<白名单>}`。五类专属短句每类至少2句、旋转至少2句，长度保持现有小气泡可容纳；同类不连续重复。响应保留气泡所绑定动作，`respond`对新动作返回 `{command:'again',motion}`，旧通用play继续返回原字符串。renderer据此重播完整动作；rest不改变睡眠规则。节流阻止新文字时，旧专属play失效并隐藏；重复/过期按钮不能重播。
+- [x] index加载纯动作模块；package-mac显式包含新增运行文件。保留contextIsolation、sandbox、非激活窗口；不改其他权限。
+- [x] 跑全部测试，核对旧125项回归；源代码真实窗口检查由下一任务执行。通过方案与质量检查后提交。f8a64c3、3515e96实现与修复，全套196项通过，独立符合性及质量检查均通过。
 
 ## 任务3：实机验证与本机交付
 
