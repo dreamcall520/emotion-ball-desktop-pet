@@ -521,6 +521,15 @@
       if (this._bounceAt < 0) this._bounceAt = performance.now();
       return this;
     },
+    /* 宿主明确要求安静时，结束动作并丢弃含旧旋转角度的过渡姿态。 */
+    stopMotion: function () {
+      this._spin = null;
+      this._bounceAt = -1;
+      this._prevPose = null;
+      this._lastPose = null;
+      this._transDur = 0;
+      return this;
+    },
 
     /* 切换眼环目标：把当前插值冻结为新起点，弹簧从 0 重新弹向 1 */
     _setExpr: function (idx, speed) {

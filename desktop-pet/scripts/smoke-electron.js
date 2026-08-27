@@ -4,7 +4,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 
-const electronBinary = require('electron');
+const packagedApp = process.env.PET_SMOKE_APP_PATH;
+const electronBinary = packagedApp ? path.join(packagedApp, 'Contents/MacOS/球球桌宠') : require('electron');
 const root = path.resolve(__dirname, '../..');
 
 function runSmokeTest() {
@@ -17,7 +18,7 @@ function runSmokeTest() {
     };
     const child = spawn(
       electronBinary,
-      [`--user-data-dir=${smokeUserData}`, root],
+      [`--user-data-dir=${smokeUserData}`, ...(packagedApp ? [] : [root])],
       {
         cwd: root,
         env: {
@@ -39,8 +40,8 @@ function runSmokeTest() {
 
     const timer = setTimeout(() => {
       child.kill('SIGTERM');
-      reject(new Error(`桌宠真实启动超过 20 秒\n${output}`));
-    }, 20000);
+      reject(new Error(`桌宠真实启动与互动检查超过 60 秒\n${output}`));
+    }, 60000);
 
     child.once('error', error => {
       clearTimeout(timer);
@@ -55,6 +56,9 @@ function runSmokeTest() {
         assert.equal(code, 0, output);
         assert.match(output, /PET_SMOKE_OK/);
         assert.match(output, /PET_BOUNCE_OK/);
+        for (const marker of ['USER_DATA', 'ACTIVITY_STATES', 'GAZE', 'TOUCH_DRAG', 'BUBBLE_REPLY', 'BUBBLE_EDGES_SETTINGS', 'NATIVE_ACTIVITY']) {
+          assert.ok(output.includes(`PET_${marker}_OK`), `${marker}检查未完成`);
+        }
         assert.doesNotMatch(output, /Uncaught|ERR_FILE_NOT_FOUND|did-fail-load/i);
         resolve(output);
       } catch (error) {

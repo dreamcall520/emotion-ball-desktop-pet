@@ -28,6 +28,7 @@ class DialogueDirector {
     this._lastPhrase = new Map();
     this._nextId = 1;
     this._current = null;
+    this._dropPending = false;
   }
 
   setEnabled(enabled) {
@@ -37,16 +38,19 @@ class DialogueDirector {
 
   dismiss() {
     this._current = null;
+    this._dropPending = false;
   }
 
   _expire(nowMs) {
-    if (this._current && nowMs >= this._current.expiresAt) this.dismiss();
+    if (this._current && nowMs >= this._current.expiresAt) this._current = null;
   }
 
   offer(event, nowMs) {
     if (!this.enabled || !Number.isFinite(nowMs) || typeof event !== 'string' ||
       !Object.prototype.hasOwnProperty.call(PHRASES, event)) return null;
     this._expire(nowMs);
+    // 睡眠是状态切换：先让旧玩耍按钮失效，醒来后的欢迎仍可正常接上。
+    if (event === 'sleep') this.dismiss();
     if (this._current && PRIORITY[event] < this._current.priority) return null;
 
     if (event === 'work') {
@@ -54,7 +58,7 @@ class DialogueDirector {
         nowMs - this._lastWorkAt < TEN_MINUTES || nowMs - this._lastBubbleAt < 15000 ||
         nowMs < this._workQuietUntil) return null;
     } else if (DIRECT_EVENTS.has(event)) {
-      const continuingDrop = event === 'drop' && this._current?.event === 'drag';
+      const continuingDrop = event === 'drop' && this._dropPending;
       if (!continuingDrop && nowMs - this._lastDirectAt < 6000) return null;
     }
 
@@ -69,7 +73,10 @@ class DialogueDirector {
     const actions = event === 'play' ? PLAY_ACTIONS : [];
     this._current = { id, event, actions, priority: PRIORITY[event], expiresAt: nowMs + durationMs };
     this._lastBubbleAt = nowMs;
-    if (DIRECT_EVENTS.has(event)) this._lastDirectAt = nowMs;
+    if (DIRECT_EVENTS.has(event)) {
+      this._lastDirectAt = nowMs;
+      this._dropPending = event === 'drag';
+    }
     if (event === 'work') this._lastWorkAt = nowMs;
     return { id, text: phrases[index], actions: actions.map(action => ({ ...action })), durationMs };
   }

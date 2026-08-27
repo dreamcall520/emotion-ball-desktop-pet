@@ -7,15 +7,38 @@
     dragTo() {},
     endDrag() {},
     bounce() {},
+    stopMotion() {},
+    say() {},
     showContextMenu() {},
-    onCommand() { return () => {}; }
+    onCommand() { return () => {}; },
+    onActivity() { return () => {}; },
+    onSettings() { return () => {}; }
   };
+
+  const companion = new CompanionBehavior.CompanionState();
+  const petting = new CompanionBehavior.PettingTracker();
 
   let ball = null;
   let compactMode = null;
   let dragState = null;
   let singleClickTimer = null;
-  let removeCommandListener = () => {};
+  let helloTimer = null;
+  let actionTimer = null;
+  let actionUntil = 0;
+  let lastWorkAttempt = 0;
+  let lastSample = null;
+  let currentState = { mode: 'awake', emotionId: '50', gaze: null };
+  const listeners = [];
+
+  // 只调整此桌宠页面的配置，不改变原项目表情库。
+  for (const definition of EmotionBall.config.list()) {
+    if (definition.antics) EmotionBall.config.register({ ...definition.raw, antics: false });
+  }
+  EmotionBall.config.register({
+    ...EmotionBall.config.get('02').raw,
+    id: '50', name: '安静陪伴', group: 'custom', antics: false,
+    anims: []
+  });
 
   function createBall(emotionId) {
     const nextCompactMode = window.innerWidth <= 120;
@@ -23,41 +46,143 @@
     petElement.replaceChildren();
     compactMode = nextCompactMode;
     ball = EmotionBall.create(petElement, {
-      emotion: emotionId || '02',
+      emotion: emotionId || '50',
       shape: 'blob',
-      idle: PetBehavior.IDLE_OPTIONS,
+      idle: false,
       eyeScale: compactMode ? 1.5 : 1,
       lite: compactMode,
-      fallbackId: '02',
+      fallbackId: '50',
       label: '球球桌面宠物'
     });
     ball.bounce = () => {
       desktop.bounce();
       return ball;
     };
+    ball.on('change', ({ id }) => { petElement.dataset.emotion = id; });
+    petElement.dataset.emotion = ball.emotionId;
+  }
+
+  function showEmotion(id) {
+    if (ball.emotionId !== id) ball.setEmotion(id);
+  }
+
+  function clearAction() {
+    clearTimeout(actionTimer);
+    actionTimer = null;
+    actionUntil = 0;
+  }
+
+  function stopMotion() {
+    ball.stopMotion();
+    desktop.stopMotion();
+  }
+
+  function cancelPendingInteraction() {
+    clearTimeout(singleClickTimer);
+    singleClickTimer = null;
+    clearTimeout(helloTimer);
+    helloTimer = null;
+  }
+
+  function restoreState() {
+    if (dragState?.dragged || performance.now() < actionUntil) return;
+    showEmotion(companion.manualSleep ? '00' : currentState.emotionId);
+  }
+
+  function playEmotion(id, duration, scene) {
+    clearAction();
+    actionUntil = performance.now() + duration;
+    ball.setEmotion(id);
+    if (scene) desktop.say(scene);
+    actionTimer = setTimeout(() => {
+      actionUntil = 0;
+      restoreState();
+    }, duration);
+  }
+
+  function updateActivity(sample) {
+    lastSample = sample;
+    const now = performance.now();
+    const previousMode = currentState.mode;
+    currentState = companion.update(sample, now);
+    petElement.dataset.mode = companion.manualSleep ? 'manual-sleep' : currentState.mode;
+    if (sample.locked) {
+      cancelPendingInteraction();
+      clearAction();
+      stopMotion();
+      if (dragState) {
+        if (petElement.hasPointerCapture(dragState.pointerId)) petElement.releasePointerCapture(dragState.pointerId);
+        dragState = null;
+        petElement.classList.remove('dragging');
+        desktop.endDrag();
+      }
+      showEmotion('00');
+      ball.clearGaze();
+      petElement.dataset.gaze = '0,0';
+      ball.setActive(false);
+      return;
+    }
+    ball.setActive(true);
+    if (currentState.welcome && !dragState?.dragged && now >= actionUntil) {
+      playEmotion('01', 2250, 'welcome');
+    } else {
+      restoreState();
+    }
+    if (currentState.mode === 'sleep' && previousMode !== 'sleep' && !companion.manualSleep) {
+      desktop.say('sleep');
+    }
+    if (!dragState?.dragged && !companion.manualSleep && currentState.gaze) {
+      ball.setGaze(currentState.gaze.x, currentState.gaze.y);
+      petElement.dataset.gaze = `${currentState.gaze.x.toFixed(2)},${currentState.gaze.y.toFixed(2)}`;
+    } else {
+      ball.clearGaze();
+      petElement.dataset.gaze = '0,0';
+    }
+    if (!companion.manualSleep && ['awake', 'focus'].includes(currentState.mode) &&
+        now - lastWorkAttempt >= 60000 && !dragState && now >= actionUntil) {
+      lastWorkAttempt = now;
+      desktop.say('work');
+    }
+  }
+
+  function noteInteraction() {
+    companion.noteInteraction(performance.now());
+    if (lastSample) updateActivity(lastSample);
   }
 
   function wake() {
-    ball.resetIdle();
-    ball.setEmotion('01');
+    companion.setManualSleep(false, performance.now());
+    currentState = { ...currentState, mode: 'awake', emotionId: '50' };
+    petElement.dataset.mode = 'awake';
+    playEmotion('01', 2250, 'welcome');
   }
 
   function sleep() {
-    ball.resetIdle();
-    ball.setEmotion('00');
+    cancelPendingInteraction();
+    clearAction();
+    stopMotion();
+    petting.reset();
+    companion.setManualSleep(true, performance.now());
+    petElement.dataset.mode = 'manual-sleep';
+    ball.clearGaze();
+    showEmotion('00');
+    desktop.say('sleep');
   }
 
   function toggleSleep() {
+    if (lastSample?.locked) return;
     if (ball.emotionId === '00') wake();
     else sleep();
   }
 
-  function runSingleClickAction() {
-    ball.resetIdle();
+  function runSingleClickAction(speak = true) {
+    if (companion.manualSleep || lastSample?.locked) return;
+    noteInteraction();
+    playEmotion('10', 3200, speak ? 'play' : null);
     const action = PetBehavior.chooseClickAction(Math.random());
+    petElement.dataset.lastAction = action;
     if (action === 'bounce') ball.bounce();
     else if (action === 'spin') ball.spin(1);
-    else ball.setEmotion('10');
   }
 
   function scheduleSingleClick() {
@@ -69,15 +194,30 @@
   }
 
   function runRandomEmotion() {
+    companion.setManualSleep(false, performance.now());
     const definitions = EmotionBall.config.list();
     const selected = definitions[Math.floor(Math.random() * definitions.length)];
-    if (selected) ball.setEmotion(selected.id);
+    if (selected) playEmotion(selected.id, 5000);
   }
 
   function runCommand(command) {
+    if (lastSample?.locked) return;
     if (command === 'random') runRandomEmotion();
     else if (command === 'sleep') sleep();
     else if (command === 'wake') wake();
+    else if (command === 'again') {
+      cancelPendingInteraction();
+      stopMotion();
+      runSingleClickAction(false);
+    }
+    else if (command === 'rest') {
+      cancelPendingInteraction();
+      clearAction();
+      stopMotion();
+      noteInteraction();
+      restoreState();
+      petElement.dataset.lastAction = 'rest';
+    }
   }
 
   function eventPoint(event) {
@@ -85,31 +225,55 @@
   }
 
   petElement.addEventListener('pointerdown', event => {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || lastSample?.locked) return;
+    clearTimeout(helloTimer);
+    petting.reset();
     const point = eventPoint(event);
     dragState = {
       pointerId: event.pointerId,
       start: point,
-      dragged: false
+      dragged: false,
+      lastX: point.x
     };
     petElement.setPointerCapture(event.pointerId);
     desktop.beginDrag(point);
   });
 
   petElement.addEventListener('pointermove', event => {
+    if (lastSample?.locked) return;
     const rect = petElement.getBoundingClientRect();
-    ball.setGaze(
-      Math.max(-1, Math.min(1, (event.clientX - rect.width / 2) / (rect.width / 2))),
-      Math.max(-1, Math.min(1, (event.clientY - rect.height / 2) / (rect.height / 2)))
-    );
+    if (!companion.manualSleep) {
+      if (!dragState && petting.update({
+        x: event.clientX, y: event.clientY,
+        width: rect.width, height: rect.height, buttons: event.buttons
+      }, performance.now())) {
+        clearTimeout(helloTimer);
+        noteInteraction();
+        playEmotion('19', 2400, 'pet');
+        petElement.dataset.lastAction = 'pet';
+      }
+    }
 
     if (!dragState || dragState.pointerId !== event.pointerId) return;
     const point = eventPoint(event);
     if (!dragState.dragged) {
       dragState.dragged = PetBehavior.isDrag(dragState.start, point);
-      if (dragState.dragged) petElement.classList.add('dragging');
+      if (dragState.dragged) {
+        petElement.classList.add('dragging');
+        clearAction();
+        stopMotion();
+        if (!companion.manualSleep) {
+          noteInteraction();
+          showEmotion('13');
+          desktop.say('drag');
+        }
+      }
     }
-    if (dragState.dragged) desktop.dragTo(point);
+    if (dragState.dragged) {
+      petElement.style.setProperty('--drag-tilt', `${Math.max(-5, Math.min(5, (point.x - dragState.lastX) * .4))}deg`);
+      dragState.lastX = point.x;
+      desktop.dragTo(point);
+    }
   });
 
   function finishPointer(event, cancelled) {
@@ -121,7 +285,11 @@
       petElement.releasePointerCapture(event.pointerId);
     }
     desktop.endDrag();
-    ball.resetIdle();
+    noteInteraction();
+    if (wasDragged && !companion.manualSleep) {
+      playEmotion('19', 1000, cancelled ? null : 'drop');
+      petElement.dataset.lastAction = 'drop';
+    }
     if (!cancelled && !wasDragged && event.button === 0) scheduleSingleClick();
   }
 
@@ -136,12 +304,18 @@
   });
 
   petElement.addEventListener('pointerenter', () => {
-    if (ball.emotionId === '00') wake();
-    else ball.resetIdle();
+    if (companion.manualSleep || lastSample?.locked) return;
+    noteInteraction();
+    clearTimeout(helloTimer);
+    helloTimer = setTimeout(() => {
+      if (companion.manualSleep || dragState || performance.now() < actionUntil) return;
+      playEmotion('03', 2200, 'hello');
+    }, 900);
   });
 
   petElement.addEventListener('pointerleave', () => {
-    if (!dragState) ball.clearGaze();
+    clearTimeout(helloTimer);
+    petting.reset();
   });
 
   petElement.addEventListener('contextmenu', event => {
@@ -156,11 +330,19 @@
 
   window.addEventListener('beforeunload', () => {
     clearTimeout(singleClickTimer);
-    removeCommandListener();
+    clearTimeout(helloTimer);
+    clearAction();
+    listeners.forEach(remove => remove());
     if (ball) ball.destroy();
   });
 
-  createBall('02');
-  removeCommandListener = desktop.onCommand(runCommand);
+  createBall('50');
+  petElement.dataset.mode = 'awake';
+  listeners.push(desktop.onCommand(runCommand));
+  listeners.push(desktop.onActivity(updateActivity));
+  listeners.push(desktop.onSettings(settings => {
+    companion.setKeepAwake(settings.keepAwake);
+    if (lastSample) updateActivity(lastSample);
+  }));
   window.__petReady = true;
 })();

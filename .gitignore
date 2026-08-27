@@ -4,7 +4,7 @@ emotion-ball/docs/商业授权运营手册.md
 
 # local desktop-pet artifacts
 .DS_Store
-node_modules/
+node_modules
 dist/
 desktop-pet/build/
 desktop-pet/output/

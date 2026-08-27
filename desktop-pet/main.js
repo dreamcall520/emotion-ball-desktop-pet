@@ -6,6 +6,7 @@ const {
   ipcMain,
   Menu,
   nativeImage,
+  powerMonitor,
   screen,
   Tray
 } = require('electron');
@@ -19,6 +20,9 @@ const {
   BOUNCE_TOTAL_MS,
   bounceOffset
 } = require('./lib/window-bounce');
+const { createActivityMonitor, createPowerGuard } = require('./lib/activity-monitor');
+const { DialogueDirector } = require('./lib/dialogue');
+const { createBubbleWindow } = require('./lib/bubble-window');
 
 const APP_NAME = '球球桌宠';
 const IS_SMOKE_TEST = process.env.PET_SMOKE_TEST === '1';
@@ -30,6 +34,10 @@ let settingsFile = null;
 let dragState = null;
 let bounceState = null;
 let isQuitting = false;
+let activityMonitor = null;
+let dialogue = null;
+let bubble = null;
+let screenLocked = false;
 
 app.setName(APP_NAME);
 
@@ -155,6 +163,33 @@ function sendCommand(command) {
   petWindow.webContents.send('pet:command', command);
 }
 
+function sendCompanionSettings() {
+  if (!petWindow || petWindow.isDestroyed()) return;
+  petWindow.webContents.send('pet:settings', {
+    keepAwake: settings.keepAwake,
+    bubblesEnabled: settings.bubblesEnabled
+  });
+}
+
+function setCompanionSetting(name, enabled) {
+  if (!['keepAwake', 'bubblesEnabled'].includes(name)) return;
+  settings[name] = Boolean(enabled);
+  if (name === 'bubblesEnabled') {
+    dialogue.setEnabled(settings.bubblesEnabled);
+    if (!settings.bubblesEnabled) bubble.hide();
+  }
+  persistSettings();
+  sendCompanionSettings();
+  refreshTrayMenu();
+}
+
+function showDialogue(event) {
+  if (screenLocked || !petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return null;
+  const payload = dialogue.offer(event, performance.now());
+  if (payload) bubble.show(payload);
+  return payload;
+}
+
 function setPetSize(sizeName) {
   if (!SIZES[sizeName] || !petWindow || petWindow.isDestroyed()) return;
   stopWindowBounce();
@@ -183,6 +218,7 @@ function setAlwaysOnTop(enabled) {
   if (petWindow && !petWindow.isDestroyed()) {
     petWindow.setAlwaysOnTop(settings.alwaysOnTop, 'floating');
   }
+  bubble?.setAlwaysOnTop(settings.alwaysOnTop);
   persistSettings();
   refreshTrayMenu();
 }
@@ -230,6 +266,14 @@ function menuTemplate() {
     { label: '随机表情', click: () => sendCommand('random') },
     { label: '立即睡眠', click: () => sendCommand('sleep') },
     { label: '立即唤醒', click: () => sendCommand('wake') },
+    {
+      label: '保持清醒', type: 'checkbox', checked: settings.keepAwake,
+      click: item => setCompanionSetting('keepAwake', item.checked)
+    },
+    {
+      label: '互动气泡', type: 'checkbox', checked: settings.bubblesEnabled,
+      click: item => setCompanionSetting('bubblesEnabled', item.checked)
+    },
     { type: 'separator' },
     { label: '尺寸', submenu: sizeMenu() },
     {
@@ -291,6 +335,15 @@ async function finishSmokeTest() {
       'Boolean(window.__petReady)'
     );
     if (!ready) throw new Error('桌宠页面未完成初始化');
+    const companionReady = await petWindow.webContents.executeJavaScript(
+      "Boolean(window.petDesktop.onActivity && document.getElementById('pet').dataset.mode)"
+    );
+    if (!companionReady) throw new Error('轻陪伴活动感知尚未接入');
+
+    await require('./scripts/verify-companion').verifyCompanion({
+      pet: petWindow, bubble, monitor: activityMonitor, screen, BrowserWindow,
+      command: sendCommand, setSetting: setCompanionSetting, showDialogue
+    });
 
     setPetSize('tiny');
     await new Promise(resolve => setTimeout(resolve, 250));
@@ -365,6 +418,7 @@ function createPetWindow() {
     ...currentBounds(),
     title: APP_NAME,
     transparent: true,
+    focusable: false,
     frame: false,
     resizable: false,
     fullscreenable: false,
@@ -404,9 +458,19 @@ function createPetWindow() {
     if (!petWindow || petWindow.isDestroyed()) return;
     petWindow.showInactive();
   });
-  petWindow.webContents.once('did-finish-load', finishSmokeTest);
+  petWindow.webContents.on('did-finish-load', () => {
+    sendCompanionSettings();
+    activityMonitor.start();
+    finishSmokeTest();
+  });
+  petWindow.on('move', () => bubble?.reposition());
+  petWindow.on('resize', () => bubble?.reposition());
+  petWindow.on('hide', () => { bubble?.hide(); dialogue?.dismiss(); });
   petWindow.on('closed', () => {
     stopWindowBounce(false);
+    activityMonitor?.stop();
+    bubble?.destroy();
+    dialogue?.dismiss();
     petWindow = null;
   });
 
@@ -418,8 +482,22 @@ function createPetWindow() {
 }
 
 function registerIpc() {
+  ipcMain.on('pet:say', (event, scene) => {
+    if (fromPetWindow(event) && typeof scene === 'string') showDialogue(scene);
+  });
+
+  ipcMain.on('pet:bubble-reply', (event, payload) => {
+    const bubbleWindow = bubble?.getWindow();
+    if (!bubbleWindow || bubbleWindow.isDestroyed() || event.sender !== bubbleWindow.webContents) return;
+    if (!payload || !Number.isInteger(payload.id)) return;
+    const action = dialogue.respond(payload.id, payload.action, performance.now());
+    if (!action) return;
+    bubble.hide();
+    sendCommand(action);
+  });
+
   ipcMain.on('pet:drag-start', (event, rawPoint) => {
-    if (!fromPetWindow(event)) return;
+    if (!fromPetWindow(event) || screenLocked) return;
     const point = validPoint(rawPoint);
     if (!point) return;
     stopWindowBounce();
@@ -428,7 +506,7 @@ function registerIpc() {
   });
 
   ipcMain.on('pet:drag-move', (event, rawPoint) => {
-    if (!fromPetWindow(event) || !dragState) return;
+    if (!fromPetWindow(event) || !dragState || screenLocked) return;
     const point = validPoint(rawPoint);
     if (!point) return;
     petWindow.setPosition(
@@ -441,12 +519,16 @@ function registerIpc() {
   ipcMain.on('pet:drag-end', event => {
     if (!fromPetWindow(event)) return;
     dragState = null;
-    makeWindowVisible();
+    if (!screenLocked) makeWindowVisible();
   });
 
   ipcMain.on('pet:bounce', event => {
-    if (!fromPetWindow(event)) return;
+    if (!fromPetWindow(event) || screenLocked) return;
     startWindowBounce();
+  });
+
+  ipcMain.on('pet:stop-motion', event => {
+    if (fromPetWindow(event)) stopWindowBounce();
   });
 
   ipcMain.on('pet:context-menu', event => {
@@ -458,6 +540,7 @@ function registerIpc() {
 function registerDisplayRecovery() {
   const recover = () => {
     if (petWindow && !petWindow.isDestroyed()) makeWindowVisible();
+    bubble?.reposition();
   };
   screen.on('display-added', recover);
   screen.on('display-removed', recover);
@@ -465,10 +548,44 @@ function registerDisplayRecovery() {
 }
 
 async function bootstrap() {
+  if (IS_SMOKE_TEST) {
+    const smokeDirectory = app.commandLine.getSwitchValue('user-data-dir');
+    if (!smokeDirectory || fs.realpathSync(app.getPath('userData')) !== fs.realpathSync(smokeDirectory)) {
+      throw new Error(`冒烟检查必须使用独立设置目录：指定=${smokeDirectory} 实际=${app.getPath('userData')}`);
+    }
+    process.stdout.write('PET_USER_DATA_OK\n');
+  }
   app.setActivationPolicy('accessory');
   if (app.dock) app.dock.hide();
   settingsFile = path.join(app.getPath('userData'), 'settings.json');
   settings = loadSettings(settingsFile);
+  dialogue = new DialogueDirector({ now: performance.now(), enabled: settings.bubblesEnabled });
+  bubble = createBubbleWindow({
+    BrowserWindow, screen, getPetWindow: () => petWindow,
+    alwaysOnTop: settings.alwaysOnTop,
+    onError: error => writeError('气泡窗口', error)
+  });
+  activityMonitor = createActivityMonitor({
+    screen, powerMonitor, getWindow: () => petWindow,
+    onSample: packet => {
+      if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send('pet:activity', packet);
+    },
+    onError: error => writeError('活动状态检测', error)
+  });
+  const pause = () => {
+    screenLocked = true;
+    dragState = null;
+    stopWindowBounce();
+    activityMonitor.pause();
+    bubble.hide();
+    dialogue.dismiss();
+  };
+  const resume = () => { screenLocked = false; activityMonitor.resume(); };
+  const powerGuard = createPowerGuard({ pause, resume });
+  powerMonitor.on('lock-screen', () => powerGuard.setLocked(true));
+  powerMonitor.on('suspend', () => powerGuard.setSuspended(true));
+  powerMonitor.on('unlock-screen', () => powerGuard.setLocked(false));
+  powerMonitor.on('resume', () => powerGuard.setSuspended(false));
   registerIpc();
   registerDisplayRecovery();
   createPetWindow();
@@ -492,6 +609,8 @@ if (!hasSingleInstanceLock) {
   app.on('before-quit', () => {
     isQuitting = true;
     stopWindowBounce();
+    activityMonitor?.stop();
+    bubble?.destroy();
   });
 
   app.on('window-all-closed', () => {

@@ -56,11 +56,20 @@ test('拖起到放下仅允许一次连贯替换', () => {
   assert.equal(director.offer('play', 6100)?.id, 3);
 });
 
-test('欢迎与睡眠可以独立转换但不能盖住用户互动', () => {
+test('拖动超过四秒后落地仍能接上一次回应', () => {
+  for (const at of [4000, 4500, 5999]) {
+    const director = new DialogueDirector();
+    assert.ok(director.offer('drag', 0));
+    assert.ok(director.offer('drop', at));
+    assert.equal(director.offer('drop', at + 1), null);
+  }
+});
+
+test('欢迎不覆盖用户互动，睡眠切换会收起当前互动', () => {
   const director = new DialogueDirector();
   assert.ok(director.offer('pet', 0));
   assert.equal(director.offer('welcome', 1000), null);
-  assert.equal(director.offer('sleep', 2000), null);
+  assert.ok(director.offer('sleep', 2000));
   assert.ok(director.offer('welcome', 4000));
   assert.ok(director.offer('sleep', 4100));
 });
@@ -132,6 +141,13 @@ test('气泡到期时旧按钮失效', () => {
   const result = director.offer('play', 0);
   assert.ok(result);
   assert.equal(director.respond(result.id, 'again', 8000), null);
+});
+
+test('进入睡眠时收起玩耍按钮，旧回应不能再打扰睡眠', () => {
+  const director = new DialogueDirector();
+  const play = director.offer('play', 0);
+  assert.ok(director.offer('sleep', 100));
+  assert.equal(director.respond(play.id, 'again', 200), null);
 });
 
 test('返回的气泡不能被外部修改以伪造动作', () => {

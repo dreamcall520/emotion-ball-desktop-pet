@@ -63,6 +63,25 @@ test('打包暂存区继承项目版本号', () => {
   assert.equal(stagedPackage.version, projectPackage.version);
 });
 
+test('安装包完整包含轻陪伴和气泡依赖，避免缺少模块', () => {
+  const root = path.resolve(__dirname, '../..');
+  const staging = prepareStaging(root);
+  for (const relativePath of [
+    'desktop-pet/lib/activity-monitor.js',
+    'desktop-pet/lib/companion-behavior.js',
+    'desktop-pet/lib/dialogue.js',
+    'desktop-pet/lib/bubble-placement.js',
+    'desktop-pet/lib/bubble-window.js',
+    'desktop-pet/bubble.html',
+    'desktop-pet/bubble.css',
+    'desktop-pet/bubble-renderer.js',
+    'desktop-pet/bubble-preload.js'
+  ]) {
+    assert.equal(fs.readFileSync(path.join(staging, relativePath), 'utf8'),
+      fs.readFileSync(path.join(root, relativePath), 'utf8'));
+  }
+});
+
 test('优先复用本机已经下载好的 Electron 压缩包', () => {
   const cacheRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'electron-cache-'));
   const zipDir = path.join(cacheRoot, 'cache-key');
