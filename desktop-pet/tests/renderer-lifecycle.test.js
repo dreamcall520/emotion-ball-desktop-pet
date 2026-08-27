@@ -13,12 +13,29 @@ function createRenderer(randomValue = 0.5) {
   const timers = new Map();
   const events = {};
   const subscriptions = {};
-  const host = { bounces: 0, stops: 0, scenes: [] };
+  const windowEvents = {};
+  const host = { bounces: 0, stops: 0, scenes: [], motions: [], frames: [], positions: [] };
+  const bounds = { x: 100, y: 100, width: 80, height: 80 };
+  let windowController;
+  const nativeWindow = { isDestroyed: () => false, isVisible: () => true,
+    getBounds: () => ({ ...bounds }), setPosition(x, y) { bounds.x = x; bounds.y = y; host.positions.push({ x, y }); } };
+  function node(tag) {
+    return { tag, children: [], attributes: {}, style: {},
+      setAttribute(key, value) { this.attributes[key] = String(value); },
+      getAttribute(key) { return this.attributes[key]; },
+      appendChild(child) { this.children.push(child); child.parentNode = this; },
+      removeChild(child) { this.children = this.children.filter(item => item !== child); },
+      remove() { this.parentNode?.removeChild(this); }
+    };
+  }
   const pet = {
     dataset: {},
     classList: { add() {}, remove() {} },
     style: { setProperty() {} },
-    replaceChildren() {},
+    children: [],
+    appendChild(child) { this.children.push(child); child.parentNode = this; },
+    removeChild(child) { this.children = this.children.filter(item => item !== child); },
+    replaceChildren() { this.children = []; },
     addEventListener(name, callback) { events[name] = callback; },
     getBoundingClientRect() { return { x: 0, y: 0, width: 80, height: 80 }; },
     setPointerCapture() { captured = true; },
@@ -41,19 +58,31 @@ function createRenderer(randomValue = 0.5) {
     clearTimeout(id) { timers.delete(id); },
     clearInterval() {},
     requestAnimationFrame() { return 1; },
-    document: { getElementById: () => pet },
+    document: { getElementById: () => pet, createElementNS: (_ns, tag) => node(tag) },
     innerWidth: 80,
-    addEventListener() {},
+    addEventListener(name, callback) { windowEvents[name] = callback; },
     petDesktop: {
-      beginDrag() {}, dragTo() {}, endDrag() {}, showContextMenu() {},
+      beginDrag() { windowController?.stop(); }, dragTo() {}, endDrag() {}, showContextMenu() {},
       bounce() { host.bounces++; },
-      stopMotion() { host.stops++; },
+      stopMotion() { host.stops++; windowController?.stop(); },
+      playMotion(request) {
+        host.motions.push(request);
+        if (!windowController) {
+          const { createWindowMotion } = require('../lib/window-motion');
+          windowController = createWindowMotion({ getWindow: () => nativeWindow,
+            getWorkArea: () => ({ x: 0, y: 0, width: 1000, height: 800 }), now: () => now,
+            schedule: context.setTimeout, cancel: context.clearTimeout,
+            sendFrame(packet) { host.frames.push(packet); subscriptions.motion(packet); }
+          });
+        }
+        windowController.start(request);
+      },
       say(scene) { host.scenes.push(scene); },
       onCommand: subscribe('command'),
       onActivity: subscribe('activity'),
-      onSettings: subscribe('settings')
-    },
-    EmotionBall: { createBall: () => ({ applyPose() {}, destroy() {}, burst() {} }) }
+      onSettings: subscribe('settings'),
+      onMotion: subscribe('motion')
+    }
   });
   context.window = context;
   const run = file => vm.runInContext(
@@ -62,23 +91,26 @@ function createRenderer(randomValue = 0.5) {
     { filename: file }
   );
   for (const file of [
-    'emotion-ball/js/rings.js', 'emotion-ball/js/emotions.js', 'emotion-ball/js/engine.js',
-    'desktop-pet/lib/pet-behavior.js', 'desktop-pet/lib/companion-behavior.js'
+    'emotion-ball/js/rings.js', 'emotion-ball/js/emotions.js', 'emotion-ball/js/ball.js', 'emotion-ball/js/engine.js',
+    'desktop-pet/lib/pet-behavior.js', 'desktop-pet/lib/companion-behavior.js', 'desktop-pet/lib/interaction-motion.js'
   ]) run(file);
   const create = context.EmotionBall.create;
   context.EmotionBall.create = (...args) => (engine = create(...args));
   run('desktop-pet/renderer.js');
 
-  function activity(locked = false) {
+  function activity(locked = false, overrides = {}) {
     subscriptions.activity({
       cursor: { x: 140, y: 140 },
       petBounds: { x: 100, y: 100, width: 80, height: 80 },
-      sameDisplay: true, idleSeconds: locked ? null : 0, locked
+      sameDisplay: true, idleSeconds: locked ? null : 0, locked, ...overrides
     });
   }
   activity();
   return {
-    host, pet, engine, activity,
+    host, pet, get engine() { return engine; }, activity, bounds, events, windowEvents, timers,
+    frame: packet => subscriptions.motion(packet),
+    stopHost: () => windowController?.stop(),
+    resize(width) { context.innerWidth = width; windowEvents.resize(); },
     emotions: context.EmotionBall.config.list(),
     command: value => subscriptions.command(value),
     click() {
@@ -205,7 +237,7 @@ test('全部表情及过渡帧保持睡眠灰白，眼睛保持原来的黑色',
   assert.equal(renderer.emotions.find(definition => definition.id === '10').raw.body.color, '#F6EFE4', '不改原项目的开心配色');
 });
 
-for (const [random, action, emotion] of [[0, 'greet', '03'], [0.25, 'bounce', '10'], [0.45, 'shy', '14'], [0.65, 'happy', '19'], [0.85, 'spin', '10']]) {
+for (const [random, action, emotion] of [[0, 'hop', '10'], [0.2, 'jelly', '03'], [0.4, 'sway', '19'], [0.6, 'peek', '03'], [0.8, 'bow', '14'], [0.99, 'spin', '10']]) {
   test(`双击清醒球球会${action}，不会进入睡眠或补发单击`, () => {
     const renderer = createRenderer(random);
     renderer.doubleClick();
@@ -214,10 +246,165 @@ for (const [random, action, emotion] of [[0, 'greet', '03'], [0.25, 'bounce', '1
     assert.equal(renderer.engine.emotionId, emotion);
     assert.notEqual(renderer.pet.dataset.mode, 'manual-sleep');
     assert.equal(renderer.host.scenes.includes('sleep'), false);
-    assert.equal(renderer.host.scenes.filter(scene => scene === 'play').length, 1);
+    assert.equal(renderer.host.scenes.filter(scene => scene?.event === 'play' && scene.motion === action).length, 1);
+    assert.equal(renderer.host.motions.length, 1);
+    assert.equal(renderer.host.bounces, 0);
+    const latest = renderer.host.frames.at(-1);
+    assert.ok(latest, '真实宿主控制器应产生身体帧');
+    assert.notDeepEqual(latest.frame.body, require('../lib/interaction-motion').sampleMotion(action, 0).body);
+    for (const key of Object.keys(latest.frame.body)) assert.equal(renderer.engine._lastPose.body[key], latest.frame.body[key]);
+    assert.equal(renderer.engine._lastPose.body.scale, 1);
+    const bodyNode = renderer.engine.ball.svg.children.find(child => child.children.some(node => node.attributes.class === 'eb-eye'));
+    const round = value => Math.round(value * 100) / 100;
+    assert.ok(bodyNode.attributes.transform.includes(`scale(${round(latest.frame.body.scaleX)} ${round(latest.frame.body.scaleY)})`), '真实 SVG 应使用横纵身体缩放');
     assert.equal(renderer.engine._lastPose.body.color, '#EEEBE4');
+    renderer.advanceTo(2400);
+    assert.equal(renderer.engine._motionFrame, null);
+    assert.equal(renderer.engine.emotionId, '50');
+    assert.deepEqual(renderer.bounds, { x: 100, y: 100, width: 80, height: 80 });
   });
 }
+
+test('连续双击不重复，旧token帧无效；绑定again重播原动作完整时间线', () => {
+  const renderer = createRenderer(0);
+  renderer.doubleClick();
+  renderer.advanceTo(400);
+  const first = renderer.host.motions[0];
+  renderer.doubleClick();
+  renderer.advanceTo(500);
+  const second = renderer.host.motions[1];
+  assert.ok(first && second, '两次双击均应启动受控身体动作');
+  assert.notEqual(second.action, first.action);
+  assert.ok(second.token > first.token);
+  const before = renderer.engine._motionFrame;
+  renderer.frame({ ...first, frame: require('../lib/interaction-motion').sampleMotion(first.action, 1800) });
+  assert.equal(renderer.engine._motionFrame, before);
+  renderer.command({ command: 'again', motion: first.action });
+  assert.equal(renderer.host.motions.at(-1).action, first.action);
+  assert.ok(renderer.host.motions.at(-1).token > second.token);
+  renderer.advanceTo(540);
+  assert.ok(renderer.engine._motionFrame);
+  renderer.advanceTo(2308);
+  assert.equal(renderer.engine._motionFrame, null);
+});
+
+for (const reason of ['rest', 'sleep', 'lock', 'hide', 'resize', 'drag', 'unload']) {
+  test(`${reason}打断动作后归位且旧帧和排队单击失效`, () => {
+    const renderer = createRenderer(0);
+    renderer.doubleClick();
+    renderer.advanceTo(400);
+    const first = renderer.host.motions[0];
+    assert.ok(first);
+    const oldEngine = renderer.engine;
+    if (reason === 'lock') renderer.activity(true);
+    else if (reason === 'hide') { renderer.stopHost(); renderer.command('stop'); }
+    else if (reason === 'resize') renderer.windowEvents.resize();
+    else if (reason === 'unload') renderer.windowEvents.beforeunload();
+    else if (reason === 'drag') {
+      renderer.events.pointerdown({ button: 0, pointerId: 1, screenX: 140, screenY: 140 });
+      renderer.events.pointermove({ pointerId: 1, screenX: 170, screenY: 170, clientX: 30, clientY: 30, buttons: 1 });
+    } else renderer.command(reason);
+    if (reason !== 'unload') renderer.frame({ ...first, frame: require('../lib/interaction-motion').sampleMotion('hop', 540) });
+    renderer.advanceTo(2600);
+    assert.equal(oldEngine._motionFrame, null);
+    assert.equal(oldEngine._spin, null);
+    assert.equal(renderer.host.motions.length, 1);
+    assert.equal(renderer.host.bounces, 0);
+    assert.deepEqual(renderer.bounds, { x: 100, y: 100, width: 80, height: 80 });
+  });
+}
+
+test('受控动作期间招呼计时及无按键摸头不会抢身体动作', () => {
+  const renderer = createRenderer(0);
+  renderer.doubleClick();
+  renderer.events.pointerenter();
+  for (let at = 100; at <= 1200; at += 100) {
+    renderer.advanceTo(at);
+    renderer.events.pointermove({ clientX: at % 200 ? 20 : 60, clientY: 10, buttons: 0 });
+  }
+  assert.equal(renderer.pet.dataset.lastAction, 'hop');
+  assert.equal(renderer.engine.emotionId, '10');
+  assert.ok(renderer.engine._motionFrame);
+  assert.equal(renderer.host.scenes.length, 1);
+});
+
+test('引擎隔离动作字段和对象引用，切换表情不把受控姿态带入过渡', () => {
+  const renderer = createRenderer();
+  const frame = { body: { x: 2, y: 3, scaleX: 0.9, scaleY: 0.8, rotate: 10, yaw: 1, color: 'red' }, gaze: { x: 5, y: 6 } };
+  assert.equal(typeof renderer.engine.setMotionFrame, 'function');
+  renderer.engine.setMotionFrame(frame);
+  frame.body.y = 99;
+  frame.gaze.x = 99;
+  renderer.advanceTo(100);
+  assert.equal(renderer.engine._lastPose.body.y, 3);
+  assert.equal(renderer.engine._lastPose.body.color, '#EEEBE4');
+  for (const invalid of [null, {}, { body: { x: Infinity } }, { body: { scaleX: -1 } }, { gaze: { y: NaN } }]) {
+    renderer.engine.setMotionFrame(invalid);
+    renderer.advanceTo(110);
+    assert.equal(renderer.engine._lastPose.body.y, 3);
+  }
+  renderer.engine.setEmotion('50');
+  assert.equal(renderer.engine._motionFrame, null);
+  renderer.advanceTo(111);
+  assert.equal(renderer.engine._lastPose.body.yaw, 0);
+  assert.notEqual(renderer.engine._lastPose.body.y, 3);
+});
+
+test('锁屏停止动画循环之前，真实SVG立即回到睡眠姿态', () => {
+  const renderer = createRenderer(0.2);
+  renderer.doubleClick();
+  renderer.advanceTo(220);
+  const body = renderer.engine.ball.svg.children.find(child => child.children.some(node => node.attributes.class === 'eb-eye'));
+  const animated = body.attributes.transform;
+  renderer.activity(true);
+  assert.equal(renderer.engine._active, false);
+  assert.notEqual(body.attributes.transform, animated, '锁屏不能冻结旧果冻姿态');
+  assert.equal(renderer.engine._lastPose.body.yaw, 0);
+});
+
+test('跨尺寸档重建后不再接旧token，默认身体缩放和鼠标注视恢复', () => {
+  const renderer = createRenderer(0.6);
+  renderer.doubleClick();
+  renderer.advanceTo(260);
+  const original = renderer.engine;
+  const oldPacket = renderer.host.frames.at(-1);
+  renderer.resize(180);
+  assert.notEqual(renderer.engine, original);
+  assert.equal(original._motionFrame, null);
+  renderer.frame(oldPacket);
+  renderer.activity(false, { cursor: { x: 400, y: 140 } });
+  renderer.advanceTo(400);
+  assert.equal(renderer.engine._motionFrame, null);
+  assert.equal(renderer.engine._lastPose.body.yaw, 0);
+  assert.ok(renderer.engine._lastPose.left.lookX > 0);
+  const body = renderer.engine.ball.svg.children.find(child => child.children.some(node => node.attributes.class === 'eb-eye'));
+  const scale = Math.round(renderer.engine._lastPose.body.scale * 100) / 100;
+  assert.ok(body.attributes.transform.includes(`scale(${scale} ${scale})`));
+});
+
+test('单击不会覆盖双击不连续重复的独立记忆', () => {
+  const renderer = createRenderer(0);
+  renderer.doubleClick();
+  renderer.advanceTo(2000);
+  renderer.click();
+  renderer.advanceTo(2300);
+  assert.equal(renderer.pet.dataset.lastAction, 'bounce');
+  renderer.doubleClick();
+  assert.equal(renderer.host.motions.at(-1).action, 'jelly');
+});
+
+test('相同token但动作不匹配的结束帧不清当前动作；stop不往宿主回传循环', () => {
+  const renderer = createRenderer(0);
+  renderer.doubleClick();
+  renderer.advanceTo(200);
+  const packet = renderer.host.frames.at(-1);
+  renderer.frame({ ...packet, action: 'bow', frame: { done: true } });
+  assert.ok(renderer.engine._motionFrame);
+  const stops = renderer.host.stops;
+  renderer.command('stop');
+  assert.equal(renderer.engine._motionFrame, null);
+  assert.equal(renderer.host.stops, stops);
+});
 
 test('菜单仍可睡眠，双击睡着的球球只唤醒', () => {
   const renderer = createRenderer();
@@ -230,6 +417,31 @@ test('菜单仍可睡眠，双击睡着的球球只唤醒', () => {
   assert.notEqual(renderer.engine.emotionId, '00');
   assert.equal(renderer.host.scenes.at(-1), 'welcome');
   assert.equal(renderer.host.scenes.includes('play'), false);
+});
+
+test('系统空闲睡着后，真实双击序列只唤醒，不被第一次松手提前变醒而误触发动作', () => {
+  const renderer = createRenderer(0);
+  renderer.activity(false, { idleSeconds: 1000 });
+  renderer.advanceTo(100);
+  assert.equal(renderer.engine.emotionId, '00');
+  renderer.doubleClick();
+  renderer.advanceTo(500);
+  assert.equal(renderer.host.motions.length, 0);
+  assert.equal(renderer.host.bounces, 0);
+  assert.equal(renderer.host.scenes.at(-1), 'welcome');
+});
+
+test('播放身体动作时菜单立即唤醒会停止旧动作，旧帧不再覆盖欢迎', () => {
+  const renderer = createRenderer(0);
+  renderer.doubleClick();
+  renderer.advanceTo(400);
+  const packet = renderer.host.frames.at(-1);
+  renderer.command('wake');
+  renderer.frame(packet);
+  renderer.advanceTo(500);
+  assert.equal(renderer.engine._motionFrame, null);
+  assert.equal(renderer.engine.emotionId, '01');
+  assert.deepEqual(renderer.bounds, { x: 100, y: 100, width: 80, height: 80 });
 });
 
 test('锁屏时双击不触发互动', () => {

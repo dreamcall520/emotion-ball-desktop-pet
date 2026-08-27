@@ -101,6 +101,20 @@ test('优先复用本机已经下载好的 Electron 压缩包', () => {
   fs.rmSync(cacheRoot, { recursive: true, force: true });
 });
 
+test('打包完整包含动作采样与窗口控制器并可真正加载', () => {
+  const root = path.resolve(__dirname, '../..');
+  const staging = prepareStaging(root);
+  for (const file of ['interaction-motion.js', 'window-motion.js']) {
+    const staged = path.join(staging, 'desktop-pet/lib', file);
+    assert.ok(fs.existsSync(staged), `${file} 必须进入显式打包清单`);
+    assert.equal(fs.readFileSync(staged, 'utf8'), fs.readFileSync(path.join(root, 'desktop-pet/lib', file), 'utf8'));
+  }
+  assert.equal(typeof require(path.join(staging, 'desktop-pet/lib/window-motion.js')).createWindowMotion, 'function');
+  const html = fs.readFileSync(path.join(staging, 'desktop-pet/index.html'), 'utf8');
+  assert.ok(html.indexOf('lib/interaction-motion.js') >= 0);
+  assert.ok(html.indexOf('lib/interaction-motion.js') < html.indexOf('renderer.js'));
+});
+
 test('真实启动检查使用独立的临时设置目录', () => {
   const text = fs.readFileSync(
     path.resolve(__dirname, '../scripts/smoke-electron.js'),

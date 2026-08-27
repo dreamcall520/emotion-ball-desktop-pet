@@ -1,3 +1,12 @@
+const { getMotion } = require('./interaction-motion');
+const MOTION_PHRASES = Object.freeze({
+  hop: Object.freeze(['看我蹦两下！', '快乐，起飞！']),
+  jelly: Object.freeze(['我是软乎乎的！', '晃一晃，烦恼散掉。']),
+  sway: Object.freeze(['给你跳个小舞～', '左一下，右一下。']),
+  peek: Object.freeze(['让我瞅瞅～', '这边看看，那边看看。']),
+  bow: Object.freeze(['收到，向你致意！', '谢谢你来陪我。']),
+  spin: Object.freeze(['转一圈，快乐加倍。', '这一招，专门给你看。'])
+});
 const PHRASES = Object.freeze({
   hello: Object.freeze([
     '我在呢。', '嗯？叫我啦。', '小球报到。', '目光锁定你。',
@@ -71,10 +80,22 @@ class DialogueDirector {
     if (this._current && nowMs >= this._current.expiresAt) this._current = null;
   }
 
-  offer(event, nowMs) {
+  hasBubble(nowMs) {
+    if (!Number.isFinite(nowMs)) return false;
+    this._expire(nowMs);
+    return this._current !== null;
+  }
+
+  offer(request, nowMs) {
+    const motion = request && typeof request === 'object' ? request.motion : null;
+    const event = typeof request === 'string' ? request : request?.event;
+    if (typeof request !== 'string' && (event !== 'play' || !getMotion(motion))) return null;
     if (!this.enabled || !Number.isFinite(nowMs) || typeof event !== 'string' ||
       !Object.prototype.hasOwnProperty.call(PHRASES, event)) return null;
     this._expire(nowMs);
+    // 新动作即使遇到六秒冷却，也不能继续展示上个动作的专属文案。
+    if (event === 'play' && this._current?.event === 'play' &&
+      (motion || this._current.motion) && motion !== this._current.motion) this.dismiss();
     // 睡眠是状态切换：先让旧玩耍按钮失效，醒来后的欢迎仍可正常接上。
     if (event === 'sleep') this.dismiss();
     if (this._current && PRIORITY[event] < this._current.priority) return null;
@@ -88,16 +109,17 @@ class DialogueDirector {
       if (!continuingDrop && nowMs - this._lastDirectAt < 6000) return null;
     }
 
-    const phrases = PHRASES[event];
+    const phrases = motion ? MOTION_PHRASES[motion] : PHRASES[event];
+    const phraseKey = motion ? `play:${motion}` : event;
     const randomValue = this._random();
     let index = Number.isFinite(randomValue) ? Math.max(0, Math.min(phrases.length - 1, Math.floor(randomValue * phrases.length))) : 0;
-    if (index === this._lastPhrase.get(event)) index = (index + 1) % phrases.length;
-    this._lastPhrase.set(event, index);
+    if (index === this._lastPhrase.get(phraseKey)) index = (index + 1) % phrases.length;
+    this._lastPhrase.set(phraseKey, index);
 
     const id = this._nextId++;
     const durationMs = event === 'play' ? 8000 : 4000;
     const actions = event === 'play' ? PLAY_ACTIONS : [];
-    this._current = { id, event, actions, priority: PRIORITY[event], expiresAt: nowMs + durationMs };
+    this._current = { id, event, motion, actions, priority: PRIORITY[event], expiresAt: nowMs + durationMs };
     this._lastBubbleAt = nowMs;
     if (DIRECT_EVENTS.has(event)) {
       this._lastDirectAt = nowMs;
@@ -111,9 +133,10 @@ class DialogueDirector {
     if (!Number.isFinite(nowMs)) return null;
     this._expire(nowMs);
     if (!this._current || id !== this._current.id || !this._current.actions.some(item => item.id === action)) return null;
+    const motion = this._current.motion;
     this.dismiss();
     if (action === 'rest') this._workQuietUntil = nowMs + TEN_MINUTES;
-    return action;
+    return action === 'again' && motion ? { command: 'again', motion } : action;
   }
 }
 module.exports = { PHRASES, DialogueDirector };

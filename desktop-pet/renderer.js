@@ -8,11 +8,13 @@
     endDrag() {},
     bounce() {},
     stopMotion() {},
+    playMotion() {},
     say() {},
     showContextMenu() {},
     onCommand() { return () => {}; },
     onActivity() { return () => {}; },
-    onSettings() { return () => {}; }
+    onSettings() { return () => {}; },
+    onMotion() { return () => {}; }
   };
 
   const companion = new CompanionBehavior.CompanionState();
@@ -22,12 +24,16 @@
   let compactMode = null;
   let dragState = null;
   let singleClickTimer = null;
+  let wakeOnDoubleClick = false;
   let helloTimer = null;
   let actionTimer = null;
   let actionUntil = 0;
   let lastWorkAttempt = 0;
   let lastSample = null;
   let currentState = { mode: 'awake', emotionId: '50', gaze: null };
+  let activeMotion = null;
+  let nextMotionToken = 0;
+  let lastDoubleMotion = null;
   const listeners = [];
 
   // 只调整此桌宠页面的配置，不改变原项目表情库。
@@ -75,9 +81,10 @@
     actionUntil = 0;
   }
 
-  function stopMotion() {
+  function stopMotion(notifyHost = true) {
+    activeMotion = null;
     ball.stopMotion();
-    desktop.stopMotion();
+    if (notifyHost) desktop.stopMotion();
   }
 
   function cancelPendingInteraction() {
@@ -85,10 +92,11 @@
     singleClickTimer = null;
     clearTimeout(helloTimer);
     helloTimer = null;
+    wakeOnDoubleClick = false;
   }
 
   function restoreState() {
-    if (dragState?.dragged || performance.now() < actionUntil) return;
+    if (activeMotion || dragState?.dragged || performance.now() < actionUntil) return;
     showEmotion(companion.manualSleep ? '00' : currentState.emotionId);
   }
 
@@ -123,10 +131,16 @@
       ball.clearGaze();
       petElement.dataset.gaze = '0,0';
       ball.setActive(false);
+      ball.renderStatic();
       return;
     }
     ball.setActive(true);
-    if (currentState.welcome && !dragState?.dragged && now >= actionUntil) {
+    if (currentState.mode === 'sleep' && previousMode !== 'sleep') {
+      cancelPendingInteraction();
+      clearAction();
+      stopMotion();
+    }
+    if (currentState.welcome && !activeMotion && !dragState?.dragged && now >= actionUntil) {
       playEmotion('01', 2250, 'welcome');
     } else {
       restoreState();
@@ -142,7 +156,7 @@
       petElement.dataset.gaze = '0,0';
     }
     if (!companion.manualSleep && ['awake', 'focus'].includes(currentState.mode) &&
-        now - lastWorkAttempt >= 60000 && !dragState && now >= actionUntil) {
+        now - lastWorkAttempt >= 60000 && !activeMotion && !dragState && now >= actionUntil) {
       lastWorkAttempt = now;
       desktop.say('work');
     }
@@ -154,6 +168,9 @@
   }
 
   function wake() {
+    cancelPendingInteraction();
+    clearAction();
+    stopMotion();
     companion.setManualSleep(false, performance.now());
     currentState = { ...currentState, mode: 'awake', emotionId: '50' };
     petElement.dataset.mode = 'awake';
@@ -173,32 +190,46 @@
   }
 
   function runDoubleClickAction() {
+    const shouldWake = wakeOnDoubleClick || companion.manualSleep || ball.emotionId === '00';
     cancelPendingInteraction();
     if (lastSample?.locked) return;
-    if (companion.manualSleep || ball.emotionId === '00') {
+    if (shouldWake) {
       wake();
       return;
     }
-    const reactions = [
-      { emotion: '03', action: 'greet' },
-      { emotion: '10', action: 'bounce' },
-      { emotion: '14', action: 'shy' },
-      { emotion: '19', action: 'happy' },
-      { emotion: '10', action: 'spin' }
-    ];
-    let index = Math.floor(Math.random() * reactions.length);
-    if (reactions[index].action === petElement.dataset.lastAction) index = (index + 1) % reactions.length;
-    const reaction = reactions[index];
+    const motion = InteractionMotion.chooseMotion(Math.random(), lastDoubleMotion);
+    lastDoubleMotion = motion.id;
+    playReaction(motion.id);
+  }
+
+  function playReaction(action, speak = true) {
+    const motion = InteractionMotion.getMotion(action);
+    if (!motion || lastSample?.locked || companion.manualSleep) return;
+    cancelPendingInteraction();
+    clearAction();
     stopMotion();
     noteInteraction();
-    playEmotion(reaction.emotion, 3200, 'play');
-    petElement.dataset.lastAction = reaction.action;
-    if (reaction.action === 'bounce') ball.bounce();
-    else if (reaction.action === 'spin') ball.spin(1);
+    activeMotion = { token: ++nextMotionToken, action };
+    ball.setEmotion(motion.emotion);
+    ball.setMotionFrame(InteractionMotion.sampleMotion(action, 0));
+    petElement.dataset.lastAction = action;
+    desktop.playMotion({ ...activeMotion });
+    if (speak) desktop.say({ event: 'play', motion: action });
+  }
+
+  function onMotion(packet) {
+    if (!activeMotion || !packet || packet.token !== activeMotion.token ||
+        packet.action !== activeMotion.action || !packet.frame) return;
+    if (packet.frame.done === true) {
+      activeMotion = null;
+      ball.stopMotion();
+      restoreState();
+    } else ball.setMotionFrame(packet.frame);
   }
 
   function runSingleClickAction(speak = true) {
     if (companion.manualSleep || lastSample?.locked) return;
+    if (activeMotion) stopMotion();
     noteInteraction();
     playEmotion('10', 3200, speak ? 'play' : null);
     const action = PetBehavior.chooseClickAction(Math.random());
@@ -211,11 +242,14 @@
     clearTimeout(singleClickTimer);
     singleClickTimer = setTimeout(() => {
       singleClickTimer = null;
+      wakeOnDoubleClick = false;
       runSingleClickAction();
     }, 260);
   }
 
   function runRandomEmotion() {
+    cancelPendingInteraction();
+    stopMotion();
     companion.setManualSleep(false, performance.now());
     const definitions = EmotionBall.config.list();
     const selected = definitions[Math.floor(Math.random() * definitions.length)];
@@ -223,8 +257,16 @@
   }
 
   function runCommand(command) {
+    if (command === 'stop') {
+      cancelPendingInteraction();
+      clearAction();
+      stopMotion(false);
+      restoreState();
+      return;
+    }
     if (lastSample?.locked) return;
-    if (command === 'random') runRandomEmotion();
+    if (command?.command === 'again') playReaction(command.motion, false);
+    else if (command === 'random') runRandomEmotion();
     else if (command === 'sleep') sleep();
     else if (command === 'wake') wake();
     else if (command === 'again') {
@@ -248,7 +290,12 @@
 
   petElement.addEventListener('pointerdown', event => {
     if (event.button !== 0 || lastSample?.locked) return;
-    clearTimeout(helloTimer);
+    // 第一次松手会刷新系统空闲状态；保留本次双击最初是否睡着。
+    const startedSleeping = companion.manualSleep || ball.emotionId === '00' || (singleClickTimer && wakeOnDoubleClick);
+    cancelPendingInteraction();
+    wakeOnDoubleClick = Boolean(startedSleeping);
+    clearAction();
+    stopMotion();
     petting.reset();
     const point = eventPoint(event);
     dragState = {
@@ -264,7 +311,7 @@
   petElement.addEventListener('pointermove', event => {
     if (lastSample?.locked) return;
     const rect = petElement.getBoundingClientRect();
-    if (!companion.manualSleep) {
+    if (!companion.manualSleep && !activeMotion) {
       if (!dragState && petting.update({
         x: event.clientX, y: event.clientY,
         width: rect.width, height: rect.height, buttons: event.buttons
@@ -324,11 +371,11 @@
   });
 
   petElement.addEventListener('pointerenter', () => {
-    if (companion.manualSleep || lastSample?.locked) return;
+    if (companion.manualSleep || lastSample?.locked || activeMotion) return;
     noteInteraction();
     clearTimeout(helloTimer);
     helloTimer = setTimeout(() => {
-      if (companion.manualSleep || dragState || performance.now() < actionUntil) return;
+      if (companion.manualSleep || lastSample?.locked || activeMotion || dragState || performance.now() < actionUntil) return;
       playEmotion('03', 2200, 'hello');
     }, 900);
   });
@@ -344,14 +391,18 @@
   });
 
   window.addEventListener('resize', () => {
+    cancelPendingInteraction();
+    clearAction();
+    stopMotion();
     const shouldBeCompact = window.innerWidth <= 120;
     if (shouldBeCompact !== compactMode) createBall(ball.emotionId);
+    restoreState();
   });
 
   window.addEventListener('beforeunload', () => {
-    clearTimeout(singleClickTimer);
-    clearTimeout(helloTimer);
+    cancelPendingInteraction();
     clearAction();
+    stopMotion();
     listeners.forEach(remove => remove());
     if (ball) ball.destroy();
   });
@@ -359,6 +410,7 @@
   createBall('50');
   petElement.dataset.mode = 'awake';
   listeners.push(desktop.onCommand(runCommand));
+  listeners.push(desktop.onMotion(onMotion));
   listeners.push(desktop.onActivity(updateActivity));
   listeners.push(desktop.onSettings(settings => {
     companion.setKeepAwake(settings.keepAwake);

@@ -461,7 +461,8 @@
       bodyG.setAttribute('transform',
         'translate(' + r2(HEAD_C + b.x) + ' ' + r2(HEAD_C + b.y) + ')' +
         ' rotate(' + r2(b.rotate || 0) + ')' +
-        ' scale(' + r2(b.scale) + ')' +
+        ' scale(' + r2(b.scale * (b.scaleX == null ? 1 : b.scaleX)) + ' ' +
+          r2(b.scale * (b.scaleY == null ? 1 : b.scaleY)) + ')' +
         ' translate(' + r2(-HEAD_C) + ' ' + r2(-HEAD_C) + ')');
       setBodyColor(b.color);
 

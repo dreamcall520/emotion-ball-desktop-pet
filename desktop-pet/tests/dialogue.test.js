@@ -6,6 +6,44 @@ const { PHRASES, DialogueDirector } = require('../lib/dialogue');
 
 const events = ['hello', 'pet', 'drag', 'drop', 'welcome', 'work', 'play', 'sleep'];
 
+for (const motion of ['hop', 'jelly', 'sway', 'peek', 'bow', 'spin']) {
+  test(`${motion}专属气泡有两句且再来一次绑定原动作`, () => {
+    const director = new DialogueDirector({ random: () => 0 });
+    const first = director.offer({ event: 'play', motion }, 0);
+    assert.ok(first, '动作应有专属气泡');
+    assert.equal(first.durationMs, 8000);
+    assert.equal(first.actions.length, 2);
+    assert.doesNotMatch(first.text, /睡|眠|眯|晚安/);
+    assert.deepEqual(director.respond(first.id, 'again', 100), { command: 'again', motion });
+    assert.equal(director.respond(first.id, 'again', 101), null);
+    const second = director.offer({ event: 'play', motion }, 6000);
+    assert.notEqual(first.text, second.text);
+    assert.equal(director.respond(second.id, 'again', 14000), null);
+  });
+}
+
+test('冷却期切换动作会收起旧动作气泡并使旧按钮失效', () => {
+  const director = new DialogueDirector();
+  const first = director.offer({ event: 'play', motion: 'hop' }, 0);
+  assert.ok(first);
+  assert.equal(director.hasBubble(10), true);
+  assert.equal(director.offer({ event: 'play', motion: 'bow' }, 100), null);
+  assert.equal(director.hasBubble(100), false);
+  assert.equal(director.respond(first.id, 'again', 101), null);
+  assert.ok(director.offer({ event: 'play', motion: 'bow' }, 6000));
+});
+
+test('未知动作对象不占冷却，通用play兼容且不能留下错配专属文案', () => {
+  const director = new DialogueDirector();
+  for (const motion of ['unknown', '__proto__', null, 1]) assert.equal(director.offer({ event: 'play', motion }, 0), null);
+  const first = director.offer({ event: 'play', motion: 'hop' }, 0);
+  assert.ok(first);
+  assert.equal(director.offer('play', 10), null);
+  assert.equal(director.hasBubble(10), false);
+  const generic = director.offer('play', 6000);
+  assert.equal(director.respond(generic.id, 'again', 6100), 'again');
+});
+
 test('对白规则模块存在', () => {
   assert.equal(fs.existsSync(path.join(__dirname, '../lib/dialogue.js')), true);
 });

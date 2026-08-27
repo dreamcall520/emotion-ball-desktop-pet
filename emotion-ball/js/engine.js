@@ -332,6 +332,7 @@
     this._eyeScale = opts.eyeScale || 1;
     this._lastTick = 0;
     this._spin = null;   /* { x, v, t }：弹簧驱动的整圈自旋（彩带触发源） */
+    this._motionFrame = null;
 
     /* ---- 表情形变系统 ---- */
     this._ringSrc = [EXPR[0][0], EXPR[0][1]];   /* 形变起点环对 */
@@ -404,6 +405,7 @@
     /* ---------- 核心：切换表情（含兜底） ---------- */
     setEmotion: function (id, o) {
       o = o || {};
+      if (this._motionFrame) this.stopMotion();
       var def = EB.config.get(id);
       if (!def) {
         console.warn('[EmotionBall] 未知表情 ID "' + id + '"，回退到待机 (' + this._fallbackId + ')');
@@ -523,11 +525,29 @@
     },
     /* 宿主明确要求安静时，结束动作并丢弃含旧旋转角度的过渡姿态。 */
     stopMotion: function () {
+      this._motionFrame = null;
       this._spin = null;
       this._bounceAt = -1;
       this._prevPose = null;
       this._lastPose = null;
       this._transDur = 0;
+      return this;
+    },
+
+    /* 受控动作只覆盖身体与临时注视，不接纳颜色或其他配置。 */
+    setMotionFrame: function (frame) {
+      if (!frame || !frame.body) return this;
+      var fields = ['x', 'y', 'scaleX', 'scaleY', 'rotate', 'yaw'];
+      var body = {};
+      for (var i = 0; i < fields.length; i++) {
+        var key = fields[i], value = frame.body[key];
+        if (!Number.isFinite(value) || (key.indexOf('scale') === 0 && value <= 0)) return this;
+        body[key] = value;
+      }
+      var gaze = frame.gaze || { x: 0, y: 0 };
+      if (!Number.isFinite(gaze.x) || !Number.isFinite(gaze.y)) return this;
+      this._motionFrame = { body: body, gaze: { x: clamp(gaze.x, -24, 24), y: clamp(gaze.y, -15, 15) } };
+      if (!this._active) this.renderStatic();
       return this;
     },
 
@@ -584,6 +604,7 @@
       this._seq = seq;
     },
     destroy: function () {
+      this.stopMotion();
       this.stopTour();
       this.setActive(false);
       this._events = {};
@@ -766,6 +787,11 @@
       var tt = now - this._transStart;
       if (this._transDur > 0 && tt < this._transDur && this._prevPose) {
         pose = lerpPose(this._prevPose, pose, easeInOutCubic(tt / this._transDur));
+      }
+      if (this._motionFrame) {
+        Object.assign(pose.body, this._motionFrame.body, { scale: 1 });
+        pose.left.lookX = pose.right.lookX = this._motionFrame.gaze.x;
+        pose.left.lookY = pose.right.lookY = this._motionFrame.gaze.y;
       }
       return pose;
     },

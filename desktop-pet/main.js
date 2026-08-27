@@ -23,6 +23,8 @@ const {
 const { createActivityMonitor, createPowerGuard } = require('./lib/activity-monitor');
 const { DialogueDirector } = require('./lib/dialogue');
 const { createBubbleWindow } = require('./lib/bubble-window');
+const { getMotion } = require('./lib/interaction-motion');
+const { createWindowMotion } = require('./lib/window-motion');
 
 const APP_NAME = '球球桌宠';
 const IS_SMOKE_TEST = process.env.PET_SMOKE_TEST === '1';
@@ -38,6 +40,12 @@ let activityMonitor = null;
 let dialogue = null;
 let bubble = null;
 let screenLocked = false;
+const windowMotion = createWindowMotion({
+  getWindow: () => petWindow,
+  getWorkArea: bounds => screen.getDisplayMatching(bounds).workArea,
+  now: () => performance.now(), schedule: setTimeout, cancel: clearTimeout,
+  sendFrame: packet => petWindow.webContents.send('pet:motion-frame', packet)
+});
 
 app.setName(APP_NAME);
 
@@ -93,7 +101,14 @@ function stopWindowBounce(restorePosition = true) {
   }
 }
 
+function stopMotion({ restore = true, notify = true, notifyRenderer = true } = {}) {
+  stopWindowBounce(restore);
+  windowMotion.stop({ restore, notify });
+  if (notifyRenderer && petWindow && !petWindow.isDestroyed()) sendCommand('stop');
+}
+
 function startWindowBounce() {
+  windowMotion.stop();
   if (
     bounceState ||
     !petWindow ||
@@ -146,9 +161,9 @@ function currentBounds() {
   return defaultBounds(screen.getPrimaryDisplay(), settings.size);
 }
 
-function makeWindowVisible() {
+function makeWindowVisible(notifyRenderer = true) {
   if (!petWindow || petWindow.isDestroyed()) return;
-  stopWindowBounce();
+  stopMotion({ notifyRenderer });
   const next = ensureVisibleBounds(
     petWindow.getBounds(),
     screen.getAllDisplays(),
@@ -160,7 +175,14 @@ function makeWindowVisible() {
 
 function sendCommand(command) {
   if (!petWindow || petWindow.isDestroyed()) return;
-  petWindow.webContents.send('pet:command', command);
+  if (typeof command !== 'string') {
+    if (command?.command !== 'again' || !getMotion(command.motion)) return;
+    command = { command: 'again', motion: command.motion };
+  }
+  if (command === 'sleep' || command === 'rest') stopMotion({ notifyRenderer: false });
+  try {
+    petWindow.webContents.send('pet:command', command);
+  } catch (_) { /* 窗口关闭或渲染进程退出时，停止操作仍需完成。 */ }
 }
 
 function sendCompanionSettings() {
@@ -187,12 +209,13 @@ function showDialogue(event) {
   if (screenLocked || !petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return null;
   const payload = dialogue.offer(event, performance.now());
   if (payload) bubble.show(payload);
+  else if (!dialogue.hasBubble(performance.now())) bubble.hide();
   return payload;
 }
 
 function setPetSize(sizeName) {
   if (!SIZES[sizeName] || !petWindow || petWindow.isDestroyed()) return;
-  stopWindowBounce();
+  stopMotion();
   const current = petWindow.getBounds();
   const size = SIZES[sizeName];
   const proposed = {
@@ -225,7 +248,7 @@ function setAlwaysOnTop(enabled) {
 
 function resetPosition() {
   if (!petWindow || petWindow.isDestroyed()) return;
-  stopWindowBounce();
+  stopMotion();
   const next = defaultBounds(screen.getPrimaryDisplay(), settings.size);
   petWindow.setBounds(next, true);
   settings.x = next.x;
@@ -464,10 +487,10 @@ function createPetWindow() {
     finishSmokeTest();
   });
   petWindow.on('move', () => bubble?.reposition());
-  petWindow.on('resize', () => bubble?.reposition());
-  petWindow.on('hide', () => { bubble?.hide(); dialogue?.dismiss(); });
+  petWindow.on('resize', () => { stopMotion(); bubble?.reposition(); });
+  petWindow.on('hide', () => { stopMotion(); bubble?.hide(); dialogue?.dismiss(); });
   petWindow.on('closed', () => {
-    stopWindowBounce(false);
+    stopMotion({ restore: false, notify: false, notifyRenderer: false });
     activityMonitor?.stop();
     bubble?.destroy();
     dialogue?.dismiss();
@@ -483,7 +506,7 @@ function createPetWindow() {
 
 function registerIpc() {
   ipcMain.on('pet:say', (event, scene) => {
-    if (fromPetWindow(event) && typeof scene === 'string') showDialogue(scene);
+    if (fromPetWindow(event)) showDialogue(scene);
   });
 
   ipcMain.on('pet:bubble-reply', (event, payload) => {
@@ -500,7 +523,8 @@ function registerIpc() {
     if (!fromPetWindow(event) || screenLocked) return;
     const point = validPoint(rawPoint);
     if (!point) return;
-    stopWindowBounce();
+    // 页面已在 pointerdown 清理待执行互动；不发送全局 stop，避免迟到后误杀新双击。
+    stopMotion({ notifyRenderer: false });
     const [x, y] = petWindow.getPosition();
     dragState = { pointer: point, window: { x, y } };
   });
@@ -519,16 +543,23 @@ function registerIpc() {
   ipcMain.on('pet:drag-end', event => {
     if (!fromPetWindow(event)) return;
     dragState = null;
-    if (!screenLocked) makeWindowVisible();
+    if (!screenLocked) makeWindowVisible(false);
   });
 
   ipcMain.on('pet:bounce', event => {
-    if (!fromPetWindow(event) || screenLocked) return;
+    if (!fromPetWindow(event) || screenLocked || !petWindow.isVisible()) return;
     startWindowBounce();
   });
 
+  ipcMain.on('pet:motion-start', (event, request) => {
+    if (!fromPetWindow(event) || screenLocked || !petWindow.isVisible() || !request ||
+      !Number.isSafeInteger(request.token) || request.token <= 0 || !getMotion(request.action)) return;
+    stopWindowBounce();
+    windowMotion.start({ token: request.token, action: request.action });
+  });
+
   ipcMain.on('pet:stop-motion', event => {
-    if (fromPetWindow(event)) stopWindowBounce();
+    if (fromPetWindow(event)) stopMotion({ notifyRenderer: false });
   });
 
   ipcMain.on('pet:context-menu', event => {
@@ -575,7 +606,7 @@ async function bootstrap() {
   const pause = () => {
     screenLocked = true;
     dragState = null;
-    stopWindowBounce();
+    stopMotion();
     activityMonitor.pause();
     bubble.hide();
     dialogue.dismiss();
@@ -608,7 +639,7 @@ if (!hasSingleInstanceLock) {
 
   app.on('before-quit', () => {
     isQuitting = true;
-    stopWindowBounce();
+    stopMotion();
     activityMonitor?.stop();
     bubble?.destroy();
   });

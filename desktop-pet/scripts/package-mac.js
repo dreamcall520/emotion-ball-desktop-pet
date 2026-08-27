@@ -37,6 +37,8 @@ function prepareStaging(root) {
     'desktop-pet/assets/tray-iconTemplate@2x.png',
     'desktop-pet/lib/settings.js',
     'desktop-pet/lib/window-bounce.js',
+    'desktop-pet/lib/interaction-motion.js',
+    'desktop-pet/lib/window-motion.js',
     'desktop-pet/lib/window-placement.js',
     'desktop-pet/lib/pet-behavior.js',
     'desktop-pet/lib/activity-monitor.js',
