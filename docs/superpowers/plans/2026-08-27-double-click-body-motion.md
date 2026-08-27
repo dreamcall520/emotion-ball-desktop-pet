@@ -25,7 +25,7 @@
 
 文件：新增 `desktop-pet/lib/interaction-motion.js`、`desktop-pet/tests/interaction-motion.test.js`。
 
-- [ ] 写失败测试，先用文件存在断言验证缺少功能，再覆盖全部导出：`MOTIONS`、`getMotion(id)`、`chooseMotion(random, previousId)`、`sampleMotion(id, elapsedMs)`、`positionForMotion(bounds, workArea, offset)`。
+- [x] 写失败测试，先用文件存在断言验证缺少功能，再覆盖全部导出：`MOTIONS`、`getMotion(id)`、`chooseMotion(random, previousId)`、`sampleMotion(id, elapsedMs)`、`positionForMotion(bounds, workArea, offset)`。
 
 ```js
 assert.ok(fs.existsSync(modulePath), '缺少全身动作模块');
@@ -41,9 +41,9 @@ for (const item of motion.MOTIONS) {
 }
 ```
 
-- [ ] 运行 `node --test desktop-pet/tests/interaction-motion.test.js`，确认先因缺少动作模块断言失败，而非语法错误。
-- [ ] 实现 UMD 导出 `window.InteractionMotion` / `module.exports`。目录每项包含 `{id, durationMs, weight, emotion}`。五项weight=2，spin=1；选择前排除previousId；异常随机值按0，数值限制到[0,1)。未知id采样返回null，异常时间返回安全起始帧。
-- [ ] 使用下列完整关键帧数据和采样规则；每一帧合并中性值，未列字段不继承上一帧。body坐标采用259 viewBox单位，window偏移也采用同一单位。
+- [x] 运行 `node --test desktop-pet/tests/interaction-motion.test.js`，确认先因缺少动作模块断言失败，而非语法错误。
+- [x] 实现 UMD 导出 `window.InteractionMotion` / `module.exports`。目录每项包含 `{id, durationMs, weight, emotion}`。五项weight=2，spin=1；选择前排除previousId；异常随机值按0，数值限制到[0,1)。未知id采样返回null，异常时间返回安全起始帧。
+- [x] 使用下列完整关键帧数据和采样规则；每一帧合并中性值，未列字段不继承上一帧。body坐标采用259 viewBox单位，window偏移也采用同一单位。
 
 ```js
 const neutral = { x: 0, y: 0, scaleX: 1, scaleY: 1, rotate: 0, yaw: 0 };
@@ -80,9 +80,9 @@ function interpolate(a,b,t) { return a+(b-a)*smooth(t); }
 // 完成时精确返回neutral（spin的2π与0视觉等价），不得留下微小残余。
 ```
 
-- [ ] 对每个采样body计算旋转椭圆的外包络，约束在viewBox `[-7,236]` 以内（圆心114.2705，保守半径114.2705）；不改变中性尺寸。`positionForMotion` 用窗口宽/259缩放offset，结果四舍五入，夹在workArea内；允许负坐标，非法bounds/area/offset返回null。
-- [ ] 每16ms采样六个动作，验证有限值、起止中性、身体外包络安全；跳跃有两次离地且有落地形变，其余五种身体轨迹各不相同。检查80/120/180/240尺寸、四角、负坐标；连续选择不重复、spin权重较低、非法输入安全。
-- [ ] 运行上述测试和 `node --test --test-reporter=dot desktop-pet/tests/*.test.js`；提交动作模块和测试。
+- [x] 对每个采样body计算旋转椭圆的外包络，约束在viewBox `[-7,236]` 以内（圆心114.2705，实际blob点最大半径114.299603，保守半径114.3）；不改变中性尺寸。`positionForMotion` 用窗口宽/259缩放offset，结果四舍五入，夹在workArea内；允许负坐标，非法bounds/area/offset返回null。
+- [x] 每16ms采样六个动作，验证有限值、起止中性、身体外包络安全；跳跃有两次离地且有落地形变，其余五种身体轨迹各不相同。检查80/120/180/240尺寸、四角、负坐标；连续选择不重复、spin权重较低、非法输入安全。
+- [x] 运行上述测试和 `node --test --test-reporter=dot desktop-pet/tests/*.test.js`；提交动作模块和测试。专项17项、全套142项通过，方案与质量独立检查均通过（75efccb、62b495b）。
 
 ## 任务2：接入完整互动生命周期
 
