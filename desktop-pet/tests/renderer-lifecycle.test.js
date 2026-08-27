@@ -79,11 +79,17 @@ function createRenderer(randomValue = 0.5) {
   activity();
   return {
     host, pet, engine, activity,
+    emotions: context.EmotionBall.config.list(),
     command: value => subscriptions.command(value),
     click() {
       const event = { screenX: 140, screenY: 140, button: 0, pointerId: 1 };
       events.pointerdown(event);
       events.pointerup(event);
+    },
+    doubleClick() {
+      this.click();
+      this.click();
+      events.dblclick({ button: 0 });
     },
     advanceTo(target) {
       assert.ok(target >= now);
@@ -180,4 +186,58 @@ test('你歇会儿取消排队单击，不会过一会儿又开始玩', () => {
   assert.equal(renderer.engine.emotionId, '50');
   assert.equal(renderer.engine._spin, null);
   assert.equal(renderer.pet.dataset.lastAction, 'rest');
+});
+
+test('全部表情及过渡帧保持睡眠灰白，眼睛保持原来的黑色', () => {
+  const renderer = createRenderer();
+  let now = 0;
+  for (const definition of renderer.emotions) {
+    renderer.engine.setEmotion(definition.id);
+    for (const elapsed of [1, 150, 750, 1600, 3500]) {
+      renderer.advanceTo(now + elapsed);
+      const pose = renderer.engine._lastPose;
+      assert.equal(pose.body.color.toUpperCase(), '#EEEBE4', `${definition.id} / ${elapsed}ms 身体色`);
+      assert.equal(pose.left.color.toUpperCase(), '#1A1A1A', `${definition.id} 左眼`);
+      assert.equal(pose.right.color.toUpperCase(), '#1A1A1A', `${definition.id} 右眼`);
+    }
+    now += 3500;
+  }
+  assert.equal(renderer.emotions.find(definition => definition.id === '10').raw.body.color, '#F6EFE4', '不改原项目的开心配色');
+});
+
+for (const [random, action, emotion] of [[0, 'greet', '03'], [0.25, 'bounce', '10'], [0.45, 'shy', '14'], [0.65, 'happy', '19'], [0.85, 'spin', '10']]) {
+  test(`双击清醒球球会${action}，不会进入睡眠或补发单击`, () => {
+    const renderer = createRenderer(random);
+    renderer.doubleClick();
+    renderer.advanceTo(400);
+    assert.equal(renderer.pet.dataset.lastAction, action);
+    assert.equal(renderer.engine.emotionId, emotion);
+    assert.notEqual(renderer.pet.dataset.mode, 'manual-sleep');
+    assert.equal(renderer.host.scenes.includes('sleep'), false);
+    assert.equal(renderer.host.scenes.filter(scene => scene === 'play').length, 1);
+    assert.equal(renderer.engine._lastPose.body.color, '#EEEBE4');
+  });
+}
+
+test('菜单仍可睡眠，双击睡着的球球只唤醒', () => {
+  const renderer = createRenderer();
+  renderer.command('sleep');
+  renderer.advanceTo(100);
+  assert.equal(renderer.pet.dataset.mode, 'manual-sleep');
+  renderer.doubleClick();
+  renderer.advanceTo(500);
+  assert.equal(renderer.pet.dataset.mode, 'awake');
+  assert.notEqual(renderer.engine.emotionId, '00');
+  assert.equal(renderer.host.scenes.at(-1), 'welcome');
+  assert.equal(renderer.host.scenes.includes('play'), false);
+});
+
+test('锁屏时双击不触发互动', () => {
+  const renderer = createRenderer();
+  renderer.activity(true);
+  renderer.doubleClick();
+  renderer.advanceTo(400);
+  assert.equal(renderer.engine._active, false);
+  assert.equal(renderer.pet.dataset.lastAction, undefined);
+  assert.deepEqual(renderer.host.scenes, []);
 });

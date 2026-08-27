@@ -18,6 +18,13 @@ test('每个场景至少有三句不同的短中文', () => {
   }
 });
 
+test('日常互动每个场景至少八句，清醒对白不再混入睡觉文案', () => {
+  for (const event of events.filter(value => value !== 'sleep')) {
+    assert.ok(new Set(PHRASES[event]).size >= 8, `${event} 需要更多日常回应`);
+    assert.ok(PHRASES[event].every(text => !/睡|眠|眯|晚安/.test(text)), event);
+  }
+});
+
 test('普通气泡四秒并输出约定字段', () => {
   for (const event of events.filter(value => value !== 'play')) {
     const director = new DialogueDirector({ random: () => 0, now: -600000 });

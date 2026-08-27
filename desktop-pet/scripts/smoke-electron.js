@@ -56,7 +56,7 @@ function runSmokeTest() {
         assert.equal(code, 0, output);
         assert.match(output, /PET_SMOKE_OK/);
         assert.match(output, /PET_BOUNCE_OK/);
-        for (const marker of ['USER_DATA', 'ACTIVITY_STATES', 'GAZE', 'TOUCH_DRAG', 'BUBBLE_REPLY', 'BUBBLE_EDGES_SETTINGS', 'NATIVE_ACTIVITY']) {
+        for (const marker of ['USER_DATA', 'ACTIVITY_STATES', 'GAZE', 'TOUCH_DRAG', 'BUBBLE_REPLY', 'BUBBLE_EDGES_SETTINGS', 'NATIVE_ACTIVITY', 'FIXED_COLOR', 'DOUBLE_CLICK']) {
           assert.ok(output.includes(`PET_${marker}_OK`), `${marker}检查未完成`);
         }
         assert.doesNotMatch(output, /Uncaught|ERR_FILE_NOT_FOUND|did-fail-load/i);

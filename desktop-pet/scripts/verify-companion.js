@@ -28,8 +28,18 @@ async function verifyCompanion({ pet, bubble, monitor, screen, BrowserWindow, co
     fs.mkdirSync(path.resolve(artifacts), { recursive: true });
     fs.writeFileSync(path.join(path.resolve(artifacts), `${name}.png`), (await win.webContents.capturePage()).toPNG());
   }
+  async function assertFixedColor() {
+    const colors = await page(`({
+      body: document.querySelectorAll('radialGradient stop')[1].getAttribute('stop-color'),
+      eyes: [...document.querySelectorAll('.eb-eye')].map(eye => eye.getAttribute('fill'))
+    })`);
+    assert.equal(colors.body.toUpperCase(), '#EEEBE4', '实际球体必须保持睡眠灰白');
+    assert.deepEqual(colors.eyes.map(color => color.toUpperCase()), ['#1A1A1A', '#1A1A1A']);
+  }
+  await assertFixedColor();
   for (const [seconds, mode] of [[301, 'spacing'], [601, 'tired'], [901, 'sleep']]) {
     assert.equal((await sample({ idleSeconds: seconds })).mode, mode);
+    await assertFixedColor();
   }
   setSetting('keepAwake', true);
   assert.equal((await sample({ idleSeconds: 901 })).mode, 'awake');
@@ -56,6 +66,8 @@ async function verifyCompanion({ pet, bubble, monitor, screen, BrowserWindow, co
   } while (performance.now() < focusDeadline);
   assert.equal(focused.mode, 'focus', JSON.stringify(await page('window.__focusTrace')));
   assert.equal((await state()).emotion, '16');
+  await assertFixedColor();
+  await capture(pet, 'focus-80');
   process.stdout.write('PET_ACTIVITY_STATES_OK\n');
 
   const eyesX = () => page('[...document.querySelectorAll(".eb-eye")].map(el=>el.getBoundingClientRect().x).reduce((a,b)=>a+b,0)/2');
@@ -88,6 +100,7 @@ async function verifyCompanion({ pet, bubble, monitor, screen, BrowserWindow, co
     await wait(100);
   }
   assert.equal((await state()).lastAction, 'pet', '连续摸头应触发舒服表情');
+  await assertFixedColor();
   await capture(pet, 'petting-80');
   await page(`window.__dragTrace = []; for (const type of ['pointerdown','pointermove','pointerup','pointercancel']) {
     document.getElementById('pet').addEventListener(type, e => window.__dragTrace.push({type, x:e.screenX, y:e.screenY, buttons:e.buttons}));
@@ -155,11 +168,28 @@ async function verifyCompanion({ pet, bubble, monitor, screen, BrowserWindow, co
   }
   await wait(120);
   assert.ok(['bounce', 'spin', 'happy'].includes((await state()).lastAction), `再来一次按钮应触发新的玩耍动作：${JSON.stringify({pet:await state(),visible:bubbleWin.isVisible(),trace:await bubbleWin.webContents.executeJavaScript('window.__replyTrace')})}`);
+  await assertFixedColor();
+  await capture(pet, 'happy-80');
   assert.equal(bubbleWin.isVisible(), false);
   command('rest');
   await wait(150);
   assert.equal(BrowserWindow.getFocusedWindow(), focusBefore, '回应按钮不能激活原生窗口');
   process.stdout.write('PET_BUBBLE_REPLY_OK\n');
+
+  // 真实双击必须执行多样互动，而非把球球送去睡觉。
+  for (const clickCount of [1, 2]) {
+    await input('mouseDown', 40, 40, { button: 'left', clickCount });
+    await input('mouseUp', 40, 40, { button: 'left', clickCount });
+    await wait(50);
+  }
+  await wait(400);
+  assert.notEqual((await state()).mode, 'manual-sleep');
+  assert.ok(['greet', 'bounce', 'shy', 'happy', 'spin'].includes((await state()).lastAction));
+  await assertFixedColor();
+  await capture(pet, 'double-click-80');
+  command('rest');
+  await wait(150);
+  process.stdout.write('PET_DOUBLE_CLICK_OK\n');
 
   let id = 10000;
   for (const [corner, x, y, placement] of [
@@ -198,6 +228,7 @@ async function verifyCompanion({ pet, bubble, monitor, screen, BrowserWindow, co
   pet.setBounds(original);
   pet.webContents.debugger.detach();
   bubbleWin.webContents.debugger.detach();
+  process.stdout.write('PET_FIXED_COLOR_OK\n');
   process.stdout.write('PET_NATIVE_ACTIVITY_OK\n');
 }
 

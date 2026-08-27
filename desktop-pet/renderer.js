@@ -48,6 +48,9 @@
     ball = EmotionBall.create(petElement, {
       emotion: emotionId || '50',
       shape: 'blob',
+      // 复用实例主题色：所有表情沿用睡眠灰白，眼睛保持黑色。
+      color: '#EEEBE4',
+      eyeColor: '#1A1A1A',
       idle: false,
       eyeScale: compactMode ? 1.5 : 1,
       lite: compactMode,
@@ -169,10 +172,29 @@
     desktop.say('sleep');
   }
 
-  function toggleSleep() {
+  function runDoubleClickAction() {
+    cancelPendingInteraction();
     if (lastSample?.locked) return;
-    if (ball.emotionId === '00') wake();
-    else sleep();
+    if (companion.manualSleep || ball.emotionId === '00') {
+      wake();
+      return;
+    }
+    const reactions = [
+      { emotion: '03', action: 'greet' },
+      { emotion: '10', action: 'bounce' },
+      { emotion: '14', action: 'shy' },
+      { emotion: '19', action: 'happy' },
+      { emotion: '10', action: 'spin' }
+    ];
+    let index = Math.floor(Math.random() * reactions.length);
+    if (reactions[index].action === petElement.dataset.lastAction) index = (index + 1) % reactions.length;
+    const reaction = reactions[index];
+    stopMotion();
+    noteInteraction();
+    playEmotion(reaction.emotion, 3200, 'play');
+    petElement.dataset.lastAction = reaction.action;
+    if (reaction.action === 'bounce') ball.bounce();
+    else if (reaction.action === 'spin') ball.spin(1);
   }
 
   function runSingleClickAction(speak = true) {
@@ -298,9 +320,7 @@
 
   petElement.addEventListener('dblclick', event => {
     if (event.button !== 0) return;
-    clearTimeout(singleClickTimer);
-    singleClickTimer = null;
-    toggleSleep();
+    runDoubleClickAction();
   });
 
   petElement.addEventListener('pointerenter', () => {
