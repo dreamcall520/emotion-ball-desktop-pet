@@ -30,7 +30,34 @@ test('损坏文件回退且有效设置可回读', t => {
     size: 'tiny',
     x: 12,
     y: 20,
-    alwaysOnTop: false
+    alwaysOnTop: false,
+    keepAwake: false,
+    bubblesEnabled: true
   });
   assert.equal(fs.existsSync(`${file}.tmp`), false);
+});
+
+test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
+  assert.deepEqual(normalizeSettings({ size: 'small', x: -102.3, y: 81.8, alwaysOnTop: false }), {
+    size: 'small', x: -102, y: 82, alwaysOnTop: false,
+    keepAwake: false, bubblesEnabled: true
+  });
+});
+
+test('陪伴开关只接受布尔值且不保存输入信息', () => {
+  assert.deepEqual(normalizeSettings({
+    keepAwake: true, bubblesEnabled: false, inputText: '不保存', cursor: { x: 1, y: 2 }, idleSeconds: 99
+  }), { ...DEFAULTS, keepAwake: true, bubblesEnabled: false });
+  assert.deepEqual(normalizeSettings({ keepAwake: 'true', bubblesEnabled: 0 }), DEFAULTS);
+});
+
+test('陪伴开关保存后可回读且仅写入允许设置', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emotion-pet-companion-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'settings.json');
+  const saved = saveSettings(file, { keepAwake: true, bubblesEnabled: false, inputText: '不保存' });
+  assert.deepEqual(saved, { ...DEFAULTS, keepAwake: true, bubblesEnabled: false });
+  assert.deepEqual(loadSettings(file), saved);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), saved);
+  assert.equal(fs.readFileSync(file, 'utf8').includes('inputText'), false);
 });

@@ -5,7 +5,9 @@ const DEFAULTS = Object.freeze({
   size: 'medium',
   x: null,
   y: null,
-  alwaysOnTop: true
+  alwaysOnTop: true,
+  keepAwake: false,
+  bubblesEnabled: true
 });
 
 function normalizeSettings(raw = {}) {
@@ -16,7 +18,11 @@ function normalizeSettings(raw = {}) {
     x: Number.isFinite(raw.x) ? Math.round(raw.x) : DEFAULTS.x,
     y: Number.isFinite(raw.y) ? Math.round(raw.y) : DEFAULTS.y,
     alwaysOnTop:
-      typeof raw.alwaysOnTop === 'boolean' ? raw.alwaysOnTop : DEFAULTS.alwaysOnTop
+      typeof raw.alwaysOnTop === 'boolean' ? raw.alwaysOnTop : DEFAULTS.alwaysOnTop,
+    keepAwake:
+      typeof raw.keepAwake === 'boolean' ? raw.keepAwake : DEFAULTS.keepAwake,
+    bubblesEnabled:
+      typeof raw.bubblesEnabled === 'boolean' ? raw.bubblesEnabled : DEFAULTS.bubblesEnabled
   };
 }
 
