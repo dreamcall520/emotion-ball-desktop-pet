@@ -175,3 +175,151 @@ test('positionForMotion拒绝无穷字段、非正尺寸和放不下的窗口', 
   assert.equal(positionForMotion(bounds, { x: 0, y: 0, width: 500, height: 100 }, { x: 0, y: 0 }), null);
   assert.equal(positionForMotion(bounds, area, null), null);
 });
+
+test('六个动作的起止帧都中性、done正确且采样结果不共享可变对象', () => {
+  for (const motion of MOTIONS) {
+    const start = sampleMotion(motion.id, 0);
+    const end = sampleMotion(motion.id, motion.durationMs);
+    const after = sampleMotion(motion.id, motion.durationMs + 1);
+    for (const sample of [start, end, after]) {
+      assert.deepEqual(sample.body, neutral);
+      assert.deepEqual(sample.window, { x: 0, y: 0 });
+      assert.deepEqual(sample.gaze, { x: 0, y: 0 });
+    }
+    assert.equal(start.done, false);
+    assert.equal(end.done, true);
+    assert.equal(after.done, true);
+    assert.notStrictEqual(start.body, end.body);
+    assert.notStrictEqual(start.window, end.window);
+    assert.notStrictEqual(start.gaze, end.gaze);
+    assert.notStrictEqual(end.body, after.body);
+    assert.notStrictEqual(end.window, after.window);
+    assert.notStrictEqual(end.gaze, after.gaze);
+    start.body.x = 99;
+    start.window.x = 99;
+    start.gaze.x = 99;
+    assert.equal(end.body.x, 0);
+    assert.equal(end.window.x, 0);
+    assert.equal(end.gaze.x, 0);
+  }
+});
+
+test('所有previousId都不会再次选中同一个动作', () => {
+  for (const motion of MOTIONS) {
+    for (const random of [0, 0.37, 0.99]) {
+      assert.notEqual(chooseMotion(random, motion.id).id, motion.id);
+    }
+  }
+});
+
+test('hop第二次落地关键帧也有压扁形变', () => {
+  const secondLanding = sampleMotion('hop', 1330);
+  assert.deepEqual(secondLanding.body, {
+    x: 0,
+    y: 9,
+    scaleX: 1.04,
+    scaleY: 0.86,
+    rotate: 0,
+    yaw: 0
+  });
+  assert.deepEqual(secondLanding.window, { x: 0, y: 0 });
+});
+
+test('五种身体轨迹互异，peek停顿、bow两次点头和sway左右交替明确', () => {
+  const ids = ['hop', 'jelly', 'sway', 'peek', 'bow'];
+  const trajectorySignatures = ids.map((id) => JSON.stringify(
+    [100, 300, 700, 1000, 1300].map((elapsed) => sampleMotion(id, elapsed).body)
+  ));
+  assert.equal(new Set(trajectorySignatures).size, ids.length);
+
+  assert.deepEqual(sampleMotion('peek', 260), sampleMotion('peek', 600));
+  assert.deepEqual(sampleMotion('peek', 1180), sampleMotion('peek', 1540));
+  assert.notDeepEqual(sampleMotion('peek', 259), sampleMotion('peek', 260));
+  assert.notDeepEqual(sampleMotion('peek', 1540), sampleMotion('peek', 1541));
+
+  assert.deepEqual(sampleMotion('bow', 260), sampleMotion('bow', 440));
+  assert.deepEqual(sampleMotion('bow', 900), sampleMotion('bow', 1100));
+  assert.notDeepEqual(sampleMotion('bow', 260), sampleMotion('bow', 900));
+  assert.deepEqual(sampleMotion('bow', 650), {
+    body: neutral,
+    window: { x: 0, y: 0 },
+    gaze: { x: 0, y: 0 },
+    done: false
+  });
+
+  assert.equal(sampleMotion('sway', 250).body.rotate, -14);
+  assert.equal(sampleMotion('sway', 520).body.rotate, 14);
+  assert.equal(sampleMotion('sway', 790).body.rotate, -12);
+  assert.equal(sampleMotion('sway', 1100).body.rotate, 12);
+  assert(sampleMotion('sway', 250).window.x < 0);
+  assert(sampleMotion('sway', 520).window.x > 0);
+  assert(sampleMotion('sway', 790).window.x < 0);
+  assert(sampleMotion('sway', 1100).window.x > 0);
+});
+
+test('非中点采样使用smoothstep而非线性插值', () => {
+  const quarter = sampleMotion('hop', 45);
+  const eased = 0.15625;
+  assert(Math.abs(quarter.body.scaleX - (1 + 0.06 * eased)) < 1e-12);
+  assert(Math.abs(quarter.body.scaleY - (1 - 0.22 * eased)) < 1e-12);
+  assert(Math.abs(quarter.body.y - 14 * eased) < 1e-12);
+});
+
+test('1ms采样全部动作始终有限且保持旋转椭圆安全包络', () => {
+  const min = -7;
+  const max = 236;
+  const radius = 114.3;
+  const center = 114.2705;
+  for (const motion of MOTIONS) {
+    for (let elapsed = 0; elapsed <= motion.durationMs; elapsed += 1) {
+      const sample = sampleMotion(motion.id, elapsed);
+      const body = sample.body;
+      for (const value of Object.values(body)) assert(Number.isFinite(value));
+      const angle = body.rotate * Math.PI / 180;
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      const rx = radius * Math.sqrt((body.scaleX * cos) ** 2 + (body.scaleY * sin) ** 2);
+      const ry = radius * Math.sqrt((body.scaleX * sin) ** 2 + (body.scaleY * cos) ** 2);
+      assert(center + body.x - rx >= min - 1e-9);
+      assert(center + body.x + rx <= max + 1e-9);
+      assert(center + body.y - ry >= min - 1e-9);
+      assert(center + body.y + ry <= max + 1e-9);
+    }
+  }
+});
+
+test('80/120/180/240尺寸在正负工作区四角均正确clamp位置', () => {
+  const sizes = [80, 120, 180, 240];
+  const workAreas = [
+    { x: 100, y: 80, width: 1200, height: 900 },
+    { x: -1300, y: -900, width: 1200, height: 900 }
+  ];
+  const corners = [
+    { x: -10000, y: -10000, horizontal: 'left', vertical: 'top' },
+    { x: 10000, y: -10000, horizontal: 'right', vertical: 'top' },
+    { x: -10000, y: 10000, horizontal: 'left', vertical: 'bottom' },
+    { x: 10000, y: 10000, horizontal: 'right', vertical: 'bottom' }
+  ];
+  for (const area of workAreas) {
+    for (const size of sizes) {
+      const bounds = {
+        x: area.x + 500,
+        y: area.y + 300,
+        width: size,
+        height: size
+      };
+      for (const corner of corners) {
+        const expectedX = corner.horizontal === 'left'
+          ? area.x
+          : area.x + area.width - size;
+        const expectedY = corner.vertical === 'top'
+          ? area.y
+          : area.y + area.height - size;
+        assert.deepEqual(positionForMotion(bounds, area, corner), {
+          x: expectedX,
+          y: expectedY
+        });
+      }
+    }
+  }
+});
