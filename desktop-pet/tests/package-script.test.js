@@ -123,3 +123,13 @@ test('真实启动检查使用独立的临时设置目录', () => {
   assert.match(text, /--user-data-dir=/);
   assert.match(text, /mkdtempSync/);
 });
+
+test('真实动作验收助手进入显式打包清单且可以加载', () => {
+  const root = path.resolve(__dirname, '../..');
+  const staging = prepareStaging(root);
+  const relative = 'desktop-pet/scripts/verify-body-motion.js';
+  const staged = path.join(staging, relative);
+  assert.ok(fs.existsSync(staged), '安装包缺少真实身体动作验收助手');
+  assert.equal(fs.readFileSync(staged, 'utf8'), fs.readFileSync(path.join(root, relative), 'utf8'));
+  assert.equal(typeof require(staged).verifyBodyMotion, 'function');
+});

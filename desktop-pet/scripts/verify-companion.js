@@ -176,20 +176,9 @@ async function verifyCompanion({ pet, bubble, monitor, screen, BrowserWindow, co
   assert.equal(BrowserWindow.getFocusedWindow(), focusBefore, '回应按钮不能激活原生窗口');
   process.stdout.write('PET_BUBBLE_REPLY_OK\n');
 
-  // 真实双击必须执行多样互动，而非把球球送去睡觉。
-  for (const clickCount of [1, 2]) {
-    await input('mouseDown', 40, 40, { button: 'left', clickCount });
-    await input('mouseUp', 40, 40, { button: 'left', clickCount });
-    await wait(50);
-  }
-  await wait(400);
-  assert.notEqual((await state()).mode, 'manual-sleep');
-  assert.ok(['greet', 'bounce', 'shy', 'happy', 'spin'].includes((await state()).lastAction));
-  await assertFixedColor();
-  await capture(pet, 'double-click-80');
-  command('rest');
-  await wait(150);
-  process.stdout.write('PET_DOUBLE_CLICK_OK\n');
+  await require('./verify-body-motion').verifyBodyMotion({
+    pet, bubble, screen, command, setSetting, sample, inputWindow
+  });
 
   let id = 10000;
   for (const [corner, x, y, placement] of [

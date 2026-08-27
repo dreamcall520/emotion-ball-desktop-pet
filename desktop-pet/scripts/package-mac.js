@@ -47,6 +47,7 @@ function prepareStaging(root) {
     'desktop-pet/lib/bubble-placement.js',
     'desktop-pet/lib/bubble-window.js',
     'desktop-pet/scripts/verify-companion.js',
+    'desktop-pet/scripts/verify-body-motion.js',
     'emotion-ball/js/rings.js',
     'emotion-ball/js/emotions.js',
     'emotion-ball/js/ball.js',

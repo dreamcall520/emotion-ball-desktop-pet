@@ -33,6 +33,7 @@ function runSmokeTest() {
     let output = '';
     child.stdout.on('data', chunk => {
       output += chunk.toString();
+      process.stdout.write(chunk);
     });
     child.stderr.on('data', chunk => {
       output += chunk.toString();
@@ -40,8 +41,8 @@ function runSmokeTest() {
 
     const timer = setTimeout(() => {
       child.kill('SIGTERM');
-      reject(new Error(`桌宠真实启动与互动检查超过 60 秒\n${output}`));
-    }, 60000);
+      reject(new Error(`桌宠真实启动与互动检查超过 240 秒\n${output}`));
+    }, 240000);
 
     child.once('error', error => {
       clearTimeout(timer);
@@ -56,7 +57,7 @@ function runSmokeTest() {
         assert.equal(code, 0, output);
         assert.match(output, /PET_SMOKE_OK/);
         assert.match(output, /PET_BOUNCE_OK/);
-        for (const marker of ['USER_DATA', 'ACTIVITY_STATES', 'GAZE', 'TOUCH_DRAG', 'BUBBLE_REPLY', 'BUBBLE_EDGES_SETTINGS', 'NATIVE_ACTIVITY', 'FIXED_COLOR', 'DOUBLE_CLICK']) {
+        for (const marker of ['USER_DATA', 'ACTIVITY_STATES', 'GAZE', 'TOUCH_DRAG', 'BUBBLE_REPLY', 'BUBBLE_EDGES_SETTINGS', 'NATIVE_ACTIVITY', 'FIXED_COLOR', 'DOUBLE_CLICK', 'BODY_MOTION', 'BODY_MOTION_INTERRUPTS', 'BODY_MOTION_EDGES', 'BODY_MOTION_SIZE_120', 'BODY_MOTION_SIZE_180', 'BODY_MOTION_SIZE_240', ...['HOP', 'JELLY', 'SWAY', 'PEEK', 'BOW', 'SPIN'].map(id => `BODY_MOTION_${id}`)]) {
           assert.ok(output.includes(`PET_${marker}_OK`), `${marker}检查未完成`);
         }
         assert.doesNotMatch(output, /Uncaught|ERR_FILE_NOT_FOUND|did-fail-load/i);
@@ -68,9 +69,7 @@ function runSmokeTest() {
   });
 }
 
-runSmokeTest()
-  .then(output => process.stdout.write(output))
-  .catch(error => {
+runSmokeTest().catch(error => {
     process.stderr.write(`${error.stack || error.message}\n`);
     process.exitCode = 1;
   });
