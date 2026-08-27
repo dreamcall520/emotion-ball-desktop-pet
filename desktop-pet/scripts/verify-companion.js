@@ -43,11 +43,18 @@ async function verifyCompanion({ pet, bubble, monitor, screen, BrowserWindow, co
   assert.equal((await state()).emotion, '00');
   command('wake');
   await wait(2400);
-  for (let count = 0; count < 5; count++) {
-    await sample({ idleSeconds: 0 });
-    await wait(900);
-  }
-  assert.equal((await sample({ idleSeconds: 0 })).mode, 'focus');
+  await page(`window.__focusTrace = []; window.petDesktop.onActivity(p => {
+    window.__focusTrace.push({at:performance.now(), idle:p.idleSeconds, locked:p.locked, mode:document.getElementById('pet').dataset.mode});
+  }); document.getElementById('pet').addEventListener('pointerenter',()=>window.__focusTrace.push({at:performance.now(),event:'pointerenter'})); true`);
+  // 真实鼠标偶尔进入测试窗口会重新计时，等待实际状态而不是卡固定帧。
+  const focusDeadline = performance.now() + 8000;
+  let focused;
+  do {
+    focused = await sample({ idleSeconds: 0 });
+    if (focused.mode === 'focus') break;
+    await wait(160);
+  } while (performance.now() < focusDeadline);
+  assert.equal(focused.mode, 'focus', JSON.stringify(await page('window.__focusTrace')));
   assert.equal((await state()).emotion, '16');
   process.stdout.write('PET_ACTIVITY_STATES_OK\n');
 
@@ -64,12 +71,20 @@ async function verifyCompanion({ pet, bubble, monitor, screen, BrowserWindow, co
   await sample({ sameDisplay: true });
   process.stdout.write('PET_GAZE_OK\n');
 
-  const input = (type, x, y, extra = {}) => {
-    const bounds = pet.getBounds();
-    pet.webContents.sendInputEvent({ type, x, y, globalX: bounds.x + x, globalY: bounds.y + y, ...extra });
+  // sendInputEvent 要求原生窗口聚焦；CDP 输入不改变生产窗口的非激活属性。
+  const inputWindow = async (win, type, x, y, extra = {}) => {
+    const debuggerApi = win.webContents.debugger;
+    if (!debuggerApi.isAttached()) debuggerApi.attach('1.3');
+    const pressed = type === 'mouseDown' || extra.modifiers?.includes('leftButtonDown');
+    await debuggerApi.sendCommand('Input.dispatchMouseEvent', {
+      type: { mouseDown: 'mousePressed', mouseUp: 'mouseReleased', mouseMove: 'mouseMoved' }[type],
+      x, y, button: extra.button || (pressed ? 'left' : 'none'),
+      buttons: pressed ? 1 : 0, clickCount: extra.clickCount || 0
+    });
   };
+  const input = (type, x, y, extra) => inputWindow(pet, type, x, y, extra);
   for (let index = 0; index < 10; index++) {
-    input('mouseMove', index % 2 ? 48 : 28, 25);
+    await input('mouseMove', index % 2 ? 48 : 28, 25);
     await wait(100);
   }
   assert.equal((await state()).lastAction, 'pet', '连续摸头应触发舒服表情');
@@ -77,11 +92,11 @@ async function verifyCompanion({ pet, bubble, monitor, screen, BrowserWindow, co
   await page(`window.__dragTrace = []; for (const type of ['pointerdown','pointermove','pointerup','pointercancel']) {
     document.getElementById('pet').addEventListener(type, e => window.__dragTrace.push({type, x:e.screenX, y:e.screenY, buttons:e.buttons}));
   } true`);
-  input('mouseDown', 40, 40, { button: 'left', clickCount: 1 });
+  await input('mouseDown', 40, 40, { button: 'left', clickCount: 1 });
   await wait(50);
-  input('mouseMove', 60, 40, { modifiers: ['leftButtonDown'] });
+  await input('mouseMove', 60, 40, { modifiers: ['leftButtonDown'] });
   await wait(150);
-  input('mouseUp', 60, 40, { button: 'left', clickCount: 1 });
+  await input('mouseUp', 60, 40, { button: 'left', clickCount: 1 });
   await wait(200);
   assert.equal((await state()).lastAction, 'drop', `拖动后应触发落地反馈：${JSON.stringify(await page('window.__dragTrace'))}`);
   process.stdout.write('PET_TOUCH_DRAG_OK\n');
@@ -118,7 +133,7 @@ async function verifyCompanion({ pet, bubble, monitor, screen, BrowserWindow, co
   await wait(150);
   assert.ok(pet.getBounds().y < restY);
   for (const type of ['mouseMove', 'mouseDown', 'mouseUp']) {
-    bubbleWin.webContents.sendInputEvent({ type, ...content.point, button: 'left', clickCount: 1 });
+    await inputWindow(bubbleWin, type, content.point.x, content.point.y, { button: 'left', clickCount: 1 });
     await wait(60);
   }
   await wait(150);
@@ -130,17 +145,20 @@ async function verifyCompanion({ pet, bubble, monitor, screen, BrowserWindow, co
   await wait(150);
   const againPoint = await bubbleWin.webContents.executeJavaScript(`(() => {
     const rect = document.querySelector('[data-action="again"]').getBoundingClientRect();
+    window.__replyTrace = [];
+    for (const type of ['pointerdown','pointerup','click']) document.addEventListener(type,e=>window.__replyTrace.push({type,action:e.target.dataset.action,disabled:e.target.disabled}));
     return { x: Math.round(rect.x + rect.width / 2), y: Math.round(rect.y + rect.height / 2) };
   })()`);
   for (const type of ['mouseMove', 'mouseDown', 'mouseUp']) {
-    bubbleWin.webContents.sendInputEvent({ type, ...againPoint, button: 'left', clickCount: 1 });
+    await inputWindow(bubbleWin, type, againPoint.x, againPoint.y, { button: 'left', clickCount: 1 });
     await wait(60);
   }
   await wait(120);
-  assert.ok(['bounce', 'spin', 'happy'].includes((await state()).lastAction), '再来一次按钮应触发新的玩耍动作');
+  assert.ok(['bounce', 'spin', 'happy'].includes((await state()).lastAction), `再来一次按钮应触发新的玩耍动作：${JSON.stringify({pet:await state(),visible:bubbleWin.isVisible(),trace:await bubbleWin.webContents.executeJavaScript('window.__replyTrace')})}`);
   assert.equal(bubbleWin.isVisible(), false);
   command('rest');
   await wait(150);
+  assert.equal(BrowserWindow.getFocusedWindow(), focusBefore, '回应按钮不能激活原生窗口');
   process.stdout.write('PET_BUBBLE_REPLY_OK\n');
 
   let id = 10000;
@@ -178,6 +196,8 @@ async function verifyCompanion({ pet, bubble, monitor, screen, BrowserWindow, co
   assert.equal(realSample.locked, false);
   monitor.stop();
   pet.setBounds(original);
+  pet.webContents.debugger.detach();
+  bubbleWin.webContents.debugger.detach();
   process.stdout.write('PET_NATIVE_ACTIVITY_OK\n');
 }
 

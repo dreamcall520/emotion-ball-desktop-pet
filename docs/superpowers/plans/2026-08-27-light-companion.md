@@ -8,7 +8,7 @@
 
 **Tech Stack:** 现有 Electron 43、原生 JavaScript/SVG、Node test；不增加依赖。
 
-**进度（2026-08-27）**：Task 1、Task 2 已完成；Task 3 已生成并校验 0.2.0 本地候选应用，等待 Mac 解锁后完成最终原生验收和替换安装。不得将候选包称为已安装或已发布。详见同级 `../verification/2026-08-27-light-companion.md`。
+**进度（2026-08-27）**：Task 1–3 已完成。用户手动解锁后，最终源码和打包版检查通过，0.2.0 已安装启动，原尺寸/位置保留；未发布、未推送。真实界面与自动输入的验收边界详见同级 `../verification/2026-08-27-light-companion.md`。
 
 ---
 
@@ -38,7 +38,7 @@
 文件：`desktop-pet/scripts/package-mac.js`、`scripts/smoke-electron.js`、`tests/package-script.test.js`、README、package 版本信息。
 
 - [x] 先增加打包包含新增文件、真实行为/气泡检查的失败断言；更新明确的打包清单。
-- [ ] 执行 `npm test`、`npm run smoke`；真实截图检查 80×80 眼睛、Zzz、气泡和点击反馈，覆盖四角位置。
-- [ ] 执行 `npm run package:mac`；签名核验、打包版 smoke 和 app.asar 文件核对。
-- [ ] 保存旧本地应用备份后安装并启动本地新版；不上传、不改公开 Release。回读安装版并提交变更。
-- [ ] 需求符合性复核通过后再进行代码质量复核；修复重要问题并复跑所有检查。
+- [x] 执行 `npm test`、`npm run smoke`；真实截图检查 80×80 眼睛、Zzz、气泡和点击反馈，覆盖四角位置。
+- [x] 执行 `npm run package:mac`；签名核验、打包版 smoke 和 app.asar 文件核对。
+- [x] 保存旧本地应用备份后安装并启动本地新版；不上传、不改公开 Release。回读安装版并提交变更。
+- [x] 需求符合性复核通过后再进行代码质量复核；修复重要问题并复跑所有检查。
