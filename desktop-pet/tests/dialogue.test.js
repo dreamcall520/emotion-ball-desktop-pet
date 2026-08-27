@@ -33,6 +33,25 @@ test('冷却期切换动作会收起旧动作气泡并使旧按钮失效', () =>
   assert.ok(director.offer({ event: 'play', motion: 'bow' }, 6000));
 });
 
+for (const event of ['hello', 'pet', 'drag', 'drop']) {
+  test(`${event}新互动遇到冷却也会使旧专属play失效，但不改变普通play`, () => {
+    const director = new DialogueDirector();
+    const first = director.offer({ event: 'play', motion: 'hop' }, 0);
+    assert.ok(first);
+    assert.equal(director.offer(event, 100), null, '保留六秒冷却');
+    assert.equal(director.hasBubble(100), false, '不能留下已被新互动取代的动作专属气泡');
+    assert.equal(director.respond(first.id, 'again', 101), null);
+    assert.equal(director.offer(event, 5999), null);
+    assert.ok(director.offer(event, 6000), '冷却基准不因拒绝事件而延长');
+
+    const generic = new DialogueDirector();
+    const ordinary = generic.offer('play', 0);
+    assert.equal(generic.offer(event, 100), null);
+    assert.equal(generic.hasBubble(100), true, '原通用气泡兼容行为不变');
+    assert.equal(generic.respond(ordinary.id, 'again', 101), 'again');
+  });
+}
+
 test('未知动作对象不占冷却，通用play兼容且不能留下错配专属文案', () => {
   const director = new DialogueDirector();
   for (const motion of ['unknown', '__proto__', null, 1]) assert.equal(director.offer({ event: 'play', motion }, 0), null);

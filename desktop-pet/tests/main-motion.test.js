@@ -150,6 +150,44 @@ test('新动作在对白冷却期会关闭错配旧泡，again传递绑定动作
   assert.equal(f.bubble.hides, previousHide + 1);
 });
 
+test('hop开始100ms后真实拖起与落地链路会隐藏专属旧泡，旧按钮不能重播', async () => {
+  const f = await fixture();
+  f.send('pet:motion-start', { token: 1, action: 'hop' });
+  f.send('pet:say', { event: 'play', motion: 'hop' });
+  const first = f.bubble.shows[0];
+  assert.ok(first);
+  f.at(100);
+  const hides = f.bubble.hides;
+  f.send('pet:drag-start', { x: 20, y: 20 });
+  f.send('pet:drag-move', { x: 70, y: 70 });
+  f.send('pet:say', 'drag');
+  assert.equal(f.bubble.shows.length, 1, '拖起新文案仍遵守冷却');
+  assert.equal(f.bubble.hides, hides + 1, '旧hop文案必须同步隐藏');
+  const replies = f.commands.length;
+  f.send('pet:bubble-reply', { id: first.id, action: 'again' }, f.bubble);
+  assert.equal(f.commands.length, replies, '旧气泡不能发出重播命令');
+  f.send('pet:drag-end');
+  f.send('pet:say', 'drop');
+  assert.equal(f.bubble.shows.length, 1);
+  assert.equal(f.timers.size, 0);
+});
+
+test('专属play的rest按钮仍停止动作并失效，不留下可重播的旧回应', async () => {
+  const f = await fixture();
+  f.send('pet:motion-start', { token: 1, action: 'hop' });
+  f.send('pet:say', { event: 'play', motion: 'hop' });
+  const first = f.bubble.shows[0];
+  f.at(100);
+  const hides = f.bubble.hides;
+  f.send('pet:bubble-reply', { id: first.id, action: 'rest' }, f.bubble);
+  assert.equal(f.commands.at(-1), 'rest');
+  assert.equal(f.bubble.hides, hides + 1);
+  assert.equal(f.timers.size, 0);
+  const replies = f.commands.length;
+  f.send('pet:bubble-reply', { id: first.id, action: 'again' }, f.bubble);
+  assert.equal(f.commands.length, replies);
+});
+
 test('渲染进程关闭后，主进程停止与退出不因发送通知而抛出', async () => {
   const f = await fixture();
   f.send('pet:motion-start', { token: 1, action: 'hop' });

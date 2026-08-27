@@ -93,8 +93,8 @@ class DialogueDirector {
     if (!this.enabled || !Number.isFinite(nowMs) || typeof event !== 'string' ||
       !Object.prototype.hasOwnProperty.call(PHRASES, event)) return null;
     this._expire(nowMs);
-    // 新动作即使遇到六秒冷却，也不能继续展示上个动作的专属文案。
-    if (event === 'play' && this._current?.event === 'play' &&
+    // 新的直接互动即使遇到六秒冷却，也不能留下已被取代的动作专属文案。
+    if (DIRECT_EVENTS.has(event) && this._current?.event === 'play' &&
       (motion || this._current.motion) && motion !== this._current.motion) this.dismiss();
     // 睡眠是状态切换：先让旧玩耍按钮失效，醒来后的欢迎仍可正常接上。
     if (event === 'sleep') this.dismiss();
