@@ -325,15 +325,18 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
       if (current()) for (const channel of Object.keys(channels)) receiveStatus({ channel, state: 'disconnected', code: 'DISCONNECTED' });
     }
   }
+  function finishDisable() {
+    stopConnection(); resetChannels('disabled');
+    accountKey = undefined; quota = { windows: [], updatedAt: null }; tasks.clear(); lastManualAt = -Infinity;
+    clearAlerts({ history: true, dedupe: true, cooldown: true });
+    onClear(); notify();
+  }
   async function setEnabled(value) {
     const next = value === true;
     if (closed || enabled === next) return false;
     enabled = next; generation++;
     if (enabled) { await openConnection(); return true; }
-    stopConnection(); resetChannels('disabled');
-    accountKey = undefined; quota = { windows: [], updatedAt: null }; tasks.clear(); lastManualAt = -Infinity;
-    clearAlerts({ history: true, dedupe: true, cooldown: true });
-    onClear(); notify();
+    finishDisable();
     return true;
   }
   async function refresh() {
@@ -348,7 +351,10 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
   }
   function close() {
     if (closed) return;
-    void setEnabled(false); closed = true;
+    closed = true;
+    if (!enabled) return;
+    enabled = false; generation++;
+    finishDisable();
   }
   return { setEnabled, refresh, getSnapshot, dismiss, close };
 }

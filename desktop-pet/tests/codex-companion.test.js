@@ -31,7 +31,7 @@ function fixture(options = {}) {
     canPresent: () => options.canPresent ? options.canPresent(companion) : present,
     onAlert: alert => alerts.push(alert),
     onChange: snapshot => { changes.push(snapshot); options.onChange?.(snapshot, companion); },
-    onClear: () => clears.push(time),
+    onClear: () => { clears.push(time); options.onClear?.(companion); },
     createConnection: callbacks => {
       const index = connections.length;
       const connection = {
@@ -551,4 +551,26 @@ test('展示许可检查时关闭联动，返回true也不能继续播放', asyn
   assert.equal(f.alerts.length, 0);
   assert.equal(f.companion.getSnapshot().currentAlert, null);
   assert.equal(f.timers.size, 0);
+});
+
+test('close先建立终态，清理回调不能重新开启或遗留新连接', async () => {
+  let reopenAttempted = false;
+  const f = fixture({ onClear: companion => {
+    if (!reopenAttempted) { reopenAttempted = true; void companion.setEnabled(true); }
+  } });
+  await f.companion.setEnabled(true);
+  f.quota(10); f.task(1, 'active', { baseline: true }); f.task(1, 'waiting');
+  f.companion.close(); await settle();
+  assert.equal(reopenAttempted, true);
+  assert.equal(f.companion.getSnapshot().enabled, false);
+  assert.equal(f.connections.length, 1);
+  assert.equal(f.connections[0].closed, true);
+  assert.equal(f.timers.size, 0);
+  assert.deepEqual(f.companion.getSnapshot().quota.windows, []);
+  assert.deepEqual(f.companion.getSnapshot().tasks.items, []);
+  assert.deepEqual(f.companion.getSnapshot().recent, []);
+  assert.equal(f.companion.getSnapshot().currentAlert, null);
+  assert.equal(await f.companion.setEnabled(true), false);
+  f.companion.close();
+  assert.equal(f.clears.length, 1);
 });
