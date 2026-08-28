@@ -239,3 +239,283 @@ test('快照只留白名单字段且调用方修改快照不污染控制器', as
   assert.equal(f.companion.getSnapshot().tasks.items[0].title, '任务 1');
   assert.equal(f.companion.getSnapshot().quota.windows[0].remaining, 70);
 });
+
+test('额度阈值先合并五秒，同周期每档一次且一次跨档只报严重档', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.quota(20);
+  await f.tick(2000);
+  f.quota(9);
+  await f.tick(2999);
+  assert.equal(f.alerts.length, 0);
+  await f.tick(1);
+  assert.equal(f.alerts.length, 1);
+  assert.equal(f.alerts[0].kind, 'quota');
+  assert.equal(f.alerts[0].motion, 'bow');
+  assert.match(f.alerts[0].text, /9%/);
+  f.quota(15); await f.tick(30000);
+  f.quota(8); await f.tick(30000);
+  assert.equal(f.alerts.length, 1);
+  assert.equal(f.companion.getSnapshot().recent.length, 1);
+});
+
+test('20%后降到10%可再提醒，新周期和不同类别独立去重', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.quota(20); await f.tick(5000);
+  f.quota(10); await f.tick(29999);
+  assert.equal(f.alerts.length, 1);
+  await f.tick(1);
+  assert.equal(f.alerts.length, 2);
+  f.quota(9, { windows: [
+    { id: 'codex:primary', label: 'Codex', windowMinutes: 300, remaining: 9, resetsAt: 10000000 },
+    { id: 'spark:primary', label: 'Spark', windowMinutes: 300, remaining: 18, resetsAt: 9000000 }
+  ] });
+  await f.tick(30000);
+  assert.equal(f.alerts.length, 3);
+  assert.match(f.alerts[2].text, /2/);
+});
+
+test('未知、已过期和未来时间额度不生成预警或伪造周期', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  for (const overrides of [
+    { updatedAt: f.time - 300001 }, { updatedAt: f.time + 1 },
+    { windows: [{ id: 'x', label: 'x', windowMinutes: 300, remaining: 1, resetsAt: 'unknown' }] },
+    { windows: [{ id: 'x', label: 'x', windowMinutes: 'unknown', remaining: 1, resetsAt: 9000000 }] },
+    { windows: [{ id: 'x', label: 'x', windowMinutes: 300, remaining: 'unknown', resetsAt: 9000000 }] },
+    { windows: [{ id: 'x', label: 'x', windowMinutes: 300, remaining: 1, resetsAt: f.time - 1 }] }
+  ]) f.quota(1, overrides);
+  await f.tick(30000);
+  assert.equal(f.alerts.length, 0);
+  assert.equal(f.companion.getSnapshot().recent.length, 0);
+});
+
+test('同账号重建连接保留额度去重和历史，关闭重开则清空', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.quota(10); await f.tick(5000);
+  const old = f.companion.getSnapshot().currentAlert;
+  await f.companion.refresh();
+  assert.equal(f.companion.getSnapshot().recent.length, 1);
+  assert.equal(f.companion.getSnapshot().currentAlert, null);
+  assert.equal(f.companion.dismiss(old.id, old.generation), false);
+  f.quota(10); await f.tick(30000);
+  assert.equal(f.alerts.length, 1);
+  await f.companion.setEnabled(false);
+  assert.equal(f.companion.getSnapshot().recent.length, 0);
+  await f.companion.setEnabled(true);
+  f.quota(10); await f.tick(5000);
+  assert.equal(f.alerts.length, 2);
+});
+
+test('切换账号清空额度提醒基线、当前提示及排队，新账号数据仍接收', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.quota(10);
+  f.callbacks.onAccount({ accountKey: 'account-two' });
+  assert.equal(f.companion.getSnapshot().recent.length, 0);
+  await f.tick(5000);
+  assert.equal(f.alerts.length, 0);
+  f.quota(10); await f.tick(5000);
+  assert.equal(f.alerts.length, 1);
+});
+
+test('首次与重连基线不回放历史完成、失败、等待和运行提示', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  for (const [index, state] of ['completed', 'failed', 'waiting', 'active', 'interrupted'].entries()) f.task(index, state, { baseline: true });
+  await f.tick(10000);
+  assert.equal(f.alerts.length, 0);
+  await f.companion.refresh();
+  f.task(1, 'active', { baseline: true });
+  f.task(1, 'completed', { baseline: true });
+  await f.tick(30000);
+  assert.equal(f.alerts.length, 0);
+});
+
+test('真实运行变化复用sway且无气泡，等待/完成/失败分别peek/hop/jelly', async () => {
+  for (const [state, motion] of [['active', 'sway'], ['waiting', 'peek'], ['completed', 'hop'], ['failed', 'jelly']]) {
+    const f = fixture();
+    await f.companion.setEnabled(true);
+    f.task(1, state === 'active' ? 'idle' : 'active', { baseline: true });
+    f.task(1, state);
+    await f.tick(5000);
+    assert.equal(f.alerts.length, 1, state);
+    assert.equal(f.alerts[0].kind, state);
+    assert.equal(f.alerts[0].motion, motion);
+    assert.equal(f.alerts[0].text === null, state === 'active');
+    assert.deepEqual(f.alerts[0].taskIds, [taskId(1)]);
+    assert.equal(JSON.stringify(f.alerts[0]).includes('任务 1'), false);
+    f.companion.close();
+  }
+});
+
+test('unknown、idle和interrupted不庆祝；unknown恢复旧终态也不误报', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  for (const [index, state] of ['unknown', 'idle', 'interrupted'].entries()) {
+    f.task(index, 'active', { baseline: true }); f.task(index, state);
+  }
+  f.task(4, 'unknown', { baseline: true }); f.task(4, 'completed');
+  await f.tick(10000);
+  assert.equal(f.alerts.length, 0);
+});
+
+test('同轮终态去重，未知后恢复同轮不重复；新轮次仍可提醒', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.task(1, 'active', { baseline: true }); f.task(1, 'completed');
+  await f.tick(5000);
+  f.task(1, 'completed'); f.task(1, 'unknown'); f.task(1, 'active', { baseline: true }); f.task(1, 'completed');
+  await f.tick(30000);
+  assert.equal(f.alerts.length, 1);
+  f.task(1, 'active', { turnId: 'new-turn', baseline: true });
+  f.task(1, 'completed', { turnId: 'new-turn' });
+  await f.tick(5000);
+  assert.equal(f.alerts.length, 2);
+});
+
+test('等待恢复运行后再次等待可提醒，但所有类型共享30秒间隔', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.task(1, 'active', { baseline: true }); f.task(1, 'waiting');
+  await f.tick(5000);
+  f.task(1, 'waiting'); await f.tick(1000);
+  f.task(1, 'active'); f.task(1, 'waiting');
+  await f.tick(28999);
+  assert.equal(f.alerts.length, 1);
+  await f.tick(1);
+  assert.equal(f.alerts.length, 2);
+  assert.equal(f.alerts[1].kind, 'waiting');
+  assert.equal(f.alerts[1].createdAt, 1006000);
+});
+
+test('五秒内同类任务合并，气泡不包含任务标题和正文', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.task(1, 'active', { baseline: true }); f.task(1, 'waiting', { title: 'SECRET_TITLE', body: 'SECRET_BODY' });
+  await f.tick(4000);
+  f.task(2, 'active', { baseline: true }); f.task(2, 'waiting');
+  await f.tick(1000);
+  assert.equal(f.alerts.length, 1);
+  assert.deepEqual(f.alerts[0].taskIds, [taskId(1), taskId(2)]);
+  assert.equal(JSON.stringify(f.alerts).includes('SECRET'), false);
+  assert.equal(f.companion.getSnapshot().recent.length, 1);
+});
+
+test('忙碌/睡眠时延后，60秒过期后仅留菜单，不补播', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.setPresent(false);
+  f.task(1, 'active', { baseline: true }); f.task(1, 'waiting');
+  await f.tick(60000);
+  f.setPresent(true); await f.tick(10000);
+  assert.equal(f.alerts.length, 0);
+  assert.equal(f.companion.getSnapshot().recent.length, 1);
+  assert.equal(f.companion.getSnapshot().currentAlert, null);
+});
+
+test('忙碌解除且未过期时可显示，显示8秒后按钮失效', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.setPresent(false);
+  f.task(1, 'active', { baseline: true }); f.task(1, 'waiting');
+  await f.tick(9000);
+  f.setPresent(true); await f.tick(1000);
+  const current = f.companion.getSnapshot().currentAlert;
+  assert.equal(f.alerts.length, 1);
+  assert.equal(current.expiresAt, f.time + 8000);
+  assert.equal(f.companion.dismiss(current.id + 1, current.generation), false);
+  await f.tick(8000);
+  assert.equal(f.companion.getSnapshot().currentAlert, null);
+  assert.equal(f.companion.dismiss(current.id, current.generation), false);
+});
+
+test('等待状态被取代后剔除合并提醒中的旧任务，新轮次不补播旧完成', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  for (const n of [1, 2]) { f.task(n, 'active', { baseline: true }); f.task(n, 'waiting'); }
+  await f.tick(1000);
+  f.task(1, 'active');
+  await f.tick(4000);
+  assert.deepEqual(f.alerts[0].taskIds, [taskId(2)]);
+  f.task(3, 'active', { baseline: true }); f.task(3, 'completed');
+  f.task(3, 'active', { baseline: true, turnId: 'next-turn' });
+  await f.tick(40000);
+  assert.equal(f.alerts.filter(alert => alert.kind === 'completed').length, 0);
+});
+
+test('低额度恢复或周期重置后不播放已经排队的旧预警', async () => {
+  for (const reason of ['recovered', 'reset', 'stale']) {
+    const f = fixture();
+    await f.companion.setEnabled(true);
+    const window = { id: 'codex:primary', label: 'Codex', windowMinutes: 300, remaining: 10,
+      resetsAt: reason === 'reset' ? f.time + 2000 : 9000000 };
+    f.quota(10, { windows: [window], updatedAt: reason === 'stale' ? f.time - 298000 : f.time });
+    if (reason === 'recovered') f.quota(90);
+    await f.tick(10000);
+    assert.equal(f.alerts.length, 0, reason);
+    assert.equal(f.companion.getSnapshot().recent.length, 1);
+  }
+});
+
+test('断连和移出任务使待播及当前任务提醒失效，但保留历史', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.task(1, 'active', { baseline: true }); f.task(1, 'waiting'); await f.tick(5000);
+  f.callbacks.onStatus({ channel: 'tasks', state: 'disconnected', code: 'DISCONNECTED' });
+  assert.equal(f.companion.getSnapshot().currentAlert, null);
+  assert.equal(f.companion.getSnapshot().recent.length, 1);
+  f.callbacks.onStatus({ channel: 'tasks', state: 'connected' });
+  f.task(2, 'active', { baseline: true }); f.task(2, 'waiting');
+  f.task(2, 'unknown', { removed: true }); await f.tick(40000);
+  assert.equal(f.alerts.length, 1);
+});
+
+test('只保留10条近期提醒且显示数据有界', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.setPresent(false);
+  for (let n = 0; n < 12; n++) {
+    f.task(n, 'active', { baseline: true }); f.task(n, 'completed');
+    await f.tick(6000);
+  }
+  assert.equal(f.companion.getSnapshot().recent.length, 10);
+  for (let n = 12; n < 40; n++) f.task(n, 'active', { baseline: true });
+  assert.equal(f.companion.getSnapshot().tasks.items.length, 20);
+  f.quota(70, { windows: Array.from({ length: 100 }, (_, n) => ({ id: String(n), remaining: 70 })) });
+  assert.equal(f.companion.getSnapshot().quota.windows.length, 64);
+});
+
+test('手动关闭当前提醒校验id和代次，关闭联动使旧按钮永久无效', async () => {
+  const f = fixture();
+  assert.equal(f.companion.dismiss(1, 0), false);
+  await f.companion.setEnabled(true);
+  f.task(1, 'active', { baseline: true }); f.task(1, 'waiting'); await f.tick(5000);
+  const current = f.companion.getSnapshot().currentAlert;
+  assert.equal(f.companion.dismiss(current.id, current.generation - 1), false);
+  assert.equal(f.companion.dismiss(current.id, current.generation), true);
+  assert.equal(f.companion.getSnapshot().currentAlert, null);
+  assert.equal(f.companion.getSnapshot().recent.length, 1);
+  await f.companion.setEnabled(false);
+  assert.equal(f.companion.dismiss(current.id, current.generation), false);
+  assert.equal(f.timers.size, 0);
+  assert.equal(f.companion.getSnapshot().recent.length, 0);
+});
+
+test('手动刷新失败后仍在旧额度满五分钟时主动通知菜单过期', async () => {
+  const f = fixture({ start: (callbacks, index) => {
+    callbacks.onAccount({ accountKey: 'account-one' });
+    for (const channel of ['quota', 'tasks']) callbacks.onStatus({ channel, state: index ? 'missing' : 'connected', code: index ? 'MISSING' : null });
+  } });
+  await f.companion.setEnabled(true);
+  f.quota(70);
+  await f.tick(120000);
+  await f.companion.refresh();
+  const count = f.changes.length;
+  await f.tick(180000);
+  assert.equal(f.companion.getSnapshot().quota.stale, true);
+  assert.ok(f.changes.length > count);
+  assert.equal(f.changes.at(-1).quota.stale, true);
+});
