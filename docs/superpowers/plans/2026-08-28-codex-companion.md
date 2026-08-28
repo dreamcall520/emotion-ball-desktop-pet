@@ -28,7 +28,7 @@ assert.equal(JSON.stringify(normalizeTask({title:'标题',turns:[{turnId:'one',s
 - [ ] 为真实帧分片、帧过大、错误 JSON、超时、取消和方法白名单写失败测试，再实现连接。导入/构造均不探测。现有 `.codex/ipc/ipc.sock` 校验当前 uid、非符号链接、父目录无其他用户写权限。只发送 initialize、thread-owner-discovery、following changed/status requested；不宣布所有权。实測大包采用 16MiB 解析上限、8KiB 协议头、256MiB 硬上限；超解析上限但可安全路由时流式丢弃并隔离对应任务，标记 `unavailable: STATE_TOO_LARGE`，不自动反复请求。
 - [ ] stdio 只允许 initialize、account/read、account/rateLimits/read、thread/list。安装仅检查 `/Applications/Codex.app`、`/Applications/ChatGPT.app` 与用户 Applications 的 Resources/codex，不扫描私人文件或自动安装。连接关闭杀死自身 child、移除监听、拒绝 pending；任何错误只提供固定错误码。
 - [ ] thread/list 仅元数据（read-only state DB），单轮最多 20 个最近本机非归档非子代理任务，明确 partial。跟随后立即白名单提取并丢弃原始状态包。增量只保留相关标量，版本缺口/owner 切换变 unknown 并限频重新请求 snapshot，绝不请求完整历史。owner 断连不能继续显示处理中。
-- [ ] 两路独立：`createCodexConnection({onQuota,onTask,onStatus,onAccount})` 返回 `start()`、`refresh()`、`close()`；账户只提供不可逆内存 identity，切换时先清旧状态。返回状态 `connecting/connected/missing/unauthenticated/unsupported/disconnected`，不泄漏原始错误。
+- [x] 两路独立：`createCodexConnection({onQuota,onTask,onStatus,onAccount})` 返回 `start()`、`refresh()`、`retry({quota,tasks})`、`close()`；自动重试仅重建失败通道，手动整体刷新可重试被隔离状态。账户只提供不可逆内存 identity，切换时先清旧状态。返回状态 `connecting/connected/missing/unauthenticated/unsupported/disconnected`，不泄漏原始错误。
 - [ ] 执行对应测试及全量 `npm test`，提交仅本任务文件；规格复核后再质量复核。
 
 ## Task 2：总开关、提醒策略与菜单模型
@@ -37,7 +37,7 @@ assert.equal(JSON.stringify(normalizeTask({title:'标题',turns:[{turnId:'one',s
 
 文件：修改 `desktop-pet/lib/settings.js`；新增 `codex-companion.js`、`codex-menu.js` 与对应 tests。
 
-- [ ] 添加失败测试：`assert.equal(normalizeSettings({codexEnabled:'true'}).codexEnabled,false)`；实现仅 boolean 有效，默认 false，保留已有设置。
+- [x] 添加失败测试：`assert.equal(normalizeSettings({codexEnabled:'true'}).codexEnabled,false)`；实现仅 boolean 有效，默认 false，保留已有设置（`74d1ce3`，7 项设置测试通过）。
 - [ ] 控制器 `createCodexCompanion({createConnection,onChange,onAlert,onClear,canPresent,now,schedule,cancel})` 返回 `setEnabled()`、`refresh()`、`getSnapshot()`、`dismiss()`、`close()`。先测试默认零 I/O、rapid toggle、晚到回调，然后实现 generation guard 和只在 enable 时创建连接。
 - [ ] 先用可控时钟写失败测试，再实现 quota 120 秒、manual 10 秒、stale 5 分钟；暂时连接错误 30/60/120 秒退避，missing/unauthenticated/unsupported 仅手动重试。断路状态分别展示，旧值标过期。
 - [ ] 阈值窗口键 `bucket:duration:reset`，剩余 <=20/10 同档去重、跨档仅严重档。任务首次只基线，真正状态转换发事件：active→sway（无气泡），waiting→peek，completed→hop，failed→jelly，中断不庆祝。同一轮终态去重；unknown、notLoaded、断连不生成完成。
