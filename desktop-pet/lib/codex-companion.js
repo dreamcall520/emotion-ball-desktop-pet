@@ -50,8 +50,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
       tasks: { state: channels.tasks.state, code: channels.tasks.code, partial: true,
         items: [...tasks.values()].map(task => ({ ...task })) },
       recent: recent.map(entry => ({ ...entry, taskIds: [...entry.taskIds] })),
-      currentAlert: currentAlert && now() < currentAlert.expiresAt && validRefs(currentAlert).length === currentAlert.refs.size
-        ? publicAlert(currentAlert) : null
+      currentAlert: eventValid(currentAlert) ? publicAlert(currentAlert) : null
     };
   }
   function notify() { onChange(getSnapshot()); }
@@ -88,6 +87,13 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
       const task = tasks.get(ref.id);
       return task?.state === event.kind && task.turnId === ref.turnId ? [ref] : [];
     });
+  }
+  function eventValid(event) {
+    return Boolean(event && event.refs.size > 0 && now() < event.expiresAt && event.generation === generation
+      && validRefs(event).length === event.refs.size);
+  }
+  function refreshEventRefs(event) {
+    event.refs = new Map(validRefs(event).map(ref => [event.kind === 'quota' ? ref.key : ref.id, ref]));
   }
   function eventText(event) {
     const count = event.refs.size;
@@ -130,10 +136,10 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
   function pruneAlerts() {
     queued = queued.filter(event => {
       if (now() >= event.expiresAt) return false;
-      event.refs = new Map(validRefs(event).map(ref => [event.kind === 'quota' ? ref.key : ref.id, ref]));
+      refreshEventRefs(event);
       return event.refs.size > 0;
     });
-    if (currentAlert && (now() >= currentAlert.expiresAt || validRefs(currentAlert).length !== currentAlert.refs.size)) {
+    if (currentAlert && !eventValid(currentAlert)) {
       currentAlert = null; clearTimer('alert'); onClear();
       return true;
     }
@@ -151,15 +157,20 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     const cleared = pruneAlerts();
     const ready = queued.find(event => event.createdAt + MERGE_MS <= now());
     if (ready && now() - lastPresentedAt >= ALERT_GAP_MS && canPresent() === true
-      && enabled && !closed && ready.generation === generation) {
+      && enabled && !closed && queued.includes(ready) && eventValid(ready)) {
+      refreshEventRefs(ready);
       queued = queued.filter(event => event !== ready);
-      currentAlert = { ...ready, expiresAt: now() + DISPLAY_MS };
-      lastPresentedAt = now();
-      remember(currentAlert, now());
+      const candidate = { ...ready, expiresAt: now() + DISPLAY_MS };
+      currentAlert = candidate;
       setTimer('alert', DISPLAY_MS, () => { if (pruneAlerts()) notify(); });
-      const alert = publicAlert(currentAlert);
       notify();
-      if (enabled && !closed && generation === alert.generation && currentAlert?.id === alert.id) onAlert(alert);
+      if (enabled && !closed && currentAlert === candidate && eventValid(candidate)) {
+        refreshEventRefs(candidate);
+        lastPresentedAt = now();
+        remember(candidate, now());
+        onAlert(publicAlert(candidate));
+        if (enabled && !closed && generation === candidate.generation) notify();
+      }
     } else if (cleared) notify();
     armDrain();
   }

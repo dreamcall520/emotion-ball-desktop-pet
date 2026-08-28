@@ -574,3 +574,96 @@ test('close先建立终态，清理回调不能重新开启或遗留新连接', 
   f.companion.close();
   assert.equal(f.clears.length, 1);
 });
+
+test('许可回调把等待任务改成完成后，不播放空任务的旧等待提醒', async () => {
+  let changed = false;
+  const f = fixture({ canPresent: () => {
+    if (!changed) { changed = true; f.task(1, 'completed'); }
+    return true;
+  } });
+  await f.companion.setEnabled(true);
+  f.task(1, 'active', { baseline: true }); f.task(1, 'waiting');
+  await f.tick(5000);
+  assert.equal(f.alerts.length, 0);
+  assert.equal(f.companion.getSnapshot().currentAlert, null);
+  await f.tick(5000);
+  assert.equal(f.alerts.length, 1);
+  assert.equal(f.alerts[0].kind, 'completed');
+  assert.deepEqual(f.alerts[0].taskIds, [taskId(1)]);
+});
+
+test('许可回调恢复额度后，已移出队列的旧额度提醒不再显示', async () => {
+  const f = fixture({ canPresent: () => { f.quota(90); return true; } });
+  await f.companion.setEnabled(true);
+  f.quota(15); await f.tick(5000);
+  assert.equal(f.alerts.length, 0);
+  assert.equal(f.companion.getSnapshot().currentAlert, null);
+  assert.equal(f.companion.getSnapshot().recent[0].presentedAt, null);
+});
+
+test('许可回调改变合并提醒的同一对象时，只显示仍有效的任务子集', async () => {
+  let changed = false;
+  const f = fixture({ canPresent: () => {
+    if (!changed) { changed = true; f.task(1, 'completed'); }
+    return true;
+  } });
+  await f.companion.setEnabled(true);
+  for (const n of [1, 2]) { f.task(n, 'active', { baseline: true }); f.task(n, 'waiting'); }
+  await f.tick(5000);
+  assert.equal(f.alerts.length, 1);
+  assert.equal(f.alerts[0].kind, 'waiting');
+  assert.deepEqual(f.alerts[0].taskIds, [taskId(2)]);
+  assert.equal(f.alerts[0].text, '有一步等你确认哦');
+});
+
+test('许可回调恢复部分额度且同档更新剩余项，采用有效子集最新比例', async () => {
+  const windows = [
+    { id: 'codex:primary', label: 'Codex', windowMinutes: 300, remaining: 15, resetsAt: 9000000 },
+    { id: 'spark:primary', label: 'Spark', windowMinutes: 300, remaining: 18, resetsAt: 9000000 }
+  ];
+  const f = fixture({ canPresent: () => {
+    f.quota(90, { windows: [{ ...windows[0], remaining: 90 }, { ...windows[1], remaining: 12 }] });
+    return true;
+  } });
+  await f.companion.setEnabled(true);
+  f.quota(15, { windows }); await f.tick(5000);
+  assert.equal(f.alerts.length, 1);
+  assert.match(f.alerts[0].text, /12%/);
+  assert.doesNotMatch(f.alerts[0].text, /2 项|15%|18%/);
+});
+
+test('展示前菜单回调替换任务状态，不再onAlert也不记为已展示', async () => {
+  let changed = false;
+  const f = fixture({ onChange: value => {
+    if (value.currentAlert?.kind === 'waiting' && !changed) { changed = true; f.task(1, 'completed'); }
+  } });
+  await f.companion.setEnabled(true);
+  f.task(1, 'active', { baseline: true }); f.task(1, 'waiting'); await f.tick(5000);
+  assert.equal(f.alerts.length, 0);
+  assert.equal(f.companion.getSnapshot().currentAlert, null);
+  assert.equal(f.companion.getSnapshot().recent.find(entry => entry.kind === 'waiting').presentedAt, null);
+});
+
+test('展示前菜单回调恢复额度，不再onAlert也不保留当前提示', async () => {
+  let changed = false;
+  const f = fixture({ onChange: value => {
+    if (value.currentAlert?.kind === 'quota' && !changed) { changed = true; f.quota(90); }
+  } });
+  await f.companion.setEnabled(true);
+  f.quota(15); await f.tick(5000);
+  assert.equal(f.alerts.length, 0);
+  assert.equal(f.companion.getSnapshot().currentAlert, null);
+  assert.equal(f.companion.getSnapshot().recent[0].presentedAt, null);
+});
+
+test('展示前菜单回调同档更新额度，onAlert与历史使用最终比例', async () => {
+  let changed = false;
+  const f = fixture({ onChange: value => {
+    if (value.currentAlert?.kind === 'quota' && !changed) { changed = true; f.quota(12); }
+  } });
+  await f.companion.setEnabled(true);
+  f.quota(15); await f.tick(5000);
+  assert.equal(f.alerts.length, 1);
+  assert.match(f.alerts[0].text, /12%/);
+  assert.match(f.companion.getSnapshot().recent[0].text, /12%/);
+});
