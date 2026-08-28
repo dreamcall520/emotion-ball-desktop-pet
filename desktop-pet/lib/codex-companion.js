@@ -266,6 +266,9 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     }
   }
   function receiveQuota(value) {
+    // A successful quota payload is connection evidence even when the transport
+    // deduplicates its unchanged "connected" status after an account switch.
+    channels.quota.state = 'connected'; channels.quota.code = null; channels.quota.failures = 0;
     quota = { updatedAt: timestamp(value?.updatedAt), windows: [] };
     for (const window of Array.isArray(value?.windows) ? value.windows.slice(0, 64) : []) {
       if (!window || typeof window.id !== 'string') continue;
@@ -276,7 +279,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
         resetsAt: timestamp(window.resetsAt) ?? 'unknown'
       });
     }
-    armStale(); pruneAlerts(); quotaAlerts();
+    armChannel('quota'); armStale(); pruneAlerts(); quotaAlerts();
     notify();
   }
   function receiveTask(value) {

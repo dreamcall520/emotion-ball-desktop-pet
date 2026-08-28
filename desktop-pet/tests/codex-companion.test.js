@@ -33,6 +33,11 @@ function fixture(options = {}) {
     onChange: snapshot => { changes.push(snapshot); options.onChange?.(snapshot, companion); },
     onClear: () => { clears.push(time); options.onClear?.(companion); },
     createConnection: callbacks => {
+      if (options.createConnection) {
+        const connection = { ...options.createConnection(callbacks), callbacks };
+        connections.push(connection);
+        return connection;
+      }
       const index = connections.length;
       const connection = {
         callbacks, closed: false,
@@ -666,4 +671,49 @@ test('展示前菜单回调同档更新额度，onAlert与历史使用最终比�
   assert.equal(f.alerts.length, 1);
   assert.match(f.alerts[0].text, /12%/);
   assert.match(f.companion.getSnapshot().recent[0].text, /12%/);
+});
+
+test('真实连接组合：账号切换后即使connected状态去重，后续额度轮询仍持续', async () => {
+  const { createCodexConnection } = require('../lib/codex-connection');
+  let accountReads = 0;
+  let quotaReads = 0;
+  let metadataReads = 0;
+  const f = fixture({ createConnection: callbacks => createCodexConnection({
+    ...callbacks,
+    now: () => f.time,
+    createRpc: () => ({
+      start: async () => {}, close() {},
+      readAccount: async () => ({ accountKey: ++accountReads === 1 ? 'one' : 'two', authenticated: true, supported: true }),
+      readQuota: async updatedAt => {
+        quotaReads++;
+        return { windows: [{ id: 'codex:primary', label: 'Codex', windowMinutes: 300, remaining: 70, resetsAt: 9000000 }], updatedAt };
+      },
+      listThreads: async () => {
+        metadataReads++;
+        return [{ id: taskId(1), title: '正在运行的任务', state: 'unknown', turnId: null, updatedAt: f.time, partial: true }];
+      }
+    }),
+    createStream: ({ onTask, onStatus }) => ({
+      start: async () => {}, close() {},
+      setThreads: rows => {
+        for (const row of rows) onTask({ ...row, state: 'active', turnId: 'turn-one', baseline: true });
+        onStatus({ state: 'connected', code: null });
+      }
+    })
+  }) });
+  await f.companion.setEnabled(true);
+  assert.equal(quotaReads, 1);
+  assert.equal(f.companion.getSnapshot().quota.state, 'connected');
+  await f.tick(120000);
+  assert.equal(quotaReads, 2);
+  assert.equal(f.companion.getSnapshot().quota.state, 'connected');
+  await f.tick(240000);
+  assert.equal(quotaReads, 4);
+  assert.equal(accountReads, 4);
+  assert.ok(metadataReads > 4);
+  assert.equal(f.companion.getSnapshot().quota.updatedAt, f.time);
+  assert.equal(f.companion.getSnapshot().quota.stale, false);
+  assert.equal(f.companion.getSnapshot().tasks.state, 'connected');
+  f.companion.close();
+  assert.equal(f.timers.size, 0);
 });
