@@ -81,7 +81,7 @@ function interpolate(a,b,t) { return a+(b-a)*smooth(t); }
 ```
 
 - [x] 对每个采样body计算旋转椭圆的外包络，约束在viewBox `[-7,236]` 以内（圆心114.2705，实际blob点最大半径114.299603，保守半径114.3）；不改变中性尺寸。`positionForMotion` 用窗口宽/259缩放offset，结果四舍五入，夹在workArea内；允许负坐标，非法bounds/area/offset返回null。
-- [x] 每16ms采样六个动作，验证有限值、起止中性、身体外包络安全；跳跃有两次离地且有落地形变，其余五种身体轨迹各不相同。检查80/120/180/240尺寸、四角、负坐标；连续选择不重复、spin权重较低、非法输入安全。
+- [x] 每16ms采样六个动作，验证有限值、起止中性、身体外包络安全；跳跃有两次离地且有落地形变，其余五种身体轨迹各不相同。检查真实80/120/180/260尺寸、四角、负坐标；连续选择不重复、spin权重较低、非法输入安全。尺寸验收于8月28日改为直接读取SIZES，避免旧240值冒充实际大档。
 - [x] 运行上述测试和 `node --test --test-reporter=dot desktop-pet/tests/*.test.js`；提交动作模块和测试。专项17项、全套142项通过，方案与质量独立检查均通过（75efccb、62b495b）。
 
 ## 任务2：接入完整互动生命周期
@@ -93,8 +93,9 @@ function interpolate(a,b,t) { return a+(b-a)*smooth(t); }
 - [x] 控制器使用如下接口，执行单一时间轴；停止和完成都发当前token的结束帧，销毁时不发。
 
 ```js
-createWindowMotion({ getWindow, getWorkArea, now, schedule, cancel, sendFrame });
-// 返回 { start({token, action}), stop({restore=true, notify=true}={}) }。
+createWindowMotion({ getWindow, getWorkArea, getDisplayId, now, schedule, cancel, sendFrame });
+// 返回 { start({token, action}), stop({restore=true, notify=true}={}), refreshWorkArea() }。
+// refreshWorkArea仅在同屏同尺寸、原始归位点安全时更新边界，不重启时间线；失败交回宿主恢复。
 // start仅接受正安全整数token和getMotion(action)存在的动作。
 // start先stop，再保存原始bounds、startedAt、token、action；每16ms执行：
 const elapsed = now() - state.startedAt;
@@ -128,7 +129,7 @@ function playReaction(action, speak = true) {
 // 接收窗口生命周期stop命令时统一清理动作、排队单击、表情定时。
 ```
 
-- [x] main主导生命周期：新动作前停旧bounce；单击bounce前停新动作；拖起、sleep/rest、隐藏、调整尺寸、显示器变化、锁屏/挂起、退出统一取消。拖动以停止动画后的实际位置建立锚点，旧回调不得拉回拖动结果。renderer缩放重建球球前清理旧token。
+- [x] main主导生命周期：新动作前停旧bounce；单击bounce前停新动作；拖起、sleep/rest、隐藏、调整尺寸、需要重新定位的显示器变化、锁屏/挂起、退出统一取消。纯工作区微调且安全时只刷新动作边界。拖动以停止动画后的实际位置建立锚点，旧回调不得拉回拖动结果。renderer缩放重建球球前清理旧token。
 - [x] dialogue.offer扩展为兼容字符串事件或 `{event:'play', motion:<白名单>}`。五类专属短句每类至少2句、旋转至少2句，长度保持现有小气泡可容纳；同类不连续重复。响应保留气泡所绑定动作，`respond`对新动作返回 `{command:'again',motion}`，旧通用play继续返回原字符串。renderer据此重播完整动作；rest不改变睡眠规则。节流阻止新文字时，旧专属play失效并隐藏；重复/过期按钮不能重播。
 - [x] index加载纯动作模块；package-mac显式包含新增运行文件。保留contextIsolation、sandbox、非激活窗口；不改其他权限。
 - [x] 跑全部测试，核对旧125项回归；源代码真实窗口检查由下一任务执行。通过方案与质量检查后提交。f8a64c3、3515e96实现与修复，全套196项通过，独立符合性及质量检查均通过。
@@ -142,16 +143,26 @@ function playReaction(action, speak = true) {
 - [x] 将版本从0.2.1增到0.2.2，使用说明只更新双击及重播行为；不声称分享包已发布。
 - [x] 运行 `git diff --check`、`npm test`、`npm run smoke`、`npm run package:mac`。再针对打包 app.asar 运行相同 smoke，检查所有模块和版本一致。
 - [x] 独立检查整个变更并修复必要问题；主代理实际查看截图，不把脚本成功等同视觉验收。
-- [ ] 主代理更新 `/Applications/球球桌宠.app`：先回读版本和最新设置，正常退出，旧app移至唯一的废纸篓备份路径，再复制已验收的新app；核对签名、app.asar一致、实际启动、搜索入口唯一。若用户在操作，不抢鼠标。
-- [ ] 最小同步已确认项目结果到Obsidian当前上下文；只报告实际完成项，保留特性分支，不推送或重做分享ZIP。
+- [x] 主代理更新 `/Applications/球球桌宠.app`：先回读版本和最新设置，正常退出，旧app移至唯一的废纸篓备份路径，再复制已验收的新app；核对签名、app.asar一致、实际启动、搜索入口唯一。若用户在操作，不抢鼠标。
+- [x] 最小同步已确认项目结果到Obsidian当前上下文；只报告实际完成项，保留特性分支，不推送或重做分享ZIP。
 
 ### 当次进度（2026-08-27）
 
-代码提交 `0f1e933`，201项测试及独立符合性、最终质量检查均通过。源码和打包版各通过38个完整动作案例，分别采集7826、7828个真实渲染帧；覆盖四档尺寸和两屏四角（含负坐标）。球体最小边缘余量约2.515 CSS像素，主代理已查看六类浅深底关键帧及打包版80睡眼/Zzz截图。
+代码提交 `0f1e933`，201项测试及独立符合性、最终质量检查均通过。源码和打包版各通过38个完整动作案例，分别采集7826、7828个真实渲染帧；当时测试尺寸为80/120/180/240，尚未覆盖菜单实际260大档（8月28日已补正），并检查两屏四角（含负坐标）。球体最小边缘余量约2.515 CSS像素，主代理已查看六类浅深底关键帧及打包版80睡眼/Zzz截图。
 
 打包版本0.2.2，31个运行文件与源码逐字节一致，严格签名通过。包内app.asar SHA-256为 `a199c9a93999965ad659be344ac76dcb2a6926b52be0ffadec5821cc44b1727d`。临时验收素材位于 `/tmp/emotion-ball-body-motion.NFe3dH/`，最终源码报告在 `source-recheck/`，打包版报告在 `packaged/`；不提交这些图片或报告。
 
-正式安装仍待完成：桌面操作工具在安装前回报Mac锁屏，必须由用户手动解锁。当前 `/Applications/球球桌宠.app` 仍为0.2.1，未移动或覆盖；未创建本轮旧版备份。解锁后先回读当时最新设置，再正常退出、备份、替换、启动和核对搜索入口，不能恢复较早坐标。未推送GitHub、未更新公开Release或分享ZIP。
+当日正式安装未完成：桌面操作工具在安装前回报Mac锁屏，需由用户手动解锁；当时安装版仍为0.2.1，未移动或覆盖。以下为解锁后的最新交付结果。
+
+### 续验与交付（2026-08-28）
+
+- `ecbbec9`将验收尺寸直接绑定真实SIZES：80/120/180/260；烟测不接受旧240标记替代260。
+- 实机诊断捕获工作区高度895→896时，bow重播在843.8ms被显示恢复逻辑提前停止。`400ecc2`修复为安全的纯工作区变化只更新边界，保持动作时钟；当前帧即时夹紧，原始归位点越界、换屏及撤屏等仍停止回收。217项测试与两轮独立复查通过。
+- 最终源码38案例/7315帧通过；其中jelly-120实际遇到工作区变化仍完整播放1616ms。最终打包版38案例/7502帧通过，包含真实四档、双屏四角、完整重播、休息/拖动中断、固定色和睡眼/Zzz。源码最小球体边缘余量约2.515 CSS像素。主代理复看了六类动作关键帧及最终包睡眠截图。
+- 中途一次休息后的异常70px位移未在后续诊断与最终包中复现，未据此猜测修改拖动逻辑。失败及后续报告均保留在临时素材目录。临时诊断代码已全部撤回，最终包不含这些诊断。
+- 已正常退出0.2.1，备份旧app和退出后最新设置到 `/Users/allan/.Trash/球球桌宠-0.2.1-更新前-20260828.as4iKI/`，可恢复。已安装并启动 `/Applications/球球桌宠.app` 0.2.2，实际双击有视觉响应；80×80、最新位置(2125,-182)、置顶及气泡设置逐字节保留，未恢复更早坐标。
+- 正式安装包31个运行文件与源码一致，严格签名通过，app.asar SHA-256为 `d47f8f168df9f918605a6ffd498ee7b80f3e04cef76dc5d1ab8dbcb5f4238f06`；未产生errors.log，Spotlight查询仅返回正式应用入口。
+- 最终源码证据：`/tmp/emotion-ball-body-motion.NFe3dH/source-move-diagnostics/`；最终包证据：`packaged-fixed/`。保持`codex/light-companion`分支，未合并main、推送GitHub、更新公开Release或分享ZIP。
 
 ## 自检
 
