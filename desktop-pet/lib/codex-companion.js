@@ -78,14 +78,15 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
   }
   function quotaKey(window) { return JSON.stringify([window.id, window.windowMinutes, window.resetsAt]); }
   function validRefs(event) {
-    return [...event.refs.values()].filter(ref => {
+    return [...event.refs.values()].flatMap(ref => {
       if (event.kind === 'quota') {
-        if (quotaStale()) return false;
+        if (quotaStale()) return [];
         const window = quota.windows.find(item => quotaKey(item) === ref.key);
-        return window && Number.isFinite(window.remaining) && window.remaining <= ref.threshold && window.resetsAt > now();
+        return window && Number.isFinite(window.remaining) && window.remaining <= ref.threshold && window.resetsAt > now()
+          ? [{ ...ref, remaining: window.remaining }] : [];
       }
       const task = tasks.get(ref.id);
-      return task?.state === event.kind && task.turnId === ref.turnId;
+      return task?.state === event.kind && task.turnId === ref.turnId ? [ref] : [];
     });
   }
   function eventText(event) {
@@ -149,13 +150,16 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
   function drain() {
     const cleared = pruneAlerts();
     const ready = queued.find(event => event.createdAt + MERGE_MS <= now());
-    if (ready && now() - lastPresentedAt >= ALERT_GAP_MS && canPresent()) {
+    if (ready && now() - lastPresentedAt >= ALERT_GAP_MS && canPresent() === true
+      && enabled && !closed && ready.generation === generation) {
       queued = queued.filter(event => event !== ready);
       currentAlert = { ...ready, expiresAt: now() + DISPLAY_MS };
       lastPresentedAt = now();
       remember(currentAlert, now());
       setTimer('alert', DISPLAY_MS, () => { if (pruneAlerts()) notify(); });
-      notify(); onAlert(publicAlert(currentAlert));
+      const alert = publicAlert(currentAlert);
+      notify();
+      if (enabled && !closed && generation === alert.generation && currentAlert?.id === alert.id) onAlert(alert);
     } else if (cleared) notify();
     armDrain();
   }

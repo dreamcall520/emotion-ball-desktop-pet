@@ -28,9 +28,9 @@ function fixture(options = {}) {
     now: () => time,
     schedule: (callback, delay) => { const id = ++nextTimer; timers.set(id, { at: time + delay, callback }); return id; },
     cancel: id => timers.delete(id),
-    canPresent: () => present,
+    canPresent: () => options.canPresent ? options.canPresent(companion) : present,
     onAlert: alert => alerts.push(alert),
-    onChange: snapshot => changes.push(snapshot),
+    onChange: snapshot => { changes.push(snapshot); options.onChange?.(snapshot, companion); },
     onClear: () => clears.push(time),
     createConnection: callbacks => {
       const index = connections.length;
@@ -518,4 +518,37 @@ test('手动刷新失败后仍在旧额度满五分钟时主动通知菜单过�
   assert.equal(f.companion.getSnapshot().quota.stale, true);
   assert.ok(f.changes.length > count);
   assert.equal(f.changes.at(-1).quota.stale, true);
+});
+
+test('同档额度排队时继续下降，首次弹出用最新可靠百分比', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.quota(15); await f.tick(1000);
+  f.quota(12); await f.tick(4000);
+  assert.equal(f.alerts.length, 1);
+  assert.match(f.alerts[0].text, /12%/);
+  assert.doesNotMatch(f.alerts[0].text, /15%/);
+  assert.match(f.companion.getSnapshot().recent[0].text, /12%/);
+  f.quota(11);
+  assert.match(f.companion.getSnapshot().recent[0].text, /12%/);
+});
+
+test('菜单更新回调中关闭联动，不会再发出过期提醒或残留定时器', async () => {
+  const f = fixture({ onChange: (value, companion) => { if (value.currentAlert) void companion.setEnabled(false); } });
+  await f.companion.setEnabled(true);
+  f.task(1, 'active', { baseline: true }); f.task(1, 'waiting');
+  await f.tick(5000);
+  assert.equal(f.companion.getSnapshot().enabled, false);
+  assert.equal(f.alerts.length, 0);
+  assert.equal(f.timers.size, 0);
+});
+
+test('展示许可检查时关闭联动，返回true也不能继续播放', async () => {
+  const f = fixture({ canPresent: companion => { void companion.setEnabled(false); return true; } });
+  await f.companion.setEnabled(true);
+  f.task(1, 'active', { baseline: true }); f.task(1, 'waiting');
+  await f.tick(5000);
+  assert.equal(f.alerts.length, 0);
+  assert.equal(f.companion.getSnapshot().currentAlert, null);
+  assert.equal(f.timers.size, 0);
 });
