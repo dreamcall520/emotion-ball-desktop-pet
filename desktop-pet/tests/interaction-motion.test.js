@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { SIZES } = require('../lib/window-placement');
 
 const {
   MOTIONS,
@@ -144,7 +145,7 @@ test('每16ms采样全部动作均为有限值且外包络位于安全范围', (
 });
 
 test('positionForMotion按259基准缩放偏移并夹在不同尺寸工作区', () => {
-  for (const size of [80, 120, 180, 240]) {
+  for (const size of Object.values(SIZES).map(size => size.width)) {
     const bounds = { x: 100, y: 200, width: size, height: size };
     const area = { x: 0, y: 0, width: 500, height: 400 };
     assert.deepEqual(positionForMotion(bounds, area, { x: 13, y: -26 }), {
@@ -158,10 +159,10 @@ test('positionForMotion按259基准缩放偏移并夹在不同尺寸工作区', 
     { x: -1000, y: 1000 }
   ), { x: -500, y: 120 });
   assert.deepEqual(positionForMotion(
-    { x: 1000, y: 800, width: 240, height: 240 },
+    { x: 1000, y: 800, ...SIZES.large },
     { x: 0, y: 0, width: 500, height: 400 },
     { x: 1000, y: -1000 }
-  ), { x: 260, y: 0 });
+  ), { x: 500 - SIZES.large.width, y: 0 });
 });
 
 test('positionForMotion拒绝无穷字段、非正尺寸和放不下的窗口', () => {
@@ -288,8 +289,8 @@ test('1ms采样全部动作始终有限且保持旋转椭圆安全包络', () =>
   }
 });
 
-test('80/120/180/240尺寸在正负工作区四角均正确clamp位置', () => {
-  const sizes = [80, 120, 180, 240];
+test('产品全部实际尺寸在正负工作区四角均正确clamp位置', () => {
+  const sizes = Object.values(SIZES).map(size => size.width);
   const workAreas = [
     { x: 100, y: 80, width: 1200, height: 900 },
     { x: -1300, y: -900, width: 1200, height: 900 }

@@ -2,13 +2,70 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
+const { EventEmitter } = require('node:events');
+const { createRequire } = require('node:module');
 const { chooseMotion } = require('../lib/interaction-motion');
+const { SIZES } = require('../lib/window-placement');
 const helperPath = path.resolve(__dirname, '../scripts/verify-body-motion.js');
 
 function helper() {
   assert.ok(fs.existsSync(helperPath), '缺少真实身体动作验收助手');
   return require(helperPath);
 }
+
+test('动作验收尺寸必须完整取自产品实际尺寸定义', () => {
+  assert.deepEqual(helper().BODY_MOTION_SIZES, Object.values(SIZES).map(size => size.width));
+});
+
+// 只替代启动Electron的进程边界，实际运行烟测脚本的输出校验；不打开GUI。
+async function validateSmokeOutput(markers) {
+  const runner = path.resolve(__dirname, '../scripts/smoke-electron.js');
+  const runnerRequire = createRequire(runner);
+  const result = { exitCode: 0, errors: '' };
+  await vm.runInNewContext(fs.readFileSync(runner, 'utf8'), {
+    __dirname: path.dirname(runner), setTimeout, clearTimeout,
+    process: {
+      env: {}, stdout: { write() {} }, stderr: { write(text) { result.errors += text; } },
+      set exitCode(value) { result.exitCode = value; }
+    },
+    require(name) {
+      if (name === 'electron') return '/not-launched/electron';
+      if (name !== 'node:child_process') return runnerRequire(name);
+      return { spawn() {
+        const child = new EventEmitter();
+        child.stdout = new EventEmitter();
+        child.stderr = new EventEmitter();
+        queueMicrotask(() => {
+          child.stdout.emit('data', markers.map(marker => `PET_${marker}_OK`).join('\n'));
+          child.emit('close', 0);
+        });
+        return child;
+      } };
+    }
+  });
+  return result;
+}
+
+const completeMarkers = [
+  'SMOKE', 'BOUNCE', 'USER_DATA', 'ACTIVITY_STATES', 'GAZE', 'TOUCH_DRAG', 'BUBBLE_REPLY',
+  'BUBBLE_EDGES_SETTINGS', 'NATIVE_ACTIVITY', 'FIXED_COLOR', 'DOUBLE_CLICK', 'BODY_MOTION',
+  'BODY_MOTION_INTERRUPTS', 'BODY_MOTION_EDGES',
+  ...Object.values(SIZES).map(size => `BODY_MOTION_SIZE_${size.width}`),
+  ...['HOP', 'JELLY', 'SWAY', 'PEEK', 'BOW', 'SPIN'].map(id => `BODY_MOTION_${id}`)
+];
+
+test('烟测接受全部真实尺寸的通过标记，不额外要求不存在的240尺寸', async () => {
+  const result = await validateSmokeOutput(completeMarkers);
+  assert.equal(result.exitCode, 0, result.errors);
+});
+
+test('烟测拒绝用旧240标记冒充真实大尺寸已通过', async () => {
+  const largeMarker = `BODY_MOTION_SIZE_${SIZES.large.width}`;
+  const result = await validateSmokeOutput(completeMarkers.filter(marker => marker !== largeMarker).concat('BODY_MOTION_SIZE_240'));
+  assert.equal(result.exitCode, 1, '未完成真实大尺寸检查不能通过');
+  assert.ok(result.errors.includes(largeMarker), result.errors);
+});
 
 test('动作验收用轮廓点与实际变换判断边界，不误用旋转矩形的四角', () => {
   const { contourBounds } = helper();

@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { BODY_MOTION_SIZES } = require('./verify-body-motion');
 
 const packagedApp = process.env.PET_SMOKE_APP_PATH;
 const electronBinary = packagedApp ? path.join(packagedApp, 'Contents/MacOS/球球桌宠') : require('electron');
@@ -57,7 +58,7 @@ function runSmokeTest() {
         assert.equal(code, 0, output);
         assert.match(output, /PET_SMOKE_OK/);
         assert.match(output, /PET_BOUNCE_OK/);
-        for (const marker of ['USER_DATA', 'ACTIVITY_STATES', 'GAZE', 'TOUCH_DRAG', 'BUBBLE_REPLY', 'BUBBLE_EDGES_SETTINGS', 'NATIVE_ACTIVITY', 'FIXED_COLOR', 'DOUBLE_CLICK', 'BODY_MOTION', 'BODY_MOTION_INTERRUPTS', 'BODY_MOTION_EDGES', 'BODY_MOTION_SIZE_120', 'BODY_MOTION_SIZE_180', 'BODY_MOTION_SIZE_240', ...['HOP', 'JELLY', 'SWAY', 'PEEK', 'BOW', 'SPIN'].map(id => `BODY_MOTION_${id}`)]) {
+        for (const marker of ['USER_DATA', 'ACTIVITY_STATES', 'GAZE', 'TOUCH_DRAG', 'BUBBLE_REPLY', 'BUBBLE_EDGES_SETTINGS', 'NATIVE_ACTIVITY', 'FIXED_COLOR', 'DOUBLE_CLICK', 'BODY_MOTION', 'BODY_MOTION_INTERRUPTS', 'BODY_MOTION_EDGES', ...BODY_MOTION_SIZES.map(size => `BODY_MOTION_SIZE_${size}`), ...['HOP', 'JELLY', 'SWAY', 'PEEK', 'BOW', 'SPIN'].map(id => `BODY_MOTION_${id}`)]) {
           assert.ok(output.includes(`PET_${marker}_OK`), `${marker}检查未完成`);
         }
         assert.doesNotMatch(output, /Uncaught|ERR_FILE_NOT_FOUND|did-fail-load/i);

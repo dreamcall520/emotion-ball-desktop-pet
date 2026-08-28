@@ -3,6 +3,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { setTimeout: wait } = require('node:timers/promises');
 const { MOTIONS } = require('../lib/interaction-motion');
+const { SIZES } = require('../lib/window-placement');
+const BODY_MOTION_SIZES = Object.freeze(Object.values(SIZES).map(size => size.width));
 
 // 只在显式冒烟模式使用；不新增生产测试入口，不直接调用动作启动接口。
 function contourBounds(d, matrix) {
@@ -210,6 +212,7 @@ async function verifyBodyMotion({ pet, bubble, screen, command, setSetting, samp
       assert.ok(replay > token, `${id}重播没有新动作令牌`);
       process.stdout.write(`PET_BODY_MOTION_${id.toUpperCase()}_OK\n`);
     }
+    process.stdout.write('PET_BODY_MOTION_SIZE_80_OK\n');
     // 真正点击当前动作气泡的休息按钮，不直接调用 renderer 内部函数。
     await cooldown();
     await resetTrace();
@@ -242,7 +245,7 @@ async function verifyBodyMotion({ pet, bubble, screen, command, setSetting, samp
     }
     process.stdout.write('PET_BODY_MOTION_INTERRUPTS_OK\n');
 
-    for (const size of [120, 180, 240]) {
+    for (const size of BODY_MOTION_SIZES.filter(size => size !== 80)) {
       await place(area, size, area.x + 240, area.y + 240);
       for (const { id } of MOTIONS) await run(id, () => startDouble(id), { label: `${id}-${size}` });
       process.stdout.write(`PET_BODY_MOTION_SIZE_${size}_OK\n`);
@@ -275,4 +278,4 @@ async function verifyBodyMotion({ pet, bubble, screen, command, setSetting, samp
   }
 }
 
-module.exports = { contourBounds, assertVisibleFrame, randomForMotion, isRestingTransform, verifyBodyMotion };
+module.exports = { BODY_MOTION_SIZES, contourBounds, assertVisibleFrame, randomForMotion, isRestingTransform, verifyBodyMotion };
