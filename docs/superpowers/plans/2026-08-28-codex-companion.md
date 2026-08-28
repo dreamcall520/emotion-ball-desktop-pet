@@ -16,7 +16,7 @@
 
 文件：新增 `desktop-pet/lib/codex-state.js`（字段白名单）、`codex-rpc.js`（额度子进程）、`codex-frame.js`（有界帧与协议头读取）、`codex-stream.js`（桌面状态）、`codex-connection.js`（两路组合）；对应 `desktop-pet/tests/codex-*.test.js`。
 
-- [ ] 先写状态与边界失败测试并执行 `node --test desktop-pet/tests/codex-state.test.js`。新文件不存在时以 `assert.ok(fs.existsSync(modulePath))` 明确失败，之后才加载模块。核心断言：
+- [x] 先写状态与边界失败测试并执行 `node --test desktop-pet/tests/codex-state.test.js`。新文件不存在时以 `assert.ok(fs.existsSync(modulePath))` 明确失败，之后才加载模块。核心断言：
 
 ```js
 assert.equal(normalizeQuota({rateLimits:{primary:{usedPercent:85,windowDurationMins:300,resetsAt:2000000000}}}, 100).windows[0].remaining,15);
@@ -24,26 +24,26 @@ assert.equal(normalizeTask({threadRuntimeStatus:{type:'notLoaded'}},100).state,'
 assert.equal(JSON.stringify(normalizeTask({title:'标题',turns:[{turnId:'one',status:'inProgress',items:[{text:'SECRET_BODY'}]}]},100)).includes('SECRET_BODY'),false);
 ```
 
-- [ ] 实现白名单：quota windows 保留 id/label/window/remaining/reset；task 保留 id/title/state/turnId/updatedAt，状态仅 active/waiting/completed/failed/interrupted/idle/unknown。canonical 与 legacy 均找最新轮次；runtime active flags 和明确请求类型决定等待，明确终态决定本轮结束，错误正文不保留。
-- [ ] 为真实帧分片、帧过大、错误 JSON、超时、取消和方法白名单写失败测试，再实现连接。导入/构造均不探测。现有 `.codex/ipc/ipc.sock` 校验当前 uid、非符号链接、父目录无其他用户写权限。只发送 initialize、thread-owner-discovery、following changed/status requested；不宣布所有权。实測大包采用 16MiB 解析上限、8KiB 协议头、256MiB 硬上限；超解析上限但可安全路由时流式丢弃并隔离对应任务，标记 `unavailable: STATE_TOO_LARGE`，不自动反复请求。
-- [ ] stdio 只允许 initialize、account/read、account/rateLimits/read、thread/list。安装仅检查 `/Applications/Codex.app`、`/Applications/ChatGPT.app` 与用户 Applications 的 Resources/codex，不扫描私人文件或自动安装。连接关闭杀死自身 child、移除监听、拒绝 pending；任何错误只提供固定错误码。
-- [ ] thread/list 仅元数据（read-only state DB），单轮最多 20 个最近本机非归档非子代理任务，明确 partial。跟随后立即白名单提取并丢弃原始状态包。增量只保留相关标量，版本缺口/owner 切换变 unknown 并限频重新请求 snapshot，绝不请求完整历史。owner 断连不能继续显示处理中。
+- [x] 实现白名单：quota windows 保留 id/label/window/remaining/reset；task 保留 id/title/state/turnId/updatedAt，状态仅 active/waiting/completed/failed/interrupted/idle/unknown。canonical 与 legacy 均找最新轮次；runtime active flags 和明确请求类型决定等待，明确终态决定本轮结束，错误正文不保留。
+- [x] 为真实帧分片、帧过大、错误 JSON、超时、取消和方法白名单写失败测试，再实现连接。导入/构造均不探测。现有 `.codex/ipc/ipc.sock` 校验当前 uid、非符号链接、父目录无其他用户写权限。只发送 initialize、thread-owner-discovery、following changed/status requested；不宣布所有权。实測大包采用 16MiB 解析上限、8KiB 协议头、256MiB 硬上限；超解析上限但可安全路由时流式丢弃并隔离对应任务，标记 `unavailable: STATE_TOO_LARGE`，不自动反复请求。
+- [x] stdio 只允许 initialize、account/read、account/rateLimits/read、thread/list。安装仅检查 `/Applications/Codex.app`、`/Applications/ChatGPT.app` 与用户 Applications 的 Resources/codex，不扫描私人文件或自动安装。连接关闭杀死自身 child、移除监听、拒绝 pending；任何错误只提供固定错误码。
+- [x] thread/list 仅元数据（read-only state DB），单轮最多 20 个最近本机非归档非子代理任务，明确 partial。跟随后立即白名单提取并丢弃原始状态包。增量只保留相关标量，版本缺口/owner 切换变 unknown 并限频重新请求 snapshot，绝不请求完整历史。owner 断连不能继续显示处理中。
 - [x] 两路独立：`createCodexConnection({onQuota,onTask,onStatus,onAccount})` 返回 `start()`、`refresh()`、`retry({quota,tasks})`、`close()`；自动重试仅重建失败通道，手动整体刷新可重试被隔离状态。账户只提供不可逆内存 identity，切换时先清旧状态。返回状态 `connecting/connected/missing/unauthenticated/unsupported/disconnected`，不泄漏原始错误。
-- [ ] 执行对应测试及全量 `npm test`，提交仅本任务文件；规格复核后再质量复核。
+- [x] 执行对应测试及全量 `npm test`，提交仅本任务文件；规格复核后再质量复核。
 
 ## Task 2：总开关、提醒策略与菜单模型
 
-状态：开发中。
+状态：已完成，规格及质量复核通过（`4891359`），全量 424 项通过；尚未接入界面。
 
 文件：修改 `desktop-pet/lib/settings.js`；新增 `codex-companion.js`、`codex-menu.js` 与对应 tests。
 
 - [x] 添加失败测试：`assert.equal(normalizeSettings({codexEnabled:'true'}).codexEnabled,false)`；实现仅 boolean 有效，默认 false，保留已有设置（`74d1ce3`，7 项设置测试通过）。
-- [ ] 控制器 `createCodexCompanion({createConnection,onChange,onAlert,onClear,canPresent,now,schedule,cancel})` 返回 `setEnabled()`、`refresh()`、`getSnapshot()`、`dismiss()`、`close()`。先测试默认零 I/O、rapid toggle、晚到回调，然后实现 generation guard 和只在 enable 时创建连接。
-- [ ] 先用可控时钟写失败测试，再实现 quota 120 秒、manual 10 秒、stale 5 分钟；暂时连接错误 30/60/120 秒退避，missing/unauthenticated/unsupported 仅手动重试。断路状态分别展示，旧值标过期。
-- [ ] 阈值窗口键 `bucket:duration:reset`，剩余 <=20/10 同档去重、跨档仅严重档。任务首次只基线，真正状态转换发事件：active→sway（无气泡），waiting→peek，completed→hop，failed→jelly，中断不庆祝。同一轮终态去重；unknown、notLoaded、断连不生成完成。
-- [ ] 提醒规则测试后实现：五秒同类合并、所有提醒共享三十秒、direct input/drag/隐藏/锁屏/睡眠 defer 最长六十秒；最近十条仅内存。off/accountchange 清空所有资源与排队，onClear 只清联动表现。
-- [ ] 菜单模型输出纯文本、转义 `&` 加速键、截断标题，缺失字段显示不可用、partial 明确「最近最多20个任务」。可信 UUID 构造 `codex://threads/<uuid>`；回调拒绝旧代次/未知任务，不处理接口提供 URL。
-- [ ] 执行测试及全量 `npm test`；提交本任务文件；规格复核通过后质量复核。
+- [x] 控制器 `createCodexCompanion({createConnection,onChange,onAlert,onClear,canPresent,now,schedule,cancel})` 返回 `setEnabled()`、`refresh()`、`getSnapshot()`、`dismiss()`、`close()`。先测试默认零 I/O、rapid toggle、晚到回调，然后实现 generation guard 和只在 enable 时创建连接。
+- [x] 先用可控时钟写失败测试，再实现 quota 120 秒、manual 10 秒、stale 5 分钟；暂时连接错误 30/60/120 秒退避，missing/unauthenticated/unsupported 仅手动重试。断路状态分别展示，旧值标过期。
+- [x] 阈值窗口键 `bucket:duration:reset`，剩余 <=20/10 同档去重、跨档仅严重档。任务首次只基线，真正状态转换发事件：active→sway（无气泡），waiting→peek，completed→hop，failed→jelly，中断不庆祝。同一轮终态去重；unknown、notLoaded、断连不生成完成。
+- [x] 提醒规则测试后实现：五秒同类合并、所有提醒共享三十秒、direct input/drag/隐藏/锁屏/睡眠 defer 最长六十秒；最近十条仅内存。off/accountchange 清空所有资源与排队，onClear 只清联动表现。
+- [x] 菜单模型输出纯文本、转义 `&` 加速键、截断标题，缺失字段显示不可用、partial 明确「最近最多20个任务」。可信 UUID 构造 `codex://threads/<uuid>`；回调拒绝旧代次/未知任务，不处理接口提供 URL。
+- [x] 执行测试及全量 `npm test`；提交本任务文件；规格复核通过后质量复核。
 
 ## Task 3：接入现有界面与验收
 
