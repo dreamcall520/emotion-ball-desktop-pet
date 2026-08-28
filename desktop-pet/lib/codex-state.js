@@ -7,6 +7,10 @@ const WAIT_METHODS = new Set([
   'mcpServer/elicitation/request', 'execCommandApproval', 'applyPatchApproval'
 ]);
 const TERMINAL = new Set(['completed', 'failed', 'interrupted']);
+const CLIENT_SOURCES = new Set(['cli', 'vscode', 'exec', 'appServer', 'api']);
+const THREAD_SOURCES = new Set([...CLIENT_SOURCES, 'user', 'agent_created_thread', 'agent_forked_thread']);
+const TAIL_TURN_KEY = /^tail:[0-9]+:local:(?:[0-9]+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+const isTurnKey = key => typeof key === 'string' && (key.startsWith('turn:') || TAIL_TURN_KEY.test(key));
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const text = (value, limit = 200) => typeof value === 'string' ? value.trim().slice(0, limit) : '';
 const positive = value => Number.isFinite(value) && value > 0;
@@ -38,11 +42,10 @@ function isEligibleThread(raw) {
   if (!object(raw) || !isTaskId(raw.id) || raw.archived === true || raw.ephemeral === true) return false;
   if (raw.hostId != null && raw.hostId !== 'local') return false;
   if (raw.parentThreadId != null || raw.parent_thread_id != null) return false;
-  // Object-valued sources include internal subagents. Unknown sources never expand scope.
-  for (const source of [raw.source, raw.threadSource]) {
-    if (source == null) continue;
-    if (!['cli', 'vscode', 'exec', 'appServer', 'api'].includes(source)) return false;
-  }
+  // Client transport and user-facing task origin are different enums. Agent-created
+  // peer tasks are not internal subagents; unknown/object-valued sources stay excluded.
+  if (raw.source != null && !CLIENT_SOURCES.has(raw.source)) return false;
+  if (raw.threadSource != null && !THREAD_SOURCES.has(raw.threadSource)) return false;
   return true;
 }
 
@@ -77,7 +80,7 @@ function latestTurn(raw) {
     let count = 0;
     let hasUndated = false;
     for (const [key, entity] of Object.entries(history.history.entitiesByKey)) {
-      if (!key.startsWith('turn:')) continue;
+      if (!isTurnKey(key)) continue;
       const next = projectTurn(entity, `canonical:${text(key, 220)}`);
       if (!next) continue;
       count++; hasUndated ||= next.startedAt === null;
@@ -160,7 +163,11 @@ function mergeWholeTurn(task, raw, location, canonical, operation) {
   // Scalar updates cannot establish ordering relative to an omitted ambiguous turn.
   // Only a new full projection can clear this uncertainty.
   if (task.turn?.orderUnknown) next.orderUnknown = true;
-  if (canonical && location !== `canonical:turn:${next.turnId}`) return false;
+  // Local turns retain tail:<generation>:local:<index-or-client-message-id> after
+  // receiving their server turnId. Preserve that location for status patches.
+  if (canonical && location !== `canonical:turn:${next.turnId}` &&
+    !TAIL_TURN_KEY.test(location.slice('canonical:'.length))) return false;
+  if (canonical && task.turn?.location === location && task.turn.turnId !== next.turnId) return false;
   if (!task.turn || task.turn.location === location) { task.turn = next; return true; }
   if (canonical) {
     if (next.startedAt === null || task.turn.startedAt === null || next.startedAt === task.turn.startedAt) return false;
@@ -217,7 +224,7 @@ function applyTaskPatches(previous, patches) {
       const canonical = root === 'turnHistory' && path[1] === 'history' && path[2] === 'entitiesByKey';
       const location = root === 'turns' ? `legacy:${path[1]}` : canonical ? `canonical:${path[3]}` : null;
       const fieldIndex = canonical ? 4 : 2;
-      if (canonical && typeof path[3] === 'string' && !path[3].startsWith('turn:')) continue;
+      if (canonical && typeof path[3] === 'string' && !isTurnKey(path[3])) continue;
       if (path.length >= fieldIndex + 1 && !['status', 'turnId', 'id', 'turnStartedAtMs'].includes(path[fieldIndex])) continue;
       if (location && path.length === fieldIndex) {
         if (!mergeWholeTurn(task, value, location, canonical, patch.op)) needsSnapshot = true;

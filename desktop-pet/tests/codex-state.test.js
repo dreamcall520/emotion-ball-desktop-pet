@@ -90,6 +90,47 @@ test('canonical轮次按开始时间选最新，不依赖实体键顺序；不�
   assert.equal(JSON.stringify(state().projectTask(raw)).includes(SECRET), false);
 });
 
+for (const status of ['inProgress', 'completed', 'failed', 'interrupted']) {
+  test(`canonical本地tail轮次读取真实 ${status}，键不要求等于轮次ID`, () => {
+    const raw = { id: ID, threadRuntimeStatus: { type: 'idle' }, turns: [],
+      turnHistory: { kind: 'canonical', history: { entitiesByKey: {
+        'tail:1:local:0': { turnId: 'one', status, turnStartedAtMs: 100, items: [SECRET], params: { input: SECRET } }
+      } } } };
+    const result = state().normalizeTask(raw, 200);
+    assert.equal(result.state, status === 'inProgress' ? 'idle' : status);
+    assert.equal(result.turnId, 'one');
+    assert.equal(JSON.stringify(state().projectTask(raw)).includes(SECRET), false);
+  });
+}
+
+test('canonical混合持久化轮次和本地tail仍按时间排序，缺时间不猜测', () => {
+  const raw = { id: ID, turnHistory: { kind: 'canonical', history: { entitiesByKey: {
+    'turn:old': { turnId: 'old', status: 'failed', turnStartedAtMs: 100 },
+    'tail:7:local:1': { turnId: 'new', status: 'completed', turnStartedAtMs: 200 }
+  } } } };
+  assert.equal(state().normalizeTask(raw, 300).state, 'completed');
+  assert.equal(state().normalizeTask(raw, 300).turnId, 'new');
+  delete raw.turnHistory.history.entitiesByKey['tail:7:local:1'].turnStartedAtMs;
+  assert.equal(state().normalizeTask(raw, 300).state, 'unknown');
+});
+
+test('canonical本地tail整体增量及状态增量可合并，轮次身份改变要求新快照', () => {
+  let current = state().projectTask({ id: ID, turns: [] });
+  const path = ['turnHistory', 'history', 'entitiesByKey', 'tail:3:local:0'];
+  let result = state().applyTaskPatches(current, [{ op: 'add', path,
+    value: { turnId: 'one', status: 'inProgress', turnStartedAtMs: 100, items: [SECRET] } }]);
+  assert.equal(result.needsSnapshot, false);
+  assert.equal(state().taskFromProjection(result.task, 200).state, 'active');
+  current = result.task;
+  result = state().applyTaskPatches(current, [{ op: 'replace', path: [...path, 'status'], value: 'completed' }]);
+  assert.equal(result.needsSnapshot, false);
+  assert.equal(state().taskFromProjection(result.task, 200).state, 'completed');
+  assert.equal(JSON.stringify(result.task).includes(SECRET), false);
+  result = state().applyTaskPatches(current, [{ op: 'replace', path,
+    value: { turnId: 'different', status: 'completed', turnStartedAtMs: 200 } }]);
+  assert.equal(result.needsSnapshot, true);
+});
+
 test('未知新轮次不回退成旧轮次已完成，notLoaded压过旧终态', () => {
   assert.equal(state().normalizeTask({ id: ID, turns: [{ turnId: 'old', status: 'completed' }, { turnId: 'new', status: 'futureStatus' }] }, 100).state, 'unknown');
   assert.equal(state().normalizeTask({ id: ID, threadRuntimeStatus: { type: 'notLoaded' }, turns: [{ turnId: 'old', status: 'completed' }] }, 100).state, 'unknown');
@@ -157,6 +198,24 @@ test('元数据排除归档、远端、子代理、非法ID；只取20条不引�
   assert.equal(result[0].id, many[21].id);
   assert.equal(JSON.stringify(result).includes(SECRET), false);
   assert.equal(state().normalizeThreadList({ data: [{ id: ID, preview: SECRET }] })[0].title, '未命名任务');
+});
+
+for (const threadSource of ['user', 'agent_created_thread', 'agent_forked_thread']) {
+  test(`普通任务来源 ${threadSource} 与客户端来源分别校验，不误排为内部子代理`, () => {
+    const row = { id: ID, source: 'vscode', threadSource, hostId: 'local', name: '用户任务' };
+    assert.equal(state().isEligibleThread(row), true);
+    assert.equal(state().normalizeThreadList({ data: [row] })[0]?.id, ID);
+  });
+}
+
+test('普通任务来源不能绕过内部子代理、未知来源及原有范围限制', () => {
+  const row = { id: ID, source: 'vscode', threadSource: 'agent_created_thread', hostId: 'local' };
+  for (const invalid of [
+    { source: { subAgent: { thread_spawn: {} } } }, { threadSource: 'subAgentThreadSpawn' },
+    { source: 'agent_created_thread' }, { threadSource: 'future_unknown_source' },
+    { threadSource: { subAgent: {} } }, { parentThreadId: SECOND }, { parent_thread_id: SECOND },
+    { archived: true }, { ephemeral: true }, { hostId: 'remote' }, { id: 'invalid' }
+  ]) assert.equal(state().isEligibleThread({ ...row, ...invalid }), false, JSON.stringify(invalid));
 });
 
 test('patch只合并当前轮次状态标量，其它正文丢弃', () => {

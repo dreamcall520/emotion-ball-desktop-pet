@@ -367,6 +367,116 @@ test('unknown、idle和interrupted不庆祝；unknown恢复旧终态也不误报
   assert.equal(f.alerts.length, 0);
 });
 
+test('同轮运行或等待经过短暂idle后，真实完成或失败仍提醒且只提醒一次', async () => {
+  for (const before of ['active', 'waiting']) {
+    for (const terminal of ['completed', 'failed']) {
+      const f = fixture();
+      await f.companion.setEnabled(true);
+      f.task(1, before, { baseline: true });
+      f.task(1, 'idle');
+      await f.tick(150);
+      assert.equal(f.alerts.length, 0, 'idle本身不生成提醒');
+      f.task(1, terminal);
+      await f.tick(5000);
+      assert.deepEqual(f.alerts.map(alert => alert.kind), [terminal], `${before} -> idle -> ${terminal}`);
+      f.task(1, 'active', { baseline: true });
+      f.task(1, 'idle'); f.task(1, terminal);
+      await f.tick(30000);
+      assert.equal(f.alerts.length, 1, '相同轮次不重复');
+      f.companion.close();
+    }
+  }
+});
+
+test('idle过渡只保留五秒，重复idle不续期；没有明确终态不提醒', async () => {
+  for (const delay of [4999, 5000, 15000]) {
+    const f = fixture();
+    await f.companion.setEnabled(true);
+    f.task(1, 'active', { baseline: true }); f.task(1, 'idle');
+    await f.tick(3000); f.task(1, 'idle');
+    await f.tick(delay - 3000);
+    assert.equal(f.alerts.length, 0);
+    f.task(1, 'completed'); await f.tick(5000);
+    assert.equal(f.alerts.length, delay < 5000 ? 1 : 0, `idle持续${delay}毫秒`);
+    f.companion.close();
+  }
+});
+
+test('idle过渡不跨越基线、未知、换轮次或中断，也不补报历史idle完成', async () => {
+  for (const reason of ['historical', 'idle-baseline', 'terminal-baseline', 'unknown', 'new-turn', 'interrupted']) {
+    const f = fixture();
+    await f.companion.setEnabled(true);
+    if (reason !== 'historical') f.task(1, 'active', { baseline: true });
+    f.task(1, 'idle', { baseline: reason === 'historical' || reason === 'idle-baseline' });
+    if (reason === 'unknown' || reason === 'interrupted') f.task(1, reason);
+    if (reason === 'new-turn') f.task(1, 'idle', { turnId: 'different-turn' });
+    f.task(1, 'completed', { baseline: reason === 'terminal-baseline' });
+    await f.tick(5000);
+    assert.equal(f.alerts.length, 0, reason);
+    f.companion.close();
+  }
+});
+
+test('idle过渡在断连、移除、刷新、换账号、开关和任务淘汰后立即失效', async () => {
+  for (const reason of ['disconnected', 'removed', 'refresh', 'account', 'disable', 'eviction']) {
+    const f = fixture();
+    await f.companion.setEnabled(true);
+    f.task(1, 'active', { baseline: true }); f.task(1, 'idle');
+    if (reason === 'disconnected') {
+      f.callbacks.onStatus({ channel: 'tasks', state: 'disconnected', code: 'DISCONNECTED' });
+      f.callbacks.onStatus({ channel: 'tasks', state: 'connected' });
+    } else if (reason === 'removed') f.task(1, 'unknown', { removed: true });
+    else if (reason === 'refresh') await f.companion.refresh();
+    else if (reason === 'account') f.callbacks.onAccount({ accountKey: 'account-two' });
+    else if (reason === 'disable') {
+      await f.companion.setEnabled(false); await f.companion.setEnabled(true);
+    } else for (let n = 2; n <= 21; n++) f.task(n, 'idle', { baseline: true });
+    f.task(1, 'idle'); f.task(1, 'completed');
+    await f.tick(5000);
+    assert.equal(f.alerts.length, 0, reason);
+    f.companion.close();
+  }
+});
+
+test('两条任务各自经过idle后完成仍按五秒窗口合并', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  for (const n of [1, 2]) {
+    f.task(n, 'active', { baseline: true }); f.task(n, 'idle');
+    await f.tick(100); f.task(n, 'completed');
+    await f.tick(1000);
+  }
+  await f.tick(5000);
+  assert.equal(f.alerts.length, 1);
+  assert.deepEqual(f.alerts[0].taskIds, [taskId(1), taskId(2)]);
+  assert.equal(f.alerts[0].kind, 'completed');
+  f.companion.close();
+});
+
+test('清理提醒回调重建基线或连接时，旧idle处理不恢复过渡证据', async () => {
+  for (const reason of ['baseline', 'account', 'disable', 'refresh']) {
+    let replaced = false;
+    const f = fixture({ onClear(companion) {
+      if (replaced) return;
+      replaced = true;
+      if (reason === 'account') f.callbacks.onAccount({ accountKey: 'account-two' });
+      else if (reason === 'disable') { void companion.setEnabled(false); void companion.setEnabled(true); }
+      else if (reason === 'refresh') void companion.refresh();
+      f.task(1, 'idle', { baseline: true });
+    } });
+    await f.companion.setEnabled(true);
+    f.task(1, 'idle', { baseline: true }); f.task(1, 'active');
+    await f.tick(5000);
+    assert.deepEqual(f.alerts.map(alert => alert.kind), ['active']);
+    f.task(1, 'idle');
+    await settle();
+    assert.equal(replaced, true);
+    f.task(1, 'completed'); await f.tick(30000);
+    assert.deepEqual(f.alerts.map(alert => alert.kind), ['active'], reason);
+    f.companion.close();
+  }
+});
+
 test('同轮终态去重，未知后恢复同轮不重复；新轮次仍可提醒', async () => {
   const f = fixture();
   await f.companion.setEnabled(true);

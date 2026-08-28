@@ -8,6 +8,7 @@ const MERGE_MS = 5000;
 const ALERT_GAP_MS = 30000;
 const QUEUE_MS = 60000;
 const DISPLAY_MS = 8000;
+const IDLE_TRANSITION_MS = 5000;
 const MOTIONS = Object.freeze({ active: 'sway', waiting: 'peek', completed: 'hop', failed: 'jelly', quota: 'bow' });
 const TASK_STATES = new Set(['active', 'waiting', 'completed', 'failed', 'interrupted', 'idle', 'unknown']);
 const cleanText = (value, limit) => typeof value === 'string' ? value.slice(0, limit) : '';
@@ -29,6 +30,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
   const timers = new Map();
   const quotaSeen = new Map();
   const terminalSeen = new Map();
+  const idleTransitions = new Map();
   let queued = [];
   let recent = [];
   let currentAlert = null;
@@ -123,6 +125,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
   function clearAlerts({ history = false, dedupe = false, cooldown = false } = {}) {
     clearTimer('drain'); clearTimer('alert');
     queued = []; currentAlert = null;
+    idleTransitions.clear();
     if (history) recent = [];
     if (dedupe) { quotaSeen.clear(); terminalSeen.clear(); }
     if (cooldown) lastPresentedAt = -Infinity;
@@ -202,6 +205,17 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     }
   }
   function taskAlerts(task, previous, baseline) {
+    const sameTurn = Boolean(task.turnId && previous?.turnId === task.turnId);
+    const idleTransition = idleTransitions.get(task.id);
+    const followsIdle = sameTurn && previous.state === 'idle'
+      && idleTransition?.turnId === task.turnId && now() < idleTransition.expiresAt;
+    // Codex can publish runtime idle just before the same turn's terminal patch.
+    // Bridge only that short observed transition; idle alone is never completion.
+    if (task.state === 'idle' && !baseline && sameTurn) {
+      if (['active', 'waiting'].includes(previous.state)) {
+        idleTransitions.set(task.id, { turnId: task.turnId, expiresAt: now() + IDLE_TRANSITION_MS });
+      } else if (!followsIdle) idleTransitions.delete(task.id);
+    } else idleTransitions.delete(task.id);
     const terminal = ['completed', 'failed', 'interrupted'].includes(task.state);
     let seen = terminalSeen.get(task.id) || [];
     const alreadySeen = seen.includes(task.turnId);
@@ -209,10 +223,10 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
       seen = [...seen, task.turnId].slice(-16); terminalSeen.set(task.id, seen);
     }
     if (!previous || baseline || !task.turnId) return;
-    const sameTurn = previous.turnId === task.turnId;
     if (task.state === 'active' && !['active', 'unknown'].includes(previous.state)) enqueue('active', { id: task.id, turnId: task.turnId });
     else if (task.state === 'waiting' && previous.state === 'active' && sameTurn) enqueue('waiting', { id: task.id, turnId: task.turnId });
-    else if (['completed', 'failed'].includes(task.state) && ['active', 'waiting'].includes(previous.state) && sameTurn && !alreadySeen) {
+    else if (['completed', 'failed'].includes(task.state)
+      && (['active', 'waiting'].includes(previous.state) || followsIdle) && sameTurn && !alreadySeen) {
       enqueue(task.state, { id: task.id, turnId: task.turnId });
     }
   }
@@ -238,6 +252,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     channel.state = state; channel.code = code;
     if (state === 'connected') channel.failures = 0;
     if (value.channel === 'tasks' && ['disconnected', 'missing', 'unauthenticated', 'unsupported'].includes(state)) {
+      idleTransitions.clear();
       for (const task of tasks.values()) task.state = 'unknown';
     }
     const alertCleared = pruneAlerts();
@@ -287,6 +302,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     const previous = tasks.get(value.id);
     if (value.removed) {
       terminalSeen.delete(value.id);
+      idleTransitions.delete(value.id);
       if (tasks.delete(value.id)) { pruneAlerts(); notify(); }
       return;
     }
@@ -299,9 +315,16 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     };
     if (!previous && tasks.size === 20) {
       const oldest = tasks.keys().next().value; tasks.delete(oldest); terminalSeen.delete(oldest);
+      idleTransitions.delete(oldest);
     }
     tasks.set(task.id, task);
-    pruneAlerts(); taskAlerts(task, previous, value.baseline === true);
+    const taskGeneration = generation;
+    const taskEpoch = connectionEpoch;
+    pruneAlerts();
+    // onClear may replace the task baseline or connection while pruning.
+    if (enabled && !closed && generation === taskGeneration && connectionEpoch === taskEpoch && tasks.get(task.id) === task) {
+      taskAlerts(task, previous, value.baseline === true);
+    }
     if (!previous || ['title', 'state', 'turnId', 'unavailable'].some(key => previous[key] !== task[key])) notify();
   }
   function receiveAccount(value) {

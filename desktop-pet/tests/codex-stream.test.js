@@ -177,6 +177,31 @@ test('连续patch更新当前轮次，丢掉正文；revision缺口改unknown并
   h.stream.close();
 });
 
+for (const turnKey of ['turn:one', 'tail:1:local:0', `tail:0:local:${CLIENT}`]) test(`由Codex创建的普通任务快照及结束增量保留订阅（${turnKey}），正文仍不离开连接`, async () => {
+  const h = harness();
+  h.stream.setThreads([{ id: ID, title: '普通任务' }]);
+  try {
+    await h.stream.start();
+    h.receive(snapshot(1, { threadSource: 'agent_created_thread', turnHistory: {
+      kind: 'canonical', history: { entitiesByKey: {
+        [turnKey]: { turnId: 'one', status: 'inProgress', turnStartedAtMs: 1000, items: [SECRET] }
+      } }
+    } }));
+    assert.equal(h.tasks.at(-1).state, 'active');
+    assert.equal(h.tasks.at(-1).baseline, true);
+    assert.equal(h.statuses.at(-1).state, 'connected');
+    h.receive(broadcast({ type: 'patches', baseRevision: 1, revision: 2, patches: [
+      { op: 'replace', path: ['threadRuntimeStatus', 'type'], value: 'idle' },
+      { op: 'replace', path: ['turnHistory', 'history', 'entitiesByKey', turnKey, 'status'], value: 'completed' }
+    ] }));
+    assert.equal(h.tasks.at(-1).state, 'completed');
+    assert.equal(h.tasks.at(-1).baseline, false);
+    assert.equal(h.tasks.some(task => task.removed), false);
+    assert.equal(h.sent.some(packet => packet.params?.following === false), false);
+    assert.equal(JSON.stringify(h.tasks).includes(SECRET), false);
+  } finally { h.stream.close(); }
+});
+
 test('周期元数据刷新不重新索取已有有效snapshot，也不重设任务基线', async () => {
   const h = harness(); h.stream.setThreads([{ id: ID, title: '标题' }]); await h.stream.start(); h.receive(snapshot());
   h.tick(25000); h.stream.setThreads([{ id: ID, title: '标题' }]);
