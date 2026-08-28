@@ -542,7 +542,7 @@ async function finishSmokeTest() {
     if (!companionReady) throw new Error('轻陪伴活动感知尚未接入');
 
     await require('./scripts/verify-companion').verifyCompanion({
-      pet: petWindow, bubble, monitor: activityMonitor, screen, BrowserWindow,
+      pet: petWindow, bubble, dialogue, monitor: activityMonitor, screen, BrowserWindow,
       command: sendCommand, setSetting: setCompanionSetting, showDialogue
     });
 

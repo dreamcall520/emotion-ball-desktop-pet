@@ -4,15 +4,72 @@ const path = require('node:path');
 const { setTimeout: wait } = require('node:timers/promises');
 
 // 仅在显式冒烟模式调用；通过真实 IPC、渲染页面和原生输入验收。
-async function verifyCompanion({ pet, bubble, monitor, screen, BrowserWindow, command, setSetting, showDialogue }) {
+async function verifyCompanion({ pet, bubble, dialogue, monitor, screen, BrowserWindow, command, setSetting, showDialogue }) {
   const page = code => pet.webContents.executeJavaScript(code);
   const state = () => page('({...document.getElementById("pet").dataset})');
   const area = screen.getDisplayMatching(pet.getBounds()).workArea;
   const original = pet.getBounds();
   const artifacts = process.env.PET_SMOKE_ARTIFACT_DIR;
   const hostTrace = [];
+  const presentationTrace = [];
+  const restorePresentationTrace = [];
+  let lastBubbleShow = null;
+  const observedBubbles = new Set();
+  const dialogueState = () => ({ enabled: dialogue?.enabled,
+    lastDirectAt: Number.isFinite(dialogue?._lastDirectAt) ? dialogue._lastDirectAt : null,
+    current: dialogue?._current ? { id: dialogue._current.id, event: dialogue._current.event,
+      motion: dialogue._current.motion, expiresAt: dialogue._current.expiresAt } : null });
+  const nativeState = win => {
+    if (!win || win.isDestroyed()) return { destroyed: true };
+    return { visible: win.isVisible(), bounds: win.getBounds() };
+  };
+  const recordPresentation = (type, detail) => {
+    if (presentationTrace.length < 1000) presentationTrace.push({ type, wallTime: Date.now(), at: performance.now(),
+      ...detail, dialogue: dialogueState(), pet: nativeState(pet), bubble: nativeState(bubble.getWindow()) });
+  };
+  const listen = (target, type, callback) => {
+    target.on(type, callback);
+    restorePresentationTrace.push(() => target.removeListener(type, callback));
+  };
+  const watchBubble = () => {
+    const win = bubble.getWindow();
+    if (!win || observedBubbles.has(win)) return;
+    observedBubbles.add(win);
+    for (const type of ['show', 'hide', 'closed']) listen(win, type, () => recordPresentation(`native-bubble-${type}`, { lastBubbleShow }));
+  };
+  const wrap = (target, method, summarize) => {
+    const original = target[method];
+    const own = Object.prototype.hasOwnProperty.call(target, method);
+    target[method] = function (...args) {
+      const before = dialogueState();
+      let result;
+      try { result = original.apply(this, args); return result; }
+      finally { summarize(args, result, before); }
+    };
+    restorePresentationTrace.push(() => { if (own) target[method] = original; else delete target[method]; });
+  };
+  const installPresentationTrace = () => {
+    // 只记录规则元数据，不记录对白正文，更不接收或保存 Codex 对话内容。
+    if (dialogue) for (const method of ['offer', 'respond', 'dismiss', '_expire']) wrap(dialogue, method, (args, result, before) => {
+      const request = method === 'offer' ? (typeof args[0] === 'string' ? { event: args[0] } : { event: args[0]?.event, motion: args[0]?.motion })
+        : method === 'respond' ? { id: args[0], action: args[1] } : {};
+      const output = result && typeof result === 'object' ? { id: result.id, command: result.command, motion: result.motion, durationMs: result.durationMs }
+        : result ?? null;
+      recordPresentation(`dialogue-${method}`, { request, result: output, before });
+    });
+    wrap(bubble, 'show', (args) => {
+      lastBubbleShow = { id: args[0]?.id, wallTime: Date.now(), durationMs: args[0]?.durationMs };
+      watchBubble(); recordPresentation('bubble-show-call', { lastBubbleShow });
+    });
+    wrap(bubble, 'hide', () => recordPresentation('bubble-hide-call', { lastBubbleShow }));
+    watchBubble();
+    for (const type of ['show', 'hide', 'resize', 'closed']) listen(pet, type, () => recordPresentation(`native-pet-${type}`, {}));
+    for (const type of ['display-added', 'display-removed', 'display-metrics-changed']) listen(screen, type, (_event, display, changedMetrics) => {
+      recordPresentation(type, { displayId: display?.id, workArea: display?.workArea, changedMetrics });
+    });
+  };
   const observeHost = (type, detail) => {
-    if (hostTrace.length < 100) hostTrace.push({ type, at: performance.now(), detail,
+    if (hostTrace.length < 100) hostTrace.push({ type, wallTime: Date.now(), at: performance.now(), detail,
       cursor: screen.getCursorScreenPoint(), petBounds: pet.getBounds() });
   };
   const applySetting = setSetting;
@@ -24,7 +81,7 @@ async function verifyCompanion({ pet, bubble, monitor, screen, BrowserWindow, co
       const listener = event => {
         const pet = document.getElementById('pet'); const rect = pet.getBoundingClientRect();
         if (window.__companionFailureTrace.events.length < 200) window.__companionFailureTrace.events.push({
-          type,at:performance.now(),x:event.clientX,y:event.clientY,buttons:event.buttons,trusted:event.isTrusted,
+          type,wallTime:Date.now(),at:performance.now(),x:event.clientX,y:event.clientY,buttons:event.buttons,trusted:event.isTrusted,
           onPet:pet.contains(event.target),target:event.target.tagName,
           rect:{x:rect.x,y:rect.y,width:rect.width,height:rect.height},state:{...pet.dataset}
         });
@@ -34,7 +91,7 @@ async function verifyCompanion({ pet, bubble, monitor, screen, BrowserWindow, co
     }
     const record = (type,packet) => {
       if (window.__companionFailureTrace.received.length < 160) window.__companionFailureTrace.received.push({
-        type,at:performance.now(),packet,state:{...document.getElementById('pet').dataset}
+        type,wallTime:Date.now(),at:performance.now(),packet,state:{...document.getElementById('pet').dataset}
       });
     };
     window.__companionDiagnosticCleanup.push(window.petDesktop.onActivity(packet => record('activity', packet)));
@@ -44,6 +101,7 @@ async function verifyCompanion({ pet, bubble, monitor, screen, BrowserWindow, co
     window.addEventListener('error',errorListener);
     window.__companionDiagnosticCleanup.push(() => window.removeEventListener('error',errorListener)); true`);
   try {
+  installPresentationTrace();
   monitor.stop();
   pet.setBounds({ x: area.x + 240, y: area.y + 240, width: 80, height: 80 });
   await wait(150);
@@ -289,11 +347,18 @@ async function verifyCompanion({ pet, bubble, monitor, screen, BrowserWindow, co
     if (artifacts) {
       fs.mkdirSync(path.resolve(artifacts), { recursive: true });
       const file = path.join(path.resolve(artifacts), 'companion-failure.json');
-      fs.writeFileSync(file, JSON.stringify({ host: hostTrace, renderer: rendererTrace }, null, 2));
+      fs.writeFileSync(file, JSON.stringify({ host: hostTrace, renderer: rendererTrace, presentation: presentationTrace }, null, 2));
       process.stdout.write(`PET_COMPANION_FAILURE_DIAGNOSTIC=${file}\n`);
     }
     throw error;
   } finally {
+    restorePresentationTrace.reverse().forEach(restore => restore());
+    if (artifacts) {
+      try {
+        fs.mkdirSync(path.resolve(artifacts), { recursive: true });
+        fs.writeFileSync(path.join(path.resolve(artifacts), 'presentation-events.json'), JSON.stringify(presentationTrace, null, 2));
+      } catch (_) { /* 诊断输出不能遮盖原验收结果。 */ }
+    }
     await page(`window.__companionDiagnosticCleanup?.forEach(remove => remove());
       delete window.__companionDiagnosticCleanup; delete window.__companionFailureTrace; true`).catch(() => {});
   }
