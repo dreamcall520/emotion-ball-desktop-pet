@@ -33,7 +33,7 @@ assert.equal(JSON.stringify(normalizeTask({title:'标题',turns:[{turnId:'one',s
 
 ## Task 2：总开关、提醒策略与菜单模型
 
-状态：已完成，规格及质量复核通过（`4891359`），全量 424 项通过；尚未接入界面。
+状态：已完成，规格及质量复核通过（`4891359`），当时全量 424 项通过；后续界面接入见 Task 3。
 
 文件：修改 `desktop-pet/lib/settings.js`；新增 `codex-companion.js`、`codex-menu.js` 与对应 tests。
 
@@ -47,15 +47,17 @@ assert.equal(JSON.stringify(normalizeTask({title:'标题',turns:[{turnId:'one',s
 
 ## Task 3：接入现有界面与验收
 
+状态：源码候选已完成，规格复核至 `cfa5536`、质量复核至 `c4bba9b` 通过。主代理全量 472 项、最终 `c4bba9b` 原生窗口检查通过；原有动作 38 案例/7,836 帧及四尺寸联动气泡均回验。此前偶发失败根因仍未定位，真实任务终态和实际深链点击仍未验；未安装或更新分享 ZIP。
+
 文件：修改 `desktop-pet/main.js`、`lib/dialogue.js`、`bubble-preload.js`、`bubble-renderer.js`、`preload.js`、`renderer.js`（只增受控联动入口）、`scripts/package-mac.js`；新增联动集成 tests 及必要 smoke 检查。
 
-- [ ] 先写默认关闭与弹窗取消无连接的集成失败测试，再增加菜单 checkbox。`dialog.showMessageBox` 使用「开启联动 / 暂不开启」，defaultId/cancelId 指向取消；完整说明临时接收正文且不存不传。确认之后才保存 true 和连接；每次从 off→on 再确认，重启 saved true 恢复。
-- [ ] 为普通气泡优先、联动按钮过期及off清理写失败测试，再扩展 DialogueDirector 受控 `offerCodex` / `dismissCodex` / `respond`，共用 id，联动 duration 8000。只允许 codex-open/codex-list/codex-dismiss，主进程校验发送窗口、当前 id、enabled、generation 和仍有效 task。
-- [ ] 为动作不打断用户/睡眠写失败测试，再增加 renderer 的 codex 命令，复用 interaction-motion 和 window-motion。渲染端提供自身是否适合展示的最小状态（不传键盘内容），关闭只取消 owner 为 codex 的动作；用户开始互动立即取消联动所有权。
-- [ ] 接主菜单、额度/任务子菜单和最近提醒；单任务用户点击才 shell.openExternal 可信深链，多任务仅 popup 任务菜单。所有失败固定文案，无原始错误写现有 errors.log。
-- [ ] 包装脚本 runtimeFiles 明确加入新模块；不携带 Codex binary、账号、快照或诊断输出。测试包文件完整性及旧版动作/气泡行为。
-- [ ] `npm test` 和 `npm run smoke`；另只读连接真实当前任务检查额度/运行状态，正常出现的等待/结束/失败按实际记录，未发生的状态不伪称实机通过。不主动创建收费测试任务、不安装替换。
-- [ ] 检查 80×80 与其余尺寸、气泡边界、灰白色、旧双击和拖动。最终规格/质量复核；更新 verification 及知识库中本项目少量状态。`git diff --check`，秘密/大文件检查，精确 stage/commit/push 当前分支，回读远端 SHA。
+- [x] 先写默认关闭与弹窗取消无连接的集成失败测试，再增加菜单 checkbox。`dialog.showMessageBox` 使用「开启联动 / 暂不开启」，defaultId/cancelId 指向取消；完整说明临时接收正文且不存不传。确认之后才保存 true 和连接；每次从 off→on 再确认，重启 saved true 恢复。
+- [x] 为普通气泡优先、联动按钮过期及off清理写失败测试，再扩展 DialogueDirector 受控 `offerCodex` / `dismissCodex` / `respond`，共用 id，联动 duration 8000。只允许 codex-open/codex-list/codex-dismiss，主进程校验发送窗口、当前 id、enabled、generation 和仍有效 task。
+- [x] 为动作不打断用户/睡眠写失败测试，再增加 renderer 的 codex 命令，复用 interaction-motion 和 window-motion。渲染端提供自身是否适合展示的最小状态（不传键盘内容），关闭只取消 owner 为 codex 的动作；用户开始互动立即取消联动所有权。
+- [x] 接主菜单、额度/任务子菜单和最近提醒；单任务用户点击才 shell.openExternal 可信深链，多任务仅 popup 任务菜单。所有失败固定文案，无原始错误写现有 errors.log。
+- [x] 包装脚本 runtimeFiles 明确加入新模块；不携带 Codex binary、账号、快照或诊断输出。测试包文件完整性及旧版动作/气泡行为。
+- [x] `npm test` 和 `npm run smoke`；另只读连接真实当前任务检查额度/运行状态，正常出现的等待/结束/失败按实际记录，未发生的状态不伪称实机通过。不主动创建收费测试任务、不安装替换。
+- [x] 检查 80×80 与其余尺寸、气泡边界、灰白色、旧双击和拖动；完成最终规格/质量复核、verification、`git diff --check` 及秘密/大文件检查。按既有授权精确提交/推送当前分支并回读远端 SHA，知识库只追加本项目状态；不合并或发布。
 
 ## 交付边界
 
