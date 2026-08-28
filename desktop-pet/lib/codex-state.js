@@ -86,7 +86,7 @@ function latestTurn(raw) {
         ambiguous = false;
       } else if (next.startedAt === latest.startedAt) ambiguous = true;
     }
-    if ((ambiguous || (hasUndated && count > 1)) && latest) latest.status = UNKNOWN;
+    if ((ambiguous || (hasUndated && count > 1)) && latest) latest.orderUnknown = true;
     return latest;
   }
   let latest = null;
@@ -138,12 +138,13 @@ function projectTask(raw = {}) {
 
 function taskFromProjection(projected, now) {
   let state = UNKNOWN;
+  const turnStatus = projected.turn?.orderUnknown ? UNKNOWN : projected.turn?.status;
   if (!projected.runtimeUnknown && !projected.waitingUnknown) {
     if (projected.flagWaiting || projected.requestWaiting) state = 'waiting';
     else if (projected.runtime === 'active') state = 'active';
-    else if (TERMINAL.has(projected.turn?.status)) state = projected.turn.status;
+    else if (TERMINAL.has(turnStatus)) state = turnStatus;
     else if (projected.runtime === 'idle') state = 'idle';
-    else if (projected.turn?.status === 'inProgress') state = 'active';
+    else if (turnStatus === 'inProgress') state = 'active';
   }
   return { id: projected.id, title: projected.title, state, turnId: projected.turn?.turnId ?? null, updatedAt: now, partial: true };
 }
@@ -155,6 +156,9 @@ function normalizeTask(raw, now) {
 function mergeWholeTurn(task, raw, location, canonical, operation) {
   const next = projectTurn(raw, location);
   if (!next || operation === 'remove') return false;
+  // Scalar updates cannot establish ordering relative to an omitted ambiguous turn.
+  // Only a new full projection can clear this uncertainty.
+  if (task.turn?.orderUnknown) next.orderUnknown = true;
   if (canonical && location !== `canonical:turn:${next.turnId}`) return false;
   if (!task.turn || task.turn.location === location) { task.turn = next; return true; }
   if (canonical) {

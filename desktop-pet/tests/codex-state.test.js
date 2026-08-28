@@ -104,6 +104,28 @@ test('canonical存在无法排序的轮次时不拿旧终态冒充最新任务�
   }
 });
 
+test('排序不确定性不能被旧轮次状态或整体增量清除，只由完整有序快照解除', () => {
+  for (const startedAt of [undefined, 100]) {
+    const history = { kind: 'canonical', history: { entitiesByKey: {
+      'turn:old': { turnId: 'old', status: 'completed', turnStartedAtMs: 100 },
+      'turn:new': { turnId: 'new', status: 'inProgress', turnStartedAtMs: startedAt }
+    } } };
+    let current = state().projectTask({ id: ID, turnHistory: history });
+    assert.equal(state().taskFromProjection(current, 100).state, 'unknown');
+    const path = ['turnHistory', 'history', 'entitiesByKey', 'turn:old'];
+    for (const patch of [
+      { op: 'replace', path: [...path, 'status'], value: 'completed' },
+      { op: 'replace', path, value: { turnId: 'old', status: 'completed', turnStartedAtMs: 100 } },
+      { op: 'add', path: ['turnHistory', 'history', 'entitiesByKey', 'turn:third'], value: { turnId: 'third', status: 'completed', turnStartedAtMs: 300 } }
+    ]) {
+      const result = state().applyTaskPatches(current, [patch]); current = result.task;
+      assert.equal(result.needsSnapshot, false); assert.equal(state().taskFromProjection(current, 200).state, 'unknown');
+    }
+    history.history.entitiesByKey['turn:new'].turnStartedAtMs = 200;
+    assert.equal(state().normalizeTask({ id: ID, turnHistory: history }, 300).state, 'active');
+  }
+});
+
 test('归档、远端或身份变化的增量必须重验范围，不能继续复用旧状态', () => {
   const task = state().projectTask({ id: ID, turns: [{ turnId: 'one', status: 'completed' }] });
   for (const [key, value] of [['archived', true], ['ephemeral', true], ['hostId', 'remote'], ['id', SECOND], ['parent_thread_id', SECOND]]) {

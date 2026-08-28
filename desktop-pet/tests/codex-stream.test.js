@@ -237,6 +237,26 @@ test('正常新轮次开始和快速结束不重设基线，仍能收到本轮�
   h.stream.close();
 });
 
+test('连续旧轮次增量不能把排序不明的快照变成完成，后续有序快照才恢复', async t => {
+  const h = harness(); t.after(() => h.stream.close());
+  h.stream.setThreads([{ id: ID }]); await h.stream.start();
+  const history = { kind: 'canonical', history: { entitiesByKey: {
+    'turn:old': { turnId: 'old', status: 'completed', turnStartedAtMs: 100 },
+    'turn:new': { turnId: 'new', status: 'inProgress' }
+  } } };
+  h.receive(snapshot(1, { threadRuntimeStatus: undefined, turnHistory: history }));
+  assert.equal(h.tasks.at(-1).state, 'unknown');
+  const path = ['turnHistory', 'history', 'entitiesByKey', 'turn:old'];
+  h.receive(broadcast({ type: 'patches', baseRevision: 1, revision: 2, patches: [{ op: 'replace', path: [...path, 'status'], value: 'completed' }] }));
+  assert.equal(h.tasks.at(-1).state, 'unknown');
+  h.receive(broadcast({ type: 'patches', baseRevision: 2, revision: 3, patches: [{ op: 'replace', path, value: { turnId: 'old', status: 'completed', turnStartedAtMs: 100 } }] }));
+  assert.equal(h.tasks.at(-1).state, 'unknown');
+  assert.equal(h.sent.filter(packet => packet.params?.following === true).length, 1);
+  history.history.entitiesByKey['turn:new'].turnStartedAtMs = 200;
+  h.receive(snapshot(4, { threadRuntimeStatus: undefined, turnHistory: history }));
+  assert.equal(h.tasks.at(-1).state, 'active'); assert.equal(h.tasks.at(-1).turnId, 'new');
+});
+
 test('进入与解除审批等待的增量不丢通知基线或请求额外快照', async t => {
   const h = harness(); t.after(() => h.stream.close());
   h.stream.setThreads([{ id: ID }]); await h.stream.start(); h.receive(snapshot());
