@@ -480,7 +480,8 @@
     if (!Number.isSafeInteger(settings?.generation) || settings.generation < codexGeneration ||
       typeof settings.enabled !== 'boolean') return;
     if (settings.generation !== codexGeneration || !settings.enabled) cancelCodex();
-    if (settings.generation !== codexGeneration) { lastCodexAlertId = 0; lastAvailability = null; }
+    if (settings.generation !== codexGeneration) lastCodexAlertId = 0;
+    lastAvailability = null;
     codexGeneration = settings.generation;
     codexEnabled = settings.enabled;
   })));

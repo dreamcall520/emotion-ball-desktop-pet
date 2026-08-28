@@ -162,6 +162,13 @@ test('Codex 未开启不报告活动，开启后只报告改变的可展示状�
   assert.equal(r.host.availability.length, count);
 });
 
+test('宿主请求同代次设置时也重新上报一次可用性', () => {
+  const r = createRenderer();
+  r.codexSettings({ enabled: true, generation: 1 });
+  r.codexSettings({ enabled: true, generation: 1 });
+  assert.equal(r.host.availability.length, 2);
+});
+
 test('Codex 动作先确认令牌，不发送普通玩耍文案或伪造交互', () => {
   const r = createRenderer();
   r.codexSettings({ enabled: true, generation: 1 });

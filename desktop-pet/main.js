@@ -3,11 +3,13 @@ const path = require('node:path');
 const {
   app,
   BrowserWindow,
+  dialog,
   ipcMain,
   Menu,
   nativeImage,
   powerMonitor,
   screen,
+  shell,
   Tray
 } = require('electron');
 const { loadSettings, saveSettings } = require('./lib/settings');
@@ -25,6 +27,8 @@ const { DialogueDirector } = require('./lib/dialogue');
 const { createBubbleWindow } = require('./lib/bubble-window');
 const { getMotion } = require('./lib/interaction-motion');
 const { createWindowMotion } = require('./lib/window-motion');
+const { createCodexCompanion } = require('./lib/codex-companion');
+const { buildCodexMenu, resolveCodexAction } = require('./lib/codex-menu');
 
 const APP_NAME = '球球桌宠';
 const IS_SMOKE_TEST = process.env.PET_SMOKE_TEST === '1';
@@ -40,12 +44,25 @@ let activityMonitor = null;
 let dialogue = null;
 let bubble = null;
 let screenLocked = false;
+let codexCompanion = null;
+let codexNow = Date.now;
+let codexConsentFlight = null;
+let codexConsentToken = 0;
+let codexPresentation = null;
+let codexRenderer = null;
+let codexPageReady = false;
+let codexSentSettings = null;
+let codexNotice = null;
+let hostMotion = null;
 const windowMotion = createWindowMotion({
   getWindow: () => petWindow,
   getWorkArea: bounds => screen.getDisplayMatching(bounds).workArea,
   getDisplayId: bounds => screen.getDisplayMatching(bounds).id,
   now: () => performance.now(), schedule: setTimeout, cancel: clearTimeout,
-  sendFrame: packet => petWindow.webContents.send('pet:motion-frame', packet)
+  sendFrame: packet => {
+    if (packet.frame.done && hostMotion?.token === packet.token) hostMotion = null;
+    petWindow.webContents.send('pet:motion-frame', packet);
+  }
 });
 
 app.setName(APP_NAME);
@@ -76,6 +93,129 @@ function fromPetWindow(event) {
   );
 }
 
+function codexHostAvailable() {
+  return codexPageReady && !isQuitting && !screenLocked && petWindow && !petWindow.isDestroyed() && petWindow.isVisible() &&
+    !dragState && !bounceState && !hostMotion && !dialogue?.hasBubble(performance.now());
+}
+
+function canPresentCodex() {
+  return Boolean(settings?.codexEnabled && codexHostAvailable() && codexRenderer?.available === true &&
+    codexRenderer.generation === codexCompanion?.getSnapshot().generation);
+}
+
+function sendCodexCommand(command) {
+  if (!petWindow || petWindow.isDestroyed()) return;
+  try { petWindow.webContents.send('pet:command', command); } catch (_) { /* 关闭期间不再展示。 */ }
+}
+
+function clearCodexPresentation() {
+  const previous = codexPresentation;
+  codexPresentation = null;
+  if (hostMotion?.owner === 'codex') {
+    windowMotion.stop();
+    hostMotion = null;
+  }
+  if (previous) sendCodexCommand({ command: 'codex-cancel', alertId: previous.id,
+    generation: previous.generation, ...(previous.token ? { token: previous.token } : {}) });
+  if (dialogue?.dismissCodex()) bubble?.hide();
+}
+
+function dismissCodexPresentation() {
+  const alert = codexCompanion?.getSnapshot().currentAlert;
+  if (!alert || !codexCompanion.dismiss(alert.id, alert.generation)) clearCodexPresentation();
+}
+
+function syncCodexSettings(snapshot, force = false) {
+  if (!snapshot) return;
+  const next = { enabled: snapshot.enabled, generation: snapshot.generation };
+  if (!force && codexSentSettings?.enabled === next.enabled && codexSentSettings?.generation === next.generation) return;
+  codexRenderer = null;
+  codexSentSettings = next;
+  if (codexNotice?.generation !== next.generation) codexNotice = null;
+  if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send('pet:codex-settings', next);
+}
+
+function presentCodexAlert(alert) {
+  const current = codexCompanion?.getSnapshot().currentAlert;
+  if (!canPresentCodex() || current?.id !== alert.id || current.generation !== alert.generation) return;
+  codexPresentation = { ...current };
+  sendCodexCommand({ command: 'codex', alertId: current.id, generation: current.generation, motion: current.motion });
+}
+
+function initializeCodexCompanion(options = {}) {
+  codexCompanion?.close();
+  codexNow = options.now || Date.now;
+  codexSentSettings = null;
+  codexCompanion = createCodexCompanion({ ...options, now: codexNow, schedule: options.schedule || setTimeout,
+    cancel: options.cancel || clearTimeout, canPresent: canPresentCodex, onAlert: presentCodexAlert,
+    onClear: clearCodexPresentation,
+    onChange: snapshot => { syncCodexSettings(snapshot); refreshTrayMenu(); }
+  });
+}
+
+async function setCodexEnabled(enabled) {
+  if (!codexCompanion || isQuitting) return false;
+  if (enabled !== true) {
+    codexConsentToken++;
+    if (settings.codexEnabled) { settings.codexEnabled = false; persistSettings(); }
+    await codexCompanion.setEnabled(false);
+    refreshTrayMenu();
+    return true;
+  }
+  if (settings.codexEnabled || codexConsentFlight) return false;
+  const token = ++codexConsentToken;
+  const flight = {};
+  codexConsentFlight = flight;
+  try {
+    const result = await dialog.showMessageBox({
+      type: 'info', title: '开启 Codex 联动？', message: '让球球提醒 Codex 额度与任务进展',
+      detail: '开启后，仅在本机读取 Codex 的额度与任务状态。状态包可能附带已加载的聊天内容；球球只提取进展，正文立即丢弃，不保存、不上传。\n不监听键盘，也不会代你创建、发送、审批或中断任务。随时关闭即可停止读取。',
+      buttons: ['开启联动', '暂不开启'], defaultId: 1, cancelId: 1, noLink: true
+    });
+    if (result.response !== 0 || token !== codexConsentToken || isQuitting) return false;
+    settings.codexEnabled = true;
+    persistSettings();
+    await codexCompanion.setEnabled(true);
+    return true;
+  } catch (_) {
+    // 不记录来自系统或 Codex 的原始错误内容。
+    return false;
+  } finally {
+    if (codexConsentFlight === flight) codexConsentFlight = null;
+    refreshTrayMenu();
+  }
+}
+
+function bindCodexMenu(items) {
+  return items.map(({ action, submenu, ...item }) => ({ ...item,
+    ...(submenu ? { submenu: bindCodexMenu(submenu) } : {}),
+    ...(action ? { click: () => routeCodexAction(action) } : {})
+  }));
+}
+
+async function routeCodexAction(descriptor) {
+  const snapshot = codexCompanion?.getSnapshot();
+  const action = resolveCodexAction(snapshot, descriptor, codexNow());
+  if (!action || isQuitting) return false;
+  if (action.type === 'refresh') { await codexCompanion.refresh(); return true; }
+  if (action.type === 'dismiss') return codexCompanion.dismiss(action.alertId, descriptor.generation);
+  if (action.type === 'show-tasks') {
+    const tasks = buildCodexMenu(snapshot, codexNow()).find(item => item.id === 'codex-tasks');
+    if (tasks && petWindow && !petWindow.isDestroyed()) Menu.buildFromTemplate(bindCodexMenu(tasks.submenu)).popup({ window: petWindow });
+  }
+  if (descriptor.scope === 'alert') codexCompanion.dismiss(descriptor.alertId, descriptor.generation);
+  if (action.type === 'open-task') {
+    try { await shell.openExternal(action.url); } catch (_) {
+      const current = codexCompanion?.getSnapshot();
+      if (current?.enabled && current.generation === snapshot.generation) {
+        codexNotice = { generation: current.generation, text: '无法打开 Codex，请确认已安装' };
+        refreshTrayMenu();
+      }
+    }
+  }
+  return true;
+}
+
 function persistSettings() {
   settings = saveSettings(settingsFile, settings);
 }
@@ -103,13 +243,17 @@ function stopWindowBounce(restorePosition = true) {
 }
 
 function stopMotion({ restore = true, notify = true, notifyRenderer = true } = {}) {
+  dismissCodexPresentation();
   stopWindowBounce(restore);
   windowMotion.stop({ restore, notify });
+  hostMotion = null;
   if (notifyRenderer && petWindow && !petWindow.isDestroyed()) sendCommand('stop');
 }
 
 function startWindowBounce() {
+  dismissCodexPresentation();
   windowMotion.stop();
+  hostMotion = null;
   if (
     bounceState ||
     !petWindow ||
@@ -209,6 +353,7 @@ function setCompanionSetting(name, enabled) {
 function showDialogue(event) {
   if (screenLocked || !petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return null;
   const payload = dialogue.offer(event, performance.now());
+  if (payload) dismissCodexPresentation();
   if (payload) bubble.show(payload);
   else if (!dialogue.hasBubble(performance.now())) bubble.hide();
   return payload;
@@ -298,6 +443,14 @@ function menuTemplate() {
       label: '互动气泡', type: 'checkbox', checked: settings.bubblesEnabled,
       click: item => setCompanionSetting('bubblesEnabled', item.checked)
     },
+    {
+      id: 'codex-enabled', label: 'Codex 联动', type: 'checkbox', checked: settings.codexEnabled === true,
+      click: item => { const enabled = item.checked; item.checked = settings.codexEnabled === true; void setCodexEnabled(enabled); }
+    },
+    ...(settings.codexEnabled ? [{ id: 'codex-status', label: 'Codex 状态', submenu: [
+      ...(codexNotice ? [{ label: codexNotice.text, enabled: false }, { type: 'separator' }] : []),
+      ...bindCodexMenu(buildCodexMenu(codexCompanion?.getSnapshot(), codexNow()))
+    ] }] : []),
     { type: 'separator' },
     { label: '尺寸', submenu: sizeMenu() },
     {
@@ -475,6 +628,9 @@ function createPetWindow() {
     if (IS_SMOKE_TEST) app.exit(1);
   });
   petWindow.webContents.on('render-process-gone', (_event, details) => {
+    codexPageReady = false;
+    codexRenderer = null;
+    dismissCodexPresentation();
     writeError('渲染进程退出', JSON.stringify(details));
     if (IS_SMOKE_TEST) app.exit(1);
   });
@@ -483,14 +639,23 @@ function createPetWindow() {
     petWindow.showInactive();
   });
   petWindow.webContents.on('did-finish-load', () => {
+    codexPageReady = true;
     sendCompanionSettings();
+    syncCodexSettings(codexCompanion?.getSnapshot(), true);
     activityMonitor.start();
     finishSmokeTest();
+  });
+  petWindow.webContents.on('did-start-loading', () => {
+    codexPageReady = false;
+    codexRenderer = null;
+    dismissCodexPresentation();
   });
   petWindow.on('move', () => bubble?.reposition());
   petWindow.on('resize', () => { stopMotion(); bubble?.reposition(); });
   petWindow.on('hide', () => { stopMotion(); bubble?.hide(); dialogue?.dismiss(); });
   petWindow.on('closed', () => {
+    codexPageReady = false;
+    codexRenderer = null;
     stopMotion({ restore: false, notify: false, notifyRenderer: false });
     activityMonitor?.stop();
     bubble?.destroy();
@@ -517,7 +682,8 @@ function registerIpc() {
     const action = dialogue.respond(payload.id, payload.action, performance.now());
     if (!action) return;
     bubble.hide();
-    sendCommand(action);
+    if (action?.command === 'codex') void routeCodexAction(action.descriptor);
+    else sendCommand(action);
   });
 
   ipcMain.on('pet:drag-start', (event, rawPoint) => {
@@ -555,8 +721,41 @@ function registerIpc() {
   ipcMain.on('pet:motion-start', (event, request) => {
     if (!fromPetWindow(event) || screenLocked || !petWindow.isVisible() || !request ||
       !Number.isSafeInteger(request.token) || request.token <= 0 || !getMotion(request.action)) return;
+    dismissCodexPresentation();
     stopWindowBounce();
-    windowMotion.start({ token: request.token, action: request.action });
+    hostMotion = { owner: 'user', token: request.token, action: request.action };
+    if (!windowMotion.start({ token: request.token, action: request.action })) hostMotion = null;
+  });
+
+  ipcMain.on('pet:codex-availability', (event, packet) => {
+    const snapshot = codexCompanion?.getSnapshot();
+    if (!fromPetWindow(event) || !codexPageReady || !snapshot?.enabled || packet?.generation !== snapshot.generation ||
+      typeof packet.available !== 'boolean') return;
+    codexRenderer = { generation: packet.generation, available: packet.available };
+  });
+
+  ipcMain.on('pet:codex-motion-ready', (event, request) => {
+    if (!fromPetWindow(event) || !Number.isSafeInteger(request?.token) || request.token <= 0 ||
+      !Number.isSafeInteger(request.alertId) || !Number.isSafeInteger(request.generation) || !getMotion(request.action)) return;
+    if (codexPresentation?.token === request.token && codexPresentation.id === request.alertId &&
+      codexPresentation.generation === request.generation) return;
+    const snapshot = codexCompanion?.getSnapshot();
+    const alert = snapshot?.currentAlert;
+    const valid = settings.codexEnabled && snapshot?.enabled && codexHostAvailable() &&
+      alert?.id === request.alertId && alert.generation === request.generation && alert.motion === request.action &&
+      codexPresentation?.id === alert.id && codexPresentation.generation === alert.generation && !codexPresentation.token;
+    if (!valid) {
+      sendCodexCommand({ command: 'codex-cancel', token: request.token, alertId: request.alertId, generation: request.generation });
+      return;
+    }
+    codexPresentation.token = request.token;
+    hostMotion = { owner: 'codex', token: request.token, action: request.action };
+    if (!windowMotion.start({ token: request.token, action: request.action })) {
+      dismissCodexPresentation();
+      return;
+    }
+    const payload = dialogue.offerCodex(alert, performance.now(), alert.expiresAt - codexNow());
+    if (payload) bubble.show(payload);
   });
 
   ipcMain.on('pet:stop-motion', event => {
@@ -627,8 +826,10 @@ async function bootstrap() {
   powerMonitor.on('resume', () => powerGuard.setSuspended(false));
   registerIpc();
   registerDisplayRecovery();
+  initializeCodexCompanion();
   createPetWindow();
   createTray();
+  if (settings.codexEnabled) void codexCompanion.setEnabled(true);
 }
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -647,6 +848,8 @@ if (!hasSingleInstanceLock) {
 
   app.on('before-quit', () => {
     isQuitting = true;
+    codexConsentToken++;
+    codexCompanion?.close();
     stopMotion();
     activityMonitor?.stop();
     bubble?.destroy();
