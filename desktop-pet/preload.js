@@ -24,6 +24,19 @@ contextBridge.exposeInMainWorld('petDesktop', {
       ipcRenderer.send('pet:motion-start', { token: request.token, action: request.action });
     }
   },
+  codexMotionReady: request => {
+    if (request && Number.isSafeInteger(request.token) && request.token > 0 && motionIds.has(request.action) &&
+      Number.isSafeInteger(request.alertId) && request.alertId > 0 && Number.isSafeInteger(request.generation) && request.generation > 0) {
+      ipcRenderer.send('pet:codex-motion-ready', {
+        token: request.token, action: request.action, alertId: request.alertId, generation: request.generation
+      });
+    }
+  },
+  codexAvailability: request => {
+    if (request && Number.isSafeInteger(request.generation) && request.generation > 0 && typeof request.available === 'boolean') {
+      ipcRenderer.send('pet:codex-availability', { generation: request.generation, available: request.available });
+    }
+  },
   say: event => {
     if (typeof event === 'string') ipcRenderer.send('pet:say', event);
     else if (event?.event === 'play' && motionIds.has(event.motion)) {
@@ -34,5 +47,6 @@ contextBridge.exposeInMainWorld('petDesktop', {
   onCommand: callback => subscribe('pet:command', callback),
   onMotion: callback => subscribe('pet:motion-frame', callback),
   onActivity: callback => subscribe('pet:activity', callback),
-  onSettings: callback => subscribe('pet:settings', callback)
+  onSettings: callback => subscribe('pet:settings', callback),
+  onCodexSettings: callback => subscribe('pet:codex-settings', callback)
 });

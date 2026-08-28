@@ -4,6 +4,58 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
+test('Codex 预加载只发送最小状态与受控动作确认', () => {
+  let desktop;
+  const messages = [];
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../preload.js'), 'utf8'), {
+    require: () => ({ contextBridge: { exposeInMainWorld(_name, api) { desktop = api; } },
+      ipcRenderer: { send: (...args) => messages.push(args) } })
+  });
+  assert.equal(typeof desktop.codexMotionReady, 'function');
+  assert.equal(typeof desktop.codexAvailability, 'function');
+  desktop.codexMotionReady({ token: 4, action: 'hop', alertId: 2, generation: 1, secret: 'no' });
+  desktop.codexMotionReady({ token: 4, action: '__proto__', alertId: 2, generation: 1 });
+  desktop.codexAvailability({ generation: 1, available: true, secret: 'no' });
+  desktop.codexAvailability({ generation: 1, available: 'true' });
+  assert.equal(JSON.stringify(messages), JSON.stringify([
+    ['pet:codex-motion-ready', { token: 4, action: 'hop', alertId: 2, generation: 1 }],
+    ['pet:codex-availability', { generation: 1, available: true }]
+  ]));
+});
+
+test('气泡只允许当前普通或 Codex 固定按钮动作', () => {
+  let api;
+  const messages = [];
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../bubble-preload.js'), 'utf8'), {
+    require: () => ({ contextBridge: { exposeInMainWorld(_name, value) { api = value; } },
+      ipcRenderer: { send: (...args) => messages.push(args) } })
+  });
+  for (const action of ['again', 'rest', 'codex-open', 'codex-list', 'codex-dismiss', 'shell', 'https://invalid']) api.reply(1, action);
+  assert.equal(messages.length, 5);
+  assert.deepEqual(messages.map(item => item[1].action), ['again', 'rest', 'codex-open', 'codex-list', 'codex-dismiss']);
+});
+
+test('气泡显示 Codex 按钮且锚点更新不重建按钮', () => {
+  let receive;
+  const replies = [];
+  const bubble = { dataset: {}, style: { setProperty() {} } };
+  const message = {};
+  const actions = { children: [], replaceChildren() { this.children = []; }, appendChild(node) { this.children.push(node); } };
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../bubble-renderer.js'), 'utf8'), {
+    document: { getElementById: id => ({ bubble, message, actions })[id], createElement: () => ({ dataset: {}, addEventListener(_name, callback) { this.click = callback; } }) },
+    window: { addEventListener() {}, petBubble: { onMessage(callback) { receive = callback; }, reply: (...args) => replies.push(args) } }
+  });
+  const payload = { id: 4, text: '<b>这轮有结果啦</b>', actions: [{ id: 'codex-open', label: '去看看' }, { id: 'codex-dismiss', label: '知道啦' }], anchorX: 30 };
+  receive(payload);
+  assert.equal(message.textContent, payload.text);
+  assert.equal(actions.children.length, 2);
+  const button = actions.children[0];
+  receive({ ...payload, anchorX: 40 });
+  assert.equal(actions.children[0], button);
+  button.click();
+  assert.deepEqual(replies, [[4, 'codex-open']]);
+});
+
 test('预加载动作接口仅发送白名单字段且回帧可取消订阅', () => {
   let desktop;
   const messages = [];

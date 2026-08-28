@@ -13,7 +13,7 @@
     message.textContent = payload.text;
     actions.replaceChildren();
     for (const action of payload.actions) {
-      if (!['again', 'rest'].includes(action.id)) continue;
+      if (!['again', 'rest', 'codex-open', 'codex-list', 'codex-dismiss'].includes(action.id)) continue;
       const button = document.createElement('button');
       button.type = 'button';
       button.dataset.action = action.id;

@@ -86,6 +86,39 @@ class DialogueDirector {
     return this._current !== null;
   }
 
+  dismissCodex() {
+    if (this._current?.event !== 'codex') return false;
+    this.dismiss();
+    return true;
+  }
+
+  offerCodex(alert, nowMs, durationMs = 8000) {
+    if (!this.enabled || !Number.isFinite(nowMs) || !Number.isFinite(durationMs) || durationMs <= 0 ||
+      !Number.isSafeInteger(alert?.id) || !Number.isSafeInteger(alert.generation) ||
+      !['waiting', 'completed', 'failed', 'quota'].includes(alert.kind) ||
+      typeof alert.text !== 'string' || !alert.text.trim() || alert.text.length > 48 ||
+      alert.text.split('\n').length > 2 || !Array.isArray(alert.taskIds)) return null;
+    this._expire(nowMs);
+    if (this._current) return null;
+    const actions = [];
+    const descriptors = {};
+    const descriptor = type => ({ scope: 'alert', type, generation: alert.generation, alertId: alert.id });
+    if (alert.taskIds.length === 1) {
+      actions.push({ id: 'codex-open', label: '去看看' });
+      descriptors['codex-open'] = { ...descriptor('open-task'), taskId: alert.taskIds[0] };
+    } else if (alert.taskIds.length > 1) {
+      actions.push({ id: 'codex-list', label: '查看任务' });
+      descriptors['codex-list'] = descriptor('show-tasks');
+    }
+    actions.push({ id: 'codex-dismiss', label: '知道啦' });
+    descriptors['codex-dismiss'] = descriptor('dismiss');
+    const id = this._nextId++;
+    durationMs = Math.min(8000, durationMs);
+    this._current = { id, event: 'codex', priority: -1, actions, descriptors, expiresAt: nowMs + durationMs };
+    this._lastBubbleAt = nowMs;
+    return { id, text: alert.text, actions: actions.map(action => ({ ...action })), durationMs };
+  }
+
   offer(request, nowMs) {
     const motion = request && typeof request === 'object' ? request.motion : null;
     const event = typeof request === 'string' ? request : request?.event;
@@ -93,6 +126,7 @@ class DialogueDirector {
     if (!this.enabled || !Number.isFinite(nowMs) || typeof event !== 'string' ||
       !Object.prototype.hasOwnProperty.call(PHRASES, event)) return null;
     this._expire(nowMs);
+    if (DIRECT_EVENTS.has(event)) this.dismissCodex();
     // 新的直接互动即使遇到六秒冷却，也不能留下已被取代的动作专属文案。
     if (DIRECT_EVENTS.has(event) && this._current?.event === 'play' &&
       (motion || this._current.motion) && motion !== this._current.motion) this.dismiss();
@@ -133,8 +167,10 @@ class DialogueDirector {
     if (!Number.isFinite(nowMs)) return null;
     this._expire(nowMs);
     if (!this._current || id !== this._current.id || !this._current.actions.some(item => item.id === action)) return null;
+    const descriptor = this._current.descriptors?.[action];
     const motion = this._current.motion;
     this.dismiss();
+    if (descriptor) return { command: 'codex', descriptor: { ...descriptor } };
     if (action === 'rest') this._workQuietUntil = nowMs + TEN_MINUTES;
     return action === 'again' && motion ? { command: 'again', motion } : action;
   }

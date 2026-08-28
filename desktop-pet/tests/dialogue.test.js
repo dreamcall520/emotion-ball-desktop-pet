@@ -6,6 +6,53 @@ const { PHRASES, DialogueDirector } = require('../lib/dialogue');
 
 const events = ['hello', 'pet', 'drag', 'drop', 'welcome', 'work', 'play', 'sleep'];
 
+const codexAlert = (overrides = {}) => ({ id: 7, generation: 2, kind: 'completed',
+  text: '这轮有结果啦，去看看？', taskIds: ['11111111-1111-4111-8111-111111111111'], ...overrides });
+
+test('Codex 气泡共享编号，只返回受控且绑定提醒的操作', () => {
+  const director = new DialogueDirector();
+  assert.equal(typeof director.offerCodex, 'function');
+  const first = director.offerCodex(codexAlert(), 0);
+  assert.equal(first.durationMs, 8000);
+  assert.deepEqual(first.actions, [{ id: 'codex-open', label: '去看看' }, { id: 'codex-dismiss', label: '知道啦' }]);
+  assert.equal(director.respond(first.id, 'again', 100), null);
+  assert.deepEqual(director.respond(first.id, 'codex-open', 100), { command: 'codex', descriptor: {
+    scope: 'alert', type: 'open-task', generation: 2, alertId: 7, taskId: codexAlert().taskIds[0] } });
+  assert.equal(director.respond(first.id, 'codex-open', 101), null);
+  assert.ok(director.offer('hello', 102).id > first.id);
+});
+
+test('普通气泡优先，直接互动即使冷却也撤销 Codex 按钮', () => {
+  const director = new DialogueDirector();
+  assert.equal(typeof director.offerCodex, 'function');
+  const ordinary = director.offer('play', 0);
+  assert.equal(director.offerCodex(codexAlert(), 100), null);
+  assert.equal(director.dismissCodex(), false);
+  assert.equal(director.respond(ordinary.id, 'rest', 200), 'rest');
+  const alert = director.offerCodex(codexAlert(), 300);
+  assert.equal(director.offer('hello', 400), null, '原直接互动冷却不变');
+  assert.equal(director.hasBubble(400), false);
+  assert.equal(director.respond(alert.id, 'codex-open', 401), null);
+});
+
+test('Codex 多任务、额度、过期与关闭不混入普通对白状态', () => {
+  const director = new DialogueDirector();
+  assert.equal(typeof director.offerCodex, 'function');
+  const multi = director.offerCodex(codexAlert({ taskIds: ['a', 'b'] }), 0);
+  assert.equal(multi.actions[0].id, 'codex-list');
+  assert.equal(director.respond(multi.id, 'codex-list', 8000), null);
+  const quota = director.offerCodex(codexAlert({ kind: 'quota', text: '额度剩余 10%\n详情见 Codex 状态', taskIds: [] }), 8000, 500);
+  assert.equal(quota.durationMs, 500);
+  assert.deepEqual(quota.actions, [{ id: 'codex-dismiss', label: '知道啦' }]);
+  director.setEnabled(false);
+  assert.equal(director.respond(quota.id, 'codex-dismiss', 8001), null);
+  assert.equal(director.offerCodex(codexAlert(), 8002), null);
+  director.setEnabled(true);
+  assert.equal(director.offerCodex(codexAlert({ text: null }), 8003), null);
+  assert.equal(director.offerCodex(codexAlert({ text: '一\n二\n三' }), 8004), null);
+  assert.ok(director.offer('play', 8005));
+});
+
 for (const motion of ['hop', 'jelly', 'sway', 'peek', 'bow', 'spin']) {
   test(`${motion}专属气泡有两句且再来一次绑定原动作`, () => {
     const director = new DialogueDirector({ random: () => 0 });
