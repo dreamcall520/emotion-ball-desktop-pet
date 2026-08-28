@@ -34,6 +34,10 @@ function projectAccount(raw) {
     return { accountKey: createHash('sha256').update(`chatgpt:${account.email.trim().toLowerCase()}`).digest('hex'), authenticated: true };
   }
   // API-key accounts have no safe stable identity field; never read the key to manufacture one.
+  if (account && typeof account === 'object' && !Array.isArray(account) &&
+    typeof account.type === 'string' && account.type.trim() && account.type !== 'chatgpt') {
+    return { accountKey: null, authenticated: null, supported: false };
+  }
   throw codexError('UNSUPPORTED');
 }
 

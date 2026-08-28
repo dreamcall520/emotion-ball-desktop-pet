@@ -107,6 +107,56 @@ test('账号切换先关旧流与清基线，再接受新任务；旧流晚到�
   h.connection.close();
 });
 
+test('成功确认不支持的账号类型时清旧身份和流，不能当临时错误或退出登录', async t => {
+  let supported = true;
+  const h = harness({ account: () => supported ? { accountKey: 'one', authenticated: true }
+    : { accountKey: null, authenticated: null, supported: false } });
+  t.after(() => h.connection.close()); await h.connection.start();
+  const old = h.streams[0]; old.options.onStatus({ state: 'connected', code: null });
+  supported = false; h.calls.length = 0; await h.connection.refresh();
+  assert.deepEqual(h.accounts, [{ accountKey: 'one' }, { accountKey: null }]);
+  assert.equal(old.closed, true); assert.equal(h.streams.length, 1);
+  assert.equal(h.calls.includes('quota'), false); assert.equal(h.calls.includes('list'), false);
+  for (const channel of ['quota', 'tasks']) {
+    assert.equal(h.statuses.filter(value => value.channel === channel).at(-1).state, 'unsupported');
+    assert.equal(h.statuses.filter(value => value.channel === channel).at(-1).code, 'UNSUPPORTED');
+  }
+  assert.equal(h.statuses.some(value => value.state === 'unauthenticated'), false);
+  const count = h.statuses.length; old.options.onStatus({ state: 'connected', code: null }); old.options.onTask({ id: ID, state: 'completed' });
+  assert.equal(h.statuses.length, count); assert.equal(h.tasks.length, 0);
+  h.calls.length = 0; await h.connection.refresh({ quota: false }); assert.deepEqual(h.calls, []);
+  await h.connection.refresh(); assert.equal(h.accounts.length, 2);
+  supported = true; await h.connection.refresh();
+  assert.deepEqual(h.accounts.at(-1), { accountKey: 'one' }); assert.equal(h.streams.length, 2);
+  assert.equal(h.streams[1].rows.length, 1);
+});
+
+test('首次不支持的账号类型与明确退出登录分开报告，即使两者identity都是null', async t => {
+  let loggedOut = false;
+  const h = harness({ account: () => loggedOut ? { accountKey: null, authenticated: false }
+    : { accountKey: null, authenticated: null, supported: false } });
+  t.after(() => h.connection.close()); await h.connection.start();
+  assert.equal(h.streams[0].closed, true);
+  assert.equal(h.statuses.filter(value => value.channel === 'tasks').at(-1).state, 'unsupported');
+  assert.equal(h.calls.includes('quota'), false); assert.equal(h.calls.includes('list'), false);
+  loggedOut = true; await h.connection.refresh();
+  assert.equal(h.accounts.length, 2);
+  assert.equal(h.statuses.filter(value => value.channel === 'tasks').at(-1).state, 'unauthenticated');
+});
+
+test('损坏账号响应的读取错误不清空已知身份，也不关闭仍有效的任务通道', async t => {
+  let broken = false;
+  const h = harness({ account: () => {
+    if (broken) throw Object.assign(new Error('UNSUPPORTED'), { code: 'UNSUPPORTED' });
+    return { accountKey: 'one', authenticated: true };
+  } });
+  t.after(() => h.connection.close()); await h.connection.start();
+  h.streams[0].options.onStatus({ state: 'connected', code: null }); broken = true;
+  await h.connection.refresh();
+  assert.deepEqual(h.accounts, [{ accountKey: 'one' }]); assert.equal(h.streams[0].closed, false);
+  assert.equal(h.statuses.filter(value => value.channel === 'tasks').at(-1).state, 'connected');
+});
+
 test('新following不直接订阅，必须重新读合规元数据', async () => {
   const h = harness(); await h.connection.start(); h.calls.length = 0;
   h.streams[0].options.onDiscovered(ID); await tick();

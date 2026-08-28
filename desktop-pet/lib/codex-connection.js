@@ -16,6 +16,7 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
   let accountGeneration = 0;
   let accountKey;
   let authenticated = null;
+  let accountSupported = true;
   let starting = null;
   let streamStarting = null;
   let accountFlight = null;
@@ -40,7 +41,7 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
     report(channel, state, code);
   }
   function beginStream() {
-    if (closed || authenticated === false) return Promise.resolve();
+    if (closed || authenticated === false || !accountSupported) return Promise.resolve();
     const generation = ++streamGeneration;
     report('tasks', 'connecting');
     stream = createStream({
@@ -55,17 +56,21 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
   }
   function acceptAccount(value) {
     if (closed) return;
+    const supported = value.supported !== false;
+    const unchanged = value.accountKey === accountKey && value.authenticated === authenticated && supported === accountSupported;
     authenticated = value.authenticated;
-    if (value.accountKey === accountKey) return;
+    accountSupported = supported;
+    if (unchanged) return;
     const hadIdentity = accountKey !== undefined;
     accountKey = value.accountKey;
     accountGeneration++;
-    if (hadIdentity || authenticated === false) {
+    if (hadIdentity || authenticated === false || !accountSupported) {
       streamGeneration++;
       stream?.close(); stream = null; hasMetadata = false;
     }
     onAccount({ accountKey });
-    if (authenticated === false) report('tasks', 'unauthenticated', 'UNAUTHENTICATED');
+    if (!accountSupported) report('tasks', 'unsupported', 'UNSUPPORTED');
+    else if (authenticated === false) report('tasks', 'unauthenticated', 'UNAUTHENTICATED');
     else if (hadIdentity) void beginStream();
   }
   function refreshQuota() {
@@ -75,6 +80,7 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
     }).then(value => {
       if (closed || !value) return false;
       acceptAccount(value);
+      if (!accountSupported) { report('quota', 'unsupported', 'UNSUPPORTED'); return false; }
       if (!value.authenticated) { report('quota', 'unauthenticated', 'UNAUTHENTICATED'); return false; }
       return true;
     }).catch(error => { reportError('quota', error); return false; });
@@ -89,7 +95,7 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
   }
   function refreshTasks() {
     if (tasksFlight) return tasksFlight;
-    if (closed || authenticated === false) return Promise.resolve();
+    if (closed || authenticated === false || !accountSupported) return Promise.resolve();
     const generation = accountGeneration;
     tasksFlight = Promise.resolve().then(() => {
       if (!closed) return rpc.listThreads();
@@ -134,7 +140,7 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
   function close() {
     if (closed) return;
     closed = true; accountGeneration++; streamGeneration++;
-    rpcReady = false; accountKey = undefined; authenticated = null; hasMetadata = false;
+    rpcReady = false; accountKey = undefined; authenticated = null; accountSupported = true; hasMetadata = false;
     stream?.close(); rpc?.close(); stream = null; rpc = null; lastStatus.clear();
   }
   return { start, refresh, close };

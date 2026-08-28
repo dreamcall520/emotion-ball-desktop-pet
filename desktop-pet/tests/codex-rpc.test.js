@@ -81,6 +81,23 @@ test('账号计划升级不改变身份hash；明确未登录才返回null身份
   h.rpc.close();
 });
 
+for (const type of ['apiKey', 'futureAccountType']) test(`成功确认${type}账号时返回安全unsupported结果，不读取或输出密钥身份`, async t => {
+  const h = setup({ reply: p => ({ result: p.method === 'account/read' ? { account: { type, apiKey: 'SECRET_KEY', email: 'SECRET_EMAIL' } } : {} }) });
+  t.after(() => h.rpc.close()); await h.rpc.start();
+  const account = await h.rpc.readAccount();
+  assert.deepEqual(account, { accountKey: null, authenticated: null, supported: false });
+  assert.equal(JSON.stringify(account).includes('SECRET'), false);
+  assert.equal(JSON.stringify(account).includes(type), false);
+});
+
+test('损坏或不完整的账号响应保持读取错误，不伪造确认的账号类型变化', async () => {
+  for (const raw of [null, {}, { account: 'apiKey' }, { account: [] }, { account: {} }, { account: { type: '' } }, { account: { type: 'chatgpt' } }]) {
+    const h = setup({ reply: p => ({ result: p.method === 'account/read' ? raw : {} }) });
+    try { await h.rpc.start(); await assert.rejects(h.rpc.readAccount(), { code: 'UNSUPPORTED' }); }
+    finally { h.rpc.close(); }
+  }
+});
+
 test('真实子进程分片JSONL及多行响应被正确解析，stderr不输出', async () => {
   let processChild;
   const rpc = moduleApi().createCodexRpc({ fs: { promises: { lstat: async () => ({ isFile: () => true, isSymbolicLink: () => false }), access: async () => {} } },
