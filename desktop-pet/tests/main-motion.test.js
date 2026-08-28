@@ -276,6 +276,26 @@ test('页面重载完成后，同连接代次的旧页面 availability 仍不可
   await f.call('setCodexEnabled(false)');
 });
 
+test('有当前提醒的页面重载清理不能把新页面代次提前泄给旧 renderer', async () => {
+  const f = await fixture({ codexEnabled: true });
+  queueCodexCompletion(f);
+  assert.ok(f.call('codexCompanion.getSnapshot().currentAlert'));
+  const before = f.pet.messages.filter(item => item.channel === 'pet:codex-settings');
+  const old = before.at(-1).packet;
+  f.pet.webContents.emit('did-start-loading');
+  assert.equal(f.call('codexCompanion.getSnapshot().currentAlert'), null, '清理应触发真实 controller notify');
+  const during = f.pet.messages.filter(item => item.channel === 'pet:codex-settings');
+  assert.equal(during.length, before.length, '未 ready 不能发送带新代次的设置');
+  assert.equal(f.call('codexSentSettings.pageEpoch'), old.pageEpoch, '未发送的代次也不能标为已发');
+  f.pet.webContents.emit('did-finish-load');
+  const after = f.pet.messages.filter(item => item.channel === 'pet:codex-settings');
+  assert.equal(after.length, before.length + 1);
+  assert.ok(after.at(-1).packet.pageEpoch > old.pageEpoch);
+  f.send('pet:codex-availability', { ...old, available: true });
+  assert.equal(f.call('codexRenderer'), null);
+  await f.call('setCodexEnabled(false)');
+});
+
 test('动作确认必须属于命令对应页面，旧页面取消不能指向新页面', async () => {
   const f = await fixture({ codexEnabled: true });
   const ack = queueCodexCompletion(f);

@@ -136,12 +136,14 @@ function invalidateCodexPage() {
 function syncCodexSettings(snapshot, force = false) {
   if (!snapshot) return;
   const next = { enabled: snapshot.enabled, generation: snapshot.generation, pageEpoch: codexPageEpoch };
+  if (codexNotice?.generation !== next.generation) codexNotice = null;
+  // 导航清理会同步触发状态更新；新页面代次只能在新页面 ready 后发送。
+  if (!codexPageReady || !petWindow || petWindow.isDestroyed()) return;
   if (!force && codexSentSettings?.enabled === next.enabled && codexSentSettings?.generation === next.generation &&
     codexSentSettings?.pageEpoch === next.pageEpoch) return;
   codexRenderer = null;
   codexSentSettings = next;
-  if (codexNotice?.generation !== next.generation) codexNotice = null;
-  if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send('pet:codex-settings', next);
+  petWindow.webContents.send('pet:codex-settings', next);
 }
 
 function presentCodexAlert(alert) {
