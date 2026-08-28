@@ -238,3 +238,34 @@ test('等待flag索引增删可连续更新，未知flag和请求方法不保留
   assert.equal(removed.needsSnapshot, false); assert.equal(state().taskFromProjection(removed.task, 100).state, 'active');
   assert.equal(JSON.stringify(removed).includes(SECRET), false);
 });
+
+for (const source of ['requests', 'activeFlags']) test(`${source}超限后收到完整空列表可独立恢复，不永久unknown`, () => {
+  const task = state().projectTask({ id: ID,
+    requests: source === 'requests' ? Array(65).fill({ method: 'item/tool/requestUserInput' }) : [],
+    threadRuntimeStatus: { type: 'active', activeFlags: source === 'activeFlags' ? Array(65).fill('waitingOnApproval') : [] }
+  });
+  assert.equal(state().taskFromProjection(task, 100).state, 'unknown');
+  const path = source === 'requests' ? ['requests'] : ['threadRuntimeStatus', 'activeFlags'];
+  const result = state().applyTaskPatches(task, [{ op: 'replace', path, value: [] }]);
+  assert.equal(result.needsSnapshot, false); assert.equal(state().taskFromProjection(result.task, 101).state, 'active');
+});
+
+for (const first of ['requests', 'activeFlags']) test(`先恢复${first}不能清掉另一来源仍超限的unknown`, () => {
+  const task = state().projectTask({ id: ID, requests: Array(65).fill({ method: 'item/tool/requestUserInput' }),
+    threadRuntimeStatus: { type: 'active', activeFlags: Array(65).fill('waitingOnApproval') } });
+  const paths = [['requests'], ['threadRuntimeStatus', 'activeFlags']];
+  if (first === 'activeFlags') paths.reverse();
+  const partial = state().applyTaskPatches(task, [{ op: 'replace', path: paths[0], value: [] }]);
+  assert.equal(partial.needsSnapshot, false); assert.equal(state().taskFromProjection(partial.task, 100).state, 'unknown');
+  const restored = state().applyTaskPatches(partial.task, [{ op: 'replace', path: paths[1], value: [] }]);
+  assert.equal(restored.needsSnapshot, false); assert.equal(state().taskFromProjection(restored.task, 101).state, 'active');
+});
+
+test('完整runtime替换只重算flag超限，不清掉requests超限', () => {
+  const task = state().projectTask({ id: ID, requests: Array(65).fill({ method: 'item/tool/requestUserInput' }),
+    threadRuntimeStatus: { type: 'active', activeFlags: Array(65).fill('waitingOnApproval') } });
+  const flagsRestored = state().applyTaskPatches(task, [{ op: 'replace', path: ['threadRuntimeStatus'], value: { type: 'active', activeFlags: [] } }]);
+  assert.equal(flagsRestored.needsSnapshot, false); assert.equal(state().taskFromProjection(flagsRestored.task, 100).state, 'unknown');
+  const restored = state().applyTaskPatches(flagsRestored.task, [{ op: 'replace', path: ['requests'], value: [] }]);
+  assert.equal(restored.needsSnapshot, false); assert.equal(state().taskFromProjection(restored.task, 101).state, 'active');
+});

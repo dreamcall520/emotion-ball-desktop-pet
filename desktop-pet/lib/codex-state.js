@@ -131,7 +131,8 @@ function projectTask(raw = {}) {
     flagWaiting: flagsWaiting(raw.threadRuntimeStatus?.activeFlags), requestWaiting: requestsWaiting(raw.requests),
     activeFlags: scalarList(raw.threadRuntimeStatus?.activeFlags, waitFlag),
     requestMethods: scalarList(raw.requests, request => waitMethod(request?.method)),
-    waitingUnknown: (raw.requests?.length > 64 || raw.threadRuntimeStatus?.activeFlags?.length > 64),
+    requestOverflow: raw.requests?.length > 64,
+    flagOverflow: raw.threadRuntimeStatus?.activeFlags?.length > 64,
     turn: latestTurn(raw)
   };
 }
@@ -139,7 +140,7 @@ function projectTask(raw = {}) {
 function taskFromProjection(projected, now) {
   let state = UNKNOWN;
   const turnStatus = projected.turn?.orderUnknown ? UNKNOWN : projected.turn?.status;
-  if (!projected.runtimeUnknown && !projected.waitingUnknown) {
+  if (!projected.runtimeUnknown && !projected.requestOverflow && !projected.flagOverflow) {
     if (projected.flagWaiting || projected.requestWaiting) state = 'waiting';
     else if (projected.runtime === 'active') state = 'active';
     else if (TERMINAL.has(turnStatus)) state = turnStatus;
@@ -192,7 +193,7 @@ function applyTaskPatches(previous, patches) {
     if (root === 'title' && path.length === 1) task.title = title(value);
     else if (root === 'requests' && path.length === 1) {
       task.requestMethods = scalarList(value, request => waitMethod(request?.method));
-      if (value?.length > 64) task.waitingUnknown = true;
+      task.requestOverflow = value?.length > 64;
     } else if (root === 'requests' && path.length === 2) {
       if (!patchScalarList(task.requestMethods, path[1], patch.op, waitMethod(value?.method))) needsSnapshot = true;
     } else if (root === 'requests' && path.length === 3 && path[2] === 'method') {
@@ -202,13 +203,13 @@ function applyTaskPatches(previous, patches) {
       task.runtime = ['active', 'idle', 'notLoaded'].includes(value?.type) ? value.type : null;
       task.runtimeUnknown = !['active', 'idle'].includes(value?.type);
       task.activeFlags = scalarList(value?.activeFlags, waitFlag);
-      if (value?.activeFlags?.length > 64) task.waitingUnknown = true;
+      task.flagOverflow = value?.activeFlags?.length > 64;
     } else if (root === 'threadRuntimeStatus' && path.length === 2 && path[1] === 'type') {
       task.runtime = ['active', 'idle', 'notLoaded'].includes(value) ? value : null;
       task.runtimeUnknown = !['active', 'idle'].includes(value);
     } else if (root === 'threadRuntimeStatus' && path.length === 2 && path[1] === 'activeFlags') {
       task.activeFlags = scalarList(value, waitFlag);
-      if (value?.length > 64) task.waitingUnknown = true;
+      task.flagOverflow = value?.length > 64;
     } else if (root === 'threadRuntimeStatus' && path.length === 3 && path[1] === 'activeFlags') {
       if (!patchScalarList(task.activeFlags, path[2], patch.op, waitFlag(value))) needsSnapshot = true;
     }
