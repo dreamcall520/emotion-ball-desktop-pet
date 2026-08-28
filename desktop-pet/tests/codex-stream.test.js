@@ -185,6 +185,37 @@ test('周期元数据刷新不重新索取已有有效snapshot，也不重设任
   h.stream.close();
 });
 
+for (const cause of ['revision-gap', 'owner-change']) test(`唯一可靠任务因${cause}失效后，通道退出connected并等待新快照`, async t => {
+  const h = harness(); t.after(() => h.stream.close());
+  h.stream.setThreads([{ id: ID }]); await h.stream.start(); h.receive(snapshot());
+  assert.equal(h.statuses.at(-1).state, 'connected');
+  if (cause === 'revision-gap') h.receive(broadcast({ type: 'patches', baseRevision: 4, revision: 5, patches: [] }));
+  else h.receive({ ...snapshot(2), sourceClientId: CLIENT });
+  assert.equal(h.tasks.at(-1).state, 'unknown'); assert.equal(h.tasks.at(-1).baseline, true);
+  assert.equal(h.statuses.at(-1).state, 'connecting'); assert.equal(h.socket.destroyed, false);
+  h.receive({ ...snapshot(6), sourceClientId: cause === 'owner-change' ? CLIENT : OWNER });
+  assert.equal(h.statuses.at(-1).state, 'connected');
+});
+
+test('最近任务集合清空后，不继续显示拥有有效snapshot的connected', async t => {
+  const h = harness(); t.after(() => h.stream.close());
+  h.stream.setThreads([{ id: ID }]); await h.stream.start(); h.receive(snapshot());
+  h.stream.setThreads([]);
+  assert.equal(h.tasks.at(-1).removed, true); assert.equal(h.tasks.at(-1).state, 'unknown');
+  assert.equal(h.statuses.at(-1).state, 'connecting'); assert.equal(h.socket.destroyed, false);
+});
+
+test('单个任务失效或移除不拖掉另一个仍有有效snapshot的连接', async t => {
+  const h = harness(); t.after(() => h.stream.close());
+  h.stream.setThreads([{ id: ID }, { id: OWNER }]); await h.stream.start(); h.receive(snapshot());
+  const other = snapshot(1, { id: OWNER }); other.params.conversationId = OWNER; h.receive(other);
+  h.receive(broadcast({ type: 'patches', baseRevision: 4, revision: 5, patches: [] }));
+  assert.equal(h.statuses.at(-1).state, 'connected');
+  h.stream.setThreads([{ id: OWNER }]);
+  assert.equal(h.statuses.at(-1).state, 'connected'); assert.equal(h.socket.destroyed, false);
+  assert.equal(h.tasks.filter(task => task.id === OWNER).at(-1).state, 'active');
+});
+
 test('正常新轮次开始和快速结束不重设基线，仍能收到本轮结束事件', async t => {
   const h = harness(); h.stream.setThreads([{ id: ID }]); await h.stream.start();
   t.after(() => h.stream.close());

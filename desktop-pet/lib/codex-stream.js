@@ -54,6 +54,7 @@ function createCodexStream({ onTask = () => {}, onStatus = () => {}, onDiscovere
     onTask({ ...record.metadata, state: 'unknown', turnId: null, updatedAt: now(), partial: true, baseline: true,
       ...(record.unavailable ? { unavailable: record.unavailable } : {}), ...(removed ? { removed: true } : {}) });
     record.task = null; record.revision = null; record.baseline = true;
+    reportAvailability();
   }
   function cleanup(code = 'CLOSED') {
     if (closed) return;
@@ -95,10 +96,12 @@ function createCodexStream({ onTask = () => {}, onStatus = () => {}, onDiscovere
   }
 
   function reportAvailability() {
+    if (!ready) return;
     const current = [...records.values()];
     const partial = current.some(record => record.unavailable);
     if (current.some(record => record.task)) status('connected', partial ? 'PARTIAL_STATE' : null);
     else if (partial) status('unsupported', 'STATE_TOO_LARGE');
+    else status('connecting');
   }
   function receiveOversized(envelope) {
     if (closed || !ready || !records.has(envelope.conversationId)) return false;
