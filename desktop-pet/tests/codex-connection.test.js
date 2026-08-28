@@ -11,23 +11,25 @@ function api() {
 }
 function harness({ account, quota, list, startRpc, startStream } = {}) {
   const calls = []; const statuses = []; const tasks = []; const accounts = []; const quotas = []; const streams = [];
-  let rpcOptions;
+  const rpcs = [];
   const connection = api().createCodexConnection({
     createRpc: options => {
-      rpcOptions = options; calls.push('construct-rpc');
-      return {
-        start: async () => { calls.push('start-rpc'); await startRpc?.(); },
-        readAccount: async () => { calls.push('account'); return account ? account() : { authenticated: true, accountKey: 'one' }; },
-        readQuota: async () => { calls.push('quota'); return quota ? quota() : { windows: [], updatedAt: 100 }; },
-        listThreads: async () => { calls.push('list'); return list ? list() : [{ id: ID, title: '任务', state: 'unknown', partial: true }]; },
-        close: () => calls.push('close-rpc')
+      const index = rpcs.length; calls.push('construct-rpc');
+      const rpc = {
+        options, closed: false,
+        start: async () => { calls.push('start-rpc'); await startRpc?.(index); },
+        readAccount: async () => { calls.push('account'); return account ? account(index) : { authenticated: true, accountKey: 'one' }; },
+        readQuota: async () => { calls.push('quota'); return quota ? quota(index) : { windows: [], updatedAt: 100 }; },
+        listThreads: async () => { calls.push('list'); return list ? list(index) : [{ id: ID, title: '任务', state: 'unknown', partial: true }]; },
+        close: () => { calls.push('close-rpc'); rpc.closed = true; }
       };
+      rpcs.push(rpc); return rpc;
     },
     createStream: options => {
-      calls.push('construct-stream');
+      const index = streams.length; calls.push('construct-stream');
       const stream = {
         options, rows: [], closed: false,
-        start: async () => { calls.push('start-stream'); await startStream?.(); options.onStatus({ state: 'connecting', code: null, partial: true }); },
+        start: async () => { calls.push('start-stream'); await startStream?.(index); options.onStatus({ state: 'connecting', code: null, partial: true }); },
         setThreads: rows => { calls.push('set-threads'); stream.rows = rows; },
         refresh: () => calls.push('refresh-stream'),
         close: () => { calls.push('close-stream'); stream.closed = true; }
@@ -37,7 +39,11 @@ function harness({ account, quota, list, startRpc, startStream } = {}) {
     now: () => 100,
     onStatus: value => statuses.push(value), onTask: value => tasks.push(value), onQuota: value => quotas.push(value), onAccount: value => accounts.push(value)
   });
-  return { connection, calls, statuses, tasks, accounts, quotas, streams, disconnectRpc: code => rpcOptions.onDisconnect(code) };
+  return { connection, calls, statuses, tasks, accounts, quotas, streams, rpcs, disconnectRpc: code => rpcs.at(-1).options.onDisconnect(code) };
+}
+function retry(h, options) {
+  assert.equal(typeof h.connection.retry, 'function', '需要两条通路独立retry接口');
+  return h.connection.retry(options);
 }
 
 test('导入与构造不读取或连接Codex；未start的refresh也零I/O', async () => {
@@ -232,4 +238,113 @@ test('部分任务过大的固定降级码透传，任务原因不影响额度�
   h.streams[0].options.onTask({ id: ID, state: 'unknown', unavailable: 'STATE_TOO_LARGE', partial: true });
   assert.equal(h.statuses.at(-1).code, 'PARTIAL_STATE'); assert.equal(h.tasks.at(-1).unavailable, 'STATE_TOO_LARGE');
   assert.equal(h.quotas.length, 1); h.connection.close();
+});
+
+test('retry在start前或close后零I/O', async () => {
+  const h = harness(); await retry(h); h.connection.close(); await retry(h);
+  assert.deepEqual(h.calls, []); assert.deepEqual(h.statuses, []);
+});
+
+for (const taskStatus of [{ state: 'connected', code: null }, { state: 'unsupported', code: 'UNSUPPORTED' }, { state: 'connected', code: 'PARTIAL_STATE' }]) {
+  test(`quota-only retry保留任务通路${taskStatus.state}/${taskStatus.code}，旧RPC迟到断连无效`, async t => {
+    const h = harness(); t.after(() => h.connection.close()); await h.connection.start();
+    const old = h.rpcs[0]; h.streams[0].options.onStatus(taskStatus); h.disconnectRpc('DISCONNECTED'); h.calls.length = 0;
+    await retry(h, { quota: true, tasks: false });
+    assert.equal(h.rpcs.length, 2); assert.equal(old.closed, true);
+    assert.equal(h.streams.length, 1); assert.equal(h.streams[0].closed, false); assert.equal(h.calls.includes('list'), false);
+    assert.equal(h.accounts.length, 1); assert.equal(h.quotas.length, 2);
+    assert.equal(h.statuses.filter(value => value.channel === 'tasks').at(-1).state, taskStatus.state);
+    assert.equal(h.statuses.filter(value => value.channel === 'tasks').at(-1).code, taskStatus.code);
+    const count = h.statuses.length; old.options.onDisconnect('INVALID_FRAME'); assert.equal(h.statuses.length, count);
+    h.calls.length = 0; await h.connection.refresh({ quota: false }); assert.deepEqual(h.calls, ['list', 'set-threads']);
+  });
+}
+
+test('quota-only retry对仍ready的RPC只刷新账号额度，不重新建连接', async t => {
+  const h = harness(); t.after(() => h.connection.close()); await h.connection.start(); h.calls.length = 0;
+  await retry(h, { tasks: false });
+  assert.deepEqual(h.calls, ['account', 'quota']); assert.equal(h.rpcs.length, 1); assert.equal(h.streams.length, 1);
+});
+
+test('tasks-only retry只重建stream和metadata，不触碰健康RPC或账号额度', async t => {
+  const h = harness(); t.after(() => h.connection.close()); await h.connection.start();
+  const old = h.streams[0]; old.options.onStatus({ state: 'disconnected', code: 'DISCONNECTED' }); h.calls.length = 0;
+  await retry(h, { quota: false, tasks: true });
+  assert.equal(h.rpcs.length, 1); assert.equal(h.rpcs[0].closed, false);
+  assert.equal(h.streams.length, 2); assert.equal(old.closed, true); assert.equal(h.streams[1].rows.length, 1);
+  assert.equal(h.calls.includes('account'), false); assert.equal(h.calls.includes('quota'), false);
+  assert.equal(h.statuses.filter(value => value.channel === 'tasks').at(-1).state, 'connecting');
+  const before = h.statuses.length; old.options.onStatus({ state: 'connected', code: null }); old.options.onTask({ id: ID, state: 'completed' });
+  assert.equal(h.statuses.length, before); assert.deepEqual(h.tasks, []);
+});
+
+test('tasks-only retry在RPC不可用时明确断连，不擅自复活额度或停在connecting', async t => {
+  const h = harness(); t.after(() => h.connection.close()); await h.connection.start(); h.disconnectRpc('DISCONNECTED'); h.calls.length = 0;
+  await retry(h, { quota: false });
+  assert.equal(h.rpcs.length, 1); assert.equal(h.streams.length, 1);
+  assert.equal(h.calls.includes('account'), false); assert.equal(h.calls.includes('quota'), false); assert.equal(h.calls.includes('list'), false);
+  assert.equal(h.statuses.filter(value => value.channel === 'tasks').at(-1).state, 'disconnected');
+});
+
+for (const phase of ['account', 'quota']) test(`旧RPC的${phase}迟到结果不能覆盖重连后的账号或额度`, async t => {
+  let slow = false; let finish;
+  const h = harness({
+    account: index => slow && index === 0 && phase === 'account' ? new Promise(resolve => { finish = resolve; }) : { accountKey: 'one', authenticated: true },
+    quota: index => slow && index === 0 && phase === 'quota' ? new Promise(resolve => { finish = resolve; }) : { windows: [], updatedAt: 100 }
+  });
+  t.after(() => { h.connection.close(); finish?.({}); }); await h.connection.start();
+  slow = true; const oldRefresh = h.connection.refresh({ tasks: false });
+  for (let i = 0; i < 5 && !finish; i++) await tick();
+  h.disconnectRpc('DISCONNECTED'); await retry(h, { tasks: false });
+  finish(phase === 'account' ? { accountKey: 'stale-other', authenticated: true } : { windows: [{ remaining: 99 }], updatedAt: 0 });
+  await oldRefresh;
+  assert.deepEqual(h.accounts, [{ accountKey: 'one' }]); assert.equal(h.quotas.length, 2);
+  assert.equal(h.quotas.at(-1).updatedAt, 100); assert.equal(h.streams.length, 1); assert.equal(h.streams[0].closed, false);
+});
+
+test('quota重建在途合并，close后迟到初始化不读账号或产生回调', async t => {
+  let finish;
+  const h = harness({ startRpc: index => index === 1 ? new Promise(resolve => { finish = resolve; }) : undefined });
+  t.after(() => { h.connection.close(); finish?.(); }); await h.connection.start(); h.disconnectRpc('DISCONNECTED');
+  const first = retry(h, { tasks: false }); const second = retry(h, { tasks: false }); await tick();
+  assert.equal(h.rpcs.length, 2); h.connection.close(); const count = h.statuses.length; const reads = h.calls.filter(call => call === 'account').length;
+  finish(); await Promise.all([first, second]); h.rpcs[1].options.onDisconnect('DISCONNECTED');
+  assert.equal(h.statuses.length, count); assert.equal(h.calls.filter(call => call === 'account').length, reads);
+});
+
+test('quota-only retry确认真账号变化时仍重建任务基线并获取新metadata', async t => {
+  let key = 'one'; const h = harness({ account: () => ({ accountKey: key, authenticated: true }) });
+  t.after(() => h.connection.close()); await h.connection.start(); key = 'two'; h.disconnectRpc('DISCONNECTED');
+  await retry(h, { tasks: false }); await tick();
+  assert.deepEqual(h.accounts, [{ accountKey: 'one' }, { accountKey: 'two' }]);
+  assert.equal(h.streams[0].closed, true); assert.equal(h.streams.length, 2); assert.equal(h.streams[1].rows.length, 1);
+});
+
+test('默认retry可恢复两条断开通路，任务仍须新snapshot才connected', async t => {
+  const h = harness(); t.after(() => h.connection.close()); await h.connection.start(); h.disconnectRpc('DISCONNECTED');
+  h.streams[0].options.onStatus({ state: 'disconnected', code: 'DISCONNECTED' }); await retry(h);
+  assert.equal(h.rpcs.length, 2); assert.equal(h.streams.length, 2); assert.equal(h.streams[1].rows.length, 1);
+  assert.equal(h.statuses.filter(value => value.channel === 'quota').at(-1).state, 'connected');
+  assert.equal(h.statuses.filter(value => value.channel === 'tasks').at(-1).state, 'connecting');
+});
+
+test('tasks-only retry不复用旧stream的metadata在途结果', async t => {
+  let reads = 0; let finishOld;
+  const h = harness({ list: () => ++reads === 2 ? new Promise(resolve => { finishOld = resolve; }) : [{ id: ID, title: `当前-${reads}` }] });
+  t.after(() => { h.connection.close(); finishOld?.([]); }); await h.connection.start();
+  const oldRefresh = h.connection.refresh({ quota: false }); await tick();
+  await retry(h, { quota: false });
+  assert.equal(reads, 3); assert.equal(h.streams[1].rows[0].title, '当前-3');
+  finishOld([{ id: ID, title: '旧stream迟到' }]); await oldRefresh;
+  assert.equal(h.streams[1].rows[0].title, '当前-3');
+});
+
+test('tasks重建在途合并，close后迟到握手不能恢复状态或影响RPC', async t => {
+  let finish;
+  const h = harness({ startStream: index => index === 1 ? new Promise(resolve => { finish = resolve; }) : undefined });
+  t.after(() => { h.connection.close(); finish?.(); }); await h.connection.start();
+  const first = retry(h, { quota: false }); const second = retry(h, { quota: false }); await tick();
+  assert.equal(h.streams.length, 2); assert.equal(h.rpcs.length, 1);
+  h.connection.close(); const count = h.statuses.length; finish(); await Promise.all([first, second]);
+  assert.equal(h.statuses.length, count); assert.equal(h.streams[1].closed, true);
 });
