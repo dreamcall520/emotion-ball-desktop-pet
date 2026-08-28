@@ -9,6 +9,41 @@ async function verifyCompanion({ pet, bubble, monitor, screen, BrowserWindow, co
   const state = () => page('({...document.getElementById("pet").dataset})');
   const area = screen.getDisplayMatching(pet.getBounds()).workArea;
   const original = pet.getBounds();
+  const artifacts = process.env.PET_SMOKE_ARTIFACT_DIR;
+  const hostTrace = [];
+  const observeHost = (type, detail) => {
+    if (hostTrace.length < 100) hostTrace.push({ type, at: performance.now(), detail,
+      cursor: screen.getCursorScreenPoint(), petBounds: pet.getBounds() });
+  };
+  const applySetting = setSetting;
+  setSetting = (name, value) => { observeHost('setting-request', { name, value }); applySetting(name, value); };
+  observeHost('start', {});
+  await page(`window.__companionFailureTrace = {events:[],received:[],errors:[]};
+    window.__companionDiagnosticCleanup = [];
+    for (const type of ['pointerenter','pointerleave','pointermove']) {
+      const listener = event => {
+        const pet = document.getElementById('pet'); const rect = pet.getBoundingClientRect();
+        if (window.__companionFailureTrace.events.length < 200) window.__companionFailureTrace.events.push({
+          type,at:performance.now(),x:event.clientX,y:event.clientY,buttons:event.buttons,trusted:event.isTrusted,
+          onPet:pet.contains(event.target),target:event.target.tagName,
+          rect:{x:rect.x,y:rect.y,width:rect.width,height:rect.height},state:{...pet.dataset}
+        });
+      };
+      window.addEventListener(type,listener,true);
+      window.__companionDiagnosticCleanup.push(() => window.removeEventListener(type,listener,true));
+    }
+    const record = (type,packet) => {
+      if (window.__companionFailureTrace.received.length < 160) window.__companionFailureTrace.received.push({
+        type,at:performance.now(),packet,state:{...document.getElementById('pet').dataset}
+      });
+    };
+    window.__companionDiagnosticCleanup.push(window.petDesktop.onActivity(packet => record('activity', packet)));
+    window.__companionDiagnosticCleanup.push(window.petDesktop.onSettings(packet => record('settings', packet)));
+    window.__companionDiagnosticCleanup.push(window.petDesktop.onCommand(packet => record('command', packet)));
+    const errorListener = event => window.__companionFailureTrace.errors.push({at:performance.now(),message:event.message});
+    window.addEventListener('error',errorListener);
+    window.__companionDiagnosticCleanup.push(() => window.removeEventListener('error',errorListener)); true`);
+  try {
   monitor.stop();
   pet.setBounds({ x: area.x + 240, y: area.y + 240, width: 80, height: 80 });
   await wait(150);
@@ -18,11 +53,11 @@ async function verifyCompanion({ pet, bubble, monitor, screen, BrowserWindow, co
   };
   const sample = async patch => {
     packet = { ...packet, ...patch, petBounds: pet.getBounds() };
+    observeHost('activity-request', packet);
     pet.webContents.send('pet:activity', packet);
     await wait(90);
     return state();
   };
-  const artifacts = process.env.PET_SMOKE_ARTIFACT_DIR;
   async function capture(win, name) {
     if (!artifacts) return;
     fs.mkdirSync(path.resolve(artifacts), { recursive: true });
@@ -95,11 +130,41 @@ async function verifyCompanion({ pet, bubble, monitor, screen, BrowserWindow, co
     });
   };
   const input = (type, x, y, extra) => inputWindow(pet, type, x, y, extra);
+  // 失败时保留实际事件边界，区分未送达、移出重置、坐标和调度间隔；不改变抚摸规则。
+  await page(`window.__pettingTrace = {events:[],errors:[]};
+    window.__pettingListeners = [];
+    for (const type of ['pointerenter','pointerleave','pointermove']) {
+      const listener = event => {
+        const pet = document.getElementById('pet');
+        const rect = pet.getBoundingClientRect();
+        if (window.__pettingTrace.events.length < 120) window.__pettingTrace.events.push({
+          type,at:performance.now(),x:event.clientX,y:event.clientY,buttons:event.buttons,
+          trusted:event.isTrusted,onPet:pet.contains(event.target),target:event.target.tagName,
+          rect:{x:rect.x,y:rect.y,width:rect.width,height:rect.height},state:{...pet.dataset}
+        });
+      };
+      window.addEventListener(type, listener, true);
+      window.__pettingListeners.push([type,listener]);
+    }
+    window.__pettingError = event => window.__pettingTrace.errors.push({at:performance.now(),message:event.message});
+    window.addEventListener('error',window.__pettingError); true`);
   for (let index = 0; index < 10; index++) {
     await input('mouseMove', index % 2 ? 48 : 28, 25);
     await wait(100);
   }
-  assert.equal((await state()).lastAction, 'pet', '连续摸头应触发舒服表情');
+  const pettingState = await state();
+  const pettingTrace = await page(`(() => {
+    for(const [type,listener] of window.__pettingListeners) window.removeEventListener(type,listener,true);
+    window.removeEventListener('error',window.__pettingError);
+    const result = window.__pettingTrace;
+    delete window.__pettingListeners; delete window.__pettingError; delete window.__pettingTrace;
+    return result;
+  })()`);
+  if (pettingState.lastAction !== 'pet' && artifacts) {
+    fs.mkdirSync(path.resolve(artifacts), { recursive: true });
+    fs.writeFileSync(path.join(path.resolve(artifacts), 'petting-failure.json'), JSON.stringify({ state: pettingState, ...pettingTrace }, null, 2));
+  }
+  assert.equal(pettingState.lastAction, 'pet', `连续摸头应触发舒服表情：${JSON.stringify({ state: pettingState, ...pettingTrace })}`);
   await assertFixedColor();
   await capture(pet, 'petting-80');
   await page(`window.__dragTrace = []; for (const type of ['pointerdown','pointermove','pointerup','pointercancel']) {
@@ -219,6 +284,19 @@ async function verifyCompanion({ pet, bubble, monitor, screen, BrowserWindow, co
   bubbleWin.webContents.debugger.detach();
   process.stdout.write('PET_FIXED_COLOR_OK\n');
   process.stdout.write('PET_NATIVE_ACTIVITY_OK\n');
+  } catch (error) {
+    const rendererTrace = await page('window.__companionFailureTrace').catch(() => null);
+    if (artifacts) {
+      fs.mkdirSync(path.resolve(artifacts), { recursive: true });
+      const file = path.join(path.resolve(artifacts), 'companion-failure.json');
+      fs.writeFileSync(file, JSON.stringify({ host: hostTrace, renderer: rendererTrace }, null, 2));
+      process.stdout.write(`PET_COMPANION_FAILURE_DIAGNOSTIC=${file}\n`);
+    }
+    throw error;
+  } finally {
+    await page(`window.__companionDiagnosticCleanup?.forEach(remove => remove());
+      delete window.__companionDiagnosticCleanup; delete window.__companionFailureTrace; true`).catch(() => {});
+  }
 }
 
 module.exports = { verifyCompanion };
