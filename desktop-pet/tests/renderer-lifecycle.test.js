@@ -14,7 +14,7 @@ function createRenderer(randomValue = 0.5) {
   const events = {};
   const subscriptions = {};
   const windowEvents = {};
-  const host = { bounces: 0, stops: 0, scenes: [], motions: [], frames: [], positions: [] };
+  const host = { bounces: 0, stops: 0, scenes: [], motions: [], frames: [], positions: [], codexAcks: [], availability: [] };
   const bounds = { x: 100, y: 100, width: 80, height: 80 };
   let windowController;
   const nativeWindow = { isDestroyed: () => false, isVisible: () => true,
@@ -78,10 +78,13 @@ function createRenderer(randomValue = 0.5) {
         windowController.start(request);
       },
       say(scene) { host.scenes.push(scene); },
+      codexMotionReady(request) { host.codexAcks.push(request); },
+      codexAvailability(packet) { host.availability.push(packet); },
       onCommand: subscribe('command'),
       onActivity: subscribe('activity'),
       onSettings: subscribe('settings'),
-      onMotion: subscribe('motion')
+      onMotion: subscribe('motion'),
+      onCodexSettings: subscribe('codexSettings')
     }
   });
   context.window = context;
@@ -113,6 +116,7 @@ function createRenderer(randomValue = 0.5) {
     resize(width) { context.innerWidth = width; windowEvents.resize(); },
     emotions: context.EmotionBall.config.list(),
     command: value => subscriptions.command(value),
+    codexSettings(value) { subscriptions.codexSettings?.(value); },
     click() {
       const event = { screenX: 140, screenY: 140, button: 0, pointerId: 1 };
       events.pointerdown(event);
@@ -137,6 +141,97 @@ function createRenderer(randomValue = 0.5) {
     }
   };
 }
+
+const codexCommand = (overrides = {}) => ({ command: 'codex', alertId: 1, generation: 1, motion: 'hop', ...overrides });
+
+test('Codex 未开启不报告活动，开启后只报告改变的可展示状态', () => {
+  const r = createRenderer();
+  r.activity();
+  assert.equal(r.host.availability.length, 0);
+  r.codexSettings({ enabled: true, generation: 1 });
+  assert.equal(r.host.availability.length, 1);
+  assert.equal(r.host.availability[0].available, true);
+  r.activity();
+  assert.equal(r.host.availability.length, 1);
+  r.click();
+  assert.equal(r.host.availability.at(-1).available, false);
+  r.codexSettings({ enabled: false, generation: 2 });
+  const count = r.host.availability.length;
+  r.advanceTo(4000);
+  r.activity();
+  assert.equal(r.host.availability.length, count);
+});
+
+test('Codex 动作先确认令牌，不发送普通玩耍文案或伪造交互', () => {
+  const r = createRenderer();
+  r.codexSettings({ enabled: true, generation: 1 });
+  const scenes = r.host.scenes.length;
+  r.command(codexCommand());
+  assert.equal(r.host.codexAcks.length, 1);
+  assert.equal(r.host.motions.length, 0);
+  assert.equal(r.host.scenes.length, scenes);
+  const ack = r.host.codexAcks[0];
+  assert.equal(ack.action, 'hop');
+  assert.equal(r.pet.dataset.motionOwner, 'codex');
+  r.frame({ token: ack.token, action: 'hop', frame: { done: true } });
+  assert.equal(r.pet.dataset.motionOwner, 'none');
+  r.command(codexCommand());
+  assert.equal(r.host.codexAcks.length, 1, '同一提醒不可重播');
+  r.advanceTo(1000000);
+  r.activity(false, { idleSeconds: 10000 });
+  assert.equal(r.pet.dataset.mode, 'sleep', '自动动作不把用户记为活跃');
+});
+
+for (const reason of ['off', 'old-generation', 'sleep', 'idle-sleep', 'lock', 'drag', 'pending-click', 'hello', 'user-motion']) {
+  test(`Codex 迟到动作在 ${reason} 时不打断球球`, () => {
+    const r = createRenderer();
+    r.codexSettings({ enabled: true, generation: 1 });
+    if (reason === 'off') r.codexSettings({ enabled: false, generation: 2 });
+    if (reason === 'old-generation') r.codexSettings({ enabled: true, generation: 2 });
+    if (reason === 'sleep') r.command('sleep');
+    if (reason === 'idle-sleep') { r.advanceTo(1000000); r.activity(false, { idleSeconds: 10000 }); }
+    if (reason === 'lock') r.activity(true);
+    if (reason === 'drag') r.events.pointerdown({ button: 0, pointerId: 1, screenX: 140, screenY: 140 });
+    if (reason === 'pending-click') r.click();
+    if (reason === 'hello') r.events.pointerenter();
+    if (reason === 'user-motion') r.doubleClick();
+    const count = r.host.stops;
+    r.command(codexCommand());
+    assert.equal(r.host.codexAcks.length, 0);
+    assert.equal(r.host.stops, count, '拒绝不能全局停止用户动作');
+  });
+}
+
+test('关闭或旧取消只清 Codex 所有者，不停止新用户动作', () => {
+  const r = createRenderer();
+  r.codexSettings({ enabled: true, generation: 1 });
+  r.command(codexCommand());
+  assert.equal(r.host.codexAcks.length, 1);
+  const ack = r.host.codexAcks[0];
+  r.doubleClick();
+  const user = r.host.motions.at(-1);
+  assert.ok(user);
+  r.command({ command: 'codex-cancel', alertId: 1, generation: 1, token: ack.token });
+  r.codexSettings({ enabled: false, generation: 2 });
+  assert.equal(r.pet.dataset.motionOwner, 'user');
+  r.advanceTo(500);
+  assert.equal(r.host.frames.at(-1).token, user.token);
+  assert.equal(r.host.frames.at(-1).frame.done, false);
+});
+
+test('关闭清理待确认 Codex 帧，重新开启后旧代次不复活', () => {
+  const r = createRenderer();
+  r.codexSettings({ enabled: true, generation: 1 });
+  r.command(codexCommand());
+  assert.equal(r.host.codexAcks.length, 1);
+  const ack = r.host.codexAcks[0];
+  r.codexSettings({ enabled: false, generation: 2 });
+  r.codexSettings({ enabled: true, generation: 3 });
+  r.frame({ token: ack.token, action: 'hop', frame: { done: false } });
+  assert.equal(r.pet.dataset.motionOwner, 'none');
+  r.command(codexCommand());
+  assert.equal(r.host.codexAcks.length, 1);
+});
 
 test('锁屏取消待执行单击，不在锁屏后启动动作', () => {
   const renderer = createRenderer();

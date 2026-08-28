@@ -9,12 +9,15 @@
     bounce() {},
     stopMotion() {},
     playMotion() {},
+    codexMotionReady() {},
+    codexAvailability() {},
     say() {},
     showContextMenu() {},
     onCommand() { return () => {}; },
     onActivity() { return () => {}; },
     onSettings() { return () => {}; },
-    onMotion() { return () => {}; }
+    onMotion() { return () => {}; },
+    onCodexSettings() { return () => {}; }
   };
 
   const companion = new CompanionBehavior.CompanionState();
@@ -34,7 +37,54 @@
   let activeMotion = null;
   let nextMotionToken = 0;
   let lastDoubleMotion = null;
+  let codexEnabled = false;
+  let codexGeneration = 0;
+  let lastCodexAlertId = 0;
+  let lastAvailability = null;
   const listeners = [];
+
+  function canShowCodex() {
+    return codexEnabled && Boolean(lastSample) && !lastSample.locked && !companion.manualSleep &&
+      currentState.mode !== 'sleep' && !dragState && !singleClickTimer && !helloTimer &&
+      performance.now() >= actionUntil && !activeMotion;
+  }
+
+  function reportCodexAvailability() {
+    if (!codexEnabled) { lastAvailability = null; return; }
+    const available = canShowCodex();
+    if (available === lastAvailability) return;
+    lastAvailability = available;
+    desktop.codexAvailability({ generation: codexGeneration, available });
+  }
+
+  function observe(callback) {
+    return (...args) => { try { return callback(...args); } finally { reportCodexAvailability(); } };
+  }
+  const onPet = (name, callback) => petElement.addEventListener(name, observe(callback));
+  const onWindow = (name, callback) => window.addEventListener(name, observe(callback));
+
+  function cancelCodex(request) {
+    if (activeMotion?.owner !== 'codex' || (request && (request.generation !== activeMotion.generation ||
+      request.alertId !== activeMotion.alertId || (request.token !== undefined && request.token !== activeMotion.token)))) return;
+    stopMotion(false);
+    restoreState();
+  }
+
+  function startCodex(request) {
+    const motion = InteractionMotion.getMotion(request.motion);
+    if (!canShowCodex() || request.generation !== codexGeneration || !Number.isSafeInteger(request.alertId) ||
+      request.alertId <= lastCodexAlertId || !motion) return;
+    lastCodexAlertId = request.alertId;
+    activeMotion = { token: ++nextMotionToken, action: motion.id, owner: 'codex',
+      alertId: request.alertId, generation: request.generation };
+    petElement.dataset.motionOwner = 'codex';
+    ball.setEmotion(motion.emotion);
+    ball.setMotionFrame(InteractionMotion.sampleMotion(motion.id, 0));
+    petElement.dataset.lastAction = motion.id;
+    // 只准备本地姿态。宿主复核提醒和所有权后才开始移动窗口、显示气泡。
+    desktop.codexMotionReady({ token: activeMotion.token, action: motion.id,
+      alertId: request.alertId, generation: request.generation });
+  }
 
   // 只调整此桌宠页面的配置，不改变原项目表情库。
   for (const definition of EmotionBall.config.list()) {
@@ -83,6 +133,7 @@
 
   function stopMotion(notifyHost = true) {
     activeMotion = null;
+    petElement.dataset.motionOwner = 'none';
     ball.stopMotion();
     if (notifyHost) desktop.stopMotion();
   }
@@ -105,10 +156,10 @@
     actionUntil = performance.now() + duration;
     ball.setEmotion(id);
     if (scene) desktop.say(scene);
-    actionTimer = setTimeout(() => {
+    actionTimer = setTimeout(observe(() => {
       actionUntil = 0;
       restoreState();
-    }, duration);
+    }), duration);
   }
 
   function updateActivity(sample) {
@@ -209,7 +260,8 @@
     clearAction();
     stopMotion();
     noteInteraction();
-    activeMotion = { token: ++nextMotionToken, action };
+    activeMotion = { token: ++nextMotionToken, action, owner: 'user' };
+    petElement.dataset.motionOwner = 'user';
     ball.setEmotion(motion.emotion);
     ball.setMotionFrame(InteractionMotion.sampleMotion(action, 0));
     petElement.dataset.lastAction = action;
@@ -222,6 +274,7 @@
         packet.action !== activeMotion.action || !packet.frame) return;
     if (packet.frame.done === true) {
       activeMotion = null;
+      petElement.dataset.motionOwner = 'none';
       ball.stopMotion();
       restoreState();
     } else ball.setMotionFrame(packet.frame);
@@ -240,11 +293,11 @@
 
   function scheduleSingleClick() {
     clearTimeout(singleClickTimer);
-    singleClickTimer = setTimeout(() => {
+    singleClickTimer = setTimeout(observe(() => {
       singleClickTimer = null;
       wakeOnDoubleClick = false;
       runSingleClickAction();
-    }, 260);
+    }), 260);
   }
 
   function runRandomEmotion() {
@@ -257,6 +310,8 @@
   }
 
   function runCommand(command) {
+    if (command?.command === 'codex-cancel') { cancelCodex(command); return; }
+    if (command?.command === 'codex') { startCodex(command); return; }
     if (command === 'stop') {
       cancelPendingInteraction();
       clearAction();
@@ -288,7 +343,7 @@
     return { x: event.screenX, y: event.screenY };
   }
 
-  petElement.addEventListener('pointerdown', event => {
+  onPet('pointerdown', event => {
     if (event.button !== 0 || lastSample?.locked) return;
     // 第一次松手会刷新系统空闲状态；保留本次双击最初是否睡着。
     const startedSleeping = companion.manualSleep || ball.emotionId === '00' || (singleClickTimer && wakeOnDoubleClick);
@@ -308,7 +363,7 @@
     desktop.beginDrag(point);
   });
 
-  petElement.addEventListener('pointermove', event => {
+  onPet('pointermove', event => {
     if (lastSample?.locked) return;
     const rect = petElement.getBoundingClientRect();
     if (!companion.manualSleep && !activeMotion) {
@@ -317,6 +372,7 @@
         width: rect.width, height: rect.height, buttons: event.buttons
       }, performance.now())) {
         clearTimeout(helloTimer);
+        helloTimer = null;
         noteInteraction();
         playEmotion('19', 2400, 'pet');
         petElement.dataset.lastAction = 'pet';
@@ -362,35 +418,37 @@
     if (!cancelled && !wasDragged && event.button === 0) scheduleSingleClick();
   }
 
-  petElement.addEventListener('pointerup', event => finishPointer(event, false));
-  petElement.addEventListener('pointercancel', event => finishPointer(event, true));
+  onPet('pointerup', event => finishPointer(event, false));
+  onPet('pointercancel', event => finishPointer(event, true));
 
-  petElement.addEventListener('dblclick', event => {
+  onPet('dblclick', event => {
     if (event.button !== 0) return;
     runDoubleClickAction();
   });
 
-  petElement.addEventListener('pointerenter', () => {
+  onPet('pointerenter', () => {
     if (companion.manualSleep || lastSample?.locked || activeMotion) return;
     noteInteraction();
     clearTimeout(helloTimer);
-    helloTimer = setTimeout(() => {
+    helloTimer = setTimeout(observe(() => {
+      helloTimer = null;
       if (companion.manualSleep || lastSample?.locked || activeMotion || dragState || performance.now() < actionUntil) return;
       playEmotion('03', 2200, 'hello');
-    }, 900);
+    }), 900);
   });
 
-  petElement.addEventListener('pointerleave', () => {
+  onPet('pointerleave', () => {
     clearTimeout(helloTimer);
+    helloTimer = null;
     petting.reset();
   });
 
-  petElement.addEventListener('contextmenu', event => {
+  onPet('contextmenu', event => {
     event.preventDefault();
     desktop.showContextMenu();
   });
 
-  window.addEventListener('resize', () => {
+  onWindow('resize', () => {
     cancelPendingInteraction();
     clearAction();
     stopMotion();
@@ -399,7 +457,8 @@
     restoreState();
   });
 
-  window.addEventListener('beforeunload', () => {
+  onWindow('beforeunload', () => {
+    codexEnabled = false;
     cancelPendingInteraction();
     clearAction();
     stopMotion();
@@ -409,12 +468,21 @@
 
   createBall('50');
   petElement.dataset.mode = 'awake';
-  listeners.push(desktop.onCommand(runCommand));
-  listeners.push(desktop.onMotion(onMotion));
-  listeners.push(desktop.onActivity(updateActivity));
-  listeners.push(desktop.onSettings(settings => {
+  petElement.dataset.motionOwner = 'none';
+  listeners.push(desktop.onCommand(observe(runCommand)));
+  listeners.push(desktop.onMotion(observe(onMotion)));
+  listeners.push(desktop.onActivity(observe(updateActivity)));
+  listeners.push(desktop.onSettings(observe(settings => {
     companion.setKeepAwake(settings.keepAwake);
     if (lastSample) updateActivity(lastSample);
-  }));
+  })));
+  listeners.push(desktop.onCodexSettings(observe(settings => {
+    if (!Number.isSafeInteger(settings?.generation) || settings.generation < codexGeneration ||
+      typeof settings.enabled !== 'boolean') return;
+    if (settings.generation !== codexGeneration || !settings.enabled) cancelCodex();
+    if (settings.generation !== codexGeneration) { lastCodexAlertId = 0; lastAvailability = null; }
+    codexGeneration = settings.generation;
+    codexEnabled = settings.enabled;
+  })));
   window.__petReady = true;
 })();
