@@ -7,7 +7,8 @@ const DEFAULTS = Object.freeze({
   y: null,
   alwaysOnTop: true,
   keepAwake: false,
-  bubblesEnabled: true
+  bubblesEnabled: true,
+  codexEnabled: false
 });
 
 function normalizeSettings(raw = {}) {
@@ -22,7 +23,9 @@ function normalizeSettings(raw = {}) {
     keepAwake:
       typeof raw.keepAwake === 'boolean' ? raw.keepAwake : DEFAULTS.keepAwake,
     bubblesEnabled:
-      typeof raw.bubblesEnabled === 'boolean' ? raw.bubblesEnabled : DEFAULTS.bubblesEnabled
+      typeof raw.bubblesEnabled === 'boolean' ? raw.bubblesEnabled : DEFAULTS.bubblesEnabled,
+    codexEnabled:
+      typeof raw.codexEnabled === 'boolean' ? raw.codexEnabled : DEFAULTS.codexEnabled
   };
 }
 
