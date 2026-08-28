@@ -522,6 +522,17 @@ async function finishSmokeTest() {
       command: sendCommand, setSetting: setCompanionSetting, showDialogue
     });
 
+    await require('./scripts/verify-codex-companion').verifyCodexCompanion({
+      pet: petWindow, bubble, monitor: activityMonitor, screen, BrowserWindow,
+      command: sendCommand, setSetting: setCompanionSetting, setSize: setPetSize,
+      getMenu: () => Menu.buildFromTemplate(menuTemplate()), getSettings: () => ({ ...settings }),
+      prepare: initializeCodexCompanion, getController: () => codexCompanion,
+      canPresent: canPresentCodex, getMotionOwner: () => hostMotion,
+      clearDialogue: () => { dialogue.dismiss(); bubble.hide(); },
+      // 只在显式冒烟闭包提供模拟开关，不注册测试 IPC，也不显示真实授权弹窗。
+      setEnabled: async enabled => { settings.codexEnabled = enabled; await codexCompanion.setEnabled(enabled); }
+    });
+
     setPetSize('tiny');
     await new Promise(resolve => setTimeout(resolve, 250));
     sendCommand('sleep');

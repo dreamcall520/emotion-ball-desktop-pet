@@ -72,6 +72,13 @@ test('安装包完整包含轻陪伴和气泡依赖，避免缺少模块', () =>
     'desktop-pet/lib/dialogue.js',
     'desktop-pet/lib/bubble-placement.js',
     'desktop-pet/lib/bubble-window.js',
+    'desktop-pet/lib/codex-state.js',
+    'desktop-pet/lib/codex-rpc.js',
+    'desktop-pet/lib/codex-frame.js',
+    'desktop-pet/lib/codex-stream.js',
+    'desktop-pet/lib/codex-connection.js',
+    'desktop-pet/lib/codex-companion.js',
+    'desktop-pet/lib/codex-menu.js',
     'desktop-pet/bubble.html',
     'desktop-pet/bubble.css',
     'desktop-pet/bubble-renderer.js',
@@ -80,6 +87,12 @@ test('安装包完整包含轻陪伴和气泡依赖，避免缺少模块', () =>
     assert.equal(fs.readFileSync(path.join(staging, relativePath), 'utf8'),
       fs.readFileSync(path.join(root, relativePath), 'utf8'));
   }
+  const controller = require(path.join(staging, 'desktop-pet/lib/codex-companion.js')).createCodexCompanion({
+    createConnection: () => assert.fail('仅加载关闭态不能连接 Codex')
+  });
+  assert.equal(controller.getSnapshot().enabled, false);
+  assert.deepEqual(require(path.join(staging, 'desktop-pet/lib/codex-menu.js')).buildCodexMenu(controller.getSnapshot()), []);
+  controller.close();
 });
 
 test('优先复用本机已经下载好的 Electron 压缩包', () => {
@@ -132,4 +145,8 @@ test('真实动作验收助手进入显式打包清单且可以加载', () => {
   assert.ok(fs.existsSync(staged), '安装包缺少真实身体动作验收助手');
   assert.equal(fs.readFileSync(staged, 'utf8'), fs.readFileSync(path.join(root, relative), 'utf8'));
   assert.equal(typeof require(staged).verifyBodyMotion, 'function');
+  const codexHelper = 'desktop-pet/scripts/verify-codex-companion.js';
+  assert.ok(fs.existsSync(path.join(staging, codexHelper)), '安装包缺少显式模拟 Codex 原生验收助手');
+  assert.equal(fs.readFileSync(path.join(staging, codexHelper), 'utf8'), fs.readFileSync(path.join(root, codexHelper), 'utf8'));
+  assert.equal(typeof require(path.join(staging, codexHelper)).verifyCodexCompanion, 'function');
 });

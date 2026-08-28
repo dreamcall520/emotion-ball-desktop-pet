@@ -51,6 +51,7 @@ const completeMarkers = [
   'SMOKE', 'BOUNCE', 'USER_DATA', 'ACTIVITY_STATES', 'GAZE', 'TOUCH_DRAG', 'BUBBLE_REPLY',
   'BUBBLE_EDGES_SETTINGS', 'NATIVE_ACTIVITY', 'FIXED_COLOR', 'DOUBLE_CLICK', 'BODY_MOTION',
   'BODY_MOTION_INTERRUPTS', 'BODY_MOTION_EDGES',
+  'CODEX_SIMULATED', ...Object.values(SIZES).map(size => `CODEX_SIZE_${size.width}`),
   ...Object.values(SIZES).map(size => `BODY_MOTION_SIZE_${size.width}`),
   ...['HOP', 'JELLY', 'SWAY', 'PEEK', 'BOW', 'SPIN'].map(id => `BODY_MOTION_${id}`)
 ];
@@ -65,6 +66,15 @@ test('烟测拒绝用旧240标记冒充真实大尺寸已通过', async () => {
   const result = await validateSmokeOutput(completeMarkers.filter(marker => marker !== largeMarker).concat('BODY_MOTION_SIZE_240'));
   assert.equal(result.exitCode, 1, '未完成真实大尺寸检查不能通过');
   assert.ok(result.errors.includes(largeMarker), result.errors);
+});
+
+test('只有旧动作标记不能冒充已完成 Codex 原生检查', async () => {
+  const result = await validateSmokeOutput(completeMarkers.filter(marker => !marker.startsWith('CODEX_')));
+  assert.equal(result.exitCode, 1);
+  assert.match(result.errors, /CODEX_SIMULATED/);
+  const missingTiny = await validateSmokeOutput(completeMarkers.filter(marker => marker !== 'CODEX_SIZE_80'));
+  assert.equal(missingTiny.exitCode, 1);
+  assert.match(missingTiny.errors, /CODEX_SIZE_80/);
 });
 
 test('动作验收用轮廓点与实际变换判断边界，不误用旋转矩形的四角', () => {

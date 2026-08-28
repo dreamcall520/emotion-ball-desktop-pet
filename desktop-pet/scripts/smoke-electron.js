@@ -58,6 +58,9 @@ function runSmokeTest() {
         assert.equal(code, 0, output);
         assert.match(output, /PET_SMOKE_OK/);
         assert.match(output, /PET_BOUNCE_OK/);
+        for (const marker of ['CODEX_SIMULATED', ...BODY_MOTION_SIZES.map(size => `CODEX_SIZE_${size}`)]) {
+          assert.ok(output.includes(`PET_${marker}_OK`), `${marker}模拟 Codex 原生检查未完成`);
+        }
         for (const marker of ['USER_DATA', 'ACTIVITY_STATES', 'GAZE', 'TOUCH_DRAG', 'BUBBLE_REPLY', 'BUBBLE_EDGES_SETTINGS', 'NATIVE_ACTIVITY', 'FIXED_COLOR', 'DOUBLE_CLICK', 'BODY_MOTION', 'BODY_MOTION_INTERRUPTS', 'BODY_MOTION_EDGES', ...BODY_MOTION_SIZES.map(size => `BODY_MOTION_SIZE_${size}`), ...['HOP', 'JELLY', 'SWAY', 'PEEK', 'BOW', 'SPIN'].map(id => `BODY_MOTION_${id}`)]) {
           assert.ok(output.includes(`PET_${marker}_OK`), `${marker}检查未完成`);
         }
