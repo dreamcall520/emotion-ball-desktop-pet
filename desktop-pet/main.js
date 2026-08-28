@@ -54,6 +54,7 @@ let codexPageReady = false;
 let codexPageEpoch = 0;
 let codexSentSettings = null;
 let codexNotice = null;
+let codexPreferenceWarning = null;
 let hostMotion = null;
 const windowMotion = createWindowMotion({
   getWindow: () => petWindow,
@@ -168,8 +169,14 @@ async function setCodexEnabled(enabled) {
   if (!codexCompanion || isQuitting) return false;
   if (enabled !== true) {
     codexConsentToken++;
-    if (settings.codexEnabled) { settings.codexEnabled = false; persistSettings(); }
+    const changed = settings.codexEnabled === true;
+    settings.codexEnabled = false;
+    // 停止读取不依赖磁盘写入成功；保存失败也必须先释放连接和计时器。
     await codexCompanion.setEnabled(false);
+    if (changed) {
+      try { persistSettings(); codexPreferenceWarning = null; }
+      catch (_) { codexPreferenceWarning = '联动已关闭，但未保存；重启可能恢复开启'; }
+    }
     refreshTrayMenu();
     return true;
   }
@@ -185,7 +192,12 @@ async function setCodexEnabled(enabled) {
     });
     if (result.response !== 0 || token !== codexConsentToken || isQuitting) return false;
     settings.codexEnabled = true;
-    persistSettings();
+    try { persistSettings(); codexPreferenceWarning = null; }
+    catch (_) {
+      settings.codexEnabled = false;
+      codexPreferenceWarning = '未能保存设置，Codex 联动仍保持关闭';
+      return false;
+    }
     await codexCompanion.setEnabled(true);
     return true;
   } catch (_) {
@@ -458,6 +470,7 @@ function menuTemplate() {
       id: 'codex-enabled', label: 'Codex 联动', type: 'checkbox', checked: settings.codexEnabled === true,
       click: item => { const enabled = item.checked; item.checked = settings.codexEnabled === true; void setCodexEnabled(enabled); }
     },
+    ...(codexPreferenceWarning ? [{ id: 'codex-preference-warning', label: codexPreferenceWarning, enabled: false }] : []),
     ...(settings.codexEnabled ? [{ id: 'codex-status', label: 'Codex 状态', submenu: [
       ...(codexNotice ? [{ label: codexNotice.text, enabled: false }, { type: 'separator' }] : []),
       ...bindCodexMenu(buildCodexMenu(codexCompanion?.getSnapshot(), codexNow()))

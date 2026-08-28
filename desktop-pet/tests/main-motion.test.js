@@ -8,7 +8,7 @@ const { EventEmitter } = require('node:events');
 const { setImmediate: flush } = require('node:timers/promises');
 
 // 真实 main、动作控制器和对白规则；只替代 Electron、系统采样和磁盘设置。
-async function fixture({ codexEnabled = false, consent = async () => ({ response: 1 }), openExternal = async () => {} } = {}) {
+async function fixture({ codexEnabled = false, consent = async () => ({ response: 1 }), openExternal = async () => {}, saveError = null } = {}) {
   let now = 0;
   let serial = 0;
   const timers = new Map();
@@ -59,7 +59,7 @@ async function fixture({ codexEnabled = false, consent = async () => ({ response
         shell: { openExternal: url => { external.push(url); return openExternal(url); } },
         Menu: { buildFromTemplate: value => Object.assign(value, { popup: options => popups.push({ value, options }) }) }, nativeImage: { createFromPath: () => ({ setTemplateImage() {} }) } };
       if (name === './lib/settings') return { loadSettings: () => ({ size: 'tiny', x: -600, y: 100, bubblesEnabled: true, codexEnabled }),
-        saveSettings: (_file, settings) => { saved.push({ ...settings }); return settings; } };
+        saveSettings: (_file, settings) => { if (saveError) throw saveError; saved.push({ ...settings }); return settings; } };
       if (name === './lib/codex-companion') return { createCodexCompanion: options => realRequire(name).createCodexCompanion({ ...options,
         createConnection(callbacks) {
           const connection = { callbacks, closed: false, async start() {
@@ -173,6 +173,36 @@ test('确认后才启用，已保存开启的重启不重复确认，关闭只�
   restarted.app.emit('before-quit');
   assert.equal(restarted.connections[0].closed, true);
   assert.equal(restarted.timers.size, 0);
+});
+
+test('关闭时写设置失败也立即清理连接与定时器，并在关闭态显示未保存警示', async () => {
+  const f = await fixture({ codexEnabled: true, saveError: new Error('ENOSPC_PRIVATE_PATH') });
+  assert.equal(f.connections.length, 1);
+  assert.ok(f.timers.size > 0);
+  await assert.doesNotReject(f.call('setCodexEnabled(false)'));
+  assert.equal(f.call('codexCompanion.getSnapshot().enabled'), false);
+  assert.equal(f.connections[0].closed, true);
+  assert.equal(f.timers.size, 0);
+  const menu = f.call('menuTemplate()');
+  assert.equal(menu.find(item => item.id === 'codex-enabled').checked, false);
+  assert.equal(menu.some(item => item.id === 'codex-status'), false);
+  const warning = menu.find(item => item.id === 'codex-preference-warning');
+  assert.ok(warning, '关闭态仍须看见未保存风险');
+  assert.match(warning.label, /已关闭.*未保存.*重启.*恢复/);
+  assert.doesNotMatch(warning.label, /ENOSPC|PRIVATE/);
+});
+
+test('开启前设置保存失败维持关闭、零连接，警示不暴露原始错误', async () => {
+  const f = await fixture({ consent: async () => ({ response: 0 }), saveError: new Error('PRIVATE_WRITE_FAILURE') });
+  await assert.doesNotReject(f.call('setCodexEnabled(true)'));
+  assert.equal(f.connections.length, 0);
+  assert.equal(f.timers.size, 0);
+  assert.equal(f.call('codexCompanion.getSnapshot().enabled'), false);
+  const menu = f.call('menuTemplate()');
+  assert.equal(menu.find(item => item.id === 'codex-enabled').checked, false);
+  const warning = menu.find(item => item.id === 'codex-preference-warning');
+  assert.match(warning.label, /未能保存.*保持关闭/);
+  assert.doesNotMatch(warning.label, /PRIVATE/);
 });
 
 test('动作确认前无气泡，确认来自球球且仍有效后才开始原生动作', async () => {
