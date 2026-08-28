@@ -73,6 +73,20 @@ test('两个通道独立标识，不支持及大状态包不伪装为已连接',
   assert.doesNotMatch(labels, /任务进展：已连接/);
 });
 
+test('额度已连接但桌面状态服务缺失时，不误报Codex未安装', () => {
+  const { buildCodexMenu } = api();
+  const value = snapshot();
+  value.tasks.state = 'missing'; value.tasks.code = 'MISSING';
+  const labels = entries(buildCodexMenu(value, TIME)).map(item => item.label || '').join('\n');
+  assert.match(labels, /额度：已连接/);
+  assert.match(labels, /任务进展：未连接桌面任务/);
+  assert.doesNotMatch(labels, /未找到 Codex/);
+  value.quota.state = 'missing'; value.quota.code = 'MISSING';
+  const absent = entries(buildCodexMenu(value, TIME)).map(item => item.label || '').join('\n');
+  assert.match(absent, /额度：未找到 Codex/);
+  assert.match(absent, /任务进展：未连接桌面任务/);
+});
+
 test('缺失额度字段显示暂不可用，不编造比例周期或Invalid Date', () => {
   const { buildCodexMenu } = api();
   const value = snapshot();

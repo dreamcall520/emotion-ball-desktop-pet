@@ -52,7 +52,7 @@ function buildCodexMenu(snapshot, now = Date.now()) {
     { id: 'codex-quota', label: '额度明细', submenu: quotaItems.length ? quotaItems : [{ label: '额度暂不可用', enabled: false }] },
     { label: `上次更新：${dateLabel(quota.updatedAt)}`, enabled: false },
     { type: 'separator' },
-    { label: `任务进展：${CONNECTION_LABELS[tasks.state] || '暂不可用'}（最近最多20个任务）`, enabled: false },
+    { label: `任务进展：${tasks.state === 'missing' ? '未连接桌面任务' : CONNECTION_LABELS[tasks.state] || '暂不可用'}（最近最多20个任务）`, enabled: false },
     { id: 'codex-tasks', label: '任务列表', submenu: taskItems.length ? taskItems : [{ label: '尚未读到任务', enabled: false }] },
     { id: 'codex-recent', label: '最近提醒', submenu: recentItems.length ? recentItems : [{ label: '暂无提醒', enabled: false }] },
     { type: 'separator' },
