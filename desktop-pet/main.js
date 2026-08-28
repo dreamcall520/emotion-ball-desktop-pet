@@ -43,6 +43,7 @@ let screenLocked = false;
 const windowMotion = createWindowMotion({
   getWindow: () => petWindow,
   getWorkArea: bounds => screen.getDisplayMatching(bounds).workArea,
+  getDisplayId: bounds => screen.getDisplayMatching(bounds).id,
   now: () => performance.now(), schedule: setTimeout, cancel: clearTimeout,
   sendFrame: packet => petWindow.webContents.send('pet:motion-frame', packet)
 });
@@ -575,7 +576,14 @@ function registerDisplayRecovery() {
   };
   screen.on('display-added', recover);
   screen.on('display-removed', recover);
-  screen.on('display-metrics-changed', recover);
+  screen.on('display-metrics-changed', (_event, _display, changedMetrics) => {
+    if (Array.isArray(changedMetrics) && changedMetrics.length > 0 &&
+      changedMetrics.every(metric => metric === 'workArea') && windowMotion.refreshWorkArea()) {
+      bubble?.reposition();
+      return;
+    }
+    recover();
+  });
 }
 
 async function bootstrap() {

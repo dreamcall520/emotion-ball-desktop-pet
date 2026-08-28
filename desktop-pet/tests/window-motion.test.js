@@ -16,6 +16,7 @@ function fixture(bounds = { x: -700, y: 40, width: 80, height: 80 }) {
   const moves = [];
   const origin = { ...bounds };
   const workArea = { x: -800, y: 0, width: 800, height: 600 };
+  const display = { id: 1 };
   const win = {
     destroyed: false, visible: true,
     isDestroyed() { return this.destroyed; },
@@ -24,12 +25,12 @@ function fixture(bounds = { x: -700, y: 40, width: 80, height: 80 }) {
     setPosition(x, y, animate) { moves.push({ x, y, animate }); bounds.x = x; bounds.y = y; }
   };
   const controller = createWindowMotion({
-    getWindow: () => win, getWorkArea: () => workArea, now: () => now,
+    getWindow: () => win, getWorkArea: () => workArea, getDisplayId: () => display.id, now: () => now,
     schedule(callback, delay) { callbacks.push(callback); timers.set(++serial, { callback, at: now + delay }); return serial; },
     cancel(id) { timers.delete(id); },
     sendFrame(packet) { frames.push(packet); }
   });
-  return { controller, win, frames, moves, callbacks, timers, bounds, origin, workArea,
+  return { controller, win, frames, moves, callbacks, timers, bounds, origin, workArea, display,
     at(time) { now = time; const queued = [...timers.values()]; timers.clear(); queued.forEach(item => item.callback()); }
   };
 }
@@ -44,6 +45,62 @@ test('窗口和身体使用同一帧时间，结束回到原位且释放计时�
   assert.deepEqual(f.bounds, f.origin);
   assert.equal(f.frames.at(-1).frame.done, true);
   assert.equal(f.timers.size, 0);
+});
+
+test('同屏工作区微变保留动作token、原始锚点及起始时间，不新增计时器', () => {
+  const f = fixture();
+  f.controller.start({ token: 1, action: 'bow' });
+  f.at(844);
+  const pending = [...f.timers.keys()];
+  assert.equal(typeof f.controller.refreshWorkArea, 'function');
+  f.workArea.height += 1;
+  assert.equal(f.controller.refreshWorkArea(), true);
+  assert.deepEqual([...f.timers.keys()], pending);
+  assert.equal(f.frames.some(packet => packet.frame.done), false);
+  f.at(1000);
+  assert.deepEqual(f.frames.at(-1), { token: 1, action: 'bow', frame: sampleMotion('bow', 1000) });
+  f.at(1600);
+  assert.equal(f.frames.at(-1).frame.done, true);
+  assert.deepEqual(f.bounds, f.origin);
+});
+
+test('更新工作区立即夹紧当前半空位置，后续轨迹也使用新区而非旧区', () => {
+  const f = fixture();
+  f.controller.start({ token: 1, action: 'hop' });
+  f.at(540);
+  assert.ok(f.bounds.y < 35);
+  assert.equal(typeof f.controller.refreshWorkArea, 'function');
+  f.workArea.y = 35;
+  f.workArea.height = 565;
+  assert.equal(f.controller.refreshWorkArea(), true);
+  assert.equal(f.bounds.y, 35);
+  assert.equal(f.frames.at(-1).frame.done, false);
+  for (let at = 556; at < 1800; at += 16) {
+    f.at(at);
+    assert.ok(f.bounds.y >= 35);
+    assert.deepEqual(f.frames.at(-1).frame, sampleMotion('hop', at));
+  }
+  f.at(1800);
+  assert.deepEqual(f.bounds, f.origin);
+  assert.equal(f.timers.size, 0);
+});
+
+test('原始锚点越界、显示器身份改变或区域无效时拒绝继续，交还宿主恢复', () => {
+  const f = fixture({ x: -700, y: 520, width: 80, height: 80 });
+  f.controller.start({ token: 1, action: 'hop' });
+  f.at(540);
+  assert.equal(typeof f.controller.refreshWorkArea, 'function');
+  f.workArea.height = 599;
+  assert.ok(f.bounds.y + f.bounds.height <= 599, '当前半空位置仍在屏内');
+  assert.equal(f.controller.refreshWorkArea(), false, '必须检查原始归位锚点');
+  f.workArea.height = 600;
+  f.display.id = 2;
+  assert.equal(f.controller.refreshWorkArea(), false);
+  f.display.id = 1;
+  f.workArea.height = NaN;
+  assert.equal(f.controller.refreshWorkArea(), false);
+  f.controller.stop();
+  assert.equal(f.controller.refreshWorkArea(), false);
 });
 
 test('再次启动使旧回调失效，停止后归位且只通知当前 token', () => {

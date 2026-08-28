@@ -1,7 +1,7 @@
 const { getMotion, sampleMotion, positionForMotion } = require('./interaction-motion');
 
 // 窗口位移与身体姿态共用一个时钟；旧回调只认识自己的状态对象。
-function createWindowMotion({ getWindow, getWorkArea, now = () => performance.now(),
+function createWindowMotion({ getWindow, getWorkArea, getDisplayId = () => null, now = () => performance.now(),
   schedule = setTimeout, cancel = clearTimeout, sendFrame }) {
   let current = null;
 
@@ -22,6 +22,30 @@ function createWindowMotion({ getWindow, getWorkArea, now = () => performance.no
     }
   }
 
+  // 只刷新仍属于原显示器且可完整归位的工作区；不重启时间线或计时器。
+  // 返回 false 时由宿主走原来的停止、归位和显示器恢复路径。
+  function refreshWorkArea() {
+    const state = current;
+    if (!state) return false;
+    try {
+      const window = state.window;
+      if (window !== getWindow() || window.isDestroyed() || !window.isVisible()) return false;
+      const bounds = window.getBounds();
+      if (bounds.width !== state.bounds.width || bounds.height !== state.bounds.height ||
+        getDisplayId(state.bounds) !== state.displayId || getDisplayId(bounds) !== state.displayId) return false;
+      const workArea = { ...getWorkArea(state.bounds) };
+      const anchor = positionForMotion(state.bounds, workArea, { x: 0, y: 0 });
+      if (!anchor || anchor.x !== state.bounds.x || anchor.y !== state.bounds.y) return false;
+      const position = positionForMotion(state.bounds, workArea, state.offset);
+      state.workArea = workArea;
+      // 当前帧立即按新区夹紧；后续帧仍从原始锚点取样并使用新区。
+      if (position.x !== bounds.x || position.y !== bounds.y) window.setPosition(position.x, position.y, false);
+      return current === state;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function start(request) {
     if (!request || !Number.isSafeInteger(request.token) || request.token <= 0 || !getMotion(request.action)) return false;
     try {
@@ -32,7 +56,8 @@ function createWindowMotion({ getWindow, getWorkArea, now = () => performance.no
       const workArea = { ...getWorkArea(bounds) };
       const startedAt = now();
       if (!Number.isFinite(startedAt) || !positionForMotion(bounds, workArea, { x: 0, y: 0 })) return false;
-      const state = { window, bounds, workArea, startedAt, token: request.token, action: request.action, timer: null };
+      const state = { window, bounds, workArea, displayId: getDisplayId(bounds), startedAt,
+        token: request.token, action: request.action, timer: null, offset: { x: 0, y: 0 } };
       current = state;
       const next = () => {
         if (current !== state) return;
@@ -44,6 +69,7 @@ function createWindowMotion({ getWindow, getWorkArea, now = () => performance.no
           const frame = sampleMotion(state.action, elapsed);
           if (frame.done) { stop(); return; }
           const position = positionForMotion(state.bounds, state.workArea, frame.window);
+          state.offset = { ...frame.window };
           window.setPosition(position.x, position.y, false);
           sendFrame({ token: state.token, action: state.action, frame });
           if (current === state) state.timer = schedule(next, 16);
@@ -59,7 +85,7 @@ function createWindowMotion({ getWindow, getWorkArea, now = () => performance.no
     }
   }
 
-  return { start, stop };
+  return { start, stop, refreshWorkArea };
 }
 
 module.exports = { createWindowMotion };

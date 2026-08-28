@@ -86,6 +86,127 @@ test('主进程校验来源和白名单，窗口帧不写设置且气泡跟随�
   assert.equal(f.pet.bounds.y, 100);
 });
 
+test('实机同型workArea高度加1事件不截断bow重播，也不落盘临时位置', async () => {
+  const f = await fixture();
+  const display = f.screen.getPrimaryDisplay();
+  f.send('pet:motion-start', { token: 10, action: 'bow' });
+  f.at(844);
+  display.workArea.height += 1;
+  f.screen.emit('display-metrics-changed', {}, display, ['workArea']);
+  assert.equal(f.timers.size, 1, '无害工作区变化不能清掉动作计时器');
+  assert.equal(f.commands.includes('stop'), false);
+  assert.equal(f.saved.length, 0);
+  f.at(1599);
+  assert.equal(f.pet.messages.filter(item => item.channel === 'pet:motion-frame').at(-1).packet.frame.done, false);
+  f.at(1600);
+  const frames = f.pet.messages.filter(item => item.channel === 'pet:motion-frame');
+  assert.ok(frames.every(item => item.packet.token === 10 && item.packet.action === 'bow'));
+  assert.equal(frames.at(-1).packet.frame.done, true);
+  assert.deepEqual(f.pet.getPosition(), [-600, 100]);
+});
+
+test('锚点仍安全时工作区收缩会约束未来hop轨迹，并保持完整时长', async () => {
+  const f = await fixture();
+  const display = f.screen.getPrimaryDisplay();
+  f.send('pet:motion-start', { token: 1, action: 'hop' });
+  f.at(100);
+  Object.assign(display.workArea, { y: 95, height: 505 });
+  f.screen.emit('display-metrics-changed', {}, display, ['workArea']);
+  assert.equal(f.timers.size, 1);
+  for (let at = 116; at < 1800; at += 16) {
+    f.at(at);
+    assert.ok(f.pet.bounds.y >= 95);
+    assert.ok(f.pet.bounds.y + f.pet.bounds.height <= 600);
+    assert.equal(f.pet.messages.filter(item => item.channel === 'pet:motion-frame').at(-1).packet.frame.done, false);
+  }
+  f.at(1800);
+  assert.deepEqual(f.pet.getPosition(), [-600, 100]);
+  assert.equal(f.saved.length, 0);
+});
+
+test('当前半空位置安全但原始归位锚点越界时，仍停止并按原始位置回收', async () => {
+  const f = await fixture();
+  f.pet.bounds.y = 520;
+  f.send('pet:motion-start', { token: 1, action: 'hop' });
+  f.at(540);
+  const old = [...f.timers.values()][0].callback;
+  const display = f.screen.getPrimaryDisplay();
+  display.workArea.height = 599;
+  assert.ok(f.pet.bounds.y + f.pet.bounds.height <= 599);
+  f.screen.emit('display-metrics-changed', {}, display, ['workArea']);
+  assert.equal(f.timers.size, 0);
+  assert.deepEqual(f.pet.getPosition(), [-600, 519]);
+  old();
+  assert.deepEqual(f.pet.getPosition(), [-600, 519]);
+  assert.ok(f.commands.includes('stop'));
+});
+
+for (const change of ['identity', 'removed', 'bounds', 'scaleFactor']) {
+  test(`${change}真实屏幕变化仍停止动作并回收，旧回调不会复活`, async () => {
+    const f = await fixture();
+    f.send('pet:motion-start', { token: 1, action: 'hop' });
+    f.at(540);
+    const old = [...f.timers.values()][0].callback;
+    const display = f.screen.getPrimaryDisplay();
+    if (change === 'identity') {
+      display.id = 2;
+      f.screen.emit('display-metrics-changed', {}, display, ['workArea']);
+    } else if (change === 'removed') {
+      const replacement = { id: 2, workArea: { x: 0, y: 0, width: 1000, height: 600 } };
+      f.screen.getAllDisplays = () => [replacement];
+      f.screen.getPrimaryDisplay = () => replacement;
+      f.screen.getDisplayMatching = () => replacement;
+      f.screen.emit('display-removed', {}, display);
+      assert.ok(f.pet.bounds.x >= 0 && f.pet.bounds.x + 80 <= 1000);
+    } else f.screen.emit('display-metrics-changed', {}, display, [change]);
+    assert.equal(f.timers.size, 0);
+    assert.ok(f.commands.includes('stop'));
+    const recovered = f.pet.getBounds();
+    old();
+    assert.deepEqual(f.pet.getBounds(), recovered);
+  });
+}
+
+test('当前窗口换屏但原始锚点仍在旧屏时，也不能继续原动作', async () => {
+  const f = await fixture();
+  const firstDisplay = f.screen.getPrimaryDisplay();
+  const secondDisplay = { id: 2, workArea: { x: 0, y: 0, width: 1000, height: 600 } };
+  f.screen.getAllDisplays = () => [firstDisplay, secondDisplay];
+  f.screen.getDisplayMatching = bounds => bounds.x < 0 ? firstDisplay : secondDisplay;
+  f.send('pet:motion-start', { token: 1, action: 'hop' });
+  f.at(540);
+  f.pet.bounds.x = 200;
+  f.screen.emit('display-metrics-changed', {}, firstDisplay, ['workArea']);
+  assert.equal(f.timers.size, 0);
+  assert.ok(f.commands.includes('stop'));
+});
+
+test('其他显示器仅workArea改变不会截断当前屏幕的安全动作，混合几何变化仍恢复', async () => {
+  const f = await fixture();
+  f.send('pet:motion-start', { token: 1, action: 'hop' });
+  f.at(540);
+  const otherDisplay = { id: 2, workArea: { x: 0, y: 0, width: 1000, height: 599 } };
+  f.screen.emit('display-metrics-changed', {}, otherDisplay, ['workArea']);
+  assert.equal(f.timers.size, 1);
+  assert.equal(f.commands.includes('stop'), false);
+  assert.equal(f.saved.length, 0);
+  f.screen.emit('display-metrics-changed', {}, f.screen.getPrimaryDisplay(), ['workArea', 'bounds']);
+  assert.equal(f.timers.size, 0);
+  assert.ok(f.commands.includes('stop'));
+});
+
+test('没有边界夹紧的旧单击bounce保留工作区变化时停止归位的安全行为', async () => {
+  const f = await fixture();
+  f.send('pet:bounce');
+  f.at(200);
+  assert.ok(f.pet.bounds.y < 100);
+  const display = f.screen.getPrimaryDisplay();
+  display.workArea.height += 1;
+  f.screen.emit('display-metrics-changed', {}, display, ['workArea']);
+  assert.equal(f.timers.size, 0);
+  assert.deepEqual(f.pet.getPosition(), [-600, 100]);
+});
+
 for (const reason of ['sleep', 'rest', 'hide', 'size', 'resize', 'display', 'lock', 'suspend', 'close', 'quit']) {
   test(`主进程${reason}路径停止动作，旧回调不再移动或发帧`, async () => {
     const f = await fixture();
