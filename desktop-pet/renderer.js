@@ -39,6 +39,7 @@
   let lastDoubleMotion = null;
   let codexEnabled = false;
   let codexGeneration = 0;
+  let codexPageEpoch = 0;
   let lastCodexAlertId = 0;
   let lastAvailability = null;
   const listeners = [];
@@ -54,7 +55,7 @@
     const available = canShowCodex();
     if (available === lastAvailability) return;
     lastAvailability = available;
-    desktop.codexAvailability({ generation: codexGeneration, available });
+    desktop.codexAvailability({ generation: codexGeneration, pageEpoch: codexPageEpoch, available });
   }
 
   function observe(callback) {
@@ -65,25 +66,26 @@
 
   function cancelCodex(request) {
     if (activeMotion?.owner !== 'codex' || (request && (request.generation !== activeMotion.generation ||
-      request.alertId !== activeMotion.alertId || (request.token !== undefined && request.token !== activeMotion.token)))) return;
+      request.pageEpoch !== activeMotion.pageEpoch || request.alertId !== activeMotion.alertId ||
+      (request.token !== undefined && request.token !== activeMotion.token)))) return;
     stopMotion(false);
     restoreState();
   }
 
   function startCodex(request) {
     const motion = InteractionMotion.getMotion(request.motion);
-    if (!canShowCodex() || request.generation !== codexGeneration || !Number.isSafeInteger(request.alertId) ||
+    if (!canShowCodex() || request.generation !== codexGeneration || request.pageEpoch !== codexPageEpoch || !Number.isSafeInteger(request.alertId) ||
       request.alertId <= lastCodexAlertId || !motion) return;
     lastCodexAlertId = request.alertId;
     activeMotion = { token: ++nextMotionToken, action: motion.id, owner: 'codex',
-      alertId: request.alertId, generation: request.generation };
+      alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch };
     petElement.dataset.motionOwner = 'codex';
     ball.setEmotion(motion.emotion);
     ball.setMotionFrame(InteractionMotion.sampleMotion(motion.id, 0));
     petElement.dataset.lastAction = motion.id;
     // 只准备本地姿态。宿主复核提醒和所有权后才开始移动窗口、显示气泡。
     desktop.codexMotionReady({ token: activeMotion.token, action: motion.id,
-      alertId: request.alertId, generation: request.generation });
+      alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch });
   }
 
   // 只调整此桌宠页面的配置，不改变原项目表情库。
@@ -478,11 +480,14 @@
   })));
   listeners.push(desktop.onCodexSettings(observe(settings => {
     if (!Number.isSafeInteger(settings?.generation) || settings.generation < codexGeneration ||
+      !Number.isSafeInteger(settings.pageEpoch) || settings.pageEpoch <= 0 || settings.pageEpoch < codexPageEpoch ||
       typeof settings.enabled !== 'boolean') return;
-    if (settings.generation !== codexGeneration || !settings.enabled) cancelCodex();
-    if (settings.generation !== codexGeneration) lastCodexAlertId = 0;
+    const changed = settings.generation !== codexGeneration || settings.pageEpoch !== codexPageEpoch;
+    if (changed || !settings.enabled) cancelCodex();
+    if (changed) lastCodexAlertId = 0;
     lastAvailability = null;
     codexGeneration = settings.generation;
+    codexPageEpoch = settings.pageEpoch;
     codexEnabled = settings.enabled;
   })));
   window.__petReady = true;

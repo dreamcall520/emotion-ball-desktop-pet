@@ -51,6 +51,7 @@ let codexConsentToken = 0;
 let codexPresentation = null;
 let codexRenderer = null;
 let codexPageReady = false;
+let codexPageEpoch = 0;
 let codexSentSettings = null;
 let codexNotice = null;
 let hostMotion = null;
@@ -100,7 +101,7 @@ function codexHostAvailable() {
 
 function canPresentCodex() {
   return Boolean(settings?.codexEnabled && codexHostAvailable() && codexRenderer?.available === true &&
-    codexRenderer.generation === codexCompanion?.getSnapshot().generation);
+    codexRenderer.generation === codexCompanion?.getSnapshot().generation && codexRenderer.pageEpoch === codexPageEpoch);
 }
 
 function sendCodexCommand(command) {
@@ -116,7 +117,7 @@ function clearCodexPresentation() {
     hostMotion = null;
   }
   if (previous) sendCodexCommand({ command: 'codex-cancel', alertId: previous.id,
-    generation: previous.generation, ...(previous.token ? { token: previous.token } : {}) });
+    generation: previous.generation, pageEpoch: previous.pageEpoch, ...(previous.token ? { token: previous.token } : {}) });
   if (dialogue?.dismissCodex()) bubble?.hide();
 }
 
@@ -125,10 +126,18 @@ function dismissCodexPresentation() {
   if (!alert || !codexCompanion.dismiss(alert.id, alert.generation)) clearCodexPresentation();
 }
 
+function invalidateCodexPage() {
+  codexPageEpoch++;
+  codexPageReady = false;
+  codexRenderer = null;
+  dismissCodexPresentation();
+}
+
 function syncCodexSettings(snapshot, force = false) {
   if (!snapshot) return;
-  const next = { enabled: snapshot.enabled, generation: snapshot.generation };
-  if (!force && codexSentSettings?.enabled === next.enabled && codexSentSettings?.generation === next.generation) return;
+  const next = { enabled: snapshot.enabled, generation: snapshot.generation, pageEpoch: codexPageEpoch };
+  if (!force && codexSentSettings?.enabled === next.enabled && codexSentSettings?.generation === next.generation &&
+    codexSentSettings?.pageEpoch === next.pageEpoch) return;
   codexRenderer = null;
   codexSentSettings = next;
   if (codexNotice?.generation !== next.generation) codexNotice = null;
@@ -138,8 +147,8 @@ function syncCodexSettings(snapshot, force = false) {
 function presentCodexAlert(alert) {
   const current = codexCompanion?.getSnapshot().currentAlert;
   if (!canPresentCodex() || current?.id !== alert.id || current.generation !== alert.generation) return;
-  codexPresentation = { ...current };
-  sendCodexCommand({ command: 'codex', alertId: current.id, generation: current.generation, motion: current.motion });
+  codexPresentation = { ...current, pageEpoch: codexPageEpoch };
+  sendCodexCommand({ command: 'codex', alertId: current.id, generation: current.generation, pageEpoch: codexPageEpoch, motion: current.motion });
 }
 
 function initializeCodexCompanion(options = {}) {
@@ -601,6 +610,7 @@ async function finishSmokeTest() {
 
 function createPetWindow() {
   if (petWindow && !petWindow.isDestroyed()) return petWindow;
+  invalidateCodexPage();
 
   petWindow = new BrowserWindow({
     ...currentBounds(),
@@ -639,9 +649,7 @@ function createPetWindow() {
     if (IS_SMOKE_TEST) app.exit(1);
   });
   petWindow.webContents.on('render-process-gone', (_event, details) => {
-    codexPageReady = false;
-    codexRenderer = null;
-    dismissCodexPresentation();
+    invalidateCodexPage();
     writeError('渲染进程退出', JSON.stringify(details));
     if (IS_SMOKE_TEST) app.exit(1);
   });
@@ -656,17 +664,12 @@ function createPetWindow() {
     activityMonitor.start();
     finishSmokeTest();
   });
-  petWindow.webContents.on('did-start-loading', () => {
-    codexPageReady = false;
-    codexRenderer = null;
-    dismissCodexPresentation();
-  });
+  petWindow.webContents.on('did-start-loading', invalidateCodexPage);
   petWindow.on('move', () => bubble?.reposition());
   petWindow.on('resize', () => { stopMotion(); bubble?.reposition(); });
   petWindow.on('hide', () => { stopMotion(); bubble?.hide(); dialogue?.dismiss(); });
   petWindow.on('closed', () => {
-    codexPageReady = false;
-    codexRenderer = null;
+    invalidateCodexPage();
     stopMotion({ restore: false, notify: false, notifyRenderer: false });
     activityMonitor?.stop();
     bubble?.destroy();
@@ -741,22 +744,25 @@ function registerIpc() {
   ipcMain.on('pet:codex-availability', (event, packet) => {
     const snapshot = codexCompanion?.getSnapshot();
     if (!fromPetWindow(event) || !codexPageReady || !snapshot?.enabled || packet?.generation !== snapshot.generation ||
-      typeof packet.available !== 'boolean') return;
-    codexRenderer = { generation: packet.generation, available: packet.available };
+      packet.pageEpoch !== codexPageEpoch || typeof packet.available !== 'boolean') return;
+    codexRenderer = { generation: packet.generation, pageEpoch: packet.pageEpoch, available: packet.available };
   });
 
   ipcMain.on('pet:codex-motion-ready', (event, request) => {
     if (!fromPetWindow(event) || !Number.isSafeInteger(request?.token) || request.token <= 0 ||
-      !Number.isSafeInteger(request.alertId) || !Number.isSafeInteger(request.generation) || !getMotion(request.action)) return;
+      !Number.isSafeInteger(request.alertId) || !Number.isSafeInteger(request.generation) ||
+      !Number.isSafeInteger(request.pageEpoch) || request.pageEpoch <= 0 || !getMotion(request.action)) return;
     if (codexPresentation?.token === request.token && codexPresentation.id === request.alertId &&
-      codexPresentation.generation === request.generation) return;
+      codexPresentation.generation === request.generation && codexPresentation.pageEpoch === request.pageEpoch) return;
     const snapshot = codexCompanion?.getSnapshot();
     const alert = snapshot?.currentAlert;
     const valid = settings.codexEnabled && snapshot?.enabled && codexHostAvailable() &&
+      request.pageEpoch === codexPageEpoch && codexPresentation?.pageEpoch === codexPageEpoch &&
       alert?.id === request.alertId && alert.generation === request.generation && alert.motion === request.action &&
       codexPresentation?.id === alert.id && codexPresentation.generation === alert.generation && !codexPresentation.token;
     if (!valid) {
-      sendCodexCommand({ command: 'codex-cancel', token: request.token, alertId: request.alertId, generation: request.generation });
+      sendCodexCommand({ command: 'codex-cancel', token: request.token, alertId: request.alertId,
+        generation: request.generation, pageEpoch: request.pageEpoch });
       return;
     }
     codexPresentation.token = request.token;

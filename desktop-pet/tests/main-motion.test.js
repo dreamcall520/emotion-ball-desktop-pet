@@ -83,7 +83,11 @@ async function fixture({ codexEnabled = false, consent = async () => ({ response
   pet.webContents.emit('did-finish-load');
   return { pet, bubble, commands, saved, screen, powerMonitor, app, timers, connections, dialogs, external, popups,
     call: expression => vm.runInContext(expression, context),
-    send(channel, packet, sender = pet.webContents) { ipcMain.emit(channel, { sender }, packet); },
+    send(channel, packet, sender = pet.webContents) {
+      // 与实际预加载一致，默认携带当前页面代次；显式传旧值可验迟到报文。
+      if (channel.startsWith('pet:codex-') && packet) packet = { pageEpoch: vm.runInContext('typeof codexPageEpoch === "number" ? codexPageEpoch : 1', context), ...packet };
+      ipcMain.emit(channel, { sender }, packet);
+    },
     at(time) { now = time; const queue = [...timers.values()]; timers.clear(); queue.forEach(item => item.callback()); },
     advanceTo(target) {
       while (true) {
@@ -253,6 +257,35 @@ test('页面重新加载立即撤销旧页面的可用性和待确认提醒', as
   f.send('pet:codex-motion-ready', ack);
   assert.equal(f.bubble.shows.length, 0);
   assert.equal(f.call('codexCompanion.getSnapshot().currentAlert'), null);
+  await f.call('setCodexEnabled(false)');
+});
+
+test('页面重载完成后，同连接代次的旧页面 availability 仍不可恢复门禁', async () => {
+  const f = await fixture({ codexEnabled: true });
+  const old = f.pet.messages.filter(item => item.channel === 'pet:codex-settings').at(-1).packet;
+  f.send('pet:codex-availability', { ...old, available: true });
+  f.pet.webContents.emit('did-start-loading');
+  f.pet.webContents.emit('did-finish-load');
+  const fresh = f.pet.messages.filter(item => item.channel === 'pet:codex-settings').at(-1).packet;
+  assert.equal(fresh.generation, old.generation, '页面重载不应重连 Codex');
+  assert.ok(fresh.pageEpoch > old.pageEpoch, '每次加载须有独立页面代次');
+  f.send('pet:codex-availability', { ...old, available: true });
+  assert.equal(f.call('codexRenderer'), null);
+  f.send('pet:codex-availability', { ...fresh, available: true });
+  assert.equal(f.call('codexRenderer.pageEpoch'), fresh.pageEpoch);
+  await f.call('setCodexEnabled(false)');
+});
+
+test('动作确认必须属于命令对应页面，旧页面取消不能指向新页面', async () => {
+  const f = await fixture({ codexEnabled: true });
+  const ack = queueCodexCompletion(f);
+  const settingsPacket = f.pet.messages.filter(item => item.channel === 'pet:codex-settings').at(-1).packet;
+  f.send('pet:codex-motion-ready', { ...ack, pageEpoch: settingsPacket.pageEpoch + 1 });
+  assert.equal(f.bubble.shows.length, 0);
+  const cancel = f.commands.findLast(command => command?.command === 'codex-cancel');
+  assert.equal(cancel.pageEpoch, settingsPacket.pageEpoch + 1);
+  f.send('pet:codex-motion-ready', { ...ack, pageEpoch: settingsPacket.pageEpoch });
+  assert.equal(f.bubble.shows.length, 1);
   await f.call('setCodexEnabled(false)');
 });
 

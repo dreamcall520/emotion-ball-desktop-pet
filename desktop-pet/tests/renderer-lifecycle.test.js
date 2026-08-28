@@ -116,7 +116,7 @@ function createRenderer(randomValue = 0.5) {
     resize(width) { context.innerWidth = width; windowEvents.resize(); },
     emotions: context.EmotionBall.config.list(),
     command: value => subscriptions.command(value),
-    codexSettings(value) { subscriptions.codexSettings?.(value); },
+    codexSettings(value) { subscriptions.codexSettings?.({ pageEpoch: 1, ...value }); },
     click() {
       const event = { screenX: 140, screenY: 140, button: 0, pointerId: 1 };
       events.pointerdown(event);
@@ -142,7 +142,7 @@ function createRenderer(randomValue = 0.5) {
   };
 }
 
-const codexCommand = (overrides = {}) => ({ command: 'codex', alertId: 1, generation: 1, motion: 'hop', ...overrides });
+const codexCommand = (overrides = {}) => ({ command: 'codex', alertId: 1, generation: 1, pageEpoch: 1, motion: 'hop', ...overrides });
 
 test('Codex 未开启不报告活动，开启后只报告改变的可展示状态', () => {
   const r = createRenderer();
@@ -167,6 +167,25 @@ test('宿主请求同代次设置时也重新上报一次可用性', () => {
   r.codexSettings({ enabled: true, generation: 1 });
   r.codexSettings({ enabled: true, generation: 1 });
   assert.equal(r.host.availability.length, 2);
+});
+
+test('同连接代次的新页面只接受本页面命令和取消，旧页面令牌不能复活', () => {
+  const r = createRenderer();
+  r.codexSettings({ enabled: true, generation: 1, pageEpoch: 1 });
+  r.command(codexCommand());
+  assert.equal(r.host.codexAcks[0].pageEpoch, 1);
+  r.codexSettings({ enabled: true, generation: 1, pageEpoch: 2 });
+  assert.equal(r.pet.dataset.motionOwner, 'none');
+  r.command(codexCommand());
+  assert.equal(r.host.codexAcks.length, 1);
+  r.command(codexCommand({ pageEpoch: 2 }));
+  assert.equal(r.host.codexAcks.length, 2);
+  const current = r.host.codexAcks.at(-1);
+  r.command({ command: 'codex-cancel', ...current, pageEpoch: 1 });
+  assert.equal(r.pet.dataset.motionOwner, 'codex');
+  r.command({ command: 'codex-cancel', ...current });
+  assert.equal(r.pet.dataset.motionOwner, 'none');
+  assert.equal(r.host.availability.at(-1).pageEpoch, 2);
 });
 
 test('Codex 动作先确认令牌，不发送普通玩耍文案或伪造交互', () => {

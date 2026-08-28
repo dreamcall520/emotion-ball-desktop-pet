@@ -13,13 +13,13 @@ test('Codex 预加载只发送最小状态与受控动作确认', () => {
   });
   assert.equal(typeof desktop.codexMotionReady, 'function');
   assert.equal(typeof desktop.codexAvailability, 'function');
-  desktop.codexMotionReady({ token: 4, action: 'hop', alertId: 2, generation: 1, secret: 'no' });
+  desktop.codexMotionReady({ token: 4, action: 'hop', alertId: 2, generation: 1, pageEpoch: 3, secret: 'no' });
   desktop.codexMotionReady({ token: 4, action: '__proto__', alertId: 2, generation: 1 });
-  desktop.codexAvailability({ generation: 1, available: true, secret: 'no' });
+  desktop.codexAvailability({ generation: 1, pageEpoch: 3, available: true, secret: 'no' });
   desktop.codexAvailability({ generation: 1, available: 'true' });
   assert.equal(JSON.stringify(messages), JSON.stringify([
-    ['pet:codex-motion-ready', { token: 4, action: 'hop', alertId: 2, generation: 1 }],
-    ['pet:codex-availability', { generation: 1, available: true }]
+    ['pet:codex-motion-ready', { token: 4, action: 'hop', alertId: 2, generation: 1, pageEpoch: 3 }],
+    ['pet:codex-availability', { generation: 1, pageEpoch: 3, available: true }]
   ]));
 });
 

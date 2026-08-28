@@ -26,15 +26,17 @@ contextBridge.exposeInMainWorld('petDesktop', {
   },
   codexMotionReady: request => {
     if (request && Number.isSafeInteger(request.token) && request.token > 0 && motionIds.has(request.action) &&
-      Number.isSafeInteger(request.alertId) && request.alertId > 0 && Number.isSafeInteger(request.generation) && request.generation > 0) {
+      Number.isSafeInteger(request.alertId) && request.alertId > 0 && Number.isSafeInteger(request.generation) && request.generation > 0 &&
+      Number.isSafeInteger(request.pageEpoch) && request.pageEpoch > 0) {
       ipcRenderer.send('pet:codex-motion-ready', {
-        token: request.token, action: request.action, alertId: request.alertId, generation: request.generation
+        token: request.token, action: request.action, alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch
       });
     }
   },
   codexAvailability: request => {
-    if (request && Number.isSafeInteger(request.generation) && request.generation > 0 && typeof request.available === 'boolean') {
-      ipcRenderer.send('pet:codex-availability', { generation: request.generation, available: request.available });
+    if (request && Number.isSafeInteger(request.generation) && request.generation > 0 &&
+      Number.isSafeInteger(request.pageEpoch) && request.pageEpoch > 0 && typeof request.available === 'boolean') {
+      ipcRenderer.send('pet:codex-availability', { generation: request.generation, pageEpoch: request.pageEpoch, available: request.available });
     }
   },
   say: event => {
