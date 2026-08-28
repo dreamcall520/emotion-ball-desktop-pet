@@ -328,6 +328,45 @@ test('默认retry可恢复两条断开通路，任务仍须新snapshot才connect
   assert.equal(h.statuses.filter(value => value.channel === 'tasks').at(-1).state, 'connecting');
 });
 
+test('混合retry在RPC初始化期间清空旧stream后，默认retry仍重建任务连接', async t => {
+  let finish;
+  const h = harness({ startRpc: index => index === 1 ? new Promise(resolve => { finish = resolve; }) : undefined });
+  t.after(() => { h.connection.close(); finish?.(); }); await h.connection.start(); h.disconnectRpc('DISCONNECTED');
+  const both = retry(h); await tick();
+  assert.equal(typeof finish, 'function');
+  await retry(h, { quota: false, tasks: true });
+  assert.equal(h.streams[0].closed, true);
+  assert.equal(h.statuses.filter(value => value.channel === 'tasks').at(-1).state, 'disconnected');
+  finish(); await both;
+  assert.equal(h.rpcs.length, 2); assert.equal(h.streams.length, 2);
+  assert.equal(h.streams[1].rows.length, 1); assert.equal(h.accounts.length, 1);
+  assert.equal(h.statuses.filter(value => value.channel === 'quota').at(-1).state, 'connected');
+  assert.equal(h.statuses.filter(value => value.channel === 'tasks').at(-1).state, 'connecting');
+});
+
+for (const [state, account] of [
+  ['unsupported', { accountKey: null, authenticated: null, supported: false }],
+  ['unauthenticated', { accountKey: null, authenticated: false }]
+]) test(`混合retry清空stream后确认${state}账号，不意外创建任务连接`, async t => {
+  let finish;
+  const h = harness({
+    startRpc: index => index === 1 ? new Promise(resolve => { finish = resolve; }) : undefined,
+    account: index => index === 0 ? { accountKey: 'one', authenticated: true } : account
+  });
+  t.after(() => { h.connection.close(); finish?.(); }); await h.connection.start(); h.disconnectRpc('DISCONNECTED');
+  const both = retry(h); await tick();
+  assert.equal(typeof finish, 'function');
+  await retry(h, { quota: false, tasks: true }); finish(); await both;
+  assert.equal(h.streams.length, 1); assert.equal(h.streams[0].closed, true);
+  assert.equal(h.calls.filter(call => call === 'list').length, 1);
+  assert.equal(h.calls.filter(call => call === 'quota').length, 1);
+  assert.deepEqual(h.accounts, [{ accountKey: 'one' }, { accountKey: null }]);
+  for (const channel of ['quota', 'tasks']) {
+    const status = h.statuses.filter(value => value.channel === channel).at(-1);
+    assert.equal(status.state, state); assert.equal(status.code, state.toUpperCase());
+  }
+});
+
 test('tasks-only retry不复用旧stream的metadata在途结果', async t => {
   let reads = 0; let finishOld;
   const h = harness({ list: () => ++reads === 2 ? new Promise(resolve => { finishOld = resolve; }) : [{ id: ID, title: `当前-${reads}` }] });

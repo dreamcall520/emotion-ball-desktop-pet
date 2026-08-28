@@ -190,9 +190,9 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
       } catch (error) { reportError('quota', error); }
     }
     if (closed || !tasks) return;
-    // A confirmed account switch already rebuilt this stream and its baseline.
-    if (quota && streamGeneration !== previousStream) {
-      if (stream) await Promise.all([streamStarting, refreshTasks()]);
+    // Reuse a stream rebuilt by an account switch or another retry, but not a cleared one.
+    if (quota && streamGeneration !== previousStream && stream) {
+      await Promise.all([streamStarting, refreshTasks()]);
     } else await retryTasks();
   }
   function close() {
