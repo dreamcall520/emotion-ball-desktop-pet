@@ -186,6 +186,46 @@ test('同一路刷新有在途工作时合并，防止堆积请求', async () =>
   finish([]); await Promise.all([first, second]); h.connection.close();
 });
 
+test('账号切换立即创建独立metadata读取，旧finally不清掉新代次在途请求', async t => {
+  let accountKey = 'one'; let reads = 0; let finishOld; let finishNew;
+  const h = harness({ account: () => ({ accountKey, authenticated: true }), list: () => {
+    reads++;
+    if (reads === 2) return new Promise(resolve => { finishOld = resolve; });
+    if (reads === 3) return new Promise(resolve => { finishNew = resolve; });
+    return [{ id: ID, title: '初始元数据' }];
+  } });
+  t.after(() => { h.connection.close(); finishOld?.([]); finishNew?.([]); });
+  await h.connection.start();
+  const oldRefresh = h.connection.refresh({ quota: false }); await tick();
+  accountKey = 'two'; const newRefresh = h.connection.refresh();
+  for (let i = 0; i < 5 && reads < 3; i++) await tick();
+  assert.equal(reads, 3); assert.equal(h.streams.length, 2);
+  finishOld([{ id: ID, title: '旧账号迟到元数据' }]); await oldRefresh;
+  assert.deepEqual(h.streams[1].rows, []);
+  const coalesced = h.connection.refresh({ quota: false }); await tick();
+  assert.equal(reads, 3);
+  const current = [{ id: ID, title: '新账号元数据' }]; finishNew(current);
+  await Promise.all([newRefresh, coalesced]);
+  assert.deepEqual(h.streams[1].rows, current);
+});
+
+test('旧账号metadata失败不能覆盖新账号正在获取状态的通道', async t => {
+  let accountKey = 'one'; let reads = 0; let rejectOld; let finishNew;
+  const h = harness({ account: () => ({ accountKey, authenticated: true }), list: () => {
+    reads++;
+    if (reads === 2) return new Promise((resolve, reject) => { rejectOld = reject; });
+    if (reads === 3) return new Promise(resolve => { finishNew = resolve; });
+    return [];
+  } });
+  t.after(() => { h.connection.close(); finishNew?.([]); });
+  await h.connection.start();
+  const oldRefresh = h.connection.refresh({ quota: false }); await tick();
+  accountKey = 'two'; const newRefresh = h.connection.refresh(); await tick();
+  rejectOld(Object.assign(new Error('DISCONNECTED'), { code: 'DISCONNECTED' })); await oldRefresh;
+  assert.equal(h.statuses.filter(value => value.channel === 'tasks').at(-1).state, 'connecting');
+  finishNew([]); await newRefresh;
+});
+
 test('部分任务过大的固定降级码透传，任务原因不影响额度通路', async () => {
   const h = harness(); await h.connection.start();
   h.streams[0].options.onStatus({ state: 'connected', code: 'PARTIAL_STATE' });

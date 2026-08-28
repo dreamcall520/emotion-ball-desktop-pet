@@ -94,10 +94,11 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
     return quotaFlight;
   }
   function refreshTasks() {
-    if (tasksFlight) return tasksFlight;
-    if (closed || authenticated === false || !accountSupported) return Promise.resolve();
     const generation = accountGeneration;
-    tasksFlight = Promise.resolve().then(() => {
+    if (tasksFlight?.generation === generation) return tasksFlight.promise;
+    if (closed || authenticated === false || !accountSupported) return Promise.resolve();
+    const flight = { generation, promise: null };
+    flight.promise = Promise.resolve().then(() => {
       if (!closed) return rpc.listThreads();
     }).then(rows => {
       if (closed || generation !== accountGeneration || !rows) return;
@@ -105,9 +106,10 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
       stream?.setThreads(rows);
     }).catch(error => {
       // A metadata refresh failure does not invalidate an already working live stream.
-      if (!hasMetadata) reportError('tasks', error);
-    }).finally(() => { tasksFlight = null; });
-    return tasksFlight;
+      if (generation === accountGeneration && !hasMetadata) reportError('tasks', error);
+    }).finally(() => { if (tasksFlight === flight) tasksFlight = null; });
+    tasksFlight = flight;
+    return flight.promise;
   }
   function refresh({ quota = true, tasks = true } = {}) {
     if (!started || closed || !rpcReady) return Promise.resolve();
