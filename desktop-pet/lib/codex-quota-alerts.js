@@ -186,7 +186,9 @@ function createQuotaAlertTracker(options = {}) {
   // 11 张固定 2^20 位位图、6 个 HMAC 位置，共约 1.4 MiB；不保存身份列表。
   // 每个 tracker 使用独立随机盐，外部无法复用预计算碰撞；大位图将完整碰撞压到极低。
   // 碰撞会合并历史，可能保守少提醒；seen 单独命中时仍按首次身份处理，避免普通档误报。
-  const positionsForKey = createFingerprintPositions(options);
+  let positionsForKey = createFingerprintPositions(options);
+  // 任一位置生成失败都会使现有位图成为不完整历史，必须停用到 reset 后整体重建。
+  let summaryHealthy = true;
   const seenSummary = createBloomSummary();
   const observedSummaries = LEVELS.map(() => createBloomSummary());
 
@@ -198,7 +200,7 @@ function createQuotaAlertTracker(options = {}) {
   }
 
   function remember(positions, level) {
-    if (!positions) return;
+    if (!summaryHealthy || !positions) return;
     seenSummary.add(positions);
     for (let index = 0; index < LEVELS.length && LEVELS[index] <= level; index += 1) {
       observedSummaries[index].add(positions);
@@ -209,6 +211,8 @@ function createQuotaAlertTracker(options = {}) {
     state.clear();
     seenSummary.clear();
     for (const summary of observedSummaries) summary.clear();
+    positionsForKey = createFingerprintPositions(options);
+    summaryHealthy = true;
   }
 
   function update(windows, options = {}) {
@@ -218,7 +222,22 @@ function createQuotaAlertTracker(options = {}) {
     const reliable = reliableByIdentity(windows);
     const batchKeys = new Set(reliable.keys());
     const positionsByKey = new Map();
-    for (const key of reliable.keys()) positionsByKey.set(key, positionsForKey(key));
+    if (summaryHealthy) {
+      for (const key of reliable.keys()) {
+        const positions = positionsForKey(key);
+        if (!positions) {
+          summaryHealthy = false;
+          positionsByKey.clear();
+          seenSummary.clear();
+          for (const summary of observedSummaries) summary.clear();
+          break;
+        }
+        positionsByKey.set(key, positions);
+      }
+    }
+    if (!summaryHealthy) {
+      for (const key of reliable.keys()) positionsByKey.set(key, null);
+    }
     const alertsByKey = new Map();
 
     function observe(key, item, entry, isNewIdentity, positions) {

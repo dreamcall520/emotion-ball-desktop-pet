@@ -397,6 +397,46 @@ test('每个 tracker 使用独立盐生成指纹，随机源或强哈希异常�
   )), { baseline: true }));
 });
 
+test('摘要一次临时失败后锁定停用，满载批次往返不重报且 reset 后恢复', () => {
+  let hashUnavailable = true;
+  let digestCalls = 0;
+  const tracker = createQuotaAlertTracker({
+    fingerprintSalt: Buffer.alloc(32, 29),
+    fingerprintDigest(key, salt) {
+      digestCalls += 1;
+      if (hashUnavailable) throw new Error('temporary hash failure');
+      return createHmac('sha256', salt).update(key).digest();
+    }
+  });
+  const first = Array.from({ length: 64 }, (_, index) => (
+    quotaWindow(`unstable-first-${index}`, 300, 20)
+  ));
+  const second = Array.from({ length: 64 }, (_, index) => (
+    quotaWindow(`unstable-second-${index}`, 300, 20)
+  ));
+
+  assert.equal(tracker.update(first, { baseline: true }).length, 64);
+  hashUnavailable = false;
+  const callsAtLock = digestCalls;
+  assert.deepEqual(tracker.update(second, { alwaysVisible: false }), []);
+  assert.equal(tracker.update([{ ...second[0], remaining: 10 }], {
+    alwaysVisible: false
+  })[0].level, 90, '保守峰值仍应允许未来更高档');
+  assert.deepEqual(tracker.update([{ ...second[0], remaining: 10 }], {
+    alwaysVisible: false
+  }), []);
+  assert.deepEqual(tracker.update(first, { alwaysVisible: false }), []);
+  assert.equal(digestCalls, callsAtLock, '锁定后不应继续使用或信任部分摘要');
+
+  tracker.reset();
+  const afterReset = quotaWindow('after-summary-reset', 300, 80);
+  assert.deepEqual(tracker.update([afterReset], { alwaysVisible: false }), []);
+  assert.equal(tracker.update([{ ...afterReset, remaining: 20 }], {
+    alwaysVisible: false
+  })[0].level, 80);
+  assert.ok(digestCalls > callsAtLock, 'reset 后应重新尝试健康摘要');
+});
+
 test('旧无盐算法可定向覆盖的四个 key 不再使新周期普通档误报', () => {
   const tracker = createQuotaAlertTracker({ fingerprintSalt: Buffer.alloc(32, 11) });
   const attackerIds = [
