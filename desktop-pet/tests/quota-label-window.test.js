@@ -59,6 +59,7 @@ function fixture(load = () => Promise.resolve(), options = {}) {
       this.webContents.send = (...args) => { maybeThrow('send', this); this.sent.push(args); };
       this.webContents.setWindowOpenHandler = handler => { maybeThrow('setWindowOpenHandler', this); this.openHandler = handler; };
       windows.push(this);
+      maybeThrow('constructor', this);
     }
     setAlwaysOnTop(...args) { maybeThrow('setAlwaysOnTop', this); this.topmostCalls.push(args); }
     setVisibleOnAllWorkspaces() { maybeThrow('setVisibleOnAllWorkspaces', this); }
@@ -560,6 +561,110 @@ test('did-finish-load 与 loadFile Promise 双完成只能 send/showInactive 一
   await flush();
   assert.equal(win.sent.length, 1);
   assert.equal(win.showInactiveCalls, 1);
+});
+
+test('已有窗口 health 内同步 destroy 后旧 ensure 不得偷偷创建隐藏窗口', async () => {
+  let f;
+  let armed = false;
+  f = fixture(() => Promise.resolve(), {
+    onCall: (name, _index, target) => {
+      if (!armed || name !== 'isDestroyed' || target !== f.windows[0]) return;
+      armed = false;
+      f.label.destroy();
+    }
+  });
+  f.label.show(readyModel());
+  await flush();
+  armed = true;
+  f.label.show({ state: 'connecting', items: [], overflow: 0 });
+  await flush();
+  assert.equal(f.windows.length, 1);
+  assert.equal(f.windows[0].destroyed, true);
+  assert.equal(f.label.getWindow(), null);
+});
+
+test('已有窗口 health 内同步 destroy 加 show 时最新窗口获胜且不得出现第三窗', async t => {
+  let f;
+  let armed = false;
+  f = fixture(() => Promise.resolve(), {
+    onCall: (name, _index, target) => {
+      if (!armed || name !== 'isDestroyed' || target !== f.windows[0]) return;
+      armed = false;
+      f.label.destroy();
+      f.label.show({ state: 'ready', items: [{ label: 'Newest health', windowMinutes: 300, remaining: 91 }], overflow: 0 });
+    }
+  });
+  t.after(() => f.label.destroy());
+  f.label.show(readyModel());
+  await flush();
+  armed = true;
+  f.label.show({ state: 'connecting', items: [], overflow: 0 });
+  await flush();
+  assert.equal(f.windows.length, 2);
+  assert.equal(f.windows[0].destroyed, true);
+  assert.equal(f.windows[1].destroyed, false);
+  assert.equal(f.label.getWindow(), f.windows[1]);
+  assert.equal(f.windows[1].sent.at(-1)[1].items[0].label, 'Newest health');
+});
+
+test('BrowserWindow 构造器内同步 show 时最新窗口获胜且旧候选被安全销毁', async t => {
+  let f;
+  let reentered = false;
+  f = fixture(() => Promise.resolve(), {
+    onCall: (name, index) => {
+      if (name !== 'constructor' || index !== 1 || reentered) return;
+      reentered = true;
+      f.label.show({ state: 'ready', items: [{ label: 'Newest constructor', windowMinutes: 10080, remaining: 82 }], overflow: 0 });
+    }
+  });
+  t.after(() => f.label.destroy());
+  f.label.show({ state: 'connecting', items: [], overflow: 0 });
+  await flush();
+  assert.equal(f.windows.length, 2);
+  assert.equal(f.windows[0].destroyed, true);
+  assert.equal(f.windows[1].destroyed, false);
+  assert.equal(f.label.getWindow(), f.windows[1]);
+  assert.equal(f.windows[1].sent.at(-1)[1].items[0].label, 'Newest constructor');
+});
+
+test('初始化置顶调用内同步关闭置顶时必须重放最新 false', async t => {
+  let f;
+  let reentered = false;
+  f = fixture(() => Promise.resolve(), {
+    onCall: (name, index) => {
+      if (name !== 'setAlwaysOnTop' || index !== 1 || reentered) return;
+      reentered = true;
+      f.label.setAlwaysOnTop(false);
+    }
+  });
+  t.after(() => f.label.destroy());
+  f.label.show(readyModel());
+  await flush();
+  assert.deepEqual(f.windows[0].topmostCalls.at(-1), [false, 'floating']);
+  f.label.destroy();
+  f.label.show(readyModel());
+  await flush();
+  assert.deepEqual(f.windows[1].topmostCalls[0], [false, 'floating']);
+});
+
+test('置顶原生边界持续重入必须有界作废且报告一次', () => {
+  let f;
+  let enabled = false;
+  let calls = 0;
+  f = fixture(() => Promise.resolve(), {
+    onCall: name => {
+      if (name !== 'setAlwaysOnTop') return;
+      calls += 1;
+      if (calls <= 30) {
+        enabled = !enabled;
+        f.label.setAlwaysOnTop(enabled);
+      }
+    }
+  });
+  assert.doesNotThrow(() => f.label.show(readyModel()));
+  assert.ok(calls <= 10, `置顶同步不得无界重入，实际调用 ${calls} 次`);
+  assert.equal(f.label.getWindow(), null);
+  assert.equal(f.errors.length, 1);
 });
 
 test('主进程模型每个外部字段只读一次，且数组最多检查前两项', async t => {

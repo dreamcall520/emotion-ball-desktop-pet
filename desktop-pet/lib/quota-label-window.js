@@ -8,6 +8,7 @@ const STATES = new Set([
 ]);
 const CONTROL_AND_DIRECTION = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/gu;
 const EMPTY_MODEL = Object.freeze({ state: 'disconnected', items: Object.freeze([]), overflow: 0 });
+const MAX_TOPMOST_SYNC_ATTEMPTS = 8;
 
 function cleanLabel(value) {
   if (typeof value !== 'string') return '';
@@ -89,9 +90,11 @@ function createQuotaLabelWindow({
   let requestedVisible = false;
   let currentModel = null;
   let topmost = Boolean(alwaysOnTop);
+  let topmostRevision = 0;
   let operation = 0;
   let reporting = false;
   let silentWindow = null;
+  const topmostSyncing = new Set();
 
   function safeDestroy(target) {
     if (!target) return;
@@ -205,6 +208,43 @@ function createQuotaLabelWindow({
     if (silentWindow === target) silentWindow = null;
   }
 
+  function syncTopmost(target) {
+    if (!target || win !== target) return false;
+    if (topmostSyncing.has(target)) return true;
+    topmostSyncing.add(target);
+    try {
+      for (let attempt = 0; attempt < MAX_TOPMOST_SYNC_ATTEMPTS; attempt += 1) {
+        if (win !== target) return false;
+        const revision = topmostRevision;
+        const enabled = topmost;
+        const status = health(target);
+        if (!status.ok) {
+          detach(target, status.error);
+          return false;
+        }
+        if (win !== target) return false;
+        if (topmostRevision !== revision) continue;
+        try { target.setAlwaysOnTop(enabled, 'floating'); }
+        catch (error) {
+          detach(target, error);
+          return false;
+        }
+        if (win !== target) return false;
+        const afterApply = health(target);
+        if (!afterApply.ok) {
+          detach(target, afterApply.error);
+          return false;
+        }
+        if (win !== target) return false;
+        if (topmostRevision === revision) return true;
+      }
+      detach(target, new Error('额度标签置顶设置持续重入'));
+      return false;
+    } finally {
+      topmostSyncing.delete(target);
+    }
+  }
+
   function setupStep(target, callback) {
     try { callback(); } catch (error) { detach(target, error); return false; }
     if (win !== target) {
@@ -220,12 +260,19 @@ function createQuotaLabelWindow({
   }
 
   function ensureWindow() {
-    if (win) {
-      const currentWindow = win;
+    const entryToken = operation;
+    const entryWindow = win;
+    if (entryWindow) {
+      const currentWindow = entryWindow;
       const currentStatus = health(currentWindow);
-      if (currentStatus.ok && win === currentWindow) return;
-      if (win === currentWindow) detach(currentWindow, currentStatus.error);
+      if (operation !== entryToken || win !== currentWindow) return;
+      if (currentStatus.ok) return;
+      const beforeDetach = operation;
+      detach(currentWindow, currentStatus.error);
+      if (win || operation !== beforeDetach + 1) return;
     }
+    const constructToken = operation;
+    const expectedWindow = win;
     let loadingWindow = null;
     try { loadingWindow = new BrowserWindow({
       width: 176,
@@ -251,9 +298,13 @@ function createQuotaLabelWindow({
         backgroundThrottling: false
       }
     }); } catch (error) { report(error); return; }
+    if (operation !== constructToken || win !== expectedWindow) {
+      safeDestroy(loadingWindow);
+      return;
+    }
     win = loadingWindow;
     const steps = [
-      () => loadingWindow.setAlwaysOnTop(topmost, 'floating'),
+      () => syncTopmost(loadingWindow),
       () => loadingWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }),
       () => loadingWindow.setHiddenInMissionControl(true),
       () => loadingWindow.setIgnoreMouseEvents(true, { forward: true }),
@@ -344,16 +395,11 @@ function createQuotaLabelWindow({
     setAlwaysOnTop(enabled) {
       operation += 1;
       topmost = Boolean(enabled);
+      topmostRevision += 1;
       const target = win;
-      const token = operation;
       if (!target) return;
-      const status = health(target);
-      if (!status.ok) {
-        detach(target, status.error);
-        return;
-      }
-      if (win !== target || operation !== token) return;
-      try { target.setAlwaysOnTop(topmost, 'floating'); } catch (error) { detach(target, error); }
+      try { syncTopmost(target); }
+      catch (error) { if (win === target) detach(target, error); else report(error); }
     },
     destroy
   };
