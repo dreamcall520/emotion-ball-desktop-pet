@@ -119,6 +119,21 @@ test('ready 只保留两个指定额度池，顺序不受剩余比例影响', ()
   assert.equal(model.overflow, 0);
 });
 
+test('ready 模型向卡片提供可用重置机会数量，非法值不冒充为零', () => {
+  const ready = buildQuotaLabelModel(snapshot([
+    quotaWindow('codex:secondary', 10080, 64)
+  ], { resetCreditsAvailable: 1 }), { period: 'auto' }, NOW);
+  assert.equal(ready.resetCreditsAvailable, 1);
+  assert.equal(ready.items[0].resetsAt, NOW + 3600000);
+
+  for (const resetCreditsAvailable of [-1, 1.5, '1', Number.NaN]) {
+    const model = buildQuotaLabelModel(snapshot([
+      quotaWindow('codex:secondary', 10080, 64)
+    ], { resetCreditsAvailable }), { period: 'auto' }, NOW);
+    assert.equal('resetCreditsAvailable' in model, false);
+  }
+});
+
 test('常驻额度只显示 codex 和 gpt-reserve，并固定顺序且不提示隐藏项', () => {
   const model = buildQuotaLabelModel(snapshot([
     quotaWindow('GPT-5.3-Codex-Spark:primary', 300, 4, NOW + 3600000, 'GPT-5.3-Codex-Spark'),

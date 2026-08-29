@@ -5,7 +5,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { BODY_MOTION_SIZES } = require('./verify-body-motion');
 const QUOTA_LABEL_MARKERS = Object.freeze([
-  'CODEX_QUOTA_SIZE_80', 'CODEX_QUOTA_SIZE_120',
+  'CODEX_QUOTA_SIZE_60', 'CODEX_QUOTA_SIZE_80', 'CODEX_QUOTA_SIZE_120',
   'CODEX_QUOTA_SIZE_180', 'CODEX_QUOTA_SIZE_260'
 ]);
 
@@ -62,6 +62,8 @@ function runSmokeTest() {
         assert.equal(code, 0, output);
         assert.match(output, /PET_SMOKE_OK/);
         assert.match(output, /PET_BOUNCE_OK/);
+        assert.match(output, /PET_SLEEP_VISUAL_OK/);
+        assert.match(output, /PET_SLEEP_VISUAL_MICRO_OK/);
         for (const marker of ['CODEX_SIMULATED', 'CODEX_TASK_MENU', 'CODEX_TASK_TITLE',
           ...BODY_MOTION_SIZES.map(size => `CODEX_SIZE_${size}`),
           ...QUOTA_LABEL_MARKERS,

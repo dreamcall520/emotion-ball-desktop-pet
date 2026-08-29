@@ -1,4 +1,5 @@
 const SIZES = Object.freeze({
+  micro: Object.freeze({ width: 60, height: 60 }),
   tiny: Object.freeze({ width: 80, height: 80 }),
   small: Object.freeze({ width: 120, height: 120 }),
   medium: Object.freeze({ width: 180, height: 180 }),

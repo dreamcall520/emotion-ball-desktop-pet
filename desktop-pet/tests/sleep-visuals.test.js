@@ -33,11 +33,13 @@ test('极小尺寸睡眠态保留可辨认的闭眼厚度', () => {
   assert.match(ballSource, /setEye\(eyeR, pose\.right, 1, sketch, yaw, minEyeOpen\)/);
 });
 
-test('真实启动检查覆盖极小尺寸的睡眼与 Zzz', () => {
+test('真实启动检查同时覆盖超小和极小尺寸的睡眼与 Zzz', () => {
+  assert.match(mainSource, /setPetSize\('micro'\)/);
   assert.match(mainSource, /setPetSize\('tiny'\)/);
   assert.match(mainSource, /document\.querySelectorAll\('\.eb-sleep-z'\)/);
   assert.match(mainSource, /getBoundingClientRect\(\)\.height/);
   assert.match(mainSource, /PET_SLEEP_VISUAL_OK/);
+  assert.match(mainSource, /PET_SLEEP_VISUAL_MICRO_OK/);
 });
 
 test('真实启动检查可输出睡眠态截图供视觉验收', () => {

@@ -48,7 +48,7 @@ async function validateSmokeOutput(markers) {
 }
 
 const completeMarkers = [
-  'SMOKE', 'BOUNCE', 'USER_DATA', 'ACTIVITY_STATES', 'GAZE', 'TOUCH_DRAG', 'BUBBLE_REPLY',
+  'SMOKE', 'BOUNCE', 'SLEEP_VISUAL', 'SLEEP_VISUAL_MICRO', 'USER_DATA', 'ACTIVITY_STATES', 'GAZE', 'TOUCH_DRAG', 'BUBBLE_REPLY',
   'BUBBLE_EDGES_SETTINGS', 'NATIVE_ACTIVITY', 'FIXED_COLOR', 'DOUBLE_CLICK', 'BODY_MOTION',
   'BODY_MOTION_INTERRUPTS', 'BODY_MOTION_EDGES',
   'CODEX_SIMULATED', 'CODEX_TASK_MENU', 'CODEX_TASK_TITLE',
@@ -62,6 +62,14 @@ const completeMarkers = [
 test('烟测接受全部真实尺寸的通过标记，不额外要求不存在的240尺寸', async () => {
   const result = await validateSmokeOutput(completeMarkers);
   assert.equal(result.exitCode, 0, result.errors);
+});
+
+test('烟测必须分别完成超小与极小睡眠视觉检查', async () => {
+  for (const marker of ['SLEEP_VISUAL', 'SLEEP_VISUAL_MICRO']) {
+    const result = await validateSmokeOutput(completeMarkers.filter(value => value !== marker));
+    assert.equal(result.exitCode, 1, `缺少 ${marker} 时不能通过`);
+    assert.match(result.errors, new RegExp(marker));
+  }
 });
 
 test('烟测拒绝用旧240标记冒充真实大尺寸已通过', async () => {

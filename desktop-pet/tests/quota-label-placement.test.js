@@ -28,14 +28,14 @@ test('标准档使用原小巧版 168×58，优先放在球球下方八像素且
   });
 });
 
-test('小巧档折叠为 128×32，点击展开后复用 168×58 标准明细', () => {
+test('小巧档折叠为 128×32，点击展开为 196×84 完整明细', () => {
   const pet = Object.freeze({ x: 600, y: 400, width: 80, height: 80 });
   const area = Object.freeze({ ...AREA });
   assert.deepEqual(quotaLabelBounds(pet, area, null, 'compact'), {
     x: 576, y: 488, width: 128, height: 32, placement: 'below'
   });
   assert.deepEqual(quotaLabelBounds(pet, area, null, 'compact', true), {
-    x: 556, y: 488, width: 168, height: 58, placement: 'below'
+    x: 542, y: 488, width: 196, height: 84, placement: 'below'
   });
   assert.deepEqual(quotaLabelBounds(pet, area, null, 'unknown'), {
     x: 556, y: 488, width: 168, height: 58, placement: 'below'
@@ -69,8 +69,8 @@ test('正负坐标双屏四边均在当前屏内', () => {
   }
 });
 
-test('80/120/180/260 四档球球均保持 168×58 标准标签和八像素间距', () => {
-  for (const size of [80, 120, 180, 260]) {
+test('60/80/120/180/260 五档球球均保持 168×58 标准标签和八像素间距', () => {
+  for (const size of [60, 80, 120, 180, 260]) {
     const pet = { x: 600, y: 300, width: size, height: size };
     const result = quotaLabelBounds(pet, AREA);
     assert.equal(result.placement, 'below');

@@ -10,8 +10,9 @@ const { createQuotaLabelWindow } = require('../lib/quota-label-window');
 const AREA = Object.freeze({ x: 0, y: 0, width: 1440, height: 900 });
 const readyModel = () => ({
   state: 'ready',
-  items: [{ id: 'private-id', label: 'Codex', windowMinutes: 300, remaining: 47.6, resetsAt: 99 }],
-  overflow: 0
+  items: [{ id: 'private-id', label: 'Codex', windowMinutes: 300, remaining: 47.6, resetsAt: 2000000000000 }],
+  overflow: 0,
+  resetCreditsAvailable: 1
 });
 
 function deferred() {
@@ -154,7 +155,7 @@ test('小巧档创建可点击的 128×32 横条，点击展开和收起时复�
 
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
   assert.equal(f.windows.length, 1);
-  assert.deepEqual(win.bounds, { x: 256, y: 388, width: 168, height: 58 });
+  assert.deepEqual(win.bounds, { x: 242, y: 388, width: 196, height: 84 });
   assert.equal(win.sent.at(-1)[1].expanded, true);
 
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
@@ -204,11 +205,13 @@ test('按球球当前屏定位并避让气泡，只发固定通道的白名单�
   const model = {
     state: 'ready', account: 'secret@example.com', body: '<script>bad()</script>', html: '<b>bad</b>',
     items: [
-      { id: 'account-id', label: '  Codex\u0000 \u202e ', windowMinutes: 300, remaining: 9.44, resetsAt: 123, secret: {} },
-      { label: 'gpt-reserve', windowMinutes: 10080, remaining: 18.6 },
+      { id: 'account-id', label: '  Codex\u0000 \u202e ', windowMinutes: 300, remaining: 9.44, resetsAt: 2000000000000, secret: {} },
+      { label: 'gpt-reserve', windowMinutes: 10080, remaining: 18.6, resetsAt: 2000003600000 },
       { label: '第三项', windowMinutes: 60, remaining: 50 }
     ],
-    overflow: 7
+    overflow: 7,
+    resetCreditsAvailable: 1,
+    resetCredits: [{ id: 'private-reset-id' }]
   };
   f.label.show(model);
   await flush();
@@ -223,10 +226,11 @@ test('按球球当前屏定位并避让气泡，只发固定通道的白名单�
     expanded: false,
     state: 'ready',
     items: [
-      { label: 'Codex', windowMinutes: 300, remaining: 9.44 },
-      { label: 'gpt-reserve', windowMinutes: 10080, remaining: 18.6 }
+      { label: 'Codex', windowMinutes: 300, remaining: 9.44, resetsAt: 2000000000000 },
+      { label: 'gpt-reserve', windowMinutes: 10080, remaining: 18.6, resetsAt: 2000003600000 }
     ],
-    overflow: 7
+    overflow: 7,
+    resetCreditsAvailable: 1
   });
   assert.equal('account' in win.sent[0][1], false);
   assert.equal('body' in win.sent[0][1], false);
@@ -708,6 +712,7 @@ test('主进程模型每个外部字段只读一次，且数组最多检查前�
   once(item, 'label', ' Codex ');
   once(item, 'windowMinutes', 300);
   once(item, 'remaining', 49.5);
+  once(item, 'resetsAt', 2000000000000);
   const rawItems = [item, { label: 'Spark', windowMinutes: 10080, remaining: 20 },
     { label: 'must-not-read', windowMinutes: 60, remaining: 1 }];
   const itemsProxy = new Proxy(rawItems, {
@@ -720,6 +725,7 @@ test('主进程模型每个外部字段只读一次，且数组最多检查前�
   once(model, 'state', 'ready');
   once(model, 'items', itemsProxy);
   once(model, 'overflow', 1);
+  once(model, 'resetCreditsAvailable', 1);
   const f = fixture(() => Promise.resolve());
   t.after(() => f.label.destroy());
   assert.doesNotThrow(() => f.label.show(model));
@@ -729,10 +735,11 @@ test('主进程模型每个外部字段只读一次，且数组最多检查前�
     expanded: false,
     state: 'ready',
     items: [
-      { label: 'Codex', windowMinutes: 300, remaining: 49.5 },
+      { label: 'Codex', windowMinutes: 300, remaining: 49.5, resetsAt: 2000000000000 },
       { label: 'Spark', windowMinutes: 10080, remaining: 20 }
     ],
-    overflow: 1
+    overflow: 1,
+    resetCreditsAvailable: 1
   });
   for (const count of reads.values()) assert.equal(count, 1);
 });
@@ -775,11 +782,14 @@ test('预加载层只接收固定通道，白名单纯标量且可取消订阅',
   const unsubscribe = api.onModel(model => { received = model; });
   listener({}, {
     state: 'ready', size: 'compact', account: 'private', body: '<b>private</b>',
-    items: [{ label: ' Codex\n', windowMinutes: 300, remaining: 19.55, private: {} }], overflow: 2
+    items: [{ label: ' Codex\n', windowMinutes: 300, remaining: 19.55,
+      resetsAt: 2000000000000, private: {} }], overflow: 2,
+    resetCreditsAvailable: 1, resetCredits: [{ id: 'private' }]
   });
   assert.equal(JSON.stringify(received), JSON.stringify({
     state: 'ready', size: 'compact', expanded: false,
-    items: [{ label: 'Codex', windowMinutes: 300, remaining: 19.55 }], overflow: 2
+    items: [{ label: 'Codex', windowMinutes: 300, remaining: 19.55, resetsAt: 2000000000000 }],
+    overflow: 2, resetCreditsAvailable: 1
   }));
   unsubscribe();
   assert.equal(removed.length, 1);
@@ -799,6 +809,11 @@ test('小巧横条只显示周期类型和最低剩余额度，点击请求展�
   const summary = { children: [], replaceChildren(...children) { this.children = children; } };
   const items = { children: [], replaceChildren(...children) { this.children = children; } };
   const overflow = {};
+  const resetTime = {};
+  const resetCredits = {};
+  class FixedDate extends Date {
+    static now() { return 1800000000000; }
+  }
   const element = () => ({
     dataset: {}, className: '', children: [], _text: '',
     set textContent(value) { this._text = String(value); this.children = []; },
@@ -808,7 +823,8 @@ test('小巧横条只显示周期类型和最低剩余额度，点击请求展�
   });
   vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8'), {
     document: {
-      getElementById: id => ({ 'quota-label': label, status, summary, items, overflow })[id],
+      getElementById: id => ({ 'quota-label': label, status, summary, items, overflow,
+        'reset-time': resetTime, 'reset-credits': resetCredits })[id],
       createElement: element
     },
     window: {
@@ -817,7 +833,8 @@ test('小巧横条只显示周期类型和最低剩余额度，点击请求展�
         onModel(callback) { receive = callback; return () => {}; },
         toggleExpanded() { toggles += 1; }
       }
-    }
+    },
+    Date: FixedDate
   });
   receive({ state: 'ready', size: 'compact', expanded: false, items: [
     { label: 'codex', windowMinutes: 10080, remaining: 64 },
@@ -830,10 +847,12 @@ test('小巧横条只显示周期类型和最低剩余额度，点击请求展�
   assert.equal(toggles, 1);
 
   receive({ state: 'ready', size: 'compact', expanded: true, items: [
-    { label: 'codex', windowMinutes: 300, remaining: 42 }
-  ], overflow: 0 });
+    { label: 'codex', windowMinutes: 300, remaining: 42, resetsAt: 1800019800000 }
+  ], overflow: 0, resetCreditsAvailable: 1 });
   assert.equal(label.dataset.expanded, 'true');
   assert.equal(summary.children.map(node => node.textContent).join(''), '5小时42%');
+  assert.equal(resetTime.textContent, '5小时30分钟后重置 · 1/15 21:30');
+  assert.equal(resetCredits.textContent, '1 次重置机会');
 });
 
 test('预加载每个外部字段只读一次，Proxy 和回调异常不穿透 IPC', () => {
@@ -858,18 +877,21 @@ test('预加载每个外部字段只读一次，Proxy 和回调异常不穿透 I
   once(item, 'label', 'Codex');
   once(item, 'windowMinutes', 300);
   once(item, 'remaining', 18.2);
+  once(item, 'resetsAt', 2000000000000);
   const model = {};
   once(model, 'state', 'ready');
   once(model, 'size', 'compact');
   once(model, 'expanded', true);
   once(model, 'items', [item]);
   once(model, 'overflow', 0);
+  once(model, 'resetCreditsAvailable', 1);
   let received;
   const unsubscribe = api.onModel(value => { received = value; throw new Error('consumer failed'); });
   assert.doesNotThrow(() => listener({}, model));
   assert.equal(JSON.stringify(received), JSON.stringify({
     state: 'ready', size: 'compact', expanded: true,
-    items: [{ label: 'Codex', windowMinutes: 300, remaining: 18.2 }], overflow: 0
+    items: [{ label: 'Codex', windowMinutes: 300, remaining: 18.2, resetsAt: 2000000000000 }],
+    overflow: 0, resetCreditsAvailable: 1
   }));
   for (const count of reads.values()) assert.equal(count, 1);
   assert.doesNotThrow(unsubscribe);
@@ -1007,6 +1029,8 @@ test('静态页面无内联脚本能力，浅深背景可读、正文至少 12px
   assert.match(html, /default-src 'self'/);
   assert.match(html, /object-src 'none'/);
   assert.match(html, /quota-label-renderer\.js/);
+  assert.match(html, /id="reset-time"/);
+  assert.match(html, /id="reset-credits"/);
   assert.doesNotMatch(html, /https?:\/\//);
   assert.match(css, /font-size:\s*(?:12|1[3-9]|[2-9]\d)px/);
   assert.match(css, /prefers-color-scheme:\s*dark/);
@@ -1039,6 +1063,12 @@ test('标准档复用原小巧版 11px 字号和 3px 进度条，小巧折叠为
   assert.match(css, /\.quota-progress\s*\{[\s\S]*?height:\s*3px/);
   assert.match(css, /#quota-label\[data-size="compact"\]\[data-expanded="false"\][\s\S]*?border-radius:\s*999px/);
   assert.match(css, /#quota-label\[data-size="compact"\]\[data-expanded="false"\][\s\S]*?#summary[\s\S]*?display:\s*flex/);
+  assert.match(css, /#quota-label\[data-size="compact"\]\[data-expanded="true"\][\s\S]*?#quota-details[\s\S]*?display:\s*grid/);
+});
+
+test('小巧展开详情在深色背景使用浅色文字，不能继承浅色页灰字', () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
+  assert.match(css, /@media \(prefers-color-scheme: dark\)[\s\S]*?#quota-label\[data-size="compact"\]\[data-expanded="true"\] #quota-details\s*\{[\s\S]*?color:\s*rgba\(232, 233, 235, \.66\)/);
 });
 
 test('168×58 标准档内两条额度的文字和进度条不裁切', () => {

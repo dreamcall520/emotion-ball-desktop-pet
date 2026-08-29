@@ -54,7 +54,9 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     return {
       enabled, generation,
       quota: { state: channels.quota.state, code: channels.quota.code,
-        windows: quota.windows.map(window => ({ ...window })), updatedAt: quota.updatedAt, stale: quotaStale() },
+        windows: quota.windows.map(window => ({ ...window })), updatedAt: quota.updatedAt, stale: quotaStale(),
+        ...(Number.isSafeInteger(quota.resetCreditsAvailable) && quota.resetCreditsAvailable >= 0
+          ? { resetCreditsAvailable: quota.resetCreditsAvailable } : {}) },
       tasks: { state: channels.tasks.state, code: channels.tasks.code, partial: true,
         items: [...tasks.values()].map(task => ({ ...task })) },
       currentAlert: eventValid(currentAlert) ? publicAlert(currentAlert) : null
@@ -449,7 +451,13 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     // A successful quota payload is connection evidence even when the transport
     // deduplicates its unchanged "connected" status after an account switch.
     channels.quota.state = 'connected'; channels.quota.code = null; channels.quota.failures = 0;
-    const nextQuota = { updatedAt: timestamp(value?.updatedAt), windows: [] };
+    const resetCreditsAvailable = value?.resetCreditsAvailable;
+    const nextQuota = {
+      updatedAt: timestamp(value?.updatedAt),
+      windows: [],
+      ...(Number.isSafeInteger(resetCreditsAvailable) && resetCreditsAvailable >= 0
+        ? { resetCreditsAvailable } : {})
+    };
     quota = nextQuota;
     for (const window of Array.isArray(value?.windows) ? value.windows.slice(0, 64) : []) {
       if (!window || typeof window.id !== 'string') continue;

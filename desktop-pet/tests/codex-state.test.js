@@ -21,6 +21,23 @@ test('额度按真实窗口计算剩余比例并统一为毫秒', () => {
   });
 });
 
+test('额度只保留可用重置机会数量，不保留重置凭据详情', () => {
+  const result = state().normalizeQuota({
+    ...quota(window),
+    rateLimitResetCredits: {
+      availableCount: 1,
+      credits: [{ id: SECRET, title: SECRET, description: SECRET }]
+    }
+  }, 100);
+  assert.equal(result.resetCreditsAvailable, 1);
+  assert.equal(JSON.stringify(result).includes(SECRET), false);
+  for (const availableCount of [-1, 1.5, '1', Number.NaN, Infinity]) {
+    assert.equal('resetCreditsAvailable' in state().normalizeQuota({
+      ...quota(window), rateLimitResetCredits: { availableCount }
+    }, 100), false);
+  }
+});
+
 test('优先多类额度，不重复旧rateLimits；同周期的主次窗口仍有独立键', () => {
   const result = state().normalizeQuota({
     rateLimits: { primary: window },

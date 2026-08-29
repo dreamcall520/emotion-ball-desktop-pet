@@ -32,12 +32,12 @@ test('真实启动流程必须调用并要求 Codex 模拟验收完成标记', (
   assert.match(smoke, /CODEX_SIMULATED/);
   assert.match(smoke, /CODEX_SIZE_/);
   for (const marker of [
-    'CODEX_QUOTA_SIZE_80', 'CODEX_QUOTA_SIZE_120', 'CODEX_QUOTA_SIZE_180',
+    'CODEX_QUOTA_SIZE_60', 'CODEX_QUOTA_SIZE_80', 'CODEX_QUOTA_SIZE_120', 'CODEX_QUOTA_SIZE_180',
     'CODEX_QUOTA_SIZE_260', 'CODEX_QUOTA_POLICY', 'CODEX_QUOTA_LABEL'
   ]) assert.match(smoke, new RegExp(marker));
 });
 
-test('额度标签原生校验区分 168×58 标准、128×32 小巧及展开明细', () => {
+test('额度标签原生校验区分 168×58 标准、128×32 小巧及 196×84 展开明细', () => {
   const { assertQuotaLabelWindow } = require('../scripts/verify-codex-companion');
   const petBounds = { x: 300, y: 300, width: 80, height: 80 };
   const win = {
@@ -60,7 +60,8 @@ test('额度标签原生校验区分 168×58 标准、128×32 小巧及展开明
   const compact = { ...win, getBounds: () => ({ x: 276, y: 388, width: 128, height: 32 }) };
   assert.doesNotThrow(() => assertQuotaLabelWindow({ getWindow: () => compact }, compact, petBounds,
     { size: 'compact' }));
-  assert.doesNotThrow(() => assertQuotaLabelWindow(controller, win, petBounds,
+  const expanded = { ...win, getBounds: () => ({ x: 242, y: 388, width: 196, height: 84 }) };
+  assert.doesNotThrow(() => assertQuotaLabelWindow({ getWindow: () => expanded }, expanded, petBounds,
     { size: 'compact', expanded: true }));
 });
 
@@ -359,6 +360,7 @@ test('原生助手验收任务菜单与名称开关且不具备真实任务写�
   assert.match(source, /getMenuItemById\('codex-recent'\)/);
   assert.match(source, /getMenuItemById\('codex-task-names'\)/);
   assert.match(source, /PET_CODEX_QUOTA_SIZE_80_OK/);
+  assert.match(source, /PET_CODEX_QUOTA_SIZE_60_OK/);
   assert.match(source, /PET_CODEX_QUOTA_SIZE_120_OK/);
   assert.match(source, /PET_CODEX_QUOTA_SIZE_180_OK/);
   assert.match(source, /PET_CODEX_QUOTA_SIZE_260_OK/);

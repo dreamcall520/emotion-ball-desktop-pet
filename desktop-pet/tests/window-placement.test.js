@@ -27,6 +27,16 @@ test('极小尺寸为 80 × 80 并保留右下角安全距离', () => {
   });
 });
 
+test('超小尺寸为 60 × 60 并保留右下角安全距离', () => {
+  assert.deepEqual(SIZES.micro, { width: 60, height: 60 });
+  assert.deepEqual(defaultBounds(primary, 'micro'), {
+    x: 1356,
+    y: 816,
+    width: 60,
+    height: 60
+  });
+});
+
 test('屏幕外位置被收敛回可见区域', () => {
   assert.deepEqual(
     ensureVisibleBounds({ x: 2000, y: 1200, ...SIZES.small }, [primary], primary),

@@ -29,7 +29,7 @@ body {
   font-weight: 550;
   line-height: 14px;
 }
-#status, #summary, #overflow { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#status, #summary, #overflow, #quota-details p { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #status { text-align: center; }
 #summary { display: none; width: 100%; align-items: center; justify-content: space-between; gap: 8px; }
 .summary-period { overflow: hidden; text-overflow: ellipsis; color: rgba(69, 72, 80, .82); }
@@ -76,7 +76,23 @@ body {
 }
 #quota-label[data-size="compact"][data-expanded="false"][data-has-items="true"] #summary { display: flex; }
 #quota-label[data-size="compact"][data-expanded="false"] #items,
+#quota-label[data-size="compact"][data-expanded="false"] #quota-details,
 #quota-label[data-size="compact"][data-expanded="false"][data-has-items="true"] #status { display: none; }
+#quota-details { display: none; }
+#quota-label[data-size="compact"][data-expanded="true"] {
+  padding: 4px 8px;
+  cursor: pointer;
+}
+#quota-label[data-size="compact"][data-expanded="true"] #quota-details {
+  display: grid;
+  gap: 1px;
+  margin-top: 3px;
+  padding-top: 3px;
+  border-top: 1px solid rgba(76, 77, 80, .13);
+  color: rgba(69, 72, 80, .82);
+  font-size: 10px;
+  line-height: 10px;
+}
 #overflow { display: none; }
 #quota-label[data-state="ready"] #status,
 #quota-label[data-state="stale"][data-has-items="true"] #status { display: none; }
@@ -94,7 +110,11 @@ body {
     background: rgba(42, 44, 48, .95);
     color: rgba(246, 246, 244, .94);
   }
-  .quota-period, .summary-period { color: rgba(232, 233, 235, .66); }
+  .quota-period, .summary-period, #quota-details { color: rgba(232, 233, 235, .66); }
+  #quota-label[data-size="compact"][data-expanded="true"] #quota-details {
+    border-top-color: rgba(225, 226, 229, .13);
+    color: rgba(232, 233, 235, .66);
+  }
   .quota-progress::-webkit-progress-bar { background: rgba(232, 235, 242, .16); }
   .quota-progress::-webkit-progress-value { background: rgb(116, 161, 235); }
   #quota-label[data-severity="low"] { border-color: rgba(239, 190, 90, .72); }

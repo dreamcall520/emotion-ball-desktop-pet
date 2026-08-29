@@ -101,14 +101,17 @@ function buildQuotaLabelModel(snapshot, options = {}, now = Date.now()) {
   const period = normalizePeriod(options && typeof options === 'object' && !Array.isArray(options)
     ? options.period : 'auto');
   const selected = selectDisplayedQuotaWindows(quota.windows, period, now);
+  const resetCredits = Number.isSafeInteger(quota.resetCreditsAvailable)
+    && quota.resetCreditsAvailable >= 0
+    ? { resetCreditsAvailable: quota.resetCreditsAvailable } : {};
   const expired = validNow(now) && scopeQuotaWindows(quota.windows)
     .some(item => validScalars(item) && item.resetsAt <= now && matchesPeriod(item, period));
   if (quota.stale === true) {
     if (!selected.length && expired) return emptyModel('reset-wait');
-    return { state: 'stale', items: selected, overflow: 0 };
+    return { state: 'stale', items: selected, overflow: 0, ...resetCredits };
   }
   if (selected.length) {
-    return { state: 'ready', items: selected, overflow: 0 };
+    return { state: 'ready', items: selected, overflow: 0, ...resetCredits };
   }
 
   if (expired) return emptyModel('reset-wait');

@@ -31,17 +31,24 @@ function copyItem(value) {
   let labelValue;
   let windowMinutes;
   let remaining;
+  let resetsAt;
   try {
     labelValue = item.label;
     windowMinutes = item.windowMinutes;
     remaining = item.remaining;
+    resetsAt = item.resetsAt;
   } catch (_) {
     return null;
   }
   const label = cleanLabel(labelValue);
   if (!label || !Number.isSafeInteger(windowMinutes) || windowMinutes <= 0 ||
     typeof remaining !== 'number' || !Number.isFinite(remaining) || remaining < 0 || remaining > 100) return null;
-  return { label, windowMinutes, remaining };
+  return {
+    label,
+    windowMinutes,
+    remaining,
+    ...(Number.isSafeInteger(resetsAt) && resetsAt > 0 ? { resetsAt } : {})
+  };
 }
 
 function copyItems(value) {
@@ -72,15 +79,23 @@ function safeModel(value) {
   if (!['ready', 'stale'].includes(state)) return { state, items: [], overflow: 0 };
   let rawItems;
   let overflowValue;
+  let resetCreditsAvailable;
   try {
     rawItems = source.items;
     overflowValue = source.overflow;
+    resetCreditsAvailable = source.resetCreditsAvailable;
   } catch (_) {
     return { state, items: [], overflow: 0 };
   }
   const overflow = Number.isSafeInteger(overflowValue) && overflowValue > 0
     ? Math.min(overflowValue, 99) : 0;
-  return { state, items: copyItems(rawItems), overflow };
+  return {
+    state,
+    items: copyItems(rawItems),
+    overflow,
+    ...(Number.isSafeInteger(resetCreditsAvailable) && resetCreditsAvailable >= 0
+      ? { resetCreditsAvailable } : {})
+  };
 }
 
 function createQuotaLabelWindow({

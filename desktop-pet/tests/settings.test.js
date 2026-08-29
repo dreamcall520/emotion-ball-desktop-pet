@@ -37,7 +37,7 @@ test('损坏文件回退且有效设置可回读', t => {
     codexTaskNameInAlerts: false,
     codexQuotaAlwaysVisible: false,
     codexQuotaPeriod: 'auto',
-    codexQuotaLabelSize: 'standard'
+    codexQuotaLabelSize: 'compact'
   });
   assert.equal(fs.existsSync(`${file}.tmp`), false);
 });
@@ -47,7 +47,7 @@ test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
     size: 'small', x: -102, y: 82, alwaysOnTop: false,
     keepAwake: false, bubblesEnabled: true, codexEnabled: false,
     codexTaskNameInAlerts: false, codexQuotaAlwaysVisible: false,
-    codexQuotaPeriod: 'auto', codexQuotaLabelSize: 'standard'
+    codexQuotaPeriod: 'auto', codexQuotaLabelSize: 'compact'
   });
 });
 
@@ -95,13 +95,18 @@ test('额度显示默认关闭且周期只接受三个枚举', () => {
   }
 });
 
-test('额度卡片默认为标准大小，只接受标准和小巧两档', () => {
-  assert.equal(DEFAULTS.codexQuotaLabelSize, 'standard');
+test('球球默认极小 80×80，同时接受超小 60×60', () => {
+  assert.equal(DEFAULTS.size, 'tiny');
+  assert.equal(normalizeSettings({ size: 'micro' }).size, 'micro');
+});
+
+test('额度卡片默认为小巧，只接受标准和小巧两档', () => {
+  assert.equal(DEFAULTS.codexQuotaLabelSize, 'compact');
   for (const size of ['standard', 'compact']) {
     assert.equal(normalizeSettings({ codexQuotaLabelSize: size }).codexQuotaLabelSize, size);
   }
   for (const size of ['', 'small', 'large', 168, null, {}]) {
-    assert.equal(normalizeSettings({ codexQuotaLabelSize: size }).codexQuotaLabelSize, 'standard');
+    assert.equal(normalizeSettings({ codexQuotaLabelSize: size }).codexQuotaLabelSize, 'compact');
   }
 });
 

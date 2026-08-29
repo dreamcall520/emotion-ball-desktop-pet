@@ -32,15 +32,22 @@
     let labelValue;
     let windowMinutes;
     let remaining;
+    let resetsAt;
     try {
       labelValue = item.label;
       windowMinutes = item.windowMinutes;
       remaining = item.remaining;
+      resetsAt = item.resetsAt;
     } catch (_) { return null; }
     const itemLabel = cleanText(labelValue);
     if (!itemLabel || !Number.isSafeInteger(windowMinutes) || windowMinutes <= 0 ||
       typeof remaining !== 'number' || !Number.isFinite(remaining) || remaining < 0 || remaining > 100) return null;
-    return { label: itemLabel, windowMinutes, remaining };
+    return {
+      label: itemLabel,
+      windowMinutes,
+      remaining,
+      ...(Number.isSafeInteger(resetsAt) && resetsAt > 0 ? { resetsAt } : {})
+    };
   }
 
   function copyItems(value) {
@@ -75,13 +82,23 @@
     if (!['ready', 'stale'].includes(state)) return { state, items: [], overflow: 0, size, expanded: false };
     let rawItems;
     let overflowValue;
+    let resetCreditsAvailable;
     try {
       rawItems = source.items;
       overflowValue = source.overflow;
+      resetCreditsAvailable = source.resetCreditsAvailable;
     } catch (_) { return { state, items: [], overflow: 0, size, expanded }; }
     const hidden = Number.isSafeInteger(overflowValue) && overflowValue > 0
       ? Math.min(overflowValue, 99) : 0;
-    return { state, items: copyItems(rawItems), overflow: hidden, size, expanded };
+    return {
+      state,
+      items: copyItems(rawItems),
+      overflow: hidden,
+      size,
+      expanded,
+      ...(Number.isSafeInteger(resetCreditsAvailable) && resetCreditsAvailable >= 0
+        ? { resetCreditsAvailable } : {})
+    };
   }
 
   function periodText(minutes) {
@@ -102,11 +119,40 @@
     return 'normal';
   }
 
+  function resetTimeText(model) {
+    if (model.state === 'stale') return '重置时间待额度更新';
+    const now = Date.now();
+    const resetsAt = model.items.map(item => item.resetsAt)
+      .filter(value => Number.isSafeInteger(value) && value > now)
+      .sort((left, right) => left - right)[0];
+    if (!resetsAt) return '重置时间暂不可用';
+    const totalMinutes = Math.max(1, Math.ceil((resetsAt - now) / 60000));
+    const days = Math.floor(totalMinutes / 1440);
+    const hours = Math.floor((totalMinutes % 1440) / 60);
+    const minutes = totalMinutes % 60;
+    const relative = days > 0
+      ? `${days}天${hours > 0 ? `${hours}小时` : ''}`
+      : hours > 0
+        ? `${hours}小时${minutes > 0 ? `${minutes}分钟` : ''}`
+        : `${minutes}分钟`;
+    const date = new Date(resetsAt);
+    const exact = `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+    return `${relative}后重置 · ${exact}`;
+  }
+
+  function resetCreditsText(value) {
+    if (!Number.isSafeInteger(value) || value < 0) return '重置机会暂不可用';
+    if (value === 0) return '暂无重置机会';
+    return `${value > 99 ? '99+' : value} 次重置机会`;
+  }
+
   let label;
   let status;
   let summary;
   let items;
   let overflow;
+  let resetTime;
+  let resetCredits;
   let bridge;
   try {
     label = document.getElementById('quota-label');
@@ -114,6 +160,8 @@
     summary = document.getElementById('summary');
     items = document.getElementById('items');
     overflow = document.getElementById('overflow');
+    resetTime = document.getElementById('reset-time');
+    resetCredits = document.getElementById('reset-credits');
     bridge = window.petQuotaLabel;
   } catch (_) { return; }
   if (!label || !label.dataset || !status || !summary || typeof summary.replaceChildren !== 'function' ||
@@ -172,6 +220,8 @@
       label.dataset.hasItems = rows.length > 0 ? 'true' : 'false';
       label.dataset.severity = rows.length > 0 ? overallSeverity : 'normal';
       overflow.textContent = '';
+      if (resetTime) resetTime.textContent = resetTimeText(model);
+      if (resetCredits) resetCredits.textContent = resetCreditsText(model.resetCreditsAvailable);
     } catch (_) {}
   };
 

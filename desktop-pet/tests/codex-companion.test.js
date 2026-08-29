@@ -1058,6 +1058,21 @@ test('不保留历史提醒，任务快照最多64条且额度数据有界', asy
   assert.equal(f.companion.getSnapshot().quota.windows.length, 64);
 });
 
+test('额度快照只保留可用重置机会数量，不保留重置凭据详情', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.quota(64, {
+    resetCreditsAvailable: 1,
+    resetCredits: [{ id: 'SECRET_RESET_ID', title: 'SECRET_RESET_TITLE' }]
+  });
+  const snapshot = f.companion.getSnapshot();
+  assert.equal(snapshot.quota.resetCreditsAvailable, 1);
+  assert.equal(JSON.stringify(snapshot).includes('SECRET_RESET'), false);
+
+  f.quota(64, { resetCreditsAvailable: -1 });
+  assert.equal('resetCreditsAvailable' in f.companion.getSnapshot().quota, false);
+});
+
 test('手动关闭当前提醒校验id和代次，关闭联动使旧按钮永久无效', async () => {
   const f = fixture();
   assert.equal(f.companion.dismiss(1, 0), false);

@@ -690,6 +690,7 @@ function setOpenAtLogin(enabled) {
 
 function sizeMenu() {
   return [
+    ['micro', '超小（60 × 60）'],
     ['tiny', '极小（80 × 80）'],
     ['small', '小（120 × 120）'],
     ['medium', '中（180 × 180）'],
@@ -860,11 +861,13 @@ async function finishSmokeTest() {
       setEnabled: async enabled => { settings.codexEnabled = enabled; await codexCompanion.setEnabled(enabled); }
     });
 
-    setPetSize('tiny');
-    await new Promise(resolve => setTimeout(resolve, 250));
-    sendCommand('sleep');
-    await new Promise(resolve => setTimeout(resolve, 1100));
-    const sleepVisual = await petWindow.webContents.executeJavaScript(`(() => {
+    const inspectSleepVisual = async (pixels, minimumEyeHeight, screenshotPath = null) => {
+      await new Promise(resolve => setTimeout(resolve, 250));
+      sendCommand('wake');
+      await new Promise(resolve => setTimeout(resolve, 120));
+      sendCommand('sleep');
+      await new Promise(resolve => setTimeout(resolve, 1100));
+      const sleepVisual = await petWindow.webContents.executeJavaScript(`(() => {
       const zNodes = [...document.querySelectorAll('.eb-sleep-z')];
       const visibleZ = zNodes.filter(node => Number(node.getAttribute('opacity')) > 0.05);
       const eyeHeights = [...document.querySelectorAll('.eb-eye')]
@@ -882,23 +885,37 @@ async function finishSmokeTest() {
         hasVisibleZInsideWindow,
         eyeHeights
       };
-    })()`);
-    if (sleepVisual.width !== 80 || sleepVisual.height !== 80) {
-      throw new Error(`极小尺寸错误：${sleepVisual.width} × ${sleepVisual.height}`);
-    }
-    if (sleepVisual.zCount !== 3 || sleepVisual.visibleZCount < 1) {
-      throw new Error(`极小尺寸 Zzz 不可见：${JSON.stringify(sleepVisual)}`);
-    }
-    if (!sleepVisual.hasVisibleZInsideWindow) {
-      throw new Error(`极小尺寸 Zzz 被窗口裁切：${JSON.stringify(sleepVisual)}`);
-    }
-    if (sleepVisual.eyeHeights.length !== 2 || sleepVisual.eyeHeights.some(height => height < 1.5)) {
-      throw new Error(`极小尺寸睡眼过细：${JSON.stringify(sleepVisual.eyeHeights)}`);
-    }
-    if (process.env.PET_SMOKE_SCREENSHOT) {
-      const screenshot = await petWindow.webContents.capturePage();
-      fs.writeFileSync(path.resolve(process.env.PET_SMOKE_SCREENSHOT), screenshot.toPNG());
-    }
+      })()`);
+      if (sleepVisual.width !== pixels || sleepVisual.height !== pixels) {
+        throw new Error(`${pixels} 尺寸错误：${sleepVisual.width} × ${sleepVisual.height}`);
+      }
+      if (sleepVisual.zCount !== 3 || sleepVisual.visibleZCount < 1) {
+        throw new Error(`${pixels} 尺寸 Zzz 不可见：${JSON.stringify(sleepVisual)}`);
+      }
+      if (!sleepVisual.hasVisibleZInsideWindow) {
+        throw new Error(`${pixels} 尺寸 Zzz 被窗口裁切：${JSON.stringify(sleepVisual)}`);
+      }
+      if (sleepVisual.eyeHeights.length !== 2 ||
+        sleepVisual.eyeHeights.some(height => height < minimumEyeHeight)) {
+        throw new Error(`${pixels} 尺寸睡眼过细：${JSON.stringify(sleepVisual.eyeHeights)}`);
+      }
+      if (screenshotPath) {
+        const screenshot = await petWindow.webContents.capturePage();
+        fs.writeFileSync(path.resolve(screenshotPath), screenshot.toPNG());
+      }
+    };
+
+    setPetSize('micro');
+    const tinyScreenshot = process.env.PET_SMOKE_SCREENSHOT;
+    const microScreenshot = tinyScreenshot
+      ? path.join(path.dirname(path.resolve(tinyScreenshot)),
+        `${path.basename(tinyScreenshot, path.extname(tinyScreenshot))}-micro${path.extname(tinyScreenshot) || '.png'}`)
+      : null;
+    await inspectSleepVisual(60, 1, microScreenshot);
+    process.stdout.write('PET_SLEEP_VISUAL_MICRO_OK\n');
+
+    setPetSize('tiny');
+    await inspectSleepVisual(80, 1.5, tinyScreenshot);
     process.stdout.write('PET_SLEEP_VISUAL_OK\n');
 
     const startY = petWindow.getPosition()[1];

@@ -83,7 +83,9 @@ function assertQuotaLabelWindow(controller, expectedWindow, petBounds, options =
   const bounds = expectedWindow.getBounds();
   const expectedSize = options.size === 'compact' && options.expanded !== true
     ? { width: 128, height: 32 }
-    : { width: 168, height: 58 };
+    : options.size === 'compact'
+      ? { width: 196, height: 84 }
+      : { width: 168, height: 58 };
   assert.deepEqual({ width: bounds.width, height: bounds.height }, expectedSize,
     `额度标签必须保持 ${expectedSize.width}×${expectedSize.height}`);
   assert.equal(intersects(bounds, petBounds), false, '额度标签不能与球球相交');
@@ -307,7 +309,9 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     'Codex 总开关关闭时额度周期必须禁用');
   assert.equal(initialMenu.getMenuItemById('codex-quota-label-size').enabled, false,
     'Codex 总开关关闭时额度卡片大小必须禁用');
-  assert.equal(initialMenu.getMenuItemById('codex-quota-label-standard').checked, true);
+  assert.equal(initialMenu.getMenuItemById('codex-quota-label-standard').checked, false);
+  assert.equal(initialMenu.getMenuItemById('codex-quota-label-compact').checked, true,
+    '额度卡片首次启动必须默认小巧');
   assert.equal(initialMenu.getMenuItemById('codex-status'), null);
   assert.equal(initialMenu.getMenuItemById('codex-recent'), null, '原生菜单不能保留最近提醒');
   const clock = policyClock();
@@ -323,7 +327,8 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     remaining,
     resetsAt: options.resetsAt || resetAt + quotaSequence
   });
-  const emitQuota = windows => callbacks.onQuota({ windows, updatedAt: clock.now() });
+  const emitQuota = windows => callbacks.onQuota({ windows, updatedAt: clock.now(),
+    resetCreditsAvailable: 1 });
   const quota = remaining => emitQuota([quotaWindow(remaining, {
     id: 'codex:primary', resetsAt: resetAt, label: 'Codex'
   })]);
@@ -392,6 +397,8 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       progress: [...document.querySelectorAll('.quota-progress')].map(node => ({
         value: node.value, max: node.max, clientWidth: node.clientWidth, clientHeight: node.clientHeight
       })),
+      resetTime: document.getElementById('reset-time')?.textContent || '',
+      resetCredits: document.getElementById('reset-credits')?.textContent || '',
       controls: document.querySelectorAll('button,input,select,textarea,a[href],[tabindex]').length
     };
   })()`);
@@ -531,6 +538,8 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assert.equal(getMenu().getMenuItemById('codex-recent'), null, '开启后也不能出现最近提醒');
 
     assert.equal(typeof setQuotaPreference, 'function', '原生验收必须使用真实额度设置入口');
+    assert.equal(setQuotaPreference('codexQuotaLabelSize', 'standard'), true,
+      '默认小巧后必须能通过正式设置入口切换标准档');
     assert.equal(setQuotaPreference('codexQuotaAlwaysVisible', true), true);
     emitQuota(quotaPeriods());
     let labelResult = await waitForLabelRows(2, '自动周期两项额度标签');
@@ -593,6 +602,9 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     '展开明细的百分比不得裁切');
     assert.ok(compactResult.view.progress.every(item => item.clientWidth > 0 && item.clientHeight === 3),
       '展开明细必须保留完整的 3px 进度条');
+    assert.match(compactResult.view.resetTime, /后重置 · \d+\/\d+ \d{2}:\d{2}/,
+      '展开明细必须展示相对与具体重置时间');
+    assert.equal(compactResult.view.resetCredits, '1 次重置机会');
     await captureColorSchemes(compactResult.win,
       { size: 'compact', expanded: true, prefix: 'quota-label-compact-expanded' });
 
@@ -630,7 +642,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assert.equal(setQuotaPreference('codexQuotaAlwaysVisible', true), true);
     await visibleLabel('重新开启常驻额度标签');
 
-    for (const [sizeName, pixels] of [['tiny', 80], ['small', 120], ['medium', 180], ['large', 260]]) {
+    for (const [sizeName, pixels] of [['micro', 60], ['tiny', 80], ['small', 120], ['medium', 180], ['large', 260]]) {
       await applyPetSize({ setSize, getSettings, pet, poll, sizeName, pixels });
       const labelWindow = await visibleLabel(`${pixels} 尺寸额度标签`);
       await poll(() => Promise.resolve(labelWindow.getBounds()),
@@ -641,6 +653,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       await capture(labelWindow, `codex-quota-${pixels}`, quotaLabel);
       assertQuotaLabelWindow(quotaLabel, labelWindow, pet.getBounds());
       const marker = {
+        60: 'PET_CODEX_QUOTA_SIZE_60_OK',
         80: 'PET_CODEX_QUOTA_SIZE_80_OK', 120: 'PET_CODEX_QUOTA_SIZE_120_OK',
         180: 'PET_CODEX_QUOTA_SIZE_180_OK', 260: 'PET_CODEX_QUOTA_SIZE_260_OK'
       }[pixels];
@@ -660,7 +673,8 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
 
     await page('window.__codexNativeFrames = []; window.__removeCodexNativeTrace = window.petDesktop.onMotion(packet => window.__codexNativeFrames.push(packet)); true');
     const focusBefore = BrowserWindow.getFocusedWindow();
-    for (const [size, pixels, kind] of [['tiny', 80, 'completed'], ['small', 120, 'quota'], ['medium', 180, 'waiting'], ['large', 260, 'failed']]) {
+    for (const [size, pixels, kind] of [['micro', 60, 'completed'], ['tiny', 80, 'quota'],
+      ['small', 120, 'completed'], ['medium', 180, 'waiting'], ['large', 260, 'failed']]) {
       await applyPetSize({ setSize, getSettings, pet, poll, sizeName: size, pixels });
       await wait(120);
       await begin(kind, kind === 'waiting' ? 2 : 1);
@@ -710,12 +724,12 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     const taskItems = nativeMenu.getMenuItemById('codex-tasks').submenu.items;
     const taskLabels = taskItems.map(item => item.label);
     assert.deepEqual(taskLabels, [
-      '模拟验收任务 2 · 等你确认',
       '模拟验收任务 3 · 等你确认',
-      '模拟验收任务 5 · 处理中'
+      '模拟验收任务 4 · 等你确认',
+      '模拟验收任务 6 · 处理中'
     ], '真实菜单只应列出处理中与等你确认');
     assert.equal(nativeMenu.getMenuItemById('codex-recent'), null);
-    assert.doesNotMatch(taskLabels.join('\n'), /模拟验收任务 1|模拟验收任务 4|完成|失败|最近提醒/);
+    assert.doesNotMatch(taskLabels.join('\n'), /模拟验收任务 1|模拟验收任务 2|模拟验收任务 5|完成|失败|最近提醒/);
     process.stdout.write('PET_CODEX_TASK_MENU_OK\n');
     await setEnabled(false);
     await poll(state, value => value.motionOwner === 'none', '关闭清理 Codex 动作');

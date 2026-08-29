@@ -35,7 +35,14 @@ function normalizeQuota(raw, now) {
       });
     }
   }
-  return { windows, updatedAt: now };
+  const resetCredits = raw?.rateLimitResetCredits;
+  const availableCount = object(resetCredits) ? resetCredits.availableCount : null;
+  return {
+    windows,
+    updatedAt: now,
+    ...(Number.isSafeInteger(availableCount) && availableCount >= 0
+      ? { resetCreditsAvailable: availableCount } : {})
+  };
 }
 
 function isEligibleThread(raw) {

@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const DEFAULTS = Object.freeze({
-  size: 'medium',
+  size: 'tiny',
   x: null,
   y: null,
   alwaysOnTop: true,
@@ -12,12 +12,12 @@ const DEFAULTS = Object.freeze({
   codexTaskNameInAlerts: false,
   codexQuotaAlwaysVisible: false,
   codexQuotaPeriod: 'auto',
-  codexQuotaLabelSize: 'standard'
+  codexQuotaLabelSize: 'compact'
 });
 
 function normalizeSettings(raw = {}) {
   return {
-    size: ['tiny', 'small', 'medium', 'large'].includes(raw.size)
+    size: ['micro', 'tiny', 'small', 'medium', 'large'].includes(raw.size)
       ? raw.size
       : DEFAULTS.size,
     x: Number.isFinite(raw.x) ? Math.round(raw.x) : DEFAULTS.x,
