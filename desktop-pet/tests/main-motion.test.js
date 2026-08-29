@@ -57,10 +57,10 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     });
   }
   let bubbleWindow = createNativeBubbleWindow();
-  const bubble = { shows: [], hides: 0, moves: 0,
+  const bubble = { shows: [], hides: 0, moves: 0, destroys: 0,
     show(payload) { this.shows.push(payload); bubbleWindow.visible = true; },
     hide() { this.hides++; bubbleWindow.visible = false; },
-    reposition() { this.moves++; }, destroy() { bubbleWindow.visible = false; }, setAlwaysOnTop() {}, getWindow: () => bubbleWindow,
+    reposition() { this.moves++; }, destroy() { this.destroys++; bubbleWindow.visible = false; }, setAlwaysOnTop() {}, getWindow: () => bubbleWindow,
     replaceWindow() {
       const previous = bubbleWindow;
       previous.destroyed = true;
@@ -400,6 +400,86 @@ test('气泡可见性监听每个窗口只绑定一次，重建后旧窗口事�
   assert.equal(f.quotaLabel.moves, moves + 1);
   current.emit('closed');
   assert.equal(current.listenerCount('show'), 0, '窗口关闭后不留监听');
+});
+
+test('气泡显示抛错不穿透且不绑定假窗口，错误记录再抛错也仍重排额度标签', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  let reads = 0;
+  f.bubble.show = () => { throw new Error('PRIVATE_BUBBLE_SHOW'); };
+  f.bubble.getWindow = () => { reads++; throw new Error('PRIVATE_FAKE_WINDOW'); };
+  const moves = f.quotaLabel.moves;
+  assert.doesNotThrow(() => f.send('pet:say', 'hello'));
+  assert.equal(reads, 0, '显示失败不得继续读取或绑定窗口');
+  assert.equal(f.call('bubbleVisibilityBinding'), null);
+  assert.ok(f.quotaLabel.moves > moves);
+});
+
+test('气泡窗口读取抛错不穿透，显示后仍重排额度标签', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  f.bubble.getWindow = () => { throw new Error('PRIVATE_BUBBLE_WINDOW'); };
+  const moves = f.quotaLabel.moves;
+  assert.doesNotThrow(() => f.send('pet:say', 'hello'));
+  assert.equal(f.call('bubbleVisibilityBinding'), null);
+  assert.ok(f.quotaLabel.moves > moves);
+});
+
+test('气泡隐藏抛错不阻断锁屏隐藏额度标签', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  assert.equal(f.quotaLabel.visible, true);
+  f.bubble.hide = () => { throw new Error('PRIVATE_BUBBLE_HIDE'); };
+  assert.doesNotThrow(() => f.powerMonitor.emit('lock-screen'));
+  assert.equal(f.quotaLabel.visible, false);
+});
+
+test('气泡重排抛错不阻断窗口移动事件和额度标签重排', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  f.bubble.reposition = () => { throw new Error('PRIVATE_BUBBLE_REPOSITION'); };
+  const moves = f.quotaLabel.moves;
+  assert.doesNotThrow(() => f.pet.emit('move'));
+  assert.ok(f.quotaLabel.moves > moves);
+});
+
+test('气泡销毁抛错不阻断关闭窗口的监听解绑和额度标签销毁', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  const win = f.bubble.getWindow();
+  f.call("showBubble({ id: 'bind-before-close', text: '绑定后关闭', actions: [], durationMs: 1000 })");
+  let destroys = 0;
+  f.bubble.destroy = () => { destroys++; throw new Error('PRIVATE_BUBBLE_DESTROY'); };
+  f.pet.destroyed = true;
+  assert.doesNotThrow(() => f.pet.emit('closed'));
+  assert.equal(destroys, 1);
+  assert.equal(win.listenerCount('show'), 0);
+  assert.equal(win.listenerCount('hide'), 0);
+  assert.equal(win.listenerCount('closed'), 0);
+  assert.equal(f.quotaLabel.destroys, 1);
+});
+
+test('退出时气泡销毁抛错或重入都不阻断额度标签销毁', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  let destroys = 0;
+  f.bubble.destroy = () => {
+    destroys++;
+    if (destroys === 1) f.app.emit('before-quit');
+    throw new Error('PRIVATE_REENTRANT_BUBBLE_DESTROY');
+  };
+  assert.doesNotThrow(() => f.app.emit('before-quit'));
+  assert.equal(destroys, 1, '重入退出不得重复销毁气泡');
+  assert.equal(f.quotaLabel.destroys, 1);
+});
+
+test('置顶原生调用彼此隔离，即使错误记录抛错也仍保存并刷新', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  const attempts = [];
+  f.pet.setAlwaysOnTop = () => { attempts.push('pet'); throw new Error('PRIVATE_PET_TOPMOST'); };
+  f.bubble.setAlwaysOnTop = () => { attempts.push('bubble'); throw new Error('PRIVATE_BUBBLE_TOPMOST'); };
+  f.quotaLabel.setAlwaysOnTop = value => { attempts.push(`label:${value}`); throw new Error('PRIVATE_LABEL_TOPMOST'); };
+  const saves = f.saved.length;
+  const refreshes = f.trayMenus.length;
+  assert.doesNotThrow(() => f.call('setAlwaysOnTop(false)'));
+  assert.deepEqual(attempts, ['pet', 'bubble', 'label:false']);
+  assert.equal(f.saved.length, saves + 1);
+  assert.equal(f.saved.at(-1).alwaysOnTop, false);
+  assert.ok(f.trayMenus.length > refreshes);
 });
 
 test('重复开启只弹一个确认，关闭及退出后的迟到确认不会连接', async () => {

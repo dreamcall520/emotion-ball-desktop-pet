@@ -63,6 +63,7 @@ let hostMotion = null;
 let quotaSyncing = false;
 let quotaSyncPending = false;
 let quotaSyncSnapshot = null;
+let bubbleDestroying = false;
 const windowMotion = createWindowMotion({
   getWindow: () => petWindow,
   getWorkArea: bounds => screen.getDisplayMatching(bounds).workArea,
@@ -147,6 +148,16 @@ function reportQuotaError(scope, error) {
   try { writeError(scope, error); } catch (_) { /* 关闭期间错误记录不得影响生命周期。 */ }
 }
 
+function safelyInvokeWindow(scope, callback) {
+  try {
+    callback();
+    return true;
+  } catch (error) {
+    reportQuotaError(scope, error);
+    return false;
+  }
+}
+
 function repositionQuotaLabel() {
   try { quotaLabel?.reposition(); } catch (error) { reportQuotaError('额度标签重排', error); }
 }
@@ -211,21 +222,31 @@ function bindBubbleVisibilityEvents() {
 
 function showBubble(payload) {
   if (!payload) return;
-  try {
-    bubble?.show(payload);
-    bindBubbleVisibilityEvents();
-  } finally {
-    repositionQuotaLabel();
-    Promise.resolve().then(repositionQuotaLabel);
-  }
+  const shown = safelyInvokeWindow('气泡显示', () => bubble?.show(payload));
+  if (shown) bindBubbleVisibilityEvents();
+  repositionQuotaLabel();
+  Promise.resolve().then(repositionQuotaLabel);
 }
 
 function hideBubble() {
-  try { bubble?.hide(); } finally { repositionQuotaLabel(); }
+  safelyInvokeWindow('气泡隐藏', () => bubble?.hide());
+  repositionQuotaLabel();
 }
 
 function repositionBubble() {
-  try { bubble?.reposition(); } finally { repositionQuotaLabel(); }
+  safelyInvokeWindow('气泡重排', () => bubble?.reposition());
+  repositionQuotaLabel();
+}
+
+function destroyBubbleSafely() {
+  if (bubbleDestroying) return false;
+  bubbleDestroying = true;
+  try {
+    detachBubbleVisibilityEvents();
+    return safelyInvokeWindow('气泡销毁', () => bubble?.destroy());
+  } finally {
+    bubbleDestroying = false;
+  }
 }
 
 function syncQuotaLabel(snapshot = null) {
@@ -610,11 +631,11 @@ function setPetSize(sizeName) {
 
 function setAlwaysOnTop(enabled) {
   settings.alwaysOnTop = Boolean(enabled);
-  if (petWindow && !petWindow.isDestroyed()) {
-    petWindow.setAlwaysOnTop(settings.alwaysOnTop, 'floating');
-  }
-  bubble?.setAlwaysOnTop(settings.alwaysOnTop);
-  quotaLabel?.setAlwaysOnTop(settings.alwaysOnTop);
+  safelyInvokeWindow('球球窗口置顶', () => {
+    if (petWindow && !petWindow.isDestroyed()) petWindow.setAlwaysOnTop(settings.alwaysOnTop, 'floating');
+  });
+  safelyInvokeWindow('气泡窗口置顶', () => bubble?.setAlwaysOnTop(settings.alwaysOnTop));
+  safelyInvokeWindow('额度标签置顶', () => quotaLabel?.setAlwaysOnTop(settings.alwaysOnTop));
   persistSettings();
   refreshTrayMenu();
 }
@@ -915,15 +936,26 @@ function createPetWindow() {
   petWindow.webContents.on('did-start-loading', invalidateCodexPage);
   petWindow.on('move', repositionBubble);
   petWindow.on('resize', () => { stopMotion(); repositionBubble(); });
-  petWindow.on('hide', () => { stopMotion(); hideBubble(); quotaLabel?.hide(); dialogue?.dismiss(); });
+  petWindow.on('hide', () => {
+    safelyInvokeWindow('隐藏时停止动作', stopMotion);
+    hideBubble();
+    safelyInvokeWindow('隐藏时额度标签隐藏', () => quotaLabel?.hide());
+    safelyInvokeWindow('隐藏时对白清理', () => dialogue?.dismiss());
+  });
+  const createdPetWindow = petWindow;
+  let closedCleanupStarted = false;
   petWindow.on('closed', () => {
-    invalidateCodexPage();
-    stopMotion({ restore: false, notify: false, notifyRenderer: false });
-    activityMonitor?.stop();
-    bubble?.destroy();
-    quotaLabel?.destroy();
-    dialogue?.dismiss();
-    petWindow = null;
+    if (closedCleanupStarted) return;
+    closedCleanupStarted = true;
+    if (!isQuitting) {
+      safelyInvokeWindow('关闭时页面状态清理', invalidateCodexPage);
+      safelyInvokeWindow('关闭时停止动作', () => stopMotion({ restore: false, notify: false, notifyRenderer: false }));
+      safelyInvokeWindow('关闭时活动监测清理', () => activityMonitor?.stop());
+      destroyBubbleSafely();
+      safelyInvokeWindow('关闭时额度标签销毁', () => quotaLabel?.destroy());
+      safelyInvokeWindow('关闭时对白清理', () => dialogue?.dismiss());
+    }
+    if (petWindow === createdPetWindow) petWindow = null;
   });
 
   petWindow.loadFile(path.join(__dirname, 'index.html')).catch(error => {
@@ -1085,11 +1117,11 @@ async function bootstrap() {
   const pause = () => {
     screenLocked = true;
     dragState = null;
-    stopMotion();
-    activityMonitor.pause();
+    safelyInvokeWindow('锁屏时停止动作', stopMotion);
+    safelyInvokeWindow('锁屏时暂停活动监测', () => activityMonitor.pause());
     hideBubble();
-    quotaLabel?.hide();
-    dialogue.dismiss();
+    safelyInvokeWindow('锁屏时额度标签隐藏', () => quotaLabel?.hide());
+    safelyInvokeWindow('锁屏时对白清理', () => dialogue.dismiss());
   };
   const resume = () => { screenLocked = false; activityMonitor.resume(); syncQuotaLabel(codexCompanion?.getSnapshot()); };
   const powerGuard = createPowerGuard({ pause, resume });
@@ -1121,13 +1153,15 @@ if (!hasSingleInstanceLock) {
   });
 
   app.on('before-quit', () => {
+    if (isQuitting) return;
     isQuitting = true;
     codexConsentToken++;
-    codexCompanion?.close();
-    stopMotion();
-    activityMonitor?.stop();
-    bubble?.destroy();
-    quotaLabel?.destroy();
+    safelyInvokeWindow('退出时 Codex 联动清理', () => codexCompanion?.close());
+    safelyInvokeWindow('退出时停止动作', stopMotion);
+    safelyInvokeWindow('退出时活动监测清理', () => activityMonitor?.stop());
+    destroyBubbleSafely();
+    safelyInvokeWindow('退出时额度标签销毁', () => quotaLabel?.destroy());
+    safelyInvokeWindow('退出时对白清理', () => dialogue?.dismiss());
   });
 
   app.on('window-all-closed', () => {
