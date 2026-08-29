@@ -181,14 +181,16 @@ function createFingerprintPositions(options) {
   };
 }
 
-function createQuotaAlertTracker(options = {}) {
+function createQuotaAlertTracker(trackerOptions = {}) {
   const state = new Map();
   // 11 张固定 2^20 位位图、6 个 HMAC 位置，共约 1.4 MiB；不保存身份列表。
   // 每个 tracker 使用独立随机盐，外部无法复用预计算碰撞；大位图将完整碰撞压到极低。
   // 碰撞会合并历史，可能保守少提醒；seen 单独命中时仍按首次身份处理，避免普通档误报。
-  let positionsForKey = createFingerprintPositions(options);
+  let positionsForKey = createFingerprintPositions(trackerOptions);
   // 任一位置生成失败都会使现有位图成为不完整历史，必须停用到 reset 后整体重建。
   let summaryHealthy = true;
+  let revision = 0;
+  let inUpdate = false;
   const seenSummary = createBloomSummary();
   const observedSummaries = LEVELS.map(() => createBloomSummary());
 
@@ -208,87 +210,108 @@ function createQuotaAlertTracker(options = {}) {
   }
 
   function reset() {
+    revision += 1;
     state.clear();
     seenSummary.clear();
     for (const summary of observedSummaries) summary.clear();
-    positionsForKey = createFingerprintPositions(options);
+    // 延迟到下一次 update 重建，避免随机源在 reset 内同步重入并写回已清状态。
+    positionsForKey = null;
     summaryHealthy = true;
   }
 
   function update(windows, options = {}) {
-    const normalizedOptions = safeOptions(options);
-    const baseline = normalizedOptions.baseline;
-    const alwaysVisible = normalizedOptions.alwaysVisible;
-    const reliable = reliableByIdentity(windows);
-    const batchKeys = new Set(reliable.keys());
-    const positionsByKey = new Map();
-    if (summaryHealthy) {
-      for (const key of reliable.keys()) {
-        const positions = positionsForKey(key);
-        if (!positions) {
-          summaryHealthy = false;
-          positionsByKey.clear();
-          seenSummary.clear();
-          for (const summary of observedSummaries) summary.clear();
-          break;
-        }
-        positionsByKey.set(key, positions);
+    if (inUpdate) return [];
+    inUpdate = true;
+    const updateRevision = revision;
+    const isCurrent = () => revision === updateRevision;
+
+    try {
+      const normalizedOptions = safeOptions(options);
+      if (!isCurrent()) return [];
+      const baseline = normalizedOptions.baseline;
+      const alwaysVisible = normalizedOptions.alwaysVisible;
+      const reliable = reliableByIdentity(windows);
+      if (!isCurrent()) return [];
+      const batchKeys = new Set(reliable.keys());
+      const positionsByKey = new Map();
+
+      if (summaryHealthy && !positionsForKey) {
+        const nextPositionsForKey = createFingerprintPositions(trackerOptions);
+        if (!isCurrent()) return [];
+        positionsForKey = nextPositionsForKey;
       }
-    }
-    if (!summaryHealthy) {
-      for (const key of reliable.keys()) positionsByKey.set(key, null);
-    }
-    const alertsByKey = new Map();
-
-    function observe(key, item, entry, isNewIdentity, positions) {
-      const currentLevel = levelOf(item.remaining);
-      const isBaseline = baseline || isNewIdentity;
-      const exceedsPeak = currentLevel > entry.peak;
-      const candidate = exceedsPeak && (!isBaseline || currentLevel >= 80) ? currentLevel : 0;
-      entry.peak = Math.max(entry.peak, currentLevel);
-      remember(positions, currentLevel);
-
-      if (!candidate || entry.emitted.has(candidate) || (alwaysVisible && candidate < 80)) return;
-      entry.emitted.add(candidate);
-      alertsByKey.set(key, alertOf(key, candidate, item));
-    }
-
-    for (const [key, item] of reliable) {
-      const entry = state.get(key);
-      if (entry) observe(key, item, entry, false, positionsByKey.get(key));
-    }
-
-    for (const [key, item] of reliable) {
-      if (state.has(key)) continue;
-      const positions = positionsByKey.get(key);
-      const seenHit = Boolean(positions && seenSummary.has(positions));
-      const summaryPeak = seenHit ? summarizedPeak(positions) : 0;
-      const wasSeen = seenHit && summaryPeak > 0;
-      const summaryUnavailableWhileFull = !positions && state.size >= MAX_IDENTITIES;
-      if (state.size >= MAX_IDENTITIES) {
-        let evictionKey;
-        for (const existingKey of state.keys()) {
-          if (!batchKeys.has(existingKey)) {
-            evictionKey = existingKey;
+      if (summaryHealthy) {
+        const fingerprint = positionsForKey;
+        for (const key of reliable.keys()) {
+          const positions = fingerprint(key);
+          if (!isCurrent()) return [];
+          if (!positions) {
+            summaryHealthy = false;
+            positionsByKey.clear();
+            seenSummary.clear();
+            for (const summary of observedSummaries) summary.clear();
             break;
           }
+          positionsByKey.set(key, positions);
         }
-        const selectedKey = evictionKey === undefined ? state.keys().next().value : evictionKey;
-        state.delete(selectedKey);
       }
-      const entry = {
-        peak: summaryUnavailableWhileFull ? levelOf(item.remaining) : summaryPeak,
-        emitted: new Set()
-      };
-      state.set(key, entry);
-      observe(key, item, entry, !wasSeen && !summaryUnavailableWhileFull, positions);
-    }
+      if (!summaryHealthy) {
+        for (const key of reliable.keys()) positionsByKey.set(key, null);
+      }
+      const alertsByKey = new Map();
 
-    const alerts = [];
-    for (const key of reliable.keys()) {
-      if (alertsByKey.has(key)) alerts.push(alertsByKey.get(key));
+      function observe(key, item, entry, isNewIdentity, positions) {
+        const currentLevel = levelOf(item.remaining);
+        const isBaseline = baseline || isNewIdentity;
+        const exceedsPeak = currentLevel > entry.peak;
+        const candidate = exceedsPeak && (!isBaseline || currentLevel >= 80) ? currentLevel : 0;
+        entry.peak = Math.max(entry.peak, currentLevel);
+        remember(positions, currentLevel);
+
+        if (!candidate || entry.emitted.has(candidate) || (alwaysVisible && candidate < 80)) return;
+        entry.emitted.add(candidate);
+        alertsByKey.set(key, alertOf(key, candidate, item));
+      }
+
+      for (const [key, item] of reliable) {
+        const entry = state.get(key);
+        if (entry) observe(key, item, entry, false, positionsByKey.get(key));
+      }
+
+      for (const [key, item] of reliable) {
+        if (state.has(key)) continue;
+        const positions = positionsByKey.get(key);
+        const seenHit = Boolean(positions && seenSummary.has(positions));
+        const summaryPeak = seenHit ? summarizedPeak(positions) : 0;
+        const wasSeen = seenHit && summaryPeak > 0;
+        const summaryUnavailableWhileFull = !positions && state.size >= MAX_IDENTITIES;
+        if (state.size >= MAX_IDENTITIES) {
+          let evictionKey;
+          for (const existingKey of state.keys()) {
+            if (!batchKeys.has(existingKey)) {
+              evictionKey = existingKey;
+              break;
+            }
+          }
+          const selectedKey = evictionKey === undefined ? state.keys().next().value : evictionKey;
+          state.delete(selectedKey);
+        }
+        const entry = {
+          peak: summaryUnavailableWhileFull ? levelOf(item.remaining) : summaryPeak,
+          emitted: new Set()
+        };
+        state.set(key, entry);
+        observe(key, item, entry, !wasSeen && !summaryUnavailableWhileFull, positions);
+      }
+
+      const alerts = [];
+      for (const key of reliable.keys()) {
+        if (alertsByKey.has(key)) alerts.push(alertsByKey.get(key));
+      }
+      return alerts;
+    } finally {
+      inUpdate = false;
     }
-    return alerts;
   }
 
   return { update, reset };

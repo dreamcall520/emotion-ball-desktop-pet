@@ -437,6 +437,58 @@ test('摘要一次临时失败后锁定停用，满载批次往返不重报且 r
   assert.ok(digestCalls > callsAtLock, 'reset 后应重新尝试健康摘要');
 });
 
+test('指纹回调重入 reset 时作废外层整批，新代次重建基线后不混盐重报', () => {
+  let tracker;
+  let resetOnFirstDigest = true;
+  let saltByte = 0;
+  tracker = createQuotaAlertTracker({
+    randomBytes: size => Buffer.alloc(size, ++saltByte),
+    fingerprintDigest(key, salt) {
+      if (resetOnFirstDigest) {
+        resetOnFirstDigest = false;
+        tracker.reset();
+      }
+      return createHmac('sha256', salt).update(key).digest();
+    }
+  });
+  const first = Array.from({ length: 64 }, (_, index) => (
+    quotaWindow(`revision-first-${index}`, 300, 20)
+  ));
+
+  assert.deepEqual(tracker.update(first, { baseline: true }), []);
+  assert.equal(tracker.update(first, { baseline: true }).length, 64);
+  assert.equal(tracker.update([
+    quotaWindow('revision-65', 300, 20)
+  ], { alwaysVisible: false })[0].level, 80);
+  assert.deepEqual(tracker.update([first[0]], { alwaysVisible: false }), []);
+});
+
+test('指纹回调递归 update 安全作废，异常后更新锁释放且下一档仍工作', () => {
+  let tracker;
+  let reenter = true;
+  let nestedResult;
+  tracker = createQuotaAlertTracker({
+    fingerprintSalt: Buffer.alloc(32, 31),
+    fingerprintDigest(key, salt) {
+      if (reenter) {
+        reenter = false;
+        nestedResult = tracker.update([
+          quotaWindow('nested-update', 300, 20)
+        ], { baseline: true });
+        throw new Error('digest failed after recursive update');
+      }
+      return createHmac('sha256', salt).update(key).digest();
+    }
+  });
+  const outer = quotaWindow('outer-update', 300, 20);
+
+  assert.equal(tracker.update([outer], { baseline: true })[0].level, 80);
+  assert.deepEqual(nestedResult, []);
+  assert.equal(tracker.update([{ ...outer, remaining: 10 }], {
+    alwaysVisible: false
+  })[0].level, 90);
+});
+
 test('旧无盐算法可定向覆盖的四个 key 不再使新周期普通档误报', () => {
   const tracker = createQuotaAlertTracker({ fingerprintSalt: Buffer.alloc(32, 11) });
   const attackerIds = [
