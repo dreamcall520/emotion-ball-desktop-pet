@@ -87,3 +87,13 @@
 - 最终 DMG 为 `/Users/allan/Documents/个人创作/球球桌宠-0.3.1-Apple芯片.dmg`，大小 138,063,803 字节，SHA-256 为 `b0e172f3bfb6112e359609dcab56b21205c1be1387a4f0d2dfad2084c502eda2`，`hdiutil verify` 通过；镜像内应用版本、签名及目录/文件/链接比对均通过。
 - 最终分享 ZIP 为 `/Users/allan/Documents/个人创作/球球桌宠-0.3.1-Apple芯片-分享用.zip`，大小 135,985,970 字节，SHA-256 为 `8f62892db809c843db924fcb0b58c9542432bd6bdc7a8ccec4812a9fbabdcbdf`；解压测试通过，根目录只包含上述 DMG。旧候选包和打包暂存目录已移入废纸篓，可恢复，没有永久删除。
 - 本包为免费、非商用分享包，采用本机临时签名，未使用 Apple Developer ID，也未做苹果公证；接收者首次启动可能需要右键「打开」或在「隐私与安全性」中允许。没有发布 GitHub Release，也没有合并 `main`。
+
+## 0.3.2 额度卡片精简与安装
+
+- 常驻额度和菜单额度明细仅保留 `codex` 与 `gpt-reserve`；同一额度池有多个周期时使用后到的可靠项，当前实际数据因此对应两条 7 天额度。其他 Spark 等额度、“另有几项”不再展示或参与球球额度提醒。
+- 常驻标签改为 196×74 两行卡片：每行分别显示名称、周期、剩余百分比和进度条，低额度使用黄/红强调；球体颜色和互动动效未改。
+- 全量自动测试 713 项通过；源码、打包应用和正式安装版分别完成真实 Electron smoke，浅色/深色/过期截图 SHA-256 三轮一致，80/120/180/260 四档、负坐标副屏、气泡避让、固定球体颜色及 `PET_SMOKE_OK` 通过。验收使用本地合成额度，没有读取真实 Codex 任务或消耗额度。
+- 正式安装为 `/Applications/球球桌宠.app` 0.3.2，arm64，临时签名严格校验通过，`app.asar` SHA-256 为 `a0043efea6a88ac312f66e479e03ab10d88fd289ad9fcc716526968de18ae93f`。更新前后设置 SHA-256 均为 `4e610c57f8510539d386a1f3bf09d1db1f0103f981cf9736ff1b561a8dede004`，旧 0.3.1 应用与设置位于废纸篓可恢复备份。启动后 PID 为 21535，未产生 `errors.log`，安装入口唯一。
+- DMG 为 `/Users/allan/Documents/个人创作/球球桌宠-0.3.2-Apple芯片.dmg`，123,529,912 字节，SHA-256 `871acf010c4a7ff35860c8fd0d20c8ba6f94429ce23f66beb3470a39713fdf50`，`hdiutil verify` 通过，镜像内应用版本、签名和 `app.asar` 均与打包应用一致。
+- 分享 ZIP 为 `/Users/allan/Documents/个人创作/球球桌宠-0.3.2-Apple芯片-分享用.zip`，121,376,004 字节，SHA-256 `f34b0ed1a2d8d0a43bd76ac23880e6ddb554b5626dcaf14be5fa31a4784cd83a`；解压测试通过，根目录只有上述 DMG。首个目录层级错误的 ZIP 已移入废纸篓，可恢复。
+- 仍未合并 `main`、未发布 GitHub Release；分享包仍为免费非商用、本机临时签名且未经苹果公证的 Apple 芯片版。

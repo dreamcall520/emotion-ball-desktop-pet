@@ -77,11 +77,9 @@
   }
 
   function periodText(minutes) {
-    if (minutes === 300) return '5 小时';
-    if (minutes === 10080) return '周额度';
-    if (minutes % 1440 === 0) return `${minutes / 1440} 天`;
-    if (minutes % 60 === 0) return `${minutes / 60} 小时`;
-    return `${minutes} 分钟`;
+    if (minutes % 1440 === 0) return `${minutes / 1440}天`;
+    if (minutes % 60 === 0) return `${minutes / 60}小时`;
+    return `${minutes}分钟`;
   }
 
   function severityOf(remaining) {
@@ -117,24 +115,31 @@
       let overallSeverity = 'normal';
       for (const item of model.items) {
         const row = document.createElement('li');
-        const remainingNode = document.createElement('span');
-        const detailNode = document.createElement('span');
+        const nameNode = document.createElement('span');
+        const periodNode = document.createElement('span');
+        const valueNode = document.createElement('span');
+        const progressNode = document.createElement('progress');
         if (!row || !row.dataset || typeof row.replaceChildren !== 'function' ||
-          !remainingNode || !detailNode) continue;
+          !nameNode || !periodNode || !valueNode || !progressNode) continue;
         const severity = severityOf(item.remaining);
         row.dataset.severity = severity;
-        remainingNode.className = 'quota-remaining';
-        remainingNode.textContent = `${model.state === 'stale' ? '已过期 · ' : ''}剩余 ${Math.round(item.remaining)}%`;
-        detailNode.className = 'quota-detail';
-        detailNode.textContent = ` · ${item.label} · ${periodText(item.windowMinutes)}`;
-        row.replaceChildren(remainingNode, detailNode);
+        nameNode.className = 'quota-name';
+        nameNode.textContent = item.label;
+        periodNode.className = 'quota-period';
+        periodNode.textContent = `${model.state === 'stale' ? '已过期 ' : ''}${periodText(item.windowMinutes)}`;
+        valueNode.className = 'quota-value';
+        valueNode.textContent = `${Math.round(item.remaining)}%`;
+        progressNode.className = 'quota-progress';
+        progressNode.max = 100;
+        progressNode.value = item.remaining;
+        row.replaceChildren(nameNode, periodNode, valueNode, progressNode);
         rows.push(row);
         if (severity === 'urgent' || (severity === 'low' && overallSeverity === 'normal')) overallSeverity = severity;
       }
       items.replaceChildren(...rows);
       label.dataset.hasItems = rows.length > 0 ? 'true' : 'false';
       label.dataset.severity = rows.length > 0 ? overallSeverity : 'normal';
-      overflow.textContent = model.overflow ? `另有 ${model.overflow} 项，见菜单` : '';
+      overflow.textContent = '';
     } catch (_) {}
   };
 

@@ -1,4 +1,4 @@
-const LABEL_SIZE = Object.freeze({ width: 176, height: 54 });
+const LABEL_SIZE = Object.freeze({ width: 196, height: 74 });
 const GAP = 8;
 const GEOMETRY_LIMIT = Math.floor(Number.MAX_SAFE_INTEGER / 4);
 

@@ -1,5 +1,6 @@
 const { isTaskId } = require('./codex-state');
 const { menuText } = require('./codex-text');
+const { scopeQuotaWindows } = require('./codex-quota-view');
 
 const CONNECTION_LABELS = Object.freeze({ disabled: '已关闭', connecting: '正在连接', connected: '已连接',
   missing: '未找到 Codex', unauthenticated: '未登录', unsupported: '暂不支持', disconnected: '未连接' });
@@ -78,11 +79,12 @@ function buildCodexMenu(snapshot, now = Date.now()) {
   if (snapshot?.enabled !== true) return [];
   const quota = snapshot.quota || {};
   const tasks = snapshot.tasks || {};
-  const quotaItems = (Array.isArray(quota.windows) ? quota.windows.slice(0, 64) : []).map(window => {
+  const quotaItems = scopeQuotaWindows(quota.windows).map(window => {
+    const family = window.id.split(':', 1)[0].trim().toLowerCase();
     const remaining = Number.isFinite(window.remaining) && window.remaining >= 0 && window.remaining <= 100
       ? `${Math.round(window.remaining * 10) / 10}%` : '暂不可用';
     const reset = Number.isFinite(window.resetsAt) && window.resetsAt <= now ? '等待更新新周期' : dateLabel(window.resetsAt);
-    return { label: `${menuText(window.label, 32, '额度')} · ${period(window.windowMinutes)}：${remaining}${quota.stale ? '（已过期）' : ''}`,
+    return { label: `${family} · ${period(window.windowMinutes)}：${remaining}${quota.stale ? '（已过期）' : ''}`,
       submenu: [{ label: `重置：${reset}`, enabled: false }] };
   });
   return [

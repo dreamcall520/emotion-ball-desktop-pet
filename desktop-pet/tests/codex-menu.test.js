@@ -38,7 +38,7 @@ test('额度按真实类别周期比例和重置显示，任务明确最近最�
   const { buildCodexMenu } = api();
   const all = entries(buildCodexMenu(snapshot(), TIME));
   const labels = all.map(item => item.label || '').join('\n');
-  assert.match(labels, /Codex/);
+  assert.match(labels, /codex/);
   assert.match(labels, /5小时/);
   assert.match(labels, /18%/);
   assert.match(labels, /重置/);
@@ -48,6 +48,20 @@ test('额度按真实类别周期比例和重置显示，任务明确最近最�
   assert.equal(all.some(item => item.id === 'codex-recent'), false);
   assert.match(labels, /刷新状态/);
   assert.equal(all.some(item => typeof item.click === 'function'), false);
+});
+
+test('额度明细只展示 codex 和 gpt-reserve 两个额度池', () => {
+  const { buildCodexMenu } = api();
+  const value = snapshot();
+  value.quota.windows = [
+    { id: 'codex:secondary', label: 'Codex Weekly', remaining: 65, windowMinutes: 10080, resetsAt: TIME + 3600000 },
+    { id: 'gpt-reserve:secondary', label: 'Reserve Pool', remaining: 100, windowMinutes: 10080, resetsAt: TIME + 3600000 },
+    { id: 'GPT-5.3-Codex-Spark:primary', label: 'GPT-5.3-Codex-Spark', remaining: 100, windowMinutes: 300, resetsAt: TIME + 3600000 },
+    { id: 'GPT-5.3-Codex-Spark:secondary', label: 'GPT-5.3-Codex-Spark', remaining: 100, windowMinutes: 10080, resetsAt: TIME + 3600000 }
+  ];
+
+  const items = buildCodexMenu(value, TIME).find(item => item.id === 'codex-quota').submenu;
+  assert.deepEqual(items.map(item => item.label), ['codex · 7天：65%', 'gpt-reserve · 7天：100%']);
 });
 
 test('任务列表只显示处理中和等你确认，并移除最近提醒', () => {

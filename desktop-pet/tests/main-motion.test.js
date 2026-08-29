@@ -272,16 +272,19 @@ test('常驻标签始终使用当前快照和已保存周期', async () => {
   f.connections[0].callbacks.onQuota({
     updatedAt: 1800000000000,
     windows: [
-      { id: 'five', label: '5 小时', windowMinutes: 300, remaining: 61, resetsAt: 1800003600000 },
-      { id: 'week', label: '周额度', windowMinutes: 10080, remaining: 42, resetsAt: 1800604800000 }
+      { id: 'codex:primary', label: 'Codex 5 小时', windowMinutes: 300, remaining: 61, resetsAt: 1800003600000 },
+      { id: 'codex:secondary', label: 'Codex 7 天', windowMinutes: 10080, remaining: 65, resetsAt: 1800604800000 },
+      { id: 'gpt-reserve:primary', label: 'Reserve 5 小时', windowMinutes: 300, remaining: 22, resetsAt: 1800003600000 },
+      { id: 'gpt-reserve:secondary', label: 'Reserve 7 天', windowMinutes: 10080, remaining: 100, resetsAt: 1800604800000 },
+      { id: 'GPT-5.3-Codex-Spark:secondary', label: 'Spark', windowMinutes: 10080, remaining: 100, resetsAt: 1800604800000 }
     ]
   });
   assert.equal(f.quotaLabel.shows.at(-1).items.length, 2);
   assert.equal(f.call("setCodexPreference('codexQuotaPeriod', 'weekly')"), true);
   const model = f.quotaLabel.shows.at(-1);
-  assert.equal(model.items.length, 1);
-  assert.equal(model.items[0].label, '周额度');
-  assert.equal(model.items[0].remaining, 42);
+  assert.deepEqual(model.items.map(item => [item.label, item.windowMinutes, item.remaining]), [
+    ['codex', 10080, 65], ['gpt-reserve', 10080, 100]
+  ]);
 });
 
 test('Codex 额度偏好只在原子保存成功后同步，失败完整回滚', async () => {

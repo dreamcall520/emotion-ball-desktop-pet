@@ -294,12 +294,12 @@ test('严格按五小时周期提醒，轻强档使用各自动作、样式和�
   await f.companion.setEnabled(true);
   f.companion.setPreferences({ quotaPeriod: 'fiveHour' });
   f.quota(95, { windows: [
-    quotaWindow('five', 300, 95),
-    quotaWindow('week', 10080, 95)
+    quotaWindow('codex:primary', 300, 95),
+    quotaWindow('gpt-reserve:secondary', 10080, 95)
   ] });
   f.quota(59, { windows: [
-    quotaWindow('five', 300, 59),
-    quotaWindow('week', 10080, 5, 9000000, 'SECRET_WEEK')
+    quotaWindow('codex:primary', 300, 59),
+    quotaWindow('gpt-reserve:secondary', 10080, 5, 9000000, 'SECRET_WEEK')
   ] });
   await f.tick(5000);
   assert.equal(f.alerts.length, 1);
@@ -311,8 +311,8 @@ test('严格按五小时周期提醒，轻强档使用各自动作、样式和�
   assert.equal(f.companion.getSnapshot().currentAlert.expiresAt, f.time + 6000);
 
   f.quota(19, { windows: [
-    quotaWindow('five', 300, 19),
-    quotaWindow('week', 10080, 5)
+    quotaWindow('codex:primary', 300, 19),
+    quotaWindow('gpt-reserve:secondary', 10080, 5)
   ] });
   await f.tick(30000);
   assert.equal(f.alerts.length, 2);
@@ -324,15 +324,15 @@ test('严格按五小时周期提醒，轻强档使用各自动作、样式和�
 test('首次与新周期普通用量只建基线，首次高用量只提示最高档', async () => {
   const f = fixture();
   await f.companion.setEnabled(true);
-  f.quota(65, { windows: [quotaWindow('normal', 300, 65)] });
+  f.quota(65, { windows: [quotaWindow('codex:normal', 300, 65)] });
   await f.tick(10000);
   assert.equal(f.alerts.length, 0);
-  f.quota(10, { windows: [quotaWindow('high', 300, 10)] });
+  f.quota(10, { windows: [quotaWindow('codex:high', 300, 10)] });
   await f.tick(5000);
   assert.equal(f.alerts.length, 1);
   assert.equal(f.alerts[0].severity, 'urgent');
   assert.match(f.alerts[0].text, /10%/);
-  f.quota(0, { windows: [quotaWindow('full', 300, 0)] });
+  f.quota(0, { windows: [quotaWindow('codex:full', 300, 0)] });
   await f.tick(30000);
   assert.equal(f.alerts.length, 2);
   assert.match(f.alerts[1].text, /已用完/);
@@ -342,11 +342,11 @@ test('首次与新周期普通用量只建基线，首次高用量只提示最�
 test('五秒内多项额度只合并一次，取最高严重度和最低实际剩余且不冒充总余额', async () => {
   const f = fixture();
   await f.companion.setEnabled(true);
-  const baseline = [quotaWindow('a', 300, 95), quotaWindow('b', 10080, 95)];
+  const baseline = [quotaWindow('codex:primary', 300, 95), quotaWindow('gpt-reserve:secondary', 10080, 95)];
   f.quota(95, { windows: baseline });
-  f.quota(69, { windows: [quotaWindow('a', 300, 69), quotaWindow('b', 10080, 95)] });
+  f.quota(69, { windows: [quotaWindow('codex:primary', 300, 69), quotaWindow('gpt-reserve:secondary', 10080, 95)] });
   await f.tick(4000);
-  f.quota(8, { windows: [quotaWindow('a', 300, 69), quotaWindow('b', 10080, 8)] });
+  f.quota(8, { windows: [quotaWindow('codex:primary', 300, 69), quotaWindow('gpt-reserve:secondary', 10080, 8)] });
   await f.tick(1000);
   assert.equal(f.alerts.length, 1);
   assert.equal(f.alerts[0].severity, 'urgent');
@@ -360,8 +360,8 @@ test('当前多项额度部分失效时立即更新文案和强弱表现，并�
   for (const reason of ['recovered', 'period', 'always-visible']) {
     const f = fixture();
     await f.companion.setEnabled(true);
-    const normal = quotaWindow('five', 300, 69);
-    const urgent = quotaWindow('week', 10080, 10);
+    const normal = quotaWindow('codex:primary', 300, 69);
+    const urgent = quotaWindow('gpt-reserve:secondary', 10080, 10);
     f.quota(95, { windows: [{ ...normal, remaining: 95 }, { ...urgent, remaining: 95 }] });
     f.quota(10, { windows: [normal, urgent] });
     await f.tick(5000);
@@ -401,8 +401,8 @@ test('当前额度按最早重置时刻降级并继续等待下一到期点', as
   await f.companion.setEnabled(true);
   const firstReset = f.time + 10000;
   const secondReset = f.time + 15000;
-  const first = quotaWindow('first', 300, 10, firstReset);
-  const second = quotaWindow('second', 10080, 10, secondReset);
+  const first = quotaWindow('codex:primary', 300, 10, firstReset);
+  const second = quotaWindow('gpt-reserve:secondary', 10080, 10, secondReset);
   f.quota(95, { windows: [{ ...first, remaining: 95 }, { ...second, remaining: 95 }] });
   f.quota(10, { windows: [first, second] });
   await f.tick(5000);
@@ -453,8 +453,8 @@ test('排队额度在五秒合并窗口内重置时立即丢弃，不过期补�
 test('额度更新或到期回调内关闭控制器后不留定时器或过期状态', async () => {
   const updated = fixture({ onAlertUpdate: (_alert, companion) => companion.close() });
   await updated.companion.setEnabled(true);
-  const normal = quotaWindow('five', 300, 69);
-  const urgent = quotaWindow('week', 10080, 10);
+  const normal = quotaWindow('codex:primary', 300, 69);
+  const urgent = quotaWindow('gpt-reserve:secondary', 10080, 10);
   updated.quota(95, { windows: [{ ...normal, remaining: 95 }, { ...urgent, remaining: 95 }] });
   updated.quota(10, { windows: [normal, urgent] });
   await updated.tick(5000);
@@ -508,8 +508,8 @@ test('切换额度周期只清理新范围外额度，任务不动并为新范�
   const f = fixture();
   await f.companion.setEnabled(true);
   f.companion.setPreferences({ quotaPeriod: 'fiveHour' });
-  f.quota(95, { windows: [quotaWindow('five', 300, 95), quotaWindow('week', 10080, 10)] });
-  f.quota(69, { windows: [quotaWindow('five', 300, 69), quotaWindow('week', 10080, 10)] });
+  f.quota(95, { windows: [quotaWindow('codex:primary', 300, 95), quotaWindow('gpt-reserve:secondary', 10080, 10)] });
+  f.quota(69, { windows: [quotaWindow('codex:primary', 300, 69), quotaWindow('gpt-reserve:secondary', 10080, 10)] });
   f.task(1, 'active', { baseline: true });
   f.task(1, 'waiting');
   assert.equal(f.companion.setPreferences({ quotaPeriod: 'weekly' }), true);
@@ -526,8 +526,8 @@ test('切换额度周期只清理新范围外额度，任务不动并为新范�
 test('切换周期时已在展示且仍属于新范围的强额度不重复排队', async () => {
   const f = fixture();
   await f.companion.setEnabled(true);
-  f.quota(95, { windows: [quotaWindow('week', 10080, 95)] });
-  f.quota(10, { windows: [quotaWindow('week', 10080, 10)] });
+  f.quota(95, { windows: [quotaWindow('gpt-reserve:secondary', 10080, 95)] });
+  f.quota(10, { windows: [quotaWindow('gpt-reserve:secondary', 10080, 10)] });
   await f.tick(5000);
   assert.equal(f.alerts.length, 1);
   assert.equal(f.companion.getSnapshot().currentAlert.severity, 'urgent');
@@ -649,7 +649,7 @@ test('20%后降到10%可再提醒，新周期和不同类别独立去重', async
   assert.equal(f.alerts.length, 2);
   f.quota(9, { windows: [
     { id: 'codex:primary', label: 'Codex', windowMinutes: 300, remaining: 9, resetsAt: 10000000 },
-    { id: 'spark:primary', label: 'Spark', windowMinutes: 300, remaining: 18, resetsAt: 9000000 }
+    { id: 'gpt-reserve:primary', label: 'gpt-reserve', windowMinutes: 300, remaining: 18, resetsAt: 9000000 }
   ] });
   await f.tick(30000);
   assert.equal(f.alerts.length, 3);
@@ -1188,7 +1188,7 @@ test('许可回调改变合并提醒的同一对象时，只显示仍有效的�
 test('许可回调恢复部分额度且同档更新剩余项，采用有效子集最新比例', async () => {
   const windows = [
     { id: 'codex:primary', label: 'Codex', windowMinutes: 300, remaining: 15, resetsAt: 9000000 },
-    { id: 'spark:primary', label: 'Spark', windowMinutes: 300, remaining: 18, resetsAt: 9000000 }
+    { id: 'gpt-reserve:primary', label: 'gpt-reserve', windowMinutes: 300, remaining: 18, resetsAt: 9000000 }
   ];
   const f = fixture({ canPresent: () => {
     f.quota(90, { windows: [{ ...windows[0], remaining: 90 }, { ...windows[1], remaining: 12 }] });
@@ -1285,8 +1285,8 @@ test('额度清理回调重入刷新、禁用或换账号后，旧回包不再�
       changesAfterAction = f.changes.length;
     } });
     await f.companion.setEnabled(true);
-    const normal = quotaWindow('five', 300, 69);
-    const urgent = quotaWindow('week', 10080, 10);
+    const normal = quotaWindow('codex:primary', 300, 69);
+    const urgent = quotaWindow('gpt-reserve:secondary', 10080, 10);
     f.quota(95, { windows: [{ ...normal, remaining: 95 }, { ...urgent, remaining: 95 }] });
     f.quota(10, { windows: [normal, urgent] });
     await f.tick(5000);
@@ -1374,8 +1374,8 @@ test('合并额度只续期升档引用，旧普通项到60秒即剔除', async 
   const f = fixture();
   await f.companion.setEnabled(true);
   f.setPresent(false);
-  const first = quotaWindow('first', 300, 69);
-  const upgraded = quotaWindow('upgraded', 10080, 69);
+  const first = quotaWindow('codex:primary', 300, 69);
+  const upgraded = quotaWindow('gpt-reserve:secondary', 10080, 69);
   f.quota(95, { windows: [{ ...first, remaining: 95 }, { ...upgraded, remaining: 95 }] });
   f.quota(69, { windows: [first, upgraded] });
   await f.tick(59000);
@@ -1501,7 +1501,7 @@ test('额度偏好每个字段只读一次，读取抛错时不改任何偏好',
 test('同一额度键重复出现时，跟踪、引用校验和文案统一使用最后一个可靠值', async () => {
   const f = fixture();
   await f.companion.setEnabled(true);
-  const first = quotaWindow('duplicate', 300, 95);
+  const first = quotaWindow('codex:duplicate', 300, 95);
   f.quota(95, { windows: [{ ...first }, { ...first }] });
   f.quota(10, { windows: [{ ...first }, { ...first, remaining: 10 }] });
   await f.tick(5000);

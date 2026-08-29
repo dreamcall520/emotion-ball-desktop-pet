@@ -275,8 +275,8 @@ function createQuotaLabelWindow({
     const expectedWindow = win;
     let loadingWindow = null;
     try { loadingWindow = new BrowserWindow({
-      width: 176,
-      height: 54,
+      width: 196,
+      height: 74,
       title: 'Codex 剩余额度',
       transparent: true,
       frame: false,

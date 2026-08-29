@@ -1,7 +1,7 @@
 const { createCodexConnection, CONNECTION_STATES, ERROR_CODES } = require('./codex-connection');
 const { isTaskId } = require('./codex-state');
 const { completionText } = require('./codex-text');
-const { selectQuotaWindows } = require('./codex-quota-view');
+const { selectDisplayedQuotaWindows } = require('./codex-quota-view');
 const { createQuotaAlertTracker, mergeQuotaAlerts } = require('./codex-quota-alerts');
 
 const POLL_MS = Object.freeze({ quota: 120000, tasks: 15000 });
@@ -89,7 +89,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
   function selectedQuotaWindows() {
     if (channels.quota.state !== 'connected' || quotaStale()) return [];
     const selected = new Map();
-    for (const window of selectQuotaWindows(quota.windows, preferences.quotaPeriod, now())) {
+    for (const window of selectDisplayedQuotaWindows(quota.windows, preferences.quotaPeriod, now())) {
       selected.set(quotaKey(window), window);
     }
     return [...selected.values()];

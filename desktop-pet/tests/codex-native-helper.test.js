@@ -37,13 +37,13 @@ test('真实启动流程必须调用并要求 Codex 模拟验收完成标记', (
   ]) assert.match(smoke, new RegExp(marker));
 });
 
-test('额度标签原生校验要求可见、不聚焦、176×54 且不与球球相交', () => {
+test('额度标签原生校验要求可见、不聚焦、196×74 且不与球球相交', () => {
   const { assertQuotaLabelWindow } = require('../scripts/verify-codex-companion');
   const petBounds = { x: 300, y: 300, width: 80, height: 80 };
   const win = {
     isFocusable: () => false,
     isVisible: () => true,
-    getBounds: () => ({ x: 252, y: 388, width: 176, height: 54 })
+    getBounds: () => ({ x: 242, y: 388, width: 196, height: 74 })
   };
   const controller = { getWindow: () => win };
   assert.doesNotThrow(() => assertQuotaLabelWindow(controller, win, petBounds));
@@ -53,10 +53,10 @@ test('额度标签原生校验要求可见、不聚焦、176×54 且不与球球
   assert.throws(() => assertQuotaLabelWindow({ getWindow: () => win }, { ...win, isFocusable: () => true }, petBounds), /当前窗口/);
   const focusable = { ...win, isFocusable: () => true };
   assert.throws(() => assertQuotaLabelWindow({ getWindow: () => focusable }, focusable, petBounds), /聚焦/);
-  const overlap = { ...win, getBounds: () => ({ x: 300, y: 300, width: 176, height: 54 }) };
+  const overlap = { ...win, getBounds: () => ({ x: 300, y: 300, width: 196, height: 74 }) };
   assert.throws(() => assertQuotaLabelWindow({ getWindow: () => overlap }, overlap, petBounds), /相交/);
-  const wrongSize = { ...win, getBounds: () => ({ x: 252, y: 388, width: 175, height: 54 }) };
-  assert.throws(() => assertQuotaLabelWindow({ getWindow: () => wrongSize }, wrongSize, petBounds), /176×54/);
+  const wrongSize = { ...win, getBounds: () => ({ x: 242, y: 388, width: 195, height: 74 }) };
+  assert.throws(() => assertQuotaLabelWindow({ getWindow: () => wrongSize }, wrongSize, petBounds), /196×74/);
 });
 
 test('普通 10% 合成额度先建立 100% 基线，80% 以上可直接合成', () => {
@@ -162,8 +162,8 @@ test('过期 DOM 即使正确，PNG 仍等于新鲜帧也必须拒绝为旧合�
   const stale = Buffer.from('stale-painted');
   assert.throws(() => assertDistinctCaptureEvidence(light, [Buffer.from(light)], '浅深证据'),
     /旧合成帧|重复/);
-  const staleDom = { state: 'stale', cores: [
-    { text: '已过期 · 剩余 64%' }, { text: '已过期 · 剩余 78%' }
+  const staleDom = { state: 'stale', periods: ['已过期 7天', '已过期 7天'], values: [
+    { text: '64%' }, { text: '78%' }
   ] };
   assert.throws(() => assertStaleCaptureEvidence({ before: staleDom, after: staleDom,
     stale: Buffer.from(light), fresh: { light, dark } }), /旧合成帧|重复/,
@@ -206,7 +206,7 @@ test('存在负坐标显示器时真实移动球球验证标签，且只改位�
   };
   const labelWindow = {
     isFocusable: () => false, isVisible: () => true,
-    getBounds: () => ({ x: bounds.x, y: bounds.y + bounds.height + 8, width: 176, height: 54 })
+    getBounds: () => ({ x: bounds.x, y: bounds.y + bounds.height + 8, width: 196, height: 74 })
   };
   const quotaLabel = { getWindow: () => labelWindow };
   const poll = async (read, predicate, label) => {
@@ -366,7 +366,8 @@ test('原生助手验收任务菜单与名称开关且不具备真实任务写�
   assert.match(source, /\['light', 'dark'\]/);
   assert.match(source, /quota-label-\$\{scheme\}/);
   assert.match(source, /quota-label-stale-long/);
-  assert.match(source, /已过期 · 剩余 64%/);
+  assert.match(source, /已过期 7天/);
+  assert.match(source, /\['64%', '78%'\]/);
   assert.match(source, /severity/);
   assert.match(source, /applyPetSize\(\{ setSize, getSettings, pet, poll/);
   assert.match(source, /screen\.getAllDisplays\(\)/);

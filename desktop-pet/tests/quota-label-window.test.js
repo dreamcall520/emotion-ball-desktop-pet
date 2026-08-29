@@ -115,8 +115,8 @@ test('只在 show 时懒创建安全、透明、不聚焦的鼠标穿透窗口',
   f.label.show(readyModel());
   assert.equal(f.windows.length, 1);
   const win = f.windows[0];
-  assert.equal(win.options.width, 176);
-  assert.equal(win.options.height, 54);
+  assert.equal(win.options.width, 196);
+  assert.equal(win.options.height, 74);
   assert.equal(win.options.transparent, true);
   assert.equal(win.options.frame, false);
   assert.equal(win.options.focusable, false);
@@ -176,12 +176,12 @@ test('窗口只加载本地页面，禁止新窗口和所有导航', async t => 
 test('按球球当前屏定位并避让气泡，只发固定通道的白名单纯标量', async t => {
   const f = fixture(() => Promise.resolve());
   t.after(() => f.label.destroy());
-  f.obstacle = { x: 252, y: 388, width: 176, height: 54 };
+  f.obstacle = { x: 242, y: 388, width: 196, height: 74 };
   const model = {
     state: 'ready', account: 'secret@example.com', body: '<script>bad()</script>', html: '<b>bad</b>',
     items: [
       { id: 'account-id', label: '  Codex\u0000 \u202e ', windowMinutes: 300, remaining: 9.44, resetsAt: 123, secret: {} },
-      { label: 'Spark', windowMinutes: 10080, remaining: 18.6 },
+      { label: 'gpt-reserve', windowMinutes: 10080, remaining: 18.6 },
       { label: '第三项', windowMinutes: 60, remaining: 50 }
     ],
     overflow: 7
@@ -191,14 +191,14 @@ test('按球球当前屏定位并避让气泡，只发固定通道的白名单�
   const win = f.windows[0];
   assert.deepEqual(f.matching, [{ x: 300, y: 300, width: 80, height: 80 }]);
   assert.equal(win.bounds.placement, undefined);
-  assert.deepEqual(win.bounds, { x: 252, y: 238, width: 176, height: 54 });
+  assert.deepEqual(win.bounds, { x: 242, y: 218, width: 196, height: 74 });
   assert.equal(win.sent.length, 1);
   assert.equal(win.sent[0][0], 'pet:quota-label');
   assert.deepEqual(win.sent[0][1], {
     state: 'ready',
     items: [
       { label: 'Codex', windowMinutes: 300, remaining: 9.44 },
-      { label: 'Spark', windowMinutes: 10080, remaining: 18.6 }
+      { label: 'gpt-reserve', windowMinutes: 10080, remaining: 18.6 }
     ],
     overflow: 7
   });
@@ -223,7 +223,7 @@ test('reposition 复用最后安全模型，重入 show 只发送最新模型', 
   f.label.reposition();
   assert.equal(win.sent.length, 2);
   assert.deepEqual(win.sent[1][1], win.sent[0][1]);
-  assert.deepEqual(win.bounds, { x: 472, y: 548, width: 176, height: 54 });
+  assert.deepEqual(win.bounds, { x: 462, y: 548, width: 196, height: 74 });
 });
 
 test('hide 不销毁，destroy 幂等，closed 后下次 show 可重建', async () => {
@@ -830,14 +830,20 @@ test('渲染层用固定中文状态、纯文本和合理四舍五入最多展�
   });
   assert.equal(status.textContent, 'Codex 剩余额度');
   assert.deepEqual(items.children.map(item => item.textContent), [
-    '剩余 48% · <b>Codex</b> · 5 小时',
-    '剩余 9% · Spark · 周额度'
+    '<b>Codex</b>5小时48%',
+    'Spark7天9%'
   ]);
   assert.deepEqual(items.children.map(item => item.children.map(child => child.className)), [
-    ['quota-remaining', 'quota-detail'], ['quota-remaining', 'quota-detail']
+    ['quota-name', 'quota-period', 'quota-value', 'quota-progress'],
+    ['quota-name', 'quota-period', 'quota-value', 'quota-progress']
   ]);
-  assert.deepEqual(items.children.map(item => item.children[0].textContent), ['剩余 48%', '剩余 9%']);
-  assert.equal(overflow.textContent, '另有 3 项，见菜单');
+  assert.deepEqual(items.children.map(item => item.children[0].textContent), ['<b>Codex</b>', 'Spark']);
+  assert.deepEqual(items.children.map(item => item.children[1].textContent), ['5小时', '7天']);
+  assert.deepEqual(items.children.map(item => item.children[2].textContent), ['48%', '9%']);
+  assert.deepEqual(items.children.map(item => [item.children[3].max, item.children[3].value]), [
+    [100, 47.6], [100, 9.4]
+  ]);
+  assert.equal(overflow.textContent, '');
   assert.equal(label.dataset.state, 'ready');
   assert.equal(label.dataset.severity, 'urgent');
   assert.doesNotMatch(fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8'), /innerHTML/);
@@ -847,19 +853,18 @@ test('渲染层用固定中文状态、纯文本和合理四舍五入最多展�
     { label: '周额度详情名称也可以很长很长很长', windowMinutes: 10080, remaining: 78 }
   ], overflow: 0 });
   assert.equal(status.textContent, '额度已过期');
-  assert.deepEqual(items.children.map(item => item.children[0].textContent), [
-    '已过期 · 剩余 64%', '已过期 · 剩余 78%'
+  assert.deepEqual(items.children.map(item => item.children[1].textContent), [
+    '已过期 5小时', '已过期 7天'
   ]);
-  assert.ok(items.children.every(item => !item.children[1].textContent.includes('已过期')),
-    '已过期不能放入可能被省略的详情区');
+  assert.deepEqual(items.children.map(item => item.children[2].textContent), ['64%', '78%']);
   assert.equal(overflow.textContent, '');
 
   receive({ state: 'ready', items: [
     { label: '超长恶意标签<script>alert(1)</script>还有更多文字', windowMinutes: 300, remaining: 64 },
     { label: '周额度详情名称也可以很长很长很长', windowMinutes: 10080, remaining: 78 }
   ], overflow: 0 });
-  assert.deepEqual(items.children.map(item => item.children[0].textContent), ['剩余 64%', '剩余 78%']);
-  assert.ok(items.children.every(item => item.children[1].textContent.startsWith(' · ')));
+  assert.deepEqual(items.children.map(item => item.children[1].textContent), ['5小时', '7天']);
+  assert.deepEqual(items.children.map(item => item.children[2].textContent), ['64%', '78%']);
 
   const states = {
     disabled: 'Codex 联动已关闭', connecting: '正在连接 Codex…', connected: 'Codex 已连接',
@@ -919,22 +924,33 @@ test('静态页面无内联脚本能力，浅深背景可读、正文至少 12px
   assert.match(css, /rgba\(/);
   assert.match(css, /box-shadow:\s*none/);
   assert.doesNotMatch(css, /animation|filter:\s*drop-shadow/);
-  assert.match(css, /\.quota-remaining\s*\{[\s\S]*?flex:\s*0\s+0\s+auto/);
-  assert.match(css, /\.quota-detail\s*\{[\s\S]*?text-overflow:\s*ellipsis/);
-  assert.match(css, /\.quota-detail\s*\{[\s\S]*?min-width:\s*0/);
+  assert.match(css, /#items li\s*\{[\s\S]*?display:\s*grid/);
+  assert.match(css, /\.quota-name\s*\{[\s\S]*?text-overflow:\s*ellipsis/);
+  assert.match(css, /\.quota-value\s*\{[\s\S]*?font-variant-numeric:\s*tabular-nums/);
+  assert.match(css, /\.quota-progress\s*\{[\s\S]*?height:\s*4px/);
 });
 
-test('176 像素宽内只允许详情省略，64% 和 78% 核心比例不收缩', () => {
+test('额度标签改为两行名称、周期、百分比和进度条，不再渲染另有项目提示', () => {
+  const renderer = fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8');
+  const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
+  assert.match(renderer, /createElement\('progress'\)/);
+  for (const className of ['quota-name', 'quota-period', 'quota-value', 'quota-progress']) {
+    assert.match(renderer, new RegExp(className));
+    assert.match(css, new RegExp(`\\.${className}`));
+  }
+  assert.doesNotMatch(renderer, /另有.*见菜单/);
+});
+
+test('196 像素宽内只允许名称和周期省略，64% 和 78% 核心比例完整', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
   const renderer = fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8');
-  assert.match(renderer, /remainingNode\.textContent\s*=\s*`[^`]*剩余/);
-  assert.match(renderer, /detailNode\.textContent/);
+  assert.match(renderer, /valueNode\.textContent\s*=\s*`\$\{Math\.round\(item\.remaining\)\}%`/);
+  assert.match(renderer, /periodNode\.textContent\s*=\s*`\$\{model\.state\s*===\s*'stale'\s*\?\s*'已过期 '\s*:\s*''\}/);
   assert.doesNotMatch(renderer, /row\.textContent\s*=\s*`\$\{item\.label\}/);
-  assert.match(css, /#items li\s*\{[\s\S]*?display:\s*flex/);
-  assert.match(css, /\.quota-remaining\s*\{[\s\S]*?white-space:\s*nowrap/);
-  assert.match(css, /\.quota-detail\s*\{[\s\S]*?overflow:\s*hidden/);
-  assert.match(renderer, /model\.state\s*===\s*'stale'[\s\S]*?已过期[\s\S]*?剩余/,
-    '过期标识与比例必须同时位于不可收缩核心区');
+  assert.match(css, /grid-template-columns:\s*minmax\(0, auto\)\s+minmax\(0, 1fr\)\s+auto/);
+  assert.match(css, /\.quota-name\s*\{[\s\S]*?overflow:\s*hidden/);
+  assert.match(css, /\.quota-period\s*\{[\s\S]*?overflow:\s*hidden/);
+  assert.match(css, /\.quota-value\s*\{[\s\S]*?text-align:\s*right/);
 });
 
 function composite(foreground, background) {
@@ -955,35 +971,36 @@ function contrast(first, second) {
   return (values[0] + 0.05) / (values[1] + 0.05);
 }
 
-test('176×54 内真实 15px 行高的两条额度加 overflow 三行不裁切', () => {
+test('196×74 内两条额度的文字和进度条不裁切', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
   const inset = Number(css.match(/#quota-label\s*\{[\s\S]*?inset:\s*(\d+)px/)[1]);
   const paddingY = Number(css.match(/#quota-label\s*\{[\s\S]*?padding:\s*(\d+)px/)[1]);
   const border = Number(css.match(/#quota-label\s*\{[\s\S]*?border:\s*(\d+)px/)[1]);
   const lineHeight = Number(css.match(/#quota-label\s*\{[\s\S]*?line-height:\s*(\d+)px/)[1]);
-  const available = 54 - inset * 2 - paddingY * 2 - border * 2;
+  const rowText = Number(css.match(/grid-template-rows:\s*(\d+)px\s+(\d+)px/)[1]);
+  const rowProgress = Number(css.match(/grid-template-rows:\s*(\d+)px\s+(\d+)px/)[2]);
+  const rowGap = Number(css.match(/row-gap:\s*(\d+)px/)[1]);
+  const itemsGap = Number(css.match(/#items\s*\{[^}]*gap:\s*(\d+)px/)[1]);
+  const available = 74 - inset * 2 - paddingY * 2 - border * 2;
+  const needed = (rowText + rowGap + rowProgress) * 2 + itemsGap;
   assert.ok(lineHeight >= 15, `真实 12px 正文行高不得低于 15px，当前为 ${lineHeight}px`);
-  assert.ok(available >= 45, `三行字形至少需要 45px，当前为 ${available}px`);
-  assert.ok(lineHeight * 3 <= available, `三行需要 ${lineHeight * 3}px，实际只有 ${available}px`);
-  const syntheticClientHeight = available;
-  const syntheticScrollHeight = lineHeight * 3;
-  assert.ok(syntheticScrollHeight <= syntheticClientHeight);
+  assert.ok(needed <= available, `两条额度需要 ${needed}px，实际可用 ${available}px`);
   assert.doesNotMatch(css, /overflow(?:-y)?:\s*(?:auto|scroll)/);
 });
 
-test('浅色 overflow 和深色 urgent 在各自背景合成后对比度均不低于 4.5', () => {
+test('浅色周期文字和深色 urgent 在各自背景合成后对比度均不低于 4.5', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
   const lightBackgroundMatch = css.match(/background:\s*rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
-  const overflowMatch = css.match(/#overflow\s*\{\s*color:\s*rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+  const periodMatch = css.match(/\.quota-period\s*\{[^}]*color:\s*rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
   const darkBlock = css.slice(css.indexOf('@media (prefers-color-scheme: dark)'));
   const darkBackgroundMatch = darkBlock.match(/background:\s*rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
-  const urgentMatch = darkBlock.match(/#items li\[data-severity="urgent"\]\s*\{\s*color:\s*rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
-  assert.ok(lightBackgroundMatch && overflowMatch && darkBackgroundMatch && urgentMatch);
+  const urgentMatch = darkBlock.match(/#items li\[data-severity="urgent"\] \.quota-value\s*\{\s*color:\s*rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+  assert.ok(lightBackgroundMatch && periodMatch && darkBackgroundMatch && urgentMatch);
   const numbers = match => match.slice(1).map(Number);
   const lightBackground = composite(numbers(lightBackgroundMatch), [255, 255, 255]);
-  const overflowColor = composite(numbers(overflowMatch), lightBackground);
+  const periodColor = composite(numbers(periodMatch), lightBackground);
   const darkBackground = composite(numbers(darkBackgroundMatch), [28, 28, 30]);
   const urgentColor = numbers(urgentMatch);
-  assert.ok(contrast(overflowColor, lightBackground) >= 4.5);
+  assert.ok(contrast(periodColor, lightBackground) >= 4.5);
   assert.ok(contrast(urgentColor, darkBackground) >= 4.5);
 });

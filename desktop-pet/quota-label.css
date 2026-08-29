@@ -15,42 +15,71 @@ body {
   position: absolute;
   inset: 2px;
   box-sizing: border-box;
-  padding: 1px 7px;
+  padding: 7px 10px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   overflow: hidden;
-  border: 1px solid rgba(76, 77, 80, .22);
-  border-radius: 10px;
-  background: rgba(246, 246, 244, .92);
+  border: 1px solid rgba(76, 77, 80, .20);
+  border-radius: 12px;
+  background: rgba(247, 248, 249, .94);
   box-shadow: none;
-  color: rgba(43, 44, 47, .92);
+  color: rgba(35, 37, 42, .94);
   font-size: 12px;
-  font-weight: 500;
-  line-height: 15px;
+  font-weight: 550;
+  line-height: 16px;
 }
 #status, #overflow { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #status { text-align: center; }
-#items { margin: 0; padding: 0; list-style: none; min-width: 0; }
-#items li { display: flex; min-width: 0; overflow: hidden; white-space: nowrap; }
-.quota-remaining { flex: 0 0 auto; white-space: nowrap; }
-.quota-detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#overflow { color: rgba(55, 56, 60, .82); }
+#items { margin: 0; padding: 0; display: grid; gap: 5px; list-style: none; min-width: 0; }
+#items li {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
+  grid-template-rows: 16px 4px;
+  column-gap: 5px;
+  row-gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.quota-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 650; }
+.quota-period { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: rgba(69, 72, 80, .82); }
+.quota-value { font-variant-numeric: tabular-nums; font-weight: 700; text-align: right; }
+.quota-progress {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 4px;
+  border: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+}
+.quota-progress::-webkit-progress-bar { border-radius: 999px; background: rgba(85, 92, 105, .14); }
+.quota-progress::-webkit-progress-value { border-radius: 999px; background: rgb(79, 128, 210); }
+#overflow { display: none; }
 #quota-label[data-state="ready"] #status,
 #quota-label[data-state="stale"][data-has-items="true"] #status { display: none; }
 #quota-label[data-severity="low"] { border-color: rgba(150, 104, 24, .58); }
 #quota-label[data-severity="urgent"] { border-color: rgba(171, 62, 52, .66); }
-#items li[data-severity="low"] { color: rgb(133, 87, 17); font-weight: 600; }
-#items li[data-severity="urgent"] { color: rgb(157, 48, 39); font-weight: 650; }
+#items li[data-severity="low"] .quota-value { color: rgb(133, 87, 17); }
+#items li[data-severity="low"] .quota-progress::-webkit-progress-value { background: rgb(181, 126, 35); }
+#items li[data-severity="urgent"] .quota-value { color: rgb(157, 48, 39); }
+#items li[data-severity="urgent"] .quota-progress::-webkit-progress-value { background: rgb(194, 76, 65); }
 @media (prefers-color-scheme: dark) {
   #quota-label {
     border-color: rgba(225, 226, 229, .22);
-    background: rgba(49, 50, 53, .94);
+    background: rgba(42, 44, 48, .95);
     color: rgba(246, 246, 244, .94);
   }
-  #overflow { color: rgba(232, 233, 235, .68); }
+  .quota-period { color: rgba(232, 233, 235, .66); }
+  .quota-progress::-webkit-progress-bar { background: rgba(232, 235, 242, .16); }
+  .quota-progress::-webkit-progress-value { background: rgb(116, 161, 235); }
   #quota-label[data-severity="low"] { border-color: rgba(239, 190, 90, .72); }
   #quota-label[data-severity="urgent"] { border-color: rgba(255, 132, 119, .78); }
-  #items li[data-severity="low"] { color: rgb(244, 198, 106); }
-  #items li[data-severity="urgent"] { color: rgb(255, 184, 172); }
+  #items li[data-severity="low"] .quota-value { color: rgb(244, 198, 106); }
+  #items li[data-severity="low"] .quota-progress::-webkit-progress-value { background: rgb(235, 182, 80); }
+  #items li[data-severity="urgent"] .quota-value { color: rgb(255, 184, 172); }
+  #items li[data-severity="urgent"] .quota-progress::-webkit-progress-value { background: rgb(245, 124, 111); }
 }

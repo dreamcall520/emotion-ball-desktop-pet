@@ -7,6 +7,8 @@ const MAX_WINDOWS = 64;
 const MAX_TIME = 8640000000000000;
 const MAX_TEXT_LENGTH = 256;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/u;
+const DISPLAYED_QUOTA_FAMILIES = Object.freeze(['codex', 'gpt-reserve']);
+const DISPLAYED_QUOTA_FAMILY_SET = new Set(DISPLAYED_QUOTA_FAMILIES);
 
 function normalizePeriod(period) {
   return PERIODS.has(period) ? period : 'auto';
@@ -47,6 +49,20 @@ function limitedWindows(windows) {
   return Array.isArray(windows) ? windows.slice(0, MAX_WINDOWS) : [];
 }
 
+function quotaFamily(item) {
+  if (!item || typeof item.id !== 'string') return '';
+  return item.id.split(':', 1)[0].trim().toLowerCase();
+}
+
+function scopeQuotaWindows(windows) {
+  const selected = new Map();
+  for (const item of limitedWindows(windows)) {
+    const family = quotaFamily(item);
+    if (DISPLAYED_QUOTA_FAMILY_SET.has(family)) selected.set(family, item);
+  }
+  return DISPLAYED_QUOTA_FAMILIES.flatMap(family => selected.has(family) ? [selected.get(family)] : []);
+}
+
 function matchesPeriod(item, period) {
   return period === 'auto' || item.windowMinutes === PERIOD_MINUTES[period];
 }
@@ -59,12 +75,9 @@ function selectQuotaWindows(windows, period = 'auto', now = Date.now()) {
     .map(copyWindow);
 }
 
-function sortedWindows(windows) {
-  return windows.map((item, index) => ({ item, index }))
-    .sort((left, right) => left.item.remaining - right.item.remaining
-      || (left.item.id < right.item.id ? -1 : left.item.id > right.item.id ? 1 : 0)
-      || left.index - right.index)
-    .map(entry => entry.item);
+function selectDisplayedQuotaWindows(windows, period = 'auto', now = Date.now()) {
+  return selectQuotaWindows(scopeQuotaWindows(windows), period, now)
+    .map(item => ({ ...item, label: quotaFamily(item) }));
 }
 
 function emptyModel(state) {
@@ -87,19 +100,26 @@ function buildQuotaLabelModel(snapshot, options = {}, now = Date.now()) {
 
   const period = normalizePeriod(options && typeof options === 'object' && !Array.isArray(options)
     ? options.period : 'auto');
-  const selected = sortedWindows(selectQuotaWindows(quota.windows, period, now));
-  const expired = validNow(now) && limitedWindows(quota.windows)
+  const selected = selectDisplayedQuotaWindows(quota.windows, period, now);
+  const expired = validNow(now) && scopeQuotaWindows(quota.windows)
     .some(item => validScalars(item) && item.resetsAt <= now && matchesPeriod(item, period));
   if (quota.stale === true) {
     if (!selected.length && expired) return emptyModel('reset-wait');
-    return { state: 'stale', items: selected.slice(0, 2), overflow: Math.max(0, selected.length - 2) };
+    return { state: 'stale', items: selected, overflow: 0 };
   }
   if (selected.length) {
-    return { state: 'ready', items: selected.slice(0, 2), overflow: Math.max(0, selected.length - 2) };
+    return { state: 'ready', items: selected, overflow: 0 };
   }
 
   if (expired) return emptyModel('reset-wait');
   return emptyModel(period === 'auto' ? 'empty' : 'period-missing');
 }
 
-module.exports = { PERIOD_MINUTES, selectQuotaWindows, buildQuotaLabelModel };
+module.exports = {
+  PERIOD_MINUTES,
+  DISPLAYED_QUOTA_FAMILIES,
+  scopeQuotaWindows,
+  selectQuotaWindows,
+  selectDisplayedQuotaWindows,
+  buildQuotaLabelModel
+};
