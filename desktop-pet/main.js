@@ -702,6 +702,68 @@ function sizeMenu() {
   }));
 }
 
+function codexMenu() {
+  return {
+    id: 'codex-menu',
+    label: 'Codex 联动',
+    submenu: [
+      {
+        id: 'codex-enabled', label: '启用 Codex 联动', type: 'checkbox', checked: settings.codexEnabled === true,
+        click: item => { const enabled = item.checked; item.checked = settings.codexEnabled === true;
+          void setCodexEnabled(enabled); }
+      },
+      {
+        id: 'codex-task-names', label: '完成提醒显示任务名称', type: 'checkbox',
+        enabled: settings.codexEnabled === true, checked: settings.codexTaskNameInAlerts === true,
+        click: item => { const enabled = item.checked; item.checked = settings.codexTaskNameInAlerts === true;
+          setCodexTaskNameInAlerts(enabled); }
+      },
+      {
+        id: 'codex-quota-visible', label: '一直显示剩余额度', type: 'checkbox',
+        enabled: settings.codexEnabled === true, checked: settings.codexQuotaAlwaysVisible === true,
+        click: item => { const enabled = item.checked; item.checked = settings.codexQuotaAlwaysVisible === true;
+          setCodexPreference('codexQuotaAlwaysVisible', enabled); }
+      },
+      {
+        id: 'codex-quota-period', label: '额度提醒周期', enabled: settings.codexEnabled === true,
+        submenu: [
+          ['auto', 'codex-quota-auto', '自动（按当前套餐）'],
+          ['fiveHour', 'codex-quota-five-hour', '5 小时'],
+          ['weekly', 'codex-quota-weekly', '周额度']
+        ].map(([value, id, label]) => ({
+          id, label, type: 'radio', enabled: settings.codexEnabled === true,
+          checked: settings.codexQuotaPeriod === value,
+          click: item => {
+            item.checked = settings.codexQuotaPeriod === value;
+            setCodexPreference('codexQuotaPeriod', value);
+          }
+        }))
+      },
+      {
+        id: 'codex-quota-label-size', label: '额度卡片大小', enabled: settings.codexEnabled === true,
+        submenu: [
+          ['standard', 'codex-quota-label-standard', '标准'],
+          ['compact', 'codex-quota-label-compact', '小巧']
+        ].map(([value, id, label]) => ({
+          id, label, type: 'radio', enabled: settings.codexEnabled === true,
+          checked: settings.codexQuotaLabelSize === value,
+          click: item => {
+            item.checked = settings.codexQuotaLabelSize === value;
+            setCodexPreference('codexQuotaLabelSize', value);
+          }
+        }))
+      },
+      ...(codexPreferenceWarning
+        ? [{ id: 'codex-preference-warning', label: codexPreferenceWarning, enabled: false }]
+        : []),
+      ...(settings.codexEnabled ? [{ id: 'codex-status', label: 'Codex 状态', submenu: [
+        ...(codexNotice ? [{ label: codexNotice.text, enabled: false }, { type: 'separator' }] : []),
+        ...bindCodexMenu(buildCodexMenu(codexCompanion?.getSnapshot(), codexNow()))
+      ] }] : [])
+    ]
+  };
+}
+
 function menuTemplate() {
   return [
     { label: '随机表情', click: () => sendCommand('random') },
@@ -715,56 +777,7 @@ function menuTemplate() {
       label: '互动气泡', type: 'checkbox', checked: settings.bubblesEnabled,
       click: item => setCompanionSetting('bubblesEnabled', item.checked)
     },
-    {
-      id: 'codex-enabled', label: 'Codex 联动', type: 'checkbox', checked: settings.codexEnabled === true,
-      click: item => { const enabled = item.checked; item.checked = settings.codexEnabled === true; void setCodexEnabled(enabled); }
-    },
-    {
-      id: 'codex-task-names', label: '完成提醒显示任务名称', type: 'checkbox',
-      enabled: settings.codexEnabled === true, checked: settings.codexTaskNameInAlerts === true,
-      click: item => { const enabled = item.checked; item.checked = settings.codexTaskNameInAlerts === true;
-        setCodexTaskNameInAlerts(enabled); }
-    },
-    {
-      id: 'codex-quota-visible', label: '一直显示剩余额度', type: 'checkbox',
-      enabled: settings.codexEnabled === true, checked: settings.codexQuotaAlwaysVisible === true,
-      click: item => { const enabled = item.checked; item.checked = settings.codexQuotaAlwaysVisible === true;
-        setCodexPreference('codexQuotaAlwaysVisible', enabled); }
-    },
-    {
-      id: 'codex-quota-period', label: '额度提醒周期', enabled: settings.codexEnabled === true,
-      submenu: [
-        ['auto', 'codex-quota-auto', '自动（按当前套餐）'],
-        ['fiveHour', 'codex-quota-five-hour', '5 小时'],
-        ['weekly', 'codex-quota-weekly', '周额度']
-      ].map(([value, id, label]) => ({
-        id, label, type: 'radio', enabled: settings.codexEnabled === true,
-        checked: settings.codexQuotaPeriod === value,
-        click: item => {
-          item.checked = settings.codexQuotaPeriod === value;
-          setCodexPreference('codexQuotaPeriod', value);
-        }
-      }))
-    },
-    {
-      id: 'codex-quota-label-size', label: '额度卡片大小', enabled: settings.codexEnabled === true,
-      submenu: [
-        ['standard', 'codex-quota-label-standard', '标准'],
-        ['compact', 'codex-quota-label-compact', '小巧']
-      ].map(([value, id, label]) => ({
-        id, label, type: 'radio', enabled: settings.codexEnabled === true,
-        checked: settings.codexQuotaLabelSize === value,
-        click: item => {
-          item.checked = settings.codexQuotaLabelSize === value;
-          setCodexPreference('codexQuotaLabelSize', value);
-        }
-      }))
-    },
-    ...(codexPreferenceWarning ? [{ id: 'codex-preference-warning', label: codexPreferenceWarning, enabled: false }] : []),
-    ...(settings.codexEnabled ? [{ id: 'codex-status', label: 'Codex 状态', submenu: [
-      ...(codexNotice ? [{ label: codexNotice.text, enabled: false }, { type: 'separator' }] : []),
-      ...bindCodexMenu(buildCodexMenu(codexCompanion?.getSnapshot(), codexNow()))
-    ] }] : []),
+    codexMenu(),
     { type: 'separator' },
     { label: '尺寸', submenu: sizeMenu() },
     {

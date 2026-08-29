@@ -60,31 +60,40 @@
 
   function safeModel(value) {
     const source = record(value);
-    if (!source) return { state: 'disconnected', items: [], overflow: 0, size: 'standard' };
+    if (!source) return { state: 'disconnected', items: [], overflow: 0, size: 'standard', expanded: false };
     let stateValue;
     let sizeValue;
+    let expandedValue;
     try {
       stateValue = source.state;
       sizeValue = source.size;
-    } catch (_) { return { state: 'disconnected', items: [], overflow: 0, size: 'standard' }; }
+      expandedValue = source.expanded;
+    } catch (_) { return { state: 'disconnected', items: [], overflow: 0, size: 'standard', expanded: false }; }
     const state = states.has(stateValue) ? stateValue : 'disconnected';
     const size = sizeValue === 'compact' ? 'compact' : 'standard';
-    if (!['ready', 'stale'].includes(state)) return { state, items: [], overflow: 0, size };
+    const expanded = size === 'compact' && expandedValue === true;
+    if (!['ready', 'stale'].includes(state)) return { state, items: [], overflow: 0, size, expanded: false };
     let rawItems;
     let overflowValue;
     try {
       rawItems = source.items;
       overflowValue = source.overflow;
-    } catch (_) { return { state, items: [], overflow: 0, size }; }
+    } catch (_) { return { state, items: [], overflow: 0, size, expanded }; }
     const hidden = Number.isSafeInteger(overflowValue) && overflowValue > 0
       ? Math.min(overflowValue, 99) : 0;
-    return { state, items: copyItems(rawItems), overflow: hidden, size };
+    return { state, items: copyItems(rawItems), overflow: hidden, size, expanded };
   }
 
   function periodText(minutes) {
     if (minutes % 1440 === 0) return `${minutes / 1440}天`;
     if (minutes % 60 === 0) return `${minutes / 60}小时`;
     return `${minutes}分钟`;
+  }
+
+  function periodTypeText(minutes) {
+    if (minutes === 10080) return '周额度';
+    if (minutes === 300) return '5小时';
+    return periodText(minutes);
   }
 
   function severityOf(remaining) {
@@ -95,17 +104,20 @@
 
   let label;
   let status;
+  let summary;
   let items;
   let overflow;
   let bridge;
   try {
     label = document.getElementById('quota-label');
     status = document.getElementById('status');
+    summary = document.getElementById('summary');
     items = document.getElementById('items');
     overflow = document.getElementById('overflow');
     bridge = window.petQuotaLabel;
   } catch (_) { return; }
-  if (!label || !label.dataset || !status || !items || typeof items.replaceChildren !== 'function' ||
+  if (!label || !label.dataset || !status || !summary || typeof summary.replaceChildren !== 'function' ||
+    !items || typeof items.replaceChildren !== 'function' ||
     !overflow || !bridge || typeof bridge.onModel !== 'function' ||
     !document || typeof document.createElement !== 'function') return;
 
@@ -115,6 +127,7 @@
       status.textContent = states.get(model.state);
       label.dataset.state = model.state;
       label.dataset.size = model.size;
+      label.dataset.expanded = model.expanded ? 'true' : 'false';
       label.dataset.hasItems = 'false';
       label.dataset.severity = 'normal';
       const rows = [];
@@ -143,11 +156,33 @@
         if (severity === 'urgent' || (severity === 'low' && overallSeverity === 'normal')) overallSeverity = severity;
       }
       items.replaceChildren(...rows);
+      const summaryItem = model.items.reduce((lowest, item) =>
+        !lowest || item.remaining < lowest.remaining ? item : lowest, null);
+      if (summaryItem) {
+        const periodNode = document.createElement('span');
+        const valueNode = document.createElement('span');
+        periodNode.className = 'summary-period';
+        periodNode.textContent = periodTypeText(summaryItem.windowMinutes);
+        valueNode.className = 'summary-value';
+        valueNode.textContent = `${Math.round(summaryItem.remaining)}%`;
+        summary.replaceChildren(periodNode, valueNode);
+      } else {
+        summary.replaceChildren();
+      }
       label.dataset.hasItems = rows.length > 0 ? 'true' : 'false';
       label.dataset.severity = rows.length > 0 ? overallSeverity : 'normal';
       overflow.textContent = '';
     } catch (_) {}
   };
+
+  if (typeof label.addEventListener === 'function' && typeof bridge.toggleExpanded === 'function') {
+    try {
+      label.addEventListener('click', () => {
+        if (label.dataset.size !== 'compact' || label.dataset.hasItems !== 'true') return;
+        try { bridge.toggleExpanded(); } catch (_) {}
+      });
+    } catch (_) {}
+  }
 
   let unsubscribe = null;
   try {

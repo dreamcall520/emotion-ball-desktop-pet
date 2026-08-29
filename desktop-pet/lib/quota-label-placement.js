@@ -1,6 +1,6 @@
 const LABEL_SIZES = Object.freeze({
-  standard: Object.freeze({ width: 196, height: 74 }),
-  compact: Object.freeze({ width: 168, height: 58 })
+  standard: Object.freeze({ width: 168, height: 58 }),
+  compact: Object.freeze({ width: 128, height: 32 })
 });
 const GAP = 8;
 const GEOMETRY_LIMIT = Math.floor(Number.MAX_SAFE_INTEGER / 4);
@@ -65,15 +65,16 @@ function bounded(candidate, size, area) {
   };
 }
 
-function quotaLabelSize(value) {
+function quotaLabelSize(value, expanded = false) {
+  if (value === 'compact' && expanded === true) return LABEL_SIZES.standard;
   return LABEL_SIZES[value] || LABEL_SIZES.standard;
 }
 
-function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName = 'standard') {
+function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName = 'standard', expanded = false) {
   const area = safeArea(workArea);
   const pet = safePet(petBounds, area);
   const obstacle = safeObstacle(obstacleBounds);
-  const requestedSize = quotaLabelSize(sizeName);
+  const requestedSize = quotaLabelSize(sizeName, expanded);
   const size = {
     width: Math.min(requestedSize.width, area.width),
     height: Math.min(requestedSize.height, area.height)

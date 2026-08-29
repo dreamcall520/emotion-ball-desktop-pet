@@ -37,13 +37,13 @@ test('真实启动流程必须调用并要求 Codex 模拟验收完成标记', (
   ]) assert.match(smoke, new RegExp(marker));
 });
 
-test('额度标签原生校验要求可见、不聚焦、196×74 且不与球球相交', () => {
+test('额度标签原生校验区分 168×58 标准、128×32 小巧及展开明细', () => {
   const { assertQuotaLabelWindow } = require('../scripts/verify-codex-companion');
   const petBounds = { x: 300, y: 300, width: 80, height: 80 };
   const win = {
     isFocusable: () => false,
     isVisible: () => true,
-    getBounds: () => ({ x: 242, y: 388, width: 196, height: 74 })
+    getBounds: () => ({ x: 256, y: 388, width: 168, height: 58 })
   };
   const controller = { getWindow: () => win };
   assert.doesNotThrow(() => assertQuotaLabelWindow(controller, win, petBounds));
@@ -53,10 +53,15 @@ test('额度标签原生校验要求可见、不聚焦、196×74 且不与球球
   assert.throws(() => assertQuotaLabelWindow({ getWindow: () => win }, { ...win, isFocusable: () => true }, petBounds), /当前窗口/);
   const focusable = { ...win, isFocusable: () => true };
   assert.throws(() => assertQuotaLabelWindow({ getWindow: () => focusable }, focusable, petBounds), /聚焦/);
-  const overlap = { ...win, getBounds: () => ({ x: 300, y: 300, width: 196, height: 74 }) };
+  const overlap = { ...win, getBounds: () => ({ x: 300, y: 300, width: 168, height: 58 }) };
   assert.throws(() => assertQuotaLabelWindow({ getWindow: () => overlap }, overlap, petBounds), /相交/);
-  const wrongSize = { ...win, getBounds: () => ({ x: 242, y: 388, width: 195, height: 74 }) };
-  assert.throws(() => assertQuotaLabelWindow({ getWindow: () => wrongSize }, wrongSize, petBounds), /196×74/);
+  const wrongSize = { ...win, getBounds: () => ({ x: 256, y: 388, width: 167, height: 58 }) };
+  assert.throws(() => assertQuotaLabelWindow({ getWindow: () => wrongSize }, wrongSize, petBounds), /168×58/);
+  const compact = { ...win, getBounds: () => ({ x: 276, y: 388, width: 128, height: 32 }) };
+  assert.doesNotThrow(() => assertQuotaLabelWindow({ getWindow: () => compact }, compact, petBounds,
+    { size: 'compact' }));
+  assert.doesNotThrow(() => assertQuotaLabelWindow(controller, win, petBounds,
+    { size: 'compact', expanded: true }));
 });
 
 test('普通 10% 合成额度先建立 100% 基线，80% 以上可直接合成', () => {
@@ -206,7 +211,7 @@ test('存在负坐标显示器时真实移动球球验证标签，且只改位�
   };
   const labelWindow = {
     isFocusable: () => false, isVisible: () => true,
-    getBounds: () => ({ x: bounds.x, y: bounds.y + bounds.height + 8, width: 196, height: 74 })
+    getBounds: () => ({ x: bounds.x, y: bounds.y + bounds.height + 8, width: 168, height: 58 })
   };
   const quotaLabel = { getWindow: () => labelWindow };
   const poll = async (read, predicate, label) => {

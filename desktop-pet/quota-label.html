@@ -8,8 +8,9 @@
     <link rel="stylesheet" href="quota-label.css">
   </head>
   <body>
-    <section id="quota-label" data-state="disconnected" data-size="standard" data-severity="normal" data-has-items="false" aria-label="Codex 剩余额度">
+    <section id="quota-label" data-state="disconnected" data-size="standard" data-expanded="false" data-severity="normal" data-has-items="false" aria-label="Codex 剩余额度">
       <p id="status" role="status" aria-live="polite">Codex 未连接</p>
+      <p id="summary" aria-hidden="true"></p>
       <ul id="items"></ul>
       <p id="overflow"></p>
     </section>

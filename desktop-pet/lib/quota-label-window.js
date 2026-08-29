@@ -2,6 +2,7 @@ const path = require('node:path');
 const { quotaLabelBounds, quotaLabelSize } = require('./quota-label-placement');
 
 const CHANNEL = 'pet:quota-label';
+const TOGGLE_CHANNEL = 'pet:quota-label-toggle';
 const STATES = new Set([
   'disabled', 'connecting', 'connected', 'ready', 'stale', 'reset-wait', 'period-missing',
   'empty', 'missing', 'unauthenticated', 'unsupported', 'disconnected'
@@ -186,7 +187,8 @@ function createQuotaLabelWindow({
         typeof pet.isVisible !== 'function' || !pet.isVisible() || typeof pet.getBounds !== 'function') return null;
       const petBounds = pet.getBounds();
       const display = screen.getDisplayMatching(petBounds);
-      return quotaLabelBounds(petBounds, display && display.workArea, getObstacle(), currentModel?.size);
+      return quotaLabelBounds(petBounds, display && display.workArea, getObstacle(),
+        currentModel?.size, currentModel?.expanded === true);
     } catch (error) {
       report(error);
       return null;
@@ -209,7 +211,10 @@ function createQuotaLabelWindow({
     if (!confirm(target, token, model)) return;
     try { target.webContents.send(CHANNEL, model); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
-    try { target.setIgnoreMouseEvents(true, { forward: true }); } catch (error) { detach(target, error); return; }
+    try {
+      if (model.size === 'compact') target.setIgnoreMouseEvents(false);
+      else target.setIgnoreMouseEvents(true, { forward: true });
+    } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
     try { target.showInactive(); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) {
@@ -285,7 +290,7 @@ function createQuotaLabelWindow({
     const constructToken = operation;
     const expectedWindow = win;
     let loadingWindow = null;
-    const initialSize = quotaLabelSize(currentModel?.size);
+    const initialSize = quotaLabelSize(currentModel?.size, currentModel?.expanded === true);
     try { loadingWindow = new BrowserWindow({
       width: initialSize.width,
       height: initialSize.height,
@@ -323,6 +328,13 @@ function createQuotaLabelWindow({
       () => loadingWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' })),
       () => loadingWindow.webContents.on('will-navigate', event => {
         try { event.preventDefault(); } catch (_) {}
+      }),
+      () => loadingWindow.webContents.on('ipc-message', (_event, channel) => {
+        if (channel !== TOGGLE_CHANNEL || win !== loadingWindow || !requestedVisible || !ready ||
+          currentModel?.size !== 'compact' || !currentModel.items.length) return;
+        operation += 1;
+        currentModel = { ...currentModel, expanded: currentModel.expanded !== true };
+        try { present(); } catch (error) { detach(loadingWindow, error); }
       }),
       () => loadingWindow.webContents.on('render-process-gone', (_event, details) => {
         let reason = 'unknown';
@@ -365,6 +377,7 @@ function createQuotaLabelWindow({
   function hide() {
     operation += 1;
     requestedVisible = false;
+    if (currentModel?.expanded === true) currentModel = { ...currentModel, expanded: false };
     conceal(win, operation);
   }
 
@@ -386,7 +399,9 @@ function createQuotaLabelWindow({
       if (operation !== token) return;
       const size = requestedSize();
       if (operation !== token) return;
-      currentModel = { ...copied, size: size.name };
+      const expanded = size.name === 'compact' && currentModel?.size === 'compact' &&
+        currentModel.expanded === true && copied.items.length > 0;
+      currentModel = { ...copied, size: size.name, expanded };
       requestedVisible = true;
       try { ensureWindow(); } catch (error) { report(error); }
       try { present(); } catch (error) { if (win) detach(win, error); else report(error); }

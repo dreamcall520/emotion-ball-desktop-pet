@@ -108,4 +108,15 @@
 - 正常退出 0.3.2 后，旧应用和设置备份位于 `/Users/allan/.Trash/球球桌宠-0.3.2-backup.qShPjD/`，可恢复；从最终 DMG 安装前后真实设置 SHA-256 均为 `f22fa85bfe0dc74606f8991a925f6ba4c3e2b2d20e235ac11c88886775d2acde`。0.3.3 已从 `/Applications/球球桌宠.app` 启动，PID 为 28742，没有生成 `errors.log`，本机应用入口只保留一份。
 - 最终 DMG 为 `/Users/allan/Documents/个人创作/球球桌宠-0.3.3-Apple芯片.dmg`，124,080,015 字节，SHA-256 `05c69349fe02a584cdbee262db06eaea1df9d7b1735c08476d951fb19b2fc779`，`hdiutil verify` 通过。初版镜像因压缩级别较低约为 128 MB；确认应用非空数据量未增加后改用 zlib level 9，体积恢复到与 0.3.2 接近的约 118 MB。
 - 最终分享 ZIP 为 `/Users/allan/Documents/个人创作/球球桌宠-0.3.3-Apple芯片-分享用.zip`，121,507,234 字节，SHA-256 `36daebf0eb7d4871f80bbed7dd66f98ad4c5ed415877df06715daf75be79ef94`；解压测试与 DMG 逐字节比对通过，根目录只有一个 DMG，没有 `__MACOSX` 辅助目录。
+
+## 0.3.4 小巧横条、Codex 设置归拢与最终分享包
+
+- 原 168×58 的「小巧」额度卡片改为「标准」；新「小巧」为 128×32 单行横条，展示当前提醒周期类型和最低剩余额度。点击横条后，同一窗口展开为 168×58 的两行详情，再次点击收起。标准卡片保持两行详情；球体颜色与互动动画未改。
+- 右键与菜单栏中的额度、任务名称、任务状态等设置统一归入一个「Codex 联动」子菜单；原设置项标识和用户持久化字段保持不变。
+- 全量自动测试为 721 项通过、0 失败、0 跳过。源码、打包应用和正式安装版分别通过真实窗口检查，证据目录为 `/tmp/emotion-ball-inline-compact-source.lGjv7B`、`/tmp/emotion-ball-034-packaged.95ytId` 和 `/tmp/emotion-ball-034-installed.JGKuqG`，三轮都有 `PET_CODEX_QUOTA_COMPACT_OK` 与 `PET_SMOKE_OK`。
+- 正式安装版小巧收起截图为 256×64 Retina 像素，对应逻辑尺寸 128×32，SHA-256 `470feb6a2786b25d16148d9cc9a738498a3685f838f19eff167aae7adf524603`；点击展开截图为 336×116，对应逻辑尺寸 168×58，SHA-256 `8b53037fe74f2120dbb51385be76029d9e42ac8d10f7780c52fa37006bca8981`。浅色与深色截图均人工回读，无文字、边框或进度条裁切。
+- 应用版本为 0.3.4，bundle id 为 `local.xiaokun.emotionball.pet`，`app.asar` SHA-256 为 `f9c6ab2b2190cd3d60d0ef60e7f541cba37a2a50e1607b1996fb1d74ebde5b42`。DMG 内应用与打包应用逐项内容校验一致，严格签名验证通过。
+- 更新前后用户设置 SHA-256 均为 `cf2144046c9e4305651cea1e62ae98978781162b5f25286a189b6b56c28c2846`；旧 0.3.3 应用与设置备份位于 `/Users/allan/.Trash/球球桌宠-0.3.3-backup.ZLEp5s/`，可恢复。0.3.4 已从 `/Applications/球球桌宠.app` 启动，PID 为 35016，没有生成 `errors.log`，本机应用入口只有一份。
+- 最终 DMG 为 `/Users/allan/Documents/个人创作/球球桌宠-0.3.4-Apple芯片.dmg`，123,517,782 字节，SHA-256 `3799235d0a191aa9758d12ff46b9329f3a1c4553b6b047f95a3d707dfc2c4f48`，`hdiutil verify` 通过。
+- 最终分享 ZIP 为 `/Users/allan/Documents/个人创作/球球桌宠-0.3.4-Apple芯片-分享用.zip`，121,295,078 字节，SHA-256 `ba8732b0e1c598f769749f7a9260f1db3b39a66d0c3ca37470c5a0518cd22996`；解压测试与 DMG 逐字节比对通过，根目录只有一个 DMG，没有 `__MACOSX` 辅助目录。
 - 分享包仍为免费非商用、本机临时签名且未经苹果公证的 Apple 芯片版；未合并 `main`、未发布 GitHub Release。

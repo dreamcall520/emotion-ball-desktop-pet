@@ -104,7 +104,7 @@ function fixture(load = () => Promise.resolve(), options = {}) {
   };
 }
 
-test('只在 show 时懒创建安全、透明、不聚焦的鼠标穿透窗口', async t => {
+test('标准档只在 show 时懒创建安全、透明、不聚焦的鼠标穿透窗口', async t => {
   const loading = deferred();
   const f = fixture(() => loading.promise);
   t.after(() => f.label.destroy());
@@ -116,8 +116,8 @@ test('只在 show 时懒创建安全、透明、不聚焦的鼠标穿透窗口',
   f.label.show(readyModel());
   assert.equal(f.windows.length, 1);
   const win = f.windows[0];
-  assert.equal(win.options.width, 196);
-  assert.equal(win.options.height, 74);
+  assert.equal(win.options.width, 168);
+  assert.equal(win.options.height, 58);
   assert.equal(win.options.transparent, true);
   assert.equal(win.options.frame, false);
   assert.equal(win.options.focusable, false);
@@ -139,16 +139,27 @@ test('只在 show 时懒创建安全、透明、不聚焦的鼠标穿透窗口',
   assert.equal(win.showInactiveCalls, 1);
 });
 
-test('小巧档创建 168×58 窗口并把尺寸白名单传给页面', async t => {
+test('小巧档创建可点击的 128×32 横条，点击展开和收起时复用同一窗口', async t => {
   const f = fixture(() => Promise.resolve(), { labelSize: 'compact' });
   t.after(() => f.label.destroy());
   f.label.show(readyModel());
   await flush();
   const win = f.windows[0];
-  assert.equal(win.options.width, 168);
-  assert.equal(win.options.height, 58);
-  assert.deepEqual(win.bounds, { x: 256, y: 388, width: 168, height: 58 });
+  assert.equal(win.options.width, 128);
+  assert.equal(win.options.height, 32);
+  assert.deepEqual(win.bounds, { x: 276, y: 388, width: 128, height: 32 });
   assert.equal(win.sent[0][1].size, 'compact');
+  assert.equal(win.sent[0][1].expanded, false);
+  assert.deepEqual(win.ignoreCalls.at(-1), [false]);
+
+  win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  assert.equal(f.windows.length, 1);
+  assert.deepEqual(win.bounds, { x: 256, y: 388, width: 168, height: 58 });
+  assert.equal(win.sent.at(-1)[1].expanded, true);
+
+  win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  assert.deepEqual(win.bounds, { x: 276, y: 388, width: 128, height: 32 });
+  assert.equal(win.sent.at(-1)[1].expanded, false);
 });
 
 test('getWindow 只返回当前有效窗口，销毁后不暴露旧引用', async () => {
@@ -189,7 +200,7 @@ test('窗口只加载本地页面，禁止新窗口和所有导航', async t => 
 test('按球球当前屏定位并避让气泡，只发固定通道的白名单纯标量', async t => {
   const f = fixture(() => Promise.resolve());
   t.after(() => f.label.destroy());
-  f.obstacle = { x: 242, y: 388, width: 196, height: 74 };
+  f.obstacle = { x: 256, y: 388, width: 168, height: 58 };
   const model = {
     state: 'ready', account: 'secret@example.com', body: '<script>bad()</script>', html: '<b>bad</b>',
     items: [
@@ -204,11 +215,12 @@ test('按球球当前屏定位并避让气泡，只发固定通道的白名单�
   const win = f.windows[0];
   assert.deepEqual(f.matching, [{ x: 300, y: 300, width: 80, height: 80 }]);
   assert.equal(win.bounds.placement, undefined);
-  assert.deepEqual(win.bounds, { x: 242, y: 218, width: 196, height: 74 });
+  assert.deepEqual(win.bounds, { x: 256, y: 234, width: 168, height: 58 });
   assert.equal(win.sent.length, 1);
   assert.equal(win.sent[0][0], 'pet:quota-label');
   assert.deepEqual(win.sent[0][1], {
     size: 'standard',
+    expanded: false,
     state: 'ready',
     items: [
       { label: 'Codex', windowMinutes: 300, remaining: 9.44 },
@@ -237,7 +249,7 @@ test('reposition 复用最后安全模型，重入 show 只发送最新模型', 
   f.label.reposition();
   assert.equal(win.sent.length, 2);
   assert.deepEqual(win.sent[1][1], win.sent[0][1]);
-  assert.deepEqual(win.bounds, { x: 462, y: 548, width: 196, height: 74 });
+  assert.deepEqual(win.bounds, { x: 476, y: 548, width: 168, height: 58 });
 });
 
 test('hide 不销毁，destroy 幂等，closed 后下次 show 可重建', async () => {
@@ -714,6 +726,7 @@ test('主进程模型每个外部字段只读一次，且数组最多检查前�
   await flush();
   assert.deepEqual(f.windows[0].sent[0][1], {
     size: 'standard',
+    expanded: false,
     state: 'ready',
     items: [
       { label: 'Codex', windowMinutes: 300, remaining: 49.5 },
@@ -732,14 +745,14 @@ test('撤销 Proxy 或抛错 getter 不能穿透 show，必须降级为断开模
   assert.doesNotThrow(() => f.label.show(revoked.proxy));
   await flush();
   assert.deepEqual(f.windows[0].sent[0][1], {
-    state: 'disconnected', items: [], overflow: 0, size: 'standard'
+    state: 'disconnected', items: [], overflow: 0, size: 'standard', expanded: false
   });
 
   const throwing = {};
   Object.defineProperty(throwing, 'state', { get() { throw new Error('getter failed'); } });
   assert.doesNotThrow(() => f.label.show(throwing));
   assert.deepEqual(f.windows[0].sent.at(-1)[1], {
-    state: 'disconnected', items: [], overflow: 0, size: 'standard'
+    state: 'disconnected', items: [], overflow: 0, size: 'standard', expanded: false
   });
 });
 
@@ -747,12 +760,14 @@ test('预加载层只接收固定通道，白名单纯标量且可取消订阅',
   let api;
   let listener;
   const removed = [];
+  const sent = [];
   vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../quota-label-preload.js'), 'utf8'), {
     require: () => ({
       contextBridge: { exposeInMainWorld(name, value) { assert.equal(name, 'petQuotaLabel'); api = value; } },
       ipcRenderer: {
         on(name, callback) { assert.equal(name, 'pet:quota-label'); listener = callback; },
-        removeListener: (...args) => removed.push(args)
+        removeListener: (...args) => removed.push(args),
+        send: (...args) => sent.push(args)
       }
     })
   });
@@ -763,14 +778,62 @@ test('预加载层只接收固定通道，白名单纯标量且可取消订阅',
     items: [{ label: ' Codex\n', windowMinutes: 300, remaining: 19.55, private: {} }], overflow: 2
   });
   assert.equal(JSON.stringify(received), JSON.stringify({
-    state: 'ready', size: 'compact',
+    state: 'ready', size: 'compact', expanded: false,
     items: [{ label: 'Codex', windowMinutes: 300, remaining: 19.55 }], overflow: 2
   }));
   unsubscribe();
   assert.equal(removed.length, 1);
   assert.equal(removed[0][0], 'pet:quota-label');
+  api.toggleExpanded();
+  assert.deepEqual(sent, [['pet:quota-label-toggle']]);
   assert.equal(typeof api.reply, 'undefined');
   assert.equal(typeof api.open, 'undefined');
+});
+
+test('小巧横条只显示周期类型和最低剩余额度，点击请求展开明细', () => {
+  let receive;
+  let click;
+  let toggles = 0;
+  const label = { dataset: {}, addEventListener(name, callback) { if (name === 'click') click = callback; } };
+  const status = {};
+  const summary = { children: [], replaceChildren(...children) { this.children = children; } };
+  const items = { children: [], replaceChildren(...children) { this.children = children; } };
+  const overflow = {};
+  const element = () => ({
+    dataset: {}, className: '', children: [], _text: '',
+    set textContent(value) { this._text = String(value); this.children = []; },
+    get textContent() { return this.children.length
+      ? this.children.map(child => child.textContent).join('') : this._text; },
+    replaceChildren(...children) { this._text = ''; this.children = children; }
+  });
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8'), {
+    document: {
+      getElementById: id => ({ 'quota-label': label, status, summary, items, overflow })[id],
+      createElement: element
+    },
+    window: {
+      addEventListener() {},
+      petQuotaLabel: {
+        onModel(callback) { receive = callback; return () => {}; },
+        toggleExpanded() { toggles += 1; }
+      }
+    }
+  });
+  receive({ state: 'ready', size: 'compact', expanded: false, items: [
+    { label: 'codex', windowMinutes: 10080, remaining: 64 },
+    { label: 'gpt-reserve', windowMinutes: 10080, remaining: 78 }
+  ], overflow: 0 });
+  assert.equal(label.dataset.expanded, 'false');
+  assert.equal(summary.children.map(node => node.textContent).join(''), '周额度64%');
+  assert.deepEqual(summary.children.map(node => node.className), ['summary-period', 'summary-value']);
+  click();
+  assert.equal(toggles, 1);
+
+  receive({ state: 'ready', size: 'compact', expanded: true, items: [
+    { label: 'codex', windowMinutes: 300, remaining: 42 }
+  ], overflow: 0 });
+  assert.equal(label.dataset.expanded, 'true');
+  assert.equal(summary.children.map(node => node.textContent).join(''), '5小时42%');
 });
 
 test('预加载每个外部字段只读一次，Proxy 和回调异常不穿透 IPC', () => {
@@ -798,13 +861,14 @@ test('预加载每个外部字段只读一次，Proxy 和回调异常不穿透 I
   const model = {};
   once(model, 'state', 'ready');
   once(model, 'size', 'compact');
+  once(model, 'expanded', true);
   once(model, 'items', [item]);
   once(model, 'overflow', 0);
   let received;
   const unsubscribe = api.onModel(value => { received = value; throw new Error('consumer failed'); });
   assert.doesNotThrow(() => listener({}, model));
   assert.equal(JSON.stringify(received), JSON.stringify({
-    state: 'ready', size: 'compact',
+    state: 'ready', size: 'compact', expanded: true,
     items: [{ label: 'Codex', windowMinutes: 300, remaining: 18.2 }], overflow: 0
   }));
   for (const count of reads.values()) assert.equal(count, 1);
@@ -816,7 +880,7 @@ test('预加载每个外部字段只读一次，Proxy 和回调异常不穿透 I
   api.onModel(value => { fallback = value; });
   assert.doesNotThrow(() => listener({}, revoked.proxy));
   assert.equal(JSON.stringify(fallback), JSON.stringify({
-    state: 'disconnected', size: 'standard', items: [], overflow: 0
+    state: 'disconnected', size: 'standard', expanded: false, items: [], overflow: 0
   }));
 });
 
@@ -824,6 +888,7 @@ test('渲染层用固定中文状态、纯文本和合理四舍五入最多展�
   let receive;
   const label = { dataset: {} };
   const status = {};
+  const summary = { children: [], replaceChildren(...children) { this.children = children; } };
   const items = { children: [], replaceChildren(...children) { this.children = children; } };
   const overflow = {};
   const element = () => ({
@@ -835,7 +900,7 @@ test('渲染层用固定中文状态、纯文本和合理四舍五入最多展�
   });
   vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8'), {
     document: {
-      getElementById: id => ({ 'quota-label': label, status, items, overflow })[id],
+      getElementById: id => ({ 'quota-label': label, status, summary, items, overflow })[id],
       createElement: element
     },
     window: {
@@ -919,7 +984,7 @@ test('渲染层在 DOM 或 bridge 缺失、订阅退订抛错和恶意模型下�
   let beforeUnload;
   const nodes = {
     'quota-label': { dataset: {} }, status: {},
-    items: { replaceChildren() {} }, overflow: {}
+    summary: { replaceChildren() {} }, items: { replaceChildren() {} }, overflow: {}
   };
   assert.doesNotThrow(() => vm.runInNewContext(source, {
     document: { getElementById: id => nodes[id], createElement: () => ({ dataset: {} }) },
@@ -951,7 +1016,7 @@ test('静态页面无内联脚本能力，浅深背景可读、正文至少 12px
   assert.match(css, /#items li\s*\{[\s\S]*?display:\s*grid/);
   assert.match(css, /\.quota-name\s*\{[\s\S]*?text-overflow:\s*ellipsis/);
   assert.match(css, /\.quota-value\s*\{[\s\S]*?font-variant-numeric:\s*tabular-nums/);
-  assert.match(css, /\.quota-progress\s*\{[\s\S]*?height:\s*4px/);
+  assert.match(css, /\.quota-progress\s*\{[\s\S]*?height:\s*3px/);
 });
 
 test('额度标签改为两行名称、周期、百分比和进度条，不再渲染另有项目提示', () => {
@@ -965,16 +1030,18 @@ test('额度标签改为两行名称、周期、百分比和进度条，不再�
   assert.doesNotMatch(renderer, /另有.*见菜单/);
 });
 
-test('小巧档使用 11px 字号、3px 进度条和更紧凑留白', () => {
+test('标准档复用原小巧版 11px 字号和 3px 进度条，小巧折叠为一行横条', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
   const renderer = fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8');
   assert.match(renderer, /label\.dataset\.size\s*=\s*model\.size/);
-  assert.match(css, /#quota-label\[data-size="compact"\]\s*\{[\s\S]*?padding:\s*5px 8px/);
-  assert.match(css, /#quota-label\[data-size="compact"\]\s*\{[\s\S]*?font-size:\s*11px/);
-  assert.match(css, /#quota-label\[data-size="compact"\][\s\S]*?\.quota-progress\s*\{[\s\S]*?height:\s*3px/);
+  assert.match(css, /#quota-label\s*\{[\s\S]*?padding:\s*5px 8px/);
+  assert.match(css, /#quota-label\s*\{[\s\S]*?font-size:\s*11px/);
+  assert.match(css, /\.quota-progress\s*\{[\s\S]*?height:\s*3px/);
+  assert.match(css, /#quota-label\[data-size="compact"\]\[data-expanded="false"\][\s\S]*?border-radius:\s*999px/);
+  assert.match(css, /#quota-label\[data-size="compact"\]\[data-expanded="false"\][\s\S]*?#summary[\s\S]*?display:\s*flex/);
 });
 
-test('168×58 小巧档内两条额度的文字和进度条不裁切', () => {
+test('168×58 标准档内两条额度的文字和进度条不裁切', () => {
   const inset = 2;
   const paddingY = 5;
   const border = 1;
@@ -987,7 +1054,7 @@ test('168×58 小巧档内两条额度的文字和进度条不裁切', () => {
   assert.ok(needed <= available, `小巧档两条额度需要 ${needed}px，实际可用 ${available}px`);
 });
 
-test('196 像素宽内只允许名称和周期省略，64% 和 78% 核心比例完整', () => {
+test('168 像素宽内只允许名称和周期省略，64% 和 78% 核心比例完整', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
   const renderer = fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8');
   assert.match(renderer, /valueNode\.textContent\s*=\s*`\$\{Math\.round\(item\.remaining\)\}%`/);
@@ -1017,7 +1084,7 @@ function contrast(first, second) {
   return (values[0] + 0.05) / (values[1] + 0.05);
 }
 
-test('196×74 内两条额度的文字和进度条不裁切', () => {
+test('168×58 内两条额度的文字和进度条不裁切', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
   const inset = Number(css.match(/#quota-label\s*\{[\s\S]*?inset:\s*(\d+)px/)[1]);
   const paddingY = Number(css.match(/#quota-label\s*\{[\s\S]*?padding:\s*(\d+)px/)[1]);
@@ -1027,9 +1094,9 @@ test('196×74 内两条额度的文字和进度条不裁切', () => {
   const rowProgress = Number(css.match(/grid-template-rows:\s*(\d+)px\s+(\d+)px/)[2]);
   const rowGap = Number(css.match(/row-gap:\s*(\d+)px/)[1]);
   const itemsGap = Number(css.match(/#items\s*\{[^}]*gap:\s*(\d+)px/)[1]);
-  const available = 74 - inset * 2 - paddingY * 2 - border * 2;
+  const available = 58 - inset * 2 - paddingY * 2 - border * 2;
   const needed = (rowText + rowGap + rowProgress) * 2 + itemsGap;
-  assert.ok(lineHeight >= 15, `真实 12px 正文行高不得低于 15px，当前为 ${lineHeight}px`);
+  assert.ok(lineHeight >= 14, `真实 11px 正文行高不得低于 14px，当前为 ${lineHeight}px`);
   assert.ok(needed <= available, `两条额度需要 ${needed}px，实际可用 ${available}px`);
   assert.doesNotMatch(css, /overflow(?:-y)?:\s*(?:auto|scroll)/);
 });

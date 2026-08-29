@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 const CHANNEL = 'pet:quota-label';
+const TOGGLE_CHANNEL = 'pet:quota-label-toggle';
 const STATES = new Set([
   'disabled', 'connecting', 'connected', 'ready', 'stale', 'reset-wait', 'period-missing',
   'empty', 'missing', 'unauthenticated', 'unsupported', 'disconnected'
@@ -52,30 +53,36 @@ function copyItems(value) {
 
 function safeModel(value) {
   const source = record(value);
-  if (!source) return { state: 'disconnected', size: 'standard', items: [], overflow: 0 };
+  if (!source) return { state: 'disconnected', size: 'standard', expanded: false, items: [], overflow: 0 };
   let stateValue;
   let sizeValue;
+  let expandedValue;
   try {
     stateValue = source.state;
     sizeValue = source.size;
+    expandedValue = source.expanded;
   } catch (_) {
-    return { state: 'disconnected', size: 'standard', items: [], overflow: 0 };
+    return { state: 'disconnected', size: 'standard', expanded: false, items: [], overflow: 0 };
   }
   const state = STATES.has(stateValue) ? stateValue : 'disconnected';
   const size = sizeValue === 'compact' ? 'compact' : 'standard';
-  if (!['ready', 'stale'].includes(state)) return { state, size, items: [], overflow: 0 };
+  const expanded = size === 'compact' && expandedValue === true;
+  if (!['ready', 'stale'].includes(state)) return { state, size, expanded: false, items: [], overflow: 0 };
   let rawItems;
   let overflowValue;
   try {
     rawItems = source.items;
     overflowValue = source.overflow;
-  } catch (_) { return { state, size, items: [], overflow: 0 }; }
+  } catch (_) { return { state, size, expanded, items: [], overflow: 0 }; }
   const overflow = Number.isSafeInteger(overflowValue) && overflowValue > 0
     ? Math.min(overflowValue, 99) : 0;
-  return { state, size, items: copyItems(rawItems), overflow };
+  return { state, size, expanded, items: copyItems(rawItems), overflow };
 }
 
 contextBridge.exposeInMainWorld('petQuotaLabel', {
+  toggleExpanded() {
+    try { ipcRenderer.send(TOGGLE_CHANNEL); } catch (_) {}
+  },
   onModel(callback) {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, payload) => {

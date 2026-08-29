@@ -138,6 +138,20 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
 }
 
 const TASK_ID = '11111111-1111-4111-8111-111111111111';
+function findMenuItem(template, id) {
+  const queue = [...template];
+  while (queue.length) {
+    const item = queue.shift();
+    if (item?.id === id) return item;
+    if (Array.isArray(item?.submenu)) queue.push(...item.submenu);
+  }
+  return null;
+}
+
+function menuItem(fixtureValue, id) {
+  return findMenuItem(fixtureValue.call('menuTemplate()'), id);
+}
+
 function queueCodexCompletion(f) {
   const generation = f.call('codexCompanion.getSnapshot().generation');
   f.send('pet:codex-availability', { generation, available: true });
@@ -170,16 +184,16 @@ function queueMultiCodexCompletion(f) {
 test('默认关闭和取消确认都零连接、零轮询，并保留原设置', async () => {
   const f = await fixture();
   assert.equal(f.connections.length, 0);
-  const item = f.call("menuTemplate().find(item => item.id === 'codex-enabled')");
+  const item = menuItem(f, 'codex-enabled');
   assert.ok(item, '菜单必须有可选开关');
   assert.equal(item.checked, false);
-  const names = f.call("menuTemplate().find(item => item.id === 'codex-task-names')");
+  const names = menuItem(f, 'codex-task-names');
   assert.equal(names.checked, false);
   assert.equal(names.enabled, false);
   assert.equal(f.call('setCodexTaskNameInAlerts(true)'), false);
   assert.equal(f.saved.length, 0);
-  assert.equal(f.call("menuTemplate().find(item => item.id === 'codex-task-names').checked"), false);
-  assert.equal(f.call("menuTemplate().some(item => item.id === 'codex-status')"), false);
+  assert.equal(menuItem(f, 'codex-task-names').checked, false);
+  assert.equal(menuItem(f, 'codex-status'), null);
   await f.call('setCodexEnabled(true)');
   assert.equal(f.dialogs.length, 1);
   assert.equal(f.dialogs[0].length, 1, '小尺寸球球不能作为确认 sheet 宿主');
@@ -191,6 +205,21 @@ test('默认关闭和取消确认都零连接、零轮询，并保留原设置',
   assert.equal(f.connections.length, 0);
   assert.equal(f.saved.length, 0);
   assert.equal(f.timers.size, 0);
+});
+
+test('所有 Codex 设置只保留一个顶层入口并完整归入子菜单', async () => {
+  const f = await fixture({ codexEnabled: true });
+  const menu = f.call('menuTemplate()');
+  const group = menu.find(item => item.id === 'codex-menu');
+  assert.ok(group);
+  assert.equal(group.label, 'Codex 联动');
+  assert.equal(JSON.stringify(menu.filter(item => String(item.id || '').startsWith('codex-')).map(item => item.id)),
+    JSON.stringify(['codex-menu']));
+  assert.equal(JSON.stringify(group.submenu.filter(item => item.id).map(item => item.id)), JSON.stringify([
+    'codex-enabled', 'codex-task-names', 'codex-quota-visible', 'codex-quota-period',
+    'codex-quota-label-size', 'codex-status'
+  ]));
+  assert.equal(group.submenu.find(item => item.id === 'codex-enabled').label, '启用 Codex 联动');
 });
 
 test('原生 smoke 的受控闭包可精确恢复尺寸与空坐标设置且不移动窗口', async () => {
@@ -214,7 +243,7 @@ test('任务名称开关保存成功才更新偏好和菜单，失败时完整�
   const timers = f.timers.size;
   assert.equal(f.call('setCodexTaskNameInAlerts(true)'), true);
   assert.equal(f.saved.at(-1).codexTaskNameInAlerts, true);
-  assert.equal(f.call("menuTemplate().find(item => item.id === 'codex-task-names').checked"), true);
+  assert.equal(menuItem(f, 'codex-task-names').checked, true);
   const updated = f.bubble.shows.at(-1);
   assert.equal(updated.id, shown.id);
   assert.equal(updated.text, '《测试任务》有结果啦\n去看看？');
@@ -230,7 +259,7 @@ test('任务名称开关保存成功才更新偏好和菜单，失败时完整�
   const failedShown = failed.bubble.shows.at(-1);
   const beforeShows = failed.bubble.shows.length;
   assert.equal(failed.call('setCodexTaskNameInAlerts(true)'), false);
-  assert.equal(failed.call("menuTemplate().find(item => item.id === 'codex-task-names').checked"), false);
+  assert.equal(menuItem(failed, 'codex-task-names').checked, false);
   assert.equal(failed.bubble.shows.length, beforeShows);
   assert.equal(failed.bubble.shows.at(-1).id, failedShown.id);
 });
@@ -240,21 +269,21 @@ test('已保存的任务名称开关启动即生效', async () => {
   const ack = queueCodexCompletion(f);
   f.send('pet:codex-motion-ready', ack);
   assert.equal(f.bubble.shows.at(-1).text, '《测试任务》有结果啦\n去看看？');
-  assert.equal(f.call("menuTemplate().find(item => item.id === 'codex-task-names').checked"), true);
+  assert.equal(menuItem(f, 'codex-task-names').checked, true);
 });
 
 test('Codex 额度菜单只在总联动开启时可操作，周期为互斥单选', async () => {
   const off = await fixture();
   const offMenu = off.call('menuTemplate()');
-  assert.equal(offMenu.find(item => item.id === 'codex-quota-visible').enabled, false);
-  assert.equal(offMenu.find(item => item.id === 'codex-quota-period').enabled, false);
+  assert.equal(findMenuItem(offMenu, 'codex-quota-visible').enabled, false);
+  assert.equal(findMenuItem(offMenu, 'codex-quota-period').enabled, false);
   assert.equal(off.call("setCodexPreference('codexQuotaAlwaysVisible', true)"), false);
   assert.equal(off.saved.length, 0);
 
   const f = await fixture({ codexEnabled: true, codexQuotaPeriod: 'weekly' });
   const menu = f.call('menuTemplate()');
-  const visible = menu.find(item => item.id === 'codex-quota-visible');
-  const period = menu.find(item => item.id === 'codex-quota-period');
+  const visible = findMenuItem(menu, 'codex-quota-visible');
+  const period = findMenuItem(menu, 'codex-quota-period');
   assert.equal(visible.checked, false);
   assert.equal(visible.enabled, true);
   assert.equal(period.enabled, true);
@@ -264,25 +293,25 @@ test('Codex 额度菜单只在总联动开启时可操作，周期为互斥单�
   assert.deepEqual(f.preferences.at(-1), {
     taskNameInAlerts: false, quotaAlwaysVisible: false, quotaPeriod: 'fiveHour'
   });
-  assert.equal(f.call("menuTemplate().find(item => item.id === 'codex-quota-period').submenu.find(item => item.checked).id"), 'codex-quota-five-hour');
+  assert.equal(menuItem(f, 'codex-quota-period').submenu.find(item => item.checked).id, 'codex-quota-five-hour');
 });
 
 test('额度卡片大小为标准和小巧两档，只在保存成功后切换', async () => {
   const off = await fixture();
-  assert.equal(off.call("menuTemplate().find(item => item.id === 'codex-quota-label-size').enabled"), false);
+  assert.equal(menuItem(off, 'codex-quota-label-size').enabled, false);
 
   const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
-  const menu = f.call("menuTemplate().find(item => item.id === 'codex-quota-label-size')");
+  const menu = menuItem(f, 'codex-quota-label-size');
   assert.equal(menu.label, '额度卡片大小');
   assert.equal(menu.submenu.find(item => item.checked).id, 'codex-quota-label-standard');
   assert.equal(f.call("setCodexPreference('codexQuotaLabelSize', 'compact')"), true);
   assert.equal(f.saved.at(-1).codexQuotaLabelSize, 'compact');
-  assert.equal(f.call("menuTemplate().find(item => item.id === 'codex-quota-label-size').submenu.find(item => item.checked).id"), 'codex-quota-label-compact');
+  assert.equal(menuItem(f, 'codex-quota-label-size').submenu.find(item => item.checked).id, 'codex-quota-label-compact');
   assert.ok(f.quotaLabel.shows.length > 0, '尺寸切换后应立即刷新常驻卡片');
 
   const failed = await fixture({ codexEnabled: true, saveError: new Error('SIZE_WRITE_FAILURE') });
   assert.equal(failed.call("setCodexPreference('codexQuotaLabelSize', 'compact')"), false);
-  assert.equal(failed.call("menuTemplate().find(item => item.id === 'codex-quota-label-size').submenu.find(item => item.checked).id"), 'codex-quota-label-standard');
+  assert.equal(menuItem(failed, 'codex-quota-label-size').submenu.find(item => item.checked).id, 'codex-quota-label-standard');
 });
 
 test('常驻标签始终使用当前快照和已保存周期', async () => {
@@ -308,33 +337,33 @@ test('常驻标签始终使用当前快照和已保存周期', async () => {
 test('Codex 额度偏好只在原子保存成功后同步，失败完整回滚', async () => {
   const f = await fixture({ codexEnabled: true, saveError: new Error('PRIVATE_WRITE') });
   assert.equal(f.call("setCodexPreference('codexQuotaAlwaysVisible', true)"), false);
-  assert.equal(f.call("menuTemplate().find(item => item.id === 'codex-quota-visible').checked"), false);
+  assert.equal(menuItem(f, 'codex-quota-visible').checked, false);
   assert.equal(f.quotaLabel.shows.length, 0);
   assert.equal(f.call("setCodexPreference('codexQuotaPeriod', 'invalid')"), false);
-  assert.equal(f.call("menuTemplate().find(item => item.id === 'codex-quota-period').submenu.find(item => item.checked).id"), 'codex-quota-auto');
+  assert.equal(menuItem(f, 'codex-quota-period').submenu.find(item => item.checked).id, 'codex-quota-auto');
 });
 
 test('额度周期单选只在保存成功后切换，失败同时回滚点击项和新菜单', async () => {
   const failed = await fixture({ codexEnabled: true, saveError: new Error('PERIOD_WRITE_FAILURE') });
   const failedMenu = failed.call('menuTemplate()');
-  const failedWeekly = failedMenu.find(item => item.id === 'codex-quota-period').submenu
+  const failedWeekly = findMenuItem(failedMenu, 'codex-quota-period').submenu
     .find(item => item.id === 'codex-quota-weekly');
   const failedRefreshes = failed.trayMenus.length;
   failedWeekly.checked = true;
   failedWeekly.click(failedWeekly);
   assert.equal(failedWeekly.checked, false, '当次点击项要立即恢复真实旧值');
   assert.ok(failed.trayMenus.length > failedRefreshes, '保存失败也要刷新整个托盘菜单');
-  const failedFreshPeriod = failed.trayMenus.at(-1).find(item => item.id === 'codex-quota-period');
+  const failedFreshPeriod = findMenuItem(failed.trayMenus.at(-1), 'codex-quota-period');
   assert.equal(failedFreshPeriod.submenu.find(item => item.checked).id, 'codex-quota-auto');
 
   const success = await fixture({ codexEnabled: true });
   const successMenu = success.call('menuTemplate()');
-  const successWeekly = successMenu.find(item => item.id === 'codex-quota-period').submenu
+  const successWeekly = findMenuItem(successMenu, 'codex-quota-period').submenu
     .find(item => item.id === 'codex-quota-weekly');
   successWeekly.checked = true;
   successWeekly.click(successWeekly);
   assert.equal(success.saved.at(-1).codexQuotaPeriod, 'weekly');
-  const successFreshPeriod = success.trayMenus.at(-1).find(item => item.id === 'codex-quota-period');
+  const successFreshPeriod = findMenuItem(success.trayMenus.at(-1), 'codex-quota-period');
   assert.equal(successFreshPeriod.submenu.find(item => item.checked).id, 'codex-quota-weekly');
 });
 
@@ -669,9 +698,9 @@ test('关闭时写设置失败也立即清理连接与定时器，并在关闭�
   assert.equal(f.timers.size, 0);
   assert.equal(f.quotaLabel.destroys, 1, '设置落盘失败也必须彻底释放额度标签');
   const menu = f.call('menuTemplate()');
-  assert.equal(menu.find(item => item.id === 'codex-enabled').checked, false);
-  assert.equal(menu.some(item => item.id === 'codex-status'), false);
-  const warning = menu.find(item => item.id === 'codex-preference-warning');
+  assert.equal(findMenuItem(menu, 'codex-enabled').checked, false);
+  assert.equal(findMenuItem(menu, 'codex-status'), null);
+  const warning = findMenuItem(menu, 'codex-preference-warning');
   assert.ok(warning, '关闭态仍须看见未保存风险');
   assert.match(warning.label, /已关闭.*未保存.*重启.*恢复/);
   assert.doesNotMatch(warning.label, /ENOSPC|PRIVATE/);
@@ -684,8 +713,8 @@ test('开启前设置保存失败维持关闭、零连接，警示不暴露原�
   assert.equal(f.timers.size, 0);
   assert.equal(f.call('codexCompanion.getSnapshot().enabled'), false);
   const menu = f.call('menuTemplate()');
-  assert.equal(menu.find(item => item.id === 'codex-enabled').checked, false);
-  const warning = menu.find(item => item.id === 'codex-preference-warning');
+  assert.equal(findMenuItem(menu, 'codex-enabled').checked, false);
+  const warning = findMenuItem(menu, 'codex-preference-warning');
   assert.match(warning.label, /未能保存.*保持关闭/);
   assert.doesNotMatch(warning.label, /PRIVATE/);
 });
@@ -741,7 +770,7 @@ test('旧菜单闭包在账号切换、任务移出、联动关闭后不能打�
   queueCodexCompletion(f);
   const activeId = '33333333-3333-4333-8333-333333333333';
   f.connections[0].callbacks.onTask({ id: activeId, title: '进行中任务', state: 'active', turnId: 'active-turn', baseline: true });
-  const item = f.call("menuTemplate().find(item => item.id === 'codex-status').submenu.find(item => item.id === 'codex-tasks').submenu[0]");
+  const item = menuItem(f, 'codex-status').submenu.find(item => item.id === 'codex-tasks').submenu[0];
   f.connections[0].callbacks.onTask({ id: activeId, removed: true });
   await item.click();
   assert.equal(f.external.length, 0);
@@ -761,7 +790,7 @@ test('气泡总开关关闭只禁气泡，仍有 Codex 动作与状态菜单', a
   f.send('pet:codex-motion-ready', ack);
   assert.equal(f.call('hostMotion.owner'), 'codex');
   assert.equal(f.bubble.shows.length, 0);
-  assert.equal(f.call("menuTemplate().some(item => item.id === 'codex-status')"), true);
+  assert.ok(menuItem(f, 'codex-status'));
   await f.call('setCodexEnabled(false)');
 });
 

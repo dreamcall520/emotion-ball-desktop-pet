@@ -81,9 +81,9 @@ function assertQuotaLabelWindow(controller, expectedWindow, petBounds, options =
   assert.equal(expectedWindow.isFocusable(), false, '额度标签不能聚焦');
   assert.equal(expectedWindow.isVisible(), true, '额度标签必须可见');
   const bounds = expectedWindow.getBounds();
-  const expectedSize = options.size === 'compact'
-    ? { width: 168, height: 58 }
-    : { width: 196, height: 74 };
+  const expectedSize = options.size === 'compact' && options.expanded !== true
+    ? { width: 128, height: 32 }
+    : { width: 168, height: 58 };
   assert.deepEqual({ width: bounds.width, height: bounds.height }, expectedSize,
     `额度标签必须保持 ${expectedSize.width}×${expectedSize.height}`);
   assert.equal(intersects(bounds, petBounds), false, '额度标签不能与球球相交');
@@ -377,7 +377,9 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     return {
       state: root.dataset.state,
       size: root.dataset.size,
+      expanded: root.dataset.expanded,
       severity: root.dataset.severity,
+      summary: [...document.querySelectorAll('#summary span')].map(node => node.textContent),
       rows: [...document.querySelectorAll('#items li')].map(row => row.textContent),
       names: [...document.querySelectorAll('.quota-name')].map(node => node.textContent),
       periods: [...document.querySelectorAll('.quota-period')].map(node => node.textContent),
@@ -406,8 +408,9 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     view => view.rows.length === expected, label);
   const captureColorSchemes = async (win, options = {}) => {
     const size = options.size === 'compact' ? 'compact' : 'standard';
+    const expanded = options.expanded === true;
     const prefix = options.prefix || 'quota-label';
-    assertQuotaLabelWindow(quotaLabel, win, pet.getBounds(), { size });
+    assertQuotaLabelWindow(quotaLabel, win, pet.getBounds(), { size, expanded });
     const debuggerApi = win.webContents.debugger;
     const attachedHere = !debuggerApi.isAttached();
     if (attachedHere) debuggerApi.attach('1.3');
@@ -424,7 +427,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
         assert.equal(quotaLabel.getWindow(), win, `${scheme} 截图后标签窗口不能被替换`);
       }
       await debuggerApi.sendCommand('Emulation.setEmulatedMedia', { media: '', features: [] });
-      assertQuotaLabelWindow(quotaLabel, win, pet.getBounds(), { size });
+      assertQuotaLabelWindow(quotaLabel, win, pet.getBounds(), { size, expanded });
       assertDistinctCaptureEvidence(captures.dark, [captures.light], '额度标签浅深截图');
     } finally {
       if (attachedHere && debuggerApi.isAttached()) debuggerApi.detach();
@@ -539,8 +542,8 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assert.deepEqual(labelResult.view.progress.map(item => [item.value, item.max]), [[64, 100], [78, 100]]);
     assert.ok(labelResult.view.values.every(item => item.scrollWidth <= item.clientWidth &&
       item.left >= item.rowLeft && item.right <= item.rowRight),
-    '核心剩余比例必须在 196 宽标签中完整可见');
-    assert.ok(labelResult.view.progress.every(item => item.clientWidth > 0 && item.clientHeight === 4),
+    '核心剩余比例必须在 168 宽标签中完整可见');
+    assert.ok(labelResult.view.progress.every(item => item.clientWidth > 0 && item.clientHeight === 3),
     '两条额度进度条必须完整可见');
     const freshCaptures = await captureColorSchemes(labelResult.win);
 
@@ -552,7 +555,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assert.deepEqual(staleLabelResult.view.values.map(item => item.text), ['64%', '78%']);
     assert.ok(staleLabelResult.view.values.every(item => item.scrollWidth <= item.clientWidth &&
       item.left >= item.rowLeft && item.right <= item.rowRight),
-    '过期状态与核心比例必须在 196 宽标签中同时完整可见');
+    '过期状态与核心比例必须在 168 宽标签中同时完整可见');
     const staleBeforeCapture = await labelView(staleLabelResult.win);
     const staleCapture = await capture(staleLabelResult.win, 'quota-label-stale-long', quotaLabel);
     const staleAfterCapture = await labelView(staleLabelResult.win);
@@ -567,19 +570,38 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assert.equal(compactItem.checked, false);
     assert.equal(setQuotaPreference('codexQuotaLabelSize', 'compact'), true,
       '小巧额度卡片必须通过正式设置入口切换');
-    const compactResult = await waitForLabelView(view => view.size === 'compact' &&
-      view.rows.length === 2, '小巧额度卡片');
+    let compactResult = await waitForLabelView(view => view.size === 'compact' &&
+      view.expanded === 'false' && view.rows.length === 2, '小巧额度横条');
     assert.equal(compactResult.win, standardWindow, '切换尺寸不应重建额度窗口');
     assertQuotaLabelWindow(quotaLabel, compactResult.win, pet.getBounds(), { size: 'compact' });
     assert.equal(getSettings().codexQuotaLabelSize, 'compact');
     assert.equal(getMenu().getMenuItemById('codex-quota-label-compact').checked, true);
-    assert.ok(compactResult.view.values.every(item => item.scrollWidth <= item.clientWidth &&
-      item.left >= item.rowLeft && item.right <= item.rowRight),
-    '小巧卡片的百分比不得裁切');
-    assert.ok(compactResult.view.progress.every(item => item.clientWidth > 0 && item.clientHeight === 3),
-      '小巧卡片必须保留完整的 3px 进度条');
+    assert.deepEqual(compactResult.view.summary, ['周额度', '64%'],
+      '小巧横条只展示周期类型和最低剩余额度');
     await captureColorSchemes(compactResult.win,
       { size: 'compact', prefix: 'quota-label-compact' });
+
+    let compactBounds = compactResult.win.getBounds();
+    await input(compactResult.win, 'mousePressed', compactBounds.width / 2, compactBounds.height / 2);
+    await input(compactResult.win, 'mouseReleased', compactBounds.width / 2, compactBounds.height / 2);
+    compactResult = await waitForLabelView(view => view.size === 'compact' &&
+      view.expanded === 'true' && view.rows.length === 2, '展开小巧额度明细');
+    assertQuotaLabelWindow(quotaLabel, compactResult.win, pet.getBounds(),
+      { size: 'compact', expanded: true });
+    assert.ok(compactResult.view.values.every(item => item.scrollWidth <= item.clientWidth &&
+      item.left >= item.rowLeft && item.right <= item.rowRight),
+    '展开明细的百分比不得裁切');
+    assert.ok(compactResult.view.progress.every(item => item.clientWidth > 0 && item.clientHeight === 3),
+      '展开明细必须保留完整的 3px 进度条');
+    await captureColorSchemes(compactResult.win,
+      { size: 'compact', expanded: true, prefix: 'quota-label-compact-expanded' });
+
+    compactBounds = compactResult.win.getBounds();
+    await input(compactResult.win, 'mousePressed', compactBounds.width / 2, compactBounds.height / 2);
+    await input(compactResult.win, 'mouseReleased', compactBounds.width / 2, compactBounds.height / 2);
+    compactResult = await waitForLabelView(view => view.size === 'compact' &&
+      view.expanded === 'false', '收起小巧额度明细');
+    assertQuotaLabelWindow(quotaLabel, compactResult.win, pet.getBounds(), { size: 'compact' });
     const standardItem = getMenu().getMenuItemById('codex-quota-label-standard');
     assert.equal(standardItem.checked, false);
     assert.equal(setQuotaPreference('codexQuotaLabelSize', 'standard'), true,
@@ -665,7 +687,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
         quotaLabel.getWindow() === labelWindow && !intersects(bounds, pet.getBounds()) && !intersects(bounds, win.getBounds()),
       `${pixels} 额度标签避让气泡`);
       assertQuotaLabelWindow(quotaLabel, labelWindow, pet.getBounds(), { obstacleBounds: win.getBounds() });
-      assert.deepEqual({ width: labelBounds.width, height: labelBounds.height }, { width: 196, height: 74 });
+      assert.deepEqual({ width: labelBounds.width, height: labelBounds.height }, { width: 168, height: 58 });
       await capture(win, `codex-bubble-${pixels}`);
       await capture(pet, `codex-pet-${pixels}`);
       assertQuotaLabelWindow(quotaLabel, labelWindow, pet.getBounds(), { obstacleBounds: win.getBounds() });
