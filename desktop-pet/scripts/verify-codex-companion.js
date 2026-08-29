@@ -39,20 +39,32 @@ function assertStaleCaptureEvidence({ before, after, stale, fresh }) {
   return assertDistinctCaptureEvidence(stale, [fresh?.light, fresh?.dark], '过期标签截图');
 }
 
-async function capturePaintedWindow({ win, controller = null, settle = wait, artifactPath = null }) {
+function withCaptureTimeout(operation, timeoutMs, timeoutMessage, timers = globalThis) {
+  const milliseconds = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 3000;
+  let handle;
+  const timeout = new Promise((_, reject) => {
+    handle = timers.setTimeout(() => reject(new Error(timeoutMessage)), milliseconds);
+  });
+  return Promise.race([Promise.resolve(operation), timeout])
+    .finally(() => timers.clearTimeout(handle));
+}
+
+async function capturePaintedWindow({ win, controller = null, settle = wait,
+  artifactPath = null, timeoutMs = 3000 }) {
   assert.ok(win?.webContents, '截图窗口必须存在');
   const assertCurrent = () => {
     if (controller) assert.equal(controller.getWindow(), win, '截图对象必须仍是当前标签窗口');
   };
   assertCurrent();
   if (typeof win.webContents.invalidate === 'function') win.webContents.invalidate();
-  await win.webContents.executeJavaScript(`new Promise(resolve => {
+  await withCaptureTimeout(win.webContents.executeJavaScript(`new Promise(resolve => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
-  })`);
+  })`), timeoutMs, '额度标签截图等待页面绘制超时');
   assertCurrent();
   await settle(60);
   assertCurrent();
-  const image = await win.webContents.capturePage();
+  const image = await withCaptureTimeout(win.webContents.capturePage(), timeoutMs,
+    '额度标签截图捕获超时');
   const buffer = image.toPNG();
   captureDigest(buffer);
   assertCurrent();
@@ -714,5 +726,5 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
 module.exports = {
   verifyCodexCompanion, assertBubbleLayout, assertQuotaLabelWindow, syntheticQuotaSteps,
   applyPetSize, verifyNegativeDisplay, restoreSmokeState, combinedSmokeError,
-  capturePaintedWindow, assertDistinctCaptureEvidence, assertStaleCaptureEvidence
+  capturePaintedWindow, withCaptureTimeout, assertDistinctCaptureEvidence, assertStaleCaptureEvidence
 };

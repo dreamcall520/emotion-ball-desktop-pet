@@ -107,6 +107,53 @@ test('截图证据先等待双帧与短暂绘制稳定，并在捕获前后锁�
   '捕获期间替换窗口时旧截图必须失败');
 });
 
+test('截图绘制和捕获各自局部超时，固定报错且清除计时器', async () => {
+  const { capturePaintedWindow, withCaptureTimeout } =
+    require('../scripts/verify-codex-companion');
+  assert.equal(typeof withCaptureTimeout, 'function', '截图操作需要独立的局部超时门禁');
+  const never = new Promise(() => {});
+  const controllerFor = win => ({ getWindow: () => win });
+  const rafHung = { webContents: {
+    executeJavaScript: () => never,
+    capturePage: async () => { throw new Error('不应进入捕获'); }
+  } };
+  const startedAt = Date.now();
+  await assert.rejects(() => capturePaintedWindow({ win: rafHung,
+    controller: controllerFor(rafHung), timeoutMs: 15, settle: async () => {} }),
+  error => error?.message === '额度标签截图等待页面绘制超时');
+  assert.ok(Date.now() - startedAt < 500, '页面绘制卡住不能等整轮 smoke 超时');
+
+  const captureHung = { webContents: {
+    executeJavaScript: async () => true,
+    capturePage: () => never
+  } };
+  await assert.rejects(() => capturePaintedWindow({ win: captureHung,
+    controller: controllerFor(captureHung), timeoutMs: 15, settle: async () => {} }),
+  error => error?.message === '额度标签截图捕获超时');
+
+  const timerCalls = [];
+  const value = await withCaptureTimeout(Promise.resolve('ok'), 3000, '固定超时', {
+    setTimeout(callback, milliseconds) {
+      timerCalls.push(['set', milliseconds, callback]);
+      return 42;
+    },
+    clearTimeout(handle) { timerCalls.push(['clear', handle]); }
+  });
+  assert.equal(value, 'ok');
+  assert.deepEqual(timerCalls.map(([kind, value]) => [kind, value]),
+    [['set', 3000], ['clear', 42]], '正常完成也必须清除局部超时计时器');
+
+  const timeoutTimerCalls = [];
+  let expire;
+  const timeoutResult = withCaptureTimeout(never, 3000, '固定超时', {
+    setTimeout(callback) { expire = callback; return 43; },
+    clearTimeout(handle) { timeoutTimerCalls.push(handle); }
+  });
+  expire();
+  await assert.rejects(timeoutResult, error => error?.message === '固定超时');
+  assert.deepEqual(timeoutTimerCalls, [43], '超时发生后也必须清除局部计时器');
+});
+
 test('过期 DOM 即使正确，PNG 仍等于新鲜帧也必须拒绝为旧合成证据', () => {
   const { assertDistinctCaptureEvidence, assertStaleCaptureEvidence } =
     require('../scripts/verify-codex-companion');
@@ -177,8 +224,21 @@ test('存在负坐标显示器时真实移动球球验证标签，且只改位�
   assert.deepEqual(calls.at(-1), original, '实机负屏检查后必须恢复原位置');
 });
 
-test('验收中途已关闭且失败时，清理会临时开启合成联动恢复偏好并继续全部步骤', async () => {
-  const { restoreSmokeState, combinedSmokeError } = require('../scripts/verify-codex-companion');
+test('验收截图超时且中途已关闭时，清理会恢复偏好并继续全部步骤', async () => {
+  const { capturePaintedWindow, restoreSmokeState, combinedSmokeError } =
+    require('../scripts/verify-codex-companion');
+  let primary = null;
+  const hungWindow = { webContents: {
+    executeJavaScript: () => new Promise(() => {}),
+    capturePage: async () => { throw new Error('不应进入捕获'); }
+  } };
+  try {
+    await capturePaintedWindow({ win: hungWindow, controller: { getWindow: () => hungWindow },
+      timeoutMs: 15, settle: async () => {} });
+  } catch (error) {
+    primary = error;
+  }
+  assert.equal(primary?.message, '额度标签截图等待页面绘制超时');
   const settings = {
     codexEnabled: false, codexQuotaPeriod: 'weekly', codexQuotaAlwaysVisible: true,
     codexTaskNameInAlerts: true, keepAwake: true, bubblesEnabled: true, size: 'large',
@@ -236,10 +296,9 @@ test('验收中途已关闭且失败时，清理会临时开启合成联动恢�
   assert.deepEqual(cleanup.map(item => item.label), [
     '恢复额度周期', '停止动作', '断开球球调试器', '重建关闭态联动'
   ]);
-  const primary = new Error('原始验收失败');
   const combined = combinedSmokeError(primary, cleanup);
   assert.equal(combined.errors[0], primary, '聚合错误必须保留原始失败为第一条');
-  assert.match(combined.message, /原始验收失败/);
+  assert.match(combined.message, /等待页面绘制超时/);
   assert.equal(combined.errors.length, cleanup.length + 1);
 });
 
