@@ -202,6 +202,7 @@ async function restoreSmokeState({ original, getSettings, setEnabled, setQuotaPr
     ['恢复额度周期', () => restorePreference('codexQuotaPeriod', original.settings.codexQuotaPeriod)],
     ['恢复额度常驻开关', () => restorePreference('codexQuotaAlwaysVisible', original.settings.codexQuotaAlwaysVisible)],
     ['恢复额度卡片大小', () => restorePreference('codexQuotaLabelSize', original.settings.codexQuotaLabelSize)],
+    ['恢复额度卡片外观', () => restorePreference('codexQuotaAppearance', original.settings.codexQuotaAppearance)],
     ['恢复任务名称隐私开关', () => restorePreference('codexTaskNameInAlerts', original.settings.codexTaskNameInAlerts)],
     ['恢复 Codex 总开关', async () => {
       await setEnabled(original.settings.codexEnabled === true);
@@ -312,6 +313,10 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
   assert.equal(initialMenu.getMenuItemById('codex-quota-label-standard').checked, false);
   assert.equal(initialMenu.getMenuItemById('codex-quota-label-compact').checked, true,
     '额度卡片首次启动必须默认小巧');
+  assert.equal(initialMenu.getMenuItemById('codex-quota-appearance').enabled, false,
+    'Codex 总开关关闭时额度卡片外观必须禁用');
+  assert.equal(initialMenu.getMenuItemById('codex-quota-appearance-system').checked, true,
+    '额度卡片首次启动必须默认跟随系统');
   assert.equal(initialMenu.getMenuItemById('codex-status'), null);
   assert.equal(initialMenu.getMenuItemById('codex-recent'), null, '原生菜单不能保留最近提醒');
   const clock = policyClock();
@@ -386,6 +391,8 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     return {
       state: root.dataset.state,
       size: root.dataset.size,
+      appearance: root.dataset.appearance,
+      documentAppearance: document.documentElement.dataset.appearance,
       expanded: root.dataset.expanded,
       itemCount: root.dataset.itemCount,
       severity: root.dataset.severity,
@@ -406,6 +413,12 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       })),
       resetTime: document.getElementById('reset-time')?.textContent || '',
       resetCredits: document.getElementById('reset-credits')?.textContent || '',
+      palette: {
+        surface: getComputedStyle(root).getPropertyValue('--quota-surface').trim(),
+        text: getComputedStyle(root).color,
+        period: getComputedStyle(document.querySelector('.quota-period') || root).color,
+        secondary: getComputedStyle(document.querySelector('.detail-secondary') || root).color
+      },
       clickTrace: Number(window.__quotaStandardClickTrace || 0),
       viewport: { width: innerWidth, height: innerHeight },
       fits: visibleSections.every(node => {
@@ -497,6 +510,70 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       if (attachedHere && debuggerApi.isAttached()) debuggerApi.detach();
     }
     assert.equal(quotaLabel.getWindow(), win, '深色壁纸验收后必须仍是当前标签窗口');
+  };
+  const verifyQuotaAppearance = async win => {
+    assert.equal(quotaLabel.getWindow(), win, '外观验收前必须仍是当前标签窗口');
+    const debuggerApi = win.webContents.debugger;
+    const attachedHere = !debuggerApi.isAttached();
+    if (attachedHere) debuggerApi.attach('1.3');
+    const originalBounds = win.getBounds();
+    const baseline = await labelView(win);
+    const captures = {};
+    const expectPalette = (view, theme) => {
+      if (theme === 'light') {
+        assert.match(view.palette.surface, /rgba\(244,\s*249,\s*255,\s*(?:0?\.86)\)/);
+        assert.equal(view.palette.text, 'rgb(35, 37, 42)');
+        assert.equal(view.palette.period, 'rgb(85, 94, 106)');
+        assert.equal(view.palette.secondary, 'rgb(80, 89, 101)');
+      } else {
+        assert.match(view.palette.surface, /rgba\(26,\s*34,\s*45,\s*(?:0?\.82)\)/);
+        assert.match(view.palette.text, /rgba?\(246,\s*246,\s*244(?:,\s*(?:0?\.96))?\)/);
+        assert.equal(view.palette.period, 'rgb(210, 216, 224)');
+        assert.equal(view.palette.secondary, 'rgb(174, 184, 197)');
+      }
+    };
+    const emulate = scheme => debuggerApi.sendCommand('Emulation.setEmulatedMedia', {
+      media: '', features: [{ name: 'prefers-color-scheme', value: scheme }]
+    });
+    const inspect = async ({ appearance, scheme, theme, name }) => {
+      const previous = getSettings().codexQuotaAppearance;
+      assert.equal(setQuotaPreference('codexQuotaAppearance', appearance), previous !== appearance,
+        `${appearance} 外观必须通过正式设置入口切换`);
+      await emulate(scheme);
+      const result = await waitForLabelView(view => view.appearance === appearance &&
+        view.documentAppearance === appearance && view.expanded === baseline.expanded &&
+        view.rows.length === baseline.rows.length, `${name} 外观模型`);
+      assert.equal(result.win, win, `${name} 不能重建额度窗口`);
+      assert.deepEqual(result.win.getBounds(), originalBounds, `${name} 不能改变额度窗口尺寸或位置`);
+      assert.deepEqual(result.view.rows, baseline.rows, `${name} 不能改变额度内容`);
+      assert.deepEqual(result.view.values.map(item => item.text), baseline.values.map(item => item.text),
+        `${name} 不能改变额度比例`);
+      assert.equal(getMenu().getMenuItemById(`codex-quota-appearance-${appearance}`).checked, true);
+      expectPalette(result.view, theme);
+      captures[name] = await capture(win, `quota-label-appearance-${name}`, quotaLabel);
+      return result.view;
+    };
+    try {
+      await inspect({ appearance: 'system', scheme: 'light', theme: 'light', name: 'system-light' });
+      await inspect({ appearance: 'system', scheme: 'dark', theme: 'dark', name: 'system-dark' });
+      await inspect({ appearance: 'light', scheme: 'dark', theme: 'light', name: 'forced-light' });
+      await inspect({ appearance: 'dark', scheme: 'light', theme: 'dark', name: 'forced-dark' });
+      assertDistinctCaptureEvidence(captures['system-dark'], [captures['system-light']], '跟随系统浅深外观截图');
+      assertDistinctCaptureEvidence(captures['forced-light'], [captures['system-dark']], '固定浅色截图');
+      assertDistinctCaptureEvidence(captures['forced-dark'], [captures['system-light']], '固定深色截图');
+    } finally {
+      if (getSettings().codexQuotaAppearance !== 'system') {
+        setQuotaPreference('codexQuotaAppearance', 'system');
+      }
+      await debuggerApi.sendCommand('Emulation.setEmulatedMedia', { media: '', features: [] })
+        .catch(() => undefined);
+      if (attachedHere && debuggerApi.isAttached()) debuggerApi.detach();
+    }
+    const restored = await waitForLabelView(view => view.appearance === 'system' &&
+      view.expanded === baseline.expanded, '恢复跟随系统外观');
+    assert.equal(restored.win, win);
+    assert.deepEqual(restored.win.getBounds(), originalBounds);
+    process.stdout.write('PET_CODEX_QUOTA_APPEARANCE_OK\n');
   };
   const verifyQuotaBeam = async win => {
     assert.equal(quotaLabel.getWindow(), win, '流光验收前必须仍是当前标签窗口');
@@ -685,6 +762,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assert.equal(standardExpanded.view.resetCredits, '1 次重置机会');
     await captureColorSchemes(standardExpanded.win,
       { size: 'standard', expanded: true, prefix: 'quota-label-standard-expanded' });
+    await verifyQuotaAppearance(standardExpanded.win);
     await captureDarkWallpaperInLightSystem(standardExpanded.win);
     process.stdout.write('PET_CODEX_QUOTA_WALLPAPER_CONTRAST_OK\n');
 
