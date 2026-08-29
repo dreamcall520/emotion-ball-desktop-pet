@@ -59,7 +59,12 @@ function reliableByIdentity(windows) {
   if (!Array.isArray(windows)) return reliable;
   for (const item of windows) {
     if (!validWindow(item)) continue;
-    reliable.set(keyOf(item), copyWindow(item));
+    const key = keyOf(item);
+    if (reliable.has(key)) {
+      reliable.set(key, copyWindow(item));
+      continue;
+    }
+    if (reliable.size < MAX_IDENTITIES) reliable.set(key, copyWindow(item));
   }
   return reliable;
 }
@@ -108,6 +113,7 @@ function createQuotaAlertTracker() {
 function validAlert(item) {
   return validWindow(item)
     && reasonableText(item.key, MAX_KEY_LENGTH)
+    && item.key === keyOf(item)
     && LEVEL_SET.has(item.level);
 }
 

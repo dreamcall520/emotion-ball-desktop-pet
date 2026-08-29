@@ -205,6 +205,16 @@ test('身份历史最多 64 项，超限时按首次出现顺序稳定淘汰最�
   assert.deepEqual(tracker.update([quotaWindow('id-0', 300, 80)], { alwaysVisible: false }), []);
 });
 
+test('同一批次最多跟踪前 64 个不同身份，超出项不引起状态抖动或重报', () => {
+  const tracker = createQuotaAlertTracker();
+  const baseline = Array.from({ length: 65 }, (_, index) => quotaWindow(`id-${index}`, 300, 100));
+  const strong = baseline.map(item => ({ ...item, remaining: 20 }));
+
+  assert.deepEqual(tracker.update(baseline, { baseline: true, alwaysVisible: false }), []);
+  assert.equal(tracker.update(strong, { alwaysVisible: false }).length, 64);
+  assert.deepEqual(tracker.update(strong, { alwaysVisible: false }), []);
+});
+
 test('多类别提醒合并返回最高档、最低实际剩余和稳定的安全引用', () => {
   const tracker = createQuotaAlertTracker();
   tracker.update([
@@ -258,6 +268,30 @@ test('合并忽略非法项、按 key 去重并最多保留 64 个有效提醒',
   assert.equal(merged.refs[0].remaining, 19);
   assert.equal(merged.level, 80);
   assert.equal(merged.remaining, 19);
+});
+
+test('合并只接受与额度身份完全匹配的 key，拒绝伪造独立 key 或共用 key', () => {
+  const tracker = createQuotaAlertTracker();
+  tracker.update([
+    quotaWindow('codex', 300, 100),
+    quotaWindow('spark', 10080, 100)
+  ], { baseline: true, alwaysVisible: false });
+  const [codex, spark] = tracker.update([
+    quotaWindow('codex', 300, 20),
+    quotaWindow('spark', 10080, 10)
+  ], { alwaysVisible: false });
+
+  assert.equal(mergeQuotaAlerts([{ ...codex, key: 'forged-independent-key' }]), null);
+  assert.equal(mergeQuotaAlerts([{ ...spark, key: codex.key }]), null);
+
+  const merged = mergeQuotaAlerts([
+    codex,
+    { ...codex, key: 'forged-independent-key' },
+    { ...spark, key: codex.key },
+    spark
+  ]);
+  assert.equal(merged.count, 2);
+  assert.deepEqual(merged.refs.map(item => item.id), ['codex', 'spark']);
 });
 
 test('合并不变异原提醒，也不携带多余或非标量数据', () => {
