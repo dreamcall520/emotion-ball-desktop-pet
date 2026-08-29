@@ -31,6 +31,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif
 }
 #bubble[data-placement="below"] { inset: 14px 10px 8px; }
 #bubble[data-placement="below"]::after { top: -5px; bottom: auto; transform: rotate(225deg); }
+#bubble[data-tone="strong"] { border-color: rgba(158, 104, 28, .46); color: #6c4514; }
+#bubble[data-tone="strong"]::after { border-color: rgba(158, 104, 28, .46); }
+#bubble[data-tone="urgent"] { border-color: rgba(167, 64, 47, .56); color: #803326; }
+#bubble[data-tone="urgent"]::after { border-color: rgba(167, 64, 47, .56); }
 #message { margin: 0; font-size: 14px; font-weight: 500; line-height: 20px; text-align: center; overflow-wrap: anywhere; }
 #actions { display: flex; align-items: center; gap: 7px; }
 #actions:empty { display: none; }

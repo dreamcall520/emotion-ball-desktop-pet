@@ -6,6 +6,7 @@
   let currentActionKey = null;
   const unsubscribe = window.petBubble.onMessage(payload => {
     bubble.dataset.placement = payload.placement;
+    bubble.dataset.tone = ['normal', 'strong', 'urgent'].includes(payload.tone) ? payload.tone : 'normal';
     bubble.style.setProperty('--anchor-x', `${payload.anchorX}px`);
     message.textContent = payload.text;
     const allowed = ['again', 'rest', 'codex-open', 'codex-results', 'codex-dismiss'];

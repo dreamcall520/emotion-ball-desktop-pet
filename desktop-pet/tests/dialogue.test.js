@@ -59,6 +59,20 @@ test('Codex 多任务、额度、过期与关闭不混入普通对白状态', ()
   assert.ok(director.offer('play', 8005));
 });
 
+test('Codex 额度提醒保留普通、强提醒和紧急层级及六或十二秒时长', () => {
+  for (const [severity, durationMs] of [['normal', 6000], ['strong', 12000], ['urgent', 12000]]) {
+    const director = new DialogueDirector();
+    const result = director.offerCodex(codexAlert({ kind: 'quota', severity, taskIds: [] }), 0, durationMs);
+    assert.equal(result.durationMs, durationMs);
+    assert.equal(result.tone, severity);
+    const updated = director.updateCodex(codexAlert({ kind: 'quota', severity, taskIds: [] }), 1000);
+    assert.equal(updated.durationMs, durationMs - 1000);
+    assert.equal(updated.tone, severity);
+  }
+  const safe = new DialogueDirector().offerCodex(codexAlert({ severity: '<script>' }), 0, 12000);
+  assert.equal(safe.tone, 'normal');
+});
+
 test('当前 Codex 气泡原位更新文案且不延长时限', () => {
   const director = new DialogueDirector({ now: 0 });
   const first = director.offerCodex(codexAlert({ text: '《任务A》有结果啦\n去看看？' }), 1000, 8000);

@@ -29,6 +29,8 @@ const { getMotion } = require('./lib/interaction-motion');
 const { createWindowMotion } = require('./lib/window-motion');
 const { createCodexCompanion } = require('./lib/codex-companion');
 const { buildCodexMenu, buildCodexResultMenu, resolveCodexAction } = require('./lib/codex-menu');
+const { buildQuotaLabelModel } = require('./lib/codex-quota-view');
+const { createQuotaLabelWindow } = require('./lib/quota-label-window');
 
 const APP_NAME = '球球桌宠';
 const IS_SMOKE_TEST = process.env.PET_SMOKE_TEST === '1';
@@ -43,6 +45,7 @@ let isQuitting = false;
 let activityMonitor = null;
 let dialogue = null;
 let bubble = null;
+let quotaLabel = null;
 let screenLocked = false;
 let codexCompanion = null;
 let codexNow = Date.now;
@@ -56,6 +59,9 @@ let codexSentSettings = null;
 let codexNotice = null;
 let codexPreferenceWarning = null;
 let hostMotion = null;
+let quotaSyncing = false;
+let quotaSyncPending = false;
+let quotaSyncSnapshot = null;
 const windowMotion = createWindowMotion({
   getWindow: () => petWindow,
   getWorkArea: bounds => screen.getDisplayMatching(bounds).workArea,
@@ -119,7 +125,92 @@ function clearCodexPresentation() {
   }
   if (previous) sendCodexCommand({ command: 'codex-cancel', alertId: previous.id,
     generation: previous.generation, pageEpoch: previous.pageEpoch, ...(previous.token ? { token: previous.token } : {}) });
-  if (dialogue?.dismissCodex()) bubble?.hide();
+  if (dialogue?.dismissCodex()) hideBubble();
+}
+
+function quotaObstacleBounds() {
+  try {
+    const win = bubble?.getWindow();
+    if (!win || typeof win.isDestroyed !== 'function' || win.isDestroyed() ||
+      typeof win.isVisible !== 'function' || !win.isVisible() || typeof win.getBounds !== 'function') return null;
+    const bounds = win.getBounds();
+    return bounds && Number.isFinite(bounds.x) && Number.isFinite(bounds.y) &&
+      Number.isFinite(bounds.width) && bounds.width > 0 && Number.isFinite(bounds.height) && bounds.height > 0
+      ? { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height } : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function reportQuotaError(scope, error) {
+  try { writeError(scope, error); } catch (_) { /* 关闭期间错误记录不得影响生命周期。 */ }
+}
+
+function repositionQuotaLabel() {
+  try { quotaLabel?.reposition(); } catch (error) { reportQuotaError('额度标签重排', error); }
+}
+
+function showBubble(payload) {
+  if (!payload) return;
+  try { bubble?.show(payload); } finally {
+    repositionQuotaLabel();
+    Promise.resolve().then(repositionQuotaLabel);
+  }
+}
+
+function hideBubble() {
+  try { bubble?.hide(); } finally { repositionQuotaLabel(); }
+}
+
+function repositionBubble() {
+  try { bubble?.reposition(); } finally { repositionQuotaLabel(); }
+}
+
+function syncQuotaLabel(snapshot = null) {
+  quotaSyncPending = true;
+  quotaSyncSnapshot = snapshot;
+  if (quotaSyncing || !quotaLabel) return false;
+  quotaSyncing = true;
+  let shown = false;
+  let attempts = 0;
+  try {
+    while (quotaSyncPending && attempts++ < 8) {
+      quotaSyncPending = false;
+      const requestedSnapshot = quotaSyncSnapshot;
+      quotaSyncSnapshot = null;
+      let visible = false;
+      try {
+        visible = !isQuitting && settings?.codexEnabled === true && settings.codexQuotaAlwaysVisible === true &&
+          !screenLocked && petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
+      } catch (error) {
+        reportQuotaError('额度标签状态', error);
+      }
+      if (!visible) {
+        shown = false;
+        try { quotaLabel.hide(); } catch (error) { reportQuotaError('额度标签隐藏', error); }
+        continue;
+      }
+      try {
+        const current = requestedSnapshot || codexCompanion?.getSnapshot();
+        quotaLabel.show(buildQuotaLabelModel(current, { period: settings.codexQuotaPeriod }, codexNow()));
+        shown = true;
+      } catch (error) {
+        shown = false;
+        reportQuotaError('额度标签同步', error);
+        try { quotaLabel.hide(); } catch (_) {}
+      }
+    }
+    if (quotaSyncPending) {
+      quotaSyncPending = false;
+      quotaSyncSnapshot = null;
+      shown = false;
+      try { quotaLabel.hide(); } catch (_) {}
+      reportQuotaError('额度标签同步', new Error('额度标签状态持续重入'));
+    }
+    return shown;
+  } finally {
+    quotaSyncing = false;
+  }
 }
 
 function dismissCodexPresentation() {
@@ -162,28 +253,45 @@ function initializeCodexCompanion(options = {}) {
     cancel: options.cancel || clearTimeout, canPresent: canPresentCodex, onAlert: presentCodexAlert,
     onAlertUpdate: alert => {
       const payload = dialogue?.updateCodex(alert, performance.now());
-      if (payload) bubble?.show(payload);
+      if (payload) showBubble(payload);
     },
     onClear: clearCodexPresentation,
-    onChange: snapshot => { syncCodexSettings(snapshot); refreshTrayMenu(); }
+    onChange: snapshot => { syncCodexSettings(snapshot); syncQuotaLabel(snapshot); refreshTrayMenu(); }
   });
-  codexCompanion.setPreferences({ taskNameInAlerts: settings?.codexTaskNameInAlerts === true });
+  codexCompanion.setPreferences({
+    taskNameInAlerts: settings?.codexTaskNameInAlerts === true,
+    quotaAlwaysVisible: settings?.codexQuotaAlwaysVisible === true,
+    quotaPeriod: settings?.codexQuotaPeriod
+  });
+}
+
+function setCodexPreference(name, value) {
+  if (!settings || settings.codexEnabled !== true || !codexCompanion || isQuitting) return false;
+  const allowed = new Set(['codexTaskNameInAlerts', 'codexQuotaAlwaysVisible', 'codexQuotaPeriod']);
+  if (!allowed.has(name)) return false;
+  const previous = settings[name];
+  const next = name === 'codexQuotaPeriod'
+    ? (['auto', 'fiveHour', 'weekly'].includes(value) ? value : previous)
+    : Boolean(value);
+  if (previous === next) return false;
+  settings[name] = next;
+  try { persistSettings(); }
+  catch (_) {
+    settings[name] = previous;
+    return false;
+  }
+  codexCompanion.setPreferences({
+    taskNameInAlerts: settings.codexTaskNameInAlerts,
+    quotaAlwaysVisible: settings.codexQuotaAlwaysVisible,
+    quotaPeriod: settings.codexQuotaPeriod
+  });
+  syncQuotaLabel(codexCompanion.getSnapshot());
+  refreshTrayMenu();
+  return true;
 }
 
 function setCodexTaskNameInAlerts(enabled) {
-  if (!settings || settings.codexEnabled !== true || !codexCompanion || isQuitting) return false;
-  const previous = settings.codexTaskNameInAlerts;
-  const next = Boolean(enabled);
-  if (previous === next) return false;
-  settings.codexTaskNameInAlerts = next;
-  try { persistSettings(); }
-  catch (_) {
-    settings.codexTaskNameInAlerts = previous;
-    return false;
-  }
-  codexCompanion.setPreferences({ taskNameInAlerts: settings.codexTaskNameInAlerts });
-  refreshTrayMenu();
-  return true;
+  return setCodexPreference('codexTaskNameInAlerts', enabled);
 }
 
 async function setCodexEnabled(enabled) {
@@ -194,6 +302,7 @@ async function setCodexEnabled(enabled) {
     settings.codexEnabled = false;
     // 停止读取不依赖磁盘写入成功；保存失败也必须先释放连接和计时器。
     await codexCompanion.setEnabled(false);
+    syncQuotaLabel(codexCompanion.getSnapshot());
     if (changed) {
       try { persistSettings(); codexPreferenceWarning = null; }
       catch (_) { codexPreferenceWarning = '联动已关闭，但未保存；重启可能恢复开启'; }
@@ -220,6 +329,7 @@ async function setCodexEnabled(enabled) {
       return false;
     }
     await codexCompanion.setEnabled(true);
+    syncQuotaLabel(codexCompanion.getSnapshot());
     return true;
   } catch (_) {
     // 不记录来自系统或 Codex 的原始错误内容。
@@ -393,7 +503,7 @@ function setCompanionSetting(name, enabled) {
   settings[name] = Boolean(enabled);
   if (name === 'bubblesEnabled') {
     dialogue.setEnabled(settings.bubblesEnabled);
-    if (!settings.bubblesEnabled) bubble.hide();
+    if (!settings.bubblesEnabled) hideBubble();
   }
   persistSettings();
   sendCompanionSettings();
@@ -404,8 +514,8 @@ function showDialogue(event) {
   if (screenLocked || !petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return null;
   const payload = dialogue.offer(event, performance.now());
   if (payload) dismissCodexPresentation();
-  if (payload) bubble.show(payload);
-  else if (!dialogue.hasBubble(performance.now())) bubble.hide();
+  if (payload) showBubble(payload);
+  else if (!dialogue.hasBubble(performance.now())) hideBubble();
   return payload;
 }
 
@@ -438,6 +548,7 @@ function setAlwaysOnTop(enabled) {
     petWindow.setAlwaysOnTop(settings.alwaysOnTop, 'floating');
   }
   bubble?.setAlwaysOnTop(settings.alwaysOnTop);
+  quotaLabel?.setAlwaysOnTop(settings.alwaysOnTop);
   persistSettings();
   refreshTrayMenu();
 }
@@ -503,6 +614,24 @@ function menuTemplate() {
       click: item => { const enabled = item.checked; item.checked = settings.codexTaskNameInAlerts === true;
         setCodexTaskNameInAlerts(enabled); }
     },
+    {
+      id: 'codex-quota-visible', label: '一直显示剩余额度', type: 'checkbox',
+      enabled: settings.codexEnabled === true, checked: settings.codexQuotaAlwaysVisible === true,
+      click: item => { const enabled = item.checked; item.checked = settings.codexQuotaAlwaysVisible === true;
+        setCodexPreference('codexQuotaAlwaysVisible', enabled); }
+    },
+    {
+      id: 'codex-quota-period', label: '额度提醒周期', enabled: settings.codexEnabled === true,
+      submenu: [
+        ['auto', 'codex-quota-auto', '自动（按当前套餐）'],
+        ['fiveHour', 'codex-quota-five-hour', '5 小时'],
+        ['weekly', 'codex-quota-weekly', '周额度']
+      ].map(([value, id, label]) => ({
+        id, label, type: 'radio', enabled: settings.codexEnabled === true,
+        checked: settings.codexQuotaPeriod === value,
+        click: () => setCodexPreference('codexQuotaPeriod', value)
+      }))
+    },
     ...(codexPreferenceWarning ? [{ id: 'codex-preference-warning', label: codexPreferenceWarning, enabled: false }] : []),
     ...(settings.codexEnabled ? [{ id: 'codex-status', label: 'Codex 状态', submenu: [
       ...(codexNotice ? [{ label: codexNotice.text, enabled: false }, { type: 'separator' }] : []),
@@ -558,6 +687,7 @@ function createTray() {
       makeWindowVisible();
       petWindow.showInactive();
       petWindow.moveTop();
+      syncQuotaLabel(codexCompanion?.getSnapshot());
     }
   });
 }
@@ -585,7 +715,7 @@ async function finishSmokeTest() {
       getMenu: () => Menu.buildFromTemplate(menuTemplate()), getSettings: () => ({ ...settings }),
       prepare: initializeCodexCompanion, getController: () => codexCompanion,
       canPresent: canPresentCodex, getMotionOwner: () => hostMotion,
-      clearDialogue: () => { dialogue.dismiss(); bubble.hide(); },
+      clearDialogue: () => { dialogue.dismiss(); hideBubble(); },
       // 只在显式冒烟闭包提供模拟开关，不注册测试 IPC，也不显示真实授权弹窗。
       setEnabled: async enabled => { settings.codexEnabled = enabled; await codexCompanion.setEnabled(enabled); }
     });
@@ -704,6 +834,7 @@ function createPetWindow() {
   petWindow.once('ready-to-show', () => {
     if (!petWindow || petWindow.isDestroyed()) return;
     petWindow.showInactive();
+    syncQuotaLabel(codexCompanion?.getSnapshot());
   });
   petWindow.webContents.on('did-finish-load', () => {
     codexPageReady = true;
@@ -713,14 +844,15 @@ function createPetWindow() {
     finishSmokeTest();
   });
   petWindow.webContents.on('did-start-loading', invalidateCodexPage);
-  petWindow.on('move', () => bubble?.reposition());
-  petWindow.on('resize', () => { stopMotion(); bubble?.reposition(); });
-  petWindow.on('hide', () => { stopMotion(); bubble?.hide(); dialogue?.dismiss(); });
+  petWindow.on('move', repositionBubble);
+  petWindow.on('resize', () => { stopMotion(); repositionBubble(); });
+  petWindow.on('hide', () => { stopMotion(); hideBubble(); quotaLabel?.hide(); dialogue?.dismiss(); });
   petWindow.on('closed', () => {
     invalidateCodexPage();
     stopMotion({ restore: false, notify: false, notifyRenderer: false });
     activityMonitor?.stop();
     bubble?.destroy();
+    quotaLabel?.destroy();
     dialogue?.dismiss();
     petWindow = null;
   });
@@ -743,7 +875,7 @@ function registerIpc() {
     if (!payload || !Number.isInteger(payload.id)) return;
     const action = dialogue.respond(payload.id, payload.action, performance.now());
     if (!action) return;
-    bubble.hide();
+    hideBubble();
     if (action?.command === 'codex') void routeCodexAction(action.descriptor);
     else sendCommand(action);
   });
@@ -820,7 +952,7 @@ function registerIpc() {
       return;
     }
     const payload = dialogue.offerCodex(alert, performance.now(), alert.expiresAt - codexNow());
-    if (payload) bubble.show(payload);
+    if (payload) showBubble(payload);
   });
 
   ipcMain.on('pet:stop-motion', event => {
@@ -836,14 +968,14 @@ function registerIpc() {
 function registerDisplayRecovery() {
   const recover = () => {
     if (petWindow && !petWindow.isDestroyed()) makeWindowVisible();
-    bubble?.reposition();
+    repositionBubble();
   };
   screen.on('display-added', recover);
   screen.on('display-removed', recover);
   screen.on('display-metrics-changed', (_event, _display, changedMetrics) => {
     if (Array.isArray(changedMetrics) && changedMetrics.length > 0 &&
       changedMetrics.every(metric => metric === 'workArea') && windowMotion.refreshWorkArea()) {
-      bubble?.reposition();
+      repositionBubble();
       return;
     }
     recover();
@@ -868,6 +1000,12 @@ async function bootstrap() {
     alwaysOnTop: settings.alwaysOnTop,
     onError: error => writeError('气泡窗口', error)
   });
+  quotaLabel = createQuotaLabelWindow({
+    BrowserWindow, screen, getPetWindow: () => petWindow,
+    getObstacle: quotaObstacleBounds,
+    alwaysOnTop: settings.alwaysOnTop,
+    onError: error => writeError('额度标签窗口', error)
+  });
   activityMonitor = createActivityMonitor({
     screen, powerMonitor, getWindow: () => petWindow,
     onSample: packet => {
@@ -880,10 +1018,11 @@ async function bootstrap() {
     dragState = null;
     stopMotion();
     activityMonitor.pause();
-    bubble.hide();
+    hideBubble();
+    quotaLabel?.hide();
     dialogue.dismiss();
   };
-  const resume = () => { screenLocked = false; activityMonitor.resume(); };
+  const resume = () => { screenLocked = false; activityMonitor.resume(); syncQuotaLabel(codexCompanion?.getSnapshot()); };
   const powerGuard = createPowerGuard({ pause, resume });
   powerMonitor.on('lock-screen', () => powerGuard.setLocked(true));
   powerMonitor.on('suspend', () => powerGuard.setSuspended(true));
@@ -908,6 +1047,7 @@ if (!hasSingleInstanceLock) {
       makeWindowVisible();
       petWindow.showInactive();
       petWindow.moveTop();
+      syncQuotaLabel(codexCompanion?.getSnapshot());
     }
   });
 
@@ -918,6 +1058,7 @@ if (!hasSingleInstanceLock) {
     stopMotion();
     activityMonitor?.stop();
     bubble?.destroy();
+    quotaLabel?.destroy();
   });
 
   app.on('window-all-closed', () => {

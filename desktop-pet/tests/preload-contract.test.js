@@ -45,13 +45,15 @@ test('气泡同ID先更新文字，动作不变时保留按钮、变化时才重
     document: { getElementById: id => ({ bubble, message, actions })[id], createElement: () => ({ dataset: {}, addEventListener(_name, callback) { this.click = callback; } }) },
     window: { addEventListener() {}, petBubble: { onMessage(callback) { receive = callback; }, reply: (...args) => replies.push(args) } }
   });
-  const payload = { id: 4, text: '<b>这轮有结果啦</b>', actions: [{ id: 'codex-open', label: '去看看' }, { id: 'codex-dismiss', label: '知道啦' }], anchorX: 30 };
+  const payload = { id: 4, text: '<b>这轮有结果啦</b>', tone: 'strong', actions: [{ id: 'codex-open', label: '去看看' }, { id: 'codex-dismiss', label: '知道啦' }], anchorX: 30 };
   receive(payload);
   assert.equal(message.textContent, payload.text);
+  assert.equal(bubble.dataset.tone, 'strong');
   assert.equal(actions.children.length, 2);
   const button = actions.children[0];
-  receive({ ...payload, text: '已显示任务名称', anchorX: 40 });
+  receive({ ...payload, text: '已显示任务名称', tone: 'javascript:bad', anchorX: 40 });
   assert.equal(message.textContent, '已显示任务名称');
+  assert.equal(bubble.dataset.tone, 'normal');
   assert.equal(actions.children[0], button);
   receive({ ...payload, text: '动作已变', actions: [{ id: 'codex-results', label: '查看结果' }, { id: 'codex-dismiss', label: '知道啦' }] });
   assert.equal(message.textContent, '动作已变');
@@ -60,6 +62,15 @@ test('气泡同ID先更新文字，动作不变时保留按钮、变化时才重
   button.click();
   assert.deepEqual(replies, [[4, 'codex-open']]);
   assert.doesNotMatch(fs.readFileSync(path.resolve(__dirname, '../bubble-renderer.js'), 'utf8'), /innerHTML/);
+});
+
+test('强额度提醒只强化气泡边框和文字，不闪烁不改球球颜色', () => {
+  const bubbleCss = fs.readFileSync(path.resolve(__dirname, '../bubble.css'), 'utf8');
+  const renderer = fs.readFileSync(path.resolve(__dirname, '../renderer.js'), 'utf8');
+  assert.match(bubbleCss, /data-tone="strong"/);
+  assert.match(bubbleCss, /data-tone="urgent"/);
+  assert.doesNotMatch(bubbleCss, /animation\s*:/);
+  assert.match(renderer, /#EEEBE4/i);
 });
 
 test('预加载动作接口仅发送白名单字段且回帧可取消订阅', () => {

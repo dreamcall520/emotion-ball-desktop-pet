@@ -9,6 +9,7 @@ const { setImmediate: flush } = require('node:timers/promises');
 
 // 真实 main、动作控制器和对白规则；只替代 Electron、系统采样和磁盘设置。
 async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
+  codexQuotaAlwaysVisible = false, codexQuotaPeriod = 'auto', bubblesEnabled = true,
   consent = async () => ({ response: 1 }), openExternal = async () => {}, saveError = null } = {}) {
   let now = 0;
   let serial = 0;
@@ -17,6 +18,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   const saved = [];
   const commands = [];
   const connections = [];
+  const preferences = [];
   const dialogs = [];
   const external = [];
   const popups = [];
@@ -46,8 +48,17 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     showInactive() { this.visible = true; } hide() { this.visible = false; this.emit('hide'); }
   }
   class Tray extends EventEmitter { setToolTip() {} setContextMenu() {} }
-  const bubble = { shows: [], hides: 0, moves: 0, show(payload) { this.shows.push(payload); }, hide() { this.hides++; },
-    reposition() { this.moves++; }, destroy() {}, setAlwaysOnTop() {}, getWindow: () => ({ isDestroyed: () => false, webContents: bubble }) };
+  const bubbleWindow = { visible: false, bounds: { x: -610, y: 0, width: 224, height: 118 },
+    isDestroyed: () => false, isVisible() { return this.visible; }, getBounds() { return { ...this.bounds }; }, webContents: null };
+  const bubble = { shows: [], hides: 0, moves: 0,
+    show(payload) { this.shows.push(payload); bubbleWindow.visible = true; },
+    hide() { this.hides++; bubbleWindow.visible = false; },
+    reposition() { this.moves++; }, destroy() { bubbleWindow.visible = false; }, setAlwaysOnTop() {}, getWindow: () => bubbleWindow };
+  bubbleWindow.webContents = bubble;
+  const quotaLabel = { shows: [], hides: 0, moves: 0, destroys: 0, topmost: [], visible: false,
+    show(model) { this.shows.push(model); this.visible = true; }, hide() { this.hides++; this.visible = false; },
+    reposition() { this.moves++; }, destroy() { this.destroys++; this.visible = false; },
+    setAlwaysOnTop(value) { this.topmost.push(value); }, getWindow: () => null };
   const realRequire = createRequire(path.resolve(__dirname, '../main.js'));
   const context = vm.createContext({ __dirname: path.resolve(__dirname, '..'), console,
     process: { env: {}, stderr: { write(message) { throw new Error(message); } } }, performance: { now: () => now },
@@ -60,10 +71,11 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
         shell: { openExternal: url => { external.push(url); return openExternal(url); } },
         Menu: { buildFromTemplate: value => Object.assign(value, { popup: options => popups.push({ value, options }) }) }, nativeImage: { createFromPath: () => ({ setTemplateImage() {} }) } };
       if (name === './lib/settings') return { loadSettings: () => ({ size: 'tiny', x: -600, y: 100,
-        bubblesEnabled: true, keepAwake: false, alwaysOnTop: true, codexEnabled, codexTaskNameInAlerts }),
+        bubblesEnabled, keepAwake: false, alwaysOnTop: true, codexEnabled, codexTaskNameInAlerts,
+        codexQuotaAlwaysVisible, codexQuotaPeriod }),
         saveSettings: (_file, settings) => { if (saveError) throw saveError; saved.push({ ...settings }); return settings; } };
-      if (name === './lib/codex-companion') return { createCodexCompanion: options => realRequire(name).createCodexCompanion({ ...options,
-        createConnection(callbacks) {
+      if (name === './lib/codex-companion') return { createCodexCompanion: options => {
+        const controller = realRequire(name).createCodexCompanion({ ...options, createConnection(callbacks) {
           const connection = { callbacks, closed: false, async start() {
             callbacks.onAccount({ accountKey: 'account-one' });
             callbacks.onStatus({ channel: 'quota', state: 'connected' });
@@ -71,9 +83,13 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
           }, async refresh() {}, async retry() {}, close() { this.closed = true; } };
           connections.push(connection);
           return connection;
-        }
-      }) };
+        } });
+        const setPreferences = controller.setPreferences;
+        controller.setPreferences = value => { preferences.push({ ...value }); return setPreferences(value); };
+        return controller;
+      } };
       if (name === './lib/bubble-window') return { createBubbleWindow: () => bubble };
+      if (name === './lib/quota-label-window') return { createQuotaLabelWindow: () => quotaLabel };
       if (name === './lib/activity-monitor') return { ...realRequire(name), createActivityMonitor: () => ({ start() {}, stop() {}, pause() {}, resume() {} }) };
       return realRequire(name);
     }
@@ -83,7 +99,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   const pet = windows[0];
   pet.emit('ready-to-show');
   pet.webContents.emit('did-finish-load');
-  return { pet, bubble, commands, saved, screen, powerMonitor, app, timers, connections, dialogs, external, popups,
+  return { pet, bubble, quotaLabel, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups,
     call: expression => vm.runInContext(expression, context),
     send(channel, packet, sender = pet.webContents) {
       // 与实际预加载一致，默认携带当前页面代次；显式传旧值可验迟到报文。
@@ -194,6 +210,106 @@ test('已保存的任务名称开关启动即生效', async () => {
   f.send('pet:codex-motion-ready', ack);
   assert.equal(f.bubble.shows.at(-1).text, '《测试任务》有结果啦\n去看看？');
   assert.equal(f.call("menuTemplate().find(item => item.id === 'codex-task-names').checked"), true);
+});
+
+test('Codex 额度菜单只在总联动开启时可操作，周期为互斥单选', async () => {
+  const off = await fixture();
+  const offMenu = off.call('menuTemplate()');
+  assert.equal(offMenu.find(item => item.id === 'codex-quota-visible').enabled, false);
+  assert.equal(offMenu.find(item => item.id === 'codex-quota-period').enabled, false);
+  assert.equal(off.call("setCodexPreference('codexQuotaAlwaysVisible', true)"), false);
+  assert.equal(off.saved.length, 0);
+
+  const f = await fixture({ codexEnabled: true, codexQuotaPeriod: 'weekly' });
+  const menu = f.call('menuTemplate()');
+  const visible = menu.find(item => item.id === 'codex-quota-visible');
+  const period = menu.find(item => item.id === 'codex-quota-period');
+  assert.equal(visible.checked, false);
+  assert.equal(visible.enabled, true);
+  assert.equal(period.enabled, true);
+  assert.equal(JSON.stringify(period.submenu.filter(item => item.checked).map(item => item.id)), JSON.stringify(['codex-quota-weekly']));
+  assert.equal(f.call("setCodexPreference('codexQuotaPeriod', 'fiveHour')"), true);
+  assert.equal(f.saved.at(-1).codexQuotaPeriod, 'fiveHour');
+  assert.deepEqual(f.preferences.at(-1), {
+    taskNameInAlerts: false, quotaAlwaysVisible: false, quotaPeriod: 'fiveHour'
+  });
+  assert.equal(f.call("menuTemplate().find(item => item.id === 'codex-quota-period').submenu.find(item => item.checked).id"), 'codex-quota-five-hour');
+});
+
+test('常驻标签始终使用当前快照和已保存周期', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  f.connections[0].callbacks.onQuota({
+    updatedAt: 1800000000000,
+    windows: [
+      { id: 'five', label: '5 小时', windowMinutes: 300, remaining: 61, resetsAt: 1800003600000 },
+      { id: 'week', label: '周额度', windowMinutes: 10080, remaining: 42, resetsAt: 1800604800000 }
+    ]
+  });
+  assert.equal(f.quotaLabel.shows.at(-1).items.length, 2);
+  assert.equal(f.call("setCodexPreference('codexQuotaPeriod', 'weekly')"), true);
+  const model = f.quotaLabel.shows.at(-1);
+  assert.equal(model.items.length, 1);
+  assert.equal(model.items[0].label, '周额度');
+  assert.equal(model.items[0].remaining, 42);
+});
+
+test('Codex 额度偏好只在原子保存成功后同步，失败完整回滚', async () => {
+  const f = await fixture({ codexEnabled: true, saveError: new Error('PRIVATE_WRITE') });
+  assert.equal(f.call("setCodexPreference('codexQuotaAlwaysVisible', true)"), false);
+  assert.equal(f.call("menuTemplate().find(item => item.id === 'codex-quota-visible').checked"), false);
+  assert.equal(f.quotaLabel.shows.length, 0);
+  assert.equal(f.call("setCodexPreference('codexQuotaPeriod', 'invalid')"), false);
+  assert.equal(f.call("menuTemplate().find(item => item.id === 'codex-quota-period').submenu.find(item => item.checked).id"), 'codex-quota-auto');
+});
+
+test('常驻额度标签与互动气泡独立，只在联动开启且球球可见时展示', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true, bubblesEnabled: false });
+  assert.equal(f.quotaLabel.visible, true);
+  assert.ok(f.quotaLabel.shows.length > 0);
+  assert.equal(f.bubble.shows.length, 0);
+  assert.equal(f.call("setCodexPreference('codexQuotaAlwaysVisible', false)"), true);
+  assert.equal(f.quotaLabel.visible, false);
+  assert.equal(f.call("setCodexPreference('codexQuotaAlwaysVisible', true)"), true);
+  assert.equal(f.quotaLabel.visible, true);
+  await f.call('setCodexEnabled(false)');
+  assert.equal(f.quotaLabel.visible, false);
+});
+
+test('额度标签跟随锁屏、休眠、隐藏、窗口和显示器生命周期', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  const initialMoves = f.quotaLabel.moves;
+  f.pet.emit('move');
+  f.pet.emit('resize');
+  f.screen.emit('display-added');
+  assert.ok(f.quotaLabel.moves >= initialMoves + 3);
+  f.powerMonitor.emit('lock-screen');
+  assert.equal(f.quotaLabel.visible, false);
+  f.powerMonitor.emit('unlock-screen');
+  assert.equal(f.quotaLabel.visible, true);
+  f.powerMonitor.emit('suspend');
+  assert.equal(f.quotaLabel.visible, false);
+  f.powerMonitor.emit('resume');
+  assert.equal(f.quotaLabel.visible, true);
+  f.pet.hide();
+  assert.equal(f.quotaLabel.visible, false);
+  f.pet.showInactive();
+  f.call('syncQuotaLabel(codexCompanion.getSnapshot())');
+  assert.equal(f.quotaLabel.visible, true);
+  f.call('setAlwaysOnTop(false)');
+  assert.equal(f.quotaLabel.topmost.at(-1), false);
+  f.app.emit('before-quit');
+  assert.ok(f.quotaLabel.destroys > 0);
+});
+
+test('额度标签只避让实际可见气泡，气泡显隐后立即重排', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  assert.equal(f.call('quotaObstacleBounds()'), null);
+  f.send('pet:say', 'hello');
+  assert.equal(JSON.stringify(f.call('quotaObstacleBounds()')), JSON.stringify({ x: -610, y: 0, width: 224, height: 118 }));
+  const moves = f.quotaLabel.moves;
+  f.call('hideBubble()');
+  assert.equal(f.call('quotaObstacleBounds()'), null);
+  assert.ok(f.quotaLabel.moves > moves);
 });
 
 test('重复开启只弹一个确认，关闭及退出后的迟到确认不会连接', async () => {

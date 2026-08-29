@@ -50,6 +50,8 @@ const PLAY_ACTIONS = Object.freeze([
   Object.freeze({ id: 'rest', label: '你歇会儿' })
 ]);
 const TEN_MINUTES = 600000;
+const CODEX_TONES = new Set(['normal', 'strong', 'urgent']);
+const codexTone = value => CODEX_TONES.has(value) ? value : 'normal';
 
 function validCodexText(text) {
   if (typeof text !== 'string' || Array.from(text).length > 48) return false;
@@ -118,11 +120,12 @@ class DialogueDirector {
     actions.push({ id: 'codex-dismiss', label: '知道啦' });
     descriptors['codex-dismiss'] = descriptor('dismiss');
     const id = this._nextId++;
-    durationMs = Math.min(8000, durationMs);
+    durationMs = Math.min(12000, durationMs);
+    const tone = codexTone(alert.severity);
     this._current = { id, event: 'codex', sourceAlertId: alert.id, sourceGeneration: alert.generation,
-      priority: -1, actions, descriptors, expiresAt: nowMs + durationMs };
+      priority: -1, tone, actions, descriptors, expiresAt: nowMs + durationMs };
     this._lastBubbleAt = nowMs;
-    return { id, text: alert.text, actions: actions.map(action => ({ ...action })), durationMs };
+    return { id, text: alert.text, tone, actions: actions.map(action => ({ ...action })), durationMs };
   }
 
   updateCodex(alert, nowMs) {
@@ -130,9 +133,12 @@ class DialogueDirector {
     this._expire(nowMs);
     if (this._current?.event !== 'codex' || this._current.sourceAlertId !== alert?.id ||
       this._current.sourceGeneration !== alert?.generation || !validCodexText(alert?.text)) return null;
+    const tone = codexTone(alert.severity);
+    this._current.tone = tone;
     return {
       id: this._current.id,
       text: alert.text,
+      tone,
       actions: this._current.actions.map(action => ({ ...action })),
       durationMs: this._current.expiresAt - nowMs
     };
