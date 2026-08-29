@@ -25,7 +25,14 @@ function menuText(value, maximum = DEFAULT_MAXIMUM, fallback = '') {
 function alertTaskTitle(value) {
   const fullTitle = plainText(value, Number.MAX_SAFE_INTEGER);
   const reliable = fullTitle.replace(DEFAULT_IGNORABLE, '');
-  return reliable && reliable !== '未命名任务' ? plainText(fullTitle, TITLE_MAXIMUM) : null;
+  if (!reliable || reliable === '未命名任务') return null;
+  const preview = plainText(fullTitle, TITLE_MAXIMUM);
+  const previewPoints = Array.from(preview);
+  const fullPoints = Array.from(fullTitle);
+  const visiblePreview = previewPoints
+    .slice(0, fullPoints.length > TITLE_MAXIMUM && previewPoints.at(-1) === '…' ? -1 : undefined)
+    .join('').replace(DEFAULT_IGNORABLE, '').replace(/\s+/gu, '').trim();
+  return visiblePreview && visiblePreview !== '未命名任务' ? preview : null;
 }
 
 function genericCompletion(count) {
