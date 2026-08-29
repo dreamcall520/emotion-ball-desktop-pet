@@ -27,6 +27,12 @@ test('提醒标题最多18个 Unicode 字符且过滤未命名兜底', () => {
   assert.equal(alertTaskTitle('\u0000\u202e\n'), null);
 });
 
+test('提醒标题忽略不可见格式字符判断可靠性但保留正常 emoji 序列', () => {
+  assert.equal(alertTaskTitle('\u200b\u2060\u00ad\u034f'), null);
+  assert.equal(alertTaskTitle('未\u200b命\u2060名\u00ad任\u034f务'), null);
+  assert.equal(alertTaskTitle('👩‍💻️'), '👩‍💻️');
+});
+
 test('关闭名称或无可靠名称时保持通用完成文案', () => {
   assert.equal(completionText(['任务A'], 1, false), '这轮有结果啦，去看看？');
   assert.equal(completionText([null, '未命名任务'], 2, true), '有 2 轮出结果啦\n去看看？');

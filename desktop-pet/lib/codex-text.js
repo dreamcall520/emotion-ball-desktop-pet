@@ -1,4 +1,5 @@
 const INVALID_TEXT = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+const DEFAULT_IGNORABLE = /\p{Default_Ignorable_Code_Point}/gu;
 const DEFAULT_MAXIMUM = 40;
 const TITLE_MAXIMUM = 18;
 
@@ -23,7 +24,8 @@ function menuText(value, maximum = DEFAULT_MAXIMUM, fallback = '') {
 
 function alertTaskTitle(value) {
   const title = plainText(value, TITLE_MAXIMUM);
-  return title && title !== '未命名任务' ? title : null;
+  const reliable = title.replace(DEFAULT_IGNORABLE, '');
+  return reliable && reliable !== '未命名任务' ? title : null;
 }
 
 function genericCompletion(count) {
