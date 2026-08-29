@@ -67,19 +67,22 @@
 
   function safeModel(value) {
     const source = record(value);
-    if (!source) return { state: 'disconnected', items: [], overflow: 0, size: 'standard', expanded: false };
+    if (!source) return { state: 'disconnected', items: [], overflow: 0, size: 'standard', appearance: 'system', expanded: false };
     let stateValue;
     let sizeValue;
+    let appearanceValue;
     let expandedValue;
     try {
       stateValue = source.state;
       sizeValue = source.size;
+      appearanceValue = source.appearance;
       expandedValue = source.expanded;
-    } catch (_) { return { state: 'disconnected', items: [], overflow: 0, size: 'standard', expanded: false }; }
+    } catch (_) { return { state: 'disconnected', items: [], overflow: 0, size: 'standard', appearance: 'system', expanded: false }; }
     const state = states.has(stateValue) ? stateValue : 'disconnected';
     const size = sizeValue === 'compact' ? 'compact' : 'standard';
+    const appearance = ['light', 'dark'].includes(appearanceValue) ? appearanceValue : 'system';
     const expanded = expandedValue === true;
-    if (!['ready', 'stale'].includes(state)) return { state, items: [], overflow: 0, size, expanded: false };
+    if (!['ready', 'stale'].includes(state)) return { state, items: [], overflow: 0, size, appearance, expanded: false };
     let rawItems;
     let overflowValue;
     let resetCreditsAvailable;
@@ -87,7 +90,7 @@
       rawItems = source.items;
       overflowValue = source.overflow;
       resetCreditsAvailable = source.resetCreditsAvailable;
-    } catch (_) { return { state, items: [], overflow: 0, size, expanded }; }
+    } catch (_) { return { state, items: [], overflow: 0, size, appearance, expanded }; }
     const hidden = Number.isSafeInteger(overflowValue) && overflowValue > 0
       ? Math.min(overflowValue, 99) : 0;
     return {
@@ -95,6 +98,7 @@
       items: copyItems(rawItems),
       overflow: hidden,
       size,
+      appearance,
       expanded,
       ...(Number.isSafeInteger(resetCreditsAvailable) && resetCreditsAvailable >= 0
         ? { resetCreditsAvailable } : {})
@@ -197,8 +201,10 @@
   let resetCredits;
   let compactProduct;
   let compactPeriod;
+  let root;
   let bridge;
   try {
+    root = document.documentElement;
     label = document.getElementById('quota-label');
     status = document.getElementById('status');
     summary = document.getElementById('summary');
@@ -221,6 +227,8 @@
       status.textContent = states.get(model.state);
       label.dataset.state = model.state;
       label.dataset.size = model.size;
+      label.dataset.appearance = model.appearance;
+      if (root?.dataset) root.dataset.appearance = model.appearance;
       label.dataset.expanded = model.expanded ? 'true' : 'false';
       label.dataset.hasItems = 'false';
       label.dataset.itemCount = '0';

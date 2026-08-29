@@ -100,7 +100,7 @@ function safeModel(value) {
 
 function createQuotaLabelWindow({
   BrowserWindow, screen, getPetWindow, getObstacle = () => null, getSize = () => 'standard',
-  onError = () => {}, alwaysOnTop = true
+  getAppearance = () => 'system', onError = () => {}, alwaysOnTop = true
 }) {
   let win = null;
   let ready = false;
@@ -120,6 +120,16 @@ function createQuotaLabelWindow({
     } catch (error) {
       report(error);
       return { name: 'standard', ...quotaLabelSize('standard') };
+    }
+  }
+
+  function requestedAppearance() {
+    try {
+      const value = getAppearance();
+      return ['light', 'dark'].includes(value) ? value : 'system';
+    } catch (error) {
+      report(error);
+      return 'system';
     }
   }
 
@@ -414,9 +424,11 @@ function createQuotaLabelWindow({
       if (operation !== token) return;
       const size = requestedSize();
       if (operation !== token) return;
+      const appearance = requestedAppearance();
+      if (operation !== token) return;
       const expanded = currentModel?.size === size.name && currentModel.expanded === true &&
         copied.items.length > 0;
-      currentModel = { ...copied, size: size.name, expanded };
+      currentModel = { ...copied, size: size.name, appearance, expanded };
       requestedVisible = true;
       try { ensureWindow(); } catch (error) { report(error); }
       try { present(); } catch (error) { if (win) detach(win, error); else report(error); }

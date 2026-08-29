@@ -60,21 +60,24 @@ function copyItems(value) {
 
 function safeModel(value) {
   const source = record(value);
-  if (!source) return { state: 'disconnected', size: 'standard', expanded: false, items: [], overflow: 0 };
+  if (!source) return { state: 'disconnected', size: 'standard', appearance: 'system', expanded: false, items: [], overflow: 0 };
   let stateValue;
   let sizeValue;
+  let appearanceValue;
   let expandedValue;
   try {
     stateValue = source.state;
     sizeValue = source.size;
+    appearanceValue = source.appearance;
     expandedValue = source.expanded;
   } catch (_) {
-    return { state: 'disconnected', size: 'standard', expanded: false, items: [], overflow: 0 };
+    return { state: 'disconnected', size: 'standard', appearance: 'system', expanded: false, items: [], overflow: 0 };
   }
   const state = STATES.has(stateValue) ? stateValue : 'disconnected';
   const size = sizeValue === 'compact' ? 'compact' : 'standard';
+  const appearance = ['light', 'dark'].includes(appearanceValue) ? appearanceValue : 'system';
   const expanded = expandedValue === true;
-  if (!['ready', 'stale'].includes(state)) return { state, size, expanded: false, items: [], overflow: 0 };
+  if (!['ready', 'stale'].includes(state)) return { state, size, appearance, expanded: false, items: [], overflow: 0 };
   let rawItems;
   let overflowValue;
   let resetCreditsAvailable;
@@ -82,12 +85,13 @@ function safeModel(value) {
     rawItems = source.items;
     overflowValue = source.overflow;
     resetCreditsAvailable = source.resetCreditsAvailable;
-  } catch (_) { return { state, size, expanded, items: [], overflow: 0 }; }
+  } catch (_) { return { state, size, appearance, expanded, items: [], overflow: 0 }; }
   const overflow = Number.isSafeInteger(overflowValue) && overflowValue > 0
     ? Math.min(overflowValue, 99) : 0;
   return {
     state,
     size,
+    appearance,
     expanded,
     items: copyItems(rawItems),
     overflow,

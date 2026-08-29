@@ -92,6 +92,7 @@ function fixture(load = () => Promise.resolve(), options = {}) {
     getPetWindow: () => pet,
     getObstacle: () => obstacle,
     getSize: () => options.labelSize || 'standard',
+    getAppearance: () => options.appearance || 'system',
     onError: error => {
       errors.push(error);
       if (typeof options.onError === 'function') options.onError(error);
@@ -241,6 +242,7 @@ test('按球球当前屏定位并避让气泡，只发固定通道的白名单�
   assert.equal(win.sent[0][0], 'pet:quota-label');
   assert.deepEqual(win.sent[0][1], {
     size: 'standard',
+    appearance: 'system',
     expanded: false,
     state: 'ready',
     items: [
@@ -253,6 +255,29 @@ test('按球球当前屏定位并避让气泡，只发固定通道的白名单�
   assert.equal('account' in win.sent[0][1], false);
   assert.equal('body' in win.sent[0][1], false);
   assert.equal('html' in win.sent[0][1], false);
+});
+
+test('外观只接受跟随系统、浅色和深色，切换时保留窗口和展开状态', async t => {
+  const options = { labelSize: 'compact', appearance: 'light' };
+  const f = fixture(() => Promise.resolve(), options);
+  t.after(() => f.label.destroy());
+  f.label.show(readyModel());
+  await flush();
+  const win = f.windows[0];
+  assert.equal(win.sent.at(-1)[1].appearance, 'light');
+  win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  assert.equal(win.sent.at(-1)[1].expanded, true);
+
+  options.appearance = 'dark';
+  f.label.show(readyModel());
+  assert.equal(f.windows.length, 1);
+  assert.equal(win.sent.at(-1)[1].appearance, 'dark');
+  assert.equal(win.sent.at(-1)[1].expanded, true);
+
+  options.appearance = 'invalid';
+  f.label.show(readyModel());
+  assert.equal(win.sent.at(-1)[1].appearance, 'system');
+  assert.equal(win.sent.at(-1)[1].expanded, true);
 });
 
 test('reposition 复用最后安全模型，重入 show 只发送最新模型', async t => {
@@ -750,6 +775,7 @@ test('主进程模型每个外部字段只读一次，且数组最多检查前�
   await flush();
   assert.deepEqual(f.windows[0].sent[0][1], {
     size: 'standard',
+    appearance: 'system',
     expanded: false,
     state: 'ready',
     items: [
@@ -770,14 +796,14 @@ test('撤销 Proxy 或抛错 getter 不能穿透 show，必须降级为断开模
   assert.doesNotThrow(() => f.label.show(revoked.proxy));
   await flush();
   assert.deepEqual(f.windows[0].sent[0][1], {
-    state: 'disconnected', items: [], overflow: 0, size: 'standard', expanded: false
+    state: 'disconnected', items: [], overflow: 0, size: 'standard', appearance: 'system', expanded: false
   });
 
   const throwing = {};
   Object.defineProperty(throwing, 'state', { get() { throw new Error('getter failed'); } });
   assert.doesNotThrow(() => f.label.show(throwing));
   assert.deepEqual(f.windows[0].sent.at(-1)[1], {
-    state: 'disconnected', items: [], overflow: 0, size: 'standard', expanded: false
+    state: 'disconnected', items: [], overflow: 0, size: 'standard', appearance: 'system', expanded: false
   });
 });
 
@@ -799,13 +825,13 @@ test('预加载层只接收固定通道，白名单纯标量且可取消订阅',
   let received;
   const unsubscribe = api.onModel(model => { received = model; });
   listener({}, {
-    state: 'ready', size: 'compact', account: 'private', body: '<b>private</b>',
+    state: 'ready', size: 'compact', appearance: 'light', account: 'private', body: '<b>private</b>',
     items: [{ label: ' Codex\n', windowMinutes: 300, remaining: 19.55,
       resetsAt: 2000000000000, private: {} }], overflow: 2,
     resetCreditsAvailable: 1, resetCredits: [{ id: 'private' }]
   });
   assert.equal(JSON.stringify(received), JSON.stringify({
-    state: 'ready', size: 'compact', expanded: false,
+    state: 'ready', size: 'compact', appearance: 'light', expanded: false,
     items: [{ label: 'Codex', windowMinutes: 300, remaining: 19.55, resetsAt: 2000000000000 }],
     overflow: 2, resetCreditsAvailable: 1
   }));
@@ -822,6 +848,7 @@ test('小巧横条只显示摘要，小巧和标准卡片均可点击展开明�
   let receive;
   let click;
   let toggles = 0;
+  const root = { dataset: {} };
   const label = { dataset: {}, addEventListener(name, callback) { if (name === 'click') click = callback; } };
   const status = {};
   const summary = { children: [], replaceChildren(...children) { this.children = children; } };
@@ -841,6 +868,7 @@ test('小巧横条只显示摘要，小巧和标准卡片均可点击展开明�
   });
   vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8'), {
     document: {
+      documentElement: root,
       getElementById: id => ({ 'quota-label': label, status, summary, items, overflow,
         'reset-time': resetTime, 'reset-credits': resetCredits })[id],
       createElement: element
@@ -854,11 +882,13 @@ test('小巧横条只显示摘要，小巧和标准卡片均可点击展开明�
     },
     Date: FixedDate
   });
-  receive({ state: 'ready', size: 'compact', expanded: false, items: [
+  receive({ state: 'ready', size: 'compact', appearance: 'dark', expanded: false, items: [
     { label: 'codex', windowMinutes: 10080, remaining: 64 },
     { label: 'gpt-reserve', windowMinutes: 10080, remaining: 78 }
   ], overflow: 0 });
   assert.equal(label.dataset.expanded, 'false');
+  assert.equal(label.dataset.appearance, 'dark');
+  assert.equal(root.dataset.appearance, 'dark');
   assert.equal(summary.children.map(node => node.textContent).join(''), '周额度64%');
   assert.deepEqual(summary.children.map(node => node.className), ['summary-period', 'summary-value']);
   click();
@@ -910,6 +940,7 @@ test('预加载每个外部字段只读一次，Proxy 和回调异常不穿透 I
   const model = {};
   once(model, 'state', 'ready');
   once(model, 'size', 'compact');
+  once(model, 'appearance', 'dark');
   once(model, 'expanded', true);
   once(model, 'items', [item]);
   once(model, 'overflow', 0);
@@ -918,7 +949,7 @@ test('预加载每个外部字段只读一次，Proxy 和回调异常不穿透 I
   const unsubscribe = api.onModel(value => { received = value; throw new Error('consumer failed'); });
   assert.doesNotThrow(() => listener({}, model));
   assert.equal(JSON.stringify(received), JSON.stringify({
-    state: 'ready', size: 'compact', expanded: true,
+    state: 'ready', size: 'compact', appearance: 'dark', expanded: true,
     items: [{ label: 'Codex', windowMinutes: 300, remaining: 18.2, resetsAt: 2000000000000 }],
     overflow: 0, resetCreditsAvailable: 1
   }));
@@ -931,7 +962,7 @@ test('预加载每个外部字段只读一次，Proxy 和回调异常不穿透 I
   api.onModel(value => { fallback = value; });
   assert.doesNotThrow(() => listener({}, revoked.proxy));
   assert.equal(JSON.stringify(fallback), JSON.stringify({
-    state: 'disconnected', size: 'standard', expanded: false, items: [], overflow: 0
+    state: 'disconnected', size: 'standard', appearance: 'system', expanded: false, items: [], overflow: 0
   }));
 });
 
