@@ -1237,6 +1237,206 @@ test('展示前菜单回调同档更新额度，onAlert使用最终比例', asyn
   assert.equal('recent' in f.companion.getSnapshot(), false);
 });
 
+test('手动刷新清理回调重入关闭或重启时，不继续打开旧请求的连接', async () => {
+  for (const action of ['close', 'restart']) {
+    let armed = false;
+    let acted = false;
+    let f;
+    f = fixture({ onClear: companion => {
+      if (!armed || acted) return;
+      acted = true;
+      if (action === 'close') companion.close();
+      else {
+        void companion.setEnabled(false);
+        void companion.setEnabled(true);
+      }
+    } });
+    await f.companion.setEnabled(true);
+    armed = true;
+
+    assert.equal(await f.companion.refresh(), true);
+    await settle();
+    assert.equal(acted, true, action);
+    assert.equal(f.connections.length, action === 'close' ? 1 : 2, action);
+    assert.equal(f.connections.some(connection => !connection.closed), action === 'restart', action);
+    assert.notEqual(f.companion.getSnapshot().quota.state, 'connecting', action);
+    assert.notEqual(f.companion.getSnapshot().tasks.state, 'connecting', action);
+    if (action === 'close') {
+      assert.equal(f.companion.getSnapshot().enabled, false);
+      assert.equal(f.companion.getSnapshot().quota.state, 'disabled');
+      assert.equal(f.companion.getSnapshot().tasks.state, 'disabled');
+      assert.equal(f.timers.size, 0);
+    }
+    f.companion.close();
+  }
+});
+
+test('额度清理回调重入刷新、禁用或换账号后，旧回包不再通知或提醒', async () => {
+  for (const action of ['refresh', 'disable']) {
+    let armed = false;
+    let acted = false;
+    let changesAfterAction = -1;
+    let f;
+    f = fixture({ onAlertUpdate: (_alert, companion) => {
+      if (!armed || acted) return;
+      acted = true;
+      if (action === 'refresh') void companion.refresh();
+      else void companion.setEnabled(false);
+      changesAfterAction = f.changes.length;
+    } });
+    await f.companion.setEnabled(true);
+    const normal = quotaWindow('five', 300, 69);
+    const urgent = quotaWindow('week', 10080, 10);
+    f.quota(95, { windows: [{ ...normal, remaining: 95 }, { ...urgent, remaining: 95 }] });
+    f.quota(10, { windows: [normal, urgent] });
+    await f.tick(5000);
+    const oldCallbacks = f.callbacks;
+    armed = true;
+
+    oldCallbacks.onQuota({
+      windows: [{ ...normal, remaining: 59 }, { ...urgent, remaining: 95 }],
+      updatedAt: f.time
+    });
+    await settle();
+    assert.equal(acted, true, action);
+    assert.equal(f.changes.length, changesAfterAction, action);
+    if (action === 'refresh') {
+      assert.equal(f.connections.length, 2);
+      await f.tick(30000);
+      assert.equal(f.alerts.length, 1);
+    } else {
+      assert.equal(f.companion.getSnapshot().enabled, false);
+      assert.equal(f.timers.size, 0);
+    }
+    f.companion.close();
+  }
+
+  let armed = false;
+  let acted = false;
+  let changesAfterAction = -1;
+  let f;
+  f = fixture({ onClear: () => {
+    if (!armed || acted) return;
+    acted = true;
+    f.callbacks.onAccount({ accountKey: 'account-two' });
+    changesAfterAction = f.changes.length;
+  } });
+  await f.companion.setEnabled(true);
+  f.quota(95);
+  f.quota(10);
+  await f.tick(5000);
+  const oldCallbacks = f.callbacks;
+  armed = true;
+  oldCallbacks.onQuota({ windows: [quotaWindow('codex:primary', 300, 95)], updatedAt: f.time });
+  assert.equal(acted, true);
+  assert.equal(f.changes.length, changesAfterAction);
+  assert.deepEqual(f.companion.getSnapshot().quota.windows, []);
+  f.companion.close();
+});
+
+test('排队普通额度在第59秒升为强提醒时，同一事件从升级时重新获得有效期', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.setPresent(false);
+  f.quota(95);
+  f.quota(69);
+  await f.tick(59000);
+  f.quota(19);
+  f.setPresent(true);
+
+  await f.tick(1000);
+  assert.equal(f.alerts.length, 1);
+  assert.equal(f.alerts[0].kind, 'quota');
+  assert.equal(f.alerts[0].severity, 'strong');
+  assert.equal(f.alerts[0].motion, 'jelly');
+  await f.tick(60000);
+  assert.equal(f.alerts.length, 1);
+});
+
+test('账号清理回调重入禁用或新账号时，旧账号回调不覆盖最终状态', async () => {
+  let armed = false;
+  let acted = false;
+  let f;
+  f = fixture({ onClear: companion => {
+    if (!armed || acted) return;
+    acted = true;
+    void companion.setEnabled(false);
+  } });
+  await f.companion.setEnabled(true);
+  armed = true;
+  f.callbacks.onAccount({ accountKey: 'account-two' });
+  await settle();
+  const disabledGeneration = f.companion.getSnapshot().generation;
+  const disabledClears = f.clears.length;
+  assert.equal(f.companion.getSnapshot().enabled, false);
+  await f.companion.setEnabled(true);
+  assert.equal(f.companion.getSnapshot().generation, disabledGeneration + 1);
+  assert.equal(f.clears.length, disabledClears);
+  assert.equal(f.connections.length, 2);
+  f.companion.close();
+
+  armed = false;
+  acted = false;
+  let nested;
+  nested = fixture({ onClear: () => {
+    if (!armed || acted) return;
+    acted = true;
+    nested.callbacks.onAccount({ accountKey: 'account-three' });
+  } });
+  await nested.companion.setEnabled(true);
+  armed = true;
+  nested.callbacks.onAccount({ accountKey: 'account-two' });
+  const clearsAfterNestedAccount = nested.clears.length;
+  nested.callbacks.onAccount({ accountKey: 'account-three' });
+  assert.equal(nested.clears.length, clearsAfterNestedAccount);
+  nested.companion.close();
+});
+
+test('额度偏好每个字段只读一次，读取抛错时不改任何偏好', () => {
+  const f = fixture();
+  const reads = { taskNameInAlerts: 0, quotaAlwaysVisible: 0, quotaPeriod: 0 };
+  const stateful = {};
+  Object.defineProperties(stateful, {
+    taskNameInAlerts: { get() { return ++reads.taskNameInAlerts === 1 ? true : false; } },
+    quotaAlwaysVisible: { get() { return ++reads.quotaAlwaysVisible === 1 ? true : false; } },
+    quotaPeriod: { get() { return ++reads.quotaPeriod === 1 ? 'weekly' : 'auto'; } }
+  });
+  assert.equal(f.companion.setPreferences(stateful), true);
+  assert.deepEqual(reads, { taskNameInAlerts: 1, quotaAlwaysVisible: 1, quotaPeriod: 1 });
+  assert.equal(f.companion.setPreferences({
+    taskNameInAlerts: true, quotaAlwaysVisible: true, quotaPeriod: 'weekly'
+  }), false);
+
+  const changesBeforeThrow = f.changes.length;
+  const throwing = {};
+  Object.defineProperties(throwing, {
+    taskNameInAlerts: { get() { return false; } },
+    quotaAlwaysVisible: { get() { throw new Error('getter failed'); } },
+    quotaPeriod: { get() { return 'fiveHour'; } }
+  });
+  assert.equal(f.companion.setPreferences(throwing), false);
+  assert.equal(f.changes.length, changesBeforeThrow);
+  assert.equal(f.companion.setPreferences({
+    taskNameInAlerts: true, quotaAlwaysVisible: true, quotaPeriod: 'weekly'
+  }), false);
+});
+
+test('同一额度键重复出现时，跟踪、引用校验和文案统一使用最后一个可靠值', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  const first = quotaWindow('duplicate', 300, 95);
+  f.quota(95, { windows: [{ ...first }, { ...first }] });
+  f.quota(10, { windows: [{ ...first }, { ...first, remaining: 10 }] });
+  await f.tick(5000);
+  assert.equal(f.alerts.length, 1);
+  assert.equal(f.alerts[0].severity, 'urgent');
+  assert.match(f.alerts[0].text, /10%/);
+
+  f.quota(95, { windows: [{ ...first, remaining: 9 }, { ...first, remaining: 95 }] });
+  assert.equal(f.companion.getSnapshot().currentAlert, null);
+  assert.equal(f.clears.length, 1);
+});
+
 test('真实连接组合：账号切换后即使connected状态去重，后续额度轮询仍持续', async () => {
   const { createCodexConnection } = require('../lib/codex-connection');
   let accountReads = 0;
