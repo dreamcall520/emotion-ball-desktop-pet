@@ -23,9 +23,9 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   const external = [];
   const popups = [];
   const trayMenus = [];
-  const app = Object.assign(new EventEmitter(), { setName() {}, getPath: () => '/fixture',
+  const app = Object.assign(new EventEmitter(), { quitCalls: 0, setName() {}, getPath: () => '/fixture',
     requestSingleInstanceLock: () => true, whenReady: () => Promise.resolve(), setActivationPolicy() {},
-    quit() {}, exit(code) { throw new Error(`unexpected exit ${code}`); } });
+    quit() { this.quitCalls++; }, exit(code) { throw new Error(`unexpected exit ${code}`); } });
   const ipcMain = new EventEmitter();
   const powerMonitor = new EventEmitter();
   const display = { id: 1, bounds: { x: -800, y: 0, width: 800, height: 600 }, workArea: { x: -800, y: 0, width: 800, height: 600 } };
@@ -38,6 +38,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
       this.webContents = Object.assign(new EventEmitter(), { setWindowOpenHandler() {},
         send: (channel, packet) => { this.messages.push({ channel, packet }); if (channel === 'pet:command') commands.push(packet); } });
       windows.push(this);
+      NativeWindow.onConstruct?.(this);
     }
     setAlwaysOnTop() {} setVisibleOnAllWorkspaces() {} setHiddenInMissionControl() {} moveTop() {}
     getBounds() { return { ...this.bounds }; }
@@ -45,9 +46,11 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     isDestroyed() { return this.destroyed; } isVisible() { return this.visible; }
     setPosition(x, y, animate) { assert.equal(animate, false); Object.assign(this.bounds, { x, y }); this.emit('move'); }
     setBounds(bounds) { this.bounds = { ...bounds }; this.emit('resize'); }
-    loadFile() { return Promise.resolve(); }
+    loadFile() { return { catch: handler => { this.loadFailure = handler; } }; }
     showInactive() { this.visible = true; } hide() { this.visible = false; this.emit('hide'); }
+    destroy() { this.destroyed = true; this.visible = false; this.emit('closed'); }
   }
+  NativeWindow.onConstruct = null;
   class Tray extends EventEmitter { setToolTip() {} setContextMenu(value) { trayMenus.push(value); } }
   function createNativeBubbleWindow() {
     return Object.assign(new EventEmitter(), {
@@ -73,6 +76,8 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     show(model) { this.shows.push(model); this.visible = true; }, hide() { this.hides++; this.visible = false; },
     reposition() { this.moves++; }, destroy() { this.destroys++; this.visible = false; },
     setAlwaysOnTop(value) { this.topmost.push(value); }, getWindow: () => null };
+  const activity = { starts: 0, stops: 0, pauses: 0, resumes: 0,
+    start() { this.starts++; }, stop() { this.stops++; }, pause() { this.pauses++; }, resume() { this.resumes++; } };
   const realRequire = createRequire(path.resolve(__dirname, '../main.js'));
   const context = vm.createContext({ __dirname: path.resolve(__dirname, '..'), console,
     process: { env: {}, stderr: { write(message) { throw new Error(message); } } }, performance: { now: () => now },
@@ -104,7 +109,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
       } };
       if (name === './lib/bubble-window') return { createBubbleWindow: () => bubble };
       if (name === './lib/quota-label-window') return { createQuotaLabelWindow: () => quotaLabel };
-      if (name === './lib/activity-monitor') return { ...realRequire(name), createActivityMonitor: () => ({ start() {}, stop() {}, pause() {}, resume() {} }) };
+      if (name === './lib/activity-monitor') return { ...realRequire(name), createActivityMonitor: () => activity };
       return realRequire(name);
     }
   });
@@ -113,7 +118,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   const pet = windows[0];
   pet.emit('ready-to-show');
   pet.webContents.emit('did-finish-load');
-  return { pet, bubble, quotaLabel, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus,
+  return { pet, bubble, quotaLabel, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus,
     call: expression => vm.runInContext(expression, context),
     send(channel, packet, sender = pet.webContents) {
       // 与实际预加载一致，默认携带当前页面代次；显式传旧值可验迟到报文。
@@ -480,6 +485,104 @@ test('置顶原生调用彼此隔离，即使错误记录抛错也仍保存并�
   assert.equal(f.saved.length, saves + 1);
   assert.equal(f.saved.at(-1).alwaysOnTop, false);
   assert.ok(f.trayMenus.length > refreshes);
+});
+
+test('退出菜单只请求系统退出，真实 before-quit 才一次性安全清理全部资源', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  f.send('pet:motion-start', { token: 1, action: 'hop' });
+  assert.ok(f.timers.size > 0);
+  const exitItem = f.call("menuTemplate().find(item => item.label === '退出球球')");
+  exitItem.click();
+  assert.equal(f.app.quitCalls, 1);
+  assert.equal(f.call('isQuitting'), false, '菜单不得抢先写入退出态');
+  assert.equal(f.connections.at(-1).closed, false);
+  assert.equal(f.bubble.destroys, 0);
+  assert.equal(f.quotaLabel.destroys, 0);
+
+  f.app.emit('before-quit');
+  assert.equal(f.call('isQuitting'), true);
+  assert.equal(f.connections.at(-1).closed, true);
+  assert.equal(f.timers.size, 0);
+  assert.equal(f.activity.stops, 1);
+  assert.equal(f.bubble.destroys, 1);
+  assert.equal(f.quotaLabel.destroys, 1);
+  const cleanup = { activity: f.activity.stops, bubble: f.bubble.destroys, label: f.quotaLabel.destroys };
+  f.app.emit('before-quit');
+  assert.deepEqual({ activity: f.activity.stops, bubble: f.bubble.destroys, label: f.quotaLabel.destroys }, cleanup,
+    '重复 before-quit 不得二次伤害已清理资源');
+});
+
+test('旧球球窗口迟到的移动、缩放、隐藏和关闭事件不伤害新窗口资源', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  const stale = f.call('petWindow = null; createPetWindow()');
+  const current = f.call('petWindow = null; createPetWindow()');
+  current.emit('ready-to-show');
+  current.webContents.emit('did-finish-load');
+  f.send('pet:motion-start', { token: 7, action: 'hop' }, current.webContents);
+  f.send('pet:say', 'hello', current.webContents);
+  const before = { moves: f.bubble.moves, hides: f.bubble.hides, destroys: f.bubble.destroys,
+    labelMoves: f.quotaLabel.moves, labelHides: f.quotaLabel.hides, labelDestroys: f.quotaLabel.destroys,
+    timers: f.timers.size };
+  assert.doesNotThrow(() => stale.emit('move'));
+  assert.doesNotThrow(() => stale.emit('resize'));
+  assert.doesNotThrow(() => stale.emit('hide'));
+  stale.destroyed = true;
+  assert.doesNotThrow(() => stale.emit('closed'));
+  assert.deepEqual({ moves: f.bubble.moves, hides: f.bubble.hides, destroys: f.bubble.destroys,
+    labelMoves: f.quotaLabel.moves, labelHides: f.quotaLabel.hides, labelDestroys: f.quotaLabel.destroys,
+    timers: f.timers.size }, before);
+  assert.equal(f.call('petWindow') === current, true);
+  assert.equal(f.call('codexPageReady'), true);
+});
+
+test('旧球球窗口迟到的加载和渲染事件不改写新窗口就绪状态', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  const stale = f.call('petWindow = null; createPetWindow()');
+  const current = f.call('petWindow = null; createPetWindow()');
+  current.emit('ready-to-show');
+  current.webContents.emit('did-finish-load');
+  stale.visible = false;
+  current.visible = false;
+  const starts = f.activity.starts;
+  assert.doesNotThrow(() => stale.emit('ready-to-show'));
+  assert.equal(stale.visible, false);
+  assert.equal(current.visible, false, '旧 ready 不得错误显示新窗口');
+  assert.equal(f.call('codexPageReady'), true);
+  stale.webContents.emit('did-start-loading');
+  assert.equal(f.call('codexPageReady'), true);
+  stale.webContents.emit('did-finish-load');
+  assert.equal(f.activity.starts, starts, '旧页面完成不得重启活动监测');
+  assert.doesNotThrow(() => stale.webContents.emit('did-fail-load', {}, -7, 'PRIVATE_OLD_LOAD'));
+  assert.doesNotThrow(() => stale.webContents.emit('render-process-gone', {}, { reason: 'PRIVATE_OLD_RENDER' }));
+  assert.equal(f.call('codexPageReady'), true);
+  assert.equal(f.call('petWindow') === current, true);
+});
+
+test('旧窗口 loadFile 迟到拒绝不记错或退出，新窗口仍是唯一当前窗口', async () => {
+  const f = await fixture();
+  const stale = f.call('petWindow = null; createPetWindow()');
+  const current = f.call('petWindow = null; createPetWindow()');
+  assert.equal(typeof stale.loadFailure, 'function');
+  assert.doesNotThrow(() => stale.loadFailure(new Error('PRIVATE_OLD_LOAD_REJECTION')));
+  assert.equal(f.call('petWindow') === current, true);
+  assert.equal(f.app.quitCalls, 0);
+});
+
+test('BrowserWindow 构造器同步重入创建时后一个窗口获胜，旧候选不得覆盖', async () => {
+  const f = await fixture();
+  let newest = null;
+  let reentered = false;
+  f.windowClass.onConstruct = () => {
+    if (reentered) return;
+    reentered = true;
+    newest = f.call('createPetWindow()');
+  };
+  f.call('petWindow = null');
+  const returned = f.call('createPetWindow()');
+  const outerCandidate = f.windows.at(-2);
+  assert.equal(returned, newest);
+  assert.equal(f.call('petWindow') === newest, true);
+  assert.equal(outerCandidate.destroyed, true, '同步重入后外层候选必须安全作废');
 });
 
 test('重复开启只弹一个确认，关闭及退出后的迟到确认不会连接', async () => {

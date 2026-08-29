@@ -64,6 +64,8 @@ let quotaSyncing = false;
 let quotaSyncPending = false;
 let quotaSyncSnapshot = null;
 let bubbleDestroying = false;
+let petWindowCreationRevision = 0;
+let quitCleanupStarted = false;
 const windowMotion = createWindowMotion({
   getWindow: () => petWindow,
   getWorkArea: bounds => screen.getDisplayMatching(bounds).workArea,
@@ -746,10 +748,7 @@ function menuTemplate() {
     { type: 'separator' },
     {
       label: '退出球球',
-      click: () => {
-        isQuitting = true;
-        app.quit();
-      }
+      click: () => app.quit()
     }
   ];
 }
@@ -878,9 +877,11 @@ async function finishSmokeTest() {
 
 function createPetWindow() {
   if (petWindow && !petWindow.isDestroyed()) return petWindow;
+  const creationRevision = ++petWindowCreationRevision;
   invalidateCodexPage();
+  if (creationRevision !== petWindowCreationRevision) return petWindow;
 
-  petWindow = new BrowserWindow({
+  const candidatePetWindow = new BrowserWindow({
     ...currentBounds(),
     title: APP_NAME,
     transparent: true,
@@ -906,63 +907,106 @@ function createPetWindow() {
       devTools: !app.isPackaged
     }
   });
+  if (creationRevision !== petWindowCreationRevision) {
+    safelyInvokeWindow('旧球球窗口作废', () => {
+      if (!candidatePetWindow.isDestroyed()) candidatePetWindow.destroy();
+    });
+    return petWindow;
+  }
+  petWindow = candidatePetWindow;
+  const createdPetWindow = candidatePetWindow;
+  const isCurrentPetWindow = () => petWindow === createdPetWindow;
 
-  petWindow.setAlwaysOnTop(settings.alwaysOnTop, 'floating');
-  petWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  petWindow.setHiddenInMissionControl(true);
-  petWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  petWindow.webContents.on('will-navigate', event => event.preventDefault());
-  petWindow.webContents.on('did-fail-load', (_event, code, description) => {
+  createdPetWindow.setAlwaysOnTop(settings.alwaysOnTop, 'floating');
+  createdPetWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  createdPetWindow.setHiddenInMissionControl(true);
+  createdPetWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  createdPetWindow.webContents.on('will-navigate', event => event.preventDefault());
+  createdPetWindow.webContents.on('did-fail-load', (_event, code, description) => {
+    if (!isCurrentPetWindow()) return;
     writeError('页面加载失败', `${code} ${description}`);
     if (IS_SMOKE_TEST) app.exit(1);
   });
-  petWindow.webContents.on('render-process-gone', (_event, details) => {
+  createdPetWindow.webContents.on('render-process-gone', (_event, details) => {
+    if (!isCurrentPetWindow()) return;
     invalidateCodexPage();
+    if (!isCurrentPetWindow()) return;
     writeError('渲染进程退出', JSON.stringify(details));
     if (IS_SMOKE_TEST) app.exit(1);
   });
-  petWindow.once('ready-to-show', () => {
-    if (!petWindow || petWindow.isDestroyed()) return;
-    petWindow.showInactive();
+  createdPetWindow.once('ready-to-show', () => {
+    if (!isCurrentPetWindow() || createdPetWindow.isDestroyed()) return;
+    createdPetWindow.showInactive();
+    if (!isCurrentPetWindow()) return;
     syncQuotaLabel(codexCompanion?.getSnapshot());
   });
-  petWindow.webContents.on('did-finish-load', () => {
+  createdPetWindow.webContents.on('did-finish-load', () => {
+    if (!isCurrentPetWindow()) return;
     codexPageReady = true;
+    if (!isCurrentPetWindow()) return;
     sendCompanionSettings();
+    if (!isCurrentPetWindow()) return;
     syncCodexSettings(codexCompanion?.getSnapshot(), true);
+    if (!isCurrentPetWindow()) return;
     activityMonitor.start();
+    if (!isCurrentPetWindow()) return;
     finishSmokeTest();
   });
-  petWindow.webContents.on('did-start-loading', invalidateCodexPage);
-  petWindow.on('move', repositionBubble);
-  petWindow.on('resize', () => { stopMotion(); repositionBubble(); });
-  petWindow.on('hide', () => {
+  createdPetWindow.webContents.on('did-start-loading', () => {
+    if (isCurrentPetWindow()) invalidateCodexPage();
+  });
+  createdPetWindow.on('move', () => {
+    if (isCurrentPetWindow()) repositionBubble();
+  });
+  createdPetWindow.on('resize', () => {
+    if (!isCurrentPetWindow()) return;
+    stopMotion();
+    if (isCurrentPetWindow()) repositionBubble();
+  });
+  createdPetWindow.on('hide', () => {
+    if (!isCurrentPetWindow()) return;
     safelyInvokeWindow('隐藏时停止动作', stopMotion);
+    if (!isCurrentPetWindow()) return;
     hideBubble();
+    if (!isCurrentPetWindow()) return;
     safelyInvokeWindow('隐藏时额度标签隐藏', () => quotaLabel?.hide());
+    if (!isCurrentPetWindow()) return;
     safelyInvokeWindow('隐藏时对白清理', () => dialogue?.dismiss());
   });
-  const createdPetWindow = petWindow;
   let closedCleanupStarted = false;
-  petWindow.on('closed', () => {
-    if (closedCleanupStarted) return;
+  createdPetWindow.on('closed', () => {
+    if (!isCurrentPetWindow() || closedCleanupStarted) return;
     closedCleanupStarted = true;
-    if (!isQuitting) {
-      safelyInvokeWindow('关闭时页面状态清理', invalidateCodexPage);
-      safelyInvokeWindow('关闭时停止动作', () => stopMotion({ restore: false, notify: false, notifyRenderer: false }));
-      safelyInvokeWindow('关闭时活动监测清理', () => activityMonitor?.stop());
-      destroyBubbleSafely();
-      safelyInvokeWindow('关闭时额度标签销毁', () => quotaLabel?.destroy());
-      safelyInvokeWindow('关闭时对白清理', () => dialogue?.dismiss());
+    if (isQuitting) {
+      petWindow = null;
+      return;
     }
-    if (petWindow === createdPetWindow) petWindow = null;
+    safelyInvokeWindow('关闭时页面状态清理', invalidateCodexPage);
+    if (!isCurrentPetWindow()) return;
+    safelyInvokeWindow('关闭时停止动作', () => stopMotion({ restore: false, notify: false, notifyRenderer: false }));
+    if (!isCurrentPetWindow()) return;
+    safelyInvokeWindow('关闭时活动监测清理', () => activityMonitor?.stop());
+    if (!isCurrentPetWindow()) return;
+    destroyBubbleSafely();
+    if (!isCurrentPetWindow()) return;
+    safelyInvokeWindow('关闭时额度标签销毁', () => quotaLabel?.destroy());
+    if (!isCurrentPetWindow()) return;
+    safelyInvokeWindow('关闭时对白清理', () => dialogue?.dismiss());
+    if (isCurrentPetWindow()) petWindow = null;
   });
 
-  petWindow.loadFile(path.join(__dirname, 'index.html')).catch(error => {
+  createdPetWindow.loadFile(path.join(__dirname, 'index.html')).catch(error => {
+    if (!isCurrentPetWindow()) return;
     writeError('无法打开桌宠页面', error);
     if (IS_SMOKE_TEST) app.exit(1);
   });
-  return petWindow;
+  if (!isCurrentPetWindow()) {
+    safelyInvokeWindow('旧球球窗口作废', () => {
+      if (!createdPetWindow.isDestroyed()) createdPetWindow.destroy();
+    });
+    return petWindow;
+  }
+  return createdPetWindow;
 }
 
 function registerIpc() {
@@ -1153,8 +1197,9 @@ if (!hasSingleInstanceLock) {
   });
 
   app.on('before-quit', () => {
-    if (isQuitting) return;
     isQuitting = true;
+    if (quitCleanupStarted) return;
+    quitCleanupStarted = true;
     codexConsentToken++;
     safelyInvokeWindow('退出时 Codex 联动清理', () => codexCompanion?.close());
     safelyInvokeWindow('退出时停止动作', stopMotion);
