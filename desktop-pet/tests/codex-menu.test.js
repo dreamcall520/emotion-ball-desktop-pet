@@ -5,6 +5,8 @@ const path = require('node:path');
 const modulePath = path.join(__dirname, '../lib/codex-menu.js');
 const ID = '11111111-1111-4111-8111-111111111111';
 const ID2 = '22222222-2222-4222-8222-222222222222';
+const ID3 = '33333333-3333-4333-8333-333333333333';
+const CASE_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const TIME = 1800000000000;
 function api() {
   assert.ok(fs.existsSync(modulePath), 'Codex menu model must exist');
@@ -41,9 +43,60 @@ test('额度按真实类别周期比例和重置显示，任务明确最近最�
   assert.match(labels, /重置/);
   assert.match(labels, /最近最多20个任务/);
   assert.match(labels, /等你确认/);
-  assert.match(labels, /最近提醒/);
+  assert.doesNotMatch(labels, /最近提醒/);
+  assert.equal(all.some(item => item.id === 'codex-recent'), false);
   assert.match(labels, /刷新状态/);
   assert.equal(all.some(item => typeof item.click === 'function'), false);
+});
+
+test('任务列表只显示处理中和等你确认，并移除最近提醒', () => {
+  const { buildCodexMenu } = api();
+  const value = snapshot();
+  const idAt = index => `11111111-1111-4111-8111-${String(index + 1).padStart(12, '0')}`;
+  value.tasks.items = ['active', 'waiting', 'completed', 'failed', 'interrupted', 'idle', 'unknown']
+    .map((state, index) => ({ id: idAt(index), title: state, state, turnId: `turn-${index}` }));
+  value.tasks.items.push({ id: idAt(7), title: 'unavailable-active', state: 'active', unavailable: 'STATE_TOO_LARGE' });
+  value.recent = [{ id: 9, kind: 'completed', text: '不应出现的最近提醒', taskIds: [idAt(2)] }];
+  const menu = buildCodexMenu(value, TIME);
+  const taskItems = menu.find(item => item.id === 'codex-tasks').submenu;
+  const labels = taskItems.map(item => item.label).join('\n');
+  assert.match(labels, /active.*处理中/);
+  assert.match(labels, /waiting.*等你确认/);
+  assert.doesNotMatch(labels, /completed|failed|interrupted|idle|unknown|unavailable-active/);
+  assert.equal(menu.some(item => item.id === 'codex-recent'), false);
+  assert.equal(JSON.stringify(menu).includes('不应出现的最近提醒'), false);
+});
+
+test('任务列表最多显示20项，其余任务只显示不可点击提示', () => {
+  const { buildCodexMenu } = api();
+  const value = snapshot();
+  value.tasks.items = Array.from({ length: 23 }, (_, index) => ({
+    id: `11111111-1111-4111-8111-${String(index + 1).padStart(12, '0')}`,
+    title: `任务${index + 1}`,
+    state: index % 2 ? 'waiting' : 'active'
+  }));
+  const items = buildCodexMenu(value, TIME).find(item => item.id === 'codex-tasks').submenu;
+  assert.equal(items.filter(item => item.action?.type === 'open-task').length, 20);
+  assert.deepEqual(items.at(-1), { label: '另有 3 个，请到 Codex 查看', enabled: false });
+});
+
+test('同一真实任务不在列表中重复出现', () => {
+  const { buildCodexMenu } = api();
+  const value = snapshot();
+  value.tasks.items = [
+    { id: CASE_ID, title: '同一任务', state: 'active' },
+    { id: CASE_ID.toUpperCase(), title: '同一任务的重复行', state: 'waiting' }
+  ];
+  const items = buildCodexMenu(value, TIME).find(item => item.id === 'codex-tasks').submenu;
+  assert.equal(items.filter(item => item.action?.taskId?.toLowerCase() === CASE_ID).length, 1);
+});
+
+test('已连接但筛选后为空时如实显示无进行中任务', () => {
+  const { buildCodexMenu } = api();
+  const value = snapshot();
+  value.tasks.items = [{ id: ID, title: '已完成', state: 'completed' }];
+  const items = buildCodexMenu(value, TIME).find(item => item.id === 'codex-tasks').submenu;
+  assert.deepEqual(items, [{ label: '暂无进行中或待确认的任务', enabled: false }]);
 });
 
 test('标题按纯文本截断、去控制符、转义菜单加速键，不采用接口URL', () => {
@@ -120,6 +173,26 @@ test('任务链接仅由仍存在的可信UUID构造，拒绝旧代次及关闭'
   assert.equal(resolveCodexAction(value, menuAction('open-task', { taskId: ID }), TIME), null);
 });
 
+test('菜单打开任务使用完整可信任务行，但拒绝不可用行和64条之外的行', () => {
+  const { buildCodexMenu, resolveCodexAction } = api();
+  const value = snapshot();
+  value.tasks.items = [{ id: ID, title: '已完成任务', state: 'completed' }];
+  assert.equal(buildCodexMenu(value, TIME).find(item => item.id === 'codex-tasks').submenu[0].enabled, false);
+  assert.equal(resolveCodexAction(value, menuAction('open-task', { taskId: ID }), TIME).taskId, ID);
+
+  value.tasks.items = [{ id: ID, title: '不可用任务', state: 'active', unavailable: 'STATE_TOO_LARGE' }];
+  assert.equal(resolveCodexAction(value, menuAction('open-task', { taskId: ID }), TIME), null);
+
+  value.tasks.items = Array.from({ length: 65 }, (_, index) => ({
+    id: `11111111-1111-4111-8111-${String(index + 1).padStart(12, '0')}`,
+    title: `任务${index + 1}`,
+    state: 'completed'
+  }));
+  assert.equal(resolveCodexAction(value, menuAction('open-task', { taskId: value.tasks.items[63].id }), TIME).taskId,
+    value.tasks.items[63].id);
+  assert.equal(resolveCodexAction(value, menuAction('open-task', { taskId: value.tasks.items[64].id }), TIME), null);
+});
+
 test('恶意和非法任务标识不能成为菜单动作或打开地址', () => {
   const { buildCodexMenu, resolveCodexAction } = api();
   for (const id of ['../private', 'https://example.com', 'javascript:run()', `${ID}?command=run`, '', null, {}]) {
@@ -142,22 +215,96 @@ test('气泡动作同时校验当前id、代次、有效期及任务仍存在', 
   assert.equal(resolveCodexAction(value, alertAction('open-task', { taskId: ID }), TIME), null);
 });
 
-test('多任务提醒只能打开选择菜单，不可通过气泡直达任意任务', () => {
+test('多任务完成提醒只生成当前提醒的临时结果菜单', () => {
+  const { buildCodexResultMenu, resolveCodexAction } = api();
+  const value = snapshot();
+  value.tasks.items = [
+    { id: ID, title: `结果&A\n${'长'.repeat(50)}`, state: 'completed', turnId: 'turn-one' },
+    { id: ID2, title: '结果二', state: 'completed', turnId: 'turn-two' }
+  ];
+  value.currentAlert = { ...value.currentAlert, kind: 'completed', taskIds: [ID, ID2] };
+  const action = resolveCodexAction(value, alertAction('show-results'), TIME);
+  assert.deepEqual(action, { type: 'show-results', alertId: 2 });
+  const result = buildCodexResultMenu(value, action.alertId, TIME);
+  assert.deepEqual(result.map(item => item.action.taskId), [ID, ID2]);
+  assert.deepEqual(result[0].action,
+    { scope: 'result', type: 'open-task', generation: 7, alertId: 2, taskId: ID });
+  assert.ok(result[0].label.startsWith('结果&&A '));
+  assert.match(result[0].label, /…$/);
+  assert.deepEqual(resolveCodexAction(value, result[0].action, TIME),
+    { type: 'open-task', taskId: ID, url: `codex://threads/${ID}` });
+  assert.deepEqual(buildCodexResultMenu(value, action.alertId, TIME + 8000), []);
+  assert.equal(resolveCodexAction(value, alertAction('open-task', { taskId: ID }), TIME), null);
+});
+
+test('临时结果项拒绝非成员、错误提醒、旧代次、过期和已移除任务', () => {
+  const { buildCodexResultMenu, resolveCodexAction } = api();
+  const value = snapshot();
+  value.tasks.items = [
+    { id: ID, title: '结果一', state: 'completed' },
+    { id: ID2, title: '结果二', state: 'completed' },
+    { id: ID3, title: '非提醒成员', state: 'completed' }
+  ];
+  value.currentAlert = { ...value.currentAlert, kind: 'completed', taskIds: [ID, ID2] };
+  const item = buildCodexResultMenu(value, 2, TIME)[0];
+  const forged = [
+    { ...item.action, taskId: ID3 },
+    { ...item.action, alertId: 3 },
+    { ...item.action, generation: 6 }
+  ];
+  for (const descriptor of forged) assert.equal(resolveCodexAction(value, descriptor, TIME), null);
+  assert.equal(resolveCodexAction(value, item.action, TIME + 8000), null);
+  value.tasks.items = value.tasks.items.filter(task => task.id !== ID);
+  assert.equal(resolveCodexAction(value, item.action, TIME), null);
+});
+
+test('临时结果菜单拒绝错误提醒、旧代次、非完成、重复或不可信任务', () => {
+  const { buildCodexResultMenu, resolveCodexAction } = api();
+  const value = snapshot();
+  value.tasks.items = [
+    { id: ID, title: '结果一', state: 'completed' },
+    { id: ID2, title: '结果二', state: 'completed' }
+  ];
+  value.currentAlert = { ...value.currentAlert, kind: 'completed', taskIds: [ID, ID2] };
+  const invalid = [
+    { ...value, currentAlert: { ...value.currentAlert, id: 3 } },
+    { ...value, currentAlert: { ...value.currentAlert, generation: 6 } },
+    { ...value, currentAlert: { ...value.currentAlert, kind: 'waiting' } },
+    { ...value, currentAlert: { ...value.currentAlert, taskIds: [ID, ID] } },
+    { ...value, currentAlert: { ...value.currentAlert, taskIds: [ID, '../private'] } },
+    { ...value, currentAlert: { ...value.currentAlert, taskIds: [ID] } }
+  ];
+  for (const candidate of invalid) {
+    assert.deepEqual(buildCodexResultMenu(candidate, 2, TIME), []);
+    assert.equal(resolveCodexAction(candidate, alertAction('show-results'), TIME), null);
+  }
+  assert.deepEqual(buildCodexResultMenu(value, 3, TIME), []);
+  assert.equal(resolveCodexAction(value, alertAction('show-results', { alertId: 3 }), TIME), null);
+});
+
+test('临时结果菜单在任务移除或不可用后安全失效', () => {
+  const { buildCodexResultMenu, resolveCodexAction } = api();
+  const value = snapshot();
+  value.tasks.items = [
+    { id: ID, title: '结果一', state: 'completed' },
+    { id: ID2, title: '结果二', state: 'completed' }
+  ];
+  value.currentAlert = { ...value.currentAlert, kind: 'completed', taskIds: [ID, ID2] };
+  value.tasks.items.pop();
+  assert.deepEqual(buildCodexResultMenu(value, 2, TIME), []);
+  assert.equal(resolveCodexAction(value, alertAction('show-results'), TIME), null);
+  value.tasks.items.push({ id: ID2, title: '结果二', state: 'completed', unavailable: 'STATE_TOO_LARGE' });
+  assert.deepEqual(buildCodexResultMenu(value, 2, TIME), []);
+  assert.equal(resolveCodexAction(value, alertAction('show-results'), TIME), null);
+});
+
+test('旧show-tasks结果入口已移除并始终拒绝', () => {
   const { resolveCodexAction } = api();
   const value = snapshot();
   value.tasks.items.push({ ...value.tasks.items[0], id: ID2 });
   value.currentAlert.taskIds = [ID, ID2];
-  assert.deepEqual(resolveCodexAction(value, alertAction('show-tasks'), TIME), { type: 'show-tasks' });
-  assert.equal(resolveCodexAction(value, alertAction('open-task', { taskId: ID }), TIME), null);
-});
-
-test('当前气泡过期后仍可从近期提醒菜单进入有效任务', () => {
-  const { buildCodexMenu, resolveCodexAction } = api();
-  const value = snapshot(); value.currentAlert = null;
-  const recent = buildCodexMenu(value, TIME + 9000).find(item => item.label === '最近提醒');
-  const action = recent.submenu.find(item => item.action).action;
-  assert.deepEqual(action, menuAction('open-task', { taskId: ID }));
-  assert.ok(resolveCodexAction(value, action, TIME + 9000));
+  assert.equal(resolveCodexAction(value, alertAction('show-tasks'), TIME), null);
+  assert.equal(resolveCodexAction(value, menuAction('show-tasks'), TIME), null);
 });
 
 test('只接受限定的刷新和关闭动作，不能扩展成任务控制', () => {
