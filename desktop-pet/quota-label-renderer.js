@@ -113,6 +113,12 @@
     return periodText(minutes);
   }
 
+  function periodBadgeText(minutes) {
+    if (minutes === 10080) return '周';
+    if (minutes === 300) return '5h';
+    return periodText(minutes).slice(0, 3);
+  }
+
   function severityOf(remaining) {
     if (remaining <= 10) return 'urgent';
     if (remaining <= 20) return 'low';
@@ -146,6 +152,42 @@
     return `${value > 99 ? '99+' : value} 次重置机会`;
   }
 
+  function detailParts(text, type) {
+    if (type === 'time') {
+      const parts = text.split(' · ');
+      return parts.length === 2
+        ? { primary: parts[0], separator: ' · ', secondary: parts[1] }
+        : { primary: text, separator: '', secondary: '' };
+    }
+    const match = text.match(/^(99\+|\d+) 次(重置机会)$/u);
+    return match
+      ? { primary: `${match[1]} 次`, separator: '', secondary: match[2] }
+      : { primary: text, separator: '', secondary: '' };
+  }
+
+  function renderDetail(node, text, type) {
+    if (!node) return;
+    if (typeof node.replaceChildren !== 'function') {
+      node.textContent = text;
+      return;
+    }
+    const parts = detailParts(text, type);
+    const primary = document.createElement('span');
+    const separator = document.createElement('span');
+    const secondary = document.createElement('span');
+    if (!primary || !separator || !secondary) {
+      node.textContent = text;
+      return;
+    }
+    primary.className = 'detail-primary';
+    primary.textContent = parts.primary;
+    separator.className = 'detail-separator';
+    separator.textContent = parts.separator;
+    secondary.className = 'detail-secondary';
+    secondary.textContent = parts.secondary;
+    node.replaceChildren(primary, separator, secondary);
+  }
+
   let label;
   let status;
   let summary;
@@ -153,6 +195,8 @@
   let overflow;
   let resetTime;
   let resetCredits;
+  let compactProduct;
+  let compactPeriod;
   let bridge;
   try {
     label = document.getElementById('quota-label');
@@ -162,6 +206,8 @@
     overflow = document.getElementById('overflow');
     resetTime = document.getElementById('reset-time');
     resetCredits = document.getElementById('reset-credits');
+    compactProduct = document.getElementById('compact-product');
+    compactPeriod = document.getElementById('compact-period');
     bridge = window.petQuotaLabel;
   } catch (_) { return; }
   if (!label || !label.dataset || !status || !summary || typeof summary.replaceChildren !== 'function' ||
@@ -177,6 +223,7 @@
       label.dataset.size = model.size;
       label.dataset.expanded = model.expanded ? 'true' : 'false';
       label.dataset.hasItems = 'false';
+      label.dataset.itemCount = '0';
       label.dataset.severity = 'normal';
       const rows = [];
       let overallSeverity = 'normal';
@@ -208,20 +255,31 @@
         !lowest || item.remaining < lowest.remaining ? item : lowest, null);
       if (summaryItem) {
         const periodNode = document.createElement('span');
+        const badgeNode = document.createElement('span');
+        const periodLabelNode = document.createElement('span');
         const valueNode = document.createElement('span');
         periodNode.className = 'summary-period';
-        periodNode.textContent = periodTypeText(summaryItem.windowMinutes);
+        badgeNode.className = 'summary-badge';
+        badgeNode.textContent = periodBadgeText(summaryItem.windowMinutes);
+        periodLabelNode.className = 'summary-period-label';
+        periodLabelNode.textContent = '额度';
+        periodNode.replaceChildren(badgeNode, periodLabelNode);
         valueNode.className = 'summary-value';
         valueNode.textContent = `${Math.round(summaryItem.remaining)}%`;
         summary.replaceChildren(periodNode, valueNode);
+        if (compactProduct) compactProduct.textContent = summaryItem.label.toUpperCase();
+        if (compactPeriod) compactPeriod.textContent = periodTypeText(summaryItem.windowMinutes);
       } else {
         summary.replaceChildren();
+        if (compactProduct) compactProduct.textContent = 'CODEX';
+        if (compactPeriod) compactPeriod.textContent = '';
       }
       label.dataset.hasItems = rows.length > 0 ? 'true' : 'false';
+      label.dataset.itemCount = String(rows.length);
       label.dataset.severity = rows.length > 0 ? overallSeverity : 'normal';
       overflow.textContent = '';
-      if (resetTime) resetTime.textContent = resetTimeText(model);
-      if (resetCredits) resetCredits.textContent = resetCreditsText(model.resetCreditsAvailable);
+      renderDetail(resetTime, resetTimeText(model), 'time');
+      renderDetail(resetCredits, resetCreditsText(model.resetCreditsAvailable), 'credits');
     } catch (_) {}
   };
 

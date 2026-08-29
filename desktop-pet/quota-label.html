@@ -8,16 +8,25 @@
     <link rel="stylesheet" href="quota-label.css">
   </head>
   <body>
-    <section id="quota-label" data-state="disconnected" data-size="standard" data-expanded="false" data-severity="normal" data-has-items="false" aria-label="Codex 剩余额度">
-      <p id="status" role="status" aria-live="polite">Codex 未连接</p>
-      <p id="summary" aria-hidden="true"></p>
-      <ul id="items"></ul>
-      <div id="quota-details" aria-label="额度重置详情">
-        <p id="reset-time"></p>
-        <p id="reset-credits"></p>
-      </div>
-      <p id="overflow"></p>
-    </section>
+    <div id="quota-beam">
+      <section id="quota-label" data-state="disconnected" data-size="standard" data-expanded="false" data-severity="normal" data-has-items="false" data-item-count="0" aria-label="Codex 剩余额度">
+        <p id="status" role="status" aria-live="polite">Codex 未连接</p>
+        <p id="summary" aria-hidden="true"></p>
+        <div id="compact-header" aria-hidden="true">
+          <div class="compact-product">
+            <span id="compact-product">CODEX</span>
+            <span id="compact-period">周额度</span>
+          </div>
+          <span class="compact-collapse">⌃</span>
+        </div>
+        <ul id="items"></ul>
+        <div id="quota-details" aria-label="额度重置详情">
+          <p id="reset-time"></p>
+          <p id="reset-credits"></p>
+        </div>
+        <p id="overflow"></p>
+      </section>
+    </div>
     <script src="quota-label-renderer.js"></script>
   </body>
 </html>

@@ -84,7 +84,7 @@ function assertQuotaLabelWindow(controller, expectedWindow, petBounds, options =
   const expectedSize = options.size === 'compact' && options.expanded !== true
     ? { width: 128, height: 32 }
     : options.size === 'compact'
-      ? { width: 196, height: 84 }
+      ? { width: 196, height: 96 }
       : { width: 168, height: 58 };
   assert.deepEqual({ width: bounds.width, height: bounds.height }, expectedSize,
     `额度标签必须保持 ${expectedSize.width}×${expectedSize.height}`);
@@ -379,12 +379,18 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assert.equal(quotaLabel.getWindow(), win, '读取标签前必须仍是当前窗口');
     const view = await win.webContents.executeJavaScript(`(() => {
     const root = document.getElementById('quota-label');
+    const rootRect = root.getBoundingClientRect();
+    const visibleSections = ['compact-header', 'items', 'quota-details']
+      .map(id => document.getElementById(id)).filter(node => node && getComputedStyle(node).display !== 'none');
     return {
       state: root.dataset.state,
       size: root.dataset.size,
       expanded: root.dataset.expanded,
+      itemCount: root.dataset.itemCount,
       severity: root.dataset.severity,
-      summary: [...document.querySelectorAll('#summary span')].map(node => node.textContent),
+      summary: [...document.querySelectorAll('#summary > span')].map(node => node.textContent),
+      compactProduct: document.getElementById('compact-product')?.textContent || '',
+      compactPeriod: document.getElementById('compact-period')?.textContent || '',
       rows: [...document.querySelectorAll('#items li')].map(row => row.textContent),
       names: [...document.querySelectorAll('.quota-name')].map(node => node.textContent),
       periods: [...document.querySelectorAll('.quota-period')].map(node => node.textContent),
@@ -399,6 +405,11 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       })),
       resetTime: document.getElementById('reset-time')?.textContent || '',
       resetCredits: document.getElementById('reset-credits')?.textContent || '',
+      fits: visibleSections.every(node => {
+        const rect = node.getBoundingClientRect();
+        return rect.left >= rootRect.left && rect.right <= rootRect.right &&
+          rect.top >= rootRect.top && rect.bottom <= rootRect.bottom;
+      }),
       controls: document.querySelectorAll('button,input,select,textarea,a[href],[tabindex]').length
     };
   })()`);
@@ -440,6 +451,62 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       if (attachedHere && debuggerApi.isAttached()) debuggerApi.detach();
     }
     return captures;
+  };
+  const verifyQuotaBeam = async win => {
+    assert.equal(quotaLabel.getWindow(), win, '流光验收前必须仍是当前标签窗口');
+    const debuggerApi = win.webContents.debugger;
+    const attachedHere = !debuggerApi.isAttached();
+    if (attachedHere) debuggerApi.attach('1.3');
+    const beamStyle = () => win.webContents.executeJavaScript(`(() => {
+      const beam = document.getElementById('quota-beam');
+      const style = getComputedStyle(beam, '::before');
+      return { animationName: style.animationName, animationDuration: style.animationDuration,
+        opacity: style.opacity, angle: style.getPropertyValue('--quota-beam-angle').trim() };
+    })()`);
+    try {
+      await debuggerApi.sendCommand('Emulation.setEmulatedMedia', {
+        media: '', features: [
+          { name: 'prefers-color-scheme', value: 'light' },
+          { name: 'prefers-reduced-motion', value: 'no-preference' }
+        ]
+      });
+      await wait(80);
+      const light = await beamStyle();
+      assert.equal(light.animationName, 'quotaBeamOrbit');
+      assert.equal(light.animationDuration, '4.5s');
+      assert.equal(light.opacity, '0.84');
+      const first = await capture(win, 'quota-label-beam-phase-a', quotaLabel);
+      await wait(420);
+      const second = await capture(win, 'quota-label-beam-phase-b', quotaLabel);
+      assertDistinctCaptureEvidence(second, [first], '额度标签流光连续帧');
+
+      await debuggerApi.sendCommand('Emulation.setEmulatedMedia', {
+        media: '', features: [
+          { name: 'prefers-color-scheme', value: 'dark' },
+          { name: 'prefers-reduced-motion', value: 'no-preference' }
+        ]
+      });
+      await wait(80);
+      const dark = await beamStyle();
+      assert.equal(dark.animationName, 'quotaBeamOrbit');
+      assert.equal(dark.opacity, '0.96');
+
+      await debuggerApi.sendCommand('Emulation.setEmulatedMedia', {
+        media: '', features: [
+          { name: 'prefers-color-scheme', value: 'dark' },
+          { name: 'prefers-reduced-motion', value: 'reduce' }
+        ]
+      });
+      await wait(80);
+      const reduced = await beamStyle();
+      assert.equal(reduced.animationName, 'none');
+      assert.equal(reduced.angle, '261deg');
+    } finally {
+      await debuggerApi.sendCommand('Emulation.setEmulatedMedia', { media: '', features: [] })
+        .catch(() => undefined);
+      if (attachedHere && debuggerApi.isAttached()) debuggerApi.detach();
+    }
+    assert.equal(quotaLabel.getWindow(), win, '流光验收后必须仍是当前标签窗口');
   };
   const area = screen.getDisplayMatching(pet.getBounds()).workArea;
   const sample = async () => {
@@ -589,6 +656,8 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       '小巧横条只展示周期类型和最低剩余额度');
     await captureColorSchemes(compactResult.win,
       { size: 'compact', prefix: 'quota-label-compact' });
+    await verifyQuotaBeam(compactResult.win);
+    process.stdout.write('PET_CODEX_QUOTA_BEAM_OK\n');
 
     let compactBounds = compactResult.win.getBounds();
     await input(compactResult.win, 'mousePressed', compactBounds.width / 2, compactBounds.height / 2);
@@ -607,6 +676,21 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assert.equal(compactResult.view.resetCredits, '1 次重置机会');
     await captureColorSchemes(compactResult.win,
       { size: 'compact', expanded: true, prefix: 'quota-label-compact-expanded' });
+
+    emitQuota([quotaWindow(60, { id: 'codex:single-weekly', label: 'codex', windowMinutes: 10080,
+      resetsAt: resetAt + 300000 })]);
+    compactResult = await waitForLabelView(view => view.size === 'compact' &&
+      view.expanded === 'true' && view.itemCount === '1', '展开单项额度液态玻璃卡片');
+    assert.deepEqual(compactResult.view.values.map(item => item.text), ['60%']);
+    assert.equal(compactResult.view.compactProduct, 'CODEX');
+    assert.equal(compactResult.view.compactPeriod, '周额度');
+    assert.equal(compactResult.view.fits, true, '展开单项额度内容不得超出 196×96 卡片');
+    await captureColorSchemes(compactResult.win, {
+      size: 'compact', expanded: true, prefix: 'quota-label-compact-expanded-single'
+    });
+    emitQuota(quotaPeriods());
+    compactResult = await waitForLabelView(view => view.size === 'compact' &&
+      view.expanded === 'true' && view.itemCount === '2', '恢复展开两项额度明细');
 
     compactBounds = compactResult.win.getBounds();
     await input(compactResult.win, 'mousePressed', compactBounds.width / 2, compactBounds.height / 2);

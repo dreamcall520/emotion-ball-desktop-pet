@@ -1,7 +1,7 @@
 const LABEL_SIZES = Object.freeze({
   standard: Object.freeze({ width: 168, height: 58 }),
   compact: Object.freeze({ width: 128, height: 32 }),
-  compactExpanded: Object.freeze({ width: 196, height: 84 })
+  compactExpanded: Object.freeze({ width: 196, height: 96 })
 });
 const GAP = 8;
 const GEOMETRY_LIMIT = Math.floor(Number.MAX_SAFE_INTEGER / 4);

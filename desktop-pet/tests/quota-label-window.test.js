@@ -155,7 +155,7 @@ test('小巧档创建可点击的 128×32 横条，点击展开和收起时复�
 
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
   assert.equal(f.windows.length, 1);
-  assert.deepEqual(win.bounds, { x: 242, y: 388, width: 196, height: 84 });
+  assert.deepEqual(win.bounds, { x: 242, y: 388, width: 196, height: 96 });
   assert.equal(win.sent.at(-1)[1].expanded, true);
 
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
@@ -850,7 +850,7 @@ test('小巧横条只显示周期类型和最低剩余额度，点击请求展�
     { label: 'codex', windowMinutes: 300, remaining: 42, resetsAt: 1800019800000 }
   ], overflow: 0, resetCreditsAvailable: 1 });
   assert.equal(label.dataset.expanded, 'true');
-  assert.equal(summary.children.map(node => node.textContent).join(''), '5小时42%');
+  assert.equal(summary.children.map(node => node.textContent).join(''), '5h额度42%');
   assert.equal(resetTime.textContent, '5小时30分钟后重置 · 1/15 21:30');
   assert.equal(resetCredits.textContent, '1 次重置机会');
 });
@@ -1022,7 +1022,7 @@ test('渲染层在 DOM 或 bridge 缺失、订阅退订抛错和恶意模型下�
   assert.doesNotThrow(beforeUnload);
 });
 
-test('静态页面无内联脚本能力，浅深背景可读、正文至少 12px 且无阴影', () => {
+test('静态页面无内联脚本能力，额度内容位于独立流光外壳且浅深背景可读', () => {
   const html = fs.readFileSync(path.resolve(__dirname, '../quota-label.html'), 'utf8');
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
   assert.match(html, /Content-Security-Policy/);
@@ -1031,16 +1031,37 @@ test('静态页面无内联脚本能力，浅深背景可读、正文至少 12px
   assert.match(html, /quota-label-renderer\.js/);
   assert.match(html, /id="reset-time"/);
   assert.match(html, /id="reset-credits"/);
+  assert.match(html, /id="quota-beam"/);
+  assert.match(html, /id="compact-product"/);
+  assert.match(html, /id="compact-period"/);
   assert.doesNotMatch(html, /https?:\/\//);
   assert.match(css, /font-size:\s*(?:12|1[3-9]|[2-9]\d)px/);
   assert.match(css, /prefers-color-scheme:\s*dark/);
   assert.match(css, /rgba\(/);
-  assert.match(css, /box-shadow:\s*none/);
-  assert.doesNotMatch(css, /animation|filter:\s*drop-shadow/);
+  assert.match(css, /backdrop-filter:\s*blur\(24px\)\s+saturate\(175%\)/);
   assert.match(css, /#items li\s*\{[\s\S]*?display:\s*grid/);
   assert.match(css, /\.quota-name\s*\{[\s\S]*?text-overflow:\s*ellipsis/);
   assert.match(css, /\.quota-value\s*\{[\s\S]*?font-variant-numeric:\s*tabular-nums/);
   assert.match(css, /\.quota-progress\s*\{[\s\S]*?height:\s*3px/);
+});
+
+test('额度卡片复用星空工作台流光，悬停加速且减少动态效果时静止', () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
+  assert.match(css, /@property\s+--quota-beam-angle/);
+  assert.match(css, /@keyframes\s+quotaBeamOrbit/);
+  assert.match(css, /#quota-beam::before,[\s\S]*?#quota-beam::after[\s\S]*?conic-gradient\([\s\S]*?#3fdbec[\s\S]*?#8fa7ff[\s\S]*?#ef93de[\s\S]*?#ffd18b/);
+  assert.match(css, /animation:\s*quotaBeamOrbit\s+4\.5s\s+linear\s+infinite/);
+  assert.match(css, /#quota-beam:hover::before[\s\S]*?animation-duration:\s*3s/);
+  assert.match(css, /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*?animation:\s*none/);
+  assert.match(css, /@media \(prefers-color-scheme:\s*dark\)[\s\S]*?#quota-beam::before\s*\{\s*opacity:\s*\.96/);
+});
+
+test('小巧展开为 196×96，单项额度使用大数字，双项额度仍完整保留', () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
+  assert.match(css, /#quota-label\[data-size="compact"\]\[data-expanded="true"\][\s\S]*?padding:\s*8px 10px 7px/);
+  assert.match(css, /#quota-label\[data-size="compact"\]\[data-expanded="true"\]\[data-item-count="1"\][\s\S]*?\.quota-value[\s\S]*?font-size:\s*28px/);
+  assert.match(css, /#quota-label\[data-size="compact"\]\[data-expanded="true"\]\[data-item-count="2"\][\s\S]*?#items li[\s\S]*?display:\s*grid/);
+  assert.match(css, /#quota-details[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)\s+58px/);
 });
 
 test('额度标签改为两行名称、周期、百分比和进度条，不再渲染另有项目提示', () => {
@@ -1061,14 +1082,23 @@ test('标准档复用原小巧版 11px 字号和 3px 进度条，小巧折叠为
   assert.match(css, /#quota-label\s*\{[\s\S]*?padding:\s*5px 8px/);
   assert.match(css, /#quota-label\s*\{[\s\S]*?font-size:\s*11px/);
   assert.match(css, /\.quota-progress\s*\{[\s\S]*?height:\s*3px/);
-  assert.match(css, /#quota-label\[data-size="compact"\]\[data-expanded="false"\][\s\S]*?border-radius:\s*999px/);
+  assert.match(css, /#quota-label\[data-size="compact"\]\[data-expanded="false"\][\s\S]*?border-radius:\s*11px/);
   assert.match(css, /#quota-label\[data-size="compact"\]\[data-expanded="false"\][\s\S]*?#summary[\s\S]*?display:\s*flex/);
   assert.match(css, /#quota-label\[data-size="compact"\]\[data-expanded="true"\][\s\S]*?#quota-details[\s\S]*?display:\s*grid/);
 });
 
 test('小巧展开详情在深色背景使用浅色文字，不能继承浅色页灰字', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
-  assert.match(css, /@media \(prefers-color-scheme: dark\)[\s\S]*?#quota-label\[data-size="compact"\]\[data-expanded="true"\] #quota-details\s*\{[\s\S]*?color:\s*rgba\(232, 233, 235, \.66\)/);
+  assert.match(css, /@media \(prefers-color-scheme: dark\)[\s\S]*?#quota-label\[data-size="compact"\]\[data-expanded="true"\] #quota-details\s*\{[\s\S]*?color:\s*rgba\(232, 233, 235, \.72\)/);
+  assert.match(css, /@media \(prefers-color-scheme: dark\)[\s\S]*?#quota-label\[data-size="compact"\]\[data-expanded="true"\]\[data-item-count="1"\] #items li::after\s*\{\s*color:\s*#c8d0da/);
+});
+
+test('展开详情把相对重置时间、具体时间和重置机会分层排版', () => {
+  const renderer = fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8');
+  assert.match(renderer, /detail-primary/);
+  assert.match(renderer, /detail-secondary/);
+  assert.match(renderer, /detail-separator/);
+  assert.doesNotMatch(renderer, /resetTime\.textContent\s*=\s*resetTimeText/);
 });
 
 test('168×58 标准档内两条额度的文字和进度条不裁切', () => {

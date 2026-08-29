@@ -37,7 +37,7 @@ test('真实启动流程必须调用并要求 Codex 模拟验收完成标记', (
   ]) assert.match(smoke, new RegExp(marker));
 });
 
-test('额度标签原生校验区分 168×58 标准、128×32 小巧及 196×84 展开明细', () => {
+test('额度标签原生校验区分 168×58 标准、128×32 小巧及 196×96 展开明细', () => {
   const { assertQuotaLabelWindow } = require('../scripts/verify-codex-companion');
   const petBounds = { x: 300, y: 300, width: 80, height: 80 };
   const win = {
@@ -60,7 +60,7 @@ test('额度标签原生校验区分 168×58 标准、128×32 小巧及 196×84 
   const compact = { ...win, getBounds: () => ({ x: 276, y: 388, width: 128, height: 32 }) };
   assert.doesNotThrow(() => assertQuotaLabelWindow({ getWindow: () => compact }, compact, petBounds,
     { size: 'compact' }));
-  const expanded = { ...win, getBounds: () => ({ x: 242, y: 388, width: 196, height: 84 }) };
+  const expanded = { ...win, getBounds: () => ({ x: 242, y: 388, width: 196, height: 96 }) };
   assert.doesNotThrow(() => assertQuotaLabelWindow({ getWindow: () => expanded }, expanded, petBounds,
     { size: 'compact', expanded: true }));
 });
@@ -367,6 +367,8 @@ test('原生助手验收任务菜单与名称开关且不具备真实任务写�
   assert.match(source, /PET_CODEX_QUOTA_POLICY_OK/);
   assert.match(source, /PET_CODEX_QUOTA_LABEL_OK/);
   assert.match(source, /PET_CODEX_QUOTA_COMPACT_OK/);
+  assert.match(source, /PET_CODEX_QUOTA_BEAM_OK/);
+  assert.match(source, /querySelectorAll\('#summary > span'\)/);
   assert.match(source, /codex-quota-visible/);
   assert.match(source, /codex-quota-auto/);
   assert.match(source, /codex-quota-five-hour/);
@@ -374,6 +376,8 @@ test('原生助手验收任务菜单与名称开关且不具备真实任务写�
   assert.match(source, /\['light', 'dark'\]/);
   assert.match(source, /\$\{prefix\}-\$\{scheme\}/);
   assert.match(source, /quota-label-compact/);
+  assert.match(source, /quota-label-compact-expanded-single/);
+  assert.match(source, /itemCount/);
   assert.match(source, /quota-label-stale-long/);
   assert.match(source, /已过期 7天/);
   assert.match(source, /\['64%', '78%'\]/);
