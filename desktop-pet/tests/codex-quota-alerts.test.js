@@ -51,6 +51,26 @@ test('100% 档只在剩余严格等于 0 时触发，极小正数不被浮点抵
   ], { alwaysVisible: false })[0].level, 100);
 });
 
+test('档位直接按剩余阈值比较，紧邻 80% 和 90% 档的正数不提前触发', () => {
+  const eighty = createQuotaAlertTracker();
+  eighty.update([quotaWindow('eighty', 300, 30)], { baseline: true, alwaysVisible: false });
+  assert.deepEqual(eighty.update([
+    quotaWindow('eighty', 300, 20.000000000000004)
+  ], { alwaysVisible: false }), []);
+  assert.equal(eighty.update([
+    quotaWindow('eighty', 300, 20)
+  ], { alwaysVisible: false })[0].level, 80);
+
+  const ninety = createQuotaAlertTracker();
+  ninety.update([quotaWindow('ninety', 300, 20)], { baseline: true, alwaysVisible: false });
+  assert.deepEqual(ninety.update([
+    quotaWindow('ninety', 300, 10.000000000000002)
+  ], { alwaysVisible: false }), []);
+  assert.equal(ninety.update([
+    quotaWindow('ninety', 300, 10)
+  ], { alwaysVisible: false })[0].level, 90);
+});
+
 test('首次和新类别先建基线，普通档不补报而高用量只报当前最严重档', () => {
   const tracker = createQuotaAlertTracker();
   const alerts = tracker.update([
@@ -204,17 +224,18 @@ test('提醒携带完整周期引用的安全副本，更改输出不影响输�
   assert.deepEqual(tracker.update([{ ...source, remaining: 80 }], { alwaysVisible: false }), []);
 });
 
-test('身份历史最多 64 项，超限时按首次出现顺序稳定淘汰最旧项', () => {
+test('身份状态最多 64 项，被淘汰身份不当首次基线且 10% 到 20% 仍提醒', () => {
   const tracker = createQuotaAlertTracker();
   tracker.update(Array.from({ length: 64 }, (_, index) => (
-    quotaWindow(`id-${index}`, 300, 95)
+    quotaWindow(`id-${index}`, 300, 100)
   )), { baseline: true, alwaysVisible: false });
+  assert.equal(tracker.update(Array.from({ length: 64 }, (_, index) => (
+    quotaWindow(`id-${index}`, 300, 90)
+  )), { alwaysVisible: false }).length, 64);
 
-  tracker.update([quotaWindow('id-0', 300, 94)], { alwaysVisible: false });
-  tracker.update([quotaWindow('id-64', 300, 95)], { alwaysVisible: false });
+  tracker.update([quotaWindow('id-64', 300, 100)], { alwaysVisible: false });
 
-  assert.equal(tracker.update([quotaWindow('id-1', 300, 80)], { alwaysVisible: false })[0].level, 20);
-  assert.deepEqual(tracker.update([quotaWindow('id-0', 300, 80)], { alwaysVisible: false }), []);
+  assert.equal(tracker.update([quotaWindow('id-0', 300, 80)], { alwaysVisible: false })[0].level, 20);
 });
 
 test('同一批次最多跟踪前 64 个不同身份，超出项不引起状态抖动或重报', () => {
@@ -266,6 +287,34 @@ test('64 项上限的两个交替批次多轮往返，同周期同档不得无�
   for (let round = 0; round < 5; round += 1) {
     assert.deepEqual(tracker.update(batchA, { alwaysVisible: false }), []);
     assert.deepEqual(tracker.update(batchB, { alwaysVisible: false }), []);
+  }
+});
+
+test('129 个身份在批首、批尾及多轮交替时不级联或重复轰炸', () => {
+  for (const position of ['first', 'last']) {
+    const tracker = createQuotaAlertTracker();
+    const first = Array.from({ length: 64 }, (_, index) => quotaWindow(`id-${index}`, 300, 100));
+    tracker.update(first, { baseline: true, alwaysVisible: false });
+    assert.equal(tracker.update(first.map(item => ({ ...item, remaining: 20 })), {
+      alwaysVisible: false
+    }).length, 64);
+
+    const second = Array.from({ length: 64 }, (_, index) => quotaWindow(`id-${index + 64}`, 300, 20));
+    assert.deepEqual(tracker.update(second, { alwaysVisible: false }).map(item => item.id), ['id-64']);
+    assert.deepEqual(tracker.update(second, { alwaysVisible: false }), []);
+
+    const retained = second.slice(0, 63);
+    const boundary = quotaWindow('id-128', 300, 20);
+    const third = position === 'first' ? [boundary, ...retained] : [...retained, boundary];
+    assert.deepEqual(tracker.update(third, { alwaysVisible: false }), []);
+
+    for (let round = 0; round < 3; round += 1) {
+      assert.deepEqual(tracker.update(first.map(item => ({ ...item, remaining: 20 })), {
+        alwaysVisible: false
+      }), []);
+      assert.deepEqual(tracker.update(second, { alwaysVisible: false }), []);
+      assert.deepEqual(tracker.update(third, { alwaysVisible: false }), []);
+    }
   }
 });
 
@@ -386,6 +435,27 @@ test('update 与 merge 安全忽略会抛错的 getter、Proxy 和已撤销 Prox
   assert.deepEqual(tracker.update(symbolicLength), []);
   assert.doesNotThrow(() => mergeQuotaAlerts(symbolicLength));
   assert.equal(mergeQuotaAlerts(symbolicLength), null);
+
+  let windowReads = 0;
+  let alertReads = 0;
+  const longWindows = new Proxy([], {
+    get(target, property, receiver) {
+      if (property === 'length') return 2048;
+      if (/^\d+$/u.test(String(property))) windowReads += 1;
+      return Reflect.get(target, property, receiver);
+    }
+  });
+  const longAlerts = new Proxy([], {
+    get(target, property, receiver) {
+      if (property === 'length') return 2048;
+      if (/^\d+$/u.test(String(property))) alertReads += 1;
+      return Reflect.get(target, property, receiver);
+    }
+  });
+  tracker.update(longWindows);
+  mergeQuotaAlerts(longAlerts);
+  assert.ok(windowReads > 0 && windowReads < 2048);
+  assert.ok(alertReads > 0 && alertReads < 2048);
 });
 
 test('访问器标量只读取一次就防御复制，单个异常数组项不阻断后续可靠项', () => {

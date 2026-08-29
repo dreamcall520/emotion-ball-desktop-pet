@@ -1,7 +1,7 @@
 const LEVELS = Object.freeze([10, 20, 30, 40, 50, 60, 70, 80, 90, 100]);
 const LEVEL_SET = new Set(LEVELS);
 const MAX_IDENTITIES = 64;
-const MAX_EVICTED_IDENTITIES = 64;
+const MAX_INPUT_ITEMS = 1024;
 const MAX_TEXT_LENGTH = 256;
 const MAX_KEY_LENGTH = 1024;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/u;
@@ -41,14 +41,11 @@ function keyOf(item) {
 
 function levelOf(remaining) {
   if (remaining === 0) return 100;
-  const used = 100 - remaining;
-  let result = 0;
-  for (const level of LEVELS) {
-    if (level === 100) break;
-    if (used < level) break;
-    result = level;
+  for (let index = LEVELS.length - 2; index >= 0; index -= 1) {
+    const level = LEVELS[index];
+    if (remaining <= 100 - level) return level;
   }
-  return result;
+  return 0;
 }
 
 function alertOf(key, level, item) {
@@ -73,6 +70,7 @@ function reliableByIdentity(windows) {
     return reliable;
   }
   if (!Number.isSafeInteger(length) || length < 0) return reliable;
+  length = Math.min(length, MAX_INPUT_ITEMS);
   for (let index = 0; index < length; index += 1) {
     let raw;
     try {
@@ -108,11 +106,14 @@ function safeOptions(options) {
 
 function createQuotaAlertTracker() {
   const state = new Map();
-  const evicted = new Map();
+  // 超过 64 个身份后只留无身份的最高档摘要：宁可少提醒，不因边界换入重复轰炸。
+  let saturated = false;
+  let forgottenPeak = 0;
 
   function reset() {
     state.clear();
-    evicted.clear();
+    saturated = false;
+    forgottenPeak = 0;
   }
 
   function update(windows, options = {}) {
@@ -142,9 +143,9 @@ function createQuotaAlertTracker() {
 
     for (const [key, item] of reliable) {
       if (state.has(key)) continue;
-      let entry = evicted.get(key);
-      if (entry) evicted.delete(key);
+      let conservative = false;
       if (state.size >= MAX_IDENTITIES) {
+        conservative = saturated;
         let evictionKey;
         for (const existingKey of state.keys()) {
           if (!batchKeys.has(existingKey)) {
@@ -155,12 +156,12 @@ function createQuotaAlertTracker() {
         const selectedKey = evictionKey === undefined ? state.keys().next().value : evictionKey;
         const selectedEntry = state.get(selectedKey);
         state.delete(selectedKey);
-        if (evicted.size >= MAX_EVICTED_IDENTITIES) evicted.delete(evicted.keys().next().value);
-        evicted.set(selectedKey, selectedEntry);
+        forgottenPeak = Math.max(forgottenPeak, selectedEntry.peak);
+        saturated = true;
       }
-      if (!entry) entry = { peak: 0, emitted: new Set() };
+      const entry = { peak: conservative ? forgottenPeak : 0, emitted: new Set() };
       state.set(key, entry);
-      observe(key, item, entry, true);
+      observe(key, item, entry, !conservative);
     }
 
     const alerts = [];
@@ -217,6 +218,7 @@ function mergeQuotaAlerts(alerts) {
     return null;
   }
   if (!Number.isSafeInteger(length) || length < 0) return null;
+  length = Math.min(length, MAX_INPUT_ITEMS);
   const unique = new Map();
   for (let index = 0; index < length; index += 1) {
     let raw;
