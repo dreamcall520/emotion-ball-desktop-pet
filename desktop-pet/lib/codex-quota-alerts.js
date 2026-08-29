@@ -81,29 +81,48 @@ function createQuotaAlertTracker() {
       ? options : {};
     const baseline = safeOptions.baseline === true;
     const alwaysVisible = safeOptions.alwaysVisible === true;
-    const alerts = [];
+    const reliable = reliableByIdentity(windows);
+    const batchKeys = new Set(reliable.keys());
+    const alertsByKey = new Map();
 
-    for (const [key, item] of reliableByIdentity(windows)) {
+    function observe(key, item, entry, isNewIdentity) {
       const currentLevel = levelOf(item.remaining);
-      let entry = state.get(key);
-      const isNewIdentity = !entry;
-
-      if (isNewIdentity) {
-        if (state.size >= MAX_IDENTITIES) state.delete(state.keys().next().value);
-        entry = { peak: 0, emitted: new Set() };
-        state.set(key, entry);
-      }
-
       const isBaseline = baseline || isNewIdentity;
       const exceedsPeak = currentLevel > entry.peak;
       const candidate = exceedsPeak && (!isBaseline || currentLevel >= 80) ? currentLevel : 0;
       entry.peak = Math.max(entry.peak, currentLevel);
 
-      if (!candidate || entry.emitted.has(candidate) || (alwaysVisible && candidate < 80)) continue;
+      if (!candidate || entry.emitted.has(candidate) || (alwaysVisible && candidate < 80)) return;
       entry.emitted.add(candidate);
-      alerts.push(alertOf(key, candidate, item));
+      alertsByKey.set(key, alertOf(key, candidate, item));
     }
 
+    for (const [key, item] of reliable) {
+      const entry = state.get(key);
+      if (entry) observe(key, item, entry, false);
+    }
+
+    for (const [key, item] of reliable) {
+      if (state.has(key)) continue;
+      if (state.size >= MAX_IDENTITIES) {
+        let evictionKey;
+        for (const existingKey of state.keys()) {
+          if (!batchKeys.has(existingKey)) {
+            evictionKey = existingKey;
+            break;
+          }
+        }
+        state.delete(evictionKey === undefined ? state.keys().next().value : evictionKey);
+      }
+      const entry = { peak: 0, emitted: new Set() };
+      state.set(key, entry);
+      observe(key, item, entry, true);
+    }
+
+    const alerts = [];
+    for (const key of reliable.keys()) {
+      if (alertsByKey.has(key)) alerts.push(alertsByKey.get(key));
+    }
     return alerts;
   }
 

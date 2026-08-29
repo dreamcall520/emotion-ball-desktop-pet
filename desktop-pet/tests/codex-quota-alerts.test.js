@@ -215,6 +215,26 @@ test('同一批次最多跟踪前 64 个不同身份，超出项不引起状态�
   assert.deepEqual(tracker.update(strong, { alwaysVisible: false }), []);
 });
 
+test('满 64 项时批次换序且只替换一项，新身份不得级联误删已有身份', () => {
+  const tracker = createQuotaAlertTracker();
+  const initial = Array.from({ length: 64 }, (_, index) => quotaWindow(`id-${index}`, 300, 100));
+  tracker.update(initial, { baseline: true, alwaysVisible: false });
+  assert.equal(tracker.update(initial.map(item => ({ ...item, remaining: 20 })), {
+    alwaysVisible: false
+  }).length, 64);
+
+  const reorderedReplacement = [
+    quotaWindow('id-64', 300, 20),
+    ...Array.from({ length: 63 }, (_, index) => quotaWindow(`id-${index}`, 300, 20))
+  ];
+  const alerts = tracker.update(reorderedReplacement, { alwaysVisible: false });
+
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].id, 'id-64');
+  assert.equal(alerts[0].level, 80);
+  assert.deepEqual(tracker.update(reorderedReplacement, { alwaysVisible: false }), []);
+});
+
 test('多类别提醒合并返回最高档、最低实际剩余和稳定的安全引用', () => {
   const tracker = createQuotaAlertTracker();
   tracker.update([
