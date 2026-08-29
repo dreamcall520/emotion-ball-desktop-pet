@@ -33,7 +33,8 @@ test('损坏文件回退且有效设置可回读', t => {
     alwaysOnTop: false,
     keepAwake: false,
     bubblesEnabled: true,
-    codexEnabled: false
+    codexEnabled: false,
+    codexTaskNameInAlerts: false
   });
   assert.equal(fs.existsSync(`${file}.tmp`), false);
 });
@@ -41,7 +42,8 @@ test('损坏文件回退且有效设置可回读', t => {
 test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
   assert.deepEqual(normalizeSettings({ size: 'small', x: -102.3, y: 81.8, alwaysOnTop: false }), {
     size: 'small', x: -102, y: 82, alwaysOnTop: false,
-    keepAwake: false, bubblesEnabled: true, codexEnabled: false
+    keepAwake: false, bubblesEnabled: true, codexEnabled: false,
+    codexTaskNameInAlerts: false
   });
 });
 
@@ -74,6 +76,15 @@ test('Codex 联动默认关闭且只接受布尔值', () => {
   });
 });
 
+test('任务名称提醒默认关闭且只接受布尔值', () => {
+  assert.equal(DEFAULTS.codexTaskNameInAlerts, false);
+  assert.equal(normalizeSettings({}).codexTaskNameInAlerts, false);
+  for (const codexTaskNameInAlerts of ['true', 1, null, {}, []]) {
+    assert.equal(normalizeSettings({ codexTaskNameInAlerts }).codexTaskNameInAlerts, false);
+  }
+  assert.equal(normalizeSettings({ codexTaskNameInAlerts: true }).codexTaskNameInAlerts, true);
+});
+
 test('Codex 只持久化开关，不保存账号或快照', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emotion-pet-codex-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -82,4 +93,21 @@ test('Codex 只持久化开关，不保存账号或快照', t => {
   assert.deepEqual(saved, { ...DEFAULTS, codexEnabled: true });
   assert.deepEqual(loadSettings(file), saved);
   assert.equal(fs.readFileSync(file, 'utf8').includes('private'), false);
+});
+
+test('任务名称提醒只持久化隐私开关，不保存任务信息', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emotion-pet-task-name-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'settings.json');
+  const saved = saveSettings(file, {
+    codexTaskNameInAlerts: true,
+    taskTitle: 'PRIVATE_TITLE',
+    taskBody: 'PRIVATE_BODY'
+  });
+  assert.equal(saved.codexTaskNameInAlerts, true);
+  const persisted = fs.readFileSync(file, 'utf8');
+  assert.equal(persisted.includes('PRIVATE_TITLE'), false);
+  assert.equal(persisted.includes('PRIVATE_BODY'), false);
+  assert.equal(Object.hasOwn(JSON.parse(persisted), 'taskTitle'), false);
+  assert.equal(Object.hasOwn(JSON.parse(persisted), 'taskBody'), false);
 });

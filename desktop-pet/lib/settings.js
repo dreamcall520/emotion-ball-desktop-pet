@@ -8,7 +8,8 @@ const DEFAULTS = Object.freeze({
   alwaysOnTop: true,
   keepAwake: false,
   bubblesEnabled: true,
-  codexEnabled: false
+  codexEnabled: false,
+  codexTaskNameInAlerts: false
 });
 
 function normalizeSettings(raw = {}) {
@@ -25,7 +26,11 @@ function normalizeSettings(raw = {}) {
     bubblesEnabled:
       typeof raw.bubblesEnabled === 'boolean' ? raw.bubblesEnabled : DEFAULTS.bubblesEnabled,
     codexEnabled:
-      typeof raw.codexEnabled === 'boolean' ? raw.codexEnabled : DEFAULTS.codexEnabled
+      typeof raw.codexEnabled === 'boolean' ? raw.codexEnabled : DEFAULTS.codexEnabled,
+    codexTaskNameInAlerts:
+      typeof raw.codexTaskNameInAlerts === 'boolean'
+        ? raw.codexTaskNameInAlerts
+        : DEFAULTS.codexTaskNameInAlerts
   };
 }
 
