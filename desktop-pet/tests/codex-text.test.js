@@ -5,7 +5,7 @@ const {
 } = require('../lib/codex-text');
 
 test('纯文本清理会移除控制符和方向控制符并合并空白', () => {
-  assert.equal(plainText('  A\n\tB\u0000\u202e C\u0085  '), 'A B C');
+  assert.equal(plainText('  A\n\tB\u0000\u202e\u061c\u200e\u200f C\u0085  '), 'A B C');
 });
 
 test('纯文本截断按 Unicode code point 保留 emoji 完整字符', () => {

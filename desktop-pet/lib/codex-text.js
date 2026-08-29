@@ -1,4 +1,4 @@
-const INVALID_TEXT = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g;
+const INVALID_TEXT = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
 const DEFAULT_MAXIMUM = 40;
 const TITLE_MAXIMUM = 18;
 
