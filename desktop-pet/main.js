@@ -477,6 +477,18 @@ function persistWindowPosition() {
   persistSettings();
 }
 
+// 仅由显式原生 smoke 闭包调用，用于在真实尺寸入口验收后精确还原初始设置。
+function restoreSmokePetSettings(value) {
+  if (!value || !SIZES[value.size] ||
+    !(value.x === null || Number.isFinite(value.x)) ||
+    !(value.y === null || Number.isFinite(value.y))) return false;
+  settings.size = value.size;
+  settings.x = value.x === null ? null : Math.round(value.x);
+  settings.y = value.y === null ? null : Math.round(value.y);
+  persistSettings();
+  return true;
+}
+
 function stopWindowBounce(restorePosition = true) {
   if (!bounceState) return;
   const current = bounceState;
@@ -806,6 +818,7 @@ async function finishSmokeTest() {
       canPresent: canPresentCodex, getMotionOwner: () => hostMotion,
       clearDialogue: () => { dialogue.dismiss(); hideBubble(); },
       setQuotaPreference: setCodexPreference,
+      restorePetSettings: restoreSmokePetSettings,
       // 只在显式冒烟闭包提供模拟开关，不注册测试 IPC，也不显示真实授权弹窗。
       setEnabled: async enabled => { settings.codexEnabled = enabled; await codexCompanion.setEnabled(enabled); }
     });

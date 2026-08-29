@@ -193,6 +193,18 @@ test('默认关闭和取消确认都零连接、零轮询，并保留原设置',
   assert.equal(f.timers.size, 0);
 });
 
+test('原生 smoke 的受控闭包可精确恢复尺寸与空坐标设置且不移动窗口', async () => {
+  const f = await fixture();
+  const before = f.pet.getBounds();
+  assert.equal(f.call("restoreSmokePetSettings({ size: 'tiny', x: null, y: null })"), true);
+  assert.deepEqual(f.pet.getBounds(), before, '设置恢复闭包不能替代真实窗口恢复入口');
+  assert.deepEqual({ size: f.saved.at(-1).size, x: f.saved.at(-1).x, y: f.saved.at(-1).y },
+    { size: 'tiny', x: null, y: null });
+  const savedCount = f.saved.length;
+  assert.equal(f.call("restoreSmokePetSettings({ size: 'invalid', x: 1, y: 2 })"), false);
+  assert.equal(f.saved.length, savedCount, '非法恢复值不能落盘');
+});
+
 test('任务名称开关保存成功才更新偏好和菜单，失败时完整回滚', async () => {
   const f = await fixture({ codexEnabled: true });
   const ack = queueCodexCompletion(f);

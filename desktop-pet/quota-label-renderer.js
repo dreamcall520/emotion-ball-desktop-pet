@@ -124,9 +124,9 @@
         const severity = severityOf(item.remaining);
         row.dataset.severity = severity;
         remainingNode.className = 'quota-remaining';
-        remainingNode.textContent = `剩余 ${Math.round(item.remaining)}%`;
+        remainingNode.textContent = `${model.state === 'stale' ? '已过期 · ' : ''}剩余 ${Math.round(item.remaining)}%`;
         detailNode.className = 'quota-detail';
-        detailNode.textContent = ` · ${item.label} · ${periodText(item.windowMinutes)}${model.state === 'stale' ? ' · 已过期' : ''}`;
+        detailNode.textContent = ` · ${item.label} · ${periodText(item.windowMinutes)}`;
         row.replaceChildren(remainingNode, detailNode);
         rows.push(row);
         if (severity === 'urgent' || (severity === 'low' && overallSeverity === 'normal')) overallSeverity = severity;

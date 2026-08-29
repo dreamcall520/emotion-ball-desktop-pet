@@ -118,7 +118,8 @@ async function runCleanupSteps(steps) {
 }
 
 async function restoreSmokeState({ original, getSettings, setEnabled, setQuotaPreference, command,
-  clearDialogue, page, setSetting, setSize, pet, bubble, quotaLabel, prepareSynthetic, prepare }) {
+  clearDialogue, page, setSetting, setSize, restorePetSettings, pet, bubble, quotaLabel,
+  prepareSynthetic, prepare }) {
   const restorePreference = (name, value) => {
     setQuotaPreference(name, value);
     assert.equal(getSettings()[name], value, `${name} 未恢复`);
@@ -152,11 +153,37 @@ async function restoreSmokeState({ original, getSettings, setEnabled, setQuotaPr
       setSetting('bubblesEnabled', original.settings.bubblesEnabled);
       assert.equal(getSettings().bubblesEnabled, original.settings.bubblesEnabled);
     }],
-    ['恢复球球尺寸', () => {
-      setSize(original.settings.size);
-      assert.equal(getSettings().size, original.settings.size);
+    ['恢复球球真实位置', () => {
+      pet.setBounds(original.bounds, false);
+      assert.deepEqual(pet.getBounds(), original.bounds, '球球真实 bounds 未恢复');
     }],
-    ['恢复球球位置', () => pet.setBounds(original.bounds)],
+    ['恢复球球尺寸与落盘位置', () => {
+      setSize(original.settings.size);
+      assert.deepEqual(pet.getBounds(), original.bounds, '真实尺寸入口改变了原始 bounds');
+      const current = getSettings();
+      assert.deepEqual({ size: current.size, x: current.x, y: current.y },
+        { size: original.settings.size, x: original.bounds.x, y: original.bounds.y },
+      '真实尺寸入口未按原始 bounds 持久化尺寸与位置');
+    }],
+    ['恢复初始球球设置', () => {
+      const expected = {
+        size: original.settings.size,
+        x: original.settings.x,
+        y: original.settings.y
+      };
+      assert.equal(restorePetSettings(expected), true, '受控 smoke 设置恢复入口失败');
+      const restored = getSettings();
+      assert.deepEqual({ size: restored.size, x: restored.x, y: restored.y }, expected,
+        '球球初始尺寸与位置设置未精确恢复');
+      assert.deepEqual(pet.getBounds(), original.bounds, '恢复原始设置不能改变真实 bounds');
+    }],
+    ['最终核对球球恢复', () => {
+      assert.deepEqual(pet.getBounds(), original.bounds, '球球最终 bounds 与初始值不一致');
+      const current = getSettings();
+      assert.deepEqual({ size: current.size, x: current.x, y: current.y }, {
+        size: original.settings.size, x: original.settings.x, y: original.settings.y
+      }, '球球最终设置与初始值不一致');
+    }],
     ['断开球球调试器', () => detachDebugger(pet)],
     ['断开气泡调试器', () => detachDebugger(bubble.getWindow())],
     ['断开额度标签调试器', () => detachDebugger(quotaLabel.getWindow())],
@@ -201,7 +228,7 @@ function policyClock() {
 // 页面、预加载、IPC、对白和窗口动作均为实际应用代码。
 async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindow, command, setSetting, setSize,
   getMenu, getSettings, prepare, setEnabled, getController, canPresent, getMotionOwner, clearDialogue,
-  quotaLabel, setQuotaPreference }) {
+  quotaLabel, setQuotaPreference, restorePetSettings }) {
   if (process.env.PET_SMOKE_TEST !== '1') throw new Error('Codex 验收只允许在显式冒烟模式运行');
   const original = { bounds: pet.getBounds(), settings: { ...getSettings() } };
   assert.equal(original.settings.codexEnabled, false, '冒烟初始设置必须默认关闭');
@@ -441,6 +468,25 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     '超长恶意标签只能在详情区域省略');
     await captureColorSchemes(labelResult.win);
 
+    clock.advanceBy(300001);
+    const staleLabelResult = await waitForLabelView(view => view.state === 'stale' &&
+      view.rows.length === 2, '过期长名称额度标签');
+    assertQuotaLabelWindow(quotaLabel, staleLabelResult.win, pet.getBounds());
+    assert.deepEqual(staleLabelResult.view.cores.map(item => item.text), [
+      '已过期 · 剩余 64%', '已过期 · 剩余 78%'
+    ]);
+    assert.ok(staleLabelResult.view.cores.every(item => item.scrollWidth <= item.clientWidth &&
+      item.left >= item.rowLeft && item.right <= item.rowRight),
+    '过期标识与核心比例必须在 176 宽标签中同时完整可见');
+    assert.ok(staleLabelResult.view.details.every(item => !item.text.includes('已过期')) &&
+      staleLabelResult.view.details.some(item => item.scrollWidth > item.clientWidth),
+    '过期标识不能落入可省略详情区');
+    assert.equal(quotaLabel.getWindow(), staleLabelResult.win, '过期截图前标签窗口不能被替换');
+    await capture(staleLabelResult.win, 'quota-label-stale-long');
+    assertQuotaLabelWindow(quotaLabel, staleLabelResult.win, pet.getBounds());
+    emitQuota(quotaPeriods());
+    labelResult = await waitForLabelRows(2, '恢复新鲜额度标签');
+
     for (const [setting, menuId, expected] of [
       ['fiveHour', 'codex-quota-five-hour', /5 小时/],
       ['weekly', 'codex-quota-weekly', /周额度/]
@@ -606,7 +652,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     primaryError = error;
   } finally {
     cleanupErrors = await restoreSmokeState({ original, getSettings, setEnabled,
-      setQuotaPreference, command, clearDialogue, page, setSetting, setSize,
+      setQuotaPreference, command, clearDialogue, page, setSetting, setSize, restorePetSettings,
       pet, bubble, quotaLabel, prepareSynthetic: () => prepare(syntheticOptions), prepare });
   }
   const finalError = combinedSmokeError(primaryError, cleanupErrors);

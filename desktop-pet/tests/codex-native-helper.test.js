@@ -27,6 +27,8 @@ test('真实启动流程必须调用并要求 Codex 模拟验收完成标记', (
   assert.match(main, /verifyCodexCompanion\(/);
   assert.match(main, /verifyCodexCompanion\(\{[\s\S]*?\bquotaLabel\b[\s\S]*?\}\)/,
     '原生验收入口必须传入当前额度标签控制器');
+  assert.match(main, /restorePetSettings:\s*restoreSmokePetSettings/,
+    '原生验收必须获得不暴露给 IPC 的受控设置恢复闭包');
   assert.match(smoke, /CODEX_SIMULATED/);
   assert.match(smoke, /CODEX_SIZE_/);
   for (const marker of [
@@ -119,16 +121,19 @@ test('验收中途已关闭且失败时，清理会临时开启合成联动恢�
   const { restoreSmokeState, combinedSmokeError } = require('../scripts/verify-codex-companion');
   const settings = {
     codexEnabled: false, codexQuotaPeriod: 'weekly', codexQuotaAlwaysVisible: true,
-    codexTaskNameInAlerts: true, keepAwake: true, bubblesEnabled: true, size: 'large'
+    codexTaskNameInAlerts: true, keepAwake: true, bubblesEnabled: true, size: 'large',
+    x: 50, y: 60
   };
   const original = { settings: {
     codexEnabled: false, codexQuotaPeriod: 'auto', codexQuotaAlwaysVisible: false,
-    codexTaskNameInAlerts: false, keepAwake: false, bubblesEnabled: false, size: 'tiny'
+    codexTaskNameInAlerts: false, keepAwake: false, bubblesEnabled: false, size: 'tiny',
+    x: null, y: null
   }, bounds: { x: 9, y: 8, width: 80, height: 80 } };
   const calls = [];
+  let petBounds = { x: 0, y: 0, width: 260, height: 260 };
   const pet = {
-    getBounds: () => ({ x: 0, y: 0, width: 260, height: 260 }),
-    setBounds(value) { calls.push('position'); assert.deepEqual(value, original.bounds); },
+    getBounds: () => ({ ...petBounds }),
+    setBounds(value) { calls.push('position'); petBounds = { ...value }; },
     webContents: { debugger: { isAttached: () => true, detach() { calls.push('pet-debugger'); throw new Error('pet detach'); } } }
   };
   const bubbleWindow = { isDestroyed: () => false,
@@ -145,7 +150,15 @@ test('验收中途已关闭且失败时，清理会临时开启合成联动恢�
     command() { calls.push('command'); throw new Error('command restore'); },
     clearDialogue() { calls.push('dialogue'); }, page: async () => { calls.push('page'); },
     setSetting(name, value) { calls.push(`setting:${name}`); settings[name] = value; },
-    setSize(value) { calls.push('size'); settings.size = value; }, pet,
+    setSize(value) {
+      calls.push('size'); settings.size = value;
+      settings.x = petBounds.x; settings.y = petBounds.y;
+    },
+    restorePetSettings(value) {
+      calls.push('restore-pet-settings');
+      Object.assign(settings, value);
+      return true;
+    }, pet,
     bubble: { getWindow: () => bubbleWindow }, quotaLabel: { getWindow: () => labelWindow },
     prepareSynthetic() { calls.push('prepare-synthetic'); },
     prepare() { calls.push('prepare'); throw new Error('prepare restore'); }
@@ -154,8 +167,12 @@ test('验收中途已关闭且失败时，清理会临时开启合成联动恢�
     '已关闭时必须先重建合成联动并临时开启，不能连接真实 Codex');
   for (const expected of ['pref:codexQuotaPeriod', 'pref:codexQuotaAlwaysVisible',
     'pref:codexTaskNameInAlerts', 'enabled:false', 'dialogue', 'page', 'setting:keepAwake',
-    'setting:bubblesEnabled', 'size', 'position', 'pet-debugger', 'bubble-debugger',
+    'setting:bubblesEnabled', 'position', 'size', 'restore-pet-settings', 'pet-debugger', 'bubble-debugger',
     'label-debugger', 'prepare']) assert.ok(calls.includes(expected), `缺少清理步骤 ${expected}`);
+  assert.ok(calls.indexOf('position') < calls.indexOf('size'), '必须先恢复真实 bounds 再调用真实尺寸入口');
+  assert.deepEqual(pet.getBounds(), original.bounds);
+  assert.deepEqual({ size: settings.size, x: settings.x, y: settings.y },
+    { size: 'tiny', x: null, y: null }, '初始设置坐标与 bounds 不同时也必须精确恢复');
   assert.deepEqual(cleanup.map(item => item.label), [
     '恢复额度周期', '停止动作', '断开球球调试器', '重建关闭态联动'
   ]);
@@ -164,6 +181,48 @@ test('验收中途已关闭且失败时，清理会临时开启合成联动恢�
   assert.equal(combined.errors[0], primary, '聚合错误必须保留原始失败为第一条');
   assert.match(combined.message, /原始验收失败/);
   assert.equal(combined.errors.length, cleanup.length + 1);
+});
+
+test('位置、尺寸或落盘坐标静默失效都会成为清理错误且不阻断后续步骤', async () => {
+  const { restoreSmokeState } = require('../scripts/verify-codex-companion');
+  for (const [mode, expectedLabel] of [
+    ['bounds-noop', '恢复球球真实位置'],
+    ['size-noop', '恢复球球尺寸与落盘位置'],
+    ['position-not-persisted', '恢复球球尺寸与落盘位置']
+  ]) {
+    const original = { settings: {
+      codexEnabled: false, codexQuotaPeriod: 'auto', codexQuotaAlwaysVisible: false,
+      codexTaskNameInAlerts: false, keepAwake: false, bubblesEnabled: false,
+      size: 'tiny', x: 9, y: 8
+    }, bounds: { x: 9, y: 8, width: 80, height: 80 } };
+    const settings = { ...original.settings, size: 'large', x: 50, y: 60 };
+    let bounds = { x: 50, y: 60, width: 260, height: 260 };
+    const calls = [];
+    const pet = {
+      getBounds: () => ({ ...bounds }),
+      setBounds(value) { calls.push('position'); if (mode !== 'bounds-noop') bounds = { ...value }; },
+      webContents: { debugger: { isAttached: () => false } }
+    };
+    const cleanup = await restoreSmokeState({ original, getSettings: () => ({ ...settings }),
+      async setEnabled(value) { settings.codexEnabled = value; },
+      setQuotaPreference(name, value) { settings[name] = value; },
+      command() {}, clearDialogue() {}, page: async () => {},
+      setSetting(name, value) { settings[name] = value; },
+      setSize(value) {
+        calls.push('size');
+        if (mode === 'size-noop') return;
+        settings.size = value;
+        if (mode !== 'position-not-persisted') {
+          settings.x = bounds.x; settings.y = bounds.y;
+        }
+      },
+      restorePetSettings() { calls.push('restore-pet-settings'); return true; }, pet,
+      bubble: { getWindow: () => null }, quotaLabel: { getWindow: () => null },
+      prepareSynthetic() {}, prepare() { calls.push('prepare'); }
+    });
+    assert.ok(cleanup.some(item => item.label === expectedLabel), `${mode} 未产生 ${expectedLabel}`);
+    assert.ok(calls.includes('prepare'), `${mode} 失败后仍须执行最终重建`);
+  }
 });
 
 test('原生助手验收任务菜单与名称开关且不具备真实任务写入行为', () => {
@@ -187,6 +246,8 @@ test('原生助手验收任务菜单与名称开关且不具备真实任务写�
   assert.match(source, /codex-quota-weekly/);
   assert.match(source, /\['light', 'dark'\]/);
   assert.match(source, /quota-label-\$\{scheme\}/);
+  assert.match(source, /quota-label-stale-long/);
+  assert.match(source, /已过期 · 剩余 64%/);
   assert.match(source, /severity/);
   assert.match(source, /applyPetSize\(\{ setSize, getSettings, pet, poll/);
   assert.match(source, /screen\.getAllDisplays\(\)/);

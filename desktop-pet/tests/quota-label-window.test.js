@@ -842,9 +842,16 @@ test('渲染层用固定中文状态、纯文本和合理四舍五入最多展�
   assert.equal(label.dataset.severity, 'urgent');
   assert.doesNotMatch(fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8'), /innerHTML/);
 
-  receive({ state: 'stale', items: [{ label: 'Codex', windowMinutes: 300, remaining: 8 }], overflow: 0 });
+  receive({ state: 'stale', items: [
+    { label: '超长恶意标签<script>alert(1)</script>还有更多文字', windowMinutes: 300, remaining: 64 },
+    { label: '周额度详情名称也可以很长很长很长', windowMinutes: 10080, remaining: 78 }
+  ], overflow: 0 });
   assert.equal(status.textContent, '额度已过期');
-  assert.equal(items.children[0].textContent, '剩余 8% · Codex · 5 小时 · 已过期');
+  assert.deepEqual(items.children.map(item => item.children[0].textContent), [
+    '已过期 · 剩余 64%', '已过期 · 剩余 78%'
+  ]);
+  assert.ok(items.children.every(item => !item.children[1].textContent.includes('已过期')),
+    '已过期不能放入可能被省略的详情区');
   assert.equal(overflow.textContent, '');
 
   receive({ state: 'ready', items: [
@@ -920,12 +927,14 @@ test('静态页面无内联脚本能力，浅深背景可读、正文至少 12px
 test('176 像素宽内只允许详情省略，64% 和 78% 核心比例不收缩', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
   const renderer = fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8');
-  assert.match(renderer, /remainingNode\.textContent\s*=\s*`剩余/);
+  assert.match(renderer, /remainingNode\.textContent\s*=\s*`[^`]*剩余/);
   assert.match(renderer, /detailNode\.textContent/);
   assert.doesNotMatch(renderer, /row\.textContent\s*=\s*`\$\{item\.label\}/);
   assert.match(css, /#items li\s*\{[\s\S]*?display:\s*flex/);
   assert.match(css, /\.quota-remaining\s*\{[\s\S]*?white-space:\s*nowrap/);
   assert.match(css, /\.quota-detail\s*\{[\s\S]*?overflow:\s*hidden/);
+  assert.match(renderer, /model\.state\s*===\s*'stale'[\s\S]*?已过期[\s\S]*?剩余/,
+    '过期标识与比例必须同时位于不可收缩核心区');
 });
 
 function composite(foreground, background) {
