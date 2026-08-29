@@ -17,17 +17,14 @@ function dateLabel(value) {
 }
 function allRows(snapshot) {
   if (!Array.isArray(snapshot?.tasks?.items)) return [];
-  const trusted = [];
-  const seen = new Set();
+  const trusted = new Map();
   for (const item of snapshot.tasks.items) {
     if (!isTaskId(item?.id)) continue;
     const id = item.id.toLowerCase();
-    if (seen.has(id)) continue;
-    seen.add(id);
-    trusted.push(item);
-    if (trusted.length === 64) break;
+    if (!trusted.has(id) && trusted.size >= 64) continue;
+    trusted.set(id, { ...item, id });
   }
-  return trusted;
+  return [...trusted.values()];
 }
 const visibleRows = snapshot => allRows(snapshot)
   .filter(item => !item.unavailable && (item.state === 'active' || item.state === 'waiting'));
@@ -38,7 +35,15 @@ function taskConnectionLabel(tasks) {
   return CONNECTION_LABELS[tasks?.state] || '暂不可用';
 }
 
-function emptyTaskLabel(tasks) {
+function hasPartialTasks(snapshot) {
+  const tasks = snapshot?.tasks;
+  return tasks?.state === 'connected' && (tasks.code === 'PARTIAL_STATE' || (Array.isArray(tasks.items)
+    && tasks.items.some(item => isTaskId(item?.id) && item.unavailable)));
+}
+
+function emptyTaskLabel(snapshot) {
+  const tasks = snapshot?.tasks;
+  if (tasks?.state === 'connected' && hasPartialTasks(snapshot)) return '部分任务暂不可用，请到 Codex 查看';
   if (tasks?.state === 'connected') return '暂无进行中或待确认的任务';
   if (tasks?.code === 'STATE_TOO_LARGE') return '状态包过大，暂不可用';
   return taskConnectionLabel(tasks);
@@ -51,7 +56,7 @@ function taskSubmenu(snapshot) {
     action: action(snapshot, 'open-task', { taskId: task.id })
   }));
   if (rows.length > 20) items.push({ label: `另有 ${rows.length - 20} 个，请到 Codex 查看`, enabled: false });
-  return items.length ? items : [{ label: emptyTaskLabel(snapshot?.tasks), enabled: false }];
+  return items.length ? items : [{ label: emptyTaskLabel(snapshot), enabled: false }];
 }
 
 function alertResultRows(snapshot, alertId, now) {
@@ -59,10 +64,11 @@ function alertResultRows(snapshot, alertId, now) {
   const alert = snapshot.currentAlert;
   if (!alert || alert.id !== alertId || alert.generation !== snapshot.generation || alert.kind !== 'completed'
     || !Number.isFinite(alert.expiresAt) || now >= alert.expiresAt || !Array.isArray(alert.taskIds)
-    || alert.taskIds.length < 2 || alert.taskIds.some(id => !isTaskId(id))
-    || new Set(alert.taskIds).size !== alert.taskIds.length) return [];
+    || alert.taskIds.length < 2 || alert.taskIds.some(id => !isTaskId(id))) return [];
+  const taskIds = alert.taskIds.map(id => id.toLowerCase());
+  if (new Set(taskIds).size !== taskIds.length) return [];
   const trusted = new Map(allRows(snapshot).filter(task => !task.unavailable).map(task => [task.id, task]));
-  const rows = alert.taskIds.map(id => trusted.get(id));
+  const rows = taskIds.map(id => trusted.get(id));
   return rows.every(Boolean) ? rows : [];
 }
 
@@ -84,7 +90,7 @@ function buildCodexMenu(snapshot, now = Date.now()) {
     { id: 'codex-quota', label: '额度明细', submenu: quotaItems.length ? quotaItems : [{ label: '额度暂不可用', enabled: false }] },
     { label: `上次更新：${dateLabel(quota.updatedAt)}`, enabled: false },
     { type: 'separator' },
-    { label: `任务进展：${taskConnectionLabel(tasks)}（最近最多20个任务）`, enabled: false },
+    { label: `任务进展：${taskConnectionLabel(tasks)}${hasPartialTasks(snapshot) ? ' · 部分任务暂不可用' : ''}（最近最多20个任务）`, enabled: false },
     { id: 'codex-tasks', label: '任务列表', submenu: taskSubmenu(snapshot) },
     { type: 'separator' },
     { id: 'codex-refresh', label: '刷新状态（至少间隔10秒）', action: action(snapshot, 'refresh') }
@@ -110,12 +116,14 @@ function resolveCodexAction(snapshot, descriptor, now = Date.now()) {
   if (descriptor.type === 'dismiss') return descriptor.scope === 'alert' ? { type: 'dismiss', alertId: alert.id } : null;
   if (descriptor.type === 'show-results') return descriptor.scope === 'alert'
     && alertResultRows(snapshot, descriptor.alertId, now).length >= 2 ? { type: 'show-results', alertId: alert.id } : null;
-  if (descriptor.type !== 'open-task' || !isTaskId(descriptor.taskId)
-    || !taskRows.some(task => task.id === descriptor.taskId && !task.unavailable)) return null;
+  if (descriptor.type !== 'open-task' || !isTaskId(descriptor.taskId)) return null;
+  const taskId = descriptor.taskId.toLowerCase();
+  if (!taskRows.some(task => task.id === taskId && !task.unavailable)) return null;
   if (descriptor.scope === 'result'
-    && !alertResultRows(snapshot, descriptor.alertId, now).some(task => task.id === descriptor.taskId)) return null;
-  if (descriptor.scope === 'alert' && (!Array.isArray(alert.taskIds) || alert.taskIds.length !== 1 || alert.taskIds[0] !== descriptor.taskId)) return null;
-  return { type: 'open-task', taskId: descriptor.taskId, url: `codex://threads/${descriptor.taskId.toLowerCase()}` };
+    && !alertResultRows(snapshot, descriptor.alertId, now).some(task => task.id === taskId)) return null;
+  if (descriptor.scope === 'alert' && (!Array.isArray(alert.taskIds) || alert.taskIds.length !== 1
+    || !isTaskId(alert.taskIds[0]) || alert.taskIds[0].toLowerCase() !== taskId)) return null;
+  return { type: 'open-task', taskId, url: `codex://threads/${taskId}` };
 }
 
 module.exports = { buildCodexMenu, buildCodexResultMenu, resolveCodexAction };

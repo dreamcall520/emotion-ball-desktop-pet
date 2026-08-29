@@ -7,6 +7,7 @@ const ID = '11111111-1111-4111-8111-111111111111';
 const ID2 = '22222222-2222-4222-8222-222222222222';
 const ID3 = '33333333-3333-4333-8333-333333333333';
 const CASE_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const CASE_ID2 = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const TIME = 1800000000000;
 function api() {
   assert.ok(fs.existsSync(modulePath), 'Codex menu model must exist');
@@ -80,15 +81,17 @@ test('任务列表最多显示20项，其余任务只显示不可点击提示', 
   assert.deepEqual(items.at(-1), { label: '另有 3 个，请到 Codex 查看', enabled: false });
 });
 
-test('同一真实任务不在列表中重复出现', () => {
+test('大小写不同的同一任务只保留后到的最新行并统一小写ID', () => {
   const { buildCodexMenu } = api();
   const value = snapshot();
   value.tasks.items = [
-    { id: CASE_ID, title: '同一任务', state: 'active' },
-    { id: CASE_ID.toUpperCase(), title: '同一任务的重复行', state: 'waiting' }
+    { id: CASE_ID, title: '旧的已完成行', state: 'completed' },
+    { id: CASE_ID.toUpperCase(), title: '最新任务', state: 'active' }
   ];
   const items = buildCodexMenu(value, TIME).find(item => item.id === 'codex-tasks').submenu;
   assert.equal(items.filter(item => item.action?.taskId?.toLowerCase() === CASE_ID).length, 1);
+  assert.match(items[0].label, /最新任务.*处理中/);
+  assert.equal(items[0].action.taskId, CASE_ID);
 });
 
 test('已连接但筛选后为空时如实显示无进行中任务', () => {
@@ -97,6 +100,34 @@ test('已连接但筛选后为空时如实显示无进行中任务', () => {
   value.tasks.items = [{ id: ID, title: '已完成', state: 'completed' }];
   const items = buildCodexMenu(value, TIME).find(item => item.id === 'codex-tasks').submenu;
   assert.deepEqual(items, [{ label: '暂无进行中或待确认的任务', enabled: false }]);
+});
+
+test('已连接但只有不可用任务时不伪报为无进行中任务', () => {
+  const { buildCodexMenu } = api();
+  const value = snapshot();
+  value.tasks.code = 'PARTIAL_STATE';
+  value.tasks.items = [{ id: ID, title: '暂时不可读任务', state: 'active', unavailable: 'STATE_TOO_LARGE' }];
+  const menu = buildCodexMenu(value, TIME);
+  const progress = menu.find(item => item.label?.startsWith('任务进展：')).label;
+  assert.match(progress, /部分任务暂不可用/);
+  assert.deepEqual(menu.find(item => item.id === 'codex-tasks').submenu,
+    [{ label: '部分任务暂不可用，请到 Codex 查看', enabled: false }]);
+});
+
+test('已连接且正常与不可用任务并存时保留正常项并标明部分不可用', () => {
+  const { buildCodexMenu } = api();
+  const value = snapshot();
+  value.tasks.items = [
+    { id: ID, title: '正常任务', state: 'waiting' },
+    { id: ID2, title: '不可用任务', state: 'active', unavailable: 'STATE_TOO_LARGE' }
+  ];
+  const menu = buildCodexMenu(value, TIME);
+  const progress = menu.find(item => item.label?.startsWith('任务进展：')).label;
+  const taskItems = menu.find(item => item.id === 'codex-tasks').submenu;
+  assert.match(progress, /部分任务暂不可用/);
+  assert.equal(taskItems.length, 1);
+  assert.match(taskItems[0].label, /正常任务.*等你确认/);
+  assert.doesNotMatch(JSON.stringify(taskItems), /不可用任务/);
 });
 
 test('标题按纯文本截断、去控制符、转义菜单加速键，不采用接口URL', () => {
@@ -124,6 +155,7 @@ test('两个通道独立标识，不支持及大状态包不伪装为已连接',
   assert.match(labels, /任务进展：暂不支持/);
   assert.match(labels, /状态包过大，暂不可用/);
   assert.doesNotMatch(labels, /任务进展：已连接/);
+  assert.doesNotMatch(labels, /任务进展：暂不支持.*部分任务暂不可用/);
 });
 
 test('额度已连接但桌面状态服务缺失时，不误报Codex未安装', () => {
@@ -235,6 +267,40 @@ test('多任务完成提醒只生成当前提醒的临时结果菜单', () => {
     { type: 'open-task', taskId: ID, url: `codex://threads/${ID}` });
   assert.deepEqual(buildCodexResultMenu(value, action.alertId, TIME + 8000), []);
   assert.equal(resolveCodexAction(value, alertAction('open-task', { taskId: ID }), TIME), null);
+});
+
+test('结果提醒与任务行的UUID大小写不同时仍按小写构建并解析', () => {
+  const { buildCodexResultMenu, resolveCodexAction } = api();
+  const value = snapshot();
+  value.tasks.items = [
+    { id: CASE_ID, title: '结果A', state: 'completed' },
+    { id: CASE_ID2, title: '结果B', state: 'completed' }
+  ];
+  value.currentAlert = {
+    ...value.currentAlert,
+    kind: 'completed',
+    taskIds: [CASE_ID.toUpperCase(), CASE_ID2.toUpperCase()]
+  };
+  const result = buildCodexResultMenu(value, 2, TIME);
+  assert.deepEqual(result.map(item => item.action.taskId), [CASE_ID, CASE_ID2]);
+  assert.deepEqual(resolveCodexAction(value, result[0].action, TIME),
+    { type: 'open-task', taskId: CASE_ID, url: `codex://threads/${CASE_ID}` });
+});
+
+test('结果提醒中同一UUID的大小写变体视为重复并拒绝', () => {
+  const { buildCodexResultMenu, resolveCodexAction } = api();
+  const value = snapshot();
+  value.tasks.items = [
+    { id: CASE_ID, title: '结果A', state: 'completed' },
+    { id: CASE_ID2, title: '结果B', state: 'completed' }
+  ];
+  value.currentAlert = {
+    ...value.currentAlert,
+    kind: 'completed',
+    taskIds: [CASE_ID, CASE_ID.toUpperCase()]
+  };
+  assert.deepEqual(buildCodexResultMenu(value, 2, TIME), []);
+  assert.equal(resolveCodexAction(value, alertAction('show-results'), TIME), null);
 });
 
 test('临时结果项拒绝非成员、错误提醒、旧代次、过期和已移除任务', () => {
