@@ -206,3 +206,40 @@ test('未知、HTML 或非字符串连接状态统一安全降级为 disconnecte
       { period: 'auto' }, NOW), { state: 'disconnected', items: [], overflow: 0 });
   }
 });
+
+test('只有 enabled 明确为 true 才允许解释已连接额度', () => {
+  const visible = quotaWindow('must-stay-hidden', 300, 25);
+  for (const enabled of [undefined, null, false, 0, '', 'false', [], {}]) {
+    assert.deepEqual(buildQuotaLabelModel({ ...snapshot([visible]), enabled }, { period: 'auto' }, NOW), {
+      state: 'disabled', items: [], overflow: 0
+    });
+  }
+});
+
+test('已连接额度的 windows、stale 和 now 必须结构完整', () => {
+  const visible = quotaWindow('must-stay-hidden', 300, 25);
+  const cases = [];
+  for (const windows of [undefined, null, {}, 'windows', 42]) {
+    cases.push({ value: { enabled: true, quota: { state: 'connected', stale: false, windows } }, now: NOW });
+  }
+  for (const stale of [undefined, null, 0, 1, 'false', [], {}]) {
+    cases.push({ value: { enabled: true, quota: { state: 'connected', stale, windows: [visible] } }, now: NOW });
+  }
+  for (const now of [Number.NaN, Infinity, -1, 1.5, MAX_TIME + 1, '1800000000000']) {
+    cases.push({ value: snapshot([visible]), now });
+  }
+
+  for (const entry of cases) {
+    assert.deepEqual(buildQuotaLabelModel(entry.value, { period: 'auto' }, entry.now), {
+      state: 'disconnected', items: [], overflow: 0
+    });
+  }
+});
+
+test('已知非连接状态原样返回，不要求 windows、stale 或有效 now', () => {
+  for (const state of ['disabled', 'connecting', 'missing', 'unauthenticated', 'unsupported', 'disconnected']) {
+    assert.deepEqual(buildQuotaLabelModel({ enabled: true, quota: { state } }, { period: 'auto' }, Number.NaN), {
+      state, items: [], overflow: 0
+    });
+  }
+});
