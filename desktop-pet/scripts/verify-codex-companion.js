@@ -37,8 +37,13 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
   if (process.env.PET_SMOKE_TEST !== '1') throw new Error('Codex 验收只允许在显式冒烟模式运行');
   const original = { bounds: pet.getBounds(), settings: { ...getSettings() } };
   assert.equal(original.settings.codexEnabled, false, '冒烟初始设置必须默认关闭');
-  assert.equal(getMenu().getMenuItemById('codex-enabled').checked, false);
-  assert.ok(!getMenu().getMenuItemById('codex-status'));
+  const initialMenu = getMenu();
+  assert.equal(initialMenu.getMenuItemById('codex-enabled').checked, false);
+  assert.equal(initialMenu.getMenuItemById('codex-task-names').checked, false);
+  assert.equal(initialMenu.getMenuItemById('codex-task-names').enabled, false,
+    'Codex 总开关关闭时任务名称开关必须禁用');
+  assert.equal(initialMenu.getMenuItemById('codex-status'), null);
+  assert.equal(initialMenu.getMenuItemById('codex-recent'), null, '原生菜单不能保留最近提醒');
   monitor.stop();
   const clock = policyClock();
   const connections = [];
@@ -100,20 +105,20 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     await debuggerApi.sendCommand('Input.dispatchMouseEvent', { type, x, y, button: 'left',
       buttons: type === 'mousePressed' ? 1 : 0, clickCount: count });
   };
-  const emitTask = (kind, count = 1) => {
+  const emitTask = (kind, count = 1, title = null) => {
     for (let index = 0; index < count; index++) {
       const serial = String(++sequence).padStart(12, '0');
-      const task = { id: `11111111-1111-4111-8111-${serial}`, title: `模拟验收任务 ${sequence}`,
+      const task = { id: `11111111-1111-4111-8111-${serial}`, title: title || `模拟验收任务 ${sequence}`,
         turnId: `fixture-turn-${sequence}`, updatedAt: clock.now() };
       callbacks.onTask({ ...task, state: kind === 'active' ? 'idle' : 'active', baseline: true });
       callbacks.onTask({ ...task, state: kind });
     }
   };
-  const begin = async (kind, count = 1) => {
+  const begin = async (kind, count = 1, title = null) => {
     clock.advanceBy(31000);
     await ready();
     await page('window.__codexNativeFrames = []; true');
-    if (kind === 'quota') quota(10); else emitTask(kind, count);
+    if (kind === 'quota') quota(10); else emitTask(kind, count, title);
     clock.advanceBy(5000);
     await poll(state, value => value.motionOwner === 'codex', '真实 Codex 动作确认');
   };
@@ -126,6 +131,9 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assert.equal(connections.length, 1);
     assert.equal(getMenu().getMenuItemById('codex-enabled').checked, true);
     assert.ok(getMenu().getMenuItemById('codex-tasks'));
+    assert.equal(getMenu().getMenuItemById('codex-task-names').enabled, true);
+    assert.equal(getMenu().getMenuItemById('codex-task-names').checked, false);
+    assert.equal(getMenu().getMenuItemById('codex-recent'), null, '开启后也不能出现最近提醒');
     await page('window.__codexNativeFrames = []; window.__removeCodexNativeTrace = window.petDesktop.onMotion(packet => window.__codexNativeFrames.push(packet)); true');
     const focusBefore = BrowserWindow.getFocusedWindow();
     for (const [size, pixels, kind] of [['tiny', 80, 'completed'], ['small', 120, 'quota'], ['medium', 180, 'waiting'], ['large', 260, 'failed']]) {
@@ -168,13 +176,54 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
 
     await begin('active');
     assert.equal(bubble.getWindow()?.isVisible(), false, '处理中只轻动作，不弹气泡');
+    const nativeMenu = getMenu();
+    const taskItems = nativeMenu.getMenuItemById('codex-tasks').submenu.items;
+    const taskLabels = taskItems.map(item => item.label);
+    assert.deepEqual(taskLabels, [
+      '模拟验收任务 2 · 等你确认',
+      '模拟验收任务 3 · 等你确认',
+      '模拟验收任务 5 · 处理中'
+    ], '真实菜单只应列出处理中与等你确认');
+    assert.equal(nativeMenu.getMenuItemById('codex-recent'), null);
+    assert.doesNotMatch(taskLabels.join('\n'), /模拟验收任务 1|模拟验收任务 4|完成|失败|最近提醒/);
+    process.stdout.write('PET_CODEX_TASK_MENU_OK\n');
     await setEnabled(false);
     await poll(state, value => value.motionOwner === 'none', '关闭清理 Codex 动作');
     assert.equal(getMotionOwner(), null);
     assert.ok(!getMenu().getMenuItemById('codex-status'));
+    assert.equal(getMenu().getMenuItemById('codex-task-names').enabled, false);
 
     await setEnabled(true);
-    await begin('completed');
+    await begin('completed', 1, '  原生\n验收\u202e任务  ');
+    const titleWindow = await poll(() => Promise.resolve(bubble.getWindow()), value => value?.isVisible(), '名称气泡显示');
+    const bubbleText = () => titleWindow.webContents.executeJavaScript("document.getElementById('message').textContent");
+    assert.equal(await bubbleText(), '这轮有结果啦，去看看？', '名称开关默认关闭时必须显示通用文案');
+    const beforeToggle = getController().getSnapshot().currentAlert;
+    const motionBeforeToggle = { ...getMotionOwner() };
+    let titleItem = getMenu().getMenuItemById('codex-task-names');
+    assert.equal(titleItem.checked, false);
+    // Electron 的原生 checkbox click 会先反转 checked，再调用业务 click。
+    titleItem.checked = false;
+    titleItem.click({}, pet, pet.webContents);
+    assert.equal(getSettings().codexTaskNameInAlerts, true, '真实菜单 click 必须开启任务名称设置');
+    await poll(bubbleText, text => text === '《原生 验收 任务》有结果啦\n去看看？', '真实菜单开启任务名称');
+    const namedAlert = getController().getSnapshot().currentAlert;
+    assert.equal(namedAlert.id, beforeToggle.id, '名称开关不能替换当前气泡');
+    assert.equal(namedAlert.expiresAt, beforeToggle.expiresAt, '名称开关不能延长提醒时限');
+    assert.deepEqual(getMotionOwner(), motionBeforeToggle, '名称开关不能增加或重播身体动作');
+    assert.equal(bubble.getWindow(), titleWindow, '名称开关必须原位更新同一个气泡窗口');
+    assert.equal(getMenu().getMenuItemById('codex-task-names').checked, true);
+    titleItem = getMenu().getMenuItemById('codex-task-names');
+    titleItem.checked = true;
+    titleItem.click({}, pet, pet.webContents);
+    assert.equal(getSettings().codexTaskNameInAlerts, false, '真实菜单 click 必须关闭任务名称设置');
+    await poll(bubbleText, text => text === '这轮有结果啦，去看看？', '真实菜单关闭任务名称');
+    const genericAlert = getController().getSnapshot().currentAlert;
+    assert.equal(genericAlert.id, beforeToggle.id);
+    assert.equal(genericAlert.expiresAt, beforeToggle.expiresAt);
+    assert.deepEqual(getMotionOwner(), motionBeforeToggle);
+    assert.equal(getMenu().getMenuItemById('codex-task-names').checked, false);
+    process.stdout.write('PET_CODEX_TASK_TITLE_OK\n');
     const center = pet.getBounds().width / 2;
     for (const count of [1, 2]) {
       await input(pet, 'mousePressed', center, center, count);

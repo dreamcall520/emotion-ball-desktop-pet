@@ -28,3 +28,15 @@ test('真实启动流程必须调用并要求 Codex 模拟验收完成标记', (
   assert.match(smoke, /CODEX_SIMULATED/);
   assert.match(smoke, /CODEX_SIZE_/);
 });
+
+test('原生助手验收任务菜单与名称开关且不具备真实任务写入行为', () => {
+  const source = fs.readFileSync(
+    path.resolve(__dirname, '../scripts/verify-codex-companion.js'),
+    'utf8'
+  );
+  assert.match(source, /PET_CODEX_TASK_MENU_OK/);
+  assert.match(source, /PET_CODEX_TASK_TITLE_OK/);
+  assert.match(source, /getMenuItemById\('codex-recent'\)/);
+  assert.match(source, /getMenuItemById\('codex-task-names'\)/);
+  assert.doesNotMatch(source, /createThread|create_thread|sendMessageToThread|send_message_to_thread|turn\/start|model\/start/);
+});

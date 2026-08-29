@@ -95,6 +95,24 @@ test('安装包完整包含轻陪伴和气泡依赖，避免缺少模块', () =>
   controller.close();
 });
 
+test('打包暂存区包含任务名称清理模块且菜单与控制器可加载', () => {
+  const root = path.resolve(__dirname, '../..');
+  const staging = prepareStaging(root);
+  const relative = 'desktop-pet/lib/codex-text.js';
+  assert.deepEqual(
+    fs.readFileSync(path.join(staging, relative)),
+    fs.readFileSync(path.join(root, relative))
+  );
+  assert.equal(
+    typeof require(path.join(staging, 'desktop-pet/lib/codex-companion.js')).createCodexCompanion,
+    'function'
+  );
+  assert.equal(
+    typeof require(path.join(staging, 'desktop-pet/lib/codex-menu.js')).buildCodexMenu,
+    'function'
+  );
+});
+
 test('优先复用本机已经下载好的 Electron 压缩包', () => {
   const cacheRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'electron-cache-'));
   const zipDir = path.join(cacheRoot, 'cache-key');

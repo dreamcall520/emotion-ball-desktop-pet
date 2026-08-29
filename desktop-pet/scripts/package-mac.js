@@ -50,6 +50,7 @@ function prepareStaging(root) {
     'desktop-pet/lib/codex-connection.js',
     'desktop-pet/lib/codex-companion.js',
     'desktop-pet/lib/codex-menu.js',
+    'desktop-pet/lib/codex-text.js',
     'desktop-pet/lib/dialogue.js',
     'desktop-pet/lib/bubble-placement.js',
     'desktop-pet/lib/bubble-window.js',

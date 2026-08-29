@@ -49,3 +49,13 @@
 - 安装、启动、菜单和双击检查完成后，收尾的桌面应用列表检查再次明确报告 Mac 锁屏；已停止进一步桌面操作，没有绕过锁屏。此前完成的安装与 UI 证据保留，随后仅做文件/进程只读回查和文档同步。
 - 完整证据目录：`/tmp/emotion-ball-030-unlocked.30Qem3`，包括 `motion-verification.json`、`motion-frames.json`、`codex-native-results.json`、`sleep.png`、`installed-before-doubleclick.jpg` 和 `installed-after-doubleclick.jpg`。
 - 新 DMG SHA-256 保持不变。旧分享 ZIP 的 SHA-256 仍为 `61bf6fc96c780cb00ea6c0b01b93fcd836382b57a58b6165b5070e86d4c60e58`；没有生成新 ZIP、上传安装包、合并 main 或发布 Release。
+
+## 任务交互源码候选验证
+
+- 本次只验证 `codex/light-companion` 源码候选；提交前基线为 `5220ebd`，候选内容为「补齐 Codex 任务交互打包验收」，不在提交正文中写入无法自指的最终 SHA。
+- 定向命令 `node --test desktop-pet/tests/package-script.test.js desktop-pet/tests/codex-native-helper.test.js desktop-pet/tests/smoke-verification.test.js` 最终为 24 项通过、0 失败；`npm test` 最终为 536 项通过、0 失败、0 跳过。
+- `npm run smoke` 使用独立临时设置目录和本地合成回调，最终退出码为 0。除既有互动、六种动作、四档 80/120/180/260、双屏边缘、Codex 四档窗口、睡眠视觉、弹跳及总完成标记外，新增输出 `PET_CODEX_TASK_MENU_OK`、`PET_CODEX_TASK_TITLE_OK`，并保留 `PET_CODEX_SIMULATED_OK`。
+- 原生菜单实际只列出「处理中、等你确认」，不列出完成、失败或「最近提醒」；任务名称开关默认关闭且在 Codex 总开关关闭时禁用。通过真实 `MenuItem` 复选项 click 开启后，同一个可见气泡原位切换为清理后的任务名称，再关闭回到通用文案；提醒编号、到期时间和身体动作令牌均未改变。
+- 前两次 smoke 没有锁屏，均因误用 Electron 原生复选项的自动反转语义而在名称切换处失败；修正为真实 `MenuItem.click` 调用方式后重新完整执行通过，没有放宽断言或把失败记录成成功。
+- 原生 helper 仍只允许 `PET_SMOKE_TEST=1`，仅接收本地合成任务状态；本次没有读取真实 Codex、创建真实任务、发送模型请求或消耗任务额度。
+- 本节没有运行 `package:mac`、没有生成 DMG，也没有改动或重新验证本机安装、分享 ZIP、`main` 合并和 GitHub Release；上文历史安装事实保持不变。
