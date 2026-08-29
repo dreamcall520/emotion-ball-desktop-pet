@@ -5,6 +5,9 @@ const path = require('node:path');
 
 const modulePath = path.join(__dirname, '../lib/codex-companion.js');
 const taskId = n => `11111111-1111-4111-8111-${String(n).padStart(12, '0')}`;
+const quotaWindow = (id, windowMinutes, remaining, resetsAt = 9000000, label = `额度 ${id}`) => ({
+  id, label, windowMinutes, remaining, resetsAt
+});
 const settle = async () => { for (let n = 0; n < 12; n++) await Promise.resolve(); };
 function deferred() {
   let resolve;
@@ -258,12 +261,264 @@ test('额度阈值先合并五秒，同周期每档一次且一次跨档只报�
   await f.tick(1);
   assert.equal(f.alerts.length, 1);
   assert.equal(f.alerts[0].kind, 'quota');
-  assert.equal(f.alerts[0].motion, 'bow');
+  assert.equal(f.alerts[0].motion, 'jelly');
+  assert.equal(f.alerts[0].severity, 'urgent');
+  assert.equal(f.alerts[0].durationMs, 12000);
   assert.match(f.alerts[0].text, /9%/);
   f.quota(15); await f.tick(30000);
   f.quota(8); await f.tick(30000);
   assert.equal(f.alerts.length, 1);
   assert.equal('recent' in f.companion.getSnapshot(), false);
+});
+
+test('额度偏好默认值安全且只部分更新，非法或未提供字段保留原值', async () => {
+  const f = fixture();
+  assert.equal(f.companion.setPreferences(), false);
+  assert.equal(f.companion.setPreferences(null), false);
+  assert.equal(f.companion.setPreferences({ quotaAlwaysVisible: 'true', quotaPeriod: 'daily' }), false);
+  assert.equal(f.companion.setPreferences({ quotaPeriod: 'fiveHour' }), true);
+  assert.equal(f.companion.setPreferences({ quotaPeriod: 'fiveHour' }), false);
+  assert.equal(f.companion.setPreferences({ quotaAlwaysVisible: true }), true);
+  assert.equal(f.companion.setPreferences({ taskNameInAlerts: true }), true);
+  assert.equal(f.companion.setPreferences({ taskNameInAlerts: 1, quotaAlwaysVisible: 0, quotaPeriod: 'weekly-ish' }), false);
+
+  await f.companion.setEnabled(true);
+  f.task(1, 'active', { baseline: true, title: '偏好保留' });
+  f.task(1, 'completed', { title: '偏好保留' });
+  await f.tick(5000);
+  assert.match(f.alerts[0].text, /偏好保留/);
+});
+
+test('严格按五小时周期提醒，轻强档使用各自动作、样式和展示时长', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.companion.setPreferences({ quotaPeriod: 'fiveHour' });
+  f.quota(95, { windows: [
+    quotaWindow('five', 300, 95),
+    quotaWindow('week', 10080, 95)
+  ] });
+  f.quota(59, { windows: [
+    quotaWindow('five', 300, 59),
+    quotaWindow('week', 10080, 5, 9000000, 'SECRET_WEEK')
+  ] });
+  await f.tick(5000);
+  assert.equal(f.alerts.length, 1);
+  assert.equal(f.alerts[0].severity, 'normal');
+  assert.equal(f.alerts[0].motion, 'bow');
+  assert.equal(f.alerts[0].durationMs, 6000);
+  assert.match(f.alerts[0].text, /41%|59%/);
+  assert.equal(JSON.stringify(f.alerts[0]).includes('SECRET_WEEK'), false);
+  assert.equal(f.companion.getSnapshot().currentAlert.expiresAt, f.time + 6000);
+
+  f.quota(19, { windows: [
+    quotaWindow('five', 300, 19),
+    quotaWindow('week', 10080, 5)
+  ] });
+  await f.tick(30000);
+  assert.equal(f.alerts.length, 2);
+  assert.equal(f.alerts[1].severity, 'strong');
+  assert.equal(f.alerts[1].motion, 'jelly');
+  assert.equal(f.alerts[1].durationMs, 12000);
+});
+
+test('首次与新周期普通用量只建基线，首次高用量只提示最高档', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.quota(65, { windows: [quotaWindow('normal', 300, 65)] });
+  await f.tick(10000);
+  assert.equal(f.alerts.length, 0);
+  f.quota(10, { windows: [quotaWindow('high', 300, 10)] });
+  await f.tick(5000);
+  assert.equal(f.alerts.length, 1);
+  assert.equal(f.alerts[0].severity, 'urgent');
+  assert.match(f.alerts[0].text, /10%/);
+  f.quota(0, { windows: [quotaWindow('full', 300, 0)] });
+  await f.tick(30000);
+  assert.equal(f.alerts.length, 2);
+  assert.match(f.alerts[1].text, /已用完/);
+  assert.doesNotMatch(f.alerts[1].text, /90% 档/);
+});
+
+test('五秒内多项额度只合并一次，取最高严重度和最低实际剩余且不冒充总余额', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  const baseline = [quotaWindow('a', 300, 95), quotaWindow('b', 10080, 95)];
+  f.quota(95, { windows: baseline });
+  f.quota(69, { windows: [quotaWindow('a', 300, 69), quotaWindow('b', 10080, 95)] });
+  await f.tick(4000);
+  f.quota(8, { windows: [quotaWindow('a', 300, 69), quotaWindow('b', 10080, 8)] });
+  await f.tick(1000);
+  assert.equal(f.alerts.length, 1);
+  assert.equal(f.alerts[0].severity, 'urgent');
+  assert.equal(f.alerts[0].durationMs, 12000);
+  assert.match(f.alerts[0].text, /多项额度/);
+  assert.match(f.alerts[0].text, /8%/);
+  assert.match(f.alerts[0].text, /非账户总余额/);
+});
+
+test('手动周期不存在、数据过期和重置等待时都不提醒', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.companion.setPreferences({ quotaPeriod: 'weekly' });
+  f.quota(5, { windows: [quotaWindow('five', 300, 5)] });
+  f.quota(5, { windows: [quotaWindow('week', 10080, 5)], updatedAt: f.time - 300001 });
+  f.quota(0, { windows: [quotaWindow('week', 10080, 0, f.time)] });
+  await f.tick(30000);
+  assert.equal(f.alerts.length, 0);
+});
+
+test('普通额度排队期间跨入强档只升级同一引用，不留两条', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.task(1, 'active', { baseline: true });
+  f.task(1, 'waiting');
+  await f.tick(5000);
+  f.quota(95);
+  f.quota(69);
+  await f.tick(6000);
+  f.quota(19);
+  await f.tick(24000);
+  assert.equal(f.alerts.length, 2);
+  assert.equal(f.alerts[0].kind, 'waiting');
+  assert.equal(f.alerts[1].kind, 'quota');
+  assert.equal(f.alerts[1].severity, 'strong');
+  await f.tick(30000);
+  assert.equal(f.alerts.filter(alert => alert.kind === 'quota').length, 1);
+});
+
+test('切换额度周期只清理新范围外额度，任务不动并为新范围建基线', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.companion.setPreferences({ quotaPeriod: 'fiveHour' });
+  f.quota(95, { windows: [quotaWindow('five', 300, 95), quotaWindow('week', 10080, 10)] });
+  f.quota(69, { windows: [quotaWindow('five', 300, 69), quotaWindow('week', 10080, 10)] });
+  f.task(1, 'active', { baseline: true });
+  f.task(1, 'waiting');
+  assert.equal(f.companion.setPreferences({ quotaPeriod: 'weekly' }), true);
+  await f.tick(5000);
+  assert.deepEqual(f.alerts.map(alert => alert.kind), ['waiting']);
+  await f.tick(30000);
+  assert.deepEqual(f.alerts.map(alert => alert.kind), ['waiting', 'quota']);
+  assert.equal(f.alerts[1].severity, 'urgent');
+  assert.match(f.alerts[1].text, /10%/);
+  await f.tick(30000);
+  assert.equal(f.alerts.filter(alert => alert.kind === 'quota').length, 1);
+});
+
+test('切换周期时已在展示且仍属于新范围的强额度不重复排队', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.quota(95, { windows: [quotaWindow('week', 10080, 95)] });
+  f.quota(10, { windows: [quotaWindow('week', 10080, 10)] });
+  await f.tick(5000);
+  assert.equal(f.alerts.length, 1);
+  assert.equal(f.companion.getSnapshot().currentAlert.severity, 'urgent');
+  f.companion.setPreferences({ quotaPeriod: 'weekly' });
+  await f.tick(60000);
+  assert.equal(f.alerts.length, 1);
+});
+
+test('打开常驻取消普通额度但保留强额度和任务，关闭时不补报普通历史', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.quota(95);
+  f.quota(69);
+  assert.equal(f.companion.setPreferences({ quotaAlwaysVisible: true }), true);
+  f.task(1, 'active', { baseline: true });
+  f.task(1, 'waiting');
+  await f.tick(5000);
+  assert.deepEqual(f.alerts.map(alert => alert.kind), ['waiting']);
+
+  f.quota(19);
+  await f.tick(30000);
+  assert.equal(f.alerts[1].kind, 'quota');
+  assert.equal(f.alerts[1].severity, 'strong');
+  assert.equal(f.companion.setPreferences({ quotaAlwaysVisible: false }), true);
+  f.quota(19);
+  await f.tick(30000);
+  assert.equal(f.alerts.length, 2);
+  f.quota(9);
+  await f.tick(5000);
+  assert.equal(f.alerts.length, 3);
+  assert.equal(f.alerts[2].severity, 'urgent');
+});
+
+test('从常驻切回临时提醒时用当前值建普通基线，只提醒之后的新档', async () => {
+  const f = fixture();
+  f.companion.setPreferences({ quotaAlwaysVisible: true });
+  await f.companion.setEnabled(true);
+  f.quota(95);
+  f.quota(69);
+  f.companion.setPreferences({ quotaAlwaysVisible: false });
+  await f.tick(10000);
+  assert.equal(f.alerts.length, 0);
+  f.quota(59);
+  await f.tick(5000);
+  assert.equal(f.alerts.length, 1);
+  assert.equal(f.alerts[0].severity, 'normal');
+});
+
+test('断连恢复和同账号手动刷新保留去重，恢复时不补普通历史', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.quota(95);
+  f.callbacks.onStatus({ channel: 'quota', state: 'disconnected', code: 'DISCONNECTED' });
+  f.callbacks.onStatus({ channel: 'quota', state: 'connected', code: null });
+  f.quota(59);
+  await f.tick(10000);
+  assert.equal(f.alerts.length, 0);
+  f.quota(49);
+  await f.tick(5000);
+  assert.equal(f.alerts.length, 1);
+  await f.companion.refresh();
+  f.quota(49);
+  await f.tick(30000);
+  assert.equal(f.alerts.length, 1);
+});
+
+test('恢复可靠数据时首次已达强档只提示当前最高档', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.quota(95);
+  f.callbacks.onStatus({ channel: 'quota', state: 'disconnected', code: 'DISCONNECTED' });
+  f.callbacks.onStatus({ channel: 'quota', state: 'connected', code: null });
+  f.quota(9);
+  await f.tick(5000);
+  assert.equal(f.alerts.length, 1);
+  assert.equal(f.alerts[0].severity, 'urgent');
+  assert.match(f.alerts[0].text, /9%/);
+});
+
+test('直接收到已过期或未来时间快照后，恢复可靠值不补报期间普通档', async () => {
+  for (const updatedAt of [value => value - 300001, value => value + 1]) {
+    const f = fixture();
+    await f.companion.setEnabled(true);
+    f.quota(95);
+    f.quota(59, { updatedAt: updatedAt(f.time) });
+    f.quota(59);
+    await f.tick(10000);
+    assert.equal(f.alerts.length, 0);
+    f.quota(49);
+    await f.tick(5000);
+    assert.equal(f.alerts.length, 1);
+    f.companion.close();
+  }
+});
+
+test('额度引用按 id、周期和重置时刻严格校验，回升、过期或换周期即删除', async () => {
+  for (const reason of ['identity', 'recovered', 'expired', 'period']) {
+    const f = fixture();
+    await f.companion.setEnabled(true);
+    f.quota(95);
+    f.quota(69);
+    if (reason === 'identity') f.quota(69, { windows: [quotaWindow('codex:primary', 300, 69, 10000000)] });
+    if (reason === 'recovered') f.quota(95);
+    if (reason === 'expired') f.quota(69, { windows: [quotaWindow('codex:primary', 300, 69, f.time)] });
+    if (reason === 'period') f.companion.setPreferences({ quotaPeriod: 'weekly' });
+    await f.tick(10000);
+    assert.equal(f.alerts.length, 0, reason);
+    f.companion.close();
+  }
 });
 
 test('20%后降到10%可再提醒，新周期和不同类别独立去重', async () => {
@@ -280,7 +535,7 @@ test('20%后降到10%可再提醒，新周期和不同类别独立去重', async
   ] });
   await f.tick(30000);
   assert.equal(f.alerts.length, 3);
-  assert.match(f.alerts[2].text, /2/);
+  assert.match(f.alerts[2].text, /多项额度/);
 });
 
 test('未知、已过期和未来时间额度不生成预警或伪造周期', async () => {
@@ -352,6 +607,8 @@ test('真实运行变化复用sway且无气泡，等待/完成/失败分别peek/
     assert.equal(f.alerts.length, 1, state);
     assert.equal(f.alerts[0].kind, state);
     assert.equal(f.alerts[0].motion, motion);
+    assert.equal(f.alerts[0].severity, 'normal');
+    assert.equal(f.alerts[0].durationMs, 8000);
     assert.equal(f.alerts[0].text === null, state === 'active');
     assert.deepEqual(f.alerts[0].taskIds, [taskId(1)]);
     assert.equal(JSON.stringify(f.alerts[0]).includes('任务 1'), false);
@@ -376,7 +633,7 @@ test('完成提醒默认隐藏任务名称和正文，快照只保留纯标题',
   assert.equal('recent' in snapshot, false);
 });
 
-test('任务名称偏好只接受布尔true，变化时立即更新当前完成提醒', async () => {
+test('任务名称偏好只接受布尔值，非法值保留且变化时立即更新当前完成提醒', async () => {
   const f = fixture();
   await f.companion.setEnabled(true);
   f.task(1, 'active', { baseline: true, title: '\u202e  额度\n标签开发  ' });
@@ -392,13 +649,15 @@ test('任务名称偏好只接受布尔true，变化时立即更新当前完成�
   assert.equal(JSON.stringify(f.alertUpdates).includes('SECRET_BODY'), false);
 
   assert.equal(f.companion.setPreferences({ taskNameInAlerts: true }), false);
-  assert.equal(f.companion.setPreferences({ taskNameInAlerts: 1 }), true);
-  assert.equal(f.alertUpdates.at(-1).text, '这轮有结果啦，去看看？');
+  assert.equal(f.companion.setPreferences({ taskNameInAlerts: 1 }), false);
+  assert.equal(f.alertUpdates.at(-1).text, '《额度 标签开发》有结果啦\n去看看？');
   const updates = f.alertUpdates.length;
   const changes = f.changes.length;
   assert.equal(f.companion.setPreferences({ taskNameInAlerts: 'true' }), false);
   assert.equal(f.alertUpdates.length, updates);
   assert.equal(f.changes.length, changes);
+  assert.equal(f.companion.setPreferences({ taskNameInAlerts: false }), true);
+  assert.equal(f.alertUpdates.at(-1).text, '这轮有结果啦，去看看？');
 });
 
 test('开启名称后完成提醒使用最新清理标题，不信任旧引用或正文', async () => {

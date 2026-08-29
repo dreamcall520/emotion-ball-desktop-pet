@@ -1,6 +1,8 @@
 const { createCodexConnection, CONNECTION_STATES, ERROR_CODES } = require('./codex-connection');
 const { isTaskId } = require('./codex-state');
 const { completionText } = require('./codex-text');
+const { selectQuotaWindows } = require('./codex-quota-view');
+const { createQuotaAlertTracker, mergeQuotaAlerts } = require('./codex-quota-alerts');
 
 const POLL_MS = Object.freeze({ quota: 120000, tasks: 15000 });
 const RETRY_MS = Object.freeze([30000, 60000, 120000]);
@@ -8,10 +10,12 @@ const STALE_MS = 300000;
 const MERGE_MS = 5000;
 const ALERT_GAP_MS = 30000;
 const QUEUE_MS = 60000;
-const DISPLAY_MS = 8000;
+const TASK_DISPLAY_MS = 8000;
+const QUOTA_DISPLAY_MS = Object.freeze({ normal: 6000, strong: 12000, urgent: 12000 });
 const IDLE_TRANSITION_MS = 5000;
-const MOTIONS = Object.freeze({ active: 'sway', waiting: 'peek', completed: 'hop', failed: 'jelly', quota: 'bow' });
+const MOTIONS = Object.freeze({ active: 'sway', waiting: 'peek', completed: 'hop', failed: 'jelly' });
 const TASK_STATES = new Set(['active', 'waiting', 'completed', 'failed', 'interrupted', 'idle', 'unknown']);
+const QUOTA_PERIODS = new Set(['auto', 'fiveHour', 'weekly']);
 const cleanText = (value, limit) => typeof value === 'string' ? value.slice(0, limit) : '';
 const timestamp = value => Number.isFinite(value) && value >= 0 && value <= 8640000000000000 ? value : null;
 
@@ -29,12 +33,13 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
   let quota = { windows: [], updatedAt: null };
   const tasks = new Map();
   const timers = new Map();
-  const quotaSeen = new Map();
+  const quotaTracker = createQuotaAlertTracker();
   const terminalSeen = new Map();
   const idleTransitions = new Map();
   let queued = [];
   let currentAlert = null;
-  let preferences = { taskNameInAlerts: false };
+  let preferences = { taskNameInAlerts: false, quotaAlwaysVisible: false, quotaPeriod: 'auto' };
+  let quotaNeedsBaseline = true;
   let nextAlertId = 0;
   let lastPresentedAt = -Infinity;
   const channels = {
@@ -75,15 +80,43 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
   function clearTimers() { for (const name of [...timers.keys()]) clearTimer(name); }
   function armStale() {
     clearTimer('stale');
-    if (!quotaStale()) setTimer('stale', quota.updatedAt + STALE_MS - now(), () => { pruneAlerts(); notify(); });
+    if (!quotaStale()) setTimer('stale', quota.updatedAt + STALE_MS - now(), () => {
+      quotaNeedsBaseline = true;
+      pruneAlerts(); notify();
+    });
   }
   function quotaKey(window) { return JSON.stringify([window.id, window.windowMinutes, window.resetsAt]); }
+  function selectedQuotaWindows() {
+    if (channels.quota.state !== 'connected' || quotaStale()) return [];
+    return selectQuotaWindows(quota.windows, preferences.quotaPeriod, now());
+  }
+  function quotaSeverity(level) {
+    return level >= 90 ? 'urgent' : level >= 80 ? 'strong' : 'normal';
+  }
+  function quotaSummary(refs) {
+    if (!refs.length) return null;
+    return {
+      level: Math.max(...refs.map(ref => ref.level)),
+      remaining: Math.min(...refs.map(ref => ref.remaining)),
+      count: refs.length
+    };
+  }
+  function eventSeverity(event, refs) {
+    return event.kind === 'quota' ? quotaSeverity(quotaSummary(refs)?.level || 0) : 'normal';
+  }
+  function eventDuration(event, refs) {
+    const severity = eventSeverity(event, refs);
+    return event.kind === 'quota' ? QUOTA_DISPLAY_MS[severity] : TASK_DISPLAY_MS;
+  }
+  function eventMotion(event, refs) {
+    if (event.kind !== 'quota') return MOTIONS[event.kind];
+    return eventSeverity(event, refs) === 'normal' ? 'bow' : 'jelly';
+  }
   function validRefs(event) {
     return [...event.refs.values()].flatMap(ref => {
       if (event.kind === 'quota') {
-        if (quotaStale()) return [];
-        const window = quota.windows.find(item => quotaKey(item) === ref.key);
-        return window && Number.isFinite(window.remaining) && window.remaining <= ref.threshold && window.resetsAt > now()
+        const window = selectedQuotaWindows().find(item => quotaKey(item) === ref.key);
+        return window && window.remaining <= 100 - ref.level
           ? [{ ...ref, remaining: window.remaining }] : [];
       }
       const task = tasks.get(ref.id);
@@ -101,16 +134,27 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     const count = refs.length;
     if (event.kind === 'active') return null;
     if (event.kind === 'quota') {
-      const remaining = Math.min(...refs.map(ref => ref.remaining));
+      const summary = quotaSummary(refs);
+      const remaining = summary.remaining;
       const percentage = Math.round(remaining * 10) / 10;
-      return count > 1 ? `${count} 项额度偏低\n最低剩余 ${percentage}%` : `额度剩余 ${percentage}%\n详情见 Codex 状态`;
+      if (count > 1) {
+        return summary.level >= 100
+          ? `多项额度中已有额度用完\n最低剩余 ${percentage}%，非账户总余额`
+          : `多项额度提醒\n最低剩余 ${percentage}%，非账户总余额`;
+      }
+      if (summary.level >= 100) return '这项额度已用完\n重置时间见 Codex 状态';
+      if (summary.level >= 90) return `这项额度只剩 ${percentage}%\n留意一下接下来的用量`;
+      if (summary.level >= 80) return `这项额度剩余 ${percentage}%\n用量接近上限啦`;
+      const used = Math.round((100 - remaining) * 10) / 10;
+      return `本周期已用 ${used}%\n还剩 ${percentage}%，继续陪你`;
     }
     if (event.kind === 'waiting') return count > 1 ? `有 ${count} 个任务\n等你确认哦` : '有一步等你确认哦';
     return count > 1 ? `有 ${count} 个任务\n遇到问题了` : '这一步遇到问题了';
   }
   function publicAlert(event) {
     const refs = validRefs(event);
-    return { id: event.id, generation: event.generation, kind: event.kind, motion: MOTIONS[event.kind],
+    return { id: event.id, generation: event.generation, kind: event.kind,
+      motion: eventMotion(event, refs), severity: eventSeverity(event, refs), durationMs: eventDuration(event, refs),
       text: event.kind === 'completed'
         ? completionText(refs.map(ref => ref.title), refs.length, preferences.taskNameInAlerts)
         : eventText(event, refs),
@@ -118,19 +162,55 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
       createdAt: event.createdAt, expiresAt: event.expiresAt };
   }
   function setPreferences(next = {}) {
-    const taskNameInAlerts = next?.taskNameInAlerts === true;
-    if (preferences.taskNameInAlerts === taskNameInAlerts) return false;
-    preferences = { taskNameInAlerts };
+    const previous = preferences;
+    const proposed = { ...previous };
+    try {
+      if (next && typeof next === 'object' && !Array.isArray(next)) {
+        if (typeof next.taskNameInAlerts === 'boolean') proposed.taskNameInAlerts = next.taskNameInAlerts;
+        if (typeof next.quotaAlwaysVisible === 'boolean') proposed.quotaAlwaysVisible = next.quotaAlwaysVisible;
+        if (QUOTA_PERIODS.has(next.quotaPeriod)) proposed.quotaPeriod = next.quotaPeriod;
+      }
+    } catch {
+      return false;
+    }
+    if (Object.keys(proposed).every(key => proposed[key] === previous[key])) return false;
+    preferences = proposed;
+    const periodChanged = previous.quotaPeriod !== proposed.quotaPeriod;
+    const alwaysOpened = !previous.quotaAlwaysVisible && proposed.quotaAlwaysVisible;
+    const alwaysClosed = previous.quotaAlwaysVisible && !proposed.quotaAlwaysVisible;
+    if (periodChanged) {
+      quotaTracker.reset();
+      quotaNeedsBaseline = true;
+      pruneAlerts();
+    }
+    if (alwaysOpened) removeOrdinaryQuotaAlerts();
+    if (periodChanged || alwaysClosed) quotaAlerts({ baseline: true });
     notify();
-    if (eventValid(currentAlert)) onAlertUpdate(publicAlert(currentAlert));
+    if (previous.taskNameInAlerts !== proposed.taskNameInAlerts && eventValid(currentAlert)) {
+      onAlertUpdate(publicAlert(currentAlert));
+    }
     return true;
   }
   function clearAlerts({ dedupe = false, cooldown = false } = {}) {
     clearTimer('drain'); clearTimer('alert');
     queued = []; currentAlert = null;
     idleTransitions.clear();
-    if (dedupe) { quotaSeen.clear(); terminalSeen.clear(); }
+    if (dedupe) { quotaTracker.reset(); quotaNeedsBaseline = true; terminalSeen.clear(); }
     if (cooldown) lastPresentedAt = -Infinity;
+  }
+  function removeOrdinaryQuotaAlerts() {
+    queued = queued.filter(event => {
+      if (event.kind !== 'quota') return true;
+      event.refs = new Map([...event.refs].filter(([, ref]) => ref.level >= 80));
+      return event.refs.size > 0;
+    });
+    if (currentAlert?.kind === 'quota') {
+      currentAlert.refs = new Map([...currentAlert.refs].filter(([, ref]) => ref.level >= 80));
+      if (!currentAlert.refs.size) {
+        currentAlert = null; clearTimer('alert'); onClear();
+      }
+    }
+    armDrain();
   }
   function dismiss(id, expectedGeneration) {
     if (!enabled || !currentAlert || id !== currentAlert.id || expectedGeneration !== generation
@@ -140,13 +220,20 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
   }
   function pruneAlerts() {
     queued = queued.filter(event => {
-      if (now() >= event.expiresAt) return false;
+      if (now() >= event.expiresAt || event.generation !== generation) return false;
       refreshEventRefs(event);
       return event.refs.size > 0;
     });
-    if (currentAlert && !eventValid(currentAlert)) {
-      currentAlert = null; clearTimer('alert'); onClear();
-      return true;
+    if (currentAlert) {
+      if (now() >= currentAlert.expiresAt || currentAlert.generation !== generation) {
+        currentAlert = null; clearTimer('alert'); onClear();
+        return true;
+      }
+      refreshEventRefs(currentAlert);
+      if (!currentAlert.refs.size) {
+        currentAlert = null; clearTimer('alert'); onClear();
+        return true;
+      }
     }
     return false;
   }
@@ -154,20 +241,30 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     clearTimer('drain');
     pruneAlerts();
     if (!queued.length) return;
-    const readyAt = Math.max(queued[0].createdAt + MERGE_MS, lastPresentedAt + ALERT_GAP_MS);
+    const mergedAt = Math.min(...queued.map(event => event.createdAt + MERGE_MS));
+    const readyAt = Math.max(mergedAt, lastPresentedAt + ALERT_GAP_MS);
     const wakeAt = Math.min(readyAt > now() ? readyAt : now() + 1000, ...queued.map(event => event.expiresAt));
     setTimer('drain', wakeAt - now(), drain);
   }
   function drain() {
     const cleared = pruneAlerts();
-    const ready = queued.find(event => event.createdAt + MERGE_MS <= now());
+    const readyEvents = queued.filter(event => event.createdAt + MERGE_MS <= now());
+    let ready = readyEvents[0];
+    if (ready?.kind === 'quota') {
+      ready = readyEvents.filter(event => event.kind === 'quota').sort((left, right) => {
+        const leftLevel = quotaSummary(validRefs(left))?.level || 0;
+        const rightLevel = quotaSummary(validRefs(right))?.level || 0;
+        return rightLevel - leftLevel || left.createdAt - right.createdAt;
+      })[0] || ready;
+    }
     if (ready && now() - lastPresentedAt >= ALERT_GAP_MS && canPresent() === true
       && enabled && !closed && queued.includes(ready) && eventValid(ready)) {
       refreshEventRefs(ready);
       queued = queued.filter(event => event !== ready);
-      const candidate = { ...ready, expiresAt: now() + DISPLAY_MS };
+      const durationMs = eventDuration(ready, [...ready.refs.values()]);
+      const candidate = { ...ready, expiresAt: now() + durationMs };
       currentAlert = candidate;
-      setTimer('alert', DISPLAY_MS, () => { if (pruneAlerts()) notify(); });
+      setTimer('alert', durationMs, () => { if (pruneAlerts()) notify(); });
       notify();
       if (enabled && !closed && currentAlert === candidate && eventValid(candidate)) {
         refreshEventRefs(candidate);
@@ -179,7 +276,8 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     armDrain();
   }
   function enqueue(kind, ref) {
-    let event = queued.find(item => item.kind === kind && now() - item.createdAt < MERGE_MS);
+    let event = kind === 'quota' ? queued.find(item => item.kind === kind && item.refs.has(ref.key)) : null;
+    if (!event) event = queued.find(item => item.kind === kind && now() - item.createdAt < MERGE_MS);
     if (!event) {
       event = { id: ++nextAlertId, generation, kind, createdAt: now(), expiresAt: now() + QUEUE_MS, refs: new Map() };
       queued.push(event);
@@ -191,18 +289,19 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     event.refs.set(kind === 'quota' ? ref.key : ref.id, ref);
     armDrain();
   }
-  function quotaAlerts() {
-    if (quotaStale()) return;
-    for (const window of quota.windows) {
-      if (!Number.isFinite(window.remaining) || !Number.isFinite(window.windowMinutes)
-        || !Number.isFinite(window.resetsAt) || window.resetsAt <= now() || window.remaining > 20) continue;
-      const threshold = window.remaining <= 10 ? 10 : 20;
-      const key = quotaKey(window);
-      const previous = quotaSeen.get(window.id);
-      if (previous?.key === key && previous.threshold <= threshold) continue;
-      quotaSeen.set(window.id, { key, threshold });
-      if (quotaSeen.size > 64) quotaSeen.delete(quotaSeen.keys().next().value);
-      enqueue('quota', { key, threshold, remaining: window.remaining });
+  function quotaAlerts({ baseline = false } = {}) {
+    if (!enabled || closed || channels.quota.state !== 'connected' || quotaStale()) return;
+    const selected = selectedQuotaWindows();
+    if (!selected.length) return;
+    const crossed = quotaTracker.update(selected, {
+      baseline: baseline || quotaNeedsBaseline,
+      alwaysVisible: preferences.quotaAlwaysVisible
+    });
+    quotaNeedsBaseline = false;
+    const merged = mergeQuotaAlerts(crossed);
+    for (const ref of merged?.refs || []) {
+      const visible = currentAlert?.kind === 'quota' ? currentAlert.refs.get(ref.key) : null;
+      if (!visible || visible.level < ref.level) enqueue('quota', ref);
     }
   }
   function taskAlerts(task, previous, baseline) {
@@ -252,6 +351,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     const changed = channel.state !== state || channel.code !== code;
     channel.state = state; channel.code = code;
     if (state === 'connected') channel.failures = 0;
+    if (value.channel === 'quota' && state !== 'connected') quotaNeedsBaseline = true;
     if (value.channel === 'tasks' && ['disconnected', 'missing', 'unauthenticated', 'unsupported'].includes(state)) {
       idleTransitions.clear();
       for (const task of tasks.values()) task.state = 'unknown';
@@ -295,6 +395,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
         resetsAt: timestamp(window.resetsAt) ?? 'unknown'
       });
     }
+    if (quotaStale()) quotaNeedsBaseline = true;
     armChannel('quota'); armStale(); pruneAlerts(); quotaAlerts();
     notify();
   }
@@ -381,6 +482,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     if (!enabled || closed || now() - lastManualAt < 10000) return false;
     lastManualAt = now(); generation++;
     stopConnection();
+    quotaNeedsBaseline = true;
     clearAlerts(); armStale();
     for (const task of tasks.values()) task.state = 'unknown';
     onClear();
