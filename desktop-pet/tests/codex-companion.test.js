@@ -356,6 +356,124 @@ test('五秒内多项额度只合并一次，取最高严重度和最低实际�
   assert.match(f.alerts[0].text, /非账户总余额/);
 });
 
+test('当前多项额度部分失效时立即更新文案和强弱表现，并缩短而不延长截止时间', async () => {
+  for (const reason of ['recovered', 'period', 'always-visible']) {
+    const f = fixture();
+    await f.companion.setEnabled(true);
+    const normal = quotaWindow('five', 300, 69);
+    const urgent = quotaWindow('week', 10080, 10);
+    f.quota(95, { windows: [{ ...normal, remaining: 95 }, { ...urgent, remaining: 95 }] });
+    f.quota(10, { windows: [normal, urgent] });
+    await f.tick(5000);
+    const originalExpiry = f.companion.getSnapshot().currentAlert.expiresAt;
+    assert.equal(f.companion.getSnapshot().currentAlert.severity, 'urgent');
+    assert.match(f.companion.getSnapshot().currentAlert.text, /多项额度/);
+
+    if (reason === 'recovered') {
+      f.quota(95, { windows: [normal, { ...urgent, remaining: 95 }] });
+    } else if (reason === 'period') {
+      f.companion.setPreferences({ quotaPeriod: 'fiveHour' });
+    } else {
+      f.companion.setPreferences({ quotaAlwaysVisible: true });
+    }
+
+    assert.equal(f.alertUpdates.length, 1, reason);
+    const update = f.alertUpdates[0];
+    assert.doesNotMatch(update.text, /多项额度/);
+    if (reason === 'always-visible') {
+      assert.equal(update.severity, 'urgent');
+      assert.equal(update.motion, 'jelly');
+      assert.equal(update.durationMs, 12000);
+      assert.equal(update.expiresAt, originalExpiry);
+    } else {
+      assert.equal(update.severity, 'normal');
+      assert.equal(update.motion, 'bow');
+      assert.equal(update.durationMs, 6000);
+      assert.equal(update.expiresAt, f.time + 6000);
+      assert.ok(update.expiresAt < originalExpiry);
+    }
+    f.companion.close();
+  }
+});
+
+test('当前额度按最早重置时刻降级并继续等待下一到期点', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  const firstReset = f.time + 10000;
+  const secondReset = f.time + 15000;
+  const first = quotaWindow('first', 300, 10, firstReset);
+  const second = quotaWindow('second', 10080, 10, secondReset);
+  f.quota(95, { windows: [{ ...first, remaining: 95 }, { ...second, remaining: 95 }] });
+  f.quota(10, { windows: [first, second] });
+  await f.tick(5000);
+  assert.equal(f.companion.getSnapshot().currentAlert.severity, 'urgent');
+  await f.tick(4999);
+  assert.equal(f.alertUpdates.length, 0);
+  await f.tick(1);
+  assert.equal(f.alertUpdates.length, 1);
+  assert.doesNotMatch(f.alertUpdates[0].text, /多项额度/);
+  assert.equal(f.alertUpdates[0].severity, 'urgent');
+  assert.notEqual(f.companion.getSnapshot().currentAlert, null);
+  await f.tick(4999);
+  assert.notEqual(f.companion.getSnapshot().currentAlert, null);
+  await f.tick(1);
+  assert.equal(f.companion.getSnapshot().currentAlert, null);
+  assert.equal(f.clears.length, 1);
+});
+
+test('单项强额度展示后五秒重置时立即清除，不等十二秒展示期结束', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  const resetsAt = f.time + 10000;
+  f.quota(95, { windows: [quotaWindow('codex', 300, 95, resetsAt)] });
+  f.quota(10, { windows: [quotaWindow('codex', 300, 10, resetsAt)] });
+  await f.tick(5000);
+  assert.equal(f.companion.getSnapshot().currentAlert.durationMs, 12000);
+  await f.tick(4999);
+  assert.notEqual(f.companion.getSnapshot().currentAlert, null);
+  await f.tick(1);
+  assert.equal(f.companion.getSnapshot().currentAlert, null);
+  assert.equal(f.clears.length, 1);
+});
+
+test('排队额度在五秒合并窗口内重置时立即丢弃，不过期补播', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  const resetsAt = f.time + 4000;
+  f.quota(95, { windows: [quotaWindow('codex', 300, 95, resetsAt)] });
+  f.quota(10, { windows: [quotaWindow('codex', 300, 10, resetsAt)] });
+  assert.ok([...f.timers.values()].some(timer => timer.at === resetsAt));
+  await f.tick(4000);
+  assert.equal(f.alerts.length, 0);
+  assert.equal(f.companion.getSnapshot().currentAlert, null);
+  await f.tick(10000);
+  assert.equal(f.alerts.length, 0);
+});
+
+test('额度更新或到期回调内关闭控制器后不留定时器或过期状态', async () => {
+  const updated = fixture({ onAlertUpdate: (_alert, companion) => companion.close() });
+  await updated.companion.setEnabled(true);
+  const normal = quotaWindow('five', 300, 69);
+  const urgent = quotaWindow('week', 10080, 10);
+  updated.quota(95, { windows: [{ ...normal, remaining: 95 }, { ...urgent, remaining: 95 }] });
+  updated.quota(10, { windows: [normal, urgent] });
+  await updated.tick(5000);
+  updated.quota(95, { windows: [normal, { ...urgent, remaining: 95 }] });
+  assert.equal(updated.companion.getSnapshot().enabled, false);
+  assert.equal(updated.timers.size, 0);
+  assert.equal(updated.companion.getSnapshot().currentAlert, null);
+
+  const cleared = fixture({ onClear: companion => companion.close() });
+  await cleared.companion.setEnabled(true);
+  const resetsAt = cleared.time + 10000;
+  cleared.quota(95, { windows: [quotaWindow('codex', 300, 95, resetsAt)] });
+  cleared.quota(10, { windows: [quotaWindow('codex', 300, 10, resetsAt)] });
+  await cleared.tick(10000);
+  assert.equal(cleared.companion.getSnapshot().enabled, false);
+  assert.equal(cleared.timers.size, 0);
+  assert.equal(cleared.companion.getSnapshot().currentAlert, null);
+});
+
 test('手动周期不存在、数据过期和重置等待时都不提醒', async () => {
   const f = fixture();
   await f.companion.setEnabled(true);
