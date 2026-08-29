@@ -1168,8 +1168,17 @@ test('标准档复用原小巧版 11px 字号和 3px 进度条，小巧折叠为
 
 test('小巧展开详情在深色背景使用浅色文字，不能继承浅色页灰字', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
-  assert.match(css, /@media \(prefers-color-scheme: dark\)[\s\S]*?#quota-label\[data-expanded="true"\] #quota-details\s*\{[\s\S]*?color:\s*var\(--quota-muted\)/);
-  assert.match(css, /@media \(prefers-color-scheme: dark\)[\s\S]*?#quota-label\[data-expanded="true"\]\[data-item-count="1"\] #items li::after\s*\{\s*color:\s*#c8d0da/);
+  assert.match(css, /:root\[data-appearance="dark"\] #quota-label\[data-expanded="true"\] #quota-details\s*\{[\s\S]*?color:\s*var\(--quota-muted\)/);
+  assert.match(css, /:root\[data-appearance="dark"\] #quota-label\[data-expanded="true"\]\[data-item-count="1"\] #items li::after\s*\{\s*color:\s*#c8d0da/);
+});
+
+test('额度卡片外观可独立跟随系统或固定浅深色，不影响球球和气泡', () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
+  assert.match(css, /:root\[data-appearance="light"\]\s*\{\s*color-scheme:\s*light/);
+  assert.match(css, /:root\[data-appearance="dark"\]\s*\{[\s\S]*?color-scheme:\s*dark[\s\S]*?--quota-surface:\s*rgba\(26, 34, 45, \.82\)/);
+  assert.match(css, /@media \(prefers-color-scheme: dark\)\s*\{[\s\S]*?:root\[data-appearance="system"\]\s*\{[\s\S]*?--quota-surface:\s*rgba\(26, 34, 45, \.82\)/);
+  assert.doesNotMatch(css, /@media \(prefers-color-scheme: dark\)\s*\{\s*:root\s*\{/);
+  assert.doesNotMatch(css, /#pet|#bubble/);
 });
 
 test('浅色系统叠在深色壁纸上仍使用高覆盖玻璃底和不透明文字', () => {
