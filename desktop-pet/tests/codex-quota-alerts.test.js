@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { createHmac } = require('node:crypto');
 const {
   LEVELS,
   createQuotaAlertTracker,
@@ -359,6 +360,92 @@ test('状态饱和后真正新 key 首次处于 80/90/100 时各只报当前最�
     quotaWindow('new-90', 300, 10),
     quotaWindow('new-100', 300, 0)
   ], { alwaysVisible: false }), []);
+});
+
+test('每个 tracker 使用独立盐生成指纹，随机源或强哈希异常不外抛', () => {
+  let saltByte = 0;
+  const salts = [];
+  const positions = [];
+  const randomBytes = size => Buffer.alloc(size, ++saltByte);
+  const fingerprintDigest = (key, salt) => {
+    salts.push(salt[0]);
+    const digest = createHmac('sha256', salt).update(key).digest();
+    positions.push(Array.from({ length: 6 }, (_, index) => (
+      digest.readUInt32BE(index * 4) & ((1 << 20) - 1)
+    )));
+    return digest;
+  };
+  const first = createQuotaAlertTracker({ randomBytes, fingerprintDigest });
+  const second = createQuotaAlertTracker({ randomBytes, fingerprintDigest });
+  first.update([quotaWindow('same-key', 300, 100)], { baseline: true });
+  second.update([quotaWindow('same-key', 300, 100)], { baseline: true });
+  assert.deepEqual(salts, [1, 2]);
+  assert.notDeepEqual(positions[0], positions[1]);
+
+  const brokenRandom = createQuotaAlertTracker({
+    randomBytes() { throw new Error('random unavailable'); }
+  });
+  const brokenHash = createQuotaAlertTracker({
+    fingerprintSalt: Buffer.alloc(32, 7),
+    fingerprintDigest() { throw new Error('hash unavailable'); }
+  });
+  assert.doesNotThrow(() => brokenRandom.update(Array.from({ length: 65 }, (_, index) => (
+    quotaWindow(`random-${index}`, 300, 20)
+  )), { baseline: true }));
+  assert.doesNotThrow(() => brokenHash.update(Array.from({ length: 65 }, (_, index) => (
+    quotaWindow(`hash-${index}`, 300, 20)
+  )), { baseline: true }));
+});
+
+test('旧无盐算法可定向覆盖的四个 key 不再使新周期普通档误报', () => {
+  const tracker = createQuotaAlertTracker({ fingerprintSalt: Buffer.alloc(32, 11) });
+  const attackerIds = [
+    'old-attacker-13992',
+    'old-attacker-14209',
+    'old-attacker-37831',
+    'old-attacker-51406'
+  ];
+  tracker.update(attackerIds.map(id => quotaWindow(id, 300, 100)), { baseline: true });
+  tracker.update(attackerIds.map(id => quotaWindow(id, 300, 90)), { alwaysVisible: false });
+
+  const target = quotaWindow('old-collision-target', 300, 80);
+  assert.deepEqual(tracker.update([target], { alwaysVisible: false }), []);
+  assert.equal(tracker.update([{ ...target, remaining: 20 }], { alwaysVisible: false })[0].level, 80);
+});
+
+test('seen 位图单独碰撞但没有任何档位命中时仍按新周期基线处理', () => {
+  const tracker = createQuotaAlertTracker({
+    fingerprintSalt: Buffer.alloc(32, 13),
+    fingerprintDigest: () => Buffer.alloc(32, 17)
+  });
+  tracker.update([quotaWindow('seen-only-source', 300, 100)], { baseline: true });
+
+  const target = quotaWindow('seen-only-target', 300, 80);
+  assert.deepEqual(tracker.update([target], { alwaysVisible: false }), []);
+  assert.equal(tracker.update([{ ...target, remaining: 20 }], {
+    alwaysVisible: false
+  })[0].level, 80);
+});
+
+test('10000 个合法历史后旧算法的稳定假阳性样本仍按新周期基线和 80% 强提醒', () => {
+  const tracker = createQuotaAlertTracker({ fingerprintSalt: Buffer.alloc(32, 23) });
+  for (let start = 0; start < 10000; start += 64) {
+    const size = Math.min(64, 10000 - start);
+    tracker.update(Array.from({ length: size }, (_, offset) => (
+      quotaWindow(`history-${start + offset}`, 300, 0)
+    )), { baseline: true, alwaysVisible: false });
+  }
+
+  const oldFalsePositives = [
+    'fresh-2', 'fresh-10', 'fresh-42', 'fresh-86',
+    'fresh-88', 'fresh-100', 'fresh-142', 'fresh-168'
+  ];
+  assert.deepEqual(tracker.update(oldFalsePositives.map(id => quotaWindow(id, 300, 80)), {
+    alwaysVisible: false
+  }), []);
+  assert.deepEqual(tracker.update(oldFalsePositives.map(id => quotaWindow(id, 300, 20)), {
+    alwaysVisible: false
+  }).map(item => item.id), oldFalsePositives);
 });
 
 test('多类别提醒合并返回最高档、最低实际剩余和稳定的安全引用', () => {
