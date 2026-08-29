@@ -1,9 +1,12 @@
 const LABEL_SIZE = Object.freeze({ width: 176, height: 54 });
 const GAP = 8;
+const GEOMETRY_LIMIT = Math.floor(Number.MAX_SAFE_INTEGER / 4);
 
-const finite = (value, fallback) => Number.isFinite(value) ? value : fallback;
-const positive = (value, fallback) => Number.isFinite(value) && value > 0 ? value : fallback;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const finite = (value, fallback) => Number.isFinite(value)
+  ? clamp(value, -GEOMETRY_LIMIT, GEOMETRY_LIMIT) : fallback;
+const positive = (value, fallback) => Number.isFinite(value) && value > 0
+  ? Math.min(value, GEOMETRY_LIMIT) : fallback;
 
 function safeArea(area) {
   return {
@@ -29,7 +32,12 @@ function safeObstacle(obstacle) {
   if (!obstacle || !Number.isFinite(obstacle.x) || !Number.isFinite(obstacle.y) ||
     !Number.isFinite(obstacle.width) || !Number.isFinite(obstacle.height) ||
     obstacle.width <= 0 || obstacle.height <= 0) return null;
-  return { x: obstacle.x, y: obstacle.y, width: obstacle.width, height: obstacle.height };
+  return {
+    x: finite(obstacle.x, 0),
+    y: finite(obstacle.y, 0),
+    width: positive(obstacle.width, 1),
+    height: positive(obstacle.height, 1)
+  };
 }
 
 function inside(candidate, size, area) {

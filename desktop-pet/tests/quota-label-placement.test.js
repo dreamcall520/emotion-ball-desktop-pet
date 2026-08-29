@@ -108,3 +108,18 @@ test('宠物、工作区和障碍物畸形输入均安全降级且不修改对�
   assert.equal(result.width, 176);
   assert.equal(result.height, 54);
 });
+
+test('Number.MAX_VALUE 级别的有限坐标与尺寸不得在中间加法中溢出', () => {
+  const max = Number.MAX_VALUE;
+  for (const [pet, area, obstacle] of [
+    [{ x: max, y: max, width: max, height: max }, { x: max, y: max, width: max, height: max }, null],
+    [{ x: max, y: max, width: max, height: max }, { x: 0, y: 0, width: 1440, height: 900 }, null],
+    [{ x: -max, y: -max, width: 260, height: 260 }, { x: max, y: -max, width: max, height: max }, null],
+    [{ x: max, y: -max, width: 80, height: 80 }, { x: -max, y: max, width: max, height: max },
+      { x: max, y: max, width: max, height: max }]
+  ]) {
+    const result = quotaLabelBounds(pet, area, obstacle);
+    assertFiniteBounds(result);
+    assert.ok(['below', 'above', 'right', 'left'].includes(result.placement));
+  }
+});

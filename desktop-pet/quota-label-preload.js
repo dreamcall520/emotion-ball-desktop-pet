@@ -7,33 +7,77 @@ const STATES = new Set([
 ]);
 const CONTROL_AND_DIRECTION = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/gu;
 
+function record(value) {
+  try { return value && typeof value === 'object' && !Array.isArray(value) ? value : null; }
+  catch (_) { return null; }
+}
+
 function cleanLabel(value) {
   if (typeof value !== 'string') return '';
   return Array.from(value.replace(CONTROL_AND_DIRECTION, ' ').replace(/\s+/gu, ' ').trim())
     .slice(0, 32).join('');
 }
 
-function safeModel(value) {
-  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-  const state = STATES.has(source.state) ? source.state : 'disconnected';
-  if (!['ready', 'stale'].includes(state)) return { state, items: [], overflow: 0 };
+function copyItem(value) {
+  const item = record(value);
+  if (!item) return null;
+  let labelValue;
+  let windowMinutes;
+  let remaining;
+  try {
+    labelValue = item.label;
+    windowMinutes = item.windowMinutes;
+    remaining = item.remaining;
+  } catch (_) { return null; }
+  const label = cleanLabel(labelValue);
+  if (!label || !Number.isSafeInteger(windowMinutes) || windowMinutes <= 0 ||
+    typeof remaining !== 'number' || !Number.isFinite(remaining) || remaining < 0 || remaining > 100) return null;
+  return { label, windowMinutes, remaining };
+}
+
+function copyItems(value) {
+  try { if (!Array.isArray(value)) return []; } catch (_) { return []; }
+  let length;
+  try { length = value.length; } catch (_) { return []; }
+  const limit = Number.isSafeInteger(length) && length >= 0 ? Math.min(length, 2) : 0;
   const items = [];
-  for (const item of Array.isArray(source.items) ? source.items.slice(0, 2) : []) {
-    const label = cleanLabel(item && item.label);
-    if (!label || !Number.isSafeInteger(item && item.windowMinutes) || item.windowMinutes <= 0 ||
-      !Number.isFinite(item.remaining) || item.remaining < 0 || item.remaining > 100) continue;
-    items.push({ label, windowMinutes: item.windowMinutes, remaining: item.remaining });
+  for (let index = 0; index < limit; index += 1) {
+    let raw;
+    try { raw = value[index]; } catch (_) { continue; }
+    const item = copyItem(raw);
+    if (item) items.push(item);
   }
-  const overflow = Number.isSafeInteger(source.overflow) && source.overflow > 0
-    ? Math.min(source.overflow, 99) : 0;
-  return { state, items, overflow };
+  return items;
+}
+
+function safeModel(value) {
+  const source = record(value);
+  if (!source) return { state: 'disconnected', items: [], overflow: 0 };
+  let stateValue;
+  try { stateValue = source.state; } catch (_) { return { state: 'disconnected', items: [], overflow: 0 }; }
+  const state = STATES.has(stateValue) ? stateValue : 'disconnected';
+  if (!['ready', 'stale'].includes(state)) return { state, items: [], overflow: 0 };
+  let rawItems;
+  let overflowValue;
+  try {
+    rawItems = source.items;
+    overflowValue = source.overflow;
+  } catch (_) { return { state, items: [], overflow: 0 }; }
+  const overflow = Number.isSafeInteger(overflowValue) && overflowValue > 0
+    ? Math.min(overflowValue, 99) : 0;
+  return { state, items: copyItems(rawItems), overflow };
 }
 
 contextBridge.exposeInMainWorld('petQuotaLabel', {
   onModel(callback) {
     if (typeof callback !== 'function') return () => {};
-    const listener = (_event, payload) => callback(safeModel(payload));
-    ipcRenderer.on(CHANNEL, listener);
-    return () => ipcRenderer.removeListener(CHANNEL, listener);
+    const listener = (_event, payload) => {
+      const model = safeModel(payload);
+      try { callback(model); } catch (_) {}
+    };
+    try { ipcRenderer.on(CHANNEL, listener); } catch (_) { return () => {}; }
+    return () => {
+      try { ipcRenderer.removeListener(CHANNEL, listener); } catch (_) {}
+    };
   }
 });

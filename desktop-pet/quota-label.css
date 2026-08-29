@@ -15,7 +15,7 @@ body {
   position: absolute;
   inset: 2px;
   box-sizing: border-box;
-  padding: 4px 7px;
+  padding: 3px 7px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -27,13 +27,13 @@ body {
   color: rgba(43, 44, 47, .92);
   font-size: 12px;
   font-weight: 500;
-  line-height: 14px;
+  line-height: 13px;
 }
 #status, #overflow { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #status { text-align: center; }
 #items { margin: 0; padding: 0; list-style: none; min-width: 0; }
 #items li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#overflow { color: rgba(75, 76, 80, .7); }
+#overflow { color: rgba(55, 56, 60, .82); }
 #quota-label[data-state="ready"] #status,
 #quota-label[data-state="stale"][data-has-items="true"] #status { display: none; }
 #quota-label[data-severity="low"] { border-color: rgba(150, 104, 24, .58); }
@@ -43,12 +43,12 @@ body {
 @media (prefers-color-scheme: dark) {
   #quota-label {
     border-color: rgba(225, 226, 229, .22);
-    background: rgba(49, 50, 53, .9);
+    background: rgba(49, 50, 53, .94);
     color: rgba(246, 246, 244, .94);
   }
   #overflow { color: rgba(232, 233, 235, .68); }
   #quota-label[data-severity="low"] { border-color: rgba(239, 190, 90, .72); }
   #quota-label[data-severity="urgent"] { border-color: rgba(255, 132, 119, .78); }
   #items li[data-severity="low"] { color: rgb(244, 198, 106); }
-  #items li[data-severity="urgent"] { color: rgb(255, 145, 132); }
+  #items li[data-severity="urgent"] { color: rgb(255, 184, 172); }
 }

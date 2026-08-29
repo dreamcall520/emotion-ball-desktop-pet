@@ -7,6 +7,7 @@ const STATES = new Set([
   'empty', 'missing', 'unauthenticated', 'unsupported', 'disconnected'
 ]);
 const CONTROL_AND_DIRECTION = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/gu;
+const EMPTY_MODEL = Object.freeze({ state: 'disconnected', items: Object.freeze([]), overflow: 0 });
 
 function cleanLabel(value) {
   if (typeof value !== 'string') return '';
@@ -14,20 +15,70 @@ function cleanLabel(value) {
     .slice(0, 32).join('');
 }
 
-function safeModel(value) {
-  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-  const state = STATES.has(source.state) ? source.state : 'disconnected';
-  if (!['ready', 'stale'].includes(state)) return { state, items: [], overflow: 0 };
-  const items = [];
-  for (const item of Array.isArray(source.items) ? source.items.slice(0, 2) : []) {
-    const label = cleanLabel(item && item.label);
-    if (!label || !Number.isSafeInteger(item && item.windowMinutes) || item.windowMinutes <= 0 ||
-      !Number.isFinite(item.remaining) || item.remaining < 0 || item.remaining > 100) continue;
-    items.push({ label, windowMinutes: item.windowMinutes, remaining: item.remaining });
+function record(value) {
+  try {
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+  } catch (_) {
+    return null;
   }
-  const overflow = Number.isSafeInteger(source.overflow) && source.overflow > 0
-    ? Math.min(source.overflow, 99) : 0;
-  return { state, items, overflow };
+}
+
+function copyItem(value) {
+  const item = record(value);
+  if (!item) return null;
+  let labelValue;
+  let windowMinutes;
+  let remaining;
+  try {
+    labelValue = item.label;
+    windowMinutes = item.windowMinutes;
+    remaining = item.remaining;
+  } catch (_) {
+    return null;
+  }
+  const label = cleanLabel(labelValue);
+  if (!label || !Number.isSafeInteger(windowMinutes) || windowMinutes <= 0 ||
+    typeof remaining !== 'number' || !Number.isFinite(remaining) || remaining < 0 || remaining > 100) return null;
+  return { label, windowMinutes, remaining };
+}
+
+function copyItems(value) {
+  try {
+    if (!Array.isArray(value)) return [];
+  } catch (_) {
+    return [];
+  }
+  let length;
+  try { length = value.length; } catch (_) { return []; }
+  const limit = Number.isSafeInteger(length) && length >= 0 ? Math.min(length, 2) : 0;
+  const items = [];
+  for (let index = 0; index < limit; index += 1) {
+    let raw;
+    try { raw = value[index]; } catch (_) { continue; }
+    const item = copyItem(raw);
+    if (item) items.push(item);
+  }
+  return items;
+}
+
+function safeModel(value) {
+  const source = record(value);
+  if (!source) return { state: EMPTY_MODEL.state, items: [], overflow: 0 };
+  let stateValue;
+  try { stateValue = source.state; } catch (_) { return { state: EMPTY_MODEL.state, items: [], overflow: 0 }; }
+  const state = STATES.has(stateValue) ? stateValue : 'disconnected';
+  if (!['ready', 'stale'].includes(state)) return { state, items: [], overflow: 0 };
+  let rawItems;
+  let overflowValue;
+  try {
+    rawItems = source.items;
+    overflowValue = source.overflow;
+  } catch (_) {
+    return { state, items: [], overflow: 0 };
+  }
+  const overflow = Number.isSafeInteger(overflowValue) && overflowValue > 0
+    ? Math.min(overflowValue, 99) : 0;
+  return { state, items: copyItems(rawItems), overflow };
 }
 
 function createQuotaLabelWindow({
@@ -38,15 +89,80 @@ function createQuotaLabelWindow({
   let requestedVisible = false;
   let currentModel = null;
   let topmost = Boolean(alwaysOnTop);
+  let operation = 0;
+  let reporting = false;
+  let silentWindow = null;
 
-  function report(error) {
-    try { onError(error); } catch (_) {}
+  function safeDestroy(target) {
+    if (!target) return;
+    let destroyed = false;
+    try { destroyed = typeof target.isDestroyed === 'function' && target.isDestroyed(); } catch (_) {}
+    if (destroyed) return;
+    try { if (typeof target.destroy === 'function') target.destroy(); } catch (_) {}
   }
 
-  function conceal(target = win) {
-    if (!target || target.isDestroyed()) return;
-    target.hide();
-    target.setIgnoreMouseEvents(true, { forward: true });
+  function report(error, target = null) {
+    if (!error || reporting || (target && target === silentWindow)) return;
+    reporting = true;
+    const before = win;
+    try { onError(error); } catch (_) {}
+    if (win && win !== before) silentWindow = win;
+    reporting = false;
+  }
+
+  function detach(target, error = null) {
+    const current = win === target;
+    if (current) {
+      win = null;
+      ready = false;
+      operation += 1;
+    }
+    safeDestroy(target);
+    if (current && error) report(error, target);
+  }
+
+  function health(target) {
+    if (!target) return { ok: false, error: null };
+    try {
+      if (typeof target.isDestroyed !== 'function' || target.isDestroyed()) return { ok: false, error: null };
+      const contents = target.webContents;
+      if (!contents) return { ok: false, error: null };
+      if (typeof contents.isDestroyed === 'function' && contents.isDestroyed()) return { ok: false, error: null };
+      return { ok: true, error: null };
+    } catch (error) {
+      return { ok: false, error };
+    }
+  }
+
+  function confirm(target, token, model, requireVisible = true) {
+    if (win !== target || operation !== token || currentModel !== model ||
+      (requireVisible && !requestedVisible)) return false;
+    const status = health(target);
+    if (!status.ok) {
+      detach(target, status.error);
+      return false;
+    }
+    return win === target && operation === token && currentModel === model &&
+      (!requireVisible || requestedVisible);
+  }
+
+  function conceal(target = win, token = operation) {
+    if (!target || win !== target || operation !== token) return;
+    const status = health(target);
+    if (!status.ok) {
+      detach(target, status.error);
+      return;
+    }
+    if (win !== target || operation !== token) return;
+    try { target.hide(); } catch (error) { detach(target, error); return; }
+    if (win !== target || operation !== token) return;
+    const afterHide = health(target);
+    if (!afterHide.ok) {
+      detach(target, afterHide.error);
+      return;
+    }
+    if (win !== target || operation !== token) return;
+    try { target.setIgnoreMouseEvents(true, { forward: true }); } catch (error) { detach(target, error); }
   }
 
   function petLayout() {
@@ -65,117 +181,179 @@ function createQuotaLabelWindow({
 
   function present() {
     const target = win;
-    if (!requestedVisible || !currentModel || !ready || !target || target.isDestroyed()) return;
+    const token = operation;
+    const model = currentModel;
+    if (!ready || !confirm(target, token, model)) return;
     const layout = petLayout();
+    if (!confirm(target, token, model)) return;
     if (!layout) {
-      conceal(target);
+      conceal(target, token);
       return;
     }
     const { x, y, width, height } = layout;
-    target.setBounds({ x, y, width, height }, false);
-    target.webContents.send(CHANNEL, currentModel);
-    target.setIgnoreMouseEvents(true, { forward: true });
-    target.showInactive();
+    try { target.setBounds({ x, y, width, height }, false); } catch (error) { detach(target, error); return; }
+    if (!confirm(target, token, model)) return;
+    try { target.webContents.send(CHANNEL, model); } catch (error) { detach(target, error); return; }
+    if (!confirm(target, token, model)) return;
+    try { target.setIgnoreMouseEvents(true, { forward: true }); } catch (error) { detach(target, error); return; }
+    if (!confirm(target, token, model)) return;
+    try { target.showInactive(); } catch (error) { detach(target, error); return; }
+    if (!confirm(target, token, model)) {
+      if (win === target && !requestedVisible) conceal(target, operation);
+      return;
+    }
+    if (silentWindow === target) silentWindow = null;
   }
 
-  function discard(target, error) {
-    if (win !== target) return;
-    win = null;
-    ready = false;
-    if (!target.isDestroyed()) target.destroy();
-    if (error) report(error);
+  function setupStep(target, token, callback) {
+    try { callback(); } catch (error) { detach(target, error); return false; }
+    if (win !== target || operation !== token) {
+      detach(target);
+      return false;
+    }
+    const status = health(target);
+    if (!status.ok) {
+      detach(target, status.error);
+      return false;
+    }
+    return win === target && operation === token;
   }
 
   function ensureWindow() {
-    if (win && !win.isDestroyed()) return;
-    ready = false;
-    let loadingWindow;
-    try {
-      loadingWindow = new BrowserWindow({
-        width: 176,
-        height: 54,
-        title: 'Codex 剩余额度',
-        transparent: true,
-        frame: false,
-        resizable: false,
-        focusable: false,
-        skipTaskbar: true,
-        show: false,
-        fullscreenable: false,
-        maximizable: false,
-        minimizable: false,
-        hasShadow: false,
-        backgroundColor: '#00000000',
-        webPreferences: {
-          preload: path.join(__dirname, '../quota-label-preload.js'),
-          contextIsolation: true,
-          nodeIntegration: false,
-          sandbox: true,
-          spellcheck: false,
-          backgroundThrottling: false
-        }
-      });
-      win = loadingWindow;
-      loadingWindow.setAlwaysOnTop(topmost, 'floating');
-      loadingWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-      loadingWindow.setHiddenInMissionControl(true);
-      loadingWindow.setIgnoreMouseEvents(true, { forward: true });
-      loadingWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-      loadingWindow.webContents.on('will-navigate', event => event.preventDefault());
-      loadingWindow.webContents.on('render-process-gone', (_event, details = {}) => {
-        discard(loadingWindow, new Error(`额度标签渲染退出：${details.reason || 'unknown'}`));
-      });
-      loadingWindow.on('closed', () => {
+    if (win) {
+      const currentWindow = win;
+      const currentToken = operation;
+      const currentStatus = health(currentWindow);
+      if (currentStatus.ok && win === currentWindow && operation === currentToken) return;
+      if (win === currentWindow) detach(currentWindow, currentStatus.error);
+    }
+    const token = operation;
+    let loadingWindow = null;
+    try { loadingWindow = new BrowserWindow({
+      width: 176,
+      height: 54,
+      title: 'Codex 剩余额度',
+      transparent: true,
+      frame: false,
+      resizable: false,
+      focusable: false,
+      skipTaskbar: true,
+      show: false,
+      fullscreenable: false,
+      maximizable: false,
+      minimizable: false,
+      hasShadow: false,
+      backgroundColor: '#00000000',
+      webPreferences: {
+        preload: path.join(__dirname, '../quota-label-preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        spellcheck: false,
+        backgroundThrottling: false
+      }
+    }); } catch (error) { report(error); return; }
+    win = loadingWindow;
+    const steps = [
+      () => loadingWindow.setAlwaysOnTop(topmost, 'floating'),
+      () => loadingWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }),
+      () => loadingWindow.setHiddenInMissionControl(true),
+      () => loadingWindow.setIgnoreMouseEvents(true, { forward: true }),
+      () => loadingWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' })),
+      () => loadingWindow.webContents.on('will-navigate', event => {
+        try { event.preventDefault(); } catch (_) {}
+      }),
+      () => loadingWindow.webContents.on('render-process-gone', (_event, details) => {
+        let reason = 'unknown';
+        try { if (details && typeof details.reason === 'string') reason = details.reason; } catch (_) {}
+        detach(loadingWindow, new Error(`额度标签渲染退出：${reason}`));
+      }),
+      () => loadingWindow.on('closed', () => {
         if (win !== loadingWindow) return;
         win = null;
         ready = false;
         requestedVisible = false;
-      });
+        operation += 1;
+      })
+    ];
+    for (const step of steps) if (!setupStep(loadingWindow, token, step)) return;
 
-      const markReady = () => {
-        if (win !== loadingWindow || loadingWindow.isDestroyed() || ready) return;
-        ready = true;
-        present();
-      };
-      loadingWindow.webContents.on('did-finish-load', markReady);
-      Promise.resolve(loadingWindow.loadFile(path.join(__dirname, '../quota-label.html')))
-        .then(markReady)
-        .catch(error => discard(loadingWindow, error));
-    } catch (error) {
-      if (loadingWindow && win === loadingWindow) discard(loadingWindow, error);
-      else report(error);
+    const markReady = () => {
+      if (win !== loadingWindow) return;
+      const status = health(loadingWindow);
+      if (!status.ok) {
+        detach(loadingWindow, status.error);
+        return;
+      }
+      if (win !== loadingWindow) return;
+      ready = true;
+      try { present(); } catch (error) { detach(loadingWindow, error); }
+    };
+    if (!setupStep(loadingWindow, token,
+      () => loadingWindow.webContents.on('did-finish-load', markReady))) return;
+    let loading;
+    try { loading = loadingWindow.loadFile(path.join(__dirname, '../quota-label.html')); }
+    catch (error) { detach(loadingWindow, error); return; }
+    if (win !== loadingWindow || operation !== token) {
+      detach(loadingWindow);
+      return;
     }
+    Promise.resolve(loading).then(markReady).catch(error => detach(loadingWindow, error));
   }
 
   function hide() {
+    operation += 1;
     requestedVisible = false;
-    conceal();
+    conceal(win, operation);
   }
 
   function destroy() {
+    operation += 1;
     requestedVisible = false;
     currentModel = null;
     const previous = win;
     win = null;
     ready = false;
-    if (previous && !previous.isDestroyed()) previous.destroy();
+    safeDestroy(previous);
   }
 
   return {
     show(model) {
-      currentModel = safeModel(model);
+      const copied = safeModel(model);
+      operation += 1;
+      currentModel = copied;
       requestedVisible = true;
-      ensureWindow();
-      present();
+      try { ensureWindow(); } catch (error) { report(error); }
+      try { present(); } catch (error) { if (win) detach(win, error); else report(error); }
     },
     hide,
     reposition() {
-      present();
+      operation += 1;
+      try { present(); } catch (error) { if (win) detach(win, error); else report(error); }
     },
-    getWindow: () => win,
+    getWindow() {
+      const target = win;
+      if (!target) return null;
+      const status = health(target);
+      if (!status.ok) {
+        detach(target, status.error);
+        return null;
+      }
+      return win === target ? target : null;
+    },
     setAlwaysOnTop(enabled) {
+      operation += 1;
       topmost = Boolean(enabled);
-      if (win && !win.isDestroyed()) win.setAlwaysOnTop(topmost, 'floating');
+      const target = win;
+      const token = operation;
+      if (!target) return;
+      const status = health(target);
+      if (!status.ok) {
+        detach(target, status.error);
+        return;
+      }
+      if (win !== target || operation !== token) return;
+      try { target.setAlwaysOnTop(topmost, 'floating'); } catch (error) { detach(target, error); }
     },
     destroy
   };

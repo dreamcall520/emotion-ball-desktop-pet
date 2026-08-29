@@ -1,8 +1,4 @@
 (function renderQuotaLabel() {
-  const label = document.getElementById('quota-label');
-  const status = document.getElementById('status');
-  const items = document.getElementById('items');
-  const overflow = document.getElementById('overflow');
   const states = new Map([
     ['disabled', 'Codex 联动已关闭'],
     ['connecting', '正在连接 Codex…'],
@@ -19,10 +15,65 @@
   ]);
   const directionAndControl = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/gu;
 
+  function record(value) {
+    try { return value && typeof value === 'object' && !Array.isArray(value) ? value : null; }
+    catch (_) { return null; }
+  }
+
   function cleanText(value) {
     if (typeof value !== 'string') return '';
     return Array.from(value.replace(directionAndControl, ' ').replace(/\s+/gu, ' ').trim())
       .slice(0, 32).join('');
+  }
+
+  function copyItem(value) {
+    const item = record(value);
+    if (!item) return null;
+    let labelValue;
+    let windowMinutes;
+    let remaining;
+    try {
+      labelValue = item.label;
+      windowMinutes = item.windowMinutes;
+      remaining = item.remaining;
+    } catch (_) { return null; }
+    const itemLabel = cleanText(labelValue);
+    if (!itemLabel || !Number.isSafeInteger(windowMinutes) || windowMinutes <= 0 ||
+      typeof remaining !== 'number' || !Number.isFinite(remaining) || remaining < 0 || remaining > 100) return null;
+    return { label: itemLabel, windowMinutes, remaining };
+  }
+
+  function copyItems(value) {
+    try { if (!Array.isArray(value)) return []; } catch (_) { return []; }
+    let length;
+    try { length = value.length; } catch (_) { return []; }
+    const limit = Number.isSafeInteger(length) && length >= 0 ? Math.min(length, 2) : 0;
+    const items = [];
+    for (let index = 0; index < limit; index += 1) {
+      let raw;
+      try { raw = value[index]; } catch (_) { continue; }
+      const item = copyItem(raw);
+      if (item) items.push(item);
+    }
+    return items;
+  }
+
+  function safeModel(value) {
+    const source = record(value);
+    if (!source) return { state: 'disconnected', items: [], overflow: 0 };
+    let stateValue;
+    try { stateValue = source.state; } catch (_) { return { state: 'disconnected', items: [], overflow: 0 }; }
+    const state = states.has(stateValue) ? stateValue : 'disconnected';
+    if (!['ready', 'stale'].includes(state)) return { state, items: [], overflow: 0 };
+    let rawItems;
+    let overflowValue;
+    try {
+      rawItems = source.items;
+      overflowValue = source.overflow;
+    } catch (_) { return { state, items: [], overflow: 0 }; }
+    const hidden = Number.isSafeInteger(overflowValue) && overflowValue > 0
+      ? Math.min(overflowValue, 99) : 0;
+    return { state, items: copyItems(rawItems), overflow: hidden };
   }
 
   function periodText(minutes) {
@@ -39,34 +90,57 @@
     return 'normal';
   }
 
-  const unsubscribe = window.petQuotaLabel.onModel(model => {
-    const state = states.has(model && model.state) ? model.state : 'disconnected';
-    const showsItems = state === 'ready' || state === 'stale';
-    status.textContent = states.get(state);
-    label.dataset.state = state;
-    label.dataset.hasItems = 'false';
-    label.dataset.severity = 'normal';
-    const rows = [];
-    let overallSeverity = 'normal';
-    if (showsItems) {
-      for (const item of Array.isArray(model.items) ? model.items.slice(0, 2) : []) {
-        const itemLabel = cleanText(item && item.label);
-        if (!itemLabel || !Number.isSafeInteger(item && item.windowMinutes) || item.windowMinutes <= 0 ||
-          !Number.isFinite(item.remaining) || item.remaining < 0 || item.remaining > 100) continue;
+  let label;
+  let status;
+  let items;
+  let overflow;
+  let bridge;
+  try {
+    label = document.getElementById('quota-label');
+    status = document.getElementById('status');
+    items = document.getElementById('items');
+    overflow = document.getElementById('overflow');
+    bridge = window.petQuotaLabel;
+  } catch (_) { return; }
+  if (!label || !label.dataset || !status || !items || typeof items.replaceChildren !== 'function' ||
+    !overflow || !bridge || typeof bridge.onModel !== 'function' ||
+    !document || typeof document.createElement !== 'function') return;
+
+  const render = value => {
+    const model = safeModel(value);
+    try {
+      status.textContent = states.get(model.state);
+      label.dataset.state = model.state;
+      label.dataset.hasItems = 'false';
+      label.dataset.severity = 'normal';
+      const rows = [];
+      let overallSeverity = 'normal';
+      for (const item of model.items) {
         const row = document.createElement('li');
+        if (!row || !row.dataset) continue;
         const severity = severityOf(item.remaining);
         row.dataset.severity = severity;
-        row.textContent = `${itemLabel} · ${periodText(item.windowMinutes)} · 剩余 ${Math.round(item.remaining)}%${state === 'stale' ? ' · 已过期' : ''}`;
+        row.textContent = `${item.label} · ${periodText(item.windowMinutes)} · 剩余 ${Math.round(item.remaining)}%${model.state === 'stale' ? ' · 已过期' : ''}`;
         rows.push(row);
         if (severity === 'urgent' || (severity === 'low' && overallSeverity === 'normal')) overallSeverity = severity;
       }
-    }
-    items.replaceChildren(...rows);
-    label.dataset.hasItems = rows.length > 0 ? 'true' : 'false';
-    label.dataset.severity = rows.length > 0 ? overallSeverity : 'normal';
-    const hidden = showsItems && Number.isSafeInteger(model.overflow) && model.overflow > 0
-      ? Math.min(model.overflow, 99) : 0;
-    overflow.textContent = hidden ? `另有 ${hidden} 项，见菜单` : '';
-  });
-  window.addEventListener('beforeunload', unsubscribe);
+      items.replaceChildren(...rows);
+      label.dataset.hasItems = rows.length > 0 ? 'true' : 'false';
+      label.dataset.severity = rows.length > 0 ? overallSeverity : 'normal';
+      overflow.textContent = model.overflow ? `另有 ${model.overflow} 项，见菜单` : '';
+    } catch (_) {}
+  };
+
+  let unsubscribe = null;
+  try {
+    const candidate = bridge.onModel(render);
+    if (typeof candidate === 'function') unsubscribe = candidate;
+  } catch (_) { return; }
+  if (unsubscribe && typeof window.addEventListener === 'function') {
+    try {
+      window.addEventListener('beforeunload', () => {
+        try { unsubscribe(); } catch (_) {}
+      });
+    } catch (_) {}
+  }
 })();

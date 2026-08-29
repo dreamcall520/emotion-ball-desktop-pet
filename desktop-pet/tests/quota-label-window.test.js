@@ -21,7 +21,7 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-function fixture(load = () => Promise.resolve()) {
+function fixture(load = () => Promise.resolve(), options = {}) {
   const windows = [];
   const errors = [];
   const matching = [];
@@ -34,6 +34,11 @@ function fixture(load = () => Promise.resolve()) {
     getBounds() { return { ...this.bounds }; }
   };
   let obstacle = null;
+  const maybeThrow = (name, target) => {
+    if (typeof options.fail === 'function' && options.fail(name, windows.length, target)) {
+      throw new Error(`${name} failed`);
+    }
+  };
 
   class NativeWindow extends EventEmitter {
     constructor(options) {
@@ -48,20 +53,23 @@ function fixture(load = () => Promise.resolve()) {
       this.openHandler = null;
       this.loadedFile = null;
       this.webContents = new EventEmitter();
-      this.webContents.send = (...args) => this.sent.push(args);
-      this.webContents.setWindowOpenHandler = handler => { this.openHandler = handler; };
+      this.webContents.destroyed = false;
+      this.webContents.isDestroyed = () => this.webContents.destroyed;
+      this.webContents.send = (...args) => { maybeThrow('send', this); this.sent.push(args); };
+      this.webContents.setWindowOpenHandler = handler => { maybeThrow('setWindowOpenHandler', this); this.openHandler = handler; };
       windows.push(this);
     }
-    setAlwaysOnTop(...args) { this.topmostCalls.push(args); }
-    setVisibleOnAllWorkspaces() {}
-    setHiddenInMissionControl() {}
-    setBounds(bounds) { this.boundsCalls.push({ ...bounds }); this.bounds = { ...bounds }; }
-    setIgnoreMouseEvents(...args) { this.ignoreCalls.push(args); }
-    loadFile(file) { this.loadedFile = file; return load(windows.length, this); }
-    showInactive() { this.visible = true; this.showInactiveCalls = (this.showInactiveCalls || 0) + 1; }
-    hide() { this.visible = false; this.hideCalls = (this.hideCalls || 0) + 1; }
-    isDestroyed() { return this.destroyed; }
+    setAlwaysOnTop(...args) { maybeThrow('setAlwaysOnTop', this); this.topmostCalls.push(args); }
+    setVisibleOnAllWorkspaces() { maybeThrow('setVisibleOnAllWorkspaces', this); }
+    setHiddenInMissionControl() { maybeThrow('setHiddenInMissionControl', this); }
+    setBounds(bounds) { maybeThrow('setBounds', this); this.boundsCalls.push({ ...bounds }); this.bounds = { ...bounds }; }
+    setIgnoreMouseEvents(...args) { maybeThrow('setIgnoreMouseEvents', this); this.ignoreCalls.push(args); }
+    loadFile(file) { maybeThrow('loadFile', this); this.loadedFile = file; return load(windows.length, this); }
+    showInactive() { maybeThrow('showInactive', this); this.visible = true; this.showInactiveCalls = (this.showInactiveCalls || 0) + 1; }
+    hide() { maybeThrow('hide', this); this.visible = false; this.hideCalls = (this.hideCalls || 0) + 1; }
+    isDestroyed() { maybeThrow('isDestroyed', this); return this.destroyed; }
     destroy() {
+      maybeThrow('destroy', this);
       if (this.destroyed) return;
       this.destroyed = true;
       this.visible = false;
@@ -80,7 +88,10 @@ function fixture(load = () => Promise.resolve()) {
     },
     getPetWindow: () => pet,
     getObstacle: () => obstacle,
-    onError: error => errors.push(error)
+    onError: error => {
+      errors.push(error);
+      if (typeof options.onError === 'function') options.onError(error);
+    }
   });
   return {
     label, windows, errors, matching,
@@ -297,6 +308,190 @@ test('渲染进程退出后隐藏并在下次 show 重建', async t => {
   assert.equal(f.windows[1].visible, true);
 });
 
+test('send 内重入 hide 后必须立即停止，不得再穿透设置或 showInactive', async t => {
+  const loading = deferred();
+  const f = fixture(() => loading.promise);
+  t.after(() => f.label.destroy());
+  f.label.show(readyModel());
+  const win = f.windows[0];
+  win.webContents.send = () => f.label.hide();
+  loading.resolve();
+  await flush();
+  assert.equal(win.visible, false);
+  assert.equal(win.showInactiveCalls || 0, 0);
+});
+
+test('原生销毁状态检查内重入 hide 后也不得短暂 showInactive', async t => {
+  const f = fixture(() => Promise.resolve());
+  t.after(() => f.label.destroy());
+  f.label.show(readyModel());
+  await flush();
+  const win = f.windows[0];
+  const previousShows = win.showInactiveCalls;
+  let checks = 0;
+  win.isDestroyed = () => {
+    checks += 1;
+    if (checks === 6) f.label.hide();
+    return false;
+  };
+  f.label.show({ state: 'connecting', items: [], overflow: 0 });
+  assert.equal(win.visible, false);
+  assert.equal(win.showInactiveCalls, previousShows);
+});
+
+test('did-finish-load 中任一展示步骤异常都安全作废，下次 show 可重建', async t => {
+  for (const method of ['setBounds', 'send', 'setIgnoreMouseEvents', 'showInactive']) {
+    await t.test(method, async () => {
+      const loading = deferred();
+      let matchingCalls = 0;
+      const f = fixture(index => index === 1 ? loading.promise : Promise.resolve(), {
+        fail: (name, index) => {
+          if (name !== method || index !== 1) return false;
+          matchingCalls += 1;
+          return matchingCalls === (method === 'setIgnoreMouseEvents' ? 2 : 1);
+        }
+      });
+      f.label.show(readyModel());
+      const old = f.windows[0];
+      assert.doesNotThrow(() => old.webContents.emit('did-finish-load'));
+      assert.equal(f.label.getWindow(), null);
+      assert.equal(old.destroyed, true);
+      f.label.show(readyModel());
+      await flush();
+      assert.equal(f.windows[1].visible, true);
+      f.label.destroy();
+    });
+  }
+});
+
+test('webContents 已销毁时不发送或展示，坏窗口不从 getWindow 泄露', async () => {
+  const loading = deferred();
+  const f = fixture(index => index === 1 ? loading.promise : Promise.resolve());
+  f.label.show(readyModel());
+  const old = f.windows[0];
+  old.webContents.destroyed = true;
+  assert.doesNotThrow(() => old.webContents.emit('did-finish-load'));
+  assert.equal(old.sent.length, 0);
+  assert.equal(f.label.getWindow(), null);
+  f.label.show(readyModel());
+  await flush();
+  assert.equal(f.windows[1].visible, true);
+  f.label.destroy();
+});
+
+test('conceal、discard、ensure、destroy 和置顶边界报错均不向外抛出', async t => {
+  await t.test('conceal', async () => {
+    const f = fixture(() => Promise.resolve(), { fail: (name, index) => name === 'hide' && index === 1 });
+    f.label.show(readyModel());
+    await flush();
+    assert.doesNotThrow(() => f.label.hide());
+    assert.equal(f.label.getWindow(), null);
+    f.label.destroy();
+  });
+  await t.test('ensure/discard', () => {
+    const f = fixture(() => Promise.resolve(), {
+      fail: (name, index) => index === 1 && ['setVisibleOnAllWorkspaces', 'isDestroyed', 'destroy'].includes(name)
+    });
+    assert.doesNotThrow(() => f.label.show(readyModel()));
+    assert.equal(f.label.getWindow(), null);
+  });
+  await t.test('destroy/isDestroyed', async () => {
+    const f = fixture(() => Promise.resolve());
+    f.label.show(readyModel());
+    await flush();
+    const win = f.windows[0];
+    win.isDestroyed = () => { throw new Error('isDestroyed failed'); };
+    win.destroy = () => { throw new Error('destroy failed'); };
+    assert.doesNotThrow(() => f.label.destroy());
+    assert.equal(f.label.getWindow(), null);
+  });
+  await t.test('setAlwaysOnTop', async () => {
+    const f = fixture(() => Promise.resolve(), { fail: (name, index) => name === 'setAlwaysOnTop' && index === 1 });
+    assert.doesNotThrow(() => f.label.show(readyModel()));
+    assert.equal(f.label.getWindow(), null);
+    f.label.show(readyModel());
+    await flush();
+    assert.doesNotThrow(() => f.label.setAlwaysOnTop(false));
+    f.label.destroy();
+  });
+});
+
+test('onError 内重入 show 不得引发连锁报错或复活旧窗口', async () => {
+  let f;
+  let callbacks = 0;
+  f = fixture(() => Promise.resolve(), {
+    fail: name => name === 'setBounds',
+    onError: () => {
+      callbacks += 1;
+      if (callbacks === 1) f.label.show({ state: 'connecting', items: [], overflow: 0 });
+    }
+  });
+  assert.doesNotThrow(() => f.label.show(readyModel()));
+  await flush();
+  await flush();
+  assert.equal(callbacks, 1);
+  assert.equal(f.label.getWindow(), null);
+  assert.ok(f.windows.length <= 2);
+  f.label.destroy();
+});
+
+test('主进程模型每个外部字段只读一次，且数组最多检查前两项', async t => {
+  const reads = new Map();
+  const once = (target, name, value) => Object.defineProperty(target, name, {
+    enumerable: true,
+    get() {
+      const count = (reads.get(name) || 0) + 1;
+      reads.set(name, count);
+      if (count > 1) throw new Error(`${name} read twice`);
+      return value;
+    }
+  });
+  const item = {};
+  once(item, 'label', ' Codex ');
+  once(item, 'windowMinutes', 300);
+  once(item, 'remaining', 49.5);
+  const rawItems = [item, { label: 'Spark', windowMinutes: 10080, remaining: 20 },
+    { label: 'must-not-read', windowMinutes: 60, remaining: 1 }];
+  const itemsProxy = new Proxy(rawItems, {
+    get(target, property, receiver) {
+      if (property === 'slice' || property === '2') throw new Error(`unsafe array read: ${String(property)}`);
+      return Reflect.get(target, property, receiver);
+    }
+  });
+  const model = {};
+  once(model, 'state', 'ready');
+  once(model, 'items', itemsProxy);
+  once(model, 'overflow', 1);
+  const f = fixture(() => Promise.resolve());
+  t.after(() => f.label.destroy());
+  assert.doesNotThrow(() => f.label.show(model));
+  await flush();
+  assert.deepEqual(f.windows[0].sent[0][1], {
+    state: 'ready',
+    items: [
+      { label: 'Codex', windowMinutes: 300, remaining: 49.5 },
+      { label: 'Spark', windowMinutes: 10080, remaining: 20 }
+    ],
+    overflow: 1
+  });
+  for (const count of reads.values()) assert.equal(count, 1);
+});
+
+test('撤销 Proxy 或抛错 getter 不能穿透 show，必须降级为断开模型', async t => {
+  const revoked = Proxy.revocable({}, {});
+  revoked.revoke();
+  const f = fixture(() => Promise.resolve());
+  t.after(() => f.label.destroy());
+  assert.doesNotThrow(() => f.label.show(revoked.proxy));
+  await flush();
+  assert.deepEqual(f.windows[0].sent[0][1], { state: 'disconnected', items: [], overflow: 0 });
+
+  const throwing = {};
+  Object.defineProperty(throwing, 'state', { get() { throw new Error('getter failed'); } });
+  assert.doesNotThrow(() => f.label.show(throwing));
+  assert.deepEqual(f.windows[0].sent.at(-1)[1], { state: 'disconnected', items: [], overflow: 0 });
+});
+
 test('预加载层只接收固定通道，白名单纯标量且可取消订阅', () => {
   let api;
   let listener;
@@ -324,6 +519,49 @@ test('预加载层只接收固定通道，白名单纯标量且可取消订阅',
   assert.equal(removed[0][0], 'pet:quota-label');
   assert.equal(typeof api.reply, 'undefined');
   assert.equal(typeof api.open, 'undefined');
+});
+
+test('预加载每个外部字段只读一次，Proxy 和回调异常不穿透 IPC', () => {
+  let api;
+  let listener;
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../quota-label-preload.js'), 'utf8'), {
+    require: () => ({
+      contextBridge: { exposeInMainWorld(_name, value) { api = value; } },
+      ipcRenderer: { on(_name, callback) { listener = callback; }, removeListener() { throw new Error('remove failed'); } }
+    })
+  });
+  const reads = new Map();
+  const once = (target, name, value) => Object.defineProperty(target, name, {
+    get() {
+      const count = (reads.get(name) || 0) + 1;
+      reads.set(name, count);
+      if (count > 1) throw new Error(`${name} read twice`);
+      return value;
+    }
+  });
+  const item = {};
+  once(item, 'label', 'Codex');
+  once(item, 'windowMinutes', 300);
+  once(item, 'remaining', 18.2);
+  const model = {};
+  once(model, 'state', 'ready');
+  once(model, 'items', [item]);
+  once(model, 'overflow', 0);
+  let received;
+  const unsubscribe = api.onModel(value => { received = value; throw new Error('consumer failed'); });
+  assert.doesNotThrow(() => listener({}, model));
+  assert.equal(JSON.stringify(received), JSON.stringify({
+    state: 'ready', items: [{ label: 'Codex', windowMinutes: 300, remaining: 18.2 }], overflow: 0
+  }));
+  for (const count of reads.values()) assert.equal(count, 1);
+  assert.doesNotThrow(unsubscribe);
+
+  const revoked = Proxy.revocable({}, {});
+  revoked.revoke();
+  let fallback;
+  api.onModel(value => { fallback = value; });
+  assert.doesNotThrow(() => listener({}, revoked.proxy));
+  assert.equal(JSON.stringify(fallback), JSON.stringify({ state: 'disconnected', items: [], overflow: 0 }));
 });
 
 test('渲染层用固定中文状态、纯文本和合理四舍五入最多展示两项', () => {
@@ -381,6 +619,36 @@ test('渲染层用固定中文状态、纯文本和合理四舍五入最多展�
   }
 });
 
+test('渲染层在 DOM 或 bridge 缺失、订阅退订抛错和恶意模型下均安全收口', () => {
+  const source = fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8');
+  assert.doesNotThrow(() => vm.runInNewContext(source, {
+    document: { getElementById: () => null }, window: {}
+  }));
+  assert.doesNotThrow(() => vm.runInNewContext(source, {
+    document: { getElementById: () => ({ dataset: {}, replaceChildren() {} }), createElement: () => ({ dataset: {} }) },
+    window: { petQuotaLabel: { onModel() { throw new Error('subscribe failed'); } }, addEventListener() {} }
+  }));
+
+  let receive;
+  let beforeUnload;
+  const nodes = {
+    'quota-label': { dataset: {} }, status: {},
+    items: { replaceChildren() {} }, overflow: {}
+  };
+  assert.doesNotThrow(() => vm.runInNewContext(source, {
+    document: { getElementById: id => nodes[id], createElement: () => ({ dataset: {} }) },
+    window: {
+      petQuotaLabel: { onModel(callback) { receive = callback; return () => { throw new Error('unsubscribe failed'); }; } },
+      addEventListener(_name, callback) { beforeUnload = callback; }
+    }
+  }));
+  const revoked = Proxy.revocable({}, {});
+  revoked.revoke();
+  assert.doesNotThrow(() => receive(revoked.proxy));
+  assert.equal(nodes.status.textContent, 'Codex 未连接');
+  assert.doesNotThrow(beforeUnload);
+});
+
 test('静态页面无内联脚本能力，浅深背景可读、正文至少 12px 且无阴影', () => {
   const html = fs.readFileSync(path.resolve(__dirname, '../quota-label.html'), 'utf8');
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
@@ -394,4 +662,49 @@ test('静态页面无内联脚本能力，浅深背景可读、正文至少 12px
   assert.match(css, /rgba\(/);
   assert.match(css, /box-shadow:\s*none/);
   assert.doesNotMatch(css, /animation|filter:\s*drop-shadow/);
+});
+
+function composite(foreground, background) {
+  const alpha = foreground[3];
+  return foreground.slice(0, 3).map((value, index) => value * alpha + background[index] * (1 - alpha));
+}
+
+function luminance(rgb) {
+  const channels = rgb.map(value => {
+    const normalized = value / 255;
+    return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+}
+
+function contrast(first, second) {
+  const values = [luminance(first), luminance(second)].sort((a, b) => b - a);
+  return (values[0] + 0.05) / (values[1] + 0.05);
+}
+
+test('176×54 内两条额度加 overflow 三行不裁切', () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
+  const inset = Number(css.match(/#quota-label\s*\{[\s\S]*?inset:\s*(\d+)px/)[1]);
+  const paddingY = Number(css.match(/#quota-label\s*\{[\s\S]*?padding:\s*(\d+)px/)[1]);
+  const border = Number(css.match(/#quota-label\s*\{[\s\S]*?border:\s*(\d+)px/)[1]);
+  const lineHeight = Number(css.match(/#quota-label\s*\{[\s\S]*?line-height:\s*(\d+)px/)[1]);
+  const available = 54 - inset * 2 - paddingY * 2 - border * 2;
+  assert.ok(lineHeight * 3 <= available, `三行需要 ${lineHeight * 3}px，实际只有 ${available}px`);
+});
+
+test('浅色 overflow 和深色 urgent 在各自背景合成后对比度均不低于 4.5', () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
+  const lightBackgroundMatch = css.match(/background:\s*rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+  const overflowMatch = css.match(/#overflow\s*\{\s*color:\s*rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+  const darkBlock = css.slice(css.indexOf('@media (prefers-color-scheme: dark)'));
+  const darkBackgroundMatch = darkBlock.match(/background:\s*rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+  const urgentMatch = darkBlock.match(/#items li\[data-severity="urgent"\]\s*\{\s*color:\s*rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+  assert.ok(lightBackgroundMatch && overflowMatch && darkBackgroundMatch && urgentMatch);
+  const numbers = match => match.slice(1).map(Number);
+  const lightBackground = composite(numbers(lightBackgroundMatch), [255, 255, 255]);
+  const overflowColor = composite(numbers(overflowMatch), lightBackground);
+  const darkBackground = composite(numbers(darkBackgroundMatch), [28, 28, 30]);
+  const urgentColor = numbers(urgentMatch);
+  assert.ok(contrast(overflowColor, lightBackground) >= 4.5);
+  assert.ok(contrast(urgentColor, darkBackground) >= 4.5);
 });
