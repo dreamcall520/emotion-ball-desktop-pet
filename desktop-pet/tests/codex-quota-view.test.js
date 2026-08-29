@@ -44,12 +44,14 @@ test('只接受结构完整、比例合法且重置时间有效的窗口', () =>
     { ...quotaWindow('control', 300, 50), label: 'Codex\u0000' },
     { ...quotaWindow('long', 300, 50), id: 'x'.repeat(257) },
     { ...quotaWindow('minutes-zero', 0, 50) },
+    { ...quotaWindow('minutes-fraction', 1.5, 50) },
     { ...quotaWindow('minutes-string', '300', 50) },
     { ...quotaWindow('negative', 300, -0.01) },
     { ...quotaWindow('over', 300, 100.01) },
     { ...quotaWindow('nan', 300, Number.NaN) },
     { ...quotaWindow('expired', 300, 50), resetsAt: NOW },
     { ...quotaWindow('infinite', 300, 50), resetsAt: Infinity },
+    { ...quotaWindow('fractional-time', 300, 50), resetsAt: NOW + 3600000.5 },
     { ...quotaWindow('invalid-date', 300, 50), resetsAt: MAX_TIME + 1 }
   ];
 
@@ -158,6 +160,23 @@ test('stale 也尊重手动周期，不把其他周期旧数据当成所选周�
   assert.equal(model.overflow, 0);
 });
 
+test('stale 有未重置旧值时保留，所选周期全部已重置时优先等待更新', () => {
+  const validWeekly = quotaWindow('week-valid', 10080, 35);
+  const expiredWeekly = quotaWindow('week-expired', 10080, 10, NOW);
+  const expiredFiveHour = quotaWindow('five-expired', 300, 0, NOW - 1);
+
+  assert.deepEqual(buildQuotaLabelModel(snapshot([expiredWeekly, validWeekly], { stale: true }),
+    { period: 'weekly' }, NOW), {
+    state: 'stale', items: [validWeekly], overflow: 0
+  });
+  assert.deepEqual(buildQuotaLabelModel(snapshot([expiredFiveHour], { stale: true }),
+    { period: 'auto' }, NOW), { state: 'reset-wait', items: [], overflow: 0 });
+  assert.deepEqual(buildQuotaLabelModel(snapshot([expiredFiveHour], { stale: true }),
+    { period: 'fiveHour' }, NOW), { state: 'reset-wait', items: [], overflow: 0 });
+  assert.deepEqual(buildQuotaLabelModel(snapshot([expiredFiveHour], { stale: true }),
+    { period: 'weekly' }, NOW), { state: 'stale', items: [], overflow: 0 });
+});
+
 test('非连接状态原样传递且绝不携带额度项', () => {
   for (const state of ['disabled', 'connecting', 'missing', 'unauthenticated', 'unsupported', 'disconnected']) {
     const model = buildQuotaLabelModel(snapshot([quotaWindow('hidden', 300, 0)], { state, stale: true }),
@@ -167,4 +186,11 @@ test('非连接状态原样传递且绝不携带额度项', () => {
   assert.deepEqual(buildQuotaLabelModel({ enabled: false, quota: { windows: [] } }, {}, NOW), {
     state: 'disabled', items: [], overflow: 0
   });
+});
+
+test('未知、HTML 或非字符串连接状态统一安全降级为 disconnected', () => {
+  for (const state of ['ready', '<b>connected</b>', ' connected ', '', 42, {}, null]) {
+    assert.deepEqual(buildQuotaLabelModel(snapshot([quotaWindow('hidden', 300, 10)], { state }),
+      { period: 'auto' }, NOW), { state: 'disconnected', items: [], overflow: 0 });
+  }
 });

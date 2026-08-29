@@ -1,5 +1,8 @@
 const PERIOD_MINUTES = Object.freeze({ fiveHour: 300, weekly: 10080 });
 const PERIODS = new Set(['auto', ...Object.keys(PERIOD_MINUTES)]);
+const CONNECTION_STATES = new Set([
+  'disabled', 'connecting', 'connected', 'missing', 'unauthenticated', 'unsupported', 'disconnected'
+]);
 const MAX_WINDOWS = 64;
 const MAX_TIME = 8640000000000000;
 const MAX_TEXT_LENGTH = 256;
@@ -10,7 +13,7 @@ function normalizePeriod(period) {
 }
 
 function validTime(value) {
-  return Number.isFinite(value) && value >= 0 && value <= MAX_TIME;
+  return Number.isSafeInteger(value) && value >= 0 && value <= MAX_TIME;
 }
 
 function reasonableText(value) {
@@ -21,7 +24,7 @@ function reasonableText(value) {
 function validScalars(item) {
   return Boolean(item && typeof item === 'object' && !Array.isArray(item)
     && reasonableText(item.id) && reasonableText(item.label)
-    && Number.isFinite(item.windowMinutes) && item.windowMinutes > 0
+    && Number.isSafeInteger(item.windowMinutes) && item.windowMinutes > 0
     && Number.isFinite(item.remaining) && item.remaining >= 0 && item.remaining <= 100
     && validTime(item.resetsAt));
 }
@@ -68,22 +71,23 @@ function buildQuotaLabelModel(snapshot, options = {}, now = Date.now()) {
   const source = snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot) ? snapshot : {};
   const quota = source.quota && typeof source.quota === 'object' && !Array.isArray(source.quota)
     ? source.quota : {};
-  const quotaState = typeof quota.state === 'string' && quota.state.trim() ? quota.state : null;
-  const state = source.enabled === false ? 'disabled' : quotaState || 'disconnected';
+  const quotaState = CONNECTION_STATES.has(quota.state) ? quota.state : 'disconnected';
+  const state = source.enabled === false ? 'disabled' : quotaState;
   if (state !== 'connected') return emptyModel(state);
 
   const period = normalizePeriod(options && typeof options === 'object' && !Array.isArray(options)
     ? options.period : 'auto');
   const selected = sortedWindows(selectQuotaWindows(quota.windows, period, now));
+  const expired = validTime(now) && limitedWindows(quota.windows)
+    .some(item => validScalars(item) && item.resetsAt <= now && matchesPeriod(item, period));
   if (quota.stale === true) {
+    if (!selected.length && expired) return emptyModel('reset-wait');
     return { state: 'stale', items: selected.slice(0, 2), overflow: Math.max(0, selected.length - 2) };
   }
   if (selected.length) {
     return { state: 'ready', items: selected.slice(0, 2), overflow: Math.max(0, selected.length - 2) };
   }
 
-  const expired = validTime(now) && limitedWindows(quota.windows)
-    .some(item => validScalars(item) && item.resetsAt <= now && matchesPeriod(item, period));
   if (expired) return emptyModel('reset-wait');
   return emptyModel(period === 'auto' ? 'empty' : 'period-missing');
 }
