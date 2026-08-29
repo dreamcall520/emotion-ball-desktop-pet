@@ -4,6 +4,9 @@ const MAX_IDENTITIES = 64;
 const MAX_INPUT_ITEMS = 1024;
 const MAX_TEXT_LENGTH = 256;
 const MAX_KEY_LENGTH = 1024;
+const BLOOM_BITS = 65536;
+const BLOOM_MASK = BLOOM_BITS - 1;
+const BLOOM_HASHES = 4;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/u;
 
 function reasonableText(value, maxLength = MAX_TEXT_LENGTH) {
@@ -104,16 +107,74 @@ function safeOptions(options) {
   }
 }
 
+function bloomSeeds(value) {
+  let first = 0x811c9dc5;
+  let second = 0x9e3779b9;
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    first = Math.imul(first ^ code, 0x01000193) >>> 0;
+    second = Math.imul(second ^ code, 0x85ebca6b) >>> 0;
+    second = (second ^ (second >>> 13)) >>> 0;
+  }
+  return [first, (second | 1) >>> 0];
+}
+
+function createBloomSummary() {
+  const words = new Uint32Array(BLOOM_BITS >>> 5);
+
+  function add(value) {
+    const [first, second] = bloomSeeds(value);
+    for (let index = 0; index < BLOOM_HASHES; index += 1) {
+      const mixed = (first + Math.imul(index, second)
+        + Math.imul(index * index, 0x9e3779b1)) >>> 0;
+      const bit = mixed & BLOOM_MASK;
+      words[bit >>> 5] |= 1 << (bit & 31);
+    }
+  }
+
+  function has(value) {
+    const [first, second] = bloomSeeds(value);
+    for (let index = 0; index < BLOOM_HASHES; index += 1) {
+      const mixed = (first + Math.imul(index, second)
+        + Math.imul(index * index, 0x9e3779b1)) >>> 0;
+      const bit = mixed & BLOOM_MASK;
+      if ((words[bit >>> 5] & (1 << (bit & 31))) === 0) return false;
+    }
+    return true;
+  }
+
+  function clear() {
+    words.fill(0);
+  }
+
+  return { add, has, clear };
+}
+
 function createQuotaAlertTracker() {
   const state = new Map();
-  // 超过 64 个身份后只留无身份的最高档摘要：宁可少提醒，不因边界换入重复轰炸。
-  let saturated = false;
-  let forgottenPeak = 0;
+  // 匿名摘要为 11 张固定 65,536 位位图、4 哈希，约 88 KiB；不保存 key 列表。
+  // 多哈希和足够位数降低现实碰撞；碰撞合并历史后倾向保守少提醒。
+  const seenSummary = createBloomSummary();
+  const observedSummaries = LEVELS.map(() => createBloomSummary());
+
+  function summarizedPeak(key) {
+    for (let index = LEVELS.length - 1; index >= 0; index -= 1) {
+      if (observedSummaries[index].has(key)) return LEVELS[index];
+    }
+    return 0;
+  }
+
+  function remember(key, level) {
+    seenSummary.add(key);
+    for (let index = 0; index < LEVELS.length && LEVELS[index] <= level; index += 1) {
+      observedSummaries[index].add(key);
+    }
+  }
 
   function reset() {
     state.clear();
-    saturated = false;
-    forgottenPeak = 0;
+    seenSummary.clear();
+    for (const summary of observedSummaries) summary.clear();
   }
 
   function update(windows, options = {}) {
@@ -130,6 +191,7 @@ function createQuotaAlertTracker() {
       const exceedsPeak = currentLevel > entry.peak;
       const candidate = exceedsPeak && (!isBaseline || currentLevel >= 80) ? currentLevel : 0;
       entry.peak = Math.max(entry.peak, currentLevel);
+      remember(key, currentLevel);
 
       if (!candidate || entry.emitted.has(candidate) || (alwaysVisible && candidate < 80)) return;
       entry.emitted.add(candidate);
@@ -143,9 +205,8 @@ function createQuotaAlertTracker() {
 
     for (const [key, item] of reliable) {
       if (state.has(key)) continue;
-      let conservative = false;
+      const wasSeen = seenSummary.has(key);
       if (state.size >= MAX_IDENTITIES) {
-        conservative = saturated;
         let evictionKey;
         for (const existingKey of state.keys()) {
           if (!batchKeys.has(existingKey)) {
@@ -154,14 +215,11 @@ function createQuotaAlertTracker() {
           }
         }
         const selectedKey = evictionKey === undefined ? state.keys().next().value : evictionKey;
-        const selectedEntry = state.get(selectedKey);
         state.delete(selectedKey);
-        forgottenPeak = Math.max(forgottenPeak, selectedEntry.peak);
-        saturated = true;
       }
-      const entry = { peak: conservative ? forgottenPeak : 0, emitted: new Set() };
+      const entry = { peak: wasSeen ? summarizedPeak(key) : 0, emitted: new Set() };
       state.set(key, entry);
-      observe(key, item, entry, !conservative);
+      observe(key, item, entry, !wasSeen);
     }
 
     const alerts = [];

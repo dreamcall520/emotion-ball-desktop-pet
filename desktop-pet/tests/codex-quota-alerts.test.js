@@ -300,13 +300,14 @@ test('129 个身份在批首、批尾及多轮交替时不级联或重复轰炸'
     }).length, 64);
 
     const second = Array.from({ length: 64 }, (_, index) => quotaWindow(`id-${index + 64}`, 300, 20));
-    assert.deepEqual(tracker.update(second, { alwaysVisible: false }).map(item => item.id), ['id-64']);
+    assert.deepEqual(tracker.update(second, { alwaysVisible: false }).map(item => item.id),
+      second.map(item => item.id));
     assert.deepEqual(tracker.update(second, { alwaysVisible: false }), []);
 
     const retained = second.slice(0, 63);
     const boundary = quotaWindow('id-128', 300, 20);
     const third = position === 'first' ? [boundary, ...retained] : [...retained, boundary];
-    assert.deepEqual(tracker.update(third, { alwaysVisible: false }), []);
+    assert.deepEqual(tracker.update(third, { alwaysVisible: false }).map(item => item.id), ['id-128']);
 
     for (let round = 0; round < 3; round += 1) {
       assert.deepEqual(tracker.update(first.map(item => ({ ...item, remaining: 20 })), {
@@ -316,6 +317,48 @@ test('129 个身份在批首、批尾及多轮交替时不级联或重复轰炸'
       assert.deepEqual(tracker.update(third, { alwaysVisible: false }), []);
     }
   }
+});
+
+test('状态饱和后第 66 个真正新周期仍先建基线，20% 不误报而 80/90/100 逐档提醒', () => {
+  const tracker = createQuotaAlertTracker();
+  const first = Array.from({ length: 64 }, (_, index) => quotaWindow(`id-${index}`, 300, 100));
+  tracker.update(first, { baseline: true, alwaysVisible: false });
+  tracker.update([quotaWindow('id-64', 300, 100)], { alwaysVisible: false });
+
+  const sixtySixth = quotaWindow('id-65', 300, 80);
+  assert.deepEqual(tracker.update([sixtySixth], { alwaysVisible: false }), []);
+  assert.equal(tracker.update([{ ...sixtySixth, remaining: 20 }], { alwaysVisible: false })[0].level, 80);
+  assert.equal(tracker.update([{ ...sixtySixth, remaining: 10 }], { alwaysVisible: false })[0].level, 90);
+  assert.equal(tracker.update([{ ...sixtySixth, remaining: 0 }], { alwaysVisible: false })[0].level, 100);
+
+  tracker.reset();
+  assert.equal(tracker.update([{ ...sixtySixth, remaining: 20 }], {
+    baseline: true,
+    alwaysVisible: false
+  })[0].level, 80);
+});
+
+test('状态饱和后真正新 key 首次处于 80/90/100 时各只报当前最严重档', () => {
+  const tracker = createQuotaAlertTracker();
+  const first = Array.from({ length: 64 }, (_, index) => quotaWindow(`id-${index}`, 300, 100));
+  tracker.update(first, { baseline: true, alwaysVisible: false });
+  tracker.update([quotaWindow('overflow', 300, 100)], { alwaysVisible: false });
+
+  const alerts = tracker.update([
+    quotaWindow('new-80', 300, 20),
+    quotaWindow('new-90', 300, 10),
+    quotaWindow('new-100', 300, 0)
+  ], { alwaysVisible: false });
+  assert.deepEqual(alerts.map(item => [item.id, item.level]), [
+    ['new-80', 80],
+    ['new-90', 90],
+    ['new-100', 100]
+  ]);
+  assert.deepEqual(tracker.update([
+    quotaWindow('new-80', 300, 20),
+    quotaWindow('new-90', 300, 10),
+    quotaWindow('new-100', 300, 0)
+  ], { alwaysVisible: false }), []);
 });
 
 test('多类别提醒合并返回最高档、最低实际剩余和稳定的安全引用', () => {
