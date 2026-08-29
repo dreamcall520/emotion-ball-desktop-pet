@@ -12,8 +12,12 @@ function normalizePeriod(period) {
   return PERIODS.has(period) ? period : 'auto';
 }
 
-function validTime(value) {
+function validNow(value) {
   return Number.isSafeInteger(value) && value >= 0 && value <= MAX_TIME;
+}
+
+function validResetTime(value) {
+  return Number.isSafeInteger(value) && value > 0 && value <= MAX_TIME;
 }
 
 function reasonableText(value) {
@@ -26,7 +30,7 @@ function validScalars(item) {
     && reasonableText(item.id) && reasonableText(item.label)
     && Number.isSafeInteger(item.windowMinutes) && item.windowMinutes > 0
     && Number.isFinite(item.remaining) && item.remaining >= 0 && item.remaining <= 100
-    && validTime(item.resetsAt));
+    && validResetTime(item.resetsAt));
 }
 
 function copyWindow(item) {
@@ -48,7 +52,7 @@ function matchesPeriod(item, period) {
 }
 
 function selectQuotaWindows(windows, period = 'auto', now = Date.now()) {
-  if (!validTime(now)) return [];
+  if (!validNow(now)) return [];
   const normalizedPeriod = normalizePeriod(period);
   return limitedWindows(windows)
     .filter(item => validScalars(item) && item.resetsAt > now && matchesPeriod(item, normalizedPeriod))
@@ -78,7 +82,7 @@ function buildQuotaLabelModel(snapshot, options = {}, now = Date.now()) {
   const period = normalizePeriod(options && typeof options === 'object' && !Array.isArray(options)
     ? options.period : 'auto');
   const selected = sortedWindows(selectQuotaWindows(quota.windows, period, now));
-  const expired = validTime(now) && limitedWindows(quota.windows)
+  const expired = validNow(now) && limitedWindows(quota.windows)
     .some(item => validScalars(item) && item.resetsAt <= now && matchesPeriod(item, period));
   if (quota.stale === true) {
     if (!selected.length && expired) return emptyModel('reset-wait');

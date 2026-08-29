@@ -133,6 +133,18 @@ test('所选周期的重置时间已到时等待更新，不猜测新比例', ()
   ]), { period: 'auto' }, NOW).state, 'empty');
 });
 
+test('now 允许为 0，但 resetsAt 0 和负零必须丢弃且不触发等待更新', () => {
+  const futureFromEpoch = quotaWindow('future', 300, 50, 1);
+  assert.deepEqual(selectQuotaWindows([futureFromEpoch], 'auto', 0), [futureFromEpoch]);
+  assert.equal(buildQuotaLabelModel(snapshot([futureFromEpoch]), { period: 'auto' }, 0).state, 'ready');
+
+  for (const resetsAt of [0, -0]) {
+    const invalid = quotaWindow('invalid-reset', 300, 20, resetsAt);
+    assert.equal(buildQuotaLabelModel(snapshot([invalid]), { period: 'auto' }, NOW).state, 'empty');
+    assert.equal(buildQuotaLabelModel(snapshot([invalid]), { period: 'fiveHour' }, NOW).state, 'period-missing');
+  }
+});
+
 test('stale 明确标记旧数据，仅保留仍结构有效且未到重置时间的项', () => {
   const model = buildQuotaLabelModel(snapshot([
     quotaWindow('c', 1440, 70),
