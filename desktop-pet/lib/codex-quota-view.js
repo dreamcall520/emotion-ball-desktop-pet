@@ -74,10 +74,11 @@ function emptyModel(state) {
 function buildQuotaLabelModel(snapshot, options = {}, now = Date.now()) {
   const validSource = Boolean(snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot));
   const source = validSource ? snapshot : {};
+  if (validSource && source.enabled === false) return emptyModel('disabled');
   const validQuota = Boolean(source.quota && typeof source.quota === 'object' && !Array.isArray(source.quota));
   const quota = validQuota ? source.quota : {};
   const knownState = validQuota && CONNECTION_STATES.has(quota.state);
-  if (!knownState) return emptyModel(validSource && source.enabled === false ? 'disabled' : 'disconnected');
+  if (!knownState) return emptyModel('disconnected');
   if (quota.state !== 'connected') return emptyModel(quota.state);
   if (source.enabled !== true) return emptyModel('disabled');
   if (!Array.isArray(quota.windows) || typeof quota.stale !== 'boolean' || !validNow(now)) {

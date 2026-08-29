@@ -216,6 +216,16 @@ test('只有 enabled 明确为 true 才允许解释已连接额度', () => {
   }
 });
 
+test('enabled false 优先于所有已知 quota 状态，统一返回 disabled', () => {
+  const hidden = quotaWindow('must-stay-hidden', 300, 25);
+  for (const state of ['disabled', 'connecting', 'connected', 'missing', 'unauthenticated', 'unsupported', 'disconnected']) {
+    assert.deepEqual(buildQuotaLabelModel({
+      enabled: false,
+      quota: { state, stale: false, windows: [hidden] }
+    }, { period: 'auto' }, NOW), { state: 'disabled', items: [], overflow: 0 });
+  }
+});
+
 test('已连接额度的 windows、stale 和 now 必须结构完整', () => {
   const visible = quotaWindow('must-stay-hidden', 300, 25);
   const cases = [];
