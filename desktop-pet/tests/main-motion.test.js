@@ -22,6 +22,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   const dialogs = [];
   const external = [];
   const popups = [];
+  const trayMenus = [];
   const app = Object.assign(new EventEmitter(), { setName() {}, getPath: () => '/fixture',
     requestSingleInstanceLock: () => true, whenReady: () => Promise.resolve(), setActivationPolicy() {},
     quit() {}, exit(code) { throw new Error(`unexpected exit ${code}`); } });
@@ -47,13 +48,26 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     loadFile() { return Promise.resolve(); }
     showInactive() { this.visible = true; } hide() { this.visible = false; this.emit('hide'); }
   }
-  class Tray extends EventEmitter { setToolTip() {} setContextMenu() {} }
-  const bubbleWindow = { visible: false, bounds: { x: -610, y: 0, width: 224, height: 118 },
-    isDestroyed: () => false, isVisible() { return this.visible; }, getBounds() { return { ...this.bounds }; }, webContents: null };
+  class Tray extends EventEmitter { setToolTip() {} setContextMenu(value) { trayMenus.push(value); } }
+  function createNativeBubbleWindow() {
+    return Object.assign(new EventEmitter(), {
+      visible: false, destroyed: false, bounds: { x: -610, y: 0, width: 224, height: 118 },
+      isDestroyed() { return this.destroyed; }, isVisible() { return this.visible; },
+      getBounds() { return { ...this.bounds }; }, webContents: null
+    });
+  }
+  let bubbleWindow = createNativeBubbleWindow();
   const bubble = { shows: [], hides: 0, moves: 0,
     show(payload) { this.shows.push(payload); bubbleWindow.visible = true; },
     hide() { this.hides++; bubbleWindow.visible = false; },
-    reposition() { this.moves++; }, destroy() { bubbleWindow.visible = false; }, setAlwaysOnTop() {}, getWindow: () => bubbleWindow };
+    reposition() { this.moves++; }, destroy() { bubbleWindow.visible = false; }, setAlwaysOnTop() {}, getWindow: () => bubbleWindow,
+    replaceWindow() {
+      const previous = bubbleWindow;
+      previous.destroyed = true;
+      bubbleWindow = createNativeBubbleWindow();
+      bubbleWindow.webContents = this;
+      return { previous, current: bubbleWindow };
+    } };
   bubbleWindow.webContents = bubble;
   const quotaLabel = { shows: [], hides: 0, moves: 0, destroys: 0, topmost: [], visible: false,
     show(model) { this.shows.push(model); this.visible = true; }, hide() { this.hides++; this.visible = false; },
@@ -99,7 +113,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   const pet = windows[0];
   pet.emit('ready-to-show');
   pet.webContents.emit('did-finish-load');
-  return { pet, bubble, quotaLabel, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups,
+  return { pet, bubble, quotaLabel, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus,
     call: expression => vm.runInContext(expression, context),
     send(channel, packet, sender = pet.webContents) {
       // 与实际预加载一致，默认携带当前页面代次；显式传旧值可验迟到报文。
@@ -262,8 +276,33 @@ test('Codex 额度偏好只在原子保存成功后同步，失败完整回滚',
   assert.equal(f.call("menuTemplate().find(item => item.id === 'codex-quota-period').submenu.find(item => item.checked).id"), 'codex-quota-auto');
 });
 
-test('常驻额度标签与互动气泡独立，只在联动开启且球球可见时展示', async () => {
-  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true, bubblesEnabled: false });
+test('额度周期单选只在保存成功后切换，失败同时回滚点击项和新菜单', async () => {
+  const failed = await fixture({ codexEnabled: true, saveError: new Error('PERIOD_WRITE_FAILURE') });
+  const failedMenu = failed.call('menuTemplate()');
+  const failedWeekly = failedMenu.find(item => item.id === 'codex-quota-period').submenu
+    .find(item => item.id === 'codex-quota-weekly');
+  const failedRefreshes = failed.trayMenus.length;
+  failedWeekly.checked = true;
+  failedWeekly.click(failedWeekly);
+  assert.equal(failedWeekly.checked, false, '当次点击项要立即恢复真实旧值');
+  assert.ok(failed.trayMenus.length > failedRefreshes, '保存失败也要刷新整个托盘菜单');
+  const failedFreshPeriod = failed.trayMenus.at(-1).find(item => item.id === 'codex-quota-period');
+  assert.equal(failedFreshPeriod.submenu.find(item => item.checked).id, 'codex-quota-auto');
+
+  const success = await fixture({ codexEnabled: true });
+  const successMenu = success.call('menuTemplate()');
+  const successWeekly = successMenu.find(item => item.id === 'codex-quota-period').submenu
+    .find(item => item.id === 'codex-quota-weekly');
+  successWeekly.checked = true;
+  successWeekly.click(successWeekly);
+  assert.equal(success.saved.at(-1).codexQuotaPeriod, 'weekly');
+  const successFreshPeriod = success.trayMenus.at(-1).find(item => item.id === 'codex-quota-period');
+  assert.equal(successFreshPeriod.submenu.find(item => item.checked).id, 'codex-quota-weekly');
+});
+
+test('关闭 Codex 立即销毁额度标签，重开可自动重建且重复关闭不重复销毁', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true, bubblesEnabled: false,
+    consent: async () => ({ response: 0 }) });
   assert.equal(f.quotaLabel.visible, true);
   assert.ok(f.quotaLabel.shows.length > 0);
   assert.equal(f.bubble.shows.length, 0);
@@ -271,8 +310,17 @@ test('常驻额度标签与互动气泡独立，只在联动开启且球球可�
   assert.equal(f.quotaLabel.visible, false);
   assert.equal(f.call("setCodexPreference('codexQuotaAlwaysVisible', true)"), true);
   assert.equal(f.quotaLabel.visible, true);
+  const shows = f.quotaLabel.shows.length;
   await f.call('setCodexEnabled(false)');
   assert.equal(f.quotaLabel.visible, false);
+  assert.equal(f.quotaLabel.destroys, 1);
+  await f.call('setCodexEnabled(false)');
+  assert.equal(f.quotaLabel.destroys, 1, '重复关闭不应反复销毁已释放的标签');
+  await f.call('setCodexEnabled(true)');
+  assert.equal(f.quotaLabel.visible, true);
+  assert.ok(f.quotaLabel.shows.length > shows, '重开后 show 应自动重建标签窗口');
+  f.app.emit('before-quit');
+  assert.equal(f.quotaLabel.destroys, 2, '退出只销毁重建后的当前标签一次');
 });
 
 test('额度标签跟随锁屏、休眠、隐藏、窗口和显示器生命周期', async () => {
@@ -310,6 +358,48 @@ test('额度标签只避让实际可见气泡，气泡显隐后立即重排', as
   f.call('hideBubble()');
   assert.equal(f.call('quotaObstacleBounds()'), null);
   assert.ok(f.quotaLabel.moves > moves);
+});
+
+test('气泡延迟显示和内部自动隐藏时，额度标签都跟随原生可见性事件重排', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  const win = f.bubble.getWindow();
+  f.bubble.show = function showLater(payload) {
+    this.shows.push(payload);
+    win.visible = false;
+  };
+  f.call("showBubble({ id: 'delayed', text: '稍后显示', actions: [], durationMs: 1000 })");
+  await flush();
+  const beforeShow = f.quotaLabel.moves;
+  win.visible = true;
+  win.emit('show');
+  assert.equal(f.quotaLabel.moves, beforeShow + 1, '真正 show 时再重排');
+  const beforeHide = f.quotaLabel.moves;
+  win.visible = false;
+  win.emit('hide');
+  assert.equal(f.quotaLabel.moves, beforeHide + 1, '气泡内部定时 hide 时也重排');
+});
+
+test('气泡可见性监听每个窗口只绑定一次，重建后旧窗口事件不影响新窗口', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  const first = f.bubble.getWindow();
+  f.call("showBubble({ id: 'one', text: '第一次', actions: [], durationMs: 1000 })");
+  f.call("showBubble({ id: 'two', text: '第二次', actions: [], durationMs: 1000 })");
+  assert.equal(first.listenerCount('show'), 1);
+  assert.equal(first.listenerCount('hide'), 1);
+  assert.equal(first.listenerCount('closed'), 1);
+
+  const { current } = f.bubble.replaceWindow();
+  f.call("showBubble({ id: 'three', text: '新窗口', actions: [], durationMs: 1000 })");
+  assert.equal(first.listenerCount('show'), 0, '旧窗口监听需要主动解除');
+  assert.equal(current.listenerCount('show'), 1);
+  const moves = f.quotaLabel.moves;
+  first.emit('hide');
+  assert.equal(f.quotaLabel.moves, moves, '旧窗口迟到事件不得扰动新窗口布局');
+  current.visible = false;
+  current.emit('hide');
+  assert.equal(f.quotaLabel.moves, moves + 1);
+  current.emit('closed');
+  assert.equal(current.listenerCount('show'), 0, '窗口关闭后不留监听');
 });
 
 test('重复开启只弹一个确认，关闭及退出后的迟到确认不会连接', async () => {
@@ -361,6 +451,7 @@ test('关闭时写设置失败也立即清理连接与定时器，并在关闭�
   assert.equal(f.call('codexCompanion.getSnapshot().enabled'), false);
   assert.equal(f.connections[0].closed, true);
   assert.equal(f.timers.size, 0);
+  assert.equal(f.quotaLabel.destroys, 1, '设置落盘失败也必须彻底释放额度标签');
   const menu = f.call('menuTemplate()');
   assert.equal(menu.find(item => item.id === 'codex-enabled').checked, false);
   assert.equal(menu.some(item => item.id === 'codex-status'), false);

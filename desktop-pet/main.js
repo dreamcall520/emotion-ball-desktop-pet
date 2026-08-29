@@ -45,6 +45,7 @@ let isQuitting = false;
 let activityMonitor = null;
 let dialogue = null;
 let bubble = null;
+let bubbleVisibilityBinding = null;
 let quotaLabel = null;
 let screenLocked = false;
 let codexCompanion = null;
@@ -150,9 +151,70 @@ function repositionQuotaLabel() {
   try { quotaLabel?.reposition(); } catch (error) { reportQuotaError('额度标签重排', error); }
 }
 
+function detachBubbleVisibilityEvents(expected = null) {
+  const binding = bubbleVisibilityBinding;
+  if (!binding || (expected && binding !== expected)) return;
+  bubbleVisibilityBinding = null;
+  try {
+    if (typeof binding.win.removeListener === 'function') {
+      binding.win.removeListener('show', binding.onVisibility);
+      binding.win.removeListener('hide', binding.onVisibility);
+      binding.win.removeListener('closed', binding.onClosed);
+    }
+  } catch (error) {
+    reportQuotaError('气泡可见性解绑', error);
+  }
+}
+
+function bindBubbleVisibilityEvents() {
+  let win;
+  try {
+    win = bubble?.getWindow();
+    if (!win || typeof win.on !== 'function' || (typeof win.isDestroyed === 'function' && win.isDestroyed())) return;
+  } catch (error) {
+    reportQuotaError('气泡可见性绑定', error);
+    return;
+  }
+  if (bubbleVisibilityBinding?.win === win) return;
+  detachBubbleVisibilityEvents();
+  const binding = { win, onVisibility: null, onClosed: null };
+  binding.onVisibility = () => {
+    if (bubbleVisibilityBinding !== binding) return;
+    try {
+      if (bubble?.getWindow() !== win) return;
+    } catch (_) {
+      return;
+    }
+    repositionQuotaLabel();
+  };
+  binding.onClosed = () => {
+    if (bubbleVisibilityBinding !== binding) return;
+    detachBubbleVisibilityEvents(binding);
+    try {
+      const current = bubble?.getWindow();
+      if (current && current !== win) return;
+    } catch (_) {
+      return;
+    }
+    repositionQuotaLabel();
+  };
+  bubbleVisibilityBinding = binding;
+  try {
+    win.on('show', binding.onVisibility);
+    win.on('hide', binding.onVisibility);
+    win.on('closed', binding.onClosed);
+  } catch (error) {
+    detachBubbleVisibilityEvents(binding);
+    reportQuotaError('气泡可见性绑定', error);
+  }
+}
+
 function showBubble(payload) {
   if (!payload) return;
-  try { bubble?.show(payload); } finally {
+  try {
+    bubble?.show(payload);
+    bindBubbleVisibilityEvents();
+  } finally {
     repositionQuotaLabel();
     Promise.resolve().then(repositionQuotaLabel);
   }
@@ -278,6 +340,7 @@ function setCodexPreference(name, value) {
   try { persistSettings(); }
   catch (_) {
     settings[name] = previous;
+    refreshTrayMenu();
     return false;
   }
   codexCompanion.setPreferences({
@@ -300,6 +363,9 @@ async function setCodexEnabled(enabled) {
     codexConsentToken++;
     const changed = settings.codexEnabled === true;
     settings.codexEnabled = false;
+    if (changed) {
+      try { quotaLabel?.destroy(); } catch (error) { reportQuotaError('额度标签销毁', error); }
+    }
     // 停止读取不依赖磁盘写入成功；保存失败也必须先释放连接和计时器。
     await codexCompanion.setEnabled(false);
     syncQuotaLabel(codexCompanion.getSnapshot());
@@ -629,7 +695,10 @@ function menuTemplate() {
       ].map(([value, id, label]) => ({
         id, label, type: 'radio', enabled: settings.codexEnabled === true,
         checked: settings.codexQuotaPeriod === value,
-        click: () => setCodexPreference('codexQuotaPeriod', value)
+        click: item => {
+          item.checked = settings.codexQuotaPeriod === value;
+          setCodexPreference('codexQuotaPeriod', value);
+        }
       }))
     },
     ...(codexPreferenceWarning ? [{ id: 'codex-preference-warning', label: codexPreferenceWarning, enabled: false }] : []),
