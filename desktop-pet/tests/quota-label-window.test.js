@@ -35,6 +35,7 @@ function fixture(load = () => Promise.resolve(), options = {}) {
   };
   let obstacle = null;
   const maybeThrow = (name, target) => {
+    if (typeof options.onCall === 'function') options.onCall(name, windows.length, target);
     if (typeof options.fail === 'function' && options.fail(name, windows.length, target)) {
       throw new Error(`${name} failed`);
     }
@@ -435,6 +436,132 @@ test('onError 内重入 show 不得引发连锁报错或复活旧窗口', async 
   f.label.destroy();
 });
 
+test('safeModel getter 内重入 show 时外层请求过期，不得覆盖最新模型', async t => {
+  const f = fixture(() => Promise.resolve());
+  t.after(() => f.label.destroy());
+  let nested = false;
+  const oldModel = {
+    get state() {
+      if (!nested) {
+        nested = true;
+        f.label.show({ state: 'ready', items: [{ label: 'Newest', windowMinutes: 300, remaining: 88 }], overflow: 0 });
+      }
+      return 'ready';
+    },
+    items: [{ label: 'Old', windowMinutes: 300, remaining: 1 }],
+    overflow: 0
+  };
+  f.label.show(oldModel);
+  await flush();
+  assert.equal(f.windows.length, 1);
+  assert.equal(f.windows[0].visible, true);
+  assert.equal(f.windows[0].sent.length, 1);
+  assert.equal(f.windows[0].sent[0][1].items[0].label, 'Newest');
+});
+
+test('setAlwaysOnTop 初始化内同步 show(Newest) 复用当前窗口并完成加载', async t => {
+  let f;
+  let reentered = false;
+  f = fixture(() => Promise.resolve(), {
+    onCall: name => {
+      if (name === 'setAlwaysOnTop' && !reentered) {
+        reentered = true;
+        f.label.show({ state: 'ready', items: [{ label: 'Newest', windowMinutes: 300, remaining: 77 }], overflow: 0 });
+      }
+    }
+  });
+  t.after(() => f.label.destroy());
+  f.label.show({ state: 'connecting', items: [], overflow: 0 });
+  await flush();
+  assert.equal(f.windows.length, 1);
+  assert.equal(f.windows[0].destroyed, false);
+  assert.equal(f.windows[0].visible, true);
+  assert.equal(f.windows[0].sent.length, 1);
+  assert.equal(f.windows[0].sent[0][1].items[0].label, 'Newest');
+});
+
+test('loadFile 内同步 show(Newest) 不中断旧初始化且只展示最新模型', async t => {
+  let f;
+  let reentered = false;
+  f = fixture(() => {
+    if (!reentered) {
+      reentered = true;
+      f.label.show({ state: 'ready', items: [{ label: 'Newest', windowMinutes: 10080, remaining: 66 }], overflow: 0 });
+    }
+    return Promise.resolve();
+  });
+  t.after(() => f.label.destroy());
+  f.label.show({ state: 'connecting', items: [], overflow: 0 });
+  await flush();
+  assert.equal(f.windows.length, 1);
+  assert.equal(f.windows[0].destroyed, false);
+  assert.equal(f.windows[0].sent.length, 1);
+  assert.equal(f.windows[0].sent[0][1].items[0].label, 'Newest');
+});
+
+test('初始化内同步 hide 仍完成加载但不展示，下次 show 复用原窗口', async () => {
+  let f;
+  let reentered = false;
+  f = fixture(() => Promise.resolve(), {
+    onCall: name => {
+      if (name === 'setAlwaysOnTop' && !reentered) {
+        reentered = true;
+        f.label.hide();
+      }
+    }
+  });
+  f.label.show(readyModel());
+  await flush();
+  assert.equal(f.windows.length, 1);
+  assert.equal(f.windows[0].destroyed, false);
+  assert.equal(f.windows[0].visible, false);
+  assert.equal(f.windows[0].sent.length, 0);
+  f.label.show({ state: 'ready', items: [{ label: 'After hide', windowMinutes: 300, remaining: 55 }], overflow: 0 });
+  assert.equal(f.windows.length, 1);
+  assert.equal(f.windows[0].visible, true);
+  assert.equal(f.windows[0].sent.at(-1)[1].items[0].label, 'After hide');
+  f.label.destroy();
+});
+
+test('初始化内 destroy 并 show 新窗口时，旧流程不得销毁或发送到新窗口', async t => {
+  let f;
+  let reentered = false;
+  f = fixture(() => Promise.resolve(), {
+    onCall: (name, index) => {
+      if (name === 'setAlwaysOnTop' && index === 1 && !reentered) {
+        reentered = true;
+        f.label.destroy();
+        f.label.show({ state: 'ready', items: [{ label: 'Newest window', windowMinutes: 300, remaining: 44 }], overflow: 0 });
+      }
+    }
+  });
+  t.after(() => f.label.destroy());
+  f.label.show(readyModel());
+  await flush();
+  assert.equal(f.windows.length, 2);
+  assert.equal(f.windows[0].destroyed, true);
+  assert.equal(f.windows[0].sent.length, 0);
+  assert.equal(f.windows[1].destroyed, false);
+  assert.equal(f.windows[1].visible, true);
+  assert.equal(f.windows[1].sent.length, 1);
+  assert.equal(f.windows[1].sent[0][1].items[0].label, 'Newest window');
+});
+
+test('did-finish-load 与 loadFile Promise 双完成只能 send/showInactive 一次', async t => {
+  const loading = deferred();
+  const f = fixture(() => loading.promise);
+  t.after(() => f.label.destroy());
+  f.label.show(readyModel());
+  const win = f.windows[0];
+  win.webContents.emit('did-finish-load');
+  assert.equal(win.sent.length, 1);
+  assert.equal(win.showInactiveCalls, 1);
+  loading.resolve();
+  await flush();
+  assert.equal(win.sent.length, 1);
+  assert.equal(win.showInactiveCalls, 1);
+});
+
 test('主进程模型每个外部字段只读一次，且数组最多检查前两项', async t => {
   const reads = new Map();
   const once = (target, name, value) => Object.defineProperty(target, name, {
@@ -682,14 +809,20 @@ function contrast(first, second) {
   return (values[0] + 0.05) / (values[1] + 0.05);
 }
 
-test('176×54 内两条额度加 overflow 三行不裁切', () => {
+test('176×54 内真实 15px 行高的两条额度加 overflow 三行不裁切', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
   const inset = Number(css.match(/#quota-label\s*\{[\s\S]*?inset:\s*(\d+)px/)[1]);
   const paddingY = Number(css.match(/#quota-label\s*\{[\s\S]*?padding:\s*(\d+)px/)[1]);
   const border = Number(css.match(/#quota-label\s*\{[\s\S]*?border:\s*(\d+)px/)[1]);
   const lineHeight = Number(css.match(/#quota-label\s*\{[\s\S]*?line-height:\s*(\d+)px/)[1]);
   const available = 54 - inset * 2 - paddingY * 2 - border * 2;
+  assert.ok(lineHeight >= 15, `真实 12px 正文行高不得低于 15px，当前为 ${lineHeight}px`);
+  assert.ok(available >= 45, `三行字形至少需要 45px，当前为 ${available}px`);
   assert.ok(lineHeight * 3 <= available, `三行需要 ${lineHeight * 3}px，实际只有 ${available}px`);
+  const syntheticClientHeight = available;
+  const syntheticScrollHeight = lineHeight * 3;
+  assert.ok(syntheticScrollHeight <= syntheticClientHeight);
+  assert.doesNotMatch(css, /overflow(?:-y)?:\s*(?:auto|scroll)/);
 });
 
 test('浅色 overflow 和深色 urgent 在各自背景合成后对比度均不低于 4.5', () => {

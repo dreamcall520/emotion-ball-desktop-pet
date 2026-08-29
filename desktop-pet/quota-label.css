@@ -15,7 +15,7 @@ body {
   position: absolute;
   inset: 2px;
   box-sizing: border-box;
-  padding: 3px 7px;
+  padding: 1px 7px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -27,7 +27,7 @@ body {
   color: rgba(43, 44, 47, .92);
   font-size: 12px;
   font-weight: 500;
-  line-height: 13px;
+  line-height: 15px;
 }
 #status, #overflow { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #status { text-align: center; }

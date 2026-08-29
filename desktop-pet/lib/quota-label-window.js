@@ -205,9 +205,9 @@ function createQuotaLabelWindow({
     if (silentWindow === target) silentWindow = null;
   }
 
-  function setupStep(target, token, callback) {
+  function setupStep(target, callback) {
     try { callback(); } catch (error) { detach(target, error); return false; }
-    if (win !== target || operation !== token) {
+    if (win !== target) {
       detach(target);
       return false;
     }
@@ -216,18 +216,16 @@ function createQuotaLabelWindow({
       detach(target, status.error);
       return false;
     }
-    return win === target && operation === token;
+    return win === target;
   }
 
   function ensureWindow() {
     if (win) {
       const currentWindow = win;
-      const currentToken = operation;
       const currentStatus = health(currentWindow);
-      if (currentStatus.ok && win === currentWindow && operation === currentToken) return;
+      if (currentStatus.ok && win === currentWindow) return;
       if (win === currentWindow) detach(currentWindow, currentStatus.error);
     }
-    const token = operation;
     let loadingWindow = null;
     try { loadingWindow = new BrowserWindow({
       width: 176,
@@ -276,10 +274,10 @@ function createQuotaLabelWindow({
         operation += 1;
       })
     ];
-    for (const step of steps) if (!setupStep(loadingWindow, token, step)) return;
+    for (const step of steps) if (!setupStep(loadingWindow, step)) return;
 
     const markReady = () => {
-      if (win !== loadingWindow) return;
+      if (win !== loadingWindow || ready) return;
       const status = health(loadingWindow);
       if (!status.ok) {
         detach(loadingWindow, status.error);
@@ -289,12 +287,12 @@ function createQuotaLabelWindow({
       ready = true;
       try { present(); } catch (error) { detach(loadingWindow, error); }
     };
-    if (!setupStep(loadingWindow, token,
+    if (!setupStep(loadingWindow,
       () => loadingWindow.webContents.on('did-finish-load', markReady))) return;
     let loading;
     try { loading = loadingWindow.loadFile(path.join(__dirname, '../quota-label.html')); }
     catch (error) { detach(loadingWindow, error); return; }
-    if (win !== loadingWindow || operation !== token) {
+    if (win !== loadingWindow) {
       detach(loadingWindow);
       return;
     }
@@ -319,8 +317,10 @@ function createQuotaLabelWindow({
 
   return {
     show(model) {
-      const copied = safeModel(model);
       operation += 1;
+      const token = operation;
+      const copied = safeModel(model);
+      if (operation !== token) return;
       currentModel = copied;
       requestedVisible = true;
       try { ensureWindow(); } catch (error) { report(error); }
