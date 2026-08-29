@@ -53,6 +53,8 @@ const completeMarkers = [
   'BODY_MOTION_INTERRUPTS', 'BODY_MOTION_EDGES',
   'CODEX_SIMULATED', 'CODEX_TASK_MENU', 'CODEX_TASK_TITLE',
   ...Object.values(SIZES).map(size => `CODEX_SIZE_${size.width}`),
+  ...Object.values(SIZES).map(size => `CODEX_QUOTA_SIZE_${size.width}`),
+  'CODEX_QUOTA_POLICY', 'CODEX_QUOTA_LABEL',
   ...Object.values(SIZES).map(size => `BODY_MOTION_SIZE_${size.width}`),
   ...['HOP', 'JELLY', 'SWAY', 'PEEK', 'BOW', 'SPIN'].map(id => `BODY_MOTION_${id}`)
 ];
@@ -80,6 +82,17 @@ test('只有旧动作标记不能冒充已完成 Codex 原生检查', async () =
 
 test('缺少任务菜单或名称开关标记时烟测失败', async () => {
   for (const marker of ['CODEX_TASK_MENU', 'CODEX_TASK_TITLE']) {
+    const result = await validateSmokeOutput(completeMarkers.filter(value => value !== marker));
+    assert.equal(result.exitCode, 1, `缺少 ${marker} 时不能通过`);
+    assert.match(result.errors, new RegExp(marker));
+  }
+});
+
+test('缺少任一额度尺寸、策略或常驻标签标记时烟测失败', async () => {
+  for (const marker of [
+    ...Object.values(SIZES).map(size => `CODEX_QUOTA_SIZE_${size.width}`),
+    'CODEX_QUOTA_POLICY', 'CODEX_QUOTA_LABEL'
+  ]) {
     const result = await validateSmokeOutput(completeMarkers.filter(value => value !== marker));
     assert.equal(result.exitCode, 1, `缺少 ${marker} 时不能通过`);
     assert.match(result.errors, new RegExp(marker));

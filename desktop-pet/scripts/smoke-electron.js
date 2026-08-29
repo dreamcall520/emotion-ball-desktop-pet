@@ -4,6 +4,10 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { BODY_MOTION_SIZES } = require('./verify-body-motion');
+const QUOTA_LABEL_MARKERS = Object.freeze([
+  'CODEX_QUOTA_SIZE_80', 'CODEX_QUOTA_SIZE_120',
+  'CODEX_QUOTA_SIZE_180', 'CODEX_QUOTA_SIZE_260'
+]);
 
 const packagedApp = process.env.PET_SMOKE_APP_PATH;
 const electronBinary = packagedApp ? path.join(packagedApp, 'Contents/MacOS/球球桌宠') : require('electron');
@@ -59,7 +63,9 @@ function runSmokeTest() {
         assert.match(output, /PET_SMOKE_OK/);
         assert.match(output, /PET_BOUNCE_OK/);
         for (const marker of ['CODEX_SIMULATED', 'CODEX_TASK_MENU', 'CODEX_TASK_TITLE',
-          ...BODY_MOTION_SIZES.map(size => `CODEX_SIZE_${size}`)]) {
+          ...BODY_MOTION_SIZES.map(size => `CODEX_SIZE_${size}`),
+          ...QUOTA_LABEL_MARKERS,
+          'CODEX_QUOTA_POLICY', 'CODEX_QUOTA_LABEL']) {
           assert.ok(output.includes(`PET_${marker}_OK`), `${marker}模拟 Codex 原生检查未完成`);
         }
         for (const marker of ['USER_DATA', 'ACTIVITY_STATES', 'GAZE', 'TOUCH_DRAG', 'BUBBLE_REPLY', 'BUBBLE_EDGES_SETTINGS', 'NATIVE_ACTIVITY', 'FIXED_COLOR', 'DOUBLE_CLICK', 'BODY_MOTION', 'BODY_MOTION_INTERRUPTS', 'BODY_MOTION_EDGES', ...BODY_MOTION_SIZES.map(size => `BODY_MOTION_SIZE_${size}`), ...['HOP', 'JELLY', 'SWAY', 'PEEK', 'BOW', 'SPIN'].map(id => `BODY_MOTION_${id}`)]) {

@@ -799,12 +799,13 @@ async function finishSmokeTest() {
     });
 
     await require('./scripts/verify-codex-companion').verifyCodexCompanion({
-      pet: petWindow, bubble, monitor: activityMonitor, screen, BrowserWindow,
+      pet: petWindow, bubble, quotaLabel, monitor: activityMonitor, screen, BrowserWindow,
       command: sendCommand, setSetting: setCompanionSetting, setSize: setPetSize,
       getMenu: () => Menu.buildFromTemplate(menuTemplate()), getSettings: () => ({ ...settings }),
       prepare: initializeCodexCompanion, getController: () => codexCompanion,
       canPresent: canPresentCodex, getMotionOwner: () => hostMotion,
       clearDialogue: () => { dialogue.dismiss(); hideBubble(); },
+      setQuotaPreference: setCodexPreference,
       // 只在显式冒烟闭包提供模拟开关，不注册测试 IPC，也不显示真实授权弹窗。
       setEnabled: async enabled => { settings.codexEnabled = enabled; await codexCompanion.setEnabled(enabled); }
     });

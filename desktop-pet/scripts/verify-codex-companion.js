@@ -10,6 +10,26 @@ function assertBubbleLayout(layout) {
   assert.ok(layout.buttons.length >= 1 && layout.buttons.length <= 2, 'Codex 气泡仅有受控按钮');
 }
 
+function intersects(a, b) {
+  return a.x < b.x + b.width && a.x + a.width > b.x &&
+    a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+function assertQuotaLabelWindow(win, petBounds) {
+  assert.ok(win && typeof win.getBounds === 'function', '额度标签窗口必须存在');
+  assert.equal(win.isFocusable(), false, '额度标签不能聚焦');
+  assert.equal(win.isVisible(), true, '额度标签必须可见');
+  const bounds = win.getBounds();
+  assert.deepEqual({ width: bounds.width, height: bounds.height }, { width: 176, height: 54 },
+    '额度标签必须保持 176×54');
+  assert.equal(intersects(bounds, petBounds), false, '额度标签不能与球球相交');
+  return bounds;
+}
+
+function syntheticQuotaSteps(used) {
+  return used < 80 ? [100, 100 - used] : [100 - used];
+}
+
 function policyClock() {
   let time = Date.now();
   let serial = 0;
@@ -33,7 +53,8 @@ function policyClock() {
 // 仅显式冒烟时使用模拟连接与策略时钟；不读取真实 Codex，不创建或操作真实任务。
 // 页面、预加载、IPC、对白和窗口动作均为实际应用代码。
 async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindow, command, setSetting, setSize,
-  getMenu, getSettings, prepare, setEnabled, getController, canPresent, getMotionOwner, clearDialogue }) {
+  getMenu, getSettings, prepare, setEnabled, getController, canPresent, getMotionOwner, clearDialogue,
+  quotaLabel, setQuotaPreference }) {
   if (process.env.PET_SMOKE_TEST !== '1') throw new Error('Codex 验收只允许在显式冒烟模式运行');
   const original = { bounds: pet.getBounds(), settings: { ...getSettings() } };
   assert.equal(original.settings.codexEnabled, false, '冒烟初始设置必须默认关闭');
@@ -42,6 +63,11 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
   assert.equal(initialMenu.getMenuItemById('codex-task-names').checked, false);
   assert.equal(initialMenu.getMenuItemById('codex-task-names').enabled, false,
     'Codex 总开关关闭时任务名称开关必须禁用');
+  assert.equal(initialMenu.getMenuItemById('codex-quota-visible').checked, false);
+  assert.equal(initialMenu.getMenuItemById('codex-quota-visible').enabled, false,
+    'Codex 总开关关闭时常驻额度开关必须禁用');
+  assert.equal(initialMenu.getMenuItemById('codex-quota-period').enabled, false,
+    'Codex 总开关关闭时额度周期必须禁用');
   assert.equal(initialMenu.getMenuItemById('codex-status'), null);
   assert.equal(initialMenu.getMenuItemById('codex-recent'), null, '原生菜单不能保留最近提醒');
   monitor.stop();
@@ -50,8 +76,24 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
   let callbacks;
   let sequence = 0;
   const resetAt = clock.now() + 86400000;
-  const quota = remaining => callbacks.onQuota({ windows: [{ id: 'fixture:primary', label: '测试额度',
-    windowMinutes: 300, remaining, resetsAt: resetAt }], updatedAt: clock.now() });
+  let quotaSequence = 0;
+  const quotaWindow = (remaining, options = {}) => ({
+    id: options.id || `fixture:quota:${++quotaSequence}`,
+    label: options.label || '测试额度',
+    windowMinutes: options.windowMinutes || 300,
+    remaining,
+    resetsAt: options.resetsAt || resetAt + quotaSequence
+  });
+  const emitQuota = windows => callbacks.onQuota({ windows, updatedAt: clock.now() });
+  const quota = remaining => emitQuota([quotaWindow(remaining, {
+    id: 'fixture:primary', resetsAt: resetAt, label: '5 小时额度'
+  })]);
+  const quotaPeriods = () => [
+    quotaWindow(64, { id: 'fixture:five-hour', label: '5 小时额度', windowMinutes: 300,
+      resetsAt: resetAt + 300000 }),
+    quotaWindow(78, { id: 'fixture:weekly', label: '周额度', windowMinutes: 10080,
+      resetsAt: resetAt + 10080 })
+  ];
   prepare({ now: clock.now, schedule: clock.schedule, cancel: clock.cancel,
     createConnection(next) {
       callbacks = next;
@@ -84,6 +126,41 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     if (!artifacts) return;
     fs.mkdirSync(artifacts, { recursive: true });
     fs.writeFileSync(path.join(artifacts, `${name}.png`), (await win.webContents.capturePage()).toPNG());
+  };
+  const labelView = win => win.webContents.executeJavaScript(`(() => {
+    const root = document.getElementById('quota-label');
+    return {
+      state: root.dataset.state,
+      severity: root.dataset.severity,
+      rows: [...document.querySelectorAll('#items li')].map(row => row.textContent),
+      controls: document.querySelectorAll('button,input,select,textarea,a[href],[tabindex]').length
+    };
+  })()`);
+  const visibleLabel = label => poll(() => Promise.resolve(quotaLabel?.getWindow()),
+    value => value?.isVisible(), label);
+  const waitForLabelView = (predicate, label) => poll(async () => {
+    const win = quotaLabel?.getWindow();
+    return win?.isVisible() ? { win, view: await labelView(win) } : null;
+  }, value => value && predicate(value.view), label);
+  const waitForLabelRows = (expected, label) => waitForLabelView(
+    view => view.rows.length === expected, label);
+  const captureColorSchemes = async win => {
+    if (!artifacts) return;
+    const debuggerApi = win.webContents.debugger;
+    const attachedHere = !debuggerApi.isAttached();
+    if (attachedHere) debuggerApi.attach('1.3');
+    try {
+      for (const scheme of ['light', 'dark']) {
+        await debuggerApi.sendCommand('Emulation.setEmulatedMedia', {
+          media: '', features: [{ name: 'prefers-color-scheme', value: scheme }]
+        });
+        await wait(50);
+        await capture(win, `quota-label-${scheme}`);
+      }
+      await debuggerApi.sendCommand('Emulation.setEmulatedMedia', { media: '', features: [] });
+    } finally {
+      if (attachedHere && debuggerApi.isAttached()) debuggerApi.detach();
+    }
   };
   const area = screen.getDisplayMatching(pet.getBounds()).workArea;
   const sample = async () => {
@@ -122,6 +199,45 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     clock.advanceBy(5000);
     await poll(state, value => value.motionOwner === 'codex', '真实 Codex 动作确认');
   };
+  const verifyQuotaAlert = async (used, severity, alwaysVisible) => {
+    const beforeVisible = getSettings().codexQuotaAlwaysVisible;
+    assert.equal(setQuotaPreference('codexQuotaAlwaysVisible', alwaysVisible),
+      beforeVisible !== alwaysVisible,
+      '额度常驻设置只应在值变化时返回 true');
+    assert.equal(getSettings().codexQuotaAlwaysVisible, alwaysVisible);
+    clock.advanceBy(31000);
+    await ready();
+    const remaining = 100 - used;
+    const synthetic = quotaWindow(remaining, { label: `模拟已用 ${used}%` });
+    for (const stepRemaining of syntheticQuotaSteps(used)) {
+      emitQuota([{ ...synthetic, remaining: stepRemaining }]);
+    }
+    clock.advanceBy(5000);
+    const alert = await poll(() => Promise.resolve(getController().getSnapshot().currentAlert),
+      value => value?.kind === 'quota', `${used}% 额度提醒`);
+    assert.equal(alert.severity, severity, `已用 ${used}% 提醒强度不正确`);
+    assert.equal(alert.durationMs, severity === 'normal' ? 6000 : 12000);
+    const win = await poll(() => Promise.resolve(bubble.getWindow()), value => value?.isVisible(),
+      `${used}% 额度气泡`);
+    const tone = await poll(
+      () => win.webContents.executeJavaScript("document.getElementById('bubble').dataset.tone"),
+      value => value === severity,
+      `${used}% 气泡强弱样式`
+    );
+    assert.equal(tone, severity, `${used}% 气泡强弱样式未到达真实页面`);
+    if (alwaysVisible) {
+      const labelWindow = await visibleLabel(`${used}% 常驻额度标签`);
+      assertQuotaLabelWindow(labelWindow, pet.getBounds());
+    } else {
+      assert.equal(quotaLabel.getWindow()?.isVisible() === true, false,
+        '关闭常驻时普通额度提醒不能偷偷显示标签');
+    }
+    assert.equal(getController().dismiss(alert.id, alert.generation), true);
+    await poll(() => Promise.resolve(bubble.getWindow()?.isVisible()), value => value !== true,
+      `${used}% 额度气泡关闭`);
+    results.push({ used, remaining, severity, durationMs: alert.durationMs,
+      alwaysVisible, source: 'synthetic-quota-real-ui' });
+  };
 
   try {
     setSetting('keepAwake', true);
@@ -133,7 +249,71 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assert.ok(getMenu().getMenuItemById('codex-tasks'));
     assert.equal(getMenu().getMenuItemById('codex-task-names').enabled, true);
     assert.equal(getMenu().getMenuItemById('codex-task-names').checked, false);
+    assert.equal(getMenu().getMenuItemById('codex-quota-visible').enabled, true);
+    assert.equal(getMenu().getMenuItemById('codex-quota-visible').checked, false);
     assert.equal(getMenu().getMenuItemById('codex-recent'), null, '开启后也不能出现最近提醒');
+
+    assert.equal(typeof setQuotaPreference, 'function', '原生验收必须使用真实额度设置入口');
+    assert.equal(setQuotaPreference('codexQuotaAlwaysVisible', true), true);
+    emitQuota(quotaPeriods());
+    let labelResult = await waitForLabelRows(2, '自动周期两项额度标签');
+    assertQuotaLabelWindow(labelResult.win, pet.getBounds());
+    assert.equal(labelResult.view.controls, 0, '额度标签必须只读，不能包含交互控件');
+    assert.match(labelResult.view.rows.join('\n'), /5 小时/);
+    assert.match(labelResult.view.rows.join('\n'), /周额度/);
+    await captureColorSchemes(labelResult.win);
+
+    for (const [setting, menuId, expected] of [
+      ['fiveHour', 'codex-quota-five-hour', /5 小时/],
+      ['weekly', 'codex-quota-weekly', /周额度/]
+    ]) {
+      assert.equal(setQuotaPreference('codexQuotaPeriod', setting), true);
+      labelResult = await waitForLabelView(view => view.rows.length === 1 &&
+        expected.test(view.rows[0]), `${setting} 单周期额度标签`);
+      assert.equal(getMenu().getMenuItemById(menuId).checked, true);
+    }
+    assert.equal(setQuotaPreference('codexQuotaPeriod', 'auto'), true);
+    labelResult = await waitForLabelRows(2, '切回自动周期额度标签');
+    assert.equal(getMenu().getMenuItemById('codex-quota-auto').checked, true);
+    assert.equal(setQuotaPreference('codexQuotaAlwaysVisible', false), true);
+    await poll(() => Promise.resolve(quotaLabel.getWindow()?.isVisible()), value => value !== true,
+      '关闭常驻额度标签');
+    assert.equal(getMenu().getMenuItemById('codex-quota-visible').checked, false);
+    assert.equal(setQuotaPreference('codexQuotaAlwaysVisible', true), true);
+    await visibleLabel('重新开启常驻额度标签');
+
+    for (const [sizeName, pixels] of [['tiny', 80], ['small', 120], ['medium', 180], ['large', 260]]) {
+      setSize(sizeName);
+      pet.setBounds({ x: area.x + 240, y: area.y + 240, width: pixels, height: pixels });
+      const labelWindow = await visibleLabel(`${pixels} 尺寸额度标签`);
+      await poll(() => Promise.resolve(labelWindow.getBounds()),
+        bounds => !intersects(bounds, pet.getBounds()), `${pixels} 尺寸额度标签避让球球`);
+      assertQuotaLabelWindow(labelWindow, pet.getBounds());
+      await capture(labelWindow, `codex-quota-${pixels}`);
+      const marker = {
+        80: 'PET_CODEX_QUOTA_SIZE_80_OK', 120: 'PET_CODEX_QUOTA_SIZE_120_OK',
+        180: 'PET_CODEX_QUOTA_SIZE_180_OK', 260: 'PET_CODEX_QUOTA_SIZE_260_OK'
+      }[pixels];
+      process.stdout.write(`${marker}\n`);
+    }
+    // 用负坐标工作区补验外接屏几何，不移动真实用户窗口到不存在的屏幕。
+    const { quotaLabelBounds } = require('../lib/quota-label-placement');
+    for (const syntheticArea of [area, { x: -1920, y: -180, width: 1920, height: 1080 }]) {
+      const syntheticPet = { x: syntheticArea.x + 240, y: syntheticArea.y + 240, width: 80, height: 80 };
+      const bounds = quotaLabelBounds(syntheticPet, syntheticArea);
+      assert.equal(intersects(bounds, syntheticPet), false);
+      assert.ok(bounds.x >= syntheticArea.x && bounds.y >= syntheticArea.y);
+      assert.ok(bounds.x + bounds.width <= syntheticArea.x + syntheticArea.width);
+      assert.ok(bounds.y + bounds.height <= syntheticArea.y + syntheticArea.height);
+    }
+    process.stdout.write('PET_CODEX_QUOTA_LABEL_OK\n');
+
+    await verifyQuotaAlert(10, 'normal', false);
+    await verifyQuotaAlert(80, 'strong', true);
+    await verifyQuotaAlert(90, 'urgent', true);
+    await verifyQuotaAlert(100, 'urgent', true);
+    process.stdout.write('PET_CODEX_QUOTA_POLICY_OK\n');
+
     await page('window.__codexNativeFrames = []; window.__removeCodexNativeTrace = window.petDesktop.onMotion(packet => window.__codexNativeFrames.push(packet)); true');
     const focusBefore = BrowserWindow.getFocusedWindow();
     for (const [size, pixels, kind] of [['tiny', 80, 'completed'], ['small', 120, 'quota'], ['medium', 180, 'waiting'], ['large', 260, 'failed']]) {
@@ -159,10 +339,15 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       assert.equal(win.isFocusable(), false);
       assert.equal(BrowserWindow.getFocusedWindow(), focusBefore, '自动 Codex 提醒不能抢焦点');
       assert.equal(pet.getBounds().width, pixels);
+      const labelWindow = await visibleLabel(`${pixels} Codex 气泡期间额度标签`);
+      const labelBounds = await poll(() => Promise.resolve(labelWindow.getBounds()), bounds =>
+        !intersects(bounds, pet.getBounds()) && !intersects(bounds, win.getBounds()),
+      `${pixels} 额度标签避让气泡`);
+      assert.deepEqual({ width: labelBounds.width, height: labelBounds.height }, { width: 176, height: 54 });
       await capture(win, `codex-bubble-${pixels}`);
       await capture(pet, `codex-pet-${pixels}`);
       const packets = await poll(() => page('window.__codexNativeFrames'), value => value.some(packet => packet.frame.done), 'Codex 动作完整结束');
-      const expected = { completed: 'hop', quota: 'bow', waiting: 'peek', failed: 'jelly' }[kind];
+      const expected = { completed: 'hop', quota: 'jelly', waiting: 'peek', failed: 'jelly' }[kind];
       assert.ok(packets.length > 5 && packets.every(packet => packet.action === expected));
       const alertId = getController().getSnapshot().currentAlert.id;
       await input(win, 'mouseMoved', layout.point.x, layout.point.y);
@@ -231,6 +416,12 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       if (count === 1) await wait(35);
     }
     await poll(state, value => value.motionOwner === 'user', '用户双击优先于 Codex');
+    if (original.settings.codexQuotaPeriod !== getSettings().codexQuotaPeriod) {
+      setQuotaPreference('codexQuotaPeriod', original.settings.codexQuotaPeriod);
+    }
+    if (original.settings.codexQuotaAlwaysVisible !== getSettings().codexQuotaAlwaysVisible) {
+      setQuotaPreference('codexQuotaAlwaysVisible', original.settings.codexQuotaAlwaysVisible);
+    }
     await setEnabled(false);
     await wait(150);
     assert.equal((await state()).motionOwner, 'user', '关闭联动不能停止用户新动作');
@@ -243,6 +434,14 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     process.stdout.write('PET_CODEX_SIMULATED_OK\n');
     if (artifacts) fs.writeFileSync(path.join(artifacts, 'codex-native-results.json'), JSON.stringify(results, null, 2));
   } finally {
+    if (getSettings?.().codexEnabled === true) {
+      if (original.settings.codexQuotaPeriod !== getSettings().codexQuotaPeriod) {
+        setQuotaPreference?.('codexQuotaPeriod', original.settings.codexQuotaPeriod);
+      }
+      if (original.settings.codexQuotaAlwaysVisible !== getSettings().codexQuotaAlwaysVisible) {
+        setQuotaPreference?.('codexQuotaAlwaysVisible', original.settings.codexQuotaAlwaysVisible);
+      }
+    }
     await setEnabled(false);
     command('rest'); clearDialogue();
     await page('window.__removeCodexNativeTrace?.(); delete window.__removeCodexNativeTrace; delete window.__codexNativeFrames; true');
@@ -257,4 +456,4 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
   }
 }
 
-module.exports = { verifyCodexCompanion, assertBubbleLayout };
+module.exports = { verifyCodexCompanion, assertBubbleLayout, assertQuotaLabelWindow, syntheticQuotaSteps };

@@ -59,3 +59,12 @@
 - 前两次 smoke 没有锁屏，均因误用 Electron 原生复选项的自动反转语义而在名称切换处失败；修正为真实 `MenuItem.click` 调用方式后重新完整执行通过，没有放宽断言或把失败记录成成功。
 - 原生 helper 仍只允许 `PET_SMOKE_TEST=1`，仅接收本地合成任务状态；本次没有读取真实 Codex、创建真实任务、发送模型请求或消耗任务额度。
 - 本节没有运行 `package:mac`、没有生成 DMG，也没有改动或重新验证本机安装、分享 ZIP、`main` 合并和 GitHub Release；上文历史安装事实保持不变。
+
+## Codex 额度功能候选自动化证据
+
+- 本节只记录 `codex/light-companion` 候选源码与自动测试；没有启动 GUI、没有连接真实 Codex、没有创建测试任务，也没有消耗真实额度。
+- 定向命令 `node --test desktop-pet/tests/package-script.test.js desktop-pet/tests/codex-native-helper.test.js desktop-pet/tests/smoke-verification.test.js` 为 28 项通过、0 失败；`npm test` 为 698 项通过、0 失败、0 跳过。
+- 打包暂存清单已逐文件加入额度选择、提醒策略、标签定位、标签窗口以及 HTML/CSS/预加载/渲染共 8 个资源；测试逐文件比对内容，并确认暂存区不夹带用户设置、日志或验收结果。
+- 原生模拟验收助手的候选代码已接入当前额度标签控制器，并使用本地合成快照覆盖 80/120/180/260 四档尺寸、常驻开关、自动/5 小时/周额度、气泡避让、浅深外观截图以及已用 10%/80%/90%/100% 的 normal/strong/urgent 表现。这些是待运行的真实窗口断言，本节不将其写成已完成实机验收。
+- 冒烟门禁已强制新增 `PET_CODEX_QUOTA_SIZE_80_OK`、`120`、`180`、`260`、`PET_CODEX_QUOTA_POLICY_OK` 和 `PET_CODEX_QUOTA_LABEL_OK`；自动测试逐一删除标记，均确认会失败。
+- 真实 `npm run smoke`、本轮浅深截图目录、打包应用、DMG/分享 ZIP、哈希、本机安装替换、搜索入口及 GitHub Release 均尚未执行；必须由后续独立步骤产生新鲜证据，不复用上文历史证据代替。

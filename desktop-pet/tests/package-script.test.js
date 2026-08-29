@@ -113,6 +113,33 @@ test('打包暂存区包含任务名称清理模块且菜单与控制器可加�
   );
 });
 
+test('安装包完整包含额度策略和标签窗口全部资源', () => {
+  const root = path.resolve(__dirname, '../..');
+  const staging = prepareStaging(root);
+  for (const relativePath of [
+    'desktop-pet/lib/codex-quota-view.js',
+    'desktop-pet/lib/codex-quota-alerts.js',
+    'desktop-pet/lib/quota-label-placement.js',
+    'desktop-pet/lib/quota-label-window.js',
+    'desktop-pet/quota-label.html',
+    'desktop-pet/quota-label.css',
+    'desktop-pet/quota-label-preload.js',
+    'desktop-pet/quota-label-renderer.js'
+  ]) {
+    assert.equal(
+      fs.readFileSync(path.join(staging, relativePath), 'utf8'),
+      fs.readFileSync(path.join(root, relativePath), 'utf8'),
+      `${relativePath} 必须逐文件显式进入暂存区`
+    );
+  }
+  const stagedFiles = fs.readdirSync(staging, { recursive: true })
+    .map(value => String(value).toLowerCase());
+  assert.equal(stagedFiles.some(value => /(^|[/\\])settings(?:\.json)?$/.test(value)), false,
+    '分享包不能夹带用户设置');
+  assert.equal(stagedFiles.some(value => /(?:^|[/\\])(?:logs?|codex-native-results\.json)(?:[/\\]|$)/.test(value)), false,
+    '分享包不能夹带运行日志或验收结果');
+});
+
 test('优先复用本机已经下载好的 Electron 压缩包', () => {
   const cacheRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'electron-cache-'));
   const zipDir = path.join(cacheRoot, 'cache-key');
