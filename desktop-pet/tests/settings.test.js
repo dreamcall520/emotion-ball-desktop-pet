@@ -115,7 +115,8 @@ test('Codex 只持久化开关，不保存账号额度快照阈值或任务信�
     quotaSnapshot: { remaining: 1 },
     quotaThresholds: { warning: 80 },
     tasks: ['private'],
-    taskBody: 'PRIVATE_BODY'
+    taskBody: 'PRIVATE_BODY',
+    body: 'PRIVATE_GENERIC_BODY'
   });
   assert.deepEqual(saved, {
     ...DEFAULTS,
@@ -127,7 +128,8 @@ test('Codex 只持久化开关，不保存账号额度快照阈值或任务信�
   const persisted = fs.readFileSync(file, 'utf8');
   assert.equal(persisted.includes('private'), false);
   assert.equal(persisted.includes('PRIVATE_BODY'), false);
-  for (const key of ['account', 'quotaSnapshot', 'quotaThresholds', 'tasks', 'taskBody']) {
+  assert.equal(persisted.includes('PRIVATE_GENERIC_BODY'), false);
+  for (const key of ['account', 'quotaSnapshot', 'quotaThresholds', 'tasks', 'taskBody', 'body']) {
     assert.equal(Object.hasOwn(JSON.parse(persisted), key), false);
   }
 });
