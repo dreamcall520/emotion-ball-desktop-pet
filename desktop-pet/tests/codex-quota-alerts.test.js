@@ -1,0 +1,276 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const {
+  LEVELS,
+  createQuotaAlertTracker,
+  mergeQuotaAlerts
+} = require('../lib/codex-quota-alerts');
+
+const NOW = 1800000000000;
+const quotaWindow = (id, windowMinutes, remaining, resetsAt = NOW + 3600000,
+  label = `额度${id}`) => ({
+  id: String(id), label, windowMinutes, remaining, resetsAt
+});
+
+test('导出冻结的 10% 到 100% 提醒档位', () => {
+  assert.deepEqual(LEVELS, [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]);
+  assert.equal(Object.isFrozen(LEVELS), true);
+  assert.throws(() => LEVELS.push(110), TypeError);
+});
+
+test('所有档位都按原始剩余值精确跨过，不被显示四舍五入提前触发', () => {
+  for (const level of LEVELS) {
+    const tracker = createQuotaAlertTracker();
+    const previousLevel = level - 10;
+    tracker.update([quotaWindow(level, 300, 100 - previousLevel)], {
+      baseline: true,
+      alwaysVisible: false
+    });
+
+    assert.deepEqual(tracker.update([
+      quotaWindow(level, 300, 100 - level + 0.0001)
+    ], { alwaysVisible: false }), [], `${level}% 档不应提前触发`);
+
+    const alerts = tracker.update([
+      quotaWindow(level, 300, 100 - level)
+    ], { alwaysVisible: false });
+    assert.equal(alerts.length, 1, `${level}% 档应恰好触发`);
+    assert.equal(alerts[0].level, level);
+  }
+});
+
+test('首次和新类别先建基线，普通档不补报而高用量只报当前最严重档', () => {
+  const tracker = createQuotaAlertTracker();
+  const alerts = tracker.update([
+    quotaWindow('normal', 300, 30),
+    quotaWindow('eighty', 300, 20),
+    quotaWindow('ninety', 300, 10),
+    quotaWindow('full', 300, 0)
+  ], { baseline: true, alwaysVisible: false });
+
+  assert.deepEqual(alerts.map(item => [item.id, item.level]), [
+    ['eighty', 80],
+    ['ninety', 90],
+    ['full', 100]
+  ]);
+  assert.deepEqual(tracker.update([
+    quotaWindow('late-normal', 300, 65)
+  ], { alwaysVisible: false }), []);
+});
+
+test('一次跨多档只报最高档，回升、刷新和同账号重连不重复', () => {
+  const tracker = createQuotaAlertTracker();
+  const baseline = quotaWindow('codex', 300, 85);
+  tracker.update([baseline], { baseline: true, alwaysVisible: false });
+
+  assert.equal(tracker.update([
+    quotaWindow('codex', 300, 54)
+  ], { alwaysVisible: false })[0].level, 40);
+  assert.deepEqual(tracker.update([quotaWindow('codex', 300, 60)], { alwaysVisible: false }), []);
+  assert.deepEqual(tracker.update([quotaWindow('codex', 300, 54)], { alwaysVisible: false }), []);
+  assert.deepEqual(tracker.update([{ ...quotaWindow('codex', 300, 54) }], { alwaysVisible: false }), []);
+  assert.equal(tracker.update([quotaWindow('codex', 300, 49)], { alwaysVisible: false })[0].level, 50);
+});
+
+test('常驻开启抑制 10% 到 70% 但记录峰值，80% 到 100% 仍逐档触发', () => {
+  const tracker = createQuotaAlertTracker();
+  tracker.update([quotaWindow('codex', 300, 100)], { baseline: true, alwaysVisible: true });
+
+  for (const level of LEVELS.slice(0, 7)) {
+    assert.deepEqual(tracker.update([
+      quotaWindow('codex', 300, 100 - level)
+    ], { alwaysVisible: true }), []);
+  }
+  assert.deepEqual(tracker.update([quotaWindow('codex', 300, 30)], { alwaysVisible: false }), []);
+
+  for (const level of [80, 90, 100]) {
+    const alerts = tracker.update([
+      quotaWindow('codex', 300, 100 - level)
+    ], { alwaysVisible: true });
+    assert.equal(alerts.length, 1);
+    assert.equal(alerts[0].level, level);
+  }
+});
+
+test('只有超过历史峰值的新档触发，baseline 不会重报已观察强提醒', () => {
+  const tracker = createQuotaAlertTracker();
+  assert.equal(tracker.update([
+    quotaWindow('codex', 300, 10)
+  ], { baseline: true, alwaysVisible: false })[0].level, 90);
+  assert.deepEqual(tracker.update([
+    quotaWindow('codex', 300, 20)
+  ], { alwaysVisible: false }), []);
+  assert.deepEqual(tracker.update([
+    quotaWindow('codex', 300, 10)
+  ], { baseline: true, alwaysVisible: false }), []);
+  assert.equal(tracker.update([
+    quotaWindow('codex', 300, 0)
+  ], { alwaysVisible: false })[0].level, 100);
+});
+
+test('reset 清空全部历史，新 resetsAt 自然作为新周期建基线', () => {
+  const tracker = createQuotaAlertTracker();
+  const oldCycle = quotaWindow('codex', 300, 70);
+  tracker.update([oldCycle], { baseline: true, alwaysVisible: false });
+  assert.equal(tracker.update([{ ...oldCycle, remaining: 50 }], { alwaysVisible: false })[0].level, 50);
+
+  tracker.reset();
+  assert.deepEqual(tracker.update([{ ...oldCycle, remaining: 50 }], { alwaysVisible: false }), []);
+  assert.equal(tracker.update([{ ...oldCycle, remaining: 39 }], { alwaysVisible: false })[0].level, 60);
+
+  const newCycle = quotaWindow('codex', 300, 30, NOW + 7200000);
+  assert.deepEqual(tracker.update([newCycle], { alwaysVisible: false }), []);
+  assert.equal(tracker.update([{ ...newCycle, remaining: 19 }], { alwaysVisible: false })[0].level, 80);
+});
+
+test('同一 update 的重复身份使用最后一个可靠值且不双报', () => {
+  const tracker = createQuotaAlertTracker();
+  tracker.update([quotaWindow('codex', 300, 95)], { baseline: true, alwaysVisible: false });
+
+  const alerts = tracker.update([
+    quotaWindow('codex', 300, 69),
+    { ...quotaWindow('codex', 300, 25), remaining: Number.NaN },
+    quotaWindow('codex', 300, 45)
+  ], { alwaysVisible: false });
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].level, 50);
+  assert.equal(alerts[0].remaining, 45);
+});
+
+test('只接受结构完整的安全标量和合法比例、周期、重置时间', () => {
+  const tracker = createQuotaAlertTracker();
+  const valid = quotaWindow('valid', 300, 80);
+  const invalid = [
+    null,
+    [],
+    { ...valid, id: '' },
+    { ...valid, id: 'x'.repeat(257) },
+    { ...valid, label: '  ' },
+    { ...valid, label: 'Codex\u0000' },
+    { ...valid, windowMinutes: 0 },
+    { ...valid, windowMinutes: 1.5 },
+    { ...valid, windowMinutes: '300' },
+    { ...valid, remaining: -0.0001 },
+    { ...valid, remaining: 100.0001 },
+    { ...valid, remaining: Number.NaN },
+    { ...valid, remaining: '80' },
+    { ...valid, resetsAt: 0 },
+    { ...valid, resetsAt: -1 },
+    { ...valid, resetsAt: 1.5 },
+    { ...valid, resetsAt: Number.MAX_SAFE_INTEGER + 1 }
+  ];
+
+  assert.deepEqual(tracker.update(invalid, { baseline: true, alwaysVisible: false }), []);
+  assert.deepEqual(tracker.update(null, null), []);
+  assert.deepEqual(tracker.update({}, 'options'), []);
+  assert.deepEqual(tracker.update([valid], { baseline: true, alwaysVisible: false }), []);
+});
+
+test('提醒携带完整周期引用的安全副本，更改输出不影响输入或后续去重', () => {
+  const tracker = createQuotaAlertTracker();
+  const source = Object.freeze({
+    ...quotaWindow('codex', 300, 95, NOW + 3600000, 'Codex 额度'),
+    privateData: Object.freeze({ token: 'secret' })
+  });
+  const windows = Object.freeze([source]);
+  tracker.update(windows, { baseline: true, alwaysVisible: false });
+  const alert = tracker.update([{ ...source, remaining: 80 }], { alwaysVisible: false })[0];
+
+  assert.deepEqual(alert, {
+    key: JSON.stringify(['codex', 300, NOW + 3600000]),
+    level: 20,
+    remaining: 80,
+    id: 'codex',
+    label: 'Codex 额度',
+    windowMinutes: 300,
+    resetsAt: NOW + 3600000
+  });
+  assert.equal('privateData' in alert, false);
+  alert.id = 'changed';
+  alert.remaining = 0;
+  assert.equal(source.id, 'codex');
+  assert.deepEqual(tracker.update([{ ...source, remaining: 80 }], { alwaysVisible: false }), []);
+});
+
+test('身份历史最多 64 项，超限时按首次出现顺序稳定淘汰最旧项', () => {
+  const tracker = createQuotaAlertTracker();
+  tracker.update(Array.from({ length: 64 }, (_, index) => (
+    quotaWindow(`id-${index}`, 300, 95)
+  )), { baseline: true, alwaysVisible: false });
+
+  tracker.update([quotaWindow('id-0', 300, 94)], { alwaysVisible: false });
+  tracker.update([quotaWindow('id-64', 300, 95)], { alwaysVisible: false });
+
+  assert.equal(tracker.update([quotaWindow('id-1', 300, 80)], { alwaysVisible: false })[0].level, 20);
+  assert.deepEqual(tracker.update([quotaWindow('id-0', 300, 80)], { alwaysVisible: false }), []);
+});
+
+test('多类别提醒合并返回最高档、最低实际剩余和稳定的安全引用', () => {
+  const tracker = createQuotaAlertTracker();
+  tracker.update([
+    quotaWindow('codex', 300, 100),
+    quotaWindow('spark', 10080, 100)
+  ], { baseline: true, alwaysVisible: false });
+  const alerts = tracker.update([
+    quotaWindow('codex', 300, 19),
+    quotaWindow('spark', 10080, 8)
+  ], { alwaysVisible: false });
+  const merged = mergeQuotaAlerts(alerts);
+
+  assert.equal(merged.level, 90);
+  assert.equal(merged.remaining, 8);
+  assert.equal(merged.count, 2);
+  assert.deepEqual(merged.refs.map(item => item.id), ['codex', 'spark']);
+  merged.refs[0].remaining = 0;
+  assert.equal(alerts[0].remaining, 19);
+});
+
+test('合并忽略非法项、按 key 去重并最多保留 64 个有效提醒', () => {
+  assert.equal(mergeQuotaAlerts(), null);
+  assert.equal(mergeQuotaAlerts(null), null);
+  assert.equal(mergeQuotaAlerts({}), null);
+  assert.equal(mergeQuotaAlerts([]), null);
+
+  const tracker = createQuotaAlertTracker();
+  const windows = Array.from({ length: 65 }, (_, index) => quotaWindow(`id-${index}`, 300, 100));
+  tracker.update(windows, { baseline: true, alwaysVisible: false });
+  const validAlerts = tracker.update(windows.map(item => ({ ...item, remaining: 20 })), {
+    alwaysVisible: false
+  });
+  const first = validAlerts[0];
+  const duplicate = { ...first, remaining: 19, level: 80 };
+  const invalid = [
+    null,
+    {},
+    { ...first, key: '' },
+    { ...first, level: 75 },
+    { ...first, remaining: -1 },
+    { ...first, id: [] },
+    { ...first, label: {} },
+    { ...first, windowMinutes: 0 },
+    { ...first, resetsAt: 0 }
+  ];
+  const merged = mergeQuotaAlerts([first, ...invalid, ...validAlerts.slice(1), duplicate]);
+
+  assert.equal(merged.count, 64);
+  assert.equal(merged.refs.length, 64);
+  assert.deepEqual(merged.refs.slice(0, 3).map(item => item.id), ['id-0', 'id-1', 'id-2']);
+  assert.equal(merged.refs[0].remaining, 19);
+  assert.equal(merged.level, 80);
+  assert.equal(merged.remaining, 19);
+});
+
+test('合并不变异原提醒，也不携带多余或非标量数据', () => {
+  const tracker = createQuotaAlertTracker();
+  tracker.update([quotaWindow('codex', 300, 100)], { baseline: true, alwaysVisible: false });
+  const source = Object.freeze({
+    ...tracker.update([quotaWindow('codex', 300, 20)], { alwaysVisible: false })[0],
+    nested: Object.freeze({ secret: true })
+  });
+  const alerts = Object.freeze([source]);
+  const merged = mergeQuotaAlerts(alerts);
+
+  assert.notEqual(merged.refs[0], source);
+  assert.equal('nested' in merged.refs[0], false);
+  assert.equal(source.remaining, 20);
+});
