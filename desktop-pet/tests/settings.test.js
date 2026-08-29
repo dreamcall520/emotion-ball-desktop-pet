@@ -34,7 +34,9 @@ test('损坏文件回退且有效设置可回读', t => {
     keepAwake: false,
     bubblesEnabled: true,
     codexEnabled: false,
-    codexTaskNameInAlerts: false
+    codexTaskNameInAlerts: false,
+    codexQuotaAlwaysVisible: false,
+    codexQuotaPeriod: 'auto'
   });
   assert.equal(fs.existsSync(`${file}.tmp`), false);
 });
@@ -43,7 +45,8 @@ test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
   assert.deepEqual(normalizeSettings({ size: 'small', x: -102.3, y: 81.8, alwaysOnTop: false }), {
     size: 'small', x: -102, y: 82, alwaysOnTop: false,
     keepAwake: false, bubblesEnabled: true, codexEnabled: false,
-    codexTaskNameInAlerts: false
+    codexTaskNameInAlerts: false, codexQuotaAlwaysVisible: false,
+    codexQuotaPeriod: 'auto'
   });
 });
 
@@ -76,6 +79,21 @@ test('Codex 联动默认关闭且只接受布尔值', () => {
   });
 });
 
+test('额度显示默认关闭且周期只接受三个枚举', () => {
+  assert.equal(DEFAULTS.codexQuotaAlwaysVisible, false);
+  assert.equal(DEFAULTS.codexQuotaPeriod, 'auto');
+  for (const period of ['auto', 'fiveHour', 'weekly']) {
+    assert.equal(normalizeSettings({ codexQuotaPeriod: period }).codexQuotaPeriod, period);
+  }
+  for (const period of ['', 'daily', 300, null, {}]) {
+    assert.equal(normalizeSettings({ codexQuotaPeriod: period }).codexQuotaPeriod, 'auto');
+  }
+  assert.equal(normalizeSettings({ codexQuotaAlwaysVisible: true }).codexQuotaAlwaysVisible, true);
+  for (const value of ['true', 1, null, {}, []]) {
+    assert.equal(normalizeSettings({ codexQuotaAlwaysVisible: value }).codexQuotaAlwaysVisible, false);
+  }
+});
+
 test('任务名称提醒默认关闭且只接受布尔值', () => {
   assert.equal(DEFAULTS.codexTaskNameInAlerts, false);
   assert.equal(normalizeSettings({}).codexTaskNameInAlerts, false);
@@ -85,14 +103,33 @@ test('任务名称提醒默认关闭且只接受布尔值', () => {
   assert.equal(normalizeSettings({ codexTaskNameInAlerts: true }).codexTaskNameInAlerts, true);
 });
 
-test('Codex 只持久化开关，不保存账号或快照', t => {
+test('Codex 只持久化开关，不保存账号额度快照阈值或任务信息', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emotion-pet-codex-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const file = path.join(dir, 'settings.json');
-  const saved = saveSettings(file, { codexEnabled: true, accountKey: 'private', quota: {}, tasks: ['private'] });
-  assert.deepEqual(saved, { ...DEFAULTS, codexEnabled: true });
+  const saved = saveSettings(file, {
+    codexEnabled: true,
+    codexQuotaAlwaysVisible: true,
+    codexQuotaPeriod: 'weekly',
+    account: { email: 'private@example.com' },
+    quotaSnapshot: { remaining: 1 },
+    quotaThresholds: { warning: 80 },
+    tasks: ['private'],
+    taskBody: 'PRIVATE_BODY'
+  });
+  assert.deepEqual(saved, {
+    ...DEFAULTS,
+    codexEnabled: true,
+    codexQuotaAlwaysVisible: true,
+    codexQuotaPeriod: 'weekly'
+  });
   assert.deepEqual(loadSettings(file), saved);
-  assert.equal(fs.readFileSync(file, 'utf8').includes('private'), false);
+  const persisted = fs.readFileSync(file, 'utf8');
+  assert.equal(persisted.includes('private'), false);
+  assert.equal(persisted.includes('PRIVATE_BODY'), false);
+  for (const key of ['account', 'quotaSnapshot', 'quotaThresholds', 'tasks', 'taskBody']) {
+    assert.equal(Object.hasOwn(JSON.parse(persisted), key), false);
+  }
 });
 
 test('任务名称提醒只持久化隐私开关，不保存任务信息', t => {

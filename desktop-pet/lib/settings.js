@@ -9,7 +9,9 @@ const DEFAULTS = Object.freeze({
   keepAwake: false,
   bubblesEnabled: true,
   codexEnabled: false,
-  codexTaskNameInAlerts: false
+  codexTaskNameInAlerts: false,
+  codexQuotaAlwaysVisible: false,
+  codexQuotaPeriod: 'auto'
 });
 
 function normalizeSettings(raw = {}) {
@@ -30,7 +32,14 @@ function normalizeSettings(raw = {}) {
     codexTaskNameInAlerts:
       typeof raw.codexTaskNameInAlerts === 'boolean'
         ? raw.codexTaskNameInAlerts
-        : DEFAULTS.codexTaskNameInAlerts
+        : DEFAULTS.codexTaskNameInAlerts,
+    codexQuotaAlwaysVisible:
+      typeof raw.codexQuotaAlwaysVisible === 'boolean'
+        ? raw.codexQuotaAlwaysVisible
+        : DEFAULTS.codexQuotaAlwaysVisible,
+    codexQuotaPeriod: ['auto', 'fiveHour', 'weekly'].includes(raw.codexQuotaPeriod)
+      ? raw.codexQuotaPeriod
+      : DEFAULTS.codexQuotaPeriod
   };
 }
 
