@@ -585,7 +585,10 @@ function sendCommand(command) {
     if (command?.command !== 'again' || !getMotion(command.motion)) return;
     command = { command: 'again', motion: command.motion };
   }
-  if (command === 'sleep' || command === 'rest') stopMotion({ notifyRenderer: false });
+  if (command === 'sleep' || command === 'rest') {
+    dragState = null;
+    stopMotion({ notifyRenderer: false });
+  }
   try {
     petWindow.webContents.send('pet:command', command);
   } catch (_) { /* 窗口关闭或渲染进程退出时，停止操作仍需完成。 */ }
@@ -1061,9 +1064,20 @@ function registerIpc() {
   });
 
   ipcMain.on('pet:drag-end', event => {
-    if (!fromPetWindow(event)) return;
+    if (!fromPetWindow(event) || !dragState) return;
     dragState = null;
-    if (!screenLocked) makeWindowVisible(false);
+    if (!screenLocked) {
+      const anchor = hostMotion?.anchor;
+      const visible = anchor && ensureVisibleBounds(anchor, screen.getAllDisplays(), screen.getPrimaryDisplay());
+      if (anchor && anchor.x === visible.x && anchor.y === visible.y &&
+        anchor.width === visible.width && anchor.height === visible.height) {
+        // macOS 屏幕边缘下，pointerup 可能晚于双击动作到达主进程。
+        // 动作锚点仍完整可见时只记住锚点，不把中途动画帧落盘。
+        settings.x = anchor.x;
+        settings.y = anchor.y;
+        persistSettings();
+      } else makeWindowVisible(false);
+    }
   });
 
   ipcMain.on('pet:bounce', event => {
@@ -1076,7 +1090,7 @@ function registerIpc() {
       !Number.isSafeInteger(request.token) || request.token <= 0 || !getMotion(request.action)) return;
     dismissCodexPresentation();
     stopWindowBounce();
-    hostMotion = { owner: 'user', token: request.token, action: request.action };
+    hostMotion = { owner: 'user', token: request.token, action: request.action, anchor: petWindow.getBounds() };
     if (!windowMotion.start({ token: request.token, action: request.action })) hostMotion = null;
   });
 
@@ -1105,7 +1119,7 @@ function registerIpc() {
       return;
     }
     codexPresentation.token = request.token;
-    hostMotion = { owner: 'codex', token: request.token, action: request.action };
+    hostMotion = { owner: 'codex', token: request.token, action: request.action, anchor: petWindow.getBounds() };
     if (!windowMotion.start({ token: request.token, action: request.action })) {
       dismissCodexPresentation();
       return;

@@ -1064,6 +1064,63 @@ test('拖动在建立锚点前复原，旧动作不会拉回新位置且与单�
   assert.equal(f.pet.messages.filter(item => item.channel === 'pet:motion-frame').at(-1).packet.frame.done, true);
 });
 
+test('双击的迟到 drag-end 不能截断已经开始的新动作', async () => {
+  const f = await fixture();
+  f.send('pet:drag-start', { x: 20, y: 20 });
+  f.send('pet:motion-start', { token: 2, action: 'peek' });
+  f.at(1100);
+  const before = f.pet.messages.filter(item => item.channel === 'pet:motion-frame');
+  assert.equal(before.at(-1).packet.frame.done, false);
+
+  // macOS 屏幕边缘下 pointerup 对应的 IPC 可能比双击动作开始更晚到达。
+  f.send('pet:drag-end');
+
+  assert.equal(f.timers.size, 1, '迟到的抬手不应清掉新动作计时器');
+  assert.equal(f.pet.messages.filter(item => item.channel === 'pet:motion-frame').at(-1).packet.frame.done, false);
+  assert.deepEqual({ x: f.saved.at(-1).x, y: f.saved.at(-1).y }, { x: -600, y: 100 },
+    '落盘必须使用动作锚点，不得保存中途帧位置');
+  f.at(1900);
+  const frames = f.pet.messages.filter(item => item.channel === 'pet:motion-frame');
+  assert.equal(frames.at(-1).packet.token, 2);
+  assert.equal(frames.at(-1).packet.frame.done, true);
+  assert.deepEqual(f.pet.getPosition(), [-600, 100]);
+});
+
+test('越界锚点不能被动画夹紧帧伪装成安全位置', async () => {
+  const f = await fixture();
+  f.pet.bounds.x = 50;
+  f.send('pet:drag-start', { x: 20, y: 20 });
+  f.send('pet:motion-start', { token: 3, action: 'peek' });
+  f.at(1100);
+  assert.deepEqual(f.pet.getPosition(), [-80, 100], '动画帧会把当前窗口暂时夹紧到屏幕内');
+
+  f.send('pet:drag-end');
+
+  assert.equal(f.timers.size, 0, '真实锚点越界时必须终止动作并恢复安全位置');
+  const recovered = f.pet.getBounds();
+  const area = f.screen.getPrimaryDisplay().workArea;
+  assert.ok(recovered.x >= area.x && recovered.y >= area.y &&
+    recovered.x + recovered.width <= area.x + area.width && recovered.y + recovered.height <= area.y + area.height);
+  assert.deepEqual({ x: f.saved.at(-1).x, y: f.saved.at(-1).y }, { x: recovered.x, y: recovered.y });
+  f.at(1900);
+  assert.deepEqual(f.pet.getBounds(), recovered, '旧动作回调不得复活越界锚点');
+});
+
+test('休息作废拖动会话后，迟到 drag-end 不得覆盖已恢复的空坐标设置', async () => {
+  const f = await fixture();
+  f.send('pet:drag-start', { x: 20, y: 20 });
+  f.send('pet:motion-start', { token: 4, action: 'peek' });
+  f.call("sendCommand('rest')");
+  assert.equal(f.call("restoreSmokePetSettings({ size: 'tiny', x: null, y: null })"), true);
+  assert.deepEqual({ x: f.saved.at(-1).x, y: f.saved.at(-1).y }, { x: null, y: null });
+
+  f.send('pet:drag-end');
+
+  assert.deepEqual({ x: f.saved.at(-1).x, y: f.saved.at(-1).y }, { x: null, y: null },
+    '已失效的抬手消息不能再把真实 bounds 写回设置');
+  assert.equal(f.timers.size, 0);
+});
+
 test('新动作在对白冷却期会关闭错配旧泡，again传递绑定动作，关闭泡不停止动作', async () => {
   const f = await fixture();
   f.send('pet:motion-start', { token: 1, action: 'hop' });
