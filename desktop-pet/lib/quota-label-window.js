@@ -1,5 +1,5 @@
 const path = require('node:path');
-const { quotaLabelBounds } = require('./quota-label-placement');
+const { quotaLabelBounds, quotaLabelSize } = require('./quota-label-placement');
 
 const CHANNEL = 'pet:quota-label';
 const STATES = new Set([
@@ -83,7 +83,8 @@ function safeModel(value) {
 }
 
 function createQuotaLabelWindow({
-  BrowserWindow, screen, getPetWindow, getObstacle = () => null, onError = () => {}, alwaysOnTop = true
+  BrowserWindow, screen, getPetWindow, getObstacle = () => null, getSize = () => 'standard',
+  onError = () => {}, alwaysOnTop = true
 }) {
   let win = null;
   let ready = false;
@@ -95,6 +96,16 @@ function createQuotaLabelWindow({
   let reporting = false;
   let silentWindow = null;
   const topmostSyncing = new Set();
+
+  function requestedSize() {
+    try {
+      const name = getSize() === 'compact' ? 'compact' : 'standard';
+      return { name, ...quotaLabelSize(name) };
+    } catch (error) {
+      report(error);
+      return { name: 'standard', ...quotaLabelSize('standard') };
+    }
+  }
 
   function safeDestroy(target) {
     if (!target) return;
@@ -175,7 +186,7 @@ function createQuotaLabelWindow({
         typeof pet.isVisible !== 'function' || !pet.isVisible() || typeof pet.getBounds !== 'function') return null;
       const petBounds = pet.getBounds();
       const display = screen.getDisplayMatching(petBounds);
-      return quotaLabelBounds(petBounds, display && display.workArea, getObstacle());
+      return quotaLabelBounds(petBounds, display && display.workArea, getObstacle(), currentModel?.size);
     } catch (error) {
       report(error);
       return null;
@@ -274,9 +285,10 @@ function createQuotaLabelWindow({
     const constructToken = operation;
     const expectedWindow = win;
     let loadingWindow = null;
+    const initialSize = quotaLabelSize(currentModel?.size);
     try { loadingWindow = new BrowserWindow({
-      width: 196,
-      height: 74,
+      width: initialSize.width,
+      height: initialSize.height,
       title: 'Codex 剩余额度',
       transparent: true,
       frame: false,
@@ -372,7 +384,9 @@ function createQuotaLabelWindow({
       const token = operation;
       const copied = safeModel(model);
       if (operation !== token) return;
-      currentModel = copied;
+      const size = requestedSize();
+      if (operation !== token) return;
+      currentModel = { ...copied, size: size.name };
       requestedVisible = true;
       try { ensureWindow(); } catch (error) { report(error); }
       try { present(); } catch (error) { if (win) detach(win, error); else report(error); }

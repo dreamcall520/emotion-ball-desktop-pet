@@ -90,6 +90,7 @@ function fixture(load = () => Promise.resolve(), options = {}) {
     },
     getPetWindow: () => pet,
     getObstacle: () => obstacle,
+    getSize: () => options.labelSize || 'standard',
     onError: error => {
       errors.push(error);
       if (typeof options.onError === 'function') options.onError(error);
@@ -136,6 +137,18 @@ test('只在 show 时懒创建安全、透明、不聚焦的鼠标穿透窗口',
   await flush();
   assert.equal(win.visible, true);
   assert.equal(win.showInactiveCalls, 1);
+});
+
+test('小巧档创建 168×58 窗口并把尺寸白名单传给页面', async t => {
+  const f = fixture(() => Promise.resolve(), { labelSize: 'compact' });
+  t.after(() => f.label.destroy());
+  f.label.show(readyModel());
+  await flush();
+  const win = f.windows[0];
+  assert.equal(win.options.width, 168);
+  assert.equal(win.options.height, 58);
+  assert.deepEqual(win.bounds, { x: 256, y: 388, width: 168, height: 58 });
+  assert.equal(win.sent[0][1].size, 'compact');
 });
 
 test('getWindow 只返回当前有效窗口，销毁后不暴露旧引用', async () => {
@@ -195,6 +208,7 @@ test('按球球当前屏定位并避让气泡，只发固定通道的白名单�
   assert.equal(win.sent.length, 1);
   assert.equal(win.sent[0][0], 'pet:quota-label');
   assert.deepEqual(win.sent[0][1], {
+    size: 'standard',
     state: 'ready',
     items: [
       { label: 'Codex', windowMinutes: 300, remaining: 9.44 },
@@ -699,6 +713,7 @@ test('主进程模型每个外部字段只读一次，且数组最多检查前�
   assert.doesNotThrow(() => f.label.show(model));
   await flush();
   assert.deepEqual(f.windows[0].sent[0][1], {
+    size: 'standard',
     state: 'ready',
     items: [
       { label: 'Codex', windowMinutes: 300, remaining: 49.5 },
@@ -716,12 +731,16 @@ test('撤销 Proxy 或抛错 getter 不能穿透 show，必须降级为断开模
   t.after(() => f.label.destroy());
   assert.doesNotThrow(() => f.label.show(revoked.proxy));
   await flush();
-  assert.deepEqual(f.windows[0].sent[0][1], { state: 'disconnected', items: [], overflow: 0 });
+  assert.deepEqual(f.windows[0].sent[0][1], {
+    state: 'disconnected', items: [], overflow: 0, size: 'standard'
+  });
 
   const throwing = {};
   Object.defineProperty(throwing, 'state', { get() { throw new Error('getter failed'); } });
   assert.doesNotThrow(() => f.label.show(throwing));
-  assert.deepEqual(f.windows[0].sent.at(-1)[1], { state: 'disconnected', items: [], overflow: 0 });
+  assert.deepEqual(f.windows[0].sent.at(-1)[1], {
+    state: 'disconnected', items: [], overflow: 0, size: 'standard'
+  });
 });
 
 test('预加载层只接收固定通道，白名单纯标量且可取消订阅', () => {
@@ -740,11 +759,12 @@ test('预加载层只接收固定通道，白名单纯标量且可取消订阅',
   let received;
   const unsubscribe = api.onModel(model => { received = model; });
   listener({}, {
-    state: 'ready', account: 'private', body: '<b>private</b>',
+    state: 'ready', size: 'compact', account: 'private', body: '<b>private</b>',
     items: [{ label: ' Codex\n', windowMinutes: 300, remaining: 19.55, private: {} }], overflow: 2
   });
   assert.equal(JSON.stringify(received), JSON.stringify({
-    state: 'ready', items: [{ label: 'Codex', windowMinutes: 300, remaining: 19.55 }], overflow: 2
+    state: 'ready', size: 'compact',
+    items: [{ label: 'Codex', windowMinutes: 300, remaining: 19.55 }], overflow: 2
   }));
   unsubscribe();
   assert.equal(removed.length, 1);
@@ -777,13 +797,15 @@ test('预加载每个外部字段只读一次，Proxy 和回调异常不穿透 I
   once(item, 'remaining', 18.2);
   const model = {};
   once(model, 'state', 'ready');
+  once(model, 'size', 'compact');
   once(model, 'items', [item]);
   once(model, 'overflow', 0);
   let received;
   const unsubscribe = api.onModel(value => { received = value; throw new Error('consumer failed'); });
   assert.doesNotThrow(() => listener({}, model));
   assert.equal(JSON.stringify(received), JSON.stringify({
-    state: 'ready', items: [{ label: 'Codex', windowMinutes: 300, remaining: 18.2 }], overflow: 0
+    state: 'ready', size: 'compact',
+    items: [{ label: 'Codex', windowMinutes: 300, remaining: 18.2 }], overflow: 0
   }));
   for (const count of reads.values()) assert.equal(count, 1);
   assert.doesNotThrow(unsubscribe);
@@ -793,7 +815,9 @@ test('预加载每个外部字段只读一次，Proxy 和回调异常不穿透 I
   let fallback;
   api.onModel(value => { fallback = value; });
   assert.doesNotThrow(() => listener({}, revoked.proxy));
-  assert.equal(JSON.stringify(fallback), JSON.stringify({ state: 'disconnected', items: [], overflow: 0 }));
+  assert.equal(JSON.stringify(fallback), JSON.stringify({
+    state: 'disconnected', size: 'standard', items: [], overflow: 0
+  }));
 });
 
 test('渲染层用固定中文状态、纯文本和合理四舍五入最多展示两项', () => {
@@ -939,6 +963,28 @@ test('额度标签改为两行名称、周期、百分比和进度条，不再�
     assert.match(css, new RegExp(`\\.${className}`));
   }
   assert.doesNotMatch(renderer, /另有.*见菜单/);
+});
+
+test('小巧档使用 11px 字号、3px 进度条和更紧凑留白', () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
+  const renderer = fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8');
+  assert.match(renderer, /label\.dataset\.size\s*=\s*model\.size/);
+  assert.match(css, /#quota-label\[data-size="compact"\]\s*\{[\s\S]*?padding:\s*5px 8px/);
+  assert.match(css, /#quota-label\[data-size="compact"\]\s*\{[\s\S]*?font-size:\s*11px/);
+  assert.match(css, /#quota-label\[data-size="compact"\][\s\S]*?\.quota-progress\s*\{[\s\S]*?height:\s*3px/);
+});
+
+test('168×58 小巧档内两条额度的文字和进度条不裁切', () => {
+  const inset = 2;
+  const paddingY = 5;
+  const border = 1;
+  const lineHeight = 14;
+  const rowGap = 1;
+  const rowProgress = 3;
+  const itemsGap = 3;
+  const available = 58 - 2 * inset - 2 * paddingY - 2 * border;
+  const needed = (lineHeight + rowGap + rowProgress) * 2 + itemsGap;
+  assert.ok(needed <= available, `小巧档两条额度需要 ${needed}px，实际可用 ${available}px`);
 });
 
 test('196 像素宽内只允许名称和周期省略，64% 和 78% 核心比例完整', () => {

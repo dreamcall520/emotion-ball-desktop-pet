@@ -36,7 +36,8 @@ test('损坏文件回退且有效设置可回读', t => {
     codexEnabled: false,
     codexTaskNameInAlerts: false,
     codexQuotaAlwaysVisible: false,
-    codexQuotaPeriod: 'auto'
+    codexQuotaPeriod: 'auto',
+    codexQuotaLabelSize: 'standard'
   });
   assert.equal(fs.existsSync(`${file}.tmp`), false);
 });
@@ -46,7 +47,7 @@ test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
     size: 'small', x: -102, y: 82, alwaysOnTop: false,
     keepAwake: false, bubblesEnabled: true, codexEnabled: false,
     codexTaskNameInAlerts: false, codexQuotaAlwaysVisible: false,
-    codexQuotaPeriod: 'auto'
+    codexQuotaPeriod: 'auto', codexQuotaLabelSize: 'standard'
   });
 });
 
@@ -94,6 +95,16 @@ test('额度显示默认关闭且周期只接受三个枚举', () => {
   }
 });
 
+test('额度卡片默认为标准大小，只接受标准和小巧两档', () => {
+  assert.equal(DEFAULTS.codexQuotaLabelSize, 'standard');
+  for (const size of ['standard', 'compact']) {
+    assert.equal(normalizeSettings({ codexQuotaLabelSize: size }).codexQuotaLabelSize, size);
+  }
+  for (const size of ['', 'small', 'large', 168, null, {}]) {
+    assert.equal(normalizeSettings({ codexQuotaLabelSize: size }).codexQuotaLabelSize, 'standard');
+  }
+});
+
 test('任务名称提醒默认关闭且只接受布尔值', () => {
   assert.equal(DEFAULTS.codexTaskNameInAlerts, false);
   assert.equal(normalizeSettings({}).codexTaskNameInAlerts, false);
@@ -111,6 +122,7 @@ test('Codex 只持久化开关，不保存账号额度快照阈值或任务信�
     codexEnabled: true,
     codexQuotaAlwaysVisible: true,
     codexQuotaPeriod: 'weekly',
+    codexQuotaLabelSize: 'compact',
     account: { email: 'private@example.com' },
     quotaSnapshot: { remaining: 1 },
     quotaThresholds: { warning: 80 },
@@ -122,7 +134,8 @@ test('Codex 只持久化开关，不保存账号额度快照阈值或任务信�
     ...DEFAULTS,
     codexEnabled: true,
     codexQuotaAlwaysVisible: true,
-    codexQuotaPeriod: 'weekly'
+    codexQuotaPeriod: 'weekly',
+    codexQuotaLabelSize: 'compact'
   });
   assert.deepEqual(loadSettings(file), saved);
   const persisted = fs.readFileSync(file, 'utf8');

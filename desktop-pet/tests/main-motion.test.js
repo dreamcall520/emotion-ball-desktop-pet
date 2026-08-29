@@ -9,7 +9,7 @@ const { setImmediate: flush } = require('node:timers/promises');
 
 // 真实 main、动作控制器和对白规则；只替代 Electron、系统采样和磁盘设置。
 async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
-  codexQuotaAlwaysVisible = false, codexQuotaPeriod = 'auto', bubblesEnabled = true,
+  codexQuotaAlwaysVisible = false, codexQuotaPeriod = 'auto', codexQuotaLabelSize = 'standard', bubblesEnabled = true,
   consent = async () => ({ response: 1 }), openExternal = async () => {}, saveError = null } = {}) {
   let now = 0;
   let serial = 0;
@@ -91,7 +91,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
         Menu: { buildFromTemplate: value => Object.assign(value, { popup: options => popups.push({ value, options }) }) }, nativeImage: { createFromPath: () => ({ setTemplateImage() {} }) } };
       if (name === './lib/settings') return { loadSettings: () => ({ size: 'tiny', x: -600, y: 100,
         bubblesEnabled, keepAwake: false, alwaysOnTop: true, codexEnabled, codexTaskNameInAlerts,
-        codexQuotaAlwaysVisible, codexQuotaPeriod }),
+        codexQuotaAlwaysVisible, codexQuotaPeriod, codexQuotaLabelSize }),
         saveSettings: (_file, settings) => { if (saveError) throw saveError; saved.push({ ...settings }); return settings; } };
       if (name === './lib/codex-companion') return { createCodexCompanion: options => {
         const controller = realRequire(name).createCodexCompanion({ ...options, createConnection(callbacks) {
@@ -265,6 +265,24 @@ test('Codex 额度菜单只在总联动开启时可操作，周期为互斥单�
     taskNameInAlerts: false, quotaAlwaysVisible: false, quotaPeriod: 'fiveHour'
   });
   assert.equal(f.call("menuTemplate().find(item => item.id === 'codex-quota-period').submenu.find(item => item.checked).id"), 'codex-quota-five-hour');
+});
+
+test('额度卡片大小为标准和小巧两档，只在保存成功后切换', async () => {
+  const off = await fixture();
+  assert.equal(off.call("menuTemplate().find(item => item.id === 'codex-quota-label-size').enabled"), false);
+
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  const menu = f.call("menuTemplate().find(item => item.id === 'codex-quota-label-size')");
+  assert.equal(menu.label, '额度卡片大小');
+  assert.equal(menu.submenu.find(item => item.checked).id, 'codex-quota-label-standard');
+  assert.equal(f.call("setCodexPreference('codexQuotaLabelSize', 'compact')"), true);
+  assert.equal(f.saved.at(-1).codexQuotaLabelSize, 'compact');
+  assert.equal(f.call("menuTemplate().find(item => item.id === 'codex-quota-label-size').submenu.find(item => item.checked).id"), 'codex-quota-label-compact');
+  assert.ok(f.quotaLabel.shows.length > 0, '尺寸切换后应立即刷新常驻卡片');
+
+  const failed = await fixture({ codexEnabled: true, saveError: new Error('SIZE_WRITE_FAILURE') });
+  assert.equal(failed.call("setCodexPreference('codexQuotaLabelSize', 'compact')"), false);
+  assert.equal(failed.call("menuTemplate().find(item => item.id === 'codex-quota-label-size').submenu.find(item => item.checked).id"), 'codex-quota-label-standard');
 });
 
 test('常驻标签始终使用当前快照和已保存周期', async () => {

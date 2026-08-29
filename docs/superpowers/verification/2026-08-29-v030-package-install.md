@@ -97,3 +97,15 @@
 - DMG 为 `/Users/allan/Documents/个人创作/球球桌宠-0.3.2-Apple芯片.dmg`，123,529,912 字节，SHA-256 `871acf010c4a7ff35860c8fd0d20c8ba6f94429ce23f66beb3470a39713fdf50`，`hdiutil verify` 通过，镜像内应用版本、签名和 `app.asar` 均与打包应用一致。
 - 分享 ZIP 为 `/Users/allan/Documents/个人创作/球球桌宠-0.3.2-Apple芯片-分享用.zip`，121,376,004 字节，SHA-256 `f34b0ed1a2d8d0a43bd76ac23880e6ddb554b5626dcaf14be5fa31a4784cd83a`；解压测试通过，根目录只有上述 DMG。首个目录层级错误的 ZIP 已移入废纸篓，可恢复。
 - 仍未合并 `main`、未发布 GitHub Release；分享包仍为免费非商用、本机临时签名且未经苹果公证的 Apple 芯片版。
+
+## 0.3.3 额度卡片大小与最终分享包
+
+- 额度常驻卡片新增「额度卡片大小」设置，提供「标准」196×74 和「小巧」168×58 两档；默认保持标准，不自动改写用户选择。小巧版仍完整保留 `codex`、`gpt-reserve` 两行名称、周期、剩余百分比和进度条，球体颜色与互动动画未改。
+- 首次真实窗口检查暴露出额度窗口虽已缩至 168×58，但预加载层未传递 `compact`，页面仍套用标准样式；先补失败测试再修正白名单。另一次重跑在进入额度阶段前出现既有 `spin-replay-80` 单次时序失败，该轮未记为通过；相同最终代码随后在源码、打包应用和正式安装版三处完整通过。
+- 全量自动测试最终为 719 项通过、0 失败、0 跳过。源码通过证据目录为 `/tmp/emotion-ball-compact-smoke.4zzngH`，打包应用为 `/tmp/emotion-ball-033-packaged.fDALqN`，正式安装版为 `/tmp/emotion-ball-033-installed.l1xUZi`；三轮均包含小巧卡片、四档球体尺寸、负坐标副屏、任务列表与任务名称、固定球体颜色、全部互动动作及 `PET_SMOKE_OK`。
+- 正式安装版小巧浅色、深色截图 SHA-256 分别为 `8b53037fe74f2120dbb51385be76029d9e42ac8d10f7780c52fa37006bca8981`、`337aa1102ba63f139d8bdfe010abaaf9b5ecd8ec0917de482c5cd6f6f100af2f`；截图像素为 336×116，对应 Retina 下逻辑尺寸 168×58，人工回读无文字或进度条裁切。
+- 应用版本为 0.3.3、bundle id 为 `local.xiaokun.emotionball.pet`，`app.asar` SHA-256 为 `18e0dfffc9556758e5d172a169846692a0b248eaeb1c529bf416b3501fd77196`。DMG 内应用与打包应用的文件内容、权限和符号链接逐项一致，正式安装版严格签名校验与独立设置 smoke 均通过。
+- 正常退出 0.3.2 后，旧应用和设置备份位于 `/Users/allan/.Trash/球球桌宠-0.3.2-backup.qShPjD/`，可恢复；从最终 DMG 安装前后真实设置 SHA-256 均为 `f22fa85bfe0dc74606f8991a925f6ba4c3e2b2d20e235ac11c88886775d2acde`。0.3.3 已从 `/Applications/球球桌宠.app` 启动，PID 为 28742，没有生成 `errors.log`，本机应用入口只保留一份。
+- 最终 DMG 为 `/Users/allan/Documents/个人创作/球球桌宠-0.3.3-Apple芯片.dmg`，124,080,015 字节，SHA-256 `05c69349fe02a584cdbee262db06eaea1df9d7b1735c08476d951fb19b2fc779`，`hdiutil verify` 通过。初版镜像因压缩级别较低约为 128 MB；确认应用非空数据量未增加后改用 zlib level 9，体积恢复到与 0.3.2 接近的约 118 MB。
+- 最终分享 ZIP 为 `/Users/allan/Documents/个人创作/球球桌宠-0.3.3-Apple芯片-分享用.zip`，121,507,234 字节，SHA-256 `36daebf0eb7d4871f80bbed7dd66f98ad4c5ed415877df06715daf75be79ef94`；解压测试与 DMG 逐字节比对通过，根目录只有一个 DMG，没有 `__MACOSX` 辅助目录。
+- 分享包仍为免费非商用、本机临时签名且未经苹果公证的 Apple 芯片版；未合并 `main`、未发布 GitHub Release。

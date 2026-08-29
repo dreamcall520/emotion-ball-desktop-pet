@@ -65,7 +65,7 @@ function runSmokeTest() {
         for (const marker of ['CODEX_SIMULATED', 'CODEX_TASK_MENU', 'CODEX_TASK_TITLE',
           ...BODY_MOTION_SIZES.map(size => `CODEX_SIZE_${size}`),
           ...QUOTA_LABEL_MARKERS,
-          'CODEX_QUOTA_POLICY', 'CODEX_QUOTA_LABEL']) {
+          'CODEX_QUOTA_POLICY', 'CODEX_QUOTA_LABEL', 'CODEX_QUOTA_COMPACT']) {
           assert.ok(output.includes(`PET_${marker}_OK`), `${marker}模拟 Codex 原生检查未完成`);
         }
         for (const marker of ['USER_DATA', 'ACTIVITY_STATES', 'GAZE', 'TOUCH_DRAG', 'BUBBLE_REPLY', 'BUBBLE_EDGES_SETTINGS', 'NATIVE_ACTIVITY', 'FIXED_COLOR', 'DOUBLE_CLICK', 'BODY_MOTION', 'BODY_MOTION_INTERRUPTS', 'BODY_MOTION_EDGES', ...BODY_MOTION_SIZES.map(size => `BODY_MOTION_SIZE_${size}`), ...['HOP', 'JELLY', 'SWAY', 'PEEK', 'BOW', 'SPIN'].map(id => `BODY_MOTION_${id}`)]) {

@@ -81,8 +81,11 @@ function assertQuotaLabelWindow(controller, expectedWindow, petBounds, options =
   assert.equal(expectedWindow.isFocusable(), false, '额度标签不能聚焦');
   assert.equal(expectedWindow.isVisible(), true, '额度标签必须可见');
   const bounds = expectedWindow.getBounds();
-  assert.deepEqual({ width: bounds.width, height: bounds.height }, { width: 196, height: 74 },
-    '额度标签必须保持 196×74');
+  const expectedSize = options.size === 'compact'
+    ? { width: 168, height: 58 }
+    : { width: 196, height: 74 };
+  assert.deepEqual({ width: bounds.width, height: bounds.height }, expectedSize,
+    `额度标签必须保持 ${expectedSize.width}×${expectedSize.height}`);
   assert.equal(intersects(bounds, petBounds), false, '额度标签不能与球球相交');
   if (options.obstacleBounds) {
     assert.equal(intersects(bounds, options.obstacleBounds), false, '额度标签不能与可见气泡相交');
@@ -196,6 +199,7 @@ async function restoreSmokeState({ original, getSettings, setEnabled, setQuotaPr
     }],
     ['恢复额度周期', () => restorePreference('codexQuotaPeriod', original.settings.codexQuotaPeriod)],
     ['恢复额度常驻开关', () => restorePreference('codexQuotaAlwaysVisible', original.settings.codexQuotaAlwaysVisible)],
+    ['恢复额度卡片大小', () => restorePreference('codexQuotaLabelSize', original.settings.codexQuotaLabelSize)],
     ['恢复任务名称隐私开关', () => restorePreference('codexTaskNameInAlerts', original.settings.codexTaskNameInAlerts)],
     ['恢复 Codex 总开关', async () => {
       await setEnabled(original.settings.codexEnabled === true);
@@ -301,6 +305,9 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     'Codex 总开关关闭时常驻额度开关必须禁用');
   assert.equal(initialMenu.getMenuItemById('codex-quota-period').enabled, false,
     'Codex 总开关关闭时额度周期必须禁用');
+  assert.equal(initialMenu.getMenuItemById('codex-quota-label-size').enabled, false,
+    'Codex 总开关关闭时额度卡片大小必须禁用');
+  assert.equal(initialMenu.getMenuItemById('codex-quota-label-standard').checked, true);
   assert.equal(initialMenu.getMenuItemById('codex-status'), null);
   assert.equal(initialMenu.getMenuItemById('codex-recent'), null, '原生菜单不能保留最近提醒');
   const clock = policyClock();
@@ -369,6 +376,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     const root = document.getElementById('quota-label');
     return {
       state: root.dataset.state,
+      size: root.dataset.size,
       severity: root.dataset.severity,
       rows: [...document.querySelectorAll('#items li')].map(row => row.textContent),
       names: [...document.querySelectorAll('.quota-name')].map(node => node.textContent),
@@ -396,8 +404,10 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
   }, value => value && predicate(value.view), label);
   const waitForLabelRows = (expected, label) => waitForLabelView(
     view => view.rows.length === expected, label);
-  const captureColorSchemes = async win => {
-    assertQuotaLabelWindow(quotaLabel, win, pet.getBounds());
+  const captureColorSchemes = async (win, options = {}) => {
+    const size = options.size === 'compact' ? 'compact' : 'standard';
+    const prefix = options.prefix || 'quota-label';
+    assertQuotaLabelWindow(quotaLabel, win, pet.getBounds(), { size });
     const debuggerApi = win.webContents.debugger;
     const attachedHere = !debuggerApi.isAttached();
     if (attachedHere) debuggerApi.attach('1.3');
@@ -410,11 +420,11 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
         });
         await wait(50);
         assert.equal(quotaLabel.getWindow(), win, `${scheme} 截图时标签窗口不能被替换`);
-        captures[scheme] = await capture(win, `quota-label-${scheme}`, quotaLabel);
+        captures[scheme] = await capture(win, `${prefix}-${scheme}`, quotaLabel);
         assert.equal(quotaLabel.getWindow(), win, `${scheme} 截图后标签窗口不能被替换`);
       }
       await debuggerApi.sendCommand('Emulation.setEmulatedMedia', { media: '', features: [] });
-      assertQuotaLabelWindow(quotaLabel, win, pet.getBounds());
+      assertQuotaLabelWindow(quotaLabel, win, pet.getBounds(), { size });
       assertDistinctCaptureEvidence(captures.dark, [captures.light], '额度标签浅深截图');
     } finally {
       if (attachedHere && debuggerApi.isAttached()) debuggerApi.detach();
@@ -551,6 +561,34 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assertQuotaLabelWindow(quotaLabel, staleLabelResult.win, pet.getBounds());
     emitQuota(quotaPeriods());
     labelResult = await waitForLabelRows(2, '恢复新鲜额度标签');
+
+    const standardWindow = labelResult.win;
+    const compactItem = getMenu().getMenuItemById('codex-quota-label-compact');
+    assert.equal(compactItem.checked, false);
+    assert.equal(setQuotaPreference('codexQuotaLabelSize', 'compact'), true,
+      '小巧额度卡片必须通过正式设置入口切换');
+    const compactResult = await waitForLabelView(view => view.size === 'compact' &&
+      view.rows.length === 2, '小巧额度卡片');
+    assert.equal(compactResult.win, standardWindow, '切换尺寸不应重建额度窗口');
+    assertQuotaLabelWindow(quotaLabel, compactResult.win, pet.getBounds(), { size: 'compact' });
+    assert.equal(getSettings().codexQuotaLabelSize, 'compact');
+    assert.equal(getMenu().getMenuItemById('codex-quota-label-compact').checked, true);
+    assert.ok(compactResult.view.values.every(item => item.scrollWidth <= item.clientWidth &&
+      item.left >= item.rowLeft && item.right <= item.rowRight),
+    '小巧卡片的百分比不得裁切');
+    assert.ok(compactResult.view.progress.every(item => item.clientWidth > 0 && item.clientHeight === 3),
+      '小巧卡片必须保留完整的 3px 进度条');
+    await captureColorSchemes(compactResult.win,
+      { size: 'compact', prefix: 'quota-label-compact' });
+    const standardItem = getMenu().getMenuItemById('codex-quota-label-standard');
+    assert.equal(standardItem.checked, false);
+    assert.equal(setQuotaPreference('codexQuotaLabelSize', 'standard'), true,
+      '标准额度卡片必须通过正式设置入口切回');
+    labelResult = await waitForLabelView(view => view.size === 'standard' && view.rows.length === 2,
+      '切回标准额度卡片');
+    assertQuotaLabelWindow(quotaLabel, labelResult.win, pet.getBounds());
+    assert.equal(getMenu().getMenuItemById('codex-quota-label-standard').checked, true);
+    process.stdout.write('PET_CODEX_QUOTA_COMPACT_OK\n');
 
     assert.equal(setQuotaPreference('codexQuotaPeriod', 'fiveHour'), true);
     labelResult = await waitForLabelView(view => view.state === 'period-missing' && view.rows.length === 0,

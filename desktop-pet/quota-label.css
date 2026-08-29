@@ -58,6 +58,19 @@ body {
 }
 .quota-progress::-webkit-progress-bar { border-radius: 999px; background: rgba(85, 92, 105, .14); }
 .quota-progress::-webkit-progress-value { border-radius: 999px; background: rgb(79, 128, 210); }
+#quota-label[data-size="compact"] {
+  padding: 5px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  line-height: 14px;
+}
+#quota-label[data-size="compact"] #items { gap: 3px; }
+#quota-label[data-size="compact"] #items li {
+  grid-template-rows: 14px 3px;
+  column-gap: 4px;
+  row-gap: 1px;
+}
+#quota-label[data-size="compact"] .quota-progress { height: 3px; }
 #overflow { display: none; }
 #quota-label[data-state="ready"] #status,
 #quota-label[data-state="stale"][data-has-items="true"] #status { display: none; }

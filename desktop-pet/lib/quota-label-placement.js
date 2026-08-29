@@ -1,4 +1,7 @@
-const LABEL_SIZE = Object.freeze({ width: 196, height: 74 });
+const LABEL_SIZES = Object.freeze({
+  standard: Object.freeze({ width: 196, height: 74 }),
+  compact: Object.freeze({ width: 168, height: 58 })
+});
 const GAP = 8;
 const GEOMETRY_LIMIT = Math.floor(Number.MAX_SAFE_INTEGER / 4);
 
@@ -62,13 +65,18 @@ function bounded(candidate, size, area) {
   };
 }
 
-function quotaLabelBounds(petBounds, workArea, obstacleBounds = null) {
+function quotaLabelSize(value) {
+  return LABEL_SIZES[value] || LABEL_SIZES.standard;
+}
+
+function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName = 'standard') {
   const area = safeArea(workArea);
   const pet = safePet(petBounds, area);
   const obstacle = safeObstacle(obstacleBounds);
+  const requestedSize = quotaLabelSize(sizeName);
   const size = {
-    width: Math.min(LABEL_SIZE.width, area.width),
-    height: Math.min(LABEL_SIZE.height, area.height)
+    width: Math.min(requestedSize.width, area.width),
+    height: Math.min(requestedSize.height, area.height)
   };
   const centerX = pet.x + pet.width / 2;
   const centerY = pet.y + pet.height / 2;
@@ -87,4 +95,4 @@ function quotaLabelBounds(petBounds, workArea, obstacleBounds = null) {
   return fallbacks.find(candidate => !overlaps(candidate, size, obstacle)) || fallbacks[0];
 }
 
-module.exports = { quotaLabelBounds };
+module.exports = { LABEL_SIZES, quotaLabelSize, quotaLabelBounds };

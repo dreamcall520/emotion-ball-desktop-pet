@@ -60,20 +60,25 @@
 
   function safeModel(value) {
     const source = record(value);
-    if (!source) return { state: 'disconnected', items: [], overflow: 0 };
+    if (!source) return { state: 'disconnected', items: [], overflow: 0, size: 'standard' };
     let stateValue;
-    try { stateValue = source.state; } catch (_) { return { state: 'disconnected', items: [], overflow: 0 }; }
+    let sizeValue;
+    try {
+      stateValue = source.state;
+      sizeValue = source.size;
+    } catch (_) { return { state: 'disconnected', items: [], overflow: 0, size: 'standard' }; }
     const state = states.has(stateValue) ? stateValue : 'disconnected';
-    if (!['ready', 'stale'].includes(state)) return { state, items: [], overflow: 0 };
+    const size = sizeValue === 'compact' ? 'compact' : 'standard';
+    if (!['ready', 'stale'].includes(state)) return { state, items: [], overflow: 0, size };
     let rawItems;
     let overflowValue;
     try {
       rawItems = source.items;
       overflowValue = source.overflow;
-    } catch (_) { return { state, items: [], overflow: 0 }; }
+    } catch (_) { return { state, items: [], overflow: 0, size }; }
     const hidden = Number.isSafeInteger(overflowValue) && overflowValue > 0
       ? Math.min(overflowValue, 99) : 0;
-    return { state, items: copyItems(rawItems), overflow: hidden };
+    return { state, items: copyItems(rawItems), overflow: hidden, size };
   }
 
   function periodText(minutes) {
@@ -109,6 +114,7 @@
     try {
       status.textContent = states.get(model.state);
       label.dataset.state = model.state;
+      label.dataset.size = model.size;
       label.dataset.hasItems = 'false';
       label.dataset.severity = 'normal';
       const rows = [];

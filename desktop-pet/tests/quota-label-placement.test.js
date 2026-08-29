@@ -28,6 +28,17 @@ test('标签固定为 196×74，优先放在球球下方八像素且不修改输
   });
 });
 
+test('小巧档为 168×58，仍优先放在球球下方并保持八像素间距', () => {
+  const pet = Object.freeze({ x: 600, y: 400, width: 80, height: 80 });
+  const area = Object.freeze({ ...AREA });
+  assert.deepEqual(quotaLabelBounds(pet, area, null, 'compact'), {
+    x: 556, y: 488, width: 168, height: 58, placement: 'below'
+  });
+  assert.deepEqual(quotaLabelBounds(pet, area, null, 'unknown'), {
+    x: 542, y: 488, width: 196, height: 74, placement: 'below'
+  });
+});
+
 test('下方被气泡占用时按上、右、左的顺序避让', () => {
   const pet = { x: 600, y: 400, width: 80, height: 80 };
   const below = { x: 542, y: 488, width: 196, height: 74 };

@@ -359,12 +359,14 @@ test('原生助手验收任务菜单与名称开关且不具备真实任务写�
   assert.match(source, /PET_CODEX_QUOTA_SIZE_260_OK/);
   assert.match(source, /PET_CODEX_QUOTA_POLICY_OK/);
   assert.match(source, /PET_CODEX_QUOTA_LABEL_OK/);
+  assert.match(source, /PET_CODEX_QUOTA_COMPACT_OK/);
   assert.match(source, /codex-quota-visible/);
   assert.match(source, /codex-quota-auto/);
   assert.match(source, /codex-quota-five-hour/);
   assert.match(source, /codex-quota-weekly/);
   assert.match(source, /\['light', 'dark'\]/);
-  assert.match(source, /quota-label-\$\{scheme\}/);
+  assert.match(source, /\$\{prefix\}-\$\{scheme\}/);
+  assert.match(source, /quota-label-compact/);
   assert.match(source, /quota-label-stale-long/);
   assert.match(source, /已过期 7天/);
   assert.match(source, /\['64%', '78%'\]/);

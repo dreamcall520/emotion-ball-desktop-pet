@@ -11,7 +11,8 @@ const DEFAULTS = Object.freeze({
   codexEnabled: false,
   codexTaskNameInAlerts: false,
   codexQuotaAlwaysVisible: false,
-  codexQuotaPeriod: 'auto'
+  codexQuotaPeriod: 'auto',
+  codexQuotaLabelSize: 'standard'
 });
 
 function normalizeSettings(raw = {}) {
@@ -39,7 +40,10 @@ function normalizeSettings(raw = {}) {
         : DEFAULTS.codexQuotaAlwaysVisible,
     codexQuotaPeriod: ['auto', 'fiveHour', 'weekly'].includes(raw.codexQuotaPeriod)
       ? raw.codexQuotaPeriod
-      : DEFAULTS.codexQuotaPeriod
+      : DEFAULTS.codexQuotaPeriod,
+    codexQuotaLabelSize: ['standard', 'compact'].includes(raw.codexQuotaLabelSize)
+      ? raw.codexQuotaLabelSize
+      : DEFAULTS.codexQuotaLabelSize
   };
 }
 

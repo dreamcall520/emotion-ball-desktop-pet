@@ -54,7 +54,7 @@ const completeMarkers = [
   'CODEX_SIMULATED', 'CODEX_TASK_MENU', 'CODEX_TASK_TITLE',
   ...Object.values(SIZES).map(size => `CODEX_SIZE_${size.width}`),
   ...Object.values(SIZES).map(size => `CODEX_QUOTA_SIZE_${size.width}`),
-  'CODEX_QUOTA_POLICY', 'CODEX_QUOTA_LABEL',
+  'CODEX_QUOTA_POLICY', 'CODEX_QUOTA_LABEL', 'CODEX_QUOTA_COMPACT',
   ...Object.values(SIZES).map(size => `BODY_MOTION_SIZE_${size.width}`),
   ...['HOP', 'JELLY', 'SWAY', 'PEEK', 'BOW', 'SPIN'].map(id => `BODY_MOTION_${id}`)
 ];
@@ -91,7 +91,7 @@ test('缺少任务菜单或名称开关标记时烟测失败', async () => {
 test('缺少任一额度尺寸、策略或常驻标签标记时烟测失败', async () => {
   for (const marker of [
     ...Object.values(SIZES).map(size => `CODEX_QUOTA_SIZE_${size.width}`),
-    'CODEX_QUOTA_POLICY', 'CODEX_QUOTA_LABEL'
+    'CODEX_QUOTA_POLICY', 'CODEX_QUOTA_LABEL', 'CODEX_QUOTA_COMPACT'
   ]) {
     const result = await validateSmokeOutput(completeMarkers.filter(value => value !== marker));
     assert.equal(result.exitCode, 1, `缺少 ${marker} 时不能通过`);
