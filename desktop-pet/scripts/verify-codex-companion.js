@@ -15,15 +15,162 @@ function intersects(a, b) {
     a.y < b.y + b.height && a.y + a.height > b.y;
 }
 
-function assertQuotaLabelWindow(win, petBounds) {
-  assert.ok(win && typeof win.getBounds === 'function', '额度标签窗口必须存在');
-  assert.equal(win.isFocusable(), false, '额度标签不能聚焦');
-  assert.equal(win.isVisible(), true, '额度标签必须可见');
-  const bounds = win.getBounds();
+function assertQuotaLabelWindow(controller, expectedWindow, petBounds, options = {}) {
+  assert.ok(controller && typeof controller.getWindow === 'function', '额度标签控制器必须存在');
+  assert.equal(controller.getWindow(), expectedWindow, '验收对象必须是额度标签当前窗口');
+  assert.ok(expectedWindow && typeof expectedWindow.getBounds === 'function', '额度标签窗口必须存在');
+  assert.equal(expectedWindow.isFocusable(), false, '额度标签不能聚焦');
+  assert.equal(expectedWindow.isVisible(), true, '额度标签必须可见');
+  const bounds = expectedWindow.getBounds();
   assert.deepEqual({ width: bounds.width, height: bounds.height }, { width: 176, height: 54 },
     '额度标签必须保持 176×54');
   assert.equal(intersects(bounds, petBounds), false, '额度标签不能与球球相交');
+  if (options.obstacleBounds) {
+    assert.equal(intersects(bounds, options.obstacleBounds), false, '额度标签不能与可见气泡相交');
+  }
+  if (options.workArea) {
+    const area = options.workArea;
+    assert.ok(bounds.x >= area.x && bounds.y >= area.y &&
+      bounds.x + bounds.width <= area.x + area.width &&
+      bounds.y + bounds.height <= area.y + area.height,
+    '额度标签必须完整位于当前显示器工作区');
+  }
+  assert.equal(controller.getWindow(), expectedWindow, '验收期间额度标签当前窗口不能被替换');
   return bounds;
+}
+
+async function applyPetSize({ setSize, getSettings, pet, poll, sizeName, pixels }) {
+  setSize(sizeName);
+  const value = await poll(async () => ({
+    bounds: pet.getBounds(),
+    configuredSize: getSettings().size
+  }), current => current?.bounds?.width === pixels && current.bounds.height === pixels &&
+    current.configuredSize === sizeName, `${sizeName} 真实尺寸入口`);
+  assert.deepEqual({ width: value.bounds.width, height: value.bounds.height },
+    { width: pixels, height: pixels });
+  assert.equal(value.configuredSize, sizeName);
+  return value.bounds;
+}
+
+async function verifyNegativeDisplay({ screen, pet, quotaLabel, bubble, poll }) {
+  const displays = screen.getAllDisplays();
+  const display = displays.find(item => item?.workArea &&
+    (item.workArea.x < 0 || item.workArea.y < 0));
+  if (!display) return { skipped: true };
+  const area = display.workArea;
+  const original = pet.getBounds();
+  const target = {
+    ...original,
+    x: Math.round(area.x + Math.max(0, Math.min(240, area.width - original.width))),
+    y: Math.round(area.y + Math.max(0, Math.min(240, area.height - original.height)))
+  };
+  let primaryError = null;
+  let result = null;
+  try {
+    pet.setBounds(target, false);
+    const petBounds = await poll(() => Promise.resolve(pet.getBounds()), value =>
+      value.x === target.x && value.y === target.y &&
+      value.width === original.width && value.height === original.height,
+    '球球移入负坐标显示器');
+    const expectedWindow = await poll(() => Promise.resolve(quotaLabel.getWindow()),
+      value => value?.isVisible(), '负坐标显示器额度标签');
+    await poll(() => {
+      if (quotaLabel.getWindow() !== expectedWindow) return null;
+      const labelBounds = expectedWindow.getBounds();
+      const bubbleWindow = bubble?.getWindow?.();
+      const obstacleBounds = bubbleWindow?.isVisible?.() ? bubbleWindow.getBounds() : null;
+      const inside = labelBounds.x >= area.x && labelBounds.y >= area.y &&
+        labelBounds.x + labelBounds.width <= area.x + area.width &&
+        labelBounds.y + labelBounds.height <= area.y + area.height;
+      return { labelBounds, obstacleBounds, inside };
+    }, value => Boolean(value?.inside && !intersects(value.labelBounds, petBounds) &&
+      (!value.obstacleBounds || !intersects(value.labelBounds, value.obstacleBounds))),
+    '负坐标显示器标签重排');
+    const bubbleWindow = bubble?.getWindow?.();
+    const obstacleBounds = bubbleWindow?.isVisible?.() ? bubbleWindow.getBounds() : null;
+    const labelBounds = assertQuotaLabelWindow(quotaLabel, expectedWindow, petBounds,
+      { obstacleBounds, workArea: area });
+    result = { skipped: false, workArea: { ...area }, labelBounds };
+  } catch (error) {
+    primaryError = error;
+  } finally {
+    try {
+      pet.setBounds(original, false);
+      await poll(() => Promise.resolve(pet.getBounds()), value =>
+        value.x === original.x && value.y === original.y &&
+        value.width === original.width && value.height === original.height,
+      '恢复负坐标检查前位置');
+    } catch (cleanupError) {
+      if (primaryError) throw new AggregateError([primaryError, cleanupError], primaryError.message);
+      throw cleanupError;
+    }
+  }
+  if (primaryError) throw primaryError;
+  return result;
+}
+
+async function runCleanupSteps(steps) {
+  const errors = [];
+  for (const [label, callback] of steps) {
+    try { await callback(); } catch (error) { errors.push({ label, error }); }
+  }
+  return errors;
+}
+
+async function restoreSmokeState({ original, getSettings, setEnabled, setQuotaPreference, command,
+  clearDialogue, page, setSetting, setSize, pet, bubble, quotaLabel, prepareSynthetic, prepare }) {
+  const restorePreference = (name, value) => {
+    setQuotaPreference(name, value);
+    assert.equal(getSettings()[name], value, `${name} 未恢复`);
+  };
+  const detachDebugger = owner => {
+    if (!owner || owner.isDestroyed?.()) return;
+    const debuggerApi = owner.webContents?.debugger;
+    if (debuggerApi?.isAttached?.()) debuggerApi.detach();
+  };
+  return runCleanupSteps([
+    ['临时开启合成联动', async () => {
+      prepareSynthetic();
+      await setEnabled(true);
+      assert.equal(getSettings().codexEnabled, true, '合成联动未临时开启');
+    }],
+    ['恢复额度周期', () => restorePreference('codexQuotaPeriod', original.settings.codexQuotaPeriod)],
+    ['恢复额度常驻开关', () => restorePreference('codexQuotaAlwaysVisible', original.settings.codexQuotaAlwaysVisible)],
+    ['恢复任务名称隐私开关', () => restorePreference('codexTaskNameInAlerts', original.settings.codexTaskNameInAlerts)],
+    ['恢复 Codex 总开关', async () => {
+      await setEnabled(original.settings.codexEnabled === true);
+      assert.equal(getSettings().codexEnabled, original.settings.codexEnabled === true, 'Codex 总开关未恢复');
+    }],
+    ['停止动作', () => command('rest')],
+    ['清理对话', () => clearDialogue()],
+    ['清理页面验收追踪', () => page('window.__removeCodexNativeTrace?.(); delete window.__removeCodexNativeTrace; delete window.__codexNativeFrames; true')],
+    ['恢复保持清醒', () => {
+      setSetting('keepAwake', original.settings.keepAwake);
+      assert.equal(getSettings().keepAwake, original.settings.keepAwake);
+    }],
+    ['恢复互动气泡', () => {
+      setSetting('bubblesEnabled', original.settings.bubblesEnabled);
+      assert.equal(getSettings().bubblesEnabled, original.settings.bubblesEnabled);
+    }],
+    ['恢复球球尺寸', () => {
+      setSize(original.settings.size);
+      assert.equal(getSettings().size, original.settings.size);
+    }],
+    ['恢复球球位置', () => pet.setBounds(original.bounds)],
+    ['断开球球调试器', () => detachDebugger(pet)],
+    ['断开气泡调试器', () => detachDebugger(bubble.getWindow())],
+    ['断开额度标签调试器', () => detachDebugger(quotaLabel.getWindow())],
+    ['重建关闭态联动', () => prepare()]
+  ]);
+}
+
+function combinedSmokeError(primaryError, cleanupErrors) {
+  if (!primaryError && !cleanupErrors.length) return null;
+  const errors = [...(primaryError ? [primaryError] : []), ...cleanupErrors.map(item => item.error)];
+  const message = primaryError?.message || '原生验收清理失败';
+  const combined = new AggregateError(errors, message, primaryError ? { cause: primaryError } : undefined);
+  combined.cleanupErrors = cleanupErrors.map(item => ({ label: item.label, error: item.error }));
+  return combined;
 }
 
 function syntheticQuotaSteps(used) {
@@ -70,7 +217,6 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     'Codex 总开关关闭时额度周期必须禁用');
   assert.equal(initialMenu.getMenuItemById('codex-status'), null);
   assert.equal(initialMenu.getMenuItemById('codex-recent'), null, '原生菜单不能保留最近提醒');
-  monitor.stop();
   const clock = policyClock();
   const connections = [];
   let callbacks;
@@ -89,12 +235,14 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     id: 'fixture:primary', resetsAt: resetAt, label: '5 小时额度'
   })]);
   const quotaPeriods = () => [
-    quotaWindow(64, { id: 'fixture:five-hour', label: '5 小时额度', windowMinutes: 300,
+    quotaWindow(64, { id: 'fixture:five-hour',
+      label: '超长恶意标签<script>alert(1)</script>还有更多文字', windowMinutes: 300,
       resetsAt: resetAt + 300000 }),
-    quotaWindow(78, { id: 'fixture:weekly', label: '周额度', windowMinutes: 10080,
+    quotaWindow(78, { id: 'fixture:weekly',
+      label: '周额度详情名称也可以很长很长很长', windowMinutes: 10080,
       resetsAt: resetAt + 10080 })
   ];
-  prepare({ now: clock.now, schedule: clock.schedule, cancel: clock.cancel,
+  const syntheticOptions = { now: clock.now, schedule: clock.schedule, cancel: clock.cancel,
     createConnection(next) {
       callbacks = next;
       const connection = { closed: false, async start() {
@@ -106,8 +254,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       connections.push(connection);
       return connection;
     }
-  });
-  assert.equal(connections.length, 0, '准备关闭态不能创建连接');
+  };
   const page = code => pet.webContents.executeJavaScript(code);
   const state = () => page('({...document.getElementById("pet").dataset})');
   const poll = async (read, predicate, label, timeout = 3500) => {
@@ -127,15 +274,29 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     fs.mkdirSync(artifacts, { recursive: true });
     fs.writeFileSync(path.join(artifacts, `${name}.png`), (await win.webContents.capturePage()).toPNG());
   };
-  const labelView = win => win.webContents.executeJavaScript(`(() => {
+  const labelView = async win => {
+    assert.equal(quotaLabel.getWindow(), win, '读取标签前必须仍是当前窗口');
+    const view = await win.webContents.executeJavaScript(`(() => {
     const root = document.getElementById('quota-label');
     return {
       state: root.dataset.state,
       severity: root.dataset.severity,
       rows: [...document.querySelectorAll('#items li')].map(row => row.textContent),
+      cores: [...document.querySelectorAll('.quota-remaining')].map(node => {
+        const rect = node.getBoundingClientRect();
+        const row = node.parentElement.getBoundingClientRect();
+        return { text: node.textContent, clientWidth: node.clientWidth, scrollWidth: node.scrollWidth,
+          left: rect.left, right: rect.right, rowLeft: row.left, rowRight: row.right };
+      }),
+      details: [...document.querySelectorAll('.quota-detail')].map(node => ({
+        text: node.textContent, clientWidth: node.clientWidth, scrollWidth: node.scrollWidth
+      })),
       controls: document.querySelectorAll('button,input,select,textarea,a[href],[tabindex]').length
     };
   })()`);
+    assert.equal(quotaLabel.getWindow(), win, '读取标签后必须仍是当前窗口');
+    return view;
+  };
   const visibleLabel = label => poll(() => Promise.resolve(quotaLabel?.getWindow()),
     value => value?.isVisible(), label);
   const waitForLabelView = (predicate, label) => poll(async () => {
@@ -146,18 +307,23 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     view => view.rows.length === expected, label);
   const captureColorSchemes = async win => {
     if (!artifacts) return;
+    assertQuotaLabelWindow(quotaLabel, win, pet.getBounds());
     const debuggerApi = win.webContents.debugger;
     const attachedHere = !debuggerApi.isAttached();
     if (attachedHere) debuggerApi.attach('1.3');
     try {
       for (const scheme of ['light', 'dark']) {
+        assert.equal(quotaLabel.getWindow(), win, `${scheme} 截图前标签窗口不能被替换`);
         await debuggerApi.sendCommand('Emulation.setEmulatedMedia', {
           media: '', features: [{ name: 'prefers-color-scheme', value: scheme }]
         });
         await wait(50);
+        assert.equal(quotaLabel.getWindow(), win, `${scheme} 截图时标签窗口不能被替换`);
         await capture(win, `quota-label-${scheme}`);
+        assert.equal(quotaLabel.getWindow(), win, `${scheme} 截图后标签窗口不能被替换`);
       }
       await debuggerApi.sendCommand('Emulation.setEmulatedMedia', { media: '', features: [] });
+      assertQuotaLabelWindow(quotaLabel, win, pet.getBounds());
     } finally {
       if (attachedHere && debuggerApi.isAttached()) debuggerApi.detach();
     }
@@ -227,7 +393,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assert.equal(tone, severity, `${used}% 气泡强弱样式未到达真实页面`);
     if (alwaysVisible) {
       const labelWindow = await visibleLabel(`${used}% 常驻额度标签`);
-      assertQuotaLabelWindow(labelWindow, pet.getBounds());
+      assertQuotaLabelWindow(quotaLabel, labelWindow, pet.getBounds());
     } else {
       assert.equal(quotaLabel.getWindow()?.isVisible() === true, false,
         '关闭常驻时普通额度提醒不能偷偷显示标签');
@@ -239,7 +405,12 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       alwaysVisible, source: 'synthetic-quota-real-ui' });
   };
 
+  let primaryError = null;
+  let cleanupErrors = [];
   try {
+    monitor.stop();
+    prepare(syntheticOptions);
+    assert.equal(connections.length, 0, '准备关闭态不能创建连接');
     setSetting('keepAwake', true);
     setSetting('bubblesEnabled', true);
     command('wake');
@@ -257,10 +428,17 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assert.equal(setQuotaPreference('codexQuotaAlwaysVisible', true), true);
     emitQuota(quotaPeriods());
     let labelResult = await waitForLabelRows(2, '自动周期两项额度标签');
-    assertQuotaLabelWindow(labelResult.win, pet.getBounds());
+    assertQuotaLabelWindow(quotaLabel, labelResult.win, pet.getBounds());
     assert.equal(labelResult.view.controls, 0, '额度标签必须只读，不能包含交互控件');
     assert.match(labelResult.view.rows.join('\n'), /5 小时/);
     assert.match(labelResult.view.rows.join('\n'), /周额度/);
+    assert.deepEqual(labelResult.view.cores.map(item => item.text), ['剩余 64%', '剩余 78%']);
+    assert.ok(labelResult.view.cores.every(item => item.scrollWidth <= item.clientWidth &&
+      item.left >= item.rowLeft && item.right <= item.rowRight),
+    '核心剩余比例必须在 176 宽标签中完整可见');
+    assert.ok(labelResult.view.details.every(item => item.text.startsWith(' · ')) &&
+      labelResult.view.details.some(item => item.scrollWidth > item.clientWidth),
+    '超长恶意标签只能在详情区域省略');
     await captureColorSchemes(labelResult.win);
 
     for (const [setting, menuId, expected] of [
@@ -283,29 +461,25 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     await visibleLabel('重新开启常驻额度标签');
 
     for (const [sizeName, pixels] of [['tiny', 80], ['small', 120], ['medium', 180], ['large', 260]]) {
-      setSize(sizeName);
-      pet.setBounds({ x: area.x + 240, y: area.y + 240, width: pixels, height: pixels });
+      await applyPetSize({ setSize, getSettings, pet, poll, sizeName, pixels });
       const labelWindow = await visibleLabel(`${pixels} 尺寸额度标签`);
       await poll(() => Promise.resolve(labelWindow.getBounds()),
-        bounds => !intersects(bounds, pet.getBounds()), `${pixels} 尺寸额度标签避让球球`);
-      assertQuotaLabelWindow(labelWindow, pet.getBounds());
+        bounds => quotaLabel.getWindow() === labelWindow && !intersects(bounds, pet.getBounds()),
+      `${pixels} 尺寸额度标签避让球球`);
+      assertQuotaLabelWindow(quotaLabel, labelWindow, pet.getBounds());
+      assert.equal(quotaLabel.getWindow(), labelWindow, `${pixels} 截图前不能替换标签窗口`);
       await capture(labelWindow, `codex-quota-${pixels}`);
+      assertQuotaLabelWindow(quotaLabel, labelWindow, pet.getBounds());
       const marker = {
         80: 'PET_CODEX_QUOTA_SIZE_80_OK', 120: 'PET_CODEX_QUOTA_SIZE_120_OK',
         180: 'PET_CODEX_QUOTA_SIZE_180_OK', 260: 'PET_CODEX_QUOTA_SIZE_260_OK'
       }[pixels];
       process.stdout.write(`${marker}\n`);
     }
-    // 用负坐标工作区补验外接屏几何，不移动真实用户窗口到不存在的屏幕。
-    const { quotaLabelBounds } = require('../lib/quota-label-placement');
-    for (const syntheticArea of [area, { x: -1920, y: -180, width: 1920, height: 1080 }]) {
-      const syntheticPet = { x: syntheticArea.x + 240, y: syntheticArea.y + 240, width: 80, height: 80 };
-      const bounds = quotaLabelBounds(syntheticPet, syntheticArea);
-      assert.equal(intersects(bounds, syntheticPet), false);
-      assert.ok(bounds.x >= syntheticArea.x && bounds.y >= syntheticArea.y);
-      assert.ok(bounds.x + bounds.width <= syntheticArea.x + syntheticArea.width);
-      assert.ok(bounds.y + bounds.height <= syntheticArea.y + syntheticArea.height);
-    }
+    const negativeDisplay = await verifyNegativeDisplay({ screen, pet, quotaLabel, bubble, poll });
+    process.stdout.write(negativeDisplay.skipped
+      ? 'PET_CODEX_QUOTA_NEGATIVE_DISPLAY_SKIPPED\n'
+      : 'PET_CODEX_QUOTA_NEGATIVE_DISPLAY_OK\n');
     process.stdout.write('PET_CODEX_QUOTA_LABEL_OK\n');
 
     await verifyQuotaAlert(10, 'normal', false);
@@ -317,8 +491,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     await page('window.__codexNativeFrames = []; window.__removeCodexNativeTrace = window.petDesktop.onMotion(packet => window.__codexNativeFrames.push(packet)); true');
     const focusBefore = BrowserWindow.getFocusedWindow();
     for (const [size, pixels, kind] of [['tiny', 80, 'completed'], ['small', 120, 'quota'], ['medium', 180, 'waiting'], ['large', 260, 'failed']]) {
-      setSize(size);
-      pet.setBounds({ x: area.x + 240, y: area.y + 240, width: pixels, height: pixels });
+      await applyPetSize({ setSize, getSettings, pet, poll, sizeName: size, pixels });
       await wait(120);
       await begin(kind, kind === 'waiting' ? 2 : 1);
       const win = await poll(() => Promise.resolve(bubble.getWindow()), value => value?.isVisible(), 'Codex 气泡显示');
@@ -341,11 +514,13 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       assert.equal(pet.getBounds().width, pixels);
       const labelWindow = await visibleLabel(`${pixels} Codex 气泡期间额度标签`);
       const labelBounds = await poll(() => Promise.resolve(labelWindow.getBounds()), bounds =>
-        !intersects(bounds, pet.getBounds()) && !intersects(bounds, win.getBounds()),
+        quotaLabel.getWindow() === labelWindow && !intersects(bounds, pet.getBounds()) && !intersects(bounds, win.getBounds()),
       `${pixels} 额度标签避让气泡`);
+      assertQuotaLabelWindow(quotaLabel, labelWindow, pet.getBounds(), { obstacleBounds: win.getBounds() });
       assert.deepEqual({ width: labelBounds.width, height: labelBounds.height }, { width: 176, height: 54 });
       await capture(win, `codex-bubble-${pixels}`);
       await capture(pet, `codex-pet-${pixels}`);
+      assertQuotaLabelWindow(quotaLabel, labelWindow, pet.getBounds(), { obstacleBounds: win.getBounds() });
       const packets = await poll(() => page('window.__codexNativeFrames'), value => value.some(packet => packet.frame.done), 'Codex 动作完整结束');
       const expected = { completed: 'hop', quota: 'jelly', waiting: 'peek', failed: 'jelly' }[kind];
       assert.ok(packets.length > 5 && packets.every(packet => packet.action === expected));
@@ -416,12 +591,6 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       if (count === 1) await wait(35);
     }
     await poll(state, value => value.motionOwner === 'user', '用户双击优先于 Codex');
-    if (original.settings.codexQuotaPeriod !== getSettings().codexQuotaPeriod) {
-      setQuotaPreference('codexQuotaPeriod', original.settings.codexQuotaPeriod);
-    }
-    if (original.settings.codexQuotaAlwaysVisible !== getSettings().codexQuotaAlwaysVisible) {
-      setQuotaPreference('codexQuotaAlwaysVisible', original.settings.codexQuotaAlwaysVisible);
-    }
     await setEnabled(false);
     await wait(150);
     assert.equal((await state()).motionOwner, 'user', '关闭联动不能停止用户新动作');
@@ -433,27 +602,18 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assert.ok(connections.every(connection => connection.closed), '所有模拟连接应已关闭');
     process.stdout.write('PET_CODEX_SIMULATED_OK\n');
     if (artifacts) fs.writeFileSync(path.join(artifacts, 'codex-native-results.json'), JSON.stringify(results, null, 2));
+  } catch (error) {
+    primaryError = error;
   } finally {
-    if (getSettings?.().codexEnabled === true) {
-      if (original.settings.codexQuotaPeriod !== getSettings().codexQuotaPeriod) {
-        setQuotaPreference?.('codexQuotaPeriod', original.settings.codexQuotaPeriod);
-      }
-      if (original.settings.codexQuotaAlwaysVisible !== getSettings().codexQuotaAlwaysVisible) {
-        setQuotaPreference?.('codexQuotaAlwaysVisible', original.settings.codexQuotaAlwaysVisible);
-      }
-    }
-    await setEnabled(false);
-    command('rest'); clearDialogue();
-    await page('window.__removeCodexNativeTrace?.(); delete window.__removeCodexNativeTrace; delete window.__codexNativeFrames; true');
-    setSetting('keepAwake', original.settings.keepAwake);
-    setSetting('bubblesEnabled', original.settings.bubblesEnabled);
-    setSize(original.settings.size);
-    pet.setBounds(original.bounds);
-    if (pet.webContents.debugger.isAttached()) pet.webContents.debugger.detach();
-    const win = bubble.getWindow();
-    if (win && !win.isDestroyed() && win.webContents.debugger.isAttached()) win.webContents.debugger.detach();
-    prepare();
+    cleanupErrors = await restoreSmokeState({ original, getSettings, setEnabled,
+      setQuotaPreference, command, clearDialogue, page, setSetting, setSize,
+      pet, bubble, quotaLabel, prepareSynthetic: () => prepare(syntheticOptions), prepare });
   }
+  const finalError = combinedSmokeError(primaryError, cleanupErrors);
+  if (finalError) throw finalError;
 }
 
-module.exports = { verifyCodexCompanion, assertBubbleLayout, assertQuotaLabelWindow, syntheticQuotaSteps };
+module.exports = {
+  verifyCodexCompanion, assertBubbleLayout, assertQuotaLabelWindow, syntheticQuotaSteps,
+  applyPetSize, verifyNegativeDisplay, restoreSmokeState, combinedSmokeError
+};

@@ -117,10 +117,17 @@
       let overallSeverity = 'normal';
       for (const item of model.items) {
         const row = document.createElement('li');
-        if (!row || !row.dataset) continue;
+        const remainingNode = document.createElement('span');
+        const detailNode = document.createElement('span');
+        if (!row || !row.dataset || typeof row.replaceChildren !== 'function' ||
+          !remainingNode || !detailNode) continue;
         const severity = severityOf(item.remaining);
         row.dataset.severity = severity;
-        row.textContent = `${item.label} · ${periodText(item.windowMinutes)} · 剩余 ${Math.round(item.remaining)}%${model.state === 'stale' ? ' · 已过期' : ''}`;
+        remainingNode.className = 'quota-remaining';
+        remainingNode.textContent = `剩余 ${Math.round(item.remaining)}%`;
+        detailNode.className = 'quota-detail';
+        detailNode.textContent = ` · ${item.label} · ${periodText(item.windowMinutes)}${model.state === 'stale' ? ' · 已过期' : ''}`;
+        row.replaceChildren(remainingNode, detailNode);
         rows.push(row);
         if (severity === 'urgent' || (severity === 'low' && overallSeverity === 'normal')) overallSeverity = severity;
       }

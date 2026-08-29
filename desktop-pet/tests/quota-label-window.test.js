@@ -802,10 +802,17 @@ test('渲染层用固定中文状态、纯文本和合理四舍五入最多展�
   const status = {};
   const items = { children: [], replaceChildren(...children) { this.children = children; } };
   const overflow = {};
+  const element = () => ({
+    dataset: {}, className: '', children: [], _text: '',
+    set textContent(value) { this._text = String(value); this.children = []; },
+    get textContent() { return this.children.length
+      ? this.children.map(child => child.textContent).join('') : this._text; },
+    replaceChildren(...children) { this._text = ''; this.children = children; }
+  });
   vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8'), {
     document: {
       getElementById: id => ({ 'quota-label': label, status, items, overflow })[id],
-      createElement: () => ({ dataset: {} })
+      createElement: element
     },
     window: {
       addEventListener() {},
@@ -823,9 +830,13 @@ test('渲染层用固定中文状态、纯文本和合理四舍五入最多展�
   });
   assert.equal(status.textContent, 'Codex 剩余额度');
   assert.deepEqual(items.children.map(item => item.textContent), [
-    '<b>Codex</b> · 5 小时 · 剩余 48%',
-    'Spark · 周额度 · 剩余 9%'
+    '剩余 48% · <b>Codex</b> · 5 小时',
+    '剩余 9% · Spark · 周额度'
   ]);
+  assert.deepEqual(items.children.map(item => item.children.map(child => child.className)), [
+    ['quota-remaining', 'quota-detail'], ['quota-remaining', 'quota-detail']
+  ]);
+  assert.deepEqual(items.children.map(item => item.children[0].textContent), ['剩余 48%', '剩余 9%']);
   assert.equal(overflow.textContent, '另有 3 项，见菜单');
   assert.equal(label.dataset.state, 'ready');
   assert.equal(label.dataset.severity, 'urgent');
@@ -833,8 +844,15 @@ test('渲染层用固定中文状态、纯文本和合理四舍五入最多展�
 
   receive({ state: 'stale', items: [{ label: 'Codex', windowMinutes: 300, remaining: 8 }], overflow: 0 });
   assert.equal(status.textContent, '额度已过期');
-  assert.equal(items.children[0].textContent, 'Codex · 5 小时 · 剩余 8% · 已过期');
+  assert.equal(items.children[0].textContent, '剩余 8% · Codex · 5 小时 · 已过期');
   assert.equal(overflow.textContent, '');
+
+  receive({ state: 'ready', items: [
+    { label: '超长恶意标签<script>alert(1)</script>还有更多文字', windowMinutes: 300, remaining: 64 },
+    { label: '周额度详情名称也可以很长很长很长', windowMinutes: 10080, remaining: 78 }
+  ], overflow: 0 });
+  assert.deepEqual(items.children.map(item => item.children[0].textContent), ['剩余 64%', '剩余 78%']);
+  assert.ok(items.children.every(item => item.children[1].textContent.startsWith(' · ')));
 
   const states = {
     disabled: 'Codex 联动已关闭', connecting: '正在连接 Codex…', connected: 'Codex 已连接',
@@ -894,6 +912,20 @@ test('静态页面无内联脚本能力，浅深背景可读、正文至少 12px
   assert.match(css, /rgba\(/);
   assert.match(css, /box-shadow:\s*none/);
   assert.doesNotMatch(css, /animation|filter:\s*drop-shadow/);
+  assert.match(css, /\.quota-remaining\s*\{[\s\S]*?flex:\s*0\s+0\s+auto/);
+  assert.match(css, /\.quota-detail\s*\{[\s\S]*?text-overflow:\s*ellipsis/);
+  assert.match(css, /\.quota-detail\s*\{[\s\S]*?min-width:\s*0/);
+});
+
+test('176 像素宽内只允许详情省略，64% 和 78% 核心比例不收缩', () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
+  const renderer = fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8');
+  assert.match(renderer, /remainingNode\.textContent\s*=\s*`剩余/);
+  assert.match(renderer, /detailNode\.textContent/);
+  assert.doesNotMatch(renderer, /row\.textContent\s*=\s*`\$\{item\.label\}/);
+  assert.match(css, /#items li\s*\{[\s\S]*?display:\s*flex/);
+  assert.match(css, /\.quota-remaining\s*\{[\s\S]*?white-space:\s*nowrap/);
+  assert.match(css, /\.quota-detail\s*\{[\s\S]*?overflow:\s*hidden/);
 });
 
 function composite(foreground, background) {

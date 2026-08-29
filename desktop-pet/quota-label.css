@@ -32,7 +32,9 @@ body {
 #status, #overflow { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #status { text-align: center; }
 #items { margin: 0; padding: 0; list-style: none; min-width: 0; }
-#items li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#items li { display: flex; min-width: 0; overflow: hidden; white-space: nowrap; }
+.quota-remaining { flex: 0 0 auto; white-space: nowrap; }
+.quota-detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #overflow { color: rgba(55, 56, 60, .82); }
 #quota-label[data-state="ready"] #status,
 #quota-label[data-state="stale"][data-has-items="true"] #status { display: none; }
