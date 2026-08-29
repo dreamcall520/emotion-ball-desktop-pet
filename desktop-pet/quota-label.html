@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+    <title>Codex 剩余额度</title>
+    <link rel="stylesheet" href="quota-label.css">
+  </head>
+  <body>
+    <section id="quota-label" data-state="disconnected" data-severity="normal" data-has-items="false" aria-label="Codex 剩余额度">
+      <p id="status" role="status" aria-live="polite">Codex 未连接</p>
+      <ul id="items"></ul>
+      <p id="overflow"></p>
+    </section>
+    <script src="quota-label-renderer.js"></script>
+  </body>
+</html>

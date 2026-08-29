@@ -1,0 +1,110 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { quotaLabelBounds } = require('../lib/quota-label-placement');
+
+const AREA = Object.freeze({ x: 0, y: 0, width: 1440, height: 900 });
+
+function assertFiniteBounds(result) {
+  for (const key of ['x', 'y', 'width', 'height']) {
+    assert.equal(Number.isFinite(result[key]), true, `${key} 应为有限数字`);
+  }
+  assert.ok(result.width >= 0);
+  assert.ok(result.height >= 0);
+}
+
+function assertInside(result, area) {
+  assert.ok(result.x >= area.x);
+  assert.ok(result.y >= area.y);
+  assert.ok(result.x + result.width <= area.x + area.width);
+  assert.ok(result.y + result.height <= area.y + area.height);
+}
+
+test('标签固定为 176×54，优先放在球球下方八像素且不修改输入', () => {
+  const pet = Object.freeze({ x: 600, y: 400, width: 80, height: 80 });
+  const area = Object.freeze({ ...AREA });
+  const obstacle = Object.freeze({ x: 10, y: 10, width: 20, height: 20 });
+  assert.deepEqual(quotaLabelBounds(pet, area, obstacle), {
+    x: 552, y: 488, width: 176, height: 54, placement: 'below'
+  });
+});
+
+test('下方被气泡占用时按上、右、左的顺序避让', () => {
+  const pet = { x: 600, y: 400, width: 80, height: 80 };
+  const below = { x: 552, y: 488, width: 176, height: 54 };
+  assert.equal(quotaLabelBounds(pet, AREA, below).placement, 'above');
+
+  const topLeftPet = { x: 0, y: 20, width: 80, height: 80 };
+  const bubble = { x: 8, y: 108, width: 224, height: 118 };
+  assert.deepEqual(quotaLabelBounds(topLeftPet, AREA, bubble), {
+    x: 88, y: 33, width: 176, height: 54, placement: 'right'
+  });
+
+  const rightPet = { x: 1360, y: 400, width: 80, height: 80 };
+  assert.equal(quotaLabelBounds(rightPet, AREA).placement, 'left');
+});
+
+test('正负坐标双屏四边均在当前屏内', () => {
+  for (const area of [AREA, { x: -1920, y: -180, width: 1920, height: 1080 }]) {
+    const pets = [
+      { x: area.x, y: area.y, width: 80, height: 80 },
+      { x: area.x + area.width - 80, y: area.y, width: 80, height: 80 },
+      { x: area.x, y: area.y + area.height - 80, width: 80, height: 80 },
+      { x: area.x + area.width - 80, y: area.y + area.height - 80, width: 80, height: 80 }
+    ];
+    for (const pet of pets) assertInside(quotaLabelBounds(pet, area), area);
+  }
+});
+
+test('80/120/180/260 四档球球均保持固定标签尺寸和八像素间距', () => {
+  for (const size of [80, 120, 180, 260]) {
+    const pet = { x: 600, y: 300, width: size, height: size };
+    const result = quotaLabelBounds(pet, AREA);
+    assert.equal(result.placement, 'below');
+    assert.equal(result.width, 176);
+    assert.equal(result.height, 54);
+    assert.equal(result.y, pet.y + size + 8);
+    assert.equal(result.x, Math.round(pet.x + (size - 176) / 2));
+  }
+});
+
+test('候选位置必须完整在屏内且不与气泡相交', () => {
+  const pet = { x: 600, y: 400, width: 80, height: 80 };
+  const below = { x: 552, y: 488, width: 176, height: 54 };
+  const above = { x: 552, y: 338, width: 176, height: 54 };
+  const combinedObstacle = { x: 552, y: 330, width: 136, height: 220 };
+  const result = quotaLabelBounds(pet, AREA, combinedObstacle);
+  assert.equal(result.placement, 'right');
+  assert.equal(result.x, 688);
+  assert.equal(result.y, 413);
+  assert.ok(!(result.x < combinedObstacle.x + combinedObstacle.width &&
+    result.x + result.width > combinedObstacle.x && result.y < combinedObstacle.y + combinedObstacle.height &&
+    result.y + result.height > combinedObstacle.y));
+  assert.ok(below.y < combinedObstacle.y + combinedObstacle.height);
+  assert.ok(above.y + above.height > combinedObstacle.y);
+});
+
+test('极小或畸形工作区安全收敛，不产生负尺寸或非有限数', () => {
+  for (const area of [
+    { x: -40, y: -30, width: 40, height: 30 },
+    { x: 10, y: 20, width: 1, height: 1 },
+    { x: Number.NaN, y: Infinity, width: -10, height: Number.NaN }
+  ]) {
+    const result = quotaLabelBounds({ x: -999, y: 999, width: 80, height: 80 }, area);
+    assertFiniteBounds(result);
+    if (Number.isFinite(area.x) && Number.isFinite(area.y) && area.width > 0 && area.height > 0) {
+      assertInside(result, area);
+    }
+    assert.ok(['below', 'above', 'right', 'left'].includes(result.placement));
+  }
+});
+
+test('宠物、工作区和障碍物畸形输入均安全降级且不修改对象', () => {
+  const pet = Object.freeze({ x: Number.NaN, y: -Infinity, width: -80, height: 'bad' });
+  const area = Object.freeze({ x: -100, y: -50, width: 500, height: 300 });
+  const obstacle = Object.freeze({ x: Number.NaN, y: 0, width: -1, height: Infinity });
+  const result = quotaLabelBounds(pet, area, obstacle);
+  assertFiniteBounds(result);
+  assertInside(result, area);
+  assert.equal(result.width, 176);
+  assert.equal(result.height, 54);
+});

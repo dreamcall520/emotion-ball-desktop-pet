@@ -1,0 +1,54 @@
+:root { color-scheme: light dark; background: transparent; }
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+#quota-label {
+  position: absolute;
+  inset: 2px;
+  box-sizing: border-box;
+  padding: 4px 7px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid rgba(76, 77, 80, .22);
+  border-radius: 10px;
+  background: rgba(246, 246, 244, .92);
+  box-shadow: none;
+  color: rgba(43, 44, 47, .92);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 14px;
+}
+#status, #overflow { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#status { text-align: center; }
+#items { margin: 0; padding: 0; list-style: none; min-width: 0; }
+#items li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#overflow { color: rgba(75, 76, 80, .7); }
+#quota-label[data-state="ready"] #status,
+#quota-label[data-state="stale"][data-has-items="true"] #status { display: none; }
+#quota-label[data-severity="low"] { border-color: rgba(150, 104, 24, .58); }
+#quota-label[data-severity="urgent"] { border-color: rgba(171, 62, 52, .66); }
+#items li[data-severity="low"] { color: rgb(133, 87, 17); font-weight: 600; }
+#items li[data-severity="urgent"] { color: rgb(157, 48, 39); font-weight: 650; }
+@media (prefers-color-scheme: dark) {
+  #quota-label {
+    border-color: rgba(225, 226, 229, .22);
+    background: rgba(49, 50, 53, .9);
+    color: rgba(246, 246, 244, .94);
+  }
+  #overflow { color: rgba(232, 233, 235, .68); }
+  #quota-label[data-severity="low"] { border-color: rgba(239, 190, 90, .72); }
+  #quota-label[data-severity="urgent"] { border-color: rgba(255, 132, 119, .78); }
+  #items li[data-severity="low"] { color: rgb(244, 198, 106); }
+  #items li[data-severity="urgent"] { color: rgb(255, 145, 132); }
+}
