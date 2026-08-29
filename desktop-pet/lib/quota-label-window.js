@@ -227,7 +227,7 @@ function createQuotaLabelWindow({
     try { target.webContents.send(CHANNEL, model); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
     try {
-      if (model.size === 'compact') target.setIgnoreMouseEvents(false);
+      if (model.items.length > 0) target.setIgnoreMouseEvents(false);
       else target.setIgnoreMouseEvents(true, { forward: true });
     } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
@@ -346,7 +346,7 @@ function createQuotaLabelWindow({
       }),
       () => loadingWindow.webContents.on('ipc-message', (_event, channel) => {
         if (channel !== TOGGLE_CHANNEL || win !== loadingWindow || !requestedVisible || !ready ||
-          currentModel?.size !== 'compact' || !currentModel.items.length) return;
+          !currentModel?.items.length) return;
         operation += 1;
         currentModel = { ...currentModel, expanded: currentModel.expanded !== true };
         try { present(); } catch (error) { detach(loadingWindow, error); }
@@ -414,8 +414,8 @@ function createQuotaLabelWindow({
       if (operation !== token) return;
       const size = requestedSize();
       if (operation !== token) return;
-      const expanded = size.name === 'compact' && currentModel?.size === 'compact' &&
-        currentModel.expanded === true && copied.items.length > 0;
+      const expanded = currentModel?.size === size.name && currentModel.expanded === true &&
+        copied.items.length > 0;
       currentModel = { ...copied, size: size.name, expanded };
       requestedVisible = true;
       try { ensureWindow(); } catch (error) { report(error); }

@@ -42,6 +42,13 @@ test('小巧档折叠为 128×32，点击展开为 196×96 液态玻璃明细', 
   });
 });
 
+test('标准档点击后也展开为 196×96 液态玻璃明细', () => {
+  const pet = Object.freeze({ x: 600, y: 400, width: 80, height: 80 });
+  assert.deepEqual(quotaLabelBounds(pet, AREA, null, 'standard', true), {
+    x: 542, y: 488, width: 196, height: 96, placement: 'below'
+  });
+});
+
 test('下方被气泡占用时按上、右、左的顺序避让', () => {
   const pet = { x: 600, y: 400, width: 80, height: 80 };
   const below = { x: 556, y: 488, width: 168, height: 58 };

@@ -4,7 +4,8 @@ const path = require('node:path');
 const { setTimeout: wait } = require('node:timers/promises');
 
 // 仅在显式冒烟模式调用；通过真实 IPC、渲染页面和原生输入验收。
-async function verifyCompanion({ pet, bubble, dialogue, monitor, screen, BrowserWindow, command, setSetting, showDialogue }) {
+async function verifyCompanion({ pet, bubble, dialogue, monitor, screen, BrowserWindow, command, setSetting,
+  getSettings, showDialogue }) {
   const page = code => pet.webContents.executeJavaScript(code);
   const state = () => page('({...document.getElementById("pet").dataset})');
   const area = screen.getDisplayMatching(pet.getBounds()).workArea;
@@ -130,6 +131,8 @@ async function verifyCompanion({ pet, bubble, dialogue, monitor, screen, Browser
     assert.deepEqual(colors.eyes.map(color => color.toUpperCase()), ['#1A1A1A', '#1A1A1A']);
   }
   await assertFixedColor();
+  assert.equal(getSettings().keepAwake, true, '首次使用必须默认选中保持清醒');
+  setSetting('keepAwake', false);
   for (const [seconds, mode] of [[301, 'spacing'], [601, 'tired'], [901, 'sleep']]) {
     assert.equal((await sample({ idleSeconds: seconds })).mode, mode);
     await assertFixedColor();
@@ -237,8 +240,12 @@ async function verifyCompanion({ pet, bubble, dialogue, monitor, screen, Browser
   assert.equal((await state()).lastAction, 'drop', `拖动后应触发落地反馈：${JSON.stringify(await page('window.__dragTrace'))}`);
   process.stdout.write('PET_TOUCH_DRAG_OK\n');
 
-  // 让真实互动冷却结束，不绕过生产对白节流。
-  await wait(6100);
+  // 等待真实互动冷却确实结束，不以固定等待误判稍晚到达的拖拽反馈。
+  const dialogueReadyDeadline = performance.now() + 10000;
+  while ((performance.now() - dialogue._lastDirectAt < 6050 || dialogue.hasBubble(performance.now())) &&
+    performance.now() < dialogueReadyDeadline) await wait(50);
+  assert.ok(performance.now() - dialogue._lastDirectAt >= 6050, '互动气泡冷却未结束');
+  assert.equal(dialogue.hasBubble(performance.now()), false, '上一条互动气泡仍未结束');
   const focusBefore = BrowserWindow.getFocusedWindow();
   assert.ok(showDialogue('play'));
   await wait(350);

@@ -163,6 +163,24 @@ test('小巧档创建可点击的 128×32 横条，点击展开和收起时复�
   assert.equal(win.sent.at(-1)[1].expanded, false);
 });
 
+test('标准档同样可点击展开和收起，并复用同一窗口', async t => {
+  const f = fixture(() => Promise.resolve(), { labelSize: 'standard' });
+  t.after(() => f.label.destroy());
+  f.label.show(readyModel());
+  await flush();
+  const win = f.windows[0];
+  assert.deepEqual(win.ignoreCalls.at(-1), [false]);
+
+  win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  assert.equal(f.windows.length, 1);
+  assert.deepEqual(win.bounds, { x: 242, y: 388, width: 196, height: 96 });
+  assert.equal(win.sent.at(-1)[1].expanded, true);
+
+  win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  assert.deepEqual(win.bounds, { x: 256, y: 388, width: 168, height: 58 });
+  assert.equal(win.sent.at(-1)[1].expanded, false);
+});
+
 test('getWindow 只返回当前有效窗口，销毁后不暴露旧引用', async () => {
   const f = fixture(() => Promise.resolve());
   assert.equal(f.label.getWindow(), null);
@@ -800,7 +818,7 @@ test('预加载层只接收固定通道，白名单纯标量且可取消订阅',
   assert.equal(typeof api.open, 'undefined');
 });
 
-test('小巧横条只显示周期类型和最低剩余额度，点击请求展开明细', () => {
+test('小巧横条只显示摘要，小巧和标准卡片均可点击展开明细', () => {
   let receive;
   let click;
   let toggles = 0;
@@ -853,6 +871,17 @@ test('小巧横条只显示周期类型和最低剩余额度，点击请求展�
   assert.equal(summary.children.map(node => node.textContent).join(''), '5h额度42%');
   assert.equal(resetTime.textContent, '5小时30分钟后重置 · 1/15 21:30');
   assert.equal(resetCredits.textContent, '1 次重置机会');
+
+  receive({ state: 'ready', size: 'standard', expanded: false, items: [
+    { label: 'codex', windowMinutes: 10080, remaining: 64 },
+    { label: 'gpt-reserve', windowMinutes: 10080, remaining: 78 }
+  ], overflow: 0 });
+  click();
+  assert.equal(toggles, 2);
+  receive({ state: 'ready', size: 'standard', expanded: true, items: [
+    { label: 'codex', windowMinutes: 10080, remaining: 64 }
+  ], overflow: 0 });
+  assert.equal(label.dataset.expanded, 'true');
 });
 
 test('预加载每个外部字段只读一次，Proxy 和回调异常不穿透 IPC', () => {
@@ -904,6 +933,25 @@ test('预加载每个外部字段只读一次，Proxy 和回调异常不穿透 I
   assert.equal(JSON.stringify(fallback), JSON.stringify({
     state: 'disconnected', size: 'standard', expanded: false, items: [], overflow: 0
   }));
+});
+
+test('预加载安全层保留标准卡片的展开状态', () => {
+  let api;
+  let listener;
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../quota-label-preload.js'), 'utf8'), {
+    require: () => ({
+      contextBridge: { exposeInMainWorld(_name, value) { api = value; } },
+      ipcRenderer: { on(_name, callback) { listener = callback; }, removeListener() {} }
+    })
+  });
+  let received;
+  api.onModel(value => { received = value; });
+  listener({}, {
+    state: 'ready', size: 'standard', expanded: true,
+    items: [{ label: 'codex', windowMinutes: 10080, remaining: 59 }], overflow: 0
+  });
+  assert.equal(received.size, 'standard');
+  assert.equal(received.expanded, true);
 });
 
 test('渲染层用固定中文状态、纯文本和合理四舍五入最多展示两项', () => {
@@ -1058,9 +1106,9 @@ test('额度卡片复用星空工作台流光，悬停加速且减少动态效�
 
 test('小巧展开为 196×96，单项额度使用大数字，双项额度仍完整保留', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
-  assert.match(css, /#quota-label\[data-size="compact"\]\[data-expanded="true"\][\s\S]*?padding:\s*8px 10px 7px/);
-  assert.match(css, /#quota-label\[data-size="compact"\]\[data-expanded="true"\]\[data-item-count="1"\][\s\S]*?\.quota-value[\s\S]*?font-size:\s*28px/);
-  assert.match(css, /#quota-label\[data-size="compact"\]\[data-expanded="true"\]\[data-item-count="2"\][\s\S]*?#items li[\s\S]*?display:\s*grid/);
+  assert.match(css, /#quota-label\[data-expanded="true"\][\s\S]*?padding:\s*8px 10px 7px/);
+  assert.match(css, /#quota-label\[data-expanded="true"\]\[data-item-count="1"\][\s\S]*?\.quota-value[\s\S]*?font-size:\s*28px/);
+  assert.match(css, /#quota-label\[data-expanded="true"\]\[data-item-count="2"\][\s\S]*?#items li[\s\S]*?display:\s*grid/);
   assert.match(css, /#quota-details[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)\s+58px/);
 });
 
@@ -1084,13 +1132,29 @@ test('标准档复用原小巧版 11px 字号和 3px 进度条，小巧折叠为
   assert.match(css, /\.quota-progress\s*\{[\s\S]*?height:\s*3px/);
   assert.match(css, /#quota-label\[data-size="compact"\]\[data-expanded="false"\][\s\S]*?border-radius:\s*11px/);
   assert.match(css, /#quota-label\[data-size="compact"\]\[data-expanded="false"\][\s\S]*?#summary[\s\S]*?display:\s*flex/);
-  assert.match(css, /#quota-label\[data-size="compact"\]\[data-expanded="true"\][\s\S]*?#quota-details[\s\S]*?display:\s*grid/);
+  assert.match(css, /#quota-label\[data-expanded="true"\][\s\S]*?#quota-details[\s\S]*?display:\s*grid/);
 });
 
 test('小巧展开详情在深色背景使用浅色文字，不能继承浅色页灰字', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
-  assert.match(css, /@media \(prefers-color-scheme: dark\)[\s\S]*?#quota-label\[data-size="compact"\]\[data-expanded="true"\] #quota-details\s*\{[\s\S]*?color:\s*rgba\(232, 233, 235, \.72\)/);
-  assert.match(css, /@media \(prefers-color-scheme: dark\)[\s\S]*?#quota-label\[data-size="compact"\]\[data-expanded="true"\]\[data-item-count="1"\] #items li::after\s*\{\s*color:\s*#c8d0da/);
+  assert.match(css, /@media \(prefers-color-scheme: dark\)[\s\S]*?#quota-label\[data-expanded="true"\] #quota-details\s*\{[\s\S]*?color:\s*var\(--quota-muted\)/);
+  assert.match(css, /@media \(prefers-color-scheme: dark\)[\s\S]*?#quota-label\[data-expanded="true"\]\[data-item-count="1"\] #items li::after\s*\{\s*color:\s*#c8d0da/);
+});
+
+test('浅色系统叠在深色壁纸上仍使用高覆盖玻璃底和不透明文字', () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
+  assert.match(css, /--quota-surface:\s*rgba\(244, 249, 255, \.86\)/);
+  assert.match(css, /--quota-muted:\s*#555e6a/);
+  assert.match(css, /--quota-subtle:\s*#505965/);
+  assert.match(css, /\.quota-period[\s\S]*?color:\s*var\(--quota-muted\)/);
+  assert.match(css, /\.detail-secondary[\s\S]*?color:\s*var\(--quota-subtle\)/);
+  assert.match(css, /#quota-label\[data-expanded="true"\][\s\S]*?#quota-details[\s\S]*?display:\s*grid/);
+});
+
+test('标准卡片展开态复用 196×96 明细布局', () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
+  assert.match(css, /#quota-label\[data-expanded="true"\][\s\S]*?padding:\s*8px 10px 7px/);
+  assert.match(css, /#quota-label\[data-expanded="true"\]\[data-item-count="1"\][\s\S]*?\.quota-value[\s\S]*?font-size:\s*28px/);
 });
 
 test('展开详情把相对重置时间、具体时间和重置机会分层排版', () => {
@@ -1161,18 +1225,19 @@ test('168×58 内两条额度的文字和进度条不裁切', () => {
   assert.doesNotMatch(css, /overflow(?:-y)?:\s*(?:auto|scroll)/);
 });
 
-test('浅色周期文字和深色 urgent 在各自背景合成后对比度均不低于 4.5', () => {
+test('浅色卡片在深色壁纸上的次级文字和深色 urgent 对比度均不低于 4.5', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
-  const lightBackgroundMatch = css.match(/background:\s*rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
-  const periodMatch = css.match(/\.quota-period\s*\{[^}]*color:\s*rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+  const lightBackgroundMatch = css.match(/--quota-surface:\s*rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+  const periodMatch = css.match(/--quota-muted:\s*#([0-9a-f]{6})/i);
   const darkBlock = css.slice(css.indexOf('@media (prefers-color-scheme: dark)'));
-  const darkBackgroundMatch = darkBlock.match(/background:\s*rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+  const darkBackgroundMatch = darkBlock.match(/--quota-surface:\s*rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
   const urgentMatch = darkBlock.match(/#items li\[data-severity="urgent"\] \.quota-value\s*\{\s*color:\s*rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
   assert.ok(lightBackgroundMatch && periodMatch && darkBackgroundMatch && urgentMatch);
   const numbers = match => match.slice(1).map(Number);
-  const lightBackground = composite(numbers(lightBackgroundMatch), [255, 255, 255]);
-  const periodColor = composite(numbers(periodMatch), lightBackground);
-  const darkBackground = composite(numbers(darkBackgroundMatch), [28, 28, 30]);
+  const hex = value => [0, 2, 4].map(index => Number.parseInt(value.slice(index, index + 2), 16));
+  const lightBackground = composite(numbers(lightBackgroundMatch), [0, 0, 0]);
+  const periodColor = hex(periodMatch[1]);
+  const darkBackground = composite(numbers(darkBackgroundMatch), [0, 0, 0]);
   const urgentColor = numbers(urgentMatch);
   assert.ok(contrast(periodColor, lightBackground) >= 4.5);
   assert.ok(contrast(urgentColor, darkBackground) >= 4.5);

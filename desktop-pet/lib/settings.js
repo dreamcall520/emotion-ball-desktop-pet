@@ -6,7 +6,7 @@ const DEFAULTS = Object.freeze({
   x: null,
   y: null,
   alwaysOnTop: true,
-  keepAwake: false,
+  keepAwake: true,
   bubblesEnabled: true,
   codexEnabled: false,
   codexTaskNameInAlerts: false,

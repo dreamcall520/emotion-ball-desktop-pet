@@ -141,6 +141,9 @@ async function verifyBodyMotion({ pet, bubble, screen, command, setSetting, samp
     const started = performance.now();
     await capture(recording, started);
     await trigger();
+    // 动作已经由真实双击或气泡按钮启动；后续逐帧期间临时挡住实体鼠标，
+    // 避免验收跑到当前光标所在屏幕时，被额外点击或拖动打断。
+    pet.setIgnoreMouseEvents(true, { forward: true });
     const deadline = started + 5000;
     const nativeFrames = [];
     let packets = [];
@@ -179,10 +182,13 @@ async function verifyBodyMotion({ pet, bubble, screen, command, setSetting, samp
     if (recording) {
       assert.ok(recording.frames.length >= 7, `${label}截图不足`);
     }
+    pet.setIgnoreMouseEvents(false);
     return tokens[0];
   };
   const place = async (area, size, x, y) => {
     command('rest');
+    await wait(80);
+    command('wake');
     await wait(80);
     pet.setBounds({ x, y, width: size, height: size });
     await poll(() => page('({width:innerWidth,height:innerHeight})'), value => value.width === size && value.height === size, '窗口尺寸');
@@ -271,6 +277,7 @@ async function verifyBodyMotion({ pet, bubble, screen, command, setSetting, samp
     process.stdout.write('PET_BODY_MOTION_OK\n');
     process.stdout.write('PET_DOUBLE_CLICK_OK\n');
   } finally {
+    try { pet.setIgnoreMouseEvents(false); } catch (_) { /* 冒烟退出时窗口可能已关闭。 */ }
     if (artifacts) fs.writeFileSync(path.join(artifacts, 'motion-verification.json'), JSON.stringify({ displays: screen.getAllDisplays().map(display => ({ id: display.id, workArea: display.workArea })), results }, null, 2));
     command('rest');
     await page('window.__motionUnsubscribe(); cancelAnimationFrame(window.__motionRAF); window.__motionQA.collecting = false; true');

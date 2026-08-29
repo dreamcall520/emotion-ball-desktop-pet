@@ -845,7 +845,7 @@ async function finishSmokeTest() {
 
     await require('./scripts/verify-companion').verifyCompanion({
       pet: petWindow, bubble, dialogue, monitor: activityMonitor, screen, BrowserWindow,
-      command: sendCommand, setSetting: setCompanionSetting, showDialogue
+      command: sendCommand, setSetting: setCompanionSetting, getSettings: () => ({ ...settings }), showDialogue
     });
 
     await require('./scripts/verify-codex-companion').verifyCodexCompanion({

@@ -31,7 +31,7 @@ test('损坏文件回退且有效设置可回读', t => {
     x: 12,
     y: 20,
     alwaysOnTop: false,
-    keepAwake: false,
+    keepAwake: true,
     bubblesEnabled: true,
     codexEnabled: false,
     codexTaskNameInAlerts: false,
@@ -45,7 +45,7 @@ test('损坏文件回退且有效设置可回读', t => {
 test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
   assert.deepEqual(normalizeSettings({ size: 'small', x: -102.3, y: 81.8, alwaysOnTop: false }), {
     size: 'small', x: -102, y: 82, alwaysOnTop: false,
-    keepAwake: false, bubblesEnabled: true, codexEnabled: false,
+    keepAwake: true, bubblesEnabled: true, codexEnabled: false,
     codexTaskNameInAlerts: false, codexQuotaAlwaysVisible: false,
     codexQuotaPeriod: 'auto', codexQuotaLabelSize: 'compact'
   });
@@ -56,6 +56,12 @@ test('陪伴开关只接受布尔值且不保存输入信息', () => {
     keepAwake: true, bubblesEnabled: false, inputText: '不保存', cursor: { x: 1, y: 2 }, idleSeconds: 99
   }), { ...DEFAULTS, keepAwake: true, bubblesEnabled: false });
   assert.deepEqual(normalizeSettings({ keepAwake: 'true', bubblesEnabled: 0 }), DEFAULTS);
+});
+
+test('首次使用默认保持清醒，但保留用户明确关闭的选择', () => {
+  assert.equal(DEFAULTS.keepAwake, true);
+  assert.equal(normalizeSettings({}).keepAwake, true);
+  assert.equal(normalizeSettings({ keepAwake: false }).keepAwake, false);
 });
 
 test('陪伴开关保存后可回读且仅写入允许设置', t => {

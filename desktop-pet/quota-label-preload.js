@@ -73,7 +73,7 @@ function safeModel(value) {
   }
   const state = STATES.has(stateValue) ? stateValue : 'disconnected';
   const size = sizeValue === 'compact' ? 'compact' : 'standard';
-  const expanded = size === 'compact' && expandedValue === true;
+  const expanded = expandedValue === true;
   if (!['ready', 'stale'].includes(state)) return { state, size, expanded: false, items: [], overflow: 0 };
   let rawItems;
   let overflowValue;

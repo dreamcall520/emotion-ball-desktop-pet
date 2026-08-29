@@ -1,5 +1,6 @@
 const LABEL_SIZES = Object.freeze({
   standard: Object.freeze({ width: 168, height: 58 }),
+  standardExpanded: Object.freeze({ width: 196, height: 96 }),
   compact: Object.freeze({ width: 128, height: 32 }),
   compactExpanded: Object.freeze({ width: 196, height: 96 })
 });
@@ -67,7 +68,8 @@ function bounded(candidate, size, area) {
 }
 
 function quotaLabelSize(value, expanded = false) {
-  if (value === 'compact' && expanded === true) return LABEL_SIZES.compactExpanded;
+  if (expanded === true && value === 'standard') return LABEL_SIZES.standardExpanded;
+  if (expanded === true && value === 'compact') return LABEL_SIZES.compactExpanded;
   return LABEL_SIZES[value] || LABEL_SIZES.standard;
 }
 

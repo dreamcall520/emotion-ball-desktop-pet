@@ -81,10 +81,10 @@ function assertQuotaLabelWindow(controller, expectedWindow, petBounds, options =
   assert.equal(expectedWindow.isFocusable(), false, '额度标签不能聚焦');
   assert.equal(expectedWindow.isVisible(), true, '额度标签必须可见');
   const bounds = expectedWindow.getBounds();
-  const expectedSize = options.size === 'compact' && options.expanded !== true
-    ? { width: 128, height: 32 }
+  const expectedSize = options.expanded === true
+    ? { width: 196, height: 96 }
     : options.size === 'compact'
-      ? { width: 196, height: 96 }
+      ? { width: 128, height: 32 }
       : { width: 168, height: 58 };
   assert.deepEqual({ width: bounds.width, height: bounds.height }, expectedSize,
     `额度标签必须保持 ${expectedSize.width}×${expectedSize.height}`);
@@ -371,6 +371,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
   };
   const artifacts = process.env.PET_SMOKE_ARTIFACT_DIR ? path.resolve(process.env.PET_SMOKE_ARTIFACT_DIR) : null;
   const results = [];
+  let shieldQuotaInput = false;
   const capture = (win, name, controller = null) => capturePaintedWindow({
     win, controller, settle: wait,
     artifactPath: artifacts ? path.join(artifacts, `${name}.png`) : null
@@ -405,6 +406,8 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       })),
       resetTime: document.getElementById('reset-time')?.textContent || '',
       resetCredits: document.getElementById('reset-credits')?.textContent || '',
+      clickTrace: Number(window.__quotaStandardClickTrace || 0),
+      viewport: { width: innerWidth, height: innerHeight },
       fits: visibleSections.every(node => {
         const rect = node.getBoundingClientRect();
         return rect.left >= rootRect.left && rect.right <= rootRect.right &&
@@ -416,8 +419,12 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assert.equal(quotaLabel.getWindow(), win, '读取标签后必须仍是当前窗口');
     return view;
   };
-  const visibleLabel = label => poll(() => Promise.resolve(quotaLabel?.getWindow()),
-    value => value?.isVisible(), label);
+  const visibleLabel = async label => {
+    const win = await poll(() => Promise.resolve(quotaLabel?.getWindow()),
+      value => value?.isVisible(), label);
+    if (shieldQuotaInput) win.setIgnoreMouseEvents(true, { forward: true });
+    return win;
+  };
   const waitForLabelView = (predicate, label) => poll(async () => {
     const win = quotaLabel?.getWindow();
     return win?.isVisible() ? { win, view: await labelView(win) } : null;
@@ -451,6 +458,45 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       if (attachedHere && debuggerApi.isAttached()) debuggerApi.detach();
     }
     return captures;
+  };
+  const captureDarkWallpaperInLightSystem = async win => {
+    assert.equal(quotaLabel.getWindow(), win, '深色壁纸验收前必须仍是当前标签窗口');
+    const debuggerApi = win.webContents.debugger;
+    const attachedHere = !debuggerApi.isAttached();
+    if (attachedHere) debuggerApi.attach('1.3');
+    try {
+      await debuggerApi.sendCommand('Emulation.setEmulatedMedia', {
+        media: '', features: [{ name: 'prefers-color-scheme', value: 'light' }]
+      });
+      const palette = await win.webContents.executeJavaScript(`(() => {
+        document.documentElement.style.background = '#080b10';
+        document.body.style.background = 'radial-gradient(circle at 25% 20%, #343b46, #080b10 64%)';
+        const root = document.getElementById('quota-label');
+        const period = document.querySelector('.quota-period');
+        const secondary = document.querySelector('.detail-secondary');
+        return {
+          surface: getComputedStyle(root).getPropertyValue('--quota-surface').trim(),
+          text: getComputedStyle(root).color,
+          period: period ? getComputedStyle(period).color : '',
+          secondary: secondary ? getComputedStyle(secondary).color : ''
+        };
+      })()`);
+      await wait(80);
+      assert.match(palette.surface, /rgba\(244,\s*249,\s*255,\s*(?:0?\.86)\)/);
+      assert.equal(palette.text, 'rgb(35, 37, 42)');
+      assert.equal(palette.period, 'rgb(85, 94, 106)');
+      assert.equal(palette.secondary, 'rgb(80, 89, 101)');
+      await capture(win, 'quota-label-standard-expanded-dark-wallpaper-light-system', quotaLabel);
+    } finally {
+      await win.webContents.executeJavaScript(`(() => {
+        document.documentElement.style.removeProperty('background');
+        document.body.style.removeProperty('background');
+      })()`).catch(() => undefined);
+      await debuggerApi.sendCommand('Emulation.setEmulatedMedia', { media: '', features: [] })
+        .catch(() => undefined);
+      if (attachedHere && debuggerApi.isAttached()) debuggerApi.detach();
+    }
+    assert.equal(quotaLabel.getWindow(), win, '深色壁纸验收后必须仍是当前标签窗口');
   };
   const verifyQuotaBeam = async win => {
     assert.equal(quotaLabel.getWindow(), win, '流光验收前必须仍是当前标签窗口');
@@ -623,6 +669,35 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     '两条额度进度条必须完整可见');
     const freshCaptures = await captureColorSchemes(labelResult.win);
 
+    await labelResult.win.webContents.executeJavaScript(`(() => {
+      window.__quotaStandardClickTrace = 0;
+      document.getElementById('quota-label').addEventListener('click', () => {
+        window.__quotaStandardClickTrace += 1;
+      });
+    })()`);
+    let standardBounds = labelResult.win.getBounds();
+    await input(labelResult.win, 'mousePressed', standardBounds.width / 2, standardBounds.height / 2);
+    await input(labelResult.win, 'mouseReleased', standardBounds.width / 2, standardBounds.height / 2);
+    let standardExpanded = await waitForLabelView(view => view.size === 'standard' &&
+      view.expanded === 'true' && view.rows.length === 2, '展开标准额度明细');
+    assertQuotaLabelWindow(quotaLabel, standardExpanded.win, pet.getBounds(),
+      { size: 'standard', expanded: true });
+    assert.equal(standardExpanded.view.resetCredits, '1 次重置机会');
+    await captureColorSchemes(standardExpanded.win,
+      { size: 'standard', expanded: true, prefix: 'quota-label-standard-expanded' });
+    await captureDarkWallpaperInLightSystem(standardExpanded.win);
+    process.stdout.write('PET_CODEX_QUOTA_WALLPAPER_CONTRAST_OK\n');
+
+    standardBounds = standardExpanded.win.getBounds();
+    await input(standardExpanded.win, 'mousePressed', standardBounds.width / 2, standardBounds.height / 2);
+    await input(standardExpanded.win, 'mouseReleased', standardBounds.width / 2, standardBounds.height / 2);
+    standardExpanded = await waitForLabelView(view => view.size === 'standard' &&
+      view.expanded === 'false' && view.rows.length === 2, '收起标准额度明细');
+    await poll(() => Promise.resolve(standardExpanded.win.getBounds()), bounds =>
+      bounds.width === 168 && bounds.height === 58, '标准额度窗口收起尺寸');
+    assertQuotaLabelWindow(quotaLabel, standardExpanded.win, pet.getBounds(), { size: 'standard' });
+    process.stdout.write('PET_CODEX_QUOTA_STANDARD_EXPAND_OK\n');
+
     clock.advanceBy(300001);
     const staleLabelResult = await waitForLabelView(view => view.state === 'stale' &&
       view.rows.length === 2, '过期两项额度标签');
@@ -706,6 +781,10 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       '切回标准额度卡片');
     assertQuotaLabelWindow(quotaLabel, labelResult.win, pet.getBounds());
     assert.equal(getMenu().getMenuItemById('codex-quota-label-standard').checked, true);
+    // 标准和小巧的真实点击已经专项验收完成；其余长流程只检查展示与避让，
+    // 临时挡住实体鼠标，避免测试窗口经过当前光标时被再次展开。
+    shieldQuotaInput = true;
+    labelResult.win.setIgnoreMouseEvents(true, { forward: true });
     process.stdout.write('PET_CODEX_QUOTA_COMPACT_OK\n');
 
     assert.equal(setQuotaPreference('codexQuotaPeriod', 'fiveHour'), true);
@@ -873,6 +952,8 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
   } catch (error) {
     primaryError = error;
   } finally {
+    shieldQuotaInput = false;
+    try { quotaLabel?.getWindow()?.setIgnoreMouseEvents(false); } catch (_) { /* 冒烟退出时窗口可能已关闭。 */ }
     cleanupErrors = await restoreSmokeState({ original, getSettings, setEnabled,
       setQuotaPreference, command, clearDialogue, page, setSetting, setSize, restorePetSettings,
       pet, bubble, quotaLabel, prepareSynthetic: () => prepare(syntheticOptions), prepare });

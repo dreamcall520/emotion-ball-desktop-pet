@@ -78,7 +78,7 @@
     } catch (_) { return { state: 'disconnected', items: [], overflow: 0, size: 'standard', expanded: false }; }
     const state = states.has(stateValue) ? stateValue : 'disconnected';
     const size = sizeValue === 'compact' ? 'compact' : 'standard';
-    const expanded = size === 'compact' && expandedValue === true;
+    const expanded = expandedValue === true;
     if (!['ready', 'stale'].includes(state)) return { state, items: [], overflow: 0, size, expanded: false };
     let rawItems;
     let overflowValue;
@@ -286,7 +286,7 @@
   if (typeof label.addEventListener === 'function' && typeof bridge.toggleExpanded === 'function') {
     try {
       label.addEventListener('click', () => {
-        if (label.dataset.size !== 'compact' || label.dataset.hasItems !== 'true') return;
+        if (label.dataset.hasItems !== 'true') return;
         try { bridge.toggleExpanded(); } catch (_) {}
       });
     } catch (_) {}
