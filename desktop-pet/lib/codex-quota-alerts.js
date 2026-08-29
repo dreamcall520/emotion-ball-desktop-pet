@@ -1,6 +1,7 @@
 const LEVELS = Object.freeze([10, 20, 30, 40, 50, 60, 70, 80, 90, 100]);
 const LEVEL_SET = new Set(LEVELS);
 const MAX_IDENTITIES = 64;
+const MAX_EVICTED_IDENTITIES = 64;
 const MAX_TEXT_LENGTH = 256;
 const MAX_KEY_LENGTH = 1024;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/u;
@@ -10,7 +11,7 @@ function reasonableText(value, maxLength = MAX_TEXT_LENGTH) {
     && value.trim().length > 0 && !CONTROL_CHARACTERS.test(value);
 }
 
-function validWindow(item) {
+function validWindowScalars(item) {
   return Boolean(item && typeof item === 'object' && !Array.isArray(item)
     && reasonableText(item.id) && reasonableText(item.label)
     && Number.isSafeInteger(item.windowMinutes) && item.windowMinutes > 0
@@ -18,24 +19,32 @@ function validWindow(item) {
     && Number.isSafeInteger(item.resetsAt) && item.resetsAt > 0);
 }
 
+function safeWindow(item) {
+  try {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+    const copy = {
+      id: item.id,
+      label: item.label,
+      windowMinutes: item.windowMinutes,
+      remaining: item.remaining,
+      resetsAt: item.resetsAt
+    };
+    return validWindowScalars(copy) ? copy : null;
+  } catch {
+    return null;
+  }
+}
+
 function keyOf(item) {
   return JSON.stringify([item.id, item.windowMinutes, item.resetsAt]);
 }
 
-function copyWindow(item) {
-  return {
-    id: item.id,
-    label: item.label,
-    windowMinutes: item.windowMinutes,
-    remaining: item.remaining,
-    resetsAt: item.resetsAt
-  };
-}
-
 function levelOf(remaining) {
+  if (remaining === 0) return 100;
   const used = 100 - remaining;
   let result = 0;
   for (const level of LEVELS) {
+    if (level === 100) break;
     if (used < level) break;
     result = level;
   }
@@ -56,31 +65,60 @@ function alertOf(key, level, item) {
 
 function reliableByIdentity(windows) {
   const reliable = new Map();
-  if (!Array.isArray(windows)) return reliable;
-  for (const item of windows) {
-    if (!validWindow(item)) continue;
-    const key = keyOf(item);
-    if (reliable.has(key)) {
-      reliable.set(key, copyWindow(item));
+  let length;
+  try {
+    if (!Array.isArray(windows)) return reliable;
+    length = windows.length;
+  } catch {
+    return reliable;
+  }
+  if (!Number.isSafeInteger(length) || length < 0) return reliable;
+  for (let index = 0; index < length; index += 1) {
+    let raw;
+    try {
+      raw = windows[index];
+    } catch {
       continue;
     }
-    if (reliable.size < MAX_IDENTITIES) reliable.set(key, copyWindow(item));
+    const item = safeWindow(raw);
+    if (!item) continue;
+    const key = keyOf(item);
+    if (reliable.has(key)) {
+      reliable.set(key, item);
+      continue;
+    }
+    if (reliable.size < MAX_IDENTITIES) reliable.set(key, item);
   }
   return reliable;
 }
 
+function safeOptions(options) {
+  try {
+    if (!options || typeof options !== 'object' || Array.isArray(options)) {
+      return { baseline: false, alwaysVisible: false };
+    }
+    return {
+      baseline: options.baseline === true,
+      alwaysVisible: options.alwaysVisible === true
+    };
+  } catch {
+    return { baseline: false, alwaysVisible: false };
+  }
+}
+
 function createQuotaAlertTracker() {
   const state = new Map();
+  const evicted = new Map();
 
   function reset() {
     state.clear();
+    evicted.clear();
   }
 
   function update(windows, options = {}) {
-    const safeOptions = options && typeof options === 'object' && !Array.isArray(options)
-      ? options : {};
-    const baseline = safeOptions.baseline === true;
-    const alwaysVisible = safeOptions.alwaysVisible === true;
+    const normalizedOptions = safeOptions(options);
+    const baseline = normalizedOptions.baseline;
+    const alwaysVisible = normalizedOptions.alwaysVisible;
     const reliable = reliableByIdentity(windows);
     const batchKeys = new Set(reliable.keys());
     const alertsByKey = new Map();
@@ -104,6 +142,8 @@ function createQuotaAlertTracker() {
 
     for (const [key, item] of reliable) {
       if (state.has(key)) continue;
+      let entry = evicted.get(key);
+      if (entry) evicted.delete(key);
       if (state.size >= MAX_IDENTITIES) {
         let evictionKey;
         for (const existingKey of state.keys()) {
@@ -112,9 +152,13 @@ function createQuotaAlertTracker() {
             break;
           }
         }
-        state.delete(evictionKey === undefined ? state.keys().next().value : evictionKey);
+        const selectedKey = evictionKey === undefined ? state.keys().next().value : evictionKey;
+        const selectedEntry = state.get(selectedKey);
+        state.delete(selectedKey);
+        if (evicted.size >= MAX_EVICTED_IDENTITIES) evicted.delete(evicted.keys().next().value);
+        evicted.set(selectedKey, selectedEntry);
       }
-      const entry = { peak: 0, emitted: new Set() };
+      if (!entry) entry = { peak: 0, emitted: new Set() };
       state.set(key, entry);
       observe(key, item, entry, true);
     }
@@ -129,13 +173,6 @@ function createQuotaAlertTracker() {
   return { update, reset };
 }
 
-function validAlert(item) {
-  return validWindow(item)
-    && reasonableText(item.key, MAX_KEY_LENGTH)
-    && item.key === keyOf(item)
-    && LEVEL_SET.has(item.level);
-}
-
 function copyAlert(item) {
   return {
     key: item.key,
@@ -148,11 +185,48 @@ function copyAlert(item) {
   };
 }
 
+function safeAlert(item) {
+  try {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+    const copy = {
+      key: item.key,
+      level: item.level,
+      remaining: item.remaining,
+      id: item.id,
+      label: item.label,
+      windowMinutes: item.windowMinutes,
+      resetsAt: item.resetsAt
+    };
+    if (!validWindowScalars(copy)
+      || !reasonableText(copy.key, MAX_KEY_LENGTH)
+      || copy.key !== keyOf(copy)
+      || !LEVEL_SET.has(copy.level)
+      || copy.level !== levelOf(copy.remaining)) return null;
+    return copy;
+  } catch {
+    return null;
+  }
+}
+
 function mergeQuotaAlerts(alerts) {
-  if (!Array.isArray(alerts)) return null;
+  let length;
+  try {
+    if (!Array.isArray(alerts)) return null;
+    length = alerts.length;
+  } catch {
+    return null;
+  }
+  if (!Number.isSafeInteger(length) || length < 0) return null;
   const unique = new Map();
-  for (const item of alerts) {
-    if (!validAlert(item)) continue;
+  for (let index = 0; index < length; index += 1) {
+    let raw;
+    try {
+      raw = alerts[index];
+    } catch {
+      continue;
+    }
+    const item = safeAlert(raw);
+    if (!item) continue;
     if (unique.has(item.key)) {
       unique.set(item.key, copyAlert(item));
       continue;

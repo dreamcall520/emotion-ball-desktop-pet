@@ -39,6 +39,18 @@ test('所有档位都按原始剩余值精确跨过，不被显示四舍五入�
   }
 });
 
+test('100% 档只在剩余严格等于 0 时触发，极小正数不被浮点抵消', () => {
+  const tracker = createQuotaAlertTracker();
+  tracker.update([quotaWindow('codex', 300, 10)], { baseline: true, alwaysVisible: false });
+
+  assert.deepEqual(tracker.update([
+    quotaWindow('codex', 300, Number.MIN_VALUE)
+  ], { alwaysVisible: false }), []);
+  assert.equal(tracker.update([
+    quotaWindow('codex', 300, 0)
+  ], { alwaysVisible: false })[0].level, 100);
+});
+
 test('首次和新类别先建基线，普通档不补报而高用量只报当前最严重档', () => {
   const tracker = createQuotaAlertTracker();
   const alerts = tracker.update([
@@ -235,6 +247,28 @@ test('满 64 项时批次换序且只替换一项，新身份不得级联误删�
   assert.deepEqual(tracker.update(reorderedReplacement, { alwaysVisible: false }), []);
 });
 
+test('64 项上限的两个交替批次多轮往返，同周期同档不得无限重报', () => {
+  const tracker = createQuotaAlertTracker();
+  const firstBatch = Array.from({ length: 64 }, (_, index) => quotaWindow(`id-${index}`, 300, 100));
+  tracker.update(firstBatch, { baseline: true, alwaysVisible: false });
+  assert.equal(tracker.update(firstBatch.map(item => ({ ...item, remaining: 20 })), {
+    alwaysVisible: false
+  }).length, 64);
+
+  const batchA = [
+    quotaWindow('id-64', 300, 20),
+    ...Array.from({ length: 63 }, (_, index) => quotaWindow(`id-${index}`, 300, 20))
+  ];
+  const batchB = Array.from({ length: 64 }, (_, index) => quotaWindow(`id-${index}`, 300, 20));
+  assert.deepEqual(tracker.update(batchA, { alwaysVisible: false }).map(item => item.id), ['id-64']);
+  assert.deepEqual(tracker.update(batchB, { alwaysVisible: false }), []);
+
+  for (let round = 0; round < 5; round += 1) {
+    assert.deepEqual(tracker.update(batchA, { alwaysVisible: false }), []);
+    assert.deepEqual(tracker.update(batchB, { alwaysVisible: false }), []);
+  }
+});
+
 test('多类别提醒合并返回最高档、最低实际剩余和稳定的安全引用', () => {
   const tracker = createQuotaAlertTracker();
   tracker.update([
@@ -312,6 +346,70 @@ test('合并只接受与额度身份完全匹配的 key，拒绝伪造独立 key
   ]);
   assert.equal(merged.count, 2);
   assert.deepEqual(merged.refs.map(item => item.id), ['codex', 'spark']);
+});
+
+test('合并拒绝与实际剩余不一致的档位，非法重复项不覆盖合法项', () => {
+  const tracker = createQuotaAlertTracker();
+  tracker.update([quotaWindow('codex', 300, 100)], { baseline: true, alwaysVisible: false });
+  const valid = tracker.update([quotaWindow('codex', 300, 20)], { alwaysVisible: false })[0];
+  const mismatched = { ...valid, remaining: 99, level: 100 };
+
+  assert.equal(mergeQuotaAlerts([mismatched]), null);
+  assert.deepEqual(mergeQuotaAlerts([valid, mismatched]).refs, [valid]);
+  assert.deepEqual(mergeQuotaAlerts([mismatched, valid]).refs, [valid]);
+});
+
+test('update 与 merge 安全忽略会抛错的 getter、Proxy 和已撤销 Proxy', () => {
+  const tracker = createQuotaAlertTracker();
+  const throwingItem = new Proxy({}, { get() { throw new Error('private getter'); } });
+  const throwingOptions = new Proxy({}, { get() { throw new Error('private option'); } });
+  const revokedWindows = Proxy.revocable([], {});
+  const revokedAlerts = Proxy.revocable([], {});
+  const symbolicLength = new Proxy([], {
+    get(target, property, receiver) {
+      if (property === 'length') return Symbol('invalid length');
+      return Reflect.get(target, property, receiver);
+    }
+  });
+  revokedWindows.revoke();
+  revokedAlerts.revoke();
+
+  assert.doesNotThrow(() => tracker.update([throwingItem], throwingOptions));
+  assert.deepEqual(tracker.update([throwingItem], throwingOptions), []);
+  assert.doesNotThrow(() => tracker.update(revokedWindows.proxy));
+  assert.deepEqual(tracker.update(revokedWindows.proxy), []);
+  assert.doesNotThrow(() => mergeQuotaAlerts([throwingItem]));
+  assert.equal(mergeQuotaAlerts([throwingItem]), null);
+  assert.doesNotThrow(() => mergeQuotaAlerts(revokedAlerts.proxy));
+  assert.equal(mergeQuotaAlerts(revokedAlerts.proxy), null);
+  assert.doesNotThrow(() => tracker.update(symbolicLength));
+  assert.deepEqual(tracker.update(symbolicLength), []);
+  assert.doesNotThrow(() => mergeQuotaAlerts(symbolicLength));
+  assert.equal(mergeQuotaAlerts(symbolicLength), null);
+});
+
+test('访问器标量只读取一次就防御复制，单个异常数组项不阻断后续可靠项', () => {
+  const tracker = createQuotaAlertTracker();
+  let idReads = 0;
+  const accessor = {
+    get id() { idReads += 1; return `accessor-${idReads}`; },
+    label: '访问器额度',
+    windowMinutes: 300,
+    remaining: 20,
+    resetsAt: NOW + 3600000
+  };
+  const mixed = new Proxy([null, accessor], {
+    get(target, property, receiver) {
+      if (property === '0') throw new Error('broken slot');
+      return Reflect.get(target, property, receiver);
+    }
+  });
+  const alerts = tracker.update(mixed, { baseline: true, alwaysVisible: false });
+
+  assert.equal(idReads, 1);
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].id, 'accessor-1');
+  assert.equal(alerts[0].key, JSON.stringify(['accessor-1', 300, NOW + 3600000]));
 });
 
 test('合并不变异原提醒，也不携带多余或非标量数据', () => {
