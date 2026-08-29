@@ -128,7 +128,10 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     });
   }
   function eventValid(event) {
-    return Boolean(event && event.refs.size > 0 && now() < event.expiresAt && event.generation === generation
+    const beforeExpiry = event?.kind === 'quota' && event.shownAt === undefined
+      ? [...event.refs.values()].every(ref => now() < ref.queueExpiresAt)
+      : now() < event?.expiresAt;
+    return Boolean(event && event.refs.size > 0 && beforeExpiry && event.generation === generation
       && validRefs(event).length === event.refs.size);
   }
   function refSignature(event, refs) {
@@ -273,8 +276,12 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
   }
   function pruneAlerts() {
     queued = queued.filter(event => {
-      if (now() >= event.expiresAt || event.generation !== generation) return false;
-      refreshEventRefs(event);
+      if (event.generation !== generation) return false;
+      if (event.kind === 'quota') refreshEventRefs(event, ref => now() < ref.queueExpiresAt);
+      else {
+        if (now() >= event.expiresAt) return false;
+        refreshEventRefs(event);
+      }
       return event.refs.size > 0;
     });
     return reconcileCurrentAlert();
@@ -288,8 +295,11 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     const quotaResets = queued.flatMap(event => event.kind === 'quota'
       ? [...event.refs.values()].map(ref => ref.resetsAt).filter(value => Number.isFinite(value) && value > now())
       : []);
+    const queueExpiries = queued.flatMap(event => event.kind === 'quota'
+      ? [...event.refs.values()].map(ref => ref.queueExpiresAt)
+      : [event.expiresAt]);
     const wakeAt = Math.min(readyAt > now() ? readyAt : now() + 1000,
-      ...queued.map(event => event.expiresAt), ...quotaResets);
+      ...queueExpiries, ...quotaResets);
     setTimer('drain', wakeAt - now(), drain);
   }
   function drain() {
@@ -326,13 +336,16 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     const previousRef = kind === 'quota' ? event?.refs.get(ref.key) : null;
     if (!event) event = queued.find(item => item.kind === kind && now() - item.createdAt < MERGE_MS);
     if (!event) {
-      event = { id: ++nextAlertId, generation, kind, createdAt: now(), expiresAt: now() + QUEUE_MS, refs: new Map() };
+      event = { id: ++nextAlertId, generation, kind, createdAt: now(), refs: new Map() };
+      if (kind !== 'quota') event.expiresAt = now() + QUEUE_MS;
       queued.push(event);
       if (queued.length > 20) queued.shift();
     }
     if (kind === 'quota') {
       for (const other of queued) if (other !== event) other.refs.delete(ref.key);
-      if (previousRef && previousRef.level < 80 && ref.level >= 80) event.expiresAt = now() + QUEUE_MS;
+      const queueExpiresAt = !previousRef || ref.level > previousRef.level
+        ? now() + QUEUE_MS : previousRef.queueExpiresAt;
+      ref = { ...ref, queueExpiresAt };
     }
     event.refs.set(kind === 'quota' ? ref.key : ref.id, ref);
     armDrain();

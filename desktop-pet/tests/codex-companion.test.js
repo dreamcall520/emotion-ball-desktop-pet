@@ -1353,6 +1353,83 @@ test('排队普通额度在第59秒升为强提醒时，同一事件从升级时
   assert.equal(f.alerts.length, 1);
 });
 
+test('排队额度在第59秒从80档升到90档时，该引用独立续期且urgent不丢失', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.setPresent(false);
+  f.quota(95);
+  f.quota(19);
+  await f.tick(59000);
+  f.quota(9);
+  f.setPresent(true);
+
+  await f.tick(1000);
+  assert.equal(f.alerts.length, 1);
+  assert.equal(f.alerts[0].severity, 'urgent');
+  assert.match(f.alerts[0].text, /9%/);
+  assert.equal(JSON.stringify(f.alerts[0]).includes('queueExpiresAt'), false);
+});
+
+test('合并额度只续期升档引用，旧普通项到60秒即剔除', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.setPresent(false);
+  const first = quotaWindow('first', 300, 69);
+  const upgraded = quotaWindow('upgraded', 10080, 69);
+  f.quota(95, { windows: [{ ...first, remaining: 95 }, { ...upgraded, remaining: 95 }] });
+  f.quota(69, { windows: [first, upgraded] });
+  await f.tick(59000);
+  f.quota(19, { windows: [first, { ...upgraded, remaining: 19 }] });
+  await f.tick(58000);
+  f.setPresent(true);
+
+  await f.tick(1000);
+  assert.equal(f.time, 1118000);
+  assert.equal(f.alerts.length, 1);
+  assert.equal(f.alerts[0].severity, 'strong');
+  assert.doesNotMatch(f.alerts[0].text, /多项额度/);
+  assert.match(f.alerts[0].text, /19%/);
+  const displayExpiry = f.companion.getSnapshot().currentAlert.expiresAt;
+  await f.tick(2000);
+  assert.notEqual(f.companion.getSnapshot().currentAlert, null);
+  assert.equal(f.companion.getSnapshot().currentAlert.expiresAt, displayExpiry);
+});
+
+test('排队额度在第59秒从90档升到100档时，只续期该引用并显示用完', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.setPresent(false);
+  f.quota(95);
+  f.quota(9);
+  await f.tick(59000);
+  f.quota(0);
+  f.setPresent(true);
+
+  await f.tick(1000);
+  assert.equal(f.alerts.length, 1);
+  assert.equal(f.alerts[0].severity, 'urgent');
+  assert.match(f.alerts[0].text, /已用完/);
+});
+
+test('排队额度同档只更新可靠剩余值，不会反复续期', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.setPresent(false);
+  f.quota(95);
+  f.quota(19);
+  for (let remaining = 18; remaining >= 14; remaining--) {
+    await f.tick(10000);
+    f.quota(remaining);
+  }
+  await f.tick(9000);
+  f.quota(13);
+  f.setPresent(true);
+
+  await f.tick(2000);
+  assert.equal(f.alerts.length, 0);
+  assert.equal(f.companion.getSnapshot().currentAlert, null);
+});
+
 test('账号清理回调重入禁用或新账号时，旧账号回调不覆盖最终状态', async () => {
   let armed = false;
   let acted = false;
