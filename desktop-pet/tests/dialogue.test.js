@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { PHRASES, DialogueDirector } = require('../lib/dialogue');
+const { completionText } = require('../lib/codex-text');
 
 const events = ['hello', 'pet', 'drag', 'drop', 'welcome', 'work', 'play', 'sleep'];
 
@@ -39,8 +40,13 @@ test('Codex 多任务、额度、过期与关闭不混入普通对白状态', ()
   const director = new DialogueDirector();
   assert.equal(typeof director.offerCodex, 'function');
   const multi = director.offerCodex(codexAlert({ taskIds: ['a', 'b'] }), 0);
-  assert.equal(multi.actions[0].id, 'codex-list');
-  assert.equal(director.respond(multi.id, 'codex-list', 8000), null);
+  assert.deepEqual(multi.actions, [
+    { id: 'codex-results', label: '查看结果' }, { id: 'codex-dismiss', label: '知道啦' }
+  ]);
+  assert.equal(director.respond(multi.id, 'codex-list', 100), null);
+  assert.deepEqual(director.respond(multi.id, 'codex-results', 100), { command: 'codex', descriptor: {
+    scope: 'alert', type: 'show-results', generation: 2, alertId: 7
+  } });
   const quota = director.offerCodex(codexAlert({ kind: 'quota', text: '额度剩余 10%\n详情见 Codex 状态', taskIds: [] }), 8000, 500);
   assert.equal(quota.durationMs, 500);
   assert.deepEqual(quota.actions, [{ id: 'codex-dismiss', label: '知道啦' }]);
@@ -51,6 +57,50 @@ test('Codex 多任务、额度、过期与关闭不混入普通对白状态', ()
   assert.equal(director.offerCodex(codexAlert({ text: null }), 8003), null);
   assert.equal(director.offerCodex(codexAlert({ text: '一\n二\n三' }), 8004), null);
   assert.ok(director.offer('play', 8005));
+});
+
+test('当前 Codex 气泡原位更新文案且不延长时限', () => {
+  const director = new DialogueDirector({ now: 0 });
+  const first = director.offerCodex(codexAlert({ text: '《任务A》有结果啦\n去看看？' }), 1000, 8000);
+  const originalActions = first.actions.map(item => ({ ...item }));
+  const updated = director.updateCodex(codexAlert({ text: '这轮有结果啦，去看看？' }), 2000);
+  assert.equal(updated.id, first.id);
+  assert.equal(updated.text, '这轮有结果啦，去看看？');
+  assert.equal(updated.durationMs, 7000);
+  assert.deepEqual(updated.actions, originalActions);
+  updated.actions.push({ id: 'forged', label: '伪造' });
+  assert.deepEqual(director.respond(first.id, 'codex-open', 2001)?.descriptor, {
+    scope: 'alert', type: 'open-task', generation: 2, alertId: 7, taskId: codexAlert().taskIds[0]
+  });
+});
+
+test('Codex 气泡更新拒绝错提醒、错代次、过期、非法文案和普通气泡且不污染状态', () => {
+  const invalid = [
+    codexAlert({ id: 8 }), codexAlert({ generation: 3 }), codexAlert({ text: '' }),
+    codexAlert({ text: '一\n二\n三' }), codexAlert({ text: '长'.repeat(49) })
+  ];
+  for (const alert of invalid) {
+    const director = new DialogueDirector();
+    const first = director.offerCodex(codexAlert(), 0, 8000);
+    assert.equal(director.updateCodex(alert, 100), null);
+    assert.deepEqual(director.respond(first.id, 'codex-open', 101)?.descriptor.taskId, codexAlert().taskIds[0]);
+  }
+  const expired = new DialogueDirector();
+  expired.offerCodex(codexAlert(), 0, 8000);
+  assert.equal(expired.updateCodex(codexAlert(), 8000), null);
+  assert.equal(expired.hasBubble(8000), false);
+  const ordinary = new DialogueDirector();
+  const first = ordinary.offer('play', 0);
+  assert.equal(ordinary.updateCodex(codexAlert(), 100), null);
+  assert.equal(ordinary.respond(first.id, 'again', 101), 'again');
+});
+
+test('18个 emoji 任务名生成的合并文案按 Unicode 字符通过气泡校验', () => {
+  const text = completionText(['😀'.repeat(18), '任务B'], 2, true);
+  assert.ok(Array.from(text).length <= 48);
+  assert.ok(text.length > 48, '该用例必须暴露 UTF-16 长度误判');
+  const director = new DialogueDirector();
+  assert.ok(director.offerCodex(codexAlert({ text, taskIds: ['a', 'b'] }), 0));
 });
 
 for (const motion of ['hop', 'jelly', 'sway', 'peek', 'bow', 'spin']) {

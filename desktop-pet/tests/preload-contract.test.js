@@ -30,12 +30,12 @@ test('气泡只允许当前普通或 Codex 固定按钮动作', () => {
     require: () => ({ contextBridge: { exposeInMainWorld(_name, value) { api = value; } },
       ipcRenderer: { send: (...args) => messages.push(args) } })
   });
-  for (const action of ['again', 'rest', 'codex-open', 'codex-list', 'codex-dismiss', 'shell', 'https://invalid']) api.reply(1, action);
+  for (const action of ['again', 'rest', 'codex-open', 'codex-results', 'codex-list', 'codex-dismiss', 'shell', 'https://invalid']) api.reply(1, action);
   assert.equal(messages.length, 5);
-  assert.deepEqual(messages.map(item => item[1].action), ['again', 'rest', 'codex-open', 'codex-list', 'codex-dismiss']);
+  assert.deepEqual(messages.map(item => item[1].action), ['again', 'rest', 'codex-open', 'codex-results', 'codex-dismiss']);
 });
 
-test('气泡显示 Codex 按钮且锚点更新不重建按钮', () => {
+test('气泡同ID先更新文字，动作不变时保留按钮、变化时才重建', () => {
   let receive;
   const replies = [];
   const bubble = { dataset: {}, style: { setProperty() {} } };
@@ -50,10 +50,16 @@ test('气泡显示 Codex 按钮且锚点更新不重建按钮', () => {
   assert.equal(message.textContent, payload.text);
   assert.equal(actions.children.length, 2);
   const button = actions.children[0];
-  receive({ ...payload, anchorX: 40 });
+  receive({ ...payload, text: '已显示任务名称', anchorX: 40 });
+  assert.equal(message.textContent, '已显示任务名称');
   assert.equal(actions.children[0], button);
+  receive({ ...payload, text: '动作已变', actions: [{ id: 'codex-results', label: '查看结果' }, { id: 'codex-dismiss', label: '知道啦' }] });
+  assert.equal(message.textContent, '动作已变');
+  assert.notEqual(actions.children[0], button);
+  assert.deepEqual(actions.children.map(item => item.dataset.action), ['codex-results', 'codex-dismiss']);
   button.click();
   assert.deepEqual(replies, [[4, 'codex-open']]);
+  assert.doesNotMatch(fs.readFileSync(path.resolve(__dirname, '../bubble-renderer.js'), 'utf8'), /innerHTML/);
 });
 
 test('预加载动作接口仅发送白名单字段且回帧可取消订阅', () => {

@@ -51,6 +51,12 @@ const PLAY_ACTIONS = Object.freeze([
 ]);
 const TEN_MINUTES = 600000;
 
+function validCodexText(text) {
+  if (typeof text !== 'string' || Array.from(text).length > 48) return false;
+  const lines = text.split('\n');
+  return lines.length <= 2 && lines.every(line => line.trim());
+}
+
 class DialogueDirector {
   constructor({ random = Math.random, now = 0, enabled = true } = {}) {
     this.enabled = Boolean(enabled);
@@ -96,8 +102,7 @@ class DialogueDirector {
     if (!this.enabled || !Number.isFinite(nowMs) || !Number.isFinite(durationMs) || durationMs <= 0 ||
       !Number.isSafeInteger(alert?.id) || !Number.isSafeInteger(alert.generation) ||
       !['waiting', 'completed', 'failed', 'quota'].includes(alert.kind) ||
-      typeof alert.text !== 'string' || !alert.text.trim() || alert.text.length > 48 ||
-      alert.text.split('\n').length > 2 || !Array.isArray(alert.taskIds)) return null;
+      !validCodexText(alert.text) || !Array.isArray(alert.taskIds)) return null;
     this._expire(nowMs);
     if (this._current) return null;
     const actions = [];
@@ -107,16 +112,30 @@ class DialogueDirector {
       actions.push({ id: 'codex-open', label: '去看看' });
       descriptors['codex-open'] = { ...descriptor('open-task'), taskId: alert.taskIds[0] };
     } else if (alert.taskIds.length > 1) {
-      actions.push({ id: 'codex-list', label: '查看任务' });
-      descriptors['codex-list'] = descriptor('show-tasks');
+      actions.push({ id: 'codex-results', label: '查看结果' });
+      descriptors['codex-results'] = descriptor('show-results');
     }
     actions.push({ id: 'codex-dismiss', label: '知道啦' });
     descriptors['codex-dismiss'] = descriptor('dismiss');
     const id = this._nextId++;
     durationMs = Math.min(8000, durationMs);
-    this._current = { id, event: 'codex', priority: -1, actions, descriptors, expiresAt: nowMs + durationMs };
+    this._current = { id, event: 'codex', sourceAlertId: alert.id, sourceGeneration: alert.generation,
+      priority: -1, actions, descriptors, expiresAt: nowMs + durationMs };
     this._lastBubbleAt = nowMs;
     return { id, text: alert.text, actions: actions.map(action => ({ ...action })), durationMs };
+  }
+
+  updateCodex(alert, nowMs) {
+    if (!Number.isFinite(nowMs)) return null;
+    this._expire(nowMs);
+    if (this._current?.event !== 'codex' || this._current.sourceAlertId !== alert?.id ||
+      this._current.sourceGeneration !== alert?.generation || !validCodexText(alert?.text)) return null;
+    return {
+      id: this._current.id,
+      text: alert.text,
+      actions: this._current.actions.map(action => ({ ...action })),
+      durationMs: this._current.expiresAt - nowMs
+    };
   }
 
   offer(request, nowMs) {

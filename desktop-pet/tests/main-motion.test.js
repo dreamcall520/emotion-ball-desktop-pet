@@ -8,7 +8,8 @@ const { EventEmitter } = require('node:events');
 const { setImmediate: flush } = require('node:timers/promises');
 
 // 真实 main、动作控制器和对白规则；只替代 Electron、系统采样和磁盘设置。
-async function fixture({ codexEnabled = false, consent = async () => ({ response: 1 }), openExternal = async () => {}, saveError = null } = {}) {
+async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
+  consent = async () => ({ response: 1 }), openExternal = async () => {}, saveError = null } = {}) {
   let now = 0;
   let serial = 0;
   const timers = new Map();
@@ -58,7 +59,8 @@ async function fixture({ codexEnabled = false, consent = async () => ({ response
         dialog: { showMessageBox: (...args) => { dialogs.push(args); return consent(...args); } },
         shell: { openExternal: url => { external.push(url); return openExternal(url); } },
         Menu: { buildFromTemplate: value => Object.assign(value, { popup: options => popups.push({ value, options }) }) }, nativeImage: { createFromPath: () => ({ setTemplateImage() {} }) } };
-      if (name === './lib/settings') return { loadSettings: () => ({ size: 'tiny', x: -600, y: 100, bubblesEnabled: true, codexEnabled }),
+      if (name === './lib/settings') return { loadSettings: () => ({ size: 'tiny', x: -600, y: 100,
+        bubblesEnabled: true, keepAwake: false, alwaysOnTop: true, codexEnabled, codexTaskNameInAlerts }),
         saveSettings: (_file, settings) => { if (saveError) throw saveError; saved.push({ ...settings }); return settings; } };
       if (name === './lib/codex-companion') return { createCodexCompanion: options => realRequire(name).createCodexCompanion({ ...options,
         createConnection(callbacks) {
@@ -114,12 +116,34 @@ function queueCodexCompletion(f) {
   return { token: 90, action: pending.motion, alertId: pending.alertId, generation: pending.generation };
 }
 
+function queueMultiCodexCompletion(f) {
+  const generation = f.call('codexCompanion.getSnapshot().generation');
+  f.send('pet:codex-availability', { generation, available: true });
+  const callbacks = f.connections.at(-1).callbacks;
+  for (const [index, id] of [TASK_ID, '22222222-2222-4222-8222-222222222222'].entries()) {
+    const task = { id, title: `完成任务${index + 1}`, state: 'active', turnId: `turn-${index + 1}`, updatedAt: 1800000000000 };
+    callbacks.onTask({ ...task, baseline: true });
+    callbacks.onTask({ ...task, state: 'completed' });
+  }
+  f.advanceTo(5000);
+  const pending = f.commands.findLast(command => command?.command === 'codex');
+  assert.ok(pending);
+  f.send('pet:codex-motion-ready', { token: 91, action: pending.motion, alertId: pending.alertId, generation: pending.generation });
+  return f.bubble.shows.at(-1);
+}
+
 test('默认关闭和取消确认都零连接、零轮询，并保留原设置', async () => {
   const f = await fixture();
   assert.equal(f.connections.length, 0);
   const item = f.call("menuTemplate().find(item => item.id === 'codex-enabled')");
   assert.ok(item, '菜单必须有可选开关');
   assert.equal(item.checked, false);
+  const names = f.call("menuTemplate().find(item => item.id === 'codex-task-names')");
+  assert.equal(names.checked, false);
+  assert.equal(names.enabled, false);
+  assert.equal(f.call('setCodexTaskNameInAlerts(true)'), false);
+  assert.equal(f.saved.length, 0);
+  assert.equal(f.call("menuTemplate().find(item => item.id === 'codex-task-names').checked"), false);
   assert.equal(f.call("menuTemplate().some(item => item.id === 'codex-status')"), false);
   await f.call('setCodexEnabled(true)');
   assert.equal(f.dialogs.length, 1);
@@ -132,6 +156,44 @@ test('默认关闭和取消确认都零连接、零轮询，并保留原设置',
   assert.equal(f.connections.length, 0);
   assert.equal(f.saved.length, 0);
   assert.equal(f.timers.size, 0);
+});
+
+test('任务名称开关保存成功才更新偏好和菜单，失败时完整回滚', async () => {
+  const f = await fixture({ codexEnabled: true });
+  const ack = queueCodexCompletion(f);
+  f.send('pet:codex-motion-ready', ack);
+  const shown = f.bubble.shows.at(-1);
+  const commands = f.commands.length;
+  const timers = f.timers.size;
+  assert.equal(f.call('setCodexTaskNameInAlerts(true)'), true);
+  assert.equal(f.saved.at(-1).codexTaskNameInAlerts, true);
+  assert.equal(f.call("menuTemplate().find(item => item.id === 'codex-task-names').checked"), true);
+  const updated = f.bubble.shows.at(-1);
+  assert.equal(updated.id, shown.id);
+  assert.equal(updated.text, '《测试任务》有结果啦\n去看看？');
+  assert.equal(f.commands.length, commands, '原位更新不应新发身体动作命令');
+  assert.equal(f.timers.size, timers, '原位更新不应重启身体动作');
+  assert.equal(f.call('setCodexTaskNameInAlerts(false)'), true);
+  assert.equal(f.bubble.shows.at(-1).id, shown.id);
+  assert.equal(f.bubble.shows.at(-1).text, '这轮有结果啦，去看看？');
+
+  const failed = await fixture({ codexEnabled: true, saveError: new Error('PRIVATE_SETTINGS_FAILURE') });
+  const failedAck = queueCodexCompletion(failed);
+  failed.send('pet:codex-motion-ready', failedAck);
+  const failedShown = failed.bubble.shows.at(-1);
+  const beforeShows = failed.bubble.shows.length;
+  assert.equal(failed.call('setCodexTaskNameInAlerts(true)'), false);
+  assert.equal(failed.call("menuTemplate().find(item => item.id === 'codex-task-names').checked"), false);
+  assert.equal(failed.bubble.shows.length, beforeShows);
+  assert.equal(failed.bubble.shows.at(-1).id, failedShown.id);
+});
+
+test('已保存的任务名称开关启动即生效', async () => {
+  const f = await fixture({ codexEnabled: true, codexTaskNameInAlerts: true });
+  const ack = queueCodexCompletion(f);
+  f.send('pet:codex-motion-ready', ack);
+  assert.equal(f.bubble.shows.at(-1).text, '《测试任务》有结果啦\n去看看？');
+  assert.equal(f.call("menuTemplate().find(item => item.id === 'codex-task-names').checked"), true);
 });
 
 test('重复开启只弹一个确认，关闭及退出后的迟到确认不会连接', async () => {
@@ -254,8 +316,10 @@ test('旧菜单闭包在账号切换、任务移出、联动关闭后不能打�
   const f = await fixture({ codexEnabled: true });
   assert.equal(f.connections.length, 1);
   queueCodexCompletion(f);
+  const activeId = '33333333-3333-4333-8333-333333333333';
+  f.connections[0].callbacks.onTask({ id: activeId, title: '进行中任务', state: 'active', turnId: 'active-turn', baseline: true });
   const item = f.call("menuTemplate().find(item => item.id === 'codex-status').submenu.find(item => item.id === 'codex-tasks').submenu[0]");
-  f.connections[0].callbacks.onTask({ id: TASK_ID, removed: true });
+  f.connections[0].callbacks.onTask({ id: activeId, removed: true });
   await item.click();
   assert.equal(f.external.length, 0);
   f.connections[0].callbacks.onAccount({ accountKey: 'account-two' });
@@ -365,25 +429,51 @@ test('打开失败只给固定说明，旧代次迟到错误不污染新菜单',
   await f.call('setCodexEnabled(false)');
 });
 
-test('多任务提醒只打开当前任务列表，不自动打开任务或调用模型', async () => {
+test('多任务完成提醒只弹当前结果，点有效结果才打开并关闭提醒', async () => {
   const f = await fixture({ codexEnabled: true });
-  f.send('pet:codex-availability', { generation: 1, available: true });
-  const ids = [TASK_ID, '22222222-2222-4222-8222-222222222222'];
-  for (const id of ids) {
-    f.connections[0].callbacks.onTask({ id, title: '测试任务', state: 'active', turnId: 't', baseline: true });
-    f.connections[0].callbacks.onTask({ id, title: '测试任务', state: 'waiting', turnId: 't' });
-  }
-  f.advanceTo(5000);
-  const pending = f.commands.findLast(command => command?.command === 'codex');
-  f.send('pet:codex-motion-ready', { token: 1, action: pending.motion, generation: pending.generation, alertId: pending.alertId });
-  const shown = f.bubble.shows.at(-1);
-  f.send('pet:bubble-reply', { id: shown.id, action: 'codex-list' }, f.bubble);
+  const shown = queueMultiCodexCompletion(f);
+  assert.equal(shown.actions[0].id, 'codex-results');
+  f.send('pet:bubble-reply', { id: shown.id, action: 'codex-results' }, f.bubble);
   assert.equal(f.popups.length, 1);
   assert.equal(f.popups[0].value.length, 2);
   assert.equal(f.external.length, 0);
-  await f.call('setCodexEnabled(false)');
+  assert.ok(f.call('codexCompanion.getSnapshot().currentAlert'), '弹菜单时不能立即关闭当前提醒');
   await f.popups[0].value[0].click();
-  assert.equal(f.external.length, 0, '打开后的旧任务列表也必须重新校验');
+  assert.deepEqual(f.external, [`codex://threads/${TASK_ID}`]);
+  assert.equal(f.call('codexCompanion.getSnapshot().currentAlert'), null);
+});
+
+for (const reason of ['expiry', 'account', 'removed', 'off']) {
+  test(`临时结果菜单在${reason}后不能打开旧任务`, async () => {
+    const f = await fixture({ codexEnabled: true });
+    const shown = queueMultiCodexCompletion(f);
+    f.send('pet:bubble-reply', { id: shown.id, action: 'codex-results' }, f.bubble);
+    assert.equal(f.popups.length, 1);
+    if (reason === 'expiry') f.advanceTo(13000);
+    if (reason === 'account') f.connections[0].callbacks.onAccount({ accountKey: 'account-two' });
+    if (reason === 'removed') f.connections[0].callbacks.onTask({ id: TASK_ID, removed: true });
+    if (reason === 'off') await f.call('setCodexEnabled(false)');
+    await f.popups[0].value[0].click();
+    assert.equal(f.external.length, 0);
+  });
+}
+
+test('当前结果不存在时不弹窗且如实返回 false', async () => {
+  const f = await fixture({ codexEnabled: true });
+  const shown = queueMultiCodexCompletion(f);
+  const descriptor = f.call(`dialogue.respond(${shown.id}, 'codex-results', performance.now()).descriptor`);
+  f.advanceTo(13000);
+  assert.equal(await f.call(`routeCodexAction(${JSON.stringify(descriptor)})`), false);
+  assert.equal(f.popups.length, 0);
+});
+
+test('旧 codex-list 按钮不能再触发任何结果', async () => {
+  const f = await fixture({ codexEnabled: true });
+  const shown = queueMultiCodexCompletion(f);
+  f.send('pet:bubble-reply', { id: shown.id, action: 'codex-list' }, f.bubble);
+  assert.equal(f.popups.length, 0);
+  assert.equal(f.external.length, 0);
+  await f.call('setCodexEnabled(false)');
 });
 
 test('主进程校验来源和白名单，窗口帧不写设置且气泡跟随移动', async () => {

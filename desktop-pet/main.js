@@ -28,7 +28,7 @@ const { createBubbleWindow } = require('./lib/bubble-window');
 const { getMotion } = require('./lib/interaction-motion');
 const { createWindowMotion } = require('./lib/window-motion');
 const { createCodexCompanion } = require('./lib/codex-companion');
-const { buildCodexMenu, resolveCodexAction } = require('./lib/codex-menu');
+const { buildCodexMenu, buildCodexResultMenu, resolveCodexAction } = require('./lib/codex-menu');
 
 const APP_NAME = '球球桌宠';
 const IS_SMOKE_TEST = process.env.PET_SMOKE_TEST === '1';
@@ -160,9 +160,30 @@ function initializeCodexCompanion(options = {}) {
   codexSentSettings = null;
   codexCompanion = createCodexCompanion({ ...options, now: codexNow, schedule: options.schedule || setTimeout,
     cancel: options.cancel || clearTimeout, canPresent: canPresentCodex, onAlert: presentCodexAlert,
+    onAlertUpdate: alert => {
+      const payload = dialogue?.updateCodex(alert, performance.now());
+      if (payload) bubble?.show(payload);
+    },
     onClear: clearCodexPresentation,
     onChange: snapshot => { syncCodexSettings(snapshot); refreshTrayMenu(); }
   });
+  codexCompanion.setPreferences({ taskNameInAlerts: settings?.codexTaskNameInAlerts === true });
+}
+
+function setCodexTaskNameInAlerts(enabled) {
+  if (!settings || settings.codexEnabled !== true || !codexCompanion || isQuitting) return false;
+  const previous = settings.codexTaskNameInAlerts;
+  const next = Boolean(enabled);
+  if (previous === next) return false;
+  settings.codexTaskNameInAlerts = next;
+  try { persistSettings(); }
+  catch (_) {
+    settings.codexTaskNameInAlerts = previous;
+    return false;
+  }
+  codexCompanion.setPreferences({ taskNameInAlerts: settings.codexTaskNameInAlerts });
+  refreshTrayMenu();
+  return true;
 }
 
 async function setCodexEnabled(enabled) {
@@ -222,13 +243,19 @@ async function routeCodexAction(descriptor) {
   if (!action || isQuitting) return false;
   if (action.type === 'refresh') { await codexCompanion.refresh(); return true; }
   if (action.type === 'dismiss') return codexCompanion.dismiss(action.alertId, descriptor.generation);
-  if (action.type === 'show-tasks') {
-    const tasks = buildCodexMenu(snapshot, codexNow()).find(item => item.id === 'codex-tasks');
-    if (tasks && petWindow && !petWindow.isDestroyed()) Menu.buildFromTemplate(bindCodexMenu(tasks.submenu)).popup({ window: petWindow });
+  if (action.type === 'show-results') {
+    const items = buildCodexResultMenu(snapshot, action.alertId, codexNow());
+    if (items.length && petWindow && !petWindow.isDestroyed()) {
+      Menu.buildFromTemplate(bindCodexMenu(items)).popup({ window: petWindow });
+    }
+    return items.length > 0;
   }
   if (descriptor.scope === 'alert') codexCompanion.dismiss(descriptor.alertId, descriptor.generation);
   if (action.type === 'open-task') {
-    try { await shell.openExternal(action.url); } catch (_) {
+    try {
+      await shell.openExternal(action.url);
+      if (descriptor.scope === 'result') codexCompanion.dismiss(descriptor.alertId, descriptor.generation);
+    } catch (_) {
       const current = codexCompanion?.getSnapshot();
       if (current?.enabled && current.generation === snapshot.generation) {
         codexNotice = { generation: current.generation, text: '无法打开 Codex，请确认已安装' };
@@ -469,6 +496,12 @@ function menuTemplate() {
     {
       id: 'codex-enabled', label: 'Codex 联动', type: 'checkbox', checked: settings.codexEnabled === true,
       click: item => { const enabled = item.checked; item.checked = settings.codexEnabled === true; void setCodexEnabled(enabled); }
+    },
+    {
+      id: 'codex-task-names', label: '完成提醒显示任务名称', type: 'checkbox',
+      enabled: settings.codexEnabled === true, checked: settings.codexTaskNameInAlerts === true,
+      click: item => { const enabled = item.checked; item.checked = settings.codexTaskNameInAlerts === true;
+        setCodexTaskNameInAlerts(enabled); }
     },
     ...(codexPreferenceWarning ? [{ id: 'codex-preference-warning', label: codexPreferenceWarning, enabled: false }] : []),
     ...(settings.codexEnabled ? [{ id: 'codex-status', label: 'Codex 状态', submenu: [
