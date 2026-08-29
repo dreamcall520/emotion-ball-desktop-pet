@@ -33,6 +33,11 @@ test('提醒标题忽略不可见格式字符判断可靠性但保留正常 emoj
   assert.equal(alertTaskTitle('👩‍💻️'), '👩‍💻️');
 });
 
+test('超长不可见标题和带不可见后缀的未命名标题仍不可靠', () => {
+  assert.equal(alertTaskTitle('\u200b'.repeat(20)), null);
+  assert.equal(alertTaskTitle(`未命名任务${'\u200b'.repeat(40)}`), null);
+});
+
 test('关闭名称或无可靠名称时保持通用完成文案', () => {
   assert.equal(completionText(['任务A'], 1, false), '这轮有结果啦，去看看？');
   assert.equal(completionText([null, '未命名任务'], 2, true), '有 2 轮出结果啦\n去看看？');

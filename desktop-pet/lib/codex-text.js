@@ -23,9 +23,9 @@ function menuText(value, maximum = DEFAULT_MAXIMUM, fallback = '') {
 }
 
 function alertTaskTitle(value) {
-  const title = plainText(value, TITLE_MAXIMUM);
-  const reliable = title.replace(DEFAULT_IGNORABLE, '');
-  return reliable && reliable !== '未命名任务' ? title : null;
+  const fullTitle = plainText(value, Number.MAX_SAFE_INTEGER);
+  const reliable = fullTitle.replace(DEFAULT_IGNORABLE, '');
+  return reliable && reliable !== '未命名任务' ? plainText(fullTitle, TITLE_MAXIMUM) : null;
 }
 
 function genericCompletion(count) {
