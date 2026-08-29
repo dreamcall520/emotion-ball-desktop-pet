@@ -1,5 +1,6 @@
 const { createCodexConnection, CONNECTION_STATES, ERROR_CODES } = require('./codex-connection');
 const { isTaskId } = require('./codex-state');
+const { completionText } = require('./codex-text');
 
 const POLL_MS = Object.freeze({ quota: 120000, tasks: 15000 });
 const RETRY_MS = Object.freeze([30000, 60000, 120000]);
@@ -16,7 +17,7 @@ const timestamp = value => Number.isFinite(value) && value >= 0 && value <= 8640
 
 // Creating the policy owns no resources. Transports and timers exist only while enabled.
 function createCodexCompanion({ createConnection = createCodexConnection, onChange = () => {},
-  onAlert = () => {}, onClear = () => {}, canPresent = () => true,
+  onAlert = () => {}, onAlertUpdate = () => {}, onClear = () => {}, canPresent = () => true,
   now = Date.now, schedule = setTimeout, cancel = clearTimeout } = {}) {
   let enabled = false;
   let closed = false;
@@ -32,8 +33,8 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
   const terminalSeen = new Map();
   const idleTransitions = new Map();
   let queued = [];
-  let recent = [];
   let currentAlert = null;
+  let preferences = { taskNameInAlerts: false };
   let nextAlertId = 0;
   let lastPresentedAt = -Infinity;
   const channels = {
@@ -51,7 +52,6 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
         windows: quota.windows.map(window => ({ ...window })), updatedAt: quota.updatedAt, stale: quotaStale() },
       tasks: { state: channels.tasks.state, code: channels.tasks.code, partial: true,
         items: [...tasks.values()].map(task => ({ ...task })) },
-      recent: recent.map(entry => ({ ...entry, taskIds: [...entry.taskIds] })),
       currentAlert: eventValid(currentAlert) ? publicAlert(currentAlert) : null
     };
   }
@@ -87,7 +87,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
           ? [{ ...ref, remaining: window.remaining }] : [];
       }
       const task = tasks.get(ref.id);
-      return task?.state === event.kind && task.turnId === ref.turnId ? [ref] : [];
+      return task?.state === event.kind && task.turnId === ref.turnId ? [{ ...ref, title: task.title }] : [];
     });
   }
   function eventValid(event) {
@@ -97,36 +97,38 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
   function refreshEventRefs(event) {
     event.refs = new Map(validRefs(event).map(ref => [event.kind === 'quota' ? ref.key : ref.id, ref]));
   }
-  function eventText(event) {
-    const count = event.refs.size;
+  function eventText(event, refs) {
+    const count = refs.length;
     if (event.kind === 'active') return null;
     if (event.kind === 'quota') {
-      const remaining = Math.min(...[...event.refs.values()].map(ref => ref.remaining));
+      const remaining = Math.min(...refs.map(ref => ref.remaining));
       const percentage = Math.round(remaining * 10) / 10;
       return count > 1 ? `${count} 项额度偏低\n最低剩余 ${percentage}%` : `额度剩余 ${percentage}%\n详情见 Codex 状态`;
     }
     if (event.kind === 'waiting') return count > 1 ? `有 ${count} 个任务\n等你确认哦` : '有一步等你确认哦';
-    if (event.kind === 'completed') return count > 1 ? `有 ${count} 轮出结果啦\n去看看？` : '这轮有结果啦，去看看？';
     return count > 1 ? `有 ${count} 个任务\n遇到问题了` : '这一步遇到问题了';
   }
   function publicAlert(event) {
+    const refs = validRefs(event);
     return { id: event.id, generation: event.generation, kind: event.kind, motion: MOTIONS[event.kind],
-      text: eventText(event), taskIds: event.kind === 'quota' ? [] : [...event.refs.values()].map(ref => ref.id),
+      text: event.kind === 'completed'
+        ? completionText(refs.map(ref => ref.title), refs.length, preferences.taskNameInAlerts)
+        : eventText(event, refs),
+      taskIds: event.kind === 'quota' ? [] : refs.map(ref => ref.id),
       createdAt: event.createdAt, expiresAt: event.expiresAt };
   }
-  function remember(event, presentedAt = null) {
-    const alert = publicAlert(event);
-    const entry = { id: alert.id, kind: alert.kind, text: alert.text || '有任务正在处理',
-      taskIds: alert.taskIds, createdAt: alert.createdAt, presentedAt };
-    const index = recent.findIndex(item => item.id === event.id);
-    if (index >= 0) recent[index] = entry;
-    else if (presentedAt === null) recent = [entry, ...recent].slice(0, 10);
+  function setPreferences(next = {}) {
+    const taskNameInAlerts = next?.taskNameInAlerts === true;
+    if (preferences.taskNameInAlerts === taskNameInAlerts) return false;
+    preferences = { taskNameInAlerts };
+    notify();
+    if (eventValid(currentAlert)) onAlertUpdate(publicAlert(currentAlert));
+    return true;
   }
-  function clearAlerts({ history = false, dedupe = false, cooldown = false } = {}) {
+  function clearAlerts({ dedupe = false, cooldown = false } = {}) {
     clearTimer('drain'); clearTimer('alert');
     queued = []; currentAlert = null;
     idleTransitions.clear();
-    if (history) recent = [];
     if (dedupe) { quotaSeen.clear(); terminalSeen.clear(); }
     if (cooldown) lastPresentedAt = -Infinity;
   }
@@ -170,7 +172,6 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
       if (enabled && !closed && currentAlert === candidate && eventValid(candidate)) {
         refreshEventRefs(candidate);
         lastPresentedAt = now();
-        remember(candidate, now());
         onAlert(publicAlert(candidate));
         if (enabled && !closed && generation === candidate.generation) notify();
       }
@@ -188,7 +189,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
       for (const other of queued) if (other !== event) other.refs.delete(ref.key);
     }
     event.refs.set(kind === 'quota' ? ref.key : ref.id, ref);
-    remember(event); armDrain();
+    armDrain();
   }
   function quotaAlerts() {
     if (quotaStale()) return;
@@ -313,7 +314,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
       updatedAt: timestamp(value.updatedAt),
       ...(value.unavailable === 'STATE_TOO_LARGE' ? { unavailable: 'STATE_TOO_LARGE' } : {})
     };
-    if (!previous && tasks.size === 20) {
+    if (!previous && tasks.size === 64) {
       const oldest = tasks.keys().next().value; tasks.delete(oldest); terminalSeen.delete(oldest);
       idleTransitions.delete(oldest);
     }
@@ -332,7 +333,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     if (accountKey !== undefined && next !== accountKey) {
       generation++;
       quota = { windows: [], updatedAt: null }; tasks.clear();
-      clearAlerts({ history: true, dedupe: true, cooldown: true });
+      clearAlerts({ dedupe: true, cooldown: true });
       clearTimer('stale');
       for (const name of Object.keys(channels)) {
         clearTimer(name); channels[name].state = 'connecting'; channels[name].code = null; channels[name].failures = 0;
@@ -365,7 +366,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
   function finishDisable() {
     stopConnection(); resetChannels('disabled');
     accountKey = undefined; quota = { windows: [], updatedAt: null }; tasks.clear(); lastManualAt = -Infinity;
-    clearAlerts({ history: true, dedupe: true, cooldown: true });
+    clearAlerts({ dedupe: true, cooldown: true });
     onClear(); notify();
   }
   async function setEnabled(value) {
@@ -393,7 +394,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     enabled = false; generation++;
     finishDisable();
   }
-  return { setEnabled, refresh, getSnapshot, dismiss, close };
+  return { setEnabled, setPreferences, refresh, getSnapshot, dismiss, close };
 }
 
 module.exports = { createCodexCompanion };
