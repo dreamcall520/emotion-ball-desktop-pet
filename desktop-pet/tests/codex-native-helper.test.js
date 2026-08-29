@@ -67,6 +67,66 @@ test('普通 10% 合成额度先建立 100% 基线，80% 以上可直接合成',
   assert.deepEqual(syntheticQuotaSteps(100), [0]);
 });
 
+test('截图证据先等待双帧与短暂绘制稳定，并在捕获前后锁定当前标签窗口', async () => {
+  const { capturePaintedWindow } = require('../scripts/verify-codex-companion');
+  const calls = [];
+  const expected = Buffer.from('painted-frame');
+  const win = { webContents: {
+    async executeJavaScript(source) {
+      calls.push(['raf', source]);
+      assert.match(source, /requestAnimationFrame[\s\S]*requestAnimationFrame/);
+      return true;
+    },
+    invalidate() { calls.push(['invalidate']); },
+    async capturePage() { calls.push(['capture']); return { toPNG: () => expected }; }
+  } };
+  let currentWindow = win;
+  let identityReads = 0;
+  const controller = { getWindow: () => { identityReads += 1; return currentWindow; } };
+  const result = await capturePaintedWindow({ win, controller,
+    settle: async milliseconds => { calls.push(['settle', milliseconds]); } });
+  assert.equal(result, expected);
+  assert.ok(identityReads >= 4, '双帧、稳定等待和捕获后都必须确认当前窗口身份');
+  assert.ok(calls.some(([kind, milliseconds]) => kind === 'settle' && milliseconds >= 30),
+    '截图前必须有短暂 paint settle');
+  assert.ok(calls.findIndex(([kind]) => kind === 'raf') < calls.findIndex(([kind]) => kind === 'capture'),
+    '截图不能早于双帧等待');
+  assert.ok(calls.some(([kind]) => kind === 'invalidate'), '支持安全重绘时应主动请求重绘');
+
+  const replacement = {};
+  const replacingWindow = { webContents: {
+    async executeJavaScript() { return true; },
+    async capturePage() {
+      currentWindow = replacement;
+      return { toPNG: () => expected };
+    }
+  } };
+  currentWindow = replacingWindow;
+  await assert.rejects(() => capturePaintedWindow({ win: replacingWindow, controller,
+    settle: async () => {} }), /当前标签窗口/,
+  '捕获期间替换窗口时旧截图必须失败');
+});
+
+test('过期 DOM 即使正确，PNG 仍等于新鲜帧也必须拒绝为旧合成证据', () => {
+  const { assertDistinctCaptureEvidence, assertStaleCaptureEvidence } =
+    require('../scripts/verify-codex-companion');
+  const light = Buffer.from('fresh-light');
+  const dark = Buffer.from('fresh-dark');
+  const stale = Buffer.from('stale-painted');
+  assert.throws(() => assertDistinctCaptureEvidence(light, [Buffer.from(light)], '浅深证据'),
+    /旧合成帧|重复/);
+  const staleDom = { state: 'stale', cores: [
+    { text: '已过期 · 剩余 64%' }, { text: '已过期 · 剩余 78%' }
+  ] };
+  assert.throws(() => assertStaleCaptureEvidence({ before: staleDom, after: staleDom,
+    stale: Buffer.from(light), fresh: { light, dark } }), /旧合成帧|重复/,
+  'DOM 正确不能掩盖旧 PNG');
+  assert.doesNotThrow(() => assertStaleCaptureEvidence({ before: staleDom, after: staleDom,
+    stale, fresh: { light, dark } }));
+  assert.throws(() => assertStaleCaptureEvidence({ before: staleDom,
+    after: { ...staleDom, state: 'ready' }, stale, fresh: { light, dark } }), /过期状态/);
+});
+
 test('四档原生尺寸只通过真实 setSize 入口达成，入口失效时不能伪造标记', async () => {
   const { applyPetSize } = require('../scripts/verify-codex-companion');
   const settings = { size: 'tiny' };

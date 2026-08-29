@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { setTimeout: wait } = require('node:timers/promises');
@@ -13,6 +14,53 @@ function assertBubbleLayout(layout) {
 function intersects(a, b) {
   return a.x < b.x + b.width && a.x + a.width > b.x &&
     a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+function captureDigest(value, label = '截图证据') {
+  assert.ok(Buffer.isBuffer(value) && value.length > 0, `${label}必须是非空 PNG Buffer`);
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+function assertDistinctCaptureEvidence(candidate, references, label = '截图证据') {
+  const digest = captureDigest(candidate, label);
+  for (const reference of references) {
+    assert.notEqual(digest, captureDigest(reference, label), `${label}重复，仍是旧合成帧`);
+  }
+  return digest;
+}
+
+function assertStaleCaptureEvidence({ before, after, stale, fresh }) {
+  for (const [phase, view] of [['截图前', before], ['截图后', after]]) {
+    assert.equal(view?.state, 'stale', `${phase}页面不是过期状态`);
+    assert.ok(Array.isArray(view.cores) && view.cores.length === 2 &&
+      view.cores.every(item => /^已过期 · 剩余 \d+%$/u.test(item?.text)),
+    `${phase}页面没有完整过期核心文案`);
+  }
+  return assertDistinctCaptureEvidence(stale, [fresh?.light, fresh?.dark], '过期标签截图');
+}
+
+async function capturePaintedWindow({ win, controller = null, settle = wait, artifactPath = null }) {
+  assert.ok(win?.webContents, '截图窗口必须存在');
+  const assertCurrent = () => {
+    if (controller) assert.equal(controller.getWindow(), win, '截图对象必须仍是当前标签窗口');
+  };
+  assertCurrent();
+  if (typeof win.webContents.invalidate === 'function') win.webContents.invalidate();
+  await win.webContents.executeJavaScript(`new Promise(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
+  })`);
+  assertCurrent();
+  await settle(60);
+  assertCurrent();
+  const image = await win.webContents.capturePage();
+  const buffer = image.toPNG();
+  captureDigest(buffer);
+  assertCurrent();
+  if (artifactPath) {
+    fs.mkdirSync(path.dirname(artifactPath), { recursive: true });
+    fs.writeFileSync(artifactPath, buffer);
+  }
+  return buffer;
 }
 
 function assertQuotaLabelWindow(controller, expectedWindow, petBounds, options = {}) {
@@ -296,11 +344,10 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
   };
   const artifacts = process.env.PET_SMOKE_ARTIFACT_DIR ? path.resolve(process.env.PET_SMOKE_ARTIFACT_DIR) : null;
   const results = [];
-  const capture = async (win, name) => {
-    if (!artifacts) return;
-    fs.mkdirSync(artifacts, { recursive: true });
-    fs.writeFileSync(path.join(artifacts, `${name}.png`), (await win.webContents.capturePage()).toPNG());
-  };
+  const capture = (win, name, controller = null) => capturePaintedWindow({
+    win, controller, settle: wait,
+    artifactPath: artifacts ? path.join(artifacts, `${name}.png`) : null
+  });
   const labelView = async win => {
     assert.equal(quotaLabel.getWindow(), win, '读取标签前必须仍是当前窗口');
     const view = await win.webContents.executeJavaScript(`(() => {
@@ -333,11 +380,11 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
   const waitForLabelRows = (expected, label) => waitForLabelView(
     view => view.rows.length === expected, label);
   const captureColorSchemes = async win => {
-    if (!artifacts) return;
     assertQuotaLabelWindow(quotaLabel, win, pet.getBounds());
     const debuggerApi = win.webContents.debugger;
     const attachedHere = !debuggerApi.isAttached();
     if (attachedHere) debuggerApi.attach('1.3');
+    const captures = {};
     try {
       for (const scheme of ['light', 'dark']) {
         assert.equal(quotaLabel.getWindow(), win, `${scheme} 截图前标签窗口不能被替换`);
@@ -346,14 +393,16 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
         });
         await wait(50);
         assert.equal(quotaLabel.getWindow(), win, `${scheme} 截图时标签窗口不能被替换`);
-        await capture(win, `quota-label-${scheme}`);
+        captures[scheme] = await capture(win, `quota-label-${scheme}`, quotaLabel);
         assert.equal(quotaLabel.getWindow(), win, `${scheme} 截图后标签窗口不能被替换`);
       }
       await debuggerApi.sendCommand('Emulation.setEmulatedMedia', { media: '', features: [] });
       assertQuotaLabelWindow(quotaLabel, win, pet.getBounds());
+      assertDistinctCaptureEvidence(captures.dark, [captures.light], '额度标签浅深截图');
     } finally {
       if (attachedHere && debuggerApi.isAttached()) debuggerApi.detach();
     }
+    return captures;
   };
   const area = screen.getDisplayMatching(pet.getBounds()).workArea;
   const sample = async () => {
@@ -466,7 +515,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assert.ok(labelResult.view.details.every(item => item.text.startsWith(' · ')) &&
       labelResult.view.details.some(item => item.scrollWidth > item.clientWidth),
     '超长恶意标签只能在详情区域省略');
-    await captureColorSchemes(labelResult.win);
+    const freshCaptures = await captureColorSchemes(labelResult.win);
 
     clock.advanceBy(300001);
     const staleLabelResult = await waitForLabelView(view => view.state === 'stale' &&
@@ -481,8 +530,11 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assert.ok(staleLabelResult.view.details.every(item => !item.text.includes('已过期')) &&
       staleLabelResult.view.details.some(item => item.scrollWidth > item.clientWidth),
     '过期标识不能落入可省略详情区');
-    assert.equal(quotaLabel.getWindow(), staleLabelResult.win, '过期截图前标签窗口不能被替换');
-    await capture(staleLabelResult.win, 'quota-label-stale-long');
+    const staleBeforeCapture = await labelView(staleLabelResult.win);
+    const staleCapture = await capture(staleLabelResult.win, 'quota-label-stale-long', quotaLabel);
+    const staleAfterCapture = await labelView(staleLabelResult.win);
+    assertStaleCaptureEvidence({ before: staleBeforeCapture, after: staleAfterCapture,
+      stale: staleCapture, fresh: freshCaptures });
     assertQuotaLabelWindow(quotaLabel, staleLabelResult.win, pet.getBounds());
     emitQuota(quotaPeriods());
     labelResult = await waitForLabelRows(2, '恢复新鲜额度标签');
@@ -514,7 +566,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       `${pixels} 尺寸额度标签避让球球`);
       assertQuotaLabelWindow(quotaLabel, labelWindow, pet.getBounds());
       assert.equal(quotaLabel.getWindow(), labelWindow, `${pixels} 截图前不能替换标签窗口`);
-      await capture(labelWindow, `codex-quota-${pixels}`);
+      await capture(labelWindow, `codex-quota-${pixels}`, quotaLabel);
       assertQuotaLabelWindow(quotaLabel, labelWindow, pet.getBounds());
       const marker = {
         80: 'PET_CODEX_QUOTA_SIZE_80_OK', 120: 'PET_CODEX_QUOTA_SIZE_120_OK',
@@ -661,5 +713,6 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
 
 module.exports = {
   verifyCodexCompanion, assertBubbleLayout, assertQuotaLabelWindow, syntheticQuotaSteps,
-  applyPetSize, verifyNegativeDisplay, restoreSmokeState, combinedSmokeError
+  applyPetSize, verifyNegativeDisplay, restoreSmokeState, combinedSmokeError,
+  capturePaintedWindow, assertDistinctCaptureEvidence, assertStaleCaptureEvidence
 };

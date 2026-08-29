@@ -63,10 +63,11 @@
 ## Codex 额度功能候选自动化证据
 
 - 本节只记录 `codex/light-companion` 候选源码与自动测试；没有启动 GUI、没有连接真实 Codex、没有创建测试任务，也没有消耗真实额度。
-- 定向命令 `node --test desktop-pet/tests/package-script.test.js desktop-pet/tests/codex-native-helper.test.js desktop-pet/tests/smoke-verification.test.js` 为 32 项通过、0 失败；`npm test` 为 704 项通过、0 失败、0 跳过。
+- 定向命令 `node --test desktop-pet/tests/package-script.test.js desktop-pet/tests/codex-native-helper.test.js desktop-pet/tests/smoke-verification.test.js` 为 34 项通过、0 失败；`npm test` 为 706 项通过、0 失败、0 跳过。
 - 打包暂存清单已逐文件加入额度选择、提醒策略、标签定位、标签窗口以及 HTML/CSS/预加载/渲染共 8 个资源；测试逐文件比对内容，并确认暂存区不夹带用户设置、日志或验收结果。
 - 原生模拟验收助手的候选代码已接入当前额度标签控制器，并使用本地合成快照覆盖 80/120/180/260 四档尺寸、常驻开关、自动/5 小时/周额度、气泡避让、浅深外观截图以及已用 10%/80%/90%/100% 的 normal/strong/urgent 表现。这些是待运行的真实窗口断言，本节不将其写成已完成实机验收。
 - 常驻标签候选布局已把固定可见的「剩余 N%」放在可省略详情之前；过期数据的核心区固定显示「已过期 · 剩余 N%」，标签和周期才可省略。模拟验收会以 64%、78% 和超长恶意标签读取真实 DOM 宽度，并设置独立的 `quota-label-stale-long` 待验截图，在截图前后核对仍是当前 176×54 标签窗口。四档尺寸只调用应用真实尺寸入口并回读窗口与设置，不能直接改宽高伪造通过标记。
+- 后续候选 smoke 的证据目录 `/tmp/emotion-ball-quota-final.OTL9MS` 暴露出截图缺口：`quota-label-stale-long.png` 与新鲜浅色截图的 SHA-256 均为 `ad6e471ebfab8397e064f03aafc4047d6ac910c64db9e945f1967a1b6d78e220`，虽然页面 DOM 已进入过期状态，实际捕获仍是旧合成帧，因此该次过期截图不计为通过。候选门禁现会在捕获前等待页面连续两帧及短暂绘制稳定，捕获前后都回读过期 DOM，并要求过期 PNG 与新鲜浅色、深色 PNG 均不同；相同内容会直接失败。本轮只完成自动测试，修复后的真实窗口 smoke 与人工截图复核仍待后续重跑。
 - 双屏候选验收读取真实显示器列表：只有检测到负坐标显示器并真实移动球球、完成标签屏内/避让断言后才输出 `PET_CODEX_QUOTA_NEGATIVE_DISPLAY_OK`；没有该环境只输出 `PET_CODEX_QUOTA_NEGATIVE_DISPLAY_SKIPPED`。通用 `PET_CODEX_QUOTA_LABEL_OK` 不代表已做实机双屏验收。
 - 异常收尾会先重建本地合成连接，再临时开启以恢复额度周期、常驻与任务名称开关；随后先恢复球球真实 bounds，再调用真实尺寸入口按该 bounds 持久化尺寸与位置，最后通过仅在 smoke 闭包内可达的受控入口精确还原初始 `size/x/y`。静默位置、尺寸或落盘失效都会形成清理错误；各清理步骤仍独立执行，原始失败与清理失败会一并保留，不会因此连接真实 Codex。
 - 冒烟门禁已强制新增 `PET_CODEX_QUOTA_SIZE_80_OK`、`120`、`180`、`260`、`PET_CODEX_QUOTA_POLICY_OK` 和 `PET_CODEX_QUOTA_LABEL_OK`；自动测试逐一删除标记，均确认会失败。
