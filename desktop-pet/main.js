@@ -353,7 +353,8 @@ function initializeCodexCompanion(options = {}) {
 function setCodexPreference(name, value) {
   if (!settings || settings.codexEnabled !== true || !codexCompanion || isQuitting) return false;
   const allowed = new Set([
-    'codexTaskNameInAlerts', 'codexQuotaAlwaysVisible', 'codexQuotaPeriod', 'codexQuotaLabelSize'
+    'codexTaskNameInAlerts', 'codexQuotaAlwaysVisible', 'codexQuotaPeriod', 'codexQuotaLabelSize',
+    'codexQuotaAppearance'
   ]);
   if (!allowed.has(name)) return false;
   const previous = settings[name];
@@ -362,6 +363,8 @@ function setCodexPreference(name, value) {
     next = ['auto', 'fiveHour', 'weekly'].includes(value) ? value : previous;
   } else if (name === 'codexQuotaLabelSize') {
     next = ['standard', 'compact'].includes(value) ? value : previous;
+  } else if (name === 'codexQuotaAppearance') {
+    next = ['system', 'light', 'dark'].includes(value) ? value : previous;
   } else {
     next = Boolean(value);
   }
@@ -751,6 +754,21 @@ function codexMenu() {
           click: item => {
             item.checked = settings.codexQuotaLabelSize === value;
             setCodexPreference('codexQuotaLabelSize', value);
+          }
+        }))
+      },
+      {
+        id: 'codex-quota-appearance', label: '额度卡片外观', enabled: settings.codexEnabled === true,
+        submenu: [
+          ['system', 'codex-quota-appearance-system', '跟随系统'],
+          ['light', 'codex-quota-appearance-light', '浅色'],
+          ['dark', 'codex-quota-appearance-dark', '深色']
+        ].map(([value, id, label]) => ({
+          id, label, type: 'radio', enabled: settings.codexEnabled === true,
+          checked: settings.codexQuotaAppearance === value,
+          click: item => {
+            item.checked = settings.codexQuotaAppearance === value;
+            setCodexPreference('codexQuotaAppearance', value);
           }
         }))
       },
@@ -1228,6 +1246,7 @@ async function bootstrap() {
     BrowserWindow, screen, getPetWindow: () => petWindow,
     getObstacle: quotaObstacleBounds,
     getSize: () => settings?.codexQuotaLabelSize,
+    getAppearance: () => settings?.codexQuotaAppearance,
     alwaysOnTop: settings.alwaysOnTop,
     onError: error => writeError('额度标签窗口', error)
   });

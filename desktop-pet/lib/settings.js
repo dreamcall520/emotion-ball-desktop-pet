@@ -12,7 +12,8 @@ const DEFAULTS = Object.freeze({
   codexTaskNameInAlerts: false,
   codexQuotaAlwaysVisible: false,
   codexQuotaPeriod: 'auto',
-  codexQuotaLabelSize: 'compact'
+  codexQuotaLabelSize: 'compact',
+  codexQuotaAppearance: 'system'
 });
 
 function normalizeSettings(raw = {}) {
@@ -43,7 +44,10 @@ function normalizeSettings(raw = {}) {
       : DEFAULTS.codexQuotaPeriod,
     codexQuotaLabelSize: ['standard', 'compact'].includes(raw.codexQuotaLabelSize)
       ? raw.codexQuotaLabelSize
-      : DEFAULTS.codexQuotaLabelSize
+      : DEFAULTS.codexQuotaLabelSize,
+    codexQuotaAppearance: ['system', 'light', 'dark'].includes(raw.codexQuotaAppearance)
+      ? raw.codexQuotaAppearance
+      : DEFAULTS.codexQuotaAppearance
   };
 }
 

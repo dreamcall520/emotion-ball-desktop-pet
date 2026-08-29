@@ -9,7 +9,8 @@ const { setImmediate: flush } = require('node:timers/promises');
 
 // 真实 main、动作控制器和对白规则；只替代 Electron、系统采样和磁盘设置。
 async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
-  codexQuotaAlwaysVisible = false, codexQuotaPeriod = 'auto', codexQuotaLabelSize = 'standard', bubblesEnabled = true,
+  codexQuotaAlwaysVisible = false, codexQuotaPeriod = 'auto', codexQuotaLabelSize = 'standard',
+  codexQuotaAppearance = 'system', bubblesEnabled = true,
   consent = async () => ({ response: 1 }), openExternal = async () => {}, saveError = null } = {}) {
   let now = 0;
   let serial = 0;
@@ -91,7 +92,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
         Menu: { buildFromTemplate: value => Object.assign(value, { popup: options => popups.push({ value, options }) }) }, nativeImage: { createFromPath: () => ({ setTemplateImage() {} }) } };
       if (name === './lib/settings') return { loadSettings: () => ({ size: 'tiny', x: -600, y: 100,
         bubblesEnabled, keepAwake: false, alwaysOnTop: true, codexEnabled, codexTaskNameInAlerts,
-        codexQuotaAlwaysVisible, codexQuotaPeriod, codexQuotaLabelSize }),
+        codexQuotaAlwaysVisible, codexQuotaPeriod, codexQuotaLabelSize, codexQuotaAppearance }),
         saveSettings: (_file, settings) => { if (saveError) throw saveError; saved.push({ ...settings }); return settings; } };
       if (name === './lib/codex-companion') return { createCodexCompanion: options => {
         const controller = realRequire(name).createCodexCompanion({ ...options, createConnection(callbacks) {
@@ -217,7 +218,7 @@ test('所有 Codex 设置只保留一个顶层入口并完整归入子菜单', a
     JSON.stringify(['codex-menu']));
   assert.equal(JSON.stringify(group.submenu.filter(item => item.id).map(item => item.id)), JSON.stringify([
     'codex-enabled', 'codex-task-names', 'codex-quota-visible', 'codex-quota-period',
-    'codex-quota-label-size', 'codex-status'
+    'codex-quota-label-size', 'codex-quota-appearance', 'codex-status'
   ]));
   assert.equal(group.submenu.find(item => item.id === 'codex-enabled').label, '启用 Codex 联动');
 });
@@ -312,6 +313,26 @@ test('额度卡片大小为标准和小巧两档，只在保存成功后切换',
   const failed = await fixture({ codexEnabled: true, saveError: new Error('SIZE_WRITE_FAILURE') });
   assert.equal(failed.call("setCodexPreference('codexQuotaLabelSize', 'compact')"), false);
   assert.equal(menuItem(failed, 'codex-quota-label-size').submenu.find(item => item.checked).id, 'codex-quota-label-standard');
+});
+
+test('额度卡片外观为跟随系统、浅色和深色三档，只在保存成功后切换', async () => {
+  const off = await fixture();
+  assert.equal(menuItem(off, 'codex-quota-appearance').enabled, false);
+
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  const menu = menuItem(f, 'codex-quota-appearance');
+  assert.equal(menu.label, '额度卡片外观');
+  assert.equal(menu.submenu.find(item => item.checked).id, 'codex-quota-appearance-system');
+  assert.equal(f.call("setCodexPreference('codexQuotaAppearance', 'dark')"), true);
+  assert.equal(f.saved.at(-1).codexQuotaAppearance, 'dark');
+  assert.equal(menuItem(f, 'codex-quota-appearance').submenu.find(item => item.checked).id,
+    'codex-quota-appearance-dark');
+  assert.ok(f.quotaLabel.shows.length > 0, '外观切换后应立即刷新常驻卡片');
+
+  const failed = await fixture({ codexEnabled: true, saveError: new Error('APPEARANCE_WRITE_FAILURE') });
+  assert.equal(failed.call("setCodexPreference('codexQuotaAppearance', 'light')"), false);
+  assert.equal(menuItem(failed, 'codex-quota-appearance').submenu.find(item => item.checked).id,
+    'codex-quota-appearance-system');
 });
 
 test('常驻标签始终使用当前快照和已保存周期', async () => {

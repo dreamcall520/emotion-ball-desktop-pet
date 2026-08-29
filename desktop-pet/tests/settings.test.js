@@ -37,7 +37,8 @@ test('损坏文件回退且有效设置可回读', t => {
     codexTaskNameInAlerts: false,
     codexQuotaAlwaysVisible: false,
     codexQuotaPeriod: 'auto',
-    codexQuotaLabelSize: 'compact'
+    codexQuotaLabelSize: 'compact',
+    codexQuotaAppearance: 'system'
   });
   assert.equal(fs.existsSync(`${file}.tmp`), false);
 });
@@ -47,7 +48,7 @@ test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
     size: 'small', x: -102, y: 82, alwaysOnTop: false,
     keepAwake: true, bubblesEnabled: true, codexEnabled: false,
     codexTaskNameInAlerts: false, codexQuotaAlwaysVisible: false,
-    codexQuotaPeriod: 'auto', codexQuotaLabelSize: 'compact'
+    codexQuotaPeriod: 'auto', codexQuotaLabelSize: 'compact', codexQuotaAppearance: 'system'
   });
 });
 
@@ -116,6 +117,16 @@ test('额度卡片默认为小巧，只接受标准和小巧两档', () => {
   }
 });
 
+test('额度卡片外观默认跟随系统，只接受跟随系统、浅色和深色', () => {
+  assert.equal(DEFAULTS.codexQuotaAppearance, 'system');
+  for (const appearance of ['system', 'light', 'dark']) {
+    assert.equal(normalizeSettings({ codexQuotaAppearance: appearance }).codexQuotaAppearance, appearance);
+  }
+  for (const appearance of ['', 'auto', 'night', 1, null, {}]) {
+    assert.equal(normalizeSettings({ codexQuotaAppearance: appearance }).codexQuotaAppearance, 'system');
+  }
+});
+
 test('任务名称提醒默认关闭且只接受布尔值', () => {
   assert.equal(DEFAULTS.codexTaskNameInAlerts, false);
   assert.equal(normalizeSettings({}).codexTaskNameInAlerts, false);
@@ -134,6 +145,7 @@ test('Codex 只持久化开关，不保存账号额度快照阈值或任务信�
     codexQuotaAlwaysVisible: true,
     codexQuotaPeriod: 'weekly',
     codexQuotaLabelSize: 'compact',
+    codexQuotaAppearance: 'dark',
     account: { email: 'private@example.com' },
     quotaSnapshot: { remaining: 1 },
     quotaThresholds: { warning: 80 },
@@ -146,7 +158,8 @@ test('Codex 只持久化开关，不保存账号额度快照阈值或任务信�
     codexEnabled: true,
     codexQuotaAlwaysVisible: true,
     codexQuotaPeriod: 'weekly',
-    codexQuotaLabelSize: 'compact'
+    codexQuotaLabelSize: 'compact',
+    codexQuotaAppearance: 'dark'
   });
   assert.deepEqual(loadSettings(file), saved);
   const persisted = fs.readFileSync(file, 'utf8');
