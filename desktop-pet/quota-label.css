@@ -252,6 +252,14 @@ body {
 }
 .quota-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 650; }
 .quota-period { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--quota-muted); }
+.quota-period.period-pill {
+  align-self: center;
+  justify-self: start;
+  width: fit-content;
+  max-width: 100%;
+  padding-block: 0;
+  color: #3f6fbf;
+}
 .quota-value { font-variant-numeric: tabular-nums; font-weight: 700; text-align: right; }
 .quota-progress {
   grid-column: 1 / -1;
@@ -408,7 +416,8 @@ body {
   height: 14px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 6px;
 }
 #secondary-period { font-size: 8px; line-height: 11px; }
 #secondary-value {
@@ -420,7 +429,7 @@ body {
   line-height: 14px;
 }
 #secondary-progress {
-  width: 100%;
+  width: 70%;
   height: 3px;
   display: block;
   margin-top: 2px;

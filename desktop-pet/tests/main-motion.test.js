@@ -351,7 +351,7 @@ test('常驻标签使用已保存周期作为主项，并补充展示实际返�
   assert.equal(f.call("setCodexPreference('codexQuotaPeriod', 'weekly')"), true);
   const model = f.quotaLabel.shows.at(-1);
   assert.deepEqual(model.items.map(item => [item.label, item.windowMinutes, item.remaining]), [
-    ['codex', 10080, 65], ['codex', 300, 61]
+    ['Codex', 10080, 65], ['Codex', 300, 61]
   ]);
 });
 

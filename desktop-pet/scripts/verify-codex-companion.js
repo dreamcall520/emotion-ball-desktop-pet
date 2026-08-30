@@ -271,6 +271,21 @@ function syntheticQuotaSteps(used) {
   return used < 80 ? [100, 100 - used] : [100 - used];
 }
 
+function quotaPeriodsFixture(now) {
+  const fiveHourResetAt = now + (4 * 60 + 35) * 60000;
+  const weeklyResetAt = now + (6 * 24 + 14) * 3600000;
+  return [
+    { id: 'codex_bengalfox:primary', label: 'GPT-5.3-Codex-Spark', windowMinutes: 300,
+      remaining: 100, resetsAt: fiveHourResetAt },
+    { id: 'codex_bengalfox:secondary', label: 'GPT-5.3-Codex-Spark', windowMinutes: 10080,
+      remaining: 100, resetsAt: weeklyResetAt },
+    { id: 'base_model_inference:primary', label: 'gpt-reserve', windowMinutes: 10080,
+      remaining: 100, resetsAt: weeklyResetAt },
+    { id: 'codex:primary', label: 'codex', windowMinutes: 10080,
+      remaining: 94, resetsAt: weeklyResetAt }
+  ];
+}
+
 function policyClock() {
   let time = Date.now();
   let serial = 0;
@@ -338,16 +353,8 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
   const quota = remaining => emitQuota([quotaWindow(remaining, {
     id: 'codex:primary', resetsAt: resetAt, label: 'Codex'
   })]);
-  const quotaPeriods = () => [
-    quotaWindow(100, { id: 'codex_bengalfox:primary', label: 'GPT-5.3-Codex-Spark', windowMinutes: 300,
-      resetsAt: resetAt + 300000 }),
-    quotaWindow(100, { id: 'codex_bengalfox:secondary', label: 'GPT-5.3-Codex-Spark', windowMinutes: 10080,
-      resetsAt: resetAt + 300000 }),
-    quotaWindow(100, { id: 'base_model_inference:primary', label: 'gpt-reserve', windowMinutes: 10080,
-      resetsAt: resetAt + 10080 }),
-    quotaWindow(94, { id: 'codex:primary', label: 'codex',
-      windowMinutes: 10080, resetsAt: resetAt + 10080 })
-  ];
+  const quotaPeriodsSample = quotaPeriodsFixture(clock.now());
+  const quotaPeriods = () => quotaPeriodsSample.map(item => ({ ...item }));
   const syntheticOptions = { now: clock.now, schedule: clock.schedule, cancel: clock.cancel,
     createConnection(next) {
       callbacks = next;
@@ -509,7 +516,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       await wait(80);
       assert.match(palette.surface, /rgba\(244,\s*249,\s*255,\s*(?:0?\.86)\)/);
       assert.equal(palette.text, 'rgb(35, 37, 42)');
-      assert.equal(palette.period, 'rgb(85, 94, 106)');
+      assert.equal(palette.period, 'rgb(63, 111, 191)');
       assert.equal(palette.secondary, 'rgb(80, 89, 101)');
       await capture(win, 'quota-label-standard-expanded-dark-wallpaper-light-system', quotaLabel);
     } finally {
@@ -535,12 +542,12 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       if (theme === 'light') {
         assert.match(view.palette.surface, /rgba\(244,\s*249,\s*255,\s*(?:0?\.86)\)/);
         assert.equal(view.palette.text, 'rgb(35, 37, 42)');
-        assert.equal(view.palette.period, 'rgb(85, 94, 106)');
+        assert.equal(view.palette.period, 'rgb(63, 111, 191)');
         assert.equal(view.palette.secondary, 'rgb(80, 89, 101)');
       } else {
         assert.match(view.palette.surface, /rgba\(26,\s*34,\s*45,\s*(?:0?\.82)\)/);
         assert.match(view.palette.text, /rgba?\(246,\s*246,\s*244(?:,\s*(?:0?\.96))?\)/);
-        assert.equal(view.palette.period, 'rgb(210, 216, 224)');
+        assert.equal(view.palette.period, 'rgb(200, 220, 255)');
         assert.equal(view.palette.secondary, 'rgb(174, 184, 197)');
       }
     };
@@ -747,7 +754,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     let labelResult = await waitForLabelRows(2, '自动周期两项额度标签');
     assertQuotaLabelWindow(quotaLabel, labelResult.win, pet.getBounds());
     assert.equal(labelResult.view.controls, 0, '额度标签必须只读，不能包含交互控件');
-    assert.deepEqual(labelResult.view.names, ['codex', 'codex']);
+    assert.deepEqual(labelResult.view.names, ['Codex', 'Codex']);
     assert.deepEqual(labelResult.view.periods, ['5小时', '7天']);
     assert.deepEqual(labelResult.view.values.map(item => item.text), ['100%', '94%']);
     assert.deepEqual(labelResult.view.progress.map(item => [item.value, item.max]), [[100, 100], [94, 100]]);
@@ -856,7 +863,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     compactResult = await waitForLabelView(view => view.size === 'compact' &&
       view.expanded === 'true' && view.itemCount === '1', '展开单项额度液态玻璃卡片');
     assert.deepEqual(compactResult.view.values.map(item => item.text), ['60%']);
-    assert.equal(compactResult.view.compactProduct, 'CODEX');
+    assert.equal(compactResult.view.compactProduct, 'Codex');
     assert.equal(compactResult.view.compactPeriod, '周额度');
     assert.equal(compactResult.view.fits, true, '展开单项额度内容不得超出 196×96 卡片');
     await captureColorSchemes(compactResult.win, {
@@ -1062,7 +1069,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
 }
 
 module.exports = {
-  verifyCodexCompanion, assertBubbleLayout, assertQuotaLabelWindow, syntheticQuotaSteps,
+  verifyCodexCompanion, assertBubbleLayout, assertQuotaLabelWindow, syntheticQuotaSteps, quotaPeriodsFixture,
   applyPetSize, verifyNegativeDisplay, restoreSmokeState, combinedSmokeError,
   capturePaintedWindow, withCaptureTimeout, assertDistinctCaptureEvidence, assertStaleCaptureEvidence
 };

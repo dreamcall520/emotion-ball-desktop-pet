@@ -10,6 +10,17 @@ test('Codex 原生验收助手只在显式 smoke 模式下可运行', async () =
   await assert.rejects(verifyCodexCompanion({}), /显式冒烟/);
 });
 
+test('双周期验收样本使用各自真实的重置区间，不用一天后冒充五小时窗口', () => {
+  const { quotaPeriodsFixture } = require('../scripts/verify-codex-companion');
+  const now = 1800000000000;
+  const windows = quotaPeriodsFixture(now);
+  const fiveHour = windows.find(item => item.windowMinutes === 300);
+  const weekly = windows.find(item => item.windowMinutes === 10080 && item.id === 'codex:primary');
+
+  assert.equal(fiveHour.resetsAt - now, (4 * 60 + 35) * 60000);
+  assert.equal(weekly.resetsAt - now, (6 * 24 + 14) * 3600000);
+});
+
 test('原生布局校验拒绝第三行、溢出按钮与过小字体', () => {
   const file = path.resolve(__dirname, '../scripts/verify-codex-companion.js');
   assert.equal(fs.existsSync(file), true);

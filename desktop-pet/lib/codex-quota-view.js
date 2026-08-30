@@ -83,7 +83,8 @@ function selectQuotaWindows(windows, period = 'auto', now = Date.now()) {
 }
 
 function canonicalWindow(item) {
-  return { ...copyWindow(item), label: quotaFamily(item) || 'codex' };
+  const family = quotaFamily(item);
+  return { ...copyWindow(item), label: family === 'codex' ? 'Codex' : family || 'Codex' };
 }
 
 function familyPriority(item) {

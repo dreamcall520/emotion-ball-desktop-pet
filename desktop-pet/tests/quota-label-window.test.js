@@ -934,7 +934,7 @@ test('小巧横条只显示摘要，小巧和标准卡片均可点击展开明�
     { label: 'codex', windowMinutes: 300, remaining: 100, resetsAt: 1800016200000 },
     { label: 'codex', windowMinutes: 10080, remaining: 94, resetsAt: 1800522000000 }
   ], overflow: 0, resetCreditsAvailable: 1 });
-  assert.equal(compactProduct.textContent, 'CODEX');
+  assert.equal(compactProduct.textContent, 'Codex');
   assert.equal(compactPeriod.textContent, '5小时');
   assert.equal(secondaryQuota.dataset.severity, 'normal');
   assert.equal(secondaryPeriod.textContent, '周额度');
@@ -947,6 +947,11 @@ test('小巧横条只显示摘要，小巧和标准卡片均可点击展开明�
     { label: 'codex', windowMinutes: 10080, remaining: 64 },
     { label: 'gpt-reserve', windowMinutes: 10080, remaining: 78 }
   ], overflow: 0 });
+  assert.equal(items.children[0].children[1].className, 'quota-period period-pill',
+    '标准卡片收起态的周期也必须使用蓝色玻璃胶囊');
+  const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
+  assert.match(css, /\.quota-period\.period-pill\s*\{[\s\S]*?justify-self:\s*start[\s\S]*?width:\s*fit-content/,
+    '标准卡片周期胶囊必须按文字自适应宽度，不能被网格列拉满');
   click();
   assert.equal(toggles, 2);
   receive({ state: 'ready', size: 'standard', expanded: true, items: [
@@ -1065,8 +1070,8 @@ test('渲染层用固定中文状态、纯文本和合理四舍五入最多展�
     'Spark7天9%'
   ]);
   assert.deepEqual(items.children.map(item => item.children.map(child => child.className)), [
-    ['quota-name', 'quota-period', 'quota-value', 'quota-progress'],
-    ['quota-name', 'quota-period', 'quota-value', 'quota-progress']
+    ['quota-name', 'quota-period period-pill', 'quota-value', 'quota-progress'],
+    ['quota-name', 'quota-period period-pill', 'quota-value', 'quota-progress']
   ]);
   assert.deepEqual(items.children.map(item => item.children[0].textContent), ['<b>Codex</b>', 'Spark']);
   assert.deepEqual(items.children.map(item => item.children[1].textContent), ['5小时', '7天']);
@@ -1200,6 +1205,10 @@ test('双周期展开以第一项为主周期，并让上下周期共用同一�
   assert.match(css, /\.period-pill\s*\{/);
   assert.match(css, /#quota-label\[data-expanded="true"\]\[data-item-count="2"\][\s\S]*?#items li:nth-child\(2\)[\s\S]*?display:\s*none/);
   assert.match(css, /#secondary-value[\s\S]*?font-variant-numeric:\s*tabular-nums/);
+  assert.match(css, /\.secondary-heading\s*\{[\s\S]*?justify-content:\s*flex-start[\s\S]*?gap:\s*6px/,
+    '周额度百分比应紧跟在周期胶囊后');
+  assert.match(css, /#secondary-progress\s*\{[\s\S]*?width:\s*70%/,
+    '第二周期进度条按设计稿保持紧凑，不与主进度条等宽');
 });
 
 test('额度标签改为两行名称、周期、百分比和进度条，不再渲染另有项目提示', () => {

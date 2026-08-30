@@ -256,7 +256,7 @@
         row.dataset.role = index === 0 ? 'primary' : 'secondary';
         nameNode.className = 'quota-name';
         nameNode.textContent = item.label;
-        periodNode.className = 'quota-period';
+        periodNode.className = 'quota-period period-pill';
         periodNode.textContent = `${model.state === 'stale' ? '已过期 ' : ''}${periodText(item.windowMinutes)}`;
         valueNode.className = 'quota-value';
         valueNode.textContent = `${Math.round(item.remaining)}%`;
@@ -283,11 +283,11 @@
         valueNode.className = 'summary-value';
         valueNode.textContent = `${Math.round(summaryItem.remaining)}%`;
         summary.replaceChildren(periodNode, valueNode);
-        if (compactProduct) compactProduct.textContent = summaryItem.label.toUpperCase();
+        if (compactProduct) compactProduct.textContent = 'Codex';
         if (compactPeriod) compactPeriod.textContent = periodTypeText(summaryItem.windowMinutes);
       } else {
         summary.replaceChildren();
-        if (compactProduct) compactProduct.textContent = 'CODEX';
+        if (compactProduct) compactProduct.textContent = 'Codex';
         if (compactPeriod) compactPeriod.textContent = '';
       }
       label.dataset.hasItems = rows.length > 0 ? 'true' : 'false';

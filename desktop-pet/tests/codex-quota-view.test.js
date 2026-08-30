@@ -131,8 +131,8 @@ test('真实接口同时返回 5 小时和周额度时按周期保留，自动�
   const automatic = buildQuotaLabelModel(snapshot(windows), { period: 'auto' }, NOW);
   assert.equal(automatic.state, 'ready');
   assert.deepEqual(automatic.items.map(item => [item.windowMinutes, item.remaining, item.label]), [
-    [300, 100, 'codex'],
-    [10080, 94, 'codex']
+    [300, 100, 'Codex'],
+    [10080, 94, 'Codex']
   ]);
   assert.deepEqual(selectPrimaryQuotaWindows(windows, 'auto', NOW).map(item => item.windowMinutes), [300]);
 
@@ -171,10 +171,22 @@ test('常驻额度按主次周期各取一个可靠代表值，不显示模型�
 
   assert.equal(model.state, 'ready');
   assert.deepEqual(model.items.map(item => [item.id, item.label, item.remaining]), [
-    ['codex:primary', 'codex', 12],
-    ['codex:secondary', 'codex', 65],
+    ['codex:primary', 'Codex', 12],
+    ['codex:secondary', 'Codex', 65],
   ]);
   assert.equal(model.overflow, 0);
+});
+
+test('只有服务端返回的周窗口时直接以周额度为主，不捏造五小时窗口', () => {
+  const model = buildQuotaLabelModel(snapshot([
+    quotaWindow('codex:primary', 10080, 98, NOW + 6 * 86400000, 'codex')
+  ]), { period: 'auto' }, NOW);
+
+  assert.equal(model.state, 'ready');
+  assert.deepEqual(model.items, [{
+    id: 'codex:primary', label: 'Codex', windowMinutes: 10080, remaining: 98,
+    resetsAt: NOW + 6 * 86400000
+  }]);
 });
 
 test('手动周期缺失不回退，自动无有效数据时明确为 empty', () => {
