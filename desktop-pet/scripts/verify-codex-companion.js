@@ -885,7 +885,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     compactResult = await waitForLabelView(view => view.size === 'compact' &&
       view.expanded === 'true' && view.itemCount === '1', '展开单项额度液态玻璃卡片');
     assert.deepEqual(compactResult.view.values.map(item => item.text), ['60%']);
-    assert.equal(compactResult.view.compactProduct, 'Codex');
+    assert.equal(compactResult.view.compactProduct, 'CODEX');
     assert.equal(compactResult.view.compactPeriod, '周额度');
     assert.equal(compactResult.view.fits, true, '展开单项额度内容不得超出 196×96 卡片');
     await captureColorSchemes(compactResult.win, {

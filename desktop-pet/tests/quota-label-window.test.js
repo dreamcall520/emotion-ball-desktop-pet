@@ -934,7 +934,7 @@ test('小巧横条只显示摘要，小巧和标准卡片均可点击展开明�
     { label: 'codex', windowMinutes: 300, remaining: 100, resetsAt: 1800016200000 },
     { label: 'codex', windowMinutes: 10080, remaining: 94, resetsAt: 1800522000000 }
   ], overflow: 0, resetCreditsAvailable: 1 });
-  assert.equal(compactProduct.textContent, 'Codex');
+  assert.equal(compactProduct.textContent, 'CODEX');
   assert.equal(compactPeriod.textContent, '5小时');
   assert.equal(secondaryQuota.dataset.severity, 'normal');
   assert.equal(secondaryPeriod.textContent, '周额度');
@@ -1209,6 +1209,20 @@ test('双周期展开以第一项为主周期，并让上下周期共用同一�
     '周额度百分比应紧跟在周期胶囊后');
   assert.match(css, /#secondary-progress\s*\{[\s\S]*?width:\s*70%/,
     '第二周期进度条按设计稿保持紧凑，不与主进度条等宽');
+});
+
+test('展开卡片使用大写品牌标识、蓝色周期边界且深色玻璃只有一层内轮廓', () => {
+  const html = fs.readFileSync(path.resolve(__dirname, '../quota-label.html'), 'utf8');
+  const renderer = fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8');
+  const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
+  assert.match(html, /id="compact-product">CODEX</);
+  assert.match(renderer, /compactProduct\.textContent\s*=\s*'CODEX'/);
+  assert.match(css, /\.period-pill\s*\{[\s\S]*?border:\s*1px solid rgba\(112, 171, 238, \.24\)/,
+    '周期胶囊应使用轻蓝边界，不能用高亮白边形成白色外圈');
+  assert.match(css, /:root\[data-appearance="dark"\] #quota-label::after\s*\{\s*border-color:\s*transparent/,
+    '固定深色外观应移除第二层内边框');
+  assert.match(css, /:root\[data-appearance="system"\] #quota-label::after\s*\{\s*border-color:\s*transparent/,
+    '跟随系统的深色外观也应移除第二层内边框');
 });
 
 test('额度标签改为两行名称、周期、百分比和进度条，不再渲染另有项目提示', () => {

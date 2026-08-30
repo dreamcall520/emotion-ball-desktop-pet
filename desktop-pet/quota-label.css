@@ -216,10 +216,10 @@ body {
 .period-pill {
   flex: none;
   padding: 1px 5px;
-  border: 1px solid rgba(255, 255, 255, .34);
+  border: 1px solid rgba(112, 171, 238, .24);
   border-radius: 999px;
-  background: linear-gradient(180deg, rgba(231, 243, 255, .78), rgba(207, 228, 253, .48));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .42);
+  background: linear-gradient(180deg, rgba(229, 242, 255, .68), rgba(204, 227, 252, .38));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .24);
   color: #3f6fbf;
   font-size: 8px;
   font-weight: 690;
@@ -490,7 +490,7 @@ body {
     radial-gradient(circle at 104% 108%, rgba(83, 145, 217, .17), transparent 36%),
     linear-gradient(110deg, rgba(255, 255, 255, .08), transparent 48%, rgba(255, 255, 255, .035));
 }
-:root[data-appearance="dark"] #quota-label::after { border-color: rgba(255, 255, 255, .08); }
+:root[data-appearance="dark"] #quota-label::after { border-color: transparent; }
 :root[data-appearance="dark"] #quota-beam::before { opacity: .96; }
 :root[data-appearance="dark"] #quota-beam::after { opacity: .48; }
 :root[data-appearance="dark"] .quota-period,
@@ -553,7 +553,7 @@ body {
       radial-gradient(circle at 104% 108%, rgba(83, 145, 217, .17), transparent 36%),
       linear-gradient(110deg, rgba(255, 255, 255, .08), transparent 48%, rgba(255, 255, 255, .035));
   }
-  :root[data-appearance="system"] #quota-label::after { border-color: rgba(255, 255, 255, .08); }
+  :root[data-appearance="system"] #quota-label::after { border-color: transparent; }
   :root[data-appearance="system"] #quota-beam::before { opacity: .96; }
   :root[data-appearance="system"] #quota-beam::after { opacity: .48; }
   :root[data-appearance="system"] .quota-period,

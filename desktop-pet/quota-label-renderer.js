@@ -283,11 +283,11 @@
         valueNode.className = 'summary-value';
         valueNode.textContent = `${Math.round(summaryItem.remaining)}%`;
         summary.replaceChildren(periodNode, valueNode);
-        if (compactProduct) compactProduct.textContent = 'Codex';
+        if (compactProduct) compactProduct.textContent = 'CODEX';
         if (compactPeriod) compactPeriod.textContent = periodTypeText(summaryItem.windowMinutes);
       } else {
         summary.replaceChildren();
-        if (compactProduct) compactProduct.textContent = 'Codex';
+        if (compactProduct) compactProduct.textContent = 'CODEX';
         if (compactPeriod) compactPeriod.textContent = '';
       }
       label.dataset.hasItems = rows.length > 0 ? 'true' : 'false';
