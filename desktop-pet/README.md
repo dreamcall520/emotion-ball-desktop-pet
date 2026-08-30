@@ -46,7 +46,11 @@
 
 `dist/球球桌宠-darwin-arm64/球球桌宠.app`
 
-当前版本面向 Apple 芯片 Mac。它使用本机临时签名，没有提交 Apple 公证，只适合个人本机使用。
+Intel x64 独立应用生成在：
+
+`dist/intel-x64/球球桌宠-darwin-x64/球球桌宠.app`
+
+两个版本都使用本机临时签名，没有提交 Apple 公证。Intel x64 版已完成 Rosetta 模拟烟测，尚未完成真实 Intel Mac 验收；其 Codex 联动默认关闭，也不列为 Intel 实机已验证能力。
 
 ## 删除
 

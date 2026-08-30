@@ -10,6 +10,7 @@
     "test": "node --test desktop-pet/tests/*.test.js",
     "smoke": "node desktop-pet/scripts/smoke-electron.js",
     "package:mac": "node desktop-pet/scripts/package-mac.js",
+    "package:mac:intel": "node desktop-pet/scripts/package-mac.js --arch=x64",
     "postinstall": "ELECTRON_GET_USE_PROXY=1 node node_modules/electron/install.js"
   },
   "devDependencies": {

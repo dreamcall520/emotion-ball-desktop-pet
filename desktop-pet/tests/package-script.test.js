@@ -10,7 +10,7 @@ const {
   prepareStaging
 } = require('../scripts/package-mac');
 
-test('只打包 Apple Silicon 本地应用并启用 asar', () => {
+test('默认继续打包 Apple Silicon 本地应用并启用 asar', () => {
   const options = buildPackagerOptions('/repo', '/repo/desktop-pet/build/app.icns');
   assert.equal(options.platform, 'darwin');
   assert.equal(options.arch, 'arm64');
@@ -19,6 +19,31 @@ test('只打包 Apple Silicon 本地应用并启用 asar', () => {
   assert.equal(options.name, '球球桌宠');
   assert.equal(options.out, '/repo/dist');
   assert.equal(options.quiet, true);
+});
+
+test('Intel 独立命令生成 x64 应用且不改变其他打包设置', () => {
+  const options = buildPackagerOptions(
+    '/repo',
+    '/repo/desktop-pet/build/app.icns',
+    null,
+    'x64'
+  );
+  assert.equal(options.platform, 'darwin');
+  assert.equal(options.arch, 'x64');
+  assert.equal(options.asar, true);
+  assert.equal(options.appBundleId, 'local.xiaokun.emotionball.pet');
+  assert.equal(options.dir, '/repo/desktop-pet/build/intel-x64/staging');
+  assert.equal(options.out, '/repo/dist/intel-x64');
+  assert.deepEqual(options.download, {
+    cacheRoot: '/repo/desktop-pet/build/intel-x64/electron-cache'
+  });
+});
+
+test('拒绝将未知架构打包成 macOS 交付物', () => {
+  assert.throws(
+    () => buildPackagerOptions('/repo', '/repo/desktop-pet/build/app.icns', null, 'universal'),
+    /只支持 arm64 或 x64/
+  );
 });
 
 test('打包后执行整个应用的本机临时签名', () => {
@@ -61,6 +86,19 @@ test('打包暂存区继承项目版本号', () => {
   );
 
   assert.equal(stagedPackage.version, projectPackage.version);
+});
+
+test('Intel 暂存区使用独立 x64 目录', () => {
+  const root = path.resolve(__dirname, '../..');
+  const staging = prepareStaging(root, 'x64');
+  assert.equal(
+    staging,
+    path.join(root, 'desktop-pet/build/intel-x64/staging')
+  );
+  assert.equal(
+    JSON.parse(fs.readFileSync(path.join(staging, 'package.json'), 'utf8')).version,
+    JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version
+  );
 });
 
 test('安装包完整包含轻陪伴和气泡依赖，避免缺少模块', () => {
@@ -155,6 +193,24 @@ test('优先复用本机已经下载好的 Electron 压缩包', () => {
       .electronZipDir,
     zipDir
   );
+
+  fs.rmSync(cacheRoot, { recursive: true, force: true });
+});
+
+test('Intel 打包只复用 x64 Electron 压缩包，不误用 Apple Silicon 缓存', () => {
+  const cacheRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'electron-cache-'));
+  fs.writeFileSync(
+    path.join(cacheRoot, 'electron-v43.4.1-darwin-arm64.zip'),
+    'arm64 fixture'
+  );
+  assert.equal(findElectronZipDir(cacheRoot, 'x64'), null);
+
+  fs.writeFileSync(
+    path.join(cacheRoot, 'electron-v43.4.1-darwin-x64.zip'),
+    'x64 fixture'
+  );
+
+  assert.equal(findElectronZipDir(cacheRoot, 'x64'), cacheRoot);
 
   fs.rmSync(cacheRoot, { recursive: true, force: true });
 });

@@ -19,7 +19,9 @@
 
 ## 下载安装
 
-当前版本为 Apple 芯片版，适用于 M1、M2、M3、M4 及后续 Apple 芯片 Mac，需要 macOS 12 或更高版本。
+当前版本分别提供 Apple 芯片版和 Intel x64 版，需要 macOS 12 或更高版本。请按电脑处理器下载明确标注的对应安装包，不要在 Apple 芯片 Mac 上用 Intel 包替换 Apple 芯片版。
+
+Intel x64 版已完成独立构建、签名和 Apple 芯片 Mac 上的 Rosetta 模拟烟测，但尚未经过真实 Intel Mac 验收。普通桌宠功能与 Apple 芯片版使用同一份 0.3.10 应用代码；Codex 联动仍默认关闭，Intel 环境下不列为已实机验收能力。
 
 1. 前往 [Releases](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases) 下载最新的“分享用 ZIP”。
 2. 解压 ZIP，打开 DMG。
@@ -50,7 +52,10 @@ npm start
 npm test
 npm run smoke
 npm run package:mac
+npm run package:mac:intel
 ```
+
+`package:mac` 继续只生成 Apple Silicon 应用；`package:mac:intel` 生成独立 x64 应用，两者输出目录不同。
 
 ## 来源与许可
 

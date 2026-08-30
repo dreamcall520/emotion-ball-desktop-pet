@@ -6,7 +6,19 @@ process.env.ELECTRON_GET_USE_PROXY ||= '1';
 const { packager } = require('@electron/packager');
 const { makeIcon } = require('./make-icon');
 
-const ELECTRON_ZIP = 'electron-v43.4.1-darwin-arm64.zip';
+const ELECTRON_VERSION = '43.4.1';
+const SUPPORTED_ARCHS = new Set(['arm64', 'x64']);
+
+function normalizeArch(arch = 'arm64') {
+  if (!SUPPORTED_ARCHS.has(arch)) {
+    throw new Error(`macOS 打包只支持 arm64 或 x64，收到: ${arch}`);
+  }
+  return arch;
+}
+
+function electronZipName(arch) {
+  return `electron-v${ELECTRON_VERSION}-darwin-${normalizeArch(arch)}.zip`;
+}
 
 function copyFile(root, staging, relativePath) {
   const source = path.join(root, relativePath);
@@ -15,8 +27,15 @@ function copyFile(root, staging, relativePath) {
   fs.copyFileSync(source, destination);
 }
 
-function prepareStaging(root) {
-  const staging = path.join(root, 'desktop-pet/build/staging');
+function intelBuildRoot(root) {
+  return path.join(root, 'desktop-pet/build/intel-x64');
+}
+
+function prepareStaging(root, arch = 'arm64') {
+  const normalizedArch = normalizeArch(arch);
+  const staging = normalizedArch === 'x64'
+    ? path.join(intelBuildRoot(root), 'staging')
+    : path.join(root, 'desktop-pet/build/staging');
   const rootPackage = JSON.parse(
     fs.readFileSync(path.join(root, 'package.json'), 'utf8')
   );
@@ -91,26 +110,34 @@ function prepareStaging(root) {
 }
 
 function findElectronZipDir(
-  cacheRoot = path.join(os.homedir(), 'Library/Caches/electron')
+  cacheRoot = path.join(os.homedir(), 'Library/Caches/electron'),
+  arch = 'arm64'
 ) {
+  const electronZip = electronZipName(arch);
   if (!fs.existsSync(cacheRoot)) return null;
-  if (fs.existsSync(path.join(cacheRoot, ELECTRON_ZIP))) return cacheRoot;
+  if (fs.existsSync(path.join(cacheRoot, electronZip))) return cacheRoot;
 
   for (const entry of fs.readdirSync(cacheRoot, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     const candidate = path.join(cacheRoot, entry.name);
-    if (fs.existsSync(path.join(candidate, ELECTRON_ZIP))) return candidate;
+    if (fs.existsSync(path.join(candidate, electronZip))) return candidate;
   }
   return null;
 }
 
-function buildPackagerOptions(root, icon, electronZipDir = null) {
+function buildPackagerOptions(root, icon, electronZipDir = null, arch = 'arm64') {
+  const normalizedArch = normalizeArch(arch);
+  const isIntel = normalizedArch === 'x64';
   const options = {
-    dir: path.join(root, 'desktop-pet/build/staging'),
-    out: path.join(root, 'dist'),
+    dir: isIntel
+      ? path.join(intelBuildRoot(root), 'staging')
+      : path.join(root, 'desktop-pet/build/staging'),
+    out: isIntel
+      ? path.join(root, 'dist/intel-x64')
+      : path.join(root, 'dist'),
     platform: 'darwin',
-    arch: 'arm64',
-    electronVersion: '43.4.1',
+    arch: normalizedArch,
+    electronVersion: ELECTRON_VERSION,
     name: '球球桌宠',
     appBundleId: 'local.xiaokun.emotionball.pet',
     appCategoryType: 'public.app-category.entertainment',
@@ -120,6 +147,11 @@ function buildPackagerOptions(root, icon, electronZipDir = null) {
     prune: true,
     quiet: true
   };
+  if (isIntel) {
+    options.download = {
+      cacheRoot: path.join(intelBuildRoot(root), 'electron-cache')
+    };
+  }
   if (electronZipDir) options.electronZipDir = electronZipDir;
   return options;
 }
@@ -145,12 +177,18 @@ function adhocSign(appPath) {
   runTool('codesign', ['--verify', '--deep', '--strict', appPath]);
 }
 
-async function packageMac(root = path.resolve(__dirname, '../..')) {
+async function packageMac(
+  root = path.resolve(__dirname, '../..'),
+  arch = 'arm64'
+) {
+  const normalizedArch = normalizeArch(arch);
   const icon = makeIcon(root);
-  prepareStaging(root);
-  const electronZipDir = findElectronZipDir();
+  prepareStaging(root, normalizedArch);
+  const electronZipDir = normalizedArch === 'arm64'
+    ? findElectronZipDir(undefined, normalizedArch)
+    : null;
   const paths = await packager(
-    buildPackagerOptions(root, icon, electronZipDir)
+    buildPackagerOptions(root, icon, electronZipDir, normalizedArch)
   );
   if (!paths.length) throw new Error('未生成 macOS 应用');
   const appPath = path.join(paths[0], '球球桌宠.app');
@@ -161,7 +199,9 @@ async function packageMac(root = path.resolve(__dirname, '../..')) {
 }
 
 if (require.main === module) {
-  packageMac().catch(error => {
+  const archArgument = process.argv.find(argument => argument.startsWith('--arch='));
+  const arch = archArgument ? archArgument.slice('--arch='.length) : 'arm64';
+  packageMac(undefined, arch).catch(error => {
     process.stderr.write(`${error.stack || error.message}\n`);
     process.exitCode = 1;
   });
@@ -169,6 +209,7 @@ if (require.main === module) {
 
 module.exports = {
   buildPackagerOptions,
+  electronZipName,
   adhocSign,
   findElectronZipDir,
   prepareStaging,

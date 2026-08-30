@@ -9,6 +9,10 @@ test('桌宠项目固定入口、测试和打包脚本', () => {
   assert.equal(pkg.scripts.test, 'node --test desktop-pet/tests/*.test.js');
   assert.equal(pkg.scripts['package:mac'], 'node desktop-pet/scripts/package-mac.js');
   assert.equal(
+    pkg.scripts['package:mac:intel'],
+    'node desktop-pet/scripts/package-mac.js --arch=x64'
+  );
+  assert.equal(
     pkg.scripts.postinstall,
     'ELECTRON_GET_USE_PROXY=1 node node_modules/electron/install.js'
   );
