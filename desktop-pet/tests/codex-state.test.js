@@ -21,6 +21,13 @@ test('额度按真实窗口计算剩余比例并统一为毫秒', () => {
   });
 });
 
+test('旧版单额度池未返回编号时明确归为通用 Codex 额度', () => {
+  assert.deepEqual(state().normalizeQuota({ rateLimits: { primary: window } }, 100).windows, [{
+    id: 'codex:primary', label: 'codex', windowMinutes: 300, remaining: 15,
+    resetsAt: 2000000000000
+  }]);
+});
+
 test('额度只保留可用重置机会数量，不保留重置凭据详情', () => {
   const result = state().normalizeQuota({
     ...quota(window),

@@ -278,7 +278,10 @@ function syncQuotaLabel(snapshot = null) {
       }
       try {
         const current = requestedSnapshot || codexCompanion?.getSnapshot();
-        quotaLabel.show(buildQuotaLabelModel(current, { period: settings.codexQuotaPeriod }, codexNow()));
+        quotaLabel.show(buildQuotaLabelModel(current, {
+          period: settings.codexQuotaPeriod,
+          size: settings.codexQuotaLabelSize
+        }, codexNow()));
         shown = true;
       } catch (error) {
         shown = false;

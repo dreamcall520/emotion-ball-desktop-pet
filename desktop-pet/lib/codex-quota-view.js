@@ -52,9 +52,8 @@ function quotaFamily(item) {
   if (!item || typeof item !== 'object') return '';
   const id = typeof item.id === 'string' ? item.id.split(':', 1)[0].trim().toLowerCase() : '';
   const label = typeof item.label === 'string' ? item.label.trim().toLowerCase() : '';
-  if (id === 'codex' || label === 'codex') return 'codex';
+  if (id === 'codex') return 'codex';
   if (id === 'gpt-reserve' || label === 'gpt-reserve' || label === 'gpt reserve') return 'gpt-reserve';
-  if (id.startsWith('codex_') || label.includes('codex')) return 'codex';
   return '';
 }
 
@@ -90,14 +89,14 @@ function canonicalWindow(item) {
 function familyPriority(item) {
   const id = typeof item?.id === 'string' ? item.id.split(':', 1)[0].trim().toLowerCase() : '';
   const label = typeof item?.label === 'string' ? item.label.trim().toLowerCase() : '';
-  if (id === 'codex' || label === 'codex') return 0;
+  if (id === 'codex') return 0;
   if (id === 'gpt-reserve' || label === 'gpt-reserve' || label === 'gpt reserve') return 1;
-  if (id.startsWith('codex_') || label.includes('codex')) return 2;
-  return 3;
+  return 2;
 }
 
 function validWindows(windows, now) {
-  return selectQuotaWindows(windows, 'auto', now);
+  return selectQuotaWindows(windows, 'auto', now).filter(item => quotaFamily(item) === 'codex'
+    && Object.values(PERIOD_MINUTES).includes(item.windowMinutes));
 }
 
 function resolvePrimaryMinutes(windows, period) {
@@ -157,14 +156,18 @@ function buildQuotaLabelModel(snapshot, options = {}, now = Date.now()) {
     return emptyModel('disconnected');
   }
 
-  const period = normalizePeriod(options && typeof options === 'object' && !Array.isArray(options)
-    ? options.period : 'auto');
-  const selected = selectDisplayedQuotaWindows(quota.windows, period, now);
+  const safeOptions = options && typeof options === 'object' && !Array.isArray(options) ? options : {};
+  const period = normalizePeriod(safeOptions.period);
+  const selectedByPeriod = selectDisplayedQuotaWindows(quota.windows, period, now);
+  const selected = safeOptions.size === 'standard' && period !== 'auto'
+    ? selectedByPeriod.slice(0, 1) : selectedByPeriod;
   const resetCredits = Number.isSafeInteger(quota.resetCreditsAvailable)
     && quota.resetCreditsAvailable >= 0
     ? { resetCreditsAvailable: quota.resetCreditsAvailable } : {};
   const expired = validNow(now) && limitedWindows(quota.windows)
-    .some(item => validScalars(item) && item.resetsAt <= now && matchesPeriod(item, period));
+    .some(item => validScalars(item) && quotaFamily(item) === 'codex'
+      && Object.values(PERIOD_MINUTES).includes(item.windowMinutes)
+      && item.resetsAt <= now && matchesPeriod(item, period));
   if (quota.stale === true) {
     if (!selected.length && expired) return emptyModel('reset-wait');
     return { state: 'stale', items: selected, overflow: 0, ...resetCredits };

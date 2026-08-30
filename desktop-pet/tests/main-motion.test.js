@@ -335,7 +335,7 @@ test('额度卡片外观为跟随系统、浅色和深色三档，只在保存�
     'codex-quota-appearance-system');
 });
 
-test('常驻标签使用已保存周期作为主项，并补充展示实际返回的另一周期', async () => {
+test('常驻标签按当前卡片大小构建手动周期模型', async () => {
   const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
   f.connections[0].callbacks.onQuota({
     updatedAt: 1800000000000,
@@ -349,8 +349,14 @@ test('常驻标签使用已保存周期作为主项，并补充展示实际返�
   });
   assert.equal(f.quotaLabel.shows.at(-1).items.length, 2);
   assert.equal(f.call("setCodexPreference('codexQuotaPeriod', 'weekly')"), true);
-  const model = f.quotaLabel.shows.at(-1);
-  assert.deepEqual(model.items.map(item => [item.label, item.windowMinutes, item.remaining]), [
+  const standardModel = f.quotaLabel.shows.at(-1);
+  assert.deepEqual(standardModel.items.map(item => [item.label, item.windowMinutes, item.remaining]), [
+    ['Codex', 10080, 65]
+  ], '标准卡片手动选周额度时只展示所选周期');
+
+  assert.equal(f.call("setCodexPreference('codexQuotaLabelSize', 'compact')"), true);
+  const compactModel = f.quotaLabel.shows.at(-1);
+  assert.deepEqual(compactModel.items.map(item => [item.label, item.windowMinutes, item.remaining]), [
     ['Codex', 10080, 65], ['Codex', 300, 61]
   ]);
 });

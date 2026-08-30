@@ -275,14 +275,16 @@ function quotaPeriodsFixture(now) {
   const fiveHourResetAt = now + (4 * 60 + 35) * 60000;
   const weeklyResetAt = now + (6 * 24 + 14) * 3600000;
   return [
+    { id: 'codex:primary', label: 'codex', windowMinutes: 300,
+      remaining: 100, resetsAt: fiveHourResetAt },
+    { id: 'codex:secondary', label: 'codex', windowMinutes: 10080,
+      remaining: 94, resetsAt: weeklyResetAt },
     { id: 'codex_bengalfox:primary', label: 'GPT-5.3-Codex-Spark', windowMinutes: 300,
       remaining: 100, resetsAt: fiveHourResetAt },
     { id: 'codex_bengalfox:secondary', label: 'GPT-5.3-Codex-Spark', windowMinutes: 10080,
       remaining: 100, resetsAt: weeklyResetAt },
     { id: 'base_model_inference:primary', label: 'gpt-reserve', windowMinutes: 10080,
-      remaining: 100, resetsAt: weeklyResetAt },
-    { id: 'codex:primary', label: 'codex', windowMinutes: 10080,
-      remaining: 94, resetsAt: weeklyResetAt }
+      remaining: 100, resetsAt: weeklyResetAt }
   ];
 }
 
@@ -916,12 +918,12 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     process.stdout.write('PET_CODEX_QUOTA_COMPACT_OK\n');
 
     assert.equal(setQuotaPreference('codexQuotaPeriod', 'fiveHour'), true);
-    labelResult = await waitForLabelView(view => view.rows.length === 2 &&
-      view.periods[0] === '5小时' && view.periods[1] === '7天', 'fiveHour 主周期额度标签');
+    labelResult = await waitForLabelView(view => view.rows.length === 1 &&
+      view.itemCount === '1' && view.periods[0] === '5小时', 'fiveHour 单周期额度标签');
     assert.equal(getMenu().getMenuItemById('codex-quota-five-hour').checked, true);
     assert.equal(setQuotaPreference('codexQuotaPeriod', 'weekly'), true);
-    labelResult = await waitForLabelView(view => view.rows.length === 2 &&
-      view.periods[0] === '7天' && view.periods[1] === '5小时', 'weekly 主次周期额度标签');
+    labelResult = await waitForLabelView(view => view.rows.length === 1 &&
+      view.itemCount === '1' && view.periods[0] === '7天', 'weekly 单周期额度标签');
     assert.equal(getMenu().getMenuItemById('codex-quota-weekly').checked, true);
     assert.equal(setQuotaPreference('codexQuotaPeriod', 'auto'), true);
     labelResult = await waitForLabelRows(2, '切回自动周期额度标签');

@@ -20,7 +20,7 @@ const title = value => text(value) || '未命名任务';
 function normalizeQuota(raw, now) {
   const windows = [];
   const groups = object(raw?.rateLimitsByLimitId) ? Object.entries(raw.rateLimitsByLimitId).slice(0, 32)
-    : object(raw?.rateLimits) ? [[text(raw.rateLimits.limitId, 100) || 'default', raw.rateLimits]] : [];
+    : object(raw?.rateLimits) ? [[text(raw.rateLimits.limitId, 100) || 'codex', raw.rateLimits]] : [];
   for (const [key, group] of groups) {
     if (!object(group)) continue;
     const id = text(key, 100) || 'unknown';

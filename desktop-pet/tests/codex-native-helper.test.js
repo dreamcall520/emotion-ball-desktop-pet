@@ -14,8 +14,8 @@ test('双周期验收样本使用各自真实的重置区间，不用一天后�
   const { quotaPeriodsFixture } = require('../scripts/verify-codex-companion');
   const now = 1800000000000;
   const windows = quotaPeriodsFixture(now);
-  const fiveHour = windows.find(item => item.windowMinutes === 300);
-  const weekly = windows.find(item => item.windowMinutes === 10080 && item.id === 'codex:primary');
+  const fiveHour = windows.find(item => item.id === 'codex:primary' && item.windowMinutes === 300);
+  const weekly = windows.find(item => item.id === 'codex:secondary' && item.windowMinutes === 10080);
 
   assert.equal(fiveHour.resetsAt - now, (4 * 60 + 35) * 60000);
   assert.equal(weekly.resetsAt - now, (6 * 24 + 14) * 3600000);
@@ -387,6 +387,10 @@ test('原生助手验收任务菜单与名称开关且不具备真实任务写�
   assert.match(source, /codex-quota-auto/);
   assert.match(source, /codex-quota-five-hour/);
   assert.match(source, /codex-quota-weekly/);
+  assert.match(source, /view\.rows\.length === 1 &&\s*view\.itemCount === '1' &&\s*view\.periods\[0\] === '5小时'/s,
+    '标准卡片手动选 5 小时时必须只验收所选周期');
+  assert.match(source, /view\.rows\.length === 1 &&\s*view\.itemCount === '1' &&\s*view\.periods\[0\] === '7天'/s,
+    '标准卡片手动选周额度时必须只验收所选周期');
   assert.match(source, /\['light', 'dark'\]/);
   assert.match(source, /\$\{prefix\}-\$\{scheme\}/);
   assert.match(source, /quota-label-compact/);
