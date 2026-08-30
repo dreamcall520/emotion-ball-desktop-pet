@@ -343,18 +343,18 @@ body {
 .detail-primary {
   overflow: hidden;
   color: #4f5763;
-  font-size: 9px;
-  font-weight: 680;
-  line-height: 11px;
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 #reset-credits .detail-primary { color: #3d6dbb; }
 .detail-secondary {
   overflow: hidden;
-  margin-top: 1px;
+  margin-top: 2px;
   color: var(--quota-subtle);
-  font-size: 8px;
+  font-size: 7px;
   line-height: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -446,12 +446,12 @@ body {
   background: linear-gradient(90deg, #4a79cf, #86b2f2);
 }
 #secondary-reset {
-  margin: 1px 0 0;
+  margin: 3px 0 0;
   overflow: hidden;
   color: var(--quota-subtle);
-  font-size: 8px;
-  font-weight: 570;
-  line-height: 9px;
+  font-size: 7px;
+  font-weight: 540;
+  line-height: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

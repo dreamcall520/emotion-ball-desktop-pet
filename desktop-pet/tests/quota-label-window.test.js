@@ -1267,10 +1267,17 @@ test('标准卡片展开态复用 196×96 明细布局', () => {
 
 test('展开详情把相对重置时间、具体时间和重置机会分层排版', () => {
   const renderer = fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8');
+  const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
   assert.match(renderer, /detail-primary/);
   assert.match(renderer, /detail-secondary/);
   assert.match(renderer, /detail-separator/);
   assert.doesNotMatch(renderer, /resetTime\.textContent\s*=\s*resetTimeText/);
+  assert.match(css, /\.detail-primary\s*\{[\s\S]*?font-size:\s*8px[\s\S]*?font-weight:\s*600[\s\S]*?line-height:\s*12px/,
+    '主周期重置详情应使用更轻、更疏朗的两行排版');
+  assert.match(css, /\.detail-secondary\s*\{[\s\S]*?margin-top:\s*2px[\s\S]*?font-size:\s*7px[\s\S]*?line-height:\s*9px/,
+    '具体重置时间应降低字号并与上行留出间距');
+  assert.match(css, /#secondary-reset\s*\{[\s\S]*?margin:\s*3px 0 0[\s\S]*?font-size:\s*7px[\s\S]*?font-weight:\s*540[\s\S]*?line-height:\s*10px/,
+    '周额度重置详情应按原稿降低密度并保留进度条间距');
 });
 
 test('168×58 标准档内两条额度的文字和进度条不裁切', () => {
