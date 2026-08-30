@@ -365,7 +365,7 @@ body {
 #quota-label[data-expanded="true"][data-item-count="2"] #items li:first-child {
   position: relative;
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: 29px 3px;
+  grid-template-rows: 25px 3px;
   align-items: end;
 }
 #quota-label[data-expanded="true"][data-item-count="1"] .quota-name,
@@ -378,9 +378,9 @@ body {
   grid-row: 1;
   justify-self: start;
   color: #222831;
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 735;
-  line-height: 29px;
+  line-height: 25px;
   letter-spacing: -.055em;
 }
 #quota-label[data-expanded="true"][data-item-count="1"] #items li::after,

@@ -1184,7 +1184,7 @@ test('额度卡片复用星空工作台流光，悬停加速且减少动态效�
 test('小巧展开为 196×96，单项额度使用大数字，双项额度仍完整保留', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
   assert.match(css, /#quota-label\[data-expanded="true"\][\s\S]*?padding:\s*8px 10px 7px/);
-  assert.match(css, /#quota-label\[data-expanded="true"\]\[data-item-count="1"\][\s\S]*?\.quota-value[\s\S]*?font-size:\s*28px/);
+  assert.match(css, /#quota-label\[data-expanded="true"\]\[data-item-count="1"\][\s\S]*?\.quota-value[\s\S]*?font-size:\s*24px/);
   assert.match(css, /#quota-label\[data-expanded="true"\]\[data-item-count="2"\][\s\S]*?#secondary-quota[\s\S]*?display:\s*block/);
   assert.match(css, /#quota-details[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)\s+58px/);
 });
@@ -1262,7 +1262,10 @@ test('浅色系统叠在深色壁纸上仍使用高覆盖玻璃底和不透明�
 test('标准卡片展开态复用 196×96 明细布局', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
   assert.match(css, /#quota-label\[data-expanded="true"\][\s\S]*?padding:\s*8px 10px 7px/);
-  assert.match(css, /#quota-label\[data-expanded="true"\]\[data-item-count="1"\][\s\S]*?\.quota-value[\s\S]*?font-size:\s*28px/);
+  assert.match(css, /#quota-label\[data-expanded="true"\]\[data-item-count="1"\][\s\S]*?grid-template-rows:\s*25px 3px/,
+    '主额度区应压缩到设计稿高度，为底部说明保留安全空间');
+  assert.match(css, /#quota-label\[data-expanded="true"\]\[data-item-count="1"\][\s\S]*?\.quota-value[\s\S]*?font-size:\s*24px[\s\S]*?line-height:\s*25px/,
+    '主额度数字应按设计稿比例呈现，不能挤压下方信息');
 });
 
 test('展开详情把相对重置时间、具体时间和重置机会分层排版', () => {

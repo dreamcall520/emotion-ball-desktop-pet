@@ -392,6 +392,11 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     const view = await win.webContents.executeJavaScript(`(() => {
     const root = document.getElementById('quota-label');
     const rootRect = root.getBoundingClientRect();
+    const primaryProgress = document.querySelector('#items li:first-child .quota-progress');
+    const secondaryReset = document.getElementById('secondary-reset');
+    const secondaryResetRange = secondaryReset ? document.createRange() : null;
+    if (secondaryResetRange) secondaryResetRange.selectNodeContents(secondaryReset);
+    const secondaryResetTextRect = secondaryResetRange?.getBoundingClientRect() || null;
     const visibleSections = ['compact-header', 'items', 'quota-details', 'secondary-quota']
       .map(id => document.getElementById(id)).filter(node => node && getComputedStyle(node).display !== 'none');
     return {
@@ -425,6 +430,15 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
         value: document.getElementById('secondary-value')?.textContent || '',
         progress: document.getElementById('secondary-progress')?.value || 0,
         reset: document.getElementById('secondary-reset')?.textContent || ''
+      },
+      layout: {
+        primaryProgressTop: primaryProgress ? primaryProgress.getBoundingClientRect().top - rootRect.top : -1,
+        secondaryResetBottomInset: secondaryReset
+          ? rootRect.bottom - secondaryReset.getBoundingClientRect().bottom : -1,
+        secondaryResetTextBottomInset: secondaryResetTextRect
+          ? rootRect.bottom - secondaryResetTextRect.bottom : -1,
+        secondaryResetFits: secondaryReset
+          ? secondaryReset.scrollHeight <= secondaryReset.clientHeight : false
       },
       resetTime: document.getElementById('reset-time')?.textContent || '',
       resetCredits: document.getElementById('reset-credits')?.textContent || '',
@@ -786,6 +800,14 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     });
     assert.match(standardExpanded.view.secondaryQuota.reset, /后重置 · \d+\/\d+ \d{2}:\d{2}/);
     assert.equal(standardExpanded.view.resetCredits, '1 次重置机会');
+    assert.ok(standardExpanded.view.layout.primaryProgressTop <= 52,
+      '主进度条及剩余额度标签必须位于设计稿基线，不能挤压详情区');
+    assert.ok(standardExpanded.view.layout.secondaryResetBottomInset >= 8,
+      '周额度说明与卡片底部必须至少保留 8px 安全留白');
+    assert.ok(standardExpanded.view.layout.secondaryResetTextBottomInset >= 8,
+      '周额度说明文字与卡片底部必须至少保留 8px 安全留白');
+    assert.equal(standardExpanded.view.layout.secondaryResetFits, true,
+      '周额度说明文字不能被自身行高裁切');
     await captureColorSchemes(standardExpanded.win,
       { size: 'standard', expanded: true, itemCount: 2, prefix: 'quota-label-standard-expanded' });
     await verifyQuotaAppearance(standardExpanded.win);
