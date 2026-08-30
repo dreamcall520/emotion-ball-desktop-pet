@@ -34,6 +34,7 @@ const { createQuotaLabelWindow } = require('./lib/quota-label-window');
 
 const APP_NAME = '球球桌宠';
 const IS_SMOKE_TEST = process.env.PET_SMOKE_TEST === '1';
+const IS_CODEX_SMOKE_ONLY = IS_SMOKE_TEST && process.env.PET_SMOKE_CODEX_ONLY === '1';
 
 let petWindow = null;
 let tray = null;
@@ -861,10 +862,12 @@ async function finishSmokeTest() {
     );
     if (!companionReady) throw new Error('轻陪伴活动感知尚未接入');
 
-    await require('./scripts/verify-companion').verifyCompanion({
-      pet: petWindow, bubble, dialogue, monitor: activityMonitor, screen, BrowserWindow,
-      command: sendCommand, setSetting: setCompanionSetting, getSettings: () => ({ ...settings }), showDialogue
-    });
+    if (!IS_CODEX_SMOKE_ONLY) {
+      await require('./scripts/verify-companion').verifyCompanion({
+        pet: petWindow, bubble, dialogue, monitor: activityMonitor, screen, BrowserWindow,
+        command: sendCommand, setSetting: setCompanionSetting, getSettings: () => ({ ...settings }), showDialogue
+      });
+    }
 
     await require('./scripts/verify-codex-companion').verifyCodexCompanion({
       pet: petWindow, bubble, quotaLabel, monitor: activityMonitor, screen, BrowserWindow,

@@ -129,12 +129,10 @@
     return 'normal';
   }
 
-  function resetTimeText(model) {
+  function resetTimeText(model, item = model.items[0]) {
     if (model.state === 'stale') return '重置时间待额度更新';
     const now = Date.now();
-    const resetsAt = model.items.map(item => item.resetsAt)
-      .filter(value => Number.isSafeInteger(value) && value > now)
-      .sort((left, right) => left - right)[0];
+    const resetsAt = Number.isSafeInteger(item?.resetsAt) && item.resetsAt > now ? item.resetsAt : null;
     if (!resetsAt) return '重置时间暂不可用';
     const totalMinutes = Math.max(1, Math.ceil((resetsAt - now) / 60000));
     const days = Math.floor(totalMinutes / 1440);
@@ -201,6 +199,11 @@
   let resetCredits;
   let compactProduct;
   let compactPeriod;
+  let secondaryQuota;
+  let secondaryPeriod;
+  let secondaryValue;
+  let secondaryProgress;
+  let secondaryReset;
   let root;
   let bridge;
   try {
@@ -214,6 +217,11 @@
     resetCredits = document.getElementById('reset-credits');
     compactProduct = document.getElementById('compact-product');
     compactPeriod = document.getElementById('compact-period');
+    secondaryQuota = document.getElementById('secondary-quota');
+    secondaryPeriod = document.getElementById('secondary-period');
+    secondaryValue = document.getElementById('secondary-value');
+    secondaryProgress = document.getElementById('secondary-progress');
+    secondaryReset = document.getElementById('secondary-reset');
     bridge = window.petQuotaLabel;
   } catch (_) { return; }
   if (!label || !label.dataset || !status || !summary || typeof summary.replaceChildren !== 'function' ||
@@ -235,7 +243,7 @@
       label.dataset.severity = 'normal';
       const rows = [];
       let overallSeverity = 'normal';
-      for (const item of model.items) {
+      for (const [index, item] of model.items.entries()) {
         const row = document.createElement('li');
         const nameNode = document.createElement('span');
         const periodNode = document.createElement('span');
@@ -245,6 +253,7 @@
           !nameNode || !periodNode || !valueNode || !progressNode) continue;
         const severity = severityOf(item.remaining);
         row.dataset.severity = severity;
+        row.dataset.role = index === 0 ? 'primary' : 'secondary';
         nameNode.className = 'quota-name';
         nameNode.textContent = item.label;
         periodNode.className = 'quota-period';
@@ -259,8 +268,7 @@
         if (severity === 'urgent' || (severity === 'low' && overallSeverity === 'normal')) overallSeverity = severity;
       }
       items.replaceChildren(...rows);
-      const summaryItem = model.items.reduce((lowest, item) =>
-        !lowest || item.remaining < lowest.remaining ? item : lowest, null);
+      const summaryItem = model.items[0];
       if (summaryItem) {
         const periodNode = document.createElement('span');
         const badgeNode = document.createElement('span');
@@ -286,8 +294,21 @@
       label.dataset.itemCount = String(rows.length);
       label.dataset.severity = rows.length > 0 ? overallSeverity : 'normal';
       overflow.textContent = '';
-      renderDetail(resetTime, resetTimeText(model), 'time');
+      renderDetail(resetTime, resetTimeText(model, summaryItem), 'time');
       renderDetail(resetCredits, resetCreditsText(model.resetCreditsAvailable), 'credits');
+      const secondaryItem = model.items[1];
+      if (secondaryQuota?.dataset) secondaryQuota.dataset.severity = secondaryItem
+        ? severityOf(secondaryItem.remaining) : 'normal';
+      if (secondaryItem && secondaryPeriod) secondaryPeriod.textContent = periodTypeText(secondaryItem.windowMinutes);
+      else if (secondaryPeriod) secondaryPeriod.textContent = '';
+      if (secondaryValue) secondaryValue.textContent = secondaryItem
+        ? `${Math.round(secondaryItem.remaining)}%` : '';
+      if (secondaryProgress) {
+        secondaryProgress.max = 100;
+        secondaryProgress.value = secondaryItem ? secondaryItem.remaining : 0;
+      }
+      if (secondaryItem && secondaryReset) secondaryReset.textContent = resetTimeText(model, secondaryItem);
+      else if (secondaryReset) secondaryReset.textContent = '';
     } catch (_) {}
   };
 

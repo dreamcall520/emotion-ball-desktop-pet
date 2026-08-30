@@ -213,7 +213,7 @@ body {
   letter-spacing: .08em;
   white-space: nowrap;
 }
-#compact-period {
+.period-pill {
   flex: none;
   padding: 1px 5px;
   border: 1px solid rgba(255, 255, 255, .34);
@@ -285,9 +285,11 @@ body {
 #quota-label[data-size="compact"][data-expanded="false"] #compact-header,
 #quota-label[data-size="compact"][data-expanded="false"] #items,
 #quota-label[data-size="compact"][data-expanded="false"] #quota-details,
+#quota-label[data-size="compact"][data-expanded="false"] #secondary-quota,
 #quota-label[data-size="compact"][data-expanded="false"][data-has-items="true"] #status { display: none; }
 
 #quota-details { display: none; }
+#secondary-quota { display: none; }
 #quota-label[data-expanded="true"] {
   padding: 8px 10px 7px;
   justify-content: flex-start;
@@ -351,15 +353,19 @@ body {
 }
 .detail-separator { display: none; }
 
-#quota-label[data-expanded="true"][data-item-count="1"] #items li {
+#quota-label[data-expanded="true"][data-item-count="1"] #items li,
+#quota-label[data-expanded="true"][data-item-count="2"] #items li:first-child {
   position: relative;
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-rows: 29px 3px;
   align-items: end;
 }
 #quota-label[data-expanded="true"][data-item-count="1"] .quota-name,
-#quota-label[data-expanded="true"][data-item-count="1"] .quota-period { display: none; }
-#quota-label[data-expanded="true"][data-item-count="1"] .quota-value {
+#quota-label[data-expanded="true"][data-item-count="1"] .quota-period,
+#quota-label[data-expanded="true"][data-item-count="2"] #items li:first-child .quota-name,
+#quota-label[data-expanded="true"][data-item-count="2"] #items li:first-child .quota-period { display: none; }
+#quota-label[data-expanded="true"][data-item-count="1"] .quota-value,
+#quota-label[data-expanded="true"][data-item-count="2"] #items li:first-child .quota-value {
   grid-column: 1;
   grid-row: 1;
   justify-self: start;
@@ -369,7 +375,8 @@ body {
   line-height: 29px;
   letter-spacing: -.055em;
 }
-#quota-label[data-expanded="true"][data-item-count="1"] #items li::after {
+#quota-label[data-expanded="true"][data-item-count="1"] #items li::after,
+#quota-label[data-expanded="true"][data-item-count="2"] #items li:first-child::after {
   content: "剩余额度";
   grid-column: 2;
   grid-row: 1;
@@ -380,12 +387,65 @@ body {
   font-weight: 580;
   line-height: 10px;
 }
-#quota-label[data-expanded="true"][data-item-count="1"] .quota-progress {
+#quota-label[data-expanded="true"][data-item-count="1"] .quota-progress,
+#quota-label[data-expanded="true"][data-item-count="2"] #items li:first-child .quota-progress {
   grid-column: 1 / -1;
   grid-row: 2;
   height: 3px;
 }
-#quota-label[data-expanded="true"][data-item-count="2"] #items li { display: grid; }
+#quota-label[data-expanded="true"][data-item-count="2"] #items li:nth-child(2) { display: none; }
+#quota-label[data-expanded="true"][data-item-count="2"] #quota-details {
+  min-height: 20px;
+  margin-top: 3px;
+}
+#quota-label[data-expanded="true"][data-item-count="2"] #secondary-quota {
+  display: block;
+  margin-top: 3px;
+  padding-top: 4px;
+  border-top: 1px solid var(--quota-line);
+}
+.secondary-heading {
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+#secondary-period { font-size: 8px; line-height: 11px; }
+#secondary-value {
+  color: #303640;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 730;
+  letter-spacing: -.035em;
+  line-height: 14px;
+}
+#secondary-progress {
+  width: 100%;
+  height: 3px;
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+}
+#secondary-progress::-webkit-progress-bar { border-radius: 999px; background: rgba(55, 70, 90, .11); }
+#secondary-progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: linear-gradient(90deg, #4a79cf, #86b2f2);
+}
+#secondary-reset {
+  margin: 1px 0 0;
+  overflow: hidden;
+  color: var(--quota-subtle);
+  font-size: 8px;
+  font-weight: 570;
+  line-height: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 #overflow { display: none; }
 #quota-label[data-state="ready"] #status,
@@ -396,6 +456,10 @@ body {
 #items li[data-severity="low"] .quota-progress::-webkit-progress-value { background: rgb(181, 126, 35); }
 #items li[data-severity="urgent"] .quota-value { color: rgb(157, 48, 39); }
 #items li[data-severity="urgent"] .quota-progress::-webkit-progress-value { background: rgb(194, 76, 65); }
+#secondary-quota[data-severity="low"] #secondary-value { color: rgb(133, 87, 17); }
+#secondary-quota[data-severity="low"] #secondary-progress::-webkit-progress-value { background: rgb(181, 126, 35); }
+#secondary-quota[data-severity="urgent"] #secondary-value { color: rgb(157, 48, 39); }
+#secondary-quota[data-severity="urgent"] #secondary-progress::-webkit-progress-value { background: rgb(194, 76, 65); }
 #quota-label[data-severity="low"] .summary-value { color: rgb(133, 87, 17); }
 #quota-label[data-severity="urgent"] .summary-value { color: rgb(157, 48, 39); }
 
@@ -424,15 +488,18 @@ body {
 :root[data-appearance="dark"] .summary-period,
 :root[data-appearance="dark"] #quota-details { color: var(--quota-muted); }
 :root[data-appearance="dark"] .summary-badge,
-:root[data-appearance="dark"] #compact-period {
+:root[data-appearance="dark"] .period-pill {
   color: #c8dcff;
   border-color: rgba(181, 213, 255, .18);
   background: linear-gradient(180deg, rgba(98, 157, 237, .28), rgba(62, 112, 183, .18));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14);
 }
 :root[data-appearance="dark"] .summary-value,
-:root[data-appearance="dark"] #quota-label[data-expanded="true"][data-item-count="1"] .quota-value { color: #f5f7fa; }
-:root[data-appearance="dark"] #quota-label[data-expanded="true"][data-item-count="1"] #items li::after { color: #c8d0da; }
+:root[data-appearance="dark"] #secondary-value,
+:root[data-appearance="dark"] #quota-label[data-expanded="true"][data-item-count="1"] .quota-value,
+:root[data-appearance="dark"] #quota-label[data-expanded="true"][data-item-count="2"] #items li:first-child .quota-value { color: #f5f7fa; }
+:root[data-appearance="dark"] #quota-label[data-expanded="true"][data-item-count="1"] #items li::after,
+:root[data-appearance="dark"] #quota-label[data-expanded="true"][data-item-count="2"] #items li:first-child::after { color: #c8d0da; }
 :root[data-appearance="dark"] #compact-product { color: #e5eaf1; }
 :root[data-appearance="dark"] .compact-collapse { color: #b7c1cd; }
 :root[data-appearance="dark"] #quota-label[data-expanded="true"] #quota-details { color: var(--quota-muted); }
@@ -441,6 +508,9 @@ body {
 :root[data-appearance="dark"] #reset-credits .detail-primary { color: #8db8f7; }
 :root[data-appearance="dark"] .quota-progress::-webkit-progress-bar { background: rgba(226, 234, 244, .14); }
 :root[data-appearance="dark"] .quota-progress::-webkit-progress-value { background: linear-gradient(90deg, #6d9be5, #8ebbf8); }
+:root[data-appearance="dark"] #secondary-progress::-webkit-progress-bar { background: rgba(226, 234, 244, .14); }
+:root[data-appearance="dark"] #secondary-progress::-webkit-progress-value { background: linear-gradient(90deg, #6d9be5, #8ebbf8); }
+:root[data-appearance="dark"] #secondary-reset { color: #bdc6d1; }
 :root[data-appearance="dark"] #quota-label[data-severity="low"] { border-color: rgba(239, 190, 90, .72); }
 :root[data-appearance="dark"] #quota-label[data-severity="urgent"] { border-color: rgba(255, 132, 119, .78); }
 :root[data-appearance="dark"] #items li[data-severity="low"] .quota-value { color: rgb(244, 198, 106); }
@@ -481,15 +551,18 @@ body {
   :root[data-appearance="system"] .summary-period,
   :root[data-appearance="system"] #quota-details { color: var(--quota-muted); }
   :root[data-appearance="system"] .summary-badge,
-  :root[data-appearance="system"] #compact-period {
+  :root[data-appearance="system"] .period-pill {
     color: #c8dcff;
     border-color: rgba(181, 213, 255, .18);
     background: linear-gradient(180deg, rgba(98, 157, 237, .28), rgba(62, 112, 183, .18));
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14);
   }
   :root[data-appearance="system"] .summary-value,
-  :root[data-appearance="system"] #quota-label[data-expanded="true"][data-item-count="1"] .quota-value { color: #f5f7fa; }
-  :root[data-appearance="system"] #quota-label[data-expanded="true"][data-item-count="1"] #items li::after { color: #c8d0da; }
+  :root[data-appearance="system"] #secondary-value,
+  :root[data-appearance="system"] #quota-label[data-expanded="true"][data-item-count="1"] .quota-value,
+  :root[data-appearance="system"] #quota-label[data-expanded="true"][data-item-count="2"] #items li:first-child .quota-value { color: #f5f7fa; }
+  :root[data-appearance="system"] #quota-label[data-expanded="true"][data-item-count="1"] #items li::after,
+  :root[data-appearance="system"] #quota-label[data-expanded="true"][data-item-count="2"] #items li:first-child::after { color: #c8d0da; }
   :root[data-appearance="system"] #compact-product { color: #e5eaf1; }
   :root[data-appearance="system"] .compact-collapse { color: #b7c1cd; }
   :root[data-appearance="system"] #quota-label[data-expanded="true"] #quota-details {
@@ -500,6 +573,9 @@ body {
   :root[data-appearance="system"] #reset-credits .detail-primary { color: #8db8f7; }
   :root[data-appearance="system"] .quota-progress::-webkit-progress-bar { background: rgba(226, 234, 244, .14); }
   :root[data-appearance="system"] .quota-progress::-webkit-progress-value { background: linear-gradient(90deg, #6d9be5, #8ebbf8); }
+  :root[data-appearance="system"] #secondary-progress::-webkit-progress-bar { background: rgba(226, 234, 244, .14); }
+  :root[data-appearance="system"] #secondary-progress::-webkit-progress-value { background: linear-gradient(90deg, #6d9be5, #8ebbf8); }
+  :root[data-appearance="system"] #secondary-reset { color: #bdc6d1; }
   :root[data-appearance="system"] #quota-label[data-severity="low"] { border-color: rgba(239, 190, 90, .72); }
   :root[data-appearance="system"] #quota-label[data-severity="urgent"] { border-color: rgba(255, 132, 119, .78); }
   :root[data-appearance="system"] #items li[data-severity="low"] .quota-value { color: rgb(244, 198, 106); }

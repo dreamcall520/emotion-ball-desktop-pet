@@ -15,7 +15,7 @@
         <div id="compact-header" aria-hidden="true">
           <div class="compact-product">
             <span id="compact-product">CODEX</span>
-            <span id="compact-period">周额度</span>
+            <span id="compact-period" class="period-pill">周额度</span>
           </div>
           <span class="compact-collapse">⌃</span>
         </div>
@@ -23,6 +23,14 @@
         <div id="quota-details" aria-label="额度重置详情">
           <p id="reset-time"></p>
           <p id="reset-credits"></p>
+        </div>
+        <div id="secondary-quota" aria-label="另一周期额度">
+          <div class="secondary-heading">
+            <span id="secondary-period" class="period-pill">周额度</span>
+            <span id="secondary-value">--%</span>
+          </div>
+          <progress id="secondary-progress" max="100" value="0"></progress>
+          <p id="secondary-reset"></p>
         </div>
         <p id="overflow"></p>
       </section>

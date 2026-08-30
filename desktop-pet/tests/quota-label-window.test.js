@@ -164,6 +164,23 @@ test('小巧档创建可点击的 128×32 横条，点击展开和收起时复�
   assert.equal(win.sent.at(-1)[1].expanded, false);
 });
 
+test('双周期小巧档点击后展开为 196×128，收起仍回到 128×32', async t => {
+  const f = fixture(() => Promise.resolve(), { labelSize: 'compact' });
+  t.after(() => f.label.destroy());
+  const model = readyModel();
+  model.items.push({ id: 'weekly', label: 'Codex', windowMinutes: 10080, remaining: 94, resetsAt: 2000003600000 });
+  f.label.show(model);
+  await flush();
+  const win = f.windows[0];
+  win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  assert.deepEqual(win.bounds, { x: 242, y: 388, width: 196, height: 128 });
+  assert.equal(win.sent.at(-1)[1].expanded, true);
+  assert.equal(win.sent.at(-1)[1].items.length, 2);
+
+  win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  assert.deepEqual(win.bounds, { x: 276, y: 388, width: 128, height: 32 });
+});
+
 test('标准档同样可点击展开和收起，并复用同一窗口', async t => {
   const f = fixture(() => Promise.resolve(), { labelSize: 'standard' });
   t.after(() => f.label.destroy());
@@ -856,6 +873,13 @@ test('小巧横条只显示摘要，小巧和标准卡片均可点击展开明�
   const overflow = {};
   const resetTime = {};
   const resetCredits = {};
+  const compactProduct = {};
+  const compactPeriod = {};
+  const secondaryQuota = { dataset: {} };
+  const secondaryPeriod = {};
+  const secondaryValue = {};
+  const secondaryProgress = {};
+  const secondaryReset = {};
   class FixedDate extends Date {
     static now() { return 1800000000000; }
   }
@@ -870,7 +894,11 @@ test('小巧横条只显示摘要，小巧和标准卡片均可点击展开明�
     document: {
       documentElement: root,
       getElementById: id => ({ 'quota-label': label, status, summary, items, overflow,
-        'reset-time': resetTime, 'reset-credits': resetCredits })[id],
+        'reset-time': resetTime, 'reset-credits': resetCredits,
+        'compact-product': compactProduct, 'compact-period': compactPeriod,
+        'secondary-quota': secondaryQuota, 'secondary-period': secondaryPeriod,
+        'secondary-value': secondaryValue, 'secondary-progress': secondaryProgress,
+        'secondary-reset': secondaryReset })[id],
       createElement: element
     },
     window: {
@@ -901,6 +929,19 @@ test('小巧横条只显示摘要，小巧和标准卡片均可点击展开明�
   assert.equal(summary.children.map(node => node.textContent).join(''), '5h额度42%');
   assert.equal(resetTime.textContent, '5小时30分钟后重置 · 1/15 21:30');
   assert.equal(resetCredits.textContent, '1 次重置机会');
+
+  receive({ state: 'ready', size: 'compact', appearance: 'light', expanded: true, items: [
+    { label: 'codex', windowMinutes: 300, remaining: 100, resetsAt: 1800016200000 },
+    { label: 'codex', windowMinutes: 10080, remaining: 94, resetsAt: 1800522000000 }
+  ], overflow: 0, resetCreditsAvailable: 1 });
+  assert.equal(compactProduct.textContent, 'CODEX');
+  assert.equal(compactPeriod.textContent, '5小时');
+  assert.equal(secondaryQuota.dataset.severity, 'normal');
+  assert.equal(secondaryPeriod.textContent, '周额度');
+  assert.equal(secondaryValue.textContent, '94%');
+  assert.equal(secondaryProgress.max, 100);
+  assert.equal(secondaryProgress.value, 94);
+  assert.equal(secondaryReset.textContent, '6天1小时后重置 · 1/21 17:00');
 
   receive({ state: 'ready', size: 'standard', expanded: false, items: [
     { label: 'codex', windowMinutes: 10080, remaining: 64 },
@@ -1139,8 +1180,26 @@ test('小巧展开为 196×96，单项额度使用大数字，双项额度仍完
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
   assert.match(css, /#quota-label\[data-expanded="true"\][\s\S]*?padding:\s*8px 10px 7px/);
   assert.match(css, /#quota-label\[data-expanded="true"\]\[data-item-count="1"\][\s\S]*?\.quota-value[\s\S]*?font-size:\s*28px/);
-  assert.match(css, /#quota-label\[data-expanded="true"\]\[data-item-count="2"\][\s\S]*?#items li[\s\S]*?display:\s*grid/);
+  assert.match(css, /#quota-label\[data-expanded="true"\]\[data-item-count="2"\][\s\S]*?#secondary-quota[\s\S]*?display:\s*block/);
   assert.match(css, /#quota-details[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)\s+58px/);
+});
+
+test('双周期展开以第一项为主周期，并让上下周期共用同一蓝色玻璃胶囊', () => {
+  const html = fs.readFileSync(path.resolve(__dirname, '../quota-label.html'), 'utf8');
+  const renderer = fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8');
+  const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
+  assert.match(html, /id="compact-period"\s+class="period-pill"/);
+  assert.match(html, /id="secondary-quota"/);
+  assert.match(html, /id="secondary-period"\s+class="period-pill"/);
+  assert.match(html, /id="secondary-value"/);
+  assert.match(html, /id="secondary-progress"/);
+  assert.match(html, /id="secondary-reset"/);
+  assert.match(renderer, /const summaryItem = model\.items\[0\]/);
+  assert.match(renderer, /secondaryPeriod\.textContent\s*=\s*periodTypeText\(secondaryItem\.windowMinutes\)/);
+  assert.match(renderer, /secondaryReset\.textContent\s*=\s*resetTimeText\(model, secondaryItem\)/);
+  assert.match(css, /\.period-pill\s*\{/);
+  assert.match(css, /#quota-label\[data-expanded="true"\]\[data-item-count="2"\][\s\S]*?#items li:nth-child\(2\)[\s\S]*?display:\s*none/);
+  assert.match(css, /#secondary-value[\s\S]*?font-variant-numeric:\s*tabular-nums/);
 });
 
 test('额度标签改为两行名称、周期、百分比和进度条，不再渲染另有项目提示', () => {
@@ -1169,7 +1228,7 @@ test('标准档复用原小巧版 11px 字号和 3px 进度条，小巧折叠为
 test('小巧展开详情在深色背景使用浅色文字，不能继承浅色页灰字', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
   assert.match(css, /:root\[data-appearance="dark"\] #quota-label\[data-expanded="true"\] #quota-details\s*\{[\s\S]*?color:\s*var\(--quota-muted\)/);
-  assert.match(css, /:root\[data-appearance="dark"\] #quota-label\[data-expanded="true"\]\[data-item-count="1"\] #items li::after\s*\{\s*color:\s*#c8d0da/);
+  assert.match(css, /:root\[data-appearance="dark"\] #quota-label\[data-expanded="true"\]\[data-item-count="1"\] #items li::after,[\s\S]*?\{\s*color:\s*#c8d0da/);
 });
 
 test('额度卡片外观可独立跟随系统或固定浅深色，不影响球球和气泡', () => {

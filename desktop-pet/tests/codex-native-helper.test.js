@@ -37,7 +37,7 @@ test('真实启动流程必须调用并要求 Codex 模拟验收完成标记', (
   ]) assert.match(smoke, new RegExp(marker));
 });
 
-test('额度标签原生校验区分 168×58 标准、128×32 小巧及 196×96 展开明细', () => {
+test('额度标签原生校验区分收起、单周期展开和 196×128 双周期展开', () => {
   const { assertQuotaLabelWindow } = require('../scripts/verify-codex-companion');
   const petBounds = { x: 300, y: 300, width: 80, height: 80 };
   const win = {
@@ -63,6 +63,9 @@ test('额度标签原生校验区分 168×58 标准、128×32 小巧及 196×96 
   const expanded = { ...win, getBounds: () => ({ x: 242, y: 388, width: 196, height: 96 }) };
   assert.doesNotThrow(() => assertQuotaLabelWindow({ getWindow: () => expanded }, expanded, petBounds,
     { size: 'compact', expanded: true }));
+  const expandedDual = { ...win, getBounds: () => ({ x: 242, y: 388, width: 196, height: 128 }) };
+  assert.doesNotThrow(() => assertQuotaLabelWindow({ getWindow: () => expandedDual }, expandedDual, petBounds,
+    { size: 'compact', expanded: true, itemCount: 2 }));
 });
 
 test('普通 10% 合成额度先建立 100% 基线，80% 以上可直接合成', () => {
@@ -168,8 +171,8 @@ test('过期 DOM 即使正确，PNG 仍等于新鲜帧也必须拒绝为旧合�
   const stale = Buffer.from('stale-painted');
   assert.throws(() => assertDistinctCaptureEvidence(light, [Buffer.from(light)], '浅深证据'),
     /旧合成帧|重复/);
-  const staleDom = { state: 'stale', periods: ['已过期 7天', '已过期 7天'], values: [
-    { text: '64%' }, { text: '78%' }
+  const staleDom = { state: 'stale', periods: ['已过期 5小时', '已过期 7天'], values: [
+    { text: '100%' }, { text: '94%' }
   ] };
   assert.throws(() => assertStaleCaptureEvidence({ before: staleDom, after: staleDom,
     stale: Buffer.from(light), fresh: { light, dark } }), /旧合成帧|重复/,
@@ -379,8 +382,8 @@ test('原生助手验收任务菜单与名称开关且不具备真实任务写�
   assert.match(source, /quota-label-compact-expanded-single/);
   assert.match(source, /itemCount/);
   assert.match(source, /quota-label-stale-long/);
-  assert.match(source, /已过期 7天/);
-  assert.match(source, /\['64%', '78%'\]/);
+  assert.match(source, /已过期 5小时/);
+  assert.match(source, /\['100%', '94%'\]/);
   assert.match(source, /severity/);
   assert.match(source, /applyPetSize\(\{ setSize, getSettings, pet, poll/);
   assert.match(source, /screen\.getAllDisplays\(\)/);

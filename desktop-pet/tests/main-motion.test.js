@@ -335,7 +335,7 @@ test('额度卡片外观为跟随系统、浅色和深色三档，只在保存�
     'codex-quota-appearance-system');
 });
 
-test('常驻标签始终使用当前快照和已保存周期', async () => {
+test('常驻标签使用已保存周期作为主项，并补充展示实际返回的另一周期', async () => {
   const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
   f.connections[0].callbacks.onQuota({
     updatedAt: 1800000000000,
@@ -351,7 +351,7 @@ test('常驻标签始终使用当前快照和已保存周期', async () => {
   assert.equal(f.call("setCodexPreference('codexQuotaPeriod', 'weekly')"), true);
   const model = f.quotaLabel.shows.at(-1);
   assert.deepEqual(model.items.map(item => [item.label, item.windowMinutes, item.remaining]), [
-    ['codex', 10080, 65], ['gpt-reserve', 10080, 100]
+    ['codex', 10080, 65], ['codex', 300, 61]
   ]);
 });
 

@@ -213,7 +213,7 @@ function createQuotaLabelWindow({
       const petBounds = pet.getBounds();
       const display = screen.getDisplayMatching(petBounds);
       return quotaLabelBounds(petBounds, display && display.workArea, getObstacle(),
-        currentModel?.size, currentModel?.expanded === true);
+        currentModel?.size, currentModel?.expanded === true, currentModel?.items?.length);
     } catch (error) {
       report(error);
       return null;
@@ -315,7 +315,8 @@ function createQuotaLabelWindow({
     const constructToken = operation;
     const expectedWindow = win;
     let loadingWindow = null;
-    const initialSize = quotaLabelSize(currentModel?.size, currentModel?.expanded === true);
+    const initialSize = quotaLabelSize(currentModel?.size, currentModel?.expanded === true,
+      currentModel?.items?.length);
     try { loadingWindow = new BrowserWindow({
       width: initialSize.width,
       height: initialSize.height,

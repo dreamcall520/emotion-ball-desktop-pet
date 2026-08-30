@@ -8,7 +8,6 @@ const MAX_TIME = 8640000000000000;
 const MAX_TEXT_LENGTH = 256;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/u;
 const DISPLAYED_QUOTA_FAMILIES = Object.freeze(['codex', 'gpt-reserve']);
-const DISPLAYED_QUOTA_FAMILY_SET = new Set(DISPLAYED_QUOTA_FAMILIES);
 
 function normalizePeriod(period) {
   return PERIODS.has(period) ? period : 'auto';
@@ -50,17 +49,25 @@ function limitedWindows(windows) {
 }
 
 function quotaFamily(item) {
-  if (!item || typeof item.id !== 'string') return '';
-  return item.id.split(':', 1)[0].trim().toLowerCase();
+  if (!item || typeof item !== 'object') return '';
+  const id = typeof item.id === 'string' ? item.id.split(':', 1)[0].trim().toLowerCase() : '';
+  const label = typeof item.label === 'string' ? item.label.trim().toLowerCase() : '';
+  if (id === 'codex' || label === 'codex') return 'codex';
+  if (id === 'gpt-reserve' || label === 'gpt-reserve' || label === 'gpt reserve') return 'gpt-reserve';
+  if (id.startsWith('codex_') || label.includes('codex')) return 'codex';
+  return '';
 }
 
 function scopeQuotaWindows(windows) {
   const selected = new Map();
   for (const item of limitedWindows(windows)) {
     const family = quotaFamily(item);
-    if (DISPLAYED_QUOTA_FAMILY_SET.has(family)) selected.set(family, item);
+    if (!family) continue;
+    const current = selected.get(family);
+    if (!current || familyPriority(item) <= familyPriority(current)) selected.set(family, item);
   }
-  return DISPLAYED_QUOTA_FAMILIES.flatMap(family => selected.has(family) ? [selected.get(family)] : []);
+  return DISPLAYED_QUOTA_FAMILIES.flatMap(family => selected.has(family)
+    ? [{ ...selected.get(family), label: family }] : []);
 }
 
 function matchesPeriod(item, period) {
@@ -75,9 +82,60 @@ function selectQuotaWindows(windows, period = 'auto', now = Date.now()) {
     .map(copyWindow);
 }
 
+function canonicalWindow(item) {
+  return { ...copyWindow(item), label: quotaFamily(item) || 'codex' };
+}
+
+function familyPriority(item) {
+  const id = typeof item?.id === 'string' ? item.id.split(':', 1)[0].trim().toLowerCase() : '';
+  const label = typeof item?.label === 'string' ? item.label.trim().toLowerCase() : '';
+  if (id === 'codex' || label === 'codex') return 0;
+  if (id === 'gpt-reserve' || label === 'gpt-reserve' || label === 'gpt reserve') return 1;
+  if (id.startsWith('codex_') || label.includes('codex')) return 2;
+  return 3;
+}
+
+function validWindows(windows, now) {
+  return selectQuotaWindows(windows, 'auto', now);
+}
+
+function resolvePrimaryMinutes(windows, period) {
+  const normalizedPeriod = normalizePeriod(period);
+  if (normalizedPeriod !== 'auto') {
+    const expected = PERIOD_MINUTES[normalizedPeriod];
+    return windows.some(item => item.windowMinutes === expected) ? expected : null;
+  }
+  if (windows.some(item => item.windowMinutes === PERIOD_MINUTES.fiveHour)) return PERIOD_MINUTES.fiveHour;
+  if (windows.some(item => item.windowMinutes === PERIOD_MINUTES.weekly)) return PERIOD_MINUTES.weekly;
+  return windows.reduce((shortest, item) => shortest === null || item.windowMinutes < shortest
+    ? item.windowMinutes : shortest, null);
+}
+
+function representativeForPeriod(windows, windowMinutes) {
+  return windows
+    .filter(item => item.windowMinutes === windowMinutes)
+    .reduce((best, item) => !best || familyPriority(item) < familyPriority(best) ? item : best, null);
+}
+
+function selectPrimaryQuotaWindows(windows, period = 'auto', now = Date.now()) {
+  const valid = validWindows(windows, now);
+  const primaryMinutes = resolvePrimaryMinutes(valid, period);
+  if (primaryMinutes === null) return [];
+  return valid.filter(item => item.windowMinutes === primaryMinutes).map(canonicalWindow);
+}
+
 function selectDisplayedQuotaWindows(windows, period = 'auto', now = Date.now()) {
-  return selectQuotaWindows(scopeQuotaWindows(windows), period, now)
-    .map(item => ({ ...item, label: quotaFamily(item) }));
+  const valid = validWindows(windows, now);
+  const primaryMinutes = resolvePrimaryMinutes(valid, period);
+  if (primaryMinutes === null) return [];
+  const periods = [primaryMinutes];
+  const alternate = [PERIOD_MINUTES.fiveHour, PERIOD_MINUTES.weekly]
+    .find(minutes => minutes !== primaryMinutes && valid.some(item => item.windowMinutes === minutes));
+  if (alternate) periods.push(alternate);
+  return periods.flatMap(minutes => {
+    const representative = representativeForPeriod(valid, minutes);
+    return representative ? [canonicalWindow(representative)] : [];
+  });
 }
 
 function emptyModel(state) {
@@ -104,7 +162,7 @@ function buildQuotaLabelModel(snapshot, options = {}, now = Date.now()) {
   const resetCredits = Number.isSafeInteger(quota.resetCreditsAvailable)
     && quota.resetCreditsAvailable >= 0
     ? { resetCreditsAvailable: quota.resetCreditsAvailable } : {};
-  const expired = validNow(now) && scopeQuotaWindows(quota.windows)
+  const expired = validNow(now) && limitedWindows(quota.windows)
     .some(item => validScalars(item) && item.resetsAt <= now && matchesPeriod(item, period));
   if (quota.stale === true) {
     if (!selected.length && expired) return emptyModel('reset-wait');
@@ -123,6 +181,7 @@ module.exports = {
   DISPLAYED_QUOTA_FAMILIES,
   scopeQuotaWindows,
   selectQuotaWindows,
+  selectPrimaryQuotaWindows,
   selectDisplayedQuotaWindows,
   buildQuotaLabelModel
 };

@@ -42,6 +42,20 @@ test('小巧档折叠为 128×32，点击展开为 196×96 液态玻璃明细', 
   });
 });
 
+test('双周期展开宽度不变并增高为 196×128，靠近屏幕边缘仍完整收口', () => {
+  const pet = Object.freeze({ x: 600, y: 400, width: 80, height: 80 });
+  assert.deepEqual(quotaLabelBounds(pet, AREA, null, 'compact', true, 2), {
+    x: 542, y: 488, width: 196, height: 128, placement: 'below'
+  });
+  assert.deepEqual(quotaLabelBounds(pet, AREA, null, 'standard', true, 2), {
+    x: 542, y: 488, width: 196, height: 128, placement: 'below'
+  });
+  for (const area of [AREA, { x: -1920, y: -180, width: 1920, height: 1080 }]) {
+    const edgePet = { x: area.x, y: area.y + area.height - 80, width: 80, height: 80 };
+    assertInside(quotaLabelBounds(edgePet, area, null, 'compact', true, 2), area);
+  }
+});
+
 test('标准档点击后也展开为 196×96 液态玻璃明细', () => {
   const pet = Object.freeze({ x: 600, y: 400, width: 80, height: 80 });
   assert.deepEqual(quotaLabelBounds(pet, AREA, null, 'standard', true), {

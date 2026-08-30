@@ -80,7 +80,7 @@ function buildCodexMenu(snapshot, now = Date.now()) {
   const quota = snapshot.quota || {};
   const tasks = snapshot.tasks || {};
   const quotaItems = scopeQuotaWindows(quota.windows).map(window => {
-    const family = window.id.split(':', 1)[0].trim().toLowerCase();
+    const family = window.label;
     const remaining = Number.isFinite(window.remaining) && window.remaining >= 0 && window.remaining <= 100
       ? `${Math.round(window.remaining * 10) / 10}%` : '暂不可用';
     const reset = Number.isFinite(window.resetsAt) && window.resetsAt <= now ? '等待更新新周期' : dateLabel(window.resetsAt);

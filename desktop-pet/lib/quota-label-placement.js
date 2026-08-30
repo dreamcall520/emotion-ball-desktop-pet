@@ -1,8 +1,10 @@
 const LABEL_SIZES = Object.freeze({
   standard: Object.freeze({ width: 168, height: 58 }),
   standardExpanded: Object.freeze({ width: 196, height: 96 }),
+  standardExpandedDual: Object.freeze({ width: 196, height: 128 }),
   compact: Object.freeze({ width: 128, height: 32 }),
-  compactExpanded: Object.freeze({ width: 196, height: 96 })
+  compactExpanded: Object.freeze({ width: 196, height: 96 }),
+  compactExpandedDual: Object.freeze({ width: 196, height: 128 })
 });
 const GAP = 8;
 const GEOMETRY_LIMIT = Math.floor(Number.MAX_SAFE_INTEGER / 4);
@@ -67,17 +69,19 @@ function bounded(candidate, size, area) {
   };
 }
 
-function quotaLabelSize(value, expanded = false) {
+function quotaLabelSize(value, expanded = false, itemCount = 1) {
+  if (expanded === true && itemCount > 1 && value === 'standard') return LABEL_SIZES.standardExpandedDual;
+  if (expanded === true && itemCount > 1 && value === 'compact') return LABEL_SIZES.compactExpandedDual;
   if (expanded === true && value === 'standard') return LABEL_SIZES.standardExpanded;
   if (expanded === true && value === 'compact') return LABEL_SIZES.compactExpanded;
   return LABEL_SIZES[value] || LABEL_SIZES.standard;
 }
 
-function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName = 'standard', expanded = false) {
+function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName = 'standard', expanded = false, itemCount = 1) {
   const area = safeArea(workArea);
   const pet = safePet(petBounds, area);
   const obstacle = safeObstacle(obstacleBounds);
-  const requestedSize = quotaLabelSize(sizeName, expanded);
+  const requestedSize = quotaLabelSize(sizeName, expanded, itemCount);
   const size = {
     width: Math.min(requestedSize.width, area.width),
     height: Math.min(requestedSize.height, area.height)

@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const {
   PERIOD_MINUTES,
   selectQuotaWindows,
+  selectPrimaryQuotaWindows,
   buildQuotaLabelModel
 } = require('../lib/codex-quota-view');
 
@@ -95,7 +96,7 @@ test('输出项是独立标量副本，筛选和排序均不变异输入', () =>
 
   const model = buildQuotaLabelModel(snapshot(windows), { period: 'auto' }, NOW);
   assert.deepEqual(windows.map(item => item.id), ['b', 'a']);
-  assert.deepEqual(model.items, []);
+  assert.deepEqual(model.items.map(item => [item.id, item.windowMinutes]), [['b', 300], ['a', 10080]]);
 
   const scoped = Object.freeze([
     Object.freeze(quotaWindow('gpt-reserve:secondary', 10080, 20)),
@@ -106,7 +107,7 @@ test('输出项是独立标量副本，筛选和排序均不变异输入', () =>
   assert.equal(scoped[1].label, '额度codex:secondary');
 });
 
-test('ready 只保留两个指定额度池，顺序不受剩余比例影响', () => {
+test('ready 每个周期只保留一个代表值，自动模式优先 5 小时再展示周额度', () => {
   const model = buildQuotaLabelModel(snapshot([
     quotaWindow('gpt-reserve:secondary', 10080, 20),
     quotaWindow('other:secondary', 10080, 1),
@@ -115,8 +116,32 @@ test('ready 只保留两个指定额度池，顺序不受剩余比例影响', ()
   ]), { period: 'auto' }, NOW);
 
   assert.equal(model.state, 'ready');
-  assert.deepEqual(model.items.map(item => item.id), ['codex:secondary', 'gpt-reserve:secondary']);
+  assert.deepEqual(model.items.map(item => item.id), ['GPT-5.3-Codex-Spark:primary', 'codex:secondary']);
   assert.equal(model.overflow, 0);
+});
+
+test('真实接口同时返回 5 小时和周额度时按周期保留，自动与手动模式只改变主次顺序', () => {
+  const windows = [
+    quotaWindow('codex_bengalfox:primary', 300, 100, NOW + 4 * 3600000, 'GPT-5.3-Codex-Spark'),
+    quotaWindow('codex_bengalfox:secondary', 10080, 100, NOW + 6 * 86400000, 'GPT-5.3-Codex-Spark'),
+    quotaWindow('base_model_inference:primary', 10080, 100, NOW + 6 * 86400000, 'gpt-reserve'),
+    quotaWindow('codex:primary', 10080, 94, NOW + 6 * 86400000, 'codex')
+  ];
+
+  const automatic = buildQuotaLabelModel(snapshot(windows), { period: 'auto' }, NOW);
+  assert.equal(automatic.state, 'ready');
+  assert.deepEqual(automatic.items.map(item => [item.windowMinutes, item.remaining, item.label]), [
+    [300, 100, 'codex'],
+    [10080, 94, 'codex']
+  ]);
+  assert.deepEqual(selectPrimaryQuotaWindows(windows, 'auto', NOW).map(item => item.windowMinutes), [300]);
+
+  const weekly = buildQuotaLabelModel(snapshot(windows), { period: 'weekly' }, NOW);
+  assert.deepEqual(weekly.items.map(item => item.windowMinutes), [10080, 300]);
+  assert.deepEqual(selectPrimaryQuotaWindows(windows, 'weekly', NOW).map(item => item.windowMinutes), [10080, 10080, 10080]);
+
+  const fiveHour = buildQuotaLabelModel(snapshot(windows), { period: 'fiveHour' }, NOW);
+  assert.deepEqual(fiveHour.items.map(item => item.windowMinutes), [300, 10080]);
 });
 
 test('ready 模型向卡片提供可用重置机会数量，非法值不冒充为零', () => {
@@ -134,7 +159,7 @@ test('ready 模型向卡片提供可用重置机会数量，非法值不冒充�
   }
 });
 
-test('常驻额度只显示 codex 和 gpt-reserve，并固定顺序且不提示隐藏项', () => {
+test('常驻额度按主次周期各取一个可靠代表值，不显示模型内部名称', () => {
   const model = buildQuotaLabelModel(snapshot([
     quotaWindow('GPT-5.3-Codex-Spark:primary', 300, 4, NOW + 3600000, 'GPT-5.3-Codex-Spark'),
     quotaWindow('codex:primary', 300, 12, NOW + 3600000, 'Codex Five Hour'),
@@ -146,8 +171,8 @@ test('常驻额度只显示 codex 和 gpt-reserve，并固定顺序且不提示�
 
   assert.equal(model.state, 'ready');
   assert.deepEqual(model.items.map(item => [item.id, item.label, item.remaining]), [
+    ['codex:primary', 'codex', 12],
     ['codex:secondary', 'codex', 65],
-    ['gpt-reserve:secondary', 'gpt-reserve', 100]
   ]);
   assert.equal(model.overflow, 0);
 });

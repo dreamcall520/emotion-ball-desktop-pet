@@ -32,8 +32,8 @@ function assertDistinctCaptureEvidence(candidate, references, label = '截图证
 function assertStaleCaptureEvidence({ before, after, stale, fresh }) {
   for (const [phase, view] of [['截图前', before], ['截图后', after]]) {
     assert.equal(view?.state, 'stale', `${phase}页面不是过期状态`);
-    assert.deepEqual(view?.periods, ['已过期 7天', '已过期 7天'], `${phase}过期周期不完整`);
-    assert.deepEqual(view?.values?.map(item => item.text), ['64%', '78%'], `${phase}剩余比例不完整`);
+    assert.deepEqual(view?.periods, ['已过期 5小时', '已过期 7天'], `${phase}过期周期不完整`);
+    assert.deepEqual(view?.values?.map(item => item.text), ['100%', '94%'], `${phase}剩余比例不完整`);
   }
   return assertDistinctCaptureEvidence(stale, [fresh?.light, fresh?.dark], '过期标签截图');
 }
@@ -82,13 +82,14 @@ function assertQuotaLabelWindow(controller, expectedWindow, petBounds, options =
   assert.equal(expectedWindow.isVisible(), true, '额度标签必须可见');
   const bounds = expectedWindow.getBounds();
   const expectedSize = options.expanded === true
-    ? { width: 196, height: 96 }
+    ? { width: 196, height: options.itemCount > 1 ? 128 : 96 }
     : options.size === 'compact'
       ? { width: 128, height: 32 }
       : { width: 168, height: 58 };
   assert.deepEqual({ width: bounds.width, height: bounds.height }, expectedSize,
     `额度标签必须保持 ${expectedSize.width}×${expectedSize.height}`);
-  assert.equal(intersects(bounds, petBounds), false, '额度标签不能与球球相交');
+  assert.equal(intersects(bounds, petBounds), false,
+    `额度标签不能与球球相交：label=${JSON.stringify(bounds)} pet=${JSON.stringify(petBounds)}`);
   if (options.obstacleBounds) {
     assert.equal(intersects(bounds, options.obstacleBounds), false, '额度标签不能与可见气泡相交');
   }
@@ -338,15 +339,13 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     id: 'codex:primary', resetsAt: resetAt, label: 'Codex'
   })]);
   const quotaPeriods = () => [
-    quotaWindow(12, { id: 'codex:primary', label: 'Codex 5 小时', windowMinutes: 300,
+    quotaWindow(100, { id: 'codex_bengalfox:primary', label: 'GPT-5.3-Codex-Spark', windowMinutes: 300,
       resetsAt: resetAt + 300000 }),
-    quotaWindow(64, { id: 'codex:secondary', label: 'Codex 7 天', windowMinutes: 10080,
+    quotaWindow(100, { id: 'codex_bengalfox:secondary', label: 'GPT-5.3-Codex-Spark', windowMinutes: 10080,
       resetsAt: resetAt + 300000 }),
-    quotaWindow(18, { id: 'gpt-reserve:primary', label: 'gpt-reserve 5 小时', windowMinutes: 300,
-      resetsAt: resetAt + 300000 }),
-    quotaWindow(78, { id: 'gpt-reserve:secondary', label: 'gpt-reserve 7 天', windowMinutes: 10080,
+    quotaWindow(100, { id: 'base_model_inference:primary', label: 'gpt-reserve', windowMinutes: 10080,
       resetsAt: resetAt + 10080 }),
-    quotaWindow(100, { id: 'GPT-5.3-Codex-Spark:secondary', label: 'GPT-5.3-Codex-Spark',
+    quotaWindow(94, { id: 'codex:primary', label: 'codex',
       windowMinutes: 10080, resetsAt: resetAt + 10080 })
   ];
   const syntheticOptions = { now: clock.now, schedule: clock.schedule, cancel: clock.cancel,
@@ -386,7 +385,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     const view = await win.webContents.executeJavaScript(`(() => {
     const root = document.getElementById('quota-label');
     const rootRect = root.getBoundingClientRect();
-    const visibleSections = ['compact-header', 'items', 'quota-details']
+    const visibleSections = ['compact-header', 'items', 'quota-details', 'secondary-quota']
       .map(id => document.getElementById(id)).filter(node => node && getComputedStyle(node).display !== 'none');
     return {
       state: root.dataset.state,
@@ -402,15 +401,24 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       rows: [...document.querySelectorAll('#items li')].map(row => row.textContent),
       names: [...document.querySelectorAll('.quota-name')].map(node => node.textContent),
       periods: [...document.querySelectorAll('.quota-period')].map(node => node.textContent),
-      values: [...document.querySelectorAll('.quota-value')].map(node => {
+      values: [...document.querySelectorAll('.quota-value')]
+        .filter(node => getComputedStyle(node.parentElement).display !== 'none').map(node => {
         const rect = node.getBoundingClientRect();
         const row = node.parentElement.getBoundingClientRect();
         return { text: node.textContent, clientWidth: node.clientWidth, scrollWidth: node.scrollWidth,
           left: rect.left, right: rect.right, rowLeft: row.left, rowRight: row.right };
       }),
-      progress: [...document.querySelectorAll('.quota-progress')].map(node => ({
+      progress: [...document.querySelectorAll('.quota-progress')]
+        .filter(node => getComputedStyle(node.parentElement).display !== 'none').map(node => ({
         value: node.value, max: node.max, clientWidth: node.clientWidth, clientHeight: node.clientHeight
       })),
+      secondaryQuota: {
+        display: getComputedStyle(document.getElementById('secondary-quota')).display,
+        period: document.getElementById('secondary-period')?.textContent || '',
+        value: document.getElementById('secondary-value')?.textContent || '',
+        progress: document.getElementById('secondary-progress')?.value || 0,
+        reset: document.getElementById('secondary-reset')?.textContent || ''
+      },
       resetTime: document.getElementById('reset-time')?.textContent || '',
       resetCredits: document.getElementById('reset-credits')?.textContent || '',
       palette: {
@@ -448,7 +456,9 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     const size = options.size === 'compact' ? 'compact' : 'standard';
     const expanded = options.expanded === true;
     const prefix = options.prefix || 'quota-label';
-    assertQuotaLabelWindow(quotaLabel, win, pet.getBounds(), { size, expanded });
+    assertQuotaLabelWindow(quotaLabel, win, pet.getBounds(), {
+      size, expanded, itemCount: options.itemCount
+    });
     const debuggerApi = win.webContents.debugger;
     const attachedHere = !debuggerApi.isAttached();
     if (attachedHere) debuggerApi.attach('1.3');
@@ -465,7 +475,9 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
         assert.equal(quotaLabel.getWindow(), win, `${scheme} 截图后标签窗口不能被替换`);
       }
       await debuggerApi.sendCommand('Emulation.setEmulatedMedia', { media: '', features: [] });
-      assertQuotaLabelWindow(quotaLabel, win, pet.getBounds(), { size, expanded });
+      assertQuotaLabelWindow(quotaLabel, win, pet.getBounds(), {
+        size, expanded, itemCount: options.itemCount
+      });
       assertDistinctCaptureEvidence(captures.dark, [captures.light], '额度标签浅深截图');
     } finally {
       if (attachedHere && debuggerApi.isAttached()) debuggerApi.detach();
@@ -735,10 +747,10 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     let labelResult = await waitForLabelRows(2, '自动周期两项额度标签');
     assertQuotaLabelWindow(quotaLabel, labelResult.win, pet.getBounds());
     assert.equal(labelResult.view.controls, 0, '额度标签必须只读，不能包含交互控件');
-    assert.deepEqual(labelResult.view.names, ['codex', 'gpt-reserve']);
-    assert.deepEqual(labelResult.view.periods, ['7天', '7天']);
-    assert.deepEqual(labelResult.view.values.map(item => item.text), ['64%', '78%']);
-    assert.deepEqual(labelResult.view.progress.map(item => [item.value, item.max]), [[64, 100], [78, 100]]);
+    assert.deepEqual(labelResult.view.names, ['codex', 'codex']);
+    assert.deepEqual(labelResult.view.periods, ['5小时', '7天']);
+    assert.deepEqual(labelResult.view.values.map(item => item.text), ['100%', '94%']);
+    assert.deepEqual(labelResult.view.progress.map(item => [item.value, item.max]), [[100, 100], [94, 100]]);
     assert.ok(labelResult.view.values.every(item => item.scrollWidth <= item.clientWidth &&
       item.left >= item.rowLeft && item.right <= item.rowRight),
     '核心剩余比例必须在 168 宽标签中完整可见');
@@ -758,10 +770,17 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     let standardExpanded = await waitForLabelView(view => view.size === 'standard' &&
       view.expanded === 'true' && view.rows.length === 2, '展开标准额度明细');
     assertQuotaLabelWindow(quotaLabel, standardExpanded.win, pet.getBounds(),
-      { size: 'standard', expanded: true });
+      { size: 'standard', expanded: true, itemCount: 2 });
+    assert.equal(standardExpanded.view.compactPeriod, '5小时');
+    assert.deepEqual(standardExpanded.view.values.map(item => item.text), ['100%']);
+    assert.deepEqual(standardExpanded.view.secondaryQuota, {
+      display: 'block', period: '周额度', value: '94%', progress: 94,
+      reset: standardExpanded.view.secondaryQuota.reset
+    });
+    assert.match(standardExpanded.view.secondaryQuota.reset, /后重置 · \d+\/\d+ \d{2}:\d{2}/);
     assert.equal(standardExpanded.view.resetCredits, '1 次重置机会');
     await captureColorSchemes(standardExpanded.win,
-      { size: 'standard', expanded: true, prefix: 'quota-label-standard-expanded' });
+      { size: 'standard', expanded: true, itemCount: 2, prefix: 'quota-label-standard-expanded' });
     await verifyQuotaAppearance(standardExpanded.win);
     await captureDarkWallpaperInLightSystem(standardExpanded.win);
     process.stdout.write('PET_CODEX_QUOTA_WALLPAPER_CONTRAST_OK\n');
@@ -780,8 +799,8 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     const staleLabelResult = await waitForLabelView(view => view.state === 'stale' &&
       view.rows.length === 2, '过期两项额度标签');
     assertQuotaLabelWindow(quotaLabel, staleLabelResult.win, pet.getBounds());
-    assert.deepEqual(staleLabelResult.view.periods, ['已过期 7天', '已过期 7天']);
-    assert.deepEqual(staleLabelResult.view.values.map(item => item.text), ['64%', '78%']);
+    assert.deepEqual(staleLabelResult.view.periods, ['已过期 5小时', '已过期 7天']);
+    assert.deepEqual(staleLabelResult.view.values.map(item => item.text), ['100%', '94%']);
     assert.ok(staleLabelResult.view.values.every(item => item.scrollWidth <= item.clientWidth &&
       item.left >= item.rowLeft && item.right <= item.rowRight),
     '过期状态与核心比例必须在 168 宽标签中同时完整可见');
@@ -805,8 +824,8 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assertQuotaLabelWindow(quotaLabel, compactResult.win, pet.getBounds(), { size: 'compact' });
     assert.equal(getSettings().codexQuotaLabelSize, 'compact');
     assert.equal(getMenu().getMenuItemById('codex-quota-label-compact').checked, true);
-    assert.deepEqual(compactResult.view.summary, ['周额度', '64%'],
-      '小巧横条只展示周期类型和最低剩余额度');
+    assert.deepEqual(compactResult.view.summary, ['5h额度', '100%'],
+      '小巧横条只展示当前主周期和对应剩余额度');
     await captureColorSchemes(compactResult.win,
       { size: 'compact', prefix: 'quota-label-compact' });
     await verifyQuotaBeam(compactResult.win);
@@ -818,7 +837,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     compactResult = await waitForLabelView(view => view.size === 'compact' &&
       view.expanded === 'true' && view.rows.length === 2, '展开小巧额度明细');
     assertQuotaLabelWindow(quotaLabel, compactResult.win, pet.getBounds(),
-      { size: 'compact', expanded: true });
+      { size: 'compact', expanded: true, itemCount: 2 });
     assert.ok(compactResult.view.values.every(item => item.scrollWidth <= item.clientWidth &&
       item.left >= item.rowLeft && item.right <= item.rowRight),
     '展开明细的百分比不得裁切');
@@ -827,8 +846,10 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assert.match(compactResult.view.resetTime, /后重置 · \d+\/\d+ \d{2}:\d{2}/,
       '展开明细必须展示相对与具体重置时间');
     assert.equal(compactResult.view.resetCredits, '1 次重置机会');
+    assert.equal(compactResult.view.secondaryQuota.period, '周额度');
+    assert.equal(compactResult.view.secondaryQuota.value, '94%');
     await captureColorSchemes(compactResult.win,
-      { size: 'compact', expanded: true, prefix: 'quota-label-compact-expanded' });
+      { size: 'compact', expanded: true, itemCount: 2, prefix: 'quota-label-compact-expanded' });
 
     emitQuota([quotaWindow(60, { id: 'codex:single-weekly', label: 'codex', windowMinutes: 10080,
       resetsAt: resetAt + 300000 })]);
@@ -866,12 +887,12 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     process.stdout.write('PET_CODEX_QUOTA_COMPACT_OK\n');
 
     assert.equal(setQuotaPreference('codexQuotaPeriod', 'fiveHour'), true);
-    labelResult = await waitForLabelView(view => view.state === 'period-missing' && view.rows.length === 0,
-      'fiveHour 无对应可见额度池');
+    labelResult = await waitForLabelView(view => view.rows.length === 2 &&
+      view.periods[0] === '5小时' && view.periods[1] === '7天', 'fiveHour 主周期额度标签');
     assert.equal(getMenu().getMenuItemById('codex-quota-five-hour').checked, true);
     assert.equal(setQuotaPreference('codexQuotaPeriod', 'weekly'), true);
     labelResult = await waitForLabelView(view => view.rows.length === 2 &&
-      view.periods.every(value => value === '7天'), 'weekly 两项额度标签');
+      view.periods[0] === '7天' && view.periods[1] === '5小时', 'weekly 主次周期额度标签');
     assert.equal(getMenu().getMenuItemById('codex-quota-weekly').checked, true);
     assert.equal(setQuotaPreference('codexQuotaPeriod', 'auto'), true);
     labelResult = await waitForLabelRows(2, '切回自动周期额度标签');
