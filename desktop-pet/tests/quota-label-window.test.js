@@ -1211,7 +1211,7 @@ test('双周期展开以第一项为主周期，并让上下周期共用同一�
     '第二周期进度条按设计稿保持紧凑，不与主进度条等宽');
 });
 
-test('展开卡片使用大写品牌标识、蓝色周期边界且深色玻璃只有一层内轮廓', () => {
+test('额度卡片使用大写品牌标识、蓝色周期边界且浅深玻璃顶部都只有一层流光', () => {
   const html = fs.readFileSync(path.resolve(__dirname, '../quota-label.html'), 'utf8');
   const renderer = fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8');
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
@@ -1225,6 +1225,8 @@ test('展开卡片使用大写品牌标识、蓝色周期边界且深色玻璃�
     '跟随系统的深色外观也应移除第二层内边框');
   const fixedDarkCard = css.match(/:root\[data-appearance="dark"\] #quota-label\s*\{([\s\S]*?)\n\}/)?.[1] || '';
   const systemDarkCard = css.match(/:root\[data-appearance="system"\] #quota-label\s*\{([\s\S]*?)\n\s*\}/)?.[1] || '';
+  const lightCard = css.match(/^#quota-label\s*\{([\s\S]*?)\n\}/m)?.[1] || '';
+  const lightInnerEdge = [...css.matchAll(/^#quota-label::after\s*\{([\s\S]*?)\n\}/gm)].at(-1)?.[1] || '';
   assert.doesNotMatch(fixedDarkCard, /inset\s+0\s+1px/,
     '固定深色卡片不能再用顶部内阴影与外边框叠成双线');
   assert.doesNotMatch(systemDarkCard, /inset\s+0\s+1px/,
@@ -1233,6 +1235,12 @@ test('展开卡片使用大写品牌标识、蓝色周期边界且深色玻璃�
     '固定深色卡片顶部只保留外层流光，不能再显示第二条灰色边框');
   assert.match(systemDarkCard, /border-top-color:\s*transparent/,
     '跟随系统的深色卡片顶部也只保留外层流光');
+  assert.doesNotMatch(lightCard, /inset\s+0\s+1px/,
+    '浅色卡片不能再用顶部内阴影与外边框叠成多线');
+  assert.match(lightCard, /border-top-color:\s*transparent/,
+    '浅色卡片顶部只保留外层流光');
+  assert.match(lightInnerEdge, /border-color:\s*transparent/,
+    '浅色卡片内部细边框不能再次形成顶部白线');
 });
 
 test('额度标签改为两行名称、周期、百分比和进度条，不再渲染另有项目提示', () => {
