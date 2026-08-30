@@ -107,7 +107,6 @@ body {
   justify-content: center;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, .68);
-  border-top-color: transparent;
   border-radius: 10px;
   background:
     linear-gradient(145deg, rgba(255, 255, 255, .52), rgba(243, 248, 255, .17)),
@@ -476,7 +475,6 @@ body {
 /* 固定深色与跟随系统共用同一套液态玻璃参数；固定浅色不受系统深色覆盖。 */
 :root[data-appearance="dark"] #quota-label {
   border-color: rgba(255, 255, 255, .24);
-  border-top-color: transparent;
   background:
     linear-gradient(145deg, rgba(255, 255, 255, .15), rgba(255, 255, 255, .035)),
     var(--quota-surface);
@@ -539,7 +537,6 @@ body {
   }
   :root[data-appearance="system"] #quota-label {
     border-color: rgba(255, 255, 255, .24);
-    border-top-color: transparent;
     background:
       linear-gradient(145deg, rgba(255, 255, 255, .15), rgba(255, 255, 255, .035)),
       var(--quota-surface);

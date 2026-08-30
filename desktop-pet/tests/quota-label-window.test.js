@@ -1211,7 +1211,7 @@ test('双周期展开以第一项为主周期，并让上下周期共用同一�
     '第二周期进度条按设计稿保持紧凑，不与主进度条等宽');
 });
 
-test('额度卡片使用大写品牌标识、蓝色周期边界且浅深玻璃顶部都只有一层流光', () => {
+test('额度卡片使用大写品牌标识、蓝色周期边界及四周一致的单层玻璃轮廓', () => {
   const html = fs.readFileSync(path.resolve(__dirname, '../quota-label.html'), 'utf8');
   const renderer = fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8');
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
@@ -1231,14 +1231,14 @@ test('额度卡片使用大写品牌标识、蓝色周期边界且浅深玻璃�
     '固定深色卡片不能再用顶部内阴影与外边框叠成双线');
   assert.doesNotMatch(systemDarkCard, /inset\s+0\s+1px/,
     '跟随系统的深色卡片也不能叠加顶部内阴影');
-  assert.match(fixedDarkCard, /border-top-color:\s*transparent/,
-    '固定深色卡片顶部只保留外层流光，不能再显示第二条灰色边框');
-  assert.match(systemDarkCard, /border-top-color:\s*transparent/,
-    '跟随系统的深色卡片顶部也只保留外层流光');
+  assert.doesNotMatch(fixedDarkCard, /border-top-color:\s*transparent/,
+    '固定深色卡片必须保留与其他三边一致的顶部玻璃边');
+  assert.doesNotMatch(systemDarkCard, /border-top-color:\s*transparent/,
+    '跟随系统的深色卡片也必须保留完整四边轮廓');
   assert.doesNotMatch(lightCard, /inset\s+0\s+1px/,
     '浅色卡片不能再用顶部内阴影与外边框叠成多线');
-  assert.match(lightCard, /border-top-color:\s*transparent/,
-    '浅色卡片顶部只保留外层流光');
+  assert.doesNotMatch(lightCard, /border-top-color:\s*transparent/,
+    '浅色卡片必须保留与其他三边一致的顶部玻璃边');
   assert.match(lightInnerEdge, /border-color:\s*transparent/,
     '浅色卡片内部细边框不能再次形成顶部白线');
 });
