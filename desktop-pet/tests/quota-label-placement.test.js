@@ -118,6 +118,21 @@ test('候选位置必须完整在屏内且不与气泡相交', () => {
   assert.ok(above.y + above.height > combinedObstacle.y);
 });
 
+test('右下角双周期展开遇到可见气泡时仍不得与球球相交', () => {
+  const area = { x: 0, y: 32, width: 1512, height: 950 };
+  const pet = { x: 1408, y: 878, width: 80, height: 80 };
+  const bubble = { x: 1280, y: 784, width: 224, height: 86 };
+  const result = quotaLabelBounds(pet, area, bubble, 'standard', true, 2);
+  const intersects = (left, right) => left.x < right.x + right.width &&
+    left.x + left.width > right.x && left.y < right.y + right.height &&
+    left.y + left.height > right.y;
+
+  assertInside(result, area);
+  assert.deepEqual(result, { x: 1076, y: 854, width: 196, height: 128, placement: 'left' });
+  assert.equal(intersects(result, pet), false, '额度卡片不能因边界收敛而压到球球');
+  assert.equal(intersects(result, bubble), false, '额度卡片仍须避开可见气泡');
+});
+
 test('极小或畸形工作区安全收敛，不产生负尺寸或非有限数', () => {
   for (const area of [
     { x: -40, y: -30, width: 40, height: 30 },

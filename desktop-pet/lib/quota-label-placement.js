@@ -100,7 +100,18 @@ function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName =
   if (valid) return { x: valid.x, y: valid.y, ...size, placement: valid.placement };
 
   const fallbacks = candidates.map(candidate => bounded(candidate, size, area));
-  return fallbacks.find(candidate => !overlaps(candidate, size, obstacle)) || fallbacks[0];
+  const safe = fallbacks.find(candidate => !overlaps(candidate, size, pet) &&
+    !overlaps(candidate, size, obstacle));
+  const aroundObstacle = obstacle ? [
+    { placement: 'left', x: obstacle.x - size.width - GAP, y: centerY - size.height / 2 },
+    { placement: 'right', x: obstacle.x + obstacle.width + GAP, y: centerY - size.height / 2 },
+    { placement: 'above', x: centerX - size.width / 2, y: obstacle.y - size.height - GAP },
+    { placement: 'below', x: centerX - size.width / 2, y: obstacle.y + obstacle.height + GAP }
+  ].map(candidate => bounded(candidate, size, area)) : [];
+  const aroundObstacleSafe = aroundObstacle.find(candidate =>
+    !overlaps(candidate, size, pet) && !overlaps(candidate, size, obstacle));
+  return safe || aroundObstacleSafe ||
+    fallbacks.find(candidate => !overlaps(candidate, size, obstacle)) || fallbacks[0];
 }
 
 module.exports = { LABEL_SIZES, quotaLabelSize, quotaLabelBounds };
