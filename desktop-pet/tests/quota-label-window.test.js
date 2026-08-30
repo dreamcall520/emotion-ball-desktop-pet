@@ -1223,6 +1223,16 @@ test('展开卡片使用大写品牌标识、蓝色周期边界且深色玻璃�
     '固定深色外观应移除第二层内边框');
   assert.match(css, /:root\[data-appearance="system"\] #quota-label::after\s*\{\s*border-color:\s*transparent/,
     '跟随系统的深色外观也应移除第二层内边框');
+  const fixedDarkCard = css.match(/:root\[data-appearance="dark"\] #quota-label\s*\{([\s\S]*?)\n\}/)?.[1] || '';
+  const systemDarkCard = css.match(/:root\[data-appearance="system"\] #quota-label\s*\{([\s\S]*?)\n\s*\}/)?.[1] || '';
+  assert.doesNotMatch(fixedDarkCard, /inset\s+0\s+1px/,
+    '固定深色卡片不能再用顶部内阴影与外边框叠成双线');
+  assert.doesNotMatch(systemDarkCard, /inset\s+0\s+1px/,
+    '跟随系统的深色卡片也不能叠加顶部内阴影');
+  assert.match(fixedDarkCard, /border-top-color:\s*transparent/,
+    '固定深色卡片顶部只保留外层流光，不能再显示第二条灰色边框');
+  assert.match(systemDarkCard, /border-top-color:\s*transparent/,
+    '跟随系统的深色卡片顶部也只保留外层流光');
 });
 
 test('额度标签改为两行名称、周期、百分比和进度条，不再渲染另有项目提示', () => {

@@ -475,11 +475,11 @@ body {
 /* 固定深色与跟随系统共用同一套液态玻璃参数；固定浅色不受系统深色覆盖。 */
 :root[data-appearance="dark"] #quota-label {
   border-color: rgba(255, 255, 255, .24);
+  border-top-color: transparent;
   background:
     linear-gradient(145deg, rgba(255, 255, 255, .15), rgba(255, 255, 255, .035)),
     var(--quota-surface);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .24),
     inset 0 -1px 0 rgba(255, 255, 255, .06),
     0 1px 4px rgba(3, 8, 15, .24);
   color: rgba(246, 246, 244, .96);
@@ -538,11 +538,11 @@ body {
   }
   :root[data-appearance="system"] #quota-label {
     border-color: rgba(255, 255, 255, .24);
+    border-top-color: transparent;
     background:
       linear-gradient(145deg, rgba(255, 255, 255, .15), rgba(255, 255, 255, .035)),
       var(--quota-surface);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, .24),
       inset 0 -1px 0 rgba(255, 255, 255, .06),
       0 1px 4px rgba(3, 8, 15, .24);
     color: rgba(246, 246, 244, .96);
