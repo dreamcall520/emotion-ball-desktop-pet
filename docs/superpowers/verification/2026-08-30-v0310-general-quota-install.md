@@ -31,4 +31,4 @@
 - 新分享 ZIP：`/Users/allan/Documents/个人创作/球球桌宠-0.3.10-Apple芯片-分享用.zip`，121,143,962 字节，SHA-256 为 `364d7e5283ab29f756adf1dbb8aa92dc530b23a15c6f504a4734b941e95c257f`。ZIP 解压后只含一个 DMG，与本地交付 DMG 逐字节一致。
 - 已发布 [GitHub Release v0.3.10](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.10)，标签指向产品提交 `27a66557d40f6a4f60c756c3ddef3528ac5cff2c`，不是草稿或预发布。
 - Release 只保留两个清晰英文文件名的资源：推荐的分享 ZIP 和单独 DMG；远端大小、SHA-256 与本地一致。已从 Release 重新下载两个文件，重新执行 ZIP 解压检查、逐字节比对与 `hdiutil verify`，全部通过。
-- 本轮不合并 `main`，不覆盖 0.3.9 及更早的历史分享 ZIP。
+- 已将 `codex/light-companion` 普通快进合并到公开默认分支 `main`，未强制覆盖；远端两分支最终指向同一提交。GitHub `main` 回读版本为 0.3.10，通用额度规则与 README 均为最新内容；不覆盖 0.3.9 及更早的历史分享 ZIP。
