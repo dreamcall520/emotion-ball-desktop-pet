@@ -64,6 +64,57 @@ test('气泡同ID先更新文字，动作不变时保留按钮、变化时才重
   assert.doesNotMatch(fs.readFileSync(path.resolve(__dirname, '../bubble-renderer.js'), 'utf8'), /innerHTML/);
 });
 
+test('气泡自适应高度必须在主进程回传尺寸后收敛，不能持续拉高闪烁', () => {
+  let receive;
+  let windowHeight = 118;
+  let frameId = 0;
+  const frames = [];
+  const requestedHeights = [];
+  const bubble = {
+    dataset: {},
+    style: { bottom: '', height: '', setProperty() {} },
+    // 真实页面的箭头会让 scrollHeight 比可见卡片多出几像素；旧算法因此每轮继续增长。
+    get scrollHeight() { return windowHeight - 17; },
+    getBoundingClientRect() {
+      return { height: this.style.bottom === 'auto' && this.style.height === 'max-content'
+        ? 96 : windowHeight - 22 };
+    }
+  };
+  const message = {};
+  const actions = {
+    children: [], replaceChildren() { this.children = []; },
+    appendChild(node) { this.children.push(node); }
+  };
+  const payload = { id: 9, text: '我有一点点厉害。', tone: 'normal',
+    actions: [{ id: 'again', label: '再来一次' }, { id: 'rest', label: '你歇会儿' }], anchorX: 112 };
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../bubble-renderer.js'), 'utf8'), {
+    document: {
+      getElementById: id => ({ bubble, message, actions })[id],
+      createElement: () => ({ dataset: {}, addEventListener() {} })
+    },
+    requestAnimationFrame(callback) { frames.push(callback); return ++frameId; },
+    cancelAnimationFrame() {},
+    window: {
+      addEventListener() {},
+      petBubble: {
+        onMessage(callback) { receive = callback; return () => {}; },
+        reply() {},
+        resize(_id, height) {
+          requestedHeights.push(height);
+          if (height === windowHeight) return;
+          windowHeight = height;
+          receive(payload);
+        }
+      }
+    }
+  });
+
+  receive(payload);
+  for (let index = 0; index < 6 && frames.length; index++) frames.shift()();
+  assert.deepEqual(requestedHeights, [118]);
+  assert.equal(windowHeight, 118);
+});
+
 test('强额度提醒只强化气泡边框和文字，不闪烁不改球球颜色', () => {
   const bubbleCss = fs.readFileSync(path.resolve(__dirname, '../bubble.css'), 'utf8');
   const renderer = fs.readFileSync(path.resolve(__dirname, '../renderer.js'), 'utf8');

@@ -254,6 +254,13 @@ async function verifyCompanion({ pet, bubble, dialogue, monitor, screen, Browser
   assert.equal(bubbleWin.isFocusable(), false);
   assert.equal(pet.isFocusable(), false);
   assert.equal(BrowserWindow.getFocusedWindow(), focusBefore, '气泡不得抢走窗口焦点');
+  const playBubbleHeights = [];
+  for (let index = 0; index < 21; index++) {
+    playBubbleHeights.push(bubbleWin.getBounds().height);
+    await wait(250);
+  }
+  assert.deepEqual([...new Set(playBubbleHeights)], [118],
+    `点击球球后的互动气泡高度必须稳定，不能持续拉高闪烁：${JSON.stringify(playBubbleHeights)}`);
   const content = await bubbleWin.webContents.executeJavaScript(`(() => {
     const text = document.getElementById('message');
     const card = document.getElementById('bubble');
@@ -275,12 +282,21 @@ async function verifyCompanion({ pet, bubble, dialogue, monitor, screen, Browser
   await page('window.petDesktop.bounce(); true');
   await wait(150);
   assert.ok(pet.getBounds().y < restY);
+  const liveRestTarget = await bubbleWin.webContents.executeJavaScript(`(() => {
+    window.__restReplyTrace = [];
+    for (const type of ['pointerdown','pointerup','click']) document.addEventListener(type,event =>
+      window.__restReplyTrace.push({type,action:event.target.dataset.action,disabled:event.target.disabled}));
+    const target = document.elementFromPoint(${content.point.x}, ${content.point.y});
+    return { action: target?.dataset?.action || '', tag: target?.tagName || '' };
+  })()`);
+  assert.equal(liveRestTarget.action, 'rest', `气泡点击坐标已经漂移：${JSON.stringify(liveRestTarget)}`);
   for (const type of ['mouseMove', 'mouseDown', 'mouseUp']) {
     await inputWindow(bubbleWin, type, content.point.x, content.point.y, { button: 'left', clickCount: 1 });
-    await wait(60);
   }
   await wait(150);
-  assert.equal((await state()).lastAction, 'rest', '气泡按钮必须真正发回宠物动作');
+  assert.equal((await state()).lastAction, 'rest', `气泡按钮必须真正发回宠物动作：${JSON.stringify({
+    target: liveRestTarget, trace: await bubbleWin.webContents.executeJavaScript('window.__restReplyTrace')
+  })}`);
   assert.equal(bubbleWin.isVisible(), false);
   assert.equal(pet.getBounds().y, restY, '休息应立即结束原生弹跳并回到原位');
   await wait(6100);
@@ -292,9 +308,11 @@ async function verifyCompanion({ pet, bubble, dialogue, monitor, screen, Browser
     for (const type of ['pointerdown','pointerup','click']) document.addEventListener(type,e=>window.__replyTrace.push({type,action:e.target.dataset.action,disabled:e.target.disabled}));
     return { x: Math.round(rect.x + rect.width / 2), y: Math.round(rect.y + rect.height / 2) };
   })()`);
+  assert.equal(await bubbleWin.webContents.executeJavaScript(
+    `document.elementFromPoint(${againPoint.x}, ${againPoint.y})?.dataset?.action || ''`
+  ), 'again', '再次互动按钮的实时坐标必须命中按钮');
   for (const type of ['mouseMove', 'mouseDown', 'mouseUp']) {
     await inputWindow(bubbleWin, type, againPoint.x, againPoint.y, { button: 'left', clickCount: 1 });
-    await wait(60);
   }
   await wait(120);
   assert.ok(['bounce', 'spin', 'happy'].includes((await state()).lastAction), `再来一次按钮应触发新的玩耍动作：${JSON.stringify({pet:await state(),visible:bubbleWin.isVisible(),trace:await bubbleWin.webContents.executeJavaScript('window.__replyTrace')})}`);

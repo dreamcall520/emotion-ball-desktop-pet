@@ -22,6 +22,12 @@ test('互动气泡加高并保留固定宽度', () => {
   });
 });
 
+test('长文案测量高度会增高气泡并保持头顶间距', () => {
+  assert.deepEqual(bubbleBounds({ x: 600, y: 400, width: 80, height: 80 }, workArea, true, 146), {
+    x: 528, y: 246, width: 224, height: 146, placement: 'above', anchorX: 112
+  });
+});
+
 test('顶部不够时自动放到宠物下方', () => {
   assert.deepEqual(bubbleBounds({ x: 600, y: 30, width: 80, height: 80 }, workArea), {
     x: 528, y: 118, width: 224, height: 86, placement: 'below', anchorX: 112

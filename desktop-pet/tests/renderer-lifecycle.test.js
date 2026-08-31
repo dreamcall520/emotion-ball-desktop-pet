@@ -169,6 +169,19 @@ test('宿主请求同代次设置时也重新上报一次可用性', () => {
   assert.equal(r.host.availability.length, 2);
 });
 
+test('执行中任务让球球进入专注陪伴，用户互动优先且任务结束后停止', () => {
+  const r = createRenderer();
+  r.codexSettings({ enabled: true, generation: 1, activeTaskCount: 1 });
+  assert.equal(r.pet.dataset.codexWorking, 'true');
+  assert.equal(r.pet.dataset.codexActiveTasks, '1');
+  r.click();
+  assert.equal(r.pet.dataset.codexWorking, 'false');
+  r.advanceTo(4000);
+  assert.equal(r.pet.dataset.codexWorking, 'true');
+  r.codexSettings({ enabled: true, generation: 1, activeTaskCount: 0 });
+  assert.equal(r.pet.dataset.codexWorking, 'false');
+});
+
 test('同连接代次的新页面只接受本页面命令和取消，旧页面令牌不能复活', () => {
   const r = createRenderer();
   r.codexSettings({ enabled: true, generation: 1, pageEpoch: 1 });

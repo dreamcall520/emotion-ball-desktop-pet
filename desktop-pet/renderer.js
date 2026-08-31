@@ -42,6 +42,7 @@
   let codexPageEpoch = 0;
   let lastCodexAlertId = 0;
   let lastAvailability = null;
+  let codexActiveTaskCount = 0;
   const listeners = [];
 
   function canShowCodex() {
@@ -58,8 +59,19 @@
     desktop.codexAvailability({ generation: codexGeneration, pageEpoch: codexPageEpoch, available });
   }
 
+  function syncCodexWorking() {
+    const working = codexEnabled && codexActiveTaskCount > 0 && Boolean(lastSample) && !lastSample.locked &&
+      !companion.manualSleep && currentState.mode !== 'sleep' && !dragState && !singleClickTimer && !helloTimer &&
+      performance.now() >= actionUntil && !activeMotion;
+    petElement.dataset.codexWorking = working ? 'true' : 'false';
+    petElement.dataset.codexActiveTasks = String(codexActiveTaskCount);
+  }
+
   function observe(callback) {
-    return (...args) => { try { return callback(...args); } finally { reportCodexAvailability(); } };
+    return (...args) => {
+      try { return callback(...args); }
+      finally { syncCodexWorking(); reportCodexAvailability(); }
+    };
   }
   const onPet = (name, callback) => petElement.addEventListener(name, observe(callback));
   const onWindow = (name, callback) => window.addEventListener(name, observe(callback));
@@ -471,6 +483,8 @@
   createBall('50');
   petElement.dataset.mode = 'awake';
   petElement.dataset.motionOwner = 'none';
+  petElement.dataset.codexWorking = 'false';
+  petElement.dataset.codexActiveTasks = '0';
   listeners.push(desktop.onCommand(observe(runCommand)));
   listeners.push(desktop.onMotion(observe(onMotion)));
   listeners.push(desktop.onActivity(observe(updateActivity)));
@@ -489,6 +503,8 @@
     codexGeneration = settings.generation;
     codexPageEpoch = settings.pageEpoch;
     codexEnabled = settings.enabled;
+    codexActiveTaskCount = Number.isSafeInteger(settings.activeTaskCount) && settings.activeTaskCount >= 0 &&
+      settings.activeTaskCount <= 64 ? settings.activeTaskCount : 0;
   })));
   window.__petReady = true;
 })();
