@@ -200,8 +200,7 @@ code {
 /* Web approximation of macOS glass. No Apple web material package exists. */
 .site-header,
 .glass-panel,
-.download-card,
-.license-section {
+.download-card {
   border: 1px solid var(--line);
   background:
     linear-gradient(145deg, color-mix(in srgb, var(--surface) 92%, transparent), color-mix(in srgb, var(--surface) 72%, transparent)),
@@ -918,45 +917,42 @@ code {
   margin-bottom: 0;
 }
 
-.license-section {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(220px, 0.65fr);
-  gap: 24px 56px;
-  align-items: start;
-  width: min(1080px, calc(100% - (var(--page-gutter) * 2)));
-  margin-bottom: clamp(64px, 6vw, 88px);
-  padding: clamp(28px, 3vw, 38px);
-  border-radius: var(--radius-surface);
+.updates-section {
+  padding-bottom: clamp(48px, 6vw, 80px);
 }
 
-.license-section h2 {
-  margin-bottom: 14px;
-  font-size: clamp(30px, 3vw, 40px);
-}
-
-.license-section p {
+.license-note {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px 24px;
   margin-bottom: 0;
+  padding: 22px 0;
+  border-top: 1px solid var(--line);
+}
+
+.license-note p {
+  margin-bottom: 0;
+  color: var(--text-soft);
+  font-size: 14px;
+}
+
+.license-note strong {
+  color: var(--text);
+  font-weight: 800;
 }
 
 .license-links {
-  display: grid;
-  gap: 6px;
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 8px 16px;
 }
 
 .license-links a {
-  padding: 8px 0;
-  border-bottom: 1px solid var(--line);
   color: var(--accent);
+  font-size: 14px;
   font-weight: 750;
-}
-
-.license-warning {
-  grid-column: 1 / -1;
-  padding-top: 18px;
-  border-top: 1px solid var(--line);
-  color: var(--warning);
-  font-size: 15px;
-  font-weight: 700;
 }
 
 .site-footer {
@@ -1143,8 +1139,7 @@ code {
   .feature-layout,
   .codex-section,
   .privacy-section,
-  .install-section,
-  .license-section {
+  .install-section {
     grid-template-columns: 1fr;
   }
 
@@ -1186,9 +1181,6 @@ code {
     margin-left: 0;
   }
 
-  .license-warning {
-    grid-column: auto;
-  }
 }
 
 @media (max-width: 680px) {
@@ -1353,9 +1345,11 @@ code {
     margin-bottom: 3px;
   }
 
-  .license-section {
-    gap: 20px;
-    padding: 22px 18px;
+  .license-note {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+    padding: 18px 0;
   }
 
   .site-footer {
@@ -1369,8 +1363,7 @@ code {
 @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
   .site-header,
   .glass-panel,
-  .download-card,
-  .license-section {
+  .download-card {
     background: var(--surface-solid);
   }
 }
@@ -1378,8 +1371,7 @@ code {
 @media (prefers-reduced-transparency: reduce) {
   .site-header,
   .glass-panel,
-  .download-card,
-  .license-section {
+  .download-card {
     background: var(--surface-solid);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
