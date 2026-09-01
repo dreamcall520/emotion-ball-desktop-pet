@@ -626,7 +626,10 @@ code {
 }
 
 .quota-frame img {
+  display: block;
   width: 100%;
+  height: auto;
+  object-fit: contain;
   border-radius: 12px;
 }
 
@@ -655,6 +658,13 @@ code {
 .gallery-grid figure {
   margin: 0;
   border-radius: var(--radius-surface);
+}
+
+.gallery-grid img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
 }
 
 .gallery-main,
