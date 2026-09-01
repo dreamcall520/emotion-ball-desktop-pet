@@ -920,16 +920,18 @@ code {
 
 .license-section {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(260px, 0.7fr);
-  gap: 42px 80px;
+  grid-template-columns: minmax(0, 1.15fr) minmax(220px, 0.65fr);
+  gap: 24px 56px;
   align-items: start;
-  margin-bottom: clamp(80px, 9vw, 130px);
-  padding: clamp(30px, 5vw, 58px);
+  width: min(1080px, calc(100% - (var(--page-gutter) * 2)));
+  margin-bottom: clamp(64px, 6vw, 88px);
+  padding: clamp(28px, 3vw, 38px);
   border-radius: var(--radius-surface);
 }
 
 .license-section h2 {
-  font-size: clamp(34px, 4vw, 54px);
+  margin-bottom: 14px;
+  font-size: clamp(30px, 3vw, 40px);
 }
 
 .license-section p {
@@ -938,11 +940,11 @@ code {
 
 .license-links {
   display: grid;
-  gap: 10px;
+  gap: 6px;
 }
 
 .license-links a {
-  padding: 11px 0;
+  padding: 8px 0;
   border-bottom: 1px solid var(--line);
   color: var(--accent);
   font-weight: 750;
@@ -950,9 +952,10 @@ code {
 
 .license-warning {
   grid-column: 1 / -1;
-  padding-top: 28px;
+  padding-top: 18px;
   border-top: 1px solid var(--line);
   color: var(--warning);
+  font-size: 15px;
   font-weight: 700;
 }
 
@@ -1351,8 +1354,8 @@ code {
   }
 
   .license-section {
-    gap: 28px;
-    padding: 28px 22px;
+    gap: 20px;
+    padding: 22px 18px;
   }
 
   .site-footer {
