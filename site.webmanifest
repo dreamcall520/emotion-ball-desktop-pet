@@ -1,0 +1,17 @@
+{
+  "name": "球球桌宠",
+  "short_name": "球球桌宠",
+  "description": "免费、非商业的 macOS 桌面宠物",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "display": "browser",
+  "background_color": "#f6f8fb",
+  "theme_color": "#f6f8fb",
+  "icons": [
+    {
+      "src": "assets/favicon.png",
+      "sizes": "1024x1024",
+      "type": "image/png"
+    }
+  ]
+}

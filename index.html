@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="球球桌宠是一个免费、非商业的 macOS 桌面宠物。支持 Apple 芯片和 Intel x64 独立下载。">
+    <meta name="theme-color" content="#f6f8fb" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#11151b" media="(prefers-color-scheme: dark)">
+    <meta name="color-scheme" content="light dark">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="zh_CN">
+    <meta property="og:title" content="球球桌宠">
+    <meta property="og:description" content="桌面上，多一个安静陪你的球球。免费、离线、非商业。">
+    <meta property="og:url" content="https://dreamcall520.github.io/emotion-ball-desktop-pet/">
+    <link rel="canonical" href="https://dreamcall520.github.io/emotion-ball-desktop-pet/">
+    <link rel="icon" href="assets/favicon.png">
+    <link rel="manifest" href="site.webmanifest">
+    <link rel="stylesheet" href="styles.css">
+    <title>球球桌宠 - 免费的 macOS 桌面伙伴</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到主要内容</a>
+
+    <header class="site-header" data-header>
+      <a class="brand" href="#top" aria-label="球球桌宠首页">球球桌宠</a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav">菜单</button>
+      <nav class="site-nav" id="site-nav" aria-label="主要导航">
+        <a href="#features">功能</a>
+        <a href="#codex">Codex 陪伴</a>
+        <a href="#gallery">实拍</a>
+        <a href="#download">下载</a>
+        <a href="#privacy">隐私</a>
+        <a href="#install">安装</a>
+        <a href="#updates">更新日志</a>
+        <a href="#license">开源与许可</a>
+      </nav>
+      <button class="theme-toggle" type="button" aria-label="切换页面外观" data-theme-toggle>外观</button>
+    </header>
+
+    <main id="main">
+      <section class="hero" id="top" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <h1 id="hero-title">桌面上，<br>多一个安静陪你的球球</h1>
+          <p>免费、离线、安静陪伴，不打扰你。</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.10/emotion-ball-desktop-pet-0.3.10-Apple-Silicon-hotfix-20260831-share.zip">下载 Apple 芯片版</a>
+            <a class="button button-secondary" href="#features">看看它会什么</a>
+          </div>
+        </div>
+        <div class="hero-stage" aria-label="可互动的球球视觉演示">
+          <div class="ambient ambient-one" aria-hidden="true"></div>
+          <div class="ambient ambient-two" aria-hidden="true"></div>
+          <div class="live-ball hero-ball" id="hero-ball" role="img" aria-label="灰白色球球会跟随鼠标看向不同方向"></div>
+          <div class="ball-shadow" aria-hidden="true"></div>
+        </div>
+      </section>
+
+      <section class="feature-section section" id="features" aria-labelledby="features-title">
+        <div class="section-heading">
+          <h2 id="features-title">真实陪伴，细腻回应</h2>
+          <p>它不会占据你的工作，只在你愿意时回应。</p>
+        </div>
+        <div class="feature-layout">
+          <div class="feature-list">
+            <article>
+              <h3>拖动与互动</h3>
+              <p>拖到屏幕任意位置，单击或双击触发不同动作。</p>
+            </article>
+            <article>
+              <h3>眼神与摸头反馈</h3>
+              <p>看向同屏鼠标，轻轻摸头时给出专属表情。</p>
+            </article>
+            <article>
+              <h3>双击全身动作</h3>
+              <p>弹跳、果冻抖动、扭动、探望、鞠躬与低频旋转。</p>
+            </article>
+            <article>
+              <h3>五档尺寸与置顶</h3>
+              <p>从 60 × 60 到大号，自由切换并可始终置顶。</p>
+            </article>
+          </div>
+          <div class="demo-stage glass-panel">
+            <div class="speech-sample">你忙，我陪着。</div>
+            <div class="live-ball demo-ball" id="demo-ball" role="img" aria-label="球球互动演示"></div>
+            <div class="demo-controls" aria-label="球球表情演示">
+              <button type="button" data-emotion="10">开心</button>
+              <button type="button" data-emotion="03">好奇</button>
+              <button type="button" data-emotion="00">困了</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="codex-section section" id="codex" aria-labelledby="codex-title">
+        <div class="codex-copy">
+          <p class="section-label">可选能力</p>
+          <h2 id="codex-title">可选的 Codex 陪伴</h2>
+          <p class="codex-lead">默认关闭。只有你主动开启后，球球才会在本机读取额度与任务进展。</p>
+          <dl class="fact-list">
+            <div>
+              <dt>本机处理</dt>
+              <dd>只提取需要的状态，不保存、不上传。</dd>
+            </div>
+            <div>
+              <dt>正文立即丢弃</dt>
+              <dd>状态包可能附带已加载聊天内容，正文会立即丢弃。</dd>
+            </div>
+            <div>
+              <dt>不替你操作</dt>
+              <dd>不会创建、发送、审批、中断任务或重置额度。</dd>
+            </div>
+          </dl>
+        </div>
+        <div class="quota-showcase" aria-label="Codex 额度卡片浅色与深色实拍">
+          <figure class="quota-frame quota-frame-light">
+            <img src="assets/screenshots/quota-light.png" width="392" height="192" loading="lazy" alt="浅色模式的 Codex 额度卡片真实验收截图">
+            <figcaption>浅色模式</figcaption>
+          </figure>
+          <figure class="quota-frame quota-frame-dark">
+            <img src="assets/screenshots/quota-dark.png" width="392" height="192" loading="lazy" alt="深色模式的 Codex 额度卡片真实验收截图">
+            <figcaption>深色模式</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="gallery-section section" id="gallery" aria-labelledby="gallery-title">
+        <div class="section-heading gallery-heading">
+          <h2 id="gallery-title">真正在桌面上的样子</h2>
+          <p>来自隔离烟测的真实截图，展示角色、气泡和额度卡片。</p>
+        </div>
+        <div class="gallery-grid">
+          <figure class="gallery-main glass-panel">
+            <img src="assets/screenshots/pet-260.png" width="520" height="520" loading="lazy" alt="260 尺寸球球的二倍图真实验收截图">
+            <figcaption>灰白角色与黑色眼睛保持统一</figcaption>
+          </figure>
+          <figure class="gallery-wide glass-panel">
+            <img src="assets/screenshots/bubble.png" width="448" height="172" loading="lazy" alt="球球气泡真实验收截图，文字为你忙，我陪着">
+            <figcaption>克制、低打扰的陪伴气泡</figcaption>
+          </figure>
+          <figure class="gallery-small glass-panel">
+            <img src="assets/screenshots/petting.png" width="160" height="160" loading="lazy" alt="球球摸头表情真实验收截图">
+            <figcaption>摸头时的细小回应</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="download-section section" id="download" aria-labelledby="download-title">
+        <div class="download-intro">
+          <h2 id="download-title">选择与你的 Mac 匹配的版本</h2>
+          <p>Apple 芯片与 Intel 版本完全分开。下载安装前可核对文件大小和 SHA-256。</p>
+        </div>
+        <div class="download-grid">
+          <article class="download-card download-card-primary">
+            <div class="download-card-head">
+              <div>
+                <p class="download-status">推荐，已验证</p>
+                <h3>Apple 芯片版</h3>
+              </div>
+              <span class="architecture">arm64</span>
+            </div>
+            <p>适用于 M1、M2、M3、M4 及后续 Apple 芯片 Mac。需要 macOS 12.0 或更高版本。</p>
+            <dl class="release-data">
+              <div><dt>版本</dt><dd>0.3.10 热修复</dd></div>
+              <div><dt>发布日期</dt><dd>2026-09-01</dd></div>
+              <div><dt>文件大小</dt><dd>121,133,015 bytes</dd></div>
+              <div><dt>SHA-256</dt><dd><code>e8c5fe70b432352d8ad95dd0bfff045b1c466659309ea25cc6a4964cddaa5a19</code></dd></div>
+            </dl>
+            <div class="download-actions">
+              <a class="button button-primary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.10/emotion-ball-desktop-pet-0.3.10-Apple-Silicon-hotfix-20260831-share.zip">下载 ZIP</a>
+              <button class="copy-button" type="button" data-copy="e8c5fe70b432352d8ad95dd0bfff045b1c466659309ea25cc6a4964cddaa5a19">复制 SHA-256</button>
+            </div>
+          </article>
+
+          <article class="download-card download-card-candidate">
+            <div class="download-card-head">
+              <div>
+                <p class="download-status">构建候选</p>
+                <h3>Intel x64 版</h3>
+              </div>
+              <span class="architecture">x86_64</span>
+            </div>
+            <p>尚未在真实 Intel Mac 上验收，也未同步 8 月 31 日 Apple 专项热修复。Codex 联动不声明已通过。</p>
+            <dl class="release-data">
+              <div><dt>版本</dt><dd>0.3.10 候选</dd></div>
+              <div><dt>发布日期</dt><dd>2026-08-30</dd></div>
+              <div><dt>文件大小</dt><dd>137,650,548 bytes</dd></div>
+              <div><dt>SHA-256</dt><dd><code>9166ab8428c599c49862ce0cb38ef5e105bd305daafcf394809e59e288d5334a</code></dd></div>
+            </dl>
+            <div class="download-actions">
+              <a class="button button-secondary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.10/emotion-ball-desktop-pet-0.3.10-Intel-x64-share.zip">下载候选 ZIP</a>
+              <button class="copy-button" type="button" data-copy="9166ab8428c599c49862ce0cb38ef5e105bd305daafcf394809e59e288d5334a">复制 SHA-256</button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="privacy-section section" id="privacy" aria-labelledby="privacy-title">
+        <div class="privacy-title-block">
+          <h2 id="privacy-title">安静，也尊重你的隐私</h2>
+          <p>官网无广告、无统计脚本、无 Cookie、无表单。普通桌宠不需要登录。</p>
+        </div>
+        <div class="privacy-points">
+          <article>
+            <h3>普通桌宠完全本地运行</h3>
+            <p>不读取输入内容、剪贴板或其他窗口，也不会上传个人数据。</p>
+          </article>
+          <article>
+            <h3>只用必要的系统状态</h3>
+            <p>鼠标坐标、系统空闲时长和锁屏状态只用于动作与休息判断。</p>
+          </article>
+          <article>
+            <h3>Codex 联动由你决定</h3>
+            <p>默认关闭，关闭后立即停止读取并清理相关状态。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="install-section section" id="install" aria-labelledby="install-title">
+        <div class="install-copy">
+          <h2 id="install-title">三步放到桌面上</h2>
+          <p>当前安装包使用临时签名，未经过 Apple 公证。只在确认下载来自本官网时继续。</p>
+        </div>
+        <ol class="install-list">
+          <li>
+            <span class="install-action">下载并解压</span>
+            <p>解压 ZIP，打开里面唯一的 DMG 文件。</p>
+          </li>
+          <li>
+            <span class="install-action">拖入应用程序</span>
+            <p>把“球球桌宠”拖到“Applications”文件夹。</p>
+          </li>
+          <li>
+            <span class="install-action">允许首次打开</span>
+            <p>如被拦截，前往“系统设置 &gt; 隐私与安全性”，选择“仍要打开”。</p>
+          </li>
+        </ol>
+      </section>
+
+      <section class="updates-section section" id="updates" aria-labelledby="updates-title">
+        <div class="section-heading">
+          <h2 id="updates-title">更新日志</h2>
+          <p>区分官网上线、公开安装包和源码更新，不把其中一项当成全部完成。</p>
+        </div>
+        <div class="timeline">
+          <article>
+            <time datetime="2026-09-01">2026-09-01</time>
+            <div><h3>公开官网上线</h3><p>提供 Apple 热修复版与 Intel 构建候选的架构分流、直连下载和校验信息。</p></div>
+          </article>
+          <article>
+            <time datetime="2026-08-31">2026-08-31</time>
+            <div><h3>0.3.10 Apple 热修复</h3><p>长气泡自适应高度，修复持续拉高闪烁，增加低打扰的任务专注反馈。</p></div>
+          </article>
+          <article>
+            <time datetime="2026-08-30">2026-08-30</time>
+            <div><h3>0.3.10 发布</h3><p>通用 Codex 额度规则、双周期卡片与 Apple 芯片正式包完成验证。</p></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="license-section section" id="license" aria-labelledby="license-title">
+        <div>
+          <h2 id="license-title">开源、署名与许可</h2>
+          <p>球形角色与动画来自原作者 sam70361。当前项目免费、非商业，欢迎查看源码和参与改进。</p>
+        </div>
+        <div class="license-links" aria-label="源码与许可链接">
+          <a href="https://github.com/dreamcall520/emotion-ball-desktop-pet">GitHub 源码</a>
+          <a href="https://github.com/sam70361/emotion-ball">原作者项目</a>
+          <a href="LICENSE">LICENSE</a>
+          <a href="NOTICE.md">NOTICE</a>
+        </div>
+        <p class="license-warning">禁止售卖、付费授权、商业推广或集成到商业产品与服务。再次分发时必须保留原作者署名、LICENSE 和 NOTICE。</p>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>球球桌宠，免费、非商业使用。</p>
+      <a href="#top">回到顶部</a>
+    </footer>
+
+    <div class="copy-toast" role="status" aria-live="polite" data-toast></div>
+
+    <script src="assets/vendor/emotion-ball/rings.js"></script>
+    <script src="assets/vendor/emotion-ball/emotions.js"></script>
+    <script src="assets/vendor/emotion-ball/ball.js"></script>
+    <script src="assets/vendor/emotion-ball/engine.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
