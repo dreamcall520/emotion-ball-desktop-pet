@@ -6,6 +6,8 @@
   const navButton = document.querySelector('.nav-toggle');
   const navigation = document.getElementById('site-nav');
   const toast = document.querySelector('[data-toast]');
+  const backToTopButton = document.querySelector('[data-back-to-top]');
+  const topSection = document.getElementById('top');
   let toastTimer = null;
   let demoResetTimer = null;
 
@@ -55,6 +57,22 @@
       navigation.classList.remove('is-open');
       navButton.setAttribute('aria-expanded', 'false');
       navButton.textContent = '菜单';
+    });
+  }
+
+  if (backToTopButton && topSection && 'IntersectionObserver' in window) {
+    const topObserver = new IntersectionObserver(([entry]) => {
+      const shouldShow = !entry.isIntersecting;
+      backToTopButton.classList.toggle('is-visible', shouldShow);
+      backToTopButton.setAttribute('aria-hidden', String(!shouldShow));
+      backToTopButton.tabIndex = shouldShow ? 0 : -1;
+    });
+
+    topObserver.observe(topSection);
+    backToTopButton.addEventListener('click', () => {
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      topSection.focus({ preventScroll: true });
+      window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
     });
   }
 
