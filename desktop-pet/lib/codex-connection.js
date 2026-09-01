@@ -25,6 +25,9 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
   let tasksFlight = null;
   let taskRetryFlight = null;
   let hasMetadata = false;
+  const discoveryFlights = new Map();
+  const pendingDiscoveries = new Set();
+  let discoveryQueue = Promise.resolve();
   const lastStatus = new Map();
 
   function report(channel, state, code = null) {
@@ -53,7 +56,7 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
     const opening = Promise.resolve().then(() => {
       if (!closed && generation === rpcGeneration) return target.start();
     }).then(() => {
-      if (!closed && generation === rpcGeneration) rpcReady = true;
+      if (!closed && generation === rpcGeneration) { rpcReady = true; drainDiscoveries(); }
     }).finally(() => { if (rpcStarting === opening) rpcStarting = null; });
     rpcStarting = opening;
     return opening;
@@ -61,18 +64,51 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
   function beginStream() {
     if (closed || authenticated === false || !accountSupported) return Promise.resolve();
     const generation = ++streamGeneration;
-    stream?.close(); hasMetadata = false;
+    stream?.close(); hasMetadata = false; pendingDiscoveries.clear();
     report('tasks', 'connecting');
     const target = createStream({
       onTask: task => { if (!closed && generation === streamGeneration) onTask(task); },
       onStatus: value => { if (!closed && generation === streamGeneration) report('tasks', value.state, value.code); },
-      onDiscovered: () => { if (!closed && generation === streamGeneration) void refresh({ quota: false, tasks: true }); }
+      onDiscovered: id => { if (!closed && generation === streamGeneration) queueDiscovery(id); }
     });
     stream = target;
     streamStarting = Promise.resolve().then(() => {
       if (!closed && generation === streamGeneration) return target.start();
     }).catch(error => { if (!closed && generation === streamGeneration) reportError('tasks', error); });
     return streamStarting;
+  }
+  function queueDiscovery(id) {
+    if (closed || authenticated === false || !accountSupported) return;
+    if (!rpcReady || authenticated !== true) {
+      if (pendingDiscoveries.size < 64) pendingDiscoveries.add(id);
+      return;
+    }
+    void discoverTask(id);
+  }
+  function drainDiscoveries() {
+    if (closed || !rpcReady || authenticated !== true || !accountSupported) return;
+    const ids = [...pendingDiscoveries]; pendingDiscoveries.clear();
+    for (const id of ids) queueDiscovery(id);
+  }
+  function discoverTask(id) {
+    if (closed || !rpcReady || authenticated === false || !accountSupported || discoveryFlights.has(id)) {
+      return discoveryFlights.get(id) || Promise.resolve();
+    }
+    const account = accountGeneration; const rpcEpoch = rpcGeneration; const streamEpoch = streamGeneration;
+    const targetRpc = rpc; const targetStream = stream;
+    const current = () => !closed && rpcReady && account === accountGeneration && rpcEpoch === rpcGeneration
+      && streamEpoch === streamGeneration && targetRpc === rpc && targetStream === stream;
+    const lookup = discoveryQueue.then(async () => {
+      if (!current()) return;
+      const row = await targetRpc.findThread(id);
+      if (current() && row) targetStream?.addThread(row);
+    }).catch(() => {
+      // Discovery is opportunistic metadata validation. A failed lookup must not
+      // downgrade an otherwise healthy live task channel.
+    }).finally(() => { if (discoveryFlights.get(id) === lookup) discoveryFlights.delete(id); });
+    discoveryFlights.set(id, lookup);
+    discoveryQueue = lookup.then(() => undefined, () => undefined);
+    return lookup;
   }
   function acceptAccount(value) {
     if (closed) return;
@@ -86,12 +122,13 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
     accountGeneration++;
     if (hadIdentity || authenticated === false || !accountSupported) {
       streamGeneration++;
-      stream?.close(); stream = null; hasMetadata = false;
+      stream?.close(); stream = null; hasMetadata = false; pendingDiscoveries.clear();
     }
     onAccount({ accountKey });
     if (!accountSupported) report('tasks', 'unsupported', 'UNSUPPORTED');
     else if (authenticated === false) report('tasks', 'unauthenticated', 'UNAUTHENTICATED');
     else if (hadIdentity) { void beginStream(); void refreshTasks(); }
+    if (authenticated === true && accountSupported) drainDiscoveries();
   }
   function refreshQuota() {
     const generation = rpcGeneration;
@@ -199,7 +236,7 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
     if (closed) return;
     closed = true; accountGeneration++; streamGeneration++; rpcGeneration++;
     rpcReady = false; accountKey = undefined; authenticated = null; accountSupported = true; hasMetadata = false;
-    stream?.close(); rpc?.close(); stream = null; rpc = null; lastStatus.clear();
+    stream?.close(); rpc?.close(); stream = null; rpc = null; discoveryFlights.clear(); pendingDiscoveries.clear(); lastStatus.clear();
   }
   return { start, refresh, retry, close };
 }

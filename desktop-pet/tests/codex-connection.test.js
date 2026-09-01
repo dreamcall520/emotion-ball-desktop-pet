@@ -9,7 +9,7 @@ function api() {
   assert.ok(fs.existsSync(file), '需要额度与任务两路独立组合连接');
   return require(file);
 }
-function harness({ account, quota, list, startRpc, startStream } = {}) {
+function harness({ account, quota, list, find, startRpc, startStream } = {}) {
   const calls = []; const statuses = []; const tasks = []; const accounts = []; const quotas = []; const streams = [];
   const rpcs = [];
   const connection = api().createCodexConnection({
@@ -21,6 +21,7 @@ function harness({ account, quota, list, startRpc, startStream } = {}) {
         readAccount: async () => { calls.push('account'); return account ? account(index) : { authenticated: true, accountKey: 'one' }; },
         readQuota: async () => { calls.push('quota'); return quota ? quota(index) : { windows: [], updatedAt: 100 }; },
         listThreads: async () => { calls.push('list'); return list ? list(index) : [{ id: ID, title: '任务', state: 'unknown', partial: true }]; },
+        findThread: async id => { calls.push('find'); return find ? find(id, index) : { id, title: '新发现任务', state: 'unknown', partial: true }; },
         close: () => { calls.push('close-rpc'); rpc.closed = true; }
       };
       rpcs.push(rpc); return rpc;
@@ -31,6 +32,7 @@ function harness({ account, quota, list, startRpc, startStream } = {}) {
         options, rows: [], closed: false,
         start: async () => { calls.push('start-stream'); await startStream?.(index); options.onStatus({ state: 'connecting', code: null, partial: true }); },
         setThreads: rows => { calls.push('set-threads'); stream.rows = rows; },
+        addThread: row => { calls.push('add-thread'); stream.rows.push(row); },
         refresh: () => calls.push('refresh-stream'),
         close: () => { calls.push('close-stream'); stream.closed = true; }
       };
@@ -163,10 +165,43 @@ test('损坏账号响应的读取错误不清空已知身份，也不关闭仍�
   assert.equal(h.statuses.filter(value => value.channel === 'tasks').at(-1).state, 'connected');
 });
 
-test('新following不直接订阅，必须重新读合规元数据', async () => {
+test('新following分页核验合规元数据后直接加入追踪，不再回查最近20条', async () => {
   const h = harness(); await h.connection.start(); h.calls.length = 0;
   h.streams[0].options.onDiscovered(ID); await tick();
-  assert.deepEqual(h.calls, ['list', 'set-threads']); h.connection.close();
+  assert.deepEqual(h.calls, ['find', 'add-thread']);
+  assert.equal(h.streams[0].rows.at(-1).id, ID); h.connection.close();
+});
+
+test('新following未通过合规元数据核验时不加入追踪', async () => {
+  const h = harness({ find: () => null }); await h.connection.start(); h.calls.length = 0;
+  h.streams[0].options.onDiscovered(ID); await tick();
+  assert.deepEqual(h.calls, ['find']); h.connection.close();
+});
+
+test('启动时先收到following、后准备好RPC也不丢新任务', async () => {
+  let finishRpc;
+  const h = harness({ startRpc: () => new Promise(resolve => { finishRpc = resolve; }) });
+  const opening = h.connection.start();
+  for (let i = 0; i < 5 && !finishRpc; i++) await tick();
+  h.streams[0].options.onDiscovered(ID);
+  finishRpc(); await opening; await tick();
+  assert.equal(h.calls.includes('find'), true);
+  assert.equal(h.calls.includes('add-thread'), true);
+  h.connection.close();
+});
+
+test('账号身份未确认前新following只排队，确认登录后才核验追踪', async () => {
+  let finishAccount;
+  const h = harness({ account: () => new Promise(resolve => { finishAccount = resolve; }) });
+  const opening = h.connection.start();
+  for (let i = 0; i < 10 && !finishAccount; i++) await tick();
+  h.streams[0].options.onDiscovered(ID); await tick();
+  assert.equal(h.calls.includes('find'), false);
+  finishAccount({ authenticated: true, accountKey: 'one' });
+  await opening; await tick();
+  assert.equal(h.calls.includes('find'), true);
+  assert.equal(h.calls.includes('add-thread'), true);
+  h.connection.close();
 });
 
 test('close立即停止两路并忽略所有未结束请求的迟到结果', async () => {

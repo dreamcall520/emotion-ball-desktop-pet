@@ -882,6 +882,19 @@ test('idle过渡不跨越基线、未知、换轮次或中断，也不补报历�
   }
 });
 
+test('同一轮任务处理中短暂断线，重连首帧已完成仍提醒；历史完成首帧不提醒', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.task(1, 'active', { baseline: true });
+  f.task(1, 'unknown', { baseline: true, turnId: null });
+  f.task(1, 'completed', { baseline: true });
+  f.task(2, 'completed', { baseline: true });
+  await f.tick(5000);
+  assert.deepEqual(f.alerts.map(alert => alert.kind), ['completed']);
+  assert.deepEqual(f.alerts[0].taskIds, [taskId(1)]);
+  f.companion.close();
+});
+
 test('idle过渡在断连、移除、刷新、换账号、开关和任务淘汰后立即失效', async () => {
   for (const reason of ['disconnected', 'removed', 'refresh', 'account', 'disable', 'eviction']) {
     const f = fixture();

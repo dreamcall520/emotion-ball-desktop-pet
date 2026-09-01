@@ -4,11 +4,14 @@ const path = require('node:path');
 const childProcess = require('node:child_process');
 const { createHash } = require('node:crypto');
 const { TextDecoder } = require('node:util');
-const { normalizeQuota, normalizeThreadList } = require('./codex-state');
+const { isTaskId, normalizeQuota, normalizeThreadList } = require('./codex-state');
 
 const ERROR_CODES = Object.freeze(['MISSING', 'UNAUTHENTICATED', 'UNSUPPORTED', 'DISCONNECTED', 'TIMEOUT', 'INVALID_FRAME', 'UNSAFE_SOCKET', 'STATE_TOO_LARGE', 'PARTIAL_STATE', 'CLOSED', 'BUSY']);
 const MAX_FRAME_BYTES = 16 * 1024 * 1024;
 const METHODS = new Set(['initialize', 'account/read', 'account/rateLimits/read', 'thread/list']);
+const THREAD_LIST_PARAMS = Object.freeze({ sortKey: 'updated_at', archived: false, sourceKinds: [], useStateDbOnly: true });
+const DISCOVERY_PAGE_LIMIT = 100;
+const DISCOVERY_MAX_PAGES = 10;
 function codexError(code) {
   const safe = ERROR_CODES.includes(code) ? code : 'DISCONNECTED';
   return Object.assign(new Error(safe), { code: safe });
@@ -170,11 +173,31 @@ function createCodexRpc({ fs = nodeFs, spawn = childProcess.spawn, homedir = os.
     return starting;
   }
 
+  async function findThread(id) {
+    if (!isTaskId(id)) return null;
+    let cursor = null;
+    const seenCursors = new Set();
+    for (let page = 0; page < DISCOVERY_MAX_PAGES; page++) {
+      const result = await request('thread/list', {
+        limit: DISCOVERY_PAGE_LIMIT, ...THREAD_LIST_PARAMS, ...(cursor ? { cursor } : {})
+      }, raw => ({
+        rows: normalizeThreadList(raw, DISCOVERY_PAGE_LIMIT),
+        nextCursor: typeof raw?.nextCursor === 'string' && raw.nextCursor.length <= 500 ? raw.nextCursor : null
+      }));
+      const match = result.rows.find(row => row.id === id);
+      if (match) return match;
+      if (!result.nextCursor || seenCursors.has(result.nextCursor)) return null;
+      seenCursors.add(result.nextCursor); cursor = result.nextCursor;
+    }
+    return null;
+  }
+
   return {
     start,
     readAccount: () => request('account/read', { refreshToken: false }, projectAccount),
     readQuota: (now = Date.now()) => request('account/rateLimits/read', {}, raw => normalizeQuota(raw, now)),
-    listThreads: () => request('thread/list', { limit: 20, sortKey: 'updated_at', archived: false, sourceKinds: [], useStateDbOnly: true }, normalizeThreadList),
+    listThreads: () => request('thread/list', { limit: 20, ...THREAD_LIST_PARAMS }, normalizeThreadList),
+    findThread,
     close: () => shutdown()
   };
 }

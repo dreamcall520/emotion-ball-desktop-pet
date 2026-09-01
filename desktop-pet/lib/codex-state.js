@@ -56,8 +56,9 @@ function isEligibleThread(raw) {
   return true;
 }
 
-function normalizeThreadList(raw) {
+function normalizeThreadList(raw, limit = MAX_TASKS) {
   if (!Array.isArray(raw?.data)) return [];
+  const boundedLimit = Number.isSafeInteger(limit) ? Math.max(0, Math.min(100, limit)) : MAX_TASKS;
   const seen = new Set();
   return raw.data.filter(isEligibleThread).map(row => ({
     id: row.id, title: title(row.name), state: UNKNOWN, turnId: null,
@@ -66,7 +67,7 @@ function normalizeThreadList(raw) {
     if (seen.has(row.id)) return false;
     seen.add(row.id);
     return true;
-  }).slice(0, MAX_TASKS);
+  }).slice(0, boundedLimit);
 }
 
 function projectTurn(raw, location) {

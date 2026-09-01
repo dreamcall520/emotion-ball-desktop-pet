@@ -6,6 +6,9 @@ const { randomUUID } = require('node:crypto');
 const { codexError } = require('./codex-rpc');
 const { createFrameParser } = require('./codex-frame');
 const { MAX_TASKS, isTaskId, isEligibleThread, projectTask, taskFromProjection, applyTaskPatches } = require('./codex-state');
+const MAX_TRACKED_TASKS = 64;
+const DISCOVERED_RETENTION_MS = 90000;
+const IDLE_RETENTION_MS = 15000;
 
 function encodeFrame(packet) {
   const data = Buffer.from(JSON.stringify(packet));
@@ -55,6 +58,39 @@ function createCodexStream({ onTask = () => {}, onStatus = () => {}, onDiscovere
       ...(record.unavailable ? { unavailable: record.unavailable } : {}), ...(removed ? { removed: true } : {}) });
     record.task = null; record.revision = null; record.baseline = true;
     reportAvailability();
+  }
+  function removeRecord(record) {
+    clearTimeout(record.timer); publishUnknown(record, true); follow(record, false); records.delete(record.metadata.id);
+  }
+  function canRetain(record) {
+    return record.sticky === true && (record.retainUntil === Infinity || now() < record.retainUntil);
+  }
+  function metadata(row) {
+    return { id: row.id, title: typeof row.title === 'string' && row.title.trim()
+      ? row.title.trim().slice(0, 200) : '未命名任务' };
+  }
+  function addRecord(row, sticky = false) {
+    if (!isEligibleThread(row)) return null;
+    let record = records.get(row.id);
+    if (record) {
+      record.metadata = metadata(row);
+      if (sticky) {
+        record.sticky = true;
+        record.retainUntil = Math.max(record.retainUntil || 0, now() + DISCOVERED_RETENTION_MS);
+      }
+      if (!record.task) requestSnapshot(record);
+      return record;
+    }
+    if (records.size >= MAX_TRACKED_TASKS) {
+      const expired = [...records.values()].find(value => !canRetain(value));
+      if (!expired) return null;
+      removeRecord(expired);
+    }
+    record = { metadata: metadata(row), task: null, revision: null, owner: null, baseline: true, timer: null,
+      lastFollow: -Infinity, unavailable: oversizedIds.has(row.id) ? 'STATE_TOO_LARGE' : null,
+      sticky, retainUntil: sticky ? now() + DISCOVERED_RETENTION_MS : 0 };
+    records.set(row.id, record); publishUnknown(record); requestSnapshot(record);
+    return record;
   }
   function cleanup(code = 'CLOSED') {
     if (closed) return;
@@ -149,7 +185,12 @@ function createCodexStream({ onTask = () => {}, onStatus = () => {}, onDiscovere
     } else { publishUnknown(record); requestSnapshot(record); return; }
     record.revision = change.revision;
     clearTimeout(snapshotTimer); snapshotTimer = null;
-    onTask({ ...taskFromProjection(record.task, now()), baseline: record.baseline }); record.baseline = false;
+    const task = taskFromProjection(record.task, now());
+    if (task.state === 'active' || task.state === 'waiting') { record.sticky = true; record.retainUntil = Infinity; }
+    else if (['completed', 'failed', 'interrupted'].includes(task.state) && record.sticky) {
+      record.retainUntil = now() + DISCOVERED_RETENTION_MS;
+    } else if (task.state === 'idle' && record.sticky) record.retainUntil = now() + IDLE_RETENTION_MS;
+    onTask({ ...task, baseline: record.baseline }); record.baseline = false;
     reportAvailability();
   }
 
@@ -229,23 +270,26 @@ function createCodexStream({ onTask = () => {}, onStatus = () => {}, onDiscovere
     for (const row of Array.isArray(rows) ? rows : []) {
       if (selected.size >= MAX_TASKS) break;
       if (!isEligibleThread(row)) continue;
-      selected.set(row.id, { id: row.id, title: typeof row.title === 'string' && row.title.trim() ? row.title.trim().slice(0, 200) : '未命名任务' });
+      selected.set(row.id, metadata(row));
     }
-    for (const [id, record] of records) if (!selected.has(id)) {
-      clearTimeout(record.timer); publishUnknown(record, true); follow(record, false); records.delete(id);
+    for (const [id, record] of records) {
+      if (!selected.has(id) && (selected.size === 0 || !canRetain(record))) removeRecord(record);
     }
     for (const [id, metadata] of selected) {
       let record = records.get(id);
-      if (!record) {
-        record = { metadata, task: null, revision: null, owner: null, baseline: true, timer: null, lastFollow: -Infinity,
-          unavailable: oversizedIds.has(id) ? 'STATE_TOO_LARGE' : null };
-        records.set(id, record); publishUnknown(record);
-      } else record.metadata = metadata;
-      if (!record.task) requestSnapshot(record);
+      if (!record) record = addRecord(metadata);
+      else record.metadata = metadata;
+      if (record && !record.task) requestSnapshot(record);
     }
     reportAvailability();
   }
-  return { start, setThreads, refresh() { for (const record of records.values()) requestSnapshot(record); }, close: () => cleanup() };
+  function addThread(row) {
+    if (closed) return false;
+    const record = addRecord(row, true);
+    reportAvailability();
+    return Boolean(record);
+  }
+  return { start, setThreads, addThread, refresh() { for (const record of records.values()) requestSnapshot(record); }, close: () => cleanup() };
 }
 
 module.exports = { createCodexStream, createFrameParser };
