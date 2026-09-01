@@ -273,6 +273,20 @@ test('已保存的任务名称开关启动即生效', async () => {
   assert.equal(menuItem(f, 'codex-task-names').checked, true);
 });
 
+test('已有执行中任务会同步给球球页面，结束后归零', async () => {
+  const f = await fixture({ codexEnabled: true });
+  const settingsPackets = () => f.pet.messages.filter(message => message.channel === 'pet:codex-settings');
+  assert.equal(settingsPackets().at(-1).packet.activeTaskCount, 0);
+  f.connections[0].callbacks.onTask({
+    id: TASK_ID, title: '正在处理', state: 'active', turnId: 'turn-working', baseline: true
+  });
+  assert.equal(settingsPackets().at(-1).packet.activeTaskCount, 1);
+  f.connections[0].callbacks.onTask({
+    id: TASK_ID, title: '正在处理', state: 'completed', turnId: 'turn-working'
+  });
+  assert.equal(settingsPackets().at(-1).packet.activeTaskCount, 0);
+});
+
 test('Codex 额度菜单只在总联动开启时可操作，周期为互斥单选', async () => {
   const off = await fixture();
   const offMenu = off.call('menuTemplate()');

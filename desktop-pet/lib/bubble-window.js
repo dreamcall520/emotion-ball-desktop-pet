@@ -30,7 +30,12 @@ function createBubbleWindow({ BrowserWindow, screen, getPetWindow, onError, alwa
     const pet = getPetWindow();
     if (!current || !ready || !win || win.isDestroyed() || !pet || pet.isDestroyed()) return;
     const petBounds = pet.getBounds();
-    const layout = bubbleBounds(petBounds, screen.getDisplayMatching(petBounds).workArea, current.actions.length > 0);
+    const layout = bubbleBounds(
+      petBounds,
+      screen.getDisplayMatching(petBounds).workArea,
+      current.actions.length > 0,
+      current.preferredHeight
+    );
     const { x, y, width, height, placement, anchorX } = layout;
     win.setBounds({ x, y, width, height }, false);
     win.webContents.send('pet:bubble', { ...current, placement, anchorX });
@@ -92,11 +97,19 @@ function createBubbleWindow({ BrowserWindow, screen, getPetWindow, onError, alwa
 
   return {
     show(payload) {
-      current = payload;
+      current = { ...payload, preferredHeight: null };
       clearTimeout(timer);
       ensureWindow();
       present();
       timer = setTimeout(hide, payload.durationMs);
+    },
+    resize(payload) {
+      if (!current || payload?.id !== current.id || !Number.isFinite(payload.height) || payload.height <= 0) return false;
+      const height = Math.ceil(payload.height);
+      if (height === current.preferredHeight) return true;
+      current.preferredHeight = height;
+      reposition();
+      return true;
     },
     hide,
     reposition,

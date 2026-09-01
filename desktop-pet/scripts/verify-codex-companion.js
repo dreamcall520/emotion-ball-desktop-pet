@@ -1002,9 +1002,18 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       const expected = { completed: 'hop', quota: 'jelly', waiting: 'peek', failed: 'jelly' }[kind];
       assert.ok(packets.length > 5 && packets.every(packet => packet.action === expected));
       const alertId = getController().getSnapshot().currentAlert.id;
-      await input(win, 'mouseMoved', layout.point.x, layout.point.y);
-      await input(win, 'mousePressed', layout.point.x, layout.point.y);
-      await input(win, 'mouseReleased', layout.point.x, layout.point.y);
+      const liveDismiss = await win.webContents.executeJavaScript(`(() => {
+        const cached = document.elementFromPoint(${layout.point.x}, ${layout.point.y});
+        const button = document.querySelector('[data-action="codex-dismiss"]');
+        const rect = button.getBoundingClientRect();
+        const point = {x:rect.x+rect.width/2,y:rect.y+rect.height/2};
+        const live = document.elementFromPoint(point.x, point.y);
+        return { cachedAction:cached?.dataset?.action || '', liveAction:live?.dataset?.action || '', point };
+      })()`);
+      assert.equal(liveDismiss.liveAction, 'codex-dismiss', `Codex 关闭按钮实时坐标错误：${JSON.stringify(liveDismiss)}`);
+      await input(win, 'mouseMoved', liveDismiss.point.x, liveDismiss.point.y);
+      await input(win, 'mousePressed', liveDismiss.point.x, liveDismiss.point.y);
+      await input(win, 'mouseReleased', liveDismiss.point.x, liveDismiss.point.y);
       await poll(() => Promise.resolve(getController().getSnapshot().currentAlert), value => value === null, 'Codex 按钮真实 IPC 回应');
       assert.equal(win.isVisible(), false);
       results.push({ size: pixels, kind, alertId, layout, frameCount: packets.length, source: 'simulated-connection-real-ui' });
@@ -1013,6 +1022,11 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
 
     await begin('active');
     assert.equal(bubble.getWindow()?.isVisible(), false, '处理中只轻动作，不弹气泡');
+    await poll(
+      () => page("document.getElementById('pet').dataset.codexWorking"),
+      value => value === 'true',
+      '处理中进入专注呼吸状态'
+    );
     const nativeMenu = getMenu();
     const taskItems = nativeMenu.getMenuItemById('codex-tasks').submenu.items;
     const taskLabels = taskItems.map(item => item.label);
@@ -1031,7 +1045,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assert.equal(getMenu().getMenuItemById('codex-task-names').enabled, false);
 
     await setEnabled(true);
-    await begin('completed', 1, '  原生\n验收\u202e任务  ');
+    await begin('completed', 1, '  方案中｜独立站外商机｜客户线上化  ');
     const titleWindow = await poll(() => Promise.resolve(bubble.getWindow()), value => value?.isVisible(), '名称气泡显示');
     const bubbleText = () => titleWindow.webContents.executeJavaScript("document.getElementById('message').textContent");
     assert.equal(await bubbleText(), '这轮有结果啦，去看看？', '名称开关默认关闭时必须显示通用文案');
@@ -1043,7 +1057,32 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     titleItem.checked = false;
     titleItem.click({}, pet, pet.webContents);
     assert.equal(getSettings().codexTaskNameInAlerts, true, '真实菜单 click 必须开启任务名称设置');
-    await poll(bubbleText, text => text === '《原生 验收 任务》有结果啦\n去看看？', '真实菜单开启任务名称');
+    await poll(bubbleText, text => text === '《方案中｜独立站外商机｜客户线上化》有结果啦\n去看看？', '真实菜单开启任务名称');
+    const adaptiveLayout = await poll(
+      async () => titleWindow.webContents.executeJavaScript(`(() => {
+        const card = document.getElementById('bubble').getBoundingClientRect();
+        const message = document.getElementById('message');
+        const range = document.createRange(); range.selectNodeContents(message);
+        const rects = [...range.getClientRects()].filter(rect => rect.width && rect.height);
+        return {
+          windowHeight: window.innerHeight,
+          cardBottom: card.bottom,
+          maxTextBottom: Math.max(...rects.map(rect => rect.bottom)),
+          lineCount: new Set(rects.map(rect => Math.round(rect.top))).size
+        };
+      })()`),
+      value => value.windowHeight > 118 && value.lineCount >= 3,
+      '长任务名称撑高气泡'
+    );
+    assert.ok(adaptiveLayout.maxTextBottom <= adaptiveLayout.cardBottom, '长任务名称不能超出气泡边界');
+    const adaptiveHeights = [];
+    for (let index = 0; index < 6; index++) {
+      adaptiveHeights.push(titleWindow.getBounds().height);
+      await wait(80);
+    }
+    assert.deepEqual([...new Set(adaptiveHeights)], [adaptiveLayout.windowHeight],
+      `长任务名称气泡增高后必须收敛：${JSON.stringify(adaptiveHeights)}`);
+    await capture(titleWindow, 'codex-bubble-long-title-adaptive');
     const namedAlert = getController().getSnapshot().currentAlert;
     assert.equal(namedAlert.id, beforeToggle.id, '名称开关不能替换当前气泡');
     assert.equal(namedAlert.expiresAt, beforeToggle.expiresAt, '名称开关不能延长提醒时限');

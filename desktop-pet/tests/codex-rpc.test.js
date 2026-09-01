@@ -70,6 +70,27 @@ test('只开放四个只读方法并固定敏感参数，不请求历史', async
   h.rpc.close();
 });
 
+test('新发现任务用只读元数据分页定位，不受最近20条限制且不泄露正文', async () => {
+  const h = setup({ reply: packet => {
+    if (packet.method !== 'thread/list') return { result: {} };
+    if (!packet.params.cursor) return { result: { data: [], nextCursor: 'page-two' } };
+    return { result: { data: [{ id: ID, name: '分页任务', source: 'vscode', preview: 'SECRET', turns: ['SECRET'] }] } };
+  } });
+  await h.rpc.start();
+  const result = await h.rpc.findThread(ID);
+  const requests = h.sent.filter(packet => packet.method === 'thread/list');
+  assert.equal(requests.length, 2);
+  assert.deepEqual(requests[0].params, {
+    limit: 100, sortKey: 'updated_at', archived: false, sourceKinds: [], useStateDbOnly: true
+  });
+  assert.deepEqual(requests[1].params, {
+    limit: 100, sortKey: 'updated_at', archived: false, sourceKinds: [], useStateDbOnly: true, cursor: 'page-two'
+  });
+  assert.deepEqual(result, { id: ID, title: '分页任务', state: 'unknown', turnId: null, updatedAt: null, partial: true });
+  assert.equal(JSON.stringify(result).includes('SECRET'), false);
+  h.rpc.close();
+});
+
 test('账号计划升级不改变身份hash；明确未登录才返回null身份', async () => {
   let plan = 'plus'; let accountPresent = true;
   const h = setup({ reply: p => ({ result: p.method === 'account/read' ? { account: accountPresent ? { type: 'chatgpt', email: 'same@example.test', planType: plan } : null, requiresOpenaiAuth: true } : {} }) });

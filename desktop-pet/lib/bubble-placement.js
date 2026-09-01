@@ -1,12 +1,16 @@
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
-function bubbleBounds(petBounds, workArea, interactive = false) {
+function bubbleBounds(petBounds, workArea, interactive = false, preferredHeight = null) {
   const areaWidth = Math.max(1, Math.floor(workArea.width));
   const areaHeight = Math.max(1, Math.floor(workArea.height));
   const paddingX = Math.min(8, Math.floor((areaWidth - 1) / 2));
   const paddingY = Math.min(8, Math.floor((areaHeight - 1) / 2));
   const width = Math.min(224, areaWidth - paddingX * 2);
-  const height = Math.min(interactive ? 118 : 86, areaHeight - paddingY * 2);
+  const baseHeight = interactive ? 118 : 86;
+  const requestedHeight = Number.isFinite(preferredHeight)
+    ? Math.max(baseHeight, Math.ceil(preferredHeight))
+    : baseHeight;
+  const height = Math.min(requestedHeight, areaHeight - paddingY * 2);
   const minX = workArea.x + paddingX;
   const minY = workArea.y + paddingY;
   const centerX = petBounds.x + petBounds.width / 2;

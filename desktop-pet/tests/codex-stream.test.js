@@ -144,6 +144,18 @@ test('仅订阅最多20个合规ID，移出的任务发removed且取消订阅', 
   h.stream.close();
 });
 
+test('分页核验通过的新任务可追加追踪，不被后续最近列表刷新移除', async () => {
+  const h = harness();
+  h.stream.setThreads([{ id: OWNER, title: '最近任务' }]);
+  await h.stream.start();
+  h.stream.addThread({ id: ID, title: '分页发现任务' });
+  assert.equal(h.sent.filter(packet => packet.params?.conversationId === ID && packet.params?.following === true).length, 1);
+  h.stream.setThreads([{ id: OWNER, title: '最近任务' }]);
+  assert.equal(h.tasks.some(task => task.id === ID && task.removed), false);
+  assert.equal(h.sent.some(packet => packet.params?.conversationId === ID && packet.params?.following === false), false);
+  h.stream.close();
+});
+
 test('未知/远端/归档/子代理snapshot不能加入任务；正文永不离开连接', async () => {
   const h = harness(); h.stream.setThreads([{ id: ID, title: '标题' }]); await h.stream.start();
   h.receive(snapshot(1, { turns: [{ turnId: 'one', status: 'inProgress', items: [{ text: SECRET }] }], requests: [{ method: SECRET, params: SECRET }], cwd: SECRET }));

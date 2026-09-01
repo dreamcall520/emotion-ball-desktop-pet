@@ -36,6 +36,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
   const quotaTracker = createQuotaAlertTracker();
   const terminalSeen = new Map();
   const idleTransitions = new Map();
+  const resumableTurns = new Map();
   let queued = [];
   let currentAlert = null;
   let preferences = { taskNameInAlerts: false, quotaAlwaysVisible: false, quotaPeriod: 'auto' };
@@ -222,7 +223,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     clearTimer('drain'); clearTimer('alert');
     queued = []; currentAlert = null;
     idleTransitions.clear();
-    if (dedupe) { quotaTracker.reset(); quotaNeedsBaseline = true; terminalSeen.clear(); }
+    if (dedupe) { quotaTracker.reset(); quotaNeedsBaseline = true; terminalSeen.clear(); resumableTurns.clear(); }
     if (cooldown) lastPresentedAt = -Infinity;
   }
   function removeOrdinaryQuotaAlerts() {
@@ -380,16 +381,25 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
       } else if (!followsIdle) idleTransitions.delete(task.id);
     } else idleTransitions.delete(task.id);
     const terminal = ['completed', 'failed', 'interrupted'].includes(task.state);
+    const resumable = resumableTurns.get(task.id);
+    const resumedTerminal = baseline && terminal && task.turnId && resumable?.interrupted === true
+      && resumable.turnId === task.turnId;
     let seen = terminalSeen.get(task.id) || [];
     const alreadySeen = seen.includes(task.turnId);
     if (terminal && task.turnId && !alreadySeen) {
       seen = [...seen, task.turnId].slice(-16); terminalSeen.set(task.id, seen);
     }
-    if (!previous || baseline || !task.turnId) return;
+    if (task.turnId && ['active', 'waiting'].includes(task.state)) {
+      resumableTurns.set(task.id, { turnId: task.turnId, interrupted: false });
+    } else if (baseline && task.state === 'unknown' && previous?.turnId
+      && ['active', 'waiting'].includes(previous.state)) {
+      resumableTurns.set(task.id, { turnId: previous.turnId, interrupted: true });
+    } else if (terminal) resumableTurns.delete(task.id);
+    if (!previous || (baseline && !resumedTerminal) || !task.turnId) return;
     if (task.state === 'active' && !['active', 'unknown'].includes(previous.state)) enqueue('active', { id: task.id, turnId: task.turnId });
     else if (task.state === 'waiting' && previous.state === 'active' && sameTurn) enqueue('waiting', { id: task.id, turnId: task.turnId });
     else if (['completed', 'failed'].includes(task.state)
-      && (['active', 'waiting'].includes(previous.state) || followsIdle) && sameTurn && !alreadySeen) {
+      && (((['active', 'waiting'].includes(previous.state) || followsIdle) && sameTurn) || resumedTerminal) && !alreadySeen) {
       enqueue(task.state, { id: task.id, turnId: task.turnId });
     }
   }
@@ -406,6 +416,14 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
       : channel.state === 'disconnected' ? RETRY_MS[Math.min(channel.failures, RETRY_MS.length - 1)] : null;
     if (delay !== null) setTimer(name, delay, () => { void runChannel(name); });
   }
+  function markTaskTrackingInterrupted() {
+    for (const task of tasks.values()) {
+      if (task.turnId && ['active', 'waiting'].includes(task.state)) {
+        resumableTurns.set(task.id, { turnId: task.turnId, interrupted: true });
+      }
+      task.state = 'unknown';
+    }
+  }
   function receiveStatus(value) {
     const channel = channels[value?.channel];
     if (!channel) return;
@@ -417,7 +435,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     if (value.channel === 'quota' && state !== 'connected') quotaNeedsBaseline = true;
     if (value.channel === 'tasks' && ['disconnected', 'missing', 'unauthenticated', 'unsupported'].includes(state)) {
       idleTransitions.clear();
-      for (const task of tasks.values()) task.state = 'unknown';
+      markTaskTrackingInterrupted();
     }
     const alertCleared = pruneAlerts();
     armChannel(value.channel);
@@ -482,6 +500,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     if (value.removed) {
       terminalSeen.delete(value.id);
       idleTransitions.delete(value.id);
+      resumableTurns.delete(value.id);
       if (tasks.delete(value.id)) { pruneAlerts(); notify(); }
       return;
     }
@@ -494,7 +513,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     };
     if (!previous && tasks.size === 64) {
       const oldest = tasks.keys().next().value; tasks.delete(oldest); terminalSeen.delete(oldest);
-      idleTransitions.delete(oldest);
+      idleTransitions.delete(oldest); resumableTurns.delete(oldest);
     }
     tasks.set(task.id, task);
     const taskGeneration = generation;
@@ -568,7 +587,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     const refreshEpoch = connectionEpoch;
     quotaNeedsBaseline = true;
     clearAlerts(); armStale();
-    for (const task of tasks.values()) task.state = 'unknown';
+    markTaskTrackingInterrupted();
     onClear();
     if (enabled && !closed && generation === refreshGeneration && connectionEpoch === refreshEpoch && connection === null) {
       await openConnection();

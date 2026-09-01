@@ -20,7 +20,7 @@ function fixture(load) {
     setAlwaysOnTop() {}
     setVisibleOnAllWorkspaces() {}
     setHiddenInMissionControl() {}
-    setBounds() {}
+    setBounds(bounds) { this.bounds = { ...bounds }; }
     setIgnoreMouseEvents() {}
     loadFile() { return load(windows.length); }
     showInactive() { this.visible = true; }
@@ -87,4 +87,16 @@ test('加载过程中收起气泡，加载完成也不再弹出', async t => {
   finishLoad();
   await flush();
   assert.equal(f.windows[0].visible, false);
+});
+
+test('渲染层测得长文案高度后只调整当前气泡', async t => {
+  const f = fixture(() => Promise.resolve());
+  t.after(() => f.bubble.destroy());
+  f.show(1);
+  await flush();
+  assert.equal(f.windows[0].bounds.height, 86);
+  assert.equal(f.bubble.resize({ id: 1, height: 146 }), true);
+  assert.equal(f.windows[0].bounds.height, 146);
+  assert.equal(f.bubble.resize({ id: 0, height: 180 }), false);
+  assert.equal(f.windows[0].bounds.height, 146);
 });

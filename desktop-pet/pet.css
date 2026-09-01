@@ -41,3 +41,19 @@ body {
   filter: drop-shadow(0 4px 5px rgba(66, 60, 52, 0.08));
   transition: transform 180ms ease-out;
 }
+
+@keyframes codex-working-breathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-1.5%) scale(1.018); }
+}
+
+#pet[data-codex-working="true"][data-motion-owner="none"]:not(.dragging) svg {
+  animation: codex-working-breathe 1.8s ease-in-out infinite;
+  transform-origin: 50% 62%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #pet[data-codex-working="true"][data-motion-owner="none"]:not(.dragging) svg {
+    animation: none;
+  }
+}
