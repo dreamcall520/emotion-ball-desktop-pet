@@ -76,6 +76,109 @@
     });
   }
 
+  const gallery = document.querySelector('[data-gallery]');
+
+  if (gallery) {
+    const slides = Array.from(gallery.querySelectorAll('[data-gallery-slide]'));
+    const controls = Array.from(gallery.querySelectorAll('[data-gallery-control]'));
+    const playbackButton = gallery.querySelector('[data-gallery-playback]');
+    const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let galleryIndex = 0;
+    let galleryTimer = null;
+    let galleryVisible = false;
+    let galleryHovered = false;
+    let galleryFocused = false;
+    let galleryPaused = false;
+
+    function stopGalleryTimer() {
+      window.clearTimeout(galleryTimer);
+      galleryTimer = null;
+    }
+
+    function renderGallery(nextIndex) {
+      galleryIndex = (nextIndex + slides.length) % slides.length;
+      slides.forEach((slide, index) => {
+        const isActive = index === galleryIndex;
+        slide.classList.toggle('is-active', isActive);
+        slide.setAttribute('aria-hidden', String(!isActive));
+      });
+      controls.forEach((control, index) => {
+        const isActive = index === galleryIndex;
+        control.classList.toggle('is-active', isActive);
+        control.setAttribute('aria-selected', String(isActive));
+        control.tabIndex = isActive ? 0 : -1;
+      });
+    }
+
+    function scheduleGallery() {
+      stopGalleryTimer();
+      if (!galleryVisible || galleryHovered || galleryFocused || galleryPaused || document.hidden || reducedMotionQuery.matches) return;
+      galleryTimer = window.setTimeout(() => {
+        renderGallery(galleryIndex + 1);
+        scheduleGallery();
+      }, 5200);
+    }
+
+    controls.forEach((control, index) => {
+      control.addEventListener('click', () => {
+        renderGallery(index);
+        scheduleGallery();
+      });
+      control.addEventListener('keydown', event => {
+        const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
+        if (!keys.includes(event.key)) return;
+        event.preventDefault();
+        const nextIndex = event.key === 'Home'
+          ? 0
+          : event.key === 'End'
+            ? controls.length - 1
+            : galleryIndex + (event.key === 'ArrowRight' ? 1 : -1);
+        renderGallery(nextIndex);
+        controls[galleryIndex].focus();
+      });
+    });
+
+    playbackButton.addEventListener('click', () => {
+      galleryPaused = !galleryPaused;
+      playbackButton.setAttribute('aria-pressed', String(galleryPaused));
+      playbackButton.textContent = galleryPaused ? '继续切换' : '暂停切换';
+      scheduleGallery();
+    });
+
+    gallery.addEventListener('pointerenter', () => {
+      galleryHovered = true;
+      stopGalleryTimer();
+    });
+    gallery.addEventListener('pointerleave', () => {
+      galleryHovered = false;
+      scheduleGallery();
+    });
+    gallery.addEventListener('focusin', () => {
+      galleryFocused = true;
+      stopGalleryTimer();
+    });
+    gallery.addEventListener('focusout', event => {
+      if (gallery.contains(event.relatedTarget)) return;
+      galleryFocused = false;
+      scheduleGallery();
+    });
+    document.addEventListener('visibilitychange', scheduleGallery);
+    reducedMotionQuery.addEventListener?.('change', scheduleGallery);
+
+    if ('IntersectionObserver' in window) {
+      const galleryObserver = new IntersectionObserver(([entry]) => {
+        galleryVisible = entry.isIntersecting;
+        scheduleGallery();
+      }, { threshold: 0.35 });
+      galleryObserver.observe(gallery);
+    } else {
+      galleryVisible = true;
+    }
+
+    renderGallery(0);
+    scheduleGallery();
+  }
+
   function showToast(message) {
     window.clearTimeout(toastTimer);
     toast.textContent = message;
