@@ -35,9 +35,10 @@ function createActivityMonitor({
     try {
       const cursor = screen.getCursorScreenPoint();
       const petBounds = win.getBounds();
-      const sameDisplay = screen.getDisplayNearestPoint(cursor).id ===
-        screen.getDisplayMatching(petBounds).id;
-      const packet = { cursor, petBounds, sameDisplay, idleSeconds, locked: false };
+      const petDisplay = screen.getDisplayMatching(petBounds);
+      const sameDisplay = screen.getDisplayNearestPoint(cursor).id === petDisplay.id;
+      const workArea = { ...petDisplay.workArea };
+      const packet = { cursor, petBounds, workArea, sameDisplay, idleSeconds, locked: false };
       const changed = !lastPacket || JSON.stringify(packet) !== JSON.stringify(lastPacket);
       if (changed || idleDue) {
         lastPacket = packet;

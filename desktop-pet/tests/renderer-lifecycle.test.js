@@ -169,16 +169,52 @@ test('宿主请求同代次设置时也重新上报一次可用性', () => {
   assert.equal(r.host.availability.length, 2);
 });
 
-test('执行中任务让球球进入专注陪伴，用户互动优先且任务结束后停止', () => {
+test('执行中任务只间歇展示思考动效，用户互动优先且任务结束后停止', () => {
   const r = createRenderer();
   r.codexSettings({ enabled: true, generation: 1, activeTaskCount: 1 });
   assert.equal(r.pet.dataset.codexWorking, 'true');
   assert.equal(r.pet.dataset.codexActiveTasks, '1');
+  assert.equal(r.pet.dataset.codexThoughtSide, 'right');
+  assert.equal(r.engine.emotionId, '51');
+  assert.equal(r.engine._gaze.tx, 24);
+  assert.equal(r.engine._gaze.ty, -15);
+  r.activity(false, {
+    petBounds: { x: 900, y: 100, width: 80, height: 80 },
+    workArea: { x: 0, y: 0, width: 1000, height: 700 }
+  });
+  assert.equal(r.pet.dataset.codexThoughtSide, 'left');
+  assert.equal(r.engine._gaze.tx, -24);
+  r.advanceTo(2399);
+  assert.equal(r.pet.dataset.codexWorking, 'true');
+  r.advanceTo(2400);
+  assert.equal(r.pet.dataset.codexWorking, 'false', '首轮后应回到安静陪伴');
+  assert.notEqual(r.engine.emotionId, '51');
+  r.advanceTo(17999);
+  assert.equal(r.pet.dataset.codexWorking, 'false', '长任务不能一直展示思考动效');
+  r.advanceTo(18000);
+  assert.equal(r.pet.dataset.codexWorking, 'true', '间隔后只短暂再提醒一轮');
   r.click();
   assert.equal(r.pet.dataset.codexWorking, 'false');
-  r.advanceTo(4000);
-  assert.equal(r.pet.dataset.codexWorking, 'true');
+  r.advanceTo(22000);
+  assert.equal(r.pet.dataset.codexWorking, 'false');
   r.codexSettings({ enabled: true, generation: 1, activeTaskCount: 0 });
+  assert.equal(r.pet.dataset.codexWorking, 'false');
+  assert.notEqual(r.engine.emotionId, '51');
+  assert.equal(r.timers.size, 0, '任务结束后不得残留思考定时器');
+});
+
+test('Codex 运行轻动作结束后，正在执行的任务获得完整思考展示轮次', () => {
+  const r = createRenderer();
+  r.codexSettings({ enabled: true, generation: 1, activeTaskCount: 1 });
+  r.command(codexCommand({ motion: 'sway' }));
+  const active = r.host.codexAcks.at(-1);
+  assert.equal(r.pet.dataset.codexWorking, 'false');
+  r.advanceTo(2300);
+  r.frame({ token: active.token, action: active.action, frame: { done: true } });
+  assert.equal(r.pet.dataset.codexWorking, 'true');
+  r.advanceTo(4699);
+  assert.equal(r.pet.dataset.codexWorking, 'true');
+  r.advanceTo(4700);
   assert.equal(r.pet.dataset.codexWorking, 'false');
 });
 

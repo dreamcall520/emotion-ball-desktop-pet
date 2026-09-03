@@ -51,7 +51,7 @@ const completeMarkers = [
   'SMOKE', 'BOUNCE', 'SLEEP_VISUAL', 'SLEEP_VISUAL_MICRO', 'USER_DATA', 'ACTIVITY_STATES', 'GAZE', 'TOUCH_DRAG', 'BUBBLE_REPLY',
   'BUBBLE_EDGES_SETTINGS', 'NATIVE_ACTIVITY', 'FIXED_COLOR', 'DOUBLE_CLICK', 'BODY_MOTION',
   'BODY_MOTION_INTERRUPTS', 'BODY_MOTION_EDGES',
-  'CODEX_SIMULATED', 'CODEX_TASK_MENU', 'CODEX_TASK_TITLE',
+  'CODEX_SIMULATED', 'CODEX_TASK_MENU', 'CODEX_TASK_TITLE', 'CODEX_THINKING',
   ...Object.values(SIZES).map(size => `CODEX_SIZE_${size.width}`),
   ...Object.values(SIZES).map(size => `CODEX_QUOTA_SIZE_${size.width}`),
   'CODEX_QUOTA_POLICY', 'CODEX_QUOTA_LABEL', 'CODEX_QUOTA_COMPACT', 'CODEX_QUOTA_BEAM',
@@ -89,8 +89,8 @@ test('只有旧动作标记不能冒充已完成 Codex 原生检查', async () =
   assert.match(missingTiny.errors, /CODEX_SIZE_80/);
 });
 
-test('缺少任务菜单或名称开关标记时烟测失败', async () => {
-  for (const marker of ['CODEX_TASK_MENU', 'CODEX_TASK_TITLE']) {
+test('缺少任务菜单、名称开关或思考动效标记时烟测失败', async () => {
+  for (const marker of ['CODEX_TASK_MENU', 'CODEX_TASK_TITLE', 'CODEX_THINKING']) {
     const result = await validateSmokeOutput(completeMarkers.filter(value => value !== marker));
     assert.equal(result.exitCode, 1, `缺少 ${marker} 时不能通过`);
     assert.match(result.errors, new RegExp(marker));

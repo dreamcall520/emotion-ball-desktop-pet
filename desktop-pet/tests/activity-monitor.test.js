@@ -80,7 +80,7 @@ test('活动采样只包含坐标、空闲时长和屏幕，不包含输入内�
     screen: {
       getCursorScreenPoint: () => ({ x: 10, y: 30 }),
       getDisplayNearestPoint: () => ({ id: 1 }),
-      getDisplayMatching: () => ({ id: 1 })
+      getDisplayMatching: () => ({ id: 1, workArea: { x: 0, y: 0, width: 1000, height: 700 } })
     },
     powerMonitor: { getSystemIdleTime: () => { idleReads++; return 42; } },
     getWindow: () => ({ isDestroyed: () => false, getBounds: () => ({ x: 0, y: 0, width: 80, height: 80 }) }),
@@ -90,7 +90,8 @@ test('活动采样只包含坐标、空闲时长和屏幕，不包含输入内�
   tick = 125;
   monitor.sampleNow();
   assert.equal(idleReads, 1);
-  assert.deepEqual(Object.keys(packets[0]).sort(), ['cursor', 'idleSeconds', 'locked', 'petBounds', 'sameDisplay']);
+  assert.deepEqual(Object.keys(packets[0]).sort(), ['cursor', 'idleSeconds', 'locked', 'petBounds', 'sameDisplay', 'workArea']);
+  assert.deepEqual(packets[0].workArea, { x: 0, y: 0, width: 1000, height: 700 });
   assert.equal(packets[0].idleSeconds, 42);
   monitor.pause();
   assert.equal(packets.at(-1).locked, true);
@@ -107,7 +108,8 @@ test('空闲检测失败时用未知值，不误判长时间离开', () => {
   const { createActivityMonitor } = require(file);
   let packet;
   const monitor = createActivityMonitor({
-    screen: { getCursorScreenPoint: () => ({ x: 0, y: 0 }), getDisplayNearestPoint: () => ({ id: 1 }), getDisplayMatching: () => ({ id: 2 }) },
+    screen: { getCursorScreenPoint: () => ({ x: 0, y: 0 }), getDisplayNearestPoint: () => ({ id: 1 }),
+      getDisplayMatching: () => ({ id: 2, workArea: { x: -500, y: 0, width: 500, height: 600 } }) },
     powerMonitor: { getSystemIdleTime: () => { throw new Error('not available'); } },
     getWindow: () => ({ isDestroyed: () => false, getBounds: () => ({ x: 20, y: 20, width: 80, height: 80 }) }),
     onSample: value => { packet = value; }
@@ -115,4 +117,5 @@ test('空闲检测失败时用未知值，不误判长时间离开', () => {
   monitor.sampleNow();
   assert.equal(packet.idleSeconds, null);
   assert.equal(packet.sameDisplay, false);
+  assert.deepEqual(packet.workArea, { x: -500, y: 0, width: 500, height: 600 });
 });

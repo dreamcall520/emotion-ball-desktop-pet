@@ -184,3 +184,14 @@ test('桌宠阴影在浅色背景下保持轻量', () => {
   assert.ok(Number(match[2]) <= 6, '阴影模糊范围不能超过 6px');
   assert.ok(Number(match[3]) <= 0.1, '阴影透明度不能超过 10%');
 });
+
+test('Codex 思考点使用独立顶部图层，不从眼睛节点生成', () => {
+  const html = fs.readFileSync(path.resolve(__dirname, '../index.html'), 'utf8');
+  const css = fs.readFileSync(path.resolve(__dirname, '../pet.css'), 'utf8');
+  assert.match(html, /id="codex-thoughts"[^>]*aria-hidden="true"/);
+  assert.equal((html.match(/class="codex-thought-dot"/g) || []).length, 3);
+  assert.match(css, /#codex-thoughts\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*0;/s);
+  assert.match(css, /#pet\[data-codex-working="true"\][^}]*\+\s*#codex-thoughts/s);
+  assert.match(css, /#pet\[data-codex-thought-side="left"\][^}]*\+\s*#codex-thoughts/s);
+  assert.doesNotMatch(html, /eb-eye[^\n]*codex-thought/i);
+});

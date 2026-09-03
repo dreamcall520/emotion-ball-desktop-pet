@@ -43,7 +43,12 @@
   let lastCodexAlertId = 0;
   let lastAvailability = null;
   let codexActiveTaskCount = 0;
+  let codexThinking = false;
+  let codexThinkingVisible = false;
+  let codexThinkingTimer = null;
   const listeners = [];
+  const CODEX_THINKING_BURST_MS = 2400;
+  const CODEX_THINKING_REST_MS = 15600;
 
   function canShowCodex() {
     return codexEnabled && Boolean(lastSample) && !lastSample.locked && !companion.manualSleep &&
@@ -59,12 +64,56 @@
     desktop.codexAvailability({ generation: codexGeneration, pageEpoch: codexPageEpoch, available });
   }
 
+  function stopCodexThinkingCadence() {
+    clearTimeout(codexThinkingTimer);
+    codexThinkingTimer = null;
+    codexThinkingVisible = false;
+  }
+
+  function scheduleCodexThinkingPhase(visible, delay) {
+    clearTimeout(codexThinkingTimer);
+    codexThinkingTimer = setTimeout(() => {
+      codexThinkingTimer = null;
+      if (!codexEnabled || codexActiveTaskCount <= 0) return;
+      codexThinkingVisible = visible;
+      syncCodexWorking();
+      scheduleCodexThinkingPhase(!visible,
+        visible ? CODEX_THINKING_BURST_MS : CODEX_THINKING_REST_MS);
+    }, delay);
+  }
+
+  function startCodexThinkingCadence() {
+    stopCodexThinkingCadence();
+    codexThinkingVisible = true;
+    scheduleCodexThinkingPhase(false, CODEX_THINKING_BURST_MS);
+  }
+
   function syncCodexWorking() {
-    const working = codexEnabled && codexActiveTaskCount > 0 && Boolean(lastSample) && !lastSample.locked &&
+    const eligible = codexEnabled && codexActiveTaskCount > 0 && Boolean(lastSample) && !lastSample.locked &&
       !companion.manualSleep && currentState.mode !== 'sleep' && !dragState && !singleClickTimer && !helloTimer &&
       performance.now() >= actionUntil && !activeMotion;
+    const working = eligible && codexThinkingVisible;
+    const petBounds = lastSample?.petBounds;
+    const workArea = lastSample?.workArea;
+    const hasGeometry = [petBounds?.x, petBounds?.width, workArea?.x, workArea?.width]
+      .every(Number.isFinite) && petBounds.width > 0 && workArea.width > 0;
+    const side = hasGeometry && petBounds.x + petBounds.width / 2 > workArea.x + workArea.width / 2
+      ? 'left' : 'right';
     petElement.dataset.codexWorking = working ? 'true' : 'false';
     petElement.dataset.codexActiveTasks = String(codexActiveTaskCount);
+    petElement.dataset.codexThoughtSide = side;
+    if (!ball) return;
+    if (working) {
+      codexThinking = true;
+      showEmotion('51');
+      setBallGaze({ x: side === 'left' ? -1 : 1, y: -1 });
+    } else if (codexThinking) {
+      codexThinking = false;
+      restoreState();
+      if (!activeMotion && performance.now() >= actionUntil) {
+        setBallGaze(!companion.manualSleep ? currentState.gaze : null);
+      }
+    }
   }
 
   function observe(callback) {
@@ -109,6 +158,12 @@
     id: '50', name: '安静陪伴', group: 'custom', antics: false,
     anims: []
   });
+  const thinkingDefinition = EmotionBall.config.get('30').raw;
+  EmotionBall.config.register({
+    ...thinkingDefinition,
+    id: '51', name: 'Codex 思考', group: 'custom', antics: false,
+    body: { ...thinkingDefinition.body, orbit: 0 }
+  });
 
   function createBall(emotionId) {
     const nextCompactMode = window.innerWidth <= 120;
@@ -137,6 +192,11 @@
 
   function showEmotion(id) {
     if (ball.emotionId !== id) ball.setEmotion(id);
+  }
+
+  function setBallGaze(gaze) {
+    if (gaze) ball.setGaze(gaze.x, gaze.y);
+    else ball.clearGaze();
   }
 
   function clearAction() {
@@ -214,10 +274,10 @@
       desktop.say('sleep');
     }
     if (!dragState?.dragged && !companion.manualSleep && currentState.gaze) {
-      ball.setGaze(currentState.gaze.x, currentState.gaze.y);
+      setBallGaze(currentState.gaze);
       petElement.dataset.gaze = `${currentState.gaze.x.toFixed(2)},${currentState.gaze.y.toFixed(2)}`;
     } else {
-      ball.clearGaze();
+      setBallGaze(null);
       petElement.dataset.gaze = '0,0';
     }
     if (!companion.manualSleep && ['awake', 'focus'].includes(currentState.mode) &&
@@ -287,10 +347,14 @@
     if (!activeMotion || !packet || packet.token !== activeMotion.token ||
         packet.action !== activeMotion.action || !packet.frame) return;
     if (packet.frame.done === true) {
+      const finishedOwner = activeMotion.owner;
       activeMotion = null;
       petElement.dataset.motionOwner = 'none';
       ball.stopMotion();
       restoreState();
+      if (finishedOwner === 'codex' && codexEnabled && codexActiveTaskCount > 0) {
+        startCodexThinkingCadence();
+      }
     } else ball.setMotionFrame(packet.frame);
   }
 
@@ -473,6 +537,7 @@
 
   onWindow('beforeunload', () => {
     codexEnabled = false;
+    stopCodexThinkingCadence();
     cancelPendingInteraction();
     clearAction();
     stopMotion();
@@ -485,6 +550,7 @@
   petElement.dataset.motionOwner = 'none';
   petElement.dataset.codexWorking = 'false';
   petElement.dataset.codexActiveTasks = '0';
+  petElement.dataset.codexThoughtSide = 'right';
   listeners.push(desktop.onCommand(observe(runCommand)));
   listeners.push(desktop.onMotion(observe(onMotion)));
   listeners.push(desktop.onActivity(observe(updateActivity)));
@@ -497,6 +563,7 @@
       !Number.isSafeInteger(settings.pageEpoch) || settings.pageEpoch <= 0 || settings.pageEpoch < codexPageEpoch ||
       typeof settings.enabled !== 'boolean') return;
     const changed = settings.generation !== codexGeneration || settings.pageEpoch !== codexPageEpoch;
+    const wasActive = codexEnabled && codexActiveTaskCount > 0;
     if (changed || !settings.enabled) cancelCodex();
     if (changed) lastCodexAlertId = 0;
     lastAvailability = null;
@@ -505,6 +572,9 @@
     codexEnabled = settings.enabled;
     codexActiveTaskCount = Number.isSafeInteger(settings.activeTaskCount) && settings.activeTaskCount >= 0 &&
       settings.activeTaskCount <= 64 ? settings.activeTaskCount : 0;
+    const isActive = codexEnabled && codexActiveTaskCount > 0;
+    if (!isActive) stopCodexThinkingCadence();
+    else if (changed || !wasActive) startCodexThinkingCadence();
   })));
   window.__petReady = true;
 })();

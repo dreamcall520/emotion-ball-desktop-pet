@@ -64,7 +64,7 @@ function runSmokeTest() {
         assert.match(output, /PET_BOUNCE_OK/);
         assert.match(output, /PET_SLEEP_VISUAL_OK/);
         assert.match(output, /PET_SLEEP_VISUAL_MICRO_OK/);
-        for (const marker of ['CODEX_SIMULATED', 'CODEX_TASK_MENU', 'CODEX_TASK_TITLE',
+        for (const marker of ['CODEX_SIMULATED', 'CODEX_TASK_MENU', 'CODEX_TASK_TITLE', 'CODEX_THINKING',
           ...BODY_MOTION_SIZES.map(size => `CODEX_SIZE_${size}`),
           ...QUOTA_LABEL_MARKERS,
           'CODEX_QUOTA_POLICY', 'CODEX_QUOTA_LABEL', 'CODEX_QUOTA_COMPACT', 'CODEX_QUOTA_BEAM',

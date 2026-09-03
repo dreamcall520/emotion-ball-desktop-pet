@@ -1020,6 +1020,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       process.stdout.write(`PET_CODEX_SIZE_${pixels}_OK\n`);
     }
 
+    await applyPetSize({ setSize, getSettings, pet, poll, sizeName: 'tiny', pixels: 80 });
     await begin('active');
     assert.equal(bubble.getWindow()?.isVisible(), false, '处理中只轻动作，不弹气泡');
     await poll(
@@ -1027,6 +1028,43 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       value => value === 'true',
       '处理中进入专注呼吸状态'
     );
+    const readThinkingView = () => page(`(() => {
+      const pet = document.getElementById('pet');
+      const thoughts = document.getElementById('codex-thoughts');
+      const dots = [...thoughts.querySelectorAll('.codex-thought-dot')];
+      const eyes = [...pet.querySelectorAll('.eb-eye')];
+      const dotRects = dots.map(dot => dot.getBoundingClientRect());
+      const eyeRects = eyes.map(eye => eye.getBoundingClientRect());
+      const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+      return {
+        working: pet.dataset.codexWorking,
+        emotion: pet.dataset.emotion,
+        side: pet.dataset.codexThoughtSide,
+        dotCount: dots.length,
+        layerOutsideSvg: !thoughts.closest('svg') && thoughts.parentElement === document.body,
+        visible: Number.parseFloat(getComputedStyle(thoughts).opacity) > 0.9,
+        overlapsEye: dotRects.some(dot => eyeRects.some(eye => overlaps(dot, eye))),
+        topGap: Math.min(...eyeRects.map(rect => rect.top)) - Math.max(...dotRects.map(rect => rect.bottom))
+      };
+    })()`);
+    const thinkingView = await poll(readThinkingView,
+      value => value.working === 'true' && value.visible === true,
+      '思考点图层完成淡入');
+    assert.deepEqual({ working: thinkingView.working, emotion: thinkingView.emotion,
+      dotCount: thinkingView.dotCount, layerOutsideSvg: thinkingView.layerOutsideSvg,
+      visible: thinkingView.visible, overlapsEye: thinkingView.overlapsEye },
+    { working: 'true', emotion: '51', dotCount: 3, layerOutsideSvg: true,
+      visible: true, overlapsEye: false });
+    assert.ok(['left', 'right'].includes(thinkingView.side));
+    assert.ok(thinkingView.topGap >= 2, `思考点必须与眼睛保持空隙：${JSON.stringify(thinkingView)}`);
+    await capture(pet, 'codex-thinking-80');
+    await poll(
+      () => page("document.getElementById('pet').dataset.codexWorking"),
+      value => value === 'false',
+      '思考动效展示一轮后回到安静陪伴',
+      3500
+    );
+    process.stdout.write('PET_CODEX_THINKING_OK\n');
     const nativeMenu = getMenu();
     const taskItems = nativeMenu.getMenuItemById('codex-tasks').submenu.items;
     const taskLabels = taskItems.map(item => item.label);
