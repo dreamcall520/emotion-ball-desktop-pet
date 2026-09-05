@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 // sandbox 预加载不加载本地模块，只暴露固定的动作名称与数据字段。
 const motionIds = new Set(['hop', 'jelly', 'sway', 'peek', 'bow', 'spin']);
+const companionIds = new Set(['nuzzle', 'land', 'stretch']);
 
 function pointPayload(point) {
   return { x: point && point.x, y: point && point.y };
@@ -20,9 +21,16 @@ contextBridge.exposeInMainWorld('petDesktop', {
   bounce: () => ipcRenderer.send('pet:bounce'),
   stopMotion: () => ipcRenderer.send('pet:stop-motion'),
   playMotion: request => {
-    if (request && Number.isSafeInteger(request.token) && request.token > 0 && motionIds.has(request.action)) {
-      ipcRenderer.send('pet:motion-start', { token: request.token, action: request.action });
+    if (request && Number.isSafeInteger(request.token) && request.token > 0 &&
+      (motionIds.has(request.action) || companionIds.has(request.action))) {
+      ipcRenderer.send('pet:motion-start', { token: request.token, action: request.action,
+        side: request.side === 'left' ? 'left' : 'right', reducedMotion: request.reducedMotion === true });
     }
+  },
+  thought: request => {
+    if (typeof request?.visible !== 'boolean') return;
+    ipcRenderer.send('pet:thought', { visible: request.visible,
+      side: request.side === 'left' ? 'left' : 'right', reducedMotion: request.reducedMotion === true });
   },
   codexMotionReady: request => {
     if (request && Number.isSafeInteger(request.token) && request.token > 0 && motionIds.has(request.action) &&

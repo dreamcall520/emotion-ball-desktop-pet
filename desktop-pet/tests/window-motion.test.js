@@ -39,7 +39,7 @@ test('窗口和身体使用同一帧时间，结束回到原位且释放计时�
   const f = fixture();
   assert.equal(f.controller.start({ token: 1, action: 'hop' }), true);
   f.at(540);
-  assert.deepEqual(f.frames.at(-1), { token: 1, action: 'hop', frame: sampleMotion('hop', 540) });
+  assert.deepEqual(f.frames.at(-1), { token: 1, action: 'hop', side: 'right', frame: sampleMotion('hop', 540) });
   assert.deepEqual(f.moves.at(-1), { ...positionForMotion(f.origin, f.workArea, sampleMotion('hop', 540).window), animate: false });
   f.at(getMotion('hop').durationMs);
   assert.deepEqual(f.bounds, f.origin);
@@ -58,7 +58,7 @@ test('同屏工作区微变保留动作token、原始锚点及起始时间，不
   assert.deepEqual([...f.timers.keys()], pending);
   assert.equal(f.frames.some(packet => packet.frame.done), false);
   f.at(1000);
-  assert.deepEqual(f.frames.at(-1), { token: 1, action: 'bow', frame: sampleMotion('bow', 1000) });
+  assert.deepEqual(f.frames.at(-1), { token: 1, action: 'bow', side: 'right', frame: sampleMotion('bow', 1000) });
   f.at(1600);
   assert.equal(f.frames.at(-1).frame.done, true);
   assert.deepEqual(f.bounds, f.origin);
@@ -182,4 +182,85 @@ test('运行中隐藏会归位并结束，非法工作区不会排入计时器',
   f.workArea.width = 10;
   assert.equal(f.controller.start({ token: 2, action: 'bow' }), false);
   assert.equal(f.timers.size, 0);
+});
+
+test('新动作使用统一窗口轨迹，方向在启动时固定，完成和打断恢复原位', () => {
+  const companion = require('../lib/companion-motion');
+  const f = fixture();
+  const request = { token: 1, action: 'nuzzle', side: 'left' };
+  assert.equal(f.controller.start(request), true);
+  request.side = 'right';
+  f.at(1150);
+  assert.deepEqual(f.frames.at(-1), { token: 1, action: 'nuzzle', side: 'left', frame: companion.sample('nuzzle', 1150, 'left') });
+  assert.ok(f.bounds.x < f.origin.x);
+  f.at(3200);
+  assert.deepEqual(f.bounds, f.origin);
+  assert.equal(f.frames.at(-1).frame.emotionId, '50');
+  assert.equal(f.timers.size, 0);
+  f.controller.start({ token: 2, action: 'stretch', side: 'left' });
+  f.at(3480);
+  assert.ok(f.bounds.y < f.origin.y, '唤醒一圈真实移动窗口');
+  f.at(3743);
+  assert.ok(f.bounds.x > f.origin.x);
+  f.controller.stop();
+  assert.deepEqual(f.bounds, f.origin);
+  assert.equal(f.frames.at(-1).frame.done, true);
+  assert.deepEqual(f.frames.at(-1).frame.body, companion.neutralFrame().body);
+  assert.equal(f.timers.size, 0);
+});
+
+test('放下卡顿限制每帧50ms，慢帧不会跳变甩彩带，累计足够才完成', () => {
+  const companion = require('../lib/companion-motion');
+  const f = fixture();
+  assert.equal(f.controller.start({ token: 1, action: 'land', side: 'left' }), true);
+  f.at(800);
+  assert.deepEqual(f.frames.at(-1).frame, companion.sample('land', 50, 'left'));
+  f.at(816);
+  assert.deepEqual(f.frames.at(-1).frame, companion.sample('land', 66, 'left'));
+  f.at(10000);
+  assert.deepEqual(f.frames.at(-1).frame, companion.sample('land', 116, 'left'));
+  assert.equal(f.frames.at(-1).frame.done, false);
+  for (let t = 10016; t <= 12304; t += 16) f.at(t);
+  assert.equal(f.frames.at(-1).frame.done, true);
+  assert.deepEqual(f.bounds, f.origin);
+  assert.equal(f.timers.size, 0);
+});
+
+test('小圆路径在负坐标屏幕边缘限位，停止和过期回调不会继续移动', () => {
+  const f = fixture({ x: -800, y: 0, width: 80, height: 80 });
+  f.controller.start({ token: 1, action: 'stretch', side: 'right' });
+  for (let t = 16; t < 1600; t += 16) {
+    f.at(t);
+    assert.ok(f.bounds.x >= -800);
+    assert.ok(f.bounds.y >= 0);
+  }
+  const stale = f.callbacks.at(-1);
+  f.controller.start({ token: 2, action: 'nuzzle', side: 'left' });
+  const count = f.frames.length;
+  stale();
+  assert.equal(f.frames.length, count);
+  f.controller.stop();
+  assert.deepEqual(f.bounds, f.origin);
+  assert.equal(f.timers.size, 0);
+});
+
+test('减少动态时三个新动作保持中性且按正常时长结束，不产生转面或小圆位移', () => {
+  const companion = require('../lib/companion-motion');
+  for (const motion of companion.MOTIONS) {
+    const f = fixture();
+    assert.equal(f.controller.start({ token: 1, action: motion.id, side: 'left', reducedMotion: true }), true);
+    f.at(1150);
+    for (const packet of f.frames) {
+      assert.deepEqual(packet.frame.body, companion.neutralFrame().body);
+      assert.deepEqual(packet.frame.gaze, { x: 0, y: 0 });
+      assert.deepEqual(packet.frame.window, { x: 0, y: 0 });
+      assert.equal(packet.frame.emotionId, '50');
+      assert.equal(packet.frame.done, false);
+    }
+    assert.deepEqual(f.bounds, f.origin);
+    assert.ok(f.moves.every(move => move.x === f.origin.x && move.y === f.origin.y));
+    f.at(motion.durationMs);
+    assert.equal(f.frames.at(-1).frame.done, true, '放下也使用正常时长而非卡顿累计');
+    assert.equal(f.timers.size, 0);
+  }
 });

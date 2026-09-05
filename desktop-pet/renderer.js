@@ -11,6 +11,7 @@
     playMotion() {},
     codexMotionReady() {},
     codexAvailability() {},
+    thought() {},
     say() {},
     showContextMenu() {},
     onCommand() { return () => {}; },
@@ -46,9 +47,26 @@
   let codexThinking = false;
   let codexThinkingVisible = false;
   let codexThinkingTimer = null;
+  let facing = null;
+  let thoughtSignature = '';
   const listeners = [];
-  const CODEX_THINKING_BURST_MS = 2400;
-  const CODEX_THINKING_REST_MS = 15600;
+  const CODEX_THINKING_BURST_MS = 6000;
+  const thinkingRestMs = () => 25000 + Math.floor(Math.random() * 10001);
+  const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+
+  function syncFacing() {
+    if (dragState || activeMotion) return;
+    facing = PetFacing.resolve(lastSample?.petBounds, lastSample?.workArea, facing);
+    petElement.dataset.facing = facing;
+    ball?.setFacing(facing);
+  }
+
+  function syncThought(visible, side) {
+    const signature = visible ? `${side}:${reducedMotion()}` : '';
+    if (signature === thoughtSignature) return;
+    thoughtSignature = signature;
+    desktop.thought?.({ visible, side, reducedMotion: reducedMotion() });
+  }
 
   function canShowCodex() {
     return codexEnabled && Boolean(lastSample) && !lastSample.locked && !companion.manualSleep &&
@@ -68,6 +86,7 @@
     clearTimeout(codexThinkingTimer);
     codexThinkingTimer = null;
     codexThinkingVisible = false;
+    syncThought(false, facing);
   }
 
   function scheduleCodexThinkingPhase(visible, delay) {
@@ -78,7 +97,7 @@
       codexThinkingVisible = visible;
       syncCodexWorking();
       scheduleCodexThinkingPhase(!visible,
-        visible ? CODEX_THINKING_BURST_MS : CODEX_THINKING_REST_MS);
+        visible ? CODEX_THINKING_BURST_MS : thinkingRestMs());
     }, delay);
   }
 
@@ -93,17 +112,16 @@
       !companion.manualSleep && currentState.mode !== 'sleep' && !dragState && !singleClickTimer && !helloTimer &&
       performance.now() >= actionUntil && !activeMotion;
     const working = eligible && codexThinkingVisible;
-    const petBounds = lastSample?.petBounds;
-    const workArea = lastSample?.workArea;
-    const hasGeometry = [petBounds?.x, petBounds?.width, workArea?.x, workArea?.width]
-      .every(Number.isFinite) && petBounds.width > 0 && workArea.width > 0;
-    const side = hasGeometry && petBounds.x + petBounds.width / 2 > workArea.x + workArea.width / 2
-      ? 'left' : 'right';
+    syncFacing();
+    const side = facing || 'right';
     petElement.dataset.codexWorking = working ? 'true' : 'false';
     petElement.dataset.codexActiveTasks = String(codexActiveTaskCount);
     petElement.dataset.codexThoughtSide = side;
+    syncThought(working, side);
     if (!ball) return;
     if (working) {
+      // 若前一段被摸头、拖动或睡眠挡住，从真正可见时计满一轮。
+      if (!codexThinking) scheduleCodexThinkingPhase(false, CODEX_THINKING_BURST_MS);
       codexThinking = true;
       showEmotion('51');
       setBallGaze({ x: side === 'left' ? -1 : 1, y: -1 });
@@ -164,6 +182,7 @@
     id: '51', name: 'Codex 思考', group: 'custom', antics: false,
     body: { ...thinkingDefinition.body, orbit: 0 }
   });
+  CompanionMotion.registerEmotions(EmotionBall.config);
 
   function createBall(emotionId) {
     const nextCompactMode = window.innerWidth <= 120;
@@ -179,6 +198,7 @@
       idle: false,
       eyeScale: compactMode ? 1.5 : 1,
       lite: compactMode,
+      liteRibbons: true,
       fallbackId: '50',
       label: '球球桌面宠物'
     });
@@ -188,6 +208,7 @@
     };
     ball.on('change', ({ id }) => { petElement.dataset.emotion = id; });
     petElement.dataset.emotion = ball.emotionId;
+    ball.setFacing(facing || 'right');
   }
 
   function showEmotion(id) {
@@ -238,6 +259,7 @@
 
   function updateActivity(sample) {
     lastSample = sample;
+    syncFacing();
     const now = performance.now();
     const previousMode = currentState.mode;
     currentState = companion.update(sample, now);
@@ -265,14 +287,15 @@
       clearAction();
       stopMotion();
     }
-    if (currentState.welcome && !activeMotion && !dragState?.dragged && now >= actionUntil) {
-      playEmotion('01', 2250, 'welcome');
+    if (currentState.welcome && !wakeOnDoubleClick && !activeMotion && !dragState?.dragged && now >= actionUntil) {
+      playCompanionReaction('stretch', 'wake');
     } else {
       restoreState();
     }
     if (currentState.mode === 'sleep' && previousMode !== 'sleep' && !companion.manualSleep) {
       desktop.say('sleep');
     }
+    if (activeMotion) return;
     if (!dragState?.dragged && !companion.manualSleep && currentState.gaze) {
       setBallGaze(currentState.gaze);
       petElement.dataset.gaze = `${currentState.gaze.x.toFixed(2)},${currentState.gaze.y.toFixed(2)}`;
@@ -299,7 +322,7 @@
     companion.setManualSleep(false, performance.now());
     currentState = { ...currentState, mode: 'awake', emotionId: '50' };
     petElement.dataset.mode = 'awake';
-    playEmotion('01', 2250, 'welcome');
+    playCompanionReaction('stretch', 'wake');
   }
 
   function sleep() {
@@ -334,7 +357,7 @@
     clearAction();
     stopMotion();
     noteInteraction();
-    activeMotion = { token: ++nextMotionToken, action, owner: 'user' };
+    activeMotion = { token: ++nextMotionToken, action, owner: 'user', side: facing || 'right' };
     petElement.dataset.motionOwner = 'user';
     ball.setEmotion(motion.emotion);
     ball.setMotionFrame(InteractionMotion.sampleMotion(action, 0));
@@ -343,9 +366,30 @@
     if (speak) desktop.say({ event: 'play', motion: action });
   }
 
+  function playCompanionReaction(action, scene) {
+    const motion = CompanionMotion.getMotion(action);
+    if (!motion || lastSample?.locked || companion.manualSleep) return;
+    cancelPendingInteraction();
+    clearAction();
+    stopMotion();
+    syncFacing();
+    activeMotion = { token: ++nextMotionToken, action, owner: 'user', side: facing || 'right' };
+    petElement.dataset.motionOwner = 'user';
+    petElement.dataset.lastAction = action;
+    ball.setEmotion(reducedMotion() ? '50' : motion.emotion);
+    ball.setMotionFrame(reducedMotion() ? CompanionMotion.neutralFrame() : CompanionMotion.sample(action, 0, activeMotion.side));
+    desktop.playMotion({ ...activeMotion, reducedMotion: reducedMotion() });
+    if (scene) desktop.say(scene);
+  }
+
   function onMotion(packet) {
     if (!activeMotion || !packet || packet.token !== activeMotion.token ||
         packet.action !== activeMotion.action || !packet.frame) return;
+    if (packet.side === 'left' || packet.side === 'right') {
+      facing = packet.side;
+      petElement.dataset.facing = facing;
+      ball.setFacing(facing);
+    }
     if (packet.frame.done === true) {
       const finishedOwner = activeMotion.owner;
       activeMotion = null;
@@ -362,6 +406,13 @@
     if (companion.manualSleep || lastSample?.locked) return;
     if (activeMotion) stopMotion();
     noteInteraction();
+    if (speak && codexEnabled && codexActiveTaskCount > 0) {
+      clearAction();
+      startCodexThinkingCadence();
+      desktop.say('thought');
+      petElement.dataset.lastAction = 'thought';
+      return;
+    }
     playEmotion('10', 3200, speak ? 'play' : null);
     const action = PetBehavior.chooseClickAction(Math.random());
     petElement.dataset.lastAction = action;
@@ -452,8 +503,7 @@
         clearTimeout(helloTimer);
         helloTimer = null;
         noteInteraction();
-        playEmotion('19', 2400, 'pet');
-        petElement.dataset.lastAction = 'pet';
+        playCompanionReaction('nuzzle', 'pet');
       }
     }
 
@@ -490,8 +540,8 @@
     desktop.endDrag();
     noteInteraction();
     if (wasDragged && !companion.manualSleep) {
-      playEmotion('19', 1000, cancelled ? null : 'drop');
-      petElement.dataset.lastAction = 'drop';
+      if (!cancelled) playCompanionReaction('land', 'drop');
+      else restoreState();
     }
     if (!cancelled && !wasDragged && event.button === 0) scheduleSingleClick();
   }

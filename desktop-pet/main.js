@@ -26,6 +26,9 @@ const { createActivityMonitor, createPowerGuard } = require('./lib/activity-moni
 const { DialogueDirector } = require('./lib/dialogue');
 const { createBubbleWindow } = require('./lib/bubble-window');
 const { getMotion } = require('./lib/interaction-motion');
+const CompanionMotion = require('./lib/companion-motion');
+const PetFacing = require('./lib/pet-facing');
+const { createThoughtWindow } = require('./lib/thought-window');
 const { createWindowMotion } = require('./lib/window-motion');
 const { createCodexCompanion } = require('./lib/codex-companion');
 const { buildCodexMenu, buildCodexResultMenu, resolveCodexAction } = require('./lib/codex-menu');
@@ -46,6 +49,7 @@ let isQuitting = false;
 let activityMonitor = null;
 let dialogue = null;
 let bubble = null;
+let thoughts = null;
 let bubbleVisibilityBinding = null;
 let quotaLabel = null;
 let screenLocked = false;
@@ -200,6 +204,7 @@ function bindBubbleVisibilityEvents() {
       return;
     }
     repositionQuotaLabel();
+    thoughts?.reposition();
   };
   binding.onClosed = () => {
     if (bubbleVisibilityBinding !== binding) return;
@@ -308,6 +313,7 @@ function dismissCodexPresentation() {
 }
 
 function invalidateCodexPage() {
+  thoughts?.hide();
   codexPageEpoch++;
   codexPageReady = false;
   codexRenderer = null;
@@ -321,6 +327,7 @@ function syncCodexSettings(snapshot, force = false) {
     : 0;
   const next = { enabled: snapshot.enabled, generation: snapshot.generation,
     pageEpoch: codexPageEpoch, activeTaskCount };
+  if (!next.enabled || activeTaskCount === 0) thoughts?.hide();
   if (codexNotice?.generation !== next.generation) codexNotice = null;
   // 导航清理会同步触发状态更新；新页面代次只能在新页面 ready 后发送。
   if (!codexPageReady || !petWindow || petWindow.isDestroyed()) return;
@@ -524,6 +531,7 @@ function stopWindowBounce(restorePosition = true) {
 }
 
 function stopMotion({ restore = true, notify = true, notifyRenderer = true } = {}) {
+  thoughts?.hide();
   dismissCodexPresentation();
   stopWindowBounce(restore);
   windowMotion.stop({ restore, notify });
@@ -673,6 +681,7 @@ function setAlwaysOnTop(enabled) {
   });
   safelyInvokeWindow('气泡窗口置顶', () => bubble?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('额度标签置顶', () => quotaLabel?.setAlwaysOnTop(settings.alwaysOnTop));
+  thoughts?.setAlwaysOnTop(settings.alwaysOnTop);
   persistSettings();
   refreshTrayMenu();
 }
@@ -880,6 +889,7 @@ async function finishSmokeTest() {
 
     await require('./scripts/verify-codex-companion').verifyCodexCompanion({
       pet: petWindow, bubble, quotaLabel, monitor: activityMonitor, screen, BrowserWindow,
+      getThoughtWindow: () => thoughts?.getWindow(),
       command: sendCommand, setSetting: setCompanionSetting, setSize: setPetSize,
       getMenu: () => Menu.buildFromTemplate(menuTemplate()), getSettings: () => ({ ...settings }),
       prepare: initializeCodexCompanion, getController: () => codexCompanion,
@@ -1054,7 +1064,7 @@ function createPetWindow() {
     if (isCurrentPetWindow()) invalidateCodexPage();
   });
   createdPetWindow.on('move', () => {
-    if (isCurrentPetWindow()) repositionBubble();
+    if (isCurrentPetWindow()) { thoughts?.hide(); repositionBubble(); }
   });
   createdPetWindow.on('resize', () => {
     if (!isCurrentPetWindow()) return;
@@ -1088,6 +1098,7 @@ function createPetWindow() {
     destroyBubbleSafely();
     if (!isCurrentPetWindow()) return;
     safelyInvokeWindow('关闭时额度标签销毁', () => quotaLabel?.destroy());
+    thoughts?.destroy();
     if (!isCurrentPetWindow()) return;
     safelyInvokeWindow('关闭时对白清理', () => dialogue?.dismiss());
     if (isCurrentPetWindow()) petWindow = null;
@@ -1108,7 +1119,16 @@ function createPetWindow() {
 }
 
 function registerIpc() {
+  ipcMain.on('pet:thought', (event, request) => {
+    if (!fromPetWindow(event) || typeof request?.visible !== 'boolean') return;
+    if (!request.visible) { thoughts?.hide(); return; }
+    const snapshot = codexCompanion?.getSnapshot();
+    if (!settings.codexEnabled || !codexPageReady || screenLocked || dragState || hostMotion ||
+        !petWindow.isVisible() || !snapshot?.tasks.items.some(task => task.state === 'active')) return;
+    thoughts?.show(request);
+  });
   ipcMain.on('pet:say', (event, scene) => {
+    if (scene === 'thought' && !codexCompanion?.getSnapshot().tasks.items.some(task => task.state === 'active')) return;
     if (fromPetWindow(event)) showDialogue(scene);
   });
 
@@ -1174,11 +1194,16 @@ function registerIpc() {
 
   ipcMain.on('pet:motion-start', (event, request) => {
     if (!fromPetWindow(event) || screenLocked || !petWindow.isVisible() || !request ||
-      !Number.isSafeInteger(request.token) || request.token <= 0 || !getMotion(request.action)) return;
+      !Number.isSafeInteger(request.token) || request.token <= 0 ||
+      (!getMotion(request.action) && !CompanionMotion.getMotion(request.action))) return;
+    thoughts?.hide();
     dismissCodexPresentation();
     stopWindowBounce();
     hostMotion = { owner: 'user', token: request.token, action: request.action, anchor: petWindow.getBounds() };
-    if (!windowMotion.start({ token: request.token, action: request.action })) hostMotion = null;
+    const bounds = petWindow.getBounds();
+    const side = PetFacing.resolve(bounds, screen.getDisplayMatching(bounds).workArea, request.side);
+    if (!windowMotion.start({ token: request.token, action: request.action, side,
+      reducedMotion: request.reducedMotion === true })) hostMotion = null;
   });
 
   ipcMain.on('pet:codex-availability', (event, packet) => {
@@ -1206,8 +1231,11 @@ function registerIpc() {
       return;
     }
     codexPresentation.token = request.token;
+    thoughts?.hide();
     hostMotion = { owner: 'codex', token: request.token, action: request.action, anchor: petWindow.getBounds() };
-    if (!windowMotion.start({ token: request.token, action: request.action })) {
+    const bounds = petWindow.getBounds();
+    if (!windowMotion.start({ token: request.token, action: request.action,
+      side: PetFacing.resolve(bounds, screen.getDisplayMatching(bounds).workArea) })) {
       dismissCodexPresentation();
       return;
     }
@@ -1255,6 +1283,9 @@ async function bootstrap() {
   settingsFile = path.join(app.getPath('userData'), 'settings.json');
   settings = loadSettings(settingsFile);
   dialogue = new DialogueDirector({ now: performance.now(), enabled: settings.bubblesEnabled });
+  thoughts = createThoughtWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
+    getObstacle: quotaObstacleBounds,
+    alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('思考光迹窗口', error) });
   bubble = createBubbleWindow({
     BrowserWindow, screen, getPetWindow: () => petWindow,
     alwaysOnTop: settings.alwaysOnTop,
@@ -1323,6 +1354,7 @@ if (!hasSingleInstanceLock) {
     safelyInvokeWindow('退出时活动监测清理', () => activityMonitor?.stop());
     destroyBubbleSafely();
     safelyInvokeWindow('退出时额度标签销毁', () => quotaLabel?.destroy());
+    thoughts?.destroy();
     safelyInvokeWindow('退出时对白清理', () => dialogue?.dismiss());
   });
 

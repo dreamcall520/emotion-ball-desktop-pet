@@ -322,6 +322,7 @@
     this.ball = EB.createBall(el, Object.assign({}, opts, {
       lite: opts.lite != null ? opts.lite : opts.autostart === false
     }));
+    this._facing = opts.facing === 'left' ? 'left' : 'right';
     this._seed = Math.random() * 100;
     this._events = {};
     this._gaze = { x: 0, y: 0, tx: 0, ty: 0 };
@@ -497,6 +498,14 @@
     clearGaze: function () {
       this._gaze.tx = 0;
       this._gaze.ty = 0;
+      return this;
+    },
+    /* 脸部朝向：只交给渲染层镜像眼睛与睡眠提示，不改变屏幕坐标注视。 */
+    setFacing: function (side) {
+      if (side !== 'left' && side !== 'right') return this;
+      this._facing = side;
+      if (this.ball.setFacing) this.ball.setFacing(side);
+      if (!this._active) this.renderStatic();
       return this;
     },
     setStyle: function (style) {

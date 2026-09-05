@@ -5,7 +5,7 @@ const path = require('node:path');
 const { PHRASES, DialogueDirector } = require('../lib/dialogue');
 const { completionText } = require('../lib/codex-text');
 
-const events = ['hello', 'pet', 'drag', 'drop', 'welcome', 'work', 'play', 'sleep'];
+const events = ['hello', 'pet', 'drag', 'drop', 'welcome', 'wake', 'thought', 'work', 'play', 'sleep'];
 
 const codexAlert = (overrides = {}) => ({ id: 7, generation: 2, kind: 'completed',
   text: '这轮有结果啦，去看看？', taskIds: ['11111111-1111-4111-8111-111111111111'], ...overrides });
@@ -118,7 +118,7 @@ test('18个 emoji 任务名生成的合并文案按 Unicode 字符通过气泡�
 });
 
 for (const motion of ['hop', 'jelly', 'sway', 'peek', 'bow', 'spin']) {
-  test(`${motion}专属气泡有两句且再来一次绑定原动作`, () => {
+  test(`${motion}专属气泡保留旧词且再来一次绑定原动作`, () => {
     const director = new DialogueDirector({ random: () => 0 });
     const first = director.offer({ event: 'play', motion }, 0);
     assert.ok(first, '动作应有专属气泡');
@@ -189,7 +189,38 @@ test('每个场景至少有三句不同的短中文', () => {
 test('日常互动每个场景至少八句，清醒对白不再混入睡觉文案', () => {
   for (const event of events.filter(value => value !== 'sleep')) {
     assert.ok(new Set(PHRASES[event]).size >= 8, `${event} 需要更多日常回应`);
-    assert.ok(PHRASES[event].every(text => !/睡|眠|眯|晚安/.test(text)), event);
+    if (event !== 'wake') {
+      // 摸头时眯眼是放松回应，仍禁止混入入睡文案。
+      const sleeping = event === 'pet' ? /睡|眠|晚安/ : /睡|眠|眯|晚安/;
+      assert.ok(PHRASES[event].every(text => !sleeping.test(text)), event);
+    }
+  }
+});
+
+test('新增摸头与唤醒文案只描述对应动作，普通欢迎不混入刚醒来的状态', () => {
+  assert.ok(PHRASES.pet.includes('摸得我眯起眼啦。'));
+  assert.ok(PHRASES.wake.includes('睡意跑掉，我醒啦。'));
+  assert.ok(PHRASES.welcome.every(text => !/睡|醒|眯/.test(text)));
+  for (const event of events) assert.equal(new Set(PHRASES[event]).size, PHRASES[event].length, event);
+});
+
+test('用户主动查询的思考文案沿用六秒节流并与工作陪伴分开', () => {
+  const director = new DialogueDirector({ random: () => 0 });
+  const first = director.offer('thought', 0);
+  assert.ok(PHRASES.thought.includes(first.text));
+  assert.equal(director.offer('thought', 5999), null);
+  assert.notEqual(director.offer('thought', 6000).text, first.text);
+  assert.equal(director.offer('work', 10000), null, '新增词库不缩短主动陪伴的十分钟限制');
+});
+
+test('六种双击动作各保留两句并追加两句可选择且不连着重复', () => {
+  for (const motion of ['hop', 'jelly', 'sway', 'peek', 'bow', 'spin']) {
+    const texts = new Set();
+    for (let index = 0; index < 4; index++) {
+      const director = new DialogueDirector({ random: () => index / 4 });
+      texts.add(director.offer({ event: 'play', motion }, 0).text);
+    }
+    assert.equal(texts.size, 4, motion);
   }
 });
 

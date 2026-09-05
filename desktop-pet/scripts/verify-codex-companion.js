@@ -117,6 +117,20 @@ async function applyPetSize({ setSize, getSettings, pet, poll, sizeName, pixels 
   return value.bounds;
 }
 
+async function settleWakeMotion({ command, getMotionOwner, pet, poll, state }) {
+  command('wake');
+  // wake 现在会真实移动球窗；必须先观察启动，不能把 IPC 到达前的空闲误认为结束。
+  const started = await poll(() => Promise.resolve(getMotionOwner()),
+    value => value?.owner === 'user' && value.action === 'stretch', '唤醒动作真正启动');
+  const anchor = { ...started.anchor };
+  await poll(async () => ({ owner: getMotionOwner(), bounds: pet.getBounds(), page: await state() }),
+    value => value.owner === null && value.page.motionOwner === 'none' &&
+      ['x', 'y', 'width', 'height'].every(key => value.bounds[key] === anchor[key]),
+    '唤醒动作结束并恢复原始锚点', 3500);
+  assert.deepEqual(pet.getBounds(), anchor, '额度静态验收开始前球球必须已经归位');
+  return anchor;
+}
+
 async function verifyNegativeDisplay({ screen, pet, quotaLabel, bubble, poll }) {
   const displays = screen.getAllDisplays();
   const display = displays.find(item => item?.workArea &&
@@ -312,7 +326,7 @@ function policyClock() {
 // 页面、预加载、IPC、对白和窗口动作均为实际应用代码。
 async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindow, command, setSetting, setSize,
   getMenu, getSettings, prepare, setEnabled, getController, canPresent, getMotionOwner, clearDialogue,
-  quotaLabel, setQuotaPreference, restorePetSettings }) {
+  quotaLabel, setQuotaPreference, restorePetSettings, getThoughtWindow }) {
   if (process.env.PET_SMOKE_TEST !== '1') throw new Error('Codex 验收只允许在显式冒烟模式运行');
   const original = { bounds: pet.getBounds(), settings: { ...getSettings() } };
   assert.equal(original.settings.codexEnabled, false, '冒烟初始设置必须默认关闭');
@@ -357,7 +371,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
   })]);
   const quotaPeriodsSample = quotaPeriodsFixture(clock.now());
   const quotaPeriods = () => quotaPeriodsSample.map(item => ({ ...item }));
-  const syntheticOptions = { now: clock.now, schedule: clock.schedule, cancel: clock.cancel,
+  const syntheticOptions = { now: clock.now, random: () => 0, schedule: clock.schedule, cancel: clock.cancel,
     createConnection(next) {
       callbacks = next;
       const connection = { closed: false, async start() {
@@ -751,7 +765,9 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assert.equal(connections.length, 0, '准备关闭态不能创建连接');
     setSetting('keepAwake', true);
     setSetting('bubblesEnabled', true);
-    command('wake');
+    await settleWakeMotion({ command, getMotionOwner, pet, poll, state });
+    // 唤醒对白会作为额度避让障碍，并在四秒后消失；静态外观验收从无对白状态开始。
+    clearDialogue();
     await setEnabled(true);
     assert.equal(connections.length, 1);
     assert.equal(getMenu().getMenuItemById('codex-enabled').checked, true);
@@ -1028,42 +1044,72 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       value => value === 'true',
       '处理中进入专注呼吸状态'
     );
-    const readThinkingView = () => page(`(() => {
-      const pet = document.getElementById('pet');
-      const thoughts = document.getElementById('codex-thoughts');
-      const dots = [...thoughts.querySelectorAll('.codex-thought-dot')];
-      const eyes = [...pet.querySelectorAll('.eb-eye')];
-      const dotRects = dots.map(dot => dot.getBoundingClientRect());
-      const eyeRects = eyes.map(eye => eye.getBoundingClientRect());
-      const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-      return {
-        working: pet.dataset.codexWorking,
-        emotion: pet.dataset.emotion,
-        side: pet.dataset.codexThoughtSide,
-        dotCount: dots.length,
-        layerOutsideSvg: !thoughts.closest('svg') && thoughts.parentElement === document.body,
-        visible: Number.parseFloat(getComputedStyle(thoughts).opacity) > 0.9,
-        overlapsEye: dotRects.some(dot => eyeRects.some(eye => overlaps(dot, eye))),
-        topGap: Math.min(...eyeRects.map(rect => rect.top)) - Math.max(...dotRects.map(rect => rect.bottom))
-      };
-    })()`);
+    assert.equal(typeof getThoughtWindow, 'function', '原生思考验收必须提供当前光迹窗口入口');
+    const thoughtWindow = await poll(() => Promise.resolve(getThoughtWindow()),
+      win => win?.isVisible(), '独立思考光迹窗口显示');
+    assert.equal(thoughtWindow.isFocusable(), false, '思考光迹不能抢焦点');
+    const readThinkingView = async () => {
+      assert.equal(getThoughtWindow(), thoughtWindow, '思考验收必须读取当前光迹窗口');
+      const [petView, particles] = await Promise.all([
+        page(`(() => {
+          const pet = document.getElementById('pet');
+          return { working: pet.dataset.codexWorking, emotion: pet.dataset.emotion,
+            side: pet.dataset.codexThoughtSide,
+            eyes: [...pet.querySelectorAll('.eb-eye')].map(eye => {
+              const rect = eye.getBoundingClientRect();
+              return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+            }) };
+        })()`),
+        thoughtWindow.webContents.executeJavaScript(`(() => [...document.querySelectorAll('#flow path[data-flow-particle]')]
+          .filter(path => Number.parseFloat(getComputedStyle(path).opacity) > 0.1)
+          .map(path => {
+            const rect = path.getBoundingClientRect();
+            return { id: path.dataset.flowParticle, path: path.getAttribute('d'),
+              x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+          }).filter(rect => rect.width > 0 && rect.height > 0))()`)
+      ]);
+      const petBounds = pet.getBounds(), flowBounds = thoughtWindow.getBounds();
+      const eyes = petView.eyes.map(rect => ({ ...rect, x: petBounds.x + rect.x, y: petBounds.y + rect.y }));
+      const paths = particles.map(rect => ({ ...rect, x: flowBounds.x + rect.x, y: flowBounds.y + rect.y }));
+      const gaps = paths.flatMap(particle => eyes.map(eye => Math.hypot(
+        Math.max(0, eye.x - particle.x - particle.width, particle.x - eye.x - eye.width),
+        Math.max(0, eye.y - particle.y - particle.height, particle.y - eye.y - eye.height))));
+      return { working: petView.working, emotion: petView.emotion, side: petView.side,
+        eyeCount: eyes.length, particleCount: paths.length,
+        visible: thoughtWindow.isVisible() && paths.length > 0,
+        overlapsEye: paths.some(particle => eyes.some(eye => intersects(particle, eye))),
+        minimumEyeGap: gaps.length ? Math.min(...gaps) : null,
+        pathSignature: JSON.stringify(particles.map(particle => [particle.id, particle.path])),
+        flowBounds, petBounds };
+    };
     const thinkingView = await poll(readThinkingView,
       value => value.working === 'true' && value.visible === true,
-      '思考点图层完成淡入');
-    assert.deepEqual({ working: thinkingView.working, emotion: thinkingView.emotion,
-      dotCount: thinkingView.dotCount, layerOutsideSvg: thinkingView.layerOutsideSvg,
-      visible: thinkingView.visible, overlapsEye: thinkingView.overlapsEye },
-    { working: 'true', emotion: '51', dotCount: 3, layerOutsideSvg: true,
-      visible: true, overlapsEye: false });
+      '思考光迹进入可见阶段');
+    const assertThoughtFrame = view => {
+      assert.equal(view.working, 'true');
+      assert.equal(view.emotion, '51');
+      assert.equal(view.eyeCount, 2, '必须读取真实双眼后检查全屏坐标避让');
+      assert.ok(view.particleCount >= 1 && view.particleCount <= 3, '光迹应渐次产生，同时最多三条');
+      assert.equal(view.overlapsEye, false, '独立窗口光迹不能与球球眼睛重叠');
+      assert.ok(view.minimumEyeGap >= 2, `光迹必须与眼睛保持空隙：${JSON.stringify(view)}`);
+    };
+    assertThoughtFrame(thinkingView);
     assert.ok(['left', 'right'].includes(thinkingView.side));
-    assert.ok(thinkingView.topGap >= 2, `思考点必须与眼睛保持空隙：${JSON.stringify(thinkingView)}`);
+    const movingView = await poll(readThinkingView,
+      value => value.visible && value.pathSignature !== thinkingView.pathSignature,
+      '思考光迹沿弧线移动');
+    assertThoughtFrame(movingView);
     await capture(pet, 'codex-thinking-80');
+    await capture(thoughtWindow, 'codex-thinking-flow-80');
     await poll(
-      () => page("document.getElementById('pet').dataset.codexWorking"),
-      value => value === 'false',
+      async () => ({ working: await page("document.getElementById('pet').dataset.codexWorking"),
+        overlayVisible: getThoughtWindow()?.isVisible() === true }),
+      value => value.working === 'false' && !value.overlayVisible,
       '思考动效展示一轮后回到安静陪伴',
-      3500
+      7000
     );
+    results.push({ kind: 'thinking', size: 80, thinkingView, movingView,
+      source: 'simulated-connection-real-overlay-and-pet' });
     process.stdout.write('PET_CODEX_THINKING_OK\n');
     const nativeMenu = getMenu();
     const taskItems = nativeMenu.getMenuItemById('codex-tasks').submenu.items;
@@ -1171,6 +1217,6 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
 
 module.exports = {
   verifyCodexCompanion, assertBubbleLayout, assertQuotaLabelWindow, syntheticQuotaSteps, quotaPeriodsFixture,
-  applyPetSize, verifyNegativeDisplay, restoreSmokeState, combinedSmokeError,
+  applyPetSize, settleWakeMotion, verifyNegativeDisplay, restoreSmokeState, combinedSmokeError,
   capturePaintedWindow, withCaptureTimeout, assertDistinctCaptureEvidence, assertStaleCaptureEvidence
 };

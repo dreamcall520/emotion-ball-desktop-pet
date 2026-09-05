@@ -14,7 +14,7 @@ function createRenderer(randomValue = 0.5) {
   const events = {};
   const subscriptions = {};
   const windowEvents = {};
-  const host = { bounces: 0, stops: 0, scenes: [], motions: [], frames: [], positions: [], codexAcks: [], availability: [] };
+  const host = { bounces: 0, stops: 0, scenes: [], motions: [], frames: [], positions: [], codexAcks: [], availability: [], thoughts: [] };
   const bounds = { x: 100, y: 100, width: 80, height: 80 };
   let windowController;
   const nativeWindow = { isDestroyed: () => false, isVisible: () => true,
@@ -78,6 +78,7 @@ function createRenderer(randomValue = 0.5) {
         windowController.start(request);
       },
       say(scene) { host.scenes.push(scene); },
+      thought(packet) { host.thoughts.push({ ...packet }); },
       codexMotionReady(request) { host.codexAcks.push(request); },
       codexAvailability(packet) { host.availability.push(packet); },
       onCommand: subscribe('command'),
@@ -95,7 +96,8 @@ function createRenderer(randomValue = 0.5) {
   );
   for (const file of [
     'emotion-ball/js/rings.js', 'emotion-ball/js/emotions.js', 'emotion-ball/js/ball.js', 'emotion-ball/js/engine.js',
-    'desktop-pet/lib/pet-behavior.js', 'desktop-pet/lib/companion-behavior.js', 'desktop-pet/lib/interaction-motion.js'
+    'desktop-pet/lib/pet-behavior.js', 'desktop-pet/lib/companion-behavior.js', 'desktop-pet/lib/interaction-motion.js',
+    'desktop-pet/lib/companion-motion.js', 'desktop-pet/lib/pet-facing.js'
   ]) run(file);
   const create = context.EmotionBall.create;
   context.EmotionBall.create = (...args) => (engine = create(...args));
@@ -184,20 +186,22 @@ test('执行中任务只间歇展示思考动效，用户互动优先且任务�
   });
   assert.equal(r.pet.dataset.codexThoughtSide, 'left');
   assert.equal(r.engine._gaze.tx, -24);
-  r.advanceTo(2399);
+  r.advanceTo(5999);
   assert.equal(r.pet.dataset.codexWorking, 'true');
-  r.advanceTo(2400);
+  r.advanceTo(6000);
   assert.equal(r.pet.dataset.codexWorking, 'false', '首轮后应回到安静陪伴');
   assert.notEqual(r.engine.emotionId, '51');
-  r.advanceTo(17999);
+  r.advanceTo(35999);
   assert.equal(r.pet.dataset.codexWorking, 'false', '长任务不能一直展示思考动效');
-  r.advanceTo(18000);
+  r.advanceTo(36000);
   assert.equal(r.pet.dataset.codexWorking, 'true', '间隔后只短暂再提醒一轮');
-  r.click();
+  r.doubleClick();
   assert.equal(r.pet.dataset.codexWorking, 'false');
-  r.advanceTo(22000);
+  r.advanceTo(36500);
   assert.equal(r.pet.dataset.codexWorking, 'false');
+  assert.equal(r.pet.dataset.motionOwner, 'user', '身体互动占用期间不插入思考');
   r.codexSettings({ enabled: true, generation: 1, activeTaskCount: 0 });
+  r.advanceTo(40000);
   assert.equal(r.pet.dataset.codexWorking, 'false');
   assert.notEqual(r.engine.emotionId, '51');
   assert.equal(r.timers.size, 0, '任务结束后不得残留思考定时器');
@@ -212,9 +216,9 @@ test('Codex 运行轻动作结束后，正在执行的任务获得完整思考�
   r.advanceTo(2300);
   r.frame({ token: active.token, action: active.action, frame: { done: true } });
   assert.equal(r.pet.dataset.codexWorking, 'true');
-  r.advanceTo(4699);
+  r.advanceTo(8299);
   assert.equal(r.pet.dataset.codexWorking, 'true');
-  r.advanceTo(4700);
+  r.advanceTo(8300);
   assert.equal(r.pet.dataset.codexWorking, 'false');
 });
 
@@ -330,10 +334,16 @@ test('锁屏取消的单击在很快解锁后也不补发', () => {
   renderer.advanceTo(150);
   renderer.activity(false);
   renderer.advanceTo(300);
-  assert.equal(renderer.pet.dataset.lastAction, undefined);
+  assert.equal(renderer.pet.dataset.lastAction, 'stretch', '解锁可执行新的唤醒动作');
+  assert.deepEqual(renderer.host.motions.map(motion => motion.action), ['stretch']);
+  assert.equal(renderer.host.scenes.filter(scene => scene === 'wake').length, 1);
   assert.equal(renderer.engine._spin, null);
   assert.equal(renderer.host.bounces, 0);
   assert.equal(renderer.host.scenes.includes('play'), false);
+  renderer.advanceTo(2200);
+  assert.equal(renderer.engine._motionFrame, null);
+  assert.equal(renderer.engine.emotionId, '50');
+  assert.equal(renderer.host.motions.length, 1, '锁屏前排队的单击不得晚于新唤醒补发');
 });
 
 for (const [action, randomValue] of [['bounce', 0.1], ['spin', 0.5]]) {
@@ -585,7 +595,9 @@ test('菜单仍可睡眠，双击睡着的球球只唤醒', () => {
   renderer.advanceTo(500);
   assert.equal(renderer.pet.dataset.mode, 'awake');
   assert.notEqual(renderer.engine.emotionId, '00');
-  assert.equal(renderer.host.scenes.at(-1), 'welcome');
+  assert.equal(renderer.host.scenes.at(-1), 'wake');
+  assert.deepEqual(renderer.host.motions.map(motion => motion.action), ['stretch']);
+  assert.equal(renderer.engine.emotionId, '53');
   assert.equal(renderer.host.scenes.includes('play'), false);
 });
 
@@ -596,21 +608,36 @@ test('系统空闲睡着后，真实双击序列只唤醒，不被第一次松�
   assert.equal(renderer.engine.emotionId, '00');
   renderer.doubleClick();
   renderer.advanceTo(500);
-  assert.equal(renderer.host.motions.length, 0);
+  assert.deepEqual(renderer.host.motions.map(motion => motion.action), ['stretch'], '整次双击只启动一轮唤醒');
   assert.equal(renderer.host.bounces, 0);
-  assert.equal(renderer.host.scenes.at(-1), 'welcome');
+  assert.equal(renderer.host.scenes.at(-1), 'wake');
+  assert.equal(renderer.host.scenes.filter(scene => scene === 'wake').length, 1);
+  assert.equal(renderer.host.scenes.some(scene => scene === 'play' || scene?.event === 'play'), false);
 });
 
-test('播放身体动作时菜单立即唤醒会停止旧动作，旧帧不再覆盖欢迎', () => {
+test('播放身体动作时菜单立即唤醒会停止旧动作，旧帧不能覆盖新唤醒', () => {
   const renderer = createRenderer(0);
   renderer.doubleClick();
   renderer.advanceTo(400);
   const packet = renderer.host.frames.at(-1);
   renderer.command('wake');
+  const wake = renderer.host.motions.at(-1);
+  const firstWakeFrame = renderer.engine._motionFrame;
+  assert.equal(wake.action, 'stretch');
+  assert.ok(wake.token > packet.token);
   renderer.frame(packet);
+  assert.equal(renderer.engine._motionFrame, firstWakeFrame, '旧令牌运动帧不能覆盖新唤醒起点');
+  renderer.frame({ ...packet, frame: { done: true } });
+  assert.equal(renderer.pet.dataset.motionOwner, 'user', '旧完成帧不能提前结束新唤醒');
   renderer.advanceTo(500);
+  assert.ok(renderer.engine._motionFrame);
+  assert.equal(renderer.engine.emotionId, '53');
+  assert.equal(renderer.host.frames.at(-1).token, wake.token);
+  renderer.advanceTo(940);
+  assert.notDeepEqual(renderer.bounds, { x: 100, y: 100, width: 80, height: 80 }, '新唤醒仍能完整走小圆路径');
+  renderer.advanceTo(2416);
   assert.equal(renderer.engine._motionFrame, null);
-  assert.equal(renderer.engine.emotionId, '01');
+  assert.equal(renderer.engine.emotionId, '50');
   assert.deepEqual(renderer.bounds, { x: 100, y: 100, width: 80, height: 80 });
 });
 
@@ -622,4 +649,129 @@ test('锁屏时双击不触发互动', () => {
   assert.equal(renderer.engine._active, false);
   assert.equal(renderer.pet.dataset.lastAction, undefined);
   assert.deepEqual(renderer.host.scenes, []);
+});
+
+test('任务进行中单击只回应思考并重启完整一轮，自动思考不自行弹文案', () => {
+  const r = createRenderer();
+  r.codexSettings({ enabled: true, generation: 1, activeTaskCount: 2 });
+  assert.equal(r.host.thoughts.at(-1).visible, true);
+  assert.deepEqual(r.host.scenes, []);
+  r.advanceTo(6000);
+  assert.equal(r.host.thoughts.at(-1).visible, false);
+  r.click();
+  r.advanceTo(6260);
+  assert.equal(r.pet.dataset.lastAction, 'thought');
+  assert.equal(r.pet.dataset.codexWorking, 'true');
+  assert.deepEqual(r.host.scenes, ['thought']);
+  assert.equal(r.host.motions.length, 0);
+  assert.equal(r.host.bounces, 0);
+  assert.equal(r.engine._spin, null);
+  r.advanceTo(12259);
+  assert.equal(r.pet.dataset.codexWorking, 'true');
+  r.advanceTo(12260);
+  assert.equal(r.pet.dataset.codexWorking, 'false');
+  r.advanceTo(42260);
+  assert.equal(r.pet.dataset.codexWorking, 'true');
+  assert.deepEqual(r.host.scenes, ['thought'], '再次自动展示不得自动重复说话');
+});
+
+for (const [random, restMs] of [[0, 25000], [0.5, 30000], [0.999999, 35000]]) {
+  test(`思考展示6秒后实际休息${restMs / 1000}秒，宿主仅在可见性变化时收到通知`, () => {
+    const r = createRenderer(random);
+    r.codexSettings({ enabled: true, generation: 1, activeTaskCount: 1 });
+    const count = r.host.thoughts.length;
+    r.activity();
+    assert.equal(r.host.thoughts.length, count);
+    r.advanceTo(5999);
+    assert.equal(r.pet.dataset.codexWorking, 'true');
+    r.advanceTo(6000);
+    assert.equal(r.pet.dataset.codexWorking, 'false');
+    r.advanceTo(6000 + restMs - 1);
+    assert.equal(r.pet.dataset.codexWorking, 'false');
+    r.advanceTo(6000 + restMs);
+    assert.equal(r.pet.dataset.codexWorking, 'true');
+    assert.deepEqual(r.host.thoughts.map(packet => packet.visible), [true, false, true]);
+    assert.deepEqual(r.host.scenes, []);
+  });
+}
+
+for (const reason of ['sleep', 'drag', 'disable', 'lock', 'unload']) {
+  test(`${reason}及时隐藏宿主思考层，受阻期间下一轮不能重新出现`, () => {
+    const r = createRenderer();
+    r.codexSettings({ enabled: true, generation: 1, activeTaskCount: 1 });
+    assert.equal(r.host.thoughts.at(-1).visible, true);
+    r.advanceTo(1000);
+    if (reason === 'sleep') r.command('sleep');
+    if (reason === 'drag') {
+      r.events.pointerdown({ button: 0, pointerId: 1, screenX: 140, screenY: 140 });
+      r.events.pointermove({ pointerId: 1, screenX: 170, screenY: 170, clientX: 30, clientY: 30, buttons: 1 });
+    }
+    if (reason === 'disable') r.codexSettings({ enabled: false, generation: 2 });
+    if (reason === 'lock') r.activity(true);
+    if (reason === 'unload') r.windowEvents.beforeunload();
+    assert.equal(r.host.thoughts.at(-1).visible, false);
+    const count = r.host.thoughts.length;
+    r.advanceTo(50000);
+    assert.equal(r.host.thoughts.length, count, '受阻期间不把隐藏层重新唤起');
+    assert.equal(r.pet.dataset.codexWorking, 'false');
+    if (reason === 'disable' || reason === 'unload') assert.equal(r.timers.size, 0);
+  });
+}
+
+test('负坐标显示器按所在屏幕确定朝向，中线保留方向，换到另一侧统一更新思考方向', () => {
+  const r = createRenderer();
+  const area = { x: -1600, y: -100, width: 1200, height: 800 };
+  const update = x => r.activity(false, { petBounds: { x, y: 100, width: 80, height: 80 }, workArea: area, cursor: null });
+  update(-650);
+  assert.equal(r.pet.dataset.facing, 'left');
+  assert.equal(r.engine._facing, 'left');
+  r.codexSettings({ enabled: true, generation: 1, activeTaskCount: 1 });
+  assert.equal(r.pet.dataset.codexThoughtSide, 'left');
+  assert.equal(r.host.thoughts.at(-1).side, 'left');
+  assert.equal(r.engine._gaze.tx, -24);
+  const count = r.host.thoughts.length;
+  update(-1030);
+  update(-1050);
+  assert.equal(r.pet.dataset.facing, 'left', '中线小范围变化不来回翻面');
+  assert.equal(r.host.thoughts.length, count);
+  update(-1480);
+  assert.equal(r.pet.dataset.facing, 'right');
+  assert.equal(r.engine._facing, 'right');
+  assert.equal(r.host.thoughts.at(-1).side, 'right');
+  assert.equal(r.engine._gaze.tx, 24);
+  r.activity(false, { petBounds: { x: 2500, y: 50, width: 80, height: 80 },
+    workArea: { x: 1800, y: 0, width: 900, height: 700 }, cursor: null });
+  assert.equal(r.pet.dataset.facing, 'left', '跨屏之后按新屏幕判断，不沿用总桌面中线');
+});
+
+test('左右默认脸型均保持屏幕坐标鼠标注视，鼠标停留后回归默认脸型', () => {
+  const r = createRenderer();
+  const area = { x: 0, y: 0, width: 1200, height: 800 };
+  for (const [time, x, side] of [[0, 900, 'left'], [3000, 100, 'right']]) {
+    r.advanceTo(time);
+    const petBounds = { x, y: 100, width: 80, height: 80 };
+    r.activity(false, { petBounds, workArea: area, cursor: { x: x + 200, y: 140 } });
+    assert.equal(r.engine._facing, side);
+    assert.ok(r.engine._gaze.tx > 0, '鼠标在右边，两种脸型都必须向屏幕右侧看');
+    r.activity(false, { petBounds, workArea: area, cursor: { x: x - 100, y: 140 } });
+    assert.ok(r.engine._gaze.tx < 0, '鼠标在左边，不能因脸型镜像而反向');
+    r.advanceTo(time + 2501);
+    r.activity(false, { petBounds, workArea: area, cursor: { x: x - 100, y: 140 } });
+    assert.equal(r.engine._gaze.tx, 0);
+    assert.equal(r.engine._facing, side);
+  }
+});
+
+test('运动中换边不翻转正在播放的动作，结束后才回到新侧朝向', () => {
+  const r = createRenderer();
+  const area = { x: 0, y: 0, width: 1200, height: 800 };
+  r.activity(false, { petBounds: { x: 100, y: 100, width: 80, height: 80 }, workArea: area, cursor: null });
+  r.command('wake');
+  assert.equal(r.host.motions.at(-1).side, 'right');
+  r.activity(false, { petBounds: { x: 1050, y: 100, width: 80, height: 80 }, workArea: area, cursor: null });
+  r.advanceTo(500);
+  assert.equal(r.pet.dataset.facing, 'right');
+  r.advanceTo(2016);
+  assert.equal(r.pet.dataset.facing, 'left');
+  assert.equal(r.engine._facing, 'left');
 });

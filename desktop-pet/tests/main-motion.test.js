@@ -95,7 +95,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
         codexQuotaAlwaysVisible, codexQuotaPeriod, codexQuotaLabelSize, codexQuotaAppearance }),
         saveSettings: (_file, settings) => { if (saveError) throw saveError; saved.push({ ...settings }); return settings; } };
       if (name === './lib/codex-companion') return { createCodexCompanion: options => {
-        const controller = realRequire(name).createCodexCompanion({ ...options, createConnection(callbacks) {
+        const controller = realRequire(name).createCodexCompanion({ ...options, random: () => 0, createConnection(callbacks) {
           const connection = { callbacks, closed: false, async start() {
             callbacks.onAccount({ accountKey: 'account-one' });
             callbacks.onStatus({ channel: 'quota', state: 'connected' });

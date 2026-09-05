@@ -78,6 +78,8 @@
     opts = opts || {};
     var id = 'eb' + (uid++);
     var lite = !!opts.lite;
+    var liteRibbons = lite && opts.liteRibbons === true;
+    var facing = opts.facing === 'left' ? -1 : 1;
     var shape = RD.SHAPES[opts.shape] || RD.SHAPES.blob;
     var face = shape.face;
     var headRing = shape.ring;
@@ -391,7 +393,7 @@
       var base = eye.c || BASE_C[k];
       var open = clamp(pose.open, minOpen || 0.02, 2.4);
       var sy = clamp(pose.scaleY * open * face.eye, 0.02, 2.4);
-      var sxBase = pose.scaleX * face.eye;
+      var sxBase = pose.scaleX * face.eye * facing;
 
       /* 纵向：脸部拟合映射 + 轮廓钳制 */
       var halfH = EYE_HALF * sy + 2;
@@ -403,7 +405,10 @@
       var hw = Math.max((sil[1] - sil[0]) / 2, 12);
 
       /* 横向：经度换算 + 自旋偏航 + 余弦压缩 */
-      var ox = face.x + (base[0] - HEAD_C) * face.sx + pose.x + pose.lookX;
+      /* 朝向只镜像脸型的固有位置与轮廓；lookX 仍是屏幕坐标，
+       * 因而鼠标向右时两种朝向都会向屏幕右侧注视。 */
+      var faceX = face.x + (base[0] - HEAD_C) * face.sx + pose.x;
+      var ox = faceX * facing + pose.lookX;
       var theta = clamp(ox / hw, -1.15, 1.15);
       var total = theta + (yaw || 0);
       var cn = Math.cos(total);
@@ -418,7 +423,7 @@
 
       eye.node.setAttribute('transform',
         'translate(' + r2(ex) + ' ' + r2(ey0) + ')' +
-        (pose.rotate ? ' rotate(' + r2(pose.rotate) + ')' : '') +
+        (pose.rotate ? ' rotate(' + r2(pose.rotate * facing) + ')' : '') +
         ' scale(' + r2(sxBase * cn) + ' ' + r2(sy * fy) + ')' +
         ' translate(' + r2(-base[0]) + ' ' + r2(-base[1]) + ')');
 
@@ -443,6 +448,7 @@
         var zo = (zp < 0.18 ? zp / 0.18 : 1 - (zp - 0.18) / 0.82) * maxOpacity * amount;
         var fontSize = lite ? 16 + zp * 10 : 12 + zp * 11;
         var x = lite ? 172 + zp * 32 + 4 * Math.sin(zp * 9) : 180 + zp * 34 + 4 * Math.sin(zp * 9);
+        if (facing < 0) x = HEAD_C * 2 - x;
         var y = lite ? 54 - zp * 42 : 48 - zp * 42;
         znode.setAttribute('opacity', zo.toFixed(3));
         znode.setAttribute('font-size', fontSize.toFixed(1));
@@ -487,7 +493,7 @@
 
       renderZzz(now, b.zzz || 0);
 
-      if (lite) return;
+      if (lite && !liteRibbons) return;
 
       var dt = prevNow ? clamp((now - prevNow) / 1000, 0.001, 0.05) : 1 / 60;
       prevNow = now;
@@ -594,6 +600,9 @@
         rb.gradEl.setAttribute('y2', headP.y.toFixed(1));
       }
 
+      /* 小尺寸可单独启用原生彩带，但仍跳过较重的撒花粒子。 */
+      if (lite) return;
+
       /* ---- 撒花更新：速度衰减 0.94^60dt + 微重力 40/s ---- */
       for (var ci = confPieces.length - 1; ci >= 0; ci--) {
         var pc = confPieces[ci];
@@ -622,7 +631,12 @@
       if (svg.parentNode) svg.parentNode.removeChild(svg);
     }
 
-    return { svg: svg, applyPose: applyPose, burst: burst, destroy: destroy };
+    function setFacing(side) {
+      if (side === 'left') facing = -1;
+      else if (side === 'right') facing = 1;
+    }
+
+    return { svg: svg, applyPose: applyPose, burst: burst, setFacing: setFacing, destroy: destroy };
   }
 
   EB.createBall = createBall;

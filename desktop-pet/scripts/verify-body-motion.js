@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { setTimeout: wait } = require('node:timers/promises');
 const { MOTIONS } = require('../lib/interaction-motion');
+const CompanionMotion = require('../lib/companion-motion');
 const { SIZES } = require('../lib/window-placement');
 const BODY_MOTION_SIZES = Object.freeze(Object.values(SIZES).map(size => size.width));
 
@@ -81,7 +82,8 @@ async function verifyBodyMotion({ pet, bubble, screen, command, setSetting, samp
         contour:window.__contourBounds(head.getAttribute('d'), m),
         transform:head.parentElement.getAttribute('transform'),
         bodyColor:document.querySelectorAll('radialGradient stop')[1].getAttribute('stop-color'),
-        eyeColors:[...document.querySelectorAll('.eb-eye')].map(eye=>eye.getAttribute('fill')) };
+        eyeColors:[...document.querySelectorAll('.eb-eye')].map(eye=>eye.getAttribute('fill')),
+        eyeTransforms:[...document.querySelectorAll('.eb-eye')].map(eye=>eye.getAttribute('transform')) };
     };
     window.__motionQA = { frames:[], packets:[], collecting:false };
     window.__motionUnsubscribe = window.petDesktop.onMotion(packet => {
@@ -137,6 +139,8 @@ async function verifyBodyMotion({ pet, bubble, screen, command, setSetting, samp
     await resetTrace();
     const anchor = pet.getBounds();
     const area = screen.getDisplayMatching(anchor).workArea;
+    const expectedSide = (await state()).facing;
+    assert.ok(['left', 'right'].includes(expectedSide), `${label}必须读回有效朝向`);
     const recording = record && artifacts ? { action: id, anchor: { x: anchor.x, y: anchor.y }, frames: [] } : null;
     const started = performance.now();
     await capture(recording, started);
@@ -175,6 +179,7 @@ async function verifyBodyMotion({ pet, bubble, screen, command, setSetting, samp
     const tokens = [...new Set(packets.map(packet => packet.token))];
     assert.equal(tokens.length, 1, `${label}发生混合动作`);
     assert.ok(packets.every(packet => packet.action === id), `${label}动作错配`);
+    assert.ok(packets.every(packet => packet.side === expectedSide), `${label}动作期间朝向不应反复翻转`);
     const motion = MOTIONS.find(motion => motion.id === id);
     assert.ok(packets.at(-1).at - packets[0].at >= motion.durationMs - 100, `${label}重播或动作被提前截断`);
     assert.deepEqual(packets.at(-1).frame, { body: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotate: 0, yaw: 0 }, window: { x: 0, y: 0 }, gaze: { x: 0, y: 0 }, done: true }, `${label}结束包必须精确中性`);
@@ -188,12 +193,20 @@ async function verifyBodyMotion({ pet, bubble, screen, command, setSetting, samp
   const place = async (area, size, x, y) => {
     command('rest');
     await wait(80);
-    command('wake');
-    await wait(80);
+    if (['sleep', 'manual-sleep'].includes((await state()).mode)) {
+      command('wake');
+      await poll(state, value => value.lastAction === 'stretch' && value.motionOwner === 'user', '换位前唤醒开始');
+      await poll(state, value => value.motionOwner === 'none', '换位前完整唤醒结束', 3500);
+    }
     pet.setBounds({ x, y, width: size, height: size });
     await poll(() => page('({width:innerWidth,height:innerHeight})'), value => value.width === size && value.height === size, '窗口尺寸');
-    await sample({ idleSeconds: 0, locked: false, sameDisplay: true, cursor: { x: area.x + area.width / 2, y: area.y + area.height / 2 } });
+    await sample({ idleSeconds: 0, locked: false, sameDisplay: true, workArea: area, cursor: { x: area.x + area.width / 2, y: area.y + area.height / 2 } });
     await wait(60);
+    const placed = await state();
+    const relative = (x + size / 2 - area.x) / area.width;
+    if (relative > 0.56) assert.equal(placed.facing, 'left', '屏幕右侧默认朝左');
+    if (relative < 0.44) assert.equal(placed.facing, 'right', '屏幕左侧默认朝右');
+    assert.equal(placed.motionOwner, 'none', '换位后不得留下未完成唤醒动作');
   };
   const cooldown = async () => {
     const remaining = lastDirectAt + 6100 - performance.now();
@@ -202,9 +215,12 @@ async function verifyBodyMotion({ pet, bubble, screen, command, setSetting, samp
   const area = screen.getDisplayMatching(pet.getBounds()).workArea;
   await place(area, 80, area.x + Math.round(area.width / 2), area.y + Math.round(area.height / 2));
   const phrases = {
-    hop: ['看我蹦两下！', '快乐，起飞！'], jelly: ['我是软乎乎的！', '晃一晃，烦恼散掉。'],
-    sway: ['给你跳个小舞～', '左一下，右一下。'], peek: ['让我瞅瞅～', '这边看看，那边看看。'],
-    bow: ['收到，向你致意！', '谢谢你来陪我。'], spin: ['转一圈，快乐加倍。', '这一招，专门给你看。']
+    hop: ['看我蹦两下！', '快乐，起飞！', '第一下！第二下！', '高一点，下一拍轻一点。'],
+    jelly: ['我是软乎乎的！', '晃一晃，烦恼散掉。', '软一下，又圆回来啦。', '揉圆，再慢慢弹回来。'],
+    sway: ['给你跳个小舞～', '左一下，右一下。', '圆滚滚也会踩拍子。', '晃两下，再慢慢回正。'],
+    peek: ['让我瞅瞅～', '这边看看，那边看看。', '探出去，再悄悄回来。', '好奇心露出来啦。'],
+    bow: ['收到，向你致意！', '谢谢你来陪我。', '鞠个圆圆的躬。', '把认真轻轻送给你。'],
+    spin: ['转一圈，快乐加倍。', '这一招，专门给你看。', '画个圆，再稳稳停下。', '这一转，眼睛可别跟丢。']
   };
   try {
     for (const { id } of MOTIONS) {
@@ -241,14 +257,23 @@ async function verifyBodyMotion({ pet, bubble, screen, command, setSetting, samp
     await input('mouseMove', 65, 55, { modifiers: ['leftButtonDown'] });
     await wait(120);
     await input('mouseUp', 65, 55, { button: 'left', clickCount: 1 });
-    await poll(state, value => value.lastAction === 'drop', '拖动中断');
+    await poll(state, value => value.lastAction === 'land' && value.motionOwner === 'user', '拖动中断并开始站稳');
     const dropAnchor = pet.getBounds();
     assert.notDeepEqual(dropAnchor, restAnchor, '真实拖动必须改变位置');
     const droppedAt = performance.now();
-    while (performance.now() - droppedAt < 2000) {
+    let dropPackets;
+    do {
       assert.deepEqual(pet.getBounds(), dropAnchor, '旧动作不应把拖动后的窗口拉回');
+      assertVisibleFrame(await page('window.__readBody()'), pet.getBounds(), area, '拖动打断后的转面站稳');
+      dropPackets = (await page('window.__motionQA.packets')).filter(packet => packet.action === 'land');
+      if (dropPackets.some(packet => packet.frame.done)) break;
       await wait(40);
-    }
+    } while (performance.now() - droppedAt < 5000);
+    assert.ok(dropPackets?.at(-1)?.frame.done, '放下必须完整完成，不能在2秒处提前结束');
+    assert.ok(dropPackets.at(-1).at - dropPackets[0].at >= CompanionMotion.durations.land - 100);
+    assert.ok(dropPackets.some(packet => Math.abs(packet.frame.body.yaw) > 0.95));
+    assert.deepEqual(dropPackets.at(-1).frame, CompanionMotion.sample('land', CompanionMotion.durations.land, dropPackets[0].side));
+    assert.equal((await state()).motionOwner, 'none');
     process.stdout.write('PET_BODY_MOTION_INTERRUPTS_OK\n');
 
     for (const size of BODY_MOTION_SIZES.filter(size => size !== 80)) {
