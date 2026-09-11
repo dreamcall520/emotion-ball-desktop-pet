@@ -21,7 +21,7 @@
     stretch: ['醒醒脑袋，继续陪你。', '一个小小的圆，又回到熟悉的位置。']
   };
   const SEQUENCES = {
-    hero: ['hello', 'nuzzle', 'quiet', 'stretch', 'quiet'],
+    hero: ['ribbon', 'hello', 'nuzzle', 'quiet', 'stretch', 'quiet'],
     feature: ['land', 'stretch', 'hop', 'ribbon', 'nuzzle'],
     codex: ['thought', 'quiet', 'complete', 'quiet'],
     desktop: ['hello', 'nuzzle', 'sleep', 'stretch']

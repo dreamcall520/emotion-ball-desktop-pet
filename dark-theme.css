@@ -1,9 +1,9 @@
 /* Neutral black/charcoal surfaces, informed by Apple MacBook Pro.
  * Both explicit dark and system-dark are scoped; light mode is unchanged. */
 html[data-theme="dark"] {
-  --page: #000000;
+  --page: #101012;
   --page-deep: #101011;
-  --surface: #161617;
+  --surface: #1c1c1e;
   --surface-solid: #1d1d1f;
   --surface-strong: #232325;
   --text: #f5f5f7;
@@ -17,10 +17,10 @@ html[data-theme="dark"] {
   --shadow-soft: none;
   --shadow-control: none;
 }
-html[data-theme="dark"] body { background: #000; }
+html[data-theme="dark"] body { background: var(--page); }
 html[data-theme="dark"] .site-header { background: rgba(17, 17, 18, .86); box-shadow: none; }
 html[data-theme="dark"] .motion-panel, html[data-theme="dark"] .codex-live-showcase, html[data-theme="dark"] .download-card, html[data-theme="dark"] .download-card-candidate {
-  background: #161617; border-color: rgba(255,255,255,.08); box-shadow: none;
+  background: var(--surface); border-color: rgba(255,255,255,.08); box-shadow: none;
 }
 html[data-theme="dark"] .download-card-primary { border-color: rgba(255,255,255,.16); box-shadow: none; }
 html[data-theme="dark"] .button-primary, html[data-theme="dark"] .button-primary:hover { box-shadow: none; }
@@ -31,9 +31,9 @@ html[data-theme="dark"] .motion-bubble { background: #1d1d1f; box-shadow: none; 
 html[data-theme="dark"] .motion-bubble::after { background: #1d1d1f; }
 @media (prefers-color-scheme: dark) {
   html:not([data-theme="light"]) {
-  --page: #000000;
+  --page: #101012;
   --page-deep: #101011;
-  --surface: #161617;
+  --surface: #1c1c1e;
   --surface-solid: #1d1d1f;
   --surface-strong: #232325;
   --text: #f5f5f7;
@@ -47,10 +47,10 @@ html[data-theme="dark"] .motion-bubble::after { background: #1d1d1f; }
   --shadow-soft: none;
   --shadow-control: none;
   }
-html:not([data-theme="light"]) body { background: #000; }
+html:not([data-theme="light"]) body { background: var(--page); }
 html:not([data-theme="light"]) .site-header { background: rgba(17, 17, 18, .86); box-shadow: none; }
 html:not([data-theme="light"]) .motion-panel, html:not([data-theme="light"]) .codex-live-showcase, html:not([data-theme="light"]) .download-card, html:not([data-theme="light"]) .download-card-candidate {
-  background: #161617; border-color: rgba(255,255,255,.08); box-shadow: none;
+  background: var(--surface); border-color: rgba(255,255,255,.08); box-shadow: none;
 }
 html:not([data-theme="light"]) .download-card-primary { border-color: rgba(255,255,255,.16); box-shadow: none; }
 html:not([data-theme="light"]) .button-primary, html:not([data-theme="light"]) .button-primary:hover { box-shadow: none; }
@@ -60,4 +60,3 @@ html:not([data-theme="light"]) .desktop-scene { background: linear-gradient(125d
 html:not([data-theme="light"]) .motion-bubble { background: #1d1d1f; box-shadow: none; }
 html:not([data-theme="light"]) .motion-bubble::after { background: #1d1d1f; }
 }
-
