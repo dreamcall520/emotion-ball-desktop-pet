@@ -9,7 +9,6 @@
   const backToTopButton = document.querySelector('[data-back-to-top]');
   const topSection = document.getElementById('top');
   let toastTimer = null;
-  let demoResetTimer = null;
 
   function storedTheme() {
     try {
@@ -75,109 +74,6 @@
     });
   }
 
-  const gallery = document.querySelector('[data-gallery]');
-
-  if (gallery) {
-    const slides = Array.from(gallery.querySelectorAll('[data-gallery-slide]'));
-    const controls = Array.from(gallery.querySelectorAll('[data-gallery-control]'));
-    const playbackButton = gallery.querySelector('[data-gallery-playback]');
-    const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    let galleryIndex = 0;
-    let galleryTimer = null;
-    let galleryVisible = false;
-    let galleryHovered = false;
-    let galleryFocused = false;
-    let galleryPaused = false;
-
-    function stopGalleryTimer() {
-      window.clearTimeout(galleryTimer);
-      galleryTimer = null;
-    }
-
-    function renderGallery(nextIndex) {
-      galleryIndex = (nextIndex + slides.length) % slides.length;
-      slides.forEach((slide, index) => {
-        const isActive = index === galleryIndex;
-        slide.classList.toggle('is-active', isActive);
-        slide.setAttribute('aria-hidden', String(!isActive));
-      });
-      controls.forEach((control, index) => {
-        const isActive = index === galleryIndex;
-        control.classList.toggle('is-active', isActive);
-        control.setAttribute('aria-selected', String(isActive));
-        control.tabIndex = isActive ? 0 : -1;
-      });
-    }
-
-    function scheduleGallery() {
-      stopGalleryTimer();
-      if (!galleryVisible || galleryHovered || galleryFocused || galleryPaused || document.hidden || reducedMotionQuery.matches) return;
-      galleryTimer = window.setTimeout(() => {
-        renderGallery(galleryIndex + 1);
-        scheduleGallery();
-      }, 5200);
-    }
-
-    controls.forEach((control, index) => {
-      control.addEventListener('click', () => {
-        renderGallery(index);
-        scheduleGallery();
-      });
-      control.addEventListener('keydown', event => {
-        const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
-        if (!keys.includes(event.key)) return;
-        event.preventDefault();
-        const nextIndex = event.key === 'Home'
-          ? 0
-          : event.key === 'End'
-            ? controls.length - 1
-            : galleryIndex + (event.key === 'ArrowRight' ? 1 : -1);
-        renderGallery(nextIndex);
-        controls[galleryIndex].focus();
-      });
-    });
-
-    playbackButton.addEventListener('click', () => {
-      galleryPaused = !galleryPaused;
-      playbackButton.setAttribute('aria-pressed', String(galleryPaused));
-      playbackButton.textContent = galleryPaused ? '继续切换' : '暂停切换';
-      scheduleGallery();
-    });
-
-    gallery.addEventListener('pointerenter', () => {
-      galleryHovered = true;
-      stopGalleryTimer();
-    });
-    gallery.addEventListener('pointerleave', () => {
-      galleryHovered = false;
-      scheduleGallery();
-    });
-    gallery.addEventListener('focusin', () => {
-      galleryFocused = true;
-      stopGalleryTimer();
-    });
-    gallery.addEventListener('focusout', event => {
-      if (gallery.contains(event.relatedTarget)) return;
-      galleryFocused = false;
-      scheduleGallery();
-    });
-    document.addEventListener('visibilitychange', scheduleGallery);
-    reducedMotionQuery.addEventListener?.('change', scheduleGallery);
-
-    if ('IntersectionObserver' in window) {
-      const galleryObserver = new IntersectionObserver(([entry]) => {
-        galleryVisible = entry.isIntersecting;
-        scheduleGallery();
-      }, { threshold: 0.35 });
-      galleryObserver.observe(gallery);
-    } else {
-      galleryVisible = true;
-    }
-
-    renderGallery(0);
-    scheduleGallery();
-  }
-
   function showToast(message) {
     window.clearTimeout(toastTimer);
     toast.textContent = message;
@@ -198,69 +94,4 @@
     button.addEventListener('click', () => copyValue(button.dataset.copy));
   }
 
-  function quietDefinition() {
-    const base = window.EmotionBall.config.get('02');
-    return {
-      ...base.raw,
-      id: '50',
-      name: '安静陪伴',
-      group: 'custom',
-      antics: false,
-      anims: []
-    };
-  }
-
-  function createBall(targetId, sizeMode) {
-    const target = document.getElementById(targetId);
-    if (!target || !window.EmotionBall) return null;
-    const ball = window.EmotionBall.create(target, {
-      emotion: '50',
-      shape: 'blob',
-      color: '#EEEBE4',
-      eyeColor: '#1A1A1A',
-      idle: false,
-      eyeScale: sizeMode === 'compact' ? 1.35 : 1,
-      lite: false,
-      fallbackId: '50',
-      label: '球球桌宠'
-    });
-    ball.setActive(true);
-    ball.renderStatic();
-    return ball;
-  }
-
-  if (window.EmotionBall) {
-    window.EmotionBall.config.register(quietDefinition());
-  }
-
-  const heroBall = createBall('hero-ball', 'large');
-  const demoBall = createBall('demo-ball', 'large');
-  const heroStage = document.querySelector('.hero-stage');
-
-  if (heroBall && heroStage) {
-    heroStage.addEventListener('pointermove', event => {
-      const bounds = heroStage.getBoundingClientRect();
-      const x = ((event.clientX - bounds.left) / bounds.width - 0.5) * 1.6;
-      const y = ((event.clientY - bounds.top) / bounds.height - 0.5) * 1.5;
-      heroBall.setGaze(x, y);
-    });
-    heroStage.addEventListener('pointerleave', () => heroBall.clearGaze());
-  }
-
-  if (demoBall) {
-    for (const control of document.querySelectorAll('[data-emotion]')) {
-      control.addEventListener('click', () => {
-        window.clearTimeout(demoResetTimer);
-        demoBall.setEmotion(control.dataset.emotion);
-        const target = document.getElementById('demo-ball');
-        target.classList.remove('is-reacting');
-        requestAnimationFrame(() => target.classList.add('is-reacting'));
-        demoResetTimer = window.setTimeout(() => {
-          target.classList.remove('is-reacting');
-          demoBall.setEmotion('50');
-          demoBall.renderStatic();
-        }, 1800);
-      });
-    }
-  }
 })();

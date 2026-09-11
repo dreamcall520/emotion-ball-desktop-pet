@@ -23,7 +23,10 @@ python3 -m http.server 4179 --bind 127.0.0.1
 
 - `index.html`：页面内容和可访问结构。
 - `styles.css`：浅色、深色、移动端与网页玻璃材质近似。
-- `app.js`：外观切换、移动导航、校验值复制和球球互动演示。
+- `app.js`：外观切换、移动导航和校验值复制。
+- `motion-showcase.js`、`motion-showcase.css`：首屏、互动、Codex 与桌面场景的实时 V5 动效编排；自动播放支持离屏暂停、手动点选及减少动态效果。
+- `quota-demo.js`、`quota-demo.css`：可操作的额度演示卡片，只使用示例数据，不连接 Codex。
+- `assets/motion/`：复用已确认的 V5 互动、思绪游光和文案模块，以及原有身体动作采样；原设计稿和桌面应用未修改。
 - `assets/vendor/emotion-ball/`：原项目球形角色矢量引擎。
-- `assets/screenshots/`：来自隔离烟测的真实产品截图。
+- `assets/screenshots/`：保留的历史真实产品截图；当前展示区使用明确标注的网页动画演示。
 - `LICENSE`、`NOTICE.md`：许可与原作者声明。

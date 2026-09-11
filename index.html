@@ -22,6 +22,8 @@
       } catch (_error) {}
     </script>
     <link rel="stylesheet" href="styles.css?v=20260911-1">
+    <link rel="stylesheet" href="motion-showcase.css?v=20260911-1">
+    <link rel="stylesheet" href="quota-demo.css?v=20260911-1">
     <title>球球桌宠 - 免费的 macOS 桌面伙伴</title>
   </head>
   <body>
@@ -33,7 +35,7 @@
       <nav class="site-nav" id="site-nav" aria-label="主要导航">
         <a href="#features">功能</a>
         <a href="#codex">Codex 陪伴</a>
-        <a href="#gallery">实拍</a>
+        <a href="#gallery">动态体验</a>
         <a href="#download">下载</a>
         <a href="#privacy">隐私</a>
         <a href="#install">安装</a>
@@ -53,11 +55,16 @@
             <a class="button button-secondary" href="#features">看看它会什么</a>
           </div>
         </div>
-        <div class="hero-stage" aria-label="可互动的球球视觉演示">
+        <div class="hero-stage" data-motion-scene="hero" aria-label="球球自动互动演示">
           <div class="ambient ambient-one" aria-hidden="true"></div>
           <div class="ambient ambient-two" aria-hidden="true"></div>
-          <div class="live-ball hero-ball" id="hero-ball" role="img" aria-label="灰白色球球会跟随鼠标看向不同方向"></div>
-          <div class="ball-shadow" aria-hidden="true"></div>
+          <div class="motion-stage hero-motion-stage">
+            <p class="motion-bubble" data-motion-bubble>嗨，今天也碰面啦。</p>
+            <button class="pet-touch-target" type="button" data-pet-touch aria-label="摸摸球球">
+              <span class="pet-offset"><span class="live-ball" data-ball-host></span><span class="thought-flow" aria-hidden="true"></span></span>
+            </button>
+          </div>
+          <div class="hero-stage-caption"><span>点点球球，它会回应你</span><button class="motion-toggle" type="button" data-motion-toggle aria-pressed="false">暂停动效</button></div>
         </div>
       </section>
 
@@ -85,14 +92,22 @@
               <p>从 60 × 60 到大号，自由切换并可始终置顶。</p>
             </article>
           </div>
-          <div class="demo-stage glass-panel">
-            <div class="speech-sample">你忙，我陪着。</div>
-            <div class="live-ball demo-ball" id="demo-ball" role="img" aria-label="球球互动演示"></div>
-            <div class="demo-controls" aria-label="球球表情演示">
-              <button type="button" data-emotion="10">开心</button>
-              <button type="button" data-emotion="03">好奇</button>
-              <button type="button" data-emotion="00">困了</button>
+          <div class="motion-panel feature-playground" data-motion-scene="feature">
+            <div class="motion-panel-heading"><span data-motion-label>摸头 · 侧躺贴贴</span><button class="motion-toggle" type="button" data-motion-toggle aria-pressed="false">暂停动效</button></div>
+            <div class="motion-stage">
+              <p class="motion-bubble" data-motion-bubble>软乎乎地贴一下。</p>
+              <button class="pet-touch-target" type="button" data-pet-touch aria-label="摸摸互动区的球球">
+                <span class="pet-offset"><span class="live-ball" data-ball-host></span><span class="thought-flow" aria-hidden="true"></span></span>
+              </button>
             </div>
+            <div class="motion-choices" aria-label="选择球球互动">
+              <button type="button" data-motion-action="nuzzle" aria-pressed="true">摸摸头</button>
+              <button type="button" data-motion-action="land" aria-pressed="false">放下来</button>
+              <button type="button" data-motion-action="stretch" aria-pressed="false">叫醒它</button>
+              <button type="button" data-motion-action="hop" aria-pressed="false">跳一跳</button>
+              <button type="button" data-motion-action="ribbon" aria-pressed="false">转彩带</button>
+            </div>
+            <p class="motion-caption">自动轮播，也可以点选你想看的小动作。</p>
           </div>
         </div>
       </section>
@@ -117,52 +132,46 @@
             </div>
           </dl>
         </div>
-        <div class="quota-showcase" aria-label="Codex 额度卡片浅色与深色实拍">
-          <figure class="quota-frame quota-frame-light">
-            <img src="assets/screenshots/quota-light.png" width="392" height="192" loading="lazy" alt="浅色模式的 Codex 额度卡片真实验收截图">
-            <figcaption>浅色模式</figcaption>
-          </figure>
-          <figure class="quota-frame quota-frame-dark">
-            <img src="assets/screenshots/quota-dark.png" width="392" height="192" loading="lazy" alt="深色模式的 Codex 额度卡片真实验收截图">
-            <figcaption>深色模式</figcaption>
-          </figure>
+        <div class="codex-live-showcase" data-motion-scene="codex">
+          <div class="quota-playground" data-quota-demo></div>
+          <div class="codex-pet-row">
+            <div class="codex-pet-copy"><span data-motion-label>思考中 · 思绪游光</span><p data-motion-bubble>一点点把线索串起来。</p></div>
+            <div class="motion-stage">
+              <button class="pet-touch-target" type="button" data-pet-touch aria-label="体验球球完成提醒">
+                <span class="pet-offset"><span class="live-ball" data-ball-host></span><span class="thought-flow" aria-hidden="true"></span></span>
+              </button>
+            </div>
+          </div>
+          <div class="codex-motion-footer"><span>网页模拟演示，不会操作你的任务。</span><button class="motion-toggle" type="button" data-motion-toggle aria-pressed="false">暂停动效</button></div>
         </div>
       </section>
 
       <section class="gallery-section section" id="gallery" aria-labelledby="gallery-title">
         <div class="section-heading gallery-heading">
-          <h2 id="gallery-title">真正在桌面上的样子</h2>
-          <p>来自 0.3.10 的真实截图，展示角色、气泡和摸头表情；0.3.13 新增互动见更新日志。</p>
+          <h2 id="gallery-title">把一小份陪伴，留在桌面</h2>
+          <p>从安静守候到小小回应，看看它如何陪你度过一天。</p>
         </div>
-        <div class="gallery-showcase" data-gallery>
-          <div class="gallery-stage glass-panel" role="group" aria-label="球球桌宠真实截图动态展示" aria-roledescription="轮播图">
-            <figure class="gallery-slide is-active" id="gallery-panel-character" role="tabpanel" aria-labelledby="gallery-tab-character" aria-hidden="false" data-gallery-slide="0">
-              <div class="gallery-media gallery-media-character">
-                <img src="assets/screenshots/pet-180.png" width="360" height="360" alt="180 尺寸球球的二倍图真实验收截图">
-              </div>
-              <figcaption><strong>桌面角色</strong><span>灰白角色与黑色眼睛保持统一</span></figcaption>
-            </figure>
-            <figure class="gallery-slide" id="gallery-panel-bubble" role="tabpanel" aria-labelledby="gallery-tab-bubble" aria-hidden="true" data-gallery-slide="1">
-              <div class="gallery-media gallery-media-bubble">
-                <img src="assets/screenshots/bubble.png" width="448" height="172" alt="球球气泡真实验收截图，文字为你忙，我陪着">
-              </div>
-              <figcaption><strong>陪伴气泡</strong><span>克制、低打扰的陪伴气泡</span></figcaption>
-            </figure>
-            <figure class="gallery-slide" id="gallery-panel-petting" role="tabpanel" aria-labelledby="gallery-tab-petting" aria-hidden="true" data-gallery-slide="2">
-              <div class="gallery-media gallery-media-petting">
-                <img src="assets/screenshots/petting.png" width="160" height="160" alt="球球摸头表情真实验收截图">
-              </div>
-              <figcaption><strong>摸头回应</strong><span>摸头时的细小回应</span></figcaption>
-            </figure>
-          </div>
-          <div class="gallery-toolbar">
-            <div class="gallery-tabs" role="tablist" aria-label="选择真实截图">
-              <button class="is-active" id="gallery-tab-character" type="button" role="tab" aria-controls="gallery-panel-character" aria-selected="true" data-gallery-control="0">桌面角色</button>
-              <button id="gallery-tab-bubble" type="button" role="tab" aria-controls="gallery-panel-bubble" aria-selected="false" tabindex="-1" data-gallery-control="1">陪伴气泡</button>
-              <button id="gallery-tab-petting" type="button" role="tab" aria-controls="gallery-panel-petting" aria-selected="false" tabindex="-1" data-gallery-control="2">摸头回应</button>
+        <div class="desktop-showcase" data-motion-scene="desktop">
+          <div class="desktop-scene">
+            <div class="desktop-scene-copy"><span data-motion-label>安静陪伴</span><h3 data-scene-title>你忙，我陪着。</h3><p data-scene-description>不抢走注意力，也一直在你身边。</p></div>
+            <div class="desktop-orbit desktop-orbit-one" aria-hidden="true"></div><div class="desktop-orbit desktop-orbit-two" aria-hidden="true"></div>
+            <div class="motion-stage">
+              <p class="motion-bubble" data-motion-bubble>球球在这儿，稳稳待着。</p>
+              <button class="pet-touch-target" type="button" data-pet-touch aria-label="与桌面场景里的球球互动">
+                <span class="pet-offset"><span class="live-ball" data-ball-host></span><span class="thought-flow" aria-hidden="true"></span></span>
+              </button>
             </div>
-            <button class="gallery-playback" type="button" aria-pressed="false" data-gallery-playback>暂停切换</button>
           </div>
+          <div class="desktop-toolbar">
+            <div class="motion-choices" aria-label="选择桌面陪伴场景">
+              <button type="button" data-motion-action="hello" aria-pressed="true">打个招呼</button>
+              <button type="button" data-motion-action="nuzzle" aria-pressed="false">贴贴陪伴</button>
+              <button type="button" data-motion-action="sleep" aria-pressed="false">安静休息</button>
+              <button type="button" data-motion-action="stretch" aria-pressed="false">醒脑一圈</button>
+            </div>
+            <button class="motion-toggle" type="button" data-motion-toggle aria-pressed="false">暂停动效</button>
+          </div>
+          <p class="motion-caption">基于已确认 V5 动效的网页演示；部分新互动仅包含在 Apple 0.3.13 中。</p>
         </div>
       </section>
 
@@ -304,6 +313,12 @@
     <script src="assets/vendor/emotion-ball/emotions.js"></script>
     <script src="assets/vendor/emotion-ball/ball.js"></script>
     <script src="assets/vendor/emotion-ball/engine.js"></script>
-    <script src="app.js?v=20260911-1"></script>
+    <script src="assets/motion/interaction-motion.js"></script>
+    <script src="assets/motion/interaction-v5.js"></script>
+    <script src="assets/motion/thought-flow-v5.js"></script>
+    <script src="assets/motion/dialogue-v5.js"></script>
+    <script src="app.js?v=20260911-2"></script>
+    <script src="motion-showcase.js?v=20260911-1"></script>
+    <script src="quota-demo.js?v=20260911-1"></script>
   </body>
 </html>
