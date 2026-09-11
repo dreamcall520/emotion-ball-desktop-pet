@@ -1,0 +1,63 @@
+/* Neutral black/charcoal surfaces, informed by Apple MacBook Pro.
+ * Both explicit dark and system-dark are scoped; light mode is unchanged. */
+html[data-theme="dark"] {
+  --page: #000000;
+  --page-deep: #101011;
+  --surface: #161617;
+  --surface-solid: #1d1d1f;
+  --surface-strong: #232325;
+  --text: #f5f5f7;
+  --text-soft: #a1a1a6;
+  --text-faint: #86868b;
+  --line: rgba(255, 255, 255, .10);
+  --line-strong: rgba(255, 255, 255, .20);
+  --accent: #82b1f7;
+  --accent-strong: #a3c8fc;
+  --accent-soft: rgba(130, 177, 247, .10);
+  --shadow-soft: none;
+  --shadow-control: none;
+}
+html[data-theme="dark"] body { background: #000; }
+html[data-theme="dark"] .site-header { background: rgba(17, 17, 18, .86); box-shadow: none; }
+html[data-theme="dark"] .motion-panel, html[data-theme="dark"] .codex-live-showcase, html[data-theme="dark"] .download-card, html[data-theme="dark"] .download-card-candidate {
+  background: #161617; border-color: rgba(255,255,255,.08); box-shadow: none;
+}
+html[data-theme="dark"] .download-card-primary { border-color: rgba(255,255,255,.16); box-shadow: none; }
+html[data-theme="dark"] .button-primary, html[data-theme="dark"] .button-primary:hover { box-shadow: none; }
+html[data-theme="dark"] .ambient-one { background: rgba(245,245,247,.045); }
+html[data-theme="dark"] .ambient-two { background: rgba(245,245,247,.025); }
+html[data-theme="dark"] .desktop-scene { background: linear-gradient(125deg, #1d1d1f, #101011); border-color: rgba(255,255,255,.08); }
+html[data-theme="dark"] .motion-bubble { background: #1d1d1f; box-shadow: none; }
+html[data-theme="dark"] .motion-bubble::after { background: #1d1d1f; }
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) {
+  --page: #000000;
+  --page-deep: #101011;
+  --surface: #161617;
+  --surface-solid: #1d1d1f;
+  --surface-strong: #232325;
+  --text: #f5f5f7;
+  --text-soft: #a1a1a6;
+  --text-faint: #86868b;
+  --line: rgba(255, 255, 255, .10);
+  --line-strong: rgba(255, 255, 255, .20);
+  --accent: #82b1f7;
+  --accent-strong: #a3c8fc;
+  --accent-soft: rgba(130, 177, 247, .10);
+  --shadow-soft: none;
+  --shadow-control: none;
+  }
+html:not([data-theme="light"]) body { background: #000; }
+html:not([data-theme="light"]) .site-header { background: rgba(17, 17, 18, .86); box-shadow: none; }
+html:not([data-theme="light"]) .motion-panel, html:not([data-theme="light"]) .codex-live-showcase, html:not([data-theme="light"]) .download-card, html:not([data-theme="light"]) .download-card-candidate {
+  background: #161617; border-color: rgba(255,255,255,.08); box-shadow: none;
+}
+html:not([data-theme="light"]) .download-card-primary { border-color: rgba(255,255,255,.16); box-shadow: none; }
+html:not([data-theme="light"]) .button-primary, html:not([data-theme="light"]) .button-primary:hover { box-shadow: none; }
+html:not([data-theme="light"]) .ambient-one { background: rgba(245,245,247,.045); }
+html:not([data-theme="light"]) .ambient-two { background: rgba(245,245,247,.025); }
+html:not([data-theme="light"]) .desktop-scene { background: linear-gradient(125deg, #1d1d1f, #101011); border-color: rgba(255,255,255,.08); }
+html:not([data-theme="light"]) .motion-bubble { background: #1d1d1f; box-shadow: none; }
+html:not([data-theme="light"]) .motion-bubble::after { background: #1d1d1f; }
+}
+
