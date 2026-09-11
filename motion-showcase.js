@@ -114,6 +114,8 @@
     updateButton() {
       const stopped = this.paused || reduced.matches;
       this.button.textContent = reduced.matches ? '已减少动态' : this.paused ? '继续动效' : '暂停动效';
+      this.button.setAttribute('aria-label', this.button.textContent);
+      this.button.title = this.button.textContent;
       this.button.setAttribute('aria-pressed', String(stopped));
       this.button.disabled = reduced.matches;
       this.root.dataset.autoplay = String(this.canAuto());

@@ -22,7 +22,7 @@
       } catch (_error) {}
     </script>
     <link rel="stylesheet" href="styles.css?v=20260911-1">
-    <link rel="stylesheet" href="motion-showcase.css?v=20260911-1">
+    <link rel="stylesheet" href="motion-showcase.css?v=20260911-2">
     <link rel="stylesheet" href="quota-demo.css?v=20260911-1">
     <title>球球桌宠 - 免费的 macOS 桌面伙伴</title>
   </head>
@@ -64,7 +64,7 @@
               <span class="pet-offset"><span class="live-ball" data-ball-host></span><span class="thought-flow" aria-hidden="true"></span></span>
             </button>
           </div>
-          <div class="hero-stage-caption"><span>点点球球，它会回应你</span><button class="motion-toggle" type="button" data-motion-toggle aria-pressed="false">暂停动效</button></div>
+          <button class="motion-toggle hero-motion-toggle" type="button" data-motion-toggle aria-pressed="false" aria-label="暂停动效" title="暂停动效">暂停动效</button>
         </div>
       </section>
 
@@ -285,6 +285,8 @@
             <time datetime="2026-09-03">2026-09-03</time>
             <div><h3>0.3.12 Apple 芯片版</h3><p>增加间歇性的 Codex 思考提示，避让眼睛和屏幕边界；思考效果已在 0.3.13 升级为头顶光迹。</p></div>
           </article>
+          <details class="updates-history">
+            <summary><span class="history-expand">查看更早更新（4 条）</span><span class="history-collapse">收起历史更新</span><span class="history-chevron" aria-hidden="true">⌄</span></summary>
           <article>
             <time datetime="2026-09-01">2026-09-01</time>
             <div><h3>0.3.11 发布</h3><p>补全 Codex 新任务发现，修复任务短暂断线后的完成提醒。提供 Apple 芯片版和独立 Intel x64 构建候选。</p></div>
@@ -301,6 +303,7 @@
             <time datetime="2026-08-30">2026-08-30</time>
             <div><h3>0.3.10 发布</h3><p>通用 Codex 额度规则、双周期卡片与 Apple 芯片正式包完成验证。</p></div>
           </article>
+          </details>
         </div>
       </section>
 
@@ -322,7 +325,7 @@
     <script src="assets/motion/thought-flow-v5.js"></script>
     <script src="assets/motion/dialogue-v5.js"></script>
     <script src="app.js?v=20260911-2"></script>
-    <script src="motion-showcase.js?v=20260911-1"></script>
+    <script src="motion-showcase.js?v=20260911-2"></script>
     <script src="quota-demo.js?v=20260911-1"></script>
   </body>
 </html>
