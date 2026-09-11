@@ -1,6 +1,6 @@
 const { createCodexConnection, CONNECTION_STATES, ERROR_CODES } = require('./codex-connection');
 const { isTaskId } = require('./codex-state');
-const { completionText } = require('./codex-text');
+const { completionText, COMPLETION_VARIANT_COUNT } = require('./codex-text');
 const { selectPrimaryQuotaWindows } = require('./codex-quota-view');
 const { createQuotaAlertTracker, mergeQuotaAlerts } = require('./codex-quota-alerts');
 
@@ -22,7 +22,7 @@ const timestamp = value => Number.isFinite(value) && value >= 0 && value <= 8640
 // Creating the policy owns no resources. Transports and timers exist only while enabled.
 function createCodexCompanion({ createConnection = createCodexConnection, onChange = () => {},
   onAlert = () => {}, onAlertUpdate = () => {}, onClear = () => {}, canPresent = () => true,
-  now = Date.now, schedule = setTimeout, cancel = clearTimeout } = {}) {
+  now = Date.now, random = Math.random, schedule = setTimeout, cancel = clearTimeout } = {}) {
   let enabled = false;
   let closed = false;
   let generation = 0;
@@ -116,6 +116,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     return event.kind === 'quota' ? QUOTA_DISPLAY_MS[severity] : TASK_DISPLAY_MS;
   }
   function eventMotion(event, refs) {
+    if (event.kind === 'completed') return event.completionMotion;
     if (event.kind !== 'quota') return MOTIONS[event.kind];
     return eventSeverity(event, refs) === 'normal' ? 'bow' : 'jelly';
   }
@@ -172,7 +173,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     return { id: event.id, generation: event.generation, kind: event.kind,
       motion: eventMotion(event, refs), severity: eventSeverity(event, refs), durationMs: eventDuration(event, refs),
       text: event.kind === 'completed'
-        ? completionText(refs.map(ref => ref.title), refs.length, preferences.taskNameInAlerts)
+        ? completionText(refs.map(ref => ref.title), refs.length, preferences.taskNameInAlerts, event.completionVariant)
         : eventText(event, refs),
       taskIds: event.kind === 'quota' ? [] : refs.map(ref => ref.id),
       createdAt: event.createdAt, expiresAt: event.expiresAt };
@@ -340,6 +341,14 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     if (!event) event = queued.find(item => item.kind === kind && now() - item.createdAt < MERGE_MS);
     if (!event) {
       event = { id: ++nextAlertId, generation, kind, createdAt: now(), refs: new Map() };
+      if (kind === 'completed') {
+        // 一次完成合并提醒只抽一次；名称刷新、偏好切换和排队重试均沿用。
+        const value = typeof random === 'function' ? random() : 0;
+        const choice = Number.isFinite(value)
+          ? Math.max(0, Math.min(COMPLETION_VARIANT_COUNT * 2 - 1, Math.floor(value * COMPLETION_VARIANT_COUNT * 2))) : 0;
+        event.completionMotion = choice < COMPLETION_VARIANT_COUNT ? 'hop' : 'spin';
+        event.completionVariant = choice % COMPLETION_VARIANT_COUNT;
+      }
       if (kind !== 'quota') event.expiresAt = now() + QUEUE_MS;
       queued.push(event);
       if (queued.length > 20) queued.shift();

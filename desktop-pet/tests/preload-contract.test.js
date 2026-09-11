@@ -140,7 +140,7 @@ test('预加载动作接口仅发送白名单字段且回帧可取消订阅', ()
   desktop.say({ event: 'play', motion: 'bow', unexpected: 'ignored' });
   desktop.say({ event: 'sleep', motion: 'bow' });
   assert.equal(JSON.stringify(messages), JSON.stringify([
-    ['pet:motion-start', { token: 3, action: 'hop' }], ['pet:say', { event: 'play', motion: 'bow' }]
+    ['pet:motion-start', { token: 3, action: 'hop', side: 'right', reducedMotion: false }], ['pet:say', { event: 'play', motion: 'bow' }]
   ]));
   let frame;
   const remove = desktop.onMotion(packet => { frame = packet; });
@@ -183,4 +183,14 @@ test('桌宠阴影在浅色背景下保持轻量', () => {
   assert.ok(match, '需要保留一层轻量阴影');
   assert.ok(Number(match[2]) <= 6, '阴影模糊范围不能超过 6px');
   assert.ok(Number(match[3]) <= 0.1, '阴影透明度不能超过 10%');
+});
+
+test('Codex 思绪使用独立透明窗口，球体不再包含固定气泡', () => {
+  const html = fs.readFileSync(path.resolve(__dirname, '../index.html'), 'utf8');
+  const overlay = fs.readFileSync(path.resolve(__dirname, '../thought.html'), 'utf8');
+  const host = fs.readFileSync(path.resolve(__dirname, '../lib/thought-window.js'), 'utf8');
+  assert.doesNotMatch(html, /codex-thought-dot/);
+  assert.match(overlay, /id="flow" aria-hidden="true"/);
+  assert.match(host, /setIgnoreMouseEvents\(true\)/);
+  assert.match(host, /focusable: false/);
 });

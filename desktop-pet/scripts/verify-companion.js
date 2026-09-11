@@ -2,6 +2,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { setTimeout: wait } = require('node:timers/promises');
+const CompanionMotion = require('../lib/companion-motion');
+const { contourBounds, assertVisibleFrame } = require('./verify-body-motion');
 
 // 仅在显式冒烟模式调用；通过真实 IPC、渲染页面和原生输入验收。
 async function verifyCompanion({ pet, bubble, dialogue, monitor, screen, BrowserWindow, command, setSetting,
@@ -12,6 +14,7 @@ async function verifyCompanion({ pet, bubble, dialogue, monitor, screen, Browser
   const original = pet.getBounds();
   const artifacts = process.env.PET_SMOKE_ARTIFACT_DIR;
   const hostTrace = [];
+  const companionMotionResults = [];
   const presentationTrace = [];
   const restorePresentationTrace = [];
   let lastBubbleShow = null;
@@ -98,6 +101,22 @@ async function verifyCompanion({ pet, bubble, dialogue, monitor, screen, Browser
     window.__companionDiagnosticCleanup.push(window.petDesktop.onActivity(packet => record('activity', packet)));
     window.__companionDiagnosticCleanup.push(window.petDesktop.onSettings(packet => record('settings', packet)));
     window.__companionDiagnosticCleanup.push(window.petDesktop.onCommand(packet => record('command', packet)));
+    window.__companionDiagnosticCleanup.push(window.petDesktop.onMotion(packet => {
+      const trace = window.__companionMotionTrace;
+      if (trace && packet.action === trace.action) trace.packets.push({...packet,at:performance.now()});
+    }));
+    window.__companionContourBounds = ${contourBounds.toString()};
+    window.__readCompanionMotion = () => {
+      const eye = document.querySelector('.eb-eye');
+      const head = eye.parentElement.firstElementChild;
+      return { at:performance.now(), viewport:{width:innerWidth,height:innerHeight},
+        contour:window.__companionContourBounds(head.getAttribute('d'),head.getScreenCTM()),
+        transform:head.parentElement.getAttribute('transform'),
+        bodyColor:document.querySelectorAll('radialGradient stop')[1].getAttribute('stop-color'),
+        eyeColors:[...document.querySelectorAll('.eb-eye')].map(el=>el.getAttribute('fill')),
+        eyeTransforms:[...document.querySelectorAll('.eb-eye')].map(el=>el.getAttribute('transform')),
+        state:{...document.getElementById('pet').dataset} };
+    };
     const errorListener = event => window.__companionFailureTrace.errors.push({at:performance.now(),message:event.message});
     window.addEventListener('error',errorListener);
     window.__companionDiagnosticCleanup.push(() => window.removeEventListener('error',errorListener)); true`);
@@ -108,10 +127,10 @@ async function verifyCompanion({ pet, bubble, dialogue, monitor, screen, Browser
   await wait(150);
   let packet = {
     idleSeconds: 0, locked: false, sameDisplay: true,
-    cursor: { x: area.x + 420, y: area.y + 280 }, petBounds: pet.getBounds()
+    cursor: { x: area.x + 420, y: area.y + 280 }, petBounds: pet.getBounds(), workArea: area
   };
   const sample = async patch => {
-    packet = { ...packet, ...patch, petBounds: pet.getBounds() };
+    packet = { ...packet, ...patch, petBounds: pet.getBounds(), workArea: screen.getDisplayMatching(pet.getBounds()).workArea };
     observeHost('activity-request', packet);
     pet.webContents.send('pet:activity', packet);
     await wait(90);
@@ -130,6 +149,47 @@ async function verifyCompanion({ pet, bubble, dialogue, monitor, screen, Browser
     assert.equal(colors.body.toUpperCase(), '#EEEBE4', '实际球体必须保持睡眠灰白');
     assert.deepEqual(colors.eyes.map(color => color.toUpperCase()), ['#1A1A1A', '#1A1A1A']);
   }
+  const beginCompanionTrace = action => page(`window.__companionMotionTrace = {action:${JSON.stringify(action)},packets:[]}; true`);
+  const finishCompanionTrace = async (action, anchor, label, expectedSide) => {
+    const motion = CompanionMotion.getMotion(action);
+    const work = screen.getDisplayMatching(anchor).workArea;
+    const deadline = performance.now() + motion.durationMs + 3000;
+    const rendered = [];
+    let packets = [];
+    do {
+      const frame = await page('window.__readCompanionMotion()');
+      const bounds = pet.getBounds();
+      assertVisibleFrame(frame, bounds, work, label);
+      rendered.push({ ...frame, bounds });
+      packets = await page('window.__companionMotionTrace.packets');
+      if (packets.some(packet => packet.frame.done)) break;
+      await wait(40);
+    } while (performance.now() < deadline);
+    assert.ok(packets.length >= 7 && packets.at(-1).frame.done, `${label}必须完整结束：${JSON.stringify(await state())}`);
+    assert.equal(new Set(packets.map(packet => packet.token)).size, 1, `${label}不得重复启动或被其他动作中断`);
+    assert.ok(packets.at(-1).at - packets[0].at >= motion.durationMs - 100, `${label}未播放完整时长`);
+    assert.deepEqual(packets.at(-1).frame, CompanionMotion.sample(action, motion.durationMs, expectedSide), `${label}最终包必须精确中性`);
+    assert.ok(packets.every(packet => packet.side === expectedSide), `${label}整轮方向必须固定`);
+    assert.deepEqual(pet.getBounds(), anchor, `${label}结束必须归位`);
+    assert.equal((await state()).motionOwner, 'none');
+    assert.ok(rendered.length >= 7, `${label}真实渲染采样不足`);
+    if (action === 'nuzzle') {
+      assert.ok(packets.some(packet => Math.abs(packet.frame.body.rotate) >= 60), '摸头必须真实侧躺');
+      assert.ok(new Set(rendered.map(frame => frame.transform)).size > 5, '摸头身体必须连续变化');
+      assert.ok(rendered.some(frame => expectedSide === 'left' ? frame.bounds.x < anchor.x : frame.bounds.x > anchor.x), '摸头必须向内贴近');
+    } else if (action === 'land') {
+      assert.ok(packets.some(packet => Math.abs(packet.frame.body.yaw) >= 0.95), '放下必须转面确认落点');
+      assert.ok(new Set(rendered.map(frame => JSON.stringify(frame.eyeTransforms))).size > 5, '放下必须实际转动脸部');
+      assert.ok(rendered.every(frame => frame.bounds.x === anchor.x && frame.bounds.y === anchor.y), '放下在新落点站稳，不回跳旧位置');
+    } else {
+      for (const axis of ['x', 'y']) assert.ok(rendered.some(frame => frame.bounds[axis] < anchor[axis]) &&
+        rendered.some(frame => frame.bounds[axis] > anchor[axis]), '唤醒必须完整走过小圆四个方向');
+      assert.ok(packets.every(packet => packet.frame.body.rotate === 0 && packet.frame.body.yaw === 0), '醒脑小圆保持正脸');
+    }
+    companionMotionResults.push({ action, label, anchor, expectedSide, packets, rendered });
+    await page('window.__companionMotionTrace = null; true');
+    process.stdout.write(`PET_COMPANION_${action.toUpperCase()}_OK\n`);
+  };
   await assertFixedColor();
   assert.equal(getSettings().keepAwake, true, '首次使用必须默认选中保持清醒');
   setSetting('keepAwake', false);
@@ -147,8 +207,11 @@ async function verifyCompanion({ pet, bubble, dialogue, monitor, screen, Browser
   command('sleep');
   assert.equal((await sample({ idleSeconds: 0 })).mode, 'manual-sleep');
   assert.equal((await state()).emotion, '00');
+  const wakeAnchor = pet.getBounds();
+  const wakeSide = (await state()).facing;
+  await beginCompanionTrace('stretch');
   command('wake');
-  await wait(2400);
+  await finishCompanionTrace('stretch', wakeAnchor, '菜单醒脑一圈-80', wakeSide);
   await page(`window.__focusTrace = []; window.petDesktop.onActivity(p => {
     window.__focusTrace.push({at:performance.now(), idle:p.idleSeconds, locked:p.locked, mode:document.getElementById('pet').dataset.mode});
   }); document.getElementById('pet').addEventListener('pointerenter',()=>window.__focusTrace.push({at:performance.now(),event:'pointerenter'})); true`);
@@ -178,6 +241,15 @@ async function verifyCompanion({ pet, bubble, dialogue, monitor, screen, Browser
   assert.equal((await sample({ sameDisplay: false })).gaze, '0,0');
   await sample({ sameDisplay: true });
   process.stdout.write('PET_GAZE_OK\n');
+
+  pet.setPosition(area.x + area.width - 240, area.y + 240, false);
+  await sample({ cursor: null });
+  assert.equal((await state()).facing, 'left', '放在屏幕右侧时默认必须朝左');
+  await wait(120);
+  const mirroredEyes = await page('[...document.querySelectorAll(".eb-eye")].map(el=>el.getAttribute("transform"))');
+  assert.ok(mirroredEyes.every(transform => /scale\(-/.test(transform)), '实际眼睛轮廓应朝左镜像');
+  await capture(pet, 'facing-left-right-desktop-80');
+  process.stdout.write('PET_INWARD_FACING_OK\n');
 
   // sendInputEvent 要求原生窗口聚焦；CDP 输入不改变生产窗口的非激活属性。
   const inputWindow = async (win, type, x, y, extra = {}) => {
@@ -209,6 +281,8 @@ async function verifyCompanion({ pet, bubble, dialogue, monitor, screen, Browser
     }
     window.__pettingError = event => window.__pettingTrace.errors.push({at:performance.now(),message:event.message});
     window.addEventListener('error',window.__pettingError); true`);
+  const pettingAnchor = pet.getBounds();
+  await beginCompanionTrace('nuzzle');
   for (let index = 0; index < 10; index++) {
     await input('mouseMove', index % 2 ? 48 : 28, 25);
     await wait(100);
@@ -221,13 +295,15 @@ async function verifyCompanion({ pet, bubble, dialogue, monitor, screen, Browser
     delete window.__pettingListeners; delete window.__pettingError; delete window.__pettingTrace;
     return result;
   })()`);
-  if (pettingState.lastAction !== 'pet' && artifacts) {
+  if (pettingState.lastAction !== 'nuzzle' && artifacts) {
     fs.mkdirSync(path.resolve(artifacts), { recursive: true });
     fs.writeFileSync(path.join(path.resolve(artifacts), 'petting-failure.json'), JSON.stringify({ state: pettingState, ...pettingTrace }, null, 2));
   }
-  assert.equal(pettingState.lastAction, 'pet', `连续摸头应触发舒服表情：${JSON.stringify({ state: pettingState, ...pettingTrace })}`);
+  assert.equal(pettingState.lastAction, 'nuzzle', `连续摸头应触发侧躺贴贴：${JSON.stringify({ state: pettingState, ...pettingTrace })}`);
+  assert.equal(pettingState.emotion, '52');
   await assertFixedColor();
   await capture(pet, 'petting-80');
+  await finishCompanionTrace('nuzzle', pettingAnchor, '真实摸头侧躺-80', 'left');
   await page(`window.__dragTrace = []; for (const type of ['pointerdown','pointermove','pointerup','pointercancel']) {
     document.getElementById('pet').addEventListener(type, e => window.__dragTrace.push({type, x:e.screenX, y:e.screenY, buttons:e.buttons}));
   } true`);
@@ -235,9 +311,13 @@ async function verifyCompanion({ pet, bubble, dialogue, monitor, screen, Browser
   await wait(50);
   await input('mouseMove', 60, 40, { modifiers: ['leftButtonDown'] });
   await wait(150);
+  const dropAnchor = pet.getBounds();
+  await beginCompanionTrace('land');
   await input('mouseUp', 60, 40, { button: 'left', clickCount: 1 });
   await wait(200);
-  assert.equal((await state()).lastAction, 'drop', `拖动后应触发落地反馈：${JSON.stringify(await page('window.__dragTrace'))}`);
+  assert.equal((await state()).lastAction, 'land', `拖动后应触发转面站稳：${JSON.stringify(await page('window.__dragTrace'))}`);
+  assert.equal((await state()).emotion, '54');
+  await finishCompanionTrace('land', dropAnchor, '真实放下转面-80', 'left');
   process.stdout.write('PET_TOUCH_DRAG_OK\n');
 
   // 等待真实互动冷却确实结束，不以固定等待误判稍晚到达的拖拽反馈。
@@ -382,10 +462,12 @@ async function verifyCompanion({ pet, bubble, dialogue, monitor, screen, Browser
       try {
         fs.mkdirSync(path.resolve(artifacts), { recursive: true });
         fs.writeFileSync(path.join(path.resolve(artifacts), 'presentation-events.json'), JSON.stringify(presentationTrace, null, 2));
+        fs.writeFileSync(path.join(path.resolve(artifacts), 'companion-motion-verification.json'), JSON.stringify(companionMotionResults, null, 2));
       } catch (_) { /* 诊断输出不能遮盖原验收结果。 */ }
     }
     await page(`window.__companionDiagnosticCleanup?.forEach(remove => remove());
-      delete window.__companionDiagnosticCleanup; delete window.__companionFailureTrace; true`).catch(() => {});
+      delete window.__companionDiagnosticCleanup; delete window.__companionFailureTrace;
+      delete window.__companionMotionTrace; delete window.__companionContourBounds; delete window.__readCompanionMotion; true`).catch(() => {});
   }
 }
 

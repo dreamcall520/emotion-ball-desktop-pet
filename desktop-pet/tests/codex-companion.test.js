@@ -30,6 +30,7 @@ function fixture(options = {}) {
   const calls = [];
   const companion = createCodexCompanion({
     now: () => time,
+    random: options.random || (() => 0),
     schedule: (callback, delay) => { const id = ++nextTimer; timers.set(id, { at: time + delay, callback }); return id; },
     cancel: id => timers.delete(id),
     canPresent: () => options.canPresent ? options.canPresent(companion) : present,
@@ -746,6 +747,57 @@ test('真实运行变化复用sway且无气泡，等待/完成/失败分别peek/
     assert.equal(JSON.stringify(f.alerts[0]).includes('任务 1'), false);
     f.companion.close();
   }
+});
+
+test('真实完成在跳跃和彩带间等分随机，合并、排队与更新只用一次选择', async () => {
+  const { completionText } = require('../lib/codex-text');
+  for (const [value, motion, variant] of [[0, 'hop', 0], [0.499, 'hop', 8], [0.5, 'spin', 0], [0.999, 'spin', 8]]) {
+    let samples = 0;
+    const f = fixture({ random: () => { samples++; return value; } });
+    await f.companion.setEnabled(true);
+    f.setPresent(false);
+    for (const n of [1, 2]) {
+      f.task(n, 'active', { baseline: true });
+      f.task(n, 'completed');
+    }
+    await f.tick(6000);
+    assert.equal(f.alerts.length, 0);
+    assert.equal(samples, 1, '同一合并提醒仅取样一次');
+    f.setPresent(true);
+    await f.tick(1000);
+    const alert = f.alerts[0];
+    assert.equal(alert.motion, motion);
+    assert.equal(alert.text, completionText([], 2, false, variant));
+    assert.deepEqual(alert.taskIds, [taskId(1), taskId(2)]);
+    f.companion.setPreferences({ taskNameInAlerts: true });
+    f.task(1, 'completed', { title: '更新后的名称' });
+    const current = f.companion.getSnapshot().currentAlert;
+    assert.equal(current.motion, motion);
+    assert.equal(current.text, completionText(['更新后的名称', '任务 2'], 2, true, variant));
+    assert.equal(current.id, alert.id);
+    assert.equal(current.expiresAt, alert.expiresAt);
+    assert.equal(samples, 1, '标题、偏好和快照刷新不重抽');
+    f.companion.close();
+  }
+});
+
+test('等待失败额度保持原动作且历史完成不消耗庆祝随机选择', async () => {
+  let samples = 0;
+  const f = fixture({ random: () => { samples++; return 0.9; } });
+  await f.companion.setEnabled(true);
+  f.task(9, 'completed', { baseline: true });
+  f.task(1, 'active', { baseline: true });
+  f.task(1, 'waiting');
+  await f.tick(5000);
+  assert.equal(f.alerts.at(-1).motion, 'peek');
+  f.task(1, 'failed');
+  await f.tick(30000);
+  assert.equal(f.alerts.at(-1).motion, 'jelly');
+  f.quota(9);
+  await f.tick(30000);
+  assert.equal(f.alerts.at(-1).motion, 'jelly');
+  assert.equal(samples, 0);
+  f.companion.close();
 });
 
 test('完成提醒默认隐藏任务名称和正文，快照只保留纯标题', async () => {

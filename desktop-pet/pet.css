@@ -21,6 +21,8 @@ body {
 }
 
 #pet {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
   cursor: grab;
@@ -52,8 +54,7 @@ body {
   transform-origin: 50% 62%;
 }
 
+/* 头顶短光迹由独立透明窗口承载，不占用球体点击范围。 */
 @media (prefers-reduced-motion: reduce) {
-  #pet[data-codex-working="true"][data-motion-owner="none"]:not(.dragging) svg {
-    animation: none;
-  }
+  #pet[data-codex-working="true"][data-motion-owner="none"]:not(.dragging) svg { animation: none; }
 }

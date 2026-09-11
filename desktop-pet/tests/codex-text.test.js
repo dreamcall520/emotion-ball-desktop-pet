@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  plainText, menuText, alertTaskTitle, completionText
+  plainText, menuText, alertTaskTitle, completionText, COMPLETION_VARIANT_COUNT
 } = require('../lib/codex-text');
 
 test('纯文本清理会移除控制符和方向控制符并合并空白', () => {
@@ -67,4 +67,31 @@ test('无输入数组和非法 maximum 安全返回', () => {
   assert.equal(menuText(undefined, NaN), '');
   assert.equal(alertTaskTitle(undefined), null);
   assert.equal(completionText(undefined, 'bad', true), '这轮有结果啦，去看看？');
+});
+
+test('完成文案变体保留任务名称和合并数量，超长回退继续受48字限制', () => {
+  const genericTexts = new Set();
+  for (let variant = 0; variant < COMPLETION_VARIANT_COUNT; variant++) {
+    const generic = completionText(['任务A'], 1, false, variant);
+    genericTexts.add(generic);
+    assert.doesNotMatch(generic, /任务完成/, '只承诺一轮运行结束，不承诺整个任务已办完');
+    const named = completionText(['任务A'], 1, true, variant);
+    assert.match(named, /^《任务A》/);
+    const multiple = completionText(['任务A', '任务B'], 3, true, variant);
+    assert.match(multiple, /3 个任务/);
+    for (const [titles, count] of [[['😀'.repeat(18)], 1], [['甲'.repeat(18), '乙'.repeat(18)], 2], [[], 3], [[], Number.MAX_SAFE_INTEGER]]) {
+      const text = completionText(titles, count, true, variant);
+      assert.ok(Array.from(text).length <= 48, text);
+      assert.ok(text.split('\n').length <= 2, text);
+      if (count > 1) assert.ok(text.includes(String(count)), text);
+    }
+    assert.equal(completionText(['任务A'], 1, true, variant), named, '刷新同一变体时文案稳定');
+  }
+  assert.equal(genericTexts.size, 9, '旧文案与八句新增都可选择');
+});
+
+test('非法完成文案变体回退旧文案', () => {
+  for (const variant of [-1, NaN, Infinity, '1', 1.5, COMPLETION_VARIANT_COUNT, '__proto__']) {
+    assert.equal(completionText(['任务A'], 1, true, variant), '《任务A》有结果啦\n去看看？');
+  }
 });

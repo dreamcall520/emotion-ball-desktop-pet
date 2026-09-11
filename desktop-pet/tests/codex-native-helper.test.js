@@ -21,6 +21,38 @@ test('双周期验收样本使用各自真实的重置区间，不用一天后�
   assert.equal(weekly.resetsAt - now, (6 * 24 + 14) * 3600000);
 });
 
+test('静态额度验收先观察唤醒开始，再等待宿主和页面动作结束且精确归位', async () => {
+  const { settleWakeMotion } = require('../scripts/verify-codex-companion');
+  const anchor = { x: 1408, y: 878, width: 80, height: 80 };
+  const moving = { owner: 'user', action: 'stretch', anchor };
+  const probes = [
+    [{ owner: null }, { owner: moving }],
+    [
+      { owner: moving, bounds: { ...anchor, y: 881 }, page: { motionOwner: 'user' } },
+      { owner: null, bounds: anchor, page: { motionOwner: 'user' } },
+      { owner: null, bounds: { ...anchor, y: 880 }, page: { motionOwner: 'none' } },
+      { owner: null, bounds: anchor, page: { motionOwner: 'none' } }
+    ]
+  ];
+  let current = {}, attempts = [], commands = [];
+  const restored = await settleWakeMotion({
+    command: value => commands.push(value), getMotionOwner: () => current.owner,
+    pet: { getBounds: () => current.bounds }, state: async () => current.page,
+    poll: async (read, predicate) => {
+      let count = 0;
+      for (const sample of probes.shift()) {
+        count++; current = sample;
+        const value = await read();
+        if (predicate(value)) { attempts.push(count); return value; }
+      }
+      throw new Error('测试阶段未满足真实归位条件');
+    }
+  });
+  assert.deepEqual(commands, ['wake']);
+  assert.deepEqual(attempts, [2, 4], '空闲首帧、未完成页面和仍偏移的球窗不能提前通过');
+  assert.deepEqual(restored, anchor);
+});
+
 test('原生布局校验拒绝第三行、溢出按钮与过小字体', () => {
   const file = path.resolve(__dirname, '../scripts/verify-codex-companion.js');
   assert.equal(fs.existsSync(file), true);
