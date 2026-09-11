@@ -22,7 +22,7 @@
   };
   const SEQUENCES = {
     hero: ['hello', 'nuzzle', 'quiet', 'stretch', 'quiet'],
-    feature: ['nuzzle', 'land', 'stretch', 'hop', 'ribbon'],
+    feature: ['land', 'stretch', 'hop', 'ribbon', 'nuzzle'],
     codex: ['thought', 'quiet', 'complete', 'quiet'],
     desktop: ['hello', 'nuzzle', 'sleep', 'stretch']
   };
@@ -113,9 +113,10 @@
     }
     updateButton() {
       const stopped = this.paused || reduced.matches;
-      this.button.textContent = reduced.matches ? '已减少动态' : this.paused ? '继续动效' : '暂停动效';
-      this.button.setAttribute('aria-label', this.button.textContent);
-      this.button.title = this.button.textContent;
+      const toggleLabel = reduced.matches ? '已减少动态' : this.paused ? '继续动效' : '暂停动效';
+      if (this.name !== 'hero') this.button.textContent = toggleLabel;
+      this.button.setAttribute('aria-label', toggleLabel);
+      this.button.title = toggleLabel;
       this.button.setAttribute('aria-pressed', String(stopped));
       this.button.disabled = reduced.matches;
       this.root.dataset.autoplay = String(this.canAuto());

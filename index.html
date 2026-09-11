@@ -22,7 +22,7 @@
       } catch (_error) {}
     </script>
     <link rel="stylesheet" href="styles.css?v=20260911-1">
-    <link rel="stylesheet" href="motion-showcase.css?v=20260911-2">
+    <link rel="stylesheet" href="motion-showcase.css?v=20260911-3">
     <link rel="stylesheet" href="quota-demo.css?v=20260911-1">
     <title>球球桌宠 - 免费的 macOS 桌面伙伴</title>
   </head>
@@ -64,7 +64,9 @@
               <span class="pet-offset"><span class="live-ball" data-ball-host></span><span class="thought-flow" aria-hidden="true"></span></span>
             </button>
           </div>
-          <button class="motion-toggle hero-motion-toggle" type="button" data-motion-toggle aria-pressed="false" aria-label="暂停动效" title="暂停动效">暂停动效</button>
+          <button class="motion-toggle hero-motion-toggle" type="button" data-motion-toggle aria-pressed="false" aria-label="暂停动效" title="暂停动效">
+            <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><g class="motion-icon-pause" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></g><path class="motion-icon-play" d="M8 5v14l11-7z" fill="currentColor"/></svg>
+          </button>
         </div>
       </section>
 
@@ -93,19 +95,19 @@
             </article>
           </div>
           <div class="motion-panel feature-playground" data-motion-scene="feature">
-            <div class="motion-panel-heading"><span data-motion-label>摸头 · 侧躺贴贴</span><button class="motion-toggle" type="button" data-motion-toggle aria-pressed="false">暂停动效</button></div>
+            <div class="motion-panel-heading"><span data-motion-label>放下 · 转面站稳</span><button class="motion-toggle" type="button" data-motion-toggle aria-pressed="false">暂停动效</button></div>
             <div class="motion-stage">
-              <p class="motion-bubble" data-motion-bubble>软乎乎地贴一下。</p>
+              <p class="motion-bubble" data-motion-bubble>站稳啦，继续陪你。</p>
               <button class="pet-touch-target" type="button" data-pet-touch aria-label="摸摸互动区的球球">
                 <span class="pet-offset"><span class="live-ball" data-ball-host></span><span class="thought-flow" aria-hidden="true"></span></span>
               </button>
             </div>
             <div class="motion-choices" aria-label="选择球球互动">
-              <button type="button" data-motion-action="nuzzle" aria-pressed="true">摸摸头</button>
-              <button type="button" data-motion-action="land" aria-pressed="false">放下来</button>
+              <button type="button" data-motion-action="land" aria-pressed="true">放下来</button>
               <button type="button" data-motion-action="stretch" aria-pressed="false">叫醒它</button>
               <button type="button" data-motion-action="hop" aria-pressed="false">跳一跳</button>
               <button type="button" data-motion-action="ribbon" aria-pressed="false">转彩带</button>
+              <button type="button" data-motion-action="nuzzle" aria-pressed="false">摸摸头</button>
             </div>
             <p class="motion-caption">自动轮播，也可以点选你想看的小动作。</p>
           </div>
@@ -178,7 +180,7 @@
       <section class="download-section section" id="download" aria-labelledby="download-title">
         <div class="download-intro">
           <h2 id="download-title">选择与你的 Mac 匹配的版本</h2>
-          <p>Apple 芯片与 Intel 版本完全分开。下载安装前可核对文件大小和 SHA-256。</p>
+          <p>Apple 芯片与 Intel 版本完全分开，请按你的 Mac 芯片选择。</p>
         </div>
         <div class="download-grid">
           <article class="download-card download-card-primary">
@@ -193,12 +195,9 @@
             <dl class="release-data">
               <div><dt>版本</dt><dd>0.3.13</dd></div>
               <div><dt>发布日期</dt><dd>2026-09-05</dd></div>
-              <div><dt>文件大小</dt><dd>132,305,618 bytes</dd></div>
-              <div><dt>SHA-256</dt><dd><code>c02510c44140e1f31ce96f0f87b6358d6605fc99f366b27ea3e8e7199f64cdc6</code></dd></div>
             </dl>
             <div class="download-actions">
               <a class="button button-primary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.13/Qiuqiu-0.3.13-macOS-arm64-share.zip">下载 ZIP</a>
-              <button class="copy-button" type="button" data-copy="c02510c44140e1f31ce96f0f87b6358d6605fc99f366b27ea3e8e7199f64cdc6">复制 SHA-256</button>
             </div>
           </article>
 
@@ -214,12 +213,9 @@
             <dl class="release-data">
               <div><dt>版本</dt><dd>0.3.13 候选</dd></div>
               <div><dt>发布日期</dt><dd>2026-09-11</dd></div>
-              <div><dt>文件大小</dt><dd>137,676,767 bytes</dd></div>
-              <div><dt>SHA-256</dt><dd><code>f4b1ee54f99da7222780cbd0d98799a2db79128329c9e12d8b8b0e0a2f6bc12a</code></dd></div>
             </dl>
             <div class="download-actions">
               <a class="button button-secondary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.13/Qiuqiu-0.3.13-macOS-x64-share.zip">下载候选 ZIP</a>
-              <button class="copy-button" type="button" data-copy="f4b1ee54f99da7222780cbd0d98799a2db79128329c9e12d8b8b0e0a2f6bc12a">复制 SHA-256</button>
             </div>
           </article>
         </div>
@@ -325,7 +321,7 @@
     <script src="assets/motion/thought-flow-v5.js"></script>
     <script src="assets/motion/dialogue-v5.js"></script>
     <script src="app.js?v=20260911-2"></script>
-    <script src="motion-showcase.js?v=20260911-2"></script>
+    <script src="motion-showcase.js?v=20260911-3"></script>
     <script src="quota-demo.js?v=20260911-1"></script>
   </body>
 </html>
