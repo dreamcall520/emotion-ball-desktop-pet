@@ -90,7 +90,7 @@
   background: var(--surface-solid);
   transform: rotate(45deg);
 }
-.hero-stage { display: flex; flex-direction: column; justify-content: center; }
+.hero-stage { display: flex; flex-direction: column; justify-content: center; overflow: visible; }
 .hero-motion-stage { --pet-size: clamp(340px, 35vw, 500px); width: 100%; min-height: 550px; padding-top: 35px; }
 .hero-motion-stage .motion-bubble { top: 2px; }
 .hero-motion-toggle { position: absolute; right: 16px; bottom: 16px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 44px; width: 44px; min-width: 44px; height: 44px; padding: 0; border: 1px solid var(--text-faint); border-radius: 50%; background: var(--surface-solid); color: var(--text); box-shadow: 0 2px 10px color-mix(in srgb, var(--page) 30%, transparent); }
