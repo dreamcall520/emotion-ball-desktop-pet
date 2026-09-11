@@ -90,6 +90,7 @@
   background: var(--surface-solid);
   transform: rotate(45deg);
 }
+.hero { overflow: clip; }
 .hero-stage { display: flex; flex-direction: column; justify-content: center; overflow: visible; }
 .hero-motion-stage { --pet-size: clamp(340px, 35vw, 500px); width: 100%; min-height: 550px; padding-top: 35px; }
 .hero-motion-stage .motion-bubble { top: 2px; }
