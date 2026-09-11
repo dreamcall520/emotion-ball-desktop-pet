@@ -1033,7 +1033,8 @@ code {
 .site-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  text-align: center;
   width: min(var(--content-width), calc(100% - (var(--page-gutter) * 2)));
   margin-inline: auto;
   padding: 32px 0 42px;
@@ -1042,6 +1043,8 @@ code {
 
 .site-footer p {
   margin-bottom: 0;
+  color: var(--text-soft);
+  font-size: 13px;
 }
 
 .back-to-top {
@@ -1451,7 +1454,7 @@ code {
   }
 
   .site-footer {
-    align-items: flex-start;
+    align-items: center;
     flex-direction: column;
     gap: 12px;
     width: calc(100% - 32px);

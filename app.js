@@ -14,9 +14,9 @@
   function storedTheme() {
     try {
       const value = window.localStorage.getItem('emotion-ball-site-theme');
-      return ['light', 'dark'].includes(value) ? value : 'auto';
+      return ['auto', 'light', 'dark'].includes(value) ? value : 'dark';
     } catch (_error) {
-      return 'auto';
+      return 'dark';
     }
   }
 
@@ -30,8 +30,7 @@
     themeButton.textContent = labels[theme];
     themeButton.dataset.themeChoice = theme;
     try {
-      if (theme === 'auto') window.localStorage.removeItem('emotion-ball-site-theme');
-      else window.localStorage.setItem('emotion-ball-site-theme', theme);
+      window.localStorage.setItem('emotion-ball-site-theme', theme);
     } catch (_error) {
       // 外观偏好保存失败不会影响浏览。
     }

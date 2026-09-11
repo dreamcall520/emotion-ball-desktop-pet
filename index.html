@@ -1,11 +1,10 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="球球桌宠是一个免费、非商业的 macOS 桌面宠物。支持 Apple 芯片和 Intel x64 独立下载。">
-    <meta name="theme-color" content="#f6f8fb" media="(prefers-color-scheme: light)">
-    <meta name="theme-color" content="#11151b" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#11151b">
     <meta name="color-scheme" content="light dark">
     <meta property="og:type" content="website">
     <meta property="og:locale" content="zh_CN">
@@ -15,7 +14,14 @@
     <link rel="canonical" href="https://dreamcall520.github.io/emotion-ball-desktop-pet/">
     <link rel="icon" href="assets/favicon.png">
     <link rel="manifest" href="site.webmanifest">
-    <link rel="stylesheet" href="styles.css?v=20260901-5">
+    <script>
+      try {
+        const theme = localStorage.getItem('emotion-ball-site-theme');
+        if (theme === 'auto') document.documentElement.removeAttribute('data-theme');
+        else if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+      } catch (_error) {}
+    </script>
+    <link rel="stylesheet" href="styles.css?v=20260911-1">
     <title>球球桌宠 - 免费的 macOS 桌面伙伴</title>
   </head>
   <body>
@@ -285,18 +291,10 @@
         </div>
       </section>
 
-      <section class="license-note section" id="license" aria-label="开源、署名与许可">
-        <p><strong>免费、非商业使用。</strong>角色与动画来自原作者 sam70361；再次分发须保留署名、LICENSE 和 NOTICE。</p>
-        <nav class="license-links" aria-label="署名与许可链接">
-          <a href="https://github.com/sam70361/emotion-ball">原作者项目</a>
-          <a href="LICENSE">LICENSE</a>
-          <a href="NOTICE.md">NOTICE</a>
-        </nav>
-      </section>
     </main>
 
-    <footer class="site-footer">
-      <p>球球桌宠，免费、非商业使用。</p>
+    <footer class="site-footer" id="license" aria-label="开源、署名与许可">
+      <p>球球桌宠，免费、非商业使用。角色与动画来自原作者 sam70361；再次分发须保留署名、LICENSE 和 NOTICE。</p>
     </footer>
 
     <button class="back-to-top" type="button" aria-hidden="true" tabindex="-1" data-back-to-top><span aria-hidden="true">↑</span>回到顶部</button>
@@ -306,6 +304,6 @@
     <script src="assets/vendor/emotion-ball/emotions.js"></script>
     <script src="assets/vendor/emotion-ball/ball.js"></script>
     <script src="assets/vendor/emotion-ball/engine.js"></script>
-    <script src="app.js?v=20260901-3"></script>
+    <script src="app.js?v=20260911-1"></script>
   </body>
 </html>
