@@ -54,6 +54,7 @@ contextBridge.exposeInMainWorld('petDesktop', {
     }
   },
   showContextMenu: () => ipcRenderer.send('pet:context-menu'),
+  onPresentation: callback => subscribe('pet:presentation', callback),
   onCommand: callback => subscribe('pet:command', callback),
   onMotion: callback => subscribe('pet:motion-frame', callback),
   onActivity: callback => subscribe('pet:activity', callback),

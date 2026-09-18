@@ -58,3 +58,15 @@ body {
 @media (prefers-reduced-motion: reduce) {
   #pet[data-codex-working="true"][data-motion-owner="none"]:not(.dragging) svg { animation: none; }
 }
+
+/* 方形原生窗口留在工作区内，溢出的半边由 body 裁切。 */
+#pet { transition: transform 180ms ease-out; }
+#pet[data-presentation="tucked"][data-edge="left"] { transform: translateX(-50%); }
+#pet[data-presentation="tucked"][data-edge="right"] { transform: translateX(50%); }
+#pet.dragging,
+#pet[data-dragging="true"] { transition: none; }
+#pet[data-presentation="tucked"] svg,
+#pet[data-presentation="hidden"] svg { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  #pet { transition: none; }
+}

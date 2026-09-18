@@ -34,12 +34,14 @@ const { createCodexCompanion } = require('./lib/codex-companion');
 const { buildCodexMenu, buildCodexResultMenu, resolveCodexAction } = require('./lib/codex-menu');
 const { buildQuotaLabelModel } = require('./lib/codex-quota-view');
 const { createQuotaLabelWindow } = require('./lib/quota-label-window');
+const { createEdgeTuck } = require('./lib/edge-tuck');
 
 const APP_NAME = '球球桌宠';
 const IS_SMOKE_TEST = process.env.PET_SMOKE_TEST === '1';
 const IS_CODEX_SMOKE_ONLY = IS_SMOKE_TEST && process.env.PET_SMOKE_CODEX_ONLY === '1';
 
 let petWindow = null;
+let edgeTuck = null;
 let tray = null;
 let settings = null;
 let settingsFile = null;
@@ -110,8 +112,65 @@ function fromPetWindow(event) {
   );
 }
 
+function presentationSuppressed() {
+  return edgeTuck?.getPresentation().suppressed === true;
+}
+
+function sendPresentation(packet) {
+  if (!petWindow || petWindow.isDestroyed()) return;
+  try { petWindow.webContents.send('pet:presentation', packet); } catch (_) {}
+}
+
+function applyPresentation(packet) {
+  sendPresentation(packet);
+  if (packet.suppressed) {
+    stopMotion();
+    dialogue?.dismiss();
+    hideBubble();
+    safelyInvokeWindow('收起时额度标签隐藏', () => quotaLabel?.hide());
+  } else syncQuotaLabel(codexCompanion?.getSnapshot());
+  refreshTrayMenu();
+}
+
+function edgeRetentionBounds() {
+  return [bubble, quotaLabel].flatMap(controller => {
+    try {
+      const win = controller?.getWindow();
+      return win && !win.isDestroyed() && win.isVisible() ? [win.getBounds()] : [];
+    } catch (_) { return []; }
+  });
+}
+
+function dockPet(side) {
+  if (!petWindow || petWindow.isDestroyed() || screenLocked) return;
+  dragState = null;
+  stopMotion();
+  edgeTuck?.dock(side);
+  petWindow.showInactive();
+  persistWindowPosition();
+}
+
+function restorePet() {
+  if (!petWindow || petWindow.isDestroyed()) { createPetWindow(); return; }
+  dragState = null;
+  stopMotion();
+  edgeTuck?.restore();
+  makeWindowVisible();
+  petWindow.showInactive();
+  petWindow.moveTop();
+  syncQuotaLabel(codexCompanion?.getSnapshot());
+  refreshTrayMenu();
+}
+
+function hidePet() {
+  if (!petWindow || petWindow.isDestroyed()) return;
+  dragState = null;
+  edgeTuck?.hide();
+  petWindow.hide();
+}
+
 function codexHostAvailable() {
-  return codexPageReady && !isQuitting && !screenLocked && petWindow && !petWindow.isDestroyed() && petWindow.isVisible() &&
+  return codexPageReady && !isQuitting && !screenLocked && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible() &&
     !dragState && !bounceState && !hostMotion && !dialogue?.hasBubble(performance.now());
 }
 
@@ -229,7 +288,7 @@ function bindBubbleVisibilityEvents() {
 }
 
 function showBubble(payload) {
-  if (!payload) return;
+  if (!payload || presentationSuppressed()) return;
   const shown = safelyInvokeWindow('气泡显示', () => bubble?.show(payload));
   if (shown) bindBubbleVisibilityEvents();
   repositionQuotaLabel();
@@ -272,7 +331,7 @@ function syncQuotaLabel(snapshot = null) {
       let visible = false;
       try {
         visible = !isQuitting && settings?.codexEnabled === true && settings.codexQuotaAlwaysVisible === true &&
-          !screenLocked && petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
+          !screenLocked && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
       } catch (error) {
         reportQuotaError('额度标签状态', error);
       }
@@ -498,7 +557,7 @@ function persistSettings() {
 
 function persistWindowPosition() {
   if (!petWindow || petWindow.isDestroyed()) return;
-  const bounds = petWindow.getBounds();
+  const bounds = ensureVisibleBounds(petWindow.getBounds(), screen.getAllDisplays(), screen.getPrimaryDisplay());
   settings.x = bounds.x;
   settings.y = bounds.y;
   persistSettings();
@@ -643,7 +702,7 @@ function setCompanionSetting(name, enabled) {
 }
 
 function showDialogue(event) {
-  if (screenLocked || !petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return null;
+  if (screenLocked || presentationSuppressed() || !petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return null;
   const payload = dialogue.offer(event, performance.now());
   if (payload) dismissCodexPresentation();
   if (payload) showBubble(payload);
@@ -670,7 +729,8 @@ function setPetSize(sizeName) {
   settings.x = next.x;
   settings.y = next.y;
   petWindow.setBounds(next, true);
-  persistSettings();
+  edgeTuck?.recover();
+  persistWindowPosition();
   refreshTrayMenu();
 }
 
@@ -688,7 +748,10 @@ function setAlwaysOnTop(enabled) {
 
 function resetPosition() {
   if (!petWindow || petWindow.isDestroyed()) return;
+  dragState = null;
   stopMotion();
+  edgeTuck?.restore();
+  petWindow.showInactive();
   const next = defaultBounds(screen.getPrimaryDisplay(), settings.size);
   petWindow.setBounds(next, true);
   settings.x = next.x;
@@ -817,6 +880,12 @@ function menuTemplate() {
     },
     codexMenu(),
     { type: 'separator' },
+    { id: 'edge-left', label: '靠左收起', click: () => dockPet('left') },
+    { id: 'edge-right', label: '靠右收起', click: () => dockPet('right') },
+    { id: 'edge-leave', label: '离开边缘', enabled: Boolean(edgeTuck?.getPresentation().side), click: restorePet },
+    { id: 'edge-visibility', label: edgeTuck?.getPresentation().mode === 'hidden' ? '显示球球' : '暂时隐藏',
+      click: () => edgeTuck?.getPresentation().mode === 'hidden' ? restorePet() : hidePet() },
+    { type: 'separator' },
     { label: '尺寸', submenu: sizeMenu() },
     {
       label: '始终置顶',
@@ -847,7 +916,10 @@ function refreshTrayMenu() {
 
 function showPetContextMenu() {
   if (!petWindow || petWindow.isDestroyed()) return;
-  Menu.buildFromTemplate(menuTemplate()).popup({ window: petWindow });
+  edgeTuck?.pin(true);
+  try {
+    Menu.buildFromTemplate(menuTemplate()).popup({ window: petWindow, callback: () => edgeTuck?.pin(false) });
+  } catch (error) { edgeTuck?.pin(false); throw error; }
 }
 
 function createTray() {
@@ -858,13 +930,7 @@ function createTray() {
   tray.setToolTip(APP_NAME);
   refreshTrayMenu();
   tray.on('click', () => {
-    if (!petWindow || petWindow.isDestroyed()) createPetWindow();
-    else {
-      makeWindowVisible();
-      petWindow.showInactive();
-      petWindow.moveTop();
-      syncQuotaLabel(codexCompanion?.getSnapshot());
-    }
+    restorePet();
   });
 }
 
@@ -879,6 +945,21 @@ async function finishSmokeTest() {
       "Boolean(window.petDesktop.onActivity && document.getElementById('pet').dataset.mode)"
     );
     if (!companionReady) throw new Error('轻陪伴活动感知尚未接入');
+
+    if (process.env.PET_SMOKE_EDGE_ONLY === '1') {
+      await require('./scripts/verify-edge-tuck').verifyEdgeTuck({
+        pet: petWindow, bubble, quotaLabel, monitor: activityMonitor, screen,
+        getThoughtWindow: () => thoughts?.getWindow(),
+        getMenu: () => Menu.buildFromTemplate(menuTemplate()), setSize: setPetSize,
+        getSettings: () => ({ ...settings }), showDialogue,
+        getPresentation: () => edgeTuck.getPresentation(), prepare: initializeCodexCompanion,
+        setQuotaPreference: setCodexPreference,
+        setEnabled: async enabled => { settings.codexEnabled = enabled; await codexCompanion.setEnabled(enabled); }
+      });
+      process.stdout.write('PET_EDGE_SMOKE_OK\n');
+      app.exit(0);
+      return;
+    }
 
     if (!IS_CODEX_SMOKE_ONLY) {
       await require('./scripts/verify-companion').verifyCompanion({
@@ -1021,7 +1102,12 @@ function createPetWindow() {
     });
     return petWindow;
   }
+  edgeTuck?.dispose();
   petWindow = candidatePetWindow;
+  edgeTuck = createEdgeTuck({ getWindow: () => petWindow,
+    getWorkArea: bounds => screen.getDisplayMatching(bounds).workArea,
+    getRetentionBounds: edgeRetentionBounds, onChange: applyPresentation,
+    schedule: setTimeout, cancel: clearTimeout });
   const createdPetWindow = candidatePetWindow;
   const isCurrentPetWindow = () => petWindow === createdPetWindow;
 
@@ -1053,6 +1139,7 @@ function createPetWindow() {
     codexPageReady = true;
     if (!isCurrentPetWindow()) return;
     sendCompanionSettings();
+    edgeTuck?.publish();
     if (!isCurrentPetWindow()) return;
     syncCodexSettings(codexCompanion?.getSnapshot(), true);
     if (!isCurrentPetWindow()) return;
@@ -1068,11 +1155,19 @@ function createPetWindow() {
   });
   createdPetWindow.on('resize', () => {
     if (!isCurrentPetWindow()) return;
+    dragState = null;
     stopMotion();
+    edgeTuck?.recover();
     if (isCurrentPetWindow()) repositionBubble();
+  });
+  createdPetWindow.on('show', () => {
+    if (!isCurrentPetWindow()) return;
+    if (edgeTuck?.getPresentation().mode === 'hidden') edgeTuck.restore();
   });
   createdPetWindow.on('hide', () => {
     if (!isCurrentPetWindow()) return;
+    dragState = null;
+    if (edgeTuck?.getPresentation().mode !== 'hidden') edgeTuck?.hide();
     safelyInvokeWindow('隐藏时停止动作', stopMotion);
     if (!isCurrentPetWindow()) return;
     hideBubble();
@@ -1085,6 +1180,7 @@ function createPetWindow() {
   createdPetWindow.on('closed', () => {
     if (!isCurrentPetWindow() || closedCleanupStarted) return;
     closedCleanupStarted = true;
+    edgeTuck?.dispose();
     if (isQuitting) {
       petWindow = null;
       return;
@@ -1123,7 +1219,7 @@ function registerIpc() {
     if (!fromPetWindow(event) || typeof request?.visible !== 'boolean') return;
     if (!request.visible) { thoughts?.hide(); return; }
     const snapshot = codexCompanion?.getSnapshot();
-    if (!settings.codexEnabled || !codexPageReady || screenLocked || dragState || hostMotion ||
+    if (!settings.codexEnabled || !codexPageReady || screenLocked || presentationSuppressed() || dragState || hostMotion ||
         !petWindow.isVisible() || !snapshot?.tasks.items.some(task => task.state === 'active')) return;
     thoughts?.show(request);
   });
@@ -1150,19 +1246,21 @@ function registerIpc() {
   });
 
   ipcMain.on('pet:drag-start', (event, rawPoint) => {
-    if (!fromPetWindow(event) || screenLocked) return;
+    if (!fromPetWindow(event) || screenLocked || !petWindow.isVisible()) return;
     const point = validPoint(rawPoint);
     if (!point) return;
     // 页面已在 pointerdown 清理待执行互动；不发送全局 stop，避免迟到后误杀新双击。
     stopMotion({ notifyRenderer: false });
+    edgeTuck?.beginDrag();
     const [x, y] = petWindow.getPosition();
-    dragState = { pointer: point, window: { x, y } };
+    dragState = { pointer: point, window: { x, y }, moved: false };
   });
 
   ipcMain.on('pet:drag-move', (event, rawPoint) => {
     if (!fromPetWindow(event) || !dragState || screenLocked) return;
     const point = validPoint(rawPoint);
     if (!point) return;
+    if (Math.hypot(point.x - dragState.pointer.x, point.y - dragState.pointer.y) > 6) dragState.moved = true;
     petWindow.setPosition(
       dragState.window.x + point.x - dragState.pointer.x,
       dragState.window.y + point.y - dragState.pointer.y,
@@ -1172,28 +1270,37 @@ function registerIpc() {
 
   ipcMain.on('pet:drag-end', event => {
     if (!fromPetWindow(event) || !dragState) return;
+    const moved = dragState.moved;
     dragState = null;
     if (!screenLocked) {
       const anchor = hostMotion?.anchor;
       const visible = anchor && ensureVisibleBounds(anchor, screen.getAllDisplays(), screen.getPrimaryDisplay());
-      if (anchor && anchor.x === visible.x && anchor.y === visible.y &&
+      if (!moved && anchor && anchor.x === visible.x && anchor.y === visible.y &&
         anchor.width === visible.width && anchor.height === visible.height) {
         // macOS 屏幕边缘下，pointerup 可能晚于双击动作到达主进程。
         // 动作锚点仍完整可见时只记住锚点，不把中途动画帧落盘。
         settings.x = anchor.x;
         settings.y = anchor.y;
         persistSettings();
-      } else makeWindowVisible(false);
+      } else {
+        // Only a real drag can dock. Keep a late click release from interrupting a new motion.
+        if (moved || anchor) stopMotion({ notifyRenderer: false });
+        const next = ensureVisibleBounds(petWindow.getBounds(), screen.getAllDisplays(), screen.getPrimaryDisplay());
+        petWindow.setPosition(next.x, next.y, false);
+        edgeTuck?.endDrag(moved);
+        persistWindowPosition();
+      }
+      if (edgeTuck?.getPresentation().dragging) edgeTuck.endDrag(false);
     }
   });
 
   ipcMain.on('pet:bounce', event => {
-    if (!fromPetWindow(event) || screenLocked || !petWindow.isVisible()) return;
+    if (!fromPetWindow(event) || screenLocked || presentationSuppressed() || !petWindow.isVisible()) return;
     startWindowBounce();
   });
 
   ipcMain.on('pet:motion-start', (event, request) => {
-    if (!fromPetWindow(event) || screenLocked || !petWindow.isVisible() || !request ||
+    if (!fromPetWindow(event) || screenLocked || presentationSuppressed() || !petWindow.isVisible() || !request ||
       !Number.isSafeInteger(request.token) || request.token <= 0 ||
       (!getMotion(request.action) && !CompanionMotion.getMotion(request.action))) return;
     thoughts?.hide();
@@ -1255,7 +1362,12 @@ function registerIpc() {
 
 function registerDisplayRecovery() {
   const recover = () => {
-    if (petWindow && !petWindow.isDestroyed()) makeWindowVisible();
+    if (petWindow && !petWindow.isDestroyed()) {
+      dragState = null;
+      makeWindowVisible();
+      edgeTuck?.recover();
+      persistWindowPosition();
+    }
     repositionBubble();
   };
   screen.on('display-added', recover);
@@ -1302,6 +1414,7 @@ async function bootstrap() {
   activityMonitor = createActivityMonitor({
     screen, powerMonitor, getWindow: () => petWindow,
     onSample: packet => {
+      if (!packet.locked) edgeTuck?.sampleCursor(packet.cursor);
       if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send('pet:activity', packet);
     },
     onError: error => writeError('活动状态检测', error)
@@ -1310,12 +1423,13 @@ async function bootstrap() {
     screenLocked = true;
     dragState = null;
     safelyInvokeWindow('锁屏时停止动作', stopMotion);
+    edgeTuck?.suspend();
     safelyInvokeWindow('锁屏时暂停活动监测', () => activityMonitor.pause());
     hideBubble();
     safelyInvokeWindow('锁屏时额度标签隐藏', () => quotaLabel?.hide());
     safelyInvokeWindow('锁屏时对白清理', () => dialogue.dismiss());
   };
-  const resume = () => { screenLocked = false; activityMonitor.resume(); syncQuotaLabel(codexCompanion?.getSnapshot()); };
+  const resume = () => { screenLocked = false; edgeTuck?.resume(); activityMonitor.resume(); syncQuotaLabel(codexCompanion?.getSnapshot()); };
   const powerGuard = createPowerGuard({ pause, resume });
   powerMonitor.on('lock-screen', () => powerGuard.setLocked(true));
   powerMonitor.on('suspend', () => powerGuard.setSuspended(true));
@@ -1335,19 +1449,14 @@ if (!hasSingleInstanceLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (!petWindow || petWindow.isDestroyed()) createPetWindow();
-    else {
-      makeWindowVisible();
-      petWindow.showInactive();
-      petWindow.moveTop();
-      syncQuotaLabel(codexCompanion?.getSnapshot());
-    }
+    restorePet();
   });
 
   app.on('before-quit', () => {
     isQuitting = true;
     if (quitCleanupStarted) return;
     quitCleanupStarted = true;
+    edgeTuck?.dispose();
     codexConsentToken++;
     safelyInvokeWindow('退出时 Codex 联动清理', () => codexCompanion?.close());
     safelyInvokeWindow('退出时停止动作', stopMotion);

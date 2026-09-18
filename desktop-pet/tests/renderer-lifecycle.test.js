@@ -82,6 +82,7 @@ function createRenderer(randomValue = 0.5) {
       codexMotionReady(request) { host.codexAcks.push(request); },
       codexAvailability(packet) { host.availability.push(packet); },
       onCommand: subscribe('command'),
+      onPresentation: subscribe('presentation'),
       onActivity: subscribe('activity'),
       onSettings: subscribe('settings'),
       onMotion: subscribe('motion'),
@@ -118,6 +119,7 @@ function createRenderer(randomValue = 0.5) {
     resize(width) { context.innerWidth = width; windowEvents.resize(); },
     emotions: context.EmotionBall.config.list(),
     command: value => subscriptions.command(value),
+    present: value => subscriptions.presentation?.(value),
     codexSettings(value) { subscriptions.codexSettings?.({ pageEpoch: 1, ...value }); },
     click() {
       const event = { screenX: 140, screenY: 140, button: 0, pointerId: 1 };
@@ -774,4 +776,48 @@ test('运动中换边不翻转正在播放的动作，结束后才回到新侧�
   r.advanceTo(2016);
   assert.equal(r.pet.dataset.facing, 'left');
   assert.equal(r.engine._facing, 'left');
+});
+
+for (const mode of ['tucked', 'hidden']) {
+  test(`${mode}展示包取消单击、主动动作和思绪，但Codex任务数仍更新`, () => {
+    const r = createRenderer(0);
+    r.click();
+    r.codexSettings({ enabled: true, generation: 1, activeTaskCount: 1 });
+    r.present({ mode, side: 'left', dragging: false, suppressed: true });
+    assert.equal(r.pet.dataset.presentation, mode);
+    assert.equal(r.pet.dataset.edge, 'left');
+    assert.equal(r.pet.dataset.codexWorking, 'false');
+    assert.equal(r.engine._active, false);
+    const scenes = r.host.scenes.length, motions = r.host.motions.length;
+    r.advanceTo(90000);
+    r.activity(false, { idleSeconds: 0 });
+    r.command('again');
+    r.codexSettings({ enabled: true, generation: 1, activeTaskCount: 2 });
+    assert.equal(r.host.scenes.length, scenes);
+    assert.equal(r.host.motions.length, motions);
+    assert.equal(r.host.bounces, 0);
+    assert.equal(r.pet.dataset.codexActiveTasks, '2');
+    assert.equal(r.pet.dataset.codexWorking, 'false');
+    assert.equal(r.host.availability.at(-1).available, false);
+    r.present({ mode: 'peeked', side: 'left', dragging: false, suppressed: false });
+    assert.equal(r.engine._active, true);
+    assert.equal(r.pet.dataset.presentation, 'peeked');
+    assert.equal(r.pet.dataset.codexWorking, 'true');
+    assert.equal(r.host.scenes.length, scenes, '恢复不重放旧对白');
+  });
+}
+
+test('收起展示包清掉迟到落地姿态，旧窗口帧不能复活动作', () => {
+  const r = createRenderer();
+  const event = { screenX: 140, screenY: 140, clientX: 40, clientY: 40, button: 0, buttons: 1, pointerId: 1 };
+  r.events.pointerdown(event);
+  r.events.pointermove({ ...event, screenX: 170, clientX: 70 });
+  r.events.pointerup({ ...event, screenX: 170, clientX: 70 });
+  assert.equal(r.host.motions.at(-1).action, 'land');
+  const motion = r.host.motions.at(-1);
+  r.present({ mode: 'tucked', side: 'right', dragging: false, suppressed: true });
+  assert.equal(r.pet.dataset.motionOwner, 'none');
+  r.frame({ token: motion.token, action: 'land', frame: { done: false } });
+  assert.equal(r.pet.dataset.motionOwner, 'none');
+  assert.equal(r.engine._active, false);
 });

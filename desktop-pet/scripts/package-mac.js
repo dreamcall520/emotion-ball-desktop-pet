@@ -48,6 +48,8 @@ function prepareStaging(root) {
     'desktop-pet/thought-renderer.js',
     'desktop-pet/lib/window-motion.js',
     'desktop-pet/lib/window-placement.js',
+    'desktop-pet/lib/edge-tuck.js',
+    'desktop-pet/scripts/verify-edge-tuck.js',
     'desktop-pet/lib/pet-behavior.js',
     'desktop-pet/lib/activity-monitor.js',
     'desktop-pet/lib/companion-behavior.js',
