@@ -48,7 +48,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     setPosition(x, y, animate) { assert.equal(animate, false); Object.assign(this.bounds, { x, y }); this.emit('move'); }
     setBounds(bounds) { this.bounds = { ...bounds }; this.emit('resize'); }
     loadFile() { return { catch: handler => { this.loadFailure = handler; } }; }
-    showInactive() { this.visible = true; } hide() { this.visible = false; this.emit('hide'); }
+    showInactive() { this.visible = true; this.emit('show'); } hide() { this.visible = false; this.emit('hide'); }
     destroy() { this.destroyed = true; this.visible = false; this.emit('closed'); }
   }
   NativeWindow.onConstruct = null;
@@ -77,6 +77,9 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     show(model) { this.shows.push(model); this.visible = true; }, hide() { this.hides++; this.visible = false; },
     reposition() { this.moves++; }, destroy() { this.destroys++; this.visible = false; },
     setAlwaysOnTop(value) { this.topmost.push(value); }, getWindow: () => null };
+  const edgeNoticeWindow = { shows: [], visible: false,
+    show(payload) { this.shows.push(payload); this.visible = true; }, hide() { this.visible = false; },
+    destroy() { this.visible = false; }, reposition() {}, setAlwaysOnTop() {}, getWindow: () => null };
   const activity = { starts: 0, stops: 0, pauses: 0, resumes: 0,
     start() { this.starts++; }, stop() { this.stops++; }, pause() { this.pauses++; }, resume() { this.resumes++; } };
   const realRequire = createRequire(path.resolve(__dirname, '../main.js'));
@@ -110,7 +113,8 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
       } };
       if (name === './lib/bubble-window') return { createBubbleWindow: () => bubble };
       if (name === './lib/quota-label-window') return { createQuotaLabelWindow: () => quotaLabel };
-      if (name === './lib/activity-monitor') return { ...realRequire(name), createActivityMonitor: () => activity };
+      if (name === './lib/edge-notice-window') return { createEdgeNoticeWindow: () => edgeNoticeWindow };
+      if (name === './lib/activity-monitor') return { ...realRequire(name), createActivityMonitor: options => { activity.sample = options.onSample; return activity; } };
       return realRequire(name);
     }
   });
@@ -119,7 +123,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   const pet = windows[0];
   pet.emit('ready-to-show');
   pet.webContents.emit('did-finish-load');
-  return { pet, bubble, quotaLabel, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus,
+  return { pet, bubble, quotaLabel, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus,
     call: expression => vm.runInContext(expression, context),
     send(channel, packet, sender = pet.webContents) {
       // 与实际预加载一致，默认携带当前页面代次；显式传旧值可验迟到报文。
@@ -139,6 +143,44 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
 }
 
 const TASK_ID = '11111111-1111-4111-8111-111111111111';
+
+test('靠边额度胶囊沿用最新真实主周期，关闭、锁屏及重载立即撤回', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true, bubblesEnabled: false });
+  const emit = remaining => f.connections[0].callbacks.onQuota({ updatedAt: 1800000000000,
+    windows: [{ id: 'codex:primary', label: 'Codex', windowMinutes: 300, remaining, resetsAt: 1800003600000 },
+      { id: 'codex:secondary', label: 'Codex', windowMinutes: 10080, remaining: 65, resetsAt: 1800604800000 }] });
+  emit(83); f.call("dockPet('left')"); f.call('edgeNoticeNow = () => 60000; tickEdgeNotice(true)');
+  assert.equal(f.edgeNoticeWindow.visible, true);
+  assert.equal(f.edgeNoticeWindow.shows.at(-1).remaining, 83);
+  assert.equal(f.quotaLabel.visible, false);
+  emit(79); assert.equal(f.edgeNoticeWindow.shows.at(-1).remaining, 79);
+  f.call("setCodexPreference('codexQuotaPeriod', 'weekly')");
+  assert.equal(f.edgeNoticeWindow.shows.at(-1).period, '周额度');
+  assert.equal(f.edgeNoticeWindow.shows.at(-1).remaining, 65);
+  f.call("setCodexPreference('codexQuotaAlwaysVisible', false)");
+  assert.equal(f.edgeNoticeWindow.visible, false);
+  f.call("setCodexPreference('codexQuotaAlwaysVisible', true); edgeNoticeNow = () => 180000; tickEdgeNotice(true)");
+  assert.equal(f.edgeNoticeWindow.visible, true);
+  f.powerMonitor.emit('lock-screen'); assert.equal(f.edgeNoticeWindow.visible, false);
+  f.powerMonitor.emit('unlock-screen');
+  f.call('edgeNoticeNow = () => 300000; tickEdgeNotice(true)');
+  assert.equal(f.edgeNoticeWindow.visible, true);
+  f.pet.webContents.emit('did-start-loading'); assert.equal(f.edgeNoticeWindow.visible, false);
+  f.call('edgeNoticeNow = () => 600000; tickEdgeNotice(true)');
+  assert.equal(f.edgeNoticeWindow.visible, false);
+});
+
+test('靠边短句独立于Codex，复用活动采样且气泡开关立即生效', async () => {
+  const f = await fixture({ codexEnabled: false });
+  f.call("dockPet('right'); edgeNoticeNow = () => 90000");
+  f.activity.sample({ locked: false, cursor: { x: -500, y: 20 } });
+  assert.equal(f.edgeNoticeWindow.shows.at(-1).kind, 'text');
+  assert.equal(f.edgeNoticeWindow.shows.at(-1).side, 'right');
+  f.call("setCompanionSetting('bubblesEnabled', false)");
+  assert.equal(f.edgeNoticeWindow.visible, false);
+  f.call('hidePet(); edgeNoticeNow = () => 900000; tickEdgeNotice(true)');
+  assert.equal(f.edgeNoticeWindow.visible, false);
+});
 function findMenuItem(template, id) {
   const queue = [...template];
   while (queue.length) {
@@ -1289,4 +1331,183 @@ test('隐藏或锁屏不启动新动作，恢复后旧帧不复活', async () =>
   assert.equal(f.timers.size, 0);
   f.send('pet:motion-start', { token: 3, action: 'hop' });
   assert.ok(f.timers.size > 0);
+});
+
+function edgeSnapshot(f) {
+  return f.pet.messages.filter(item => item.channel === 'pet:presentation').at(-1)?.packet;
+}
+
+test('边缘菜单提供靠左、靠右、离开、隐藏恢复，并且状态不写入设置', async () => {
+  const f = await fixture();
+  assert.ok(menuItem(f, 'edge-left'), '存在靠左收起入口');
+  menuItem(f, 'edge-left').click();
+  assert.equal(edgeSnapshot(f).mode, 'tucked');
+  assert.equal(f.pet.bounds.x, -800);
+  assert.equal(menuItem(f, 'edge-leave').enabled, true);
+  menuItem(f, 'edge-visibility').click();
+  assert.equal(edgeSnapshot(f).mode, 'hidden');
+  assert.equal(f.pet.isVisible(), false);
+  assert.equal(menuItem(f, 'edge-visibility').label, '显示球球');
+  menuItem(f, 'edge-visibility').click();
+  assert.equal(edgeSnapshot(f).mode, 'free');
+  assert.equal(edgeSnapshot(f).side, null);
+  assert.equal(f.pet.isVisible(), true);
+  assert.ok(f.saved.every(value => !('edge' in value) && !('hidden' in value) && !('side' in value)));
+  assert.ok(f.saved.every(value => value.x >= -800 && value.x <= -80));
+});
+
+test('主进程真实拖动到边才吸附；点击松手不会收起，迟到land被状态挡住', async () => {
+  const f = await fixture();
+  f.pet.bounds.x = -784;
+  f.send('pet:drag-start', { x: -744, y: 140 }); f.send('pet:drag-end');
+  assert.equal(edgeSnapshot(f)?.mode, 'free');
+  f.send('pet:drag-start', { x: -744, y: 140 });
+  f.send('pet:drag-move', { x: -752, y: 140 }); f.send('pet:drag-end');
+  assert.equal(edgeSnapshot(f).mode, 'tucked');
+  const bounds = f.pet.getBounds();
+  f.send('pet:motion-start', { token: 92, action: 'land' }); f.send('pet:bounce');
+  f.advanceTo(2000);
+  assert.deepEqual(f.pet.getBounds(), bounds);
+  assert.equal(f.call('hostMotion'), null);
+  assert.equal(f.timers.size, 0);
+  assert.equal(f.saved.at(-1).x, -800);
+});
+
+test('收起及隐藏抑制附属窗口与动作，但继续更新Codex并在展开显示最新额度', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  f.call("showDialogue('play')");
+  assert.ok(menuItem(f, 'edge-right'));
+  menuItem(f, 'edge-right').click();
+  assert.equal(f.quotaLabel.visible, false);
+  assert.equal(f.call("showDialogue('play')"), null);
+  const shows = f.bubble.shows.length;
+  f.connections[0].callbacks.onQuota({ updatedAt: 1800000000000,
+    windows: [{ id: 'codex:primary', label: 'Codex', windowMinutes: 300, remaining: 42, resetsAt: 1800003600000 }] });
+  f.connections[0].callbacks.onTask({ id: TASK_ID, title: '新任务', state: 'active', turnId: 'edge', baseline: true });
+  assert.equal(f.quotaLabel.visible, false);
+  assert.equal(f.pet.messages.filter(item => item.channel === 'pet:codex-settings').at(-1).packet.activeTaskCount, 1);
+  f.activity.sample({ cursor: { x: -20, y: 140 }, petBounds: f.pet.getBounds(), locked: false });
+  assert.equal(edgeSnapshot(f).mode, 'peeked');
+  assert.equal(f.quotaLabel.visible, true);
+  assert.equal(f.quotaLabel.shows.at(-1).items[0].remaining, 42);
+  assert.equal(f.bubble.shows.length, shows, '旧气泡不能重放');
+  menuItem(f, 'edge-visibility').click();
+  f.activity.sample({ cursor: { x: -20, y: 140 }, petBounds: f.pet.getBounds(), locked: false });
+  f.send('pet:motion-start', { token: 93, action: 'hop' });
+  assert.equal(edgeSnapshot(f).mode, 'hidden');
+  assert.equal(f.quotaLabel.visible, false);
+  assert.equal(f.call('hostMotion'), null);
+  await f.call('setCodexEnabled(false)');
+});
+
+for (const reason of ['size', 'resize', 'display', 'lock', 'suspend', 'close', 'quit', 'reset']) {
+  test(`边缘展开等待期间${reason}取消收回计时，旧回调不再作用`, async () => {
+    const f = await fixture();
+    assert.ok(menuItem(f, 'edge-left'));
+    menuItem(f, 'edge-left').click();
+    f.activity.sample({ cursor: { x: -780, y: 140 }, petBounds: f.pet.getBounds(), locked: false });
+    f.activity.sample({ cursor: { x: -500, y: 40 }, petBounds: f.pet.getBounds(), locked: false });
+    const callbacks = [...f.timers.values()].map(item => item.callback);
+    assert.equal(callbacks.length, 1);
+    if (reason === 'size') f.call("setPetSize('large')");
+    if (reason === 'resize') f.pet.emit('resize');
+    if (reason === 'display') f.screen.emit('display-removed');
+    if (reason === 'lock') f.powerMonitor.emit('lock-screen');
+    if (reason === 'suspend') f.powerMonitor.emit('suspend');
+    if (reason === 'close') f.pet.destroy();
+    if (reason === 'quit') f.app.emit('before-quit');
+    if (reason === 'reset') f.call('resetPosition()');
+    const before = f.pet.messages.length;
+    callbacks.forEach(callback => callback());
+    assert.equal(f.pet.messages.length, before);
+    assert.equal(f.timers.size, 0);
+    if (!['close', 'quit'].includes(reason)) {
+      assert.ok(f.pet.bounds.x >= -800 && f.pet.bounds.x + f.pet.bounds.width <= 0);
+      assert.ok(f.pet.bounds.y >= 0 && f.pet.bounds.y + f.pet.bounds.height <= 600);
+    }
+  });
+}
+
+test('真实拖动的抬手迟于land启动时仍按拖动终点收起', async () => {
+  const f = await fixture();
+  f.pet.bounds.x = -770;
+  f.send('pet:drag-start', { x: -730, y: 140 });
+  f.send('pet:drag-move', { x: -755, y: 140 });
+  f.send('pet:motion-start', { token: 101, action: 'land' });
+  f.send('pet:drag-end');
+  assert.equal(edgeSnapshot(f).mode, 'tucked');
+  assert.equal(edgeSnapshot(f).side, 'left');
+  assert.equal(f.timers.size, 0);
+  assert.deepEqual(f.pet.getPosition(), [-800, 100]);
+});
+
+test('拖动途中锁屏会取消拖动并恢复完整可见位置', async () => {
+  const f = await fixture();
+  f.send('pet:drag-start', { x: -560, y: 140 });
+  f.send('pet:drag-move', { x: -900, y: 800 });
+  assert.ok(f.pet.bounds.x < -800);
+  f.powerMonitor.emit('lock-screen');
+  assert.ok(f.pet.bounds.x >= -800 && f.pet.bounds.x + 80 <= 0);
+  assert.ok(f.pet.bounds.y >= 0 && f.pet.bounds.y + 80 <= 600);
+  assert.equal(edgeSnapshot(f).dragging, false);
+  const bounds = f.pet.getBounds();
+  f.send('pet:drag-end');
+  assert.deepEqual(f.pet.getBounds(), bounds);
+});
+
+test('边缘展开时任务结果菜单保持展示，移出半球超过650ms仍能打开当前任务', async () => {
+  const f = await fixture({ codexEnabled: true });
+  menuItem(f, 'edge-left').click();
+  f.activity.sample({ cursor: { x: -780, y: 140 }, petBounds: f.pet.getBounds(), locked: false });
+  const shown = queueMultiCodexCompletion(f);
+  f.send('pet:bubble-reply', { id: shown.id, action: 'codex-results' }, f.bubble);
+  assert.equal(f.popups.length, 1);
+  f.activity.sample({ cursor: { x: -500, y: 40 }, petBounds: f.pet.getBounds(), locked: false });
+  f.advanceTo(5800);
+  assert.equal(edgeSnapshot(f).mode, 'peeked', '鼠标进入原生结果菜单不能收起并作废提醒');
+  await f.popups[0].value[0].click();
+  assert.deepEqual(f.external, [`codex://threads/${TASK_ID}`]);
+  f.popups[0].options.callback();
+  f.advanceTo(6449);
+  assert.equal(edgeSnapshot(f).mode, 'peeked');
+  f.advanceTo(6450);
+  assert.equal(edgeSnapshot(f).mode, 'tucked', '结果菜单关闭后恢复650ms收起');
+});
+
+for (const replacement of ['menu', 'window']) {
+  test(`旧菜单关闭不能解除新${replacement}菜单的展开保护`, async () => {
+    const f = await fixture();
+    menuItem(f, 'edge-left').click();
+    f.activity.sample({ cursor: { x: -780, y: 140 }, petBounds: f.pet.getBounds(), locked: false });
+    f.call('showPetContextMenu()');
+    const previousClose = f.popups[0].options.callback;
+    let current = f.pet;
+    if (replacement === 'window') {
+      f.pet.destroy();
+      current = f.call('createPetWindow()');
+      current.emit('ready-to-show');
+      current.webContents.emit('did-finish-load');
+      menuItem(f, 'edge-left').click();
+      f.activity.sample({ cursor: { x: -780, y: 140 }, petBounds: current.getBounds(), locked: false });
+    }
+    f.call('showPetContextMenu()');
+    f.activity.sample({ cursor: { x: -500, y: 40 }, petBounds: current.getBounds(), locked: false });
+    previousClose();
+    f.advanceTo(800);
+    assert.equal(f.call('edgeTuck.getPresentation().mode'), 'peeked');
+    f.popups[1].options.callback();
+    f.advanceTo(1450);
+    assert.equal(f.call('edgeTuck.getPresentation().mode'), 'tucked');
+  });
+}
+
+test('原生菜单打开失败会释放展开保护，不留下永久展开状态', async () => {
+  const f = await fixture();
+  menuItem(f, 'edge-left').click();
+  f.activity.sample({ cursor: { x: -780, y: 140 }, petBounds: f.pet.getBounds(), locked: false });
+  f.activity.sample({ cursor: { x: -500, y: 40 }, petBounds: f.pet.getBounds(), locked: false });
+  f.call("Menu.buildFromTemplate = () => ({ popup() { throw new Error('popup failed'); } })");
+  assert.throws(() => f.call('showPetContextMenu()'), /popup failed/);
+  f.advanceTo(650);
+  assert.equal(edgeSnapshot(f).mode, 'tucked');
 });

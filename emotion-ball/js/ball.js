@@ -141,7 +141,7 @@
     svg.appendChild(fxBack);
 
     var bodyG = el('g', {});
-    var head = el('path', { d: ringPath(headRing), fill: 'url(#' + id + 'g)', stroke: 'none', 'stroke-width': '2' });
+    var head = el('path', { class: 'eb-head', d: ringPath(headRing), fill: 'url(#' + id + 'g)', stroke: 'none', 'stroke-width': '2' });
     bodyG.appendChild(head);
 
     function buildEye(k) {

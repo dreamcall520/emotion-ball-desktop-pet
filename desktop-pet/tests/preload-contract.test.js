@@ -194,3 +194,22 @@ test('Codex 思绪使用独立透明窗口，球体不再包含固定气泡', ()
   assert.match(host, /setIgnoreMouseEvents\(true\)/);
   assert.match(host, /focusable: false/);
 });
+
+test('边缘展示为可退订的只读固定频道，不暴露任意宿主指令', () => {
+  let api;
+  const listeners = new Map(), sent = [];
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../preload.js'), 'utf8'), {
+    require: () => ({ contextBridge: { exposeInMainWorld(_name, value) { api = value; } },
+      ipcRenderer: { send: (...args) => sent.push(args), on: (name, fn) => listeners.set(name, fn),
+        removeListener: name => listeners.delete(name) } })
+  });
+  assert.equal(typeof api.onPresentation, 'function');
+  let packet;
+  const remove = api.onPresentation(value => { packet = value; });
+  listeners.get('pet:presentation')({}, { mode: 'tucked', side: 'left', suppressed: true });
+  assert.equal(packet.mode, 'tucked');
+  assert.equal(sent.length, 0);
+  remove();
+  assert.equal(listeners.has('pet:presentation'), false);
+  assert.equal(api.setPresentation, undefined);
+});

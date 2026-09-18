@@ -25,6 +25,10 @@
   const petting = new CompanionBehavior.PettingTracker();
 
   let ball = null;
+  let presentationSuppressed = false;
+  let presentationMode = 'free';
+  let presentationPaused = false;
+  let presentationFrozen = false;
   let compactMode = null;
   let dragState = null;
   let singleClickTimer = null;
@@ -55,7 +59,7 @@
   const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
 
   function syncFacing() {
-    if (dragState || activeMotion) return;
+    if (dragState || activeMotion || presentationSuppressed || lastSample?.locked) return;
     facing = PetFacing.resolve(lastSample?.petBounds, lastSample?.workArea, facing);
     petElement.dataset.facing = facing;
     ball?.setFacing(facing);
@@ -69,7 +73,7 @@
   }
 
   function canShowCodex() {
-    return codexEnabled && Boolean(lastSample) && !lastSample.locked && !companion.manualSleep &&
+    return !presentationSuppressed && codexEnabled && Boolean(lastSample) && !lastSample.locked && !companion.manualSleep &&
       currentState.mode !== 'sleep' && !dragState && !singleClickTimer && !helloTimer &&
       performance.now() >= actionUntil && !activeMotion;
   }
@@ -108,7 +112,7 @@
   }
 
   function syncCodexWorking() {
-    const eligible = codexEnabled && codexActiveTaskCount > 0 && Boolean(lastSample) && !lastSample.locked &&
+    const eligible = !presentationSuppressed && codexEnabled && codexActiveTaskCount > 0 && Boolean(lastSample) && !lastSample.locked &&
       !companion.manualSleep && currentState.mode !== 'sleep' && !dragState && !singleClickTimer && !helloTimer &&
       performance.now() >= actionUntil && !activeMotion;
     const working = eligible && codexThinkingVisible;
@@ -128,7 +132,7 @@
     } else if (codexThinking) {
       codexThinking = false;
       restoreState();
-      if (!activeMotion && performance.now() >= actionUntil) {
+      if (!presentationSuppressed && !lastSample?.locked && !activeMotion && performance.now() >= actionUntil) {
         setBallGaze(!companion.manualSleep ? currentState.gaze : null);
       }
     }
@@ -183,12 +187,26 @@
     body: { ...thinkingDefinition.body, orbit: 0 }
   });
   CompanionMotion.registerEmotions(EmotionBall.config);
+  EmotionBall.config.register({
+    id: '55', name: '靠边陪伴', group: 'custom', gaze: false, antics: false,
+    pool: [0], blinkMs: [2500, 5000], transition: 0, anims: [],
+    body: { breathe: 0.007 },
+    eyes: { both: { scaleX: 0.78, scaleY: 0.78, y: 20 }, left: { x: 10 }, right: { x: 2 } }
+  });
+  EmotionBall.config.register({
+    id: '56', name: '靠边小憩', group: 'custom', gaze: false, antics: false,
+    pool: [13], blinkMs: null, transition: 0, anims: [],
+    body: { breathe: 0.006 },
+    // 刚收起时可能还留有上一表情的眨眼关键帧，基础眼形也保持闭合。
+    eyes: { both: { open: 0.08, scaleX: 0.78, scaleY: 0.78, y: 24, lookY: 2 }, left: { x: 10 }, right: { x: 2 } }
+  });
 
   function createBall(emotionId) {
     const nextCompactMode = window.innerWidth <= 120;
     if (ball) ball.destroy();
     petElement.replaceChildren();
     compactMode = nextCompactMode;
+    presentationFrozen = false;
     ball = EmotionBall.create(petElement, {
       emotion: emotionId || '50',
       shape: 'blob',
@@ -203,7 +221,7 @@
       label: '球球桌面宠物'
     });
     ball.bounce = () => {
-      desktop.bounce();
+      if (!presentationSuppressed) desktop.bounce();
       return ball;
     };
     ball.on('change', ({ id }) => { petElement.dataset.emotion = id; });
@@ -242,8 +260,25 @@
   }
 
   function restoreState() {
+    if (presentationSuppressed) { syncSuppressedAnimation(); return; }
     if (activeMotion || dragState?.dragged || performance.now() < actionUntil) return;
     showEmotion(companion.manualSleep ? '00' : currentState.emotionId);
+  }
+
+  function syncSuppressedAnimation(refresh = false) {
+    const quiet = presentationMode === 'tucked' && !presentationPaused && !lastSample?.locked;
+    if (!quiet && presentationFrozen && !refresh) return;
+    const sleeping = companion.manualSleep || currentState.mode === 'sleep' || lastSample?.locked;
+    const emotion = presentationMode === 'tucked' ? (sleeping ? '56' : '55') :
+      (sleeping ? '00' : currentState.emotionId);
+    if (!quiet) ball.setActive(false);
+    showEmotion(emotion);
+    ball.clearGaze();
+    petElement.dataset.gaze = '0,0';
+    // 保留现有引擎的呼吸和眨眼时间线；125ms活动采样不能重排眨眼。
+    if (quiet) ball.setActive(true);
+    else ball.renderStatic();
+    presentationFrozen = !quiet;
   }
 
   function playEmotion(id, duration, scene) {
@@ -257,14 +292,63 @@
     }), duration);
   }
 
+  function updatePresentation(packet) {
+    if (!packet || !['free', 'tucked', 'peeked', 'hidden'].includes(packet.mode)) return;
+    const wasSuppressed = presentationSuppressed;
+    presentationMode = packet.mode;
+    presentationPaused = packet.paused === true;
+    presentationSuppressed = packet.suppressed === true || presentationPaused;
+    petElement.dataset.presentation = packet.mode;
+    petElement.dataset.edge = packet.side === 'left' || packet.side === 'right' ? packet.side : 'none';
+    petElement.dataset.dragging = packet.dragging ? 'true' : 'false';
+    // 吸边先改宿主位置，活动采样可能尚未到达；由吸附侧直接确定朝向。
+    // 仅在朝向实际改变时更新，隐藏/暂停后的重复报文不能重画冻结帧。
+    if (packet.mode === 'tucked' && ['left', 'right'].includes(packet.side)) {
+      const inward = packet.side === 'left' ? 'right' : 'left';
+      if (facing !== inward) {
+        facing = inward;
+        petElement.dataset.facing = facing;
+        ball.setFacing(facing);
+      }
+    }
+    // 普通松手确认可能晚于下一次按下；只有明确恢复或隐藏才作废本地拖动。
+    if (dragState && (presentationSuppressed || packet.cancelDrag === true)) {
+      if (petElement.hasPointerCapture(dragState.pointerId)) petElement.releasePointerCapture(dragState.pointerId);
+      dragState = null;
+      petElement.classList.remove('dragging');
+    }
+    if (presentationSuppressed) {
+      cancelPendingInteraction();
+      clearAction();
+      stopMotion(false);
+      stopCodexThinkingCadence();
+      petting.reset();
+      syncSuppressedAnimation(true);
+    } else {
+      presentationFrozen = false;
+      ball.setActive(!lastSample?.locked);
+      if (wasSuppressed) {
+        restoreState();
+        if (!activeMotion && !dragState) setBallGaze(!companion.manualSleep ? currentState.gaze : null);
+      }
+      if (codexEnabled && codexActiveTaskCount > 0 && !codexThinkingTimer) startCodexThinkingCadence();
+    }
+  }
+
   function updateActivity(sample) {
+    const previouslyLocked = lastSample?.locked === true;
     lastSample = sample;
     syncFacing();
     const now = performance.now();
     const previousMode = currentState.mode;
     currentState = companion.update(sample, now);
     petElement.dataset.mode = companion.manualSleep ? 'manual-sleep' : currentState.mode;
+    if (presentationSuppressed) {
+      syncSuppressedAnimation();
+      return;
+    }
     if (sample.locked) {
+      if (previouslyLocked) return;
       cancelPendingInteraction();
       clearAction();
       stopMotion();
@@ -340,7 +424,7 @@
   function runDoubleClickAction() {
     const shouldWake = wakeOnDoubleClick || companion.manualSleep || ball.emotionId === '00';
     cancelPendingInteraction();
-    if (lastSample?.locked) return;
+    if (presentationSuppressed || lastSample?.locked) return;
     if (shouldWake) {
       wake();
       return;
@@ -352,7 +436,7 @@
 
   function playReaction(action, speak = true) {
     const motion = InteractionMotion.getMotion(action);
-    if (!motion || lastSample?.locked || companion.manualSleep) return;
+    if (!motion || presentationSuppressed || lastSample?.locked || companion.manualSleep) return;
     cancelPendingInteraction();
     clearAction();
     stopMotion();
@@ -368,7 +452,7 @@
 
   function playCompanionReaction(action, scene) {
     const motion = CompanionMotion.getMotion(action);
-    if (!motion || lastSample?.locked || companion.manualSleep) return;
+    if (!motion || presentationSuppressed || lastSample?.locked || companion.manualSleep) return;
     cancelPendingInteraction();
     clearAction();
     stopMotion();
@@ -403,7 +487,7 @@
   }
 
   function runSingleClickAction(speak = true) {
-    if (companion.manualSleep || lastSample?.locked) return;
+    if (presentationSuppressed || companion.manualSleep || lastSample?.locked) return;
     if (activeMotion) stopMotion();
     noteInteraction();
     if (speak && codexEnabled && codexActiveTaskCount > 0) {
@@ -433,7 +517,7 @@
     cancelPendingInteraction();
     stopMotion();
     companion.setManualSleep(false, performance.now());
-    const definitions = EmotionBall.config.list();
+    const definitions = EmotionBall.config.list().filter(definition => !['55', '56'].includes(definition.id));
     const selected = definitions[Math.floor(Math.random() * definitions.length)];
     if (selected) playEmotion(selected.id, 5000);
   }
@@ -448,7 +532,7 @@
       restoreState();
       return;
     }
-    if (lastSample?.locked) return;
+    if (presentationSuppressed || lastSample?.locked) return;
     if (command?.command === 'again') playReaction(command.motion, false);
     else if (command === 'random') runRandomEmotion();
     else if (command === 'sleep') sleep();
@@ -473,7 +557,7 @@
   }
 
   onPet('pointerdown', event => {
-    if (event.button !== 0 || lastSample?.locked) return;
+    if (event.button !== 0 || presentationSuppressed || lastSample?.locked) return;
     // 第一次松手会刷新系统空闲状态；保留本次双击最初是否睡着。
     const startedSleeping = companion.manualSleep || ball.emotionId === '00' || (singleClickTimer && wakeOnDoubleClick);
     cancelPendingInteraction();
@@ -493,7 +577,7 @@
   });
 
   onPet('pointermove', event => {
-    if (lastSample?.locked) return;
+    if (presentationSuppressed || lastSample?.locked) return;
     const rect = petElement.getBoundingClientRect();
     if (!companion.manualSleep && !activeMotion) {
       if (!dragState && petting.update({
@@ -555,7 +639,7 @@
   });
 
   onPet('pointerenter', () => {
-    if (companion.manualSleep || lastSample?.locked || activeMotion) return;
+    if (presentationSuppressed || companion.manualSleep || lastSample?.locked || activeMotion) return;
     noteInteraction();
     clearTimeout(helloTimer);
     helloTimer = setTimeout(observe(() => {
@@ -583,6 +667,7 @@
     const shouldBeCompact = window.innerWidth <= 120;
     if (shouldBeCompact !== compactMode) createBall(ball.emotionId);
     restoreState();
+    if (presentationSuppressed) syncSuppressedAnimation(true);
   });
 
   onWindow('beforeunload', () => {
@@ -597,10 +682,14 @@
 
   createBall('50');
   petElement.dataset.mode = 'awake';
+  petElement.dataset.presentation = 'free';
+  petElement.dataset.edge = 'none';
+  petElement.dataset.dragging = 'false';
   petElement.dataset.motionOwner = 'none';
   petElement.dataset.codexWorking = 'false';
   petElement.dataset.codexActiveTasks = '0';
   petElement.dataset.codexThoughtSide = 'right';
+  if (desktop.onPresentation) listeners.push(desktop.onPresentation(observe(updatePresentation)));
   listeners.push(desktop.onCommand(observe(runCommand)));
   listeners.push(desktop.onMotion(observe(onMotion)));
   listeners.push(desktop.onActivity(observe(updateActivity)));
@@ -623,7 +712,7 @@
     codexActiveTaskCount = Number.isSafeInteger(settings.activeTaskCount) && settings.activeTaskCount >= 0 &&
       settings.activeTaskCount <= 64 ? settings.activeTaskCount : 0;
     const isActive = codexEnabled && codexActiveTaskCount > 0;
-    if (!isActive) stopCodexThinkingCadence();
+    if (!isActive || presentationSuppressed) stopCodexThinkingCadence();
     else if (changed || !wasActive) startCodexThinkingCadence();
   })));
   window.__petReady = true;

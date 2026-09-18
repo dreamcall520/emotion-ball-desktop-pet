@@ -10,7 +10,7 @@ const QUOTA_LABEL_MARKERS = Object.freeze([
 ]);
 
 const packagedApp = process.env.PET_SMOKE_APP_PATH;
-const electronBinary = packagedApp ? path.join(packagedApp, 'Contents/MacOS/球球桌宠') : require('electron');
+const electronBinary = packagedApp ? path.join(packagedApp, 'Contents/MacOS', process.env.PET_SMOKE_EXECUTABLE || '球球桌宠') : require('electron');
 const root = path.resolve(__dirname, '../..');
 
 function runSmokeTest() {
@@ -60,6 +60,14 @@ function runSmokeTest() {
       cleanup();
       try {
         assert.equal(code, 0, output);
+        if (process.env.PET_SMOKE_EDGE_ONLY === '1') {
+          for (const marker of ['EDGE_SIZES', 'EDGE_HOVER', 'EDGE_DRAG', 'EDGE_HIDE', 'EDGE_DISPLAYS', 'EDGE_COMPANION', 'EDGE_SMOKE']) {
+            assert.ok(output.includes(`PET_${marker}_OK`), `${marker} 靠边验收未完成`);
+          }
+          assert.doesNotMatch(output, /Uncaught|ERR_FILE_NOT_FOUND|did-fail-load/i);
+          resolve(output);
+          return;
+        }
         assert.match(output, /PET_SMOKE_OK/);
         assert.match(output, /PET_BOUNCE_OK/);
         assert.match(output, /PET_SLEEP_VISUAL_OK/);

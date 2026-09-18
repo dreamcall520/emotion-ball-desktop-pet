@@ -14,7 +14,7 @@ function createRenderer(randomValue = 0.5) {
   const events = {};
   const subscriptions = {};
   const windowEvents = {};
-  const host = { bounces: 0, stops: 0, scenes: [], motions: [], frames: [], positions: [], codexAcks: [], availability: [], thoughts: [] };
+  const host = { dragEnds: 0, dragMoves: [], bounces: 0, stops: 0, scenes: [], motions: [], frames: [], positions: [], codexAcks: [], availability: [], thoughts: [] };
   const bounds = { x: 100, y: 100, width: 80, height: 80 };
   let windowController;
   const nativeWindow = { isDestroyed: () => false, isVisible: () => true,
@@ -62,7 +62,8 @@ function createRenderer(randomValue = 0.5) {
     innerWidth: 80,
     addEventListener(name, callback) { windowEvents[name] = callback; },
     petDesktop: {
-      beginDrag() { windowController?.stop(); }, dragTo() {}, endDrag() {}, showContextMenu() {},
+      beginDrag() { windowController?.stop(); }, dragTo(point) { host.dragMoves.push(point); },
+      endDrag() { host.dragEnds++; }, showContextMenu() {},
       bounce() { host.bounces++; },
       stopMotion() { host.stops++; windowController?.stop(); },
       playMotion(request) {
@@ -82,6 +83,7 @@ function createRenderer(randomValue = 0.5) {
       codexMotionReady(request) { host.codexAcks.push(request); },
       codexAvailability(packet) { host.availability.push(packet); },
       onCommand: subscribe('command'),
+      onPresentation: subscribe('presentation'),
       onActivity: subscribe('activity'),
       onSettings: subscribe('settings'),
       onMotion: subscribe('motion'),
@@ -118,6 +120,7 @@ function createRenderer(randomValue = 0.5) {
     resize(width) { context.innerWidth = width; windowEvents.resize(); },
     emotions: context.EmotionBall.config.list(),
     command: value => subscriptions.command(value),
+    present: value => subscriptions.presentation?.(value),
     codexSettings(value) { subscriptions.codexSettings?.({ pageEpoch: 1, ...value }); },
     click() {
       const event = { screenX: 140, screenY: 140, button: 0, pointerId: 1 };
@@ -774,4 +777,242 @@ test('运动中换边不翻转正在播放的动作，结束后才回到新侧�
   r.advanceTo(2016);
   assert.equal(r.pet.dataset.facing, 'left');
   assert.equal(r.engine._facing, 'left');
+});
+
+for (const mode of ['tucked', 'hidden']) {
+  test(`${mode}展示包取消单击、主动动作和思绪，但Codex任务数仍更新`, () => {
+    const r = createRenderer(0);
+    r.click();
+    r.codexSettings({ enabled: true, generation: 1, activeTaskCount: 1 });
+    r.present({ mode, side: 'left', dragging: false, suppressed: true });
+    assert.equal(r.pet.dataset.presentation, mode);
+    assert.equal(r.pet.dataset.edge, 'left');
+    assert.equal(r.pet.dataset.codexWorking, 'false');
+    assert.equal(r.engine._active, mode === 'tucked');
+    const scenes = r.host.scenes.length, motions = r.host.motions.length;
+    r.advanceTo(90000);
+    r.activity(false, { idleSeconds: 0 });
+    r.command('again');
+    r.codexSettings({ enabled: true, generation: 1, activeTaskCount: 2 });
+    assert.equal(r.host.scenes.length, scenes);
+    assert.equal(r.host.motions.length, motions);
+    assert.equal(r.host.bounces, 0);
+    assert.equal(r.pet.dataset.codexActiveTasks, '2');
+    assert.equal(r.pet.dataset.codexWorking, 'false');
+    assert.equal(r.host.availability.at(-1).available, false);
+    r.present({ mode: 'peeked', side: 'left', dragging: false, suppressed: false });
+    assert.equal(r.engine._active, true);
+    assert.equal(r.pet.dataset.presentation, 'peeked');
+    assert.equal(r.pet.dataset.codexWorking, 'true');
+    assert.equal(r.host.scenes.length, scenes, '恢复不重放旧对白');
+  });
+}
+
+test('收起展示包清掉迟到落地姿态，旧窗口帧不能复活动作', () => {
+  const r = createRenderer();
+  const event = { screenX: 140, screenY: 140, clientX: 40, clientY: 40, button: 0, buttons: 1, pointerId: 1 };
+  r.events.pointerdown(event);
+  r.events.pointermove({ ...event, screenX: 170, clientX: 70 });
+  r.events.pointerup({ ...event, screenX: 170, clientX: 70 });
+  assert.equal(r.host.motions.at(-1).action, 'land');
+  const motion = r.host.motions.at(-1);
+  r.present({ mode: 'tucked', side: 'right', dragging: false, suppressed: true });
+  assert.equal(r.pet.dataset.motionOwner, 'none');
+  r.frame({ token: motion.token, action: 'land', frame: { done: false } });
+  assert.equal(r.pet.dataset.motionOwner, 'none');
+  assert.equal(r.engine._active, true);
+  assert.equal(r.engine.emotionId, '55');
+});
+
+test('收起在125ms活动采样下仍按原定时间眨眼，仅保留微呼吸', () => {
+  const r = createRenderer();
+  r.codexSettings({ enabled: true, generation: 1, activeTaskCount: 2 });
+  r.present({ mode: 'tucked', side: 'left', dragging: false, suppressed: true });
+  const scales = [], eyes = [], blinkTimes = [];
+  let nextBlink = r.engine._blinkNext;
+  assert.equal(nextBlink, 3750);
+  for (let now = 125; now <= 22500; now += 125) {
+    r.advanceTo(now);
+    r.activity(false, { cursor: { x: now % 500, y: 140 } });
+    scales.push(r.engine._lastPose.body.scale);
+    if (now >= 9000) eyes.push(r.engine._lastPose.left.open);
+    if (r.engine._blinkNext !== nextBlink) { blinkTimes.push(now); nextBlink = r.engine._blinkNext; }
+    assert.equal(r.engine.emotionId, '55');
+    assert.equal(r.engine._gaze.tx, 0);
+    assert.equal(r.engine._gaze.ty, 0);
+    assert.equal(r.engine._lastPose.body.yaw, 0);
+    assert.equal(r.engine._lastPose.body.zzz, 0);
+  }
+  assert.deepEqual(blinkTimes, [3750, 7500, 11250, 15000, 18750, 22500], '活动采样不能不断推迟更频繁的眨眼');
+  assert.ok(Math.min(...eyes) < 0.5 && Math.max(...eyes) > 0.98, '真实眼睛姿态发生闭合和恢复');
+  assert.ok(Math.max(...scales) - Math.min(...scales) > 0.012, '真实身体姿态保留呼吸');
+  assert.ok(Math.min(...scales) >= 0.993 && Math.max(...scales) <= 1.007);
+  assert.equal(r.engine._def.gaze, false);
+  assert.equal(r.timers.size, 0, '收起不创建新计时器，也不保留思考轮次');
+  assert.equal(r.host.motions.length, 0);
+  assert.equal(r.host.bounces, 0);
+});
+
+for (const sleeping of ['manual', 'natural']) {
+  test(`${sleeping}睡眠收起时闭眼微呼吸，无眨眼或zzz，展开恢复睡眠`, () => {
+    const r = createRenderer();
+    if (sleeping === 'manual') r.command('sleep');
+    else r.activity(false, { idleSeconds: 901 });
+    r.present({ mode: 'tucked', side: 'right', dragging: false, suppressed: true });
+    const scales = [], eyes = [];
+    for (let now = 125; now <= 15000; now += 125) {
+      r.advanceTo(now);
+      r.activity(false, { idleSeconds: sleeping === 'natural' ? 901 : 0 });
+      assert.equal(r.engine.emotionId, '56');
+      assert.equal(r.engine._lastPose.body.zzz, 0);
+      assert.equal(r.engine._blinkNext, Infinity);
+      scales.push(r.engine._lastPose.body.scale);
+      if (now > 1000) eyes.push(r.engine._lastPose.left.open);
+    }
+    assert.ok(Math.max(...scales) - Math.min(...scales) > 0.01);
+    assert.ok(Math.max(...eyes) <= 0.081 && Math.min(...eyes) >= 0.079, '整个后续睡眠保持闭眼');
+    r.present({ mode: 'peeked', side: 'right', dragging: false, suppressed: false });
+    assert.equal(r.engine.emotionId, '00');
+    assert.equal(r.engine._active, true);
+  });
+}
+
+for (const reason of ['hidden', 'paused', 'locked']) {
+  test(`${reason}使收起球体完全停止，重复活动不会重新绘制或唤醒`, () => {
+    const r = createRenderer();
+    r.present({ mode: 'tucked', side: 'left', dragging: false, suppressed: true });
+    r.advanceTo(1000);
+    if (reason === 'locked') r.activity(true);
+    else r.present({ mode: reason === 'hidden' ? 'hidden' : 'tucked', side: 'left',
+      dragging: false, suppressed: true, ...(reason === 'paused' ? { paused: true } : {}) });
+    const pose = JSON.stringify(r.engine._lastPose);
+    const tick = r.engine._lastTick;
+    for (let now = 1125; now <= 15000; now += 125) {
+      r.advanceTo(now);
+      r.activity(reason === 'locked', { cursor: { x: now % 500, y: 140 } });
+      assert.equal(r.engine._active, false);
+      assert.equal(JSON.stringify(r.engine._lastPose), pose);
+      assert.equal(r.engine._lastTick, tick);
+    }
+    if (reason === 'locked') r.activity(false);
+    r.present({ mode: 'free', side: null, dragging: false, suppressed: false });
+    assert.equal(r.engine._active, true);
+    assert.equal(r.engine.emotionId, '50', '恢复时立即回到当前清醒状态');
+  });
+}
+
+test('暂停展示先于锁屏采样到达时不短暂唤醒，恢复收起后继续微动画', () => {
+  const r = createRenderer();
+  r.present({ mode: 'tucked', side: 'right', dragging: false, suppressed: true, paused: true });
+  assert.equal(r.engine._active, false, '尚未收到locked=true也必须停止');
+  r.activity(true);
+  r.present({ mode: 'tucked', side: 'right', dragging: false, suppressed: true });
+  assert.equal(r.engine._active, false, '恢复展示到达时仍应尊重最后锁屏采样');
+  r.activity(false);
+  assert.equal(r.engine._active, true);
+  assert.equal(r.engine.emotionId, '55');
+});
+
+test('收起期间状态更新为疲倦，展开立即恢复当前表情而不等下一次采样', () => {
+  const r = createRenderer();
+  r.present({ mode: 'tucked', side: 'left', dragging: false, suppressed: true });
+  r.activity(false, { idleSeconds: 650 });
+  assert.equal(r.engine.emotionId, '55');
+  r.present({ mode: 'peeked', side: 'left', dragging: false, suppressed: false });
+  assert.equal(r.engine.emotionId, '15');
+});
+
+test('收起时迟到的双击不唤醒手动睡眠，跨尺寸重建仍只保留闭眼呼吸', () => {
+  const r = createRenderer();
+  r.command('sleep');
+  r.present({ mode: 'tucked', side: 'left', dragging: false, suppressed: true });
+  r.events.dblclick({ button: 0 });
+  r.resize(180);
+  r.advanceTo(1000);
+  assert.equal(r.pet.dataset.mode, 'manual-sleep');
+  assert.equal(r.engine.emotionId, '56');
+  assert.equal(r.engine._active, true);
+  assert.equal(r.engine._lastPose.body.zzz, 0);
+  assert.equal(r.host.motions.length, 0);
+  r.present({ mode: 'free', side: null, dragging: false, suppressed: false });
+  assert.equal(r.engine.emotionId, '00');
+});
+
+test('收起眨眼过程中进入自然睡眠时立即闭眼，恢复清醒后继续安静动画', () => {
+  const r = createRenderer();
+  r.present({ mode: 'tucked', side: 'left', dragging: false, suppressed: true });
+  r.advanceTo(3750);
+  assert.ok(r.engine._blinkQ.length > 0);
+  r.activity(false, { idleSeconds: 901 });
+  for (let now = 3766; now <= 4750; now += 16) {
+    r.advanceTo(now);
+    assert.ok(r.engine._lastPose.left.open < 0.1);
+    assert.equal(r.engine._lastPose.body.zzz, 0);
+  }
+  r.activity(false);
+  assert.equal(r.engine.emotionId, '55');
+  assert.equal(r.engine._active, true);
+  assert.equal(r.host.motions.length, 0, '收起期间自然醒不播伸懒腰');
+});
+
+test('尚未收到新屏幕采样时吸边和换边也立即朝向内侧，冻结样本不改朝向', () => {
+  const r = createRenderer();
+  r.activity(false, { petBounds: { x: 900, y: 100, width: 80, height: 80 }, workArea: { x: 0, y: 0, width: 1000, height: 800 } });
+  assert.equal(r.pet.dataset.facing, 'left');
+  r.present({ mode: 'tucked', side: 'left', suppressed: true });
+  assert.equal(r.pet.dataset.facing, 'right');
+  assert.equal(r.engine._facing, 'right');
+  r.activity(false, { petBounds: { x: 900, y: 100, width: 80, height: 80 }, workArea: { x: 0, y: 0, width: 1000, height: 800 } });
+  assert.equal(r.pet.dataset.facing, 'right', '旧采样不能把靠边眼睛转到屏外');
+  r.present({ mode: 'tucked', side: 'right', suppressed: true });
+  assert.equal(r.pet.dataset.facing, 'left');
+  r.present({ mode: 'tucked', side: 'right', suppressed: true, paused: true });
+  r.activity(false, { petBounds: { x: 0, y: 100, width: 80, height: 80 }, workArea: { x: 0, y: 0, width: 1000, height: 800 } });
+  assert.equal(r.pet.dataset.facing, 'left');
+});
+
+test('暂停和解锁报文先后到达时收起朝向不会永久停留在屏外', () => {
+  const r = createRenderer();
+  r.activity(true);
+  r.present({ mode: 'tucked', side: 'right', suppressed: true, paused: true });
+  assert.equal(r.pet.dataset.facing, 'left');
+  r.present({ mode: 'tucked', side: 'right', suppressed: true });
+  r.activity(false);
+  assert.equal(r.pet.dataset.facing, 'left');
+  assert.equal(r.engine._active, true);
+});
+
+test('宿主恢复自由位置时取消本地拖动，旧抬手不产生落地动作', () => {
+  const r = createRenderer();
+  const event = { screenX: 140, screenY: 140, clientX: 40, clientY: 40, button: 0, buttons: 1, pointerId: 1 };
+  r.events.pointerdown(event);
+  r.present({ mode: 'free', side: null, dragging: true, suppressed: false });
+  assert.equal(r.pet.hasPointerCapture(1), true, '拖动开始的宿主确认保留捕获');
+  r.events.pointermove({ ...event, screenX: 170, clientX: 70 });
+  r.present({ mode: 'free', side: null, dragging: false, suppressed: false, cancelDrag: true });
+  assert.equal(r.pet.hasPointerCapture(1), false, '显示器或尺寸恢复已作废拖动');
+  const motions = r.host.motions.length, scenes = r.host.scenes.length;
+  r.events.pointerup({ ...event, screenX: 170, clientX: 70 });
+  assert.equal(r.host.motions.length, motions);
+  assert.equal(r.host.scenes.length, scenes);
+  assert.equal(r.pet.dataset.dragging, 'false');
+});
+
+test('前次点击迟到的松手确认不能取消新拖动或丢失第二次endDrag', () => {
+  const r = createRenderer();
+  const event = { screenX: 140, screenY: 140, clientX: 40, clientY: 40, button: 0, buttons: 1, pointerId: 1 };
+  r.events.pointerdown(event);
+  r.events.pointerup(event);
+  assert.equal(r.host.dragEnds, 1);
+  r.events.pointerdown(event);
+  assert.equal(r.pet.hasPointerCapture(1), true);
+  r.present({ mode: 'free', side: null, dragging: false, suppressed: false });
+  assert.equal(r.pet.hasPointerCapture(1), true, '普通松手确认仅报告宿主状态，不取消后来按下的拖动');
+  r.present({ mode: 'free', side: null, dragging: true, suppressed: false });
+  r.events.pointermove({ ...event, screenX: 170, clientX: 70 });
+  r.events.pointerup({ ...event, screenX: 170, clientX: 70 });
+  assert.equal(r.host.dragMoves.at(-1).x, 170, '新拖动仍向宿主发送位置');
+  assert.equal(r.host.dragEnds, 2, '新拖动必须完整结束，不能让宿主卡在dragging');
+  assert.equal(r.host.motions.at(-1).action, 'land');
+  assert.equal(r.pet.hasPointerCapture(1), false);
 });
