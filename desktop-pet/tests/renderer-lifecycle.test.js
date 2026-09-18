@@ -821,3 +821,19 @@ test('收起展示包清掉迟到落地姿态，旧窗口帧不能复活动作',
   assert.equal(r.pet.dataset.motionOwner, 'none');
   assert.equal(r.engine._active, false);
 });
+
+test('宿主恢复自由位置时取消本地拖动，旧抬手不产生落地动作', () => {
+  const r = createRenderer();
+  const event = { screenX: 140, screenY: 140, clientX: 40, clientY: 40, button: 0, buttons: 1, pointerId: 1 };
+  r.events.pointerdown(event);
+  r.present({ mode: 'free', side: null, dragging: true, suppressed: false });
+  assert.equal(r.pet.hasPointerCapture(1), true, '拖动开始的宿主确认保留捕获');
+  r.events.pointermove({ ...event, screenX: 170, clientX: 70 });
+  r.present({ mode: 'free', side: null, dragging: false, suppressed: false });
+  assert.equal(r.pet.hasPointerCapture(1), false, '显示器或尺寸恢复已作废拖动');
+  const motions = r.host.motions.length, scenes = r.host.scenes.length;
+  r.events.pointerup({ ...event, screenX: 170, clientX: 70 });
+  assert.equal(r.host.motions.length, motions);
+  assert.equal(r.host.scenes.length, scenes);
+  assert.equal(r.pet.dataset.dragging, 'false');
+});

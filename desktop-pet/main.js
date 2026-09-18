@@ -42,6 +42,7 @@ const IS_CODEX_SMOKE_ONLY = IS_SMOKE_TEST && process.env.PET_SMOKE_CODEX_ONLY ==
 
 let petWindow = null;
 let edgeTuck = null;
+let petMenuToken = 0;
 let tray = null;
 let settings = null;
 let settingsFile = null;
@@ -530,10 +531,7 @@ async function routeCodexAction(descriptor) {
   if (action.type === 'dismiss') return codexCompanion.dismiss(action.alertId, descriptor.generation);
   if (action.type === 'show-results') {
     const items = buildCodexResultMenu(snapshot, action.alertId, codexNow());
-    if (items.length && petWindow && !petWindow.isDestroyed()) {
-      Menu.buildFromTemplate(bindCodexMenu(items)).popup({ window: petWindow });
-    }
-    return items.length > 0;
+    return items.length > 0 && popupPetMenu(bindCodexMenu(items));
   }
   if (descriptor.scope === 'alert') codexCompanion.dismiss(descriptor.alertId, descriptor.generation);
   if (action.type === 'open-task') {
@@ -914,12 +912,31 @@ function refreshTrayMenu() {
   tray.setContextMenu(Menu.buildFromTemplate(menuTemplate()));
 }
 
-function showPetContextMenu() {
-  if (!petWindow || petWindow.isDestroyed()) return;
-  edgeTuck?.pin(true);
+function popupPetMenu(items) {
+  const win = petWindow, controller = edgeTuck;
+  if (!win || win.isDestroyed()) return false;
+  const token = ++petMenuToken;
+  let opened = false, released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    win.removeListener('closed', release);
+    // 旧菜单或旧窗口的关闭回调不能解除后来菜单的展开保护。
+    if (token === petMenuToken && controller === edgeTuck) controller?.pin(false);
+  };
+  controller?.pin(true);
+  win.once('closed', release);
   try {
-    Menu.buildFromTemplate(menuTemplate()).popup({ window: petWindow, callback: () => edgeTuck?.pin(false) });
-  } catch (error) { edgeTuck?.pin(false); throw error; }
+    Menu.buildFromTemplate(items).popup({ window: win, callback: release });
+    opened = true;
+    return true;
+  } finally {
+    if (!opened) release();
+  }
+}
+
+function showPetContextMenu() {
+  return popupPetMenu(menuTemplate());
 }
 
 function createTray() {

@@ -264,17 +264,17 @@
     petElement.dataset.presentation = packet.mode;
     petElement.dataset.edge = packet.side === 'left' || packet.side === 'right' ? packet.side : 'none';
     petElement.dataset.dragging = packet.dragging ? 'true' : 'false';
+    if (dragState && packet.dragging === false) {
+      if (petElement.hasPointerCapture(dragState.pointerId)) petElement.releasePointerCapture(dragState.pointerId);
+      dragState = null;
+      petElement.classList.remove('dragging');
+    }
     if (presentationSuppressed) {
       cancelPendingInteraction();
       clearAction();
       stopMotion(false);
       stopCodexThinkingCadence();
       petting.reset();
-      if (dragState && !packet.dragging) {
-        if (petElement.hasPointerCapture(dragState.pointerId)) petElement.releasePointerCapture(dragState.pointerId);
-        dragState = null;
-        petElement.classList.remove('dragging');
-      }
       restoreState();
       ball.clearGaze();
       ball.setActive(false);
