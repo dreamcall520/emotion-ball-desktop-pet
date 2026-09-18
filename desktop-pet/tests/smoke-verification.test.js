@@ -19,14 +19,14 @@ test('动作验收尺寸必须完整取自产品实际尺寸定义', () => {
 });
 
 // 只替代启动Electron的进程边界，实际运行烟测脚本的输出校验；不打开GUI。
-async function validateSmokeOutput(markers) {
+async function validateSmokeOutput(markers, env = {}) {
   const runner = path.resolve(__dirname, '../scripts/smoke-electron.js');
   const runnerRequire = createRequire(runner);
   const result = { exitCode: 0, errors: '' };
   await vm.runInNewContext(fs.readFileSync(runner, 'utf8'), {
     __dirname: path.dirname(runner), setTimeout, clearTimeout,
     process: {
-      env: {}, stdout: { write() {} }, stderr: { write(text) { result.errors += text; } },
+      env, stdout: { write() {} }, stderr: { write(text) { result.errors += text; } },
       set exitCode(value) { result.exitCode = value; }
     },
     require(name) {
@@ -152,4 +152,16 @@ test('结束身体允许原有轻微呼吸，但不允许残留压扁、旋转�
   assert.ok(!isRestingTransform(pose(0, 0, 2, 1, 1)));
   assert.ok(!isRestingTransform(pose(0, 3, 0, 1, 1)));
   assert.ok(!isRestingTransform(''));
+});
+
+
+test('靠边验收必须同时验证尺寸、悬停、真实拖动及隐藏恢复', async () => {
+  const markers = ['EDGE_SIZES', 'EDGE_HOVER', 'EDGE_DRAG', 'EDGE_HIDE', 'EDGE_DISPLAYS', 'EDGE_SMOKE'];
+  const env = { PET_SMOKE_EDGE_ONLY: '1' };
+  const full = await validateSmokeOutput(markers, env);
+  assert.equal(full.exitCode, 0, full.errors);
+  for (const missing of markers) {
+    const result = await validateSmokeOutput(markers.filter(value => value !== missing), env);
+    assert.equal(result.exitCode, 1, missing);
+  }
 });
