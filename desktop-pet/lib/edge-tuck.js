@@ -36,11 +36,11 @@ function createEdgeTuck({ getWindow, getWorkArea, onChange = () => {},
     if (!bounds) return null;
     return { ...bounds, x: bounds.x + (side === 'right' ? bounds.width / 2 : 0), width: bounds.width / 2 };
   }
-  function publish() {
+  function publish({ cancelDrag = false } = {}) {
     if (disposed) return;
     if (mode === 'tucked' && !dragging) setIgnored(!contains(visibleHalf(), lastCursor));
     else setIgnored(false);
-    onChange(getPresentation());
+    onChange({ ...getPresentation(), ...(cancelDrag ? { cancelDrag: true } : {}) });
   }
   function placeAtEdge() {
     const win = window();
@@ -60,7 +60,7 @@ function createEdgeTuck({ getWindow, getWorkArea, onChange = () => {},
   function restore() {
     if (disposed) return;
     cancelTuck(); dragging = false; pinned = false; side = null; mode = 'free';
-    placeAtEdge(); publish();
+    placeAtEdge(); publish({ cancelDrag: true });
   }
   function sampleCursor(point) {
     lastCursor = point;
@@ -110,7 +110,7 @@ function createEdgeTuck({ getWindow, getWorkArea, onChange = () => {},
       if (disposed) return;
       cancelTuck(); dragging = false; pinned = false;
       if (side && mode !== 'hidden') mode = 'tucked';
-      placeAtEdge(); publish();
+      placeAtEdge(); publish({ cancelDrag: true });
     },
     suspend() {
       if (disposed) return;

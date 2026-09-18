@@ -14,7 +14,7 @@ function createRenderer(randomValue = 0.5) {
   const events = {};
   const subscriptions = {};
   const windowEvents = {};
-  const host = { bounces: 0, stops: 0, scenes: [], motions: [], frames: [], positions: [], codexAcks: [], availability: [], thoughts: [] };
+  const host = { dragEnds: 0, dragMoves: [], bounces: 0, stops: 0, scenes: [], motions: [], frames: [], positions: [], codexAcks: [], availability: [], thoughts: [] };
   const bounds = { x: 100, y: 100, width: 80, height: 80 };
   let windowController;
   const nativeWindow = { isDestroyed: () => false, isVisible: () => true,
@@ -62,7 +62,8 @@ function createRenderer(randomValue = 0.5) {
     innerWidth: 80,
     addEventListener(name, callback) { windowEvents[name] = callback; },
     petDesktop: {
-      beginDrag() { windowController?.stop(); }, dragTo() {}, endDrag() {}, showContextMenu() {},
+      beginDrag() { windowController?.stop(); }, dragTo(point) { host.dragMoves.push(point); },
+      endDrag() { host.dragEnds++; }, showContextMenu() {},
       bounce() { host.bounces++; },
       stopMotion() { host.stops++; windowController?.stop(); },
       playMotion(request) {
@@ -829,11 +830,30 @@ test('宿主恢复自由位置时取消本地拖动，旧抬手不产生落地�
   r.present({ mode: 'free', side: null, dragging: true, suppressed: false });
   assert.equal(r.pet.hasPointerCapture(1), true, '拖动开始的宿主确认保留捕获');
   r.events.pointermove({ ...event, screenX: 170, clientX: 70 });
-  r.present({ mode: 'free', side: null, dragging: false, suppressed: false });
+  r.present({ mode: 'free', side: null, dragging: false, suppressed: false, cancelDrag: true });
   assert.equal(r.pet.hasPointerCapture(1), false, '显示器或尺寸恢复已作废拖动');
   const motions = r.host.motions.length, scenes = r.host.scenes.length;
   r.events.pointerup({ ...event, screenX: 170, clientX: 70 });
   assert.equal(r.host.motions.length, motions);
   assert.equal(r.host.scenes.length, scenes);
   assert.equal(r.pet.dataset.dragging, 'false');
+});
+
+test('前次点击迟到的松手确认不能取消新拖动或丢失第二次endDrag', () => {
+  const r = createRenderer();
+  const event = { screenX: 140, screenY: 140, clientX: 40, clientY: 40, button: 0, buttons: 1, pointerId: 1 };
+  r.events.pointerdown(event);
+  r.events.pointerup(event);
+  assert.equal(r.host.dragEnds, 1);
+  r.events.pointerdown(event);
+  assert.equal(r.pet.hasPointerCapture(1), true);
+  r.present({ mode: 'free', side: null, dragging: false, suppressed: false });
+  assert.equal(r.pet.hasPointerCapture(1), true, '普通松手确认仅报告宿主状态，不取消后来按下的拖动');
+  r.present({ mode: 'free', side: null, dragging: true, suppressed: false });
+  r.events.pointermove({ ...event, screenX: 170, clientX: 70 });
+  r.events.pointerup({ ...event, screenX: 170, clientX: 70 });
+  assert.equal(r.host.dragMoves.at(-1).x, 170, '新拖动仍向宿主发送位置');
+  assert.equal(r.host.dragEnds, 2, '新拖动必须完整结束，不能让宿主卡在dragging');
+  assert.equal(r.host.motions.at(-1).action, 'land');
+  assert.equal(r.pet.hasPointerCapture(1), false);
 });

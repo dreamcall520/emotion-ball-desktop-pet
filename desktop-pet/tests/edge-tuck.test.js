@@ -129,3 +129,20 @@ test('快照不能从外部篡改，恢复会解除鼠标穿透，恢复采样�
   assert.equal(f.ignores.at(-1), false);
   assert.equal(f.controller.getPresentation().suppressed, false);
 });
+
+test('普通松手确认不取消新拖动，只有明确恢复位置才发送cancelDrag', () => {
+  const f = fixture();
+  f.controller.beginDrag();
+  f.controller.endDrag(false);
+  assert.equal(f.packets.at(-1).dragging, false);
+  assert.equal(f.packets.at(-1).cancelDrag, undefined);
+  f.controller.beginDrag();
+  f.controller.recover();
+  assert.equal(f.packets.at(-1).cancelDrag, true);
+  assert.equal(f.packets.at(-1).dragging, false);
+  f.controller.beginDrag();
+  f.controller.restore();
+  assert.equal(f.packets.at(-1).cancelDrag, true);
+  f.controller.beginDrag();
+  assert.equal(f.packets.at(-1).cancelDrag, undefined, '强制取消是一次通知，不保留到下一次拖动');
+});

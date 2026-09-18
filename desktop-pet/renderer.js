@@ -264,7 +264,8 @@
     petElement.dataset.presentation = packet.mode;
     petElement.dataset.edge = packet.side === 'left' || packet.side === 'right' ? packet.side : 'none';
     petElement.dataset.dragging = packet.dragging ? 'true' : 'false';
-    if (dragState && packet.dragging === false) {
+    // 普通松手确认可能晚于下一次按下；只有明确恢复或隐藏才作废本地拖动。
+    if (dragState && (presentationSuppressed || packet.cancelDrag === true)) {
       if (petElement.hasPointerCapture(dragState.pointerId)) petElement.releasePointerCapture(dragState.pointerId);
       dragState = null;
       petElement.classList.remove('dragging');
