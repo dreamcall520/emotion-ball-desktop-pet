@@ -15,7 +15,8 @@ function createEdgeTuck({ getWindow, getWorkArea, onChange = () => {},
   let pinned = false, timer = null, revision = 0, ignored = null, lastCursor = null;
 
   function getPresentation() {
-    return { mode, side, dragging, suppressed: mode === 'tucked' || mode === 'hidden' || paused };
+    return { mode, side, dragging, suppressed: mode === 'tucked' || mode === 'hidden' || paused,
+      ...(paused ? { paused: true } : {}) };
   }
   function window() {
     const win = getWindow();

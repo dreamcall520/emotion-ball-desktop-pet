@@ -146,3 +146,15 @@ test('普通松手确认不取消新拖动，只有明确恢复位置才发送ca
   f.controller.beginDrag();
   assert.equal(f.packets.at(-1).cancelDrag, undefined, '强制取消是一次通知，不保留到下一次拖动');
 });
+
+test('暂停快照显式阻止安静动画，恢复后不保留paused字段', () => {
+  const f = fixture({ side: 'left' });
+  assert.equal(f.controller.getPresentation().paused, undefined);
+  f.controller.suspend();
+  assert.equal(f.packets.at(-1).paused, true);
+  assert.equal(f.controller.getPresentation().paused, true);
+  assert.equal(f.controller.getPresentation().suppressed, true);
+  f.controller.resume();
+  assert.equal(f.packets.at(-1).paused, undefined);
+  assert.equal(f.controller.getPresentation().suppressed, true, '恢复微动画仍禁止大动作');
+});

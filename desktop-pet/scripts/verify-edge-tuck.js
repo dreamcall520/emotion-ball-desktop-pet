@@ -6,7 +6,7 @@ const { SIZES } = require('../lib/window-placement');
 
 // Explicit smoke only: real Electron windows, renderer and IPC; isolated synthetic cursor/usage.
 async function verifyEdgeTuck({ pet, bubble, quotaLabel, getThoughtWindow, screen, monitor,
-  getMenu, setSize, getSettings, showDialogue, getPresentation, prepare, setEnabled, setQuotaPreference }) {
+  getMenu, setSize, getSettings, showDialogue, getPresentation, prepare, setEnabled, setQuotaPreference, verifyNotices }) {
   assert.equal(process.env.PET_SMOKE_TEST, '1');
   const artifacts = process.env.PET_SMOKE_ARTIFACT_DIR;
   if (artifacts) fs.mkdirSync(artifacts, { recursive: true });
@@ -172,6 +172,7 @@ async function verifyEdgeTuck({ pet, bubble, quotaLabel, getThoughtWindow, scree
     await poll(() => quotaLabel.getWindow().webContents.executeJavaScript('document.body.textContent'),
       text => text.includes('79%'), 'restore shows latest hidden quota');
     assert.equal(visible(bubble.getWindow()), false, 'old bubble not replayed');
+    if (verifyNotices) await verifyNotices();
     assert.deepEqual(errors, []);
     assert.deepEqual(await page('window.__edgeErrors'), []);
     if (artifacts) fs.writeFileSync(path.join(artifacts, 'edge-tuck-results.json'), JSON.stringify({

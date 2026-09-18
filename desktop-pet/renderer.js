@@ -26,6 +26,9 @@
 
   let ball = null;
   let presentationSuppressed = false;
+  let presentationMode = 'free';
+  let presentationPaused = false;
+  let presentationFrozen = false;
   let compactMode = null;
   let dragState = null;
   let singleClickTimer = null;
@@ -56,7 +59,7 @@
   const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
 
   function syncFacing() {
-    if (dragState || activeMotion) return;
+    if (dragState || activeMotion || presentationSuppressed || lastSample?.locked) return;
     facing = PetFacing.resolve(lastSample?.petBounds, lastSample?.workArea, facing);
     petElement.dataset.facing = facing;
     ball?.setFacing(facing);
@@ -129,7 +132,7 @@
     } else if (codexThinking) {
       codexThinking = false;
       restoreState();
-      if (!activeMotion && performance.now() >= actionUntil) {
+      if (!presentationSuppressed && !lastSample?.locked && !activeMotion && performance.now() >= actionUntil) {
         setBallGaze(!companion.manualSleep ? currentState.gaze : null);
       }
     }
@@ -184,12 +187,25 @@
     body: { ...thinkingDefinition.body, orbit: 0 }
   });
   CompanionMotion.registerEmotions(EmotionBall.config);
+  EmotionBall.config.register({
+    id: '55', name: '靠边陪伴', group: 'custom', gaze: false, antics: false,
+    pool: [0], blinkMs: [6000, 14000], transition: 0, anims: [],
+    body: { breathe: 0.007 }
+  });
+  EmotionBall.config.register({
+    id: '56', name: '靠边小憩', group: 'custom', gaze: false, antics: false,
+    pool: [13], blinkMs: null, transition: 0, anims: [],
+    body: { breathe: 0.006 },
+    // 刚收起时可能还留有上一表情的眨眼关键帧，基础眼形也保持闭合。
+    eyes: { both: { open: 0.08, y: 4, lookY: 2 } }
+  });
 
   function createBall(emotionId) {
     const nextCompactMode = window.innerWidth <= 120;
     if (ball) ball.destroy();
     petElement.replaceChildren();
     compactMode = nextCompactMode;
+    presentationFrozen = false;
     ball = EmotionBall.create(petElement, {
       emotion: emotionId || '50',
       shape: 'blob',
@@ -243,8 +259,25 @@
   }
 
   function restoreState() {
+    if (presentationSuppressed) { syncSuppressedAnimation(); return; }
     if (activeMotion || dragState?.dragged || performance.now() < actionUntil) return;
     showEmotion(companion.manualSleep ? '00' : currentState.emotionId);
+  }
+
+  function syncSuppressedAnimation(refresh = false) {
+    const quiet = presentationMode === 'tucked' && !presentationPaused && !lastSample?.locked;
+    if (!quiet && presentationFrozen && !refresh) return;
+    const sleeping = companion.manualSleep || currentState.mode === 'sleep' || lastSample?.locked;
+    const emotion = presentationMode === 'tucked' ? (sleeping ? '56' : '55') :
+      (sleeping ? '00' : currentState.emotionId);
+    if (!quiet) ball.setActive(false);
+    showEmotion(emotion);
+    ball.clearGaze();
+    petElement.dataset.gaze = '0,0';
+    // 保留现有引擎的呼吸和眨眼时间线；125ms活动采样不能重排眨眼。
+    if (quiet) ball.setActive(true);
+    else ball.renderStatic();
+    presentationFrozen = !quiet;
   }
 
   function playEmotion(id, duration, scene) {
@@ -260,7 +293,10 @@
 
   function updatePresentation(packet) {
     if (!packet || !['free', 'tucked', 'peeked', 'hidden'].includes(packet.mode)) return;
-    presentationSuppressed = packet.suppressed === true;
+    const wasSuppressed = presentationSuppressed;
+    presentationMode = packet.mode;
+    presentationPaused = packet.paused === true;
+    presentationSuppressed = packet.suppressed === true || presentationPaused;
     petElement.dataset.presentation = packet.mode;
     petElement.dataset.edge = packet.side === 'left' || packet.side === 'right' ? packet.side : 'none';
     petElement.dataset.dragging = packet.dragging ? 'true' : 'false';
@@ -276,17 +312,20 @@
       stopMotion(false);
       stopCodexThinkingCadence();
       petting.reset();
-      restoreState();
-      ball.clearGaze();
-      ball.setActive(false);
-      ball.renderStatic();
+      syncSuppressedAnimation(true);
     } else {
+      presentationFrozen = false;
       ball.setActive(!lastSample?.locked);
+      if (wasSuppressed) {
+        restoreState();
+        if (!activeMotion && !dragState) setBallGaze(!companion.manualSleep ? currentState.gaze : null);
+      }
       if (codexEnabled && codexActiveTaskCount > 0 && !codexThinkingTimer) startCodexThinkingCadence();
     }
   }
 
   function updateActivity(sample) {
+    const previouslyLocked = lastSample?.locked === true;
     lastSample = sample;
     syncFacing();
     const now = performance.now();
@@ -294,11 +333,11 @@
     currentState = companion.update(sample, now);
     petElement.dataset.mode = companion.manualSleep ? 'manual-sleep' : currentState.mode;
     if (presentationSuppressed) {
-      ball.setActive(false);
-      ball.renderStatic();
+      syncSuppressedAnimation();
       return;
     }
     if (sample.locked) {
+      if (previouslyLocked) return;
       cancelPendingInteraction();
       clearAction();
       stopMotion();
@@ -374,7 +413,7 @@
   function runDoubleClickAction() {
     const shouldWake = wakeOnDoubleClick || companion.manualSleep || ball.emotionId === '00';
     cancelPendingInteraction();
-    if (lastSample?.locked) return;
+    if (presentationSuppressed || lastSample?.locked) return;
     if (shouldWake) {
       wake();
       return;
@@ -467,7 +506,7 @@
     cancelPendingInteraction();
     stopMotion();
     companion.setManualSleep(false, performance.now());
-    const definitions = EmotionBall.config.list();
+    const definitions = EmotionBall.config.list().filter(definition => !['55', '56'].includes(definition.id));
     const selected = definitions[Math.floor(Math.random() * definitions.length)];
     if (selected) playEmotion(selected.id, 5000);
   }
@@ -617,7 +656,7 @@
     const shouldBeCompact = window.innerWidth <= 120;
     if (shouldBeCompact !== compactMode) createBall(ball.emotionId);
     restoreState();
-    if (presentationSuppressed) { ball.setActive(false); ball.renderStatic(); }
+    if (presentationSuppressed) syncSuppressedAnimation(true);
   });
 
   onWindow('beforeunload', () => {

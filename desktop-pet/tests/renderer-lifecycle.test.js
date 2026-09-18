@@ -788,7 +788,7 @@ for (const mode of ['tucked', 'hidden']) {
     assert.equal(r.pet.dataset.presentation, mode);
     assert.equal(r.pet.dataset.edge, 'left');
     assert.equal(r.pet.dataset.codexWorking, 'false');
-    assert.equal(r.engine._active, false);
+    assert.equal(r.engine._active, mode === 'tucked');
     const scenes = r.host.scenes.length, motions = r.host.motions.length;
     r.advanceTo(90000);
     r.activity(false, { idleSeconds: 0 });
@@ -820,7 +820,139 @@ test('收起展示包清掉迟到落地姿态，旧窗口帧不能复活动作',
   assert.equal(r.pet.dataset.motionOwner, 'none');
   r.frame({ token: motion.token, action: 'land', frame: { done: false } });
   assert.equal(r.pet.dataset.motionOwner, 'none');
-  assert.equal(r.engine._active, false);
+  assert.equal(r.engine._active, true);
+  assert.equal(r.engine.emotionId, '55');
+});
+
+test('收起在125ms活动采样下仍按原定时间眨眼，仅保留微呼吸', () => {
+  const r = createRenderer();
+  r.codexSettings({ enabled: true, generation: 1, activeTaskCount: 2 });
+  r.present({ mode: 'tucked', side: 'left', dragging: false, suppressed: true });
+  const scales = [], eyes = [], blinkTimes = [];
+  let nextBlink = r.engine._blinkNext;
+  assert.equal(nextBlink, 10000);
+  for (let now = 125; now <= 22500; now += 125) {
+    r.advanceTo(now);
+    r.activity(false, { cursor: { x: now % 500, y: 140 } });
+    scales.push(r.engine._lastPose.body.scale);
+    if (now >= 9000) eyes.push(r.engine._lastPose.left.open);
+    if (r.engine._blinkNext !== nextBlink) { blinkTimes.push(now); nextBlink = r.engine._blinkNext; }
+    assert.equal(r.engine.emotionId, '55');
+    assert.equal(r.engine._gaze.tx, 0);
+    assert.equal(r.engine._gaze.ty, 0);
+    assert.equal(r.engine._lastPose.body.yaw, 0);
+    assert.equal(r.engine._lastPose.body.zzz, 0);
+  }
+  assert.deepEqual(blinkTimes, [10000, 20000], '活动采样不能不断推迟眨眼');
+  assert.ok(Math.min(...eyes) < 0.5 && Math.max(...eyes) > 0.98, '真实眼睛姿态发生闭合和恢复');
+  assert.ok(Math.max(...scales) - Math.min(...scales) > 0.012, '真实身体姿态保留呼吸');
+  assert.ok(Math.min(...scales) >= 0.993 && Math.max(...scales) <= 1.007);
+  assert.equal(r.engine._def.gaze, false);
+  assert.equal(r.timers.size, 0, '收起不创建新计时器，也不保留思考轮次');
+  assert.equal(r.host.motions.length, 0);
+  assert.equal(r.host.bounces, 0);
+});
+
+for (const sleeping of ['manual', 'natural']) {
+  test(`${sleeping}睡眠收起时闭眼微呼吸，无眨眼或zzz，展开恢复睡眠`, () => {
+    const r = createRenderer();
+    if (sleeping === 'manual') r.command('sleep');
+    else r.activity(false, { idleSeconds: 901 });
+    r.present({ mode: 'tucked', side: 'right', dragging: false, suppressed: true });
+    const scales = [], eyes = [];
+    for (let now = 125; now <= 15000; now += 125) {
+      r.advanceTo(now);
+      r.activity(false, { idleSeconds: sleeping === 'natural' ? 901 : 0 });
+      assert.equal(r.engine.emotionId, '56');
+      assert.equal(r.engine._lastPose.body.zzz, 0);
+      assert.equal(r.engine._blinkNext, Infinity);
+      scales.push(r.engine._lastPose.body.scale);
+      if (now > 1000) eyes.push(r.engine._lastPose.left.open);
+    }
+    assert.ok(Math.max(...scales) - Math.min(...scales) > 0.01);
+    assert.ok(Math.max(...eyes) <= 0.081 && Math.min(...eyes) >= 0.079, '整个后续睡眠保持闭眼');
+    r.present({ mode: 'peeked', side: 'right', dragging: false, suppressed: false });
+    assert.equal(r.engine.emotionId, '00');
+    assert.equal(r.engine._active, true);
+  });
+}
+
+for (const reason of ['hidden', 'paused', 'locked']) {
+  test(`${reason}使收起球体完全停止，重复活动不会重新绘制或唤醒`, () => {
+    const r = createRenderer();
+    r.present({ mode: 'tucked', side: 'left', dragging: false, suppressed: true });
+    r.advanceTo(1000);
+    if (reason === 'locked') r.activity(true);
+    else r.present({ mode: reason === 'hidden' ? 'hidden' : 'tucked', side: 'left',
+      dragging: false, suppressed: true, ...(reason === 'paused' ? { paused: true } : {}) });
+    const pose = JSON.stringify(r.engine._lastPose);
+    const tick = r.engine._lastTick;
+    for (let now = 1125; now <= 15000; now += 125) {
+      r.advanceTo(now);
+      r.activity(reason === 'locked', { cursor: { x: now % 500, y: 140 } });
+      assert.equal(r.engine._active, false);
+      assert.equal(JSON.stringify(r.engine._lastPose), pose);
+      assert.equal(r.engine._lastTick, tick);
+    }
+    if (reason === 'locked') r.activity(false);
+    r.present({ mode: 'free', side: null, dragging: false, suppressed: false });
+    assert.equal(r.engine._active, true);
+    assert.equal(r.engine.emotionId, '50', '恢复时立即回到当前清醒状态');
+  });
+}
+
+test('暂停展示先于锁屏采样到达时不短暂唤醒，恢复收起后继续微动画', () => {
+  const r = createRenderer();
+  r.present({ mode: 'tucked', side: 'right', dragging: false, suppressed: true, paused: true });
+  assert.equal(r.engine._active, false, '尚未收到locked=true也必须停止');
+  r.activity(true);
+  r.present({ mode: 'tucked', side: 'right', dragging: false, suppressed: true });
+  assert.equal(r.engine._active, false, '恢复展示到达时仍应尊重最后锁屏采样');
+  r.activity(false);
+  assert.equal(r.engine._active, true);
+  assert.equal(r.engine.emotionId, '55');
+});
+
+test('收起期间状态更新为疲倦，展开立即恢复当前表情而不等下一次采样', () => {
+  const r = createRenderer();
+  r.present({ mode: 'tucked', side: 'left', dragging: false, suppressed: true });
+  r.activity(false, { idleSeconds: 650 });
+  assert.equal(r.engine.emotionId, '55');
+  r.present({ mode: 'peeked', side: 'left', dragging: false, suppressed: false });
+  assert.equal(r.engine.emotionId, '15');
+});
+
+test('收起时迟到的双击不唤醒手动睡眠，跨尺寸重建仍只保留闭眼呼吸', () => {
+  const r = createRenderer();
+  r.command('sleep');
+  r.present({ mode: 'tucked', side: 'left', dragging: false, suppressed: true });
+  r.events.dblclick({ button: 0 });
+  r.resize(180);
+  r.advanceTo(1000);
+  assert.equal(r.pet.dataset.mode, 'manual-sleep');
+  assert.equal(r.engine.emotionId, '56');
+  assert.equal(r.engine._active, true);
+  assert.equal(r.engine._lastPose.body.zzz, 0);
+  assert.equal(r.host.motions.length, 0);
+  r.present({ mode: 'free', side: null, dragging: false, suppressed: false });
+  assert.equal(r.engine.emotionId, '00');
+});
+
+test('收起眨眼过程中进入自然睡眠时立即闭眼，恢复清醒后继续安静动画', () => {
+  const r = createRenderer();
+  r.present({ mode: 'tucked', side: 'left', dragging: false, suppressed: true });
+  r.advanceTo(10000);
+  assert.ok(r.engine._blinkQ.length > 0);
+  r.activity(false, { idleSeconds: 901 });
+  for (let now = 10016; now <= 11000; now += 16) {
+    r.advanceTo(now);
+    assert.ok(r.engine._lastPose.left.open < 0.1);
+    assert.equal(r.engine._lastPose.body.zzz, 0);
+  }
+  r.activity(false);
+  assert.equal(r.engine.emotionId, '55');
+  assert.equal(r.engine._active, true);
+  assert.equal(r.host.motions.length, 0, '收起期间自然醒不播伸懒腰');
 });
 
 test('宿主恢复自由位置时取消本地拖动，旧抬手不产生落地动作', () => {

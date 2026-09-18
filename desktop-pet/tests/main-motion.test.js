@@ -77,6 +77,9 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     show(model) { this.shows.push(model); this.visible = true; }, hide() { this.hides++; this.visible = false; },
     reposition() { this.moves++; }, destroy() { this.destroys++; this.visible = false; },
     setAlwaysOnTop(value) { this.topmost.push(value); }, getWindow: () => null };
+  const edgeNoticeWindow = { shows: [], visible: false,
+    show(payload) { this.shows.push(payload); this.visible = true; }, hide() { this.visible = false; },
+    destroy() { this.visible = false; }, reposition() {}, setAlwaysOnTop() {}, getWindow: () => null };
   const activity = { starts: 0, stops: 0, pauses: 0, resumes: 0,
     start() { this.starts++; }, stop() { this.stops++; }, pause() { this.pauses++; }, resume() { this.resumes++; } };
   const realRequire = createRequire(path.resolve(__dirname, '../main.js'));
@@ -110,6 +113,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
       } };
       if (name === './lib/bubble-window') return { createBubbleWindow: () => bubble };
       if (name === './lib/quota-label-window') return { createQuotaLabelWindow: () => quotaLabel };
+      if (name === './lib/edge-notice-window') return { createEdgeNoticeWindow: () => edgeNoticeWindow };
       if (name === './lib/activity-monitor') return { ...realRequire(name), createActivityMonitor: options => { activity.sample = options.onSample; return activity; } };
       return realRequire(name);
     }
@@ -119,7 +123,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   const pet = windows[0];
   pet.emit('ready-to-show');
   pet.webContents.emit('did-finish-load');
-  return { pet, bubble, quotaLabel, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus,
+  return { pet, bubble, quotaLabel, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus,
     call: expression => vm.runInContext(expression, context),
     send(channel, packet, sender = pet.webContents) {
       // 与实际预加载一致，默认携带当前页面代次；显式传旧值可验迟到报文。
@@ -139,6 +143,44 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
 }
 
 const TASK_ID = '11111111-1111-4111-8111-111111111111';
+
+test('靠边额度胶囊沿用最新真实主周期，关闭、锁屏及重载立即撤回', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true, bubblesEnabled: false });
+  const emit = remaining => f.connections[0].callbacks.onQuota({ updatedAt: 1800000000000,
+    windows: [{ id: 'codex:primary', label: 'Codex', windowMinutes: 300, remaining, resetsAt: 1800003600000 },
+      { id: 'codex:secondary', label: 'Codex', windowMinutes: 10080, remaining: 65, resetsAt: 1800604800000 }] });
+  emit(83); f.call("dockPet('left')"); f.call('edgeNoticeNow = () => 60000; tickEdgeNotice(true)');
+  assert.equal(f.edgeNoticeWindow.visible, true);
+  assert.equal(f.edgeNoticeWindow.shows.at(-1).remaining, 83);
+  assert.equal(f.quotaLabel.visible, false);
+  emit(79); assert.equal(f.edgeNoticeWindow.shows.at(-1).remaining, 79);
+  f.call("setCodexPreference('codexQuotaPeriod', 'weekly')");
+  assert.equal(f.edgeNoticeWindow.shows.at(-1).period, '周额度');
+  assert.equal(f.edgeNoticeWindow.shows.at(-1).remaining, 65);
+  f.call("setCodexPreference('codexQuotaAlwaysVisible', false)");
+  assert.equal(f.edgeNoticeWindow.visible, false);
+  f.call("setCodexPreference('codexQuotaAlwaysVisible', true); edgeNoticeNow = () => 180000; tickEdgeNotice(true)");
+  assert.equal(f.edgeNoticeWindow.visible, true);
+  f.powerMonitor.emit('lock-screen'); assert.equal(f.edgeNoticeWindow.visible, false);
+  f.powerMonitor.emit('unlock-screen');
+  f.call('edgeNoticeNow = () => 300000; tickEdgeNotice(true)');
+  assert.equal(f.edgeNoticeWindow.visible, true);
+  f.pet.webContents.emit('did-start-loading'); assert.equal(f.edgeNoticeWindow.visible, false);
+  f.call('edgeNoticeNow = () => 600000; tickEdgeNotice(true)');
+  assert.equal(f.edgeNoticeWindow.visible, false);
+});
+
+test('靠边短句独立于Codex，复用活动采样且气泡开关立即生效', async () => {
+  const f = await fixture({ codexEnabled: false });
+  f.call("dockPet('right'); edgeNoticeNow = () => 90000");
+  f.activity.sample({ locked: false, cursor: { x: -500, y: 20 } });
+  assert.equal(f.edgeNoticeWindow.shows.at(-1).kind, 'text');
+  assert.equal(f.edgeNoticeWindow.shows.at(-1).side, 'right');
+  f.call("setCompanionSetting('bubblesEnabled', false)");
+  assert.equal(f.edgeNoticeWindow.visible, false);
+  f.call('hidePet(); edgeNoticeNow = () => 900000; tickEdgeNotice(true)');
+  assert.equal(f.edgeNoticeWindow.visible, false);
+});
 function findMenuItem(template, id) {
   const queue = [...template];
   while (queue.length) {

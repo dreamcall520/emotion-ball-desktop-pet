@@ -155,8 +155,8 @@ test('结束身体允许原有轻微呼吸，但不允许残留压扁、旋转�
 });
 
 
-test('靠边验收必须同时验证尺寸、悬停、真实拖动及隐藏恢复', async () => {
-  const markers = ['EDGE_SIZES', 'EDGE_HOVER', 'EDGE_DRAG', 'EDGE_HIDE', 'EDGE_DISPLAYS', 'EDGE_SMOKE'];
+test('靠边验收必须同时验证尺寸、悬停、真实拖动、隐藏恢复及轻陪伴胶囊', async () => {
+  const markers = ['EDGE_SIZES', 'EDGE_HOVER', 'EDGE_DRAG', 'EDGE_HIDE', 'EDGE_DISPLAYS', 'EDGE_COMPANION', 'EDGE_SMOKE'];
   const env = { PET_SMOKE_EDGE_ONLY: '1' };
   const full = await validateSmokeOutput(markers, env);
   assert.equal(full.exitCode, 0, full.errors);

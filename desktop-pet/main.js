@@ -35,6 +35,8 @@ const { buildCodexMenu, buildCodexResultMenu, resolveCodexAction } = require('./
 const { buildQuotaLabelModel } = require('./lib/codex-quota-view');
 const { createQuotaLabelWindow } = require('./lib/quota-label-window');
 const { createEdgeTuck } = require('./lib/edge-tuck');
+const { createEdgeNotice } = require('./lib/edge-notice');
+const { createEdgeNoticeWindow } = require('./lib/edge-notice-window');
 
 const APP_NAME = '球球桌宠';
 const IS_SMOKE_TEST = process.env.PET_SMOKE_TEST === '1';
@@ -42,6 +44,10 @@ const IS_CODEX_SMOKE_ONLY = IS_SMOKE_TEST && process.env.PET_SMOKE_CODEX_ONLY ==
 
 let petWindow = null;
 let edgeTuck = null;
+let edgeNotice = null;
+let edgeNoticeWindow = null;
+let edgeNoticeNow = () => performance.now();
+let lastEdgeNoticeTick = -Infinity;
 let petMenuToken = 0;
 let tray = null;
 let settings = null;
@@ -122,6 +128,21 @@ function sendPresentation(packet) {
   try { petWindow.webContents.send('pet:presentation', packet); } catch (_) {}
 }
 
+function tickEdgeNotice(force = false) {
+  const now = edgeNoticeNow();
+  if (!force && now - lastEdgeNoticeTick < 500) return;
+  lastEdgeNoticeTick = now;
+  const presentation = edgeTuck?.getPresentation();
+  const visible = Boolean(!isQuitting && codexPageReady && petWindow && !petWindow.isDestroyed() && petWindow.isVisible());
+  const quotaEnabled = settings?.codexEnabled === true && settings.codexQuotaAlwaysVisible === true;
+  edgeNotice?.tick({ presentation, visible, locked: screenLocked,
+    bubblesEnabled: settings?.bubblesEnabled === true, quotaEnabled,
+    appearance: settings?.codexQuotaAppearance,
+    quotaModel: visible && quotaEnabled && presentation?.mode === 'tucked'
+      ? buildQuotaLabelModel(codexCompanion?.getSnapshot(), { period: settings.codexQuotaPeriod, size: 'compact' }, codexNow()) : null
+  });
+}
+
 function applyPresentation(packet) {
   sendPresentation(packet);
   if (packet.suppressed) {
@@ -130,6 +151,7 @@ function applyPresentation(packet) {
     hideBubble();
     safelyInvokeWindow('收起时额度标签隐藏', () => quotaLabel?.hide());
   } else syncQuotaLabel(codexCompanion?.getSnapshot());
+  tickEdgeNotice(true);
   refreshTrayMenu();
 }
 
@@ -318,6 +340,7 @@ function destroyBubbleSafely() {
 }
 
 function syncQuotaLabel(snapshot = null) {
+  tickEdgeNotice(true);
   quotaSyncPending = true;
   quotaSyncSnapshot = snapshot;
   if (quotaSyncing || !quotaLabel) return false;
@@ -373,6 +396,7 @@ function dismissCodexPresentation() {
 }
 
 function invalidateCodexPage() {
+  edgeNotice?.reset();
   thoughts?.hide();
   codexPageEpoch++;
   codexPageReady = false;
@@ -695,6 +719,7 @@ function setCompanionSetting(name, enabled) {
     if (!settings.bubblesEnabled) hideBubble();
   }
   persistSettings();
+  tickEdgeNotice(true);
   sendCompanionSettings();
   refreshTrayMenu();
 }
@@ -739,6 +764,7 @@ function setAlwaysOnTop(enabled) {
   });
   safelyInvokeWindow('气泡窗口置顶', () => bubble?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('额度标签置顶', () => quotaLabel?.setAlwaysOnTop(settings.alwaysOnTop));
+  safelyInvokeWindow('边缘提示置顶', () => edgeNoticeWindow?.setAlwaysOnTop(settings.alwaysOnTop));
   thoughts?.setAlwaysOnTop(settings.alwaysOnTop);
   persistSettings();
   refreshTrayMenu();
@@ -970,6 +996,18 @@ async function finishSmokeTest() {
         getMenu: () => Menu.buildFromTemplate(menuTemplate()), setSize: setPetSize,
         getSettings: () => ({ ...settings }), showDialogue,
         getPresentation: () => edgeTuck.getPresentation(), prepare: initializeCodexCompanion,
+        verifyNotices: async () => {
+          try {
+            await require('./scripts/verify-edge-companion').verifyEdgeCompanion({
+              pet: petWindow, screen, quotaLabel, notice: edgeNoticeWindow,
+              dock: dockPet, hide: hidePet, restore: restorePet,
+              pause: () => edgeTuck.suspend(), resume: () => edgeTuck.resume(),
+              setSetting: setCompanionSetting, setQuotaPreference: setCodexPreference,
+              tick: time => { edgeNoticeNow = () => time; tickEdgeNotice(true); },
+              reset: () => edgeNotice.reset(), getPresentation: () => edgeTuck.getPresentation()
+            });
+          } finally { edgeNoticeNow = () => performance.now(); lastEdgeNoticeTick = -Infinity; edgeNotice.reset(); }
+        },
         setQuotaPreference: setCodexPreference,
         setEnabled: async enabled => { settings.codexEnabled = enabled; await codexCompanion.setEnabled(enabled); }
       });
@@ -1168,7 +1206,7 @@ function createPetWindow() {
     if (isCurrentPetWindow()) invalidateCodexPage();
   });
   createdPetWindow.on('move', () => {
-    if (isCurrentPetWindow()) { thoughts?.hide(); repositionBubble(); }
+    if (isCurrentPetWindow()) { thoughts?.hide(); repositionBubble(); edgeNoticeWindow?.reposition(); }
   });
   createdPetWindow.on('resize', () => {
     if (!isCurrentPetWindow()) return;
@@ -1198,6 +1236,8 @@ function createPetWindow() {
     if (!isCurrentPetWindow() || closedCleanupStarted) return;
     closedCleanupStarted = true;
     edgeTuck?.dispose();
+    edgeNotice?.reset();
+    safelyInvokeWindow('关闭时边缘提示销毁', () => edgeNoticeWindow?.destroy());
     if (isQuitting) {
       petWindow = null;
       return;
@@ -1428,11 +1468,17 @@ async function bootstrap() {
     alwaysOnTop: settings.alwaysOnTop,
     onError: error => writeError('额度标签窗口', error)
   });
+  edgeNoticeWindow = createEdgeNoticeWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
+    alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('边缘提示窗口', error) });
+  edgeNotice = createEdgeNotice({ now: () => edgeNoticeNow(), onChange: payload => {
+    safelyInvokeWindow('边缘提示', () => payload ? edgeNoticeWindow.show(payload) : edgeNoticeWindow.hide());
+  } });
   activityMonitor = createActivityMonitor({
     screen, powerMonitor, getWindow: () => petWindow,
     onSample: packet => {
       if (!packet.locked) edgeTuck?.sampleCursor(packet.cursor);
       if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send('pet:activity', packet);
+      tickEdgeNotice();
     },
     onError: error => writeError('活动状态检测', error)
   });
@@ -1474,6 +1520,8 @@ if (!hasSingleInstanceLock) {
     if (quitCleanupStarted) return;
     quitCleanupStarted = true;
     edgeTuck?.dispose();
+    edgeNotice?.reset();
+    safelyInvokeWindow('退出时边缘提示销毁', () => edgeNoticeWindow?.destroy());
     codexConsentToken++;
     safelyInvokeWindow('退出时 Codex 联动清理', () => codexCompanion?.close());
     safelyInvokeWindow('退出时停止动作', stopMotion);
