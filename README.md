@@ -23,6 +23,8 @@
 
 提供 Apple 芯片版与独立 Intel x64 构建，需 macOS 12 或更高版本。请按 Mac 芯片选择对应附件；Intel 的实机验证范围见 Release 说明。
 
+当前 Apple 芯片版为 [0.3.14](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.14)，Intel 下载继续使用 [0.3.13](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.13)。Intel 0.3.14 尚未完成运行验收，暂不提供公开安装包。
+
 1. 前往 [Releases](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases) 下载最新的“分享用 ZIP”。
 2. 解压 ZIP，打开 DMG。
 3. 将“球球桌宠”拖入“Applications”。
