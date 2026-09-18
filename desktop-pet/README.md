@@ -54,7 +54,7 @@ Intel x64 独立应用生成在：
 
 `dist/intel-x64/球球桌宠-darwin-x64/球球桌宠.app`
 
-两个版本都使用本机临时签名，没有提交 Apple 公证。Intel x64 版已完成 Rosetta 模拟烟测，尚未完成真实 Intel Mac 验收；其 Codex 联动默认关闭，也不列为 Intel 实机已验证能力。
+两个版本都使用本机临时签名，没有提交 Apple 公证。本分支 Intel x64 0.3.14 的构建、架构和签名已核验，但 Rosetta 完整烟测及靠边专项尚未通过，当前只保留本地待验收产物，公开 Intel 下载仍为 0.3.13。真实 Intel Mac 与 Intel Codex 联动未验收，Codex 联动默认关闭。
 
 ## 删除
 

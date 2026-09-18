@@ -23,7 +23,7 @@
 
 当前版本分别提供 Apple 芯片版和 Intel x64 版，需要 macOS 12 或更高版本。请按电脑处理器下载明确标注的对应安装包，不要在 Apple 芯片 Mac 上用 Intel 包替换 Apple 芯片版。
 
-Intel x64 版已完成独立构建、签名和 Apple 芯片 Mac 上的 Rosetta 模拟烟测，但尚未经过真实 Intel Mac 验收。普通桌宠功能与 Apple 芯片版使用同一份 0.3.14 应用代码；Codex 联动仍默认关闭，Intel 环境下不列为已实机验收能力。
+本分支的 Intel x64 0.3.14 已完成独立构建、架构和签名核验，但 Rosetta 完整烟测及靠边专项尚未通过，当前不作为已验收安装包发布。公开 Intel 下载仍为 0.3.13。0.3.14 与 Apple 芯片版使用同源应用代码，Codex 联动仍默认关闭；真实 Intel Mac 及 Intel Codex 联动均未验收。
 
 1. 前往 [Releases](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases) 下载最新的“分享用 ZIP”。
 2. 解压 ZIP，打开 DMG。
