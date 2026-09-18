@@ -830,7 +830,7 @@ test('收起在125ms活动采样下仍按原定时间眨眼，仅保留微呼吸
   r.present({ mode: 'tucked', side: 'left', dragging: false, suppressed: true });
   const scales = [], eyes = [], blinkTimes = [];
   let nextBlink = r.engine._blinkNext;
-  assert.equal(nextBlink, 10000);
+  assert.equal(nextBlink, 3750);
   for (let now = 125; now <= 22500; now += 125) {
     r.advanceTo(now);
     r.activity(false, { cursor: { x: now % 500, y: 140 } });
@@ -843,7 +843,7 @@ test('收起在125ms活动采样下仍按原定时间眨眼，仅保留微呼吸
     assert.equal(r.engine._lastPose.body.yaw, 0);
     assert.equal(r.engine._lastPose.body.zzz, 0);
   }
-  assert.deepEqual(blinkTimes, [10000, 20000], '活动采样不能不断推迟眨眼');
+  assert.deepEqual(blinkTimes, [3750, 7500, 11250, 15000, 18750, 22500], '活动采样不能不断推迟更频繁的眨眼');
   assert.ok(Math.min(...eyes) < 0.5 && Math.max(...eyes) > 0.98, '真实眼睛姿态发生闭合和恢复');
   assert.ok(Math.max(...scales) - Math.min(...scales) > 0.012, '真实身体姿态保留呼吸');
   assert.ok(Math.min(...scales) >= 0.993 && Math.max(...scales) <= 1.007);
@@ -941,10 +941,10 @@ test('收起时迟到的双击不唤醒手动睡眠，跨尺寸重建仍只保�
 test('收起眨眼过程中进入自然睡眠时立即闭眼，恢复清醒后继续安静动画', () => {
   const r = createRenderer();
   r.present({ mode: 'tucked', side: 'left', dragging: false, suppressed: true });
-  r.advanceTo(10000);
+  r.advanceTo(3750);
   assert.ok(r.engine._blinkQ.length > 0);
   r.activity(false, { idleSeconds: 901 });
-  for (let now = 10016; now <= 11000; now += 16) {
+  for (let now = 3766; now <= 4750; now += 16) {
     r.advanceTo(now);
     assert.ok(r.engine._lastPose.left.open < 0.1);
     assert.equal(r.engine._lastPose.body.zzz, 0);
@@ -953,6 +953,33 @@ test('收起眨眼过程中进入自然睡眠时立即闭眼，恢复清醒后�
   assert.equal(r.engine.emotionId, '55');
   assert.equal(r.engine._active, true);
   assert.equal(r.host.motions.length, 0, '收起期间自然醒不播伸懒腰');
+});
+
+test('尚未收到新屏幕采样时吸边和换边也立即朝向内侧，冻结样本不改朝向', () => {
+  const r = createRenderer();
+  r.activity(false, { petBounds: { x: 900, y: 100, width: 80, height: 80 }, workArea: { x: 0, y: 0, width: 1000, height: 800 } });
+  assert.equal(r.pet.dataset.facing, 'left');
+  r.present({ mode: 'tucked', side: 'left', suppressed: true });
+  assert.equal(r.pet.dataset.facing, 'right');
+  assert.equal(r.engine._facing, 'right');
+  r.activity(false, { petBounds: { x: 900, y: 100, width: 80, height: 80 }, workArea: { x: 0, y: 0, width: 1000, height: 800 } });
+  assert.equal(r.pet.dataset.facing, 'right', '旧采样不能把靠边眼睛转到屏外');
+  r.present({ mode: 'tucked', side: 'right', suppressed: true });
+  assert.equal(r.pet.dataset.facing, 'left');
+  r.present({ mode: 'tucked', side: 'right', suppressed: true, paused: true });
+  r.activity(false, { petBounds: { x: 0, y: 100, width: 80, height: 80 }, workArea: { x: 0, y: 0, width: 1000, height: 800 } });
+  assert.equal(r.pet.dataset.facing, 'left');
+});
+
+test('暂停和解锁报文先后到达时收起朝向不会永久停留在屏外', () => {
+  const r = createRenderer();
+  r.activity(true);
+  r.present({ mode: 'tucked', side: 'right', suppressed: true, paused: true });
+  assert.equal(r.pet.dataset.facing, 'left');
+  r.present({ mode: 'tucked', side: 'right', suppressed: true });
+  r.activity(false);
+  assert.equal(r.pet.dataset.facing, 'left');
+  assert.equal(r.engine._active, true);
 });
 
 test('宿主恢复自由位置时取消本地拖动，旧抬手不产生落地动作', () => {

@@ -189,15 +189,16 @@
   CompanionMotion.registerEmotions(EmotionBall.config);
   EmotionBall.config.register({
     id: '55', name: '靠边陪伴', group: 'custom', gaze: false, antics: false,
-    pool: [0], blinkMs: [6000, 14000], transition: 0, anims: [],
-    body: { breathe: 0.007 }
+    pool: [0], blinkMs: [2500, 5000], transition: 0, anims: [],
+    body: { breathe: 0.007 },
+    eyes: { both: { scaleX: 0.78, scaleY: 0.78, y: 20 }, left: { x: 10 }, right: { x: 2 } }
   });
   EmotionBall.config.register({
     id: '56', name: '靠边小憩', group: 'custom', gaze: false, antics: false,
     pool: [13], blinkMs: null, transition: 0, anims: [],
     body: { breathe: 0.006 },
     // 刚收起时可能还留有上一表情的眨眼关键帧，基础眼形也保持闭合。
-    eyes: { both: { open: 0.08, y: 4, lookY: 2 } }
+    eyes: { both: { open: 0.08, scaleX: 0.78, scaleY: 0.78, y: 24, lookY: 2 }, left: { x: 10 }, right: { x: 2 } }
   });
 
   function createBall(emotionId) {
@@ -300,6 +301,16 @@
     petElement.dataset.presentation = packet.mode;
     petElement.dataset.edge = packet.side === 'left' || packet.side === 'right' ? packet.side : 'none';
     petElement.dataset.dragging = packet.dragging ? 'true' : 'false';
+    // 吸边先改宿主位置，活动采样可能尚未到达；由吸附侧直接确定朝向。
+    // 仅在朝向实际改变时更新，隐藏/暂停后的重复报文不能重画冻结帧。
+    if (packet.mode === 'tucked' && ['left', 'right'].includes(packet.side)) {
+      const inward = packet.side === 'left' ? 'right' : 'left';
+      if (facing !== inward) {
+        facing = inward;
+        petElement.dataset.facing = facing;
+        ball.setFacing(facing);
+      }
+    }
     // 普通松手确认可能晚于下一次按下；只有明确恢复或隐藏才作废本地拖动。
     if (dragState && (presentationSuppressed || packet.cancelDrag === true)) {
       if (petElement.hasPointerCapture(dragState.pointerId)) petElement.releasePointerCapture(dragState.pointerId);

@@ -17,8 +17,11 @@ async function verifyEdgeCompanion({ pet, screen, quotaLabel, notice, dock, hide
   };
   const samples = [];
   const images = [];
-  const frame = () => page(`(() => {const e=document.querySelector('.eb-eye');
-    return {body:e.parentNode.getAttribute('transform'),eye:e.getAttribute('transform'),state:{...document.getElementById('pet').dataset}};})()`);
+  const frame = () => page(`(() => {const e=document.querySelector('.eb-eye'),head=document.querySelector('.eb-head');
+    const eyesInsideHead=[...document.querySelectorAll('.eb-eye')].every(eye=>{const length=eye.getTotalLength();
+      const matrix=head.getScreenCTM().inverse().multiply(eye.getScreenCTM());
+      return Array.from({length:64},(_,i)=>eye.getPointAtLength(length*i/64)).every(p=>head.isPointInFill(new DOMPoint(p.x,p.y).matrixTransform(matrix)));});
+    return {body:e.parentNode.getAttribute('transform'),eye:e.getAttribute('transform'),eyesInsideHead,state:{...document.getElementById('pet').dataset}};})()`);
   const capture = async name => {
     const win = notice.getWindow();
     await wait(250);
@@ -44,6 +47,13 @@ async function verifyEdgeCompanion({ pet, screen, quotaLabel, notice, dock, hide
   const until = performance.now() + 15500;
   while (performance.now() < until) { samples.push(await frame()); await wait(45); }
   const scales = samples.map(s => Number(s.eye.match(/scale\([^ ]+ ([^)]+)\)/)[1]));
+  assert.ok(samples.every(sample => sample.eyesInsideHead), 'eyes remain inside rounded head throughout blinking and breathing');
+  let blinks = 0, closed = false;
+  for (const scale of scales) {
+    if (!closed && scale < 0.45) { blinks++; closed = true; }
+    else if (closed && scale > 0.7) closed = false;
+  }
+  assert.ok(blinks >= 2, `tucked pet blinks repeatedly within 15.5 seconds: ${blinks}`);
   assert.ok(Math.max(...scales) - Math.min(...scales) > 0.5, 'actual SVG eyes blink while tucked');
   assert.ok(new Set(samples.map(s => s.body)).size > 3, 'actual SVG body gently breathes');
   pause(); await wait(150); const frozen = await frame(); await wait(600);
@@ -70,7 +80,7 @@ async function verifyEdgeCompanion({ pet, screen, quotaLabel, notice, dock, hide
   await poll(() => quotaLabel.getWindow()?.isVisible(), Boolean, 'regular quota restored');
   if (artifacts) fs.writeFileSync(path.join(artifacts, 'edge-companion-results.json'), JSON.stringify({
     passed: true, source: 'real-electron; synthetic quota; injected notice clock only',
-    blink: { min: Math.min(...scales), max: Math.max(...scales) }, bodyFrameCount: new Set(samples.map(s => s.body)).size, images
+    blink: { count: blinks, min: Math.min(...scales), max: Math.max(...scales) }, bodyFrameCount: new Set(samples.map(s => s.body)).size, images
   }, null, 2));
   process.stdout.write('PET_EDGE_COMPANION_OK\n');
 }

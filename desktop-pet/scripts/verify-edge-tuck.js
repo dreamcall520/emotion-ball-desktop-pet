@@ -55,9 +55,15 @@ async function verifyEdgeTuck({ pet, bubble, quotaLabel, getThoughtWindow, scree
     const width = pet.getBounds().width;
     const targetX = expected.mode === 'tucked' ? (expected.side === 'left' ? -width/2 : width/2) : 0;
     const readFrame = () => page(`(() => { const p=document.getElementById('pet'); const r=p.getBoundingClientRect();
+      const head=document.querySelector('.eb-head');
       return {state:{...p.dataset},rect:{x:r.x,y:r.y,width:r.width,height:r.height},
       body:document.querySelectorAll('radialGradient stop')[1].getAttribute('stop-color'),
-      eyes:[...document.querySelectorAll('.eb-eye')].map(e=>e.getAttribute('fill'))}; })()`);
+      eyes:[...document.querySelectorAll('.eb-eye')].map(e=>e.getAttribute('fill')),
+      eyeBounds:[...document.querySelectorAll('.eb-eye')].map(e=>{const b=e.getBoundingClientRect();return{x:b.x,y:b.y,width:b.width,height:b.height}}),
+      eyesInsideHead:[...document.querySelectorAll('.eb-eye')].map(e=>{const length=e.getTotalLength();
+        const matrix=head.getScreenCTM().inverse().multiply(e.getScreenCTM());
+        return Array.from({length:64},(_,i)=>e.getPointAtLength(length*i/64)).every(p=>head.isPointInFill(new DOMPoint(p.x,p.y).matrixTransform(matrix)))}),
+      headPath:getComputedStyle(head).d}; })()`);
     // Wait for IPC, layout and the actual CSS transition endpoint, not wall-clock delay.
     await poll(readFrame, frame => frame.state.presentation === expected.mode &&
       Math.abs(frame.rect.x - targetX) < 0.1 && frame.rect.width === width, `${name} painted geometry`);
@@ -102,11 +108,19 @@ async function verifyEdgeTuck({ pet, bubble, quotaLabel, getThoughtWindow, scree
         assert.ok(Math.abs(tucked.rect.x - (side === 'left' ? -size.width/2 : size.width/2)) < 1, `half-body offset: ${JSON.stringify({tucked, host:getPresentation(), bounds})}`);
         assert.equal(tucked.body.toUpperCase(), '#EEEBE4');
         assert.deepEqual(tucked.eyes.map(x => x.toUpperCase()), ['#1A1A1A','#1A1A1A']);
+        assert.equal(tucked.state.facing, side === 'left' ? 'right' : 'left', 'tucked face looks inward');
+        assert.ok(tucked.headPath.includes('C'), 'tucked contour uses smooth curves');
+        assert.deepEqual(tucked.eyesInsideHead, [true, true], 'both eyes remain inside rounded head');
+        for (const eye of tucked.eyeBounds) {
+          assert.ok(eye.x >= 0 && eye.x + eye.width <= size.width, `eye is not clipped by screen edge: ${JSON.stringify(eye)}`);
+          assert.ok(eye.y >= 0 && eye.y + eye.height <= size.height);
+        }
         emitQuota(83); await wait(100); auxiliariesHidden();
         await sample({ x: side === 'left' ? bounds.x + 5 : bounds.x + bounds.width - 5, y: bounds.y + bounds.height/2 });
         await mode('peeked');
         const peeked = await capture(`edge-${side}-peeked-${size.width}`);
         assert.ok(Math.abs(peeked.rect.x) < 1, 'peek full body');
+        assert.notEqual(peeked.headPath, tucked.headPath, 'peek restores original body outline');
         await poll(() => visible(quotaLabel.getWindow()), Boolean, 'quota restored on peek');
         await poll(() => quotaLabel.getWindow().webContents.executeJavaScript('document.body.textContent'),
           text => text.includes('83%'), 'peek shows latest quota');
