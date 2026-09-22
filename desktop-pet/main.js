@@ -86,6 +86,7 @@ let quotaSyncSnapshot = null;
 let bubbleDestroying = false;
 let petWindowCreationRevision = 0;
 let quitCleanupStarted = false;
+let quitReady = false;
 const windowMotion = createWindowMotion({
   getWindow: () => petWindow,
   getWorkArea: bounds => screen.getDisplayMatching(bounds).workArea,
@@ -1601,14 +1602,20 @@ if (!hasSingleInstanceLock) {
 
   app.on('before-quit', event => {
     isQuitting = true;
-    if (quitCleanupStarted) return;
+    if (quitCleanupStarted) {
+      if (!quitReady) event?.preventDefault?.();
+      return;
+    }
     quitCleanupStarted = true;
     let chatClosing;
     safelyInvokeWindow('退出时聊天停止', () => { chatClosing = chat?.close(); });
     if (event?.preventDefault && chatClosing?.then) {
       event.preventDefault();
-      Promise.resolve(chatClosing).finally(() => app.quit());
-    }
+      // Leave the cancelled native quit event before starting the next one.
+      Promise.resolve(chatClosing)
+        .catch(error => reportQuotaError('退出时聊天停止', error))
+        .finally(() => setTimeout(() => { quitReady = true; app.quit(); }, 0));
+    } else quitReady = true;
     safelyInvokeWindow('退出时聊天面板销毁', () => chatWindow?.destroy());
     edgeTuck?.dispose();
     edgeNotice?.reset();

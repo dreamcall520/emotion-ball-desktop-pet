@@ -387,6 +387,30 @@ test('真实退出事件只清理一次聊天服务和窗口，退出后 IPC 与
   assert.deepEqual(f.chat.sends, []);
 });
 
+for (const fails of [false, true]) test(`退出等待聊天连接释放，并在下一轮事件循环继续系统退出（关闭失败=${fails}）`, async () => {
+  const f = await fixture();
+  let finishClose;
+  f.chat.close = () => new Promise((resolve, reject) => {
+    f.chat.closes++;
+    finishClose = () => fails ? reject(new Error('close failed')) : resolve();
+  });
+  let prevented = false;
+  f.app.emit('before-quit', { preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  await flush();
+  assert.equal(f.app.quitCalls, 0, '连接尚未释放时不能继续退出');
+  let repeatedPrevented = false;
+  f.app.emit('before-quit', { preventDefault() { repeatedPrevented = true; } });
+  assert.equal(repeatedPrevented, true, '重复退出不能跳过连接释放');
+  assert.equal(f.chat.closes, 1);
+  finishClose();
+  await flush();
+  assert.equal(f.app.quitCalls, 0, '微任务中不能重入尚未完成取消的原生退出事件');
+  f.advanceTo(0);
+  assert.equal(f.app.quitCalls, 1);
+  f.app.emit('before-quit', { preventDefault() { assert.fail('清理完成后的退出不再拦截'); } });
+});
+
 test('球球自己的聊天 thread 不进入 Codex 任务状态和完成提醒', async () => {
   const f = await fixture({ codexEnabled: true });
   f.chat.ownedThreads.add(TASK_ID);

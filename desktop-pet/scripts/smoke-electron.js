@@ -60,6 +60,12 @@ function runSmokeTest() {
       cleanup();
       try {
         assert.equal(code, 0, output);
+        if (process.env.PET_SMOKE_CHAT_ONLY === '1') {
+          assert.match(output, /PET_CHAT_INTEGRATION_OK/, '聊天原生集成验收未完成');
+          assert.doesNotMatch(output, /Uncaught|ERR_FILE_NOT_FOUND|did-fail-load/i);
+          resolve(output);
+          return;
+        }
         if (process.env.PET_SMOKE_EDGE_ONLY === '1') {
           for (const marker of ['EDGE_SIZES', 'EDGE_HOVER', 'EDGE_DRAG', 'EDGE_HIDE', 'EDGE_DISPLAYS', 'EDGE_COMPANION', 'EDGE_SMOKE']) {
             assert.ok(output.includes(`PET_${marker}_OK`), `${marker} 靠边验收未完成`);

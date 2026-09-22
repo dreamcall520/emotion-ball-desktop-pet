@@ -19,7 +19,7 @@ test('动作验收尺寸必须完整取自产品实际尺寸定义', () => {
 });
 
 // 只替代启动Electron的进程边界，实际运行烟测脚本的输出校验；不打开GUI。
-async function validateSmokeOutput(markers, env = {}) {
+async function validateSmokeOutput(markers, env = {}, { extraOutput = '', exitCode = 0 } = {}) {
   const runner = path.resolve(__dirname, '../scripts/smoke-electron.js');
   const runnerRequire = createRequire(runner);
   const result = { exitCode: 0, errors: '' };
@@ -37,8 +37,8 @@ async function validateSmokeOutput(markers, env = {}) {
         child.stdout = new EventEmitter();
         child.stderr = new EventEmitter();
         queueMicrotask(() => {
-          child.stdout.emit('data', markers.map(marker => `PET_${marker}_OK`).join('\n'));
-          child.emit('close', 0);
+          child.stdout.emit('data', markers.map(marker => `PET_${marker}_OK`).join('\n') + extraOutput);
+          child.emit('close', exitCode);
         });
         return child;
       } };
@@ -164,4 +164,22 @@ test('靠边验收必须同时验证尺寸、悬停、真实拖动、隐藏恢�
     const result = await validateSmokeOutput(markers.filter(value => value !== missing), env);
     assert.equal(result.exitCode, 1, missing);
   }
+});
+
+test('聊天专用烟测以真实聊天集成标记完成，不要求其他互动分支的标记', async () => {
+  const env = { PET_SMOKE_CHAT_ONLY: '1' };
+  const passed = await validateSmokeOutput(['CHAT_INTEGRATION'], env);
+  assert.equal(passed.exitCode, 0, passed.errors);
+  const missing = await validateSmokeOutput(completeMarkers, env);
+  assert.equal(missing.exitCode, 1, '普通互动通过不能冒充聊天集成通过');
+  assert.match(missing.errors, /聊天原生集成验收未完成/);
+});
+
+test('聊天烟测拒绝成功标记后出现加载错误或非正常退出', async () => {
+  for (const extraOutput of ['\nUncaught Error: failed', '\nERR_FILE_NOT_FOUND', '\ndid-fail-load']) {
+    const result = await validateSmokeOutput(['CHAT_INTEGRATION'], { PET_SMOKE_CHAT_ONLY: '1' }, { extraOutput });
+    assert.equal(result.exitCode, 1, extraOutput);
+  }
+  const result = await validateSmokeOutput(['CHAT_INTEGRATION'], { PET_SMOKE_CHAT_ONLY: '1' }, { exitCode: 1 });
+  assert.equal(result.exitCode, 1, '应用退出异常不能通过聊天烟测');
 });

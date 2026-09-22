@@ -95,6 +95,41 @@ test('安装包完整包含轻陪伴和气泡依赖，避免缺少模块', () =>
   controller.close();
 });
 
+test('安装包完整包含聊天窗口、持久对话和独立 Codex 通道，加载时不连接账号', async () => {
+  const root = path.resolve(__dirname, '../..');
+  const staging = prepareStaging(root);
+  for (const relativePath of [
+    'desktop-pet/chat.html',
+    'desktop-pet/chat.css',
+    'desktop-pet/chat-preload.js',
+    'desktop-pet/chat-renderer.js',
+    'desktop-pet/lib/chat-window.js',
+    'desktop-pet/lib/chat-store.js',
+    'desktop-pet/lib/chat-companion.js',
+    'desktop-pet/lib/codex-chat-rpc.js',
+    'desktop-pet/scripts/verify-chat-integration.js'
+  ]) {
+    assert.equal(fs.readFileSync(path.join(staging, relativePath), 'utf8'),
+      fs.readFileSync(path.join(root, relativePath), 'utf8'), `${relativePath} 必须进入正式包`);
+  }
+  const stagedRequire = relative => require(path.join(staging, 'desktop-pet', relative));
+  assert.equal(typeof stagedRequire('lib/chat-window.js').createChatWindow, 'function');
+  assert.equal(typeof stagedRequire('lib/codex-chat-rpc.js').createCodexChatRpc, 'function');
+  const verifier = stagedRequire('scripts/verify-chat-integration.js');
+  assert.equal(typeof verifier.verifyChatIntegration, 'function');
+  assert.equal(typeof verifier.createSmokeChatRpc, 'function');
+  const controller = stagedRequire('lib/chat-companion.js').createChatCompanion({
+    store: { read: stagedRequire('lib/chat-store.js').emptyRecord, write: () => assert.fail('仅加载不能保存记录') },
+    createRpc: () => assert.fail('仅加载不能连接 Codex 或消耗额度')
+  });
+  assert.equal(controller.getState().connection, 'idle');
+  assert.equal(controller.getState().hasConversation, false);
+  await controller.close();
+  const stagedFiles = fs.readdirSync(staging, { recursive: true }).map(String);
+  assert.equal(stagedFiles.some(value => /(?:^|[/\\])(?:chat|auth)\.json$/.test(value)), false,
+    '安装包不能夹带聊天记录或登录凭据');
+});
+
 test('打包暂存区包含任务名称清理模块且菜单与控制器可加载', () => {
   const root = path.resolve(__dirname, '../..');
   const staging = prepareStaging(root);
