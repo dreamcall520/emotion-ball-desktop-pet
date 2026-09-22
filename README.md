@@ -11,7 +11,9 @@
 - 离线互动气泡，可回应“再来一次”完整重播刚才的双击动作，或“你歇会儿”停止动作
 - 支持超小（60 × 60）、极小（80 × 80）、小、中、大五档尺寸；首次启动默认极小
 - 支持始终置顶、开机启动和位置重置
-- 无需登录，运行时不会上传个人数据
+- 普通桌宠无需登录，可离线使用；主动使用聊天时，会把输入的消息发送给 Codex 生成回复
+
+0.3.17 新增“和球球聊聊”：使用本机已登录的 Codex 账号，关闭重开继续原聊天；支持历史记录切换、新聊天确认和预设动作回应，并修复任务监控误跟随自家聊天造成的连接占用。
 
 0.3.14 新增左右靠边收起：拖到边缘露出圆润的小半身，鼠标靠近时探出，拖离恢复；收起时保留约 2.5–5 秒一次的眨眼和轻微呼吸，偶尔出现短句。开启 Codex 额度显示后，靠边时会间歇弹出真实剩余额度的小胶囊。菜单支持暂时隐藏和恢复，隐藏及锁屏时保持安静。
 
@@ -23,7 +25,7 @@
 
 提供 Apple 芯片版与独立 Intel x64 构建，需 macOS 12 或更高版本。请按 Mac 芯片选择对应附件；Intel 的实机验证范围见 Release 说明。
 
-当前 Apple 芯片版为 [0.3.14](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.14)，Intel 下载继续使用 [0.3.13](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.13)。Intel 0.3.14 尚未完成运行验收，暂不提供公开安装包。
+当前 Apple 芯片版为 [0.3.17](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.17)，Intel 下载继续使用 [0.3.13 构建候选](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.13)。本次没有发布新的 Intel 安装包。
 
 1. 前往 [Releases](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases) 下载最新的“分享用 ZIP”。
 2. 解压 ZIP，打开 DMG。
