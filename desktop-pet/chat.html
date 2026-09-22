@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <title>和球球聊聊</title>
+  <link rel="stylesheet" href="chat.css">
+  <script defer src="chat-renderer.js"></script>
+</head>
+<body>
+  <main class="chat-panel" aria-label="和球球聊聊">
+    <header class="chat-header">
+      <span class="pet-mark" aria-hidden="true"><i></i><i></i></span>
+      <div class="heading">
+        <h1>和球球聊聊</h1>
+        <p id="connection-status" role="status">想说什么，我在听</p>
+      </div>
+      <button id="new-chat" class="text-button" type="button" title="开始一段新的聊天">新聊天</button>
+      <button id="close-chat" class="close-button" type="button" aria-label="关闭聊天" title="关闭聊天（Esc）">×</button>
+    </header>
+
+    <section id="conversation" class="conversation" aria-label="聊天内容">
+      <div id="empty-state" class="empty-state">
+        <span class="empty-dot" aria-hidden="true"></span>
+        <h2>我在，想聊点什么？</h2>
+        <p>使用本机已登录的 Codex 账号。<br>首次发送才创建聊天，之后接着聊。</p>
+      </div>
+      <div id="messages" class="messages" role="log" aria-live="polite" aria-relevant="additions text"></div>
+    </section>
+
+    <div id="error-banner" class="error-banner" role="alert" hidden>
+      <p id="error-text"></p>
+      <button id="retry-message" type="button" class="text-button" hidden>重新编辑</button>
+    </div>
+
+    <form id="composer" class="composer">
+      <label class="sr-only" for="message-input">给球球的消息</label>
+      <textarea id="message-input" rows="2" maxlength="2000" placeholder="和球球说句话…" aria-describedby="input-hint" spellcheck="false"></textarea>
+      <div class="composer-tools">
+        <span id="input-hint">Shift + Enter 换行</span>
+        <span id="character-count" hidden>0 / 2000</span>
+        <button id="stop-message" class="stop-button" type="button" hidden><span aria-hidden="true">■</span> 停止</button>
+        <button id="send-message" class="send-button" type="submit" disabled>发送 <span aria-hidden="true">↑</span></button>
+      </div>
+    </form>
+    <p class="privacy-note">使用 Codex 额度 · 延续同一段聊天</p>
+  </main>
+</body>
+</html>

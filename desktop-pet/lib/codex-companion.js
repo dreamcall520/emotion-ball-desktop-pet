@@ -21,7 +21,7 @@ const timestamp = value => Number.isFinite(value) && value >= 0 && value <= 8640
 
 // Creating the policy owns no resources. Transports and timers exist only while enabled.
 function createCodexCompanion({ createConnection = createCodexConnection, onChange = () => {},
-  onAlert = () => {}, onAlertUpdate = () => {}, onClear = () => {}, canPresent = () => true,
+  onAlert = () => {}, onAlertUpdate = () => {}, onClear = () => {}, canPresent = () => true, ignoreTask = () => false,
   now = Date.now, random = Math.random, schedule = setTimeout, cancel = clearTimeout } = {}) {
   let enabled = false;
   let closed = false;
@@ -506,7 +506,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
   function receiveTask(value) {
     if (!isTaskId(value?.id)) return;
     const previous = tasks.get(value.id);
-    if (value.removed) {
+    if (value.removed || ignoreTask(value.id)) {
       terminalSeen.delete(value.id);
       idleTransitions.delete(value.id);
       resumableTurns.delete(value.id);

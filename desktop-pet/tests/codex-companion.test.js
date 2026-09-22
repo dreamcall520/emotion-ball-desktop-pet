@@ -34,6 +34,7 @@ function fixture(options = {}) {
     schedule: (callback, delay) => { const id = ++nextTimer; timers.set(id, { at: time + delay, callback }); return id; },
     cancel: id => timers.delete(id),
     canPresent: () => options.canPresent ? options.canPresent(companion) : present,
+    ignoreTask: options.ignoreTask,
     onAlert: alert => alerts.push(alert),
     onAlertUpdate: alert => { alertUpdates.push(alert); options.onAlertUpdate?.(alert, companion); },
     onChange: snapshot => { changes.push(snapshot); options.onChange?.(snapshot, companion); },
@@ -98,6 +99,20 @@ test('默认关闭：构造、快照、刷新和关闭均无连接或定时器',
   assert.equal(f.connections.length, 0);
   assert.equal(f.timers.size, 0);
   assert.equal(f.changes.length, 0);
+});
+
+test('球球自己的聊天不进入编程任务提醒，其他任务和额度照常更新', async () => {
+  const f = fixture({ ignoreTask: id => id === taskId(1) });
+  await f.companion.setEnabled(true);
+  f.task(1, 'active');
+  f.task(2, 'active');
+  f.quota(80);
+  assert.deepEqual(f.companion.getSnapshot().tasks.items.map(task => task.id), [taskId(2)]);
+  assert.equal(f.companion.getSnapshot().quota.windows[0].remaining, 80);
+  f.task(1, 'completed');
+  assert.equal(f.companion.getSnapshot().tasks.items.length, 1);
+  assert.equal(f.alerts.length, 0);
+  f.companion.close();
 });
 
 test('快速开关只关闭自己连接，丢弃旧代次迟到结果', async () => {

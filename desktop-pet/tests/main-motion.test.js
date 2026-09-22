@@ -7,7 +7,7 @@ const { createRequire } = require('node:module');
 const { EventEmitter } = require('node:events');
 const { setImmediate: flush } = require('node:timers/promises');
 
-// 真实 main、动作控制器和对白规则；只替代 Electron、系统采样和磁盘设置。
+// 真实 main、动作控制器和对白规则；替代 Electron、系统采样、磁盘设置及聊天服务边界。
 async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   codexQuotaAlwaysVisible = false, codexQuotaPeriod = 'auto', codexQuotaLabelSize = 'standard',
   codexQuotaAppearance = 'system', bubblesEnabled = true,
@@ -28,6 +28,11 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     requestSingleInstanceLock: () => true, whenReady: () => Promise.resolve(), setActivationPolicy() {},
     quit() { this.quitCalls++; }, exit(code) { throw new Error(`unexpected exit ${code}`); } });
   const ipcMain = new EventEmitter();
+  const ipcHandlers = new Map();
+  ipcMain.handle = (channel, handler) => {
+    assert.equal(ipcHandlers.has(channel), false, `${channel} must only be registered once`);
+    ipcHandlers.set(channel, handler);
+  };
   const powerMonitor = new EventEmitter();
   const display = { id: 1, bounds: { x: -800, y: 0, width: 800, height: 600 }, workArea: { x: -800, y: 0, width: 800, height: 600 } };
   const screen = Object.assign(new EventEmitter(), { getPrimaryDisplay: () => display, getAllDisplays: () => [display], getDisplayMatching: () => display });
@@ -82,6 +87,35 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     destroy() { this.visible = false; }, reposition() {}, setAlwaysOnTop() {}, getWindow: () => null };
   const activity = { starts: 0, stops: 0, pauses: 0, resumes: 0,
     start() { this.starts++; }, stop() { this.stops++; }, pause() { this.pauses++; }, resume() { this.resumes++; } };
+  let chatNativeWindow = null;
+  const chatWindow = { options: null, creations: 0, shows: [], updates: [], hides: 0, destroys: 0, moves: 0,
+    show(state) {
+      if (!chatNativeWindow || chatNativeWindow.destroyed) {
+        chatNativeWindow = Object.assign(createNativeBubbleWindow(), { webContents: new EventEmitter() });
+        this.creations++;
+      }
+      this.shows.push(state); chatNativeWindow.visible = true;
+      this.options?.onVisibilityChange?.(true);
+    },
+    update(state) { this.updates.push(state); },
+    hide() { this.hides++; if (chatNativeWindow) chatNativeWindow.visible = false; this.options?.onVisibilityChange?.(false); },
+    destroy() { this.destroys++; if (chatNativeWindow) { chatNativeWindow.visible = false; chatNativeWindow.destroyed = true; } },
+    isVisible: () => Boolean(chatNativeWindow?.visible && !chatNativeWindow.destroyed),
+    getWindow: () => chatNativeWindow,
+    reposition() { this.moves++; }, setAlwaysOnTop() {}
+  };
+  const chat = { options: null, storePaths: [], connects: 0, sends: [], stops: 0, newChats: 0, closes: 0, ownedThreads: new Set(),
+    state: { messages: [], busy: false, connection: 'idle', error: null, hasConversation: false },
+    getState() { return this.state; },
+    async connect() { this.connects++; return undefined; },
+    async send(text) { this.sends.push(text); return { accepted: true }; },
+    async stop() { this.stops++; },
+    async newChat() { this.newChats++; return { accepted: true }; },
+    close() { this.closes++; },
+    ownsThread(id) { return this.ownedThreads.has(id); },
+    change(state) { this.state = state; this.options.onChange(state); },
+    action(action) { this.options.onAction(action); }
+  };
   const realRequire = createRequire(path.resolve(__dirname, '../main.js'));
   const context = vm.createContext({ __dirname: path.resolve(__dirname, '..'), console,
     process: { env: {}, stderr: { write(message) { throw new Error(message); } } }, performance: { now: () => now },
@@ -114,6 +148,14 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
       if (name === './lib/bubble-window') return { createBubbleWindow: () => bubble };
       if (name === './lib/quota-label-window') return { createQuotaLabelWindow: () => quotaLabel };
       if (name === './lib/edge-notice-window') return { createEdgeNoticeWindow: () => edgeNoticeWindow };
+      if (name === './lib/chat-window') return { createChatWindow: options => { chatWindow.options = options; return chatWindow; } };
+      if (name === './lib/chat-store') return { createChatStore: file => {
+        chat.storePaths.push(file);
+        return { read() { throw new Error('chat disk access is forbidden in main fixture'); },
+          write() { throw new Error('chat disk access is forbidden in main fixture'); } };
+      } };
+      if (name === './lib/chat-companion') return { createChatCompanion: options => { chat.options = options; return chat; } };
+      if (name === './lib/codex-chat-rpc') return { createCodexChatRpc: () => { throw new Error('real Codex process is forbidden in main fixture'); } };
       if (name === './lib/activity-monitor') return { ...realRequire(name), createActivityMonitor: options => { activity.sample = options.onSample; return activity; } };
       return realRequire(name);
     }
@@ -123,8 +165,12 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   const pet = windows[0];
   pet.emit('ready-to-show');
   pet.webContents.emit('did-finish-load');
-  return { pet, bubble, quotaLabel, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus,
+  return { pet, bubble, quotaLabel, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
     call: expression => vm.runInContext(expression, context),
+    invoke(channel, packet, sender = pet.webContents) {
+      assert.ok(ipcHandlers.has(channel), `${channel} handler must be registered`);
+      return Promise.resolve(ipcHandlers.get(channel)({ sender }, packet));
+    },
     send(channel, packet, sender = pet.webContents) {
       // 与实际预加载一致，默认携带当前页面代次；显式传旧值可验迟到报文。
       if (channel.startsWith('pet:codex-') && packet) packet = { pageEpoch: vm.runInContext('typeof codexPageEpoch === "number" ? codexPageEpoch : 1', context), ...packet };
@@ -194,6 +240,165 @@ function findMenuItem(template, id) {
 function menuItem(fixtureValue, id) {
   return findMenuItem(fixtureValue.call('menuTemplate()'), id);
 }
+
+test('聊天菜单复用同一个面板和控制器，打开关闭不会发送或新建聊天', async () => {
+  const f = await fixture();
+  assert.equal(f.chatWindow.getWindow(), null);
+  assert.equal(f.chat.connects, 0);
+  assert.deepEqual(f.chat.storePaths, ['/fixture/chat.json']);
+  const item = menuItem(f, 'chat-open');
+  assert.ok(item);
+  item.click();
+  const firstWindow = f.chatWindow.getWindow();
+  assert.equal(f.chatWindow.isVisible(), true);
+  item.click();
+  assert.equal(f.chatWindow.getWindow(), firstWindow);
+  assert.equal(f.chatWindow.creations, 1);
+  assert.equal(f.chat.connects, 2);
+  assert.deepEqual(f.chat.sends, []);
+  assert.equal(f.chat.newChats, 0);
+  f.send('pet:chat-close', undefined, firstWindow.webContents);
+  assert.equal(f.chatWindow.isVisible(), false);
+  assert.equal(f.chat.closes, 0);
+  item.click();
+  assert.equal(f.chatWindow.getWindow(), firstWindow);
+  assert.equal(f.chatWindow.creations, 1);
+  assert.equal(f.chat.connects, 3);
+});
+
+test('聊天 IPC 只接受当前聊天窗口；球球和其他窗口无法读记录、发送或停止', async () => {
+  const f = await fixture();
+  menuItem(f, 'chat-open').click();
+  const sender = f.chatWindow.getWindow().webContents;
+  for (const foreign of [f.pet.webContents, {}, f.bubble]) {
+    assert.equal(await f.invoke('pet:chat-get', undefined, foreign), null);
+    assert.equal((await f.invoke('pet:chat-send', '伪造发送', foreign)).accepted, false);
+    assert.equal((await f.invoke('pet:chat-new', undefined, foreign)).accepted, false);
+    await f.invoke('pet:chat-stop', undefined, foreign);
+    f.send('pet:chat-close', undefined, foreign);
+  }
+  assert.deepEqual(f.chat.sends, []);
+  assert.equal(f.chat.newChats, 0);
+  assert.equal(f.chat.stops, 0);
+  assert.equal(f.chatWindow.isVisible(), true);
+  assert.equal(await f.invoke('pet:chat-get', undefined, sender), f.chat.state);
+  assert.equal((await f.invoke('pet:chat-send', '有效消息', sender)).accepted, true);
+  assert.deepEqual(f.chat.sends, ['有效消息']);
+  assert.equal((await f.invoke('pet:chat-new', undefined, sender)).accepted, true);
+  assert.equal(f.chat.newChats, 1);
+  await f.invoke('pet:chat-stop', undefined, sender);
+  assert.equal(f.chat.stops, 1);
+});
+
+test('聊天面板隐藏或锁屏期间拒绝发送和新聊天，锁屏也不推送历史', async () => {
+  const f = await fixture();
+  menuItem(f, 'chat-open').click();
+  const sender = f.chatWindow.getWindow().webContents;
+  f.send('pet:chat-close', undefined, sender);
+  assert.equal((await f.invoke('pet:chat-send', '隐藏时发送', sender)).accepted, false);
+  assert.equal((await f.invoke('pet:chat-new', undefined, sender)).accepted, false);
+  menuItem(f, 'chat-open').click();
+  f.powerMonitor.emit('lock-screen');
+  assert.equal(f.chatWindow.isVisible(), false);
+  assert.equal(f.chat.stops, 1);
+  const updateCount = f.chatWindow.updates.length;
+  f.chat.change({ messages: [{ text: '假回复' }], busy: false });
+  assert.equal(f.chatWindow.updates.length, updateCount);
+  assert.equal(await f.invoke('pet:chat-get', undefined, sender), null);
+  assert.equal((await f.invoke('pet:chat-send', '锁屏时发送', sender)).accepted, false);
+  assert.equal((await f.invoke('pet:chat-new', undefined, sender)).accepted, false);
+  const opens = f.chatWindow.shows.length;
+  menuItem(f, 'chat-open').click();
+  assert.equal(f.chatWindow.shows.length, opens);
+  assert.deepEqual(f.chat.sends, []);
+  assert.equal(f.chat.newChats, 0);
+  f.powerMonitor.emit('unlock-screen');
+  menuItem(f, 'chat-open').click();
+  assert.equal((await f.invoke('pet:chat-send', '解锁后主动发送', sender)).accepted, true);
+  assert.deepEqual(f.chat.sends, ['解锁后主动发送']);
+});
+
+test('聊天窗口销毁重建后拒绝旧 sender，隐藏球球也同时隐藏聊天', async () => {
+  const f = await fixture();
+  menuItem(f, 'chat-open').click();
+  const oldSender = f.chatWindow.getWindow().webContents;
+  f.chatWindow.destroy();
+  assert.equal((await f.invoke('pet:chat-send', '销毁后的发送', oldSender)).accepted, false);
+  menuItem(f, 'chat-open').click();
+  const sender = f.chatWindow.getWindow().webContents;
+  assert.notEqual(sender, oldSender);
+  assert.equal((await f.invoke('pet:chat-send', '旧窗口迟到消息', oldSender)).accepted, false);
+  assert.equal((await f.invoke('pet:chat-send', '当前窗口消息', sender)).accepted, true);
+  f.call('hidePet()');
+  assert.equal(f.pet.isVisible(), false);
+  assert.equal(f.chatWindow.isVisible(), false);
+  assert.equal((await f.invoke('pet:chat-send', '球球已隐藏', sender)).accepted, false);
+  menuItem(f, 'chat-open').click();
+  assert.equal(f.pet.isVisible(), true);
+  assert.equal(f.chatWindow.isVisible(), true);
+  assert.equal(f.chat.closes, 0);
+});
+
+test('聊天动作只调用现有动作白名单，隐藏、锁屏和退出后迟到动作不生效', async () => {
+  const f = await fixture();
+  const before = f.commands.length;
+  f.chat.action('hop');
+  const delivered = f.commands.slice(before);
+  assert.ok(delivered.includes('wake'));
+  assert.ok(delivered.some(command => command?.command === 'again' && command.motion === 'hop'));
+  const acceptedCount = f.commands.length;
+  f.chat.action('arbitrary-shell-command');
+  assert.equal(f.commands.length, acceptedCount);
+  f.chat.action('dockLeft');
+  assert.equal(f.call('edgeTuck.getPresentation().mode'), 'tucked');
+  assert.equal(f.call('edgeTuck.getPresentation().side'), 'left');
+  f.chat.action('restore');
+  assert.equal(f.call('edgeTuck.getPresentation().mode'), 'free');
+  f.call('hidePet()');
+  let count = f.commands.length;
+  f.chat.action('hop'); f.chat.action('restore');
+  assert.equal(f.commands.length, count);
+  assert.equal(f.pet.isVisible(), false);
+  f.call('restorePet()');
+  f.powerMonitor.emit('lock-screen'); count = f.commands.length;
+  f.chat.action('spin'); f.chat.action('wake');
+  assert.equal(f.commands.length, count);
+  f.powerMonitor.emit('unlock-screen');
+  f.app.emit('before-quit'); count = f.commands.length;
+  f.chat.action('hop');
+  assert.equal(f.commands.length, count);
+});
+
+test('真实退出事件只清理一次聊天服务和窗口，退出后 IPC 与菜单都失效', async () => {
+  const f = await fixture();
+  const openItem = menuItem(f, 'chat-open');
+  openItem.click();
+  const sender = f.chatWindow.getWindow().webContents;
+  f.app.emit('before-quit'); f.app.emit('before-quit');
+  assert.equal(f.chat.closes, 1);
+  assert.equal(f.chatWindow.destroys, 1);
+  assert.equal(await f.invoke('pet:chat-get', undefined, sender), null);
+  assert.equal((await f.invoke('pet:chat-send', '退出后发送', sender)).accepted, false);
+  assert.equal((await f.invoke('pet:chat-new', undefined, sender)).accepted, false);
+  const opens = f.chatWindow.shows.length, connects = f.chat.connects;
+  openItem.click();
+  assert.equal(f.chatWindow.shows.length, opens);
+  assert.equal(f.chat.connects, connects);
+  assert.deepEqual(f.chat.sends, []);
+});
+
+test('球球自己的聊天 thread 不进入 Codex 任务状态和完成提醒', async () => {
+  const f = await fixture({ codexEnabled: true });
+  f.chat.ownedThreads.add(TASK_ID);
+  const callbacks = f.connections[0].callbacks;
+  const task = { id: TASK_ID, title: '球球自己的测试聊天', state: 'active', turnId: 'chat-turn', updatedAt: 1800000000000 };
+  callbacks.onTask({ ...task, baseline: true });
+  assert.equal(f.call('codexCompanion.getSnapshot().tasks.items.length'), 0);
+  callbacks.onTask({ ...task, state: 'completed' });
+  f.advanceTo(5000);
+  assert.equal(f.call('codexCompanion.getSnapshot().tasks.items.length'), 0);
+  assert.equal(f.commands.some(command => command?.command === 'codex'), false);
+});
 
 function queueCodexCompletion(f) {
   const generation = f.call('codexCompanion.getSnapshot().generation');
@@ -1316,6 +1521,18 @@ test('渲染进程关闭后，主进程停止与退出不因发送通知而抛�
   assert.doesNotThrow(() => f.app.emit('before-quit'));
   assert.equal(f.timers.size, 0);
   assert.equal(f.pet.bounds.y, 100);
+});
+
+test('快速隐藏再恢复后，迟到的原生hide不关闭新打开的聊天', async () => {
+  const f = await fixture();
+  f.call('openChat()');
+  f.call('hidePet()');
+  f.call('restorePet()');
+  f.call('openChat()');
+  f.pet.emit('hide');
+  assert.equal(f.pet.isVisible(), true);
+  assert.equal(f.chatWindow.isVisible(), true);
+  assert.notEqual(edgeSnapshot(f).mode, 'hidden');
 });
 
 test('隐藏或锁屏不启动新动作，恢复后旧帧不复活', async () => {

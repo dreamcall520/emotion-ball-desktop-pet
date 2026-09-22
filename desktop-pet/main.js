@@ -37,6 +37,10 @@ const { createQuotaLabelWindow } = require('./lib/quota-label-window');
 const { createEdgeTuck } = require('./lib/edge-tuck');
 const { createEdgeNotice } = require('./lib/edge-notice');
 const { createEdgeNoticeWindow } = require('./lib/edge-notice-window');
+const { createChatStore } = require('./lib/chat-store');
+const { createChatCompanion } = require('./lib/chat-companion');
+const { createCodexChatRpc } = require('./lib/codex-chat-rpc');
+const { createChatWindow } = require('./lib/chat-window');
 
 const APP_NAME = '球球桌宠';
 const IS_SMOKE_TEST = process.env.PET_SMOKE_TEST === '1';
@@ -61,6 +65,8 @@ let bubble = null;
 let thoughts = null;
 let bubbleVisibilityBinding = null;
 let quotaLabel = null;
+let chat = null;
+let chatWindow = null;
 let screenLocked = false;
 let codexCompanion = null;
 let codexNow = Date.now;
@@ -123,6 +129,38 @@ function presentationSuppressed() {
   return edgeTuck?.getPresentation().suppressed === true;
 }
 
+function fromChatWindow(event) {
+  const win = chatWindow?.getWindow();
+  return Boolean(!isQuitting && win && !win.isDestroyed() && event.sender === win.webContents);
+}
+
+function openChat() {
+  if (isQuitting || screenLocked || !chat) return;
+  if (!petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) restorePet();
+  stopMotion();
+  dismissCodexPresentation();
+  dialogue?.dismiss();
+  hideBubble();
+  thoughts?.hide();
+  quotaLabel?.hide();
+  edgeNoticeWindow?.hide();
+  chatWindow.show(chat.getState());
+  // Opening checks login and shows local history; only send() can create a thread.
+  void chat.connect().catch(() => {});
+}
+
+function performChatAction(action) {
+  if (isQuitting || screenLocked || !petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return;
+  if (action === 'dockLeft' || action === 'dockRight') { dockPet(action === 'dockLeft' ? 'left' : 'right'); return; }
+  if (action === 'restore') { restorePet(); return; }
+  if (action === 'sleep' || action === 'wake') { restorePet(); sendCommand(action); return; }
+  if (['hop', 'jelly', 'sway', 'peek', 'bow', 'spin'].includes(action)) {
+    restorePet();
+    sendCommand('wake');
+    sendCommand({ command: 'again', motion: action });
+  }
+}
+
 function sendPresentation(packet) {
   if (!petWindow || petWindow.isDestroyed()) return;
   try { petWindow.webContents.send('pet:presentation', packet); } catch (_) {}
@@ -133,7 +171,7 @@ function tickEdgeNotice(force = false) {
   if (!force && now - lastEdgeNoticeTick < 500) return;
   lastEdgeNoticeTick = now;
   const presentation = edgeTuck?.getPresentation();
-  const visible = Boolean(!isQuitting && codexPageReady && petWindow && !petWindow.isDestroyed() && petWindow.isVisible());
+  const visible = Boolean(!isQuitting && !chatWindow?.isVisible() && codexPageReady && petWindow && !petWindow.isDestroyed() && petWindow.isVisible());
   const quotaEnabled = settings?.codexEnabled === true && settings.codexQuotaAlwaysVisible === true;
   edgeNotice?.tick({ presentation, visible, locked: screenLocked,
     bubblesEnabled: settings?.bubblesEnabled === true, quotaEnabled,
@@ -156,7 +194,7 @@ function applyPresentation(packet) {
 }
 
 function edgeRetentionBounds() {
-  return [bubble, quotaLabel].flatMap(controller => {
+  return [bubble, quotaLabel, chatWindow].flatMap(controller => {
     try {
       const win = controller?.getWindow();
       return win && !win.isDestroyed() && win.isVisible() ? [win.getBounds()] : [];
@@ -187,13 +225,14 @@ function restorePet() {
 
 function hidePet() {
   if (!petWindow || petWindow.isDestroyed()) return;
+  chatWindow?.hide();
   dragState = null;
   edgeTuck?.hide();
   petWindow.hide();
 }
 
 function codexHostAvailable() {
-  return codexPageReady && !isQuitting && !screenLocked && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible() &&
+  return codexPageReady && !isQuitting && !screenLocked && !chatWindow?.isVisible() && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible() &&
     !dragState && !bounceState && !hostMotion && !dialogue?.hasBubble(performance.now());
 }
 
@@ -311,7 +350,7 @@ function bindBubbleVisibilityEvents() {
 }
 
 function showBubble(payload) {
-  if (!payload || presentationSuppressed()) return;
+  if (!payload || presentationSuppressed() || chatWindow?.isVisible()) return;
   const shown = safelyInvokeWindow('气泡显示', () => bubble?.show(payload));
   if (shown) bindBubbleVisibilityEvents();
   repositionQuotaLabel();
@@ -325,6 +364,7 @@ function hideBubble() {
 
 function repositionBubble() {
   safelyInvokeWindow('气泡重排', () => bubble?.reposition());
+  safelyInvokeWindow('聊天面板重排', () => chatWindow?.reposition());
   repositionQuotaLabel();
 }
 
@@ -355,7 +395,7 @@ function syncQuotaLabel(snapshot = null) {
       let visible = false;
       try {
         visible = !isQuitting && settings?.codexEnabled === true && settings.codexQuotaAlwaysVisible === true &&
-          !screenLocked && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
+          !screenLocked && !chatWindow?.isVisible() && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
       } catch (error) {
         reportQuotaError('额度标签状态', error);
       }
@@ -436,6 +476,7 @@ function initializeCodexCompanion(options = {}) {
   codexNow = options.now || Date.now;
   codexSentSettings = null;
   codexCompanion = createCodexCompanion({ ...options, now: codexNow, schedule: options.schedule || setTimeout,
+    ignoreTask: id => chat?.ownsThread(id) === true,
     cancel: options.cancel || clearTimeout, canPresent: canPresentCodex, onAlert: presentCodexAlert,
     onAlertUpdate: alert => {
       const payload = dialogue?.updateCodex(alert, performance.now());
@@ -725,7 +766,7 @@ function setCompanionSetting(name, enabled) {
 }
 
 function showDialogue(event) {
-  if (screenLocked || presentationSuppressed() || !petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return null;
+  if (screenLocked || chatWindow?.isVisible() || presentationSuppressed() || !petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return null;
   const payload = dialogue.offer(event, performance.now());
   if (payload) dismissCodexPresentation();
   if (payload) showBubble(payload);
@@ -765,6 +806,7 @@ function setAlwaysOnTop(enabled) {
   safelyInvokeWindow('气泡窗口置顶', () => bubble?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('额度标签置顶', () => quotaLabel?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('边缘提示置顶', () => edgeNoticeWindow?.setAlwaysOnTop(settings.alwaysOnTop));
+  safelyInvokeWindow('聊天面板置顶', () => chatWindow?.setAlwaysOnTop(settings.alwaysOnTop));
   thoughts?.setAlwaysOnTop(settings.alwaysOnTop);
   persistSettings();
   refreshTrayMenu();
@@ -891,6 +933,8 @@ function codexMenu() {
 
 function menuTemplate() {
   return [
+    { id: 'chat-open', label: '和球球聊聊', click: openChat },
+    { type: 'separator' },
     { label: '随机表情', click: () => sendCommand('random') },
     { label: '立即睡眠', click: () => sendCommand('sleep') },
     { label: '立即唤醒', click: () => sendCommand('wake') },
@@ -988,6 +1032,14 @@ async function finishSmokeTest() {
       "Boolean(window.petDesktop.onActivity && document.getElementById('pet').dataset.mode)"
     );
     if (!companionReady) throw new Error('轻陪伴活动感知尚未接入');
+
+    if (process.env.PET_SMOKE_CHAT_ONLY === '1') {
+      await require('./scripts/verify-chat-integration').verifyChatIntegration({ pet: petWindow, chat, chatWindow,
+        getMenu: () => Menu.buildFromTemplate(menuTemplate()), getPresentation: () => edgeTuck.getPresentation(),
+        hidePet, restorePet, powerMonitor });
+      app.quit();
+      return;
+    }
 
     if (process.env.PET_SMOKE_EDGE_ONLY === '1') {
       await require('./scripts/verify-edge-tuck').verifyEdgeTuck({
@@ -1220,8 +1272,11 @@ function createPetWindow() {
     if (edgeTuck?.getPresentation().mode === 'hidden') edgeTuck.restore();
   });
   createdPetWindow.on('hide', () => {
-    if (!isCurrentPetWindow()) return;
+    // macOS may deliver hide after a quick hide/show pair. Do not hide a newly
+    // reopened chat or re-tuck the pet for an obsolete native notification.
+    if (!isCurrentPetWindow() || createdPetWindow.isVisible()) return;
     dragState = null;
+    chatWindow?.hide();
     if (edgeTuck?.getPresentation().mode !== 'hidden') edgeTuck?.hide();
     safelyInvokeWindow('隐藏时停止动作', stopMotion);
     if (!isCurrentPetWindow()) return;
@@ -1235,6 +1290,7 @@ function createPetWindow() {
   createdPetWindow.on('closed', () => {
     if (!isCurrentPetWindow() || closedCleanupStarted) return;
     closedCleanupStarted = true;
+    chatWindow?.hide();
     edgeTuck?.dispose();
     edgeNotice?.reset();
     safelyInvokeWindow('关闭时边缘提示销毁', () => edgeNoticeWindow?.destroy());
@@ -1272,11 +1328,24 @@ function createPetWindow() {
 }
 
 function registerIpc() {
+  ipcMain.handle('pet:chat-get', event => fromChatWindow(event) && !screenLocked ? chat.getState() : null);
+  ipcMain.handle('pet:chat-send', (event, text) => {
+    if (!fromChatWindow(event) || screenLocked || !chatWindow.isVisible()) return { accepted: false, error: '请打开聊天面板后再发送。' };
+    return chat.send(text);
+  });
+  ipcMain.handle('pet:chat-stop', event => {
+    if (fromChatWindow(event)) return chat.stop();
+  });
+  ipcMain.handle('pet:chat-new', event => {
+    if (!fromChatWindow(event) || screenLocked || !chatWindow.isVisible()) return { accepted: false, error: '请打开聊天面板后再操作。' };
+    return chat.newChat();
+  });
+  ipcMain.on('pet:chat-close', event => { if (fromChatWindow(event)) chatWindow.hide(); });
   ipcMain.on('pet:thought', (event, request) => {
     if (!fromPetWindow(event) || typeof request?.visible !== 'boolean') return;
     if (!request.visible) { thoughts?.hide(); return; }
     const snapshot = codexCompanion?.getSnapshot();
-    if (!settings.codexEnabled || !codexPageReady || screenLocked || presentationSuppressed() || dragState || hostMotion ||
+    if (!settings.codexEnabled || !codexPageReady || screenLocked || chatWindow?.isVisible() || presentationSuppressed() || dragState || hostMotion ||
         !petWindow.isVisible() || !snapshot?.tasks.items.some(task => task.state === 'active')) return;
     thoughts?.show(request);
   });
@@ -1451,6 +1520,19 @@ async function bootstrap() {
   if (app.dock) app.dock.hide();
   settingsFile = path.join(app.getPath('userData'), 'settings.json');
   settings = loadSettings(settingsFile);
+  chatWindow = createChatWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
+    alwaysOnTop: settings.alwaysOnTop,
+    onVisibilityChange: () => syncQuotaLabel(codexCompanion?.getSnapshot()),
+    onError: error => writeError('聊天面板', error) });
+  chat = createChatCompanion({ store: createChatStore(path.join(app.getPath('userData'), 'chat.json')),
+    workspaceDir: path.join(app.getPath('userData'), 'chat-workspace'),
+    createRpc: options => {
+      if (IS_SMOKE_TEST && process.env.PET_SMOKE_CHAT_ONLY === '1') return require('./scripts/verify-chat-integration').createSmokeChatRpc(options);
+      fs.mkdirSync(options.workspaceDir, { recursive: true, mode: 0o700 });
+      return createCodexChatRpc(options);
+    },
+    onChange: state => { if (!screenLocked) chatWindow.update(state); },
+    onAction: performChatAction });
   dialogue = new DialogueDirector({ now: performance.now(), enabled: settings.bubblesEnabled });
   thoughts = createThoughtWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
     getObstacle: quotaObstacleBounds,
@@ -1484,6 +1566,8 @@ async function bootstrap() {
   });
   const pause = () => {
     screenLocked = true;
+    chatWindow?.hide();
+    void chat?.stop();
     dragState = null;
     safelyInvokeWindow('锁屏时停止动作', stopMotion);
     edgeTuck?.suspend();
@@ -1515,10 +1599,17 @@ if (!hasSingleInstanceLock) {
     restorePet();
   });
 
-  app.on('before-quit', () => {
+  app.on('before-quit', event => {
     isQuitting = true;
     if (quitCleanupStarted) return;
     quitCleanupStarted = true;
+    let chatClosing;
+    safelyInvokeWindow('退出时聊天停止', () => { chatClosing = chat?.close(); });
+    if (event?.preventDefault && chatClosing?.then) {
+      event.preventDefault();
+      Promise.resolve(chatClosing).finally(() => app.quit());
+    }
+    safelyInvokeWindow('退出时聊天面板销毁', () => chatWindow?.destroy());
     edgeTuck?.dispose();
     edgeNotice?.reset();
     safelyInvokeWindow('退出时边缘提示销毁', () => edgeNoticeWindow?.destroy());
