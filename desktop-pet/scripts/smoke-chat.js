@@ -38,8 +38,14 @@ if (!process.versions.electron) {
     fs.mkdirSync(outputDirectory, { recursive: true });
     const checks = [], screenshots = [], errors = [], visibility = [];
     let chat, focusWindow;
-    let state = { messages: [], busy: false, connection: 'idle', error: null, hasConversation: false };
-    const calls = { send: 0, stop: 0, newChat: 0, close: 0 };
+    let state = { messages: [], history: [], activeChatId: 'empty-draft', canStartNewChat: false, busy: false, connection: 'idle', error: null, hasConversation: false };
+    const calls = { send: 0, stop: 0, newChat: 0, selectChat: 0, close: 0 };
+    let rejectSelection = false;
+    const history = [
+      { id: 'chat-a', title: '今天忙了一整天，想跟你歇一会儿。', updatedAt: '2026-09-22T12:00:00.000Z', current: true },
+      { id: 'chat-b', title: '陪我想想周末怎么过', updatedAt: '2026-09-21T10:30:00.000Z', current: false },
+      { id: 'chat-c', title: '晚安，球球', updatedAt: '2026-09-20T14:05:00.000Z', current: false }
+    ];
     const workArea = screen.getPrimaryDisplay().workArea;
     let petBounds = { x: workArea.x + workArea.width - 90, y: workArea.y + workArea.height / 2 - 40, width: 80, height: 80 };
     const allow = event => assert.equal(event.sender, chat.getWindow().webContents);
@@ -66,7 +72,7 @@ if (!process.versions.electron) {
       ipcMain.handle('pet:chat-send', (event, text) => {
         allow(event);
         calls.send += 1;
-        update({ messages: [{ id: 'user-1', role: 'user', text, status: 'complete' }, { id: 'answer-1', role: 'assistant', text: '', status: 'streaming' }], busy: true, connection: 'ready', error: null, hasConversation: true });
+        update({ messages: [{ id: 'user-1', role: 'user', text, status: 'complete' }, { id: 'answer-1', role: 'assistant', text: '', status: 'streaming' }], history, activeChatId: 'chat-a', canStartNewChat: true, busy: true, connection: 'ready', error: null, hasConversation: true });
         return { accepted: true };
       });
       ipcMain.handle('pet:chat-stop', event => {
@@ -78,11 +84,22 @@ if (!process.versions.electron) {
       ipcMain.handle('pet:chat-new', event => {
         allow(event);
         calls.newChat += 1;
-        update({ messages: [], busy: false, connection: 'idle', error: null, hasConversation: false });
+        update({ messages: [], history: history.map(item => ({ ...item, current: false })), activeChatId: 'new-empty-draft', canStartNewChat: false, busy: false, connection: 'idle', error: null, hasConversation: false });
+        return { accepted: true };
+      });
+      ipcMain.handle('pet:chat-select', (event, id) => {
+        allow(event);
+        calls.selectChat += 1;
+        if (rejectSelection) return { accepted: false, error: '这次没能打开聊天，原来的内容还在。' };
+        assert.ok(history.some(item => item.id === id));
+        update({ ...state, messages: [{ id: `${id}-u`, role: 'user', text: '陪我想想周末怎么过', status: 'complete' }, { id: `${id}-a`, role: 'assistant', text: '去公园慢慢走一圈，再找一家喜欢的小店坐坐？', status: 'complete' }], history: history.map(item => ({ ...item, current: item.id === id })), activeChatId: id, hasConversation: true, error: null });
         return { accepted: true };
       });
       ipcMain.on('pet:chat-close', event => { allow(event); calls.close += 1; chat.hide(); });
       chat.show(state);
+      // The user's physical keyboard must not alter isolated test drafts while
+      // this short-lived window checks native focus. DOM test events still run.
+      chat.getWindow().webContents.on('before-input-event', event => event.preventDefault());
       await new Promise(resolve => chat.getWindow().webContents.once('did-finish-load', resolve));
       await waitFor("Boolean(window.qiuqiuChat && !document.getElementById('empty-state').hidden)", '空态加载');
       assert.equal(calls.send, 0);
@@ -165,12 +182,68 @@ if (!process.versions.electron) {
       mark('隐藏期间更新不抢焦点，重新打开保留草稿和同一渲染器');
       mark('原生显示隐藏回调仅在可见性改变时触发');
 
+      nativeTheme.themeSource = 'light';
+      await js("document.getElementById('chat-history').click()");
+      await waitFor("!document.getElementById('history-view').hidden && document.querySelectorAll('.history-item').length === 3", '历史列表');
+      assert.equal(calls.selectChat, 0);
+      assert.equal(calls.newChat, 0);
+      assert.equal(await js("document.querySelector('.history-item[aria-current=true] .history-current').textContent"), '当前聊天');
+      assert.equal(await js("document.getElementById('new-chat').getBoundingClientRect().bottom < innerHeight"), true);
+      assert.equal(await js('document.body.scrollWidth <= innerWidth'), true);
+      await capture('06-light-history');
+      mark('历史列表显示标题、时间和当前聊天，打开不创建聊天');
+
+      await js("document.querySelector('.history-item[aria-current=true]').click()");
+      await waitFor("document.getElementById('history-view').hidden", '返回当前聊天');
+      assert.equal(calls.selectChat, 0);
+      assert.equal(await js("document.getElementById('message-input').value"), '下次回来继续这句话');
+      await js("document.getElementById('chat-history').click()");
+      rejectSelection = true;
+      await js("document.querySelectorAll('.history-item')[1].click()");
+      await waitFor("document.getElementById('error-text').textContent.includes('这次没能打开')", '切换失败提示');
+      assert.equal(await js("document.getElementById('history-view').hidden"), false);
+      assert.equal(await js("document.getElementById('message-input').value"), '下次回来继续这句话');
+      rejectSelection = false;
+      await js("document.querySelectorAll('.history-item')[1].click()");
+      await waitFor("document.getElementById('history-view').hidden && document.querySelector('[data-role=assistant] .message-text').textContent.includes('公园')", '切换历史聊天');
+      assert.equal(calls.selectChat, 2);
+      assert.equal(calls.send, 1);
+      assert.equal(await js("document.getElementById('message-input').value"), '');
+      assert.equal(await js("document.activeElement.id"), 'message-input');
+      mark('切换失败保留草稿，成功才清空草稿并恢复输入焦点；当前项不调用切换');
+
+      nativeTheme.themeSource = 'dark';
+      await js("document.getElementById('message-input').value = '误点也留住草稿'; document.getElementById('chat-history').click()");
+      await waitFor(`getComputedStyle(document.querySelector('.chat-panel')).color !== ${JSON.stringify(layout.textColor)}`, '历史深色主题');
+      await capture('07-dark-history');
+      update({ ...state, connection: 'connecting' });
+      await waitFor("document.getElementById('new-chat').disabled && [...document.querySelectorAll('.history-item')].every(item => item.disabled)", '连接中禁用切换');
+      await js("document.querySelectorAll('.history-item')[0].click(); document.getElementById('new-chat').click()");
+      assert.equal(calls.selectChat, 2);
+      assert.equal(calls.newChat, 0);
+      update({ ...state, connection: 'ready' });
+      await waitFor("!document.getElementById('new-chat').disabled", '恢复可选');
       await js("document.getElementById('new-chat').click()");
+      await waitFor("!document.getElementById('new-chat-confirmation').hidden", '新聊天确认');
+      assert.equal(calls.newChat, 0);
+      assert.equal(await js('document.activeElement.id'), 'cancel-new-chat');
+      await capture('08-dark-new-confirmation');
+      await js("document.getElementById('cancel-new-chat').click()");
+      assert.equal(await js("document.getElementById('message-input').value"), '误点也留住草稿');
+      assert.equal(calls.newChat, 0);
+      await js("document.getElementById('new-chat').click(); document.getElementById('confirm-new-chat').click()");
       await waitFor("!document.getElementById('empty-state').hidden", '主动新聊天');
       assert.equal(calls.newChat, 1);
       assert.equal(calls.send, 1);
       assert.equal(await js("document.getElementById('message-input').value"), '');
-      mark('仅主动新聊天清空当前面板，不自动发送消息');
+      mark('新聊天在列表底部，二次确认默认取消，确认才清空面板，不自动发送消息');
+      await js("document.getElementById('chat-history').click()");
+      await waitFor("document.getElementById('new-chat').disabled", '空聊天不可重复新建');
+      await js("document.getElementById('new-chat').click(); document.getElementById('confirm-new-chat').click()");
+      assert.equal(calls.newChat, 1);
+      assert.equal(await js("document.querySelectorAll('.history-item').length"), 3);
+      await js("document.getElementById('history-back').click()");
+      mark('新建后历史仍保留，空聊天不会重复新建；连接中禁止切换');
       for (const side of ['left', 'right']) {
         petBounds = { ...petBounds, x: side === 'left' ? workArea.x - 40 : workArea.x + workArea.width - 40 };
         chat.reposition();

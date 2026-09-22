@@ -7,15 +7,20 @@
   const sendButton = byId('send-message');
   const stopButton = byId('stop-message');
   const newButton = byId('new-chat');
+  const historyButton = byId('chat-history');
+  const historyList = byId('history-list');
   const retryButton = byId('retry-message');
-  let snapshot = { messages: [], busy: false, connection: 'idle', error: null, hasConversation: false };
+  let snapshot = { messages: [], history: [], activeChatId: null, busy: false, connection: 'idle', error: null, hasConversation: false };
   let pending = false;
   let stopping = false;
   let composing = false;
   let localError = '';
   let failedDraft = '';
   let stateEvents = 0;
+  let historyOpen = false;
+  let confirmingNew = false;
   const rows = new Map();
+  const historyRows = new Map();
 
   function errorMessage(error) {
     return typeof error?.message === 'string' ? error.message : '暂时没连上，请稍后再试。';
@@ -25,27 +30,109 @@
     return [...snapshot.messages].reverse().find(message => message.role === 'user')?.text || '';
   }
 
+  function changeBlocked() {
+    return pending || snapshot.busy || snapshot.connection === 'connecting';
+  }
+
+  function hasCurrentChat() {
+    if (typeof snapshot.canStartNewChat === 'boolean') return snapshot.canStartNewChat;
+    return Boolean(snapshot.hasConversation || snapshot.messages.length);
+  }
+
+  function refreshHistory() {
+    byId('history-view').hidden = !historyOpen;
+    conversation.hidden = historyOpen;
+    byId('composer').hidden = historyOpen;
+    byId('privacy-note').hidden = historyOpen;
+    historyButton.setAttribute('aria-expanded', String(historyOpen));
+    historyButton.disabled = pending;
+    byId('history-back').disabled = pending;
+    byId('history-browse').hidden = confirmingNew;
+    byId('new-chat-confirmation').hidden = !confirmingNew;
+    byId('cancel-new-chat').disabled = pending;
+    byId('confirm-new-chat').disabled = changeBlocked() || !hasCurrentChat();
+    newButton.disabled = changeBlocked() || !hasCurrentChat();
+    byId('history-hint').textContent = snapshot.busy || snapshot.connection === 'connecting'
+      ? '等这次回复结束后，就可以切换聊天。'
+      : hasCurrentChat() ? '原来的聊天会保留，随时可以切回来。' : '当前已是新聊天，直接发送第一句话即可。';
+    for (const { button } of historyRows.values()) button.disabled = changeBlocked();
+  }
+
+  function closeHistory() {
+    if (pending) return;
+    historyOpen = false;
+    confirmingNew = false;
+    refreshControls();
+    input.focus();
+  }
+
+  function formatDate(value) {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return '';
+    return date.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+
+  function renderHistory() {
+    const history = Array.isArray(snapshot.history) ? snapshot.history : [];
+    const liveIds = new Set(history.map(chat => chat.id));
+    for (const [id, entry] of historyRows) {
+      if (!liveIds.has(id)) {
+        entry.button.remove();
+        historyRows.delete(id);
+      }
+    }
+    for (const chat of history) {
+      let entry = historyRows.get(chat.id);
+      if (!entry) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'history-item';
+        const title = document.createElement('span');
+        title.className = 'history-item-title';
+        const meta = document.createElement('span');
+        meta.className = 'history-item-meta';
+        const date = document.createElement('span');
+        const current = document.createElement('span');
+        current.className = 'history-current';
+        meta.append(date, current);
+        button.append(title, meta);
+        button.addEventListener('click', () => selectChat(chat.id));
+        entry = { button, title, date, current };
+        historyRows.set(chat.id, entry);
+      }
+      entry.title.textContent = typeof chat.title === 'string' && chat.title.trim() ? chat.title : '和球球的聊天';
+      entry.date.textContent = formatDate(chat.updatedAt);
+      const current = chat.id === snapshot.activeChatId || chat.current === true;
+      entry.current.textContent = current ? '当前聊天' : '';
+      if (current) entry.button.setAttribute('aria-current', 'true');
+      else entry.button.removeAttribute('aria-current');
+      historyList.appendChild(entry.button);
+    }
+    historyList.hidden = history.length === 0;
+    byId('history-empty').hidden = history.length > 0;
+  }
+
   function refreshControls() {
     const busy = Boolean(snapshot.busy);
     sendButton.hidden = busy;
-    sendButton.disabled = pending || busy || !input.value.trim() || input.value.length > 2000;
+    sendButton.disabled = changeBlocked() || !input.value.trim() || input.value.length > 2000;
     stopButton.hidden = !busy;
     stopButton.disabled = stopping;
     stopButton.textContent = stopping ? '正在停止…' : '■ 停止';
-    newButton.disabled = busy || pending;
     const error = localError || snapshot.error || '';
     byId('error-banner').hidden = !error;
     byId('error-text').textContent = error;
-    retryButton.hidden = !error || busy || pending || !(failedDraft || lastUserText());
+    retryButton.hidden = historyOpen || !error || busy || pending || !(failedDraft || lastUserText());
     const count = byId('character-count');
     count.hidden = input.value.length < 1800;
     count.textContent = `${input.value.length} / 2000`;
     byId('input-hint').hidden = !count.hidden;
     const status = byId('connection-status');
-    status.textContent = busy
-      ? (snapshot.connection === 'connecting' ? '正在连接 Codex…' : '球球正在想…')
+    status.textContent = snapshot.connection === 'connecting' ? '正在连接 Codex…' : busy
+      ? '球球正在想…'
       : error ? '连接遇到了一点问题'
         : snapshot.hasConversation ? '接着聊，我还记得这一段' : '想说什么，我在听';
+    refreshHistory();
   }
 
   function resizeInput() {
@@ -93,13 +180,14 @@
       entry.status.hidden = !entry.status.textContent;
     }
     byId('empty-state').hidden = next.messages.length > 0;
+    renderHistory();
     if (!next.busy) stopping = false;
     refreshControls();
     if (nearBottom) conversation.scrollTop = conversation.scrollHeight;
   }
 
   async function send() {
-    if (pending || snapshot.busy || composing) return;
+    if (changeBlocked() || composing || historyOpen) return;
     const draft = input.value;
     const text = draft.trim();
     if (!text || draft.length > 2000) return;
@@ -146,7 +234,13 @@
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && !event.isComposing && !composing && event.keyCode !== 229) {
       event.preventDefault();
-      api.close();
+      if (confirmingNew) {
+        if (pending) return;
+        confirmingNew = false;
+        refreshControls();
+        newButton.focus();
+      } else if (historyOpen) closeHistory();
+      else api.close();
     }
   });
   stopButton.addEventListener('click', async () => {
@@ -163,26 +257,64 @@
       refreshControls();
     }
   });
-  newButton.addEventListener('click', async () => {
-    if (pending || snapshot.busy) return;
+  async function changeChat(action, fallbackError) {
+    if (changeBlocked()) return;
     pending = true;
     localError = '';
     refreshControls();
     try {
-      const result = await api.newChat();
-      if (!result?.accepted) localError = result?.error || '暂时无法开始新聊天，请稍后再试。';
+      const result = await action();
+      if (!result?.accepted) localError = result?.error || fallbackError;
       else {
         input.value = '';
         failedDraft = '';
         resizeInput();
-        input.focus();
+        historyOpen = false;
+        confirmingNew = false;
+        conversation.scrollTop = conversation.scrollHeight;
       }
     } catch (error) {
       localError = errorMessage(error);
     } finally {
       pending = false;
       refreshControls();
+      if (!historyOpen) input.focus();
     }
+  }
+  async function selectChat(id) {
+    if (changeBlocked() || !historyOpen || confirmingNew) return;
+    if (id === snapshot.activeChatId) {
+      closeHistory();
+      return;
+    }
+    await changeChat(() => api.selectChat(id), '暂时无法打开这段聊天，请稍后再试。');
+  }
+  historyButton.addEventListener('click', () => {
+    if (pending) return;
+    if (historyOpen) closeHistory();
+    else {
+      historyOpen = true;
+      confirmingNew = false;
+      refreshControls();
+    }
+  });
+  byId('history-back').addEventListener('click', closeHistory);
+  newButton.addEventListener('click', () => {
+    if (changeBlocked() || !hasCurrentChat() || !historyOpen || confirmingNew) return;
+    confirmingNew = true;
+    localError = '';
+    refreshControls();
+    byId('cancel-new-chat').focus();
+  });
+  byId('cancel-new-chat').addEventListener('click', () => {
+    if (pending) return;
+    confirmingNew = false;
+    refreshControls();
+    newButton.focus();
+  });
+  byId('confirm-new-chat').addEventListener('click', () => {
+    if (!confirmingNew || !historyOpen || !hasCurrentChat()) return;
+    return changeChat(() => api.newChat(), '暂时无法开始新聊天，请稍后再试。');
   });
   retryButton.addEventListener('click', () => {
     if (snapshot.busy || pending) return;
@@ -193,7 +325,7 @@
     input.focus();
   });
   window.addEventListener('focus', () => {
-    if (document.activeElement === document.body) input.focus();
+    if (!historyOpen && document.activeElement === document.body) input.focus();
   });
   const unsubscribe = api.onState(next => {
     stateEvents += 1;

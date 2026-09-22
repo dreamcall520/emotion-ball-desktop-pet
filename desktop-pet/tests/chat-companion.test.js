@@ -168,6 +168,111 @@ test('显式新聊天只清本地关联；等下一次发送才创建新 thread'
   assert.notEqual(f.store.saved.threadId, previous);
 });
 
+test('误点新聊天后可切回旧记录，切换零模型请求，继续发送复用原 thread', async t => {
+  const f = fixture(t);
+  await f.companion.send('最初的话题'); f.complete();
+  const previous = { ...f.store.saved };
+  await f.companion.newChat();
+  const count = f.calls.length;
+  assert.equal(f.companion.getState().history.find(chat => chat.id === previous.chatId).title, '最初的话题');
+  assert.equal((await f.companion.selectChat(previous.chatId)).accepted, true);
+  assert.equal(f.calls.length, count, '本地选择不请求或恢复模型');
+  assert.equal(f.store.saved.threadId, previous.threadId);
+  assert.deepEqual(f.companion.getState().messages, previous.messages);
+  await f.companion.send('接着最初的话题'); f.complete();
+  assert.equal(f.count('startThread'), 1);
+  assert.equal(f.lastTurn.threadId, previous.threadId);
+  assert.equal(f.count('resumeThread'), 1);
+});
+
+test('多段聊天切换和重启后保留各自消息及编号，全部自身记录继续排除任务提醒', async t => {
+  const f = fixture(t);
+  await f.companion.send('第一段'); f.complete();
+  const first = { id: f.store.saved.chatId, threadId: f.store.saved.threadId };
+  await f.companion.newChat(); await f.companion.send('第二段'); f.complete();
+  const second = { id: f.store.saved.chatId, threadId: f.store.saved.threadId };
+  await f.companion.selectChat(first.id); await f.companion.close();
+  const restarted = fixture(t, { store: f.store });
+  assert.deepEqual(restarted.companion.getState().history, []);
+  await restarted.companion.connect();
+  assert.equal(restarted.companion.getState().history.length, 2);
+  assert.equal(restarted.companion.ownsThread(first.threadId), true);
+  assert.equal(restarted.companion.ownsThread(second.threadId), true);
+  await restarted.companion.selectChat(second.id);
+  assert.equal(restarted.companion.getState().messages[0].text, '第二段');
+  await restarted.companion.send('第二段继续'); restarted.complete();
+  assert.equal(restarted.count('startThread'), 0);
+  assert.equal(restarted.lastTurn.threadId, second.threadId);
+});
+
+test('连续点新聊天不积累空记录，也不创建 Codex thread', async t => {
+  const f = fixture(t);
+  await f.companion.connect();
+  const id = f.companion.getState().activeChatId;
+  for (let n = 0; n < 5; n++) assert.equal((await f.companion.newChat()).accepted, true);
+  assert.equal(f.companion.getState().activeChatId, id);
+  assert.equal(f.count('startThread'), 0);
+  assert.equal(f.store.writes, 0);
+  await f.companion.send('已有聊天'); f.complete();
+  await f.companion.newChat();
+  const saved = copy(f.store.saved);
+  for (let n = 0; n < 5; n++) await f.companion.newChat();
+  assert.deepEqual(f.store.saved, saved);
+  assert.equal(f.store.saved.history.length, 1);
+});
+
+test('切换拒绝未知编号、未验证账号及其他账号，标题和内容不跨账号显示', async t => {
+  const f = fixture(t, { record: savedConversation() });
+  const firstId = f.store.saved.threadId;
+  assert.equal((await f.companion.selectChat(firstId)).accepted, false);
+  await f.companion.connect();
+  const id = f.companion.getState().activeChatId;
+  assert.equal((await f.companion.selectChat('unrelated-codex-thread')).accepted, false);
+  f.account = { authenticated: true, accountKey: ACCOUNT_B };
+  await assert.rejects(f.companion.connect(), { code: 'ACCOUNT_CHANGED' });
+  assert.deepEqual(f.companion.getState().history, []);
+  assert.equal((await f.companion.selectChat(id)).accepted, false);
+  await f.companion.newChat(); await f.companion.send('另一个账号'); f.complete();
+  assert.equal(f.companion.getState().history.length, 1);
+  f.account = { authenticated: true, accountKey: ACCOUNT_A };
+  await assert.rejects(f.companion.connect(), { code: 'ACCOUNT_CHANGED' });
+  assert.deepEqual(f.companion.getState().history.map(chat => chat.id), [id]);
+  assert.equal((await f.companion.selectChat(id)).accepted, true);
+  assert.equal(f.store.saved.threadId, firstId);
+});
+
+test('写入失败时切换回滚，损坏文件不能被新聊天覆盖', async t => {
+  const f = fixture(t, { record: savedConversation() });
+  await f.companion.connect();
+  const id = f.companion.getState().activeChatId;
+  await f.companion.newChat();
+  const saved = copy(f.store.saved);
+  f.store.failWrite = true;
+  assert.equal((await f.companion.selectChat(id)).accepted, false);
+  assert.deepEqual(f.store.saved, saved);
+  assert.equal(f.companion.getState().activeChatId, saved.chatId);
+  const store = memoryStore(savedConversation()); store.failRead = true;
+  const unreadable = fixture(t, { store });
+  assert.equal((await unreadable.companion.newChat()).accepted, false);
+  assert.equal(store.writes, 0);
+});
+
+test('切换后继续发送必须等旧连接退出，进行中的连接或回复不能切换', async t => {
+  const closing = deferred(), f = fixture(t, { close: () => closing.promise });
+  await f.companion.send('第一段'); f.complete();
+  const id = f.companion.getState().activeChatId;
+  await f.companion.newChat();
+  await f.companion.selectChat(id);
+  const sending = f.companion.send('旧连接关闭后继续'); await settle();
+  assert.equal((await f.companion.selectChat(id)).accepted, false);
+  assert.equal((await f.companion.newChat()).accepted, false);
+  assert.equal(f.count('startTurn'), 1);
+  closing.resolve(); await sending;
+  assert.equal(f.count('startThread'), 1);
+  assert.equal(f.count('resumeThread'), 1);
+  f.complete();
+});
+
 test('记录自己的新旧聊天 thread，避免把它们当成外部 Codex 任务', async t => {
   const f = fixture(t, { record: savedConversation() });
   assert.equal(f.companion.ownsThread('saved-thread'), true);

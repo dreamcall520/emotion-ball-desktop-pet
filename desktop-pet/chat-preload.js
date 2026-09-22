@@ -16,5 +16,11 @@ contextBridge.exposeInMainWorld('qiuqiuChat', {
   },
   stop: () => ipcRenderer.invoke('pet:chat-stop'),
   newChat: () => ipcRenderer.invoke('pet:chat-new'),
+  selectChat(id) {
+    if (typeof id !== 'string' || !id.trim() || id.length > 200) {
+      return Promise.resolve({ accepted: false, error: '这段聊天暂时无法打开。' });
+    }
+    return ipcRenderer.invoke('pet:chat-select', id);
+  },
   close: () => ipcRenderer.send('pet:chat-close')
 });

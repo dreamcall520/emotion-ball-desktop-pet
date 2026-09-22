@@ -58,6 +58,7 @@ async function verifyChatIntegration({ pet, chat, chatWindow, getMenu, getPresen
   await send('你好');
   await send('继续聊');
   assert.equal(counts.threads, 1);
+  const originalChatId = chat.getState().activeChatId;
   await page('window.qiuqiuChat.close()');
   await poll(() => chatWindow.isVisible(), visible => !visible, 'close hides panel');
   open();
@@ -76,6 +77,13 @@ async function verifyChatIntegration({ pet, chat, chatWindow, getMenu, getPresen
   assert.equal(counts.interrupts, 1);
   await page('window.qiuqiuChat.newChat()');
   assert.equal(counts.threads, 1, 'new chat only clears pointer');
+  assert.ok(chat.getState().history.some(item => item.id === originalChatId && !item.current));
+  assert.equal((await page(`window.qiuqiuChat.selectChat(${JSON.stringify(originalChatId)})`)).accepted, true);
+  assert.equal(counts.threads, 1, 'selecting history creates no thread');
+  assert.equal(chat.getState().activeChatId, originalChatId);
+  await send('继续原聊天');
+  assert.equal(counts.threads, 1, 'sending after switching resumes the original thread');
+  await page('window.qiuqiuChat.newChat()');
   await send('新开始');
   assert.equal(counts.threads, 2);
   hidePet();
@@ -90,6 +98,7 @@ async function verifyChatIntegration({ pet, chat, chatWindow, getMenu, getPresen
   assert.equal(chatWindow.isVisible(), false);
   assert.equal(await page('window.qiuqiuChat.getState()'), null);
   assert.equal((await page('window.qiuqiuChat.send("锁屏时拒绝")')).accepted, false);
+  assert.equal((await page(`window.qiuqiuChat.selectChat(${JSON.stringify(originalChatId)})`)).accepted, false);
   powerMonitor.emit('unlock-screen');
   assert.equal(counts.threads, 2);
   process.stdout.write(`PET_CHAT_INTEGRATION_OK ${JSON.stringify(counts)}\n`);

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { createChatStore, emptyRecord, normalizeRecord, MAX_MESSAGES, MAX_TEXT } = require('../lib/chat-store');
+const { createChatStore, emptyRecord, normalizeRecord, normalizeArchive, createChatRecord, MAX_MESSAGES, MAX_TEXT, MAX_CHATS } = require('../lib/chat-store');
 
 function fixture(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'qiuqiu-chat-store-test-'));
@@ -108,4 +108,30 @@ test('归一化只保留有限消息和允许字段，不改变 thread 身份', 
   assert.equal(normalized.messages.at(-1).status, 'complete');
   assert.equal(Object.hasOwn(normalized, 'untrusted'), false);
   assert.equal(Object.hasOwn(normalized.messages[0], 'command'), false);
+});
+
+test('旧版单段记录升级为历史格式，保留原 thread 和消息，迁移编号稳定', t => {
+  const f = fixture(t), legacy = recordWithThread();
+  f.store.write(legacy);
+  const archive = normalizeArchive(f.store.read());
+  assert.equal(archive.threadId, legacy.threadId);
+  assert.deepEqual(archive.messages, legacy.messages);
+  assert.equal(archive.chatId, normalizeArchive(legacy).chatId);
+  assert.deepEqual(archive.history, []);
+  archive.history.push(createChatRecord({ ...legacy, threadId: 'older-thread' }, 100));
+  f.store.write(archive);
+  assert.deepEqual(f.store.read(), archive);
+  assert.equal(fs.statSync(f.file).mode & 0o777, 0o600);
+});
+
+test('历史记录身份重复或容量超限时拒绝覆盖原文件，不丢弃旧对话', t => {
+  const f = fixture(t), archive = normalizeArchive(recordWithThread());
+  f.store.write(archive);
+  const original = fs.readFileSync(f.file, 'utf8');
+  for (const history of [[createChatRecord({ ...recordWithThread(), chatId: archive.chatId })],
+    [createChatRecord({ ...recordWithThread(), chatId: 'different-local-id' })],
+    Array.from({ length: MAX_CHATS }, (_, i) => createChatRecord({ ...emptyRecord(), threadId: `history-${i}` }))]) {
+    assert.throws(() => f.store.write({ ...archive, history }), { code: 'STORAGE' });
+    assert.equal(fs.readFileSync(f.file, 'utf8'), original);
+  }
 });

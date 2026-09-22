@@ -1341,6 +1341,10 @@ function registerIpc() {
     if (!fromChatWindow(event) || screenLocked || !chatWindow.isVisible()) return { accepted: false, error: '请打开聊天面板后再操作。' };
     return chat.newChat();
   });
+  ipcMain.handle('pet:chat-select', (event, id) => {
+    if (!fromChatWindow(event) || screenLocked || !chatWindow.isVisible()) return { accepted: false, error: '请打开聊天面板后再操作。' };
+    return chat.selectChat(id);
+  });
   ipcMain.on('pet:chat-close', event => { if (fromChatWindow(event)) chatWindow.hide(); });
   ipcMain.on('pet:thought', (event, request) => {
     if (!fromPetWindow(event) || typeof request?.visible !== 'boolean') return;

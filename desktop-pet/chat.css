@@ -50,6 +50,32 @@ h1 { font-size: 14px; line-height: 20px; font-weight: 600; margin: 0; letter-spa
 .text-button:hover:not(:disabled), .close-button:hover { background: var(--hover); color: var(--text); }
 .close-button { width: 24px; height: 26px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-size: 23px; font-weight: 300; line-height: 23px; }
 .conversation { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 20px 16px 16px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.history-view { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 19px 14px 15px; }
+.history-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 17px; }
+.history-heading h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.history-heading p { margin: 6px 0 0; font-size: 11px; color: var(--muted); line-height: 1.6; }
+.history-heading .text-button { margin-top: -3px; }
+.history-browse { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.history-list { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.history-item { display: block; width: 100%; padding: 12px 11px; margin-bottom: 7px; text-align: left; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); }
+.history-item:hover:not(:disabled) { background: var(--hover); }
+.history-item[aria-current="true"] { border-color: var(--accent); background: var(--user); }
+.history-item-title { display: block; font-size: 12px; line-height: 1.6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-item-meta { display: flex; justify-content: space-between; gap: 10px; margin-top: 5px; font-size: 10px; line-height: 1.5; color: var(--muted); }
+.history-current { color: var(--accent); }
+.history-empty { flex: 1; margin: 32px 0; text-align: center; color: var(--muted); font-size: 12px; line-height: 1.9; }
+.history-footer { flex: 0 0 auto; padding-top: 13px; border-top: 1px solid var(--line); margin-top: 8px; }
+.new-chat-button { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; color: var(--text); background: var(--surface); font-size: 12px; text-align: left; }
+.new-chat-button:hover:not(:disabled) { background: var(--hover); }
+.new-chat-button span { margin-right: 5px; color: var(--muted); }
+.history-footer p { margin: 8px 1px 0; font-size: 10px; line-height: 1.6; color: var(--muted); }
+.new-chat-confirmation { margin: 12px 0 0; padding: 20px 15px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.new-chat-confirmation h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.new-chat-confirmation p { color: var(--muted); font-size: 12px; line-height: 1.9; margin: 12px 0 22px; }
+.confirmation-actions { display: flex; justify-content: flex-end; gap: 9px; }
+.confirmation-actions button { border-radius: 7px; padding: 8px 12px; font-size: 11px; }
+.cancel-button { border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+.confirm-button { border: 1px solid var(--accent); background: var(--accent); color: var(--accent-text); }
 .empty-state { height: 100%; min-height: 128px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding-bottom: 10px; }
 .empty-dot { width: 5px; height: 5px; margin-bottom: 15px; border-radius: 50%; background: var(--accent); opacity: .7; }
 .empty-state h2 { margin: 0 0 10px; font-size: 15px; font-weight: 500; }
@@ -87,4 +113,8 @@ textarea::placeholder { color: var(--muted); }
   .empty-state { min-height: 70px; }
   .empty-dot { display: none; }
   .privacy-note { margin-top: 6px; margin-bottom: 6px; }
+  .history-view { padding-top: 12px; }
+  .history-heading { margin-bottom: 8px; }
+  .new-chat-confirmation { margin-top: 0; padding-top: 14px; }
+  .new-chat-confirmation p { margin-bottom: 14px; }
 }

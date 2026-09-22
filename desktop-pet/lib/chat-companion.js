@@ -1,5 +1,5 @@
 const { randomUUID } = require('node:crypto');
-const { emptyRecord, validId, MAX_MESSAGES, MAX_TEXT } = require('./chat-store');
+const { emptyRecord, normalizeArchive, createChatRecord, chatTitle, hasChat, validId, MAX_MESSAGES, MAX_TEXT, MAX_CHATS } = require('./chat-store');
 
 const ACTIONS = new Set(['none', 'hop', 'jelly', 'sway', 'peek', 'bow', 'spin', 'sleep', 'wake', 'dockLeft', 'dockRight', 'restore']);
 const ERRORS = {
@@ -57,18 +57,28 @@ function finalReply(raw) {
 }
 
 function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => {}, onAction = () => {}, turnTimeoutMs = 180000 }) {
-  let record = emptyRecord(), storageProblem = false, storageLoaded = false;
-  try { record = store.read(); storageLoaded = true; } catch (_) { storageProblem = true; }
-  for (const message of record.messages) if (message.status === 'streaming') message.status = 'interrupted';
+  let record = normalizeArchive(emptyRecord()), storageProblem = false, storageLoaded = false;
+  const readArchive = () => {
+    const archive = normalizeArchive(store.read());
+    for (const chat of [archive, ...archive.history]) for (const message of chat.messages) if (message.status === 'streaming') message.status = 'interrupted';
+    return archive;
+  };
+  try { record = readArchive(); storageLoaded = true; } catch (_) { storageProblem = true; }
   let rpc = null, connecting = null, loadedThread = null, accountKey = null;
   let connection = 'idle', error = storageProblem ? ERRORS.STORAGE : null;
   let verified = false, closed = false, active = null, epoch = 0;
   let draining = Promise.resolve();
-  const ownedThreads = new Set(record.threadId ? [record.threadId] : []);
+  const ownedThreads = new Set([record, ...record.history].map(chat => chat.threadId).filter(Boolean));
 
   function snapshot() {
     return { messages: verified ? record.messages.map(message => ({ ...message })) : [],
-      busy: Boolean(active), connection, error, hasConversation: Boolean(record.threadId) };
+      busy: Boolean(active), connection, error, hasConversation: Boolean(record.threadId),
+      canStartNewChat: hasChat(record) || Boolean(accountKey && record.accountKey && record.accountKey !== accountKey),
+      activeChatId: verified ? record.chatId : null,
+      history: accountKey && !storageProblem ? [record, ...record.history]
+        .filter(chat => hasChat(chat) && (chat.accountKey === accountKey || (chat.chatId === record.chatId && verified && !chat.accountKey)))
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .map(chat => ({ id: chat.chatId, title: chat.title, updatedAt: chat.updatedAt, current: chat.chatId === record.chatId })) : [] };
   }
   const emit = () => { if (!closed) onChange(snapshot()); };
   function retireClient(client) {
@@ -209,9 +219,8 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
     if (storageProblem) {
       try {
         if (!storageLoaded) {
-          record = store.read(); storageLoaded = true;
-          for (const message of record.messages) if (message.status === 'streaming') message.status = 'interrupted';
-          if (record.threadId) ownedThreads.add(record.threadId);
+          record = readArchive(); storageLoaded = true;
+          for (const chat of [record, ...record.history]) if (chat.threadId) ownedThreads.add(chat.threadId);
         }
         persist();
       } catch (_) { return { accepted: false, error: ERRORS.STORAGE }; }
@@ -248,6 +257,8 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
       request.threadId = record.threadId;
       record.messages.push({ id: randomUUID(), role: 'user', text: text.trim(), status: 'complete' },
         { id: request.assistantId, role: 'assistant', text: '', status: 'streaming' });
+      if (record.messages.filter(message => message.role === 'user').length === 1) record.title = chatTitle(record);
+      record.updatedAt = Date.now();
       record.pendingTurn = true; persist();
       request.phase = 'starting'; emit();
       request.timer = setTimeout(() => {
@@ -287,17 +298,38 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
   }
 
   async function newChat() {
-    if (closed || active) return { accepted: false, error: '请先结束当前回复，再开始新聊天。' };
-    // Explicit user action is the only operation that clears the saved thread.
+    if (closed || active || connecting) return { accepted: false, error: '请先等待当前回复或连接完成。' };
+    if (!storageLoaded || storageProblem) return { accepted: false, error: ERRORS.STORAGE };
+    // Reuse the existing empty draft; confirmation alone never creates a Codex thread.
+    if (!hasChat(record) && (!record.accountKey || record.accountKey === accountKey)) return { accepted: true };
+    const draft = record.history.find(chat => !hasChat(chat) && chat.accountKey === accountKey);
+    if (draft) return changeChat(draft);
+    if (record.history.length + 1 >= MAX_CHATS) return { accepted: false, error: '聊天记录已达上限，请先继续已有聊天。' };
+    return changeChat(createChatRecord({ ...emptyRecord(), accountKey }));
+  }
+
+  function changeChat(target) {
     const previous = record;
-    record = emptyRecord(); record.accountKey = accountKey;
+    const history = record.history.filter(chat => chat.chatId !== target.chatId);
+    if (hasChat(record)) history.push(createChatRecord({ ...record, version: 1 }));
+    record = { ...target, version: 2, history };
     try { persist(); }
     catch (cause) { record = previous; error = readableError(cause); emit(); return { accepted: false, error }; }
-    storageLoaded = true;
     epoch++; loadedThread = null; verified = Boolean(accountKey); error = null;
     const previousRpc = rpc; rpc = null; connecting = null; retireClient(previousRpc);
     connection = accountKey ? 'ready' : 'idle'; emit();
     return { accepted: true };
+  }
+
+  async function selectChat(id) {
+    if (closed || active || connecting) return { accepted: false, error: '请先等待当前回复或连接完成。' };
+    if (!storageLoaded || storageProblem) return { accepted: false, error: ERRORS.STORAGE };
+    if (!accountKey) return { accepted: false, error: ERRORS.UNAUTHENTICATED };
+    const target = [record, ...record.history].find(chat => chat.chatId === id && chat.accountKey === accountKey);
+    if (!target) return { accepted: false, error: '这段聊天暂不可用，请选择当前账号的聊天记录。' };
+    if (target.chatId === record.chatId) return { accepted: true };
+    // Select only local, account-matched records. Resume happens on the next send.
+    return changeChat(target);
   }
 
   function close() {
@@ -312,7 +344,7 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
     const previous = rpc; rpc = null; connecting = null;
     return retireClient(previous);
   }
-  return { getState: snapshot, connect, send, stop, newChat, close, ownsThread: id => ownedThreads.has(id) };
+  return { getState: snapshot, connect, send, stop, newChat, selectChat, close, ownsThread: id => ownedThreads.has(id) };
 }
 
 module.exports = { createChatCompanion, partialReply, finalReply, ACTIONS, ERRORS };

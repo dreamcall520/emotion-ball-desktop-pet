@@ -104,13 +104,14 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     getWindow: () => chatNativeWindow,
     reposition() { this.moves++; }, setAlwaysOnTop() {}
   };
-  const chat = { options: null, storePaths: [], connects: 0, sends: [], stops: 0, newChats: 0, closes: 0, ownedThreads: new Set(),
+  const chat = { options: null, storePaths: [], connects: 0, sends: [], selected: [], stops: 0, newChats: 0, closes: 0, ownedThreads: new Set(),
     state: { messages: [], busy: false, connection: 'idle', error: null, hasConversation: false },
     getState() { return this.state; },
     async connect() { this.connects++; return undefined; },
     async send(text) { this.sends.push(text); return { accepted: true }; },
     async stop() { this.stops++; },
     async newChat() { this.newChats++; return { accepted: true }; },
+    async selectChat(id) { this.selected.push(id); return { accepted: true }; },
     close() { this.closes++; },
     ownsThread(id) { return this.ownedThreads.has(id); },
     change(state) { this.state = state; this.options.onChange(state); },
@@ -274,6 +275,7 @@ test('聊天 IPC 只接受当前聊天窗口；球球和其他窗口无法读记
     assert.equal(await f.invoke('pet:chat-get', undefined, foreign), null);
     assert.equal((await f.invoke('pet:chat-send', '伪造发送', foreign)).accepted, false);
     assert.equal((await f.invoke('pet:chat-new', undefined, foreign)).accepted, false);
+    assert.equal((await f.invoke('pet:chat-select', 'past-chat', foreign)).accepted, false);
     await f.invoke('pet:chat-stop', undefined, foreign);
     f.send('pet:chat-close', undefined, foreign);
   }
@@ -286,6 +288,8 @@ test('聊天 IPC 只接受当前聊天窗口；球球和其他窗口无法读记
   assert.deepEqual(f.chat.sends, ['有效消息']);
   assert.equal((await f.invoke('pet:chat-new', undefined, sender)).accepted, true);
   assert.equal(f.chat.newChats, 1);
+  assert.equal((await f.invoke('pet:chat-select', 'past-chat', sender)).accepted, true);
+  assert.deepEqual(f.chat.selected, ['past-chat']);
   await f.invoke('pet:chat-stop', undefined, sender);
   assert.equal(f.chat.stops, 1);
 });
@@ -296,6 +300,7 @@ test('聊天面板隐藏或锁屏期间拒绝发送和新聊天，锁屏也不�
   const sender = f.chatWindow.getWindow().webContents;
   f.send('pet:chat-close', undefined, sender);
   assert.equal((await f.invoke('pet:chat-send', '隐藏时发送', sender)).accepted, false);
+  assert.equal((await f.invoke('pet:chat-select', 'past-chat', sender)).accepted, false);
   assert.equal((await f.invoke('pet:chat-new', undefined, sender)).accepted, false);
   menuItem(f, 'chat-open').click();
   f.powerMonitor.emit('lock-screen');
@@ -306,6 +311,7 @@ test('聊天面板隐藏或锁屏期间拒绝发送和新聊天，锁屏也不�
   assert.equal(f.chatWindow.updates.length, updateCount);
   assert.equal(await f.invoke('pet:chat-get', undefined, sender), null);
   assert.equal((await f.invoke('pet:chat-send', '锁屏时发送', sender)).accepted, false);
+  assert.equal((await f.invoke('pet:chat-select', 'past-chat', sender)).accepted, false);
   assert.equal((await f.invoke('pet:chat-new', undefined, sender)).accepted, false);
   const opens = f.chatWindow.shows.length;
   menuItem(f, 'chat-open').click();
