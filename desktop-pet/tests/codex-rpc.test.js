@@ -19,7 +19,7 @@ function fakeChild() {
   child.kill = signal => { child.kills.push(signal); return true; };
   return child;
 }
-function setup({ reply = () => ({}), timeoutMs = 100, installed = true } = {}) {
+function setup({ reply = () => ({}), timeoutMs = 100, installed = true, ignoreThread } = {}) {
   const child = fakeChild(); const sent = []; const probes = []; const launches = [];
   child.stdin.on('data', chunk => {
     const packet = JSON.parse(chunk);
@@ -33,7 +33,7 @@ function setup({ reply = () => ({}), timeoutMs = 100, installed = true } = {}) {
     fs: { promises: {
       lstat: async file => { probes.push(file); if (!installed) throw Object.assign(new Error('SECRET'), { code: 'ENOENT' }); return { isFile: () => true, isSymbolicLink: () => false }; },
       access: async () => {}
-    } }, homedir: () => '/private/test-user', timeoutMs
+    } }, homedir: () => '/private/test-user', timeoutMs, ignoreThread
   });
   return { rpc, child, sent, probes, launches };
 }
@@ -198,4 +198,26 @@ test('关闭与进程创建失败同时发生时，迟到原生error被安全收
   await assert.rejects(rpc.start(), { code: 'CLOSED' });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(processChild.listenerCount('error'), 0);
+});
+
+for (const method of ['listThreads', 'findThread']) test(method + ' 在移除 cwd 前过滤球球专用 workspace，外部任务正常返回', async t => {
+  const otherId = '22222222-2222-4222-8222-222222222222';
+  const workspace = '/fixture/chat-workspace';
+  const seen = [];
+  const h = setup({ ignoreThread: row => { seen.push(row.cwd); return row.cwd === workspace; }, reply: packet => ({ result:
+    packet.method === 'thread/list' ? { data: [
+      { id: ID, cwd: workspace, name: '自己的聊天', source: 'vscode' },
+      { id: otherId, cwd: '/other/project', name: '外部工作', source: 'vscode' }
+    ] } : {} }) });
+  t.after(() => h.rpc.close());
+  await h.rpc.start();
+  if (method === 'listThreads') {
+    const rows = await h.rpc.listThreads();
+    assert.deepEqual(rows.map(row => row.id), [otherId]);
+    assert.equal(Object.hasOwn(rows[0], 'cwd'), false);
+  } else {
+    assert.equal(await h.rpc.findThread(ID), null);
+    assert.equal((await h.rpc.findThread(otherId)).id, otherId);
+  }
+  assert.ok(seen.includes(workspace));
 });

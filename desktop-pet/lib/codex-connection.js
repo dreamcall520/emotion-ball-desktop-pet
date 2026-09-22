@@ -6,6 +6,7 @@ const CONNECTION_STATES = Object.freeze(['connecting', 'connected', 'missing', '
 // Construction deliberately does not instantiate transports, inspect the installation,
 // resolve the home directory, read accounts, or connect to any endpoint.
 function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus = () => {}, onAccount = () => {},
+  ignoreTask = () => false, ignoreThread = () => false,
   createRpc = createCodexRpc, createStream = createCodexStream, now = Date.now } = {}) {
   let started = false;
   let closed = false;
@@ -49,7 +50,8 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
     if (rpcStarting) return rpcStarting;
     const generation = ++rpcGeneration;
     rpcReady = false; rpc?.close(); report('quota', 'connecting');
-    const target = createRpc({ onDisconnect: code => {
+    // RPC applies the workspace filter before its public metadata projection drops cwd.
+    const target = createRpc({ ignoreThread, onDisconnect: code => {
       if (!closed && generation === rpcGeneration) { rpcReady = false; reportError('quota', { code }); }
     } });
     rpc = target;
@@ -67,6 +69,7 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
     stream?.close(); hasMetadata = false; pendingDiscoveries.clear();
     report('tasks', 'connecting');
     const target = createStream({
+      ignoreTask,
       onTask: task => { if (!closed && generation === streamGeneration) onTask(task); },
       onStatus: value => { if (!closed && generation === streamGeneration) report('tasks', value.state, value.code); },
       onDiscovered: id => { if (!closed && generation === streamGeneration) queueDiscovery(id); }
@@ -78,7 +81,7 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
     return streamStarting;
   }
   function queueDiscovery(id) {
-    if (closed || authenticated === false || !accountSupported) return;
+    if (closed || authenticated === false || !accountSupported || ignoreTask(id)) return;
     if (!rpcReady || authenticated !== true) {
       if (pendingDiscoveries.size < 64) pendingDiscoveries.add(id);
       return;
@@ -91,7 +94,7 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
     for (const id of ids) queueDiscovery(id);
   }
   function discoverTask(id) {
-    if (closed || !rpcReady || authenticated === false || !accountSupported || discoveryFlights.has(id)) {
+    if (closed || !rpcReady || authenticated === false || !accountSupported || ignoreTask(id) || discoveryFlights.has(id)) {
       return discoveryFlights.get(id) || Promise.resolve();
     }
     const account = accountGeneration; const rpcEpoch = rpcGeneration; const streamEpoch = streamGeneration;
@@ -99,9 +102,9 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
     const current = () => !closed && rpcReady && account === accountGeneration && rpcEpoch === rpcGeneration
       && streamEpoch === streamGeneration && targetRpc === rpc && targetStream === stream;
     const lookup = discoveryQueue.then(async () => {
-      if (!current()) return;
+      if (!current() || ignoreTask(id)) return;
       const row = await targetRpc.findThread(id);
-      if (current() && row) targetStream?.addThread(row);
+      if (current() && row && !ignoreTask(row.id) && !ignoreThread(row)) targetStream?.addThread(row);
     }).catch(() => {
       // Discovery is opportunistic metadata validation. A failed lookup must not
       // downgrade an otherwise healthy live task channel.
@@ -169,7 +172,7 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
     }).then(rows => {
       if (!current() || !rows) return;
       hasMetadata = true;
-      targetStream?.setThreads(rows);
+      targetStream?.setThreads(rows.filter(row => !ignoreTask(row.id) && !ignoreThread(row)));
     }).catch(error => {
       // A metadata refresh failure does not invalidate an already working live stream.
       if (current() && !hasMetadata) reportError('tasks', error);

@@ -9,10 +9,11 @@ function api() {
   assert.ok(fs.existsSync(file), '需要额度与任务两路独立组合连接');
   return require(file);
 }
-function harness({ account, quota, list, find, startRpc, startStream } = {}) {
+function harness({ account, quota, list, find, startRpc, startStream, ignoreTask, ignoreThread } = {}) {
   const calls = []; const statuses = []; const tasks = []; const accounts = []; const quotas = []; const streams = [];
   const rpcs = [];
   const connection = api().createCodexConnection({
+    ignoreTask, ignoreThread,
     createRpc: options => {
       const index = rpcs.length; calls.push('construct-rpc');
       const rpc = {
@@ -63,6 +64,50 @@ test('start两路独立，额度已连接不冒充任务已收到snapshot', asyn
   h.streams[0].options.onStatus({ state: 'connected', code: null, partial: true });
   assert.equal(h.tasks.at(-1).state, 'active'); assert.equal(h.statuses.at(-1).channel, 'tasks');
   h.connection.close();
+});
+
+test('已知自家聊天在最近列表和discovery订阅前排除，额度和外部任务照常', async t => {
+  const outside = '019fae37-6bb8-7873-8873-14a6661bd1f2';
+  const ignoreTask = id => id === ID;
+  const h = harness({ ignoreTask, list: () => [{ id: ID }, { id: outside }] });
+  t.after(() => h.connection.close());
+  await h.connection.start();
+  assert.deepEqual(h.streams[0].rows, [{ id: outside }]);
+  assert.equal(h.quotas.length, 1);
+  assert.equal(h.streams[0].options.ignoreTask, ignoreTask);
+  h.calls.length = 0;
+  h.streams[0].options.onDiscovered(ID);
+  await tick();
+  assert.equal(h.calls.includes('find'), false);
+  assert.equal(h.calls.includes('add-thread'), false);
+});
+
+test('新聊天尚未登记ID时按精确workspace元数据排除，并向RPC传入同一过滤', async t => {
+  const own = '/private/qiuqiu/chat-workspace';
+  const outside = '019fae37-6bb8-7873-8873-14a6661bd1f2';
+  const ignoreThread = row => row.cwd === own;
+  const h = harness({ ignoreThread, list: () => [{ id: ID, cwd: own }, { id: outside, cwd: own + '-other' }],
+    find: () => ({ id: ID, cwd: own }) });
+  t.after(() => h.connection.close());
+  await h.connection.start();
+  assert.equal(h.rpcs[0].options.ignoreThread, ignoreThread);
+  assert.deepEqual(h.streams[0].rows.map(row => row.id), [outside]);
+  h.streams[0].options.onDiscovered(ID);
+  await tick();
+  assert.deepEqual(h.streams[0].rows.map(row => row.id), [outside]);
+});
+
+test('discovery元数据返回前成为自家聊天，不把晚到结果交给stream', async t => {
+  let ignored = false, finish;
+  const h = harness({ ignoreTask: id => ignored && id === ID, list: () => [],
+    find: () => new Promise(resolve => { finish = resolve; }) });
+  t.after(() => h.connection.close());
+  await h.connection.start();
+  h.streams[0].options.onDiscovered(ID);
+  await tick();
+  ignored = true; finish({ id: ID });
+  await tick();
+  assert.equal(h.calls.includes('add-thread'), false);
 });
 
 test('task-only refresh不读账号和额度，只刷新最近元数据', async () => {

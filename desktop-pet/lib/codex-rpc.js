@@ -45,7 +45,7 @@ function projectAccount(raw) {
 }
 
 function createCodexRpc({ fs = nodeFs, spawn = childProcess.spawn, homedir = os.homedir,
-  timeoutMs = 10000, maxFrameBytes = MAX_FRAME_BYTES, onDisconnect = () => {} } = {}) {
+  timeoutMs = 10000, maxFrameBytes = MAX_FRAME_BYTES, onDisconnect = () => {}, ignoreThread = () => false } = {}) {
   const timeout = Math.max(1, Math.min(15000, timeoutMs));
   const frameLimit = Math.max(1, Math.min(MAX_FRAME_BYTES, maxFrameBytes));
   let child = null;
@@ -173,6 +173,13 @@ function createCodexRpc({ fs = nodeFs, spawn = childProcess.spawn, homedir = os.
     return starting;
   }
 
+  function projectThreads(raw, limit) {
+    // Workspace identity is available only before the metadata projection drops cwd.
+    const filtered = Array.isArray(raw?.data)
+      ? { ...raw, data: raw.data.filter(row => !ignoreThread(row)) } : raw;
+    return normalizeThreadList(filtered, limit);
+  }
+
   async function findThread(id) {
     if (!isTaskId(id)) return null;
     let cursor = null;
@@ -181,7 +188,7 @@ function createCodexRpc({ fs = nodeFs, spawn = childProcess.spawn, homedir = os.
       const result = await request('thread/list', {
         limit: DISCOVERY_PAGE_LIMIT, ...THREAD_LIST_PARAMS, ...(cursor ? { cursor } : {})
       }, raw => ({
-        rows: normalizeThreadList(raw, DISCOVERY_PAGE_LIMIT),
+        rows: projectThreads(raw, DISCOVERY_PAGE_LIMIT),
         nextCursor: typeof raw?.nextCursor === 'string' && raw.nextCursor.length <= 500 ? raw.nextCursor : null
       }));
       const match = result.rows.find(row => row.id === id);
@@ -196,7 +203,7 @@ function createCodexRpc({ fs = nodeFs, spawn = childProcess.spawn, homedir = os.
     start,
     readAccount: () => request('account/read', { refreshToken: false }, projectAccount),
     readQuota: (now = Date.now()) => request('account/rateLimits/read', {}, raw => normalizeQuota(raw, now)),
-    listThreads: () => request('thread/list', { limit: 20, ...THREAD_LIST_PARAMS }, normalizeThreadList),
+    listThreads: () => request('thread/list', { limit: 20, ...THREAD_LIST_PARAMS }, projectThreads),
     findThread,
     close: () => shutdown()
   };

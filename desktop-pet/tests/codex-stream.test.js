@@ -29,7 +29,7 @@ function receiveLarge(h, id) {
   h.socket.emit('data', suffix);
 }
 function fakeStat(socket = false, overrides = {}) { return { uid: 501, mode: 0o700, dev: 1, ino: socket ? 2 : 1, isSymbolicLink: () => false, isDirectory: () => !socket, isSocket: () => socket, ...overrides }; }
-function harness({ stat, handshake = true, timeoutMs = 1000 } = {}) {
+function harness({ stat, handshake = true, timeoutMs = 1000, ignoreTask } = {}) {
   const sent = []; const statuses = []; const tasks = []; const discoveries = []; const probes = [];
   let connects = 0; let tick = 10000;
   const socket = new EventEmitter(); socket.writable = true; socket.destroyed = false;
@@ -40,6 +40,7 @@ function harness({ stat, handshake = true, timeoutMs = 1000 } = {}) {
   };
   socket.destroy = () => { socket.destroyed = true; socket.writable = false; };
   const stream = api().createCodexStream({
+    ignoreTask,
     fs: { promises: { lstat: async file => { probes.push(file); return stat ? stat(file) : fakeStat(file.endsWith('.sock')); } } },
     connect: () => { connects++; queueMicrotask(() => socket.emit('connect')); return socket; },
     homedir: () => '/private/test-user', getuid: () => 501, now: () => tick, timeoutMs,
@@ -142,6 +143,49 @@ test('仅订阅最多20个合规ID，移出的任务发removed且取消订阅', 
   assert.equal(h.tasks.filter(p => p.removed).length, 19);
   assert.equal(h.sent.filter(p => p.params?.following === false).length, 19);
   h.stream.close();
+});
+
+test('自家聊天从初始列表、追加和外部发现入口都不发送following', async t => {
+  const h = harness({ ignoreTask: id => id === ID });
+  t.after(() => h.stream.close());
+  h.stream.setThreads([{ id: ID }, { id: OWNER }]);
+  await h.stream.start();
+  assert.equal(h.stream.addThread({ id: ID }), false);
+  h.receive({ type: 'broadcast', method: 'thread-stream-following-changed', version: 1,
+    params: { conversationId: ID, hostId: 'local', following: true } });
+  assert.equal(h.sent.some(packet => packet.params?.conversationId === ID && packet.params?.following === true), false);
+  assert.equal(h.sent.some(packet => packet.params?.conversationId === OWNER && packet.params?.following === true), true);
+  assert.deepEqual(h.discoveries, []);
+});
+
+test('已活跃且sticky的记录成为自家聊天后强制退订，后续刷新不重跟随', async t => {
+  let ignored = false;
+  const h = harness({ ignoreTask: id => ignored && id === ID });
+  t.after(() => h.stream.close());
+  h.stream.setThreads([{ id: ID }, { id: OWNER }]);
+  await h.stream.start();
+  h.receive(snapshot(1));
+  ignored = true;
+  h.stream.setThreads([{ id: OWNER }]);
+  assert.equal(h.sent.some(packet => packet.params?.conversationId === ID && packet.params?.following === false), true);
+  assert.equal(h.tasks.filter(task => task.id === ID).at(-1).removed, true);
+  h.sent.length = 0;
+  h.tick(20000); h.stream.refresh();
+  h.receive({ type: 'broadcast', method: 'thread-stream-following-status-requested', version: 1,
+    params: { conversationId: ID, hostId: 'local' } });
+  assert.equal(h.sent.some(packet => packet.params?.conversationId === ID && packet.params?.following === true), false);
+});
+
+test('重请求快照前动态检查自家聊天，取消尚未完成的订阅', async t => {
+  let ignored = false;
+  const h = harness({ ignoreTask: id => ignored && id === ID });
+  t.after(() => h.stream.close());
+  h.stream.setThreads([{ id: ID }, { id: OWNER }]);
+  await h.stream.start();
+  ignored = true; h.sent.length = 0;
+  h.tick(20000); h.stream.refresh();
+  assert.equal(h.sent.some(packet => packet.params?.conversationId === ID && packet.params?.following === false), true);
+  assert.equal(h.sent.some(packet => packet.params?.conversationId === ID && packet.params?.following === true), false);
 });
 
 test('分页核验通过的新任务可追加追踪，不被后续最近列表刷新移除', async () => {

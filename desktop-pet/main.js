@@ -478,6 +478,8 @@ function initializeCodexCompanion(options = {}) {
   codexSentSettings = null;
   codexCompanion = createCodexCompanion({ ...options, now: codexNow, schedule: options.schedule || setTimeout,
     ignoreTask: id => chat?.ownsThread(id) === true,
+    ignoreThread: row => typeof row?.cwd === 'string' && row.cwd.length > 0 &&
+      path.resolve(row.cwd) === path.join(app.getPath('userData'), 'chat-workspace'),
     cancel: options.cancel || clearTimeout, canPresent: canPresentCodex, onAlert: presentCodexAlert,
     onAlertUpdate: alert => {
       const payload = dialogue?.updateCodex(alert, performance.now());

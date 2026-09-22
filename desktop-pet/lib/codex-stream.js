@@ -17,6 +17,7 @@ function encodeFrame(packet) {
 }
 
 function createCodexStream({ onTask = () => {}, onStatus = () => {}, onDiscovered = () => {},
+  ignoreTask = () => false,
   fs = nodeFs, connect = options => net.createConnection(options), homedir = os.homedir,
   getuid = () => process.getuid(), now = Date.now, timeoutMs = 10000 } = {}) {
   const timeout = Math.max(1, Math.min(15000, timeoutMs));
@@ -72,6 +73,10 @@ function createCodexStream({ onTask = () => {}, onStatus = () => {}, onDiscovere
   function addRecord(row, sticky = false) {
     if (!isEligibleThread(row)) return null;
     let record = records.get(row.id);
+    if (ignoreTask(row.id)) {
+      if (record) removeRecord(record);
+      return null;
+    }
     if (record) {
       record.metadata = metadata(row);
       if (sticky) {
@@ -121,6 +126,10 @@ function createCodexStream({ onTask = () => {}, onStatus = () => {}, onDiscovere
   function onData(data) { parser?.push(data); }
 
   function requestSnapshot(record) {
+    if (records.get(record.metadata.id) !== record) return;
+    // Following asks the desktop to provide thread state; exclude owned chats before
+    // that request, including records/timers created before ownership was known.
+    if (ignoreTask(record.metadata.id)) { removeRecord(record); return; }
     if (closed || !ready || record.unavailable) return;
     const remaining = 5000 - (now() - record.lastFollow);
     if (remaining > 0) {
@@ -158,6 +167,7 @@ function createCodexStream({ onTask = () => {}, onStatus = () => {}, onDiscovere
     const params = packet.params;
     if (params?.hostId !== 'local' || !records.has(params.conversationId)) return;
     const record = records.get(params.conversationId);
+    if (ignoreTask(params.conversationId)) { removeRecord(record); return; }
     if (record.unavailable) return;
     if (packet.version !== 11) { fail('UNSUPPORTED'); return; }
     if (!isTaskId(packet.sourceClientId)) { publishUnknown(record); requestSnapshot(record); return; }
@@ -225,7 +235,8 @@ function createCodexStream({ onTask = () => {}, onStatus = () => {}, onDiscovere
     if (packet.version !== 1 || params?.hostId !== 'local' || !isTaskId(params.conversationId)) return;
     if (packet.method === 'thread-stream-following-status-requested') {
       const record = records.get(params.conversationId); if (record) requestSnapshot(record);
-    } else if (packet.method === 'thread-stream-following-changed' && params.following === true && !records.has(params.conversationId)) {
+    } else if (packet.method === 'thread-stream-following-changed' && params.following === true
+      && !records.has(params.conversationId) && !ignoreTask(params.conversationId)) {
       if (now() - lastDiscovery >= 5000) { lastDiscovery = now(); onDiscovered(params.conversationId); }
     }
   }
@@ -269,11 +280,11 @@ function createCodexStream({ onTask = () => {}, onStatus = () => {}, onDiscovere
     const selected = new Map();
     for (const row of Array.isArray(rows) ? rows : []) {
       if (selected.size >= MAX_TASKS) break;
-      if (!isEligibleThread(row)) continue;
+      if (!isEligibleThread(row) || ignoreTask(row.id)) continue;
       selected.set(row.id, metadata(row));
     }
     for (const [id, record] of records) {
-      if (!selected.has(id) && (selected.size === 0 || !canRetain(record))) removeRecord(record);
+      if (ignoreTask(id) || (!selected.has(id) && (selected.size === 0 || !canRetain(record)))) removeRecord(record);
     }
     for (const [id, metadata] of selected) {
       let record = records.get(id);

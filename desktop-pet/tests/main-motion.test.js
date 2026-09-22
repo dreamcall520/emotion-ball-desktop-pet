@@ -1758,3 +1758,16 @@ test('原生菜单打开失败会释放展开保护，不留下永久展开状�
   f.advanceTo(650);
   assert.equal(edgeSnapshot(f).mode, 'tucked');
 });
+
+test('监控按专用 workspace 提前排除球球聊天，不依赖新 thread ID 已登记', async () => {
+  const f = await fixture({ codexEnabled: true });
+  const { ignoreTask, ignoreThread } = f.connections[0].callbacks;
+  assert.equal(ignoreTask(TASK_ID), false);
+  assert.equal(ignoreThread({ id: TASK_ID, cwd: '/fixture/chat-workspace' }), true);
+  assert.equal(ignoreThread({ cwd: '/fixture/chat-workspace/' }), true);
+  for (const row of [null, {}, { cwd: '' }, { cwd: '/fixture/chat-workspace-other' }, { cwd: '/other/chat-workspace' }]) {
+    assert.equal(ignoreThread(row), false);
+  }
+  f.chat.ownedThreads.add(TASK_ID);
+  assert.equal(ignoreTask(TASK_ID), true);
+});

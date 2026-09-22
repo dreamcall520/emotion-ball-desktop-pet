@@ -22,6 +22,7 @@ const timestamp = value => Number.isFinite(value) && value >= 0 && value <= 8640
 // Creating the policy owns no resources. Transports and timers exist only while enabled.
 function createCodexCompanion({ createConnection = createCodexConnection, onChange = () => {},
   onAlert = () => {}, onAlertUpdate = () => {}, onClear = () => {}, canPresent = () => true, ignoreTask = () => false,
+  ignoreThread = () => false,
   now = Date.now, random = Math.random, schedule = setTimeout, cancel = clearTimeout } = {}) {
   let enabled = false;
   let closed = false;
@@ -565,7 +566,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     const guard = callback => value => { if (current()) callback(value); };
     resetChannels('connecting'); notify();
     try {
-      const created = createConnection({ onAccount: guard(receiveAccount), onQuota: guard(receiveQuota),
+      const created = createConnection({ ignoreTask, ignoreThread, onAccount: guard(receiveAccount), onQuota: guard(receiveQuota),
         onTask: guard(receiveTask), onStatus: guard(receiveStatus) });
       if (!current()) { created.close(); return; }
       connection = created;

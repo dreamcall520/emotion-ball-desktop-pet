@@ -35,6 +35,7 @@ function fixture(options = {}) {
     cancel: id => timers.delete(id),
     canPresent: () => options.canPresent ? options.canPresent(companion) : present,
     ignoreTask: options.ignoreTask,
+    ignoreThread: options.ignoreThread,
     onAlert: alert => alerts.push(alert),
     onAlertUpdate: alert => { alertUpdates.push(alert); options.onAlertUpdate?.(alert, companion); },
     onChange: snapshot => { changes.push(snapshot); options.onChange?.(snapshot, companion); },
@@ -113,6 +114,16 @@ test('球球自己的聊天不进入编程任务提醒，其他任务和额度�
   assert.equal(f.companion.getSnapshot().tasks.items.length, 1);
   assert.equal(f.alerts.length, 0);
   f.companion.close();
+});
+
+test('自家聊天过滤下传至连接，不能等订阅后才隐藏提醒', async t => {
+  const ignoreTask = id => id === taskId(1);
+  const ignoreThread = row => row.cwd === '/private/qiuqiu/chat-workspace';
+  const f = fixture({ ignoreTask, ignoreThread });
+  t.after(() => f.companion.close());
+  await f.companion.setEnabled(true);
+  assert.equal(f.callbacks.ignoreTask, ignoreTask);
+  assert.equal(f.callbacks.ignoreThread, ignoreThread);
 });
 
 test('快速开关只关闭自己连接，丢弃旧代次迟到结果', async () => {
