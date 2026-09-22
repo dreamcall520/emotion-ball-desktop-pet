@@ -11,6 +11,17 @@
 - `LICENSE`、`NOTICE.md` 和原作者 `sam70361/emotion-ball` 署名不得删除。
 - 官网没有统计脚本、Cookie、表单或远程字体。
 
+## 当前下载记录
+
+Apple 芯片版于 2026-09-22 更新为 0.3.17，对应代码标签 `v0.3.17`。官网保持简洁的下载卡，文件大小与校验值在此维护。
+
+| 文件 | 精确大小（bytes） | SHA-256 |
+| --- | ---: | --- |
+| [Qiuqiu-0.3.17-macOS-arm64-share.zip](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.17/Qiuqiu-0.3.17-macOS-arm64-share.zip) | 116908582 | `6602be6a345b10adb908240190a0c69fc775e43e6e37f49ee4f364ff8bb9f7a5` |
+| [Qiuqiu-0.3.17-macOS-arm64.dmg](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.17/Qiuqiu-0.3.17-macOS-arm64.dmg) | 118342855 | `83bf698a016dc26af113447899a186aa80306c5826df98836aaf608b76be9ba0` |
+
+ZIP 内只包含上述 DMG。Intel x64 下载仍为已公开的 0.3.13 构建候选，尚未在真实 Intel Mac 上验收；0.3.17 聊天发布说明仅适用于 Apple 芯片版。
+
 ## 本地预览
 
 在本目录启动任意静态文件服务器，然后访问首页。例如：
