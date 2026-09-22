@@ -25,6 +25,7 @@
     <link rel="stylesheet" href="motion-showcase.css?v=20260911-5">
     <link rel="stylesheet" href="quota-demo.css?v=20260911-1">
     <link rel="stylesheet" href="dark-theme.css?v=20260911-2">
+    <link rel="stylesheet" href="chat-showcase.css?v=20260922-1">
     <title>球球桌宠 - 免费的 macOS 桌面伙伴</title>
   </head>
   <body>
@@ -36,6 +37,7 @@
       <nav class="site-nav" id="site-nav" aria-label="主要导航">
         <a href="#features">功能</a>
         <a href="#codex">Codex 陪伴</a>
+        <a href="#chat">和球球聊聊</a>
         <a href="#gallery">动态体验</a>
         <a href="#download">下载</a>
         <a href="#privacy">隐私</a>
@@ -50,7 +52,7 @@
       <section class="hero" id="top" aria-labelledby="hero-title" tabindex="-1">
         <div class="hero-copy">
           <h1 id="hero-title">桌面上，<br>多一个安静陪你的球球</h1>
-          <p>免费、离线、安静陪伴，不打扰你。</p>
+          <p>免费、安静陪伴，不打扰你。</p>
           <div class="hero-actions">
             <a class="button button-primary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.14/Qiuqiu-0.3.14-macOS-arm64-share.zip">下载 Apple 芯片版</a>
             <a class="button button-secondary" href="#features">看看它会什么</a>
@@ -118,7 +120,7 @@
       <section class="codex-section section" id="codex" aria-labelledby="codex-title">
         <div class="codex-copy">
           <p class="section-label">可选能力</p>
-          <h2 id="codex-title">可选的 Codex 陪伴</h2>
+          <h2 id="codex-title">可选的 Codex 任务陪伴</h2>
           <p class="codex-lead">默认关闭。开启后，在本机读取额度与任务进展；处理中偶尔浮现头顶光迹，完成时用跳跃或渐变彩带回应。</p>
           <dl class="fact-list">
             <div>
@@ -131,7 +133,7 @@
             </div>
             <div>
               <dt>不替你操作</dt>
-              <dd>不会创建、发送、审批、中断任务或重置额度。</dd>
+              <dd>任务监控不会创建、发送、审批、中断任务或重置额度；聊天由你主动发起。</dd>
             </div>
           </dl>
         </div>
@@ -146,6 +148,49 @@
             </div>
           </div>
           <div class="codex-motion-footer"><span>网页模拟演示，不会操作你的任务。</span><button class="motion-toggle" type="button" data-motion-toggle aria-pressed="false">暂停动效</button></div>
+        </div>
+      </section>
+
+      <section class="chat-section section" id="chat" aria-labelledby="chat-title">
+        <div class="chat-intro">
+          <p class="chat-release">0.3.17 功能预览 · 公开下载待同步</p>
+          <h2 id="chat-title">和球球聊聊，<br>接着上次的话。</h2>
+          <p class="chat-lead">不只是待在桌面上。想说点什么，就打开球球旁边的聊天面板；回来时，继续熟悉的那一段。</p>
+          <dl class="chat-benefits">
+            <div><dt>聊下去，不反复新建</dt><dd>首次发送才建立对话，后续消息、关闭重开与断线恢复都延续原聊天。</dd></div>
+            <div><dt>以前的话，也能接回来</dt><dd>从“聊天记录”切回旧聊天；新聊天需要确认，旧记录仍然保留。</dd></div>
+            <div><dt>说一句，也有小动作</dt><dd>可以让球球跳一跳、转圈或睡一会儿，只执行预设动作，不运行代码或命令。</dd></div>
+          </dl>
+          <p class="chat-entry">使用入口：右键球球或菜单栏 → 和球球聊聊</p>
+          <p class="chat-requirements">需在本机登录 Codex 并联网，无需另填 API Key；回复使用你的 Codex 额度。普通桌宠仍可离线使用。</p>
+          <a class="chat-download-link" href="#download">查看当前公开版本 →</a>
+        </div>
+        <div class="chat-demo-wrap">
+          <div class="chat-demo" data-chat-demo>
+            <header class="chat-demo-header">
+              <img src="assets/favicon.png" width="40" height="40" alt="">
+              <div><strong>和球球聊聊</strong><span data-chat-subtitle>接着聊，我还记得这一段</span></div>
+              <button type="button" data-chat-history aria-expanded="false">聊天记录</button>
+            </header>
+            <div class="chat-demo-body">
+              <div class="chat-demo-messages" data-chat-messages role="log" aria-label="示例聊天记录" aria-live="polite"></div>
+              <div class="chat-demo-history" data-chat-records hidden>
+                <h3>聊天记录</h3>
+                <button type="button" data-chat-select="today">歇一会儿 <span>今天</span></button>
+                <button type="button" data-chat-select="earlier">明天的小计划 <span>之前</span></button>
+                <button class="chat-new" type="button" data-chat-new>新聊天</button>
+                <p>切换记录不会新建对话。</p>
+              </div>
+              <div class="chat-demo-confirm" data-chat-confirm hidden role="group" aria-label="确认新聊天">
+                <h3>开始一段新聊天？</h3><p>原来的聊天会保留在“聊天记录”里。</p>
+                <div><button type="button" data-chat-cancel>取消</button><button type="button" data-chat-create>开始新聊天</button></div>
+              </div>
+            </div>
+            <div class="chat-demo-composer"><p data-chat-draft>那就陪我放松一下吧。</p><button type="button" data-chat-send>发送示例</button></div>
+            <p class="chat-demo-footer" data-chat-status>示例：延续同一段聊天</p>
+          </div>
+          <p class="chat-demo-note">可点击“发送示例”和“聊天记录”体验。这里是预设演示，不连接 Codex、不发送真实消息。</p>
+          <button class="chat-reset" type="button" data-chat-reset>重新体验</button>
         </div>
       </section>
 
@@ -240,6 +285,10 @@
             <h3>Codex 联动由你决定</h3>
             <p>默认关闭，关闭后立即停止读取并清理相关状态。</p>
           </article>
+          <article>
+            <h3>聊天是独立的可选能力</h3>
+            <p>聊天需联网，内容交由 Codex 处理；本机保留球球聊天编号与最近内容。不会读取其他聊天，也不会运行模型返回的代码或命令。</p>
+          </article>
         </div>
       </section>
 
@@ -329,5 +378,6 @@
     <script src="app.js?v=20260911-2"></script>
     <script src="motion-showcase.js?v=20260911-4"></script>
     <script src="quota-demo.js?v=20260911-1"></script>
+    <script src="chat-showcase.js?v=20260922-1"></script>
   </body>
 </html>
