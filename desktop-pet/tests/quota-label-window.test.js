@@ -1067,7 +1067,7 @@ test('渲染层用固定中文状态、纯文本和合理四舍五入最多展�
   assert.equal(status.textContent, 'Codex 剩余额度');
   assert.deepEqual(items.children.map(item => item.textContent), [
     '<b>Codex</b>5小时48%',
-    'Spark7天9%'
+    'Spark7天9%紧张'
   ]);
   assert.deepEqual(items.children.map(item => item.children.map(child => child.className)), [
     ['quota-name', 'quota-period period-pill', 'quota-value', 'quota-progress'],
@@ -1075,7 +1075,7 @@ test('渲染层用固定中文状态、纯文本和合理四舍五入最多展�
   ]);
   assert.deepEqual(items.children.map(item => item.children[0].textContent), ['<b>Codex</b>', 'Spark']);
   assert.deepEqual(items.children.map(item => item.children[1].textContent), ['5小时', '7天']);
-  assert.deepEqual(items.children.map(item => item.children[2].textContent), ['48%', '9%']);
+  assert.deepEqual(items.children.map(item => item.children[2].textContent), ['48%', '9%紧张']);
   assert.deepEqual(items.children.map(item => [item.children[3].max, item.children[3].value]), [
     [100, 47.6], [100, 9.4]
   ]);
@@ -1331,7 +1331,8 @@ test('168×58 标准档内两条额度的文字和进度条不裁切', () => {
 test('168 像素宽内只允许名称和周期省略，64% 和 78% 核心比例完整', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
   const renderer = fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8');
-  assert.match(renderer, /valueNode\.textContent\s*=\s*`\$\{Math\.round\(item\.remaining\)\}%`/);
+  assert.match(renderer, /renderValue\(valueNode, item\.remaining\)/);
+  assert.match(renderer, /const percentage\s*=\s*`\$\{Math\.round\(remaining\)\}%`/);
   assert.match(renderer, /periodNode\.textContent\s*=\s*`\$\{model\.state\s*===\s*'stale'\s*\?\s*'已过期 '\s*:\s*''\}/);
   assert.doesNotMatch(renderer, /row\.textContent\s*=\s*`\$\{item\.label\}/);
   assert.match(css, /grid-template-columns:\s*minmax\(0, auto\)\s+minmax\(0, 1fr\)\s+auto/);
@@ -1381,7 +1382,7 @@ test('浅色卡片在深色壁纸上的次级文字和深色 urgent 对比度均
   const periodMatch = css.match(/--quota-muted:\s*#([0-9a-f]{6})/i);
   const darkBlock = css.slice(css.indexOf('@media (prefers-color-scheme: dark)'));
   const darkBackgroundMatch = darkBlock.match(/--quota-surface:\s*rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
-  const urgentMatch = darkBlock.match(/#items li\[data-severity="urgent"\] \.quota-value\s*\{\s*color:\s*rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+  const urgentMatch = darkBlock.match(/--quota-urgent-text:\s*rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
   assert.ok(lightBackgroundMatch && periodMatch && darkBackgroundMatch && urgentMatch);
   const numbers = match => match.slice(1).map(Number);
   const hex = value => [0, 2, 4].map(index => Number.parseInt(value.slice(index, index + 2), 16));

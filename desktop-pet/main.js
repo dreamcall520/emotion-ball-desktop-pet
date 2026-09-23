@@ -41,6 +41,7 @@ const { createChatStore } = require('./lib/chat-store');
 const { createChatCompanion } = require('./lib/chat-companion');
 const { createCodexChatRpc } = require('./lib/codex-chat-rpc');
 const { createChatWindow } = require('./lib/chat-window');
+const { createColorModeManager } = require('./lib/color-mode');
 
 const APP_NAME = '球球桌宠';
 const IS_SMOKE_TEST = process.env.PET_SMOKE_TEST === '1';
@@ -99,6 +100,8 @@ const windowMotion = createWindowMotion({
 });
 
 app.setName(APP_NAME);
+const colorModes = createColorModeManager({ getMode: () => settings?.colorMode });
+app.on('browser-window-created', (_event, win) => colorModes.track(win));
 
 function writeError(scope, error) {
   const message = error instanceof Error ? error.stack || error.message : String(error);
@@ -621,6 +624,22 @@ function persistSettings() {
   settings = saveSettings(settingsFile, settings);
 }
 
+function setColorMode(value) {
+  if (!settings || isQuitting || !['standard', 'accessible'].includes(value) || settings.colorMode === value) return false;
+  const previous = settings.colorMode;
+  settings.colorMode = value;
+  try { persistSettings(); }
+  catch (error) {
+    settings.colorMode = previous;
+    writeError('保存界面配色', error);
+    refreshTrayMenu();
+    return false;
+  }
+  colorModes.sync();
+  refreshTrayMenu();
+  return true;
+}
+
 function persistWindowPosition() {
   if (!petWindow || petWindow.isDestroyed()) return;
   const bounds = ensureVisibleBounds(petWindow.getBounds(), screen.getAllDisplays(), screen.getPrimaryDisplay());
@@ -958,6 +977,14 @@ function menuTemplate() {
       click: () => edgeTuck?.getPresentation().mode === 'hidden' ? restorePet() : hidePet() },
     { type: 'separator' },
     { label: '尺寸', submenu: sizeMenu() },
+    {
+      id: 'color-mode', label: '界面配色', submenu: [
+        { id: 'color-standard', label: '标准配色', type: 'radio', checked: settings.colorMode !== 'accessible',
+          click: () => setColorMode('standard') },
+        { id: 'color-accessible', label: '色弱友好（高对比）', type: 'radio', checked: settings.colorMode === 'accessible',
+          click: () => setColorMode('accessible') }
+      ]
+    },
     {
       label: '始终置顶',
       type: 'checkbox',

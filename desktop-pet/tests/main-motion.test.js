@@ -10,7 +10,7 @@ const { setImmediate: flush } = require('node:timers/promises');
 // 真实 main、动作控制器和对白规则；替代 Electron、系统采样、磁盘设置及聊天服务边界。
 async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   codexQuotaAlwaysVisible = false, codexQuotaPeriod = 'auto', codexQuotaLabelSize = 'standard',
-  codexQuotaAppearance = 'system', bubblesEnabled = true,
+  codexQuotaAppearance = 'system', bubblesEnabled = true, colorMode = 'standard',
   consent = async () => ({ response: 1 }), openExternal = async () => {}, saveError = null } = {}) {
   let now = 0;
   let serial = 0;
@@ -44,6 +44,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
       this.webContents = Object.assign(new EventEmitter(), { setWindowOpenHandler() {},
         send: (channel, packet) => { this.messages.push({ channel, packet }); if (channel === 'pet:command') commands.push(packet); } });
       windows.push(this);
+      app.emit('browser-window-created', {}, this);
       NativeWindow.onConstruct?.(this);
     }
     setAlwaysOnTop() {} setVisibleOnAllWorkspaces() {} setHiddenInMissionControl() {} moveTop() {}
@@ -129,7 +130,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
         shell: { openExternal: url => { external.push(url); return openExternal(url); } },
         Menu: { buildFromTemplate: value => Object.assign(value, { popup: options => popups.push({ value, options }) }) }, nativeImage: { createFromPath: () => ({ setTemplateImage() {} }) } };
       if (name === './lib/settings') return { loadSettings: () => ({ size: 'tiny', x: -600, y: 100,
-        bubblesEnabled, keepAwake: false, alwaysOnTop: true, codexEnabled, codexTaskNameInAlerts,
+        bubblesEnabled, colorMode, keepAwake: false, alwaysOnTop: true, codexEnabled, codexTaskNameInAlerts,
         codexQuotaAlwaysVisible, codexQuotaPeriod, codexQuotaLabelSize, codexQuotaAppearance }),
         saveSettings: (_file, settings) => { if (saveError) throw saveError; saved.push({ ...settings }); return settings; } };
       if (name === './lib/codex-companion') return { createCodexCompanion: options => {
@@ -1770,4 +1771,33 @@ test('监控按专用 workspace 提前排除球球聊天，不依赖新 thread I
   }
   f.chat.ownedThreads.add(TASK_ID);
   assert.equal(ignoreTask(TASK_ID), true);
+});
+
+
+test('界面配色在未开启Codex时可切换，持久化并同步已打开和后创建的窗口', async () => {
+  const f = await fixture({ codexQuotaAppearance: 'light' });
+  const menu = findMenuItem(f.call('menuTemplate()'), 'color-mode');
+  assert.equal(menu.label, '界面配色');
+  findMenuItem(menu.submenu, 'color-accessible').click();
+  assert.equal(f.saved.at(-1).colorMode, 'accessible');
+  assert.equal(f.saved.at(-1).codexQuotaAppearance, 'light');
+  assert.equal(f.connections.length, 0);
+  assert.deepEqual(f.pet.messages.filter(row => row.channel === 'pet:color-mode').at(-1), { channel: 'pet:color-mode', packet: 'accessible' });
+  const late = new f.windowClass({ x: 0, y: 0, width: 100, height: 100 });
+  late.webContents.emit('did-finish-load');
+  assert.equal(late.messages.at(-1).packet, 'accessible');
+  f.call("setColorMode('standard')");
+  assert.equal(late.messages.at(-1).packet, 'standard');
+  assert.equal(f.saved.at(-1).codexQuotaAppearance, 'light');
+  assert.equal(findMenuItem(f.call('menuTemplate()'), 'color-standard').checked, true);
+});
+
+test('保存配色失败时保留原有选择，不向窗口广播未保存的模式', async () => {
+  const f = await fixture({ colorMode: 'accessible', saveError: new Error('COLOR_WRITE_FAILURE') });
+  f.call('writeError = () => {}');
+  const count = f.pet.messages.length;
+  assert.equal(f.call("setColorMode('standard')"), false);
+  assert.equal(f.call('settings.colorMode'), 'accessible');
+  assert.equal(f.pet.messages.length, count);
+  assert.equal(findMenuItem(f.call('menuTemplate()'), 'color-accessible').checked, true);
 });

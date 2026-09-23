@@ -1,0 +1,213 @@
+/* Shared visual mode for all pet windows. Every rule is opt-in so the standard
+ * appearance remains unchanged. Scoped !important declarations deliberately
+ * outrank quota light/dark/system rules and animated SVG presentation colors. */
+:root[data-color-mode="accessible"] {
+  color-scheme: dark !important;
+  --accessible-panel: #101820;
+  --accessible-surface: #162330;
+  --accessible-raised: #20344a;
+  --accessible-text: #f7f9fc;
+  --accessible-muted: #c5d1df;
+  --accessible-line: #809bb8;
+  --accessible-blue: #8fc9ff;
+  --accessible-yellow: #ffe08a;
+  --accessible-track: #33465b;
+  --accessible-disabled: #293644;
+  --accessible-warning: #302a19;
+  --panel: var(--accessible-panel) !important;
+  --text: var(--accessible-text) !important;
+  --muted: var(--accessible-muted) !important;
+  --line: var(--accessible-line) !important;
+  --surface: var(--accessible-surface) !important;
+  --user: var(--accessible-raised) !important;
+  --accent: var(--accessible-blue) !important;
+  --accent-text: var(--accessible-panel) !important;
+  --hover: var(--accessible-raised) !important;
+  --error: var(--accessible-yellow) !important;
+  --error-bg: var(--accessible-warning) !important;
+  --ink: var(--accessible-text) !important;
+  --dot: var(--accessible-blue) !important;
+  --quota-line: var(--accessible-line) !important;
+  --quota-surface: var(--accessible-panel) !important;
+  --quota-muted: var(--accessible-muted) !important;
+  --quota-subtle: var(--accessible-muted) !important;
+  --quota-value-normal: var(--accessible-text) !important;
+  --quota-low-text: var(--accessible-yellow) !important;
+  --quota-urgent-text: var(--accessible-yellow) !important;
+  --quota-low-progress: var(--accessible-yellow) !important;
+  --quota-urgent-progress: var(--accessible-yellow) !important;
+}
+
+/* The opaque surfaces keep text contrast independent of the wallpaper. */
+:root[data-color-mode="accessible"] #quota-label,
+:root[data-color-mode="accessible"] #bubble,
+:root[data-color-mode="accessible"] #notice {
+  background: var(--accessible-panel) !important;
+  color: var(--accessible-text) !important;
+  border-color: var(--accessible-line) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+:root[data-color-mode="accessible"] #quota-beam::before,
+:root[data-color-mode="accessible"] #quota-beam::after,
+:root[data-color-mode="accessible"] #quota-label::before,
+:root[data-color-mode="accessible"] #quota-label::after {
+  background: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+:root[data-color-mode="accessible"] #compact-product,
+:root[data-color-mode="accessible"] #items .quota-name,
+:root[data-color-mode="accessible"] .detail-primary {
+  color: var(--accessible-text) !important;
+}
+
+:root[data-color-mode="accessible"] #items .quota-value,
+:root[data-color-mode="accessible"] .summary-value,
+:root[data-color-mode="accessible"] #secondary-value {
+  color: var(--quota-value-color, var(--accessible-text)) !important;
+}
+
+:root[data-color-mode="accessible"] .quota-period,
+:root[data-color-mode="accessible"] .summary-period,
+:root[data-color-mode="accessible"] .detail-secondary,
+:root[data-color-mode="accessible"] .compact-collapse,
+:root[data-color-mode="accessible"] #secondary-reset,
+:root[data-color-mode="accessible"] #quota-label #items li::after {
+  color: var(--accessible-muted) !important;
+}
+
+:root[data-color-mode="accessible"] .summary-badge,
+:root[data-color-mode="accessible"] .period-pill {
+  color: var(--accessible-blue) !important;
+  border-color: var(--accessible-line) !important;
+  background: var(--accessible-surface) !important;
+  box-shadow: none !important;
+}
+
+:root[data-color-mode="accessible"] #reset-credits .detail-primary {
+  color: var(--accessible-blue) !important;
+}
+
+:root[data-color-mode="accessible"] .quota-progress::-webkit-progress-bar,
+:root[data-color-mode="accessible"] #secondary-progress::-webkit-progress-bar {
+  background: var(--accessible-track) !important;
+}
+
+:root[data-color-mode="accessible"] .quota-progress::-webkit-progress-value,
+:root[data-color-mode="accessible"] #secondary-progress::-webkit-progress-value {
+  background: var(--quota-progress-color, var(--accessible-blue)) !important;
+}
+
+/* Severity words distinguish low and urgent even when their hue is identical. */
+:root[data-color-mode="accessible"] #quota-label:is([data-severity="low"], [data-severity="urgent"]),
+:root[data-color-mode="accessible"] #bubble:is([data-tone="strong"], [data-tone="urgent"]) {
+  border-color: var(--accessible-yellow) !important;
+}
+
+:root[data-color-mode="accessible"] #items li:is([data-severity="low"], [data-severity="urgent"]) .quota-value,
+:root[data-color-mode="accessible"] #secondary-quota:is([data-severity="low"], [data-severity="urgent"]) #secondary-value,
+:root[data-color-mode="accessible"] #summary:is([data-severity="low"], [data-severity="urgent"]) .summary-value,
+:root[data-color-mode="accessible"] #bubble:is([data-tone="strong"], [data-tone="urgent"]) #message {
+  color: var(--accessible-yellow) !important;
+}
+
+:root[data-color-mode="accessible"] #items li:is([data-severity="low"], [data-severity="urgent"]) .quota-progress::-webkit-progress-value,
+:root[data-color-mode="accessible"] #secondary-quota:is([data-severity="low"], [data-severity="urgent"]) #secondary-progress::-webkit-progress-value {
+  background: var(--accessible-yellow) !important;
+}
+
+:root[data-color-mode="accessible"] #bubble::after {
+  background: var(--accessible-panel) !important;
+  border-color: var(--accessible-line) !important;
+}
+
+:root[data-color-mode="accessible"] #bubble:is([data-tone="strong"], [data-tone="urgent"])::after {
+  border-color: var(--accessible-yellow) !important;
+}
+
+:root[data-color-mode="accessible"] #actions button {
+  color: var(--accessible-panel) !important;
+  background: var(--accessible-blue) !important;
+  box-shadow: inset 0 0 0 1px var(--accessible-blue);
+}
+
+:root[data-color-mode="accessible"] #actions button:last-child,
+:root[data-color-mode="accessible"] #actions button:hover {
+  color: var(--accessible-text) !important;
+  background: var(--accessible-raised) !important;
+  box-shadow: inset 0 0 0 1px var(--accessible-line);
+}
+
+:root[data-color-mode="accessible"] .chat-panel {
+  background: var(--accessible-panel) !important;
+  color: var(--accessible-text) !important;
+  border-color: var(--accessible-line) !important;
+}
+
+:root[data-color-mode="accessible"] button:disabled {
+  opacity: 1 !important;
+  color: var(--accessible-muted) !important;
+  background: var(--accessible-disabled) !important;
+  box-shadow: inset 0 0 0 1px var(--accessible-line) !important;
+}
+
+:root[data-color-mode="accessible"] button:focus-visible,
+:root[data-color-mode="accessible"] #quota-label:focus-visible,
+:root[data-color-mode="accessible"] .composer:focus-within {
+  outline: 2px solid var(--accessible-yellow) !important;
+  outline-offset: 2px;
+}
+
+:root[data-color-mode="accessible"] textarea::placeholder {
+  opacity: 1;
+  color: var(--accessible-muted) !important;
+}
+
+:root[data-color-mode="accessible"] .pet-mark {
+  background: var(--accessible-text) !important;
+  box-shadow: inset 0 0 0 1px var(--accessible-line) !important;
+}
+
+:root[data-color-mode="accessible"] .pet-mark i {
+  background: var(--accessible-panel) !important;
+}
+
+/* White body + dark stroke + white outer edge stay visible on light and dark
+ * desktops. Only paint changes; eye shapes, body motion and edge curves remain. */
+:root[data-color-mode="accessible"] #pet svg {
+  filter: drop-shadow(1px 0 0 #f7f9fc) drop-shadow(-1px 0 0 #f7f9fc)
+    drop-shadow(0 1px 0 #f7f9fc) drop-shadow(0 -1px 0 #f7f9fc) !important;
+}
+
+:root[data-color-mode="accessible"] #pet .eb-head {
+  fill: var(--accessible-text) !important;
+  stroke: var(--accessible-panel) !important;
+  stroke-opacity: 1 !important;
+  stroke-width: 1.5px !important;
+  vector-effect: non-scaling-stroke;
+  paint-order: stroke fill;
+}
+
+:root[data-color-mode="accessible"] #pet .eb-eye {
+  fill: var(--accessible-panel) !important;
+}
+
+:root[data-color-mode="accessible"] #pet .eb-sleep-z {
+  fill: var(--accessible-panel) !important;
+  stroke: var(--accessible-text) !important;
+}
+
+:root[data-color-mode="accessible"] #flow [data-flow-particle] {
+  fill: var(--accessible-blue) !important;
+  stroke: var(--accessible-panel) !important;
+  stroke-width: 0.5px;
+  vector-effect: non-scaling-stroke;
+}
+
+:root[data-color-mode="accessible"] #flow [data-flow-particle]:nth-of-type(even) {
+  fill: var(--accessible-yellow) !important;
+}

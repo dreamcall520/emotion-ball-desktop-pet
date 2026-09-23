@@ -8,6 +8,7 @@ const DEFAULTS = Object.freeze({
   alwaysOnTop: true,
   keepAwake: true,
   bubblesEnabled: true,
+  colorMode: 'standard',
   codexEnabled: false,
   codexTaskNameInAlerts: false,
   codexQuotaAlwaysVisible: false,
@@ -29,6 +30,7 @@ function normalizeSettings(raw = {}) {
       typeof raw.keepAwake === 'boolean' ? raw.keepAwake : DEFAULTS.keepAwake,
     bubblesEnabled:
       typeof raw.bubblesEnabled === 'boolean' ? raw.bubblesEnabled : DEFAULTS.bubblesEnabled,
+    colorMode: ['standard', 'accessible'].includes(raw.colorMode) ? raw.colorMode : DEFAULTS.colorMode,
     codexEnabled:
       typeof raw.codexEnabled === 'boolean' ? raw.codexEnabled : DEFAULTS.codexEnabled,
     codexTaskNameInAlerts:

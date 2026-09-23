@@ -49,6 +49,19 @@ async function verifyChatIntegration({ pet, chat, chatWindow, getMenu, getPresen
   open();
   await poll(() => chatWindow.isVisible() && chat.getState().connection, value => value === 'ready', 'open panel and connect');
   const win = chatWindow.getWindow(), page = code => win.webContents.executeJavaScript(code);
+  const chooseColor = mode => {
+    const item = getMenu().getMenuItemById(`color-${mode}`);
+    assert.ok(item?.enabled, 'global color menu is independent of Codex monitoring');
+    item.click(item, pet, {});
+  };
+  chooseColor('accessible');
+  await poll(() => page('document.documentElement.dataset.colorMode'), value => value === 'accessible', 'chat receives accessible colors');
+  assert.equal(await pet.webContents.executeJavaScript('document.documentElement.dataset.colorMode'), 'accessible');
+  assert.equal(await page('getComputedStyle(document.querySelector(".chat-panel")).backgroundColor'), 'rgb(16, 24, 32)');
+  chooseColor('standard');
+  await poll(() => page('document.documentElement.dataset.colorMode'), value => value === 'standard', 'chat restores standard colors');
+  assert.equal(await pet.webContents.executeJavaScript('document.documentElement.dataset.colorMode'), 'standard');
+  process.stdout.write('PET_COLOR_MODE_OK\n');
   const send = async text => {
     const result = await page(`window.qiuqiuChat.send(${JSON.stringify(text)})`);
     assert.equal(result.accepted, true, result.error);

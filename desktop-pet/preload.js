@@ -15,6 +15,12 @@ function subscribe(channel, callback) {
 }
 
 contextBridge.exposeInMainWorld('petDesktop', {
+  onColorMode: callback => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, value) => callback(value === 'accessible' ? 'accessible' : 'standard');
+    ipcRenderer.on('pet:color-mode', listener);
+    return () => ipcRenderer.removeListener('pet:color-mode', listener);
+  },
   beginDrag: point => ipcRenderer.send('pet:drag-start', pointPayload(point)),
   dragTo: point => ipcRenderer.send('pet:drag-move', pointPayload(point)),
   endDrag: () => ipcRenderer.send('pet:drag-end'),

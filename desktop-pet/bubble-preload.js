@@ -1,6 +1,12 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('petBubble', {
+  onColorMode: callback => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, value) => callback(value === 'accessible' ? 'accessible' : 'standard');
+    ipcRenderer.on('pet:color-mode', listener);
+    return () => ipcRenderer.removeListener('pet:color-mode', listener);
+  },
   onMessage: callback => {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, payload) => callback(payload);

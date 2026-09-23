@@ -101,6 +101,12 @@ function safeModel(value) {
 }
 
 contextBridge.exposeInMainWorld('petQuotaLabel', {
+  onColorMode: callback => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, value) => callback(value === 'accessible' ? 'accessible' : 'standard');
+    ipcRenderer.on('pet:color-mode', listener);
+    return () => ipcRenderer.removeListener('pet:color-mode', listener);
+  },
   toggleExpanded() {
     try { ipcRenderer.send(TOGGLE_CHANNEL); } catch (_) {}
   },

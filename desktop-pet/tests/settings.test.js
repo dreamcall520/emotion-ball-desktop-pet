@@ -33,6 +33,7 @@ test('损坏文件回退且有效设置可回读', t => {
     alwaysOnTop: false,
     keepAwake: true,
     bubblesEnabled: true,
+    colorMode: 'standard',
     codexEnabled: false,
     codexTaskNameInAlerts: false,
     codexQuotaAlwaysVisible: false,
@@ -46,7 +47,7 @@ test('损坏文件回退且有效设置可回读', t => {
 test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
   assert.deepEqual(normalizeSettings({ size: 'small', x: -102.3, y: 81.8, alwaysOnTop: false }), {
     size: 'small', x: -102, y: 82, alwaysOnTop: false,
-    keepAwake: true, bubblesEnabled: true, codexEnabled: false,
+    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', codexEnabled: false,
     codexTaskNameInAlerts: false, codexQuotaAlwaysVisible: false,
     codexQuotaPeriod: 'auto', codexQuotaLabelSize: 'compact', codexQuotaAppearance: 'system'
   });

@@ -129,6 +129,36 @@
     return 'normal';
   }
 
+  function severityText(remaining) {
+    if (remaining === 0) return '已用尽';
+    const severity = severityOf(remaining);
+    return severity === 'urgent' ? '紧张' : severity === 'low' ? '偏低' : '';
+  }
+
+  function renderValue(node, remaining) {
+    if (!node) return;
+    const percentage = `${Math.round(remaining)}%`;
+    const state = severityText(remaining);
+    if (!state || typeof node.replaceChildren !== 'function') {
+      node.textContent = `${percentage}${state}`;
+      return;
+    }
+    const number = document.createElement('span');
+    const status = document.createElement('span');
+    number.className = 'quota-number';
+    number.textContent = percentage;
+    status.className = 'quota-state-label';
+    status.textContent = state;
+    node.replaceChildren(number, status);
+  }
+
+  function labelProgress(node, item) {
+    if (!node || typeof node.setAttribute !== 'function') return;
+    const state = severityText(item.remaining);
+    node.setAttribute('aria-label', `${periodTypeText(item.windowMinutes)}剩余额度`);
+    node.setAttribute('aria-valuetext', `${Math.round(item.remaining)}%${state ? `，${state}` : ''}`);
+  }
+
   function resetTimeText(model, item = model.items[0]) {
     if (model.state === 'stale') return '重置时间待额度更新';
     const now = Date.now();
@@ -259,16 +289,18 @@
         periodNode.className = 'quota-period period-pill';
         periodNode.textContent = `${model.state === 'stale' ? '已过期 ' : ''}${periodText(item.windowMinutes)}`;
         valueNode.className = 'quota-value';
-        valueNode.textContent = `${Math.round(item.remaining)}%`;
+        renderValue(valueNode, item.remaining);
         progressNode.className = 'quota-progress';
         progressNode.max = 100;
         progressNode.value = item.remaining;
+        labelProgress(progressNode, item);
         row.replaceChildren(nameNode, periodNode, valueNode, progressNode);
         rows.push(row);
         if (severity === 'urgent' || (severity === 'low' && overallSeverity === 'normal')) overallSeverity = severity;
       }
       items.replaceChildren(...rows);
       const summaryItem = model.items[0];
+      if (summary.dataset) summary.dataset.severity = summaryItem ? severityOf(summaryItem.remaining) : 'normal';
       if (summaryItem) {
         const periodNode = document.createElement('span');
         const badgeNode = document.createElement('span');
@@ -278,7 +310,7 @@
         badgeNode.className = 'summary-badge';
         badgeNode.textContent = periodBadgeText(summaryItem.windowMinutes);
         periodLabelNode.className = 'summary-period-label';
-        periodLabelNode.textContent = '额度';
+        periodLabelNode.textContent = severityText(summaryItem.remaining) || '额度';
         periodNode.replaceChildren(badgeNode, periodLabelNode);
         valueNode.className = 'summary-value';
         valueNode.textContent = `${Math.round(summaryItem.remaining)}%`;
@@ -301,11 +333,12 @@
         ? severityOf(secondaryItem.remaining) : 'normal';
       if (secondaryItem && secondaryPeriod) secondaryPeriod.textContent = periodTypeText(secondaryItem.windowMinutes);
       else if (secondaryPeriod) secondaryPeriod.textContent = '';
-      if (secondaryValue) secondaryValue.textContent = secondaryItem
-        ? `${Math.round(secondaryItem.remaining)}%` : '';
+      if (secondaryItem) renderValue(secondaryValue, secondaryItem.remaining);
+      else if (secondaryValue) secondaryValue.textContent = '';
       if (secondaryProgress) {
         secondaryProgress.max = 100;
         secondaryProgress.value = secondaryItem ? secondaryItem.remaining : 0;
+        if (secondaryItem) labelProgress(secondaryProgress, secondaryItem);
       }
       if (secondaryItem && secondaryReset) secondaryReset.textContent = resetTimeText(model, secondaryItem);
       else if (secondaryReset) secondaryReset.textContent = '';
