@@ -42,7 +42,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
       this.visible = false; this.destroyed = false;
       this.messages = [];
       this.webContents = Object.assign(new EventEmitter(), { setWindowOpenHandler() {},
-        send: (channel, packet) => { this.messages.push({ channel, packet }); if (channel === 'pet:command') commands.push(packet); } });
+        send: (channel, packet, appearance) => { if (channel === 'pet:color-mode') this.colorAppearance = appearance; this.messages.push({ channel, packet }); if (channel === 'pet:command') commands.push(packet); } });
       windows.push(this);
       app.emit('browser-window-created', {}, this);
       NativeWindow.onConstruct?.(this);
@@ -1800,4 +1800,22 @@ test('保存配色失败时保留原有选择，不向窗口广播未保存的�
   assert.equal(f.call('settings.colorMode'), 'accessible');
   assert.equal(f.pet.messages.length, count);
   assert.equal(findMenuItem(f.call('menuTemplate()'), 'color-accessible').checked, true);
+});
+
+
+test('色弱友好外观在Codex关闭时也能切换并保存，原额度外观入口与之同步', async () => {
+  const f=await fixture({colorMode:'accessible',codexQuotaAppearance:'dark'});
+  findMenuItem(f.call('menuTemplate()'),'color-appearance-light').click();
+  assert.equal(f.saved.at(-1).codexQuotaAppearance,'light');assert.equal(f.saved.at(-1).colorMode,'accessible');
+  assert.equal(f.pet.colorAppearance,'light');assert.equal(f.connections.length,0);
+  assert.equal(findMenuItem(f.call('menuTemplate()'),'color-appearance-light').checked,true);
+  const connected=await fixture({colorMode:'accessible',codexEnabled:true,codexQuotaAppearance:'dark'});
+  connected.call("setCodexPreference('codexQuotaAppearance','light')");assert.equal(connected.pet.colorAppearance,'light');
+});
+
+test('外观保存失败时保留原有配色且不广播', async () => {
+  const f=await fixture({colorMode:'accessible',codexQuotaAppearance:'dark',saveError:new Error('APPEARANCE_WRITE')});
+  f.call('writeError=()=>{}');const count=f.pet.messages.length;
+  assert.equal(f.call("setInterfaceAppearance('light')"),false);
+  assert.equal(f.call('settings.codexQuotaAppearance'),'dark');assert.equal(f.pet.messages.length,count);
 });

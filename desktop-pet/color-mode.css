@@ -1,6 +1,6 @@
 /* Shared visual mode for all pet windows. Every rule is opt-in so the standard
  * appearance remains unchanged. Scoped !important declarations deliberately
- * outrank quota light/dark/system rules and animated SVG presentation colors. */
+ * outrank quota light/dark/system rules. Character artwork is not themed. */
 :root[data-color-mode="accessible"] {
   color-scheme: dark !important;
   --accessible-panel: #101820;
@@ -10,6 +10,7 @@
   --accessible-muted: #c5d1df;
   --accessible-line: #809bb8;
   --accessible-blue: #8fc9ff;
+  --accessible-on-accent: #101820;
   --accessible-yellow: #ffe08a;
   --accessible-track: #33465b;
   --accessible-disabled: #293644;
@@ -21,7 +22,7 @@
   --surface: var(--accessible-surface) !important;
   --user: var(--accessible-raised) !important;
   --accent: var(--accessible-blue) !important;
-  --accent-text: var(--accessible-panel) !important;
+  --accent-text: var(--accessible-on-accent) !important;
   --hover: var(--accessible-raised) !important;
   --error: var(--accessible-yellow) !important;
   --error-bg: var(--accessible-warning) !important;
@@ -38,6 +39,22 @@
   --quota-urgent-progress: var(--accessible-yellow) !important;
 }
 
+:root[data-color-mode="accessible"][data-accessible-appearance="light"] {
+  color-scheme: light !important;
+  --accessible-panel: #ffffff;
+  --accessible-surface: #f3f6fa;
+  --accessible-raised: #e2ebf5;
+  --accessible-text: #14212e;
+  --accessible-muted: #455467;
+  --accessible-line: #667c94;
+  --accessible-blue: #07569b;
+  --accessible-on-accent: #ffffff;
+  --accessible-yellow: #715200;
+  --accessible-track: #d0dae5;
+  --accessible-disabled: #e1e6ed;
+  --accessible-warning: #fff3cc;
+}
+
 /* The opaque surfaces keep text contrast independent of the wallpaper. */
 :root[data-color-mode="accessible"] #quota-label,
 :root[data-color-mode="accessible"] #bubble,
@@ -50,8 +67,6 @@
   -webkit-backdrop-filter: none !important;
 }
 
-:root[data-color-mode="accessible"] #quota-beam::before,
-:root[data-color-mode="accessible"] #quota-beam::after,
 :root[data-color-mode="accessible"] #quota-label::before,
 :root[data-color-mode="accessible"] #quota-label::after {
   background: none !important;
@@ -130,7 +145,7 @@
 }
 
 :root[data-color-mode="accessible"] #actions button {
-  color: var(--accessible-panel) !important;
+  color: var(--accessible-on-accent) !important;
   background: var(--accessible-blue) !important;
   box-shadow: inset 0 0 0 1px var(--accessible-blue);
 }
@@ -166,49 +181,4 @@
 :root[data-color-mode="accessible"] textarea::placeholder {
   opacity: 1;
   color: var(--accessible-muted) !important;
-}
-
-:root[data-color-mode="accessible"] .pet-mark {
-  background: var(--accessible-text) !important;
-  box-shadow: inset 0 0 0 1px var(--accessible-line) !important;
-}
-
-:root[data-color-mode="accessible"] .pet-mark i {
-  background: var(--accessible-panel) !important;
-}
-
-/* White body + dark stroke + white outer edge stay visible on light and dark
- * desktops. Only paint changes; eye shapes, body motion and edge curves remain. */
-:root[data-color-mode="accessible"] #pet svg {
-  filter: drop-shadow(1px 0 0 #f7f9fc) drop-shadow(-1px 0 0 #f7f9fc)
-    drop-shadow(0 1px 0 #f7f9fc) drop-shadow(0 -1px 0 #f7f9fc) !important;
-}
-
-:root[data-color-mode="accessible"] #pet .eb-head {
-  fill: var(--accessible-text) !important;
-  stroke: var(--accessible-panel) !important;
-  stroke-opacity: 1 !important;
-  stroke-width: 1.5px !important;
-  vector-effect: non-scaling-stroke;
-  paint-order: stroke fill;
-}
-
-:root[data-color-mode="accessible"] #pet .eb-eye {
-  fill: var(--accessible-panel) !important;
-}
-
-:root[data-color-mode="accessible"] #pet .eb-sleep-z {
-  fill: var(--accessible-panel) !important;
-  stroke: var(--accessible-text) !important;
-}
-
-:root[data-color-mode="accessible"] #flow [data-flow-particle] {
-  fill: var(--accessible-blue) !important;
-  stroke: var(--accessible-panel) !important;
-  stroke-width: 0.5px;
-  vector-effect: non-scaling-stroke;
-}
-
-:root[data-color-mode="accessible"] #flow [data-flow-particle]:nth-of-type(even) {
-  fill: var(--accessible-yellow) !important;
 }

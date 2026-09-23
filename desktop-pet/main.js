@@ -100,7 +100,8 @@ const windowMotion = createWindowMotion({
 });
 
 app.setName(APP_NAME);
-const colorModes = createColorModeManager({ getMode: () => settings?.colorMode });
+const colorModes = createColorModeManager({ getMode: () => settings?.colorMode,
+  getAppearance: () => settings?.codexQuotaAppearance });
 app.on('browser-window-created', (_event, win) => colorModes.track(win));
 
 function writeError(scope, error) {
@@ -530,6 +531,7 @@ function setCodexPreference(name, value) {
     quotaPeriod: settings.codexQuotaPeriod
   });
   syncQuotaLabel(codexCompanion.getSnapshot());
+  if (name === 'codexQuotaAppearance') colorModes.sync();
   refreshTrayMenu();
   return true;
 }
@@ -636,6 +638,24 @@ function setColorMode(value) {
     return false;
   }
   colorModes.sync();
+  refreshTrayMenu();
+  return true;
+}
+
+function setInterfaceAppearance(value) {
+  if (!settings || isQuitting || settings.colorMode !== 'accessible' ||
+    !['system', 'light', 'dark'].includes(value) || settings.codexQuotaAppearance === value) return false;
+  const previous = settings.codexQuotaAppearance;
+  settings.codexQuotaAppearance = value;
+  try { persistSettings(); }
+  catch (error) {
+    settings.codexQuotaAppearance = previous;
+    writeError('保存界面外观', error);
+    refreshTrayMenu();
+    return false;
+  }
+  colorModes.sync();
+  syncQuotaLabel(codexCompanion?.getSnapshot());
   refreshTrayMenu();
   return true;
 }
@@ -982,7 +1002,13 @@ function menuTemplate() {
         { id: 'color-standard', label: '标准配色', type: 'radio', checked: settings.colorMode !== 'accessible',
           click: () => setColorMode('standard') },
         { id: 'color-accessible', label: '色弱友好（高对比）', type: 'radio', checked: settings.colorMode === 'accessible',
-          click: () => setColorMode('accessible') }
+          click: () => setColorMode('accessible') },
+        { type: 'separator' },
+        { id: 'color-appearance', label: '色弱友好外观', enabled: settings.colorMode === 'accessible',
+          submenu: [['system', '跟随系统'], ['light', '浅色'], ['dark', '深色']].map(([value, label]) => ({
+            id: `color-appearance-${value}`, label, type: 'radio', checked: settings.codexQuotaAppearance === value,
+            click: () => setInterfaceAppearance(value)
+          })) }
       ]
     },
     {

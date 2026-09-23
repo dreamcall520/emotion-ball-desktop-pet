@@ -17,7 +17,8 @@ function subscribe(channel, callback) {
 contextBridge.exposeInMainWorld('petDesktop', {
   onColorMode: callback => {
     if (typeof callback !== 'function') return () => {};
-    const listener = (_event, value) => callback(value === 'accessible' ? 'accessible' : 'standard');
+    const listener = (_event, value, appearance) => callback(value === 'accessible' ? 'accessible' : 'standard',
+      ['light', 'dark'].includes(appearance) ? appearance : 'system');
     ipcRenderer.on('pet:color-mode', listener);
     return () => ipcRenderer.removeListener('pet:color-mode', listener);
   },

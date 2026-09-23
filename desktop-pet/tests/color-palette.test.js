@@ -6,8 +6,20 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const css = fs.readFileSync(path.join(__dirname, '..', 'color-mode.css'), 'utf8');
-const palette = Object.fromEntries([...css.matchAll(/--accessible-([\w-]+):\s*(#[0-9a-f]{6});/g)]
-  .map(([, name, color]) => [name, color]));
+function extractPalette(selector) {
+  const source = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const block = [...source.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .find(([, selectors]) => selectors.trim() === selector);
+  assert.ok(block, `Missing palette ${selector}`);
+  return Object.fromEntries([...block[2].matchAll(/--accessible-([\w-]+):\s*(#[0-9a-f]{6});/g)]
+    .map(([, name, color]) => [name, color]));
+}
+
+const darkPalette = extractPalette(':root[data-color-mode="accessible"]');
+const palettes = {
+  dark: darkPalette,
+  light: { ...darkPalette, ...extractPalette(':root[data-color-mode="accessible"][data-accessible-appearance="light"]') },
+};
 
 function luminance(hex) {
   const rgb = hex.slice(1).match(/../g).map(part => parseInt(part, 16) / 255)
@@ -15,36 +27,38 @@ function luminance(hex) {
   return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
 }
 
-function contrast(foreground, background) {
+function contrast(palette, foreground, background) {
   assert.ok(palette[foreground], `Missing foreground ${foreground}`);
   assert.ok(palette[background], `Missing background ${background}`);
   const values = [luminance(palette[foreground]), luminance(palette[background])].sort((a, b) => a - b);
   return (values[1] + 0.05) / (values[0] + 0.05);
 }
 
-test('accessible text, labels and disabled controls maintain 4.5:1 on every used surface', () => {
-  const pairs = [
-    ['text', 'panel'], ['muted', 'panel'], ['blue', 'panel'], ['yellow', 'panel'],
-    ['text', 'surface'], ['muted', 'surface'], ['blue', 'surface'],
-    ['text', 'raised'], ['muted', 'raised'], ['blue', 'raised'],
-    ['muted', 'disabled'], ['yellow', 'warning'], ['panel', 'blue'],
-  ];
-  for (const [foreground, background] of pairs) {
-    const ratio = contrast(foreground, background);
-    assert.ok(ratio >= 4.5, `${foreground}/${background} is ${ratio.toFixed(2)}:1`);
-  }
-});
+for (const [mode, palette] of Object.entries(palettes)) {
+  test(`accessible ${mode} text, labels and disabled controls maintain 4.5:1 on every used surface`, () => {
+    const pairs = [
+      ['text', 'panel'], ['muted', 'panel'], ['blue', 'panel'], ['yellow', 'panel'],
+      ['text', 'surface'], ['muted', 'surface'], ['blue', 'surface'],
+      ['text', 'raised'], ['muted', 'raised'], ['blue', 'raised'],
+      ['muted', 'disabled'], ['yellow', 'warning'], ['on-accent', 'blue'],
+    ];
+    for (const [foreground, background] of pairs) {
+      const ratio = contrast(palette, foreground, background);
+      assert.ok(ratio >= 4.5, `${foreground}/${background} is ${ratio.toFixed(2)}:1`);
+    }
+  });
 
-test('accessible progress, outlines and focus indicators maintain 3:1', () => {
-  for (const [foreground, background] of [
-    ['blue', 'track'], ['yellow', 'track'],
-    ['line', 'panel'], ['line', 'surface'], ['line', 'raised'],
-    ['yellow', 'panel'], ['yellow', 'surface'], ['panel', 'text'],
-  ]) {
-    const ratio = contrast(foreground, background);
-    assert.ok(ratio >= 3, `${foreground}/${background} is ${ratio.toFixed(2)}:1`);
-  }
-});
+  test(`accessible ${mode} progress, outlines and focus indicators maintain 3:1`, () => {
+    for (const [foreground, background] of [
+      ['blue', 'track'], ['yellow', 'track'],
+      ['line', 'panel'], ['line', 'surface'], ['line', 'raised'],
+      ['yellow', 'panel'], ['yellow', 'surface'],
+    ]) {
+      const ratio = contrast(palette, foreground, background);
+      assert.ok(ratio >= 3, `${foreground}/${background} is ${ratio.toFixed(2)}:1`);
+    }
+  });
+}
 
 test('shared accessibility stylesheet cannot change the standard mode', () => {
   const source = css.replace(/\/\*[\s\S]*?\*\//g, '');

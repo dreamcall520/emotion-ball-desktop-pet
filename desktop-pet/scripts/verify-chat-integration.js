@@ -54,14 +54,34 @@ async function verifyChatIntegration({ pet, chat, chatWindow, getMenu, getPresen
     assert.ok(item?.enabled, 'global color menu is independent of Codex monitoring');
     item.click(item, pet, {});
   };
+  const petPaint = () => pet.webContents.executeJavaScript(`(() => {
+    const head = getComputedStyle(document.querySelector('#pet .eb-head'));
+    const eye = getComputedStyle(document.querySelector('#pet .eb-eye'));
+    return { fill: head.fill, stroke: head.stroke, eye: eye.fill,
+      filter: getComputedStyle(document.querySelector('#pet svg')).filter };
+  })()`);
+  const originalPaint = await petPaint();
+  const chooseAppearance = value => {
+    const item = getMenu().getMenuItemById(`color-appearance-${value}`);
+    assert.ok(item?.enabled);
+    item.click(item, pet, {});
+  };
   chooseColor('accessible');
+  chooseAppearance('dark');
   await poll(() => page('document.documentElement.dataset.colorMode'), value => value === 'accessible', 'chat receives accessible colors');
   assert.equal(await pet.webContents.executeJavaScript('document.documentElement.dataset.colorMode'), 'accessible');
   assert.equal(await page('getComputedStyle(document.querySelector(".chat-panel")).backgroundColor'), 'rgb(16, 24, 32)');
+  assert.deepEqual(await petPaint(), originalPaint, 'dark accessible mode preserves original pet paint');
+  chooseAppearance('light');
+  await poll(() => page('document.documentElement.dataset.accessibleAppearance'), value => value === 'light', 'light accessible theme arrives');
+  assert.equal(await page('getComputedStyle(document.querySelector(".chat-panel")).backgroundColor'), 'rgb(255, 255, 255)');
+  assert.deepEqual(await petPaint(), originalPaint, 'light accessible mode preserves original pet paint');
+  chooseAppearance('system');
   chooseColor('standard');
   await poll(() => page('document.documentElement.dataset.colorMode'), value => value === 'standard', 'chat restores standard colors');
   assert.equal(await pet.webContents.executeJavaScript('document.documentElement.dataset.colorMode'), 'standard');
   process.stdout.write('PET_COLOR_MODE_OK\n');
+  process.stdout.write('PET_COLOR_APPEARANCE_PET_UNCHANGED_OK\n');
   const send = async text => {
     const result = await page(`window.qiuqiuChat.send(${JSON.stringify(text)})`);
     assert.equal(result.accepted, true, result.error);
