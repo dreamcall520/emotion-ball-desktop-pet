@@ -148,7 +148,8 @@
   border-color: var(--accessible-line) !important;
 }
 
-:root[data-color-mode="accessible"] button:disabled {
+:root[data-color-mode="accessible"] button:disabled,
+:root[data-color-mode="accessible"] #actions button:disabled {
   opacity: 1 !important;
   color: var(--accessible-muted) !important;
   background: var(--accessible-disabled) !important;

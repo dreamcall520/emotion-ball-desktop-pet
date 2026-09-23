@@ -49,6 +49,24 @@ test('全局配色覆盖已打开、延迟创建和重载窗口，关闭窗口�
   assert.deepEqual(late.sent.at(-1), ['pet:color-mode', 'accessible']);
 });
 
+test('真实窗口closed之后不可再访问webContents，清理使用已捕获的监听对象', () => {
+  const { createColorModeManager } = require('../lib/color-mode');
+  const manager = createColorModeManager({ getMode: () => 'accessible' });
+  const win = new EventEmitter();
+  const contents = new EventEmitter(); contents.send = () => {};
+  let destroyed = false;
+  win.isDestroyed = () => destroyed;
+  Object.defineProperty(win, 'webContents', { get() {
+    if (destroyed) throw new TypeError('Object has been destroyed');
+    return contents;
+  } });
+  manager.track(win);
+  destroyed = true;
+  assert.doesNotThrow(() => win.emit('closed'));
+  assert.equal(contents.listenerCount('did-finish-load'), 0);
+  assert.doesNotThrow(() => manager.sync());
+});
+
 for (const [preload, apiName] of [['preload.js', 'petDesktop'], ['quota-label-preload.js', 'petQuotaLabel'],
   ['chat-preload.js', 'qiuqiuChat'], ['bubble-preload.js', 'petBubble'], ['edge-notice-preload.js', 'edgeNotice'], ['thought-preload.js', 'petThought']]) {
   test(`${preload} 只接收配色枚举，可注销且没有改变设置权限`, () => {

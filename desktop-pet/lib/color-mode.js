@@ -12,11 +12,13 @@ function createColorModeManager({ getMode }) {
     track(win) {
       if (windows.has(win) || win.isDestroyed()) return;
       windows.add(win);
+      const contents = win.webContents;
       const loaded = () => send(win);
-      win.webContents.on('did-finish-load', loaded);
+      contents.on('did-finish-load', loaded);
       win.once('closed', () => {
         windows.delete(win);
-        win.webContents.removeListener('did-finish-load', loaded);
+        // BrowserWindow.webContents itself throws after native window destruction.
+        contents.removeListener('did-finish-load', loaded);
       });
     },
     sync() { for (const win of windows) send(win); }
