@@ -26,6 +26,7 @@
     <link rel="stylesheet" href="quota-demo.css?v=20260911-1">
     <link rel="stylesheet" href="dark-theme.css?v=20260911-2">
     <link rel="stylesheet" href="chat-showcase.css?v=20260922-1">
+    <link rel="stylesheet" href="appearance-showcase.css?v=20260923-1">
     <title>球球桌宠 - 免费的 macOS 桌面伙伴</title>
   </head>
   <body>
@@ -38,6 +39,7 @@
         <a href="#features">功能</a>
         <a href="#codex">Codex 陪伴</a>
         <a href="#chat">和球球聊聊</a>
+        <a href="#appearance">色弱友好</a>
         <a href="#gallery">动态体验</a>
         <a href="#download">下载</a>
         <a href="#privacy">隐私</a>
@@ -192,6 +194,44 @@
           <p class="chat-demo-note">可点击“发送示例”和“聊天记录”体验。这里是预设演示，不连接 Codex、不发送真实消息。</p>
           <button class="chat-reset" type="button" data-chat-reset>重新体验</button>
         </div>
+      </section>
+
+      <section class="appearance-section section" id="appearance" aria-labelledby="appearance-title">
+        <div class="section-heading">
+          <h2 id="appearance-title">看得清楚，也自在。</h2>
+          <p>标准配色与色弱友好，一键切换。信息更清楚，球球还是熟悉的样子。</p>
+        </div>
+        <div class="ap-demo" data-appearance-demo data-mode="accessible" data-look="dark">
+          <div class="ap-controls">
+            <div role="group" aria-label="演示界面配色" class="ap-switch">
+              <button type="button" data-ap-mode="standard" aria-pressed="false">标准配色</button>
+              <button type="button" data-ap-mode="accessible" aria-pressed="true">色弱友好（高对比）</button>
+            </div>
+            <div role="group" aria-label="演示界面外观" class="ap-switch">
+              <button type="button" data-ap-look="light" aria-pressed="false">浅色</button>
+              <button type="button" data-ap-look="dark" aria-pressed="true">深色</button>
+              <button type="button" data-ap-look="system" aria-pressed="false">跟随系统</button>
+            </div>
+          </div>
+          <div class="ap-preview">
+            <div class="ap-quota ap-panel" aria-label="额度卡片配色示例">
+              <div class="ap-quota-heading"><strong>CODEX</strong><span class="ap-pill">5 小时</span></div>
+              <div class="ap-balance"><strong data-ap-value>15%</strong><span data-ap-severity>偏低</span><span class="ap-muted">剩余额度</span></div>
+              <progress max="100" value="15" aria-label="演示剩余额度"></progress>
+              <div class="ap-details"><span>2 小时 30 分钟后重置</span><span class="ap-blue">2 次重置机会</span></div>
+              <div class="ap-secondary"><span class="ap-pill">周额度</span><strong>74%</strong><span class="ap-muted">3 天后重置</span></div>
+              <progress max="100" value="74" aria-label="演示周剩余额度"></progress>
+            </div>
+            <div class="ap-conversation">
+              <div class="ap-panel ap-chat"><div class="ap-chat-heading"><img src="assets/favicon.png" width="32" height="32" alt="球球，造型保持不变"><strong>和球球聊聊</strong></div><p class="ap-user">今天想慢一点。</p><p>好呀，我陪你按自己的步子走。</p><span class="ap-muted">聊天文字与背景一起调整</span></div>
+              <div class="ap-panel ap-bubble"><span data-ap-notice>5 小时剩余 15% · 偏低</span></div>
+            </div>
+          </div>
+          <div class="ap-demo-footer"><label>体验额度状态 <select data-ap-state><option value="68">充足 · 68%</option><option value="15" selected>偏低 · 15%</option><option value="8">紧张 · 8%</option><option value="0">已用尽 · 0%</option></select></label><p role="status" data-ap-description>色弱友好：实底、高对比文字与蓝黄提示，状态不只靠颜色区分。</p></div>
+          <p class="ap-note">配色示意，使用预设数据，不连接 Codex；这里的切换只影响本模块，不改变你的桌宠设置或网页主题。</p>
+        </div>
+        <div class="ap-info"><p><strong>从这里开启</strong>右键球球或菜单栏 → 界面配色 → 色弱友好（高对比）。在“色弱友好外观”选择浅色、深色或跟随系统，立即生效并保存。</p><p><strong>信息变清楚，陪伴不变</strong>调整额度卡、聊天和气泡；保留球球原来的渐变、轮廓、眼睛与动效，额度边框流光也继续保留。</p></div>
+        <p class="ap-release">功能预览 · 已在本机 0.3.23 验证，尚未包含在当前公开的 0.3.17 Apple 安装包中。<a href="#download">查看当前公开版本</a></p>
       </section>
 
       <section class="gallery-section section" id="gallery" aria-labelledby="gallery-title">
@@ -383,5 +423,6 @@
     <script src="motion-showcase.js?v=20260911-4"></script>
     <script src="quota-demo.js?v=20260911-1"></script>
     <script src="chat-showcase.js?v=20260922-1"></script>
+    <script src="appearance-showcase.js?v=20260923-1"></script>
   </body>
 </html>

@@ -1,0 +1,61 @@
+/* Preview-only tokens mirror desktop-pet/color-mode.css; page theme is untouched. */
+.ap-demo { border-block: 1px solid var(--line-strong); padding: 28px 0; }
+.ap-controls, .ap-demo-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; }
+.ap-switch { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 12px; }
+.ap-switch button { font: 500 14px/1.4 var(--body-font); border: 1px solid transparent; padding: 10px 14px; background: transparent; color: var(--text-soft); border-radius: 8px; cursor: pointer; }
+.ap-switch button[aria-pressed="true"] { background: var(--text); color: var(--page); }
+.ap-switch button:focus-visible, .ap-demo select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.ap-demo { --ap-panel: #101820; --ap-surface: #162330; --ap-raised: #20344a; --ap-text: #f7f9fc; --ap-muted: #c5d1df; --ap-line: #809bb8; --ap-blue: #8fc9ff; --ap-warning: #ffe08a; --ap-track: #33465b; }
+.ap-demo[data-look="light"] { --ap-panel: #fff; --ap-surface: #f3f6fa; --ap-raised: #e2ebf5; --ap-text: #14212e; --ap-muted: #455467; --ap-line: #667c94; --ap-blue: #07569b; --ap-warning: #715200; --ap-track: #d0dae5; }
+.ap-demo[data-mode="standard"][data-look="dark"] { --ap-panel: #202831ed; --ap-surface: #293747; --ap-raised: #334458; --ap-text: #f4f7fb; --ap-muted: #ccd8e7; --ap-line: #687e95; --ap-blue: #a5d5ff; --ap-warning: #ffb080; --ap-track: #405066; }
+.ap-demo[data-mode="standard"][data-look="light"] { --ap-panel: #f5f8fced; --ap-surface: #e8eef6; --ap-raised: #e0eaf5; --ap-text: #192432; --ap-muted: #45576c; --ap-line: #a1afc0; --ap-blue: #215ca2; --ap-warning: #994214; --ap-track: #d2dce8; }
+.ap-preview { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: clamp(28px, 6vw, 88px); padding: 48px clamp(0px, 3vw, 40px); }
+.ap-panel { color: var(--ap-text); background: var(--ap-panel); border: 1px solid var(--ap-line); }
+.ap-demo[data-mode="accessible"][data-level="warning"] :is(.ap-quota, .ap-bubble) { border-color: var(--ap-warning); }
+.ap-demo[data-mode="standard"] .ap-panel { box-shadow: 0 12px 28px #00000018; backdrop-filter: blur(12px); }
+.ap-quota { border-radius: 24px; padding: 26px; position: relative; overflow: hidden; }
+.ap-quota::before { content: ""; position: absolute; top: 0; left: 8%; width: 35%; height: 2px; background: linear-gradient(90deg, transparent, var(--ap-blue), var(--ap-warning), transparent); animation: ap-flow 6s ease-in-out infinite alternate; }
+@keyframes ap-flow { to { transform: translateX(145%); } }
+.ap-demo[data-paused="true"] .ap-quota::before { animation-play-state: paused; }
+.ap-quota-heading, .ap-secondary, .ap-chat-heading { display: flex; align-items: center; gap: 12px; }
+.ap-quota-heading > strong { font-size: 16px; letter-spacing: .12em; }
+.ap-pill { border: 1px solid var(--ap-line); color: var(--ap-blue); background: var(--ap-surface); border-radius: 20px; padding: 3px 10px; font-size: 13px; font-weight: 600; }
+.ap-balance { display: flex; align-items: baseline; gap: 8px; margin: 16px 0 4px; color: var(--ap-warning); }
+.ap-balance > strong { font-size: clamp(40px, 4vw, 56px); line-height: 1.15; letter-spacing: -.04em; }
+.ap-balance > span { font-size: 16px; font-weight: 600; }
+.ap-balance .ap-muted { margin-left: auto; font-size: 13px; }
+.ap-muted { color: var(--ap-muted); }
+.ap-blue { color: var(--ap-blue); }
+.ap-demo progress { display: block; appearance: none; width: 100%; height: 5px; border: 0; border-radius: 5px; overflow: hidden; background: var(--ap-track); }
+.ap-demo progress::-webkit-progress-bar { background: var(--ap-track); }
+.ap-demo progress::-webkit-progress-value { background: var(--ap-warning); border-radius: 5px; }
+.ap-demo progress::-moz-progress-bar { background: var(--ap-warning); }
+.ap-demo progress:last-child::-webkit-progress-value { background: var(--ap-blue); }
+.ap-demo progress:last-child::-moz-progress-bar { background: var(--ap-blue); }
+.ap-demo[data-level="normal"] .ap-balance { color: var(--ap-text); }
+.ap-demo[data-level="normal"] progress::-webkit-progress-value { background: var(--ap-blue); }
+.ap-demo[data-level="normal"] progress::-moz-progress-bar { background: var(--ap-blue); }
+.ap-details { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; font-size: 13px; padding: 16px 0 20px; border-bottom: 1px solid var(--ap-line); }
+.ap-secondary { margin: 16px 0 10px; flex-wrap: wrap; }
+.ap-secondary > strong { font-size: 24px; }
+.ap-secondary .ap-muted { font-size: 12px; margin-left: auto; }
+.ap-chat { border-radius: 20px; padding: 24px; }
+.ap-chat-heading { font-size: 16px; margin-bottom: 20px; }
+.ap-chat-heading img { border-radius: 50%; }
+.ap-chat p { font-size: 16px; color: var(--ap-text); margin: 14px 0; }
+.ap-chat .ap-user { background: var(--ap-raised); border-radius: 12px 12px 3px 12px; padding: 10px 14px; margin-left: auto; width: fit-content; }
+.ap-chat > span { font-size: 12px; }
+.ap-bubble { border-radius: 14px; padding: 14px 20px; margin-top: 16px; width: fit-content; font-size: 14px; color: var(--ap-warning); }
+.ap-demo[data-level="normal"] .ap-bubble { color: var(--ap-text); }
+.ap-demo-footer { font-size: 14px; }
+.ap-demo-footer label { color: var(--text); }
+.ap-demo select { font: inherit; color: var(--text); background: var(--surface-solid); border: 1px solid var(--line-strong); padding: 9px 12px; border-radius: 8px; margin-left: 8px; }
+.ap-demo-footer p { margin: 0; font-size: 13px; max-width: 580px; }
+.ap-note, .ap-release { font-size: 13px; line-height: 1.8; }
+.ap-note { margin: 20px 0 0; }
+.ap-info { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; padding: 30px 0 8px; }
+.ap-info p { font-size: 14px; }
+.ap-info strong { display: block; font-size: 16px; margin-bottom: 8px; color: var(--text); }
+.ap-release a { color: var(--accent); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .ap-quota::before { animation: none; } }
+@media (max-width: 700px) { .ap-preview { grid-template-columns: 1fr; padding: 28px 0; gap: 20px; } .ap-controls { gap: 12px; } .ap-switch button { padding: 9px 10px; font-size: 13px; } .ap-quota { padding: 22px 18px; } .ap-chat { padding: 20px; } .ap-info { grid-template-columns: 1fr; gap: 8px; } }
