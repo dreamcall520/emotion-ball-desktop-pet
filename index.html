@@ -25,7 +25,7 @@
     <link rel="stylesheet" href="motion-showcase.css?v=20260911-5">
     <link rel="stylesheet" href="quota-demo.css?v=20260911-1">
     <link rel="stylesheet" href="dark-theme.css?v=20260911-2">
-    <link rel="stylesheet" href="chat-showcase.css?v=20260922-1">
+    <link rel="stylesheet" href="chat-showcase.css?v=20260923-2">
     <link rel="stylesheet" href="appearance-showcase.css?v=20260923-1">
     <title>球球桌宠 - 免费的 macOS 桌面伙伴</title>
   </head>
@@ -56,7 +56,7 @@
           <h1 id="hero-title">桌面上，<br>多一个安静陪你的球球</h1>
           <p>免费、安静陪伴，不打扰你。</p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.23/Qiuqiu-0.3.23-macOS-arm64-share.zip">下载 Apple 芯片版</a>
+            <a class="button button-primary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.24/Qiuqiu-0.3.24-macOS-arm64-share.zip">下载 Apple 芯片版</a>
             <a class="button button-secondary" href="#features">看看它会什么</a>
           </div>
         </div>
@@ -155,17 +155,18 @@
 
       <section class="chat-section section" id="chat" aria-labelledby="chat-title">
         <div class="chat-intro">
-          <p class="chat-release">0.3.23 Apple 芯片版 · 已发布</p>
+          <p class="chat-release">0.3.24 Apple 芯片版 · 已发布</p>
           <h2 id="chat-title">和球球聊聊，<br>接着上次的话。</h2>
           <p class="chat-lead">不只是待在桌面上。想说点什么，就打开球球旁边的聊天面板；回来时，继续熟悉的那一段。</p>
           <dl class="chat-benefits">
             <div><dt>聊下去，不反复新建</dt><dd>首次发送才建立对话，后续消息、关闭重开与断线恢复都延续原聊天。</dd></div>
             <div><dt>以前的话，也能接回来</dt><dd>从“聊天记录”切回旧聊天；新聊天需要确认，旧记录仍然保留。</dd></div>
             <div><dt>说一句，也有小动作</dt><dd>可以让球球跳一跳、转圈或睡一会儿，只执行预设动作，不运行代码或命令。</dd></div>
+            <div><dt>换个模型，还是这段聊天</dt><dd>在输入框左下角选择模型，也可交给“自动”：日常聊天优先 Luna，分析与计划优先 Sol，深入推导优先 Astra。实际按本机账号可用模型选择；手选不可用时会明确提示。</dd></div>
           </dl>
           <p class="chat-entry">使用入口：右键球球或菜单栏 → 和球球聊聊</p>
           <p class="chat-requirements">需在本机登录 Codex 并联网，无需另填 API Key；回复使用你的 Codex 额度。普通桌宠仍可离线使用。</p>
-          <a class="chat-download-link" href="#download">下载 0.3.23，和球球聊聊 →</a>
+          <a class="chat-download-link" href="#download">下载 0.3.24，和球球聊聊 →</a>
         </div>
         <div class="chat-demo-wrap">
           <div class="chat-demo" data-chat-demo>
@@ -188,10 +189,25 @@
                 <div><button type="button" data-chat-cancel>取消</button><button type="button" data-chat-create>开始新聊天</button></div>
               </div>
             </div>
-            <div class="chat-demo-composer"><p data-chat-draft>那就陪我放松一下吧。</p><button type="button" data-chat-send>发送示例</button></div>
+            <div class="chat-demo-composer">
+              <p data-chat-draft>那就陪我放松一下吧。</p>
+              <div class="chat-demo-tools">
+                <details class="chat-model-picker" data-chat-model-picker>
+                  <summary aria-label="选择示例模型"><span data-chat-model-label>自动</span><span aria-hidden="true">⌃</span></summary>
+                  <div class="chat-model-options" role="group" aria-label="示例模型列表">
+                    <p>模型示例 · 实际列表以本机账号为准</p>
+                    <button type="button" data-chat-model="自动" aria-pressed="true">自动 <span>按内容选择</span></button>
+                    <button type="button" data-chat-model="Luna" aria-pressed="false">Luna <span>日常聊天</span></button>
+                    <button type="button" data-chat-model="Sol" aria-pressed="false">Sol <span>分析与计划</span></button>
+                    <button type="button" data-chat-model="Astra" aria-pressed="false">Astra <span>深入推导</span></button>
+                  </div>
+                </details>
+                <button type="button" data-chat-send>发送示例</button>
+              </div>
+            </div>
             <p class="chat-demo-footer" data-chat-status>示例：延续同一段聊天</p>
           </div>
-          <p class="chat-demo-note">可点击“发送示例”和“聊天记录”体验。这里是预设演示，不连接 Codex、不发送真实消息。</p>
+          <p class="chat-demo-note">可点击左下角模型入口、发送示例和聊天记录。这里是预设演示，不连接 Codex、不发送真实消息。应用中会保存模型选择，切换不另开聊天、不额外发送；响应速度仍受服务和网络影响。</p>
           <button class="chat-reset" type="button" data-chat-reset>重新体验</button>
         </div>
       </section>
@@ -279,11 +295,11 @@
             </div>
             <p>适用于 M1、M2、M3、M4 及后续 Apple 芯片 Mac。需要 macOS 12.0 或更高版本。</p>
             <dl class="release-data">
-              <div><dt>版本</dt><dd>0.3.23</dd></div>
+              <div><dt>版本</dt><dd>0.3.24</dd></div>
               <div><dt>发布日期</dt><dd>2026-09-23</dd></div>
             </dl>
             <div class="download-actions">
-              <a class="button button-primary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.23/Qiuqiu-0.3.23-macOS-arm64-share.zip">下载 ZIP</a>
+              <a class="button button-primary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.24/Qiuqiu-0.3.24-macOS-arm64-share.zip">下载 ZIP</a>
             </div>
           </article>
 
@@ -361,18 +377,22 @@
         <div class="timeline">
           <article>
             <time datetime="2026-09-23">2026-09-23</time>
+            <div><h3>0.3.24 Apple 芯片版</h3><p>聊天新增模型选择：在输入框左下角向上展开菜单，手选本机账号可用模型，或由“自动”按内容选择。切换仍在同一段聊天，选择会保存；手选模型不可用时明确提示。每轮使用支持的较低推理强度，自动深入推导可用中等强度，不改动 Codex 全局设置；响应仍受服务和网络影响。</p></div>
+          </article>
+          <article>
+            <time datetime="2026-09-23">2026-09-23</time>
             <div><h3>0.3.23 Apple 芯片版</h3><p>新增色弱友好高对比配色，支持浅色、深色与跟随系统，保留球球造型及流光。额度卡和靠边提示补齐状态文字；增强正常深色文字辨识度，为浅色卡片保留柔和阴影，并修复右键菜单截断及窗口关闭报错。</p></div>
           </article>
           <article>
             <time datetime="2026-09-22">2026-09-22</time>
             <div><h3>0.3.17 Apple 芯片版</h3><p>新增 Codex 聊天，关闭重开仍可接着聊；支持切换聊天记录，新聊天需确认，也能用预设动作回应。修复任务监控误跟随球球聊天导致的连接占用，继续保留原聊天与历史内容。</p></div>
           </article>
+          <details class="updates-history">
+            <summary><span class="history-expand">查看更早更新（8 条）</span><span class="history-collapse">收起历史更新</span><span class="history-chevron" aria-hidden="true">⌄</span></summary>
           <article>
             <time datetime="2026-09-18">2026-09-18</time>
             <div><h3>0.3.14 Apple 芯片版</h3><p>新增左右靠边半身收起，悬停时探出、拖离边缘后恢复，也可暂时隐藏；收起时仍会眨眼呼吸、偶尔说句短话，开启 Codex 额度显示时偶尔弹出剩余额度小胶囊。</p></div>
           </article>
-          <details class="updates-history">
-            <summary><span class="history-expand">查看更早更新（7 条）</span><span class="history-collapse">收起历史更新</span><span class="history-chevron" aria-hidden="true">⌄</span></summary>
           <article>
             <time datetime="2026-09-11">2026-09-11</time>
             <div><h3>0.3.13 Intel x64 候选</h3><p>同步 Apple 版的侧躺贴贴、放下站稳、唤醒绕圈、内侧朝向与 Codex 思考光迹等 0.3.13 功能；已通过 Rosetta 检查，仍待真实 Intel Mac 验收。</p></div>
@@ -426,7 +446,7 @@
     <script src="app.js?v=20260911-2"></script>
     <script src="motion-showcase.js?v=20260911-4"></script>
     <script src="quota-demo.js?v=20260911-1"></script>
-    <script src="chat-showcase.js?v=20260922-1"></script>
+    <script src="chat-showcase.js?v=20260923-2"></script>
     <script src="appearance-showcase.js?v=20260923-1"></script>
   </body>
 </html>

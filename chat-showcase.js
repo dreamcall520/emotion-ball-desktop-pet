@@ -10,9 +10,20 @@
   };
   let records, current, timer;
   function closePanels() {
+    get('model-picker').open = false;
     get('records').hidden = true; get('confirm').hidden = true;
     get('history').setAttribute('aria-expanded', 'false');
   }
+  root.querySelectorAll('[data-chat-model]').forEach(button => button.addEventListener('click', () => {
+    get('model-label').textContent = button.dataset.chatModel;
+    root.querySelectorAll('[data-chat-model]').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+    get('model-picker').open = false;
+    get('model-picker').querySelector('summary').focus();
+    get('status').textContent = `示例：已选择${button.dataset.chatModel}，仍在同一段聊天，未发送消息`;
+  }));
+  document.addEventListener('click', event => {
+    if (!get('model-picker').contains(event.target)) get('model-picker').open = false;
+  });
   function render() {
     get('messages').replaceChildren();
     for (const [role, text] of records[current]) {
@@ -42,8 +53,8 @@
       if (records[current] === target) render();
     }, 450);
   });
-  const reset = () => { clearTimeout(timer); records = structuredClone(seeds); current = 'today'; closePanels(); render(); };
+  const reset = () => { clearTimeout(timer); records = structuredClone(seeds); current = 'today'; get('model-label').textContent = '自动'; root.querySelectorAll('[data-chat-model]').forEach(item => item.setAttribute('aria-pressed', String(item.dataset.chatModel === '自动'))); closePanels(); render(); };
   document.querySelector('[data-chat-reset]').addEventListener('click', reset);
-  root.addEventListener('keydown', e => { if (e.key === 'Escape') { closePanels(); get('history').focus(); } });
+  root.addEventListener('keydown', e => { if (e.key === 'Escape') { const modelOpen = get('model-picker').open; closePanels(); (modelOpen ? get('model-picker').querySelector('summary') : get('history')).focus(); } });
   reset();
 })();

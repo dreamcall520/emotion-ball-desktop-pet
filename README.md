@@ -13,14 +13,16 @@
 
 ## 当前下载记录
 
-Apple 芯片版于 2026-09-23 更新为 0.3.23，对应代码标签 `v0.3.23`（154da42473e077c9738040360932d5221e3ae510）。官网保持简洁的下载卡，文件大小与校验值在此维护。
+Apple 芯片版于 2026-09-23 更新为 0.3.24，对应代码标签 `v0.3.24`（bae9d4b88f258e03c14026c0d3d32f44d9007fb7）。官网保持简洁的下载卡，文件大小与校验值在此维护。
 
 | 文件 | 精确大小（bytes） | SHA-256 |
 | --- | ---: | --- |
-| [Qiuqiu-0.3.23-macOS-arm64-share.zip](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.23/Qiuqiu-0.3.23-macOS-arm64-share.zip) | 116821016 | `8ea3bd1d184d3c2dda2d0be420cf6b72a9f0f0ce83f12c9dce6b62b6c59644c6` |
-| [Qiuqiu-0.3.23-macOS-arm64.dmg](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.23/Qiuqiu-0.3.23-macOS-arm64.dmg) | 118250518 | `f8879e25f8d609f708ee7c1af204344aedef7473088f1ba812e7c61d3c7bb445` |
+| [Qiuqiu-0.3.24-macOS-arm64-share.zip](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.24/Qiuqiu-0.3.24-macOS-arm64-share.zip) | 116882520 | `9f5b09a9bad261ccda5c97a143ff5f859c274a82b86f10d49afd055d37ceafe0` |
+| [Qiuqiu-0.3.24-macOS-arm64.dmg](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.24/Qiuqiu-0.3.24-macOS-arm64.dmg) | 118314322 | `b13fd698aae9c550b44b2ba3f09ab370a1be7c840c85199a7e807899465844bc` |
 
-ZIP 内只包含上述 DMG。Intel x64 下载仍为已公开的 0.3.13 构建候选，尚未在真实 Intel Mac 上验收；本次色弱配色等更新仅适用于 Apple 芯片版。应用采用本机临时签名，未进行 Apple Developer ID 签名或公证。
+ZIP 内只包含上述 DMG。Intel x64 下载仍为已公开的 0.3.13 构建候选，尚未在真实 Intel Mac 上验收；本次模型选择更新仅适用于 Apple 芯片版。应用采用本机临时签名，未进行 Apple Developer ID 签名或公证。
+
+官网模型菜单是预设演示，不读取账号模型列表、不发送真实消息、不保存桌宠设置。实际应用的模型目录以本机 Codex 当前账号为准，切换保持同一聊天；不承诺固定响应时间。
 
 ## 本地预览
 
