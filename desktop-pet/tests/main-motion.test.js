@@ -1703,6 +1703,17 @@ test('拖动途中锁屏会取消拖动并恢复完整可见位置', async () =>
   assert.deepEqual(f.pet.getBounds(), bounds);
 });
 
+test('桌面右键菜单以第一项为锚点，保留完整菜单及关闭回调', async () => {
+  const f = await fixture();
+  f.send('pet:context-menu');
+  const { value, options } = f.popups.at(-1);
+  assert.equal(options.window, f.pet);
+  assert.equal(options.positioningItem, 0);
+  assert.equal(value[0].label, '和球球聊聊');
+  assert.equal(value.at(-1).label, '退出球球');
+  assert.equal(typeof options.callback, 'function');
+});
+
 test('边缘展开时任务结果菜单保持展示，移出半球超过650ms仍能打开当前任务', async () => {
   const f = await fixture({ codexEnabled: true });
   menuItem(f, 'edge-left').click();

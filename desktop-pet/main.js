@@ -1053,7 +1053,9 @@ function popupPetMenu(items) {
   controller?.pin(true);
   win.once('closed', release);
   try {
-    Menu.buildFromTemplate(items).popup({ window: win, callback: release });
+    // 交由 AppKit 定位第一项，避免 Electron 为长菜单计算的底边补偿
+    // 把锚点移出小尺寸透明窗口，触发原生菜单的滚动裁切。
+    Menu.buildFromTemplate(items).popup({ window: win, positioningItem: 0, callback: release });
     opened = true;
     return true;
   } finally {
