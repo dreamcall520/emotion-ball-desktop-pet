@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://dreamcall520.github.io/emotion-ball-desktop-pet/sitemap.xml
+Sitemap: https://qiuqiu.pet/sitemap.xml
