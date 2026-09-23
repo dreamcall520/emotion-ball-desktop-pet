@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { normalizeModelSelection } = require('./chat-models');
 
 const DEFAULTS = Object.freeze({
   size: 'tiny',
@@ -9,6 +10,7 @@ const DEFAULTS = Object.freeze({
   keepAwake: true,
   bubblesEnabled: true,
   colorMode: 'standard',
+  chatModel: 'auto',
   codexEnabled: false,
   codexTaskNameInAlerts: false,
   codexQuotaAlwaysVisible: false,
@@ -31,6 +33,7 @@ function normalizeSettings(raw = {}) {
     bubblesEnabled:
       typeof raw.bubblesEnabled === 'boolean' ? raw.bubblesEnabled : DEFAULTS.bubblesEnabled,
     colorMode: ['standard', 'accessible'].includes(raw.colorMode) ? raw.colorMode : DEFAULTS.colorMode,
+    chatModel: normalizeModelSelection(raw.chatModel),
     codexEnabled:
       typeof raw.codexEnabled === 'boolean' ? raw.codexEnabled : DEFAULTS.codexEnabled,
     codexTaskNameInAlerts:

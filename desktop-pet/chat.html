@@ -61,12 +61,20 @@
 
     <form id="composer" class="composer">
       <label class="sr-only" for="message-input">给球球的消息</label>
-      <textarea id="message-input" rows="2" maxlength="2000" placeholder="和球球说句话…" aria-describedby="input-hint" spellcheck="false"></textarea>
+      <textarea id="message-input" rows="2" maxlength="2000" placeholder="和球球说句话…" aria-describedby="input-hint" title="Shift + Enter 换行" spellcheck="false"></textarea>
       <div class="composer-tools">
-        <span id="input-hint">Shift + Enter 换行</span>
+        <span id="input-hint" class="sr-only">Shift + Enter 换行</span>
+        <div id="model-bar" class="model-choice">
+          <button id="chat-model" type="button" value="auto" aria-label="聊天模型" aria-haspopup="menu" aria-controls="model-menu" aria-expanded="false" aria-describedby="model-hint" disabled>自动选择</button>
+        </div>
         <span id="character-count" hidden>0 / 2000</span>
         <button id="stop-message" class="stop-button" type="button" hidden><span aria-hidden="true">■</span> 停止</button>
         <button id="send-message" class="send-button" type="submit" disabled>发送 <span aria-hidden="true">↑</span></button>
+      </div>
+      <div id="model-menu" class="model-menu" role="menu" aria-label="选择聊天模型" hidden></div>
+      <div id="model-feedback" class="sr-only">
+        <p id="model-hint" role="status">正在读取可用模型…</p>
+        <button id="refresh-models" class="text-button" type="button" hidden>重试</button>
       </div>
     </form>
     <p id="privacy-note" class="privacy-note">使用 Codex 额度 · 延续同一段聊天</p>

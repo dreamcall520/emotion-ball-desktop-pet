@@ -5,6 +5,8 @@ const { emptyRecord } = require('../lib/chat-store');
 
 const ACCOUNT_A = 'a'.repeat(64);
 const ACCOUNT_B = 'b'.repeat(64);
+const MODELS = ['gpt-6-luna', 'gpt-6-sol', 'gpt-6-astra'].map(id => ({ id, displayName: id,
+  supportedReasoningEfforts: ['low', 'medium', 'xhigh'], defaultReasoningEffort: 'medium', isDefault: id === 'gpt-6-astra' }));
 const copy = value => JSON.parse(JSON.stringify(value));
 const settle = async () => { for (let n = 0; n < 20; n++) await Promise.resolve(); };
 function deferred() {
@@ -45,12 +47,15 @@ function fixture(t, options = {}) {
   f.companion = createChatCompanion({
     store, workspaceDir: '/tmp/qiuqiu-fake-chat-workspace',
     turnTimeoutMs: options.turnTimeoutMs || 180000,
+    initialModelSelection: options.initialModelSelection,
+    onModelSelection: options.onModelSelection,
     onChange: state => changes.push(state), onAction: action => actions.push(action),
     createRpc(callbacks) {
       const rpc = {
         callbacks, closed: false, closeCalls: 0,
         async start() { calls.push({ method: 'start' }); },
         async readAccount() { calls.push({ method: 'readAccount' }); return copy(f.account); },
+        async listModels() { calls.push({ method: 'listModels' }); return options.listModels ? options.listModels() : copy(MODELS); },
         async startThread() {
           const id = `thread-${++threadNumber}`; calls.push({ method: 'startThread', id });
           return options.startThread ? options.startThread({ id, callbacks }) : { id };
@@ -59,9 +64,9 @@ function fixture(t, options = {}) {
           calls.push({ method: 'resumeThread', threadId });
           return options.resumeThread ? options.resumeThread(threadId) : { id: threadId };
         },
-        async startTurn(threadId, text) {
+        async startTurn(threadId, text, modelSelection) {
           const turnId = `turn-${++turnNumber}`;
-          calls.push({ method: 'startTurn', threadId, text, turnId });
+          calls.push({ method: 'startTurn', threadId, text, turnId, modelSelection });
           return options.startTurn ? options.startTurn({ threadId, text, turnId, callbacks }) : { id: turnId };
         },
         async interruptTurn(threadId, turnId) {
@@ -90,6 +95,93 @@ test('打开聊天和连接只读账号；第一次发送才创建一个 thread'
   assert.equal(f.lastTurn.text, '第一条测试消息');
   assert.equal(f.store.saved.threadId, f.lastTurn.threadId);
   f.complete();
+});
+
+test('模型目录预读一次，手选与自动切换沿用同一聊天，不写入消息或重发', async t => {
+  const saved = [];
+  const f = fixture(t, { onModelSelection: value => saved.push(value) });
+  await f.companion.connect();
+  assert.equal(f.companion.getState().modelsStatus, 'ready');
+  assert.equal(f.companion.getState().models.length, 3);
+  assert.deepEqual(await f.companion.setModel('gpt-6-astra'), { accepted: true });
+  assert.equal(f.count('startThread'), 0);
+  assert.equal(f.count('startTurn'), 0);
+  await f.companion.send('你好');
+  const id = f.lastTurn.threadId;
+  assert.equal(f.lastTurn.modelSelection.model, 'gpt-6-astra');
+  assert.equal(f.lastTurn.modelSelection.effort, 'low');
+  f.complete();
+  await f.companion.setModel('auto');
+  await f.companion.send('陪陪我');
+  assert.equal(f.lastTurn.threadId, id);
+  assert.equal(f.lastTurn.modelSelection.model, 'gpt-6-luna');
+  assert.equal(f.count('startThread'), 1);
+  assert.equal(f.count('listModels'), 1);
+  assert.deepEqual(saved, ['gpt-6-astra', 'auto']);
+  f.complete();
+});
+
+test('模型选择保存失败、非法模型及回复中切换不改变原设置', async t => {
+  let failSave = true;
+  const f = fixture(t, { onModelSelection() { if (failSave) throw new Error('SECRET'); } });
+  await f.companion.connect();
+  assert.equal((await f.companion.setModel('gpt-6-sol')).accepted, false);
+  assert.equal(f.companion.getState().modelSelection, 'auto');
+  failSave = false;
+  assert.equal((await f.companion.setModel('missing-model')).accepted, false);
+  assert.equal((await f.companion.setModel(' auto ')).accepted, false);
+  await f.companion.send('你好');
+  assert.equal((await f.companion.setModel('gpt-6-sol')).accepted, false);
+  assert.equal(f.companion.getState().modelSelection, 'auto');
+  f.complete();
+});
+
+test('已选模型失效或目录读取失败不建新聊天、不偷偷换模型；重试目录后可继续', async t => {
+  let unavailable = true;
+  const f = fixture(t, { initialModelSelection: 'gpt-6-sol', listModels() {
+    if (unavailable) throw new Error('SECRET');
+    return copy(MODELS);
+  } });
+  await f.companion.connect();
+  assert.equal(f.companion.getState().modelsStatus, 'error');
+  assert.equal(f.companion.getState().modelSelection, 'gpt-6-sol');
+  assert.equal((await f.companion.send('你好')).accepted, false);
+  assert.equal(f.count('startThread'), 0);
+  assert.equal(f.count('startTurn'), 0);
+  unavailable = false;
+  assert.equal((await f.companion.refreshModels()).accepted, true);
+  await f.companion.send('你好');
+  assert.equal(f.lastTurn.modelSelection.model, 'gpt-6-sol');
+  f.complete();
+  const stale = fixture(t, { initialModelSelection: 'removed-model' });
+  assert.equal((await stale.companion.send('继续')).accepted, false);
+  assert.equal(stale.count('startThread'), 0);
+  assert.equal(stale.companion.getState().modelSelection, 'removed-model');
+});
+
+test('空聊天静默切换账号后重读模型目录，缓存不能沿用上一账号', async t => {
+  const f = fixture(t);
+  await f.companion.connect();
+  f.account.accountKey = ACCOUNT_B;
+  await f.companion.send('你好');
+  assert.equal(f.count('listModels'), 2);
+  assert.equal(f.count('startThread'), 1);
+  assert.equal(f.count('startTurn'), 1);
+  f.complete();
+});
+
+test('重试模型列表只读取一次，成功后不发起多余刷新', async t => {
+  let reads = 0;
+  const f = fixture(t, { listModels() {
+    reads++;
+    if (reads !== 2) throw new Error('simulated network failure');
+    return copy(MODELS);
+  } });
+  await f.companion.connect();
+  assert.equal(f.companion.getState().modelsStatus, 'error');
+  assert.equal((await f.companion.refreshModels()).accepted, true);
+  assert.equal(reads, 2);
+  assert.equal(f.companion.getState().modelsStatus, 'ready');
 });
 
 test('原连接结束前不恢复对话，释放writer后才在新连接发送', async t => {

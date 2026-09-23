@@ -106,6 +106,7 @@ test('安装包完整包含聊天窗口、持久对话和独立 Codex 通道，�
     'desktop-pet/lib/chat-window.js',
     'desktop-pet/lib/chat-store.js',
     'desktop-pet/lib/chat-companion.js',
+    'desktop-pet/lib/chat-models.js',
     'desktop-pet/lib/codex-chat-rpc.js',
     'desktop-pet/scripts/verify-chat-integration.js'
   ]) {

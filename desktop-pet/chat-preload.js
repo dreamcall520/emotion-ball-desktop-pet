@@ -22,6 +22,13 @@ contextBridge.exposeInMainWorld('qiuqiuChat', {
     return ipcRenderer.invoke('pet:chat-send', text.trim());
   },
   stop: () => ipcRenderer.invoke('pet:chat-stop'),
+  setModel(id) {
+    if (typeof id !== 'string' || !id.trim() || id.length > 200 || id !== id.trim() || /[\u0000-\u001f\u007f]/.test(id)) {
+      return Promise.resolve({ accepted: false, error: '请选择可用的模型。' });
+    }
+    return ipcRenderer.invoke('pet:chat-model', id);
+  },
+  refreshModels: () => ipcRenderer.invoke('pet:chat-models-refresh'),
   newChat: () => ipcRenderer.invoke('pet:chat-new'),
   selectChat(id) {
     if (typeof id !== 'string' || !id.trim() || id.length > 200) {

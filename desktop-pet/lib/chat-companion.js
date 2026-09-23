@@ -1,5 +1,6 @@
 const { randomUUID } = require('node:crypto');
 const { emptyRecord, normalizeArchive, createChatRecord, chatTitle, hasChat, validId, MAX_MESSAGES, MAX_TEXT, MAX_CHATS } = require('./chat-store');
+const { normalizeModelSelection, resolveChatModel } = require('./chat-models');
 
 const ACTIONS = new Set(['none', 'hop', 'jelly', 'sway', 'peek', 'bow', 'spin', 'sleep', 'wake', 'dockLeft', 'dockRight', 'restore']);
 const ERRORS = {
@@ -19,6 +20,8 @@ const ERRORS = {
   RATE_LIMITED: 'Codex 当前可用额度不足或请求过于频繁，请稍后再聊。原对话已保留。',
   CONTEXT_LIMIT: '这段聊天已达到 Codex 的上下文上限。可以主动点“新聊天”重新开始。',
   UNSAFE_CONFIG: '当前 Codex 版本无法按聊天模式连接，请更新 Codex 后再试。',
+  MODELS_UNAVAILABLE: '暂时没能读取可用模型，请重试模型列表后再发送。',
+  MODEL_UNAVAILABLE: '所选模型暂不可用，请重新选择模型；原聊天已保留。',
   TOOL_BLOCKED: '这次请求超出了球球的聊天能力，已停止。可以继续聊或让球球做个小动作。',
   CLOSED: '聊天已关闭。'
 };
@@ -56,7 +59,8 @@ function finalReply(raw) {
   } catch (_) { return null; }
 }
 
-function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => {}, onAction = () => {}, turnTimeoutMs = 180000 }) {
+function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => {}, onAction = () => {}, turnTimeoutMs = 180000,
+  initialModelSelection = 'auto', onModelSelection = () => {} }) {
   let record = normalizeArchive(emptyRecord()), storageProblem = false, storageLoaded = false;
   const readArchive = () => {
     const archive = normalizeArchive(store.read());
@@ -68,12 +72,17 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
   let connection = 'idle', error = storageProblem ? ERRORS.STORAGE : null;
   let verified = false, closed = false, active = null, epoch = 0;
   let draining = Promise.resolve();
+  let modelSelection = normalizeModelSelection(initialModelSelection), models = [], modelsStatus = 'idle', modelsError = null;
+  let modelsClient = null, modelsAccount = null, modelLoad = null, activeModel = null, modelRevision = 0;
   const ownedThreads = new Set([record, ...record.history].map(chat => chat.threadId).filter(Boolean));
 
   function snapshot() {
     return { messages: verified ? record.messages.map(message => ({ ...message })) : [],
       busy: Boolean(active), connection, error, hasConversation: Boolean(record.threadId),
       canStartNewChat: hasChat(record) || Boolean(accountKey && record.accountKey && record.accountKey !== accountKey),
+      modelSelection, models: verified ? models.map(model => ({ ...model, supportedReasoningEfforts: [...model.supportedReasoningEfforts] })) : [],
+      modelsStatus: verified ? modelsStatus : 'idle', modelsError: verified ? modelsError : null,
+      activeModel: verified && activeModel ? { ...activeModel } : null,
       activeChatId: verified ? record.chatId : null,
       history: accountKey && !storageProblem ? [record, ...record.history]
         .filter(chat => hasChat(chat) && (chat.accountKey === accountKey || (chat.chatId === record.chatId && verified && !chat.accountKey)))
@@ -81,6 +90,54 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
         .map(chat => ({ id: chat.chatId, title: chat.title, updatedAt: chat.updatedAt, current: chat.chatId === record.chatId })) : [] };
   }
   const emit = () => { if (!closed) onChange(snapshot()); };
+  async function loadModels(client, force = false) {
+    if (!force && modelsClient === client && modelsAccount === accountKey && modelsStatus === 'ready') return;
+    if (modelLoad?.client === client && modelLoad.account === accountKey) return modelLoad.promise;
+    const operation = { client, account: accountKey };
+    modelRevision++;
+    modelsStatus = 'loading'; modelsError = null; emit();
+    operation.promise = (async () => {
+      try {
+        const available = await client.listModels();
+        if (closed || rpc !== client || !verified || accountKey !== operation.account) return;
+        if (!Array.isArray(available) || !available.length) throw fault('MODELS_UNAVAILABLE');
+        models = available; modelsClient = client; modelsAccount = operation.account; modelsStatus = 'ready';
+      } catch (_) {
+        if (closed || rpc !== client || !verified || accountKey !== operation.account) return;
+        models = []; modelsClient = null; modelsAccount = null; modelsStatus = 'error'; modelsError = ERRORS.MODELS_UNAVAILABLE;
+      } finally {
+        if (modelLoad === operation) modelLoad = null;
+        if (rpc === client) emit();
+      }
+    })();
+    modelLoad = operation;
+    return operation.promise;
+  }
+  function setModel(value) {
+    if (closed || active || connecting || modelsStatus === 'loading') return { accepted: false, error: '请先等待当前回复或连接完成。' };
+    if (typeof value !== 'string' || normalizeModelSelection(value) !== value ||
+      (value !== 'auto' && (!verified || modelsStatus !== 'ready' || !models.some(model => model.id === value)))) {
+      return { accepted: false, error: ERRORS.MODEL_UNAVAILABLE };
+    }
+    if (value === modelSelection) return { accepted: true };
+    try { onModelSelection(value); }
+    catch (_) { return { accepted: false, error: '模型设置未能保存，请稍后再试。' }; }
+    modelSelection = value;
+    activeModel = null;
+    if (error === ERRORS.MODEL_UNAVAILABLE || error === ERRORS.MODELS_UNAVAILABLE) error = null;
+    emit(); return { accepted: true };
+  }
+  async function refreshModels() {
+    if (closed || active || connecting) return { accepted: false, error: '请先等待当前回复或连接完成。' };
+    try {
+      const previousRevision = modelRevision;
+      const client = await connect();
+      if (previousRevision === modelRevision) await loadModels(client, true);
+      if (modelsStatus !== 'ready') return { accepted: false, error: modelsError || ERRORS.MODELS_UNAVAILABLE };
+      if (error === ERRORS.MODELS_UNAVAILABLE) { error = null; emit(); }
+      return { accepted: true };
+    } catch (cause) { return { accepted: false, error: readableError(cause) }; }
+  }
   function retireClient(client) {
     if (!client) return draining;
     const previous = draining;
@@ -142,6 +199,7 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
       // Re-check the account before another message; never assume a login event
       // grants access to the account that owns the saved conversation.
       verified = false; accountKey = null;
+      models = []; modelsClient = null; modelsAccount = null; modelsStatus = 'idle'; modelsError = null; activeModel = null;
       if (request) {
         request.cancelled = true;
         if (request.turnId) void interruptRequest(request);
@@ -196,8 +254,11 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
       if (!account.authenticated || !account.accountKey) throw fault(account.supported === false ? 'UNSUPPORTED' : 'UNAUTHENTICATED');
       accountKey = account.accountKey;
       if (record.accountKey && record.accountKey !== accountKey) { verified = false; throw fault('ACCOUNT_CHANGED'); }
+      if (modelsAccount && modelsAccount !== accountKey) { models = []; modelsClient = null; modelsAccount = null; activeModel = null; }
       verified = true; connection = 'ready';
       error = storageProblem ? ERRORS.STORAGE : record.creationPending ? ERRORS.CREATION_UNCERTAIN : null;
+      await loadModels(client);
+      if (closed || currentEpoch !== epoch || rpc !== client) throw fault('CLOSED');
       emit(); return client;
     })();
     connecting = operation;
@@ -231,6 +292,8 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
       const client = await connect();
       request.client = client;
       if (active !== request || request.cancelled) throw fault('CLOSED');
+      if (modelsStatus !== 'ready' || modelsClient !== client) throw fault('MODELS_UNAVAILABLE');
+      const selectedModel = resolveChatModel(models, modelSelection, text);
       if (record.creationPending) throw fault('CREATION_UNCERTAIN');
       if (!record.threadId) {
         const previousAccount = record.accountKey;
@@ -260,6 +323,7 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
       if (record.messages.filter(message => message.role === 'user').length === 1) record.title = chatTitle(record);
       record.updatedAt = Date.now();
       record.pendingTurn = true; persist();
+      activeModel = selectedModel;
       request.phase = 'starting'; emit();
       request.timer = setTimeout(() => {
         if (active !== request) return;
@@ -270,7 +334,7 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
         loadedThread = null;
       }, turnTimeoutMs);
       request.timer.unref?.();
-      const turn = await client.startTurn(request.threadId, text.trim());
+      const turn = await client.startTurn(request.threadId, text.trim(), selectedModel);
       if (validId(turn?.id)) request.turnId = turn.id;
       if (request.cancelled) void interruptRequest(request);
       if (active !== request) return { accepted: true };
@@ -315,7 +379,7 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
     record = { ...target, version: 2, history };
     try { persist(); }
     catch (cause) { record = previous; error = readableError(cause); emit(); return { accepted: false, error }; }
-    epoch++; loadedThread = null; verified = Boolean(accountKey); error = null;
+    epoch++; loadedThread = null; verified = Boolean(accountKey); error = null; activeModel = null;
     const previousRpc = rpc; rpc = null; connecting = null; retireClient(previousRpc);
     connection = accountKey ? 'ready' : 'idle'; emit();
     return { accepted: true };
@@ -344,7 +408,7 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
     const previous = rpc; rpc = null; connecting = null;
     return retireClient(previous);
   }
-  return { getState: snapshot, connect, send, stop, newChat, selectChat, close, ownsThread: id => ownedThreads.has(id) };
+  return { getState: snapshot, connect, send, stop, newChat, selectChat, setModel, refreshModels, close, ownsThread: id => ownedThreads.has(id) };
 }
 
 module.exports = { createChatCompanion, partialReply, finalReply, ACTIONS, ERRORS };

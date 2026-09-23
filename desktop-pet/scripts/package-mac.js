@@ -43,6 +43,7 @@ function prepareStaging(root) {
     'desktop-pet/lib/chat-window.js',
     'desktop-pet/lib/chat-store.js',
     'desktop-pet/lib/chat-companion.js',
+    'desktop-pet/lib/chat-models.js',
     'desktop-pet/lib/codex-chat-rpc.js',
     'desktop-pet/assets/tray-iconTemplate.png',
     'desktop-pet/assets/tray-iconTemplate@2x.png',

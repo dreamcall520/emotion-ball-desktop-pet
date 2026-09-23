@@ -4,15 +4,18 @@ const path = require('node:path');
 const { spawn: nodeSpawn } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const { TextDecoder } = require('node:util');
+const { isModelId } = require('./chat-models');
 
 // Keep this connection independent of the existing read-only quota/status RPC.
 const ERROR_CODES = Object.freeze(['MISSING', 'UNAUTHENTICATED', 'UNSUPPORTED', 'DISCONNECTED',
   'TIMEOUT', 'INVALID_FRAME', 'INVALID_INPUT', 'CLOSED', 'BUSY', 'TOOL_BLOCKED',
-  'UNSAFE_CONFIG', 'THREAD_NOT_FOUND', 'THREAD_BUSY', 'RATE_LIMITED', 'CONTEXT_LIMIT']);
+  'UNSAFE_CONFIG', 'THREAD_NOT_FOUND', 'THREAD_BUSY', 'RATE_LIMITED', 'CONTEXT_LIMIT', 'MODEL_UNAVAILABLE', 'MODELS_UNAVAILABLE']);
 const MAX_FRAME_BYTES = 4 * 1024 * 1024;
 const MAX_TEXT_LENGTH = 128 * 1024;
 const METHODS = new Set(['initialize', 'config/read', 'account/read', 'thread/start', 'thread/resume',
-  'thread/name/set', 'thread/read', 'turn/start', 'turn/interrupt']);
+  'thread/name/set', 'thread/read', 'turn/start', 'turn/interrupt', 'model/list']);
+const MODEL_PAGE_SIZE = 50, MAX_MODEL_PAGES = 10, MAX_MODELS = 200;
+const isEffort = value => typeof value === 'string' && /^[a-z][a-z0-9_-]{0,31}$/.test(value);
 const DISABLED_FEATURES = Object.freeze(['shell_tool', 'shell_snapshot', 'apps', 'plugins', 'hooks',
   'browser_use', 'browser_use_external', 'computer_use', 'in_app_browser', 'multi_agent', 'multi_agent_v2',
   'code_mode', 'code_mode_host', 'view_image', 'memories', 'chronicle', 'skill_search',
@@ -79,6 +82,7 @@ function createCodexChatRpc({ workspaceDir, fs = nodeFs, spawn = nodeSpawn, home
   let child = null, closed = false, ready = false, safetyReady = false, starting = null, startReject = null, startTimer = null;
   let nextId = 0, chunks = [], buffered = 0, accountKey = null, threadAccountKey = null, accountRevision = 0;
   let accountObserved = false;
+  let modelCatalog = null, modelCatalogAccount = null, listingModels = null;
   let threadId = null, threadRequest = false;
   let closing = null;
   let activeTurnId = null, turnPending = false, threadStatus = 'idle', mcpNames = [];
@@ -88,7 +92,7 @@ function createCodexChatRpc({ workspaceDir, fs = nodeFs, spawn = nodeSpawn, home
 
   function shutdown(code = 'CLOSED') {
     if (closed) return closing || Promise.resolve();
-    closed = true; ready = false; safetyReady = false;
+    closed = true; ready = false; safetyReady = false; modelCatalog = null;
     clearTimeout(startTimer); startTimer = null;
     startReject?.(chatError(code)); startReject = null;
     for (const entry of pending.values()) { clearTimeout(entry.timer); entry.reject(chatError(code)); }
@@ -136,7 +140,7 @@ function createCodexChatRpc({ workspaceDir, fs = nodeFs, spawn = nodeSpawn, home
 
   function notification(method, params) {
     if (method === 'account/updated') {
-      accountKey = null; accountRevision++;
+      accountKey = null; accountRevision++; modelCatalog = null;
       // Initial account/read can itself announce the loaded login. There is no
       // previously verified identity to invalidate yet; readAccount confirms it
       // again below before authorizing any thread or model request.
@@ -322,19 +326,83 @@ function createCodexChatRpc({ workspaceDir, fs = nodeFs, spawn = nodeSpawn, home
       return result;
     } finally { threadRequest = false; }
   }
-  async function startTurn(id, text) {
+  function projectModelPage(raw) {
+    if (!Array.isArray(raw?.data) || raw.data.length > MODEL_PAGE_SIZE ||
+      (raw.nextCursor != null && (typeof raw.nextCursor !== 'string' || !raw.nextCursor || raw.nextCursor.length > 4096 || /[\x00-\x1f]/.test(raw.nextCursor)))) throw chatError('MODELS_UNAVAILABLE');
+    const data = [];
+    for (const model of raw.data) {
+      if (model?.hidden === true) continue;
+      if (!model || model.hidden !== false || !isModelId(model.id) || !isModelId(model.model) ||
+        typeof model.displayName !== 'string' || !model.displayName.trim() || model.displayName.length > 160 ||
+        typeof model.description !== 'string' || model.description.length > 2000 ||
+        typeof model.isDefault !== 'boolean' || !isEffort(model.defaultReasoningEffort) ||
+        !Array.isArray(model.supportedReasoningEfforts) || model.supportedReasoningEfforts.length > 32 ||
+        model.supportedReasoningEfforts.some(option => !isEffort(option?.reasoningEffort))) throw chatError('MODELS_UNAVAILABLE');
+      const supportedReasoningEfforts = [...new Set(model.supportedReasoningEfforts.map(option => option.reasoningEffort))];
+      if (!supportedReasoningEfforts.length || !supportedReasoningEfforts.includes(model.defaultReasoningEffort)) throw chatError('MODELS_UNAVAILABLE');
+      data.push({ id: model.id, model: model.model, displayName: model.displayName, description: model.description,
+        supportedReasoningEfforts, defaultReasoningEffort: model.defaultReasoningEffort, isDefault: model.isDefault });
+    }
+    return { data, nextCursor: raw.nextCursor ?? null, count: raw.data.length };
+  }
+  async function listModels() {
+    ensureOpen();
+    if (!safetyReady) throw chatError('UNSAFE_CONFIG');
+    if (!accountKey) throw chatError('UNAUTHENTICATED');
+    if (listingModels) return listingModels;
+    const revision = accountRevision, identity = accountKey;
+    modelCatalog = null;
+    const operation = (async () => {
+      const result = new Map(), cursors = new Set();
+      let cursor, count = 0;
+      for (let page = 0; page < MAX_MODEL_PAGES; page++) {
+        const response = await request('model/list', { includeHidden: false, limit: MODEL_PAGE_SIZE,
+          ...(cursor === undefined ? {} : { cursor }) }, projectModelPage, { fatalTimeout: false });
+        ensureOpen();
+        if (revision !== accountRevision || identity !== accountKey) throw chatError('UNAUTHENTICATED');
+        count += response.count;
+        if (count > MAX_MODELS) throw chatError('MODELS_UNAVAILABLE');
+        for (const model of response.data) {
+          if (result.has(model.id)) throw chatError('MODELS_UNAVAILABLE');
+          result.set(model.id, model);
+        }
+        if (!response.nextCursor) {
+          if (!result.size) throw chatError('MODELS_UNAVAILABLE');
+          modelCatalog = result; modelCatalogAccount = identity;
+          return [...result.values()].map(({ model, ...entry }) => ({ ...entry, supportedReasoningEfforts: [...entry.supportedReasoningEfforts] }));
+        }
+        if (cursors.has(response.nextCursor)) throw chatError('MODELS_UNAVAILABLE');
+        cursor = response.nextCursor; cursors.add(cursor);
+      }
+      throw chatError('MODELS_UNAVAILABLE');
+    })().catch(error => {
+      modelCatalog = null;
+      throw chatError(['CLOSED', 'UNAUTHENTICATED'].includes(error?.code) ? error.code : 'MODELS_UNAVAILABLE');
+    });
+    listingModels = operation;
+    try { return await operation; }
+    finally { if (listingModels === operation) listingModels = null; }
+  }
+  async function startTurn(id, text, selection) {
     ensureOpen();
     if (!safetyReady) throw chatError('UNSAFE_CONFIG');
     if (!isId(id) || id !== threadId || typeof text !== 'string' || !text.trim() || text.length > 8000) throw chatError('INVALID_INPUT');
     if (!accountKey || accountKey !== threadAccountKey) throw chatError('UNAUTHENTICATED');
     if (turnPending || threadStatus === 'active') throw chatError('BUSY');
+    let selected = {};
+    if (selection !== undefined) {
+      if (!modelCatalog) throw chatError('MODELS_UNAVAILABLE');
+      const model = selection && isModelId(selection.model) ? modelCatalog.get(selection.model) : null;
+      if (!model || !isEffort(selection.effort) || !model.supportedReasoningEfforts.includes(selection.effort)) throw chatError('MODEL_UNAVAILABLE');
+      selected = { model: model.model, effort: selection.effort };
+    }
     turnPending = true;
     completedBeforeReply.clear();
     // Notifications may arrive before the turn/start response. Do not regress a completed turn.
     try {
       return await request('turn/start', { threadId: id, input: [{ type: 'text', text }], cwd,
         approvalPolicy: 'never', sandboxPolicy: { type: 'readOnly', networkAccess: false },
-        environments: [], outputSchema: CHAT_OUTPUT_SCHEMA }, raw => {
+        environments: [], outputSchema: CHAT_OUTPUT_SCHEMA, ...selected }, raw => {
         const turn = projectTurn(raw?.turn);
         if (!completedBeforeReply.has(turn.id) && turn.status === 'inProgress') { activeTurnId = turn.id; threadStatus = 'active'; }
         return turn;
@@ -363,12 +431,13 @@ function createCodexChatRpc({ workspaceDir, fs = nodeFs, spawn = nodeSpawn, home
         const projected = await request('account/read', { refreshToken: false }, raw =>
           revision === accountRevision ? projectAccount(raw) : null);
         if (!projected || revision !== accountRevision) continue;
+        if (modelCatalogAccount !== projected.accountKey) modelCatalog = null;
         accountObserved = true; accountKey = projected.accountKey;
         return projected;
       }
       throw chatError('UNAUTHENTICATED');
     },
-    startThread: () => loadThread(), resumeThread: id => loadThread(id), startTurn,
+    startThread: () => loadThread(), resumeThread: id => loadThread(id), startTurn, listModels,
     nameThread: id => {
       if (!isId(id) || id !== threadId) return Promise.reject(chatError('INVALID_INPUT'));
       return request('thread/name/set', { threadId: id, name: '和球球聊天' }, () => undefined, { fatalTimeout: false });

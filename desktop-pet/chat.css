@@ -33,10 +33,10 @@
 
 * { box-sizing: border-box; }
 html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; }
-button, textarea { font: inherit; }
+button, textarea, select { font: inherit; }
 button { cursor: pointer; -webkit-app-region: no-drag; }
 button:disabled { opacity: .4; cursor: default; }
-button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 [hidden] { display: none !important; }
 
 .chat-panel { height: 100%; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); color: var(--text); }
@@ -49,6 +49,25 @@ h1 { font-size: 14px; line-height: 20px; font-weight: 600; margin: 0; letter-spa
 .text-button { border: 0; background: transparent; color: var(--muted); padding: 6px; border-radius: 6px; white-space: nowrap; font-size: 11px; }
 .text-button:hover:not(:disabled), .close-button:hover { background: var(--hover); color: var(--text); }
 .close-button { width: 24px; height: 26px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-size: 23px; font-weight: 300; line-height: 23px; }
+.model-choice { position: relative; flex: 0 1 auto; min-width: 0; max-width: 180px; color: var(--muted); }
+.model-choice::after { content: ''; position: absolute; right: 7px; top: 9px; width: 5px; height: 5px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); pointer-events: none; }
+.model-choice > button { display: block; min-width: 0; max-width: 100%; height: 26px; padding: 0 20px 0 4px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 11px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+.model-choice > button:hover:not(:disabled), .model-choice > button[aria-expanded="true"] { background: var(--hover); color: var(--text); }
+.model-choice:has(> button[aria-expanded="true"])::after { top: 12px; transform: rotate(225deg); }
+.model-choice > button:disabled { color: var(--muted); cursor: default; opacity: .65; }
+.model-menu { position: fixed; z-index: 5; width: 226px; padding: 6px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line) transparent; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: 0 8px 24px #0002, 0 2px 6px #0001; }
+.model-option { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 28px; padding: 6px 9px; border: 0; border-radius: 7px; background: transparent; color: var(--text); font-size: 11px; text-align: left; }
+.model-option:hover:not(:disabled), .model-option:focus-visible, .model-option[aria-checked="true"] { background: var(--hover); }
+.model-option:focus-visible { outline-offset: -2px; }
+.model-option-auto { align-items: flex-start; min-height: 49px; padding-top: 8px; }
+.model-option-check { flex: 0 0 12px; color: var(--accent); font-size: 12px; font-weight: 600; line-height: 16px; }
+.model-option-content { min-width: 0; }
+.model-option-label { display: block; overflow-wrap: anywhere; line-height: 16px; }
+.model-option-description { display: block; margin-top: 4px; color: var(--muted); font-size: 9px; line-height: 14px; }
+.model-menu-separator { height: 1px; margin: 6px 7px; background: var(--line); }
+.model-feedback { display: flex; align-items: center; gap: 6px; min-width: 0; height: 18px; padding: 3px 4px 0; }
+.model-feedback p { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--error); font-size: 9px; line-height: 15px; }
+.model-feedback .text-button { flex: 0 0 auto; margin-left: auto; padding: 0 3px; color: var(--accent); font-size: 9px; line-height: 15px; text-decoration: underline; text-underline-offset: 2px; }
 .conversation { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 20px 16px 16px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 .history-view { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 19px 14px 15px; }
 .history-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 17px; }

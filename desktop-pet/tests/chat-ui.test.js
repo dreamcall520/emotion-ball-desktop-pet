@@ -15,6 +15,10 @@ const stored = () => ({
     { id: 'chat-b', title: '<img src=x onerror=alert(1)>', updatedAt: '2026-09-21T12:00:00.000Z', current: false }
   ]
 });
+const withModels = (state = stored()) => ({
+  ...state, modelSelection: 'auto', modelsStatus: 'ready', modelsError: null, activeModel: null,
+  models: [{ id: 'gpt-fast', displayName: 'GPT Fast' }, { id: 'gpt-full', displayName: 'GPT Full' }]
+});
 
 function fixture(overrides = {}) {
   let receive;
@@ -27,11 +31,15 @@ function fixture(overrides = {}) {
       this.attributes = new Map();
     }
     addEventListener(name, fn) { this.listeners.set(name, fn); }
-    dispatch(name, fields = {}) { return this.listeners.get(name)?.({ preventDefault() {}, ...fields }); }
+    dispatch(name, fields = {}) { return this.listeners.get(name)?.({ preventDefault() {}, stopPropagation() {}, ...fields }); }
     append(...children) { children.forEach(child => this.appendChild(child)); }
     appendChild(child) { if (child.parent) child.remove(); child.parent = this; this.children.push(child); }
+    replaceChildren(...children) { this.children.forEach(child => { child.parent = null; }); this.children = []; this.append(...children); }
     remove() { this.parent.children = this.parent.children.filter(child => child !== this); }
-    focus() { this.focusCount += 1; }
+    focus() { this.focusCount += 1; document.activeElement = this; }
+    contains(target) { return target === this || this.children.some(child => child.contains(target)); }
+    getBoundingClientRect() { return { top: 412, bottom: 439, left: 23, right: 91, width: 68, height: 27 }; }
+    scrollIntoView() {}
     setAttribute(name, value) { this.attributes.set(name, value); }
     removeAttribute(name) { this.attributes.delete(name); }
   }
@@ -43,6 +51,7 @@ function fixture(overrides = {}) {
   document.body = new Element();
   document.activeElement = document.body;
   const window = new Element();
+  window.innerWidth = 360; window.innerHeight = 480;
   const api = {
     getState: () => Promise.resolve(idle()),
     onState(callback) { receive = callback; return () => {}; },
@@ -50,13 +59,71 @@ function fixture(overrides = {}) {
     async stop() {},
     async newChat() { return { accepted: true }; },
     async selectChat() { return { accepted: true }; },
+    async setModel() { return { accepted: true }; },
+    async refreshModels() { return { accepted: true }; },
     close() {},
     ...overrides
   };
   window.qiuqiuChat = api;
   vm.runInNewContext(source, { document, window });
-  return { get, sent, document, window, receive: next => receive(next) };
+  return { get, sent, document, window, options: () => get('model-menu').children.filter(item => item.dataset.model), receive: next => receive(next) };
 }
+
+test('自定义模型菜单上下键 Home End Enter 选择，Esc 先关闭菜单并回焦入口', async () => {
+  let closes = 0;
+  const selected = [];
+  const f = fixture({ close: () => { closes += 1; }, setModel: async id => { selected.push(id); return { accepted: true }; } });
+  await flush();
+  f.receive(withModels());
+  const trigger = f.get('chat-model');
+  trigger.dispatch('click');
+  assert.equal(f.get('model-menu').hidden, false);
+  assert.equal(trigger.attributes.get('aria-expanded'), 'true');
+  assert.equal(f.options()[0].attributes.get('aria-checked'), 'true');
+  assert.equal(f.document.activeElement, f.options()[0]);
+  f.get('model-menu').dispatch('keydown', { key: 'End' });
+  assert.equal(f.document.activeElement, f.options()[2]);
+  f.get('model-menu').dispatch('keydown', { key: 'ArrowUp' });
+  assert.equal(f.document.activeElement, f.options()[1]);
+  f.get('model-menu').dispatch('keydown', { key: 'Home' });
+  assert.equal(f.document.activeElement, f.options()[0]);
+  f.get('model-menu').dispatch('keydown', { key: 'ArrowDown' });
+  f.get('model-menu').dispatch('keydown', { key: 'Enter' });
+  await flush();
+  assert.deepEqual(selected, ['gpt-fast']);
+  assert.equal(trigger.value, 'gpt-fast');
+  assert.equal(f.get('model-menu').hidden, true);
+  assert.deepEqual(f.sent, []);
+  trigger.dispatch('click');
+  f.document.dispatch('keydown', { key: 'Escape' });
+  assert.equal(closes, 0);
+  assert.equal(f.get('model-menu').hidden, true);
+  assert.equal(f.document.activeElement, trigger);
+  f.document.dispatch('keydown', { key: 'Escape' });
+  assert.equal(closes, 1);
+});
+
+test('模型菜单 Tab、外部点击、历史、忙碌均关闭，忙碌时入口不能打开', async () => {
+  const f = fixture();
+  await flush();
+  f.receive(withModels());
+  const trigger = f.get('chat-model');
+  trigger.dispatch('click');
+  f.get('model-menu').dispatch('keydown', { key: 'Tab' });
+  assert.equal(f.get('model-menu').hidden, true);
+  trigger.dispatch('click');
+  f.document.dispatch('pointerdown', { target: f.get('message-input') });
+  assert.equal(f.get('model-menu').hidden, true);
+  trigger.dispatch('click');
+  f.get('chat-history').dispatch('click');
+  assert.equal(f.get('model-menu').hidden, true);
+  f.get('history-back').dispatch('click');
+  trigger.dispatch('click');
+  f.receive({ ...withModels(), busy: true });
+  assert.equal(f.get('model-menu').hidden, true);
+  trigger.dispatch('click');
+  assert.equal(f.get('model-menu').hidden, true);
+});
 
 test('中文输入确认、Shift+Enter 不发消息；普通 Enter 才明确发送，打开不自动请求聊天', async () => {
   const f = fixture();
@@ -294,6 +361,154 @@ test('新聊天失败保留确认界面、旧消息与草稿，且不会自动�
   assert.equal(f.get('error-text').textContent, '连接暂时不可用');
 });
 
+test('直接选择真实模型或自动选择，不发送消息、不新建聊天，草稿与聊天内容保留', async () => {
+  const selections = [];
+  let creates = 0, refreshes = 0;
+  const f = fixture({
+    setModel: async id => { selections.push(id); return { accepted: true }; },
+    newChat: async () => { creates += 1; },
+    refreshModels: async () => { refreshes += 1; }
+  });
+  await flush();
+  f.receive(withModels());
+  const select = f.get('chat-model');
+  assert.equal(select.value, 'auto');
+  assert.equal(select.disabled, false);
+  assert.deepEqual(f.options().map(option => option.children[1].children[0].textContent), ['自动选择', 'GPT Fast', 'GPT Full']);
+  assert.match(f.get('model-hint').textContent, /日常优先轻量/);
+  assert.equal(f.get('model-feedback').className, 'sr-only');
+  f.get('message-input').value = '还没发出的草稿';
+  select.value = 'gpt-fast';
+  await select.dispatch('change');
+  assert.deepEqual(selections, ['gpt-fast']);
+  assert.equal(select.value, 'gpt-fast');
+  assert.match(f.get('model-hint').textContent, /下条消息起生效/);
+  assert.equal(f.get('message-input').value, '还没发出的草稿');
+  assert.equal(f.get('messages').children[0].children[1].textContent, '今天散步了吗？');
+  select.value = 'auto';
+  await select.dispatch('change');
+  assert.deepEqual(selections, ['gpt-fast', 'auto']);
+  assert.equal(creates, 0);
+  assert.equal(refreshes, 0);
+  assert.deepEqual(f.sent, []);
+});
+
+test('模型保存失败回到已保存选项，提示与聊天错误分离，拒绝及异常均保留草稿', async () => {
+  let throws = false;
+  const f = fixture({ setModel: async () => {
+    if (throws) throw new Error('模型设置暂时无法保存');
+    return { accepted: false, error: '这个模型暂不可用' };
+  } });
+  await flush();
+  f.receive({ ...withModels(), modelSelection: 'gpt-full' });
+  const select = f.get('chat-model');
+  f.get('message-input').value = '请保留我';
+  select.value = 'gpt-fast';
+  await select.dispatch('change');
+  assert.equal(select.value, 'gpt-full');
+  assert.equal(f.get('model-hint').textContent, '这个模型暂不可用');
+  assert.equal(f.get('model-feedback').className, 'model-feedback');
+  assert.equal(f.get('error-banner').hidden, true);
+  throws = true;
+  select.value = 'auto';
+  await select.dispatch('change');
+  assert.equal(select.value, 'gpt-full');
+  assert.equal(f.get('model-hint').textContent, '模型设置暂时无法保存');
+  assert.equal(f.get('message-input').value, '请保留我');
+  assert.equal(f.sent.length, 0);
+});
+
+test('回复中、连接中、发送待确认及模型保存中均不能切换模型，历史页隐藏模型栏', async () => {
+  let changes = 0, resolveSend, resolveModel;
+  const f = fixture({
+    send: () => new Promise(resolve => { resolveSend = resolve; }),
+    setModel: () => { changes += 1; return new Promise(resolve => { resolveModel = resolve; }); }
+  });
+  await flush();
+  const select = f.get('chat-model');
+  for (const patch of [{ busy: true }, { connection: 'connecting' }]) {
+    f.receive({ ...withModels(), ...patch });
+    assert.equal(select.disabled, true);
+    select.value = 'gpt-fast';
+    await select.dispatch('change');
+    assert.equal(select.value, 'auto');
+  }
+  f.receive(withModels());
+  f.get('message-input').value = '你好';
+  f.get('composer').dispatch('submit');
+  assert.equal(select.disabled, true);
+  select.value = 'gpt-fast';
+  await select.dispatch('change');
+  assert.equal(changes, 0);
+  resolveSend({ accepted: true });
+  await flush();
+  select.value = 'gpt-full';
+  const saved = select.dispatch('change');
+  assert.equal(changes, 1);
+  assert.equal(select.disabled, true);
+  select.value = 'auto';
+  await select.dispatch('change');
+  assert.equal(changes, 1);
+  f.get('message-input').value = '保存模型时不能发送';
+  f.get('composer').dispatch('submit');
+  assert.equal(f.get('send-message').disabled, true);
+  resolveModel({ accepted: true });
+  await saved;
+  f.get('chat-history').dispatch('click');
+  assert.equal(f.get('model-bar').hidden, true);
+  select.value = 'gpt-fast';
+  await select.dispatch('change');
+  assert.equal(changes, 1);
+  f.get('history-back').dispatch('click');
+  assert.equal(f.get('model-bar').hidden, false);
+});
+
+test('模型目录失败可单独重试，不消耗聊天消息；已保存但缺失的模型明确标为不可用', async () => {
+  let reads = 0, selections = 0, resolveRead;
+  const f = fixture({
+    refreshModels: () => { reads += 1; return new Promise(resolve => { resolveRead = resolve; }); },
+    setModel: async () => { selections += 1; return { accepted: true }; }
+  });
+  await flush();
+  f.receive({ ...withModels(), modelSelection: 'old-model', modelsStatus: 'error', modelsError: '模型列表暂时不可用' });
+  assert.equal(f.get('chat-model').value, 'old-model');
+  const missing = f.options().find(option => option.value === 'old-model');
+  assert.match(missing.children[1].children[0].textContent, /暂不可用/);
+  assert.equal(missing.disabled, true);
+  assert.equal(f.get('refresh-models').hidden, false);
+  assert.equal(f.get('error-banner').hidden, true);
+  f.get('message-input').value = '我的草稿';
+  const retry = f.get('refresh-models').dispatch('click');
+  f.get('refresh-models').dispatch('click');
+  assert.equal(reads, 1);
+  f.receive({ ...withModels(), modelSelection: 'old-model' });
+  resolveRead({ accepted: true });
+  await retry;
+  assert.equal(f.get('chat-model').value, 'old-model');
+  assert.match(f.get('model-hint').textContent, /所选模型暂不可用/);
+  assert.equal(f.get('message-input').value, '我的草稿');
+  assert.equal(selections, 0);
+  assert.deepEqual(f.sent, []);
+});
+
+test('模型名按纯文字显示，长名字不丢失；流式更新不反复替换选项，自动结果明确显示', async () => {
+  const f = fixture();
+  await flush();
+  const name = '<img src=x onerror=alert(1)>' + '很长的模型名'.repeat(40);
+  const state = { ...withModels(), models: [{ id: 'untrusted', displayName: name }, null, { id: 'untrusted', displayName: '重复' }] };
+  f.receive(state);
+  const options = f.options();
+  assert.equal(options.length, 2);
+  assert.equal(options[1].children[1].children[0].textContent, name);
+  assert.equal(options[1].innerHTML, undefined);
+  f.receive({ ...state, busy: true, activeModel: { model: 'untrusted', displayName: name, automatic: true } });
+  assert.equal(f.options()[1], options[1]);
+  assert.equal(f.get('model-hint').textContent, `本次自动选用 ${name}`);
+  assert.equal(f.get('model-hint').title, `本次自动选用 ${name}`);
+  f.receive({ ...state, modelSelection: 'untrusted' });
+  assert.ok(f.get('chat-model').title.startsWith(`${name}\n`));
+});
+
 test('预加载限制消息类型、长度、固定频道，并能解除订阅', async () => {
   let api;
   const invoked = [], listeners = new Map(), sent = [];
@@ -320,6 +535,16 @@ test('预加载限制消息类型、长度、固定频道，并能解除订阅',
   assert.equal(invoked.length, 1);
   await api.selectChat('chat-record-1');
   assert.deepEqual(invoked[1], ['pet:chat-select', 'chat-record-1']);
+  for (const invalid of [null, {}, '', ' ', ' padded ', 'line\nbreak', 'a'.repeat(201)]) {
+    assert.equal((await api.setModel(invalid)).accepted, false);
+  }
+  assert.equal(invoked.length, 2);
+  await api.setModel('auto');
+  await api.setModel('gpt-fast');
+  await api.refreshModels();
+  assert.deepEqual(invoked.slice(2), [
+    ['pet:chat-model', 'auto'], ['pet:chat-model', 'gpt-fast'], ['pet:chat-models-refresh']
+  ]);
   let snapshot;
   const unsubscribe = api.onState(next => { snapshot = next; });
   listeners.get('pet:chat-state')({}, { busy: true });

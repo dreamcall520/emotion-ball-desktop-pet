@@ -34,6 +34,7 @@ test('损坏文件回退且有效设置可回读', t => {
     keepAwake: true,
     bubblesEnabled: true,
     colorMode: 'standard',
+    chatModel: 'auto',
     codexEnabled: false,
     codexTaskNameInAlerts: false,
     codexQuotaAlwaysVisible: false,
@@ -47,7 +48,7 @@ test('损坏文件回退且有效设置可回读', t => {
 test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
   assert.deepEqual(normalizeSettings({ size: 'small', x: -102.3, y: 81.8, alwaysOnTop: false }), {
     size: 'small', x: -102, y: 82, alwaysOnTop: false,
-    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', codexEnabled: false,
+    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', chatModel: 'auto', codexEnabled: false,
     codexTaskNameInAlerts: false, codexQuotaAlwaysVisible: false,
     codexQuotaPeriod: 'auto', codexQuotaLabelSize: 'compact', codexQuotaAppearance: 'system'
   });
@@ -58,6 +59,20 @@ test('陪伴开关只接受布尔值且不保存输入信息', () => {
     keepAwake: true, bubblesEnabled: false, inputText: '不保存', cursor: { x: 1, y: 2 }, idleSeconds: 99
   }), { ...DEFAULTS, keepAwake: true, bubblesEnabled: false });
   assert.deepEqual(normalizeSettings({ keepAwake: 'true', bubblesEnabled: 0 }), DEFAULTS);
+});
+
+test('模型选择独立持久化，旧配置默认自动，非法id不进入设置', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emotion-pet-model-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'settings.json');
+  assert.equal(normalizeSettings({}).chatModel, 'auto');
+  for (const chatModel of ['auto', 'gpt-6-luna', 'gpt-6-astra']) {
+    saveSettings(file, { chatModel, x: 42, colorMode: 'accessible' });
+    assert.equal(loadSettings(file).chatModel, chatModel);
+    assert.equal(loadSettings(file).x, 42);
+    assert.equal(loadSettings(file).colorMode, 'accessible');
+  }
+  for (const chatModel of [' bad ', {}, 'x\nmodel', '<script>', null]) assert.equal(normalizeSettings({ chatModel }).chatModel, 'auto');
 });
 
 test('首次使用默认保持清醒，但保留用户明确关闭的选择', () => {

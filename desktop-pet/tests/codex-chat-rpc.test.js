@@ -12,6 +12,9 @@ const goodConfig = () => ({ config: { features: Object.fromEntries(DISABLED_FEAT
   web_search: 'disabled', project_doc_max_bytes: 0, mcp_servers: { 'company.private': { command: 'SECRET' }, foo: {} } } });
 const goodThread = () => ({ thread: { id: ID, environments: [], status: { type: 'idle' }, turns: [] },
   cwd: WORKSPACE, approvalPolicy: 'never', sandbox: { type: 'readOnly', networkAccess: false }, instructionSources: [] });
+const goodModel = (id = 'gpt-6-luna', extra = {}) => ({ id, model: id, displayName: id.toUpperCase(), description: '适合聊天', hidden: false,
+  supportedReasoningEfforts: ['low', 'medium'].map(reasoningEffort => ({ reasoningEffort, description: 'effort description' })),
+  defaultReasoningEffort: 'medium', isDefault: false, ...extra });
 function fakeChild() {
   const child = new EventEmitter(); child.pid = 999999;
   for (const name of ['stdin', 'stdout', 'stderr']) child[name] = new PassThrough();
@@ -416,4 +419,114 @@ test('另一个连接占用同对话时返回明确码，不新建或暴露服�
   await h.rpc.start(); await h.rpc.readAccount();
   await assert.rejects(h.rpc.resumeThread(ID), { code: 'THREAD_BUSY', message: 'THREAD_BUSY' });
   assert.equal(h.sent.some(packet => packet.method === 'thread/start'), false);
+});
+
+test('模型目录只读分页，过滤隐藏项和不相关字段，不创建thread或模型轮次', async t => {
+  const h = setup({ reply: p => p.method === 'model/list' ? { result: p.params.cursor
+    ? { data: [goodModel('gpt-6-sol')], nextCursor: null }
+    : { data: [goodModel(undefined, { credentials: 'SECRET', serviceTiers: ['SECRET'] }), goodModel('gpt-hidden', { hidden: true })], nextCursor: 'page-2' }
+  } : defaultReply(p) });
+  t.after(() => h.rpc.close()); await h.rpc.start(); await h.rpc.readAccount();
+  const catalog = await h.rpc.listModels();
+  assert.deepEqual(catalog, ['gpt-6-luna', 'gpt-6-sol'].map(id => ({ id, displayName: id.toUpperCase(), description: '适合聊天', supportedReasoningEfforts: ['low', 'medium'], defaultReasoningEffort: 'medium', isDefault: false })));
+  assert.equal(JSON.stringify(catalog).includes('SECRET'), false);
+  assert.deepEqual(h.sent.filter(p => p.method === 'model/list').map(p => p.params), [
+    { includeHidden: false, limit: 50 }, { includeHidden: false, limit: 50, cursor: 'page-2' }]);
+  assert.equal(h.sent.some(p => p.method.startsWith('thread/') || p.method.startsWith('turn/')), false);
+});
+
+test('模型目录的并发读取合并，一次完成后显式读取会刷新', async t => {
+  let reads = 0;
+  const h = setup({ reply: p => p.method === 'model/list' ? (reads++, { result: { data: [goodModel()] } }) : defaultReply(p) });
+  t.after(() => h.rpc.close()); await h.rpc.start(); await h.rpc.readAccount();
+  const [first, second] = await Promise.all([h.rpc.listModels(), h.rpc.listModels()]);
+  assert.deepEqual(first, second); assert.equal(reads, 1);
+  await h.rpc.listModels(); assert.equal(reads, 2);
+});
+
+test('同一thread切换目录内模型与支持的effort，保留其他隔离参数', async t => {
+  const h = setup({ reply: p => p.method === 'model/list' ? { result: { data: [goodModel(), goodModel('gpt-6-sol', { model: 'gpt-6-sol-20260923' })] } } : defaultReply(p) });
+  t.after(() => h.rpc.close()); await connected(h); const catalog = await h.rpc.listModels();
+  // Mutating the projected list cannot authorize an unsupported effort.
+  catalog[0].supportedReasoningEfforts.push('xhigh');
+  await assert.rejects(h.rpc.startTurn(ID, '你好', { model: 'gpt-6-luna', effort: 'xhigh' }), { code: 'MODEL_UNAVAILABLE' });
+  await h.rpc.startTurn(ID, '你好', { model: 'gpt-6-luna', effort: 'low' });
+  h.send({ method: 'turn/completed', params: { threadId: ID, turn: { id: TURN, status: 'completed' } } });
+  await h.rpc.startTurn(ID, '比较一下', { model: 'gpt-6-sol', effort: 'medium' });
+  const turns = h.sent.filter(p => p.method === 'turn/start');
+  assert.deepEqual(turns.map(p => ({ threadId: p.params.threadId, model: p.params.model, effort: p.params.effort })), [
+    { threadId: ID, model: 'gpt-6-luna', effort: 'low' }, { threadId: ID, model: 'gpt-6-sol-20260923', effort: 'medium' }]);
+  assert.equal(h.sent.filter(p => p.method === 'thread/start').length, 1);
+  for (const { params } of turns) { assert.deepEqual(params.environments, []); assert.deepEqual(params.outputSchema, CHAT_OUTPUT_SCHEMA); }
+});
+
+test('没有目录、恶意id、隐藏模型、未支持effort均在发送前拒绝', async t => {
+  const h = setup({ reply: p => p.method === 'model/list' ? { result: { data: [goodModel(), goodModel('hidden-model', { hidden: true })] } } : defaultReply(p) });
+  t.after(() => h.rpc.close()); await connected(h);
+  await assert.rejects(h.rpc.startTurn(ID, '你好', { model: 'gpt-6-luna', effort: 'low' }), { code: 'MODELS_UNAVAILABLE' });
+  await h.rpc.listModels();
+  for (const selection of [null, {}, { model: '../secret', effort: 'low' }, { model: '--config', effort: 'low' },
+    { model: 'hidden-model', effort: 'low' }, { model: 'gpt-6-luna', effort: 'high' }, { model: 'gpt-6-luna', effort: null }]) {
+    await assert.rejects(h.rpc.startTurn(ID, '你好', selection), { code: 'MODEL_UNAVAILABLE' });
+  }
+  assert.equal(h.sent.some(p => p.method === 'turn/start'), false);
+});
+
+test('刷新后过期模型不可发送，不替换为默认模型；刷新失败也不得用旧目录', async t => {
+  let available = 'gpt-6-luna', fail = false;
+  const h = setup({ reply: p => p.method === 'model/list' ? fail ? { error: { code: 500, message: 'SECRET' } } : { result: { data: [goodModel(available)] } } : defaultReply(p) });
+  t.after(() => h.rpc.close()); await connected(h); await h.rpc.listModels();
+  available = 'gpt-6-sol'; await h.rpc.listModels();
+  await assert.rejects(h.rpc.startTurn(ID, '你好', { model: 'gpt-6-luna', effort: 'low' }), { code: 'MODEL_UNAVAILABLE' });
+  fail = true;
+  await assert.rejects(h.rpc.listModels(), { code: 'MODELS_UNAVAILABLE', message: 'MODELS_UNAVAILABLE' });
+  await assert.rejects(h.rpc.startTurn(ID, '你好', { model: 'gpt-6-sol', effort: 'low' }), { code: 'MODELS_UNAVAILABLE' });
+  assert.equal(h.sent.some(p => p.method === 'turn/start'), false);
+});
+
+for (const mode of ['cycle', 'pages', 'count', 'malformed', 'duplicate', 'empty']) test(`模型目录拒绝异常或无界分页：${mode}`, async t => {
+  let page = 0;
+  const h = setup({ reply: p => {
+    if (p.method !== 'model/list') return defaultReply(p);
+    page++;
+    let data = [goodModel(`model-${page}`)], nextCursor = `cursor-${page}`;
+    if (mode === 'cycle') nextCursor = 'same-cursor';
+    if (mode === 'count') data = Array.from({ length: 50 }, (_, i) => goodModel(`model-${page}-${i}`));
+    if (mode === 'malformed') data[0].supportedReasoningEfforts = [{ reasoningEffort: 'bad\nSECRET' }];
+    if (mode === 'duplicate') data = [goodModel(), goodModel()];
+    if (mode === 'empty') { data = []; nextCursor = null; }
+    return { result: { data, nextCursor } };
+  } });
+  t.after(() => h.rpc.close()); await h.rpc.start(); await h.rpc.readAccount();
+  await assert.rejects(h.rpc.listModels(), { code: 'MODELS_UNAVAILABLE' });
+  assert.ok(page <= 10);
+  assert.equal(h.sent.some(p => p.method.startsWith('thread/') || p.method.startsWith('turn/')), false);
+});
+
+test('账号通知或身份切换使模型目录失效，晚到目录不能重新授权', async t => {
+  let account = 'one@example.test', hold = false, waiting;
+  const h = setup({ reply: p => {
+    if (p.method === 'account/read') return { result: { account: { type: 'chatgpt', email: account } } };
+    if (p.method === 'model/list') { if (hold) { waiting = p; return; } return { result: { data: [goodModel()] } }; }
+    return defaultReply(p);
+  } });
+  t.after(() => h.rpc.close()); await h.rpc.start(); await h.rpc.readAccount(); await h.rpc.listModels();
+  account = 'two@example.test'; await h.rpc.readAccount(); await h.rpc.startThread();
+  await assert.rejects(h.rpc.startTurn(ID, '你好', { model: 'gpt-6-luna', effort: 'low' }), { code: 'MODELS_UNAVAILABLE' });
+  hold = true;
+  const listing = h.rpc.listModels();
+  h.send({ method: 'account/updated', params: {} });
+  h.send({ id: waiting.id, result: { data: [goodModel()] } });
+  await assert.rejects(listing, { code: 'UNAUTHENTICATED' });
+  assert.equal(h.sent.some(p => p.method === 'turn/start'), false);
+});
+
+test('目录请求超时不重发、不建会话且保持只读连接', async t => {
+  const h = setup({ timeoutMs: 10, reply: p => p.method === 'model/list' ? undefined : defaultReply(p) });
+  t.after(() => h.rpc.close()); await h.rpc.start(); await h.rpc.readAccount();
+  await Promise.all([assert.rejects(h.rpc.listModels(), { code: 'MODELS_UNAVAILABLE' }),
+    assert.rejects(h.rpc.listModels(), { code: 'MODELS_UNAVAILABLE' })]);
+  assert.equal(h.sent.filter(p => p.method === 'model/list').length, 1);
+  assert.deepEqual(h.child.kills, []);
+  assert.equal(h.sent.some(p => p.method.startsWith('thread/') || p.method.startsWith('turn/')), false);
 });

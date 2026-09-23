@@ -11,9 +11,13 @@ function createSmokeChatRpc({ onNotification }) {
   return {
     start: async () => {},
     readAccount: async () => ({ authenticated: true, accountKey: 'a'.repeat(64) }),
+    listModels: async () => ['gpt-6-luna', 'gpt-6-sol', 'gpt-6-astra'].map(id => ({ id, displayName: id,
+      supportedReasoningEfforts: ['low', 'medium'], defaultReasoningEffort: 'medium' })),
     startThread: async () => ({ id: `smoke-chat-${++counts.threads}` }),
     resumeThread: async id => ({ id, status: 'idle' }),
-    async startTurn(threadId, text) {
+    async startTurn(threadId, text, selection) {
+      assert.ok(selection && ['gpt-6-luna', 'gpt-6-sol', 'gpt-6-astra'].includes(selection.model));
+      assert.ok(['low', 'medium'].includes(selection.effort));
       const id = `smoke-turn-${++counts.turns}`;
       emit('turn/started', { threadId, turn: { id, status: 'inProgress' } });
       if (text !== '停止验收') timer = setTimeout(() => {
@@ -48,6 +52,7 @@ async function verifyChatIntegration({ pet, chat, chatWindow, getMenu, getPresen
   };
   open();
   await poll(() => chatWindow.isVisible() && chat.getState().connection, value => value === 'ready', 'open panel and connect');
+  await poll(() => chat.getState().modelsStatus, value => value === 'ready', 'load current model catalog');
   const win = chatWindow.getWindow(), page = code => win.webContents.executeJavaScript(code);
   const chooseColor = mode => {
     const item = getMenu().getMenuItemById(`color-${mode}`);
@@ -88,8 +93,15 @@ async function verifyChatIntegration({ pet, chat, chatWindow, getMenu, getPresen
     await poll(() => chat.getState().busy, busy => !busy, 'reply completes');
   };
   assert.equal(counts.threads, 0, 'open must not create thread');
+  assert.equal((await page('window.qiuqiuChat.setModel("gpt-6-astra")')).accepted, true);
+  assert.equal(await page('document.querySelector("#chat-model").value'), 'gpt-6-astra');
+  assert.equal(counts.threads, 0, 'model selection creates no thread');
+  assert.equal(counts.turns, 0, 'model selection sends no messages');
   await send('你好');
-  await send('继续聊');
+  assert.equal(chat.getState().activeModel.model, 'gpt-6-astra');
+  assert.equal((await page('window.qiuqiuChat.setModel("auto")')).accepted, true);
+  await send('请帮我分析一下周末安排');
+  assert.equal(chat.getState().activeModel.model, 'gpt-6-sol');
   assert.equal(counts.threads, 1);
   const originalChatId = chat.getState().activeChatId;
   await page('window.qiuqiuChat.close()');
@@ -122,6 +134,8 @@ async function verifyChatIntegration({ pet, chat, chatWindow, getMenu, getPresen
   hidePet();
   assert.equal(chatWindow.isVisible(), false);
   assert.equal((await page('window.qiuqiuChat.send("隐藏时拒绝")')).accepted, false);
+  assert.equal((await page('window.qiuqiuChat.setModel("gpt-6-astra")')).accepted, false);
+  assert.equal((await page('window.qiuqiuChat.refreshModels()')).accepted, false);
   restorePet(); open();
   await poll(() => chatWindow.isVisible(), Boolean, 'open after restore');
   const lockResult = await page('window.qiuqiuChat.send("停止验收")');
@@ -131,6 +145,8 @@ async function verifyChatIntegration({ pet, chat, chatWindow, getMenu, getPresen
   assert.equal(chatWindow.isVisible(), false);
   assert.equal(await page('window.qiuqiuChat.getState()'), null);
   assert.equal((await page('window.qiuqiuChat.send("锁屏时拒绝")')).accepted, false);
+  assert.equal((await page('window.qiuqiuChat.setModel("gpt-6-astra")')).accepted, false);
+  assert.equal((await page('window.qiuqiuChat.refreshModels()')).accepted, false);
   assert.equal((await page(`window.qiuqiuChat.selectChat(${JSON.stringify(originalChatId)})`)).accepted, false);
   powerMonitor.emit('unlock-screen');
   assert.equal(counts.threads, 2);

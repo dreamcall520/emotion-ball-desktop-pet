@@ -1402,6 +1402,14 @@ function registerIpc() {
     if (!fromChatWindow(event) || screenLocked || !chatWindow.isVisible()) return { accepted: false, error: '请打开聊天面板后再操作。' };
     return chat.selectChat(id);
   });
+  ipcMain.handle('pet:chat-model', (event, id) => {
+    if (!fromChatWindow(event) || screenLocked || !chatWindow.isVisible()) return { accepted: false, error: '请打开聊天面板后再操作。' };
+    return chat.setModel(id);
+  });
+  ipcMain.handle('pet:chat-models-refresh', event => {
+    if (!fromChatWindow(event) || screenLocked || !chatWindow.isVisible()) return { accepted: false, error: '请打开聊天面板后再操作。' };
+    return chat.refreshModels();
+  });
   ipcMain.on('pet:chat-close', event => { if (fromChatWindow(event)) chatWindow.hide(); });
   ipcMain.on('pet:thought', (event, request) => {
     if (!fromPetWindow(event) || typeof request?.visible !== 'boolean') return;
@@ -1588,6 +1596,8 @@ async function bootstrap() {
     onError: error => writeError('聊天面板', error) });
   chat = createChatCompanion({ store: createChatStore(path.join(app.getPath('userData'), 'chat.json')),
     workspaceDir: path.join(app.getPath('userData'), 'chat-workspace'),
+    initialModelSelection: settings.chatModel,
+    onModelSelection: chatModel => { settings = saveSettings(settingsFile, { ...settings, chatModel }); },
     createRpc: options => {
       if (IS_SMOKE_TEST && process.env.PET_SMOKE_CHAT_ONLY === '1') return require('./scripts/verify-chat-integration').createSmokeChatRpc(options);
       fs.mkdirSync(options.workspaceDir, { recursive: true, mode: 0o700 });
