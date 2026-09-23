@@ -1,7 +1,7 @@
 const path = require('node:path');
 
-function edgeNoticeBounds(pet, area, side) {
-  const width = Math.min(244, area.width), height = Math.min(44, area.height);
+function edgeNoticeBounds(pet, area, side, kind = 'text') {
+  const width = Math.min(kind === 'quota' ? 284 : 244, area.width), height = Math.min(44, area.height);
   const inward = side === 'left' ? pet.x + pet.width / 2 + 6 : pet.x + pet.width / 2 - width - 6;
   return { x: Math.round(Math.max(area.x, Math.min(area.x + area.width - width, inward))),
     y: Math.round(Math.max(area.y, Math.min(area.y + area.height - height, pet.y + (pet.height - height) / 2))),
@@ -31,7 +31,7 @@ function createEdgeNoticeWindow({ BrowserWindow, screen, getPetWindow, alwaysOnT
       const pet = getPetWindow();
       if (!pet || pet.isDestroyed() || !pet.isVisible()) { hide(); return; }
       const bounds = pet.getBounds();
-      target.setBounds(edgeNoticeBounds(bounds, screen.getDisplayMatching(bounds).workArea, current.side), false);
+      target.setBounds(edgeNoticeBounds(bounds, screen.getDisplayMatching(bounds).workArea, current.side, current.kind), false);
       target.webContents.send('pet:edge-notice', current);
       target.showInactive();
     } catch (error) { failed(error, target); }

@@ -79,15 +79,53 @@ test('quota only displays the selected primary period and zero is a valid balanc
   const f = fixture(); f.state.quotaModel.items = [{ windowMinutes: 10080, remaining: 0 }, { windowMinutes: 300, remaining: 83 }];
   f.tick(0); const shown = f.tick(30000);
   assert.equal(shown.period, '周额度'); assert.equal(shown.remaining, 0);
+  assert.equal(shown.statusLabel, '已用尽');
+});
+
+test('quota state matches the main card at raw balance boundaries before display rounding', () => {
+  for (const [remaining, statusLabel] of [
+    [100, ''], [20.4, ''], [20.01, ''], [20, '偏低'], [10.4, '偏低'], [10.01, '偏低'],
+    [10, '紧张'], [0.4, '紧张'], [0.01, '紧张'], [0, '已用尽']
+  ]) for (const windowMinutes of [300, 10080]) {
+    const f = fixture();
+    f.state.quotaModel.items = [{ windowMinutes, remaining }, { windowMinutes: 300, remaining: 0 }];
+    f.tick(0);
+    const shown = f.tick(30000);
+    assert.equal(shown.statusLabel, statusLabel, `raw balance ${remaining}, period ${windowMinutes}`);
+    assert.equal(shown.remaining, Math.round(remaining));
+    assert.equal(shown.expiresAt, 36000);
+  }
+});
+
+test('live quota state changes without replaying the capsule or extending its display time', () => {
+  const f = fixture(); f.tick(0);
+  const first = f.tick(30000);
+  for (const [remaining, statusLabel] of [[20, '偏低'], [10, '紧张'], [0, '已用尽'], [21, '']]) {
+    f.state.quotaModel.items[0].remaining = remaining;
+    const updated = f.tick(31000);
+    assert.equal(updated.statusLabel, statusLabel);
+    assert.equal(updated.id, first.id);
+    assert.equal(updated.expiresAt, first.expiresAt);
+  }
+  assert.equal(f.tick(36000), null);
 });
 
 test('capsule stays inside negative-coordinate work area for both edges and all pet sizes', () => {
   const area = { x: -3008, y: -1692, width: 3008, height: 1692 };
-  for (const size of [60, 80, 120, 180, 260]) for (const side of ['left', 'right']) for (const y of [area.y, -size]) {
+  for (const size of [60, 80, 120, 180, 260]) for (const side of ['left', 'right']) for (const y of [area.y, -size]) for (const kind of ['text', 'quota']) {
     const pet = { x: side === 'left' ? area.x : -size, y, width: size, height: size };
-    const b = edgeNoticeBounds(pet, area, side);
+    const b = edgeNoticeBounds(pet, area, side, kind);
+    assert.equal(b.width, kind === 'quota' ? 284 : 244);
     assert.ok(b.x >= area.x && b.x + b.width <= 0 && b.y >= area.y && b.y + b.height <= 0);
     if (side === 'left') assert.ok(b.x >= pet.x + size / 2);
     else assert.ok(b.x + b.width <= pet.x + size / 2);
+  }
+});
+
+test('quota capsule respects a work area smaller than the preferred dimensions', () => {
+  const area = { x: -80, y: -40, width: 200, height: 30 };
+  for (const side of ['left', 'right']) {
+    assert.deepEqual(edgeNoticeBounds({ x: -80, y: -40, width: 80, height: 80 }, area, side, 'quota'),
+      { x: -80, y: -40, width: 200, height: 30 });
   }
 });

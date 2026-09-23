@@ -1269,7 +1269,7 @@ test('标准档复用原小巧版 11px 字号和 3px 进度条，小巧折叠为
 test('小巧展开详情在深色背景使用浅色文字，不能继承浅色页灰字', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
   assert.match(css, /:root\[data-appearance="dark"\] #quota-label\[data-expanded="true"\] #quota-details\s*\{[\s\S]*?color:\s*var\(--quota-muted\)/);
-  assert.match(css, /:root\[data-appearance="dark"\] #quota-label\[data-expanded="true"\]\[data-item-count="1"\] #items li::after,[\s\S]*?\{\s*color:\s*#c8d0da/);
+  assert.match(css, /:root\[data-appearance="dark"\] #quota-label\[data-expanded="true"\]\[data-item-count="1"\] #items li::after,[\s\S]*?\{\s*color:\s*var\(--quota-subtle\)/);
 });
 
 test('额度卡片外观可独立跟随系统或固定浅深色，不影响球球和气泡', () => {
@@ -1358,6 +1358,29 @@ function contrast(first, second) {
   const values = [luminance(first), luminance(second)].sort((a, b) => b - a);
   return (values[0] + 0.05) / (values[1] + 0.05);
 }
+
+test('正常深色胶囊的额度文字和周期徽标在亮色背板上仍有足够对比', () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
+  const hex = value => [0, 2, 4].map(index => Number.parseInt(value.slice(index, index + 2), 16));
+  for (const [appearance, source] of [['dark', css], ['system', css.slice(css.indexOf('@media (prefers-color-scheme: dark)'))]]) {
+    const root = source.match(new RegExp(`:root\\[data-appearance="${appearance}"\\]\\s*\\{([^}]+)\\}`))[1];
+    const muted = root.match(/--quota-muted:\s*#([0-9a-f]{6})/i);
+    // Hidden Electron baseline: the white desktop and glass highlights make
+    // the compact label's center background rgb(93, 98, 106).
+    assert.ok(contrast(hex(muted[1]), [93, 98, 106]) >= 4.5, `${appearance}: 额度文字不能被玻璃高光冲淡`);
+    const badge = source.match(new RegExp(`:root\\[data-appearance="${appearance}"\\] \\.summary-badge,\\s*:root\\[data-appearance="${appearance}"\\] \\.period-pill\\s*\\{([^}]+)\\}`))[1];
+    const text = hex(badge.match(/color:\s*#([0-9a-f]{6})/i)[1]);
+    const background = badge.match(/background:\s*linear-gradient\(([^;]+)\);/)[1];
+    const stops = [...background.matchAll(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/g)];
+    assert.equal(stops.length, 2);
+    for (const stop of stops) {
+      const fill = stop.slice(1).map(Number);
+      assert.ok(fill[3] > 0 && fill[3] < 1, '周期徽标仍保持半透明');
+      assert.ok(contrast(text, composite(fill, [150, 155, 165])) >= 4.5,
+        `${appearance}: 周期徽标不能用亮蓝底托亮蓝字`);
+    }
+  }
+});
 
 test('168×58 内两条额度的文字和进度条不裁切', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');

@@ -54,7 +54,9 @@ function createEdgeNotice({ now = () => performance.now(), random = Math.random,
     if (!active) return;
     publish({ ...active, side: p.side, appearance: state.appearance,
       ...(active.kind === 'quota' ? {
-        period: quota.windowMinutes === 300 ? '5 小时' : '周额度', remaining: Math.round(quota.remaining)
+        period: quota.windowMinutes === 300 ? '5 小时' : '周额度', remaining: Math.round(quota.remaining),
+        // Match the main card using the original balance, before display rounding.
+        statusLabel: quota.remaining === 0 ? '已用尽' : quota.remaining <= 10 ? '紧张' : quota.remaining <= 20 ? '偏低' : ''
       } : {}) });
   }
   return { tick, reset, getCurrent: () => active ? { ...active } : null };

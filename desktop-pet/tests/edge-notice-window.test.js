@@ -52,6 +52,24 @@ test('loaded capsule uses latest payload without focus or mouse capture; can be 
   f.controller.setAlwaysOnTop(false); assert.equal(win.topmost, false);
 });
 
+test('only quota uses the wider capsule and both edges keep the same inward anchor', async () => {
+  const f = fixture(); f.controller.show(payload);
+  const win = f.windows[0]; win.loaded(); await flush();
+  assert.equal(win.bounds.width, 244);
+  const leftAnchor = win.bounds.x;
+  f.controller.show({ ...payload, kind: 'quota', period: '周额度', remaining: 0, statusLabel: '已用尽' });
+  assert.equal(win.bounds.width, 284);
+  assert.equal(win.bounds.x, leftAnchor);
+  f.pet.getBounds = () => ({ x: -80, y: 100, width: 80, height: 80 });
+  f.controller.show({ ...payload, side: 'right', kind: 'quota', period: '周额度', remaining: 0, statusLabel: '已用尽' });
+  const rightAnchor = win.bounds.x + win.bounds.width;
+  f.controller.show({ ...payload, side: 'right' });
+  assert.equal(win.bounds.width, 244);
+  assert.equal(win.bounds.x + win.bounds.width, rightAnchor);
+  assert.equal(win.bounds.height, 44);
+  assert.equal(f.windows.length, 1);
+});
+
 test('old window load rejection and renderer exit cannot close replacement window', async () => {
   const f = fixture(); f.controller.show(payload); const old = f.windows[0];
   f.controller.destroy(); f.controller.show({ ...payload, id: 2 }); const current = f.windows[1];

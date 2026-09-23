@@ -7,8 +7,9 @@
     document.body.dataset.side = value.side === 'right' ? 'right' : 'left';
     document.body.dataset.kind = value.kind;
     document.getElementById('brand').textContent = value.kind === 'quota' ? 'Codex' : '';
+    const status = ['偏低', '紧张', '已用尽'].includes(value.statusLabel) ? ` · ${value.statusLabel}` : '';
     document.getElementById('text').textContent = value.kind === 'quota'
-      ? `${value.period} · 剩余 ${value.remaining}%` : value.text;
+      ? `${value.period} · 剩余 ${value.remaining}%${status}` : value.text;
     if (previous !== value.id) {
       notice.classList.remove('appear');
       void notice.offsetWidth;
