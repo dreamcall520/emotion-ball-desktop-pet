@@ -9,7 +9,25 @@
 - 下载链接必须来自公开 GitHub Release 直链，并同步版本、文件大小、发布日期和 SHA-256。
 - Intel 构建候选在真实 Intel Mac 验收前，必须保留明显说明。
 - `LICENSE`、`NOTICE.md` 和原作者 `sam70361/emotion-ball` 署名不得删除。
-- 官网没有统计脚本、Cookie、表单或远程字体。
+- 官网不使用 Cookie、表单或远程字体；访问统计仅限下方说明的匿名汇总范围。
+
+## 官网访问统计
+
+Umami Cloud 网站“球球官网”，website ID 为 `fe855bb0-9000-49aa-820b-baa55887bd11`。从 2026-09-24 发布接入后开始累计，不包含此前访问。私有[统计看板](https://cloud.umami.is/analytics/us/websites/fe855bb0-9000-49aa-820b-baa55887bd11)需使用已授权的 GitHub 账号登录。
+
+配置在 `index.html` 中 `analytics.js` 的 `data-website-id`。清空该值即可停用，停用时也不加载第三方脚本；停用或更换平台时同步修改首页隐私说明。此 ID 为公开网站配置，不是 API 密钥。
+
+- 仅在 `https://qiuqiu.pet` 加载；本地预览、其他域名、DNT 开启或 `localStorage['umami.disabled'] = '1'` 时不加载。
+- 一次页面加载上报一次 PV；站内锚点切换不重复计数。UV 是 Umami 的匿名访客估算，不能当作真实人数，跨设备或浏览器可能重复。
+- `download` 事件只包含 `architecture`（`arm64` / `x64`）与 `position`（`hero` / `download`）。下载点击不代表下载完成或安装成功；脚本拦截、网络失败与过早离开可能造成漏计。
+- 页面 URL 固定为 `/`，来源仅保留外部网站 origin；不传 URL 查询参数、hash、来源路径、聊天演示内容、邮箱或账号信息。不启用身份识别、回放或热图。
+- 保留浏览器语言、屏幕尺寸等基础访问维度；Umami 根据网络请求识别粗略地区及设备。统计不使用 Cookie，尊重 DNT；不影响桌宠本地运行的隐私边界。
+- Umami Hobby 当前免费额度为每月 100,000 个事件、1 个网站、保留 6 个月；PV 与下载点击均消耗事件额度。免费版不含 API/MCP，日报需从已登录的后台读取。不升级、不添加付款方式。
+- 历史访问无法补回。首日按接入时间注明不完整；日报按 Asia/Shanghai 的前一自然日统计，读取失败不能记为 0。
+
+参考：[Umami 价格](https://umami.is/pricing)、[追踪配置](https://docs.umami.is/docs/tracker-configuration)、[指标口径](https://docs.umami.is/docs/metric-definitions)。
+
+本地检查：`node --test tests/analytics.test.cjs`。这些测试不会连接统计后台。
 
 ## 当前下载记录
 
