@@ -25,8 +25,9 @@
     <link rel="stylesheet" href="motion-showcase.css?v=20260911-5">
     <link rel="stylesheet" href="quota-demo.css?v=20260911-1">
     <link rel="stylesheet" href="dark-theme.css?v=20260911-2">
-    <link rel="stylesheet" href="chat-showcase.css?v=20260923-2">
+    <link rel="stylesheet" href="chat-showcase.css?v=20260928-1">
     <link rel="stylesheet" href="appearance-showcase.css?v=20260923-1">
+    <link rel="stylesheet" href="customize-showcase.css?v=20260928-1">
     <title>球球桌宠 - 免费的 macOS 桌面伙伴</title>
   </head>
   <body>
@@ -37,15 +38,10 @@
       <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav">菜单</button>
       <nav class="site-nav" id="site-nav" aria-label="主要导航">
         <a href="#features">功能</a>
-        <a href="#codex">Codex 陪伴</a>
-        <a href="#chat">和球球聊聊</a>
-        <a href="#appearance">色弱友好</a>
-        <a href="#gallery">动态体验</a>
+        <a href="#customize">定制球球</a>
+        <a href="#codex">Codex</a>
+        <a href="#chat">聊天</a>
         <a href="#download">下载</a>
-        <a href="#privacy">隐私</a>
-        <a href="#install">安装</a>
-        <a href="#updates">更新日志</a>
-        <a href="#license">开源与许可</a>
       </nav>
       <button class="theme-toggle" type="button" aria-label="切换页面外观" data-theme-toggle>外观</button>
     </header>
@@ -119,6 +115,33 @@
         </div>
       </section>
 
+      <section class="customize-section section" id="customize" aria-labelledby="customize-title">
+        <div class="section-heading">
+          <h2 id="customize-title">定制你的球球</h2>
+          <p>从喜欢的形态出发，调整颜色，留下自己的样子。</p>
+        </div>
+        <div class="customize-layout" data-customize-demo>
+          <div class="customize-preview">
+            <div class="customize-stage" data-custom-stage><div data-custom-ball aria-label="经典球球配色示意"></div><div data-custom-palette hidden><strong>幻彩云</strong><div class="customize-palette" aria-hidden="true"><i></i><i></i><i></i><i></i></div><p>球体 / 眼睛<span data-custom-glow-label> / 粉光 / 金光</span></p><p>此处仅展示配色，暂不展示角色素材。</p></div></div>
+            <div class="customize-preview-foot"><span>网页交互示意，非 App 实录</span><div class="customize-switch" data-custom-sizes role="group" aria-label="定制预览尺寸"><button type="button" data-custom-size="large" aria-pressed="true">大图</button><button type="button" data-custom-size="desktop" aria-pressed="false">桌面尺寸</button></div></div>
+          </div>
+          <div class="customize-controls">
+            <fieldset><legend>选择形态</legend><div class="customize-shapes">
+              <button type="button" data-custom-shape="blob" aria-pressed="true">经典</button>
+              <button type="button" data-custom-shape="cloud" aria-pressed="false">云</button>
+              <button type="button" data-custom-shape="aurora" aria-pressed="false">幻彩云</button>
+              <button type="button" data-custom-shape="square" aria-pressed="false">圆角方</button>
+            </div><p data-custom-description>熟悉的球球，也能换一套喜欢的配色。</p></fieldset>
+            <div class="customize-colors"><label>球体颜色 <input type="color" value="#eeebe4" data-custom-body></label><label>眼睛颜色 <input type="color" value="#1a1a1a" data-custom-eye></label></div>
+            <label class="customize-transparency">透明度 <output data-custom-opacity-label>0%</output><input type="range" min="0" max="60" value="0" step="1" data-custom-opacity></label>
+            <fieldset data-custom-styles hidden><legend>幻彩云样式</legend><div class="customize-switch" role="group" aria-label="幻彩云样式说明"><button type="button" data-custom-style="dimensional" aria-pressed="true">立体幻彩</button><button type="button" data-custom-style="simple" aria-pressed="false">简色渐变</button></div><p data-custom-style-note>立体幻彩支持球体、眼睛、粉光与金光配色。</p></fieldset>
+            <div class="customize-startup"><label><input type="checkbox" checked data-custom-startup> 设为启动外观</label><p data-custom-startup-note>在 App 中保存后，下次打开仍使用这套外观。</p><span>右键球球 → 定制球球 → 保存到桌面球球。网页操作不会修改或保存本机设置。</span></div>
+          </div>
+        </div>
+        <p class="customize-release">新版功能预告 · 当前公开的 0.3.24 尚不包含定制球球。新安装包暂未开放下载。</p>
+        <nav class="section-links" aria-label="更多外观与互动"><a href="#appearance">色弱友好配色 →</a><a href="#gallery">更多动态体验 →</a></nav>
+      </section>
+
       <section class="codex-section section" id="codex" aria-labelledby="codex-title">
         <div class="codex-copy">
           <p class="section-label">可选能力</p>
@@ -173,7 +196,8 @@
             <header class="chat-demo-header">
               <img src="assets/favicon.png" width="40" height="40" alt="">
               <div><strong>和球球聊聊</strong><span data-chat-subtitle>接着聊，我还记得这一段</span></div>
-              <button type="button" data-chat-history aria-expanded="false">聊天记录</button>
+              <button type="button" data-chat-new>新聊天</button>
+              <button type="button" data-chat-history aria-expanded="false">历史</button>
             </header>
             <div class="chat-demo-body">
               <div class="chat-demo-messages" data-chat-messages role="log" aria-label="示例聊天记录" aria-live="polite"></div>
@@ -181,7 +205,6 @@
                 <h3>聊天记录</h3>
                 <button type="button" data-chat-select="today">歇一会儿 <span>今天</span></button>
                 <button type="button" data-chat-select="earlier">明天的小计划 <span>之前</span></button>
-                <button class="chat-new" type="button" data-chat-new>新聊天</button>
                 <p>切换记录不会新建对话。</p>
               </div>
               <div class="chat-demo-confirm" data-chat-confirm hidden role="group" aria-label="确认新聊天">
@@ -207,7 +230,7 @@
             </div>
             <p class="chat-demo-footer" data-chat-status>示例：延续同一段聊天</p>
           </div>
-          <p class="chat-demo-note">可点击左下角模型入口、发送示例和聊天记录。这里是预设演示，不连接 Codex、不发送真实消息。应用中会保存模型选择，切换不另开聊天、不额外发送；响应速度仍受服务和网络影响。</p>
+          <p class="chat-demo-note">新版顶栏预览：新聊天 / 历史。当前公开 0.3.24 的新聊天入口仍在历史中。这里是预设演示，不连接 Codex、不发送真实消息；模型切换仍在同一段聊天，响应速度受服务和网络影响。</p>
           <button class="chat-reset" type="button" data-chat-reset>重新体验</button>
         </div>
       </section>
@@ -429,6 +452,7 @@
     </main>
 
     <footer class="site-footer" id="license" aria-label="开源、署名与许可">
+      <nav class="section-links" aria-label="帮助与更多内容"><a href="#appearance">色弱友好</a><a href="#gallery">动态体验</a><a href="#install">安装指南</a><a href="#privacy">隐私</a><a href="#updates">更新日志</a><a href="LICENSE">使用许可</a><a href="NOTICE.md">来源声明</a></nav>
       <p>球球桌宠 · 由马晓坤设计与开发</p>
       <p>球球桌宠，免费、非商业使用。角色与动画来自原作者 sam70361；再次分发须保留署名、LICENSE 和 NOTICE。</p>
     </footer>
@@ -447,8 +471,9 @@
     <script src="app.js?v=20260911-2"></script>
     <script src="motion-showcase.js?v=20260911-4"></script>
     <script src="quota-demo.js?v=20260911-1"></script>
-    <script src="chat-showcase.js?v=20260923-2"></script>
+    <script src="chat-showcase.js?v=20260928-1"></script>
     <script src="appearance-showcase.js?v=20260923-1"></script>
+    <script src="customize-showcase.js?v=20260928-1"></script>
     <script src="analytics.js?v=20260924-1" data-website-id="fe855bb0-9000-49aa-820b-baa55887bd11"></script>
   </body>
 </html>
