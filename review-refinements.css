@@ -1,4 +1,9 @@
 /* Review pass: preserve existing theme and demos, reduce competing detail. */
+.update-group { margin-top: 22px; }
+.update-group h4 { margin: 0 0 8px; font-size: 16px; color: var(--text); }
+.update-group ul { margin: 0; padding-left: 1.25em; color: var(--text-soft); }
+.update-group li { padding-left: 4px; line-height: 1.75; }
+.update-group li + li { margin-top: 6px; }
 .section { padding-block: clamp(56px, 6vw, 88px); }
 .section:not(.hero) h2 { font-size: clamp(30px, 3vw, 42px); line-height: 1.22; }
 .section:not(.hero) .section-heading { margin-bottom: 28px; }

@@ -14,8 +14,8 @@ class Element {
   replaceChildren() { this.children = []; }
   fire(event) { this.events[event](); }
 }
-const names = ['ball', 'body', 'eye', 'palette', 'artwork', 'swatches', 'styles', 'sizes', 'description', 'stage',
-  'opacity', 'opacity-label', 'glow-label', 'style-note', 'startup', 'startup-note'];
+const names = ['ball', 'body', 'eye', 'palette', 'artwork', 'colors', 'caption', 'styles', 'sizes', 'description', 'stage',
+  'opacity', 'opacity-label', 'startup', 'startup-note'];
 const nodes = Object.fromEntries(names.map(name => [name, new Element()]));
 nodes.body.value = '#eeebe4'; nodes.eye.value = '#1a1a1a'; nodes.opacity.value = '0';
 const groups = {
@@ -39,32 +39,39 @@ for (const [index, shape] of ['blob', 'cloud', 'aurora', 'square'].entries()) {
   groups.shape[index].fire('click');
   assert.equal(groups.shape[index].attributes['aria-pressed'], 'true');
   assert.equal(groups.shape.filter(node => node.attributes['aria-pressed'] === 'true').length, 1);
-  assert.equal(nodes.ball.hidden, shape === 'aurora');
-  assert.equal(nodes.palette.hidden, shape !== 'aurora');
+  assert.equal(nodes.ball.hidden, shape !== 'blob');
+  assert.equal(nodes.palette.hidden, shape === 'blob');
+  assert.equal(nodes.colors.hidden, shape !== 'blob');
   assert.equal(nodes.styles.hidden, shape !== 'aurora');
   assert.equal(nodes.ball.attributes['aria-label'], `${['经典', '云朵', '幻彩', '方糖'][index]}配色示意`);
   if (shape === 'aurora') assert.equal(nodes.ball.children.length, 0);
-  if (shape === 'square' || shape === 'cloud') assert.equal(nodes.ball.children.length, 1);
+  if (shape === 'square' || shape === 'cloud') assert.equal(nodes.artwork.src, `assets/custom-${shape}.svg`);
 }
 assert.ok(destroyed >= 1);
 nodes.opacity.value = '60'; nodes.opacity.fire('input');
 assert.equal(nodes.ball.style.opacity, '0.4');
 assert.equal(nodes.artwork.style.opacity, '0.4');
-assert.equal(nodes.swatches.style.opacity, '0.4');
 assert.equal(nodes.palette.style.opacity, undefined, 'reference captions remain readable');
 assert.equal(nodes['opacity-label'].textContent, '60%');
 for (const checked of [false, true]) {
   nodes.startup.checked = checked; nodes.startup.fire('change');
   assert.match(nodes['startup-note'].textContent, checked ? /下次打开仍使用/ : /下次打开恢复/);
 }
+groups.shape[2].fire('click');
 for (const kind of ['size', 'style']) {
   for (const button of groups[kind]) {
     button.fire('click');
     assert.equal(nodes.stage.dataset[kind], button.dataset[kind === 'size' ? 'customSize' : 'customStyle']);
     assert.equal(groups[kind].filter(node => node.attributes['aria-pressed'] === 'true').length, 1);
+    if (kind === 'style') assert.equal(nodes.artwork.src, button.dataset.customStyle === 'simple'
+      ? 'assets/custom-aurora-simple.png' : 'assets/custom-aurora-dimensional.png');
   }
 }
-assert.match(nodes['style-note'].textContent, /不使用粉光、金光/);
+groups.shape[1].fire('click');
+groups.shape[2].fire('click');
+assert.equal(nodes.artwork.src, 'assets/custom-aurora-simple.png', 'style survives shape switch');
+groups.shape[0].fire('click');
+assert.equal(nodes.colors.hidden, false, 'classic palette returns');
 assert.doesNotMatch(source, /BOO_ASSETS|boo-binary|aurora-rive|aurora-cloud-reference|fetch\(|localStorage/);
 const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
 const downloadLinks = [...html.matchAll(/data-download-arch="arm64"[^>]*href="([^"]+)"/g)];
@@ -75,7 +82,8 @@ assert.match(html, /v0\.3\.13\/Qiuqiu-0\.3\.13-macOS-x64-share\.zip/);
 assert.doesNotMatch(html + source, /幻彩云|圆角方|新版功能预告|尚不包含此功能|新安装包暂未开放|新聊天入口仍在历史记录中/);
 assert.match(html, /assets\/huancai-icon\.png/);
 assert.ok(fs.existsSync(path.join(__dirname, '../assets/huancai-icon.png')));
-assert.match(html, /静态外观参考/);
-assert.match(html, /完整材质与动效请在 App 中体验/);
+for (const asset of ['custom-cloud.svg', 'custom-square.svg', 'custom-aurora-simple.png', 'custom-aurora-dimensional.png'])
+  assert.ok(fs.existsSync(path.join(__dirname, '../assets', asset)));
+assert.doesNotMatch(html, /参考图不随配色|data-custom-swatches|data-custom-glow-label/);
 assert.equal((html.match(/<details class="updates-history">([\s\S]*?)<\/details>\s*<\/div>\s*<\/section>/)[1].match(/<article>/g) || []).length, 11);
-console.log('customize showcase: names, transparency, startup, palette demo, release links and history passed');
+console.log('customize showcase: App previews, linked styles, palette visibility, transparency, release links and history passed');
