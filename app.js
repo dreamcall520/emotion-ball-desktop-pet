@@ -13,9 +13,9 @@
   function storedTheme() {
     try {
       const value = window.localStorage.getItem('emotion-ball-site-theme');
-      return ['auto', 'light', 'dark'].includes(value) ? value : 'dark';
+      return ['auto', 'light', 'dark'].includes(value) ? value : 'light';
     } catch (_error) {
-      return 'dark';
+      return 'light';
     }
   }
 
@@ -25,8 +25,10 @@
     } else {
       documentRoot.dataset.theme = theme;
     }
-    const labels = { auto: '外观: 系统', light: '外观: 浅色', dark: '外观: 深色' };
-    themeButton.textContent = labels[theme];
+    const labels = { auto: '跟随系统', light: '浅色', dark: '深色' };
+    themeButton.textContent = `外观：${labels[theme]}`;
+    themeButton.setAttribute('aria-label', `切换页面外观，当前${labels[theme]}`);
+    themeButton.setAttribute('title', `切换页面外观，当前${labels[theme]}`);
     themeButton.dataset.themeChoice = theme;
     try {
       window.localStorage.setItem('emotion-ball-site-theme', theme);
@@ -43,20 +45,28 @@
     setTheme(order[(order.indexOf(current) + 1) % order.length]);
   });
 
-  navButton.addEventListener('click', () => {
-    const willOpen = !navigation.classList.contains('is-open');
-    navigation.classList.toggle('is-open', willOpen);
-    navButton.setAttribute('aria-expanded', String(willOpen));
-    navButton.textContent = willOpen ? '关闭' : '菜单';
-  });
+  function setNavigation(open) {
+    navigation.classList.toggle('is-open', open);
+    navButton.setAttribute('aria-expanded', String(open));
+  }
 
-  for (const link of navigation.querySelectorAll('a')) {
+  navButton.addEventListener('click', () => setNavigation(!navigation.classList.contains('is-open')));
+
+  for (const link of document.querySelectorAll('.site-header a')) {
     link.addEventListener('click', () => {
-      navigation.classList.remove('is-open');
-      navButton.setAttribute('aria-expanded', 'false');
-      navButton.textContent = '菜单';
+      setNavigation(false);
     });
   }
+
+  document.addEventListener('click', (event) => {
+    if (!navigation.contains(event.target) && !navButton.contains(event.target)) setNavigation(false);
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && navigation.classList.contains('is-open')) {
+      setNavigation(false);
+      navButton.focus();
+    }
+  });
 
   if (backToTopButton && topSection && 'IntersectionObserver' in window) {
     const topObserver = new IntersectionObserver(([entry]) => {
