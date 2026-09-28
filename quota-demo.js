@@ -13,7 +13,7 @@
   root.innerHTML = `
     <div class="qd-toolbar">
       <span class="qd-toolbar-label">卡片外观</span>
-      <div class="qd-segment" role="group" aria-label="演示卡片外观，不改变网页主题">
+      <div class="qd-segment" role="group" aria-label="演示卡片外观">
         <button type="button" data-qd-theme="light" aria-pressed="false">浅色</button>
         <button type="button" data-qd-theme="dark" aria-pressed="true">深色</button>
       </div>
@@ -42,7 +42,7 @@
       <button type="button" data-qd-action="complete">已完成</button>
       <button type="button" data-qd-action="quota">额度提醒</button>
     </div>
-    <p class="qd-disclaimer">演示数据，不连接 Codex · 点击按钮体验回应</p>
+    <p class="qd-disclaimer">演示数据 · 点击按钮体验回应</p>
     <span class="qd-sr-only" role="status" aria-live="polite"></span>`;
   const card = root.querySelector('.qd-card');
   const caption = root.querySelector('.qd-caption');

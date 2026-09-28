@@ -15,7 +15,7 @@ function run(saved, unavailable = false) {
   const document = Object.assign(element(), { documentElement: root,
     querySelector: selector => ({ '[data-theme-toggle]': theme, '.nav-toggle': toggle })[selector] || null,
     getElementById: id => id === 'site-nav' ? nav : null,
-    querySelectorAll: selector => selector === '.site-header a' ? [link] : []
+    querySelectorAll: selector => selector === '.site-header a' ? [link] : selector === '[data-theme-toggle]' ? [theme] : []
   });
   vm.runInNewContext(source, { document, window: { localStorage: {
     getItem() { if (unavailable) throw Error('blocked'); return saved; }, setItem() {}

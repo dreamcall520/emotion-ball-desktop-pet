@@ -26,6 +26,8 @@
 .customize-transparency input { width: 100%; grid-column: 1 / -1; accent-color: var(--accent); }
 .customize-startup { border-top: 1px solid var(--line); padding-top: 24px; font-size: 15px; }
 .customize-startup input { accent-color: var(--accent); }
+.customize-startup summary { cursor: pointer; font-size: 14px; padding-block: 10px; }
+.customize-startup[open] summary { margin-bottom: 12px; }
 .customize-startup span { display: block; margin-top: 12px; font-size: 12px; color: var(--text-soft); line-height: 1.7; }
 .customize-release { border-top: 1px solid var(--line); padding-top: 24px; margin-top: 40px; font-size: 14px; }
 .section-links { display: flex; flex-wrap: wrap; gap: 16px 28px; font-size: 14px; margin-top: 24px; }
@@ -40,9 +42,24 @@
 .customize-palette i:nth-child(4) { background: #d0ad8a; }
 [data-custom-stage][data-style="simple"] .customize-palette i:nth-child(n+3) { display: none; }
 @media (max-width: 800px) {
-  .customize-layout { grid-template-columns: 1fr; gap: 32px; }
-  .customize-stage { min-height: 300px; }
-  [data-custom-ball] { width: 260px; }
-  .customize-controls { border-left: 0; border-top: 1px solid var(--line); padding: 24px 0 0; }
+  .customize-layout { grid-template-columns: minmax(108px, .8fr) minmax(0, 1.2fr); gap: 20px; align-items: start; }
+  .customize-preview { position: sticky; top: 76px; }
+  .customize-stage { flex: none; min-height: 180px; grid-template-columns: minmax(0, 1fr); }
+  [data-custom-ball] { width: 180px; }
+  .customize-preview-foot { justify-content: center; gap: 8px; text-align: center; line-height: 1.6; }
+  .customize-preview-foot .customize-switch { flex-wrap: wrap; justify-content: center; gap: 0; }
+  .customize-controls { padding-left: 16px; }
+  .customize-controls fieldset { margin-bottom: 16px; }
+  .customize-shapes { display: grid; grid-template-columns: 1fr 1fr; }
+  .customize-section button { min-height: 44px; padding: 8px; }
+  .customize-colors { gap: 12px; padding-top: 16px; flex-wrap: wrap; }
+  .customize-colors label { gap: 8px; }
+  .customize-colors input { width: 56px; height: 44px; }
+  .customize-transparency { margin: 20px 0; gap: 8px; }
+  .customize-transparency input { min-height: 32px; margin: 0; }
+  .customize-startup { padding-top: 8px; }
+  [data-custom-styles] .customize-switch { flex-wrap: wrap; }
+  .customize-palette { flex-wrap: wrap; gap: 8px; margin-block: 16px; }
+  .customize-palette i { width: 32px; height: 32px; }
   .customize-section > .section-heading { text-align: left; margin-bottom: 24px; }
 }

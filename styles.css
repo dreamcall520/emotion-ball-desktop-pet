@@ -299,6 +299,7 @@ code {
   font-size: 13px;
   font-weight: 400;
 }
+.theme-toggle-mobile { display: none; }
 
 .nav-toggle {
   display: inline-flex;
@@ -1231,15 +1232,28 @@ code {
 
 @media (max-width: 900px) {
   :root {
-    --header-height: 88px;
+    --header-height: 60px;
   }
 
-  .site-header { grid-template-columns: 1fr auto auto; grid-template-rows: 44px 44px; gap: 0 8px; }
-  .brand { grid-area: 1 / 1; }
-  .nav-toggle { grid-area: 1 / 2; }
-  .theme-toggle { grid-area: 1 / 3; }
-  .nav-core { grid-area: 2 / 1 / 3 / 4; justify-content: flex-start; gap: 24px; overflow-x: auto; }
+  .site-header { grid-template-columns: auto minmax(0, 1fr) auto; gap: 16px; }
+  .site-header > .theme-toggle { display: none; }
+  .site-nav .theme-toggle-mobile { display: block; width: 100%; text-align: left; padding: 13px 14px; border-top: 1px solid var(--line); border-radius: 0; }
+  .nav-core { justify-content: flex-start; gap: 20px; overflow-x: auto; scrollbar-width: none; }
+  .nav-core::-webkit-scrollbar { display: none; }
   .nav-core a { flex-shrink: 0; }
+  .nav-core a[href="#download"] {
+    position: sticky;
+    padding-inline: 12px;
+    background: var(--surface);
+    -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(24px);
+    box-shadow: -8px 0 10px -5px var(--surface);
+  }
+  .nav-core a[href="#download"] { right: 0; }
+
+  .hero .hero-copy { display: contents; }
+  .hero .hero-stage { order: 1; }
+  .hero .hero-actions { order: 2; }
 
   .section,
   .hero,
@@ -1311,7 +1325,7 @@ code {
 @media (max-width: 680px) {
   :root {
     --page-gutter: 16px;
-    --header-height: 88px;
+    --header-height: 60px;
   }
 
   body {
@@ -1320,12 +1334,13 @@ code {
 
   .site-header {
     padding-inline: 16px;
+    gap: 12px;
   }
   .nav-core a { font-size: 13px; }
   .nav-core { gap: 18px; }
 
   .brand {
-    font-size: 18px;
+    font-size: 16px;
   }
 
   .theme-toggle,
@@ -1490,6 +1505,13 @@ code {
   .back-to-top {
     right: max(16px, env(safe-area-inset-right));
     bottom: max(16px, env(safe-area-inset-bottom));
+    width: 44px;
+    min-height: 44px;
+    padding: 0;
+    justify-content: center;
+    gap: 0;
+    font-size: 0;
+    border-radius: 50%;
   }
 
   .copy-toast {

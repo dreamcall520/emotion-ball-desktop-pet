@@ -2,7 +2,7 @@
   'use strict';
 
   const documentRoot = document.documentElement;
-  const themeButton = document.querySelector('[data-theme-toggle]');
+  const themeButtons = document.querySelectorAll('[data-theme-toggle]');
   const navButton = document.querySelector('.nav-toggle');
   const navigation = document.getElementById('site-nav');
   const toast = document.querySelector('[data-toast]');
@@ -26,10 +26,12 @@
       documentRoot.dataset.theme = theme;
     }
     const labels = { auto: '跟随系统', light: '浅色', dark: '深色' };
+    for (const themeButton of themeButtons) {
     themeButton.textContent = `外观：${labels[theme]}`;
     themeButton.setAttribute('aria-label', `切换页面外观，当前${labels[theme]}`);
     themeButton.setAttribute('title', `切换页面外观，当前${labels[theme]}`);
     themeButton.dataset.themeChoice = theme;
+    }
     try {
       window.localStorage.setItem('emotion-ball-site-theme', theme);
     } catch (_error) {
@@ -39,7 +41,7 @@
 
   setTheme(storedTheme());
 
-  themeButton.addEventListener('click', () => {
+  for (const themeButton of themeButtons) themeButton.addEventListener('click', () => {
     const order = ['auto', 'dark', 'light'];
     const current = themeButton.dataset.themeChoice || 'auto';
     setTheme(order[(order.indexOf(current) + 1) % order.length]);

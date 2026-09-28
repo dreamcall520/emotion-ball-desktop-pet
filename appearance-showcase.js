@@ -5,8 +5,8 @@
   const system = matchMedia('(prefers-color-scheme: dark)');
   let mode = 'accessible', look = 'dark';
   const descriptions = {
-    accessible: '色弱友好：实底、高对比文字与蓝黄提示，状态不只靠颜色区分。',
-    standard: '标准配色：保留柔和的玻璃质感，额度状态同样有文字提示。'
+    accessible: '文字与背景区分更明显，额度高低也有文字提示。',
+    standard: '柔和的半透明背景，额度高低仍有文字提示。'
   };
   function render() {
     root.dataset.mode = mode;

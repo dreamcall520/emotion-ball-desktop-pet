@@ -6,9 +6,9 @@
   let shape = 'blob', ball;
   const descriptions = {
     blob: '熟悉的球球，也能换一套喜欢的配色。',
-    cloud: '云形支持轮廓和五官微调；这里使用独立几何示意，不是 App 原轮廓。',
-    aurora: '保留幻彩云的轮廓和五官，可切换样式、颜色与透明度。',
-    square: '圆角方支持轮廓与五官微调；此处为简化配色示意。'
+    cloud: '独立云形示意。App 内可微调轮廓与五官。',
+    aurora: '仅演示配色。App 内可切换样式与透明度。',
+    square: '简化方形示意。App 内可微调轮廓与五官。'
   };
   function render() {
     ball?.destroy(); ball = null;

@@ -35,6 +35,9 @@
     if (definition.antics) engine.config.register({ ...definition.raw, antics: false });
   }
   engine.config.register({ ...engine.config.get('02').raw, id: '50', name: '安静陪伴', group: 'custom', antics: false, anims: [] });
+  engine.config.register({ ...engine.config.get('02').raw, id: '55', name: '靠右边陪伴', group: 'custom',
+    antics: false, anims: [], gaze: false, body: { breathe: 0 },
+    eyes: { both: { x: -92, y: 18, rotate: 32 } } });
   const thinking = engine.config.get('30').raw;
   engine.config.register({ ...thinking, id: '51', name: 'Codex 思考', group: 'custom', antics: false, body: { ...thinking.body, orbit: 0 } });
 
@@ -46,6 +49,8 @@
       this.offset = root.querySelector('.pet-offset');
       this.button = root.querySelector('[data-motion-toggle]');
       this.touch = root.querySelector('[data-pet-touch]');
+      this.edge = root.querySelector('[data-desktop-edge]');
+      this.edgePeek = false;
       this.sequence = SEQUENCES[this.name];
       this.index = 0;
       this.current = this.sequence[0];
@@ -80,16 +85,24 @@
       this.touch.addEventListener('click', () => this.play(this.name === 'codex' ? 'complete' : 'nuzzle', true));
       this.touch.addEventListener('dblclick', () => this.play('hop', true));
       this.touch.addEventListener('pointermove', event => {
-        if (this.controller || this.current === 'thought' || this.current === 'sleep' || reduced.matches || this.paused) return;
+        if (this.edge?.checked || this.controller || this.current === 'thought' || this.current === 'sleep' || reduced.matches || this.paused) return;
         const rect = this.touch.getBoundingClientRect();
         this.ball.setGaze((event.clientX - rect.left) / rect.width * 2 - 1, (event.clientY - rect.top) / rect.height * 2 - 1);
       });
       this.touch.addEventListener('pointerleave', () => {
         if (!this.controller && this.current !== 'thought') this.ball.clearGaze();
       });
+      if (this.edge) {
+        const edgeArea = this.touch;
+        this.edge.addEventListener('change', () => { this.edgePeek = false; this.reconcile(); });
+        edgeArea.addEventListener('pointerenter', () => { this.edgePeek = true; if (this.edge.checked) this.reconcile(); });
+        edgeArea.addEventListener('pointerleave', () => { this.edgePeek = false; if (this.edge.checked) this.reconcile(); });
+        this.touch.addEventListener('focus', () => { this.edgePeek = true; if (this.edge.checked) this.reconcile(); });
+        this.touch.addEventListener('blur', () => { this.edgePeek = false; if (this.edge.checked) this.reconcile(); });
+      }
     }
     canAnimate() { return this.alive && this.visible && !document.hidden && !reduced.matches; }
-    canAuto() { return this.canAnimate() && !this.paused; }
+    canAuto() { return this.canAnimate() && !this.paused && !this.edge?.checked; }
     renderStill() { this.ball.setEmotion(this.current === 'sleep' ? '00' : '50'); this.ball.renderStatic(); }
     after(callback, delay) {
       const timer = setTimeout(() => {
@@ -145,6 +158,10 @@
       }
     }
     play(action, manual = false) {
+      if (manual && this.edge?.checked) {
+        this.edge.checked = false;
+        this.root.dataset.edgeTucked = 'false';
+      }
       this.stop();
       this.render(action);
       this.count += 1;
@@ -199,6 +216,15 @@
     }
     reconcile() {
       this.stop();
+      const tucked = !!this.edge?.checked && !this.edgePeek;
+      this.root.dataset.edgeTucked = String(tucked);
+      if (this.edge?.checked) {
+        this.ball.setEmotion(tucked ? '55' : '50');
+        this.ball.setMotionFrame({
+          body: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotate: 0, yaw: 0 },
+          gaze: { x: 0, y: 0 }
+        });
+      }
       this.updateButton();
       if (this.canAuto()) this.play(this.sequence[this.index]);
     }
@@ -232,7 +258,7 @@
   // Read-only diagnostic state, no mutation or account integration API.
   window.QiuqiuWebsiteMotion = Object.freeze({ getState: () => [...scenes.values()].map(scene => ({
     name: scene.name, action: scene.current, count: scene.count, visible: scene.visible,
-    paused: scene.paused, autoplay: scene.canAuto(), timers: scene.timers.size,
+    paused: scene.paused, edgeTucked: scene.root.dataset.edgeTucked === 'true', autoplay: scene.canAuto(), timers: scene.timers.size,
     playing: scene.root.dataset.playing === 'true', thought: scene.flow.getState()
   })) });
 })();

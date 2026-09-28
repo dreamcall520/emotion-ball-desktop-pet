@@ -21,13 +21,14 @@
         else if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
       } catch (_error) {}
     </script>
-    <link rel="stylesheet" href="styles.css?v=20260928-nav5">
+    <link rel="stylesheet" href="styles.css?v=20260928-review">
     <link rel="stylesheet" href="motion-showcase.css?v=20260911-5">
     <link rel="stylesheet" href="quota-demo.css?v=20260911-1">
     <link rel="stylesheet" href="dark-theme.css?v=20260911-2">
     <link rel="stylesheet" href="chat-showcase.css?v=20260928-1">
-    <link rel="stylesheet" href="appearance-showcase.css?v=20260923-1">
-    <link rel="stylesheet" href="customize-showcase.css?v=20260928-1">
+    <link rel="stylesheet" href="appearance-showcase.css?v=20260928-2">
+    <link rel="stylesheet" href="customize-showcase.css?v=20260928-review">
+    <link rel="stylesheet" href="review-refinements.css?v=20260928-2">
     <title>球球桌宠 - 免费的 macOS 桌面伙伴</title>
   </head>
   <body>
@@ -45,11 +46,11 @@
       <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav">更多</button>
       <nav class="site-nav" id="site-nav" aria-label="更多导航">
         <a href="#appearance">色弱友好</a>
-        <a href="#gallery">动态体验</a>
         <a href="#install">安装指南</a>
         <a href="#privacy">隐私</a>
         <a href="#updates">更新日志</a>
         <a href="#license">开源与许可</a>
+        <button class="theme-toggle theme-toggle-mobile" type="button" aria-label="切换页面外观" data-theme-toggle>外观</button>
       </nav>
       <button class="theme-toggle" type="button" aria-label="切换页面外观" data-theme-toggle>外观</button>
     </header>
@@ -117,58 +118,32 @@
               <button type="button" data-motion-action="hop" aria-pressed="false">跳一跳</button>
               <button type="button" data-motion-action="ribbon" aria-pressed="false">转彩带</button>
               <button type="button" data-motion-action="nuzzle" aria-pressed="false">摸摸头</button>
+              <label class="desktop-edge-control"><input type="checkbox" data-desktop-edge> 靠边收起</label>
             </div>
-            <p class="motion-caption">自动轮播，也可以点选你想看的小动作。</p>
+            <p class="motion-caption">点选动作体验；靠边收起后，移到球球上可展开。</p>
           </div>
         </div>
-      </section>
-
-      <section class="customize-section section" id="customize" aria-labelledby="customize-title">
-        <div class="section-heading">
-          <h2 id="customize-title">定制你的球球</h2>
-          <p>从喜欢的形态出发，调整颜色，留下自己的样子。</p>
-        </div>
-        <div class="customize-layout" data-customize-demo>
-          <div class="customize-preview">
-            <div class="customize-stage" data-custom-stage><div data-custom-ball aria-label="经典球球配色示意"></div><div data-custom-palette hidden><strong>幻彩云</strong><div class="customize-palette" aria-hidden="true"><i></i><i></i><i></i><i></i></div><p>球体 / 眼睛<span data-custom-glow-label> / 粉光 / 金光</span></p><p>此处仅展示配色，暂不展示角色素材。</p></div></div>
-            <div class="customize-preview-foot"><span>网页交互示意，非 App 实录</span><div class="customize-switch" data-custom-sizes role="group" aria-label="定制预览尺寸"><button type="button" data-custom-size="large" aria-pressed="true">大图</button><button type="button" data-custom-size="desktop" aria-pressed="false">桌面尺寸</button></div></div>
-          </div>
-          <div class="customize-controls">
-            <fieldset><legend>选择形态</legend><div class="customize-shapes">
-              <button type="button" data-custom-shape="blob" aria-pressed="true">经典</button>
-              <button type="button" data-custom-shape="cloud" aria-pressed="false">云</button>
-              <button type="button" data-custom-shape="aurora" aria-pressed="false">幻彩云</button>
-              <button type="button" data-custom-shape="square" aria-pressed="false">圆角方</button>
-            </div><p data-custom-description>熟悉的球球，也能换一套喜欢的配色。</p></fieldset>
-            <div class="customize-colors"><label>球体颜色 <input type="color" value="#eeebe4" data-custom-body></label><label>眼睛颜色 <input type="color" value="#1a1a1a" data-custom-eye></label></div>
-            <label class="customize-transparency">透明度 <output data-custom-opacity-label>0%</output><input type="range" min="0" max="60" value="0" step="1" data-custom-opacity></label>
-            <fieldset data-custom-styles hidden><legend>幻彩云样式</legend><div class="customize-switch" role="group" aria-label="幻彩云样式说明"><button type="button" data-custom-style="dimensional" aria-pressed="true">立体幻彩</button><button type="button" data-custom-style="simple" aria-pressed="false">简色渐变</button></div><p data-custom-style-note>立体幻彩支持球体、眼睛、粉光与金光配色。</p></fieldset>
-            <div class="customize-startup"><label><input type="checkbox" checked data-custom-startup> 设为启动外观</label><p data-custom-startup-note>在 App 中保存后，下次打开仍使用这套外观。</p><span>右键球球 → 定制球球 → 保存到桌面球球。网页操作不会修改或保存本机设置。</span></div>
-          </div>
-        </div>
-        <p class="customize-release">新版功能预告 · 当前公开的 0.3.24 尚不包含定制球球。新安装包暂未开放下载。</p>
-        <nav class="section-links" aria-label="更多外观与互动"><a href="#appearance">色弱友好配色 →</a><a href="#gallery">更多动态体验 →</a></nav>
       </section>
 
       <section class="codex-section section" id="codex" aria-labelledby="codex-title">
         <div class="codex-copy">
-          <p class="section-label">可选能力</p>
-          <h2 id="codex-title">可选的 Codex 任务陪伴</h2>
-          <p class="codex-lead">默认关闭。开启后，在本机读取额度与任务进展；处理中偶尔浮现头顶光迹，完成时用跳跃或渐变彩带回应。</p>
+          <h2 id="codex-title">Codex 在忙，球球替你留意。</h2>
+          <p class="codex-lead">工作交给 Codex，进展让球球轻轻提醒你。</p>
           <dl class="fact-list">
             <div>
-              <dt>本机处理</dt>
-              <dd>只提取需要的状态，不保存、不上传。</dd>
+              <dt>看进展</dt>
+              <dd>任务处理中，用头顶光迹陪你等待。</dd>
             </div>
             <div>
-              <dt>正文立即丢弃</dt>
-              <dd>状态包可能附带已加载聊天内容，正文会立即丢弃。</dd>
+              <dt>看额度</dt>
+              <dd>剩余额度与重置时间，一眼就知道。</dd>
             </div>
             <div>
-              <dt>不替你操作</dt>
-              <dd>任务监控不会创建、发送、审批、中断任务或重置额度；聊天由你主动发起。</dd>
+              <dt>完成提醒</dt>
+              <dd>任务结束，用跳跃或彩带回应。</dd>
             </div>
           </dl>
+          <p class="release-note">默认关闭，可选开启；只查看状态，不代你操作。<a href="#privacy">了解隐私边界</a></p>
         </div>
         <div class="codex-live-showcase" data-motion-scene="codex">
           <div class="quota-playground" data-quota-demo></div>
@@ -180,26 +155,28 @@
               </button>
             </div>
           </div>
-          <div class="codex-motion-footer"><span>网页模拟演示，不会操作你的任务。</span><button class="motion-toggle" type="button" data-motion-toggle aria-pressed="false">暂停动效</button></div>
+          <div class="codex-motion-footer"><button class="motion-toggle" type="button" data-motion-toggle aria-pressed="false">暂停动效</button></div>
         </div>
       </section>
 
       <section class="chat-section section" id="chat" aria-labelledby="chat-title">
         <div class="chat-intro">
-          <p class="chat-release">0.3.24 Apple 芯片版 · 已发布</p>
+          <p class="chat-release">Apple 芯片版已支持聊天</p>
           <h2 id="chat-title">和球球聊聊，<br>接着上次的话。</h2>
-          <p class="chat-lead">不只是待在桌面上。想说点什么，就打开球球旁边的聊天面板；回来时，继续熟悉的那一段。</p>
+          <p class="chat-lead">想说点什么，就打开球球旁边的聊天面板。</p>
+          <p class="chat-requirements">需登录 Codex 并联网，使用你的 Codex 额度。普通桌宠仍可离线使用。</p>
           <dl class="chat-benefits">
-            <div><dt>聊下去，不反复新建</dt><dd>首次发送才建立对话，后续消息、关闭重开与断线恢复都延续原聊天。</dd></div>
-            <div><dt>以前的话，也能接回来</dt><dd>从“聊天记录”切回旧聊天；新聊天需要确认，旧记录仍然保留。</dd></div>
-            <div><dt>说一句，也有小动作</dt><dd>可以让球球跳一跳、转圈或睡一会儿，只执行预设动作，不运行代码或命令。</dd></div>
-            <div><dt>换个模型，还是这段聊天</dt><dd>在输入框左下角选择模型，也可交给“自动”：日常聊天优先 Luna，分析与计划优先 Sol，深入推导优先 Astra。实际按本机账号可用模型选择；手选不可用时会明确提示。</dd></div>
+            <div><dt>接着上次聊</dt><dd>关闭后再回来，仍是熟悉的那一段。</dd></div>
+            <div><dt>找回旧聊天</dt><dd>从历史记录切回来，之前的话不会丢。</dd></div>
+            <div><dt>用小动作回应</dt><dd>让球球跳一跳、转个圈，或安静休息。</dd></div>
           </dl>
           <p class="chat-entry">使用入口：右键球球或菜单栏 → 和球球聊聊</p>
-          <p class="chat-requirements">需在本机登录 Codex 并联网，无需另填 API Key；回复使用你的 Codex 额度。普通桌宠仍可离线使用。</p>
+          <details class="content-details"><summary>模型与使用说明</summary><p>模型可以自动选择，也能在输入框左下角手选，以本机账号可用列表为准。无需另填 API Key；模型不可用时会明确提示。球球只执行预设动作，不运行模型返回的代码或命令。</p></details>
           <a class="chat-download-link" href="#download">下载 0.3.24，和球球聊聊 →</a>
         </div>
         <div class="chat-demo-wrap">
+          <p class="release-badge">新版界面预览</p>
+          <p class="release-note">当前下载版的新聊天入口仍在历史记录中。</p>
           <div class="chat-demo" data-chat-demo>
             <header class="chat-demo-header">
               <img src="assets/favicon.png" width="40" height="40" alt="">
@@ -238,8 +215,34 @@
             </div>
             <p class="chat-demo-footer" data-chat-status>示例：延续同一段聊天</p>
           </div>
-          <p class="chat-demo-note">新版顶栏预览：新聊天 / 历史。当前公开 0.3.24 的新聊天入口仍在历史中。这里是预设演示，不连接 Codex、不发送真实消息；模型切换仍在同一段聊天，响应速度受服务和网络影响。</p>
           <button class="chat-reset" type="button" data-chat-reset>重新体验</button>
+        </div>
+      </section>
+
+      <section class="customize-section section" id="customize" aria-labelledby="customize-title">
+        <div class="section-heading">
+          <p class="release-badge">新版功能预告</p>
+          <h2 id="customize-title">定制你的球球</h2>
+          <p>从喜欢的形态出发，调整颜色，留下自己的样子。</p>
+          <p class="release-note">当前下载版尚不包含此功能，新安装包暂未开放下载。</p>
+        </div>
+        <div class="customize-layout" data-customize-demo>
+          <div class="customize-preview">
+            <div class="customize-stage" data-custom-stage><div data-custom-ball aria-label="经典球球配色示意"></div><div data-custom-palette hidden><strong>幻彩云</strong><div class="customize-palette" aria-hidden="true"><i></i><i></i><i></i><i></i></div><p>球体 / 眼睛<span data-custom-glow-label> / 粉光 / 金光</span></p><p>此处仅展示配色，暂不展示角色素材。</p></div></div>
+            <div class="customize-preview-foot"><span>网页交互示意，非 App 实录</span><div class="customize-switch" data-custom-sizes role="group" aria-label="定制预览尺寸"><button type="button" data-custom-size="large" aria-pressed="true">大图</button><button type="button" data-custom-size="desktop" aria-pressed="false">桌面尺寸</button></div></div>
+          </div>
+          <div class="customize-controls">
+            <fieldset><legend>选择形态</legend><div class="customize-shapes">
+              <button type="button" data-custom-shape="blob" aria-pressed="true">经典</button>
+              <button type="button" data-custom-shape="cloud" aria-pressed="false">云</button>
+              <button type="button" data-custom-shape="aurora" aria-pressed="false">幻彩云</button>
+              <button type="button" data-custom-shape="square" aria-pressed="false">圆角方</button>
+            </div><p data-custom-description>熟悉的球球，也能换一套喜欢的配色。</p></fieldset>
+            <div class="customize-colors"><label>球体颜色 <input type="color" value="#eeebe4" data-custom-body></label><label>眼睛颜色 <input type="color" value="#1a1a1a" data-custom-eye></label></div>
+            <label class="customize-transparency">透明度 <output data-custom-opacity-label>0%</output><input type="range" min="0" max="60" value="0" step="1" data-custom-opacity></label>
+            <fieldset data-custom-styles hidden><legend>幻彩云样式</legend><div class="customize-switch" role="group" aria-label="幻彩云样式说明"><button type="button" data-custom-style="dimensional" aria-pressed="true">立体幻彩</button><button type="button" data-custom-style="simple" aria-pressed="false">简色渐变</button></div><p data-custom-style-note>立体幻彩支持球体、眼睛、粉光与金光配色。</p></fieldset>
+            <details class="customize-startup"><summary>启动外观与保存</summary><label><input type="checkbox" checked data-custom-startup> 设为启动外观</label><p data-custom-startup-note>在 App 中保存后，下次打开仍使用这套外观。</p><span>右键球球 → 定制球球 → 保存到桌面球球。</span></details>
+          </div>
         </div>
       </section>
 
@@ -262,7 +265,7 @@
           </div>
           <div class="ap-preview">
             <div class="ap-quota ap-panel" aria-label="额度卡片配色示例">
-              <div class="ap-quota-heading"><strong>CODEX</strong><span class="ap-pill">5 小时</span></div>
+              <div class="ap-quota-heading"><strong>CODEX</strong><span class="ap-pill">5 小时</span><label class="ap-state-control"><span>示例额度</span><select data-ap-state aria-label="切换示例额度"><option value="68">充足 · 68%</option><option value="15" selected>偏低 · 15%</option><option value="8">紧张 · 8%</option><option value="0">已用尽 · 0%</option></select></label></div>
               <div class="ap-balance"><strong data-ap-value>15%</strong><span data-ap-severity>偏低</span><span class="ap-muted">剩余额度</span></div>
               <progress max="100" value="15" aria-label="演示剩余额度"></progress>
               <div class="ap-details"><span>2 小时 30 分钟后重置</span><span class="ap-blue">2 次重置机会</span></div>
@@ -274,41 +277,12 @@
               <div class="ap-panel ap-bubble"><span data-ap-notice>5 小时剩余 15% · 偏低</span></div>
             </div>
           </div>
-          <div class="ap-demo-footer"><label>体验额度状态 <select data-ap-state><option value="68">充足 · 68%</option><option value="15" selected>偏低 · 15%</option><option value="8">紧张 · 8%</option><option value="0">已用尽 · 0%</option></select></label><p role="status" data-ap-description>色弱友好：实底、高对比文字与蓝黄提示，状态不只靠颜色区分。</p></div>
-          <p class="ap-note">配色示意，使用预设数据，不连接 Codex；这里的切换只影响本模块，不改变你的桌宠设置或网页主题。</p>
+          <div class="ap-demo-footer"><p role="status" data-ap-description>文字与背景区分更明显，额度高低也有文字提示。</p></div>
         </div>
-        <div class="ap-info"><p><strong>从这里开启</strong>右键球球或菜单栏 → 界面配色 → 色弱友好（高对比）。在“色弱友好外观”选择浅色、深色或跟随系统，立即生效并保存。</p><p><strong>信息变清楚，陪伴不变</strong>调整额度卡、聊天和气泡；保留球球原来的渐变、轮廓、眼睛与动效，额度边框流光也继续保留。</p></div>
+        <div class="ap-info"><p><strong>在 App 中开启</strong>右键球球 → 界面配色 → 色弱友好（高对比）。</p><p><strong>只改变信息配色</strong>额度、聊天和提示更清楚，球球的样子和动作不变。</p></div>
         <p class="ap-release">0.3.23 Apple 芯片版 · 已发布，安装后即可切换界面配色。<a href="#download">下载最新版本</a></p>
       </section>
 
-      <section class="gallery-section section" id="gallery" aria-labelledby="gallery-title">
-        <div class="section-heading gallery-heading">
-          <h2 id="gallery-title">把一小份陪伴，留在桌面</h2>
-          <p>从安静守候到小小回应，看看它如何陪你度过一天。</p>
-        </div>
-        <div class="desktop-showcase" data-motion-scene="desktop">
-          <div class="desktop-scene">
-            <div class="desktop-scene-copy"><span data-motion-label>安静陪伴</span><h3 data-scene-title>你忙，我陪着。</h3><p data-scene-description>不抢走注意力，也一直在你身边。</p></div>
-            <div class="desktop-orbit desktop-orbit-one" aria-hidden="true"></div><div class="desktop-orbit desktop-orbit-two" aria-hidden="true"></div>
-            <div class="motion-stage">
-              <p class="motion-bubble" data-motion-bubble>球球在这儿，稳稳待着。</p>
-              <button class="pet-touch-target" type="button" data-pet-touch aria-label="与桌面场景里的球球互动">
-                <span class="pet-offset"><span class="live-ball" data-ball-host></span><span class="thought-flow" aria-hidden="true"></span></span>
-              </button>
-            </div>
-          </div>
-          <div class="desktop-toolbar">
-            <div class="motion-choices" aria-label="选择桌面陪伴场景">
-              <button type="button" data-motion-action="hello" aria-pressed="true">打个招呼</button>
-              <button type="button" data-motion-action="nuzzle" aria-pressed="false">贴贴陪伴</button>
-              <button type="button" data-motion-action="sleep" aria-pressed="false">安静休息</button>
-              <button type="button" data-motion-action="stretch" aria-pressed="false">醒脑一圈</button>
-            </div>
-            <button class="motion-toggle" type="button" data-motion-toggle aria-pressed="false">暂停动效</button>
-          </div>
-          <p class="motion-caption">基于已确认 V5 动效的网页演示；Apple 与 Intel x64 自 0.3.13 起均包含这些互动。</p>
-        </div>
-      </section>
 
       <section class="download-section section" id="download" aria-labelledby="download-title">
         <div class="download-intro">
@@ -342,7 +316,8 @@
               </div>
               <span class="architecture">x86_64</span>
             </div>
-            <p>与 Apple 版使用同一份 0.3.13 应用代码，已通过独立 x64 构建、签名与 Rosetta 检查，尚未在真实 Intel Mac 上验收；Codex 联动不声明 Intel 实机通过。</p>
+            <p>Intel 版停留在 0.3.13，提供基础桌宠互动，不包含本页展示的新版聊天与色弱配色功能。</p>
+            <details class="content-details"><summary>Intel 兼容性说明</summary><p>已通过独立 x64 构建、签名与 Rosetta 检查，尚未在真实 Intel Mac 上验收；Codex 联动也未通过 Intel 实机验证。</p></details>
             <dl class="release-data">
               <div><dt>版本</dt><dd>0.3.13</dd></div>
               <div><dt>发布日期</dt><dd>2026-09-11</dd></div>
@@ -357,8 +332,8 @@
       <section class="privacy-section section" id="privacy" aria-labelledby="privacy-title">
         <div class="privacy-title-block">
           <h2 id="privacy-title">安静，也尊重你的隐私</h2>
-          <p>官网无广告、无 Cookie、无表单。普通桌宠不需要登录。</p>
-          <p>官网使用 Umami 汇总浏览量、匿名访客、来源网站和下载点击，以及浏览器、设备与大致地区；不使用追踪 Cookie，不收集聊天演示内容，并尊重浏览器的“请勿追踪”设置。统计仅用于了解官网使用情况。</p>
+          <p>普通桌宠不需要登录。</p>
+          <details class="content-details"><summary>球球的数据与隐私说明</summary><p>Codex 任务监控只提取必要状态，不保存、不上传。状态包可能附带已加载聊天内容，正文会立即丢弃；不会创建、发送、审批、中断任务或重置额度。聊天由你主动发起，按下方说明单独处理。</p></details>
         </div>
         <div class="privacy-points">
           <article>
@@ -409,8 +384,10 @@
         <div class="timeline">
           <article>
             <time datetime="2026-09-23">2026-09-23</time>
-            <div><h3>0.3.24 Apple 芯片版</h3><p>聊天新增模型选择：在输入框左下角向上展开菜单，手选本机账号可用模型，或由“自动”按内容选择。切换仍在同一段聊天，选择会保存；手选模型不可用时明确提示。每轮使用支持的较低推理强度，自动深入推导可用中等强度，不改动 Codex 全局设置；响应仍受服务和网络影响。</p></div>
+            <div><h3>0.3.24 Apple 芯片版</h3><p>聊天模型可自动选择，也可手动切换。切换不打断原聊天，选择会保留。</p><details class="content-details"><summary>技术变更详情</summary><p>模型列表以本机账号为准，手选不可用时会明确提示。每轮使用支持的较低推理强度，自动深入推导可用中等强度，不改动 Codex 全局设置；响应仍受服务和网络影响。</p></details></div>
           </article>
+          <details class="updates-history">
+            <summary><span class="history-expand">查看更早更新（10 条）</span><span class="history-collapse">收起历史更新</span><span class="history-chevron" aria-hidden="true">⌄</span></summary>
           <article>
             <time datetime="2026-09-23">2026-09-23</time>
             <div><h3>0.3.23 Apple 芯片版</h3><p>新增色弱友好高对比配色，支持浅色、深色与跟随系统，保留球球造型及流光。额度卡和靠边提示补齐状态文字；增强正常深色文字辨识度，为浅色卡片保留柔和阴影，并修复右键菜单截断及窗口关闭报错。</p></div>
@@ -419,8 +396,7 @@
             <time datetime="2026-09-22">2026-09-22</time>
             <div><h3>0.3.17 Apple 芯片版</h3><p>新增 Codex 聊天，关闭重开仍可接着聊；支持切换聊天记录，新聊天需确认，也能用预设动作回应。修复任务监控误跟随球球聊天导致的连接占用，继续保留原聊天与历史内容。</p></div>
           </article>
-          <details class="updates-history">
-            <summary><span class="history-expand">查看更早更新（8 条）</span><span class="history-collapse">收起历史更新</span><span class="history-chevron" aria-hidden="true">⌄</span></summary>
+
           <article>
             <time datetime="2026-09-18">2026-09-18</time>
             <div><h3>0.3.14 Apple 芯片版</h3><p>新增左右靠边半身收起，悬停时探出、拖离边缘后恢复，也可暂时隐藏；收起时仍会眨眼呼吸、偶尔说句短话，开启 Codex 额度显示时偶尔弹出剩余额度小胶囊。</p></div>
@@ -460,7 +436,6 @@
     </main>
 
     <footer class="site-footer" id="license" aria-label="开源、署名与许可">
-      <nav class="section-links" aria-label="帮助与更多内容"><a href="#appearance">色弱友好</a><a href="#gallery">动态体验</a><a href="#install">安装指南</a><a href="#privacy">隐私</a><a href="#updates">更新日志</a><a href="LICENSE">使用许可</a><a href="NOTICE.md">来源声明</a></nav>
       <p>球球桌宠 · 由马晓坤设计与开发</p>
       <p>球球桌宠，免费、非商业使用。角色与动画来自原作者 sam70361；再次分发须保留署名、LICENSE 和 NOTICE。</p>
     </footer>
@@ -476,12 +451,12 @@
     <script src="assets/motion/interaction-v5.js"></script>
     <script src="assets/motion/thought-flow-v5.js"></script>
     <script src="assets/motion/dialogue-v5.js"></script>
-    <script src="app.js?v=20260928-nav4"></script>
-    <script src="motion-showcase.js?v=20260911-4"></script>
-    <script src="quota-demo.js?v=20260911-1"></script>
+    <script src="app.js?v=20260928-release"></script>
+    <script src="motion-showcase.js?v=20260928-2"></script>
+    <script src="quota-demo.js?v=20260928-release"></script>
     <script src="chat-showcase.js?v=20260928-1"></script>
-    <script src="appearance-showcase.js?v=20260923-1"></script>
-    <script src="customize-showcase.js?v=20260928-1"></script>
+    <script src="appearance-showcase.js?v=20260928-2"></script>
+    <script src="customize-showcase.js?v=20260928-review"></script>
     <script src="analytics.js?v=20260924-1" data-website-id="fe855bb0-9000-49aa-820b-baa55887bd11"></script>
   </body>
 </html>
