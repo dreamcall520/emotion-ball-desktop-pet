@@ -31,14 +31,14 @@ Umami Cloud 网站“球球官网”，website ID 为 `fe855bb0-9000-49aa-820b-b
 
 ## 当前下载记录
 
-Apple 芯片版于 2026-09-23 更新为 0.3.24，对应代码标签 `v0.3.24`（bae9d4b88f258e03c14026c0d3d32f44d9007fb7）。官网保持简洁的下载卡，文件大小与校验值在此维护。
+Apple 芯片版于 2026-09-28 更新为 0.3.25。新增「定制球球」，提供经典、云朵、幻彩、方糖四种外观；可调整配色、透明度并保存启动外观。官网保持简洁的下载卡，文件大小与校验值在此维护。
 
 | 文件 | 精确大小（bytes） | SHA-256 |
 | --- | ---: | --- |
-| [Qiuqiu-0.3.24-macOS-arm64-share.zip](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.24/Qiuqiu-0.3.24-macOS-arm64-share.zip) | 116882520 | `9f5b09a9bad261ccda5c97a143ff5f859c274a82b86f10d49afd055d37ceafe0` |
-| [Qiuqiu-0.3.24-macOS-arm64.dmg](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.24/Qiuqiu-0.3.24-macOS-arm64.dmg) | 118314322 | `b13fd698aae9c550b44b2ba3f09ab370a1be7c840c85199a7e807899465844bc` |
+| [Qiuqiu-0.3.25-macOS-arm64-share.zip](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.25/Qiuqiu-0.3.25-macOS-arm64-share.zip) | 138428441 | `c8155aa77fbc4d68b2797faec2731415d483d4ad1500abdbfe415a84bdf91120` |
+| [Qiuqiu-0.3.25-macOS-arm64.dmg](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.25/Qiuqiu-0.3.25-macOS-arm64.dmg) | 140810795 | `e4016335c635e2b069311e7e131118f759fbc635bd7e45beb28b1ac3194f36ac` |
 
-ZIP 内只包含上述 DMG。Intel x64 下载仍为已公开的 0.3.13 构建候选，尚未在真实 Intel Mac 上验收；本次模型选择更新仅适用于 Apple 芯片版。应用采用本机临时签名，未进行 Apple Developer ID 签名或公证。
+ZIP 内只包含上述 DMG。Intel x64 下载仍为已公开的 0.3.13 构建候选，尚未在真实 Intel Mac 上验收；本次更新仅适用于 Apple 芯片版。应用采用本机临时签名，未进行 Apple Developer ID 签名或公证。
 
 官网模型菜单是预设演示，不读取账号模型列表、不发送真实消息、不保存桌宠设置。实际应用的模型目录以本机 Codex 当前账号为准，切换保持同一聊天；不承诺固定响应时间。
 

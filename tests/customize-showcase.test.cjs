@@ -14,7 +14,7 @@ class Element {
   replaceChildren() { this.children = []; }
   fire(event) { this.events[event](); }
 }
-const names = ['ball', 'body', 'eye', 'palette', 'styles', 'sizes', 'description', 'stage',
+const names = ['ball', 'body', 'eye', 'palette', 'artwork', 'swatches', 'styles', 'sizes', 'description', 'stage',
   'opacity', 'opacity-label', 'glow-label', 'style-note', 'startup', 'startup-note'];
 const nodes = Object.fromEntries(names.map(name => [name, new Element()]));
 nodes.body.value = '#eeebe4'; nodes.eye.value = '#1a1a1a'; nodes.opacity.value = '0';
@@ -42,13 +42,16 @@ for (const [index, shape] of ['blob', 'cloud', 'aurora', 'square'].entries()) {
   assert.equal(nodes.ball.hidden, shape === 'aurora');
   assert.equal(nodes.palette.hidden, shape !== 'aurora');
   assert.equal(nodes.styles.hidden, shape !== 'aurora');
+  assert.equal(nodes.ball.attributes['aria-label'], `${['经典', '云朵', '幻彩', '方糖'][index]}配色示意`);
   if (shape === 'aurora') assert.equal(nodes.ball.children.length, 0);
   if (shape === 'square' || shape === 'cloud') assert.equal(nodes.ball.children.length, 1);
 }
 assert.ok(destroyed >= 1);
 nodes.opacity.value = '60'; nodes.opacity.fire('input');
 assert.equal(nodes.ball.style.opacity, '0.4');
-assert.equal(nodes.palette.style.opacity, '0.4');
+assert.equal(nodes.artwork.style.opacity, '0.4');
+assert.equal(nodes.swatches.style.opacity, '0.4');
+assert.equal(nodes.palette.style.opacity, undefined, 'reference captions remain readable');
 assert.equal(nodes['opacity-label'].textContent, '60%');
 for (const checked of [false, true]) {
   nodes.startup.checked = checked; nodes.startup.fire('change');
@@ -63,4 +66,16 @@ for (const kind of ['size', 'style']) {
 }
 assert.match(nodes['style-note'].textContent, /不使用粉光、金光/);
 assert.doesNotMatch(source, /BOO_ASSETS|boo-binary|aurora-rive|aurora-cloud-reference|fetch\(|localStorage/);
-console.log('customize showcase: shape, transparency, startup, schematic-only and switches passed');
+const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+const downloadLinks = [...html.matchAll(/data-download-arch="arm64"[^>]*href="([^"]+)"/g)];
+assert.equal(downloadLinks.length, 2);
+assert.ok(downloadLinks.every(match => match[1].endsWith('/v0.3.25/Qiuqiu-0.3.25-macOS-arm64-share.zip')));
+assert.match(html, /<dt>发布日期<\/dt><dd>2026-09-28<\/dd>/);
+assert.match(html, /v0\.3\.13\/Qiuqiu-0\.3\.13-macOS-x64-share\.zip/);
+assert.doesNotMatch(html + source, /幻彩云|圆角方|新版功能预告|尚不包含此功能|新安装包暂未开放|新聊天入口仍在历史记录中/);
+assert.match(html, /assets\/huancai-icon\.png/);
+assert.ok(fs.existsSync(path.join(__dirname, '../assets/huancai-icon.png')));
+assert.match(html, /静态外观参考/);
+assert.match(html, /完整材质与动效请在 App 中体验/);
+assert.equal((html.match(/<details class="updates-history">([\s\S]*?)<\/details>\s*<\/div>\s*<\/section>/)[1].match(/<article>/g) || []).length, 11);
+console.log('customize showcase: names, transparency, startup, palette demo, release links and history passed');

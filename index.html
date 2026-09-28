@@ -27,7 +27,7 @@
     <link rel="stylesheet" href="dark-theme.css?v=20260911-2">
     <link rel="stylesheet" href="chat-showcase.css?v=20260928-1">
     <link rel="stylesheet" href="appearance-showcase.css?v=20260928-2">
-    <link rel="stylesheet" href="customize-showcase.css?v=20260928-review">
+    <link rel="stylesheet" href="customize-showcase.css?v=20260928-release">
     <link rel="stylesheet" href="review-refinements.css?v=20260928-2">
     <title>球球桌宠 - 免费的 macOS 桌面伙伴</title>
   </head>
@@ -61,7 +61,7 @@
           <h1 id="hero-title">桌面上，<br>多一个安静陪你的球球</h1>
           <p>免费、安静陪伴，不打扰你。</p>
           <div class="hero-actions">
-            <a class="button button-primary" data-download-arch="arm64" data-download-position="hero" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.24/Qiuqiu-0.3.24-macOS-arm64-share.zip">下载 Apple 芯片版</a>
+            <a class="button button-primary" data-download-arch="arm64" data-download-position="hero" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.25/Qiuqiu-0.3.25-macOS-arm64-share.zip">下载 Apple 芯片版</a>
             <a class="button button-secondary" href="#features">看看它会什么</a>
           </div>
         </div>
@@ -172,11 +172,11 @@
           </dl>
           <p class="chat-entry">使用入口：右键球球或菜单栏 → 和球球聊聊</p>
           <details class="content-details"><summary>模型与使用说明</summary><p>模型可以自动选择，也能在输入框左下角手选，以本机账号可用列表为准。无需另填 API Key；模型不可用时会明确提示。球球只执行预设动作，不运行模型返回的代码或命令。</p></details>
-          <a class="chat-download-link" href="#download">下载 0.3.24，和球球聊聊 →</a>
+          <a class="chat-download-link" href="#download">下载 0.3.25，和球球聊聊 →</a>
         </div>
         <div class="chat-demo-wrap">
-          <p class="release-badge">新版界面预览</p>
-          <p class="release-note">当前下载版的新聊天入口仍在历史记录中。</p>
+          <p class="release-badge">聊天交互示例</p>
+          <p class="release-note">从顶部开始新聊天，也能随时找回历史记录。</p>
           <div class="chat-demo" data-chat-demo>
             <header class="chat-demo-header">
               <img src="assets/favicon.png" width="40" height="40" alt="">
@@ -221,26 +221,26 @@
 
       <section class="customize-section section" id="customize" aria-labelledby="customize-title">
         <div class="section-heading">
-          <p class="release-badge">新版功能预告</p>
+          <p class="release-badge">0.3.25 Apple 芯片版已支持</p>
           <h2 id="customize-title">定制你的球球</h2>
           <p>从喜欢的形态出发，调整颜色，留下自己的样子。</p>
-          <p class="release-note">当前下载版尚不包含此功能，新安装包暂未开放下载。</p>
+          <p class="release-note">经典、云朵、幻彩、方糖，选好后可临时换装，也可设为启动外观。</p>
         </div>
         <div class="customize-layout" data-customize-demo>
           <div class="customize-preview">
-            <div class="customize-stage" data-custom-stage><div data-custom-ball aria-label="经典球球配色示意"></div><div data-custom-palette hidden><strong>幻彩云</strong><div class="customize-palette" aria-hidden="true"><i></i><i></i><i></i><i></i></div><p>球体 / 眼睛<span data-custom-glow-label> / 粉光 / 金光</span></p><p>此处仅展示配色，暂不展示角色素材。</p></div></div>
+            <div class="customize-stage" data-custom-stage><div data-custom-ball aria-label="经典球球配色示意"></div><div data-custom-palette hidden><img class="customize-artwork" src="assets/huancai-icon.png" width="256" height="256" alt="幻彩的六瓣柔和渐变外观" data-custom-artwork><strong>幻彩 · 静态外观参考</strong><div class="customize-palette" data-custom-swatches aria-hidden="true"><i></i><i></i><i></i><i></i></div><p>配色示意：球体 / 眼睛<span data-custom-glow-label> / 粉光 / 金光</span></p><p>完整材质与动效请在 App 中体验。</p></div></div>
             <div class="customize-preview-foot"><span>网页交互示意，非 App 实录</span><div class="customize-switch" data-custom-sizes role="group" aria-label="定制预览尺寸"><button type="button" data-custom-size="large" aria-pressed="true">大图</button><button type="button" data-custom-size="desktop" aria-pressed="false">桌面尺寸</button></div></div>
           </div>
           <div class="customize-controls">
             <fieldset><legend>选择形态</legend><div class="customize-shapes">
               <button type="button" data-custom-shape="blob" aria-pressed="true">经典</button>
-              <button type="button" data-custom-shape="cloud" aria-pressed="false">云</button>
-              <button type="button" data-custom-shape="aurora" aria-pressed="false">幻彩云</button>
-              <button type="button" data-custom-shape="square" aria-pressed="false">圆角方</button>
+              <button type="button" data-custom-shape="cloud" aria-pressed="false">云朵</button>
+              <button type="button" data-custom-shape="aurora" aria-pressed="false">幻彩</button>
+              <button type="button" data-custom-shape="square" aria-pressed="false">方糖</button>
             </div><p data-custom-description>熟悉的球球，也能换一套喜欢的配色。</p></fieldset>
             <div class="customize-colors"><label>球体颜色 <input type="color" value="#eeebe4" data-custom-body></label><label>眼睛颜色 <input type="color" value="#1a1a1a" data-custom-eye></label></div>
             <label class="customize-transparency">透明度 <output data-custom-opacity-label>0%</output><input type="range" min="0" max="60" value="0" step="1" data-custom-opacity></label>
-            <fieldset data-custom-styles hidden><legend>幻彩云样式</legend><div class="customize-switch" role="group" aria-label="幻彩云样式说明"><button type="button" data-custom-style="dimensional" aria-pressed="true">立体幻彩</button><button type="button" data-custom-style="simple" aria-pressed="false">简色渐变</button></div><p data-custom-style-note>立体幻彩支持球体、眼睛、粉光与金光配色。</p></fieldset>
+            <fieldset data-custom-styles hidden><legend>幻彩样式</legend><div class="customize-switch" role="group" aria-label="幻彩样式说明"><button type="button" data-custom-style="dimensional" aria-pressed="true">立体幻彩</button><button type="button" data-custom-style="simple" aria-pressed="false">简色渐变</button></div><p data-custom-style-note>立体幻彩支持球体、眼睛、粉光与金光配色。</p></fieldset>
             <details class="customize-startup"><summary>启动外观与保存</summary><label><input type="checkbox" checked data-custom-startup> 设为启动外观</label><p data-custom-startup-note>在 App 中保存后，下次打开仍使用这套外观。</p><span>右键球球 → 定制球球 → 保存到桌面球球。</span></details>
           </div>
         </div>
@@ -300,11 +300,11 @@
             </div>
             <p>适用于 M1、M2、M3、M4 及后续 Apple 芯片 Mac。需要 macOS 12.0 或更高版本。</p>
             <dl class="release-data">
-              <div><dt>版本</dt><dd>0.3.24</dd></div>
-              <div><dt>发布日期</dt><dd>2026-09-23</dd></div>
+              <div><dt>版本</dt><dd>0.3.25</dd></div>
+              <div><dt>发布日期</dt><dd>2026-09-28</dd></div>
             </dl>
             <div class="download-actions">
-              <a class="button button-primary" data-download-arch="arm64" data-download-position="download" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.24/Qiuqiu-0.3.24-macOS-arm64-share.zip">下载 ZIP</a>
+              <a class="button button-primary" data-download-arch="arm64" data-download-position="download" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.25/Qiuqiu-0.3.25-macOS-arm64-share.zip">下载 ZIP</a>
             </div>
           </article>
 
@@ -383,14 +383,18 @@
         </div>
         <div class="timeline">
           <article>
+            <time datetime="2026-09-28">2026-09-28</time>
+            <div><h3>0.3.25 Apple 芯片版</h3><p>新增“定制球球”，支持经典、云朵、幻彩、方糖四种形态，可调整配色与透明度，临时换装或保存为启动外观。幻彩支持立体幻彩、简色渐变两种样式；新聊天入口移至聊天面板顶部。</p></div>
+          </article>
+          <details class="updates-history">
+            <summary><span class="history-expand">查看更早更新（11 条）</span><span class="history-collapse">收起历史更新</span><span class="history-chevron" aria-hidden="true">⌄</span></summary>
+          <article>
             <time datetime="2026-09-23">2026-09-23</time>
             <div><h3>0.3.24 Apple 芯片版</h3><p>聊天模型可自动选择，也可手动切换。切换不打断原聊天，选择会保留。</p><details class="content-details"><summary>技术变更详情</summary><p>模型列表以本机账号为准，手选不可用时会明确提示。每轮使用支持的较低推理强度，自动深入推导可用中等强度，不改动 Codex 全局设置；响应仍受服务和网络影响。</p></details></div>
           </article>
-          <details class="updates-history">
-            <summary><span class="history-expand">查看更早更新（10 条）</span><span class="history-collapse">收起历史更新</span><span class="history-chevron" aria-hidden="true">⌄</span></summary>
           <article>
             <time datetime="2026-09-23">2026-09-23</time>
-            <div><h3>0.3.23 Apple 芯片版</h3><p>新增色弱友好高对比配色，支持浅色、深色与跟随系统，保留球球造型及流光。额度卡和靠边提示补齐状态文字；增强正常深色文字辨识度，为浅色卡片保留柔和阴影，并修复右键菜单截断及窗口关闭报错。</p></div>
+            <div><h3>0.3.23 Apple 芯片版</h3><p>新增色弱友好高对比配色，支持浅色、深色与跟随系统，球球的外观与互动动效保持不变。额度卡和靠边提示补齐状态文字；增强正常深色文字辨识度，为浅色卡片保留柔和阴影，并修复右键菜单截断及窗口关闭报错。</p></div>
           </article>
           <article>
             <time datetime="2026-09-22">2026-09-22</time>
@@ -456,7 +460,7 @@
     <script src="quota-demo.js?v=20260928-release"></script>
     <script src="chat-showcase.js?v=20260928-1"></script>
     <script src="appearance-showcase.js?v=20260928-2"></script>
-    <script src="customize-showcase.js?v=20260928-review"></script>
+    <script src="customize-showcase.js?v=20260928-release"></script>
     <script src="analytics.js?v=20260924-1" data-website-id="fe855bb0-9000-49aa-820b-baa55887bd11"></script>
   </body>
 </html>

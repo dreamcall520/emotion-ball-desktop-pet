@@ -1,4 +1,4 @@
-/* Local-only schematic. Never imports native assets or reads desktop settings. */
+/* Local-only palette demo with a static App artwork reference; no desktop settings access. */
 (() => {
   const root = document.querySelector('[data-customize-demo]');
   if (!root) return;
@@ -6,9 +6,9 @@
   let shape = 'blob', ball;
   const descriptions = {
     blob: '熟悉的球球，也能换一套喜欢的配色。',
-    cloud: '独立云形示意。App 内可微调轮廓与五官。',
-    aurora: '仅演示配色。App 内可切换样式与透明度。',
-    square: '简化方形示意。App 内可微调轮廓与五官。'
+    cloud: '云朵配色示意。App 内可微调轮廓与五官。',
+    aurora: '下方控件仅演示配色，参考图不随配色或样式切换。',
+    square: '方糖配色示意。App 内可微调轮廓与五官。'
   };
   function render() {
     ball?.destroy(); ball = null;
@@ -21,8 +21,8 @@
     get('stage').style.setProperty('--custom-body', body);
     get('stage').style.setProperty('--custom-eye', eye);
     get('opacity-label').textContent = `${get('opacity').value}%`;
-    host.style.opacity = get('palette').style.opacity = String(1 - Number(get('opacity').value) / 100);
-    host.setAttribute('aria-label', `${{blob:'经典',cloud:'云',square:'圆角方',aurora:'幻彩云'}[shape]}配色示意`);
+    host.style.opacity = get('artwork').style.opacity = get('swatches').style.opacity = String(1 - Number(get('opacity').value) / 100);
+    host.setAttribute('aria-label', `${{blob:'经典',cloud:'云朵',square:'方糖',aurora:'幻彩'}[shape]}配色示意`);
     if (shape === 'blob') {
       ball = window.EmotionBall.create(host, { emotion: '02', shape: 'blob', color: body, eyeColor: eye, idle: false, lite: true, autostart: false });
       ball.renderStatic();
