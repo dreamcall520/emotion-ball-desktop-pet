@@ -538,7 +538,7 @@ test('所有 Codex 设置只保留一个顶层入口并完整归入子菜单', a
     JSON.stringify(['codex-menu']));
   assert.equal(JSON.stringify(group.submenu.filter(item => item.id).map(item => item.id)), JSON.stringify([
     'codex-enabled', 'codex-task-names', 'codex-quota-visible', 'codex-quota-period',
-    'codex-quota-label-size', 'codex-quota-appearance', 'codex-status'
+    'codex-quota-label-size', 'codex-quota-appearance', 'openai-api-usage', 'codex-status'
   ]));
   assert.equal(group.submenu.find(item => item.id === 'codex-enabled').label, '启用 Codex 联动');
 });

@@ -8,6 +8,7 @@ const {
   Menu,
   nativeImage,
   powerMonitor,
+  safeStorage,
   screen,
   shell,
   Tray
@@ -41,6 +42,7 @@ const { createChatStore } = require('./lib/chat-store');
 const { createChatCompanion } = require('./lib/chat-companion');
 const { createCodexChatRpc } = require('./lib/codex-chat-rpc');
 const { createChatWindow } = require('./lib/chat-window');
+const { createApiUsage } = require('./lib/api-usage');
 const { createColorModeManager } = require('./lib/color-mode');
 const { normalizeCustomization, effectiveAppearance } = require('./lib/customization');
 
@@ -70,6 +72,8 @@ let quotaLabel = null;
 let chat = null;
 let chatWindow = null;
 let customizationWindow = null;
+let apiUsage = null;
+let apiUsageWindow = null;
 let customizationPreviewAppearance = null;
 let screenLocked = false;
 let codexCompanion = null;
@@ -145,6 +149,36 @@ function fromChatWindow(event) {
 function fromCustomizationWindow(event) {
   return Boolean(!isQuitting && customizationWindow && !customizationWindow.isDestroyed() &&
     event.sender === customizationWindow.webContents);
+}
+
+function fromApiUsageWindow(event, requireVisible = true) {
+  return Boolean(!isQuitting && !screenLocked && apiUsageWindow && !apiUsageWindow.isDestroyed() &&
+    (!requireVisible || apiUsageWindow.isVisible()) && event.sender === apiUsageWindow.webContents);
+}
+
+function openApiUsage() {
+  if (isQuitting || screenLocked) return;
+  if (apiUsageWindow && !apiUsageWindow.isDestroyed()) {
+    apiUsageWindow.show();
+    apiUsageWindow.focus();
+    return;
+  }
+  const win = new BrowserWindow({
+    width: 620, height: 700, minWidth: 460, minHeight: 520,
+    title: 'OpenAI API 费用与用量', backgroundColor: '#F6F4EF', show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'api-usage-preload.js'),
+      contextIsolation: true, nodeIntegration: false, sandbox: true,
+      spellcheck: false, devTools: !app.isPackaged
+    }
+  });
+  apiUsageWindow = win;
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', event => event.preventDefault());
+  win.webContents.on('will-attach-webview', event => event.preventDefault());
+  win.on('closed', () => { if (apiUsageWindow === win) apiUsageWindow = null; });
+  win.once('ready-to-show', () => { if (!win.isDestroyed() && !screenLocked) win.show(); });
+  void win.loadFile(path.join(__dirname, 'api-usage.html')).catch(error => writeError('API 费用面板', error));
 }
 
 function openCustomization() {
@@ -1032,6 +1066,7 @@ function codexMenu() {
       ...(codexPreferenceWarning
         ? [{ id: 'codex-preference-warning', label: codexPreferenceWarning, enabled: false }]
         : []),
+      { id: 'openai-api-usage', label: 'OpenAI API 费用与用量…', click: openApiUsage },
       ...(settings.codexEnabled ? [{ id: 'codex-status', label: 'Codex 状态', submenu: [
         ...(codexNotice ? [{ label: codexNotice.text, enabled: false }, { type: 'separator' }] : []),
         ...bindCodexMenu(buildCodexMenu(codexCompanion?.getSnapshot(), codexNow()))
@@ -1154,6 +1189,15 @@ async function finishSmokeTest() {
       "Boolean(window.petDesktop.onActivity && document.getElementById('pet').dataset.mode)"
     );
     if (!companionReady) throw new Error('轻陪伴活动感知尚未接入');
+
+    if (process.env.PET_SMOKE_API_USAGE_ONLY === '1') {
+      await require('./scripts/verify-api-usage-integration').verifyApiUsage({
+        getWindow: () => apiUsageWindow, service: apiUsage, pet: petWindow,
+        getMenu: () => Menu.buildFromTemplate(menuTemplate()), powerMonitor
+      });
+      app.exit(0);
+      return;
+    }
 
     if (process.env.PET_SMOKE_CUSTOMIZE_ONLY === '1') {
       const assert = require('node:assert/strict');
@@ -1703,6 +1747,15 @@ function createPetWindow() {
 }
 
 function registerIpc() {
+  ipcMain.handle('pet:api-usage-get', event => fromApiUsageWindow(event, false) ? apiUsage.getState() : null);
+  ipcMain.handle('pet:api-usage-connect', (event, value) => fromApiUsageWindow(event) ? apiUsage.connect(value) : null);
+  ipcMain.handle('pet:api-usage-refresh', event => fromApiUsageWindow(event) ? apiUsage.refresh() : null);
+  ipcMain.handle('pet:api-usage-disconnect', event => fromApiUsageWindow(event) ? apiUsage.disconnect() : null);
+  ipcMain.handle('pet:api-usage-guide', event => {
+    if (!fromApiUsageWindow(event)) return false;
+    return shell.openExternal('https://platform.openai.com/settings/organization/admin-keys')
+      .then(() => true, () => false);
+  });
   ipcMain.handle('pet:customization-get', event => fromCustomizationWindow(event) && !screenLocked
     ? { customization: effectiveCustomization(settings.customization),
       startupAppearance: effectiveAppearance(settings.startupAppearance),
@@ -1919,6 +1972,13 @@ async function bootstrap() {
   app.setActivationPolicy('accessory');
   if (app.dock) app.dock.hide();
   settingsFile = path.join(app.getPath('userData'), 'settings.json');
+  apiUsage = createApiUsage({ filePath: path.join(app.getPath('userData'), 'openai-api-usage.enc'), safeStorage,
+    ...(IS_SMOKE_TEST && process.env.PET_SMOKE_API_USAGE_ONLY === '1'
+      ? { get: require('./scripts/verify-api-usage-integration').smokeGet } : {}),
+    onChange: state => {
+      if (apiUsageWindow && !apiUsageWindow.isDestroyed()) apiUsageWindow.webContents.send('pet:api-usage-state', state);
+    }
+  });
   settings = loadSettings(settingsFile);
   settings.customization = { ...settings.customization, appearance: settings.startupAppearance };
   chatWindow = createChatWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
@@ -2014,6 +2074,7 @@ async function bootstrap() {
   const pause = () => {
     screenLocked = true;
     if (customizationWindow && !customizationWindow.isDestroyed()) customizationWindow.hide();
+    if (apiUsageWindow && !apiUsageWindow.isDestroyed()) apiUsageWindow.hide();
     chatWindow?.hide();
     void chat?.stop();
     dragState = null;
@@ -2054,6 +2115,7 @@ if (!hasSingleInstanceLock) {
       return;
     }
     quitCleanupStarted = true;
+    apiUsage?.close();
     let chatClosing;
     safelyInvokeWindow('退出时聊天停止', () => { chatClosing = chat?.close(); });
     if (event?.preventDefault && chatClosing?.then) {
