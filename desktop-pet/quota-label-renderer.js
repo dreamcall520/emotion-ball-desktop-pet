@@ -359,16 +359,7 @@
         valueNode.className = 'summary-value';
         valueNode.textContent = `${Math.round(summaryItem.remaining)}%`;
         summary.replaceChildren(periodNode, valueNode);
-        if (compactProduct) {
-          compactProduct.textContent = model.extraCredits ? 'CODEX PRO' : 'CODEX';
-          if (model.extraCredits && typeof compactProduct.replaceChildren === 'function') {
-            const product = document.createElement('span'), plan = document.createElement('span');
-            product.textContent = 'CODEX ';
-            plan.className = 'plan-name';
-            plan.textContent = 'PRO';
-            compactProduct.replaceChildren(product, plan);
-          }
-        }
+        if (compactProduct) compactProduct.textContent = 'CODEX';
         if (compactPeriod) compactPeriod.textContent = periodTypeText(summaryItem.windowMinutes);
       } else {
         summary.replaceChildren();

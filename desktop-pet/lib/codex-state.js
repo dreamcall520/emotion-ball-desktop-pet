@@ -17,12 +17,12 @@ const positive = value => Number.isFinite(value) && value > 0;
 const isTaskId = value => typeof value === 'string' && UUID.test(value);
 const title = value => text(value) || '未命名任务';
 
-function proQuotaDetails(value) {
-  if (!object(value) || value.planType !== 'pro') return {};
-  const credits = object(value.credits) ? value.credits : {};
+function quotaCreditDetails(value) {
+  if (!object(value) || !object(value.credits)) return {};
+  const credits = value.credits;
   const balance = typeof credits.balance === 'string' && credits.balance.length <= 128 &&
     /^\d+(?:\.\d+)?$/.test(credits.balance) ? credits.balance : null;
-  return { planType: 'pro', credits: {
+  return { credits: {
     hasCredits: typeof credits.hasCredits === 'boolean' ? credits.hasCredits : null,
     unlimited: typeof credits.unlimited === 'boolean' ? credits.unlimited : null,
     balance
@@ -55,7 +55,7 @@ function normalizeQuota(raw, now) {
   return {
     windows,
     updatedAt: now,
-    ...proQuotaDetails(codex),
+    ...quotaCreditDetails(codex),
     ...(Number.isSafeInteger(availableCount) && availableCount >= 0
       ? { resetCreditsAvailable: availableCount } : {})
   };
@@ -261,5 +261,5 @@ function applyTaskPatches(previous, patches) {
   return { task, needsSnapshot };
 }
 
-module.exports = { UNKNOWN, MAX_TASKS, isTaskId, isEligibleThread, normalizeQuota, proQuotaDetails, normalizeThreadList,
+module.exports = { UNKNOWN, MAX_TASKS, isTaskId, isEligibleThread, normalizeQuota, quotaCreditDetails, normalizeThreadList,
   normalizeTask, projectTask, taskFromProjection, applyTaskPatches };

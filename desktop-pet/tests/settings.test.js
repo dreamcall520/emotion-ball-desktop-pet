@@ -90,7 +90,7 @@ test('旧外观沿用为启动默认，临时换装不覆盖已选启动外观',
   assert.equal(loadSettings(file).startupAppearance.shape, 'cloud');
 });
 
-test('Pro 额外点数默认显示，明确关闭可持久化，余额不进入设置文件', t => {
+test('额外点数默认显示，明确关闭可持久化，余额不进入设置文件', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emotion-pro-credits-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const file = path.join(dir, 'settings.json');

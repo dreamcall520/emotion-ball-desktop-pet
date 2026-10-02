@@ -25,7 +25,7 @@ function renderer() {
 }
 const item = (remaining, windowMinutes = 300) => ({ label: 'Codex', remaining, windowMinutes });
 
-test('Pro 点数按原字符串准确格式化，明确零与未知/无限/过期分开，Plus 不增加内容', () => {
+test('点数按原字符串准确格式化，明确零与未知/无限/过期分开，缺失不加内容或推断套餐', () => {
   const { nodes, receive } = renderer();
   const show = (extraCredits, state = 'ready', remaining = 79) => receive({ state, size: 'compact',
     expanded: true, items: [item(remaining, 10080)], resetCreditsAvailable: 2, extraCredits });
@@ -35,7 +35,7 @@ test('Pro 点数按原字符串准确格式化，明确零与未知/无限/过�
     assert.equal(nodes['credits-balance'].textContent, expected);
     assert.equal(nodes['credits-unit'].textContent, '点');
     assert.equal(nodes['credits-unit'].hidden, false);
-    assert.equal(nodes['compact-product'].textContent, 'CODEX PRO');
+    assert.equal(nodes['compact-product'].textContent, 'CODEX');
     assert.equal(nodes['reset-credits'].textContent, '2 次重置机会');
     assert.equal(nodes.summary.textContent, '周额度79%');
   }

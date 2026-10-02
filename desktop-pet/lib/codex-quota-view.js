@@ -8,7 +8,7 @@ const MAX_TIME = 8640000000000000;
 const MAX_TEXT_LENGTH = 256;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/u;
 const DISPLAYED_QUOTA_FAMILIES = Object.freeze(['codex', 'gpt-reserve']);
-const { proQuotaDetails } = require('./codex-state');
+const { quotaCreditDetails } = require('./codex-state');
 
 function normalizePeriod(period) {
   return PERIODS.has(period) ? period : 'auto';
@@ -165,15 +165,15 @@ function buildQuotaLabelModel(snapshot, options = {}, now = Date.now()) {
   const resetCredits = Number.isSafeInteger(quota.resetCreditsAvailable)
     && quota.resetCreditsAvailable >= 0
     ? { resetCreditsAvailable: quota.resetCreditsAvailable } : {};
-  const pro = proQuotaDetails(quota);
+  const details = quotaCreditDetails(quota);
   let extraCredits = {};
-  if (safeOptions.showExtraCredits !== false && pro.planType === 'pro') {
-    const credits = pro.credits;
+  if (safeOptions.showExtraCredits !== false && details.credits) {
+    const credits = details.credits;
     const state = quota.stale ? 'stale' : credits.unlimited === true ? 'unlimited'
       : credits.hasCredits === false ? 'none' : credits.balance !== null ? 'balance' : 'unknown';
     extraCredits = { extraCredits: { state,
       ...(state === 'balance' ? { balance: credits.balance } : {}),
-      ...(!quota.stale && pro.spendControlReached === true ? { usageStatus: 'blocked' } : {}) } };
+      ...(!quota.stale && details.spendControlReached === true ? { usageStatus: 'blocked' } : {}) } };
   }
   const expired = validNow(now) && limitedWindows(quota.windows)
     .some(item => validScalars(item) && quotaFamily(item) === 'codex'

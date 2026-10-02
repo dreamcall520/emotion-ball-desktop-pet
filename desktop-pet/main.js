@@ -1214,7 +1214,7 @@ function codexMenu() {
           setCodexPreference('codexQuotaAlwaysVisible', enabled); }
       },
       {
-        id: 'codex-extra-credits', label: '显示额外点数（Pro）', type: 'checkbox',
+        id: 'codex-extra-credits', label: '显示额外点数', type: 'checkbox',
         enabled: settings.codexEnabled === true, checked: settings.codexShowExtraCredits !== false,
         click: item => { const enabled = item.checked; item.checked = settings.codexShowExtraCredits !== false;
           setCodexPreference('codexShowExtraCredits', enabled); }

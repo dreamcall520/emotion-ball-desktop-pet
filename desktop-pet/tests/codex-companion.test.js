@@ -1178,7 +1178,7 @@ test('额度快照只保留可用重置机会数量，不保留重置凭据详�
   assert.equal('resetCreditsAvailable' in f.companion.getSnapshot().quota, false);
 });
 
-test('Pro 点数透过快照独立复制，额度更新或换为 Plus 不保留旧点数', async () => {
+test('点数透过快照独立复制，Plus 可返回点数，缺失或账户更换不保留旧点数', async () => {
   const f = fixture();
   await f.companion.setEnabled(true);
   f.quota(79, { planType: 'pro', credits: {
@@ -1192,8 +1192,10 @@ test('Pro 点数透过快照独立复制，额度更新或换为 Plus 不保留�
   snapshot.quota.credits.balance = '0';
   assert.equal(f.companion.getSnapshot().quota.credits.balance, '62485.1547310000');
   f.quota(79, { planType: 'pro' });
-  assert.equal(f.companion.getSnapshot().quota.credits.balance, null);
+  assert.equal('credits' in f.companion.getSnapshot().quota, false);
   f.quota(79, { planType: 'plus', credits: { hasCredits: true, unlimited: false, balance: '123' } });
+  assert.equal(f.companion.getSnapshot().quota.credits.balance, '123');
+  f.callbacks.onAccount({ accountKey: 'new-account' });
   assert.equal('credits' in f.companion.getSnapshot().quota, false);
   f.companion.close();
 });

@@ -14,7 +14,7 @@
 - 定制经典、云朵、幻彩、方糖四种外观，调整配色、透明度并保存启动外观
 - 普通桌宠无需登录，可离线使用；主动使用聊天时，会把输入的消息发送给 Codex 生成回复
 
-0.3.26 新增 OpenAI API 费用与用量报告和独立常驻卡、Pro 额外点数展示（默认开启，可关闭）、“关于球球”和页内检查更新。自动发现新版后，可在桌面对白、聊天顶部和菜单看到提醒；Plus 现有额度逻辑保持。
+0.3.27 提供 OpenAI API 费用与用量报告和独立常驻卡、额外点数展示（默认开启，可关闭）、“关于球球”和页内检查更新。点数按接口返回的数据展示，适用于有相关点数的账号，不限定 Pro。自动发现新版后，可在桌面对白、聊天顶部和菜单看到提醒；Plus 现有周期额度逻辑保持。
 
 0.3.25 新增“定制球球”，支持四种外观、立体幻彩与简色渐变、实时预览和保存；聊天头像同步当前外观，并优化桌面互动与靠边展示。
 
@@ -30,10 +30,10 @@
 
 提供 Apple 芯片版与独立 Intel x64 构建，需 macOS 12 或更高版本。请按 Mac 芯片选择对应附件；Intel 的实机验证范围见 Release 说明。
 
-当前 Apple 芯片版为 [0.3.26](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.26)，Intel 下载继续使用 [0.3.13 构建候选](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.13)。本次没有发布新的 Intel 安装包。
+当前 Apple 芯片版为 [0.3.27](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.27)，Intel 下载继续使用 [0.3.13 构建候选](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.13)。本次没有发布新的 Intel 安装包。
 
 1. 前往 [Releases](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases) 下载最新的“分享用 ZIP”。
-2. 解压 ZIP，打开 DMG。
+2. 解压 ZIP，得到“球球桌宠.app”；也可下载并打开 DMG。
 3. 将“球球桌宠”拖入“Applications”。
 4. 如果 macOS 提示无法验证开发者，请打开“系统设置 → 隐私与安全性”，在安全性区域选择“仍要打开”。
 

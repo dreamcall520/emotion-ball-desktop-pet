@@ -17,7 +17,7 @@ const snapshot = (windows, overrides = {}) => ({
   quota: { state: 'connected', stale: false, updatedAt: NOW, windows, ...overrides }
 });
 
-test('额外点数仅 Pro 默认开启，余额、零、无点数、无限、未知与过期独立于套餐比例和重置机会', () => {
+test('额外点数按返回数据默认开启，余额、零、无点数、无限、未知与过期独立于套餐比例和重置机会', () => {
   const windows = [quotaWindow('codex:weekly', 10080, 79)];
   const pro = credits => snapshot(windows, { planType: 'pro', credits, resetCreditsAvailable: 2 });
   for (const [credits, expected] of [
@@ -26,7 +26,7 @@ test('额外点数仅 Pro 默认开启，余额、零、无点数、无限、未
     [{ hasCredits: false, unlimited: false, balance: null }, { state: 'none' }],
     [{ hasCredits: false, unlimited: true, balance: null }, { state: 'unlimited' }],
     [{ hasCredits: true, unlimited: false, balance: null }, { state: 'unknown' }],
-    [null, { state: 'unknown' }]
+    [{}, { state: 'unknown' }]
   ]) {
     const model = buildQuotaLabelModel(pro(credits), {}, NOW);
     assert.deepEqual(model.extraCredits, expected);
@@ -41,9 +41,14 @@ test('额外点数仅 Pro 默认开启，余额、零、无点数、无限、未
   source.quota.stale = false;
   assert.deepEqual(buildQuotaLabelModel(source, {}, NOW).extraCredits,
     { state: 'balance', balance: '62485.1547310000', usageStatus: 'blocked' });
-  for (const planType of ['plus', undefined, 'unknown']) {
-    assert.deepEqual(buildQuotaLabelModel(snapshot(windows, { planType, credits: source.quota.credits }), {}, NOW),
-      buildQuotaLabelModel(snapshot(windows), {}, NOW));
+  for (const planType of ['plus', 'business', undefined, 'unknown']) {
+    const shared = snapshot(windows, { planType, credits: source.quota.credits });
+    assert.deepEqual(buildQuotaLabelModel(shared, {}, NOW).extraCredits,
+      { state: 'balance', balance: '62485.1547310000' });
+    for (const credits of [undefined, null, [], '123']) {
+      assert.deepEqual(buildQuotaLabelModel(snapshot(windows, { planType, credits }), {}, NOW),
+        buildQuotaLabelModel(snapshot(windows), {}, NOW));
+    }
   }
 });
 

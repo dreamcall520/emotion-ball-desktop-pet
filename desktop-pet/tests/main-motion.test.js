@@ -913,10 +913,11 @@ test('额度卡片外观为跟随系统、浅色和深色三档，只在保存�
     'codex-quota-appearance-system');
 });
 
-test('额外点数默认开启，切换立即刷新 Pro 卡，保存失败回滚，Plus 保持原模型', async () => {
+test('额外点数默认开启，Pro/Plus 均可显示，缺失不加行，切换刷新且保存失败回滚', async () => {
   const off = await fixture();
   assert.equal(menuItem(off, 'codex-extra-credits').enabled, false);
   assert.equal(menuItem(off, 'codex-extra-credits').checked, true);
+  assert.equal(menuItem(off, 'codex-extra-credits').label, '显示额外点数');
   const quota = { updatedAt: 1800000000000, planType: 'pro', credits: { hasCredits: true, unlimited: false, balance: '123.45' },
     windows: [{ id: 'codex:secondary', label: 'Codex', windowMinutes: 10080, remaining: 65, resetsAt: 1800604800000 }] };
   const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
@@ -929,6 +930,8 @@ test('额外点数默认开启，切换立即刷新 Pro 卡，保存失败回滚
   menuItem(f, 'codex-extra-credits').click({ checked: true });
   assert.equal(f.quotaLabel.shows.at(-1).extraCredits.balance, '123.45');
   f.connections[0].callbacks.onQuota({ ...quota, planType: 'plus' });
+  assert.equal(f.quotaLabel.shows.at(-1).extraCredits.balance, '123.45');
+  f.connections[0].callbacks.onQuota({ ...quota, planType: 'plus', credits: null });
   assert.equal(f.quotaLabel.shows.at(-1).extraCredits, undefined);
   assert.equal(f.quotaLabel.shows.at(-1).items.length, 1);
   const failed = await fixture({ codexEnabled: true, saveError: new Error('CREDITS_WRITE_FAILURE') });
