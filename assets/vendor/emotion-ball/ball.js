@@ -76,6 +76,7 @@
 
   function createBall(container, opts) {
     opts = opts || {};
+    var facing = opts.facing === 'left' ? -1 : 1;
     var id = 'eb' + (uid++);
     var lite = !!opts.lite;
     var shape = RD.SHAPES[opts.shape] || RD.SHAPES.blob;
@@ -139,7 +140,7 @@
     svg.appendChild(fxBack);
 
     var bodyG = el('g', {});
-    var head = el('path', { d: ringPath(headRing), fill: 'url(#' + id + 'g)', stroke: 'none', 'stroke-width': '2' });
+    var head = el('path', { class: 'eb-head', d: ringPath(headRing), fill: 'url(#' + id + 'g)', stroke: 'none', 'stroke-width': '2' });
     bodyG.appendChild(head);
 
     function buildEye(k) {
@@ -391,7 +392,7 @@
       var base = eye.c || BASE_C[k];
       var open = clamp(pose.open, minOpen || 0.02, 2.4);
       var sy = clamp(pose.scaleY * open * face.eye, 0.02, 2.4);
-      var sxBase = pose.scaleX * face.eye;
+      var sxBase = pose.scaleX * face.eye * facing;
 
       /* 纵向：脸部拟合映射 + 轮廓钳制 */
       var halfH = EYE_HALF * sy + 2;
@@ -403,7 +404,7 @@
       var hw = Math.max((sil[1] - sil[0]) / 2, 12);
 
       /* 横向：经度换算 + 自旋偏航 + 余弦压缩 */
-      var ox = face.x + (base[0] - HEAD_C) * face.sx + pose.x + pose.lookX;
+      var ox = (face.x + (base[0] - HEAD_C) * face.sx + pose.x) * facing + pose.lookX;
       var theta = clamp(ox / hw, -1.15, 1.15);
       var total = theta + (yaw || 0);
       var cn = Math.cos(total);
@@ -418,7 +419,7 @@
 
       eye.node.setAttribute('transform',
         'translate(' + r2(ex) + ' ' + r2(ey0) + ')' +
-        (pose.rotate ? ' rotate(' + r2(pose.rotate) + ')' : '') +
+        (pose.rotate ? ' rotate(' + r2(pose.rotate * facing) + ')' : '') +
         ' scale(' + r2(sxBase * cn) + ' ' + r2(sy * fy) + ')' +
         ' translate(' + r2(-base[0]) + ' ' + r2(-base[1]) + ')');
 
@@ -622,7 +623,12 @@
       if (svg.parentNode) svg.parentNode.removeChild(svg);
     }
 
-    return { svg: svg, applyPose: applyPose, burst: burst, destroy: destroy };
+    function setFacing(side) {
+      if (side === 'left') facing = -1;
+      else if (side === 'right') facing = 1;
+    }
+
+    return { svg: svg, applyPose: applyPose, burst: burst, setFacing: setFacing, destroy: destroy };
   }
 
   EB.createBall = createBall;

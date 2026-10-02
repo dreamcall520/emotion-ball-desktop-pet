@@ -499,6 +499,12 @@
       this._gaze.ty = 0;
       return this;
     },
+    setFacing: function (side) {
+      if (side !== 'left' && side !== 'right') return this;
+      this.ball.setFacing(side);
+      if (!this._active) this.renderStatic();
+      return this;
+    },
     setStyle: function (style) {
       Object.assign(this._style, style || {});
       if (!this._active) this.renderStatic();

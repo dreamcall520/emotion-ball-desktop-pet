@@ -35,9 +35,11 @@
     if (definition.antics) engine.config.register({ ...definition.raw, antics: false });
   }
   engine.config.register({ ...engine.config.get('02').raw, id: '50', name: '安静陪伴', group: 'custom', antics: false, anims: [] });
-  engine.config.register({ ...engine.config.get('02').raw, id: '55', name: '靠右边陪伴', group: 'custom',
-    antics: false, anims: [], gaze: false, body: { breathe: 0 },
-    eyes: { both: { x: -92, y: 18, rotate: 32 } } });
+  // Match the native classic pet's edge pose; facing is mirrored by the renderer.
+  engine.config.register({ id: '55', name: '靠边陪伴', group: 'custom', gaze: false, antics: false,
+    pool: [0], blinkMs: [2500, 5000], transition: 0, anims: [],
+    body: { breathe: 0.007 },
+    eyes: { both: { scaleX: 0.78, scaleY: 0.78, y: 20 }, left: { x: 10 }, right: { x: 2 } } });
   const thinking = engine.config.get('30').raw;
   engine.config.register({ ...thinking, id: '51', name: 'Codex 思考', group: 'custom', antics: false, body: { ...thinking.body, orbit: 0 } });
 
@@ -121,6 +123,7 @@
       motion.stop(this.ball);
       this.offset.style.translate = '0px 0px';
       this.ball.setActive(false);
+      this.ball.setFacing('right');
       this.renderStill();
       this.root.dataset.playing = 'false';
     }
@@ -219,6 +222,7 @@
       const tucked = !!this.edge?.checked && !this.edgePeek;
       this.root.dataset.edgeTucked = String(tucked);
       if (this.edge?.checked) {
+        this.ball.setFacing(tucked ? 'left' : 'right');
         this.ball.setEmotion(tucked ? '55' : '50');
         this.ball.setMotionFrame({
           body: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotate: 0, yaw: 0 },

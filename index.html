@@ -23,12 +23,12 @@
     </script>
     <link rel="stylesheet" href="styles.css?v=20260928-review">
     <link rel="stylesheet" href="motion-showcase.css?v=20260911-5">
-    <link rel="stylesheet" href="quota-demo.css?v=20260911-1">
+    <link rel="stylesheet" href="quota-demo.css?v=20261002-layout">
     <link rel="stylesheet" href="dark-theme.css?v=20260911-2">
     <link rel="stylesheet" href="chat-showcase.css?v=20260928-1">
     <link rel="stylesheet" href="appearance-showcase.css?v=20260928-2">
     <link rel="stylesheet" href="customize-showcase.css?v=20260928-preview">
-    <link rel="stylesheet" href="review-refinements.css?v=20260928-history">
+    <link rel="stylesheet" href="review-refinements.css?v=20261002-feature-layout">
     <title>球球桌宠 - 免费的 macOS 桌面伙伴</title>
   </head>
   <body>
@@ -89,19 +89,19 @@
           <div class="feature-list">
             <article>
               <h3>拖动与互动</h3>
-              <p>拖放后转面站稳，根据所在位置朝向桌面内侧，唤醒时绕个小圈。</p>
+              <p>拖放后转身站稳，朝向桌面内侧；唤醒时绕个小圈。</p>
             </article>
             <article>
-              <h3>眼神与摸头反馈</h3>
-              <p>看向同屏鼠标，轻轻摸头时侧躺贴贴，配合简短回应。</p>
+              <h3>眼神与摸头</h3>
+              <p>目光跟随同屏鼠标，摸摸头就会侧躺回应。</p>
             </article>
             <article>
-              <h3>双击全身动作</h3>
-              <p>弹跳、果冻抖动、扭动、探望、鞠躬与低频旋转。</p>
+              <h3>双击小动作</h3>
+              <p>双击触发弹跳、抖动、探望等小动作。</p>
             </article>
             <article>
               <h3>五档尺寸与置顶</h3>
-              <p>从 60 × 60 到大号，自由切换并可始终置顶。</p>
+              <p>从 60 × 60 到大号，五档可选，支持始终置顶。</p>
             </article>
           </div>
           <div class="motion-panel feature-playground" data-motion-scene="feature">
@@ -136,7 +136,7 @@
             </div>
             <div>
               <dt>看额度</dt>
-              <dd>剩余额度、重置时间与额外点数，各自清楚展示。</dd>
+              <dd>查看剩余额度、重置时间和额外点数。</dd>
             </div>
             <div>
               <dt>完成提醒</dt>
@@ -144,12 +144,10 @@
             </div>
             <div>
               <dt>API 费用</dt>
-              <dd>可选常驻本月费用小卡，展开看今日费用与完整报告。</dd>
+              <dd>可常驻本月费用，展开查看今日费用与报告。</dd>
             </div>
           </dl>
-          <p class="release-note">默认关闭，可选开启；只查看状态，不代你操作。<a href="#privacy">了解隐私边界</a></p>
-          <details class="content-details"><summary>额外点数的显示说明</summary><p>账号支持购买或使用点数，且 Codex 返回点数状态时，才显示额外点数。点数与套餐比例、重置机会分别展示，也不与 API 费用合并。<a href="https://learn.chatgpt.com/docs/pricing" target="_blank" rel="noopener noreferrer">查看官方说明</a></p></details>
-          <details class="content-details"><summary>API 费用的接入说明</summary><p>使用官方 OpenAI API 时，需组织所有者提供具有费用与用量读取权限的 Admin API Key；普通 Codex 调用 Key 无法查询报表。默认统计整个组织，报告可能延迟，不代表余额或本次聊天的实时计费。API 费用小卡与套餐额度卡可分别开启。</p><p>管理密钥在本机安全存储中加密保存，不回显；断开连接时移除。完整报告还可查看本月输入、输出及其中缓存 tokens。</p></details>
+          <div class="release-note codex-privacy-note"><p><strong>默认关闭，可选开启</strong><span>只查看状态，不代你操作。</span></p><a href="#privacy">了解隐私边界 <span aria-hidden="true">→</span></a></div>
         </div>
         <div class="codex-live-showcase" data-motion-scene="codex">
           <div class="quota-playground" data-quota-demo></div>
@@ -403,7 +401,6 @@
                 <h4>额度明细</h4>
                 <ul>
                   <li>「显示额外点数」开关默认开启；账号支持点数并返回状态时展示，可在 Codex 联动菜单调整。点数与套餐剩余比例、重置机会分别展示。</li>
-                  <li>Plus 现有额度显示、周期选择与提醒行为保持。</li>
                 </ul>
               </div>
               <div class="update-group">
@@ -621,15 +618,15 @@
 
     <script src="assets/vendor/emotion-ball/rings.js"></script>
     <script src="assets/vendor/emotion-ball/emotions.js"></script>
-    <script src="assets/vendor/emotion-ball/ball.js"></script>
-    <script src="assets/vendor/emotion-ball/engine.js"></script>
+    <script src="assets/vendor/emotion-ball/ball.js?v=20261002-native-edge"></script>
+    <script src="assets/vendor/emotion-ball/engine.js?v=20261002-native-edge"></script>
     <script src="assets/motion/interaction-motion.js"></script>
     <script src="assets/motion/interaction-v5.js"></script>
     <script src="assets/motion/thought-flow-v5.js"></script>
     <script src="assets/motion/dialogue-v5.js"></script>
     <script src="app.js?v=20260928-release"></script>
-    <script src="motion-showcase.js?v=20260928-2"></script>
-    <script src="quota-demo.js?v=20260928-release"></script>
+    <script src="motion-showcase.js?v=20261002-native-edge"></script>
+    <script src="quota-demo.js?v=20261002-layout"></script>
     <script src="chat-showcase.js?v=20260928-1"></script>
     <script src="appearance-showcase.js?v=20260928-2"></script>
     <script src="customize-showcase.js?v=20260928-preview"></script>

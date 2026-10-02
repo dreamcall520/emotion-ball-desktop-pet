@@ -12,13 +12,15 @@
   let timer = null;
   root.innerHTML = `
     <div class="qd-toolbar">
-      <span class="qd-toolbar-label">卡片外观</span>
+      <span class="qd-toolbar-label">卡片预览 · 示例数据</span>
       <div class="qd-segment" role="group" aria-label="演示卡片外观">
         <button type="button" data-qd-theme="light" aria-pressed="false">浅色</button>
         <button type="button" data-qd-theme="dark" aria-pressed="true">深色</button>
       </div>
     </div>
     <div class="qd-stage">
+      <div class="qd-panel">
+      <h3>套餐额度与额外点数</h3>
       <section class="qd-card" data-appearance="dark" data-severity="normal" aria-label="Codex 额度卡片演示">
         <div class="qd-card-header">
           <span class="qd-product">CODEX</span>
@@ -33,8 +35,30 @@
         <div id="qd-card-details" class="qd-details">
           <div><strong class="qd-reset">1 天后重置</strong><span>当前周期 · 演示</span></div>
           <div class="qd-credit"><strong>1 次</strong><span>重置机会</span></div>
+          <div class="qd-extra-credits"><span>额外点数</span><strong>1,250.00 <small>点</small></strong></div>
         </div>
       </section>
+      <details class="qd-help"><summary>额外点数如何显示？</summary><dl>
+        <div><dt>开启入口</dt><dd>右键球球 → Codex 联动 → 显示额外点数</dd></div>
+        <div><dt>显示规则</dt><dd>Codex 返回点数状态时显示，与套餐额度、API 费用分开。<a href="https://learn.chatgpt.com/docs/pricing" target="_blank" rel="noopener noreferrer">查看官方说明 ↗</a></dd></div>
+      </dl></details>
+      </div>
+      <div class="qd-panel">
+      <h3>API 费用</h3>
+      <details class="qd-card qd-api-card" data-appearance="dark" open>
+        <summary aria-label="展开或收起 API 费用卡片"><span class="qd-product">API</span><span class="qd-remaining">本月</span><span class="qd-api-compact">$32.48</span><span class="qd-api-chevron" aria-hidden="true">⌃</span></summary>
+        <div class="qd-value-row"><strong class="qd-value">32.48</strong><span class="qd-remaining">USD</span></div>
+        <div class="qd-api-today"><span>今日 UTC</span><strong>$1.26</strong></div>
+        <p class="qd-api-updated">上次查询 09:41 UTC</p>
+        <details class="qd-api-report"><summary>查看报告示例</summary><dl><div><dt>本月输入</dt><dd>2.84M tokens</dd></div><div><dt>其中缓存输入</dt><dd>1.12M tokens</dd></div><div><dt>本月输出</dt><dd>420K tokens</dd></div></dl></details>
+      </details>
+      <details class="qd-help"><summary>如何接入 API 费用？</summary><dl>
+        <div><dt>接入入口</dt><dd>右键球球 → Codex 联动 → OpenAI API 费用与用量</dd></div>
+        <div><dt>所需密钥</dt><dd>组织所有者的 Admin API Key，需费用与用量读取权限。</dd></div>
+        <div><dt>统计口径</dt><dd>组织费用，按 UTC 汇总；不是余额，可能延迟。</dd></div>
+        <div><dt>密钥保存</dt><dd>仅在本机加密保存，断开连接即移除。</dd></div>
+      </dl></details>
+      </div>
     </div>
     <p class="qd-caption">额度充足，安心做自己的事。</p>
     <div class="qd-actions" role="group" aria-label="点击体验球球的状态回应">
@@ -50,7 +74,7 @@
   const running = () => !state.paused && state.visible && !document.hidden && !reducedMotion.matches;
   function render() {
     const value = stages[state.stage][state.period];
-    card.dataset.appearance = state.appearance;
+    root.querySelectorAll('.qd-card').forEach(item => { item.dataset.appearance = state.appearance; });
     card.dataset.severity = value <= 10 ? 'urgent' : value <= 20 ? 'low' : 'normal';
     card.dataset.expanded = String(state.expanded);
     root.querySelectorAll('[data-qd-theme]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.qdTheme === state.appearance)));
