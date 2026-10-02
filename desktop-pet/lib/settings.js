@@ -17,6 +17,7 @@ const DEFAULTS = Object.freeze({
   codexEnabled: false,
   codexTaskNameInAlerts: false,
   codexQuotaAlwaysVisible: false,
+  openaiApiAlwaysVisible: false,
   codexQuotaPeriod: 'auto',
   codexQuotaLabelSize: 'compact',
   codexQuotaAppearance: 'system'
@@ -51,6 +52,8 @@ function normalizeSettings(raw = {}) {
       typeof raw.codexQuotaAlwaysVisible === 'boolean'
         ? raw.codexQuotaAlwaysVisible
         : DEFAULTS.codexQuotaAlwaysVisible,
+    openaiApiAlwaysVisible: typeof raw.openaiApiAlwaysVisible === 'boolean'
+      ? raw.openaiApiAlwaysVisible : DEFAULTS.openaiApiAlwaysVisible,
     codexQuotaPeriod: ['auto', 'fiveHour', 'weekly'].includes(raw.codexQuotaPeriod)
       ? raw.codexQuotaPeriod
       : DEFAULTS.codexQuotaPeriod,

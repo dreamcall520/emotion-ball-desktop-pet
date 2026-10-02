@@ -43,6 +43,7 @@ const { createChatCompanion } = require('./lib/chat-companion');
 const { createCodexChatRpc } = require('./lib/codex-chat-rpc');
 const { createChatWindow } = require('./lib/chat-window');
 const { createApiUsage } = require('./lib/api-usage');
+const { createApiUsageLabelWindow } = require('./lib/api-usage-label-window');
 const { createColorModeManager } = require('./lib/color-mode');
 const { normalizeCustomization, effectiveAppearance } = require('./lib/customization');
 
@@ -74,6 +75,10 @@ let chatWindow = null;
 let customizationWindow = null;
 let apiUsage = null;
 let apiUsageWindow = null;
+let apiUsageLabel = null;
+let apiRefreshTimer = null;
+let apiLastAttemptAt = -Infinity;
+const API_REFRESH_MS = 5 * 60 * 1000;
 let customizationPreviewAppearance = null;
 let screenLocked = false;
 let codexCompanion = null;
@@ -247,6 +252,7 @@ function openChat() {
   hideBubble();
   thoughts?.hide();
   quotaLabel?.hide();
+  apiUsageLabel?.hide();
   edgeNoticeWindow?.hide();
   chatWindow.show(chat.getState());
   // Opening checks login and shows local history; only send() can create a thread.
@@ -292,13 +298,14 @@ function applyPresentation(packet) {
     dialogue?.dismiss();
     hideBubble();
     safelyInvokeWindow('收起时额度标签隐藏', () => quotaLabel?.hide());
+    safelyInvokeWindow('收起时 API 卡片隐藏', () => apiUsageLabel?.hide());
   } else syncQuotaLabel(codexCompanion?.getSnapshot());
   tickEdgeNotice(true);
   refreshTrayMenu();
 }
 
 function edgeRetentionBounds() {
-  return [bubble, quotaLabel, chatWindow].flatMap(controller => {
+  return [bubble, quotaLabel, apiUsageLabel, chatWindow].flatMap(controller => {
     try {
       const win = controller?.getWindow();
       return win && !win.isDestroyed() && win.isVisible() ? [win.getBounds()] : [];
@@ -392,6 +399,41 @@ function safelyInvokeWindow(scope, callback) {
 
 function repositionQuotaLabel() {
   try { quotaLabel?.reposition(); } catch (error) { reportQuotaError('额度标签重排', error); }
+  safelyInvokeWindow('API 卡片重排', () => apiUsageLabel?.reposition());
+}
+
+function syncApiUsageLabel() {
+  if (!apiUsage || !apiUsageLabel) return;
+  const state = apiUsage.getState();
+  const enabled = !isQuitting && settings?.openaiApiAlwaysVisible === true;
+  const visible = enabled && !screenLocked && !chatWindow?.isVisible() && !presentationSuppressed() &&
+    petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
+  safelyInvokeWindow('API 卡片同步', () => visible ? apiUsageLabel.show(state) : apiUsageLabel.hide());
+  if (!enabled || !state.connected) {
+    clearTimeout(apiRefreshTimer);
+    apiRefreshTimer = null;
+    return;
+  }
+  if (!apiRefreshTimer) apiRefreshTimer = setTimeout(() => {
+    apiRefreshTimer = null;
+    syncApiUsageLabel();
+  }, API_REFRESH_MS);
+  if (visible && !state.busy && Date.now() - Math.max(apiLastAttemptAt, state.report?.updatedAt || 0) >= API_REFRESH_MS) {
+    apiLastAttemptAt = Date.now();
+    void apiUsage.refresh();
+  }
+}
+
+function setApiUsageVisible(value) {
+  const previous = settings.openaiApiAlwaysVisible;
+  settings.openaiApiAlwaysVisible = Boolean(value);
+  try { persistSettings(); }
+  catch (error) {
+    settings.openaiApiAlwaysVisible = previous;
+    writeError('保存 API 常驻显示', error);
+  }
+  syncApiUsageLabel();
+  refreshTrayMenu();
 }
 
 function detachBubbleVisibilityEvents(expected = null) {
@@ -531,6 +573,7 @@ function syncQuotaLabel(snapshot = null) {
     return shown;
   } finally {
     quotaSyncing = false;
+    syncApiUsageLabel();
   }
 }
 
@@ -947,6 +990,7 @@ function setAlwaysOnTop(enabled) {
   });
   safelyInvokeWindow('气泡窗口置顶', () => bubble?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('额度标签置顶', () => quotaLabel?.setAlwaysOnTop(settings.alwaysOnTop));
+  safelyInvokeWindow('API 卡片置顶', () => apiUsageLabel?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('边缘提示置顶', () => edgeNoticeWindow?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('聊天面板置顶', () => chatWindow?.setAlwaysOnTop(settings.alwaysOnTop));
   thoughts?.setAlwaysOnTop(settings.alwaysOnTop);
@@ -1067,6 +1111,10 @@ function codexMenu() {
         ? [{ id: 'codex-preference-warning', label: codexPreferenceWarning, enabled: false }]
         : []),
       { id: 'openai-api-usage', label: 'OpenAI API 费用与用量…', click: openApiUsage },
+      { id: 'openai-api-visible', label: '一直显示 API 本月费用', type: 'checkbox',
+        checked: settings.openaiApiAlwaysVisible === true,
+        click: item => { const enabled = item.checked; item.checked = settings.openaiApiAlwaysVisible === true;
+          setApiUsageVisible(enabled); } },
       ...(settings.codexEnabled ? [{ id: 'codex-status', label: 'Codex 状态', submenu: [
         ...(codexNotice ? [{ label: codexNotice.text, enabled: false }, { type: 'separator' }] : []),
         ...bindCodexMenu(buildCodexMenu(codexCompanion?.getSnapshot(), codexNow()))
@@ -1193,7 +1241,12 @@ async function finishSmokeTest() {
     if (process.env.PET_SMOKE_API_USAGE_ONLY === '1') {
       await require('./scripts/verify-api-usage-integration').verifyApiUsage({
         getWindow: () => apiUsageWindow, service: apiUsage, pet: petWindow,
-        getMenu: () => Menu.buildFromTemplate(menuTemplate()), powerMonitor
+        getMenu: () => Menu.buildFromTemplate(menuTemplate()), powerMonitor,
+        apiLabel: apiUsageLabel, quotaLabel, screen,
+        showDemoQuota: () => { quotaLabel.show(buildQuotaLabelModel({ enabled: true,
+          quota: { state: 'connected', stale: false, windows: [{ id: 'codex:weekly', label: 'Codex',
+            windowMinutes: 10080, remaining: 79, resetsAt: Date.now() + 86400000 }] }
+        }, { period: 'auto', size: 'compact' }, Date.now())); syncApiUsageLabel(); }
       });
       app.exit(0);
       return;
@@ -1702,6 +1755,7 @@ function createPetWindow() {
     hideBubble();
     if (!isCurrentPetWindow()) return;
     safelyInvokeWindow('隐藏时额度标签隐藏', () => quotaLabel?.hide());
+    safelyInvokeWindow('隐藏时 API 卡片隐藏', () => apiUsageLabel?.hide());
     if (!isCurrentPetWindow()) return;
     safelyInvokeWindow('隐藏时对白清理', () => dialogue?.dismiss());
   });
@@ -1726,6 +1780,7 @@ function createPetWindow() {
     destroyBubbleSafely();
     if (!isCurrentPetWindow()) return;
     safelyInvokeWindow('关闭时额度标签销毁', () => quotaLabel?.destroy());
+    safelyInvokeWindow('关闭时 API 卡片销毁', () => apiUsageLabel?.destroy());
     thoughts?.destroy();
     if (!isCurrentPetWindow()) return;
     safelyInvokeWindow('关闭时对白清理', () => dialogue?.dismiss());
@@ -1976,7 +2031,9 @@ async function bootstrap() {
     ...(IS_SMOKE_TEST && process.env.PET_SMOKE_API_USAGE_ONLY === '1'
       ? { get: require('./scripts/verify-api-usage-integration').smokeGet } : {}),
     onChange: state => {
+      if (state.busy) apiLastAttemptAt = Date.now();
       if (apiUsageWindow && !apiUsageWindow.isDestroyed()) apiUsageWindow.webContents.send('pet:api-usage-state', state);
+      syncApiUsageLabel();
     }
   });
   settings = loadSettings(settingsFile);
@@ -2057,6 +2114,12 @@ async function bootstrap() {
     alwaysOnTop: settings.alwaysOnTop,
     onError: error => writeError('额度标签窗口', error)
   });
+  apiUsageLabel = createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
+    getQuotaWindow: () => quotaLabel?.getWindow(), getObstacleBounds: quotaObstacleBounds,
+    getAppearance: () => settings?.codexQuotaAppearance,
+    getPresentation: () => ({ ...edgeTuck?.getPresentation(), shape: settings?.customization?.appearance?.shape }),
+    onOpenDetails: openApiUsage, alwaysOnTop: settings.alwaysOnTop,
+    onError: error => writeError('API 常驻卡片', error) });
   edgeNoticeWindow = createEdgeNoticeWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('边缘提示窗口', error) });
   edgeNotice = createEdgeNotice({ now: () => edgeNoticeNow(), onChange: payload => {
@@ -2083,6 +2146,7 @@ async function bootstrap() {
     safelyInvokeWindow('锁屏时暂停活动监测', () => activityMonitor.pause());
     hideBubble();
     safelyInvokeWindow('锁屏时额度标签隐藏', () => quotaLabel?.hide());
+    safelyInvokeWindow('锁屏时 API 卡片隐藏', () => apiUsageLabel?.hide());
     safelyInvokeWindow('锁屏时对白清理', () => dialogue.dismiss());
   };
   const resume = () => { screenLocked = false; edgeTuck?.resume(); activityMonitor.resume(); syncQuotaLabel(codexCompanion?.getSnapshot()); };
@@ -2115,6 +2179,8 @@ if (!hasSingleInstanceLock) {
       return;
     }
     quitCleanupStarted = true;
+    clearTimeout(apiRefreshTimer);
+    apiRefreshTimer = null;
     apiUsage?.close();
     let chatClosing;
     safelyInvokeWindow('退出时聊天停止', () => { chatClosing = chat?.close(); });
@@ -2135,6 +2201,7 @@ if (!hasSingleInstanceLock) {
     safelyInvokeWindow('退出时活动监测清理', () => activityMonitor?.stop());
     destroyBubbleSafely();
     safelyInvokeWindow('退出时额度标签销毁', () => quotaLabel?.destroy());
+    safelyInvokeWindow('退出时 API 卡片销毁', () => apiUsageLabel?.destroy());
     thoughts?.destroy();
     safelyInvokeWindow('退出时对白清理', () => dialogue?.dismiss());
   });

@@ -84,6 +84,13 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     show(model) { this.shows.push(model); this.visible = true; }, hide() { this.hides++; this.visible = false; },
     reposition() { this.moves++; }, destroy() { this.destroys++; this.visible = false; },
     setAlwaysOnTop(value) { this.topmost.push(value); }, getWindow: () => null };
+  const apiLabel = { ...quotaLabel, shows: [], topmost: [] };
+  const apiUsage = { options: null, refreshes: 0,
+    state: { connected: false, busy: false, report: null, error: null, config: {} },
+    getState() { return this.state; },
+    refresh() { this.refreshes++; return Promise.resolve(this.state); },
+    close() {},
+    change(state) { this.state = state; this.options.onChange(state); } };
   const edgeNoticeWindow = { shows: [], visible: false,
     show(payload) { this.shows.push(payload); this.visible = true; }, hide() { this.visible = false; },
     destroy() { this.visible = false; }, reposition() {}, setAlwaysOnTop() {}, getWindow: () => null };
@@ -153,6 +160,8 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
       } };
       if (name === './lib/bubble-window') return { createBubbleWindow: () => bubble };
       if (name === './lib/quota-label-window') return { createQuotaLabelWindow: () => quotaLabel };
+      if (name === './lib/api-usage-label-window') return { createApiUsageLabelWindow: () => apiLabel };
+      if (name === './lib/api-usage') return { createApiUsage: options => { apiUsage.options = options; return apiUsage; } };
       if (name === './lib/edge-notice-window') return { createEdgeNoticeWindow: () => edgeNoticeWindow };
       if (name === './lib/chat-window') return { createChatWindow: options => { chatWindow.options = options; return chatWindow; } };
       if (name === './lib/chat-store') return { createChatStore: file => {
@@ -171,7 +180,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   const pet = windows[0];
   pet.emit('ready-to-show');
   pet.webContents.emit('did-finish-load');
-  return { pet, bubble, quotaLabel, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
+  return { pet, bubble, quotaLabel, apiLabel, apiUsage, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
     call: expression => vm.runInContext(expression, context),
     invoke(channel, packet, sender = pet.webContents) {
       assert.ok(ipcHandlers.has(channel), `${channel} handler must be registered`);
@@ -528,6 +537,42 @@ test('默认关闭和取消确认都零连接、零轮询，并保留原设置',
   assert.equal(f.timers.size, 0);
 });
 
+test('API 常驻独立于套餐，失败刷新有间隔，隐藏与关闭清理', async () => {
+  const f = await fixture();
+  assert.equal(f.apiLabel.visible, false);
+  assert.equal(f.apiUsage.refreshes, 0);
+  const item = f.call('codexMenu().submenu.find(item => item.id === "openai-api-visible")');
+  assert.notEqual(item.enabled, false);
+  item.click({ checked: true });
+  assert.equal(f.apiLabel.visible, true);
+  assert.equal(f.quotaLabel.visible, false);
+  assert.equal(f.saved.at(-1).openaiApiAlwaysVisible, true);
+  const failed = { connected: true, busy: false, report: null, error: '未更新', config: {} };
+  f.apiUsage.change(failed);
+  assert.equal(f.apiUsage.refreshes, 1);
+  f.apiUsage.change(failed);
+  f.call('syncApiUsageLabel()');
+  assert.equal(f.apiUsage.refreshes, 1, '报告失败不能形成立即重试循环');
+  f.advanceTo(300000);
+  assert.equal(f.apiUsage.refreshes, 2);
+  f.powerMonitor.emit('lock-screen');
+  assert.equal(f.apiLabel.visible, false);
+  f.advanceTo(600000);
+  assert.equal(f.apiUsage.refreshes, 2, '锁屏不查询');
+  f.powerMonitor.emit('unlock-screen');
+  assert.equal(f.apiLabel.visible, true);
+  assert.equal(f.apiUsage.refreshes, 3);
+  f.pet.hide();
+  assert.equal(f.apiLabel.visible, false);
+  f.call('restorePet()');
+  assert.equal(f.apiLabel.visible, true);
+  item.click({ checked: false });
+  assert.equal(f.apiLabel.visible, false);
+  assert.equal(f.call('apiRefreshTimer'), null);
+  f.app.emit('before-quit');
+  assert.equal(f.apiLabel.destroys, 1);
+});
+
 test('所有 Codex 设置只保留一个顶层入口并完整归入子菜单', async () => {
   const f = await fixture({ codexEnabled: true });
   const menu = f.call('menuTemplate()');
@@ -538,7 +583,7 @@ test('所有 Codex 设置只保留一个顶层入口并完整归入子菜单', a
     JSON.stringify(['codex-menu']));
   assert.equal(JSON.stringify(group.submenu.filter(item => item.id).map(item => item.id)), JSON.stringify([
     'codex-enabled', 'codex-task-names', 'codex-quota-visible', 'codex-quota-period',
-    'codex-quota-label-size', 'codex-quota-appearance', 'openai-api-usage', 'codex-status'
+    'codex-quota-label-size', 'codex-quota-appearance', 'openai-api-usage', 'openai-api-visible', 'codex-status'
   ]));
   assert.equal(group.submenu.find(item => item.id === 'codex-enabled').label, '启用 Codex 联动');
 });

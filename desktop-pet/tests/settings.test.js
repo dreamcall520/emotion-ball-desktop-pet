@@ -17,6 +17,20 @@ test('无效设置回退默认值', () => {
   );
 });
 
+test('API 常驻开关只接受布尔值，独立持久化且不保存报表或密钥', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emotion-api-label-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'settings.json');
+  assert.equal(normalizeSettings({ openaiApiAlwaysVisible: 'true' }).openaiApiAlwaysVisible, false);
+  saveSettings(file, { openaiApiAlwaysVisible: true, key: 'SECRET_KEY', report: { costs: 99 } });
+  const saved = loadSettings(file);
+  assert.equal(saved.openaiApiAlwaysVisible, true);
+  assert.equal(saved.codexEnabled, false);
+  assert.equal(saved.codexQuotaAlwaysVisible, false);
+  assert.equal(fs.readFileSync(file, 'utf8').includes('SECRET_KEY'), false);
+  assert.equal(Object.hasOwn(saved, 'report'), false);
+});
+
 test('损坏文件回退且有效设置可回读', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emotion-pet-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -40,6 +54,7 @@ test('损坏文件回退且有效设置可回读', t => {
     codexEnabled: false,
     codexTaskNameInAlerts: false,
     codexQuotaAlwaysVisible: false,
+    openaiApiAlwaysVisible: false,
     codexQuotaPeriod: 'auto',
     codexQuotaLabelSize: 'compact',
     codexQuotaAppearance: 'system'
@@ -53,6 +68,7 @@ test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
     keepAwake: true, bubblesEnabled: true, colorMode: 'standard', chatModel: 'auto', customization: DEFAULTS.customization,
     startupAppearance: DEFAULTS.startupAppearance, codexEnabled: false,
     codexTaskNameInAlerts: false, codexQuotaAlwaysVisible: false,
+    openaiApiAlwaysVisible: false,
     codexQuotaPeriod: 'auto', codexQuotaLabelSize: 'compact', codexQuotaAppearance: 'system'
   });
 });
