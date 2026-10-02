@@ -950,7 +950,9 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       view.expanded === 'true' && view.itemCount === '2', '恢复展开两项额度明细');
     assert.equal(compactResult.view.extraCredits.enabled, 'false', 'Plus 不能增加 Pro 点数行');
     assert.equal(compactResult.view.compactProduct, 'CODEX');
-    assert.deepEqual(compactResult.view.values.map(item => item.text), ['100%', '94%']);
+    assert.deepEqual(compactResult.view.values.map(item => item.text), ['100%']);
+    assert.equal(compactResult.view.secondaryQuota.display, 'block');
+    assert.equal(compactResult.view.secondaryQuota.value, '94%');
     assertQuotaLabelWindow(quotaLabel, compactResult.win, pet.getBounds(),
       { size: 'compact', expanded: true, itemCount: 2 });
     results.push({ proCredits: '62485.1547310000', proExpandedHeight: 116, hiddenHeight: 96,
