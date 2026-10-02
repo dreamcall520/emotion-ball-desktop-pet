@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict');
 const { setTimeout: wait } = require('node:timers/promises');
+const { capturePaintedWindow } = require('./verify-codex-companion');
 
 const counts = { connections: 0, threads: 0, turns: 0, interrupts: 0 };
 const nextVersion = require('../../package.json').version.replace(/\d+$/, patch => Number(patch) + 1);
@@ -61,8 +62,8 @@ async function verifyChatIntegration({ pet, chat, chatWindow, screen, getMenu, g
     value => value === `球球有新版本 ${nextVersion}`, 'bubble shows the release');
   assert.equal(getAboutWindow(), null, 'bubble delivers the automatic reminder');
   assert.equal(counts.connections, 0, 'bubble starts no Codex connection');
-  if (process.env.PET_SMOKE_CHAT_SCREENSHOT) require('node:fs').writeFileSync(
-    process.env.PET_SMOKE_CHAT_SCREENSHOT.replace(/\.png$/, '-bubble.png'), (await bubble.webContents.capturePage()).toPNG());
+  if (process.env.PET_SMOKE_CHAT_SCREENSHOT) await capturePaintedWindow({ win: bubble,
+    artifactPath: process.env.PET_SMOKE_CHAT_SCREENSHOT.replace(/\.png$/, '-bubble.png') });
   await bubble.webContents.executeJavaScript('document.querySelector("[data-action=app-update-open]").click()');
   await poll(() => getAboutWindow()?.isVisible(), Boolean, 'bubble button opens About');
   getAboutWindow().close();
@@ -84,15 +85,15 @@ async function verifyChatIntegration({ pet, chat, chatWindow, screen, getMenu, g
   assert.equal(getMenu().getMenuItemById('update-check').label, `● 有新版本 ${nextVersion}…`);
   assert.equal(await page('document.querySelector("#messages").children.length'), 0, 'reminder is outside conversation history');
   assert.deepEqual(counts, beforeUpdate, 'update checking consumes no model turn');
-  if (process.env.PET_SMOKE_CHAT_SCREENSHOT) require('node:fs').writeFileSync(process.env.PET_SMOKE_CHAT_SCREENSHOT,
-    (await win.webContents.capturePage()).toPNG());
+  if (process.env.PET_SMOKE_CHAT_SCREENSHOT) await capturePaintedWindow({ win,
+    artifactPath: process.env.PET_SMOKE_CHAT_SCREENSHOT });
   await page('document.querySelector("#open-app-update").click()');
   await poll(() => getAboutWindow()?.isVisible(), Boolean, 'update reminder opens About');
   const about = getAboutWindow();
   await poll(() => about.webContents.executeJavaScript('document.body.innerText'),
     value => value.includes(nextVersion) && value.includes('发现新版本'), 'About shows the same release');
-  if (process.env.PET_SMOKE_CHAT_SCREENSHOT) require('node:fs').writeFileSync(
-    process.env.PET_SMOKE_CHAT_SCREENSHOT.replace(/\.png$/, '-about.png'), (await about.webContents.capturePage()).toPNG());
+  if (process.env.PET_SMOKE_CHAT_SCREENSHOT) await capturePaintedWindow({ win: about,
+    artifactPath: process.env.PET_SMOKE_CHAT_SCREENSHOT.replace(/\.png$/, '-about.png') });
   about.close();
   process.stdout.write(`PET_CHAT_UPDATE_REMINDER_OK ${nextVersion} (simulated release)\n`);
   if (process.env.PET_SMOKE_CHAT_AVATAR === '1') {
