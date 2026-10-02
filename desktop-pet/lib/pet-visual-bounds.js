@@ -10,7 +10,12 @@ const VERTICAL_INSETS = Object.freeze({
   gem: [0.06, 0.06]
 });
 
-function petVisualBounds(bounds, shape) {
+function petVisualBounds(bounds, shape, presentation = null) {
+  // Preserve the existing quota anchor for the cloud's peeked presentation.
+  if (shape === 'aurora-cloud' && presentation?.mode === 'peeked' &&
+      ['left', 'right'].includes(presentation.side)) {
+    bounds = { ...bounds, x: bounds.x + (presentation.side === 'right' ? 1 : -1) * bounds.width * 0.35 };
+  }
   const insets = VERTICAL_INSETS[shape];
   if (!insets) return bounds;
   const top = (insets[0] - 0.06) * bounds.height;

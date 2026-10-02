@@ -1,5 +1,6 @@
 const path = require('node:path');
-const { quotaLabelBounds, quotaLabelSize } = require('./quota-label-placement');
+const { GAP, quotaLabelBounds, quotaLabelSize } = require('./quota-label-placement');
+const { petVisualBounds } = require('./pet-visual-bounds');
 
 const CHANNEL = 'pet:api-usage-label';
 const TOGGLE_CHANNEL = 'pet:api-usage-label-toggle';
@@ -18,9 +19,26 @@ function apiLabelBounds(pet, area, quota, bubble, expanded = false, presentation
     width: Math.max(pet.x + pet.width, quota.x + quota.width) - Math.min(pet.x, quota.x),
     height: Math.max(pet.y + pet.height, quota.y + quota.height) - Math.min(pet.y, quota.y)
   } : pet;
-  // The union is a native-window obstacle, not a painted pet silhouette.
-  return quotaLabelBounds(anchor, area, bubble, 'compact', expanded, 2,
+  const fallback = quotaLabelBounds(anchor, area, bubble, 'compact', expanded, 2,
     hasQuota ? null : presentation);
+  if (!hasQuota || !validBounds(area)) return fallback;
+  const { width, height } = fallback;
+  const side = presentation?.side;
+  const x = Math.round(side === 'left' ? quota.x : side === 'right'
+    ? quota.x + quota.width - width : quota.x + (quota.width - width) / 2);
+  const visiblePet = petVisualBounds(pet, presentation?.shape, presentation);
+  const overlaps = (a, b) => validBounds(b) && a.x < b.x + b.width && a.x + a.width > b.x &&
+    a.y < b.y + b.height && a.y + a.height > b.y;
+  // Stack against the actual Codex card; transparent pet-window padding is usable space.
+  for (const candidate of [
+    { x, y: quota.y + quota.height + GAP, width, height, placement: 'below' },
+    { x, y: quota.y - height - GAP, width, height, placement: 'above' }
+  ]) {
+    if (candidate.x >= area.x && candidate.y >= area.y &&
+        candidate.x + width <= area.x + area.width && candidate.y + height <= area.y + area.height &&
+        !overlaps(candidate, visiblePet) && !overlaps(candidate, bubble)) return candidate;
+  }
+  return fallback;
 }
 
 function safeState(state) {

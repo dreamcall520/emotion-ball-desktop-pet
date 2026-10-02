@@ -1404,7 +1404,11 @@ async function finishSmokeTest() {
       await require('./scripts/verify-api-usage-integration').verifyApiUsage({
         getWindow: () => apiUsageWindow, service: apiUsage, pet: petWindow,
         getMenu: () => Menu.buildFromTemplate(menuTemplate()), powerMonitor,
-        apiLabel: apiUsageLabel, quotaLabel, screen,
+        apiLabel: apiUsageLabel, quotaLabel, screen, edgeTuck, monitor: activityMonitor,
+        setSize: setPetSize,
+        setShape: shape => saveCustomization({ ...settings.customization,
+          appearance: { ...settings.customization.appearance, shape,
+            auroraStyle: 'dimensional', bodyColor: '#5B3BC7', eyeColor: '#FFFFFF' } }),
         showDemoQuota: () => { quotaLabel.show(buildQuotaLabelModel({ enabled: true,
           quota: { state: 'connected', stale: false, windows: [{ id: 'codex:weekly', label: 'Codex',
             windowMinutes: 10080, remaining: 79, resetsAt: Date.now() + 86400000 }] }
@@ -2216,7 +2220,8 @@ async function bootstrap() {
   settingsFile = path.join(app.getPath('userData'), 'settings.json');
   apiUsage = createApiUsage({ filePath: path.join(app.getPath('userData'), 'openai-api-usage.enc'), safeStorage,
     ...(IS_SMOKE_TEST && process.env.PET_SMOKE_API_USAGE_ONLY === '1'
-      ? { get: require('./scripts/verify-api-usage-integration').smokeGet } : {}),
+      ? { get: require('./scripts/verify-api-usage-integration').smokeGet,
+        safeStorage: require('./scripts/verify-api-usage-integration').smokeStorage } : {}),
     onChange: state => {
       if (state.busy) apiLastAttemptAt = Date.now();
       if (apiUsageWindow && !apiUsageWindow.isDestroyed()) apiUsageWindow.webContents.send('pet:api-usage-state', state);

@@ -22,7 +22,8 @@ async function smokeGet(url, key) {
   return { data: [{ start_time: start, end_time: start + 86400, results }], has_more: false, next_page: null };
 }
 
-async function verifyApiUsage({ getWindow, getMenu, pet, service, powerMonitor, apiLabel, quotaLabel, screen, showDemoQuota }) {
+async function verifyApiUsage({ getWindow, getMenu, pet, service, powerMonitor, apiLabel, quotaLabel, screen, showDemoQuota,
+  edgeTuck, monitor, setSize, setShape }) {
   const poll = async (read, test, label) => {
     let value;
     for (let attempt = 0; attempt < 120; attempt++) {
@@ -121,6 +122,47 @@ async function verifyApiUsage({ getWindow, getMenu, pet, service, powerMonitor, 
   assert.equal(overlaps(card.getBounds(), pet.getBounds()), false);
   await capture('expanded');
   win.hide();
+  monitor.stop();
+  assert.equal(setShape('aurora-cloud'), true);
+  await poll(() => pet.webContents.executeJavaScript('document.querySelector("#pet").dataset.shape'),
+    value => value === 'aurora-cloud', 'original cloud rendered');
+  for (const sizeName of ['tiny', 'compact', 'medium']) for (const side of ['left', 'right']) {
+    edgeTuck.restore();
+    setSize(sizeName);
+    pet.setPosition(Math.round(area.x + area.width / 2), Math.round(area.y + area.height / 2), false);
+    edgeTuck.dock(side);
+    const bounds = pet.getBounds();
+    edgeTuck.sampleCursor({ x: bounds.x + (side === 'left' ? 5 : bounds.width - 5), y: bounds.y + bounds.height / 2 });
+    edgeTuck.pin(true);
+    await poll(() => pet.webContents.executeJavaScript('document.querySelector("#pet").dataset.presentation'),
+      value => value === 'peeked', `${sizeName} ${side} peeked`);
+    await poll(() => pet.webContents.executeJavaScript(`(() => {
+      const node = document.querySelector('#pet'), rect = node.getBoundingClientRect();
+      return { edge: node.dataset.edge, x: rect.x, width: rect.width };
+    })()`), value => value.edge === side && value.width === bounds.width &&
+      Math.abs(value.x - (side === 'left' ? -1 : 1) * bounds.width * 0.43) < 0.15,
+    `${sizeName} ${side} painted cloud settled`);
+    showDemoQuota();
+    await poll(() => quotaWin.isVisible() && card.isVisible(), Boolean, 'edge cards visible');
+    for (const [quotaExpanded, apiExpanded] of [[false, false], [false, true], [true, true], [true, false]]) {
+      if ((quotaWin.getBounds().height > 32) !== quotaExpanded) await quotaPage('document.querySelector("#quota-label").click()');
+      if ((card.getBounds().height > 32) !== apiExpanded) await cardPage('document.querySelector("#quota-label").click()');
+      await poll(() => ({ quota: quotaWin.getBounds(), api: card.getBounds() }), value =>
+        (value.quota.height > 32) === quotaExpanded && (value.api.height > 32) === apiExpanded &&
+        (side === 'right' ? value.api.x + value.api.width === value.quota.x + value.quota.width : value.api.x === value.quota.x) &&
+        value.api.y === value.quota.y + value.quota.height + 8,
+      `${sizeName} ${side} expansions ${quotaExpanded}/${apiExpanded} aligned`);
+      await capture(`edge-${sizeName}-${side}-${Number(quotaExpanded)}${Number(apiExpanded)}`);
+    }
+  }
+  edgeTuck.restore();
+  setSize('tiny');
+  pet.setPosition(Math.round(area.x + area.width / 2), Math.round(area.y + area.height / 2), false);
+  setShape('blob');
+  showDemoQuota();
+  await poll(() => quotaWin.isVisible() && card.isVisible(), Boolean, 'cards restore after edge checks');
+  if (card.getBounds().height === 32) await cardPage('document.querySelector("#quota-label").click()');
+  win.hide();
   await cardPage('document.querySelector("#api-open-details").click()');
   await poll(() => win.isVisible(), Boolean, 'card opens full report');
   assert.equal(card.getBounds().height, 128, 'details button does not also collapse');
@@ -168,10 +210,17 @@ async function verifyApiUsage({ getWindow, getMenu, pet, service, powerMonitor, 
   assert.equal(card.isVisible(), false, 'lock hides persistent API card');
   powerMonitor.emit('unlock-screen');
   await poll(() => card.isVisible(), Boolean, 'unlock restores card');
-  pet.hide();
+  const hideItem = getMenu().getMenuItemById('edge-visibility');
+  hideItem.click(hideItem, pet, {});
   await poll(() => card.isVisible(), value => !value, 'hiding pet hides API card');
   process.stdout.write('PET_API_LABEL_INTEGRATION_OK\n');
   process.stdout.write('PET_API_USAGE_INTEGRATION_OK\n');
 }
 
-module.exports = { smokeGet, verifyApiUsage };
+// Synthetic key only: isolated smoke must not access the macOS Keychain.
+const smokeStorage = {
+  isEncryptionAvailable: () => true,
+  encryptString(value) { assert.equal(JSON.parse(value).key, demoKey); return Buffer.from(value); },
+  decryptString: data => data.toString()
+};
+module.exports = { smokeGet, smokeStorage, verifyApiUsage };
