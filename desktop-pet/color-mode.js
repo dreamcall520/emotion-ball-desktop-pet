@@ -11,7 +11,7 @@
     refreshAppearance();
   };
   apply('standard');
-  const api = [window.petDesktop, window.petQuotaLabel, window.qiuqiuChat, window.qiuqiuApiUsage, window.qiuqiuApiUsageLabel,
+  const api = [window.petDesktop, window.petQuotaLabel, window.qiuqiuChat, window.qiuqiuAbout, window.qiuqiuApiUsage, window.qiuqiuApiUsageLabel,
     window.petBubble, window.edgeNotice, window.petThought].find(candidate => candidate?.onColorMode);
   if (!api) return;
   const unsubscribe = api.onColorMode(apply);

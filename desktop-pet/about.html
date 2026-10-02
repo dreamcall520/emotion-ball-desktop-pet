@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <title>关于球球</title>
+  <link rel="stylesheet" href="about.css">
+  <link rel="stylesheet" href="color-mode.css">
+  <script defer src="color-mode.js"></script>
+  <script defer src="../emotion-ball/js/rings.js"></script>
+  <script defer src="../emotion-ball/js/custom-shapes.js"></script>
+  <script defer src="lib/customization.js"></script>
+  <script defer src="lib/chat-avatar.js"></script>
+  <script defer src="about-renderer.js"></script>
+</head>
+<body>
+  <main class="about-window" aria-labelledby="about-name">
+    <div class="about-titlebar" aria-hidden="true"></div>
+    <section class="about-content">
+      <div id="about-avatar" class="about-avatar" aria-hidden="true"></div>
+      <h1 id="about-name">球球</h1>
+      <div class="about-info">
+        <p id="about-version" class="about-version">正在读取版本…</p>
+        <button id="about-website" class="about-link" type="button" role="link" aria-label="访问球球官网 qiuqiu.pet">qiuqiu.pet</button>
+        <p id="about-developer" class="about-developer">开发者 马晓坤</p>
+      </div>
+      <div class="about-footer">
+        <div class="about-update-actions">
+          <button id="about-check-updates" class="about-update" type="button">检查更新</button>
+          <button id="about-open-release" class="about-update about-release" type="button" hidden>查看新版本</button>
+        </div>
+        <p id="about-status" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

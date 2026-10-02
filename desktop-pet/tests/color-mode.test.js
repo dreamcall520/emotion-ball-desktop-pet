@@ -68,7 +68,7 @@ test('真实窗口closed之后不可再访问webContents，清理使用已捕获
 });
 
 for (const [preload, apiName] of [['preload.js', 'petDesktop'], ['quota-label-preload.js', 'petQuotaLabel'],
-  ['chat-preload.js', 'qiuqiuChat'], ['bubble-preload.js', 'petBubble'], ['edge-notice-preload.js', 'edgeNotice'], ['thought-preload.js', 'petThought']]) {
+  ['chat-preload.js', 'qiuqiuChat'], ['about-preload.js', 'qiuqiuAbout'], ['bubble-preload.js', 'petBubble'], ['edge-notice-preload.js', 'edgeNotice'], ['thought-preload.js', 'petThought']]) {
   test(`${preload} 只接收配色枚举，可注销且没有改变设置权限`, () => {
     const ipc = new EventEmitter(); let api; const sends = [];
     ipc.send = (...args) => sends.push(args);

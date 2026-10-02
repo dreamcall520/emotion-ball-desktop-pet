@@ -43,6 +43,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   class NativeWindow extends EventEmitter {
     constructor(options) {
       super(); this.bounds = { x: options.x, y: options.y, width: options.width, height: options.height };
+      this.options = options;
       this.visible = false; this.destroyed = false;
       this.messages = [];
       this.webContents = Object.assign(new EventEmitter(), { setWindowOpenHandler() {},
@@ -57,8 +58,12 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     isDestroyed() { return this.destroyed; } isVisible() { return this.visible; }
     setPosition(x, y, animate) { assert.equal(animate, false); Object.assign(this.bounds, { x, y }); this.emit('move'); }
     setBounds(bounds) { this.bounds = { ...bounds }; this.emit('resize'); }
-    loadFile() { return { catch: handler => { this.loadFailure = handler; } }; }
-    showInactive() { this.visible = true; this.emit('show'); } hide() { this.visible = false; this.emit('hide'); }
+    loadFile(file) {
+      if (file.endsWith('/about.html')) queueMicrotask(() => { if (!this.destroyed) this.emit('ready-to-show'); });
+      return { catch: handler => { this.loadFailure = handler; } };
+    }
+    showInactive() { this.visible = true; this.emit('show'); } show() { this.showInactive(); }
+    focus() { this.focused = true; } close() { this.destroy(); } hide() { this.visible = false; this.emit('hide'); }
     destroy() { this.destroyed = true; this.visible = false; this.emit('closed'); }
   }
   NativeWindow.onConstruct = null;
@@ -541,25 +546,68 @@ test('默认关闭和取消确认都零连接、零轮询，并保留原设置',
   assert.equal(f.timers.size, 0);
 });
 
+test('关于窗口复用、安全读取版本与固定官网；锁屏、外来页面和退出后无访问权', async () => {
+  const f = await fixture();
+  menuItem(f, 'about-open').click();
+  const win = f.windows.at(-1), count = f.windows.length;
+  assert.equal(win.options.titleBarStyle, 'hiddenInset');
+  assert.equal(win.options.webPreferences.sandbox, true);
+  assert.equal(win.options.webPreferences.contextIsolation, true);
+  assert.equal(win.options.webPreferences.nodeIntegration, false);
+  win.emit('ready-to-show');
+  f.app.getVersion = () => '0.3.25';
+  assert.equal(JSON.stringify(await f.invoke('pet:about-get', null, win.webContents)),
+    JSON.stringify({ version: '0.3.25', website: 'https://qiuqiu.pet/', developer: '马晓坤', update: { state: 'idle' } }));
+  menuItem(f, 'about-open').click();
+  assert.equal(f.windows.length, count);
+  assert.equal(await f.invoke('pet:about-get'), null);
+  assert.equal(await f.invoke('pet:about-website'), false);
+  assert.equal(await f.invoke('pet:about-update'), false);
+  assert.equal(await f.invoke('pet:about-release'), false);
+  assert.equal(await f.invoke('pet:about-website', 'https://untrusted.invalid/', win.webContents), true);
+  assert.deepEqual(f.external, ['https://qiuqiu.pet/']);
+  await f.invoke('pet:about-update', null, win.webContents);
+  assert.deepEqual(f.updateChecks, ['0.3.25']);
+  assert.equal(f.dialogs.length, 0, '版本检查在关于页展示，不再弹原生对话框');
+  assert.equal(await f.invoke('pet:about-release', 'https://untrusted.invalid/', win.webContents), true);
+  assert.equal(f.external.at(-1), 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.26');
+  f.powerMonitor.emit('lock-screen');
+  assert.equal(await f.invoke('pet:about-get', null, win.webContents), null);
+  assert.equal(await f.invoke('pet:about-website', null, win.webContents), false);
+  f.powerMonitor.emit('unlock-screen');
+  f.send('pet:about-close', null, f.pet.webContents);
+  assert.equal(win.isDestroyed(), false);
+  f.send('pet:about-close', null, win.webContents);
+  assert.equal(win.isDestroyed(), true);
+  menuItem(f, 'about-open').click();
+  const reopened = f.windows.at(-1);
+  f.app.emit('before-quit');
+  assert.equal(reopened.isDestroyed(), true);
+  assert.equal(await f.invoke('pet:about-get', null, reopened.webContents), null);
+});
+
 test('更新手动检查可复用一分钟报告，同一新版只自动提醒一次，关闭自动后仍可手动', async () => {
   const f = await fixture({ consent: async () => ({ response: 0 }) });
   assert.ok(f.call('menuTemplate().some(item => item.id === "about-open")'));
   await f.call('checkForUpdates(true)');
   assert.deepEqual(f.updateChecks, ['0.3.25']);
-  assert.equal(f.dialogs.at(-1)[0].message, '发现球球新版本');
-  assert.equal(f.external.length, 0, '稍后不能打开网站');
+  assert.equal(f.call('aboutUpdateState.state'), 'ready');
+  assert.equal(f.call('aboutUpdateState.latestVersion'), '0.3.26');
+  assert.equal(f.dialogs.length, 0);
+  assert.equal(f.external.length, 0, '只有主动点击查看新版才打开网站');
   await f.call('checkForUpdates(true)');
   assert.equal(f.updateChecks.length, 1);
   await f.call('checkForUpdates()');
   assert.equal(f.saved.at(-1).lastUpdateNotifiedVersion, '0.3.26');
-  const count = f.dialogs.length;
+  const about = f.call('aboutWindow');
+  const count = about.messages.length;
   await f.call('checkForUpdates()');
-  assert.equal(f.dialogs.length, count);
+  assert.equal(about.messages.length, count);
   f.call('setAutoUpdateCheck(false)');
   await f.call('checkForUpdates()');
-  assert.equal(f.dialogs.length, count);
+  assert.equal(about.messages.length, count);
   await f.call('checkForUpdates(true)');
-  assert.equal(f.dialogs.length, count + 1);
+  assert.equal(about.messages.length, count + 2);
 });
 
 test('正式安装版延迟检测与六小时轮询，关闭取消定时；迟到检测不在锁屏或退出后弹窗', async () => {
@@ -572,7 +620,9 @@ test('正式安装版延迟检测与六小时轮询，关闭取消定时；迟�
   assert.equal(f.updateChecks.length, 1);
   f.advanceTo(30000 + 6 * 60 * 60 * 1000); await flush(); await flush();
   assert.equal(f.updateChecks.length, 2);
-  assert.equal(f.dialogs.length, 1);
+  assert.equal(f.call('aboutUpdateState.state'), 'ready');
+  assert.equal(f.dialogs.length, 0);
+  assert.equal(f.saved.at(-1).lastUpdateNotifiedVersion, '0.3.26');
   f.call('setAutoUpdateCheck(false)');
   assert.equal(f.call('updateTimer'), null);
   let complete;
@@ -580,13 +630,14 @@ test('正式安装版延迟检测与六小时轮询，关闭取消定时；迟�
     complete = () => resolve({ currentVersion: version, latestVersion: '0.3.26', hasUpdate: true,
       url: 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.26' });
   }) });
-  const first = waiting.call('checkForUpdates(true)');
+  const first = waiting.call('checkForUpdates()');
   const second = waiting.call('checkForUpdates(true)');
   assert.equal(first, second); await flush();
   assert.equal(waiting.updateChecks.length, 1);
   waiting.powerMonitor.emit('lock-screen');
   complete(); await first;
   assert.equal(waiting.dialogs.length, 0);
+  assert.equal(waiting.call('aboutUpdateState.state'), 'idle', '锁屏后的迟到查询也须解除检查中状态');
   waiting.app.emit('before-quit');
   await waiting.call('checkForUpdates(true)');
   assert.equal(waiting.dialogs.length, 0);
@@ -602,10 +653,11 @@ test('更新查询失败不展示旧报告为最新，错误内容不进入提�
   await f.call('checkForUpdates(true)');
   f.advanceTo(60001);
   await f.call('checkForUpdates(true)');
-  assert.equal(f.dialogs.at(-1)[0].message, '暂时无法检查更新');
-  assert.equal(JSON.stringify(f.dialogs).includes('PRIVATE_NETWORK_DETAILS'), false);
+  assert.equal(f.call('aboutUpdateState.state'), 'error');
+  assert.equal(f.call('aboutUpdateState.message'), '暂时无法检查更新，请检查网络后重试。');
+  assert.equal(f.call('JSON.stringify(aboutUpdateState)').includes('PRIVATE_NETWORK_DETAILS'), false);
   await f.call('checkForUpdates(true)');
-  assert.equal(f.dialogs.at(-1)[0].message, '刚刚检查过更新');
+  assert.equal(f.call('aboutUpdateState.message'), '刚刚检查过更新，请稍等一分钟后再试。');
   assert.equal(f.updateChecks.length, 2);
 });
 

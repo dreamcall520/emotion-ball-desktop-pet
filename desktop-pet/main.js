@@ -83,8 +83,12 @@ let apiRefreshTimer = null;
 let apiLastAttemptAt = -Infinity;
 let updateTimer = null;
 let updateCheck = null;
+let updateCheckManual = false;
 let lastUpdateCheckAt = -Infinity;
 let lastUpdateResult = null;
+let aboutWindow = null;
+let aboutReady = false;
+let aboutUpdateState = { state: 'idle' };
 const API_REFRESH_MS = 5 * 60 * 1000;
 let customizationPreviewAppearance = null;
 let screenLocked = false;
@@ -193,51 +197,98 @@ function openApiUsage() {
   void win.loadFile(path.join(__dirname, 'api-usage.html')).catch(error => writeError('API 费用面板', error));
 }
 
-async function openAbout() {
+function fromAboutWindow(event, requireVisible = false) {
+  return Boolean(!isQuitting && !screenLocked && aboutWindow && !aboutWindow.isDestroyed() &&
+    (!requireVisible || aboutWindow.isVisible()) && event.sender === aboutWindow.webContents);
+}
+
+function openAbout() {
   if (isQuitting || screenLocked) return;
-  try {
-    const { response } = await dialog.showMessageBox({ type: 'info', title: '关于球球', message: '关于球球',
-      detail: `当前版本：${app.getVersion()}\n官网：${APP_WEBSITE}\n开发者：马晓坤`,
-      buttons: ['关闭', '打开官网'], defaultId: 0, cancelId: 0, noLink: true });
-    if (response === 1 && !isQuitting && !screenLocked) await shell.openExternal(APP_WEBSITE);
-  } catch (error) { writeError('关于球球', error); }
+  if (aboutWindow && !aboutWindow.isDestroyed()) {
+    if (aboutReady) { aboutWindow.show(); aboutWindow.focus(); }
+    return aboutWindow;
+  }
+  const win = new BrowserWindow({
+    width: 360, height: 480, resizable: false, maximizable: false, fullscreenable: false,
+    title: '关于球球', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 },
+    backgroundColor: '#EDF4FF', show: false,
+    webPreferences: { preload: path.join(__dirname, 'about-preload.js'),
+      contextIsolation: true, nodeIntegration: false, sandbox: true,
+      spellcheck: false, devTools: !app.isPackaged }
+  });
+  aboutWindow = win;
+  aboutReady = false;
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', event => event.preventDefault());
+  win.webContents.on('will-attach-webview', event => event.preventDefault());
+  win.on('closed', () => { if (aboutWindow === win) { aboutWindow = null; aboutReady = false; } });
+  win.once('ready-to-show', () => {
+    if (aboutWindow !== win || win.isDestroyed()) return;
+    aboutReady = true;
+    if (!isQuitting && !screenLocked) { win.show(); win.focus(); }
+  });
+  void win.loadFile(path.join(__dirname, 'about.html')).catch(error => {
+    writeError('关于球球', error);
+    if (!win.isDestroyed()) win.destroy();
+  });
+  return win;
+}
+
+function setAboutUpdate(state) {
+  aboutUpdateState = state;
+  if (aboutWindow && !aboutWindow.isDestroyed()) aboutWindow.webContents.send('pet:about-update-state', state);
 }
 
 async function showUpdateResult(result) {
-  const { response } = await dialog.showMessageBox({ type: 'info', title: '检查更新',
-    message: result.hasUpdate ? '发现球球新版本' : '当前没有可用的新版本',
-    detail: `当前版本：${result.currentVersion}\n官方最新版本：${result.latestVersion}`,
-    buttons: result.hasUpdate ? ['稍后', '查看新版本'] : ['好'], defaultId: 0, cancelId: 0, noLink: true });
-  if (result.hasUpdate && response === 1 && !isQuitting && !screenLocked) await shell.openExternal(result.url);
+  setAboutUpdate({ state: 'ready', currentVersion: result.currentVersion,
+    latestVersion: result.latestVersion, hasUpdate: result.hasUpdate });
+  const win = openAbout();
+  if (!win) return false;
+  if (!win.isVisible()) await new Promise(resolve => {
+    const done = () => { win.removeListener('ready-to-show', done); win.removeListener('closed', done); resolve(); };
+    win.once('ready-to-show', done);
+    win.once('closed', done);
+  });
+  return !isQuitting && !screenLocked && !win.isDestroyed() && win.isVisible();
 }
 
 function checkForUpdates(manual = false) {
   if (isQuitting || screenLocked || (!manual && settings?.autoUpdateCheck === false)) return Promise.resolve();
-  if (updateCheck) return updateCheck;
+  if (updateCheck) {
+    if (manual) { updateCheckManual = true; openAbout(); if (!lastUpdateResult) setAboutUpdate({ state: 'checking' }); }
+    return updateCheck;
+  }
+  if (manual) { openAbout(); setAboutUpdate({ state: 'checking' }); }
   const cached = Date.now() - lastUpdateCheckAt < 60000 ? lastUpdateResult : null;
   if (!cached && Date.now() - lastUpdateCheckAt < 60000) {
-    return manual ? dialog.showMessageBox({ type: 'info', message: '刚刚检查过更新',
-      detail: '请稍等一分钟后再试。', buttons: ['好'] }).catch(error => writeError('更新提示', error)) : Promise.resolve();
+    if (manual) setAboutUpdate({ state: 'error', message: '刚刚检查过更新，请稍等一分钟后再试。' });
+    updateCheckManual = false;
+    return Promise.resolve();
   }
+  updateCheckManual = manual;
   if (!cached) { lastUpdateCheckAt = Date.now(); lastUpdateResult = null; }
   updateCheck = Promise.resolve().then(() => cached || checkLatestRelease(app.getVersion())).then(async result => {
     lastUpdateResult = result;
     if (isQuitting || screenLocked) return;
-    if (manual) await showUpdateResult(result);
+    if (updateCheckManual) await showUpdateResult(result);
     else if (settings.autoUpdateCheck !== false && !chatWindow?.isVisible() && result.hasUpdate &&
       settings.lastUpdateNotifiedVersion !== result.latestVersion) {
-      await showUpdateResult(result);
-      if (!isQuitting) {
+      const shown = await showUpdateResult(result);
+      if (shown && settings.autoUpdateCheck !== false && !isQuitting) {
         settings.lastUpdateNotifiedVersion = result.latestVersion;
         persistSettings();
       }
     }
   }).catch(async () => {
-    if (manual && !isQuitting && !screenLocked) {
-      await dialog.showMessageBox({ type: 'warning', title: '检查更新', message: '暂时无法检查更新',
-        detail: '请检查网络连接，稍后再试。', buttons: ['好'] }).catch(error => writeError('更新提示', error));
+    if (updateCheckManual && !isQuitting && !screenLocked)
+      setAboutUpdate({ state: 'error', message: '暂时无法检查更新，请检查网络后重试。' });
+  }).finally(() => {
+    updateCheck = null; updateCheckManual = false;
+    if (!isQuitting) {
+      if (aboutUpdateState.state === 'checking') setAboutUpdate({ state: 'idle' });
+      refreshTrayMenu();
     }
-  }).finally(() => { updateCheck = null; if (!isQuitting) refreshTrayMenu(); });
+  });
   refreshTrayMenu();
   return updateCheck;
 }
@@ -1882,6 +1933,23 @@ function createPetWindow() {
 }
 
 function registerIpc() {
+  ipcMain.handle('pet:about-get', event => fromAboutWindow(event)
+    ? { version: app.getVersion(), website: APP_WEBSITE, developer: '马晓坤', update: aboutUpdateState } : null);
+  ipcMain.handle('pet:about-website', event => {
+    if (!fromAboutWindow(event, true)) return false;
+    return shell.openExternal(APP_WEBSITE).then(() => true, () => false);
+  });
+  ipcMain.handle('pet:about-update', async event => {
+    if (!fromAboutWindow(event, true)) return false;
+    await checkForUpdates(true);
+    return true;
+  });
+  ipcMain.handle('pet:about-release', event => {
+    if (!fromAboutWindow(event, true) || aboutUpdateState.state !== 'ready' ||
+      !lastUpdateResult?.hasUpdate || aboutUpdateState.latestVersion !== lastUpdateResult.latestVersion) return false;
+    return shell.openExternal(lastUpdateResult.url).then(() => true, () => false);
+  });
+  ipcMain.on('pet:about-close', event => { if (fromAboutWindow(event)) aboutWindow.close(); });
   ipcMain.handle('pet:api-usage-get', event => fromApiUsageWindow(event, false) ? apiUsage.getState() : null);
   ipcMain.handle('pet:api-usage-connect', (event, value) => fromApiUsageWindow(event) ? apiUsage.connect(value) : null);
   ipcMain.handle('pet:api-usage-refresh', event => fromApiUsageWindow(event) ? apiUsage.refresh() : null);
@@ -2265,6 +2333,7 @@ if (!hasSingleInstanceLock) {
     clearTimeout(apiRefreshTimer);
     apiRefreshTimer = null;
     apiUsage?.close();
+    safelyInvokeWindow('退出时关于窗口销毁', () => aboutWindow?.destroy());
     let chatClosing;
     safelyInvokeWindow('退出时聊天停止', () => { chatClosing = chat?.close(); });
     if (event?.preventDefault && chatClosing?.then) {
