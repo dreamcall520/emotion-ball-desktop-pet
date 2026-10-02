@@ -12,7 +12,9 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   codexQuotaAlwaysVisible = false, codexQuotaPeriod = 'auto', codexQuotaLabelSize = 'standard',
   codexQuotaAppearance = 'system', bubblesEnabled = true, colorMode = 'standard',
   consent = async () => ({ response: 1 }), openExternal = async () => {}, saveError = null,
-  loadedSettings = null, argv = [] } = {}) {
+  loadedSettings = null, argv = [], updateFetch = async currentVersion => ({ currentVersion,
+    latestVersion: '0.3.26', hasUpdate: true,
+    url: 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.26' }) } = {}) {
   let now = 0;
   let serial = 0;
   const timers = new Map();
@@ -25,8 +27,9 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   const external = [];
   const popups = [];
   const trayMenus = [];
+  const updateChecks = [];
   const app = Object.assign(new EventEmitter(), { quitCalls: 0, setName() {}, getPath: () => '/fixture',
-    requestSingleInstanceLock: () => true, whenReady: () => Promise.resolve(), setActivationPolicy() {},
+    requestSingleInstanceLock: () => true, whenReady: () => Promise.resolve(), setActivationPolicy() {}, getVersion: () => '0.3.25',
     quit() { this.quitCalls++; }, exit(code) { throw new Error(`unexpected exit ${code}`); } });
   const ipcMain = new EventEmitter();
   const ipcHandlers = new Map();
@@ -160,6 +163,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
       } };
       if (name === './lib/bubble-window') return { createBubbleWindow: () => bubble };
       if (name === './lib/quota-label-window') return { createQuotaLabelWindow: () => quotaLabel };
+      if (name === './lib/app-update') return { checkLatestRelease: version => { updateChecks.push(version); return updateFetch(version); } };
       if (name === './lib/api-usage-label-window') return { createApiUsageLabelWindow: () => apiLabel };
       if (name === './lib/api-usage') return { createApiUsage: options => { apiUsage.options = options; return apiUsage; } };
       if (name === './lib/edge-notice-window') return { createEdgeNoticeWindow: () => edgeNoticeWindow };
@@ -180,7 +184,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   const pet = windows[0];
   pet.emit('ready-to-show');
   pet.webContents.emit('did-finish-load');
-  return { pet, bubble, quotaLabel, apiLabel, apiUsage, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
+  return { pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
     call: expression => vm.runInContext(expression, context),
     invoke(channel, packet, sender = pet.webContents) {
       assert.ok(ipcHandlers.has(channel), `${channel} handler must be registered`);
@@ -262,7 +266,7 @@ test('右键菜单保留聊天和定制直达，互动、贴边、常规设置�
   const top = menu.filter(item => item.type !== 'separator');
   assert.deepEqual(Array.from(top, item => item.label), [
     '和球球聊聊', '定制球球', '随机表情', '状态与互动', 'Codex 联动',
-    '贴边与显示', '尺寸', '界面配色', '常规设置', '退出球球'
+    '贴边与显示', '尺寸', '界面配色', '常规设置', '关于球球', '检查更新…', '退出球球'
   ]);
   const group = label => top.find(item => item.label === label).submenu.filter(item => item.type !== 'separator');
   assert.deepEqual(Array.from(group('状态与互动'), item => item.label),
@@ -270,7 +274,7 @@ test('右键菜单保留聊天和定制直达，互动、贴边、常规设置�
   assert.deepEqual(Array.from(group('贴边与显示'), item => item.id),
     ['edge-left', 'edge-right', 'edge-leave', 'edge-visibility']);
   assert.deepEqual(Array.from(group('常规设置'), item => item.label),
-    ['始终置顶', '开机自动启动（打包后可用）', '恢复默认位置']);
+    ['始终置顶', '开机自动启动（打包后可用）', '恢复默认位置', '自动提醒新版本']);
   assert.equal(top.find(item => item.label === '尺寸').submenu.length, 6);
   assert.equal(top.find(item => item.label === '界面配色').id, 'color-mode');
 });
@@ -535,6 +539,74 @@ test('默认关闭和取消确认都零连接、零轮询，并保留原设置',
   assert.equal(f.connections.length, 0);
   assert.equal(f.saved.length, 0);
   assert.equal(f.timers.size, 0);
+});
+
+test('更新手动检查可复用一分钟报告，同一新版只自动提醒一次，关闭自动后仍可手动', async () => {
+  const f = await fixture({ consent: async () => ({ response: 0 }) });
+  assert.ok(f.call('menuTemplate().some(item => item.id === "about-open")'));
+  await f.call('checkForUpdates(true)');
+  assert.deepEqual(f.updateChecks, ['0.3.25']);
+  assert.equal(f.dialogs.at(-1)[0].message, '发现球球新版本');
+  assert.equal(f.external.length, 0, '稍后不能打开网站');
+  await f.call('checkForUpdates(true)');
+  assert.equal(f.updateChecks.length, 1);
+  await f.call('checkForUpdates()');
+  assert.equal(f.saved.at(-1).lastUpdateNotifiedVersion, '0.3.26');
+  const count = f.dialogs.length;
+  await f.call('checkForUpdates()');
+  assert.equal(f.dialogs.length, count);
+  f.call('setAutoUpdateCheck(false)');
+  await f.call('checkForUpdates()');
+  assert.equal(f.dialogs.length, count);
+  await f.call('checkForUpdates(true)');
+  assert.equal(f.dialogs.length, count + 1);
+});
+
+test('正式安装版延迟检测与六小时轮询，关闭取消定时；迟到检测不在锁屏或退出后弹窗', async () => {
+  const f = await fixture({ consent: async () => ({ response: 0 }) });
+  f.app.isPackaged = true;
+  f.app.getLoginItemSettings = () => ({ openAtLogin: false });
+  f.call('scheduleUpdateCheck()');
+  f.advanceTo(29999); await flush(); assert.equal(f.updateChecks.length, 0);
+  f.advanceTo(30000); await flush(); await flush();
+  assert.equal(f.updateChecks.length, 1);
+  f.advanceTo(30000 + 6 * 60 * 60 * 1000); await flush(); await flush();
+  assert.equal(f.updateChecks.length, 2);
+  assert.equal(f.dialogs.length, 1);
+  f.call('setAutoUpdateCheck(false)');
+  assert.equal(f.call('updateTimer'), null);
+  let complete;
+  const waiting = await fixture({ updateFetch: version => new Promise(resolve => {
+    complete = () => resolve({ currentVersion: version, latestVersion: '0.3.26', hasUpdate: true,
+      url: 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.26' });
+  }) });
+  const first = waiting.call('checkForUpdates(true)');
+  const second = waiting.call('checkForUpdates(true)');
+  assert.equal(first, second); await flush();
+  assert.equal(waiting.updateChecks.length, 1);
+  waiting.powerMonitor.emit('lock-screen');
+  complete(); await first;
+  assert.equal(waiting.dialogs.length, 0);
+  waiting.app.emit('before-quit');
+  await waiting.call('checkForUpdates(true)');
+  assert.equal(waiting.dialogs.length, 0);
+});
+
+test('更新查询失败不展示旧报告为最新，错误内容不进入提示', async () => {
+  let calls = 0;
+  const f = await fixture({ consent: async () => ({ response: 0 }), updateFetch: async currentVersion => {
+    if (++calls > 1) throw new Error('PRIVATE_NETWORK_DETAILS');
+    return { currentVersion, latestVersion: currentVersion, hasUpdate: false,
+      url: 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.25' };
+  } });
+  await f.call('checkForUpdates(true)');
+  f.advanceTo(60001);
+  await f.call('checkForUpdates(true)');
+  assert.equal(f.dialogs.at(-1)[0].message, '暂时无法检查更新');
+  assert.equal(JSON.stringify(f.dialogs).includes('PRIVATE_NETWORK_DETAILS'), false);
+  await f.call('checkForUpdates(true)');
+  assert.equal(f.dialogs.at(-1)[0].message, '刚刚检查过更新');
+  assert.equal(f.updateChecks.length, 2);
 });
 
 test('API 常驻独立于套餐，失败刷新有间隔，隐藏与关闭清理', async () => {

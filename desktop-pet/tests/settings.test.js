@@ -55,6 +55,8 @@ test('损坏文件回退且有效设置可回读', t => {
     codexTaskNameInAlerts: false,
     codexQuotaAlwaysVisible: false,
     openaiApiAlwaysVisible: false,
+    autoUpdateCheck: true,
+    lastUpdateNotifiedVersion: '',
     codexQuotaPeriod: 'auto',
     codexQuotaLabelSize: 'compact',
     codexQuotaAppearance: 'system'
@@ -69,6 +71,7 @@ test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
     startupAppearance: DEFAULTS.startupAppearance, codexEnabled: false,
     codexTaskNameInAlerts: false, codexQuotaAlwaysVisible: false,
     openaiApiAlwaysVisible: false,
+    autoUpdateCheck: true, lastUpdateNotifiedVersion: '',
     codexQuotaPeriod: 'auto', codexQuotaLabelSize: 'compact', codexQuotaAppearance: 'system'
   });
 });

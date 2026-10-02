@@ -18,6 +18,8 @@ const DEFAULTS = Object.freeze({
   codexTaskNameInAlerts: false,
   codexQuotaAlwaysVisible: false,
   openaiApiAlwaysVisible: false,
+  autoUpdateCheck: true,
+  lastUpdateNotifiedVersion: '',
   codexQuotaPeriod: 'auto',
   codexQuotaLabelSize: 'compact',
   codexQuotaAppearance: 'system'
@@ -54,6 +56,9 @@ function normalizeSettings(raw = {}) {
         : DEFAULTS.codexQuotaAlwaysVisible,
     openaiApiAlwaysVisible: typeof raw.openaiApiAlwaysVisible === 'boolean'
       ? raw.openaiApiAlwaysVisible : DEFAULTS.openaiApiAlwaysVisible,
+    autoUpdateCheck: typeof raw.autoUpdateCheck === 'boolean' ? raw.autoUpdateCheck : DEFAULTS.autoUpdateCheck,
+    lastUpdateNotifiedVersion: typeof raw.lastUpdateNotifiedVersion === 'string' &&
+      /^\d{1,8}\.\d{1,8}\.\d{1,8}$/.test(raw.lastUpdateNotifiedVersion) ? raw.lastUpdateNotifiedVersion : '',
     codexQuotaPeriod: ['auto', 'fiveHour', 'weekly'].includes(raw.codexQuotaPeriod)
       ? raw.codexQuotaPeriod
       : DEFAULTS.codexQuotaPeriod,

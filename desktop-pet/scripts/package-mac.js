@@ -51,6 +51,7 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/api-usage-preload.js',
     'desktop-pet/api-usage-renderer.js',
     'desktop-pet/lib/api-usage.js',
+    'desktop-pet/lib/app-update.js',
     'desktop-pet/lib/api-usage-label-window.js',
     'desktop-pet/api-usage-label.html',
     'desktop-pet/api-usage-label.css',

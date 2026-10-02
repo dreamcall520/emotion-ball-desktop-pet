@@ -44,10 +44,13 @@ const { createCodexChatRpc } = require('./lib/codex-chat-rpc');
 const { createChatWindow } = require('./lib/chat-window');
 const { createApiUsage } = require('./lib/api-usage');
 const { createApiUsageLabelWindow } = require('./lib/api-usage-label-window');
+const { checkLatestRelease } = require('./lib/app-update');
 const { createColorModeManager } = require('./lib/color-mode');
 const { normalizeCustomization, effectiveAppearance } = require('./lib/customization');
 
 const APP_NAME = '球球桌宠';
+const APP_WEBSITE = 'https://qiuqiu.pet/';
+const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const IS_SMOKE_TEST = process.env.PET_SMOKE_TEST === '1';
 const IS_CODEX_SMOKE_ONLY = IS_SMOKE_TEST && process.env.PET_SMOKE_CODEX_ONLY === '1';
 
@@ -78,6 +81,10 @@ let apiUsageWindow = null;
 let apiUsageLabel = null;
 let apiRefreshTimer = null;
 let apiLastAttemptAt = -Infinity;
+let updateTimer = null;
+let updateCheck = null;
+let lastUpdateCheckAt = -Infinity;
+let lastUpdateResult = null;
 const API_REFRESH_MS = 5 * 60 * 1000;
 let customizationPreviewAppearance = null;
 let screenLocked = false;
@@ -184,6 +191,74 @@ function openApiUsage() {
   win.on('closed', () => { if (apiUsageWindow === win) apiUsageWindow = null; });
   win.once('ready-to-show', () => { if (!win.isDestroyed() && !screenLocked) win.show(); });
   void win.loadFile(path.join(__dirname, 'api-usage.html')).catch(error => writeError('API 费用面板', error));
+}
+
+async function openAbout() {
+  if (isQuitting || screenLocked) return;
+  try {
+    const { response } = await dialog.showMessageBox({ type: 'info', title: '关于球球', message: '关于球球',
+      detail: `当前版本：${app.getVersion()}\n官网：${APP_WEBSITE}\n开发者：马晓坤`,
+      buttons: ['关闭', '打开官网'], defaultId: 0, cancelId: 0, noLink: true });
+    if (response === 1 && !isQuitting && !screenLocked) await shell.openExternal(APP_WEBSITE);
+  } catch (error) { writeError('关于球球', error); }
+}
+
+async function showUpdateResult(result) {
+  const { response } = await dialog.showMessageBox({ type: 'info', title: '检查更新',
+    message: result.hasUpdate ? '发现球球新版本' : '当前没有可用的新版本',
+    detail: `当前版本：${result.currentVersion}\n官方最新版本：${result.latestVersion}`,
+    buttons: result.hasUpdate ? ['稍后', '查看新版本'] : ['好'], defaultId: 0, cancelId: 0, noLink: true });
+  if (result.hasUpdate && response === 1 && !isQuitting && !screenLocked) await shell.openExternal(result.url);
+}
+
+function checkForUpdates(manual = false) {
+  if (isQuitting || screenLocked || (!manual && settings?.autoUpdateCheck === false)) return Promise.resolve();
+  if (updateCheck) return updateCheck;
+  const cached = Date.now() - lastUpdateCheckAt < 60000 ? lastUpdateResult : null;
+  if (!cached && Date.now() - lastUpdateCheckAt < 60000) {
+    return manual ? dialog.showMessageBox({ type: 'info', message: '刚刚检查过更新',
+      detail: '请稍等一分钟后再试。', buttons: ['好'] }).catch(error => writeError('更新提示', error)) : Promise.resolve();
+  }
+  if (!cached) { lastUpdateCheckAt = Date.now(); lastUpdateResult = null; }
+  updateCheck = Promise.resolve().then(() => cached || checkLatestRelease(app.getVersion())).then(async result => {
+    lastUpdateResult = result;
+    if (isQuitting || screenLocked) return;
+    if (manual) await showUpdateResult(result);
+    else if (settings.autoUpdateCheck !== false && !chatWindow?.isVisible() && result.hasUpdate &&
+      settings.lastUpdateNotifiedVersion !== result.latestVersion) {
+      await showUpdateResult(result);
+      if (!isQuitting) {
+        settings.lastUpdateNotifiedVersion = result.latestVersion;
+        persistSettings();
+      }
+    }
+  }).catch(async () => {
+    if (manual && !isQuitting && !screenLocked) {
+      await dialog.showMessageBox({ type: 'warning', title: '检查更新', message: '暂时无法检查更新',
+        detail: '请检查网络连接，稍后再试。', buttons: ['好'] }).catch(error => writeError('更新提示', error));
+    }
+  }).finally(() => { updateCheck = null; if (!isQuitting) refreshTrayMenu(); });
+  refreshTrayMenu();
+  return updateCheck;
+}
+
+function scheduleUpdateCheck(delay = 30000) {
+  clearTimeout(updateTimer);
+  updateTimer = null;
+  if (isQuitting || !app.isPackaged || IS_SMOKE_TEST || settings?.autoUpdateCheck === false) return;
+  updateTimer = setTimeout(() => {
+    updateTimer = null;
+    void checkForUpdates().finally(() => scheduleUpdateCheck(UPDATE_INTERVAL_MS));
+  }, delay);
+}
+
+function setAutoUpdateCheck(value) {
+  const previous = settings.autoUpdateCheck;
+  settings.autoUpdateCheck = Boolean(value);
+  try { persistSettings(); }
+  catch (error) { settings.autoUpdateCheck = previous; writeError('保存更新提醒', error); }
+  scheduleUpdateCheck();
+  refreshTrayMenu();
 }
 
 function openCustomization() {
@@ -1170,9 +1245,14 @@ function menuTemplate() {
         type: 'checkbox', enabled: app.isPackaged, checked: loginItemEnabled(),
         click: item => setOpenAtLogin(item.checked) },
       { type: 'separator' },
-      { label: '恢复默认位置', click: resetPosition }
+      { label: '恢复默认位置', click: resetPosition },
+      { id: 'update-auto', label: '自动提醒新版本', type: 'checkbox', checked: settings.autoUpdateCheck !== false,
+        click: item => setAutoUpdateCheck(item.checked) }
     ] },
     { type: 'separator' },
+    { id: 'about-open', label: '关于球球', click: () => { void openAbout(); } },
+    { id: 'update-check', label: updateCheck ? '正在检查更新…' : '检查更新…', enabled: !updateCheck,
+      click: () => { void checkForUpdates(true); } },
     {
       label: '退出球球',
       click: () => app.quit()
@@ -2149,7 +2229,7 @@ async function bootstrap() {
     safelyInvokeWindow('锁屏时 API 卡片隐藏', () => apiUsageLabel?.hide());
     safelyInvokeWindow('锁屏时对白清理', () => dialogue.dismiss());
   };
-  const resume = () => { screenLocked = false; edgeTuck?.resume(); activityMonitor.resume(); syncQuotaLabel(codexCompanion?.getSnapshot()); };
+  const resume = () => { screenLocked = false; edgeTuck?.resume(); activityMonitor.resume(); syncQuotaLabel(codexCompanion?.getSnapshot()); scheduleUpdateCheck(); };
   const powerGuard = createPowerGuard({ pause, resume });
   powerMonitor.on('lock-screen', () => powerGuard.setLocked(true));
   powerMonitor.on('suspend', () => powerGuard.setSuspended(true));
@@ -2160,6 +2240,7 @@ async function bootstrap() {
   initializeCodexCompanion();
   createPetWindow();
   createTray();
+  scheduleUpdateCheck();
   if (settings.codexEnabled) void codexCompanion.setEnabled(true);
 }
 
@@ -2179,6 +2260,8 @@ if (!hasSingleInstanceLock) {
       return;
     }
     quitCleanupStarted = true;
+    clearTimeout(updateTimer);
+    updateTimer = null;
     clearTimeout(apiRefreshTimer);
     apiRefreshTimer = null;
     apiUsage?.close();
