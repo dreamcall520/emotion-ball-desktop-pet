@@ -65,6 +65,19 @@
     return items;
   }
 
+  function extraCreditsFields(source, state) {
+    try {
+      const value = record(source.extraCredits);
+      if (!value || !['balance', 'none', 'unlimited', 'unknown', 'stale'].includes(value.state)) return {};
+      const balance = typeof value.balance === 'string' && value.balance.length <= 128 &&
+        /^\d+(?:\.\d+)?$/.test(value.balance) ? value.balance : null;
+      const creditState = state === 'stale' ? 'stale' : value.state === 'balance' && balance === null ? 'unknown' : value.state;
+      return { extraCredits: { state: creditState,
+        ...(creditState === 'balance' ? { balance } : {}),
+        ...(state === 'ready' && value.usageStatus === 'blocked' ? { usageStatus: 'blocked' } : {}) } };
+    } catch (_) { return {}; }
+  }
+
   function safeModel(value) {
     const source = record(value);
     if (!source) return { state: 'disconnected', items: [], overflow: 0, size: 'standard', appearance: 'system', expanded: false };
@@ -100,6 +113,7 @@
       size,
       appearance,
       expanded,
+      ...extraCreditsFields(source, state),
       ...(Number.isSafeInteger(resetCreditsAvailable) && resetCreditsAvailable >= 0
         ? { resetCreditsAvailable } : {})
     };
@@ -184,6 +198,18 @@
     return `${value > 99 ? '99+' : value} 次重置机会`;
   }
 
+  function creditBalanceText(balance) {
+    const [integer, fraction = ''] = balance.split('.');
+    const whole = integer.replace(/^0+(?=\d)/u, '');
+    if (!/[1-9]/u.test(whole + fraction)) return '0.00';
+    if (whole === '0' && !/[1-9]/u.test(fraction.slice(0, 2))) return '<0.01';
+    const decimals = `${fraction}000`;
+    let cents = BigInt(whole) * 100n + BigInt(decimals.slice(0, 2));
+    if (Number(decimals[2]) >= 5) cents += 1n;
+    const digits = cents.toString().padStart(3, '0');
+    return `${digits.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/gu, ',')}.${digits.slice(-2)}`;
+  }
+
   function detailParts(text, type) {
     if (type === 'time') {
       const parts = text.split(' · ');
@@ -234,6 +260,9 @@
   let secondaryValue;
   let secondaryProgress;
   let secondaryReset;
+  let extraCredits;
+  let creditsBalance;
+  let creditsUnit;
   let root;
   let bridge;
   try {
@@ -252,6 +281,9 @@
     secondaryValue = document.getElementById('secondary-value');
     secondaryProgress = document.getElementById('secondary-progress');
     secondaryReset = document.getElementById('secondary-reset');
+    extraCredits = document.getElementById('extra-credits');
+    creditsBalance = document.getElementById('credits-balance');
+    creditsUnit = document.getElementById('credits-unit');
     bridge = window.petQuotaLabel;
   } catch (_) { return; }
   if (!label || !label.dataset || !status || !summary || typeof summary.replaceChildren !== 'function' ||
@@ -271,6 +303,9 @@
       label.dataset.hasItems = 'false';
       label.dataset.itemCount = '0';
       label.dataset.severity = 'normal';
+      label.dataset.hasExtraCredits = model.extraCredits ? 'true' : 'false';
+      label.dataset.status = model.state === 'ready' && model.extraCredits?.usageStatus === 'blocked' ? 'blocked'
+        : model.state === 'ready' && model.extraCredits && model.items[0]?.remaining === 0 ? 'exhausted' : '';
       const rows = [];
       let overallSeverity = 'normal';
       for (const [index, item] of model.items.entries()) {
@@ -295,12 +330,21 @@
         progressNode.value = item.remaining;
         labelProgress(progressNode, item);
         row.replaceChildren(nameNode, periodNode, valueNode, progressNode);
+        if (model.extraCredits && index === 0) {
+          valueNode.textContent = `${Math.round(item.remaining)}%`;
+          const description = document.createElement('span');
+          description.className = 'quota-description';
+          description.textContent = label.dataset.status === 'blocked' ? '已达花费限制'
+            : label.dataset.status === 'exhausted' ? '套餐额度已用尽' : '剩余额度';
+          row.replaceChildren(nameNode, periodNode, valueNode, progressNode, description);
+        }
         rows.push(row);
         if (severity === 'urgent' || (severity === 'low' && overallSeverity === 'normal')) overallSeverity = severity;
       }
       items.replaceChildren(...rows);
       const summaryItem = model.items[0];
-      if (summary.dataset) summary.dataset.severity = summaryItem ? severityOf(summaryItem.remaining) : 'normal';
+      if (summary.dataset) summary.dataset.severity = label.dataset.status === 'blocked' ? 'urgent'
+        : summaryItem ? severityOf(summaryItem.remaining) : 'normal';
       if (summaryItem) {
         const periodNode = document.createElement('span');
         const badgeNode = document.createElement('span');
@@ -310,12 +354,21 @@
         badgeNode.className = 'summary-badge';
         badgeNode.textContent = periodBadgeText(summaryItem.windowMinutes);
         periodLabelNode.className = 'summary-period-label';
-        periodLabelNode.textContent = severityText(summaryItem.remaining) || '额度';
+        periodLabelNode.textContent = label.dataset.status === 'blocked' ? '受限' : severityText(summaryItem.remaining) || '额度';
         periodNode.replaceChildren(badgeNode, periodLabelNode);
         valueNode.className = 'summary-value';
         valueNode.textContent = `${Math.round(summaryItem.remaining)}%`;
         summary.replaceChildren(periodNode, valueNode);
-        if (compactProduct) compactProduct.textContent = 'CODEX';
+        if (compactProduct) {
+          compactProduct.textContent = model.extraCredits ? 'CODEX PRO' : 'CODEX';
+          if (model.extraCredits && typeof compactProduct.replaceChildren === 'function') {
+            const product = document.createElement('span'), plan = document.createElement('span');
+            product.textContent = 'CODEX ';
+            plan.className = 'plan-name';
+            plan.textContent = 'PRO';
+            compactProduct.replaceChildren(product, plan);
+          }
+        }
         if (compactPeriod) compactPeriod.textContent = periodTypeText(summaryItem.windowMinutes);
       } else {
         summary.replaceChildren();
@@ -324,7 +377,7 @@
       }
       label.dataset.hasItems = rows.length > 0 ? 'true' : 'false';
       label.dataset.itemCount = String(rows.length);
-      label.dataset.severity = rows.length > 0 ? overallSeverity : 'normal';
+      label.dataset.severity = label.dataset.status === 'blocked' ? 'urgent' : rows.length > 0 ? overallSeverity : 'normal';
       overflow.textContent = '';
       renderDetail(resetTime, resetTimeText(model, summaryItem), 'time');
       renderDetail(resetCredits, resetCreditsText(model.resetCreditsAvailable), 'credits');
@@ -342,6 +395,18 @@
       }
       if (secondaryItem && secondaryReset) secondaryReset.textContent = resetTimeText(model, secondaryItem);
       else if (secondaryReset) secondaryReset.textContent = '';
+      if (extraCredits && creditsBalance && creditsUnit) {
+        const credits = model.extraCredits;
+        const hasBalance = credits?.state === 'balance';
+        const text = hasBalance ? creditBalanceText(credits.balance)
+          : credits?.state === 'none' ? '暂无额外点数' : credits?.state === 'unlimited' ? '不限额' : '暂不可用';
+        creditsBalance.textContent = credits ? text : '';
+        creditsUnit.textContent = hasBalance ? '点' : '';
+        creditsUnit.hidden = !hasBalance;
+        if (extraCredits.dataset) extraCredits.dataset.kind = hasBalance ? 'balance' : 'text';
+        extraCredits.title = credits?.state === 'stale' ? '额外点数已过期，等待更新；当前余额暂不可用。'
+          : hasBalance ? `额外点数余额：${credits.balance} 点。与套餐额度、重置机会分别统计。` : credits ? `额外点数：${text}` : '';
+      }
     } catch (_) {}
   };
 

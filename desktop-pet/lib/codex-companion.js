@@ -1,5 +1,5 @@
 const { createCodexConnection, CONNECTION_STATES, ERROR_CODES } = require('./codex-connection');
-const { isTaskId } = require('./codex-state');
+const { isTaskId, proQuotaDetails } = require('./codex-state');
 const { completionText, COMPLETION_VARIANT_COUNT } = require('./codex-text');
 const { selectPrimaryQuotaWindows } = require('./codex-quota-view');
 const { createQuotaAlertTracker, mergeQuotaAlerts } = require('./codex-quota-alerts');
@@ -57,6 +57,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
       enabled, generation,
       quota: { state: channels.quota.state, code: channels.quota.code,
         windows: quota.windows.map(window => ({ ...window })), updatedAt: quota.updatedAt, stale: quotaStale(),
+        ...proQuotaDetails(quota),
         ...(Number.isSafeInteger(quota.resetCreditsAvailable) && quota.resetCreditsAvailable >= 0
           ? { resetCreditsAvailable: quota.resetCreditsAvailable } : {}) },
       tasks: { state: channels.tasks.state, code: channels.tasks.code, partial: true,
@@ -483,6 +484,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     const nextQuota = {
       updatedAt: timestamp(value?.updatedAt),
       windows: [],
+      ...proQuotaDetails(value),
       ...(Number.isSafeInteger(resetCreditsAvailable) && resetCreditsAvailable >= 0
         ? { resetCreditsAvailable } : {})
     };

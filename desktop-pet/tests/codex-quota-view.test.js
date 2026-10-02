@@ -17,6 +17,36 @@ const snapshot = (windows, overrides = {}) => ({
   quota: { state: 'connected', stale: false, updatedAt: NOW, windows, ...overrides }
 });
 
+test('额外点数仅 Pro 默认开启，余额、零、无点数、无限、未知与过期独立于套餐比例和重置机会', () => {
+  const windows = [quotaWindow('codex:weekly', 10080, 79)];
+  const pro = credits => snapshot(windows, { planType: 'pro', credits, resetCreditsAvailable: 2 });
+  for (const [credits, expected] of [
+    [{ hasCredits: true, unlimited: false, balance: '62485.1547310000' }, { state: 'balance', balance: '62485.1547310000' }],
+    [{ hasCredits: true, unlimited: false, balance: '0' }, { state: 'balance', balance: '0' }],
+    [{ hasCredits: false, unlimited: false, balance: null }, { state: 'none' }],
+    [{ hasCredits: false, unlimited: true, balance: null }, { state: 'unlimited' }],
+    [{ hasCredits: true, unlimited: false, balance: null }, { state: 'unknown' }],
+    [null, { state: 'unknown' }]
+  ]) {
+    const model = buildQuotaLabelModel(pro(credits), {}, NOW);
+    assert.deepEqual(model.extraCredits, expected);
+    assert.equal(model.items[0].remaining, 79);
+    assert.equal(model.resetCreditsAvailable, 2);
+    assert.deepEqual(buildQuotaLabelModel(pro(credits), { showExtraCredits: false }, NOW),
+      buildQuotaLabelModel(snapshot(windows, { resetCreditsAvailable: 2 }), {}, NOW));
+  }
+  const source = pro({ hasCredits: true, unlimited: false, balance: '62485.1547310000' });
+  source.quota.stale = true; source.quota.spendControlReached = true;
+  assert.deepEqual(buildQuotaLabelModel(source, {}, NOW).extraCredits, { state: 'stale' });
+  source.quota.stale = false;
+  assert.deepEqual(buildQuotaLabelModel(source, {}, NOW).extraCredits,
+    { state: 'balance', balance: '62485.1547310000', usageStatus: 'blocked' });
+  for (const planType of ['plus', undefined, 'unknown']) {
+    assert.deepEqual(buildQuotaLabelModel(snapshot(windows, { planType, credits: source.quota.credits }), {}, NOW),
+      buildQuotaLabelModel(snapshot(windows), {}, NOW));
+  }
+});
+
 test('导出固定的 5 小时和周期常量', () => {
   assert.deepEqual(PERIOD_MINUTES, { fiveHour: 300, weekly: 10080 });
   assert.equal(Object.isFrozen(PERIOD_MINUTES), true);

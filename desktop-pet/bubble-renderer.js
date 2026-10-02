@@ -30,7 +30,7 @@
     bubble.dataset.tone = ['normal', 'strong', 'urgent'].includes(payload.tone) ? payload.tone : 'normal';
     bubble.style.setProperty('--anchor-x', `${payload.anchorX}px`);
     message.textContent = payload.text;
-    const allowed = ['again', 'rest', 'codex-open', 'codex-results', 'codex-dismiss'];
+    const allowed = ['again', 'rest', 'codex-open', 'codex-results', 'codex-dismiss', 'app-update-open', 'app-update-dismiss'];
     const visibleActions = payload.actions.filter(action => allowed.includes(action.id));
     const actionKey = visibleActions.map(action => `${action.id}:${action.label}`).join('|');
     // 移动窗口或原位更新文案时，不重建正在鼠标下的按钮。

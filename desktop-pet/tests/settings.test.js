@@ -54,6 +54,7 @@ test('损坏文件回退且有效设置可回读', t => {
     codexEnabled: false,
     codexTaskNameInAlerts: false,
     codexQuotaAlwaysVisible: false,
+    codexShowExtraCredits: true,
     openaiApiAlwaysVisible: false,
     autoUpdateCheck: true,
     lastUpdateNotifiedVersion: '',
@@ -70,6 +71,7 @@ test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
     keepAwake: true, bubblesEnabled: true, colorMode: 'standard', chatModel: 'auto', customization: DEFAULTS.customization,
     startupAppearance: DEFAULTS.startupAppearance, codexEnabled: false,
     codexTaskNameInAlerts: false, codexQuotaAlwaysVisible: false,
+    codexShowExtraCredits: true,
     openaiApiAlwaysVisible: false,
     autoUpdateCheck: true, lastUpdateNotifiedVersion: '',
     codexQuotaPeriod: 'auto', codexQuotaLabelSize: 'compact', codexQuotaAppearance: 'system'
@@ -86,6 +88,19 @@ test('旧外观沿用为启动默认，临时换装不覆盖已选启动外观',
     customization: { appearance: { shape: 'square' } } });
   assert.equal(saved.customization.appearance.shape, 'square');
   assert.equal(loadSettings(file).startupAppearance.shape, 'cloud');
+});
+
+test('Pro 额外点数默认显示，明确关闭可持久化，余额不进入设置文件', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emotion-pro-credits-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'settings.json');
+  assert.equal(DEFAULTS.codexShowExtraCredits, true);
+  for (const value of [undefined, null, 0, 'false', {}]) {
+    assert.equal(normalizeSettings({ codexShowExtraCredits: value }).codexShowExtraCredits, true);
+  }
+  saveSettings(file, { codexShowExtraCredits: false, credits: { balance: '62485.1547310000' } });
+  assert.equal(loadSettings(file).codexShowExtraCredits, false);
+  assert.equal(fs.readFileSync(file, 'utf8').includes('62485'), false);
 });
 
 test('陪伴开关只接受布尔值且不保存输入信息', () => {

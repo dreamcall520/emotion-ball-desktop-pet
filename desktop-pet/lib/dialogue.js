@@ -121,6 +121,18 @@ class DialogueDirector {
     return true;
   }
 
+  offerUpdate(version, nowMs) {
+    if (!this.enabled || !Number.isFinite(nowMs) || typeof version !== 'string' || version.length > 64 ||
+      !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) return null;
+    this._expire(nowMs);
+    if (this._current) return null;
+    const id = this._nextId++, durationMs = 10000;
+    const actions = [{ id: 'app-update-open', label: '查看更新' }, { id: 'app-update-dismiss', label: '稍后再说' }];
+    this._current = { id, event: 'app-update', version, actions, priority: -1, expiresAt: nowMs + durationMs };
+    this._lastBubbleAt = nowMs;
+    return { id, text: `球球有新版本 ${version}`, actions: actions.map(action => ({ ...action })), durationMs };
+  }
+
   offerCodex(alert, nowMs, durationMs = 8000) {
     if (!this.enabled || !Number.isFinite(nowMs) || !Number.isFinite(durationMs) || durationMs <= 0 ||
       !Number.isSafeInteger(alert?.id) || !Number.isSafeInteger(alert.generation) ||
@@ -214,8 +226,10 @@ class DialogueDirector {
     this._expire(nowMs);
     if (!this._current || id !== this._current.id || !this._current.actions.some(item => item.id === action)) return null;
     const descriptor = this._current.descriptors?.[action];
+    const updateVersion = this._current.event === 'app-update' ? this._current.version : null;
     const motion = this._current.motion;
     this.dismiss();
+    if (updateVersion) return { command: 'app-update', version: updateVersion, open: action === 'app-update-open' };
     if (descriptor) return { command: 'codex', descriptor: { ...descriptor } };
     if (action === 'rest') this._workQuietUntil = nowMs + TEN_MINUTES;
     return action === 'again' && motion ? { command: 'again', motion } : action;

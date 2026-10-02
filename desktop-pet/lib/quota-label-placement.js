@@ -72,7 +72,11 @@ function bounded(candidate, size, area) {
   };
 }
 
-function quotaLabelSize(value, expanded = false, itemCount = 1) {
+function quotaLabelSize(value, expanded = false, itemCount = 1, extraCredits = false) {
+  if (expanded === true && extraCredits === true) {
+    const size = quotaLabelSize(value, expanded, itemCount);
+    return { width: size.width, height: size.height + 20 };
+  }
   if (expanded === true && itemCount > 1 && value === 'standard') return LABEL_SIZES.standardExpandedDual;
   if (expanded === true && itemCount > 1 && value === 'compact') return LABEL_SIZES.compactExpandedDual;
   if (expanded === true && value === 'standard') return LABEL_SIZES.standardExpanded;
@@ -81,7 +85,7 @@ function quotaLabelSize(value, expanded = false, itemCount = 1) {
 }
 
 function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName = 'standard', expanded = false, itemCount = 1,
-  presentation = null) {
+  presentation = null, extraCredits = false) {
   const area = safeArea(workArea);
   const nativePet = safePet(petBounds, area);
   const auroraPeek = presentation?.shape === 'aurora-cloud' && presentation?.mode === 'peeked' &&
@@ -94,7 +98,7 @@ function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName =
   } : nativePet;
   const pet = petVisualBounds(shiftedPet, presentation?.shape);
   const obstacle = safeObstacle(obstacleBounds);
-  const requestedSize = quotaLabelSize(sizeName, expanded, itemCount);
+  const requestedSize = quotaLabelSize(sizeName, expanded, itemCount, extraCredits);
   const size = {
     width: Math.min(requestedSize.width, area.width),
     height: Math.min(requestedSize.height, area.height)

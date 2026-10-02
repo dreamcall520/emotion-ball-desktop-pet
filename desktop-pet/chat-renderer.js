@@ -31,6 +31,7 @@
   let modelOptionsKey = '';
   let modelMenuOpen = false;
   let modelOptions = [];
+  let updateVersion = null;
   const rows = new Map();
   const historyRows = new Map();
 
@@ -289,6 +290,16 @@
     input.style.height = `${Math.min(112, Math.max(40, input.scrollHeight))}px`;
   }
 
+  function renderAppUpdate() {
+    const latest = snapshot.appUpdate?.latestVersion;
+    const version = typeof latest === 'string' && /^[0-9A-Za-z][0-9A-Za-z.+_-]{0,79}$/.test(latest) ? latest : '';
+    if (version === updateVersion) return;
+    updateVersion = version;
+    byId('app-update').hidden = !version;
+    byId('app-update-text').textContent = version ? `球球有新版本 ${version}` : '';
+    byId('app-update-text').title = version ? `球球有新版本 ${version}` : '';
+  }
+
   function makeRow(message) {
     const row = document.createElement('article');
     row.className = 'message';
@@ -309,6 +320,7 @@
     if (!next || !Array.isArray(next.messages)) return;
     const nearBottom = conversation.scrollHeight - conversation.scrollTop - conversation.clientHeight < 40;
     snapshot = next;
+    renderAppUpdate();
     if (next.busy) modelChanged = false;
     const liveIds = new Set(next.messages.map(message => message.id));
     for (const [id, entry] of rows) {
@@ -543,6 +555,10 @@
     resizeInput();
     refreshControls();
     input.focus();
+  });
+  byId('open-app-update').addEventListener('click', async () => {
+    if (!updateVersion || typeof api.openUpdate !== 'function') return;
+    try { await api.openUpdate(); } catch (_) {}
   });
   window.addEventListener('focus', () => {
     if (!historyOpen && [document.body, historyButton, newButton].includes(document.activeElement)) input.focus();

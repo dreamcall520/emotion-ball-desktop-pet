@@ -10,7 +10,7 @@ const { setImmediate: flush } = require('node:timers/promises');
 // 真实 main、动作控制器和对白规则；替代 Electron、系统采样、磁盘设置及聊天服务边界。
 async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   codexQuotaAlwaysVisible = false, codexQuotaPeriod = 'auto', codexQuotaLabelSize = 'standard',
-  codexQuotaAppearance = 'system', bubblesEnabled = true, colorMode = 'standard',
+  codexQuotaAppearance = 'system', codexShowExtraCredits = true, bubblesEnabled = true, colorMode = 'standard',
   consent = async () => ({ response: 1 }), openExternal = async () => {}, saveError = null,
   loadedSettings = null, argv = [], updateFetch = async currentVersion => ({ currentVersion,
     latestVersion: '0.3.26', hasUpdate: true,
@@ -148,7 +148,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
         Menu: { buildFromTemplate: value => Object.assign(value, { popup: options => popups.push({ value, options }) }) }, nativeImage: { createFromPath: () => ({ setTemplateImage() {} }) } };
       if (name === './lib/settings') return { ...realRequire(name), loadSettings: () => loadedSettings ? structuredClone(loadedSettings) : ({ size: 'tiny', x: -600, y: 100,
         bubblesEnabled, colorMode, keepAwake: false, alwaysOnTop: true, codexEnabled, codexTaskNameInAlerts,
-        codexQuotaAlwaysVisible, codexQuotaPeriod, codexQuotaLabelSize, codexQuotaAppearance,
+        codexQuotaAlwaysVisible, codexQuotaPeriod, codexQuotaLabelSize, codexQuotaAppearance, codexShowExtraCredits,
         customization: realRequire('./lib/customization').normalizeCustomization(),
         startupAppearance: realRequire('./lib/customization').normalizeCustomization().appearance }),
         saveSettings: (_file, settings) => { if (saveError) throw saveError; saved.push({ ...settings }); return settings; } };
@@ -344,7 +344,8 @@ test('聊天 IPC 只接受当前聊天窗口；球球和其他窗口无法读记
   assert.equal(f.chat.newChats, 0);
   assert.equal(f.chat.stops, 0);
   assert.equal(f.chatWindow.isVisible(), true);
-  assert.equal(await f.invoke('pet:chat-get', undefined, sender), f.chat.state);
+  assert.equal(JSON.stringify(await f.invoke('pet:chat-get', undefined, sender)),
+    JSON.stringify({ ...f.chat.state, appUpdate: null }));
   assert.equal((await f.invoke('pet:chat-send', '有效消息', sender)).accepted, true);
   assert.deepEqual(f.chat.sends, ['有效消息']);
   assert.equal((await f.invoke('pet:chat-new', undefined, sender)).accepted, true);
@@ -661,6 +662,80 @@ test('更新查询失败不展示旧报告为最新，错误内容不进入提�
   assert.equal(f.updateChecks.length, 2);
 });
 
+test('桌面新版气泡只主动出现一次，可信当前按钮打开关于页，菜单标记保留', async () => {
+  const f = await fixture();
+  await f.call('checkForUpdates()');
+  const shown = f.bubble.shows.at(-1);
+  assert.equal(shown.text, '球球有新版本 0.3.26');
+  assert.equal(f.call('aboutWindow'), null);
+  assert.equal(f.saved.at(-1).lastUpdateNotifiedVersion, '0.3.26');
+  await f.call('checkForUpdates()');
+  assert.equal(f.bubble.shows.length, 1);
+  f.send('pet:bubble-reply', { id: shown.id, action: 'app-update-open' }, {});
+  assert.equal(f.call('aboutWindow'), null);
+  f.send('pet:bubble-reply', { id: shown.id + 1, action: 'app-update-open' }, f.bubble);
+  assert.equal(f.call('aboutWindow'), null);
+  f.send('pet:bubble-reply', { id: shown.id, action: 'app-update-open', url: 'https://untrusted.invalid/' }, f.bubble);
+  await flush();
+  assert.equal(f.call('aboutWindow.isVisible()'), true);
+  assert.equal(f.call('aboutUpdateState.latestVersion'), '0.3.26');
+  assert.equal(f.external.length, 0);
+  assert.equal(menuItem(f, 'update-check').label, '● 有新版本 0.3.26…');
+  const count = f.windows.length;
+  f.send('pet:bubble-reply', { id: shown.id, action: 'app-update-open' }, f.bubble);
+  assert.equal(f.windows.length, count);
+  const quiet = await fixture();
+  await quiet.call('checkForUpdates()');
+  const later = quiet.bubble.shows.at(-1);
+  quiet.send('pet:bubble-reply', { id: later.id, action: 'app-update-dismiss' }, quiet.bubble);
+  assert.equal(quiet.call('aboutWindow'), null);
+  assert.equal(quiet.bubble.getWindow().isVisible(), false);
+  assert.equal(menuItem(quiet, 'update-check').label, '● 有新版本 0.3.26…');
+});
+
+test('新版在会话内提示并保留菜单标记，失败不丢已知新版，点击入口只接受当前可见会话', async () => {
+  let requests = 0;
+  const f = await fixture({ updateFetch: async currentVersion => {
+    if (++requests === 2) throw new Error('PRIVATE_NETWORK_DETAILS');
+    return { currentVersion, latestVersion: requests === 3 ? currentVersion : '0.3.26',
+      hasUpdate: requests !== 3, url: 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.26' };
+  } });
+  menuItem(f, 'chat-open').click();
+  const sender = f.chatWindow.getWindow().webContents;
+  assert.equal(await f.invoke('pet:chat-open-update', undefined, sender), false);
+  await f.call('checkForUpdates()');
+  assert.equal(f.call('aboutWindow'), null, '聊天可见时只显示会话提示，不抢开关于窗口');
+  assert.equal(f.chatWindow.updates.at(-1).appUpdate.latestVersion, '0.3.26');
+  assert.equal(f.saved.at(-1).lastUpdateNotifiedVersion, '0.3.26');
+  assert.match(menuItem(f, 'update-check').label, /●.*0\.3\.26/);
+  f.chat.change({ ...f.chat.state, busy: true });
+  assert.equal(f.chatWindow.updates.at(-1).appUpdate.latestVersion, '0.3.26', '流式会话状态不丢新版提示');
+  assert.deepEqual(f.chat.sends, [], '版本检测不会作为消息发给模型');
+  assert.equal(await f.invoke('pet:chat-open-update', 'https://untrusted.invalid/', f.pet.webContents), false);
+  assert.equal(await f.invoke('pet:chat-open-update', 'https://untrusted.invalid/', sender), true);
+  assert.equal(f.call('aboutUpdateState.latestVersion'), '0.3.26');
+  assert.equal(f.external.length, 0, '查看更新只打开关于页，不接受传入的网址');
+  f.advanceTo(60001);
+  await f.call('checkForUpdates()');
+  assert.match(menuItem(f, 'update-check').label, /●.*0\.3\.26/);
+  assert.equal((await f.invoke('pet:chat-get', undefined, sender)).appUpdate.latestVersion, '0.3.26');
+  menuItem(f, 'update-check').click();
+  await flush();
+  assert.equal(requests, 2, '已知新版入口不依赖再次联网');
+  assert.equal(f.call('aboutUpdateState.hasUpdate'), true);
+  f.send('pet:chat-close', undefined, sender);
+  assert.equal(await f.invoke('pet:chat-open-update', undefined, sender), false);
+  menuItem(f, 'chat-open').click();
+  f.advanceTo(120002);
+  await f.call('checkForUpdates()');
+  assert.equal((await f.invoke('pet:chat-get', undefined, sender)).appUpdate, null);
+  assert.equal(menuItem(f, 'update-check').label, '检查更新…');
+  assert.equal(f.call('aboutUpdateState.hasUpdate'), false);
+  assert.equal(await f.invoke('pet:chat-open-update', undefined, sender), false);
+  f.powerMonitor.emit('lock-screen');
+  assert.equal(await f.invoke('pet:chat-open-update', undefined, sender), false);
+});
+
 test('API 常驻独立于套餐，失败刷新有间隔，隐藏与关闭清理', async () => {
   const f = await fixture();
   assert.equal(f.apiLabel.visible, false);
@@ -706,7 +781,7 @@ test('所有 Codex 设置只保留一个顶层入口并完整归入子菜单', a
   assert.equal(JSON.stringify(menu.filter(item => String(item.id || '').startsWith('codex-')).map(item => item.id)),
     JSON.stringify(['codex-menu']));
   assert.equal(JSON.stringify(group.submenu.filter(item => item.id).map(item => item.id)), JSON.stringify([
-    'codex-enabled', 'codex-task-names', 'codex-quota-visible', 'codex-quota-period',
+    'codex-enabled', 'codex-task-names', 'codex-quota-visible', 'codex-extra-credits', 'codex-quota-period',
     'codex-quota-label-size', 'codex-quota-appearance', 'openai-api-usage', 'openai-api-visible', 'codex-status'
   ]));
   assert.equal(group.submenu.find(item => item.id === 'codex-enabled').label, '启用 Codex 联动');
@@ -836,6 +911,30 @@ test('额度卡片外观为跟随系统、浅色和深色三档，只在保存�
   assert.equal(failed.call("setCodexPreference('codexQuotaAppearance', 'light')"), false);
   assert.equal(menuItem(failed, 'codex-quota-appearance').submenu.find(item => item.checked).id,
     'codex-quota-appearance-system');
+});
+
+test('额外点数默认开启，切换立即刷新 Pro 卡，保存失败回滚，Plus 保持原模型', async () => {
+  const off = await fixture();
+  assert.equal(menuItem(off, 'codex-extra-credits').enabled, false);
+  assert.equal(menuItem(off, 'codex-extra-credits').checked, true);
+  const quota = { updatedAt: 1800000000000, planType: 'pro', credits: { hasCredits: true, unlimited: false, balance: '123.45' },
+    windows: [{ id: 'codex:secondary', label: 'Codex', windowMinutes: 10080, remaining: 65, resetsAt: 1800604800000 }] };
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  f.connections[0].callbacks.onQuota(quota);
+  assert.equal(f.quotaLabel.shows.at(-1).extraCredits.balance, '123.45');
+  menuItem(f, 'codex-extra-credits').click({ checked: false });
+  assert.equal(f.saved.at(-1).codexShowExtraCredits, false);
+  assert.equal(menuItem(f, 'codex-extra-credits').checked, false);
+  assert.equal(f.quotaLabel.shows.at(-1).extraCredits, undefined);
+  menuItem(f, 'codex-extra-credits').click({ checked: true });
+  assert.equal(f.quotaLabel.shows.at(-1).extraCredits.balance, '123.45');
+  f.connections[0].callbacks.onQuota({ ...quota, planType: 'plus' });
+  assert.equal(f.quotaLabel.shows.at(-1).extraCredits, undefined);
+  assert.equal(f.quotaLabel.shows.at(-1).items.length, 1);
+  const failed = await fixture({ codexEnabled: true, saveError: new Error('CREDITS_WRITE_FAILURE') });
+  assert.equal(failed.call("setCodexPreference('codexShowExtraCredits', false)"), false);
+  assert.equal(menuItem(failed, 'codex-extra-credits').checked, true);
+  assert.equal(failed.call('settings.codexShowExtraCredits'), true);
 });
 
 test('常驻标签按当前卡片大小构建手动周期模型', async () => {

@@ -93,6 +93,37 @@ test('聊天头像在窗口内收到外观更新，不受聊天消息刷新影�
   assert.equal(f.avatars.length, 2); // Initial fallback plus the saved appearance.
 });
 
+test('新版提示独立于聊天记录，同版本流式刷新不重复播报，按钮仅打开更新页', async () => {
+  let opens = 0;
+  const f = fixture({ openUpdate: async () => { opens += 1; } });
+  await flush();
+  assert.equal(f.get('app-update').hidden, true);
+  let writes = 0;
+  let text = '';
+  Object.defineProperty(f.get('app-update-text'), 'textContent', { get: () => text, set: value => { text = value; writes += 1; } });
+  const state = { ...idle(), busy: true, appUpdate: { latestVersion: '0.3.27' }, messages: [{ id: 'a', role: 'assistant', status: 'streaming', text: '你好' }] };
+  f.receive(state);
+  const notice = f.get('app-update');
+  assert.equal(notice.hidden, false);
+  assert.equal(text, '球球有新版本 0.3.27');
+  for (let index = 0; index < 5; index += 1) f.receive({ ...state, messages: [{ ...state.messages[0], text: `你好${index}` }] });
+  assert.equal(f.get('app-update'), notice);
+  assert.equal(writes, 1);
+  assert.equal(f.get('messages').children.length, 1);
+  assert.equal(state.messages.length, 1);
+  await f.get('open-app-update').dispatch('click');
+  assert.equal(opens, 1);
+  assert.deepEqual(f.sent, []);
+  f.receive({ ...state, appUpdate: { latestVersion: '0.3.28' } });
+  assert.equal(text, '球球有新版本 0.3.28');
+  assert.equal(writes, 2);
+  f.receive({ ...state, appUpdate: null });
+  assert.equal(notice.hidden, true);
+  assert.equal(f.get('messages').children.length, 1);
+  const html = fs.readFileSync(path.join(__dirname, '../chat.html'), 'utf8');
+  assert.equal((html.match(/id="app-update"/g) || []).length, 1);
+});
+
 test('幻彩云聊天头像载入当前球球动画，切换形态后清理动画', async () => {
   const f = fixture();
   f.receiveAppearance({ shape: 'aurora-cloud' }, 'data:image/png;base64,AAAA');
@@ -608,6 +639,8 @@ test('预加载限制消息类型、长度、固定频道，并能解除订阅',
   assert.deepEqual(invoked.slice(2), [
     ['pet:chat-model', 'auto'], ['pet:chat-model', 'gpt-fast'], ['pet:chat-models-refresh']
   ]);
+  await api.openUpdate('https://untrusted.example/update');
+  assert.deepEqual(invoked.at(-1), ['pet:chat-open-update']);
   let snapshot;
   const unsubscribe = api.onState(next => { snapshot = next; });
   let appearance;

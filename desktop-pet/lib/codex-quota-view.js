@@ -8,6 +8,7 @@ const MAX_TIME = 8640000000000000;
 const MAX_TEXT_LENGTH = 256;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/u;
 const DISPLAYED_QUOTA_FAMILIES = Object.freeze(['codex', 'gpt-reserve']);
+const { proQuotaDetails } = require('./codex-state');
 
 function normalizePeriod(period) {
   return PERIODS.has(period) ? period : 'auto';
@@ -164,16 +165,26 @@ function buildQuotaLabelModel(snapshot, options = {}, now = Date.now()) {
   const resetCredits = Number.isSafeInteger(quota.resetCreditsAvailable)
     && quota.resetCreditsAvailable >= 0
     ? { resetCreditsAvailable: quota.resetCreditsAvailable } : {};
+  const pro = proQuotaDetails(quota);
+  let extraCredits = {};
+  if (safeOptions.showExtraCredits !== false && pro.planType === 'pro') {
+    const credits = pro.credits;
+    const state = quota.stale ? 'stale' : credits.unlimited === true ? 'unlimited'
+      : credits.hasCredits === false ? 'none' : credits.balance !== null ? 'balance' : 'unknown';
+    extraCredits = { extraCredits: { state,
+      ...(state === 'balance' ? { balance: credits.balance } : {}),
+      ...(!quota.stale && pro.spendControlReached === true ? { usageStatus: 'blocked' } : {}) } };
+  }
   const expired = validNow(now) && limitedWindows(quota.windows)
     .some(item => validScalars(item) && quotaFamily(item) === 'codex'
       && Object.values(PERIOD_MINUTES).includes(item.windowMinutes)
       && item.resetsAt <= now && matchesPeriod(item, period));
   if (quota.stale === true) {
     if (!selected.length && expired) return emptyModel('reset-wait');
-    return { state: 'stale', items: selected, overflow: 0, ...resetCredits };
+    return { state: 'stale', items: selected, overflow: 0, ...resetCredits, ...extraCredits };
   }
   if (selected.length) {
-    return { state: 'ready', items: selected, overflow: 0, ...resetCredits };
+    return { state: 'ready', items: selected, overflow: 0, ...resetCredits, ...extraCredits };
   }
 
   if (expired) return emptyModel('reset-wait');

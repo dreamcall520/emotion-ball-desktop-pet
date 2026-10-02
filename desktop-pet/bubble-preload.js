@@ -15,7 +15,7 @@ contextBridge.exposeInMainWorld('petBubble', {
     return () => ipcRenderer.removeListener('pet:bubble', listener);
   },
   reply: (id, action) => {
-    if (Number.isInteger(id) && ['again', 'rest', 'codex-open', 'codex-results', 'codex-dismiss'].includes(action)) {
+    if (Number.isInteger(id) && ['again', 'rest', 'codex-open', 'codex-results', 'codex-dismiss', 'app-update-open', 'app-update-dismiss'].includes(action)) {
       ipcRenderer.send('pet:bubble-reply', { id, action });
     }
   },

@@ -2,6 +2,14 @@ const assert = require('node:assert/strict');
 const { setTimeout: wait } = require('node:timers/promises');
 
 const counts = { connections: 0, threads: 0, turns: 0, interrupts: 0 };
+const nextVersion = require('../../package.json').version.replace(/\d+$/, patch => Number(patch) + 1);
+async function getSmokeRelease(url) {
+  assert.equal(process.env.PET_SMOKE_TEST, '1');
+  assert.equal(process.env.PET_SMOKE_CHAT_ONLY, '1');
+  assert.equal(url, 'https://api.github.com/repos/dreamcall520/emotion-ball-desktop-pet/releases/latest');
+  return { tag_name: `v${nextVersion}`, draft: false, prerelease: false };
+}
+
 function createSmokeChatRpc({ onNotification }) {
   assert.equal(process.env.PET_SMOKE_TEST, '1');
   assert.equal(process.env.PET_SMOKE_CHAT_ONLY, '1');
@@ -38,13 +46,27 @@ function createSmokeChatRpc({ onNotification }) {
   };
 }
 
-async function verifyChatIntegration({ pet, chat, chatWindow, screen, getMenu, getPresentation, hidePet, restorePet, powerMonitor }) {
+async function verifyChatIntegration({ pet, chat, chatWindow, screen, getMenu, getPresentation, hidePet, restorePet,
+  powerMonitor, checkUpdates, getAboutWindow, getBubbleWindow }) {
   const poll = async (read, test, label) => {
     const deadline = Date.now() + 5000;
     while (Date.now() < deadline) { const value = await read(); if (test(value)) return value; await wait(30); }
     assert.fail(label);
   };
   assert.equal(counts.connections, 0, 'boot must not connect');
+  await checkUpdates();
+  await poll(() => getBubbleWindow()?.isVisible(), Boolean, 'desktop update bubble appears');
+  const bubble = getBubbleWindow();
+  await poll(() => bubble.webContents.executeJavaScript('document.querySelector("#message").textContent'),
+    value => value === `球球有新版本 ${nextVersion}`, 'bubble shows the release');
+  assert.equal(getAboutWindow(), null, 'bubble delivers the automatic reminder');
+  assert.equal(counts.connections, 0, 'bubble starts no Codex connection');
+  if (process.env.PET_SMOKE_CHAT_SCREENSHOT) require('node:fs').writeFileSync(
+    process.env.PET_SMOKE_CHAT_SCREENSHOT.replace(/\.png$/, '-bubble.png'), (await bubble.webContents.capturePage()).toPNG());
+  await bubble.webContents.executeJavaScript('document.querySelector("[data-action=app-update-open]").click()');
+  await poll(() => getAboutWindow()?.isVisible(), Boolean, 'bubble button opens About');
+  getAboutWindow().close();
+  process.stdout.write(`PET_DESKTOP_UPDATE_BUBBLE_OK ${nextVersion} (simulated release)\n`);
   const open = () => {
     const item = getMenu().getMenuItemById('chat-open');
     assert.ok(item?.enabled);
@@ -54,6 +76,25 @@ async function verifyChatIntegration({ pet, chat, chatWindow, screen, getMenu, g
   await poll(() => chatWindow.isVisible() && chat.getState().connection, value => value === 'ready', 'open panel and connect');
   await poll(() => chat.getState().modelsStatus, value => value === 'ready', 'load current model catalog');
   const win = chatWindow.getWindow(), page = code => win.webContents.executeJavaScript(code);
+  const beforeUpdate = { ...counts };
+  await checkUpdates();
+  await poll(() => page('document.querySelector("#app-update").hidden'), value => value === false, 'show update reminder');
+  assert.equal(await page('document.querySelector("#app-update-text").textContent'), `球球有新版本 ${nextVersion}`);
+  assert.equal(getAboutWindow(), null, 'visible chat receives update without an automatic About popup');
+  assert.equal(getMenu().getMenuItemById('update-check').label, `● 有新版本 ${nextVersion}…`);
+  assert.equal(await page('document.querySelector("#messages").children.length'), 0, 'reminder is outside conversation history');
+  assert.deepEqual(counts, beforeUpdate, 'update checking consumes no model turn');
+  if (process.env.PET_SMOKE_CHAT_SCREENSHOT) require('node:fs').writeFileSync(process.env.PET_SMOKE_CHAT_SCREENSHOT,
+    (await win.webContents.capturePage()).toPNG());
+  await page('document.querySelector("#open-app-update").click()');
+  await poll(() => getAboutWindow()?.isVisible(), Boolean, 'update reminder opens About');
+  const about = getAboutWindow();
+  await poll(() => about.webContents.executeJavaScript('document.body.innerText'),
+    value => value.includes(nextVersion) && value.includes('发现新版本'), 'About shows the same release');
+  if (process.env.PET_SMOKE_CHAT_SCREENSHOT) require('node:fs').writeFileSync(
+    process.env.PET_SMOKE_CHAT_SCREENSHOT.replace(/\.png$/, '-about.png'), (await about.webContents.capturePage()).toPNG());
+  about.close();
+  process.stdout.write(`PET_CHAT_UPDATE_REMINDER_OK ${nextVersion} (simulated release)\n`);
   if (process.env.PET_SMOKE_CHAT_AVATAR === '1') {
     await poll(() => page("Boolean(document.querySelector('#chat-avatar .eb-rive-aurora.ready'))"),
       Boolean, 'current aurora avatar animation');
@@ -191,4 +232,4 @@ async function verifyChatIntegration({ pet, chat, chatWindow, screen, getMenu, g
   process.stdout.write(`PET_CHAT_INTEGRATION_OK ${JSON.stringify(counts)}\n`);
 }
 
-module.exports = { createSmokeChatRpc, verifyChatIntegration };
+module.exports = { createSmokeChatRpc, verifyChatIntegration, getSmokeRelease };

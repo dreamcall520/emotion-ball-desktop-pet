@@ -10,6 +10,26 @@ const events = ['hello', 'pet', 'drag', 'drop', 'welcome', 'wake', 'thought', 'w
 const codexAlert = (overrides = {}) => ({ id: 7, generation: 2, kind: 'completed',
   text: '这轮有结果啦，去看看？', taskIds: ['11111111-1111-4111-8111-111111111111'], ...overrides });
 
+test('新版气泡复用对白编号和按钮权限，过期、关闭、已被替换的按钮失效', () => {
+  const director = new DialogueDirector();
+  assert.equal(director.offerUpdate('https://untrusted.invalid/', 0), null);
+  const first = director.offerUpdate('0.3.27', 0);
+  assert.equal(director.offerUpdate('0.3.27', 1), null, '不抢占当前气泡');
+  assert.equal(director.respond(first.id + 1, 'app-update-open', 2), null);
+  assert.equal(director.respond(first.id, 'codex-open', 3), null);
+  assert.deepEqual(director.respond(first.id, 'app-update-open', 4), { command: 'app-update', version: '0.3.27', open: true });
+  assert.equal(director.respond(first.id, 'app-update-open', 5), null);
+  const dismissed = director.offerUpdate('0.3.27', 10);
+  assert.deepEqual(director.respond(dismissed.id, 'app-update-dismiss', 11), { command: 'app-update', version: '0.3.27', open: false });
+  const expired = director.offerUpdate('0.3.27', 20);
+  assert.equal(director.respond(expired.id, 'app-update-open', 10020), null);
+  const replaced = director.offerUpdate('0.3.27', 10021);
+  assert.ok(director.offer('hello', 10022));
+  assert.equal(director.respond(replaced.id, 'app-update-open', 10023), null);
+  director.setEnabled(false);
+  assert.equal(director.offerUpdate('0.3.27', 20000), null);
+});
+
 test('Codex 气泡共享编号，只返回受控且绑定提醒的操作', () => {
   const director = new DialogueDirector();
   assert.equal(typeof director.offerCodex, 'function');

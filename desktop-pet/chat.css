@@ -58,6 +58,9 @@ h1 { font-size: 14px; line-height: 20px; font-weight: 600; margin: 0; letter-spa
 .heading p { margin: 2px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 10px; line-height: 15px; }
 .text-button { border: 0; background: transparent; color: var(--muted); padding: 6px; border-radius: 6px; white-space: nowrap; font-size: 11px; }
 .text-button:hover:not(:disabled), .header-action:hover:not(:disabled), .close-button:hover { background: var(--hover); color: var(--text); }
+.app-update { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; margin: 8px 12px 0; padding: 7px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--user); color: var(--text); }
+.app-update p { flex: 1; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; line-height: 16px; }
+.app-update .text-button { flex: 0 0 auto; padding: 2px 0; color: var(--accent); font-size: 10px; line-height: 16px; }
 .header-actions { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
 .header-action { display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 3px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 11px; font-weight: 500; white-space: nowrap; }
 .header-action svg { width: 15px; height: 15px; flex: 0 0 auto; }

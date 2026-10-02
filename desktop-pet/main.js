@@ -86,6 +86,7 @@ let updateCheck = null;
 let updateCheckManual = false;
 let lastUpdateCheckAt = -Infinity;
 let lastUpdateResult = null;
+let availableUpdate = null;
 let aboutWindow = null;
 let aboutReady = false;
 let aboutUpdateState = { state: 'idle' };
@@ -239,6 +240,10 @@ function setAboutUpdate(state) {
   if (aboutWindow && !aboutWindow.isDestroyed()) aboutWindow.webContents.send('pet:about-update-state', state);
 }
 
+function chatSnapshot(state = chat?.getState()) {
+  return { ...state, appUpdate: availableUpdate ? { latestVersion: availableUpdate.latestVersion } : null };
+}
+
 async function showUpdateResult(result) {
   setAboutUpdate({ state: 'ready', currentVersion: result.currentVersion,
     latestVersion: result.latestVersion, hasUpdate: result.hasUpdate });
@@ -250,6 +255,13 @@ async function showUpdateResult(result) {
     win.once('closed', done);
   });
   return !isQuitting && !screenLocked && !win.isDestroyed() && win.isVisible();
+}
+
+function showUpdateBubble(result) {
+  if (isQuitting || screenLocked || chatWindow?.isVisible() || presentationSuppressed() ||
+    !petWindow || petWindow.isDestroyed() || !petWindow.isVisible() || dragState || hostMotion || bounceState) return false;
+  const payload = dialogue?.offerUpdate(result.latestVersion, performance.now());
+  return Boolean(payload && showBubble(payload));
 }
 
 function checkForUpdates(manual = false) {
@@ -267,17 +279,26 @@ function checkForUpdates(manual = false) {
   }
   updateCheckManual = manual;
   if (!cached) { lastUpdateCheckAt = Date.now(); lastUpdateResult = null; }
-  updateCheck = Promise.resolve().then(() => cached || checkLatestRelease(app.getVersion())).then(async result => {
+  updateCheck = Promise.resolve().then(() => cached || checkLatestRelease(app.getVersion(),
+    IS_SMOKE_TEST && process.env.PET_SMOKE_CHAT_ONLY === '1'
+      ? { get: require('./scripts/verify-chat-integration').getSmokeRelease } : undefined)).then(async result => {
     lastUpdateResult = result;
     if (isQuitting || screenLocked) return;
+    availableUpdate = result.hasUpdate ? result : null;
+    chatWindow?.update(chatSnapshot());
     if (updateCheckManual) await showUpdateResult(result);
-    else if (settings.autoUpdateCheck !== false && !chatWindow?.isVisible() && result.hasUpdate &&
+    else if (settings.autoUpdateCheck !== false && result.hasUpdate &&
       settings.lastUpdateNotifiedVersion !== result.latestVersion) {
-      const shown = await showUpdateResult(result);
+      const shown = chatWindow?.isVisible() || showUpdateBubble(result) || await showUpdateResult(result);
       if (shown && settings.autoUpdateCheck !== false && !isQuitting) {
         settings.lastUpdateNotifiedVersion = result.latestVersion;
         persistSettings();
       }
+    }
+    if (!isQuitting && !screenLocked && (aboutUpdateState.latestVersion !== result.latestVersion ||
+      aboutUpdateState.hasUpdate !== result.hasUpdate)) {
+      setAboutUpdate({ state: 'ready', currentVersion: result.currentVersion,
+        latestVersion: result.latestVersion, hasUpdate: result.hasUpdate });
     }
   }).catch(async () => {
     if (updateCheckManual && !isQuitting && !screenLocked)
@@ -380,7 +401,7 @@ function openChat() {
   quotaLabel?.hide();
   apiUsageLabel?.hide();
   edgeNoticeWindow?.hide();
-  chatWindow.show(chat.getState());
+  chatWindow.show(chatSnapshot());
   // Opening checks login and shows local history; only send() can create a thread.
   void chat.connect().catch(() => {});
 }
@@ -413,7 +434,8 @@ function tickEdgeNotice(force = false) {
     bubblesEnabled: settings?.bubblesEnabled === true, quotaEnabled,
     appearance: settings?.codexQuotaAppearance,
     quotaModel: visible && quotaEnabled && presentation?.mode === 'tucked'
-      ? buildQuotaLabelModel(codexCompanion?.getSnapshot(), { period: settings.codexQuotaPeriod, size: 'compact' }, codexNow()) : null
+      ? buildQuotaLabelModel(codexCompanion?.getSnapshot(), { period: settings.codexQuotaPeriod, size: 'compact',
+        showExtraCredits: settings.codexShowExtraCredits }, codexNow()) : null
   });
 }
 
@@ -622,11 +644,12 @@ function bindBubbleVisibilityEvents() {
 }
 
 function showBubble(payload) {
-  if (!payload || presentationSuppressed() || chatWindow?.isVisible()) return;
+  if (!payload || presentationSuppressed() || chatWindow?.isVisible()) return false;
   const shown = safelyInvokeWindow('气泡显示', () => bubble?.show(payload));
   if (shown) bindBubbleVisibilityEvents();
   repositionQuotaLabel();
   Promise.resolve().then(repositionQuotaLabel);
+  return shown;
 }
 
 function hideBubble() {
@@ -680,7 +703,8 @@ function syncQuotaLabel(snapshot = null) {
         const current = requestedSnapshot || codexCompanion?.getSnapshot();
         quotaLabel.show(buildQuotaLabelModel(current, {
           period: settings.codexQuotaPeriod,
-          size: settings.codexQuotaLabelSize
+          size: settings.codexQuotaLabelSize,
+          showExtraCredits: settings.codexShowExtraCredits
         }, codexNow()));
         shown = true;
       } catch (error) {
@@ -771,7 +795,7 @@ function setCodexPreference(name, value) {
   if (!settings || settings.codexEnabled !== true || !codexCompanion || isQuitting) return false;
   const allowed = new Set([
     'codexTaskNameInAlerts', 'codexQuotaAlwaysVisible', 'codexQuotaPeriod', 'codexQuotaLabelSize',
-    'codexQuotaAppearance'
+    'codexQuotaAppearance', 'codexShowExtraCredits'
   ]);
   if (!allowed.has(name)) return false;
   const previous = settings[name];
@@ -1190,6 +1214,12 @@ function codexMenu() {
           setCodexPreference('codexQuotaAlwaysVisible', enabled); }
       },
       {
+        id: 'codex-extra-credits', label: '显示额外点数（Pro）', type: 'checkbox',
+        enabled: settings.codexEnabled === true, checked: settings.codexShowExtraCredits !== false,
+        click: item => { const enabled = item.checked; item.checked = settings.codexShowExtraCredits !== false;
+          setCodexPreference('codexShowExtraCredits', enabled); }
+      },
+      {
         id: 'codex-quota-period', label: '额度提醒周期', enabled: settings.codexEnabled === true,
         submenu: [
           ['auto', 'codex-quota-auto', '自动（按当前套餐）'],
@@ -1302,8 +1332,9 @@ function menuTemplate() {
     ] },
     { type: 'separator' },
     { id: 'about-open', label: '关于球球', click: () => { void openAbout(); } },
-    { id: 'update-check', label: updateCheck ? '正在检查更新…' : '检查更新…', enabled: !updateCheck,
-      click: () => { void checkForUpdates(true); } },
+    { id: 'update-check', label: availableUpdate ? `● 有新版本 ${availableUpdate.latestVersion}…`
+      : updateCheck ? '正在检查更新…' : '检查更新…', enabled: Boolean(availableUpdate) || !updateCheck,
+      click: () => { void (availableUpdate ? showUpdateResult(availableUpdate) : checkForUpdates(true)); } },
     {
       label: '退出球球',
       click: () => app.quit()
@@ -1638,7 +1669,8 @@ async function finishSmokeTest() {
       }
       await require('./scripts/verify-chat-integration').verifyChatIntegration({ pet: petWindow, chat, chatWindow,
         screen, getMenu: () => Menu.buildFromTemplate(menuTemplate()), getPresentation: () => edgeTuck.getPresentation(),
-        hidePet, restorePet, powerMonitor });
+        hidePet, restorePet, powerMonitor, checkUpdates: checkForUpdates, getAboutWindow: () => aboutWindow,
+        getBubbleWindow: () => bubble.getWindow() });
       app.quit();
       return;
     }
@@ -1946,8 +1978,8 @@ function registerIpc() {
   });
   ipcMain.handle('pet:about-release', event => {
     if (!fromAboutWindow(event, true) || aboutUpdateState.state !== 'ready' ||
-      !lastUpdateResult?.hasUpdate || aboutUpdateState.latestVersion !== lastUpdateResult.latestVersion) return false;
-    return shell.openExternal(lastUpdateResult.url).then(() => true, () => false);
+      !availableUpdate || aboutUpdateState.latestVersion !== availableUpdate.latestVersion) return false;
+    return shell.openExternal(availableUpdate.url).then(() => true, () => false);
   });
   ipcMain.on('pet:about-close', event => { if (fromAboutWindow(event)) aboutWindow.close(); });
   ipcMain.handle('pet:api-usage-get', event => fromApiUsageWindow(event, false) ? apiUsage.getState() : null);
@@ -1972,7 +2004,11 @@ function registerIpc() {
     if (!fromCustomizationWindow(event) || screenLocked) return false;
     return saveCustomization(value, setAsStartupDefault);
   });
-  ipcMain.handle('pet:chat-get', event => fromChatWindow(event) && !screenLocked ? chat.getState() : null);
+  ipcMain.handle('pet:chat-get', event => fromChatWindow(event) && !screenLocked ? chatSnapshot() : null);
+  ipcMain.handle('pet:chat-open-update', event => {
+    if (!fromChatWindow(event) || screenLocked || isQuitting || !chatWindow.isVisible() || !availableUpdate) return false;
+    return showUpdateResult(availableUpdate);
+  });
   ipcMain.handle('pet:chat-send', (event, text) => {
     if (!fromChatWindow(event) || screenLocked || !chatWindow.isVisible()) return { accepted: false, error: '请打开聊天面板后再发送。' };
     return chat.send(text);
@@ -2013,11 +2049,14 @@ function registerIpc() {
   ipcMain.on('pet:bubble-reply', (event, payload) => {
     const bubbleWindow = bubble?.getWindow();
     if (!bubbleWindow || bubbleWindow.isDestroyed() || event.sender !== bubbleWindow.webContents) return;
+    if (isQuitting || screenLocked || !bubbleWindow.isVisible() || !petWindow?.isVisible()) return;
     if (!payload || !Number.isInteger(payload.id)) return;
     const action = dialogue.respond(payload.id, payload.action, performance.now());
     if (!action) return;
     hideBubble();
-    if (action?.command === 'codex') void routeCodexAction(action.descriptor);
+    if (action?.command === 'app-update') {
+      if (action.open && availableUpdate?.latestVersion === action.version) void showUpdateResult(availableUpdate);
+    } else if (action?.command === 'codex') void routeCodexAction(action.descriptor);
     else sendCommand(action);
   });
 
@@ -2238,7 +2277,7 @@ async function bootstrap() {
       fs.mkdirSync(options.workspaceDir, { recursive: true, mode: 0o700 });
       return createCodexChatRpc(options);
     },
-    onChange: state => { if (!screenLocked) chatWindow.update(state); },
+    onChange: state => { if (!screenLocked) chatWindow.update(chatSnapshot(state)); },
     onAction: performChatAction });
   dialogue = new DialogueDirector({ now: performance.now(), enabled: settings.bubblesEnabled });
   thoughts = createThoughtWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,

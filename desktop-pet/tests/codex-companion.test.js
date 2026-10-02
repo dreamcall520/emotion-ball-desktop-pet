@@ -1178,6 +1178,26 @@ test('额度快照只保留可用重置机会数量，不保留重置凭据详�
   assert.equal('resetCreditsAvailable' in f.companion.getSnapshot().quota, false);
 });
 
+test('Pro 点数透过快照独立复制，额度更新或换为 Plus 不保留旧点数', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.quota(79, { planType: 'pro', credits: {
+    hasCredits: true, unlimited: false, balance: '62485.1547310000', key: 'SECRET_KEY'
+  }, spendControlReached: true, resetCreditsAvailable: 2 });
+  const snapshot = f.companion.getSnapshot();
+  assert.equal(snapshot.quota.credits.balance, '62485.1547310000');
+  assert.equal(snapshot.quota.spendControlReached, true);
+  assert.equal(snapshot.quota.resetCreditsAvailable, 2);
+  assert.equal(JSON.stringify(snapshot).includes('SECRET_KEY'), false);
+  snapshot.quota.credits.balance = '0';
+  assert.equal(f.companion.getSnapshot().quota.credits.balance, '62485.1547310000');
+  f.quota(79, { planType: 'pro' });
+  assert.equal(f.companion.getSnapshot().quota.credits.balance, null);
+  f.quota(79, { planType: 'plus', credits: { hasCredits: true, unlimited: false, balance: '123' } });
+  assert.equal('credits' in f.companion.getSnapshot().quota, false);
+  f.companion.close();
+});
+
 test('手动关闭当前提醒校验id和代次，关闭联动使旧按钮永久无效', async () => {
   const f = fixture();
   assert.equal(f.companion.dismiss(1, 0), false);

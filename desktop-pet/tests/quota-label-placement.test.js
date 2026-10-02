@@ -1,8 +1,26 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { quotaLabelBounds } = require('../lib/quota-label-placement');
+const { quotaLabelBounds, quotaLabelSize } = require('../lib/quota-label-placement');
 
 const AREA = Object.freeze({ x: 0, y: 0, width: 1440, height: 900 });
+
+test('Pro 点数行只在展开时增加二十像素，折叠和 Plus 尺寸保持原样', () => {
+  assert.deepEqual(quotaLabelSize('compact', false, 1, true), { width: 128, height: 32 });
+  for (const size of ['compact', 'standard']) {
+    assert.deepEqual(quotaLabelSize(size, true, 1, true), { width: 196, height: 116 });
+    assert.deepEqual(quotaLabelSize(size, true, 2, true), { width: 196, height: 148 });
+    assert.deepEqual(quotaLabelSize(size, true, 1), { width: 196, height: 96 });
+    assert.deepEqual(quotaLabelSize(size, true, 2), { width: 196, height: 128 });
+  }
+  const pet = { x: 1408, y: 878, width: 80, height: 80 };
+  const area = { x: 0, y: 32, width: 1512, height: 950 };
+  const bubble = { x: 1280, y: 784, width: 224, height: 86 };
+  const bounds = quotaLabelBounds(pet, area, bubble, 'compact', true, 1, null, true);
+  assertInside(bounds, area);
+  assert.equal(bounds.height, 116);
+  assert.equal(bounds.x < pet.x + pet.width && bounds.x + bounds.width > pet.x &&
+    bounds.y < pet.y + pet.height && bounds.y + bounds.height > pet.y, false);
+});
 
 function assertFiniteBounds(result) {
   for (const key of ['x', 'y', 'width', 'height']) {

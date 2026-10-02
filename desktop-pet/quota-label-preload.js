@@ -58,6 +58,19 @@ function copyItems(value) {
   return items;
 }
 
+function extraCreditsFields(source, state) {
+  try {
+    const value = record(source.extraCredits);
+    if (!value || !['balance', 'none', 'unlimited', 'unknown', 'stale'].includes(value.state)) return {};
+    const balance = typeof value.balance === 'string' && value.balance.length <= 128 &&
+      /^\d+(?:\.\d+)?$/.test(value.balance) ? value.balance : null;
+    const creditState = state === 'stale' ? 'stale' : value.state === 'balance' && balance === null ? 'unknown' : value.state;
+    return { extraCredits: { state: creditState,
+      ...(creditState === 'balance' ? { balance } : {}),
+      ...(state === 'ready' && value.usageStatus === 'blocked' ? { usageStatus: 'blocked' } : {}) } };
+  } catch (_) { return {}; }
+}
+
 function safeModel(value) {
   const source = record(value);
   if (!source) return { state: 'disconnected', size: 'standard', appearance: 'system', expanded: false, items: [], overflow: 0 };
@@ -95,6 +108,7 @@ function safeModel(value) {
     expanded,
     items: copyItems(rawItems),
     overflow,
+    ...extraCreditsFields(source, state),
     ...(Number.isSafeInteger(resetCreditsAvailable) && resetCreditsAvailable >= 0
       ? { resetCreditsAvailable } : {})
   };

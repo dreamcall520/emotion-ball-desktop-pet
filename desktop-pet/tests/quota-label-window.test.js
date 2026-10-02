@@ -167,6 +167,35 @@ test('小巧档创建可点击的 128×32 横条，点击展开和收起时复�
   assert.equal(win.sent.at(-1)[1].expanded, false);
 });
 
+test('Pro 点数通过原生窗口和 preload 的白名单，展开多二十像素，关闭行立即恢复尺寸', async t => {
+  const f = fixture(() => Promise.resolve(), { labelSize: 'compact' });
+  t.after(() => f.label.destroy());
+  const extraCredits = { state: 'balance', balance: '62485.1547310000', key: 'SECRET_KEY' };
+  f.label.show({ ...readyModel(), extraCredits }); await flush();
+  const win = f.windows[0];
+  assert.equal(win.bounds.height, 32);
+  win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  assert.equal(win.bounds.width, 196); assert.equal(win.bounds.height, 116);
+  assert.deepEqual(win.sent.at(-1)[1].extraCredits, { state: 'balance', balance: '62485.1547310000' });
+  assert.equal(win.sent.at(-1)[1].resetCreditsAvailable, 1);
+  assert.equal(JSON.stringify(win.sent.at(-1)[1]).includes('SECRET_KEY'), false);
+  let api, listener, received;
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../quota-label-preload.js'), 'utf8'), {
+    require: () => ({ contextBridge: { exposeInMainWorld(_name, value) { api = value; } },
+      ipcRenderer: { on(_name, callback) { listener = callback; }, removeListener() {} } })
+  });
+  api.onModel(value => { received = value; });
+  listener({}, win.sent.at(-1)[1]);
+  assert.equal(JSON.stringify(received.extraCredits), JSON.stringify({ state: 'balance', balance: '62485.1547310000' }));
+  listener({}, { ...win.sent.at(-1)[1], state: 'stale' });
+  assert.equal(JSON.stringify(received.extraCredits), JSON.stringify({ state: 'stale' }));
+  f.label.show({ ...readyModel(), extraCredits: { state: 'balance', balance: '<script>secret</script>' } });
+  assert.deepEqual(win.sent.at(-1)[1].extraCredits, { state: 'unknown' });
+  f.label.show(readyModel());
+  assert.equal(win.bounds.height, 96);
+  assert.equal('extraCredits' in win.sent.at(-1)[1], false);
+});
+
 test('半露幻彩云切换屏边时重排额度标签，与可见云瓣相邻', async t => {
   const f = fixture(() => Promise.resolve(), { labelSize: 'compact',
     presentation: { shape: 'aurora-cloud', mode: 'peeked', side: 'right' } });

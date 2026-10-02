@@ -45,6 +45,30 @@ test('额度只保留可用重置机会数量，不保留重置凭据详情', ()
   }
 });
 
+test('Pro 只从通用 Codex 池读取官方点数字符串，未知不当零，重置机会独立', () => {
+  const codex = { planType: 'pro', primary: window,
+    credits: { hasCredits: true, unlimited: false, balance: '62485.1547310000', key: SECRET } };
+  const result = state().normalizeQuota({
+    rateLimits: { ...codex, credits: { hasCredits: true, unlimited: false, balance: '999' } },
+    rateLimitsByLimitId: { codex, spark: { ...codex, credits: { hasCredits: true, unlimited: true, balance: '888' } } },
+    rateLimitResetCredits: { availableCount: 2 }
+  }, 100);
+  assert.equal(result.planType, 'pro');
+  assert.deepEqual(result.credits, { hasCredits: true, unlimited: false, balance: '62485.1547310000' });
+  assert.equal(result.resetCreditsAvailable, 2);
+  assert.equal(JSON.stringify(result).includes(SECRET), false);
+  for (const balance of [null, undefined, '', 'unknown', 'Infinity', '-1', '1e5', 0, NaN, SECRET]) {
+    assert.equal(state().normalizeQuota({ rateLimits: { ...codex,
+      credits: { hasCredits: true, unlimited: false, balance } } }, 100).credits.balance, null);
+  }
+  assert.equal(state().normalizeQuota({ rateLimits: { ...codex,
+    credits: { hasCredits: true, unlimited: false, balance: '0' } } }, 100).credits.balance, '0');
+  assert.deepEqual(state().normalizeQuota({ rateLimits: { ...codex, credits: null } }, 100).credits,
+    { hasCredits: null, unlimited: null, balance: null });
+  assert.deepEqual(state().normalizeQuota({ rateLimits: { ...codex, planType: 'plus' } }, 100),
+    state().normalizeQuota({ rateLimits: { primary: window } }, 100));
+});
+
 test('优先多类额度，不重复旧rateLimits；同周期的主次窗口仍有独立键', () => {
   const result = state().normalizeQuota({
     rateLimits: { primary: window },

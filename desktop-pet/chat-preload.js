@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld('qiuqiuChat', {
     return ipcRenderer.invoke('pet:chat-model', id);
   },
   refreshModels: () => ipcRenderer.invoke('pet:chat-models-refresh'),
+  openUpdate: () => ipcRenderer.invoke('pet:chat-open-update'),
   newChat: () => ipcRenderer.invoke('pet:chat-new'),
   selectChat(id) {
     if (typeof id !== 'string' || !id.trim() || id.length > 200) {

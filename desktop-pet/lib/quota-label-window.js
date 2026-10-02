@@ -70,6 +70,19 @@ function copyItems(value) {
   return items;
 }
 
+function extraCreditsFields(source, state) {
+  try {
+    const value = record(source.extraCredits);
+    if (!value || !['balance', 'none', 'unlimited', 'unknown', 'stale'].includes(value.state)) return {};
+    const balance = typeof value.balance === 'string' && value.balance.length <= 128 &&
+      /^\d+(?:\.\d+)?$/.test(value.balance) ? value.balance : null;
+    const creditState = state === 'stale' ? 'stale' : value.state === 'balance' && balance === null ? 'unknown' : value.state;
+    return { extraCredits: { state: creditState,
+      ...(creditState === 'balance' ? { balance } : {}),
+      ...(state === 'ready' && value.usageStatus === 'blocked' ? { usageStatus: 'blocked' } : {}) } };
+  } catch (_) { return {}; }
+}
+
 function safeModel(value) {
   const source = record(value);
   if (!source) return { state: EMPTY_MODEL.state, items: [], overflow: 0 };
@@ -93,6 +106,7 @@ function safeModel(value) {
     state,
     items: copyItems(rawItems),
     overflow,
+    ...extraCreditsFields(source, state),
     ...(Number.isSafeInteger(resetCreditsAvailable) && resetCreditsAvailable >= 0
       ? { resetCreditsAvailable } : {})
   };
@@ -214,7 +228,7 @@ function createQuotaLabelWindow({
       const display = screen.getDisplayMatching(petBounds);
       return quotaLabelBounds(petBounds, display && display.workArea, getObstacle(),
         currentModel?.size, currentModel?.expanded === true, currentModel?.items?.length,
-        getPresentation());
+        getPresentation(), Boolean(currentModel?.extraCredits));
     } catch (error) {
       report(error);
       return null;
@@ -317,7 +331,7 @@ function createQuotaLabelWindow({
     const expectedWindow = win;
     let loadingWindow = null;
     const initialSize = quotaLabelSize(currentModel?.size, currentModel?.expanded === true,
-      currentModel?.items?.length);
+      currentModel?.items?.length, Boolean(currentModel?.extraCredits));
     try { loadingWindow = new BrowserWindow({
       width: initialSize.width,
       height: initialSize.height,

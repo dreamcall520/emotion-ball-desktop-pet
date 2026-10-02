@@ -17,6 +17,19 @@ const positive = value => Number.isFinite(value) && value > 0;
 const isTaskId = value => typeof value === 'string' && UUID.test(value);
 const title = value => text(value) || '未命名任务';
 
+function proQuotaDetails(value) {
+  if (!object(value) || value.planType !== 'pro') return {};
+  const credits = object(value.credits) ? value.credits : {};
+  const balance = typeof credits.balance === 'string' && credits.balance.length <= 128 &&
+    /^\d+(?:\.\d+)?$/.test(credits.balance) ? credits.balance : null;
+  return { planType: 'pro', credits: {
+    hasCredits: typeof credits.hasCredits === 'boolean' ? credits.hasCredits : null,
+    unlimited: typeof credits.unlimited === 'boolean' ? credits.unlimited : null,
+    balance
+  }, ...(typeof value.spendControlReached === 'boolean'
+    ? { spendControlReached: value.spendControlReached } : {}) };
+}
+
 function normalizeQuota(raw, now) {
   const windows = [];
   const groups = object(raw?.rateLimitsByLimitId) ? Object.entries(raw.rateLimitsByLimitId).slice(0, 32)
@@ -37,9 +50,12 @@ function normalizeQuota(raw, now) {
   }
   const resetCredits = raw?.rateLimitResetCredits;
   const availableCount = object(resetCredits) ? resetCredits.availableCount : null;
+  const codex = object(raw?.rateLimitsByLimitId) ? raw.rateLimitsByLimitId.codex
+    : object(raw?.rateLimits) && (!raw.rateLimits.limitId || raw.rateLimits.limitId === 'codex') ? raw.rateLimits : null;
   return {
     windows,
     updatedAt: now,
+    ...proQuotaDetails(codex),
     ...(Number.isSafeInteger(availableCount) && availableCount >= 0
       ? { resetCreditsAvailable: availableCount } : {})
   };
@@ -245,5 +261,5 @@ function applyTaskPatches(previous, patches) {
   return { task, needsSnapshot };
 }
 
-module.exports = { UNKNOWN, MAX_TASKS, isTaskId, isEligibleThread, normalizeQuota, normalizeThreadList,
+module.exports = { UNKNOWN, MAX_TASKS, isTaskId, isEligibleThread, normalizeQuota, proQuotaDetails, normalizeThreadList,
   normalizeTask, projectTask, taskFromProjection, applyTaskPatches };

@@ -15,7 +15,8 @@ function renderer() {
   });
   const nodes = Object.fromEntries(['quota-label', 'status', 'summary', 'items', 'overflow',
     'reset-time', 'reset-credits', 'compact-product', 'compact-period', 'secondary-quota',
-    'secondary-period', 'secondary-value', 'secondary-progress', 'secondary-reset'].map(id => [id, element()]));
+    'secondary-period', 'secondary-value', 'secondary-progress', 'secondary-reset',
+    'extra-credits', 'credits-balance', 'credits-unit'].map(id => [id, element()]));
   vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8'), {
     document: { documentElement: element(), getElementById: id => nodes[id], createElement: element },
     window: { addEventListener() {}, petQuotaLabel: { onModel(callback) { receive = callback; } } }
@@ -23,6 +24,39 @@ function renderer() {
   return { nodes, receive };
 }
 const item = (remaining, windowMinutes = 300) => ({ label: 'Codex', remaining, windowMinutes });
+
+test('Pro 点数按原字符串准确格式化，明确零与未知/无限/过期分开，Plus 不增加内容', () => {
+  const { nodes, receive } = renderer();
+  const show = (extraCredits, state = 'ready', remaining = 79) => receive({ state, size: 'compact',
+    expanded: true, items: [item(remaining, 10080)], resetCreditsAvailable: 2, extraCredits });
+  for (const [balance, expected] of [['62485.1547310000', '62,485.15'], ['0', '0.00'],
+    ['0.000001', '<0.01'], ['12345678901234567890.125', '12,345,678,901,234,567,890.13']]) {
+    show({ state: 'balance', balance });
+    assert.equal(nodes['credits-balance'].textContent, expected);
+    assert.equal(nodes['credits-unit'].textContent, '点');
+    assert.equal(nodes['credits-unit'].hidden, false);
+    assert.equal(nodes['compact-product'].textContent, 'CODEX PRO');
+    assert.equal(nodes['reset-credits'].textContent, '2 次重置机会');
+    assert.equal(nodes.summary.textContent, '周额度79%');
+  }
+  for (const [state, expected] of [['none', '暂无额外点数'], ['unlimited', '不限额'], ['unknown', '暂不可用']]) {
+    show({ state }); assert.equal(nodes['credits-balance'].textContent, expected);
+    assert.equal(nodes['credits-unit'].hidden, true);
+  }
+  show({ state: 'balance', balance: '62485.15', usageStatus: 'blocked' }, 'stale');
+  assert.equal(nodes['credits-balance'].textContent, '暂不可用');
+  assert.match(nodes['extra-credits'].title, /已过期/);
+  show({ state: 'balance', balance: '62485.15', usageStatus: 'blocked' });
+  assert.equal(nodes.summary.textContent, '周受限79%');
+  assert.equal(nodes.items.children[0].children.at(-1).textContent, '已达花费限制');
+  show({ state: 'balance', balance: '62485.15' }, 'ready', 0);
+  assert.equal(nodes.items.children[0].children.at(-1).textContent, '套餐额度已用尽');
+  show(undefined);
+  assert.equal(nodes['quota-label'].dataset.hasExtraCredits, 'false');
+  assert.equal(nodes['compact-product'].textContent, 'CODEX');
+  assert.equal(nodes['credits-balance'].textContent, '');
+  assert.equal(nodes.items.children[0].children.length, 4);
+});
 
 test('主副周期分别用文字说明低额度，正常额度不出现警告', () => {
   const { nodes, receive } = renderer();

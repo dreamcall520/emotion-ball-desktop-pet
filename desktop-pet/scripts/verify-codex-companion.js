@@ -82,7 +82,7 @@ function assertQuotaLabelWindow(controller, expectedWindow, petBounds, options =
   assert.equal(expectedWindow.isVisible(), true, '额度标签必须可见');
   const bounds = expectedWindow.getBounds();
   const expectedSize = options.expanded === true
-    ? { width: 196, height: options.itemCount > 1 ? 128 : 96 }
+    ? { width: 196, height: (options.itemCount > 1 ? 128 : 96) + (options.extraCredits === true ? 20 : 0) }
     : options.size === 'compact'
       ? { width: 128, height: 32 }
       : { width: 168, height: 58 };
@@ -218,6 +218,9 @@ async function restoreSmokeState({ original, getSettings, setEnabled, setQuotaPr
     ['恢复额度常驻开关', () => restorePreference('codexQuotaAlwaysVisible', original.settings.codexQuotaAlwaysVisible)],
     ['恢复额度卡片大小', () => restorePreference('codexQuotaLabelSize', original.settings.codexQuotaLabelSize)],
     ['恢复额度卡片外观', () => restorePreference('codexQuotaAppearance', original.settings.codexQuotaAppearance)],
+    ...(typeof original.settings.codexShowExtraCredits === 'boolean' ? [
+      ['恢复额外点数显示', () => restorePreference('codexShowExtraCredits', original.settings.codexShowExtraCredits)]
+    ] : []),
     ['恢复任务名称隐私开关', () => restorePreference('codexTaskNameInAlerts', original.settings.codexTaskNameInAlerts)],
     ['恢复 Codex 总开关', async () => {
       await setEnabled(original.settings.codexEnabled === true);
@@ -364,8 +367,8 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     remaining,
     resetsAt: options.resetsAt || resetAt + quotaSequence
   });
-  const emitQuota = windows => callbacks.onQuota({ windows, updatedAt: clock.now(),
-    resetCreditsAvailable: 1 });
+  const emitQuota = (windows, metadata = {}) => callbacks.onQuota({ windows, updatedAt: clock.now(),
+    resetCreditsAvailable: 1, ...metadata });
   const quota = remaining => emitQuota([quotaWindow(remaining, {
     id: 'codex:primary', resetsAt: resetAt, label: 'Codex'
   })]);
@@ -413,7 +416,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     const secondaryResetRange = secondaryReset ? document.createRange() : null;
     if (secondaryResetRange) secondaryResetRange.selectNodeContents(secondaryReset);
     const secondaryResetTextRect = secondaryResetRange?.getBoundingClientRect() || null;
-    const visibleSections = ['compact-header', 'items', 'quota-details', 'secondary-quota']
+    const visibleSections = ['compact-header', 'items', 'quota-details', 'secondary-quota', 'extra-credits']
       .map(id => document.getElementById(id)).filter(node => node && getComputedStyle(node).display !== 'none');
     return {
       state: root.dataset.state,
@@ -458,6 +461,13 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       },
       resetTime: document.getElementById('reset-time')?.textContent || '',
       resetCredits: document.getElementById('reset-credits')?.textContent || '',
+      extraCredits: {
+        enabled: root.dataset.hasExtraCredits,
+        display: getComputedStyle(document.getElementById('extra-credits')).display,
+        balance: document.getElementById('credits-balance')?.textContent || '',
+        unit: document.getElementById('credits-unit')?.textContent || '',
+        fits: document.getElementById('credits-balance').scrollWidth <= document.getElementById('credits-balance').clientWidth
+      },
       palette: {
         surface: getComputedStyle(root).getPropertyValue('--quota-surface').trim(),
         text: getComputedStyle(root).color,
@@ -909,9 +919,43 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     await captureColorSchemes(compactResult.win, {
       size: 'compact', expanded: true, prefix: 'quota-label-compact-expanded-single'
     });
-    emitQuota(quotaPeriods());
+    assert.equal(getSettings().codexShowExtraCredits, true, 'Pro 额外点数必须默认显示');
+    assert.equal(getMenu().getMenuItemById('codex-extra-credits').checked, true);
+    emitQuota([quotaWindow(79, { id: 'codex:pro-weekly', label: 'Codex', windowMinutes: 10080,
+      resetsAt: resetAt + 300000 })], { planType: 'pro', resetCreditsAvailable: 2,
+      credits: { hasCredits: true, unlimited: false, balance: '62485.1547310000' } });
+    const proResult = await waitForLabelView(view => view.expanded === 'true' && view.itemCount === '1' &&
+      view.extraCredits.enabled === 'true' && view.extraCredits.balance === '62,485.15', 'Pro 额外点数真实渲染');
+    assertQuotaLabelWindow(quotaLabel, proResult.win, pet.getBounds(),
+      { size: 'compact', expanded: true, extraCredits: true });
+    assert.equal(proResult.view.compactProduct, 'CODEX PRO');
+    assert.equal(proResult.view.extraCredits.unit, '点');
+    assert.equal(proResult.view.extraCredits.fits, true, '点数余额必须完整可见');
+    assert.equal(proResult.view.fits, true, 'Pro 点数行不得超出 196×116 原生卡片');
+    assert.equal(proResult.view.resetCredits, '2 次重置机会');
+    await captureColorSchemes(proResult.win, {
+      size: 'compact', expanded: true, extraCredits: true, prefix: 'quota-label-pro-credits'
+    });
+    assert.equal(setQuotaPreference('codexShowExtraCredits', false), true);
+    const proHidden = await waitForLabelView(view => view.extraCredits.enabled === 'false' &&
+      view.extraCredits.display === 'none', '关闭 Pro 额外点数');
+    assertQuotaLabelWindow(quotaLabel, proHidden.win, pet.getBounds(), { size: 'compact', expanded: true });
+    assert.equal(proHidden.win, proResult.win, '点数开关不能重建原生额度窗口');
+    assert.equal(getMenu().getMenuItemById('codex-extra-credits').checked, false);
+    assert.equal(setQuotaPreference('codexShowExtraCredits', true), true);
+    await waitForLabelView(view => view.extraCredits.enabled === 'true', '重新显示 Pro 额外点数');
+    emitQuota(quotaPeriods(), { planType: 'plus',
+      credits: { hasCredits: true, unlimited: false, balance: '12345.67' } });
     compactResult = await waitForLabelView(view => view.size === 'compact' &&
       view.expanded === 'true' && view.itemCount === '2', '恢复展开两项额度明细');
+    assert.equal(compactResult.view.extraCredits.enabled, 'false', 'Plus 不能增加 Pro 点数行');
+    assert.equal(compactResult.view.compactProduct, 'CODEX');
+    assert.deepEqual(compactResult.view.values.map(item => item.text), ['100%', '94%']);
+    assertQuotaLabelWindow(quotaLabel, compactResult.win, pet.getBounds(),
+      { size: 'compact', expanded: true, itemCount: 2 });
+    results.push({ proCredits: '62485.1547310000', proExpandedHeight: 116, hiddenHeight: 96,
+      plusExpandedHeight: 128, source: 'synthetic-quota-real-ui' });
+    process.stdout.write('PET_CODEX_PRO_CREDITS_OK\n');
 
     compactBounds = compactResult.win.getBounds();
     await input(compactResult.win, 'mousePressed', compactBounds.width / 2, compactBounds.height / 2);
