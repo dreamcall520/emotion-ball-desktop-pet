@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { normalizeModelSelection } = require('./chat-models');
+const { normalizeAppearance, normalizeCustomization } = require('./customization');
 
 const DEFAULTS = Object.freeze({
   size: 'tiny',
@@ -11,6 +12,8 @@ const DEFAULTS = Object.freeze({
   bubblesEnabled: true,
   colorMode: 'standard',
   chatModel: 'auto',
+  customization: normalizeCustomization(),
+  startupAppearance: normalizeCustomization().appearance,
   codexEnabled: false,
   codexTaskNameInAlerts: false,
   codexQuotaAlwaysVisible: false,
@@ -20,8 +23,9 @@ const DEFAULTS = Object.freeze({
 });
 
 function normalizeSettings(raw = {}) {
+  const customization = normalizeCustomization(raw.customization);
   return {
-    size: ['micro', 'tiny', 'small', 'medium', 'large'].includes(raw.size)
+    size: ['micro', 'tiny', 'compact', 'small', 'medium', 'large'].includes(raw.size)
       ? raw.size
       : DEFAULTS.size,
     x: Number.isFinite(raw.x) ? Math.round(raw.x) : DEFAULTS.x,
@@ -34,6 +38,9 @@ function normalizeSettings(raw = {}) {
       typeof raw.bubblesEnabled === 'boolean' ? raw.bubblesEnabled : DEFAULTS.bubblesEnabled,
     colorMode: ['standard', 'accessible'].includes(raw.colorMode) ? raw.colorMode : DEFAULTS.colorMode,
     chatModel: normalizeModelSelection(raw.chatModel),
+    customization,
+    startupAppearance: raw.startupAppearance && typeof raw.startupAppearance === 'object' && !Array.isArray(raw.startupAppearance)
+      ? normalizeAppearance(raw.startupAppearance) : customization.appearance,
     codexEnabled:
       typeof raw.codexEnabled === 'boolean' ? raw.codexEnabled : DEFAULTS.codexEnabled,
     codexTaskNameInAlerts:

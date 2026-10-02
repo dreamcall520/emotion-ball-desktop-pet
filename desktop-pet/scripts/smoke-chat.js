@@ -249,6 +249,15 @@ if (!process.versions.electron) {
       await capture('03-dark-conversation');
       mark('系统深色主题');
 
+      assert.equal(await js("(() => { const button = document.getElementById('new-chat'); return button.closest('.chat-header') !== null && !button.hidden && button.textContent.trim() === '新聊天' && document.getElementById('chat-history').textContent.trim() === '历史'; })()"), true);
+      await js("document.getElementById('message-input').value = '首页发起也保留草稿'; document.getElementById('new-chat').click()");
+      await waitFor("!document.getElementById('new-chat-confirmation').hidden", '首页新聊天确认');
+      assert.equal(await js('document.activeElement.id'), 'cancel-new-chat');
+      await js("document.getElementById('cancel-new-chat').click()");
+      assert.equal(await js("document.getElementById('history-view').hidden && document.getElementById('message-input').value === '首页发起也保留草稿'"), true);
+      assert.equal(calls.newChat, 0);
+      mark('顶栏新聊天与历史图标，首页发起新聊天取消后保留草稿');
+
       for (const [mode, appearance] of [['standard', 'light'], ['standard', 'dark'], ['accessible', 'light'], ['accessible', 'dark']]) {
         nativeTheme.themeSource = appearance;
         chat.getWindow().webContents.send('pet:color-mode', mode, appearance);
@@ -320,7 +329,7 @@ if (!process.versions.electron) {
       mark('错误保留聊天与显式编辑重试，不自动重发');
 
       const beforeId = chat.getWindow().webContents.id;
-      await js("document.getElementById('message-input').value = '下次回来继续这句话'; document.getElementById('close-chat').click()");
+      await js("document.getElementById('message-input').value = '下次回来继续这句话'; document.getElementById('chat-history').focus(); document.getElementById('close-chat').click()");
       await delay(100);
       assert.equal(chat.isVisible(), false);
       focusWindow = new BrowserWindow({ width: 240, height: 100, show: false, webPreferences: { nodeIntegration: false, sandbox: true, contextIsolation: true } });
@@ -341,6 +350,9 @@ if (!process.versions.electron) {
       for (let index = 0; index < 40 && !chat.getWindow().isFocused(); index += 1) await delay(50);
       assert.equal(chat.getWindow().webContents.id, beforeId);
       assert.equal(await js("document.getElementById('message-input').value"), '下次回来继续这句话');
+      assert.equal(await js('document.activeElement.id'), 'message-input');
+      assert.equal(await js("document.getElementById('chat-history').matches(':focus-visible')"), false);
+      await capture('05-reopened-no-header-focus');
       assert.equal(BrowserWindow.getFocusedWindow(), chat.getWindow());
       for (let index = 0; index < 40 && visibility.length < 3; index += 1) await delay(50);
       assert.deepEqual(visibility, [true, false, true]);
@@ -402,7 +414,7 @@ if (!process.versions.electron) {
       assert.equal(calls.newChat, 1);
       assert.equal(calls.send, 1);
       assert.equal(await js("document.getElementById('message-input').value"), '');
-      mark('新聊天在列表底部，二次确认默认取消，确认才清空面板，不自动发送消息');
+      mark('顶栏新聊天二次确认默认取消，确认才清空面板，不自动发送消息');
       await js("document.getElementById('chat-history').click()");
       await waitFor("document.getElementById('new-chat').disabled", '空聊天不可重复新建');
       await js("document.getElementById('new-chat').click(); document.getElementById('confirm-new-chat').click()");

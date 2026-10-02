@@ -35,6 +35,7 @@ function fixture(load = () => Promise.resolve(), options = {}) {
     getBounds() { return { ...this.bounds }; }
   };
   let obstacle = null;
+  let presentation = options.presentation || null;
   const maybeThrow = (name, target) => {
     if (typeof options.onCall === 'function') options.onCall(name, windows.length, target);
     if (typeof options.fail === 'function' && options.fail(name, windows.length, target)) {
@@ -93,6 +94,7 @@ function fixture(load = () => Promise.resolve(), options = {}) {
     getObstacle: () => obstacle,
     getSize: () => options.labelSize || 'standard',
     getAppearance: () => options.appearance || 'system',
+    getPresentation: () => presentation,
     onError: error => {
       errors.push(error);
       if (typeof options.onError === 'function') options.onError(error);
@@ -102,7 +104,8 @@ function fixture(load = () => Promise.resolve(), options = {}) {
     label, windows, errors, matching,
     get pet() { return pet; },
     set pet(value) { pet = value; },
-    set obstacle(value) { obstacle = value; }
+    set obstacle(value) { obstacle = value; },
+    set presentation(value) { presentation = value; }
   };
 }
 
@@ -162,6 +165,22 @@ test('小巧档创建可点击的 128×32 横条，点击展开和收起时复�
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
   assert.deepEqual(win.bounds, { x: 276, y: 388, width: 128, height: 32 });
   assert.equal(win.sent.at(-1)[1].expanded, false);
+});
+
+test('半露幻彩云切换屏边时重排额度标签，与可见云瓣相邻', async t => {
+  const f = fixture(() => Promise.resolve(), { labelSize: 'compact',
+    presentation: { shape: 'aurora-cloud', mode: 'peeked', side: 'right' } });
+  t.after(() => f.label.destroy());
+  f.pet.bounds = { x: 1360, y: 300, width: 80, height: 80 };
+  f.label.show(readyModel());
+  await flush();
+  const win = f.windows[0];
+  assert.deepEqual(win.bounds, { x: 1252, y: 321, width: 128, height: 32 });
+
+  f.pet.bounds = { x: 0, y: 300, width: 80, height: 80 };
+  f.presentation = { shape: 'aurora-cloud', mode: 'peeked', side: 'left' };
+  f.label.reposition();
+  assert.deepEqual(win.bounds, { x: 60, y: 321, width: 128, height: 32 });
 });
 
 test('双周期小巧档点击后展开为 196×128，收起仍回到 128×32', async t => {

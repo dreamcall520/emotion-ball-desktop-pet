@@ -1,6 +1,8 @@
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const { petVisualBounds } = require('./pet-visual-bounds');
 
-function bubbleBounds(petBounds, workArea, interactive = false, preferredHeight = null) {
+function bubbleBounds(petBounds, workArea, interactive = false, preferredHeight = null, shape = 'blob') {
+  petBounds = petVisualBounds(petBounds, shape);
   const areaWidth = Math.max(1, Math.floor(workArea.width));
   const areaHeight = Math.max(1, Math.floor(workArea.height));
   const paddingX = Math.min(8, Math.floor((areaWidth - 1) / 2));

@@ -75,7 +75,7 @@ test('真实启动流程必须调用并要求 Codex 模拟验收完成标记', (
   assert.match(smoke, /CODEX_SIMULATED/);
   assert.match(smoke, /CODEX_SIZE_/);
   for (const marker of [
-    'CODEX_QUOTA_SIZE_60', 'CODEX_QUOTA_SIZE_80', 'CODEX_QUOTA_SIZE_120', 'CODEX_QUOTA_SIZE_180',
+    'CODEX_QUOTA_SIZE_60', 'CODEX_QUOTA_SIZE_80', 'CODEX_QUOTA_SIZE_108', 'CODEX_QUOTA_SIZE_120', 'CODEX_QUOTA_SIZE_180',
     'CODEX_QUOTA_SIZE_260', 'CODEX_QUOTA_POLICY', 'CODEX_QUOTA_LABEL'
   ]) assert.match(smoke, new RegExp(marker));
 });
@@ -406,6 +406,7 @@ test('原生助手验收任务菜单与名称开关且不具备真实任务写�
   assert.match(source, /getMenuItemById\('codex-recent'\)/);
   assert.match(source, /getMenuItemById\('codex-task-names'\)/);
   assert.match(source, /PET_CODEX_QUOTA_SIZE_80_OK/);
+  assert.match(source, /PET_CODEX_QUOTA_SIZE_108_OK/);
   assert.match(source, /PET_CODEX_QUOTA_SIZE_60_OK/);
   assert.match(source, /PET_CODEX_QUOTA_SIZE_120_OK/);
   assert.match(source, /PET_CODEX_QUOTA_SIZE_180_OK/);

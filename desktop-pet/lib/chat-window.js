@@ -21,13 +21,31 @@ function chatBounds(petBounds, workArea) {
   };
 }
 
-function createChatWindow({ BrowserWindow, screen, getPetWindow, onError = () => {}, onVisibilityChange = () => {}, alwaysOnTop = true }) {
+function createChatWindow({ BrowserWindow, screen, getPetWindow, getAppearance = () => null,
+  getAvatarImage = async () => null,
+  onError = () => {}, onVisibilityChange = () => {}, onMoveEnd = () => {},
+  onFollowStart = () => {}, alwaysOnTop = true }) {
   let win = null;
   let ready = false;
   let wantedVisible = false;
   let current = null;
   let topmost = alwaysOnTop;
   let lastVisible = false;
+  let appearanceKey = '';
+  let positioned = null;
+  let movedPet = null;
+  let nativeMoving = false;
+  let settleTimer = null;
+
+  function cancelSettle() {
+    if (settleTimer !== null) clearTimeout(settleTimer);
+    settleTimer = null;
+  }
+
+  function scheduleSettle() {
+    cancelSettle();
+    settleTimer = setTimeout(() => { settleTimer = null; settleChatMove(); }, 200);
+  }
 
   function visibilityChanged(visible) {
     if (visible === lastVisible) return;
@@ -40,11 +58,86 @@ function createChatWindow({ BrowserWindow, screen, getPetWindow, onError = () =>
     const pet = getPetWindow();
     if (!pet || pet.isDestroyed()) return;
     const petBounds = pet.getBounds();
-    win.setBounds(chatBounds(petBounds, screen.getDisplayMatching(petBounds).workArea), false);
+    const current = win.getBounds();
+    const area = screen.getDisplayMatching(current).workArea;
+    if (movedPet && petBounds.x === movedPet.x && petBounds.y === movedPet.y &&
+      (nativeMoving || (current.x >= area.x && current.y >= area.y &&
+      current.x + current.width <= area.x + area.width &&
+      current.y + current.height <= area.y + area.height))) return;
+    cancelSettle();
+    nativeMoving = false;
+    movedPet = null;
+    positioned = chatBounds(petBounds, screen.getDisplayMatching(petBounds).workArea);
+    win.setBounds(positioned, false);
+  }
+
+  function followChatMove(nextBounds) {
+    if (!win || win.isDestroyed() || !win.isVisible() || !positioned) return;
+    const bounds = nextBounds || win.getBounds();
+    const dx = bounds.x - positioned.x;
+    const dy = bounds.y - positioned.y;
+    if (!dx && !dy) return;
+    if (!nativeMoving) onFollowStart();
+    nativeMoving = true;
+    positioned = bounds;
+    const pet = getPetWindow();
+    if (!pet || pet.isDestroyed()) return;
+    const petBounds = pet.getBounds();
+    movedPet = { x: petBounds.x + dx, y: petBounds.y + dy };
+    pet.setPosition(movedPet.x, movedPet.y, false);
+    scheduleSettle();
+  }
+
+  function settleChatMove() {
+    const moved = nativeMoving;
+    nativeMoving = false;
+    if (!win || win.isDestroyed() || !win.isVisible()) return;
+    const pet = getPetWindow();
+    if (!pet || pet.isDestroyed()) return;
+    const bounds = win.getBounds();
+    const petBounds = pet.getBounds();
+    const area = screen.getDisplayMatching(bounds).workArea;
+    const fit = (value, size, petValue, petSize, start, length) => {
+      const padding = Math.min(12, Math.floor((length - 1) / 2));
+      const left = Math.min(value, petValue) - value;
+      const right = Math.max(value + size, petValue + petSize) - value;
+      const min = start + padding - left;
+      const max = start + length - padding - right;
+      return min <= max ? clamp(value, min, max)
+        : clamp(value, start + padding, start + length - padding - size);
+    };
+    const x = Math.round(fit(bounds.x, bounds.width, petBounds.x, petBounds.width,
+      area.x, area.width));
+    const y = Math.round(fit(bounds.y, bounds.height, petBounds.y, petBounds.height,
+      area.y, area.height));
+    const dx = x - bounds.x;
+    const dy = y - bounds.y;
+    if (!dx && !dy) { if (moved) onMoveEnd(); return; }
+    positioned = { ...bounds, x, y };
+    movedPet = { x: petBounds.x + dx, y: petBounds.y + dy };
+    win.setPosition(x, y, false);
+    pet.setPosition(movedPet.x, movedPet.y, false);
+    if (moved) onMoveEnd();
   }
 
   function deliver() {
     if (ready && current && win && !win.isDestroyed()) win.webContents.send('pet:chat-state', current);
+  }
+
+  function syncAppearance() {
+    const appearance = getAppearance();
+    const key = JSON.stringify(appearance || null);
+    if (!ready || !win || win.isDestroyed() || key === appearanceKey) return;
+    win.webContents.send('pet:chat-appearance', appearance);
+    appearanceKey = key;
+    if (appearance?.shape === 'aurora-cloud') {
+      const target = win;
+      void Promise.resolve().then(() => getAvatarImage(appearance)).then(image => {
+        if (image && win === target && !target.isDestroyed() && appearanceKey === key) {
+          target.webContents.send('pet:chat-appearance', appearance, image);
+        }
+      }).catch(onError);
+    }
   }
 
   function present() {
@@ -56,12 +149,20 @@ function createChatWindow({ BrowserWindow, screen, getPetWindow, onError = () =>
 
   function hide() {
     wantedVisible = false;
+    cancelSettle();
+    nativeMoving = false;
+    movedPet = null;
     if (win && !win.isDestroyed()) win.hide();
   }
 
   function destroy() {
     wantedVisible = false;
+    cancelSettle();
     ready = false;
+    appearanceKey = '';
+    positioned = null;
+    movedPet = null;
+    nativeMoving = false;
     const previous = win;
     win = null;
     visibilityChanged(false);
@@ -71,6 +172,10 @@ function createChatWindow({ BrowserWindow, screen, getPetWindow, onError = () =>
   function ensureWindow() {
     if (win && !win.isDestroyed()) return;
     ready = false;
+    appearanceKey = '';
+    positioned = null;
+    movedPet = null;
+    nativeMoving = false;
     win = new BrowserWindow({
       width: 360, height: 480,
       title: '和球球聊聊',
@@ -98,6 +203,8 @@ function createChatWindow({ BrowserWindow, screen, getPetWindow, onError = () =>
     });
     win.on('show', () => { if (win === loadingWindow) visibilityChanged(true); });
     win.on('hide', () => { if (win === loadingWindow) visibilityChanged(false); });
+    win.on('will-move', (_event, bounds) => { if (win === loadingWindow) followChatMove(bounds); });
+    win.on('move', () => { if (win === loadingWindow) followChatMove(); });
     win.on('close', event => {
       if (win !== loadingWindow) return;
       event.preventDefault();
@@ -106,7 +213,12 @@ function createChatWindow({ BrowserWindow, screen, getPetWindow, onError = () =>
     win.on('closed', () => {
       if (win !== loadingWindow) return;
       win = null;
+      cancelSettle();
       ready = false;
+      appearanceKey = '';
+      positioned = null;
+      movedPet = null;
+      nativeMoving = false;
       wantedVisible = false;
       visibilityChanged(false);
     });
@@ -114,6 +226,7 @@ function createChatWindow({ BrowserWindow, screen, getPetWindow, onError = () =>
       if (win !== loadingWindow || loadingWindow.isDestroyed()) return;
       ready = true;
       deliver();
+      syncAppearance();
       present();
     }).catch(error => {
       if (win !== loadingWindow) return;
@@ -128,16 +241,25 @@ function createChatWindow({ BrowserWindow, screen, getPetWindow, onError = () =>
       wantedVisible = true;
       ensureWindow();
       deliver();
+      syncAppearance();
       present();
     },
     update(snapshot) {
       current = snapshot;
       deliver();
+      syncAppearance();
     },
+    syncAppearance,
     hide,
     destroy,
     reposition,
     isVisible: () => Boolean(win && !win.isDestroyed() && win.isVisible()),
+    isFollowingChat() {
+      const pet = getPetWindow();
+      if (!nativeMoving || !movedPet || !pet || pet.isDestroyed()) return false;
+      const { x, y } = pet.getBounds();
+      return x === movedPet.x && y === movedPet.y;
+    },
     getWindow: () => win,
     setAlwaysOnTop(enabled) {
       topmost = enabled;

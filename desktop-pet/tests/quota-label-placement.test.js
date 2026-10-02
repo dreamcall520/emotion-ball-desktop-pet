@@ -102,6 +102,49 @@ test('60/80/120/180/260 五档球球均保持 168×58 标准标签和八像素�
   }
 });
 
+test('幻彩云半露时额度跟随可见云瓣，左右屏边与各尺寸都保持八像素间距', () => {
+  for (const size of [60, 80, 120, 180, 260]) {
+    for (const [side, pet] of [
+      ['left', { x: AREA.x, y: 300, width: size, height: size }],
+      ['right', { x: AREA.x + AREA.width - size, y: 300, width: size, height: size }]
+    ]) {
+      const result = quotaLabelBounds(pet, AREA, null, 'compact', false, 1,
+        { shape: 'aurora-cloud', mode: 'peeked', side });
+      const visibleEdge = side === 'left' ? pet.x + size * 0.65 : pet.x + size * 0.35;
+      assert.equal(result.placement, side === 'left' ? 'right' : 'left');
+      assert.ok(Math.abs((side === 'left' ? result.x - visibleEdge : visibleEdge - result.x - result.width) - 8) <= 0.5,
+        `${side} ${size}px 的间距应为 8px`);
+      assertInside(result, AREA);
+    }
+  }
+});
+
+test('只有幻彩云半露状态改变额度横向锚点，自由状态只校准垂直轮廓', () => {
+  const pet = { x: 1360, y: 300, width: 80, height: 80 };
+  const original = quotaLabelBounds(pet, AREA, null, 'compact');
+  for (const presentation of [
+    { shape: 'cloud', mode: 'peeked', side: 'right' },
+    { shape: 'aurora-cloud', mode: 'free', side: 'right' },
+    { shape: 'aurora-cloud', mode: 'tucked', side: 'right' },
+    { shape: 'aurora-cloud', mode: 'peeked', side: null }
+  ]) {
+    const result = quotaLabelBounds(pet, AREA, null, 'compact', false, 1, presentation);
+    assert.equal(result.placement, original.placement);
+    assert.equal(result.x, original.x);
+  }
+});
+
+test('非经典外观的额度标签贴近实际可见底部，保留经典外观的视觉间距', () => {
+  const pet = { x: 600, y: 400, width: 180, height: 180 };
+  const classic = quotaLabelBounds(pet, AREA, null, 'compact');
+  const classicGap = classic.y - (pet.y + pet.height * (1 - .06));
+  for (const [shape, visibleBottom] of [['cloud', .17], ['aurora-cloud', .17], ['square', .11]]) {
+    const quota = quotaLabelBounds(pet, AREA, null, 'compact', false, 1, { shape, mode: 'free' });
+    const gap = quota.y - (pet.y + pet.height * (1 - visibleBottom));
+    assert.ok(Math.abs(gap - classicGap) <= 1, `${shape} 的额度标签与可见轮廓间距应接近经典`);
+  }
+});
+
 test('候选位置必须完整在屏内且不与气泡相交', () => {
   const pet = { x: 600, y: 400, width: 80, height: 80 };
   const below = { x: 556, y: 488, width: 168, height: 58 };

@@ -30,6 +30,13 @@
     Object.freeze({ id: 'spin', durationMs: 1600, weight: 1, emotion: '10' })
   ]);
 
+  // These two gestures belong to the aurora-cloud click sequence. Keeping them
+  // outside MOTIONS preserves the existing six-action double-click shuffle.
+  var CLICK_MOTIONS = Object.freeze([
+    Object.freeze({ id: 'dizzy', durationMs: 1550, emotion: '50' }),
+    Object.freeze({ id: 'turn', durationMs: 1300, emotion: '50' })
+  ]);
+
   var FRAMES = {
     hop: [
       [0, {}],
@@ -86,12 +93,24 @@
       [200, { scaleX: 1.03, scaleY: 0.92, y: 5 }],
       [1320, { yaw: TAU }],
       [1600, { yaw: TAU }]
-    ]
+    ],
+    dizzy: [
+      [0, { yaw: 0.12 }],
+      [160, { yaw: 0.12, rotate: -7, scaleX: 1.06, scaleY: 0.94, x: -8, y: 4 }],
+      [350, { yaw: 0.12, rotate: 6.5, scaleX: 0.95, scaleY: 1.06, x: 7, y: -4 }],
+      [580, { yaw: 0.12, rotate: -6, scaleX: 1.05, scaleY: 0.95, x: -6, y: 3 }],
+      [810, { yaw: 0.12, rotate: 5, scaleX: 0.96, scaleY: 1.05, x: 5, y: -3 }],
+      [1060, { yaw: 0.12, rotate: -3.8, scaleX: 1.03, scaleY: 0.97, x: -3 }],
+      [1340, { yaw: 0.12, rotate: 1.8, scaleX: 0.99, scaleY: 1.01 }],
+      [1550, { yaw: 0.12 }]
+    ],
+    turn: [[0, { yaw: 0.12 }]]
   };
 
   function getMotion(id) {
-    for (var i = 0; i < MOTIONS.length; i += 1) {
-      if (MOTIONS[i].id === id) return MOTIONS[i];
+    var all = MOTIONS.concat(CLICK_MOTIONS);
+    for (var i = 0; i < all.length; i += 1) {
+      if (all[i].id === id) return all[i];
     }
     return null;
   }
@@ -192,16 +211,41 @@
   function sampleMotion(id, elapsedMs) {
     var motion = getMotion(id);
     if (!motion) return null;
+    var clickMotion = id === 'dizzy' || id === 'turn';
     if (typeof elapsedMs !== 'number' || !Number.isFinite(elapsedMs) || elapsedMs <= 0) {
-      return neutralSample(false);
+      if (!clickMotion) return neutralSample(false);
+      var initial = frameValues(FRAMES[id][0]);
+      initial.done = false;
+      initial.progress = 0;
+      initial.suppressRibbons = true;
+      return initial;
     }
-    if (elapsedMs >= motion.durationMs) return neutralSample(true);
+    if (elapsedMs >= motion.durationMs) {
+      var finished = neutralSample(true);
+      if (clickMotion) finished.progress = 1;
+      return finished;
+    }
+
+    if (id === 'turn') {
+      var progress = elapsedMs / motion.durationMs;
+      var yaw = 0.12 + (TAU - 0.12) * smoothstep(progress);
+      var profile = Math.abs(Math.cos(yaw));
+      return {
+        body: bodyAtFrame({ yaw: yaw, scaleX: 0.24 + 0.76 * profile }),
+        window: { x: 0, y: 0 }, gaze: { x: 0, y: 0 },
+        done: false, progress: progress, suppressRibbons: true
+      };
+    }
 
     var frames = FRAMES[id];
     for (var i = 1; i < frames.length; i += 1) {
       if (elapsedMs <= frames[i][0]) {
         var result = interpolate(frames[i - 1], frames[i], elapsedMs);
         result.done = false;
+        if (clickMotion) {
+          result.progress = elapsedMs / motion.durationMs;
+          result.suppressRibbons = true;
+        }
         return result;
       }
     }
@@ -232,6 +276,7 @@
 
   return {
     MOTIONS: MOTIONS,
+    CLICK_MOTIONS: CLICK_MOTIONS,
     getMotion: getMotion,
     chooseMotion: chooseMotion,
     sampleMotion: sampleMotion,

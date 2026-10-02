@@ -11,7 +11,8 @@ const { setImmediate: flush } = require('node:timers/promises');
 async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   codexQuotaAlwaysVisible = false, codexQuotaPeriod = 'auto', codexQuotaLabelSize = 'standard',
   codexQuotaAppearance = 'system', bubblesEnabled = true, colorMode = 'standard',
-  consent = async () => ({ response: 1 }), openExternal = async () => {}, saveError = null } = {}) {
+  consent = async () => ({ response: 1 }), openExternal = async () => {}, saveError = null,
+  loadedSettings = null, argv = [] } = {}) {
   let now = 0;
   let serial = 0;
   const timers = new Map();
@@ -90,6 +91,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     start() { this.starts++; }, stop() { this.stops++; }, pause() { this.pauses++; }, resume() { this.resumes++; } };
   let chatNativeWindow = null;
   const chatWindow = { options: null, creations: 0, shows: [], updates: [], hides: 0, destroys: 0, moves: 0,
+    syncAppearance() {},
     show(state) {
       if (!chatNativeWindow || chatNativeWindow.destroyed) {
         chatNativeWindow = Object.assign(createNativeBubbleWindow(), { webContents: new EventEmitter() });
@@ -120,7 +122,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   };
   const realRequire = createRequire(path.resolve(__dirname, '../main.js'));
   const context = vm.createContext({ __dirname: path.resolve(__dirname, '..'), console,
-    process: { env: {}, stderr: { write(message) { throw new Error(message); } } }, performance: { now: () => now },
+    process: { env: {}, argv, stderr: { write(message) { throw new Error(message); } } }, performance: { now: () => now },
     Date: class extends Date { static now() { return 1800000000000 + now; } },
     setTimeout(callback, delay) { timers.set(++serial, { callback, at: now + delay }); return serial; },
     clearTimeout(id) { timers.delete(id); },
@@ -129,9 +131,11 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
         dialog: { showMessageBox: (...args) => { dialogs.push(args); return consent(...args); } },
         shell: { openExternal: url => { external.push(url); return openExternal(url); } },
         Menu: { buildFromTemplate: value => Object.assign(value, { popup: options => popups.push({ value, options }) }) }, nativeImage: { createFromPath: () => ({ setTemplateImage() {} }) } };
-      if (name === './lib/settings') return { loadSettings: () => ({ size: 'tiny', x: -600, y: 100,
+      if (name === './lib/settings') return { ...realRequire(name), loadSettings: () => loadedSettings ? structuredClone(loadedSettings) : ({ size: 'tiny', x: -600, y: 100,
         bubblesEnabled, colorMode, keepAwake: false, alwaysOnTop: true, codexEnabled, codexTaskNameInAlerts,
-        codexQuotaAlwaysVisible, codexQuotaPeriod, codexQuotaLabelSize, codexQuotaAppearance }),
+        codexQuotaAlwaysVisible, codexQuotaPeriod, codexQuotaLabelSize, codexQuotaAppearance,
+        customization: realRequire('./lib/customization').normalizeCustomization(),
+        startupAppearance: realRequire('./lib/customization').normalizeCustomization().appearance }),
         saveSettings: (_file, settings) => { if (saveError) throw saveError; saved.push({ ...settings }); return settings; } };
       if (name === './lib/codex-companion') return { createCodexCompanion: options => {
         const controller = realRequire(name).createCodexCompanion({ ...options, random: () => 0, createConnection(callbacks) {
@@ -243,6 +247,35 @@ function menuItem(fixtureValue, id) {
   return findMenuItem(fixtureValue.call('menuTemplate()'), id);
 }
 
+test('右键菜单保留聊天和定制直达，互动、贴边、常规设置各归一层', async () => {
+  const f = await fixture();
+  const menu = f.call('menuTemplate()');
+  const top = menu.filter(item => item.type !== 'separator');
+  assert.deepEqual(Array.from(top, item => item.label), [
+    '和球球聊聊', '定制球球', '随机表情', '状态与互动', 'Codex 联动',
+    '贴边与显示', '尺寸', '界面配色', '常规设置', '退出球球'
+  ]);
+  const group = label => top.find(item => item.label === label).submenu.filter(item => item.type !== 'separator');
+  assert.deepEqual(Array.from(group('状态与互动'), item => item.label),
+    ['立即睡眠', '立即唤醒', '保持清醒', '互动气泡']);
+  assert.deepEqual(Array.from(group('贴边与显示'), item => item.id),
+    ['edge-left', 'edge-right', 'edge-leave', 'edge-visibility']);
+  assert.deepEqual(Array.from(group('常规设置'), item => item.label),
+    ['始终置顶', '开机自动启动（打包后可用）', '恢复默认位置']);
+  assert.equal(top.find(item => item.label === '尺寸').submenu.length, 6);
+  assert.equal(top.find(item => item.label === '界面配色').id, 'color-mode');
+});
+
+test('临时换装保留启动外观，重启后恢复用户指定外观', async () => {
+  const f = await fixture();
+  assert.equal(f.call("saveCustomization({ appearance: { shape: 'cloud' } }, true)"), true);
+  assert.equal(f.call("saveCustomization({ appearance: { shape: 'square' } }, false)"), true);
+  assert.equal(f.call('settings.customization.appearance.shape'), 'square');
+  assert.equal(f.call('settings.startupAppearance.shape'), 'cloud');
+  const reopened = await fixture({ loadedSettings: f.saved.at(-1) });
+  assert.equal(reopened.call('settings.customization.appearance.shape'), 'cloud');
+});
+
 test('聊天菜单复用同一个面板和控制器，打开关闭不会发送或新建聊天', async () => {
   const f = await fixture();
   assert.equal(f.chatWindow.getWindow(), null);
@@ -266,6 +299,15 @@ test('聊天菜单复用同一个面板和控制器，打开关闭不会发送�
   assert.equal(f.chatWindow.getWindow(), firstWindow);
   assert.equal(f.chatWindow.creations, 1);
   assert.equal(f.chat.connects, 3);
+});
+
+test('从贴边半藏状态打开聊天时恢复完整球球，再显示聊天窗', async () => {
+  const f = await fixture();
+  f.call("edgeTuck.dock('right')");
+  assert.equal(f.call('edgeTuck.getPresentation().mode'), 'tucked');
+  menuItem(f, 'chat-open').click();
+  assert.equal(f.call('edgeTuck.getPresentation().mode'), 'free');
+  assert.equal(f.chatWindow.isVisible(), true);
 });
 
 test('聊天 IPC 只接受当前聊天窗口；球球和其他窗口无法读记录、发送或停止', async () => {

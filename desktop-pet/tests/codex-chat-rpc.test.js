@@ -55,13 +55,30 @@ async function connected(h, resume = false) {
   return resume ? h.rpc.resumeThread(ID) : h.rpc.startThread();
 }
 
-test('构造无探测，固定四个安装位置，不搜索PATH或运行shell', async () => {
+test('构造无探测，固定正式 App 的两种 Codex 路径，不搜索PATH或运行shell', async () => {
   const h = setup({ installed: false });
   assert.equal(h.probes.length, 0); assert.equal(h.launches.length, 0);
   await assert.rejects(h.rpc.start(), { code: 'MISSING' });
   assert.deepEqual(h.probes, ['/Applications/Codex.app/Contents/Resources/codex', '/Applications/ChatGPT.app/Contents/Resources/codex',
-    '/private/test-user/Applications/Codex.app/Contents/Resources/codex', '/private/test-user/Applications/ChatGPT.app/Contents/Resources/codex']);
+    '/private/test-user/Applications/Codex.app/Contents/Resources/codex', '/private/test-user/Applications/ChatGPT.app/Contents/Resources/codex',
+    '/Applications/Codex.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex',
+    '/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex',
+    '/private/test-user/Applications/Codex.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex',
+    '/private/test-user/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex']);
   assert.equal(h.launches.length, 0);
+});
+
+test('聊天可连接新版 ChatGPT App 内置 CodexCLI', async t => {
+  const binary = '/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex';
+  const h = setup({ fakeFs: { promises: {
+    lstat: async file => {
+      if (file !== binary) throw new Error('missing');
+      return { isFile: () => true, isSymbolicLink: () => false };
+    }, access: async () => {}
+  } } });
+  t.after(() => h.rpc.close());
+  await h.rpc.start();
+  assert.equal(h.launches[0][0], binary);
 });
 
 test('start幂等，启动仅握手和只读config，关闭工具开关不改用户全局配置', async t => {

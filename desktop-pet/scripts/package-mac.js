@@ -15,8 +15,7 @@ function copyFile(root, staging, relativePath) {
   fs.copyFileSync(source, destination);
 }
 
-function prepareStaging(root) {
-  const staging = path.join(root, 'desktop-pet/build/staging');
+function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/staging')) {
   const rootPackage = JSON.parse(
     fs.readFileSync(path.join(root, 'package.json'), 'utf8')
   );
@@ -31,7 +30,14 @@ function prepareStaging(root) {
     'desktop-pet/preload.js',
     'desktop-pet/index.html',
     'desktop-pet/pet.css',
+    'desktop-pet/aurora-click-visual.css',
+    'desktop-pet/aurora-rive.css',
     'desktop-pet/renderer.js',
+    'desktop-pet/customize.html',
+    'desktop-pet/customize.css',
+    'desktop-pet/customize-preload.js',
+    'desktop-pet/customize-renderer.js',
+    'desktop-pet/lib/customization.js',
     'desktop-pet/bubble.html',
     'desktop-pet/bubble.css',
     'desktop-pet/bubble-preload.js',
@@ -40,6 +46,7 @@ function prepareStaging(root) {
     'desktop-pet/chat.css',
     'desktop-pet/chat-preload.js',
     'desktop-pet/chat-renderer.js',
+    'desktop-pet/lib/chat-avatar.js',
     'desktop-pet/lib/chat-window.js',
     'desktop-pet/lib/chat-store.js',
     'desktop-pet/lib/chat-companion.js',
@@ -47,9 +54,16 @@ function prepareStaging(root) {
     'desktop-pet/lib/codex-chat-rpc.js',
     'desktop-pet/assets/tray-iconTemplate.png',
     'desktop-pet/assets/tray-iconTemplate@2x.png',
+    'desktop-pet/assets/aurora-six-lobe-body.png',
+    'desktop-pet/assets/aurora-six-lobe-icon.png',
     'desktop-pet/lib/settings.js',
     'desktop-pet/lib/window-bounce.js',
     'desktop-pet/lib/interaction-motion.js',
+    'desktop-pet/lib/aurora-click-visual.js',
+    'desktop-pet/lib/rive.js',
+    'desktop-pet/lib/RIVE-LICENSE.txt',
+    'desktop-pet/lib/boo-binary.js',
+    'desktop-pet/lib/aurora-rive.js',
     'desktop-pet/lib/companion-motion.js',
     'desktop-pet/lib/pet-facing.js',
     'desktop-pet/lib/thought-window.js',
@@ -84,6 +98,7 @@ function prepareStaging(root) {
     'desktop-pet/lib/codex-text.js',
     'desktop-pet/lib/dialogue.js',
     'desktop-pet/lib/bubble-placement.js',
+    'desktop-pet/lib/pet-visual-bounds.js',
     'desktop-pet/lib/bubble-window.js',
     'desktop-pet/lib/quota-label-placement.js',
     'desktop-pet/lib/quota-label-window.js',
@@ -95,7 +110,9 @@ function prepareStaging(root) {
     'desktop-pet/scripts/verify-body-motion.js',
     'desktop-pet/scripts/verify-codex-companion.js',
     'desktop-pet/scripts/verify-chat-integration.js',
+    'desktop-pet/scripts/verify-aurora-six-lobe.js',
     'emotion-ball/js/rings.js',
+    'emotion-ball/js/custom-shapes.js',
     'emotion-ball/js/emotions.js',
     'emotion-ball/js/ball.js',
     'emotion-ball/js/engine.js',
@@ -175,13 +192,14 @@ function adhocSign(appPath) {
   runTool('codesign', ['--verify', '--deep', '--strict', appPath]);
 }
 
-async function packageMac(root = path.resolve(__dirname, '../..')) {
+async function packageMac(root = path.resolve(__dirname, '../..'), { website = false } = {}) {
   const icon = makeIcon(root);
-  prepareStaging(root);
+  const staging = prepareStaging(root, website ? path.join(root, 'desktop-pet/build/website-staging') : undefined);
   const electronZipDir = findElectronZipDir();
-  const paths = await packager(
-    buildPackagerOptions(root, icon, electronZipDir)
-  );
+  const options = buildPackagerOptions(root, icon, electronZipDir);
+  options.dir = staging;
+  if (website) options.out = path.join(root, 'dist/website');
+  const paths = await packager(options);
   if (!paths.length) throw new Error('未生成 macOS 应用');
   const appPath = path.join(paths[0], '球球桌宠.app');
   if (!fs.existsSync(appPath)) throw new Error(`找不到打包后的应用: ${appPath}`);
@@ -191,7 +209,7 @@ async function packageMac(root = path.resolve(__dirname, '../..')) {
 }
 
 if (require.main === module) {
-  packageMac().catch(error => {
+  packageMac(undefined, { website: process.argv.includes('--website') }).catch(error => {
     process.stderr.write(`${error.stack || error.message}\n`);
     process.exitCode = 1;
   });

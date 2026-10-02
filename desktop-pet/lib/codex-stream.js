@@ -35,6 +35,7 @@ function createCodexStream({ onTask = () => {}, onStatus = () => {}, onDiscovere
   let rejectStart = null;
   let startTimer = null;
   let snapshotTimer = null;
+  let hasThreadList = false;
   let lastDiscovery = -Infinity;
   let lastStatus = null;
 
@@ -144,9 +145,13 @@ function createCodexStream({ onTask = () => {}, onStatus = () => {}, onDiscovere
     if (!ready) return;
     const current = [...records.values()];
     const partial = current.some(record => record.unavailable);
-    if (current.some(record => record.task)) status('connected', partial ? 'PARTIAL_STATE' : null);
+    const hasTask = current.some(record => record.task);
+    if (hasTask || partial || current.length === 0) {
+      clearTimeout(snapshotTimer); snapshotTimer = null;
+    } else if (!snapshotTimer) snapshotTimer = setTimeout(() => fail('TIMEOUT'), timeout);
+    if (hasTask) status('connected', partial ? 'PARTIAL_STATE' : null);
     else if (partial) status('unsupported', 'STATE_TOO_LARGE');
-    else status('connecting');
+    else status(current.length === 0 && hasThreadList ? 'connected' : 'connecting');
   }
   function receiveOversized(envelope) {
     if (closed || !ready || !records.has(envelope.conversationId)) return false;
@@ -217,8 +222,8 @@ function createCodexStream({ onTask = () => {}, onStatus = () => {}, onDiscovere
       if (packet.resultType !== 'success' || packet.method !== 'initialize' || !isTaskId(packet.result?.clientId)) { fail('UNSUPPORTED'); return; }
       clientId = packet.result.clientId; ready = true; requestId = null;
       clearTimeout(startTimer); startTimer = null;
-      snapshotTimer = setTimeout(() => fail('TIMEOUT'), timeout);
       for (const record of records.values()) requestSnapshot(record);
+      reportAvailability();
       resolveStart?.(); resolveStart = null; rejectStart = null;
       return;
     }
@@ -277,6 +282,7 @@ function createCodexStream({ onTask = () => {}, onStatus = () => {}, onDiscovere
   }
   function setThreads(rows) {
     if (closed) return;
+    hasThreadList = true;
     const selected = new Map();
     for (const row of Array.isArray(rows) ? rows : []) {
       if (selected.size >= MAX_TASKS) break;

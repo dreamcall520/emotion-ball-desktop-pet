@@ -131,6 +131,19 @@ test('安装包完整包含聊天窗口、持久对话和独立 Codex 通道，�
     '安装包不能夹带聊天记录或登录凭据');
 });
 
+test('安装包包含定制面板及球球外观配置模块', () => {
+  const root = path.resolve(__dirname, '../..');
+  const staging = prepareStaging(root);
+  for (const relativePath of [
+    'desktop-pet/customize.html', 'desktop-pet/customize.css',
+    'desktop-pet/customize-preload.js', 'desktop-pet/customize-renderer.js',
+    'desktop-pet/lib/customization.js', 'emotion-ball/js/custom-shapes.js'
+  ]) {
+    assert.equal(fs.readFileSync(path.join(staging, relativePath), 'utf8'),
+      fs.readFileSync(path.join(root, relativePath), 'utf8'), `${relativePath} 必须进入安装包`);
+  }
+});
+
 test('打包暂存区包含任务名称清理模块且菜单与控制器可加载', () => {
   const root = path.resolve(__dirname, '../..');
   const staging = prepareStaging(root);

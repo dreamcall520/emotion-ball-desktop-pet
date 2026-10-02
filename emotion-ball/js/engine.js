@@ -555,7 +555,11 @@
       }
       var gaze = frame.gaze || { x: 0, y: 0 };
       if (!Number.isFinite(gaze.x) || !Number.isFinite(gaze.y)) return this;
-      this._motionFrame = { body: body, gaze: { x: clamp(gaze.x, -24, 24), y: clamp(gaze.y, -15, 15) } };
+      if (frame.turnMorph !== undefined && (!Number.isFinite(frame.turnMorph) ||
+          frame.turnMorph < 0 || frame.turnMorph > 1)) return this;
+      this._motionFrame = { body: body, gaze: { x: clamp(gaze.x, -24, 24), y: clamp(gaze.y, -15, 15) },
+        suppressRibbons: frame.suppressRibbons === true,
+        turnMorph: frame.turnMorph || 0 };
       if (!this._active) this.renderStatic();
       return this;
     },
@@ -799,6 +803,8 @@
       }
       if (this._motionFrame) {
         Object.assign(pose.body, this._motionFrame.body, { scale: 1 });
+        if (this._motionFrame.suppressRibbons) pose.body.suppressRibbons = true;
+        if (this._motionFrame.turnMorph) pose.body.turnMorph = this._motionFrame.turnMorph;
         pose.left.lookX = pose.right.lookX = this._motionFrame.gaze.x;
         pose.left.lookY = pose.right.lookY = this._motionFrame.gaze.y;
       }

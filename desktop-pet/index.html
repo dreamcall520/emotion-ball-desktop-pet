@@ -5,10 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'"
+      content="default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; base-uri 'none'"
     >
     <title>球球桌宠</title>
     <link rel="stylesheet" href="pet.css">
+    <link rel="stylesheet" href="aurora-click-visual.css">
+    <link rel="stylesheet" href="aurora-rive.css">
   <link rel="stylesheet" href="color-mode.css">
   <script defer src="color-mode.js"></script>
   </head>
@@ -16,6 +18,7 @@
     <main id="pet" aria-label="可拖动和互动的球球桌面宠物"></main>
 
     <script src="../emotion-ball/js/rings.js"></script>
+    <script src="../emotion-ball/js/custom-shapes.js"></script>
     <script src="../emotion-ball/js/emotions.js"></script>
     <script src="../emotion-ball/js/ball.js"></script>
     <script src="../emotion-ball/js/engine.js"></script>
@@ -23,6 +26,11 @@
     <script src="lib/companion-behavior.js"></script>
     <script src="lib/interaction-motion.js"></script>
     <script src="lib/companion-motion.js"></script>
+    <script src="lib/customization.js"></script>
+    <script src="lib/rive.js"></script>
+    <script src="lib/boo-binary.js"></script>
+    <script src="lib/aurora-rive.js"></script>
+    <script src="lib/aurora-click-visual.js"></script>
     <script src="lib/pet-facing.js"></script>
     <script src="renderer.js"></script>
   </body>

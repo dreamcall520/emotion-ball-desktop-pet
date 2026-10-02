@@ -63,12 +63,61 @@ body {
 #pet { transition: transform 180ms ease-out; }
 #pet[data-presentation="tucked"][data-edge="left"] { transform: translateX(-50%); }
 #pet[data-presentation="tucked"][data-edge="right"] { transform: translateX(50%); }
-/* 收起时使用靠边小脑袋：屏边上下以竖直切线圆润收口，避免半圆硬切直角。
- * 曲线在身体中心轴闭合，随原有微呼吸一起运动；展开即回到原始圆形路径。 */
-#pet[data-presentation="tucked"][data-edge="left"] .eb-head {
+/* The aurora cloud is a five-lobed reference image rather than the classic
+ * round head. Leave a rounded outer lobe visible at rest; on hover show the
+ * face while keeping the native window anchored inside the work area. */
+#pet[data-shape="aurora-cloud"] {
+  transition: transform 400ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+#pet[data-shape="aurora-cloud"][data-presentation="tucked"][data-edge="left"] {
+  transform: translateX(-68%);
+}
+#pet[data-shape="aurora-cloud"][data-presentation="tucked"][data-edge="right"] {
+  transform: translateX(68%);
+}
+#pet[data-shape="aurora-cloud"][data-presentation="peeked"][data-edge="left"] {
+  transform: translateX(-43%);
+}
+#pet[data-shape="aurora-cloud"][data-presentation="peeked"][data-edge="right"] {
+  transform: translateX(43%);
+}
+#pet[data-shape="aurora-cloud"][data-presentation="peeked"] {
+  transition-duration: 250ms;
+}
+#pet[data-shape="aurora-cloud"][data-presentation="tucked"]:not(.dragging) > svg {
+  transform: translateY(3%) rotate(-12deg);
+  transform-origin: 50% 58%;
+  transition-duration: 400ms;
+}
+#pet[data-shape="aurora-cloud"][data-presentation="peeked"]:not(.dragging) > svg {
+  transition-duration: 250ms;
+}
+/* The reference artwork has its eyes left of centre. Mirror its presentation
+ * when docked left so both sides reveal the same cloud lobe and face. */
+#pet[data-shape="aurora-cloud"][data-edge="left"][data-presentation="tucked"]:not(.dragging) > svg {
+  transform: scaleX(-1) translateY(3%) rotate(-12deg);
+}
+#pet[data-shape="aurora-cloud"][data-edge="left"][data-presentation="peeked"]:not(.dragging) > svg {
+  transform: scaleX(-1);
+}
+@keyframes aurora-edge-working-breathe {
+  0%, 100% { transform: scaleX(-1) translateY(0) scale(1); }
+  50% { transform: scaleX(-1) translateY(-1.5%) scale(1.018); }
+}
+#pet[data-shape="aurora-cloud"][data-edge="left"][data-presentation="peeked"][data-codex-working="true"][data-motion-owner="none"]:not(.dragging) > svg {
+  animation: aurora-edge-working-breathe 1.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  #pet[data-shape="aurora-cloud"][data-edge="left"][data-presentation="peeked"][data-codex-working="true"][data-motion-owner="none"]:not(.dragging) > svg {
+    animation: none;
+  }
+}
+/* 经典头部收起时使用靠边小脑袋；两种云保持各自的完整云轮廓。
+ * 曲线在身体中心轴闭合，随原有微呼吸一起运动；展开即回到原始路径。 */
+#pet:not([data-shape="aurora-cloud"]):not([data-shape="cloud"])[data-presentation="tucked"][data-edge="left"] .eb-head {
   d: path("M 114.27 58 C 114.27 39 125 32 139 34 C 183 39 217 71 217 114.27 C 217 156 183 190 139 195 C 125 197 114.27 190 114.27 171 Z");
 }
-#pet[data-presentation="tucked"][data-edge="right"] .eb-head {
+#pet:not([data-shape="aurora-cloud"]):not([data-shape="cloud"])[data-presentation="tucked"][data-edge="right"] .eb-head {
   d: path("M 114.27 58 C 114.27 39 103.54 32 89.54 34 C 45.54 39 11.54 71 11.54 114.27 C 11.54 156 45.54 190 89.54 195 C 103.54 197 114.27 190 114.27 171 Z");
 }
 #pet[data-presentation="tucked"] svg { filter: drop-shadow(0 1px 2px rgba(66, 60, 52, 0.06)); }
@@ -78,4 +127,5 @@ body {
 #pet[data-presentation="hidden"] svg { animation: none; }
 @media (prefers-reduced-motion: reduce) {
   #pet { transition: none; }
+  #pet[data-shape="aurora-cloud"] { transition: none; }
 }

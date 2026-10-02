@@ -100,7 +100,7 @@ function safeModel(value) {
 
 function createQuotaLabelWindow({
   BrowserWindow, screen, getPetWindow, getObstacle = () => null, getSize = () => 'standard',
-  getAppearance = () => 'system', onError = () => {}, alwaysOnTop = true
+  getAppearance = () => 'system', getPresentation = () => null, onError = () => {}, alwaysOnTop = true
 }) {
   let win = null;
   let ready = false;
@@ -213,7 +213,8 @@ function createQuotaLabelWindow({
       const petBounds = pet.getBounds();
       const display = screen.getDisplayMatching(petBounds);
       return quotaLabelBounds(petBounds, display && display.workArea, getObstacle(),
-        currentModel?.size, currentModel?.expanded === true, currentModel?.items?.length);
+        currentModel?.size, currentModel?.expanded === true, currentModel?.items?.length,
+        getPresentation());
     } catch (error) {
       report(error);
       return null;

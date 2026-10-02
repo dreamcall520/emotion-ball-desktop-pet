@@ -27,6 +27,16 @@ test('极小尺寸为 80 × 80 并保留右下角安全距离', () => {
   });
 });
 
+test('紧凑尺寸为 108 × 108 并保留右下角安全距离', () => {
+  assert.deepEqual(SIZES.compact, { width: 108, height: 108 });
+  assert.deepEqual(defaultBounds(primary, 'compact'), {
+    x: 1308,
+    y: 768,
+    width: 108,
+    height: 108
+  });
+});
+
 test('超小尺寸为 60 × 60 并保留右下角安全距离', () => {
   assert.deepEqual(SIZES.micro, { width: 60, height: 60 });
   assert.deepEqual(defaultBounds(primary, 'micro'), {

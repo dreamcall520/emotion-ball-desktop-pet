@@ -132,9 +132,12 @@ function createCodexRpc({ fs = nodeFs, spawn = childProcess.spawn, homedir = os.
 
   async function discover() {
     const home = homedir();
-    const candidates = ['/Applications/Codex.app', '/Applications/ChatGPT.app',
-      path.join(home, 'Applications/Codex.app'), path.join(home, 'Applications/ChatGPT.app')]
-      .map(app => path.join(app, 'Contents/Resources/codex'));
+    const apps = ['/Applications/Codex.app', '/Applications/ChatGPT.app',
+      path.join(home, 'Applications/Codex.app'), path.join(home, 'Applications/ChatGPT.app')];
+    const candidates = [
+      ...apps.map(app => path.join(app, 'Contents/Resources/codex')),
+      ...apps.map(app => path.join(app, 'Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex'))
+    ];
     for (const file of candidates) {
       ensureOpen();
       try {

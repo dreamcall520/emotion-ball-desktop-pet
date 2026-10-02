@@ -22,13 +22,17 @@ const withModels = (state = stored()) => ({
 
 function fixture(overrides = {}) {
   let receive;
+  let receiveAppearance;
   const sent = [];
+  const avatars = [];
+  const animations = [];
   class Element {
     constructor() {
       this.listeners = new Map(); this.children = []; this.dataset = {}; this.style = {};
       this.value = ''; this.textContent = ''; this.hidden = false; this.disabled = false;
       this.scrollTop = 0; this.scrollHeight = 200; this.clientHeight = 200; this.focusCount = 0;
       this.attributes = new Map();
+      this.classList = { add: () => {} };
     }
     addEventListener(name, fn) { this.listeners.set(name, fn); }
     dispatch(name, fields = {}) { return this.listeners.get(name)?.({ preventDefault() {}, stopPropagation() {}, ...fields }); }
@@ -48,6 +52,7 @@ function fixture(overrides = {}) {
   const document = new Element();
   document.getElementById = get;
   document.createElement = () => new Element();
+  document.createElementNS = () => new Element();
   document.body = new Element();
   document.activeElement = document.body;
   const window = new Element();
@@ -55,6 +60,7 @@ function fixture(overrides = {}) {
   const api = {
     getState: () => Promise.resolve(idle()),
     onState(callback) { receive = callback; return () => {}; },
+    onAppearance(callback) { receiveAppearance = callback; return () => {}; },
     async send(text) { sent.push(text); return { accepted: true }; },
     async stop() {},
     async newChat() { return { accepted: true }; },
@@ -65,9 +71,41 @@ function fixture(overrides = {}) {
     ...overrides
   };
   window.qiuqiuChat = api;
+  window.PetChatAvatar = { render: (target, appearance) => avatars.push({ target, appearance }) };
+  window.AuroraRive = { create: (_target, appearance) => {
+    const animation = { appearance, destroyed: false, destroy() { this.destroyed = true; }, whenReady: () => Promise.resolve(true) };
+    animations.push(animation);
+    return animation;
+  } };
   vm.runInNewContext(source, { document, window });
-  return { get, sent, document, window, options: () => get('model-menu').children.filter(item => item.dataset.model), receive: next => receive(next) };
+  return { get, sent, document, window, avatars, animations,
+    options: () => get('model-menu').children.filter(item => item.dataset.model),
+    receive: next => receive(next), receiveAppearance: (...args) => receiveAppearance(...args) };
 }
+
+test('聊天头像在窗口内收到外观更新，不受聊天消息刷新影响', async () => {
+  const f = fixture();
+  const appearance = { shape: 'cloud', bodyColor: '#28415C' };
+  f.receiveAppearance(appearance);
+  f.receive({ ...idle(), messages: [{ id: 'a', role: 'assistant', text: '你好' }] });
+  assert.equal(f.avatars.at(-1).target, f.get('chat-avatar'));
+  assert.equal(f.avatars.at(-1).appearance, appearance);
+  assert.equal(f.avatars.length, 2); // Initial fallback plus the saved appearance.
+});
+
+test('幻彩云聊天头像载入当前球球动画，切换形态后清理动画', async () => {
+  const f = fixture();
+  f.receiveAppearance({ shape: 'aurora-cloud' }, 'data:image/png;base64,AAAA');
+  const image = f.get('chat-avatar').children[0];
+  assert.equal(image.src, 'data:image/png;base64,AAAA');
+  assert.equal(image.draggable, false);
+  assert.equal(f.animations.length, 1);
+  await flush();
+  assert.equal(f.get('chat-avatar').children.includes(image), false);
+  f.receiveAppearance({ shape: 'cloud' });
+  assert.equal(f.animations[0].destroyed, true);
+  assert.equal(f.avatars.at(-1).appearance.shape, 'cloud');
+});
 
 test('自定义模型菜单上下键 Home End Enter 选择，Esc 先关闭菜单并回焦入口', async () => {
   let closes = 0;
@@ -309,6 +347,31 @@ test('新聊天必须二次确认，默认聚焦取消；取消或 Esc 保留草
   assert.equal(f.get('history-view').hidden, true);
 });
 
+test('首页新聊天取消后回到聊天；重新打开窗口不保留历史按钮焦点', async () => {
+  let creates = 0;
+  const f = fixture({ newChat: async () => { creates += 1; return { accepted: true }; } });
+  await flush();
+  f.receive(stored());
+  const input = f.get('message-input');
+  input.value = '保留草稿';
+  assert.equal(f.get('new-chat').hidden, false);
+  f.get('new-chat').dispatch('click');
+  assert.equal(f.get('new-chat-confirmation').hidden, false);
+  assert.equal(f.get('history-view').hidden, false);
+  assert.equal(f.get('cancel-new-chat').focusCount, 1);
+  f.get('cancel-new-chat').dispatch('click');
+  assert.equal(f.get('history-view').hidden, true);
+  assert.equal(input.value, '保留草稿');
+  assert.equal(f.document.activeElement, input);
+  f.get('new-chat').dispatch('click');
+  f.document.dispatch('keydown', { key: 'Escape' });
+  assert.equal(f.get('history-view').hidden, true);
+  assert.equal(creates, 0);
+  f.get('chat-history').focus();
+  f.window.dispatch('focus');
+  assert.equal(f.document.activeElement, input);
+});
+
 test('空聊天不可重复新建；忙碌、连接中及切换待确认时阻止切换或新建', async () => {
   let creates = 0, selections = 0, resolveSelection;
   const f = fixture({
@@ -547,9 +610,14 @@ test('预加载限制消息类型、长度、固定频道，并能解除订阅',
   ]);
   let snapshot;
   const unsubscribe = api.onState(next => { snapshot = next; });
+  let appearance;
+  const unsubscribeAppearance = api.onAppearance(next => { appearance = next; });
   listeners.get('pet:chat-state')({}, { busy: true });
+  listeners.get('pet:chat-appearance')({}, { shape: 'cloud' });
   assert.equal(snapshot.busy, true);
+  assert.equal(appearance.shape, 'cloud');
   unsubscribe();
+  unsubscribeAppearance();
   assert.equal(listeners.size, 0);
   api.close();
   assert.deepEqual(sent, [['pet:chat-close']]);

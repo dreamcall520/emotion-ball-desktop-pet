@@ -118,10 +118,12 @@ test('气泡自适应高度必须在主进程回传尺寸后收敛，不能持�
 test('强额度提醒只强化气泡边框和文字，不闪烁不改球球颜色', () => {
   const bubbleCss = fs.readFileSync(path.resolve(__dirname, '../bubble.css'), 'utf8');
   const renderer = fs.readFileSync(path.resolve(__dirname, '../renderer.js'), 'utf8');
+  const { DEFAULT_APPEARANCE } = require('../lib/customization');
   assert.match(bubbleCss, /data-tone="strong"/);
   assert.match(bubbleCss, /data-tone="urgent"/);
   assert.doesNotMatch(bubbleCss, /animation\s*:/);
-  assert.match(renderer, /#EEEBE4/i);
+  assert.equal(DEFAULT_APPEARANCE.bodyColor, '#EEEBE4');
+  assert.match(renderer, /customization\.appearance\.bodyColor/);
 });
 
 test('预加载动作接口仅发送白名单字段且回帧可取消订阅', () => {

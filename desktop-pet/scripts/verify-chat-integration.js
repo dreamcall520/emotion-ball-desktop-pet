@@ -38,7 +38,7 @@ function createSmokeChatRpc({ onNotification }) {
   };
 }
 
-async function verifyChatIntegration({ pet, chat, chatWindow, getMenu, getPresentation, hidePet, restorePet, powerMonitor }) {
+async function verifyChatIntegration({ pet, chat, chatWindow, screen, getMenu, getPresentation, hidePet, restorePet, powerMonitor }) {
   const poll = async (read, test, label) => {
     const deadline = Date.now() + 5000;
     while (Date.now() < deadline) { const value = await read(); if (test(value)) return value; await wait(30); }
@@ -54,6 +54,35 @@ async function verifyChatIntegration({ pet, chat, chatWindow, getMenu, getPresen
   await poll(() => chatWindow.isVisible() && chat.getState().connection, value => value === 'ready', 'open panel and connect');
   await poll(() => chat.getState().modelsStatus, value => value === 'ready', 'load current model catalog');
   const win = chatWindow.getWindow(), page = code => win.webContents.executeJavaScript(code);
+  if (process.env.PET_SMOKE_CHAT_AVATAR === '1') {
+    await poll(() => page("Boolean(document.querySelector('#chat-avatar .eb-rive-aurora.ready'))"),
+      Boolean, 'current aurora avatar animation');
+    if (process.env.PET_SMOKE_CHAT_SCREENSHOT) {
+      const fs = require('node:fs');
+      fs.writeFileSync(process.env.PET_SMOKE_CHAT_SCREENSHOT,
+        (await win.webContents.capturePage()).toPNG());
+      fs.writeFileSync(process.env.PET_SMOKE_CHAT_SCREENSHOT.replace(/\.png$/, '-pet.png'),
+        (await pet.webContents.capturePage()).toPNG());
+    }
+    process.stdout.write('PET_CHAT_AVATAR_ANIMATED_OK\n');
+  }
+  const initialOffset = { x: pet.getBounds().x - win.getBounds().x, y: pet.getBounds().y - win.getBounds().y };
+  for (const side of ['left', 'right']) {
+    const area = screen.getDisplayMatching(win.getBounds()).workArea;
+    const bounds = win.getBounds();
+    const x = side === 'left' ? area.x + 12 : area.x + area.width - bounds.width - 12;
+    win.setPosition(x, bounds.y, false);
+    await wait(260);
+    const chatBounds = win.getBounds(), petBounds = pet.getBounds();
+    const visibleArea = screen.getDisplayMatching(chatBounds).workArea;
+    for (const item of [chatBounds, petBounds]) {
+      assert.ok(item.x >= visibleArea.x + 12 && item.x + item.width <= visibleArea.x + visibleArea.width - 12);
+      assert.ok(item.y >= visibleArea.y + 12 && item.y + item.height <= visibleArea.y + visibleArea.height - 12);
+    }
+    assert.deepEqual({ x: petBounds.x - chatBounds.x, y: petBounds.y - chatBounds.y }, initialOffset,
+      '拖到屏幕边缘后聊天窗与球球仍相邻');
+  }
+  process.stdout.write('PET_CHAT_EDGE_DRAG_OK\n');
   const chooseColor = mode => {
     const item = getMenu().getMenuItemById(`color-${mode}`);
     assert.ok(item?.enabled, 'global color menu is independent of Codex monitoring');
@@ -112,6 +141,15 @@ async function verifyChatIntegration({ pet, chat, chatWindow, getMenu, getPresen
   assert.equal((await page('window.qiuqiuChat.getState()')).messages.length, 4);
   await send('靠左');
   assert.equal(getPresentation().side, 'left', 'chat action routes to existing edge controller');
+  win.setPosition(win.getBounds().x + 100, win.getBounds().y, false);
+  await poll(() => getPresentation().side, side => side === null, 'moving chat from tucked pet restores full pet');
+  assert.equal(await pet.webContents.executeJavaScript("document.querySelector('#pet').dataset.presentation"), 'free');
+  await send('靠左');
+  assert.equal(getPresentation().side, 'left');
+  await page('window.qiuqiuChat.close()');
+  open();
+  await poll(() => chatWindow.isVisible(), Boolean, 'reopen from tucked pet');
+  assert.equal(getPresentation().side, null, 'opening chat from tucked pet reveals the whole pet');
   await send('回来');
   assert.equal(getPresentation().side, null);
   assert.equal(counts.threads, 1);

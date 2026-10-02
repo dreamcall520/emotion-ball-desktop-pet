@@ -35,6 +35,8 @@ test('损坏文件回退且有效设置可回读', t => {
     bubblesEnabled: true,
     colorMode: 'standard',
     chatModel: 'auto',
+    customization: DEFAULTS.customization,
+    startupAppearance: DEFAULTS.startupAppearance,
     codexEnabled: false,
     codexTaskNameInAlerts: false,
     codexQuotaAlwaysVisible: false,
@@ -48,10 +50,23 @@ test('损坏文件回退且有效设置可回读', t => {
 test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
   assert.deepEqual(normalizeSettings({ size: 'small', x: -102.3, y: 81.8, alwaysOnTop: false }), {
     size: 'small', x: -102, y: 82, alwaysOnTop: false,
-    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', chatModel: 'auto', codexEnabled: false,
+    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', chatModel: 'auto', customization: DEFAULTS.customization,
+    startupAppearance: DEFAULTS.startupAppearance, codexEnabled: false,
     codexTaskNameInAlerts: false, codexQuotaAlwaysVisible: false,
     codexQuotaPeriod: 'auto', codexQuotaLabelSize: 'compact', codexQuotaAppearance: 'system'
   });
+});
+
+test('旧外观沿用为启动默认，临时换装不覆盖已选启动外观', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emotion-pet-startup-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'settings.json');
+  const legacy = normalizeSettings({ customization: { appearance: { shape: 'cloud' } } });
+  assert.equal(legacy.startupAppearance.shape, 'cloud');
+  const saved = saveSettings(file, { ...legacy,
+    customization: { appearance: { shape: 'square' } } });
+  assert.equal(saved.customization.appearance.shape, 'square');
+  assert.equal(loadSettings(file).startupAppearance.shape, 'cloud');
 });
 
 test('陪伴开关只接受布尔值且不保存输入信息', () => {
@@ -118,9 +133,10 @@ test('额度显示默认关闭且周期只接受三个枚举', () => {
   }
 });
 
-test('球球默认极小 80×80，同时接受超小 60×60', () => {
+test('球球默认极小 80×80，同时接受超小和紧凑尺寸', () => {
   assert.equal(DEFAULTS.size, 'tiny');
   assert.equal(normalizeSettings({ size: 'micro' }).size, 'micro');
+  assert.equal(normalizeSettings({ size: 'compact' }).size, 'compact');
 });
 
 test('额度卡片默认为小巧，只接受标准和小巧两档', () => {
@@ -179,7 +195,8 @@ test('Codex 只持久化开关，不保存账号额度快照阈值或任务信�
   });
   assert.deepEqual(loadSettings(file), saved);
   const persisted = fs.readFileSync(file, 'utf8');
-  assert.equal(persisted.includes('private'), false);
+  assert.equal(persisted.includes('private@example.com'), false);
+  assert.equal(persisted.includes('"private"'), false);
   assert.equal(persisted.includes('PRIVATE_BODY'), false);
   assert.equal(persisted.includes('PRIVATE_GENERIC_BODY'), false);
   for (const key of ['account', 'quotaSnapshot', 'quotaThresholds', 'tasks', 'taskBody', 'body']) {

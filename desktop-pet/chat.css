@@ -40,15 +40,32 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 [hidden] { display: none !important; }
 
 .chat-panel { height: 100%; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); color: var(--text); }
-.chat-header { display: flex; align-items: center; gap: 9px; padding: 17px 14px 14px; border-bottom: 1px solid var(--line); flex: 0 0 auto; user-select: none; }
-.pet-mark { width: 29px; height: 31px; flex: 0 0 auto; border-radius: 48% 48% 46% 46%; background: #eeebe4; box-shadow: inset -3px -3px 5px #d5d2cb; display: flex; align-items: center; justify-content: center; gap: 5px; padding-bottom: 3px; }
-.pet-mark i { width: 3px; height: 7px; border-radius: 3px; background: #1a1a1a; }
+.chat-header { display: flex; align-items: center; gap: 8px; padding: 17px 12px 14px 14px; border-bottom: 1px solid var(--line); flex: 0 0 auto; user-select: none; -webkit-app-region: drag; }
+.pet-mark { position: relative; display: block; width: 31px; height: 31px; flex: 0 0 auto; overflow: hidden; }
+.pet-mark svg { display: block; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 1px 2px #171c2430); }
+.pet-mark img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.pet-mark > svg.avatar-rive-placeholder { position: absolute; inset: 0; visibility: hidden; }
+.pet-mark .avatar-eye { transform-box: fill-box; transform-origin: center; animation: chat-avatar-blink 7.4s ease-in-out infinite; }
+@keyframes chat-avatar-blink {
+  0%, 26%, 29%, 71%, 74%, 100% { transform: scaleY(1); }
+  27.5%, 72.5% { transform: scaleY(.08); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pet-mark .avatar-eye { animation: none; }
+}
 .heading { min-width: 0; flex: 1; }
 h1 { font-size: 14px; line-height: 20px; font-weight: 600; margin: 0; letter-spacing: .2px; }
-.heading p { margin: 2px 0 0; color: var(--muted); font-size: 10px; line-height: 15px; }
+.heading p { margin: 2px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 10px; line-height: 15px; }
 .text-button { border: 0; background: transparent; color: var(--muted); padding: 6px; border-radius: 6px; white-space: nowrap; font-size: 11px; }
-.text-button:hover:not(:disabled), .close-button:hover { background: var(--hover); color: var(--text); }
-.close-button { width: 24px; height: 26px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-size: 23px; font-weight: 300; line-height: 23px; }
+.text-button:hover:not(:disabled), .header-action:hover:not(:disabled), .close-button:hover { background: var(--hover); color: var(--text); }
+.header-actions { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+.header-action { display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 3px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 11px; font-weight: 500; white-space: nowrap; }
+.header-action svg { width: 15px; height: 15px; flex: 0 0 auto; }
+.new-chat-action { color: var(--accent); font-weight: 600; }
+.history-action { padding: 0 5px; }
+.header-divider { width: 1px; height: 16px; margin: 0 2px; background: var(--line); }
+.close-button { display: grid; place-items: center; width: 27px; height: 30px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); }
+.close-button svg { width: 15px; height: 15px; }
 .model-choice { position: relative; flex: 0 1 auto; min-width: 0; max-width: 180px; color: var(--muted); }
 .model-choice::after { content: ''; position: absolute; right: 7px; top: 9px; width: 5px; height: 5px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); pointer-events: none; }
 .model-choice > button { display: block; min-width: 0; max-width: 100%; height: 26px; padding: 0 20px 0 4px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 11px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
@@ -84,10 +101,7 @@ h1 { font-size: 14px; line-height: 20px; font-weight: 600; margin: 0; letter-spa
 .history-current { color: var(--accent); }
 .history-empty { flex: 1; margin: 32px 0; text-align: center; color: var(--muted); font-size: 12px; line-height: 1.9; }
 .history-footer { flex: 0 0 auto; padding-top: 13px; border-top: 1px solid var(--line); margin-top: 8px; }
-.new-chat-button { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; color: var(--text); background: var(--surface); font-size: 12px; text-align: left; }
-.new-chat-button:hover:not(:disabled) { background: var(--hover); }
-.new-chat-button span { margin-right: 5px; color: var(--muted); }
-.history-footer p { margin: 8px 1px 0; font-size: 10px; line-height: 1.6; color: var(--muted); }
+.history-footer p { margin: 0 1px; font-size: 10px; line-height: 1.6; color: var(--muted); }
 .new-chat-confirmation { margin: 12px 0 0; padding: 20px 15px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .new-chat-confirmation h3 { margin: 0; font-size: 14px; font-weight: 600; }
 .new-chat-confirmation p { color: var(--muted); font-size: 12px; line-height: 1.9; margin: 12px 0 22px; }
@@ -136,4 +150,10 @@ textarea::placeholder { color: var(--muted); }
   .history-heading { margin-bottom: 8px; }
   .new-chat-confirmation { margin-top: 0; padding-top: 14px; }
   .new-chat-confirmation p { margin-bottom: 14px; }
+}
+
+@media (max-width: 320px) {
+  .chat-header { gap: 5px; padding-left: 10px; padding-right: 8px; }
+  .header-action { justify-content: center; width: 30px; padding: 0; }
+  .header-action span { display: none; }
 }

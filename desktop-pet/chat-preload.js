@@ -8,6 +8,12 @@ contextBridge.exposeInMainWorld('qiuqiuChat', {
     ipcRenderer.on('pet:color-mode', listener);
     return () => ipcRenderer.removeListener('pet:color-mode', listener);
   },
+  onAppearance(callback) {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, appearance, image) => callback(appearance, image);
+    ipcRenderer.on('pet:chat-appearance', listener);
+    return () => ipcRenderer.removeListener('pet:chat-appearance', listener);
+  },
   getState: () => ipcRenderer.invoke('pet:chat-get'),
   onState(callback) {
     if (typeof callback !== 'function') return () => {};

@@ -25,6 +25,10 @@
   const petting = new CompanionBehavior.PettingTracker();
 
   let ball = null;
+  let clickVisual = null;
+  let officialAurora = null;
+  let lastAuroraClick = null;
+  let customization = PetCustomization.normalizeCustomization();
   let presentationSuppressed = false;
   let presentationMode = 'free';
   let presentationPaused = false;
@@ -58,11 +62,27 @@
   const thinkingRestMs = () => 25000 + Math.floor(Math.random() * 10001);
   const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
 
+  function visualFacing() {
+    if (!facing) return 'right';
+    // The approved aurora face is drawn on the left side of its artwork, the
+    // reverse of the engine's normal facing convention. Only the free pet
+    // needs this flip; docked artwork has its own mirrored edge presentation.
+    if (customization.appearance.shape === 'aurora-cloud' && presentationMode === 'free') {
+      return facing === 'left' ? 'right' : 'left';
+    }
+    return facing;
+  }
+
   function syncFacing() {
     if (dragState || activeMotion || presentationSuppressed || lastSample?.locked) return;
-    facing = PetFacing.resolve(lastSample?.petBounds, lastSample?.workArea, facing);
+    // The approved aurora artwork bakes its eyes into the right-facing image.
+    // Its left-edge presentation mirrors the whole SVG, so both edges keep
+    // the same artwork orientation while the cloud peeks out.
+    const auroraAtEdge = customization.appearance.shape === 'aurora-cloud' &&
+      presentationMode === 'peeked' && ['left', 'right'].includes(petElement.dataset.edge);
+    facing = auroraAtEdge ? 'right' : PetFacing.resolve(lastSample?.petBounds, lastSample?.workArea, facing);
     petElement.dataset.facing = facing;
-    ball?.setFacing(facing);
+    ball?.setFacing(visualFacing());
   }
 
   function syncThought(visible, side) {
@@ -201,32 +221,97 @@
     eyes: { both: { open: 0.08, scaleX: 0.78, scaleY: 0.78, y: 24, lookY: 2 }, left: { x: 10 }, right: { x: 2 } }
   });
 
+  function registerIdleAppearance() {
+    const preset = PetCustomization.EYE_PRESETS[customization.appearance.idleEyes];
+    const source = EmotionBall.config.get('02').raw;
+    EmotionBall.config.register({
+      ...source, id: '50', name: '安静陪伴', group: 'custom', antics: false, anims: [],
+      pool: preset === null
+        ? (customization.appearance.shape === 'aurora-cloud' ? [0] : [0, 8])
+        : [preset]
+    });
+  }
+
   function createBall(emotionId) {
     const nextCompactMode = window.innerWidth <= 120;
+    const previousShape = petElement.dataset.shape;
+    const previousSvg = previousShape !== 'aurora-cloud' && customization.appearance.shape === 'aurora-cloud'
+      ? petElement.querySelector(':scope > svg') : null;
+    officialAurora?.destroy();
+    officialAurora = null;
+    clickVisual?.destroy();
+    clickVisual = null;
     if (ball) ball.destroy();
     petElement.replaceChildren();
+    petElement.dataset.shape = customization.appearance.shape;
+    petElement.dataset.avatarAppearance = JSON.stringify(customization.appearance);
     compactMode = nextCompactMode;
     presentationFrozen = false;
+    const customShape = window.EB_CUSTOM_SHAPES.createShape(customization.appearance);
+    const referenceTexture = PetCustomization.auroraReferenceTexture(customization.appearance, customShape);
     ball = EmotionBall.create(petElement, {
       emotion: emotionId || '50',
-      shape: 'blob',
-      // 复用实例主题色：所有表情沿用睡眠灰白，眼睛保持黑色。
-      color: '#EEEBE4',
-      eyeColor: '#1A1A1A',
+      shape: customization.appearance.shape,
+      customShape,
+      auroraBodyTexture: referenceTexture,
+      auroraStyle: customization.appearance.auroraStyle,
+      auroraTransparency: customization.appearance.auroraTransparency,
+      // 桌面球球需要每一帧都用可转动的 SVG 眼睛；素材里的静态白眼只用作外观参考。
+      liveAuroraEyes: customization.appearance.shape === 'aurora-cloud',
+      auroraTurnRing: customization.appearance.shape === 'aurora-cloud'
+        ? PetCustomization.auroraTurnRing : null,
+      color: customization.appearance.bodyColor,
+      eyeColor: customization.appearance.eyeColor,
+      glowPinkColor: customization.appearance.glowPinkColor,
+      glowGoldColor: customization.appearance.glowGoldColor,
+      eyeSpacing: customization.appearance.eyeSpacing,
+      eyeHeight: customization.appearance.eyeHeight,
       idle: false,
-      eyeScale: compactMode ? 1.5 : 1,
+      eyeScale: (compactMode && !['cloud', 'aurora-cloud'].includes(customization.appearance.shape) ? 1.5 : 1) *
+        customization.appearance.eyeScale,
       lite: compactMode,
       liteRibbons: true,
       fallbackId: '50',
       label: '球球桌面宠物'
     });
+    if (customization.appearance.shape !== 'aurora-cloud') {
+      const svg = petElement.querySelector(':scope > svg');
+      if (svg) svg.style.opacity = (1 - customization.appearance.auroraTransparency / 100).toFixed(2);
+    }
     ball.bounce = () => {
       if (!presentationSuppressed) desktop.bounce();
       return ball;
     };
     ball.on('change', ({ id }) => { petElement.dataset.emotion = id; });
     petElement.dataset.emotion = ball.emotionId;
-    ball.setFacing(facing || 'right');
+    if (customization.appearance.shape === 'aurora-cloud' &&
+        ['tucked', 'peeked'].includes(presentationMode) && ['left', 'right'].includes(petElement.dataset.edge)) {
+      facing = 'right';
+    }
+    ball.setFacing(visualFacing());
+    if (customization.appearance.shape === 'aurora-cloud') {
+      officialAurora = window.AuroraRive?.create(petElement, customization.appearance, referenceTexture) || null;
+      if (officialAurora) {
+        const next = officialAurora;
+        const nextSvg = petElement.querySelector(':scope > svg');
+        nextSvg.style.visibility = 'hidden';
+        if (previousSvg) {
+          previousSvg.style.position = 'absolute';
+          previousSvg.style.inset = '0';
+          petElement.prepend(previousSvg);
+        }
+        next.whenReady().then(ready => {
+          if (officialAurora !== next) return;
+          previousSvg?.remove();
+          if (!ready) {
+            next.destroy();
+            officialAurora = null;
+            nextSvg.style.visibility = '';
+            clickVisual = window.AuroraClickVisual?.create(petElement) || null;
+          }
+        });
+      } else clickVisual = window.AuroraClickVisual?.create(petElement) || null;
+    }
   }
 
   function showEmotion(id) {
@@ -247,6 +332,8 @@
   function stopMotion(notifyHost = true) {
     activeMotion = null;
     petElement.dataset.motionOwner = 'none';
+    delete petElement.dataset.clickVisual;
+    clickVisual?.clear();
     ball.stopMotion();
     if (notifyHost) desktop.stopMotion();
   }
@@ -304,11 +391,12 @@
     // 吸边先改宿主位置，活动采样可能尚未到达；由吸附侧直接确定朝向。
     // 仅在朝向实际改变时更新，隐藏/暂停后的重复报文不能重画冻结帧。
     if (packet.mode === 'tucked' && ['left', 'right'].includes(packet.side)) {
-      const inward = packet.side === 'left' ? 'right' : 'left';
+      const inward = customization.appearance.shape === 'aurora-cloud'
+        ? 'right' : packet.side === 'left' ? 'right' : 'left';
       if (facing !== inward) {
         facing = inward;
         petElement.dataset.facing = facing;
-        ball.setFacing(facing);
+        ball.setFacing(visualFacing());
       }
     }
     // 普通松手确认可能晚于下一次按下；只有明确恢复或隐藏才作废本地拖动。
@@ -434,17 +522,22 @@
     playReaction(motion.id);
   }
 
-  function playReaction(action, speak = true) {
+  function playReaction(action, speak = true, withinSequence = false) {
     const motion = InteractionMotion.getMotion(action);
     if (!motion || presentationSuppressed || lastSample?.locked || companion.manualSleep) return;
     cancelPendingInteraction();
     clearAction();
-    stopMotion();
+    stopMotion(!withinSequence);
     noteInteraction();
     activeMotion = { token: ++nextMotionToken, action, owner: 'user', side: facing || 'right' };
     petElement.dataset.motionOwner = 'user';
     ball.setEmotion(motion.emotion);
-    ball.setMotionFrame(InteractionMotion.sampleMotion(action, 0));
+    const firstFrame = InteractionMotion.sampleMotion(action, 0);
+    ball.setMotionFrame(firstFrame);
+    if (action === 'dizzy' || action === 'turn') {
+      petElement.dataset.clickVisual = action;
+      clickVisual?.set(action, 0, firstFrame, facing || 'right');
+    }
     petElement.dataset.lastAction = action;
     desktop.playMotion({ ...activeMotion });
     if (speak) desktop.say({ event: 'play', motion: action });
@@ -472,18 +565,25 @@
     if (packet.side === 'left' || packet.side === 'right') {
       facing = packet.side;
       petElement.dataset.facing = facing;
-      ball.setFacing(facing);
+      ball.setFacing(visualFacing());
     }
     if (packet.frame.done === true) {
       const finishedOwner = activeMotion.owner;
       activeMotion = null;
       petElement.dataset.motionOwner = 'none';
+      delete petElement.dataset.clickVisual;
+      clickVisual?.clear();
       ball.stopMotion();
       restoreState();
       if (finishedOwner === 'codex' && codexEnabled && codexActiveTaskCount > 0) {
         startCodexThinkingCadence();
       }
-    } else ball.setMotionFrame(packet.frame);
+    } else {
+      ball.setMotionFrame(packet.frame);
+      if (packet.action === 'dizzy' || packet.action === 'turn') {
+        clickVisual?.set(packet.action, packet.frame.progress || 0, packet.frame, facing || 'right');
+      }
+    }
   }
 
   function runSingleClickAction(speak = true) {
@@ -495,6 +595,16 @@
       startCodexThinkingCadence();
       desktop.say('thought');
       petElement.dataset.lastAction = 'thought';
+      return;
+    }
+    if (officialAurora?.click()) {
+      petElement.dataset.lastAction = 'official';
+      return;
+    }
+    if (customization.appearance.shape === 'aurora-cloud' && !reducedMotion()) {
+      const action = lastAuroraClick === 'dizzy' ? 'turn' : 'dizzy';
+      lastAuroraClick = action;
+      playReaction(action, false);
       return;
     }
     playEmotion('10', 3200, speak ? 'play' : null);
@@ -677,6 +787,8 @@
     clearAction();
     stopMotion();
     listeners.forEach(remove => remove());
+    officialAurora?.destroy();
+    clickVisual?.destroy();
     if (ball) ball.destroy();
   });
 
@@ -694,6 +806,13 @@
   listeners.push(desktop.onMotion(observe(onMotion)));
   listeners.push(desktop.onActivity(observe(updateActivity)));
   listeners.push(desktop.onSettings(observe(settings => {
+    const next = PetCustomization.normalizeCustomization(settings.customization);
+    if (JSON.stringify(customization.appearance) !== JSON.stringify(next.appearance)) {
+      stopMotion();
+      customization = next;
+      registerIdleAppearance();
+      createBall(ball.emotionId);
+    } else customization = next;
     companion.setKeepAwake(settings.keepAwake);
     if (lastSample) updateActivity(lastSample);
   })));

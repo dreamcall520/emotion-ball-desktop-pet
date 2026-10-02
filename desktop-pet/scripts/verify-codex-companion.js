@@ -576,9 +576,9 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
         assert.equal(view.palette.secondary, 'rgb(80, 89, 101)');
       } else {
         assert.match(view.palette.surface, /rgba\(26,\s*34,\s*45,\s*(?:0?\.82)\)/);
-        assert.match(view.palette.text, /rgba?\(246,\s*246,\s*244(?:,\s*(?:0?\.96))?\)/);
-        assert.equal(view.palette.period, 'rgb(200, 220, 255)');
-        assert.equal(view.palette.secondary, 'rgb(174, 184, 197)');
+        assert.equal(view.palette.text, 'rgb(245, 247, 250)');
+        assert.equal(view.palette.period, 'rgb(255, 255, 255)');
+        assert.equal(view.palette.secondary, 'rgb(226, 233, 242)');
       }
     };
     const emulate = scheme => debuggerApi.sendCommand('Emulation.setEmulatedMedia', {
@@ -951,7 +951,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assert.equal(setQuotaPreference('codexQuotaAlwaysVisible', true), true);
     await visibleLabel('重新开启常驻额度标签');
 
-    for (const [sizeName, pixels] of [['micro', 60], ['tiny', 80], ['small', 120], ['medium', 180], ['large', 260]]) {
+    for (const [sizeName, pixels] of [['micro', 60], ['tiny', 80], ['compact', 108], ['small', 120], ['medium', 180], ['large', 260]]) {
       await applyPetSize({ setSize, getSettings, pet, poll, sizeName, pixels });
       const labelWindow = await visibleLabel(`${pixels} 尺寸额度标签`);
       await poll(() => Promise.resolve(labelWindow.getBounds()),
@@ -962,8 +962,8 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       await capture(labelWindow, `codex-quota-${pixels}`, quotaLabel);
       assertQuotaLabelWindow(quotaLabel, labelWindow, pet.getBounds());
       const marker = {
-        60: 'PET_CODEX_QUOTA_SIZE_60_OK',
-        80: 'PET_CODEX_QUOTA_SIZE_80_OK', 120: 'PET_CODEX_QUOTA_SIZE_120_OK',
+        60: 'PET_CODEX_QUOTA_SIZE_60_OK', 80: 'PET_CODEX_QUOTA_SIZE_80_OK',
+        108: 'PET_CODEX_QUOTA_SIZE_108_OK', 120: 'PET_CODEX_QUOTA_SIZE_120_OK',
         180: 'PET_CODEX_QUOTA_SIZE_180_OK', 260: 'PET_CODEX_QUOTA_SIZE_260_OK'
       }[pixels];
       process.stdout.write(`${marker}\n`);
@@ -983,7 +983,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     await page('window.__codexNativeFrames = []; window.__removeCodexNativeTrace = window.petDesktop.onMotion(packet => window.__codexNativeFrames.push(packet)); true');
     const focusBefore = BrowserWindow.getFocusedWindow();
     for (const [size, pixels, kind] of [['micro', 60, 'completed'], ['tiny', 80, 'quota'],
-      ['small', 120, 'completed'], ['medium', 180, 'waiting'], ['large', 260, 'failed']]) {
+      ['compact', 108, 'completed'], ['small', 120, 'completed'], ['medium', 180, 'waiting'], ['large', 260, 'failed']]) {
       await applyPetSize({ setSize, getSettings, pet, poll, sizeName: size, pixels });
       await wait(120);
       await begin(kind, kind === 'waiting' ? 2 : 1);
@@ -1115,12 +1115,12 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     const taskItems = nativeMenu.getMenuItemById('codex-tasks').submenu.items;
     const taskLabels = taskItems.map(item => item.label);
     assert.deepEqual(taskLabels, [
-      '模拟验收任务 3 · 等你确认',
       '模拟验收任务 4 · 等你确认',
-      '模拟验收任务 6 · 处理中'
+      '模拟验收任务 5 · 等你确认',
+      '模拟验收任务 7 · 处理中'
     ], '真实菜单只应列出处理中与等你确认');
     assert.equal(nativeMenu.getMenuItemById('codex-recent'), null);
-    assert.doesNotMatch(taskLabels.join('\n'), /模拟验收任务 1|模拟验收任务 2|模拟验收任务 5|完成|失败|最近提醒/);
+    assert.doesNotMatch(taskLabels.join('\n'), /模拟验收任务 1|模拟验收任务 2|模拟验收任务 3|模拟验收任务 6|完成|失败|最近提醒/);
     process.stdout.write('PET_CODEX_TASK_MENU_OK\n');
     await setEnabled(false);
     await poll(state, value => value.motionOwner === 'none', '关闭清理 Codex 动作');

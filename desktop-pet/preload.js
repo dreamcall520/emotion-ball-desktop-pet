@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 // sandbox 预加载不加载本地模块，只暴露固定的动作名称与数据字段。
 const motionIds = new Set(['hop', 'jelly', 'sway', 'peek', 'bow', 'spin']);
+const auroraClickIds = new Set(['dizzy', 'turn']);
 const companionIds = new Set(['nuzzle', 'land', 'stretch']);
 
 function pointPayload(point) {
@@ -29,7 +30,7 @@ contextBridge.exposeInMainWorld('petDesktop', {
   stopMotion: () => ipcRenderer.send('pet:stop-motion'),
   playMotion: request => {
     if (request && Number.isSafeInteger(request.token) && request.token > 0 &&
-      (motionIds.has(request.action) || companionIds.has(request.action))) {
+      (motionIds.has(request.action) || auroraClickIds.has(request.action) || companionIds.has(request.action))) {
       ipcRenderer.send('pet:motion-start', { token: request.token, action: request.action,
         side: request.side === 'left' ? 'left' : 'right', reducedMotion: request.reducedMotion === true });
     }

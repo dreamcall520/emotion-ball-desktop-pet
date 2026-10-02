@@ -278,12 +278,22 @@ for (const cause of ['revision-gap', 'owner-change']) test(`唯一可靠任务�
   assert.equal(h.statuses.at(-1).state, 'connected');
 });
 
-test('最近任务集合清空后，不继续显示拥有有效snapshot的connected', async t => {
+test('最近任务集合清空后，保持已连接且不等待不存在的snapshot', async t => {
   const h = harness(); t.after(() => h.stream.close());
   h.stream.setThreads([{ id: ID }]); await h.stream.start(); h.receive(snapshot());
   h.stream.setThreads([]);
   assert.equal(h.tasks.at(-1).removed, true); assert.equal(h.tasks.at(-1).state, 'unknown');
-  assert.equal(h.statuses.at(-1).state, 'connecting'); assert.equal(h.socket.destroyed, false);
+  assert.equal(h.statuses.at(-1).state, 'connected'); assert.equal(h.socket.destroyed, false);
+});
+
+test('空任务列表无需snapshot，连接保持健康；尚未读取列表时不提前报告已连接', async t => {
+  const h = harness({ timeoutMs: 20 }); t.after(() => h.stream.close());
+  await h.stream.start();
+  assert.equal(h.statuses.at(-1).state, 'connecting');
+  h.stream.setThreads([]);
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal(h.statuses.at(-1).state, 'connected');
+  assert.equal(h.socket.destroyed, false);
 });
 
 test('单个任务失效或移除不拖掉另一个仍有有效snapshot的连接', async t => {

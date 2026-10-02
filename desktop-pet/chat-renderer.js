@@ -13,6 +13,7 @@
   const modelSelect = byId('chat-model');
   const modelMenu = byId('model-menu');
   const modelRetry = byId('refresh-models');
+  const avatar = byId('chat-avatar');
   let snapshot = { messages: [], history: [], activeChatId: null, busy: false, connection: 'idle', error: null, hasConversation: false };
   let pending = false;
   let stopping = false;
@@ -22,6 +23,7 @@
   let stateEvents = 0;
   let historyOpen = false;
   let confirmingNew = false;
+  let newChatFromHistory = false;
   let modelSaving = '';
   let modelsRefreshing = false;
   let modelError = '';
@@ -186,7 +188,8 @@
     byId('new-chat-confirmation').hidden = !confirmingNew;
     byId('cancel-new-chat').disabled = pending;
     byId('confirm-new-chat').disabled = changeBlocked() || !hasCurrentChat();
-    newButton.disabled = changeBlocked() || !hasCurrentChat();
+    newButton.hidden = !hasCurrentChat();
+    newButton.disabled = changeBlocked() || !hasCurrentChat() || confirmingNew;
     byId('history-hint').textContent = snapshot.busy || snapshot.connection === 'connecting'
       ? '等这次回复结束后，就可以切换聊天。'
       : hasCurrentChat() ? '原来的聊天会保留，随时可以切回来。' : '当前已是新聊天，直接发送第一句话即可。';
@@ -197,8 +200,18 @@
     if (pending) return;
     historyOpen = false;
     confirmingNew = false;
+    newChatFromHistory = false;
     refreshControls();
     input.focus();
+  }
+
+  function cancelNewChat() {
+    if (pending) return;
+    confirmingNew = false;
+    historyOpen = newChatFromHistory;
+    newChatFromHistory = false;
+    refreshControls();
+    (historyOpen ? newButton : input).focus();
   }
 
   function formatDate(value) {
@@ -448,12 +461,8 @@
     if (event.key === 'Escape' && !event.isComposing && !composing && event.keyCode !== 229) {
       event.preventDefault();
       if (modelMenuOpen) closeModelMenu();
-      else if (confirmingNew) {
-        if (pending) return;
-        confirmingNew = false;
-        refreshControls();
-        newButton.focus();
-      } else if (historyOpen) closeHistory();
+      else if (confirmingNew) cancelNewChat();
+      else if (historyOpen) closeHistory();
       else api.close();
     }
   });
@@ -514,18 +523,15 @@
   });
   byId('history-back').addEventListener('click', closeHistory);
   newButton.addEventListener('click', () => {
-    if (changeBlocked() || !hasCurrentChat() || !historyOpen || confirmingNew) return;
+    if (changeBlocked() || !hasCurrentChat() || confirmingNew) return;
+    newChatFromHistory = historyOpen;
+    historyOpen = true;
     confirmingNew = true;
     localError = '';
     refreshControls();
     byId('cancel-new-chat').focus();
   });
-  byId('cancel-new-chat').addEventListener('click', () => {
-    if (pending) return;
-    confirmingNew = false;
-    refreshControls();
-    newButton.focus();
-  });
+  byId('cancel-new-chat').addEventListener('click', cancelNewChat);
   byId('confirm-new-chat').addEventListener('click', () => {
     if (!confirmingNew || !historyOpen || !hasCurrentChat()) return;
     return changeChat(() => api.newChat(), '暂时无法开始新聊天，请稍后再试。');
@@ -539,13 +545,37 @@
     input.focus();
   });
   window.addEventListener('focus', () => {
-    if (!historyOpen && document.activeElement === document.body) input.focus();
+    if (!historyOpen && [document.body, historyButton, newButton].includes(document.activeElement)) input.focus();
   });
   const unsubscribe = api.onState(next => {
     stateEvents += 1;
     render(next);
   });
-  window.addEventListener('beforeunload', unsubscribe);
+  let avatarAnimation = null;
+  const unsubscribeAppearance = api.onAppearance?.((appearance, image) => {
+    avatarAnimation?.destroy();
+    avatarAnimation = null;
+    if (appearance?.shape === 'aurora-cloud' && image?.startsWith('data:image/png;base64,')) {
+      const picture = document.createElement('img');
+      picture.src = image;
+      picture.alt = '';
+      picture.draggable = false;
+      const placeholder = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      placeholder.classList.add('avatar-rive-placeholder');
+      avatar.replaceChildren(picture, placeholder);
+      avatarAnimation = window.AuroraRive?.create(avatar, appearance);
+      const animation = avatarAnimation;
+      animation?.whenReady().then(ready => {
+        if (ready && avatarAnimation === animation) picture.remove();
+      });
+    } else window.PetChatAvatar?.render(avatar, appearance);
+  });
+  window.addEventListener('beforeunload', () => {
+    avatarAnimation?.destroy();
+    unsubscribe();
+    unsubscribeAppearance?.();
+  });
+  window.PetChatAvatar?.render(avatar);
   const initialEvents = stateEvents;
   api.getState().then(next => {
     if (stateEvents === initialEvents) render(next);

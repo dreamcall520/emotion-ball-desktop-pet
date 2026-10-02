@@ -5,6 +5,24 @@ const path = require('node:path');
 const modulePath = path.resolve(__dirname, '../lib/edge-tuck.js');
 const api = fs.existsSync(modulePath) ? require(modulePath) : {};
 
+test('两种云贴边保留云轮廓，幻彩云露出侧瓣与部分眼睛', () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../pet.css'), 'utf8');
+  const tuckedHeadRules = [...css.matchAll(/([^{}]+)\{([^{}]*\bd\s*:\s*path\([^{}]*)\}/g)]
+    .filter(([, selector]) => selector.includes('.eb-head'));
+  assert.equal(tuckedHeadRules.length, 2, '经典贴边轮廓只有左右两条覆写规则');
+  for (const [side, offset] of [['left', '-50'], ['right', '50']]) {
+    assert.match(css, new RegExp(`#pet\\[data-presentation="tucked"\\]\\[data-edge="${side}"\\]\\s*\\{\\s*transform:\\s*translateX\\(${offset}%\\)`),
+      `普通云${side}侧仍按半个窗口平移`);
+    const rule = tuckedHeadRules.find(([, selector]) => selector.includes(`[data-edge="${side}"]`));
+    assert.ok(rule, `${side}侧经典轮廓规则存在`);
+    assert.match(rule[1], /:not\(\[data-shape="cloud"\]\)/, '普通云不能被经典半球轮廓覆盖');
+    assert.match(rule[1], /:not\(\[data-shape="aurora-cloud"\]\)/, '幻彩云不能被经典半球轮廓覆盖');
+  }
+  assert.match(css, /#pet\[data-shape="aurora-cloud"\]\[data-presentation="tucked"\]\[data-edge="left"\]\s*\{\s*transform:\s*translateX\(-68%\)/);
+  assert.match(css, /#pet\[data-shape="aurora-cloud"\]\[data-presentation="tucked"\]\[data-edge="right"\]\s*\{\s*transform:\s*translateX\(68%\)/);
+  assert.doesNotMatch(css, /#pet\[data-shape="aurora-cloud"\]\[data-presentation="tucked"\]\s+\.eb-eye\s*\{[^}]*opacity:\s*0/);
+});
+
 function fixture({ size = 80, x = -600, side = null } = {}) {
   assert.equal(typeof api.createEdgeTuck, 'function', '提供可独立验证的边缘状态控制器');
   let bounds = { x, y: 100, width: size, height: size };

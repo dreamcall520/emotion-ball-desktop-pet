@@ -5,10 +5,11 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 // 运行真实 renderer、状态规则和动画引擎；仅替代 DOM、宿主通信及时间。
-function createRenderer(randomValue = 0.5) {
+function createRenderer(randomValue = 0.5, auroraRive = null) {
   let now = 0;
   let nextTimer = 1;
   let engine;
+  let lastBallOptions;
   let captured = false;
   const timers = new Map();
   const events = {};
@@ -34,6 +35,8 @@ function createRenderer(randomValue = 0.5) {
     style: { setProperty() {} },
     children: [],
     appendChild(child) { this.children.push(child); child.parentNode = this; },
+    prepend(child) { this.children.unshift(child); child.parentNode = this; },
+    querySelector(selector) { return selector === ':scope > svg' ? this.children.find(child => child.tag === 'svg') : null; },
     removeChild(child) { this.children = this.children.filter(item => item !== child); },
     replaceChildren() { this.children = []; },
     addEventListener(name, callback) { events[name] = callback; },
@@ -59,6 +62,7 @@ function createRenderer(randomValue = 0.5) {
     clearInterval() {},
     requestAnimationFrame() { return 1; },
     document: { getElementById: () => pet, createElementNS: (_ns, tag) => node(tag) },
+    AuroraRive: auroraRive,
     innerWidth: 80,
     addEventListener(name, callback) { windowEvents[name] = callback; },
     petDesktop: {
@@ -97,12 +101,15 @@ function createRenderer(randomValue = 0.5) {
     { filename: file }
   );
   for (const file of [
-    'emotion-ball/js/rings.js', 'emotion-ball/js/emotions.js', 'emotion-ball/js/ball.js', 'emotion-ball/js/engine.js',
+    'emotion-ball/js/rings.js', 'emotion-ball/js/custom-shapes.js', 'emotion-ball/js/emotions.js', 'emotion-ball/js/ball.js', 'emotion-ball/js/engine.js',
     'desktop-pet/lib/pet-behavior.js', 'desktop-pet/lib/companion-behavior.js', 'desktop-pet/lib/interaction-motion.js',
-    'desktop-pet/lib/companion-motion.js', 'desktop-pet/lib/pet-facing.js'
+    'desktop-pet/lib/companion-motion.js', 'desktop-pet/lib/pet-facing.js', 'desktop-pet/lib/customization.js'
   ]) run(file);
   const create = context.EmotionBall.create;
-  context.EmotionBall.create = (...args) => (engine = create(...args));
+  context.EmotionBall.create = (...args) => {
+    lastBallOptions = args[1];
+    return (engine = create(...args));
+  };
   run('desktop-pet/renderer.js');
 
   function activity(locked = false, overrides = {}) {
@@ -114,12 +121,14 @@ function createRenderer(randomValue = 0.5) {
   }
   activity();
   return {
-    host, pet, get engine() { return engine; }, activity, bounds, events, windowEvents, timers,
+    host, pet, get engine() { return engine; }, get lastBallOptions() { return lastBallOptions; },
+    activity, bounds, events, windowEvents, timers,
     frame: packet => subscriptions.motion(packet),
     stopHost: () => windowController?.stop(),
     resize(width) { context.innerWidth = width; windowEvents.resize(); },
     emotions: context.EmotionBall.config.list(),
     command: value => subscriptions.command(value),
+    settings: value => subscriptions.settings(value),
     present: value => subscriptions.presentation?.(value),
     codexSettings(value) { subscriptions.codexSettings?.({ pageEpoch: 1, ...value }); },
     click() {
@@ -148,6 +157,108 @@ function createRenderer(randomValue = 0.5) {
 }
 
 const codexCommand = (overrides = {}) => ({ command: 'codex', alertId: 1, generation: 1, pageEpoch: 1, motion: 'hop', ...overrides });
+
+test('定制形态、手调轮廓和配色应用到同一个球球窗口', () => {
+  const r = createRenderer();
+  const headPath = () => {
+    const walk = node => node.attributes?.class === 'eb-head'
+      ? node.attributes.d : node.children?.map(walk).find(Boolean);
+    return walk(r.pet.children[0]);
+  };
+  const originalPath = headPath();
+  r.settings({ keepAwake: true, customization: {
+    appearance: { shape: 'square', bodyColor: '#28415C', eyeColor: '#F4E8C8', eyeScale: 1.1,
+      eyeSpacing: 1.15, eyeHeight: 5, shapeTuning: { width: 1.13, height: 0.96, softness: 0.72, asymmetry: 0.2 },
+      idleEyes: 'happy' }
+  } });
+  assert.equal(r.engine._theme.body, '#28415C');
+  assert.equal(r.engine._theme.eyes, '#F4E8C8');
+  assert.equal(r.pet.children.length, 1);
+  assert.notEqual(headPath(), originalPath);
+});
+
+test('幻彩云双色光斑传到桌面，紧凑尺寸眼睛不再额外放大', () => {
+  const r = createRenderer();
+  r.settings({ customization: { appearance: {
+    shape: 'aurora-cloud', bodyColor: '#5B3BC7', eyeColor: '#FFFFFF',
+    glowPinkColor: '#E589DF', glowGoldColor: '#E7BE83', eyeScale: 1,
+    auroraTransparency: 42, auroraStyle: 'simple'
+  } } });
+  assert.equal(r.lastBallOptions.shape, 'aurora-cloud');
+  assert.equal(r.lastBallOptions.glowPinkColor, '#E589DF');
+  assert.equal(r.lastBallOptions.glowGoldColor, '#E7BE83');
+  assert.equal(r.lastBallOptions.auroraTransparency, 42);
+  assert.equal(r.lastBallOptions.auroraStyle, 'simple');
+  assert.equal(r.lastBallOptions.auroraBodyTexture, null);
+  assert.equal(r.lastBallOptions.eyeScale, 1);
+  assert.ok(r.lastBallOptions.customShape.ring.length === 96);
+  assert.deepEqual(Array.from(r.engine._def.pool), [0],
+    '幻彩云常规待机保持参考双弧眼，不随机切成宽眼形');
+
+  r.settings({ customization: { appearance: { shape: 'cloud', eyeScale: 1 } } });
+  assert.equal(r.lastBallOptions.eyeScale, 1);
+  assert.equal(r.pet.querySelector(':scope > svg').style.opacity, '1.00');
+  assert.deepEqual(Array.from(r.engine._def.pool), [0, 8], '其他形态保留原待机轮换');
+  r.settings({ customization: { appearance: { shape: 'square', eyeScale: 1 } } });
+  assert.equal(r.lastBallOptions.eyeScale, 1.5);
+});
+
+test('非幻彩云保存的透明度作用于桌面球体 SVG', () => {
+  const r = createRenderer();
+  r.settings({ customization: { appearance: { shape: 'square', auroraTransparency: 42 } } });
+  assert.equal(r.pet.querySelector(':scope > svg').style.opacity, '0.58');
+});
+
+test('从其他形态保存为幻彩云时，旧形态保持到 Rive 就绪，不露出旧版幻彩 SVG', async () => {
+  let finish;
+  const r = createRenderer(0.5, { create: () => ({
+    destroy() {}, whenReady: () => new Promise(resolve => { finish = resolve; })
+  }) });
+  const oldSvg = r.pet.children[0];
+  r.settings({ customization: { appearance: { shape: 'aurora-cloud' } } });
+  const newSvg = r.pet.children[1];
+  assert.equal(r.pet.children[0], oldSvg);
+  assert.equal(newSvg.style.visibility, 'hidden');
+  finish(true);
+  await new Promise(setImmediate);
+  assert.deepEqual(r.pet.children, [newSvg]);
+});
+
+test('幻彩云 Rive 加载失败时恢复备用 SVG', async () => {
+  let finish;
+  const r = createRenderer(0.5, { create: () => ({
+    destroy() {}, whenReady: () => new Promise(resolve => { finish = resolve; })
+  }) });
+  r.settings({ customization: { appearance: { shape: 'aurora-cloud' } } });
+  const fallback = r.pet.children[1];
+  finish(false);
+  await new Promise(setImmediate);
+  assert.deepEqual(r.pet.children, [fallback]);
+  assert.equal(fallback.style.visibility, '');
+});
+
+test('幻彩云单击交替眩晕和原地转身，双击仍保留旧随机动作', () => {
+  const r = createRenderer(0);
+  r.settings({ customization: { appearance: {
+    shape: 'aurora-cloud', bodyColor: '#5B3BC7', eyeColor: '#FFFFFF'
+  } } });
+  assert.equal(r.pet.dataset.shape, 'aurora-cloud');
+  r.click();
+  r.advanceTo(260);
+  assert.equal(r.pet.dataset.lastAction, 'dizzy');
+  assert.equal(r.host.motions.at(-1).action, 'dizzy');
+  assert.equal(r.pet.dataset.clickVisual, 'dizzy');
+  r.advanceTo(1900);
+  assert.equal(r.pet.dataset.clickVisual, undefined);
+  r.click();
+  r.advanceTo(2160);
+  assert.equal(r.pet.dataset.lastAction, 'turn');
+  assert.equal(r.host.motions.at(-1).action, 'turn');
+  r.advanceTo(4260);
+  r.doubleClick();
+  assert.equal(r.host.motions.at(-1).action, 'hop');
+  assert.equal(r.pet.dataset.clickVisual, undefined);
+});
 
 test('Codex 未开启不报告活动，开启后只报告改变的可展示状态', () => {
   const r = createRenderer();
@@ -763,6 +874,24 @@ test('左右默认脸型均保持屏幕坐标鼠标注视，鼠标停留后回�
     assert.equal(r.engine._gaze.tx, 0);
     assert.equal(r.engine._facing, side);
   }
+});
+
+test('幻彩云自由状态默认朝屏幕内侧看，贴边仍保留已确认的镜像朝向', () => {
+  const r = createRenderer();
+  r.settings({ customization: { appearance: {
+    shape: 'aurora-cloud', bodyColor: '#5B3BC7', eyeColor: '#FFFFFF'
+  } } });
+  const area = { x: 0, y: 0, width: 1200, height: 800 };
+  r.activity(false, { petBounds: { x: 100, y: 100, width: 80, height: 80 }, workArea: area, cursor: null });
+  assert.equal(r.pet.dataset.facing, 'right');
+  assert.equal(r.engine._facing, 'left', '素材眼睛偏左，反转绘制后才会朝屏幕中心');
+  r.activity(false, { petBounds: { x: 1000, y: 100, width: 80, height: 80 }, workArea: area, cursor: null });
+  assert.equal(r.pet.dataset.facing, 'left');
+  assert.equal(r.engine._facing, 'right');
+  r.present({ mode: 'tucked', side: 'left', suppressed: true });
+  assert.equal(r.engine._facing, 'right', '左侧贴边由 CSS 镜像素材');
+  r.present({ mode: 'tucked', side: 'right', suppressed: true });
+  assert.equal(r.engine._facing, 'right', '右侧贴边直接显示素材朝向');
 });
 
 test('运动中换边不翻转正在播放的动作，结束后才回到新侧朝向', () => {

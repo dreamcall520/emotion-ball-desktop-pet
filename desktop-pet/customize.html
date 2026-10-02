@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; base-uri 'none'">
+  <title>定制球球</title>
+  <link rel="stylesheet" href="customize.css">
+  <link rel="stylesheet" href="aurora-rive.css">
+</head>
+<body>
+  <div class="studio">
+    <header class="topbar">
+      <div><span class="eyebrow">QIUQIU STUDIO</span><h1>定制你的球球</h1><p>从喜欢的形态出发，亲手调整轮廓、五官和颜色。</p></div>
+      <button id="save" class="primary" type="button">保存到桌面球球</button>
+    </header>
+    <div class="workspace">
+      <section class="preview-pane" aria-label="球球实时预览">
+        <div class="preview-head"><span>实时预览</span><div class="preview-actions"><div class="preview-mode" role="group" aria-label="预览尺寸"><button id="preview-large" type="button" aria-pressed="true">大图</button><button id="preview-desktop" type="button" aria-pressed="false">桌面尺寸</button></div><button id="stage-toggle" type="button" aria-label="切换预览背景">切换背景 ◐</button></div></div>
+        <div id="stage" class="stage" data-preview-mode="large"><div id="preview-ball" aria-label="球球外观预览"></div></div>
+        <div class="preview-foot"><span id="preview-size-label">大图预览</span></div>
+        <p class="preview-note">实时查看外观与桌面实际尺寸，满意后保存；眨眼和呼吸动效会保留。</p>
+      </section>
+      <div class="controls">
+        <section class="panel" aria-labelledby="appearance-title">
+          <div class="panel-title"><div><span class="section-no">01 / LOOK</span><h2 id="appearance-title">外观设计</h2></div><button id="reset-appearance" class="text-button" type="button">恢复当前形态默认</button></div>
+          <div class="group-heading"><span>形态</span><span id="shape-hint" class="group-hint">点选一个起点，再按喜好调整</span></div>
+          <div id="shape-options" class="shape-options" role="group" aria-label="球球形态"></div>
+          <label class="startup-default"><input id="startup-default" type="checkbox" checked disabled><span><strong>设为启动外观</strong><small>保存后，下次打开仍使用这套外观</small></span></label>
+          <div id="aurora-style-field" class="aurora-style-field" hidden>
+            <div class="group-heading"><span>幻彩样式</span><span class="group-hint">点选后立即预览</span></div>
+            <div class="aurora-style-options" role="group" aria-label="幻彩样式">
+              <button id="aurora-style-dimensional" type="button" aria-pressed="true"><span class="aurora-style-swatch dimensional" aria-hidden="true"></span><span><strong>立体幻彩</strong><small>柔和光泽与层次</small></span></button>
+              <button id="aurora-style-simple" type="button" aria-pressed="false"><span class="aurora-style-swatch simple" aria-hidden="true"></span><span><strong>简色渐变</strong><small>干净柔和的颜色</small></span></button>
+            </div>
+          </div>
+          <div class="manual-heading"><div><strong>手动调整</strong><span id="manual-hint">让轮廓与五官长成你喜欢的样子</span></div><label class="switch"><input id="manual-toggle" type="checkbox" aria-controls="manual-controls"><span class="switch-track"></span><span class="sr-only">开启手动调整</span></label></div>
+          <div id="manual-controls" class="manual-controls" hidden>
+            <div class="manual-tools"><span>拖动滑杆查看变化</span><button id="reset-manual" type="button">重置微调</button></div>
+            <div class="range-grid">
+              <div class="field range-field"><label for="shape-width">宽窄 <output id="shape-width-value">100%</output></label><input id="shape-width" type="range" min="75" max="125" step="1" value="100"></div>
+              <div class="field range-field"><label for="shape-height">高矮 <output id="shape-height-value">100%</output></label><input id="shape-height" type="range" min="75" max="125" step="1" value="100"></div>
+              <div class="field range-field"><label for="shape-softness">圆润度 <output id="shape-softness-value">50%</output></label><input id="shape-softness" type="range" min="0" max="100" step="1" value="50"></div>
+              <div class="field range-field"><label for="shape-asymmetry">不对称 <output id="shape-asymmetry-value">0%</output></label><input id="shape-asymmetry" type="range" min="-100" max="100" step="1" value="0"></div>
+              <div class="field range-field"><label for="eye-scale">眼睛大小 <output id="eye-scale-value">100%</output></label><input id="eye-scale" type="range" min="40" max="125" step="1" value="100"></div>
+              <div class="field range-field"><label for="eye-spacing">眼睛间距 <output id="eye-spacing-value">100%</output></label><input id="eye-spacing" type="range" min="70" max="130" step="1" value="100"></div>
+              <div class="field range-field"><label for="eye-height">眼睛高低 <output id="eye-height-value">居中</output></label><input id="eye-height" type="range" min="-30" max="30" step="1" value="0"></div>
+            </div>
+          </div>
+          <div id="aurora-transparency-field" class="field range-field aurora-transparency-field"><label for="aurora-transparency">透明度 <output id="aurora-transparency-value">0%</output></label><input id="aurora-transparency" type="range" min="0" max="60" step="1" value="0"></div>
+          <div class="group-heading color-heading"><span>自由配色</span><span class="group-hint">点击色块，或直接输入 HEX 色值</span></div>
+          <div class="color-editor"><div class="color-editor-head"><label for="body-color">球体</label><div class="color-row"><input id="body-color" type="color" aria-label="选取球体颜色"><input id="body-hex" class="hex-input" type="text" inputmode="text" maxlength="7" spellcheck="false" aria-label="球体 HEX 色值"></div></div><div id="body-swatches" class="swatches" aria-label="球体颜色建议"></div></div>
+          <div class="color-editor"><div class="color-editor-head"><label for="eye-color">眼睛</label><div class="color-row"><input id="eye-color" type="color" aria-label="选取眼睛颜色"><input id="eye-hex" class="hex-input" type="text" inputmode="text" maxlength="7" spellcheck="false" aria-label="眼睛 HEX 色值"></div></div><div id="eye-swatches" class="swatches" aria-label="眼睛颜色建议"></div></div>
+          <div id="aurora-colors" class="aurora-colors" hidden>
+            <div class="aurora-heading"><span>幻彩光斑</span><button id="aurora-reference" type="button">应用参考配色</button></div>
+            <p>粉光与金光会柔和地映在球体上，可分别设置颜色。</p>
+            <div class="color-editor"><div class="color-editor-head"><label for="glow-pink-color">粉光</label><div class="color-row"><input id="glow-pink-color" type="color" aria-label="选取粉光颜色"><input id="glow-pink-hex" class="hex-input" type="text" inputmode="text" maxlength="7" spellcheck="false" aria-label="粉光 HEX 色值"></div></div><div id="glow-pink-swatches" class="swatches" aria-label="粉光颜色建议"></div></div>
+            <div class="color-editor"><div class="color-editor-head"><label for="glow-gold-color">金光</label><div class="color-row"><input id="glow-gold-color" type="color" aria-label="选取金光颜色"><input id="glow-gold-hex" class="hex-input" type="text" inputmode="text" maxlength="7" spellcheck="false" aria-label="金光 HEX 色值"></div></div><div id="glow-gold-swatches" class="swatches" aria-label="金光颜色建议"></div></div>
+          </div>
+          <button id="save-bottom" class="save-bottom" type="button">保存外观到桌面球球 ↗</button>
+        </section>
+      </div>
+    </div>
+    <div id="message" class="message" role="status" aria-live="polite"></div>
+  </div>
+  <script src="../emotion-ball/js/rings.js"></script>
+  <script src="../emotion-ball/js/custom-shapes.js"></script>
+  <script src="../emotion-ball/js/emotions.js"></script>
+  <script src="../emotion-ball/js/ball.js"></script>
+  <script src="../emotion-ball/js/engine.js"></script>
+  <script src="lib/customization.js"></script>
+  <script src="lib/rive.js"></script>
+  <script src="lib/boo-binary.js"></script>
+  <script src="lib/aurora-rive.js"></script>
+  <script src="customize-renderer.js"></script>
+</body>
+</html>

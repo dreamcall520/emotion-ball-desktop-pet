@@ -1,0 +1,57 @@
+.aurora-click-visual {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  user-select: none;
+}
+
+#pet .aurora-click-visual svg,
+.aurora-click-visual svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  /* The host animates its direct pet SVG. The overlay follows frame.body
+   * instead and must not receive the host's separate breathing/drag motion. */
+  transform: none !important;
+  transition: none !important;
+  animation: none !important;
+  filter: none !important;
+}
+
+#pet[data-click-visual="dizzy"] .eb-eye,
+#pet[data-click-visual="turn"] .eb-eye {
+  opacity: var(--aurora-click-eye-opacity, 0);
+}
+
+.aurora-click-visual__glow {
+  mix-blend-mode: screen;
+}
+
+.aurora-click-visual__spiral,
+.aurora-click-visual__spiral-halo {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.aurora-click-visual__spiral {
+  stroke: #fff;
+  stroke-width: 4.3;
+}
+
+.aurora-click-visual__spiral-halo {
+  stroke: #fff;
+  stroke-width: 8;
+  opacity: .38;
+}
+
+.aurora-click-visual__spark {
+  fill: #fff9e5;
+  filter: drop-shadow(0 0 2px #fff7dd);
+}

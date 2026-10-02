@@ -6,6 +6,7 @@ const { SIZES } = require('../lib/window-placement');
 
 const {
   MOTIONS,
+  CLICK_MOTIONS,
   getMotion,
   chooseMotion,
   sampleMotion,
@@ -26,6 +27,42 @@ test('动作目录按合同顺序和权重提供六个动作', () => {
     { id: 'bow', durationMs: 1600, weight: 2, emotion: '14' },
     { id: 'spin', durationMs: 1600, weight: 1, emotion: '10' }
   ]);
+});
+
+test('幻彩云单击动作独立于双击随机池，眩晕摇晃与侧身转圈均原地归位', () => {
+  assert.deepEqual(CLICK_MOTIONS.map(motion => motion.id), ['dizzy', 'turn']);
+  assert.equal(MOTIONS.length, 6);
+  assert.equal(getMotion('dizzy').durationMs, 1550);
+  assert.equal(getMotion('turn').durationMs, 1300);
+  for (const action of ['dizzy', 'turn']) {
+    const duration = getMotion(action).durationMs;
+    assert.equal(sampleMotion(action, 0).progress, 0);
+    assert.equal(sampleMotion(action, 0).suppressRibbons, true);
+    assert.ok(sampleMotion(action, 0).body.yaw > 0.04, '首帧就须遮住参考图中的静态白眼');
+    for (let elapsed = 0; elapsed <= duration; elapsed += 16) {
+      const frame = sampleMotion(action, elapsed);
+      if (!frame.done) assert.equal(frame.suppressRibbons, true);
+      assert.deepEqual(frame.window, { x: 0, y: 0 }, '点击反馈不应移动桌面窗口');
+      assert(Object.values(frame.body).every(Number.isFinite));
+    }
+    assert.deepEqual(sampleMotion(action, duration).body, neutral);
+    assert.equal(sampleMotion(action, duration).done, true);
+  }
+  assert(sampleMotion('dizzy', 170).body.rotate < 0);
+  assert(sampleMotion('dizzy', 390).body.rotate > 0);
+  assert(sampleMotion('dizzy', 170).body.rotate < -6, '眩晕须有明显的身体弹动');
+  const turn = [0, 400, 650, 900, 1299].map(elapsed => sampleMotion('turn', elapsed).body);
+  assert(turn[1].scaleX < 0.4 && turn[3].scaleX < 0.4, '一圈经过两次窄侧面');
+  assert(turn[2].scaleX > 0.95, '转至背面时重新展开，而非持续压扁');
+  assert(turn.every(body => body.scaleY === 1), '侧转时保持云朵高度');
+  assert(turn.every((body, index) => index === 0 || body.yaw > turn[index - 1].yaw),
+    '偏航角连续朝同一方向前进');
+  for (let elapsed = 16; elapsed < 1300; elapsed += 16) {
+    assert(sampleMotion('turn', elapsed).body.yaw > sampleMotion('turn', elapsed - 16).body.yaw,
+      `${elapsed}ms 转动不得倒退或在关键帧停住`);
+  }
+  assert.equal(sampleMotion('turn', 650).turnMorph, undefined, '背面仍保留常规云瓣轮廓');
+  assert.equal(sampleMotion('turn', 0).turnMorph, undefined);
 });
 
 test('getMotion只接受动作目录自身的id', () => {

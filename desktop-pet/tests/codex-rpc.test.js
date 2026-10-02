@@ -19,7 +19,7 @@ function fakeChild() {
   child.kill = signal => { child.kills.push(signal); return true; };
   return child;
 }
-function setup({ reply = () => ({}), timeoutMs = 100, installed = true, ignoreThread } = {}) {
+function setup({ reply = () => ({}), timeoutMs = 100, installed = true, installedAt, ignoreThread } = {}) {
   const child = fakeChild(); const sent = []; const probes = []; const launches = [];
   child.stdin.on('data', chunk => {
     const packet = JSON.parse(chunk);
@@ -31,21 +31,33 @@ function setup({ reply = () => ({}), timeoutMs = 100, installed = true, ignoreTh
   const rpc = moduleApi().createCodexRpc({
     spawn: (...args) => { launches.push(args); return child; },
     fs: { promises: {
-      lstat: async file => { probes.push(file); if (!installed) throw Object.assign(new Error('SECRET'), { code: 'ENOENT' }); return { isFile: () => true, isSymbolicLink: () => false }; },
+      lstat: async file => { probes.push(file); if (!installed || (installedAt && file !== installedAt)) throw Object.assign(new Error('SECRET'), { code: 'ENOENT' }); return { isFile: () => true, isSymbolicLink: () => false }; },
       access: async () => {}
     } }, homedir: () => '/private/test-user', timeoutMs, ignoreThread
   });
   return { rpc, child, sent, probes, launches };
 }
 
-test('导入和构造零探测；只在start探测4个固定安装路径', async () => {
+test('导入和构造零探测；只在start探测8个固定安装路径', async () => {
   const h = setup({ installed: false });
   assert.equal(h.probes.length, 0); assert.equal(h.launches.length, 0);
   await assert.rejects(h.rpc.start(), { code: 'MISSING' });
   assert.deepEqual(h.probes, [
     '/Applications/Codex.app/Contents/Resources/codex', '/Applications/ChatGPT.app/Contents/Resources/codex',
-    '/private/test-user/Applications/Codex.app/Contents/Resources/codex', '/private/test-user/Applications/ChatGPT.app/Contents/Resources/codex'
+    '/private/test-user/Applications/Codex.app/Contents/Resources/codex', '/private/test-user/Applications/ChatGPT.app/Contents/Resources/codex',
+    '/Applications/Codex.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex',
+    '/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex',
+    '/private/test-user/Applications/Codex.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex',
+    '/private/test-user/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex'
   ]);
+  h.rpc.close();
+});
+
+test('兼容当前 ChatGPT.app 内置 Codex CLI 路径', async () => {
+  const installedAt = '/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex';
+  const h = setup({ installedAt, reply: () => ({ result: {} }) });
+  await h.rpc.start();
+  assert.equal(h.launches[0][0], installedAt);
   h.rpc.close();
 });
 

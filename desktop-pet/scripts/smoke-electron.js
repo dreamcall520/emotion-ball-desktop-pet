@@ -5,8 +5,8 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { BODY_MOTION_SIZES } = require('./verify-body-motion');
 const QUOTA_LABEL_MARKERS = Object.freeze([
-  'CODEX_QUOTA_SIZE_60', 'CODEX_QUOTA_SIZE_80', 'CODEX_QUOTA_SIZE_120',
-  'CODEX_QUOTA_SIZE_180', 'CODEX_QUOTA_SIZE_260'
+  'CODEX_QUOTA_SIZE_60', 'CODEX_QUOTA_SIZE_80', 'CODEX_QUOTA_SIZE_108',
+  'CODEX_QUOTA_SIZE_120', 'CODEX_QUOTA_SIZE_180', 'CODEX_QUOTA_SIZE_260'
 ]);
 
 const packagedApp = process.env.PET_SMOKE_APP_PATH;
@@ -60,6 +60,19 @@ function runSmokeTest() {
       cleanup();
       try {
         assert.equal(code, 0, output);
+        if (process.env.PET_SMOKE_CUSTOMIZE_ONLY === '1') {
+          assert.match(output, /PET_CUSTOMIZE_SMOKE_OK/);
+          assert.doesNotMatch(output, /Uncaught|ERR_FILE_NOT_FOUND|did-fail-load/i);
+          resolve(output);
+          return;
+        }
+        if (process.env.PET_SMOKE_CODEX_ONLY === '1') {
+          assert.match(output, /PET_CODEX_SIMULATED_OK/);
+          assert.match(output, /PET_SMOKE_OK/);
+          assert.doesNotMatch(output, /Uncaught|ERR_FILE_NOT_FOUND|did-fail-load/i);
+          resolve(output);
+          return;
+        }
         if (process.env.PET_SMOKE_CHAT_ONLY === '1') {
           assert.match(output, /PET_CHAT_INTEGRATION_OK/, '聊天原生集成验收未完成');
           assert.doesNotMatch(output, /Uncaught|ERR_FILE_NOT_FOUND|did-fail-load/i);

@@ -7,6 +7,9 @@ const LABEL_SIZES = Object.freeze({
   compactExpandedDual: Object.freeze({ width: 196, height: 128 })
 });
 const GAP = 8;
+// Matches the peeked aurora cloud's horizontal presentation in pet.css.
+const AURORA_PEEK_SHIFT = 0.35;
+const { petVisualBounds } = require('./pet-visual-bounds');
 const GEOMETRY_LIMIT = Math.floor(Number.MAX_SAFE_INTEGER / 4);
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -77,9 +80,19 @@ function quotaLabelSize(value, expanded = false, itemCount = 1) {
   return LABEL_SIZES[value] || LABEL_SIZES.standard;
 }
 
-function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName = 'standard', expanded = false, itemCount = 1) {
+function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName = 'standard', expanded = false, itemCount = 1,
+  presentation = null) {
   const area = safeArea(workArea);
-  const pet = safePet(petBounds, area);
+  const nativePet = safePet(petBounds, area);
+  const auroraPeek = presentation?.shape === 'aurora-cloud' && presentation?.mode === 'peeked' &&
+    ['left', 'right'].includes(presentation.side);
+  // The native window stays on-screen, while CSS moves the visible cloud toward the edge.
+  // Anchor the label to that moved cloud, not to the empty part of its native window.
+  const shiftedPet = auroraPeek ? {
+    ...nativePet,
+    x: nativePet.x + (presentation.side === 'right' ? 1 : -1) * nativePet.width * AURORA_PEEK_SHIFT
+  } : nativePet;
+  const pet = petVisualBounds(shiftedPet, presentation?.shape);
   const obstacle = safeObstacle(obstacleBounds);
   const requestedSize = quotaLabelSize(sizeName, expanded, itemCount);
   const size = {

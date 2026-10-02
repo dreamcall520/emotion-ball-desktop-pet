@@ -83,3 +83,14 @@ test('定位不会修改输入对象', () => {
   const area = Object.freeze({ ...workArea });
   assert.equal(bubbleBounds(pet, area).placement, 'above');
 });
+
+test('非经典外观的气泡贴近实际可见顶部，保留经典外观的视觉间距', () => {
+  const pet = { x: 600, y: 400, width: 180, height: 180 };
+  const classic = bubbleBounds(pet, workArea);
+  const classicGap = pet.y + pet.height * .06 - classic.y - classic.height;
+  for (const [shape, visibleTop] of [['cloud', .17], ['aurora-cloud', .105], ['square', .11]]) {
+    const bubble = bubbleBounds(pet, workArea, false, null, shape);
+    const gap = pet.y + pet.height * visibleTop - bubble.y - bubble.height;
+    assert.ok(Math.abs(gap - classicGap) <= 1, `${shape} 的气泡与可见轮廓间距应接近经典`);
+  }
+});

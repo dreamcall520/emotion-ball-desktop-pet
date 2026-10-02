@@ -42,6 +42,7 @@ const { createChatCompanion } = require('./lib/chat-companion');
 const { createCodexChatRpc } = require('./lib/codex-chat-rpc');
 const { createChatWindow } = require('./lib/chat-window');
 const { createColorModeManager } = require('./lib/color-mode');
+const { normalizeCustomization, effectiveAppearance } = require('./lib/customization');
 
 const APP_NAME = '球球桌宠';
 const IS_SMOKE_TEST = process.env.PET_SMOKE_TEST === '1';
@@ -68,6 +69,8 @@ let bubbleVisibilityBinding = null;
 let quotaLabel = null;
 let chat = null;
 let chatWindow = null;
+let customizationWindow = null;
+let customizationPreviewAppearance = null;
 let screenLocked = false;
 let codexCompanion = null;
 let codexNow = Date.now;
@@ -139,9 +142,71 @@ function fromChatWindow(event) {
   return Boolean(!isQuitting && win && !win.isDestroyed() && event.sender === win.webContents);
 }
 
+function fromCustomizationWindow(event) {
+  return Boolean(!isQuitting && customizationWindow && !customizationWindow.isDestroyed() &&
+    event.sender === customizationWindow.webContents);
+}
+
+function openCustomization() {
+  if (isQuitting || screenLocked) return;
+  if (customizationWindow && !customizationWindow.isDestroyed()) {
+    customizationWindow.show();
+    customizationWindow.focus();
+    return;
+  }
+  const win = new BrowserWindow({
+    width: 960, height: 700, minWidth: 760, minHeight: 580,
+    title: '定制球球', backgroundColor: '#F6F4EF', show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'customize-preload.js'),
+      contextIsolation: true, nodeIntegration: false, sandbox: true,
+      spellcheck: false, devTools: !app.isPackaged
+    }
+  });
+  customizationWindow = win;
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', event => event.preventDefault());
+  win.webContents.on('did-fail-load', (_event, code, description) => writeError('定制面板加载', `${code} ${description}`));
+  win.on('closed', () => {
+    if (customizationWindow !== win) return;
+    customizationWindow = null;
+    customizationPreviewAppearance = null;
+    chatWindow?.syncAppearance();
+  });
+  win.once('ready-to-show', () => { if (!win.isDestroyed() && !screenLocked) win.show(); });
+  void win.loadFile(path.join(__dirname, 'customize.html')).catch(error => writeError('定制面板', error));
+}
+
+function effectiveCustomization(value) {
+  const customization = normalizeCustomization(value);
+  return { ...customization,
+    appearance: effectiveAppearance(customization.appearance) };
+}
+
+function saveCustomization(value, setAsStartupDefault = true) {
+  if (!settings || isQuitting) return false;
+  const previous = settings;
+  const customization = effectiveCustomization(value);
+  settings = { ...settings, customization,
+    startupAppearance: setAsStartupDefault ? customization.appearance : settings.startupAppearance };
+  try { persistSettings(); }
+  catch (error) {
+    settings = previous;
+    writeError('保存球球定制', error);
+    return false;
+  }
+  sendCompanionSettings();
+  customizationPreviewAppearance = null;
+  chatWindow?.syncAppearance();
+  repositionQuotaLabel();
+  refreshTrayMenu();
+  return true;
+}
+
 function openChat() {
   if (isQuitting || screenLocked || !chat) return;
   if (!petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) restorePet();
+  else if (edgeTuck?.getPresentation().side) edgeTuck.restore();
   stopMotion();
   dismissCodexPresentation();
   dialogue?.dismiss();
@@ -790,7 +855,8 @@ function sendCompanionSettings() {
   if (!petWindow || petWindow.isDestroyed()) return;
   petWindow.webContents.send('pet:settings', {
     keepAwake: settings.keepAwake,
-    bubblesEnabled: settings.bubblesEnabled
+    bubblesEnabled: settings.bubblesEnabled,
+    customization: effectiveCustomization(settings.customization)
   });
 }
 
@@ -883,11 +949,12 @@ function setOpenAtLogin(enabled) {
 
 function sizeMenu() {
   return [
-    ['micro', '超小（60 × 60）'],
-    ['tiny', '极小（80 × 80）'],
-    ['small', '小（120 × 120）'],
-    ['medium', '中（180 × 180）'],
-    ['large', '大（260 × 260）']
+    ['micro', '袖珍（60 × 60）'],
+    ['tiny', '迷你（80 × 80）'],
+    ['compact', '紧凑（108 × 108）'],
+    ['small', '标准（120 × 120）'],
+    ['medium', '大（180 × 180）'],
+    ['large', '特大（260 × 260）']
   ].map(([value, label]) => ({
     label,
     type: 'radio',
@@ -976,25 +1043,27 @@ function codexMenu() {
 function menuTemplate() {
   return [
     { id: 'chat-open', label: '和球球聊聊', click: openChat },
-    { type: 'separator' },
+    { id: 'customize-open', label: '定制球球', click: openCustomization },
     { label: '随机表情', click: () => sendCommand('random') },
-    { label: '立即睡眠', click: () => sendCommand('sleep') },
-    { label: '立即唤醒', click: () => sendCommand('wake') },
-    {
-      label: '保持清醒', type: 'checkbox', checked: settings.keepAwake,
-      click: item => setCompanionSetting('keepAwake', item.checked)
-    },
-    {
-      label: '互动气泡', type: 'checkbox', checked: settings.bubblesEnabled,
-      click: item => setCompanionSetting('bubblesEnabled', item.checked)
-    },
-    codexMenu(),
     { type: 'separator' },
-    { id: 'edge-left', label: '靠左收起', click: () => dockPet('left') },
-    { id: 'edge-right', label: '靠右收起', click: () => dockPet('right') },
-    { id: 'edge-leave', label: '离开边缘', enabled: Boolean(edgeTuck?.getPresentation().side), click: restorePet },
-    { id: 'edge-visibility', label: edgeTuck?.getPresentation().mode === 'hidden' ? '显示球球' : '暂时隐藏',
-      click: () => edgeTuck?.getPresentation().mode === 'hidden' ? restorePet() : hidePet() },
+    { label: '状态与互动', submenu: [
+      { label: '立即睡眠', click: () => sendCommand('sleep') },
+      { label: '立即唤醒', click: () => sendCommand('wake') },
+      { type: 'separator' },
+      { label: '保持清醒', type: 'checkbox', checked: settings.keepAwake,
+        click: item => setCompanionSetting('keepAwake', item.checked) },
+      { label: '互动气泡', type: 'checkbox', checked: settings.bubblesEnabled,
+        click: item => setCompanionSetting('bubblesEnabled', item.checked) }
+    ] },
+    codexMenu(),
+    { label: '贴边与显示', submenu: [
+      { id: 'edge-left', label: '靠左收起', click: () => dockPet('left') },
+      { id: 'edge-right', label: '靠右收起', click: () => dockPet('right') },
+      { id: 'edge-leave', label: '离开边缘', enabled: Boolean(edgeTuck?.getPresentation().side), click: restorePet },
+      { type: 'separator' },
+      { id: 'edge-visibility', label: edgeTuck?.getPresentation().mode === 'hidden' ? '显示球球' : '暂时隐藏',
+        click: () => edgeTuck?.getPresentation().mode === 'hidden' ? restorePet() : hidePet() }
+    ] },
     { type: 'separator' },
     { label: '尺寸', submenu: sizeMenu() },
     {
@@ -1011,20 +1080,15 @@ function menuTemplate() {
           })) }
       ]
     },
-    {
-      label: '始终置顶',
-      type: 'checkbox',
-      checked: settings.alwaysOnTop,
-      click: item => setAlwaysOnTop(item.checked)
-    },
-    {
-      label: app.isPackaged ? '开机自动启动' : '开机自动启动（打包后可用）',
-      type: 'checkbox',
-      enabled: app.isPackaged,
-      checked: loginItemEnabled(),
-      click: item => setOpenAtLogin(item.checked)
-    },
-    { label: '恢复默认位置', click: resetPosition },
+    { label: '常规设置', submenu: [
+      { label: '始终置顶', type: 'checkbox', checked: settings.alwaysOnTop,
+        click: item => setAlwaysOnTop(item.checked) },
+      { label: app.isPackaged ? '开机自动启动' : '开机自动启动（打包后可用）',
+        type: 'checkbox', enabled: app.isPackaged, checked: loginItemEnabled(),
+        click: item => setOpenAtLogin(item.checked) },
+      { type: 'separator' },
+      { label: '恢复默认位置', click: resetPosition }
+    ] },
     { type: 'separator' },
     {
       label: '退出球球',
@@ -1091,9 +1155,261 @@ async function finishSmokeTest() {
     );
     if (!companionReady) throw new Error('轻陪伴活动感知尚未接入');
 
+    if (process.env.PET_SMOKE_CUSTOMIZE_ONLY === '1') {
+      const assert = require('node:assert/strict');
+      const initialIdleEyes = settings.customization.appearance.idleEyes;
+      const waitFor = async check => {
+        for (let attempt = 0; attempt < 80; attempt += 1) {
+          if (await check()) return;
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        throw new Error('定制面板检查超时');
+      };
+      openCustomization();
+      await waitFor(async () => customizationWindow && !customizationWindow.isDestroyed() &&
+        customizationWindow.webContents.executeJavaScript('window.__customizerReady === true').catch(() => false));
+      const editor = customizationWindow;
+      await waitFor(() => editor.isVisible());
+      assert.equal(await editor.webContents.executeJavaScript(
+        "document.getElementById('startup-default').checked"), true);
+      assert.equal(await editor.webContents.executeJavaScript(
+        "Boolean(document.getElementById('motion-title') || document.getElementById('preview-play'))"
+      ), false);
+      assert.equal(menuTemplate().some(item => item.id === 'custom-sequence-play'), false);
+      process.stdout.write('PET_CUSTOMIZE_READY\n');
+      for (const [shape, bodyColor, eyeColor] of [
+        ['blob', '#EEEBE4', '#1A1A1A'],
+        ['cloud', '#5B3BC7', '#FFFFFF'],
+        ['aurora-cloud', '#5B3BC7', '#FFFFFF'],
+        ['square', '#EEEBE4', '#1A1A1A']
+      ]) {
+        await editor.webContents.executeJavaScript(
+          `document.querySelector('[data-shape="${shape}"]').click(); true`);
+        await waitFor(() => editor.webContents.executeJavaScript(`(() =>
+          document.querySelector('[data-shape="${shape}"]').getAttribute('aria-pressed') === 'true' &&
+          document.getElementById('startup-default').checked === ${shape === settings.startupAppearance.shape} &&
+          document.getElementById('body-hex').value === '${bodyColor}' &&
+          document.getElementById('eye-hex').value === '${eyeColor}' &&
+          document.querySelectorAll('#stage svg .eb-head').length === 1
+        )()`));
+        if (shape === 'aurora-cloud') await waitFor(() => editor.webContents.executeJavaScript(
+          "Boolean(document.querySelector('#preview-ball .eb-rive-aurora.ready'))"));
+        if (shape === 'aurora-cloud') {
+          chatWindow.show({ messages: [] });
+          await waitFor(async () => chatWindow.getWindow()?.webContents.executeJavaScript(
+            "Boolean(document.querySelector('#chat-avatar .eb-rive-aurora.ready'))").catch(() => false));
+          chatWindow.hide();
+          process.stdout.write('PET_CUSTOMIZE_CHAT_AVATAR_OK\n');
+        }
+        if (shape !== 'aurora-cloud') {
+          assert.equal(await editor.webContents.executeJavaScript(`(() => {
+            const icon = document.querySelector('[data-shape="${shape}"] .shape-art svg');
+            const eyes = [...icon.querySelectorAll('.eb-eye')];
+            return icon.querySelectorAll('.eb-head').length === 1 &&
+              eyes.length === 2 && eyes.every(eye =>
+                eye.getAttribute('fill') === '${eyeColor}');
+          })()`), true, `${shape}形态卡应展示对应推荐配色`);
+        }
+        if (shape === 'aurora-cloud') {
+          assert.equal(await editor.webContents.executeJavaScript(`(() =>
+            document.getElementById('glow-pink-hex').value === '#D05ED6' &&
+            document.getElementById('glow-gold-hex').value === '#D0AD8A' &&
+            !document.getElementById('aurora-transparency-field').hidden &&
+            document.getElementById('aurora-transparency').value === '0'
+          )()`), true);
+          await editor.webContents.executeJavaScript(`(() => {
+            const slider = document.getElementById('aurora-transparency');
+            slider.value = '42'; slider.dispatchEvent(new Event('input', { bubbles: true }));
+            return true;
+          })()`);
+          await waitFor(() => editor.webContents.executeJavaScript(`(() =>
+            document.getElementById('aurora-transparency-value').textContent === '42%' &&
+            document.querySelector('#preview-ball .eb-aurora-material')?.getAttribute('opacity') === '0.58'
+          )()`));
+          await editor.webContents.executeJavaScript(`(() => {
+            const slider = document.getElementById('aurora-transparency');
+            slider.value = '24'; slider.dispatchEvent(new Event('input', { bubbles: true }));
+            return true;
+          })()`);
+        }
+      }
+      process.stdout.write('PET_CUSTOMIZE_RECOMMENDED_COLORS_OK\n');
+      await require('./scripts/verify-aurora-six-lobe').verifyAuroraSixLobe({
+        editor, pet: petWindow, chatWindow, getSettings: () => settings,
+        readSettings: () => loadSettings(settingsFile), restore: value => {
+          settings = value; persistSettings(); customizationPreviewAppearance = null;
+          sendCompanionSettings(); chatWindow?.syncAppearance(); return true;
+        }, screen, monitor: activityMonitor, setSize: setPetSize, dock: dockPet,
+        restoreEdge: () => edgeTuck.restore(), getPresentation: () => edgeTuck.getPresentation()
+      });
+      if (process.env.PET_SMOKE_AURORA_SCREENSHOT) {
+        await editor.webContents.executeJavaScript("document.querySelector('[data-shape=\"aurora-cloud\"]').click(); true");
+        await waitFor(() => editor.webContents.executeJavaScript(`(() =>
+          document.querySelector('[data-shape="aurora-cloud"]').getAttribute('aria-pressed') === 'true' &&
+          document.getElementById('body-hex').value === '#5B3BC7' &&
+          document.getElementById('eye-hex').value === '#FFFFFF' &&
+          document.getElementById('preview-ball').querySelector('svg .eb-head') !== null
+        )()`));
+        await new Promise(resolve => setTimeout(resolve, 250));
+        const screenshotPath = path.resolve(process.env.PET_SMOKE_AURORA_SCREENSHOT);
+        fs.mkdirSync(path.dirname(screenshotPath), { recursive: true });
+        fs.writeFileSync(screenshotPath, (await editor.webContents.capturePage()).toPNG());
+        if (process.env.PET_SMOKE_AURORA_BACKGROUNDS === '1') {
+          const extension = path.extname(screenshotPath);
+          const stem = extension ? screenshotPath.slice(0, -extension.length) : screenshotPath;
+          await editor.webContents.executeJavaScript("document.getElementById('stage').classList.add('dark'); true");
+          await new Promise(resolve => setTimeout(resolve, 250));
+          fs.writeFileSync(`${stem}-dark.png`, (await editor.webContents.capturePage()).toPNG());
+          await editor.webContents.executeJavaScript(`(() => {
+            const stage = document.getElementById('stage');
+            stage.classList.remove('dark');
+            stage.style.background = 'repeating-linear-gradient(90deg, #202A44 0 18px, #A9B4C4 18px 20px, #202A44 20px 38px, #A9B4C4 38px 40px)';
+            return true;
+          })()`);
+          await new Promise(resolve => setTimeout(resolve, 250));
+          fs.writeFileSync(`${stem}-grid.png`, (await editor.webContents.capturePage()).toPNG());
+          await editor.webContents.executeJavaScript("document.getElementById('stage').style.background = ''; true");
+        }
+      }
+      if (process.env.PET_SMOKE_CLOUD_SCREENSHOT) {
+        await editor.webContents.executeJavaScript(`(() => {
+          document.querySelector('[data-shape="cloud"]').click();
+          for (const [id, value] of [['body-hex', '#08090D'], ['eye-hex', '#FFFFFF']]) {
+            const node = document.getElementById(id); node.value = value;
+            node.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+          return true;
+        })()`);
+        await waitFor(() => editor.webContents.executeJavaScript(`(() =>
+          document.querySelector('[data-shape="cloud"]').getAttribute('aria-pressed') === 'true' &&
+          document.getElementById('preview-ball').querySelector('svg .eb-head') !== null
+        )()`));
+        await new Promise(resolve => setTimeout(resolve, 300));
+        const screenshotPath = path.resolve(process.env.PET_SMOKE_CLOUD_SCREENSHOT);
+        fs.mkdirSync(path.dirname(screenshotPath), { recursive: true });
+        fs.writeFileSync(screenshotPath, (await editor.webContents.capturePage()).toPNG());
+      }
+      await editor.webContents.executeJavaScript(`(() => {
+        document.querySelector('[data-shape="square"]').click();
+        document.getElementById('manual-toggle').click();
+        const slider = (id, value) => { const node = document.getElementById(id); node.value = value;
+          node.dispatchEvent(new Event('input', { bubbles: true })); };
+        slider('shape-width', 113); slider('shape-softness', 72);
+        slider('eye-spacing', 115); slider('eye-scale', 110);
+        slider('aurora-transparency', 42);
+        const bodyHex = document.getElementById('body-hex'); bodyHex.value = '#28415C';
+        bodyHex.dispatchEvent(new Event('input', { bubbles: true }));
+        const eyeColor = document.getElementById('eye-color'); eyeColor.value = '#F4E8C8';
+        eyeColor.dispatchEvent(new Event('input', { bubbles: true }));
+        return true;
+      })()`);
+      process.stdout.write('PET_CUSTOMIZE_EDITED\n');
+      await waitFor(async () => editor.webContents.executeJavaScript(`(() =>
+        document.querySelector('[data-shape="square"]').getAttribute('aria-pressed') === 'true' &&
+        document.getElementById('body-hex').value === '#28415C' &&
+        document.getElementById('eye-hex').value === '#F4E8C8' &&
+        document.getElementById('aurora-transparency-value').textContent === '42%' &&
+        document.querySelector('#preview-ball > svg')?.style.opacity === '0.58' &&
+        document.getElementById('preview-ball').querySelector('svg .eb-head') !== null &&
+        document.querySelectorAll('#stage svg .eb-head').length === 1
+      )()`));
+      await editor.webContents.executeJavaScript("document.getElementById('preview-desktop').click(); true");
+      const expectedDesktopPixels = ({ micro: 60, tiny: 80, compact: 108, small: 120, medium: 180, large: 260 })[settings.size] || 80;
+      await waitFor(() => editor.webContents.executeJavaScript(`(() =>
+        document.getElementById('preview-desktop').getAttribute('aria-pressed') === 'true' &&
+        document.getElementById('stage').dataset.previewMode === 'desktop' &&
+        document.getElementById('preview-ball').style.width === '${expectedDesktopPixels}px' &&
+        document.querySelectorAll('#stage svg .eb-head').length === 1
+      )()`));
+      if (process.env.PET_SMOKE_CUSTOMIZE_DESKTOP_SCREENSHOT) {
+        await new Promise(resolve => setTimeout(resolve, 150));
+        const screenshotPath = path.resolve(process.env.PET_SMOKE_CUSTOMIZE_DESKTOP_SCREENSHOT);
+        fs.mkdirSync(path.dirname(screenshotPath), { recursive: true });
+        fs.writeFileSync(screenshotPath, (await editor.webContents.capturePage()).toPNG());
+      }
+      assert.equal(await editor.webContents.executeJavaScript(`(() => {
+        const button = document.getElementById('preview-desktop'); button.focus();
+        const keyboardFocus = document.activeElement === button;
+        const stage = document.getElementById('stage');
+        const toggle = document.getElementById('stage-toggle'); toggle.click();
+        const dark = stage.classList.contains('dark'); toggle.click();
+        return keyboardFocus && dark && !stage.classList.contains('dark');
+      })()`), true);
+      await editor.webContents.executeJavaScript("document.getElementById('preview-large').click(); true");
+      await waitFor(() => editor.webContents.executeJavaScript(`(() =>
+        document.getElementById('preview-large').getAttribute('aria-pressed') === 'true' &&
+        document.getElementById('preview-ball').style.width === '205px'
+      )()`));
+      assert.equal(await editor.webContents.executeJavaScript(`(() => {
+        const toggle = document.getElementById('manual-toggle');
+        toggle.click(); const retained = document.getElementById('shape-width').value === '113'; toggle.click();
+        const square = document.querySelector('[data-shape="square"]'); square.focus(); square.click();
+        const shapeFocus = document.activeElement === square;
+        const swatch = document.querySelector('#body-swatches .swatch'); swatch.focus(); swatch.click();
+        const swatchFocus = document.activeElement === swatch;
+        const bodyHex = document.getElementById('body-hex'); bodyHex.value = '#28415C';
+        bodyHex.dispatchEvent(new Event('input', { bubbles: true }));
+        const eyeHex = document.getElementById('eye-hex'); eyeHex.value = '#F4E8C8';
+        eyeHex.dispatchEvent(new Event('input', { bubbles: true }));
+        return retained && shapeFocus && swatchFocus;
+      })()`), true);
+      await new Promise(resolve => setTimeout(resolve, 300));
+      if (process.env.PET_SMOKE_CUSTOMIZE_SCREENSHOT) {
+        await editor.webContents.executeJavaScript('window.scrollTo(0, 0); true');
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const screenshotPath = path.resolve(process.env.PET_SMOKE_CUSTOMIZE_SCREENSHOT);
+        fs.mkdirSync(path.dirname(screenshotPath), { recursive: true });
+        fs.writeFileSync(screenshotPath, (await editor.webContents.capturePage()).toPNG());
+      }
+      if (process.env.PET_SMOKE_CUSTOMIZE_DETAILS_SCREENSHOT) {
+        await editor.webContents.executeJavaScript('window.scrollTo(0, document.body.scrollHeight); true');
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const screenshotPath = path.resolve(process.env.PET_SMOKE_CUSTOMIZE_DETAILS_SCREENSHOT);
+        fs.mkdirSync(path.dirname(screenshotPath), { recursive: true });
+        fs.writeFileSync(screenshotPath, (await editor.webContents.capturePage()).toPNG());
+      }
+      process.stdout.write('PET_CUSTOMIZE_CAPTURED\n');
+      assert.equal(await editor.webContents.executeJavaScript(`(() => {
+        const hex = document.getElementById('body-hex'); hex.value = 'invalid';
+        hex.dispatchEvent(new Event('input', { bubbles: true }));
+        document.getElementById('save').click();
+        const blocked = hex.classList.contains('invalid') && document.activeElement === hex;
+        hex.value = '#28415C'; hex.dispatchEvent(new Event('input', { bubbles: true }));
+        return blocked;
+      })()`), true);
+      assert.notEqual(settings.customization.appearance.bodyColor, '#28415C');
+      await editor.webContents.executeJavaScript("document.getElementById('startup-default').click(); true");
+      await editor.webContents.executeJavaScript("document.getElementById('save').click(); true");
+      await waitFor(() => settings.customization.appearance.bodyColor === '#28415C');
+      assert.equal(settings.startupAppearance.bodyColor, '#28415C');
+      assert.equal(settings.startupAppearance.shape, 'square');
+      process.stdout.write('PET_CUSTOMIZE_STARTUP_DEFAULT_OK\n');
+      process.stdout.write('PET_CUSTOMIZE_SAVED\n');
+      await waitFor(async () => petWindow.webContents.executeJavaScript(
+        "[...document.querySelectorAll('linearGradient stop, radialGradient stop')].some(node => node.getAttribute('stop-color') === '#28415C')"
+      ));
+      assert.equal(settings.customization.appearance.shape, 'square');
+      assert.equal(settings.customization.appearance.shapeTuning.width, 1.13);
+      assert.equal(settings.customization.appearance.shapeTuning.softness, 0.72);
+      assert.equal(settings.customization.appearance.eyeSpacing, 1.15);
+      assert.equal(settings.customization.appearance.eyeColor, '#F4E8C8');
+      assert.equal(settings.customization.appearance.auroraTransparency, 42);
+      assert.equal(await petWindow.webContents.executeJavaScript(
+        "document.querySelector('#pet > svg')?.style.opacity"), '0.58');
+      assert.equal(settings.customization.appearance.idleEyes, initialIdleEyes);
+      process.stdout.write('PET_CUSTOMIZE_SMOKE_OK\n');
+      app.exit(0);
+      return;
+    }
+
     if (process.env.PET_SMOKE_CHAT_ONLY === '1') {
+      if (process.env.PET_SMOKE_CHAT_AVATAR === '1') {
+        if (!saveCustomization({ ...settings.customization,
+          appearance: { ...settings.customization.appearance, shape: 'aurora-cloud',
+            auroraStyle: 'simple', bodyColor: '#8B72D8' } })) throw new Error('聊天头像测试外观保存失败');
+      }
       await require('./scripts/verify-chat-integration').verifyChatIntegration({ pet: petWindow, chat, chatWindow,
-        getMenu: () => Menu.buildFromTemplate(menuTemplate()), getPresentation: () => edgeTuck.getPresentation(),
+        screen, getMenu: () => Menu.buildFromTemplate(menuTemplate()), getPresentation: () => edgeTuck.getPresentation(),
         hidePet, restorePet, powerMonitor });
       app.quit();
       return;
@@ -1316,7 +1632,8 @@ function createPetWindow() {
     if (isCurrentPetWindow()) invalidateCodexPage();
   });
   createdPetWindow.on('move', () => {
-    if (isCurrentPetWindow()) { thoughts?.hide(); repositionBubble(); edgeNoticeWindow?.reposition(); }
+    if (!isCurrentPetWindow() || chatWindow?.isFollowingChat?.()) return;
+    thoughts?.hide(); repositionBubble(); edgeNoticeWindow?.reposition();
   });
   createdPetWindow.on('resize', () => {
     if (!isCurrentPetWindow()) return;
@@ -1386,6 +1703,19 @@ function createPetWindow() {
 }
 
 function registerIpc() {
+  ipcMain.handle('pet:customization-get', event => fromCustomizationWindow(event) && !screenLocked
+    ? { customization: effectiveCustomization(settings.customization),
+      startupAppearance: effectiveAppearance(settings.startupAppearance),
+      size: settings.size } : null);
+  ipcMain.on('pet:customization-preview', (event, appearance) => {
+    if (!fromCustomizationWindow(event) || screenLocked || !appearance || typeof appearance !== 'object') return;
+    customizationPreviewAppearance = effectiveAppearance(appearance);
+    chatWindow?.syncAppearance();
+  });
+  ipcMain.handle('pet:customization-save', (event, value, setAsStartupDefault) => {
+    if (!fromCustomizationWindow(event) || screenLocked) return false;
+    return saveCustomization(value, setAsStartupDefault);
+  });
   ipcMain.handle('pet:chat-get', event => fromChatWindow(event) && !screenLocked ? chat.getState() : null);
   ipcMain.handle('pet:chat-send', (event, text) => {
     if (!fromChatWindow(event) || screenLocked || !chatWindow.isVisible()) return { accepted: false, error: '请打开聊天面板后再发送。' };
@@ -1590,8 +1920,48 @@ async function bootstrap() {
   if (app.dock) app.dock.hide();
   settingsFile = path.join(app.getPath('userData'), 'settings.json');
   settings = loadSettings(settingsFile);
+  settings.customization = { ...settings.customization, appearance: settings.startupAppearance };
   chatWindow = createChatWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
+    getAppearance: () => effectiveAppearance(customizationPreviewAppearance || settings?.customization?.appearance),
+    getAvatarImage: async appearance => {
+      const key = JSON.stringify(appearance);
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const preview = customizationPreviewAppearance && customizationWindow && !customizationWindow.isDestroyed()
+          ? customizationWindow : null;
+        if (preview) {
+          const image = await preview.webContents.executeJavaScript(`(() => {
+            const target = document.querySelector('#preview-ball');
+            const canvas = target?.querySelector(':scope > .eb-rive-aurora.ready');
+            if (!canvas || target.dataset.avatarAppearance !== ${JSON.stringify(key)}) return null;
+            const box = target.getBoundingClientRect();
+            const source = canvas.getBoundingClientRect();
+            const crop = document.createElement('canvas');
+            crop.width = crop.height = 96;
+            const context = crop.getContext('2d');
+            context.globalAlpha = Number(getComputedStyle(canvas).opacity);
+            context.drawImage(canvas,
+              (box.left - source.left) / source.width * canvas.width,
+              (box.top - source.top) / source.height * canvas.height,
+              box.width / source.width * canvas.width,
+              box.height / source.height * canvas.height, 0, 0, 96, 96);
+            return crop.toDataURL('image/png');
+          })()`).catch(() => null);
+          if (image) return image;
+        } else if (petWindow && !petWindow.isDestroyed()) {
+          const ready = await petWindow.webContents.executeJavaScript(`(() => {
+            const target = document.querySelector('#pet');
+            return target?.dataset.avatarAppearance === ${JSON.stringify(key)} &&
+              Boolean(target.querySelector(':scope > .eb-rive-aurora.ready'));
+          })()`).catch(() => false);
+          if (ready) return (await petWindow.webContents.capturePage()).toDataURL();
+        }
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      return null;
+    },
     alwaysOnTop: settings.alwaysOnTop,
+    onFollowStart: () => { if (edgeTuck?.getPresentation().side) edgeTuck.restore(); },
+    onMoveEnd: persistWindowPosition,
     onVisibilityChange: () => syncQuotaLabel(codexCompanion?.getSnapshot()),
     onError: error => writeError('聊天面板', error) });
   chat = createChatCompanion({ store: createChatStore(path.join(app.getPath('userData'), 'chat.json')),
@@ -1611,6 +1981,7 @@ async function bootstrap() {
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('思考光迹窗口', error) });
   bubble = createBubbleWindow({
     BrowserWindow, screen, getPetWindow: () => petWindow,
+    getShape: () => settings?.customization?.appearance?.shape,
     alwaysOnTop: settings.alwaysOnTop,
     onError: error => writeError('气泡窗口', error)
   });
@@ -1619,6 +1990,10 @@ async function bootstrap() {
     getObstacle: quotaObstacleBounds,
     getSize: () => settings?.codexQuotaLabelSize,
     getAppearance: () => settings?.codexQuotaAppearance,
+    getPresentation: () => ({
+      ...edgeTuck?.getPresentation(),
+      shape: settings?.customization?.appearance?.shape
+    }),
     alwaysOnTop: settings.alwaysOnTop,
     onError: error => writeError('额度标签窗口', error)
   });
@@ -1638,6 +2013,7 @@ async function bootstrap() {
   });
   const pause = () => {
     screenLocked = true;
+    if (customizationWindow && !customizationWindow.isDestroyed()) customizationWindow.hide();
     chatWindow?.hide();
     void chat?.stop();
     dragState = null;
@@ -1668,7 +2044,7 @@ if (!hasSingleInstanceLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    restorePet();
+    if (settings) restorePet();
   });
 
   app.on('before-quit', event => {

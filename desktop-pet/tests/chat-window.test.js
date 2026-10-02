@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const { setImmediate: flush } = require('node:timers/promises');
+const { setTimeout: sleep } = require('node:timers/promises');
 const { chatBounds, createChatWindow } = require('../lib/chat-window');
 
 test('聊天面板朝屏幕内侧展开，给球球留出十二像素间隔', () => {
@@ -42,8 +43,17 @@ test('小工作区会缩小聊天窗口，极端尺寸仍保持正尺寸且完�
   }
 });
 
-function fixture(load = () => Promise.resolve()) {
-  const windows = [], errors = [], visibility = [];
+function fixture(load = () => Promise.resolve(), getAppearance = () => null, getAvatarImage = async () => null) {
+  const windows = [], errors = [], visibility = [], moves = [];
+  const petBounds = { x: 1300, y: 350, width: 80, height: 80 };
+  const pet = new EventEmitter();
+  pet.isDestroyed = () => false;
+  pet.getBounds = () => ({ ...petBounds });
+  pet.setPosition = (x, y) => {
+    petBounds.x = x;
+    petBounds.y = y;
+    pet.emit('move');
+  };
   class NativeWindow extends EventEmitter {
     constructor(options) {
       super();
@@ -52,6 +62,7 @@ function fixture(load = () => Promise.resolve()) {
       this.visible = false;
       this.focusCount = 0;
       this.messages = [];
+      this.bounds = { x: 0, y: 0, width: options.width, height: options.height };
       this.webContents = new EventEmitter();
       this.webContents.setWindowOpenHandler = callback => { this.openHandler = callback; };
       this.webContents.send = (...args) => this.messages.push(args);
@@ -61,6 +72,11 @@ function fixture(load = () => Promise.resolve()) {
     setVisibleOnAllWorkspaces() {}
     setHiddenInMissionControl() {}
     setBounds(bounds) { this.bounds = bounds; }
+    getBounds() { return { ...this.bounds }; }
+    setPosition(x, y) {
+      this.bounds = { ...this.bounds, x, y };
+      this.emit('move');
+    }
     loadFile() { return load(windows.length); }
     show() { this.visible = true; this.emit('show'); }
     focus() { this.focusCount += 1; }
@@ -72,12 +88,98 @@ function fixture(load = () => Promise.resolve()) {
   const chat = createChatWindow({
     BrowserWindow: NativeWindow,
     screen: { getDisplayMatching: () => ({ workArea: { x: 0, y: 25, width: 1512, height: 900 } }) },
-    getPetWindow: () => ({ isDestroyed: () => false, getBounds: () => ({ x: 1300, y: 350, width: 80, height: 80 }) }),
+    getPetWindow: () => pet,
+    getAppearance,
+    getAvatarImage,
+    onMoveEnd: () => moves.push({ ...petBounds }),
     onError: error => errors.push(error),
     onVisibilityChange: visible => visibility.push(visible)
   });
-  return { chat, windows, errors, visibility };
+  pet.on('move', () => chat.reposition());
+  return { chat, pet, windows, errors, visibility, moves };
 }
+
+test('拖动聊天标题栏时球球跟随，独立拖动球球时聊天窗仍重排', async t => {
+  const f = fixture();
+  t.after(() => f.chat.destroy());
+  f.chat.show({ messages: [] });
+  await flush();
+  const win = f.windows[0];
+  const before = win.getBounds();
+  const next = { ...before, x: before.x - 70, y: before.y + 35 };
+  win.emit('will-move', {}, next);
+  assert.deepEqual(f.pet.getBounds(), { x: 1230, y: 385, width: 80, height: 80 });
+  assert.deepEqual(win.getBounds(), before, 'macOS 原生窗口移动前，球球已预先跟随');
+  win.setPosition(next.x, next.y);
+  assert.deepEqual(win.getBounds(), next);
+  f.pet.setPosition(450, 450);
+  assert.deepEqual(win.getBounds(), chatBounds(f.pet.getBounds(), { x: 0, y: 25, width: 1512, height: 900 }));
+});
+
+test('松开聊天窗后，窗口与球球一起留在工作区内', async t => {
+  const f = fixture();
+  t.after(() => f.chat.destroy());
+  f.chat.show({ messages: [] });
+  await flush();
+  const win = f.windows[0];
+  const before = win.getBounds();
+  win.setPosition(before.x + 500, before.y - 300);
+  win.emit('moved');
+  assert.equal(f.moves.length, 0, 'macOS 的 moved 是 move 别名，拖动中不得落盘');
+  await sleep(250);
+  assert.deepEqual(f.moves, [f.pet.getBounds()], '原生拖动结束时持久化球球最终位置一次');
+  const chat = win.getBounds();
+  const pet = f.pet.getBounds();
+  assert.equal(pet.x - chat.x, 372);
+  assert.equal(pet.y - chat.y, 200);
+  assert.ok(chat.x >= 12 && chat.x + chat.width <= 1500);
+  assert.ok(pet.x >= 12 && pet.x + pet.width <= 1500);
+  assert.ok(chat.y >= 37 && chat.y + chat.height <= 913);
+  assert.ok(pet.y >= 37 && pet.y + pet.height <= 913);
+});
+
+test('聊天头像收到当前外观，保存外观后同步；重复状态更新不反复发送', async t => {
+  let appearance = { shape: 'blob', bodyColor: '#EEEBE4' };
+  const f = fixture(() => Promise.resolve(), () => appearance);
+  t.after(() => f.chat.destroy());
+  f.chat.show({ messages: [] });
+  await flush();
+  const win = f.windows[0];
+  assert.deepEqual(win.messages.filter(([channel]) => channel === 'pet:chat-appearance'),
+    [['pet:chat-appearance', appearance]]);
+  f.chat.update({ messages: [{ id: 1, text: '你好' }] });
+  assert.equal(win.messages.filter(([channel]) => channel === 'pet:chat-appearance').length, 1);
+  appearance = { shape: 'aurora-cloud', bodyColor: '#5B3BC7' };
+  f.chat.syncAppearance();
+  assert.deepEqual(win.messages.filter(([channel]) => channel === 'pet:chat-appearance').at(-1),
+    ['pet:chat-appearance', appearance]);
+  assert.equal(win.focusCount, 1);
+  f.chat.destroy();
+  f.chat.show({ messages: [] });
+  await flush();
+  assert.deepEqual(f.windows[1].messages.filter(([channel]) => channel === 'pet:chat-appearance'),
+    [['pet:chat-appearance', appearance]]);
+});
+
+test('幻彩云头像取实际画面，旧外观的异步截图不会覆盖新外观', async t => {
+  let appearance = { shape: 'aurora-cloud', bodyColor: '#5B3BC7' };
+  let finishOld;
+  const f = fixture(() => Promise.resolve(), () => appearance,
+    value => value.bodyColor === '#5B3BC7' ? new Promise(resolve => { finishOld = resolve; }) :
+      Promise.resolve('data:image/png;base64,new'));
+  t.after(() => f.chat.destroy());
+  f.chat.show({ messages: [] });
+  await flush();
+  await flush();
+  appearance = { shape: 'aurora-cloud', bodyColor: '#8B72D8' };
+  f.chat.syncAppearance();
+  await flush();
+  finishOld('data:image/png;base64,old');
+  await flush();
+  assert.deepEqual(f.windows[0].messages.filter(([channel, , image]) =>
+    channel === 'pet:chat-appearance' && image).map(([, , image]) => image),
+  ['data:image/png;base64,new']);
+});
 
 test('仅主动打开时聚焦；流式状态更新不会弹出关闭的聊天或抢焦点', async t => {
   const f = fixture();
