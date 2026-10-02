@@ -31,14 +31,20 @@ Umami Cloud 网站“球球官网”，website ID 为 `fe855bb0-9000-49aa-820b-b
 
 ## 当前下载记录
 
-Apple 芯片版于 2026-09-28 更新为 0.3.25。新增「定制球球」，提供经典、云朵、幻彩、方糖四种外观；可调整配色、透明度并保存启动外观。官网保持简洁的下载卡，文件大小与校验值在此维护。
+Apple 芯片版 0.3.27，发布日期 2026-10-02。新增 OpenAI API 费用与用量报告、常驻费用小卡、「关于球球」与页内更新检查；额外点数显示开关默认开启，按账号实际返回状态展示，发现新版时在球球气泡、聊天面板和菜单提示。Plus 现有额度显示、周期选择与提醒保持。经典、云朵、幻彩、方糖四种外观及定制功能继续保留。官网保持简洁的下载卡，文件大小与校验值在此维护。
 
 | 文件 | 精确大小（bytes） | SHA-256 |
 | --- | ---: | --- |
-| [Qiuqiu-0.3.25-macOS-arm64-share.zip](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.25/Qiuqiu-0.3.25-macOS-arm64-share.zip) | 138428441 | `c8155aa77fbc4d68b2797faec2731415d483d4ad1500abdbfe415a84bdf91120` |
-| [Qiuqiu-0.3.25-macOS-arm64.dmg](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.25/Qiuqiu-0.3.25-macOS-arm64.dmg) | 140810795 | `e4016335c635e2b069311e7e131118f759fbc635bd7e45beb28b1ac3194f36ac` |
+| [Qiuqiu-0.3.27-macOS-arm64-share.zip](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.27/Qiuqiu-0.3.27-macOS-arm64-share.zip) | 123432498 | `51ef785d04dc0de16b7ab586e702c750ed8220199eab83776bbe2b04fac8f279` |
+| [Qiuqiu-0.3.27-macOS-arm64.dmg](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.27/Qiuqiu-0.3.27-macOS-arm64.dmg) | 137750888 | `0dfc1229bb84b0c9cd22e4eee5a013ef6d3b4495b8dbc39224c1250bbe7f6a03` |
 
-ZIP 内只包含上述 DMG。Intel x64 下载仍为已公开的 0.3.13 构建候选，尚未在真实 Intel Mac 上验收；本次更新仅适用于 Apple 芯片版。应用采用本机临时签名，未进行 Apple Developer ID 签名或公证。
+ZIP 解压得到“球球桌宠.app”，可拖入 Applications；DMG 是另一个独立安装附件。Intel x64 下载仍为已公开的 0.3.13 构建候选，尚未在真实 Intel Mac 上验收；本次更新仅适用于 Apple 芯片版。应用采用本机临时签名，未进行 Apple Developer ID 签名或公证。
+
+额外点数不限定 Pro；符合条件的 Plus/Pro 账号可购买点数，支持灵活计费的团队可使用工作区点数。球球仅在账号支持点数且 Codex 返回点数状态时展示，不并入套餐比例或重置机会，也不与 API 费用合并。依据：[官方点数说明](https://learn.chatgpt.com/docs/pricing)。
+
+API 报告需要组织所有者提供具有费用与用量读取权限的 Admin API Key；普通调用 Key 无法查询费用。默认范围是整个组织，费用保留官方币种，缓存属于输入 tokens 的一部分；数据可能延迟，不表示余额、当前聊天实时费用或最终账单。报告与常驻卡由用户主动连接、开启，密钥在本机安全存储中加密保存。官网仅说明功能，没有连接真实 API 账户或验证真实账单。
+
+新版检查只提供版本结果和下载页面入口。本目录内容更新及本地检查不代表 Release 已上传或官网已发布，发布后须回读公开安装附件与线上页面。
 
 官网模型菜单是预设演示，不读取账号模型列表、不发送真实消息、不保存桌宠设置。实际应用的模型目录以本机 Codex 当前账号为准，切换保持同一聊天；不承诺固定响应时间。
 

@@ -61,7 +61,7 @@
           <h1 id="hero-title">桌面上，<br>多一个安静陪你的球球</h1>
           <p>免费、安静陪伴，不打扰你。</p>
           <div class="hero-actions">
-            <a class="button button-primary" data-download-arch="arm64" data-download-position="hero" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.25/Qiuqiu-0.3.25-macOS-arm64-share.zip">下载 Apple 芯片版</a>
+            <a class="button button-primary" data-download-arch="arm64" data-download-position="hero" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.27/Qiuqiu-0.3.27-macOS-arm64-share.zip">下载 Apple 芯片版</a>
             <a class="button button-secondary" href="#features">看看它会什么</a>
           </div>
         </div>
@@ -136,14 +136,20 @@
             </div>
             <div>
               <dt>看额度</dt>
-              <dd>剩余额度与重置时间，一眼就知道。</dd>
+              <dd>剩余额度、重置时间与额外点数，各自清楚展示。</dd>
             </div>
             <div>
               <dt>完成提醒</dt>
               <dd>任务结束，用跳跃或彩带回应。</dd>
             </div>
+            <div>
+              <dt>API 费用</dt>
+              <dd>可选常驻本月费用小卡，展开看今日费用与完整报告。</dd>
+            </div>
           </dl>
           <p class="release-note">默认关闭，可选开启；只查看状态，不代你操作。<a href="#privacy">了解隐私边界</a></p>
+          <details class="content-details"><summary>额外点数的显示说明</summary><p>账号支持购买或使用点数，且 Codex 返回点数状态时，才显示额外点数。点数与套餐比例、重置机会分别展示，也不与 API 费用合并。<a href="https://learn.chatgpt.com/docs/pricing" target="_blank" rel="noopener noreferrer">查看官方说明</a></p></details>
+          <details class="content-details"><summary>API 费用的接入说明</summary><p>使用官方 OpenAI API 时，需组织所有者提供具有费用与用量读取权限的 Admin API Key；普通 Codex 调用 Key 无法查询报表。默认统计整个组织，报告可能延迟，不代表余额或本次聊天的实时计费。API 费用小卡与套餐额度卡可分别开启。</p><p>管理密钥在本机安全存储中加密保存，不回显；断开连接时移除。完整报告还可查看本月输入、输出及其中缓存 tokens。</p></details>
         </div>
         <div class="codex-live-showcase" data-motion-scene="codex">
           <div class="quota-playground" data-quota-demo></div>
@@ -172,7 +178,7 @@
           </dl>
           <p class="chat-entry">使用入口：右键球球或菜单栏 → 和球球聊聊</p>
           <details class="content-details"><summary>模型与使用说明</summary><p>模型可以自动选择，也能在输入框左下角手选，以本机账号可用列表为准。无需另填 API Key；模型不可用时会明确提示。球球只执行预设动作，不运行模型返回的代码或命令。</p></details>
-          <a class="chat-download-link" href="#download">下载 0.3.25，和球球聊聊 →</a>
+          <a class="chat-download-link" href="#download">下载 0.3.27，和球球聊聊 →</a>
         </div>
         <div class="chat-demo-wrap">
           <p class="release-badge">聊天交互示例</p>
@@ -221,7 +227,7 @@
 
       <section class="customize-section section" id="customize" aria-labelledby="customize-title">
         <div class="section-heading">
-          <p class="release-badge">0.3.25 Apple 芯片版已支持</p>
+          <p class="release-badge">0.3.27 Apple 芯片版已支持</p>
           <h2 id="customize-title">定制你的球球</h2>
           <p>从喜欢的形态出发，调整颜色，留下自己的样子。</p>
           <p class="release-note">经典、云朵、幻彩、方糖，选好后可临时换装，也可设为启动外观。</p>
@@ -300,11 +306,11 @@
             </div>
             <p>适用于 M1、M2、M3、M4 及后续 Apple 芯片 Mac。需要 macOS 12.0 或更高版本。</p>
             <dl class="release-data">
-              <div><dt>版本</dt><dd>0.3.25</dd></div>
-              <div><dt>发布日期</dt><dd>2026-09-28</dd></div>
+              <div><dt>版本</dt><dd>0.3.27</dd></div>
+              <div><dt>发布日期</dt><dd>2026-10-02</dd></div>
             </dl>
             <div class="download-actions">
-              <a class="button button-primary" data-download-arch="arm64" data-download-position="download" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.25/Qiuqiu-0.3.25-macOS-arm64-share.zip">下载 ZIP</a>
+              <a class="button button-primary" data-download-arch="arm64" data-download-position="download" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.27/Qiuqiu-0.3.27-macOS-arm64-share.zip">下载 ZIP</a>
             </div>
           </article>
 
@@ -363,7 +369,7 @@
         <ol class="install-list">
           <li>
             <span class="install-action">下载并解压</span>
-            <p>解压 ZIP，打开里面唯一的 DMG 文件。</p>
+            <p>解压 ZIP，得到“球球桌宠.app”。也可在<a href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.27">版本下载页</a>选择独立的 DMG 附件。</p>
           </li>
           <li>
             <span class="install-action">拖入应用程序</span>
@@ -382,6 +388,35 @@
           <p>查看各版本的新功能与改进。</p>
         </div>
         <div class="timeline">
+          <article>
+            <time datetime="2026-10-02">2026-10-02</time>
+            <div>
+              <h3>0.3.27 Apple 芯片版</h3>
+              <div class="update-group">
+                <h4>API 费用与用量</h4>
+                <ul>
+                  <li>新增官方报告查询：UTC 本月与今日费用、本月输入与输出及其中缓存 tokens。</li>
+                  <li>可开启常驻 API 费用小卡，点击展开或查看完整报告；读取失败保留上次结果并标记未更新。</li>
+                </ul>
+              </div>
+              <div class="update-group">
+                <h4>额度明细</h4>
+                <ul>
+                  <li>「显示额外点数」开关默认开启；账号支持点数并返回状态时展示，可在 Codex 联动菜单调整。点数与套餐剩余比例、重置机会分别展示。</li>
+                  <li>Plus 现有额度显示、周期选择与提醒行为保持。</li>
+                </ul>
+              </div>
+              <div class="update-group">
+                <h4>关于球球与新版提醒</h4>
+                <ul>
+                  <li>新增「关于球球」，在页面内查看版本、检查更新并显示结果。</li>
+                  <li>发现新版时，球球气泡、聊天面板与菜单提供提醒；点击查看新版本，前往下载页面。</li>
+                </ul>
+              </div>
+            </div>
+          </article>
+          <details class="updates-history">
+            <summary><span class="history-expand">查看更早更新（12 条）</span><span class="history-collapse">收起历史更新</span><span class="history-chevron" aria-hidden="true">⌄</span></summary>
           <article>
             <time datetime="2026-09-28">2026-09-28</time>
             <div>
@@ -406,8 +441,6 @@
               </div>
             </div>
           </article>
-          <details class="updates-history">
-            <summary><span class="history-expand">查看更早更新（11 条）</span><span class="history-collapse">收起历史更新</span><span class="history-chevron" aria-hidden="true">⌄</span></summary>
           <article>
             <time datetime="2026-09-23">2026-09-23</time>
             <div>
