@@ -404,7 +404,7 @@
         creditsUnit.textContent = hasBalance ? '点' : '';
         creditsUnit.hidden = !hasBalance;
         if (extraCredits.dataset) extraCredits.dataset.kind = hasBalance ? 'balance' : 'text';
-        extraCredits.title = credits?.state === 'stale' ? '额外点数已过期，等待更新；当前余额暂不可用。'
+        extraCredits.title = credits?.state === 'stale' ? '额外点数数据已过期，等待更新；当前余额暂不可用。'
           : hasBalance ? `额外点数余额：${credits.balance} 点。与套餐额度、重置机会分别统计。` : credits ? `额外点数：${text}` : '';
       }
     } catch (_) {}

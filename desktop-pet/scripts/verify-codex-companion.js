@@ -504,7 +504,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     const expanded = options.expanded === true;
     const prefix = options.prefix || 'quota-label';
     assertQuotaLabelWindow(quotaLabel, win, pet.getBounds(), {
-      size, expanded, itemCount: options.itemCount
+      size, expanded, itemCount: options.itemCount, extraCredits: options.extraCredits
     });
     const debuggerApi = win.webContents.debugger;
     const attachedHere = !debuggerApi.isAttached();
@@ -523,7 +523,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       }
       await debuggerApi.sendCommand('Emulation.setEmulatedMedia', { media: '', features: [] });
       assertQuotaLabelWindow(quotaLabel, win, pet.getBounds(), {
-        size, expanded, itemCount: options.itemCount
+        size, expanded, itemCount: options.itemCount, extraCredits: options.extraCredits
       });
       assertDistinctCaptureEvidence(captures.dark, [captures.light], '额度标签浅深截图');
     } finally {
