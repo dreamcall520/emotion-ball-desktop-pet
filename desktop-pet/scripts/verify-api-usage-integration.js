@@ -27,7 +27,10 @@ async function verifyApiUsage({ getWindow, getMenu, pet, service, powerMonitor, 
     let value;
     for (let attempt = 0; attempt < 120; attempt++) {
       value = await read();
-      if (test(value)) return value;
+      if (test(value)) {
+        process.stdout.write(`PET_API_CHECK_OK ${label}\n`);
+        return value;
+      }
       await wait(30);
     }
     assert.fail(`${label}: ${JSON.stringify(value)}`);
