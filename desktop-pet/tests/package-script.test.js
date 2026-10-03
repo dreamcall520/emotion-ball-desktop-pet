@@ -148,6 +148,26 @@ test('安装包包含定制面板及球球外观配置模块', () => {
   }
 });
 
+test('安装包完整包含便签待办资源与可加载的中央存储，未夹带用户记录', () => {
+  const root = path.resolve(__dirname, '../..');
+  const staging = prepareStaging(root);
+  for (const file of ['notes.html', 'notes.css', 'notes-preload.js', 'notes-renderer.js',
+    'lib/notes-model.js', 'lib/notes-store.js', 'lib/notes-companion.js']) {
+    assert.equal(fs.readFileSync(path.join(staging, 'desktop-pet', file), 'utf8'),
+      fs.readFileSync(path.join(root, 'desktop-pet', file), 'utf8'), `${file} 必须进入安装包`);
+  }
+  assert.equal(typeof require(path.join(staging, 'desktop-pet/lib/notes-companion.js')).createNotesCompanion, 'function');
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'qiu-notes-pack-'));
+  try {
+    const file = path.join(temp, 'notes-todos.json');
+    const store = require(path.join(staging, 'desktop-pet/lib/notes-store.js')).createNotesStore(file);
+    assert.deepEqual(store.getState().notes, []);
+    assert.deepEqual(store.getState().todos, []);
+    assert.equal(fs.existsSync(file), false, '加载空态不应创建伪造记录');
+    assert.equal(fs.readdirSync(staging, { recursive: true }).map(String).some(f => f.endsWith('notes-todos.json')), false);
+  } finally { fs.rmSync(temp, { recursive: true, force: true }); }
+});
+
 test('打包暂存区包含任务名称清理模块且菜单与控制器可加载', () => {
   const root = path.resolve(__dirname, '../..');
   const staging = prepareStaging(root);

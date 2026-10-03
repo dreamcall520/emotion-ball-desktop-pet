@@ -17,6 +17,23 @@ test('无效设置回退默认值', () => {
   );
 });
 
+test('便签待办默认页面只接受两个页签，保存后可回读', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emotion-notes-default-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'settings.json');
+  assert.equal(DEFAULTS.notesDefaultTab, 'todo');
+  for (const notesDefaultTab of ['note', 'todo']) {
+    saveSettings(file, { notesDefaultTab, x: 42 });
+    assert.equal(loadSettings(file).notesDefaultTab, notesDefaultTab);
+    assert.equal(loadSettings(file).x, 42);
+  }
+  for (const notesDefaultTab of [undefined, null, '', 'notes', 'note ', 1, {}, []]) {
+    assert.equal(normalizeSettings({ notesDefaultTab }).notesDefaultTab, 'todo');
+  }
+  saveSettings(file, { notesDefaultTab: 'invalid' });
+  assert.equal(loadSettings(file).notesDefaultTab, 'todo');
+});
+
 test('API 常驻开关只接受布尔值，独立持久化且不保存报表或密钥', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emotion-api-label-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -49,6 +66,7 @@ test('损坏文件回退且有效设置可回读', t => {
     bubblesEnabled: true,
     colorMode: 'standard',
     chatModel: 'auto',
+    notesDefaultTab: 'todo',
     customization: DEFAULTS.customization,
     startupAppearance: DEFAULTS.startupAppearance,
     codexEnabled: false,
@@ -68,7 +86,7 @@ test('损坏文件回退且有效设置可回读', t => {
 test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
   assert.deepEqual(normalizeSettings({ size: 'small', x: -102.3, y: 81.8, alwaysOnTop: false }), {
     size: 'small', x: -102, y: 82, alwaysOnTop: false,
-    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', chatModel: 'auto', customization: DEFAULTS.customization,
+    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', chatModel: 'auto', notesDefaultTab: 'todo', customization: DEFAULTS.customization,
     startupAppearance: DEFAULTS.startupAppearance, codexEnabled: false,
     codexTaskNameInAlerts: false, codexQuotaAlwaysVisible: false,
     codexShowExtraCredits: true,
