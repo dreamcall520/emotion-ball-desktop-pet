@@ -76,8 +76,8 @@ assert.doesNotMatch(source, /BOO_ASSETS|boo-binary|aurora-rive|aurora-cloud-refe
 const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
 const downloadLinks = [...html.matchAll(/data-download-arch="arm64"[^>]*href="([^"]+)"/g)];
 assert.equal(downloadLinks.length, 2);
-assert.ok(downloadLinks.every(match => match[1].endsWith('/v0.3.27/Qiuqiu-0.3.27-macOS-arm64-share.zip')));
-assert.match(html, /<dt>发布日期<\/dt><dd>2026-10-02<\/dd>/);
+assert.ok(downloadLinks.every(match => match[1].endsWith('/v0.3.29/Qiuqiu-0.3.29-macOS-arm64-share.zip')));
+assert.match(html, /<dt>发布日期<\/dt><dd>2026-10-04<\/dd>/);
 assert.match(html, /v0\.3\.13\/Qiuqiu-0\.3\.13-macOS-x64-share\.zip/);
 assert.match(html, /解压 ZIP，得到“球球桌宠\.app”/);
 assert.match(fs.readFileSync(path.join(__dirname, '../quota-demo.js'), 'utf8'), /Codex 返回点数状态时/);
@@ -88,5 +88,5 @@ assert.ok(fs.existsSync(path.join(__dirname, '../assets/huancai-icon.png')));
 for (const asset of ['custom-cloud.svg', 'custom-square.svg', 'custom-aurora-simple.png', 'custom-aurora-dimensional.png'])
   assert.ok(fs.existsSync(path.join(__dirname, '../assets', asset)));
 assert.doesNotMatch(html, /参考图不随配色|data-custom-swatches|data-custom-glow-label/);
-assert.equal((html.match(/<details class="updates-history">([\s\S]*?)<\/details>\s*<\/div>\s*<\/section>/)[1].match(/<article>/g) || []).length, 12);
+assert.equal((html.match(/<details class="updates-history">([\s\S]*?)<\/details>\s*<\/div>\s*<\/section>/)[1].match(/<article>/g) || []).length, 13);
 console.log('customize showcase: App previews, linked styles, palette visibility, transparency, release links and history passed');
