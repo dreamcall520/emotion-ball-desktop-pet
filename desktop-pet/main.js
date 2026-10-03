@@ -3,6 +3,7 @@ const path = require('node:path');
 const {
   app,
   BrowserWindow,
+  clipboard,
   dialog,
   ipcMain,
   Menu,
@@ -42,6 +43,8 @@ const { createChatStore } = require('./lib/chat-store');
 const { createChatCompanion } = require('./lib/chat-companion');
 const { createCodexChatRpc } = require('./lib/codex-chat-rpc');
 const { createChatWindow } = require('./lib/chat-window');
+const { createNotesCompanion } = require('./lib/notes-companion');
+const { createNotesOrganizer } = require('./lib/notes-organizer');
 const { createApiUsage } = require('./lib/api-usage');
 const { createApiUsageLabelWindow } = require('./lib/api-usage-label-window');
 const { checkLatestRelease } = require('./lib/app-update');
@@ -75,6 +78,9 @@ let bubbleVisibilityBinding = null;
 let quotaLabel = null;
 let chat = null;
 let chatWindow = null;
+let notesCompanion = null;
+let notesQuitReady = false;
+let notesQuitFlight = null;
 let customizationWindow = null;
 let apiUsage = null;
 let apiUsageWindow = null;
@@ -934,6 +940,21 @@ function setColorMode(value) {
   return true;
 }
 
+function setNotesDefaultTab(value) {
+  if (!settings || isQuitting || !['note', 'todo'].includes(value) || settings.notesDefaultTab === value) return false;
+  const previous = settings.notesDefaultTab;
+  settings.notesDefaultTab = value;
+  try { persistSettings(); }
+  catch (error) {
+    settings.notesDefaultTab = previous;
+    writeError('保存便签待办默认页面', error);
+    refreshTrayMenu();
+    return false;
+  }
+  refreshTrayMenu();
+  return true;
+}
+
 function setInterfaceAppearance(value) {
   if (!settings || isQuitting || settings.colorMode !== 'accessible' ||
     !['system', 'light', 'dark'].includes(value) || settings.codexQuotaAppearance === value) return false;
@@ -1282,10 +1303,21 @@ function codexMenu() {
 function menuTemplate() {
   return [
     { id: 'chat-open', label: '和球球聊聊', click: openChat },
-    { id: 'customize-open', label: '定制球球', click: openCustomization },
-    { label: '随机表情', click: () => sendCommand('random') },
+    { id: 'customize-open', label: '来定制球球', click: openCustomization },
+    { label: '便签与待办', submenu: [
+      { id: 'notes-open', label: '打开主面板', click: () => notesCompanion?.openPanel() },
+      { id: 'notes-new', label: '新建便签', click: () => notesCompanion?.openPanel({ tab: 'note', create: true }) },
+      { id: 'notes-todo-new', label: '添加待办', click: () => notesCompanion?.openPanel({ tab: 'todo', create: true }) },
+      { type: 'separator' },
+      { id: 'notes-default-tab', label: '默认打开', submenu: [['note', '便签'], ['todo', '待办']].map(([value, label]) => ({
+        id: `notes-default-${value}`, label, type: 'radio', checked: (settings.notesDefaultTab === 'note' ? 'note' : 'todo') === value,
+        click: item => { item.checked = (settings.notesDefaultTab === 'note' ? 'note' : 'todo') === value; setNotesDefaultTab(value); }
+      })) }
+    ] },
     { type: 'separator' },
-    { label: '状态与互动', submenu: [
+    { label: '球球与互动', submenu: [
+      { label: '随机表情', click: () => sendCommand('random') },
+      { type: 'separator' },
       { label: '立即睡眠', click: () => sendCommand('sleep') },
       { label: '立即唤醒', click: () => sendCommand('wake') },
       { type: 'separator' },
@@ -1404,7 +1436,11 @@ async function finishSmokeTest() {
       await require('./scripts/verify-api-usage-integration').verifyApiUsage({
         getWindow: () => apiUsageWindow, service: apiUsage, pet: petWindow,
         getMenu: () => Menu.buildFromTemplate(menuTemplate()), powerMonitor,
-        apiLabel: apiUsageLabel, quotaLabel, screen,
+        apiLabel: apiUsageLabel, quotaLabel, screen, edgeTuck, monitor: activityMonitor,
+        setSize: setPetSize,
+        setShape: shape => saveCustomization({ ...settings.customization,
+          appearance: { ...settings.customization.appearance, shape,
+            auroraStyle: 'dimensional', bodyColor: '#5B3BC7', eyeColor: '#FFFFFF' } }),
         showDemoQuota: () => { quotaLabel.show(buildQuotaLabelModel({ enabled: true,
           quota: { state: 'connected', stale: false, windows: [{ id: 'codex:weekly', label: 'Codex',
             windowMinutes: 10080, remaining: 79, resetsAt: Date.now() + 86400000 }] }
@@ -1892,7 +1928,9 @@ function createPetWindow() {
     if (isCurrentPetWindow()) invalidateCodexPage();
   });
   createdPetWindow.on('move', () => {
-    if (!isCurrentPetWindow() || chatWindow?.isFollowingChat?.()) return;
+    if (!isCurrentPetWindow()) return;
+    notesCompanion?.repositionReminder?.();
+    if (chatWindow?.isFollowingChat?.()) return;
     thoughts?.hide(); repositionBubble(); edgeNoticeWindow?.reposition();
   });
   createdPetWindow.on('resize', () => {
@@ -1900,16 +1938,19 @@ function createPetWindow() {
     dragState = null;
     stopMotion();
     edgeTuck?.recover();
+    notesCompanion?.repositionReminder?.();
     if (isCurrentPetWindow()) repositionBubble();
   });
   createdPetWindow.on('show', () => {
     if (!isCurrentPetWindow()) return;
     if (edgeTuck?.getPresentation().mode === 'hidden') edgeTuck.restore();
+    notesCompanion?.repositionReminder?.(true);
   });
   createdPetWindow.on('hide', () => {
     // macOS may deliver hide after a quick hide/show pair. Do not hide a newly
     // reopened chat or re-tuck the pet for an obsolete native notification.
     if (!isCurrentPetWindow() || createdPetWindow.isVisible()) return;
+    notesCompanion?.repositionReminder?.();
     dragState = null;
     chatWindow?.hide();
     if (edgeTuck?.getPresentation().mode !== 'hidden') edgeTuck?.hide();
@@ -1926,6 +1967,7 @@ function createPetWindow() {
   createdPetWindow.on('closed', () => {
     if (!isCurrentPetWindow() || closedCleanupStarted) return;
     closedCleanupStarted = true;
+    notesCompanion?.repositionReminder?.();
     chatWindow?.hide();
     edgeTuck?.dispose();
     edgeNotice?.reset();
@@ -2216,7 +2258,8 @@ async function bootstrap() {
   settingsFile = path.join(app.getPath('userData'), 'settings.json');
   apiUsage = createApiUsage({ filePath: path.join(app.getPath('userData'), 'openai-api-usage.enc'), safeStorage,
     ...(IS_SMOKE_TEST && process.env.PET_SMOKE_API_USAGE_ONLY === '1'
-      ? { get: require('./scripts/verify-api-usage-integration').smokeGet } : {}),
+      ? { get: require('./scripts/verify-api-usage-integration').smokeGet,
+        safeStorage: require('./scripts/verify-api-usage-integration').smokeStorage } : {}),
     onChange: state => {
       if (state.busy) apiLastAttemptAt = Date.now();
       if (apiUsageWindow && !apiUsageWindow.isDestroyed()) apiUsageWindow.webContents.send('pet:api-usage-state', state);
@@ -2225,6 +2268,16 @@ async function bootstrap() {
   });
   settings = loadSettings(settingsFile);
   settings.customization = { ...settings.customization, appearance: settings.startupAppearance };
+  notesCompanion = createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialog,
+    organizer: createNotesOrganizer({ workspaceDir: path.join(app.getPath('userData'), 'notes-workspace') }),
+    filePath: path.join(app.getPath('userData'), 'notes-todos.json'),
+    getPetBounds: () => petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null,
+    getPetWindow: () => petWindow,
+    getPetPresentation: () => ({ ...edgeTuck?.getPresentation(), shape: settings?.customization?.appearance?.shape }),
+    getDefaultTab: () => settings.notesDefaultTab,
+    isSuppressed: () => screenLocked || isQuitting,
+    onComplete: () => { if (!screenLocked && !isQuitting) sendCommand({ command: 'again', motion: 'hop' }); },
+    onError: error => writeError('便签与待办', error) });
   chatWindow = createChatWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
     getAppearance: () => effectiveAppearance(customizationPreviewAppearance || settings?.customization?.appearance),
     getAvatarImage: async appearance => {
@@ -2323,6 +2376,7 @@ async function bootstrap() {
   });
   const pause = () => {
     screenLocked = true;
+    notesCompanion?.pause();
     if (customizationWindow && !customizationWindow.isDestroyed()) customizationWindow.hide();
     if (apiUsageWindow && !apiUsageWindow.isDestroyed()) apiUsageWindow.hide();
     chatWindow?.hide();
@@ -2336,7 +2390,7 @@ async function bootstrap() {
     safelyInvokeWindow('锁屏时 API 卡片隐藏', () => apiUsageLabel?.hide());
     safelyInvokeWindow('锁屏时对白清理', () => dialogue.dismiss());
   };
-  const resume = () => { screenLocked = false; edgeTuck?.resume(); activityMonitor.resume(); syncQuotaLabel(codexCompanion?.getSnapshot()); scheduleUpdateCheck(); };
+  const resume = () => { screenLocked = false; notesCompanion?.resume(); edgeTuck?.resume(); activityMonitor.resume(); syncQuotaLabel(codexCompanion?.getSnapshot()); scheduleUpdateCheck(); };
   const powerGuard = createPowerGuard({ pause, resume });
   powerMonitor.on('lock-screen', () => powerGuard.setLocked(true));
   powerMonitor.on('suspend', () => powerGuard.setSuspended(true));
@@ -2347,6 +2401,7 @@ async function bootstrap() {
   initializeCodexCompanion();
   createPetWindow();
   createTray();
+  if (process.argv.includes('--notes-preview')) notesCompanion.openPanel();
   scheduleUpdateCheck();
   if (settings.codexEnabled) void codexCompanion.setEnabled(true);
 }
@@ -2356,17 +2411,31 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv) => {
     if (settings) restorePet();
+    if (argv.includes('--notes-preview')) notesCompanion?.openPanel();
   });
 
   app.on('before-quit', event => {
+    const noteWindows = notesCompanion?.getWindows();
+    const pendingReminders = notesCompanion?.getStore().getState().todos.some(item =>
+      !item.deletedAt && !item.completed && ['pending', 'presented'].includes(item.reminderState));
+    if (!quitCleanupStarted && !notesQuitReady && event?.preventDefault &&
+      (pendingReminders || noteWindows?.panel || noteWindows?.notes.length || noteWindows?.reminder)) {
+      event.preventDefault();
+      if (!notesQuitFlight) notesQuitFlight = Promise.resolve(notesCompanion.close()).then(allowed => {
+        notesQuitFlight = null;
+        if (allowed) { notesQuitReady = true; setTimeout(() => app.quit(), 0); }
+      }).catch(error => { notesQuitFlight = null; writeError('便签保存后退出', error); });
+      return;
+    }
     isQuitting = true;
     if (quitCleanupStarted) {
       if (!quitReady) event?.preventDefault?.();
       return;
     }
     quitCleanupStarted = true;
+    if (!notesQuitReady) void notesCompanion?.close();
     clearTimeout(updateTimer);
     updateTimer = null;
     clearTimeout(apiRefreshTimer);

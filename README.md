@@ -12,7 +12,10 @@
 - 支持超小（60 × 60）、极小（80 × 80）、紧凑（108 × 108）、小、中、大六档尺寸；首次启动默认极小
 - 支持始终置顶、开机启动和位置重置
 - 定制经典、云朵、幻彩、方糖四种外观，调整配色、透明度并保存启动外观
+- 本机便签与待办，支持桌面便签、收藏、搜索、截止日期、提醒、归档和回收站
 - 普通桌宠无需登录，可离线使用；主动使用聊天时，会把输入的消息发送给 Codex 生成回复
+
+0.3.29 新增“便签与待办”：快速记录、多行输入、单条复制、桌面便签和随球球移动的待办提醒；主面板可单独置顶。便签可手动使用 Codex 智能整理，查看结果后再确认替换，支持撤销。同时优化 API 与额度双卡在屏幕边缘的排列。
 
 0.3.27 提供 OpenAI API 费用与用量报告和独立常驻卡、额外点数展示（默认开启，可关闭）、“关于球球”和页内检查更新。点数按接口返回的数据展示，适用于有相关点数的账号，不限定 Pro。自动发现新版后，可在桌面对白、聊天顶部和菜单看到提醒；Plus 现有周期额度逻辑保持。
 
@@ -30,7 +33,7 @@
 
 提供 Apple 芯片版与独立 Intel x64 构建，需 macOS 12 或更高版本。请按 Mac 芯片选择对应附件；Intel 的实机验证范围见 Release 说明。
 
-当前 Apple 芯片版为 [0.3.27](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.27)，Intel 下载继续使用 [0.3.13 构建候选](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.13)。本次没有发布新的 Intel 安装包。
+当前 Apple 芯片版为 [0.3.29](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.29)，Intel 下载继续使用 [0.3.13 构建候选](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.13)。本次没有发布新的 Intel 安装包。
 
 1. 前往 [Releases](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases) 下载最新的“分享用 ZIP”。
 2. 解压 ZIP，得到“球球桌宠.app”；也可下载并打开 DMG。

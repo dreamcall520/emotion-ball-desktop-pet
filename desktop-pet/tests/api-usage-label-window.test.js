@@ -4,6 +4,7 @@ const { EventEmitter } = require('node:events');
 const { setImmediate: flush } = require('node:timers/promises');
 const { createApiUsageLabelWindow, apiLabelBounds } = require('../lib/api-usage-label-window');
 const { quotaLabelBounds } = require('../lib/quota-label-placement');
+const { petVisualBounds } = require('../lib/pet-visual-bounds');
 
 const STATE = {
   connected: true, busy: false, error: null,
@@ -73,13 +74,15 @@ test('API card stays inside the display without covering pet, visible Codex card
     { area: { x: 0, y: 0, width: 1440, height: 900 }, pet: { x: 1360, y: 0, width: 80, height: 80 } }
   ];
   for (const { pet, area, bubble = null } of cases) for (const quotaExpanded of [false, true]) {
-    const quota = quotaLabelBounds(pet, area, bubble, 'compact', quotaExpanded, 2);
+    const presentation = { shape: 'aurora-cloud', mode: 'peeked',
+      side: pet.x < area.x + area.width / 2 ? 'left' : 'right' };
+    const quota = quotaLabelBounds(pet, area, bubble, 'compact', quotaExpanded, 2, presentation);
     for (const expanded of [false, true]) {
-      const bounds = apiLabelBounds(pet, area, quota, bubble, expanded, { shape: 'aurora-cloud', mode: 'peeked', side: 'right' });
+      const bounds = apiLabelBounds(pet, area, quota, bubble, expanded, presentation);
       assert.equal(bounds.width, expanded ? 196 : 128);
       assert.equal(bounds.height, expanded ? 128 : 32);
       assert.ok(inside(bounds, area), JSON.stringify({ bounds, area }));
-      for (const obstacle of [pet, quota, bubble].filter(Boolean)) {
+      for (const obstacle of [petVisualBounds(pet, presentation.shape, presentation), quota, bubble].filter(Boolean)) {
         assert.equal(overlaps(bounds, obstacle), false, JSON.stringify({ bounds, obstacle }));
       }
     }
@@ -89,6 +92,27 @@ test('API card stays inside the display without covering pet, visible Codex card
   const presentation = { shape: 'aurora-cloud', mode: 'peeked', side: 'right' };
   assert.deepEqual(apiLabelBounds(cases[0].pet, cases[0].area, null, null, false, presentation),
     quotaLabelBounds(cases[0].pet, cases[0].area, null, 'compact', false, 2, presentation));
+});
+
+test('peeked edge cards share an inward edge and an 8px gap across sizes and expansions', () => {
+  const area = { x: -1440, y: 32, width: 1440, height: 1000 };
+  for (const side of ['left', 'right']) for (const size of [60, 80, 108, 180, 260]) {
+    const pet = { x: side === 'left' ? area.x : area.x + area.width - size,
+      y: 400, width: size, height: size };
+    const presentation = { shape: 'aurora-cloud', mode: 'peeked', side };
+    for (const sizeName of ['compact', 'standard']) for (const quotaExpanded of [false, true]) {
+      const quota = quotaLabelBounds(pet, area, null, sizeName, quotaExpanded, 2, presentation, true);
+      for (const expanded of [false, true]) {
+        const bounds = apiLabelBounds(pet, area, quota, null, expanded, presentation);
+        assert.equal(side === 'right' ? bounds.x + bounds.width : bounds.x,
+          side === 'right' ? quota.x + quota.width : quota.x,
+          JSON.stringify({ side, size, quotaExpanded, expanded, bounds, quota }));
+        assert.equal(bounds.y, quota.y + quota.height + 8);
+        assert.ok(inside(bounds, area));
+        assert.equal(overlaps(bounds, quota), false);
+      }
+    }
+  }
 });
 
 test('lazy native window has safe flags, local resources, denied navigation and a dark safe report', async () => {

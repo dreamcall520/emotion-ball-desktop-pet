@@ -12,7 +12,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   codexQuotaAlwaysVisible = false, codexQuotaPeriod = 'auto', codexQuotaLabelSize = 'standard',
   codexQuotaAppearance = 'system', codexShowExtraCredits = true, bubblesEnabled = true, colorMode = 'standard',
   consent = async () => ({ response: 1 }), openExternal = async () => {}, saveError = null,
-  loadedSettings = null, argv = [], updateFetch = async currentVersion => ({ currentVersion,
+  loadedSettings = null, notesDefaultTab = 'todo', argv = [], updateFetch = async currentVersion => ({ currentVersion,
     latestVersion: '0.3.26', hasUpdate: true,
     url: 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.26' }) } = {}) {
   let now = 0;
@@ -135,6 +135,14 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     change(state) { this.state = state; this.options.onChange(state); },
     action(action) { this.options.onAction(action); }
   };
+  const notes = { options: null, opens: [], pauses: 0, resumes: 0, closes: 0,
+    windows: { panel: null, notes: [], reminder: null }, closeAllowed: true, todos: [],
+    openPanel(value) { this.opens.push(value); },
+    getWindows() { return this.windows; },
+    getStore() { return { getState: () => ({ todos: this.todos }) }; },
+    pause() { this.pauses++; }, resume() { this.resumes++; },
+    async close() { this.closes++; return this.closeAllowed; }
+  };
   const realRequire = createRequire(path.resolve(__dirname, '../main.js'));
   const context = vm.createContext({ __dirname: path.resolve(__dirname, '..'), console,
     process: { env: {}, argv, stderr: { write(message) { throw new Error(message); } } }, performance: { now: () => now },
@@ -147,7 +155,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
         shell: { openExternal: url => { external.push(url); return openExternal(url); } },
         Menu: { buildFromTemplate: value => Object.assign(value, { popup: options => popups.push({ value, options }) }) }, nativeImage: { createFromPath: () => ({ setTemplateImage() {} }) } };
       if (name === './lib/settings') return { ...realRequire(name), loadSettings: () => loadedSettings ? structuredClone(loadedSettings) : ({ size: 'tiny', x: -600, y: 100,
-        bubblesEnabled, colorMode, keepAwake: false, alwaysOnTop: true, codexEnabled, codexTaskNameInAlerts,
+        bubblesEnabled, colorMode, notesDefaultTab, keepAwake: false, alwaysOnTop: true, codexEnabled, codexTaskNameInAlerts,
         codexQuotaAlwaysVisible, codexQuotaPeriod, codexQuotaLabelSize, codexQuotaAppearance, codexShowExtraCredits,
         customization: realRequire('./lib/customization').normalizeCustomization(),
         startupAppearance: realRequire('./lib/customization').normalizeCustomization().appearance }),
@@ -179,6 +187,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
           write() { throw new Error('chat disk access is forbidden in main fixture'); } };
       } };
       if (name === './lib/chat-companion') return { createChatCompanion: options => { chat.options = options; return chat; } };
+      if (name === './lib/notes-companion') return { createNotesCompanion: options => { notes.options = options; return notes; } };
       if (name === './lib/codex-chat-rpc') return { createCodexChatRpc: () => { throw new Error('real Codex process is forbidden in main fixture'); } };
       if (name === './lib/activity-monitor') return { ...realRequire(name), createActivityMonitor: options => { activity.sample = options.onSample; return activity; } };
       return realRequire(name);
@@ -190,7 +199,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   pet.emit('ready-to-show');
   pet.webContents.emit('did-finish-load');
   return { pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
-    call: expression => vm.runInContext(expression, context),
+    notes, call: expression => vm.runInContext(expression, context),
     invoke(channel, packet, sender = pet.webContents) {
       assert.ok(ipcHandlers.has(channel), `${channel} handler must be registered`);
       return Promise.resolve(ipcHandlers.get(channel)({ sender }, packet));
@@ -213,6 +222,70 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
 }
 
 const TASK_ID = '11111111-1111-4111-8111-111111111111';
+
+test('便签待办入口、独立存储、锁屏暂停与成功完成反馈接入主进程', async () => {
+  const f = await fixture({ argv: ['--notes-preview'] });
+  assert.equal(f.notes.options.filePath, '/fixture/notes-todos.json');
+  assert.deepEqual(f.notes.options.getPetBounds(), f.pet.getBounds());
+  assert.equal(f.notes.options.getDefaultTab(), 'todo');
+  assert.equal(f.notes.opens.length, 1, '候选预览参数自动打开主面板');
+  menuItem(f, 'notes-open').click();
+  menuItem(f, 'notes-new').click();
+  assert.equal(f.notes.opens.length, 3);
+  assert.equal(f.notes.opens.at(-1).tab, 'note');
+  assert.equal(f.notes.opens.at(-1).create, true);
+  menuItem(f, 'notes-todo-new').click();
+  assert.equal(f.notes.opens.length, 4);
+  assert.equal(f.notes.opens.at(-1).tab, 'todo');
+  assert.equal(f.notes.opens.at(-1).create, true);
+  f.notes.options.onComplete();
+  assert.equal(f.commands.at(-1).command, 'again');
+  assert.equal(f.commands.at(-1).motion, 'hop');
+  f.powerMonitor.emit('lock-screen');
+  assert.equal(f.notes.pauses, 1);
+  const commands = f.commands.length;
+  f.notes.options.onComplete();
+  assert.equal(f.commands.length, commands, '锁屏不播放反馈');
+  f.powerMonitor.emit('unlock-screen');
+  assert.equal(f.notes.resumes, 1);
+  f.app.emit('before-quit');
+  assert.equal(f.notes.closes, 1);
+});
+
+test('便签拒绝关闭时保留整个 App，保存确认后才进入原有退出清理', async () => {
+  const f = await fixture();
+  f.notes.windows.panel = {};
+  f.notes.closeAllowed = false;
+  let prevented = 0;
+  f.app.emit('before-quit', { preventDefault() { prevented++; } });
+  await flush();
+  assert.equal(prevented, 1);
+  assert.equal(f.call('isQuitting'), false);
+  assert.equal(f.chat.closes, 0);
+  assert.equal(f.activity.stops, 0);
+  assert.equal(f.app.quitCalls, 0);
+  f.notes.closeAllowed = true;
+  f.app.emit('before-quit', { preventDefault() { prevented++; } });
+  await flush();
+  assert.equal(f.chat.closes, 0, '便签保存完成仍等待取消的原生事件结束');
+  f.advanceTo(0);
+  assert.equal(f.app.quitCalls, 1);
+  f.app.emit('before-quit', { preventDefault() { assert.fail('已经保存，不再拦截退出'); } });
+  assert.equal(f.notes.closes, 2);
+  assert.equal(f.chat.closes, 1);
+  assert.equal(f.call('isQuitting'), true);
+});
+
+test('没有便签窗口时，待启用提醒仍经过退出确认，取消不拆除其他功能', async () => {
+  const f = await fixture();
+  f.notes.todos.push({ completed: false, deletedAt: null, reminderState: 'pending' });
+  f.notes.closeAllowed = false;
+  f.app.emit('before-quit', { preventDefault() {} });
+  await flush();
+  assert.equal(f.notes.closes, 1);
+  assert.equal(f.chat.closes, 0);
+  assert.equal(f.call('isQuitting'), false);
+});
 
 test('靠边额度胶囊沿用最新真实主周期，关闭、锁屏及重载立即撤回', async () => {
   const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true, bubblesEnabled: false });
@@ -265,23 +338,54 @@ function menuItem(fixtureValue, id) {
   return findMenuItem(fixtureValue.call('menuTemplate()'), id);
 }
 
-test('右键菜单保留聊天和定制直达，互动、贴边、常规设置各归一层', async () => {
+test('右键菜单保留聊天和定制直达，便签待办、球球互动各归一组', async () => {
   const f = await fixture();
   const menu = f.call('menuTemplate()');
   const top = menu.filter(item => item.type !== 'separator');
   assert.deepEqual(Array.from(top, item => item.label), [
-    '和球球聊聊', '定制球球', '随机表情', '状态与互动', 'Codex 联动',
+    '和球球聊聊', '来定制球球', '便签与待办', '球球与互动', 'Codex 联动',
     '贴边与显示', '尺寸', '界面配色', '常规设置', '关于球球', '检查更新…', '退出球球'
   ]);
   const group = label => top.find(item => item.label === label).submenu.filter(item => item.type !== 'separator');
-  assert.deepEqual(Array.from(group('状态与互动'), item => item.label),
-    ['立即睡眠', '立即唤醒', '保持清醒', '互动气泡']);
+  assert.equal(top.find(item => item.id === 'chat-open').submenu, undefined);
+  assert.equal(top[1].id, 'customize-open');
+  assert.equal(top[1].submenu, undefined);
+  assert.deepEqual(Array.from(group('便签与待办'), item => item.id), ['notes-open', 'notes-new', 'notes-todo-new', 'notes-default-tab']);
+  assert.deepEqual(Array.from(group('便签与待办'), item => item.label), ['打开主面板', '新建便签', '添加待办', '默认打开']);
+  assert.deepEqual(Array.from(menuItem(f, 'notes-default-tab').submenu, item => [item.id, item.label, item.type, item.checked]),
+    [['notes-default-note', '便签', 'radio', false], ['notes-default-todo', '待办', 'radio', true]]);
+  assert.deepEqual(Array.from(group('球球与互动'), item => item.label),
+    ['随机表情', '立即睡眠', '立即唤醒', '保持清醒', '互动气泡']);
+  group('球球与互动')[0].click();
+  assert.equal(f.commands.at(-1), 'random');
   assert.deepEqual(Array.from(group('贴边与显示'), item => item.id),
     ['edge-left', 'edge-right', 'edge-leave', 'edge-visibility']);
   assert.deepEqual(Array.from(group('常规设置'), item => item.label),
     ['始终置顶', '开机自动启动（打包后可用）', '恢复默认位置', '自动提醒新版本']);
   assert.equal(top.find(item => item.label === '尺寸').submenu.length, 6);
   assert.equal(top.find(item => item.label === '界面配色').id, 'color-mode');
+});
+
+test('便签待办默认页保存后下次打开生效，失败恢复当前和重建菜单的单选', async () => {
+  const f = await fixture(), opens = f.notes.opens.length;
+  const note = menuItem(f, 'notes-default-note'); note.checked = true; note.click(note);
+  assert.equal(f.saved.at(-1).notesDefaultTab, 'note');
+  assert.equal(f.notes.options.getDefaultTab(), 'note');
+  assert.equal(f.notes.opens.length, opens, '修改偏好不打断当前编辑窗口');
+  assert.equal(findMenuItem(f.trayMenus.at(-1), 'notes-default-note').checked, true);
+  const restarted = await fixture({ loadedSettings: f.saved.at(-1) });
+  assert.equal(restarted.notes.options.getDefaultTab(), 'note');
+  const saves = f.saved.length;
+  assert.equal(f.call("setNotesDefaultTab('invalid')"), false); assert.equal(f.saved.length, saves);
+  const failed = await fixture({ loadedSettings: f.saved.at(-1), saveError: Error('NOTES_DEFAULT_WRITE_FAILURE') });
+  failed.call('writeError = () => {}');
+  const todo = menuItem(failed, 'notes-default-todo'), refreshes = failed.trayMenus.length;
+  todo.checked = true; todo.click(todo);
+  assert.equal(todo.checked, false); assert.equal(failed.notes.options.getDefaultTab(), 'note');
+  assert.ok(failed.trayMenus.length > refreshes);
+  assert.equal(findMenuItem(failed.trayMenus.at(-1), 'notes-default-note').checked, true);
+  assert.equal(findMenuItem(failed.trayMenus.at(-1), 'notes-default-todo').checked, false);
+  assert.equal(failed.saved.length, 0);
 });
 
 test('临时换装保留启动外观，重启后恢复用户指定外观', async () => {

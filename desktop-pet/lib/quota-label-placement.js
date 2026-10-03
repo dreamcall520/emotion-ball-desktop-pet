@@ -7,8 +7,6 @@ const LABEL_SIZES = Object.freeze({
   compactExpandedDual: Object.freeze({ width: 196, height: 128 })
 });
 const GAP = 8;
-// Matches the peeked aurora cloud's horizontal presentation in pet.css.
-const AURORA_PEEK_SHIFT = 0.35;
 const { petVisualBounds } = require('./pet-visual-bounds');
 const GEOMETRY_LIMIT = Math.floor(Number.MAX_SAFE_INTEGER / 4);
 
@@ -88,15 +86,7 @@ function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName =
   presentation = null, extraCredits = false) {
   const area = safeArea(workArea);
   const nativePet = safePet(petBounds, area);
-  const auroraPeek = presentation?.shape === 'aurora-cloud' && presentation?.mode === 'peeked' &&
-    ['left', 'right'].includes(presentation.side);
-  // The native window stays on-screen, while CSS moves the visible cloud toward the edge.
-  // Anchor the label to that moved cloud, not to the empty part of its native window.
-  const shiftedPet = auroraPeek ? {
-    ...nativePet,
-    x: nativePet.x + (presentation.side === 'right' ? 1 : -1) * nativePet.width * AURORA_PEEK_SHIFT
-  } : nativePet;
-  const pet = petVisualBounds(shiftedPet, presentation?.shape);
+  const pet = petVisualBounds(nativePet, presentation?.shape, presentation);
   const obstacle = safeObstacle(obstacleBounds);
   const requestedSize = quotaLabelSize(sizeName, expanded, itemCount, extraCredits);
   const size = {
@@ -131,4 +121,4 @@ function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName =
     fallbacks.find(candidate => !overlaps(candidate, size, obstacle)) || fallbacks[0];
 }
 
-module.exports = { LABEL_SIZES, quotaLabelSize, quotaLabelBounds };
+module.exports = { GAP, LABEL_SIZES, quotaLabelSize, quotaLabelBounds };
