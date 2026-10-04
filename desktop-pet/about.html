@@ -6,22 +6,28 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
   <title>关于球球</title>
   <link rel="stylesheet" href="about.css">
+  <link rel="stylesheet" href="aurora-rive.css">
   <link rel="stylesheet" href="color-mode.css">
   <script defer src="color-mode.js"></script>
   <script defer src="../emotion-ball/js/rings.js"></script>
   <script defer src="../emotion-ball/js/custom-shapes.js"></script>
+  <script defer src="../emotion-ball/js/emotions.js"></script>
+  <script defer src="../emotion-ball/js/ball.js"></script>
+  <script defer src="../emotion-ball/js/engine.js"></script>
   <script defer src="lib/customization.js"></script>
-  <script defer src="lib/chat-avatar.js"></script>
+  <script defer src="lib/rive.js"></script>
+  <script defer src="lib/boo-binary.js"></script>
+  <script defer src="lib/aurora-rive.js"></script>
   <script defer src="about-renderer.js"></script>
 </head>
 <body>
   <main class="about-window" aria-labelledby="about-name">
     <div class="about-titlebar" aria-hidden="true"></div>
     <section class="about-content">
-      <button id="about-avatar" class="about-avatar" type="button" aria-label="经典球球。单击转一圈，双击随机换形态" aria-describedby="about-avatar-help" title="单击：转一圈 · 双击：随机换形态&#10;键盘 Enter / 空格转圈，→ 换形态">
-        <span class="about-avatar-art"><span id="about-portrait"></span><span class="about-egg-shell" aria-hidden="true"></span></span>
+      <button id="about-avatar" class="about-avatar" type="button" aria-label="经典球球。单击互动，双击随机换形态" aria-describedby="about-avatar-help" title="单击：互动 · 双击：随机换形态&#10;键盘 Enter / 空格互动，→ 换形态">
+        <span id="about-portrait" aria-hidden="true"></span>
       </button>
-      <p id="about-avatar-help" class="about-sr-only">单击球球可转圈轻跳，双击随机切换经典、云朵、幻彩或方糖。键盘 Enter 或空格转圈，右方向键换形态。开启减少动态时只短暂显示静态彩蛋。</p>
+      <p id="about-avatar-help" class="about-sr-only">单击球球互动，双击随机切换经典、云朵、幻彩或方糖。键盘 Enter 或空格互动，右方向键换形态。开启减少动态时保持静态。</p>
       <p id="about-avatar-status" class="about-sr-only" role="status" aria-live="polite"></p>
       <h1 id="about-name">球球桌宠</h1>
       <div class="about-info">
