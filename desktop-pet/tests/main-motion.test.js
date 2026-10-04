@@ -366,6 +366,9 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
     ['始终置顶', '开机自动启动（打包后可用）', '恢复默认位置', '自动提醒新版本']);
   assert.equal(top.find(item => item.label === '尺寸').submenu.length, 6);
   assert.equal(top.find(item => item.label === '界面配色').id, 'color-mode');
+  assert.equal(menu[0].id, 'chat-open');
+  assert.equal(menu.at(-2).id, 'update-check');
+  assert.equal(menu.filter(item => item.id === 'update-check').length, 1);
 });
 
 test('便签待办默认页保存后下次打开生效，失败恢复当前和重建菜单的单选', async () => {
@@ -810,7 +813,12 @@ test('桌面新版气泡只主动出现一次，可信当前按钮打开关于�
   assert.equal(f.call('aboutWindow.isVisible()'), true);
   assert.equal(f.call('aboutUpdateState.latestVersion'), '0.3.26');
   assert.equal(f.external.length, 0);
-  assert.equal(menuItem(f, 'update-check').label, '● 有新版本 0.3.26…');
+  assert.equal(menuItem(f, 'update-check').label, '更新球球至 0.3.26…');
+  const menu = f.call('menuTemplate()');
+  assert.equal(menu[0].id, 'update-check');
+  assert.equal(menu[1].type, 'separator');
+  assert.equal(menu[2].id, 'chat-open');
+  assert.equal(menu.filter(item => item.id === 'update-check').length, 1);
   const count = f.windows.length;
   f.send('pet:bubble-reply', { id: shown.id, action: 'app-update-open' }, f.bubble);
   assert.equal(f.windows.length, count);
@@ -820,7 +828,11 @@ test('桌面新版气泡只主动出现一次，可信当前按钮打开关于�
   quiet.send('pet:bubble-reply', { id: later.id, action: 'app-update-dismiss' }, quiet.bubble);
   assert.equal(quiet.call('aboutWindow'), null);
   assert.equal(quiet.bubble.getWindow().isVisible(), false);
-  assert.equal(menuItem(quiet, 'update-check').label, '● 有新版本 0.3.26…');
+  assert.equal(menuItem(quiet, 'update-check').label, '更新球球至 0.3.26…');
+  const quietMenu = quiet.call('menuTemplate()');
+  assert.equal(quietMenu[0].id, 'update-check');
+  assert.equal(quietMenu[1].type, 'separator');
+  assert.equal(quietMenu.filter(item => item.id === 'update-check').length, 1);
 });
 
 test('新版在会话内提示并保留菜单标记，失败不丢已知新版，点击入口只接受当前可见会话', async () => {
@@ -837,7 +849,7 @@ test('新版在会话内提示并保留菜单标记，失败不丢已知新版�
   assert.equal(f.call('aboutWindow'), null, '聊天可见时只显示会话提示，不抢开关于窗口');
   assert.equal(f.chatWindow.updates.at(-1).appUpdate.latestVersion, '0.3.26');
   assert.equal(f.saved.at(-1).lastUpdateNotifiedVersion, '0.3.26');
-  assert.match(menuItem(f, 'update-check').label, /●.*0\.3\.26/);
+  assert.match(menuItem(f, 'update-check').label, /更新球球至 0\.3\.26…/);
   f.chat.change({ ...f.chat.state, busy: true });
   assert.equal(f.chatWindow.updates.at(-1).appUpdate.latestVersion, '0.3.26', '流式会话状态不丢新版提示');
   assert.deepEqual(f.chat.sends, [], '版本检测不会作为消息发给模型');
@@ -847,7 +859,7 @@ test('新版在会话内提示并保留菜单标记，失败不丢已知新版�
   assert.equal(f.external.length, 0, '查看更新只打开关于页，不接受传入的网址');
   f.advanceTo(60001);
   await f.call('checkForUpdates()');
-  assert.match(menuItem(f, 'update-check').label, /●.*0\.3\.26/);
+  assert.match(menuItem(f, 'update-check').label, /更新球球至 0\.3\.26…/);
   assert.equal((await f.invoke('pet:chat-get', undefined, sender)).appUpdate.latestVersion, '0.3.26');
   menuItem(f, 'update-check').click();
   await flush();
@@ -860,6 +872,10 @@ test('新版在会话内提示并保留菜单标记，失败不丢已知新版�
   await f.call('checkForUpdates()');
   assert.equal((await f.invoke('pet:chat-get', undefined, sender)).appUpdate, null);
   assert.equal(menuItem(f, 'update-check').label, '检查更新…');
+  const currentMenu = f.call('menuTemplate()');
+  assert.equal(currentMenu[0].id, 'chat-open');
+  assert.equal(currentMenu.at(-2).id, 'update-check');
+  assert.equal(currentMenu.filter(item => item.id === 'update-check').length, 1);
   assert.equal(f.call('aboutUpdateState.hasUpdate'), false);
   assert.equal(await f.invoke('pet:chat-open-update', undefined, sender), false);
   f.powerMonitor.emit('lock-screen');
