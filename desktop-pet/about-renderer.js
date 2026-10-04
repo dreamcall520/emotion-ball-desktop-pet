@@ -8,6 +8,69 @@
   let updateReceived = false;
   let currentVersion = '';
   let releaseAvailable = false;
+  const avatar = $('about-avatar');
+  const avatarStatus = $('about-avatar-status');
+  const motion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+  const portraits = [
+    { shape: 'blob', name: '经典' }, { shape: 'cloud', name: '云朵' },
+    { shape: 'aurora-cloud', name: '幻彩', contour: 'six-lobe' }, { shape: 'square', name: '方糖' }
+  ];
+  let portraitIndex = 0, avatarClickTimer = null, avatarEffectTimer = null;
+
+  function cancelAvatarClick() { clearTimeout(avatarClickTimer); avatarClickTimer = null; }
+  function stopAvatarEffect() {
+    clearTimeout(avatarEffectTimer); avatarEffectTimer = null;
+    avatar.classList.remove('is-spinning', 'is-switching', 'is-static-egg');
+  }
+  function avatarEffect(className, duration) {
+    stopAvatarEffect();
+    void avatar.offsetWidth;
+    avatar.classList.add(className);
+    avatarEffectTimer = setTimeout(stopAvatarEffect, duration);
+  }
+  function renderPortrait(index) {
+    const portrait = portraits[index];
+    const appearance = window.PetCustomization.applyShapeRecommendation({ idleEyes: 'original', auroraTransparency: 0 }, portrait.shape, portrait.contour);
+    if (portrait.shape === 'blob') Object.assign(appearance, { bodyColor: '#F2F0EB', eyeColor: '#252629' });
+    window.PetChatAvatar.render($('about-portrait'), appearance);
+    portraitIndex = index;
+    avatar.dataset.shape = portrait.shape;
+    avatar.setAttribute('aria-label', `${portrait.name}球球。单击转一圈，双击随机换形态`);
+    avatar.title = `当前：${portrait.name} · 单击转圈 · 双击换形态\n键盘 Enter / 空格转圈，→ 换形态`;
+  }
+  function spinPortrait() {
+    avatarEffect(motion?.matches ? 'is-static-egg' : 'is-spinning', 820);
+    avatarStatus.textContent = motion?.matches ? '找到一颗彩蛋。' : '球球转了一圈，变出一颗彩蛋。';
+  }
+  function changePortrait() {
+    cancelAvatarClick(); stopAvatarEffect();
+    const choices = portraits.map((_, index) => index).filter(index => index !== portraitIndex);
+    try {
+      renderPortrait(choices[Math.floor(Math.random() * choices.length)]);
+      avatarStatus.textContent = `换成${portraits[portraitIndex].name}球球了。`;
+      if (!motion?.matches) avatarEffect('is-switching', 180);
+    } catch (_) { avatarStatus.textContent = '暂时无法切换球球形态，请再试一次。'; }
+  }
+  avatar.addEventListener('click', event => {
+    cancelAvatarClick();
+    if (event.detail > 1) return;
+    if (event.detail === 0) spinPortrait();
+    else avatarClickTimer = setTimeout(() => { avatarClickTimer = null; spinPortrait(); }, 520);
+  });
+  avatar.addEventListener('dblclick', event => { event.preventDefault(); changePortrait(); });
+  avatar.addEventListener('keydown', event => {
+    if (!['Enter', ' ', 'ArrowRight'].includes(event.key)) return;
+    event.preventDefault();
+    if (event.repeat) return;
+    if (event.key === 'ArrowRight' || event.key === 'Enter' && event.shiftKey) changePortrait();
+    else { cancelAvatarClick(); spinPortrait(); }
+  });
+  const stopAvatar = () => { cancelAvatarClick(); stopAvatarEffect(); };
+  motion?.addEventListener('change', stopAvatar);
+  document.addEventListener('visibilitychange', () => {
+    document.documentElement.dataset.aboutVisible = String(!document.hidden);
+    if (document.hidden) stopAvatar();
+  });
 
   function refreshControls() {
     const checking = update.state === 'checking';
@@ -35,9 +98,7 @@
   }
 
   try {
-    window.PetChatAvatar.render($('about-avatar'), {
-      shape: 'blob', bodyColor: '#F2F0EB', eyeColor: '#252629', idleEyes: 'original', auroraTransparency: 0
-    });
+    renderPortrait(0);
   } catch (_) { status.textContent = '暂时无法显示球球形象。'; }
 
   async function perform(method, pending, failure) {
@@ -77,7 +138,10 @@
       if (renderUpdate(value)) updateReceived = true;
     });
   } catch (_) {}
-  window.addEventListener('beforeunload', () => { if (typeof unsubscribe === 'function') unsubscribe(); }, { once: true });
+  window.addEventListener('beforeunload', () => {
+    stopAvatar(); motion?.removeEventListener('change', stopAvatar);
+    if (typeof unsubscribe === 'function') unsubscribe();
+  }, { once: true });
   refreshControls();
   if (typeof bridge?.getInfo !== 'function') {
     $('about-version').textContent = '版本暂不可用';
