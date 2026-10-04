@@ -1322,7 +1322,11 @@ function codexMenu() {
 }
 
 function menuTemplate() {
+  const updateEntry = { id: 'update-check', label: availableUpdate ? `更新球球至 ${availableUpdate.latestVersion}…`
+    : updateCheck ? '正在检查更新…' : '检查更新…', enabled: Boolean(availableUpdate) || !updateCheck,
+    click: () => { void (availableUpdate ? showUpdateResult(availableUpdate) : checkForUpdates(true)); } };
   return [
+    ...(availableUpdate ? [updateEntry, { type: 'separator' }] : []),
     { id: 'chat-open', label: '和球球聊聊', click: openChat },
     { id: 'customize-open', label: '来定制球球', click: openCustomization },
     { label: '便签与待办', submenu: [
@@ -1389,9 +1393,7 @@ function menuTemplate() {
     ] },
     { type: 'separator' },
     { id: 'about-open', label: '关于球球', click: () => { void openAbout(); } },
-    { id: 'update-check', label: availableUpdate ? `● 有新版本 ${availableUpdate.latestVersion}…`
-      : updateCheck ? '正在检查更新…' : '检查更新…', enabled: Boolean(availableUpdate) || !updateCheck,
-      click: () => { void (availableUpdate ? showUpdateResult(availableUpdate) : checkForUpdates(true)); } },
+    ...(!availableUpdate ? [updateEntry] : []),
     {
       label: '退出球球',
       click: () => app.quit()
