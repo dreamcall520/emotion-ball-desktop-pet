@@ -1322,8 +1322,8 @@ function codexMenu() {
 }
 
 function menuTemplate() {
-  const updateEntry = { id: 'update-check', label: availableUpdate ? `更新球球至 ${availableUpdate.latestVersion}…`
-    : updateCheck ? '正在检查更新…' : '检查更新…', enabled: Boolean(availableUpdate) || !updateCheck,
+  const updateEntry = { id: 'update-check', label: availableUpdate ? `更新球球至 ${availableUpdate.latestVersion}`
+    : updateCheck ? '正在检查更新' : '检查更新', enabled: Boolean(availableUpdate) || !updateCheck,
     click: () => { void (availableUpdate ? showUpdateResult(availableUpdate) : checkForUpdates(true)); } };
   return [
     ...(availableUpdate ? [updateEntry, { type: 'separator' }] : []),
