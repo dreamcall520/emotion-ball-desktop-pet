@@ -15,40 +15,83 @@
     { shape: 'blob', name: '经典' }, { shape: 'cloud', name: '云朵' },
     { shape: 'aurora-cloud', name: '幻彩', contour: 'six-lobe' }, { shape: 'square', name: '方糖' }
   ];
+  const portraitTarget = $('about-portrait');
   let portraitIndex = 0, avatarClickTimer = null, avatarEffectTimer = null;
+  let ball = null, aurora = null;
 
   function cancelAvatarClick() { clearTimeout(avatarClickTimer); avatarClickTimer = null; }
   function stopAvatarEffect() {
     clearTimeout(avatarEffectTimer); avatarEffectTimer = null;
-    avatar.classList.remove('is-spinning', 'is-switching', 'is-static-egg');
+    ball?.stopMotion();
   }
-  function avatarEffect(className, duration) {
+  function destroyPortrait() {
     stopAvatarEffect();
-    void avatar.offsetWidth;
-    avatar.classList.add(className);
-    avatarEffectTimer = setTimeout(stopAvatarEffect, duration);
+    aurora?.destroy(); aurora = null;
+    ball?.destroy(); ball = null;
+    portraitTarget.replaceChildren();
   }
   function renderPortrait(index) {
     const portrait = portraits[index];
-    const appearance = window.PetCustomization.applyShapeRecommendation({ idleEyes: 'original', auroraTransparency: 0 }, portrait.shape, portrait.contour);
-    if (portrait.shape === 'blob') Object.assign(appearance, { bodyColor: '#F2F0EB', eyeColor: '#252629' });
-    window.PetChatAvatar.render($('about-portrait'), appearance);
+    const appearance = window.PetCustomization.normalizeAppearance(window.PetCustomization.applyShapeRecommendation({}, portrait.shape, portrait.contour));
+    cancelAvatarClick();
+    destroyPortrait();
+    const source = window.EmotionBall.config.get('02').raw;
+    window.EmotionBall.config.register({ ...source, id: '50', name: '关于页待机', group: 'custom', antics: false, anims: [], pool: [0, 8] });
+    const customShape = window.EB_CUSTOM_SHAPES.createShape(appearance);
+    const referenceTexture = window.PetCustomization.auroraReferenceTexture(appearance, customShape);
+    ball = window.EmotionBall.create(portraitTarget, {
+      emotion: '50', fallbackId: '50', shape: appearance.shape, customShape,
+      auroraBodyTexture: referenceTexture, auroraStyle: appearance.auroraStyle,
+      auroraTransparency: appearance.auroraTransparency,
+      color: appearance.bodyColor, eyeColor: appearance.eyeColor,
+      glowPinkColor: appearance.glowPinkColor, glowGoldColor: appearance.glowGoldColor,
+      eyeScale: appearance.eyeScale, eyeSpacing: appearance.eyeSpacing, eyeHeight: appearance.eyeHeight,
+      idle: false, autostart: !motion?.matches, lite: false, liteRibbons: true,
+      label: `${portrait.name}球球`
+    });
     portraitIndex = index;
     avatar.dataset.shape = portrait.shape;
-    avatar.setAttribute('aria-label', `${portrait.name}球球。单击转一圈，双击随机换形态`);
-    avatar.title = `当前：${portrait.name} · 单击转圈 · 双击换形态\n键盘 Enter / 空格转圈，→ 换形态`;
+    avatar.setAttribute('aria-label', `${portrait.name}球球。单击互动，双击随机换形态`);
+    avatar.title = `当前：${portrait.name} · 单击${portrait.shape === 'aurora-cloud' ? '互动' : '转圈'} · 双击换形态\n键盘 Enter / 空格互动，→ 换形态`;
+    if (portrait.shape !== 'aurora-cloud') return;
+    // Only the existing Rive artwork is shown for 幻彩; its preparatory SVG is never a preview fallback.
+    const svg = portraitTarget.querySelector(':scope > svg');
+    svg.style.visibility = 'hidden';
+    ball.setActive(false);
+    try {
+      aurora = window.AuroraRive.create(portraitTarget, appearance, referenceTexture, false);
+      if (!aurora) throw new Error('幻彩暂时无法加载');
+    } catch (error) { renderPortrait(0); throw error; }
+    const next = aurora;
+    const finish = ready => {
+      if (aurora !== next) return;
+      if (!ready) {
+        renderPortrait(0);
+        avatarStatus.textContent = '幻彩暂时无法加载，已回到经典球球。';
+      }
+    };
+    next.whenReady().then(finish, () => finish(false));
   }
   function spinPortrait() {
-    avatarEffect(motion?.matches ? 'is-static-egg' : 'is-spinning', 820);
-    avatarStatus.textContent = motion?.matches ? '找到一颗彩蛋。' : '球球转了一圈，变出一颗彩蛋。';
+    if (document.hidden || !ball) return;
+    if (motion?.matches) { avatarStatus.textContent = '已开启减少动态，球球保持静态。'; return; }
+    if (portraits[portraitIndex].shape === 'aurora-cloud') {
+      avatarStatus.textContent = aurora?.click() ? '幻彩球球与你互动。' : '幻彩正在加载，请稍后再试。';
+      return;
+    }
+    clearTimeout(avatarEffectTimer);
+    ball.setEmotion('10');
+    ball.spin(1);
+    avatarEffectTimer = setTimeout(() => { avatarEffectTimer = null; ball?.setEmotion('50'); }, 3200);
+    avatarStatus.textContent = `${portraits[portraitIndex].name}球球转了一圈。`;
   }
   function changePortrait() {
+    if (document.hidden) return;
     cancelAvatarClick(); stopAvatarEffect();
     const choices = portraits.map((_, index) => index).filter(index => index !== portraitIndex);
     try {
       renderPortrait(choices[Math.floor(Math.random() * choices.length)]);
       avatarStatus.textContent = `换成${portraits[portraitIndex].name}球球了。`;
-      if (!motion?.matches) avatarEffect('is-switching', 180);
     } catch (_) { avatarStatus.textContent = '暂时无法切换球球形态，请再试一次。'; }
   }
   avatar.addEventListener('click', event => {
@@ -65,11 +108,13 @@
     if (event.key === 'ArrowRight' || event.key === 'Enter' && event.shiftKey) changePortrait();
     else { cancelAvatarClick(); spinPortrait(); }
   });
-  const stopAvatar = () => { cancelAvatarClick(); stopAvatarEffect(); };
-  motion?.addEventListener('change', stopAvatar);
+  const stopAvatar = () => { cancelAvatarClick(); destroyPortrait(); };
+  const refreshAvatar = () => { stopAvatar(); if (!document.hidden) renderPortrait(portraitIndex); };
+  motion?.addEventListener('change', refreshAvatar);
   document.addEventListener('visibilitychange', () => {
     document.documentElement.dataset.aboutVisible = String(!document.hidden);
     if (document.hidden) stopAvatar();
+    else renderPortrait(portraitIndex);
   });
 
   function refreshControls() {
@@ -97,8 +142,9 @@
     return true;
   }
 
+  document.documentElement.dataset.aboutVisible = String(!document.hidden);
   try {
-    renderPortrait(0);
+    if (!document.hidden) renderPortrait(0);
   } catch (_) { status.textContent = '暂时无法显示球球形象。'; }
 
   async function perform(method, pending, failure) {
@@ -139,7 +185,7 @@
     });
   } catch (_) {}
   window.addEventListener('beforeunload', () => {
-    stopAvatar(); motion?.removeEventListener('change', stopAvatar);
+    stopAvatar(); motion?.removeEventListener('change', refreshAvatar);
     if (typeof unsubscribe === 'function') unsubscribe();
   }, { once: true });
   refreshControls();
