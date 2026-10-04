@@ -31,7 +31,14 @@ Umami Cloud 网站“球球官网”，website ID 为 `fe855bb0-9000-49aa-820b-b
 
 ## 当前下载记录
 
-Apple 芯片版 0.3.31，发布日期 2026-10-04。发现新版本时，仅显示「查看新版本」入口；便签分类显示为独立小标签，适配浅色与深色外观。单层分类与固定未分类、分类管理、统一外观和快捷待办沿用 0.3.30，既有聊天、Codex 额度、API 报告、经典、云朵、幻彩、方糖四种外观及定制功能继续保留。官网保持简洁的下载卡，文件大小与校验值在此维护。
+Apple 芯片版 0.3.32，发布日期 2026-10-04。优化日常使用体验，改进版本更新入口，让操作更清晰、更顺手。
+
+| 文件 | 精确大小（bytes） | SHA-256 |
+| --- | ---: | --- |
+| [Qiuqiu-0.3.32-macOS-arm64-share.zip](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.32/Qiuqiu-0.3.32-macOS-arm64-share.zip) | 123482291 | `daab41fffda21f1f269bc31cc8474eaba09c658d907bb1b844b8f546794162b6` |
+| [Qiuqiu-0.3.32-macOS-arm64.dmg](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.32/Qiuqiu-0.3.32-macOS-arm64.dmg) | 137811080 | `aa3f79586a1ee618e399f53a9f7cf9446e6bd742578ae0553e22db8aae611c64` |
+
+### 0.3.31 下载记录（保留）
 
 | 文件 | 精确大小（bytes） | SHA-256 |
 | --- | ---: | --- |
