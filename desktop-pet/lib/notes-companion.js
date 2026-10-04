@@ -400,7 +400,7 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
       let approved = false;
       try {
         if (store.getState().todos.some(item => !item.deletedAt && !item.completed && ['pending', 'presented'].includes(item.reminderState))) {
-          const parent = [...entries.values()].find(entry => alive(entry.win))?.win;
+          const parent = [...entries.values()].find(entry => alive(entry.win) && entry.win.isVisible())?.win;
           const options = { type: 'question', title: '退出球球', message: '退出后提醒将暂停，下次启动会汇总未处理提醒。',
             buttons: ['继续运行', '退出球球'], defaultId: 0, cancelId: 0 };
           const result = await (parent ? dialog.showMessageBox(parent, options) : dialog.showMessageBox(options));
