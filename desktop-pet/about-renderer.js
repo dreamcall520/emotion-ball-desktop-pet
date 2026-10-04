@@ -12,6 +12,7 @@
   function refreshControls() {
     const checking = update.state === 'checking';
     $('about-website').disabled = busy || typeof bridge?.openWebsite !== 'function';
+    $('about-check-updates').hidden = releaseAvailable;
     $('about-check-updates').disabled = busy || checking || typeof bridge?.checkUpdates !== 'function';
     $('about-open-release').disabled = busy || checking || typeof bridge?.openRelease !== 'function';
     $('about-open-release').hidden = !releaseAvailable;
