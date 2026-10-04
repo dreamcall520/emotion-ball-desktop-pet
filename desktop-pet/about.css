@@ -14,12 +14,19 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; }
-.about-window { width: 100%; height: 100%; overflow: hidden; color: var(--text); background: var(--about-wash), var(--panel); }
+.about-window { position: relative; isolation: isolate; width: 100%; height: 100%; overflow: hidden; color: var(--text); background: var(--panel); }
+.about-window::before { content: ""; position: absolute; inset: -12%; z-index: -1; background: var(--about-wash); background-size: 130% 130%; filter: blur(6px); animation: about-drift 24s ease-in-out infinite alternate; pointer-events: none; }
+:root[data-about-visible="false"] .about-window::before { animation-play-state: paused; }
 .about-titlebar { height: 40px; -webkit-app-region: drag; user-select: none; }
 .about-content { display: flex; height: calc(100% - 40px); flex-direction: column; align-items: center; padding: 12px 28px 15px; text-align: center; -webkit-app-region: no-drag; }
-.about-avatar { width: 172px; height: 172px; flex: 0 0 auto; }
+.about-avatar { display: block; position: relative; width: 172px; height: 172px; flex: 0 0 auto; padding: 0; border: 0; border-radius: 18px; color: inherit; background: transparent; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; user-select: none; }
+.about-avatar-art, #about-portrait { display: block; position: relative; width: 100%; height: 100%; }
+.about-avatar-art { transform-origin: 50% 64%; }
 .about-avatar svg { display: block; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 8px 12px #7281a429); }
-h1 { margin: 13px 0 0; padding-left: 4px; font-size: 29px; line-height: 40px; font-weight: 550; letter-spacing: 4px; color: var(--text); }
+h1 { margin: 13px 0 0; padding-left: 4px; font-size: 29px; line-height: 40px; font-weight: 550; letter-spacing: 4px; color: #557eb6; background: linear-gradient(110deg, #557eb6 15%, #7394c5 50%, #8875bb 88%); background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+@media (prefers-color-scheme: dark) {
+  h1 { background-image: linear-gradient(110deg, #9ed1ed 15%, #afb8eb 50%, #c6aeef 88%); }
+}
 .about-info { margin-top: 25px; width: 100%; }
 .about-version { margin: 0; font-size: 13px; line-height: 21px; font-weight: 550; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .about-link { display: inline-block; margin-top: 8px; padding: 2px 5px; border: 0; border-radius: 5px; color: var(--accent); background: transparent; font: inherit; font-size: 12px; line-height: 19px; text-decoration: none; cursor: pointer; }
@@ -33,7 +40,9 @@ h1 { margin: 13px 0 0; padding-left: 4px; font-size: 29px; line-height: 40px; fo
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 button:disabled { opacity: .5; cursor: default; }
 #about-status { min-height: 16px; margin: 4px 0 0; color: var(--muted); font-size: 10px; line-height: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-:root[data-color-mode="accessible"] .about-window { border-color: var(--accessible-line); color: var(--accessible-text); background: var(--accessible-panel); }
+:root[data-color-mode="accessible"] .about-window { color: var(--accessible-text); background: var(--accessible-panel); }
+:root[data-color-mode="accessible"] .about-window::before { display: none; }
+:root[data-color-mode="accessible"] h1 { background: none; -webkit-text-fill-color: currentColor; }
 :root[data-color-mode="accessible"] h1,
 :root[data-color-mode="accessible"] .about-version { color: var(--accessible-text); }
 :root[data-color-mode="accessible"] .about-developer,
@@ -41,3 +50,40 @@ button:disabled { opacity: .5; cursor: default; }
 :root[data-color-mode="accessible"] .about-link,
 :root[data-color-mode="accessible"] .about-update { color: var(--accessible-blue); }
 :root[data-color-mode="accessible"] .about-avatar svg { filter: none; }
+.about-egg-shell { position: absolute; top: 11%; left: 17%; width: 66%; height: 78%; border: 1px solid #e1d7eb; border-radius: 50% 50% 46% 46% / 61% 61% 39% 39%; background: radial-gradient(circle at 28% 25%, #f3b6d6 0 8%, transparent 9%), radial-gradient(circle at 76% 47%, #bee6ed 0 9%, transparent 10%), radial-gradient(circle at 28% 74%, #f5d797 0 10%, transparent 11%), linear-gradient(145deg, #fffbef, #f1e9fc); box-shadow: inset 3px 3px 10px #fff9, inset -3px -5px 9px #bdadca33; opacity: 0; pointer-events: none; }
+.about-egg-shell::before, .about-egg-shell::after { content: ""; position: absolute; top: 36%; width: 6%; height: 19%; border-radius: 5px; background: #252629; }
+.about-egg-shell::before { left: 36%; }
+.about-egg-shell::after { right: 36%; }
+.about-avatar.is-spinning .about-avatar-art { animation: egg-turn 820ms cubic-bezier(.38,.02,.28,1) both; }
+.about-avatar.is-spinning .about-egg-shell { animation: egg-peek 820ms ease-in-out both; }
+.about-avatar.is-switching .about-avatar-art { animation: shape-hello 180ms ease-out both; }
+.about-avatar.is-static-egg .about-egg-shell { opacity: 1; }
+.about-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+@keyframes egg-turn {
+  0% { transform: translateY(0) rotate(0deg) scale(1); }
+  12% { transform: translateY(3px) rotate(-12deg) scale(1.03,.96); }
+  48% { transform: translateY(-13px) rotate(174deg) scale(.98,1.02); }
+  80% { transform: translateY(-5px) rotate(334deg) scale(1); }
+  92% { transform: translateY(2px) rotate(363deg) scale(1.03,.97); }
+  100% { transform: translateY(0) rotate(360deg) scale(1); }
+}
+@keyframes egg-peek {
+  0%, 14%, 82%, 100% { opacity: 0; }
+  34%, 56% { opacity: 1; }
+}
+@keyframes shape-hello {
+  from { transform: scale(.97); opacity: .55; }
+  to { transform: scale(1); opacity: 1; }
+}
+@keyframes about-drift {
+  0% { transform: translate(-2%, -2%) scale(1.02); background-position: 0% 15%; }
+  50% { transform: translate(2%, 1%) scale(1.04); background-position: 35% 50%; }
+  100% { transform: translate(-1%, 2%) scale(1.02); background-position: 70% 85%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .about-avatar-art, .about-egg-shell, .about-window::before { animation: none !important; transform: none !important; }
+}
+@media (forced-colors: active) {
+  .about-window::before { display: none; }
+  h1 { color: CanvasText; background: none; -webkit-text-fill-color: currentColor; }
+}

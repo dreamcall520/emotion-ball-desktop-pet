@@ -18,8 +18,12 @@
   <main class="about-window" aria-labelledby="about-name">
     <div class="about-titlebar" aria-hidden="true"></div>
     <section class="about-content">
-      <div id="about-avatar" class="about-avatar" aria-hidden="true"></div>
-      <h1 id="about-name">球球</h1>
+      <button id="about-avatar" class="about-avatar" type="button" aria-label="经典球球。单击转一圈，双击随机换形态" aria-describedby="about-avatar-help" title="单击：转一圈 · 双击：随机换形态&#10;键盘 Enter / 空格转圈，→ 换形态">
+        <span class="about-avatar-art"><span id="about-portrait"></span><span class="about-egg-shell" aria-hidden="true"></span></span>
+      </button>
+      <p id="about-avatar-help" class="about-sr-only">单击球球可转圈轻跳，双击随机切换经典、云朵、幻彩或方糖。键盘 Enter 或空格转圈，右方向键换形态。开启减少动态时只短暂显示静态彩蛋。</p>
+      <p id="about-avatar-status" class="about-sr-only" role="status" aria-live="polite"></p>
+      <h1 id="about-name">球球桌宠</h1>
       <div class="about-info">
         <p id="about-version" class="about-version">正在读取版本…</p>
         <button id="about-website" class="about-link" type="button" role="link" aria-label="访问球球官网 qiuqiu.pet">qiuqiu.pet</button>
