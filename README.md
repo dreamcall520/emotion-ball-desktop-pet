@@ -31,7 +31,14 @@ Umami Cloud 网站“球球官网”，website ID 为 `fe855bb0-9000-49aa-820b-b
 
 ## 当前下载记录
 
-Apple 芯片版 0.3.30，发布日期 2026-10-04。新增单层便签分类与固定未分类，支持新增、改名、移动便签和分类排序；删除分类保留所有便签并归入未分类。便签与待办外观可独立选择跟随系统、浅色或深色，同步覆盖主面板、桌面便签和提醒。快捷待办可分别设置截止日期与提醒，两项互不改变。既有聊天、Codex 额度、API 报告、经典、云朵、幻彩、方糖四种外观及定制功能继续保留。官网保持简洁的下载卡，文件大小与校验值在此维护。
+Apple 芯片版 0.3.31，发布日期 2026-10-04。发现新版本时，仅显示「查看新版本」入口；便签分类显示为独立小标签，适配浅色与深色外观。单层分类与固定未分类、分类管理、统一外观和快捷待办沿用 0.3.30，既有聊天、Codex 额度、API 报告、经典、云朵、幻彩、方糖四种外观及定制功能继续保留。官网保持简洁的下载卡，文件大小与校验值在此维护。
+
+| 文件 | 精确大小（bytes） | SHA-256 |
+| --- | ---: | --- |
+| [Qiuqiu-0.3.31-macOS-arm64-share.zip](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.31/Qiuqiu-0.3.31-macOS-arm64-share.zip) | 123480779 | `f889ab8d214477846bec9df5b9bac42eb115a5c20bb6d32e08233265417f2600` |
+| [Qiuqiu-0.3.31-macOS-arm64.dmg](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.31/Qiuqiu-0.3.31-macOS-arm64.dmg) | 137807268 | `4f6d13dc5dfd4b3dd7c1d9aa19aa80f565b51c2852217845fbce62902444a122` |
+
+### 0.3.30 下载记录（保留）
 
 | 文件 | 精确大小（bytes） | SHA-256 |
 | --- | ---: | --- |
