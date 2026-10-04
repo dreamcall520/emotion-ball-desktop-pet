@@ -15,7 +15,7 @@ function fixture(t, initial, getDefaultTab, organizer, getAppearance) {
   const file = path.join(dir, 'notes.json');
   if (initial) fs.writeFileSync(file, JSON.stringify(initial));
   let clock = new Date('2026-10-03T12:00:00').getTime(), tick;
-  const windows = [], errors = [], completions = [], handlers = new Map(), clipboard = [], dialogs = [], dialogResult = { response: 1 };
+  const windows = [], errors = [], completions = [], handlers = new Map(), clipboard = [], dialogs = [], dialogCalls = [], dialogResult = { response: 1 };
   class Window extends EventEmitter {
     constructor(options) {
       super(); this.options = options; this.bounds = { x: options.x, y: options.y, width: options.width, height: options.height };
@@ -59,7 +59,7 @@ function fixture(t, initial, getDefaultTab, organizer, getAppearance) {
   const event = win => ({ sender: win.webContents, senderFrame: win.webContents.mainFrame });
   const controller = createNotesCompanion({ BrowserWindow: Window, ipcMain: ipc, screen, filePath: file,
     clipboard: { writeText: text => clipboard.push(text) },
-    dialog: { showSaveDialog: async () => ({ canceled: true }), showMessageBox: async (...args) => { dialogs.push(args.at(-1)); return dialogResult; } },
+    dialog: { showSaveDialog: async () => ({ canceled: true }), showMessageBox: async (...args) => { dialogs.push(args.at(-1)); dialogCalls.push(args); return dialogResult; } },
     getPetBounds: () => pet.destroyed ? null : pet.getBounds(), getPetWindow: () => pet,
     getPetPresentation: () => ({ shape: 'aurora-cloud' }), getDefaultTab, getAppearance, organizer, onError: error => errors.push(error),
     onComplete: id => completions.push(id), now: () => clock,
@@ -68,7 +68,7 @@ function fixture(t, initial, getDefaultTab, organizer, getAppearance) {
     for (const win of windows) win.allowClose = true;
     await controller.close(); fs.rmSync(dir, { recursive: true, force: true });
   });
-  return { controller, windows, screen, pet, errors, completions, clipboard, handlers, ipc, file, dir, dialogs, dialogResult,
+  return { controller, windows, screen, pet, errors, completions, clipboard, handlers, ipc, file, dir, dialogs, dialogCalls, dialogResult,
     event, call: (win, channel, ...args) => handlers.get(channel)(event(win), ...args),
     ready: win => { win.emit('ready-to-show'); return win; },
     time: time => { clock = time; tick?.(); }, now: () => clock,
@@ -252,6 +252,30 @@ test('quit warns only for active reminders and may remain running even without a
   assert.equal(store.getState().todos[0].reminderState, 'pending');
   f.dialogResult.response = 1;
   assert.equal(await f.controller.close(), true);
+});
+
+test('quit reminder confirmation uses a visible notes parent and remains independent when every notes window is hidden', async t => {
+  const f = fixture(t), store = f.controller.getStore(), panel = f.ready(f.controller.openPanel());
+  panel.allowClose = true;
+  store.update(state => {
+    state.todos.push({ ...M.newTodo('keep reminder', f.now()), reminderAt: f.now() - 1, reminderState: 'pending' });
+    return state;
+  });
+  const reminder = f.ready(f.controller.getWindows().reminder), saved = store.getState();
+  assert.equal(panel.visible, true); assert.equal(reminder.visible, true);
+  f.dialogResult.response = 0;
+  assert.equal(await f.controller.close(), false);
+  assert.equal(f.dialogCalls.at(-1)[0], panel, 'visible notes window remains the sheet parent');
+  f.controller.pause();
+  assert.equal(panel.visible, false); assert.equal(reminder.visible, false);
+  assert.equal(await f.controller.close(), false);
+  assert.equal(f.dialogCalls.at(-1).length, 1, 'hidden windows must not own the exit reminder confirmation');
+  assert.equal(f.dialogCalls.at(-1)[0].message, '退出后提醒将暂停，下次启动会汇总未处理提醒。');
+  assert.deepEqual(store.getState(), saved); assert.equal(panel.destroyed, false); assert.equal(reminder.destroyed, false);
+  f.dialogResult.response = 1;
+  assert.equal(await f.controller.close(), true);
+  assert.equal(f.dialogCalls.at(-1).length, 1); assert.deepEqual(store.getState(), saved);
+  assert.equal(panel.destroyed, true); assert.equal(reminder.destroyed, true);
 });
 
 test('save failure preserves note window and its old desktop state for retry', async t => {
