@@ -66,7 +66,7 @@ test('损坏文件回退且有效设置可回读', t => {
     bubblesEnabled: true,
     colorMode: 'standard',
     chatModel: 'auto',
-    notesDefaultTab: 'todo',
+    notesDefaultTab: 'todo', notesAppearance: 'light',
     customization: DEFAULTS.customization,
     startupAppearance: DEFAULTS.startupAppearance,
     codexEnabled: false,
@@ -86,7 +86,7 @@ test('损坏文件回退且有效设置可回读', t => {
 test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
   assert.deepEqual(normalizeSettings({ size: 'small', x: -102.3, y: 81.8, alwaysOnTop: false }), {
     size: 'small', x: -102, y: 82, alwaysOnTop: false,
-    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', chatModel: 'auto', notesDefaultTab: 'todo', customization: DEFAULTS.customization,
+    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', chatModel: 'auto', notesDefaultTab: 'todo', notesAppearance: 'light', customization: DEFAULTS.customization,
     startupAppearance: DEFAULTS.startupAppearance, codexEnabled: false,
     codexTaskNameInAlerts: false, codexQuotaAlwaysVisible: false,
     codexShowExtraCredits: true,
@@ -271,4 +271,10 @@ test('任务名称提醒只持久化隐私开关，不保存任务信息', t => 
   assert.equal(persisted.includes('PRIVATE_BODY'), false);
   assert.equal(Object.hasOwn(JSON.parse(persisted), 'taskTitle'), false);
   assert.equal(Object.hasOwn(JSON.parse(persisted), 'taskBody'), false);
+});
+
+test('便签外观独立于额度外观，保存后恢复且非法值回退旧浅色', t => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'qiu-notes-appearance-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const file=path.join(dir,'settings.json');
+  for(const notesAppearance of ['system','light','dark']) {saveSettings(file,{notesAppearance,codexQuotaAppearance:'dark',notesDefaultTab:'note'});assert.equal(loadSettings(file).notesAppearance,notesAppearance);assert.equal(loadSettings(file).codexQuotaAppearance,'dark');assert.equal(loadSettings(file).notesDefaultTab,'note')}
+  for(const notesAppearance of [undefined,null,'bad',1,{}])assert.equal(normalizeSettings({notesAppearance}).notesAppearance,'light');
 });

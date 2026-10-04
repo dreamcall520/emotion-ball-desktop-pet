@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('qiuNotes', {
   exportRaw: () => ipcRenderer.invoke('notes:export'),
   reset: () => ipcRenderer.invoke('notes:reset'),
   actionReminder: (id, occurrenceId, name) => ipcRenderer.invoke('notes:reminder-action', id, occurrenceId, name),
+  onAppearance: callback => listen('notes:appearance', callback),
   onState: callback => listen('notes:state', callback),
   onOpen: callback => listen('notes:open', callback),
   onReminder: callback => listen('notes:reminder', callback),

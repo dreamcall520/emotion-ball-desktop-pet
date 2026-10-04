@@ -34,7 +34,7 @@ function reminderBounds(bounds, area, size, presentation) {
 }
 
 function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialog, filePath,
-  getPetBounds, getPetWindow = null, getPetPresentation = () => null, getDefaultTab = () => 'todo', onComplete = () => {}, onError = () => {}, isSuppressed = () => false,
+  getPetBounds, getPetWindow = null, getPetPresentation = () => null, getDefaultTab = () => 'todo', getAppearance = () => 'light', onComplete = () => {}, onError = () => {}, isSuppressed = () => false,
   organizer = null,
   now = Date.now, setTimer = setInterval, clearTimer = clearInterval, closeTimeoutMs = 60000 }) {
   const store = createNotesStore(filePath, { onError });
@@ -59,6 +59,14 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
     if (alive(win) && entry) { try { entry.contents.send(channel, value); return true; } catch (error) { report(error); } }
     return false;
   };
+  const appearance = () => getAppearance() === 'dark' ? 'dark' : 'light';
+  function syncAppearance() {
+    const value = appearance();
+    for (const entry of entries.values()) if (alive(entry.win)) {
+      entry.win.setBackgroundColor?.(value === 'dark' ? '#182125' : '#F7FAF9');
+      send(entry.win, 'notes:appearance', value);
+    }
+  }
   const occurrenceKey = item => JSON.stringify([item.id, item.occurrenceId]);
   const due = () => M.dueReminders(store.getState(), now()).filter(item => !hiddenOccurrences.has(occurrenceKey(item)));
   function hideCurrentReminders() {
@@ -103,7 +111,7 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
     const win = new BrowserWindow({ ...bounds, minWidth: note ? 240 : 360, minHeight: note || reminder ? 160 : 420,
       ...(note ? { maxWidth: 1400, maxHeight: 1200 } : {}),
       frame: false, title: reminder ? '待办提醒' : note ? '球球便签' : '便签与待办',
-      backgroundColor: '#F7FAF9', show: false, resizable: !reminder, maximizable: false,
+      backgroundColor: appearance() === 'dark' ? '#182125' : '#F7FAF9', show: false, resizable: !reminder, maximizable: false,
       fullscreenable: false, skipTaskbar: note || reminder, alwaysOnTop: reminder,
       webPreferences: { preload: path.join(__dirname, '..', 'notes-preload.js'), contextIsolation: true,
         nodeIntegration: false, sandbox: true, spellcheck: false, webviewTag: false }
@@ -112,6 +120,7 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
     const entry = { win, contents, mode, id, ready: false, open: null, boundsTimer: null, allowedClose: false };
     entries.set(contents, entry); windowEntries.set(win, entry);
     contents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    contents.on('did-finish-load', () => send(win, 'notes:appearance', appearance()));
     contents.on('will-navigate', event => event.preventDefault());
     contents.on('will-attach-webview', event => event.preventDefault());
     contents.on('render-process-gone', () => {
@@ -301,7 +310,7 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
     });
   }
   handle('notes:load', entry => ({ state: store.getState(), error: store.getReadError(), mode: entry.mode, id: entry.id,
-    panelPinned: entry.mode === 'panel' && entry.win.isAlwaysOnTop(), reminder: reminderDescriptor() }));
+    notesAppearance: appearance(), panelPinned: entry.mode === 'panel' && entry.win.isAlwaysOnTop(), reminder: reminderDescriptor() }));
   handle('notes:save', async (entry, next, revision) => {
     if (entry.mode === 'reminder') throw Error('提醒窗口不能直接覆盖记录。');
     M.validate(next);
@@ -416,7 +425,7 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
     return closeAttempt;
   }
   return {
-    openPanel, openNote, close,
+    openPanel, openNote, close, syncAppearance,
     repositionReminder(reveal = false) { if (reveal) scan(); else return placeReminder(); },
     pause() { paused = true; void cancelOrganization(); for (const entry of entries.values()) { entry.wasVisible = entry.win.isVisible(); entry.win.hide(); } },
     resume() {
