@@ -13,6 +13,7 @@ const DEFAULTS = Object.freeze({
   colorMode: 'standard',
   chatModel: 'auto',
   notesDefaultTab: 'todo',
+  notesAppearance: 'light',
   customization: normalizeCustomization(),
   startupAppearance: normalizeCustomization().appearance,
   codexEnabled: false,
@@ -44,6 +45,7 @@ function normalizeSettings(raw = {}) {
     colorMode: ['standard', 'accessible'].includes(raw.colorMode) ? raw.colorMode : DEFAULTS.colorMode,
     chatModel: normalizeModelSelection(raw.chatModel),
     notesDefaultTab: ['note', 'todo'].includes(raw.notesDefaultTab) ? raw.notesDefaultTab : DEFAULTS.notesDefaultTab,
+    notesAppearance: ['system', 'light', 'dark'].includes(raw.notesAppearance) ? raw.notesAppearance : DEFAULTS.notesAppearance,
     customization,
     startupAppearance: raw.startupAppearance && typeof raw.startupAppearance === 'object' && !Array.isArray(raw.startupAppearance)
       ? normalizeAppearance(raw.startupAppearance) : customization.appearance,

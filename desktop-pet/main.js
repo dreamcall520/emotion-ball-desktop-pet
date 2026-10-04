@@ -8,6 +8,7 @@ const {
   ipcMain,
   Menu,
   nativeImage,
+  nativeTheme,
   powerMonitor,
   safeStorage,
   screen,
@@ -940,6 +941,26 @@ function setColorMode(value) {
   return true;
 }
 
+function getNotesAppearance() {
+  return settings?.notesAppearance === 'dark' || settings?.notesAppearance === 'system' && nativeTheme?.shouldUseDarkColors ? 'dark' : 'light';
+}
+
+function setNotesAppearance(value) {
+  if (!settings || isQuitting || !['system', 'light', 'dark'].includes(value) || settings.notesAppearance === value) return false;
+  const previous = settings.notesAppearance;
+  settings.notesAppearance = value;
+  try { persistSettings(); }
+  catch (error) {
+    settings.notesAppearance = previous;
+    writeError('保存便签待办外观', error);
+    refreshTrayMenu();
+    return false;
+  }
+  notesCompanion?.syncAppearance();
+  refreshTrayMenu();
+  return true;
+}
+
 function setNotesDefaultTab(value) {
   if (!settings || isQuitting || !['note', 'todo'].includes(value) || settings.notesDefaultTab === value) return false;
   const previous = settings.notesDefaultTab;
@@ -1312,6 +1333,10 @@ function menuTemplate() {
       { id: 'notes-default-tab', label: '默认打开', submenu: [['note', '便签'], ['todo', '待办']].map(([value, label]) => ({
         id: `notes-default-${value}`, label, type: 'radio', checked: (settings.notesDefaultTab === 'note' ? 'note' : 'todo') === value,
         click: item => { item.checked = (settings.notesDefaultTab === 'note' ? 'note' : 'todo') === value; setNotesDefaultTab(value); }
+      })) },
+      { id: 'notes-appearance', label: '外观', submenu: [['system', '跟随系统'], ['light', '浅色'], ['dark', '深色']].map(([value, label]) => ({
+        id: `notes-appearance-${value}`, label, type: 'radio', checked: (settings.notesAppearance || 'light') === value,
+        click: item => { item.checked = (settings.notesAppearance || 'light') === value; setNotesAppearance(value); }
       })) }
     ] },
     { type: 'separator' },
@@ -2275,9 +2300,11 @@ async function bootstrap() {
     getPetWindow: () => petWindow,
     getPetPresentation: () => ({ ...edgeTuck?.getPresentation(), shape: settings?.customization?.appearance?.shape }),
     getDefaultTab: () => settings.notesDefaultTab,
+    getAppearance: getNotesAppearance,
     isSuppressed: () => screenLocked || isQuitting,
     onComplete: () => { if (!screenLocked && !isQuitting) sendCommand({ command: 'again', motion: 'hop' }); },
     onError: error => writeError('便签与待办', error) });
+  nativeTheme?.on('updated', () => { if (settings.notesAppearance === 'system') notesCompanion?.syncAppearance(); });
   chatWindow = createChatWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
     getAppearance: () => effectiveAppearance(customizationPreviewAppearance || settings?.customization?.appearance),
     getAvatarImage: async appearance => {

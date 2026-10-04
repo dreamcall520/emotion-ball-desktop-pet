@@ -10,7 +10,7 @@ const M = require('../lib/notes-model');
 const { createNotesCompanion, visibleBounds } = require('../lib/notes-companion');
 const { petVisualBounds } = require('../lib/pet-visual-bounds');
 
-function fixture(t, initial, getDefaultTab, organizer) {
+function fixture(t, initial, getDefaultTab, organizer, getAppearance) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qiu-notes-window-'));
   const file = path.join(dir, 'notes.json');
   if (initial) fs.writeFileSync(file, JSON.stringify(initial));
@@ -43,6 +43,7 @@ function fixture(t, initial, getDefaultTab, organizer) {
     focus() { this.focused = true; }
     hide() { this.visible = false; }
     destroy() { this.destroyed = true; this.visible = false; this.emit('closed'); }
+    setBackgroundColor(value) { this.backgroundColor = value; }
     setAlwaysOnTop(value) { this.pinned = value; }
     isAlwaysOnTop() { return this.pinned === true; }
     getBounds() { return { ...this.bounds }; }
@@ -60,7 +61,7 @@ function fixture(t, initial, getDefaultTab, organizer) {
     clipboard: { writeText: text => clipboard.push(text) },
     dialog: { showSaveDialog: async () => ({ canceled: true }), showMessageBox: async (...args) => { dialogs.push(args.at(-1)); return dialogResult; } },
     getPetBounds: () => pet.destroyed ? null : pet.getBounds(), getPetWindow: () => pet,
-    getPetPresentation: () => ({ shape: 'aurora-cloud' }), getDefaultTab, organizer, onError: error => errors.push(error),
+    getPetPresentation: () => ({ shape: 'aurora-cloud' }), getDefaultTab, getAppearance, organizer, onError: error => errors.push(error),
     onComplete: id => completions.push(id), now: () => clock,
     setTimer: fn => { tick = fn; return { unref() {} }; }, clearTimer: () => { tick = null; }, closeTimeoutMs: 50 });
   t.after(async () => {
@@ -447,4 +448,13 @@ test('organize cancellation belongs to its requesting window and discards late r
   assert.equal((await f.call(otherWindow,'notes:organize',{id:note.id,title:note.title,body:note.body})).ok,false);
   await f.call(otherWindow,'notes:organize-cancel');assert.equal(cancelled,0);
   await f.call(panel,'notes:organize-cancel');assert.equal(cancelled,1);resolve({title:'迟到',body:'应被丢弃'});assert.equal((await pending).ok,false);
+});
+
+test('notes appearance updates live panel/note/reminder windows and newly opened windows',async t=>{
+  let appearance='light';const f=fixture(t,undefined,undefined,undefined,()=>appearance),panel=f.ready(f.controller.openPanel());const store=f.controller.getStore();
+  assert.equal((await f.call(panel,'notes:load')).notesAppearance,'light');const note=M.newNote('theme','saved',f.now()),todo=M.newTodo('due',f.now());Object.assign(todo,{reminderAt:f.now()-1,reminderState:'pending'});
+  store.update(s=>{s.notes.push({...note,desktopOpen:true});s.todos.push(todo);return s});const noteWindow=f.ready(f.controller.getWindows().notes[0]),reminder=f.ready(f.controller.getWindows().reminder);
+  appearance='dark';f.controller.syncAppearance();for(const win of [panel,noteWindow,reminder]){assert.equal(win.backgroundColor,'#182125');assert.deepEqual(win.sent.filter(([c])=>c==='notes:appearance').at(-1),['notes:appearance','dark']);assert.equal((await f.call(win,'notes:load')).notesAppearance,'dark')}
+  const extra=M.newNote('new','',f.now());store.update(s=>{s.notes.push(extra);return s});f.controller.openNote(extra.id);assert.equal(f.controller.getWindows().notes.at(-1).options.backgroundColor,'#182125');
+  appearance='light';f.controller.syncAppearance();assert.equal(noteWindow.backgroundColor,'#F7FAF9');
 });

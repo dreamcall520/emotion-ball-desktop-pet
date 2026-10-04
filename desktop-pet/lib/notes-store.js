@@ -4,7 +4,7 @@ const { randomUUID } = require('node:crypto');
 const M = require('./notes-model');
 
 const MAX_BYTES = 4 * 1024 * 1024;
-const emptyState = () => ({ schema: 1, revision: 0, notes: [], todos: [] });
+const emptyState = () => ({ schema: 2, revision: 0, categories: [], notes: [], todos: [] });
 const storageError = cause => Object.assign(new Error('便签与待办暂时无法保存，请检查本机存储后重试。', { cause }), { code: 'STORAGE' });
 
 function createNotesStore(filePath, { fsImpl = fs, onError = () => {} } = {}) {
@@ -14,7 +14,17 @@ function createNotesStore(filePath, { fsImpl = fs, onError = () => {} } = {}) {
   try {
     const stat = fsImpl.lstatSync(filePath);
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_BYTES) throw Error('记录文件格式或大小不合法');
-    state = M.validate(JSON.parse(fsImpl.readFileSync(filePath, 'utf8')));
+    const original = M.validate(JSON.parse(fsImpl.readFileSync(filePath, 'utf8')));
+    state = M.migrate(original);
+    if (original.schema === 1) {
+      try {
+        fsImpl.copyFileSync(filePath, `${filePath}.schema-1.${randomUUID()}.bak`, fs.constants.COPYFILE_EXCL);
+        write(state);
+      } catch (error) {
+        readError = '便签与待办升级未完成，原文件已保留。请检查本机存储并重新打开，再继续保存；不要重置记录。';
+        report(error.code === 'STORAGE' ? error : storageError(error));
+      }
+    }
   } catch (error) {
     if (error.code !== 'ENOENT') {
       readError = '便签与待办读取失败。原文件已保留，请先导出原始数据，再决定是否重置。';
@@ -56,6 +66,7 @@ function createNotesStore(filePath, { fsImpl = fs, onError = () => {} } = {}) {
         throw Object.assign(new Error('记录已被另一窗口更新，请保留当前输入并重新载入最新记录。'), { code: 'CONFLICT' });
       }
       M.validate(next);
+      if (next.schema !== 2) throw Object.assign(new Error('记录格式已升级，请保留当前输入并重新载入最新记录。'), { code: 'CONFLICT' });
       const clean = M.validate({ ...M.copy(next), revision: state.revision + 1 });
       write(clean);
       return publish(clean);

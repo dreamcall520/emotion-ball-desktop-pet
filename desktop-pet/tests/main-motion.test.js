@@ -12,7 +12,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   codexQuotaAlwaysVisible = false, codexQuotaPeriod = 'auto', codexQuotaLabelSize = 'standard',
   codexQuotaAppearance = 'system', codexShowExtraCredits = true, bubblesEnabled = true, colorMode = 'standard',
   consent = async () => ({ response: 1 }), openExternal = async () => {}, saveError = null,
-  loadedSettings = null, notesDefaultTab = 'todo', argv = [], updateFetch = async currentVersion => ({ currentVersion,
+  loadedSettings = null, notesDefaultTab = 'todo', notesAppearance = 'light', argv = [], updateFetch = async currentVersion => ({ currentVersion,
     latestVersion: '0.3.26', hasUpdate: true,
     url: 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.26' }) } = {}) {
   let now = 0;
@@ -38,6 +38,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     ipcHandlers.set(channel, handler);
   };
   const powerMonitor = new EventEmitter();
+  const nativeTheme = Object.assign(new EventEmitter(), { shouldUseDarkColors: false });
   const display = { id: 1, bounds: { x: -800, y: 0, width: 800, height: 600 }, workArea: { x: -800, y: 0, width: 800, height: 600 } };
   const screen = Object.assign(new EventEmitter(), { getPrimaryDisplay: () => display, getAllDisplays: () => [display], getDisplayMatching: () => display });
   class NativeWindow extends EventEmitter {
@@ -135,7 +136,8 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     change(state) { this.state = state; this.options.onChange(state); },
     action(action) { this.options.onAction(action); }
   };
-  const notes = { options: null, opens: [], pauses: 0, resumes: 0, closes: 0,
+  const notes = { options: null, opens: [], pauses: 0, resumes: 0, closes: 0, appearances: 0,
+    syncAppearance() { this.appearances++; },
     windows: { panel: null, notes: [], reminder: null }, closeAllowed: true, todos: [],
     openPanel(value) { this.opens.push(value); },
     getWindows() { return this.windows; },
@@ -150,12 +152,12 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     setTimeout(callback, delay) { timers.set(++serial, { callback, at: now + delay }); return serial; },
     clearTimeout(id) { timers.delete(id); },
     require(name) {
-      if (name === 'electron') return { app, ipcMain, powerMonitor, screen, BrowserWindow: NativeWindow, Tray,
+      if (name === 'electron') return { app, ipcMain, powerMonitor, nativeTheme, screen, BrowserWindow: NativeWindow, Tray,
         dialog: { showMessageBox: (...args) => { dialogs.push(args); return consent(...args); } },
         shell: { openExternal: url => { external.push(url); return openExternal(url); } },
         Menu: { buildFromTemplate: value => Object.assign(value, { popup: options => popups.push({ value, options }) }) }, nativeImage: { createFromPath: () => ({ setTemplateImage() {} }) } };
       if (name === './lib/settings') return { ...realRequire(name), loadSettings: () => loadedSettings ? structuredClone(loadedSettings) : ({ size: 'tiny', x: -600, y: 100,
-        bubblesEnabled, colorMode, notesDefaultTab, keepAwake: false, alwaysOnTop: true, codexEnabled, codexTaskNameInAlerts,
+        bubblesEnabled, colorMode, notesDefaultTab, notesAppearance, keepAwake: false, alwaysOnTop: true, codexEnabled, codexTaskNameInAlerts,
         codexQuotaAlwaysVisible, codexQuotaPeriod, codexQuotaLabelSize, codexQuotaAppearance, codexShowExtraCredits,
         customization: realRequire('./lib/customization').normalizeCustomization(),
         startupAppearance: realRequire('./lib/customization').normalizeCustomization().appearance }),
@@ -199,7 +201,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   pet.emit('ready-to-show');
   pet.webContents.emit('did-finish-load');
   return { pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
-    notes, call: expression => vm.runInContext(expression, context),
+    notes, nativeTheme, call: expression => vm.runInContext(expression, context),
     invoke(channel, packet, sender = pet.webContents) {
       assert.ok(ipcHandlers.has(channel), `${channel} handler must be registered`);
       return Promise.resolve(ipcHandlers.get(channel)({ sender }, packet));
@@ -350,8 +352,8 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   assert.equal(top.find(item => item.id === 'chat-open').submenu, undefined);
   assert.equal(top[1].id, 'customize-open');
   assert.equal(top[1].submenu, undefined);
-  assert.deepEqual(Array.from(group('便签与待办'), item => item.id), ['notes-open', 'notes-new', 'notes-todo-new', 'notes-default-tab']);
-  assert.deepEqual(Array.from(group('便签与待办'), item => item.label), ['打开主面板', '新建便签', '添加待办', '默认打开']);
+  assert.deepEqual(Array.from(group('便签与待办'), item => item.id), ['notes-open', 'notes-new', 'notes-todo-new', 'notes-default-tab', 'notes-appearance']);
+  assert.deepEqual(Array.from(group('便签与待办'), item => item.label), ['打开主面板', '新建便签', '添加待办', '默认打开', '外观']);
   assert.deepEqual(Array.from(menuItem(f, 'notes-default-tab').submenu, item => [item.id, item.label, item.type, item.checked]),
     [['notes-default-note', '便签', 'radio', false], ['notes-default-todo', '待办', 'radio', true]]);
   assert.deepEqual(Array.from(group('球球与互动'), item => item.label),
@@ -385,6 +387,30 @@ test('便签待办默认页保存后下次打开生效，失败恢复当前和�
   assert.ok(failed.trayMenus.length > refreshes);
   assert.equal(findMenuItem(failed.trayMenus.at(-1), 'notes-default-note').checked, true);
   assert.equal(findMenuItem(failed.trayMenus.at(-1), 'notes-default-todo').checked, false);
+  assert.equal(failed.saved.length, 0);
+});
+
+test('便签外观独立保存并同步各窗口，跟随系统更新且保存失败回滚', async () => {
+  const f = await fixture(), opens = f.notes.opens.length;
+  const dark = menuItem(f, 'notes-appearance-dark'); dark.checked = true; dark.click(dark);
+  assert.equal(f.saved.at(-1).notesAppearance, 'dark');
+  assert.equal(f.notes.options.getAppearance(), 'dark');
+  assert.equal(f.notes.appearances, 1); assert.equal(f.notes.opens.length, opens);
+  const restarted = await fixture({ loadedSettings: f.saved.at(-1) });
+  assert.equal(restarted.notes.options.getAppearance(), 'dark');
+  f.call("setNotesAppearance('system')"); f.nativeTheme.shouldUseDarkColors = true;
+  f.nativeTheme.emit('updated'); assert.equal(f.notes.options.getAppearance(), 'dark');
+  f.nativeTheme.shouldUseDarkColors = false; f.nativeTheme.emit('updated');
+  assert.equal(f.notes.options.getAppearance(), 'light');
+  const syncs = f.notes.appearances; f.call("setNotesAppearance('light')");
+  f.nativeTheme.emit('updated'); assert.equal(f.notes.appearances, syncs + 1);
+  const saves = f.saved.length; assert.equal(f.call("setNotesAppearance('invalid')"), false);
+  assert.equal(f.saved.length, saves);
+  const failed = await fixture({ notesAppearance: 'dark', saveError: Error('NOTES_THEME_WRITE_FAILURE') });
+  failed.call('writeError = () => {}'); const light = menuItem(failed, 'notes-appearance-light');
+  light.checked = true; light.click(light);
+  assert.equal(failed.notes.options.getAppearance(), 'dark'); assert.equal(failed.notes.appearances, 0);
+  assert.equal(findMenuItem(failed.trayMenus.at(-1), 'notes-appearance-dark').checked, true);
   assert.equal(failed.saved.length, 0);
 });
 
