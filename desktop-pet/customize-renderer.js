@@ -28,6 +28,13 @@
   let canPreview = false;
   let disposed = false;
   let appearancePreference = 'system';
+  let appearancePresets = [];
+  let selectedPresetId = null;
+  let presetBusy = false;
+  let presetEdit = null;
+  let pendingDelete = null;
+  const presetThumbnails = new Map();
+  let presetObserver = null;
   const colorPicker = $('color-picker');
   const colorBindings = [
     ['body-color', 'body-hex', 'bodyColor', '球体'],
@@ -162,6 +169,7 @@
     renderSwatches('glow-pink-swatches', glowPinkColors, 'glowPinkColor');
     renderSwatches('glow-gold-swatches', glowGoldColors, 'glowGoldColor');
     syncColorPicker(keepPickerHsv);
+    markPresetSelection();
   }
 
   function renderAuroraVisibility() {
@@ -286,6 +294,12 @@
     for (const id of ['body-swatches', 'eye-swatches', 'glow-pink-swatches', 'glow-gold-swatches', 'color-picker-presets']) {
       for (const button of $(id).children) button.disabled = !enabled;
     }
+    for (const [, id] of colorBindings) $(id).disabled = !enabled;
+    for (const id of Object.keys(rangeLimits)) $(id).disabled = !enabled || (id !== 'aurora-transparency' && state.appearance.shape === 'aurora-cloud');
+    for (const button of $('shape-options').children) button.disabled = !enabled;
+    for (const id of ['reset-appearance', 'aurora-style-dimensional', 'aurora-style-simple', 'aurora-reference', 'reset-manual']) $(id).disabled = !enabled;
+    $('startup-default').disabled = !enabled;
+    setPresetControlsEnabled(enabled);
     if (!enabled) closeColorPicker(false);
   }
 
@@ -382,6 +396,175 @@
   window.addEventListener('resize', positionColorPicker);
   setColorControlsEnabled(false);
 
+  function syncPresetThumbnail(record) {
+    if (disposed || document.hidden || !record.visible) {
+      record.controller?.destroy(); record.controller = null;
+      return;
+    }
+    if (record.controller) return;
+    record.controller = window.PetChatAvatar.create(record.target);
+    record.controller.setActive(false);
+    record.controller.update(record.appearance);
+    record.target.dataset.avatarAppearance = JSON.stringify(record.appearance);
+  }
+
+  function clearPresetThumbnails() {
+    presetObserver?.disconnect(); presetObserver = null;
+    for (const record of presetThumbnails.values()) record.controller?.destroy();
+    presetThumbnails.clear();
+  }
+
+  function markPresetSelection() {
+    for (const row of $('preset-list').children) {
+      const preset = appearancePresets.find(item => item.id === row.dataset.presetId);
+      row.setAttribute('aria-current', String(preset?.id === selectedPresetId &&
+        PetCustomization.appearanceContentKey(preset.appearance) === PetCustomization.appearanceContentKey(state.appearance)));
+    }
+  }
+
+  function setPresetControlsEnabled(enabled) {
+    enabled = enabled && !presetBusy && !disposed;
+    $('preset-add').disabled = !enabled || appearancePresets.length >= 20;
+    for (const id of ['preset-name', 'preset-submit', 'preset-cancel', 'preset-delete-submit', 'preset-delete-cancel']) $(id).disabled = !enabled;
+    for (const row of $('preset-list').children) for (const button of row.children) button.disabled = !enabled;
+  }
+
+  function closePresetForm() {
+    presetEdit = null; pendingDelete = null;
+    $('preset-form').hidden = true; $('preset-delete-confirm').hidden = true;
+    $('preset-error').hidden = true;
+    for (const row of $('preset-list').children) delete row.dataset.confirming;
+    $('preset-section').appendChild($('preset-delete-confirm'));
+  }
+
+  function openPresetForm(preset = null) {
+    if (!canSave || presetBusy || disposed) return;
+    closeColorPicker(false); closePresetForm();
+    presetEdit = preset ? { action: 'rename', id: preset.id } : { action: 'add' };
+    $('preset-form-label').textContent = preset ? '修改形象名称' : '给当前形象起个名字';
+    $('preset-submit').textContent = preset ? '保存名称' : '保存形象';
+    $('preset-name').value = preset?.name || '';
+    $('preset-form').hidden = false;
+    $('preset-name').focus();
+  }
+
+  function renderPresets() {
+    clearPresetThumbnails();
+    $('preset-list').replaceChildren();
+    presetObserver = appearancePresets.length ? new window.IntersectionObserver(entries => {
+      for (const entry of entries) {
+        const record = presetThumbnails.get(entry.target);
+        if (!record) continue;
+        record.visible = entry.isIntersecting;
+        syncPresetThumbnail(record);
+      }
+    }, { root: $('preset-list'), threshold: 0 }) : null;
+    $('preset-count').textContent = appearancePresets.length + ' / 20';
+    $('preset-empty').hidden = appearancePresets.length > 0;
+    for (const preset of appearancePresets) {
+      const row = document.createElement('div');
+      row.className = 'preset-row'; row.dataset.presetId = preset.id; row.setAttribute('role', 'listitem');
+      const load = document.createElement('button');
+      load.className = 'preset-load'; load.type = 'button'; load.dataset.action = 'load';
+      load.title = '载入“' + preset.name + '”到预览'; load.setAttribute('aria-label', load.title);
+      const thumbnail = document.createElement('span'); thumbnail.className = 'preset-thumbnail'; thumbnail.setAttribute('aria-hidden', 'true');
+      const name = document.createElement('span'); name.className = 'preset-label'; name.textContent = preset.name;
+      load.append(thumbnail, name);
+      presetThumbnails.set(row, { target: thumbnail, appearance: preset.appearance, visible: false, controller: null });
+      load.addEventListener('click', () => {
+        if (!canSave || presetBusy || disposed) return;
+        closeColorPicker(false); closePresetForm();
+        state.appearance = PetCustomization.normalizeAppearance(preset.appearance);
+        selectedPresetId = preset.id;
+        $('startup-default').checked = matchesStartup();
+        syncAppearance(); markPresetSelection();
+        announce('已载入预览，保存外观后应用到桌面');
+      });
+      row.appendChild(load);
+      for (const [action, label] of [['rename', '改名'], ['delete', '删除']]) {
+        const button = document.createElement('button'); button.className = 'text-button'; button.type = 'button';
+        button.dataset.action = action; button.textContent = label; button.setAttribute('aria-label', label + '“' + preset.name + '”');
+        button.addEventListener('click', () => {
+          if (!canSave || presetBusy || disposed) return;
+          if (action === 'rename') openPresetForm(preset);
+          else {
+            closeColorPicker(false); closePresetForm(); pendingDelete = preset.id;
+            $('preset-delete-label').textContent = '删除“' + preset.name + '”？';
+            row.dataset.confirming = 'true';
+            row.appendChild($('preset-delete-confirm'));
+            $('preset-delete-confirm').hidden = false;
+            $('preset-delete-submit').focus();
+          }
+        });
+        row.appendChild(button);
+      }
+      $('preset-list').appendChild(row);
+      presetObserver.observe(row);
+    }
+    markPresetSelection(); setPresetControlsEnabled(canSave);
+  }
+
+  function validateDraftColors() {
+    const colorFields = [['body-hex', 'bodyColor'], ['eye-hex', 'eyeColor']];
+    if (state.appearance.shape === 'aurora-cloud' && state.appearance.auroraStyle === 'dimensional') colorFields.push(
+      ['glow-pink-hex', 'glowPinkColor'], ['glow-gold-hex', 'glowGoldColor']);
+    for (const [id, key] of colorFields) {
+      const value = parseHex($(id).value);
+      if (!value) { $(id).classList.add('invalid'); $(id).focus(); announce('请先填写有效的 HEX 色值'); return false; }
+      state.appearance[key] = value;
+    }
+    return true;
+  }
+
+  async function runPresetOperation(action, id, name) {
+    if (!canSave || presetBusy || disposed) return;
+    if (action === 'add') {
+      if (!validateDraftColors()) return;
+      const appearanceKey = PetCustomization.appearanceContentKey(state.appearance);
+      const existing = appearancePresets.find(preset => PetCustomization.appearanceContentKey(preset.appearance) === appearanceKey);
+      if (existing) {
+        $('preset-error').textContent = '已收藏为「' + existing.name + '」，无需重复保存';
+        $('preset-error').hidden = false;
+        return;
+      }
+    }
+    presetBusy = true; canSave = false; $('save').disabled = true;
+    setColorControlsEnabled(false);
+    try {
+      const result = action === 'add' ? await bridge.addPreset?.(name, PetCustomization.normalizeAppearance(state.appearance))
+        : action === 'rename' ? await bridge.renamePreset?.(id, name) : await bridge.deletePreset?.(id);
+      if (disposed) return;
+      if (!result?.ok || !Array.isArray(result.presets)) {
+        const message = result?.error || '操作未完成，请稍后重试';
+        if (action === 'delete') announce(message);
+        else { $('preset-error').textContent = message; $('preset-error').hidden = false; }
+        return;
+      }
+      appearancePresets = result.presets.map(item => ({ id: item.id, name: item.name, appearance: PetCustomization.normalizeAppearance(item.appearance) }));
+      if (action === 'add') selectedPresetId = appearancePresets.find(item => item.name === name.trim())?.id || null;
+      if (action === 'delete' && selectedPresetId === id) selectedPresetId = null;
+      closePresetForm(); renderPresets();
+      announce(action === 'add' ? '已保存到我的形象' : action === 'rename' ? '名称已更新' : '已删除收藏，当前外观保留');
+    } catch (_) {
+      if (!disposed) {
+        if (action === 'delete') announce('操作未完成，请稍后重试');
+        else { $('preset-error').textContent = '操作未完成，请稍后重试'; $('preset-error').hidden = false; }
+      }
+    } finally {
+      presetBusy = false;
+      if (!disposed) { canSave = true; $('save').disabled = false; setColorControlsEnabled(true); }
+    }
+  }
+  $('preset-add').addEventListener('click', () => openPresetForm());
+  $('preset-form').addEventListener('submit', event => {
+    event.preventDefault();
+    if (presetEdit) return runPresetOperation(presetEdit.action, presetEdit.id, $('preset-name').value);
+  });
+  $('preset-cancel').addEventListener('click', () => { if (!presetBusy) closePresetForm(); });
+  $('preset-delete-submit').addEventListener('click', () => { if (pendingDelete) return runPresetOperation('delete', pendingDelete); });
+  $('preset-delete-cancel').addEventListener('click', () => { if (!presetBusy) closePresetForm(); });
+  closePresetForm();
+
   function registerIdle() {
     const source = EmotionBall.config.get('02').raw;
     const preset = PetCustomization.EYE_PRESETS[state.appearance.idleEyes];
@@ -396,6 +579,7 @@
     if (disposed || document.hidden) return;
     if (canPreview) bridge.preview?.(state.appearance);
     const target = $('preview-ball');
+    const appearanceKey = JSON.stringify(PetCustomization.normalizeAppearance(state.appearance));
     const heldCanvas = displayedAurora && target.querySelector?.(':scope > .eb-rive-aurora.ready');
     const heldFilter = displayedAurora && target.querySelector?.(':scope > .eb-rive-eye-filter');
     if (auroraPreview && auroraPreview !== displayedAurora) auroraPreview.destroy();
@@ -442,10 +626,10 @@
     if (!auroraPreview) {
       displayedAurora?.destroy();
       displayedAurora = null;
+      target.dataset.renderedAppearance = appearanceKey;
       return;
     }
     const next = auroraPreview;
-    const appearanceKey = JSON.stringify(PetCustomization.normalizeAppearance(state.appearance));
     const nextSvg = target.querySelector?.(':scope > svg');
     if (nextSvg) nextSvg.style.visibility = 'hidden';
     next.whenReady().then(ready => {
@@ -454,17 +638,20 @@
         if (displayedAurora && displayedAurora !== next) displayedAurora.destroy();
         displayedAurora = next;
         target.dataset.avatarAppearance = appearanceKey;
+        target.dataset.renderedAppearance = appearanceKey;
       } else {
         next.destroy();
         auroraPreview = null;
         displayedAurora?.destroy();
         displayedAurora = null;
         if (nextSvg) nextSvg.style.visibility = '';
+        target.dataset.renderedAppearance = appearanceKey;
       }
     });
   }
 
   function schedulePreview() {
+    delete $('preview-ball').dataset.renderedAppearance;
     if (frameId) cancelAnimationFrame(frameId);
     frameId = 0;
     if (disposed || document.hidden) return;
@@ -511,6 +698,7 @@
     $('aurora-transparency').value = String(a.auroraTransparency);
     $('aurora-transparency-value').textContent = `${a.auroraTransparency}%`;
     paintRange('aurora-transparency');
+    markPresetSelection();
   }
 
   function syncAppearance() {
@@ -594,19 +782,7 @@
   $('preview-desktop').addEventListener('click', () => showPreviewMode('desktop'));
   $('save').addEventListener('click', async () => {
     if (!canSave) return;
-    const colorFields = [['body-hex', 'bodyColor'], ['eye-hex', 'eyeColor']];
-    if (state.appearance.shape === 'aurora-cloud' && state.appearance.auroraStyle === 'dimensional') colorFields.push(
-      ['glow-pink-hex', 'glowPinkColor'], ['glow-gold-hex', 'glowGoldColor']);
-    for (const [id, key] of colorFields) {
-      const value = parseHex($(id).value);
-      if (!value) {
-        $(id).classList.add('invalid');
-        $(id).focus();
-        announce('请先填写有效的 HEX 色值');
-        return;
-      }
-      state.appearance[key] = value;
-    }
+    if (!validateDraftColors()) return;
     const button = $('save');
     canSave = false;
     button.disabled = true;
@@ -645,11 +821,13 @@
   function updateVisibility() {
     if (document.hidden) stopPreview();
     else schedulePreview();
+    for (const record of presetThumbnails.values()) syncPresetThumbnail(record);
   }
   motionPreference?.addEventListener('change', refreshMotion);
   document.addEventListener?.('visibilitychange', updateVisibility);
   window.addEventListener('pagehide', () => {
     disposed = true;
+    clearPresetThumbnails();
     closeColorPicker(false);
     stopPreview();
     clearTimeout(messageTimer);
@@ -662,6 +840,7 @@
   bridge.load().then(value => {
     if (disposed) return;
     if (!value) throw new Error('customization unavailable');
+    appearancePresets = Array.isArray(value.appearancePresets) ? value.appearancePresets.map(item => ({ id: item.id, name: item.name, appearance: PetCustomization.normalizeAppearance(item.appearance) })) : [];
     if (value?.customization) {
       state = PetCustomization.normalizeCustomization(value.customization);
       petSize = value.size || 'tiny';
@@ -669,6 +848,7 @@
       $('startup-default').checked = matchesStartup();
     } else if (value) state = PetCustomization.normalizeCustomization(value);
     syncAppearance();
+    renderPresets();
     canPreview = true;
     canSave = true;
     setColorControlsEnabled(true);

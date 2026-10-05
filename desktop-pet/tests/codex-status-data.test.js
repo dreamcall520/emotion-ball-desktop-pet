@@ -66,6 +66,7 @@ test('5h预测要求连续采样跨度10分钟，stale/不足/跨重置不估计
     store.record(source); source.history = store.getState();
     const trend = buildCodexDetailsModel(source, { action: 'trend' }, time).trend;
     assert.equal(trend.forecast.state, index < 5 ? 'unknown' : 'estimate');
+    if (index === 0) assert.equal(trend.forecast.summary, '暂无法预估额度用完时间');
   }
   const forecast = buildCodexDetailsModel(source, {}, time).trend.forecast;
   assert.ok(forecast.exhaustsAt > time && forecast.exhaustsAt < source.quota.windows[0].resetsAt);
@@ -115,6 +116,22 @@ test('重置数量0与未知、null与空明细、返回部分和真实到期/�
   known.resetOpportunities[0].expiresAt = NOW - 1;
   source.quota = { ...source.quota, ...known };
   assert.equal(buildCodexDetailsModel(source, {}, NOW).resetHistory[0].state, 'expired');
+});
+
+test('账户事件不混入本机终态缓存，未同步和禁用不冒充账户历史0', () => {
+  const source = snapshot(NOW, [quotaWindow()], {accountResetHistory:{state:'ready',updatedAt:NOW,events:[
+    {id:'event-a',kind:'granted',occurredAt:NOW-3600000,token:'SECRET'},
+    {id:'event-b',kind:'redeemed',occurredAt:NOW-600000}],authToken:'SECRET'}});
+  source.history = {available:true,resetHistory:[{id:'local-expiry',status:'available',grantedAt:NOW-86400000,expiresAt:NOW-1000}],windows:[],results:[]};
+  const model = buildCodexDetailsModel(source,{action:'opportunities'},NOW);
+  assert.equal(model.accountResetHistory.state,'ready'); assert.equal(model.accountResetHistory.events.length,2);
+  assert.equal(model.resetHistory.length,1); assert.equal(model.resetHistory[0].state,'expired');
+  assert.equal(JSON.stringify(model).includes('SECRET'),false);
+  source.quota.stale = true;
+  assert.equal(buildCodexDetailsModel(source,{},NOW).accountResetHistory.state,'error');
+  source.enabled = false;
+  const disabled = buildCodexDetailsModel(source,{},NOW).accountResetHistory;
+  assert.equal(disabled.state,'unavailable'); assert.deepEqual(disabled.events,[]);
 });
 
 test('可信采样可区分较充裕、刚够和早于重置，不把能撑到重置当记录不足', () => {

@@ -11,7 +11,7 @@ const updateError = message => Object.assign(new Error(message), { publicMessage
 
 function parseVersion(value) {
   if (typeof value !== 'string' || value.length > 64) return null;
-  const match = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(value);
+  const match = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|\d{2}|[1-9]\d*)$/.exec(value);
   if (!match) return null;
   const parts = match.slice(1).map(Number);
   return parts.every(Number.isSafeInteger) ? { parts, version: match.slice(1).join('.') } : null;

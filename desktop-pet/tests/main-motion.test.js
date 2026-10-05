@@ -2403,3 +2403,84 @@ test('外观保存失败时保留原有配色且不广播', async () => {
   assert.equal(f.call("setInterfaceAppearance('light')"),false);
   assert.equal(f.call('settings.codexQuotaAppearance'),'dark');assert.equal(f.pet.messages.length,count);
 });
+
+
+test('命名收藏新增改名删除仅写库，桌面聊天和启动快照保持，重开可读取', async () => {
+  const f=await fixture(); f.call('openCustomization()');
+  const editor=f.windows.find(win=>win.options.title==='定制球球');
+  const before=f.call('JSON.stringify({customization:settings.customization,startup:settings.startupAppearance})');
+  const syncs=f.chatWindow.appearances,commands=f.commands.length;
+  const saved=await f.invoke('pet:appearance-preset-add',{name:'  薄荷  ',appearance:{shape:'square',bodyColor:'#2A8B6F',auroraTransparency:30}},editor.webContents);
+  assert.equal(saved.ok,true);assert.equal(saved.presets.length,1);assert.equal(saved.presets[0].name,'薄荷');
+  assert.match(saved.presets[0].id,/^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i);
+  assert.equal(f.call('JSON.stringify({customization:settings.customization,startup:settings.startupAppearance})'),before);
+  assert.equal(f.chatWindow.appearances,syncs);assert.equal(f.commands.length,commands);
+  const restarted=await fixture({loadedSettings:f.saved.at(-1)});restarted.call('openCustomization()');
+  const reopen=restarted.windows.find(win=>win.options.title==='定制球球');
+  const value=await restarted.invoke('pet:customization-get',null,reopen.webContents);
+  assert.equal(value.appearancePresets[0].appearance.bodyColor,'#2A8B6F');
+  const writes=f.saved.length;
+  assert.equal((await f.invoke('pet:appearance-preset-add',{name:'薄荷',appearance:{shape:'cloud'}},editor.webContents)).ok,false);
+  assert.equal(f.saved.length,writes);
+  const renamed=await f.invoke('pet:appearance-preset-rename',{id:saved.presets[0].id,name:'奶糖'},editor.webContents);
+  assert.equal(renamed.presets[0].id,saved.presets[0].id);assert.equal(renamed.presets[0].name,'奶糖');
+  assert.equal((await f.invoke('pet:appearance-preset-delete',{id:saved.presets[0].id},editor.webContents)).presets.length,0);
+  assert.equal(f.call('JSON.stringify({customization:settings.customization,startup:settings.startupAppearance})'),before);
+  assert.equal(f.chatWindow.appearances,syncs);
+});
+
+
+test('可信收藏入口拒绝改名重复及隐藏字段差异，拒绝时不写库也不改变形象', async () => {
+  const f=await fixture(); f.call('openCustomization()');
+  const editor=f.windows.find(win=>win.options.title==='定制球球');
+  const appearance={shape:'square',bodyColor:'#2A8B6F',eyeSpacing:1.1,auroraTransparency:30,
+    shapeTuning:{width:1.1,height:1,softness:0.5,asymmetry:0}};
+  const first=await f.invoke('pet:appearance-preset-add',{name:'薄荷',appearance},editor.webContents);
+  assert.equal(first.ok,true);
+  const before=f.call('JSON.stringify(settings)');
+  const writes=f.saved.length,syncs=f.chatWindow.appearances,commands=f.commands.length;
+  for (const candidate of [
+    {...appearance,bodyColor:'#2a8b6f',eyeSpacing:1.104,
+      shapeTuning:{asymmetry:0,softness:0.5,height:1,width:1.104}},
+    {...appearance,glowPinkColor:'#123456',glowGoldColor:'#ABCDEF',auroraStyle:'simple',auroraContour:'six-lobe'}
+  ]) {
+    assert.deepEqual({...await f.invoke('pet:appearance-preset-add',{name:'新名字',appearance:candidate},editor.webContents)},
+      {ok:false,error:'已收藏为「薄荷」，无需重复保存'});
+    assert.equal(f.call('JSON.stringify(settings)'),before);
+    assert.equal(f.saved.length,writes);
+  }
+  assert.equal(f.chatWindow.appearances,syncs);assert.equal(f.commands.length,commands);
+  const changed=await f.invoke('pet:appearance-preset-add',{
+    name:'新名字',appearance:{...appearance,auroraTransparency:40}
+  },editor.webContents);
+  assert.equal(changed.ok,true);assert.equal(changed.presets.length,2);
+  assert.equal(changed.presets[0].id,first.presets[0].id);
+  assert.deepEqual({...await f.invoke('pet:appearance-preset-add',{
+    name:'薄荷',appearance:{...appearance,bodyColor:'#123456'}
+  },editor.webContents)},{ok:false,error:'已有同名形象，请换一个名称'});
+});
+
+test('收藏IPC拒绝外来窗口和锁屏，保存失败原列表与快照回滚', async () => {
+  const f=await fixture({saveError:Error('PRESET_WRITE_FAILURE')});f.call('writeError=()=>{}');f.call('openCustomization()');
+  const editor=f.windows.find(win=>win.options.title==='定制球球');
+  const request={name:'薄荷',appearance:{shape:'square'}};
+  const before=f.call('JSON.stringify(settings)');
+  assert.equal((await f.invoke('pet:appearance-preset-add',request)).ok,false,'桌面sender不可信');
+  f.powerMonitor.emit('lock-screen');
+  assert.equal((await f.invoke('pet:appearance-preset-add',request,editor.webContents)).ok,false);
+  f.powerMonitor.emit('unlock-screen');
+  assert.equal((await f.invoke('pet:appearance-preset-add',request,editor.webContents)).ok,false);
+  assert.equal(f.call('JSON.stringify(settings)'),before);assert.equal(f.saved.length,0);
+});
+
+test('收藏名称20项上限与同名改名拒绝，不接受客户端伪造ID或缺失外观', async () => {
+  const f=await fixture();f.call('openCustomization()');const editor=f.windows.find(win=>win.options.title==='定制球球');
+  for(const name of ['', 'a'.repeat(25), 'a\nb']) assert.equal((await f.invoke('pet:appearance-preset-add',{name,appearance:{shape:'blob'}},editor.webContents)).ok,false);
+  assert.equal((await f.invoke('pet:appearance-preset-add',{name:'无外观'},editor.webContents)).ok,false);
+  let first;
+  for(let index=0;index<20;index++){const result=await f.invoke('pet:appearance-preset-add',{id:'forged',name:'形象'+index,appearance:{shape:'blob',bodyColor:'#'+(index+1).toString(16).padStart(6,'0')}},editor.webContents);assert.equal(result.ok,true);first ||= result.presets[0].id;}
+  assert.deepEqual({...await f.invoke('pet:appearance-preset-add',{name:'第21套',appearance:{shape:'cloud'}},editor.webContents)},{ok:false,error:'最多保存 20 套形象，可先删除不再需要的形象'});
+  assert.equal((await f.invoke('pet:appearance-preset-rename',{id:first,name:'形象1'},editor.webContents)).ok,false);
+  assert.equal((await f.invoke('pet:appearance-preset-delete',{id:'forged'},editor.webContents)).ok,false);
+  assert.equal(f.call('settings.appearancePresets.length'),20);
+});

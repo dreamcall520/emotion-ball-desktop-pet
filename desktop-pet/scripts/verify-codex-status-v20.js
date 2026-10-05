@@ -36,7 +36,10 @@ function syntheticSnapshot(now, periods = [300, 10080]) {
         expiresAt: now + 9 * HOUR, resetType: 'codexRateLimits' },
       { id: 'synthetic-later', status: 'available', grantedAt: now - HOUR,
         expiresAt: now + 48 * HOUR, resetType: 'codexRateLimits' }
-    ], credits: { hasCredits: true, unlimited: false, balance: '2480' } },
+    ], accountResetHistory: { state: 'ready', updatedAt: now, events: [
+      { id: 'synthetic-account-granted', kind: 'granted', occurredAt: now - 72 * HOUR },
+      { id: 'synthetic-account-redeemed', kind: 'redeemed', occurredAt: now - 49 * HOUR }
+    ] }, credits: { hasCredits: true, unlimited: false, balance: '2480' } },
     tasks: { state: 'connected', items: [1, 2, 3].map((number, index) => ({ id: taskId(number),
       title: `合成验收任务 ${number}`, state: index === 2 ? 'waiting' : 'active',
       turnId: `synthetic-turn-${number}`, updatedAt: now })) },
@@ -64,6 +67,27 @@ function assertContentEdges(view, label) {
     ['native width', contentBounds.width, viewport.width], ['native height', contentBounds.height, viewport.height]
   ]) assert.ok(Number.isFinite(actual) && Math.abs(actual - expected) <= 1,
     `${label}: ${edge} 应填满窗口，actual=${actual} expected=${expected}`);
+}
+
+function assertAnchoredDetails(bounds, anchor, area, label = '详情打开定位') {
+  assert.ok(bounds.x >= area.x && bounds.y >= area.y &&
+    bounds.x + bounds.width <= area.x + area.width && bounds.y + bounds.height <= area.y + area.height,
+  `${label}: 原生详情完整位于当前显示器`);
+  const gap = 8;
+  const centeredX = Math.round(Math.max(area.x, Math.min(anchor.x + (anchor.width - bounds.width) / 2,
+    area.x + area.width - bounds.width)));
+  const centeredY = Math.round(Math.max(area.y, Math.min(anchor.y + (anchor.height - bounds.height) / 2,
+    area.y + area.height - bounds.height)));
+  const distances = {
+    below: bounds.y - (anchor.y + anchor.height), above: anchor.y - (bounds.y + bounds.height),
+    right: bounds.x - (anchor.x + anchor.width), left: anchor.x - (bounds.x + bounds.width)
+  };
+  const besidePet = Object.entries(distances).some(([side, distance]) => distance >= gap &&
+    (side === 'below' || side === 'above' ? bounds.x === centeredX : bounds.y === centeredY));
+  assert.ok(besidePet, `${label}: 应在当前球球有空间的一侧，不能覆盖球球且至少留 ${gap}px 间距`);
+  const overlaps = bounds.x < anchor.x + anchor.width && bounds.x + bounds.width > anchor.x &&
+    bounds.y < anchor.y + anchor.height && bounds.y + bounds.height > anchor.y;
+  assert.equal(overlaps, false, `${label}: 详情与球球实际原生 bounds 无相交`);
 }
 
 function assertDetailsSurface(view, label = '详情') {
@@ -109,7 +133,9 @@ function detailFixtures(now) {
     { name: 'trend-five', action: 'trend', snapshot: syntheticSnapshot(now, [300]), periods: 1 },
     { name: 'trend-week', action: 'trend', snapshot: syntheticSnapshot(now, [10080]), periods: 1 },
     { name: 'reset-available', action: 'opportunities', snapshot: base, entries: 2 },
-    { name: 'reset-no-history', action: 'opportunities', snapshot: { ...base, history: { ...base.history, resetHistory: [] } }, entries: 2 },
+    { name: 'reset-no-history', action: 'opportunities', snapshot: { ...base,
+      quota: { ...base.quota, accountResetHistory: { ...base.quota.accountResetHistory, events: [] } },
+      history: { ...base.history, resetHistory: [] } }, entries: 2 },
     ...[['credits-decimal', '62485.1547310000', '62,485.15'],
       ['credits-long', '12345678901234567890.125', '12,345,678,901,234,567,890.13']].map(([name, balance, expectedBalance]) => ({
       name, action: 'credits', expectedBalance,
@@ -219,6 +245,7 @@ async function detailsView(win) {
       backVisible:!document.getElementById('details-back').hidden,
       resetSummary:document.querySelector('.reset-summary')?.textContent||'',
       history:document.querySelector('.opportunity-history')?{open:document.querySelector('.opportunity-history').open,text:document.querySelector('.opportunity-history').textContent}:null,
+      localHistory:document.querySelector('.local-opportunity-history')?{open:document.querySelector('.local-opportunity-history').open,text:document.querySelector('.local-opportunity-history').textContent}:null,
       rows:document.querySelectorAll('#details-content > .opportunity-list li:not(.table-head)').length,
       tableHead:document.querySelectorAll('#details-content > .opportunity-list .table-head').length,
       empty:document.querySelector('.empty-state')?.textContent||'',
@@ -290,10 +317,10 @@ async function verifyCodexStatusV20({ pet, quotaLabel, details, BrowserWindow, s
   assert.match(path.basename(app.getPath('userData')), /^emotion-ball-smoke-/, '不得使用正式用户目录');
   const artifacts = path.resolve(process.env.PET_SMOKE_ARTIFACT_DIR || path.join(__dirname, '../build/codex-status-v20'));
   fs.mkdirSync(artifacts, { recursive: true });
-  const report = { passed: false, revision:'R7', candidate:process.env.PET_SMOKE_APP_PATH,
+  const report = { passed: false, revision:'R10', candidate:process.env.PET_SMOKE_APP_PATH,
     scope: 'Packaged candidate; synthetic v20 only; isolated profile; no live account or model/API calls',
-    cards: [], compact: [], details: [], clicks: [], surfaces: [], windowRestoration: [] };
-  const now = Date.now(), original = getSettings();
+    cards: [], compact: [], details: [], clicks: [], surfaces: [], windowRestoration: [], positions: [] };
+  const now = Date.now(), original = getSettings(), originalPetBounds = pet.getBounds();
   const seed = syntheticSnapshot(now);
   const historyFile = path.join(app.getPath('userData'), 'synthetic-v20-history.json');
   fs.writeFileSync(historyFile, JSON.stringify({ version: 1, accounts: {
@@ -426,6 +453,84 @@ async function verifyCodexStatusV20({ pet, quotaLabel, details, BrowserWindow, s
       report.details.push({ action: 'trend-320', colorMode, appearance, ...view });
     }
 
+    // Exercise the production main-process anchor with real native windows.
+    // A hidden quota window retains its last bounds; it must not be the anchor
+    // when the pet moves while a detail remains open.
+    details.close();
+    setColorMode('standard'); setQuotaPreference('codexQuotaAppearance', 'light');
+    setQuotaPreference('codexQuotaPeriod', 'auto'); emit([300, 10080]);
+    const area = screen.getDisplayMatching(originalPetBounds).workArea;
+    const locations = [.25, .75].map(fraction => ({ ...originalPetBounds,
+      x: Math.round(area.x + (area.width - originalPetBounds.width) * fraction),
+      y: Math.round(area.y + (area.height - originalPetBounds.height) * .35) }));
+    assert.notEqual(locations[0].x, locations[1].x, '原生定位验收确实移动球球');
+    const movePet = async (location, suppressed = false) => {
+      pet.setBounds(location, false);
+      const current = await poll(() => pet.getBounds(), value => value.x === location.x && value.y === location.y,
+        '球球实际移到新锚点');
+      quotaLabel.reposition();
+      if (!suppressed) {
+        await poll(() => label.isVisible(), Boolean, '移动后额度卡显示');
+        await paint(label);
+      }
+      return current;
+    };
+    const positionedOpen = async (action, phase) => {
+      const anchorSource = 'pet', anchor = pet.getBounds();
+      assert.equal(openDetails(action, 300), true, `${action}/${phase}: 使用真实主进程入口`);
+      const win = details.getWindow(), initialBounds = win.getBounds();
+      assertAnchoredDetails(initialBounds, anchor, screen.getDisplayMatching(anchor).workArea, `${action}/${phase}`);
+      await poll(() => detailsView(win), value => value.action === action && filled(value), `${action}/${phase} 原生内容`);
+      assert.equal(label.isVisible(), false, `${action}/${phase}: 额度卡持续避让`);
+      await capture(win, `position-${action}-${phase}`, details);
+      assertAnchoredDetails(win.getBounds(), pet.getBounds(), screen.getDisplayMatching(pet.getBounds()).workArea,
+        `${action}/${phase}/renderer-resize`);
+      return { win, evidence: { phase, anchorSource, anchor, petBounds: pet.getBounds(), initialBounds,
+        settledBounds: win.getBounds() } };
+    };
+    for (const action of ['tasks', 'results', 'trend', 'opportunities', 'credits']) {
+      details.close(); await poll(() => label.isVisible(), Boolean, `${action}: 首次打开前恢复额度卡`);
+      await movePet(locations[0]);
+      const first = await positionedOpen(action, 'first');
+      details.close(); await poll(() => label.isVisible(), Boolean, `${action}: 关闭后恢复额度卡`);
+      await movePet(locations[1]);
+      const reopened = await positionedOpen(action, 'reopened');
+      assert.equal(reopened.win, first.win, `${action}: 重开仍复用真实详情窗口`);
+      assert.notEqual(reopened.evidence.initialBounds.x, first.evidence.initialBounds.x, `${action}: 重开不保留旧横坐标`);
+
+      const hiddenQuotaBounds = label.getBounds();
+      await movePet(locations[0], true);
+      assert.equal(label.isVisible(), false, `${action}: 详情打开时移动球球不能抬升额度卡`);
+      assert.deepEqual(label.getBounds(), hiddenQuotaBounds, '隐藏额度卡确实保留旧位置，不能作为当前锚点');
+      const whileVisible = await positionedOpen(action, 'visible-reopen');
+      assert.equal(whileVisible.evidence.anchorSource, 'pet');
+
+      // Move the actual BrowserWindow as a user drag would, then trigger the
+      // controller's content-resize path after moving the pet again.
+      const win = whileVisible.win, current = win.getBounds();
+      const requestedHeight = current.height > 144 ? current.height - 24 : current.height + 24;
+      const dragged = { ...current,
+        x: area.x + Math.max(0, Math.min(40, area.width - current.width)),
+        y: area.y + Math.max(0, Math.min(40, area.height - Math.max(current.height, requestedHeight))) };
+      win.setBounds(dragged, false);
+      await poll(() => win.getBounds(), value => value.x === dragged.x && value.y === dragged.y,
+        `${action}: 真实窗口模拟拖动`);
+      await movePet(locations[1], true);
+      details.resize(requestedHeight);
+      const resized = win.getBounds();
+      assert.deepEqual({ x: resized.x, y: resized.y }, { x: dragged.x, y: dragged.y },
+        `${action}: 内容 resize 保留用户拖动的位置，不跟随新球球锚点`);
+      assert.equal(resized.height, Math.min(requestedHeight, 700, area.height), `${action}: resize 实际调整原生高度`);
+      await capture(win, `position-${action}-dragged-resize`, details);
+      const settled = win.getBounds();
+      assert.deepEqual({ x: settled.x, y: settled.y }, { x: dragged.x, y: dragged.y },
+        `${action}: 后续 renderer resize 也不跳回球球位置`);
+      report.positions.push({ action, workArea: area, first: first.evidence, reopened: reopened.evidence,
+        hiddenQuotaBounds, whileVisible: whileVisible.evidence,
+        resize: { dragged, requestedHeight, resized, settled, petBounds: pet.getBounds() } });
+    }
+    details.close(); await movePet(originalPetBounds);
+
     // All panels share the same native frame. Check populated and empty states
     // through the packaged controller/preload, with both actual and 320px widths.
     for (const colorMode of ['standard','accessible']) for (const appearance of ['light','dark']) {
@@ -466,8 +571,16 @@ async function verifyCodexStatusV20({ pet, quotaLabel, details, BrowserWindow, s
           }
           if(fixture.action==='credits')assert.equal(view.balance,fixture.expectedBalance,'余额精确格式化，不经 Number 丢失精度');
           if(fixture.name==='reset-no-history') {
-            assert.ok(view.history&&!view.history.open,'有可用次数但无历史仍保留折叠入口');
-            assert.match(view.history.text,/历史记录 · 0.*暂无已记录的历史/);
+            assert.ok(view.history&&!view.history.open,'账户历史成功为空仍保留折叠入口');
+            assert.match(view.history.text,/账户历史 · 过去 30 天 · 0.*过去 30 天暂无获得或使用记录/);
+            assert.equal(view.localHistory,null,'无本机记录时不虚构本机观察记录');
+          }
+          if(fixture.name==='reset-available') {
+            assert.ok(view.history&&!view.history.open,'账户历史默认折叠');
+            assert.match(view.history.text,/账户历史 · 过去 30 天 · 2/);
+            assert.match(view.history.text,/已获得/);assert.match(view.history.text,/已使用/);
+            assert.ok(view.localHistory&&!view.localHistory.open,'本机观察记录独立且默认折叠');
+            assert.match(view.localHistory.text,/本机观察记录 · 2.*已过期/);
           }
           const filename=`surface-${fixture.name}-${width}-${colorMode}-${appearance}`;
           const png=await capture(win,filename,details);
@@ -500,7 +613,10 @@ async function verifyCodexStatusV20({ pet, quotaLabel, details, BrowserWindow, s
     emit([300, 10080]);
     const zero = { ...getSnapshot(), quota: { ...getSnapshot().quota, resetCreditsAvailable: 0, resetOpportunities: [] } };
     for (const hasHistory of [true, false]) {
-      const fixture = { ...zero, history: { ...zero.history, resetHistory: hasHistory ? seed.history.resetHistory : [] } };
+      const fixture = { ...zero,
+        quota: { ...zero.quota, accountResetHistory: hasHistory ? seed.quota.accountResetHistory
+          : { state: 'unavailable', events: [], updatedAt: null, code: 'UNSUPPORTED' } },
+        history: { ...zero.history, resetHistory: hasHistory ? seed.history.resetHistory : [] } };
       details.open(buildCodexDetailsModel(fixture, { action: 'opportunities' }, now));
       win = details.getWindow(); await paint(win); view = await detailsView(win);
       assert.match(view.resetSummary, /0/, '零值不当作缺失');
@@ -509,29 +625,43 @@ async function verifyCodexStatusV20({ pet, quotaLabel, details, BrowserWindow, s
       assert.ok(view.history,'始终保留历史入口');
       assert.equal(view.history.open,false,'无历史时也默认折叠');
       if(!hasHistory) {
-        assert.match(view.history.text,/历史记录 · 0/);
+        assert.match(view.history.text,/账户历史 · 未同步/);
+        assert.doesNotMatch(view.history.text,/过去 30 天暂无/,'未同步不能声称账户没有历史');
+        assert.equal(view.localHistory,null);
         await win.webContents.executeJavaScript(`document.querySelector('.opportunity-history summary').click()`);
         const emptyHistory=await poll(()=>detailsView(win),value=>value.history?.open&&filled(value),'无历史展开且背景填满');
-        assert.match(emptyHistory.history.text,/暂无已记录的历史/);
+        assert.match(emptyHistory.history.text,/账户历史暂未同步.*历史查询未完成，不代表账户没有记录/);
         await win.webContents.executeJavaScript(`document.querySelector('.opportunity-history summary').click()`);
       }
       if (hasHistory) {
         assert.equal(view.history.open, false);
         await win.webContents.executeJavaScript(`document.querySelector('.opportunity-history summary').click()`);
-        const expanded = await detailsView(win);
-        assert.equal(expanded.history.open, true); assert.match(expanded.history.text, /已过期/); assert.match(expanded.history.text, /已使用/);
+        const expanded = await poll(()=>detailsView(win),value=>value.history?.open&&filled(value),'账户历史展开且背景填满');
+        assert.match(expanded.history.text,/账户历史 · 过去 30 天 · 2/);
+        assert.match(expanded.history.text,/已获得/);assert.match(expanded.history.text,/已使用/);
+        assert.doesNotMatch(expanded.history.text,/已过期/,'账户记录不混入本机到期观察');
+        await capture(win,'reset-zero-history-expanded-account',details);
+        await win.webContents.executeJavaScript(`document.querySelector('.opportunity-history summary').click()`);
+        await poll(()=>detailsView(win),value=>value.history?.open===false,'账户历史收起');
+        await win.webContents.executeJavaScript(`document.querySelector('.local-opportunity-history summary').click()`);
+        const local=await poll(()=>detailsView(win),value=>value.localHistory?.open&&filled(value),'本机观察记录独立展开');
+        assert.match(local.localHistory.text,/本机观察记录 · 2.*已过期/);assert.match(local.localHistory.text,/已使用/);
+        await capture(win,'reset-zero-history-expanded-local',details);
+        await win.webContents.executeJavaScript(`document.querySelector('.local-opportunity-history summary').click()`);
+        await poll(()=>detailsView(win),value=>value.localHistory?.open===false,'本机观察记录收起');
       }
       await capture(win, `reset-zero-${hasHistory ? 'history' : 'empty'}`, details);
       report.details.push({ action: 'opportunities', hasHistory, ...view });
-      if(hasHistory) {
-        await win.webContents.executeJavaScript(`document.querySelector('.opportunity-history summary').click()`);
-        await poll(()=>detailsView(win),value=>value.history?.open===false,'历史样例收起后再验收下一状态');
-      }
     }
-    emit([300], { resetCreditsAvailable: 2, resetOpportunities: null });
+    emit([300], { resetCreditsAvailable: 2, resetOpportunities: null,
+      accountResetHistory: { state: 'unavailable', events: [], updatedAt: null, code: 'UNSUPPORTED' } });
     win = await open('opportunities'); view = await detailsView(win);
     assert.equal(view.rows, 0, '未返回明细时不得虚构到期行');
     assert.match(view.visibleText, /未提供|暂未|未返回|不可用|待更新/);
+    assert.match(view.history.text,/账户历史 · 未同步/);
+    assert.doesNotMatch(view.history.text,/过去 30 天暂无/,'有可用次数但历史查询未知不能伪装成功空态');
+    await capture(win,'reset-history-unknown',details);
+    report.details.push({action:'opportunities',accountHistoryState:'unavailable',...view});
     report.resetUnknown = true;
 
     emit([300, 10080]);
@@ -581,6 +711,7 @@ async function verifyCodexStatusV20({ pet, quotaLabel, details, BrowserWindow, s
     report.error = error.message; throw error;
   } finally {
     apiWindow?.destroy(); details.close();
+    if (!pet.isDestroyed()) pet.setBounds(originalPetBounds, false);
     for (const key of ['codexQuotaPeriod', 'codexQuotaAlwaysVisible', 'codexQuotaLabelSize', 'codexQuotaAppearance', 'codexShowExtraCredits']) {
       setQuotaPreference(key, original[key]);
     }
@@ -590,4 +721,4 @@ async function verifyCodexStatusV20({ pet, quotaLabel, details, BrowserWindow, s
 }
 
 module.exports = { verifyCodexStatusV20, syntheticSnapshot, detailFixtures, assertCardLayout,
-  assertContentEdges, assertDetailsSurface, assertFilledPixels, isRenderedDetailNode, contrast, rgb, sampleContrast };
+  assertContentEdges, assertAnchoredDetails, assertDetailsSurface, assertFilledPixels, isRenderedDetailNode, contrast, rgb, sampleContrast };

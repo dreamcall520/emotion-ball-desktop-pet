@@ -1,4 +1,5 @@
 const fs = require('node:fs');
+const { randomUUID } = require('node:crypto');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const {
@@ -16,7 +17,7 @@ const {
   shell,
   Tray
 } = require('electron');
-const { loadSettings, saveSettings } = require('./lib/settings');
+const { loadSettings, saveSettings, normalizePresetName, normalizeAppearancePresets, findDuplicateAppearancePreset } = require('./lib/settings');
 const {
   SIZES,
   defaultBounds,
@@ -54,7 +55,7 @@ const { createApiUsage } = require('./lib/api-usage');
 const { createApiUsageLabelWindow } = require('./lib/api-usage-label-window');
 const { checkLatestRelease } = require('./lib/app-update');
 const { createColorModeManager } = require('./lib/color-mode');
-const { normalizeCustomization, effectiveAppearance } = require('./lib/customization');
+const { normalizeCustomization, normalizeAppearance, effectiveAppearance } = require('./lib/customization');
 
 const APP_NAME = '球球桌宠';
 const APP_WEBSITE = 'https://qiuqiu.pet/';
@@ -385,6 +386,39 @@ function effectiveCustomization(value) {
   const customization = normalizeCustomization(value);
   return { ...customization,
     appearance: effectiveAppearance(customization.appearance) };
+}
+
+function changeAppearancePreset(action, value) {
+  if (IS_SMOKE_TEST && smokeCustomizationSaveFailure) return { ok: false, error: '操作未完成，请稍后重试' };
+  if (!settings || isQuitting || !value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, error: '操作未完成，请重试' };
+  const presets = normalizeAppearancePresets(settings.appearancePresets);
+  let next;
+  if (action === 'add') {
+    const name = normalizePresetName(value.name);
+    if (!name) return { ok: false, error: '请输入 1–24 个字符的名称，勿包含控制字符' };
+    if (!value.appearance || typeof value.appearance !== 'object' || Array.isArray(value.appearance)) return { ok: false, error: '形象未读取完成，请重试' };
+    const duplicate = findDuplicateAppearancePreset(presets, value.appearance);
+    if (duplicate) return { ok: false, error: `已收藏为「${duplicate.name}」，无需重复保存` };
+    if (presets.some(item => item.name.toLowerCase() === name.toLowerCase())) return { ok: false, error: '已有同名形象，请换一个名称' };
+    if (presets.length >= 20) return { ok: false, error: '最多保存 20 套形象，可先删除不再需要的形象' };
+    next = [...presets, { id: randomUUID(), name, appearance: normalizeAppearance(value.appearance) }];
+  } else {
+    const index = presets.findIndex(item => item.id === value.id);
+    if (index < 0) return { ok: false, error: '形象已不存在，请重新打开定制页' };
+    if (action === 'rename') {
+      const name = normalizePresetName(value.name);
+      if (!name) return { ok: false, error: '请输入 1–24 个字符的名称，勿包含控制字符' };
+      if (presets.some((item, at) => at !== index && item.name.toLowerCase() === name.toLowerCase())) return { ok: false, error: '已有同名形象，请换一个名称' };
+      next = presets.map((item, at) => at === index ? { ...item, name } : item);
+    } else if (action === 'delete') next = presets.filter((_, at) => at !== index);
+    else return { ok: false, error: '操作未完成，请重试' };
+  }
+  const previous = settings;
+  settings = { ...settings, appearancePresets: next };
+  try { persistSettings(); }
+  catch (error) { settings = previous; writeError('保存我的形象', error); return { ok: false, error: '操作未完成，请稍后重试' }; }
+  return { ok: true, presets: normalizeAppearancePresets(settings.appearancePresets).map(item => ({
+    ...item, appearance: effectiveCustomization({ appearance: item.appearance }).appearance })) };
 }
 
 function saveCustomization(value, setAsStartupDefault = true) {
@@ -929,7 +963,7 @@ async function setCodexEnabled(enabled) {
   try {
     const result = await dialog.showMessageBox({
       type: 'info', title: '开启 Codex 联动？', message: '让球球提醒 Codex 额度与任务进展',
-      detail: '开启后，仅在本机读取 Codex 的额度与任务状态。状态包可能附带已加载的聊天内容；球球只提取进展，正文立即丢弃，不保存、不上传。\n不监听键盘，也不会代你创建、发送、审批或中断任务。随时关闭即可停止读取。',
+      detail: '开启后，在本机读取 Codex 的额度与任务状态，并只读查询官方服务的账户重置历史。账户令牌仅用于官方查询，不保存、不发送给其他服务。状态包可能附带已加载的聊天内容；球球只提取进展，正文立即丢弃，不保存、不上传。\n不监听键盘，也不会代你创建、发送、审批或中断任务。随时关闭即可停止读取。',
       buttons: ['开启联动', '暂不开启'], defaultId: 1, cancelId: 1, noLink: true
     });
     if (result.response !== 0 || token !== codexConsentToken || isQuitting) return false;
@@ -2143,8 +2177,13 @@ function registerIpc() {
   });
   ipcMain.handle('pet:customization-get', event => fromCustomizationWindow(event) && !screenLocked
     ? { customization: effectiveCustomization(settings.customization),
+      appearancePresets: normalizeAppearancePresets(settings.appearancePresets).map(item => ({
+        ...item, appearance: effectiveCustomization({ appearance: item.appearance }).appearance })),
       startupAppearance: effectiveAppearance(settings.startupAppearance),
       size: settings.size } : null);
+  for (const action of ['add', 'rename', 'delete']) ipcMain.handle('pet:appearance-preset-' + action, (event, value) =>
+    fromCustomizationWindow(event) && !screenLocked
+      ? changeAppearancePreset(action, value) : { ok: false, error: '请重新打开定制页后操作' });
   ipcMain.handle('pet:customization-save', (event, value, setAsStartupDefault) => {
     if (!fromCustomizationWindow(event) || screenLocked) return false;
     return saveCustomization(value, setAsStartupDefault);
@@ -2448,7 +2487,7 @@ async function bootstrap() {
     onOpenDetails: openApiUsage, alwaysOnTop: settings.alwaysOnTop,
     onError: error => writeError('API 常驻卡片', error) });
   codexDetails = createCodexDetailsWindow({ BrowserWindow, screen,
-    getAnchor: () => quotaLabel?.getWindow()?.getBounds() || petWindow?.getBounds(),
+    getAnchor: () => petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null,
     onVisibilityChange: () => safelyInvokeWindow('Codex 详情显隐时额度卡重排', () => quotaLabel?.reposition()),
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('Codex 详情窗口', error) });
   edgeNoticeWindow = createEdgeNoticeWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,

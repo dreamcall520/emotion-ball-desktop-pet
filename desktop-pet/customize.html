@@ -29,6 +29,17 @@
         <div class="form-heading"><h2 id="appearance-title">外观选项</h2></div>
         <div class="group-heading"><h3>形态</h3><span id="shape-hint">选择喜欢的起点</span></div>
         <div id="shape-options" class="shape-options" role="group" aria-label="球球形态"></div>
+        <section id="preset-section" class="preset-section" aria-labelledby="preset-title">
+          <div class="group-heading"><h3 id="preset-title">我的形象 <span id="preset-count">0 / 20</span></h3><button id="preset-add" class="preset-add" type="button" disabled><span aria-hidden="true">＋</span> 保存当前形象</button></div>
+          <p id="preset-empty" class="preset-empty">保存喜欢的配色，下次载入预览。</p>
+          <div id="preset-list" class="preset-list" role="list" aria-label="已保存的形象"></div>
+          <form id="preset-form" class="preset-form" hidden>
+            <label id="preset-form-label" for="preset-name">形象名称</label>
+            <div class="preset-name-row"><input id="preset-name" type="text" maxlength="24" autocomplete="off" spellcheck="false" placeholder="例如：薄荷奶糖"><button id="preset-submit" class="secondary" type="submit">保存形象</button><button id="preset-cancel" class="text-button" type="button">取消</button></div>
+            <p id="preset-error" class="preset-error" role="status" aria-live="polite" hidden></p>
+          </form>
+          <div id="preset-delete-confirm" class="preset-delete-confirm" role="group" aria-label="确认删除收藏" hidden><span id="preset-delete-label"></span><div class="preset-delete-actions"><button id="preset-delete-cancel" class="text-button" type="button">取消</button><button id="preset-delete-submit" class="preset-danger" type="button">删除收藏</button></div></div>
+        </section>
         <div id="aurora-style-field" class="form-section aurora-style-field" hidden>
           <div class="group-heading"><h3>幻彩样式</h3><span>立即预览</span></div>
           <div class="aurora-style-options" role="group" aria-label="幻彩样式">
@@ -103,6 +114,7 @@
   <script src="lib/rive.js"></script>
   <script src="lib/boo-binary.js"></script>
   <script src="lib/aurora-rive.js"></script>
+  <script src="lib/chat-avatar.js"></script>
   <script src="customize-renderer.js"></script>
 </body>
 </html>

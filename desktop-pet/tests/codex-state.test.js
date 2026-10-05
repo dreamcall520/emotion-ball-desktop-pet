@@ -11,6 +11,40 @@ function state() {
   assert.ok(fs.existsSync(file), '需要只保留允许字段的 Codex 状态模块');
   return require(file);
 }
+
+test('账户重置历史只保留事件标量，获赠和使用独立，未知/畸形不伪造零历史', () => {
+  const api = state(), occurredAt = Date.parse('2026-10-04T01:00:00Z');
+  assert.equal(api.normalizeResetHistoryPage({credits:[]}),null);
+  const page = api.normalizeResetHistoryPage({events:[
+    {id:'grant',kind:'granted',occurred_at:'2026-10-04T01:00:00Z',description:SECRET,authToken:SECRET},
+    {id:'grant',kind:'granted',occurred_at:'2026-10-04T01:00:00Z'},
+    {id:'use',kind:'redeemed',occurred_at:'2026-10-04T01:00:00Z'},
+    {id:'bad',kind:'expired',occurred_at:'invalid'}],next_cursor:'next'});
+  assert.equal(page.partial,true);
+  assert.deepEqual(page.events,[{id:'grant',kind:'granted',occurredAt},{id:'use',kind:'redeemed',occurredAt}]);
+  assert.equal(JSON.stringify(page).includes(SECRET),false);
+  assert.equal(api.accountResetHistoryDetails(null).state,'unavailable');
+  assert.equal(api.accountResetHistoryDetails({state:'ready',events:[],updatedAt:occurredAt}).state,'ready');
+  const projected = api.accountResetHistoryDetails({state:'ready',events:page.events,updatedAt:occurredAt,authToken:SECRET,accountId:SECRET,code:SECRET});
+  assert.equal(JSON.stringify(projected).includes(SECRET),false);
+  assert.equal(projected.code,null);
+});
+
+test('账户HTTP真实used事件映射为内部redeemed，ISO微秒保留毫秒，未知kind仍partial', () => {
+  const api = state();
+  const page = api.normalizeResetHistoryPage({events:[
+    {id:'grant-1',kind:'granted',occurred_at:'2026-10-01T01:02:03.688749Z'},
+    {id:'use-1',kind:'used',occurred_at:'2026-09-30T04:05:06.761799Z'},
+    {id:'use-2',kind:'used',occurred_at:'2026-09-25T07:08:09.515618Z'},
+    {id:'grant-2',kind:'granted',occurred_at:'2026-09-23T10:11:12.111611Z'}],
+    window_start:'2026-09-05T00:00:00Z',as_of:'2026-10-05T00:00:00Z',next_cursor:null});
+  assert.equal(page.partial,false); assert.equal(page.nextCursor,null);
+  assert.deepEqual(page.events.map(row => row.kind),['granted','redeemed','redeemed','granted']);
+  assert.equal(page.events[0].occurredAt,Date.parse('2026-10-01T01:02:03.688Z'));
+  assert.equal(page.events[1].occurredAt,Date.parse('2026-09-30T04:05:06.761Z'));
+  const unknown = api.normalizeResetHistoryPage({events:[{id:'unknown',kind:'future-unknown',occurred_at:'2026-10-01T01:02:03Z'}],next_cursor:null});
+  assert.deepEqual(unknown.events,[]); assert.equal(unknown.partial,true);
+});
 const quota = primary => ({ rateLimits: { limitId: 'codex', limitName: 'Codex', primary } });
 const window = { usedPercent: 85, windowDurationMins: 300, resetsAt: 2000000000 };
 

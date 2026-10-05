@@ -19,7 +19,8 @@ function fakeChild() {
   child.kill = signal => { child.kills.push(signal); return true; };
   return child;
 }
-function setup({ reply = () => ({}), timeoutMs = 100, installed = true, installedAt, ignoreThread } = {}) {
+function setup({ reply = () => ({}), timeoutMs = 100, installed = true, installedAt, ignoreThread,
+  fetch = null, now = Date.now, historyTimeoutMs = 5000 } = {}) {
   const child = fakeChild(); const sent = []; const probes = []; const launches = [];
   child.stdin.on('data', chunk => {
     const packet = JSON.parse(chunk);
@@ -33,7 +34,7 @@ function setup({ reply = () => ({}), timeoutMs = 100, installed = true, installe
     fs: { promises: {
       lstat: async file => { probes.push(file); if (!installed || (installedAt && file !== installedAt)) throw Object.assign(new Error('SECRET'), { code: 'ENOENT' }); return { isFile: () => true, isSymbolicLink: () => false }; },
       access: async () => {}
-    } }, homedir: () => '/private/test-user', timeoutMs, ignoreThread
+    } }, homedir: () => '/private/test-user', timeoutMs, ignoreThread, fetch, now, historyTimeoutMs
   });
   return { rpc, child, sent, probes, launches };
 }
@@ -61,7 +62,7 @@ test('兼容当前 ChatGPT.app 内置 Codex CLI 路径', async () => {
   h.rpc.close();
 });
 
-test('只开放四个只读方法并固定敏感参数，不请求历史', async () => {
+test('历史传输缺失时原有四个只读方法与参数保持，额度仍可用', async () => {
   const h = setup({ reply: packet => ({ result: packet.method === 'account/read' ? { account: { type: 'chatgpt', email: 'person@example.test', planType: 'plus' } }
     : packet.method === 'thread/list' ? { data: [{ id: ID, name: '标题', source: 'vscode', preview: 'SECRET', turns: ['SECRET'] }] }
       : packet.method === 'account/rateLimits/read' ? { rateLimits: { primary: { usedPercent: 15, windowDurationMins: 300, resetsAt: 2000000000 } } } : {} }) });
@@ -232,4 +233,173 @@ for (const method of ['listThreads', 'findThread']) test(method + ' 在移除 cw
     assert.equal((await h.rpc.findThread(otherId)).id, otherId);
   }
   assert.ok(seen.includes(workspace));
+});
+
+const HISTORY_NOW = Date.parse('2026-10-05T02:00:00Z');
+const historyEvent = (id, kind = 'granted') => ({ id, kind, occurred_at: '2026-10-04T01:00:00Z', token: 'SECRET_EVENT_TOKEN', description: 'SECRET_DESCRIPTION' });
+function historyFixture({ accountId = () => 'account-a', backendOrigin = 'https://chatgpt.com', auth, ...options } = {}) {
+  return setup({ now: () => HISTORY_NOW, ...options, reply: packet => {
+    if (packet.method === 'account/read') return { result: { account: { type: 'chatgpt', email: 'person@example.test' },
+      workspaceRouting: { chatgptAccountId: accountId(), backendOrigin, accountRoutingOverride: 'NO_CONSTRAINT' } } };
+    if (packet.method === 'getAuthStatus') {
+      if (auth) return auth(packet);
+      const claims = { 'https://api.openai.com/auth': { chatgpt_account_id: accountId() }, 'https://api.openai.com/profile': { email: 'person@example.test' } };
+      return { result: { authMethod: 'chatgpt', authToken: `fixture.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.SECRET_BEARER` } };
+    }
+    if (packet.method === 'account/rateLimits/read') return { result: { rateLimits: { primary: { usedPercent: 15, windowDurationMins: 300, resetsAt: 2000000000 } }, rateLimitResetCredits: { availableCount: 0, credits: [] } } };
+    return { result: {} };
+  } });
+}
+const historyResponse = value => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } });
+
+test('账户历史只GET固定官方路径、瞬时认证、分页去重并缓存，零可用仍展示获得和使用事件', async t => {
+  let time = HISTORY_NOW; const calls = [];
+  const h = historyFixture({ now: () => time, fetch: async (url, options) => {
+    calls.push({ url, options });
+    return historyResponse(calls.length % 2 ? { events: [historyEvent('grant')], next_cursor: 'next +/&' }
+      : { events: [historyEvent('grant'), historyEvent('use','redeemed')], next_cursor: null });
+  } });
+  t.after(() => h.rpc.close()); await h.rpc.start(); await h.rpc.readAccount();
+  const quota = await h.rpc.readQuota(time);
+  assert.equal(quota.resetCreditsAvailable,0);
+  assert.equal(quota.accountResetHistory.state,'ready');
+  assert.deepEqual(quota.accountResetHistory.events.map(event => event.kind),['granted','redeemed']);
+  assert.equal(JSON.stringify(quota).includes('SECRET'),false);
+  assert.deepEqual(h.sent.find(packet => packet.method === 'getAuthStatus').params,{ includeToken:true,refreshToken:false });
+  assert.equal(h.rpc.getAuthStatus,undefined);
+  assert.equal(calls[0].url,'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/history');
+  assert.equal(new URL(calls[1].url).searchParams.get('cursor'),'next +/&');
+  for (const {url,options} of calls) {
+    assert.equal(new URL(url).origin,'https://chatgpt.com'); assert.equal(options.method,'GET');
+    assert.equal(options.redirect,'error'); assert.equal(options.cache,'no-store');
+    assert.equal(options.headers['ChatGPT-Account-Id'],'account-a');
+    assert.match(options.headers.Authorization,/^Bearer fixture\./);
+  }
+  quota.accountResetHistory.events[0].kind = 'redeemed';
+  const cached = await h.rpc.readQuota(time);
+  assert.equal(cached.accountResetHistory.events[0].kind,'granted'); assert.equal(calls.length,2);
+  time += 120000; await h.rpc.readQuota(time); assert.equal(calls.length,4);
+});
+
+test('账户history实际wire granted/used及ISO微秒结构完整投影为ready四条', async t => {
+  const h = historyFixture({fetch:async () => historyResponse({events:[
+    {id:'fixture-grant-1',kind:'granted',occurred_at:'2026-10-01T01:02:03.688749Z'},
+    {id:'fixture-use-1',kind:'used',occurred_at:'2026-09-30T04:05:06.761799Z'},
+    {id:'fixture-use-2',kind:'used',occurred_at:'2026-09-25T07:08:09.515618Z'},
+    {id:'fixture-grant-2',kind:'granted',occurred_at:'2026-09-23T10:11:12.111611Z'}],
+    window_start:'2026-09-05T02:00:00Z',as_of:'2026-10-05T02:00:00Z',next_cursor:null})});
+  t.after(() => h.rpc.close()); await h.rpc.start(); await h.rpc.readAccount();
+  const quota = await h.rpc.readQuota(HISTORY_NOW);
+  assert.equal(quota.accountResetHistory.state,'ready'); assert.equal(quota.accountResetHistory.events.length,4);
+  assert.equal(quota.accountResetHistory.events.filter(row => row.kind === 'granted').length,2);
+  assert.equal(quota.accountResetHistory.events.filter(row => row.kind === 'redeemed').length,2);
+  assert.deepEqual(Object.keys(quota.accountResetHistory.events[0]),['id','kind','occurredAt']);
+});
+
+test('不支持auth、401与超时保持额度成功，历史未同步不能当作成功空记录', async t => {
+  for (const [kind,expected] of [['unsupported','UNSUPPORTED'],['401','UNAUTHENTICATED'],['timeout','TIMEOUT']]) {
+    let calls = 0;
+    const h = historyFixture({ historyTimeoutMs:20,
+      auth: kind === 'unsupported' ? () => ({ error:{code:-32601,message:'SECRET'} }) : undefined,
+      fetch: async () => { calls++; if (kind === 'timeout') return new Promise(() => {}); return new Response('SECRET',{status:401}); } });
+    try {
+      await h.rpc.start(); await h.rpc.readAccount(); const quota = await h.rpc.readQuota(HISTORY_NOW);
+      assert.equal(quota.windows[0].remaining,85); assert.equal(quota.accountResetHistory.code,expected);
+      assert.notEqual(quota.accountResetHistory.state,'ready'); assert.equal(JSON.stringify(quota).includes('SECRET'),false);
+      assert.equal(calls,kind === 'unsupported' ? 0 : 1);
+    } finally { h.rpc.close(); }
+  }
+});
+
+test('历史分页重复cursor、10页和200事件上限保留partial且不无限请求', async t => {
+  for (const kind of ['repeat','pages','events']) {
+    let calls = 0;
+    const h = historyFixture({ fetch: async () => {
+      calls++;
+      return historyResponse({ events: kind === 'events' ? Array.from({length:201},(_,i) => historyEvent(`e-${i}`)) : [historyEvent(`e-${calls}`)],
+        next_cursor: kind === 'repeat' ? 'same' : `page-${calls}` });
+    } });
+    try {
+      await h.rpc.start(); await h.rpc.readAccount(); const history = (await h.rpc.readQuota(HISTORY_NOW)).accountResetHistory;
+      assert.equal(history.state,'partial'); assert.equal(calls,kind === 'repeat' ? 2 : kind === 'pages' ? 10 : 1);
+      assert.ok(history.events.length <= 200);
+    } finally { h.rpc.close(); }
+  }
+});
+
+test('历史第二页失败保留已读取部分，首次明确空结果才是ready零记录', async t => {
+  let calls = 0;
+  const h = historyFixture({ fetch: async () => ++calls === 1
+    ? historyResponse({events:[historyEvent('grant')],next_cursor:'next'}) : new Response('',{status:500}) });
+  t.after(() => h.rpc.close()); await h.rpc.start(); await h.rpc.readAccount();
+  const partial = (await h.rpc.readQuota(HISTORY_NOW)).accountResetHistory;
+  assert.equal(partial.state,'partial'); assert.equal(partial.events.length,1); assert.equal(partial.code,'DISCONNECTED');
+  const empty = historyFixture({fetch:async () => historyResponse({events:[],next_cursor:null})});
+  t.after(() => empty.rpc.close()); await empty.rpc.start(); await empty.rpc.readAccount();
+  assert.equal((await empty.rpc.readQuota(HISTORY_NOW)).accountResetHistory.state,'ready');
+});
+
+test('重定向、非固定backendOrigin和过大/畸形历史响应不发送跨域凭据或影响额度', async t => {
+  for (const kind of ['origin','redirect','oversize','invalid']) {
+    let calls = 0;
+    const h = historyFixture({ backendOrigin:kind === 'origin' ? 'https://other.example.test' : 'https://chatgpt.com', fetch:async () => {
+      calls++;
+      if (kind === 'redirect') { const response = historyResponse({events:[]}); Object.defineProperty(response,'redirected',{value:true}); return response; }
+      if (kind === 'oversize') return new Response('x',{headers:{'Content-Length':String(256*1024+1)}});
+      return historyResponse({token:'SECRET',events:'invalid'});
+    } });
+    try {
+      await h.rpc.start(); await h.rpc.readAccount(); const quota = await h.rpc.readQuota(HISTORY_NOW);
+      assert.equal(quota.windows[0].remaining,85); assert.notEqual(quota.accountResetHistory.state,'ready');
+      assert.equal(calls,kind === 'origin' ? 0 : 1); assert.equal(JSON.stringify(quota).includes('SECRET'),false);
+    } finally { h.rpc.close(); }
+  }
+});
+
+test('账户切换与close立即丢弃在途历史，工作区切换清除缓存且不串记录', async t => {
+  for (const closing of [false,true]) {
+    let account = 'account-a', entered, finish;
+    const started = new Promise(resolve => { entered = resolve; });
+    const h = historyFixture({ accountId:() => account, fetch:() => { entered(); return new Promise(resolve => { finish = resolve; }); } });
+    t.after(() => h.rpc.close()); await h.rpc.start(); const first = await h.rpc.readAccount();
+    const pending = h.rpc.readQuota(HISTORY_NOW); await started;
+    if (closing) h.rpc.close();
+    else { account = 'account-b'; assert.notEqual((await h.rpc.readAccount()).accountKey,first.accountKey); }
+    await assert.rejects(pending,{code:closing ? 'CLOSED' : 'DISCONNECTED'});
+    finish(historyResponse({events:[historyEvent('old-account')]}));
+  }
+});
+
+test('bearer中的账户与workspaceRouting不一致时不请求历史', async t => {
+  let calls = 0;
+  const claims = {'https://api.openai.com/auth':{chatgpt_account_id:'other-account'}};
+  const h = historyFixture({ auth:() => ({result:{authMethod:'chatgpt',authToken:`fixture.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.SECRET`}}),fetch:async () => {calls++;return historyResponse({events:[]});} });
+  t.after(() => h.rpc.close());await h.rpc.start();await h.rpc.readAccount();
+  const quota = await h.rpc.readQuota(HISTORY_NOW);
+  assert.equal(calls,0);assert.equal(quota.accountResetHistory.code,'UNAUTHENTICATED');assert.equal(quota.windows[0].remaining,85);
+});
+
+test('token profile email与account/read不匹配拒绝历史，额度保持可用', async t => {
+  let calls = 0;
+  const claims = {'https://api.openai.com/auth':{chatgpt_account_id:'account-a'},'https://api.openai.com/profile':{email:'other@example.test'}};
+  const h = historyFixture({auth:() => ({result:{authMethod:'chatgpt',authToken:`fixture.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.SECRET`}}),fetch:async () => {calls++;return historyResponse({events:[]});}});
+  t.after(() => h.rpc.close());await h.rpc.start();await h.rpc.readAccount();
+  const quota = await h.rpc.readQuota(HISTORY_NOW);
+  assert.equal(calls,0);assert.equal(quota.accountResetHistory.code,'UNAUTHENTICATED');assert.equal(quota.windows[0].remaining,85);
+});
+
+test('旧CLI无workspaceRouting/email claim时用前后account/read核身份，跨账户迟到事件不进入快照', async t => {
+  let email = 'person@example.test', switchAfterFetch = false, reads = 0, time = HISTORY_NOW;
+  const claims = {'https://api.openai.com/auth':{chatgpt_account_id:'account-a'}};
+  const h = setup({now:() => time,reply:packet => {
+    if (packet.method === 'account/read') {reads++;return {result:{account:{type:'chatgpt',email}}};}
+    if (packet.method === 'getAuthStatus') return {result:{authMethod:'chatgpt',authToken:`fixture.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.SECRET`}};
+    if (packet.method === 'account/rateLimits/read') return {result:{rateLimits:{primary:{usedPercent:15,windowDurationMins:300,resetsAt:2000000000}}}};
+    return {result:{}};
+  },fetch:async () => {if(switchAfterFetch)email='other@example.test';return historyResponse({events:[historyEvent('grant')]});}});
+  t.after(() => h.rpc.close());await h.rpc.start();await h.rpc.readAccount();
+  assert.equal((await h.rpc.readQuota(HISTORY_NOW)).accountResetHistory.events.length,1);assert.equal(reads,3);
+  switchAfterFetch = true;
+  time += 120000;
+  await assert.rejects(h.rpc.readQuota(time),{code:'DISCONNECTED'});
 });

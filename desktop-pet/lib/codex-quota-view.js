@@ -8,7 +8,7 @@ const MAX_TIME = 8640000000000000;
 const MAX_TEXT_LENGTH = 256;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/u;
 const DISPLAYED_QUOTA_FAMILIES = Object.freeze(['codex', 'gpt-reserve']);
-const { quotaCreditDetails, quotaResetDetails, isTaskId } = require('./codex-state');
+const { quotaCreditDetails, quotaResetDetails, accountResetHistoryDetails, isTaskId } = require('./codex-state');
 
 function normalizePeriod(period) {
   return PERIODS.has(period) ? period : 'auto';
@@ -243,7 +243,7 @@ function buildQuotaLabelModel(snapshot, options = {}, now = Date.now()) {
 
 function buildTrend(snapshot, window, now) {
   const unknown = { state: 'unknown', status: 'unknown', exhaustsAt: null, label: '',
-    summary: '暂无法预估', detail: '记录不足，稍后再看' };
+    summary: '暂无法预估额度用完时间', detail: '连续用量记录不足，稍后再查看' };
   const base = { period: window?.windowMinutes ?? null,
     windowMinutes: window?.windowMinutes ?? null, resetsAt: window?.resetsAt ?? null,
     resetLabel: window ? formatQuotaDate(window.resetsAt, window.windowMinutes, now) : '',
@@ -298,6 +298,10 @@ function buildCodexDetailsModel(snapshot, options = {}, now = Date.now()) {
   const period = selectedWindow?.windowMinutes ?? requestedMinutes ?? 300;
   const details = snapshot?.enabled === true ? quotaResetDetails(snapshot.quota) : {};
   const fresh = model.state === 'ready';
+  const accountResetHistory = accountResetHistoryDetails(snapshot?.enabled === true ? snapshot.quota?.accountResetHistory : null);
+  if (!fresh && ['ready', 'partial'].includes(accountResetHistory.state)) {
+    accountResetHistory.state = 'error'; accountResetHistory.code = 'DISCONNECTED';
+  }
   const rows = details.resetOpportunities ?? null;
   const resetHistory = [];
   const past = snapshot?.enabled === true && snapshot?.history?.available === true
@@ -322,7 +326,7 @@ function buildCodexDetailsModel(snapshot, options = {}, now = Date.now()) {
     resetDetailsState: rows === null ? 'unknown' : 'known',
     resetOpportunities: rows === null ? null : rows.filter(row => row.status !== 'redeemed'
       && !(typeof row.expiresAt === 'number' && row.expiresAt <= now)),
-    resetHistory, trend: buildTrend(snapshot, selectedWindow, now) };
+    resetHistory, accountResetHistory, trend: buildTrend(snapshot, selectedWindow, now) };
 }
 
 module.exports = {

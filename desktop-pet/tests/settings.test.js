@@ -69,6 +69,7 @@ test('损坏文件回退且有效设置可回读', t => {
     notesDefaultTab: 'note', notesAppearance: 'light',
     customization: DEFAULTS.customization,
     startupAppearance: DEFAULTS.startupAppearance,
+    appearancePresets: [],
     codexEnabled: false,
     codexTaskNameInAlerts: true,
     codexQuotaAlwaysVisible: true,
@@ -87,7 +88,8 @@ test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
   assert.deepEqual(normalizeSettings({ size: 'small', x: -102.3, y: 81.8, alwaysOnTop: false }), {
     size: 'small', x: -102, y: 82, alwaysOnTop: false,
     keepAwake: true, bubblesEnabled: true, colorMode: 'standard', chatModel: 'auto', notesDefaultTab: 'note', notesAppearance: 'light', customization: DEFAULTS.customization,
-    startupAppearance: DEFAULTS.startupAppearance, codexEnabled: false,
+    startupAppearance: DEFAULTS.startupAppearance,
+    appearancePresets: [], codexEnabled: false,
     codexTaskNameInAlerts: true, codexQuotaAlwaysVisible: true,
     codexShowExtraCredits: true,
     openaiApiAlwaysVisible: false,
@@ -287,4 +289,100 @@ test('旧便签外观字段保持兼容，保存不覆盖已有全局外观，�
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'qiu-notes-appearance-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const file=path.join(dir,'settings.json');
   for(const notesAppearance of ['system','light','dark']) {saveSettings(file,{notesAppearance,codexQuotaAppearance:'dark',notesDefaultTab:'note'});assert.equal(loadSettings(file).notesAppearance,notesAppearance);assert.equal(loadSettings(file).codexQuotaAppearance,'dark');assert.equal(loadSettings(file).notesDefaultTab,'note')}
   for(const notesAppearance of [undefined,null,'bad',1,{}])assert.equal(normalizeSettings({notesAppearance}).notesAppearance,'light');
+});
+
+
+test('形象收藏只保存ID、名称和规范外观，名称与数量有明确边界', () => {
+  const { normalizePresetName, normalizeAppearancePresets } = require('../lib/settings');
+  const id = index => '00000000-0000-4000-8000-' + String(index).padStart(12, '0');
+  assert.equal(normalizePresetName('  薄荷奶糖  '), '薄荷奶糖');
+  for (const name of ['', '   ', 'a'.repeat(25), 'a\nb', 'a\u0000b', null]) assert.equal(normalizePresetName(name), null);
+  const records = [
+    { id:id(1), name:' 薄荷 ', appearance:{shape:'square',bodyColor:'#123456',auroraTransparency:42}, extra:'drop' },
+    { id:id(2), name:'薄荷', appearance:{shape:'cloud'} },
+    { id:id(1), name:'重复ID', appearance:{shape:'blob'} },
+    { id:'path', name:'无效ID', appearance:{shape:'blob'} },
+    { id:id(3), name:'无外观', appearance:null }
+  ];
+  const result = normalizeAppearancePresets(records);
+  assert.equal(result.length,1);
+  assert.deepEqual(Object.keys(result[0]), ['id','name','appearance']);
+  assert.equal(result[0].name,'薄荷'); assert.equal(result[0].appearance.auroraTransparency,42);
+  assert.equal(normalizeAppearancePresets(Array.from({length:25},(_,index)=>({id:id(index+1),name:'形象'+index,appearance:{shape:'blob'}}))).length,20);
+});
+
+
+test('形象内容比较按规范化的可见字段，忽略隐藏内光且不修改输入', () => {
+  const { appearanceContentKey, normalizeAppearance, SHAPES } = require('../lib/customization');
+  const { findDuplicateAppearancePreset } = require('../lib/settings');
+  const id = '00000000-0000-4000-8000-000000000001';
+  const appearance = { shape:'square',bodyColor:'#abcdef',eyeColor:'#FEDCBA',
+    eyeScale:1.004,eyeSpacing:1.104,eyeHeight:2.4,auroraTransparency:20.4,
+    shapeTuning:{width:1.104,height:1,softness:0.5,asymmetry:0},idleEyes:'happy' };
+  const records = [{ id,name:'薄荷',appearance }];
+  const before = JSON.stringify(records);
+  const equivalent = { idleEyes:'happy',shapeTuning:{asymmetry:0,softness:0.5,height:1,width:1.1},
+    auroraTransparency:20,eyeHeight:2,eyeSpacing:1.1,eyeScale:1,
+    eyeColor:'#fedcba',bodyColor:'#ABCDEF',shape:'square',
+    glowPinkColor:'#111111',glowGoldColor:'#222222',auroraStyle:'simple',auroraContour:'six-lobe' };
+  assert.equal(findDuplicateAppearancePreset(records,equivalent)?.name,'薄荷');
+  assert.equal(JSON.stringify(records),before);
+  for (const value of [null,[],1]) assert.equal(findDuplicateAppearancePreset(records,value),null);
+  for (const shape of SHAPES.filter(value=>value!=='aurora-cloud')) {
+    const base = { ...appearance,shape };
+    assert.equal(appearanceContentKey(base),appearanceContentKey({
+      ...base,glowPinkColor:'#111111',glowGoldColor:'#222222',auroraStyle:'simple',auroraContour:'six-lobe'
+    }),shape+' 忽略不可见的幻彩字段');
+  }
+  const visibleChanges = [
+    {shape:'cloud'}, {bodyColor:'#123456'}, {eyeColor:'#123456'}, {eyeScale:0.8},
+    {eyeSpacing:0.9}, {eyeHeight:8}, {auroraTransparency:40}, {idleEyes:'sleepy'},
+    ...Object.entries({width:0.8,height:0.8,softness:0.2,asymmetry:0.5}).map(([key,value])=>({
+      shapeTuning:{...appearance.shapeTuning,[key]:value}
+    }))
+  ];
+  for (const change of visibleChanges) {
+    assert.notEqual(appearanceContentKey(appearance),appearanceContentKey({...appearance,...change}),JSON.stringify(change));
+  }
+  const simple = { shape:'aurora-cloud',auroraStyle:'simple',auroraContour:'six-lobe' };
+  assert.equal(appearanceContentKey(simple),appearanceContentKey({
+    ...simple,glowPinkColor:'#111111',glowGoldColor:'#222222'
+  }),'简色不使用两种内光');
+  assert.notEqual(appearanceContentKey(simple),appearanceContentKey({...simple,auroraStyle:'dimensional'}));
+  const dimensional = { ...simple,auroraStyle:'dimensional' };
+  for (const change of [{glowPinkColor:'#111111'},{glowGoldColor:'#222222'},{auroraTransparency:30},
+    {bodyColor:'#123456'},{eyeColor:'#123456'}]) {
+    assert.notEqual(appearanceContentKey(dimensional),appearanceContentKey({...dimensional,...change}));
+  }
+  const original = { ...dimensional,auroraContour:'original' };
+  assert.equal(appearanceContentKey(original)===appearanceContentKey(dimensional),
+    normalizeAppearance(original).auroraContour===normalizeAppearance(dimensional).auroraContour);
+});
+
+test('已有同内容不同名收藏在保存重启后保留，不进行自动合并', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(),'emotion-existing-presets-'));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const file = path.join(dir,'settings.json');
+  const records = [
+    {id:'00000000-0000-4000-8000-000000000001',name:'旧名称',appearance:{shape:'square',bodyColor:'#2A8B6F'}},
+    {id:'00000000-0000-4000-8000-000000000002',name:'旧副本',appearance:{shape:'square',bodyColor:'#2A8B6F'}}
+  ];
+  saveSettings(file,{appearancePresets:records});
+  assert.deepEqual(loadSettings(file).appearancePresets.map(({id,name})=>({id,name})),
+    records.map(({id,name})=>({id,name})));
+});
+
+test('命名形象原子保存与重启回读，独立于桌面及启动外观快照', t => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'emotion-appearance-presets-'));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const file=path.join(dir,'settings.json');
+  const { normalizeAppearance } = require('../lib/customization');
+  const appearance=normalizeAppearance({shape:'aurora-cloud',bodyColor:'#123456',eyeColor:'#FEDCBA',auroraStyle:'simple',auroraTransparency:42});
+  const settings=saveSettings(file,{customization:{appearance:{shape:'square'}},startupAppearance:{shape:'cloud'},
+    appearancePresets:[{id:'00000000-0000-4000-8000-000000000001',name:'幻彩薄荷',appearance}]});
+  assert.deepEqual(loadSettings(file),settings);
+  assert.deepEqual(loadSettings(file).appearancePresets[0].appearance,appearance);
+  assert.equal(loadSettings(file).customization.appearance.shape,'square');
+  assert.equal(loadSettings(file).startupAppearance.shape,'cloud');
+  assert.equal(fs.existsSync(file+'.tmp'),false);
 });

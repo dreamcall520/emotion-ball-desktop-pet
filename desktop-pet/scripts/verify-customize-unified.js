@@ -260,12 +260,22 @@ async function verifyCustomizeUnified({ pet, editor, chatWindow, open, getWindow
   };
   const reopen = async () => { if (win && !win.isDestroyed()) win.close(); await poll(() => getWindow(), value => !value, '关闭释放定制窗口'); open(); await ready(); };
   const setField = async (id, value) => page(`(() => { const node=document.getElementById(${JSON.stringify(id)}); node.value=${JSON.stringify(String(value))}; node.dispatchEvent(new Event('input',{bubbles:true})); })()`);
+  const previewReady = async () => poll(() => page(`(() => {
+    const target=document.querySelector('#preview-ball'),selected=document.querySelector('#shape-options [aria-pressed="true"]');
+    const rendered=target.dataset.renderedAppearance?JSON.parse(target.dataset.renderedAppearance):null;
+    return Boolean(rendered&&selected&&rendered.shape===selected.dataset.shape&&
+      (rendered.shape!=='aurora-cloud'||rendered.auroraContour===selected.dataset.auroraContour)&&
+      rendered.bodyColor===document.querySelector('#body-hex').value.toUpperCase()&&
+      rendered.eyeColor===document.querySelector('#eye-hex').value.toUpperCase()&&
+      target.querySelector(':scope > svg .eb-head')&&
+      (rendered.shape!=='aurora-cloud'||target.querySelector('.eb-rive-aurora.ready')));
+  })()`),Boolean,'当前形态和配色完成真实预览绘制');
   const shapeSelector = shape => shape === 'aurora-cloud'
     ? '#shape-options [data-shape="aurora-cloud"][data-aurora-contour="six-lobe"]' : `#shape-options [data-shape="${shape}"]`;
   const chooseShape = async shape => {
     await page("document.querySelector('.controls').scrollTop=0"); await pointerClick(win, shapeSelector(shape));
     await poll(() => page(`document.querySelector(${JSON.stringify(shapeSelector(shape))}).getAttribute('aria-pressed')`), value => value === 'true', `切换 ${shape}`);
-    await wait(100);
+    await previewReady();
   };
   const capture = async name => { const file = path.join(output, `${name}.png`); await capturePaintedWindow({ win, artifactPath: file }); screenshots.push(file); };
   const verifyPicker = async appearance => {
@@ -473,7 +483,7 @@ async function verifyCustomizeUnified({ pet, editor, chatWindow, open, getWindow
     for (const shape of ['blob', 'cloud', 'square', 'aurora-cloud']) {
       const savedBefore = JSON.stringify(getSettings().customization), avatarBefore = await avatarState();
       await chooseShape(shape);
-      if (shape === 'cloud') { await setField('body-hex', '#3C5E72'); await setField('eye-hex', '#F8EACD'); await wait(120); }
+      if (shape === 'cloud') { await setField('body-hex', '#3C5E72'); await setField('eye-hex', '#F8EACD'); await previewReady(); }
       const appearance = await page("({bodyColor:document.querySelector('#body-hex').value,eyeColor:document.querySelector('#eye-hex').value,bodyStops:[...document.querySelectorAll('#preview-ball defs > radialGradient:first-child > stop')].map(node=>node.getAttribute('stop-color'))})");
       if (shape !== 'aurora-cloud') assert.equal(appearance.bodyStops.length, 3, '真实预览身体渐变完整');
       chatWindow.show({ messages: [] });
@@ -554,6 +564,162 @@ async function verifyCustomizeUnified({ pet, editor, chatWindow, open, getWindow
     assert.equal(await page("document.querySelector('#startup-default').checked"), true, '重开识别启动外观');
     assert.equal(await page("document.querySelector('#body-hex').value"), '#C7DBD4');
     checks.push('startup save + tuning persisted and reloads');
+    const beforePresets = JSON.parse(JSON.stringify(getSettings()));
+    const presetName = '海盐幻彩验收' + process.pid, renamed = '海盐幻彩收藏' + process.pid;
+    const presetCount = () => getSettings().appearancePresets.length;
+    const baselineCount = presetCount();
+    const scrollClick = async selector => {
+      await page("document.querySelector(" + JSON.stringify(selector) + ").scrollIntoView({block:'center'})");
+      await page('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+      await pointerClick(win, selector);
+    };
+    await chooseShape('aurora-cloud');
+    await setField('body-hex', '#D9E5F2'); await setField('eye-hex', '#FFFFFF');
+    await setField('aurora-transparency', 18);
+    const desktopBeforePreset = JSON.stringify(getSettings().customization);
+    const startupBeforePreset = JSON.stringify(getSettings().startupAppearance);
+    chatWindow.show({ messages: [] });
+    const chatBeforePreset = await avatarState();
+    await scrollClick('#preset-add'); await setField('preset-name', presetName);
+    if (setSaveFailure) {
+      setSaveFailure(true); await scrollClick('#preset-submit');
+      await poll(() => page("!document.querySelector('#preset-submit').disabled && document.querySelector('#preset-error').textContent.length>0"), Boolean, '收藏保存失败有说明且可重试');
+      assert.equal(presetCount(), baselineCount);
+      assert.equal(await page("document.querySelector('#body-hex').value"), '#D9E5F2', '收藏失败保留配色草稿');
+      assert.equal(await page("document.querySelector('#preset-name').value"), presetName, '收藏失败保留名称');
+      setSaveFailure(false);
+    }
+    await scrollClick('#preset-submit');
+    const preset = await poll(() => getSettings().appearancePresets.find(row => row.name === presetName), Boolean, '命名收藏实际保存');
+    assert.equal(presetCount(), baselineCount + 1);
+    assert.equal(preset.appearance.bodyColor, '#D9E5F2'); assert.equal(preset.appearance.auroraTransparency, 18);
+    assert.equal(preset.appearance.auroraContour, 'six-lobe');
+    assert.deepEqual(readSettings().appearancePresets.find(row => row.id === preset.id), preset, '收藏回读真实原子保存文件');
+    assert.equal(JSON.stringify(getSettings().customization), desktopBeforePreset, '新增收藏不应用桌面草稿');
+    assert.equal(JSON.stringify(getSettings().startupAppearance), startupBeforePreset, '新增收藏不改变启动外观');
+    assert.deepEqual(await avatarState(), chatBeforePreset, '新增收藏不改变聊天头像');
+    await scrollClick('#preset-add'); await setField('preset-name', presetName); await scrollClick('#preset-submit');
+    await poll(() => page("document.querySelector('#preset-error').textContent.length>0"), Boolean, '同名不能静默覆盖');
+    assert.equal(presetCount(), baselineCount + 1);
+    const contentDuplicateBefore=JSON.stringify(getSettings());
+    await setField('preset-name',presetName+'另名');await scrollClick('#preset-submit');
+    await poll(()=>page("document.querySelector('#preset-error').textContent"),value=>value.includes('无需重复保存')&&value.includes(presetName),'同内容换名称仍提示原收藏名称');
+    assert.equal(JSON.stringify(getSettings()),contentDuplicateBefore,'重复内容不能新增记录或更改外观');
+    assert.equal(await page("document.querySelector('#preset-name').value"),presetName+'另名','重复拒绝保留输入草稿');
+    await scrollClick('#preset-cancel');
+    await reopen(); win.setContentSize(760, 580);
+    const action = name => '#preset-list .preset-row[data-preset-id="' + preset.id + '"] [data-action="' + name + '"]';
+    await scrollClick(action('load'));
+    assert.equal(await page("document.querySelector('#body-hex').value"), '#D9E5F2', '重开后载入收藏的完整配色');
+    assert.equal(await page("document.querySelector('#aurora-transparency').value"), '18');
+    assert.equal(await page("document.querySelector('#startup-default').checked"), false, '载入重新判断启动外观');
+    assert.equal(JSON.stringify(getSettings().customization), desktopBeforePreset, '载入只修改预览');
+    assert.deepEqual(await avatarState(), chatBeforePreset, '载入只修改预览，不改聊天');
+    await scrollClick(action('rename')); await setField('preset-name', renamed); await scrollClick('#preset-submit');
+    await poll(() => getSettings().appearancePresets.find(row => row.id === preset.id)?.name, value => value === renamed, '收藏改名持久化');
+    assert.equal(presetCount(), baselineCount + 1);
+    assert.deepEqual(getSettings().appearancePresets.find(row => row.id === preset.id).appearance, preset.appearance, '改名保留完整外观');
+    for (const appearance of ['light','dark']) {
+      win.webContents.send('pet:color-mode', 'standard', appearance);
+      await poll(() => page('document.documentElement.dataset.theme'), value => value === appearance, '收藏主题跟随');
+      await scrollClick(action('rename'));
+      const r = await page("({form:document.querySelector('#preset-form').getBoundingClientRect().toJSON(),controls:document.querySelector('.controls').getBoundingClientRect().toJSON(),footer:document.querySelector('.studio-footer').getBoundingClientRect().toJSON(),overflow:document.documentElement.scrollWidth>innerWidth})");
+      assert.ok(r.form.left >= r.controls.left - 1 && r.form.right <= r.controls.right + 1 && r.form.bottom <= r.footer.top + 1, '最小窗口收藏命名区保持可见');
+      assert.equal(r.overflow, false); await capture('customize-760-presets-' + appearance);
+      await scrollClick('#preset-cancel');
+    }
+    await pointerClick(win, '#save');
+    await poll(() => getSettings().customization.appearance.bodyColor, value => value === '#D9E5F2', '收藏经保存外观后才应用');
+    await scrollClick(action('delete')); await scrollClick('#preset-delete-submit');
+    await poll(presetCount, value => value === baselineCount, '删除收藏持久化');
+    assert.equal(getSettings().customization.appearance.bodyColor, '#D9E5F2', '删除收藏保留当前已应用快照');
+    assert.equal(JSON.stringify(getSettings().startupAppearance), startupBeforePreset, '删除收藏保留启动快照');
+    assert.equal(readSettings().appearancePresets.some(row => row.id === preset.id), false);
+    checks.push('named presets persist/reopen/load-only-preview/rename/delete/current-snapshot + duplicate/failure + minimum light/dark');
+    const thumbnailFixtures = [
+      { shape:'blob', bodyColor:'#2A8B6F', eyeColor:'#F4E8C8', auroraTransparency:30, eyeScale:.8, eyeSpacing:1.2, eyeHeight:6,
+        shapeTuning:{width:1.12,height:.96,softness:.72,asymmetry:.1} },
+      { shape:'square', bodyColor:'#D9E5F2', eyeColor:'#1A3444', auroraTransparency:42 },
+      { shape:'aurora-cloud', auroraContour:'six-lobe', bodyColor:'#5B3BC7', eyeColor:'#FFFFFF', auroraTransparency:18 },
+      { shape:'cloud', bodyColor:'#5B3BC7', eyeColor:'#FFFFFF', auroraTransparency:24 },
+      { shape:'blob', bodyColor:'#8B72D8', eyeColor:'#FFFFFF', auroraTransparency:18 }
+    ].map((appearance,index) => ({id:crypto.randomUUID(),name:'缩略图验收'+index,appearance}));
+    restore({ ...beforePresets, appearancePresets:thumbnailFixtures }); await reopen(); win.setContentSize(760,580);
+    const verifyThumbnail = async (row, appearance) => {
+      const selector = '#preset-list .preset-row[data-preset-id="' + row.id + '"] .preset-thumbnail';
+      await scrollClick('#preset-list .preset-row[data-preset-id="' + row.id + '"] [data-action="load"]');
+      await page('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+      const state = await poll(() => page(`(() => {
+        const host=document.querySelector(${JSON.stringify(selector)}),svg=host.querySelector(':scope > svg'),canvas=host.querySelector('.eb-rive-aurora.ready');
+        return { ...host.dataset,rect:host.getBoundingClientRect().toJSON(),svgVisible:svg&&getComputedStyle(svg).visibility!=='hidden',
+          opacity:canvas?canvas.style.opacity:svg?.style.opacity,contour:canvas?.dataset.auroraContour,outlineReady:canvas?.dataset.auroraOutlineReady,
+          bodyStops:[...host.querySelectorAll('defs > radialGradient:first-child > stop')].map(node=>node.getAttribute('stop-color')),
+          eyeFills:[...host.querySelectorAll('.eb-eye')].map(node=>node.getAttribute('fill')?.toUpperCase()) };
+      })()`), value => value.avatarReady==='true', '收藏缩略图真实渲染就绪 '+row.name);
+      assert.deepEqual(JSON.parse(state.avatarAppearance),row.appearance,'缩略图使用已保存的完整外观');
+      assert.equal(state.avatarActive,'false','收藏缩略图停止持续动效');
+      assert.equal(state.avatarEngine,row.appearance.shape==='aurora-cloud'?'rive':'emotion-ball');
+      assert.ok(Math.abs(Number(state.opacity)-(1-row.appearance.auroraTransparency/100))<.001,'缩略图真实透明度');
+      if(row.appearance.shape==='aurora-cloud') {
+        assert.equal(state.svgVisible,false,'幻彩缩略图必须为真实Rive，不能显示备用形态');
+        assert.equal(state.contour,row.appearance.auroraContour,'缩略图真实幻彩轮廓');
+        if(state.contour==='six-lobe')assert.equal(state.outlineReady,'true','六瓣素材确实已载入');
+      } else {
+        const previewStops=await page("[...document.querySelectorAll('#preview-ball defs > radialGradient:first-child > stop')].map(node=>node.getAttribute('stop-color'))");
+        assert.deepEqual(state.bodyStops,previewStops,'收藏与真实预览的完整球体配色一致');
+        assert.ok(state.eyeFills.length>0&&state.eyeFills.every(fill=>fill===row.appearance.eyeColor),'收藏眼睛使用保存的配色');
+      }
+      await wait(120);
+      const image=require('electron').nativeImage.createFromBuffer(await capturePaintedWindow({win}));
+      const viewport=await page('({width:innerWidth,height:innerHeight})'),size=image.getSize(),r=state.rect;
+      const x=Math.floor(r.left*size.width/viewport.width),y=Math.floor(r.top*size.height/viewport.height);
+      const crop=image.crop({x,y,width:Math.ceil(r.right*size.width/viewport.width)-x,height:Math.ceil(r.bottom*size.height/viewport.height)-y});
+      const pixels=crop.toBitmap(),corner=Array.from(pixels.subarray(0,3));
+      let varied=0;for(let at=0;at<pixels.length;at+=4)if(pixels[at+3]>128&&corner.some((channel,index)=>Math.abs(pixels[at+index]-channel)>35))varied++;
+      assert.ok(!crop.isEmpty()&&varied>20,'原生合成缩略图有实际球体和眼睛，不能只留元数据或空背景');
+      const file=path.join(output,'preset-thumbnail-'+appearance+'-'+row.name+'-'+row.appearance.shape+'-'+row.appearance.auroraContour+'.png');
+      fs.writeFileSync(file,crop.toPNG());screenshots.push(file);
+      return state;
+    };
+    const normalizedThumbnailFixtures=getSettings().appearancePresets;
+    for(const appearance of ['light','dark']) {
+      win.webContents.send('pet:color-mode','standard',appearance);
+      await poll(()=>page('document.documentElement.dataset.theme'),value=>value===appearance,'收藏列表浅深主题');
+      await page("document.querySelector('.controls').scrollTop=0;document.querySelector('#preset-list').scrollTop=0");
+      await page("document.querySelector('#preset-section').scrollIntoView({block:'start'})");
+      await page('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+      const library=await page(`(() => {
+        const list=document.querySelector('#preset-list'),r=list.getBoundingClientRect();
+        return {rect:r.toJSON(),client:list.clientHeight,total:list.scrollHeight,overflow:getComputedStyle(list).overflowY,
+          fullyVisible:[...list.children].filter(row=>{const s=row.getBoundingClientRect();return s.top>=r.top-1&&s.bottom<=r.bottom+1;}).length,
+          add:document.querySelector('#preset-add').getBoundingClientRect().toJSON(),addColor:getComputedStyle(document.querySelector('#preset-add')).color,titleColor:getComputedStyle(document.querySelector('#preset-title')).color};
+      })()`);
+      assert.equal(library.overflow,'auto');assert.ok(library.total>library.client,'第5项仅在列表内部滚动');
+      assert.ok(library.rect.height<=231&&library.fullyVisible<=4,'收藏库最多四项高度');
+      assert.ok(library.add.height>=30&&library.addColor!==library.titleColor,'收藏保存以轻量teal文字明确强调');
+      for(const row of normalizedThumbnailFixtures)await verifyThumbnail(row,appearance);
+      assert.ok(await page("document.querySelector('#preset-list').scrollTop>0"),'第五项真实滚入列表');
+      const outerScroll=await page("document.querySelector('.controls').scrollTop");
+      await page("document.querySelector('#preset-list').scrollTop=0");
+      await page('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+      assert.equal(await page("document.querySelector('.controls').scrollTop"),outerScroll,'内部滚动不改变整个右侧的位置');
+      const offscreen='#preset-list .preset-row[data-preset-id="'+normalizedThumbnailFixtures[4].id+'"] .preset-thumbnail';
+      await poll(()=>page(`document.querySelector(${JSON.stringify(offscreen)}).childElementCount`),value=>value===0,'离屏第五项释放真实渲染资源');
+      const firstAction='#preset-list .preset-row[data-preset-id="'+normalizedThumbnailFixtures[0].id+'"] [data-action="delete"]';
+      await scrollClick(firstAction);
+      const warning=await page(`(() => {const box=document.querySelector('#preset-delete-confirm'),button=document.querySelector('#preset-delete-submit');return {
+        parent:box.parentElement.dataset.presetId,rect:box.getBoundingClientRect().toJSON(),label:document.querySelector('#preset-delete-label').textContent,
+        button:button.getBoundingClientRect().toJSON(),background:getComputedStyle(button).backgroundColor,color:getComputedStyle(button).color,cancelColor:getComputedStyle(document.querySelector('#preset-delete-cancel')).color,
+        footer:document.querySelector('.studio-footer').getBoundingClientRect().toJSON(),overflow:document.documentElement.scrollWidth>innerWidth};})()`);
+      assert.equal(warning.parent,normalizedThumbnailFixtures[0].id,'删除确认关联当前行');
+      assert.ok(warning.label.includes(normalizedThumbnailFixtures[0].name));assert.ok(warning.button.height>=28);
+      assert.notEqual(warning.color,warning.cancelColor,'轻危险色删除动作与取消明确区分');
+      assert.ok(warning.rect.bottom<=warning.footer.top+1&&!warning.overflow,'最小窗口删除确认可见且不溢出');
+      await capture('customize-760-presets-delete-'+appearance);await scrollClick('#preset-delete-cancel');
+      assert.equal(getSettings().appearancePresets.length,5,'取消删除不修改收藏');
+    }
+    checks.push('saved appearance thumbnails via real engines/static active=false/fifth row/resource release + four-row scroll + visible delete confirmation light/dark');
+    chatWindow.hide(); restore(beforePresets); await reopen();
     if (setSize) {
       setSize('large'); await reopen(); win.setContentSize(760, 580);
       await pointerClick(win, '#preview-desktop');
