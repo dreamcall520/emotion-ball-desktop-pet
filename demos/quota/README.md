@@ -23,7 +23,7 @@ frame.contentWindow.postMessage({type:'qiuqiu-demo-motion',paused:true},location
 运行检查（使用既有 Playwright，无安装步骤）：
 
 ```bash
-NODE_PATH=/Users/allan/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules QIUQIU_SITE_URL=http://127.0.0.1:4185/ node demos/quota/check.browser.cjs
+NODE_PATH=/path/to/existing/node_modules QIUQIU_SITE_URL=http://127.0.0.1:4185/ node demos/quota/check.browser.cjs
 ```
 
 同一检查覆盖额度和聊天。结果与16张外观/尺寸截图写入 `/tmp/qiuqiu-live-app-demos/`，不写入用户资料或账户。
