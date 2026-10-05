@@ -700,8 +700,9 @@ test('相同token但动作不匹配的结束帧不清当前动作；stop不往�
   assert.equal(renderer.host.stops, stops);
 });
 
-test('菜单仍可睡眠，双击睡着的球球只唤醒', () => {
+test('保持清醒开启时菜单仍可手动睡眠，双击睡着的球球只唤醒', () => {
   const renderer = createRenderer();
+  renderer.settings({ keepAwake: true });
   renderer.command('sleep');
   renderer.advanceTo(100);
   assert.equal(renderer.pet.dataset.mode, 'manual-sleep');

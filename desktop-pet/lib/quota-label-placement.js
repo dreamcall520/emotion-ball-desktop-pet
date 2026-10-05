@@ -1,10 +1,11 @@
 const LABEL_SIZES = Object.freeze({
   standard: Object.freeze({ width: 168, height: 58 }),
-  standardExpanded: Object.freeze({ width: 196, height: 96 }),
-  standardExpandedDual: Object.freeze({ width: 196, height: 128 }),
+  standardExpanded: Object.freeze({ width: 196, height: 131 }),
+  standardExpandedDual: Object.freeze({ width: 196, height: 144 }),
   compact: Object.freeze({ width: 128, height: 32 }),
-  compactExpanded: Object.freeze({ width: 196, height: 96 }),
-  compactExpandedDual: Object.freeze({ width: 196, height: 128 })
+  apiExpanded: Object.freeze({ width: 196, height: 92 }),
+  compactExpanded: Object.freeze({ width: 196, height: 131 }),
+  compactExpandedDual: Object.freeze({ width: 196, height: 144 })
 });
 const GAP = 8;
 const { petVisualBounds } = require('./pet-visual-bounds');
@@ -71,10 +72,6 @@ function bounded(candidate, size, area) {
 }
 
 function quotaLabelSize(value, expanded = false, itemCount = 1, extraCredits = false) {
-  if (expanded === true && extraCredits === true) {
-    const size = quotaLabelSize(value, expanded, itemCount);
-    return { width: size.width, height: size.height + 20 };
-  }
   if (expanded === true && itemCount > 1 && value === 'standard') return LABEL_SIZES.standardExpandedDual;
   if (expanded === true && itemCount > 1 && value === 'compact') return LABEL_SIZES.compactExpandedDual;
   if (expanded === true && value === 'standard') return LABEL_SIZES.standardExpanded;

@@ -4,20 +4,20 @@ const { quotaLabelBounds, quotaLabelSize } = require('../lib/quota-label-placeme
 
 const AREA = Object.freeze({ x: 0, y: 0, width: 1440, height: 900 });
 
-test('Pro 点数行只在展开时增加二十像素，折叠和 Plus 尺寸保持原样', () => {
+test('余额复用辅助行，显示与隐藏均保持同一展开高度，折叠尺寸保持原样', () => {
   assert.deepEqual(quotaLabelSize('compact', false, 1, true), { width: 128, height: 32 });
   for (const size of ['compact', 'standard']) {
-    assert.deepEqual(quotaLabelSize(size, true, 1, true), { width: 196, height: 116 });
-    assert.deepEqual(quotaLabelSize(size, true, 2, true), { width: 196, height: 148 });
-    assert.deepEqual(quotaLabelSize(size, true, 1), { width: 196, height: 96 });
-    assert.deepEqual(quotaLabelSize(size, true, 2), { width: 196, height: 128 });
+    assert.deepEqual(quotaLabelSize(size, true, 1, true), { width: 196, height: 131 });
+    assert.deepEqual(quotaLabelSize(size, true, 2, true), { width: 196, height: 144 });
+    assert.deepEqual(quotaLabelSize(size, true, 1), { width: 196, height: 131 });
+    assert.deepEqual(quotaLabelSize(size, true, 2), { width: 196, height: 144 });
   }
   const pet = { x: 1408, y: 878, width: 80, height: 80 };
   const area = { x: 0, y: 32, width: 1512, height: 950 };
   const bubble = { x: 1280, y: 784, width: 224, height: 86 };
   const bounds = quotaLabelBounds(pet, area, bubble, 'compact', true, 1, null, true);
   assertInside(bounds, area);
-  assert.equal(bounds.height, 116);
+  assert.equal(bounds.height, 131);
   assert.equal(bounds.x < pet.x + pet.width && bounds.x + bounds.width > pet.x &&
     bounds.y < pet.y + pet.height && bounds.y + bounds.height > pet.y, false);
 });
@@ -46,27 +46,27 @@ test('标准档使用原小巧版 168×58，优先放在球球下方八像素且
   });
 });
 
-test('小巧档折叠为 128×32，点击展开为 196×96 液态玻璃明细', () => {
+test('小巧档折叠为 128×32，点击展开为 196×131 液态玻璃明细', () => {
   const pet = Object.freeze({ x: 600, y: 400, width: 80, height: 80 });
   const area = Object.freeze({ ...AREA });
   assert.deepEqual(quotaLabelBounds(pet, area, null, 'compact'), {
     x: 576, y: 488, width: 128, height: 32, placement: 'below'
   });
   assert.deepEqual(quotaLabelBounds(pet, area, null, 'compact', true), {
-    x: 542, y: 488, width: 196, height: 96, placement: 'below'
+    x: 542, y: 488, width: 196, height: 131, placement: 'below'
   });
   assert.deepEqual(quotaLabelBounds(pet, area, null, 'unknown'), {
     x: 556, y: 488, width: 168, height: 58, placement: 'below'
   });
 });
 
-test('双周期展开宽度不变并增高为 196×128，靠近屏幕边缘仍完整收口', () => {
+test('双周期展开宽度不变并增高为 196×144，靠近屏幕边缘仍完整收口', () => {
   const pet = Object.freeze({ x: 600, y: 400, width: 80, height: 80 });
   assert.deepEqual(quotaLabelBounds(pet, AREA, null, 'compact', true, 2), {
-    x: 542, y: 488, width: 196, height: 128, placement: 'below'
+    x: 542, y: 488, width: 196, height: 144, placement: 'below'
   });
   assert.deepEqual(quotaLabelBounds(pet, AREA, null, 'standard', true, 2), {
-    x: 542, y: 488, width: 196, height: 128, placement: 'below'
+    x: 542, y: 488, width: 196, height: 144, placement: 'below'
   });
   for (const area of [AREA, { x: -1920, y: -180, width: 1920, height: 1080 }]) {
     const edgePet = { x: area.x, y: area.y + area.height - 80, width: 80, height: 80 };
@@ -74,10 +74,10 @@ test('双周期展开宽度不变并增高为 196×128，靠近屏幕边缘仍�
   }
 });
 
-test('标准档点击后也展开为 196×96 液态玻璃明细', () => {
+test('标准档点击后也展开为 196×131 液态玻璃明细', () => {
   const pet = Object.freeze({ x: 600, y: 400, width: 80, height: 80 });
   assert.deepEqual(quotaLabelBounds(pet, AREA, null, 'standard', true), {
-    x: 542, y: 488, width: 196, height: 96, placement: 'below'
+    x: 542, y: 488, width: 196, height: 131, placement: 'below'
   });
 });
 
@@ -189,7 +189,7 @@ test('右下角双周期展开遇到可见气泡时仍不得与球球相交', ()
     left.y + left.height > right.y;
 
   assertInside(result, area);
-  assert.deepEqual(result, { x: 1076, y: 854, width: 196, height: 128, placement: 'left' });
+  assert.deepEqual(result, { x: 1076, y: 838, width: 196, height: 144, placement: 'left' });
   assert.equal(intersects(result, pet), false, '额度卡片不能因边界收敛而压到球球');
   assert.equal(intersects(result, bubble), false, '额度卡片仍须避开可见气泡');
 });

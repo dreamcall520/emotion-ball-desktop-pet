@@ -110,7 +110,7 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
     const reminder = mode === 'reminder', note = mode === 'note';
     const win = new BrowserWindow({ ...bounds, minWidth: note ? 240 : 360, minHeight: note || reminder ? 160 : 420,
       ...(note ? { maxWidth: 1400, maxHeight: 1200 } : {}),
-      frame: false, title: reminder ? '待办提醒' : note ? '球球便签' : '便签与待办',
+      frame: false, hasShadow: note || reminder, title: reminder ? '待办提醒' : note ? '球球便签' : '便签与待办',
       backgroundColor: appearance() === 'dark' ? '#182125' : '#F7FAF9', show: false, resizable: !reminder, maximizable: false,
       fullscreenable: false, skipTaskbar: note || reminder, alwaysOnTop: reminder,
       webPreferences: { preload: path.join(__dirname, '..', 'notes-preload.js'), contextIsolation: true,

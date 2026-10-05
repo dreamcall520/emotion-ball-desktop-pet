@@ -4,13 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
-  <title>和球球聊聊</title>
+  <title>聊一会儿</title>
   <link rel="stylesheet" href="chat.css">
   <link rel="stylesheet" href="aurora-rive.css">
   <link rel="stylesheet" href="color-mode.css">
   <script defer src="color-mode.js"></script>
   <script defer src="../emotion-ball/js/rings.js"></script>
   <script defer src="../emotion-ball/js/custom-shapes.js"></script>
+  <script defer src="../emotion-ball/js/emotions.js"></script>
+  <script defer src="../emotion-ball/js/ball.js"></script>
+  <script defer src="../emotion-ball/js/engine.js"></script>
   <script defer src="lib/customization.js"></script>
   <script defer src="lib/chat-avatar.js"></script>
   <script defer src="lib/rive.js"></script>
@@ -19,15 +22,15 @@
   <script defer src="chat-renderer.js"></script>
 </head>
 <body>
-  <main class="chat-panel" aria-label="和球球聊聊">
+  <main class="chat-panel" aria-label="聊一会儿">
     <header class="chat-header">
       <span id="chat-avatar" class="pet-mark" aria-hidden="true"></span>
       <div class="heading">
-        <h1>和球球聊聊</h1>
-        <p id="connection-status" role="status">想说什么，我在听</p>
+        <h1>聊一会儿</h1>
+        <p id="connection-status" class="sr-only" role="status" aria-live="polite"></p>
       </div>
       <div class="header-actions">
-        <button id="new-chat" class="header-action new-chat-action" type="button" aria-controls="new-chat-confirmation" aria-haspopup="dialog" title="新聊天" hidden>
+        <button id="new-chat" class="header-action new-chat-action" type="button" aria-label="新聊天" aria-controls="new-chat-confirmation" aria-haspopup="dialog" title="当前已是新聊天，直接发送第一句话即可。" disabled>
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2.7a7.3 7.3 0 0 0-7.3 7.3c0 1.5.45 2.85 1.25 3.97L3.2 17l3.13-1.02A7.3 7.3 0 1 0 10 2.7Z"/><path d="M10 7v6M7 10h6"/></svg>
           <span>新聊天</span>
         </button>
@@ -83,15 +86,15 @@
 
     <form id="composer" class="composer">
       <label class="sr-only" for="message-input">给球球的消息</label>
-      <textarea id="message-input" rows="2" maxlength="2000" placeholder="和球球说句话…" aria-describedby="input-hint" title="Shift + Enter 换行" spellcheck="false"></textarea>
+      <textarea id="message-input" rows="1" maxlength="2000" placeholder="和球球说句话…" aria-describedby="input-hint" title="Shift + Enter 换行" spellcheck="false"></textarea>
       <div class="composer-tools">
         <span id="input-hint" class="sr-only">Shift + Enter 换行</span>
         <div id="model-bar" class="model-choice">
           <button id="chat-model" type="button" value="auto" aria-label="聊天模型" aria-haspopup="menu" aria-controls="model-menu" aria-expanded="false" aria-describedby="model-hint" disabled>自动选择</button>
         </div>
         <span id="character-count" hidden>0 / 2000</span>
-        <button id="stop-message" class="stop-button" type="button" hidden><span aria-hidden="true">■</span> 停止</button>
-        <button id="send-message" class="send-button" type="submit" disabled>发送 <span aria-hidden="true">↑</span></button>
+        <button id="stop-message" class="stop-button" type="button" hidden><span class="stop-mark" aria-hidden="true"></span><span id="stop-message-label" class="button-label">停止</span></button>
+        <button id="send-message" class="send-button" type="submit" disabled><span class="button-label">发送</span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 16V4m-4 4 4-4 4 4"/></svg></button>
       </div>
       <div id="model-menu" class="model-menu" role="menu" aria-label="选择聊天模型" hidden></div>
       <div id="model-feedback" class="sr-only">
@@ -99,7 +102,7 @@
         <button id="refresh-models" class="text-button" type="button" hidden>重试</button>
       </div>
     </form>
-    <p id="privacy-note" class="privacy-note">使用 Codex 额度 · 延续同一段聊天</p>
+    <p id="privacy-note" class="privacy-note sr-only">使用 Codex 额度 · 延续同一段聊天</p>
   </main>
 </body>
 </html>

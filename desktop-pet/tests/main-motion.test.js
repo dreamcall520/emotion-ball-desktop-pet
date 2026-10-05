@@ -12,7 +12,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   codexQuotaAlwaysVisible = false, codexQuotaPeriod = 'auto', codexQuotaLabelSize = 'standard',
   codexQuotaAppearance = 'system', codexShowExtraCredits = true, bubblesEnabled = true, colorMode = 'standard',
   consent = async () => ({ response: 1 }), openExternal = async () => {}, saveError = null,
-  loadedSettings = null, notesDefaultTab = 'todo', notesAppearance = 'light', argv = [], updateFetch = async currentVersion => ({ currentVersion,
+  loadedSettings = null, notesDefaultTab = 'note', notesAppearance = 'light', argv = [], updateFetch = async currentVersion => ({ currentVersion,
     latestVersion: '0.3.26', hasUpdate: true,
     url: 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.26' }) } = {}) {
   let now = 0;
@@ -55,6 +55,9 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     }
     setAlwaysOnTop() {} setVisibleOnAllWorkspaces() {} setHiddenInMissionControl() {} moveTop() {}
     getBounds() { return { ...this.bounds }; }
+    getSize() { return [this.bounds.width, this.bounds.height]; }
+    getContentSize() { return this.getSize(); }
+    setMinimumSize(width, height) { this.minimumSize = [width, height]; }
     getPosition() { return [this.bounds.x, this.bounds.y]; }
     isDestroyed() { return this.destroyed; } isVisible() { return this.visible; }
     setPosition(x, y, animate) { assert.equal(animate, false); Object.assign(this.bounds, { x, y }); this.emit('move'); }
@@ -107,7 +110,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     start() { this.starts++; }, stop() { this.stops++; }, pause() { this.pauses++; }, resume() { this.resumes++; } };
   let chatNativeWindow = null;
   const chatWindow = { options: null, creations: 0, shows: [], updates: [], hides: 0, destroys: 0, moves: 0,
-    syncAppearance() {},
+    appearances: 0, syncAppearance() { this.appearances++; },
     show(state) {
       if (!chatNativeWindow || chatNativeWindow.destroyed) {
         chatNativeWindow = Object.assign(createNativeBubbleWindow(), { webContents: new EventEmitter() });
@@ -177,9 +180,9 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
         return controller;
       } };
       if (name === './lib/bubble-window') return { createBubbleWindow: () => bubble };
-      if (name === './lib/quota-label-window') return { createQuotaLabelWindow: () => quotaLabel };
+      if (name === './lib/quota-label-window') return { createQuotaLabelWindow: options => { quotaLabel.options = options; return quotaLabel; } };
       if (name === './lib/app-update') return { checkLatestRelease: version => { updateChecks.push(version); return updateFetch(version); } };
-      if (name === './lib/api-usage-label-window') return { createApiUsageLabelWindow: () => apiLabel };
+      if (name === './lib/api-usage-label-window') return { createApiUsageLabelWindow: options => { apiLabel.options = options; return apiLabel; } };
       if (name === './lib/api-usage') return { createApiUsage: options => { apiUsage.options = options; return apiUsage; } };
       if (name === './lib/edge-notice-window') return { createEdgeNoticeWindow: () => edgeNoticeWindow };
       if (name === './lib/chat-window') return { createChatWindow: options => { chatWindow.options = options; return chatWindow; } };
@@ -225,11 +228,28 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
 
 const TASK_ID = '11111111-1111-4111-8111-111111111111';
 
+test('所有 Codex 详情打开与关闭均触发额度卡避让和恢复，不依赖置顶层级', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  assert.equal(f.quotaLabel.options.getSuppressed(), false);
+  for (const action of ['tasks', 'results', 'trend', 'opportunities', 'credits']) {
+    const before = f.quotaLabel.moves;
+    assert.equal(f.call(`openCodexDetails('${action}', 10080)`), true);
+    assert.equal(f.quotaLabel.options.getSuppressed(), true);
+    assert.equal(f.quotaLabel.moves, before + 1, `${action} 请求打开时立即避让`);
+    f.call('syncQuotaLabel(codexCompanion.getSnapshot())');
+    assert.equal(f.quotaLabel.options.getSuppressed(), true, '额度刷新不取消避让');
+    f.call('codexDetails.close()');
+    assert.equal(f.quotaLabel.options.getSuppressed(), false);
+    assert.equal(f.quotaLabel.moves, before + 2, `${action} 关闭时即时恢复`);
+  }
+  f.app.emit('before-quit');
+});
+
 test('便签待办入口、独立存储、锁屏暂停与成功完成反馈接入主进程', async () => {
   const f = await fixture({ argv: ['--notes-preview'] });
   assert.equal(f.notes.options.filePath, '/fixture/notes-todos.json');
   assert.deepEqual(f.notes.options.getPetBounds(), f.pet.getBounds());
-  assert.equal(f.notes.options.getDefaultTab(), 'todo');
+  assert.equal(f.notes.options.getDefaultTab(), 'note');
   assert.equal(f.notes.opens.length, 1, '候选预览参数自动打开主面板');
   menuItem(f, 'notes-open').click();
   menuItem(f, 'notes-new').click();
@@ -345,17 +365,17 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   const menu = f.call('menuTemplate()');
   const top = menu.filter(item => item.type !== 'separator');
   assert.deepEqual(Array.from(top, item => item.label), [
-    '和球球聊聊', '来定制球球', '便签与待办', '球球与互动', 'Codex 联动',
-    '贴边与显示', '尺寸', '界面配色', '常规设置', '关于球球', '检查更新', '退出球球'
+    '和球球聊聊', '来定制球球', '便签与待办', '球球与互动', 'Codex 与 API',
+    '贴边与显示', '球球尺寸', '界面配色', '常规设置', '关于球球', '检查更新', '退出球球'
   ]);
   const group = label => top.find(item => item.label === label).submenu.filter(item => item.type !== 'separator');
   assert.equal(top.find(item => item.id === 'chat-open').submenu, undefined);
   assert.equal(top[1].id, 'customize-open');
   assert.equal(top[1].submenu, undefined);
-  assert.deepEqual(Array.from(group('便签与待办'), item => item.id), ['notes-open', 'notes-new', 'notes-todo-new', 'notes-default-tab', 'notes-appearance']);
-  assert.deepEqual(Array.from(group('便签与待办'), item => item.label), ['打开主面板', '新建便签', '添加待办', '默认打开', '外观']);
+  assert.deepEqual(Array.from(group('便签与待办'), item => item.id), ['notes-open', 'notes-new', 'notes-todo-new', 'notes-default-tab']);
+  assert.deepEqual(Array.from(group('便签与待办'), item => item.label), ['打开主面板', '新建便签', '添加待办', '默认打开']);
   assert.deepEqual(Array.from(menuItem(f, 'notes-default-tab').submenu, item => [item.id, item.label, item.type, item.checked]),
-    [['notes-default-note', '便签', 'radio', false], ['notes-default-todo', '待办', 'radio', true]]);
+    [['notes-default-note', '便签', 'radio', true], ['notes-default-todo', '待办', 'radio', false]]);
   assert.deepEqual(Array.from(group('球球与互动'), item => item.label),
     ['随机表情', '立即睡眠', '立即唤醒', '保持清醒', '互动气泡']);
   group('球球与互动')[0].click();
@@ -364,7 +384,7 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
     ['edge-left', 'edge-right', 'edge-leave', 'edge-visibility']);
   assert.deepEqual(Array.from(group('常规设置'), item => item.label),
     ['始终置顶', '开机自动启动（打包后可用）', '恢复默认位置', '自动提醒新版本']);
-  assert.equal(top.find(item => item.label === '尺寸').submenu.length, 6);
+  assert.equal(top.find(item => item.label === '球球尺寸').submenu.length, 6);
   assert.equal(top.find(item => item.label === '界面配色').id, 'color-mode');
   assert.equal(menu[0].id, 'chat-open');
   assert.equal(menu.at(-2).id, 'update-check');
@@ -372,7 +392,7 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
 });
 
 test('便签待办默认页保存后下次打开生效，失败恢复当前和重建菜单的单选', async () => {
-  const f = await fixture(), opens = f.notes.opens.length;
+  const f = await fixture({ notesDefaultTab: 'todo' }), opens = f.notes.opens.length;
   const note = menuItem(f, 'notes-default-note'); note.checked = true; note.click(note);
   assert.equal(f.saved.at(-1).notesDefaultTab, 'note');
   assert.equal(f.notes.options.getDefaultTab(), 'note');
@@ -393,14 +413,19 @@ test('便签待办默认页保存后下次打开生效，失败恢复当前和�
   assert.equal(failed.saved.length, 0);
 });
 
-test('便签外观独立保存并同步各窗口，跟随系统更新且保存失败回滚', async () => {
-  const f = await fixture(), opens = f.notes.opens.length;
-  const dark = menuItem(f, 'notes-appearance-dark'); dark.checked = true; dark.click(dark);
-  assert.equal(f.saved.at(-1).notesAppearance, 'dark');
+test('便签外观跟随全局已保存选择，旧偏好不覆盖全局，系统更新和失败回滚均保持一致', async () => {
+  const f = await fixture({ codexQuotaAppearance: 'light', notesAppearance: 'dark' }), opens = f.notes.opens.length;
+  assert.equal(f.notes.options.getAppearance(), 'light', '旧页面偏好不能覆盖明确全局选择');
+  assert.equal(f.nativeTheme.themeSource, 'light');
+  const dark = menuItem(f, 'color-appearance-dark'); dark.checked = true; dark.click(dark);
+  assert.equal(f.saved.at(-1).codexQuotaAppearance, 'dark');
+  assert.equal(f.saved.at(-1).notesAppearance, 'dark', '旧字段兼容保留');
+  assert.equal(f.nativeTheme.themeSource, 'dark');
   assert.equal(f.notes.options.getAppearance(), 'dark');
   assert.equal(f.notes.appearances, 1); assert.equal(f.notes.opens.length, opens);
   const restarted = await fixture({ loadedSettings: f.saved.at(-1) });
   assert.equal(restarted.notes.options.getAppearance(), 'dark');
+  assert.equal(restarted.nativeTheme.themeSource, 'dark');
   f.call("setNotesAppearance('system')"); f.nativeTheme.shouldUseDarkColors = true;
   f.nativeTheme.emit('updated'); assert.equal(f.notes.options.getAppearance(), 'dark');
   f.nativeTheme.shouldUseDarkColors = false; f.nativeTheme.emit('updated');
@@ -409,11 +434,12 @@ test('便签外观独立保存并同步各窗口，跟随系统更新且保存�
   f.nativeTheme.emit('updated'); assert.equal(f.notes.appearances, syncs + 1);
   const saves = f.saved.length; assert.equal(f.call("setNotesAppearance('invalid')"), false);
   assert.equal(f.saved.length, saves);
-  const failed = await fixture({ notesAppearance: 'dark', saveError: Error('NOTES_THEME_WRITE_FAILURE') });
-  failed.call('writeError = () => {}'); const light = menuItem(failed, 'notes-appearance-light');
+  const failed = await fixture({ codexQuotaAppearance: 'dark', notesAppearance: 'light', saveError: Error('NOTES_THEME_WRITE_FAILURE') });
+  failed.call('writeError = () => {}'); const light = menuItem(failed, 'color-appearance-light');
   light.checked = true; light.click(light);
   assert.equal(failed.notes.options.getAppearance(), 'dark'); assert.equal(failed.notes.appearances, 0);
-  assert.equal(findMenuItem(failed.trayMenus.at(-1), 'notes-appearance-dark').checked, true);
+  assert.equal(failed.nativeTheme.themeSource, 'dark', '失败不改变应用外观');
+  assert.equal(findMenuItem(failed.trayMenus.at(-1), 'color-appearance-dark').checked, true);
   assert.equal(failed.saved.length, 0);
 });
 
@@ -738,10 +764,15 @@ test('更新手动检查可复用一分钟报告，同一新版只自动提醒�
   await f.call('checkForUpdates()');
   assert.equal(about.messages.length, count);
   f.call('setAutoUpdateCheck(false)');
+  assert.equal(f.saved.at(-1).autoUpdateCheck, false);
   await f.call('checkForUpdates()');
   assert.equal(about.messages.length, count);
   await f.call('checkForUpdates(true)');
   assert.equal(about.messages.length, count + 2);
+  const restarted = await fixture({ loadedSettings: f.saved.at(-1) });
+  assert.equal(menuItem(restarted, 'update-auto').checked, false, '重启保留用户关闭自动提醒');
+  await restarted.call('checkForUpdates()');
+  assert.equal(restarted.updateChecks.length, 0);
 });
 
 test('正式安装版延迟检测与六小时轮询，关闭取消定时；迟到检测不在锁屏或退出后弹窗', async () => {
@@ -886,12 +917,18 @@ test('API 常驻独立于套餐，失败刷新有间隔，隐藏与关闭清理'
   const f = await fixture();
   assert.equal(f.apiLabel.visible, false);
   assert.equal(f.apiUsage.refreshes, 0);
-  const item = f.call('codexMenu().submenu.find(item => item.id === "openai-api-visible")');
+  const item = menuItem(f, 'openai-api-visible');
   assert.notEqual(item.enabled, false);
   item.click({ checked: true });
   assert.equal(f.apiLabel.visible, true);
   assert.equal(f.quotaLabel.visible, false);
   assert.equal(f.saved.at(-1).openaiApiAlwaysVisible, true);
+  const labelShows = f.apiLabel.shows.length;
+  assert.equal(f.call("setInterfaceAppearance('dark')"), true);
+  assert.equal(f.apiLabel.options.getAppearance(), 'dark');
+  assert.ok(f.apiLabel.shows.length > labelShows, '全局切换立即同步独立 API 卡片');
+  assert.equal(f.saved.at(-1).openaiApiAlwaysVisible, true);
+  assert.equal(f.connections.length, 0);
   const failed = { connected: true, busy: false, report: null, error: '未更新', config: {} };
   f.apiUsage.change(failed);
   assert.equal(f.apiUsage.refreshes, 1);
@@ -923,14 +960,23 @@ test('所有 Codex 设置只保留一个顶层入口并完整归入子菜单', a
   const menu = f.call('menuTemplate()');
   const group = menu.find(item => item.id === 'codex-menu');
   assert.ok(group);
-  assert.equal(group.label, 'Codex 联动');
+  assert.equal(group.label, 'Codex 与 API');
   assert.equal(JSON.stringify(menu.filter(item => String(item.id || '').startsWith('codex-')).map(item => item.id)),
     JSON.stringify(['codex-menu']));
   assert.equal(JSON.stringify(group.submenu.filter(item => item.id).map(item => item.id)), JSON.stringify([
-    'codex-enabled', 'codex-task-names', 'codex-quota-visible', 'codex-extra-credits', 'codex-quota-period',
-    'codex-quota-label-size', 'codex-quota-appearance', 'openai-api-usage', 'openai-api-visible', 'codex-status'
+    'codex-enabled', 'codex-task-names', 'codex-quota-visible', 'codex-quota-settings', 'openai-api-menu', 'codex-status'
   ]));
   assert.equal(group.submenu.find(item => item.id === 'codex-enabled').label, '启用 Codex 联动');
+  assert.equal(group.submenu[1].type, 'separator', '总开关与依赖设置分隔');
+  assert.equal(menuItem(f, 'codex-task-names').label, '任务完成提醒显示名称');
+  assert.equal(menuItem(f, 'codex-quota-visible').label, '显示 Codex 额度卡');
+  assert.deepEqual(Array.from(menuItem(f, 'codex-quota-settings').submenu, item => item.id),
+    ['codex-extra-credits', 'codex-quota-period', 'codex-quota-label-size']);
+  assert.deepEqual(Array.from(menuItem(f, 'openai-api-menu').submenu, item => item.id),
+    ['openai-api-usage', 'openai-api-visible']);
+  assert.equal(menuItem(f, 'openai-api-visible').label, '显示 API 本月费用卡');
+  assert.equal(findMenuItem(menu, 'codex-quota-appearance'), null);
+  assert.equal(findMenuItem(menu, 'notes-appearance'), null);
 });
 
 test('原生 smoke 的受控闭包可精确恢复尺寸与空坐标设置且不移动窗口', async () => {
@@ -1004,6 +1050,15 @@ test('Codex 额度菜单只在总联动开启时可操作，周期为互斥单�
   assert.equal(findMenuItem(offMenu, 'codex-quota-period').enabled, false);
   assert.equal(off.call("setCodexPreference('codexQuotaAlwaysVisible', true)"), false);
   assert.equal(off.saved.length, 0);
+  for (const id of ['codex-task-names', 'codex-quota-visible', 'codex-quota-settings', 'codex-extra-credits', 'codex-quota-period', 'codex-quota-label-size']) {
+    assert.equal(menuItem(off, id).enabled, false, id + '依赖总联动');
+  }
+  for (const id of ['openai-api-menu', 'openai-api-usage', 'openai-api-visible']) {
+    assert.notEqual(menuItem(off, id).enabled, false, id + '独立于Codex');
+  }
+  assert.equal(off.call("setCodexTaskNameInAlerts(true)"), false);
+  assert.equal(off.call("setCodexPreference('codexShowExtraCredits', false)"), false);
+  assert.equal(off.saved.length, 0, 'disabled菜单调用仍受主进程保护');
 
   const f = await fixture({ codexEnabled: true, codexQuotaPeriod: 'weekly' });
   const menu = f.call('menuTemplate()');
@@ -1039,24 +1094,35 @@ test('额度卡片大小为标准和小巧两档，只在保存成功后切换',
   assert.equal(menuItem(failed, 'codex-quota-label-size').submenu.find(item => item.checked).id, 'codex-quota-label-standard');
 });
 
-test('额度卡片外观为跟随系统、浅色和深色三档，只在保存成功后切换', async () => {
+test('全局外观不依赖Codex或色弱模式，旧额度调用兼容且失败不改变全局或常驻卡', async () => {
   const off = await fixture();
-  assert.equal(menuItem(off, 'codex-quota-appearance').enabled, false);
-
-  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
-  const menu = menuItem(f, 'codex-quota-appearance');
-  assert.equal(menu.label, '额度卡片外观');
-  assert.equal(menu.submenu.find(item => item.checked).id, 'codex-quota-appearance-system');
-  assert.equal(f.call("setCodexPreference('codexQuotaAppearance', 'dark')"), true);
-  assert.equal(f.saved.at(-1).codexQuotaAppearance, 'dark');
-  assert.equal(menuItem(f, 'codex-quota-appearance').submenu.find(item => item.checked).id,
-    'codex-quota-appearance-dark');
-  assert.ok(f.quotaLabel.shows.length > 0, '外观切换后应立即刷新常驻卡片');
-
+  assert.notEqual(menuItem(off, 'color-appearance').enabled, false);
+  assert.equal(findMenuItem(off.call('menuTemplate()'), 'codex-quota-appearance'), null);
+  assert.equal(off.call("setCodexPreference('codexQuotaAppearance', 'light')"), true);
+  assert.equal(off.nativeTheme.themeSource, 'light'); assert.equal(off.connections.length, 0);
+  for (const mode of ['standard', 'accessible']) {
+    const f = await fixture({ colorMode: mode, codexEnabled: true, codexQuotaAlwaysVisible: true });
+    const menu = menuItem(f, 'color-appearance');
+    assert.equal(menu.label, '外观（所有窗口）');
+    assert.equal(menu.submenu.find(item => item.checked).id, 'color-appearance-system');
+    assert.equal(f.call("setCodexPreference('codexQuotaAppearance', 'dark')"), true);
+    assert.equal(f.saved.at(-1).codexQuotaAppearance, 'dark');
+    assert.equal(f.saved.at(-1).colorMode, mode);
+    assert.equal(menuItem(f, 'color-appearance').submenu.find(item => item.checked).id, 'color-appearance-dark');
+    assert.ok(f.quotaLabel.shows.length > 0, '外观切换应立即刷新常驻卡片');
+    assert.equal(f.pet.colorAppearance, 'dark'); assert.equal(f.notes.options.getAppearance(), 'dark');
+    const late = new f.windowClass({ x: 0, y: 0, width: 100, height: 100 });
+    late.webContents.emit('did-finish-load'); assert.equal(late.colorAppearance, 'dark');
+    assert.equal(f.call("setInterfaceAppearance('dark')"), false, '相同值不重复保存');
+    const saves = f.saved.length;
+    assert.equal(f.call("setInterfaceAppearance('bad')"), false); assert.equal(f.saved.length, saves);
+  }
   const failed = await fixture({ codexEnabled: true, saveError: new Error('APPEARANCE_WRITE_FAILURE') });
+  failed.call('writeError = () => {}');
+  const shows = failed.quotaLabel.shows.length;
   assert.equal(failed.call("setCodexPreference('codexQuotaAppearance', 'light')"), false);
-  assert.equal(menuItem(failed, 'codex-quota-appearance').submenu.find(item => item.checked).id,
-    'codex-quota-appearance-system');
+  assert.equal(menuItem(failed, 'color-appearance').submenu.find(item => item.checked).id, 'color-appearance-system');
+  assert.equal(failed.nativeTheme.themeSource, 'system'); assert.equal(failed.quotaLabel.shows.length, shows);
 });
 
 test('额外点数默认开启，Pro/Plus 均可显示，缺失不加行，切换刷新且保存失败回滚', async () => {
@@ -1464,6 +1530,54 @@ test('确认后才启用，已保存开启的重启不重复确认，关闭只�
   restarted.app.emit('before-quit');
   assert.equal(restarted.connections[0].closed, true);
   assert.equal(restarted.timers.size, 0);
+});
+
+test('用户开启Codex后名称提醒与额度卡一起启用；手动关闭后重启保留，关闭总开关保留子偏好', async () => {
+  const f = await fixture({ consent: async () => ({ response: 0 }), codexTaskNameInAlerts: false, codexQuotaAlwaysVisible: false });
+  assert.equal(menuItem(f, 'codex-task-names').checked, false, '启动保留已有明确关闭');
+  assert.equal(menuItem(f, 'codex-quota-visible').checked, false);
+  const saves = f.saved.length;
+  assert.equal(await f.call('setCodexEnabled(true)'), true);
+  assert.equal(f.saved.length, saves + 1, '三个开关一次原子保存');
+  for (const key of ['codexEnabled', 'codexTaskNameInAlerts', 'codexQuotaAlwaysVisible']) assert.equal(f.saved.at(-1)[key], true);
+  assert.equal(f.connections.length, 1);
+  assert.deepEqual(f.preferences.at(-1), { taskNameInAlerts: true, quotaAlwaysVisible: true, quotaPeriod: 'auto' });
+  assert.equal(menuItem(f, 'codex-task-names').checked, true); assert.equal(menuItem(f, 'codex-quota-visible').checked, true);
+  assert.equal(f.quotaLabel.visible, true, '开启后常驻卡随真实状态同步');
+  assert.equal(f.call('setCodexTaskNameInAlerts(false)'), true);
+  assert.equal(f.call("setCodexPreference('codexQuotaAlwaysVisible', false)"), true);
+  const manualOff = f.saved.at(-1), count = f.saved.length;
+  assert.equal(await f.call('setCodexEnabled(true)'), false, '已开启不重复重设子项');
+  assert.equal(f.saved.length, count);
+  const restarted = await fixture({ loadedSettings: manualOff });
+  assert.equal(restarted.dialogs.length, 0); assert.equal(restarted.connections.length, 1);
+  assert.equal(menuItem(restarted, 'codex-task-names').checked, false);
+  assert.equal(menuItem(restarted, 'codex-quota-visible').checked, false);
+  assert.equal(restarted.quotaLabel.visible, false);
+  await f.call('setCodexEnabled(false)');
+  assert.equal(f.saved.at(-1).codexTaskNameInAlerts, false); assert.equal(f.saved.at(-1).codexQuotaAlwaysVisible, false);
+  assert.equal(await f.call('setCodexEnabled(true)'), true, '用户再次开启时启用默认的两个功能');
+  assert.equal(f.saved.at(-1).codexTaskNameInAlerts, true); assert.equal(f.saved.at(-1).codexQuotaAlwaysVisible, true);
+  await f.call('setCodexEnabled(false)');
+  assert.equal(f.saved.at(-1).codexEnabled, false);
+  assert.equal(f.saved.at(-1).codexTaskNameInAlerts, true); assert.equal(f.saved.at(-1).codexQuotaAlwaysVisible, true);
+});
+
+test('开启Codex的原子保存失败回滚三个开关，不广播未保存偏好、不创建连接', async () => {
+  for (const names of [false, true]) for (const quota of [false, true]) {
+    const f = await fixture({ codexTaskNameInAlerts: names, codexQuotaAlwaysVisible: quota,
+      consent: async () => ({ response: 0 }), saveError: new Error('ENABLE_DEFAULT_WRITE_FAILURE') });
+    const prefs = f.preferences.length, shows = f.quotaLabel.shows.length;
+    assert.equal(await f.call('setCodexEnabled(true)'), false);
+    assert.equal(menuItem(f, 'codex-enabled').checked, false);
+    assert.equal(menuItem(f, 'codex-task-names').checked, names);
+    assert.equal(menuItem(f, 'codex-quota-visible').checked, quota);
+    assert.equal(f.call('settings.codexEnabled'), false);
+    assert.equal(f.call('settings.codexTaskNameInAlerts'), names); assert.equal(f.call('settings.codexQuotaAlwaysVisible'), quota);
+    assert.equal(f.saved.length, 0); assert.equal(f.preferences.length, prefs);
+    assert.equal(f.connections.length, 0); assert.equal(f.quotaLabel.shows.length, shows);
+    assert.equal(f.call('codexCompanion.getSnapshot().enabled'), false);
+  }
 });
 
 test('关闭时写设置失败也立即清理连接与定时器，并在关闭态显示未保存警示', async () => {
@@ -2273,7 +2387,7 @@ test('保存配色失败时保留原有选择，不向窗口广播未保存的�
 });
 
 
-test('色弱友好外观在Codex关闭时也能切换并保存，原额度外观入口与之同步', async () => {
+test('色弱友好与标准配色使用同一全局外观，Codex关闭时也能保存，旧额度调用同步', async () => {
   const f=await fixture({colorMode:'accessible',codexQuotaAppearance:'dark'});
   findMenuItem(f.call('menuTemplate()'),'color-appearance-light').click();
   assert.equal(f.saved.at(-1).codexQuotaAppearance,'light');assert.equal(f.saved.at(-1).colorMode,'accessible');

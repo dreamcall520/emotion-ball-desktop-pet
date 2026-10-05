@@ -1,5 +1,6 @@
 const { createCodexConnection, CONNECTION_STATES, ERROR_CODES } = require('./codex-connection');
-const { isTaskId, quotaCreditDetails } = require('./codex-state');
+const { isTaskId, quotaCreditDetails, quotaResetDetails } = require('./codex-state');
+const { createQuotaHistory } = require('./codex-quota-history');
 const { completionText, COMPLETION_VARIANT_COUNT } = require('./codex-text');
 const { selectPrimaryQuotaWindows } = require('./codex-quota-view');
 const { createQuotaAlertTracker, mergeQuotaAlerts } = require('./codex-quota-alerts');
@@ -22,7 +23,7 @@ const timestamp = value => Number.isFinite(value) && value >= 0 && value <= 8640
 // Creating the policy owns no resources. Transports and timers exist only while enabled.
 function createCodexCompanion({ createConnection = createCodexConnection, onChange = () => {},
   onAlert = () => {}, onAlertUpdate = () => {}, onClear = () => {}, canPresent = () => true, ignoreTask = () => false,
-  ignoreThread = () => false,
+  ignoreThread = () => false, history,
   now = Date.now, random = Math.random, schedule = setTimeout, cancel = clearTimeout } = {}) {
   let enabled = false;
   let closed = false;
@@ -32,6 +33,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
   let accountKey;
   let lastManualAt = -Infinity;
   let quota = { windows: [], updatedAt: null };
+  const quotaHistory = history || createQuotaHistory({ now });
   const tasks = new Map();
   const timers = new Map();
   const quotaTracker = createQuotaAlertTracker();
@@ -58,10 +60,10 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
       quota: { state: channels.quota.state, code: channels.quota.code,
         windows: quota.windows.map(window => ({ ...window })), updatedAt: quota.updatedAt, stale: quotaStale(),
         ...quotaCreditDetails(quota),
-        ...(Number.isSafeInteger(quota.resetCreditsAvailable) && quota.resetCreditsAvailable >= 0
-          ? { resetCreditsAvailable: quota.resetCreditsAvailable } : {}) },
+        ...quotaResetDetails(quota) },
       tasks: { state: channels.tasks.state, code: channels.tasks.code, partial: true,
         items: [...tasks.values()].map(task => ({ ...task })) },
+      history: quotaHistory.getState(),
       currentAlert: eventValid(currentAlert) ? publicAlert(currentAlert) : null
     };
   }
@@ -407,6 +409,10 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
       resumableTurns.set(task.id, { turnId: previous.turnId, interrupted: true });
     } else if (terminal) resumableTurns.delete(task.id);
     if (!previous || (baseline && !resumedTerminal) || !task.turnId) return;
+    const newTerminal = terminal
+      && (((['active', 'waiting'].includes(previous.state) || followsIdle) && sameTurn) || resumedTerminal) && !alreadySeen;
+    if (newTerminal) quotaHistory.record({ enabled: true,
+      tasks: { results: [{ ...task, updatedAt: task.updatedAt ?? now() }] } });
     if (task.state === 'active' && !['active', 'unknown'].includes(previous.state)) enqueue('active', { id: task.id, turnId: task.turnId });
     else if (task.state === 'waiting' && previous.state === 'active' && sameTurn) enqueue('waiting', { id: task.id, turnId: task.turnId });
     else if (['completed', 'failed'].includes(task.state)
@@ -480,13 +486,11 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     // A successful quota payload is connection evidence even when the transport
     // deduplicates its unchanged "connected" status after an account switch.
     channels.quota.state = 'connected'; channels.quota.code = null; channels.quota.failures = 0;
-    const resetCreditsAvailable = value?.resetCreditsAvailable;
     const nextQuota = {
       updatedAt: timestamp(value?.updatedAt),
       windows: [],
       ...quotaCreditDetails(value),
-      ...(Number.isSafeInteger(resetCreditsAvailable) && resetCreditsAvailable >= 0
-        ? { resetCreditsAvailable } : {})
+      ...quotaResetDetails(value)
     };
     quota = nextQuota;
     for (const window of Array.isArray(value?.windows) ? value.windows.slice(0, 64) : []) {
@@ -503,6 +507,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     const currentRequest = () => enabled && !closed && generation === quotaGeneration
       && connectionEpoch === quotaEpoch && connection === quotaConnection && quota === nextQuota;
     if (!currentRequest()) return;
+    quotaHistory.record(getSnapshot());
     armChannel('quota'); armStale(); quotaAlerts();
     if (currentRequest()) notify();
   }
@@ -539,9 +544,10 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
   }
   function receiveAccount(value) {
     const next = typeof value?.accountKey === 'string' ? value.accountKey.slice(0, 128) : null;
-    if (accountKey === undefined) { accountKey = next; return; }
+    if (accountKey === undefined) { accountKey = next; quotaHistory.setAccount(next); return; }
     if (next === accountKey) return;
     accountKey = next;
+    quotaHistory.setAccount(next);
     generation++;
     const accountGeneration = generation;
     const accountEpoch = connectionEpoch;
@@ -580,6 +586,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
   function finishDisable() {
     stopConnection(); resetChannels('disabled');
     accountKey = undefined; quota = { windows: [], updatedAt: null }; tasks.clear(); lastManualAt = -Infinity;
+    quotaHistory.setAccount(null);
     clearAlerts({ dedupe: true, cooldown: true });
     onClear(); notify();
   }
@@ -609,11 +616,18 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
   function close() {
     if (closed) return;
     closed = true;
-    if (!enabled) return;
+    if (!enabled) { quotaHistory.close(); return; }
     enabled = false; generation++;
     finishDisable();
+    quotaHistory.close();
   }
-  return { setEnabled, setPreferences, refresh, getSnapshot, dismiss, close };
+  function markRead(id, turnId) {
+    if (!enabled || closed) return false;
+    const changed = quotaHistory.markRead(id, turnId);
+    if (changed) notify();
+    return changed;
+  }
+  return { setEnabled, setPreferences, refresh, getSnapshot, dismiss, markRead, close };
 }
 
 module.exports = { createCodexCompanion };

@@ -8,23 +8,28 @@ const outputDirectory = process.env.PET_CHAT_SMOKE_OUT || path.resolve(__dirname
 
 if (!process.versions.electron) {
   const { spawn } = require('node:child_process');
-  const electronBinary = process.env.PET_CHAT_SMOKE_ELECTRON || require('electron');
+  // The packaged path must run the candidate executable through its existing
+  // isolated main hook, not load local source in an unrelated Electron app.
+  const packaged = Boolean(process.env.PET_SMOKE_APP_PATH);
+  const electronBinary = packaged ? process.execPath : process.env.PET_CHAT_SMOKE_ELECTRON || require('electron');
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'qiuqiu-chat-ui-smoke-'));
-  const child = spawn(electronBinary, [`--user-data-dir=${userData}`, __filename], {
+  const child = spawn(electronBinary, packaged ? [path.join(__dirname, 'smoke-electron.js')] : [`--user-data-dir=${userData}`, __filename], {
     cwd: path.resolve(__dirname, '../..'),
-    env: { ...process.env, PET_CHAT_SMOKE_USER_DATA: userData },
+    env: { ...process.env, PET_CHAT_SMOKE_OUT: outputDirectory,
+      ...(packaged ? { PET_SMOKE_CHAT_ONLY: '1' } : { PET_CHAT_SMOKE_USER_DATA: userData }) },
     stdio: ['ignore', 'pipe', 'pipe']
   });
   let output = '';
   const capture = chunk => { output += chunk.toString(); process.stdout.write(chunk); };
   child.stdout.on('data', capture);
   child.stderr.on('data', capture);
-  const timer = setTimeout(() => child.kill('SIGTERM'), 30000);
+  const timer = setTimeout(() => child.kill('SIGTERM'), packaged ? 245000 : 60000);
   child.once('error', error => { console.error(error); process.exitCode = 1; });
   child.once('close', code => {
     clearTimeout(timer);
     fs.rmSync(userData, { recursive: true, force: true });
-    process.exitCode = code === 0 && output.includes('PET_CHAT_UI_SMOKE_OK') ? 0 : 1;
+    process.exitCode = code === 0 && output.includes('PET_CHAT_UI_SMOKE_OK') &&
+      (!packaged || output.includes('PET_CHAT_INTEGRATION_OK')) && !/Uncaught|ERR_FILE_NOT_FOUND|did-fail-load/i.test(output) ? 0 : 1;
   });
 } else {
   const { app, BrowserWindow, ipcMain, nativeTheme, screen } = require('electron');
@@ -33,6 +38,7 @@ if (!process.versions.electron) {
   process.on('uncaughtException', fatal);
   process.on('unhandledRejection', fatal);
   const { createChatWindow } = require('../lib/chat-window');
+  const { readChatSurface, assertChatSurface, pointerClick } = require('./verify-chat-integration');
   if (!process.env.PET_CHAT_SMOKE_USER_DATA) throw new Error('请通过 node 运行本脚本，以隔离用户数据。');
   app.setPath('userData', process.env.PET_CHAT_SMOKE_USER_DATA);
   app.setActivationPolicy('accessory');
@@ -54,7 +60,7 @@ if (!process.versions.electron) {
     let state = { messages: [], history: [], activeChatId: 'empty-draft', canStartNewChat: false, busy: false, connection: 'idle', error: null, hasConversation: false,
       modelSelection: 'auto', models, modelsStatus: 'ready', modelsError: null, activeModel: null };
     const calls = { send: 0, stop: 0, newChat: 0, selectChat: 0, close: 0, setModel: 0, refreshModels: 0 };
-    let rejectSelection = false, rejectModel = false;
+    let rejectSelection = false, rejectModel = false, rejectSend = false;
     const history = [
       { id: 'chat-a', title: '今天忙了一整天，想跟你歇一会儿。', updatedAt: '2026-09-22T12:00:00.000Z', current: true },
       { id: 'chat-b', title: '陪我想想周末怎么过', updatedAt: '2026-09-21T10:30:00.000Z', current: false },
@@ -100,6 +106,7 @@ if (!process.versions.electron) {
       ipcMain.handle('pet:chat-send', (event, text) => {
         allow(event);
         calls.send += 1;
+        if (rejectSend) return { accepted: false, error: '消息没有发出，请稍后再试。' };
         update({ ...state, messages: [{ id: 'user-1', role: 'user', text, status: 'complete' }, { id: 'answer-1', role: 'assistant', text: '', status: 'streaming' }], history, activeChatId: 'chat-a', canStartNewChat: true, busy: true, connection: 'ready', error: null, hasConversation: true,
           activeModel: { model: 'gpt-6-luna', displayName: 'GPT-6 Luna', automatic: true, reason: 'simple' } });
         return { accepted: true };
@@ -147,11 +154,12 @@ if (!process.versions.electron) {
       await waitFor("Boolean(window.qiuqiuChat && !document.getElementById('empty-state').hidden)", '空态加载');
       assert.equal(calls.send, 0);
       assert.equal(calls.newChat, 0);
-      const layout = await js(`({ width: innerWidth, height: innerHeight, bodyWidth: document.body.scrollWidth, composer: document.getElementById('composer').getBoundingClientRect().toJSON(), footer: document.querySelector('.privacy-note').getBoundingClientRect().toJSON(), textColor: getComputedStyle(document.querySelector('.chat-panel')).color })`);
+      const layout = await js(`({ width: innerWidth, height: innerHeight, bodyWidth: document.body.scrollWidth, composer: document.getElementById('composer').getBoundingClientRect().toJSON(), textColor: getComputedStyle(document.querySelector('.chat-panel')).color })`);
       assert.equal(layout.width, 360);
       assert.equal(layout.height, 480);
       assert.ok(layout.bodyWidth <= layout.width);
-      assert.ok(layout.composer.bottom < layout.height && layout.footer.bottom <= layout.height);
+      assert.ok(layout.composer.bottom < layout.height);
+      assertChatSurface(await js(`(${readChatSurface.toString()})()`), chat.getWindow().getContentBounds());
       await capture('01-light-empty');
       mark('浅色空态、360×480 布局与无自动发消息');
 
@@ -277,7 +285,7 @@ if (!process.versions.electron) {
         assert.ok(measured.bodyWidth <= measured.width && measured.barScrollWidth <= measured.barClientWidth);
         assert.equal(measured.insideComposer, true);
         assert.equal(measured.visibleFeedback, false);
-        assert.ok(measured.bar.height <= 27 && measured.bar.width <= 180);
+        assert.ok(measured.bar.height <= 30 && measured.bar.width <= 180);
         assert.ok(measured.select.right <= measured.width && measured.select.left >= 0);
         assert.ok(measured.input.top >= 0 && measured.input.bottom < measured.height);
         assert.equal(measured.conversation.top, measured.header.bottom);
@@ -422,6 +430,25 @@ if (!process.versions.electron) {
       assert.equal(await js("document.querySelectorAll('.history-item').length"), 3);
       await js("document.getElementById('history-back').click()");
       mark('新建后历史仍保留，空聊天不会重复新建；连接中禁止切换');
+      for (const width of [360, 320]) for (const appearance of ['light', 'dark']) {
+        chat.getWindow().setContentSize(width, 480);
+        chat.getWindow().webContents.send('pet:color-mode', 'standard', appearance);
+        await waitFor(`innerWidth===${width} && document.documentElement.dataset.accessibleAppearance==='${appearance}'`, '新布局尺寸主题');
+        await js("document.querySelector('#message-input').value=Array(7).fill('多行输入在内部滚动').join('\\n');document.querySelector('#message-input').dispatchEvent(new Event('input'))");
+        assertChatSurface(await js(`(${readChatSurface.toString()})()`), chat.getWindow().getContentBounds(), { width, appearance, longInput: true });
+        await capture(`unified-${width}-${appearance}`);
+      }
+      rejectSend = true;
+      const failedDraft = '  发送失败也完整保留输入  ';
+      await js(`document.querySelector('#message-input').value=${JSON.stringify(failedDraft)};document.querySelector('#message-input').dispatchEvent(new Event('input'))`);
+      await pointerClick(chat.getWindow(), '#send-message .button-label');
+      await waitFor("document.querySelector('#error-text').textContent.includes('消息没有发出') && !document.querySelector('#send-message').disabled", '真实点击失败后可重试');
+      assert.equal(await js("document.querySelector('#message-input').value"), failedDraft);
+      assert.equal(calls.send, 2, '失败只发送一次');
+      await delay(100);
+      assert.equal(calls.send, 2, '失败后不自动重发');
+      rejectSend = false; chat.getWindow().setContentSize(360, 480);
+      mark('360/320 浅深色内容边界、四行输入滚动与发送标签实际点击失败保稿');
       for (const side of ['left', 'right']) {
         petBounds = { ...petBounds, x: side === 'left' ? workArea.x - 40 : workArea.x + workArea.width - 40 };
         chat.reposition();

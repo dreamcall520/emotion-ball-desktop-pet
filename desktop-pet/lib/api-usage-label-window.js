@@ -19,7 +19,7 @@ function apiLabelBounds(pet, area, quota, bubble, expanded = false, presentation
     width: Math.max(pet.x + pet.width, quota.x + quota.width) - Math.min(pet.x, quota.x),
     height: Math.max(pet.y + pet.height, quota.y + quota.height) - Math.min(pet.y, quota.y)
   } : pet;
-  const fallback = quotaLabelBounds(anchor, area, bubble, 'compact', expanded, 2,
+  const fallback = quotaLabelBounds(anchor, area, bubble, expanded ? 'apiExpanded' : 'compact', false, 2,
     hasQuota ? null : presentation);
   if (!hasQuota || !validBounds(area)) return fallback;
   const { width, height } = fallback;
@@ -199,7 +199,7 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
       safeDestroy(previous);
     }
     const token = revision;
-    const size = quotaLabelSize('compact', expanded, 2);
+    const size = quotaLabelSize(expanded ? 'apiExpanded' : 'compact');
     const target = new BrowserWindow({
       ...size, title: 'OpenAI API 费用', transparent: true, frame: false,
       resizable: false, focusable: false, skipTaskbar: true, show: false,

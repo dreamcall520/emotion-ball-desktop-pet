@@ -80,6 +80,7 @@ dialog.compact-actions{width:300px;padding:12px;border-radius:11px}
 #progress-text{white-space:nowrap}#progress-text .completed-count{color:var(--accent-text);font-weight:600;font-variant-numeric:tabular-nums}
 
 :root:not([data-color-mode="accessible"]) .panel{background:linear-gradient(180deg,#DDF4EA 0px,#ECF8F1 52px,var(--surface) 106px);border:1px solid var(--line);border-radius:14px}
+:root:not([data-notes-appearance="dark"]):not([data-color-mode="accessible"]) .panel{border-color:#dbe5df;box-shadow:inset 0 1px 0 #ffffffb3,inset 0 -1px 2px #3d58490d}
 :root:not([data-color-mode="accessible"]) .note-toolbar{background:linear-gradient(180deg,#DDF4EA 0%,#ECF8F1 55%,var(--surface) 100%)}
 .panel .section-heading{padding-bottom:9px;margin-bottom:0}.panel .list-description{margin-top:13px;margin-bottom:7px}.panel .record{padding:14px 0 12px}.panel .note-preview{margin-top:5px}
 :root:not([data-color-mode="accessible"]) .record,:root:not([data-color-mode="accessible"]) .section-heading{border-bottom-color:#EDF1EF}
@@ -134,7 +135,7 @@ body:has(dialog[open]) :is(.panel-header,.note-toolbar,.reminder-top),dialog,dia
 
 .quick-properties{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;flex:1}.quick-actions .send-button{flex:none;align-self:flex-end}.quick-option{display:flex;align-items:center;gap:4px;max-width:100%;height:28px;padding:3px 6px;border:0;border-radius:5px;background:transparent;color:var(--muted);font-size:11px;white-space:nowrap}.quick-option span{overflow:hidden;text-overflow:ellipsis}.quick-option svg{flex:none;width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.quick-option:hover{background:#F0F7F3}.quick-option.is-set{color:var(--accent-text)}.timing-shortcuts{display:flex;gap:7px}.timing-shortcuts button{padding:5px 10px;border:0;border-radius:6px;background:#F0F7F3;color:#52685C;font-size:12px}#quick-reminder-clear{margin-right:auto}.field-select{display:block;position:relative;margin-top:6px}.category-dialog .field-select select{appearance:none;margin:0;height:36px;padding:7px 34px 7px 12px}.field-select svg{position:absolute;right:12px;top:50%;transform:translateY(-50%);width:12px;height:12px;fill:none;stroke:var(--muted);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}.category-dialog .dialog-footer :is(.primary,.secondary){min-height:34px;display:inline-flex;align-items:center;justify-content:center;padding:7px 13px;line-height:18px}.category-dialog .date-pair{gap:12px}.category-dialog .date-pair input{min-width:0}
 
-/* Reused from desktop-pet/quota-label.css; same colors, 4.5s orbit and 3s hover. */
+/* Match the chat composer edge treatment and slower input orbit. */
 @property --input-beam-angle {
   syntax: "<angle>";
   initial-value: 0deg;
@@ -151,10 +152,10 @@ body:has(dialog[open]) :is(.panel-header,.note-toolbar,.reminder-top),dialog,dia
 .quick-add::after {
   content: "";
   position: absolute;
-  inset: 1px;
+  inset: 0;
   z-index: 3;
   padding: 1px;
-  border-radius: inherit;
+  border-radius: 8px;
   pointer-events: none;
   background: conic-gradient(
     from var(--input-beam-angle),
@@ -174,7 +175,7 @@ body:has(dialog[open]) :is(.panel-header,.note-toolbar,.reminder-top),dialog,dia
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask-composite: exclude;
   opacity: .84;
-  animation: inputBeamOrbit 4.5s linear infinite;
+  animation: inputBeamOrbit 5.625s linear infinite;
 }
 
 .quick-add::after {
@@ -185,10 +186,9 @@ body:has(dialog[open]) :is(.panel-header,.note-toolbar,.reminder-top),dialog,dia
   opacity: .38;
 }
 
-.quick-add:hover::before { animation-duration: 3s; }
+/* Hover brightens the glow without changing the orbit timeline. */
 .quick-add:hover::after {
   opacity: .76;
-  animation-duration: 3s;
 }
 
 @media (prefers-reduced-motion: reduce) {

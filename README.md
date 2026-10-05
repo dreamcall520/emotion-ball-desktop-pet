@@ -15,6 +15,8 @@
 - 本机便签与待办，支持桌面便签、收藏、搜索、截止日期、提醒、归档和回收站
 - 普通桌宠无需登录，可离线使用；主动使用聊天时，会把输入的消息发送给 Codex 生成回复
 
+0.3.33 更新额度卡与任务、趋势详情，统一聊天、定制、便签及窗口外观；新增额度历史与节奏预估，优化颜色选择、流光和设置入口。开启 Codex 联动时默认显示额度卡和任务完成提醒名称，可分别调整。
+
 0.3.32 让新版入口更明确：发现新版时，右键和菜单栏菜单顶部显示“更新球球至 [版本]”并与其他操作分隔；没有新版时，检查更新入口仍位于原位置。
 
 0.3.31 调整“关于球球”的更新入口：发现新版后仅显示“查看新版本”；便签分类改为浅灰和蓝灰小标签，统一浅色与深色外观下的分类标识。
@@ -39,7 +41,7 @@
 
 提供 Apple 芯片版与独立 Intel x64 构建，需 macOS 12 或更高版本。请按 Mac 芯片选择对应附件；Intel 的实机验证范围见 Release 说明。
 
-当前 Apple 芯片版为 [0.3.32](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.32)，Intel 下载继续使用 [0.3.13 构建候选](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.13)。本次没有发布新的 Intel 安装包。
+当前 Apple 芯片版为 [0.3.33](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.33)，Intel 下载继续使用 [0.3.13 构建候选](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.13)。本次没有发布新的 Intel 安装包。
 
 1. 前往 [Releases](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases) 下载最新的“分享用 ZIP”。
 2. 解压 ZIP，得到“球球桌宠.app”；也可下载并打开 DMG。

@@ -30,6 +30,46 @@ function quotaCreditDetails(value) {
     ? { spendControlReached: value.spendControlReached } : {}) };
 }
 
+const RESET_STATUSES = new Set(['available', 'redeeming', 'redeemed', 'unknown']);
+const validDate = value => Number.isSafeInteger(value) && value >= 0 && value <= 8640000000000000;
+
+// Only scalar fields from the documented reset-credit response cross into the UI.
+// A missing/null detail list is unknown; [] is an explicitly fetched empty list.
+function quotaResetDetails(value) {
+  if (!object(value)) return {};
+  const result = Number.isSafeInteger(value.resetCreditsAvailable) && value.resetCreditsAvailable >= 0
+    ? { resetCreditsAvailable: value.resetCreditsAvailable } : {};
+  if (value.resetOpportunities === null) return { ...result, resetOpportunities: null };
+  if (!Array.isArray(value.resetOpportunities)) return result;
+  const seen = new Set();
+  const rows = value.resetOpportunities.slice(0, 64).flatMap(row => {
+    if (!object(row) || typeof row.id !== 'string' || !row.id.trim() || row.id.length > 200
+      || /[\u0000-\u001f\u007f]/u.test(row.id) || !RESET_STATUSES.has(row.status)
+      || !validDate(row.grantedAt) || seen.has(row.id)) return [];
+    seen.add(row.id);
+    return [{ id: row.id, title: text(row.title, 140) || null,
+      status: RESET_STATUSES.has(row.status) ? row.status : 'unknown',
+      resetType: row.resetType === 'codexRateLimits' ? row.resetType : 'unknown',
+      grantedAt: validDate(row.grantedAt) ? row.grantedAt : null,
+      expiresAt: row.expiresAt === null ? null : validDate(row.expiresAt) ? row.expiresAt : UNKNOWN }];
+  });
+  const partial = value.resetDetailsPartial === true || rows.length !== value.resetOpportunities.length
+    || (result.resetCreditsAvailable !== undefined
+      && result.resetCreditsAvailable !== rows.filter(row => row.status === 'available').length);
+  return { ...result, resetOpportunities: rows, resetDetailsPartial: partial };
+}
+
+function normalizeResetCredits(summary) {
+  if (!object(summary)) return {};
+  const toMilliseconds = value => Number.isSafeInteger(value) && validDate(value * 1000) ? value * 1000 : UNKNOWN;
+  return quotaResetDetails({ resetCreditsAvailable: summary.availableCount,
+    resetOpportunities: Array.isArray(summary.credits) ? summary.credits.slice(0, 64).map(row => object(row) ? {
+      id: row.id, title: row.title, status: row.status, resetType: row.resetType,
+      grantedAt: toMilliseconds(row.grantedAt),
+      expiresAt: row.expiresAt === null ? null : toMilliseconds(row.expiresAt)
+    } : null) : null });
+}
+
 function normalizeQuota(raw, now) {
   const windows = [];
   const groups = object(raw?.rateLimitsByLimitId) ? Object.entries(raw.rateLimitsByLimitId).slice(0, 32)
@@ -48,16 +88,13 @@ function normalizeQuota(raw, now) {
       });
     }
   }
-  const resetCredits = raw?.rateLimitResetCredits;
-  const availableCount = object(resetCredits) ? resetCredits.availableCount : null;
   const codex = object(raw?.rateLimitsByLimitId) ? raw.rateLimitsByLimitId.codex
     : object(raw?.rateLimits) && (!raw.rateLimits.limitId || raw.rateLimits.limitId === 'codex') ? raw.rateLimits : null;
   return {
     windows,
     updatedAt: now,
     ...quotaCreditDetails(codex),
-    ...(Number.isSafeInteger(availableCount) && availableCount >= 0
-      ? { resetCreditsAvailable: availableCount } : {})
+    ...normalizeResetCredits(raw?.rateLimitResetCredits)
   };
 }
 
@@ -261,5 +298,5 @@ function applyTaskPatches(previous, patches) {
   return { task, needsSnapshot };
 }
 
-module.exports = { UNKNOWN, MAX_TASKS, isTaskId, isEligibleThread, normalizeQuota, quotaCreditDetails, normalizeThreadList,
+module.exports = { UNKNOWN, MAX_TASKS, isTaskId, isEligibleThread, normalizeQuota, quotaCreditDetails, quotaResetDetails, normalizeThreadList,
   normalizeTask, projectTask, taskFromProjection, applyTaskPatches };

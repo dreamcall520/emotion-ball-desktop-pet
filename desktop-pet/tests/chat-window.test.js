@@ -144,6 +144,8 @@ test('聊天头像收到当前外观，保存外观后同步；重复状态更�
   t.after(() => f.chat.destroy());
   f.chat.show({ messages: [] });
   await flush();
+  assert.equal(f.windows[0].options.title, '聊一会儿');
+  assert.equal(f.windows[0].options.useContentSize, true);
   const win = f.windows[0];
   assert.deepEqual(win.messages.filter(([channel]) => channel === 'pet:chat-appearance'),
     [['pet:chat-appearance', appearance]]);

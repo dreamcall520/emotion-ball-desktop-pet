@@ -21,17 +21,17 @@ test('便签待办默认页面只接受两个页签，保存后可回读', t => 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emotion-notes-default-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const file = path.join(dir, 'settings.json');
-  assert.equal(DEFAULTS.notesDefaultTab, 'todo');
+  assert.equal(DEFAULTS.notesDefaultTab, 'note');
   for (const notesDefaultTab of ['note', 'todo']) {
     saveSettings(file, { notesDefaultTab, x: 42 });
     assert.equal(loadSettings(file).notesDefaultTab, notesDefaultTab);
     assert.equal(loadSettings(file).x, 42);
   }
   for (const notesDefaultTab of [undefined, null, '', 'notes', 'note ', 1, {}, []]) {
-    assert.equal(normalizeSettings({ notesDefaultTab }).notesDefaultTab, 'todo');
+    assert.equal(normalizeSettings({ notesDefaultTab }).notesDefaultTab, 'note');
   }
   saveSettings(file, { notesDefaultTab: 'invalid' });
-  assert.equal(loadSettings(file).notesDefaultTab, 'todo');
+  assert.equal(loadSettings(file).notesDefaultTab, 'note');
 });
 
 test('API 常驻开关只接受布尔值，独立持久化且不保存报表或密钥', t => {
@@ -43,7 +43,7 @@ test('API 常驻开关只接受布尔值，独立持久化且不保存报表或�
   const saved = loadSettings(file);
   assert.equal(saved.openaiApiAlwaysVisible, true);
   assert.equal(saved.codexEnabled, false);
-  assert.equal(saved.codexQuotaAlwaysVisible, false);
+  assert.equal(saved.codexQuotaAlwaysVisible, true);
   assert.equal(fs.readFileSync(file, 'utf8').includes('SECRET_KEY'), false);
   assert.equal(Object.hasOwn(saved, 'report'), false);
 });
@@ -66,12 +66,12 @@ test('损坏文件回退且有效设置可回读', t => {
     bubblesEnabled: true,
     colorMode: 'standard',
     chatModel: 'auto',
-    notesDefaultTab: 'todo', notesAppearance: 'light',
+    notesDefaultTab: 'note', notesAppearance: 'light',
     customization: DEFAULTS.customization,
     startupAppearance: DEFAULTS.startupAppearance,
     codexEnabled: false,
-    codexTaskNameInAlerts: false,
-    codexQuotaAlwaysVisible: false,
+    codexTaskNameInAlerts: true,
+    codexQuotaAlwaysVisible: true,
     codexShowExtraCredits: true,
     openaiApiAlwaysVisible: false,
     autoUpdateCheck: true,
@@ -86,9 +86,9 @@ test('损坏文件回退且有效设置可回读', t => {
 test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
   assert.deepEqual(normalizeSettings({ size: 'small', x: -102.3, y: 81.8, alwaysOnTop: false }), {
     size: 'small', x: -102, y: 82, alwaysOnTop: false,
-    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', chatModel: 'auto', notesDefaultTab: 'todo', notesAppearance: 'light', customization: DEFAULTS.customization,
+    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', chatModel: 'auto', notesDefaultTab: 'note', notesAppearance: 'light', customization: DEFAULTS.customization,
     startupAppearance: DEFAULTS.startupAppearance, codexEnabled: false,
-    codexTaskNameInAlerts: false, codexQuotaAlwaysVisible: false,
+    codexTaskNameInAlerts: true, codexQuotaAlwaysVisible: true,
     codexShowExtraCredits: true,
     openaiApiAlwaysVisible: false,
     autoUpdateCheck: true, lastUpdateNotifiedVersion: '',
@@ -142,10 +142,18 @@ test('模型选择独立持久化，旧配置默认自动，非法id不进入设
   for (const chatModel of [' bad ', {}, 'x\nmodel', '<script>', null]) assert.equal(normalizeSettings({ chatModel }).chatModel, 'auto');
 });
 
-test('首次使用默认保持清醒，但保留用户明确关闭的选择', () => {
-  assert.equal(DEFAULTS.keepAwake, true);
-  assert.equal(normalizeSettings({}).keepAwake, true);
-  assert.equal(normalizeSettings({ keepAwake: false }).keepAwake, false);
+test('首次使用默认保持清醒和互动气泡，但保留用户明确关闭的选择', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emotion-explicit-defaults-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'settings.json');
+  for (const key of ['keepAwake', 'bubblesEnabled', 'codexTaskNameInAlerts', 'codexQuotaAlwaysVisible']) {
+    assert.equal(DEFAULTS[key], true); assert.equal(normalizeSettings({})[key], true);
+    assert.equal(normalizeSettings({ [key]: false })[key], false);
+  }
+  const explicitOff = { keepAwake: false, bubblesEnabled: false, codexTaskNameInAlerts: false, codexQuotaAlwaysVisible: false };
+  saveSettings(file, explicitOff);
+  for (const key of Object.keys(explicitOff)) assert.equal(loadSettings(file)[key], false, '重启保留 ' + key);
+  assert.equal(loadSettings(file).codexEnabled, false, '总开关仍默认关闭');
 });
 
 test('陪伴开关保存后可回读且仅写入允许设置', t => {
@@ -170,8 +178,8 @@ test('Codex 联动默认关闭且只接受布尔值', () => {
   });
 });
 
-test('额度显示默认关闭且周期只接受三个枚举', () => {
-  assert.equal(DEFAULTS.codexQuotaAlwaysVisible, false);
+test('额度显示默认开启、显式关闭保留且周期只接受三个枚举', () => {
+  assert.equal(DEFAULTS.codexQuotaAlwaysVisible, true);
   assert.equal(DEFAULTS.codexQuotaPeriod, 'auto');
   for (const period of ['auto', 'fiveHour', 'weekly']) {
     assert.equal(normalizeSettings({ codexQuotaPeriod: period }).codexQuotaPeriod, period);
@@ -180,8 +188,9 @@ test('额度显示默认关闭且周期只接受三个枚举', () => {
     assert.equal(normalizeSettings({ codexQuotaPeriod: period }).codexQuotaPeriod, 'auto');
   }
   assert.equal(normalizeSettings({ codexQuotaAlwaysVisible: true }).codexQuotaAlwaysVisible, true);
-  for (const value of ['true', 1, null, {}, []]) {
-    assert.equal(normalizeSettings({ codexQuotaAlwaysVisible: value }).codexQuotaAlwaysVisible, false);
+  assert.equal(normalizeSettings({ codexQuotaAlwaysVisible: false }).codexQuotaAlwaysVisible, false);
+  for (const value of ['true', 'false', 1, null, {}, []]) {
+    assert.equal(normalizeSettings({ codexQuotaAlwaysVisible: value }).codexQuotaAlwaysVisible, true);
   }
 });
 
@@ -211,13 +220,14 @@ test('额度卡片外观默认跟随系统，只接受跟随系统、浅色和�
   }
 });
 
-test('任务名称提醒默认关闭且只接受布尔值', () => {
-  assert.equal(DEFAULTS.codexTaskNameInAlerts, false);
-  assert.equal(normalizeSettings({}).codexTaskNameInAlerts, false);
-  for (const codexTaskNameInAlerts of ['true', 1, null, {}, []]) {
-    assert.equal(normalizeSettings({ codexTaskNameInAlerts }).codexTaskNameInAlerts, false);
+test('任务名称提醒默认开启但保留显式关闭，仅接受布尔值', () => {
+  assert.equal(DEFAULTS.codexTaskNameInAlerts, true);
+  assert.equal(normalizeSettings({}).codexTaskNameInAlerts, true);
+  for (const codexTaskNameInAlerts of ['true', 'false', 1, null, {}, []]) {
+    assert.equal(normalizeSettings({ codexTaskNameInAlerts }).codexTaskNameInAlerts, true);
   }
   assert.equal(normalizeSettings({ codexTaskNameInAlerts: true }).codexTaskNameInAlerts, true);
+  assert.equal(normalizeSettings({ codexTaskNameInAlerts: false }).codexTaskNameInAlerts, false);
 });
 
 test('Codex 只持久化开关，不保存账号额度快照阈值或任务信息', t => {
@@ -273,7 +283,7 @@ test('任务名称提醒只持久化隐私开关，不保存任务信息', t => 
   assert.equal(Object.hasOwn(JSON.parse(persisted), 'taskBody'), false);
 });
 
-test('便签外观独立于额度外观，保存后恢复且非法值回退旧浅色', t => {
+test('旧便签外观字段保持兼容，保存不覆盖已有全局外观，非法值保留旧回退', t => {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'qiu-notes-appearance-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const file=path.join(dir,'settings.json');
   for(const notesAppearance of ['system','light','dark']) {saveSettings(file,{notesAppearance,codexQuotaAppearance:'dark',notesDefaultTab:'note'});assert.equal(loadSettings(file).notesAppearance,notesAppearance);assert.equal(loadSettings(file).codexQuotaAppearance,'dark');assert.equal(loadSettings(file).notesDefaultTab,'note')}
   for(const notesAppearance of [undefined,null,'bad',1,{}])assert.equal(normalizeSettings({notesAppearance}).notesAppearance,'light');

@@ -290,7 +290,13 @@ test('closing saves quick input including typing during an in-flight write, and 
 
 test('notes appearance initializes and broadcasts for panel, desktop note and reminder without saving',async()=>{
   for(const mode of ['panel','note','reminder']){const r=renderer(async()=>assert.fail('主题切换不能写入便签'),mode);let update;r.bridge.onAppearance=fn=>{update=fn};r.bridge.load=async()=>({mode,state:r.state(),notesAppearance:'dark'});await r.start();assert.equal(r.document.documentElement.dataset.notesAppearance,'dark');update('light');assert.equal(r.document.documentElement.dataset.notesAppearance,'light');r.document.documentElement.dataset.colorMode='accessible';update('dark');assert.equal(r.document.documentElement.dataset.colorMode,'accessible')}
-  const css=fs.readFileSync(path.join(__dirname,'../notes.css'),'utf8');assert.match(css,/animation: inputBeamOrbit 4\.5s linear infinite/);assert.match(css,/\.quick-add:hover::before \{ animation-duration: 3s/);assert.match(css,/@media \(prefers-reduced-motion: reduce\)/);assert.match(css,/pointer-events: none/);
+  for(const file of ['notes.css','chat.css']){
+    const css=fs.readFileSync(path.join(__dirname,'..',file),'utf8');
+    assert.match(css,/animation: inputBeamOrbit 5\.625s linear infinite/);
+    assert.doesNotMatch(css,/:hover[^{}]*\{[^}]*animation(?:-duration)?\s*:/,'hover must preserve the orbit phase');
+    assert.match(css,/:hover::after\s*\{\s*opacity: \.76/);
+    assert.match(css,/@media \(prefers-reduced-motion: reduce\)/);assert.match(css,/pointer-events: none/);
+  }
 });
 
 test('moving a note through its picker saves only category and keeps selection on failure',async()=>{

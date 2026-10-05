@@ -25,6 +25,22 @@ function record(value) {
   }
 }
 
+function paceFields(value) {
+  try {
+    if (!value || !['fast', 'balanced', 'slow', 'unknown'].includes(value.state)) return {};
+    return { pace: { state: value.state,
+      remainingTimePercent: Number.isFinite(value.remainingTimePercent) && value.remainingTimePercent >= 0 && value.remainingTimePercent <= 100 ? value.remainingTimePercent : null } };
+  } catch (_) { return {}; }
+}
+
+function activityFields(value) {
+  try {
+    if (!value) return {};
+    const count = value => Number.isSafeInteger(value) && value >= 0 && value <= 999999 ? value : null;
+    return { activity: { runningCount: count(value.runningCount), unreadCount: count(value.unreadCount) } };
+  } catch (_) { return {}; }
+}
+
 function copyItem(value) {
   const item = record(value);
   if (!item) return null;
@@ -32,11 +48,15 @@ function copyItem(value) {
   let windowMinutes;
   let remaining;
   let resetsAt;
+  let pace;
+  let resetLabel;
   try {
     labelValue = item.label;
     windowMinutes = item.windowMinutes;
     remaining = item.remaining;
     resetsAt = item.resetsAt;
+    pace = record(item.pace);
+    resetLabel = cleanLabel(item.resetLabel);
   } catch (_) {
     return null;
   }
@@ -47,7 +67,9 @@ function copyItem(value) {
     label,
     windowMinutes,
     remaining,
-    ...(Number.isSafeInteger(resetsAt) && resetsAt > 0 ? { resetsAt } : {})
+    ...(Number.isSafeInteger(resetsAt) && resetsAt > 0 ? { resetsAt } : {}),
+    ...paceFields(pace),
+    ...(resetLabel ? { resetLabel } : {})
   };
 }
 
@@ -93,10 +115,12 @@ function safeModel(value) {
   let rawItems;
   let overflowValue;
   let resetCreditsAvailable;
+  let activity;
   try {
     rawItems = source.items;
     overflowValue = source.overflow;
     resetCreditsAvailable = source.resetCreditsAvailable;
+    activity = record(source.activity);
   } catch (_) {
     return { state, items: [], overflow: 0 };
   }
@@ -107,6 +131,7 @@ function safeModel(value) {
     items: copyItems(rawItems),
     overflow,
     ...extraCreditsFields(source, state),
+    ...activityFields(activity),
     ...(Number.isSafeInteger(resetCreditsAvailable) && resetCreditsAvailable >= 0
       ? { resetCreditsAvailable } : {})
   };
@@ -114,7 +139,8 @@ function safeModel(value) {
 
 function createQuotaLabelWindow({
   BrowserWindow, screen, getPetWindow, getObstacle = () => null, getSize = () => 'standard',
-  getAppearance = () => 'system', getPresentation = () => null, onError = () => {}, alwaysOnTop = true
+  getAppearance = () => 'system', getPresentation = () => null, getSuppressed = () => false,
+  onError = () => {}, alwaysOnTop = true
 }) {
   let win = null;
   let ready = false;
@@ -240,6 +266,10 @@ function createQuotaLabelWindow({
     const token = operation;
     const model = currentModel;
     if (!ready || !confirm(target, token, model)) return;
+    if (getSuppressed()) {
+      conceal(target, token);
+      return;
+    }
     const layout = petLayout();
     if (!confirm(target, token, model)) return;
     if (!layout) {
@@ -338,6 +368,7 @@ function createQuotaLabelWindow({
       title: 'Codex 剩余额度',
       transparent: true,
       frame: false,
+      useContentSize: true,
       resizable: false,
       focusable: false,
       skipTaskbar: true,

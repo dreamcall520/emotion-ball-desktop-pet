@@ -56,11 +56,13 @@ async function verifyAuroraSixLobe({ editor, pet, chatWindow, getSettings, readS
     await poll(() => chatWindow.getWindow()?.webContents.executeJavaScript(
       `Boolean(window.qiuqiuChat && document.getElementById('chat-avatar'))`
     ).catch(() => false), '聊天窗口未就绪');
-    await chatWindow.getWindow().webContents.executeJavaScript(`window.__qaAppearanceOff = window.qiuqiuChat.onAppearance(a => { window.__qaAppearance = a; }); true`);
+    const savedAppearance = await chatWindow.getWindow().webContents.executeJavaScript(`PetCustomization.effectiveAppearance(${JSON.stringify(getSettings().customization.appearance)}, false)`);
+    await chatWindow.getWindow().webContents.executeJavaScript(`window.__qaAppearanceUpdates = []; window.__qaAppearanceOff = window.qiuqiuChat.onAppearance(a => { window.__qaAppearanceUpdates.push(a); }); true`);
     await page(`window.petCustomizer.preview(${JSON.stringify(legacy)}); true`);
-    await poll(() => chatWindow.getWindow().webContents.executeJavaScript(
-      `window.__qaAppearance?.auroraContour === 'six-lobe'`
-    ), '旧配置预览 IPC 必须向聊天头像传递六瓣外观');
+    await wait(200);
+    const updates = await chatWindow.getWindow().webContents.executeJavaScript('window.__qaAppearanceUpdates');
+    assert.ok(updates.every(value => JSON.stringify(value) === JSON.stringify(savedAppearance)), '未保存预览不能把其他外观广播给聊天');
+    assert.equal(await chatWindow.getWindow().webContents.executeJavaScript("document.querySelector('#chat-avatar').dataset.shape"), savedAppearance.shape, '头像继续展示保存的形态');
     await chatWindow.getWindow().webContents.executeJavaScript('window.__qaAppearanceOff(); true');
     assert.equal(await page(`window.petCustomizer.save({appearance:${JSON.stringify(legacy)}}, false)`), true);
     assert.equal(readSettings().customization.appearance.auroraContour, 'six-lobe', '旧配置保存必须归一为六瓣');

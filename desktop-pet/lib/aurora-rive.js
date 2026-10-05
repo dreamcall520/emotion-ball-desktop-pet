@@ -167,8 +167,17 @@
     var readyResolve;
     var readyPromise = new Promise(function (resolve) { readyResolve = resolve; });
     var reducedMotion = root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var active = true;
+    function setActive(value) {
+      if (destroyed) return;
+      active = Boolean(value);
+      reducedMotion = Boolean(root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches);
+      if (!instance || !inputs) return;
+      if (!active || reducedMotion) { inputs.hover.value = false; instance.pause(); }
+      else { instance.play(); hover(container.matches(':hover')); }
+    }
     function hover(value) {
-      if (inputs && !reducedMotion) inputs.hover.value = Boolean(value);
+      if (inputs) inputs.hover.value = active && !reducedMotion && Boolean(value);
     }
     function enter() { hover(true); }
     function leave() { hover(false); }
@@ -180,7 +189,7 @@
     root.addEventListener('resize', resize);
 
     function click() {
-      if (!inputs || reducedMotion) return false;
+      if (!inputs || !active || reducedMotion) return false;
       inputs.index.value = clickIndex++ % 3;
       inputs.click.fire();
       return true;
@@ -233,8 +242,7 @@
         if (!inputs.index || !inputs.click || !inputs.hover) { readyResolve(false); return; }
         Promise.all(assetJobs).then(function () {
           if (destroyed) return;
-          if (reducedMotion) instance.pause();
-          else hover(container.matches(':hover'));
+          setActive(active);
           // The desktop window can finish sizing after Rive's onLoad callback.
           setTimeout(function () {
             if (destroyed) return;
@@ -246,7 +254,7 @@
         }).catch(function (error) { console.error('Aurora asset:', error); readyResolve(false); });
       }
     });
-    return { click: click, destroy: destroy,
+    return { click: click, destroy: destroy, setActive: setActive,
       ready: function () { return canvas.classList.contains('ready'); }, whenReady: function () { return readyPromise; } };
   }
 

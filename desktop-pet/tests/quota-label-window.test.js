@@ -95,6 +95,7 @@ function fixture(load = () => Promise.resolve(), options = {}) {
     getSize: () => options.labelSize || 'standard',
     getAppearance: () => options.appearance || 'system',
     getPresentation: () => presentation,
+    getSuppressed: () => options.getSuppressed?.() === true,
     onError: error => {
       errors.push(error);
       if (typeof options.onError === 'function') options.onError(error);
@@ -108,6 +109,37 @@ function fixture(load = () => Promise.resolve(), options = {}) {
     set presentation(value) { presentation = value; }
   };
 }
+
+test('详情打开期间暂时隐藏额度卡，刷新与重排不抬升，关闭后保留展开和最新数据', async t => {
+  let suppressed = false;
+  const f = fixture(() => Promise.resolve(), { getSuppressed: () => suppressed });
+  t.after(() => f.label.destroy());
+  f.label.show(readyModel());
+  await flush();
+  const win = f.windows[0];
+  win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  assert.equal(win.sent.at(-1)[1].expanded, true);
+  suppressed = true;
+  f.label.reposition();
+  assert.equal(win.visible, false);
+  assert.deepEqual(win.ignoreCalls.at(-1), [true, { forward: true }]);
+  const shows = win.showInactiveCalls;
+  const next = readyModel(); next.items[0].remaining = 23;
+  f.label.show(next);
+  f.label.reposition();
+  assert.equal(win.showInactiveCalls, shows, '详情期间同步和宠物移动均不能再次 showInactive');
+  suppressed = false;
+  f.label.reposition();
+  assert.equal(win.visible, true);
+  assert.equal(win.sent.at(-1)[1].expanded, true, '暂时避让不应收起已展开的卡');
+  assert.equal(win.sent.at(-1)[1].items[0].remaining, 23, '恢复展示最新额度');
+  suppressed = true;
+  f.label.reposition();
+  f.label.hide();
+  suppressed = false;
+  f.label.reposition();
+  assert.equal(win.visible, false, '关闭额度显示后不能因关闭详情而恢复');
+});
 
 test('标准档只在 show 时懒创建安全、透明、不聚焦的鼠标穿透窗口', async t => {
   const loading = deferred();
@@ -159,7 +191,7 @@ test('小巧档创建可点击的 128×32 横条，点击展开和收起时复�
 
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
   assert.equal(f.windows.length, 1);
-  assert.deepEqual(win.bounds, { x: 242, y: 388, width: 196, height: 96 });
+  assert.deepEqual(win.bounds, { x: 242, y: 388, width: 196, height: 131 });
   assert.equal(win.sent.at(-1)[1].expanded, true);
 
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
@@ -167,7 +199,7 @@ test('小巧档创建可点击的 128×32 横条，点击展开和收起时复�
   assert.equal(win.sent.at(-1)[1].expanded, false);
 });
 
-test('Pro 点数通过原生窗口和 preload 的白名单，展开多二十像素，关闭行立即恢复尺寸', async t => {
+test('余额通过原生窗口与 preload 白名单，显示与隐藏复用辅助行且高度不变', async t => {
   const f = fixture(() => Promise.resolve(), { labelSize: 'compact' });
   t.after(() => f.label.destroy());
   const extraCredits = { state: 'balance', balance: '62485.1547310000', key: 'SECRET_KEY' };
@@ -175,7 +207,7 @@ test('Pro 点数通过原生窗口和 preload 的白名单，展开多二十像�
   const win = f.windows[0];
   assert.equal(win.bounds.height, 32);
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
-  assert.equal(win.bounds.width, 196); assert.equal(win.bounds.height, 116);
+  assert.equal(win.bounds.width, 196); assert.equal(win.bounds.height, 131);
   assert.deepEqual(win.sent.at(-1)[1].extraCredits, { state: 'balance', balance: '62485.1547310000' });
   assert.equal(win.sent.at(-1)[1].resetCreditsAvailable, 1);
   assert.equal(JSON.stringify(win.sent.at(-1)[1]).includes('SECRET_KEY'), false);
@@ -192,7 +224,7 @@ test('Pro 点数通过原生窗口和 preload 的白名单，展开多二十像�
   f.label.show({ ...readyModel(), extraCredits: { state: 'balance', balance: '<script>secret</script>' } });
   assert.deepEqual(win.sent.at(-1)[1].extraCredits, { state: 'unknown' });
   f.label.show(readyModel());
-  assert.equal(win.bounds.height, 96);
+  assert.equal(win.bounds.height, 131);
   assert.equal('extraCredits' in win.sent.at(-1)[1], false);
 });
 
@@ -212,7 +244,7 @@ test('半露幻彩云切换屏边时重排额度标签，与可见云瓣相邻',
   assert.deepEqual(win.bounds, { x: 60, y: 321, width: 128, height: 32 });
 });
 
-test('双周期小巧档点击后展开为 196×128，收起仍回到 128×32', async t => {
+test('双周期小巧档点击后展开为 196×144，收起仍回到 128×32', async t => {
   const f = fixture(() => Promise.resolve(), { labelSize: 'compact' });
   t.after(() => f.label.destroy());
   const model = readyModel();
@@ -221,7 +253,7 @@ test('双周期小巧档点击后展开为 196×128，收起仍回到 128×32', 
   await flush();
   const win = f.windows[0];
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
-  assert.deepEqual(win.bounds, { x: 242, y: 388, width: 196, height: 128 });
+  assert.deepEqual(win.bounds, { x: 242, y: 388, width: 196, height: 144 });
   assert.equal(win.sent.at(-1)[1].expanded, true);
   assert.equal(win.sent.at(-1)[1].items.length, 2);
 
@@ -239,7 +271,7 @@ test('标准档同样可点击展开和收起，并复用同一窗口', async t 
 
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
   assert.equal(f.windows.length, 1);
-  assert.deepEqual(win.bounds, { x: 242, y: 388, width: 196, height: 96 });
+  assert.deepEqual(win.bounds, { x: 242, y: 388, width: 196, height: 131 });
   assert.equal(win.sent.at(-1)[1].expanded, true);
 
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
@@ -1218,18 +1250,23 @@ test('静态页面无内联脚本能力，额度内容位于独立流光外壳�
   assert.match(css, /\.quota-progress\s*\{[\s\S]*?height:\s*3px/);
 });
 
-test('额度卡片复用星空工作台流光，悬停加速且减少动态效果时静止', () => {
+test('额度卡流光沿可见卡面流动，悬停不变速且减少动态效果时静止', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
   assert.match(css, /@property\s+--quota-beam-angle/);
   assert.match(css, /@keyframes\s+quotaBeamOrbit/);
   assert.match(css, /#quota-beam::before,[\s\S]*?#quota-beam::after[\s\S]*?conic-gradient\([\s\S]*?#3fdbec[\s\S]*?#8fa7ff[\s\S]*?#ef93de[\s\S]*?#ffd18b/);
   assert.match(css, /animation:\s*quotaBeamOrbit\s+4\.5s\s+linear\s+infinite/);
-  assert.match(css, /#quota-beam:hover::before[\s\S]*?animation-duration:\s*3s/);
+  const hoverRules = [...css.matchAll(/#quota-beam:hover[^{}]*\{([^}]+)\}/g)];
+  hoverRules.forEach(([, rule]) => assert.doesNotMatch(rule, /animation(?:-duration)?:/));
+  assert.match(css, /#quota-beam:hover::after\s*\{\s*opacity:\s*\.76/);
+  assert.match(css, /#quota-beam:has\(#quota-label\[data-size="compact"\]\[data-expanded="false"\]\)::before\s*\{\s*inset:\s*2px;\s*border-radius:\s*11px/);
+  const compactShell = css.match(/#quota-beam:has\(#quota-label\[data-size="compact"\]\[data-expanded="false"\]\)\s*\{([^}]+)\}/)?.[1] || '';
+  assert.doesNotMatch(compactShell, /background:/, '外围留边必须透明，避免扩大正式版可见轮廓');
   assert.match(css, /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*?animation:\s*none/);
   assert.match(css, /@media \(prefers-color-scheme:\s*dark\)[\s\S]*?#quota-beam::before\s*\{\s*opacity:\s*\.96/);
 });
 
-test('小巧展开为 196×96，单项额度使用大数字，双项额度仍完整保留', () => {
+test('小巧展开为 196×131，单项额度使用大数字，双项额度仍完整保留', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
   assert.match(css, /#quota-label\[data-expanded="true"\][\s\S]*?padding:\s*8px 10px 7px/);
   assert.match(css, /#quota-label\[data-expanded="true"\]\[data-item-count="1"\][\s\S]*?\.quota-value[\s\S]*?font-size:\s*24px/);
@@ -1283,12 +1320,14 @@ test('额度卡片使用大写品牌标识、蓝色周期边界及四周一致�
     '固定深色卡片必须保留与其他三边一致的顶部玻璃边');
   assert.doesNotMatch(systemDarkCard, /border-top-color:\s*transparent/,
     '跟随系统的深色卡片也必须保留完整四边轮廓');
-  assert.doesNotMatch(lightCard, /inset\s+0\s+1px/,
-    '浅色卡片不能再用顶部内阴影与外边框叠成多线');
+  assert.match(lightCard, /border:\s*1px solid rgba\(255, 255, 255,/,
+    '浅色卡片用白色玻璃边，避免与流光叠成灰黑框');
+  assert.match(lightCard, /inset\s+0\s+1px\s+0\s+rgba\(255, 255, 255,/,
+    '浅色卡片用轻微内高光恢复层次，背景保持填满');
   assert.doesNotMatch(lightCard, /border-top-color:\s*transparent/,
     '浅色卡片必须保留与其他三边一致的顶部玻璃边');
-  assert.match(lightInnerEdge, /border-color:\s*transparent/,
-    '浅色卡片内部细边框不能再次形成顶部白线');
+  assert.match(lightInnerEdge, /border:\s*1px solid rgba\(255, 255, 255,/,
+    '浅色卡片内缘使用白高光，深色和色弱保留独立规则');
 });
 
 test('额度标签改为两行名称、周期、百分比和进度条，不再渲染另有项目提示', () => {
@@ -1309,7 +1348,7 @@ test('标准档复用原小巧版 11px 字号和 3px 进度条，小巧折叠为
   assert.match(css, /#quota-label\s*\{[\s\S]*?padding:\s*5px 8px/);
   assert.match(css, /#quota-label\s*\{[\s\S]*?font-size:\s*11px/);
   assert.match(css, /\.quota-progress\s*\{[\s\S]*?height:\s*3px/);
-  assert.match(css, /#quota-label\[data-size="compact"\]\[data-expanded="false"\][\s\S]*?border-radius:\s*11px/);
+  assert.match(css, /#quota-label\s*\{[\s\S]*?border-radius:\s*inherit/);
   assert.match(css, /#quota-label\[data-size="compact"\]\[data-expanded="false"\][\s\S]*?#summary[\s\S]*?display:\s*flex/);
   assert.match(css, /#quota-label\[data-expanded="true"\][\s\S]*?#quota-details[\s\S]*?display:\s*grid/);
 });
@@ -1339,7 +1378,7 @@ test('浅色系统叠在深色壁纸上仍使用高覆盖玻璃底和不透明�
   assert.match(css, /#quota-label\[data-expanded="true"\][\s\S]*?#quota-details[\s\S]*?display:\s*grid/);
 });
 
-test('标准卡片展开态复用 196×96 明细布局', () => {
+test('标准卡片展开态复用 196×131 明细布局', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
   assert.match(css, /#quota-label\[data-expanded="true"\][\s\S]*?padding:\s*8px 10px 7px/);
   assert.match(css, /#quota-label\[data-expanded="true"\]\[data-item-count="1"\][\s\S]*?grid-template-rows:\s*25px 3px/,

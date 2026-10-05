@@ -261,7 +261,7 @@ test('只有服务端返回的周窗口时直接以周额度为主，不捏造�
   ]), { period: 'auto' }, NOW);
 
   assert.equal(model.state, 'ready');
-  assert.deepEqual(model.items, [{
+  assert.deepEqual(model.items.map(({ pace, resetLabel, ...item }) => item), [{
     id: 'codex:primary', label: 'Codex', windowMinutes: 10080, remaining: 98,
     resetsAt: NOW + 6 * 86400000
   }]);
@@ -347,9 +347,9 @@ test('stale 有未重置旧值时保留，所选周期全部已重置时优先�
   const expiredFiveHour = quotaWindow('codex:five-expired', 300, 0, NOW - 1);
 
   assert.deepEqual(buildQuotaLabelModel(snapshot([expiredWeekly, validWeekly], { stale: true }),
-    { period: 'weekly' }, NOW), {
-    state: 'stale', items: [{ ...validWeekly, label: 'Codex' }], overflow: 0
-  });
+    { period: 'weekly' }, NOW).items.map(({ pace, resetLabel, ...item }) => item), [{ ...validWeekly, label: 'Codex' }]);
+  assert.equal(buildQuotaLabelModel(snapshot([expiredWeekly, validWeekly], { stale: true }),
+    { period: 'weekly' }, NOW).state, 'stale');
   assert.deepEqual(buildQuotaLabelModel(snapshot([expiredFiveHour], { stale: true }),
     { period: 'auto' }, NOW), { state: 'reset-wait', items: [], overflow: 0 });
   assert.deepEqual(buildQuotaLabelModel(snapshot([expiredFiveHour], { stale: true }),

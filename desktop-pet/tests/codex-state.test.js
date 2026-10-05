@@ -28,7 +28,7 @@ test('旧版单额度池未返回编号时明确归为通用 Codex 额度', () =
   }]);
 });
 
-test('额度只保留可用重置机会数量，不保留重置凭据详情', () => {
+test('额度保留重置机会数量，畸形明细与任意附加字段不传出', () => {
   const result = state().normalizeQuota({
     ...quota(window),
     rateLimitResetCredits: {
@@ -38,6 +38,8 @@ test('额度只保留可用重置机会数量，不保留重置凭据详情', ()
   }, 100);
   assert.equal(result.resetCreditsAvailable, 1);
   assert.equal(JSON.stringify(result).includes(SECRET), false);
+  assert.deepEqual(result.resetOpportunities, []);
+  assert.equal(result.resetDetailsPartial, true);
   for (const availableCount of [-1, 1.5, '1', Number.NaN, Infinity]) {
     assert.equal('resetCreditsAvailable' in state().normalizeQuota({
       ...quota(window), rateLimitResetCredits: { availableCount }

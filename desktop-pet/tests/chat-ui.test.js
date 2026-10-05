@@ -26,6 +26,7 @@ function fixture(overrides = {}) {
   const sent = [];
   const avatars = [];
   const animations = [];
+  const activities = [];
   class Element {
     constructor() {
       this.listeners = new Map(); this.children = []; this.dataset = {}; this.style = {};
@@ -35,6 +36,7 @@ function fixture(overrides = {}) {
       this.classList = { add: () => {} };
     }
     addEventListener(name, fn) { this.listeners.set(name, fn); }
+    removeEventListener(name, fn) { if (this.listeners.get(name) === fn) this.listeners.delete(name); }
     dispatch(name, fields = {}) { return this.listeners.get(name)?.({ preventDefault() {}, stopPropagation() {}, ...fields }); }
     append(...children) { children.forEach(child => this.appendChild(child)); }
     appendChild(child) { if (child.parent) child.remove(); child.parent = this; this.children.push(child); }
@@ -71,14 +73,18 @@ function fixture(overrides = {}) {
     ...overrides
   };
   window.qiuqiuChat = api;
-  window.PetChatAvatar = { render: (target, appearance) => avatars.push({ target, appearance }) };
-  window.AuroraRive = { create: (_target, appearance) => {
-    const animation = { appearance, destroyed: false, destroy() { this.destroyed = true; }, whenReady: () => Promise.resolve(true) };
+  const motion = new Element(); motion.matches = false;
+  window.matchMedia = () => motion;
+  window.PetChatAvatar = { create: target => {
+    const animation = { destroyed: false,
+      update(appearance, image) { avatars.push({ target, appearance, image }); },
+      setActive(value) { activities.push(value); },
+      destroy() { this.destroyed = true; } };
     animations.push(animation);
     return animation;
   } };
   vm.runInNewContext(source, { document, window });
-  return { get, sent, document, window, avatars, animations,
+  return { get, sent, document, window, avatars, animations, activities, motion,
     options: () => get('model-menu').children.filter(item => item.dataset.model),
     receive: next => receive(next), receiveAppearance: (...args) => receiveAppearance(...args) };
 }
@@ -124,18 +130,41 @@ test('新版提示独立于聊天记录，同版本流式刷新不重复播报�
   assert.equal((html.match(/id="app-update"/g) || []).length, 1);
 });
 
-test('幻彩云聊天头像载入当前球球动画，切换形态后清理动画', async () => {
+test('聊天外观与原生快照交给唯一头像控制器，消息刷新不重建实例', async () => {
   const f = fixture();
   f.receiveAppearance({ shape: 'aurora-cloud' }, 'data:image/png;base64,AAAA');
-  const image = f.get('chat-avatar').children[0];
-  assert.equal(image.src, 'data:image/png;base64,AAAA');
-  assert.equal(image.draggable, false);
+  assert.equal(f.avatars.at(-1).image, 'data:image/png;base64,AAAA');
   assert.equal(f.animations.length, 1);
-  await flush();
-  assert.equal(f.get('chat-avatar').children.includes(image), false);
   f.receiveAppearance({ shape: 'cloud' });
-  assert.equal(f.animations[0].destroyed, true);
   assert.equal(f.avatars.at(-1).appearance.shape, 'cloud');
+  f.receive(stored());
+  assert.equal(f.animations.length, 1);
+  f.window.dispatch('beforeunload');
+  assert.equal(f.animations[0].destroyed, true);
+});
+
+test('头像活动同时取决于页面可见与减少动态，重开及偏好变化立即同步', () => {
+  const f = fixture();
+  assert.equal(f.activities.at(-1), true);
+  f.document.hidden = true; f.document.dispatch('visibilitychange');
+  assert.equal(f.activities.at(-1), false);
+  f.motion.matches = true; f.motion.dispatch('change');
+  f.document.hidden = false; f.document.dispatch('visibilitychange');
+  assert.equal(f.activities.at(-1), false);
+  f.motion.matches = false; f.motion.dispatch('change');
+  assert.equal(f.activities.at(-1), true);
+});
+
+test('输入一行起四行后滚动；resize与中文输入结束重新测量且保留草稿', () => {
+  const f = fixture();
+  const input = f.get('message-input');
+  input.value = '中文草稿'; input.scrollHeight = 40; input.dispatch('input');
+  assert.equal(input.style.height, '40px'); assert.equal(input.style.overflowY, 'hidden');
+  input.scrollHeight = 106; f.window.dispatch('resize');
+  assert.equal(input.style.height, '106px'); assert.equal(input.style.overflowY, 'hidden');
+  input.scrollHeight = 128; input.dispatch('compositionend');
+  assert.equal(input.style.height, '106px'); assert.equal(input.style.overflowY, 'auto');
+  assert.equal(input.value, '中文草稿'); assert.deepEqual(f.sent, []);
 });
 
 test('自定义模型菜单上下键 Home End Enter 选择，Esc 先关闭菜单并回焦入口', async () => {
@@ -401,6 +430,53 @@ test('首页新聊天取消后回到聊天；重新打开窗口不保留历史�
   f.get('chat-history').focus();
   f.window.dispatch('focus');
   assert.equal(f.document.activeElement, input);
+});
+
+test('历史前的新聊天入口始终可见，空草稿仅禁用，不重复创建或丢失输入', async () => {
+  let creates = 0;
+  const f = fixture({ newChat: async () => { creates += 1; return { accepted: true }; } });
+  await flush();
+  const button = f.get('new-chat');
+  assert.equal(button.hidden, false);
+  assert.equal(button.disabled, true);
+  assert.match(button.title, /当前已是新聊天/);
+  f.get('message-input').value = '第一句话仍在草稿里';
+  f.get('message-input').dispatch('input');
+  button.dispatch('click');
+  f.get('confirm-new-chat').dispatch('click');
+  assert.equal(creates, 0);
+  assert.equal(f.sent.length, 0);
+  assert.equal(f.get('message-input').value, '第一句话仍在草稿里');
+  assert.equal(f.get('new-chat-confirmation').hidden, true);
+  f.receive(stored());
+  assert.equal(button.hidden, false);
+  assert.equal(button.disabled, false);
+  assert.equal(button.title, '新聊天');
+  assert.equal(f.get('messages').children[0].children[1].textContent, '今天散步了吗？');
+  assert.equal(f.get('history-list').children.length, 2);
+  for (const state of [{ ...stored(), busy: true }, { ...stored(), connection: 'connecting' },
+    { ...idle(), activeChatId: 'new-empty-draft', canStartNewChat: false }]) {
+    f.receive(state);
+    assert.equal(button.hidden, false);
+    assert.equal(button.disabled, true);
+    button.dispatch('click');
+  }
+  assert.equal(creates, 0);
+  assert.equal(f.sent.length, 0);
+});
+
+test('新聊天保留正式版历史前的位置及 320/360 顶栏适配', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../chat.html'), 'utf8');
+  const actions = html.match(/<div class="header-actions">([\s\S]*?)<\/header>/)[1];
+  const button = actions.match(/<button id="new-chat"[^>]*>/)[0];
+  assert.ok(actions.indexOf('id="new-chat"') < actions.indexOf('id="chat-history"'));
+  assert.match(button, /aria-label="新聊天"/);
+  assert.match(button, /disabled/);
+  assert.doesNotMatch(button, /\shidden(?:[\s=>])/);
+  const css = fs.readFileSync(path.join(__dirname, '../chat.css'), 'utf8');
+  assert.match(css, /\.header-actions\s*\{[^}]*flex:\s*0\s+0\s+auto/);
+  assert.match(css, /\.pet-mark\s*\{[^}]*width:\s*32px[^}]*flex:\s*0\s+0\s+32px/);
+  assert.match(css, /@media\s*\(max-width:\s*330px\)\s*\{[\s\S]*?\.header-action\s*\{[^}]*width:\s*30px[\s\S]*?\.header-action span\s*\{\s*display:\s*none/);
 });
 
 test('空聊天不可重复新建；忙碌、连接中及切换待确认时阻止切换或新建', async () => {
