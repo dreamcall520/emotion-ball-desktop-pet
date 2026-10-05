@@ -80,7 +80,14 @@ fs.mkdirSync(out, { recursive: true });
     await appearanceChat.locator('html[data-color-mode="accessible"]').waitFor();
     assert.equal(await appearanceChat.locator('html').getAttribute('data-accessible-appearance'), 'dark');
     assert.equal(await chat.locator('html').getAttribute('data-color-mode'), 'standard');
-    report.interactions.push('latest real UI accessibility/theme controls remain independent from main demos');
+    assert.equal(await page.locator('[data-demo-appearance][data-demo="quota"]').evaluate(e => getComputedStyle(e).backgroundColor), 'rgb(24, 33, 37)');
+    await page.locator('[data-ap-look="light"]').click();
+    assert.equal(await page.locator('[data-demo-appearance][data-demo="quota"]').evaluate(e => getComputedStyle(e).backgroundColor), 'rgb(246, 248, 251)');
+    await page.locator('[data-ap-look="system"]').click();
+    await page.emulateMedia({ colorScheme: 'dark' });
+    assert.equal(await page.locator('[data-demo-appearance][data-demo="quota"]').evaluate(e => getComputedStyle(e).backgroundColor), 'rgb(24, 33, 37)');
+    await page.emulateMedia({ colorScheme: 'light' });
+    report.interactions.push('latest real UI accessibility/theme controls, independent host theme, readable demo canvas');
     await page.reload();
     for (const [width, theme] of [[1440,'light'],[1440,'dark'],[390,'light'],[390,'dark'],[320,'light'],[320,'dark']]) {
       await page.setViewportSize({ width, height: width > 600 ? 1000 : 844 });

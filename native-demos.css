@@ -16,6 +16,9 @@
 .native-notes-panel { min-height: 520px; }
 .native-notes-card { min-height: 220px; }
 .native-appearance-preview { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; padding-block: 24px; }
+.native-appearance-preview .native-quota { background: #f6f8fb; }
+.ap-demo[data-look="dark"] .native-appearance-preview .native-quota { background: #182125; }
+@media (prefers-color-scheme: dark) { .ap-demo[data-look="system"] .native-appearance-preview .native-quota { background: #182125; } }
 .install-guide { margin: 24px 0 0; padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
 .install-visual-steps { display: grid; gap: 12px; }
 .install-visual-step { display: flex; align-items: center; gap: 14px; padding: 12px; border-radius: 10px; background: var(--surface-solid); }
