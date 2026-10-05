@@ -1,0 +1,125 @@
+{
+  "publicCommit": "7f5c291d34512f629c17275c93bed472f421e8b9",
+  "publicVersion": "0.4.00",
+  "files": [
+    {
+      "file": "customize.css",
+      "source": "desktop-pet/customize.css",
+      "sourceSha256": "a2f0692f58d434c47e4fff9951a77e4be9c63a999afac9ede0ed4e84390b9ea0",
+      "sha256": "a2f0692f58d434c47e4fff9951a77e4be9c63a999afac9ede0ed4e84390b9ea0",
+      "adaptation": null
+    },
+    {
+      "file": "aurora-rive.css",
+      "source": "desktop-pet/aurora-rive.css",
+      "sourceSha256": "bff6f40e54eca819766a66ffe9ad5e70181849fada343a63e4e819ddc8eebcd7",
+      "sha256": "bff6f40e54eca819766a66ffe9ad5e70181849fada343a63e4e819ddc8eebcd7",
+      "adaptation": null
+    },
+    {
+      "file": "lib/customization.js",
+      "source": "desktop-pet/lib/customization.js",
+      "sourceSha256": "bf79dd95b241c3a5f4f83b1a1215f13061c47805392d1829699ea92f431a2b55",
+      "sha256": "bf79dd95b241c3a5f4f83b1a1215f13061c47805392d1829699ea92f431a2b55",
+      "adaptation": null
+    },
+    {
+      "file": "lib/rive.js",
+      "source": "desktop-pet/lib/rive.js",
+      "sourceSha256": "6381cc75a1a0ed80ea76e8958e350d7162bc9ecc539b24c6b05998bafe39be9b",
+      "sha256": "6381cc75a1a0ed80ea76e8958e350d7162bc9ecc539b24c6b05998bafe39be9b",
+      "adaptation": null
+    },
+    {
+      "file": "lib/boo-binary.js",
+      "source": "desktop-pet/lib/boo-binary.js",
+      "sourceSha256": "6dca0e2b29717d749e5dae5985986a70218cbb2c458ba2f62d668f2c46fe66b7",
+      "sha256": "6dca0e2b29717d749e5dae5985986a70218cbb2c458ba2f62d668f2c46fe66b7",
+      "adaptation": null
+    },
+    {
+      "file": "lib/aurora-rive.js",
+      "source": "desktop-pet/lib/aurora-rive.js",
+      "sourceSha256": "84988e9e3b8e3ee783db599f4e5c4cd14c40d6a6f3873deb429fa51af41066e4",
+      "sha256": "84988e9e3b8e3ee783db599f4e5c4cd14c40d6a6f3873deb429fa51af41066e4",
+      "adaptation": null
+    },
+    {
+      "file": "lib/chat-avatar.js",
+      "source": "desktop-pet/lib/chat-avatar.js",
+      "sourceSha256": "7a1794f12cd589a0602b6db8ffa23aa326842e0d620c58239522d0a1487eb138",
+      "sha256": "7a1794f12cd589a0602b6db8ffa23aa326842e0d620c58239522d0a1487eb138",
+      "adaptation": null
+    },
+    {
+      "file": "lib/RIVE-LICENSE.txt",
+      "source": "desktop-pet/lib/RIVE-LICENSE.txt",
+      "sourceSha256": "8a1efa755d19446b51a18e1c15f6308728da0b36283c4d38050698ad6954b69a",
+      "sha256": "8a1efa755d19446b51a18e1c15f6308728da0b36283c4d38050698ad6954b69a",
+      "adaptation": null
+    },
+    {
+      "file": "assets/aurora-six-lobe-body.png",
+      "source": "desktop-pet/assets/aurora-six-lobe-body.png",
+      "sourceSha256": "25558ad38664822b36e7919d25beed6032cbd49bc5ce997166df167a84293abb",
+      "sha256": "25558ad38664822b36e7919d25beed6032cbd49bc5ce997166df167a84293abb",
+      "adaptation": null
+    },
+    {
+      "file": "assets/aurora-six-lobe-icon.png",
+      "source": "desktop-pet/assets/aurora-six-lobe-icon.png",
+      "sourceSha256": "34b6aefdc721faef77f3f47413c5651c42c7d9ddf7a1ba22cf53e28f7f2ba4e2",
+      "sha256": "34b6aefdc721faef77f3f47413c5651c42c7d9ddf7a1ba22cf53e28f7f2ba4e2",
+      "adaptation": null
+    },
+    {
+      "file": "index.html",
+      "source": "desktop-pet/customize.html",
+      "sourceSha256": "0a7ce20224e25b2bdba049bb19057c8b6a70be21c71dac8aa4bc10df0c10d498",
+      "sha256": "7a7e6320dce23c1db995e53c2aa7a6bd2acef275057c02b51b5693db95b6673b",
+      "adaptation": "Dependency URLs, public favicon, browser bridge and narrow-screen stylesheet only; DOM retained."
+    },
+    {
+      "file": "customize-renderer.js",
+      "source": "desktop-pet/customize-renderer.js",
+      "sourceSha256": "188bbb43166916be05906855f2eb67994dbfa59c6051c6da4c4deee68839681e",
+      "sha256": "baebdf4768cb866a6ee7bddb8461a5659275f2c62a491d645031a3d201b043c8",
+      "adaptation": "Three feedback strings describe the isolated browser preview; interaction logic unchanged."
+    },
+    {
+      "file": "../../assets/vendor/emotion-ball/rings.js",
+      "source": "emotion-ball/js/rings.js",
+      "sourceSha256": "7fd196046650b8273d87c9b85a899554d90f35c62d676eea1c681630e721ec20",
+      "sha256": "7fd196046650b8273d87c9b85a899554d90f35c62d676eea1c681630e721ec20",
+      "adaptation": null
+    },
+    {
+      "file": "../../assets/vendor/emotion-ball/custom-shapes.js",
+      "source": "emotion-ball/js/custom-shapes.js",
+      "sourceSha256": "50e20dcb2691dc9e29791602d593190878bf96ebfc21e00e592e9005eff3101d",
+      "sha256": "50e20dcb2691dc9e29791602d593190878bf96ebfc21e00e592e9005eff3101d",
+      "adaptation": null
+    },
+    {
+      "file": "../../assets/vendor/emotion-ball/emotions.js",
+      "source": "emotion-ball/js/emotions.js",
+      "sourceSha256": "c938eb9601ba4b37c67e78fa0e4c1294d1882b498111600b83a8ebfe2aeb8d77",
+      "sha256": "c938eb9601ba4b37c67e78fa0e4c1294d1882b498111600b83a8ebfe2aeb8d77",
+      "adaptation": null
+    },
+    {
+      "file": "../../assets/vendor/emotion-ball/ball.js",
+      "source": "emotion-ball/js/ball.js",
+      "sourceSha256": "4a663de7807c4d95e6e7309d3851f2f8834bd60f40368c33dad248693d741cc1",
+      "sha256": "4a663de7807c4d95e6e7309d3851f2f8834bd60f40368c33dad248693d741cc1",
+      "adaptation": null
+    },
+    {
+      "file": "../../assets/vendor/emotion-ball/engine.js",
+      "source": "emotion-ball/js/engine.js",
+      "sourceSha256": "fb1131c1d752dfeb2f5a109b659918288f55b8a0e8b3eca1fbc93c724f623961",
+      "sha256": "fb1131c1d752dfeb2f5a109b659918288f55b8a0e8b3eca1fbc93c724f623961",
+      "adaptation": null
+    }
+  ]
+}

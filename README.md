@@ -6,7 +6,7 @@
 
 - 官网保持免费、非商业，不放广告、付费、赞助或商业推广。
 - Apple 芯片与 Intel x64 下载信息分开维护，不用另一架构冒充。
-- 下载链接必须来自公开 GitHub Release 直链，并同步版本、文件大小、发布日期和 SHA-256。
+- 下载链接必须来自公开 GitHub Release 直链，同步版本和发布日期；文件大小、SHA-256 保留在本维护文档。
 - Intel 构建候选在真实 Intel Mac 验收前，必须保留明显说明。
 - `LICENSE`、`NOTICE.md` 和原作者 `sam70361/emotion-ball` 署名不得删除。
 - 官网不使用 Cookie、表单或远程字体；访问统计仅限下方说明的匿名汇总范围。
@@ -31,7 +31,7 @@ Umami Cloud 网站“球球官网”，website ID 为 `fe855bb0-9000-49aa-820b-b
 
 ## 当前下载记录
 
-Apple 芯片版 **0.4.00**，发布日期 **2026-10-05**，GitHub 兼容标签 `v0.4.0`。本轮包含便签与待办、来定制球球、自动更新提醒、额度卡片 2.0 与全局 UI 升级。用户确认的六项日志完整保留在首页，第六项仅标题；官网可见的 0.3.27–0.3.32 日志合并为本次里程碑，范围外 12 条历史保留。
+Apple 芯片版 **0.4.00**，发布日期 **2026-10-05**，GitHub 兼容标签 `v0.4.0`。本轮包含便签与待办、来定制球球、自动更新提醒、额度卡片 2.0 与全局 UI 升级。首页更新日志日期按用户要求为 **2026-10-06**；下载发布日期仍采用 Release 的 2026-10-05。用户确认的六项日志完整保留在首页，第六项仅标题；官网可见的 0.3.27–0.3.32 日志合并为本次里程碑，范围外 12 条历史保留。
 
 | 文件 | 精确大小（bytes） | SHA-256 |
 | --- | ---: | --- |
@@ -85,21 +85,27 @@ node --test tests/*.test.cjs
 NODE_PATH=/path/to/existing/node_modules QIUQIU_SITE_URL=http://127.0.0.1:4185/ QIUQIU_QA_OUTPUT=/tmp/qiuqiu-website-0400 node tests/showcases.browser.cjs
 ```
 
-浏览器检查包括 1440/390/320px 浅深色、系统深色、减少动态及四类展示的实际操作。检查使用浏览器临时设置退出匿名统计；分区截图暂隐藏固定导航与回顶按钮，检查仍在完整页面运行。
+浏览器检查包括 1440/390/320px 浅深色、系统深色、减少动态及真实界面和跨窗口/保存头像联动的实际操作。检查使用浏览器临时设置退出匿名统计；分区截图暂隐藏固定导航与回顶按钮，检查仍在完整页面运行。
 
 部署沿用 `gh-pages` 根目录与 `qiuqiu.pet`。本地检查通过后提交、推送；必须回读 Pages 的实际构建提交及线上 HTML/变更资源，不能把推送成功当作部署完成。
 
+## 当前功能演示
+
+额度、趋势、聊天、定制、便签/待办采用公开 App `main@7f5c291d34512f629c17275c93bed472f421e8b9` 的真实 HTML、CSS、renderer 和形态引擎，直接嵌入官网。来源哈希和必要适配见各演示目录 `source-manifest.json`。主介绍不再叠放截图或折叠简化示例；历史截图文件仅作归档。
+
+Electron IPC 替换为本页内存桥接，不连接账户、模型或账单，不修改 App 或用户资料；刷新页面恢复示例。定制保存后同步本页聊天头像，收藏载入仅影响预览。公开六瓣幻彩采用原 Rive 引擎。外层官网沿用浅灰蓝/深灰，演示保留当前 App 薄荷/石墨配色；手机仅适配原控件，不用截图缩放。离屏、页面隐藏、暂停与减少动态均可停止演示动效。
+
+安装区是三步示意图，不冒充 macOS 截图；首次打开路径依据 [Apple 官方说明](https://support.apple.com/zh-cn/102445)。
+
 ## 目录
 
-- `index.html`：页面内容和可访问结构。
-- `styles.css`：浅色、深色、移动端与网页玻璃材质近似。
-- `app.js`：外观切换、移动导航和校验值复制。
-- `motion-showcase.js`、`motion-showcase.css`：首屏、互动、Codex 与桌面场景的实时 V5 动效编排；自动播放支持离屏暂停、手动点选及减少动态效果。
-- `quota-demo.js`、`quota-demo.css`：可操作的额度演示卡片，只使用示例数据，不连接 Codex。
-- `assets/motion/`：复用已确认的 V5 互动、思绪游光和文案模块，以及原有身体动作采样；原设计稿和桌面应用未修改。
-- `assets/vendor/emotion-ball/`：复用公开 0.4.00 的球形角色矢量引擎与形态数据。
-- `notes-showcase.js`、`notes-showcase.css`：便签、待办、桌面卡与整理确认的内存示例，无真实模型或通知。
-- `customize-showcase.js`、`customize-showcase.css`：四形态与实时配色、命名收藏、保存后头像同步的网页示例；幻彩使用公开六瓣静态图，不模拟真实 Rive 动效。
-- `chat-showcase.js`、`chat-showcase.css`：0.4.00 浅薄荷/冷石墨聊天样式与历史续聊示例。
-- `assets/screenshots/`：保留历史图；`v0400-*` 用于当前主介绍图。定制与额度来自最终公开包原生截图，便签直接渲染公开版 DOM/CSS 及合成内容；简化交互示例收进折叠区域。
+- `index.html`、`styles.css`、`dark-theme.css`：页面内容、外层配色与响应式布局。
+- `app.js`：主题、移动导航等原有页面操作。
+- `motion-showcase.js/css`、`assets/motion/`：复用 V5 互动、思绪游光与身体动作；支持离屏暂停、手动点选和减少动态。
+- `demo-embed.js`、`native-demos.css`：同源嵌入、主题、保存头像、尺寸和暂停联动。
+- `demos/{quota,chat,customize,notes}/`：当前公开 App 界面、内存桥接、来源清单及可运行检查。
+- `appearance-showcase.js/css`：标准/色弱及浅色/深色/系统演示控制。
+- `chat-showcase.css`、`notes-showcase.css`：官网介绍排版。
+- `assets/vendor/emotion-ball/`：公开球形角色引擎。
+- `assets/screenshots/`：历史图片归档，主介绍不再使用。
 - `LICENSE`、`NOTICE.md`：许可与原作者声明。

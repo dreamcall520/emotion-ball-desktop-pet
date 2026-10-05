@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN" data-appearance="system">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>API 本月费用</title>
+  <link rel="stylesheet" href="quota-label.css">
+  <link rel="stylesheet" href="api-usage-label.css">
+  <link rel="stylesheet" href="color-mode.css">
+  <link rel="stylesheet" href="demo-adapter.css">
+  <script src="demo-bridge.js"></script>
+</head>
+<body>
+  <div id="quota-beam">
+    <section id="quota-label" data-size="compact" data-expanded="false" data-severity="normal" data-has-items="true" data-item-count="1" role="button" tabindex="0" aria-expanded="false" aria-label="API 报告未连接，打开连接设置">
+      <p id="summary"><span class="summary-period"><span class="summary-badge">API</span><span id="api-period" class="summary-period-label">未连接</span></span><span id="api-compact-cost" class="summary-value">↗</span></p>
+      <div id="compact-header"><div class="compact-product"><span id="compact-product">API</span><span id="api-month" class="period-pill">本月</span></div><span class="compact-collapse" aria-hidden="true">⌃</span></div>
+      <div id="api-details">
+        <div id="api-amounts">
+        <div id="api-month-cost" aria-label="本月完整 API 费用">—</div>
+        <div id="api-today"><span>今日 <span class="utc-note">UTC</span></span><span id="api-today-cost">—</span></div>
+        </div>
+        <div id="api-footer">
+        <p id="api-query-status" role="status" aria-live="polite">尚未连接</p>
+        <button id="api-open-details" type="button">连接 API 报告 ↗</button>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script src="color-mode.js"></script>
+  <script src="api-usage-label-renderer.js"></script>
+</body>
+</html>

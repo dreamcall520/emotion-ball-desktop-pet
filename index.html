@@ -21,15 +21,14 @@
         else if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
       } catch (_error) {}
     </script>
-    <link rel="stylesheet" href="styles.css?v=20261005-0400">
-    <link rel="stylesheet" href="motion-showcase.css?v=20260911-5">
-    <link rel="stylesheet" href="quota-demo.css?v=20261005-0400">
-    <link rel="stylesheet" href="dark-theme.css?v=20261005-0400">
-    <link rel="stylesheet" href="chat-showcase.css?v=20261005-0400">
-    <link rel="stylesheet" href="appearance-showcase.css?v=20260928-2">
-    <link rel="stylesheet" href="customize-showcase.css?v=20261005-0400">
-    <link rel="stylesheet" href="notes-showcase.css?v=20261005-0400">
-    <link rel="stylesheet" href="review-refinements.css?v=20261006-0400-trend">
+    <link rel="stylesheet" href="styles.css?v=20261006-native">
+    <link rel="stylesheet" href="motion-showcase.css?v=20261006-native">
+    <link rel="stylesheet" href="dark-theme.css?v=20261006-native">
+    <link rel="stylesheet" href="chat-showcase.css?v=20261006-native">
+    <link rel="stylesheet" href="appearance-showcase.css?v=20261006-native">
+    <link rel="stylesheet" href="notes-showcase.css?v=20261006-native">
+    <link rel="stylesheet" href="review-refinements.css?v=20261006-native">
+    <link rel="stylesheet" href="native-demos.css?v=20261006-native">
     <title>球球桌宠 - 免费的 macOS 桌面伙伴</title>
   </head>
   <body>
@@ -153,20 +152,7 @@
           <div class="release-note codex-privacy-note"><p><strong>默认关闭，可选开启</strong><span>只查看状态，不代你操作。</span></p><a href="#privacy">了解隐私边界 <span aria-hidden="true">→</span></a></div>
         </div>
         <div class="codex-live-showcase" data-motion-scene="codex">
-          <figure class="app-capture quota-capture">
-            <div class="quota-capture-pair">
-              <div><a class="capture-light" href="assets/screenshots/v0400-quota-light.png" target="_blank" rel="noopener" aria-label="打开 0.4.00 界面原图"><img src="assets/screenshots/v0400-quota-light.png" width="392" height="288" alt="0.4.00 额度卡片：双周期、重置机会、剩余额度和任务入口" loading="lazy"></a><a class="capture-dark" href="assets/screenshots/v0400-quota-dark.png" target="_blank" rel="noopener" aria-label="打开 0.4.00 界面原图"><img src="assets/screenshots/v0400-quota-dark.png" width="392" height="288" alt="0.4.00 深色额度卡片" loading="lazy"></a></div>
-              <div><a class="capture-light" href="assets/screenshots/v0400-api-light.png" target="_blank" rel="noopener" aria-label="打开 0.4.00 界面原图"><img src="assets/screenshots/v0400-api-light.png" width="392" height="184" alt="0.4.00 独立 API 卡片：本月和今日费用" loading="lazy"></a><a class="capture-dark" href="assets/screenshots/v0400-api-dark.png" target="_blank" rel="noopener" aria-label="打开 0.4.00 界面原图"><img src="assets/screenshots/v0400-api-dark.png" width="392" height="184" alt="0.4.00 深色 API 费用卡片" loading="lazy"></a></div>
-              <div class="quota-capture-trend">
-                <h3>额度趋势与用量预估</h3>
-                <p>对照剩余额度与时间，看看额度预计何时用完。</p>
-                <a class="capture-light" href="assets/screenshots/v0400-trend-light.png" target="_blank" rel="noopener" aria-label="打开 0.4.00 趋势弹窗原图"><img src="assets/screenshots/v0400-trend-light.png" width="808" height="828" alt="0.4.00 趋势弹窗：周期切换、额度与时间曲线、用量预估和重置机会" loading="lazy"></a>
-                <a class="capture-dark" href="assets/screenshots/v0400-trend-dark.png" target="_blank" rel="noopener" aria-label="打开 0.4.00 深色趋势弹窗原图"><img src="assets/screenshots/v0400-trend-dark.png" width="808" height="828" alt="0.4.00 深色额度趋势弹窗" loading="lazy"></a>
-              </div>
-            </div>
-            <figcaption>0.4.00 实际界面 · 示例数据 · 点击查看大图</figcaption>
-          </figure>
-          <details class="showcase-try" data-showcase-try><summary>体验额度卡片 · 网页示例</summary><div class="quota-playground" data-quota-demo></div></details>
+          <iframe class="native-demo native-quota" src="demos/quota/index.html" title="0.4.00 额度卡片与趋势演示" data-app-demo data-demo="quota" height="740" loading="lazy"></iframe>
           <div class="codex-pet-row">
             <div class="codex-pet-copy"><span data-motion-label>思考中 · 思绪游光</span><p data-motion-bubble>一点点把线索串起来。</p></div>
             <div class="motion-stage">
@@ -195,49 +181,8 @@
           <a class="chat-download-link" href="#download">下载 0.4.00，和球球聊聊 →</a>
         </div>
         <div class="chat-demo-wrap">
-          <p class="release-badge">0.4.00 聊天示例</p>
-          <p class="release-note">浅薄荷与冷石墨，让聊天更轻、更清楚。</p>
-          <div class="chat-demo" data-chat-demo>
-            <header class="chat-demo-header">
-              <span class="chat-demo-avatar" data-custom-chat-avatar aria-label="已保存的球球形象"><img src="assets/favicon.png" width="40" height="40" alt=""></span>
-              <div><strong>聊一会儿</strong><span data-chat-subtitle>接着聊，我还记得这一段</span></div>
-              <button type="button" data-chat-new><span aria-hidden="true">⊕</span> 新聊天</button>
-              <button type="button" data-chat-history aria-expanded="false">历史</button>
-              <button class="chat-demo-close" type="button" data-chat-close aria-label="收起聊天演示">×</button>
-            </header>
-            <div class="chat-demo-body">
-              <div class="chat-demo-messages" data-chat-messages role="log" aria-label="示例聊天记录" aria-live="polite"></div>
-              <div class="chat-demo-history" data-chat-records hidden>
-                <h3>聊天记录</h3>
-                <button type="button" data-chat-select="today">歇一会儿 <span>今天</span></button>
-                <button type="button" data-chat-select="earlier">明天的小计划 <span>之前</span></button>
-                <p>切换记录不会新建对话。</p>
-              </div>
-              <div class="chat-demo-confirm" data-chat-confirm hidden role="group" aria-label="确认新聊天">
-                <h3>开始一段新聊天？</h3><p>原来的聊天会保留在“聊天记录”里。</p>
-                <div><button type="button" data-chat-cancel>取消</button><button type="button" data-chat-create>开始新聊天</button></div>
-              </div>
-            </div>
-            <div class="chat-demo-composer">
-              <p data-chat-draft>那就陪我放松一下吧。</p>
-              <div class="chat-demo-tools">
-                <details class="chat-model-picker" data-chat-model-picker>
-                  <summary aria-label="选择示例模型"><span data-chat-model-label>自动</span><span aria-hidden="true">⌃</span></summary>
-                  <div class="chat-model-options" role="group" aria-label="示例模型列表">
-                    <p>模型示例 · 实际列表以本机账号为准</p>
-                    <button type="button" data-chat-model="自动" aria-pressed="true">自动 <span>按内容选择</span></button>
-                    <button type="button" data-chat-model="Luna" aria-pressed="false">Luna <span>日常聊天</span></button>
-                    <button type="button" data-chat-model="Sol" aria-pressed="false">Sol <span>分析与计划</span></button>
-                    <button type="button" data-chat-model="Astra" aria-pressed="false">Astra <span>深入推导</span></button>
-                  </div>
-                </details>
-                <button type="button" data-chat-send>发送示例</button>
-              </div>
-            </div>
-            <p class="chat-demo-footer" data-chat-status>示例：延续同一段聊天</p>
-          </div>
-          <button class="chat-reset" type="button" data-chat-reset>重新体验</button><button class="chat-reset" type="button" data-chat-reopen hidden>打开聊天演示</button>
-          <p class="chat-demo-note">网页示例回复，不连接账号；在下方保存示例外观后，这里的头像会同步。</p>
+          <iframe class="native-demo native-chat" src="demos/chat/index.html" title="0.4.00 聊天交互演示" data-app-demo data-demo="chat" height="520" loading="lazy"></iframe>
+          <p class="demo-note">可操作演示 · 示例回复，不连接账号</p>
         </div>
       </section>
 
@@ -249,38 +194,10 @@
           <p class="release-note">实时预览、命名收藏和启动外观，聊天头像也会跟着已保存的形象变化。</p>
           <p class="chat-entry">使用入口：右键球球 → 来定制球球；尺寸在「球球尺寸」菜单调整。</p>
         </div>
-        <figure class="app-capture">
-          <a class="capture-light" href="assets/screenshots/v0400-customize-light.png" target="_blank" rel="noopener" aria-label="打开 0.4.00 界面原图"><img src="assets/screenshots/v0400-customize-light.png" width="1920" height="1400" alt="0.4.00 定制球球真实界面：实时预览、四种形态、我的形象和配色" loading="lazy"></a>
-          <a class="capture-dark" href="assets/screenshots/v0400-customize-dark.png" target="_blank" rel="noopener" aria-label="打开 0.4.00 界面原图"><img src="assets/screenshots/v0400-customize-dark.png" width="1920" height="1400" alt="0.4.00 定制球球深色真实界面" loading="lazy"></a>
-          <figcaption>0.4.00 实际界面 · 点击查看大图</figcaption>
-        </figure>
-        <details class="showcase-try" data-showcase-try><summary>试试外观搭配 · 简化网页示例</summary>
-        <div class="customize-layout" data-customize-demo>
-          <header class="customize-demo-head"><div><strong>定制球球</strong><p>选一个起点，再按喜好调整。</p></div><button type="button" data-custom-reset>恢复默认</button></header>
-          <div class="customize-preview">
-            <div class="customize-preview-title"><strong>实时预览</strong><div class="customize-switch" data-custom-sizes role="group" aria-label="定制预览尺寸"><button type="button" data-custom-size="large" aria-pressed="true">大图</button><button type="button" data-custom-size="desktop" aria-pressed="false">桌面尺寸</button></div></div>
-            <div class="customize-stage" data-custom-stage><div data-custom-ball aria-label="经典球球配色示意"></div><div data-custom-palette hidden><img class="customize-artwork" src="assets/huancai-icon.png" width="256" height="256" alt="幻彩 · 立体幻彩" data-custom-artwork><p data-custom-caption>幻彩 · 立体幻彩</p></div></div>
-            <label class="customize-size-picker">预览桌面尺寸 <select data-custom-pixels aria-label="预览桌面尺寸"><option>60</option><option>80</option><option selected>108</option><option>120</option><option>180</option><option>260</option></select> px</label>
-            <p class="customize-preview-foot">网页交互示意 · 仅使用示例外观</p>
-          </div>
-          <div class="customize-controls">
-            <strong class="customize-controls-title">外观选项</strong>
-            <fieldset><legend>形态</legend><div class="customize-shapes">
-              <button type="button" data-custom-shape="blob" aria-pressed="true"><span class="customize-shape-art" data-custom-classic-thumb aria-hidden="true"></span>经典</button>
-              <button type="button" data-custom-shape="cloud" aria-pressed="false"><img src="assets/custom-cloud.svg" alt="" width="48" height="48">云朵</button>
-              <button type="button" data-custom-shape="aurora" aria-pressed="false"><img src="assets/huancai-icon.png" alt="" width="48" height="48">幻彩</button>
-              <button type="button" data-custom-shape="square" aria-pressed="false"><img src="assets/custom-square.svg" alt="" width="48" height="48">方糖</button>
-            </div><p data-custom-description>熟悉的球球，也能换一套喜欢的配色。</p></fieldset>
-            <fieldset class="customize-presets"><legend>我的形象</legend><div data-custom-presets></div><label class="customize-preset-name"><span>示例名称</span> <input type="text" maxlength="20" value="薄荷小球" data-custom-name></label><button type="button" data-custom-collect>＋ 保存当前形象</button><p>载入收藏只改变预览，点「保存外观」后才应用。</p></fieldset>
-            <div class="customize-colors" data-custom-colors><label>球体颜色 <input type="color" value="#eeebe4" data-custom-body></label><label>眼睛颜色 <input type="color" value="#1a1a1a" data-custom-eye></label></div>
-            <label class="customize-transparency">透明度 <output data-custom-opacity-label>0%</output><input type="range" min="0" max="60" value="0" step="1" data-custom-opacity></label>
-            <fieldset data-custom-styles hidden><legend>幻彩样式</legend><div class="customize-switch" role="group" aria-label="幻彩样式"><button type="button" data-custom-style="dimensional" aria-pressed="true">立体幻彩</button><button type="button" data-custom-style="simple" aria-pressed="false">简色渐变</button></div></fieldset>
-            <p class="customize-preview-foot">经典、云朵、方糖可试配色；幻彩使用公开六瓣静态示例，App 内支持配色及对应动效。</p>
-          </div>
-          <footer class="customize-demo-footer"><label><input type="checkbox" checked data-custom-startup> 设为启动外观</label><button type="button" data-custom-save>保存外观</button></footer>
-          <p class="customize-demo-status" data-custom-startup-note role="status">网页示例，不会改动桌面球球。</p>
+        <div class="native-custom-wrap">
+          <iframe class="native-demo native-customize" src="demos/customize/index.html" title="0.4.00 定制球球交互演示" data-app-demo data-demo="customize" height="700" loading="lazy"></iframe>
+          <p class="demo-note">可操作演示 · 保存后同步本页聊天头像</p>
         </div>
-        </details>
       </section>
 
       <section class="notes-section section" id="notes" aria-labelledby="notes-title">
@@ -296,75 +213,20 @@
           <p class="notes-entry">使用入口：右键球球或菜单栏 → 便签与待办</p>
           <p class="notes-requirements">便签与待办保存在本机。提醒需球球保持运行；智能整理需登录 Codex 并联网。</p>
         </div>
-        <div class="notes-showcase-wrap">
-          <figure class="app-capture notes-capture">
-            <a class="capture-light" href="assets/screenshots/v0400-notes-light.png" target="_blank" rel="noopener" aria-label="打开 0.4.00 界面原图"><img src="assets/screenshots/v0400-notes-light.png" width="760" height="1040" alt="0.4.00 便签与待办列表：分类、收藏和紧凑工具栏" loading="lazy"></a>
-            <a class="capture-dark" href="assets/screenshots/v0400-notes-dark.png" target="_blank" rel="noopener" aria-label="打开 0.4.00 界面原图"><img src="assets/screenshots/v0400-notes-dark.png" width="760" height="1040" alt="0.4.00 便签与待办深色列表" loading="lazy"></a>
-            <a class="capture-light" href="assets/screenshots/v0400-note-card-light.png" target="_blank" rel="noopener" aria-label="打开 0.4.00 界面原图"><img src="assets/screenshots/v0400-note-card-light.png" width="600" height="440" alt="0.4.00 桌面便签：置顶、更多和关闭入口" loading="lazy"></a>
-            <a class="capture-dark" href="assets/screenshots/v0400-note-card-dark.png" target="_blank" rel="noopener" aria-label="打开 0.4.00 界面原图"><img src="assets/screenshots/v0400-note-card-dark.png" width="600" height="440" alt="0.4.00 深色桌面便签" loading="lazy"></a>
-            <figcaption>0.4.00 界面 · 示例内容 · 点击查看大图</figcaption>
-          </figure>
-          <details class="showcase-try" data-showcase-try><summary>体验便签与待办 · 简化网页示例</summary>
-        <div class="notes-demo" data-notes-demo>
-          <div class="notes-demo-topline"><span>网页演示 · 示例数据</span><button type="button" data-notes-reset>重置演示</button></div>
-          <div class="notes-demo-workspace">
-            <div class="notes-manager">
-              <h3>便签与待办</h3>
-              <div class="notes-tabs" role="tablist" aria-label="演示记录类型">
-                <button type="button" id="notes-demo-notes-tab" data-notes-tab="note" role="tab" aria-controls="notes-demo-records" aria-selected="true">便签</button>
-                <button type="button" id="notes-demo-todos-tab" data-notes-tab="todo" role="tab" aria-controls="notes-demo-records" aria-selected="false" tabindex="-1">待办</button>
-              </div>
-              <div class="notes-toolbar">
-                <select data-notes-filter aria-label="筛选示例记录"></select>
-                <input type="search" data-notes-search aria-label="搜索示例标题与内容" placeholder="搜索便签">
-              </div>
-              <div class="notes-list-heading"><strong data-notes-group>全部便签</strong><span data-notes-count></span></div>
-              <div class="notes-records" id="notes-demo-records" data-notes-records role="tabpanel" aria-labelledby="notes-demo-notes-tab" tabindex="0"></div>
-              <form class="notes-quick" data-notes-quick>
-                <input data-notes-draft aria-label="新示例便签标题" placeholder="写下想记住的事…" maxlength="200" required>
-                <button class="notes-primary" type="submit">添加</button>
-              </form>
+        <div class="notes-native-demo" data-notes-native-demo>
+          <div class="notes-native-workspace">
+            <div class="notes-native-panel">
+              <iframe class="native-demo native-notes-panel" src="demos/notes/panel.html" title="0.4.00 便签与待办列表演示" data-app-demo data-notes-frame="panel" height="520" loading="lazy"></iframe>
+              <button type="button" class="button button-secondary" data-notes-reopen-panel hidden>重新打开便签与待办</button>
             </div>
-            <div class="notes-secondary">
-              <div data-notes-desktop>
-                <p class="notes-surface-label">桌面便签示例 · 关闭后内容仍在</p>
-                <div class="notes-desktop-card" data-notes-card>
-                  <div class="notes-desktop-header"><span>便签</span><button type="button" data-notes-close-note aria-label="关闭示例桌面便签">×</button></div>
-                  <input class="notes-desktop-title" data-notes-title aria-label="示例便签标题" placeholder="无标题便签" maxlength="200">
-                  <textarea class="notes-desktop-body" data-notes-body aria-label="示例便签正文" maxlength="20000"></textarea>
-                  <div class="notes-desktop-footer">
-                    <select data-notes-category aria-label="移动示例便签到分类"><option value="未分类">未分类</option><option value="生活">生活</option><option value="工作">工作</option></select>
-                    <button type="button" data-notes-organize>智能整理</button>
-                    <button type="button" data-notes-undo hidden>撤销整理</button>
-                  </div>
-                </div>
-                <div class="notes-closed" data-notes-closed hidden><p data-notes-closed-copy>桌面便签已关闭，内容保留在列表中。</p><button class="notes-primary" type="button" data-notes-open-note>重新在桌面显示</button></div>
-              </div>
-              <div class="notes-timing" data-notes-timing hidden>
-                <h4 data-notes-todo-title>给自己留一点休息时间</h4>
-                <label>截止日期<input type="date" data-notes-due aria-label="示例待办截止日期"></label>
-                <label>提醒时间<input type="datetime-local" data-notes-reminder-time aria-label="示例待办提醒时间"></label>
-                <p>两项互不影响。官网只演示提醒卡，不会发送系统通知。</p>
-                <button class="notes-primary" type="button" data-notes-show-reminder>体验提醒</button>
-              </div>
-              <div class="notes-reminder" data-notes-reminder hidden>
-                <span>待办提醒 · 网页演示</span><h4 data-notes-reminder-title></h4>
-                <div><button class="notes-primary" type="button" data-notes-reminder-complete>完成</button><button type="button" data-notes-snooze>稍后 10 分钟</button></div>
-              </div>
+            <div class="notes-native-desktop">
+              <iframe class="native-demo native-notes-card" src="demos/notes/desktop.html" title="0.4.00 桌面便签演示" data-app-demo data-notes-frame="desktop" height="220" loading="lazy"></iframe>
+              <button type="button" class="button button-secondary" data-notes-reopen-note hidden>重新打开桌面便签</button>
             </div>
           </div>
-          <p class="notes-demo-status" data-notes-status role="status" aria-live="polite">点开便签试试，也可以切换到待办。</p>
-          <p class="notes-demo-caption">所有内容仅在本页演示，刷新后重置。智能整理为本地格式示例，不连接 Codex。</p>
-          <dialog data-notes-organize-dialog aria-labelledby="notes-organize-title">
-            <div class="notes-organize-header"><h3 id="notes-organize-title">智能整理</h3><button type="button" data-notes-cancel-organize aria-label="关闭整理预览">×</button></div>
-            <p>App 使用已登录的 Codex 整理便签，确认后才替换。这里用本地示例演示这个过程。</p>
-            <details data-notes-original-details open><summary>原文</summary><pre data-notes-original></pre></details>
-            <div data-notes-result hidden><strong>整理预览</strong><pre data-notes-result-text></pre></div>
-            <p data-notes-organize-status role="status">原文保持不变，直到你确认替换。</p>
-            <footer><button type="button" data-notes-cancel-organize>保留原文</button><button class="notes-primary" type="button" data-notes-generate>生成示例预览</button><button class="notes-primary" type="button" data-notes-apply hidden>替换原文</button></footer>
-          </dialog>
-        </div>
-          </details>
+          <div class="notes-native-actions"><button type="button" class="button button-secondary" data-notes-demo-reminder>体验待办提醒</button><button type="button" class="text-button" data-notes-demo-reset>重置演示</button></div>
+          <p class="demo-note">可操作演示 · 示例内容仅在本页保留，智能整理为示例结果</p>
+          <p class="demo-note" data-notes-native-status role="status" aria-live="polite"></p>
         </div>
       </section>
 
@@ -373,33 +235,23 @@
           <h2 id="appearance-title">看得清楚，也自在。</h2>
           <p>标准配色与色弱友好，一键切换。信息更清楚，球球还是熟悉的样子。</p>
         </div>
-        <div class="ap-demo" data-appearance-demo data-mode="accessible" data-look="dark">
+        <div class="ap-demo" data-appearance-demo data-mode="standard" data-look="light">
           <div class="ap-controls">
             <div role="group" aria-label="演示界面配色" class="ap-switch">
-              <button type="button" data-ap-mode="standard" aria-pressed="false">标准配色</button>
-              <button type="button" data-ap-mode="accessible" aria-pressed="true">色弱友好（高对比）</button>
+              <button type="button" data-ap-mode="standard" aria-pressed="true">标准配色</button>
+              <button type="button" data-ap-mode="accessible" aria-pressed="false">色弱友好（高对比）</button>
             </div>
             <div role="group" aria-label="演示界面外观" class="ap-switch">
-              <button type="button" data-ap-look="light" aria-pressed="false">浅色</button>
-              <button type="button" data-ap-look="dark" aria-pressed="true">深色</button>
+              <button type="button" data-ap-look="light" aria-pressed="true">浅色</button>
+              <button type="button" data-ap-look="dark" aria-pressed="false">深色</button>
               <button type="button" data-ap-look="system" aria-pressed="false">跟随系统</button>
             </div>
           </div>
-          <div class="ap-preview">
-            <div class="ap-quota ap-panel" aria-label="额度卡片配色示例">
-              <div class="ap-quota-heading"><strong>CODEX</strong><span class="ap-pill">5 小时</span><label class="ap-state-control"><span>示例额度</span><select data-ap-state aria-label="切换示例额度"><option value="68">充足 · 68%</option><option value="15" selected>偏低 · 15%</option><option value="8">紧张 · 8%</option><option value="0">已用尽 · 0%</option></select></label></div>
-              <div class="ap-balance"><strong data-ap-value>15%</strong><span data-ap-severity>偏低</span><span class="ap-muted">剩余额度</span></div>
-              <progress max="100" value="15" aria-label="演示剩余额度"></progress>
-              <div class="ap-details"><span>2 小时 30 分钟后重置</span><span class="ap-blue">2 次重置机会</span></div>
-              <div class="ap-secondary"><span class="ap-pill">周额度</span><strong>74%</strong><span class="ap-muted">3 天后重置</span></div>
-              <progress max="100" value="74" aria-label="演示周剩余额度"></progress>
-            </div>
-            <div class="ap-conversation">
-              <div class="ap-panel ap-chat"><div class="ap-chat-heading"><img src="assets/favicon.png" width="32" height="32" alt="球球，造型保持不变"><strong>聊一会儿</strong></div><p class="ap-user">今天想慢一点。</p><p>好呀，我陪你按自己的步子走。</p><span class="ap-muted">聊天文字与背景一起调整</span></div>
-              <div class="ap-panel ap-bubble"><span data-ap-notice>5 小时剩余 15% · 偏低</span></div>
-            </div>
+          <div class="ap-preview native-appearance-preview">
+            <iframe class="native-demo native-quota" src="demos/quota/index.html?appearanceDemo=1" title="新版额度卡标准与色弱配色演示" data-app-demo data-demo="quota" data-demo-appearance height="740" loading="lazy"></iframe>
+            <iframe class="native-demo native-chat" src="demos/chat/index.html" title="新版聊天标准与色弱配色演示" data-app-demo data-demo="chat" data-demo-appearance height="520" loading="lazy"></iframe>
           </div>
-          <div class="ap-demo-footer"><p role="status" data-ap-description>文字与背景区分更明显，额度高低也有文字提示。</p></div>
+          <div class="ap-demo-footer"><p role="status" data-ap-description>使用当前版实际界面，切换外观与配色试试。</p></div>
         </div>
         <div class="ap-info"><p><strong>在 App 中开启</strong>右键球球 → 界面配色 → 色弱友好（高对比）。</p><p><strong>只改变信息配色</strong>额度、聊天和提示更清楚，球球的样子和动作不变。</p></div>
         <p class="ap-release">0.4.00 · 全局外观覆盖聊天、便签、定制与额度卡，支持浅色、深色和跟随系统。<a href="#download">下载最新版本</a></p>
@@ -429,7 +281,6 @@
               <a class="button button-primary" data-download-arch="arm64" data-download-position="download" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.0/Qiuqiu-0.4.00-macOS-arm64-share.zip">下载 ZIP</a>
               <a class="button button-secondary" data-download-arch="arm64" data-download-position="download" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.0/Qiuqiu-0.4.00-macOS-arm64.dmg">下载 DMG</a>
             </div>
-            <details class="content-details download-checks"><summary>文件大小与 SHA-256</summary><p>ZIP · 123,560,022 bytes</p><code>5374bcbc07fde4eb36814066774dad03d516ee42052a728e851c018acf3539af</code><p>DMG · 137,814,227 bytes</p><code>184677114814b3f261675134b59f0ea5dfd5b8cf0b2acfb24aff7ffff5e6fd07</code></details>
           </article>
 
           <article class="download-card download-card-candidate">
@@ -483,6 +334,14 @@
         <div class="install-copy">
           <h2 id="install-title">三步放到桌面上</h2>
           <p>当前安装包使用临时签名，未经过 Apple 公证。只在确认下载来自本官网时继续。</p>
+          <figure class="install-guide" aria-label="球球安装步骤图示">
+            <div class="install-visual-steps">
+              <div class="install-visual-step"><b class="install-step-number">01</b><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M11 5h18l8 8v30H11z" fill="var(--surface-strong)" stroke="var(--line-strong)"></path><path d="M29 5v8h8M23 6v4m0 3v4m0 3v4m0 3v4" fill="none" stroke="var(--text-soft)" stroke-width="2"></path><path d="M20 33h6v6h-6z" fill="none" stroke="var(--text-soft)"></path></svg><div><strong>下载并解压 ZIP</strong><span>得到「球球桌宠.app」</span></div></div>
+              <div class="install-visual-step"><b class="install-step-number">02</b><img src="assets/favicon.png" width="44" height="44" alt="球球桌宠 App 图标"><div><strong>拖入 Applications</strong><span>应用程序文件夹</span></div><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6 12h15l4 5h17v25H6z" fill="#d7e7fa" stroke="#91afce"></path><path d="M6 20h36" stroke="#91afce"></path><path d="m19 34 5-10 5 10m-8-3h6" fill="none" stroke="#557591" stroke-width="2"></path></svg></div>
+              <div class="install-visual-step"><b class="install-step-number">03</b><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 5 40 12v13c0 10-16 18-16 18S8 35 8 25V12z" fill="var(--surface-strong)" stroke="var(--line-strong)"></path><path d="m16 24 6 6 11-13" fill="none" stroke="var(--text-soft)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path></svg><div><strong>如被拦截，选择「仍要打开」</strong><span>系统设置 → 隐私与安全性</span></div></div>
+            </div>
+            <figcaption>安装示意 · <a href="https://support.apple.com/zh-cn/102445" target="_blank" rel="noopener">Apple 首次打开说明 ↗</a></figcaption>
+          </figure>
         </div>
         <ol class="install-list">
           <li>
@@ -506,7 +365,7 @@
           <p>查看各版本的新功能与改进。</p>
         </div>
         <div class="timeline">
-          <article class="milestone-update"><time datetime="2026-10-05">2026-10-05</time><div><h3>0.4.00 Apple 芯片版</h3><div class="update-group"><h4>1.【新增】便签与待办</h4><ul><li>支持桌面便签、分类管理、收藏与搜索。</li><li>待办可分别设置截止日期和提醒，支持稍后处理。</li><li>支持归档与回收站，方便找回记录。</li><li>支持 Codex 智能整理，预览确认后替换内容。</li></ul></div><div class="update-group"><h4>2.【新增】来定制球球</h4><ul><li>全新定制界面，实时预览外观。</li><li>自由调整形态、配色、透明度与尺寸。</li><li>保存专属启动外观。</li><li>聊天头像同步展示球球形象与动效。</li></ul></div><div class="update-group"><h4>3.【新增】自动更新提醒</h4><ul><li>自动检查并提醒新版本。</li><li>点击更新入口，前往版本下载页面。</li><li>关于页支持查看版本与手动检查更新。</li></ul></div><div class="update-group"><h4>4.【升级】额度卡片 2.0</h4><ul><li>分别查看套餐额度、额外点数与 API 费用。</li><li>支持查看额度趋势和用量预估，不同使用场景提供相应提示。</li><li>支持查看重置机会与历史记录。</li><li>展示进行中任务与待查看结果，点击返回对应 Codex 会话。</li></ul></div><div class="update-group"><h4>5.【升级】全局 UI 升级</h4><ul><li>统一聊天、便签、定制页与额度卡片的视觉风格。</li><li>优化浅色、深色与色弱友好配色。</li><li>精简信息排版，统一按钮与操作入口。</li><li>优化玻璃质感、边框与流光动效。</li></ul></div><div class="update-group"><h4>6.【修复】已知体验问题</h4></div></div></article>
+          <article class="milestone-update"><time datetime="2026-10-06">2026-10-06</time><div><h3>0.4.00 Apple 芯片版</h3><div class="update-group"><h4>1.【新增】便签与待办</h4><ul><li>支持桌面便签、分类管理、收藏与搜索。</li><li>待办可分别设置截止日期和提醒，支持稍后处理。</li><li>支持归档与回收站，方便找回记录。</li><li>支持 Codex 智能整理，预览确认后替换内容。</li></ul></div><div class="update-group"><h4>2.【新增】来定制球球</h4><ul><li>全新定制界面，实时预览外观。</li><li>自由调整形态、配色、透明度与尺寸。</li><li>保存专属启动外观。</li><li>聊天头像同步展示球球形象与动效。</li></ul></div><div class="update-group"><h4>3.【新增】自动更新提醒</h4><ul><li>自动检查并提醒新版本。</li><li>点击更新入口，前往版本下载页面。</li><li>关于页支持查看版本与手动检查更新。</li></ul></div><div class="update-group"><h4>4.【升级】额度卡片 2.0</h4><ul><li>分别查看套餐额度、额外点数与 API 费用。</li><li>支持查看额度趋势和用量预估，不同使用场景提供相应提示。</li><li>支持查看重置机会与历史记录。</li><li>展示进行中任务与待查看结果，点击返回对应 Codex 会话。</li></ul></div><div class="update-group"><h4>5.【升级】全局 UI 升级</h4><ul><li>统一聊天、便签、定制页与额度卡片的视觉风格。</li><li>优化浅色、深色与色弱友好配色。</li><li>精简信息排版，统一按钮与操作入口。</li><li>优化玻璃质感、边框与流光动效。</li></ul></div><div class="update-group"><h4>6.【修复】已知体验问题</h4></div></div></article>
 
           <details class="updates-history">
             <summary><span class="history-expand">查看更早更新（12 条）</span><span class="history-collapse">收起历史更新</span><span class="history-chevron" aria-hidden="true">⌄</span></summary>
@@ -731,11 +590,9 @@
     <script src="assets/motion/dialogue-v5.js"></script>
     <script src="app.js?v=20260928-release"></script>
     <script src="motion-showcase.js?v=20261002-native-edge"></script>
-    <script src="quota-demo.js?v=20261005-0400"></script>
-    <script src="chat-showcase.js?v=20261005-0400"></script>
-    <script src="appearance-showcase.js?v=20260928-2"></script>
-    <script src="customize-showcase.js?v=20261005-0400"></script>
-    <script src="notes-showcase.js?v=20261005-0400"></script>
+    <script src="appearance-showcase.js?v=20261006-native"></script>
+    <script src="demos/notes/embed.js?v=20261006-native"></script>
+    <script src="demo-embed.js?v=20261006-native"></script>
     <script src="analytics.js?v=20260924-1" data-website-id="fe855bb0-9000-49aa-820b-baa55887bd11"></script>
   </body>
 </html>

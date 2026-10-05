@@ -1,0 +1,34 @@
+#summary { gap: 4px; }
+.summary-period { gap: 4px; font-size: 9px; }
+.summary-badge { min-width: 25px; }
+.summary-value { font-size: 14px; }
+.summary-value[data-long="true"] { font-size: 11px; letter-spacing: -.03em; }
+#api-details { display: none; }
+#quota-label[data-expanded="true"] #summary { display: none; }
+#quota-label[data-expanded="true"] #api-details { display: flex; flex: 1; min-height: 0; flex-direction: column; margin-top: 4px; }
+#api-month-cost { min-height: 29px; max-height: 34px; flex: 0 1 auto; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; font-size: 22px; line-height: 29px; font-weight: 735; letter-spacing: -.045em; font-variant-numeric: tabular-nums; color: var(--quota-value-normal); }
+.api-currency-row { display: block; overflow-wrap: anywhere; }
+.api-currency-unit { margin-left: 4px; font-size: 8px; line-height: 12px; font-weight: 550; letter-spacing: 0; color: var(--quota-subtle); white-space: nowrap; }
+#api-month-cost[data-multiple="true"] { font-size: 12px; line-height: 16px; letter-spacing: 0; }
+#api-month-cost[data-long="true"] { font-size: 14px; letter-spacing: -.02em; }
+#api-month-cost[data-empty="true"] { color: var(--quota-subtle); font-size: 13px; font-weight: 600; letter-spacing: 0; }
+#api-today { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 4px; font-size: 8px; line-height: 12px; color: var(--quota-subtle); }
+.utc-note { font-size: 7px; }
+#api-today-cost { min-width: 0; font-size: 9px; font-variant-numeric: tabular-nums; color: var(--quota-value-normal); font-weight: 600; }
+#api-query-status { margin: 3px 0 0; color: var(--quota-subtle); font-size: 8px; font-weight: 540; line-height: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#quota-label[data-query-state="error"] #api-query-status { color: var(--quota-urgent-text); }
+#api-open-details { display: block; width: 100%; min-height: 19px; flex: 0 0 auto; margin-top: auto; padding: 2px 0 0; border: 0; border-top: 1px solid var(--quota-line); background: transparent; color: var(--quota-subtle); font: inherit; font-size: 8px; font-weight: 600; line-height: 13px; text-align: left; cursor: pointer; }
+#api-open-details:hover { color: var(--quota-value-normal); }
+#quota-label:focus-visible { outline: 2px solid #3f6fbf; outline-offset: -4px; }
+#api-open-details:focus-visible { outline: 2px solid #3f6fbf; outline-offset: 1px; border-radius: 3px; }
+:root[data-color-mode="accessible"] #api-month-cost,
+:root[data-color-mode="accessible"] #api-today-cost { color: var(--accessible-text); }
+:root[data-color-mode="accessible"] #api-open-details { color: var(--accessible-blue); }
+@media (prefers-reduced-motion: reduce) { #quota-beam::before, #quota-beam::after { animation: none; } }
+
+#api-amounts { display: grid; grid-template-columns: minmax(0, 1fr) 48px; gap: 8px; align-items: end; }
+#api-today { margin: 0 0 2px; align-items: flex-end; flex-direction: column; gap: 1px; font-size: 8px; line-height: 11px; }
+#api-today-cost { font-size: 12px; line-height: 16px; }
+#api-footer { display: flex; align-items: center; justify-content: space-between; gap: 5px; margin-top: auto; border-top: 1px solid var(--quota-line); padding-top: 4px; }
+#api-query-status { min-width: 0; margin: 0; font-size: 7px; line-height: 11px; }
+#api-open-details { width: auto; margin: 0; min-height: 15px; padding: 0; flex: 0 0 auto; border: 0; font-size: 7px; line-height: 12px; }

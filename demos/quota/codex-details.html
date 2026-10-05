@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN" data-appearance="system">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'">
+  <title>Codex 详情</title>
+  <link rel="stylesheet" href="color-mode.css">
+  <link rel="stylesheet" href="codex-details.css">
+  <link rel="stylesheet" href="demo-adapter.css">
+  <script src="demo-bridge.js"></script>
+</head>
+<body>
+  <section id="details-panel" aria-label="Codex 详情">
+    <header class="panel-header">
+      <h1 id="details-title" tabindex="-1">Codex 详情</h1>
+      <nav class="panel-tools" aria-label="详情操作">
+        <button id="details-back" type="button" hidden>‹ 返回趋势</button>
+        <button id="details-close" type="button" aria-label="关闭详情">×</button>
+      </nav>
+    </header>
+    <main id="details-content" aria-live="polite"><p class="empty-state">正在读取…</p></main>
+  </section>
+  <script src="credit-balance.js"></script>
+  <script src="codex-details-renderer.js"></script>
+</body>
+</html>

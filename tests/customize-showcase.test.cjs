@@ -4,6 +4,8 @@ const path = require('node:path');
 const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
 const updates = html.slice(html.indexOf('id="updates"'), html.indexOf('id="license"'));
 assert.match(updates, /0\.4\.00 Apple 芯片版/);
+assert.match(updates, /<time datetime="2026-10-06">2026-10-06<\/time>/);
+assert.doesNotMatch(html, /download-checks|app-capture|data-showcase-try/);
 assert.doesNotMatch(updates, /0\.3\.(?:27|28|29|30|31|32)/);
 for (const title of ['1.【新增】便签与待办', '2.【新增】来定制球球', '3.【新增】自动更新提醒', '4.【升级】额度卡片 2.0', '5.【升级】全局 UI 升级', '6.【修复】已知体验问题']) assert.ok(updates.includes(`<h4>${title}</h4>`));
 assert.match(updates, /<h4>6.【修复】已知体验问题<\/h4><\/div>/);

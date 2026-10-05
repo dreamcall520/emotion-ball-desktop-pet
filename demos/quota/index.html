@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN" data-appearance="light" data-color-mode="standard">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; frame-src 'self'; connect-src 'none'; base-uri 'none'; object-src 'none'">
+  <title>额度卡片 2.0 · 网页示例</title>
+  <link rel="stylesheet" href="demo.css">
+  <script defer src="demo.js"></script>
+  <link rel="icon" href="../../assets/huancai-icon.png">
+</head>
+<body>
+  <main>
+    <div class="demo-toolbar"><label>用量示例 <select id="demo-scenario"><option value="balanced">节奏均衡</option><option value="fast">用量偏快</option><option value="unknown">记录不足</option></select></label><span>0.4.00 公开界面 · 示例数据</span></div>
+    <div class="demo-layout">
+      <div class="demo-cards">
+        <section><h2>套餐额度与状态</h2><iframe id="quota-frame" src="quota-label.html" title="可操作的真实额度卡片" width="196" height="144"></iframe></section>
+        <section><h2>独立 API 费用</h2><iframe id="api-label-frame" src="api-usage-label.html" title="可操作的真实 API 费用卡片" width="196" height="92"></iframe></section>
+        <p class="demo-caption">点击卡片箭头收起；<br>点数、重置机会和任务可查看详情。</p>
+      </div>
+      <div class="demo-detail"><iframe id="detail-frame" src="codex-details.html" title="额度趋势与详情" height="400"></iframe><div id="api-report" hidden><button class="demo-back" id="api-back" type="button">‹ 返回额度趋势</button><iframe id="api-report-frame" src="api-usage.html" title="API 费用与用量示例报告" height="620"></iframe></div></div>
+    </div>
+    <aside id="demo-thread" role="dialog" aria-modal="false" aria-labelledby="demo-thread-title" hidden><header><h2 id="demo-thread-title" tabindex="-1">Codex 会话 · 示例</h2><button id="thread-close" type="button" aria-label="关闭会话示例">×</button></header><p id="thread-title"></p><p id="thread-text"></p><p class="demo-caption">真实 App 点击后返回对应 Codex 会话；网页仅展示示例。</p></aside>
+    <p id="demo-feedback" class="demo-caption" role="status" aria-live="polite">网页演示不连接账户，不读取任务或真实账单。</p>
+  </main>
+</body>
+</html>

@@ -1,0 +1,4 @@
+/* Embedding adapters only; native card and detail styles are unchanged. */
+:root[data-demo-paused="true"] #quota-beam::before,
+:root[data-demo-paused="true"] #quota-beam::after { animation-play-state: paused; }
+#connection-settings { display: none; }

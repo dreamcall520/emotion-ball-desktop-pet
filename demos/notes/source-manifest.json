@@ -1,0 +1,37 @@
+{
+  "version": "0.4.00",
+  "commit": "7f5c291d34512f629c17275c93bed472f421e8b9",
+  "source": "/Users/allan/Documents/个人创作/emotion-ball-desktop-pet/desktop-pet",
+  "originalFiles": [
+    {
+      "file": "notes.html",
+      "sha256": "ebf1ade2b74ba3999d702b4740755317d27e058ad96d627480d181dc1fbf2ad7"
+    },
+    {
+      "file": "notes.css",
+      "sha256": "fbcbd685289598bccdcaad55a3bac984de4f68f10a2b555ad9128ad937651ecc"
+    },
+    {
+      "file": "color-mode.css",
+      "sha256": "a5fafde24c1233618d2af25bb546fc6dbbba0f589ee051d0f9d2046aa2872d37"
+    },
+    {
+      "file": "notes-renderer.js",
+      "sha256": "9d25cd46c623e2d13780d91d1c9aa6020e4f34f5360b5fdbecdbee0735c89e91"
+    },
+    {
+      "file": "lib/notes-model.js",
+      "sha256": "37b0cb6a9012d788283872a3c884fbb78b9bbb0fe0db2f091767dba5102922b0"
+    }
+  ],
+  "htmlChanges": [
+    "Insert demo-bridge.js before original renderer.",
+    "Replace organize dialog account instruction with explicit local-demo instruction."
+  ],
+  "unchangedCopies": [
+    "notes.css",
+    "color-mode.css",
+    "notes-renderer.js",
+    "lib/notes-model.js"
+  ]
+}

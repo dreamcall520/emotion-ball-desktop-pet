@@ -1,0 +1,134 @@
+{
+  "repository": "https://github.com/dreamcall520/emotion-ball-desktop-pet",
+  "commit": "7f5c291d34512f629c17275c93bed472f421e8b9",
+  "version": "0.4.00",
+  "files": [
+    {
+      "source": "desktop-pet/chat.html",
+      "target": "index.html",
+      "sha256": "b06a3ebed1d0ef39e8ac79d97be1297de2ee10c1afb91363fe01e57982877ae8",
+      "embeddedSha256": "4b3a8b392349d4b43880f8da4d4af8d6b7465f2a4b0d7e27d30643fdbb98e805"
+    },
+    {
+      "source": "desktop-pet/chat.css",
+      "target": "chat.css",
+      "sha256": "72384bc54721f8cefa6d5aa6e22abb08ac1b408ef30c18c6a26ccdd38295f0d8",
+      "embeddedSha256": "72384bc54721f8cefa6d5aa6e22abb08ac1b408ef30c18c6a26ccdd38295f0d8"
+    },
+    {
+      "source": "desktop-pet/chat-renderer.js",
+      "target": "chat-renderer.js",
+      "sha256": "b4184fec3ebe0a3f8f1474d081382532bcaa4479e2b84014f5cbe34c07eaee73",
+      "embeddedSha256": "ad617d17ff1ffae9c2b8ba0897b737587168ae634bf4e0f77c4e38842bdcc928"
+    },
+    {
+      "source": "desktop-pet/color-mode.css",
+      "target": "color-mode.css",
+      "sha256": "a5fafde24c1233618d2af25bb546fc6dbbba0f589ee051d0f9d2046aa2872d37",
+      "embeddedSha256": "a5fafde24c1233618d2af25bb546fc6dbbba0f589ee051d0f9d2046aa2872d37"
+    },
+    {
+      "source": "desktop-pet/color-mode.js",
+      "target": "color-mode.js",
+      "sha256": "503835f76918495a3188cfdbd368f1e477e118df53bb1105b5c02d57be4161f4",
+      "embeddedSha256": "503835f76918495a3188cfdbd368f1e477e118df53bb1105b5c02d57be4161f4"
+    },
+    {
+      "source": "desktop-pet/aurora-rive.css",
+      "target": "aurora-rive.css",
+      "sha256": "bff6f40e54eca819766a66ffe9ad5e70181849fada343a63e4e819ddc8eebcd7",
+      "embeddedSha256": "bff6f40e54eca819766a66ffe9ad5e70181849fada343a63e4e819ddc8eebcd7"
+    },
+    {
+      "source": "desktop-pet/lib/customization.js",
+      "target": "lib/customization.js",
+      "sha256": "bf79dd95b241c3a5f4f83b1a1215f13061c47805392d1829699ea92f431a2b55",
+      "embeddedSha256": "bf79dd95b241c3a5f4f83b1a1215f13061c47805392d1829699ea92f431a2b55"
+    },
+    {
+      "source": "desktop-pet/lib/chat-avatar.js",
+      "target": "lib/chat-avatar.js",
+      "sha256": "7a1794f12cd589a0602b6db8ffa23aa326842e0d620c58239522d0a1487eb138",
+      "embeddedSha256": "7a1794f12cd589a0602b6db8ffa23aa326842e0d620c58239522d0a1487eb138"
+    },
+    {
+      "source": "desktop-pet/lib/rive.js",
+      "target": "lib/rive.js",
+      "sha256": "6381cc75a1a0ed80ea76e8958e350d7162bc9ecc539b24c6b05998bafe39be9b",
+      "embeddedSha256": "6381cc75a1a0ed80ea76e8958e350d7162bc9ecc539b24c6b05998bafe39be9b"
+    },
+    {
+      "source": "desktop-pet/lib/boo-binary.js",
+      "target": "lib/boo-binary.js",
+      "sha256": "6dca0e2b29717d749e5dae5985986a70218cbb2c458ba2f62d668f2c46fe66b7",
+      "embeddedSha256": "6dca0e2b29717d749e5dae5985986a70218cbb2c458ba2f62d668f2c46fe66b7"
+    },
+    {
+      "source": "desktop-pet/lib/aurora-rive.js",
+      "target": "lib/aurora-rive.js",
+      "sha256": "84988e9e3b8e3ee783db599f4e5c4cd14c40d6a6f3873deb429fa51af41066e4",
+      "embeddedSha256": "84988e9e3b8e3ee783db599f4e5c4cd14c40d6a6f3873deb429fa51af41066e4"
+    },
+    {
+      "source": "desktop-pet/lib/RIVE-LICENSE.txt",
+      "target": "lib/RIVE-LICENSE.txt",
+      "sha256": "8a1efa755d19446b51a18e1c15f6308728da0b36283c4d38050698ad6954b69a",
+      "embeddedSha256": "8a1efa755d19446b51a18e1c15f6308728da0b36283c4d38050698ad6954b69a"
+    },
+    {
+      "source": "desktop-pet/assets/aurora-six-lobe-body.png",
+      "target": "assets/aurora-six-lobe-body.png",
+      "sha256": "25558ad38664822b36e7919d25beed6032cbd49bc5ce997166df167a84293abb",
+      "embeddedSha256": "25558ad38664822b36e7919d25beed6032cbd49bc5ce997166df167a84293abb"
+    },
+    {
+      "source": "emotion-ball/js/rings.js",
+      "target": "emotion-ball/js/rings.js",
+      "sha256": "7fd196046650b8273d87c9b85a899554d90f35c62d676eea1c681630e721ec20",
+      "embeddedSha256": "7fd196046650b8273d87c9b85a899554d90f35c62d676eea1c681630e721ec20"
+    },
+    {
+      "source": "emotion-ball/js/custom-shapes.js",
+      "target": "emotion-ball/js/custom-shapes.js",
+      "sha256": "50e20dcb2691dc9e29791602d593190878bf96ebfc21e00e592e9005eff3101d",
+      "embeddedSha256": "50e20dcb2691dc9e29791602d593190878bf96ebfc21e00e592e9005eff3101d"
+    },
+    {
+      "source": "emotion-ball/js/emotions.js",
+      "target": "emotion-ball/js/emotions.js",
+      "sha256": "c938eb9601ba4b37c67e78fa0e4c1294d1882b498111600b83a8ebfe2aeb8d77",
+      "embeddedSha256": "c938eb9601ba4b37c67e78fa0e4c1294d1882b498111600b83a8ebfe2aeb8d77"
+    },
+    {
+      "source": "emotion-ball/js/ball.js",
+      "target": "emotion-ball/js/ball.js",
+      "sha256": "4a663de7807c4d95e6e7309d3851f2f8834bd60f40368c33dad248693d741cc1",
+      "embeddedSha256": "4a663de7807c4d95e6e7309d3851f2f8834bd60f40368c33dad248693d741cc1"
+    },
+    {
+      "source": "emotion-ball/js/engine.js",
+      "target": "emotion-ball/js/engine.js",
+      "sha256": "fb1131c1d752dfeb2f5a109b659918288f55b8a0e8b3eca1fbc93c724f623961",
+      "embeddedSha256": "fb1131c1d752dfeb2f5a109b659918288f55b8a0e8b3eca1fbc93c724f623961"
+    }
+  ],
+  "adaptations": [
+    "HTML changes relative engine paths and inserts the in-memory demo bridge.",
+    "Visible website example note and close/reopen adapter.",
+    "Avatar activity includes parent pause state; all other renderer logic unchanged."
+  ],
+  "adapters": [
+    {
+      "target": "README.md",
+      "sha256": "35e7708295a9399bf80990f97ffac78fe5aa4e0ccf015a446601faea1b33ace6"
+    },
+    {
+      "target": "demo-adapter.css",
+      "sha256": "849963ef084da5b19f79d0a4385f331ea39634ddffbe24c08183ffcfee6e15d2"
+    },
+    {
+      "target": "demo-bridge.js",
+      "sha256": "6596d6244b41daeb570ccd9393e1ba280f6ac5857a3accde42e0e9a1cca85f4a"
+    }
+  ]
+}

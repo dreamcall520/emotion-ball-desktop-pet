@@ -1,7 +1,5 @@
 /* V5 motion language, composed for the existing dark-first website. */
 .hero h1 { font-size: clamp(42px, 4.3vw, 66px); line-height: 1.18; }
-.button-primary { background: var(--accent); color: var(--page); }
-.button-primary:hover { background: var(--accent-strong); }
 .section { padding-block: clamp(72px, 8vw, 120px); }
 .motion-panel,
 .codex-live-showcase {

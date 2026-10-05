@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <title>聊一会儿</title>
+  <link rel="stylesheet" href="chat.css">
+  <link rel="stylesheet" href="aurora-rive.css">
+  <link rel="stylesheet" href="color-mode.css">
+  <script defer src="demo-bridge.js"></script>
+  <script defer src="color-mode.js"></script>
+  <script defer src="emotion-ball/js/rings.js"></script>
+  <script defer src="emotion-ball/js/custom-shapes.js"></script>
+  <script defer src="emotion-ball/js/emotions.js"></script>
+  <script defer src="emotion-ball/js/ball.js"></script>
+  <script defer src="emotion-ball/js/engine.js"></script>
+  <script defer src="lib/customization.js"></script>
+  <script defer src="lib/chat-avatar.js"></script>
+  <script defer src="lib/rive.js"></script>
+  <script defer src="lib/boo-binary.js"></script>
+  <script defer src="lib/aurora-rive.js"></script>
+  <script defer src="chat-renderer.js"></script>
+  <link rel="stylesheet" href="demo-adapter.css">
+  <link rel="icon" href="../../assets/huancai-icon.png">
+</head>
+<body>
+  <main class="chat-panel" aria-label="聊一会儿">
+    <header class="chat-header">
+      <span id="chat-avatar" class="pet-mark" aria-hidden="true"></span>
+      <div class="heading">
+        <h1>聊一会儿</h1>
+        <p id="connection-status" class="sr-only" role="status" aria-live="polite"></p>
+      </div>
+      <div class="header-actions">
+        <button id="new-chat" class="header-action new-chat-action" type="button" aria-label="新聊天" aria-controls="new-chat-confirmation" aria-haspopup="dialog" title="当前已是新聊天，直接发送第一句话即可。" disabled>
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2.7a7.3 7.3 0 0 0-7.3 7.3c0 1.5.45 2.85 1.25 3.97L3.2 17l3.13-1.02A7.3 7.3 0 1 0 10 2.7Z"/><path d="M10 7v6M7 10h6"/></svg>
+          <span>新聊天</span>
+        </button>
+        <button id="chat-history" class="header-action history-action" type="button" aria-label="聊天记录" aria-controls="history-view" aria-expanded="false" title="聊天记录">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.3 8a6.8 6.8 0 1 1 .9 5.5"/><path d="M3.3 3.7V8h4.3"/><path d="M10 6.1v4l2.5 1.5"/></svg>
+          <span>历史</span>
+        </button>
+        <span class="header-divider" aria-hidden="true"></span>
+        <button id="close-chat" class="close-button" type="button" aria-label="关闭聊天" title="关闭聊天（Esc）"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M3.5 3.5l11 11m0-11l-11 11"/></svg></button>
+      </div>
+    </header>
+
+    <aside id="app-update" class="app-update" aria-label="球球版本更新" hidden>
+      <p id="app-update-text" role="status" aria-live="polite" aria-atomic="true"></p>
+      <button id="open-app-update" class="text-button" type="button">查看更新</button>
+    </aside>
+
+    <section id="conversation" class="conversation" aria-label="聊天内容">
+      <div id="empty-state" class="empty-state">
+        <span class="empty-dot" aria-hidden="true"></span>
+        <h2>我在，想聊点什么？</h2>
+        <p>使用本机已登录的 Codex 账号。<br>首次发送才创建聊天，之后接着聊。</p>
+      </div>
+      <div id="messages" class="messages" role="log" aria-live="polite" aria-relevant="additions text"></div>
+    </section>
+
+    <section id="history-view" class="history-view" aria-label="聊天记录" hidden>
+      <div class="history-heading">
+        <div><h2>聊天记录</h2><p>找到之前的聊天，接着说。</p></div>
+        <button id="history-back" class="text-button" type="button">返回聊天</button>
+      </div>
+      <div id="history-browse" class="history-browse">
+        <div id="history-list" class="history-list" aria-label="和球球的历史聊天"></div>
+        <p id="history-empty" class="history-empty">还没有聊天记录。<br>发送第一句话后，会保存在这里。</p>
+        <div class="history-footer">
+          <p id="history-hint">原来的聊天会保留，随时可以切回来。</p>
+        </div>
+      </div>
+      <div id="new-chat-confirmation" class="new-chat-confirmation" role="dialog" aria-labelledby="new-chat-title" aria-describedby="new-chat-description" hidden>
+        <h3 id="new-chat-title">开始一段新聊天？</h3>
+        <p id="new-chat-description">现在的聊天会保留在记录里。<br>发送第一句话时，才会创建新聊天。</p>
+        <div class="confirmation-actions">
+          <button id="cancel-new-chat" class="cancel-button" type="button">取消</button>
+          <button id="confirm-new-chat" class="confirm-button" type="button">开始新聊天</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="error-banner" class="error-banner" role="alert" hidden>
+      <p id="error-text"></p>
+      <button id="retry-message" type="button" class="text-button" hidden>重新编辑</button>
+    </div>
+
+    <form id="composer" class="composer">
+      <label class="sr-only" for="message-input">给球球的消息</label>
+      <textarea id="message-input" rows="1" maxlength="2000" placeholder="和球球说句话…" aria-describedby="input-hint" title="Shift + Enter 换行" spellcheck="false"></textarea>
+      <div class="composer-tools">
+        <span id="input-hint" class="sr-only">Shift + Enter 换行</span>
+        <div id="model-bar" class="model-choice">
+          <button id="chat-model" type="button" value="auto" aria-label="聊天模型" aria-haspopup="menu" aria-controls="model-menu" aria-expanded="false" aria-describedby="model-hint" disabled>自动选择</button>
+        </div>
+        <span id="character-count" hidden>0 / 2000</span>
+        <button id="stop-message" class="stop-button" type="button" hidden><span class="stop-mark" aria-hidden="true"></span><span id="stop-message-label" class="button-label">停止</span></button>
+        <button id="send-message" class="send-button" type="submit" disabled><span class="button-label">发送</span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 16V4m-4 4 4-4 4 4"/></svg></button>
+      </div>
+      <div id="model-menu" class="model-menu" role="menu" aria-label="选择聊天模型" hidden></div>
+      <div id="model-feedback" class="sr-only">
+        <p id="model-hint" role="status">正在读取可用模型…</p>
+        <button id="refresh-models" class="text-button" type="button" hidden>重试</button>
+      </div>
+    </form>
+    <p id="privacy-note" class="privacy-note">网页示例 · 不连接 Codex，不保存输入</p>
+  </main>
+<div id="demo-closed" hidden><p>示例聊天已收起，记录仍保留。</p><button type="button" id="demo-reopen">继续示例聊天</button></div>
+</body>
+</html>

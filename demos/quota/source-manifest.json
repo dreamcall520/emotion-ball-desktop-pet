@@ -1,0 +1,132 @@
+{
+  "repository": "https://github.com/dreamcall520/emotion-ball-desktop-pet",
+  "commit": "7f5c291d34512f629c17275c93bed472f421e8b9",
+  "version": "0.4.00",
+  "files": [
+    {
+      "source": "desktop-pet/quota-label.html",
+      "target": "quota-label.html",
+      "sha256": "4853b4f04a6f6427dd84de1ad80cfef290b9a34e01a0c29a05e4c35aac4692bf",
+      "embeddedSha256": "fb07d79747fd4a6a04288f0a5ba70c45ae0628fc4995a15396caa1bfd9bdcce1"
+    },
+    {
+      "source": "desktop-pet/quota-label.css",
+      "target": "quota-label.css",
+      "sha256": "921d384b8b21b8e45cf9d0a69cb32959cd1de3d1cf5fd543dff1a307950feb51",
+      "embeddedSha256": "921d384b8b21b8e45cf9d0a69cb32959cd1de3d1cf5fd543dff1a307950feb51"
+    },
+    {
+      "source": "desktop-pet/quota-label-renderer.js",
+      "target": "quota-label-renderer.js",
+      "sha256": "f8a7e06ae67babe9dfdb733b826aac927dedd6f063999c893877c2bcd698fe59",
+      "embeddedSha256": "f8a7e06ae67babe9dfdb733b826aac927dedd6f063999c893877c2bcd698fe59"
+    },
+    {
+      "source": "desktop-pet/codex-details.html",
+      "target": "codex-details.html",
+      "sha256": "e17406ad730db3816f2e7a29907d038a2d11191aeb9d5576f80e93d97b09d511",
+      "embeddedSha256": "b0a10b31360edcbfde24e1f46c6b801c3781b842c20de613efa8665335775d07"
+    },
+    {
+      "source": "desktop-pet/codex-details.css",
+      "target": "codex-details.css",
+      "sha256": "f73c06bb8d83d0dd0f8931aedf1c647d611f4e690e2c9494d3c668b16c0e4ff0",
+      "embeddedSha256": "f73c06bb8d83d0dd0f8931aedf1c647d611f4e690e2c9494d3c668b16c0e4ff0"
+    },
+    {
+      "source": "desktop-pet/codex-details-renderer.js",
+      "target": "codex-details-renderer.js",
+      "sha256": "ab2bc968bce1a5dcfa1b0b1906399baacd1526329d6e2fc8d2365ea3521f0138",
+      "embeddedSha256": "ab2bc968bce1a5dcfa1b0b1906399baacd1526329d6e2fc8d2365ea3521f0138"
+    },
+    {
+      "source": "desktop-pet/color-mode.css",
+      "target": "color-mode.css",
+      "sha256": "a5fafde24c1233618d2af25bb546fc6dbbba0f589ee051d0f9d2046aa2872d37",
+      "embeddedSha256": "a5fafde24c1233618d2af25bb546fc6dbbba0f589ee051d0f9d2046aa2872d37"
+    },
+    {
+      "source": "desktop-pet/color-mode.js",
+      "target": "color-mode.js",
+      "sha256": "503835f76918495a3188cfdbd368f1e477e118df53bb1105b5c02d57be4161f4",
+      "embeddedSha256": "503835f76918495a3188cfdbd368f1e477e118df53bb1105b5c02d57be4161f4"
+    },
+    {
+      "source": "desktop-pet/credit-balance.js",
+      "target": "credit-balance.js",
+      "sha256": "b23436d3f1b7ec978012ce865061a2e0524df1579650ce07bfb72cb99e32799a",
+      "embeddedSha256": "b23436d3f1b7ec978012ce865061a2e0524df1579650ce07bfb72cb99e32799a"
+    },
+    {
+      "source": "desktop-pet/api-usage-label.html",
+      "target": "api-usage-label.html",
+      "sha256": "198b4bb27e2c69387daa8a4d3ba5154624ad043044bf3e7e8e7d339fef330121",
+      "embeddedSha256": "5390061efabc965edfdf1161c511460b259ce93641eecf2e2aa88921c57b2b3b"
+    },
+    {
+      "source": "desktop-pet/api-usage-label.css",
+      "target": "api-usage-label.css",
+      "sha256": "2ae34275a0e24f02aa78d6b08b047a98031f8d48b1dc4446a7eada038beeea72",
+      "embeddedSha256": "2ae34275a0e24f02aa78d6b08b047a98031f8d48b1dc4446a7eada038beeea72"
+    },
+    {
+      "source": "desktop-pet/api-usage-label-renderer.js",
+      "target": "api-usage-label-renderer.js",
+      "sha256": "7554ad35fb7968dca0cd8e50f8c160d7b7a061975a58fe6af2603b832337f6ed",
+      "embeddedSha256": "7554ad35fb7968dca0cd8e50f8c160d7b7a061975a58fe6af2603b832337f6ed"
+    },
+    {
+      "source": "desktop-pet/api-usage.html",
+      "target": "api-usage.html",
+      "sha256": "810cb6361c92e03e22e2d331589401a1b7f433024b792f5b0d11952d31f36664",
+      "embeddedSha256": "8ed365793044aab3f16741866c24a98ce55fde43c877b88191077056e38f686c"
+    },
+    {
+      "source": "desktop-pet/api-usage.css",
+      "target": "api-usage.css",
+      "sha256": "947373cae324f9bd37b1753988aafb6e7bf632c0c26689346d5763c8c8aa5d51",
+      "embeddedSha256": "947373cae324f9bd37b1753988aafb6e7bf632c0c26689346d5763c8c8aa5d51"
+    },
+    {
+      "source": "desktop-pet/api-usage-renderer.js",
+      "target": "api-usage-renderer.js",
+      "sha256": "590752b7416e50f116209a493cb1ece29f5507e81bdd4c64d145b8ce3bdfb380",
+      "embeddedSha256": "590752b7416e50f116209a493cb1ece29f5507e81bdd4c64d145b8ce3bdfb380"
+    }
+  ],
+  "adaptations": [
+    "HTML inserts the in-memory demo bridge; core DOM, CSS and renderers unchanged.",
+    "Composition layout, message validation, iframe sizing and example dialog are website-only.",
+    "API connection settings are hidden in the website; no credentials are accepted."
+  ],
+  "adapters": [
+    {
+      "target": "README.md",
+      "sha256": "6e856c7d54ced11e034b675a349466b6b23271abb2bd0184c5243f590432a4be"
+    },
+    {
+      "target": "check.browser.cjs",
+      "sha256": "0a348d82510fb3577b9bf1237cef1364315f431f4e668c4bfcbeaa8ca2da7e00"
+    },
+    {
+      "target": "demo-adapter.css",
+      "sha256": "1a8dd5da9fb694ea58fc10586f8179c7f685445355bec61cd4b91f5e75ba0b1c"
+    },
+    {
+      "target": "demo-bridge.js",
+      "sha256": "67d7c336457170cf11a1a326ce8cd87704c9ecc1f5286f551f69d77778a49591"
+    },
+    {
+      "target": "demo.css",
+      "sha256": "59d29f31ce31efafcc0f358fa5349f5a79cc553b1cc7c2bced0c5c86cc17afe9"
+    },
+    {
+      "target": "demo.js",
+      "sha256": "20bcc7cec3f0341c5597cb9e7115c3f9893f811d311bb291a6bea22a003854fb"
+    },
+    {
+      "target": "index.html",
+      "sha256": "4dab9ebb33e09416abe13be5e7fa4cd45f8ae387ffb350dea92fd57190cf9d8f"
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <title>OpenAI API 费用与用量</title>
+  <link rel="stylesheet" href="api-usage.css">
+  <link rel="stylesheet" href="color-mode.css">
+  <script defer src="color-mode.js"></script>
+  <script defer src="api-usage-renderer.js"></script>
+  <link rel="stylesheet" href="demo-adapter.css">
+  <script src="demo-bridge.js"></script>
+</head>
+<body>
+  <main class="api-panel" aria-labelledby="page-title">
+    <header class="api-header">
+      <div><h1 id="page-title">API 费用与用量</h1><p>OpenAI 官方组织报告</p></div>
+      <button id="refresh-report" class="quiet-button" type="button" disabled>刷新</button>
+    </header>
+    <div class="api-content">
+      <p id="query-status" class="query-status" role="status" aria-live="polite">尚未连接</p>
+      <p id="query-error" class="query-error" role="alert" hidden></p>
+      <section class="cost-summary" aria-labelledby="month-cost-title">
+        <div class="cost-main"><h2 id="month-cost-title">本月 API 费用 <span id="report-month">UTC</span></h2><div id="month-cost" class="month-cost">—</div></div>
+        <div class="cost-today"><h2>今日费用 <span>UTC</span></h2><div id="today-cost" class="today-cost">—</div></div>
+      </section>
+      <p class="report-note">费用与用量可能延迟更新，不是本次聊天的实时计费。</p>
+      <section class="usage-summary" aria-labelledby="usage-title">
+        <div class="section-heading"><h2 id="usage-title">本月模型用量</h2><span id="request-count">—</span></div>
+        <p class="usage-range">Responses / Chat Completions</p>
+        <dl class="token-list">
+          <div><dt>输入 tokens</dt><dd id="input-tokens">—</dd></div>
+          <div class="cached-row"><dt>其中，缓存输入 tokens</dt><dd id="cached-tokens">—</dd></div>
+          <div><dt>输出 tokens</dt><dd id="output-tokens">—</dd></div>
+        </dl>
+      </section>
+      <section class="report-meta" aria-label="报告范围与更新时间">
+        <div><span class="meta-label">统计范围</span><p id="report-scope">全部组织</p></div>
+        <p id="scope-note" class="scope-note">包含组织内其他 API 使用；不是单独的 Codex 用量。</p>
+        <div class="updated-row"><span class="meta-label">上次成功查询</span><time id="updated-at">尚未查询</time></div>
+      </section>
+      <details id="connection-settings" class="connection-settings" open>
+        <summary>报告连接设置 <span id="connection-label">未连接</span></summary>
+        <form id="connection-form" autocomplete="off">
+          <label for="admin-key">Admin API Key</label>
+          <input id="admin-key" type="password" autocomplete="off" spellcheck="false" autocapitalize="none" maxlength="515" placeholder="输入组织管理密钥" aria-describedby="key-hint" required>
+          <p id="key-hint" class="field-hint">需由组织所有者获取管理密钥。普通 Codex 调用 Key 无法查询费用；已保存的密钥不会回显。</p>
+          <div class="filter-fields">
+            <div><label for="project-id">项目 ID <span>可选</span></label><input id="project-id" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" maxlength="200" placeholder="留空则包含所有项目"></div>
+            <div><label for="api-key-id">调用 Key ID <span>可选</span></label><input id="api-key-id" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" maxlength="200" placeholder="ID，不是密钥内容"></div>
+          </div>
+          <p class="field-hint">只有项目或调用 Key 专供 Codex 使用时，筛选结果才可作为 Codex 范围。</p>
+          <div class="connection-actions"><button id="connect-report" class="primary-button" type="submit">连接并查询</button><button id="disconnect-report" class="quiet-button" type="button" hidden>断开连接</button></div>
+        </form>
+      </details>
+      <footer class="api-footer"><span>按量付费的 API 报告</span><button id="open-guide" class="quiet-button" type="button">获取管理员 Key ↗</button></footer>
+    </div>
+  </main>
+</body>
+</html>

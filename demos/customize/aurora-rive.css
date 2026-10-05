@@ -1,0 +1,17 @@
+.eb-rive-aurora {
+  position: absolute;
+  width: 150%;
+  height: 150%;
+  left: -25%;
+  top: -25%;
+  pointer-events: none;
+  visibility: hidden;
+  transform-origin: 50% 58%;
+}
+.eb-rive-aurora.ready { visibility: visible; }
+#stage[data-preview-mode="large"] .eb-rive-aurora { width: 210%; height: 210%; left: -55%; top: -55%; }
+.eb-rive-eye-filter { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
+#pet[data-presentation="tucked"][data-edge="right"] .eb-rive-aurora { transform: translateY(3%) rotate(-12deg); }
+#pet[data-presentation="tucked"][data-edge="left"] .eb-rive-aurora { transform: scaleX(-1) translateY(3%) rotate(-12deg); }
+#pet[data-presentation="peeked"][data-edge="left"] .eb-rive-aurora { transform: scaleX(-1); }
+#pet[data-presentation="free"][data-facing="right"] .eb-rive-aurora { transform: scaleX(-1); }

@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>定制球球</title>
+  <link rel="icon" href="assets/aurora-six-lobe-icon.png">
+  <link rel="stylesheet" href="customize.css">
+  <link rel="stylesheet" href="aurora-rive.css">
+  <link rel="stylesheet" href="web-adapter.css">
+</head>
+<body>
+  <main class="studio panel">
+    <header class="studio-header">
+      <div><h1>定制球球</h1><p>选一个喜欢的形态，调出属于你的球球。</p></div>
+      <button id="reset-appearance" class="secondary" type="button" title="恢复当前所选形态的默认外观">恢复默认</button>
+    </header>
+    <div class="workspace">
+      <section class="preview-pane" aria-label="球球实时预览">
+        <div class="preview-heading"><h2>实时预览</h2><button id="stage-toggle" class="icon-button" type="button" aria-label="切换预览背景" title="切换浅色 / 深色预览背景"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" stroke="none"></path></svg></button></div>
+        <div class="segmented preview-mode" role="group" aria-label="预览尺寸">
+          <button id="preview-large" type="button" aria-pressed="true">大图</button>
+          <button id="preview-desktop" type="button" aria-pressed="false" title="按当前桌面球球的实际尺寸展示">桌面尺寸</button>
+        </div>
+        <div id="stage" class="stage" data-preview-mode="large"><div id="preview-ball" aria-label="球球外观预览"></div></div>
+        <div class="preview-foot"><span id="preview-size-label">大图预览</span><span id="preview-status" role="status" aria-live="polite">眨眼与呼吸动效保留</span></div>
+        <p class="preview-note">颜色与细节实时更新，满意后再保存。</p>
+      </section>
+      <section class="controls" aria-labelledby="appearance-title">
+        <div class="form-heading"><h2 id="appearance-title">外观选项</h2></div>
+        <div class="group-heading"><h3>形态</h3><span id="shape-hint">选择喜欢的起点</span></div>
+        <div id="shape-options" class="shape-options" role="group" aria-label="球球形态"></div>
+        <section id="preset-section" class="preset-section" aria-labelledby="preset-title">
+          <div class="group-heading"><h3 id="preset-title">我的形象 <span id="preset-count">0 / 20</span></h3><button id="preset-add" class="preset-add" type="button" disabled><span aria-hidden="true">＋</span> 保存当前形象</button></div>
+          <p id="preset-empty" class="preset-empty">保存喜欢的配色，下次载入预览。</p>
+          <div id="preset-list" class="preset-list" role="list" aria-label="已保存的形象"></div>
+          <form id="preset-form" class="preset-form" hidden>
+            <label id="preset-form-label" for="preset-name">形象名称</label>
+            <div class="preset-name-row"><input id="preset-name" type="text" maxlength="24" autocomplete="off" spellcheck="false" placeholder="例如：薄荷奶糖"><button id="preset-submit" class="secondary" type="submit">保存形象</button><button id="preset-cancel" class="text-button" type="button">取消</button></div>
+            <p id="preset-error" class="preset-error" role="status" aria-live="polite" hidden></p>
+          </form>
+          <div id="preset-delete-confirm" class="preset-delete-confirm" role="group" aria-label="确认删除收藏" hidden><span id="preset-delete-label"></span><div class="preset-delete-actions"><button id="preset-delete-cancel" class="text-button" type="button">取消</button><button id="preset-delete-submit" class="preset-danger" type="button">删除收藏</button></div></div>
+        </section>
+        <div id="aurora-style-field" class="form-section aurora-style-field" hidden>
+          <div class="group-heading"><h3>幻彩样式</h3><span>立即预览</span></div>
+          <div class="aurora-style-options" role="group" aria-label="幻彩样式">
+            <button id="aurora-style-dimensional" type="button" aria-pressed="true"><span class="style-swatch dimensional" aria-hidden="true"></span><span><strong>立体幻彩</strong><small>柔和光泽与层次</small></span></button>
+            <button id="aurora-style-simple" type="button" aria-pressed="false"><span class="style-swatch simple" aria-hidden="true"></span><span><strong>简色渐变</strong><small>干净柔和的颜色</small></span></button>
+          </div>
+        </div>
+        <div class="form-section">
+          <div class="group-heading"><h3>颜色</h3><span>色块或 HEX 色值</span></div>
+          <div class="color-editor">
+            <div class="color-editor-head"><label for="body-color">球体</label><div class="color-row"><button id="body-color" class="color-trigger" type="button" aria-label="选取球体颜色" aria-haspopup="dialog" aria-controls="color-picker" aria-expanded="false" disabled><span class="color-chip" aria-hidden="true"></span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"></path></svg></button><input id="body-hex" class="hex-input" type="text" inputmode="text" maxlength="7" spellcheck="false" aria-label="球体 HEX 色值"></div></div>
+            <div id="body-swatches" class="swatches" aria-label="球体颜色建议"></div>
+          </div>
+          <div class="color-editor">
+            <div class="color-editor-head"><label for="eye-color">眼睛</label><div class="color-row"><button id="eye-color" class="color-trigger" type="button" aria-label="选取眼睛颜色" aria-haspopup="dialog" aria-controls="color-picker" aria-expanded="false" disabled><span class="color-chip" aria-hidden="true"></span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"></path></svg></button><input id="eye-hex" class="hex-input" type="text" inputmode="text" maxlength="7" spellcheck="false" aria-label="眼睛 HEX 色值"></div></div>
+            <div id="eye-swatches" class="swatches" aria-label="眼睛颜色建议"></div>
+          </div>
+          <div id="aurora-colors" class="aurora-colors" hidden>
+            <div class="group-heading"><h3>幻彩光斑</h3><button id="aurora-reference" class="text-button" type="button">参考配色</button></div>
+            <div class="color-editor">
+              <div class="color-editor-head"><label for="glow-pink-color">粉光</label><div class="color-row"><button id="glow-pink-color" class="color-trigger" type="button" aria-label="选取粉光颜色" aria-haspopup="dialog" aria-controls="color-picker" aria-expanded="false" disabled><span class="color-chip" aria-hidden="true"></span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"></path></svg></button><input id="glow-pink-hex" class="hex-input" type="text" inputmode="text" maxlength="7" spellcheck="false" aria-label="粉光 HEX 色值"></div></div>
+              <div id="glow-pink-swatches" class="swatches" aria-label="粉光颜色建议"></div>
+            </div>
+            <div class="color-editor">
+              <div class="color-editor-head"><label for="glow-gold-color">金光</label><div class="color-row"><button id="glow-gold-color" class="color-trigger" type="button" aria-label="选取金光颜色" aria-haspopup="dialog" aria-controls="color-picker" aria-expanded="false" disabled><span class="color-chip" aria-hidden="true"></span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"></path></svg></button><input id="glow-gold-hex" class="hex-input" type="text" inputmode="text" maxlength="7" spellcheck="false" aria-label="金光 HEX 色值"></div></div>
+              <div id="glow-gold-swatches" class="swatches" aria-label="金光颜色建议"></div>
+            </div>
+          </div>
+        </div>
+        <div id="aurora-transparency-field" class="form-section field range-field">
+          <label for="aurora-transparency">透明度 <output id="aurora-transparency-value">0%</output></label>
+          <input id="aurora-transparency" type="range" min="0" max="60" step="1" value="0">
+        </div>
+        <div class="form-section manual-section">
+          <button id="manual-toggle" class="manual-toggle" type="button" aria-controls="manual-controls" aria-expanded="false"><span>手动调整</span><span class="manual-toggle-end"><span id="manual-toggle-label">展开</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></span></button>
+          <p id="manual-hint">微调轮廓与五官，让球球长成喜欢的样子。</p>
+          <div id="manual-controls" class="manual-controls" hidden>
+            <div class="manual-tools"><span>拖动滑杆，实时查看变化</span><button id="reset-manual" class="text-button" type="button">重置微调</button></div>
+            <div class="range-grid">
+              <div class="field range-field"><label for="shape-width">宽窄 <output id="shape-width-value">100%</output></label><input id="shape-width" type="range" min="75" max="125" step="1" value="100"></div>
+              <div class="field range-field"><label for="shape-height">高矮 <output id="shape-height-value">100%</output></label><input id="shape-height" type="range" min="75" max="125" step="1" value="100"></div>
+              <div class="field range-field"><label for="shape-softness">圆润度 <output id="shape-softness-value">50%</output></label><input id="shape-softness" type="range" min="0" max="100" step="1" value="50"></div>
+              <div class="field range-field"><label for="shape-asymmetry">不对称 <output id="shape-asymmetry-value">0%</output></label><input id="shape-asymmetry" type="range" min="-100" max="100" step="1" value="0"></div>
+              <div class="field range-field"><label for="eye-scale">眼睛大小 <output id="eye-scale-value">100%</output></label><input id="eye-scale" type="range" min="40" max="125" step="1" value="100"></div>
+              <div class="field range-field"><label for="eye-spacing">眼睛间距 <output id="eye-spacing-value">100%</output></label><input id="eye-spacing" type="range" min="70" max="130" step="1" value="100"></div>
+              <div class="field range-field"><label for="eye-height">眼睛高低 <output id="eye-height-value">居中</output></label><input id="eye-height" type="range" min="-30" max="30" step="1" value="0"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <footer class="studio-footer">
+      <label class="startup-default"><input id="startup-default" type="checkbox" checked disabled><span>设为启动外观</span></label>
+      <div class="footer-actions"><button id="save" class="primary" type="button" disabled>保存外观</button></div>
+    </footer>
+  </main>
+  <section id="color-picker" class="color-picker" role="dialog" aria-labelledby="color-picker-title" hidden>
+    <header class="color-picker-header"><h2 id="color-picker-title">球体颜色</h2><button id="color-picker-close" class="icon-button" type="button" aria-label="关闭选色"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"></path></svg></button></header>
+    <div id="color-sv" class="color-sv" role="slider" tabindex="-1" aria-label="饱和度与明度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="饱和度 0%，明度 100%" aria-describedby="color-sv-help" aria-disabled="true"><span class="sv-thumb" aria-hidden="true"></span></div>
+    <span id="color-sv-help" class="visually-hidden">左右方向键调整饱和度，上下方向键调整明度，按住 Shift 每次调整 10%。</span>
+    <div class="picker-field"><label for="color-hue">色相 <output id="color-hue-value">0°</output></label><input id="color-hue" type="range" min="0" max="360" step="1" value="0" disabled></div>
+    <div class="color-picker-values"><span id="color-picker-sample" aria-hidden="true"></span><label class="picker-hex">HEX<input id="color-picker-hex" class="hex-input" type="text" value="#EEEBE4" inputmode="text" maxlength="7" spellcheck="false" aria-label="HEX 色值" disabled></label><div class="picker-rgb"><label>R<input id="color-red" type="number" min="0" max="255" step="1" value="238" aria-label="红色 0 到 255" disabled></label><label>G<input id="color-green" type="number" min="0" max="255" step="1" value="235" aria-label="绿色 0 到 255" disabled></label><label>B<input id="color-blue" type="number" min="0" max="255" step="1" value="228" aria-label="蓝色 0 到 255" disabled></label></div></div>
+    <div id="color-picker-presets" class="swatches picker-presets" aria-label="推荐配色"></div>
+  </section>
+  <div id="message" class="toast" role="status" aria-live="polite" hidden></div>
+  <script src="../../assets/vendor/emotion-ball/rings.js"></script>
+  <script src="../../assets/vendor/emotion-ball/custom-shapes.js"></script>
+  <script src="../../assets/vendor/emotion-ball/emotions.js"></script>
+  <script src="../../assets/vendor/emotion-ball/ball.js"></script>
+  <script src="../../assets/vendor/emotion-ball/engine.js"></script>
+  <script src="lib/customization.js"></script>
+  <script src="lib/rive.js"></script>
+  <script src="lib/boo-binary.js"></script>
+  <script src="lib/aurora-rive.js"></script>
+  <script src="lib/chat-avatar.js"></script>
+  <script src="browser-bridge.js"></script>
+  <script src="customize-renderer.js"></script>
+</body>
+</html>

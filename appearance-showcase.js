@@ -1,38 +1,20 @@
-/* Local, deterministic style preview. No account, network or app settings. */
+/* These controls send appearance choices to the current App renderers. */
 (() => {
   const root = document.querySelector('[data-appearance-demo]');
   if (!root) return;
-  const system = matchMedia('(prefers-color-scheme: dark)');
-  let mode = 'accessible', look = 'dark';
-  const descriptions = {
-    accessible: '文字与背景区分更明显，额度高低也有文字提示。',
-    standard: '柔和的半透明背景，额度高低仍有文字提示。'
-  };
   function render() {
-    root.dataset.mode = mode;
-    root.dataset.look = look === 'system' ? (system.matches ? 'dark' : 'light') : look;
-    root.querySelectorAll('[data-ap-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.apMode === mode)));
-    root.querySelectorAll('[data-ap-look]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.apLook === look)));
-    const value = Number(root.querySelector('[data-ap-state]').value);
-    const severity = value === 0 ? '已用尽' : value <= 10 ? '紧张' : value <= 20 ? '偏低' : '充足';
-    root.dataset.level = value > 20 ? 'normal' : 'warning';
-    root.querySelector('[data-ap-value]').textContent = `${value}%`;
-    root.querySelector('[data-ap-severity]').textContent = severity;
-    root.querySelector('progress').value = value;
-    root.querySelector('[data-ap-notice]').textContent = `5 小时剩余 ${value}% · ${severity}`;
-    root.querySelector('[data-ap-description]').textContent = descriptions[mode] + (look === 'system' ? ` 当前跟随系统${system.matches ? '深' : '浅'}色。` : '');
+    root.querySelectorAll('[data-ap-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.apMode === root.dataset.mode)));
+    root.querySelectorAll('[data-ap-look]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.apLook === root.dataset.look)));
+    root.querySelector('[data-ap-description]').textContent = root.dataset.mode === 'accessible'
+      ? '色弱友好：更清楚的文字、边界与状态提示。'
+      : '标准配色：柔和的玻璃层次与清晰的状态提示。';
   }
   root.addEventListener('click', event => {
     const button = event.target.closest('button');
     if (!button || !root.contains(button)) return;
-    if (button.dataset.apMode) mode = button.dataset.apMode;
-    if (button.dataset.apLook) look = button.dataset.apLook;
+    if (button.dataset.apMode) root.dataset.mode = button.dataset.apMode;
+    if (button.dataset.apLook) root.dataset.look = button.dataset.apLook;
     render();
-  });
-  root.querySelector('select').addEventListener('change', render);
-  system.addEventListener('change', render);
-  document.addEventListener('website-motion-pause', event => {
-    root.dataset.paused = String(Boolean(event.detail?.paused));
   });
   render();
 })();
