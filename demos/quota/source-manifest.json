@@ -7,7 +7,7 @@
       "source": "desktop-pet/quota-label.html",
       "target": "quota-label.html",
       "sha256": "4853b4f04a6f6427dd84de1ad80cfef290b9a34e01a0c29a05e4c35aac4692bf",
-      "embeddedSha256": "fb07d79747fd4a6a04288f0a5ba70c45ae0628fc4995a15396caa1bfd9bdcce1"
+      "embeddedSha256": "ad006bd29813325839d400ae8f0905eda4496894650038557865fea96b88c147"
     },
     {
       "source": "desktop-pet/quota-label.css",
@@ -25,7 +25,7 @@
       "source": "desktop-pet/codex-details.html",
       "target": "codex-details.html",
       "sha256": "e17406ad730db3816f2e7a29907d038a2d11191aeb9d5576f80e93d97b09d511",
-      "embeddedSha256": "b0a10b31360edcbfde24e1f46c6b801c3781b842c20de613efa8665335775d07"
+      "embeddedSha256": "91b1ee607c5d70f93c18b664af327757e9d0c5f3cba655dc8b825a5135bcdcf9"
     },
     {
       "source": "desktop-pet/codex-details.css",
@@ -61,7 +61,7 @@
       "source": "desktop-pet/api-usage-label.html",
       "target": "api-usage-label.html",
       "sha256": "198b4bb27e2c69387daa8a4d3ba5154624ad043044bf3e7e8e7d339fef330121",
-      "embeddedSha256": "5390061efabc965edfdf1161c511460b259ce93641eecf2e2aa88921c57b2b3b"
+      "embeddedSha256": "94ab39465d410367d416c11348789595977d1397b78a985686f23b0f1ab084cd"
     },
     {
       "source": "desktop-pet/api-usage-label.css",
@@ -79,7 +79,7 @@
       "source": "desktop-pet/api-usage.html",
       "target": "api-usage.html",
       "sha256": "810cb6361c92e03e22e2d331589401a1b7f433024b792f5b0d11952d31f36664",
-      "embeddedSha256": "8ed365793044aab3f16741866c24a98ce55fde43c877b88191077056e38f686c"
+      "embeddedSha256": "139e535806a7573aad930ff63af109dc7a13e51b55c621494ee61ef6be47b02e"
     },
     {
       "source": "desktop-pet/api-usage.css",

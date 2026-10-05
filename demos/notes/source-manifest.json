@@ -26,7 +26,8 @@
   ],
   "htmlChanges": [
     "Insert demo-bridge.js before original renderer.",
-    "Replace organize dialog account instruction with explicit local-demo instruction."
+    "Replace organize dialog account instruction with explicit local-demo instruction.",
+    "Insert demo-focus.js to prevent embedded windows stealing parent focus/scroll."
   ],
   "unchangedCopies": [
     "notes.css",

@@ -93,7 +93,7 @@ NODE_PATH=/path/to/existing/node_modules QIUQIU_SITE_URL=http://127.0.0.1:4185/ 
 
 额度、趋势、聊天、定制、便签/待办采用公开 App `main@7f5c291d34512f629c17275c93bed472f421e8b9` 的真实 HTML、CSS、renderer 和形态引擎，直接嵌入官网。来源哈希和必要适配见各演示目录 `source-manifest.json`。主介绍不再叠放截图或折叠简化示例；历史截图文件仅作归档。
 
-Electron IPC 替换为本页内存桥接，不连接账户、模型或账单，不修改 App 或用户资料；刷新页面恢复示例。定制保存后同步本页聊天头像，收藏载入仅影响预览。公开六瓣幻彩采用原 Rive 引擎。外层官网沿用浅灰蓝/深灰，演示保留当前 App 薄荷/石墨配色；手机仅适配原控件，不用截图缩放。离屏、页面隐藏、暂停与减少动态均可停止演示动效。
+Electron IPC 替换为本页内存桥接，不连接账户、模型或账单，不修改 App 或用户资料；刷新页面恢复示例。定制保存后同步本页聊天头像，收藏载入仅影响预览。公开六瓣幻彩采用原 Rive 引擎。外层官网沿用浅灰蓝/深灰，演示保留当前 App 薄荷/石墨配色；手机仅适配原控件，不用截图缩放。离屏、页面隐藏、暂停与减少动态均可停止演示动效。嵌入窗口在用户进入前不自动抢焦点，脚本聚焦不滚动官网。
 
 安装区是三步示意图，不冒充 macOS 截图；首次打开路径依据 [Apple 官方说明](https://support.apple.com/zh-cn/102445)。
 
@@ -102,7 +102,7 @@ Electron IPC 替换为本页内存桥接，不连接账户、模型或账单，�
 - `index.html`、`styles.css`、`dark-theme.css`：页面内容、外层配色与响应式布局。
 - `app.js`：主题、移动导航等原有页面操作。
 - `motion-showcase.js/css`、`assets/motion/`：复用 V5 互动、思绪游光与身体动作；支持离屏暂停、手动点选和减少动态。
-- `demo-embed.js`、`native-demos.css`：同源嵌入、主题、保存头像、尺寸和暂停联动。
+- `demo-embed.js`、`demo-focus.js`、`native-demos.css`：同源嵌入、主题、保存头像、尺寸和暂停联动。
 - `demos/{quota,chat,customize,notes}/`：当前公开 App 界面、内存桥接、来源清单及可运行检查。
 - `appearance-showcase.js/css`：标准/色弱及浅色/深色/系统演示控制。
 - `chat-showcase.css`、`notes-showcase.css`：官网介绍排版。
