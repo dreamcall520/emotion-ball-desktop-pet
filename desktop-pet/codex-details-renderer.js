@@ -65,6 +65,7 @@
     const tasks = key => array(source[key]).map(raw => { const item = object(raw); return { id: clean(item.id,160), turnId: clean(item.turnId,160), title: clean(item.title), state: Object.hasOwn(taskStates,item.state) ? item.state : 'unknown', updatedAt: timestamp(item.updatedAt) }; }).filter(item => item.id);
     const opportunity = raw => { const item = object(raw); return { expiresAt: item.expiresAt === null ? null : timestamp(item.expiresAt) || 'unknown', title: clean(item.title), status: ['available','redeeming','redeemed'].includes(item.status) ? item.status : 'unknown', state: ['used','expired'].includes(item.state) ? item.state : null }; };
     const trend = object(source.trend), forecast = object(trend.forecast);
+    const accountHistory = object(source.accountResetHistory);
     const samples = array(trend.samples,6000).map(raw => { const sample = object(raw); return { at: timestamp(sample.at), remaining: percent(sample.remaining) }; }).filter(sample => sample.at !== null && sample.remaining !== null).sort((a,b) => a.at - b.at).filter((sample,index,list) => !index || sample.at > list[index-1].at);
     return { action: actions.includes(source.action) ? source.action : 'tasks', appearance: ['light','dark'].includes(source.appearance) ? source.appearance : 'system',
       colorMode: ['standard','accessible'].includes(source.colorMode) ? source.colorMode : null, items,
@@ -73,6 +74,10 @@
       resetCreditsAvailable: count(source.resetCreditsAvailable), resetDetailsState: source.resetDetailsState === 'known' ? 'known' : 'unknown',
       resetDetailsPartial: source.resetDetailsPartial === true, resetOpportunities: Array.isArray(source.resetOpportunities) ? array(source.resetOpportunities).map(opportunity) : null,
       resetHistory: array(source.resetHistory).map(opportunity).filter(item => item.state), extraCredits: object(source.extraCredits),
+      accountResetHistory: { state: ['ready','partial','error'].includes(accountHistory.state) ? accountHistory.state : 'unavailable',
+        updatedAt: timestamp(accountHistory.updatedAt),
+        events: array(accountHistory.events,200).map(raw => { const event = object(raw); return { kind: event.kind, occurredAt: timestamp(event.occurredAt) }; })
+          .filter(event => ['granted','redeemed'].includes(event.kind) && event.occurredAt !== null) },
       returnToTrend: source.returnToTrend === true, returnPeriod: Number.isSafeInteger(source.returnPeriod) ? source.returnPeriod : null,
       trend: { samples, resetsAt: timestamp(trend.resetsAt), resetLabel: clean(trend.resetLabel,40), windowMinutes: Number.isSafeInteger(trend.windowMinutes) ? trend.windowMinutes : null,
         forecast: { state: forecast.state === 'estimate' ? 'estimate' : 'unknown', exhaustsAt: timestamp(forecast.exhaustsAt), label: clean(forecast.label,100),
@@ -133,9 +138,29 @@
       if (model.resetDetailsPartial) nodes.push(note('仅返回部分明细，机会总数以当前可用数量为准。'));
     } else nodes.push(node('p','empty-state','到期明细暂未提供'));
     const history = node('details','opportunity-history');
-    history.replaceChildren(node('summary','',`历史记录 · ${model.resetHistory.length}`),model.resetHistory.length
-      ? opportunityRows(model.resetHistory,true) : node('p','empty-state','暂无已记录的历史'));
+    const account = model.accountResetHistory, synced = ['ready','partial'].includes(account.state);
+    const historyLabel = synced && (account.state === 'ready' || account.events.length) ? `账户历史 · 过去 30 天 · ${account.events.length} 条${account.state === 'partial' ? '（部分）' : ''}`
+      : account.events.length ? `账户历史 · ${account.events.length} 条（未更新）` : '账户历史 · 未同步';
+    const historyContent = [];
+    if (account.events.length) {
+      const list = node('ul','opportunity-list'), head = node('li','table-head');
+      head.replaceChildren(node('span','','记录'),node('span','','发生时间'),node('span','',''));
+      list.replaceChildren(head,...account.events.map(event => {
+        const li = node('li','');
+        li.replaceChildren(node('b','',event.kind === 'granted' ? '已获得' : '已使用'),node('span','',dateLabel(event.occurredAt)),node('span','',''));
+        return li;
+      }));
+      historyContent.push(list);
+    } else historyContent.push(node('p','empty-state',account.state === 'ready' ? '过去 30 天暂无获得或使用记录' : '账户历史暂未同步'));
+    if (!synced) historyContent.push(note('历史查询未完成，不代表账户没有记录。稍后会自动重试。'));
+    else if (account.state === 'partial') historyContent.push(note('仅显示已同步的部分记录，稍后会自动重试。'));
+    history.replaceChildren(node('summary','',historyLabel),...historyContent);
     history.addEventListener('toggle',resize); nodes.push(history);
+    if (model.resetHistory.length) {
+      const local = node('details','opportunity-history local-opportunity-history');
+      local.replaceChildren(node('summary','',`本机观察记录 · ${model.resetHistory.length}`),opportunityRows(model.resetHistory,true),note('仅包含球球在本机观察到的已使用或已过期机会，独立于账户历史。'));
+      local.addEventListener('toggle',resize); nodes.push(local);
+    }
     content.replaceChildren(...nodes);
   }
   function svgNode(tag, attributes, text) {
@@ -201,8 +226,8 @@
     meta.replaceChildren(legend,updated);
     const forecast = node('div',`forecast-note ${model.trend.forecast.status}`), copy = node('div','forecast-copy');
     const known = model.trend.forecast.state === 'estimate';
-    copy.replaceChildren(node('b','',known ? model.trend.forecast.summary || '预估结果暂未提供' : '无法预估'),node('p','',known ? model.trend.forecast.detail || '按近期用量估算，会随实际用量变化' : '需要更多连续用量记录'));
-    forecast.title = known ? '按近期用量估算，会随实际用量变化' : '记录充足后显示预估';
+    copy.replaceChildren(node('b','',model.trend.forecast.summary || (known ? '预估结果暂未提供' : '暂无法预估额度用完时间')),node('p','',model.trend.forecast.detail || (known ? '按近期用量估算，会随实际用量变化' : '连续用量记录不足，稍后再查看')));
+    forecast.title = '根据连续用量记录，估算当前周期额度何时用完、能否够用到重置';
     forecast.replaceChildren(node('span','forecast-symbol',known ? ({risk:'⚠️',tight:'⏳',safe:'🌿'}[model.trend.forecast.status] || '⏳') : '🔎'),copy,node('span','forecast-badge',known ? '预估' : '待预估'));
     const bottom = node('div','panel-bottom'), reset = node('p','');
     reset.replaceChildren(node('span','','本周期重置'),node('b','',model.trend.resetLabel || item.resetLabel || dateLabel(model.trend.resetsAt || item.resetsAt)));

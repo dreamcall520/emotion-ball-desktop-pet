@@ -11,7 +11,9 @@ const release = tag_name => ({ tag_name, draft: false, prerelease: false });
 test('stable versions compare all three numeric parts and always use the official request and release page', async () => {
   for (const [current, latest, hasUpdate] of [
     ['0.3.9', 'v0.3.10', true], ['v0.3.10', '0.3.10', false],
-    ['0.3.10', 'v0.3.9', false], ['0.3.99', 'v0.4.0', true], ['1.0.0', 'v0.99.99', false]
+    ['0.3.10', 'v0.3.9', false], ['0.3.99', 'v0.4.0', true], ['1.0.0', 'v0.99.99', false],
+    ['0.3.33', 'v0.4.0', true], ['0.4.00', 'v0.4.0', false],
+    ['0.4.00', 'v0.4.01', true], ['0.4.01', 'v0.4.0', false]
   ]) {
     const metadata = { ...release(latest), html_url: 'https://evil.example/download',
       assets: [{ browser_download_url: 'https://evil.example/app' }] };

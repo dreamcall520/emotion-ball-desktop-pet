@@ -65,6 +65,19 @@
     };
   }
 
+  function appearanceContentKey(raw) {
+    const appearance = normalizeAppearance(raw);
+    if (appearance.shape !== 'aurora-cloud' || appearance.auroraStyle === 'simple') {
+      delete appearance.glowPinkColor;
+      delete appearance.glowGoldColor;
+    }
+    if (appearance.shape !== 'aurora-cloud') {
+      delete appearance.auroraStyle;
+      delete appearance.auroraContour;
+    }
+    return JSON.stringify(appearance);
+  }
+
   function applyShapeRecommendation(appearance, shape, contour = 'original') {
     if (!Object.hasOwn(SHAPE_RECOMMENDED_COLORS, shape)) return { ...appearance };
     const colors = SHAPE_RECOMMENDED_COLORS[shape];
@@ -129,5 +142,5 @@
 
   return Object.freeze({ DEFAULT_APPEARANCE, DEFAULT_SHAPE_TUNING, DEFAULT_SEQUENCE, EYE_PRESETS, SHAPES, ACTIONS,
     SHAPE_RECOMMENDED_COLORS, applyShapeRecommendation,
-    normalizeAppearance, effectiveAppearance, normalizeSequence, normalizeCustomization, auroraReferenceTexture, auroraTurnRing });
+    normalizeAppearance, appearanceContentKey, effectiveAppearance, normalizeSequence, normalizeCustomization, auroraReferenceTexture, auroraTurnRing });
 }));

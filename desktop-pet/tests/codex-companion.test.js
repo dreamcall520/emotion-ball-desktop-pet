@@ -1178,6 +1178,20 @@ test('额度快照只保留可用重置机会数量，不保留重置凭据详�
   assert.equal('resetCreditsAvailable' in f.companion.getSnapshot().quota, false);
 });
 
+test('账户历史仅透传已投影事件且独立复制；账户切换丢弃旧事件与凭据字段', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.quota(64,{accountResetHistory:{state:'ready',updatedAt:1000,events:[{id:'grant',kind:'granted',occurredAt:1000,token:'SECRET'}],authToken:'SECRET'}});
+  const first = f.companion.getSnapshot();
+  assert.equal(first.quota.accountResetHistory.events[0].kind,'granted');
+  assert.equal(JSON.stringify(first).includes('SECRET'),false);
+  first.quota.accountResetHistory.events[0].kind = 'redeemed';
+  assert.equal(f.companion.getSnapshot().quota.accountResetHistory.events[0].kind,'granted');
+  f.callbacks.onAccount({accountKey:'other-account'});
+  assert.equal('accountResetHistory' in f.companion.getSnapshot().quota,false);
+  f.companion.close();
+});
+
 test('点数透过快照独立复制，Plus 可返回点数，缺失或账户更换不保留旧点数', async () => {
   const f = fixture();
   await f.companion.setEnabled(true);

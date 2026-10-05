@@ -1,5 +1,5 @@
 const { createCodexConnection, CONNECTION_STATES, ERROR_CODES } = require('./codex-connection');
-const { isTaskId, quotaCreditDetails, quotaResetDetails } = require('./codex-state');
+const { isTaskId, quotaCreditDetails, quotaResetDetails, accountResetHistoryDetails } = require('./codex-state');
 const { createQuotaHistory } = require('./codex-quota-history');
 const { completionText, COMPLETION_VARIANT_COUNT } = require('./codex-text');
 const { selectPrimaryQuotaWindows } = require('./codex-quota-view');
@@ -60,7 +60,8 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
       quota: { state: channels.quota.state, code: channels.quota.code,
         windows: quota.windows.map(window => ({ ...window })), updatedAt: quota.updatedAt, stale: quotaStale(),
         ...quotaCreditDetails(quota),
-        ...quotaResetDetails(quota) },
+        ...quotaResetDetails(quota), ...(quota.accountResetHistory
+          ? { accountResetHistory: accountResetHistoryDetails(quota.accountResetHistory) } : {}) },
       tasks: { state: channels.tasks.state, code: channels.tasks.code, partial: true,
         items: [...tasks.values()].map(task => ({ ...task })) },
       history: quotaHistory.getState(),
@@ -490,7 +491,8 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
       updatedAt: timestamp(value?.updatedAt),
       windows: [],
       ...quotaCreditDetails(value),
-      ...quotaResetDetails(value)
+      ...quotaResetDetails(value), ...(value?.accountResetHistory
+        ? { accountResetHistory: accountResetHistoryDetails(value.accountResetHistory) } : {})
     };
     quota = nextQuota;
     for (const window of Array.isArray(value?.windows) ? value.windows.slice(0, 64) : []) {

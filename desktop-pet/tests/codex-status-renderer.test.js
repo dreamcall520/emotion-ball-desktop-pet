@@ -71,7 +71,7 @@ test('重置未知与明确0区分，历史默认折叠且空态不按count造�
   h.receive(base);
   assert.match(h.nodes['details-content'].textContent,/当前可用暂未提供.*到期明细暂未提供/);
   assert.equal(h.nodes['details-content'].querySelector('.opportunity-history').open,false);
-  assert.match(h.nodes['details-content'].querySelector('.opportunity-history').textContent,/历史记录 · 0.*暂无已记录的历史/);
+  assert.match(h.nodes['details-content'].querySelector('.opportunity-history').textContent,/账户历史 · 未同步.*账户历史暂未同步/);
   h.receive({...base,resetCreditsAvailable:0,resetOpportunities:[],resetHistory:[{state:'expired',status:'available',expiresAt:NOW-60000}]});
   assert.match(h.nodes['details-content'].textContent,/暂无重置机会/);
   assert.equal(h.nodes['details-content'].querySelector('.opportunity-history').open,false);
@@ -82,6 +82,24 @@ test('重置未知与明确0区分，历史默认折叠且空态不按count造�
   assert.doesNotMatch(h.nodes['details-content'].textContent,/机会范围与到期时间以 Codex 返回信息为准/);
 });
 
+test('账户过去30天事件与本机过期观察独立；查询失败/partial不冒充零历史',() => {
+  const h = harness('codex-details-renderer.js',detailIds,'petCodexDetails');
+  const base = {action:'opportunities',resetCreditsAvailable:0,resetOpportunities:[],resetHistory:[{state:'expired',status:'available',expiresAt:NOW-60000}],
+    accountResetHistory:{state:'ready',updatedAt:NOW,events:[{kind:'granted',occurredAt:NOW-3600000},{kind:'redeemed',occurredAt:NOW-600000}]}};
+  h.receive(base);
+  const account = h.nodes['details-content'].querySelector('.opportunity-history');
+  assert.match(account.textContent,/账户历史 · 过去 30 天 · 2.*发生时间.*已获得.*已使用/);
+  assert.doesNotMatch(account.textContent,/已过期/);
+  assert.match(h.nodes['details-content'].querySelector('.local-opportunity-history').textContent,/本机观察记录 · 1.*已过期/);
+  h.receive({...base,accountResetHistory:{state:'error',events:[]}});
+  assert.match(h.nodes['details-content'].querySelector('.opportunity-history').textContent,/未同步.*不代表账户没有记录/);
+  assert.doesNotMatch(h.nodes['details-content'].querySelector('.opportunity-history').textContent,/· 0|暂无获得或使用/);
+  h.receive({...base,accountResetHistory:{state:'partial',events:[]}});
+  assert.doesNotMatch(h.nodes['details-content'].querySelector('.opportunity-history').textContent,/暂无获得或使用/);
+  h.receive({...base,accountResetHistory:{state:'ready',events:[]}});
+  assert.match(h.nodes['details-content'].querySelector('.opportunity-history').textContent,/过去 30 天 · 0 条.*暂无获得或使用记录/);
+});
+
 test('趋势只画已采样数据；单周期无切换，双周期切换传真实分钟数，预测不足显示无法预估',() => {
   const h = harness('codex-details-renderer.js',detailIds,'petCodexDetails');
   const base = {action:'trend',period:300,items:[item(300)],trend:{windowMinutes:300,resetsAt:NOW+10800000,samples:[{at:NOW-7200000,remaining:100},{at:NOW-3600000,remaining:78},{at:NOW,remaining:44}],forecast:{state:'unknown'}}};
@@ -90,7 +108,10 @@ test('趋势只画已采样数据；单周期无切换，双周期切换传真�
   const observed = h.nodes['details-content'].querySelector('.observed-line');
   assert.match(observed.attributes.d,/L158\.0 66\.8$/);
   assert.doesNotMatch(observed.attributes.d,/350/);
-  assert.match(h.nodes['details-content'].textContent,/无法预估/);
+  assert.match(h.nodes['details-content'].textContent,/暂无法预估额度用完时间.*连续用量记录不足，稍后再查看/);
+  h.receive({...base,trend:{...base.trend,forecast:{state:'unknown',summary:'暂无法预估额度用完时间',detail:'用量尚未更新，稍后再看'}}});
+  assert.match(h.nodes['details-content'].textContent,/暂无法预估额度用完时间.*用量尚未更新，稍后再看/);
+  h.receive(base);
   assert.match(h.nodes['details-content'].querySelector('.chart-updated').textContent,/^更新 /);
   assert.match(h.nodes['details-content'].querySelector('.chart-updated').title,/已记录至/);
   assert.equal(h.nodes['details-content'].querySelector('.record-note'),null);

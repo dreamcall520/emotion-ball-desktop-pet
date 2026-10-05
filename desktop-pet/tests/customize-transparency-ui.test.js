@@ -28,7 +28,9 @@ async function fixture(appearance, startupAppearance = appearance, options = {})
       ? { width: 280, height: 350 } : this.id === 'color-sv'
         ? { left: 100, top: 100, width: 250, height: 154 } : { right: 748, top: 550, bottom: 578 }; }
     focus() { this.focused = true; }
-    appendChild(child) { this.children.push(child); return child; }
+    get firstChild() { return this.children[0] || null; }
+    remove() { if (this.parentNode) this.parentNode.children = this.parentNode.children.filter(child => child !== this); this.parentNode = null; }
+    appendChild(child) { child.remove?.(); child.parentNode = this; this.children.push(child); return child; }
     append(...children) { children.forEach(child => this.appendChild(child)); }
     replaceChildren(...children) { this.children = []; this.append(...children); }
     addEventListener(name, callback) { this.listeners.set(name, callback); }
@@ -37,7 +39,9 @@ async function fixture(appearance, startupAppearance = appearance, options = {})
     querySelector(selector) { return selector === ':scope > svg' ? this.children.find(child => child.name === 'svg') : null; }
   }
   const nodes = new Map(), saves = [], startupChoices = [], previews = [], avatarPreviews = [], frames = new Map();
-  const documentEvents = new Map(), windowEvents = new Map(), destroyed = [];
+  const presetRequests = []; let presetRecords = (options.presets || []).map(item => ({ ...item })); let presetSerial = presetRecords.length;
+  const documentEvents = new Map(), windowEvents = new Map(), destroyed = [], observers = [];
+  const thumbnailInstances = [];
   const media = matches => ({ matches, listeners: new Map(),
     addEventListener(name, listener) { this.listeners.set(name, listener); },
     removeEventListener(name) { this.listeners.delete(name); },
@@ -59,13 +63,35 @@ async function fixture(appearance, startupAppearance = appearance, options = {})
     createElementNS: (_namespace, name) => new Node(name),
     createTextNode: text => new Node(`text:${text}`)
   };
-  const window = { innerWidth: 760, innerHeight: 580, petCustomizer: {
+  const window = { innerWidth: 760, innerHeight: 580,
+    IntersectionObserver: class {
+      constructor(callback) { this.callback = callback; this.targets = []; this.disconnected = false; observers.push(this); }
+      observe(target) { this.targets.push(target); this.callback([{ target, isIntersecting: this.targets.length <= 4 }]); }
+      disconnect() { this.disconnected = true; }
+    }, petCustomizer: {
     load: async () => options.loadFailure ? null : ({ customization: { appearance }, startupAppearance,
-      size: options.size || 'tiny' }),
+      appearancePresets: presetRecords, size: options.size || 'tiny' }),
     save: async (state, startupChoice) => {
       saves.push(state); startupChoices.push(startupChoice);
       if (options.save) return options.save(state, startupChoice);
       return true;
+    },
+    addPreset: async (name, appearance) => {
+      presetRequests.push({ action:'add', name, appearance });
+      if (options.presetOperation) return options.presetOperation('add', { name, appearance });
+      presetRecords = [...presetRecords, { id:'00000000-0000-4000-8000-' + String(++presetSerial).padStart(12,'0'),name:name.trim(),appearance }];
+      return { ok:true, presets:presetRecords };
+    },
+    renamePreset: async (id, name) => {
+      presetRequests.push({ action:'rename', id, name });
+      if (options.presetOperation) return options.presetOperation('rename', { id, name });
+      presetRecords = presetRecords.map(item => item.id===id ? { ...item, name:name.trim() } : item);
+      return { ok:true, presets:presetRecords };
+    },
+    deletePreset: async id => {
+      presetRequests.push({ action:'delete', id });
+      if (options.presetOperation) return options.presetOperation('delete', { id });
+      presetRecords = presetRecords.filter(item=>item.id!==id);return { ok:true, presets:presetRecords };
     },
     onColorMode: listener => { colorModeListener = listener; return () => { colorModeListener = null; }; },
     preview: appearance => avatarPreviews.push({ ...appearance })
@@ -76,16 +102,21 @@ async function fixture(appearance, startupAppearance = appearance, options = {})
     cancelAnimationFrame: id => frames.delete(id), clearTimeout() {}, setTimeout() {} });
   const root = path.join(__dirname, '../..');
   for (const file of ['emotion-ball/js/rings.js', 'emotion-ball/js/custom-shapes.js',
-    'desktop-pet/lib/customization.js', 'desktop-pet/customize-renderer.js']) {
-    if (file === 'desktop-pet/customize-renderer.js') {
+    'desktop-pet/lib/customization.js', 'desktop-pet/lib/chat-avatar.js', 'desktop-pet/customize-renderer.js']) {
+    if (file === 'desktop-pet/lib/chat-avatar.js') {
       context.PetCustomization = window.PetCustomization;
       context.EmotionBall = {
         config: { get: () => ({ raw: { id: '02' } }), register() {} },
         create: (target, options) => {
-          previews.push(options); target.appendChild(new Node('svg'));
-          return { destroy() { destroyed.push(options); } };
+          previews.push(options); const svg = new Node('svg'); target.appendChild(svg);
+          const instance = { options, active: options.autostart, target,
+            setActive(value) { this.active = value; },
+            destroy() { this.destroyed = true; this.active = false; destroyed.push(options); svg.remove(); } };
+          if (target.className === 'preset-thumbnail') thumbnailInstances.push(instance);
+          return instance;
         }
       };
+      window.EmotionBall = context.EmotionBall;
     }
     vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), context, { filename: file });
   }
@@ -93,7 +124,8 @@ async function fixture(appearance, startupAppearance = appearance, options = {})
   await Promise.resolve();
   assert.equal(window.__customizerReady, true);
   return {
-    get: id => document.getElementById(id), saves, startupChoices, previews, avatarPreviews,
+    get: id => document.getElementById(id), saves, startupChoices, previews, avatarPreviews, presetRequests, thumbnailInstances,
+    intersect(index, visible) { const observer = observers.at(-1); observer.callback([{ target: observer.targets[index], isIntersecting: visible }]); },
     root: document.documentElement, systemAppearance, motion, destroyed,
     documentEvent: (name, event) => documentEvents.get(name)?.(event),
     resize: () => windowEvents.get('resize')?.(),
@@ -535,4 +567,158 @@ test('同长度粉光与金光推荐色仍绑定当前字段，滑钮悬停不�
   assert.doesNotMatch(css, /input\[type=range\]:hover[^}]*box-shadow/);
   assert.match(css, /:focus-visible/);
   assert.match(css, /left:clamp\(7px,var\(--sv-x/);
+});
+
+
+test('收藏当前草稿仅写收藏库，载入恢复精确配色与手调并重算启动勾选', async () => {
+  const f=await fixture({shape:'blob',bodyColor:'#EEEBE4'});
+  f.get('body-hex').value='#2A8B6F';f.get('body-hex').dispatch('input');
+  f.get('shape-width').value='112';f.get('shape-width').dispatch('input');
+  f.get('aurora-transparency').value='30';f.get('aurora-transparency').dispatch('input');
+  f.get('preset-add').dispatch('click');assert.equal(f.get('preset-form').hidden,false);
+  f.get('preset-name').value=' 薄荷奶糖 ';
+  await f.get('preset-form').dispatch('submit',{preventDefault(){}});
+  assert.equal(f.get('preset-form').hidden,true);assert.equal(f.get('preset-list').children.length,1);
+  assert.equal(f.saves.length,0);assert.equal(f.presetRequests[0].appearance.bodyColor,'#2A8B6F');
+  assert.equal(f.presetRequests[0].appearance.shapeTuning.width,1.12);
+  f.get('body-hex').value='#123456';f.get('body-hex').dispatch('input');
+  f.get('startup-default').checked=true;
+  f.get('preset-list').children[0].children[0].dispatch('click');
+  assert.equal(f.get('body-hex').value,'#2A8B6F');assert.equal(f.get('shape-width').value,'112');
+  assert.equal(f.get('aurora-transparency').value,'30');assert.equal(f.get('startup-default').checked,false);
+  assert.equal(f.saves.length,0);f.flushPreview();assert.equal(f.previews.at(-1).color,'#2A8B6F');
+  const row=f.get('preset-list').children[0];assert.equal(row.attributes['aria-current'],'true');
+  f.get('shape-width').value='115';f.get('shape-width').dispatch('input');
+  assert.equal(row.attributes['aria-current'],'false','调整手调后不再把收藏标记为当前匹配');
+  f.get('shape-width').value='112';f.get('shape-width').dispatch('input');
+  assert.equal(row.attributes['aria-current'],'true');
+  await f.get('save').dispatch('click');assert.equal(f.startupChoices.at(-1),false);
+  assert.equal(f.saves.at(-1).appearance.bodyColor,'#2A8B6F');
+});
+
+test('已有收藏改名不换ID，删除先确认且不改当前预览和启动勾选', async () => {
+  const id='00000000-0000-4000-8000-000000000001';
+  const f=await fixture({shape:'square',bodyColor:'#2A8B6F'},undefined,
+    {presets:[{id,name:'薄荷',appearance:{shape:'square',bodyColor:'#2A8B6F'}}]});
+  const row=()=>f.get('preset-list').children[0];
+  row().children[0].dispatch('click');const startup=f.get('startup-default').checked;
+  row().children[1].dispatch('click');f.get('preset-name').value='奶糖';
+  await f.get('preset-form').dispatch('submit',{preventDefault(){}});
+  assert.equal(row().dataset.presetId,id);assert.equal(f.presetRequests[0].action,'rename');
+  assert.equal(row().children[0].children[1].textContent,'奶糖');
+  row().children[2].dispatch('click');assert.equal(f.get('preset-delete-confirm').hidden,false);
+  assert.equal(f.presetRequests.length,1,'首次点删除只展示确认');
+  await f.get('preset-delete-submit').dispatch('click');
+  assert.equal(f.get('preset-list').children.length,0);assert.equal(f.get('body-hex').value,'#2A8B6F');
+  assert.equal(f.get('startup-default').checked,startup);assert.equal(f.saves.length,0);
+});
+
+test('收藏失败保留原列表名称与草稿，进行中禁用并清理选色拖动', async () => {
+  let resolve;
+  const f=await fixture({shape:'blob',bodyColor:'#FF0000'},undefined,
+    {presetOperation:()=>new Promise(done=>{resolve=done;})});
+  f.get('preset-add').dispatch('click');f.get('preset-name').value='红糖';
+  f.get('body-color').dispatch('click');svPointer(f,'pointerdown',350,100);
+  const pending=f.get('preset-form').dispatch('submit',{preventDefault(){}});
+  assert.equal(f.get('preset-submit').disabled,true);assert.equal(f.get('preset-name').disabled,true);
+  assert.equal(f.get('shape-width').disabled,true);assert.equal(f.get('color-sv').capturedPointer,null);
+  assert.equal(f.get('save').disabled,true);
+  resolve({ok:false,error:'磁盘写入未完成'});await pending;
+  assert.equal(f.get('preset-list').children.length,0);assert.equal(f.get('preset-form').hidden,false);
+  assert.equal(f.get('preset-name').value,'红糖');assert.equal(f.get('body-hex').value,'#FF0000');
+  assert.equal(f.get('preset-error').textContent,'磁盘写入未完成');assert.equal(f.get('preset-submit').disabled,false);
+  assert.equal(f.get('save').disabled,false);assert.equal(f.saves.length,0);
+  const unavailable=await fixture({shape:'blob'},undefined,{loadFailure:true});
+  assert.equal(unavailable.get('preset-add').disabled,true);
+});
+
+
+test('收藏缩略图复用真实头像配置，四项可见且第五项滚入后才创建静态实例', async () => {
+  const presets=['blob','cloud','square','aurora-cloud','blob'].map((shape,index)=>({
+    id:'00000000-0000-4000-8000-'+String(index+1).padStart(12,'0'), name:'收藏'+index,
+    appearance:{shape,bodyColor:index===4?'#2A8B6F':'#28415C',eyeColor:'#F4E8C8',
+      auroraContour:'six-lobe',auroraTransparency:42,auroraStyle:'simple',eyeScale:.8,eyeSpacing:1.2,eyeHeight:8,
+      shapeTuning:{width:1.13,height:1,softness:.72,asymmetry:0}} }));
+  const f=await fixture({shape:'blob'},undefined,{presets});
+  assert.equal(f.get('preset-list').children.length,5);
+  assert.equal(f.thumbnailInstances.length,4);
+  for(const instance of f.thumbnailInstances){
+    assert.equal(instance.active,false);assert.equal(instance.options.autostart,false);
+    assert.equal(instance.options.eyeColor,'#F4E8C8');assert.equal(instance.options.auroraTransparency,42);
+    assert.equal(instance.options.color,'#28415C');assert.ok(instance.options.customShape.ring.length);
+    assert.equal(instance.target.firstChild.name,'svg');
+    assert.equal(instance.target.dataset.avatarReady,'true');
+  }
+  assert.equal(f.thumbnailInstances[0].options.eyeScale,.8);
+  assert.equal(f.thumbnailInstances[0].options.eyeSpacing,1.2);
+  assert.equal(f.thumbnailInstances[0].options.eyeHeight,8);
+  assert.equal(JSON.parse(f.thumbnailInstances[3].target.dataset.avatarAppearance).auroraContour,'six-lobe');
+  const old=f.thumbnailInstances[0];f.intersect(0,false);assert.equal(old.destroyed,true);
+  f.intersect(4,true);assert.equal(f.thumbnailInstances.length,5);
+  assert.equal(f.thumbnailInstances.at(-1).options.color,'#2A8B6F');
+  assert.equal(f.thumbnailInstances.filter(instance=>!instance.destroyed).length,4);
+  f.hide(true);assert.equal(f.thumbnailInstances.filter(instance=>!instance.destroyed).length,0);
+  f.hide(false);assert.equal(f.thumbnailInstances.filter(instance=>!instance.destroyed).length,4);
+  f.close();f.intersect(4,true);
+  assert.equal(f.thumbnailInstances.filter(instance=>!instance.destroyed).length,0);
+});
+
+test('收藏删除确认关联当前行，取消及写入失败均保留收藏与当前草稿', async () => {
+  const id='00000000-0000-4000-8000-000000000001';
+  const f=await fixture({shape:'square',bodyColor:'#2A8B6F'},undefined,{presets:[{id,name:'薄荷奶糖',appearance:{shape:'square',bodyColor:'#2A8B6F'}}],
+    presetOperation:async()=>({ok:false,error:'保存未完成'})});
+  const row=f.get('preset-list').children[0];row.children[2].dispatch('click');
+  assert.equal(f.get('preset-delete-confirm').parentNode,row);
+  assert.equal(row.dataset.confirming,'true');assert.ok(f.get('preset-delete-label').textContent.includes('薄荷奶糖'));
+  f.get('preset-delete-cancel').dispatch('click');
+  assert.equal(f.get('preset-delete-confirm').hidden,true);assert.equal(row.dataset.confirming,undefined);
+  assert.equal(f.presetRequests.length,0);
+  row.children[2].dispatch('click');await f.get('preset-delete-submit').dispatch('click');
+  assert.equal(f.get('preset-delete-confirm').hidden,false);assert.equal(f.get('preset-delete-submit').disabled,false);
+  assert.equal(f.get('preset-list').children.length,1);assert.equal(f.get('body-hex').value,'#2A8B6F');
+  const css=fs.readFileSync(path.join(__dirname,'../customize.css'),'utf8');
+  assert.match(css,/\.preset-list\{[^}]*max-height:230px;overflow-y:auto/);
+  assert.match(css,/\.preset-danger\{[^}]*background:transparent;color:var\(--preset-danger-text\)/);
+});
+
+
+test('相同完整外观不能换名重复收藏，提示已有名称并保留草稿，调整后仍可新增', async () => {
+  const appearance={shape:'square',bodyColor:'#2A8B6F',eyeColor:'#F4E8C8',auroraTransparency:30,
+    shapeTuning:{width:1.12,height:1,softness:.72,asymmetry:0},eyeScale:.8,eyeSpacing:1.2,eyeHeight:6};
+  const f=await fixture(appearance,undefined,{presets:[{id:'00000000-0000-4000-8000-000000000001',name:'薄荷奶糖',appearance}]});
+  f.get('preset-add').dispatch('click');f.get('preset-name').value='另一个名字';
+  await f.get('preset-form').dispatch('submit',{preventDefault(){}});
+  assert.equal(f.presetRequests.length,0);assert.equal(f.get('preset-list').children.length,1);
+  assert.equal(f.get('preset-name').value,'另一个名字');assert.equal(f.get('preset-form').hidden,false);
+  assert.equal(f.get('preset-error').textContent,'已收藏为「薄荷奶糖」，无需重复保存');
+  assert.equal(f.get('preset-submit').disabled,false);assert.equal(f.get('body-hex').value,'#2A8B6F');
+  f.get('shape-width').value='114';f.get('shape-width').dispatch('input');
+  await f.get('preset-form').dispatch('submit',{preventDefault(){}});
+  assert.equal(f.presetRequests.length,1);assert.equal(f.get('preset-list').children.length,2);
+  assert.equal(f.presetRequests[0].appearance.shapeTuning.width,1.14);
+});
+
+test('形态已按下不代表预览已绘制，真实绘制标记随新颜色立即失效并在下一帧更新', async () => {
+  const f=await fixture({shape:'blob'});f.flushPreview();
+  assert.equal(JSON.parse(f.get('preview-ball').dataset.renderedAppearance).shape,'blob');
+  f.card('cloud').dispatch('click');assert.equal(f.card('cloud').attributes['aria-pressed'],'true');
+  assert.equal(f.get('preview-ball').dataset.renderedAppearance,undefined);
+  f.flushPreview();assert.equal(JSON.parse(f.get('preview-ball').dataset.renderedAppearance).shape,'cloud');
+  f.get('body-hex').value='#3C5E72';f.get('body-hex').dispatch('input');
+  assert.equal(f.get('preview-ball').dataset.renderedAppearance,undefined);
+  f.flushPreview();assert.equal(JSON.parse(f.get('preview-ball').dataset.renderedAppearance).bodyColor,'#3C5E72');
+});
+
+
+test('未生效的颜色或样式不同仍属于同一个可见形象，重复提示保留原收藏', async () => {
+  for(const shape of ['blob','aurora-cloud']){
+    const appearance={shape,bodyColor:'#2A8B6F',eyeColor:'#F4E8C8',auroraContour:'six-lobe',auroraStyle:shape==='blob'?'dimensional':'simple'};
+    const stored={...appearance,glowPinkColor:'#123456',glowGoldColor:'#654321',...(shape==='blob'?{auroraStyle:'simple'}:{})};
+    const f=await fixture(appearance,undefined,{presets:[{id:'00000000-0000-4000-8000-000000000001',name:'原有形象',appearance:stored}]});
+    f.get('preset-add').dispatch('click');f.get('preset-name').value='新名称';
+    await f.get('preset-form').dispatch('submit',{preventDefault(){}});
+    assert.equal(f.presetRequests.length,0);assert.equal(f.get('preset-list').children.length,1);
+    assert.equal(f.get('preset-error').textContent,'已收藏为「原有形象」，无需重复保存');
+    assert.equal(f.get('preset-name').value,'新名称');
+  }
 });

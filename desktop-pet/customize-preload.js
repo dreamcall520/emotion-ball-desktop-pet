@@ -9,6 +9,9 @@ contextBridge.exposeInMainWorld('petCustomizer', {
     return () => ipcRenderer.removeListener('pet:color-mode', listener);
   },
   load: () => ipcRenderer.invoke('pet:customization-get'),
+  addPreset: (name, appearance) => ipcRenderer.invoke('pet:appearance-preset-add', { name, appearance }),
+  renamePreset: (id, name) => ipcRenderer.invoke('pet:appearance-preset-rename', { id, name }),
+  deletePreset: id => ipcRenderer.invoke('pet:appearance-preset-delete', { id }),
   save: (value, setAsStartupDefault) => ipcRenderer.invoke('pet:customization-save', value, setAsStartupDefault),
   preview: appearance => ipcRenderer.send('pet:customization-preview', appearance)
 });

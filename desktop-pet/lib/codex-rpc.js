@@ -4,11 +4,17 @@ const path = require('node:path');
 const childProcess = require('node:child_process');
 const { createHash } = require('node:crypto');
 const { TextDecoder } = require('node:util');
-const { isTaskId, normalizeQuota, normalizeThreadList } = require('./codex-state');
+const { isTaskId, normalizeQuota, normalizeThreadList, normalizeResetHistoryPage,
+  accountResetHistoryDetails, MAX_RESET_HISTORY_EVENTS } = require('./codex-state');
 
 const ERROR_CODES = Object.freeze(['MISSING', 'UNAUTHENTICATED', 'UNSUPPORTED', 'DISCONNECTED', 'TIMEOUT', 'INVALID_FRAME', 'UNSAFE_SOCKET', 'STATE_TOO_LARGE', 'PARTIAL_STATE', 'CLOSED', 'BUSY']);
 const MAX_FRAME_BYTES = 16 * 1024 * 1024;
-const METHODS = new Set(['initialize', 'account/read', 'account/rateLimits/read', 'thread/list']);
+const METHODS = new Set(['initialize', 'account/read', 'account/rateLimits/read', 'getAuthStatus', 'thread/list']);
+const RESET_HISTORY_URL = 'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/history';
+const HISTORY_CACHE_MS = 120000;
+const HISTORY_MAX_PAGES = 10;
+const HISTORY_PAGE_BYTES = 256 * 1024;
+const HISTORY_TOTAL_BYTES = 1024 * 1024;
 const THREAD_LIST_PARAMS = Object.freeze({ sortKey: 'updated_at', archived: false, sourceKinds: [], useStateDbOnly: true });
 const DISCOVERY_PAGE_LIMIT = 100;
 const DISCOVERY_MAX_PAGES = 10;
@@ -34,7 +40,9 @@ function projectAccount(raw) {
   if (raw?.account === null) return { accountKey: null, authenticated: false };
   const account = raw?.account;
   if (account?.type === 'chatgpt' && typeof account.email === 'string' && account.email.trim()) {
-    return { accountKey: createHash('sha256').update(`chatgpt:${account.email.trim().toLowerCase()}`).digest('hex'), authenticated: true };
+    const workspace = raw?.workspaceRouting?.chatgptAccountId;
+    const scope = typeof workspace === 'string' && workspace.length > 0 && workspace.length <= 200 ? `:workspace:${workspace}` : '';
+    return { accountKey: createHash('sha256').update(`chatgpt:${account.email.trim().toLowerCase()}${scope}`).digest('hex'), authenticated: true };
   }
   // API-key accounts have no safe stable identity field; never read the key to manufacture one.
   if (account && typeof account === 'object' && !Array.isArray(account) &&
@@ -45,7 +53,8 @@ function projectAccount(raw) {
 }
 
 function createCodexRpc({ fs = nodeFs, spawn = childProcess.spawn, homedir = os.homedir,
-  timeoutMs = 10000, maxFrameBytes = MAX_FRAME_BYTES, onDisconnect = () => {}, ignoreThread = () => false } = {}) {
+  timeoutMs = 10000, maxFrameBytes = MAX_FRAME_BYTES, onDisconnect = () => {}, ignoreThread = () => false,
+  fetch = globalThis.fetch, now = Date.now, historyTimeoutMs = 5000 } = {}) {
   const timeout = Math.max(1, Math.min(15000, timeoutMs));
   const frameLimit = Math.max(1, Math.min(MAX_FRAME_BYTES, maxFrameBytes));
   let child = null;
@@ -58,12 +67,16 @@ function createCodexRpc({ fs = nodeFs, spawn = childProcess.spawn, homedir = os.
   let chunks = [];
   let buffered = 0;
   const pending = new Map();
+  let accountIdentity = null, accountVersion = 0, historyCache = null, historyFlight = null;
+  const historyControllers = new Set();
   const decoder = new TextDecoder('utf-8', { fatal: true });
   const ensureOpen = () => { if (closed) throw codexError('CLOSED'); };
 
   function shutdown(code = 'CLOSED') {
     if (closed) return;
     closed = true; ready = false;
+    for (const controller of historyControllers) controller.abort();
+    historyControllers.clear(); historyCache = null; accountIdentity = null; accountVersion++;
     clearTimeout(startTimer); startTimer = null;
     startReject?.(codexError(code)); startReject = null;
     for (const request of pending.values()) { clearTimeout(request.timer); request.reject(codexError(code)); }
@@ -116,14 +129,14 @@ function createCodexRpc({ fs = nodeFs, spawn = childProcess.spawn, homedir = os.
     }
   }
 
-  function request(method, params, project) {
+  function request(method, params, project, requestTimeout = timeout) {
     if (closed) return Promise.reject(codexError('CLOSED'));
     if (!METHODS.has(method)) return Promise.reject(codexError('UNSUPPORTED'));
     if (!child || (method !== 'initialize' && !ready)) return Promise.reject(codexError('DISCONNECTED'));
     if (pending.size >= 4) return Promise.reject(codexError('BUSY'));
     const id = ++nextId;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { pending.delete(id); reject(codexError('TIMEOUT')); }, timeout);
+      const timer = setTimeout(() => { pending.delete(id); reject(codexError('TIMEOUT')); }, Math.max(1, Math.min(timeout, requestTimeout)));
       pending.set(id, { resolve, reject, timer, project });
       try { child.stdin.write(JSON.stringify({ id, method, params }) + '\n'); }
       catch { shutdown('DISCONNECTED'); }
@@ -202,10 +215,171 @@ function createCodexRpc({ fs = nodeFs, spawn = childProcess.spawn, homedir = os.
     return null;
   }
 
+  function rememberAccount(raw) {
+    const projected = projectAccount(raw);
+    const routing = raw?.workspaceRouting;
+    const identity = { ...projected,
+      emailKey: raw?.account?.type === 'chatgpt' && typeof raw.account.email === 'string'
+        ? createHash('sha256').update(raw.account.email.trim().toLowerCase()).digest('hex') : null,
+      accountId: typeof routing?.chatgptAccountId === 'string' && routing.chatgptAccountId.length <= 200 ? routing.chatgptAccountId : null,
+      backendOrigin: typeof routing?.backendOrigin === 'string' ? routing.backendOrigin : null,
+      routingOverride: ['NO_CONSTRAINT', 'us', 'us_cr'].includes(routing?.accountRoutingOverride) ? routing.accountRoutingOverride : null };
+    if (JSON.stringify(identity) !== JSON.stringify(accountIdentity)) {
+      accountVersion++;
+      for (const controller of historyControllers) controller.abort();
+      historyCache = null; historyFlight = null;
+    }
+    accountIdentity = identity;
+    return projected;
+  }
+
+  function projectHistoryAuth(raw, identity) {
+    if (!['chatgpt', 'chatgptAuthTokens'].includes(raw?.authMethod) || typeof raw.authToken !== 'string'
+      || !raw.authToken || raw.authToken.length > 32768 || /[\s\u0000-\u001f\u007f]/u.test(raw.authToken)) throw codexError('UNAUTHENTICATED');
+    let accountId = identity.accountId;
+    try {
+      const parts = raw.authToken.split('.');
+      if (parts.length === 3 && parts[1].length <= 24000) {
+        const claims = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+        const email = claims?.['https://api.openai.com/profile']?.email;
+        if (typeof email === 'string' && createHash('sha256').update(email.trim().toLowerCase()).digest('hex') !== identity.emailKey) throw codexError('UNAUTHENTICATED');
+        const id = claims?.['https://api.openai.com/auth']?.chatgpt_account_id;
+        if (typeof id === 'string' && id.length > 0 && id.length <= 200) {
+          if (accountId && accountId !== id) throw codexError('UNAUTHENTICATED');
+          accountId = id;
+        }
+      }
+    } catch (error) { if (error?.code === 'UNAUTHENTICATED') throw error; }
+    if (!accountId || /[\u0000-\u001f\u007f]/u.test(accountId)) throw codexError('UNSUPPORTED');
+    return { token: raw.authToken, accountId };
+  }
+
+  async function readHistoryBody(response, budget) {
+    const declared = Number(response.headers?.get('content-length'));
+    const limit = Math.min(HISTORY_PAGE_BYTES, budget.remaining);
+    if (Number.isFinite(declared) && declared > limit) {
+      try { await response.body?.cancel(); } catch (_) {}
+      throw codexError('INVALID_FRAME');
+    }
+    if (!response.body?.getReader) throw codexError('INVALID_FRAME');
+    const reader = response.body.getReader(), parts = [];
+    let size = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > limit) throw codexError('INVALID_FRAME');
+        parts.push(Buffer.from(value));
+      }
+      budget.remaining -= size;
+      return JSON.parse(decoder.decode(Buffer.concat(parts, size)));
+    } catch (error) {
+      try { await reader.cancel(); } catch (_) {}
+      throw codexError(error?.code === 'INVALID_FRAME' ? error.code : 'INVALID_FRAME');
+    } finally { reader.releaseLock(); }
+  }
+
+  async function fetchAccountHistory(identity, version, controller, flight) {
+    if (identity?.authenticated !== true || typeof fetch !== 'function'
+      || (identity.backendOrigin !== null && identity.backendOrigin !== 'https://chatgpt.com')) throw codexError('UNSUPPORTED');
+    const current = () => { ensureOpen(); if (version !== accountVersion || controller.signal.aborted) throw codexError('CLOSED'); };
+    let auth = null;
+    const discardAuth = () => { auth = null; };
+    controller.signal.addEventListener('abort', discardAuth, { once: true });
+    const events = [], ids = new Set(), cursors = new Set();
+    const budget = { remaining: HISTORY_TOTAL_BYTES };
+    let cursor = null, partial = false;
+    try {
+      auth = await request('getAuthStatus', { includeToken: true, refreshToken: false },
+        raw => projectHistoryAuth(raw, identity), Math.min(5000, historyTimeoutMs));
+      current();
+      flight.accountId = auth.accountId;
+      // Re-check the existing identity around HTTP, including older CLI accounts
+      // whose account/read response has no workspaceRouting or token email claim.
+      await request('account/read', { refreshToken: false }, rememberAccount, Math.min(5000, historyTimeoutMs));
+      current();
+      if (historyCache?.version === version && historyCache.accountId === auth.accountId
+        && now() - historyCache.at < HISTORY_CACHE_MS) return accountResetHistoryDetails(historyCache.value);
+      for (let page = 0; page < HISTORY_MAX_PAGES; page++) {
+        const url = new URL(RESET_HISTORY_URL);
+        if (cursor) url.searchParams.set('cursor', cursor);
+        const headers = { Authorization: `Bearer ${auth.token}`, 'ChatGPT-Account-Id': auth.accountId };
+        if (identity.routingOverride && identity.routingOverride !== 'NO_CONSTRAINT') headers['X-OpenAI-Account-Routing-Override'] = identity.routingOverride;
+        const response = await fetch(url.href, { method: 'GET', headers, redirect: 'error', cache: 'no-store', signal: controller.signal });
+        current();
+        if (response.redirected || (response.url && new URL(response.url).origin !== 'https://chatgpt.com')) throw codexError('UNSUPPORTED');
+        if (!response.ok) {
+          try { await response.body?.cancel(); } catch (_) {}
+          throw codexError(response.status === 401 || response.status === 403 ? 'UNAUTHENTICATED'
+            : response.status === 404 ? 'UNSUPPORTED' : response.status === 429 ? 'BUSY' : 'DISCONNECTED');
+        }
+        const value = normalizeResetHistoryPage(await readHistoryBody(response, budget));
+        current();
+        if (!value) throw codexError('INVALID_FRAME');
+        partial ||= value.partial;
+        for (const event of value.events) {
+          if (ids.has(event.id)) continue;
+          if (events.length >= MAX_RESET_HISTORY_EVENTS) { partial = true; break; }
+          ids.add(event.id); events.push(event);
+        }
+        if (!value.nextCursor) {
+          await request('account/read', { refreshToken: false }, rememberAccount, Math.min(5000, historyTimeoutMs));
+          current();
+          return accountResetHistoryDetails({ state: partial ? 'partial' : 'ready', events, updatedAt: now() });
+        }
+        if (events.length >= MAX_RESET_HISTORY_EVENTS || cursors.has(value.nextCursor) || page === HISTORY_MAX_PAGES - 1 || budget.remaining <= 0) break;
+        cursors.add(value.nextCursor); cursor = value.nextCursor;
+      }
+      await request('account/read', { refreshToken: false }, rememberAccount, Math.min(5000, historyTimeoutMs));
+      current();
+      return accountResetHistoryDetails({ state: 'partial', events, updatedAt: now() });
+    } catch (error) {
+      current();
+      if (events.length) return accountResetHistoryDetails({ state: 'partial', events, updatedAt: now(), code: error?.code || 'DISCONNECTED' });
+      throw error;
+    } finally { auth = null; controller.signal.removeEventListener('abort', discardAuth); }
+  }
+
+  async function readAccountHistory() {
+    ensureOpen();
+    const version = accountVersion;
+    if (historyFlight?.version === version) return historyFlight.promise;
+    const controller = new AbortController(); historyControllers.add(controller);
+    const previous = historyCache?.version === version ? historyCache : null;
+    let timer, timedOut = false;
+    const cancelled = new Promise((_, reject) => controller.signal.addEventListener('abort', () => reject(codexError(timedOut ? 'TIMEOUT' : 'CLOSED')), { once: true }));
+    timer = setTimeout(() => { timedOut = true; controller.abort(); }, Math.max(1, Math.min(5000, historyTimeoutMs)));
+    const flight = { version, accountId: null, promise: null };
+    flight.promise = Promise.race([fetchAccountHistory(accountIdentity, version, controller, flight), cancelled]).catch(error =>
+      accountResetHistoryDetails({ state: error?.code === 'UNSUPPORTED' || error?.code === 'UNAUTHENTICATED' ? 'unavailable' : 'error',
+        events: flight.accountId && flight.accountId === previous?.accountId ? previous.value.events : [],
+        updatedAt: flight.accountId && flight.accountId === previous?.accountId ? previous.value.updatedAt : null, code: error?.code || 'DISCONNECTED' }))
+      .then(value => {
+        ensureOpen();
+        if (version !== accountVersion) throw codexError('DISCONNECTED');
+        const cacheAt = previous && value.updatedAt === previous.value.updatedAt && value.state === previous.value.state ? previous.at : now();
+        historyCache = { version, accountId: flight.accountId, at: cacheAt, value };
+        return accountResetHistoryDetails(value);
+      }).finally(() => { clearTimeout(timer); controller.abort(); historyControllers.delete(controller); if (historyFlight === flight) historyFlight = null; });
+    historyFlight = flight;
+    return flight.promise;
+  }
+
+  async function readQuota(at = now()) {
+    const version = accountVersion;
+    const quota = await request('account/rateLimits/read', {}, raw => normalizeQuota(raw, at));
+    if (version !== accountVersion) throw codexError('DISCONNECTED');
+    const accountResetHistory = await readAccountHistory();
+    ensureOpen();
+    if (version !== accountVersion) throw codexError('DISCONNECTED');
+    return { ...quota, accountResetHistory };
+  }
+
   return {
     start,
-    readAccount: () => request('account/read', { refreshToken: false }, projectAccount),
-    readQuota: (now = Date.now()) => request('account/rateLimits/read', {}, raw => normalizeQuota(raw, now)),
+    readAccount: () => request('account/read', { refreshToken: false }, rememberAccount),
+    readQuota,
     listThreads: () => request('thread/list', { limit: 20, ...THREAD_LIST_PARAMS }, projectThreads),
     findThread,
     close: () => shutdown()

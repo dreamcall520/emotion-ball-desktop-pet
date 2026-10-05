@@ -47,6 +47,11 @@ test('定制preload只转发现有API与安全归一的主题消息，可取消�
   await bridge.load();
   await bridge.save(customization, false);
   bridge.preview(customization.appearance);
-  assert.deepEqual(invoked, [['pet:customization-get'], ['pet:customization-save', customization, false]]);
+  await bridge.addPreset('薄荷',customization.appearance);
+  await bridge.renamePreset('id','奶糖');
+  await bridge.deletePreset('id');
+  assert.deepEqual(JSON.parse(JSON.stringify(invoked)), [['pet:customization-get'], ['pet:customization-save', customization, false],
+    ['pet:appearance-preset-add',{name:'薄荷',appearance:customization.appearance}],
+    ['pet:appearance-preset-rename',{id:'id',name:'奶糖'}],['pet:appearance-preset-delete',{id:'id'}]]);
   assert.deepEqual(sent, [['pet:customization-preview', customization.appearance]]);
 });

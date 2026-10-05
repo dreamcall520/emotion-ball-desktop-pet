@@ -70,6 +70,49 @@ function normalizeResetCredits(summary) {
     } : null) : null });
 }
 
+const MAX_RESET_HISTORY_EVENTS = 200;
+function normalizeResetHistoryPage(raw) {
+  if (!object(raw) || !Array.isArray(raw.events)) return null;
+  const seen = new Set();
+  const events = raw.events.slice(0, MAX_RESET_HISTORY_EVENTS).flatMap(row => {
+    const at = typeof row?.occurred_at === 'string' && row.occurred_at.length <= 50
+      && /^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/u.test(row.occurred_at) ? Date.parse(row.occurred_at) : NaN;
+    if (!object(row) || typeof row.id !== 'string' || !row.id.trim() || row.id.length > 200
+      || /[\u0000-\u001f\u007f]/u.test(row.id) || !['granted', 'used', 'redeemed'].includes(row.kind)
+      || !validDate(at) || seen.has(row.id)) return [];
+    seen.add(row.id);
+    // The account-history HTTP contract uses "used"; current reset-credit state
+    // uses "redeemed". Normalize the event once, preserving the separate models.
+    return [{ id: row.id, kind: row.kind === 'used' ? 'redeemed' : row.kind, occurredAt: at }];
+  });
+  const cursor = raw.next_cursor;
+  const validCursor = cursor == null || cursor === '' || (typeof cursor === 'string' && cursor.length <= 2000
+    && !/[\u0000-\u001f\u007f]/u.test(cursor));
+  return { events, nextCursor: validCursor && cursor ? cursor : null,
+    partial: !validCursor || raw.events.length > MAX_RESET_HISTORY_EVENTS
+      || events.length !== new Set(raw.events.map(row => row?.id)).size };
+}
+
+// Account events are separate from the locally observed credit-state cache.
+// This projection is the only history payload allowed beyond the RPC boundary.
+function accountResetHistoryDetails(value) {
+  if (!object(value)) return { state: 'unavailable', events: [], updatedAt: null, code: 'UNSUPPORTED' };
+  const states = ['ready', 'partial', 'unavailable', 'error'];
+  const codes = ['UNSUPPORTED', 'UNAUTHENTICATED', 'DISCONNECTED', 'TIMEOUT', 'INVALID_FRAME', 'BUSY', 'CLOSED'];
+  const events = [];
+  const seen = new Set();
+  for (const row of Array.isArray(value.events) ? value.events.slice(0, MAX_RESET_HISTORY_EVENTS) : []) {
+    if (!object(row) || typeof row.id !== 'string' || !row.id.trim() || row.id.length > 200
+      || /[\u0000-\u001f\u007f]/u.test(row.id) || !['granted', 'redeemed'].includes(row.kind)
+      || !validDate(row.occurredAt) || seen.has(row.id)) continue;
+    seen.add(row.id); events.push({ id: row.id, kind: row.kind, occurredAt: row.occurredAt });
+  }
+  events.sort((a, b) => b.occurredAt - a.occurredAt);
+  const state = states.includes(value.state) ? value.state : 'unavailable';
+  return { state, events, updatedAt: validDate(value.updatedAt) ? value.updatedAt : null,
+    code: codes.includes(value.code) ? value.code : null };
+}
+
 function normalizeQuota(raw, now) {
   const windows = [];
   const groups = object(raw?.rateLimitsByLimitId) ? Object.entries(raw.rateLimitsByLimitId).slice(0, 32)
@@ -298,5 +341,6 @@ function applyTaskPatches(previous, patches) {
   return { task, needsSnapshot };
 }
 
-module.exports = { UNKNOWN, MAX_TASKS, isTaskId, isEligibleThread, normalizeQuota, quotaCreditDetails, quotaResetDetails, normalizeThreadList,
+module.exports = { UNKNOWN, MAX_TASKS, isTaskId, isEligibleThread, normalizeQuota, quotaCreditDetails, quotaResetDetails,
+  normalizeResetHistoryPage, accountResetHistoryDetails, MAX_RESET_HISTORY_EVENTS, normalizeThreadList,
   normalizeTask, projectTask, taskFromProjection, applyTaskPatches };
