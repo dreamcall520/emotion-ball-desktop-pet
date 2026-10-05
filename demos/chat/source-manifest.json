@@ -7,7 +7,7 @@
       "source": "desktop-pet/chat.html",
       "target": "index.html",
       "sha256": "b06a3ebed1d0ef39e8ac79d97be1297de2ee10c1afb91363fe01e57982877ae8",
-      "embeddedSha256": "0960b160291f4674c3b8727bee15bc4534929461adfe85b46cc0a3a20965a610"
+      "embeddedSha256": "0d1084601d20571de453633c83127b7653ad2c2a630bed57cde82aa34654b3fb"
     },
     {
       "source": "desktop-pet/chat.css",
@@ -113,22 +113,23 @@
     }
   ],
   "adaptations": [
-    "HTML changes relative engine paths and inserts the in-memory demo bridge.",
-    "Visible website example note and close/reopen adapter.",
+    "HTML changes relative engine paths, inserts the in-memory demo bridge and cache query tags.",
+    "The iframe adapter adds 2px padding to preserve all native 15px panel border corners; no App CSS changes.",
+    "The empty privacy-note node remains for renderer history toggles but is permanently hidden by the website adapter; close/reopen copy is concise.",
     "Avatar activity includes parent pause state; all other renderer logic unchanged."
   ],
   "adapters": [
     {
       "target": "README.md",
-      "sha256": "35e7708295a9399bf80990f97ffac78fe5aa4e0ccf015a446601faea1b33ace6"
+      "sha256": "1f4a744852cebbd26d485af38b8b25c3bdf9dea888b8563d03196d103e81d732"
     },
     {
       "target": "demo-adapter.css",
-      "sha256": "849963ef084da5b19f79d0a4385f331ea39634ddffbe24c08183ffcfee6e15d2"
+      "sha256": "21eba2ae8e3053038cff154ce56ff065cab4f121eb4cf2b6cb54144010c59fcf"
     },
     {
       "target": "demo-bridge.js",
-      "sha256": "6596d6244b41daeb570ccd9393e1ba280f6ac5857a3accde42e0e9a1cca85f4a"
+      "sha256": "916b432142be9113588549fbda81625aea41d2a146b747e81b71d27fd3802397"
     }
   ]
 }

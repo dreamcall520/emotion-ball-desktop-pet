@@ -96,17 +96,17 @@
   ],
   "adaptations": [
     "HTML inserts the in-memory demo bridge; core DOM, CSS and renderers unchanged.",
-    "Composition layout, message validation, iframe sizing and example dialog are website-only.",
+    "Composition layout, verified messages, uniform 280px main / 224px appearance card scaling with preserved native viewports, responsive detail sizing and example dialog are website-only.",
     "API connection settings are hidden in the website; no credentials are accepted."
   ],
   "adapters": [
     {
       "target": "README.md",
-      "sha256": "6e856c7d54ced11e034b675a349466b6b23271abb2bd0184c5243f590432a4be"
+      "sha256": "f29568785ffcdfdda972fcabfdf247b4c674f04089117fd4d99a63f7901aa6e8"
     },
     {
       "target": "check.browser.cjs",
-      "sha256": "0a348d82510fb3577b9bf1237cef1364315f431f4e668c4bfcbeaa8ca2da7e00"
+      "sha256": "4b37d1f94541fc133945c7a82e67aa50d1349f06fd071a8b585d429e39d29cdd"
     },
     {
       "target": "demo-adapter.css",
@@ -118,15 +118,15 @@
     },
     {
       "target": "demo.css",
-      "sha256": "59d29f31ce31efafcc0f358fa5349f5a79cc553b1cc7c2bced0c5c86cc17afe9"
+      "sha256": "80bcdd4b2813a3ea4fcdfc4b6743a6ffe80a708d468c62e4e1ffe5495080b82b"
     },
     {
       "target": "demo.js",
-      "sha256": "20bcc7cec3f0341c5597cb9e7115c3f9893f811d311bb291a6bea22a003854fb"
+      "sha256": "293b9fe85aa6a7806c92791934faccfeca07f09a046a1f391c32cc74f70f3f1c"
     },
     {
       "target": "index.html",
-      "sha256": "4dab9ebb33e09416abe13be5e7fa4cd45f8ae387ffb350dea92fd57190cf9d8f"
+      "sha256": "7fc3947be18183e93a06dc90a19069d7c30293dd88aaf62ad4d442ea5caa3507"
     }
   ]
 }

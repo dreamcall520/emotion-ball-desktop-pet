@@ -5,9 +5,6 @@
   function render() {
     root.querySelectorAll('[data-ap-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.apMode === root.dataset.mode)));
     root.querySelectorAll('[data-ap-look]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.apLook === root.dataset.look)));
-    root.querySelector('[data-ap-description]').textContent = root.dataset.mode === 'accessible'
-      ? '色弱友好：更清楚的文字、边界与状态提示。'
-      : '标准配色：柔和的玻璃层次与清晰的状态提示。';
   }
   root.addEventListener('click', event => {
     const button = event.target.closest('button');

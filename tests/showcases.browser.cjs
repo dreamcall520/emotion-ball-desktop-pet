@@ -26,7 +26,13 @@ fs.mkdirSync(out, { recursive: true });
     assert.equal(await page.locator('.milestone-update time').innerText(), '2026-10-06');
     assert.equal(await page.locator('.app-capture, .download-checks, [data-showcase-try]').count(), 0);
     assert.equal(await page.locator('.install-visual-step').count(), 3);
-    assert.equal(await page.locator('[data-motion-scene] [data-ball-host] svg').count(), 3);
+    assert.equal(await page.locator('[data-motion-scene] [data-ball-host] svg').count(), 2);
+    assert.equal(await page.locator('.install-list, .codex-pet-row').count(), 0);
+    assert.equal(await page.locator('#customize .section-heading > p').count(), 2);
+    assert.equal(await page.locator('#customize .section-entry').evaluate(e => getComputedStyle(e).fontSize), '13px');
+    await page.locator('#install').scrollIntoViewIfNeeded();
+    await page.waitForFunction(() => { const img = document.querySelector('.install-settings img'); return img.complete && img.naturalWidth === 1430; });
+    assert.equal(await page.locator('body').innerText().then(text => /可操作演示 ·|网页演示不连接账户|不保存输入/.test(text)), false);
     assert.match(await page.locator('.button-primary').first().evaluate(e => getComputedStyle(e).backgroundImage), /52, 61, 72/);
     await page.locator('#chat').scrollIntoViewIfNeeded();
     const chat = page.frameLocator('#chat iframe');
@@ -46,7 +52,7 @@ fs.mkdirSync(out, { recursive: true });
     await chat.locator('#new-chat').click(); await chat.locator('#cancel-new-chat').click();
     await chat.locator('#new-chat').click(); await chat.locator('#confirm-new-chat').click();
     await chat.locator('#message-input').fill('想慢慢完成今天的事。'); await chat.locator('#send-message').click();
-    await chat.getByText(/网页示例回复/).waitFor();
+    await chat.getByText('先慢一点，挑一件想说的事，我们接着聊。', { exact: true }).waitFor();
     await chat.locator('#chat-history').click(); await chat.locator('.history-item').filter({ hasText: '给今天留一点空隙' }).click();
     assert.equal(await chat.locator('.message').count(), 2);
     await chat.locator('#close-chat').click(); await chat.locator('#demo-reopen').click();
@@ -73,6 +79,9 @@ fs.mkdirSync(out, { recursive: true });
     const quota = page.frameLocator('#codex iframe').frameLocator('#quota-frame');
     const detail = page.frameLocator('#codex iframe').frameLocator('#detail-frame');
     await detail.locator('.trend-chart').waitFor();
+    const cardWidth = await page.frameLocator('#codex iframe').locator('#quota-frame').evaluate(e => e.getBoundingClientRect().width);
+    assert.ok(Math.abs(cardWidth - 280) < 1, `quota card enlarged to 280px: ${cardWidth}`);
+    assert.equal(await page.frameLocator('#codex iframe').locator('#demo-feedback').isVisible(), false);
     await quota.locator('[data-action="opportunities"]').click(); await detail.locator('.opportunity-history > summary').click();
     assert.match(await detail.locator('.opportunity-history').innerText(), /已获得/);
     await quota.locator('[data-action="trend"]').click(); await detail.locator('[data-period="300"]').click();
@@ -87,13 +96,24 @@ fs.mkdirSync(out, { recursive: true });
     assert.equal(await page.locator('[data-demo-appearance][data-demo="quota"]').evaluate(e => getComputedStyle(e).backgroundColor), 'rgb(24, 33, 37)');
     await page.locator('[data-ap-look="light"]').click();
     assert.equal(await page.locator('[data-demo-appearance][data-demo="quota"]').evaluate(e => getComputedStyle(e).backgroundColor), 'rgb(246, 248, 251)');
+    for (const look of ['light', 'dark']) {
+      await page.locator(`[data-ap-look="${look}"]`).click();
+      await appearanceChat.locator(`html[data-accessible-appearance="${look}"]`).waitFor();
+      const corners = await appearanceChat.locator('.chat-panel').evaluate(e => {
+        const r = e.getBoundingClientRect(), css = getComputedStyle(e);
+        return { inset: r.left >= 1 && r.top >= 1 && r.right <= innerWidth - 1 && r.bottom <= innerHeight - 1, radius: css.borderTopLeftRadius, border: css.borderTopWidth };
+      });
+      assert.deepEqual(corners, { inset: true, radius: '15px', border: '1px' });
+      assert.equal(await appearanceChat.locator('#privacy-note').isVisible(), false);
+      await page.locator('#appearance').screenshot({ path: path.join(out, `appearance-1440-accessible-${look}.png`) });
+    }
     await page.locator('[data-ap-look="system"]').click();
     await page.emulateMedia({ colorScheme: 'dark' });
     assert.equal(await page.locator('[data-demo-appearance][data-demo="quota"]').evaluate(e => getComputedStyle(e).backgroundColor), 'rgb(24, 33, 37)');
     await page.emulateMedia({ colorScheme: 'light' });
-    report.interactions.push('latest real UI accessibility/theme controls, independent host theme, readable demo canvas');
+    report.interactions.push('latest real UI accessibility/theme controls, independent host theme, complete chat corners, enlarged quota cards, real Apple settings screenshot');
     await page.reload();
-    for (const [width, theme] of [[1440,'light'],[1440,'dark'],[390,'light'],[390,'dark'],[320,'light'],[320,'dark']]) {
+    for (const [width, theme] of [[1440,'light'],[1440,'dark'],[1080,'light'],[1080,'dark'],[390,'light'],[390,'dark'],[320,'light'],[320,'dark']]) {
       await page.setViewportSize({ width, height: width > 600 ? 1000 : 844 });
       await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
       for (const id of ['top','codex','chat','customize','notes','appearance','download','install','updates']) {
@@ -104,7 +124,7 @@ fs.mkdirSync(out, { recursive: true });
         assert.deepEqual(overflow, [], `embedded overflow ${width}/${theme}/${id}`);
       }
       await page.evaluate(() => document.querySelectorAll('.site-header,.skip-link,[data-back-to-top]').forEach(e => e.style.setProperty('opacity', '0', 'important')));
-      const ids = width === 1440 || (width === 390 && theme === 'light') ? ['top','codex','customize','notes','appearance','download','install'] : ['customize','notes'];
+      const ids = width >= 1080 || (width === 390 && theme === 'light') ? ['top','codex','customize','notes','appearance','download','install'] : ['customize','notes'];
       for (const id of ids) await page.locator(`#${id}`).screenshot({ path: path.join(out, `${id}-${width}-${theme}.png`) });
       report.layouts.push({ width, theme, horizontalOverflow: false });
     }

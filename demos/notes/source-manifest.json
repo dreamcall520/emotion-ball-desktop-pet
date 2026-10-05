@@ -26,7 +26,7 @@
   ],
   "htmlChanges": [
     "Insert demo-bridge.js before original renderer.",
-    "Replace organize dialog account instruction with explicit local-demo instruction.",
+    "Keep organize guidance concise: preserve meaning and replace only after confirmation.",
     "Insert demo-focus.js to prevent embedded windows stealing parent focus/scroll."
   ],
   "unchangedCopies": [
@@ -34,5 +34,23 @@
     "color-mode.css",
     "notes-renderer.js",
     "lib/notes-model.js"
+  ],
+  "embeddedFiles": [
+    {
+      "file": "panel.html",
+      "sha256": "265ef42d3f094e2251e3bb4a0393214f4bfc998dd4f94fbf2aef926b8f4cf3fd"
+    },
+    {
+      "file": "desktop.html",
+      "sha256": "265ef42d3f094e2251e3bb4a0393214f4bfc998dd4f94fbf2aef926b8f4cf3fd"
+    },
+    {
+      "file": "reminder.html",
+      "sha256": "265ef42d3f094e2251e3bb4a0393214f4bfc998dd4f94fbf2aef926b8f4cf3fd"
+    },
+    {
+      "file": "embed-fragment.html",
+      "sha256": "1725d302f43454272ec4a132fa4c1e9cf34e8f212fcf38c62d7e64fb53603329"
+    }
   ]
 }

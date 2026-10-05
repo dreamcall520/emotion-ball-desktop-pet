@@ -18,7 +18,7 @@
       if(!current()){activeId='demo-new-'+(++sequence);chats.unshift({id:activeId,title:text.trim().slice(0,24),updatedAt:Date.now(),messages:[]});}
       const chat=current(),answer={id:'answer-'+(++sequence),role:'assistant',text:'',status:'streaming'};
       chat.messages.push({id:'user-'+(++sequence),role:'user',text:text.trim(),status:'complete'},answer);chat.updatedAt=Date.now();busy=true;emit();
-      timer=setTimeout(()=>{answer.text='这是网页示例回复。可以继续输入，也可以从历史回到刚才的聊天；实际 App 会使用你的 Codex 账号回复。';answer.status='complete';busy=false;timer=null;emit();},700);
+      timer=setTimeout(()=>{answer.text='先慢一点，挑一件想说的事，我们接着聊。';answer.status='complete';busy=false;timer=null;emit();},700);
       return {accepted:true};
     },
     stop:async()=>{clearTimeout(timer);timer=null;const answer=current()?.messages.at(-1);if(answer?.status==='streaming')answer.status='interrupted';busy=false;emit();return {accepted:true};},
@@ -39,7 +39,7 @@
   document.addEventListener('DOMContentLoaded',()=>{
     theme();
     document.getElementById('demo-reopen').addEventListener('click',()=>{document.querySelector('.chat-panel').hidden=false;document.getElementById('demo-closed').hidden=true;document.getElementById('message-input').focus();});
-    document.querySelector('#empty-state p').textContent='网页示例，不连接 Codex。发送第一句话，体验新聊天。';
+    document.querySelector('#empty-state p').textContent='发送第一句话，开始聊天。';
     parent.postMessage({type:'qiuqiu-demo-ready'},location.origin);
     parent.postMessage({type:'qiuqiu-demo-resize',height:520},location.origin);
   });

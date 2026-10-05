@@ -1,6 +1,6 @@
 # 便签与待办真实界面演示
 
-来源：公开 `main@7f5c291d34512f629c17275c93bed472f421e8b9`，正式版本 `0.4.00`。`notes.css`、`color-mode.css`、`notes-renderer.js` 与 `lib/notes-model.js` 逐字节保持官方内容，SHA-256 见 `source-manifest.json`。三个 HTML 基于原 `notes.html`：仅在 renderer 前插入 `demo-bridge.js`，并将整理账户说明换为明确的本地演示说明；布局、控件、字号和原生 dialog 不变。
+来源：公开 `main@7f5c291d34512f629c17275c93bed472f421e8b9`，正式版本 `0.4.00`。`notes.css`、`color-mode.css`、`notes-renderer.js` 与 `lib/notes-model.js` 逐字节保持官方内容，SHA-256 见 `source-manifest.json`。三个 HTML 基于原 `notes.html`：仅在 renderer 前插入 `demo-bridge.js`，并将整理账户说明精简为保留原意、确认后替换的实用提示；布局、控件、字号和原生 dialog 不变。
 
 推荐嵌入片段为 `embed-fragment.html`（同时交付 `/tmp/qiuqiu-notes-native-fragment.html`）。父页在该 markup 后加载 `demos/notes/embed.js`，使用已有通用 `demo-embed.js` 向 `data-app-demo` iframe 发送主题。
 

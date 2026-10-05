@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="aurora-rive.css">
   <link rel="stylesheet" href="color-mode.css">
   <script src="../../demo-focus.js"></script>
-<script defer src="demo-bridge.js"></script>
+<script defer src="demo-bridge.js?v=20261006-layout"></script>
   <script defer src="color-mode.js"></script>
   <script defer src="emotion-ball/js/rings.js"></script>
   <script defer src="emotion-ball/js/custom-shapes.js"></script>
@@ -22,7 +22,7 @@
   <script defer src="lib/boo-binary.js"></script>
   <script defer src="lib/aurora-rive.js"></script>
   <script defer src="chat-renderer.js"></script>
-  <link rel="stylesheet" href="demo-adapter.css">
+  <link rel="stylesheet" href="demo-adapter.css?v=20261006-layout">
   <link rel="icon" href="../../assets/huancai-icon.png">
 </head>
 <body>
@@ -106,8 +106,8 @@
         <button id="refresh-models" class="text-button" type="button" hidden>重试</button>
       </div>
     </form>
-    <p id="privacy-note" class="privacy-note">网页示例 · 不连接 Codex，不保存输入</p>
+    <p id="privacy-note" class="privacy-note" aria-hidden="true" hidden></p>
   </main>
-<div id="demo-closed" hidden><p>示例聊天已收起，记录仍保留。</p><button type="button" id="demo-reopen">继续示例聊天</button></div>
+<div id="demo-closed" hidden><p>聊天已收起。</p><button type="button" id="demo-reopen">继续聊天</button></div>
 </body>
 </html>

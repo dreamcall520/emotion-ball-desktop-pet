@@ -1,4 +1,8 @@
 /* Website-only visibility and pause adapters; the current App layout is intact. */
+/* Keep the App's 15px panel corners and their 1px antialiased border fully
+   inside the iframe viewport. The parent iframe must not add a larger mask. */
+body { padding: 2px; }
+#privacy-note { display: none !important; }
 #demo-closed { width: 100%; height: 100%; padding: 24px; display: grid; place-content: center; gap: 12px; color: var(--text); background: var(--panel-wash); text-align: center; font-size: 12px; }
 #demo-closed button { padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--primary); color: var(--accent-text); }
 :root[data-demo-paused="true"] .composer::before, :root[data-demo-paused="true"] .composer::after { animation-play-state: paused; }

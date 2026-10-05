@@ -9,6 +9,9 @@ for (const file of manifest.unchangedCopies) {
   const digest = crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname, file))).digest('hex');
   assert.equal(digest, manifest.originalFiles.find(item => item.file === file).sha256, `${file} must match the official source`);
 }
+for (const {file,sha256} of manifest.embeddedFiles || []) {
+  assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname,file))).digest('hex'),sha256,`${file} must match the reviewed embedded version`);
+}
 const events = [], parent = { postMessage: value => events.push(value) }, handlers = {};
 const context = { window: { QiuModel: model, addEventListener: (name, callback) => handlers[name] = callback }, location: { search: '?demoScope=test', pathname: '/demos/notes/panel.html', origin: 'https://example.test' }, parent, crypto, URLSearchParams, structuredClone, setTimeout, clearTimeout, setInterval, clearInterval, navigator: { clipboard: { writeText: async () => {} } } };
 vm.createContext(context); vm.runInContext(fs.readFileSync(path.join(__dirname,'demo-bridge.js'),'utf8'),context);

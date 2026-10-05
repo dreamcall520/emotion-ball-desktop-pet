@@ -85,7 +85,7 @@ node --test tests/*.test.cjs
 NODE_PATH=/path/to/existing/node_modules QIUQIU_SITE_URL=http://127.0.0.1:4185/ QIUQIU_QA_OUTPUT=/tmp/qiuqiu-website-0400 node tests/showcases.browser.cjs
 ```
 
-浏览器检查包括 1440/390/320px 浅深色、系统深色、减少动态及真实界面和跨窗口/保存头像联动的实际操作。检查使用浏览器临时设置退出匿名统计；分区截图暂隐藏固定导航与回顶按钮，检查仍在完整页面运行。
+浏览器检查包括 1440/1080/390/320px 浅深色、系统深色、减少动态及真实界面和跨窗口/保存头像联动的实际操作，并检查放大卡片、聊天四角和实际安装截图。检查使用浏览器临时设置退出匿名统计；分区截图暂隐藏固定导航与回顶按钮，检查仍在完整页面运行。
 
 部署沿用 `gh-pages` 根目录与 `qiuqiu.pet`。本地检查通过后提交、推送；必须回读 Pages 的实际构建提交及线上 HTML/变更资源，不能把推送成功当作部署完成。
 
@@ -95,7 +95,7 @@ NODE_PATH=/path/to/existing/node_modules QIUQIU_SITE_URL=http://127.0.0.1:4185/ 
 
 Electron IPC 替换为本页内存桥接，不连接账户、模型或账单，不修改 App 或用户资料；刷新页面恢复示例。定制保存后同步本页聊天头像，收藏载入仅影响预览。公开六瓣幻彩采用原 Rive 引擎。外层官网沿用浅灰蓝/深灰，演示保留当前 App 薄荷/石墨配色；手机仅适配原控件，不用截图缩放。离屏、页面隐藏、暂停与减少动态均可停止演示动效。嵌入窗口在用户进入前不自动抢焦点，脚本聚焦不滚动官网。
 
-安装区是三步示意图，不冒充 macOS 截图；首次打开路径依据 [Apple 官方说明](https://support.apple.com/zh-cn/102445)。
+安装区保留三步图示，右侧为 [Apple 官方说明](https://support.apple.com/zh-cn/102445)中的真实 macOS「隐私与安全性」截图，标出「仍要打开」的实际位置；原图来自 [Apple CDN](https://cdsassets.apple.com/live/7WUAS350/images/macos/sequoia/locale/zh-cn/macos-sequoia-system-settings-privacy-and-security-open-app-anyway.png)，未修改、未包含用户个人设置。
 
 ## 目录
 

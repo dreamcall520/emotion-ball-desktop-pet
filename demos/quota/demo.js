@@ -3,7 +3,9 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const frames = { quota: $('quota-frame'), details: $('detail-frame'), 'api-label': $('api-label-frame'), 'api-report': $('api-report-frame') };
+  const cards = document.querySelector('.demo-cards');
   const ready = new Set();
+  document.documentElement.dataset.appearanceDemo=String(new URLSearchParams(location.search).get('appearanceDemo')==='1');
   const now = Date.now(), day = 86400000;
   let appearance = 'light', colorMode = 'standard', scenario = 'balanced', expanded = true, apiExpanded = true, action = 'trend', period = 10080, unread = true, apiVisible = false, paused = false;
   const report = { month: new Date(now).toISOString().slice(0,7), updatedAt: now, costs: { month: [{currency:'usd',value:32.48}], today: [{currency:'usd',value:1.26}] }, usage: {inputTokens:2840000,cachedInputTokens:1120000,outputTokens:420000,requests:137} };
@@ -16,7 +18,7 @@
       resetDetailsState:'known',resetOpportunities:[{expiresAt:now+3*day,status:'available'},{expiresAt:null,status:'available'}],
       accountResetHistory:{state:'ready',updatedAt:now,events:[{kind:'granted',occurredAt:now-5*day},{kind:'redeemed',occurredAt:now-12*day},{kind:'granted',occurredAt:now-20*day}]},
       returnToTrend:action!=='trend',returnPeriod:period,
-      trend:{windowMinutes:period,resetsAt:item.resetsAt,resetLabel:period===300?'4 小时后重置':'5 天后重置',samples:unknown?[]:[100,97,93,86,Math.max(item.remaining,80),item.remaining].map((remaining,index)=>({at:Math.round(start+(now-start)*index/5),remaining})),forecast:{state:unknown?'unknown':'estimate',status:fast?'risk':'safe',summary:unknown?'暂无法预估额度用完时间':fast?'额度可能在重置前用完':'按当前节奏，预计可用至重置',detail:unknown?'连续用量记录不足，稍后再查看':'按近期用量估算，会随实际用量变化；此处为合成示例'}}};
+      trend:{windowMinutes:period,resetsAt:item.resetsAt,resetLabel:period===300?'4 小时后重置':'5 天后重置',samples:unknown?[]:[100,97,93,86,Math.max(item.remaining,80),item.remaining].map((remaining,index)=>({at:Math.round(start+(now-start)*index/5),remaining})),forecast:{state:unknown?'unknown':'estimate',status:fast?'risk':'safe',summary:unknown?'暂无法预估额度用完时间':fast?'额度可能在重置前用完':'按当前节奏，预计可用至重置',detail:unknown?'连续用量记录不足，稍后再查看':'按近期用量估算，会随实际用量变化'}}};
   }
   function apiModel() { return {connected:true,busy:false,error:null,report,config:{},expanded:apiExpanded,appearance,colorMode}; }
   const post = (frame,data) => frame.contentWindow.postMessage(data,location.origin);
@@ -27,15 +29,27 @@
     post(frames[kind],{type:'qiuqiu-quota-model',kind,model:kind.startsWith('api-')?apiModel():quotaModel()});
   }
   const resize = () => parent.postMessage({type:'qiuqiu-demo-resize',height:Math.ceil(document.querySelector('main').getBoundingClientRect().height)},location.origin);
+  // Preserve the native viewports; scale both cards and folded modes together.
+  function sizeCards() {
+    const scale = cards.clientWidth / 196;
+    for (const [kind,isExpanded,height] of [['quota',expanded,144],['api-label',apiExpanded,92]]) {
+      const frame = frames[kind], width = isExpanded ? 196 : 128, nativeHeight = isExpanded ? height : 32;
+      frame.width=width; frame.height=nativeHeight;
+      frame.style.transform=`scale(${scale})`;
+      frame.parentElement.style.width=`${width*scale}px`;
+      frame.parentElement.style.height=`${nativeHeight*scale}px`;
+    }
+  }
+  function feedback(text) { $('demo-feedback').textContent=text; $('demo-feedback').hidden=false; resize(); }
   function render() {
     document.documentElement.dataset.appearance=appearance; document.documentElement.dataset.colorMode=colorMode; document.documentElement.dataset.demoPaused=String(paused);
-    frames.quota.width=expanded?196:128; frames.quota.height=expanded?144:32;
-    frames['api-label'].width=apiExpanded?196:128; frames['api-label'].height=apiExpanded?92:32;
+    sizeCards();
     frames.details.hidden=apiVisible; $('api-report').hidden=!apiVisible;
     Object.keys(frames).forEach(send); requestAnimationFrame(resize);
   }
   function openDetail(detail,nextPeriod) {
     if (!['trend','tasks','results','opportunities','credits'].includes(detail)) return;
+    $('demo-feedback').hidden=true;
     action=detail; period=nextPeriod===300?300:10080; apiVisible=false; render();
   }
   $('demo-scenario').addEventListener('change',event=>{scenario=event.target.value;render();});
@@ -59,10 +73,16 @@
       $('thread-title').textContent=data.id==='demo-notes'?'整理今日待办':'检查示例页面布局';
       $('thread-text').textContent=data.id==='demo-notes'?'示例结果：已整理为 3 项待办，可以逐项确认截止日期与提醒。':'示例进展：正在检查桌面与手机布局。';
       $('demo-thread').hidden=false; render(); $('demo-thread-title').focus({preventScroll:true});
-    } else if(data.action==='refresh-api' && kind==='api-report') {$('demo-feedback').textContent='示例报告已刷新，没有发起真实费用查询。';}
-    else if(data.action==='guide' && kind==='api-report') {$('demo-feedback').textContent='此处为示例报告，无需输入真实密钥。';}
+    } else if(data.action==='refresh-api' && kind==='api-report') {feedback('报告已刷新。');}
+    else if(data.action==='guide' && kind==='api-report') {feedback('网页无需输入密钥。');}
   });
   new ResizeObserver(resize).observe(document.querySelector('main'));
+  new ResizeObserver(()=>{sizeCards();resize();}).observe(cards);
+  let detailWidth=0;
+  new ResizeObserver(([entry])=>{
+    if(entry.contentRect.width===detailWidth) return;
+    detailWidth=entry.contentRect.width; send('details');
+  }).observe(document.querySelector('.demo-detail'));
   window.QiuqiuQuotaDemo=Object.freeze({getState:()=>Object.freeze({appearance,colorMode,scenario,expanded,apiExpanded,action,period,unread,apiVisible,paused})});
   parent.postMessage({type:'qiuqiu-demo-ready'},location.origin);
   render();

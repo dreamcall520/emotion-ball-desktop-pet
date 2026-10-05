@@ -1,9 +1,10 @@
 .native-demo { display: block; width: 100%; min-width: 0; border: 0; border-radius: 18px; background: transparent; color-scheme: normal; }
-.native-quota { max-width: 820px; margin-inline: auto; }
+.native-quota { max-width: 1100px; margin-inline: auto; }
 .notes-native-demo [hidden] { display: none !important; }
 .demo-note { margin: 12px 0 0; font-size: 12px; color: var(--text-soft); }
+.demo-note:empty { display: none; }
 .native-custom-wrap { width: min(100%, 1040px); margin-inline: auto; }
-.native-chat { max-width: 650px; }
+.native-chat { max-width: 650px; margin-inline: auto; border-radius: 0; }
 .native-customize { min-height: 700px; }
 .notes-native-demo { min-width: 0; }
 .notes-native-workspace { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 300px); gap: 18px; align-items: start; }
@@ -15,7 +16,7 @@
 .notes-native-actions .text-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .native-notes-panel { min-height: 520px; }
 .native-notes-card { min-height: 220px; }
-.native-appearance-preview { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; padding-block: 24px; }
+.native-appearance-preview { grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr)); align-items: start; padding-block: 24px; }
 .native-appearance-preview .native-quota { background: #f6f8fb; }
 .ap-demo[data-look="dark"] .native-appearance-preview .native-quota { background: #182125; }
 @media (prefers-color-scheme: dark) { .ap-demo[data-look="system"] .native-appearance-preview .native-quota { background: #182125; } }
@@ -27,6 +28,10 @@
 .install-visual-step span { display: block; color: var(--text-soft); font-size: 12px; }
 .install-step-number { font-size: 11px; color: var(--text-faint); min-width: 18px; }
 .install-guide figcaption { margin-top: 12px; font-size: 11px; color: var(--text-soft); }
+.install-settings { min-width: 0; margin: 0; }
+.install-settings img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 16px; }
+.install-settings figcaption { margin-top: 12px; font-size: 13px; line-height: 1.7; color: var(--text-soft); }
+.install-settings a { display: block; color: var(--accent); }
 @media (max-width: 800px) { .native-appearance-preview { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 600px) {
   .native-customize { min-height: 1000px; }
