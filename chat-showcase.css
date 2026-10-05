@@ -56,3 +56,27 @@
 @media (max-width: 1000px) { .chat-section { grid-template-columns: 1fr; } .chat-demo-wrap { width: 100%; max-width: 650px; } .chat-lead { max-width: 650px; } }
 @media (max-width: 480px) { .chat-demo-header { padding: 18px 14px; gap: 9px; } .chat-demo-header img { width: 32px; height: 32px; } .chat-demo-header strong { font-size: 16px; } .chat-demo-header span { font-size: 11px; } .chat-demo-messages { padding: 20px 16px; } .chat-demo-composer { margin-inline: 12px; padding: 12px; } .chat-demo-composer button { padding: 10px; } .chat-message p { font-size: 15px; } }
 @media (max-width: 480px) { .chat-demo-header [data-chat-subtitle] { display: none; } .chat-demo-header button { padding-inline: 4px; min-height: 44px; white-space: nowrap; } }
+/* 0.4.00: one quiet header, mint messages, and a light composer. */
+.chat-demo { background: linear-gradient(180deg,var(--accent-soft),var(--surface-solid) 130px); border-color: var(--line); border-radius: 18px; }
+.chat-demo-header { border: 0; padding: 18px; gap: 10px; }
+.chat-demo-header [data-chat-subtitle] { display: none; }
+.chat-demo-avatar { width: 40px; height: 40px; display: block; flex: none; }
+.chat-demo-avatar svg, .chat-demo-avatar img { width: 100%; height: 100%; object-fit: contain; }
+.chat-demo-header strong { font-size: 19px; white-space: nowrap; }
+.chat-demo-header button { padding: 8px 4px; min-height: 34px; font-size: 12px; white-space: nowrap; }
+.chat-demo-header [data-chat-new] { color: var(--accent); }
+.chat-demo-header .chat-demo-close { border-left: 1px solid var(--line); padding-left: 10px; font-size: 24px; line-height: 1; }
+.chat-message-user p { border-radius: 14px 14px 4px 14px; background: var(--accent-soft); }
+.chat-demo-composer { background: var(--surface-solid); border-color: var(--line); position: relative; }
+.chat-demo-composer button { background: var(--accent-soft); color: var(--accent); }
+.chat-demo-composer .chat-model-options button { color: var(--text); background: transparent; }
+.chat-demo-composer .chat-model-options button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.chat-demo-messages { padding: 20px 18px; }
+@media (max-width: 480px) {
+  .chat-demo-header { padding: 14px 12px; gap: 6px; }
+  .chat-demo-avatar { width: 28px; height: 28px; }
+  .chat-demo-header strong { font-size: 16px; }
+  .chat-demo-header button { min-height: 44px; padding-inline: 3px; font-size: 11px; }
+  .chat-demo-header [data-chat-new] > span { display: none; }
+  .chat-demo-header .chat-demo-close { font-size: 21px; padding-left: 6px; }
+}

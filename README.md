@@ -31,7 +31,14 @@ Umami Cloud 网站“球球官网”，website ID 为 `fe855bb0-9000-49aa-820b-b
 
 ## 当前下载记录
 
-Apple 芯片版 0.3.32，发布日期 2026-10-04。优化日常使用体验，改进版本更新入口，让操作更清晰、更顺手。
+Apple 芯片版 **0.4.00**，发布日期 **2026-10-05**，GitHub 兼容标签 `v0.4.0`。本轮包含便签与待办、来定制球球、自动更新提醒、额度卡片 2.0 与全局 UI 升级。用户确认的六项日志完整保留在首页，第六项仅标题；官网可见的 0.3.27–0.3.32 日志合并为本次里程碑，范围外 12 条历史保留。
+
+| 文件 | 精确大小（bytes） | SHA-256 |
+| --- | ---: | --- |
+| [Qiuqiu-0.4.00-macOS-arm64-share.zip](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.0/Qiuqiu-0.4.00-macOS-arm64-share.zip) | 123560022 | `5374bcbc07fde4eb36814066774dad03d516ee42052a728e851c018acf3539af` |
+| [Qiuqiu-0.4.00-macOS-arm64.dmg](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.0/Qiuqiu-0.4.00-macOS-arm64.dmg) | 137814227 | `184677114814b3f261675134b59f0ea5dfd5b8cf0b2acfb24aff7ffff5e6fd07` |
+
+### 0.3.32 下载记录（保留在维护文档，不在首页展示）
 
 | 文件 | 精确大小（bytes） | SHA-256 |
 | --- | ---: | --- |
@@ -70,6 +77,18 @@ API 报告需要组织所有者提供具有费用与用量读取权限的 Admin 
 python3 -m http.server 4179 --bind 127.0.0.1
 ```
 
+## 官网验证与发布
+
+```bash
+node --test tests/*.test.cjs
+# 另开本地静态服务器，使用已经安装的 Playwright 与 Chrome；无需新增依赖。
+NODE_PATH=/path/to/existing/node_modules QIUQIU_SITE_URL=http://127.0.0.1:4185/ QIUQIU_QA_OUTPUT=/tmp/qiuqiu-website-0400 node tests/showcases.browser.cjs
+```
+
+浏览器检查包括 1440/390/320px 浅深色、系统深色、减少动态及四类展示的实际操作。检查使用浏览器临时设置退出匿名统计；分区截图暂隐藏固定导航与回顶按钮，检查仍在完整页面运行。
+
+部署沿用 `gh-pages` 根目录与 `qiuqiu.pet`。本地检查通过后提交、推送；必须回读 Pages 的实际构建提交及线上 HTML/变更资源，不能把推送成功当作部署完成。
+
 ## 目录
 
 - `index.html`：页面内容和可访问结构。
@@ -78,6 +97,9 @@ python3 -m http.server 4179 --bind 127.0.0.1
 - `motion-showcase.js`、`motion-showcase.css`：首屏、互动、Codex 与桌面场景的实时 V5 动效编排；自动播放支持离屏暂停、手动点选及减少动态效果。
 - `quota-demo.js`、`quota-demo.css`：可操作的额度演示卡片，只使用示例数据，不连接 Codex。
 - `assets/motion/`：复用已确认的 V5 互动、思绪游光和文案模块，以及原有身体动作采样；原设计稿和桌面应用未修改。
-- `assets/vendor/emotion-ball/`：原项目球形角色矢量引擎。
-- `assets/screenshots/`：保留的历史真实产品截图；当前展示区使用明确标注的网页动画演示。
+- `assets/vendor/emotion-ball/`：复用公开 0.4.00 的球形角色矢量引擎与形态数据。
+- `notes-showcase.js`、`notes-showcase.css`：便签、待办、桌面卡与整理确认的内存示例，无真实模型或通知。
+- `customize-showcase.js`、`customize-showcase.css`：四形态与实时配色、命名收藏、保存后头像同步的网页示例；幻彩使用公开六瓣静态图，不模拟真实 Rive 动效。
+- `chat-showcase.js`、`chat-showcase.css`：0.4.00 浅薄荷/冷石墨聊天样式与历史续聊示例。
+- `assets/screenshots/`：保留历史图；`v0400-*` 用于当前主介绍图。定制与额度来自最终公开包原生截图，便签直接渲染公开版 DOM/CSS 及合成内容；简化交互示例收进折叠区域。
 - `LICENSE`、`NOTICE.md`：许可与原作者声明。

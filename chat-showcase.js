@@ -32,7 +32,7 @@
       const p = document.createElement('p'); p.textContent = text; item.append(label, p); get('messages').append(item);
     }
     const sent = records[current].length > (seeds[current]?.length || 0);
-    get('new').hidden = records[current].length === 0;
+    get('new').hidden = false;
     get('new').disabled = replying;
     get('history').disabled = replying;
     root.querySelectorAll('[data-chat-select]').forEach(b => { b.disabled = replying; });
@@ -72,5 +72,8 @@
   const reset = () => { clearTimeout(timer); replying = false; nextChat = 0; root.querySelectorAll('[data-chat-select]').forEach(b => { if (!seeds[b.dataset.chatSelect]) b.remove(); }); records = structuredClone(seeds); current = 'today'; get('model-label').textContent = '自动'; root.querySelectorAll('[data-chat-model]').forEach(item => item.setAttribute('aria-pressed', String(item.dataset.chatModel === '自动'))); closePanels(); render(); };
   document.querySelector('[data-chat-reset]').addEventListener('click', reset);
   root.addEventListener('keydown', e => { if (e.key === 'Escape') { const modelOpen = get('model-picker').open, confirming = !get('confirm').hidden; closePanels(); (modelOpen ? get('model-picker').querySelector('summary') : confirming ? get('new') : get('history')).focus(); } });
+  const reopen = document.querySelector('[data-chat-reopen]');
+  get('close')?.addEventListener('click', () => { root.hidden = true; reopen.hidden = false; reopen.focus(); });
+  reopen?.addEventListener('click', () => { root.hidden = false; reopen.hidden = true; get('history').focus(); });
   reset();
 })();

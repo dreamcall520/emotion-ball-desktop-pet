@@ -22,13 +22,13 @@ test('new chat preserves history, cancels cleanly and blocks switching during re
       querySelector() { return nodes.summary; }
     };
   }
-  for (const name of ['model-picker', 'records', 'confirm', 'history', 'model-label', 'status', 'messages', 'send', 'draft', 'subtitle', 'new', 'cancel', 'create', 'reset', 'summary']) nodes[name] = element();
+  for (const name of ['model-picker', 'records', 'confirm', 'history', 'model-label', 'status', 'messages', 'send', 'draft', 'subtitle', 'new', 'cancel', 'create', 'reset', 'summary', 'reopen', 'close']) nodes[name] = element();
   nodes.records.append = button => choices.push(button);
   for (const key of ['today', 'earlier']) { const button = element(); button.dataset.chatSelect = key; choices.push(button); }
   const root = element();
   root.querySelector = selector => nodes[selector.match(/data-chat-(.*)\]/)[1]];
   root.querySelectorAll = selector => selector === '[data-chat-select]' ? [...choices] : [];
-  const document = { querySelector: selector => selector === '[data-chat-demo]' ? root : nodes.reset, addEventListener() {}, createElement: element };
+  const document = { querySelector: selector => selector === '[data-chat-demo]' ? root : selector === '[data-chat-reopen]' ? nodes.reopen : nodes.reset, addEventListener() {}, createElement: element };
   vm.runInNewContext(readFileSync(new URL('../chat-showcase.js', `file://${__filename}`), 'utf8'), {
     document, structuredClone, setTimeout: fn => { reply = fn; return 1; }, clearTimeout: () => { reply = null; }
   });
@@ -45,7 +45,7 @@ test('new chat preserves history, cancels cleanly and blocks switching during re
   assert.equal(focus, nodes.new);
   assert.deepEqual(messages(), initial);
   nodes.new.click(); nodes.create.click();
-  assert.equal(nodes.new.hidden, true);
+  assert.equal(nodes.new.hidden, false);
   assert.equal(choices.length, 2, 'confirming alone does not create history');
   nodes.send.click();
   assert.equal(choices.length, 3);

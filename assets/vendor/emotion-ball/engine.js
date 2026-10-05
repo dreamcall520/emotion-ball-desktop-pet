@@ -322,6 +322,7 @@
     this.ball = EB.createBall(el, Object.assign({}, opts, {
       lite: opts.lite != null ? opts.lite : opts.autostart === false
     }));
+    this._facing = opts.facing === 'left' ? 'left' : 'right';
     this._seed = Math.random() * 100;
     this._events = {};
     this._gaze = { x: 0, y: 0, tx: 0, ty: 0 };
@@ -499,9 +500,11 @@
       this._gaze.ty = 0;
       return this;
     },
+    /* 脸部朝向：只交给渲染层镜像眼睛与睡眠提示，不改变屏幕坐标注视。 */
     setFacing: function (side) {
       if (side !== 'left' && side !== 'right') return this;
-      this.ball.setFacing(side);
+      this._facing = side;
+      if (this.ball.setFacing) this.ball.setFacing(side);
       if (!this._active) this.renderStatic();
       return this;
     },
@@ -552,7 +555,11 @@
       }
       var gaze = frame.gaze || { x: 0, y: 0 };
       if (!Number.isFinite(gaze.x) || !Number.isFinite(gaze.y)) return this;
-      this._motionFrame = { body: body, gaze: { x: clamp(gaze.x, -24, 24), y: clamp(gaze.y, -15, 15) } };
+      if (frame.turnMorph !== undefined && (!Number.isFinite(frame.turnMorph) ||
+          frame.turnMorph < 0 || frame.turnMorph > 1)) return this;
+      this._motionFrame = { body: body, gaze: { x: clamp(gaze.x, -24, 24), y: clamp(gaze.y, -15, 15) },
+        suppressRibbons: frame.suppressRibbons === true,
+        turnMorph: frame.turnMorph || 0 };
       if (!this._active) this.renderStatic();
       return this;
     },
@@ -796,6 +803,8 @@
       }
       if (this._motionFrame) {
         Object.assign(pose.body, this._motionFrame.body, { scale: 1 });
+        if (this._motionFrame.suppressRibbons) pose.body.suppressRibbons = true;
+        if (this._motionFrame.turnMorph) pose.body.turnMorph = this._motionFrame.turnMorph;
         pose.left.lookX = pose.right.lookX = this._motionFrame.gaze.x;
         pose.left.lookY = pose.right.lookY = this._motionFrame.gaze.y;
       }

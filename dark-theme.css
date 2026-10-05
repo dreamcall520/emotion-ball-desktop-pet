@@ -1,19 +1,19 @@
 /* Neutral black/charcoal surfaces, informed by Apple MacBook Pro.
  * Both explicit dark and system-dark are scoped; light mode is unchanged. */
 html[data-theme="dark"] {
-  --page: #101012;
-  --page-deep: #101011;
-  --surface: #1c1c1e;
-  --surface-solid: #1d1d1f;
-  --surface-strong: #232325;
+  --page: #111a1e;
+  --page-deep: #111a1e;
+  --surface: #182125;
+  --surface-solid: #182125;
+  --surface-strong: #1d292f;
   --text: #f5f5f7;
   --text-soft: #a1a1a6;
   --text-faint: #86868b;
   --line: rgba(255, 255, 255, .10);
   --line-strong: rgba(255, 255, 255, .20);
-  --accent: #82b1f7;
-  --accent-strong: #a3c8fc;
-  --accent-soft: rgba(130, 177, 247, .10);
+  --accent: #72dfc2;
+  --accent-strong: #9eebcd;
+  --accent-soft: #25453f;
   --shadow-soft: none;
   --shadow-control: none;
 }
@@ -26,24 +26,24 @@ html[data-theme="dark"] .download-card-primary { border-color: rgba(255,255,255,
 html[data-theme="dark"] .button-primary, html[data-theme="dark"] .button-primary:hover { box-shadow: none; }
 html[data-theme="dark"] .ambient-one { background: rgba(245,245,247,.045); }
 html[data-theme="dark"] .ambient-two { background: rgba(245,245,247,.025); }
-html[data-theme="dark"] .desktop-scene { background: linear-gradient(125deg, #1d1d1f, #101011); border-color: rgba(255,255,255,.08); }
-html[data-theme="dark"] .motion-bubble { background: #1d1d1f; box-shadow: none; }
-html[data-theme="dark"] .motion-bubble::after { background: #1d1d1f; }
+html[data-theme="dark"] .desktop-scene { background: linear-gradient(125deg, #182125, #111a1e); border-color: rgba(255,255,255,.08); }
+html[data-theme="dark"] .motion-bubble { background: #182125; box-shadow: none; }
+html[data-theme="dark"] .motion-bubble::after { background: #182125; }
 @media (prefers-color-scheme: dark) {
   html:not([data-theme="light"]) {
-  --page: #101012;
-  --page-deep: #101011;
-  --surface: #1c1c1e;
-  --surface-solid: #1d1d1f;
-  --surface-strong: #232325;
+  --page: #111a1e;
+  --page-deep: #111a1e;
+  --surface: #182125;
+  --surface-solid: #182125;
+  --surface-strong: #1d292f;
   --text: #f5f5f7;
   --text-soft: #a1a1a6;
   --text-faint: #86868b;
   --line: rgba(255, 255, 255, .10);
   --line-strong: rgba(255, 255, 255, .20);
-  --accent: #82b1f7;
-  --accent-strong: #a3c8fc;
-  --accent-soft: rgba(130, 177, 247, .10);
+  --accent: #72dfc2;
+  --accent-strong: #9eebcd;
+  --accent-soft: #25453f;
   --shadow-soft: none;
   --shadow-control: none;
   }
@@ -56,7 +56,7 @@ html:not([data-theme="light"]) .download-card-primary { border-color: rgba(255,2
 html:not([data-theme="light"]) .button-primary, html:not([data-theme="light"]) .button-primary:hover { box-shadow: none; }
 html:not([data-theme="light"]) .ambient-one { background: rgba(245,245,247,.045); }
 html:not([data-theme="light"]) .ambient-two { background: rgba(245,245,247,.025); }
-html:not([data-theme="light"]) .desktop-scene { background: linear-gradient(125deg, #1d1d1f, #101011); border-color: rgba(255,255,255,.08); }
-html:not([data-theme="light"]) .motion-bubble { background: #1d1d1f; box-shadow: none; }
-html:not([data-theme="light"]) .motion-bubble::after { background: #1d1d1f; }
+html:not([data-theme="light"]) .desktop-scene { background: linear-gradient(125deg, #182125, #111a1e); border-color: rgba(255,255,255,.08); }
+html:not([data-theme="light"]) .motion-bubble { background: #182125; box-shadow: none; }
+html:not([data-theme="light"]) .motion-bubble::after { background: #182125; }
 }
