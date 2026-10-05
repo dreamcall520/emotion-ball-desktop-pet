@@ -178,11 +178,12 @@ function createChatWindow({ BrowserWindow, screen, getPetWindow, getAppearance =
     nativeMoving = false;
     win = new BrowserWindow({
       width: 360, height: 480,
-      title: '和球球聊聊',
+      title: '聊一会儿',
       transparent: true, frame: false, resizable: false,
+      useContentSize: true,
       focusable: true, skipTaskbar: true, show: false,
       fullscreenable: false, maximizable: false, minimizable: false,
-      hasShadow: true, backgroundColor: '#00000000',
+      hasShadow: false, backgroundColor: '#00000000',
       webPreferences: {
         preload: path.join(__dirname, '../chat-preload.js'),
         contextIsolation: true, nodeIntegration: false, sandbox: true,

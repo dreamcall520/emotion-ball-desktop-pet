@@ -110,7 +110,7 @@ async function verifyApiUsage({ getWindow, getMenu, pet, service, powerMonitor, 
   };
   await capture('folded');
   await cardPage('document.querySelector("#quota-label").click()');
-  await poll(() => card.getBounds().height, value => value === 128, 'API card expands');
+  await poll(() => card.getBounds().height, value => value === 92, 'API card expands');
   assert.equal(card.getBounds().width, 196);
   assert.match(await cardPage('document.querySelector("#api-month-cost").textContent'), /27\.34USD/);
   assert.equal(await cardPage('document.documentElement.scrollHeight > innerHeight'), false, 'expanded card fits native window');
@@ -165,7 +165,7 @@ async function verifyApiUsage({ getWindow, getMenu, pet, service, powerMonitor, 
   win.hide();
   await cardPage('document.querySelector("#api-open-details").click()');
   await poll(() => win.isVisible(), Boolean, 'card opens full report');
-  assert.equal(card.getBounds().height, 128, 'details button does not also collapse');
+  assert.equal(card.getBounds().height, 92, 'details button does not also collapse');
   if (process.env.PET_SMOKE_API_USAGE_SCREENSHOT) {
     const target = process.env.PET_SMOKE_API_USAGE_SCREENSHOT;
     await page("document.querySelector('.api-header p').textContent = 'OpenAI 官方组织报告 · 模拟数据预览'");

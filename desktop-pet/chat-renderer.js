@@ -97,7 +97,7 @@
         if (choice.id === 'auto') {
           const description = document.createElement('span');
           description.className = 'model-option-description';
-          description.textContent = '日常聊天优先快，需要分析时用更强模型';
+          description.textContent = '日常用快模型，分析用强模型';
           content.appendChild(description);
         }
         option.append(check, content);
@@ -189,8 +189,12 @@
     byId('new-chat-confirmation').hidden = !confirmingNew;
     byId('cancel-new-chat').disabled = pending;
     byId('confirm-new-chat').disabled = changeBlocked() || !hasCurrentChat();
-    newButton.hidden = !hasCurrentChat();
+    // Keep the action before History even when this is already an empty draft.
+    newButton.hidden = false;
     newButton.disabled = changeBlocked() || !hasCurrentChat() || confirmingNew;
+    newButton.title = !hasCurrentChat() ? '当前已是新聊天，直接发送第一句话即可。'
+      : snapshot.busy || snapshot.connection === 'connecting' ? '等当前回复或连接完成后，再开始新聊天。'
+        : '新聊天';
     byId('history-hint').textContent = snapshot.busy || snapshot.connection === 'connecting'
       ? '等这次回复结束后，就可以切换聊天。'
       : hasCurrentChat() ? '原来的聊天会保留，随时可以切回来。' : '当前已是新聊天，直接发送第一句话即可。';
@@ -267,7 +271,7 @@
     sendButton.disabled = changeBlocked() || !input.value.trim() || input.value.length > 2000;
     stopButton.hidden = !busy;
     stopButton.disabled = stopping;
-    stopButton.textContent = stopping ? '正在停止…' : '■ 停止';
+    byId('stop-message-label').textContent = stopping ? '正在停止…' : '停止';
     const error = localError || snapshot.error || '';
     byId('error-banner').hidden = !error;
     byId('error-text').textContent = error;
@@ -287,7 +291,12 @@
 
   function resizeInput() {
     input.style.height = 'auto';
-    input.style.height = `${Math.min(112, Math.max(40, input.scrollHeight))}px`;
+    const css = window.getComputedStyle?.(input);
+    const line = parseFloat(css?.lineHeight) || 22;
+    const padding = (parseFloat(css?.paddingTop) || 9) + (parseFloat(css?.paddingBottom) || 9);
+    const maximum = line * 4 + padding;
+    input.style.height = `${Math.min(maximum, Math.max(line + padding, input.scrollHeight))}px`;
+    input.style.overflowY = input.scrollHeight > maximum ? 'auto' : 'hidden';
   }
 
   function renderAppUpdate() {
@@ -438,7 +447,7 @@
   document.addEventListener('focusin', event => {
     if (modelMenuOpen && !modelMenu.contains(event.target) && !byId('model-bar').contains(event.target)) closeModelMenu(false);
   });
-  window.addEventListener('resize', positionModelMenu);
+  window.addEventListener('resize', () => { resizeInput(); positionModelMenu(); });
   window.addEventListener('blur', () => closeModelMenu(false));
   modelRetry.addEventListener('click', async () => {
     if (changeBlocked() || historyOpen || modelsRefreshing) return;
@@ -460,7 +469,7 @@
     refreshControls();
   });
   input.addEventListener('compositionstart', () => { composing = true; });
-  input.addEventListener('compositionend', () => { composing = false; });
+  input.addEventListener('compositionend', () => { composing = false; resizeInput(); refreshControls(); });
   input.addEventListener('keydown', event => {
     if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && !composing && event.keyCode !== 229) {
       event.preventDefault();
@@ -567,31 +576,24 @@
     stateEvents += 1;
     render(next);
   });
-  let avatarAnimation = null;
+  const avatarController = window.PetChatAvatar.create(avatar);
+  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+  const syncAvatarActivity = () => avatarController.setActive(!document.hidden && !reduceMotion?.matches);
+  syncAvatarActivity();
+  reduceMotion?.addEventListener('change', syncAvatarActivity);
+  document.addEventListener('visibilitychange', syncAvatarActivity);
   const unsubscribeAppearance = api.onAppearance?.((appearance, image) => {
-    avatarAnimation?.destroy();
-    avatarAnimation = null;
-    if (appearance?.shape === 'aurora-cloud' && image?.startsWith('data:image/png;base64,')) {
-      const picture = document.createElement('img');
-      picture.src = image;
-      picture.alt = '';
-      picture.draggable = false;
-      const placeholder = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      placeholder.classList.add('avatar-rive-placeholder');
-      avatar.replaceChildren(picture, placeholder);
-      avatarAnimation = window.AuroraRive?.create(avatar, appearance);
-      const animation = avatarAnimation;
-      animation?.whenReady().then(ready => {
-        if (ready && avatarAnimation === animation) picture.remove();
-      });
-    } else window.PetChatAvatar?.render(avatar, appearance);
+    syncAvatarActivity();
+    avatarController.update(appearance, image);
   });
   window.addEventListener('beforeunload', () => {
-    avatarAnimation?.destroy();
+    avatarController.destroy();
+    reduceMotion?.removeEventListener('change', syncAvatarActivity);
+    document.removeEventListener('visibilitychange', syncAvatarActivity);
     unsubscribe();
     unsubscribeAppearance?.();
   });
-  window.PetChatAvatar?.render(avatar);
+  avatarController.update();
   const initialEvents = stateEvents;
   api.getState().then(next => {
     if (stateEvents === initialEvents) render(next);
@@ -601,4 +603,5 @@
     refreshControls();
   });
   refreshControls();
+  resizeInput();
 })();

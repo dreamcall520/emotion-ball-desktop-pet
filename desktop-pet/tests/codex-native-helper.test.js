@@ -80,7 +80,7 @@ test('真实启动流程必须调用并要求 Codex 模拟验收完成标记', (
   ]) assert.match(smoke, new RegExp(marker));
 });
 
-test('额度标签原生校验区分收起、单周期展开和 196×128 双周期展开', () => {
+test('额度标签原生校验区分收起、196×131 单周期展开和 196×144 双周期展开', () => {
   const { assertQuotaLabelWindow } = require('../scripts/verify-codex-companion');
   const petBounds = { x: 300, y: 300, width: 80, height: 80 };
   const win = {
@@ -103,10 +103,10 @@ test('额度标签原生校验区分收起、单周期展开和 196×128 双周�
   const compact = { ...win, getBounds: () => ({ x: 276, y: 388, width: 128, height: 32 }) };
   assert.doesNotThrow(() => assertQuotaLabelWindow({ getWindow: () => compact }, compact, petBounds,
     { size: 'compact' }));
-  const expanded = { ...win, getBounds: () => ({ x: 242, y: 388, width: 196, height: 96 }) };
+  const expanded = { ...win, getBounds: () => ({ x: 242, y: 388, width: 196, height: 131 }) };
   assert.doesNotThrow(() => assertQuotaLabelWindow({ getWindow: () => expanded }, expanded, petBounds,
     { size: 'compact', expanded: true }));
-  const expandedDual = { ...win, getBounds: () => ({ x: 242, y: 388, width: 196, height: 128 }) };
+  const expandedDual = { ...win, getBounds: () => ({ x: 242, y: 388, width: 196, height: 144 }) };
   assert.doesNotThrow(() => assertQuotaLabelWindow({ getWindow: () => expandedDual }, expandedDual, petBounds,
     { size: 'compact', expanded: true, itemCount: 2 }));
 });

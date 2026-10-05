@@ -31,6 +31,16 @@ function fixture() {
 const eyes = portrait => [...portrait.findAll('rect'), ...portrait.findAll('path')]
   .filter(node => node.attributes.class === 'avatar-eye');
 
+test('相同外观的头像子树被其他渲染器替换后重新绘制，不命中失效缓存', () => {
+  const { target, render } = fixture();
+  render(target, { shape: 'blob' });
+  const original = target.firstChild;
+  target.replaceChildren();
+  render(target, { shape: 'blob' });
+  assert.notEqual(target.firstChild, original);
+  assert.equal(eyes(target.firstChild).length, 2);
+});
+
 test('头像跟随已保存的形态、颜色和轮廓微调，重复状态不重置眨眼', () => {
   const { target, render } = fixture();
   render(target);

@@ -82,7 +82,7 @@ function assertQuotaLabelWindow(controller, expectedWindow, petBounds, options =
   assert.equal(expectedWindow.isVisible(), true, '额度标签必须可见');
   const bounds = expectedWindow.getBounds();
   const expectedSize = options.expanded === true
-    ? { width: 196, height: (options.itemCount > 1 ? 128 : 96) + (options.extraCredits === true ? 20 : 0) }
+    ? { width: 196, height: options.itemCount > 1 ? 144 : 131 }
     : options.size === 'compact'
       ? { width: 128, height: 32 }
       : { width: 168, height: 58 };
@@ -335,10 +335,10 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
   assert.equal(original.settings.codexEnabled, false, '冒烟初始设置必须默认关闭');
   const initialMenu = getMenu();
   assert.equal(initialMenu.getMenuItemById('codex-enabled').checked, false);
-  assert.equal(initialMenu.getMenuItemById('codex-task-names').checked, false);
+  assert.equal(initialMenu.getMenuItemById('codex-task-names').checked, true);
   assert.equal(initialMenu.getMenuItemById('codex-task-names').enabled, false,
     'Codex 总开关关闭时任务名称开关必须禁用');
-  assert.equal(initialMenu.getMenuItemById('codex-quota-visible').checked, false);
+  assert.equal(initialMenu.getMenuItemById('codex-quota-visible').checked, true);
   assert.equal(initialMenu.getMenuItemById('codex-quota-visible').enabled, false,
     'Codex 总开关关闭时常驻额度开关必须禁用');
   assert.equal(initialMenu.getMenuItemById('codex-quota-period').enabled, false,
@@ -348,9 +348,11 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
   assert.equal(initialMenu.getMenuItemById('codex-quota-label-standard').checked, false);
   assert.equal(initialMenu.getMenuItemById('codex-quota-label-compact').checked, true,
     '额度卡片首次启动必须默认小巧');
-  assert.equal(initialMenu.getMenuItemById('codex-quota-appearance').enabled, false,
-    'Codex 总开关关闭时额度卡片外观必须禁用');
-  assert.equal(initialMenu.getMenuItemById('codex-quota-appearance-system').checked, true,
+  assert.equal(initialMenu.getMenuItemById('color-appearance').enabled, true,
+    '全局外观不依赖 Codex 总开关');
+  assert.equal(initialMenu.getMenuItemById('codex-quota-appearance'), null,
+    '额度外观只保留全局入口');
+  assert.equal(initialMenu.getMenuItemById('color-appearance-system').checked, true,
     '额度卡片首次启动必须默认跟随系统');
   assert.equal(initialMenu.getMenuItemById('codex-status'), null);
   assert.equal(initialMenu.getMenuItemById('codex-recent'), null, '原生菜单不能保留最近提醒');
@@ -411,13 +413,19 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     const view = await win.webContents.executeJavaScript(`(() => {
     const root = document.getElementById('quota-label');
     const rootRect = root.getBoundingClientRect();
-    const primaryProgress = document.querySelector('#items li:first-child .quota-progress');
-    const secondaryReset = document.getElementById('secondary-reset');
+    const expanded = root.dataset.expanded === 'true';
+    const visible = node => node && node.getClientRects().length > 0 && getComputedStyle(node).display !== 'none';
+    const cells = [...document.querySelectorAll('.v20-period')];
+    const secondaryCell = expanded ? cells[1] : null;
+    const primaryProgress = document.querySelector(expanded ? '.v20-progress' : '#items li:first-child .quota-progress');
+    const secondaryReset = secondaryCell?.querySelector('.v20-reset') || document.getElementById('secondary-reset');
+    const credit = expanded ? document.querySelector('.v20-credit') : document.getElementById('extra-credits');
+    const balance = expanded ? credit?.querySelector('b') : document.getElementById('credits-balance');
     const secondaryResetRange = secondaryReset ? document.createRange() : null;
     if (secondaryResetRange) secondaryResetRange.selectNodeContents(secondaryReset);
     const secondaryResetTextRect = secondaryResetRange?.getBoundingClientRect() || null;
-    const visibleSections = ['compact-header', 'items', 'quota-details', 'secondary-quota', 'extra-credits']
-      .map(id => document.getElementById(id)).filter(node => node && getComputedStyle(node).display !== 'none');
+    const visibleSections = ['compact-header', 'items', 'quota-details', 'secondary-quota', 'extra-credits', 'codex-expanded']
+      .map(id => document.getElementById(id)).filter(visible);
     return {
       state: root.dataset.state,
       size: root.dataset.size,
@@ -432,23 +440,23 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       rows: [...document.querySelectorAll('#items li')].map(row => row.textContent),
       names: [...document.querySelectorAll('.quota-name')].map(node => node.textContent),
       periods: [...document.querySelectorAll('.quota-period')].map(node => node.textContent),
-      values: [...document.querySelectorAll('.quota-value')]
-        .filter(node => getComputedStyle(node.parentElement).display !== 'none').map(node => {
+      values: [...document.querySelectorAll(expanded ? '.v20-value' : '.quota-value')]
+        .filter(visible).map(node => {
         const rect = node.getBoundingClientRect();
         const row = node.parentElement.getBoundingClientRect();
         return { text: node.textContent, clientWidth: node.clientWidth, scrollWidth: node.scrollWidth,
           left: rect.left, right: rect.right, rowLeft: row.left, rowRight: row.right };
       }),
-      progress: [...document.querySelectorAll('.quota-progress')]
-        .filter(node => getComputedStyle(node.parentElement).display !== 'none').map(node => ({
+      progress: [...document.querySelectorAll(expanded ? '.v20-progress' : '.quota-progress')]
+        .filter(visible).map(node => ({
         value: node.value, max: node.max, clientWidth: node.clientWidth, clientHeight: node.clientHeight
       })),
       secondaryQuota: {
-        display: getComputedStyle(document.getElementById('secondary-quota')).display,
-        period: document.getElementById('secondary-period')?.textContent || '',
-        value: document.getElementById('secondary-value')?.textContent || '',
-        progress: document.getElementById('secondary-progress')?.value || 0,
-        reset: document.getElementById('secondary-reset')?.textContent || ''
+        display: secondaryCell ? getComputedStyle(secondaryCell).display : getComputedStyle(document.getElementById('secondary-quota')).display,
+        period: secondaryCell ? secondaryCell.querySelector('.period-pill')?.textContent : document.getElementById('secondary-period')?.textContent || '',
+        value: secondaryCell ? secondaryCell.querySelector('.v20-value')?.textContent : document.getElementById('secondary-value')?.textContent || '',
+        progress: secondaryCell ? secondaryCell.querySelector('.v20-progress')?.value : document.getElementById('secondary-progress')?.value || 0,
+        reset: secondaryCell ? secondaryReset?.title : document.getElementById('secondary-reset')?.textContent || ''
       },
       layout: {
         primaryProgressTop: primaryProgress ? primaryProgress.getBoundingClientRect().top - rootRect.top : -1,
@@ -459,20 +467,22 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
         secondaryResetFits: secondaryReset
           ? secondaryReset.scrollHeight <= secondaryReset.clientHeight : false
       },
-      resetTime: document.getElementById('reset-time')?.textContent || '',
-      resetCredits: document.getElementById('reset-credits')?.textContent || '',
+      resetTime: expanded ? cells[0]?.querySelector('.v20-reset')?.title || '' : document.getElementById('reset-time')?.textContent || '',
+      resetCredits: expanded ? document.querySelector('.v20-shared button[data-action="opportunities"]')?.textContent || '' : document.getElementById('reset-credits')?.textContent || '',
       extraCredits: {
         enabled: root.dataset.hasExtraCredits,
-        display: getComputedStyle(document.getElementById('extra-credits')).display,
-        balance: document.getElementById('credits-balance')?.textContent || '',
+        display: visible(credit) ? getComputedStyle(credit).display : 'none',
+        balance: balance?.textContent || '',
         unit: document.getElementById('credits-unit')?.textContent || '',
-        fits: document.getElementById('credits-balance').scrollWidth <= document.getElementById('credits-balance').clientWidth
+        caption: expanded ? credit?.querySelector('span')?.textContent.trim() || '' : '',
+        description: credit?.title || '',
+        fits: balance ? balance.scrollWidth <= balance.clientWidth : true
       },
       palette: {
         surface: getComputedStyle(root).getPropertyValue('--quota-surface').trim(),
         text: getComputedStyle(root).color,
-        period: getComputedStyle(document.querySelector('.quota-period') || root).color,
-        secondary: getComputedStyle(document.querySelector('.detail-secondary') || root).color
+        period: getComputedStyle(document.querySelector(expanded ? '#codex-expanded .period-pill' : '.quota-period') || root).color,
+        secondary: getComputedStyle(document.querySelector(expanded ? '.v20-reset' : '.detail-secondary') || root).color
       },
       clickTrace: Number(window.__quotaStandardClickTrace || 0),
       viewport: { width: innerWidth, height: innerHeight },
@@ -481,7 +491,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
         return rect.left >= rootRect.left && rect.right <= rootRect.right &&
           rect.top >= rootRect.top && rect.bottom <= rootRect.bottom;
       }),
-      controls: document.querySelectorAll('button,input,select,textarea,a[href],[tabindex]').length
+      controls: [...document.querySelectorAll('button,input,select,textarea,a[href],[tabindex]')].filter(visible).length
     };
   })()`);
     assert.equal(quotaLabel.getWindow(), win, '读取标签后必须仍是当前窗口');
@@ -607,7 +617,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       assert.deepEqual(result.view.rows, baseline.rows, `${name} 不能改变额度内容`);
       assert.deepEqual(result.view.values.map(item => item.text), baseline.values.map(item => item.text),
         `${name} 不能改变额度比例`);
-      assert.equal(getMenu().getMenuItemById(`codex-quota-appearance-${appearance}`).checked, true);
+      assert.equal(getMenu().getMenuItemById(`color-appearance-${appearance}`).checked, true);
       expectPalette(result.view, theme);
       captures[name] = await capture(win, `quota-label-appearance-${name}`, quotaLabel);
       return result.view;
@@ -783,11 +793,14 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assert.equal(getMenu().getMenuItemById('codex-enabled').checked, true);
     assert.ok(getMenu().getMenuItemById('codex-tasks'));
     assert.equal(getMenu().getMenuItemById('codex-task-names').enabled, true);
-    assert.equal(getMenu().getMenuItemById('codex-task-names').checked, false);
+    assert.equal(getMenu().getMenuItemById('codex-task-names').checked, true);
     assert.equal(getMenu().getMenuItemById('codex-quota-visible').enabled, true);
-    assert.equal(getMenu().getMenuItemById('codex-quota-visible').checked, false);
+    assert.equal(getMenu().getMenuItemById('codex-quota-visible').checked, true);
     assert.equal(getMenu().getMenuItemById('codex-recent'), null, '开启后也不能出现最近提醒');
 
+    // Exercise the explicit-off scenarios after verifying the new enabled defaults.
+    assert.equal(setQuotaPreference('codexTaskNameInAlerts', false), true);
+    assert.equal(setQuotaPreference('codexQuotaAlwaysVisible', false), true);
     assert.equal(typeof setQuotaPreference, 'function', '原生验收必须使用真实额度设置入口');
     assert.equal(setQuotaPreference('codexQuotaLabelSize', 'standard'), true,
       '默认小巧后必须能通过正式设置入口切换标准档');
@@ -821,14 +834,14 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assertQuotaLabelWindow(quotaLabel, standardExpanded.win, pet.getBounds(),
       { size: 'standard', expanded: true, itemCount: 2 });
     assert.equal(standardExpanded.view.compactPeriod, '5小时');
-    assert.deepEqual(standardExpanded.view.values.map(item => item.text), ['100%']);
+    assert.deepEqual(standardExpanded.view.values.map(item => item.text), ['100%', '94%']);
     assert.deepEqual(standardExpanded.view.secondaryQuota, {
       display: 'block', period: '周额度', value: '94%', progress: 94,
       reset: standardExpanded.view.secondaryQuota.reset
     });
     assert.match(standardExpanded.view.secondaryQuota.reset, /后重置 · \d+\/\d+ \d{2}:\d{2}/);
-    assert.equal(standardExpanded.view.resetCredits, '1 次重置机会');
-    assert.ok(standardExpanded.view.layout.primaryProgressTop <= 52,
+    assert.equal(standardExpanded.view.resetCredits, '重置机会 1 次');
+    assert.ok(standardExpanded.view.layout.primaryProgressTop <= 90,
       '主进度条及剩余额度标签必须位于设计稿基线，不能挤压详情区');
     assert.ok(standardExpanded.view.layout.secondaryResetBottomInset >= 8,
       '周额度说明与卡片底部必须至少保留 8px 安全留白');
@@ -902,7 +915,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       '展开明细必须保留完整的 3px 进度条');
     assert.match(compactResult.view.resetTime, /后重置 · \d+\/\d+ \d{2}:\d{2}/,
       '展开明细必须展示相对与具体重置时间');
-    assert.equal(compactResult.view.resetCredits, '1 次重置机会');
+    assert.equal(compactResult.view.resetCredits, '重置机会 1 次');
     assert.equal(compactResult.view.secondaryQuota.period, '周额度');
     assert.equal(compactResult.view.secondaryQuota.value, '94%');
     await captureColorSchemes(compactResult.win,
@@ -915,7 +928,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     assert.deepEqual(compactResult.view.values.map(item => item.text), ['60%']);
     assert.equal(compactResult.view.compactProduct, 'CODEX');
     assert.equal(compactResult.view.compactPeriod, '周额度');
-    assert.equal(compactResult.view.fits, true, '展开单项额度内容不得超出 196×96 卡片');
+    assert.equal(compactResult.view.fits, true, '展开单项额度内容不得超出 196×131 卡片');
     await captureColorSchemes(compactResult.win, {
       size: 'compact', expanded: true, prefix: 'quota-label-compact-expanded-single'
     });
@@ -931,10 +944,11 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       { size: 'compact', expanded: true, extraCredits: true });
     const proExpandedHeight = proResult.win.getBounds().height;
     assert.equal(proResult.view.compactProduct, 'CODEX');
-    assert.equal(proResult.view.extraCredits.unit, '点');
+    assert.equal(proResult.view.extraCredits.caption, '剩余额度');
+    assert.match(proResult.view.extraCredits.description, /与本周期额度分别统计/);
     assert.equal(proResult.view.extraCredits.fits, true, '点数余额必须完整可见');
-    assert.equal(proResult.view.fits, true, 'Pro 点数行不得超出 196×116 原生卡片');
-    assert.equal(proResult.view.resetCredits, '2 次重置机会');
+    assert.equal(proResult.view.fits, true, 'Pro 余额不得超出 196×131 原生卡片');
+    assert.equal(proResult.view.resetCredits, '重置机会 2 次');
     await captureColorSchemes(proResult.win, {
       size: 'compact', expanded: true, extraCredits: true, prefix: 'quota-label-pro-credits'
     });
@@ -956,11 +970,12 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
       { size: 'compact', expanded: true, itemCount: 2, extraCredits: true });
     const plusCreditsExpandedHeight = plusCreditsResult.win.getBounds().height;
     assert.equal(plusCreditsResult.view.compactProduct, 'CODEX');
-    assert.equal(plusCreditsResult.view.extraCredits.unit, '点');
+    assert.equal(plusCreditsResult.view.extraCredits.caption, '剩余额度');
+    assert.match(plusCreditsResult.view.extraCredits.description, /与本周期额度分别统计/);
     assert.equal(plusCreditsResult.view.extraCredits.fits, true, 'Plus 点数余额必须完整可见');
-    assert.equal(plusCreditsResult.view.fits, true, 'Plus 两周期点数行不得超出 196×148 原生卡片');
-    assert.equal(plusCreditsResult.view.resetCredits, '1 次重置机会');
-    assert.deepEqual(plusCreditsResult.view.values.map(item => item.text), ['100%']);
+    assert.equal(plusCreditsResult.view.fits, true, 'Plus 双周期余额不得超出 196×144 原生卡片');
+    assert.equal(plusCreditsResult.view.resetCredits, '重置机会 1 次');
+    assert.deepEqual(plusCreditsResult.view.values.map(item => item.text), ['100%', '94%']);
     assert.equal(plusCreditsResult.view.secondaryQuota.display, 'block');
     assert.equal(plusCreditsResult.view.secondaryQuota.value, '94%');
     await captureColorSchemes(plusCreditsResult.win, {
@@ -973,7 +988,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
         view.extraCredits.display === 'none', 'Plus 无点数恢复展开两项额度明细');
       assert.equal(compactResult.win, plusCreditsResult.win, '点数缺失不能重建原生额度窗口');
       assert.equal(compactResult.view.compactProduct, 'CODEX');
-      assert.deepEqual(compactResult.view.values.map(item => item.text), ['100%']);
+      assert.deepEqual(compactResult.view.values.map(item => item.text), ['100%', '94%']);
       assert.equal(compactResult.view.secondaryQuota.display, 'block');
       assert.equal(compactResult.view.secondaryQuota.value, '94%');
       assertQuotaLabelWindow(quotaLabel, compactResult.win, pet.getBounds(),
@@ -1205,7 +1220,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     await begin('completed', 1, '  方案中｜独立站外商机｜客户线上化  ');
     const titleWindow = await poll(() => Promise.resolve(bubble.getWindow()), value => value?.isVisible(), '名称气泡显示');
     const bubbleText = () => titleWindow.webContents.executeJavaScript("document.getElementById('message').textContent");
-    assert.equal(await bubbleText(), '这轮有结果啦，去看看？', '名称开关默认关闭时必须显示通用文案');
+    assert.equal(await bubbleText(), '这轮有结果啦，去看看？', '用户关闭名称开关时必须显示通用文案');
     const beforeToggle = getController().getSnapshot().currentAlert;
     const motionBeforeToggle = { ...getMotionOwner() };
     let titleItem = getMenu().getMenuItemById('codex-task-names');

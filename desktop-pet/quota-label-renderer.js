@@ -1,4 +1,7 @@
 (function renderQuotaLabel() {
+  const creditBalanceText = typeof window !== 'undefined' && typeof window.petCreditBalanceText === 'function'
+    ? window.petCreditBalanceText : typeof require === 'function' ? require('./credit-balance') : () => '暂未提供';
+  if (typeof module !== 'undefined' && module.exports) module.exports = { creditBalanceText };
   const states = new Map([
     ['disabled', 'Codex 联动已关闭'],
     ['connecting', '正在连接 Codex…'],
@@ -33,11 +36,13 @@
     let windowMinutes;
     let remaining;
     let resetsAt;
+    let paceValue;
     try {
       labelValue = item.label;
       windowMinutes = item.windowMinutes;
       remaining = item.remaining;
       resetsAt = item.resetsAt;
+      paceValue = item.pace;
     } catch (_) { return null; }
     const itemLabel = cleanText(labelValue);
     if (!itemLabel || !Number.isSafeInteger(windowMinutes) || windowMinutes <= 0 ||
@@ -46,8 +51,27 @@
       label: itemLabel,
       windowMinutes,
       remaining,
+      pace: copyPace(paceValue),
       ...(Number.isSafeInteger(resetsAt) && resetsAt > 0 ? { resetsAt } : {})
     };
+  }
+
+  function copyPace(value) {
+    try {
+      const source = record(value);
+      const state = source?.state;
+      const percent = source?.remainingTimePercent;
+      return { state: ['fast', 'balanced', 'slow'].includes(state) ? state : 'unknown',
+        remainingTimePercent: typeof percent === 'number' && Number.isFinite(percent) && percent >= 0 && percent <= 100 ? percent : null };
+    } catch (_) { return { state: 'unknown', remainingTimePercent: null }; }
+  }
+
+  function activityFields(source) {
+    try {
+      const activity = record(source.activity);
+      const count = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
+      return { activity: { runningCount: count(activity?.runningCount), unreadCount: count(activity?.unreadCount) } };
+    } catch (_) { return { activity: { runningCount: null, unreadCount: null } }; }
   }
 
   function copyItems(value) {
@@ -113,6 +137,7 @@
       size,
       appearance,
       expanded,
+      ...activityFields(source),
       ...extraCreditsFields(source, state),
       ...(Number.isSafeInteger(resetCreditsAvailable) && resetCreditsAvailable >= 0
         ? { resetCreditsAvailable } : {})
@@ -198,18 +223,6 @@
     return `${value > 99 ? '99+' : value} 次重置机会`;
   }
 
-  function creditBalanceText(balance) {
-    const [integer, fraction = ''] = balance.split('.');
-    const whole = integer.replace(/^0+(?=\d)/u, '');
-    if (!/[1-9]/u.test(whole + fraction)) return '0.00';
-    if (whole === '0' && !/[1-9]/u.test(fraction.slice(0, 2))) return '<0.01';
-    const decimals = `${fraction}000`;
-    let cents = BigInt(whole) * 100n + BigInt(decimals.slice(0, 2));
-    if (Number(decimals[2]) >= 5) cents += 1n;
-    const digits = cents.toString().padStart(3, '0');
-    return `${digits.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/gu, ',')}.${digits.slice(-2)}`;
-  }
-
   function detailParts(text, type) {
     if (type === 'time') {
       const parts = text.split(' · ');
@@ -265,6 +278,7 @@
   let creditsUnit;
   let root;
   let bridge;
+  let expandedCard;
   try {
     root = document.documentElement;
     label = document.getElementById('quota-label');
@@ -285,11 +299,133 @@
     creditsBalance = document.getElementById('credits-balance');
     creditsUnit = document.getElementById('credits-unit');
     bridge = window.petQuotaLabel;
+    expandedCard = document.getElementById('codex-expanded');
   } catch (_) { return; }
   if (!label || !label.dataset || !status || !summary || typeof summary.replaceChildren !== 'function' ||
     !items || typeof items.replaceChildren !== 'function' ||
     !overflow || !bridge || typeof bridge.onModel !== 'function' ||
     !document || typeof document.createElement !== 'function') return;
+
+  const node = (tag, className, text) => {
+    const result = document.createElement(tag);
+    result.className = className || '';
+    if (text !== undefined) result.textContent = text;
+    return result;
+  };
+  const countText = value => !Number.isSafeInteger(value) ? '—' : value > 99 ? '99+' : String(value);
+  function detailButton(text, action, period, className = '') {
+    const button = node('button', className, text);
+    button.type = 'button';
+    button.dataset.action = action;
+    button.dataset.period = String(period);
+    button.addEventListener?.('click', event => {
+      event.stopPropagation();
+      try { bridge.openDetail?.(action, period); } catch (_) {}
+    });
+    return button;
+  }
+  function renderExpanded(model) {
+    if (!expandedCard?.replaceChildren) return;
+    if (!model.items.length) { expandedCard.replaceChildren(); return; }
+    const dual = model.items.length > 1;
+    const header = node('div', 'v20-header');
+    const brand = node('span', 'v20-brand');
+    brand.replaceChildren(node('b', '', 'CODEX'), ...(!dual ? [node('span', 'period-pill', periodTypeText(model.items[0].windowMinutes))] : []));
+    const headerTools = node('div', 'v20-header-tools');
+    const collapse = node('button', 'v20-collapse', '⌃');
+    if (document.createElementNS) {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('aria-hidden', 'true');
+      const chevron = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      chevron.setAttribute('d', 'M3 10.5L8 5.5L13 10.5');
+      svg.appendChild(chevron); collapse.replaceChildren(svg);
+    }
+    collapse.type = 'button'; collapse.title = '收起额度卡片';
+    collapse.setAttribute?.('aria-label', '收起额度卡片');
+    collapse.addEventListener?.('click', event => {
+      event.stopPropagation();
+      try { bridge.toggleExpanded?.(); } catch (_) {}
+    });
+    headerTools.replaceChildren(node('span', 'v20-caption', '本周期剩余'), collapse);
+    header.replaceChildren(brand, headerTools);
+    const periods = node('div', dual ? 'v20-periods dual' : 'v20-periods');
+    periods.replaceChildren(...model.items.map(item => {
+      const cell = node('section', 'v20-period');
+      cell.dataset.severity = severityOf(item.remaining);
+      cell.setAttribute?.('aria-label', `${periodTypeText(item.windowMinutes)}，本周期剩余 ${Math.round(item.remaining)}%`);
+      const valueRow = node('div', 'v20-value-row');
+      const pace = node('span', `v20-pace ${item.pace.state}`, model.state === 'stale' ? '待更新'
+        : ({ fast: dual ? '偏快' : '用量偏快', balanced: dual ? '均衡' : '节奏均衡', slow: dual ? '较慢' : '用量较慢', unknown: '待记录' }[item.pace.state]));
+      pace.title = model.state === 'stale' ? '额度数据已过期' : item.pace.state === 'unknown' ? '记录不足，暂无法比较用量节奏' : '对比本周期剩余额度与剩余时间';
+      const value = node('strong', 'v20-value', `${Math.round(item.remaining)}%`);
+      value.title = severityText(item.remaining);
+      valueRow.replaceChildren(value, pace);
+      const progress = node('progress', 'v20-progress');
+      progress.max = 100; progress.value = item.remaining; labelProgress(progress, item);
+      const reset = node('p', 'v20-reset');
+      const parts = resetTimeText(model, item).split(' · ');
+      reset.title = resetTimeText(model, item);
+      reset.replaceChildren(node('span', '', parts[0]), ...(!dual && parts[1] ? [node('span', 'v20-date', parts[1])] : []));
+      cell.replaceChildren(...(dual ? [node('div', 'v20-cell-label', '')] : []), valueRow, progress, reset);
+      if (dual) cell.children[0].replaceChildren(node('span', 'period-pill', periodTypeText(item.windowMinutes)));
+      return cell;
+    }));
+    const auxiliary = node('div', 'v20-auxiliary');
+    const shared = node('div', 'v20-shared');
+    const reset = detailButton('', 'opportunities', model.items[0].windowMinutes, 'v20-opportunities');
+    const resetCount = node('b', 'v20-reset-count', Number.isSafeInteger(model.resetCreditsAvailable)
+      ? `${countText(model.resetCreditsAvailable)} 次` : '暂未提供');
+    resetCount.dataset.available = model.resetCreditsAvailable > 0 ? 'true' : 'false';
+    reset.setAttribute?.('aria-label', Number.isSafeInteger(model.resetCreditsAvailable)
+      ? `重置机会 ${model.resetCreditsAvailable} 次，查看详情` : '重置机会数量暂未提供，查看详情');
+    reset.title = '查看重置机会详情';
+    reset.replaceChildren(node('span', '', '重置机会 '), resetCount);
+    if (document.createElementNS) {
+      const clock = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      clock.setAttribute('class', 'v20-reset-clock');
+      clock.setAttribute('viewBox', '0 0 16 16');
+      clock.setAttribute('aria-hidden', 'true'); clock.setAttribute('focusable', 'false');
+      const outline = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      outline.setAttribute('cx', '8'); outline.setAttribute('cy', '8'); outline.setAttribute('r', '5.8');
+      const hands = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      hands.setAttribute('d', 'M8 4.5V8L10.5 9.5');
+      clock.appendChild(outline); clock.appendChild(hands); reset.appendChild(clock);
+    }
+    shared.replaceChildren(reset);
+    if (model.extraCredits) {
+      const credit = model.extraCredits;
+      const text = credit.state === 'balance' ? creditBalanceText(credit.balance) : credit.state === 'none' ? '暂无' : credit.state === 'unlimited' ? '不限额' : '暂未提供';
+      const balance = detailButton('', 'credits', model.items[0].windowMinutes, 'v20-credit');
+      balance.title = credit.state === 'stale' ? '余额数据已过期，等待更新' : '账户剩余额度，与本周期额度分别统计';
+      balance.setAttribute?.('aria-label', `剩余额度 ${text}${credit.state === 'balance' ? ' 点' : ''}，查看详情`);
+      balance.replaceChildren(node('span', '', '剩余额度 '), node('b', 'v20-credit-balance', text));
+      shared.appendChild(balance);
+    }
+    const links = node('nav', 'v20-links');
+    links.setAttribute?.('aria-label', 'Codex 详情');
+    const activity = node('div', 'v20-activity');
+    const running = model.activity?.runningCount, unread = model.activity?.unreadCount;
+    const tasks = detailButton('', 'tasks', model.items[0].windowMinutes);
+    tasks.title = Number.isSafeInteger(running) ? '球球已观察到的进行中任务' : '任务状态暂未提供';
+    tasks.setAttribute?.('aria-label', Number.isSafeInteger(running) ? `进行中任务 ${running} 项，查看任务` : '进行中任务数量暂未提供，查看任务');
+    tasks.replaceChildren(node('span', '', '进行中'), node('b', 'v20-count', countText(running)));
+    const results = detailButton('', 'results', model.items[0].windowMinutes, 'v20-unread');
+    results.title = Number.isSafeInteger(unread) ? '球球本地记录的待查看结果' : '待查看结果暂未提供';
+    results.setAttribute?.('aria-label', Number.isSafeInteger(unread) ? `待查看结果 ${unread} 项，查看结果` : '待查看结果数量暂未提供，查看结果');
+    results.replaceChildren(node('span', '', '待查看'), node('b', 'v20-count', countText(unread)));
+    activity.replaceChildren(tasks, results);
+    const trend = detailButton('趋势', 'trend', model.items[0].windowMinutes, 'v20-trend');
+    if (document.createElementNS) {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('aria-hidden', 'true');
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', 'M2 2V14H14M4 10L7 7L10 9L14 4');
+      svg.appendChild(path); trend.replaceChildren(svg, node('span', '', '趋势'));
+    }
+    links.replaceChildren(activity, trend);
+    auxiliary.replaceChildren(shared, links);
+    expandedCard.replaceChildren(header, periods, auxiliary);
+  }
 
   const render = value => {
     const model = safeModel(value);
@@ -306,6 +442,7 @@
       label.dataset.hasExtraCredits = model.extraCredits ? 'true' : 'false';
       label.dataset.status = model.state === 'ready' && model.extraCredits?.usageStatus === 'blocked' ? 'blocked'
         : model.state === 'ready' && model.extraCredits && model.items[0]?.remaining === 0 ? 'exhausted' : '';
+      renderExpanded(model);
       const rows = [];
       let overallSeverity = 'normal';
       for (const [index, item] of model.items.entries()) {

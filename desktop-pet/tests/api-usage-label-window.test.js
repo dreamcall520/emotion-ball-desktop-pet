@@ -80,7 +80,7 @@ test('API card stays inside the display without covering pet, visible Codex card
     for (const expanded of [false, true]) {
       const bounds = apiLabelBounds(pet, area, quota, bubble, expanded, presentation);
       assert.equal(bounds.width, expanded ? 196 : 128);
-      assert.equal(bounds.height, expanded ? 128 : 32);
+      assert.equal(bounds.height, expanded ? 92 : 32);
       assert.ok(inside(bounds, area), JSON.stringify({ bounds, area }));
       for (const obstacle of [petVisualBounds(pet, presentation.shape, presentation), quota, bubble].filter(Boolean)) {
         assert.equal(overlaps(bounds, obstacle), false, JSON.stringify({ bounds, obstacle }));
@@ -158,7 +158,7 @@ test('trusted visible IPC toggles report while open and empty report lead to det
   f.ipc(win, 'pet:quota-label-toggle');
   assert.equal(win.sent.at(-1)[1].expanded, false);
   f.ipc(win, 'pet:api-usage-label-toggle');
-  assert.equal(win.sent.at(-1)[1].expanded, true); assert.equal(win.bounds.height, 128);
+  assert.equal(win.sent.at(-1)[1].expanded, true); assert.equal(win.bounds.height, 92);
   f.ipc(win, 'pet:api-usage-label-open');
   assert.equal(f.opened.length, 1); assert.equal(win.sent.at(-1)[1].expanded, true);
   win.visible = false; f.ipc(win, 'pet:api-usage-label-open'); assert.equal(f.opened.length, 1);

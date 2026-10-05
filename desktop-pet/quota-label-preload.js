@@ -19,6 +19,22 @@ function cleanLabel(value) {
     .slice(0, 32).join('');
 }
 
+function paceFields(value) {
+  try {
+    if (!value || !['fast', 'balanced', 'slow', 'unknown'].includes(value.state)) return {};
+    return { pace: { state: value.state,
+      remainingTimePercent: Number.isFinite(value.remainingTimePercent) && value.remainingTimePercent >= 0 && value.remainingTimePercent <= 100 ? value.remainingTimePercent : null } };
+  } catch (_) { return {}; }
+}
+
+function activityFields(value) {
+  try {
+    if (!value) return {};
+    const count = value => Number.isSafeInteger(value) && value >= 0 && value <= 999999 ? value : null;
+    return { activity: { runningCount: count(value.runningCount), unreadCount: count(value.unreadCount) } };
+  } catch (_) { return {}; }
+}
+
 function copyItem(value) {
   const item = record(value);
   if (!item) return null;
@@ -26,11 +42,15 @@ function copyItem(value) {
   let windowMinutes;
   let remaining;
   let resetsAt;
+  let pace;
+  let resetLabel;
   try {
     labelValue = item.label;
     windowMinutes = item.windowMinutes;
     remaining = item.remaining;
     resetsAt = item.resetsAt;
+    pace = record(item.pace);
+    resetLabel = cleanLabel(item.resetLabel);
   } catch (_) { return null; }
   const label = cleanLabel(labelValue);
   if (!label || !Number.isSafeInteger(windowMinutes) || windowMinutes <= 0 ||
@@ -39,7 +59,9 @@ function copyItem(value) {
     label,
     windowMinutes,
     remaining,
-    ...(Number.isSafeInteger(resetsAt) && resetsAt > 0 ? { resetsAt } : {})
+    ...(Number.isSafeInteger(resetsAt) && resetsAt > 0 ? { resetsAt } : {}),
+    ...paceFields(pace),
+    ...(resetLabel ? { resetLabel } : {})
   };
 }
 
@@ -94,10 +116,12 @@ function safeModel(value) {
   let rawItems;
   let overflowValue;
   let resetCreditsAvailable;
+  let activity;
   try {
     rawItems = source.items;
     overflowValue = source.overflow;
     resetCreditsAvailable = source.resetCreditsAvailable;
+    activity = record(source.activity);
   } catch (_) { return { state, size, appearance, expanded, items: [], overflow: 0 }; }
   const overflow = Number.isSafeInteger(overflowValue) && overflowValue > 0
     ? Math.min(overflowValue, 99) : 0;
@@ -109,6 +133,7 @@ function safeModel(value) {
     items: copyItems(rawItems),
     overflow,
     ...extraCreditsFields(source, state),
+    ...activityFields(activity),
     ...(Number.isSafeInteger(resetCreditsAvailable) && resetCreditsAvailable >= 0
       ? { resetCreditsAvailable } : {})
   };
@@ -124,6 +149,10 @@ contextBridge.exposeInMainWorld('petQuotaLabel', {
   },
   toggleExpanded() {
     try { ipcRenderer.send(TOGGLE_CHANNEL); } catch (_) {}
+  },
+  openDetail(action, period) {
+    if (!['tasks', 'results', 'trend', 'opportunities', 'credits'].includes(action)) return;
+    try { ipcRenderer.send('pet:quota-label-detail', action, period === 10080 ? 10080 : 300); } catch (_) {}
   },
   onModel(callback) {
     if (typeof callback !== 'function') return () => {};

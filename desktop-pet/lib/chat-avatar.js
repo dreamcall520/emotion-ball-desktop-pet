@@ -167,7 +167,9 @@
     if (!target) return;
     const appearance = window.PetCustomization.normalizeAppearance(rawAppearance);
     const key = JSON.stringify(appearance);
-    if (cache.get(target) === key) return;
+    const previous = cache.get(target);
+    // Another portrait renderer may have replaced this subtree (e.g. Rive).
+    if (previous?.key === key && target.firstChild === previous.svg) return;
     const shape = window.EB_CUSTOM_SHAPES.createShape(appearance) ||
       window.EB_RINGS.SHAPES[appearance.shape] || window.EB_RINGS.SHAPES.blob;
     const svg = element('svg', { viewBox: '-15 -15 259 259', 'aria-hidden': 'true' });
@@ -176,8 +178,151 @@
     drawEyes(svg, appearance, shape);
     target.dataset.shape = appearance.shape;
     target.replaceChildren(svg);
-    cache.set(target, key);
+    cache.set(target, { key, svg });
   }
 
-  window.PetChatAvatar = Object.freeze({ render });
+  function create(target) {
+    let key = null, appearance = null, ball = null, rive = null, poster = null;
+    let active = true, destroyed = false, revision = 0, displayed = null;
+
+    function releaseDisplayed() {
+      if (!displayed) return;
+      displayed.rive?.destroy();
+      displayed.ball?.destroy();
+      displayed.host.remove();
+      displayed = null;
+    }
+    function clear(keepDisplayed = false) {
+      revision++;
+      // Keep the last painted portrait while a replacement Rive loads. Moving its
+      // nodes retains the actual canvas; exporting WebGL here can yield an empty frame.
+      if (keepDisplayed && !displayed && (ball || rive) &&
+          (target.dataset.avatarReady === 'true' || poster)) {
+        const host = document.createElement('span');
+        Object.assign(host.style, { position: 'absolute', inset: '0', display: 'block' });
+        for (const node of Array.from(target.children)) host.appendChild(node);
+        target.appendChild(host);
+        displayed = { host, ball, rive };
+        ball = null; rive = null; poster = null;
+      }
+      rive?.destroy(); rive = null;
+      ball?.destroy(); ball = null;
+      poster?.remove(); poster = null;
+      if (!keepDisplayed) {
+        releaseDisplayed();
+        target.replaceChildren();
+      }
+    }
+    function showPoster(image) {
+      if (!poster) {
+        poster = document.createElement('img');
+        poster.alt = ''; poster.draggable = false;
+        target.appendChild(poster);
+      }
+      poster.src = image;
+      releaseDisplayed();
+    }
+    function syncActive() {
+      const useBall = active && !rive;
+      ball?.setActive(useBall);
+      rive?.setActive?.(active);
+      displayed?.ball?.setActive(active && !displayed.rive);
+      displayed?.rive?.setActive?.(active);
+      target.dataset.avatarActive = String(active && Boolean(ball || rive));
+    }
+    function update(rawAppearance, image) {
+      if (destroyed) return;
+      const next = window.PetCustomization.normalizeAppearance(rawAppearance);
+      const nextKey = JSON.stringify(next);
+      const hasImage = typeof image === 'string' && image.startsWith('data:image/png;base64,');
+      if (nextKey === key && (ball || rive)) {
+        // A late native snapshot can cover loading without restarting the live instance.
+        if (hasImage && rive && target.dataset.avatarReady === 'false') showPoster(image);
+        return;
+      }
+      const useRive = next.shape === 'aurora-cloud' && window.AuroraRive?.eligible(next);
+      clear(useRive && !hasImage); key = nextKey; appearance = next;
+      target.dataset.shape = appearance.shape;
+      const shape = window.EB_CUSTOM_SHAPES.createShape(appearance);
+      const texture = window.PetCustomization.auroraReferenceTexture(appearance, shape);
+      const preset = window.PetCustomization.EYE_PRESETS[appearance.idleEyes];
+      let emotion = '02';
+      if (preset !== null && preset !== undefined) {
+        window.EmotionBall.config.register({ ...window.EmotionBall.config.get('02').raw,
+          id: '50', name: '聊天头像', group: 'custom', antics: false, anims: [], pool: [preset] });
+        emotion = '50';
+      }
+      ball = window.EmotionBall.create(target, {
+        emotion, fallbackId: emotion, shape: appearance.shape, customShape: shape,
+        auroraBodyTexture: texture, auroraStyle: appearance.auroraStyle,
+        auroraTransparency: appearance.auroraTransparency,
+        color: appearance.bodyColor, eyeColor: appearance.eyeColor,
+        glowPinkColor: appearance.glowPinkColor, glowGoldColor: appearance.glowGoldColor,
+        eyeScale: appearance.eyeScale, eyeSpacing: appearance.eyeSpacing, eyeHeight: appearance.eyeHeight,
+        idle: false, autostart: active, lite: true, liteRibbons: true, label: ''
+      });
+      target.dataset.avatarEngine = 'emotion-ball';
+      target.dataset.avatarReady = 'true';
+      const svg = target.querySelector(':scope > svg');
+      if (appearance.shape !== 'aurora-cloud' && svg) {
+        svg.style.opacity = String(1 - appearance.auroraTransparency / 100);
+      }
+      if (useRive) {
+        ball.setActive(false);
+        // The vector fallback has a different material. Never expose it for a
+        // successful Rive transition, even when the native screenshot arrives later.
+        if (svg) svg.style.visibility = 'hidden';
+        if (hasImage) showPoster(image);
+        try { rive = window.AuroraRive.create(target, appearance, texture, false); }
+        catch (_) { rive = null; }
+        if (rive) {
+          target.dataset.avatarEngine = 'rive';
+          target.dataset.avatarReady = 'false';
+          const current = rive, generation = revision;
+          current.whenReady().then(ready => {
+            if (destroyed || generation !== revision || current !== rive) return;
+            if (ready) {
+              target.dataset.avatarReady = 'true';
+              releaseDisplayed();
+              poster?.remove(); poster = null; syncActive();
+            }
+            else {
+              current.destroy(); rive = null;
+              if (svg) svg.style.visibility = '';
+              releaseDisplayed();
+              poster?.remove(); poster = null;
+              target.dataset.avatarEngine = 'emotion-ball';
+              target.dataset.avatarReady = 'true';
+              syncActive();
+            }
+          }, () => {
+            if (destroyed || generation !== revision || current !== rive) return;
+            current.destroy(); rive = null;
+            if (svg) svg.style.visibility = '';
+            releaseDisplayed();
+            poster?.remove(); poster = null;
+            target.dataset.avatarEngine = 'emotion-ball';
+            target.dataset.avatarReady = 'true';
+            syncActive();
+          });
+        } else {
+          if (svg) svg.style.visibility = '';
+          releaseDisplayed();
+          poster?.remove(); poster = null;
+        }
+      }
+      syncActive();
+    }
+    return {
+      update,
+      setActive(value) { if (destroyed) return; active = value === true; syncActive(); },
+      destroy() {
+        if (destroyed) return;
+        destroyed = true; active = false; clear();
+        target.dataset.avatarActive = 'false'; delete target.dataset.avatarEngine; delete target.dataset.avatarReady;
+      }
+    };
+  }
+
+  window.PetChatAvatar = Object.freeze({ render, create });
 })();

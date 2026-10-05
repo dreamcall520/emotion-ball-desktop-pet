@@ -8,7 +8,7 @@ const MAX_TIME = 8640000000000000;
 const MAX_TEXT_LENGTH = 256;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/u;
 const DISPLAYED_QUOTA_FAMILIES = Object.freeze(['codex', 'gpt-reserve']);
-const { quotaCreditDetails } = require('./codex-state');
+const { quotaCreditDetails, quotaResetDetails, isTaskId } = require('./codex-state');
 
 function normalizePeriod(period) {
   return PERIODS.has(period) ? period : 'auto';
@@ -143,7 +143,7 @@ function emptyModel(state) {
   return { state, items: [], overflow: 0 };
 }
 
-function buildQuotaLabelModel(snapshot, options = {}, now = Date.now()) {
+function buildQuotaBaseModel(snapshot, options = {}, now = Date.now()) {
   const validSource = Boolean(snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot));
   const source = validSource ? snapshot : {};
   if (validSource && source.enabled === false) return emptyModel('disabled');
@@ -191,6 +191,140 @@ function buildQuotaLabelModel(snapshot, options = {}, now = Date.now()) {
   return emptyModel(period === 'auto' ? 'empty' : 'period-missing');
 }
 
+function formatQuotaDate(value, windowMinutes, now) {
+  if (!validResetTime(value) || !validNow(now)) return '';
+  const date = new Date(value); const current = new Date(now);
+  const two = number => String(number).padStart(2, '0');
+  const clock = `${two(date.getHours())}:${two(date.getMinutes())}`;
+  if (windowMinutes === PERIOD_MINUTES.fiveHour && date.getFullYear() === current.getFullYear()
+    && date.getMonth() === current.getMonth() && date.getDate() === current.getDate()) return clock;
+  const year = date.getFullYear() === current.getFullYear() ? '' : `${date.getFullYear()}/`;
+  return `${year}${two(date.getMonth() + 1)}/${two(date.getDate())} ${clock}`;
+}
+
+function buildPace(window, state, now) {
+  const duration = window.windowMinutes * 60000;
+  const remainingTime = window.resetsAt - now;
+  if (state !== 'ready' || remainingTime <= 0 || remainingTime > duration) {
+    return { state: 'unknown', remainingTimePercent: null };
+  }
+  const remainingTimePercent = Math.max(0, Math.min(100, remainingTime / duration * 100));
+  const difference = window.remaining - remainingTimePercent;
+  return { state: difference < -10 ? 'fast' : difference > 10 ? 'slow' : 'balanced', remainingTimePercent };
+}
+
+function safeResults(snapshot) {
+  if (snapshot?.enabled !== true || snapshot?.history?.available !== true) return [];
+  return (Array.isArray(snapshot.history.results) ? snapshot.history.results.slice(-64) : []).flatMap(row => {
+    if (!isTaskId(row?.id) || !reasonableText(row.turnId) || row.turnId.length > 160
+      || !['completed', 'failed', 'interrupted'].includes(row.state) || !validNow(row.updatedAt)) return [];
+    return [{ id: row.id, turnId: row.turnId, title: typeof row.title === 'string' ? row.title.slice(0, 140) : '未命名任务',
+      state: row.state, updatedAt: row.updatedAt, readAt: validNow(row.readAt) ? row.readAt : null }];
+  });
+}
+
+function buildActivity(snapshot) {
+  const knownTasks = snapshot?.enabled === true && snapshot.tasks?.state === 'connected';
+  return {
+    runningCount: knownTasks ? (Array.isArray(snapshot.tasks.items) ? snapshot.tasks.items.slice(0, 64) : [])
+      .filter(task => isTaskId(task?.id) && ['active', 'waiting'].includes(task.state)).length : null,
+    unreadCount: snapshot?.enabled === true && snapshot.history?.available === true
+      ? safeResults(snapshot).filter(row => row.readAt === null).length : null
+  };
+}
+
+function buildQuotaLabelModel(snapshot, options = {}, now = Date.now()) {
+  const model = buildQuotaBaseModel(snapshot, options, now);
+  model.items = model.items.map(item => ({ ...item, pace: buildPace(item, model.state, now),
+    resetLabel: formatQuotaDate(item.resetsAt, item.windowMinutes, now) }));
+  if (snapshot?.tasks || snapshot?.history) model.activity = buildActivity(snapshot);
+  return model;
+}
+
+function buildTrend(snapshot, window, now) {
+  const unknown = { state: 'unknown', status: 'unknown', exhaustsAt: null, label: '',
+    summary: '暂无法预估', detail: '记录不足，稍后再看' };
+  const base = { period: window?.windowMinutes ?? null,
+    windowMinutes: window?.windowMinutes ?? null, resetsAt: window?.resetsAt ?? null,
+    resetLabel: window ? formatQuotaDate(window.resetsAt, window.windowMinutes, now) : '',
+    samples: [], forecast: unknown };
+  if (!window || snapshot?.enabled !== true || snapshot.history?.available !== true) return base;
+  const cycle = (Array.isArray(snapshot.history.windows) ? snapshot.history.windows.slice(-8) : [])
+    .find(row => row.id === window.id && row.windowMinutes === window.windowMinutes && row.resetsAt === window.resetsAt);
+  let previousAt = -1;
+  base.samples = (Array.isArray(cycle?.samples) ? cycle.samples.slice(window.windowMinutes === 10080 ? -6000 : -192) : []).flatMap(sample => {
+    if (!validNow(sample?.at) || sample.at > now || sample.at <= previousAt
+      || !Number.isFinite(sample.remaining) || sample.remaining < 0 || sample.remaining > 100) return [];
+    previousAt = sample.at;
+    return [{ at: sample.at, remaining: sample.remaining }];
+  });
+  if (snapshot.quota?.state !== 'connected' || snapshot.quota.stale !== false || !validNow(snapshot.quota.updatedAt)
+    || snapshot.quota.updatedAt > now || now - snapshot.quota.updatedAt >= 300000) {
+    base.forecast.detail = '用量尚未更新，稍后再看'; return base;
+  }
+  const horizon = window.windowMinutes === 300 ? 30 * 60000 : 48 * 3600000;
+  const recent = base.samples.filter(sample => sample.at >= now - horizon);
+  if (recent.length < 3 || now - recent.at(-1).at >= 300000) return base;
+  const first = recent[0]; const last = recent.at(-1);
+  const minimumSpan = window.windowMinutes === 300 ? 10 * 60000 : 24 * 3600000;
+  if (last.at - first.at < minimumSpan || last.remaining !== window.remaining) return base;
+  for (let index = 1; index < recent.length; index++) {
+    const previous = recent[index - 1]; const current = recent[index];
+    if (current.at - previous.at >= 300000 || current.remaining > previous.remaining
+      || previous.remaining - current.remaining >= 25) return base;
+  }
+  const consumed = first.remaining - last.remaining;
+  const rate = consumed / (last.at - first.at);
+  const remainingAtReset = window.remaining - rate * (window.resetsAt - now);
+  const status = remainingAtReset < 0 ? 'risk' : remainingAtReset < 10 ? 'tight' : 'safe';
+  const projectedAt = rate > 0 ? Math.ceil(now + window.remaining / rate) : null;
+  const exhaustsAt = validResetTime(projectedAt) ? projectedAt : null;
+  if (status === 'risk' && exhaustsAt === null) return base;
+  const label = exhaustsAt === null ? '' : formatQuotaDate(exhaustsAt, window.windowMinutes, now);
+  base.forecast = { state: 'estimate', status, exhaustsAt, label,
+    summary: status === 'risk' ? window.remaining <= 0 ? '额度已用完' : `预计约 ${label} 用完`
+      : status === 'tight' ? '预计够用到重置' : '额度充裕',
+    detail: status === 'risk' ? `早于 ${base.resetLabel} 重置`
+      : status === 'tight' ? '刚够，留意用量' : '预计够用到重置' };
+  return base;
+}
+
+function buildCodexDetailsModel(snapshot, options = {}, now = Date.now()) {
+  const safeOptions = options && typeof options === 'object' && !Array.isArray(options) ? options : {};
+  const requestedMinutes = [300, 10080].includes(safeOptions.period) ? safeOptions.period
+    : PERIOD_MINUTES[normalizePeriod(safeOptions.period)] ?? null;
+  const model = buildQuotaLabelModel(snapshot, { ...safeOptions, size: 'large', period: 'auto' }, now);
+  const selectedWindow = model.items.find(item => item.windowMinutes === requestedMinutes) || model.items[0];
+  const period = selectedWindow?.windowMinutes ?? requestedMinutes ?? 300;
+  const details = snapshot?.enabled === true ? quotaResetDetails(snapshot.quota) : {};
+  const fresh = model.state === 'ready';
+  const rows = details.resetOpportunities ?? null;
+  const resetHistory = [];
+  const past = snapshot?.enabled === true && snapshot?.history?.available === true
+    && Array.isArray(snapshot.history.resetHistory) ? snapshot.history.resetHistory : [];
+  const seen = new Set();
+  for (const row of quotaResetDetails({ resetOpportunities: [...past, ...(fresh ? rows || [] : [])] }).resetOpportunities || []) {
+    const state = row.status === 'redeemed' ? 'used'
+      : typeof row.expiresAt === 'number' && row.expiresAt <= now ? 'expired' : null;
+    if (state && !seen.has(row.id)) { seen.add(row.id); resetHistory.push({ ...row, state }); }
+  }
+  const tasks = (Array.isArray(snapshot?.tasks?.items) && snapshot.enabled === true ? snapshot.tasks.items.slice(0, 64) : [])
+    .filter(row => isTaskId(row?.id)).map(row => ({ id: row.id,
+      title: typeof row.title === 'string' ? row.title.slice(0, 140) : '未命名任务',
+      state: snapshot.tasks.state === 'connected' && ['active', 'waiting', 'completed', 'failed', 'interrupted', 'idle', 'unknown']
+        .includes(row.state) ? row.state : 'unknown',
+      turnId: typeof row.turnId === 'string' ? row.turnId.slice(0, 160) : null,
+      updatedAt: validNow(row.updatedAt) ? row.updatedAt : null }));
+  return { ...model, action: reasonableText(safeOptions.action) ? safeOptions.action.slice(0, 40) : 'trend',
+    period, appearance: ['light', 'dark', 'system'].includes(safeOptions.appearance) ? safeOptions.appearance : 'system',
+    ...details, activity: buildActivity(snapshot), tasks,
+    results: safeResults(snapshot).filter(row => row.readAt === null),
+    resetDetailsState: rows === null ? 'unknown' : 'known',
+    resetOpportunities: rows === null ? null : rows.filter(row => row.status !== 'redeemed'
+      && !(typeof row.expiresAt === 'number' && row.expiresAt <= now)),
+    resetHistory, trend: buildTrend(snapshot, selectedWindow, now) };
+}
+
 module.exports = {
   PERIOD_MINUTES,
   DISPLAYED_QUOTA_FAMILIES,
@@ -198,5 +332,7 @@ module.exports = {
   selectQuotaWindows,
   selectPrimaryQuotaWindows,
   selectDisplayedQuotaWindows,
-  buildQuotaLabelModel
+  buildQuotaLabelModel,
+  buildCodexDetailsModel,
+  formatQuotaDate
 };

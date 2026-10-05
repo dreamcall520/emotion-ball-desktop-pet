@@ -26,19 +26,50 @@
   let messageTimer = null;
   let canSave = false;
   let canPreview = false;
+  let disposed = false;
+  let appearancePreference = 'system';
+  const colorPicker = $('color-picker');
+  const colorBindings = [
+    ['body-color', 'body-hex', 'bodyColor', '球体'],
+    ['eye-color', 'eye-hex', 'eyeColor', '眼睛'],
+    ['glow-pink-color', 'glow-pink-hex', 'glowPinkColor', '粉光'],
+    ['glow-gold-color', 'glow-gold-hex', 'glowGoldColor', '金光']
+  ];
+  let pickerBinding = null;
+  let pickerAnchor = null;
+  let pickerHsv = { h: 0, s: 0, v: 100 };
+  let pickerPointer = null;
+  const rangeLimits = {
+    'shape-width': [75, 125], 'shape-height': [75, 125], 'shape-softness': [0, 100],
+    'shape-asymmetry': [-100, 100], 'eye-scale': [40, 125], 'eye-spacing': [70, 130],
+    'eye-height': [-30, 30], 'aurora-transparency': [0, 60]
+  };
+  const systemAppearance = window.matchMedia?.('(prefers-color-scheme: dark)');
+  const motionPreference = window.matchMedia?.('(prefers-reduced-motion: reduce)');
   const matchesStartup = () => JSON.stringify(PetCustomization.normalizeAppearance(state.appearance)) ===
     JSON.stringify(startupAppearance);
 
   $('save').disabled = true;
-  $('save-bottom').disabled = true;
   $('startup-default').disabled = true;
+
+  function applyTheme() {
+    if (document.documentElement) document.documentElement.dataset.theme = appearancePreference === 'system'
+      ? (systemAppearance?.matches ? 'dark' : 'light') : appearancePreference;
+  }
+  const unsubscribeColorMode = bridge.onColorMode?.((mode, appearance) => {
+    if (document.documentElement) document.documentElement.dataset.colorMode = mode === 'accessible' ? 'accessible' : 'standard';
+    appearancePreference = ['light', 'dark'].includes(appearance) ? appearance : 'system';
+    applyTheme();
+  });
+  systemAppearance?.addEventListener('change', applyTheme);
+  applyTheme();
 
   function announce(value) {
     const node = $('message');
     node.textContent = value;
-    node.classList.add('visible');
+    node.hidden = false;
     clearTimeout(messageTimer);
-    messageTimer = setTimeout(() => node.classList.remove('visible'), 2600);
+    messageTimer = setTimeout(() => { node.hidden = true; }, 2600);
   }
 
   function shapeIcon(shape, contour) {
@@ -96,8 +127,10 @@
 
   function renderSwatches(containerId, values, key) {
     const target = $(containerId);
-    if (target.children.length !== values.length) {
+    const palette = key + ':' + values.join(',');
+    if (target.children.length !== values.length || target.dataset.palette !== palette) {
       target.replaceChildren();
+      target.dataset.palette = palette;
       for (const value of values) {
         const button = document.createElement('button');
         button.className = 'swatch';
@@ -113,17 +146,14 @@
       const selected = state.appearance[key] === values[index];
       button.classList.toggle('selected', selected);
       button.setAttribute('aria-pressed', String(selected));
+      button.disabled = !canSave;
     }
   }
 
-  function renderColors() {
-    for (const [pickerId, hexId, key] of [
-      ['body-color', 'body-hex', 'bodyColor'],
-      ['eye-color', 'eye-hex', 'eyeColor'],
-      ['glow-pink-color', 'glow-pink-hex', 'glowPinkColor'],
-      ['glow-gold-color', 'glow-gold-hex', 'glowGoldColor']
-    ]) {
+  function renderColors(keepPickerHsv = false) {
+    for (const [pickerId, hexId, key] of colorBindings) {
       $(pickerId).value = state.appearance[key];
+      $(pickerId).style.setProperty('--color', state.appearance[key]);
       $(hexId).value = state.appearance[key];
       $(hexId).classList.remove('invalid');
     }
@@ -131,6 +161,7 @@
     renderSwatches('eye-swatches', eyeColors, 'eyeColor');
     renderSwatches('glow-pink-swatches', glowPinkColors, 'glowPinkColor');
     renderSwatches('glow-gold-swatches', glowGoldColors, 'glowGoldColor');
+    syncColorPicker(keepPickerHsv);
   }
 
   function renderAuroraVisibility() {
@@ -139,13 +170,14 @@
     $('manual-hint').textContent = visible
       ? '为了保持完整的动效体验，暂不支持轮廓与五官微调'
       : '让轮廓与五官长成你喜欢的样子';
-    if (visible) showManual(false);
+    showManual(visible ? false : !$('manual-controls').hidden);
     renderSliders();
     $('aurora-style-field').hidden = !visible;
     for (const style of ['dimensional', 'simple']) {
       $('aurora-style-' + style).setAttribute('aria-pressed', String(state.appearance.auroraStyle === style));
     }
     $('aurora-colors').hidden = !visible || state.appearance.auroraStyle === 'simple';
+    if (pickerBinding?.[2].startsWith('glow') && $('aurora-colors').hidden) closeColorPicker(false);
   }
 
   function parseHex(value) {
@@ -154,14 +186,201 @@
     return /^[\da-f]{6}$/i.test(raw) ? '#' + raw.toUpperCase() : null;
   }
 
-  function changeColor(key, value) {
+  function changeColor(key, value, keepPickerHsv = false) {
+    if (!canSave || disposed) return false;
     const parsed = parseHex(value);
     if (!parsed) return false;
     state.appearance[key] = parsed;
-    renderColors();
+    renderColors(keepPickerHsv);
     schedulePreview();
     return true;
   }
+
+  function hexToHsv(hex) {
+    const [r, g, b] = [1, 3, 5].map(index => parseInt(hex.slice(index, index + 2), 16) / 255);
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), delta = max - min;
+    let h = delta === 0 ? 0 : max === r ? (g - b) / delta : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4;
+    h = ((h * 60) % 360 + 360) % 360;
+    return { h, s: max === 0 ? 0 : delta / max * 100, v: max * 100 };
+  }
+
+  function hsvToHex({ h, s, v }) {
+    const hue = ((h % 360) + 360) % 360 / 60;
+    const chroma = v / 100 * s / 100, x = chroma * (1 - Math.abs(hue % 2 - 1)), m = v / 100 - chroma;
+    const rgb = [[chroma, x, 0], [x, chroma, 0], [0, chroma, x], [0, x, chroma], [x, 0, chroma], [chroma, 0, x]][Math.floor(hue)];
+    return '#' + rgb.map(value => Math.round((value + m) * 255).toString(16).padStart(2, '0')).join('').toUpperCase();
+  }
+
+  function paintRange(id) {
+    const input = $(id), [min, max] = rangeLimits[id];
+    const fill = Math.max(0, Math.min(100, (Number(input.value) - min) / (max - min) * 100));
+    input.style.setProperty('--range-fill', fill + '%');
+  }
+
+  function syncColorPicker(keepHsv = false) {
+    if (!pickerBinding) return;
+    const hex = state.appearance[pickerBinding[2]];
+    if (!keepHsv) pickerHsv = hexToHsv(hex);
+    $('color-picker-sample').style.backgroundColor = hex;
+    $('color-picker-hex').value = hex;
+    $('color-picker-hex').classList.remove('invalid');
+    for (const [index, id] of ['color-red', 'color-green', 'color-blue'].entries()) {
+      $(id).value = String(parseInt(hex.slice(1 + index * 2, 3 + index * 2), 16));
+      $(id).classList.remove('invalid');
+    }
+    $('color-hue').value = String(Math.round(pickerHsv.h));
+    $('color-hue-value').textContent = Math.round(pickerHsv.h) + '°';
+    const pure = hsvToHex({ h: pickerHsv.h, s: 100, v: 100 });
+    const sv = $('color-sv');
+    sv.style.setProperty('--sv-hue', pure);
+    sv.style.setProperty('--sv-x', pickerHsv.s + '%');
+    sv.style.setProperty('--sv-y', (100 - pickerHsv.v) + '%');
+    sv.setAttribute('aria-valuenow', String(Math.round(pickerHsv.s)));
+    sv.setAttribute('aria-valuetext', `饱和度 ${Math.round(pickerHsv.s)}%，明度 ${Math.round(pickerHsv.v)}%`);
+    const colors = { bodyColor: bodyColors, eyeColor: eyeColors, glowPinkColor: glowPinkColors, glowGoldColor: glowGoldColors };
+    renderSwatches('color-picker-presets', colors[pickerBinding[2]], pickerBinding[2]);
+  }
+
+  function positionColorPicker() {
+    if (!pickerBinding || colorPicker.hidden) return;
+    const anchor = $(pickerBinding[0]).getBoundingClientRect();
+    pickerAnchor = { top: anchor.top, left: anchor.left };
+    const rect = colorPicker.getBoundingClientRect();
+    const maxLeft = Math.max(12, window.innerWidth - rect.width - 12);
+    const maxTop = Math.max(12, window.innerHeight - rect.height - 12);
+    let top = anchor.bottom + 8;
+    if (top > maxTop) top = anchor.top - rect.height - 8;
+    colorPicker.style.left = Math.max(12, Math.min(maxLeft, anchor.right - rect.width)) + 'px';
+    colorPicker.style.top = Math.max(12, Math.min(maxTop, top)) + 'px';
+  }
+
+  function closeColorPicker(restoreFocus = true) {
+    if (!pickerBinding) return;
+    releasePickerPointer();
+    const trigger = $(pickerBinding[0]);
+    trigger.setAttribute('aria-expanded', 'false');
+    pickerBinding = null;
+    pickerAnchor = null;
+    colorPicker.hidden = true;
+    if (restoreFocus && !trigger.disabled) trigger.focus();
+  }
+
+  function openColorPicker(binding) {
+    if (!canSave || disposed || $(binding[0]).disabled) return;
+    if (pickerBinding?.[0] === binding[0]) { closeColorPicker(); return; }
+    closeColorPicker(false);
+    pickerBinding = binding;
+    $('color-picker-title').textContent = binding[3] + '颜色';
+    $(binding[0]).setAttribute('aria-expanded', 'true');
+    colorPicker.hidden = false;
+    syncColorPicker();
+    positionColorPicker();
+    $('color-sv').focus({ preventScroll: true });
+  }
+
+  function setColorControlsEnabled(enabled) {
+    for (const [id] of colorBindings) $(id).disabled = !enabled;
+    for (const id of ['color-hue', 'color-picker-hex', 'color-red', 'color-green', 'color-blue']) $(id).disabled = !enabled;
+    $('color-sv').setAttribute('aria-disabled', String(!enabled));
+    $('color-sv').tabIndex = enabled ? 0 : -1;
+    for (const id of ['body-swatches', 'eye-swatches', 'glow-pink-swatches', 'glow-gold-swatches', 'color-picker-presets']) {
+      for (const button of $(id).children) button.disabled = !enabled;
+    }
+    if (!enabled) closeColorPicker(false);
+  }
+
+  $('color-hue').addEventListener('input', event => {
+    if (!pickerBinding || !canSave || event.target.disabled) return;
+    const value = Number(event.target.value);
+    if (!Number.isFinite(value)) return;
+    pickerHsv.h = Math.max(0, Math.min(360, value));
+    changeColor(pickerBinding[2], hsvToHex(pickerHsv), true);
+  });
+
+  function releasePickerPointer() {
+    const pointer = pickerPointer;
+    pickerPointer = null;
+    if (pointer !== null && $('color-sv').hasPointerCapture?.(pointer)) $('color-sv').releasePointerCapture(pointer);
+  }
+  function updatePickerPoint(event) {
+    if (!pickerBinding || !canSave || disposed) return;
+    const rect = $('color-sv').getBoundingClientRect();
+    if (!(rect.width > 0 && rect.height > 0)) return;
+    pickerHsv.s = Math.max(0, Math.min(100, (event.clientX - rect.left) / rect.width * 100));
+    pickerHsv.v = Math.max(0, Math.min(100, 100 - (event.clientY - rect.top) / rect.height * 100));
+    changeColor(pickerBinding[2], hsvToHex(pickerHsv), true);
+  }
+  $('color-sv').addEventListener('pointerdown', event => {
+    if (!pickerBinding || !canSave || disposed || event.isPrimary === false || (event.button !== undefined && event.button !== 0)) return;
+    event.preventDefault();
+    $('color-sv').focus({ preventScroll: true });
+    pickerPointer = event.pointerId;
+    $('color-sv').setPointerCapture?.(pickerPointer);
+    updatePickerPoint(event);
+  });
+  $('color-sv').addEventListener('pointermove', event => {
+    if (pickerPointer !== null && event.pointerId === pickerPointer) updatePickerPoint(event);
+  });
+  $('color-sv').addEventListener('pointerup', event => {
+    if (pickerPointer !== null && event.pointerId === pickerPointer) { updatePickerPoint(event); releasePickerPointer(); }
+  });
+  for (const eventName of ['pointercancel', 'lostpointercapture']) $('color-sv').addEventListener(eventName, event => {
+    if (event.pointerId === pickerPointer) releasePickerPointer();
+  });
+  $('color-sv').addEventListener('keydown', event => {
+    if (!pickerBinding || !canSave || disposed) return;
+    const step = event.shiftKey ? 10 : 1;
+    const delta = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] }[event.key];
+    if (!delta) return;
+    event.preventDefault();
+    pickerHsv.s = Math.max(0, Math.min(100, pickerHsv.s + delta[0]));
+    pickerHsv.v = Math.max(0, Math.min(100, pickerHsv.v + delta[1]));
+    changeColor(pickerBinding[2], hsvToHex(pickerHsv), true);
+  });
+  function applyPickerHex(complete) {
+    const input = $('color-picker-hex');
+    if (!pickerBinding || !canSave || input.disabled) return;
+    const parsed = parseHex(input.value);
+    if (parsed && (complete || /^#?[0-9a-f]{6}$/i.test(input.value.trim()))) changeColor(pickerBinding[2], parsed);
+    else {
+      input.classList.toggle('invalid', !parsed);
+      if (complete) syncColorPicker();
+    }
+  }
+  $('color-picker-hex').addEventListener('input', () => applyPickerHex(false));
+  $('color-picker-hex').addEventListener('change', () => applyPickerHex(true));
+  function applyPickerRgb(complete) {
+    if (!pickerBinding || !canSave || $('color-red').disabled) return;
+    const inputs = ['color-red', 'color-green', 'color-blue'].map($);
+    const values = inputs.map(input => /^\d{1,3}$/.test(input.value) && Number(input.value) <= 255 ? Number(input.value) : null);
+    inputs.forEach((input, index) => input.classList.toggle('invalid', values[index] === null));
+    if (values.every(value => value !== null)) changeColor(pickerBinding[2], '#' + values.map(value => value.toString(16).padStart(2, '0')).join(''));
+    else if (complete) syncColorPicker();
+  }
+  for (const id of ['color-red', 'color-green', 'color-blue']) {
+    $(id).addEventListener('input', () => applyPickerRgb(false));
+    $(id).addEventListener('change', () => applyPickerRgb(true));
+  }
+  $('color-picker-close').addEventListener('click', () => closeColorPicker());
+  document.addEventListener?.('keydown', event => {
+    if (pickerBinding && event.key === 'Escape') {
+      event.preventDefault(); event.stopPropagation(); closeColorPicker();
+    }
+  });
+  document.addEventListener?.('pointerdown', event => {
+    if (pickerBinding && !colorPicker.contains(event.target) && !$(pickerBinding[0]).contains(event.target)) closeColorPicker(false);
+  });
+  document.addEventListener?.('focusin', event => {
+    if (pickerBinding && !colorPicker.contains(event.target) && !$(pickerBinding[0]).contains(event.target)) closeColorPicker(false);
+  });
+  document.querySelector?.('.controls')?.addEventListener('scroll', () => {
+    if (!pickerBinding || !pickerAnchor) return;
+    const anchor = $(pickerBinding[0]).getBoundingClientRect();
+    // A scroll event queued before opening must not dismiss a newly focused picker.
+    if (Math.abs(anchor.top - pickerAnchor.top) > .5 || Math.abs(anchor.left - pickerAnchor.left) > .5) closeColorPicker(false);
+  });
+  window.addEventListener('resize', positionColorPicker);
+  setColorControlsEnabled(false);
 
   function registerIdle() {
     const source = EmotionBall.config.get('02').raw;
@@ -174,6 +393,7 @@
 
   function renderBall() {
     frameId = 0;
+    if (disposed || document.hidden) return;
     if (canPreview) bridge.preview?.(state.appearance);
     const target = $('preview-ball');
     const heldCanvas = displayedAurora && target.querySelector?.(':scope > .eb-rive-aurora.ready');
@@ -187,6 +407,7 @@
     $('stage').dataset.previewMode = previewMode;
     $('preview-size-label').textContent = previewMode === 'desktop'
       ? '桌面实际尺寸 · ' + pixels + ' × ' + pixels + ' px' : '大图预览';
+    $('preview-status').textContent = motionPreference?.matches ? '减少动态已开启' : '眨眼与呼吸动效保留';
     registerIdle();
     const compact = previewMode === 'desktop' && ['micro', 'tiny', 'compact', 'small'].includes(petSize);
     const eyeBoost = compact && !['cloud', 'aurora-cloud'].includes(state.appearance.shape) ? 1.5 : 1;
@@ -205,6 +426,7 @@
       eyeSpacing: state.appearance.eyeSpacing,
       eyeHeight: state.appearance.eyeHeight,
       idle: false, lite: compact, liteRibbons: compact,
+      autostart: !motionPreference?.matches,
       label: previewMode === 'desktop' ? '桌面实际尺寸球球预览' : '定制球球大图预览'
     };
     ball = EmotionBall.create(target, options);
@@ -244,6 +466,8 @@
 
   function schedulePreview() {
     if (frameId) cancelAnimationFrame(frameId);
+    frameId = 0;
+    if (disposed || document.hidden) return;
     frameId = requestAnimationFrame(renderBall);
   }
 
@@ -263,7 +487,8 @@
 
   function showManual(enabled) {
     const active = enabled && state.appearance.shape !== 'aurora-cloud';
-    $('manual-toggle').checked = active;
+    $('manual-toggle').setAttribute('aria-expanded', String(active));
+    $('manual-toggle-label').textContent = state.appearance.shape === 'aurora-cloud' ? '暂不可用' : (active ? '收起' : '展开');
     $('manual-controls').hidden = !active;
   }
 
@@ -281,9 +506,11 @@
     for (const [id, value, display] of fields) {
       $(id).value = String(Math.round(value));
       $(id + '-value').textContent = display;
+      paintRange(id);
     }
     $('aurora-transparency').value = String(a.auroraTransparency);
     $('aurora-transparency-value').textContent = `${a.auroraTransparency}%`;
+    paintRange('aurora-transparency');
   }
 
   function syncAppearance() {
@@ -294,12 +521,9 @@
     schedulePreview();
   }
 
-  for (const [pickerId, hexId, key] of [
-    ['body-color', 'body-hex', 'bodyColor'],
-    ['eye-color', 'eye-hex', 'eyeColor'],
-    ['glow-pink-color', 'glow-pink-hex', 'glowPinkColor'],
-    ['glow-gold-color', 'glow-gold-hex', 'glowGoldColor']
-  ]) {
+  for (const binding of colorBindings) {
+    const [pickerId, hexId, key] = binding;
+    $(pickerId).addEventListener('click', () => openColorPicker(binding));
     $(pickerId).addEventListener('input', event => changeColor(key, event.target.value));
     $(hexId).addEventListener('input', event => {
       const value = event.target.value.trim();
@@ -332,8 +556,8 @@
     });
   }
 
-  $('manual-toggle').addEventListener('change', event => {
-    showManual(event.target.checked);
+  $('manual-toggle').addEventListener('click', () => {
+    showManual($('manual-controls').hidden);
   });
   for (const style of ['dimensional', 'simple']) {
     $('aurora-style-' + style).addEventListener('click', () => {
@@ -368,11 +592,10 @@
   });
   $('preview-large').addEventListener('click', () => showPreviewMode('large'));
   $('preview-desktop').addEventListener('click', () => showPreviewMode('desktop'));
-  $('save-bottom').addEventListener('click', () => $('save').click());
   $('save').addEventListener('click', async () => {
     if (!canSave) return;
     const colorFields = [['body-hex', 'bodyColor'], ['eye-hex', 'eyeColor']];
-    if (state.appearance.shape === 'aurora-cloud') colorFields.push(
+    if (state.appearance.shape === 'aurora-cloud' && state.appearance.auroraStyle === 'dimensional') colorFields.push(
       ['glow-pink-hex', 'glowPinkColor'], ['glow-gold-hex', 'glowGoldColor']);
     for (const [id, key] of colorFields) {
       const value = parseHex($(id).value);
@@ -387,7 +610,7 @@
     const button = $('save');
     canSave = false;
     button.disabled = true;
-    $('save-bottom').disabled = true;
+    setColorControlsEnabled(false);
     try {
       state = PetCustomization.normalizeCustomization(state);
       const setAsStartupDefault = $('startup-default').checked;
@@ -401,17 +624,43 @@
     } finally {
       canSave = true;
       button.disabled = false;
-      $('save-bottom').disabled = false;
+      setColorControlsEnabled(true);
     }
   });
-  window.addEventListener('pagehide', () => {
+  function stopPreview() {
     cancelAnimationFrame(frameId);
+    frameId = 0;
     auroraPreview?.destroy();
     if (displayedAurora !== auroraPreview) displayedAurora?.destroy();
-    if (ball) ball.destroy();
+    auroraPreview = null;
+    displayedAurora = null;
+    ball?.destroy();
+    ball = null;
+    $('preview-ball').replaceChildren();
+  }
+  function refreshMotion() {
+    stopPreview();
+    schedulePreview();
+  }
+  function updateVisibility() {
+    if (document.hidden) stopPreview();
+    else schedulePreview();
+  }
+  motionPreference?.addEventListener('change', refreshMotion);
+  document.addEventListener?.('visibilitychange', updateVisibility);
+  window.addEventListener('pagehide', () => {
+    disposed = true;
+    closeColorPicker(false);
+    stopPreview();
+    clearTimeout(messageTimer);
+    unsubscribeColorMode?.();
+    systemAppearance?.removeEventListener('change', applyTheme);
+    motionPreference?.removeEventListener('change', refreshMotion);
+    document.removeEventListener?.('visibilitychange', updateVisibility);
   });
 
   bridge.load().then(value => {
+    if (disposed) return;
     if (!value) throw new Error('customization unavailable');
     if (value?.customization) {
       state = PetCustomization.normalizeCustomization(value.customization);
@@ -422,11 +671,12 @@
     syncAppearance();
     canPreview = true;
     canSave = true;
+    setColorControlsEnabled(true);
     $('save').disabled = false;
-    $('save-bottom').disabled = false;
     $('startup-default').disabled = false;
     window.__customizerReady = true;
   }).catch(() => {
+    if (disposed) return;
     syncAppearance();
     announce('读取设置失败，请重新打开定制窗口');
     window.__customizerReady = true;

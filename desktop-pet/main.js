@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const {
   app,
   BrowserWindow,
@@ -35,7 +36,10 @@ const { createThoughtWindow } = require('./lib/thought-window');
 const { createWindowMotion } = require('./lib/window-motion');
 const { createCodexCompanion } = require('./lib/codex-companion');
 const { buildCodexMenu, buildCodexResultMenu, resolveCodexAction } = require('./lib/codex-menu');
-const { buildQuotaLabelModel } = require('./lib/codex-quota-view');
+const { buildQuotaLabelModel, buildCodexDetailsModel } = require('./lib/codex-quota-view');
+const { createQuotaHistory } = require('./lib/codex-quota-history');
+const { createCodexDetailsWindow, ACTIONS: CODEX_DETAIL_ACTIONS } = require('./lib/codex-details-window');
+const { isTaskId } = require('./lib/codex-state');
 const { createQuotaLabelWindow } = require('./lib/quota-label-window');
 const { createEdgeTuck } = require('./lib/edge-tuck');
 const { createEdgeNotice } = require('./lib/edge-notice');
@@ -56,7 +60,8 @@ const APP_NAME = '球球桌宠';
 const APP_WEBSITE = 'https://qiuqiu.pet/';
 const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const IS_SMOKE_TEST = process.env.PET_SMOKE_TEST === '1';
-const IS_CODEX_SMOKE_ONLY = IS_SMOKE_TEST && process.env.PET_SMOKE_CODEX_ONLY === '1';
+const IS_CODEX_STATUS_SMOKE_ONLY = IS_SMOKE_TEST && process.env.PET_SMOKE_CODEX_STATUS_ONLY === '1';
+const IS_CODEX_SMOKE_ONLY = IS_SMOKE_TEST && (process.env.PET_SMOKE_CODEX_ONLY === '1' || IS_CODEX_STATUS_SMOKE_ONLY);
 
 let petWindow = null;
 let edgeTuck = null;
@@ -77,6 +82,9 @@ let bubble = null;
 let thoughts = null;
 let bubbleVisibilityBinding = null;
 let quotaLabel = null;
+let codexDetails = null;
+let codexDetailReturn = null;
+let codexThreadOpener = url => shell.openExternal(url);
 let chat = null;
 let chatWindow = null;
 let notesCompanion = null;
@@ -98,7 +106,7 @@ let aboutWindow = null;
 let aboutReady = false;
 let aboutUpdateState = { state: 'idle' };
 const API_REFRESH_MS = 5 * 60 * 1000;
-let customizationPreviewAppearance = null;
+let smokeCustomizationSaveFailure = false;
 let screenLocked = false;
 let codexCompanion = null;
 let codexNow = Date.now;
@@ -348,14 +356,19 @@ function openCustomization() {
     return;
   }
   const win = new BrowserWindow({
-    width: 960, height: 700, minWidth: 760, minHeight: 580,
-    title: '定制球球', backgroundColor: '#F6F4EF', show: false,
+    width: 960, height: 700, minWidth: 760, minHeight: 580, useContentSize: true,
+    title: '定制球球', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 },
+    backgroundColor: settings?.codexQuotaAppearance === 'dark' ||
+      settings?.codexQuotaAppearance === 'system' && nativeTheme.shouldUseDarkColors ? '#263D42' : '#E0F5ED', show: false,
     webPreferences: {
       preload: path.join(__dirname, 'customize-preload.js'),
       contextIsolation: true, nodeIntegration: false, sandbox: true,
       spellcheck: false, devTools: !app.isPackaged
     }
   });
+  const [outerWidth, outerHeight] = win.getSize();
+  const [contentWidth, contentHeight] = win.getContentSize();
+  win.setMinimumSize(760 + outerWidth - contentWidth, 580 + outerHeight - contentHeight);
   customizationWindow = win;
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', event => event.preventDefault());
@@ -363,8 +376,6 @@ function openCustomization() {
   win.on('closed', () => {
     if (customizationWindow !== win) return;
     customizationWindow = null;
-    customizationPreviewAppearance = null;
-    chatWindow?.syncAppearance();
   });
   win.once('ready-to-show', () => { if (!win.isDestroyed() && !screenLocked) win.show(); });
   void win.loadFile(path.join(__dirname, 'customize.html')).catch(error => writeError('定制面板', error));
@@ -377,6 +388,7 @@ function effectiveCustomization(value) {
 }
 
 function saveCustomization(value, setAsStartupDefault = true) {
+  if (IS_SMOKE_TEST && smokeCustomizationSaveFailure) return false;
   if (!settings || isQuitting) return false;
   const previous = settings;
   const customization = effectiveCustomization(value);
@@ -389,7 +401,6 @@ function saveCustomization(value, setAsStartupDefault = true) {
     return false;
   }
   sendCompanionSettings();
-  customizationPreviewAppearance = null;
   chatWindow?.syncAppearance();
   repositionQuotaLabel();
   refreshTrayMenu();
@@ -777,9 +788,12 @@ function presentCodexAlert(alert) {
 
 function initializeCodexCompanion(options = {}) {
   codexCompanion?.close();
+  codexThreadOpener = IS_SMOKE_TEST && typeof options.openThread === 'function' ? options.openThread : url => shell.openExternal(url);
   codexNow = options.now || Date.now;
   codexSentSettings = null;
-  codexCompanion = createCodexCompanion({ ...options, now: codexNow, schedule: options.schedule || setTimeout,
+  codexCompanion = createCodexCompanion({ ...options, now: codexNow,
+    history: options.history || createQuotaHistory({ filePath: path.join(app.getPath('userData'), 'codex-status-history.json'),
+      now: codexNow, onError: error => writeError('Codex 趋势记录', error) }), schedule: options.schedule || setTimeout,
     ignoreTask: id => chat?.ownsThread(id) === true,
     ignoreThread: row => typeof row?.cwd === 'string' && row.cwd.length > 0 &&
       path.resolve(row.cwd) === path.join(app.getPath('userData'), 'chat-workspace'),
@@ -789,7 +803,7 @@ function initializeCodexCompanion(options = {}) {
       if (payload) showBubble(payload);
     },
     onClear: clearCodexPresentation,
-    onChange: snapshot => { syncCodexSettings(snapshot); syncQuotaLabel(snapshot); refreshTrayMenu(); }
+    onChange: snapshot => { syncCodexSettings(snapshot); syncQuotaLabel(snapshot); syncCodexDetails(snapshot); refreshTrayMenu(); }
   });
   codexCompanion.setPreferences({
     taskNameInAlerts: settings?.codexTaskNameInAlerts === true,
@@ -798,11 +812,62 @@ function initializeCodexCompanion(options = {}) {
   });
 }
 
+function codexDetailModel(snapshot, action, period) {
+  const card = buildQuotaLabelModel(snapshot, { period: settings?.codexQuotaPeriod,
+    size: settings?.codexQuotaLabelSize, showExtraCredits: settings?.codexShowExtraCredits }, codexNow());
+  const selected = card.items.find(item => item.windowMinutes === period) || card.items[0];
+  const model = buildCodexDetailsModel(snapshot, { action, period: selected?.windowMinutes || period,
+    appearance: settings?.codexQuotaAppearance }, codexNow());
+  return { ...model, action, items: model.items.filter(item => card.items.some(row => row.windowMinutes === item.windowMinutes)),
+    colorMode: settings?.colorMode === 'accessible' ? 'accessible' : 'standard',
+    ...(codexDetailReturn ? { returnToTrend: true, returnPeriod: codexDetailReturn.period } : {}) };
+}
+
+function syncCodexDetails(snapshot = codexCompanion?.getSnapshot()) {
+  if (!codexDetails?.isVisible()) return;
+  if (isQuitting || screenLocked || snapshot?.enabled !== true) { codexDetails.close(); return; }
+  codexDetails.update(codexDetailModel(snapshot, codexDetails.getAction(), codexDetails.getPeriod()));
+}
+
+function openCodexDetails(action, period) {
+  if (!CODEX_DETAIL_ACTIONS.has(action) || isQuitting || screenLocked || settings?.codexEnabled !== true || !codexDetails) return false;
+  if (action === 'opportunities' && codexDetails.getAction() === 'trend' && codexDetails.isVisible()) {
+    codexDetailReturn = { period: codexDetails.getPeriod() };
+  } else if (action !== 'opportunities' || !codexDetails.isVisible()) codexDetailReturn = null;
+  return codexDetails.open(codexDetailModel(codexCompanion.getSnapshot(), action, period));
+}
+
+function fromQuotaLabel(event) {
+  const win = quotaLabel?.getWindow();
+  return Boolean(win && event?.sender === win.webContents && event.senderFrame === event.sender.mainFrame &&
+    event.sender.getURL() === pathToFileURL(path.join(__dirname, 'quota-label.html')).href);
+}
+
+async function openCodexDetailThread(id, turnId) {
+  if (!isTaskId(id) || isQuitting || screenLocked || !codexDetails?.isVisible()) return false;
+  const action = codexDetails.getAction();
+  if (!['tasks', 'results'].includes(action)) return false;
+  const snapshot = codexCompanion?.getSnapshot();
+  if (snapshot?.enabled !== true) return false;
+  const model = codexDetailModel(snapshot, action, codexDetails.getPeriod());
+  const row = model[action]?.find(task => task.id === id && !task.unavailable &&
+    (action !== 'results' || task.turnId === turnId));
+  if (!row) return false;
+  try {
+    await codexThreadOpener(`codex://threads/${id.toLowerCase()}`);
+    const current = codexCompanion?.getSnapshot();
+    if (current?.generation === snapshot.generation && current.enabled === true) codexCompanion.markRead(id, row.turnId);
+    return true;
+  } catch (error) { writeError('打开 Codex 会话', error); return false; }
+}
+
 function setCodexPreference(name, value) {
+  // Legacy callers share the application appearance; it does not depend on Codex.
+  if (name === 'codexQuotaAppearance') return setInterfaceAppearance(value);
   if (!settings || settings.codexEnabled !== true || !codexCompanion || isQuitting) return false;
   const allowed = new Set([
     'codexTaskNameInAlerts', 'codexQuotaAlwaysVisible', 'codexQuotaPeriod', 'codexQuotaLabelSize',
-    'codexQuotaAppearance', 'codexShowExtraCredits'
+    'codexShowExtraCredits'
   ]);
   if (!allowed.has(name)) return false;
   const previous = settings[name];
@@ -811,8 +876,6 @@ function setCodexPreference(name, value) {
     next = ['auto', 'fiveHour', 'weekly'].includes(value) ? value : previous;
   } else if (name === 'codexQuotaLabelSize') {
     next = ['standard', 'compact'].includes(value) ? value : previous;
-  } else if (name === 'codexQuotaAppearance') {
-    next = ['system', 'light', 'dark'].includes(value) ? value : previous;
   } else {
     next = Boolean(value);
   }
@@ -830,7 +893,7 @@ function setCodexPreference(name, value) {
     quotaPeriod: settings.codexQuotaPeriod
   });
   syncQuotaLabel(codexCompanion.getSnapshot());
-  if (name === 'codexQuotaAppearance') colorModes.sync();
+  syncCodexDetails();
   refreshTrayMenu();
   return true;
 }
@@ -847,6 +910,7 @@ async function setCodexEnabled(enabled) {
     settings.codexEnabled = false;
     if (changed) {
       try { quotaLabel?.destroy(); } catch (error) { reportQuotaError('额度标签销毁', error); }
+      codexDetails?.close();
     }
     // 停止读取不依赖磁盘写入成功；保存失败也必须先释放连接和计时器。
     await codexCompanion.setEnabled(false);
@@ -869,13 +933,27 @@ async function setCodexEnabled(enabled) {
       buttons: ['开启联动', '暂不开启'], defaultId: 1, cancelId: 1, noLink: true
     });
     if (result.response !== 0 || token !== codexConsentToken || isQuitting) return false;
+    const previous = {
+      codexEnabled: settings.codexEnabled,
+      codexTaskNameInAlerts: settings.codexTaskNameInAlerts,
+      codexQuotaAlwaysVisible: settings.codexQuotaAlwaysVisible
+    };
+    // A user-confirmed off → on action enables both visible companion features.
+    // Startup keeps explicit saved choices; turning off only stops the connection.
     settings.codexEnabled = true;
+    settings.codexTaskNameInAlerts = true;
+    settings.codexQuotaAlwaysVisible = true;
     try { persistSettings(); codexPreferenceWarning = null; }
     catch (_) {
-      settings.codexEnabled = false;
+      Object.assign(settings, previous);
       codexPreferenceWarning = '未能保存设置，Codex 联动仍保持关闭';
       return false;
     }
+    codexCompanion.setPreferences({
+      taskNameInAlerts: settings.codexTaskNameInAlerts,
+      quotaAlwaysVisible: settings.codexQuotaAlwaysVisible,
+      quotaPeriod: settings.codexQuotaPeriod
+    });
     await codexCompanion.setEnabled(true);
     syncQuotaLabel(codexCompanion.getSnapshot());
     return true;
@@ -908,7 +986,8 @@ async function routeCodexAction(descriptor) {
   if (descriptor.scope === 'alert') codexCompanion.dismiss(descriptor.alertId, descriptor.generation);
   if (action.type === 'open-task') {
     try {
-      await shell.openExternal(action.url);
+      await codexThreadOpener(action.url);
+      if (codexCompanion?.getSnapshot().generation === snapshot.generation) codexCompanion.markRead(action.taskId);
       if (descriptor.scope === 'result') codexCompanion.dismiss(descriptor.alertId, descriptor.generation);
     } catch (_) {
       const current = codexCompanion?.getSnapshot();
@@ -942,23 +1021,12 @@ function setColorMode(value) {
 }
 
 function getNotesAppearance() {
-  return settings?.notesAppearance === 'dark' || settings?.notesAppearance === 'system' && nativeTheme?.shouldUseDarkColors ? 'dark' : 'light';
+  return settings?.codexQuotaAppearance === 'dark' || settings?.codexQuotaAppearance === 'system' && nativeTheme?.shouldUseDarkColors ? 'dark' : 'light';
 }
 
+// Keep the old programmatic entry point, with the same global behavior as the menu.
 function setNotesAppearance(value) {
-  if (!settings || isQuitting || !['system', 'light', 'dark'].includes(value) || settings.notesAppearance === value) return false;
-  const previous = settings.notesAppearance;
-  settings.notesAppearance = value;
-  try { persistSettings(); }
-  catch (error) {
-    settings.notesAppearance = previous;
-    writeError('保存便签待办外观', error);
-    refreshTrayMenu();
-    return false;
-  }
-  notesCompanion?.syncAppearance();
-  refreshTrayMenu();
-  return true;
+  return setInterfaceAppearance(value);
 }
 
 function setNotesDefaultTab(value) {
@@ -977,7 +1045,7 @@ function setNotesDefaultTab(value) {
 }
 
 function setInterfaceAppearance(value) {
-  if (!settings || isQuitting || settings.colorMode !== 'accessible' ||
+  if (!settings || isQuitting ||
     !['system', 'light', 'dark'].includes(value) || settings.codexQuotaAppearance === value) return false;
   const previous = settings.codexQuotaAppearance;
   settings.codexQuotaAppearance = value;
@@ -988,8 +1056,13 @@ function setInterfaceAppearance(value) {
     refreshTrayMenu();
     return false;
   }
+  // themeSource is application-wide: system media queries and native controls
+  // now follow this choice in standard and accessible modes alike.
+  if (nativeTheme) nativeTheme.themeSource = value;
   colorModes.sync();
+  notesCompanion?.syncAppearance();
   syncQuotaLabel(codexCompanion?.getSnapshot());
+  syncCodexDetails();
   refreshTrayMenu();
   return true;
 }
@@ -1182,6 +1255,7 @@ function setAlwaysOnTop(enabled) {
   });
   safelyInvokeWindow('气泡窗口置顶', () => bubble?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('额度标签置顶', () => quotaLabel?.setAlwaysOnTop(settings.alwaysOnTop));
+  safelyInvokeWindow('Codex 详情置顶', () => codexDetails?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('API 卡片置顶', () => apiUsageLabel?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('边缘提示置顶', () => edgeNoticeWindow?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('聊天面板置顶', () => chatWindow?.setAlwaysOnTop(settings.alwaysOnTop));
@@ -1236,83 +1310,74 @@ function sizeMenu() {
 function codexMenu() {
   return {
     id: 'codex-menu',
-    label: 'Codex 联动',
+    label: 'Codex 与 API',
     submenu: [
       {
         id: 'codex-enabled', label: '启用 Codex 联动', type: 'checkbox', checked: settings.codexEnabled === true,
         click: item => { const enabled = item.checked; item.checked = settings.codexEnabled === true;
           void setCodexEnabled(enabled); }
       },
+      { type: 'separator' },
       {
-        id: 'codex-task-names', label: '完成提醒显示任务名称', type: 'checkbox',
+        id: 'codex-task-names', label: '任务完成提醒显示名称', type: 'checkbox',
         enabled: settings.codexEnabled === true, checked: settings.codexTaskNameInAlerts === true,
         click: item => { const enabled = item.checked; item.checked = settings.codexTaskNameInAlerts === true;
           setCodexTaskNameInAlerts(enabled); }
       },
       {
-        id: 'codex-quota-visible', label: '一直显示剩余额度', type: 'checkbox',
+        id: 'codex-quota-visible', label: '显示 Codex 额度卡', type: 'checkbox',
         enabled: settings.codexEnabled === true, checked: settings.codexQuotaAlwaysVisible === true,
         click: item => { const enabled = item.checked; item.checked = settings.codexQuotaAlwaysVisible === true;
           setCodexPreference('codexQuotaAlwaysVisible', enabled); }
       },
-      {
-        id: 'codex-extra-credits', label: '显示额外点数', type: 'checkbox',
-        enabled: settings.codexEnabled === true, checked: settings.codexShowExtraCredits !== false,
-        click: item => { const enabled = item.checked; item.checked = settings.codexShowExtraCredits !== false;
-          setCodexPreference('codexShowExtraCredits', enabled); }
-      },
-      {
-        id: 'codex-quota-period', label: '额度提醒周期', enabled: settings.codexEnabled === true,
-        submenu: [
-          ['auto', 'codex-quota-auto', '自动（按当前套餐）'],
-          ['fiveHour', 'codex-quota-five-hour', '5 小时'],
-          ['weekly', 'codex-quota-weekly', '周额度']
-        ].map(([value, id, label]) => ({
-          id, label, type: 'radio', enabled: settings.codexEnabled === true,
-          checked: settings.codexQuotaPeriod === value,
-          click: item => {
-            item.checked = settings.codexQuotaPeriod === value;
-            setCodexPreference('codexQuotaPeriod', value);
-          }
-        }))
-      },
-      {
-        id: 'codex-quota-label-size', label: '额度卡片大小', enabled: settings.codexEnabled === true,
-        submenu: [
-          ['standard', 'codex-quota-label-standard', '标准'],
-          ['compact', 'codex-quota-label-compact', '小巧']
-        ].map(([value, id, label]) => ({
-          id, label, type: 'radio', enabled: settings.codexEnabled === true,
-          checked: settings.codexQuotaLabelSize === value,
-          click: item => {
-            item.checked = settings.codexQuotaLabelSize === value;
-            setCodexPreference('codexQuotaLabelSize', value);
-          }
-        }))
-      },
-      {
-        id: 'codex-quota-appearance', label: '额度卡片外观', enabled: settings.codexEnabled === true,
-        submenu: [
-          ['system', 'codex-quota-appearance-system', '跟随系统'],
-          ['light', 'codex-quota-appearance-light', '浅色'],
-          ['dark', 'codex-quota-appearance-dark', '深色']
-        ].map(([value, id, label]) => ({
-          id, label, type: 'radio', enabled: settings.codexEnabled === true,
-          checked: settings.codexQuotaAppearance === value,
-          click: item => {
-            item.checked = settings.codexQuotaAppearance === value;
-            setCodexPreference('codexQuotaAppearance', value);
-          }
-        }))
-      },
+      { id: 'codex-quota-settings', label: '额度卡设置', enabled: settings.codexEnabled === true, submenu: [
+        {
+          id: 'codex-extra-credits', label: '显示额外点数', type: 'checkbox',
+          enabled: settings.codexEnabled === true, checked: settings.codexShowExtraCredits !== false,
+          click: item => { const enabled = item.checked; item.checked = settings.codexShowExtraCredits !== false;
+            setCodexPreference('codexShowExtraCredits', enabled); }
+        },
+        {
+          id: 'codex-quota-period', label: '额度周期', enabled: settings.codexEnabled === true,
+          submenu: [
+            ['auto', 'codex-quota-auto', '自动（按当前套餐）'],
+            ['fiveHour', 'codex-quota-five-hour', '5 小时'],
+            ['weekly', 'codex-quota-weekly', '周额度']
+          ].map(([value, id, label]) => ({
+            id, label, type: 'radio', enabled: settings.codexEnabled === true,
+            checked: settings.codexQuotaPeriod === value,
+            click: item => {
+              item.checked = settings.codexQuotaPeriod === value;
+              setCodexPreference('codexQuotaPeriod', value);
+            }
+          }))
+        },
+        {
+          id: 'codex-quota-label-size', label: '额度卡片大小', enabled: settings.codexEnabled === true,
+          submenu: [
+            ['standard', 'codex-quota-label-standard', '标准'],
+            ['compact', 'codex-quota-label-compact', '小巧']
+          ].map(([value, id, label]) => ({
+            id, label, type: 'radio', enabled: settings.codexEnabled === true,
+            checked: settings.codexQuotaLabelSize === value,
+            click: item => {
+              item.checked = settings.codexQuotaLabelSize === value;
+              setCodexPreference('codexQuotaLabelSize', value);
+            }
+          }))
+        },
+      ] },
       ...(codexPreferenceWarning
         ? [{ id: 'codex-preference-warning', label: codexPreferenceWarning, enabled: false }]
         : []),
-      { id: 'openai-api-usage', label: 'OpenAI API 费用与用量…', click: openApiUsage },
-      { id: 'openai-api-visible', label: '一直显示 API 本月费用', type: 'checkbox',
-        checked: settings.openaiApiAlwaysVisible === true,
-        click: item => { const enabled = item.checked; item.checked = settings.openaiApiAlwaysVisible === true;
-          setApiUsageVisible(enabled); } },
+      { type: 'separator' },
+      { id: 'openai-api-menu', label: 'OpenAI API', submenu: [
+        { id: 'openai-api-usage', label: 'OpenAI API 费用与用量…', click: openApiUsage },
+        { id: 'openai-api-visible', label: '显示 API 本月费用卡', type: 'checkbox',
+          checked: settings.openaiApiAlwaysVisible === true,
+          click: item => { const enabled = item.checked; item.checked = settings.openaiApiAlwaysVisible === true;
+            setApiUsageVisible(enabled); } }
+      ] },
       ...(settings.codexEnabled ? [{ id: 'codex-status', label: 'Codex 状态', submenu: [
         ...(codexNotice ? [{ label: codexNotice.text, enabled: false }, { type: 'separator' }] : []),
         ...bindCodexMenu(buildCodexMenu(codexCompanion?.getSnapshot(), codexNow()))
@@ -1337,10 +1402,6 @@ function menuTemplate() {
       { id: 'notes-default-tab', label: '默认打开', submenu: [['note', '便签'], ['todo', '待办']].map(([value, label]) => ({
         id: `notes-default-${value}`, label, type: 'radio', checked: (settings.notesDefaultTab === 'note' ? 'note' : 'todo') === value,
         click: item => { item.checked = (settings.notesDefaultTab === 'note' ? 'note' : 'todo') === value; setNotesDefaultTab(value); }
-      })) },
-      { id: 'notes-appearance', label: '外观', submenu: [['system', '跟随系统'], ['light', '浅色'], ['dark', '深色']].map(([value, label]) => ({
-        id: `notes-appearance-${value}`, label, type: 'radio', checked: (settings.notesAppearance || 'light') === value,
-        click: item => { item.checked = (settings.notesAppearance || 'light') === value; setNotesAppearance(value); }
       })) }
     ] },
     { type: 'separator' },
@@ -1365,7 +1426,7 @@ function menuTemplate() {
         click: () => edgeTuck?.getPresentation().mode === 'hidden' ? restorePet() : hidePet() }
     ] },
     { type: 'separator' },
-    { label: '尺寸', submenu: sizeMenu() },
+    { label: '球球尺寸', submenu: sizeMenu() },
     {
       id: 'color-mode', label: '界面配色', submenu: [
         { id: 'color-standard', label: '标准配色', type: 'radio', checked: settings.colorMode !== 'accessible',
@@ -1373,7 +1434,7 @@ function menuTemplate() {
         { id: 'color-accessible', label: '色弱友好（高对比）', type: 'radio', checked: settings.colorMode === 'accessible',
           click: () => setColorMode('accessible') },
         { type: 'separator' },
-        { id: 'color-appearance', label: '色弱友好外观', enabled: settings.colorMode === 'accessible',
+        { id: 'color-appearance', label: '外观（所有窗口）',
           submenu: [['system', '跟随系统'], ['light', '浅色'], ['dark', '深色']].map(([value, label]) => ({
             id: `color-appearance-${value}`, label, type: 'radio', checked: settings.codexQuotaAppearance === value,
             click: () => setInterfaceAppearance(value)
@@ -1516,13 +1577,6 @@ async function finishSmokeTest() {
         )()`));
         if (shape === 'aurora-cloud') await waitFor(() => editor.webContents.executeJavaScript(
           "Boolean(document.querySelector('#preview-ball .eb-rive-aurora.ready'))"));
-        if (shape === 'aurora-cloud') {
-          chatWindow.show({ messages: [] });
-          await waitFor(async () => chatWindow.getWindow()?.webContents.executeJavaScript(
-            "Boolean(document.querySelector('#chat-avatar .eb-rive-aurora.ready'))").catch(() => false));
-          chatWindow.hide();
-          process.stdout.write('PET_CUSTOMIZE_CHAT_AVATAR_OK\n');
-        }
         if (shape !== 'aurora-cloud') {
           assert.equal(await editor.webContents.executeJavaScript(`(() => {
             const icon = document.querySelector('[data-shape="${shape}"] .shape-art svg');
@@ -1556,10 +1610,10 @@ async function finishSmokeTest() {
         }
       }
       process.stdout.write('PET_CUSTOMIZE_RECOMMENDED_COLORS_OK\n');
-      await require('./scripts/verify-aurora-six-lobe').verifyAuroraSixLobe({
+      await require('./scripts/verify-aurora-six-lobe').verifyAuroraSixLobe({ publicBuild: true,
         editor, pet: petWindow, chatWindow, getSettings: () => settings,
         readSettings: () => loadSettings(settingsFile), restore: value => {
-          settings = value; persistSettings(); customizationPreviewAppearance = null;
+          settings = value; persistSettings();
           sendCompanionSettings(); chatWindow?.syncAppearance(); return true;
         }, screen, monitor: activityMonitor, setSize: setPetSize, dock: dockPet,
         restoreEdge: () => edgeTuck.restore(), getPresentation: () => edgeTuck.getPresentation()
@@ -1719,6 +1773,14 @@ async function finishSmokeTest() {
       assert.equal(await petWindow.webContents.executeJavaScript(
         "document.querySelector('#pet > svg')?.style.opacity"), '0.58');
       assert.equal(settings.customization.appearance.idleEyes, initialIdleEyes);
+      await require('./scripts/verify-customize-unified').verifyCustomizeUnified({
+        pet: petWindow, editor: customizationWindow, chatWindow, open: openCustomization, setSize: setPetSize,
+        getWindow: () => customizationWindow, getSettings: () => settings,
+        readSettings: () => loadSettings(settingsFile),
+        setSaveFailure: value => { smokeCustomizationSaveFailure = Boolean(value); },
+        restore: value => { settings = value; persistSettings();
+          sendCompanionSettings(); chatWindow.syncAppearance(); }
+      });
       process.stdout.write('PET_CUSTOMIZE_SMOKE_OK\n');
       app.exit(0);
       return;
@@ -1765,6 +1827,18 @@ async function finishSmokeTest() {
       return;
     }
 
+    if (IS_CODEX_STATUS_SMOKE_ONLY) {
+      await require('./scripts/verify-codex-status-v20').verifyCodexStatusV20({
+        pet: petWindow, quotaLabel, details: codexDetails, BrowserWindow, screen,
+        prepare: initializeCodexCompanion, getController: () => codexCompanion,
+        getSettings: () => ({ ...settings }), openDetails: openCodexDetails,
+        setQuotaPreference: setCodexPreference,
+        setColorMode: mode => { settings.colorMode = mode; colorModes.sync(); },
+        getSnapshot: () => codexCompanion.getSnapshot(),
+        setEnabled: async enabled => { settings.codexEnabled = enabled; await codexCompanion.setEnabled(enabled); }
+      });
+      app.exit(0); return;
+    }
     if (!IS_CODEX_SMOKE_ONLY) {
       await require('./scripts/verify-companion').verifyCompanion({
         pet: petWindow, bubble, dialogue, monitor: activityMonitor, screen, BrowserWindow,
@@ -1986,6 +2060,7 @@ function createPetWindow() {
     hideBubble();
     if (!isCurrentPetWindow()) return;
     safelyInvokeWindow('隐藏时额度标签隐藏', () => quotaLabel?.hide());
+    safelyInvokeWindow('隐藏时 Codex 详情隐藏', () => codexDetails?.close());
     safelyInvokeWindow('隐藏时 API 卡片隐藏', () => apiUsageLabel?.hide());
     if (!isCurrentPetWindow()) return;
     safelyInvokeWindow('隐藏时对白清理', () => dialogue?.dismiss());
@@ -2012,6 +2087,7 @@ function createPetWindow() {
     destroyBubbleSafely();
     if (!isCurrentPetWindow()) return;
     safelyInvokeWindow('关闭时额度标签销毁', () => quotaLabel?.destroy());
+    safelyInvokeWindow('关闭时 Codex 详情销毁', () => codexDetails?.destroy());
     safelyInvokeWindow('关闭时 API 卡片销毁', () => apiUsageLabel?.destroy());
     thoughts?.destroy();
     if (!isCurrentPetWindow()) return;
@@ -2051,6 +2127,11 @@ function registerIpc() {
     return shell.openExternal(availableUpdate.url).then(() => true, () => false);
   });
   ipcMain.on('pet:about-close', event => { if (fromAboutWindow(event)) aboutWindow.close(); });
+  ipcMain.on('pet:quota-label-detail', (event, action, period) => { if (fromQuotaLabel(event)) openCodexDetails(action, period); });
+  ipcMain.on('pet:codex-details-close', event => { if (codexDetails?.owns(event)) { codexDetailReturn = null; codexDetails.close(); } });
+  ipcMain.on('pet:codex-details-open', (event, action, period) => { if (codexDetails?.owns(event)) openCodexDetails(action, period); });
+  ipcMain.on('pet:codex-details-thread', (event, id, turnId) => { if (codexDetails?.owns(event)) void openCodexDetailThread(id, turnId); });
+  ipcMain.on('pet:codex-details-resize', (event, height) => { if (codexDetails?.owns(event)) codexDetails.resize(height); });
   ipcMain.handle('pet:api-usage-get', event => fromApiUsageWindow(event, false) ? apiUsage.getState() : null);
   ipcMain.handle('pet:api-usage-connect', (event, value) => fromApiUsageWindow(event) ? apiUsage.connect(value) : null);
   ipcMain.handle('pet:api-usage-refresh', event => fromApiUsageWindow(event) ? apiUsage.refresh() : null);
@@ -2064,11 +2145,6 @@ function registerIpc() {
     ? { customization: effectiveCustomization(settings.customization),
       startupAppearance: effectiveAppearance(settings.startupAppearance),
       size: settings.size } : null);
-  ipcMain.on('pet:customization-preview', (event, appearance) => {
-    if (!fromCustomizationWindow(event) || screenLocked || !appearance || typeof appearance !== 'object') return;
-    customizationPreviewAppearance = effectiveAppearance(appearance);
-    chatWindow?.syncAppearance();
-  });
   ipcMain.handle('pet:customization-save', (event, value, setAsStartupDefault) => {
     if (!fromCustomizationWindow(event) || screenLocked) return false;
     return saveCustomization(value, setAsStartupDefault);
@@ -2294,6 +2370,8 @@ async function bootstrap() {
     }
   });
   settings = loadSettings(settingsFile);
+  // The existing saved appearance wins over per-page legacy preferences.
+  if (nativeTheme) nativeTheme.themeSource = settings.codexQuotaAppearance;
   settings.customization = { ...settings.customization, appearance: settings.startupAppearance };
   notesCompanion = createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialog,
     organizer: createNotesOrganizer({ workspaceDir: path.join(app.getPath('userData'), 'notes-workspace') }),
@@ -2306,34 +2384,13 @@ async function bootstrap() {
     isSuppressed: () => screenLocked || isQuitting,
     onComplete: () => { if (!screenLocked && !isQuitting) sendCommand({ command: 'again', motion: 'hop' }); },
     onError: error => writeError('便签与待办', error) });
-  nativeTheme?.on('updated', () => { if (settings.notesAppearance === 'system') notesCompanion?.syncAppearance(); });
+  nativeTheme?.on('updated', () => { if (settings.codexQuotaAppearance === 'system') notesCompanion?.syncAppearance(); });
   chatWindow = createChatWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
-    getAppearance: () => effectiveAppearance(customizationPreviewAppearance || settings?.customization?.appearance),
+    getAppearance: () => effectiveAppearance(settings?.customization?.appearance),
     getAvatarImage: async appearance => {
       const key = JSON.stringify(appearance);
       for (let attempt = 0; attempt < 20; attempt++) {
-        const preview = customizationPreviewAppearance && customizationWindow && !customizationWindow.isDestroyed()
-          ? customizationWindow : null;
-        if (preview) {
-          const image = await preview.webContents.executeJavaScript(`(() => {
-            const target = document.querySelector('#preview-ball');
-            const canvas = target?.querySelector(':scope > .eb-rive-aurora.ready');
-            if (!canvas || target.dataset.avatarAppearance !== ${JSON.stringify(key)}) return null;
-            const box = target.getBoundingClientRect();
-            const source = canvas.getBoundingClientRect();
-            const crop = document.createElement('canvas');
-            crop.width = crop.height = 96;
-            const context = crop.getContext('2d');
-            context.globalAlpha = Number(getComputedStyle(canvas).opacity);
-            context.drawImage(canvas,
-              (box.left - source.left) / source.width * canvas.width,
-              (box.top - source.top) / source.height * canvas.height,
-              box.width / source.width * canvas.width,
-              box.height / source.height * canvas.height, 0, 0, 96, 96);
-            return crop.toDataURL('image/png');
-          })()`).catch(() => null);
-          if (image) return image;
-        } else if (petWindow && !petWindow.isDestroyed()) {
+        if (petWindow && !petWindow.isDestroyed()) {
           const ready = await petWindow.webContents.executeJavaScript(`(() => {
             const target = document.querySelector('#pet');
             return target?.dataset.avatarAppearance === ${JSON.stringify(key)} &&
@@ -2376,6 +2433,7 @@ async function bootstrap() {
     getObstacle: quotaObstacleBounds,
     getSize: () => settings?.codexQuotaLabelSize,
     getAppearance: () => settings?.codexQuotaAppearance,
+    getSuppressed: () => codexDetails?.isVisible() === true,
     getPresentation: () => ({
       ...edgeTuck?.getPresentation(),
       shape: settings?.customization?.appearance?.shape
@@ -2389,6 +2447,10 @@ async function bootstrap() {
     getPresentation: () => ({ ...edgeTuck?.getPresentation(), shape: settings?.customization?.appearance?.shape }),
     onOpenDetails: openApiUsage, alwaysOnTop: settings.alwaysOnTop,
     onError: error => writeError('API 常驻卡片', error) });
+  codexDetails = createCodexDetailsWindow({ BrowserWindow, screen,
+    getAnchor: () => quotaLabel?.getWindow()?.getBounds() || petWindow?.getBounds(),
+    onVisibilityChange: () => safelyInvokeWindow('Codex 详情显隐时额度卡重排', () => quotaLabel?.reposition()),
+    alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('Codex 详情窗口', error) });
   edgeNoticeWindow = createEdgeNoticeWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('边缘提示窗口', error) });
   edgeNotice = createEdgeNotice({ now: () => edgeNoticeNow(), onChange: payload => {
@@ -2416,6 +2478,7 @@ async function bootstrap() {
     safelyInvokeWindow('锁屏时暂停活动监测', () => activityMonitor.pause());
     hideBubble();
     safelyInvokeWindow('锁屏时额度标签隐藏', () => quotaLabel?.hide());
+    safelyInvokeWindow('锁屏时 Codex 详情隐藏', () => codexDetails?.close());
     safelyInvokeWindow('锁屏时 API 卡片隐藏', () => apiUsageLabel?.hide());
     safelyInvokeWindow('锁屏时对白清理', () => dialogue.dismiss());
   };
@@ -2440,7 +2503,7 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
   app.quit();
 } else {
-  app.on('second-instance', (_event, argv) => {
+  app.on('second-instance', () => {
     if (settings) restorePet();
     if (argv.includes('--notes-preview')) notesCompanion?.openPanel();
   });
@@ -2490,6 +2553,7 @@ if (!hasSingleInstanceLock) {
     safelyInvokeWindow('退出时活动监测清理', () => activityMonitor?.stop());
     destroyBubbleSafely();
     safelyInvokeWindow('退出时额度标签销毁', () => quotaLabel?.destroy());
+    safelyInvokeWindow('退出时 Codex 详情销毁', () => codexDetails?.destroy());
     safelyInvokeWindow('退出时 API 卡片销毁', () => apiUsageLabel?.destroy());
     thoughts?.destroy();
     safelyInvokeWindow('退出时对白清理', () => dialogue?.dismiss());

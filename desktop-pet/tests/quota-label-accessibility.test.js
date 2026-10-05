@@ -7,23 +7,26 @@ const vm = require('node:vm');
 function renderer() {
   let receive;
   const element = () => ({
-    dataset: {}, children: [], attributes: {}, _text: '',
+    dataset: {}, children: [], attributes: {}, listeners: {}, _text: '',
     set textContent(value) { this._text = String(value); this.children = []; },
     get textContent() { return this.children.length ? this.children.map(child => child.textContent).join('') : this._text; },
     replaceChildren(...children) { this._text = ''; this.children = children; },
-    setAttribute(name, value) { this.attributes[name] = value; }
+    appendChild(child) { this.children.push(child); return child; },
+    setAttribute(name, value) { this.attributes[name] = value; },
+    addEventListener(name, callback) { this.listeners[name] = callback; }
   });
   const nodes = Object.fromEntries(['quota-label', 'status', 'summary', 'items', 'overflow',
     'reset-time', 'reset-credits', 'compact-product', 'compact-period', 'secondary-quota',
     'secondary-period', 'secondary-value', 'secondary-progress', 'secondary-reset',
-    'extra-credits', 'credits-balance', 'credits-unit'].map(id => [id, element()]));
+    'extra-credits', 'credits-balance', 'credits-unit', 'codex-expanded'].map(id => [id, element()]));
   vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8'), {
     document: { documentElement: element(), getElementById: id => nodes[id], createElement: element },
-    window: { addEventListener() {}, petQuotaLabel: { onModel(callback) { receive = callback; } } }
+    window: { petCreditBalanceText: require('../credit-balance'), addEventListener() {}, petQuotaLabel: { onModel(callback) { receive = callback; } } }
   });
   return { nodes, receive };
 }
 const item = (remaining, windowMinutes = 300) => ({ label: 'Codex', remaining, windowMinutes });
+const descendants = root => root.children.flatMap(child => [child, ...descendants(child)]);
 
 test('点数按原字符串准确格式化，明确零与未知/无限/过期分开，缺失不加内容或推断套餐', () => {
   const { nodes, receive } = renderer();
@@ -87,4 +90,28 @@ test('小巧摘要的颜色和状态只描述实际显示的周期，另一周�
   receive({ state: 'disconnected', items: [] });
   assert.equal(nodes.summary.dataset.severity, 'normal');
   assert.equal(nodes['secondary-value'].textContent, '');
+});
+
+test('v20 展开卡保留低额度文字替代及进度朗读，未知任务数量与零值分开', () => {
+  const { nodes, receive } = renderer();
+  const show = activity => receive({ state:'ready',size:'compact',expanded:true,
+    items:[item(5),item(74,10080)],activity,resetCreditsAvailable:0,
+    extraCredits:{state:'balance',balance:'2480'} });
+  show({runningCount:null,unreadCount:0});
+  let all=descendants(nodes['codex-expanded']);
+  const byClass = className => all.filter(node => node.className?.split(' ').includes(className));
+  assert.equal(byClass('v20-caption')[0].textContent,'本周期剩余');
+  assert.equal(byClass('v20-value')[0].textContent,'5%');
+  assert.equal(byClass('v20-value')[0].title,'紧张');
+  assert.equal(byClass('v20-progress')[0].attributes['aria-valuetext'],'5%，紧张');
+  assert.deepEqual(byClass('v20-count').map(node=>node.textContent),['—','0']);
+  assert.match(all.find(node=>node.dataset.action==='tasks').attributes['aria-label'],/暂未提供/);
+  assert.match(all.find(node=>node.dataset.action==='results').attributes['aria-label'],/0 项/);
+  assert.equal(all.find(node=>node.dataset.action==='opportunities').textContent,'重置机会 0 次');
+  assert.equal(byClass('v20-credit')[0].textContent,'剩余额度 2,480.00');
+  assert.match(byClass('v20-credit')[0].title,/与本周期额度分别统计/);
+  show({runningCount:3,unreadCount:100});
+  all=descendants(nodes['codex-expanded']);
+  assert.deepEqual(byClass('v20-count').map(node=>node.textContent),['3','99+']);
+  assert.match(all.find(node=>node.dataset.action==='results').attributes['aria-label'],/100 项/);
 });
