@@ -62,6 +62,7 @@ fs.mkdirSync(out, { recursive: true });
     await page.locator('[data-notes-demo-reminder]').click();
     await desktop().getByRole('button', { name: '稍后10分钟', exact: true }).click();
     await page.locator('[data-notes-demo-reset]').click();
+    await page.waitForFunction(() => { const frame = document.querySelector('[data-notes-frame="panel"]'); return frame.contentWindow.location.href === frame.src && frame.contentDocument.readyState === 'complete' && frame.contentDocument.querySelectorAll('#records .record').length === 3; });
     await panel.locator('#hide-panel').click(); await page.locator('[data-notes-reopen-panel]').click();
     report.interactions.push('native notes cross-frame save, organize preview/apply/undo, close/reopen, reminder snooze, reset');
     await page.locator('#codex').scrollIntoViewIfNeeded();
