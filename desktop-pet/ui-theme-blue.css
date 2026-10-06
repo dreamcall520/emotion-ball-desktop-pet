@@ -1,0 +1,23 @@
+/* v2 R5: keep green's structure; brighten accents with a saturated sky blue. */
+:root[data-ui-theme=blue][data-color-mode=standard]{--accent:#0988f7;--accent-text:#0863e8;--stripe:#0988f7;--selected:#e2f4ff;--selected-line:#abd4f1;--primary:#e2f4ff;--primary-hover:#d8f0ff;--primary-text:#0863e8;--completed-fill:#0988f7}
+:root[data-ui-theme=blue][data-color-mode=standard][data-appearance=dark]{--accent:#7bd3ff;--accent-text:#a7e1ff;--stripe:#7bd3ff;--selected:#214866;--selected-line:#4b88b0;--primary:#214866;--primary-hover:#2b5c80;--primary-text:#c5ebff;--completed-fill:#2783bb}
+:root[data-ui-theme=blue][data-color-mode=standard] :is(.tabs .active,.filter-trigger[aria-expanded=true],.filter-popover button[aria-current=true],.filter-popover .view-check,.filter-popover .manage-entry,.category-row .icon-button:hover,.category-add,.move-option:has(input:checked),.category-badge,.query-status[data-connected=true],.note-identity,.reminder-label,.reminder-count,.note-status.is-open){color:var(--accent-text)}
+:root[data-ui-theme=blue][data-color-mode=standard] :is(.pin-button[aria-pressed=true],.favorite-button[aria-pressed=true],.note-tools .pinned-icon){color:var(--accent)}
+:root[data-ui-theme=blue][data-color-mode=standard] .tabs .active{background:var(--selected);border-color:var(--selected-line)}
+:root[data-ui-theme=blue][data-color-mode=standard] .move-option input{accent-color:var(--accent-text)}
+:root[data-ui-theme=blue][data-color-mode=standard] .note-identity i{background:var(--stripe)}
+:root[data-ui-theme=blue][data-color-mode=standard] body[data-mode=note]{--stripe:var(--accent)}
+:root[data-ui-theme=blue][data-color-mode=standard] .note-status.is-open{background:#e5f1f8}
+:root[data-ui-theme=blue][data-color-mode=standard][data-appearance=dark] .note-status.is-open{background:#234357}
+:root[data-ui-theme=blue][data-color-mode=standard] .note-status.is-open::before{background:var(--accent)}
+:root[data-ui-theme=blue][data-color-mode=standard] .check.done{color:#fff}
+:root[data-ui-theme=blue][data-color-mode=standard] .check.done::before{background:var(--completed-fill);border-color:var(--completed-fill)}
+:root[data-ui-theme=blue][data-color-mode=standard][data-appearance=dark] .check.done{background:var(--completed-fill);border-color:var(--completed-fill)}
+:root[data-ui-theme=blue][data-color-mode=standard] :is(.primary,.send-button,.actions-list .dialog-footer .primary):enabled{background:var(--primary);color:var(--primary-text)}
+:root[data-ui-theme=blue][data-color-mode=standard] :is(.primary,.send-button,.actions-list .dialog-footer .primary):hover:enabled{background:var(--primary-hover)}
+
+/* Match the preview navigation: clear blue on a pale fill, with lighter text weight. */
+:root[data-ui-theme=blue][data-color-mode=standard]:not([data-appearance=dark]) :is(.tabs .active,.filter-trigger[aria-expanded=true],.filter-popover button[aria-current=true]){color:var(--accent-text);background:#eaf6ff;font-weight:500}
+:root[data-ui-theme=blue][data-color-mode=standard]:not([data-appearance=dark]) .tabs .active{border-color:#c4e3f8}
+
+:root[data-ui-theme=blue][data-color-mode=standard] #progress-text .completed-count{color:var(--accent-text)}

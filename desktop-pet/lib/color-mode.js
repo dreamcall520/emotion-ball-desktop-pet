@@ -1,11 +1,11 @@
-function createColorModeManager({ getMode, getAppearance = () => 'system' }) {
+function createColorModeManager({ getMode, getAppearance = () => 'system', getTheme = () => 'green' }) {
   const windows = new Set();
   const send = win => {
     if (win.isDestroyed()) return;
     try {
       const appearance = getAppearance();
       win.webContents.send('pet:color-mode', getMode() === 'accessible' ? 'accessible' : 'standard',
-        ['light', 'dark'].includes(appearance) ? appearance : 'system');
+        ['light', 'dark'].includes(appearance) ? appearance : 'system', getTheme() === 'blue' ? 'blue' : 'green');
     } catch (_) {
       // A satellite window can close between the liveness check and send.
     }

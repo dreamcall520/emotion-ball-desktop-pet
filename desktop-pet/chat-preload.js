@@ -3,8 +3,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('qiuqiuChat', {
   onColorMode: callback => {
     if (typeof callback !== 'function') return () => {};
-    const listener = (_event, value, appearance) => callback(value === 'accessible' ? 'accessible' : 'standard',
-      ['light', 'dark'].includes(appearance) ? appearance : 'system');
+    const listener = (_event, value, appearance, theme) => callback(value === 'accessible' ? 'accessible' : 'standard',
+      ['light', 'dark'].includes(appearance) ? appearance : 'system', theme === 'blue' ? 'blue' : 'green');
     ipcRenderer.on('pet:color-mode', listener);
     return () => ipcRenderer.removeListener('pet:color-mode', listener);
   },

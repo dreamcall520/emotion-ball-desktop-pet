@@ -10,7 +10,7 @@ const M = require('../lib/notes-model');
 const { createNotesCompanion, visibleBounds } = require('../lib/notes-companion');
 const { petVisualBounds } = require('../lib/pet-visual-bounds');
 
-function fixture(t, initial, getDefaultTab, organizer, getAppearance) {
+function fixture(t, initial, getDefaultTab, organizer, getAppearance, getColorMode) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qiu-notes-window-'));
   const file = path.join(dir, 'notes.json');
   if (initial) fs.writeFileSync(file, JSON.stringify(initial));
@@ -61,7 +61,7 @@ function fixture(t, initial, getDefaultTab, organizer, getAppearance) {
     clipboard: { writeText: text => clipboard.push(text) },
     dialog: { showSaveDialog: async () => ({ canceled: true }), showMessageBox: async (...args) => { dialogs.push(args.at(-1)); dialogCalls.push(args); return dialogResult; } },
     getPetBounds: () => pet.destroyed ? null : pet.getBounds(), getPetWindow: () => pet,
-    getPetPresentation: () => ({ shape: 'aurora-cloud' }), getDefaultTab, getAppearance, organizer, onError: error => errors.push(error),
+    getPetPresentation: () => ({ shape: 'aurora-cloud' }), getDefaultTab, getAppearance, getColorMode, organizer, onError: error => errors.push(error),
     onComplete: id => completions.push(id), now: () => clock,
     setTimer: fn => { tick = fn; return { unref() {} }; }, clearTimer: () => { tick = null; }, closeTimeoutMs: 50 });
   t.after(async () => {
@@ -481,4 +481,21 @@ test('notes appearance updates live panel/note/reminder windows and newly opened
   appearance='dark';f.controller.syncAppearance();for(const win of [panel,noteWindow,reminder]){assert.equal(win.backgroundColor,'#182125');assert.deepEqual(win.sent.filter(([c])=>c==='notes:appearance').at(-1),['notes:appearance','dark']);assert.equal((await f.call(win,'notes:load')).notesAppearance,'dark')}
   const extra=M.newNote('new','',f.now());store.update(s=>{s.notes.push(extra);return s});f.controller.openNote(extra.id);assert.equal(f.controller.getWindows().notes.at(-1).options.backgroundColor,'#182125');
   appearance='light';f.controller.syncAppearance();assert.equal(noteWindow.backgroundColor,'#F7FAF9');
+});
+
+
+test('accessible note window backing follows both appearance and contrast mode', async t => {
+  let appearance = 'dark', mode = 'accessible';
+  const f = fixture(t, undefined, undefined, undefined, () => appearance, () => mode);
+  const panel = f.ready(f.controller.openPanel());
+  assert.equal(panel.options.backgroundColor, '#101820');
+  const note = M.newNote('theme', '', f.now()), todo = M.newTodo('due', f.now());
+  Object.assign(todo, { reminderAt: f.now()-1, reminderState: 'pending' });
+  f.controller.getStore().update(s => { s.notes.push({ ...note, desktopOpen: true }); s.todos.push(todo); return s; });
+  const windows = [panel, f.ready(f.controller.getWindows().notes[0]), f.ready(f.controller.getWindows().reminder)];
+  for (const win of windows) assert.equal(win.options.backgroundColor, '#101820');
+  appearance = 'light'; f.controller.syncAppearance();
+  for (const win of windows) assert.equal(win.backgroundColor, '#FFFFFF');
+  mode = 'standard'; f.controller.syncAppearance();
+  for (const win of windows) assert.equal(win.backgroundColor, '#F7FAF9');
 });

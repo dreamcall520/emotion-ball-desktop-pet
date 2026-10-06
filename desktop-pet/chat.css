@@ -211,3 +211,5 @@ textarea::placeholder { color: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
   .composer::before, .composer::after { --input-beam-angle: 261deg; animation: none; }
 }
+
+:root[data-color-mode="accessible"] .composer::before,:root[data-color-mode="accessible"] .composer::after{background:none;animation:none}

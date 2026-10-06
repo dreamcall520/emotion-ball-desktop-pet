@@ -1,0 +1,50 @@
+/* Approved R3 blue palette differences only. Base layout remains in chat.css.
+ * :where keeps selector weight identical to the reviewed stylesheet.
+ * Standard mode is explicit so green and accessible modes keep their palette. */
+:root:where([data-ui-theme="blue"][data-color-mode="standard"]) {
+  --panel-wash: linear-gradient(180deg, #e6f5ff 0, #f4fbff 64px, #fff 130px);
+  --panel-edge: #e1ebf1;
+  --raised: #f5f7fa;
+  --user: #eaf6ff;
+  --accent: #356bbf;
+  --accent-text: #356bbf;
+  --primary: #e6f5ff;
+  --primary-hover: #d8efff;
+  --disabled: #eef0f2;
+  --disabled-text: #9a9fa5;
+  --hover: #eaf6ff;
+}
+@media (prefers-color-scheme: dark) {
+:root:where([data-ui-theme="blue"][data-color-mode="standard"]):not([data-accessible-appearance="light"]) {
+  --panel: #141c25;
+  --panel-wash: linear-gradient(180deg, #203347 0, #1a2938 52px, #141c25 106px);
+  --text: #eef1f5;
+  --line: #303d4c;
+  --panel-edge: #303d4c;
+  --surface: #17222e;
+  --raised: #1b2734;
+  --user: #1e354c;
+  --accent: #98caff;
+  --accent-text: #b3d9ff;
+  --primary: #27486b;
+  --primary-hover: #305780;
+  --disabled: #263544;
+  --hover: #1e354c;
+}
+}
+:root:where([data-ui-theme="blue"][data-color-mode="standard"])[data-accessible-appearance="dark"] {
+  --panel: #141c25;
+  --panel-wash: linear-gradient(180deg, #203347 0, #1a2938 52px, #141c25 106px);
+  --text: #eef1f5;
+  --line: #303d4c;
+  --surface: #17222e;
+  --panel-edge: #303d4c;
+  --raised: #1b2734;
+  --user: #1e354c;
+  --accent: #98caff;
+  --accent-text: #b3d9ff;
+  --primary: #27486b;
+  --primary-hover: #305780;
+  --disabled: #263544;
+  --hover: #1e354c;
+}

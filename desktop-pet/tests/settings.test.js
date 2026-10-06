@@ -17,6 +17,42 @@ test('无效设置回退默认值', () => {
   );
 });
 
+test('主题色兼容旧设置且独立持久化，不改写形象及既有外观偏好', t => {
+  assert.equal(DEFAULTS.uiTheme, 'green');
+  assert.equal(normalizeSettings({}).uiTheme, 'green');
+  for (const uiTheme of [undefined, null, '', 'Green', 'blue ', 'mint', 1, true, {}, []]) {
+    assert.equal(normalizeSettings({ uiTheme }).uiTheme, 'green');
+  }
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emotion-ui-theme-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'settings.json');
+  const legacy = {
+    notesAppearance: 'dark', notesDefaultTab: 'todo', codexQuotaAppearance: 'light', colorMode: 'accessible',
+    customization: { appearance: { shape: 'square', bodyColor: '#123456', eyeColor: '#ABCDEF' } },
+    startupAppearance: { shape: 'cloud', bodyColor: '#654321' },
+    appearancePresets: [
+      { id: '00000000-0000-4000-8000-000000000001', name: '原有方糖', appearance: { shape: 'square', bodyColor: '#234567' } },
+      { id: '00000000-0000-4000-8000-000000000002', name: '原有幻彩', appearance: { shape: 'aurora-cloud', auroraStyle: 'simple', auroraTransparency: 42 } }
+    ]
+  };
+  fs.writeFileSync(file, JSON.stringify(legacy));
+  const original = loadSettings(file), before = JSON.stringify(original);
+  assert.equal(original.uiTheme, 'green', '旧文件没有主题色字段时沿用薄荷绿');
+  for (const uiTheme of ['green', 'blue']) for (const colorMode of ['standard', 'accessible']) for (const codexQuotaAppearance of ['system', 'light', 'dark']) {
+    const saved = saveSettings(file, { ...original, uiTheme, colorMode, codexQuotaAppearance });
+    const loaded = loadSettings(file);
+    assert.deepEqual(loaded, saved);
+    assert.equal(loaded.uiTheme, uiTheme);
+    assert.equal(loaded.colorMode, colorMode);
+    assert.equal(loaded.codexQuotaAppearance, codexQuotaAppearance);
+    for (const key of ['customization', 'startupAppearance', 'appearancePresets', 'notesAppearance', 'notesDefaultTab']) {
+      assert.deepEqual(loaded[key], original[key], '切换主题保留 ' + key);
+    }
+  }
+  assert.equal(JSON.stringify(original), before, '保存主题不修改传入的原设置');
+  assert.equal(fs.existsSync(file + '.tmp'), false);
+});
+
 test('便签待办默认页面只接受两个页签，保存后可回读', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emotion-notes-default-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -65,6 +101,7 @@ test('损坏文件回退且有效设置可回读', t => {
     keepAwake: true,
     bubblesEnabled: true,
     colorMode: 'standard',
+    uiTheme: 'green',
     chatModel: 'auto',
     notesDefaultTab: 'note', notesAppearance: 'light',
     customization: DEFAULTS.customization,
@@ -87,7 +124,7 @@ test('损坏文件回退且有效设置可回读', t => {
 test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
   assert.deepEqual(normalizeSettings({ size: 'small', x: -102.3, y: 81.8, alwaysOnTop: false }), {
     size: 'small', x: -102, y: 82, alwaysOnTop: false,
-    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', chatModel: 'auto', notesDefaultTab: 'note', notesAppearance: 'light', customization: DEFAULTS.customization,
+    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', uiTheme: 'green', chatModel: 'auto', notesDefaultTab: 'note', notesAppearance: 'light', customization: DEFAULTS.customization,
     startupAppearance: DEFAULTS.startupAppearance,
     appearancePresets: [], codexEnabled: false,
     codexTaskNameInAlerts: true, codexQuotaAlwaysVisible: true,

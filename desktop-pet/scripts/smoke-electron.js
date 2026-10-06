@@ -60,6 +60,11 @@ function runSmokeTest() {
       cleanup();
       try {
         assert.equal(code, 0, output);
+        if (process.env.PET_SMOKE_UI_THEME_ONLY === '1') {
+          assert.match(output, /PET_UI_THEME_OK/);
+          assert.doesNotMatch(output, /Uncaught|ERR_FILE_NOT_FOUND|did-fail-load/i);
+          resolve(output); return;
+        }
         if (process.env.PET_SMOKE_CODEX_STATUS_ONLY === '1') {
           assert.match(output, /PET_CODEX_STATUS_V20_OK/);
           assert.doesNotMatch(output, /Uncaught|ERR_FILE_NOT_FOUND|did-fail-load/i);

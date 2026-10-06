@@ -20,6 +20,9 @@ function renderer(save,mode='note'){
   return {...window.check,clipboard,nodes,bridge,document};
 }
 const turn=()=>new Promise(resolve=>setImmediate(resolve));
+const menuItem=(r,id,label)=>{const item=r.nodes.get(id).children.find(n=>n.children?.[1]?.textContent===label);assert.ok(item,`${id}: ${label}`);return item};
+const menuLabels=(r,id)=>Array.from(r.nodes.get(id).children.filter(n=>n.children?.some(c=>c.className==='view-count')),n=>`${n.children[1].textContent} ${n.children[2].textContent}`);
+const manageEntry=r=>r.nodes.get('category-menu').children[0]?.children?.find(n=>n.id==='manage-categories');
 
 test('native save is awaited and newer input survives the in-flight save',async()=>{
   const pending=[];const r=renderer((next,revision)=>new Promise(resolve=>pending.push(()=>resolve({ok:true,state:{...next,revision:revision+1}}))));
@@ -235,23 +238,65 @@ test('quick textarea retains long multiline input on write failure and keeps not
   r.nodes.get('todos-tab').onclick();input.value='字'.repeat(201);await form.onsubmit({preventDefault(){}});assert.equal(saves,1);assert.equal(input.value.length,201);assert.match(r.nodes.get('toast').children[0].textContent,/200 字/);
 });
 
-test('category filters exclude trash, fixed views span categories, and desktop windows stay open',async()=>{
-  const r=renderer(async()=>assert.fail('筛选分类不能保存或关闭窗口'),'panel');await r.start();let s=M.addCategory(r.state(),'工作'),category=s.categories[0].id;
-  const notes=[M.newNote('工作便签','正文'),M.newNote('未分类便签','正文'),M.newNote('删除便签','正文')];notes[0].categoryId=category;notes[0].desktopOpen=true;notes[0].favorite=true;notes[1].favorite=true;notes[2].categoryId=category;notes[2].deletedAt=notes[2].createdAt;s.notes=notes;r.acceptState(s);r.nodes.get('notes-tab').onclick();
-  const menu=r.nodes.get('filter-menu'),categoryButton=menu.children.find(b=>b.children?.[1]?.textContent==='工作');assert.equal(categoryButton.children[2].textContent,'1');await categoryButton.onclick();
-  assert.equal(r.nodes.get('records').children.length,1);assert.equal(r.nodes.get('group-title').textContent,'工作');assert.equal(r.state().notes[0].desktopOpen,true);assert.equal(r.nodes.get('quick-category-select').value,category);
-  r.nodes.get('filter').value='favorites';r.nodes.get('filter').onchange();assert.equal(r.nodes.get('records').children.length,2);assert.equal(r.nodes.get('quick-category-select').value,'');assert.equal(r.state().notes[0].desktopOpen,true);
+test('status and category filters intersect with reciprocal counts, including trash, without changing notes',async()=>{
+  const r=renderer(async()=>assert.fail('筛选分类不能保存或关闭窗口'),'panel');await r.start();let s=M.addCategory(r.state(),'工作');s=M.addCategory(s,'生活');const [work,life]=s.categories;
+  const notes=['工作常用','工作普通','生活常用','未分类常用','删除工作','删除生活'].map(title=>M.newNote(title,'正文'));
+  for(const i of [0,1,4])notes[i].categoryId=work.id;for(const i of [2,5])notes[i].categoryId=life.id;for(const i of [0,2,3])notes[i].favorite=true;notes[0].desktopOpen=true;for(const i of [4,5])notes[i].deletedAt=notes[i].createdAt;s.notes=notes;r.acceptState(s);r.nodes.get('notes-tab').onclick();const before=JSON.stringify(r.state());
+  assert.equal(r.nodes.get('filter-label').textContent,'状态 · 全部便签 4');assert.equal(r.nodes.get('category-filter-label').textContent,'分类 · 全部分类');
+  assert.deepEqual(menuLabels(r,'filter-menu'),['全部便签 4','收藏 3','桌面显示中 1','回收站 2']);assert.deepEqual(menuLabels(r,'category-menu'),['全部分类 4','未分类 1','工作 2','生活 1']);
+  await menuItem(r,'category-menu','工作').onclick();assert.equal(r.nodes.get('records').children.length,2);assert.equal(r.nodes.get('group-title').textContent,'全部便签 · 工作');assert.equal(r.nodes.get('quick-category-select').value,work.id);
+  assert.deepEqual(menuLabels(r,'filter-menu'),['全部便签 2','收藏 1','桌面显示中 1','回收站 1']);
+  await menuItem(r,'filter-menu','收藏').onclick();assert.equal(r.nodes.get('records').children.length,1);assert.equal(r.nodes.get('filter-label').textContent,'状态 · 收藏 1');assert.deepEqual(menuLabels(r,'category-menu'),['全部分类 3','未分类 1','工作 1','生活 1']);
+  await manageEntry(r).onclick();assert.equal(r.nodes.get('uncategorized-count').textContent,'1 条 · 固定分类');assert.equal(r.nodes.get('category-list').children[0].children[1].textContent,'2 条');r.nodes.get('category-manager-done').onclick();
+  await menuItem(r,'filter-menu','回收站').onclick();assert.equal(r.nodes.get('records').children.length,1);assert.equal(r.nodes.get('group-title').textContent,'回收站 · 工作');assert.deepEqual(menuLabels(r,'category-menu'),['全部分类 2','未分类 0','工作 1','生活 1']);
+  await menuItem(r,'category-menu','生活').onclick();assert.equal(r.nodes.get('group-title').textContent,'回收站 · 生活');assert.equal(r.nodes.get('records').children.length,1);
+  await menuItem(r,'category-menu','全部分类').onclick();assert.equal(r.nodes.get('records').children.length,2);assert.equal(JSON.stringify(r.state()),before);
 });
 
 test('quick notes inherit category, keep explicit override for another entry, and reset on switching views',async()=>{
   const r=renderer(async(next,revision)=>({ok:true,state:{...next,revision:revision+1}}),'panel');await r.start();let s=M.addCategory(r.state(),'工作');s=M.addCategory(s,'生活');r.acceptState(s);r.nodes.get('notes-tab').onclick();const [work,life]=r.state().categories;
-  r.nodes.get('filter').value='category:'+work.id;r.nodes.get('filter').onchange();r.nodes.get('quick-title').value='工作正文';assert.equal(await r.submitQuick(),true);assert.equal(r.state().notes[0].categoryId,work.id);assert.equal(r.nodes.get('filter').value,'category:'+work.id);
+  await menuItem(r,'category-menu','工作').onclick();r.nodes.get('quick-title').value='工作正文';assert.equal(await r.submitQuick(),true);assert.equal(r.state().notes[0].categoryId,work.id);assert.equal(r.nodes.get('filter').value,'all');assert.equal(r.nodes.get('category-filter-label').textContent,'分类 · 工作');
   const picker=r.nodes.get('quick-category-select');picker.value=life.id;picker.onchange();r.nodes.get('quick-title').value='生活正文';await r.submitQuick();assert.equal(r.state().notes[1].categoryId,life.id);assert.equal(picker.value,life.id);
-  r.nodes.get('filter').value='all';r.nodes.get('filter').onchange();assert.equal(picker.value,'');r.nodes.get('quick-title').value='未分类正文';await r.submitQuick();assert.equal(r.state().notes[2].categoryId,'');
+  await menuItem(r,'category-menu','全部分类').onclick();assert.equal(picker.value,'');r.nodes.get('quick-title').value='未分类正文';await r.submitQuick();assert.equal(r.state().notes[2].categoryId,'');
+  await menuItem(r,'category-menu','工作').onclick();r.nodes.get('todos-tab').onclick();assert.equal(r.nodes.get('category-filter-control').hidden,true);r.nodes.get('notes-tab').onclick();assert.equal(picker.value,'');assert.equal(r.nodes.get('category-filter-label').textContent,'分类 · 全部分类');
+});
+
+test('filter popovers are mutually exclusive and close on Escape, outside click and tab changes',async()=>{
+  const r=renderer(async()=>assert.fail('菜单开关不应保存'),'panel');await r.start();r.nodes.get('notes-tab').onclick();
+  const status=r.nodes.get('filter'),category=r.nodes.get('category-filter'),statusMenu=r.nodes.get('filter-menu'),categoryMenu=r.nodes.get('category-menu');
+  status.onclick();assert.equal(statusMenu.hidden,false);assert.equal(categoryMenu.hidden,true);assert.equal(status.attributes['aria-expanded'],'true');
+  category.onclick();assert.equal(statusMenu.hidden,true);assert.equal(categoryMenu.hidden,false);assert.equal(status.attributes['aria-expanded'],'false');
+  let prevented=0;categoryMenu.onkeydown({key:'Escape',preventDefault(){prevented++}});assert.equal(categoryMenu.hidden,true);assert.equal(category.attributes['aria-expanded'],'false');assert.equal(prevented,1);
+  status.onclick();status.onkeydown({key:'Escape',preventDefault(){prevented++}});assert.equal(statusMenu.hidden,true);assert.equal(prevented,2);
+  category.onclick();const pointer=r.document.events['pointerdown:false'];pointer({target:{closest:()=>({})}});assert.equal(categoryMenu.hidden,false);pointer({target:{closest:()=>null}});assert.equal(categoryMenu.hidden,true);assert.equal(statusMenu.hidden,true);
+  status.onclick();r.document.events['keydown:false']({key:'Escape',preventDefault(){prevented++}});assert.equal(statusMenu.hidden,true);
+  category.onclick();r.nodes.get('todos-tab').onclick();assert.equal(categoryMenu.hidden,true);assert.equal(statusMenu.hidden,true);assert.equal(r.nodes.get('category-filter-control').hidden,true);assert.equal(categoryMenu.children.length,0);category.onclick();assert.equal(categoryMenu.hidden,true);assert.equal(statusMenu.children.length,8);
+});
+
+test('deleting the selected category falls back to uncategorized without changing the status filter or note contents',async()=>{
+  let saves=0;const r=renderer(async(next,revision)=>{saves++;return{ok:true,state:{...next,revision:revision+1}}},'panel');await r.start();let s=M.addCategory(r.state(),'工作');s=M.addCategory(s,'生活');const [work,life]=s.categories;
+  const active=M.newNote('工作便签','完整正文'),trashed=M.newNote('删除便签','回收站正文'),other=M.newNote('生活便签','生活正文');active.categoryId=trashed.categoryId=work.id;trashed.deletedAt=trashed.createdAt;other.categoryId=life.id;s.notes=[active,trashed,other];r.acceptState(s);r.nodes.get('notes-tab').onclick();
+  await menuItem(r,'category-menu','工作').onclick();await r.openNoteEditor();assert.equal(r.nodes.get('edit-note-category').value,work.id);await r.nodes.get('editor-close').onclick();
+  await menuItem(r,'filter-menu','回收站').onclick();r.openDeleteCategory(work.id);await r.nodes.get('delete-category-confirm').onclick();
+  assert.equal(saves,1);assert.equal(r.nodes.get('filter').value,'trash');assert.equal(r.nodes.get('category-filter-label').textContent,'分类 · 未分类');assert.equal(r.nodes.get('group-title').textContent,'回收站 · 未分类');assert.equal(r.nodes.get('records').children.length,1);assert.equal(r.nodes.get('quick-category-select').value,'');
+  assert.equal(r.state().notes[0].body,'完整正文');assert.equal(r.state().notes[1].body,'回收站正文');assert.equal(r.state().notes[1].deletedAt,trashed.deletedAt);assert.equal(r.state().notes[0].categoryId,'');assert.equal(r.state().notes[1].categoryId,'');assert.deepEqual(menuLabels(r,'category-menu'),['全部分类 1','未分类 1','生活 0']);
+  await menuItem(r,'category-menu','生活').onclick();r.acceptState(M.deleteCategory(r.state(),life.id));assert.equal(r.nodes.get('category-filter-label').textContent,'分类 · 未分类');assert.equal(r.nodes.get('filter').value,'trash');assert.equal(saves,1);
+});
+
+test('category menu heading exposes management only for notes and saves a new category',async()=>{
+  let saves=0;const r=renderer(async(next,revision)=>{saves++;return{ok:true,state:{...next,revision:revision+1}}},'panel');await r.start();
+  assert.equal(r.nodes.get('category-filter-control').hidden,true);assert.equal(manageEntry(r),undefined);
+  r.nodes.get('notes-tab').onclick();const entry=manageEntry(r);assert.equal(r.nodes.get('category-filter-control').hidden,false);assert.equal(r.nodes.get('category-menu').children[0].className,'category-menu-heading');assert.equal(entry.textContent,'管理');assert.equal(entry.attributes['aria-label'],'管理分类');assert.equal(typeof entry.onclick,'function');assert.equal(r.nodes.get('filter-menu').children.length,4);
+  r.nodes.get('category-filter').onclick();await entry.onclick();assert.equal(r.nodes.get('category-menu').hidden,true);assert.equal(r.nodes.get('filter-menu').hidden,true);assert.equal(r.nodes.get('category-manager').open,true);assert.equal(saves,0);
+  r.nodes.get('category-add').onclick();assert.equal(r.nodes.get('category-manager').open,false);assert.equal(r.nodes.get('new-category').open,true);
+  r.nodes.get('new-category-name').value='旅行';await r.nodes.get('new-category-form').onsubmit({preventDefault(){}});
+  assert.equal(saves,1);assert.equal(r.state().categories[0].name,'旅行');assert.equal(r.nodes.get('new-category').open,false);assert.equal(r.nodes.get('category-manager').open,true);assert.ok(menuItem(r,'category-menu','旅行'));
+  r.nodes.get('category-manager-done').onclick();r.nodes.get('todos-tab').onclick();assert.equal(r.nodes.get('category-filter-control').hidden,true);assert.equal(manageEntry(r),undefined);
+  r.nodes.get('notes-tab').onclick();await manageEntry(r).onclick();assert.equal(r.nodes.get('category-manager').open,true);assert.equal(saves,1);
 });
 
 test('category manager supports inline validation, Enter save, Escape cancel, and sorting',async()=>{
-  let saves=0;const r=renderer(async(next,revision)=>{saves++;return{ok:true,state:{...next,revision:revision+1}}},'panel');await r.start();let s=M.addCategory(r.state(),'工作');s=M.addCategory(s,'生活');r.acceptState(s);r.openCategoryManager();
+  let saves=0;const r=renderer(async(next,revision)=>{saves++;return{ok:true,state:{...next,revision:revision+1}}},'panel');await r.start();let s=M.addCategory(r.state(),'工作');s=M.addCategory(s,'生活');r.acceptState(s);r.nodes.get('notes-tab').onclick();await manageEntry(r).onclick();
   const list=r.nodes.get('category-list');assert.equal(list.children[0].children[2].disabled,true);await list.children[0].children[4].onclick();await list.children[1].children[0].onclick();
   const input=list.children[0].children[0];input.value='生活';input.oninput();await list.children[0].children[1].onclick();assert.equal(saves,0);assert.match(list.children[1].textContent,/已存在/);assert.equal(input.value,'生活');assert.equal(r.nodes.get('storage-alert')?.hidden??true,true);
   input.value='新的工作';input.oninput();input.onkeydown({key:'Enter',preventDefault(){}});await turn();assert.equal(r.state().categories[0].name,'新的工作');assert.equal(saves,1);

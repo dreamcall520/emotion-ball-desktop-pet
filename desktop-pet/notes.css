@@ -273,3 +273,31 @@ body:has(dialog[open]) :is(.panel-header,.note-toolbar,.reminder-top),dialog,dia
 
 :root[data-notes-appearance="dark"]:not([data-color-mode="accessible"]) .note-meta-left .note-category{background:#293A42;border-color:#40545D;color:#BCCCD1}
 :root[data-color-mode="accessible"] .note-category{background:var(--accessible-raised);border-color:var(--accessible-line);color:var(--accessible-text)}
+
+.category-manage{flex:none;border:0;border-radius:5px;background:transparent;color:var(--muted);font-size:12px;line-height:16px;padding:4px 6px;min-height:24px;white-space:nowrap}.category-manage:hover{color:var(--accent-text);background:var(--selected)}
+
+/* Keep edit actions visible while only the fields scroll. */
+#editor[open]{display:flex;flex-direction:column;overflow:hidden}
+#editor-form{display:flex;flex-direction:column;flex:1;min-height:0}
+#editor-fields{overflow:auto;min-height:0;flex:1;scrollbar-width:thin;padding:5px 5px 0;margin:0 -5px}
+#editor-form>:is(.dialog-header,.error-text,.dialog-footer){flex:none}
+dialog .dialog-footer{position:sticky;bottom:0;z-index:1;background:var(--surface);padding-top:10px}
+.reminder-help{line-height:1.65;margin-top:12px}.reminder-help p{margin:0}.reminder-help p+p{margin-top:6px}
+
+/* Independent state/category filters share a quiet, compact row. */
+.filter-toolbar{display:flex;gap:8px;flex:none;margin-bottom:12px}
+.filter-toolbar .filter-control{flex:1;max-width:none;min-width:0}
+.filter-toolbar .filter-trigger{height:30px;padding:5px 9px;border:1px solid var(--line);border-radius:7px}
+.filter-toolbar .filter-label{flex:1;text-align:left}
+.filter-toolbar .filter-popover{left:0;top:35px;width:100%;min-width:180px;max-height:calc(100vh - 180px)}
+#category-menu{left:auto;right:0}
+.category-menu-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 8px 6px;margin-bottom:4px;border-bottom:1px solid var(--line);color:var(--muted);font-size:11px}
+.filter-popover .category-manage{width:auto;min-height:24px;padding:3px 5px;color:var(--accent-text);font-size:11px;font-weight:500}
+.group-label{min-width:0}.group-label h2{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+:root[data-color-mode="accessible"] body{background:transparent;border-radius:12px}
+:root[data-color-mode="accessible"] body[data-mode="note"]{border-radius:14px}
+:root[data-color-mode="accessible"] body[data-mode="reminder"]{border-radius:0}
+:root[data-color-mode="accessible"] :is(.tabs button,.filter-popover button){color:var(--accessible-text)}
+:root[data-color-mode="accessible"] :is(.filter-trigger[aria-expanded=true],.filter-popover button:hover,.category-manage:hover){background:var(--accessible-raised);color:var(--accessible-blue)}
+:root[data-color-mode="accessible"] .filter-popover :is(.view-check,.category-manage),:root[data-color-mode="accessible"] .category-add{color:var(--accessible-blue)}
+:root[data-color-mode="accessible"] .tabs .active{box-shadow:none}
