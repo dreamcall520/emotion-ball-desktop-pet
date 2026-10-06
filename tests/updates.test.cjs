@@ -17,13 +17,11 @@ test('independent logs add 0.4.01 and retain all 13 original records and the ful
   assert.equal((html.match(/data-release-link/g) || []).length, 14);
   assert.equal((html.match(/<option /g) || []).length, 14);
   assert.match(articleBlocks[0], /id="v0\.4\.01-apple"/);
-  for (const title of ['1.【新增】Codex 宠物导入', '2.【升级】动作预览与尺寸同步', '3.【优化】查找与外观保存']) assert.ok(articles[0].includes(`<h4>${title}</h4>`));
+  assert.ok(articles[0].includes('<h4>【新增】Codex 宠物导入</h4>'));
   assert.match(articles[0], /本机 Codex 自定义宠物/);
-  assert.match(articles[0], /九类动作预览/);
-  assert.match(articles[0], /共用六档大小/);
-  assert.match(articles[0], /超过六个时可按名称搜索/);
-  assert.match(articles[0], /来源移除后仍可使用/);
-  assert.match(articles[0], /保存为启动外观/);
+  assert.match(articles[0], /无需上传文件/);
+  assert.match(articles[0], /预览原有动画后保存/);
+  assert.match(articles[0], /桌面形象与聊天头像同步切换/);
   // The complete 13 articles from gh-pages@dc373df include their original downloads.
   assert.equal(createHash('sha256').update(articleBlocks.slice(1).join('\n')).digest('hex'), 'dc68d1a101a385cb01c13e6879c12d0b871446ddab6266bbe22127f56473d54a');
   for (const title of ['1.【新增】便签与待办', '2.【新增】来定制球球', '3.【新增】自动更新提醒', '4.【升级】额度卡片 2.0', '5.【升级】全局 UI 升级', '6.【修复】已知体验问题']) assert.ok(articles[1].includes(`<h4>${title}</h4>`));
