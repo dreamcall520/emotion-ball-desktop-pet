@@ -22,13 +22,14 @@
       } catch (_error) {}
     </script>
     <link rel="stylesheet" href="styles.css?v=20261006-native">
-    <link rel="stylesheet" href="motion-showcase.css?v=20261006-guide">
+    <link rel="stylesheet" href="motion-showcase.css?v=20261006-task">
     <link rel="stylesheet" href="dark-theme.css?v=20261006-native">
     <link rel="stylesheet" href="chat-showcase.css?v=20261006-native">
     <link rel="stylesheet" href="appearance-showcase.css?v=20261006-native">
     <link rel="stylesheet" href="notes-showcase.css?v=20261006-native">
-    <link rel="stylesheet" href="review-refinements.css?v=20261006-guide">
+    <link rel="stylesheet" href="review-refinements.css?v=20261006-task">
     <link rel="stylesheet" href="native-demos.css?v=20261006-guide">
+    <link rel="stylesheet" href="image-preview.css?v=20261006">
     <title>球球桌宠 - 免费的 macOS 桌面伙伴</title>
   </head>
   <body>
@@ -110,6 +111,9 @@
             <div class="motion-panel-heading"><span data-motion-label>放下 · 转面站稳</span><button class="motion-toggle" type="button" data-motion-toggle aria-pressed="false">暂停动效</button></div>
             <div class="motion-stage">
               <p class="motion-bubble" data-motion-bubble>站稳啦，继续陪你。</p>
+              <div class="feature-edge-wrap" data-feature-edge-notice hidden>
+                <div class="feature-edge-notice" role="status"><span class="feature-edge-dot" aria-hidden="true"></span><span class="feature-edge-brand">Codex</span><span class="feature-edge-text" data-feature-edge-text>5 小时 · 剩余 82%</span></div>
+              </div>
               <button class="pet-touch-target" type="button" data-pet-touch aria-label="摸摸互动区的球球">
                 <span class="pet-offset"><span class="live-ball" data-ball-host></span><span class="thought-flow" aria-hidden="true"></span></span>
               </button>
@@ -122,7 +126,7 @@
               <button type="button" data-motion-action="nuzzle" aria-pressed="false">摸摸头</button>
               <label class="desktop-edge-control"><input type="checkbox" data-desktop-edge> 靠边收起</label>
             </div>
-            <p class="motion-caption">点选动作体验；靠边收起后，移到球球上可展开。</p>
+            <p class="motion-caption">靠边时显示额度提示；移到球球上可展开，再次勾选可体验另一周期。</p>
           </div>
         </div>
       </section>
@@ -133,16 +137,8 @@
           <p class="codex-lead section-lead">工作交给 Codex，进展让球球轻轻提醒你。</p>
           <dl class="fact-list">
             <div>
-              <dt>看进展</dt>
-              <dd>任务处理中，用头顶光迹陪你等待。</dd>
-            </div>
-            <div>
               <dt>看额度</dt>
               <dd>套餐额度与额外点数分开查看，还能查看趋势、用量预估和重置历史。</dd>
-            </div>
-            <div>
-              <dt>完成提醒</dt>
-              <dd>查看进行中任务与待查看结果，点击回到对应 Codex 会话。</dd>
             </div>
             <div>
               <dt>API 费用</dt>
@@ -152,7 +148,24 @@
           <div class="release-note codex-privacy-note"><p><strong>默认关闭，可选开启</strong><span>只查看状态，不代你操作。</span></p><a href="#privacy">了解隐私边界 <span aria-hidden="true">→</span></a></div>
         </div>
         <div class="codex-live-showcase">
-          <iframe class="native-demo native-quota" src="demos/quota/index.html?v=20261006-align" title="0.4.00 额度卡片与趋势演示" data-app-demo data-demo="quota" height="740" loading="lazy"></iframe>
+          <div class="codex-task-demo" data-motion-scene="codex" data-task-state="processing">
+            <div class="codex-task-heading"><span>体验任务提醒</span><button class="motion-toggle" type="button" data-motion-toggle aria-pressed="false">暂停动效</button></div>
+            <div class="codex-task-body">
+              <div class="motion-stage">
+                <p class="motion-bubble" data-motion-bubble>我陪你等结果。</p>
+                <button class="pet-touch-target" type="button" data-pet-touch aria-label="摸摸任务旁的球球">
+                  <span class="pet-offset"><span class="live-ball" data-ball-host></span><span class="thought-flow" aria-hidden="true"></span></span>
+                </button>
+              </div>
+              <div class="codex-task-copy">
+                <p class="codex-task-status" data-task-status role="status" aria-live="polite">Codex 处理中</p>
+                <h3>检查示例页面布局</h3>
+                <p data-task-description>头顶光迹陪你等待，球球替你留意进展。</p>
+                <button class="button button-primary" type="button" data-task-next>模拟完成</button>
+              </div>
+            </div>
+          </div>
+          <iframe class="native-demo native-quota" src="demos/quota/index.html?v=20261006-task" title="0.4.00 额度卡片与趋势演示" data-app-demo data-demo="quota" height="740" loading="lazy"></iframe>
         </div>
       </section>
 
@@ -328,7 +341,7 @@
           </figure>
         </div>
         <figure class="install-settings">
-          <a class="install-settings-image" href="assets/macos-privacy-security-open-anyway.png" target="_blank" rel="noopener">
+            <a class="install-settings-image" href="assets/macos-privacy-security-open-anyway.png" data-image-preview aria-haspopup="dialog">
             <img src="assets/macos-privacy-security-open-anyway.png" width="1430" height="1196" loading="lazy" alt="macOS 隐私与安全性页面，蓝色指引标出右侧仍要打开按钮；点击查看原图">
             <span class="install-settings-label" aria-hidden="true">③ 仍要打开</span>
             <svg class="install-settings-guide" viewBox="0 0 1430 1196" aria-hidden="true" focusable="false">
@@ -570,10 +583,11 @@
     <script src="assets/motion/thought-flow-v5.js"></script>
     <script src="assets/motion/dialogue-v5.js"></script>
     <script src="app.js?v=20260928-release"></script>
-    <script src="motion-showcase.js?v=20261002-native-edge"></script>
+    <script src="motion-showcase.js?v=20261006-task"></script>
     <script src="appearance-showcase.js?v=20261006-layout"></script>
     <script src="demos/notes/embed.js?v=20261006-native"></script>
-    <script src="demo-embed.js?v=20261006-native"></script>
+    <script src="demo-embed.js?v=20261006-task"></script>
+    <script src="image-preview.js?v=20261006"></script>
     <script src="analytics.js?v=20260924-1" data-website-id="fe855bb0-9000-49aa-820b-baa55887bd11"></script>
   </body>
 </html>

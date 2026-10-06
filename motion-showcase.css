@@ -126,13 +126,19 @@
 .feature-playground { align-self: center; }
 .codex-live-showcase { padding: 24px; min-width: 0; }
 .codex-live-showcase .quota-playground { padding: 0; }
-.codex-pet-row { display: grid; grid-template-columns: minmax(0, 1fr) 160px; align-items: center; gap: 20px; margin-top: 14px; }
-.codex-pet-row .motion-stage { --pet-size: 108px; min-height: 174px; padding-top: 24px; }
-.codex-pet-row .motion-stage::after { bottom: 14px; }
-.codex-pet-copy { padding-left: 8px; }
-.codex-pet-copy > span { color: var(--accent); font-size: 13px; font-weight: 650; }
-.codex-pet-copy > p { margin: 9px 0 0; font-size: 16px; line-height: 1.6; }
-.codex-motion-footer { padding-top: 12px; border-top: 1px solid var(--line); color: var(--text-soft); font-size: 11px; }
+.codex-task-demo { padding: 0 8px 20px; margin-bottom: 24px; border-bottom: 1px solid var(--line); }
+.codex-task-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; color: var(--text-soft); font-size: 13px; }
+.codex-task-body { display: grid; grid-template-columns: 210px minmax(0, 1fr); align-items: center; gap: 28px; max-width: 800px; margin-inline: auto; }
+.codex-task-body .motion-stage { --pet-size: 116px; min-height: 196px; padding-top: 40px; }
+.codex-task-body .motion-stage::after { bottom: 12px; }
+.codex-task-body .motion-bubble { top: 12px; padding: 8px 12px; font-size: 12px; }
+.codex-task-copy { min-width: 0; }
+.codex-task-status { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; color: var(--accent); font-size: 12px; font-weight: 600; }
+.codex-task-status::before { content: ""; width: 6px; height: 6px; flex: none; border-radius: 50%; background: currentColor; }
+.codex-task-copy h3 { margin: 0 0 8px; font-size: 20px; line-height: 1.5; }
+.codex-task-copy > p:not(.codex-task-status) { margin: 0 0 16px; color: var(--text-soft); font-size: 14px; line-height: 1.65; }
+.codex-task-copy .button { min-height: 38px; padding: 9px 16px; font-size: 13px; }
+.codex-task-demo[data-task-state="viewed"] .codex-task-status { color: var(--text-soft); }
 .desktop-showcase { width: min(1180px, 100%); margin-inline: auto; }
 .desktop-scene {
   position: relative;
@@ -160,7 +166,6 @@
 [data-motion-scene][data-motion-error] .pet-touch-target { display: none; }
 [data-motion-scene][data-motion-error] .motion-stage::before { content: "动效暂不可用，请刷新页面重试。"; font-size: 14px; color: var(--text-soft); }
 @media (max-width: 1100px) {
-  .codex-pet-row { grid-template-columns: minmax(0, 1fr) 120px; gap: 8px; }
   .desktop-scene { padding-inline: 34px; }
 }
 @media (max-width: 767px) {
@@ -174,11 +179,13 @@
   .motion-stage { --pet-size: 210px; min-height: 325px; padding-top: 54px; }
   .motion-choices { gap: 7px; }
   .motion-choices button { padding-inline: 12px; font-size: 12px; }
-  .codex-pet-row { grid-template-columns: minmax(0, 1fr) 104px; }
-  .codex-pet-row .motion-stage { --pet-size: 92px; min-height: 145px; }
-  .codex-pet-copy { padding-left: 0; }
-  .codex-pet-copy > p { font-size: 14px; }
-  .codex-motion-footer { gap: 10px; align-items: baseline; }
+  .codex-task-demo { padding-inline: 0; }
+  .codex-task-body { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .codex-task-body .motion-stage { --pet-size: 104px; min-height: 174px; padding-top: 40px; }
+  .codex-task-copy { text-align: center; }
+  .codex-task-status { justify-content: center; }
+  .codex-task-copy h3 { font-size: 18px; }
+  .codex-task-copy > p:not(.codex-task-status) { font-size: 13px; }
   .desktop-scene { grid-template-columns: 1fr; gap: 16px; padding: 28px 20px 16px; }
   .desktop-scene-copy { max-width: 100%; }
   .desktop-scene-copy h3 { margin: 10px 0; font-size: 27px; }

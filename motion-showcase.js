@@ -26,6 +26,11 @@
     codex: ['thought', 'quiet', 'complete', 'quiet'],
     desktop: ['hello', 'nuzzle', 'sleep', 'stretch']
   };
+  const TASK_COPY = {
+    processing: ['Codex 处理中', '头顶光迹陪你等待，球球替你留意进展。', '我陪你等结果。', '模拟完成', 'thought'],
+    completed: ['已完成 · 1 个结果待查看', '球球用小动作提醒你，下方待查看结果同步增加。', '完成啦，去看看？', '查看结果', 'complete'],
+    viewed: ['结果已查看', '示例结果：桌面与手机布局检查已完成。', '看过啦，继续陪你。', '重新演示', 'quiet']
+  };
 
   if (!engine || !motion || !window.ThoughtFlowPreview) {
     roots.forEach(root => { root.dataset.motionError = 'unavailable'; });
@@ -47,11 +52,15 @@
     constructor(root) {
       this.root = root;
       this.name = root.dataset.motionScene;
+      this.taskState = this.name === 'codex' ? 'processing' : null;
       this.host = root.querySelector('[data-ball-host]');
       this.offset = root.querySelector('.pet-offset');
       this.button = root.querySelector('[data-motion-toggle]');
       this.touch = root.querySelector('[data-pet-touch]');
       this.edge = root.querySelector('[data-desktop-edge]');
+      this.edgeNotice = root.querySelector('[data-feature-edge-notice]');
+      this.edgeNoticeConsumed = false;
+      this.edgeNoticeIndex = 0;
       this.edgePeek = false;
       this.sequence = SEQUENCES[this.name];
       this.index = 0;
@@ -84,7 +93,7 @@
           this.play(action, true);
         });
       });
-      this.touch.addEventListener('click', () => this.play(this.name === 'codex' ? 'complete' : 'nuzzle', true));
+      this.touch.addEventListener('click', () => this.play('nuzzle', true));
       this.touch.addEventListener('dblclick', () => this.play('hop', true));
       this.touch.addEventListener('pointermove', event => {
         if (this.edge?.checked || this.controller || this.current === 'thought' || this.current === 'sleep' || reduced.matches || this.paused) return;
@@ -94,9 +103,20 @@
       this.touch.addEventListener('pointerleave', () => {
         if (!this.controller && this.current !== 'thought') this.ball.clearGaze();
       });
+      root.querySelector('[data-task-next]')?.addEventListener('click', () => {
+        const state = this.taskState === 'processing' ? 'completed' : this.taskState === 'completed' ? 'viewed' : 'processing';
+        this.setTask(state);
+        document.dispatchEvent(new CustomEvent('website-task-command', { detail: { state } }));
+      });
       if (this.edge) {
         const edgeArea = this.touch;
-        this.edge.addEventListener('change', () => { this.edgePeek = false; this.reconcile(); });
+        this.edge.addEventListener('change', () => {
+          this.edgePeek = false; this.edgeNoticeConsumed = false;
+          if (this.edge.checked && this.edgeNotice) {
+            this.edgeNotice.querySelector('[data-feature-edge-text]').textContent = this.edgeNoticeIndex++ % 2 ? '周额度 · 剩余 68%' : '5 小时 · 剩余 82%';
+          }
+          this.reconcile();
+        });
         edgeArea.addEventListener('pointerenter', () => { this.edgePeek = true; if (this.edge.checked) this.reconcile(); });
         edgeArea.addEventListener('pointerleave', () => { this.edgePeek = false; if (this.edge.checked) this.reconcile(); });
         this.touch.addEventListener('focus', () => { this.edgePeek = true; if (this.edge.checked) this.reconcile(); });
@@ -120,6 +140,7 @@
       if (this.controller) this.controller.cancel();
       this.controller = null;
       this.flow.stop();
+      if (this.edgeNotice) this.edgeNotice.hidden = true;
       motion.stop(this.ball);
       this.offset.style.translate = '0px 0px';
       this.ball.setActive(false);
@@ -149,7 +170,14 @@
       this.root.querySelectorAll('[data-motion-action]').forEach(button => {
         button.setAttribute('aria-pressed', String(button.dataset.motionAction === action));
       });
-      if (freshCopy) {
+      if (this.name === 'codex') {
+        const copy = TASK_COPY[this.taskState];
+        this.root.dataset.taskState = this.taskState;
+        this.root.querySelector('[data-task-status]').textContent = copy[0];
+        this.root.querySelector('[data-task-description]').textContent = copy[1];
+        this.root.querySelector('[data-motion-bubble]').textContent = copy[2];
+        this.root.querySelector('[data-task-next]').textContent = copy[3];
+      } else if (freshCopy) {
         const category = action === 'ribbon' ? 'spin' : action === 'quiet' ? 'work' : action;
         const copy = action === 'quota' ? '额度有点紧啦，记得留意。' : dialogue.pick(category)?.text;
         if (copy) this.root.querySelector('[data-motion-bubble]').textContent = copy;
@@ -159,6 +187,11 @@
         this.root.querySelector('[data-scene-title]').textContent = copy[0];
         this.root.querySelector('[data-scene-description]').textContent = copy[1];
       }
+    }
+    setTask(state) {
+      if (!Object.hasOwn(TASK_COPY, state) || this.taskState === state) return;
+      this.taskState = state;
+      this.play(TASK_COPY[state][4]);
     }
     play(action, manual = false) {
       if (manual && this.edge?.checked) {
@@ -202,6 +235,16 @@
         this.ball.setGaze(action === 'hello' ? -.45 : 0, action === 'hello' ? -.2 : 0);
         this.after(() => { this.ball.setEmotion('50'); this.ball.clearGaze(); this.root.dataset.playing = 'false'; }, 2000);
       }
+      // Task motion follows its status; completion never starts an unrelated autoplay cycle.
+      if (this.name === 'codex') {
+        if (this.canAuto() && this.taskState === 'processing') {
+          this.after(() => { if (this.canAuto() && this.taskState === 'processing') this.play('thought'); }, 8200);
+        } else {
+          this.after(() => this.stop(), motion.durations[actual] || 2200);
+        }
+        this.updateButton();
+        return;
+      }
       const delay = manual ? 10000 : this.name === 'hero' ? 10500 : action === 'thought' ? 8200 : 7000;
       if (this.canAuto()) {
         this.after(() => {
@@ -226,11 +269,23 @@
         this.ball.setEmotion(tucked ? '55' : '50');
         this.ball.setMotionFrame({
           body: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotate: 0, yaw: 0 },
-          gaze: { x: 0, y: 0 }
+          gaze: { x: 0, y: 0 }, suppressRibbons: true
         });
       }
       this.updateButton();
-      if (this.canAuto()) this.play(this.sequence[this.index]);
+      if (this.edgeNotice && tucked && this.visible && !document.hidden && !this.paused && !this.edgeNoticeConsumed) {
+        this.edgeNoticeConsumed = true;
+        this.edgeNotice.hidden = false;
+        const notice = this.edgeNotice.firstElementChild;
+        notice.classList.remove('appear');
+        void notice.offsetWidth;
+        notice.classList.add('appear');
+        this.after(() => { this.edgeNotice.hidden = true; }, 6000);
+      }
+      if (this.canAuto()) {
+        if (this.name !== 'codex') this.play(this.sequence[this.index]);
+        else if (this.taskState === 'processing') this.play('thought');
+      }
     }
     destroy() { this.stop(); this.alive = false; this.flow.destroy(); this.ball.destroy(); }
   }
@@ -249,10 +304,9 @@
   roots.forEach(root => observer.observe(root));
   document.addEventListener('visibilitychange', () => scenes.forEach(scene => scene.reconcile()));
   reduced.addEventListener('change', () => scenes.forEach(scene => scene.reconcile()));
-  document.addEventListener('quota-demo-action', event => {
+  document.addEventListener('quota-demo-task-state', event => {
     const scene = scenes.get('codex');
-    const action = event.detail?.action;
-    if (scene && ['thought', 'complete', 'quota'].includes(action)) scene.play(action, true);
+    if (scene) scene.setTask(event.detail?.state);
   });
   window.addEventListener('pagehide', event => {
     if (event.persisted) { scenes.forEach(scene => scene.stop()); return; }
@@ -261,7 +315,7 @@
   window.addEventListener('pageshow', event => { if (event.persisted) scenes.forEach(scene => scene.reconcile()); });
   // Read-only diagnostic state, no mutation or account integration API.
   window.QiuqiuWebsiteMotion = Object.freeze({ getState: () => [...scenes.values()].map(scene => ({
-    name: scene.name, action: scene.current, count: scene.count, visible: scene.visible,
+    name: scene.name, action: scene.current, taskState: scene.taskState, count: scene.count, visible: scene.visible,
     paused: scene.paused, edgeTucked: scene.root.dataset.edgeTucked === 'true', autoplay: scene.canAuto(), timers: scene.timers.size,
     playing: scene.root.dataset.playing === 'true', thought: scene.flow.getState()
   })) });

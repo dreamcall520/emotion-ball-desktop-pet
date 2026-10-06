@@ -8,12 +8,27 @@ const out=process.env.QIUQIU_QA_OUTPUT||'/tmp/qiuqiu-live-app-demos';fs.mkdirSyn
  const errors=[],failed=[],externalRequests=[];const report={base,browser:'Chrome / existing Playwright; Browser plugin not available',layouts:[],interactions:[],errors,failed,externalRequests};
  try{
   const page=await browser.newPage({viewport:{width:1100,height:740}});
+  await page.addInitScript(()=>{
+   window.__quotaTaskStates=[];
+   window.addEventListener('message',event=>{
+    if(event.origin===location.origin&&event.source===window&&event.data?.type==='qiuqiu-demo-task-state') window.__quotaTaskStates.push(event.data.state);
+   });
+  });
   page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});page.on('response',r=>{if(r.status()>=400)failed.push(r.status()+' '+r.url());});
   page.on('request',r=>{if(new URL(r.url()).origin!==new URL(base).origin)externalRequests.push(r.url());});
   await page.goto(base+'demos/quota/index.html');assert.match(await page.title(),/额度卡片 2.0/);
   const quota=page.frameLocator('#quota-frame'),detail=page.frameLocator('#detail-frame'),api=page.frameLocator('#api-label-frame');
   await quota.locator('.v20-value').first().waitFor();assert.equal(await quota.locator('.v20-value').count(),2);assert.match(await detail.locator('#details-title').innerText(),/额度趋势/);
   assert.equal(await detail.locator('.trend-chart').count(),1);
+  const taskCounts=()=>quota.locator('.v20-activity').evaluate(e=>Array.from(e.querySelectorAll('.v20-count')).map(n=>n.textContent));
+  const sendTask=state=>page.evaluate(state=>window.postMessage({type:'qiuqiu-demo-task',state},location.origin),state);
+  await page.waitForFunction(()=>window.__quotaTaskStates.includes('processing'));assert.equal(await page.evaluate(()=>QiuqiuQuotaDemo.getState().taskState),'processing');assert.deepEqual(await taskCounts(),['1','0']);
+  await page.evaluate(()=>{
+   window.dispatchEvent(new MessageEvent('message',{source:window,origin:'https://example.invalid',data:{type:'qiuqiu-demo-task',state:'completed'}}));
+   window.dispatchEvent(new MessageEvent('message',{source:null,origin:location.origin,data:{type:'qiuqiu-demo-task',state:'completed'}}));
+   window.postMessage({type:'qiuqiu-demo-task',state:'invalid'},location.origin);
+  });
+  await quota.locator('body').evaluate(()=>parent.postMessage({type:'qiuqiu-demo-task',state:'completed'},location.origin));await page.waitForTimeout(50);assert.equal(await page.evaluate(()=>QiuqiuQuotaDemo.getState().taskState),'processing');
   const cardRect=selector=>page.locator(selector).evaluate(e=>({width:e.getBoundingClientRect().width,height:e.getBoundingClientRect().height,nativeWidth:e.contentWindow.innerWidth,nativeHeight:e.contentWindow.innerHeight}));
   const near=(actual,expected)=>assert.ok(Math.abs(actual-expected)<.1,`${actual} differs from ${expected}`);
   const scenarioSelect=page.locator('#demo-scenario');
@@ -33,8 +48,11 @@ const out=process.env.QIUQIU_QA_OUTPUT||'/tmp/qiuqiu-live-app-demos';fs.mkdirSyn
   await api.locator('#quota-label').press('Enter');await page.waitForFunction(()=>QiuqiuQuotaDemo.getState().apiExpanded===false);rect=await cardRect('#api-label-frame');near(rect.width,280*128/196);near(rect.height,280*32/196);await api.locator('#quota-label').press('Enter');await page.waitForFunction(()=>QiuqiuQuotaDemo.getState().apiExpanded===true);
   await quota.locator('[data-action="opportunities"]').click();await detail.locator('.opportunity-history > summary').click();assert.match(await detail.locator('.opportunity-history').innerText(),/已获得/);
   await quota.locator('[data-action="credits"]').click();assert.match(await detail.locator('.balance-value').innerText(),/1,250/);
-  await quota.locator('[data-action="tasks"]').click();await detail.locator('.activity-item').click();await page.waitForFunction(()=>document.querySelector('#thread-title').textContent.includes('检查示例'));assert.match(await page.locator('#thread-title').innerText(),/检查示例/);await page.locator('#thread-close').click();
-  await quota.locator('[data-action="results"]').click();await detail.locator('.activity-item').click();await page.locator('#thread-close').click();assert.match(await detail.locator('#details-content').innerText(),/暂无待查看/);
+  await quota.locator('[data-action="tasks"]').click();await detail.locator('.activity-item').click();await page.waitForFunction(()=>document.querySelector('#thread-title').textContent.includes('检查示例'));assert.match(await page.locator('#thread-title').innerText(),/检查示例/);assert.match(await page.locator('#thread-text').innerText(),/示例进展/);assert.equal(await page.evaluate(()=>QiuqiuQuotaDemo.getState().taskState),'processing');assert.deepEqual(await taskCounts(),['1','0']);await page.locator('#thread-close').click();
+  await sendTask('completed');await page.waitForFunction(()=>QiuqiuQuotaDemo.getState().taskState==='completed'&&document.querySelector('#quota-frame').contentDocument.querySelector('.v20-unread .v20-count').textContent==='1');assert.deepEqual(await taskCounts(),['0','1']);
+  await quota.locator('[data-action="results"]').click();assert.match(await detail.locator('.activity-item').innerText(),/检查示例页面布局/);await detail.locator('.activity-item').click();await page.waitForFunction(()=>QiuqiuQuotaDemo.getState().taskState==='viewed'&&window.__quotaTaskStates.at(-1)==='viewed');assert.equal(await page.locator('#thread-title').innerText(),'检查示例页面布局');assert.match(await page.locator('#thread-text').innerText(),/示例结果：已完成桌面与手机布局检查/);assert.deepEqual(await taskCounts(),['0','0']);await page.locator('#thread-close').click();assert.match(await detail.locator('#details-content').innerText(),/暂无待查看/);
+  await sendTask('processing');await page.waitForFunction(()=>QiuqiuQuotaDemo.getState().taskState==='processing');await sendTask('viewed');await page.waitForFunction(()=>QiuqiuQuotaDemo.getState().taskState==='viewed'&&!document.querySelector('#demo-thread').hidden);assert.match(await page.locator('#thread-text').innerText(),/示例结果/);assert.deepEqual(await taskCounts(),['0','0']);await page.locator('#thread-close').click();assert.deepEqual(await page.evaluate(()=>Array.from(new Set(window.__quotaTaskStates))),['processing','completed','viewed']);
+  report.interactions.push('trusted parent task states processing(1/0), completed(0/1), viewed(0/0); progress keeps processing, result click reports viewed, parent viewed opens existing result dialog; wrong origin/source/enum ignored');
   await quota.locator('[data-action="trend"]').click();await detail.locator('[data-period="300"]').click();assert.match(await detail.locator('#details-content').innerText(),/82%/);
   await page.locator('#demo-scenario').selectOption('unknown');await page.waitForFunction(()=>document.querySelector('#detail-frame').contentDocument.querySelector('.forecast-copy').textContent.includes('暂无法预估额度用完时间'));assert.match(await detail.locator('.forecast-copy').innerText(),/暂无法预估额度用完时间/);
   await page.locator('#demo-scenario').selectOption('fast');await page.waitForFunction(()=>document.querySelector('#detail-frame').contentDocument.querySelector('.forecast-copy').textContent.includes('重置前用完'));assert.match(await detail.locator('.forecast-copy').innerText(),/重置前用完/);
@@ -46,6 +64,9 @@ const out=process.env.QIUQIU_QA_OUTPUT||'/tmp/qiuqiu-live-app-demos';fs.mkdirSyn
   const modes=[{mode:'main',query:'',cardWidth:280,gap:20,breakpoint:700,widths:[1100,720,700,360,320]},{mode:'appearance',query:'?appearanceDemo=1',cardWidth:224,gap:16,breakpoint:559,widths:[620,560,559,360,320]}];
   for(const config of modes){
    await page.goto(base+'demos/quota/index.html'+config.query);await quota.locator('.v20-value').first().waitFor();await detail.locator('.trend-chart').waitFor();
+   if(config.mode==='appearance'){
+    await sendTask('completed');await page.waitForTimeout(50);assert.equal(await page.evaluate(()=>QiuqiuQuotaDemo.getState().taskState),'processing');assert.deepEqual(await taskCounts(),['1','1']);assert.deepEqual(await page.evaluate(()=>window.__quotaTaskStates),[]);
+   }
    for(const width of config.widths)for(const appearance of ['light','dark'])for(const colorMode of ['standard','accessible']){
    await page.setViewportSize({width,height:900});await page.evaluate(v=>window.postMessage({type:'qiuqiu-demo-theme',...v},location.origin),{appearance,colorMode});
    await page.waitForFunction(v=>QiuqiuQuotaDemo.getState().appearance===v.appearance&&QiuqiuQuotaDemo.getState().colorMode===v.colorMode,{appearance,colorMode});
@@ -59,6 +80,7 @@ const out=process.env.QIUQIU_QA_OUTPUT||'/tmp/qiuqiu-live-app-demos';fs.mkdirSyn
    const screenshot=path.join(out,`quota-${config.mode}-${width}-${appearance}-${colorMode}.png`);await page.screenshot({path:screenshot,fullPage:true});report.layouts.push({kind:'quota',mode:config.mode,width,appearance,colorMode,cardWidth:rect.width,detailWidth:(await cardRect('#detail-frame')).width,height:await page.locator('main').evaluate(e=>Math.ceil(e.getBoundingClientRect().height)),screenshot});
    }
   }
+  report.interactions.push('appearance quota keeps its independent active/result examples and neither consumes nor emits external task-state messages');
   for(const config of modes){
    await page.goto(base+'demos/quota/index.html'+config.query);await quota.locator('.v20-value').first().waitFor();
    for(const width of config.mode==='main'?[700,360,320]:[620,560,360,320]){

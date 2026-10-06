@@ -5,16 +5,18 @@
   const frames = { quota: $('quota-frame'), details: $('detail-frame'), 'api-label': $('api-label-frame'), 'api-report': $('api-report-frame') };
   const cards = document.querySelector('.demo-cards');
   const ready = new Set();
-  document.documentElement.dataset.appearanceDemo=String(new URLSearchParams(location.search).get('appearanceDemo')==='1');
+  const appearanceDemo=new URLSearchParams(location.search).get('appearanceDemo')==='1';
+  document.documentElement.dataset.appearanceDemo=String(appearanceDemo);
   const now = Date.now(), day = 86400000;
-  let appearance = 'light', colorMode = 'standard', scenario = 'balanced', expanded = true, apiExpanded = true, action = 'trend', period = 10080, unread = true, apiVisible = false, paused = false;
+  let appearance = 'light', colorMode = 'standard', scenario = 'balanced', expanded = true, apiExpanded = true, action = 'trend', period = 10080, unread = appearanceDemo, apiVisible = false, paused = false, taskState = 'processing';
   const report = { month: new Date(now).toISOString().slice(0,7), updatedAt: now, costs: { month: [{currency:'usd',value:32.48}], today: [{currency:'usd',value:1.26}] }, usage: {inputTokens:2840000,cachedInputTokens:1120000,outputTokens:420000,requests:137} };
   function quotaModel() {
     const fast = scenario === 'fast', unknown = scenario === 'unknown';
     const items = [{label:'CODEX',windowMinutes:300,remaining:fast ? 12 : 82,resetsAt:now+4*3600000,pace:{state:unknown ? 'unknown' : fast ? 'fast' : 'balanced',remainingTimePercent:80}}, {label:'CODEX',windowMinutes:10080,remaining:fast ? 8 : 68,resetsAt:now+5*day,pace:{state:unknown ? 'unknown' : fast ? 'fast' : 'balanced',remainingTimePercent:71}}];
     const item = items.find(item => item.windowMinutes === period), start = item.resetsAt-item.windowMinutes*60000;
-    return {state:'ready',size:'compact',expanded,appearance,colorMode,items,resetCreditsAvailable:2,extraCredits:{state:'balance',balance:'1250.00'},activity:{runningCount:1,unreadCount:unread?1:0},action,period,
-      tasks:[{id:'demo-layout',title:'检查示例页面布局',state:'active',updatedAt:now}],results:unread?[{id:'demo-notes',title:'整理今日待办',state:'completed',updatedAt:now}]:[],
+    const runningCount=appearanceDemo || taskState==='processing' ? 1 : 0;
+    return {state:'ready',size:'compact',expanded,appearance,colorMode,items,resetCreditsAvailable:2,extraCredits:{state:'balance',balance:'1250.00'},activity:{runningCount,unreadCount:unread?1:0},action,period,
+      tasks:runningCount?[{id:'demo-layout',title:'检查示例页面布局',state:'active',updatedAt:now}]:[],results:unread?[{id:'demo-notes',title:appearanceDemo?'整理今日待办':'检查示例页面布局',state:'completed',updatedAt:now}]:[],
       resetDetailsState:'known',resetOpportunities:[{expiresAt:now+3*day,status:'available'},{expiresAt:null,status:'available'}],
       accountResetHistory:{state:'ready',updatedAt:now,events:[{kind:'granted',occurredAt:now-5*day},{kind:'redeemed',occurredAt:now-12*day},{kind:'granted',occurredAt:now-20*day}]},
       returnToTrend:action!=='trend',returnPeriod:period,
@@ -46,11 +48,22 @@
     sizeCards();
     frames.details.hidden=apiVisible; $('api-report').hidden=!apiVisible; $('api-back').hidden=!apiVisible;
     Object.keys(frames).forEach(send); requestAnimationFrame(resize);
+    if(!appearanceDemo) parent.postMessage({type:'qiuqiu-demo-task-state',state:taskState},location.origin);
   }
   function openDetail(detail,nextPeriod) {
     if (!['trend','tasks','results','opportunities','credits'].includes(detail)) return;
     $('demo-feedback').hidden=true;
     action=detail; period=nextPeriod===300?300:10080; apiVisible=false; render();
+  }
+  function openThread(id) {
+    const result=id==='demo-notes';
+    if(result && !appearanceDemo && taskState==='processing') return;
+    if(result) {unread=false;if(!appearanceDemo) taskState='viewed';}
+    $('thread-title').textContent=result&&appearanceDemo?'整理今日待办':'检查示例页面布局';
+    $('thread-text').textContent=result
+      ? appearanceDemo?'示例结果：已整理为 3 项待办，可以逐项确认截止日期与提醒。':'示例结果：已完成桌面与手机布局检查。'
+      : '示例进展：正在检查桌面与手机布局。';
+    $('demo-thread').hidden=false; render(); $('demo-thread-title').focus({preventScroll:true});
   }
   const scenarioSelect=$('demo-scenario');
   scenarioSelect.addEventListener('pointerdown',()=>{scenarioSelect.dataset.focusMode='pointer';});
@@ -65,6 +78,15 @@
     const data=event.data;
     if(event.source===parent && data?.type==='qiuqiu-demo-theme' && ['light','dark'].includes(data.appearance) && ['standard','accessible'].includes(data.colorMode)) { appearance=data.appearance;colorMode=data.colorMode;render();return; }
     if(event.source===parent && data?.type==='qiuqiu-demo-motion') {paused=data.paused===true;render();return;}
+    if(event.source===parent && data?.type==='qiuqiu-demo-task') {
+      if(!appearanceDemo && ['processing','completed','viewed'].includes(data.state)) {
+        const changed=taskState!==data.state;
+        taskState=data.state;unread=taskState==='completed';
+        if(taskState==='viewed') openThread('demo-notes');
+        else {if(changed) $('demo-thread').hidden=true;render();}
+      }
+      return;
+    }
     const kind=Object.keys(frames).find(key=>event.source===frames[key].contentWindow);
     if(!kind || data?.type!=='qiuqiu-quota-action' || data.kind!==kind) return;
     if(data.action==='ready') {ready.add(kind);send(kind);}
@@ -74,10 +96,7 @@
     else if(data.action==='api') {apiVisible=true;render();}
     else if(data.action==='resize' && kind==='details' && Number.isFinite(data.height)) {frames.details.height=Math.max(120,Math.min(700,data.height));resize();}
     else if(data.action==='thread' && kind==='details' && ['demo-layout','demo-notes'].includes(data.id)) {
-      if(data.id==='demo-notes') unread=false;
-      $('thread-title').textContent=data.id==='demo-notes'?'整理今日待办':'检查示例页面布局';
-      $('thread-text').textContent=data.id==='demo-notes'?'示例结果：已整理为 3 项待办，可以逐项确认截止日期与提醒。':'示例进展：正在检查桌面与手机布局。';
-      $('demo-thread').hidden=false; render(); $('demo-thread-title').focus({preventScroll:true});
+      openThread(data.id);
     } else if(data.action==='refresh-api' && kind==='api-report') {feedback('报告已刷新。');}
     else if(data.action==='guide' && kind==='api-report') {feedback('网页无需输入密钥。');}
   });
@@ -88,7 +107,7 @@
     if(entry.contentRect.width===detailWidth) return;
     detailWidth=entry.contentRect.width; send('details');
   }).observe(document.querySelector('.demo-detail'));
-  window.QiuqiuQuotaDemo=Object.freeze({getState:()=>Object.freeze({appearance,colorMode,scenario,expanded,apiExpanded,action,period,unread,apiVisible,paused})});
+  window.QiuqiuQuotaDemo=Object.freeze({getState:()=>Object.freeze({appearance,colorMode,scenario,expanded,apiExpanded,action,period,unread,apiVisible,paused,taskState})});
   parent.postMessage({type:'qiuqiu-demo-ready'},location.origin);
   render();
 })();

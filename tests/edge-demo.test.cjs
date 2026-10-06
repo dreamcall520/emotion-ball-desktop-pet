@@ -7,7 +7,7 @@ const element = () => ({ dataset: {}, style: {}, handlers: {}, checked: false,
   setAttribute() {}, getBoundingClientRect: () => ({ width: 108 }) });
 const root = element(), edge = element(), touch = element(), toggle = element(), area = element();
 root.dataset.motionScene = 'feature';
-root.querySelector = selector => ({ '[data-desktop-edge]': edge, '[data-pet-touch]': touch,
+root.querySelector = selector => ['[data-feature-edge-notice]', '[data-task-next]'].includes(selector) ? null : ({ '[data-desktop-edge]': edge, '[data-pet-touch]': touch,
   '[data-motion-toggle]': toggle, '.motion-stage': area })[selector] || element();
 root.querySelectorAll = () => [];
 const ball = { renderStatic() {}, setEmotion(id) { this.emotion = id; }, setActive() {}, clearGaze() {},
@@ -27,6 +27,7 @@ vm.runInNewContext(fs.readFileSync(require('node:path').join(__dirname, '../moti
 edge.checked = true; edge.emit('change');
 assert.equal(root.dataset.edgeTucked, 'true');
 assert.equal(ball.frame.body.rotate, 0);
+assert.equal(ball.frame.suppressRibbons, true);
 assert.equal(ball.emotion, '55');
 assert.equal(definitions['55'].pool.length, 1);
 assert.equal(JSON.stringify(definitions['55'].eyes), JSON.stringify({ both: { scaleX: 0.78, scaleY: 0.78, y: 20 }, left: { x: 10 }, right: { x: 2 } }));

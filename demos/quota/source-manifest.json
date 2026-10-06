@@ -106,7 +106,7 @@
     },
     {
       "target": "check.browser.cjs",
-      "sha256": "31f5f5ae65b5b6d6d48f153c6e6078c4a2e1efe455d78bd766c0ffe9d85d285a"
+      "sha256": "60fee3f819328789a1252bf0aadeb4c7b38127d6618c850dc2eb0f6a24fd5340"
     },
     {
       "target": "demo-adapter.css",
@@ -122,11 +122,11 @@
     },
     {
       "target": "demo.js",
-      "sha256": "a61447293086872258d81e71f04363955f6b7acb5da2f5ab5ab6110b26ed45a9"
+      "sha256": "a921897e7ed0a9253644fee55efda7d36bbb069d68b1fe1f09780e06617820ff"
     },
     {
       "target": "index.html",
-      "sha256": "e0dd2e7d401c71d5d293fe87f2c8ddb7a30dba8633acc8c991aaaef1e3ef22e8"
+      "sha256": "824347119cbac2fdf07b9dc7277d786c63bd359180fa50f477cf26bfb21ce11c"
     }
   ]
 }
