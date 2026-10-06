@@ -16,7 +16,11 @@
 .notes-native-actions .text-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .native-notes-panel { min-height: 520px; }
 .native-notes-card { min-height: 220px; }
-.native-appearance-preview { grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr)); align-items: end; padding-block: 24px; }
+.native-appearance-preview { grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr)); align-items: start; padding-block: 24px; container-type: inline-size; }
+/* Two 560px columns and their 24px gap; the quota content sets the shared height. */
+@container (min-width: 1144px) {
+  .native-appearance-preview > .native-chat { height: 0; min-height: 100%; }
+}
 .native-appearance-preview .native-demo { color-scheme: light; }
 .native-appearance-preview .native-quota { background: #f6f8fb; border-radius: 12px; }
 .ap-demo[data-look="dark"] .native-appearance-preview .native-demo { color-scheme: dark; }

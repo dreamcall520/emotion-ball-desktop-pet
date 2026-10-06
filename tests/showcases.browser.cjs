@@ -145,6 +145,8 @@ fs.mkdirSync(out, { recursive: true });
     assert.equal(await page.frameLocator('#codex iframe').locator('#demo-feedback').isVisible(), false);
     const quotaDemo = page.frameLocator('#codex iframe');
     const task = page.locator('.codex-task-demo');
+    const taskCenters = await task.locator('.motion-stage, .codex-task-status, h3, [data-task-next]').evaluateAll(elements => elements.map(e => { const r=e.getBoundingClientRect(); return r.left+r.width/2; }));
+    assert.ok(Math.max(...taskCenters)-Math.min(...taskCenters)<1, 'pet, task status, title and button share the center');
     assert.equal(await task.evaluate(e => getComputedStyle(e).borderBottomWidth), '0px');
     const quotaGap = await task.evaluate(e => e.nextElementSibling.getBoundingClientRect().top-e.getBoundingClientRect().bottom);
     assert.ok(quotaGap >= 0 && quotaGap <= 16, `task-to-quota gap: ${quotaGap}`);
@@ -215,7 +217,7 @@ fs.mkdirSync(out, { recursive: true });
       await page.waitForFunction(() => {
         const preview=document.querySelector('.native-appearance-preview'), frames=[...preview.querySelectorAll(':scope > iframe')], rects=frames.map(f=>f.getBoundingClientRect());
         const singleColumn=getComputedStyle(preview).gridTemplateColumns.trim().split(/\s+/).length===1;
-        return rects.every(r=>r.height>100) && (singleColumn || Math.abs(rects[0].bottom-rects[1].bottom)<1);
+        return rects.every(r=>r.height>100) && (singleColumn || (Math.abs(rects[0].top-rects[1].top)<1 && Math.abs(rects[0].bottom-rects[1].bottom)<1));
       });
     };
     await page.locator('[data-ap-mode="accessible"]').click(); await page.locator('[data-ap-look="dark"]').click();
@@ -248,7 +250,7 @@ fs.mkdirSync(out, { recursive: true });
     await page.emulateMedia({ colorScheme: 'dark' });
     assert.equal(await page.locator('[data-demo-appearance][data-demo="quota"]').evaluate(e => getComputedStyle(e).backgroundColor), 'rgb(24, 33, 37)');
     await page.emulateMedia({ colorScheme: 'light' });
-    report.interactions.push('native dual/5-hour/weekly cards and matching trend; independent instances; appearance bottom alignment across card and theme changes; complete chat corners');
+    report.interactions.push('native dual/5-hour/weekly cards and matching trend; independent instances; appearance top and bottom alignment across card and theme changes; centered task reminder; complete chat corners');
     await page.reload();
     for (const [width, theme] of [[1440,'light'],[1440,'dark'],[1080,'light'],[1080,'dark'],[390,'light'],[390,'dark'],[320,'light'],[320,'dark']]) {
       await page.setViewportSize({ width, height: width > 600 ? 1000 : 844 });

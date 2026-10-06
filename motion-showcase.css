@@ -128,12 +128,12 @@
 .codex-live-showcase .quota-playground { padding: 0; }
 .codex-task-demo { padding: 0 8px 8px; margin-bottom: 12px; }
 .codex-task-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; color: var(--text-soft); font-size: 13px; }
-.codex-task-body { display: grid; grid-template-columns: 210px minmax(0, 1fr); align-items: center; gap: 28px; max-width: 800px; margin-inline: auto; }
-.codex-task-body .motion-stage { --pet-size: 116px; min-height: 196px; padding-top: 40px; }
+.codex-task-body { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 4px; max-width: 600px; margin-inline: auto; }
+.codex-task-body .motion-stage { --pet-size: 116px; width: 210px; min-height: 180px; padding-top: 40px; }
 .codex-task-body .motion-stage::after { bottom: 12px; }
 .codex-task-body .motion-bubble { top: 12px; padding: 8px 12px; font-size: 12px; }
-.codex-task-copy { min-width: 0; }
-.codex-task-status { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; color: var(--accent); font-size: 12px; font-weight: 600; }
+.codex-task-copy { min-width: 0; text-align: center; }
+.codex-task-status { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 0 8px; color: var(--accent); font-size: 12px; font-weight: 600; }
 .codex-task-status::before { content: ""; width: 6px; height: 6px; flex: none; border-radius: 50%; background: currentColor; }
 .codex-task-copy h3 { margin: 0 0 8px; font-size: 20px; line-height: 1.5; }
 .codex-task-copy > p:not(.codex-task-status) { margin: 0 0 16px; color: var(--text-soft); font-size: 14px; line-height: 1.65; }
@@ -182,8 +182,6 @@
   .codex-task-demo { padding-inline: 0; }
   .codex-task-body { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .codex-task-body .motion-stage { --pet-size: 104px; min-height: 174px; padding-top: 40px; }
-  .codex-task-copy { text-align: center; }
-  .codex-task-status { justify-content: center; }
   .codex-task-copy h3 { font-size: 18px; }
   .codex-task-copy > p:not(.codex-task-status) { font-size: 13px; }
   .desktop-scene { grid-template-columns: 1fr; gap: 16px; padding: 28px 20px 16px; }
