@@ -8,6 +8,8 @@
 
 原官网功能和演示保留在 `product/index.html`，地址为 `https://qiuqiu.pet/product/`。导航的功能介绍、安装指南与更新日志在新页签打开；旧首页功能锚点通过 `location.replace` 跳转到对应功能分区。旧 `product.html` 仅保留兼容跳转，并携带原查询参数和锚点。产品正文和演示、许可及署名保持。13 条完整日志迁至 `updates/index.html`（`https://qiuqiu.pet/updates/`），桌面以侧栏选版本，手机用版本选择器；hash 支持直链与历史返回，无 JavaScript 时显示全部原文。12 条版本记录配有经 GitHub API 和 HEAD 回读的 27 个下载入口，官网上线事件不虚构安装包。旧 `/product/#updates` 及 `product.html#updates` 转到独立日志页。三页均有独立 canonical 和分享封面，并已加入 sitemap。
 
+首页「免费、非商业 · 署名与许可」使用原生小弹窗，分行展示使用范围、原作者 GitHub 项目与再次分发说明，可通过关闭按钮、Esc 或点击背景关闭；不再跳转功能介绍。原作者旧项目地址已重定向为 `sam70361/aora-bot`，弹窗链接使用 GitHub API 回读的现地址。首页新页签入口统一为细线圆角新窗口图标。更新日志只展示对应版本下载，不附加 GitHub Release 页面入口。
+
 主视觉为本项目生成的静态资产；自动柔光在玻璃区域内渲染；鼠标移动和点击水波覆盖空白背景并保护角色，文字始终固定。以30fps、130万像素和最多3组鼠标波为上限，没有新增项目依赖。
 
 ## 维护原则

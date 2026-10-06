@@ -73,6 +73,13 @@
     if (menu.open) for (const other of menus) if (other !== menu) other.open = false;
   });
 
+  const licenseDialog = document.querySelector('#license-dialog');
+  document.querySelector('[data-license-open]').addEventListener('click', () => licenseDialog.showModal());
+  licenseDialog.addEventListener('click', event => {
+    const rect = licenseDialog.getBoundingClientRect();
+    if (event.target === licenseDialog && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)) licenseDialog.close();
+  });
+
   // Preserve existing section URLs when the long page moves into product/.
   const oldSections = ['features', 'codex', 'chat', 'customize', 'notes', 'appearance', 'download', 'install', 'privacy', 'license'];
   function followOldSection() {

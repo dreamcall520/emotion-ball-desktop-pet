@@ -46,8 +46,6 @@
 .release-download-secondary { border: 1px solid var(--line-strong); color: var(--text-soft); }
 .release-download-secondary:hover { background: var(--surface-strong); color: var(--text); }
 .release-download-note { max-width: 600px; margin: 0 0 9px; color: var(--text-soft); font-size: 13px; line-height: 1.7; }
-.release-source { color: var(--accent); font-size: 13px; }
-.release-source:hover { text-decoration: underline; }
 .release-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .updates-page select { font: inherit; color: var(--text); }
 .updates-page select:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }

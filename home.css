@@ -45,7 +45,7 @@ a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px soli
 .desktop-nav { display: flex; align-items: center; gap: clamp(26px, 3.5vw, 56px); font-size: 14px; letter-spacing: .06em; }
 .desktop-nav a, .desktop-nav summary { padding: 12px 0; }
 .desktop-nav .active { color: var(--ink); font-weight: 600; }
-.desktop-nav a:hover, .desktop-nav summary:hover, .home-footer a:hover { color: var(--accent); }
+.desktop-nav a:hover, .desktop-nav summary:hover, .home-footer a:hover, .home-footer button:hover { color: var(--accent); }
 details { position: relative; }
 summary { list-style: none; }
 summary::-webkit-details-marker { display: none; }
@@ -76,6 +76,20 @@ details[open] .caret { transform: rotate(180deg); }
 .pet-reply.visible { opacity: 1; transform: translateY(0); }
 .home-footer { position: relative; display: flex; align-items: center; justify-content: center; gap: 28px; padding: 10px 24px; color: var(--muted); font-size: 11px; background: var(--footer-surface); }
 .footer-links { display: flex; align-items: center; gap: 20px; }
+.footer-links button { padding: 0; }
+.license-dialog { width: min(420px, calc(100% - 40px)); max-height: calc(100dvh - 40px); margin: auto; padding: 24px; border: 1px solid var(--line); border-radius: 20px; background: var(--menu); color: var(--ink); box-shadow: 0 20px 70px #07122526; }
+.license-dialog::backdrop { background: #07122538; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.license-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.license-dialog h2 { margin: 0; font-size: 18px; font-weight: 550; }
+.license-dialog button { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border-radius: 50%; color: var(--muted); }
+.license-dialog button:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--ink); }
+.license-dialog dl { display: grid; gap: 18px; margin: 20px 0 0; padding-top: 20px; border-top: 1px solid var(--line); font-size: 14px; line-height: 1.7; }
+.license-dialog dl > div { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 20px; }
+.license-dialog dt { color: var(--muted); font-size: 13px; }
+.license-dialog dd { margin: 0; }
+.license-dialog dd a { display: inline-flex; align-items: center; gap: 6px; }
+.license-dialog dd a:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 4px; }
+.license-dialog small { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; }
 .motion-control:disabled { opacity: .6; cursor: default; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 @media (prefers-reduced-motion: reduce) { .scene-material { display: none; } }

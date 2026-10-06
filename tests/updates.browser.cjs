@@ -22,13 +22,17 @@ fs.mkdirSync(out, { recursive: true });
     assert.equal(await page.title(), '球球桌宠 · 更新日志');
     assert.equal(await page.locator('[data-release-panel]:visible').count(), 1);
     assert.equal(await page.locator('[data-release-panel]').count(), 13);
+    assert.equal(await page.locator('.release-download').count(), 27);
+    assert.equal(await page.getByRole('link', { name:/GitHub Release/ }).count(), 0);
     const entries = await page.locator('[data-release-link]').evaluateAll(links => links.map(link => ({ hash: link.hash, title: link.querySelector('span').textContent })));
     for (const entry of entries) {
       await page.locator(`.versions-list a[href="${entry.hash}"]`).click();
       assert.equal(await page.locator('[data-release-panel]:visible h3').innerText(), entry.title);
       assert.equal(new URL(page.url()).hash, entry.hash);
+      if (entry.hash === '#v0.3.23-apple') await page.screenshot({ path:path.join(out, 'updates-0.3.23.png') });
     }
     report.checks.push('13 versions selectable; exact original titles and matching shareable hash');
+    report.checks.push('GitHub Release links removed; all 27 architecture-specific download entries retained');
     await page.locator(`.versions-list a[href="${entries[0].hash}"]`).focus();
     await page.keyboard.press('Enter');
     assert.equal(await page.locator('[data-release-panel]:visible h3').innerText(), entries[0].title);

@@ -25,6 +25,7 @@ test('independent logs retain the 13 public records and the full 0.4.00 wording'
 test('each App record has architecture-specific public assets; website event and hotfix stay accurate', () => {
   assert.equal(downloads.length, 27);
   assert.equal(new Set(downloads).size, 27);
+  assert.doesNotMatch(html, /release-source|查看 GitHub Release/);
   assert.ok(downloads.every(url => /^https:\/\/github\.com\/dreamcall520\/emotion-ball-desktop-pet\/releases\/download\/v[\d.]+\/.+\.(?:zip|dmg)$/.test(url)));
   for (const article of articles) {
     const title = article.match(/<h3[^>]*>(.*?)<\/h3>/)[1];
