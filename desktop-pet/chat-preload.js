@@ -10,7 +10,7 @@ contextBridge.exposeInMainWorld('qiuqiuChat', {
   },
   onAppearance(callback) {
     if (typeof callback !== 'function') return () => {};
-    const listener = (_event, appearance, image) => callback(appearance, image);
+    const listener = (_event, appearance, image, codexPet) => callback(appearance, image, codexPet);
     ipcRenderer.on('pet:chat-appearance', listener);
     return () => ipcRenderer.removeListener('pet:chat-appearance', listener);
   },
