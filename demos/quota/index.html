@@ -5,13 +5,17 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; frame-src 'self'; connect-src 'none'; base-uri 'none'; object-src 'none'">
   <title>额度卡片 2.0 · 网页示例</title>
-  <link rel="stylesheet" href="demo.css?v=20261006-align">
-  <script defer src="demo.js?v=20261006-task"></script>
+  <link rel="stylesheet" href="demo.css?v=20261006-card-period">
+  <script defer src="demo.js?v=20261006-card-period"></script>
   <link rel="icon" href="../../assets/huancai-icon.png">
 </head>
 <body>
   <main>
-    <div class="demo-toolbar"><button class="demo-back" id="api-back" type="button" hidden>‹ 返回额度趋势</button><label>用量示例 <select id="demo-scenario" data-focus-mode="keyboard"><option value="balanced">节奏均衡</option><option value="fast">用量偏快</option><option value="unknown">记录不足</option></select></label></div>
+    <div class="demo-toolbar">
+      <div class="demo-period-switch" id="demo-card-period" role="group" aria-label="额度卡片样式"><button type="button" data-card-period="dual" aria-pressed="true">双周期</button><button type="button" data-card-period="5h" aria-pressed="false">5 小时</button><button type="button" data-card-period="week" aria-pressed="false">周额度</button></div>
+      <button class="demo-back" id="api-back" type="button" hidden>‹ 返回额度趋势</button>
+      <label>用量示例 <select id="demo-scenario" data-focus-mode="keyboard"><option value="balanced">节奏均衡</option><option value="fast">用量偏快</option><option value="unknown">记录不足</option></select></label>
+    </div>
     <div class="demo-layout">
       <div class="demo-cards">
         <section aria-label="套餐额度与状态"><div class="demo-card-window"><iframe id="quota-frame" src="quota-label.html?v=20261006-focus" title="可操作的真实额度卡片" width="196" height="144"></iframe></div></section>

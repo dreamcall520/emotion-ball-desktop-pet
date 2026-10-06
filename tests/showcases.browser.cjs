@@ -28,8 +28,22 @@ fs.mkdirSync(out, { recursive: true });
     assert.equal(await page.locator('.install-visual-step').count(), 3);
     assert.equal(await page.locator('[data-motion-scene] [data-ball-host] svg').count(), 3);
     assert.equal(await page.locator('.install-list, .codex-pet-row').count(), 0);
-    assert.equal(await page.locator('#customize .section-heading > p').count(), 2);
-    assert.equal(await page.locator('#customize .section-entry').evaluate(e => getComputedStyle(e).fontSize), '13px');
+    assert.equal(await page.locator('.section-entry, .chat-download-link').count(), 0);
+    assert.equal(await page.locator('.section-howto').count(), 4);
+    for (const id of ['chat', 'customize', 'notes', 'appearance']) {
+      const howto = page.locator(`#${id} .section-howto`);
+      assert.equal(await howto.locator('p').isVisible(), false);
+      await howto.locator('summary').focus(); await page.keyboard.press('Enter');
+      assert.match(await howto.locator('p').innerText(), /右键球球/);
+      assert.equal(await howto.locator('p').isVisible(), true);
+      await page.keyboard.press('Enter');
+      assert.equal(await howto.locator('p').isVisible(), false);
+    }
+    const typography = await page.locator('.hero-lead, .section-lead').evaluateAll(elements => elements.map(e => {
+      const css=getComputedStyle(e); return {fontSize:parseFloat(css.fontSize),lineHeight:parseFloat(css.lineHeight),fontWeight:Number(css.fontWeight)};
+    }));
+    assert.ok(typography.every(t => t.fontSize >= 16 && t.fontSize <= 20 && t.lineHeight / t.fontSize >= 1.7 && t.fontWeight <= 450));
+    report.interactions.push('consistent introduction typography; four keyboard-operable opening instructions; no standalone entry footnotes or extra chat download CTA');
     const pause = page.locator('.hero-motion-toggle');
     assert.equal(await pause.evaluate(e => getComputedStyle(e).borderWidth), '0px');
     assert.equal(await pause.locator('svg').evaluate(e => getComputedStyle(e).width), '18px');
@@ -131,6 +145,10 @@ fs.mkdirSync(out, { recursive: true });
     assert.equal(await page.frameLocator('#codex iframe').locator('#demo-feedback').isVisible(), false);
     const quotaDemo = page.frameLocator('#codex iframe');
     const task = page.locator('.codex-task-demo');
+    assert.equal(await task.evaluate(e => getComputedStyle(e).borderBottomWidth), '0px');
+    const quotaGap = await task.evaluate(e => e.nextElementSibling.getBoundingClientRect().top-e.getBoundingClientRect().bottom);
+    assert.ok(quotaGap >= 0 && quotaGap <= 16, `task-to-quota gap: ${quotaGap}`);
+    assert.equal(await quotaDemo.locator('.demo-toolbar').evaluate(e => getComputedStyle(e).borderBottomWidth), '0px');
     await task.scrollIntoViewIfNeeded();
     const taskState = () => page.evaluate(() => QiuqiuWebsiteMotion.getState().find(s => s.name === 'codex'));
     await page.waitForFunction(() => QiuqiuWebsiteMotion.getState().find(s => s.name === 'codex').thought.running);
@@ -174,12 +192,32 @@ fs.mkdirSync(out, { recursive: true });
     await scenario.press('Tab'); await page.keyboard.press('Shift+Tab');
     assert.equal(await scenario.evaluate(e => e === document.activeElement && getComputedStyle(e).outlineWidth === '1px'), true, 'keyboard focus remains visible');
     await scenario.selectOption('balanced');
+    for (const [cardPeriod, count, title] of [['5h',1,/5 小时趋势/],['week',1,/周额度趋势/],['dual',2,/额度趋势/]]) {
+      await quotaDemo.locator(`[data-card-period="${cardPeriod}"]`).click();
+      await page.waitForFunction(value => document.querySelector('#codex iframe').contentWindow.QiuqiuQuotaDemo.getState().cardPeriod === value, cardPeriod);
+      await page.waitForFunction(({count,cardPeriod}) => {
+        const demo=document.querySelector('#codex iframe').contentDocument;
+        const title=demo.querySelector('#detail-frame').contentDocument.querySelector('#details-title').textContent.trim();
+        return demo.querySelector('#quota-frame').contentDocument.querySelectorAll('.v20-period').length===count && title.startsWith(cardPeriod==='5h'?'5 小时趋势':cardPeriod==='week'?'周额度趋势':'额度趋势');
+      }, {count,cardPeriod});
+      assert.equal(await quota.locator('.v20-period').count(), count);
+      assert.match(await detail.locator('#details-title').innerText(), title);
+      assert.equal(await page.locator('[data-demo-appearance][data-demo="quota"]').evaluate(e => e.contentWindow.QiuqiuQuotaDemo.getState().cardPeriod), 'dual');
+      await quotaDemo.locator('.demo-layout').screenshot({ path: path.join(out, `quota-${cardPeriod}-1440-light.png`) });
+    }
     await quota.locator('[data-action="opportunities"]').click(); await detail.locator('.opportunity-history > summary').click();
     assert.match(await detail.locator('.opportunity-history').innerText(), /已获得/);
     await quota.locator('[data-action="trend"]').click(); await detail.locator('[data-period="300"]').click();
     assert.match(await detail.locator('#details-content').innerText(), /82%/);
     report.interactions.push('native quota default trend, aligned columns, mouse/keyboard scenario focus, history and period switching');
     await page.locator('#appearance').scrollIntoViewIfNeeded();
+    const appearanceAligned = async () => {
+      await page.waitForFunction(() => {
+        const preview=document.querySelector('.native-appearance-preview'), frames=[...preview.querySelectorAll(':scope > iframe')], rects=frames.map(f=>f.getBoundingClientRect());
+        const singleColumn=getComputedStyle(preview).gridTemplateColumns.trim().split(/\s+/).length===1;
+        return rects.every(r=>r.height>100) && (singleColumn || Math.abs(rects[0].bottom-rects[1].bottom)<1);
+      });
+    };
     await page.locator('[data-ap-mode="accessible"]').click(); await page.locator('[data-ap-look="dark"]').click();
     const appearanceChat = page.frameLocator('[data-demo-appearance][data-demo="chat"]');
     await appearanceChat.locator('html[data-color-mode="accessible"]').waitFor();
@@ -199,13 +237,18 @@ fs.mkdirSync(out, { recursive: true });
       });
       assert.deepEqual(corners, { inset: true, radius: '15px', border: '1px' });
       assert.equal(await appearanceChat.locator('#privacy-note').isVisible(), false);
+      for (const cardPeriod of ['5h','week','dual']) {
+        await page.frameLocator('[data-demo-appearance][data-demo="quota"]').locator(`[data-card-period="${cardPeriod}"]`).click();
+        await appearanceAligned();
+        assert.equal(await quotaDemo.locator('body').evaluate(() => QiuqiuQuotaDemo.getState().cardPeriod), 'dual');
+      }
       await page.locator('#appearance').screenshot({ path: path.join(out, `appearance-1440-accessible-${look}.png`) });
     }
     await page.locator('[data-ap-look="system"]').click();
     await page.emulateMedia({ colorScheme: 'dark' });
     assert.equal(await page.locator('[data-demo-appearance][data-demo="quota"]').evaluate(e => getComputedStyle(e).backgroundColor), 'rgb(24, 33, 37)');
     await page.emulateMedia({ colorScheme: 'light' });
-    report.interactions.push('latest real UI accessibility/theme controls, independent host theme, complete chat corners, enlarged quota cards, real Apple settings screenshot');
+    report.interactions.push('native dual/5-hour/weekly cards and matching trend; independent instances; appearance bottom alignment across card and theme changes; complete chat corners');
     await page.reload();
     for (const [width, theme] of [[1440,'light'],[1440,'dark'],[1080,'light'],[1080,'dark'],[390,'light'],[390,'dark'],[320,'light'],[320,'dark']]) {
       await page.setViewportSize({ width, height: width > 600 ? 1000 : 844 });
@@ -217,6 +260,7 @@ fs.mkdirSync(out, { recursive: true });
         const overflow = await page.evaluate(() => [...document.querySelectorAll('iframe[data-app-demo]')].filter(f => f.contentDocument?.readyState === 'complete').flatMap(f => [f, ...f.contentDocument.querySelectorAll('iframe')]).filter(f => !f.hidden && f.contentWindow?.innerWidth > 0 && f.contentDocument?.documentElement.scrollWidth > f.contentWindow.innerWidth + 1).map(f => f.src));
         assert.deepEqual(overflow, [], `embedded overflow ${width}/${theme}/${id}`);
         if (id === 'codex') assert.equal(await page.locator('#codex iframe').evaluate(e => getComputedStyle(e).colorScheme), theme, 'quota host scheme matches its transparent embedded page');
+        if (id === 'appearance') await appearanceAligned();
         if (id === 'features') {
           await edge.uncheck(); await edge.check();
           await page.waitForTimeout(450);

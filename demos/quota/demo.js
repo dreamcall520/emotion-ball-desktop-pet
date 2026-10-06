@@ -5,14 +5,15 @@
   const frames = { quota: $('quota-frame'), details: $('detail-frame'), 'api-label': $('api-label-frame'), 'api-report': $('api-report-frame') };
   const cards = document.querySelector('.demo-cards');
   const ready = new Set();
+  const cardWindows = {dual:null,'5h':300,week:10080};
   const appearanceDemo=new URLSearchParams(location.search).get('appearanceDemo')==='1';
   document.documentElement.dataset.appearanceDemo=String(appearanceDemo);
   const now = Date.now(), day = 86400000;
-  let appearance = 'light', colorMode = 'standard', scenario = 'balanced', expanded = true, apiExpanded = true, action = 'trend', period = 10080, unread = appearanceDemo, apiVisible = false, paused = false, taskState = 'processing';
+  let appearance = 'light', colorMode = 'standard', scenario = 'balanced', cardPeriod = 'dual', expanded = true, apiExpanded = true, action = 'trend', period = 10080, unread = appearanceDemo, apiVisible = false, paused = false, taskState = 'processing';
   const report = { month: new Date(now).toISOString().slice(0,7), updatedAt: now, costs: { month: [{currency:'usd',value:32.48}], today: [{currency:'usd',value:1.26}] }, usage: {inputTokens:2840000,cachedInputTokens:1120000,outputTokens:420000,requests:137} };
   function quotaModel() {
     const fast = scenario === 'fast', unknown = scenario === 'unknown';
-    const items = [{label:'CODEX',windowMinutes:300,remaining:fast ? 12 : 82,resetsAt:now+4*3600000,pace:{state:unknown ? 'unknown' : fast ? 'fast' : 'balanced',remainingTimePercent:80}}, {label:'CODEX',windowMinutes:10080,remaining:fast ? 8 : 68,resetsAt:now+5*day,pace:{state:unknown ? 'unknown' : fast ? 'fast' : 'balanced',remainingTimePercent:71}}];
+    const items = [{label:'CODEX',windowMinutes:300,remaining:fast ? 12 : 82,resetsAt:now+4*3600000,pace:{state:unknown ? 'unknown' : fast ? 'fast' : 'balanced',remainingTimePercent:80}}, {label:'CODEX',windowMinutes:10080,remaining:fast ? 8 : 68,resetsAt:now+5*day,pace:{state:unknown ? 'unknown' : fast ? 'fast' : 'balanced',remainingTimePercent:71}}].filter(item=>cardWindows[cardPeriod]===null || item.windowMinutes===cardWindows[cardPeriod]);
     const item = items.find(item => item.windowMinutes === period), start = item.resetsAt-item.windowMinutes*60000;
     const runningCount=appearanceDemo || taskState==='processing' ? 1 : 0;
     return {state:'ready',size:'compact',expanded,appearance,colorMode,items,resetCreditsAvailable:2,extraCredits:{state:'balance',balance:'1250.00'},activity:{runningCount,unreadCount:unread?1:0},action,period,
@@ -34,7 +35,7 @@
   // Preserve the native viewports; scale both cards and folded modes together.
   function sizeCards() {
     const scale = cards.clientWidth / 196;
-    for (const [kind,isExpanded,height] of [['quota',expanded,144],['api-label',apiExpanded,92]]) {
+    for (const [kind,isExpanded,height] of [['quota',expanded,cardPeriod==='dual'?144:131],['api-label',apiExpanded,92]]) {
       const frame = frames[kind], width = isExpanded ? 196 : 128, nativeHeight = isExpanded ? height : 32;
       frame.width=width; frame.height=nativeHeight;
       frame.style.transform=`scale(${scale})`;
@@ -45,6 +46,7 @@
   function feedback(text) { $('demo-feedback').textContent=text; $('demo-feedback').hidden=false; resize(); }
   function render() {
     document.documentElement.dataset.appearance=appearance; document.documentElement.dataset.colorMode=colorMode; document.documentElement.dataset.demoPaused=String(paused);
+    document.querySelectorAll('[data-card-period]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.cardPeriod===cardPeriod)));
     sizeCards();
     frames.details.hidden=apiVisible; $('api-report').hidden=!apiVisible; $('api-back').hidden=!apiVisible;
     Object.keys(frames).forEach(send); requestAnimationFrame(resize);
@@ -53,7 +55,7 @@
   function openDetail(detail,nextPeriod) {
     if (!['trend','tasks','results','opportunities','credits'].includes(detail)) return;
     $('demo-feedback').hidden=true;
-    action=detail; period=nextPeriod===300?300:10080; apiVisible=false; render();
+    action=detail; period=cardWindows[cardPeriod]??(nextPeriod===300?300:10080); apiVisible=false; render();
   }
   function openThread(id) {
     const result=id==='demo-notes';
@@ -71,6 +73,11 @@
     if(event.key==='Tab' || event.target===scenarioSelect) scenarioSelect.dataset.focusMode='keyboard';
   },true);
   scenarioSelect.addEventListener('change',event=>{scenario=event.target.value;render();});
+  $('demo-card-period').addEventListener('click',event=>{
+    const button=event.target.closest('button[data-card-period]');
+    if(!button || !Object.hasOwn(cardWindows,button.dataset.cardPeriod)) return;
+    cardPeriod=button.dataset.cardPeriod;openDetail('trend',period);
+  });
   $('api-back').addEventListener('click',()=>openDetail('trend',period));
   $('thread-close').addEventListener('click',()=>{$('demo-thread').hidden=true;resize();});
   window.addEventListener('message',event=>{
@@ -107,7 +114,7 @@
     if(entry.contentRect.width===detailWidth) return;
     detailWidth=entry.contentRect.width; send('details');
   }).observe(document.querySelector('.demo-detail'));
-  window.QiuqiuQuotaDemo=Object.freeze({getState:()=>Object.freeze({appearance,colorMode,scenario,expanded,apiExpanded,action,period,unread,apiVisible,paused,taskState})});
+  window.QiuqiuQuotaDemo=Object.freeze({getState:()=>Object.freeze({appearance,colorMode,scenario,cardPeriod,expanded,apiExpanded,action,period,unread,apiVisible,paused,taskState})});
   parent.postMessage({type:'qiuqiu-demo-ready'},location.origin);
   render();
 })();

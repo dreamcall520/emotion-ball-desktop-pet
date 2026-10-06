@@ -1,7 +1,7 @@
-/* Existing Playwright only: NODE_PATH=... QIUQIU_SITE_URL=http://127.0.0.1:4185/ node demos/quota/check.browser.cjs */
+/* Existing Playwright only: NODE_PATH=... QIUQIU_SITE_URL=http://127.0.0.1:4186/ node demos/quota/check.browser.cjs */
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const {chromium}=require('playwright');
-const base=process.env.QIUQIU_SITE_URL||'http://127.0.0.1:4185/';
+const base=process.env.QIUQIU_SITE_URL||'http://127.0.0.1:4186/';
 const out=process.env.QIUQIU_QA_OUTPUT||'/tmp/qiuqiu-live-app-demos';fs.mkdirSync(out,{recursive:true});
 (async()=>{
  const browser=await chromium.launch({channel:'chrome',headless:true});
@@ -18,7 +18,7 @@ const out=process.env.QIUQIU_QA_OUTPUT||'/tmp/qiuqiu-live-app-demos';fs.mkdirSyn
   page.on('request',r=>{if(new URL(r.url()).origin!==new URL(base).origin)externalRequests.push(r.url());});
   await page.goto(base+'demos/quota/index.html');assert.match(await page.title(),/额度卡片 2.0/);
   const quota=page.frameLocator('#quota-frame'),detail=page.frameLocator('#detail-frame'),api=page.frameLocator('#api-label-frame');
-  await quota.locator('.v20-value').first().waitFor();assert.equal(await quota.locator('.v20-value').count(),2);assert.match(await detail.locator('#details-title').innerText(),/额度趋势/);
+  await quota.locator('.v20-value').first().waitFor();assert.equal(await quota.locator('.v20-value').count(),2);assert.match(await detail.locator('#details-title').innerText(),/额度趋势/);assert.equal(await page.evaluate(()=>QiuqiuQuotaDemo.getState().cardPeriod),'dual');
   assert.equal(await detail.locator('.trend-chart').count(),1);
   const taskCounts=()=>quota.locator('.v20-activity').evaluate(e=>Array.from(e.querySelectorAll('.v20-count')).map(n=>n.textContent));
   const sendTask=state=>page.evaluate(state=>window.postMessage({type:'qiuqiu-demo-task',state},location.origin),state);
@@ -74,13 +74,58 @@ const out=process.env.QIUQIU_QA_OUTPUT||'/tmp/qiuqiu-live-app-demos';fs.mkdirSyn
    rect=await cardRect('#quota-frame');near(rect.width,config.cardWidth);near((await cardRect('#api-label-frame')).width,config.cardWidth);assert.equal(rect.nativeWidth,196);near((await cardRect('#detail-frame')).width,width-8-(width>config.breakpoint?config.cardWidth+config.gap:0));
    const positions=await page.evaluate(()=>({card:document.querySelector('#quota-frame').getBoundingClientRect().toJSON(),detail:document.querySelector('#detail-frame').getBoundingClientRect().toJSON()}));
    if(width>config.breakpoint){near(positions.detail.left-positions.card.right,config.gap);near(positions.card.left,4);near(positions.detail.top,positions.card.top);}else assert.ok(positions.detail.top>positions.card.bottom);
-   const toolbar=await page.locator('.demo-toolbar').evaluate(e=>e.getBoundingClientRect().toJSON());near(toolbar.left,4);near(toolbar.right,width-4);assert.ok(toolbar.bottom<positions.card.top);assert.equal(await page.locator('.demo-cards h2').count(),0);
+   const toolbar=await page.locator('.demo-toolbar').evaluate(e=>e.getBoundingClientRect().toJSON());near(toolbar.left,4);near(toolbar.right,width-4);assert.ok(toolbar.bottom<positions.card.top);assert.equal(await page.locator('.demo-cards h2').count(),0);assert.equal(await page.locator('.demo-toolbar').evaluate(e=>getComputedStyle(e).borderBottomWidth),'0px');
    assert.equal(await detail.locator('html').evaluate(e=>e.scrollWidth<=innerWidth),true);
    assert.equal(await quota.locator('html').getAttribute('data-color-mode'),colorMode);assert.equal(await detail.locator('html').getAttribute('data-accessible-appearance'),appearance);
    const screenshot=path.join(out,`quota-${config.mode}-${width}-${appearance}-${colorMode}.png`);await page.screenshot({path:screenshot,fullPage:true});report.layouts.push({kind:'quota',mode:config.mode,width,appearance,colorMode,cardWidth:rect.width,detailWidth:(await cardRect('#detail-frame')).width,height:await page.locator('main').evaluate(e=>Math.ceil(e.getBoundingClientRect().height)),screenshot});
    }
   }
   report.interactions.push('appearance quota keeps its independent active/result examples and neither consumes nor emits external task-state messages');
+  const cardPeriods=[{value:'5h',period:300,count:1,title:/5 小时趋势/,titleText:'5 小时趋势'},{value:'week',period:10080,count:1,title:/周额度趋势/,titleText:'周额度趋势'},{value:'dual',count:2,title:/额度趋势/,titleText:'额度趋势'}];
+  for(const config of modes){
+   await page.goto(base+'demos/quota/index.html'+config.query);await quota.locator('.v20-value').first().waitFor();assert.equal(await page.evaluate(()=>QiuqiuQuotaDemo.getState().cardPeriod),'dual');
+   for(const choice of cardPeriods){
+    const button=page.locator(`[data-card-period="${choice.value}"]`);
+    await button.click();await page.waitForFunction(v=>QiuqiuQuotaDemo.getState().cardPeriod===v,choice.value);
+    assert.equal(await button.getAttribute('aria-pressed'),'true');assert.equal(await button.evaluate(e=>getComputedStyle(e).outlineStyle),'none');
+    await page.waitForFunction(count=>document.querySelector('#quota-frame').contentDocument.querySelectorAll('.v20-value').length===count,choice.count);
+    await page.waitForFunction(title=>document.querySelector('#detail-frame').contentDocument.querySelector('#details-title').textContent.startsWith(title),choice.titleText);
+    assert.match(await detail.locator('#details-title').innerText(),choice.title);assert.equal(await detail.locator('.trend-tabs').count(),choice.count===1?0:1);
+    if(choice.period)assert.equal(await page.evaluate(()=>QiuqiuQuotaDemo.getState().period),choice.period);
+    await quota.locator('.v20-collapse').click();await page.waitForFunction(()=>!QiuqiuQuotaDemo.getState().expanded);
+    await page.locator('#demo-scenario').selectOption('fast');await page.waitForFunction(()=>QiuqiuQuotaDemo.getState().scenario==='fast');
+    assert.equal(await page.evaluate(()=>QiuqiuQuotaDemo.getState().cardPeriod),choice.value);near((await cardRect('#quota-frame')).nativeHeight,32);
+    await quota.locator('#quota-label').press('Enter');await page.waitForFunction(()=>QiuqiuQuotaDemo.getState().expanded);
+    await quota.locator('[data-action="opportunities"]').click();await detail.locator('.opportunity-history > summary').click();assert.match(await detail.locator('.opportunity-history').innerText(),/已获得/);
+    await quota.locator('[data-action="credits"]').click();assert.match(await detail.locator('.balance-value').innerText(),/1,250/);
+    await quota.locator('[data-action="tasks"]').click();await detail.locator('.activity-item').click();await page.locator('#demo-thread').waitFor();assert.match(await page.locator('#thread-text').innerText(),/示例进展/);await page.locator('#thread-close').click();
+    if(config.mode==='main'){
+     await sendTask('completed');await page.waitForFunction(()=>QiuqiuQuotaDemo.getState().taskState==='completed');
+     await quota.locator('[data-action="results"]').click();await page.waitForFunction(()=>document.querySelector('#detail-frame').contentDocument.querySelector('#details-title').textContent.startsWith('待查看'));await detail.locator('.activity-item').click();await page.waitForFunction(()=>QiuqiuQuotaDemo.getState().taskState==='viewed');assert.equal(await page.evaluate(()=>QiuqiuQuotaDemo.getState().cardPeriod),choice.value);await page.locator('#thread-close').click();await sendTask('processing');await page.waitForFunction(()=>QiuqiuQuotaDemo.getState().taskState==='processing');
+    }
+    await api.locator('#api-open-details').click();await page.locator('#api-back').click();assert.equal(await page.evaluate(()=>QiuqiuQuotaDemo.getState().cardPeriod),choice.value);
+    await page.locator('#demo-scenario').selectOption('balanced');await page.waitForFunction(()=>QiuqiuQuotaDemo.getState().scenario==='balanced');
+    for(const width of [config.widths[0],320])for(const appearance of ['light','dark']){
+     await page.setViewportSize({width,height:900});await page.evaluate(appearance=>window.postMessage({type:'qiuqiu-demo-theme',appearance,colorMode:'standard'},location.origin),appearance);
+     await page.waitForFunction(v=>QiuqiuQuotaDemo.getState().appearance===v&&document.querySelector('#quota-frame').contentDocument.documentElement.dataset.appearance===v,appearance);await page.waitForTimeout(80);
+     const state=await page.evaluate(()=>QiuqiuQuotaDemo.getState());assert.equal(state.cardPeriod,choice.value);if(choice.period)assert.equal(state.period,choice.period);
+     rect=await cardRect('#quota-frame');near(rect.width,config.cardWidth);near(rect.height,config.cardWidth*(choice.count===1?131:144)/196);assert.equal(rect.nativeHeight,choice.count===1?131:144);
+     assert.equal(await quota.locator('.v20-period').count(),choice.count);assert.match(await detail.locator('#details-title').innerText(),choice.title);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.equal(await detail.locator('html').evaluate(e=>e.scrollWidth<=innerWidth),true);
+     assert.equal(await quota.locator('.v20-links').evaluate(e=>e.getBoundingClientRect().bottom<=innerHeight),true);
+     const toolbar=await page.evaluate(()=>{const group=document.querySelector('#demo-card-period').getBoundingClientRect(),select=document.querySelector('#demo-scenario').getBoundingClientRect();return{group:group.toJSON(),select:select.toJSON()};});assert.ok(toolbar.group.left<toolbar.select.left);assert.ok(toolbar.select.right<=width-4);if(width>320)near(toolbar.group.top+toolbar.group.height/2,toolbar.select.top+toolbar.select.height/2);
+     const screenshot=path.join(out,`quota-${config.mode}-${choice.value}-${width}-${appearance}.png`);await page.screenshot({path:screenshot,fullPage:true});report.layouts.push({kind:'quota',mode:config.mode,cardPeriod:choice.value,width,appearance,colorMode:'standard',cardWidth:rect.width,nativeHeight:rect.nativeHeight,screenshot});
+    }
+   }
+   await quota.locator('.v20-collapse').click();await page.waitForFunction(()=>!QiuqiuQuotaDemo.getState().expanded);await page.locator('[data-card-period="5h"]').click();await page.waitForFunction(()=>QiuqiuQuotaDemo.getState().cardPeriod==='5h');assert.equal(await page.evaluate(()=>QiuqiuQuotaDemo.getState().expanded),false);assert.equal((await cardRect('#quota-frame')).nativeHeight,32);await quota.locator('#quota-label').press('Enter');await page.waitForFunction(()=>QiuqiuQuotaDemo.getState().expanded);assert.equal((await cardRect('#quota-frame')).nativeHeight,131);
+  }
+  await page.locator('[data-card-period="week"]').focus();await page.keyboard.press('Enter');await page.waitForFunction(()=>QiuqiuQuotaDemo.getState().cardPeriod==='week');assert.equal(await page.locator('[data-card-period="week"]').evaluate(e=>getComputedStyle(e).outlineWidth),'1px');assert.equal(await page.locator('[data-card-period="week"]').evaluate(e=>getComputedStyle(e).outlineStyle),'solid');
+  const isolation=await browser.newPage();isolation.on('pageerror',e=>errors.push(e.message));isolation.on('request',r=>{if(new URL(r.url()).origin!==new URL(base).origin)externalRequests.push(r.url());});
+  const isolationUrl=base+'__quota-period-isolation-check__';await isolation.route(isolationUrl,route=>route.fulfill({contentType:'text/html',body:'<!doctype html><html><body><iframe id="main" width="1100" height="700" src="demos/quota/index.html"></iframe><iframe id="appearance" width="620" height="700" src="demos/quota/index.html?appearanceDemo=1"></iframe></body></html>'}));await isolation.goto(isolationUrl);
+  const mainInstance=isolation.frameLocator('#main'),appearanceInstance=isolation.frameLocator('#appearance');await mainInstance.frameLocator('#quota-frame').locator('.v20-value').first().waitFor();await appearanceInstance.frameLocator('#quota-frame').locator('.v20-value').first().waitFor();
+  await mainInstance.locator('[data-card-period="5h"]').click();await isolation.waitForFunction(()=>document.querySelector('#main').contentWindow.QiuqiuQuotaDemo.getState().cardPeriod==='5h');assert.equal(await appearanceInstance.locator('body').evaluate(()=>QiuqiuQuotaDemo.getState().cardPeriod),'dual');
+  await appearanceInstance.locator('[data-card-period="week"]').click();await isolation.waitForFunction(()=>document.querySelector('#appearance').contentWindow.QiuqiuQuotaDemo.getState().cardPeriod==='week');assert.equal(await mainInstance.locator('body').evaluate(()=>QiuqiuQuotaDemo.getState().cardPeriod),'5h');
+  await mainInstance.locator('[data-card-period="dual"]').click();await isolation.waitForFunction(()=>document.querySelector('#main').contentWindow.QiuqiuQuotaDemo.getState().cardPeriod==='dual');assert.equal(await appearanceInstance.locator('body').evaluate(()=>QiuqiuQuotaDemo.getState().cardPeriod),'week');await isolation.close();
+  report.interactions.push('independent main/appearance dual, 5-hour and weekly native item layouts; single 196x131 viewport and matching trend; 320px/light/dark screenshots, unclipped links; choice survives scenario/theme/folding/tasks/results/API; pointer has no ring and keyboard keeps a 1px focus');
   for(const config of modes){
    await page.goto(base+'demos/quota/index.html'+config.query);await quota.locator('.v20-value').first().waitFor();
    for(const width of config.mode==='main'?[700,360,320]:[620,560,360,320]){

@@ -96,7 +96,7 @@
   ],
   "adaptations": [
     "HTML inserts the in-memory demo bridge; core DOM, CSS and renderers unchanged.",
-    "Composition layout, verified messages, uniform 280px main / 224px appearance card scaling with preserved native viewports, responsive detail sizing and example dialog are website-only.",
+    "Composition layout, verified messages, independent dual / 5-hour / weekly native items, uniform 280px main / 224px appearance card scaling with preserved dual 196x144 and single 196x131 viewports, responsive detail sizing and example dialog are website-only.",
     "API connection settings are hidden in the website; no credentials are accepted."
   ],
   "adapters": [
@@ -106,7 +106,7 @@
     },
     {
       "target": "check.browser.cjs",
-      "sha256": "60fee3f819328789a1252bf0aadeb4c7b38127d6618c850dc2eb0f6a24fd5340"
+      "sha256": "42e27a4d80a8675a5a4b3a5fbad4aa483bff468ee3826defdc923bc4c78d229b"
     },
     {
       "target": "demo-adapter.css",
@@ -118,15 +118,15 @@
     },
     {
       "target": "demo.css",
-      "sha256": "c35b6a2d10609569ed9145c685602636e0a2ccf62071780c5064cf80db667a7f"
+      "sha256": "fc3195e1ba3542c0e8bd54fd4c6004d11f86ea5a1c3b66177450b2e27821c38f"
     },
     {
       "target": "demo.js",
-      "sha256": "a921897e7ed0a9253644fee55efda7d36bbb069d68b1fe1f09780e06617820ff"
+      "sha256": "16ebc53e37851fafb63e088ebccb4f2c7e4b6e948ed8bd12c18f40d510c4537d"
     },
     {
       "target": "index.html",
-      "sha256": "824347119cbac2fdf07b9dc7277d786c63bd359180fa50f477cf26bfb21ce11c"
+      "sha256": "806e19bd2cb1dc09998f00a85215206115e977d846433e0f917dc34eb522fdfd"
     }
   ]
 }

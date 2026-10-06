@@ -22,13 +22,13 @@
       } catch (_error) {}
     </script>
     <link rel="stylesheet" href="styles.css?v=20261006-native">
-    <link rel="stylesheet" href="motion-showcase.css?v=20261006-task">
+    <link rel="stylesheet" href="motion-showcase.css?v=20261006-type">
     <link rel="stylesheet" href="dark-theme.css?v=20261006-native">
     <link rel="stylesheet" href="chat-showcase.css?v=20261006-native">
     <link rel="stylesheet" href="appearance-showcase.css?v=20261006-native">
     <link rel="stylesheet" href="notes-showcase.css?v=20261006-native">
-    <link rel="stylesheet" href="review-refinements.css?v=20261006-task">
-    <link rel="stylesheet" href="native-demos.css?v=20261006-guide">
+    <link rel="stylesheet" href="review-refinements.css?v=20261006-type">
+    <link rel="stylesheet" href="native-demos.css?v=20261006-align">
     <link rel="stylesheet" href="image-preview.css?v=20261006">
     <title>球球桌宠 - 免费的 macOS 桌面伙伴</title>
   </head>
@@ -62,7 +62,7 @@
         <div class="hero-copy">
           <p class="release-badge">0.4.00 · 球球的新里程碑</p>
           <h1 id="hero-title">桌面上，<br>多一个安静陪你的球球</h1>
-          <p>免费、安静陪伴，不打扰你。</p>
+          <p class="hero-lead">免费 · 安静陪伴 · 不打扰你</p>
           <div class="hero-actions">
             <a class="button button-primary" data-download-arch="arm64" data-download-position="hero" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.0/Qiuqiu-0.4.00-macOS-arm64-share.zip">下载 Apple 芯片版</a>
             <a class="button button-secondary" href="#features">看看它会什么</a>
@@ -165,7 +165,7 @@
               </div>
             </div>
           </div>
-          <iframe class="native-demo native-quota" src="demos/quota/index.html?v=20261006-task" title="0.4.00 额度卡片与趋势演示" data-app-demo data-demo="quota" height="740" loading="lazy"></iframe>
+          <iframe class="native-demo native-quota" src="demos/quota/index.html?v=20261006-card-period" title="0.4.00 额度卡片与趋势演示" data-app-demo data-demo="quota" height="740" loading="lazy"></iframe>
         </div>
       </section>
 
@@ -175,14 +175,13 @@
           <h2 id="chat-title">和球球聊聊，<br>接着上次的话。</h2>
           <p class="chat-lead section-lead">想说点什么，就打开球球旁边的聊天面板。</p>
           <p class="chat-requirements section-note">需登录 Codex 并联网，使用你的 Codex 额度。普通桌宠仍可离线使用。</p>
+          <details class="section-howto"><summary>打开方式</summary><p>右键球球或菜单栏 → 和球球聊聊</p></details>
           <dl class="chat-benefits">
             <div><dt>接着上次聊</dt><dd>关闭后再回来，仍是熟悉的那一段。</dd></div>
             <div><dt>找回旧聊天</dt><dd>从历史记录切回来，之前的话不会丢。</dd></div>
             <div><dt>用小动作回应</dt><dd>让球球跳一跳、转个圈，或安静休息。</dd></div>
           </dl>
-          <p class="chat-entry section-entry">入口：右键球球或菜单栏 → 和球球聊聊</p>
           <details class="content-details"><summary>模型与使用说明</summary><p>模型可以自动选择，也能在输入框左下角手选，以本机账号可用列表为准。无需另填 API Key；模型不可用时会明确提示。球球只执行预设动作，不运行模型返回的代码或命令。</p></details>
-          <a class="chat-download-link" href="#download">下载 0.4.00，和球球聊聊 →</a>
         </div>
         <div class="chat-demo-wrap">
           <iframe class="native-demo native-chat" src="demos/chat/index.html?v=20261006-layout" title="0.4.00 聊天交互演示" data-app-demo data-demo="chat" height="520" loading="lazy"></iframe>
@@ -193,7 +192,7 @@
         <div class="section-heading">
           <h2 id="customize-title">来定制球球</h2>
           <p class="section-lead">实时预览形态与配色，收藏喜欢的形象。</p>
-          <p class="chat-entry section-entry">入口：右键球球 → 来定制球球；大小在「球球尺寸」调整。</p>
+          <details class="section-howto"><summary>打开方式</summary><p>右键球球 → 来定制球球；大小在「球球尺寸」调整。</p></details>
         </div>
         <div class="native-custom-wrap">
           <iframe class="native-demo native-customize" src="demos/customize/index.html?v=20261006-focus" title="0.4.00 定制球球交互演示" data-app-demo data-demo="customize" height="700" loading="lazy"></iframe>
@@ -204,13 +203,13 @@
         <div class="notes-intro">
           <h2 id="notes-title">便签与待办，<br>留住眼前的小事。</h2>
           <p class="section-lead">灵感放在桌面，计划交给提醒。想起来时，随手记一笔。</p>
+          <details class="section-howto"><summary>打开方式</summary><p>右键球球或菜单栏 → 便签与待办</p></details>
           <dl class="notes-benefits">
             <div><dt>在桌面，也在列表里</dt><dd>独立便签可置顶；用分类、收藏和搜索找到想记住的事。</dd></div>
             <div><dt>日期与提醒，分别设置</dt><dd>为待办安排截止日期，另选提醒时间；忙时可稍后 10 分钟处理。</dd></div>
             <div><dt>完成了，收好记录</dt><dd>已完成待办可以归档，移入回收站的记录也能找回来。</dd></div>
             <div><dt>整理之前，先看一眼</dt><dd>Codex 帮你理顺便签，预览并确认后才替换原文，也可立即撤销。</dd></div>
           </dl>
-          <p class="notes-entry section-entry">入口：右键球球或菜单栏 → 便签与待办</p>
           <p class="notes-requirements section-note">便签与待办保存在本机。提醒需球球保持运行；智能整理需登录 Codex 并联网。</p>
         </div>
         <div class="notes-native-demo" data-notes-native-demo>
@@ -233,6 +232,7 @@
         <div class="section-heading">
           <h2 id="appearance-title">看得清楚，也自在。</h2>
           <p class="section-lead">浅色、深色与色弱友好，一键切换。</p>
+          <details class="section-howto"><summary>打开方式</summary><p>右键球球 → 界面配色 → 色弱友好（高对比）。</p></details>
         </div>
         <div class="ap-demo" data-appearance-demo data-mode="standard" data-look="light">
           <div class="ap-controls">
@@ -247,11 +247,10 @@
             </div>
           </div>
           <div class="ap-preview native-appearance-preview">
-            <iframe class="native-demo native-quota" src="demos/quota/index.html?appearanceDemo=1&v=20261006-align" title="新版额度卡标准与色弱配色演示" data-app-demo data-demo="quota" data-demo-appearance height="740" loading="lazy"></iframe>
+            <iframe class="native-demo native-quota" src="demos/quota/index.html?appearanceDemo=1&v=20261006-card-period" title="新版额度卡标准与色弱配色演示" data-app-demo data-demo="quota" data-demo-appearance height="740" loading="lazy"></iframe>
             <iframe class="native-demo native-chat" src="demos/chat/index.html?v=20261006-layout" title="新版聊天标准与色弱配色演示" data-app-demo data-demo="chat" data-demo-appearance height="520" loading="lazy"></iframe>
           </div>
         </div>
-        <p class="section-entry">入口：右键球球 → 界面配色 → 色弱友好（高对比）。</p>
       </section>
 
 

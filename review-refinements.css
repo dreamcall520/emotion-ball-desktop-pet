@@ -7,9 +7,16 @@
 .section { padding-block: clamp(56px, 6vw, 88px); }
 .section:not(.hero) h2 { font-size: clamp(30px, 3vw, 42px); line-height: 1.22; text-wrap: balance; }
 .section:not(.hero) .section-heading { margin-bottom: 28px; }
-.section .section-lead { max-width: 60ch; font-size: 18px; line-height: 1.65; margin-bottom: 0; }
-.section .section-entry { max-width: none; margin: 12px 0 0; font-size: 13px; line-height: 1.7; color: var(--text-soft); }
-.section .section-note { max-width: 62ch; font-size: 13px; line-height: 1.7; }
+.hero-copy > .hero-lead { margin: 0 0 28px; font-size: clamp(17px, 1.6vw, 20px); line-height: 1.75; font-weight: 400; letter-spacing: .015em; }
+.hero-copy > .release-badge { margin: 0 0 16px; font-size: 13px; line-height: 1.6; }
+.section .section-lead { max-width: 38em; margin: 0; font-size: 17px; font-weight: 400; line-height: 1.8; letter-spacing: .01em; text-wrap: pretty; }
+.hero-lead, .section .section-lead { color: color-mix(in srgb, var(--text-soft) 82%, var(--text)); }
+.section .section-note { max-width: 42em; font-size: 14px; line-height: 1.8; text-wrap: pretty; }
+.section-howto { width: fit-content; max-width: 100%; margin: 12px 0 0; color: var(--text-soft); }
+.section-howto summary { width: fit-content; padding-block: 4px; cursor: pointer; font-size: 13px; font-weight: 500; line-height: 1.6; }
+.section-howto summary::marker { color: var(--text-faint); font-size: .75em; }
+.section-howto summary:hover { color: var(--text); }
+.section-howto > p { max-width: 38em; margin: 8px 0 0; font-size: 14px; line-height: 1.8; text-wrap: pretty; }
 .section-heading > .release-badge { font-size: 13px; }
 .section :is(.chat-benefits, .notes-benefits) dt { font-size: 16px; line-height: 1.5; }
 .release-badge { width: fit-content; margin: 0 0 12px; color: var(--accent); font-size: 13px; font-weight: 600; }
@@ -95,7 +102,7 @@ html[data-theme="dark"] .feature-edge-notice { --edge-surface: rgba(26, 34, 45, 
   margin: 0 0 8px; font-size: 17px; line-height: 1.5; font-weight: 600;
 }
 .feature-list p, .codex-copy .fact-list dd, .privacy-points p {
-  margin: 0; max-width: 44em; font-size: 14px; line-height: 1.75; color: var(--text-soft);
+  margin: 0; max-width: 44em; font-size: 15px; line-height: 1.8; color: var(--text-soft); text-wrap: pretty;
 }
 .codex-copy .codex-privacy-note { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px 24px; border-top: 1px solid var(--line); padding-top: 18px; }
 .codex-privacy-note p { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; font-size: 13px; line-height: 1.7; }
@@ -136,9 +143,8 @@ html[data-theme="dark"] .feature-edge-notice { --edge-surface: rgba(26, 34, 45, 
   .chat-demo-body { min-height: 230px; }
   .chat-demo-messages { height: 230px; }
   .chat-benefits { order: 5; margin: 0; }
-  .chat-entry { order: 6; margin: 0; }
+  .chat-intro .section-howto { order: 3; margin: 0; }
   .chat-intro .content-details { order: 7; margin: 0; }
-  .chat-download-link { order: 8; }
   .ap-info { gap: 10px; }
   .ap-chat { padding: 16px; }
   .ap-chat p { font-size: 14px; margin-block: 10px; }
