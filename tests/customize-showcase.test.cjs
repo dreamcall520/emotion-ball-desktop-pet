@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '../product.html'), 'utf8');
 const updates = html.slice(html.indexOf('id="updates"'), html.indexOf('id="license"'));
 assert.match(updates, /0\.4\.00 Apple 芯片版/);
 assert.match(updates, /<time datetime="2026-10-06">2026-10-06<\/time>/);

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
-const base = process.env.QIUQIU_SITE_URL || 'http://127.0.0.1:4186/';
+const base = process.env.QIUQIU_SITE_URL || 'http://127.0.0.1:4187/product.html';
 const out = process.env.QIUQIU_QA_OUTPUT || '/tmp/qiuqiu-website-native';
 fs.mkdirSync(out, { recursive: true });
 (async () => {

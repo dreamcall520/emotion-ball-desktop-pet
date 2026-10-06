@@ -1,0 +1,235 @@
+(() => {
+  'use strict';
+  const root = document.documentElement;
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  const motionButton = document.querySelector('[data-motion-control]');
+  const themeButton = document.querySelector('[data-theme-control]');
+  const touch = document.querySelector('[data-pet-touch]');
+  const reply = document.querySelector('[data-pet-reply]');
+  const menus = [...document.querySelectorAll('details')];
+  const canvas = document.querySelector('.scene-material');
+  const systemTheme = matchMedia('(prefers-color-scheme: dark)');
+  const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
+  let paused = false, replyTimer;
+  let lastDrop = -Infinity, lastX = NaN, lastY = NaN;
+  let frame = 0, lastFrame = 0, elapsed = 0, gl, program, uniforms, texture;
+  let waves = [], imageRect = [0, 0, 1, 1], width = 1, height = 1;
+
+  function stopped() { return paused || reduced.matches || document.hidden; }
+
+  function reconcile() {
+    root.classList.toggle('motion-paused', stopped());
+    cancelAnimationFrame(frame); frame = 0; lastFrame = 0;
+    if (stopped()) waves = [];
+    canvas.dataset.state = reduced.matches ? 'reduced' : !gl ? 'static' : stopped() ? 'paused' : 'running';
+    if (gl && texture && image.complete && image.naturalWidth) {
+      draw();
+      if (!stopped()) frame = requestAnimationFrame(animate);
+    }
+    const unavailable = !gl && image.complete;
+    motionButton.disabled = reduced.matches || unavailable;
+    motionButton.setAttribute('aria-pressed', String(paused || reduced.matches));
+    const label = reduced.matches ? '已减少动态' : unavailable ? '静态画面' : paused ? '继续动效' : '暂停动效';
+    motionButton.setAttribute('aria-label', label);
+    motionButton.title = label;
+    motionButton.querySelector('use').setAttribute('href', paused ? '#icon-play' : '#icon-pause');
+  }
+  motionButton.addEventListener('click', () => { paused = !paused; reconcile(); });
+  reduced.addEventListener('change', reconcile);
+  document.addEventListener('visibilitychange', reconcile);
+
+  function setTheme(theme) {
+    if (theme === 'auto') delete root.dataset.theme;
+    else root.dataset.theme = theme;
+    for (const source of document.querySelectorAll('.scene-dark-source')) {
+      source.media = theme === 'auto' ? '(prefers-color-scheme: dark)' : theme === 'dark' ? 'all' : 'not all';
+    }
+    canvas.style.opacity = '0';
+    requestAnimationFrame(imageState);
+    document.querySelector('meta[name="theme-color"]').content = getComputedStyle(root).getPropertyValue('--page').trim();
+    const label = { auto: '跟随系统', light: '浅色外观', dark: '深色外观' }[theme];
+    themeButton.querySelector('use').setAttribute('href', { auto: '#icon-monitor', light: '#icon-sun', dark: '#icon-moon' }[theme]);
+    themeButton.setAttribute('aria-label', `切换外观，当前${label}`);
+    themeButton.title = `外观：${label}`;
+    themeButton.dataset.choice = theme;
+    try { localStorage.setItem('emotion-ball-site-theme', theme); } catch {}
+  }
+  setTheme(root.dataset.theme || 'auto');
+  themeButton.disabled = false;
+  themeButton.addEventListener('click', () => {
+    const order = ['auto', 'light', 'dark'];
+    setTheme(order[(order.indexOf(themeButton.dataset.choice) + 1) % order.length]);
+  });
+  document.addEventListener('click', event => {
+    for (const menu of menus) if (!menu.contains(event.target)) menu.open = false;
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') for (const menu of menus) if (menu.open) {
+      menu.open = false; menu.querySelector('summary').focus();
+    }
+  });
+  for (const menu of menus) menu.addEventListener('toggle', () => {
+    if (menu.open) for (const other of menus) if (other !== menu) other.open = false;
+  });
+
+  // Preserve existing section URLs when the long page moves into product.html.
+  const oldSections = ['features', 'codex', 'chat', 'customize', 'notes', 'appearance', 'download', 'install', 'privacy', 'updates', 'license'];
+  function followOldSection() {
+    if (oldSections.includes(location.hash.slice(1))) location.replace(`product.html${location.hash}`);
+  }
+  window.addEventListener('hashchange', followOldSection);
+  followOldSection();
+
+  const image = document.querySelector('.scene-image');
+
+  function staticScene() {
+    cancelAnimationFrame(frame); frame = 0; waves = [];
+    canvas.style.opacity = '0'; canvas.dataset.state = 'static'; canvas.dataset.waves = '0';
+  }
+  function startMaterial() {
+    try {
+      gl = canvas.getContext('webgl', { alpha: true, antialias: false, depth: false, stencil: false, powerPreference: 'low-power' });
+      if (!gl) return;
+      const vertex = `attribute vec2 position; varying vec2 uv;
+        void main(){uv=position;gl_Position=vec4(position.x*2.-1.,1.-position.y*2.,0.,1.);}`;
+      const fragment = `precision mediump float;
+        varying vec2 uv; uniform sampler2D image;
+        uniform vec2 size; uniform vec4 imageRect; uniform float time, night;
+        uniform vec4 waves[3];
+        void main(){
+          vec2 p=(uv-imageRect.xy)/imageRect.zw;
+          if(p.y<0.||p.y>1.){gl_FragColor=vec4(0.);return;}
+          float glass=max(1.-smoothstep(.16,.54,p.y+(1.-p.x)*.42),
+                          smoothstep(.48,.72,p.y-p.x*.5)*(1.-smoothstep(.62,.8,p.x)));
+          float face=smoothstep(.49,.57,p.x)*smoothstep(.38,.48,p.y);
+          glass*=1.-face;
+          float quiet=smoothstep(.26,.34,p.x)*(1.-smoothstep(.63,.7,p.x))*
+                      smoothstep(.27,.34,p.y)*(1.-smoothstep(.76,.83,p.y));
+          float material=glass*(1.-quiet);
+          vec2 offset=vec2(sin(p.y*9.-time*.8)*9.,cos(p.x*7.+time*.65)*6.)*material;
+          float reflection=0.;
+          for(int i=0;i<3;i++){
+            vec4 drop=waves[i];
+            if(drop.w>0.){
+              vec2 d=(uv-drop.xy)*size; float distance=length(d);
+              float front=distance-(12.+drop.z*135.);
+              float envelope=exp(-front*front/1600.)*exp(-drop.z*1.1)*smoothstep(0.,.12,drop.z)*(1.-smoothstep(1.7,2.2,drop.z));
+              float wave=sin(front*.075)*envelope*drop.w;
+              offset+=d/max(distance,1.)*wave*3.4*mix(.18,1.,glass)*(1.-face);
+              reflection+=wave*.018*mix(.2,1.,glass)*(1.-face);
+            }
+          }
+          vec3 color=texture2D(image,p+offset/(size*imageRect.zw)).rgb;
+          // Two traveling light bands follow the existing glass; no whole-image zoom or face distortion.
+          float flow=p.x*9.+p.y*6.-time*.9;
+          float sheen=pow(max(0.,sin(flow)),3.);
+          float blue=pow(max(0.,sin(flow-1.5)),3.);
+          // Preserve highlight detail: light uses remaining headroom instead of adding white over bright glass.
+          color*=1.-material*(.015+.09*blue);
+          color+=(1.-color)*material*(vec3(.7,.85,1.)*sheen*.06+vec3(0.,.003,.009)*blue)*mix(1.,.8,night);
+          color=mix(color,vec3(.8,.9,1.),max(0.,reflection)*mix(1.,.6,night));
+          color*=1.+min(0.,reflection)*mix(1.,.6,night);
+          gl_FragColor=vec4(color,1.);
+        }`;
+      function shader(type, code) {
+        const s = gl.createShader(type); gl.shaderSource(s, code); gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error('Material unavailable');
+        return s;
+      }
+      const v = shader(gl.VERTEX_SHADER, vertex), f = shader(gl.FRAGMENT_SHADER, fragment);
+      program = gl.createProgram(); gl.attachShader(program, v); gl.attachShader(program, f); gl.linkProgram(program);
+      gl.deleteShader(v); gl.deleteShader(f);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error('Material unavailable');
+      gl.useProgram(program);
+      const buffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0,0, 1,0, 0,1, 0,1, 1,0, 1,1]), gl.STATIC_DRAW);
+      const position = gl.getAttribLocation(program, 'position');
+      gl.enableVertexAttribArray(position); gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+      uniforms = Object.fromEntries(['size', 'imageRect', 'time', 'night', 'waves[0]'].map(name => [name, gl.getUniformLocation(program, name)]));
+      texture = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    } catch { gl = null; texture = null; staticScene(); }
+  }
+  function fit() {
+    const scene = canvas.parentElement.getBoundingClientRect(), box = image.getBoundingClientRect();
+    width = scene.width; height = scene.height;
+    // ponytail: cap 1.3M pixels and 30fps; increase only after measured hardware budgets allow it.
+    const ratio = Math.min(devicePixelRatio, 1.25, Math.sqrt(1300000 / (width * height)));
+    canvas.width = Math.round(width * ratio); canvas.height = Math.round(height * ratio);
+    const scale = Math.max(box.width / image.naturalWidth, box.height / image.naturalHeight);
+    const imageWidth = image.naturalWidth * scale, imageHeight = image.naturalHeight * scale;
+    const position = getComputedStyle(image).objectPosition.split(' ').map(value => parseFloat(value) / 100);
+    imageRect = [(box.left - scene.left - (imageWidth - box.width) * position[0]) / width,
+      (box.top - scene.top - (imageHeight - box.height) * position[1]) / height, imageWidth / width, imageHeight / height];
+    if (gl && texture) draw();
+  }
+  function draw() {
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.uniform2f(uniforms.size, width, height); gl.uniform4fv(uniforms.imageRect, imageRect);
+    gl.uniform1f(uniforms.time, elapsed);
+    gl.uniform1f(uniforms.night, root.dataset.theme === 'dark' || (!root.dataset.theme && systemTheme.matches) ? 1 : 0);
+    const field = new Float32Array(12);
+    waves.forEach((wave, i) => field.set([wave[0], wave[1], elapsed - wave[2], wave[3]], i * 4));
+    gl.uniform4fv(uniforms['waves[0]'], field); gl.drawArrays(gl.TRIANGLES, 0, 6);
+    canvas.dataset.waves = String(waves.length);
+    canvas.style.opacity = reduced.matches ? '0' : '1';
+  }
+  function animate(now) {
+    if (stopped()) { reconcile(); return; }
+    if (!gl || !texture) return;
+    if (!lastFrame || now - lastFrame >= 1000 / 30 - 1) {
+      elapsed += lastFrame ? Math.min((now - lastFrame) / 1000, .1) : 0;
+      lastFrame = now; waves = waves.filter(wave => elapsed - wave[2] < 2.2); draw();
+    }
+    frame = requestAnimationFrame(animate);
+  }
+  function imageState() {
+    if (!image.complete) return;
+    const ready = image.naturalWidth > 0;
+    root.classList.toggle('scene-failed', !ready);
+    root.dataset.sceneState = ready ? 'ready' : 'fallback';
+    if (!ready) { staticScene(); reconcile(); return; }
+    if (!gl && !reduced.matches) startMaterial();
+    if (gl && texture) {
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+      waves = []; fit(); reconcile();
+    } else reconcile();
+  }
+  image.addEventListener('load', imageState);
+  image.addEventListener('error', imageState);
+  if (image.complete) imageState();
+  new ResizeObserver(fit).observe(canvas.parentElement);
+  systemTheme.addEventListener('change', () => {
+    document.querySelector('meta[name="theme-color"]').content = getComputedStyle(root).getPropertyValue('--page').trim();
+    fit();
+  });
+  reduced.addEventListener('change', imageState);
+  canvas.addEventListener('webglcontextlost', event => { event.preventDefault(); gl = null; texture = null; staticScene(); reconcile(); });
+  canvas.addEventListener('webglcontextrestored', imageState);
+  document.querySelector('.home-main').addEventListener('pointermove', event => {
+    if (stopped() || !gl || !finePointer.matches || event.pointerType === 'touch' || event.target.closest('a, button')) return;
+    const distance = Math.hypot(event.clientX - lastX, event.clientY - lastY);
+    if (event.timeStamp - lastDrop < 220 || distance < 30) return;
+    const bounds = canvas.getBoundingClientRect();
+    if (waves.length >= 3) waves.shift();
+    waves.push([(event.clientX - bounds.left) / width, (event.clientY - bounds.top) / height, elapsed, .7 + (Number.isFinite(distance) ? Math.min(distance / 100, .8) : 0)]);
+    lastDrop = event.timeStamp; lastX = event.clientX; lastY = event.clientY;
+  });
+  touch.addEventListener('click', () => {
+    clearTimeout(replyTimer);
+    reply.textContent = '你忙，我陪着。';
+    reply.classList.add('visible');
+    replyTimer = setTimeout(() => reply.classList.remove('visible'), 3000);
+  });
+  touch.disabled = false;
+  reconcile();
+  window.addEventListener('pagehide', () => {
+    clearTimeout(replyTimer);
+    cancelAnimationFrame(frame); frame = 0;
+  });
+  window.addEventListener('pageshow', reconcile);
+})();
