@@ -12,7 +12,10 @@ test('四种形态卡使用实际图标，幻彩保持六瓣', async () => {
       const classes = new Set();
       this.classList = {
         add: value => classes.add(value), remove: value => classes.delete(value),
-        contains: value => classes.has(value), toggle: value => classes.has(value) ? classes.delete(value) : classes.add(value)
+        contains: value => classes.has(value), toggle: (value, force = !classes.has(value)) => {
+          if (force) classes.add(value); else classes.delete(value);
+          return force;
+        }
       };
     }
     setAttribute(name, value) { this.attributes[name] = String(value); }
@@ -25,15 +28,21 @@ test('四种形态卡使用实际图标，幻彩保持六瓣', async () => {
   }
   const nodes = new Map();
   const document = {
+    body: new Node('body'),
     getElementById: id => {
       if (!nodes.has(id)) nodes.set(id, new Node('div'));
       return nodes.get(id);
     },
     createElement: name => new Node(name),
     createElementNS: (_namespace, name) => new Node(name),
-    createTextNode: text => new Node(`text:${text}`)
+    createTextNode: text => new Node(`text:${text}`),
+    querySelector: selector => selector === '.preview-mode' ? document.getElementById('preview-mode') : null
   };
   const window = { petCustomizer: { load: async () => ({ customization: null, size: 'tiny' }) }, addEventListener() {} };
+  document.getElementById('source-tabs').append(document.getElementById('source-ball'), document.getElementById('source-codex'));
+  document.getElementById('controls').append(document.getElementById('source-tabs'),
+    document.getElementById('ball-options'), document.getElementById('codex-panel'));
+  document.getElementById('stage').append(document.getElementById('preview-mode'));
   const context = vm.createContext({ window, document, requestAnimationFrame: () => 1,
     cancelAnimationFrame() {}, clearTimeout() {}, setTimeout() {} });
   const renderCalls = [];

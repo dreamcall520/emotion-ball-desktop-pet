@@ -22,6 +22,7 @@ function chatBounds(petBounds, workArea) {
 }
 
 function createChatWindow({ BrowserWindow, screen, getPetWindow, getAppearance = () => null,
+  getCodexPet = () => null,
   getAvatarImage = async () => null,
   onError = () => {}, onVisibilityChange = () => {}, onMoveEnd = () => {},
   onFollowStart = () => {}, alwaysOnTop = true }) {
@@ -128,7 +129,9 @@ function createChatWindow({ BrowserWindow, screen, getPetWindow, getAppearance =
     const appearance = getAppearance();
     const key = JSON.stringify(appearance || null);
     if (!ready || !win || win.isDestroyed() || key === appearanceKey) return;
-    win.webContents.send('pet:chat-appearance', appearance);
+    const codexPet = getCodexPet(appearance);
+    if (appearance?.shape === 'codex-pet') win.webContents.send('pet:chat-appearance', appearance, null, codexPet);
+    else win.webContents.send('pet:chat-appearance', appearance);
     appearanceKey = key;
     if (appearance?.shape === 'aurora-cloud') {
       const target = win;

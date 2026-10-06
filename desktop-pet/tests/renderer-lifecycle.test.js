@@ -21,16 +21,18 @@ function createRenderer(randomValue = 0.5, auroraRive = null) {
   const nativeWindow = { isDestroyed: () => false, isVisible: () => true,
     getBounds: () => ({ ...bounds }), setPosition(x, y) { bounds.x = x; bounds.y = y; host.positions.push({ x, y }); } };
   function node(tag) {
-    return { tag, children: [], attributes: {}, style: {},
+    return { tag, children: [], attributes: {}, style: {}, dataset: {},
       setAttribute(key, value) { this.attributes[key] = String(value); },
       getAttribute(key) { return this.attributes[key]; },
       appendChild(child) { this.children.push(child); child.parentNode = this; },
       removeChild(child) { this.children = this.children.filter(item => item !== child); },
-      remove() { this.parentNode?.removeChild(this); }
+      remove() { this.parentNode?.removeChild(this); },
+      getContext() { return { clearRect() {}, drawImage() {} }; }
     };
   }
   const pet = {
-    dataset: {},
+    dataset: {}, attributes: {},
+    setAttribute(key, value) { this.attributes[key] = String(value); },
     classList: { add() {}, remove() {} },
     style: { setProperty() {} },
     children: [],
@@ -60,8 +62,9 @@ function createRenderer(randomValue = 0.5, auroraRive = null) {
     },
     clearTimeout(id) { timers.delete(id); },
     clearInterval() {},
-    requestAnimationFrame() { return 1; },
-    document: { getElementById: () => pet, createElementNS: (_ns, tag) => node(tag) },
+    requestAnimationFrame() { return 1; }, cancelAnimationFrame() {},
+    document: { getElementById: () => pet, createElementNS: (_ns, tag) => node(tag), createElement: node,
+      addEventListener() {}, removeEventListener() {} },
     AuroraRive: auroraRive,
     innerWidth: 80,
     addEventListener(name, callback) { windowEvents[name] = callback; },
@@ -95,6 +98,12 @@ function createRenderer(randomValue = 0.5, auroraRive = null) {
     }
   });
   context.window = context;
+  context.document.defaultView = context;
+  pet.ownerDocument = context.document;
+  context.Image = class {
+    constructor() { this.naturalWidth = 1536; this.naturalHeight = 1872; }
+    set src(_value) { context.setTimeout(() => this.onload?.(), 0); }
+  };
   const run = file => vm.runInContext(
     fs.readFileSync(path.resolve(__dirname, '../..', file), 'utf8'),
     context,
@@ -103,7 +112,8 @@ function createRenderer(randomValue = 0.5, auroraRive = null) {
   for (const file of [
     'emotion-ball/js/rings.js', 'emotion-ball/js/custom-shapes.js', 'emotion-ball/js/emotions.js', 'emotion-ball/js/ball.js', 'emotion-ball/js/engine.js',
     'desktop-pet/lib/pet-behavior.js', 'desktop-pet/lib/companion-behavior.js', 'desktop-pet/lib/interaction-motion.js',
-    'desktop-pet/lib/companion-motion.js', 'desktop-pet/lib/pet-facing.js', 'desktop-pet/lib/customization.js'
+    'desktop-pet/lib/companion-motion.js', 'desktop-pet/lib/pet-facing.js', 'desktop-pet/lib/customization.js',
+    'desktop-pet/lib/codex-pet-player.js'
   ]) run(file);
   const create = context.EmotionBall.create;
   context.EmotionBall.create = (...args) => {
@@ -1145,4 +1155,90 @@ test('前次点击迟到的松手确认不能取消新拖动或丢失第二次en
   assert.equal(r.host.dragEnds, 2, '新拖动必须完整结束，不能让宿主卡在dragging');
   assert.equal(r.host.motions.at(-1).action, 'land');
   assert.equal(r.pet.hasPointerCapture(1), false);
+});
+
+const testCodexPetId = `codex-${'a'.repeat(64)}`;
+const testCodexDescriptor = { id: testCodexPetId, name: '测试宠物', version: 1, rows: 9,
+  imageURL: 'file:///tmp/codex-pet-sprite.webp' };
+function loadCodexPet(renderer) {
+  renderer.settings({ keepAwake: true, codexPet: testCodexDescriptor,
+    customization: { appearance: { shape: 'codex-pet', codexPetId: testCodexPetId, auroraTransparency: 42 } } });
+  renderer.advanceTo(0);
+  return renderer.pet.children.find(child => child.tag === 'canvas');
+}
+
+test('Codex sprite shares the desktop size and opacity; switching back restores the original ball', () => {
+  const r = createRenderer(), canvas = loadCodexPet(r);
+  assert.ok(canvas); assert.equal(r.pet.children.length, 1);
+  assert.equal(r.pet.dataset.engine, 'codex-pet');
+  assert.equal(r.pet.dataset.codexPetId, testCodexPetId);
+  assert.equal(canvas.dataset.codexReady, 'ready');
+  assert.ok(Math.abs(Number(canvas.style.opacity) - 0.58) < 0.0001);
+  for (const px of [60, 80, 108, 120, 180, 260]) {
+    r.resize(px);
+    assert.equal(r.pet.children[0], canvas, 'size changes reuse the loaded sprite');
+    assert.equal(parseFloat(canvas.style.width), px * 192 / 208);
+    assert.equal(parseFloat(canvas.style.height), px);
+  }
+  r.settings({ customization: { appearance: { shape: 'blob' } } });
+  assert.equal(r.pet.dataset.engine, 'emotion-ball');
+  assert.equal(r.pet.dataset.codexPetId, undefined);
+  assert.equal(r.pet.children.length, 1);
+  assert.equal(r.pet.children[0].tag, 'svg');
+});
+
+test('Codex pet uses existing drag/click/motion ownership and ignores late frames after cancellation', () => {
+  const r = createRenderer(0), canvas = loadCodexPet(r);
+  const pointer = { screenX: 140, screenY: 140, clientX: 40, clientY: 40, button: 0, buttons: 1, pointerId: 1 };
+  r.events.pointerdown(pointer);
+  r.events.pointermove({ ...pointer, screenX: 175 });
+  assert.equal(canvas.dataset.codexAction, 'run-right');
+  r.events.pointermove({ ...pointer, screenX: 150 });
+  assert.equal(canvas.dataset.codexAction, 'run-left');
+  r.events.pointerup({ ...pointer, screenX: 150 });
+  assert.equal(r.host.dragMoves.length, 2); assert.equal(r.host.dragEnds, 1);
+  assert.equal(r.host.motions.at(-1).action, 'land');
+  assert.equal(canvas.dataset.codexAction, 'checking');
+  r.advanceTo(2500); assert.equal(canvas.dataset.codexAction, 'idle');
+  r.doubleClick(); assert.equal(r.host.motions.at(-1).action, 'hop');
+  assert.equal(canvas.dataset.codexAction, 'jump');
+  const motion = r.host.motions.at(-1);
+  r.command('rest'); assert.equal(canvas.dataset.codexAction, 'idle');
+  r.frame({ ...motion, frame: { done: false } });
+  assert.equal(canvas.dataset.codexAction, 'idle');
+  r.click(); r.advanceTo(2760);
+  assert.equal(canvas.dataset.codexAction, 'wave');
+  assert.ok(r.host.scenes.includes('play'));
+});
+
+test('Codex failure and thinking use original sprite rows; sleep, lock and hidden keep interaction blocked', () => {
+  const r = createRenderer(), canvas = loadCodexPet(r);
+  r.codexSettings({ enabled: true, generation: 1, activeTaskCount: 1 });
+  assert.equal(canvas.dataset.codexAction, 'running');
+  r.command(codexCommand({ motion: 'jelly' }));
+  assert.equal(canvas.dataset.codexAction, 'fail');
+  assert.equal(r.host.codexAcks.length, 1);
+  r.command({ command: 'codex-cancel', alertId: 1, generation: 1, pageEpoch: 1 });
+  r.command('sleep'); assert.equal(canvas.dataset.codexAction, 'waiting');
+  const count = r.host.motions.length;
+  r.command(codexCommand({ alertId: 2 })); assert.equal(r.host.motions.length, count);
+  r.command('wake'); assert.equal(canvas.dataset.codexAction, 'jump');
+  r.activity(true); assert.equal(r.pet.dataset.motionOwner, 'none');
+  r.command(codexCommand({ alertId: 2 })); assert.equal(r.host.codexAcks.length, 1);
+  r.activity(false); r.present({ mode: 'hidden', suppressed: true });
+  assert.equal(r.pet.dataset.codexWorking, 'false');
+  const hiddenCount = r.host.motions.length;
+  r.command('again'); assert.equal(r.host.motions.length, hiddenCount);
+  r.present({ mode: 'free', suppressed: false });
+  assert.equal(canvas.dataset.codexAction, 'running');
+  r.windowEvents.beforeunload(); assert.equal(r.pet.children.length, 0);
+});
+
+test('missing or mismatched Codex descriptor keeps a usable ball instead of an empty desktop', () => {
+  const r = createRenderer();
+  r.settings({ codexPet: { ...testCodexDescriptor, id: 'different' },
+    customization: { appearance: { shape: 'codex-pet', codexPetId: testCodexPetId } } });
+  assert.equal(r.pet.dataset.engine, 'emotion-ball');
+  assert.equal(r.pet.children[0].tag, 'svg');
+  r.click(); r.advanceTo(260); assert.ok(r.host.scenes.includes('play'));
 });

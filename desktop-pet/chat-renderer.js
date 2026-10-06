@@ -582,9 +582,9 @@
   syncAvatarActivity();
   reduceMotion?.addEventListener('change', syncAvatarActivity);
   document.addEventListener('visibilitychange', syncAvatarActivity);
-  const unsubscribeAppearance = api.onAppearance?.((appearance, image) => {
+  const unsubscribeAppearance = api.onAppearance?.((appearance, image, codexPet) => {
     syncAvatarActivity();
-    avatarController.update(appearance, image);
+    avatarController.update(appearance, image, codexPet);
   });
   window.addEventListener('beforeunload', () => {
     avatarController.destroy();

@@ -18,6 +18,7 @@ const {
   Tray
 } = require('electron');
 const { loadSettings, saveSettings, normalizePresetName, normalizeAppearancePresets, findDuplicateAppearancePreset } = require('./lib/settings');
+const { createCodexPetStore } = require('./lib/codex-pets');
 const {
   SIZES,
   defaultBounds,
@@ -74,6 +75,7 @@ let petMenuToken = 0;
 let tray = null;
 let settings = null;
 let settingsFile = null;
+let codexPets = null;
 let dragState = null;
 let bounceState = null;
 let isQuitting = false;
@@ -388,6 +390,44 @@ function effectiveCustomization(value) {
     appearance: effectiveAppearance(customization.appearance) };
 }
 
+function codexPetDescriptor(appearance) {
+  if (appearance?.shape !== 'codex-pet' || !codexPets) return null;
+  let pet;
+  try { pet = codexPets.getImported(appearance.codexPetId); }
+  catch (_) {
+    try { pet = codexPets.resolve(appearance.codexPetId); }
+    catch (_) { return null; }
+  }
+  return { id: pet.id, name: pet.name, version: pet.version, rows: pet.rows,
+    imageURL: pathToFileURL(pet.spritesheetPath).href };
+}
+
+function importCodexAppearance(appearance) {
+  if (appearance.shape !== 'codex-pet') return appearance;
+  let pet;
+  try { pet = codexPets.getImported(appearance.codexPetId); }
+  catch (_) { pet = codexPets.importPet(appearance.codexPetId); }
+  return { ...appearance, codexPetId: pet.id };
+}
+
+async function prepareCodexAppearance(appearance) {
+  const normalized = normalizeAppearance(appearance);
+  if (normalized.shape !== 'codex-pet') throw new Error('宠物编号不合法');
+  const copied = importCodexAppearance(normalized);
+  const descriptor = codexPetDescriptor(copied);
+  if (!descriptor || !customizationWindow || customizationWindow.isDestroyed()) throw new Error('宠物暂不可用');
+  // nativeImage decodes PNG/JPEG. Chromium also decodes WebP; validate the durable copy before saving its reference.
+  const dimensions = await customizationWindow.webContents.executeJavaScriptInIsolatedWorld(1004, [{ code: `new Promise(resolve => {
+    const image = new Image();
+    const timer = setTimeout(() => resolve(null), 5000);
+    image.onload = () => { clearTimeout(timer); resolve({ width: image.naturalWidth, height: image.naturalHeight }); };
+    image.onerror = () => { clearTimeout(timer); resolve(null); };
+    image.src = ${JSON.stringify(descriptor.imageURL)};
+  })` }]);
+  if (dimensions?.width !== 1536 || dimensions?.height !== descriptor.rows * 208) throw new Error('宠物图片无法解码');
+  return copied;
+}
+
 function changeAppearancePreset(action, value) {
   if (IS_SMOKE_TEST && smokeCustomizationSaveFailure) return { ok: false, error: '操作未完成，请稍后重试' };
   if (!settings || isQuitting || !value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, error: '操作未完成，请重试' };
@@ -397,6 +437,12 @@ function changeAppearancePreset(action, value) {
     const name = normalizePresetName(value.name);
     if (!name) return { ok: false, error: '请输入 1–24 个字符的名称，勿包含控制字符' };
     if (!value.appearance || typeof value.appearance !== 'object' || Array.isArray(value.appearance)) return { ok: false, error: '形象未读取完成，请重试' };
+    if (value.appearance.shape === 'codex-pet') {
+      const normalized = normalizeAppearance(value.appearance);
+      if (normalized.shape !== 'codex-pet') return { ok: false, error: '宠物暂不可用，请重新读取' };
+      try { value = { ...value, appearance: importCodexAppearance(normalized) }; }
+      catch (_) { return { ok: false, error: '宠物导入未完成，请重新读取后再试' }; }
+    }
     const duplicate = findDuplicateAppearancePreset(presets, value.appearance);
     if (duplicate) return { ok: false, error: `已收藏为「${duplicate.name}」，无需重复保存` };
     if (presets.some(item => item.name.toLowerCase() === name.toLowerCase())) return { ok: false, error: '已有同名形象，请换一个名称' };
@@ -418,7 +464,8 @@ function changeAppearancePreset(action, value) {
   try { persistSettings(); }
   catch (error) { settings = previous; writeError('保存我的形象', error); return { ok: false, error: '操作未完成，请稍后重试' }; }
   return { ok: true, presets: normalizeAppearancePresets(settings.appearancePresets).map(item => ({
-    ...item, appearance: effectiveCustomization({ appearance: item.appearance }).appearance })) };
+    ...item, appearance: effectiveCustomization({ appearance: item.appearance }).appearance,
+    codexPet: codexPetDescriptor(item.appearance) })) };
 }
 
 function saveCustomization(value, setAsStartupDefault = true) {
@@ -426,6 +473,11 @@ function saveCustomization(value, setAsStartupDefault = true) {
   if (!settings || isQuitting) return false;
   const previous = settings;
   const customization = effectiveCustomization(value);
+  if (value?.appearance?.shape === 'codex-pet') {
+    if (customization.appearance.shape !== 'codex-pet') return false;
+    try { customization.appearance = importCodexAppearance(customization.appearance); }
+    catch (error) { writeError('导入 Codex 宠物', error); return false; }
+  }
   settings = { ...settings, customization,
     startupAppearance: setAsStartupDefault ? customization.appearance : settings.startupAppearance };
   try { persistSettings(); }
@@ -1232,7 +1284,8 @@ function sendCompanionSettings() {
   petWindow.webContents.send('pet:settings', {
     keepAwake: settings.keepAwake,
     bubblesEnabled: settings.bubblesEnabled,
-    customization: effectiveCustomization(settings.customization)
+    customization: effectiveCustomization(settings.customization),
+    size: settings.size, codexPet: codexPetDescriptor(settings.customization.appearance)
   });
 }
 
@@ -1273,12 +1326,19 @@ function setPetSize(sizeName) {
     screen.getAllDisplays(),
     screen.getPrimaryDisplay()
   );
-  settings.size = sizeName;
-  settings.x = next.x;
-  settings.y = next.y;
+  const side = edgeTuck?.getPresentation().side;
+  if (side === 'left' || side === 'right') {
+    const area = screen.getDisplayMatching(next).workArea;
+    next.x = Math.round(side === 'left' ? area.x : Math.max(area.x, area.x + area.width - next.width));
+  }
+  const previous = settings;
+  settings = { ...settings, size: sizeName, x: next.x, y: next.y };
+  try { persistSettings(); }
+  catch (error) { settings = previous; throw error; }
   petWindow.setBounds(next, true);
   edgeTuck?.recover();
-  persistWindowPosition();
+  sendCompanionSettings();
+  if (customizationWindow && !customizationWindow.isDestroyed()) customizationWindow.webContents.send('pet:size', sizeName);
   refreshTrayMenu();
 }
 
@@ -1553,6 +1613,15 @@ async function finishSmokeTest() {
       "Boolean(window.petDesktop.onActivity && document.getElementById('pet').dataset.mode)"
     );
     if (!companionReady) throw new Error('轻陪伴活动感知尚未接入');
+
+    if (process.env.PET_SMOKE_CODEX_PETS_ONLY === '1') {
+      openCustomization();
+      await require('./scripts/verify-codex-pets').verifyCodexPets({ pet: petWindow,
+        customize: customizationWindow, openCustomization, openChat,
+        getChatWindow: () => chatWindow.getWindow(), getSettings: () => settings,
+        setSize: setPetSize, store: codexPets, packaged: app.isPackaged });
+      app.exit(0); return;
+    }
 
     if (process.env.PET_SMOKE_API_USAGE_ONLY === '1') {
       await require('./scripts/verify-api-usage-integration').verifyApiUsage({
@@ -2178,13 +2247,42 @@ function registerIpc() {
   ipcMain.handle('pet:customization-get', event => fromCustomizationWindow(event) && !screenLocked
     ? { customization: effectiveCustomization(settings.customization),
       appearancePresets: normalizeAppearancePresets(settings.appearancePresets).map(item => ({
-        ...item, appearance: effectiveCustomization({ appearance: item.appearance }).appearance })),
+        ...item, appearance: effectiveCustomization({ appearance: item.appearance }).appearance,
+        codexPet: codexPetDescriptor(item.appearance) })),
       startupAppearance: effectiveAppearance(settings.startupAppearance),
-      size: settings.size } : null);
-  for (const action of ['add', 'rename', 'delete']) ipcMain.handle('pet:appearance-preset-' + action, (event, value) =>
-    fromCustomizationWindow(event) && !screenLocked
-      ? changeAppearancePreset(action, value) : { ok: false, error: '请重新打开定制页后操作' });
-  ipcMain.handle('pet:customization-save', (event, value, setAsStartupDefault) => {
+      codexPet: codexPetDescriptor(settings.customization.appearance), size: settings.size } : null);
+  ipcMain.handle('pet:codex-pets-list', event => {
+    if (!fromCustomizationWindow(event) || screenLocked) return { ok: false, error: '请重新打开定制页后操作' };
+    try {
+      const sources = codexPets.list(), imported = codexPets.listImported();
+      const library = new Map(sources.pets.map(pet => [pet.importedId, pet]));
+      for (const pet of imported.pets) library.set(pet.importedId, { ...pet, imported: true });
+      return { ok: true, skipped: sources.skipped + imported.skipped,
+        pets: [...library.values()].map(pet => ({ id: pet.id, name: pet.name, importedId: pet.importedId,
+          imported: pet.imported === true, version: pet.version, rows: pet.rows,
+          imageURL: pathToFileURL(pet.spritesheetPath).href })) };
+    } catch (error) { writeError('读取 Codex 宠物', error); return { ok: false, error: '暂时无法读取宠物，请稍后重试' }; }
+  });
+  ipcMain.handle('pet:customization-size', (event, size) => {
+    if (!fromCustomizationWindow(event) || screenLocked || !Object.hasOwn(SIZES, size)) return false;
+    try { setPetSize(size); return true; }
+    catch (error) { writeError('调整球球尺寸', error); return false; }
+  });
+  for (const action of ['add', 'rename', 'delete']) ipcMain.handle('pet:appearance-preset-' + action, async (event, value) => {
+    if (!fromCustomizationWindow(event) || screenLocked) return { ok: false, error: '请重新打开定制页后操作' };
+    if (action === 'add' && value?.appearance?.shape === 'codex-pet') {
+      try { value = { ...value, appearance: await prepareCodexAppearance(value.appearance) }; }
+      catch (error) { writeError('校验 Codex 宠物', error); return { ok: false, error: '宠物导入未完成，请重新读取后再试' }; }
+    }
+    return fromCustomizationWindow(event) && !screenLocked
+      ? changeAppearancePreset(action, value) : { ok: false, error: '请重新打开定制页后操作' };
+  });
+  ipcMain.handle('pet:customization-save', async (event, value, setAsStartupDefault) => {
+    if (!fromCustomizationWindow(event) || screenLocked) return false;
+    if (value?.appearance?.shape === 'codex-pet') {
+      try { value = { ...value, appearance: await prepareCodexAppearance(value.appearance) }; }
+      catch (error) { writeError('校验 Codex 宠物', error); return false; }
+    }
     if (!fromCustomizationWindow(event) || screenLocked) return false;
     return saveCustomization(value, setAsStartupDefault);
   });
@@ -2398,6 +2496,11 @@ async function bootstrap() {
   app.setActivationPolicy('accessory');
   if (app.dock) app.dock.hide();
   settingsFile = path.join(app.getPath('userData'), 'settings.json');
+  codexPets = createCodexPetStore({
+    ...(IS_SMOKE_TEST && process.env.PET_CODEX_PETS_QA_SOURCE_ROOT ? { sourceRoot: process.env.PET_CODEX_PETS_QA_SOURCE_ROOT } : {}),
+    importRoot: path.join(app.getPath('userData'), 'codex-pets'),
+    readImageSize: (buffer, extension, size) => extension === '.png' ? nativeImage.createFromBuffer(buffer).getSize() : size
+  });
   apiUsage = createApiUsage({ filePath: path.join(app.getPath('userData'), 'openai-api-usage.enc'), safeStorage,
     ...(IS_SMOKE_TEST && process.env.PET_SMOKE_API_USAGE_ONLY === '1'
       ? { get: require('./scripts/verify-api-usage-integration').smokeGet,
@@ -2426,6 +2529,7 @@ async function bootstrap() {
   nativeTheme?.on('updated', () => { if (settings.codexQuotaAppearance === 'system') notesCompanion?.syncAppearance(); });
   chatWindow = createChatWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
     getAppearance: () => effectiveAppearance(settings?.customization?.appearance),
+    getCodexPet: appearance => codexPetDescriptor(appearance),
     getAvatarImage: async appearance => {
       const key = JSON.stringify(appearance);
       for (let attempt = 0; attempt < 20; attempt++) {
@@ -2451,7 +2555,7 @@ async function bootstrap() {
     initialModelSelection: settings.chatModel,
     onModelSelection: chatModel => { settings = saveSettings(settingsFile, { ...settings, chatModel }); },
     createRpc: options => {
-      if (IS_SMOKE_TEST && process.env.PET_SMOKE_CHAT_ONLY === '1') return require('./scripts/verify-chat-integration').createSmokeChatRpc(options);
+      if (IS_SMOKE_TEST && (process.env.PET_SMOKE_CHAT_ONLY === '1' || process.env.PET_SMOKE_CODEX_PETS_ONLY === '1')) return require('./scripts/verify-chat-integration').createSmokeChatRpc(options);
       fs.mkdirSync(options.workspaceDir, { recursive: true, mode: 0o700 });
       return createCodexChatRpc(options);
     },
