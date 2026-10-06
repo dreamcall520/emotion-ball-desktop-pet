@@ -35,6 +35,10 @@ body {
 
 #pet.dragging svg { transform: rotate(var(--drag-tilt, 0deg)); }
 
+#pet[data-shape="codex-pet"] { display: grid; place-items: center; }
+#pet .codex-pet-sprite { filter: drop-shadow(0 4px 5px rgba(66, 60, 52, 0.08)); }
+#pet.dragging .codex-pet-sprite { transform: rotate(var(--drag-tilt, 0deg)); }
+
 #pet svg {
   display: block;
   width: 100%;

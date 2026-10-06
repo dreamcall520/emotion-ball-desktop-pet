@@ -9,6 +9,14 @@ contextBridge.exposeInMainWorld('petCustomizer', {
     return () => ipcRenderer.removeListener('pet:color-mode', listener);
   },
   load: () => ipcRenderer.invoke('pet:customization-get'),
+  listCodexPets: () => ipcRenderer.invoke('pet:codex-pets-list'),
+  setSize: size => ipcRenderer.invoke('pet:customization-size', size),
+  onSize: callback => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, size) => callback(size);
+    ipcRenderer.on('pet:size', listener);
+    return () => ipcRenderer.removeListener('pet:size', listener);
+  },
   addPreset: (name, appearance) => ipcRenderer.invoke('pet:appearance-preset-add', { name, appearance }),
   renamePreset: (id, name) => ipcRenderer.invoke('pet:appearance-preset-rename', { id, name }),
   deletePreset: id => ipcRenderer.invoke('pet:appearance-preset-delete', { id }),

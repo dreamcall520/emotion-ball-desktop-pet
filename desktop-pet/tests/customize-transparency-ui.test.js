@@ -51,14 +51,15 @@ async function fixture(appearance, startupAppearance = appearance, options = {})
   let colorModeListener = null;
   let frameId = 0;
   const document = {
-    documentElement: { dataset: {} }, hidden: false,
+    documentElement: { dataset: {} }, body: new Node('body'), hidden: false,
     addEventListener(name, listener) { documentEvents.set(name, listener); },
     removeEventListener(name) { documentEvents.delete(name); },
     getElementById: id => {
       if (!nodes.has(id)) { const node = new Node('div'); node.id = id; nodes.set(id, node); }
       return nodes.get(id);
     },
-    querySelector: selector => selector === '.controls' ? document.getElementById('controls') : null,
+    querySelector: selector => selector === '.controls' ? document.getElementById('controls') :
+      selector === '.preview-mode' ? document.getElementById('preview-mode') : null,
     createElement: name => new Node(name),
     createElementNS: (_namespace, name) => new Node(name),
     createTextNode: text => new Node(`text:${text}`)
@@ -70,7 +71,7 @@ async function fixture(appearance, startupAppearance = appearance, options = {})
       disconnect() { this.disconnected = true; }
     }, petCustomizer: {
     load: async () => options.loadFailure ? null : ({ customization: { appearance }, startupAppearance,
-      appearancePresets: presetRecords, size: options.size || 'tiny' }),
+      appearancePresets: presetRecords, size: options.size || 'tiny', codexPet: options.codexPet }),
     save: async (state, startupChoice) => {
       saves.push(state); startupChoices.push(startupChoice);
       if (options.save) return options.save(state, startupChoice);
@@ -93,13 +94,23 @@ async function fixture(appearance, startupAppearance = appearance, options = {})
       if (options.presetOperation) return options.presetOperation('delete', { id });
       presetRecords = presetRecords.filter(item=>item.id!==id);return { ok:true, presets:presetRecords };
     },
+    listCodexPets: async () => ({ ok: true, pets: options.pets || [] }),
     onColorMode: listener => { colorModeListener = listener; return () => { colorModeListener = null; }; },
     preview: appearance => avatarPreviews.push({ ...appearance })
   }, addEventListener(name, listener) { windowEvents.set(name, listener); },
     matchMedia: query => query.includes('color-scheme') ? systemAppearance : motion };
   const context = vm.createContext({ window, document,
     requestAnimationFrame: callback => { const id = ++frameId; frames.set(id, callback); return id; },
-    cancelAnimationFrame: id => frames.delete(id), clearTimeout() {}, setTimeout() {} });
+    cancelAnimationFrame: id => frames.delete(id), clearTimeout() {}, setTimeout() {},
+    CodexPetPlayer: require('../lib/codex-pet-player') });
+  // Reflect the source tabs and their sibling panels in the actual HTML.
+  document.getElementById('source-tabs').append(document.getElementById('source-ball'), document.getElementById('source-codex'));
+  document.getElementById('controls').append(document.getElementById('source-tabs'),
+    document.getElementById('ball-options'), document.getElementById('codex-panel'));
+  document.getElementById('stage').append(document.getElementById('preview-mode'));
+  document.getElementById('stage').clientHeight = 400;
+  document.getElementById('stage').clientWidth = 300;
+  document.getElementById('pet-action').value = 'idle';
   const root = path.join(__dirname, '../..');
   for (const file of ['emotion-ball/js/rings.js', 'emotion-ball/js/custom-shapes.js',
     'desktop-pet/lib/customization.js', 'desktop-pet/lib/chat-avatar.js', 'desktop-pet/customize-renderer.js']) {
@@ -721,4 +732,57 @@ test('未生效的颜色或样式不同仍属于同一个可见形象，重复�
     assert.equal(f.get('preset-error').textContent,'已收藏为「原有形象」，无需重复保存');
     assert.equal(f.get('preset-name').value,'新名称');
   }
+});
+
+const codexPet = (index, name) => ({ id: 'codex-' + String(index + 1).repeat(64), name,
+  version: 1, rows: 9, imageURL: `file:///tmp/codex-test-${index}.webp` });
+
+test('浏览 Codex 页签保留当前球球草稿，只有点选卡片才替换待保存外观', async () => {
+  const pet = codexPet(0, '测试宠物');
+  const f = await fixture({ shape: 'blob', bodyColor: '#123456' }, undefined, { pets: [pet], save: async () => false });
+  f.flushPreview(); const rendered = f.previews.length;
+  assert.equal(f.get('source-ball').attributes['aria-pressed'], 'true');
+  f.get('source-codex').dispatch('click');
+  assert.equal(f.get('source-codex').attributes['aria-pressed'], 'true');
+  assert.equal(f.get('ball-options').hidden, true); assert.equal(f.get('codex-panel').hidden, false);
+  assert.equal(f.previews.length, rendered); assert.equal(f.get('preview-name').textContent, '经典');
+  await f.get('save').dispatch('click'); assert.equal(f.saves.at(-1).appearance.bodyColor, '#123456');
+  f.get('pet-grid').children[0].dispatch('click');
+  assert.equal(f.get('preview-name').textContent, '测试宠物');
+  f.get('source-ball').dispatch('click');
+  await f.get('save').dispatch('click');
+  assert.equal(f.saves.at(-1).appearance.codexPetId, pet.id, 'switching tabs preserves the selected candidate');
+  f.card('cloud').dispatch('click');
+  await f.get('save').dispatch('click'); assert.equal(f.saves.at(-1).appearance.shape, 'cloud');
+  f.close();
+});
+
+test('超过六个宠物显示搜索，名称筛选和空结果均保留已选择的待保存宠物', async () => {
+  const pets = Array.from({ length: 7 }, (_, index) => codexPet(index, index < 2 ? `ABG ${index}` : `宠物 ${index}`));
+  const f = await fixture({ shape: 'blob' }, undefined, { pets, save: async () => false });
+  assert.equal(f.get('pet-search-field').hidden, false); assert.equal(f.get('pet-grid').children.length, 7);
+  f.get('pet-grid').children[0].dispatch('click');
+  f.get('pet-search').value = ' abg '; f.get('pet-search').dispatch('input');
+  assert.equal(f.get('pet-grid').children.length, 2); assert.equal(f.get('pet-read-status').textContent, '找到 2 个');
+  assert.equal(f.get('pet-grid').children[0].attributes['aria-pressed'], 'true');
+  f.get('pet-search').value = '不存在'; f.get('pet-search').dispatch('input');
+  assert.equal(f.get('pet-grid').children.length, 0); assert.equal(f.get('pet-filter-status').hidden, false);
+  assert.equal(f.get('preview-name').textContent, 'ABG 0');
+  await f.get('save').dispatch('click'); assert.equal(f.saves.at(-1).appearance.codexPetId, pets[0].id);
+  f.get('pet-search').value = ''; f.get('pet-search').dispatch('input');
+  assert.equal(f.get('pet-grid').children.length, 7); assert.equal(f.get('pet-filter-status').hidden, true);
+  f.close();
+});
+
+test('保存后的导入 ID 与原 Codex 卡片关联，重开仍标记同一宠物而不重复显示', async () => {
+  const source = codexPet(0, '同一宠物'), importedId = 'codex-' + 'a'.repeat(64);
+  const appearance = { shape: 'codex-pet', codexPetId: importedId };
+  const f = await fixture(appearance, appearance, { pets: [{ ...source, importedId }],
+    codexPet: { ...source, id: importedId }, save: async () => false });
+  assert.equal(f.get('pet-search-field').hidden, true);
+  assert.equal(f.get('pet-grid').children.length, 1);
+  assert.equal(f.get('pet-grid').children[0].attributes['aria-pressed'], 'true');
+  assert.equal(f.get('preview-name').textContent, '同一宠物');
+  await f.get('save').dispatch('click'); assert.equal(f.saves.at(-1).appearance.codexPetId, importedId);
+  f.close();
 });

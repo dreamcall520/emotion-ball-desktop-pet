@@ -182,7 +182,7 @@
   }
 
   function create(target) {
-    let key = null, appearance = null, ball = null, rive = null, poster = null;
+    let key = null, appearance = null, ball = null, rive = null, poster = null, sprite = null;
     let active = true, destroyed = false, revision = 0, displayed = null;
 
     function releaseDisplayed() {
@@ -194,6 +194,7 @@
     }
     function clear(keepDisplayed = false) {
       revision++;
+      sprite?.destroy(); sprite = null;
       // Keep the last painted portrait while a replacement Rive loads. Moving its
       // nodes retains the actual canvas; exporting WebGL here can yield an empty frame.
       if (keepDisplayed && !displayed && (ball || rive) &&
@@ -223,19 +224,20 @@
       releaseDisplayed();
     }
     function syncActive() {
+      sprite?.pause(!active);
       const useBall = active && !rive;
       ball?.setActive(useBall);
       rive?.setActive?.(active);
       displayed?.ball?.setActive(active && !displayed.rive);
       displayed?.rive?.setActive?.(active);
-      target.dataset.avatarActive = String(active && Boolean(ball || rive));
+      target.dataset.avatarActive = String(active && Boolean(ball || rive || sprite));
     }
-    function update(rawAppearance, image) {
+    function update(rawAppearance, image, codexPet) {
       if (destroyed) return;
       const next = window.PetCustomization.normalizeAppearance(rawAppearance);
       const nextKey = JSON.stringify(next);
       const hasImage = typeof image === 'string' && image.startsWith('data:image/png;base64,');
-      if (nextKey === key && (ball || rive)) {
+      if (nextKey === key && (ball || rive || sprite)) {
         // A late native snapshot can cover loading without restarting the live instance.
         if (hasImage && rive && target.dataset.avatarReady === 'false') showPoster(image);
         return;
@@ -243,6 +245,16 @@
       const useRive = next.shape === 'aurora-cloud' && window.AuroraRive?.eligible(next);
       clear(useRive && !hasImage); key = nextKey; appearance = next;
       target.dataset.shape = appearance.shape;
+      if (appearance.shape === 'codex-pet') {
+        target.dataset.avatarEngine = 'codex-sprite'; target.dataset.avatarReady = 'false';
+        if (codexPet?.id === appearance.codexPetId && window.CodexPetPlayer?.validDescriptor(codexPet)) {
+          sprite = window.CodexPetPlayer.create(target, { descriptor: codexPet,
+            size: target.clientHeight || 32, opacity: 1 - appearance.auroraTransparency / 100,
+            onFrame: () => { if (!destroyed) target.dataset.avatarReady = 'true'; },
+            onError: () => { target.dataset.avatarReady = 'false'; } });
+        }
+        syncActive(); return;
+      }
       const shape = window.EB_CUSTOM_SHAPES.createShape(appearance);
       const texture = window.PetCustomization.auroraReferenceTexture(appearance, shape);
       const preset = window.PetCustomization.EYE_PRESETS[appearance.idleEyes];

@@ -6,6 +6,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>定制球球</title>
   <link rel="stylesheet" href="customize.css">
+  <link rel="stylesheet" href="codex-pets.css">
   <link rel="stylesheet" href="aurora-rive.css">
   <link rel="stylesheet" href="color-mode.css">
   <link id="blue-style" rel="stylesheet" href="customize-blue.css" disabled>
@@ -15,22 +16,23 @@
 <body>
   <main class="studio panel">
     <header class="studio-header">
-      <div><h1>定制球球</h1><p>选一个喜欢的形态，调出属于你的球球。</p></div>
+      <div><h1>定制球球</h1><p>选一个喜欢的形象，预览满意后再保存。</p></div>
       <button id="reset-appearance" class="secondary" type="button" title="恢复当前所选形态的默认外观">恢复默认</button>
     </header>
     <div class="workspace">
       <section class="preview-pane" aria-label="球球实时预览">
-        <div class="preview-heading"><h2>实时预览</h2><button id="stage-toggle" class="icon-button" type="button" aria-label="切换预览背景" title="切换浅色 / 深色预览背景"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" stroke="none"></path></svg></button></div>
-        <div class="segmented preview-mode" role="group" aria-label="预览尺寸">
-          <button id="preview-large" type="button" aria-pressed="true">大图</button>
-          <button id="preview-desktop" type="button" aria-pressed="false" title="按当前桌面球球的实际尺寸展示">桌面尺寸</button>
-        </div>
-        <div id="stage" class="stage" data-preview-mode="large"><div id="preview-ball" aria-label="球球外观预览"></div></div>
+        <div class="preview-heading"><div><h2 id="preview-name">经典</h2><p id="preview-subtitle">实时预览</p></div><button id="stage-toggle" class="icon-button" type="button" aria-label="切换预览背景" title="切换浅色 / 深色预览背景"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" stroke="none"></path></svg></button></div>
+        <div id="stage" class="stage" data-preview-mode="large"><div id="preview-ball" aria-label="球球外观预览"></div><div class="segmented preview-mode" role="group" aria-label="预览尺寸">
+          <button id="preview-large" type="button" aria-pressed="true">放大</button>
+          <button id="preview-desktop" type="button" aria-pressed="false" title="按当前桌面球球的实际尺寸展示">桌面效果</button>
+        </div></div>
         <div class="preview-foot"><span id="preview-size-label">大图预览</span><span id="preview-status" role="status" aria-live="polite">眨眼与呼吸动效保留</span></div>
         <p class="preview-note">颜色与细节实时更新，满意后再保存。</p>
+        <div id="preview-animation" class="preview-animation" hidden><label for="pet-action">动作</label><div class="preview-animation-actions"><select id="pet-action" aria-label="预览宠物动作"><option value="idle">待机</option><option value="wave">挥手</option><option value="jump">跳跃</option><option value="running">处理中</option><option value="waiting">等待</option><option value="checking">检查</option><option value="fail">失败</option><option value="run-right">向右跑</option><option value="run-left">向左跑</option></select><button id="pet-play" class="icon-button" type="button" aria-label="暂停动画">Ⅱ</button></div></div>
       </section>
-      <section class="controls" aria-labelledby="appearance-title">
-        <div class="form-heading"><h2 id="appearance-title">外观选项</h2></div>
+      <section class="controls" aria-label="选择与定制形象">
+        <div class="source-switch" role="group" aria-label="外观来源"><button id="source-ball" type="button" aria-pressed="true">球球外观</button><button id="source-codex" type="button" aria-pressed="false">Codex 宠物</button></div>
+        <div id="ball-options">
         <div class="group-heading"><h3>形态</h3><span id="shape-hint">选择喜欢的起点</span></div>
         <div id="shape-options" class="shape-options" role="group" aria-label="球球形态"></div>
         <section id="preset-section" class="preset-section" aria-labelledby="preset-title">
@@ -93,6 +95,14 @@
             </div>
           </div>
         </div>
+        </div>
+        <section id="codex-panel" aria-label="Codex 宠物" hidden>
+          <div class="codex-heading"><span id="pet-read-status" class="read-status" role="status">正在读取本机宠物…</span><div id="pet-search-field" class="pet-search-field" hidden><input id="pet-search" type="search" placeholder="搜索名称" aria-label="搜索宠物名称" autocomplete="off"></div><button id="refresh-pets" class="text-button refresh-pets" type="button"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14-5M4 13a8 8 0 0 0 14 5M6 2v4H2m16 16v-4h4"/></svg>刷新</button></div>
+          <p id="pet-filter-status" class="pet-filter-status" role="status" hidden></p>
+          <div id="pet-grid" class="pet-grid" role="group" aria-label="选择 Codex 宠物" title="在列表内滚动，可查看全部宠物"></div>
+          <div id="pet-read-state" class="codex-state" role="status" hidden></div>
+          <div id="pet-settings" class="pet-settings"><h3>显示设置</h3><div class="setting-row"><label for="pet-size">桌面尺寸</label><select id="pet-size"><option value="micro">袖珍 · 60 px</option><option value="tiny" selected>迷你 · 80 px</option><option value="compact">紧凑 · 108 px</option><option value="small">标准 · 120 px</option><option value="medium">大 · 180 px</option><option value="large">特大 · 260 px</option></select></div><p class="size-hint">与设置菜单共用尺寸，形象按原比例缩放。</p><div class="setting-row opacity-row"><label for="pet-opacity">透明度</label><input id="pet-opacity" type="range" min="0" max="60" value="0"><output id="pet-opacity-value">0%</output></div></div>
+        </section>
       </section>
     </div>
     <footer class="studio-footer">
@@ -118,6 +128,7 @@
   <script src="lib/rive.js"></script>
   <script src="lib/boo-binary.js"></script>
   <script src="lib/aurora-rive.js"></script>
+  <script src="lib/codex-pet-player.js"></script>
   <script src="lib/chat-avatar.js"></script>
   <script src="customize-renderer.js"></script>
 </body>

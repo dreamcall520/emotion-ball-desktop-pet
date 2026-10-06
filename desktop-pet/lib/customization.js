@@ -39,6 +39,11 @@
   function normalizeAppearance(raw) {
     const value = raw && typeof raw === 'object' ? raw : {};
     const tuning = value.shapeTuning && typeof value.shapeTuning === 'object' ? value.shapeTuning : {};
+    if (value.shape === 'codex-pet' && typeof value.codexPetId === 'string' && /^codex-[a-f0-9]{64}$/.test(value.codexPetId)) {
+      return { ...DEFAULT_APPEARANCE, shape: 'codex-pet', codexPetId: value.codexPetId,
+        shapeTuning: { ...DEFAULT_SHAPE_TUNING },
+        auroraTransparency: bounded(value.auroraTransparency, 0, 60, 0, 0) };
+    }
     const shape = SHAPES.includes(value.shape) ? value.shape : DEFAULT_APPEARANCE.shape;
     return {
       shape,
@@ -67,6 +72,8 @@
 
   function appearanceContentKey(raw) {
     const appearance = normalizeAppearance(raw);
+    if (appearance.shape === 'codex-pet') return JSON.stringify({ shape: appearance.shape,
+      codexPetId: appearance.codexPetId, auroraTransparency: appearance.auroraTransparency });
     if (appearance.shape !== 'aurora-cloud' || appearance.auroraStyle === 'simple') {
       delete appearance.glowPinkColor;
       delete appearance.glowGoldColor;

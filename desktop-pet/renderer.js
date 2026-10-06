@@ -27,6 +27,7 @@
   let ball = null;
   let clickVisual = null;
   let officialAurora = null;
+  let codexPet = null;
   let lastAuroraClick = null;
   let customization = PetCustomization.normalizeCustomization();
   let presentationSuppressed = false;
@@ -184,6 +185,7 @@
       alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch };
     petElement.dataset.motionOwner = 'codex';
     ball.setEmotion(motion.emotion);
+    ball.setMotionAction?.(motion.id, 'codex');
     ball.setMotionFrame(InteractionMotion.sampleMotion(motion.id, 0));
     petElement.dataset.lastAction = motion.id;
     // 只准备本地姿态。宿主复核提醒和所有权后才开始移动窗口、显示气泡。
@@ -232,6 +234,66 @@
     });
   }
 
+  // Keep one interaction controller: imported sprites use its existing motion,
+  // drag and Codex ownership rules, while drawing the pet's original frames.
+  function createCodexBall(emotionId) {
+    let active = true, motion = null, direction = facing || 'right';
+    const emotionAction = id => id === '51' ? 'running' :
+      ['00', '56'].includes(id) ? 'waiting' : ['03', '10', '52'].includes(id) ? 'wave' :
+      id === '53' ? 'jump' : id === '54' ? 'checking' : id === '13' ? `run-${direction}` : 'idle';
+    const motionAction = (id, owner) => {
+      if (owner === 'codex') return { jelly: 'fail', peek: 'waiting', sway: 'running', hop: 'jump', bow: 'checking' }[id] || 'wave';
+      return { hop: 'jump', jelly: 'jump', sway: 'wave', peek: 'waiting', bow: 'checking',
+        spin: 'wave', dizzy: 'fail', turn: 'checking', nuzzle: 'wave', land: 'checking', stretch: 'jump' }[id] || 'idle';
+    };
+    const resize = () => player.setSize(Math.min(window.innerWidth, window.innerHeight || window.innerWidth));
+    const player = CodexPetPlayer.create(petElement, {
+      descriptor: codexPet, size: Math.min(window.innerWidth, window.innerHeight || window.innerWidth),
+      opacity: 1 - customization.appearance.auroraTransparency / 100,
+      onFrame(action, frame) {
+        petElement.dataset.codexAction = action; petElement.dataset.codexFrame = String(frame);
+      },
+      onError() {
+        if (ball !== adapter) return;
+        codexPet = null;
+        petElement.dataset.codexPetError = 'load';
+        createBall(adapter.emotionId);
+        restoreState();
+      }
+    });
+    const syncActive = () => player.pause(!active || ['00', '56'].includes(adapter.emotionId));
+    const adapter = {
+      emotionId: emotionId || '50',
+      setEmotion(id) {
+        this.emotionId = id; motion = null;
+        petElement.dataset.emotion = id;
+        player.setAction(emotionAction(id)); syncActive(); return this;
+      },
+      setMotionAction(id, owner) { motion = id; player.setAction(motionAction(id, owner)); return this; },
+      setFacing(side) {
+        direction = side === 'left' ? 'left' : 'right';
+        if (!motion && this.emotionId === '13') player.setAction(`run-${direction}`);
+        return this;
+      },
+      setDragDirection(delta) { if (delta) player.setAction(delta < 0 ? 'run-left' : 'run-right'); },
+      setActive(value) { active = Boolean(value); syncActive(); return this; },
+      renderStatic() { player.pause(true); return this; },
+      stopMotion() { motion = null; player.setAction(emotionAction(this.emotionId)); return this; },
+      // Sprite animations already encode their poses. The host still applies
+      // the original window offsets; SVG eye/body transformations do not apply.
+      setMotionFrame() { return this; }, setGaze() { return this; }, clearGaze() { return this; },
+      spin() { player.setAction('wave'); return this; },
+      bounce() { if (!presentationSuppressed) desktop.bounce(); return this; },
+      resize, destroy() { player.destroy(); }
+    };
+    petElement.dataset.engine = 'codex-pet';
+    petElement.dataset.codexPetId = codexPet.id;
+    petElement.setAttribute('aria-label', `可拖动和互动的${codexPet.name}`);
+    adapter.setEmotion(adapter.emotionId);
+    adapter.setActive(!presentationPaused && presentationMode !== 'hidden' && !lastSample?.locked);
+    return adapter;
+  }
+
   function createBall(emotionId) {
     const nextCompactMode = window.innerWidth <= 120;
     const previousShape = petElement.dataset.shape;
@@ -247,6 +309,17 @@
     petElement.dataset.avatarAppearance = JSON.stringify(customization.appearance);
     compactMode = nextCompactMode;
     presentationFrozen = false;
+    if (customization.appearance.shape === 'codex-pet' && codexPet?.id === customization.appearance.codexPetId &&
+        window.CodexPetPlayer?.validDescriptor(codexPet)) {
+      delete petElement.dataset.codexPetError;
+      ball = createCodexBall(emotionId);
+      return;
+    }
+    petElement.dataset.engine = 'emotion-ball';
+    delete petElement.dataset.codexPetId;
+    delete petElement.dataset.codexAction;
+    delete petElement.dataset.codexFrame;
+    petElement.setAttribute('aria-label', '可拖动和互动的球球桌面宠物');
     const customShape = window.EB_CUSTOM_SHAPES.createShape(customization.appearance);
     const referenceTexture = PetCustomization.auroraReferenceTexture(customization.appearance, customShape);
     ball = EmotionBall.create(petElement, {
@@ -532,6 +605,7 @@
     activeMotion = { token: ++nextMotionToken, action, owner: 'user', side: facing || 'right' };
     petElement.dataset.motionOwner = 'user';
     ball.setEmotion(motion.emotion);
+    ball.setMotionAction?.(action, 'user');
     const firstFrame = InteractionMotion.sampleMotion(action, 0);
     ball.setMotionFrame(firstFrame);
     if (action === 'dizzy' || action === 'turn') {
@@ -554,6 +628,7 @@
     petElement.dataset.motionOwner = 'user';
     petElement.dataset.lastAction = action;
     ball.setEmotion(reducedMotion() ? '50' : motion.emotion);
+    if (!reducedMotion()) ball.setMotionAction?.(action, 'user');
     ball.setMotionFrame(reducedMotion() ? CompanionMotion.neutralFrame() : CompanionMotion.sample(action, 0, activeMotion.side));
     desktop.playMotion({ ...activeMotion, reducedMotion: reducedMotion() });
     if (scene) desktop.say(scene);
@@ -717,6 +792,7 @@
       }
     }
     if (dragState.dragged) {
+      ball.setDragDirection?.(point.x - dragState.lastX);
       petElement.style.setProperty('--drag-tilt', `${Math.max(-5, Math.min(5, (point.x - dragState.lastX) * .4))}deg`);
       dragState.lastX = point.x;
       desktop.dragTo(point);
@@ -775,7 +851,8 @@
     clearAction();
     stopMotion();
     const shouldBeCompact = window.innerWidth <= 120;
-    if (shouldBeCompact !== compactMode) createBall(ball.emotionId);
+    if (shouldBeCompact !== compactMode && customization.appearance.shape !== 'codex-pet') createBall(ball.emotionId);
+    else { compactMode = shouldBeCompact; ball.resize?.(); }
     restoreState();
     if (presentationSuppressed) syncSuppressedAnimation(true);
   });
@@ -807,8 +884,12 @@
   listeners.push(desktop.onActivity(observe(updateActivity)));
   listeners.push(desktop.onSettings(observe(settings => {
     const next = PetCustomization.normalizeCustomization(settings.customization);
-    if (JSON.stringify(customization.appearance) !== JSON.stringify(next.appearance)) {
+    const nextPet = next.appearance.shape === 'codex-pet' && settings.codexPet?.id === next.appearance.codexPetId &&
+      window.CodexPetPlayer?.validDescriptor(settings.codexPet) ? settings.codexPet : null;
+    if (JSON.stringify(customization.appearance) !== JSON.stringify(next.appearance) ||
+        JSON.stringify(codexPet) !== JSON.stringify(nextPet)) {
       stopMotion();
+      codexPet = nextPet;
       customization = next;
       registerIdleAppearance();
       createBall(ball.emotionId);

@@ -228,6 +228,50 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
 
 const TASK_ID = '11111111-1111-4111-8111-111111111111';
 
+test('尺寸写入失败保留当前设置、窗口与贴边状态，不广播未保存尺寸', async () => {
+  for (const side of [null, 'right']) {
+    const f = await fixture({ saveError: Error('SIZE_WRITE_FAILURE') });
+    f.call('openCustomization()');
+    const editor = f.call('customizationWindow');
+    if (side) f.call(`edgeTuck.dock('${side}')`);
+    const before = {
+      settings: f.call('JSON.stringify(settings)'), bounds: f.pet.getBounds(),
+      presentation: f.call('JSON.stringify(edgeTuck.getPresentation())'), menus: f.trayMenus.length,
+      broadcasts: f.pet.messages.filter(message => message.channel === 'pet:settings').length
+    };
+    assert.throws(() => f.call("setPetSize('small')"), /SIZE_WRITE_FAILURE/);
+    assert.equal(f.call('JSON.stringify(settings)'), before.settings);
+    assert.deepEqual(f.pet.getBounds(), before.bounds);
+    assert.equal(f.call('JSON.stringify(edgeTuck.getPresentation())'), before.presentation);
+    assert.equal(f.trayMenus.length, before.menus);
+    assert.equal(f.pet.messages.filter(message => message.channel === 'pet:settings').length, before.broadcasts);
+    assert.equal(editor.messages.filter(message => message.channel === 'pet:size').length, 0);
+    assert.equal(f.saved.length, 0);
+  }
+});
+
+test('六档尺寸成功各写一次，保存位置与自由及左右贴边实际窗口一致', async () => {
+  const { SIZES } = require('../lib/window-placement');
+  for (const side of [null, 'left', 'right']) {
+    const f = await fixture();
+    f.call('openCustomization()');
+    const editor = f.call('customizationWindow');
+    if (side) f.call(`edgeTuck.dock('${side}')`);
+    for (const [name, size] of Object.entries(SIZES)) {
+      const count = f.saved.length;
+      f.call(`setPetSize('${name}')`);
+      const actual = f.pet.getBounds(), saved = f.saved.at(-1);
+      assert.equal(f.saved.length, count + 1, '只执行一次尺寸持久化');
+      assert.equal(saved.size, name); assert.equal(actual.width, size.width); assert.equal(actual.height, size.height);
+      assert.deepEqual({ x: saved.x, y: saved.y }, { x: actual.x, y: actual.y });
+      const area = f.screen.getDisplayMatching(actual).workArea;
+      if (side) assert.equal(actual.x, side === 'left' ? area.x : area.x + area.width - size.width);
+      assert.equal(f.pet.messages.filter(message => message.channel === 'pet:settings').at(-1).packet.size, name);
+      assert.equal(editor.messages.filter(message => message.channel === 'pet:size').at(-1).packet, name);
+    }
+  }
+});
+
 test('所有 Codex 详情打开与关闭均触发额度卡避让和恢复，不依赖置顶层级', async () => {
   const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
   assert.equal(f.quotaLabel.options.getSuppressed(), false);
@@ -2523,4 +2567,66 @@ test('主题保存失败时回滚且不广播，菜单保持之前的选择', as
   assert.equal(f.call('settings.uiTheme'), 'blue');
   assert.equal(f.pet.messages.length, messages);
   assert.equal(findMenuItem(f.call('menuTemplate()'), 'ui-theme-blue').checked, true);
+});
+
+test('可信定制入口完整解码副本后保存内容ID，源与副本引用都可收藏且不持久化URL', async () => {
+  const sourceId = `codex-${'a'.repeat(64)}`, copiedId = `codex-${'b'.repeat(64)}`;
+  for (const version of [1, 2]) {
+    const rows = version === 1 ? 9 : 11, f = await fixture();
+    f.call('openCustomization()');
+    const editor = f.call('customizationWindow'), decodes = [];
+    f.call(`codexPets = {
+      getImported(id) { if(id!==${JSON.stringify(copiedId)}) throw Error('not imported');
+        return {id,name:'测试形象',version:${version},rows:${rows},spritesheetPath:'/fixture/copied.webp'}; },
+      importPet(id) { if(id!==${JSON.stringify(sourceId)}) throw Error('unknown source');
+        return this.getImported(${JSON.stringify(copiedId)}); },
+      resolve(id) { if(id!==${JSON.stringify(sourceId)}) throw Error('unknown source');
+        return {...this.getImported(${JSON.stringify(copiedId)}),id,spritesheetPath:'/fixture/source.webp'}; }
+    }`);
+    editor.webContents.executeJavaScriptInIsolatedWorld = async (world, scripts) => {
+      decodes.push({ world, code: scripts[0].code }); return { width: 1536, height: rows * 208 };
+    };
+    const appearance = { shape: 'codex-pet', codexPetId: sourceId, auroraTransparency: 20,
+      imageURL: 'file:///untrusted.webp', codexPet: { id: sourceId, imageURL: 'file:///untrusted.webp' } };
+    assert.equal(await f.invoke('pet:customization-save', { appearance }, editor.webContents), true);
+    assert.equal(f.call('settings.customization.appearance.codexPetId'), copiedId);
+    assert.equal(f.call('settings.startupAppearance.codexPetId'), copiedId);
+    const preset = await f.invoke('pet:appearance-preset-add', { name: '测试收藏', appearance: { ...appearance, codexPetId: copiedId } }, editor.webContents);
+    assert.equal(preset.ok, true); assert.equal(preset.presets[0].appearance.codexPetId, copiedId);
+    const duplicate = await f.invoke('pet:appearance-preset-add', { name: '另一收藏', appearance }, editor.webContents);
+    assert.equal(duplicate.ok, false); assert.match(duplicate.error, /已收藏/);
+    assert.equal(decodes.length, 3);
+    for (const decode of decodes) {
+      assert.equal(decode.world, 1004); assert.match(decode.code, /file:\/\/\/fixture\/copied\.webp/);
+      assert.doesNotMatch(decode.code, /untrusted\.webp|source\.webp/);
+    }
+    const settings = f.call('JSON.stringify(settings)');
+    assert.equal(settings.includes('imageURL'), false); assert.equal(settings.includes('.webp'), false);
+    assert.equal(f.pet.messages.filter(message => message.channel === 'pet:settings').at(-1).packet.codexPet.id, copiedId);
+  }
+});
+
+test('副本解码失败或尺寸不符时拒绝保存与新增收藏，原设置和广播均保持', async () => {
+  const sourceId = `codex-${'c'.repeat(64)}`, copiedId = `codex-${'d'.repeat(64)}`;
+  for (const dimensions of [null, { width: 1536, height: 1872 }]) {
+    const f = await fixture(); f.call('writeError=()=>{};openCustomization()');
+    f.call(`settings.startupAppearance=normalizeAppearance({shape:'cloud'});
+      settings.appearancePresets=[{id:'00000000-0000-4000-8000-000000000001',name:'既有收藏',appearance:normalizeAppearance({shape:'square'})}];`);
+    const editor = f.call('customizationWindow');
+    f.call(`codexPets = {
+      getImported(id) { if(id!==${JSON.stringify(copiedId)}) throw Error('not imported');
+        return {id,name:'失败形象',version:2,rows:11,spritesheetPath:'/fixture/copied.webp'}; },
+      importPet(id) { if(id!==${JSON.stringify(sourceId)}) throw Error('unknown source');
+        return this.getImported(${JSON.stringify(copiedId)}); },
+      resolve(id) { return {...this.getImported(${JSON.stringify(copiedId)}),id,spritesheetPath:'/fixture/source.webp'}; }
+    }`);
+    editor.webContents.executeJavaScriptInIsolatedWorld = async () => dimensions;
+    const before = f.call('JSON.stringify(settings)'), messages = f.pet.messages.length, appearances = f.chatWindow.appearances;
+    const appearance = { shape: 'codex-pet', codexPetId: sourceId };
+    assert.equal(await f.invoke('pet:customization-save', { appearance }, editor.webContents), false);
+    assert.equal((await f.invoke('pet:appearance-preset-add', { name: '失败收藏', appearance }, editor.webContents)).ok, false);
+    assert.equal(f.call('JSON.stringify(settings)'), before);
+    assert.equal(f.saved.length, 0); assert.equal(f.pet.messages.length, messages);
+    assert.equal(f.chatWindow.appearances, appearances);
+  }
 });
