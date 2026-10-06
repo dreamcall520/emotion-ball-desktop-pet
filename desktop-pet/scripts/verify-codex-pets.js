@@ -11,12 +11,13 @@ const { pointerClick } = require('./verify-chat-integration');
 const digest = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const clone = value => JSON.parse(JSON.stringify(value));
 
-// Called only from the explicit isolated source-Electron smoke branch.
+// Called only from the explicit isolated source or packaged smoke branch.
 async function verifyCodexPets({ pet, customize, openCustomization, openChat, getChatWindow,
-  getSettings, setSize, store, poll, output = process.env.PET_CODEX_PETS_QA_OUT,
+  getSettings, setSize, store, poll, packaged = false, output = process.env.PET_CODEX_PETS_QA_OUT,
   phase = process.env.PET_CODEX_PETS_QA_PHASE || 'all' }) {
   assert.equal(process.env.PET_SMOKE_TEST, '1');
   assert.equal(process.env.PET_SMOKE_CODEX_PETS_ONLY, '1');
+  assert.equal(typeof packaged, 'boolean', 'packaged 取自主 App 的实际 isPackaged');
   assert.ok(['save', 'restart', 'all', 'local'].includes(phase));
   assert.ok(output && path.isAbsolute(output), '明确指定验收输出目录');
   const stateFile = process.env.PET_CODEX_PETS_QA_STATE;
@@ -252,7 +253,7 @@ async function verifyCodexPets({ pet, customize, openCustomization, openChat, ge
     assert.ok(chat && !chat.isDestroyed());
   }
   assert.deepEqual(errors, [], '没有原生页面加载失败');
-  fs.writeFileSync(path.join(output, `report-${phase}.json`), JSON.stringify({ ok: true, packaged: false,
+  fs.writeFileSync(path.join(output, `report-${phase}.json`), JSON.stringify({ ok: true, packaged,
     isolatedUserData: true, sourceFixtures: phase === 'local' ? 0 : 30, actualPetsObserved,
     actualModelCalls: 0, phase, checks }, null, 2));
   process.stdout.write(`PET_CODEX_PETS_${phase.toUpperCase()}_OK\n`);

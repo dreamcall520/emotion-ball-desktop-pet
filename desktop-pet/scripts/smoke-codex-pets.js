@@ -1,4 +1,4 @@
-// Source Electron only. Two launches share disposable settings; no installed App or Codex data is changed.
+// Two source or packaged launches share disposable settings; no installed profile or Codex data is changed.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -9,7 +9,12 @@ const { spawn } = require('node:child_process');
 const root = path.resolve(__dirname, '../..');
 const output = process.env.PET_CODEX_PETS_QA_OUT;
 assert.ok(output && path.isAbsolute(output), 'PET_CODEX_PETS_QA_OUT 必须指定绝对验收输出目录');
-let electronBinary = process.env.PET_CODEX_PETS_QA_ELECTRON;
+const packagedApp = process.env.PET_SMOKE_APP_PATH;
+if (packagedApp) assert.ok(path.isAbsolute(packagedApp), 'PET_SMOKE_APP_PATH 必须为绝对 App 路径');
+const launchKind = packagedApp ? 'packaged' : 'source';
+let electronBinary = packagedApp
+  ? path.join(packagedApp, 'Contents/MacOS', process.env.PET_SMOKE_EXECUTABLE || '球球桌宠')
+  : process.env.PET_CODEX_PETS_QA_ELECTRON;
 if (!electronBinary) {
   for (const directory of [root, path.resolve(root, '../custom-motion-editor'), path.resolve(root, '../..')]) {
     try { electronBinary = require(require.resolve('electron', { paths: [directory] })); break; } catch (_) {}
@@ -61,7 +66,7 @@ async function run() {
     }));
   }
   const launch = phase => new Promise((resolve, reject) => {
-    const child = spawn(electronBinary, [`--user-data-dir=${userData}`, root], { cwd: root,
+    const child = spawn(electronBinary, [`--user-data-dir=${userData}`, ...(packagedApp ? [] : [root])], { cwd: root,
       env: { ...process.env, PET_SMOKE_TEST: '1', PET_SMOKE_CODEX_PETS_ONLY: '1',
         PET_CODEX_PETS_QA_SOURCE_ROOT: sourceRoot, PET_CODEX_PETS_QA_STATE: stateFile,
         PET_CODEX_PETS_QA_PHASE: phase, PET_CODEX_PETS_QA_OUT: output,
@@ -72,7 +77,7 @@ async function run() {
     const timer = setTimeout(() => child.kill('SIGTERM'), 120000);
     child.once('error', error => { clearTimeout(timer); reject(error); });
     child.once('close', code => {
-      clearTimeout(timer); fs.writeFileSync(path.join(output, `source-${phase}.log`), log);
+      clearTimeout(timer); fs.writeFileSync(path.join(output, `${launchKind}-${phase}.log`), log);
       try {
         assert.equal(code, 0, log); assert.match(log, /PET_USER_DATA_OK/);
         assert.ok(log.includes(`PET_CODEX_PETS_${phase.toUpperCase()}_OK`), log);

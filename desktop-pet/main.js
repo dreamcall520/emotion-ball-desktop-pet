@@ -1619,7 +1619,7 @@ async function finishSmokeTest() {
       await require('./scripts/verify-codex-pets').verifyCodexPets({ pet: petWindow,
         customize: customizationWindow, openCustomization, openChat,
         getChatWindow: () => chatWindow.getWindow(), getSettings: () => settings,
-        setSize: setPetSize, store: codexPets });
+        setSize: setPetSize, store: codexPets, packaged: app.isPackaged });
       app.exit(0); return;
     }
 
