@@ -1650,7 +1650,8 @@ async function finishSmokeTest() {
       await require('./scripts/verify-codex-pets').verifyCodexPets({ pet: petWindow,
         customize: customizationWindow, openCustomization, openChat,
         getChatWindow: () => chatWindow.getWindow(), getSettings: () => settings,
-        setSize: setPetSize, store: codexPets, packaged: app.isPackaged });
+        setSize: setPetSize, store: codexPets, packaged: app.isPackaged,
+        getMenu: () => Menu.buildFromTemplate(menuTemplate()), nativeTheme });
       app.exit(0); return;
     }
 

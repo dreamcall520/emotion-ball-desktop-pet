@@ -5,6 +5,37 @@ const { setTimeout: wait } = require('node:timers/promises');
 const M = require('../lib/notes-model');
 const { capturePaintedWindow } = require('./verify-codex-companion');
 
+const luminance = color => color.match(/[\d.]+/g).slice(0, 3).map(Number).map(value => {
+  const channel = value / 255; return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+}).reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
+const contrast = (foreground, background) => {
+  const a = luminance(foreground), b = luminance(background);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+};
+const textStyles = (win, selectors) => win.webContents.executeJavaScript( `(() => {
+  const parse = color => { const channels = color.match(/[\\d.]+/g).map(Number); return [...channels.slice(0, 3), channels[3] ?? 1]; };
+  return ${JSON.stringify(selectors)}.flatMap(({ label, selector }) => {
+    const elements = [...document.querySelectorAll(selector)];
+    if (!elements.length) throw Error('缺少对比度检查节点: ' + selector);
+    return elements.map((element, index) => {
+      const style = getComputedStyle(element), layers = [];
+      if (!element.getClientRects().length) throw Error('对比度检查节点不可见: ' + selector);
+      for (let ancestor = element; ancestor; ancestor = ancestor.parentElement) {
+        const paint = getComputedStyle(ancestor), rgba = parse(paint.backgroundColor);
+        layers.push({ element: ancestor.id ? '#' + ancestor.id : ancestor.tagName.toLowerCase() + '.' + [...ancestor.classList].join('.'),
+          color: paint.backgroundColor, image: paint.backgroundImage, rgba });
+        if (rgba[3] === 1) break;
+      }
+      if (layers.at(-1).rgba[3] !== 1) throw Error('未找到真实不透明背景: ' + selector);
+      if (layers.some(layer => layer.image !== 'none')) throw Error('文字背景存在渐变，不能按纯色验收: ' + selector);
+      let background = layers.at(-1).rgba.slice(0, 3);
+      for (const layer of layers.slice(0, -1).reverse()) background = background.map((channel, i) => layer.rgba[i] * layer.rgba[3] + channel * (1 - layer.rgba[3]));
+      return { label, selector, index, text: element.textContent.trim(), color: style.color,
+        ownBackground: style.backgroundColor, background: 'rgb(' + background.join(', ') + ')', layers };
+    });
+  });
+})()`);
+
 // Run with PET_SMOKE_UI_THEME_ONLY=1 PET_SMOKE_CHAT_ONLY=1 npm run smoke.
 // The existing smoke runner isolates user data and supplies the mock chat account.
 async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMenu, getSettings, settingsFile, nativeTheme }) {
@@ -53,36 +84,6 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
     await capturePaintedWindow({ win, artifactPath });
     captures.push({ name, window: win.getTitle(), path: artifactPath });
   };
-  const luminance = color => color.match(/[\d.]+/g).slice(0, 3).map(Number).map(value => {
-    const channel = value / 255; return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
-  }).reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
-  const contrast = (foreground, background) => {
-    const a = luminance(foreground), b = luminance(background);
-    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
-  };
-  const textStyles = (win, selectors) => page(win, `(() => {
-    const parse = color => { const channels = color.match(/[\\d.]+/g).map(Number); return [...channels.slice(0, 3), channels[3] ?? 1]; };
-    return ${JSON.stringify(selectors)}.flatMap(({ label, selector }) => {
-      const elements = [...document.querySelectorAll(selector)];
-      if (!elements.length) throw Error('缺少对比度检查节点: ' + selector);
-      return elements.map((element, index) => {
-        const style = getComputedStyle(element), layers = [];
-        if (!element.getClientRects().length) throw Error('对比度检查节点不可见: ' + selector);
-        for (let ancestor = element; ancestor; ancestor = ancestor.parentElement) {
-          const paint = getComputedStyle(ancestor), rgba = parse(paint.backgroundColor);
-          layers.push({ element: ancestor.id ? '#' + ancestor.id : ancestor.tagName.toLowerCase() + '.' + [...ancestor.classList].join('.'),
-            color: paint.backgroundColor, image: paint.backgroundImage, rgba });
-          if (rgba[3] === 1) break;
-        }
-        if (layers.at(-1).rgba[3] !== 1) throw Error('未找到真实不透明背景: ' + selector);
-        if (layers.some(layer => layer.image !== 'none')) throw Error('文字背景存在渐变，不能按纯色验收: ' + selector);
-        let background = layers.at(-1).rgba.slice(0, 3);
-        for (const layer of layers.slice(0, -1).reverse()) background = background.map((channel, i) => layer.rgba[i] * layer.rgba[3] + channel * (1 - layer.rgba[3]));
-        return { label, selector, index, text: element.textContent.trim(), color: style.color,
-          ownBackground: style.backgroundColor, background: 'rgb(' + background.join(', ') + ')', layers };
-      });
-    });
-  })()`);
   const surface = win => page(win, `(() => {
     const root = document.documentElement;
     const el = document.querySelector('#notes-tab, #send-message, #save, #connect-report');
@@ -299,4 +300,4 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
   process.stdout.write(`PET_UI_THEME_OK ${checks.length} combinations, ${windows.length} native windows\n`);
 }
 
-module.exports = { verifyUiTheme };
+module.exports = { verifyUiTheme, textStyles, contrast };
