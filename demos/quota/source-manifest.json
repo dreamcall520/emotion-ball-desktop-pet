@@ -106,7 +106,7 @@
     },
     {
       "target": "check.browser.cjs",
-      "sha256": "4b37d1f94541fc133945c7a82e67aa50d1349f06fd071a8b585d429e39d29cdd"
+      "sha256": "31f5f5ae65b5b6d6d48f153c6e6078c4a2e1efe455d78bd766c0ffe9d85d285a"
     },
     {
       "target": "demo-adapter.css",
@@ -118,15 +118,15 @@
     },
     {
       "target": "demo.css",
-      "sha256": "80bcdd4b2813a3ea4fcdfc4b6743a6ffe80a708d468c62e4e1ffe5495080b82b"
+      "sha256": "c35b6a2d10609569ed9145c685602636e0a2ccf62071780c5064cf80db667a7f"
     },
     {
       "target": "demo.js",
-      "sha256": "293b9fe85aa6a7806c92791934faccfeca07f09a046a1f391c32cc74f70f3f1c"
+      "sha256": "a61447293086872258d81e71f04363955f6b7acb5da2f5ab5ab6110b26ed45a9"
     },
     {
       "target": "index.html",
-      "sha256": "7fc3947be18183e93a06dc90a19069d7c30293dd88aaf62ad4d442ea5caa3507"
+      "sha256": "e0dd2e7d401c71d5d293fe87f2c8ddb7a30dba8633acc8c991aaaef1e3ef22e8"
     }
   ]
 }

@@ -22,13 +22,13 @@
       } catch (_error) {}
     </script>
     <link rel="stylesheet" href="styles.css?v=20261006-native">
-    <link rel="stylesheet" href="motion-showcase.css?v=20261006-native">
+    <link rel="stylesheet" href="motion-showcase.css?v=20261006-guide">
     <link rel="stylesheet" href="dark-theme.css?v=20261006-native">
     <link rel="stylesheet" href="chat-showcase.css?v=20261006-native">
     <link rel="stylesheet" href="appearance-showcase.css?v=20261006-native">
     <link rel="stylesheet" href="notes-showcase.css?v=20261006-native">
-    <link rel="stylesheet" href="review-refinements.css?v=20261006-layout">
-    <link rel="stylesheet" href="native-demos.css?v=20261006-layout">
+    <link rel="stylesheet" href="review-refinements.css?v=20261006-guide">
+    <link rel="stylesheet" href="native-demos.css?v=20261006-guide">
     <title>球球桌宠 - 免费的 macOS 桌面伙伴</title>
   </head>
   <body>
@@ -77,7 +77,7 @@
             </button>
           </div>
           <button class="motion-toggle hero-motion-toggle" type="button" data-motion-toggle aria-pressed="false" aria-label="暂停动效" title="暂停动效">
-            <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><g class="motion-icon-pause" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></g><path class="motion-icon-play" d="M8 5v14l11-7z" fill="currentColor"/></svg>
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><g class="motion-icon-pause" fill="currentColor"><rect x="7" y="5" width="3" height="14" rx="1"/><rect x="14" y="5" width="3" height="14" rx="1"/></g><path class="motion-icon-play" d="M8 5v14l11-7z" fill="currentColor"/></svg>
           </button>
         </div>
       </section>
@@ -152,7 +152,7 @@
           <div class="release-note codex-privacy-note"><p><strong>默认关闭，可选开启</strong><span>只查看状态，不代你操作。</span></p><a href="#privacy">了解隐私边界 <span aria-hidden="true">→</span></a></div>
         </div>
         <div class="codex-live-showcase">
-          <iframe class="native-demo native-quota" src="demos/quota/index.html?v=20261006-layout" title="0.4.00 额度卡片与趋势演示" data-app-demo data-demo="quota" height="740" loading="lazy"></iframe>
+          <iframe class="native-demo native-quota" src="demos/quota/index.html?v=20261006-align" title="0.4.00 额度卡片与趋势演示" data-app-demo data-demo="quota" height="740" loading="lazy"></iframe>
         </div>
       </section>
 
@@ -234,7 +234,7 @@
             </div>
           </div>
           <div class="ap-preview native-appearance-preview">
-            <iframe class="native-demo native-quota" src="demos/quota/index.html?appearanceDemo=1&v=20261006-layout" title="新版额度卡标准与色弱配色演示" data-app-demo data-demo="quota" data-demo-appearance height="740" loading="lazy"></iframe>
+            <iframe class="native-demo native-quota" src="demos/quota/index.html?appearanceDemo=1&v=20261006-align" title="新版额度卡标准与色弱配色演示" data-app-demo data-demo="quota" data-demo-appearance height="740" loading="lazy"></iframe>
             <iframe class="native-demo native-chat" src="demos/chat/index.html?v=20261006-layout" title="新版聊天标准与色弱配色演示" data-app-demo data-demo="chat" data-demo-appearance height="520" loading="lazy"></iframe>
           </div>
         </div>
@@ -328,8 +328,15 @@
           </figure>
         </div>
         <figure class="install-settings">
-          <a href="assets/macos-privacy-security-open-anyway.png" target="_blank" rel="noopener"><img src="assets/macos-privacy-security-open-anyway.png" width="1430" height="1196" loading="lazy" alt="macOS 系统设置的隐私与安全性页面，安全性区域右侧显示仍要打开按钮；点击查看原图"></a>
-          <figcaption>先尝试打开 App，再到此处选择「仍要打开」。<a href="https://support.apple.com/zh-cn/102445" target="_blank" rel="noopener">Apple 官方截图与说明 ↗</a></figcaption>
+          <a class="install-settings-image" href="assets/macos-privacy-security-open-anyway.png" target="_blank" rel="noopener">
+            <img src="assets/macos-privacy-security-open-anyway.png" width="1430" height="1196" loading="lazy" alt="macOS 隐私与安全性页面，蓝色指引标出右侧仍要打开按钮；点击查看原图">
+            <span class="install-settings-label" aria-hidden="true">③ 仍要打开</span>
+            <svg class="install-settings-guide" viewBox="0 0 1430 1196" aria-hidden="true" focusable="false">
+              <path d="M1118 510 1260 642m-32-8 32 8-12-31" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+              <rect x="1224" y="650" width="156" height="62" rx="16" fill="none" stroke="currentColor" stroke-width="7"/>
+            </svg>
+          </a>
+          <figcaption>先尝试打开 App，再点击图中标出的「仍要打开」。<a href="https://support.apple.com/zh-cn/102445" target="_blank" rel="noopener">Apple 官方截图与说明 ↗</a></figcaption>
         </figure>
       </section>
 

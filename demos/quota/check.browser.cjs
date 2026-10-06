@@ -16,8 +16,17 @@ const out=process.env.QIUQIU_QA_OUTPUT||'/tmp/qiuqiu-live-app-demos';fs.mkdirSyn
   assert.equal(await detail.locator('.trend-chart').count(),1);
   const cardRect=selector=>page.locator(selector).evaluate(e=>({width:e.getBoundingClientRect().width,height:e.getBoundingClientRect().height,nativeWidth:e.contentWindow.innerWidth,nativeHeight:e.contentWindow.innerHeight}));
   const near=(actual,expected)=>assert.ok(Math.abs(actual-expected)<.1,`${actual} differs from ${expected}`);
+  const scenarioSelect=page.locator('#demo-scenario');
+  await scenarioSelect.click();await scenarioSelect.selectOption('fast');await page.waitForFunction(()=>QiuqiuQuotaDemo.getState().scenario==='fast');
+  assert.equal(await scenarioSelect.evaluate(e=>document.activeElement===e),true);assert.equal(await scenarioSelect.getAttribute('data-focus-mode'),'pointer');assert.equal(await scenarioSelect.evaluate(e=>getComputedStyle(e).outlineStyle),'none');
+  const pointerScreenshot=path.join(out,'quota-pointer-fast.png');await page.screenshot({path:pointerScreenshot,fullPage:true});
+  await page.keyboard.press('Tab');await page.keyboard.press('Shift+Tab');assert.equal(await scenarioSelect.evaluate(e=>document.activeElement===e),true);assert.equal(await scenarioSelect.getAttribute('data-focus-mode'),'keyboard');assert.equal(await scenarioSelect.evaluate(e=>getComputedStyle(e).outlineWidth),'1px');assert.equal(await scenarioSelect.evaluate(e=>getComputedStyle(e).outlineStyle),'solid');
+  assert.equal(await scenarioSelect.evaluate(e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e),edge=parseFloat(s.outlineWidth)+parseFloat(s.outlineOffset);return r.top>=edge&&r.left>=edge&&r.right+edge<=innerWidth;}),true);
+  const keyboardScreenshot=path.join(out,'quota-keyboard-focus.png');await page.screenshot({path:keyboardScreenshot,fullPage:true});report.focus={pointerScreenshot,keyboardScreenshot};
+  await scenarioSelect.selectOption('balanced');await page.waitForFunction(()=>QiuqiuQuotaDemo.getState().scenario==='balanced');
+  report.interactions.push('mouse scenario selection remains focused without outline; Tab returns a 1px keyboard focus; unified toolbar and native card/detail alignment');
   let rect=await cardRect('#quota-frame');near(rect.width,280);near(rect.height,280*144/196);assert.equal(rect.nativeWidth,196);assert.equal(rect.nativeHeight,144);
-  rect=await cardRect('#api-label-frame');near(rect.width,280);near(rect.height,280*92/196);near((await cardRect('#detail-frame')).width,796);
+  rect=await cardRect('#api-label-frame');near(rect.width,280);near(rect.height,280*92/196);near((await cardRect('#detail-frame')).width,792);
   assert.equal(await page.locator('#demo-feedback').isVisible(),false);assert.doesNotMatch(await page.locator('main').innerText(),/公开界面|网页演示不连接账户|此处为合成示例/);
   await quota.locator('.v20-collapse').click();await page.waitForFunction(()=>QiuqiuQuotaDemo.getState().expanded===false);rect=await cardRect('#quota-frame');near(rect.width,280*128/196);near(rect.height,280*32/196);assert.equal(rect.nativeWidth,128);assert.equal(rect.nativeHeight,32);
   await quota.locator('#quota-label').press('Enter');await page.waitForFunction(()=>QiuqiuQuotaDemo.getState().expanded===true);
@@ -31,6 +40,7 @@ const out=process.env.QIUQIU_QA_OUTPUT||'/tmp/qiuqiu-live-app-demos';fs.mkdirSyn
   await page.locator('#demo-scenario').selectOption('fast');await page.waitForFunction(()=>document.querySelector('#detail-frame').contentDocument.querySelector('.forecast-copy').textContent.includes('重置前用完'));assert.match(await detail.locator('.forecast-copy').innerText(),/重置前用完/);
   await page.locator('#demo-scenario').selectOption('balanced');
   await api.locator('#api-open-details').click();await page.frameLocator('#api-report-frame').locator('#month-cost').waitFor();assert.match(await page.frameLocator('#api-report-frame').locator('#month-cost').innerText(),/32.48/);
+  near(await page.locator('#quota-frame').evaluate(e=>e.getBoundingClientRect().top),await page.locator('#api-report-frame').evaluate(e=>e.getBoundingClientRect().top));
   assert.equal(await page.frameLocator('#api-report-frame').locator('#connection-settings').isVisible(),false);await page.frameLocator('#api-report-frame').locator('#refresh-report').click();await page.waitForFunction(()=>!document.querySelector('#demo-feedback').hidden);assert.equal(await page.locator('#demo-feedback').innerText(),'报告已刷新。');await page.locator('#api-back').click();assert.equal(await page.locator('#demo-feedback').isVisible(),false);
   report.interactions.push('280px native cards / filling default trend; both compact/expanded keyboard modes, trend periods/forecast/unknown, account history, extra credits, tasks/results read, independent API report and concise click feedback');
   const modes=[{mode:'main',query:'',cardWidth:280,gap:20,breakpoint:700,widths:[1100,720,700,360,320]},{mode:'appearance',query:'?appearanceDemo=1',cardWidth:224,gap:16,breakpoint:559,widths:[620,560,559,360,320]}];
@@ -40,9 +50,10 @@ const out=process.env.QIUQIU_QA_OUTPUT||'/tmp/qiuqiu-live-app-demos';fs.mkdirSyn
    await page.setViewportSize({width,height:900});await page.evaluate(v=>window.postMessage({type:'qiuqiu-demo-theme',...v},location.origin),{appearance,colorMode});
    await page.waitForFunction(v=>QiuqiuQuotaDemo.getState().appearance===v.appearance&&QiuqiuQuotaDemo.getState().colorMode===v.colorMode,{appearance,colorMode});
    await page.waitForTimeout(80);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-   rect=await cardRect('#quota-frame');near(rect.width,config.cardWidth);near((await cardRect('#api-label-frame')).width,config.cardWidth);assert.equal(rect.nativeWidth,196);near((await cardRect('#detail-frame')).width,width-4-(width>config.breakpoint?config.cardWidth+config.gap:0));
+   rect=await cardRect('#quota-frame');near(rect.width,config.cardWidth);near((await cardRect('#api-label-frame')).width,config.cardWidth);assert.equal(rect.nativeWidth,196);near((await cardRect('#detail-frame')).width,width-8-(width>config.breakpoint?config.cardWidth+config.gap:0));
    const positions=await page.evaluate(()=>({card:document.querySelector('#quota-frame').getBoundingClientRect().toJSON(),detail:document.querySelector('#detail-frame').getBoundingClientRect().toJSON()}));
-   if(width>config.breakpoint){near(positions.detail.left-positions.card.right,config.gap);near(positions.card.left,2);assert.ok(positions.detail.top<positions.card.bottom);}else assert.ok(positions.detail.top>positions.card.bottom);
+   if(width>config.breakpoint){near(positions.detail.left-positions.card.right,config.gap);near(positions.card.left,4);near(positions.detail.top,positions.card.top);}else assert.ok(positions.detail.top>positions.card.bottom);
+   const toolbar=await page.locator('.demo-toolbar').evaluate(e=>e.getBoundingClientRect().toJSON());near(toolbar.left,4);near(toolbar.right,width-4);assert.ok(toolbar.bottom<positions.card.top);assert.equal(await page.locator('.demo-cards h2').count(),0);
    assert.equal(await detail.locator('html').evaluate(e=>e.scrollWidth<=innerWidth),true);
    assert.equal(await quota.locator('html').getAttribute('data-color-mode'),colorMode);assert.equal(await detail.locator('html').getAttribute('data-accessible-appearance'),appearance);
    const screenshot=path.join(out,`quota-${config.mode}-${width}-${appearance}-${colorMode}.png`);await page.screenshot({path:screenshot,fullPage:true});report.layouts.push({kind:'quota',mode:config.mode,width,appearance,colorMode,cardWidth:rect.width,detailWidth:(await cardRect('#detail-frame')).width,height:await page.locator('main').evaluate(e=>Math.ceil(e.getBoundingClientRect().height)),screenshot});
@@ -57,7 +68,7 @@ const out=process.env.QIUQIU_QA_OUTPUT||'/tmp/qiuqiu-live-app-demos';fs.mkdirSyn
   }
    await api.locator('#api-open-details').click();assert.match(await page.frameLocator('#api-report-frame').locator('#month-cost').innerText(),/32.48/);assert.equal(await page.frameLocator('#api-report-frame').locator('.api-panel').evaluate(e=>e.scrollWidth<=innerWidth),true);await page.locator('#api-back').click();
   }
-  await page.goto(base+'demos/quota/index.html');await quota.locator('.v20-value').first().waitFor();await page.setViewportSize({width:260,height:900});await page.waitForTimeout(200);near((await cardRect('#quota-frame')).width,256);assert.equal((await cardRect('#quota-frame')).nativeWidth,196);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await page.goto(base+'demos/quota/index.html');await quota.locator('.v20-value').first().waitFor();await page.setViewportSize({width:260,height:900});await page.waitForTimeout(200);near((await cardRect('#quota-frame')).width,252);assert.equal((await cardRect('#quota-frame')).nativeWidth,196);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   for(const width of [1100,320]){
    await page.setViewportSize({width,height:900});await page.waitForFunction(()=>{
     const frame=document.querySelector('#detail-frame'),doc=frame.contentDocument,panel=doc.querySelector('#details-panel'),content=doc.querySelector('#details-content'),style=frame.contentWindow.getComputedStyle(panel);

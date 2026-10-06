@@ -58,7 +58,7 @@
 .feature-list article, .feature-list article:first-child { display: block; padding: 12px 0; border: 0; }
 .feature-list h3 { font-size: 17px; margin-bottom: 8px; }
 .feature-list p { font-size: 14px; line-height: 1.7; }
-.codex-section { display: flex; flex-direction: column; align-items: stretch; gap: 24px; }
+.codex-section { display: flex; flex-direction: column; align-items: stretch; gap: 24px; max-width: 1148px; }
 .codex-copy { display: contents; }
 .codex-copy h2 { order: 0; max-width: 850px; margin: 0; }
 .codex-lead { order: 1; margin: 0; }

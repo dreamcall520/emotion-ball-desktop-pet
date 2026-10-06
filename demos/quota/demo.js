@@ -44,7 +44,7 @@
   function render() {
     document.documentElement.dataset.appearance=appearance; document.documentElement.dataset.colorMode=colorMode; document.documentElement.dataset.demoPaused=String(paused);
     sizeCards();
-    frames.details.hidden=apiVisible; $('api-report').hidden=!apiVisible;
+    frames.details.hidden=apiVisible; $('api-report').hidden=!apiVisible; $('api-back').hidden=!apiVisible;
     Object.keys(frames).forEach(send); requestAnimationFrame(resize);
   }
   function openDetail(detail,nextPeriod) {
@@ -52,7 +52,12 @@
     $('demo-feedback').hidden=true;
     action=detail; period=nextPeriod===300?300:10080; apiVisible=false; render();
   }
-  $('demo-scenario').addEventListener('change',event=>{scenario=event.target.value;render();});
+  const scenarioSelect=$('demo-scenario');
+  scenarioSelect.addEventListener('pointerdown',()=>{scenarioSelect.dataset.focusMode='pointer';});
+  document.addEventListener('keydown',event=>{
+    if(event.key==='Tab' || event.target===scenarioSelect) scenarioSelect.dataset.focusMode='keyboard';
+  },true);
+  scenarioSelect.addEventListener('change',event=>{scenario=event.target.value;render();});
   $('api-back').addEventListener('click',()=>openDetail('trend',period));
   $('thread-close').addEventListener('click',()=>{$('demo-thread').hidden=true;resize();});
   window.addEventListener('message',event=>{
