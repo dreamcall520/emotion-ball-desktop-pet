@@ -6,7 +6,7 @@
 
 首页采用确认后的整屏银白/夜景玻璃主视觉，品牌语「球球-陪你自在一点」。`home.js` 复用原生 WebGL 实现自动柔光、曲面折射与鼠标水波；眼睛以2～4秒随机间隔自然眨动，约四分之一概率快速连眨两次，闭眼以像素宽度的抗锯齿圆弧收合并沿用原眼睛颜色；暂停、减少动态、页面隐藏及静态回退保持可用。主下载按钮为「macOS 版下载」，下方注明版本与 Apple 芯片，Intel 保持独立说明入口。
 
-原官网功能和演示保留在 `product/index.html`，地址为 `https://qiuqiu.pet/product/`。导航的功能介绍、安装指南与更新日志在新页签打开；旧首页功能锚点通过 `location.replace` 跳转到对应功能分区。旧 `product.html` 仅保留兼容跳转，并携带原查询参数和锚点。产品正文和演示、许可及署名保持。13 条完整日志迁至 `updates/index.html`（`https://qiuqiu.pet/updates/`），桌面以侧栏选版本，手机用版本选择器；hash 支持直链与历史返回，无 JavaScript 时显示全部原文。12 条版本记录配有经 GitHub API 和 HEAD 回读的 27 个下载入口，官网上线事件不虚构安装包。旧 `/product/#updates` 及 `product.html#updates` 转到独立日志页。三页均有独立 canonical 和分享封面，并已加入 sitemap。
+原官网功能和演示保留在 `product/index.html`，地址为 `https://qiuqiu.pet/product/`。导航的功能介绍、安装指南与更新日志在新页签打开；旧首页功能锚点通过 `location.replace` 跳转到对应功能分区。旧 `product.html` 仅保留兼容跳转，并携带原查询参数和锚点。产品正文和演示、许可及署名保持。14 条完整日志位于 `updates/index.html`（`https://qiuqiu.pet/updates/`），原 13 篇逐字保留，桌面以侧栏选版本，手机用版本选择器；hash 支持直链与历史返回，无 JavaScript 时显示全部原文。13 条版本记录配有 29 个下载入口，原 27 个已通过 GitHub API 和 HEAD 回读，新版 2 个已完成公开地址的完整下载、大小、SHA-256 与 App 签名核验；官网上线事件不虚构安装包。旧 `/product/#updates` 及 `product.html#updates` 转到独立日志页。三页均有独立 canonical 和分享封面，并已加入 sitemap。
 
 首页「免费、非商业 · 署名与许可」使用原生小弹窗，分行展示使用范围、原作者 GitHub 项目与再次分发说明，可通过关闭按钮、Esc 或点击背景关闭；不再跳转功能介绍。原作者旧项目地址已重定向为 `sam70361/aora-bot`，弹窗链接使用 GitHub API 回读的现地址。首页新页签入口统一为细线圆角新窗口图标。更新日志只展示对应版本下载，不附加 GitHub Release 页面入口。
 
@@ -41,6 +41,17 @@ Umami Cloud 网站“球球官网”，website ID 为 `fe855bb0-9000-49aa-820b-b
 本地检查：`node --test tests/analytics.test.cjs`。这些测试不会连接统计后台。
 
 ## 当前下载记录
+
+Apple 芯片版 **0.4.01**，发布日期 **2026-10-07**，GitHub 兼容标签 `v0.4.1`。新增直接选择本机 Codex 自定义宠物、九类动作预览、六档尺寸同步、搜索与滚动列表，以及本机副本、临时换装和启动外观保存。发布日期按 Release API 的 publishedAt 转换为北京时间；公开 ZIP、DMG 已完整下载核验，版本、签名及包内内容一致。
+
+| 文件 | 精确大小（bytes） | SHA-256 |
+| --- | ---: | --- |
+| [Qiuqiu-0.4.01-macOS-arm64-share.zip](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.1/Qiuqiu-0.4.01-macOS-arm64-share.zip) | 123579755 | `1a3e31a11f301d7454e42f387dc88f34728b9bdc73f2d3ab7df1768bbdf84c54` |
+| [Qiuqiu-0.4.01-macOS-arm64.dmg](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.1/Qiuqiu-0.4.01-macOS-arm64.dmg) | 137834518 | `605e838eb5ff9f88ec19cfa6f23162db2dc932c06af7292a9e7dbbdf14de08b9` |
+
+本轮附件的精确大小与 SHA-256 已由公开下载回读核验，详见项目验收记录 `v0.4.01-codex-pets/public-release-download-verification.json`。
+
+### 0.4.00 下载记录（保留）
 
 Apple 芯片版 **0.4.00**，发布日期 **2026-10-05**，GitHub 兼容标签 `v0.4.0`。本轮包含便签与待办、来定制球球、自动更新提醒、额度卡片 2.0 与全局 UI 升级。更新日志日期按用户要求为 **2026-10-06**；下载发布日期仍采用 Release 的 2026-10-05。用户确认的六项日志完整保留在独立更新日志页，第六项仅标题；官网可见的 0.3.27–0.3.32 日志合并为本次里程碑，范围外 12 条历史保留。
 
@@ -103,7 +114,7 @@ NODE_PATH=/path/to/existing/node_modules QIUQIU_UPDATES_URL=http://127.0.0.1:418
 
 ## 当前功能演示
 
-额度、趋势、聊天、定制、便签/待办采用公开 App `main@7f5c291d34512f629c17275c93bed472f421e8b9` 的真实 HTML、CSS、renderer 和形态引擎，直接嵌入官网。来源哈希和必要适配见各演示目录 `source-manifest.json`。主介绍不再叠放截图或折叠简化示例；历史截图文件仅作归档。
+额度、趋势、聊天、定制、便签/待办采用公开 App 0.4.00 `main@7f5c291d34512f629c17275c93bed472f421e8b9` 的真实 HTML、CSS、renderer 和形态引擎，直接嵌入官网。当前演示未接入 0.4.01 的 Codex 宠物导入，继续标注 0.4.00。来源哈希和必要适配见各演示目录 `source-manifest.json`。主介绍不再叠放截图或折叠简化示例；历史截图文件仅作归档。
 
 Electron IPC 替换为本页内存桥接，不连接账户、模型或账单，不修改 App 或用户资料；刷新页面恢复示例。定制保存后同步本页聊天头像，收藏载入仅影响预览。公开六瓣幻彩采用原 Rive 引擎。外层官网沿用浅灰蓝/深灰，演示保留当前 App 薄荷/石墨配色；手机仅适配原控件，不用截图缩放。离屏、页面隐藏、暂停与减少动态均可停止演示动效。嵌入窗口在用户进入前不自动抢焦点，脚本聚焦不滚动官网。
 
