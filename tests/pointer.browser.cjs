@@ -12,6 +12,23 @@ fs.mkdirSync(out, { recursive: true });
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
     page.on('pageerror', error => errors.push(error.message));
     await page.addInitScript(() => localStorage.setItem('umami.disabled', '1'));
+    async function freezeBlink(state) {
+      await page.waitForFunction(expected => {
+        if (document.querySelector('.scene-material').dataset.blink !== expected) return false;
+        document.querySelector('[data-motion-control]').click(); return true;
+      }, state, {polling:'raf'});
+      await page.waitForTimeout(120);
+    }
+    async function sourceClip(x, y, width, height) {
+      return page.evaluate(rect => {
+        const image=document.querySelector('.scene-image'), box=image.getBoundingClientRect();
+        const scale=Math.max(box.width/image.naturalWidth,box.height/image.naturalHeight);
+        const position=getComputedStyle(image).objectPosition.split(' ').map(v=>parseFloat(v)/100);
+        const left=Math.max(0,Math.floor(box.left-(image.naturalWidth*scale-box.width)*position[0]+rect.x*scale));
+        const top=Math.max(0,Math.floor(box.top-(image.naturalHeight*scale-box.height)*position[1]+rect.y*scale));
+        return {x:left,y:top,width:Math.min(innerWidth-left,Math.ceil(rect.width*scale)),height:Math.min(innerHeight-top,Math.ceil(rect.height*scale))};
+      },{x,y,width,height});
+    }
     const automatic = [];
     for (const width of [1440, 390]) for (const scheme of ['light', 'dark']) {
       await page.setViewportSize({ width, height: width === 1440 ? 900 : 844 });
@@ -20,8 +37,7 @@ fs.mkdirSync(out, { recursive: true });
       await page.waitForFunction(() => document.querySelector('.scene-material').dataset.state === 'running');
       const clip = width === 1440 ? {x:70,y:610,width:330,height:150} :
         {x:275,y:scheme === 'dark' ? 470 : 100,width:90,height:70};
-      const faceClip = width === 1440 ? {x:1160,y:560,width:120,height:120} :
-        {x:180,y:scheme === 'dark' ? 650 : 520,width:80,height:70};
+      const faceClip = await sourceClip(1305,735,60,30); // Skin below both eyes, within the protected body.
       const first = await page.screenshot({clip});
       const face = await page.screenshot({clip:faceClip});
       await page.screenshot({path:path.join(out, `auto-${width}-${scheme}-0.png`)});
@@ -29,25 +45,14 @@ fs.mkdirSync(out, { recursive: true });
       await page.screenshot({path:path.join(out, `auto-${width}-${scheme}-1.png`)});
       await page.waitForTimeout(1600);
       assert.notDeepEqual(await page.screenshot({clip}), first, `${width}/${scheme}: glass visibly changes without mouse input`);
-      assert.deepEqual(await page.screenshot({clip:faceClip}), face, `${width}/${scheme}: face remains stable`);
+      assert.ok((await page.screenshot({clip:faceClip})).equals(face), `${width}/${scheme}: face remains stable`);
       assert.equal(await page.locator('.scene-material').getAttribute('data-waves'), '0');
       await page.screenshot({path:path.join(out, `auto-${width}-${scheme}-2.png`)});
-      const eyeClip = await page.evaluate(scheme => {
-        const image = document.querySelector('.scene-image'), box = image.getBoundingClientRect();
-        const scale = Math.max(box.width / image.naturalWidth, box.height / image.naturalHeight);
-        const position = getComputedStyle(image).objectPosition.split(' ').map(v => parseFloat(v) / 100);
-        const originX = box.left - (image.naturalWidth * scale - box.width) * position[0];
-        const originY = box.top - (image.naturalHeight * scale - box.height) * position[1];
-        const left = Math.max(0, Math.floor(originX + 1220 * scale));
-        const top = Math.max(0, Math.floor(originY + (scheme === 'dark' ? 600 : 542) * scale));
-        return {x:left, y:top, width:Math.min(innerWidth-left, Math.ceil(275*scale)), height:Math.min(innerHeight-top, Math.ceil(160*scale))};
-      }, scheme);
+      const eyeClip = await sourceClip(1220,scheme==='dark'?600:542,275,160);
+      await freezeBlink('open');
       const openEyes = await page.screenshot({clip:eyeClip});
-      await page.waitForFunction(() => {
-        if (document.querySelector('.scene-material').dataset.blink !== 'closed') return false;
-        document.querySelector('[data-motion-control]').click(); return true;
-      }, {}, {polling:'raf'});
-      await page.waitForTimeout(120); // Let the paused WebGL frame reach the compositor.
+      await page.locator('[data-motion-control]').click();
+      await freezeBlink('closed');
       assert.notDeepEqual(await page.screenshot({clip:eyeClip}), openEyes, `${width}/${scheme}: eyes close`);
       await page.screenshot({path:path.join(out, `blink-${width}-${scheme}-closed.png`)});
       const closed = await page.screenshot({clip:eyeClip});
@@ -59,9 +64,9 @@ fs.mkdirSync(out, { recursive: true });
       }
       assert.ok(held.equals(closed), `${width}/${scheme}: pause also freezes blinking`);
       await page.locator('[data-motion-control]').click();
-      await page.waitForFunction(() => document.querySelector('.scene-material').dataset.blink === 'open');
-      await page.waitForTimeout(100);
+      await freezeBlink('open');
       assert.deepEqual(await page.screenshot({clip:eyeClip}), openEyes, `${width}/${scheme}: original open eyes return unchanged`);
+      await page.locator('[data-motion-control]').click();
       await page.emulateMedia({reducedMotion:'reduce'});
       await page.waitForFunction(() => getComputedStyle(document.querySelector('.scene-material')).display === 'none');
       await page.screenshot({path:path.join(out, `auto-${width}-${scheme}-static.png`)});
@@ -95,10 +100,25 @@ fs.mkdirSync(out, { recursive: true });
     await page.screenshot({ path: path.join(out, 'material-water-desktop.png') });
     await page.waitForTimeout(2600);
     assert.equal(await material.getAttribute('data-waves'), '0');
+    await page.mouse.move(645, 625); await page.waitForTimeout(2600);
+    const clickClip = {x:600,y:590,width:90,height:90};
+    const beforeClick = await page.screenshot({clip:clickClip});
+    await page.mouse.click(645, 625);
+    await page.waitForFunction(() => document.querySelector('.scene-material').dataset.waves === '1');
+    assert.equal(await material.getAttribute('data-waves'), '1', 'click at a stationary pointer creates a new wave');
+    await page.waitForTimeout(180);
+    assert.notDeepEqual(await page.screenshot({clip:clickClip}), beforeClick, 'click visibly changes background pixels');
+    for (let i=0; i<5; i++) await page.mouse.click(645,625);
+    await page.waitForFunction(() => document.querySelector('.scene-material').dataset.waves === '3');
+    assert.equal(await material.getAttribute('data-waves'), '3', 'repeated clicks share the existing wave budget');
+    await page.screenshot({path:path.join(out,'click-water-desktop.png')});
+    await page.waitForTimeout(2600);
+    assert.equal(await material.getAttribute('data-waves'), '0');
     await page.locator('[data-motion-control]').click();
     assert.equal(await material.getAttribute('data-state'), 'paused');
     const paused = await page.screenshot({ clip: { x: 20, y: 90, width: 1400, height: 720 } });
-    await page.mouse.move(900, 680); await page.waitForTimeout(350);
+    await page.mouse.move(900, 680); await page.mouse.click(900, 680); await page.waitForTimeout(350);
+    assert.equal(await material.getAttribute('data-waves'), '0', 'pause also stops click ripples');
     assert.deepEqual(await page.screenshot({ clip: { x: 20, y: 90, width: 1400, height: 720 } }), paused, 'paused frame remains frozen');
     await page.locator('[data-motion-control]').click();
     await page.mouse.move(500, 600);
@@ -107,6 +127,8 @@ fs.mkdirSync(out, { recursive: true });
     await page.waitForFunction(() => document.querySelector('[data-motion-control]').disabled);
     assert.ok(await page.locator('[data-motion-control]').isDisabled());
     assert.equal(await material.getAttribute('data-waves'), '0');
+    await page.mouse.click(645,625);
+    assert.equal(await material.getAttribute('data-waves'), '0', 'reduced motion excludes click ripples');
     assert.equal(await material.evaluate(e => getComputedStyle(e).display), 'none');
     async function sceneAsset(name) {
       await page.waitForFunction(expected => {
@@ -160,8 +182,30 @@ fs.mkdirSync(out, { recursive: true });
     await fallback.reload();
     assert.equal(await fallback.locator('.scene-image').evaluate(e => e.currentSrc.split('/').pop()), 'hero-night-v2.webp', 'saved dark asset is correct before home.js');
     assert.equal(await fallback.locator('html').getAttribute('data-theme'), 'dark');
+    // Control only the RNG so both single and double blink scheduling are checked without flaky probability.
+    const rhythm = await browser.newPage({viewport:{width:640,height:700}});
+    await rhythm.addInitScript(() => {
+      localStorage.setItem('umami.disabled','1');
+      const values=[0,.1,.8,.9,.2]; let index=0;
+      Math.random=()=>values[index++ % values.length];
+    });
+    await rhythm.goto(base);
+    const closedTimes=[];
+    for (let i=0;i<3;i++) {
+      const time=await rhythm.waitForFunction(() => {
+        const canvas=document.querySelector('.scene-material');
+        if(canvas.dataset.blink!=='closed') return false;
+        const gl=canvas.getContext('webgl'), program=gl.getParameter(gl.CURRENT_PROGRAM);
+        return gl.getUniform(program,gl.getUniformLocation(program,'time'));
+      },null,{polling:'raf'});
+      closedTimes.push(await time.jsonValue());
+      await rhythm.waitForFunction(()=>document.querySelector('.scene-material').dataset.blink==='open');
+    }
+    assert.ok(closedTimes[1]-closedTimes[0]>.4 && closedTimes[1]-closedTimes[0]<.52, 'double blink includes a brief reopening');
+    assert.ok(closedTimes[2]-closedTimes[1]>2.9 && closedTimes[2]-closedTimes[1]<3.4, 'next blink uses the randomized interval');
+    await rhythm.close();
     assert.deepEqual(errors, []);
-    fs.writeFileSync(path.join(out, 'pointer-checks.json'), JSON.stringify({ automatic, actualPixelRefraction: true, calmCenter: true, boundedAndRemoved: true, fixedText: true, pixelBudget: true, pausedFrameFrozen: true, reducedMotion: true, touchExcluded: true, themeAssetsAndIcons: true, storedAndSystemTheme: true, contextLossAndRestore: true, noWebGLFallback: true, noScriptSavedAppearance: true, nightPetTouch: true, errors }, null, 2));
+    fs.writeFileSync(path.join(out, 'pointer-checks.json'), JSON.stringify({ automatic, randomAndDoubleBlink: {closedTimes}, actualPixelRefraction: true, clickPixelRefraction: true, calmCenter: true, boundedAndRemoved: true, fixedText: true, pixelBudget: true, pausedFrameFrozen: true, reducedMotion: true, touchExcluded: true, themeAssetsAndIcons: true, storedAndSystemTheme: true, contextLossAndRestore: true, noWebGLFallback: true, noScriptSavedAppearance: true, nightPetTouch: true, errors }, null, 2));
     console.log('Material pixels, pause, budgets, theme, reduced motion and fallback checks passed');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

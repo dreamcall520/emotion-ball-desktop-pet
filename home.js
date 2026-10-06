@@ -14,6 +14,7 @@
   let lastDrop = -Infinity, lastX = NaN, lastY = NaN;
   let frame = 0, lastFrame = 0, elapsed = 0, gl, program, uniforms, texture;
   let waves = [], imageRect = [0, 0, 1, 1], width = 1, height = 1;
+  let blinkAt = 2 + Math.random() * 2, blinkStart = -10, blinkCount = 1;
 
   function stopped() { return paused || reduced.matches || document.hidden; }
 
@@ -95,7 +96,7 @@
         void main(){uv=position;gl_Position=vec4(position.x*2.-1.,1.-position.y*2.,0.,1.);}`;
       const fragment = `precision highp float;
         varying vec2 uv; uniform sampler2D image;
-        uniform vec2 size; uniform vec4 imageRect; uniform float time, night, blink;
+        uniform vec2 size; uniform vec4 imageRect; uniform float time, night, blink, eyePixel;
         uniform vec4 waves[3];
         // Reuse the original eye texture. Nearby skin fills only the eyelid area while it closes.
         vec3 eye(vec2 p, vec3 color, vec2 center, vec2 extent){
@@ -112,8 +113,14 @@
           float opening=mix(1.,.11,blink);
           float curve=blink*5.*max(0.,1.-local.x*local.x/(extent.x*extent.x));
           vec2 sampleLocal=vec2(local.x/mix(1.,.95,blink),(local.y-curve)/opening);
-          float inside=1.-smoothstep(extent.y,extent.y+3.,abs(sampleLocal.y));
-          vec3 lid=mix(skin,texture2D(image,(center+inverseRotation*sampleLocal)/vec2(1672.,941.)).rgb,inside);
+          // Pixel-sized coverage keeps compressed lids smooth; exclude the source eye's edge halo.
+          vec2 halfSize=vec2(extent.x*mix(1.,.95,blink),extent.y*opening);
+          float radius=min(halfSize.x,halfSize.y);
+          vec2 rounded=max(abs(vec2(local.x,local.y-curve))-(halfSize-radius),0.);
+          float coverage=1.-smoothstep(-eyePixel,eyePixel,length(rounded)-radius);
+          vec3 detail=texture2D(image,(center+inverseRotation*sampleLocal)/vec2(1672.,941.)).rgb;
+          vec3 ink=texture2D(image,(center+inverseRotation*vec2(local.x*.5,0.))/vec2(1672.,941.)).rgb;
+          vec3 lid=mix(skin,mix(detail,ink,smoothstep(.65,.95,blink)),coverage);
           return mix(color,lid,mask);
         }
         void main(){
@@ -171,7 +178,7 @@
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0,0, 1,0, 0,1, 0,1, 1,0, 1,1]), gl.STATIC_DRAW);
       const position = gl.getAttribLocation(program, 'position');
       gl.enableVertexAttribArray(position); gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
-      uniforms = Object.fromEntries(['size', 'imageRect', 'time', 'night', 'blink', 'waves[0]'].map(name => [name, gl.getUniformLocation(program, name)]));
+      uniforms = Object.fromEntries(['size', 'imageRect', 'time', 'night', 'blink', 'eyePixel', 'waves[0]'].map(name => [name, gl.getUniformLocation(program, name)]));
       texture = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
@@ -197,10 +204,17 @@
     gl.uniform2f(uniforms.size, width, height); gl.uniform4fv(uniforms.imageRect, imageRect);
     gl.uniform1f(uniforms.time, elapsed);
     gl.uniform1f(uniforms.night, root.dataset.theme === 'dark' || (!root.dataset.theme && systemTheme.matches) ? 1 : 0);
-    const phase = elapsed % 4.2;
-    const closure = phase < 2.6 || phase > 2.91 ? 0 : phase < 2.7 ? (phase - 2.6) / .1 : phase < 2.75 ? 1 : (2.91 - phase) / .16;
+    if (elapsed >= blinkAt) {
+      blinkStart = elapsed;
+      blinkCount = Math.random() < .25 ? 2 : 1;
+      blinkAt = blinkStart + 2 + Math.random() * 2;
+    }
+    const age = elapsed - blinkStart;
+    const phase = blinkCount === 2 && age >= .45 ? age - .45 : age;
+    const closure = phase < 0 || phase > .31 ? 0 : phase < .1 ? phase / .1 : phase < .15 ? 1 : (.31 - phase) / .16;
     const blink = closure * closure * (3 - 2 * closure);
     gl.uniform1f(uniforms.blink, blink);
+    gl.uniform1f(uniforms.eyePixel, 1672 / (canvas.width * imageRect[2]));
     const field = new Float32Array(12);
     waves.forEach((wave, i) => field.set([wave[0], wave[1], elapsed - wave[2], wave[3]], i * 4));
     gl.uniform4fv(uniforms['waves[0]'], field); gl.drawArrays(gl.TRIANGLES, 0, 6);
@@ -241,15 +255,18 @@
   reduced.addEventListener('change', imageState);
   canvas.addEventListener('webglcontextlost', event => { event.preventDefault(); gl = null; texture = null; staticScene(); reconcile(); });
   canvas.addEventListener('webglcontextrestored', imageState);
-  document.querySelector('.home-main').addEventListener('pointermove', event => {
+  function emitRipple(event, clicked = false) {
     if (stopped() || !gl || !finePointer.matches || event.pointerType === 'touch' || event.target.closest('a, button')) return;
     const distance = Math.hypot(event.clientX - lastX, event.clientY - lastY);
-    if (event.timeStamp - lastDrop < 220 || distance < 30) return;
+    if (!clicked && (event.timeStamp - lastDrop < 220 || distance < 30)) return;
     const bounds = canvas.getBoundingClientRect();
     if (waves.length >= 3) waves.shift();
-    waves.push([(event.clientX - bounds.left) / width, (event.clientY - bounds.top) / height, elapsed, .7 + (Number.isFinite(distance) ? Math.min(distance / 100, .8) : 0)]);
+    waves.push([(event.clientX - bounds.left) / width, (event.clientY - bounds.top) / height, elapsed, clicked ? 2.1 : .7 + (Number.isFinite(distance) ? Math.min(distance / 100, .8) : 0)]);
     lastDrop = event.timeStamp; lastX = event.clientX; lastY = event.clientY;
-  });
+  }
+  const main = document.querySelector('.home-main');
+  main.addEventListener('pointermove', event => emitRipple(event));
+  main.addEventListener('pointerdown', event => { if (event.button === 0) emitRipple(event, true); });
   touch.addEventListener('click', () => {
     clearTimeout(replyTimer);
     reply.textContent = '你忙，我陪着。';
