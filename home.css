@@ -72,10 +72,9 @@ details[open] .caret { transform: rotate(180deg); }
 .download-button:hover { transform: translateY(-3px); background: var(--menu); }
 .other-download { padding: 6px 0; font-size: 12px; color: var(--muted); letter-spacing: .03em; }
 .pet-button { position: absolute; width: 24vw; height: 27vw; right: 1vw; bottom: -3vw; padding: 0; border-radius: 50%; -webkit-tap-highlight-color: transparent; }
-.pet-reply { position: absolute; right: 15vw; bottom: 15vw; max-width: 230px; padding: 12px 18px; border: 1px solid var(--line); border-radius: 24px 24px 4px 24px; background: var(--menu); font-size: 14px; opacity: 0; transform: translateY(10px); transition: opacity .25s, transform .25s; pointer-events: none; }
+.pet-reply { position: absolute; right: 5vw; top: clamp(70px, 16vh, 150px); max-width: 230px; padding: 12px 18px; border: 1px solid var(--line); border-radius: 24px 24px 4px 24px; background: var(--menu); font-size: 14px; opacity: 0; transform: translateY(10px); transition: opacity .25s, transform .25s; pointer-events: none; }
 .pet-reply.visible { opacity: 1; transform: translateY(0); }
-.home-footer { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 6px 24px 12px; color: var(--muted); font-size: 11px; background: var(--footer-surface); }
-.home-footer .credit { order: 2; }
+.home-footer { position: relative; display: flex; align-items: center; justify-content: center; gap: 28px; padding: 10px 24px; color: var(--muted); font-size: 11px; background: var(--footer-surface); }
 .footer-links { display: flex; align-items: center; gap: 20px; }
 .motion-control:disabled { opacity: .6; cursor: default; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
@@ -106,8 +105,9 @@ details[open] .caret { transform: rotate(180deg); }
   .download-meta { font-size: 11px; gap: 4px 14px; }
   .scene-image { object-position: 94% center; }
   .pet-button { width: 36vw; height: 40vw; right: -2vw; bottom: 8vh; }
-  .pet-reply { right: 10vw; bottom: 28vh; font-size: 12px; }
-  .home-footer { padding: 4px 20px 12px; gap: 5px; font-size: 10px; }
+  .pet-reply { position: fixed; left: 50%; right: auto; top: auto; bottom: 92px; border-radius: 24px; font-size: 12px; white-space: nowrap; transform: translate(-50%, 10px); }
+  .pet-reply.visible { transform: translate(-50%, 0); }
+  .home-footer { flex-direction: column; padding: 4px 20px 12px; gap: 7px; font-size: 10px; }
   .footer-links { gap: 16px; }
   .home-footer .credit { width: 100%; text-align: center; order: 2; }
 }

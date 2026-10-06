@@ -98,9 +98,12 @@ html[data-theme="dark"] {
 }
 
 html {
-  scroll-behavior: smooth;
-  scroll-padding-top: calc(var(--header-height) + 20px);
+  scroll-behavior: auto;
   background: var(--page);
+}
+
+main[id], section[id], .site-footer[id] {
+  scroll-margin-top: calc(var(--header-height) + 20px);
 }
 
 body {

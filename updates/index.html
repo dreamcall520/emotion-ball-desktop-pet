@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="球球桌宠各版本的功能更新与改进，提供 Apple 芯片和 Intel x64 对应版本下载。">
+    <meta name="theme-color" content="#f6f8fb">
+    <meta name="color-scheme" content="light dark">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="zh_CN">
+    <meta property="og:title" content="球球桌宠 · 更新日志">
+    <meta property="og:description" content="桌面上，多一个安静陪你的球球。免费、离线、非商业。">
+    <meta property="og:url" content="https://qiuqiu.pet/updates/">
+    <link rel="canonical" href="https://qiuqiu.pet/updates/">
+    <meta property="og:image" content="https://qiuqiu.pet/assets/hero-social.jpg">
+    <meta property="og:image:alt" content="银白玻璃间的球球，陪你自在一点">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="icon" href="../assets/favicon.png">
+    <link rel="manifest" href="../site.webmanifest">
+    <script>
+      try {
+        const theme = localStorage.getItem('emotion-ball-site-theme');
+        if (theme === 'auto') document.documentElement.removeAttribute('data-theme');
+        else if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+      } catch (_error) {}
+    </script>
+    <link rel="stylesheet" href="../styles.css?v=20261006-clean-anchor">
+    <link rel="stylesheet" href="../dark-theme.css?v=20261006-native">
+    <link rel="stylesheet" href="../updates.css?v=20261006">
+    <title>球球桌宠 · 更新日志</title>
+  </head>
+  <body class="updates-page">
+    <a class="skip-link" href="#main">跳到主要内容</a>
+    <header class="site-header" data-header>
+      <a class="brand" href="../" aria-label="球球桌宠首页">球球桌宠</a>
+      <nav class="nav-core" aria-label="常用导航">
+        <a href="../" target="_blank" rel="noopener">首页</a>
+        <a href="../product/" target="_blank" rel="noopener">功能介绍</a>
+        <a href="../product/#download" target="_blank" rel="noopener">下载球球</a>
+        <a href="../product/#install" target="_blank" rel="noopener">安装指南</a>
+        <a href="./" aria-current="page">更新日志</a>
+      </nav>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav">更多</button>
+      <nav class="site-nav" id="site-nav" aria-label="更多导航">
+        <a class="mobile-main-nav" href="../" target="_blank" rel="noopener">首页</a>
+        <a class="mobile-main-nav" href="../product/" target="_blank" rel="noopener">功能介绍</a>
+        <a class="mobile-main-nav" href="../product/#download" target="_blank" rel="noopener">下载球球</a>
+        <a class="mobile-main-nav" href="../product/#install" target="_blank" rel="noopener">安装指南</a>
+        <a class="mobile-main-nav" href="./" aria-current="page">更新日志</a>
+        <a href="../product/#privacy" target="_blank" rel="noopener">隐私</a>
+        <a href="../product/#license" target="_blank" rel="noopener">开源与许可</a>
+        <button class="theme-toggle theme-toggle-mobile" type="button" aria-label="切换页面外观" data-theme-toggle>外观</button>
+      </nav>
+      <button class="theme-toggle" type="button" aria-label="切换页面外观" data-theme-toggle>外观</button>
+    </header>
+    <main class="updates-layout" id="main">
+      <aside class="versions-sidebar" aria-labelledby="versions-title">
+        <h1 id="versions-title">版本日志</h1>
+        <p class="versions-platform">macOS</p>
+        <div class="version-picker">
+          <label for="version-select">选择版本</label>
+          <select id="version-select" data-release-select>
+<option value="v0.4.00-apple">2026-10-06 · 0.4.00 Apple 芯片版</option>
+<option value="v0.3.25-apple">2026-09-28 · 0.3.25 Apple 芯片版</option>
+<option value="v0.3.24-apple">2026-09-23 · 0.3.24 Apple 芯片版</option>
+<option value="v0.3.23-apple">2026-09-23 · 0.3.23 Apple 芯片版</option>
+<option value="v0.3.17-apple">2026-09-22 · 0.3.17 Apple 芯片版</option>
+<option value="v0.3.14-apple">2026-09-18 · 0.3.14 Apple 芯片版</option>
+<option value="v0.3.13-intel">2026-09-11 · 0.3.13 Intel x64 候选</option>
+<option value="v0.3.13-apple">2026-09-05 · 0.3.13 Apple 芯片版</option>
+<option value="v0.3.12-apple">2026-09-03 · 0.3.12 Apple 芯片版</option>
+<option value="v0.3.11">2026-09-01 · 0.3.11 发布</option>
+<option value="website-2026-09-01">2026-09-01 · 公开官网上线</option>
+<option value="v0.3.10-hotfix">2026-08-31 · 0.3.10 Apple 热修复</option>
+<option value="v0.3.10">2026-08-30 · 0.3.10 发布</option>
+          </select>
+        </div>
+        <nav class="versions-list" aria-label="版本列表">
+<a class="version-link" href="#v0.4.00-apple" data-release-link><time datetime="2026-10-06">2026-10-06</time><span>0.4.00 Apple 芯片版</span></a>
+<a class="version-link" href="#v0.3.25-apple" data-release-link><time datetime="2026-09-28">2026-09-28</time><span>0.3.25 Apple 芯片版</span></a>
+<a class="version-link" href="#v0.3.24-apple" data-release-link><time datetime="2026-09-23">2026-09-23</time><span>0.3.24 Apple 芯片版</span></a>
+<a class="version-link" href="#v0.3.23-apple" data-release-link><time datetime="2026-09-23">2026-09-23</time><span>0.3.23 Apple 芯片版</span></a>
+<a class="version-link" href="#v0.3.17-apple" data-release-link><time datetime="2026-09-22">2026-09-22</time><span>0.3.17 Apple 芯片版</span></a>
+<a class="version-link" href="#v0.3.14-apple" data-release-link><time datetime="2026-09-18">2026-09-18</time><span>0.3.14 Apple 芯片版</span></a>
+<a class="version-link" href="#v0.3.13-intel" data-release-link><time datetime="2026-09-11">2026-09-11</time><span>0.3.13 Intel x64 候选</span></a>
+<a class="version-link" href="#v0.3.13-apple" data-release-link><time datetime="2026-09-05">2026-09-05</time><span>0.3.13 Apple 芯片版</span></a>
+<a class="version-link" href="#v0.3.12-apple" data-release-link><time datetime="2026-09-03">2026-09-03</time><span>0.3.12 Apple 芯片版</span></a>
+<a class="version-link" href="#v0.3.11" data-release-link><time datetime="2026-09-01">2026-09-01</time><span>0.3.11 发布</span></a>
+<a class="version-link" href="#website-2026-09-01" data-release-link><time datetime="2026-09-01">2026-09-01</time><span>公开官网上线</span></a>
+<a class="version-link" href="#v0.3.10-hotfix" data-release-link><time datetime="2026-08-31">2026-08-31</time><span>0.3.10 Apple 热修复</span></a>
+<a class="version-link" href="#v0.3.10" data-release-link><time datetime="2026-08-30">2026-08-30</time><span>0.3.10 发布</span></a>
+        </nav>
+      </aside>
+      <div class="release-content" id="updates">
+<article class="release-panel" id="v0.4.00-apple" aria-labelledby="v0.4.00-apple-title" data-release-panel><time datetime="2026-10-06">2026-10-06</time><div><h3 id="v0.4.00-apple-title">0.4.00 Apple 芯片版</h3><div class="release-downloads" aria-label="本版本下载"><div class="release-download-group"><a class="release-download release-download-primary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.0/Qiuqiu-0.4.00-macOS-arm64-share.zip">Apple 芯片 · ZIP</a><a class="release-download release-download-secondary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.0/Qiuqiu-0.4.00-macOS-arm64.dmg">Apple 芯片 · DMG</a></div></div><p class="release-download-note">本次更新仅适用于 Apple 芯片；Intel x64 最新公开构建仍为 0.3.13 候选。</p><a class="release-source" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.4.0" target="_blank" rel="noopener">查看 GitHub Release ↗</a><div class="update-group"><h4>1.【新增】便签与待办</h4><ul><li>支持桌面便签、分类管理、收藏与搜索。</li><li>待办可分别设置截止日期和提醒，支持稍后处理。</li><li>支持归档与回收站，方便找回记录。</li><li>支持 Codex 智能整理，预览确认后替换内容。</li></ul></div><div class="update-group"><h4>2.【新增】来定制球球</h4><ul><li>全新定制界面，实时预览外观。</li><li>自由调整形态、配色、透明度与尺寸。</li><li>保存专属启动外观。</li><li>聊天头像同步展示球球形象与动效。</li></ul></div><div class="update-group"><h4>3.【新增】自动更新提醒</h4><ul><li>自动检查并提醒新版本。</li><li>点击更新入口，前往版本下载页面。</li><li>关于页支持查看版本与手动检查更新。</li></ul></div><div class="update-group"><h4>4.【升级】额度卡片 2.0</h4><ul><li>分别查看套餐额度、额外点数与 API 费用。</li><li>支持查看额度趋势和用量预估，不同使用场景提供相应提示。</li><li>支持查看重置机会与历史记录。</li><li>展示进行中任务与待查看结果，点击返回对应 Codex 会话。</li></ul></div><div class="update-group"><h4>5.【升级】全局 UI 升级</h4><ul><li>统一聊天、便签、定制页与额度卡片的视觉风格。</li><li>优化浅色、深色与色弱友好配色。</li><li>精简信息排版，统一按钮与操作入口。</li><li>优化玻璃质感、边框与流光动效。</li></ul></div><div class="update-group"><h4>6.【修复】已知体验问题</h4></div></div></article>
+<article class="release-panel" id="v0.3.25-apple" aria-labelledby="v0.3.25-apple-title" data-release-panel>
+            <time datetime="2026-09-28">2026-09-28</time>
+            <div>
+              <h3 id="v0.3.25-apple-title">0.3.25 Apple 芯片版</h3><div class="release-downloads" aria-label="本版本下载"><div class="release-download-group"><a class="release-download release-download-primary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.25/Qiuqiu-0.3.25-macOS-arm64-share.zip">Apple 芯片 · ZIP</a><a class="release-download release-download-secondary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.25/Qiuqiu-0.3.25-macOS-arm64.dmg">Apple 芯片 · DMG</a></div></div><a class="release-source" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.25" target="_blank" rel="noopener">查看 GitHub Release ↗</a>
+              <div class="update-group">
+                <h4>新增「定制球球」</h4>
+                <ul>
+                  <li>四种外观：经典、云朵、幻彩、方糖。</li>
+                  <li>自由调整配色与透明度；幻彩可切换「立体幻彩」和「简色渐变」。</li>
+                </ul>
+              </div>
+              <div class="update-group">
+                <h4>外观保存</h4>
+                <ul>
+                  <li>临时换装：只改变当前外观，下次启动恢复原来的设置。</li>
+                  <li>设为启动外观：保存后，下次打开继续使用这套外观。</li>
+                </ul>
+              </div>
+              <div class="update-group">
+                <h4>聊天体验</h4>
+                <ul><li>「新聊天」入口移至聊天面板顶部，更容易找到。</li></ul>
+              </div>
+            </div>
+          </article>
+<article class="release-panel" id="v0.3.24-apple" aria-labelledby="v0.3.24-apple-title" data-release-panel>
+            <time datetime="2026-09-23">2026-09-23</time>
+            <div>
+              <h3 id="v0.3.24-apple-title">0.3.24 Apple 芯片版</h3><div class="release-downloads" aria-label="本版本下载"><div class="release-download-group"><a class="release-download release-download-primary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.24/Qiuqiu-0.3.24-macOS-arm64-share.zip">Apple 芯片 · ZIP</a><a class="release-download release-download-secondary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.24/Qiuqiu-0.3.24-macOS-arm64.dmg">Apple 芯片 · DMG</a></div></div><a class="release-source" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.24" target="_blank" rel="noopener">查看 GitHub Release ↗</a>
+              <div class="update-group">
+                <h4>聊天模型</h4>
+                <ul>
+                  <li>聊天模型可自动选择，也可手动切换。</li>
+                  <li>切换不打断原聊天，选择会保留。</li>
+                </ul>
+              </div>
+              <div class="update-group">
+                <h4>技术变更详情</h4>
+                <ul>
+                  <li>模型列表以本机账号为准，手选不可用时会明确提示。</li>
+                  <li>每轮使用支持的较低推理强度；自动深入推导可用中等强度。</li>
+                  <li>不改动 Codex 全局设置；响应仍受服务和网络影响。</li>
+                </ul>
+              </div>
+            </div>
+          </article>
+<article class="release-panel" id="v0.3.23-apple" aria-labelledby="v0.3.23-apple-title" data-release-panel>
+            <time datetime="2026-09-23">2026-09-23</time>
+            <div>
+              <h3 id="v0.3.23-apple-title">0.3.23 Apple 芯片版</h3><div class="release-downloads" aria-label="本版本下载"><div class="release-download-group"><a class="release-download release-download-primary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.23/Qiuqiu-0.3.23-macOS-arm64-share.zip">Apple 芯片 · ZIP</a><a class="release-download release-download-secondary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.23/Qiuqiu-0.3.23-macOS-arm64.dmg">Apple 芯片 · DMG</a></div></div><a class="release-source" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.23" target="_blank" rel="noopener">查看 GitHub Release ↗</a>
+              <div class="update-group">
+                <h4>配色与可读性</h4>
+                <ul>
+                  <li>新增色弱友好高对比配色，支持浅色、深色与跟随系统，球球的外观与互动动效保持不变。</li>
+                  <li>额度卡和靠边提示补齐状态文字。</li>
+                  <li>增强正常深色文字辨识度，为浅色卡片保留柔和阴影。</li>
+                </ul>
+              </div>
+              <div class="update-group">
+                <h4>问题修复</h4>
+                <ul><li>修复右键菜单截断及窗口关闭报错。</li></ul>
+              </div>
+            </div>
+          </article>
+<article class="release-panel" id="v0.3.17-apple" aria-labelledby="v0.3.17-apple-title" data-release-panel>
+            <time datetime="2026-09-22">2026-09-22</time>
+            <div>
+              <h3 id="v0.3.17-apple-title">0.3.17 Apple 芯片版</h3><div class="release-downloads" aria-label="本版本下载"><div class="release-download-group"><a class="release-download release-download-primary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.17/Qiuqiu-0.3.17-macOS-arm64-share.zip">Apple 芯片 · ZIP</a><a class="release-download release-download-secondary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.17/Qiuqiu-0.3.17-macOS-arm64.dmg">Apple 芯片 · DMG</a></div></div><a class="release-source" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.17" target="_blank" rel="noopener">查看 GitHub Release ↗</a>
+              <div class="update-group">
+                <h4>Codex 聊天</h4>
+                <ul>
+                  <li>新增 Codex 聊天，关闭重开仍可接着聊。</li>
+                  <li>支持切换聊天记录，新聊天需确认，也能用预设动作回应。</li>
+                </ul>
+              </div>
+              <div class="update-group">
+                <h4>问题修复</h4>
+                <ul><li>修复任务监控误跟随球球聊天导致的连接占用，继续保留原聊天与历史内容。</li></ul>
+              </div>
+            </div>
+          </article>
+<article class="release-panel" id="v0.3.14-apple" aria-labelledby="v0.3.14-apple-title" data-release-panel>
+            <time datetime="2026-09-18">2026-09-18</time>
+            <div>
+              <h3 id="v0.3.14-apple-title">0.3.14 Apple 芯片版</h3><div class="release-downloads" aria-label="本版本下载"><div class="release-download-group"><a class="release-download release-download-primary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.14/Qiuqiu-0.3.14-macOS-arm64-share.zip">Apple 芯片 · ZIP</a><a class="release-download release-download-secondary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.14/Qiuqiu-0.3.14-macOS-arm64.dmg">Apple 芯片 · DMG</a></div></div><a class="release-source" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.14" target="_blank" rel="noopener">查看 GitHub Release ↗</a>
+              <div class="update-group">
+                <h4>靠边收起</h4>
+                <ul>
+                  <li>新增左右靠边半身收起，悬停时探出、拖离边缘后恢复，也可暂时隐藏。</li>
+                  <li>收起时仍会眨眼呼吸、偶尔说句短话。</li>
+                  <li>开启 Codex 额度显示时偶尔弹出剩余额度小胶囊。</li>
+                </ul>
+              </div>
+            </div>
+          </article>
+<article class="release-panel" id="v0.3.13-intel" aria-labelledby="v0.3.13-intel-title" data-release-panel>
+            <time datetime="2026-09-11">2026-09-11</time>
+            <div>
+              <h3 id="v0.3.13-intel-title">0.3.13 Intel x64 候选</h3><div class="release-downloads" aria-label="本版本下载"><div class="release-download-group"><a class="release-download release-download-primary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.13/Qiuqiu-0.3.13-macOS-x64-share.zip">Intel x64 候选 · ZIP</a><a class="release-download release-download-secondary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.13/Qiuqiu-0.3.13-macOS-x64.dmg">Intel x64 候选 · DMG</a></div></div><p class="release-download-note">Intel x64 为构建候选，仍待真实 Intel Mac 验收。</p><a class="release-source" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.13" target="_blank" rel="noopener">查看 GitHub Release ↗</a>
+              <div class="update-group">
+                <h4>功能同步与候选验证</h4>
+                <ul>
+                  <li>同步 Apple 版的侧躺贴贴、放下站稳、唤醒绕圈、内侧朝向与 Codex 思考光迹等 0.3.13 功能。</li>
+                  <li>已通过 Rosetta 检查，仍待真实 Intel Mac 验收。</li>
+                </ul>
+              </div>
+            </div>
+          </article>
+<article class="release-panel" id="v0.3.13-apple" aria-labelledby="v0.3.13-apple-title" data-release-panel>
+            <time datetime="2026-09-05">2026-09-05</time>
+            <div>
+              <h3 id="v0.3.13-apple-title">0.3.13 Apple 芯片版</h3><div class="release-downloads" aria-label="本版本下载"><div class="release-download-group"><a class="release-download release-download-primary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.13/Qiuqiu-0.3.13-macOS-arm64-share.zip">Apple 芯片 · ZIP</a><a class="release-download release-download-secondary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.13/Qiuqiu-0.3.13-macOS-arm64.dmg">Apple 芯片 · DMG</a></div></div><a class="release-source" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.13" target="_blank" rel="noopener">查看 GitHub Release ↗</a>
+              <div class="update-group">
+                <h4>动作与日常回应</h4>
+                <ul>
+                  <li>新增侧躺摸头、放下转面、唤醒绕圈与桌面内侧朝向。</li>
+                  <li>补充日常回应文案。</li>
+                </ul>
+              </div>
+              <div class="update-group">
+                <h4>Codex 任务反馈</h4>
+                <ul><li>Codex 处理中偶尔显示头顶光迹，完成时随机跳跃或渐变彩带。</li></ul>
+              </div>
+            </div>
+          </article>
+<article class="release-panel" id="v0.3.12-apple" aria-labelledby="v0.3.12-apple-title" data-release-panel>
+            <time datetime="2026-09-03">2026-09-03</time>
+            <div>
+              <h3 id="v0.3.12-apple-title">0.3.12 Apple 芯片版</h3><div class="release-downloads" aria-label="本版本下载"><div class="release-download-group"><a class="release-download release-download-primary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.12/emotion-ball-desktop-pet-0.3.12-Apple-Silicon-share.zip">Apple 芯片 · ZIP</a><a class="release-download release-download-secondary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.12/emotion-ball-desktop-pet-0.3.12-Apple-Silicon.dmg">Apple 芯片 · DMG</a></div></div><a class="release-source" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.12" target="_blank" rel="noopener">查看 GitHub Release ↗</a>
+              <div class="update-group">
+                <h4>Codex 思考提示</h4>
+                <ul>
+                  <li>增加间歇性的 Codex 思考提示，避让眼睛和屏幕边界。</li>
+                  <li>思考效果已在 0.3.13 升级为头顶光迹。</li>
+                </ul>
+              </div>
+            </div>
+          </article>
+<article class="release-panel" id="v0.3.11" aria-labelledby="v0.3.11-title" data-release-panel>
+            <time datetime="2026-09-01">2026-09-01</time>
+            <div>
+              <h3 id="v0.3.11-title">0.3.11 发布</h3><div class="release-downloads" aria-label="本版本下载"><div class="release-download-group"><a class="release-download release-download-primary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.11/emotion-ball-desktop-pet-0.3.11-Apple-Silicon-share.zip">Apple 芯片 · ZIP</a><a class="release-download release-download-secondary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.11/emotion-ball-desktop-pet-0.3.11-Apple-Silicon.dmg">Apple 芯片 · DMG</a></div><div class="release-download-group"><a class="release-download release-download-primary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.11/emotion-ball-desktop-pet-0.3.11-Intel-x64-share.zip">Intel x64 候选 · ZIP</a><a class="release-download release-download-secondary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.11/emotion-ball-desktop-pet-0.3.11-Intel-x64.dmg">Intel x64 候选 · DMG</a></div></div><p class="release-download-note">Intel x64 为构建候选，仍待真实 Intel Mac 验收。</p><a class="release-source" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.11" target="_blank" rel="noopener">查看 GitHub Release ↗</a>
+              <div class="update-group">
+                <h4>Codex 任务监控</h4>
+                <ul>
+                  <li>补全 Codex 新任务发现。</li>
+                  <li>修复任务短暂断线后的完成提醒。</li>
+                </ul>
+              </div>
+              <div class="update-group">
+                <h4>下载版本</h4>
+                <ul><li>提供 Apple 芯片版和独立 Intel x64 构建候选。</li></ul>
+              </div>
+            </div>
+          </article>
+<article class="release-panel" id="website-2026-09-01" aria-labelledby="website-2026-09-01-title" data-release-panel>
+            <time datetime="2026-09-01">2026-09-01</time>
+            <div>
+              <h3 id="website-2026-09-01-title">公开官网上线</h3><p class="release-download-note">这是官网上线记录，没有独立 App 安装包。</p>
+              <div class="update-group">
+                <h4>下载与校验</h4>
+                <ul><li>提供 Apple 热修复版与 Intel 构建候选的架构分流、直连下载和校验信息。</li></ul>
+              </div>
+            </div>
+          </article>
+<article class="release-panel" id="v0.3.10-hotfix" aria-labelledby="v0.3.10-hotfix-title" data-release-panel>
+            <time datetime="2026-08-31">2026-08-31</time>
+            <div>
+              <h3 id="v0.3.10-hotfix-title">0.3.10 Apple 热修复</h3><div class="release-downloads" aria-label="本版本下载"><div class="release-download-group"><a class="release-download release-download-primary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.10/emotion-ball-desktop-pet-0.3.10-Apple-Silicon-hotfix-20260831-share.zip">Apple 芯片 · ZIP</a></div></div><p class="release-download-note">此热修复仅提供专属 ZIP 安装包。</p><a class="release-source" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.10" target="_blank" rel="noopener">查看 GitHub Release ↗</a>
+              <div class="update-group">
+                <h4>气泡与任务反馈</h4>
+                <ul>
+                  <li>长气泡自适应高度，修复持续拉高闪烁。</li>
+                  <li>增加低打扰的任务专注反馈。</li>
+                </ul>
+              </div>
+            </div>
+          </article>
+<article class="release-panel" id="v0.3.10" aria-labelledby="v0.3.10-title" data-release-panel>
+            <time datetime="2026-08-30">2026-08-30</time>
+            <div>
+              <h3 id="v0.3.10-title">0.3.10 发布</h3><div class="release-downloads" aria-label="本版本下载"><div class="release-download-group"><a class="release-download release-download-primary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.10/emotion-ball-desktop-pet-0.3.10-Apple-Silicon-share.zip">Apple 芯片 · ZIP</a><a class="release-download release-download-secondary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.10/emotion-ball-desktop-pet-0.3.10-Apple-Silicon.dmg">Apple 芯片 · DMG</a></div><div class="release-download-group"><a class="release-download release-download-primary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.10/emotion-ball-desktop-pet-0.3.10-Intel-x64-share.zip">Intel x64 候选 · ZIP</a><a class="release-download release-download-secondary" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.10/emotion-ball-desktop-pet-0.3.10-Intel-x64.dmg">Intel x64 候选 · DMG</a></div></div><p class="release-download-note">Intel x64 为构建候选，仍待真实 Intel Mac 验收。</p><a class="release-source" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.10" target="_blank" rel="noopener">查看 GitHub Release ↗</a>
+              <div class="update-group">
+                <h4>额度与版本验证</h4>
+                <ul><li>通用 Codex 额度规则、双周期卡片与 Apple 芯片正式包完成验证。</li></ul>
+              </div>
+            </div>
+          </article>
+        <p class="release-status" role="status" aria-live="polite" data-release-status></p>
+      </div>
+    </main>
+    <footer class="site-footer" id="license" aria-label="开源、署名与许可">
+      <p>球球桌宠 · 由马晓坤设计与开发</p>
+      <p>球球桌宠，免费、非商业使用。角色与动画来自原作者 sam70361；再次分发须保留署名、LICENSE 和 NOTICE。</p>
+    </footer>
+    <script src="../app.js?v=20260928-release"></script>
+    <script src="../updates.js?v=20261006"></script>
+    <script src="../analytics.js?v=20260924-1" data-website-id="fe855bb0-9000-49aa-820b-baa55887bd11"></script>
+  </body>
+</html>

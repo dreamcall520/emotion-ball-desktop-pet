@@ -32,10 +32,40 @@ fs.mkdirSync(out, { recursive: true });
       assert.deepEqual(await page.screenshot({clip:faceClip}), face, `${width}/${scheme}: face remains stable`);
       assert.equal(await page.locator('.scene-material').getAttribute('data-waves'), '0');
       await page.screenshot({path:path.join(out, `auto-${width}-${scheme}-2.png`)});
+      const eyeClip = await page.evaluate(scheme => {
+        const image = document.querySelector('.scene-image'), box = image.getBoundingClientRect();
+        const scale = Math.max(box.width / image.naturalWidth, box.height / image.naturalHeight);
+        const position = getComputedStyle(image).objectPosition.split(' ').map(v => parseFloat(v) / 100);
+        const originX = box.left - (image.naturalWidth * scale - box.width) * position[0];
+        const originY = box.top - (image.naturalHeight * scale - box.height) * position[1];
+        const left = Math.max(0, Math.floor(originX + 1220 * scale));
+        const top = Math.max(0, Math.floor(originY + (scheme === 'dark' ? 600 : 542) * scale));
+        return {x:left, y:top, width:Math.min(innerWidth-left, Math.ceil(275*scale)), height:Math.min(innerHeight-top, Math.ceil(160*scale))};
+      }, scheme);
+      const openEyes = await page.screenshot({clip:eyeClip});
+      await page.waitForFunction(() => {
+        if (document.querySelector('.scene-material').dataset.blink !== 'closed') return false;
+        document.querySelector('[data-motion-control]').click(); return true;
+      }, {}, {polling:'raf'});
+      await page.waitForTimeout(120); // Let the paused WebGL frame reach the compositor.
+      assert.notDeepEqual(await page.screenshot({clip:eyeClip}), openEyes, `${width}/${scheme}: eyes close`);
+      await page.screenshot({path:path.join(out, `blink-${width}-${scheme}-closed.png`)});
+      const closed = await page.screenshot({clip:eyeClip});
+      await page.waitForTimeout(350);
+      const held = await page.screenshot({clip:eyeClip});
+      if (!held.equals(closed)) {
+        fs.writeFileSync(path.join(out, `paused-${width}-${scheme}-first.png`),closed);
+        fs.writeFileSync(path.join(out, `paused-${width}-${scheme}-held.png`),held);
+      }
+      assert.ok(held.equals(closed), `${width}/${scheme}: pause also freezes blinking`);
+      await page.locator('[data-motion-control]').click();
+      await page.waitForFunction(() => document.querySelector('.scene-material').dataset.blink === 'open');
+      await page.waitForTimeout(100);
+      assert.deepEqual(await page.screenshot({clip:eyeClip}), openEyes, `${width}/${scheme}: original open eyes return unchanged`);
       await page.emulateMedia({reducedMotion:'reduce'});
       await page.waitForFunction(() => getComputedStyle(document.querySelector('.scene-material')).display === 'none');
       await page.screenshot({path:path.join(out, `auto-${width}-${scheme}-static.png`)});
-      automatic.push({width,scheme,withoutPointer:true,faceStable:true});
+      automatic.push({width,scheme,withoutPointer:true,faceStable:true,blinkClosesAndRestores:true,blinkPause:true});
     }
     await page.setViewportSize({width:1440,height:900});
     await page.emulateMedia({colorScheme:'light',reducedMotion:'no-preference'});
@@ -51,6 +81,12 @@ fs.mkdirSync(out, { recursive: true });
     await page.waitForFunction(() => Number(document.querySelector('.scene-material').dataset.waves) > 0);
     await page.waitForTimeout(180);
     assert.notDeepEqual(await page.screenshot({ clip: { x: 600, y: 590, width: 90, height: 90 } }), still, 'pointer must visibly refract actual image pixels');
+    for (const [x,y] of [[430,450], [800,690]]) {
+      const clip = {x:x-45,y:y-45,width:90,height:90};
+      const calm = await page.screenshot({clip});
+      await page.mouse.move(x,y); await page.waitForTimeout(180);
+      assert.notDeepEqual(await page.screenshot({clip}), calm, 'plain background outside the glass responds to the pointer');
+    }
     for (let i = 0; i < 9; i++) { await page.mouse.move(270 + i * 40, 600 - i * 8); await page.waitForTimeout(150); }
     assert.ok(Number(await material.getAttribute('data-waves')) <= 3);
     assert.deepEqual(await bounds(), before);

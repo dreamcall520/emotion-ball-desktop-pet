@@ -2,13 +2,13 @@
 
 这是球球桌宠的独立静态官网源码，部署目标为 GitHub Pages。
 
-## 首页与产品说明
+## 首页、功能介绍与更新日志
 
-首页采用确认后的整屏银白/夜景玻璃主视觉，品牌语「球球-陪你自在一点」。`home.js` 复用原生 WebGL 实现自动柔光、曲面折射与鼠标水波；暂停、减少动态、页面隐藏及静态回退保持可用。主下载按钮为「macOS 版下载」，下方注明版本与 Apple 芯片，Intel 保持独立说明入口。
+首页采用确认后的整屏银白/夜景玻璃主视觉，品牌语「球球-陪你自在一点」。`home.js` 复用原生 WebGL 实现自动柔光、曲面折射与鼠标水波；眼睛沿用原纹理自然眨动；暂停、减少动态、页面隐藏及静态回退保持可用。主下载按钮为「macOS 版下载」，下方注明版本与 Apple 芯片，Intel 保持独立说明入口。
 
-原官网全文保留在 `product.html`，导航的产品说明、安装指南与更新日志在新页签打开；旧首页功能锚点通过 `location.replace` 跳转到对应产品说明分区。产品正文和演示、最新0.4.00日志、许可及署名保持。首页与产品说明各有独立 canonical 和分享封面，均已加入 sitemap。
+原官网功能和演示保留在 `product/index.html`，地址为 `https://qiuqiu.pet/product/`。导航的功能介绍、安装指南与更新日志在新页签打开；旧首页功能锚点通过 `location.replace` 跳转到对应功能分区。旧 `product.html` 仅保留兼容跳转，并携带原查询参数和锚点。产品正文和演示、许可及署名保持。13 条完整日志迁至 `updates/index.html`（`https://qiuqiu.pet/updates/`），桌面以侧栏选版本，手机用版本选择器；hash 支持直链与历史返回，无 JavaScript 时显示全部原文。12 条版本记录配有经 GitHub API 和 HEAD 回读的 27 个下载入口，官网上线事件不虚构安装包。旧 `/product/#updates` 及 `product.html#updates` 转到独立日志页。三页均有独立 canonical 和分享封面，并已加入 sitemap。
 
-主视觉为本项目生成的静态资产；自动动效在玻璃区域内渲染，中央与角色保持稳定。以30fps、130万像素和最多3组鼠标波为上限，没有新增项目依赖。
+主视觉为本项目生成的静态资产；自动柔光在玻璃区域内渲染；鼠标水波覆盖空白背景并保护角色，文字始终固定。以30fps、130万像素和最多3组鼠标波为上限，没有新增项目依赖。
 
 ## 维护原则
 
@@ -23,13 +23,13 @@
 
 Umami Cloud 网站“球球官网”，website ID 为 `fe855bb0-9000-49aa-820b-baa55887bd11`。从 2026-09-24 发布接入后开始累计，不包含此前访问。私有[统计看板](https://cloud.umami.is/analytics/us/websites/fe855bb0-9000-49aa-820b-baa55887bd11)需使用本次已登录的 Umami 账号。后台时区已核对为 Asia/Shanghai，当前套餐为 Hobby（$0/月）。
 
-配置在首页和 `product.html` 中 `analytics.js` 的 `data-website-id`。清空该值即可停用，停用时也不加载第三方脚本；停用或更换平台时同步修改产品说明的隐私分区。此 ID 为公开网站配置，不是 API 密钥。
+配置在首页、`product/index.html` 和 `updates/index.html` 中 `analytics.js` 的 `data-website-id`。清空该值即可停用，停用时也不加载第三方脚本；停用或更换平台时同步修改功能介绍的隐私分区。此 ID 为公开网站配置，不是 API 密钥。
 
 - 仅在 `https://qiuqiu.pet` 加载；本地预览、其他域名、DNT 开启或 `localStorage['umami.disabled'] = '1'` 时不加载。
 - 一次页面加载上报一次 PV；站内锚点切换不重复计数。UV 是 Umami 的匿名访客估算，不能当作真实人数，跨设备或浏览器可能重复。
 - `download` 事件只包含 `architecture`（`arm64` / `x64`）与 `position`（`hero` / `download`）。下载点击不代表下载完成或安装成功；脚本拦截、网络失败与过早离开可能造成漏计。
 - 页面 URL 固定为 `/`，来源仅保留外部网站 origin；不传 URL 查询参数、hash、来源路径、聊天演示内容、邮箱或账号信息。不启用身份识别、回放或热图。
-- 首页和产品说明各加载一次PV，继续汇总为站点访问，不区分页面路径；下载事件继续仅统计 ZIP，DMG不计入此指标。
+- 首页、功能介绍和更新日志各加载一次PV，继续汇总为站点访问，不区分页面路径；下载事件继续仅统计 ZIP，DMG不计入此指标。日志页的历史下载不加入当前下载指标，切换版本不新增 PV。
 - 保留浏览器语言、屏幕尺寸等基础访问维度；Umami 根据网络请求识别粗略地区及设备。统计不使用 Cookie，尊重 DNT；不影响桌宠本地运行的隐私边界。
 - Umami Hobby 当前免费额度为每月 100,000 个事件、1 个网站、保留 6 个月；PV 与下载点击均消耗事件额度。免费版不含 API/MCP，日报需从已登录的后台读取。不升级、不添加付款方式。
 - 历史访问无法补回。首日按接入时间注明不完整；日报按 Asia/Shanghai 的前一自然日统计，读取失败不能记为 0。
@@ -40,7 +40,7 @@ Umami Cloud 网站“球球官网”，website ID 为 `fe855bb0-9000-49aa-820b-b
 
 ## 当前下载记录
 
-Apple 芯片版 **0.4.00**，发布日期 **2026-10-05**，GitHub 兼容标签 `v0.4.0`。本轮包含便签与待办、来定制球球、自动更新提醒、额度卡片 2.0 与全局 UI 升级。首页更新日志日期按用户要求为 **2026-10-06**；下载发布日期仍采用 Release 的 2026-10-05。用户确认的六项日志完整保留在首页，第六项仅标题；官网可见的 0.3.27–0.3.32 日志合并为本次里程碑，范围外 12 条历史保留。
+Apple 芯片版 **0.4.00**，发布日期 **2026-10-05**，GitHub 兼容标签 `v0.4.0`。本轮包含便签与待办、来定制球球、自动更新提醒、额度卡片 2.0 与全局 UI 升级。更新日志日期按用户要求为 **2026-10-06**；下载发布日期仍采用 Release 的 2026-10-05。用户确认的六项日志完整保留在独立更新日志页，第六项仅标题；官网可见的 0.3.27–0.3.32 日志合并为本次里程碑，范围外 12 条历史保留。
 
 | 文件 | 精确大小（bytes） | SHA-256 |
 | --- | ---: | --- |
@@ -91,7 +91,8 @@ python3 -m http.server 4179 --bind 127.0.0.1
 ```bash
 node --test tests/*.test.cjs
 # 另开本地静态服务器，使用已经安装的 Playwright 与 Chrome；无需新增依赖。
-NODE_PATH=/path/to/existing/node_modules QIUQIU_SITE_URL=http://127.0.0.1:4185/ QIUQIU_QA_OUTPUT=/tmp/qiuqiu-website-0400 node tests/showcases.browser.cjs
+NODE_PATH=/path/to/existing/node_modules QIUQIU_SITE_URL=http://127.0.0.1:4185/product/ QIUQIU_QA_OUTPUT=/tmp/qiuqiu-website-0400 node tests/showcases.browser.cjs
+NODE_PATH=/path/to/existing/node_modules QIUQIU_UPDATES_URL=http://127.0.0.1:4185/updates/ QIUQIU_QA_OUTPUT=/tmp/qiuqiu-website-updates node tests/updates.browser.cjs
 ```
 
 浏览器检查包括 1440/1080/390/320px 浅深色、系统深色、减少动态及真实界面和跨窗口/保存头像联动的实际操作，并检查放大卡片、聊天四角和实际安装截图。检查使用浏览器临时设置退出匿名统计；分区截图暂隐藏固定导航与回顶按钮，检查仍在完整页面运行。
@@ -109,7 +110,8 @@ Electron IPC 替换为本页内存桥接，不连接账户、模型或账单，�
 ## 目录
 
 - `index.html`、`home.js`、`home.css`：整屏品牌首页、玻璃柔光/鼠标水波和首页菜单。
-- `product.html`、`styles.css`、`dark-theme.css`：产品说明全文、外层配色与响应式布局。
+- `product/index.html`、`styles.css`、`dark-theme.css`：功能介绍全文、外层配色与响应式布局；`product.html` 仅兼容旧地址跳转。
+- `updates/index.html`、`updates.css`、`updates.js`：独立版本日志、响应式版本选择、真实版本下载与无脚本阅读。
 - `app.js`：主题、移动导航等原有页面操作。
 - `motion-showcase.js/css`、`assets/motion/`：复用 V5 互动、思绪游光与身体动作；支持离屏暂停、手动点选和减少动态。
 - `demo-embed.js`、`demo-focus.js`、`native-demos.css`：同源嵌入、主题、保存头像、尺寸和暂停联动。

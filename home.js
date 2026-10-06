@@ -72,10 +72,11 @@
     if (menu.open) for (const other of menus) if (other !== menu) other.open = false;
   });
 
-  // Preserve existing section URLs when the long page moves into product.html.
-  const oldSections = ['features', 'codex', 'chat', 'customize', 'notes', 'appearance', 'download', 'install', 'privacy', 'updates', 'license'];
+  // Preserve existing section URLs when the long page moves into product/.
+  const oldSections = ['features', 'codex', 'chat', 'customize', 'notes', 'appearance', 'download', 'install', 'privacy', 'license'];
   function followOldSection() {
-    if (oldSections.includes(location.hash.slice(1))) location.replace(`product.html${location.hash}`);
+    if (location.hash === '#updates') { location.replace(`updates/${location.search}`); return; }
+    if (oldSections.includes(location.hash.slice(1))) location.replace(`product/${location.hash}`);
   }
   window.addEventListener('hashchange', followOldSection);
   followOldSection();
@@ -92,16 +93,37 @@
       if (!gl) return;
       const vertex = `attribute vec2 position; varying vec2 uv;
         void main(){uv=position;gl_Position=vec4(position.x*2.-1.,1.-position.y*2.,0.,1.);}`;
-      const fragment = `precision mediump float;
+      const fragment = `precision highp float;
         varying vec2 uv; uniform sampler2D image;
-        uniform vec2 size; uniform vec4 imageRect; uniform float time, night;
+        uniform vec2 size; uniform vec4 imageRect; uniform float time, night, blink;
         uniform vec4 waves[3];
+        // Reuse the original eye texture. Nearby skin fills only the eyelid area while it closes.
+        vec3 eye(vec2 p, vec3 color, vec2 center, vec2 extent){
+          vec2 delta=p*vec2(1672.,941.)-center;
+          mat2 rotation=mat2(.995,.1,-.1,.995);
+          vec2 local=rotation*delta;
+          float edge=length(vec2(local.x,max(abs(local.y)-(extent.y-extent.x),0.)));
+          float mask=1.-smoothstep(extent.x+4.,extent.x+14.,edge);
+          if(mask<=0.)return color;
+          mat2 inverseRotation=mat2(.995,-.1,.1,.995);
+          vec2 left=(center+inverseRotation*vec2(-extent.x-22.,local.y))/vec2(1672.,941.);
+          vec2 right=(center+inverseRotation*vec2(extent.x+22.,local.y))/vec2(1672.,941.);
+          vec3 skin=mix(texture2D(image,left).rgb,texture2D(image,right).rgb,clamp(.5+local.x/(2.*(extent.x+22.)),0.,1.));
+          float opening=mix(1.,.11,blink);
+          float curve=blink*5.*max(0.,1.-local.x*local.x/(extent.x*extent.x));
+          vec2 sampleLocal=vec2(local.x/mix(1.,.95,blink),(local.y-curve)/opening);
+          float inside=1.-smoothstep(extent.y,extent.y+3.,abs(sampleLocal.y));
+          vec3 lid=mix(skin,texture2D(image,(center+inverseRotation*sampleLocal)/vec2(1672.,941.)).rgb,inside);
+          return mix(color,lid,mask);
+        }
         void main(){
           vec2 p=(uv-imageRect.xy)/imageRect.zw;
           if(p.y<0.||p.y>1.){gl_FragColor=vec4(0.);return;}
           float glass=max(1.-smoothstep(.16,.54,p.y+(1.-p.x)*.42),
                           smoothstep(.48,.72,p.y-p.x*.5)*(1.-smoothstep(.62,.8,p.x)));
-          float face=smoothstep(.49,.57,p.x)*smoothstep(.38,.48,p.y);
+          vec2 bodyCenter=mix(vec2(.813,.727),vec2(.804,.706),night);
+          vec2 bodyRadius=mix(vec2(.192,.358),vec2(.145,.249),night);
+          float face=1.-smoothstep(.9,1.06,length((p-bodyCenter)/bodyRadius));
           glass*=1.-face;
           float quiet=smoothstep(.26,.34,p.x)*(1.-smoothstep(.63,.7,p.x))*
                       smoothstep(.27,.34,p.y)*(1.-smoothstep(.76,.83,p.y));
@@ -113,10 +135,10 @@
             if(drop.w>0.){
               vec2 d=(uv-drop.xy)*size; float distance=length(d);
               float front=distance-(12.+drop.z*135.);
-              float envelope=exp(-front*front/1600.)*exp(-drop.z*1.1)*smoothstep(0.,.12,drop.z)*(1.-smoothstep(1.7,2.2,drop.z));
+              float envelope=exp(-front*front/3600.)*exp(-drop.z*1.1)*smoothstep(0.,.12,drop.z)*(1.-smoothstep(1.7,2.2,drop.z));
               float wave=sin(front*.075)*envelope*drop.w;
-              offset+=d/max(distance,1.)*wave*3.4*mix(.18,1.,glass)*(1.-face);
-              reflection+=wave*.018*mix(.2,1.,glass)*(1.-face);
+              offset+=d/max(distance,1.)*wave*5.2*mix(.6,1.,glass)*(1.-face);
+              reflection+=wave*.07*mix(.65,1.,glass)*(1.-face);
             }
           }
           vec3 color=texture2D(image,p+offset/(size*imageRect.zw)).rgb;
@@ -129,6 +151,10 @@
           color+=(1.-color)*material*(vec3(.7,.85,1.)*sheen*.06+vec3(0.,.003,.009)*blue)*mix(1.,.8,night);
           color=mix(color,vec3(.8,.9,1.),max(0.,reflection)*mix(1.,.6,night));
           color*=1.+min(0.,reflection)*mix(1.,.6,night);
+          if(blink>0.){
+            color=eye(p,color,mix(vec2(1277.,605.),vec2(1292.,664.),night),mix(vec2(24.,47.),vec2(21.,38.),night));
+            color=eye(p,color,mix(vec2(1437.,585.),vec2(1420.,641.),night),mix(vec2(24.,47.),vec2(21.,38.),night));
+          }
           gl_FragColor=vec4(color,1.);
         }`;
       function shader(type, code) {
@@ -145,7 +171,7 @@
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0,0, 1,0, 0,1, 0,1, 1,0, 1,1]), gl.STATIC_DRAW);
       const position = gl.getAttribLocation(program, 'position');
       gl.enableVertexAttribArray(position); gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
-      uniforms = Object.fromEntries(['size', 'imageRect', 'time', 'night', 'waves[0]'].map(name => [name, gl.getUniformLocation(program, name)]));
+      uniforms = Object.fromEntries(['size', 'imageRect', 'time', 'night', 'blink', 'waves[0]'].map(name => [name, gl.getUniformLocation(program, name)]));
       texture = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
@@ -171,10 +197,15 @@
     gl.uniform2f(uniforms.size, width, height); gl.uniform4fv(uniforms.imageRect, imageRect);
     gl.uniform1f(uniforms.time, elapsed);
     gl.uniform1f(uniforms.night, root.dataset.theme === 'dark' || (!root.dataset.theme && systemTheme.matches) ? 1 : 0);
+    const phase = elapsed % 4.2;
+    const closure = phase < 2.6 || phase > 2.91 ? 0 : phase < 2.7 ? (phase - 2.6) / .1 : phase < 2.75 ? 1 : (2.91 - phase) / .16;
+    const blink = closure * closure * (3 - 2 * closure);
+    gl.uniform1f(uniforms.blink, blink);
     const field = new Float32Array(12);
     waves.forEach((wave, i) => field.set([wave[0], wave[1], elapsed - wave[2], wave[3]], i * 4));
     gl.uniform4fv(uniforms['waves[0]'], field); gl.drawArrays(gl.TRIANGLES, 0, 6);
     canvas.dataset.waves = String(waves.length);
+    canvas.dataset.blink = blink === 0 ? 'open' : blink > .98 ? 'closed' : 'moving';
     canvas.style.opacity = reduced.matches ? '0' : '1';
   }
   function animate(now) {

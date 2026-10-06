@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
-const base = process.env.QIUQIU_SITE_URL || 'http://127.0.0.1:4187/product.html';
+const base = process.env.QIUQIU_SITE_URL || 'http://127.0.0.1:4187/product/';
 const out = process.env.QIUQIU_QA_OUTPUT || '/tmp/qiuqiu-website-native';
 fs.mkdirSync(out, { recursive: true });
 (async () => {
@@ -23,7 +23,8 @@ fs.mkdirSync(out, { recursive: true });
     await page.waitForTimeout(200);
     assert.equal(await page.evaluate(() => scrollY), 0, 'embedded App startup must not move the website');
     assert.match(await page.title(), /球球桌宠/);
-    assert.equal(await page.locator('.milestone-update time').innerText(), '2026-10-06');
+    assert.equal(await page.locator('#updates, .milestone-update, .updates-history').count(), 0);
+    assert.equal(await page.locator('.site-nav a[href="../updates/"]').getAttribute('target'), '_blank');
     assert.equal(await page.locator('.app-capture, .download-checks, [data-showcase-try]').count(), 0);
     assert.equal(await page.locator('.install-visual-step').count(), 3);
     assert.equal(await page.locator('[data-motion-scene] [data-ball-host] svg').count(), 3);
@@ -278,7 +279,7 @@ fs.mkdirSync(out, { recursive: true });
     for (const [width, theme] of [[1440,'light'],[1440,'dark'],[1080,'light'],[1080,'dark'],[390,'light'],[390,'dark'],[320,'light'],[320,'dark']]) {
       await page.setViewportSize({ width, height: width > 600 ? 1000 : 844 });
       await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
-      for (const id of ['top','features','codex','chat','customize','notes','appearance','download','install','updates']) {
+      for (const id of ['top','features','codex','chat','customize','notes','appearance','download','install']) {
         const section = page.locator(`#${id}`); await section.scrollIntoViewIfNeeded();
         await page.waitForTimeout(100);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `outer overflow ${width}/${theme}/${id}`);
