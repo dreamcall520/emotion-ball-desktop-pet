@@ -25,6 +25,17 @@
 - `LICENSE`、`NOTICE.md` 和原作者 `sam70361/emotion-ball` 署名不得删除。
 - 官网不使用 Cookie、表单或远程字体；访问统计仅限下方说明的匿名汇总范围。
 
+## 基础防护
+
+- `robots.txt` 保留普通搜索抓取及 sitemap，拒绝 GPTBot、ClaudeBot、Google-Extended、CCBot，并请求所有爬虫跳过测试目录。这是对遵守协议的爬虫的声明，不能限制请求频率或拦截伪装爬虫；Google-Extended 同时控制部分 Gemini 内容使用。
+- 所有完整页面及演示在正文前加载 `site-protection.js`，逐层检查 iframe 祖先。外站嵌入跳到不含统计的官网来源提示；直接访问、同源嵌套和本地 HTTP 预览正常使用。这是可被禁用 JavaScript 绕过的浏览器回退，无法阻止源码镜像、截图或直接下载素材。
+- 首页与功能页许可弹窗提供官网地址、免费下载说明及 LICENSE / NOTICE 链接，沿用现有署名与非商业分发条款。正常文字复制、右键、键盘、输入、便签复制及下载保持可用。
+- 域名当前使用 DNSPod / GitHub Pages，尚未配置 CDN 防爬限速、资源防盗链或 `Content-Security-Policy: frame-ancestors 'self'` 响应头。该指令不能通过 HTML meta 生效，若接入 CDN，必须允许官网现有同源多层演示；图片防盗链需覆盖 WebP 并放行分享封面及必要的公开资源。
+
+检查：`node --test tests/protection.test.cjs`；实际浏览器：`NODE_PATH=<bundled node_modules> node tests/protection.browser.cjs`，不发送访问统计。后者覆盖三种屏宽、浅深色、许可链接、输入、站内双层演示、无 Referrer 外站嵌入、混合祖先及 sandbox iframe。
+
+参考：[robots.txt 的能力边界](https://developers.google.com/search/docs/crawling-indexing/robots/intro)、[OpenAI crawler](https://developers.openai.com/api/docs/bots)、[Claude crawler](https://privacy.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler)、[Google-Extended](https://developers.google.com/crawling/docs/crawlers-fetchers/google-common-crawlers)、[Common Crawl](https://commoncrawl.org/ccbot)、[frame-ancestors](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/frame-ancestors)、[Cloudflare 图片防盗链范围](https://developers.cloudflare.com/waf/tools/scrape-shield/hotlink-protection/)。
+
 ## 官网访问统计
 
 Umami Cloud 网站“球球官网”，website ID 为 `fe855bb0-9000-49aa-820b-baa55887bd11`。从 2026-09-24 发布接入后开始累计，不包含此前访问。私有[统计看板](https://cloud.umami.is/analytics/us/websites/fe855bb0-9000-49aa-820b-baa55887bd11)需使用本次已登录的 Umami 账号。后台时区已核对为 Asia/Shanghai，当前套餐为 Hobby（$0/月）。

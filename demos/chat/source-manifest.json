@@ -7,7 +7,7 @@
       "source": "desktop-pet/chat.html",
       "target": "index.html",
       "sha256": "b06a3ebed1d0ef39e8ac79d97be1297de2ee10c1afb91363fe01e57982877ae8",
-      "embeddedSha256": "f15d7c65dd020cc199780b6ecdf0dd952fede328ce99efb828fb1a6586dd130d"
+      "embeddedSha256": "4ef2e99545b315cb4da5d67461d8486d7e8c2263a4aec5ff9b639bac9c878639"
     },
     {
       "source": "desktop-pet/chat.css",
@@ -121,7 +121,8 @@
     "The iframe adapter adds 2px padding to preserve all native 15px panel border corners; no App CSS changes.",
     "The empty privacy-note node remains for renderer history toggles but is permanently hidden by the website adapter; close/reopen copy is concise.",
     "Avatar activity includes parent pause state. The onAppearance callback forwards the public 0.4.03 Codex pet descriptor to the shared avatar engine.",
-    "Customization and chat-avatar libraries use public 0.4.03 at eac7a8d12bd425fb98f005828ab80afabe18ca0b. The shared native Codex sprite player uses 0.4.04 idle timing (6.6s) and is loaded from ../customize/lib/codex-pet-player.js; its source and same-origin URL adaptation are recorded in ../customize/source-manifest.json. The memory bridge accepts only the two fixed website examples."
+    "Customization and chat-avatar libraries use public 0.4.03 at eac7a8d12bd425fb98f005828ab80afabe18ca0b. The shared native Codex sprite player uses 0.4.04 idle timing (6.6s) and is loaded from ../customize/lib/codex-pet-player.js; its source and same-origin URL adaptation are recorded in ../customize/source-manifest.json. The memory bridge accepts only the two fixed website examples.",
+    "Load the shared same-origin embedding fallback before page rendering."
   ],
   "adapters": [
     {

@@ -27,7 +27,8 @@
   "htmlChanges": [
     "Insert demo-bridge.js before original renderer.",
     "Keep organize guidance concise: preserve meaning and replace only after confirmation.",
-    "Insert demo-focus.js to prevent embedded windows stealing parent focus/scroll."
+    "Insert demo-focus.js to prevent embedded windows stealing parent focus/scroll.",
+    "Load the shared same-origin embedding fallback before page rendering."
   ],
   "unchangedCopies": [
     "notes.css",
@@ -38,15 +39,15 @@
   "embeddedFiles": [
     {
       "file": "panel.html",
-      "sha256": "eb6aced584bdf764d425b1f967ae1a8f8c22840ded9b802e8cdf2318a2176dfd"
+      "sha256": "1aeca213ee2c44a83d9a470419e0d194d0996ea4e988140eda4dc55e0c3c0f11"
     },
     {
       "file": "desktop.html",
-      "sha256": "eb6aced584bdf764d425b1f967ae1a8f8c22840ded9b802e8cdf2318a2176dfd"
+      "sha256": "1aeca213ee2c44a83d9a470419e0d194d0996ea4e988140eda4dc55e0c3c0f11"
     },
     {
       "file": "reminder.html",
-      "sha256": "eb6aced584bdf764d425b1f967ae1a8f8c22840ded9b802e8cdf2318a2176dfd"
+      "sha256": "1aeca213ee2c44a83d9a470419e0d194d0996ea4e988140eda4dc55e0c3c0f11"
     },
     {
       "file": "embed-fragment.html",

@@ -7,7 +7,7 @@
       "source": "desktop-pet/quota-label.html",
       "target": "quota-label.html",
       "sha256": "4853b4f04a6f6427dd84de1ad80cfef290b9a34e01a0c29a05e4c35aac4692bf",
-      "embeddedSha256": "caa36e10c83efbdb6ffb7dedcfd40e62b4daef69c8f5163cfeeefc6285015def"
+      "embeddedSha256": "e91a63788e644ac74b9a8994093b77755e8bc9cbeefc36a0a8ec3f3b26d5e496"
     },
     {
       "source": "desktop-pet/quota-label.css",
@@ -25,7 +25,7 @@
       "source": "desktop-pet/codex-details.html",
       "target": "codex-details.html",
       "sha256": "e17406ad730db3816f2e7a29907d038a2d11191aeb9d5576f80e93d97b09d511",
-      "embeddedSha256": "e26ca5af1363ea4a8d7c5b51c2828612b7f6ef1f2818ac21a9bbcedf40e78d84"
+      "embeddedSha256": "e48b58d74ab20d4aa76e3a36f7126db38ba219fddc27ad6cc70afe6cf8623703"
     },
     {
       "source": "desktop-pet/codex-details.css",
@@ -61,7 +61,7 @@
       "source": "desktop-pet/api-usage-label.html",
       "target": "api-usage-label.html",
       "sha256": "198b4bb27e2c69387daa8a4d3ba5154624ad043044bf3e7e8e7d339fef330121",
-      "embeddedSha256": "5c3e7aec51481ecec6a3c61de79a981e7fc94db4b724a7715cf4d96dc3705599"
+      "embeddedSha256": "fc61a2a812da95d931969ee964c926e97612529cf88f27b8617038b3c0de3917"
     },
     {
       "source": "desktop-pet/api-usage-label.css",
@@ -79,7 +79,7 @@
       "source": "desktop-pet/api-usage.html",
       "target": "api-usage.html",
       "sha256": "810cb6361c92e03e22e2d331589401a1b7f433024b792f5b0d11952d31f36664",
-      "embeddedSha256": "c4456b22e894d4a620decaa5d6765b423dbb159721042ba4a1c394359233b94e"
+      "embeddedSha256": "a7000192951fdc905643a95e277a2e4538521e82abcf309bab2b814c94e34327"
     },
     {
       "source": "desktop-pet/api-usage.css",
@@ -97,7 +97,8 @@
   "adaptations": [
     "HTML inserts the in-memory demo bridge; core DOM, CSS and renderers unchanged.",
     "Composition layout, verified messages, independent dual / 5-hour / weekly native items, uniform 280px main / 224px appearance card scaling with preserved dual 196x144 and single 196x131 viewports, responsive detail sizing and example dialog are website-only.",
-    "API connection settings are hidden in the website; no credentials are accepted."
+    "API connection settings are hidden in the website; no credentials are accepted.",
+    "Load the shared same-origin embedding fallback before page rendering."
   ],
   "adapters": [
     {
@@ -126,7 +127,7 @@
     },
     {
       "target": "index.html",
-      "sha256": "70b88570485794d3a30ca20cd71a876f885ae3e6b9a1c4a73ebaae987bfd638d"
+      "sha256": "14600e27b63232433f514a6f12b3c8ff93a10f366150b83f3e4fa43dca90b340"
     }
   ]
 }

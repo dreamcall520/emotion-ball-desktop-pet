@@ -1,4 +1,12 @@
+# Cooperative crawlers only; this file does not enforce access control.
 User-agent: *
 Allow: /
+Disallow: /tests/
+
+User-agent: GPTBot
+User-agent: ClaudeBot
+User-agent: Google-Extended
+User-agent: CCBot
+Disallow: /
 
 Sitemap: https://qiuqiu.pet/sitemap.xml

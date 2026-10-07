@@ -76,8 +76,8 @@
       "file": "index.html",
       "source": "desktop-pet/customize.html",
       "sourceSha256": "5b665e095cfc68db8d330407d1146c48bcd0ac03561f7d288f35644fd5a62e0a",
-      "sha256": "6c50ffabf009c49fe69a17e5363d465a25b864ee96d9c62fb4abd4d9d04af78d",
-      "adaptation": "Native DOM retained; website dependency URLs, public favicon, browser IPC bridge, blue palette, responsive stylesheet, static example note and explicit memory-only feedback."
+      "sha256": "cc616bd28a21f566cd8bbcb6110371f6fe53af0f13e32dc1ea52fa6e3add0a8a",
+      "adaptation": "Native DOM retained; website dependency URLs, public favicon, browser IPC bridge, blue palette, responsive stylesheet, static example note and explicit memory-only feedback. Load the shared same-origin embedding fallback before page rendering."
     },
     {
       "file": "customize-renderer.js",

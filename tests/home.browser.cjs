@@ -50,7 +50,7 @@ fs.mkdirSync(out, { recursive: true });
         assert.match(await dialog.innerText(), /免费、非商业使用。/);
         assert.match(await dialog.innerText(), /须保留署名、LICENSE 和 NOTICE。/);
         assert.equal(await dialog.getByRole('link', { name:'查看原作者 sam70361 的 GitHub 项目' }).getAttribute('href'), 'https://github.com/sam70361/aora-bot');
-        assert.equal(await dialog.getByRole('link').getAttribute('target'), '_blank');
+        assert.equal(await dialog.getByRole('link', { name:'查看原作者 sam70361 的 GitHub 项目' }).getAttribute('target'), '_blank');
         if (width === 1440 || width === 390) await page.screenshot({ path:path.join(out, `license-${width}x${height}-${scheme}.png`) });
         await page.keyboard.press('Escape');
         assert.equal(await dialog.isVisible(), false);
