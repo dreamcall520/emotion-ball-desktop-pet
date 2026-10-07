@@ -918,7 +918,7 @@ function codexDetailModel(snapshot, action, period) {
   const selected = card.items.find(item => item.windowMinutes === period) || card.items[0];
   const model = buildCodexDetailsModel(snapshot, { action, period: selected?.windowMinutes || period,
     appearance: settings?.codexQuotaAppearance }, codexNow());
-  return { ...model, action, items: model.items.filter(item => card.items.some(row => row.windowMinutes === item.windowMinutes)),
+  return { ...model, action, generation: snapshot.generation, items: model.items.filter(item => card.items.some(row => row.windowMinutes === item.windowMinutes)),
     colorMode: settings?.colorMode === 'accessible' ? 'accessible' : 'standard',
     ...(codexDetailReturn ? { returnToTrend: true, returnPeriod: codexDetailReturn.period } : {}) };
 }
@@ -2291,6 +2291,13 @@ function registerIpc() {
   ipcMain.on('pet:codex-details-close', event => { if (codexDetails?.owns(event)) { codexDetailReturn = null; codexDetails.close(); } });
   ipcMain.on('pet:codex-details-open', (event, action, period) => { if (codexDetails?.owns(event)) openCodexDetails(action, period); });
   ipcMain.on('pet:codex-details-thread', (event, id, turnId) => { if (codexDetails?.owns(event)) void openCodexDetailThread(id, turnId); });
+  ipcMain.handle('pet:codex-details-read-all', (event, generation) => {
+    if (!codexDetails?.owns(event) || !codexDetails.isVisible() || codexDetails.getAction() !== 'results' || isQuitting || screenLocked) return false;
+    const snapshot = codexCompanion?.getSnapshot();
+    if (snapshot?.enabled !== true || !Number.isSafeInteger(generation) || generation !== snapshot.generation) return false;
+    try { return codexCompanion.markAllRead(); }
+    catch (error) { writeError('标记 Codex 结果已读', error); return false; }
+  });
   ipcMain.on('pet:codex-details-resize', (event, height) => { if (codexDetails?.owns(event)) codexDetails.resize(height); });
   ipcMain.handle('pet:api-usage-get', event => fromApiUsageWindow(event, false) ? apiUsage.getState() : null);
   ipcMain.handle('pet:api-usage-connect', (event, value) => fromApiUsageWindow(event) ? apiUsage.connect(value) : null);

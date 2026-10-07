@@ -295,10 +295,20 @@ dialog .dialog-footer{position:sticky;bottom:0;z-index:1;background:var(--surfac
 .category-menu-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 8px 6px;margin-bottom:4px;border-bottom:1px solid var(--line);color:var(--muted);font-size:11px}
 .filter-popover .category-manage{width:auto;min-height:24px;padding:3px 5px;color:var(--accent-text);font-size:11px;font-weight:500}
 .group-label{min-width:0}.group-label h2{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-/* Keep the high-contrast stroke inside macOS's native corner mask. */
-:root[data-color-mode="accessible"] body{background:transparent;border-radius:18px}
-:root[data-color-mode="accessible"] :is(.panel,.desktop-note){border-radius:18px}
-:root[data-color-mode="accessible"] body[data-mode="reminder"]{border-radius:0}
+/* Native windows clip the corners; a second CSS frame leaves a backing fringe. */
+:root[data-color-mode="accessible"] body{background:var(--accessible-panel);border-radius:0}
+:root[data-color-mode="accessible"] :is(.panel,.desktop-note){border:0;border-radius:0}
+:root[data-color-mode="accessible"] :is(.record,.section-heading,.action-separator,.category-menu-heading,dialog,.filter-popover){border-color:var(--accessible-divider)}
+:root[data-color-mode="accessible"] .tabs{border-color:transparent;background:var(--accessible-surface)}
+:root[data-color-mode="accessible"] .tabs button{border-color:transparent;font-weight:500}
+:root[data-color-mode="accessible"] .tabs .active{font-weight:650}
+:root[data-color-mode="accessible"] .compact-actions .actions-list button{background:transparent;color:var(--accessible-text)}
+:root[data-color-mode="accessible"] dialog.compact-actions{border-color:var(--accessible-divider)}
+:root[data-color-mode="accessible"] .compact-actions .actions-list button:hover{background:var(--accessible-raised);color:var(--accessible-blue)}
+:root[data-color-mode="accessible"] .compact-actions .actions-list .danger{color:var(--accessible-yellow)}
+:root[data-color-mode="accessible"] .compact-actions .actions-list .danger:hover{background:var(--accessible-warning);color:var(--accessible-yellow)}
+:root[data-color-mode="accessible"] .dialog-header .icon-button{border:0;border-radius:6px;background:transparent}
+:root[data-color-mode="accessible"] .dialog-header .icon-button:hover{background:var(--accessible-raised)}
 :root[data-color-mode="accessible"] :is(.tabs button,.filter-popover button){color:var(--accessible-text)}
 :root[data-color-mode="accessible"] :is(.filter-trigger[aria-expanded=true],.filter-popover button:hover,.category-manage:hover,.collapse-button:hover,.new-button:hover,.search-toggle:hover,.search-toggle[aria-expanded=true],.filter-control:hover,.category-row .icon-button:hover,.move-option:hover,.quick-add .quick-category-picker:hover,.quick-option:hover){background:var(--accessible-raised);color:var(--accessible-blue)}
 :root[data-color-mode="accessible"] .filter-popover :is(.view-check,.category-manage),:root[data-color-mode="accessible"] .category-add{color:var(--accessible-blue)}

@@ -7,6 +7,7 @@
   const content = document.getElementById('details-content');
   const close = document.getElementById('details-close');
   const back = document.getElementById('details-back');
+  const readAll = document.getElementById('details-read-all');
   if (!bridge?.onModel || !panel || !title || !content || !close || !back) return;
   const actions = ['tasks', 'results', 'trend', 'opportunities', 'credits'];
   const taskStates = { active: '进行中', waiting: '等待中', completed: '已完成', failed: '执行失败', interrupted: '已中断', idle: '空闲', unknown: '状态未提供' };
@@ -37,7 +38,7 @@
     return `${date.getFullYear() !== now.getFullYear() ? `${date.getFullYear()}/` : ''}${String(date.getMonth() + 1).padStart(2,'0')}/${String(date.getDate()).padStart(2,'0')} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
   }
   const media = window.matchMedia?.('(prefers-color-scheme: dark)');
-  let appearance = 'system', colorMode = 'standard', lastModel = null;
+  let appearance = 'system', colorMode = 'standard', lastModel = null, markingRead = false;
   function theme() {
     const resolved = appearance === 'system' ? media?.matches ? 'dark' : 'light' : appearance;
     root.dataset.appearance = appearance;
@@ -68,7 +69,7 @@
     const accountHistory = object(source.accountResetHistory);
     const samples = array(trend.samples,6000).map(raw => { const sample = object(raw); return { at: timestamp(sample.at), remaining: percent(sample.remaining) }; }).filter(sample => sample.at !== null && sample.remaining !== null).sort((a,b) => a.at - b.at).filter((sample,index,list) => !index || sample.at > list[index-1].at);
     return { action: actions.includes(source.action) ? source.action : 'tasks', appearance: ['light','dark'].includes(source.appearance) ? source.appearance : 'system',
-      colorMode: ['standard','accessible'].includes(source.colorMode) ? source.colorMode : null, items,
+      colorMode: ['standard','accessible'].includes(source.colorMode) ? source.colorMode : null, generation: count(source.generation), items,
       period: items.some(item => item.windowMinutes === source.period) ? source.period : items[0]?.windowMinutes || 300,
       activity: { runningCount: count(activity.runningCount), unreadCount: count(activity.unreadCount) }, tasks: tasks('tasks'), results: tasks('results'),
       resetCreditsAvailable: count(source.resetCreditsAvailable), resetDetailsState: source.resetDetailsState === 'known' ? 'known' : 'unknown',
@@ -306,6 +307,7 @@
       panel.dataset.action = model.action;
       panel.querySelector('.trend-tabs')?.remove();
       back.hidden = !model.returnToTrend;
+      if (readAll) { readAll.hidden = model.action !== 'results' || !model.results.length; readAll.disabled = markingRead || model.generation === null; }
       if (model.action === 'trend') renderTrend(model);
       else if (model.action === 'opportunities') renderOpportunities(model);
       else if (model.action === 'credits') renderCredits(model);
@@ -322,6 +324,20 @@
       resize();
     } catch (_) { content.replaceChildren(node('p','empty-state','详情暂未提供')); resize(); }
   }
+  readAll?.addEventListener('click',async () => {
+    if (markingRead || lastModel?.action !== 'results' || !lastModel.results.length || lastModel.generation === null) return;
+    const generation = lastModel.generation;
+    markingRead = true; readAll.disabled = true;
+    try {
+      if (await bridge.markAllRead(generation) !== true) throw new Error('MARK_READ_FAILED');
+      if (readAll.hidden) title.focus();
+    } catch (_) {
+      if (lastModel?.action === 'results' && lastModel.generation === generation) {
+        content.querySelector('.read-error')?.remove();
+        content.appendChild(node('p','panel-note read-error','未能保存已读状态，请重试。')); resize();
+      }
+    } finally { markingRead = false; readAll.disabled = lastModel?.generation === null; }
+  });
   close.addEventListener('click',() => invoke('close'));
   back.addEventListener('click',() => invoke('openDetail','trend',lastModel?.returnPeriod || lastModel?.period));
   window.addEventListener('keydown',event => { if (event.key === 'Escape') { event.preventDefault(); invoke('close'); } });

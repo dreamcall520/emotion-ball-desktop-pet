@@ -631,7 +631,13 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     if (changed) notify();
     return changed;
   }
-  return { setEnabled, setPreferences, refresh, getSnapshot, dismiss, markRead, close };
+  function markAllRead() {
+    if (!enabled || closed) return false;
+    const changed = quotaHistory.markAllRead();
+    if (changed) notify();
+    return changed;
+  }
+  return { setEnabled, setPreferences, refresh, getSnapshot, dismiss, markRead, markAllRead, close };
 }
 
 module.exports = { createCodexCompanion };

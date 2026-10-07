@@ -17,5 +17,6 @@ contextBridge.exposeInMainWorld('petCodexDetails', {
   close() { ipcRenderer.send('pet:codex-details-close'); },
   openDetail(action, period) { if (actions.has(action)) ipcRenderer.send('pet:codex-details-open', action, period === 10080 ? 10080 : 300); },
   openThread(id, turnId) { if (typeof id === 'string' && id.length <= 200) ipcRenderer.send('pet:codex-details-thread', id, typeof turnId === 'string' ? turnId.slice(0, 200) : null); },
+  markAllRead(generation) { return Number.isSafeInteger(generation) && generation >= 0 ? ipcRenderer.invoke('pet:codex-details-read-all', generation) : Promise.resolve(false); },
   resize(height) { if (Number.isSafeInteger(height) && height >= 120 && height <= 2000) ipcRenderer.send('pet:codex-details-resize', height); }
 });

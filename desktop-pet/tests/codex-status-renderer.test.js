@@ -21,7 +21,7 @@ class Element {
   }
   focus() { this.focused = (this.focused || 0) + 1; }
   getBoundingClientRect() { return { top: 0, bottom: 220, height: 220 }; }
-  click() { this.events.click?.({ stopPropagation() {}, preventDefault() {} }); }
+  click() { return this.events.click?.({ stopPropagation() {}, preventDefault() {} }); }
 }
 function harness(file, ids, apiName) {
   const nodes = Object.fromEntries(ids.map(id => [id,new Element()]));
@@ -29,7 +29,7 @@ function harness(file, ids, apiName) {
   let receive, color;
   const api = { onModel(callback) { receive = callback; }, onColorMode(callback) { color = callback; },
     openDetail(...args) { calls.push(['openDetail',...args]); }, openThread(...args) { calls.push(['openThread',...args]); },
-    close() { calls.push(['close']); }, resize(value) { calls.push(['resize',value]); }, toggleExpanded() { calls.push(['toggle']); } };
+    markAllRead(...args) { calls.push(['markAllRead',...args]); return Promise.resolve(true); }, close() { calls.push(['close']); }, resize(value) { calls.push(['resize',value]); }, toggleExpanded() { calls.push(['toggle']); } };
   class FixedDate extends Date { static now() { return NOW; } }
   const context = { document: { documentElement: root, getElementById: id => nodes[id], createElement: tag => new Element(tag), createElementNS: (_ns,tag) => new Element(tag) },
     window: { [apiName]: api, petCreditBalanceText: require('../credit-balance'), getComputedStyle() { return { paddingBottom: '13px', borderBottomWidth: '1px' }; }, addEventListener(type,callback) { events[type] = callback; }, requestAnimationFrame(callback) { callback(); }, matchMedia() { return { matches:false, addEventListener() {}, removeEventListener() {} }; } }, Date: FixedDate };
@@ -37,15 +37,15 @@ function harness(file, ids, apiName) {
     const header = new Element(); header.className = 'panel-header';
     const tools = new Element(); tools.className = 'panel-tools';
     tools.replaceChildren(nodes['details-back'],nodes['details-close']);
-    header.replaceChildren(nodes['details-title'],tools);
+    header.replaceChildren(nodes['details-title'],...(nodes['details-read-all'] ? [nodes['details-read-all']] : []),tools);
     nodes['details-panel'].replaceChildren(header,nodes['details-content']);
   }
   vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'..',file),'utf8'),context);
-  return { nodes, root, calls, receive: value => receive(value), color: (...args) => color(...args), events };
+  return { nodes, root, calls, api, receive: value => receive(value), color: (...args) => color(...args), events };
 }
 const item = (windowMinutes,remaining = 44) => ({label:'Codex',windowMinutes,remaining,resetsAt:NOW+10800000,pace:{state:'fast',remainingTimePercent:60}});
 const cardIds = ['quota-label','status','summary','items','overflow','reset-time','reset-credits','compact-product','compact-period','secondary-quota','secondary-period','secondary-value','secondary-progress','secondary-reset','extra-credits','credits-balance','credits-unit','codex-expanded'];
-const detailIds = ['details-panel','details-title','details-content','details-close','details-back'];
+const detailIds = ['details-panel','details-title','details-content','details-close','details-back','details-read-all'];
 
 test('v20 单双周期保留真实值；全局机会仅一处，未知数量不显示0，按钮不切换收起',() => {
   const h = harness('quota-label-renderer.js',cardIds,'petQuotaLabel');
@@ -217,4 +217,52 @@ test('待查看只通过打开具体会话导航；主题、返回与Escape调�
   h.events.keydown({key:'Escape',preventDefault() {}});
   assert.ok(h.calls.some(call => call[0] === 'close'));
   assert.doesNotMatch(fs.readFileSync(path.resolve(__dirname,'../codex-details-renderer.js'),'utf8'),/innerHTML/);
+});
+
+
+test('全部已读仅在非空结果页显示；等待真实确认，不重复提交，失败保留列表且可重试',async () => {
+  const h = harness('codex-details-renderer.js',detailIds,'petCodexDetails');
+  const base = {action:'results',generation:7,activity:{unreadCount:1},results:[{id:'thread-1',turnId:'turn-1',title:'已有结果',state:'completed'}]};
+  const readAll = h.nodes['details-read-all'];
+  h.receive({...base,action:'tasks'}); assert.equal(readAll.hidden,true);
+  h.receive({...base,results:[],activity:{unreadCount:0}}); assert.equal(readAll.hidden,true);
+  h.receive(base); assert.equal(readAll.hidden,false); assert.equal(readAll.disabled,false);
+  let done, calls = 0;
+  h.api.markAllRead = generation => { assert.equal(generation,7); calls++; return new Promise(resolve => { done = resolve; }); };
+  const pending = readAll.click();
+  assert.equal(readAll.disabled,true); await readAll.click(); assert.equal(calls,1);
+  assert.equal(h.nodes['details-content'].querySelectorAll('.activity-item').length,1,'确认前不清空列表');
+  done(false); await pending;
+  assert.equal(readAll.disabled,false); assert.match(h.nodes['details-content'].textContent,/已有结果.*未能保存已读状态，请重试/);
+  h.api.markAllRead = async () => { h.receive({...base,results:[],activity:{unreadCount:0}}); return true; };
+  await readAll.click();
+  assert.equal(readAll.hidden,true); assert.match(h.nodes['details-content'].textContent,/暂无待查看结果/);
+  assert.ok(h.nodes['details-title'].focused,'清空后键盘焦点回到标题');
+  h.receive({...base,generation:8,results:[{id:'thread-1',turnId:'turn-2',title:'新的结果',state:'completed'}]});
+  assert.equal(readAll.hidden,false); assert.match(h.nodes['details-content'].textContent,/新的结果/);
+  h.receive({...base,generation:undefined}); assert.equal(readAll.disabled,true);
+});
+
+test('全部已读 IPC 只接受当前可见结果窗口主框架及当前连接代次',() => {
+  const source = fs.readFileSync(path.resolve(__dirname,'../main.js'),'utf8');
+  const start = source.indexOf("  ipcMain.handle('pet:codex-details-read-all'");
+  const end = source.indexOf("  ipcMain.on('pet:codex-details-resize'",start);
+  let handler, changed = 0, errors = 0;
+  const trusted = {}, context = {Number, isQuitting:false, screenLocked:false,
+    ipcMain:{handle(_channel,callback) { handler = callback; }},
+    codexDetails:{owns:event => event === trusted,isVisible:() => true,getAction:() => 'results'},
+    codexCompanion:{getSnapshot:() => ({enabled:true,generation:9}),markAllRead() { changed++; return true; }},
+    writeError() { errors++; }};
+  vm.runInNewContext(source.slice(start,end),context);
+  assert.equal(handler({},9),false);
+  assert.equal(handler(trusted,8),false); assert.equal(handler(trusted,'9'),false);
+  context.codexDetails.getAction = () => 'tasks'; assert.equal(handler(trusted,9),false);
+  context.codexDetails.getAction = () => 'results'; context.codexDetails.isVisible = () => false; assert.equal(handler(trusted,9),false);
+  context.codexDetails.isVisible = () => true; context.screenLocked = true; assert.equal(handler(trusted,9),false);
+  context.screenLocked = false; context.isQuitting = true; assert.equal(handler(trusted,9),false);
+  context.isQuitting = false; context.codexCompanion.getSnapshot = () => ({enabled:false,generation:9}); assert.equal(handler(trusted,9),false);
+  context.codexCompanion.getSnapshot = () => ({enabled:true,generation:9}); assert.equal(changed,0);
+  assert.equal(handler(trusted,9),true); assert.equal(changed,1);
+  context.codexCompanion.markAllRead = () => { throw new Error('failure'); };
+  assert.equal(handler(trusted,9),false); assert.equal(errors,1);
 });
