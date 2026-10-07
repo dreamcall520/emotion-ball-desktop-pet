@@ -294,7 +294,7 @@
       const px=left+step*(i+.5),latest=i===days.length-1,date=dateLabel(day.at).split(' ')[0];
       if(day.amount===null){
         const label=day.count===1?'仅 1 次记录':day.count?'无法计算':'—';
-        svg.appendChild(svgNode('text',{x:px,y:85,'text-anchor':'middle',class:'daily-empty','aria-label':date+' '+(day.count?'无法计算用量：'+label:'没有记录')},label));
+        svg.appendChild(svgNode('text',{x:px,y:85,'text-anchor':'middle',class:'daily-empty','aria-label':date+' '+(day.count?'无法计算用量：'+label:'没有记录')},step<60&&day.count===1?'仅1次':label));
       }
       else{
         const previous=days[i-1];
@@ -310,7 +310,11 @@
       }
       svg.appendChild(svgNode('text',{x:px,y:116,'text-anchor':'middle'},date));
       const secondary=day.increased?'剩余额度增加':day.correction?'额度变化较大':latest?'截至 '+dateLabel(end).split(' ').at(-1):day.amount!==null&&day.partial?'仅部分时段':'';
-      if(secondary)svg.appendChild(svgNode('text',{x:px,y:128,'text-anchor':'middle',class:'daily-secondary'},secondary));
+      if(secondary){
+        const compact=day.increased?'余额增加':day.correction?'变化较大':latest?'至'+dateLabel(end).split(' ').at(-1):'部分记录';
+        const label=svgNode('text',{x:px,y:128,'text-anchor':'middle',class:'daily-secondary','aria-label':secondary},step<60?compact:secondary);
+        label.appendChild(svgNode('title',{},secondary));svg.appendChild(label);
+      }
     });
     return svg;
   }

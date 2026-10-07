@@ -205,3 +205,21 @@ test('R2 余额空态、不限额、未知、过期与限制保持真实区分�
   assert.match(css,/@media \(prefers-reduced-transparency: reduce\) \{ #details-panel \{ background: var\(--detail-solid-bg\)/);
   assert.match(css,/\.trend-pace\.balanced\s*\{\s*color:\s*var\(--detail-blue\)/);
 });
+
+
+test('八个日期的密集周图用简短辅助标签，完整含义保留给提示和读屏',() => {
+  const h=renderer(),model=trendModel(),start=new Date(2026,9,1,12).getTime(),end=start+7*86400000;
+  const samples=Array.from({length:8},(_,i)=>i===1?[{at:start+i*86400000,remaining:50}]:[
+    {at:start+i*86400000-120000,remaining:50},{at:start+i*86400000-60000,remaining:60},{at:start+i*86400000,remaining:59}]).flat();
+  h.receive({...model,trend:{windowMinutes:10080,resetsAt:end,samples}});
+  const content=h.nodes['details-content'];content.querySelector('[data-view="daily"]').events.click();
+  const labels=content.querySelectorAll('.daily-secondary');
+  assert.ok(labels.length>=6);
+  for(const label of labels){
+    assert.ok(label.textContent.startsWith('余额增加'));
+    assert.equal(label.getAttribute('aria-label'),'剩余额度增加');
+    assert.equal(label.querySelector('title').textContent,'剩余额度增加');
+  }
+  const single=content.querySelectorAll('.daily-empty').find(label=>label.textContent==='仅1次');
+  assert.ok(single);assert.match(single.getAttribute('aria-label'),/仅 1 次记录/);
+});
