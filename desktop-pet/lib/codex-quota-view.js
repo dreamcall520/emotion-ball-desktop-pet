@@ -249,30 +249,36 @@ function buildTrend(snapshot, window, now) {
     resetLabel: window ? formatQuotaDate(window.resetsAt, window.windowMinutes, now) : '',
     samples: [], forecast: unknown };
   if (!window || snapshot?.enabled !== true || snapshot.history?.available !== true) return base;
-  const cycle = (Array.isArray(snapshot.history.windows) ? snapshot.history.windows.slice(-8) : [])
-    .find(row => row.id === window.id && row.windowMinutes === window.windowMinutes && row.resetsAt === window.resetsAt);
-  let previousAt = -1;
-  base.samples = (Array.isArray(cycle?.samples) ? cycle.samples.slice(window.windowMinutes === 10080 ? -6000 : -192) : []).flatMap(sample => {
-    if (!validNow(sample?.at) || sample.at > now || sample.at <= previousAt
-      || !Number.isFinite(sample.remaining) || sample.remaining < 0 || sample.remaining > 100) return [];
-    previousAt = sample.at;
-    return [{ at: sample.at, remaining: sample.remaining }];
-  });
+  const maximum = window.windowMinutes === 10080 ? 6000 : 192;
+  const byTime = new Map();
+  for (const cycle of Array.isArray(snapshot.history.windows) ? snapshot.history.windows.slice(-8) : []) {
+    if (cycle?.id !== window.id || cycle.windowMinutes !== window.windowMinutes
+      || !validResetTime(cycle.resetsAt) || Math.abs(cycle.resetsAt - window.resetsAt) > 1000) continue;
+    for (const sample of Array.isArray(cycle.samples) ? cycle.samples.slice(-maximum) : []) {
+      if (!validNow(sample?.at) || sample.at > now || sample.at < window.resetsAt - window.windowMinutes * 60000 - 1000
+        || !Number.isFinite(sample.remaining) || sample.remaining < 0 || sample.remaining > 100) continue;
+      byTime.set(sample.at, { at: sample.at, remaining: sample.remaining });
+    }
+  }
+  base.samples = [...byTime.values()].sort((a, b) => a.at - b.at).slice(-maximum);
   if (snapshot.quota?.state !== 'connected' || snapshot.quota.stale !== false || !validNow(snapshot.quota.updatedAt)
     || snapshot.quota.updatedAt > now || now - snapshot.quota.updatedAt >= 300000) {
     base.forecast.detail = '用量尚未更新，稍后再看'; return base;
   }
   const horizon = window.windowMinutes === 300 ? 30 * 60000 : 48 * 3600000;
-  const recent = base.samples.filter(sample => sample.at >= now - horizon);
+  let recent = base.samples.filter(sample => sample.at >= now - horizon);
   if (recent.length < 3 || now - recent.at(-1).at >= 300000) return base;
+  for (let index = recent.length - 1; index > 0; index--) {
+    const previous = recent[index - 1]; const current = recent[index];
+    if (current.at - previous.at >= 300000 || current.remaining > previous.remaining
+      || previous.remaining - current.remaining >= 25) {
+      recent = recent.slice(index); break;
+    }
+  }
+  if (recent.length < 3) return base;
   const first = recent[0]; const last = recent.at(-1);
   const minimumSpan = window.windowMinutes === 300 ? 10 * 60000 : 24 * 3600000;
   if (last.at - first.at < minimumSpan || last.remaining !== window.remaining) return base;
-  for (let index = 1; index < recent.length; index++) {
-    const previous = recent[index - 1]; const current = recent[index];
-    if (current.at - previous.at >= 300000 || current.remaining > previous.remaining
-      || previous.remaining - current.remaining >= 25) return base;
-  }
   const consumed = first.remaining - last.remaining;
   const rate = consumed / (last.at - first.at);
   const remainingAtReset = window.remaining - rate * (window.resetsAt - now);

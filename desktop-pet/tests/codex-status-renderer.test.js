@@ -106,7 +106,9 @@ test('趋势只画已采样数据；单周期无切换，双周期切换传真�
   h.receive(base);
   assert.equal(h.nodes['details-panel'].querySelector('.trend-tabs'),null);
   const observed = h.nodes['details-content'].querySelector('.observed-line');
-  assert.match(observed.attributes.d,/L158\.0 66\.8$/);
+  assert.match(observed.attributes.d,/M158\.0 66\.8L158\.0 66\.8$/);
+  assert.equal((observed.attributes.d.match(/M/g)||[]).length,3);
+  assert.equal(h.nodes['details-content'].querySelector('.observed-area'),null);
   assert.doesNotMatch(observed.attributes.d,/350/);
   assert.match(h.nodes['details-content'].textContent,/暂无法预估额度用完时间.*连续用量记录不足，稍后再查看/);
   h.receive({...base,trend:{...base.trend,forecast:{state:'unknown',summary:'暂无法预估额度用完时间',detail:'用量尚未更新，稍后再看'}}});
@@ -136,6 +138,24 @@ test('趋势只画已采样数据；单周期无切换，双周期切换传真�
   assert.ok(h.calls.some(call => JSON.stringify(call) === JSON.stringify(['openDetail','trend',10080])));
   assert.match(h.nodes['details-content'].textContent,/额度充裕.*预计够用到重置/);
   assert.doesNotMatch(h.nodes['details-content'].textContent,/预计约.*用完/);
+});
+
+test('额度图表在断档、余额校正和骤降处断线，填色也不跨未知区间',() => {
+  const h=harness('codex-details-renderer.js',detailIds,'petCodexDetails');
+  const samples=[
+    {at:NOW-1200000,remaining:90},{at:NOW-1080000,remaining:89},
+    {at:NOW-600000,remaining:85},{at:NOW-480000,remaining:84},
+    {at:NOW-360000,remaining:95},{at:NOW-240000,remaining:94},
+    {at:NOW-120000,remaining:40},{at:NOW,remaining:39}
+  ];
+  h.receive({action:'trend',period:300,items:[item(300,39)],trend:{windowMinutes:300,
+    resetsAt:NOW+10800000,samples,forecast:{state:'unknown'}}});
+  const content=h.nodes['details-content'];
+  const line=content.querySelector('.observed-line').attributes.d;
+  assert.equal((line.match(/M/g)||[]).length,4);
+  assert.equal((line.match(/L/g)||[]).length,4);
+  assert.equal((content.querySelector('.observed-area').attributes.d.match(/Z/g)||[]).length,4);
+  assert.equal(content.querySelector('.observed-line').attributes['stroke-linecap'],'round');
 });
 
 test('待查看只通过打开具体会话导航；主题、返回与Escape调用对应桥接',() => {

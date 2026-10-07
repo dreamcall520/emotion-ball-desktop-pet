@@ -509,6 +509,8 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     const currentRequest = () => enabled && !closed && generation === quotaGeneration
       && connectionEpoch === quotaEpoch && connection === quotaConnection && quota === nextQuota;
     if (!currentRequest()) return;
+    if (!quotaStale() && Array.isArray(value?.historySamples))
+      quotaHistory.importSamples?.(nextQuota.windows, value.historySamples);
     quotaHistory.record(getSnapshot());
     armChannel('quota'); armStale(); quotaAlerts();
     if (currentRequest()) notify();

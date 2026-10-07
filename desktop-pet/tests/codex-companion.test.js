@@ -89,6 +89,22 @@ function fixture(options = {}) {
   };
 }
 
+test('实时额度接入先回填可信当前周期历史，再保留本次采样；重复回填不造点', async t => {
+  const f = fixture(); t.after(() => f.companion.close()); await f.companion.setEnabled(true);
+  const old = { id: 'codex:primary', windowMinutes: 300, resetsAt: 9000000,
+    at: f.time - 600000, remaining: 90 };
+  f.quota(80, { historySamples: [old, { ...old, at: f.time - 480000, remaining: 89 },
+    { ...old, resetsAt: 9600000 }, { ...old, at: f.time + 1 }] });
+  const actual = f.companion.getSnapshot();
+  assert.deepEqual(actual.history.windows[0].samples, [
+    { at: f.time - 600000, remaining: 90 }, { at: f.time - 480000, remaining: 89 },
+    { at: f.time, remaining: 80 }
+  ]);
+  assert.equal(actual.quota.historySamples, undefined);
+  f.quota(80, { historySamples: [old] });
+  assert.deepEqual(f.companion.getSnapshot().history.windows[0].samples, actual.history.windows[0].samples);
+});
+
 test('默认关闭：构造、快照、刷新和关闭均无连接或定时器', async () => {
   const f = fixture();
   assert.equal(f.companion.getSnapshot().enabled, false);

@@ -4,6 +4,7 @@ const path = require('node:path');
 const childProcess = require('node:child_process');
 const { createHash } = require('node:crypto');
 const { TextDecoder } = require('node:util');
+const { readCodexUsageHistory } = require('./codex-usage-history');
 const { isTaskId, normalizeQuota, normalizeThreadList, normalizeResetHistoryPage,
   accountResetHistoryDetails, MAX_RESET_HISTORY_EVENTS } = require('./codex-state');
 
@@ -54,7 +55,7 @@ function projectAccount(raw) {
 
 function createCodexRpc({ fs = nodeFs, spawn = childProcess.spawn, homedir = os.homedir,
   timeoutMs = 10000, maxFrameBytes = MAX_FRAME_BYTES, onDisconnect = () => {}, ignoreThread = () => false,
-  fetch = globalThis.fetch, now = Date.now, historyTimeoutMs = 5000 } = {}) {
+  fetch = globalThis.fetch, now = Date.now, historyTimeoutMs = 5000, readUsageHistory = readCodexUsageHistory } = {}) {
   const timeout = Math.max(1, Math.min(15000, timeoutMs));
   const frameLimit = Math.max(1, Math.min(MAX_FRAME_BYTES, maxFrameBytes));
   let child = null;
@@ -68,6 +69,7 @@ function createCodexRpc({ fs = nodeFs, spawn = childProcess.spawn, homedir = os.
   let buffered = 0;
   const pending = new Map();
   let accountIdentity = null, accountVersion = 0, historyCache = null, historyFlight = null;
+  let localHistoryCycle = null;
   const historyControllers = new Set();
   const decoder = new TextDecoder('utf-8', { fatal: true });
   const ensureOpen = () => { if (closed) throw codexError('CLOSED'); };
@@ -228,6 +230,7 @@ function createCodexRpc({ fs = nodeFs, spawn = childProcess.spawn, homedir = os.
       accountVersion++;
       for (const controller of historyControllers) controller.abort();
       historyCache = null; historyFlight = null;
+      localHistoryCycle = null;
     }
     accountIdentity = identity;
     return projected;
@@ -370,10 +373,21 @@ function createCodexRpc({ fs = nodeFs, spawn = childProcess.spawn, homedir = os.
     const version = accountVersion;
     const quota = await request('account/rateLimits/read', {}, raw => normalizeQuota(raw, at));
     if (version !== accountVersion) throw codexError('DISCONNECTED');
-    const accountResetHistory = await readAccountHistory();
+    const sameCycle = localHistoryCycle?.version === version && localHistoryCycle.windows.length === quota.windows.length
+      && quota.windows.every(window => localHistoryCycle.windows.some(previous => previous.id === window.id
+        && previous.windowMinutes === window.windowMinutes && Math.abs(previous.resetsAt - window.resetsAt) <= 1000));
+    let local = Promise.resolve([]);
+    if (accountIdentity?.authenticated === true && accountIdentity.accountId && !sameCycle) {
+      localHistoryCycle = { version, windows: quota.windows };
+      const identity = accountIdentity;
+      local = Promise.resolve().then(() => readUsageHistory({ accountId: identity.accountId, windows: quota.windows,
+        root: path.join(homedir(), '.codex'), now: at, io: fs.promises })).catch(() => []);
+    }
+    const [accountResetHistory, historySamples] = await Promise.all([readAccountHistory(), local]);
     ensureOpen();
     if (version !== accountVersion) throw codexError('DISCONNECTED');
-    return { ...quota, accountResetHistory };
+    return { ...quota, accountResetHistory, ...(Array.isArray(historySamples) && historySamples.length
+      ? { historySamples: historySamples.slice(-12000) } : {}) };
   }
 
   return {
