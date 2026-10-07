@@ -76,7 +76,7 @@
       "file": "index.html",
       "source": "desktop-pet/customize.html",
       "sourceSha256": "5b665e095cfc68db8d330407d1146c48bcd0ac03561f7d288f35644fd5a62e0a",
-      "sha256": "ce06d543bcfbb5f2aded58e1119a4e4f7f27f21431edf8b6ade8d06ea6fe576b",
+      "sha256": "6c50ffabf009c49fe69a17e5363d465a25b864ee96d9c62fb4abd4d9d04af78d",
       "adaptation": "Native DOM retained; website dependency URLs, public favicon, browser IPC bridge, blue palette, responsive stylesheet, static example note and explicit memory-only feedback."
     },
     {
@@ -152,9 +152,11 @@
     {
       "file": "lib/codex-pet-player.js",
       "source": "desktop-pet/lib/codex-pet-player.js",
-      "sourceSha256": "1a81b00439526a29189dee362ef4874dc8a48ab5cc8353678c0d62f6bef0e77b",
-      "sha256": "e31ce438269143eb148e475a5e0243f85f2a25d9a8a0b5c7d1369eae2f396517",
-      "adaptation": "Native timing/rendering unchanged; reviewed same-origin public sample image URLs replace the App file/data URL contract in browser documents."
+      "sourceSha256": "d1050f7d620bfbb33c698450d4ae2c3c183f0215b40bdb37e9a90ef72af41706",
+      "sha256": "ebb5c326db4f38299c324d4192e82e9565f896decd26518c8376fcc82b472ae9",
+      "adaptation": "Native 0.4.04 timing/rendering retained (idle 6.6s); reviewed same-origin public sample image URLs replace the App file/data URL contract in browser documents.",
+      "publicCommit": "4aa3b73a69170d8a9fd0c5a3102e6ff819bfb958",
+      "publicVersion": "0.4.04"
     },
     {
       "file": "../chat/lib/customization.js",
@@ -207,5 +209,5 @@
       "sha256": "1d0c978a2b7a9598bf8e1b06259ebf75b1ffd4225dedba52f1c893bb95eba007"
     }
   ],
-  "scope": "Native customizer and chat avatar support from the published main snapshot; the user-selected example sprites are documented separately by the website maintainer. No visitor directory access or App writes."
+  "scope": "Native customizer and chat avatar support retain the published 0.4.03 baseline; the shared sprite player timing is updated from 0.4.04 as recorded per file. The user-selected example sprites are documented separately by the website maintainer. No visitor directory access or App writes."
 }

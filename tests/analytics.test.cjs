@@ -88,7 +88,7 @@ test('one manual PV; download navigation survives unavailable and rejected track
   assert.equal(state.calls.length, 1);
 
   const link = {
-    href: 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.3/Qiuqiu-0.4.03-macOS-arm64.dmg',
+    href: 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.4/Qiuqiu-0.4.04-macOS-arm64.dmg',
     dataset: { downloadArch: 'arm64', downloadPosition: 'hero' },
   };
   let prevented = false;
@@ -118,7 +118,7 @@ test('only real release links are counted, middle clicks count once and right cl
   event.button = 2;
   state.listeners.auxclick(event);
   assert.equal(state.calls.length, 1);
-  link.href = 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.3/Qiuqiu-0.4.03-macOS-arm64.dmg';
+  link.href = 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.4/Qiuqiu-0.4.04-macOS-arm64.dmg';
   link.dataset.downloadArch = 'arm64';
   event.type = 'click';
   event.button = 0;
@@ -133,7 +133,7 @@ test('only real release links are counted, middle clicks count once and right cl
   event.button = 0;
   state.listeners.click(event);
   for (const href of ['https://unrelated.example/file.dmg',
-    'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.3/unknown.dmg']) {
+    'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.4/unknown.dmg']) {
     link.href = href;
     state.listeners.click(event);
   }

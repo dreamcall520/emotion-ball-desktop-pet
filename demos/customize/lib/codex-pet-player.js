@@ -10,9 +10,10 @@
   const scriptURL = typeof document === 'object' ? document.currentScript?.src : null;
   const demoImageURLs = scriptURL ? new Set(['../assets/demo-ikun.webp', '../assets/demo-chunye.webp']
     .map(file => new URL(file, scriptURL).href)) : null;
-  // Codex's original per-frame timing; unused columns are deliberately skipped.
+  // Codex stretches idle frames 6x; other actions keep their base timing.
+  // Unused columns are deliberately skipped.
   const durations = [
-    [280,110,110,140,140,320], [120,120,120,120,120,120,120,220],
+    [1680,660,660,840,840,1920], [120,120,120,120,120,120,120,220],
     [120,120,120,120,120,120,120,220], [140,140,140,280],
     [140,140,140,140,280], [140,140,140,140,140,140,140,240],
     [150,150,150,150,150,260], [120,120,120,120,120,220],

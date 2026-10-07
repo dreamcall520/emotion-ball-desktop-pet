@@ -143,12 +143,20 @@ function customizer() {
     assert.equal(demo.paints.at(-1)[2], action.row * 208);
   }
   assert.equal(player.setAction('untrusted-action'), false);
-  player.setAction('idle'); demo.tick(0); demo.tick(300);
-  assert.equal(player.element.dataset.codexFrame, '1', 'The native frame timing advances');
+  player.setAction('idle'); demo.tick(0); demo.tick(1679);
+  assert.equal(player.element.dataset.codexFrame, '0', 'Idle retains the original 6x hold');
+  demo.tick(1680); assert.equal(player.element.dataset.codexFrame, '1');
+  demo.tick(6599); assert.equal(player.element.dataset.codexFrame, '5');
+  demo.tick(6600); assert.equal(player.element.dataset.codexFrame, '0', 'Idle completes one cycle at 6.6s');
+  player.setAction('wave'); demo.tick(7000); demo.tick(7699);
+  assert.equal(player.element.dataset.codexFrame, '3');
+  demo.tick(7700); assert.equal(player.element.dataset.codexFrame, '0', 'Wave keeps its 700ms cycle');
+  player.setAction('idle'); demo.tick(8000); demo.tick(9680);
+  assert.equal(player.element.dataset.codexFrame, '1');
   demo.receive({ type: 'qiuqiu-demo-motion', paused: true }, {}, origin);
   assert.ok(demo.requests.size > 0, 'A foreign frame cannot pause the preview');
   demo.receive({ type: 'qiuqiu-demo-motion', paused: true }); assert.equal(demo.requests.size, 0);
-  const pausedFrame = player.element.dataset.codexFrame; demo.tick(1000); assert.equal(player.element.dataset.codexFrame, pausedFrame);
+  const pausedFrame = player.element.dataset.codexFrame; demo.tick(10680); assert.equal(player.element.dataset.codexFrame, pausedFrame);
   player.pause(false); assert.equal(demo.requests.size, 0, 'Play cannot override a parent pause');
   const replacement = demo.window.CodexPetPlayer.create(demo.target(), { descriptor: (await api.listCodexPets()).pets[1] });
   assert.equal(demo.requests.size, 0, 'A replacement preview inherits the parent pause');
