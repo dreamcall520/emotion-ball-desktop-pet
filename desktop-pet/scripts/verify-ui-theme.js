@@ -304,8 +304,10 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
       assert.equal(customBorders.sourceUnderline.height, '2px');
       assert.ok(contrast(customBorders.sourceUnderline.color, panelColor) >= 3, '选中来源下划线保留清晰对比');
       const chatShell = await page(chatWin, `(() => { const panel = getComputedStyle(document.querySelector('.chat-panel')); return { border: panel.borderTopWidth, radius: panel.borderTopLeftRadius, shadow: panel.boxShadow, background: panel.backgroundColor, bodyBackground: getComputedStyle(document.body).backgroundColor }; })()`);
-      assert.equal(chatShell.border, '0px'); assert.equal(chatShell.radius, '0px'); assert.equal(chatShell.shadow, 'none');
-      assert.equal(chatShell.background, panelColor); assert.equal(chatShell.bodyBackground, panelColor, '色弱聊天与便签一样使用单层纯色外壳');
+      assert.equal(chatShell.border, '0px'); assert.equal(chatShell.radius, '15px', '透明聊天窗口保留原有圆角'); assert.equal(chatShell.shadow, 'none');
+      assert.equal(chatShell.background, panelColor); assert.equal(chatShell.bodyBackground, 'rgba(0, 0, 0, 0)');
+      const chatPixels = (await chatWin.webContents.capturePage()).toBitmap();
+      assert.equal(chatPixels[3], 0, '透明聊天窗口四角没有被页面底色填成方角');
       assert.equal(apiBody.accessiblePanel.toLowerCase(), expectedBacking);
       assert.equal(apiBody.background, resolved === 'dark' ? 'rgb(16, 24, 32)' : 'rgb(255, 255, 255)', 'API body 使用当前高对比面板底色');
       chatWin.webContents.focus(); await wait(80);

@@ -278,6 +278,7 @@ async function verifyCodexPets({ pet, customize, openCustomization, openChat, ge
         const style = selected && getComputedStyle(selected), dimensions = document.querySelector('#pet-grid');
         return { root: {...document.documentElement.dataset}, selected: selected && {id:selected.dataset.petId, border:style.borderColor, background:style.backgroundColor, color:style.color},
           stage:getComputedStyle(stage).backgroundColor, stageDark:stage.classList.contains('dark'),
+          ordinaryBorders:[...document.querySelectorAll('.pet-card[aria-pressed=false], .shape-option[aria-pressed=false]')].map(el=>getComputedStyle(el).borderTopColor),
           columns:getComputedStyle(dimensions).gridTemplateColumns.split(' ').length,
           selects:['pet-action','pet-size'].map(id=>({id,color:getComputedStyle(document.getElementById(id)).color, background:getComputedStyle(document.getElementById(id)).backgroundColor, arrow:getComputedStyle(document.getElementById(id)).backgroundImage})),
           opacity:Number(range.value), fill:range.style.getPropertyValue('--range-fill'), saveColor:getComputedStyle(document.querySelector('#save')).color };
@@ -289,6 +290,9 @@ async function verifyCodexPets({ pet, customize, openCustomization, openChat, ge
         (visual.stageDark ? 'rgb(237, 242, 248)' : 'rgb(37, 49, 61)'), '蓝色预览底未被新增CSS覆盖');
       let texts;
       if (mode === 'accessible') {
+        assert.ok(visual.ordinaryBorders.length > 1, '真实宠物库与形态卡片均存在');
+        for (const border of visual.ordinaryBorders) assert.equal(border, resolved === 'dark' ? 'rgb(51, 67, 82)' : 'rgb(217, 225, 233)', '两类普通卡片使用一致的轻边界');
+        assert.ok(contrast(visual.selected.border, resolved === 'dark' ? 'rgb(16, 24, 32)' : 'rgb(255, 255, 255)') >= 3, '选中宠物保留清晰边界');
         texts = await textStyles(customize, [
           {label:'source-tab',selector:'#source-codex'}, {label:'pet-name',selector:'.pet-card[aria-pressed=true] .pet-name'},
           {label:'ordinary-pet',selector:'.pet-card[aria-pressed=false] .pet-name'}, {label:'selected-check',selector:'.pet-card[aria-pressed=true] .selection-mark'},

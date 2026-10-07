@@ -163,13 +163,6 @@
   background: var(--accessible-panel) !important;
   color: var(--accessible-text) !important;
   border: 0;
-  border-radius: 0;
-}
-
-/* Match notes: let the native window clip one solid surface. */
-:root[data-color-mode="accessible"] body:has(> .chat-panel) {
-  background: var(--accessible-panel);
-  border-radius: 0;
 }
 
 :root[data-color-mode="accessible"] button:disabled,

@@ -386,7 +386,7 @@
       const rows=daily?[
         ['仅 1 次记录','无法计算用量'],
         ['仅部分时段','不代表全天用量'],
-        ['剩余额度增加','读到的余额变多，用量仅供参考']
+        ['剩余额度增加','余额曾增加，仅供参考']
       ]:[['蓝色实线','有连续记录'],['蓝色虚线','中间没有记录'],['灰色虚线','剩余时间参考']];
       rows.forEach(([label,meaning])=>meanings.append(node('dt','',label),node('dd','',meaning)));
       helpBody.replaceChildren(meanings,node('p','chart-help-foot',daily?'— 无记录 · 虚线只连接参考值':'额度增加或重置时，走势分段显示'));
