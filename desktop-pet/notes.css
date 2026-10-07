@@ -300,6 +300,8 @@ dialog .dialog-footer{position:sticky;bottom:0;z-index:1;background:var(--surfac
 :root[data-color-mode="accessible"] :is(.panel,.desktop-note){border-radius:18px}
 :root[data-color-mode="accessible"] body[data-mode="reminder"]{border-radius:0}
 :root[data-color-mode="accessible"] :is(.tabs button,.filter-popover button){color:var(--accessible-text)}
-:root[data-color-mode="accessible"] :is(.filter-trigger[aria-expanded=true],.filter-popover button:hover,.category-manage:hover){background:var(--accessible-raised);color:var(--accessible-blue)}
+:root[data-color-mode="accessible"] :is(.filter-trigger[aria-expanded=true],.filter-popover button:hover,.category-manage:hover,.collapse-button:hover,.new-button:hover,.search-toggle:hover,.search-toggle[aria-expanded=true],.filter-control:hover,.category-row .icon-button:hover,.move-option:hover,.quick-add .quick-category-picker:hover,.quick-option:hover){background:var(--accessible-raised);color:var(--accessible-blue)}
 :root[data-color-mode="accessible"] .filter-popover :is(.view-check,.category-manage),:root[data-color-mode="accessible"] .category-add{color:var(--accessible-blue)}
 :root[data-color-mode="accessible"] .tabs .active{box-shadow:none}
+
+:root[data-color-mode="accessible"] .category-dialog .delete-confirm:hover{background:var(--accessible-warning);color:var(--accessible-yellow)}
