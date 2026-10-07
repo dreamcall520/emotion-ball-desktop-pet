@@ -6,36 +6,62 @@ const vm = require('node:vm');
 const formatBalance = require('../credit-balance');
 
 class Element {
-  constructor(tag = 'div') { this.tagName = tag; this.className = ''; this.children = []; this.dataset = {}; this.attributes = {}; this.events = {}; this._text = ''; }
-  set textContent(value) { this._text = String(value); this.children = []; }
+  constructor(tag = 'div') { this.tagName = tag; this.className = ''; this.children = []; this.dataset = {}; this.attributes = {}; this.events = {}; this.style = {}; this._text = ''; }
+  get parentElement() { return this.parent || null; }
+  get classList() { return {contains:value => this.className.split(/\s+/).includes(value)}; }
+  set textContent(value) { this.replaceChildren(); this._text = String(value); }
   get textContent() { return this._text + this.children.map(child => child.textContent).join(''); }
-  replaceChildren(...children) { this._text = ''; this.children = []; children.forEach(child => this.appendChild(child)); }
-  appendChild(child) { child.parent = this; this.children.push(child); return child; }
-  insertBefore(child, before) { child.parent = this; const index = this.children.indexOf(before); this.children.splice(index < 0 ? this.children.length : index,0,child); }
-  remove() { if (this.parent) this.parent.children = this.parent.children.filter(child => child !== this); }
+  replaceChildren(...children) { this._text = ''; [...this.children].forEach(child => child.remove()); this.append(...children); }
+  append(...children) { children.forEach(child => this.appendChild(child)); }
+  prepend(...children) { [...children].reverse().forEach(child => this.insertBefore(child,this.children[0])); }
+  appendChild(child) { child.remove(); child.parent = this; this.children.push(child); return child; }
+  insertBefore(child, before) { child.remove(); child.parent = this; const index = this.children.indexOf(before); this.children.splice(index < 0 ? this.children.length : index,0,child); return child; }
+  remove() { if (this.parent) this.parent.children = this.parent.children.filter(child => child !== this); this.parent = null; }
   setAttribute(key,value) { this.attributes[key] = String(value); if (key === 'class') this.className = String(value); }
+  getAttribute(key) { if (key === 'open') return this.open ? '' : null; return this.attributes[key] ?? (key.startsWith('data-') ? this.dataset[key.slice(5).replace(/-([a-z])/g,(_match,letter) => letter.toUpperCase())] : null) ?? null; }
+  removeAttribute(key) { delete this.attributes[key]; }
   addEventListener(type,callback) { this.events[type] = callback; }
   querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
   querySelectorAll(selector) {
-    const matches = child => selector.startsWith('.') ? child.className.split(' ').includes(selector.slice(1)) : child.tagName === selector;
-    return this.children.flatMap(child => [...(matches(child) ? [child] : []),...child.querySelectorAll(selector)]);
+    const parts = selector.split(/\s+/), matches = (child,part) => {
+      const attribute = part.match(/\[([^=\]]+)(?:="([^"]*)")?\]$/);
+      const [tag,...classes] = part.replace(/\[.*\]$/,'').split('.');
+      return (!tag || child.tagName === tag) && classes.every(value => child.classList.contains(value))
+        && (!attribute || (attribute[2] === undefined ? child.getAttribute(attribute[1]) !== null : child.getAttribute(attribute[1]) === attribute[2]));
+    };
+    const descendants = this.children.flatMap(child => [child,...child.querySelectorAll('*')]);
+    if (selector === '*') return descendants;
+    return descendants.filter(child => {
+      if (!matches(child,parts.at(-1))) return false;
+      let ancestor = child.parentElement;
+      for (let index = parts.length - 2; index >= 0; index--) {
+        while (ancestor && !matches(ancestor,parts[index])) ancestor = ancestor.parentElement;
+        if (!ancestor) return false;
+        ancestor = ancestor.parentElement;
+      }
+      return true;
+    });
   }
   getBoundingClientRect() { return {top:0,bottom:220,height:220}; }
-  focus() {}
+  focus() { if (this.ownerDocument) this.ownerDocument.activeElement = this; }
 }
-function renderer() {
+function renderer(search = '') {
+  const TrendCurve = require('../quota-trend-curve'), TrendDaily = require('../quota-daily-model');
   const root = new Element(), nodes = Object.fromEntries(['details-panel','details-title','details-content','details-close','details-back'].map(id => [id,new Element()]));
   const header = new Element(), tools = new Element(); header.className = 'panel-header'; tools.className = 'panel-tools';
   tools.replaceChildren(nodes['details-back'],nodes['details-close']); header.replaceChildren(nodes['details-title'],tools);
   nodes['details-panel'].replaceChildren(header,nodes['details-content']);
   let receive;
+  const calls = [];
   const computedStyle = () => ({paddingTop:'0px',paddingBottom:'0px',borderTopWidth:'0px',borderBottomWidth:'0px'});
+  const document = {documentElement:root,body:new Element('body'),getElementById:id => nodes[id],createElement:tag => Object.assign(new Element(tag),{ownerDocument:document}),createElementNS:(_namespace,tag) => document.createElement(tag)};
+  Object.values(nodes).forEach(element => {element.ownerDocument=document;});
   vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../codex-details-renderer.js'),'utf8'),{
-    getComputedStyle:computedStyle,
-    document: {documentElement:root,body:new Element('body'),getElementById:id => nodes[id],createElement:tag => new Element(tag),createElementNS:(_namespace,tag) => new Element(tag)},
-    window: {getComputedStyle:computedStyle,petCreditBalanceText:formatBalance,petCodexDetails:{onModel(callback) {receive = callback;},resize() {}},addEventListener() {},requestAnimationFrame(callback) {callback();},matchMedia() {return {matches:false,addEventListener() {}};}}
+    getComputedStyle:computedStyle, TrendCurve, TrendDaily, URLSearchParams, location:{search},
+    document,
+    window: {getComputedStyle:computedStyle,TrendCurve,TrendDaily,petCreditBalanceText:formatBalance,petCodexDetails:{onModel(callback) {receive = callback;},resize() {},openDetail(...args) {calls.push(args);}},addEventListener() {},setTimeout() {return 1;},clearTimeout() {},requestAnimationFrame(callback) {callback();},matchMedia() {return {matches:false,addEventListener() {}};}}
   });
-  return {root,nodes,receive:value => receive(value)};
+  return {root,nodes,calls,receive:value => receive(value)};
 }
 const item = windowMinutes => ({windowMinutes,remaining:62,resetsAt:Date.now()+10000000,pace:{state:'balanced',remainingTimePercent:64}});
 
@@ -52,6 +78,82 @@ test('R2 单周标题与指标顺序按认可稿，双周期仍提供切换',() 
   assert.equal(h.nodes['details-title'].textContent,'额度趋势CODEX');
   assert.equal(h.nodes['details-panel'].querySelector('.trend-tabs').children.length,2);
   assert.equal(h.nodes['details-panel'].querySelector('.trend-tabs').children[1].attributes['aria-pressed'],'true');
+});
+
+const trendModel = () => {
+  const at = value => Date.parse(value+'+08:00'), resetsAt = at('2026-10-10T05:14:00');
+  return {action:'trend',period:10080,items:[300,10080].map(windowMinutes => ({...item(windowMinutes),resetsAt})),
+    trend:{windowMinutes:10080,resetsAt,samples:[
+      ['2026-10-05T23:37:00',63],['2026-10-06T23:36:59',55],['2026-10-06T23:40:07',54],
+      ['2026-10-07T09:00:00',54],['2026-10-07T09:01:00',53],['2026-10-07T09:02:00',54],['2026-10-07T09:03:00',53]
+    ].map(([time,remaining]) => ({at:at(time),remaining}))}};
+};
+
+test('趋势以走势启动，日用量切换同时更新图表、参考状态和说明',() => {
+  const h = renderer('?view=daily&line=straight');
+  h.receive(trendModel());
+  const content = h.nodes['details-content'];
+  assert.equal(content.querySelector('.chart-block').dataset.view,'line','独立预览的 URL 参数不能决定正式视图');
+  const tabs = content.querySelector('.chart-view-switch');
+  tabs.querySelector('[data-view="daily"]').events.click();
+  assert.equal(content.querySelector('.chart-block').dataset.view,'daily');
+  assert.equal(content.querySelector('.chart-status').textContent,'仅供参考');
+  assert.equal(tabs.querySelector('[data-view="daily"]').attributes['aria-selected'],'true');
+  assert.equal(tabs.querySelector('[data-view="line"]').attributes['aria-selected'],'false');
+  assert.ok(content.querySelector('.daily-chart'));
+  assert.match(content.querySelector('.daily-chart').attributes['aria-label'],/不是每日末余额/);
+  assert.match(content.querySelector('.chart-help').textContent,/仅 1 次记录无法计算用量/);
+  assert.match(content.querySelector('.chart-help').textContent,/仅部分时段不代表全天用量/);
+  tabs.querySelector('[data-view="line"]').events.click();
+  assert.equal(content.querySelector('.chart-block').dataset.view,'line');
+  assert.equal(content.querySelector('.chart-status').textContent,'');
+  assert.equal(content.querySelector('.daily-chart'),null);
+  assert.ok(content.querySelector('.observed-line'));
+});
+
+test('日用量选择在同周期刷新及重置机会返回后保留，各周期分别记住视图',() => {
+  const h = renderer(), model = trendModel(), content = h.nodes['details-content'];
+  h.receive(model);
+  content.querySelector('[data-view="daily"]').events.click();
+  h.receive({...model,appearance:'dark',trend:{...model.trend,samples:[...model.trend.samples,{at:model.trend.samples.at(-1).at+60000,remaining:52}]}});
+  assert.equal(content.querySelector('.chart-block').dataset.view,'daily');
+  assert.equal(content.querySelector('.chart-status').textContent,'仅供参考');
+  content.querySelector('.reset-link').events.click();
+  assert.deepEqual(h.calls.at(-1),['opportunities',10080]);
+  h.receive({action:'opportunities',period:10080,items:model.items,returnToTrend:true,returnPeriod:10080});
+  h.nodes['details-back'].events.click();
+  assert.deepEqual(h.calls.at(-1),['trend',10080]);
+  h.receive(model);
+  assert.equal(content.querySelector('.chart-block').dataset.view,'daily');
+  h.receive({...model,period:300,trend:{...model.trend,windowMinutes:300}});
+  assert.equal(content.querySelector('.chart-block').dataset.view,'line');
+  h.receive(model);
+  assert.equal(content.querySelector('.chart-block').dataset.view,'daily');
+});
+
+test('空历史视图往返只保留当前的一个空态',() => {
+  const h = renderer(), model = trendModel(), content = h.nodes['details-content'];
+  h.receive({...model,trend:{...model.trend,samples:[]}});
+  for (const view of ['daily','line','daily','line']) {
+    content.querySelector(`[data-view="${view}"]`).events.click();
+    const empty = content.querySelectorAll('.empty-state');
+    assert.equal(empty.length,1);
+    assert.equal(empty[0].textContent,view === 'daily' ? '暂无已记录用量' : '暂无已采样趋势');
+  }
+});
+
+test('同周期刷新保留图表说明展开及键盘焦点',() => {
+  const h = renderer(), model = trendModel(), content = h.nodes['details-content'];
+  h.receive(model);
+  content.querySelector('[data-view="daily"]').events.click();
+  const summary = content.querySelector('.chart-help summary');
+  content.querySelector('.chart-help').open = true;
+  summary.focus();
+  h.receive({...model,trend:{...model.trend,samples:[...model.trend.samples,{at:model.trend.samples.at(-1).at+60000,remaining:52}]}});
+  const next = content.querySelector('.chart-help summary');
+  assert.notEqual(next,summary);
+  assert.equal(content.querySelector('.chart-help').open,true);
+  assert.equal(summary.ownerDocument.activeElement,next);
 });
 
 test('R2 正重置次数的xx次加蓝色状态，标签、0与未知保持中性',() => {

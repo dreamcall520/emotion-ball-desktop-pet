@@ -139,6 +139,8 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/quota-label-preload.js',
     'desktop-pet/quota-label-renderer.js',
     'desktop-pet/credit-balance.js',
+    'desktop-pet/quota-trend-curve.js',
+    'desktop-pet/quota-daily-model.js',
     'desktop-pet/lib/codex-quota-history.js',
     'desktop-pet/lib/codex-details-window.js',
     'desktop-pet/codex-details.html',
