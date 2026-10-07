@@ -8,7 +8,22 @@
   let taskState = 'processing';
   let pendingTaskState = null;
   const taskFrame = frames.find(frame => frame.closest('#codex') && frame.dataset.demo === 'quota');
-  let savedAppearance;
+  let savedAvatar;
+  const petAssets = new Map([
+    ['codex-1efa22ef14f812a00e6bbeaea6ab410bf441085df26fa194bbbaea1c0c18789d', { name: 'ikun', version: 2, rows: 11, file: '../demos/customize/assets/demo-ikun.webp' }],
+    ['codex-1d0c978a2b7a9598bf8e1b06259ebf75b1ffd4225dedba52f1c893bb95eba007', { name: '春野', version: 2, rows: 11, file: '../demos/customize/assets/demo-chunye.webp' }]
+  ]);
+  function safePet(appearance, candidate) {
+    const allowed = petAssets.get(appearance.codexPetId);
+    if (!allowed || !candidate || candidate.id !== appearance.codexPetId || candidate.name !== allowed.name ||
+      candidate.version !== allowed.version || candidate.rows !== allowed.rows ||
+      candidate.imageURL !== new URL(allowed.file, location.href).href) return null;
+    return { id: candidate.id, name: allowed.name, version: allowed.version, rows: allowed.rows,
+      imageURL: new URL(allowed.file, location.href).href };
+  }
+  function restoreAvatar(frame) {
+    if (savedAvatar && frame.dataset.demo === 'chat') send(frame, savedAvatar);
+  }
   function theme(frame) {
     const preview = frame.closest('[data-appearance-demo]');
     const choice = preview ? preview.dataset.look : 'light';
@@ -26,7 +41,7 @@
     send(frame, theme(frame));
     motion(frame);
     if (frame === taskFrame) { pendingTaskState = taskState; send(frame, { type: 'qiuqiu-demo-task', state: taskState }); }
-    if (savedAppearance && frame.dataset.demo === 'chat') send(frame, { type: 'qiuqiu-demo-avatar', appearance: savedAppearance });
+    restoreAvatar(frame);
   });
   window.addEventListener('message', event => {
     if (event.origin !== location.origin) return;
@@ -34,6 +49,7 @@
     if (!frame || !event.data || typeof event.data !== 'object') return;
     if (event.data.type === 'qiuqiu-demo-ready') {
       send(frame, theme(frame)); motion(frame);
+      restoreAvatar(frame);
       if (frame === taskFrame) { pendingTaskState = taskState; send(frame, { type: 'qiuqiu-demo-task', state: taskState }); }
     }
     if (frame === taskFrame && event.data.type === 'qiuqiu-demo-task-state' && ['processing', 'completed', 'viewed'].includes(event.data.state)) {
@@ -48,9 +64,12 @@
     }
     if (event.data.type === 'qiuqiu-demo-avatar' && frame.dataset.demo === 'customize') {
       const appearance = event.data.appearance;
-      if (!appearance || !['blob', 'cloud', 'square', 'aurora-cloud'].includes(appearance.shape)) return;
-      savedAppearance = appearance;
-      frames.filter(item => item.dataset.demo === 'chat').forEach(item => send(item, { type: 'qiuqiu-demo-avatar', appearance }));
+      if (!appearance || typeof appearance !== 'object' || Array.isArray(appearance) ||
+        !['blob', 'cloud', 'square', 'aurora-cloud', 'codex-pet'].includes(appearance.shape)) return;
+      const codexPet = appearance.shape === 'codex-pet' ? safePet(appearance, event.data.codexPet) : null;
+      if (appearance.shape === 'codex-pet' && !codexPet) return;
+      savedAvatar = { type: 'qiuqiu-demo-avatar', appearance, codexPet };
+      frames.forEach(restoreAvatar);
     }
   });
   const preview = document.querySelector('[data-appearance-demo]');

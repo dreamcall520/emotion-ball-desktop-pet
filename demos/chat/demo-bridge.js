@@ -2,7 +2,19 @@
 (() => {
   'use strict';
   const states = new Set(), colors = new Set(), avatars = new Set();
-  let appearance='light',colorMode='standard',avatar=null,activeId='demo-today',busy=false,selection='auto',sequence=0,timer=null;
+  let appearance='light',colorMode='standard',avatar=null,avatarPet=null,activeId='demo-today',busy=false,selection='auto',sequence=0,timer=null;
+  const petAssets = new Map([
+    ['codex-1efa22ef14f812a00e6bbeaea6ab410bf441085df26fa194bbbaea1c0c18789d', { name: 'ikun', version: 2, rows: 11, file: '../customize/assets/demo-ikun.webp' }],
+    ['codex-1d0c978a2b7a9598bf8e1b06259ebf75b1ffd4225dedba52f1c893bb95eba007', { name: '春野', version: 2, rows: 11, file: '../customize/assets/demo-chunye.webp' }]
+  ]);
+  function safePet(raw, candidate) {
+    const allowed = petAssets.get(raw.codexPetId);
+    if (!allowed || !candidate || candidate.id !== raw.codexPetId || candidate.name !== allowed.name ||
+      candidate.version !== allowed.version || candidate.rows !== allowed.rows ||
+      candidate.imageURL !== new URL(allowed.file, location.href).href) return null;
+    return { id: raw.codexPetId, name: allowed.name, version: allowed.version, rows: allowed.rows,
+      imageURL: new URL(allowed.file, location.href).href };
+  }
   const now=Date.now();
   const chats=[{id:'demo-today',title:'给今天留一点空隙',updatedAt:now,messages:[{id:'seed-1',role:'user',text:'今天有点忙，想先把事情理清楚。',status:'complete'},{id:'seed-2',role:'assistant',text:'先挑最重要的一件，剩下的慢慢来。我在这里陪你。',status:'complete'}]},{id:'demo-earlier',title:'周末的小计划',updatedAt:now-86400000,messages:[{id:'seed-3',role:'user',text:'周末想去散个步。',status:'complete'},{id:'seed-4',role:'assistant',text:'给自己留一段没有安排的时间，也很好。',status:'complete'}]}];
   const current=()=>chats.find(chat=>chat.id===activeId);
@@ -11,7 +23,7 @@
   const subscribe=(set,fn)=>{set.add(fn);return()=>set.delete(fn);};
   function theme() { const root=document.documentElement;root.dataset.appearance=appearance;root.dataset.accessibleAppearance=appearance;root.dataset.colorMode=colorMode;colors.forEach(fn=>fn(colorMode,appearance)); }
   window.qiuqiuChat={
-    getState:async()=>snapshot(),onState:fn=>subscribe(states,fn),onColorMode:fn=>{fn(colorMode,appearance);return subscribe(colors,fn);},onAppearance:fn=>{if(avatar)fn(avatar);return subscribe(avatars,fn);},
+    getState:async()=>snapshot(),onState:fn=>subscribe(states,fn),onColorMode:fn=>{fn(colorMode,appearance);return subscribe(colors,fn);},onAppearance:fn=>{if(avatar)fn(avatar,null,avatarPet);return subscribe(avatars,fn);},
     send:async text=>{
       if(typeof text!=='string'||!text.trim()||text.length>2000) return {accepted:false,error:'请输入 1–2000 字的消息。'};
       if(busy) return {accepted:false,error:'请等待当前示例回复。'};
@@ -33,7 +45,12 @@
     const data=event.data;
     if(data?.type==='qiuqiu-demo-theme'&&['light','dark'].includes(data.appearance)&&['standard','accessible'].includes(data.colorMode)){appearance=data.appearance;colorMode=data.colorMode;theme();}
     else if(data?.type==='qiuqiu-demo-avatar'&&data.appearance&&typeof data.appearance==='object'&&!Array.isArray(data.appearance)){
-      avatar=window.PetCustomization.normalizeAppearance(data.appearance);avatars.forEach(fn=>fn(avatar));
+      const raw=data.appearance;
+      if(!['blob','cloud','square','aurora-cloud','codex-pet'].includes(raw.shape))return;
+      const pet=raw.shape==='codex-pet'?safePet(raw,data.codexPet):null;
+      if(raw.shape==='codex-pet'&&!pet)return;
+      avatar=window.PetCustomization.normalizeAppearance(raw);avatarPet=pet;
+      avatars.forEach(fn=>fn(avatar,null,avatarPet));
     }else if(data?.type==='qiuqiu-demo-motion'){window.QiuqiuDemoPaused=data.paused===true;document.documentElement.dataset.demoPaused=String(window.QiuqiuDemoPaused);window.dispatchEvent(new Event('qiuqiu-demo-motion'));}
   });
   document.addEventListener('DOMContentLoaded',()=>{

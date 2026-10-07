@@ -1,0 +1,26 @@
+[
+  {
+    "name": "ikun",
+    "file": "demo-ikun.webp",
+    "spriteVersionNumber": 2,
+    "columns": 8,
+    "rows": 11,
+    "frameWidth": 192,
+    "frameHeight": 208,
+    "bytes": 3089404,
+    "sha256": "1efa22ef14f812a00e6bbeaea6ab410bf441085df26fa194bbbaea1c0c18789d",
+    "source": "Project maintainer-provided existing Codex pet; original sprite bytes, used by request on 2026-10-07."
+  },
+  {
+    "name": "春野",
+    "file": "demo-chunye.webp",
+    "spriteVersionNumber": 2,
+    "columns": 8,
+    "rows": 11,
+    "frameWidth": 192,
+    "frameHeight": 208,
+    "bytes": 1635956,
+    "sha256": "1d0c978a2b7a9598bf8e1b06259ebf75b1ffd4225dedba52f1c893bb95eba007",
+    "source": "Project maintainer-provided existing Codex pet; original sprite bytes, used by request on 2026-10-07."
+  }
+]

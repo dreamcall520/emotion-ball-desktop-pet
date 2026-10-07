@@ -4,7 +4,19 @@
   // Replace only Electron IPC. The public customizer renderer owns the UI.
   const customization = window.PetCustomization;
   const clone = value => JSON.parse(JSON.stringify(value));
-  const supportedShapes = new Set(['blob', 'cloud', 'aurora-cloud', 'square']);
+  const supportedShapes = new Set(['blob', 'cloud', 'aurora-cloud', 'square', 'codex-pet']);
+  // A static public example catalogue, never the visitor's Codex directory.
+  const catalogue = [
+    { id: 'codex-1efa22ef14f812a00e6bbeaea6ab410bf441085df26fa194bbbaea1c0c18789d',
+      name: 'ikun', version: 2, rows: 11, file: 'assets/demo-ikun.webp' },
+    { id: 'codex-1d0c978a2b7a9598bf8e1b06259ebf75b1ffd4225dedba52f1c893bb95eba007',
+      name: '春野', version: 2, rows: 11, file: 'assets/demo-chunye.webp' }
+  ].map(({ file, ...pet }) => Object.freeze({ ...pet,
+    importedId: pet.id, imageURL: new URL(file, window.location.href).href }));
+  const descriptor = value => value?.shape === 'codex-pet'
+    ? catalogue.find(pet => pet.id === value.codexPetId) || null : null;
+  const validAppearance = value => value && typeof value === 'object' && !Array.isArray(value) &&
+    supportedShapes.has(value.shape) && (value.shape !== 'codex-pet' || Boolean(descriptor(value)));
   const normalize = value => customization.normalizeAppearance({
     ...value, shape: supportedShapes.has(value?.shape) ? value.shape : 'blob'
   });
@@ -19,8 +31,14 @@
   ];
   let appearance = 'light';
   let colorMode = 'standard';
+  let uiTheme = 'blue';
+  let size = 'tiny';
+  const sizeListeners = new Set();
+  const sizes = new Set(['micro', 'tiny', 'compact', 'small', 'medium', 'large']);
   const themeListeners = new Set();
-  const result = () => ({ ok: true, presets: clone(presets) });
+  const result = () => ({ ok: true, presets: clone(presets.map(item => ({
+    ...item, codexPet: descriptor(item.appearance)
+  }))) });
   const fail = error => ({ ok: false, error });
   const validName = name => typeof name === 'string' &&
     !/[\u0000-\u001f\u007f-\u009f]/.test(name) && name.trim().length > 0 && name.trim().length <= 24;
@@ -72,6 +90,21 @@
       }
     });
   }
+  if (window.CodexPetPlayer?.create) {
+    const engine = window.CodexPetPlayer;
+    window.CodexPetPlayer = Object.freeze({ ...engine,
+      create(target, ...args) {
+        const controller = engine.create(target, ...args);
+        if (target?.id !== 'preview-ball') return controller;
+        // Combine the native action pause button with parent/offscreen/reduced-motion pause.
+        const pause = controller.pause.bind(controller);
+        controller.setActive = active => pause(!active);
+        const wrapped = enrollPreview(controller, true);
+        wrapped.pause = value => wrapped.setActive(value !== true);
+        return wrapped;
+      }
+    });
+  }
   reducedMotion?.addEventListener('change', applyMotion);
   window.addEventListener('pagehide', () => {
     reducedMotion?.removeEventListener('change', applyMotion);
@@ -83,15 +116,31 @@
     onColorMode(callback) {
       if (typeof callback !== 'function') return () => {};
       themeListeners.add(callback);
-      queueMicrotask(() => { if (themeListeners.has(callback)) callback(colorMode, appearance); });
+      queueMicrotask(() => { if (themeListeners.has(callback)) callback(colorMode, appearance, uiTheme); });
       return () => themeListeners.delete(callback);
     },
     async load() {
-      return clone({ customization: current, startupAppearance, appearancePresets: presets, size: 'tiny' });
+      return clone({ customization: current, startupAppearance, appearancePresets: result().presets,
+        codexPet: descriptor(current.appearance), size });
+    },
+    async listCodexPets() {
+      return { ok: true, skipped: 0, pets: clone(catalogue) };
+    },
+    async setSize(value) {
+      if (!sizes.has(value)) return false;
+      size = value;
+      for (const callback of sizeListeners) callback(size);
+      return true;
+    },
+    onSize(callback) {
+      if (typeof callback !== 'function') return () => {};
+      sizeListeners.add(callback);
+      return () => sizeListeners.delete(callback);
     },
     async addPreset(name, raw) {
       if (!validName(name)) return fail('请输入 1–24 个字符的名称，勿包含控制字符');
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fail('形象未读取完成，请重试');
+      if (!validAppearance(raw)) return fail('示例宠物暂不可用，请刷新重试');
       const next = normalize(raw);
       const key = customization.appearanceContentKey(next);
       const duplicate = presets.find(item => customization.appearanceContentKey(item.appearance) === key);
@@ -117,16 +166,18 @@
       return result();
     },
     async save(value, setAsStartupDefault) {
+      if (!validAppearance(value?.appearance) || typeof setAsStartupDefault !== 'boolean') return false;
       current = customization.normalizeCustomization(value);
       current.appearance = normalize(current.appearance);
       if (setAsStartupDefault) startupAppearance = clone(current.appearance);
       if (window.parent !== window) window.parent.postMessage({
-        type: 'qiuqiu-demo-avatar', appearance: clone(current.appearance)
+        type: 'qiuqiu-demo-avatar', appearance: clone(current.appearance),
+        codexPet: descriptor(current.appearance) ? clone(descriptor(current.appearance)) : null
       }, window.location.origin);
       return true;
     },
     preview(value) {
-      previewAppearance = normalize(value);
+      if (validAppearance(value)) previewAppearance = normalize(value);
     }
   });
 
@@ -144,6 +195,10 @@
       !['standard', 'accessible'].includes(data.colorMode)) return;
     appearance = data.appearance;
     colorMode = data.colorMode;
-    for (const callback of themeListeners) callback(colorMode, appearance);
+    if (['green', 'blue'].includes(data.uiTheme)) uiTheme = data.uiTheme;
+    for (const callback of themeListeners) callback(colorMode, appearance, uiTheme);
+  });
+  window.document?.addEventListener('DOMContentLoaded', () => {
+    if (window.parent !== window) window.parent.postMessage({ type: 'qiuqiu-demo-ready' }, window.location.origin);
   });
 })();

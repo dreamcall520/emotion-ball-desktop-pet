@@ -4,16 +4,18 @@
   if (!root) return;
   function render() {
     root.querySelectorAll('[data-ap-theme]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.apTheme === root.dataset.uiTheme)));
-    root.querySelectorAll('[data-ap-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.apMode === root.dataset.mode)));
     root.querySelectorAll('[data-ap-look]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.apLook === root.dataset.look)));
+    root.querySelector('[data-ap-contrast]').checked = root.dataset.mode === 'accessible';
   }
   root.addEventListener('click', event => {
     const button = event.target.closest('button');
     if (!button || !root.contains(button)) return;
     if (button.dataset.apTheme) root.dataset.uiTheme = button.dataset.apTheme;
-    if (button.dataset.apMode) root.dataset.mode = button.dataset.apMode;
     if (button.dataset.apLook) root.dataset.look = button.dataset.apLook;
     render();
+  });
+  root.addEventListener('change', event => {
+    if (event.target.matches('[data-ap-contrast]')) root.dataset.mode = event.target.checked ? 'accessible' : 'standard';
   });
   render();
 })();

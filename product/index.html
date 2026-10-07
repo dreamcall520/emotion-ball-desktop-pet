@@ -45,7 +45,7 @@
     <link rel="stylesheet" href="../review-refinements.css?v=20261006-type">
     <link rel="stylesheet" href="../native-demos.css?v=20261006-both-edges-floor">
     <link rel="stylesheet" href="../image-preview.css?v=20261006">
-    <link rel="stylesheet" href="../product-layout.css?v=20261007-blue">
+    <link rel="stylesheet" href="../product-layout.css?v=20261007-customize">
     <title>球球桌宠 · 功能介绍</title>
   </head>
   <body class="product-redesign">
@@ -233,20 +233,26 @@
 
         </div>
         <div class="chat-demo-wrap">
-          <iframe class="native-demo native-chat" src="../demos/chat/index.html?v=20261007-blue" title="0.4.00 聊天交互演示" data-app-demo data-demo="chat" height="520" loading="lazy"></iframe>
+          <iframe class="native-demo native-chat" src="../demos/chat/index.html?v=20261007-customize" title="0.4.00 聊天交互演示" data-app-demo data-demo="chat" height="520" loading="lazy"></iframe>
         </div>
       </section>
 
       <section class="customize-section section" id="customize" aria-labelledby="customize-title">
         <div class="section-heading">
           <h2 id="customize-title">来定制球球</h2>
-          <p class="section-lead">把喜欢的 Codex 宠物，带到桌面上。</p>
-          <p class="section-note">直接选择本机 Codex 自定义宠物，预览待机、挥手、跳跃等 9 类动作。保存后应用到桌面，并同步聊天头像。</p>
-          <p class="section-note">也可以调整球球的形态与配色，收藏自己的搭配。下方可直接体验。</p>
-
+          <div class="customize-options">
+            <div>
+              <h3>定制球球的模样</h3>
+              <p>经典、云朵、幻彩、方糖，选一个起点；调整配色与细节，收藏自己的搭配。</p>
+            </div>
+            <div>
+              <h3>用上你的 Codex 宠物</h3>
+              <p>直接选择本机 Codex 自定义宠物，预览 9 类动作。保存后应用到桌面，并同步聊天头像。</p>
+            </div>
+          </div>
         </div>
         <div class="native-custom-wrap">
-          <iframe class="native-demo native-customize" src="../demos/customize/index.html?v=20261007-blue" title="0.4.00 定制球球交互演示" data-app-demo data-demo="customize" height="700" loading="lazy"></iframe>
+          <iframe class="native-demo native-customize" src="../demos/customize/index.html?v=20261007-customize" title="球球与 Codex 宠物定制演示" data-app-demo data-demo="customize" height="700" loading="lazy"></iframe>
         </div>
       </section>
 
@@ -259,22 +265,21 @@
         </div>
         <div class="ap-demo" data-appearance-demo data-mode="standard" data-look="light" data-ui-theme="blue">
           <div class="ap-controls">
-            <div role="group" aria-label="演示界面主题色" class="ap-switch">
+            <div role="group" aria-label="演示界面主题色" class="ap-switch ap-theme">
+              <span class="ap-control-label" aria-hidden="true">主题</span>
               <button type="button" data-ap-theme="blue" aria-pressed="true">晴空蓝</button>
               <button type="button" data-ap-theme="green" aria-pressed="false">薄荷绿</button>
             </div>
-            <div role="group" aria-label="演示界面配色" class="ap-switch">
-              <button type="button" data-ap-mode="standard" aria-pressed="true">标准配色</button>
-              <button type="button" data-ap-mode="accessible" aria-pressed="false">色弱友好（高对比）</button>
-            </div>
-            <div role="group" aria-label="演示界面外观" class="ap-switch">
+            <div role="group" aria-label="演示界面外观" class="ap-switch ap-look">
+              <span class="ap-control-label" aria-hidden="true">外观</span>
               <button type="button" data-ap-look="light" aria-pressed="true">浅色</button>
               <button type="button" data-ap-look="dark" aria-pressed="false">深色</button>
               <button type="button" data-ap-look="system" aria-pressed="false">跟随系统</button>
             </div>
+            <label class="ap-contrast"><input type="checkbox" data-ap-contrast>色弱友好 · 高对比</label>
           </div>
           <div class="ap-preview native-appearance-preview">
-            <iframe class="native-demo native-chat" src="../demos/chat/index.html?v=20261007-blue" title="新版聊天标准与色弱配色演示" data-app-demo data-demo="chat" data-demo-appearance height="520" loading="lazy"></iframe>
+            <iframe class="native-demo native-chat" src="../demos/chat/index.html?v=20261007-customize" title="新版聊天标准与色弱配色演示" data-app-demo data-demo="chat" data-demo-appearance height="520" loading="lazy"></iframe>
             <details class="product-details secondary-demo"><summary>查看额度与趋势界面</summary><iframe class="native-demo native-quota" src="../demos/quota/index.html?v=20261007-blue&appearanceDemo=1" title="新版额度卡标准与色弱配色演示" data-app-demo data-demo="quota" data-demo-appearance height="740" loading="lazy"></iframe></details>
           </div>
         </div>
@@ -414,9 +419,9 @@
     <script src="../assets/motion/dialogue-v5.js"></script>
     <script src="../app.js?v=20260928-release"></script>
     <script src="../motion-showcase.js?v=20261006-task"></script>
-    <script src="../appearance-showcase.js?v=20261007-blue"></script>
+    <script src="../appearance-showcase.js?v=20261007-customize"></script>
     <script src="../demos/notes/embed.js?v=20261007-blue"></script>
-    <script src="../demo-embed.js?v=20261007-blue"></script>
+    <script src="../demo-embed.js?v=20261007-customize"></script>
     <script src="../image-preview.js?v=20261006"></script>
     <script src="../analytics.js?v=20260924-1" data-website-id="fe855bb0-9000-49aa-820b-baa55887bd11"></script>
   </body>

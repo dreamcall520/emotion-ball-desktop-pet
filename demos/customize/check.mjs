@@ -29,12 +29,12 @@ function createDemo() {
     setActive(value) { this.active = value; },
     destroy() { this.destroyed = true; this.setActive(false); } });
   const parent = { postMessage: (value, targetOrigin) => messages.push({ value, targetOrigin }) };
-  const window = { parent, location: { origin: 'https://qiuqiu.example' },
+  const window = { parent, location: { origin: 'https://qiuqiu.example', href: 'https://qiuqiu.example/demos/customize/' },
     matchMedia: () => reducedMotion,
     EmotionBall: { create: makeController },
     AuroraRive: Object.freeze({ create: makeController }),
     addEventListener: (name, callback) => listeners.set(name, callback) };
-  const context = vm.createContext({ window, crypto: { randomUUID }, queueMicrotask });
+  const context = vm.createContext({ window, URL, crypto: { randomUUID }, queueMicrotask });
   vm.runInContext(customizationSource, context);
   vm.runInContext(bridgeSource, context);
   return { bridge: window.petCustomizer, window, parent, messages, listeners, reducedMotion };

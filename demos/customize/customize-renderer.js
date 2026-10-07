@@ -18,6 +18,9 @@
   let state = PetCustomization.normalizeCustomization();
   let startupAppearance = PetCustomization.normalizeAppearance();
   let ball = null;
+  let codexPlayer = null, pets = [], petReadFlight = 0, petPaused = false;
+  const codexDescriptors = new Map();
+  let lastBallAppearance = PetCustomization.normalizeAppearance();
   let auroraPreview = null;
   let displayedAurora = null;
   let petSize = 'tiny';
@@ -105,7 +108,7 @@
     target.replaceChildren();
     $('shape-hint').textContent = shapeNames.some(([id]) => id === state.appearance.shape)
       ? '点选一个起点，再按喜好调整'
-      : '当前保留旧版形态，选择以上任一形态即可替换';
+      : state.appearance.shape === 'codex-pet' ? '选择一个球球形态后可调整' : '当前保留旧版形态，选择以上任一形态即可替换';
     const visibleShapes = shapeNames;
     target.style.setProperty('--shape-count', visibleShapes.length);
     for (const [id, label, contour = 'original'] of visibleShapes) {
@@ -174,12 +177,14 @@
 
   function renderAuroraVisibility() {
     const visible = state.appearance.shape === 'aurora-cloud';
-    $('manual-toggle').disabled = visible;
-    $('manual-hint').textContent = visible
+    const codex = state.appearance.shape === 'codex-pet';
+    $('manual-toggle').disabled = visible || codex;
+    $('manual-hint').textContent = codex ? '选择球球形态后，可调整轮廓与五官' : visible
       ? '为了保持完整的动效体验，暂不支持轮廓与五官微调'
       : '让轮廓与五官长成你喜欢的样子';
-    showManual(visible ? false : !$('manual-controls').hidden);
+    showManual(visible || codex ? false : !$('manual-controls').hidden);
     renderSliders();
+    for (const id of Object.keys(rangeLimits)) if (id !== 'aurora-transparency') $(id).disabled = !canSave || visible || codex;
     $('aurora-style-field').hidden = !visible;
     for (const style of ['dimensional', 'simple']) {
       $('aurora-style-' + style).setAttribute('aria-pressed', String(state.appearance.auroraStyle === style));
@@ -196,6 +201,9 @@
 
   function changeColor(key, value, keepPickerHsv = false) {
     if (!canSave || disposed) return false;
+    if (state.appearance.shape === 'codex-pet') {
+      state.appearance = { ...lastBallAppearance }; renderAuroraVisibility();
+    }
     const parsed = parseHex(value);
     if (!parsed) return false;
     state.appearance[key] = parsed;
@@ -219,8 +227,8 @@
     return '#' + rgb.map(value => Math.round((value + m) * 255).toString(16).padStart(2, '0')).join('').toUpperCase();
   }
 
-  function paintRange(id) {
-    const input = $(id), [min, max] = rangeLimits[id];
+  function paintRange(id, limits = rangeLimits[id]) {
+    const input = $(id), [min, max] = limits;
     const fill = Math.max(0, Math.min(100, (Number(input.value) - min) / (max - min) * 100));
     input.style.setProperty('--range-fill', fill + '%');
   }
@@ -295,7 +303,7 @@
       for (const button of $(id).children) button.disabled = !enabled;
     }
     for (const [, id] of colorBindings) $(id).disabled = !enabled;
-    for (const id of Object.keys(rangeLimits)) $(id).disabled = !enabled || (id !== 'aurora-transparency' && state.appearance.shape === 'aurora-cloud');
+    for (const id of Object.keys(rangeLimits)) $(id).disabled = !enabled || (id !== 'aurora-transparency' && ['aurora-cloud', 'codex-pet'].includes(state.appearance.shape));
     for (const button of $('shape-options').children) button.disabled = !enabled;
     for (const id of ['reset-appearance', 'aurora-style-dimensional', 'aurora-style-simple', 'aurora-reference', 'reset-manual']) $(id).disabled = !enabled;
     $('startup-default').disabled = !enabled;
@@ -394,6 +402,7 @@
     if (Math.abs(anchor.top - pickerAnchor.top) > .5 || Math.abs(anchor.left - pickerAnchor.left) > .5) closeColorPicker(false);
   });
   window.addEventListener('resize', positionColorPicker);
+  window.addEventListener('resize', schedulePreview);
   setColorControlsEnabled(false);
 
   function syncPresetThumbnail(record) {
@@ -404,7 +413,7 @@
     if (record.controller) return;
     record.controller = window.PetChatAvatar.create(record.target);
     record.controller.setActive(false);
-    record.controller.update(record.appearance);
+    record.controller.update(record.appearance, null, codexDescriptors.get(record.appearance.codexPetId));
     record.target.dataset.avatarAppearance = JSON.stringify(record.appearance);
   }
 
@@ -478,7 +487,7 @@
         selectedPresetId = preset.id;
         $('startup-default').checked = matchesStartup();
         syncAppearance(); markPresetSelection();
-        announce('已载入预览');
+        announce('已载入预览，保存外观后应用到桌面');
       });
       row.appendChild(load);
       for (const [action, label] of [['rename', '改名'], ['delete', '删除']]) {
@@ -505,6 +514,7 @@
   }
 
   function validateDraftColors() {
+    if (state.appearance.shape === 'codex-pet') return true;
     const colorFields = [['body-hex', 'bodyColor'], ['eye-hex', 'eyeColor']];
     if (state.appearance.shape === 'aurora-cloud' && state.appearance.auroraStyle === 'dimensional') colorFields.push(
       ['glow-pink-hex', 'glowPinkColor'], ['glow-gold-hex', 'glowGoldColor']);
@@ -540,6 +550,7 @@
         else { $('preset-error').textContent = message; $('preset-error').hidden = false; }
         return;
       }
+      for (const item of result.presets || []) if (item.codexPet) codexDescriptors.set(item.codexPet.id, item.codexPet);
       appearancePresets = result.presets.map(item => ({ id: item.id, name: item.name, appearance: PetCustomization.normalizeAppearance(item.appearance) }));
       if (action === 'add') selectedPresetId = appearancePresets.find(item => item.name === name.trim())?.id || null;
       if (action === 'delete' && selectedPresetId === id) selectedPresetId = null;
@@ -579,6 +590,8 @@
     if (disposed || document.hidden) return;
     if (canPreview) bridge.preview?.(state.appearance);
     const target = $('preview-ball');
+    codexPlayer?.destroy(); codexPlayer = null;
+    syncCandidate();
     const appearanceKey = JSON.stringify(PetCustomization.normalizeAppearance(state.appearance));
     const heldCanvas = displayedAurora && target.querySelector?.(':scope > .eb-rive-aurora.ready');
     const heldFilter = displayedAurora && target.querySelector?.(':scope > .eb-rive-eye-filter');
@@ -592,6 +605,20 @@
     $('preview-size-label').textContent = previewMode === 'desktop'
       ? '桌面实际尺寸 · ' + pixels + ' × ' + pixels + ' px' : '大图预览';
     $('preview-status').textContent = motionPreference?.matches ? '减少动态已开启' : '眨眼与呼吸动效保留';
+    if (state.appearance.shape === 'codex-pet') {
+      auroraPreview?.destroy(); displayedAurora?.destroy(); auroraPreview = displayedAurora = null;
+      ball = null;
+      const descriptor = codexDescriptors.get(state.appearance.codexPetId);
+      if (!descriptor) { target.textContent = '宠物暂不可用，请重新读取或选择其他形象'; return; }
+      const petPixels = previewMode === 'desktop' ? pixels : Math.min(300, $('stage').clientHeight - 64, $('stage').clientWidth - 24);
+      target.style.width = petPixels + 'px'; target.style.height = petPixels + 'px';
+      codexPlayer = CodexPetPlayer.create(target, { descriptor, size: petPixels,
+        opacity: 1 - state.appearance.auroraTransparency / 100,
+        onFrame: () => { target.dataset.renderedAppearance = appearanceKey; },
+        onError: () => announce('宠物图片暂不可用，请重新读取后再试') });
+      codexPlayer.setAction($('pet-action').value); codexPlayer.pause(petPaused);
+      return;
+    }
     registerIdle();
     const compact = previewMode === 'desktop' && ['micro', 'tiny', 'compact', 'small'].includes(petSize);
     const eyeBoost = compact && !['cloud', 'aurora-cloud'].includes(state.appearance.shape) ? 1.5 : 1;
@@ -702,6 +729,8 @@
   }
 
   function syncAppearance() {
+    if (state.appearance.shape !== 'codex-pet') lastBallAppearance = PetCustomization.normalizeAppearance(state.appearance);
+    syncCandidate();
     showManual(hasManualAdjustments());
     renderColors();
     renderAuroraVisibility();
@@ -791,10 +820,19 @@
       state = PetCustomization.normalizeCustomization(state);
       const setAsStartupDefault = $('startup-default').checked;
       const saved = await bridge.save(state, setAsStartupDefault);
+      if (saved && state.appearance.shape === 'codex-pet') {
+        const current = await bridge.load();
+        if (current?.customization) {
+          state = PetCustomization.normalizeCustomization(current.customization);
+          if (current.codexPet) codexDescriptors.set(current.codexPet.id, current.codexPet);
+          startupAppearance = PetCustomization.normalizeAppearance(current.startupAppearance);
+          await refreshPets(); schedulePreview();
+        }
+      }
       if (saved && setAsStartupDefault) startupAppearance = PetCustomization.normalizeAppearance(state.appearance);
       announce(saved ? (setAsStartupDefault
-        ? '已保存本页外观'
-        : '已保存本页外观，未设为启动外观') : '保存未完成，请稍后重试');
+        ? '已保存到网页演示，刷新后恢复示例'
+        : '已更换网页演示，启动外观保持') : '保存未完成，请稍后重试');
     } catch (_) {
       announce('保存未完成，请稍后重试');
     } finally {
@@ -812,6 +850,7 @@
     displayedAurora = null;
     ball?.destroy();
     ball = null;
+    codexPlayer?.destroy(); codexPlayer = null;
     $('preview-ball').replaceChildren();
   }
   function refreshMotion() {
@@ -832,18 +871,134 @@
     stopPreview();
     clearTimeout(messageTimer);
     unsubscribeColorMode?.();
+    unsubscribeSize?.();
+    petReadFlight++;
     systemAppearance?.removeEventListener('change', applyTheme);
     motionPreference?.removeEventListener('change', refreshMotion);
     document.removeEventListener?.('visibilitychange', updateVisibility);
   });
 
+
+  function setSource(next) {
+    const codex = next === 'codex';
+    document.body.classList.toggle('codex-source', codex);
+    $('source-ball').setAttribute('aria-pressed', String(!codex));
+    $('source-codex').setAttribute('aria-pressed', String(codex));
+    $('ball-options').hidden = codex; $('codex-panel').hidden = !codex;
+    renderAuroraVisibility();
+  }
+  function syncCandidate() {
+    const codex = state.appearance.shape === 'codex-pet';
+    const descriptor = codexDescriptors.get(state.appearance.codexPetId);
+    $('preview-name').textContent = codex ? (descriptor?.name || '宠物预览') :
+      (shapeNames.find(([shape]) => shape === state.appearance.shape)?.[1] || '球球');
+    $('preview-subtitle').textContent = codex ? '动画预览' : '实时预览';
+    $('reset-appearance').hidden = codex; $('preview-animation').hidden = !codex;
+    $('pet-opacity').value = state.appearance.auroraTransparency;
+    $('pet-opacity-value').textContent = state.appearance.auroraTransparency + '%';
+    paintRange('pet-opacity', [0, 60]);
+    for (const card of $('pet-grid').children) card.setAttribute('aria-pressed', String(codex &&
+      (card.dataset.petId === state.appearance.codexPetId || card.dataset.importedId === state.appearance.codexPetId)));
+  }
+  function renderPets() {
+    $('pet-grid').replaceChildren();
+    const query = $('pet-search').value.trim().toLocaleLowerCase();
+    const visible = pets.filter(pet => pet.name.toLocaleLowerCase().includes(query));
+    $('pet-read-status').textContent = query ? '找到 ' + visible.length + ' 个' : '公开示例 · ' + pets.length;
+    $('pet-filter-status').hidden = !query || visible.length > 0;
+    $('pet-filter-status').textContent = '没有找到匹配的宠物，试试其他名称。';
+    $('pet-grid').dataset.overflow = String(visible.length > 6);
+    for (const pet of visible) {
+      const card = document.createElement('button'); card.type = 'button'; card.className = 'pet-card';
+      card.dataset.petId = pet.id; card.dataset.importedId = pet.importedId || pet.id;
+      card.title = pet.name + (pet.imported ? ' · 已导入' : ''); card.setAttribute('aria-label', '选择 ' + pet.name);
+      const sprite = document.createElement('span'); sprite.className = 'pet-sprite'; sprite.setAttribute('aria-hidden', 'true');
+      sprite.style.setProperty('--sprite', 'url(' + JSON.stringify(pet.imageURL) + ')'); sprite.style.setProperty('--rows', pet.rows);
+      const name = document.createElement('span'); name.className = 'pet-name'; name.textContent = pet.name;
+      const mark = document.createElement('span'); mark.className = 'selection-mark'; mark.textContent = '✓'; mark.setAttribute('aria-hidden', 'true');
+      card.append(sprite, name, mark); card.addEventListener('click', () => {
+        if (!canSave) return;
+        if (state.appearance.shape !== 'codex-pet') lastBallAppearance = PetCustomization.normalizeAppearance(state.appearance);
+        state.appearance = PetCustomization.normalizeAppearance({ shape: 'codex-pet', codexPetId: pet.id });
+        $('startup-default').checked = matchesStartup(); renderAuroraVisibility(); syncCandidate(); schedulePreview();
+      });
+      $('pet-grid').append(card);
+    }
+    syncCandidate();
+  }
+  async function refreshPets() {
+    const revision = ++petReadFlight;
+    $('refresh-pets').disabled = true;
+    $('pet-read-status').textContent = '正在加载公开示例…';
+    $('pet-read-state').hidden = false; $('pet-read-state').textContent = '正在加载 Codex 宠物示例…';
+    $('pet-grid').hidden = true; $('pet-search-field').hidden = true; $('pet-settings').hidden = true;
+    try {
+      const result = await bridge.listCodexPets?.();
+      if (disposed || revision !== petReadFlight) return;
+      if (!result?.ok || !Array.isArray(result.pets)) throw new Error('pets unavailable');
+      pets = result.pets.filter(pet => CodexPetPlayer.validDescriptor(pet));
+      for (const pet of pets) {
+        codexDescriptors.set(pet.id, pet);
+        if (pet.importedId && !codexDescriptors.has(pet.importedId)) codexDescriptors.set(pet.importedId, { ...pet, id: pet.importedId });
+      }
+      $('pet-read-state').hidden = pets.length > 0;
+      $('pet-read-state').textContent = pets.length ? '' : '暂无可用示例。官网不会读取你的本机宠物。';
+      $('pet-grid').hidden = !pets.length; $('pet-settings').hidden = !pets.length;
+      $('pet-search-field').hidden = pets.length <= 6;
+      $('pet-search').value = ''; renderPets();
+      $('pet-read-status').title = result.skipped ? '已忽略 ' + result.skipped + ' 个暂不支持的宠物' : '';
+    } catch (_) {
+      if (disposed || revision !== petReadFlight) return;
+      $('pet-read-status').textContent = '读取暂未完成';
+      $('pet-read-state').hidden = false;
+      $('pet-read-state').textContent = '暂时无法加载示例，请点击刷新重试。';
+    } finally {
+      if (!disposed && revision === petReadFlight) $('refresh-pets').disabled = false;
+    }
+  }
+  const unsubscribeSize = bridge.onSize?.(size => {
+    if (disposed || !Object.hasOwn(petPixels, size)) return;
+    petSize = size; $('pet-size').value = size; schedulePreview();
+  });
+  $('source-ball').addEventListener('click', () => setSource('ball'));
+  $('source-codex').addEventListener('click', () => setSource('codex'));
+  $('refresh-pets').addEventListener('click', refreshPets);
+  $('pet-search').addEventListener('input', renderPets);
+  $('pet-size').addEventListener('change', async () => {
+    const requested = $('pet-size').value;
+    $('pet-size').disabled = true;
+    try {
+      if (!await bridge.setSize?.(requested)) throw new Error('size unavailable');
+      petSize = requested; schedulePreview();
+    } catch (_) { $('pet-size').value = petSize; announce('尺寸未保存，请稍后重试'); }
+    finally { $('pet-size').disabled = false; }
+  });
+  $('pet-opacity').addEventListener('input', () => {
+    state.appearance.auroraTransparency = Number($('pet-opacity').value);
+    $('pet-opacity-value').textContent = state.appearance.auroraTransparency + '%';
+    paintRange('pet-opacity', [0, 60]);
+    $('startup-default').checked = matchesStartup();
+    if (codexPlayer) codexPlayer.setOpacity(1 - state.appearance.auroraTransparency / 100);
+    else schedulePreview();
+  });
+  $('pet-action').addEventListener('change', () => codexPlayer?.setAction($('pet-action').value));
+  $('pet-play').addEventListener('click', () => {
+    petPaused = !petPaused; codexPlayer?.pause(petPaused);
+    $('pet-play').setAttribute('aria-label', petPaused ? '播放动画' : '暂停动画');
+    $('pet-play').textContent = petPaused ? '▷' : 'Ⅱ';
+  });
+  setSource('ball'); void refreshPets();
+
   bridge.load().then(value => {
     if (disposed) return;
     if (!value) throw new Error('customization unavailable');
+    if (value.codexPet) codexDescriptors.set(value.codexPet.id, value.codexPet);
+    for (const item of value.appearancePresets || []) if (item.codexPet) codexDescriptors.set(item.codexPet.id, item.codexPet);
     appearancePresets = Array.isArray(value.appearancePresets) ? value.appearancePresets.map(item => ({ id: item.id, name: item.name, appearance: PetCustomization.normalizeAppearance(item.appearance) })) : [];
     if (value?.customization) {
       state = PetCustomization.normalizeCustomization(value.customization);
       petSize = value.size || 'tiny';
+      $('pet-size').value = petSize;
       startupAppearance = PetCustomization.normalizeAppearance(value.startupAppearance || state.appearance);
       $('startup-default').checked = matchesStartup();
     } else if (value) state = PetCustomization.normalizeCustomization(value);
@@ -858,7 +1013,7 @@
   }).catch(() => {
     if (disposed) return;
     syncAppearance();
-    announce('读取设置失败，请重新打开定制窗口');
+    announce('读取演示失败，请刷新页面');
     window.__customizerReady = true;
   });
 })();

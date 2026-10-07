@@ -1,6 +1,6 @@
 {
-  "publicCommit": "7f5c291d34512f629c17275c93bed472f421e8b9",
-  "publicVersion": "0.4.00",
+  "publicCommit": "eac7a8d12bd425fb98f005828ab80afabe18ca0b",
+  "publicVersion": "0.4.03",
   "files": [
     {
       "file": "customize.css",
@@ -19,8 +19,8 @@
     {
       "file": "lib/customization.js",
       "source": "desktop-pet/lib/customization.js",
-      "sourceSha256": "bf79dd95b241c3a5f4f83b1a1215f13061c47805392d1829699ea92f431a2b55",
-      "sha256": "bf79dd95b241c3a5f4f83b1a1215f13061c47805392d1829699ea92f431a2b55",
+      "sourceSha256": "7362471008d3db5e281c78f8607f2488b2d402874819d96ea83f3e198a0e3569",
+      "sha256": "7362471008d3db5e281c78f8607f2488b2d402874819d96ea83f3e198a0e3569",
       "adaptation": null
     },
     {
@@ -47,8 +47,8 @@
     {
       "file": "lib/chat-avatar.js",
       "source": "desktop-pet/lib/chat-avatar.js",
-      "sourceSha256": "7a1794f12cd589a0602b6db8ffa23aa326842e0d620c58239522d0a1487eb138",
-      "sha256": "7a1794f12cd589a0602b6db8ffa23aa326842e0d620c58239522d0a1487eb138",
+      "sourceSha256": "6d95a47fdb268a30ee0c2f31cf94fd19d5ea7cac5fed5e159a4aad55cec316f6",
+      "sha256": "6d95a47fdb268a30ee0c2f31cf94fd19d5ea7cac5fed5e159a4aad55cec316f6",
       "adaptation": null
     },
     {
@@ -75,16 +75,16 @@
     {
       "file": "index.html",
       "source": "desktop-pet/customize.html",
-      "sourceSha256": "0a7ce20224e25b2bdba049bb19057c8b6a70be21c71dac8aa4bc10df0c10d498",
-      "sha256": "154cac9de367556f63fad9b8f4d86959cda94a819701ad8716c454742c3181c9",
-      "adaptation": "Dependency URLs, public favicon, browser bridge and narrow-screen stylesheet only; DOM retained."
+      "sourceSha256": "5b665e095cfc68db8d330407d1146c48bcd0ac03561f7d288f35644fd5a62e0a",
+      "sha256": "ce06d543bcfbb5f2aded58e1119a4e4f7f27f21431edf8b6ade8d06ea6fe576b",
+      "adaptation": "Native DOM retained; website dependency URLs, public favicon, browser IPC bridge, blue palette, responsive stylesheet, static example note and explicit memory-only feedback."
     },
     {
       "file": "customize-renderer.js",
       "source": "desktop-pet/customize-renderer.js",
-      "sourceSha256": "188bbb43166916be05906855f2eb67994dbfa59c6051c6da4c4deee68839681e",
-      "sha256": "baebdf4768cb866a6ee7bddb8461a5659275f2c62a491d645031a3d201b043c8",
-      "adaptation": "Three feedback strings describe the isolated browser preview; interaction logic unchanged."
+      "sourceSha256": "fb225786c4d133d073f6aa8ac859c10fee12a6014aff3ad12ea0e94f4e09f9d5",
+      "sha256": "877b17a4f3f6e9f8f6cfc77616a608b6659a86806a8e10bdcc2553e974056290",
+      "adaptation": "Public native renderer; eight feedback strings name the public sample catalogue and isolated browser save/reset boundary."
     },
     {
       "file": "../../assets/vendor/emotion-ball/rings.js",
@@ -120,6 +120,92 @@
       "sourceSha256": "fb1131c1d752dfeb2f5a109b659918288f55b8a0e8b3eca1fbc93c724f623961",
       "sha256": "fb1131c1d752dfeb2f5a109b659918288f55b8a0e8b3eca1fbc93c724f623961",
       "adaptation": null
+    },
+    {
+      "file": "codex-pets.css",
+      "source": "desktop-pet/codex-pets.css",
+      "sourceSha256": "6f0daf01478dc53bdce6333aba9fc51a46923f51e0bec61c4e925c4a8b8325ea",
+      "sha256": "6f0daf01478dc53bdce6333aba9fc51a46923f51e0bec61c4e925c4a8b8325ea",
+      "adaptation": null
+    },
+    {
+      "file": "color-mode.css",
+      "source": "desktop-pet/color-mode.css",
+      "sourceSha256": "5790334d100c05602f9e823b6a9f82ccee84488686a838cf4a316c83efd65d2e",
+      "sha256": "5790334d100c05602f9e823b6a9f82ccee84488686a838cf4a316c83efd65d2e",
+      "adaptation": null
+    },
+    {
+      "file": "color-mode.js",
+      "source": "desktop-pet/color-mode.js",
+      "sourceSha256": "3b63526ba85a5c09c59ac6160367190e6d0bcf81609f82b8335b9a4a84d3a5dd",
+      "sha256": "3b63526ba85a5c09c59ac6160367190e6d0bcf81609f82b8335b9a4a84d3a5dd",
+      "adaptation": null
+    },
+    {
+      "file": "customize-blue.css",
+      "source": "desktop-pet/customize-blue.css",
+      "sourceSha256": "f1ad2921f407b94c13c28d8e6b1bd444d7bf0658f43ac16ff07fdd072081cc8e",
+      "sha256": "f1ad2921f407b94c13c28d8e6b1bd444d7bf0658f43ac16ff07fdd072081cc8e",
+      "adaptation": null
+    },
+    {
+      "file": "lib/codex-pet-player.js",
+      "source": "desktop-pet/lib/codex-pet-player.js",
+      "sourceSha256": "1a81b00439526a29189dee362ef4874dc8a48ab5cc8353678c0d62f6bef0e77b",
+      "sha256": "e31ce438269143eb148e475a5e0243f85f2a25d9a8a0b5c7d1369eae2f396517",
+      "adaptation": "Native timing/rendering unchanged; reviewed same-origin public sample image URLs replace the App file/data URL contract in browser documents."
+    },
+    {
+      "file": "../chat/lib/customization.js",
+      "source": "desktop-pet/lib/customization.js",
+      "sourceSha256": "7362471008d3db5e281c78f8607f2488b2d402874819d96ea83f3e198a0e3569",
+      "sha256": "7362471008d3db5e281c78f8607f2488b2d402874819d96ea83f3e198a0e3569",
+      "adaptation": null
+    },
+    {
+      "file": "../chat/lib/chat-avatar.js",
+      "source": "desktop-pet/lib/chat-avatar.js",
+      "sourceSha256": "6d95a47fdb268a30ee0c2f31cf94fd19d5ea7cac5fed5e159a4aad55cec316f6",
+      "sha256": "6d95a47fdb268a30ee0c2f31cf94fd19d5ea7cac5fed5e159a4aad55cec316f6",
+      "adaptation": null
     }
-  ]
+  ],
+  "websiteFiles": [
+    {
+      "file": "browser-bridge.js",
+      "sha256": "e9bc7f6bfaae2e3a7e6ff766b806c20084aa7f095264ac562d2343214c0692f7",
+      "purpose": "In-memory examples, presets, save-only parent avatar messages, same-origin/source checks, size/theme/pause lifecycle."
+    },
+    {
+      "file": "web-adapter.css",
+      "sha256": "5e317a97755102f808726a596ba481726cc581daf23f1107524588e3ad00eccb",
+      "purpose": "Narrow-screen stacking of the unchanged native panes."
+    }
+  ],
+  "demoPetCatalog": [
+    {
+      "id": "codex-1efa22ef14f812a00e6bbeaea6ab410bf441085df26fa194bbbaea1c0c18789d",
+      "name": "ikun",
+      "file": "assets/demo-ikun.webp",
+      "version": 2,
+      "rows": 11,
+      "width": 1536,
+      "height": 2288,
+      "bytes": 3089404,
+      "sha256": "1efa22ef14f812a00e6bbeaea6ab410bf441085df26fa194bbbaea1c0c18789d"
+    },
+    {
+      "id": "codex-1d0c978a2b7a9598bf8e1b06259ebf75b1ffd4225dedba52f1c893bb95eba007",
+      "name": "春野",
+      "file": "assets/demo-chunye.webp",
+      "version": 2,
+      "rows": 11,
+      "width": 1536,
+      "height": 2288,
+      "bytes": 1635956,
+      "sha256": "1d0c978a2b7a9598bf8e1b06259ebf75b1ffd4225dedba52f1c893bb95eba007"
+    }
+  ],
+  "scope": "Native customizer and chat avatar support from the published main snapshot; the user-selected example sprites are documented separately by the website maintainer. No visitor directory access or App writes."
 }

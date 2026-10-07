@@ -71,10 +71,17 @@ assert.equal(lastTheme().targetOrigin, origin);
 
 // Controls expose the active theme independently of appearance and contrast.
 const button = value => ({ dataset: { apTheme: value }, setAttribute(name, value) { this[name] = value; } });
-const buttons = [button('blue'), button('green')], controls = { dataset: { uiTheme: 'blue', look: 'light', mode: 'standard' }, contains: value => buttons.includes(value), querySelectorAll: selector => selector === '[data-ap-theme]' ? buttons : [], addEventListener: (name, fn) => { handlers[name] = fn; } };
+const contrast = { checked: false, matches: selector => selector === '[data-ap-contrast]' };
+const buttons = [button('blue'), button('green')], controls = { dataset: { uiTheme: 'blue', look: 'light', mode: 'standard' }, contains: value => buttons.includes(value), querySelector: () => contrast, querySelectorAll: selector => selector === '[data-ap-theme]' ? buttons : [], addEventListener: (name, fn) => { handlers[name] = fn; } };
 vm.runInNewContext(read('appearance-showcase.js'), { document: { querySelector: () => controls } });
 assert.equal(buttons[0]['aria-pressed'], 'true');
 handlers.click({ target: { closest: () => buttons[1] } });
 assert.equal(buttons[1]['aria-pressed'], 'true');
 assert.deepEqual(controls.dataset, { uiTheme: 'green', look: 'light', mode: 'standard' });
+contrast.checked = true;
+handlers.change({ target: contrast });
+assert.deepEqual(controls.dataset, { uiTheme: 'green', look: 'light', mode: 'accessible' });
+contrast.checked = false;
+handlers.change({ target: contrast });
+assert.equal(controls.dataset.mode, 'standard');
 console.log('PASS: published palette hashes, trusted theme changes, nested reload sync and independent controls.');

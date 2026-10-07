@@ -7,7 +7,7 @@
       "source": "desktop-pet/chat.html",
       "target": "index.html",
       "sha256": "b06a3ebed1d0ef39e8ac79d97be1297de2ee10c1afb91363fe01e57982877ae8",
-      "embeddedSha256": "ef8116d009783cd18923f7a52687e2318648cb69b114651505af1d2f71090f8f"
+      "embeddedSha256": "6cd1eca7d958b3bac53584cf33d52a7909f4166d55c2595acb4ef9606692b292"
     },
     {
       "source": "desktop-pet/chat.css",
@@ -19,7 +19,7 @@
       "source": "desktop-pet/chat-renderer.js",
       "target": "chat-renderer.js",
       "sha256": "b4184fec3ebe0a3f8f1474d081382532bcaa4479e2b84014f5cbe34c07eaee73",
-      "embeddedSha256": "ad617d17ff1ffae9c2b8ba0897b737587168ae634bf4e0f77c4e38842bdcc928"
+      "embeddedSha256": "512064642ea3fbef351f5322f189013a7e3e2f859f59cccb20f5d3f56ed622b4"
     },
     {
       "source": "desktop-pet/color-mode.css",
@@ -42,14 +42,18 @@
     {
       "source": "desktop-pet/lib/customization.js",
       "target": "lib/customization.js",
-      "sha256": "bf79dd95b241c3a5f4f83b1a1215f13061c47805392d1829699ea92f431a2b55",
-      "embeddedSha256": "bf79dd95b241c3a5f4f83b1a1215f13061c47805392d1829699ea92f431a2b55"
+      "sha256": "7362471008d3db5e281c78f8607f2488b2d402874819d96ea83f3e198a0e3569",
+      "embeddedSha256": "7362471008d3db5e281c78f8607f2488b2d402874819d96ea83f3e198a0e3569",
+      "commit": "eac7a8d12bd425fb98f005828ab80afabe18ca0b",
+      "version": "0.4.03"
     },
     {
       "source": "desktop-pet/lib/chat-avatar.js",
       "target": "lib/chat-avatar.js",
-      "sha256": "7a1794f12cd589a0602b6db8ffa23aa326842e0d620c58239522d0a1487eb138",
-      "embeddedSha256": "7a1794f12cd589a0602b6db8ffa23aa326842e0d620c58239522d0a1487eb138"
+      "sha256": "6d95a47fdb268a30ee0c2f31cf94fd19d5ea7cac5fed5e159a4aad55cec316f6",
+      "embeddedSha256": "6d95a47fdb268a30ee0c2f31cf94fd19d5ea7cac5fed5e159a4aad55cec316f6",
+      "commit": "eac7a8d12bd425fb98f005828ab80afabe18ca0b",
+      "version": "0.4.03"
     },
     {
       "source": "desktop-pet/lib/rive.js",
@@ -116,7 +120,8 @@
     "HTML changes relative engine paths, inserts the in-memory demo bridge and cache query tags.",
     "The iframe adapter adds 2px padding to preserve all native 15px panel border corners; no App CSS changes.",
     "The empty privacy-note node remains for renderer history toggles but is permanently hidden by the website adapter; close/reopen copy is concise.",
-    "Avatar activity includes parent pause state; all other renderer logic unchanged."
+    "Avatar activity includes parent pause state. The onAppearance callback forwards the public 0.4.03 Codex pet descriptor to the shared avatar engine.",
+    "Customization and chat-avatar libraries use public 0.4.03 at eac7a8d12bd425fb98f005828ab80afabe18ca0b. The shared native Codex sprite player is loaded from ../customize/lib/codex-pet-player.js; its source and same-origin URL adaptation are recorded in ../customize/source-manifest.json. The memory bridge accepts only the two fixed website examples."
   ],
   "adapters": [
     {
@@ -129,7 +134,7 @@
     },
     {
       "target": "demo-bridge.js",
-      "sha256": "916b432142be9113588549fbda81625aea41d2a146b747e81b71d27fd3802397"
+      "sha256": "34f3b51e29176269ab08155d99d77336b88cd6e3af9443657b08936c759c5413"
     }
   ]
 }

@@ -17,7 +17,7 @@ assert.match(html, /直接选择本机 Codex 自定义宠物/);
 assert.match(html, /9 类动作/);
 assert.match(html, /保存后应用到桌面，并同步聊天头像/);
 const demoTitles = [...html.matchAll(/<iframe[^>]+title="([^"]+)"/g)].map(m => m[1]);
-assert.equal(demoTitles.filter(title => title.startsWith('0.4.00 ')).length, 5);
+assert.equal(demoTitles.filter(title => title.startsWith('0.4.00 ')).length, 4);
 assert.ok(demoTitles.every(title => !title.includes('0.4.01')));
 const home = fs.readFileSync(path.join(productDir, '../index.html'), 'utf8');
 const homeDownloads = [...home.matchAll(/href="(https:\/\/github\.com\/dreamcall520\/emotion-ball-desktop-pet\/releases\/download\/[^\"]+)"/g)];
