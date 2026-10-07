@@ -315,6 +315,8 @@ function bindCategories(){
 }
 function bind(){
   document.addEventListener('pointerdown',()=>document.documentElement.dataset.inputMode='pointer',true);document.addEventListener('keydown',e=>{if(['Tab','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End'].includes(e.key))document.documentElement.dataset.inputMode='keyboard'},true);
+  const records=$('records');let scrollbarTimer;const showScrollbar=()=>{records.dataset.scrolling='true';clearTimeout(scrollbarTimer);scrollbarTimer=setTimeout(()=>records.dataset.scrolling='false',1000)};
+  for(const event of ['scroll','pointermove','pointerdown','keydown','focusin'])records.addEventListener(event,showScrollbar,{passive:true});unsubscribers.push(()=>clearTimeout(scrollbarTimer));
   $('notes-tab').onclick=()=>{tab='note';filter='all';noteCategoryFilter=null;quickCategory=null;query='';closeFilter();$('search').value='';renderList()};$('todos-tab').onclick=()=>{tab='todo';filter='today';noteCategoryFilter=null;quickCategory=null;query='';closeFilter();$('search').value='';renderList()};$('filter').onchange=()=>selectFilter($('filter').value);
   for(const [trigger,menu] of [['filter','filter-menu'],['category-filter','category-menu']]){$(trigger).onclick=()=>{if(trigger==='category-filter'&&tab!=='note')return;toggleFilter(trigger,menu)};const escape=e=>{if(e.key==='Escape'){e.preventDefault();closeFilter();$(trigger).focus()}};$(trigger).onkeydown=escape;$(menu).onkeydown=escape}
   document.addEventListener('pointerdown',e=>{if(e.target?.closest&&!e.target.closest('.filter-control'))closeFilter()});$('search').oninput=()=>{query=$('search').value;renderList()};

@@ -6,7 +6,7 @@ const vm=require('node:vm');
 const M=require('../lib/notes-model');
 
 function renderer(save,mode='note'){
-  const nodes=new Map();
+  const nodes=new Map(),timers=new Map();let nextTimer=0;
   const make=(tag='div')=>({tag,scrollHeight:24,value:'',textContent:'',hidden:true,disabled:false,open:false,children:[],dataset:{},
     style:{},events:{},attributes:{},classList:{toggle(){}},setAttribute(name,value){this.attributes[name]=String(value)},append(...items){this.children.push(...items)},replaceChildren(...items){this.children=items},
     queries:{},focus(){},select(){},showModal(){this.open=true},close(){this.open=false},querySelector(selector){return this.queries[selector]||(this.queries[selector]=make())},addEventListener(name,fn){this.events[name]=fn}});
@@ -15,9 +15,9 @@ function renderer(save,mode='note'){
   const source=fs.readFileSync(path.join(__dirname,'../notes-renderer.js'),'utf8').replace('start();',
     'window.check={commit,inputNote,flushNote,flushAll,copyNote,beforeClose,acceptState,start,showStorageError,cancelClose,openNoteEditor,openCategoryManager,openNewCategory,openDeleteCategory,openMoveCategory,submitQuick,openOrganize,generateOrganized,applyOrganized,closeOrganize,render,state:()=>state,draft:id=>drafts.get(id)};');
   const window={QiuModel:M,qiuNotes:bridge,addEventListener(){}};
-  vm.runInNewContext(source,{window,document,location:{search:`?mode=${mode}&id=n1`},URLSearchParams,setTimeout:()=>1,clearTimeout(){},setInterval:()=>1,clearInterval(){},confirm:()=>false,console});
+  vm.runInNewContext(source,{window,document,location:{search:`?mode=${mode}&id=n1`},URLSearchParams,setTimeout:(fn,delay)=>{const id=++nextTimer;timers.set(id,{fn,delay});return id},clearTimeout:id=>timers.delete(id),setInterval:()=>1,clearInterval(){},confirm:()=>false,console});
   const n=M.newNote('标题','初始内容');n.id='n1';window.check.acceptState({schema:1,revision:0,notes:[n],todos:[]});
-  return {...window.check,clipboard,nodes,bridge,document};
+  return {...window.check,clipboard,nodes,bridge,document,timers};
 }
 const turn=()=>new Promise(resolve=>setImmediate(resolve));
 const menuItem=(r,id,label)=>{const item=r.nodes.get(id).children.find(n=>n.children?.[1]?.textContent===label);assert.ok(item,`${id}: ${label}`);return item};
@@ -87,6 +87,16 @@ test('mouse selection clears the focus ring while keyboard navigation retains a 
   pointer();assert.equal(r.document.documentElement.dataset.inputMode,'pointer');
   key({key:'a'});assert.equal(r.document.documentElement.dataset.inputMode,'pointer');
   key({key:'ArrowDown'});assert.equal(r.document.documentElement.dataset.inputMode,'keyboard');
+});
+
+test('list scrollbar is visible during interaction and hides after the last activity',async()=>{
+  const r=renderer(async()=>assert.fail('滚动无需保存'));await r.start();const records=r.nodes.get('records');
+  assert.notEqual(records.dataset.scrolling,'true');
+  for(const event of ['scroll','pointermove','pointerdown','keydown','focusin']){
+    records.events[event]();assert.equal(records.dataset.scrolling,'true');assert.equal(r.timers.size,1);
+    const timer=[...r.timers.values()][0];assert.equal(timer.delay,1000);timer.fn();assert.equal(records.dataset.scrolling,'false');
+  }
+  records.events.scroll();const previous=[...r.timers.keys()][0];records.events.scroll();assert.equal(r.timers.has(previous),false);assert.equal(r.timers.size,1);
 });
 
 test('corrupt-data actions distinguish cancel, failure and successful export/reset',async()=>{

@@ -231,8 +231,13 @@
   box-shadow: none;
 }
 
-:root[data-color-mode="accessible"][data-ui-window="customize"] .stage {
-  border-color: var(--accessible-line);
+/* Decorative containers stay quiet; inputs and selected choices retain contrast. */
+:root[data-color-mode="accessible"][data-ui-window="customize"] :is(.stage, .color-editor, .manual-controls, .shape-option:not([aria-pressed="true"]), .aurora-style-options button:not([aria-pressed="true"])) {
+  border-color: var(--accessible-divider);
+}
+
+:root[data-color-mode="accessible"][data-ui-window="customize"] .aurora-style-options button[aria-pressed="true"] {
+  border-color: var(--accessible-blue);
 }
 
 :root[data-color-mode="accessible"][data-ui-window="customize"] .toast {

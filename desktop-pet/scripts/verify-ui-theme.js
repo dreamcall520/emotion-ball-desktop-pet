@@ -290,6 +290,15 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
       for (const pseudo of composer) { assert.equal(pseudo.backgroundImage, 'none', `高对比输入区 ${pseudo.pseudo} 无渐变`); assert.equal(pseudo.animationName, 'none', `高对比输入区 ${pseudo.pseudo} 无动画`); }
       assert.equal(shapes.length, 1, '定制窗口有一个选中形态');
       assert.equal(shapes[0].boxShadow, 'none', '选中形态无叠加描边阴影');
+      const customBorders = await page(customWin, `(() => {
+        const border = selector => [...document.querySelectorAll(selector)].map(element => { const style = getComputedStyle(element); return { color: style.borderTopColor, width: style.borderTopWidth }; });
+        return { decorations: border('.stage, .color-editor, .manual-controls, .shape-option:not([aria-pressed="true"]), .aurora-style-options button:not([aria-pressed="true"])'),
+          inputs: border('#body-hex, #eye-hex, .color-trigger'), selected: border('.shape-option[aria-pressed="true"], .aurora-style-options button[aria-pressed="true"]') };
+      })()`);
+      const dividerColor = resolved === 'dark' ? 'rgb(51, 67, 82)' : 'rgb(217, 225, 233)';
+      const panelColor = resolved === 'dark' ? 'rgb(16, 24, 32)' : 'rgb(255, 255, 255)';
+      for (const border of customBorders.decorations) assert.equal(border.color, dividerColor, '定制装饰容器使用轻分界线');
+      for (const border of [...customBorders.inputs, ...customBorders.selected]) assert.ok(contrast(border.color, panelColor) >= 3, '输入控件与选中态保留清晰边界');
       assert.equal(apiBody.accessiblePanel.toLowerCase(), expectedBacking);
       assert.equal(apiBody.background, resolved === 'dark' ? 'rgb(16, 24, 32)' : 'rgb(255, 255, 255)', 'API body 使用当前高对比面板底色');
       chatWin.webContents.focus(); await wait(80);
@@ -313,7 +322,7 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
       await page(panelWin, "document.querySelector('#actions-close').click()");
       const previewSwitch = await page(customWin, `(() => {const selected=document.querySelector('.preview-mode button[aria-pressed="true"]'),buttons=[...document.querySelectorAll('.preview-mode button')],style=getComputedStyle(selected);return {shadow:style.boxShadow,gap:buttons[1].getBoundingClientRect().left-buttons[0].getBoundingClientRect().right,separator:getComputedStyle(buttons[1],'::before').display};})()`);
       assert.equal(previewSwitch.shadow, 'none'); assert.ok(previewSwitch.gap>=6); assert.equal(previewSwitch.separator,'none');
-      accessibility = { texts, backing, selectedTabShadow, composer, shapes, apiBody, mouseFocus, keyboardFocus, actionStyles, closeBorder, previewSwitch };
+      accessibility = { texts, backing, selectedTabShadow, composer, shapes, customBorders, apiBody, mouseFocus, keyboardFocus, actionStyles, closeBorder, previewSwitch };
       if (screenshot) {
         await capture(notes.getWindows().notes[0], `desktop-note-${suffix}`);
         await capture(chatWin, `chat-${suffix}`);
