@@ -31,7 +31,7 @@
   }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .flow-border::before { animation: qiuqiuNavGlint 10s linear infinite; }
+  .flow-border::before { animation: qiuqiuNavGlint 9.09s linear infinite; }
 }
 @keyframes qiuqiuNavGlint { to { --qiuqiu-nav-glint: 1turn; } }
 .motion-paused .flow-border::before { animation-play-state: paused; }
