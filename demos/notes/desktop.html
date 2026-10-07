@@ -1,10 +1,13 @@
 <!doctype html>
-<html lang="zh-CN"><head>
+<html lang="zh-CN" data-ui-theme="blue" data-color-mode="standard"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
 <title>球球 · 便签与待办</title><link rel="stylesheet" href="notes.css"><link rel="stylesheet" href="color-mode.css">
 <script src="../../demo-focus.js"></script>
-<script defer src="lib/notes-model.js"></script><script defer src="demo-bridge.js"></script><script defer src="notes-renderer.js"></script></head><body>
+<script defer src="lib/notes-model.js"></script><script defer src="demo-bridge.js"></script><script defer src="notes-renderer.js"></script>  <link rel="stylesheet" href="notes-blue.css">
+  <link rel="stylesheet" href="../ui-theme-blue.css">
+  <script src="../ui-theme.js?v=20261007-blue"></script>
+</head><body>
 <div id="storage-alert" class="storage-alert" role="alert" hidden></div>
       <div class="panel" id="panel" hidden>
         <header class="panel-header"><h1>便签与待办</h1><div class="header-actions"><button class="icon-button window-front" id="pin-panel" aria-label="主面板保持在最前" aria-description="仅改变主面板的显示层级，不影响便签排序" aria-pressed="false" title="主面板保持在最前，不影响便签排序">窗口置顶</button><button class="icon-button collapse-button" id="hide-panel" aria-label="关闭主面板" title="关闭主面板"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"></path></svg></button></div></header>

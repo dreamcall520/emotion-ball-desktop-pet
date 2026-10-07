@@ -38,15 +38,15 @@
   "embeddedFiles": [
     {
       "file": "panel.html",
-      "sha256": "265ef42d3f094e2251e3bb4a0393214f4bfc998dd4f94fbf2aef926b8f4cf3fd"
+      "sha256": "eb6aced584bdf764d425b1f967ae1a8f8c22840ded9b802e8cdf2318a2176dfd"
     },
     {
       "file": "desktop.html",
-      "sha256": "265ef42d3f094e2251e3bb4a0393214f4bfc998dd4f94fbf2aef926b8f4cf3fd"
+      "sha256": "eb6aced584bdf764d425b1f967ae1a8f8c22840ded9b802e8cdf2318a2176dfd"
     },
     {
       "file": "reminder.html",
-      "sha256": "265ef42d3f094e2251e3bb4a0393214f4bfc998dd4f94fbf2aef926b8f4cf3fd"
+      "sha256": "eb6aced584bdf764d425b1f967ae1a8f8c22840ded9b802e8cdf2318a2176dfd"
     },
     {
       "file": "embed-fragment.html",

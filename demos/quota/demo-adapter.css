@@ -1,4 +1,14 @@
-/* Embedding adapters only; native card and detail styles are unchanged. */
+/* Embedding adapters; manual API appearance is independent of the OS theme. */
+:root[data-demo-window="api-report"][data-appearance="light"] { color-scheme: light; }
+:root[data-demo-window="api-report"][data-appearance="dark"] { color-scheme: dark; }
+:root[data-demo-window="api-report"][data-ui-theme="green"][data-color-mode="standard"][data-appearance="light"] {
+  --panel: #f9f9f7; --text: #292b29; --muted: #797d77; --line: #e4e6df; --surface: #fff;
+  --accent: #476349; --accent-text: #fff; --hover: #e9ece5; --error: #a74732; --error-bg: #fff1eb;
+}
+:root[data-demo-window="api-report"][data-ui-theme="green"][data-color-mode="standard"][data-appearance="dark"] {
+  --panel: #232522; --text: #eeeee9; --muted: #9da399; --line: #3a3e36; --surface: #2b2e28;
+  --accent: #bfd0b5; --accent-text: #202a1d; --hover: #393e34; --error: #f0bba8; --error-bg: #432f28;
+}
 :root[data-demo-paused="true"] #quota-beam::before,
 :root[data-demo-paused="true"] #quota-beam::after { animation-play-state: paused; }
 #connection-settings { display: none; }

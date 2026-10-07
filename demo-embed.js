@@ -15,7 +15,8 @@
     return {
       type: 'qiuqiu-demo-theme',
       appearance: choice === 'light' || choice === 'dark' ? choice : system.matches ? 'dark' : 'light',
-      colorMode: preview?.dataset.mode === 'accessible' ? 'accessible' : 'standard'
+      colorMode: preview?.dataset.mode === 'accessible' ? 'accessible' : 'standard',
+      uiTheme: preview?.dataset.uiTheme === 'green' ? 'green' : 'blue'
     };
   }
   function send(frame, message) { frame.contentWindow?.postMessage(message, location.origin); }
@@ -53,7 +54,7 @@
     }
   });
   const preview = document.querySelector('[data-appearance-demo]');
-  if (preview) new MutationObserver(sync).observe(preview, { attributes: true, attributeFilter: ['data-look', 'data-mode'] });
+  if (preview) new MutationObserver(sync).observe(preview, { attributes: true, attributeFilter: ['data-look', 'data-mode', 'data-ui-theme'] });
   system.addEventListener('change', sync);
   const observer = new IntersectionObserver(entries => entries.forEach(entry => { visible.set(entry.target, entry.isIntersecting); motion(entry.target); }));
   frames.forEach(frame => observer.observe(frame));

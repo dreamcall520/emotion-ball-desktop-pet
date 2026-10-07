@@ -148,9 +148,9 @@ node --test tests/*.test.cjs
 
 ## 当前功能演示
 
-额度、趋势、聊天、定制、便签/待办采用公开 App 0.4.00 `main@7f5c291d34512f629c17275c93bed472f421e8b9` 的真实 HTML、CSS、renderer 和形态引擎，直接嵌入官网。当前演示未接入 0.4.01 的 Codex 宠物导入，继续标注 0.4.00。来源哈希和必要适配见各演示目录 `source-manifest.json`。主介绍不再叠放截图或折叠简化示例；历史截图文件仅作归档。
+额度、趋势、聊天、定制、便签/待办的 HTML、renderer 和形态引擎保留公开 App 0.4.00 `main@7f5c291d34512f629c17275c93bed472f421e8b9` 基线。蓝色覆盖样式逐字节取自公开 0.4.03 `main@eac7a8d12bd425fb98f005828ab80afabe18ca0b`，来源与哈希见 `demos/theme-source-manifest.json`；原界面来源与必要适配见各演示目录 `source-manifest.json`。定制区突出已发布的本机 Codex 自定义宠物、9 类动作预览及桌面/头像同步，网页中的定制器仍只体验球球形态与配色。主介绍不再叠放截图或折叠简化示例；历史截图文件仅作归档。
 
-Electron IPC 替换为本页内存桥接，不连接账户、模型或账单，不修改 App 或用户资料；刷新页面恢复示例。定制保存后同步本页聊天头像，收藏载入仅影响预览。公开六瓣幻彩采用原 Rive 引擎。外层官网沿用浅灰蓝/深灰，普通演示保留 App 薄荷浅色，外观模块可独立切换石墨深色；手机仅适配原控件，不用截图缩放。离屏、页面隐藏、暂停与减少动态均可停止演示动效。嵌入窗口在用户进入前不自动抢焦点，脚本聚焦不滚动官网。
+Electron IPC 替换为本页内存桥接，不连接账户、模型或账单，不修改 App 或用户资料；刷新页面恢复示例。定制保存后同步本页聊天头像，收藏载入仅影响预览。公开六瓣幻彩采用原 Rive 引擎。外层官网沿用浅灰蓝/深灰，普通演示默认晴空蓝和浅色；外观模块可独立切换薄荷绿/晴空蓝、浅色/深色/跟随系统及高对比模式。官网的蓝色默认值不改变 App 新装默认薄荷绿。手机仅适配原控件，不用截图缩放。离屏、页面隐藏、暂停与减少动态均可停止演示动效。嵌入窗口在用户进入前不自动抢焦点，脚本聚焦不滚动官网。功能页使用 `overflow-x:clip`，避免 body 形成额外滚动容器而干扰导航吸顶。
 
 安装区保留三步图示，右侧为 [Apple 官方说明](https://support.apple.com/zh-cn/102445)中的真实 macOS「隐私与安全性」截图，标出「仍要打开」的实际位置；原图来自 [Apple CDN](https://cdsassets.apple.com/live/7WUAS350/images/macos/sequoia/locale/zh-cn/macos-sequoia-system-settings-privacy-and-security-open-app-anyway.png)，未修改、未包含用户个人设置。
 
@@ -164,7 +164,7 @@ Electron IPC 替换为本页内存桥接，不连接账户、模型或账单，�
 - `motion-showcase.js/css`、`assets/motion/`：复用 V5 互动、思绪游光与身体动作；支持离屏暂停、手动点选和减少动态。
 - `demo-embed.js`、`demo-focus.js`、`native-demos.css`：同源嵌入、主题、保存头像、尺寸和暂停联动。
 - `demos/{quota,chat,customize,notes}/`：当前公开 App 界面、内存桥接、来源清单及可运行检查。
-- `appearance-showcase.js/css`：标准/色弱及浅色/深色/系统演示控制。
+- `appearance-showcase.js/css`：薄荷绿/晴空蓝、标准/色弱及浅色/深色/系统演示控制。
 - `chat-showcase.css`、`notes-showcase.css`：官网介绍排版。
 - `assets/vendor/emotion-ball/`：公开球形角色引擎。
 - `assets/screenshots/`：历史图片归档，主介绍不再使用。

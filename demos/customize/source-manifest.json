@@ -76,7 +76,7 @@
       "file": "index.html",
       "source": "desktop-pet/customize.html",
       "sourceSha256": "0a7ce20224e25b2bdba049bb19057c8b6a70be21c71dac8aa4bc10df0c10d498",
-      "sha256": "38c36b313af2601b88a54d6a567933a99c84f42a04a59cb677e43d6af0e20e2e",
+      "sha256": "154cac9de367556f63fad9b8f4d86959cda94a819701ad8716c454742c3181c9",
       "adaptation": "Dependency URLs, public favicon, browser bridge and narrow-screen stylesheet only; DOM retained."
     },
     {

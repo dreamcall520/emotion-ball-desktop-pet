@@ -9,7 +9,7 @@
   const appearanceDemo=new URLSearchParams(location.search).get('appearanceDemo')==='1';
   document.documentElement.dataset.appearanceDemo=String(appearanceDemo);
   const now = Date.now(), day = 86400000;
-  let appearance = 'light', colorMode = 'standard', scenario = 'balanced', cardPeriod = 'dual', expanded = true, apiExpanded = true, action = 'trend', period = 10080, unread = appearanceDemo, apiVisible = false, paused = false, taskState = 'processing';
+  let appearance = 'light', colorMode = 'standard', uiTheme = 'blue', scenario = 'balanced', cardPeriod = 'dual', expanded = true, apiExpanded = true, action = 'trend', period = 10080, unread = appearanceDemo, apiVisible = false, paused = false, taskState = 'processing';
   const report = { month: new Date(now).toISOString().slice(0,7), updatedAt: now, costs: { month: [{currency:'usd',value:32.48}], today: [{currency:'usd',value:1.26}] }, usage: {inputTokens:2840000,cachedInputTokens:1120000,outputTokens:420000,requests:137} };
   function quotaModel() {
     const fast = scenario === 'fast', unknown = scenario === 'unknown';
@@ -27,7 +27,7 @@
   const post = (frame,data) => frame.contentWindow.postMessage(data,location.origin);
   function send(kind) {
     if (!ready.has(kind)) return;
-    post(frames[kind],{type:'qiuqiu-demo-theme',appearance,colorMode});
+    post(frames[kind],{type:'qiuqiu-demo-theme',appearance,colorMode,uiTheme});
     post(frames[kind],{type:'qiuqiu-demo-motion',paused});
     post(frames[kind],{type:'qiuqiu-quota-model',kind,model:kind.startsWith('api-')?apiModel():quotaModel()});
   }
@@ -83,7 +83,7 @@
   window.addEventListener('message',event=>{
     if(event.origin!==location.origin) return;
     const data=event.data;
-    if(event.source===parent && data?.type==='qiuqiu-demo-theme' && ['light','dark'].includes(data.appearance) && ['standard','accessible'].includes(data.colorMode)) { appearance=data.appearance;colorMode=data.colorMode;render();return; }
+    if(event.source===parent && data?.type==='qiuqiu-demo-theme' && ['light','dark'].includes(data.appearance) && ['standard','accessible'].includes(data.colorMode)) { appearance=data.appearance;colorMode=data.colorMode;if(['green','blue'].includes(data.uiTheme)) uiTheme=data.uiTheme;render();return; }
     if(event.source===parent && data?.type==='qiuqiu-demo-motion') {paused=data.paused===true;render();return;}
     if(event.source===parent && data?.type==='qiuqiu-demo-task') {
       if(!appearanceDemo && ['processing','completed','viewed'].includes(data.state)) {

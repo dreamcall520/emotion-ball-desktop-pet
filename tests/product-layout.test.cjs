@@ -67,24 +67,27 @@ for (const pageTheme of ['light', 'dark', undefined]) {
   for (const systemDark of [false, true]) {
     system.matches = systemDark;
     assert.deepEqual(packet(regular), {
-      type: 'qiuqiu-demo-theme', appearance: 'light', colorMode: 'standard',
+      type: 'qiuqiu-demo-theme', appearance: 'light', colorMode: 'standard', uiTheme: 'blue',
     });
     for (const look of ['light', 'dark', 'system']) {
       for (const mode of ['standard', 'accessible']) {
-        Object.assign(preview.dataset, { look, mode });
-        assert.deepEqual(packet(controlled), {
-          type: 'qiuqiu-demo-theme',
-          appearance: look === 'system' ? (systemDark ? 'dark' : 'light') : look,
-          colorMode: mode,
-        });
+        for (const uiTheme of ['green', 'blue', undefined, 'invalid']) {
+          Object.assign(preview.dataset, { look, mode, uiTheme });
+          assert.deepEqual(packet(controlled), {
+            type: 'qiuqiu-demo-theme',
+            appearance: look === 'system' ? (systemDark ? 'dark' : 'light') : look,
+            colorMode: mode,
+            uiTheme: uiTheme === 'green' ? 'green' : 'blue',
+          });
+        }
       }
     }
   }
 }
 assert.ok(!source.includes("observe(document.documentElement"), 'Page theme no longer triggers frame sync');
-assert.ok(source.includes("attributeFilter: ['data-look', 'data-mode']"), 'Manual controls still sync');
+assert.ok(source.includes("attributeFilter: ['data-look', 'data-mode', 'data-ui-theme']"), 'Manual controls still sync');
 assert.ok(source.includes("system.addEventListener('change', sync)"), 'Preview system choice still syncs');
-console.log('PASS: ordinary frames stay light; appearance demo keeps light/dark/system and both color modes.');
+console.log('PASS: ordinary frames stay light/blue; preview theme, appearance and contrast stay independent.');
 }
 
 // notes-scope
@@ -135,7 +138,7 @@ function check(legacy) {
   assert.ok(initial); assert.equal(scopeOf(desktop), initial);
   assert.equal(new URL(panel.src).pathname, '/demos/notes/panel.html');
   assert.equal(new URL(desktop.src).pathname, '/demos/notes/desktop.html');
-  assert.equal(new URL(panel.src).searchParams.get('v'), '20261006-layout');
+  assert.equal(new URL(panel.src).searchParams.get('v'), new URL(tags.find(attrs => attrs['data-notes-frame'] === 'panel')['data-src'], location.href).searchParams.get('v'));
   assert.equal(panel.writes, 1); assert.equal(desktop.writes, 1);
   const packet = { type: 'qiuqiu-notes-demo', scope: initial, from: 'desktop', kind: 'request', method: 'load', requestId: 'probe' };
   onMessage({ origin: location.origin, source: desktop.contentWindow, data: packet });

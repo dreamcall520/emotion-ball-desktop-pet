@@ -1,0 +1,32 @@
+{
+  "publicCommit": "eac7a8d12bd425fb98f005828ab80afabe18ca0b",
+  "publicVersion": "0.4.03",
+  "scope": "Published palette overlays only; embedded layout and renderer baseline remains 0.4.00.",
+  "files": [
+    {
+      "source": "desktop-pet/chat-blue.css",
+      "target": "chat/chat-blue.css",
+      "sha256": "464f21ff3015215539e7ff25bd5e5616d36bedc6ff43a896a361104d0d7e887b"
+    },
+    {
+      "source": "desktop-pet/notes-blue.css",
+      "target": "notes/notes-blue.css",
+      "sha256": "c11b65b0924ab35bbe41d0a238bce9a5347db1e758d2be2a353b1318c8c00d43"
+    },
+    {
+      "source": "desktop-pet/customize-blue.css",
+      "target": "customize/customize-blue.css",
+      "sha256": "f1ad2921f407b94c13c28d8e6b1bd444d7bf0658f43ac16ff07fdd072081cc8e"
+    },
+    {
+      "source": "desktop-pet/api-usage-blue.css",
+      "target": "quota/api-usage-blue.css",
+      "sha256": "9e872e2e5ae78e7d3119fabbb08e9a961b3684addfc2b8f5ee47f4ed345013e7"
+    },
+    {
+      "source": "desktop-pet/ui-theme-blue.css",
+      "target": "ui-theme-blue.css",
+      "sha256": "92daf522f8bec4ef324abe5d1cda629da51f39dee67d3507225b96a56d0f6475"
+    }
+  ]
+}

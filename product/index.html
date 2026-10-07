@@ -45,7 +45,7 @@
     <link rel="stylesheet" href="../review-refinements.css?v=20261006-type">
     <link rel="stylesheet" href="../native-demos.css?v=20261006-both-edges-floor">
     <link rel="stylesheet" href="../image-preview.css?v=20261006">
-    <link rel="stylesheet" href="../product-layout.css?v=20261007-final">
+    <link rel="stylesheet" href="../product-layout.css?v=20261007-blue">
     <title>球球桌宠 · 功能介绍</title>
   </head>
   <body class="product-redesign">
@@ -70,7 +70,7 @@
           <a href="#chat">聊天</a>
           <a href="#customize">定制球球</a>
         </div>
-        <a href="#appearance">色弱友好</a>
+        <a href="#appearance">主题与配色</a>
         <a href="#install">安装指南</a>
         <a href="../privacy/" target="_blank" rel="noopener">隐私说明</a>
         <a href="../updates/" target="_blank" rel="noopener">更新日志</a>
@@ -168,11 +168,11 @@
         <div class="notes-native-demo" data-notes-native-demo>
           <div class="notes-native-workspace">
             <div class="notes-native-panel">
-              <iframe class="native-demo native-notes-panel" data-src="../demos/notes/panel.html?v=20261006-layout" title="0.4.00 便签与待办列表演示" data-app-demo data-notes-frame="panel" height="520" loading="lazy"></iframe>
+              <iframe class="native-demo native-notes-panel" data-src="../demos/notes/panel.html?v=20261007-blue" title="0.4.00 便签与待办列表演示" data-app-demo data-notes-frame="panel" height="520" loading="lazy"></iframe>
               <button type="button" class="button button-secondary" data-notes-reopen-panel hidden>重新打开便签与待办</button>
             </div>
             <div class="notes-native-desktop">
-              <iframe class="native-demo native-notes-card" data-src="../demos/notes/desktop.html?v=20261006-layout" title="0.4.00 桌面便签演示" data-app-demo data-notes-frame="desktop" height="220" loading="lazy"></iframe>
+              <iframe class="native-demo native-notes-card" data-src="../demos/notes/desktop.html?v=20261007-blue" title="0.4.00 桌面便签演示" data-app-demo data-notes-frame="desktop" height="220" loading="lazy"></iframe>
               <button type="button" class="button button-secondary" data-notes-reopen-note hidden>重新打开桌面便签</button>
             </div>
           </div>
@@ -198,7 +198,7 @@
           <div class="release-note codex-privacy-note"><p><strong>默认关闭，可选开启</strong><span>只查看状态，不代你操作。</span></p><a href="../privacy/" target="_blank" rel="noopener">了解隐私边界 <span aria-hidden="true">→</span></a></div>
         </div>
         <div class="codex-live-showcase">
-          <iframe class="native-demo native-quota" src="../demos/quota/index.html?v=20261006-card-period" title="0.4.00 额度卡片与趋势演示" data-app-demo data-demo="quota" height="740" loading="lazy"></iframe>
+          <iframe class="native-demo native-quota" src="../demos/quota/index.html?v=20261007-blue" title="0.4.00 额度卡片与趋势演示" data-app-demo data-demo="quota" height="740" loading="lazy"></iframe>
           <details class="product-details task-details"><summary>体验任务提醒</summary><div class="codex-task-demo" data-motion-scene="codex" data-task-state="processing">
             <div class="codex-task-heading"><span>体验任务提醒</span><button class="motion-toggle" type="button" data-motion-toggle aria-pressed="false">暂停动效</button></div>
             <div class="codex-task-body">
@@ -233,30 +233,36 @@
 
         </div>
         <div class="chat-demo-wrap">
-          <iframe class="native-demo native-chat" src="../demos/chat/index.html?v=20261006-layout" title="0.4.00 聊天交互演示" data-app-demo data-demo="chat" height="520" loading="lazy"></iframe>
+          <iframe class="native-demo native-chat" src="../demos/chat/index.html?v=20261007-blue" title="0.4.00 聊天交互演示" data-app-demo data-demo="chat" height="520" loading="lazy"></iframe>
         </div>
       </section>
 
       <section class="customize-section section" id="customize" aria-labelledby="customize-title">
         <div class="section-heading">
           <h2 id="customize-title">来定制球球</h2>
-          <p class="section-lead">实时预览形态与配色，收藏喜欢的形象。</p>
-          <p class="section-note">0.4.01 支持直接选择本机 Codex 自定义宠物，预览动作后保存为球球外观。</p>
+          <p class="section-lead">把喜欢的 Codex 宠物，带到桌面上。</p>
+          <p class="section-note">直接选择本机 Codex 自定义宠物，预览待机、挥手、跳跃等 9 类动作。保存后应用到桌面，并同步聊天头像。</p>
+          <p class="section-note">也可以调整球球的形态与配色，收藏自己的搭配。下方可直接体验。</p>
 
         </div>
         <div class="native-custom-wrap">
-          <iframe class="native-demo native-customize" src="../demos/customize/index.html?v=20261006-focus" title="0.4.00 定制球球交互演示" data-app-demo data-demo="customize" height="700" loading="lazy"></iframe>
+          <iframe class="native-demo native-customize" src="../demos/customize/index.html?v=20261007-blue" title="0.4.00 定制球球交互演示" data-app-demo data-demo="customize" height="700" loading="lazy"></iframe>
         </div>
       </section>
 
       <section class="appearance-section section" id="appearance" aria-labelledby="appearance-title">
         <div class="appearance-intro">
           <h2 id="appearance-title">看得清楚，也自在。</h2>
-          <p class="section-lead"><span>浅色、深色，一键切换。</span><span>支持色弱友好高对比配色。</span></p>
+          <p class="section-lead"><span>薄荷绿、晴空蓝，换一种心情。</span><span>浅色、深色与跟随系统，独立切换。</span><span>色弱友好模式采用专用高对比配色。</span></p>
+          <p class="section-note">右键球球或菜单栏 → 界面配色 → 主题色。</p>
 
         </div>
-        <div class="ap-demo" data-appearance-demo data-mode="standard" data-look="light">
+        <div class="ap-demo" data-appearance-demo data-mode="standard" data-look="light" data-ui-theme="blue">
           <div class="ap-controls">
+            <div role="group" aria-label="演示界面主题色" class="ap-switch">
+              <button type="button" data-ap-theme="blue" aria-pressed="true">晴空蓝</button>
+              <button type="button" data-ap-theme="green" aria-pressed="false">薄荷绿</button>
+            </div>
             <div role="group" aria-label="演示界面配色" class="ap-switch">
               <button type="button" data-ap-mode="standard" aria-pressed="true">标准配色</button>
               <button type="button" data-ap-mode="accessible" aria-pressed="false">色弱友好（高对比）</button>
@@ -268,8 +274,8 @@
             </div>
           </div>
           <div class="ap-preview native-appearance-preview">
-            <iframe class="native-demo native-chat" src="../demos/chat/index.html?v=20261006-layout" title="新版聊天标准与色弱配色演示" data-app-demo data-demo="chat" data-demo-appearance height="520" loading="lazy"></iframe>
-            <details class="product-details secondary-demo"><summary>查看额度与趋势界面</summary><iframe class="native-demo native-quota" src="../demos/quota/index.html?appearanceDemo=1&v=20261006-card-period" title="新版额度卡标准与色弱配色演示" data-app-demo data-demo="quota" data-demo-appearance height="740" loading="lazy"></iframe></details>
+            <iframe class="native-demo native-chat" src="../demos/chat/index.html?v=20261007-blue" title="新版聊天标准与色弱配色演示" data-app-demo data-demo="chat" data-demo-appearance height="520" loading="lazy"></iframe>
+            <details class="product-details secondary-demo"><summary>查看额度与趋势界面</summary><iframe class="native-demo native-quota" src="../demos/quota/index.html?v=20261007-blue&appearanceDemo=1" title="新版额度卡标准与色弱配色演示" data-app-demo data-demo="quota" data-demo-appearance height="740" loading="lazy"></iframe></details>
           </div>
         </div>
       </section>
@@ -337,8 +343,8 @@
             <dl class="fact-list">
               <div><dt>便签与待办</dt><dd>右键球球或菜单栏 → 便签与待办</dd></div>
               <div><dt>聊天</dt><dd>右键球球或菜单栏 → 和球球聊聊</dd></div>
-              <div><dt>定制球球</dt><dd>右键球球 → 来定制球球；大小在「球球尺寸」调整。</dd></div>
-              <div><dt>界面配色</dt><dd>右键球球 → 界面配色 → 色弱友好（高对比）。</dd></div>
+              <div><dt>定制球球</dt><dd>右键球球 → 来定制球球；切到「Codex 宠物」可选择本机自定义形象。</dd></div>
+              <div><dt>界面配色</dt><dd>右键球球或菜单栏 → 界面配色；可选主题色、浅深外观与色弱友好（高对比）。</dd></div>
             </dl>
           </details>
         </div>
@@ -408,9 +414,9 @@
     <script src="../assets/motion/dialogue-v5.js"></script>
     <script src="../app.js?v=20260928-release"></script>
     <script src="../motion-showcase.js?v=20261006-task"></script>
-    <script src="../appearance-showcase.js?v=20261006-layout"></script>
-    <script src="../demos/notes/embed.js?v=20261007-v2"></script>
-    <script src="../demo-embed.js?v=20261007-v2.6"></script>
+    <script src="../appearance-showcase.js?v=20261007-blue"></script>
+    <script src="../demos/notes/embed.js?v=20261007-blue"></script>
+    <script src="../demo-embed.js?v=20261007-blue"></script>
     <script src="../image-preview.js?v=20261006"></script>
     <script src="../analytics.js?v=20260924-1" data-website-id="fe855bb0-9000-49aa-820b-baa55887bd11"></script>
   </body>

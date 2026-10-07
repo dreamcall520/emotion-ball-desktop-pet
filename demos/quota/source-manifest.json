@@ -7,7 +7,7 @@
       "source": "desktop-pet/quota-label.html",
       "target": "quota-label.html",
       "sha256": "4853b4f04a6f6427dd84de1ad80cfef290b9a34e01a0c29a05e4c35aac4692bf",
-      "embeddedSha256": "ad006bd29813325839d400ae8f0905eda4496894650038557865fea96b88c147"
+      "embeddedSha256": "caa36e10c83efbdb6ffb7dedcfd40e62b4daef69c8f5163cfeeefc6285015def"
     },
     {
       "source": "desktop-pet/quota-label.css",
@@ -25,7 +25,7 @@
       "source": "desktop-pet/codex-details.html",
       "target": "codex-details.html",
       "sha256": "e17406ad730db3816f2e7a29907d038a2d11191aeb9d5576f80e93d97b09d511",
-      "embeddedSha256": "91b1ee607c5d70f93c18b664af327757e9d0c5f3cba655dc8b825a5135bcdcf9"
+      "embeddedSha256": "e26ca5af1363ea4a8d7c5b51c2828612b7f6ef1f2818ac21a9bbcedf40e78d84"
     },
     {
       "source": "desktop-pet/codex-details.css",
@@ -61,7 +61,7 @@
       "source": "desktop-pet/api-usage-label.html",
       "target": "api-usage-label.html",
       "sha256": "198b4bb27e2c69387daa8a4d3ba5154624ad043044bf3e7e8e7d339fef330121",
-      "embeddedSha256": "94ab39465d410367d416c11348789595977d1397b78a985686f23b0f1ab084cd"
+      "embeddedSha256": "5c3e7aec51481ecec6a3c61de79a981e7fc94db4b724a7715cf4d96dc3705599"
     },
     {
       "source": "desktop-pet/api-usage-label.css",
@@ -79,7 +79,7 @@
       "source": "desktop-pet/api-usage.html",
       "target": "api-usage.html",
       "sha256": "810cb6361c92e03e22e2d331589401a1b7f433024b792f5b0d11952d31f36664",
-      "embeddedSha256": "139e535806a7573aad930ff63af109dc7a13e51b55c621494ee61ef6be47b02e"
+      "embeddedSha256": "c4456b22e894d4a620decaa5d6765b423dbb159721042ba4a1c394359233b94e"
     },
     {
       "source": "desktop-pet/api-usage.css",
@@ -110,7 +110,7 @@
     },
     {
       "target": "demo-adapter.css",
-      "sha256": "1a8dd5da9fb694ea58fc10586f8179c7f685445355bec61cd4b91f5e75ba0b1c"
+      "sha256": "fe1f93bdcbcbb1bbd4e7003c8e0e6fd4537b5f5879307e2f4bd0a4c376d6e5b1"
     },
     {
       "target": "demo-bridge.js",
@@ -122,11 +122,11 @@
     },
     {
       "target": "demo.js",
-      "sha256": "16ebc53e37851fafb63e088ebccb4f2c7e4b6e948ed8bd12c18f40d510c4537d"
+      "sha256": "af8e7d9c19b739bf0a854a545ac51e6289f62f3df1bc8c7c7fb0b294bd7c4749"
     },
     {
       "target": "index.html",
-      "sha256": "806e19bd2cb1dc09998f00a85215206115e977d846433e0f917dc34eb522fdfd"
+      "sha256": "70b88570485794d3a30ca20cd71a876f885ae3e6b9a1c4a73ebaae987bfd638d"
     }
   ]
 }

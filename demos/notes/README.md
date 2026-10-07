@@ -12,7 +12,7 @@
 
 两个 iframe 和父页必须同源。父页使用 `embed.js`，为本页建立随机 `demoScope` 并写入两个 iframe URL。主窗口是唯一内存数据源，桌面窗口通过父页转发 RPC；保存会校验 revision，拒绝覆盖另一窗口的新内容。
 
-- 主题（已有通用父页发送）：`{type:'qiuqiu-demo-theme', appearance:'light'|'dark', colorMode:'standard'|'accessible'}`。子页同时检查 `event.origin === location.origin` 和 `event.source === parent`。
+- 主题（已有通用父页发送）：`{type:'qiuqiu-demo-theme', appearance:'light'|'dark', colorMode:'standard'|'accessible', uiTheme:'green'|'blue'}`。子页同时检查 `event.origin === location.origin` 和 `event.source === parent`；新增蓝色样式覆盖来自公开 0.4.03，旧版 renderer 保持不变。
 - 便签消息公共字段：`{type:'qiuqiu-notes-demo', scope, from:'panel'|'desktop', kind, ...}`。父页再检查来源是对应的实际 iframe、scope 和 from 一致。
 - `request`：桌面 → 父页 → 主窗口，携带 `method, args, requestId`；`response`：主窗口 → 父页 → 桌面，携带 `requestId, result` 或 `error`。
 - `state` / `reminder`：主窗口 → 父页 → 桌面，携带内存快照。父页只转发，不保存业务状态。
