@@ -74,6 +74,7 @@ details[open] .caret { transform: rotate(180deg); }
 .download-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 18px; font-size: 12px; color: var(--muted); }
 .download-button { position: relative; display: inline-flex; justify-content: center; align-items: center; gap: 15px; min-width: 260px; padding: 19px 34px; border-radius: 50px; color: var(--ink); background: var(--nav); border: 1px solid var(--button-edge); box-shadow: 0 9px 30px #2c355111, inset 0 1px 0 var(--button-glow); backdrop-filter: blur(24px); font-size: 18px; font-weight: 500; white-space: nowrap; transition: transform .2s, background .2s; }
 .download-button .apple-logo { display: block; flex: none; }
+.download-button.flow-border::before { inset: -2px; padding: 2px; opacity: 1; animation-duration: 6s; }
 .download-button:hover { transform: translateY(-3px); background: var(--menu); }
 @media (prefers-reduced-motion: no-preference) { .download-button:active { transform: scale(1.045); transition-duration: 120ms; } }
 .other-download { padding: 6px 0; font-size: 12px; color: var(--muted); letter-spacing: .03em; }
