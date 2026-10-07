@@ -55,10 +55,11 @@ button:focus-visible { outline: 2px solid var(--detail-blue); outline-offset: 2p
 .trend-pace.balanced { color: var(--detail-blue); }
 .trend-pace.fast { color: var(--detail-warning); }
 .chart-meta { margin-top: 17px; display: flex; justify-content: space-between; align-items: center; gap: 6px 8px; flex-wrap: wrap; }
-.chart-legend { display: flex; gap: 10px; font-size: 9px; line-height: 14px; color: var(--detail-subtle); }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 9px; line-height: 14px; color: var(--detail-subtle); }
 .chart-legend span { display: flex; align-items: center; gap: 4px; }
 .chart-legend i { width: 12px; height: 2px; background: var(--detail-blue); }
-.chart-legend .time-line { height: 0; border-top: 1.3px dashed var(--detail-subtle); background: none; opacity: .55; }
+.chart-legend .time-line { height: 0; border-top: 1px dashed var(--detail-subtle); background: none; opacity: .3; }
+.chart-legend .unrecorded-line { height: 0; border-top: 1.5px dashed var(--detail-blue); background: none; opacity: .7; }
 .chart-updated { font-size: 8px; line-height: 14px; color: var(--detail-subtle); }
 .trend-chart { display: block; width: 100%; height: auto; margin-top: 4px; overflow: visible; }
 .trend-chart text { font-size: 8px; fill: var(--detail-subtle); }
@@ -66,7 +67,8 @@ button:focus-visible { outline: 2px solid var(--detail-blue); outline-offset: 2p
 .trend-chart .observed-area { fill: var(--detail-count); }
 .trend-chart .observed-line { fill: none; stroke: var(--detail-blue); stroke-width: 2; }
 .trend-chart .point { fill: var(--detail-blue); }
-.trend-chart .time-path { fill: none; stroke: var(--detail-subtle); stroke-width: 1.3; stroke-dasharray: 4 3; opacity: .55; }
+.trend-chart .unrecorded-line { fill: none; stroke: var(--detail-blue); stroke-width: 1.5; stroke-dasharray: 4 3; opacity: .7; }
+.trend-chart .time-path { fill: none; stroke: var(--detail-subtle); stroke-width: 1; stroke-dasharray: 2 4; opacity: .3; }
 .trend-chart .now { stroke: var(--detail-line); stroke-width: 1; }
 .forecast-note { display: grid; grid-template-columns: 20px minmax(0,1fr) auto; gap: 8px; margin-top: 12px; padding: 10px; background: rgba(83,124,179,.055); border-radius: 7px; align-items: center; }
 .forecast-symbol { font-size: 16px; line-height: 20px; }

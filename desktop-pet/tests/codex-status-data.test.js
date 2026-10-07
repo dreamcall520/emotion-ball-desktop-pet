@@ -186,6 +186,20 @@ test('旧断档/余额回升/骤降不会阻止恢复后的连续预测，也不
   }
 });
 
+test('可作虚线端点的稀疏5h和周记录保留展示，但不能累计成连续预测', () => {
+  for (const [period, offsets] of [[300,[1200000,600000,0]],[10080,[90000000,43200000,0]]]) {
+    const window=quotaWindow(period,88,NOW+3600000);
+    const samples=offsets.map((offset,index)=>({at:NOW-offset,remaining:90-index}));
+    const source=snapshot(NOW,[window]);
+    source.history={available:true,windows:[{...window,samples}]};
+    const before=JSON.stringify(source);
+    const trend=buildCodexDetailsModel(source,{period},NOW).trend;
+    assert.deepEqual(trend.samples,samples);
+    assert.equal(trend.forecast.state,'unknown');
+    assert.equal(JSON.stringify(source),before);
+  }
+});
+
 test('重置数量0与未知、null与空明细、返回部分和真实到期/使用严格区分', () => {
   const raw = credits => normalizeQuota({ rateLimits: { limitId: 'codex', primary: {
     windowDurationMins: 300, usedPercent: 30, resetsAt: (NOW + 3600000) / 1000 } },
