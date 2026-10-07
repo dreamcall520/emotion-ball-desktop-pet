@@ -6,7 +6,7 @@ const M = require('../lib/notes-model');
 const { capturePaintedWindow } = require('./verify-codex-companion');
 const { pointerClick } = require('./verify-chat-integration');
 
-const luminance = color => color.match(/[\d.]+/g).slice(0, 3).map(Number).map(value => {
+const luminance = color => color.match(/[\d.]+/g).slice(0, 3).map(value => Number(value) * (color.startsWith('color(srgb ') ? 255 : 1)).map(value => {
   const channel = value / 255; return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
 }).reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
 const contrast = (foreground, background) => {
@@ -14,7 +14,7 @@ const contrast = (foreground, background) => {
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 };
 const textStyles = (win, selectors) => win.webContents.executeJavaScript( `(() => {
-  const parse = color => { const channels = color.match(/[\\d.]+/g).map(Number); return [...channels.slice(0, 3), channels[3] ?? 1]; };
+  const parse = color => { const channels = color.match(/[\\d.]+/g).map(Number); return [...channels.slice(0, 3).map(value => value * (color.startsWith('color(srgb ') ? 255 : 1)), channels[3] ?? 1]; };
   return ${JSON.stringify(selectors)}.flatMap(({ label, selector }) => {
     const elements = [...document.querySelectorAll(selector)];
     if (!elements.length) throw Error('缺少对比度检查节点: ' + selector);

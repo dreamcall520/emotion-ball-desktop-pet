@@ -7,6 +7,13 @@ const { EventEmitter } = require('node:events');
 const { normalizeSettings, saveSettings, loadSettings } = require('../lib/settings');
 const os = require('node:os');
 
+test('contrast verification accepts normalized CSS srgb colors', () => {
+  const { contrast } = require('../scripts/verify-ui-theme');
+  assert.equal(contrast('color(srgb 0 0 0)', 'rgb(255, 255, 255)'), 21);
+  assert.equal(contrast('color(srgb 0.5 0.5 0.5)', 'rgb(255, 255, 255)'),
+    contrast('rgb(127.5, 127.5, 127.5)', 'rgb(255, 255, 255)'));
+});
+
 test('色弱友好配置保持旧版默认，白名单持久化并保留原有外观选择', t => {
   assert.equal(normalizeSettings({}).colorMode, 'standard');
   for (const value of ['bad', null, {}, true]) assert.equal(normalizeSettings({ colorMode: value }).colorMode, 'standard');
