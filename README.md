@@ -8,7 +8,7 @@
 
 首页采用确认后的整屏银白/夜景玻璃主视觉，品牌语「球球-陪你自在一点」。`home.js` 复用原生 WebGL 实现自动柔光、曲面折射与鼠标水波；眼睛以2～4秒随机间隔自然眨动，约四分之一概率快速连眨两次，闭眼以像素宽度的抗锯齿圆弧收合并沿用原眼睛颜色；暂停、减少动态、页面隐藏及静态回退保持可用。主下载按钮为「macOS 版下载」并使用内联 Apple 标识，下方注明版本与 Apple 芯片，Intel 保持独立说明入口。首页顶部导航叠加半透明渐变、柔和高光与背景模糊；浅深色分别处理，并支持减少透明度与无模糊能力的静态回退。
 
-原官网功能和演示保留在 `product/index.html`，地址为 `https://qiuqiu.pet/product/`。导航的功能介绍、安装指南与更新日志在新页签打开；旧首页功能锚点通过 `location.replace` 跳转到对应功能分区。旧 `product.html` 仅保留兼容跳转，并携带原查询参数和锚点。产品正文和演示、许可及署名保持。日志位于 `updates/index.html`（`https://qiuqiu.pet/updates/`），按用户要求移除 0.4.03 条目，保留其余 15 条记录；0.4.00 在侧栏、正文及手机选择器标为「大版本更新」。官网下载仍为最新 0.4.03。历史下载每种架构只保留 DMG，共 16 个入口（15 个 DMG 与唯一无 DMG 的 0.3.10 热修复 ZIP）；重复的 Apple／Intel 版本提示已删。桌面侧栏、手机选择器、hash 直链与历史返回保持，无 JavaScript 时显示全部记录。旧 `/product/#updates` 及 `product.html#updates` 转到独立日志页。首页、功能介绍、更新日志保留独立 canonical 和分享封面；隐私说明独立位于 `https://qiuqiu.pet/privacy/`，四页均已加入 sitemap。
+原官网功能和演示保留在 `product/index.html`，地址为 `https://qiuqiu.pet/product/`。导航的功能介绍、安装指南与更新日志在新页签打开；旧首页功能锚点通过 `location.replace` 跳转到对应功能分区。旧 `product.html` 仅保留兼容跳转，并携带原查询参数和锚点。产品正文和演示、许可及署名保持。日志位于 `updates/index.html`（`https://qiuqiu.pet/updates/`），按用户要求移除 0.4.03 条目，本次新增 0.4.04，保留其余 15 条记录；0.4.00 在侧栏、正文及手机选择器标为「大版本更新」。官网下载为最新 0.4.04。历史下载每种架构只保留 DMG，共 17 个入口（16 个 DMG 与唯一无 DMG 的 0.3.10 热修复 ZIP）；重复的 Apple／Intel 版本提示已删。桌面侧栏、手机选择器、hash 直链与历史返回保持，无 JavaScript 时显示全部记录。旧 `/product/#updates` 及 `product.html#updates` 转到独立日志页。首页、功能介绍、更新日志保留独立 canonical 和分享封面；隐私说明独立位于 `https://qiuqiu.pet/privacy/`，四页均已加入 sitemap。
 
 首页「免费、非商业 · 署名与许可」使用原生小弹窗，分行展示使用范围、原作者 GitHub 项目与再次分发说明，可通过关闭按钮、Esc 或点击背景关闭；不再跳转功能介绍。原作者旧项目地址已重定向为 `sam70361/aora-bot`，弹窗链接使用 GitHub API 回读的现地址。首页新页签入口统一为细线圆角新窗口图标。更新日志只展示对应版本下载，不附加 GitHub Release 页面入口。
 
@@ -45,6 +45,19 @@ Umami Cloud 网站“球球官网”，website ID 为 `fe855bb0-9000-49aa-820b-b
 本地检查：`node --test tests/analytics.test.cjs`。这些测试不会连接统计后台。
 
 ## 当前下载记录
+
+Apple 芯片版 **0.4.04**，发布日期 **2026-10-07**，GitHub 兼容标签 `v0.4.4`。
+
+本次升级 Codex 额度趋势的「趋势／每日消耗」视图与重置机会到期提醒，新增「清除未看」，并优化功能窗口跟随、便签、定制及色弱模式显示，修复 Codex 宠物待机动画节奏。
+
+| 文件 | 精确大小（bytes） | SHA-256 |
+| --- | ---: | --- |
+| [Qiuqiu-0.4.04-macOS-arm64-share.zip](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.4/Qiuqiu-0.4.04-macOS-arm64-share.zip) | 123612298 | `22e80247088db2fdd5a5cc81b12703138a3bf7421427895ed77a16fdcdc81be9` |
+| [Qiuqiu-0.4.04-macOS-arm64.dmg](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.4/Qiuqiu-0.4.04-macOS-arm64.dmg) | 137872466 | `b232c896c74224e0800a75ea03b82c50d770c87efb71c54ca88045cdfebbc281` |
+
+大小与 SHA-256 来自本地正式附件元数据 `v0.4.04-release/public-installer.json`，公开源码 `c5da9865a502113c7e7090058ad51526eb9611d3`；与实际构建提交的文件树一致。公开 Release 与线上下载的核验结果以项目 0.4.04 正式发布记录为准。
+
+### 0.4.03 下载记录（保留）
 
 Apple 芯片版 **0.4.03**，发布日期 **2026-10-07**，GitHub 兼容标签 `v0.4.3`。
 
@@ -145,13 +158,13 @@ python3 -m http.server 4179 --bind 127.0.0.1
 node --test tests/*.test.cjs
 ```
 
-当前检查涵盖旧地址跳转、演示主题、便签窗口 scope、原生许可弹窗控制、历史日志及下载契约。`tests/showcases.browser.cjs` 保留的是改版前完整页面的浏览器脚本，其旧版布局断言不适用于当前结构；独立日志的浏览器脚本为 `tests/updates.browser.cjs`。本轮自动浏览器访问受地址策略限制，最新玻璃、按压反馈及四宽度浅深色渲染尚未复验，源码/HTTP 检查不替代实际视觉验收。
+当前检查涵盖旧地址跳转、演示主题、便签窗口 scope、原生许可弹窗控制、历史日志及下载契约。`tests/showcases.browser.cjs` 保留的是改版前完整页面的浏览器脚本，其旧版布局断言不适用于当前结构；独立日志的浏览器脚本为 `tests/updates.browser.cjs`。0.4.04 发布准备的 17 项 Node 检查、定制器独立检查、首页/功能页/日志页四宽度浅深色共 24 组浏览器布局通过，无脚本或请求错误；34 次本地 HTTP 回读与源码逐字节一致。证据位于项目 `v0.4.04-release/website/`，线上部署与安装包发布仍须按下述流程单独核验。
 
 部署沿用 `gh-pages` 根目录与 `qiuqiu.pet`。本地检查通过后提交、推送；必须回读 Pages 的实际构建提交及线上 HTML/变更资源，不能把推送成功当作部署完成。
 
 ## 当前功能演示
 
-额度、趋势、聊天与便签/待办保留公开 App 0.4.00 `main@7f5c291d34512f629c17275c93bed472f421e8b9` 基线。定制器及聊天头像引擎升级为公开 0.4.03 `main@eac7a8d12bd425fb98f005828ab80afabe18ca0b`；定制器保留原生界面与动作播放器。蓝色覆盖样式逐字节取自公开 0.4.03 `main@eac7a8d12bd425fb98f005828ab80afabe18ca0b`，来源与哈希见 `demos/theme-source-manifest.json`；原界面来源与必要适配见各演示目录 `source-manifest.json`。定制区并列介绍球球形态/配色定制与本机 Codex 自定义宠物。网页演示使用作者提供的既有 ikun、春野原始精灵图，可选择宠物、预览 9 类动作、收藏/载入及保存后同步本页聊天头像；不读取访客的本机宠物目录。两份素材原字节与来源记录见 `demos/customize/assets/demo-pets.json`。主介绍不再叠放截图或折叠简化示例；历史截图文件仅作归档。
+额度、趋势、聊天与便签/待办保留公开 App 0.4.00 `main@7f5c291d34512f629c17275c93bed472f421e8b9` 基线。定制器及聊天头像引擎升级为公开 0.4.03 `main@eac7a8d12bd425fb98f005828ab80afabe18ca0b`；定制器保留原生界面；共享 Codex 宠物播放器单独同步 0.4.04 的 6.6 秒待机节奏，其他动作与网页同源素材适配保留，逐文件来源见定制器清单。蓝色覆盖样式逐字节取自公开 0.4.03 `main@eac7a8d12bd425fb98f005828ab80afabe18ca0b`，来源与哈希见 `demos/theme-source-manifest.json`；原界面来源与必要适配见各演示目录 `source-manifest.json`。定制区并列介绍球球形态/配色定制与本机 Codex 自定义宠物。网页演示使用作者提供的既有 ikun、春野原始精灵图，可选择宠物、预览 9 类动作、收藏/载入及保存后同步本页聊天头像；不读取访客的本机宠物目录。两份素材原字节与来源记录见 `demos/customize/assets/demo-pets.json`。主介绍不再叠放截图或折叠简化示例；历史截图文件仅作归档。
 
 Electron IPC 替换为本页内存桥接，不连接账户、模型或账单，不修改 App 或用户资料；刷新页面恢复示例。定制保存后同步本页聊天头像，收藏载入仅影响预览。公开六瓣幻彩采用原 Rive 引擎。外层官网沿用浅灰蓝/深灰，普通演示默认晴空蓝和浅色；外观控件按「主题色」「明暗模式」「可读性」分组：桌面使用细竖线分隔，手机分行并用细横线区分；色点、选中下划线与原生高对比开关保留，三类设置独立生效。官网的蓝色默认值不改变 App 新装默认薄荷绿。手机仅适配原控件，不用截图缩放。离屏、页面隐藏、暂停与减少动态均可停止演示动效。嵌入窗口在用户进入前不自动抢焦点，脚本聚焦不滚动官网。功能页使用 `overflow-x:clip`，避免 body 形成额外滚动容器而干扰导航吸顶。
 
