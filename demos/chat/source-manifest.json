@@ -7,7 +7,7 @@
       "source": "desktop-pet/chat.html",
       "target": "index.html",
       "sha256": "9e3a0d495a02b7dc804d1b7c37098bc018efe79be8ba32f240ef39859a466d1a",
-      "embeddedSha256": "84fb675b853574c0486bd6cfbf1202cd420fc1974d1bf89fe9b854f1f2553eb3"
+      "embeddedSha256": "50d4cb6edd5dd3d0726f2bbf2072c3c5f628c419c809e6a283d7853d7a722746"
     },
     {
       "source": "desktop-pet/chat.css",

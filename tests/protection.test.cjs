@@ -25,7 +25,7 @@ test('embedding checks every ancestor and leaves normal navigation and local dem
     }
     previous.parent = previous;
     vm.runInNewContext(code, { window, location: window.location, URL,
-      document: { currentScript: { src: `${origin}/site-protection.js?v=1` } } });
+      document: { currentScript: { src: `${origin}/site-protection.js?v=1` }, addEventListener() {} } });
     assert.deepEqual(calls, origins.some(value => value !== origin) ? [`${origin}/embed-blocked.html`] : []);
   }
 

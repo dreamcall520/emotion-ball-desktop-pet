@@ -7,7 +7,7 @@
       "source": "desktop-pet/quota-label.html",
       "target": "quota-label.html",
       "sha256": "4853b4f04a6f6427dd84de1ad80cfef290b9a34e01a0c29a05e4c35aac4692bf",
-      "embeddedSha256": "7a6b77bb7814bb8d4f784e4f2e86abccf978e08c6d4f328fbc24b9db25a0b475"
+      "embeddedSha256": "9a453b40e485e6f25ae47f9dc236a9d9c7f2f60369ee9341e2134e6e751b9c3c"
     },
     {
       "source": "desktop-pet/quota-label.css",
@@ -25,7 +25,7 @@
       "source": "desktop-pet/codex-details.html",
       "target": "codex-details.html",
       "sha256": "d248e0881bde2011aa3df988acea33723a4aa5229fad83d858bda04eb4d4e0e3",
-      "embeddedSha256": "57902870a5fd3f3b145e4c43f1793b136ff2c99c91a41e1acff90937c63be114"
+      "embeddedSha256": "c5f4de288156bc5d530dd306ec2f92ac331289cc70fa2b2776cebf942ad30dde"
     },
     {
       "source": "desktop-pet/codex-details.css",
@@ -61,7 +61,7 @@
       "source": "desktop-pet/api-usage-label.html",
       "target": "api-usage-label.html",
       "sha256": "198b4bb27e2c69387daa8a4d3ba5154624ad043044bf3e7e8e7d339fef330121",
-      "embeddedSha256": "04bbf4b89907a25e2d48960e5526ae1ba61283c210687a5b88a9a30cc25189b6"
+      "embeddedSha256": "0881489cde8b88a01ff1695bbcb454476a769153151853ad8037695a2624db27"
     },
     {
       "source": "desktop-pet/api-usage-label.css",
@@ -79,7 +79,7 @@
       "source": "desktop-pet/api-usage.html",
       "target": "api-usage.html",
       "sha256": "f6bc61fe8de96e5e17d58993e8a56fc62055168a5c4f90249c665889b0840f80",
-      "embeddedSha256": "faefb902aa9a70c3f1eabd3d04fd341470f1140effd8582e1f3bb396312a1a19"
+      "embeddedSha256": "414cb35b9291f7e461765cb2c9e07c2e6617a840a243dd93c26a30885ce01b5f"
     },
     {
       "source": "desktop-pet/api-usage.css",
@@ -140,7 +140,7 @@
     },
     {
       "target": "index.html",
-      "sha256": "81b9cea4570dda5ae22035af0df204b8fef14ad5c02a835699de861970388231"
+      "sha256": "bfc61dbd5495fae71ad252eec716b6ba703be5e9660b1c159bcfcf513491265c"
     }
   ],
   "packageAsarSha256": "8a4062ae6c907eea4417ebcadbb8f2f5127e8fe0ff3d21b66ca41c2f5ee151c8"

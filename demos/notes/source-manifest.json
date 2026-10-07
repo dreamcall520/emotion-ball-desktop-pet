@@ -39,15 +39,15 @@
   "embeddedFiles": [
     {
       "file": "panel.html",
-      "sha256": "1aeca213ee2c44a83d9a470419e0d194d0996ea4e988140eda4dc55e0c3c0f11"
+      "sha256": "bfbab4e10859a7edd1b76e1d0947c91fa565cf3225b41e8c17bf148e7182eea7"
     },
     {
       "file": "desktop.html",
-      "sha256": "1aeca213ee2c44a83d9a470419e0d194d0996ea4e988140eda4dc55e0c3c0f11"
+      "sha256": "bfbab4e10859a7edd1b76e1d0947c91fa565cf3225b41e8c17bf148e7182eea7"
     },
     {
       "file": "reminder.html",
-      "sha256": "1aeca213ee2c44a83d9a470419e0d194d0996ea4e988140eda4dc55e0c3c0f11"
+      "sha256": "bfbab4e10859a7edd1b76e1d0947c91fa565cf3225b41e8c17bf148e7182eea7"
     },
     {
       "file": "embed-fragment.html",

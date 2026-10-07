@@ -56,8 +56,31 @@ function serve(request, response) {
         }
         await page.keyboard.press('Escape');
         assert.equal(await dialog.isVisible(), false);
+        const protection = await page.evaluate(() => {
+          function copy(element, target = element) {
+            const range = document.createRange();
+            range.selectNodeContents(element);
+            const selection = getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            return !target.dispatchEvent(new ClipboardEvent('copy', { bubbles: true, cancelable: true }));
+          }
+          const image = document.querySelector('img');
+          const result = {
+            bodyCopyBlocked: copy(document.querySelector('main h1')),
+            focusedLinkDoesNotBypassBodyRestriction: copy(document.querySelector('main h1'), document.querySelector('main a')),
+            linkCopyAllowed: !copy(document.querySelector('main a')),
+            licenseCopyAllowed: !copy(document.querySelector('#license-details')),
+            imageMenuBlocked: !image.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })),
+            imageDragBlocked: !image.dispatchEvent(new Event('dragstart', { bubbles: true, cancelable: true })),
+            linkMenuAllowed: document.querySelector('main a').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })),
+          };
+          getSelection().removeAllRanges();
+          return result;
+        });
+        assert.ok(Object.values(protection).every(Boolean), JSON.stringify(protection));
       }
-      checks.push(`license links and dialog fit ${width}px/${colorScheme}`);
+      checks.push(`license dialog, media/body restrictions and allowed links fit ${width}px/${colorScheme}`);
     }
     for (const route of ['/updates/', '/privacy/', '/product.html']) {
       await page.goto(site + route);
@@ -68,6 +91,13 @@ function serve(request, response) {
     await input.fill('正常输入与复制');
     await input.selectText();
     assert.equal(await input.inputValue(), '正常输入与复制');
+    assert.equal(await input.evaluate(element => element.dispatchEvent(new ClipboardEvent('copy', { bubbles: true, cancelable: true }))), true);
+    await page.goto(site + '/privacy/');
+    assert.equal(await page.locator('main').evaluate(element => {
+      const range = document.createRange(); range.selectNodeContents(element);
+      getSelection().removeAllRanges(); getSelection().addRange(range);
+      return element.dispatchEvent(new ClipboardEvent('copy', { bubbles: true, cancelable: true }));
+    }), true);
     checks.push('top-level pages, compatibility route and chat input remain usable');
     await page.goto(site + '/__test/same');
     await page.waitForFunction(() => {

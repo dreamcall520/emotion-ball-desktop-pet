@@ -29,7 +29,7 @@
 
 - `robots.txt` 保留普通搜索抓取及 sitemap，拒绝 GPTBot、ClaudeBot、Google-Extended、CCBot，并请求所有爬虫跳过测试目录。这是对遵守协议的爬虫的声明，不能限制请求频率或拦截伪装爬虫；Google-Extended 同时控制部分 Gemini 内容使用。
 - 所有完整页面及演示在正文前加载 `site-protection.js`，逐层检查 iframe 祖先。外站嵌入跳到不含统计的官网来源提示；直接访问、同源嵌套和本地 HTTP 预览正常使用。这是可被禁用 JavaScript 绕过的浏览器回退，无法阻止源码镜像、截图或直接下载素材。
-- 首页与功能页许可弹窗提供官网地址、免费下载说明及 LICENSE / NOTICE 链接，沿用现有署名与非商业分发条款。正常文字复制、右键、键盘、输入、便签复制及下载保持可用。
+- 首页与功能页许可弹窗提供官网地址、免费下载说明及 LICENSE / NOTICE 链接，沿用现有署名与非商业分发条款。按用户选择加强限制：首页、功能页和日志页的宣传图片阻止右键菜单和原生拖拽，正文拦截复制事件。文字仍可选择；链接、按钮、输入框、可编辑区、代码、隐私/许可及站内演示不受该限制，既有便签复制和下载保持可用。限制依赖 JavaScript，不能阻止截图、开发者工具、直接资源下载或整站复制。
 - 域名当前使用 DNSPod / GitHub Pages，尚未配置 CDN 防爬限速、资源防盗链或 `Content-Security-Policy: frame-ancestors 'self'` 响应头。该指令不能通过 HTML meta 生效，若接入 CDN，必须允许官网现有同源多层演示；图片防盗链需覆盖 WebP 并放行分享封面及必要的公开资源。
 
 检查：`node --test tests/protection.test.cjs`；实际浏览器：`NODE_PATH=<bundled node_modules> node tests/protection.browser.cjs`，不发送访问统计。后者覆盖三种屏宽、浅深色、许可链接、输入、站内双层演示、无 Referrer 外站嵌入、混合祖先及 sandbox iframe。
