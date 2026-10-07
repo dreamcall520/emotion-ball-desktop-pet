@@ -128,8 +128,8 @@ function renderList(){
   $('records').setAttribute('aria-labelledby',tab==='note'?'notes-tab':'todos-tab');
   if(noteCategoryFilter!==null&&!categories().some(c=>c.id===noteCategoryFilter))noteCategoryFilter='';const options=tab==='note'?noteFilters:todoFilters;renderFilter(options);
   $('filter').setAttribute('aria-label',tab==='note'?'便签状态':'待办分组');$('search').placeholder=tab==='note'?'搜索便签':'搜索待办';$('new-button').setAttribute('aria-label',tab==='note'?'新建便签':'新建待办');$('new-button').title=tab==='note'?'新建便签 · 完整编辑':'新建待办 · 设置日期和提醒';
-  $('group-heading').hidden=tab==='note'&&filter==='all'&&noteCategoryFilter===null;
-  $('group-title').textContent=`${options.find(([v])=>v===filter)?.[1]||'今天'}${tab==='note'&&noteCategoryFilter!==null?' · '+categoryName(noteCategoryFilter):''}`;const p=M.progress(state);const today=tab==='todo'&&filter==='today';$('progress-text').hidden=!today;if(p.total)$('progress-text').replaceChildren(node('span','','已完成 '),node('span','completed-count',String(p.done)),node('span','progress-total',` / ${p.total}`));else $('progress-text').textContent='暂无计划';
+  $('group-heading').hidden=tab==='note'?filter==='all'&&noteCategoryFilter===null:filter==='today';
+  $('group-title').textContent=`${options.find(([v])=>v===filter)?.[1]||'今天'}${tab==='note'&&noteCategoryFilter!==null?' · '+categoryName(noteCategoryFilter):''}`;const p=M.progress(state);const today=tab==='todo'&&filter==='today';$('progress-text').hidden=!today||!p.total;$('progress-text').title=`今天已完成 ${p.done} 项，共 ${p.total} 项`;$('progress-text').setAttribute('aria-label',$('progress-text').title);$('progress-text').replaceChildren(node('span','completed-count',String(p.done)),node('span','progress-total',`/${p.total}`));
   const records=filteredRecords();$('list-description').textContent=query.trim()?`找到 ${records.length} 项记录`:filter==='trash'?'删除的记录会保留，恢复或永久删除由你决定':'';
   $('list-description').hidden=!$('list-description').textContent;
   $('records').replaceChildren();if(!records.length)$('records').append(node('p','empty',query.trim()?'没有找到相关记录':filter==='trash'?'回收站是空的':filter==='today'?'今天还没有计划，添加一件想做的事吧':'这里还没有记录'));

@@ -118,7 +118,11 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
     inlineFilters: Boolean(document.querySelector('.list-toolbar #filter') && document.querySelector('.list-toolbar #category-filter')),
     headingCount: Boolean(document.querySelector('#group-count')),
     headingHidden: document.querySelector('#group-heading').hidden,
-    toolbar: [...document.querySelectorAll('.list-toolbar .tabs button, .list-toolbar .filter-trigger, #toggle-search, #new-button')].filter(button=>button.getBoundingClientRect().width).map(button=>({id:button.id,...button.getBoundingClientRect().toJSON()})),
+    progressInToolbar: Boolean(document.querySelector('.list-toolbar #progress-text')),
+    progressHidden: document.querySelector('#progress-text').hidden,
+    progressText: document.querySelector('#progress-text').textContent,
+    progressTitle: document.querySelector('#progress-text').title,
+    toolbar: [...document.querySelectorAll('.list-toolbar .tabs button, .list-toolbar .filter-trigger, #progress-text, #toggle-search, #new-button')].filter(button=>button.getBoundingClientRect().width).map(button=>({id:button.id,...button.getBoundingClientRect().toJSON()})),
     menu: [...document.querySelectorAll('.filter-popover:not([hidden])')].map(menu=>({id:menu.id,...menu.getBoundingClientRect().toJSON()})),
     width: innerWidth,
     statusValues: [...document.querySelectorAll('#filter-menu > button')].map(button => button.dataset.filter),
@@ -136,7 +140,6 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
   assert.deepEqual(statusMenu.statusValues, ['all', 'favorites', 'desktop', 'trash'], '便签状态菜单仅四个状态');
   assert.equal(statusMenu.statusLabel, '状态'); assert.equal(statusMenu.categoryLabel, '分类');
   assert.equal(statusMenu.inlineFilters, true); assert.equal(statusMenu.headingCount, false); assert.equal(statusMenu.headingHidden, true);
-  for (const button of statusMenu.toolbar) assert.ok(button.left >= 0 && button.right <= statusMenu.width && Math.abs(button.top + button.height / 2 - statusMenu.toolbar[0].top - statusMenu.toolbar[0].height / 2) <= 3, button.id + ' 在最窄面板中保持同一行');
   for (const menu of statusMenu.menu) assert.ok(menu.left >= 0 && menu.right <= statusMenu.width, '状态菜单不越界');
   assert.equal(statusMenu.statusHasManagement, false);
   assert.equal(statusMenu.categoryHidden, false);
@@ -163,6 +166,10 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
   assert.deepEqual(managerClosed.openMenus, [], '关闭管理后分类菜单保持关闭');
   await page(panelWin, "document.querySelector('#todos-tab').click()");
   const todoFilters = await filterState();
+  for (const view of [statusMenu, todoFilters]) for (const button of view.toolbar) assert.ok(button.left >= 0 && button.right <= view.width && Math.abs(button.top + button.height / 2 - view.toolbar[0].top - view.toolbar[0].height / 2) <= 3, button.id + ' 在最窄面板中保持同一行');
+  assert.equal(todoFilters.headingHidden, true); assert.equal(todoFilters.progressInToolbar, true);
+  assert.equal(todoFilters.progressHidden, false); assert.equal(todoFilters.progressText, '1/2');
+  assert.equal(todoFilters.progressTitle, '今天已完成 1 项，共 2 项');
   assert.equal(todoFilters.categoryHidden, true, '待办隐藏分类筛选');
   assert.equal(todoFilters.categoryExpanded, 'false');
   assert.equal(todoFilters.managementPresent, false, '待办移除动态管理入口');
@@ -247,7 +254,11 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
       assert.equal((await filterState()).managerOpen, true);
       const categoryAdd = await textStyles(panelWin, [{ label: 'category-add', selector: '#category-manager[open] #category-add' }]);
       await page(panelWin, "document.querySelector('#category-manager-done').click()");
-      const texts = [...statusText, ...categoryText, ...categoryAdd].map(style => ({ ...style, ratio: contrast(style.color, style.background) }));
+      await page(panelWin, "document.querySelector('#todos-tab').click()");
+      const progressText = await textStyles(panelWin, [{ label: 'todo-progress', selector: '#progress-text' }, { label: 'todo-progress-completed', selector: '#progress-text .completed-count' }]);
+      if (screenshot) await capture(panelWin, `todo-compact-${suffix}`);
+      await page(panelWin, "document.querySelector('#notes-tab').click()");
+      const texts = [...statusText, ...categoryText, ...categoryAdd, ...progressText].map(style => ({ ...style, ratio: contrast(style.color, style.background) }));
       for (const style of texts) assert.ok(style.ratio >= 4.5, `${theme}/${appearance} ${style.label} 文字对比度 ${style.ratio}: ${style.color} / ${style.background}`);
       const notesWindows = [panelWin, ...notes.getWindows().notes];
       assert.ok(notesWindows.length > 1, '真实桌面便签已打开');

@@ -195,7 +195,7 @@ test('group counts match full lists and remain visible during search; empty desc
   assert.deepEqual(labels(),['全部便签 2','收藏 1','桌面显示中 1','回收站 1']);
   r.nodes.get('search').value='没有匹配';r.nodes.get('search').oninput();assert.deepEqual(labels(),['全部便签 2','收藏 1','桌面显示中 1','回收站 1']);
   r.nodes.get('todos-tab').onclick();assert.deepEqual(labels(),['全部待办 6','今天 2','逾期 1','未来 1','无日期 1','已完成 1','已归档 1','回收站 1']);
-  assert.equal(r.nodes.get('records').children.length,2);assert.equal(r.nodes.has('group-count'),false);assert.equal(r.nodes.get('list-description').hidden,true);assert.equal(Array.from(r.nodes.get('progress-text').children,n=>n.textContent).join(''),'已完成 2 / 3');
+  assert.equal(r.nodes.get('records').children.length,2);assert.equal(r.nodes.has('group-count'),false);assert.equal(r.nodes.get('list-description').hidden,true);assert.equal(r.nodes.get('group-heading').hidden,true);assert.equal(r.nodes.get('progress-text').hidden,false);assert.equal(r.nodes.get('progress-text').title,'今天已完成 2 项，共 3 项');assert.equal(Array.from(r.nodes.get('progress-text').children,n=>n.textContent).join(''),'2/3');
   setFilter('future');assert.equal(r.nodes.get('records').children.length,1);assert.equal(r.nodes.get('list-description').hidden,true);assert.equal(r.nodes.get('progress-text').hidden,true);
   setFilter('all');assert.equal(r.nodes.get('records').children.length,6);assert.equal(r.nodes.get('group-title').textContent,'全部待办');assert.equal(r.nodes.get('list-description').hidden,true);
 });
@@ -250,7 +250,7 @@ test('status and category filters intersect with reciprocal counts, including tr
   await manageEntry(r).onclick();assert.equal(r.nodes.get('uncategorized-count').textContent,'1 条 · 固定分类');assert.equal(r.nodes.get('category-list').children[0].children[1].textContent,'2 条');r.nodes.get('category-manager-done').onclick();
   await menuItem(r,'filter-menu','回收站').onclick();assert.equal(r.nodes.get('records').children.length,1);assert.equal(r.nodes.get('group-title').textContent,'回收站 · 工作');assert.deepEqual(menuLabels(r,'category-menu'),['全部分类 2','未分类 0','工作 1','生活 1']);
   await menuItem(r,'category-menu','生活').onclick();assert.equal(r.nodes.get('group-title').textContent,'回收站 · 生活');assert.equal(r.nodes.get('records').children.length,1);
-  await menuItem(r,'category-menu','全部分类').onclick();assert.equal(r.nodes.get('records').children.length,2);assert.equal(JSON.stringify(r.state()),before);await menuItem(r,'filter-menu','全部便签').onclick();assert.equal(r.nodes.get('group-heading').hidden,true);r.nodes.get('todos-tab').onclick();assert.equal(r.nodes.get('group-heading').hidden,false);
+  await menuItem(r,'category-menu','全部分类').onclick();assert.equal(r.nodes.get('records').children.length,2);assert.equal(JSON.stringify(r.state()),before);await menuItem(r,'filter-menu','全部便签').onclick();assert.equal(r.nodes.get('group-heading').hidden,true);r.nodes.get('todos-tab').onclick();assert.equal(r.nodes.get('group-heading').hidden,true);assert.equal(r.nodes.get('progress-text').hidden,true);
 });
 
 test('quick notes inherit category, keep explicit override for another entry, and reset on switching views',async()=>{
