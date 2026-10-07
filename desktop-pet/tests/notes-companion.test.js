@@ -47,6 +47,8 @@ function fixture(t, initial, getDefaultTab, organizer, getAppearance, getColorMo
     setAlwaysOnTop(value) { this.pinned = value; }
     isAlwaysOnTop() { return this.pinned === true; }
     getBounds() { return { ...this.bounds }; }
+    getMinimumSize() { return this.minimumSize || [this.options.minWidth, this.options.minHeight]; }
+    setMinimumSize(width, height) { this.minimumSize = [width, height]; }
     setBounds(bounds) { this.bounds = { ...bounds }; this.boundsWrites = (this.boundsWrites || 0) + 1; }
   }
   const ipc = Object.assign(new EventEmitter(), { handle: (channel, fn) => handlers.set(channel, fn), removeHandler: channel => handlers.delete(channel) });
@@ -87,6 +89,42 @@ test('notes windows deny unrelated/subframe/navigation IPC and use isolated loca
   assert.equal((await f.handlers.get('notes:copy')({ sender: panel.webContents, senderFrame: {} }, 'secret')).ok, false);
   panel.url = 'https://example.test/';
   assert.equal((await f.call(panel, 'notes:copy', 'secret')).ok, false); assert.equal(f.clipboard.length, 0);
+});
+
+test('panel opens follow the current pet display, including loading and reopening a dragged/resized panel', t => {
+  const f = fixture(t), primary = f.screen.area, external = { x: 1440, y: -300, width: 1920, height: 1080 };
+  f.screen.getDisplayMatching = rect => ({ workArea: rect.x >= 1440 ? external : primary });
+  const inside = area => {
+    const b = panel.getBounds();
+    assert.ok(b.x >= area.x && b.y >= area.y && b.x + b.width <= area.x + area.width && b.y + b.height <= area.y + area.height);
+  };
+  const panel = f.controller.openPanel({ tab: 'note', create: true });
+  inside(primary); // 球球贴着两屏接缝，面板不能按候选位置误选邻屏。
+  f.pet.bounds = { x: 3200, y: 600, width: 80, height: 80 };
+  f.ready(panel); inside(external);
+  panel.setBounds({ x: 1500, y: 0, width: 460, height: 560 }); panel.hide();
+  f.pet.bounds = { x: 100, y: 100, width: 80, height: 80 };
+  assert.equal(f.controller.openPanel({ tab: 'todo' }), panel); inside(primary);
+  assert.equal(panel.bounds.width, 460); assert.equal(panel.bounds.height, 560);
+  assert.equal(panel.sent.filter(([channel]) => channel === 'notes:open').at(-1)[1].tab, 'todo');
+  panel.setBounds({ x: 500, y: 200, width: 460, height: 560 });
+  f.pet.bounds.x = 300;
+  f.time(f.now());
+  assert.equal(panel.bounds.x, 500, '已经打开的面板仍可自由摆放');
+  f.controller.openPanel();
+  assert.notEqual(panel.bounds.x, 500, '在同一屏复开也重新靠近球球');
+});
+
+test('late ready callbacks never position destroyed or paused panels', t => {
+  const f = fixture(t), closed = f.controller.openPanel();
+  closed.destroy();
+  closed.getMinimumSize = () => { throw Error('Object has been destroyed'); };
+  assert.doesNotThrow(() => f.ready(closed)); assert.equal(closed.isVisible(), false);
+  const panel = f.controller.openPanel(), writes = panel.boundsWrites;
+  f.controller.pause(); f.ready(panel);
+  assert.equal(panel.boundsWrites, writes); assert.equal(panel.isVisible(), false);
+  f.controller.resume(); assert.equal(panel.isVisible(), false);
+  f.controller.openPanel(); assert.equal(panel.isVisible(), true);
 });
 
 test('normal opens use the current default even in an existing panel, explicit routes override it', t => {

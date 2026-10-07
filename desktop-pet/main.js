@@ -22,7 +22,8 @@ const { createCodexPetStore } = require('./lib/codex-pets');
 const {
   SIZES,
   defaultBounds,
-  ensureVisibleBounds
+  ensureVisibleBounds,
+  positionWindowNearPet
 } = require('./lib/window-placement');
 const {
   BOUNCE_TOTAL_MS,
@@ -191,9 +192,14 @@ function fromApiUsageWindow(event, requireVisible = true) {
     (!requireVisible || apiUsageWindow.isVisible()) && event.sender === apiUsageWindow.webContents);
 }
 
+function positionFunctionWindow(win) {
+  positionWindowNearPet(win, petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null, screen);
+}
+
 function openApiUsage() {
   if (isQuitting || screenLocked) return;
   if (apiUsageWindow && !apiUsageWindow.isDestroyed()) {
+    positionFunctionWindow(apiUsageWindow);
     apiUsageWindow.show();
     apiUsageWindow.focus();
     return;
@@ -208,11 +214,14 @@ function openApiUsage() {
     }
   });
   apiUsageWindow = win;
+  positionFunctionWindow(win);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', event => event.preventDefault());
   win.webContents.on('will-attach-webview', event => event.preventDefault());
   win.on('closed', () => { if (apiUsageWindow === win) apiUsageWindow = null; });
-  win.once('ready-to-show', () => { if (!win.isDestroyed() && !screenLocked) win.show(); });
+  win.once('ready-to-show', () => {
+    if (!isQuitting && !win.isDestroyed() && !screenLocked) { positionFunctionWindow(win); win.show(); }
+  });
   void win.loadFile(path.join(__dirname, 'api-usage.html')).catch(error => writeError('API 费用面板', error));
 }
 
@@ -224,7 +233,7 @@ function fromAboutWindow(event, requireVisible = false) {
 function openAbout() {
   if (isQuitting || screenLocked) return;
   if (aboutWindow && !aboutWindow.isDestroyed()) {
-    if (aboutReady) { aboutWindow.show(); aboutWindow.focus(); }
+    if (aboutReady) { positionFunctionWindow(aboutWindow); aboutWindow.show(); aboutWindow.focus(); }
     return aboutWindow;
   }
   const win = new BrowserWindow({
@@ -236,6 +245,7 @@ function openAbout() {
       spellcheck: false, devTools: !app.isPackaged }
   });
   aboutWindow = win;
+  positionFunctionWindow(win);
   aboutReady = false;
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', event => event.preventDefault());
@@ -244,7 +254,7 @@ function openAbout() {
   win.once('ready-to-show', () => {
     if (aboutWindow !== win || win.isDestroyed()) return;
     aboutReady = true;
-    if (!isQuitting && !screenLocked) { win.show(); win.focus(); }
+    if (!isQuitting && !screenLocked) { positionFunctionWindow(win); win.show(); win.focus(); }
   });
   void win.loadFile(path.join(__dirname, 'about.html')).catch(error => {
     writeError('关于球球', error);
@@ -354,6 +364,7 @@ function setAutoUpdateCheck(value) {
 function openCustomization() {
   if (isQuitting || screenLocked) return;
   if (customizationWindow && !customizationWindow.isDestroyed()) {
+    positionFunctionWindow(customizationWindow);
     customizationWindow.show();
     customizationWindow.focus();
     return;
@@ -373,6 +384,7 @@ function openCustomization() {
   const [contentWidth, contentHeight] = win.getContentSize();
   win.setMinimumSize(760 + outerWidth - contentWidth, 580 + outerHeight - contentHeight);
   customizationWindow = win;
+  positionFunctionWindow(win);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', event => event.preventDefault());
   win.webContents.on('did-fail-load', (_event, code, description) => writeError('定制面板加载', `${code} ${description}`));
@@ -380,7 +392,9 @@ function openCustomization() {
     if (customizationWindow !== win) return;
     customizationWindow = null;
   });
-  win.once('ready-to-show', () => { if (!win.isDestroyed() && !screenLocked) win.show(); });
+  win.once('ready-to-show', () => {
+    if (!isQuitting && !win.isDestroyed() && !screenLocked) { positionFunctionWindow(win); win.show(); }
+  });
   void win.loadFile(path.join(__dirname, 'customize.html')).catch(error => writeError('定制面板', error));
 }
 
@@ -1634,6 +1648,17 @@ async function finishSmokeTest() {
     );
     if (!companionReady) throw new Error('轻陪伴活动感知尚未接入');
 
+    if (process.env.PET_SMOKE_FUNCTION_WINDOWS_ONLY === '1') {
+      await require('./scripts/verify-function-windows').verifyFunctionWindows({
+        pet: petWindow, screen, openers: [
+          ['customize', () => { openCustomization(); return customizationWindow; }],
+          ['notes', () => notesCompanion.openPanel()],
+          ['api-usage', () => { openApiUsage(); return apiUsageWindow; }],
+          ['about', openAbout]
+        ]
+      });
+      app.exit(0); return;
+    }
     if (process.env.PET_SMOKE_UI_THEME_ONLY === '1') {
       await require('./scripts/verify-ui-theme').verifyUiTheme({
         pet: petWindow, notes: notesCompanion, chat, settingsFile, nativeTheme,

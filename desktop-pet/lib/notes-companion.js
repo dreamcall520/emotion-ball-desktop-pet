@@ -3,8 +3,8 @@ const { pathToFileURL } = require('node:url');
 const { randomUUID } = require('node:crypto');
 const M = require('./notes-model');
 const { createNotesStore } = require('./notes-store');
-const { GAP } = require('./quota-label-placement');
 const { petVisualBounds } = require('./pet-visual-bounds');
+const { adjacentBounds, positionWindowNearPet } = require('./window-placement');
 
 // Pet placement's fallback is a square pet; notes keep their own rectangular size.
 function visibleBounds(bounds, screen) {
@@ -17,20 +17,7 @@ function visibleBounds(bounds, screen) {
 }
 
 function reminderBounds(bounds, area, size, presentation) {
-  const pet = petVisualBounds(bounds, presentation?.shape, presentation);
-  const width = Math.min(size.width, area.width), height = Math.min(size.height, area.height);
-  const x = pet.x + (pet.width - width) / 2, y = pet.y + (pet.height - height) / 2;
-  const candidates = [
-    { x, y: pet.y - height - GAP }, { x, y: pet.y + pet.height + GAP },
-    { x: pet.x + pet.width + GAP, y }, { x: pet.x - width - GAP, y }
-  ].map(candidate => ({ x: Math.round(candidate.x), y: Math.round(candidate.y), width, height }));
-  const inside = b => b.x >= area.x && b.y >= area.y && b.x + width <= area.x + area.width && b.y + height <= area.y + area.height;
-  const fits = candidates.find(inside);
-  if (fits) return fits;
-  const bounded = candidates.map(b => ({ ...b,
-    x: Math.min(Math.max(b.x, area.x), area.x + area.width - width),
-    y: Math.min(Math.max(b.y, area.y), area.y + area.height - height) }));
-  return bounded.find(b => b.x + width <= pet.x || b.x >= pet.x + pet.width || b.y + height <= pet.y || b.y >= pet.y + pet.height) || bounded[0];
+  return adjacentBounds(petVisualBounds(bounds, presentation?.shape, presentation), area, size);
 }
 
 function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialog, filePath,
@@ -132,10 +119,14 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
       entry.allowedClose = true; if (alive(win)) win.destroy();
     });
     win.once('ready-to-show', () => {
+      if (!alive(win)) return;
       entry.ready = true;
       if (entry.open) send(win, 'notes:open', entry.open);
       if (reminder) updateReminderWindow();
-      else show(win, note && !entry.focusOnReady);
+      else if (!suppressed()) {
+        if (mode === 'panel') positionWindowNearPet(win, getPetBounds?.(), screen);
+        show(win, note && !entry.focusOnReady);
+      }
     });
     win.on('close', event => {
       if (entry.allowedClose) return;
@@ -273,6 +264,7 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
     if (suppressed()) return null;
     if (!['note', 'todo'].includes(tab)) tab = getDefaultTab() === 'note' ? 'note' : 'todo';
     if (!alive(panel)) panel = createWindow('panel', null, anchor(380, 520));
+    positionWindowNearPet(panel, getPetBounds?.(), screen);
     const entry = windowEntries.get(panel);
     entry.open = { tab, create: create === true, id: typeof id === 'string' ? id : null };
     if (entry.ready) send(panel, 'notes:open', entry.open);

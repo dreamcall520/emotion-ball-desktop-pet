@@ -154,6 +154,7 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/scripts/verify-aurora-six-lobe.js',
     'desktop-pet/scripts/verify-customize-unified.js',
     'desktop-pet/scripts/verify-ui-theme.js',
+    'desktop-pet/scripts/verify-function-windows.js',
     'desktop-pet/scripts/verify-codex-pets.js',
     'emotion-ball/js/rings.js',
     'emotion-ball/js/custom-shapes.js',

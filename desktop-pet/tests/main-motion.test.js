@@ -57,6 +57,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     getBounds() { return { ...this.bounds }; }
     getSize() { return [this.bounds.width, this.bounds.height]; }
     getContentSize() { return this.getSize(); }
+    getMinimumSize() { return this.minimumSize || [this.options.minWidth || 0, this.options.minHeight || 0]; }
     setMinimumSize(width, height) { this.minimumSize = [width, height]; }
     getPosition() { return [this.bounds.x, this.bounds.y]; }
     isDestroyed() { return this.destroyed; } isVisible() { return this.visible; }
@@ -227,6 +228,37 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
 }
 
 const TASK_ID = '11111111-1111-4111-8111-111111111111';
+
+test('定制、API 费用和关于窗口首次及复开均跟随当前球球，加载期间移动也生效', async () => {
+  const f = await fixture();
+  const primary = { x: 0, y: 24, width: 1440, height: 876 }, external = { x: 1440, y: 24, width: 1920, height: 1016 },
+    left = { x: -1920, y: -300, width: 1920, height: 1040 };
+  f.screen.getDisplayMatching = rect => ({ workArea: rect.x < 0 ? left : rect.x >= 1440 ? external : primary });
+  const inside = (win, area) => {
+    const b = win.getBounds();
+    assert.ok(b.x >= area.x && b.y >= area.y && b.x + b.width <= area.x + area.width && b.y + b.height <= area.y + area.height);
+  };
+  for (const [open, variable] of [['openCustomization', 'customizationWindow'], ['openApiUsage', 'apiUsageWindow'], ['openAbout', 'aboutWindow']]) {
+    f.pet.bounds = { x: 3260, y: 900, width: 80, height: 80 };
+    f.call(`${open}()`);
+    const win = f.call(variable); inside(win, external);
+    f.pet.bounds = { x: -1800, y: -200, width: 80, height: 80 };
+    win.emit('ready-to-show'); inside(win, left); assert.equal(win.isVisible(), true);
+    const resized = { ...win.getBounds(), x: -900, y: 100 };
+    if (win.options.resizable !== false) { resized.width += 40; resized.height += 20; }
+    win.setBounds(resized); win.hide();
+    f.pet.bounds = { x: 100, y: 100, width: 80, height: 80 };
+    f.call(`${open}()`); assert.equal(f.call(variable), win); inside(win, primary);
+    assert.equal(win.getBounds().width, resized.width); assert.equal(win.getBounds().height, resized.height);
+    assert.equal(win.isVisible(), true); assert.equal(win.focused, true);
+    const openedBounds = win.getBounds();
+    f.pet.bounds.x = 300;
+    assert.deepEqual(win.getBounds(), openedBounds, '窗口打开后仍由用户摆放');
+    win.setBounds({ ...openedBounds, x: 100, y: 32 });
+    f.call(`${open}()`);
+    assert.notDeepEqual(win.getBounds(), { ...openedBounds, x: 100, y: 32 }, '同屏再次打开也随球球重新定位');
+  }
+});
 
 test('尺寸写入失败保留当前设置、窗口与贴边状态，不广播未保存尺寸', async () => {
   for (const side of [null, 'right']) {

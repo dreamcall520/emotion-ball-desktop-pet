@@ -3,7 +3,8 @@ const assert = require('node:assert/strict');
 const {
   SIZES,
   defaultBounds,
-  ensureVisibleBounds
+  ensureVisibleBounds,
+  positionWindowNearPet
 } = require('../lib/window-placement');
 
 const primary = { id: 1, workArea: { x: 0, y: 0, width: 1440, height: 900 } };
@@ -60,4 +61,26 @@ test('第二块屏幕上的位置保留在该屏幕内', () => {
     ensureVisibleBounds({ x: 3200, y: 1000, ...SIZES.medium }, [primary, second], primary),
     { x: 3180, y: 900, width: 180, height: 180 }
   );
+});
+
+test('功能窗口以球球选屏，覆盖负坐标、屏幕接缝、边角和小工作区', () => {
+  const areas = [primary.workArea, { x: 1440, y: 24, width: 1920, height: 1016 },
+    { x: -1920, y: -1080, width: 1920, height: 1040 }, { x: 0, y: 0, width: 640, height: 480 }];
+  for (const area of areas) for (const horizontal of [0, 0.5, 1]) for (const vertical of [0, 0.5, 1]) {
+    const pet = { x: area.x + (area.width - 80) * horizontal, y: area.y + (area.height - 80) * vertical, width: 80, height: 80 };
+    let bounds = { x: 8000, y: 8000, width: 960, height: 700 }, minimum = [760, 580];
+    const win = { getBounds: () => bounds, getMinimumSize: () => minimum,
+      setMinimumSize: (w, h) => { minimum = [w, h]; }, setBounds: value => { bounds = value; } };
+    let currentArea = area;
+    const screen = { getDisplayMatching: anchor => { assert.equal(anchor, pet); return { workArea: currentArea }; } };
+    positionWindowNearPet(win, pet, screen);
+    assert.equal(bounds.width, Math.min(960, area.width));
+    assert.equal(bounds.height, Math.min(700, area.height));
+    assert.ok(bounds.x >= area.x && bounds.y >= area.y);
+    assert.ok(bounds.x + bounds.width <= area.x + area.width && bounds.y + bounds.height <= area.y + area.height);
+    assert.deepEqual(minimum, [Math.min(760, area.width), Math.min(580, area.height)]);
+    currentArea = primary.workArea;
+    positionWindowNearPet(win, pet, screen);
+    assert.deepEqual(minimum, [760, 580], '回到大屏后恢复原生最小尺寸');
+  }
 });
