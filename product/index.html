@@ -45,7 +45,7 @@
     <link rel="stylesheet" href="../review-refinements.css?v=20261006-type">
     <link rel="stylesheet" href="../native-demos.css?v=20261006-both-edges-floor">
     <link rel="stylesheet" href="../image-preview.css?v=20261006">
-    <link rel="stylesheet" href="../product-layout.css?v=20261007-customize">
+    <link rel="stylesheet" href="../product-layout.css?v=20261007-appearance-groups">
     <title>球球桌宠 · 功能介绍</title>
   </head>
   <body class="product-redesign">
@@ -265,18 +265,25 @@
         </div>
         <div class="ap-demo" data-appearance-demo data-mode="standard" data-look="light" data-ui-theme="blue">
           <div class="ap-controls">
-            <div role="group" aria-label="演示界面主题色" class="ap-switch ap-theme">
-              <span class="ap-control-label" aria-hidden="true">主题</span>
-              <button type="button" data-ap-theme="blue" aria-pressed="true">晴空蓝</button>
-              <button type="button" data-ap-theme="green" aria-pressed="false">薄荷绿</button>
+            <div class="ap-control-group" role="group" aria-labelledby="ap-theme-label">
+              <span class="ap-control-label" id="ap-theme-label">主题色</span>
+              <div class="ap-switch ap-theme">
+                <button type="button" data-ap-theme="blue" aria-pressed="true">晴空蓝</button>
+                <button type="button" data-ap-theme="green" aria-pressed="false">薄荷绿</button>
+              </div>
             </div>
-            <div role="group" aria-label="演示界面外观" class="ap-switch ap-look">
-              <span class="ap-control-label" aria-hidden="true">外观</span>
-              <button type="button" data-ap-look="light" aria-pressed="true">浅色</button>
-              <button type="button" data-ap-look="dark" aria-pressed="false">深色</button>
-              <button type="button" data-ap-look="system" aria-pressed="false">跟随系统</button>
+            <div class="ap-control-group" role="group" aria-labelledby="ap-look-label">
+              <span class="ap-control-label" id="ap-look-label">明暗模式</span>
+              <div class="ap-switch ap-look">
+                <button type="button" data-ap-look="light" aria-pressed="true">浅色</button>
+                <button type="button" data-ap-look="dark" aria-pressed="false">深色</button>
+                <button type="button" data-ap-look="system" aria-pressed="false">跟随系统</button>
+              </div>
             </div>
-            <label class="ap-contrast"><input type="checkbox" data-ap-contrast>色弱友好 · 高对比</label>
+            <div class="ap-control-group" role="group" aria-labelledby="ap-readability-label">
+              <span class="ap-control-label" id="ap-readability-label">可读性</span>
+              <label class="ap-contrast"><input type="checkbox" data-ap-contrast>色弱友好（高对比）</label>
+            </div>
           </div>
           <div class="ap-preview native-appearance-preview">
             <iframe class="native-demo native-chat" src="../demos/chat/index.html?v=20261007-customize" title="新版聊天标准与色弱配色演示" data-app-demo data-demo="chat" data-demo-appearance height="520" loading="lazy"></iframe>

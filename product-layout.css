@@ -179,9 +179,11 @@ html[data-theme="dark"] .product-redesign {
 .product-redesign .customize-options p { margin: 0; font-size: 14px; line-height: 1.85; color: var(--text-soft); }
 .product-redesign .native-custom-wrap { max-width: none; }
 .product-redesign .ap-demo { min-width: 0; border: 0; padding: 0; background: transparent; }
-.product-redesign .ap-controls { width: min(100%, 620px); justify-content: flex-start; gap: 4px 20px; margin: 0 auto 18px; }
+.product-redesign .ap-controls { display: grid; grid-template-columns: max-content max-content minmax(0, 1fr); align-items: stretch; width: min(100%, 620px); gap: 20px; margin: 0 auto 20px; }
+.product-redesign .ap-control-group { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.product-redesign .ap-control-group + .ap-control-group { padding-inline-start: 20px; border-inline-start: 1px solid var(--line-strong); }
 .product-redesign .ap-switch { align-items: center; flex-wrap: nowrap; gap: 4px; padding: 0; border: 0; border-radius: 0; background: none; }
-.product-redesign .ap-control-label { margin-right: 4px; font-size: 11px; color: var(--text-soft); }
+.product-redesign .ap-control-label { margin: 0; font-size: 11px; line-height: 1.5; color: var(--text-soft); }
 .product-redesign .ap-switch button { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 8px 6px; border: 0; border-radius: 4px; font-size: 13px; font-weight: 400; white-space: nowrap; }
 .product-redesign .ap-switch button[aria-pressed="true"] { background: none; color: var(--text); font-weight: 550; }
 .product-redesign .ap-look button[aria-pressed="true"]::after { content: ""; position: absolute; bottom: 4px; left: 6px; right: 6px; height: 1px; background: currentColor; }
@@ -275,7 +277,9 @@ html[data-theme="dark"] .product-redesign {
   .product-redesign .notes-native-actions { gap: 12px; }
   .product-redesign .customize-section > .section-heading { margin-bottom: 28px; }
   .product-redesign .customize-options { grid-template-columns: 1fr; gap: 20px; }
-  .product-redesign .ap-controls { gap: 0 18px; }
+  .product-redesign .ap-controls { grid-template-columns: 1fr; gap: 0; }
+  .product-redesign .ap-control-group { display: grid; grid-template-columns: 70px minmax(0, 1fr); align-items: center; gap: 12px; }
+  .product-redesign .ap-control-group + .ap-control-group { margin-top: 10px; padding: 10px 0 0; border-inline-start: 0; border-top: 1px solid var(--line-strong); }
   .product-redesign .download-grid { grid-template-columns: 1fr; }
   :root .product-redesign .download-card { padding: 24px; }
   .product-redesign .install-visual-step { padding: 12px; gap: 10px; }
