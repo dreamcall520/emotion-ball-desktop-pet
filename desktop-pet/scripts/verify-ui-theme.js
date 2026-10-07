@@ -110,7 +110,17 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
   await poll(() => page(customWin, "document.querySelector('#body-hex').value"), Boolean, '定制初始形象');
   const originalBody = await page(customWin, "document.querySelector('#body-hex').value");
   const panelWin = notes.getWindows().panel, panelBounds = panelWin.getBounds();
+  panelWin.setContentSize(360, 420);
+  await poll(() => page(panelWin, 'innerWidth'), width => width === 360, '最窄便签面板');
   const filterState = () => page(panelWin, `(() => ({
+    statusLabel: document.querySelector('#filter-label').textContent,
+    categoryLabel: document.querySelector('#category-filter-label').textContent,
+    inlineFilters: Boolean(document.querySelector('.list-toolbar #filter') && document.querySelector('.list-toolbar #category-filter')),
+    headingCount: Boolean(document.querySelector('#group-count')),
+    headingHidden: document.querySelector('#group-heading').hidden,
+    toolbar: [...document.querySelectorAll('.list-toolbar .tabs button, .list-toolbar .filter-trigger, #toggle-search, #new-button')].filter(button=>button.getBoundingClientRect().width).map(button=>({id:button.id,...button.getBoundingClientRect().toJSON()})),
+    menu: [...document.querySelectorAll('.filter-popover:not([hidden])')].map(menu=>({id:menu.id,...menu.getBoundingClientRect().toJSON()})),
+    width: innerWidth,
     statusValues: [...document.querySelectorAll('#filter-menu > button')].map(button => button.dataset.filter),
     statusHasManagement: Boolean(document.querySelector('#filter-menu #manage-categories, #filter-menu .manage-entry')),
     openMenus: ['filter-menu', 'category-menu'].filter(id => !document.getElementById(id).hidden),
@@ -124,12 +134,17 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
   await page(panelWin, "document.querySelector('#notes-tab').click(); document.querySelector('#filter').click()");
   const statusMenu = await filterState();
   assert.deepEqual(statusMenu.statusValues, ['all', 'favorites', 'desktop', 'trash'], '便签状态菜单仅四个状态');
+  assert.equal(statusMenu.statusLabel, '状态'); assert.equal(statusMenu.categoryLabel, '分类');
+  assert.equal(statusMenu.inlineFilters, true); assert.equal(statusMenu.headingCount, false); assert.equal(statusMenu.headingHidden, true);
+  for (const button of statusMenu.toolbar) assert.ok(button.left >= 0 && button.right <= statusMenu.width && Math.abs(button.top + button.height / 2 - statusMenu.toolbar[0].top - statusMenu.toolbar[0].height / 2) <= 3, button.id + ' 在最窄面板中保持同一行');
+  for (const menu of statusMenu.menu) assert.ok(menu.left >= 0 && menu.right <= statusMenu.width, '状态菜单不越界');
   assert.equal(statusMenu.statusHasManagement, false);
   assert.equal(statusMenu.categoryHidden, false);
   assert.deepEqual(statusMenu.openMenus, ['filter-menu']);
   await page(panelWin, "document.querySelector('#category-filter').click()");
   const categoryMenu = await filterState();
   assert.deepEqual(categoryMenu.openMenus, ['category-menu'], '打开分类时关闭状态菜单');
+  for (const menu of categoryMenu.menu) assert.ok(menu.left >= 0 && menu.right <= categoryMenu.width, '分类菜单不越界');
   assert.equal(categoryMenu.statusExpanded, 'false');
   assert.equal(categoryMenu.categoryExpanded, 'true');
   assert.equal(categoryMenu.managementInHeading, true, '分类管理位于分类菜单标题行');

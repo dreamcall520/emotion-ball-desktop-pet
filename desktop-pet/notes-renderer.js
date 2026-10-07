@@ -66,7 +66,9 @@ function toggleFilter(trigger,menu){const open=$(menu).hidden;closeFilter();if(o
 function selectFilter(value){if(!(tab==='note'?noteFilters:todoFilters).some(([id])=>id===value))return;filter=value;quickCategory=null;closeFilter();renderList();$('filter').focus()}
 function selectCategoryFilter(value){if(tab!=='note'||value!==null&&!categories().some(c=>c.id===value))return;noteCategoryFilter=value;quickCategory=null;closeFilter();renderList();$('category-filter').focus()}
 function renderFilter(options){
-  $('filter').value=filter;$('filter-label').textContent=`${tab==='note'?'状态 · ':''}${options.find(([value])=>value===filter)?.[1]||'全部便签'} ${recordsInGroup(tab,filter).length}`;
+  $('filter').value=filter;$('filter-label').textContent='状态';
+  $('filter').title=`状态：${options.find(([value])=>value===filter)?.[1]||'全部便签'} · ${recordsInGroup(tab,filter).length} ${tab==='note'?'条':'项'}`;
+  $('filter').setAttribute('aria-description',$('filter').title);$('filter').classList.toggle('is-filtered',filter!==(tab==='note'?'all':'today'));
   const menu=$('filter-menu');menu.replaceChildren();
   for(const [value,label] of options){const item=button('',()=>selectFilter(value));item.dataset.filter=value;item.setAttribute('aria-current',String(filter===value));item.append(node('span','view-check',filter===value?'✓':''),node('span','',label),node('span','view-count',String(recordsInGroup(tab,value).length)));menu.append(item)}
   renderCategoryFilter();
@@ -74,7 +76,8 @@ function renderFilter(options){
 function renderCategoryFilter(){
   $('category-filter-control').hidden=tab!=='note';const menu=$('category-menu');menu.replaceChildren();
   if(tab!=='note'){menu.hidden=true;$('category-filter').setAttribute('aria-expanded','false');return}
-  $('category-filter-label').textContent=`分类 · ${noteCategoryFilter===null?'全部分类':categoryName(noteCategoryFilter)}`;
+  $('category-filter-label').textContent='分类';$('category-filter').title=`分类：${noteCategoryFilter===null?'全部分类':categoryName(noteCategoryFilter)}`;
+  $('category-filter').setAttribute('aria-description',$('category-filter').title);$('category-filter').classList.toggle('is-filtered',noteCategoryFilter!==null);
   const heading=node('div','category-menu-heading'),manage=button('管理',()=>{closeFilter();openCategoryManager()},'category-manage');manage.id='manage-categories';manage.setAttribute('aria-label','管理分类');manage.setAttribute('aria-haspopup','dialog');manage.setAttribute('aria-controls','category-manager');heading.append(node('span','menu-label','分类'),manage);menu.append(heading);
   for(const c of [{id:null,name:'全部分类'},...categories()]){const selected=noteCategoryFilter===c.id,item=button('',()=>selectCategoryFilter(c.id));item.dataset.categoryFilter=c.id===null?'all':c.id;item.setAttribute('aria-current',String(selected));item.append(node('span','view-check',selected?'✓':''),node('span','',c.name),node('span','view-count',String(recordsInGroup('note',filter,c.id).length)));menu.append(item)}
 }
@@ -125,8 +128,9 @@ function renderList(){
   $('records').setAttribute('aria-labelledby',tab==='note'?'notes-tab':'todos-tab');
   if(noteCategoryFilter!==null&&!categories().some(c=>c.id===noteCategoryFilter))noteCategoryFilter='';const options=tab==='note'?noteFilters:todoFilters;renderFilter(options);
   $('filter').setAttribute('aria-label',tab==='note'?'便签状态':'待办分组');$('search').placeholder=tab==='note'?'搜索便签':'搜索待办';$('new-button').setAttribute('aria-label',tab==='note'?'新建便签':'新建待办');$('new-button').title=tab==='note'?'新建便签 · 完整编辑':'新建待办 · 设置日期和提醒';
+  $('group-heading').hidden=tab==='note'&&filter==='all'&&noteCategoryFilter===null;
   $('group-title').textContent=`${options.find(([v])=>v===filter)?.[1]||'今天'}${tab==='note'&&noteCategoryFilter!==null?' · '+categoryName(noteCategoryFilter):''}`;const p=M.progress(state);const today=tab==='todo'&&filter==='today';$('progress-text').hidden=!today;if(p.total)$('progress-text').replaceChildren(node('span','','已完成 '),node('span','completed-count',String(p.done)),node('span','progress-total',` / ${p.total}`));else $('progress-text').textContent='暂无计划';
-  const records=filteredRecords();$('group-count').hidden=false;$('group-count').textContent=`${records.length} ${tab==='note'?'条':'项'}`;$('list-description').textContent=query.trim()?`找到 ${records.length} 项记录`:filter==='trash'?'删除的记录会保留，恢复或永久删除由你决定':'';
+  const records=filteredRecords();$('list-description').textContent=query.trim()?`找到 ${records.length} 项记录`:filter==='trash'?'删除的记录会保留，恢复或永久删除由你决定':'';
   $('list-description').hidden=!$('list-description').textContent;
   $('records').replaceChildren();if(!records.length)$('records').append(node('p','empty',query.trim()?'没有找到相关记录':filter==='trash'?'回收站是空的':filter==='today'?'今天还没有计划，添加一件想做的事吧':'这里还没有记录'));
   for(const item of records){

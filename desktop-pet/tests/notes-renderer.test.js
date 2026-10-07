@@ -195,7 +195,7 @@ test('group counts match full lists and remain visible during search; empty desc
   assert.deepEqual(labels(),['全部便签 2','收藏 1','桌面显示中 1','回收站 1']);
   r.nodes.get('search').value='没有匹配';r.nodes.get('search').oninput();assert.deepEqual(labels(),['全部便签 2','收藏 1','桌面显示中 1','回收站 1']);
   r.nodes.get('todos-tab').onclick();assert.deepEqual(labels(),['全部待办 6','今天 2','逾期 1','未来 1','无日期 1','已完成 1','已归档 1','回收站 1']);
-  assert.equal(r.nodes.get('records').children.length,2);assert.equal(r.nodes.get('group-count').hidden,false);assert.equal(r.nodes.get('list-description').hidden,true);assert.equal(Array.from(r.nodes.get('progress-text').children,n=>n.textContent).join(''),'已完成 2 / 3');
+  assert.equal(r.nodes.get('records').children.length,2);assert.equal(r.nodes.has('group-count'),false);assert.equal(r.nodes.get('list-description').hidden,true);assert.equal(Array.from(r.nodes.get('progress-text').children,n=>n.textContent).join(''),'已完成 2 / 3');
   setFilter('future');assert.equal(r.nodes.get('records').children.length,1);assert.equal(r.nodes.get('list-description').hidden,true);assert.equal(r.nodes.get('progress-text').hidden,true);
   setFilter('all');assert.equal(r.nodes.get('records').children.length,6);assert.equal(r.nodes.get('group-title').textContent,'全部待办');assert.equal(r.nodes.get('list-description').hidden,true);
 });
@@ -242,23 +242,23 @@ test('status and category filters intersect with reciprocal counts, including tr
   const r=renderer(async()=>assert.fail('筛选分类不能保存或关闭窗口'),'panel');await r.start();let s=M.addCategory(r.state(),'工作');s=M.addCategory(s,'生活');const [work,life]=s.categories;
   const notes=['工作常用','工作普通','生活常用','未分类常用','删除工作','删除生活'].map(title=>M.newNote(title,'正文'));
   for(const i of [0,1,4])notes[i].categoryId=work.id;for(const i of [2,5])notes[i].categoryId=life.id;for(const i of [0,2,3])notes[i].favorite=true;notes[0].desktopOpen=true;for(const i of [4,5])notes[i].deletedAt=notes[i].createdAt;s.notes=notes;r.acceptState(s);r.nodes.get('notes-tab').onclick();const before=JSON.stringify(r.state());
-  assert.equal(r.nodes.get('filter-label').textContent,'状态 · 全部便签 4');assert.equal(r.nodes.get('category-filter-label').textContent,'分类 · 全部分类');
+  assert.equal(r.nodes.get('group-heading').hidden,true);assert.equal(r.nodes.get('filter-label').textContent,'状态');assert.equal(r.nodes.get('filter').title,'状态：全部便签 · 4 条');assert.equal(r.nodes.get('category-filter-label').textContent,'分类');assert.equal(r.nodes.get('category-filter').title,'分类：全部分类');
   assert.deepEqual(menuLabels(r,'filter-menu'),['全部便签 4','收藏 3','桌面显示中 1','回收站 2']);assert.deepEqual(menuLabels(r,'category-menu'),['全部分类 4','未分类 1','工作 2','生活 1']);
-  await menuItem(r,'category-menu','工作').onclick();assert.equal(r.nodes.get('records').children.length,2);assert.equal(r.nodes.get('group-title').textContent,'全部便签 · 工作');assert.equal(r.nodes.get('quick-category-select').value,work.id);
+  await menuItem(r,'category-menu','工作').onclick();assert.equal(r.nodes.get('group-heading').hidden,false);assert.equal(r.nodes.get('records').children.length,2);assert.equal(r.nodes.get('group-title').textContent,'全部便签 · 工作');assert.equal(r.nodes.get('quick-category-select').value,work.id);
   assert.deepEqual(menuLabels(r,'filter-menu'),['全部便签 2','收藏 1','桌面显示中 1','回收站 1']);
-  await menuItem(r,'filter-menu','收藏').onclick();assert.equal(r.nodes.get('records').children.length,1);assert.equal(r.nodes.get('filter-label').textContent,'状态 · 收藏 1');assert.deepEqual(menuLabels(r,'category-menu'),['全部分类 3','未分类 1','工作 1','生活 1']);
+  await menuItem(r,'filter-menu','收藏').onclick();assert.equal(r.nodes.get('records').children.length,1);assert.equal(r.nodes.get('filter-label').textContent,'状态');assert.equal(r.nodes.get('filter').title,'状态：收藏 · 1 条');assert.deepEqual(menuLabels(r,'category-menu'),['全部分类 3','未分类 1','工作 1','生活 1']);
   await manageEntry(r).onclick();assert.equal(r.nodes.get('uncategorized-count').textContent,'1 条 · 固定分类');assert.equal(r.nodes.get('category-list').children[0].children[1].textContent,'2 条');r.nodes.get('category-manager-done').onclick();
   await menuItem(r,'filter-menu','回收站').onclick();assert.equal(r.nodes.get('records').children.length,1);assert.equal(r.nodes.get('group-title').textContent,'回收站 · 工作');assert.deepEqual(menuLabels(r,'category-menu'),['全部分类 2','未分类 0','工作 1','生活 1']);
   await menuItem(r,'category-menu','生活').onclick();assert.equal(r.nodes.get('group-title').textContent,'回收站 · 生活');assert.equal(r.nodes.get('records').children.length,1);
-  await menuItem(r,'category-menu','全部分类').onclick();assert.equal(r.nodes.get('records').children.length,2);assert.equal(JSON.stringify(r.state()),before);
+  await menuItem(r,'category-menu','全部分类').onclick();assert.equal(r.nodes.get('records').children.length,2);assert.equal(JSON.stringify(r.state()),before);await menuItem(r,'filter-menu','全部便签').onclick();assert.equal(r.nodes.get('group-heading').hidden,true);r.nodes.get('todos-tab').onclick();assert.equal(r.nodes.get('group-heading').hidden,false);
 });
 
 test('quick notes inherit category, keep explicit override for another entry, and reset on switching views',async()=>{
   const r=renderer(async(next,revision)=>({ok:true,state:{...next,revision:revision+1}}),'panel');await r.start();let s=M.addCategory(r.state(),'工作');s=M.addCategory(s,'生活');r.acceptState(s);r.nodes.get('notes-tab').onclick();const [work,life]=r.state().categories;
-  await menuItem(r,'category-menu','工作').onclick();r.nodes.get('quick-title').value='工作正文';assert.equal(await r.submitQuick(),true);assert.equal(r.state().notes[0].categoryId,work.id);assert.equal(r.nodes.get('filter').value,'all');assert.equal(r.nodes.get('category-filter-label').textContent,'分类 · 工作');
+  await menuItem(r,'category-menu','工作').onclick();r.nodes.get('quick-title').value='工作正文';assert.equal(await r.submitQuick(),true);assert.equal(r.state().notes[0].categoryId,work.id);assert.equal(r.nodes.get('filter').value,'all');assert.equal(r.nodes.get('category-filter-label').textContent,'分类');assert.equal(r.nodes.get('category-filter').title,'分类：工作');
   const picker=r.nodes.get('quick-category-select');picker.value=life.id;picker.onchange();r.nodes.get('quick-title').value='生活正文';await r.submitQuick();assert.equal(r.state().notes[1].categoryId,life.id);assert.equal(picker.value,life.id);
   await menuItem(r,'category-menu','全部分类').onclick();assert.equal(picker.value,'');r.nodes.get('quick-title').value='未分类正文';await r.submitQuick();assert.equal(r.state().notes[2].categoryId,'');
-  await menuItem(r,'category-menu','工作').onclick();r.nodes.get('todos-tab').onclick();assert.equal(r.nodes.get('category-filter-control').hidden,true);r.nodes.get('notes-tab').onclick();assert.equal(picker.value,'');assert.equal(r.nodes.get('category-filter-label').textContent,'分类 · 全部分类');
+  await menuItem(r,'category-menu','工作').onclick();r.nodes.get('todos-tab').onclick();assert.equal(r.nodes.get('category-filter-control').hidden,true);r.nodes.get('notes-tab').onclick();assert.equal(picker.value,'');assert.equal(r.nodes.get('category-filter-label').textContent,'分类');assert.equal(r.nodes.get('category-filter').title,'分类：全部分类');
 });
 
 test('filter popovers are mutually exclusive and close on Escape, outside click and tab changes',async()=>{
@@ -278,9 +278,9 @@ test('deleting the selected category falls back to uncategorized without changin
   const active=M.newNote('工作便签','完整正文'),trashed=M.newNote('删除便签','回收站正文'),other=M.newNote('生活便签','生活正文');active.categoryId=trashed.categoryId=work.id;trashed.deletedAt=trashed.createdAt;other.categoryId=life.id;s.notes=[active,trashed,other];r.acceptState(s);r.nodes.get('notes-tab').onclick();
   await menuItem(r,'category-menu','工作').onclick();await r.openNoteEditor();assert.equal(r.nodes.get('edit-note-category').value,work.id);await r.nodes.get('editor-close').onclick();
   await menuItem(r,'filter-menu','回收站').onclick();r.openDeleteCategory(work.id);await r.nodes.get('delete-category-confirm').onclick();
-  assert.equal(saves,1);assert.equal(r.nodes.get('filter').value,'trash');assert.equal(r.nodes.get('category-filter-label').textContent,'分类 · 未分类');assert.equal(r.nodes.get('group-title').textContent,'回收站 · 未分类');assert.equal(r.nodes.get('records').children.length,1);assert.equal(r.nodes.get('quick-category-select').value,'');
+  assert.equal(saves,1);assert.equal(r.nodes.get('filter').value,'trash');assert.equal(r.nodes.get('category-filter-label').textContent,'分类');assert.equal(r.nodes.get('category-filter').title,'分类：未分类');assert.equal(r.nodes.get('group-title').textContent,'回收站 · 未分类');assert.equal(r.nodes.get('records').children.length,1);assert.equal(r.nodes.get('quick-category-select').value,'');
   assert.equal(r.state().notes[0].body,'完整正文');assert.equal(r.state().notes[1].body,'回收站正文');assert.equal(r.state().notes[1].deletedAt,trashed.deletedAt);assert.equal(r.state().notes[0].categoryId,'');assert.equal(r.state().notes[1].categoryId,'');assert.deepEqual(menuLabels(r,'category-menu'),['全部分类 1','未分类 1','生活 0']);
-  await menuItem(r,'category-menu','生活').onclick();r.acceptState(M.deleteCategory(r.state(),life.id));assert.equal(r.nodes.get('category-filter-label').textContent,'分类 · 未分类');assert.equal(r.nodes.get('filter').value,'trash');assert.equal(saves,1);
+  await menuItem(r,'category-menu','生活').onclick();r.acceptState(M.deleteCategory(r.state(),life.id));assert.equal(r.nodes.get('category-filter-label').textContent,'分类');assert.equal(r.nodes.get('category-filter').title,'分类：未分类');assert.equal(r.nodes.get('filter').value,'trash');assert.equal(saves,1);
 });
 
 test('category menu heading exposes management only for notes and saves a new category',async()=>{
