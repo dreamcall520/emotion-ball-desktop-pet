@@ -10,7 +10,7 @@ const M = require('../lib/notes-model');
 const { createNotesCompanion, visibleBounds } = require('../lib/notes-companion');
 const { petVisualBounds } = require('../lib/pet-visual-bounds');
 
-function fixture(t, initial, getDefaultTab, organizer, getAppearance, getColorMode) {
+function fixture(t, initial, getDefaultTab, organizer, getAppearance, getColorMode, getWindowObstacles) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qiu-notes-window-'));
   const file = path.join(dir, 'notes.json');
   if (initial) fs.writeFileSync(file, JSON.stringify(initial));
@@ -63,7 +63,7 @@ function fixture(t, initial, getDefaultTab, organizer, getAppearance, getColorMo
     clipboard: { writeText: text => clipboard.push(text) },
     dialog: { showSaveDialog: async () => ({ canceled: true }), showMessageBox: async (...args) => { dialogs.push(args.at(-1)); dialogCalls.push(args); return dialogResult; } },
     getPetBounds: () => pet.destroyed ? null : pet.getBounds(), getPetWindow: () => pet,
-    getPetPresentation: () => ({ shape: 'aurora-cloud' }), getDefaultTab, getAppearance, getColorMode, organizer, onError: error => errors.push(error),
+    getWindowObstacles, getPetPresentation: () => ({ shape: 'aurora-cloud' }), getDefaultTab, getAppearance, getColorMode, organizer, onError: error => errors.push(error),
     onComplete: id => completions.push(id), now: () => clock,
     setTimer: fn => { tick = fn; return { unref() {} }; }, clearTimer: () => { tick = null; }, closeTimeoutMs: 50 });
   t.after(async () => {
@@ -536,4 +536,42 @@ test('accessible note window backing follows both appearance and contrast mode',
   for (const win of windows) assert.equal(win.backgroundColor, '#FFFFFF');
   mode = 'standard'; f.controller.syncAppearance();
   for (const win of windows) assert.equal(win.backgroundColor, '#F7FAF9');
+});
+
+
+test('panel placement reads current visible cards again at ready and reopen', t => {
+  let obstacles = [];
+  const f = fixture(t, undefined, undefined, undefined, undefined, undefined, () => obstacles);
+  f.pet.bounds = { x: 600, y: 80, width: 80, height: 80 };
+  const panel = f.controller.openPanel();
+  assert.equal(panel.getBounds().y, 168);
+  obstacles = [{ x: 576, y: 168, width: 128, height: 32 }];
+  f.ready(panel); assert.equal(panel.getBounds().y, 208);
+  obstacles.push({ x: 576, y: 208, width: 128, height: 32 });
+  panel.hide(); f.controller.openPanel(); assert.equal(panel.getBounds().y, 248);
+  obstacles = []; panel.hide(); f.controller.openPanel(); assert.equal(panel.getBounds().y, 168);
+});
+
+test('panel desktop display uses its own screen for new and closed notes, preserving live/restored positions', async t => {
+  const f = fixture(t), primary = f.screen.area, external = { x: -1920, y: -300, width: 1920, height: 1080 };
+  f.screen.getDisplayMatching = rect => ({ workArea: rect.x < 0 ? external : primary });
+  const store = f.controller.getStore(), panel = f.ready(f.controller.openPanel());
+  const old = M.newNote('closed with old primary position', '', f.now()), fresh = M.newNote('new', '', f.now());
+  old.windowBounds = { x: 100, y: 200, width: 320, height: 300 };
+  store.update(state => { state.notes.push(old, fresh); return state; });
+  panel.setBounds({ x: -1800, y: -200, width: 380, height: 520 });
+  for (const item of [old, fresh]) {
+    assert.equal((await f.call(panel, 'notes:open-note', item.id)).ok, true);
+    const win = f.ready(f.controller.getWindows().notes.at(-1)), bounds = win.getBounds();
+    assert.ok(bounds.x >= external.x && bounds.y >= external.y && bounds.x + bounds.width <= 0 && bounds.y + bounds.height <= 780);
+    assert.equal(bounds.width, item === old ? 320 : 300); assert.equal(bounds.height, item === old ? 300 : 220);
+    assert.deepEqual(store.getState().notes.find(note => note.id === item.id).windowBounds, bounds);
+    // 查看已经展示的便签只聚焦，不挪走用户手动摆放的位置。
+    win.setBounds({ ...bounds, x: 200, y: 200 });
+    await f.call(panel, 'notes:open-note', item.id);
+    assert.equal(win.getBounds().x, 200);
+  }
+  store.update(state => { state.notes.push({ ...M.newNote('automatic restore', '', f.now()), desktopOpen: true,
+    windowBounds: { x: 350, y: 400, width: 320, height: 300 } }); return state; });
+  assert.equal(f.controller.getWindows().notes.at(-1).getBounds().x, 350, '自动恢复继续使用保存位置');
 });

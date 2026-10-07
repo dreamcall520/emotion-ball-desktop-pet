@@ -192,8 +192,15 @@ function fromApiUsageWindow(event, requireVisible = true) {
     (!requireVisible || apiUsageWindow.isVisible()) && event.sender === apiUsageWindow.webContents);
 }
 
+function functionWindowObstacles() {
+  return [quotaLabel, apiUsageLabel].flatMap(controller => {
+    const win = controller?.getWindow();
+    return win && !win.isDestroyed() && win.isVisible() ? [win.getBounds()] : [];
+  });
+}
+
 function positionFunctionWindow(win) {
-  positionWindowNearPet(win, petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null, screen);
+  positionWindowNearPet(win, petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null, screen, functionWindowObstacles());
 }
 
 function openApiUsage() {
@@ -1650,7 +1657,12 @@ async function finishSmokeTest() {
 
     if (process.env.PET_SMOKE_FUNCTION_WINDOWS_ONLY === '1') {
       await require('./scripts/verify-function-windows').verifyFunctionWindows({
-        pet: petWindow, screen, openers: [
+        pet: petWindow, screen, notes: notesCompanion, getObstacles: functionWindowObstacles,
+        showCards: () => {
+          quotaLabel.show({ state: 'ready', items: [{ label: 'Codex', windowMinutes: 10080, remaining: 95 }] });
+          apiUsageLabel.show({ connected: true, busy: false, config: {}, report: null });
+        },
+        openers: [
           ['customize', () => { openCustomization(); return customizationWindow; }],
           ['notes', () => notesCompanion.openPanel()],
           ['api-usage', () => { openApiUsage(); return apiUsageWindow; }],
@@ -2584,6 +2596,7 @@ async function bootstrap() {
     filePath: path.join(app.getPath('userData'), 'notes-todos.json'),
     getPetBounds: () => petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null,
     getPetWindow: () => petWindow,
+    getWindowObstacles: functionWindowObstacles,
     getPetPresentation: () => ({ ...edgeTuck?.getPresentation(), shape: settings?.customization?.appearance?.shape }),
     getDefaultTab: () => settings.notesDefaultTab,
     getAppearance: getNotesAppearance,

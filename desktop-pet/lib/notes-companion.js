@@ -21,7 +21,7 @@ function reminderBounds(bounds, area, size, presentation) {
 }
 
 function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialog, filePath,
-  getPetBounds, getPetWindow = null, getPetPresentation = () => null, getDefaultTab = () => 'todo', getAppearance = () => 'light', getColorMode = () => 'standard', onComplete = () => {}, onError = () => {}, isSuppressed = () => false,
+  getPetBounds, getPetWindow = null, getWindowObstacles = () => [], getPetPresentation = () => null, getDefaultTab = () => 'todo', getAppearance = () => 'light', getColorMode = () => 'standard', onComplete = () => {}, onError = () => {}, isSuppressed = () => false,
   organizer = null,
   now = Date.now, setTimer = setInterval, clearTimer = clearInterval, closeTimeoutMs = 60000 }) {
   const store = createNotesStore(filePath, { onError });
@@ -124,7 +124,7 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
       if (entry.open) send(win, 'notes:open', entry.open);
       if (reminder) updateReminderWindow();
       else if (!suppressed()) {
-        if (mode === 'panel') positionWindowNearPet(win, getPetBounds?.(), screen);
+        if (mode === 'panel') positionWindowNearPet(win, getPetBounds?.(), screen, getWindowObstacles());
         show(win, note && !entry.focusOnReady);
       }
     });
@@ -264,18 +264,26 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
     if (suppressed()) return null;
     if (!['note', 'todo'].includes(tab)) tab = getDefaultTab() === 'note' ? 'note' : 'todo';
     if (!alive(panel)) panel = createWindow('panel', null, anchor(380, 520));
-    positionWindowNearPet(panel, getPetBounds?.(), screen);
+    positionWindowNearPet(panel, getPetBounds?.(), screen, getWindowObstacles());
     const entry = windowEntries.get(panel);
     entry.open = { tab, create: create === true, id: typeof id === 'string' ? id : null };
     if (entry.ready) send(panel, 'notes:open', entry.open);
     show(panel); return panel;
   }
-  function openNote(id) {
+  function openNote(id, sourceWindow = null) {
     if (suppressed()) return { ok: false, message: '球球暂时暂停。' };
     const item = store.getState().notes.find(item => item.id === id && !item.deletedAt);
     if (!item) return { ok: false, message: '便签不存在或已删除。' };
     if (!item.desktopOpen) {
-      const result = nativeUpdate(state => { state.notes.find(item => item.id === id).desktopOpen = true; return state; });
+      const source = alive(sourceWindow) ? sourceWindow.getBounds() : null;
+      const bounds = source ? adjacentBounds(source, screen.getDisplayMatching(source).workArea,
+        item.windowBounds || { width: 300, height: 220 }) : null;
+      const result = nativeUpdate(state => {
+        const note = state.notes.find(item => item.id === id);
+        note.desktopOpen = true;
+        if (bounds) { note.windowBounds = bounds; note.position = { x: bounds.x, y: bounds.y }; }
+        return state;
+      });
       if (!result.ok) return result;
     } else syncWindows(store.getState());
     const win = noteWindows.get(id);
@@ -316,7 +324,7 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
     }
     return { ok: true, state: store.save(next, revision) };
   });
-  handle('notes:open-note', (_entry, id) => { if (typeof id !== 'string' || id.length > 200) throw Error('便签标识不合法。'); return openNote(id); });
+  handle('notes:open-note', (entry, id) => { if (typeof id !== 'string' || id.length > 200) throw Error('便签标识不合法。'); return openNote(id, entry.mode === 'panel' ? entry.win : null); });
   handle('notes:hide-panel', entry => entry.mode === 'panel' ? hideEntry(entry) : { ok: false, message: '请在主面板收起。' });
   handle('notes:close-window', entry => {
     if (entry.mode !== 'reminder') return hideEntry(entry);
