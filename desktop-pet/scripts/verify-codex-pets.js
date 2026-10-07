@@ -60,10 +60,42 @@ async function verifyCodexPets({ pet, customize, openCustomization, openChat, ge
     value.state.codexPetId === id, '桌面导入图已绘制');
   const capture = (window, name) => capturePaintedWindow({ win: window, artifactPath: path.join(output, `${name}.png`) });
   const checks = [];
+  let idleCadence = null;
   let actualPetsObserved = 0;
   assert.equal(await page("document.querySelector('#source-ball').getAttribute('aria-pressed')"), 'true', '打开默认球球来源');
   checks.push('default ball source');
   if (phase === 'save') await capture(customize, 'customizer-ball-sections');
+
+  async function verifyIdleCadence(chatWindow) {
+    const targets = [[customize,'#stage .codex-pet-sprite','preview'],[pet,'#pet .codex-pet-sprite','desktop'],[chatWindow,'#chat-avatar .codex-pet-sprite','chat']];
+    const rows = await Promise.all(targets.map(async ([win,selector,surface]) => {
+      win.webContents.setBackgroundThrottling(false);
+      const samples = await win.webContents.executeJavaScript(`new Promise((resolve,reject) => {
+        const canvas=document.querySelector(${JSON.stringify(selector)}), samples=[];
+        if(!canvas || canvas.dataset.codexAction!=='idle')return reject(Error('Idle sprite required'));
+        let last=canvas.dataset.codexFrame;
+        const observer=new MutationObserver(() => {
+          const frame=Number(canvas.dataset.codexFrame);
+          if(canvas.dataset.codexAction!=='idle'){stop();reject(Error('Idle action changed'));return;}
+          if(String(frame)===last)return;last=String(frame);
+          if(!samples.length && frame!==0)return;
+          samples.push({frame,at:performance.now()});
+          if(samples.length===7){stop();resolve(samples);}
+        });
+        const timer=setTimeout(()=>{stop();reject(Error('Idle cadence timed out'));},18000);
+        const stop=()=>{observer.disconnect();clearTimeout(timer);};
+        observer.observe(canvas,{attributes:true,attributeFilter:['data-codex-frame']});
+      })`);
+      assert.deepEqual(samples.map(sample=>sample.frame),[0,1,2,3,4,5,0], surface+'完整待机循环');
+      const intervals=samples.slice(1).map((sample,index)=>sample.at-samples[index].at), expected=[1680,660,660,840,840,1920];
+      intervals.forEach((ms,index)=>assert.ok(Math.abs(ms-expected[index])<=180, surface+'第'+index+'帧保留Codex节奏: '+ms));
+      const cycleMs=samples.at(-1).at-samples[0].at;
+      assert.ok(Math.abs(cycleMs-6600)<=300, surface+'待机一轮6.6秒');
+      return {surface,intervals,cycleMs};
+    }));
+    checks.push('native 6.6s idle cadence in preview / desktop / chat');
+    return rows;
+  }
 
   async function verifyChat(id) {
     await openChat();
@@ -221,6 +253,7 @@ async function verifyCodexPets({ pet, customize, openCustomization, openChat, ge
     const copied = store.getImported(startupId);
     assert.notEqual(copied.spritesheetPath, last.spritesheetPath); assert.equal(digest(copied.spritesheetPath), digest(last.spritesheetPath));
     await readyDesktop(startupId); const chat = await verifyChat(startupId);
+    idleCadence = await verifyIdleCadence(chat);
     await capture(pet, 'desktop-imported');
     await choose(temporaryPet); await page("document.querySelector('#startup-default').checked=false"); await click('#save');
     await waitFor(() => getSettings().customization.appearance.codexPetId, id => typeof id === 'string' && id !== startupId && id !== temporaryPet.id, '临时形象已导入');
@@ -321,7 +354,7 @@ async function verifyCodexPets({ pet, customize, openCustomization, openChat, ge
   assert.deepEqual(errors, [], '没有原生页面加载失败');
   fs.writeFileSync(path.join(output, `report-${phase}.json`), JSON.stringify({ ok: true, packaged,
     isolatedUserData: true, sourceFixtures: phase === 'local' ? 0 : 30, actualPetsObserved,
-    actualModelCalls: 0, phase, checks, themeChecks }, null, 2));
+    actualModelCalls: 0, phase, checks, themeChecks, idleCadence }, null, 2));
   process.stdout.write(`PET_CODEX_PETS_${phase.toUpperCase()}_OK\n`);
   return { checks };
 }

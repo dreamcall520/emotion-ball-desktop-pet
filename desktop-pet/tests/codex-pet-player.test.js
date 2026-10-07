@@ -54,16 +54,32 @@ test('nine original actions crop their real rows, skip unused columns, and retai
   player.destroy(); assert.equal(h.requests.size, 0);
 });
 
+test('Codex idle takes 6.6 seconds while the wave retains its 700ms cycle', () => {
+  const h = harness(), player = Player.create(h.container, { descriptor });
+  h.load(); h.step(0);
+  // At the old 1.1s loop boundary Codex must still hold the first idle pose.
+  h.step(1100); assert.equal(player.element.dataset.codexFrame, '0');
+  h.step(579); assert.equal(player.element.dataset.codexFrame, '0');
+  h.step(1); assert.equal(player.element.dataset.codexFrame, '1');
+  for (const [ms, frame] of [[660,2],[660,3],[840,4],[840,5],[1919,5],[1,0]]) {
+    h.step(ms); assert.equal(Number(player.element.dataset.codexFrame), frame);
+  }
+  player.setAction('wave'); h.step(0);
+  h.step(699); assert.equal(player.element.dataset.codexFrame, '3');
+  h.step(1); assert.equal(player.element.dataset.codexFrame, '0');
+  player.destroy();
+});
+
 test('pause, hidden, reduced motion and destroy cancel scheduling without restarting paused frames', () => {
   const h = harness(), player = Player.create(h.container, { descriptor });
-  h.load(); h.step(0); h.step(280);
+  h.load(); h.step(0); h.step(1680);
   assert.equal(player.element.dataset.codexFrame, '1');
   player.setAction('idle');
   assert.equal(player.element.dataset.codexFrame, '1', 'repeated state updates do not restart the animation');
   player.pause(); assert.equal(h.requests.size, 0);
   h.step(50000); assert.equal(player.element.dataset.codexFrame, '1');
   player.pause(false); assert.equal(h.requests.size, 1);
-  h.step(0); h.step(110); assert.equal(player.element.dataset.codexFrame, '2');
+  h.step(0); h.step(660); assert.equal(player.element.dataset.codexFrame, '2');
   h.hidden(true); assert.equal(h.requests.size, 0);
   h.hidden(false); assert.equal(h.requests.size, 1);
   h.reduce(true); assert.equal(h.requests.size, 0); assert.equal(player.element.dataset.codexFrame, '0');
