@@ -10,31 +10,33 @@ const articles = [...html.matchAll(/<article[^>]*data-release-panel[^>]*>([\s\S]
 const downloads = [...html.matchAll(/class="release-download [^"]+" href="([^"]+)"/g)].map(m => m[1]);
 const articleBlocks = html.match(/<article[^>]*data-release-panel[^>]*>[\s\S]*?<\/article>/g);
 
-test('independent logs add 0.4.01 and retain all 13 original records and the full 0.4.00 wording', () => {
+test('independent logs add 0.4.02 and retain all 14 original records and the full 0.4.00 wording', () => {
   assert.match(html, /<title>球球桌宠 · 更新日志<\/title>/);
   assert.match(html, /rel="canonical" href="https:\/\/qiuqiu.pet\/updates\/"/);
-  assert.equal(articles.length, 14);
-  assert.equal((html.match(/data-release-link/g) || []).length, 14);
-  assert.equal((html.match(/<option /g) || []).length, 14);
-  assert.match(articleBlocks[0], /id="v0\.4\.01-apple"/);
-  assert.ok(articles[0].includes('<h4>【新增】Codex 宠物导入</h4>'));
-  assert.match(articles[0], /本机 Codex 自定义宠物/);
-  assert.match(articles[0], /无需上传文件/);
-  assert.match(articles[0], /预览原有动画后保存/);
-  assert.match(articles[0], /桌面形象与聊天头像同步切换/);
-  // The complete 13 articles from gh-pages@dc373df include their original downloads.
-  assert.equal(createHash('sha256').update(articleBlocks.slice(1).join('\n')).digest('hex'), 'dc68d1a101a385cb01c13e6879c12d0b871446ddab6266bbe22127f56473d54a');
-  for (const title of ['1.【新增】便签与待办', '2.【新增】来定制球球', '3.【新增】自动更新提醒', '4.【升级】额度卡片 2.0', '5.【升级】全局 UI 升级', '6.【修复】已知体验问题']) assert.ok(articles[1].includes(`<h4>${title}</h4>`));
-  assert.match(articles[1], /<h4>6.【修复】已知体验问题<\/h4><\/div>/);
-  assert.match(articles[1], /<time datetime="2026-10-06">2026-10-06<\/time>/);
-  for (const version of ['0.3.25', '0.3.24', '0.3.23', '0.3.17', '0.3.14', '0.3.13', '0.3.12', '0.3.11', '0.3.10']) assert.ok(articles.slice(2).some(a => a.includes(version)));
+  assert.equal(articles.length, 15);
+  assert.equal((html.match(/data-release-link/g) || []).length, 15);
+  assert.equal((html.match(/<option /g) || []).length, 15);
+  assert.match(articleBlocks[0], /id="v0\.4\.02-apple"/);
+  for (const text of ['薄荷绿', '晴空蓝', '状态与分类筛选', '色弱模式下便签窗口四角边框缺口', '重启或短时断档不再清空已有记录', '有记录的部分历史']) assert.ok(articles[0].includes(text));
+  assert.match(articleBlocks[1], /id="v0\.4\.01-apple"/);
+  assert.ok(articles[1].includes('<h4>【新增】Codex 宠物导入</h4>'));
+  assert.match(articles[1], /本机 Codex 自定义宠物/);
+  assert.match(articles[1], /无需上传文件/);
+  assert.match(articles[1], /预览原有动画后保存/);
+  assert.match(articles[1], /桌面形象与聊天头像同步切换/);
+  // The complete 14 articles from gh-pages@866aaa4 include their original downloads.
+  assert.equal(createHash('sha256').update(articleBlocks.slice(1).join('\n')).digest('hex'), 'c9acd79dc4703f74369b2dcbf35a00283c2a4c33c00a68814a0b25cdc2623427');
+  for (const title of ['1.【新增】便签与待办', '2.【新增】来定制球球', '3.【新增】自动更新提醒', '4.【升级】额度卡片 2.0', '5.【升级】全局 UI 升级', '6.【修复】已知体验问题']) assert.ok(articles[2].includes(`<h4>${title}</h4>`));
+  assert.match(articles[2], /<h4>6.【修复】已知体验问题<\/h4><\/div>/);
+  assert.match(articles[2], /<time datetime="2026-10-06">2026-10-06<\/time>/);
+  for (const version of ['0.3.25', '0.3.24', '0.3.23', '0.3.17', '0.3.14', '0.3.13', '0.3.12', '0.3.11', '0.3.10']) assert.ok(articles.slice(3).some(a => a.includes(version)));
   assert.doesNotMatch(html, /0\.3\.(?:27|28|29|30|31|32)|幻彩云|iframe/);
   assert.doesNotMatch(html, /data-release-panel[^>]*\bhidden/);
 });
 
 test('each App record has architecture-specific public assets; website event and hotfix stay accurate', () => {
-  assert.equal(downloads.length, 29);
-  assert.equal(new Set(downloads).size, 29);
+  assert.equal(downloads.length, 31);
+  assert.equal(new Set(downloads).size, 31);
   assert.doesNotMatch(html, /release-source|查看 GitHub Release/);
   assert.ok(downloads.every(url => /^https:\/\/github\.com\/dreamcall520\/emotion-ball-desktop-pet\/releases\/download\/v[\d.]+\/.+\.(?:zip|dmg)$/.test(url)));
   for (const article of articles) {

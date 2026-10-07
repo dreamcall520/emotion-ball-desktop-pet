@@ -6,7 +6,7 @@
 
 首页采用确认后的整屏银白/夜景玻璃主视觉，品牌语「球球-陪你自在一点」。`home.js` 复用原生 WebGL 实现自动柔光、曲面折射与鼠标水波；眼睛以2～4秒随机间隔自然眨动，约四分之一概率快速连眨两次，闭眼以像素宽度的抗锯齿圆弧收合并沿用原眼睛颜色；暂停、减少动态、页面隐藏及静态回退保持可用。主下载按钮为「macOS 版下载」并使用内联 Apple 标识，下方注明版本与 Apple 芯片，Intel 保持独立说明入口。首页顶部导航叠加半透明渐变、柔和高光与背景模糊；浅深色分别处理，并支持减少透明度与无模糊能力的静态回退。
 
-原官网功能和演示保留在 `product/index.html`，地址为 `https://qiuqiu.pet/product/`。导航的功能介绍、安装指南与更新日志在新页签打开；旧首页功能锚点通过 `location.replace` 跳转到对应功能分区。旧 `product.html` 仅保留兼容跳转，并携带原查询参数和锚点。产品正文和演示、许可及署名保持。14 条完整日志位于 `updates/index.html`（`https://qiuqiu.pet/updates/`），原 13 篇逐字保留，桌面以侧栏选版本，手机用版本选择器；hash 支持直链与历史返回，无 JavaScript 时显示全部原文。13 条版本记录配有 29 个下载入口，原 27 个已通过 GitHub API 和 HEAD 回读，新版 2 个已完成公开地址的完整下载、大小、SHA-256 与 App 签名核验；官网上线事件不虚构安装包。旧 `/product/#updates` 及 `product.html#updates` 转到独立日志页。首页、功能介绍、更新日志保留独立 canonical 和分享封面；隐私说明独立位于 `https://qiuqiu.pet/privacy/`，四页均已加入 sitemap。
+原官网功能和演示保留在 `product/index.html`，地址为 `https://qiuqiu.pet/product/`。导航的功能介绍、安装指南与更新日志在新页签打开；旧首页功能锚点通过 `location.replace` 跳转到对应功能分区。旧 `product.html` 仅保留兼容跳转，并携带原查询参数和锚点。产品正文和演示、许可及署名保持。15 条完整日志位于 `updates/index.html`（`https://qiuqiu.pet/updates/`），原 14 篇逐字保留，桌面以侧栏选版本，手机用版本选择器；hash 支持直链与历史返回，无 JavaScript 时显示全部原文。15 条版本记录配有 31 个下载入口，原 29 个保留，新版 2 个已完成公开地址的完整下载、大小、SHA-256 与 App 签名核验；官网上线事件不虚构安装包。旧 `/product/#updates` 及 `product.html#updates` 转到独立日志页。首页、功能介绍、更新日志保留独立 canonical 和分享封面；隐私说明独立位于 `https://qiuqiu.pet/privacy/`，四页均已加入 sitemap。
 
 首页「免费、非商业 · 署名与许可」使用原生小弹窗，分行展示使用范围、原作者 GitHub 项目与再次分发说明，可通过关闭按钮、Esc 或点击背景关闭；不再跳转功能介绍。原作者旧项目地址已重定向为 `sam70361/aora-bot`，弹窗链接使用 GitHub API 回读的现地址。首页新页签入口统一为细线圆角新窗口图标。更新日志只展示对应版本下载，不附加 GitHub Release 页面入口。
 
@@ -43,6 +43,17 @@ Umami Cloud 网站“球球官网”，website ID 为 `fe855bb0-9000-49aa-820b-b
 本地检查：`node --test tests/analytics.test.cjs`。这些测试不会连接统计后台。
 
 ## 当前下载记录
+
+Apple 芯片版 **0.4.02**，发布日期 **2026-10-07**，GitHub兼容标签 `v0.4.2`。新增薄荷绿／晴空蓝主题，优化便签、待办与色弱友好模式，并修复额度趋势历史保留。
+
+| 文件 | 精确大小（bytes） | SHA-256 |
+| --- | ---: | --- |
+| [Qiuqiu-0.4.02-macOS-arm64-share.zip](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.2/Qiuqiu-0.4.02-macOS-arm64-share.zip) | 123599166 | `dc893f5b631cc5e6f56b2334d5cb28f0b237aa0cf11d8881c0da11094944eec3` |
+| [Qiuqiu-0.4.02-macOS-arm64.dmg](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.2/Qiuqiu-0.4.02-macOS-arm64.dmg) | 137850212 | `356acfc53a3d929dabab016639f13404d24b3e7eac798e6a889c4eae5c2943c3` |
+
+公开地址完整下载、大小、SHA-256、App签名及源码回读通过，证据 `v0.4.02-theme-and-quota/public-release-download-verification.json`。
+
+### 0.4.01 下载记录（保留）
 
 Apple 芯片版 **0.4.01**，发布日期 **2026-10-07**，GitHub 兼容标签 `v0.4.1`。新增直接选择本机 Codex 自定义宠物、九类动作预览、六档尺寸同步、搜索与滚动列表，以及本机副本、临时换装和启动外观保存。发布日期按 Release API 的 publishedAt 转换为北京时间；公开 ZIP、DMG 已完整下载核验，版本、签名及包内内容一致。
 

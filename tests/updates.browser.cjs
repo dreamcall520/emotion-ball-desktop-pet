@@ -21,8 +21,8 @@ fs.mkdirSync(out, { recursive: true });
     await page.goto(base);
     assert.equal(await page.title(), '球球桌宠 · 更新日志');
     assert.equal(await page.locator('[data-release-panel]:visible').count(), 1);
-    assert.equal(await page.locator('[data-release-panel]').count(), 14);
-    assert.equal(await page.locator('.release-download').count(), 29);
+    assert.equal(await page.locator('[data-release-panel]').count(), 15);
+    assert.equal(await page.locator('.release-download').count(), 31);
     assert.equal(await page.getByRole('link', { name:/GitHub Release/ }).count(), 0);
     const entries = await page.locator('[data-release-link]').evaluateAll(links => links.map(link => ({ hash: link.hash, title: link.querySelector('span').textContent })));
     for (const entry of entries) {
@@ -31,8 +31,8 @@ fs.mkdirSync(out, { recursive: true });
       assert.equal(new URL(page.url()).hash, entry.hash);
       if (entry.hash === '#v0.3.23-apple') await page.screenshot({ path:path.join(out, 'updates-0.3.23.png') });
     }
-    report.checks.push('14 versions selectable; original 13 titles retained and matching shareable hash');
-    report.checks.push('GitHub Release links removed; original 27 downloads retained plus two 0.4.01 Apple-chip assets');
+    report.checks.push('15 versions selectable; original 14 titles retained and matching shareable hash');
+    report.checks.push('GitHub Release links removed; original 29 downloads retained plus two 0.4.02 Apple-chip assets');
     await page.locator(`.versions-list a[href="${entries[0].hash}"]`).focus();
     await page.keyboard.press('Enter');
     assert.equal(await page.locator('[data-release-panel]:visible h3').innerText(), entries[0].title);
@@ -49,9 +49,9 @@ fs.mkdirSync(out, { recursive: true });
     for (const theme of ['light', 'dark']) {
       for (const [width, height] of [[1440,900], [1080,800], [390,844], [320,568]]) {
         await page.setViewportSize({ width, height });
-        await page.evaluate(theme => { localStorage.setItem('emotion-ball-site-theme', theme); location.hash = 'v0.4.01-apple'; }, theme);
+        await page.evaluate(theme => { localStorage.setItem('emotion-ball-site-theme', theme); location.hash = 'v0.4.02-apple'; }, theme);
         await page.reload();
-        await page.waitForFunction(() => document.querySelector('[data-release-panel]:not([hidden])').id === 'v0.4.01-apple');
+        await page.waitForFunction(() => document.querySelector('[data-release-panel]:not([hidden])').id === 'v0.4.02-apple');
         const metrics = await page.evaluate(() => {
           const panel = document.querySelector('[data-release-panel]:not([hidden])');
           const headerBottom = document.querySelector('.site-header').getBoundingClientRect().bottom;
@@ -67,7 +67,7 @@ fs.mkdirSync(out, { recursive: true });
           await page.locator('[data-release-select]').selectOption('v0.3.10-hotfix');
           assert.equal(await page.locator('[data-release-panel]:visible h3').innerText(), '0.3.10 Apple 热修复');
           assert.equal(await page.locator('[data-release-panel]:visible .release-download').count(), 1);
-          await page.locator('[data-release-select]').selectOption('v0.4.01-apple');
+          await page.locator('[data-release-select]').selectOption('v0.4.02-apple');
         }
         await page.screenshot({ path:path.join(out, `updates-${width}x${height}-${theme}.png`), fullPage:true });
         report.layouts.push({ theme, width, height, ...metrics });
@@ -101,10 +101,10 @@ fs.mkdirSync(out, { recursive: true });
     const noJS = await browser.newContext({ javaScriptEnabled:false, viewport:{ width:390, height:844 } });
     const staticPage = await noJS.newPage();
     await staticPage.goto(base);
-    assert.equal(await staticPage.locator('[data-release-panel]:visible').count(), 14);
-    assert.equal(await staticPage.locator('.release-download').count(), 29);
+    assert.equal(await staticPage.locator('[data-release-panel]:visible').count(), 15);
+    assert.equal(await staticPage.locator('.release-download').count(), 31);
     assert.equal(await staticPage.locator('[data-release-select]').isVisible(), false);
-    report.checks.push('without JavaScript, 14 records and 29 downloads remain readable, including all original history');
+    report.checks.push('without JavaScript, 15 records and 31 downloads remain readable, including all original history');
     await noJS.close();
     assert.deepEqual(errors, []);
     assert.deepEqual(failed, []);
