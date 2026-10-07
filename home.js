@@ -27,10 +27,9 @@
       draw();
       if (!stopped()) frame = requestAnimationFrame(animate);
     }
-    const unavailable = !gl && image.complete;
-    motionButton.disabled = reduced.matches || unavailable;
+    motionButton.disabled = reduced.matches;
     motionButton.setAttribute('aria-pressed', String(paused || reduced.matches));
-    const label = reduced.matches ? '已减少动态' : unavailable ? '静态画面' : paused ? '继续动效' : '暂停动效';
+    const label = reduced.matches ? '已减少动态' : paused ? '继续动效' : '暂停动效';
     motionButton.setAttribute('aria-label', label);
     motionButton.title = label;
     motionButton.querySelector('use').setAttribute('href', paused ? '#icon-play' : '#icon-pause');

@@ -157,6 +157,7 @@ Electron IPC 替换为本页内存桥接，不连接账户、模型或账单，�
 ## 目录
 
 - `index.html`、`home.js`、`home.css`：整屏品牌首页、玻璃柔光/鼠标水波和首页菜单。
+- `flow-border.css`：首页主下载与功能页导航共用原有彩色边缘流光，保留减少动态适配；首页暂停按钮与页面隐藏共用现有暂停状态。
 - `product/index.html`、`product-layout.css`、`styles.css`、`dark-theme.css`：功能介绍全文、外层配色与响应式布局；`product.html` 仅兼容旧地址跳转。
 - `privacy/index.html`、`privacy.css`：独立隐私说明与用户确认的联系邮箱。
 - `updates/index.html`、`updates.css`、`updates.js`：独立版本日志、响应式版本选择、真实版本下载与无脚本阅读。

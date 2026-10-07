@@ -1,0 +1,37 @@
+/* Shared rainbow edge from the product navigation. */
+@property --qiuqiu-nav-glint {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+@supports (mask-composite: exclude) or (-webkit-mask-composite: xor) {
+  .flow-border::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    padding: 1px;
+    border-radius: inherit;
+    pointer-events: none;
+    background: conic-gradient(
+      from var(--qiuqiu-nav-glint),
+      transparent 0deg 222deg,
+      rgba(51, 224, 226, .1) 238deg,
+      #3fdbec 251deg,
+      #8fa7ff 261deg,
+      #ef93de 272deg,
+      #ffd18b 281deg,
+      rgba(72, 220, 255, .45) 291deg,
+      transparent 308deg 360deg
+    );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: .84;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .flow-border::before { animation: qiuqiuNavGlint 10s linear infinite; }
+}
+@keyframes qiuqiuNavGlint { to { --qiuqiu-nav-glint: 1turn; } }
+.motion-paused .flow-border::before { animation-play-state: paused; }

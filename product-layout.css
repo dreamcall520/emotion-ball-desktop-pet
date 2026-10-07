@@ -73,41 +73,6 @@ html[data-theme="dark"] .product-redesign {
   -webkit-backdrop-filter: blur(20px) saturate(185%) contrast(1.03);
   backdrop-filter: blur(20px) saturate(185%) contrast(1.03);
 }
-@property --qiuqiu-nav-glint {
-  syntax: "<angle>";
-  initial-value: 0deg;
-  inherits: false;
-}
-@supports (mask-composite: exclude) or (-webkit-mask-composite: xor) {
-  .product-redesign .site-header::before {
-    content: "";
-    position: absolute;
-    inset: -1px;
-    padding: 1px;
-    border-radius: inherit;
-    pointer-events: none;
-    background: conic-gradient(
-      from var(--qiuqiu-nav-glint),
-      transparent 0deg 222deg,
-      rgba(51, 224, 226, .1) 238deg,
-      #3fdbec 251deg,
-      #8fa7ff 261deg,
-      #ef93de 272deg,
-      #ffd18b 281deg,
-      rgba(72, 220, 255, .45) 291deg,
-      transparent 308deg 360deg
-    );
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    opacity: .84;
-  }
-}
-@media (prefers-reduced-motion: no-preference) {
-  .product-redesign .site-header::before { animation: qiuqiuNavGlint 10s linear infinite; }
-}
-@keyframes qiuqiuNavGlint { to { --qiuqiu-nav-glint: 1turn; } }
 .product-redesign .brand { display: flex; align-items: center; gap: 9px; font-size: 19px; font-weight: 600; letter-spacing: 0; }
 .product-redesign .brand img { display: block; width: 32px; height: 32px; }
 .product-redesign .nav-core { gap: 20px; justify-content: space-between; }
