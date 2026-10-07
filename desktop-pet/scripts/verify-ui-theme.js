@@ -269,10 +269,14 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
       const expectedBacking = resolved === 'dark' ? '#101820' : '#ffffff';
       const backing = await poll(() => Promise.all(notesWindows.map(async win => {
         const body = await page(win, `(() => { const style = getComputedStyle(document.body); return { mode: document.body.dataset.mode,
-          background: style.backgroundColor, radii: [style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomRightRadius, style.borderBottomLeftRadius] }; })()`);
+          background: style.backgroundColor, radii: [style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomRightRadius, style.borderBottomLeftRadius],
+          surface: (() => { const outer = getComputedStyle(document.querySelector(document.body.dataset.mode === 'note' ? '.desktop-note' : '.panel'));
+            return { radius: outer.borderTopLeftRadius, background: outer.backgroundColor, image: outer.backgroundImage }; })() }; })()`);
         const raw = win.getBackgroundColor(), normalized = raw.toLowerCase().replace(/^(#[a-f\d]{6})ff$/, '$1');
         return { title: win.getTitle(), nativeBackground: raw, normalized, ...body };
-      })), entries => entries.every(entry => entry.normalized === expectedBacking && entry.radii.every(radius => radius === (entry.mode === 'note' ? '14px' : '12px'))), `${theme}/${appearance} 原生便签底色和圆角`);
+      })), entries => entries.every(entry => entry.normalized === expectedBacking && entry.radii.every(radius => radius === '18px') && entry.surface.radius === '18px'), `${theme}/${appearance} 原生便签底色和圆角`);
+      for (const entry of backing) { assert.equal(entry.surface.image, 'none', '色弱便签使用均匀纯色底');
+        assert.equal(entry.surface.background, resolved === 'dark' ? 'rgb(16, 24, 32)' : 'rgb(255, 255, 255)'); }
       const [composer, shapes, apiBody] = await Promise.all([
         page(chatWin, `(() => { const composer = document.querySelector('.composer'); if (!composer) throw Error('缺少聊天输入区'); return ['::before', '::after'].map(pseudo => {
           const style = getComputedStyle(composer, pseudo); return { pseudo, backgroundImage: style.backgroundImage, animation: style.animation, animationName: style.animationName }; }); })()`),

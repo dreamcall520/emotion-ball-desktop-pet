@@ -295,8 +295,9 @@ dialog .dialog-footer{position:sticky;bottom:0;z-index:1;background:var(--surfac
 .category-menu-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 8px 6px;margin-bottom:4px;border-bottom:1px solid var(--line);color:var(--muted);font-size:11px}
 .filter-popover .category-manage{width:auto;min-height:24px;padding:3px 5px;color:var(--accent-text);font-size:11px;font-weight:500}
 .group-label{min-width:0}.group-label h2{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-:root[data-color-mode="accessible"] body{background:transparent;border-radius:12px}
-:root[data-color-mode="accessible"] body[data-mode="note"]{border-radius:14px}
+/* Keep the high-contrast stroke inside macOS's native corner mask. */
+:root[data-color-mode="accessible"] body{background:transparent;border-radius:18px}
+:root[data-color-mode="accessible"] :is(.panel,.desktop-note){border-radius:18px}
 :root[data-color-mode="accessible"] body[data-mode="reminder"]{border-radius:0}
 :root[data-color-mode="accessible"] :is(.tabs button,.filter-popover button){color:var(--accessible-text)}
 :root[data-color-mode="accessible"] :is(.filter-trigger[aria-expanded=true],.filter-popover button:hover,.category-manage:hover){background:var(--accessible-raised);color:var(--accessible-blue)}
