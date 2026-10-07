@@ -313,7 +313,7 @@
       if(secondary){
         const compact=day.increased?'余额增加':day.correction?'变化较大':latest?'至'+dateLabel(end).split(' ').at(-1):'部分记录';
         const label=svgNode('text',{x:px,y:128,'text-anchor':'middle',class:'daily-secondary','aria-label':secondary},step<60?compact:secondary);
-        label.appendChild(svgNode('title',{},secondary));svg.appendChild(label);
+        if(step<60)label.appendChild(svgNode('title',{},secondary));svg.appendChild(label);
       }
     });
     return svg;
