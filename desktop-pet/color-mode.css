@@ -162,7 +162,14 @@
 :root[data-color-mode="accessible"] .chat-panel {
   background: var(--accessible-panel) !important;
   color: var(--accessible-text) !important;
-  border-color: var(--accessible-line) !important;
+  border: 0;
+  border-radius: 0;
+}
+
+/* Match notes: let the native window clip one solid surface. */
+:root[data-color-mode="accessible"] body:has(> .chat-panel) {
+  background: var(--accessible-panel);
+  border-radius: 0;
 }
 
 :root[data-color-mode="accessible"] button:disabled,
@@ -235,7 +242,9 @@
 :root[data-color-mode="accessible"][data-ui-window="customize"] .stage,
 :root[data-color-mode="accessible"][data-ui-window="customize"] .color-editor,
 :root[data-color-mode="accessible"][data-ui-window="customize"] .manual-controls,
+:root[data-color-mode="accessible"][data-ui-window="customize"] .source-switch,
 :root[data-color-mode="accessible"][data-ui-window="customize"] .shape-option:not([aria-pressed="true"]),
+:root[data-color-mode="accessible"][data-ui-window="customize"] .pet-card:not([aria-pressed="true"]),
 :root[data-color-mode="accessible"][data-ui-window="customize"] .aurora-style-options button:not([aria-pressed="true"]) {
   border-color: var(--accessible-divider);
 }
