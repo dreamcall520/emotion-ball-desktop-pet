@@ -27,6 +27,8 @@
 .version-link span { color: var(--text-soft); font-size: 14px; line-height: 1.5; }
 .version-link:hover, .version-link[aria-current="true"] { background: var(--surface-strong); }
 .version-link[aria-current="true"] span { color: var(--text); font-weight: 600; }
+.release-milestone { display: inline-flex; align-items: center; gap: 4px; margin-left: 7px; padding: 2px 8px; border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--accent); font-size: 11px; font-weight: 600; line-height: 1.4; letter-spacing: 0; vertical-align: middle; white-space: nowrap; }
+.release-milestone::before { content: ""; width: 4px; height: 4px; border-radius: 50%; background: currentColor; box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 35%, transparent); }
 .version-picker { display: none; }
 .release-content { min-width: 0; padding: 48px clamp(28px, 5vw, 76px) 64px; }
 .release-panel { scroll-margin-top: calc(var(--header-height) + 24px); }

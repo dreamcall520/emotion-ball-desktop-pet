@@ -6,7 +6,7 @@
 
 首页采用确认后的整屏银白/夜景玻璃主视觉，品牌语「球球-陪你自在一点」。`home.js` 复用原生 WebGL 实现自动柔光、曲面折射与鼠标水波；眼睛以2～4秒随机间隔自然眨动，约四分之一概率快速连眨两次，闭眼以像素宽度的抗锯齿圆弧收合并沿用原眼睛颜色；暂停、减少动态、页面隐藏及静态回退保持可用。主下载按钮为「macOS 版下载」并使用内联 Apple 标识，下方注明版本与 Apple 芯片，Intel 保持独立说明入口。首页顶部导航叠加半透明渐变、柔和高光与背景模糊；浅深色分别处理，并支持减少透明度与无模糊能力的静态回退。
 
-原官网功能和演示保留在 `product/index.html`，地址为 `https://qiuqiu.pet/product/`。导航的功能介绍、安装指南与更新日志在新页签打开；旧首页功能锚点通过 `location.replace` 跳转到对应功能分区。旧 `product.html` 仅保留兼容跳转，并携带原查询参数和锚点。产品正文和演示、许可及署名保持。16 条完整日志位于 `updates/index.html`（`https://qiuqiu.pet/updates/`），原 15 篇逐字保留，桌面以侧栏选版本，手机用版本选择器；hash 支持直链与历史返回，无 JavaScript 时显示全部原文。16 条版本记录配有 33 个下载入口，原 31 个保留，0.4.03 新增 2 个按正式附件元数据准备的下载入口，公开下载核验待 Release 发布后完成；官网上线事件不虚构安装包。旧 `/product/#updates` 及 `product.html#updates` 转到独立日志页。首页、功能介绍、更新日志保留独立 canonical 和分享封面；隐私说明独立位于 `https://qiuqiu.pet/privacy/`，四页均已加入 sitemap。
+原官网功能和演示保留在 `product/index.html`，地址为 `https://qiuqiu.pet/product/`。导航的功能介绍、安装指南与更新日志在新页签打开；旧首页功能锚点通过 `location.replace` 跳转到对应功能分区。旧 `product.html` 仅保留兼容跳转，并携带原查询参数和锚点。产品正文和演示、许可及署名保持。日志位于 `updates/index.html`（`https://qiuqiu.pet/updates/`），按用户要求移除 0.4.03 条目，保留其余 15 条记录；0.4.00 在侧栏、正文及手机选择器标为「大版本更新」。官网下载仍为最新 0.4.03。历史下载每种架构只保留 DMG，共 16 个入口（15 个 DMG 与唯一无 DMG 的 0.3.10 热修复 ZIP）；重复的 Apple／Intel 版本提示已删。桌面侧栏、手机选择器、hash 直链与历史返回保持，无 JavaScript 时显示全部记录。旧 `/product/#updates` 及 `product.html#updates` 转到独立日志页。首页、功能介绍、更新日志保留独立 canonical 和分享封面；隐私说明独立位于 `https://qiuqiu.pet/privacy/`，四页均已加入 sitemap。
 
 首页「免费、非商业 · 署名与许可」使用原生小弹窗，分行展示使用范围、原作者 GitHub 项目与再次分发说明，可通过关闭按钮、Esc 或点击背景关闭；不再跳转功能介绍。原作者旧项目地址已重定向为 `sam70361/aora-bot`，弹窗链接使用 GitHub API 回读的现地址。首页新页签入口统一为细线圆角新窗口图标。更新日志只展示对应版本下载，不附加 GitHub Release 页面入口。
 
@@ -33,7 +33,7 @@ Umami Cloud 网站“球球官网”，website ID 为 `fe855bb0-9000-49aa-820b-b
 - 一次页面加载上报一次 PV；站内锚点切换不重复计数。UV 是 Umami 的匿名访客估算，不能当作真实人数，跨设备或浏览器可能重复。
 - `download` 事件只包含 `architecture`（`arm64` / `x64`）与 `position`（`hero` / `download`）。下载点击不代表下载完成或安装成功；脚本拦截、网络失败与过早离开可能造成漏计。
 - 页面 URL 固定为 `/`，来源仅保留外部网站 origin；不传 URL 查询参数、hash、来源路径、聊天演示内容、邮箱或账号信息。不启用身份识别、回放或热图。
-- 首页、功能介绍、更新日志和隐私说明各加载一次PV，继续汇总为站点访问，不区分页面路径；下载事件继续仅统计 ZIP，DMG不计入此指标。日志页的历史下载不加入当前下载指标，切换版本不新增 PV。
+- 首页、功能介绍、更新日志和隐私说明各加载一次PV，继续汇总为站点访问，不区分页面路径；下载事件统计带当前入口标记的 DMG 或 ZIP；官网主入口现为 DMG，切换前的历史统计不回算。日志页的历史下载不加入当前下载指标，切换版本不新增 PV。
 - 保留浏览器语言、屏幕尺寸等基础访问维度；Umami 根据网络请求识别粗略地区及设备。统计不使用 Cookie，尊重 DNT；不影响桌宠本地运行的隐私边界。
 - Umami Hobby 当前免费额度为每月 100,000 个事件、1 个网站、保留 6 个月；PV 与下载点击均消耗事件额度。免费版不含 API/MCP，日报需从已登录的后台读取。不升级、不添加付款方式。
 - 历史访问无法补回。首日按接入时间注明不完整；日报按 Asia/Shanghai 的前一自然日统计，读取失败不能记为 0。
@@ -56,7 +56,7 @@ Apple 芯片版 **0.4.03**，发布日期 **2026-10-07**，GitHub 兼容标签 `
 | [Qiuqiu-0.4.03-macOS-arm64-share.zip](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.3/Qiuqiu-0.4.03-macOS-arm64-share.zip) | 123599537 | `b2af0ad53485b2b70806264252378be0499e76313cd04927eb9529746155ad96` |
 | [Qiuqiu-0.4.03-macOS-arm64.dmg](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.3/Qiuqiu-0.4.03-macOS-arm64.dmg) | 137853172 | `610966a0757abbbca47c8fe276ef5d2a7d7c3cbeed016ecb5d3986214d5eccca` |
 
-大小与 SHA-256 来自本地正式附件元数据 `v0.4.03-trend-lines/public-installer.json`，公开源码 `f6497e3b8b1290f35ad1b686de3c3bffde82cb8c`。当前尚未发布 Release 或官网，公开地址完整下载核验待发布后完成。
+大小与 SHA-256 来自本地正式附件元数据 `v0.4.03-trend-lines/public-installer.json`，公开源码 `f6497e3b8b1290f35ad1b686de3c3bffde82cb8c`。公开 Release `v0.4.3` 已发布；本轮通过公开 API 核对 DMG 名称、大小及 digest，并完成直链 HEAD 回读。完整包体的下载、签名及内容验收见项目 0.4.03 正式发布记录，本轮未重新下载包体。
 
 ### 0.4.02 下载记录（保留）
 
@@ -87,6 +87,7 @@ Intel 0.3.13 构建候选仍未在真实 Intel Mac 验收。下表为 2026-10-07
 | 文件 | 精确大小（bytes） | SHA-256 |
 | --- | ---: | --- |
 | [Qiuqiu-0.3.13-macOS-x64-share.zip](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.13/Qiuqiu-0.3.13-macOS-x64-share.zip) | 137676767 | `f4b1ee54f99da7222780cbd0d98799a2db79128329c9e12d8b8b0e0a2f6bc12a` |
+| [Qiuqiu-0.3.13-macOS-x64.dmg](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.13/Qiuqiu-0.3.13-macOS-x64.dmg) | 139670369 | `989ac4adfb2ad2e0501a82e5d8898e00494680cde89562fe39e5599da93f42d1` |
 
 ### 0.4.00 下载记录（保留）
 
@@ -118,7 +119,7 @@ Apple 芯片版 **0.4.00**，发布日期 **2026-10-05**，GitHub 兼容标签 `
 | [Qiuqiu-0.3.30-macOS-arm64-share.zip](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.30/Qiuqiu-0.3.30-macOS-arm64-share.zip) | 123480684 | `78c474ec18e9b22990385bcad526b987a35ccffe8581edcdd3dc89829c264c85` |
 | [Qiuqiu-0.3.30-macOS-arm64.dmg](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.30/Qiuqiu-0.3.30-macOS-arm64.dmg) | 137808229 | `2b38f31bf64698fc839c62965127fcbdca87f8135534fb57fe1acb2be7c78552` |
 
-ZIP 解压得到“球球桌宠.app”，可拖入 Applications；DMG 是另一个独立安装附件。Intel x64 下载仍为已公开的 0.3.13 构建候选，尚未在真实 Intel Mac 上验收；本次更新仅适用于 Apple 芯片版。应用采用本机临时签名，未进行 Apple Developer ID 签名或公证。
+官网默认提供 DMG：打开磁盘镜像，将“球球桌宠.app”拖入 Applications，完成后可推出镜像。GitHub Release 保留 ZIP 归档；历史记录仅在没有对应 DMG 时显示 ZIP。Intel x64 下载仍为已公开的 0.3.13 构建候选，尚未在真实 Intel Mac 上验收；本次更新仅适用于 Apple 芯片版。应用采用本机临时签名，未进行 Apple Developer ID 签名或公证。
 
 额外点数不限定 Pro；符合条件的 Plus/Pro 账号可购买点数，支持灵活计费的团队可使用工作区点数。球球仅在账号支持点数且 Codex 返回点数状态时展示，不并入套餐比例或重置机会，也不与 API 费用合并。依据：[官方点数说明](https://learn.chatgpt.com/docs/pricing)。
 

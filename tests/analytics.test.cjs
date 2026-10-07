@@ -88,7 +88,7 @@ test('one manual PV; download navigation survives unavailable and rejected track
   assert.equal(state.calls.length, 1);
 
   const link = {
-    href: 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.24/Qiuqiu-0.3.24-macOS-arm64-share.zip',
+    href: 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.3/Qiuqiu-0.4.03-macOS-arm64.dmg',
     dataset: { downloadArch: 'arm64', downloadPosition: 'hero' },
   };
   let prevented = false;
@@ -117,8 +117,25 @@ test('only real release links are counted, middle clicks count once and right cl
   assert.equal(state.calls.length, 1);
   event.button = 2;
   state.listeners.auxclick(event);
-  link.href = 'https://unrelated.example/file.zip';
-  event.type = 'click';
-  state.listeners.click(event);
   assert.equal(state.calls.length, 1);
+  link.href = 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.3/Qiuqiu-0.4.03-macOS-arm64.dmg';
+  link.dataset.downloadArch = 'arm64';
+  event.type = 'click';
+  event.button = 0;
+  state.listeners.click(event);
+  assert.equal(state.calls.length, 2);
+  event.type = 'auxclick';
+  event.button = 1;
+  state.listeners.auxclick(event);
+  assert.equal(state.calls.length, 3);
+  link.dataset.downloadArch = 'x64';
+  event.type = 'click';
+  event.button = 0;
+  state.listeners.click(event);
+  for (const href of ['https://unrelated.example/file.dmg',
+    'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.3/unknown.dmg']) {
+    link.href = href;
+    state.listeners.click(event);
+  }
+  assert.equal(state.calls.length, 3);
 });

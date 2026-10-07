@@ -76,7 +76,7 @@
     const link = event.target.closest?.('a[data-download-arch][data-download-position]');
     if (!link) return;
     const { downloadArch: architecture, downloadPosition: position } = link.dataset;
-    const release = /^https:\/\/github\.com\/dreamcall520\/emotion-ball-desktop-pet\/releases\/download\/v[\d.]+\/Qiuqiu-[\d.]+-macOS-(arm64|x64)-share\.zip$/;
+    const release = /^https:\/\/github\.com\/dreamcall520\/emotion-ball-desktop-pet\/releases\/download\/v[\d.]+\/Qiuqiu-[\d.]+-macOS-(arm64|x64)(?:-share\.zip|\.dmg)$/;
     if (release.exec(link.href)?.[1] !== architecture) return;
     track('download', { architecture, position });
   };
