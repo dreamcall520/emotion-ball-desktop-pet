@@ -91,7 +91,19 @@ async function verifyFunctionWindows({ pet, screen, openers, notes, getObstacles
         const bounds = win.getBounds();
         assert.equal(screen.getDisplayMatching(bounds).id, display.id, 'desktop note follows panel display');
         assert.ok(inside(bounds, area));
-        noteChecks.push({ displayId: display.id, panel: panel.getBounds(), pet: pet.getBounds(), bounds });
+        const check = { displayId: display.id, panel: panel.getBounds(), pet: pet.getBounds(), bounds };
+        if (displays.length > 1) {
+          const other = displays.find(candidate => candidate.id !== display.id).workArea;
+          win.setBounds({ ...bounds, x: other.x + 24, y: other.y + 24 }, false);
+          const reopened = await panel.webContents.executeJavaScript(`window.qiuNotes.openNote(${JSON.stringify(item.id)})`);
+          assert.equal(reopened.ok, true);
+          assert.equal(notes.getWindows().notes.at(-1), win, 'reuse already-displayed note window');
+          assert.equal(screen.getDisplayMatching(win.getBounds()).id, display.id, 'explicit display moves existing note back to panel screen');
+          assert.ok(inside(win.getBounds(), area));
+          assert.deepEqual(notes.getStore().getState().notes.find(note => note.id === item.id).windowBounds, win.getBounds());
+          check.reopenedBounds = win.getBounds();
+        }
+        noteChecks.push(check);
         notes.getStore().update(state => { state.notes.find(note => note.id === item.id).desktopOpen = false; return state; });
         panel.hide();
       }

@@ -566,12 +566,44 @@ test('panel desktop display uses its own screen for new and closed notes, preser
     assert.ok(bounds.x >= external.x && bounds.y >= external.y && bounds.x + bounds.width <= 0 && bounds.y + bounds.height <= 780);
     assert.equal(bounds.width, item === old ? 320 : 300); assert.equal(bounds.height, item === old ? 300 : 220);
     assert.deepEqual(store.getState().notes.find(note => note.id === item.id).windowBounds, bounds);
-    // 查看已经展示的便签只聚焦，不挪走用户手动摆放的位置。
-    win.setBounds({ ...bounds, x: 200, y: 200 });
+    // 同屏查看便签只聚焦，保留用户手动摆放的位置。
+    win.setBounds({ ...bounds, x: -1300, y: 200 });
     await f.call(panel, 'notes:open-note', item.id);
-    assert.equal(win.getBounds().x, 200);
+    assert.equal(win.getBounds().x, -1300);
   }
   store.update(state => { state.notes.push({ ...M.newNote('automatic restore', '', f.now()), desktopOpen: true,
     windowBounds: { x: 350, y: 400, width: 320, height: 300 } }); return state; });
   assert.equal(f.controller.getWindows().notes.at(-1).getBounds().x, 350, '自动恢复继续使用保存位置');
+});
+
+
+test('explicit panel display moves an already-restored note from another screen only after saving', async t => {
+  const f = fixture(t), primary = { id: 1, workArea: f.screen.area }, external = { id: 2,
+    workArea: { x: -1920, y: -300, width: 1920, height: 1080 } };
+  f.screen.getDisplayMatching = rect => rect.x < 0 ? external : primary;
+  const savedBounds = { x: 100, y: 200, width: 460, height: 350 };
+  const item = { ...M.newNote('already on desktop from previous version', '', f.now()), desktopOpen: true, windowBounds: savedBounds };
+  const store = f.controller.getStore();
+  store.update(state => { state.notes.push(item); return state; });
+  const win = f.ready(f.controller.getWindows().notes[0]), panel = f.ready(f.controller.openPanel());
+  panel.setBounds({ x: -1800, y: -200, width: 380, height: 520 });
+  assert.deepEqual(win.getBounds(), savedBounds, '启动自动恢复不搬动便签');
+  f.controller.openNote(item.id); assert.deepEqual(win.getBounds(), savedBounds, '非面板入口仍保留位置');
+  const rename = fs.renameSync; fs.renameSync = () => { throw Error('disk failed'); };
+  try {
+    assert.equal((await f.call(panel, 'notes:open-note', item.id)).ok, false);
+    assert.deepEqual(win.getBounds(), savedBounds, '存储失败时不先移动窗口');
+  } finally { fs.renameSync = rename; }
+  assert.equal((await f.call(panel, 'notes:open-note', item.id)).ok, true);
+  assert.equal(f.controller.getWindows().notes[0], win, '直接移动原有便签窗口，不创建副本');
+  const relocated = win.getBounds();
+  assert.equal(f.screen.getDisplayMatching(relocated).id, external.id);
+  assert.deepEqual([relocated.width, relocated.height], [460, 350]);
+  assert.deepEqual(store.getState().notes[0].windowBounds, relocated);
+  assert.deepEqual(JSON.parse(fs.readFileSync(f.file)).notes[0].windowBounds, relocated, '新位置已持久化');
+  win.setBounds({ ...relocated, x: -1200, y: 200 });
+  await f.call(panel, 'notes:open-note', item.id); assert.equal(win.getBounds().x, -1200, '同屏展示保留手动位置');
+  panel.setBounds({ x: 200, y: 200, width: 380, height: 520 });
+  await f.call(panel, 'notes:open-note', item.id);
+  assert.equal(f.screen.getDisplayMatching(win.getBounds()).id, primary.id, '再次显式展示可随面板回到另一屏');
 });

@@ -274,10 +274,14 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
     if (suppressed()) return { ok: false, message: '球球暂时暂停。' };
     const item = store.getState().notes.find(item => item.id === id && !item.deletedAt);
     if (!item) return { ok: false, message: '便签不存在或已删除。' };
-    if (!item.desktopOpen) {
-      const source = alive(sourceWindow) ? sourceWindow.getBounds() : null;
-      const bounds = source ? adjacentBounds(source, screen.getDisplayMatching(source).workArea,
-        item.windowBounds || { width: 300, height: 220 }) : null;
+    const currentWindow = noteWindows.get(id);
+    const currentBounds = alive(currentWindow) ? currentWindow.getBounds() : item.windowBounds;
+    const source = alive(sourceWindow) ? sourceWindow.getBounds() : null;
+    const display = source && screen.getDisplayMatching(source);
+    const moveToPanel = display && (!currentBounds || screen.getDisplayMatching(currentBounds).id !== display.id);
+    if (!item.desktopOpen || moveToPanel) {
+      const bounds = source ? adjacentBounds(source, display.workArea,
+        currentBounds || { width: 300, height: 220 }) : null;
       const result = nativeUpdate(state => {
         const note = state.notes.find(item => item.id === id);
         note.desktopOpen = true;
@@ -285,6 +289,7 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
         return state;
       });
       if (!result.ok) return result;
+      if (bounds && alive(currentWindow)) currentWindow.setBounds(bounds, false);
     } else syncWindows(store.getState());
     const win = noteWindows.get(id);
     if (alive(win)) windowEntries.get(win).focusOnReady = true;
