@@ -107,8 +107,9 @@
     const target = $('shape-options');
     target.replaceChildren();
     $('shape-hint').textContent = shapeNames.some(([id]) => id === state.appearance.shape)
-      ? '点选一个起点，再按喜好调整'
+      ? ''
       : state.appearance.shape === 'codex-pet' ? '选择一个球球形态后可调整' : '当前保留旧版形态，选择以上任一形态即可替换';
+    $('shape-hint').hidden = !$('shape-hint').textContent;
     const visibleShapes = shapeNames;
     target.style.setProperty('--shape-count', visibleShapes.length);
     for (const [id, label, contour = 'original'] of visibleShapes) {
@@ -126,7 +127,8 @@
         for (const option of target.querySelectorAll('.shape-option')) {
           option.setAttribute('aria-pressed', String(option.dataset.shape === id && option.dataset.auroraContour === contour));
         }
-        $('shape-hint').textContent = '点选一个起点，再按喜好调整';
+        $('shape-hint').textContent = '';
+        $('shape-hint').hidden = true;
         renderColors();
         renderAuroraVisibility();
         schedulePreview();
@@ -181,7 +183,8 @@
     $('manual-toggle').disabled = visible || codex;
     $('manual-hint').textContent = codex ? '选择球球形态后，可调整轮廓与五官' : visible
       ? '为了保持完整的动效体验，暂不支持轮廓与五官微调'
-      : '让轮廓与五官长成你喜欢的样子';
+      : '';
+    $('manual-hint').hidden = !visible && !codex;
     showManual(visible || codex ? false : !$('manual-controls').hidden);
     renderSliders();
     for (const id of Object.keys(rangeLimits)) if (id !== 'aurora-transparency') $(id).disabled = !canSave || visible || codex;
@@ -892,7 +895,6 @@
     const descriptor = codexDescriptors.get(state.appearance.codexPetId);
     $('preview-name').textContent = codex ? (descriptor?.name || '宠物预览') :
       (shapeNames.find(([shape]) => shape === state.appearance.shape)?.[1] || '球球');
-    $('preview-subtitle').textContent = codex ? '动画预览' : '实时预览';
     $('reset-appearance').hidden = codex; $('preview-animation').hidden = !codex;
     $('pet-opacity').value = state.appearance.auroraTransparency;
     $('pet-opacity-value').textContent = state.appearance.auroraTransparency + '%';
