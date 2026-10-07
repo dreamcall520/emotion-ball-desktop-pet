@@ -273,7 +273,7 @@ async function verifyCodexPets({ pet, customize, openCustomization, openChat, ge
       })()`), view => view.background === (resolved === 'light' ?
         (view.dark ? 'rgb(32, 43, 54)' : 'rgb(243, 246, 249)') :
         (view.dark ? 'rgb(237, 242, 248)' : 'rgb(37, 49, 61)')), '晴空蓝样式加载完成');
-      const visual = await page(`(() => {
+      const visual = await waitFor(() => page(`(() => {
         const selected = document.querySelector('.pet-card[aria-pressed=true]'), stage = document.querySelector('#stage'), range = document.querySelector('#pet-opacity');
         const style = selected && getComputedStyle(selected), dimensions = document.querySelector('#pet-grid');
         return { root: {...document.documentElement.dataset}, selected: selected && {id:selected.dataset.petId, border:style.borderColor, background:style.backgroundColor, color:style.color},
@@ -282,7 +282,7 @@ async function verifyCodexPets({ pet, customize, openCustomization, openChat, ge
           columns:getComputedStyle(dimensions).gridTemplateColumns.split(' ').length,
           selects:['pet-action','pet-size'].map(id=>({id,color:getComputedStyle(document.getElementById(id)).color, background:getComputedStyle(document.getElementById(id)).backgroundColor, arrow:getComputedStyle(document.getElementById(id)).backgroundImage})),
           opacity:Number(range.value), fill:range.style.getPropertyValue('--range-fill'), saveColor:getComputedStyle(document.querySelector('#save')).color };
-      })()`);
+      })()`), view => mode !== 'accessible' || view.ordinaryBorders.every(border => border === (resolved === 'dark' ? 'rgb(51, 67, 82)' : 'rgb(217, 225, 233)')), '色弱卡片边界过渡完成');
       assert.ok(visual.selected, '切换主题保留选中宠物'); assert.equal(visual.columns, 3);
       assert.equal(visual.fill, visual.opacity / 60 * 100 + '%', '透明度轨道与当前位置一致');
       if (theme === 'blue' && mode === 'standard') assert.equal(visual.stage,
