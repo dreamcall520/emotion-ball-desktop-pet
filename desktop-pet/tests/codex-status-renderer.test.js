@@ -119,11 +119,11 @@ test('趋势只画已采样数据；单周期无切换，双周期切换传真�
   assert.equal(h.nodes['details-content'].querySelector('.record-note'),null);
   assert.equal(h.nodes['details-content'].querySelector('.reset-chevron').textContent,'›');
   assert.equal(h.nodes['details-content'].querySelector('.reset-chevron').attributes['aria-hidden'],'true');
-  const css = fs.readFileSync(path.resolve(__dirname,'../codex-details.css'),'utf8');
-  assert.match(css,/\.chart-legend \.time-line\s*\{[^}]*border-top:\s*1\.3px dashed/);
-  assert.match(css,/\.trend-chart \.time-path\s*\{[^}]*stroke-dasharray:\s*4 3/);
+  assert.match(h.nodes['details-content'].querySelector('.chart-legend').textContent,/剩余时间参考.*虚线区间无记录/);
   const denseSamples = Array.from({length:61},(_sample,index) => ({at:NOW-7200000+index*120000,remaining:100-index*56/60}));
   h.receive({...base,trend:{...base.trend,samples:denseSamples}});
+  assert.equal(h.nodes['details-content'].querySelector('.trend-chart').querySelector('.unrecorded-line'),null);
+  assert.doesNotMatch(h.nodes['details-content'].querySelector('.chart-legend').textContent,/虚线区间无记录/);
   const points = h.nodes['details-content'].querySelectorAll('.point');
   assert.ok(points.length <= 8);
   assert.equal(points[0].attributes.r,'3');
@@ -140,7 +140,7 @@ test('趋势只画已采样数据；单周期无切换，双周期切换传真�
   assert.doesNotMatch(h.nodes['details-content'].textContent,/预计约.*用完/);
 });
 
-test('额度图表在断档、余额校正和骤降处断线，填色也不跨未知区间',() => {
+test('额度图表在断档处仅虚线连接已知端点，余额校正和骤降仍断开，填色不跨边界',() => {
   const h=harness('codex-details-renderer.js',detailIds,'petCodexDetails');
   const samples=[
     {at:NOW-1200000,remaining:90},{at:NOW-1080000,remaining:89},
@@ -156,6 +156,51 @@ test('额度图表在断档、余额校正和骤降处断线，填色也不跨�
   assert.equal((line.match(/L/g)||[]).length,4);
   assert.equal((content.querySelector('.observed-area').attributes.d.match(/Z/g)||[]).length,4);
   assert.equal(content.querySelector('.observed-line').attributes['stroke-linecap'],'round');
+  const chart = content.querySelector('.trend-chart');
+  assert.equal((chart.querySelector('.unrecorded-line').attributes.d.match(/M/g)||[]).length,1);
+  assert.equal((chart.querySelector('.time-path').attributes.d.match(/M/g)||[]).length,3);
+});
+
+test('5h和周趋势的缺记录虚线只连接观测两端，长断档无填充也不延伸到未来',() => {
+  for (const period of [300,10080]) {
+    const h=harness('codex-details-renderer.js',detailIds,'petCodexDetails');
+    const reset=NOW+3600000;
+    const samples=[{at:NOW-10800000,remaining:90},{at:NOW-10680000,remaining:89},
+      {at:NOW-3600000,remaining:88},{at:NOW-3480000,remaining:87},{at:NOW,remaining:86}];
+    h.receive({action:'trend',period,items:[{...item(period,86),resetsAt:reset}],trend:{windowMinutes:period,
+      resetsAt:reset,samples,forecast:{state:'unknown'}}});
+    const chart=h.nodes['details-content'].querySelector('.trend-chart');
+    const point=sample=>`${(30+(sample.at-(reset-period*60000))/(period*60000)*320).toFixed(1)} ${(102-sample.remaining*.8).toFixed(1)}`;
+    const connector=chart.querySelector('.unrecorded-line');
+    assert.equal(connector.attributes.d,`M${point(samples[1])}L${point(samples[2])}M${point(samples[3])}L${point(samples[4])}`);
+    assert.match(connector.querySelector('title').textContent,/区间无记录.*不参与用量预估/);
+    assert.match(chart.attributes['aria-label'],/蓝色虚线区间无记录/);
+    assert.equal((chart.querySelector('.observed-line').attributes.d.match(/M/g)||[]).length,3);
+    const areas=chart.querySelector('.observed-area').attributes.d.split('Z').filter(Boolean);
+    assert.equal(areas.length,2);
+    assert.ok(areas[0].startsWith(`M${point(samples[0])}L${point(samples[1])}L`));
+    assert.ok(areas[1].startsWith(`M${point(samples[2])}L${point(samples[3])}L`));
+    assert.match(h.nodes['details-content'].querySelector('.chart-legend').textContent,/虚线区间无记录/);
+    assert.match(h.nodes['details-content'].textContent,/暂无法预估额度用完时间/);
+  }
+});
+
+test('五分钟边界使用虚线；余额回升与25点修正即使伴随缺记录也不桥接',() => {
+  const h=harness('codex-details-renderer.js',detailIds,'petCodexDetails');
+  const render=samples=>h.receive({action:'trend',period:300,items:[item(300,samples.at(-1).remaining)],
+    trend:{windowMinutes:300,resetsAt:NOW+10800000,samples,forecast:{state:'unknown'}}});
+  for (const gap of [299999,300000]) {
+    render([{at:NOW-gap,remaining:90},{at:NOW,remaining:89}]);
+    const chart=h.nodes['details-content'].querySelector('.trend-chart');
+    assert.equal(Boolean(chart.querySelector('.unrecorded-line')),gap===300000);
+    assert.equal(Boolean(chart.querySelector('.observed-area')),gap<300000);
+  }
+  render([{at:NOW-1200000,remaining:90},{at:NOW-600000,remaining:95},{at:NOW,remaining:70}]);
+  const chart=h.nodes['details-content'].querySelector('.trend-chart');
+  assert.equal(chart.querySelector('.unrecorded-line'),null);
+  assert.equal(chart.querySelector('.observed-area'),null);
+  assert.equal((chart.querySelector('.observed-line').attributes.d.match(/M/g)||[]).length,3);
+  assert.equal((chart.querySelector('.time-path').attributes.d.match(/M/g)||[]).length,3);
 });
 
 test('待查看只通过打开具体会话导航；主题、返回与Escape调用对应桥接',() => {

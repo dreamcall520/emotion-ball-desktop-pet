@@ -179,22 +179,36 @@
     const x = at => 30 + (at - start) / (end - start) * 320, y = remaining => 102 - remaining * .8;
     svg.appendChild(svgNode('path',{class:'axis',d:'M30 22H350M30 62H350M30 102H350'}));
     [100,50,0].forEach((value,index) => svg.appendChild(svgNode('text',{x: value === 100 ? 1 : value === 50 ? 7 : 13,y:25+index*40},`${value}%`)));
-    const segments = [];
+    const segments = [], gaps = [], timeSegments = [];
     valid.forEach((sample,index) => {
       const previous = valid[index-1];
-      if (!previous || sample.at-previous.at >= 300000 || sample.remaining > previous.remaining
-        || previous.remaining-sample.remaining >= 25) segments.push([]);
+      const correction = previous && (sample.remaining > previous.remaining || previous.remaining-sample.remaining >= 25);
+      const missing = previous && sample.at-previous.at >= 300000;
+      if (!previous || missing || correction) segments.push([]);
+      if (!previous || correction) timeSegments.push([]);
+      // A dashed connector relates two known observations, never a continuous usage record.
+      if (missing && !correction) gaps.push([previous,sample]);
       segments.at(-1).push(sample);
+      timeSegments.at(-1).push(sample);
     });
     const coordinate = sample => `${x(sample.at).toFixed(1)} ${y(sample.remaining).toFixed(1)}`;
     const paths = segments.map(segment => 'M'+segment.map(coordinate).join('L'));
     const path = paths.map((value,index) => segments[index].length === 1 ? `${value}L${coordinate(segments[index][0])}` : value).join('');
-    const last = valid.at(-1), first = valid[0];
+    const last = valid.at(-1);
     const area = paths.flatMap((value,index) => segments[index].length > 1
       ? [`${value}L${x(segments[index].at(-1).at)} 102L${x(segments[index][0].at)} 102Z`] : []).join('');
     if (area) svg.appendChild(svgNode('path',{class:'observed-area',d:area}));
-    if (reset) svg.appendChild(svgNode('path',{class:'time-path',d:`M${x(first.at)} ${y((end-first.at)/(end-start)*100)}L${x(last.at)} ${y((end-last.at)/(end-start)*100)}`}));
+    if (reset) svg.appendChild(svgNode('path',{class:'time-path',d:timeSegments.map(segment => {
+      const timeCoordinate = sample => `${x(sample.at).toFixed(1)} ${y((end-sample.at)/(end-start)*100).toFixed(1)}`;
+      return `M${timeCoordinate(segment[0])}L${timeCoordinate(segment.at(-1))}`;
+    }).join('')}));
     svg.appendChild(svgNode('path',{class:'now',d:`M${x(last.at)} 16V102`}));
+    if (gaps.length) {
+      const connector = svgNode('path',{class:'unrecorded-line',d:gaps.map(gap => 'M'+gap.map(coordinate).join('L')).join('')});
+      connector.appendChild(svgNode('title',{},'虚线区间无记录，仅连接两次已知采样，不参与用量预估'));
+      svg.appendChild(connector);
+      svg.setAttribute('aria-label',`${periodName(item.windowMinutes)}已采样额度趋势，蓝色虚线区间无记录，曲线只到最后采样时间`);
+    }
     svg.appendChild(svgNode('path',{class:'observed-line',d:path,'stroke-linecap':'round'}));
     const markerStride = Math.max(1, Math.ceil((valid.length - 1) / 6));
     valid.forEach((sample,index) => {
@@ -230,10 +244,13 @@
     stats.replaceChildren(stat(`${Math.round(item.remaining)}%`,'剩余额度',''),stat(time === null ? '—' : `${Math.round(time)}%`,'剩余时间','time-value'),node('span',`trend-pace ${item.pace.state}`,({fast:'用量偏快',balanced:'节奏均衡',slow:'用量较慢',unknown:'待记录'}[item.pace.state])));
     const meta = node('div','chart-meta'), legend = node('div','chart-legend');
     const key = (label,className) => { const span = node('span',''); span.replaceChildren(node('i',className),node('span','',label)); return span; };
-    legend.replaceChildren(key('剩余额度',''),key('剩余时间','time-line'));
+    const trendChart = chart(model,item);
+    const hasUnrecorded = Boolean(trendChart.querySelector('.unrecorded-line'));
+    legend.replaceChildren(key('剩余额度',''),key('剩余时间参考','time-line'));
+    if (hasUnrecorded) legend.appendChild(key('虚线区间无记录','unrecorded-line'));
     const latest = model.trend.samples.at(-1)?.at;
     const updated = node('span','chart-updated',latest ? `更新 ${dateLabel(latest)}` : '暂无记录');
-    updated.title = latest ? `已记录至 ${dateLabel(latest)}；曲线仅显示已采样记录，后续暂无记录。` : '尚未提供趋势记录';
+    updated.title = latest ? `已记录至 ${dateLabel(latest)}；实线为连续采样${hasUnrecorded ? '，蓝色虚线区间无记录' : ''}，后续暂无记录。` : '尚未提供趋势记录';
     meta.replaceChildren(legend,updated);
     const forecast = node('div',`forecast-note ${model.trend.forecast.status}`), copy = node('div','forecast-copy');
     const known = model.trend.forecast.state === 'estimate';
@@ -252,7 +269,7 @@
     const expiries = (model.resetOpportunities || []).filter(entry => typeof entry.expiresAt === 'number' && entry.expiresAt > Date.now()).sort((a,b) => a.expiresAt-b.expiresAt);
     if (expiries.length) opportunities.appendChild(node('span','expiry',`1 次于 ${dateLabel(expiries[0].expiresAt)} 到期`));
     bottom.replaceChildren(reset,opportunities);
-    content.replaceChildren(stats,meta,chart(model,item),forecast,bottom);
+    content.replaceChildren(stats,meta,trendChart,forecast,bottom);
   }
   function renderCredits(model) {
     setTitle('剩余额度');
