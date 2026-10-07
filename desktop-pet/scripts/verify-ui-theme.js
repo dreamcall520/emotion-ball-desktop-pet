@@ -91,6 +91,7 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
       accent: getComputedStyle(root).getPropertyValue('--accent').trim(),
       action: el && getComputedStyle(el).color,
       glass: document.querySelector('.panel') && getComputedStyle(document.querySelector('.panel')).backgroundImage,
+      recordBorder: document.querySelector('#records>.record:last-child') && getComputedStyle(document.querySelector('#records>.record:last-child')).borderBottomWidth,
       apiButton: document.querySelector('#connect-report') && {
         color: getComputedStyle(document.querySelector('#connect-report')).color,
         background: getComputedStyle(document.querySelector('#connect-report')).backgroundColor } };
@@ -118,6 +119,7 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
     inlineFilters: Boolean(document.querySelector('.list-toolbar #filter') && document.querySelector('.list-toolbar #category-filter')),
     headingCount: Boolean(document.querySelector('#group-count')),
     headingHidden: document.querySelector('#group-heading').hidden,
+    lastRecordBorder: getComputedStyle(document.querySelector('#records>.record:last-child')).borderBottomWidth,
     progressInToolbar: Boolean(document.querySelector('.list-toolbar #progress-text')),
     progressHidden: document.querySelector('#progress-text').hidden,
     progressText: document.querySelector('#progress-text').textContent,
@@ -139,7 +141,7 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
   const statusMenu = await filterState();
   assert.deepEqual(statusMenu.statusValues, ['all', 'favorites', 'desktop', 'trash'], '便签状态菜单仅四个状态');
   assert.equal(statusMenu.statusLabel, '状态'); assert.equal(statusMenu.categoryLabel, '分类');
-  assert.equal(statusMenu.inlineFilters, true); assert.equal(statusMenu.headingCount, false); assert.equal(statusMenu.headingHidden, true);
+  assert.equal(statusMenu.inlineFilters, true); assert.equal(statusMenu.headingCount, false); assert.equal(statusMenu.headingHidden, true); assert.equal(statusMenu.lastRecordBorder, '1px');
   for (const menu of statusMenu.menu) assert.ok(menu.left >= 0 && menu.right <= statusMenu.width, '状态菜单不越界');
   assert.equal(statusMenu.statusHasManagement, false);
   assert.equal(statusMenu.categoryHidden, false);
@@ -167,6 +169,7 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
   await page(panelWin, "document.querySelector('#todos-tab').click()");
   const todoFilters = await filterState();
   for (const view of [statusMenu, todoFilters]) for (const button of view.toolbar) assert.ok(button.left >= 0 && button.right <= view.width && Math.abs(button.top + button.height / 2 - view.toolbar[0].top - view.toolbar[0].height / 2) <= 3, button.id + ' 在最窄面板中保持同一行');
+  assert.equal(todoFilters.lastRecordBorder, '1px');
   assert.equal(todoFilters.headingHidden, true); assert.equal(todoFilters.progressInToolbar, true);
   assert.equal(todoFilters.progressHidden, false); assert.equal(todoFilters.progressText, '1/2');
   assert.equal(todoFilters.progressTitle, '今天已完成 1 项，共 2 项');
@@ -211,6 +214,7 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
       (!view.notesAppearance || view.notesAppearance === resolved) && (!view.theme || view.theme === resolved) &&
       (theme !== 'blue' || mode !== 'standard' || !view.glass ||
         (resolved === 'dark' ? /32, 51, 71/ : /230, 245, 255/).test(view.glass))), `${theme}/${appearance}/${mode}`);
+    for (const view of views) if (view.recordBorder !== null) assert.equal(view.recordBorder, '1px', theme + '/' + appearance + '/' + mode + ' 最后一条记录保留细线');
     if (theme === 'blue' && mode === 'standard') {
       const panel = views[windows.indexOf(notes.getWindows().panel)];
       if (resolved === 'light') {
