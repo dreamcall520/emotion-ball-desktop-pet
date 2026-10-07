@@ -155,7 +155,7 @@
       "sourceSha256": "d1050f7d620bfbb33c698450d4ae2c3c183f0215b40bdb37e9a90ef72af41706",
       "sha256": "ebb5c326db4f38299c324d4192e82e9565f896decd26518c8376fcc82b472ae9",
       "adaptation": "Native 0.4.04 timing/rendering retained (idle 6.6s); reviewed same-origin public sample image URLs replace the App file/data URL contract in browser documents.",
-      "publicCommit": "4aa3b73a69170d8a9fd0c5a3102e6ff819bfb958",
+      "publicCommit": "16809908dd3cd4d9cb29fb5cb84cfea5a16bd2c7",
       "publicVersion": "0.4.04"
     },
     {

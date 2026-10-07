@@ -55,7 +55,7 @@ Apple 芯片版 **0.4.04**，发布日期 **2026-10-07**，GitHub 兼容标签 `
 | [Qiuqiu-0.4.04-macOS-arm64-share.zip](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.4/Qiuqiu-0.4.04-macOS-arm64-share.zip) | 123612298 | `22e80247088db2fdd5a5cc81b12703138a3bf7421427895ed77a16fdcdc81be9` |
 | [Qiuqiu-0.4.04-macOS-arm64.dmg](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.4/Qiuqiu-0.4.04-macOS-arm64.dmg) | 137872466 | `b232c896c74224e0800a75ea03b82c50d770c87efb71c54ca88045cdfebbc281` |
 
-大小与 SHA-256 来自本地正式附件元数据 `v0.4.04-release/public-installer.json`，公开源码 `c5da9865a502113c7e7090058ad51526eb9611d3`；与实际构建提交的文件树一致。公开 Release 与线上下载的核验结果以项目 0.4.04 正式发布记录为准。
+大小与 SHA-256 来自本地正式附件元数据 `v0.4.04-release/public-installer.json`，公开源码 `main@16809908dd3cd4d9cb29fb5cb84cfea5a16bd2c7`；与实际构建提交的文件树一致。公开 Release `v0.4.4` 已发布；公开安装包与官网回读证据见项目 0.4.04 正式发布记录。
 
 ### 0.4.03 下载记录（保留）
 
