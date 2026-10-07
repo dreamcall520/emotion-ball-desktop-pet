@@ -220,7 +220,7 @@ test('待查看只通过打开具体会话导航；主题、返回与Escape调�
 });
 
 
-test('全部已读仅在非空结果页显示；等待真实确认，不重复提交，失败保留列表且可重试',async () => {
+test('清除未看仅在非空结果页显示；等待真实确认，不重复提交，失败保留列表且可重试',async () => {
   const h = harness('codex-details-renderer.js',detailIds,'petCodexDetails');
   const base = {action:'results',generation:7,activity:{unreadCount:1},results:[{id:'thread-1',turnId:'turn-1',title:'已有结果',state:'completed'}]};
   const readAll = h.nodes['details-read-all'];
@@ -243,7 +243,7 @@ test('全部已读仅在非空结果页显示；等待真实确认，不重复�
   h.receive({...base,generation:undefined}); assert.equal(readAll.disabled,true);
 });
 
-test('全部已读 IPC 只接受当前可见结果窗口主框架及当前连接代次',() => {
+test('清除未看 IPC 只接受当前可见结果窗口主框架及当前连接代次',() => {
   const source = fs.readFileSync(path.resolve(__dirname,'../main.js'),'utf8');
   const start = source.indexOf("  ipcMain.handle('pet:codex-details-read-all'");
   const end = source.indexOf("  ipcMain.on('pet:codex-details-resize'",start);
