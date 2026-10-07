@@ -786,3 +786,18 @@ test('保存后的导入 ID 与原 Codex 卡片关联，重开仍标记同一宠
   await f.get('save').dispatch('click'); assert.equal(f.saves.at(-1).appearance.codexPetId, importedId);
   f.close();
 });
+
+
+test('Codex 透明度轨道在载入和换宠物时与滑块位置一致', async () => {
+  const pets = [codexPet(0, '已有宠物'), codexPet(1, '另一宠物')];
+  const appearance = { shape: 'codex-pet', codexPetId: pets[0].id, auroraTransparency: 36 };
+  const f = await fixture(appearance, appearance, { pets, codexPet: pets[0] });
+  assert.equal(Number(f.get('pet-opacity').value), 36);
+  assert.equal(f.get('pet-opacity').style['--range-fill'], '60%');
+  f.get('pet-opacity').value = 12; f.get('pet-opacity').dispatch('input');
+  assert.equal(f.get('pet-opacity').style['--range-fill'], '20%');
+  f.get('pet-grid').children[1].dispatch('click');
+  assert.equal(Number(f.get('pet-opacity').value), 0);
+  assert.equal(f.get('pet-opacity').style['--range-fill'], '0%');
+  f.close();
+});

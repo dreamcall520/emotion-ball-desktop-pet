@@ -7,13 +7,14 @@ const { SIZES } = require('../lib/window-placement');
 const { ACTIONS } = require('../lib/codex-pet-player');
 const { capturePaintedWindow } = require('./verify-codex-companion');
 const { pointerClick } = require('./verify-chat-integration');
+const { textStyles, contrast } = require('./verify-ui-theme');
 
 const digest = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const clone = value => JSON.parse(JSON.stringify(value));
 
 // Called only from the explicit isolated source or packaged smoke branch.
 async function verifyCodexPets({ pet, customize, openCustomization, openChat, getChatWindow,
-  getSettings, setSize, store, poll, packaged = false, output = process.env.PET_CODEX_PETS_QA_OUT,
+  getSettings, setSize, store, poll, getMenu, nativeTheme, packaged = false, output = process.env.PET_CODEX_PETS_QA_OUT,
   phase = process.env.PET_CODEX_PETS_QA_PHASE || 'all' }) {
   assert.equal(process.env.PET_SMOKE_TEST, '1');
   assert.equal(process.env.PET_SMOKE_CODEX_PETS_ONLY, '1');
@@ -252,10 +253,71 @@ async function verifyCodexPets({ pet, customize, openCustomization, openChat, ge
       'ball-only controls disabled for sprite and restored for ball');
     assert.ok(chat && !chat.isDestroyed());
   }
+  const themeChecks = [];
+  if (getMenu && phase === 'save') {
+    const appearances = clone({ current: getSettings().customization, startup: getSettings().startupAppearance,
+      presets: getSettings().appearancePresets });
+    const activeId = getSettings().customization.appearance.codexPetId;
+    await readyDesktop(activeId);
+    const importedDigest = digest(store.getImported(activeId).spritesheetPath);
+    const select = id => { const item = getMenu().getMenuItemById(id); assert.ok(item?.enabled, id); item.click(item, pet, {}); };
+    for (const theme of ['green', 'blue']) for (const appearance of ['light', 'dark', 'system']) for (const mode of ['standard', 'accessible']) {
+      select('ui-theme-' + theme); select('color-appearance-' + appearance);
+      const toggle = getMenu().getMenuItemById('color-accessible');
+      if (toggle.checked !== (mode === 'accessible')) toggle.click(toggle, pet, {});
+      const resolved = appearance === 'system' ? (nativeTheme.shouldUseDarkColors ? 'dark' : 'light') : appearance;
+      await waitFor(() => page('({...document.documentElement.dataset})'), value => value.uiTheme === theme && value.colorMode === mode && value.theme === resolved, 'Codex 宠物主题同步');
+      if (theme === 'blue' && mode === 'standard') await waitFor(() => page(`(() => {
+        const stage=document.querySelector('#stage');
+        return {background:getComputedStyle(stage).backgroundColor,dark:stage.classList.contains('dark')};
+      })()`), view => view.background === (resolved === 'light' ?
+        (view.dark ? 'rgb(32, 43, 54)' : 'rgb(243, 246, 249)') :
+        (view.dark ? 'rgb(237, 242, 248)' : 'rgb(37, 49, 61)')), '晴空蓝样式加载完成');
+      const visual = await page(`(() => {
+        const selected = document.querySelector('.pet-card[aria-pressed=true]'), stage = document.querySelector('#stage'), range = document.querySelector('#pet-opacity');
+        const style = selected && getComputedStyle(selected), dimensions = document.querySelector('#pet-grid');
+        return { root: {...document.documentElement.dataset}, selected: selected && {id:selected.dataset.petId, border:style.borderColor, background:style.backgroundColor, color:style.color},
+          stage:getComputedStyle(stage).backgroundColor, stageDark:stage.classList.contains('dark'),
+          columns:getComputedStyle(dimensions).gridTemplateColumns.split(' ').length,
+          selects:['pet-action','pet-size'].map(id=>({id,color:getComputedStyle(document.getElementById(id)).color, background:getComputedStyle(document.getElementById(id)).backgroundColor, arrow:getComputedStyle(document.getElementById(id)).backgroundImage})),
+          opacity:Number(range.value), fill:range.style.getPropertyValue('--range-fill'), saveColor:getComputedStyle(document.querySelector('#save')).color };
+      })()`);
+      assert.ok(visual.selected, '切换主题保留选中宠物'); assert.equal(visual.columns, 3);
+      assert.equal(visual.fill, visual.opacity / 60 * 100 + '%', '透明度轨道与当前位置一致');
+      if (theme === 'blue' && mode === 'standard') assert.equal(visual.stage,
+        resolved === 'light' ? (visual.stageDark ? 'rgb(32, 43, 54)' : 'rgb(243, 246, 249)') :
+        (visual.stageDark ? 'rgb(237, 242, 248)' : 'rgb(37, 49, 61)'), '蓝色预览底未被新增CSS覆盖');
+      let texts;
+      if (mode === 'accessible') {
+        texts = await textStyles(customize, [
+          {label:'source-tab',selector:'#source-codex'}, {label:'pet-name',selector:'.pet-card[aria-pressed=true] .pet-name'},
+          {label:'ordinary-pet',selector:'.pet-card[aria-pressed=false] .pet-name'}, {label:'selected-check',selector:'.pet-card[aria-pressed=true] .selection-mark'},
+          {label:'refresh',selector:'#refresh-pets'}, {label:'search',selector:'#pet-search'},
+          {label:'opacity',selector:'#pet-opacity-value'},
+          {label:'save',selector:'#save'}
+        ]);
+        for (const text of texts) { text.ratio = contrast(text.color,text.background); assert.ok(text.ratio >= (text.label==='selected-check'?3:4.5), text.label + ' 色弱对比 ' + text.ratio); }
+      }
+      if(mode === 'accessible') for(const item of visual.selects) assert.ok(contrast(item.color,item.background) >= 4.5, item.id+' 下拉文字清晰（箭头在右侧留白区）');
+      await input('#pet-search', '没有这个名字', 'input');
+      assert.equal(await page('document.querySelectorAll("#pet-grid button").length'),0);
+      if (mode==='accessible') for (const text of await textStyles(customize,[{label:'empty',selector:'#pet-filter-status'}]))
+        assert.ok(contrast(text.color,text.background)>=4.5,'无匹配状态清晰');
+      await input('#pet-search', '', 'input');
+      if (theme === 'blue' && appearance !== 'system') await capture(customize, 'codex-pets-' + resolved + '-' + mode);
+      assert.deepEqual(clone({ current:getSettings().customization, startup:getSettings().startupAppearance, presets:getSettings().appearancePresets }), appearances, '主题不改变导入形象、启动外观或收藏');
+      assert.equal((await readyDesktop(activeId)).state.codexPetId,activeId);
+      assert.equal(digest(store.getImported(activeId).spritesheetPath),importedDigest,'主题不改变导入副本');
+      themeChecks.push({theme,appearance,mode,resolved,visual,texts});
+    }
+    select('ui-theme-blue'); select('color-appearance-light');
+    const toggle=getMenu().getMenuItemById('color-accessible');if(toggle.checked)toggle.click(toggle,pet,{});
+    checks.push('12 Codex pet theme combinations and accessible controls', 'theme changes preserve imported assets / startup / favorites');
+  }
   assert.deepEqual(errors, [], '没有原生页面加载失败');
   fs.writeFileSync(path.join(output, `report-${phase}.json`), JSON.stringify({ ok: true, packaged,
     isolatedUserData: true, sourceFixtures: phase === 'local' ? 0 : 30, actualPetsObserved,
-    actualModelCalls: 0, phase, checks }, null, 2));
+    actualModelCalls: 0, phase, checks, themeChecks }, null, 2));
   process.stdout.write(`PET_CODEX_PETS_${phase.toUpperCase()}_OK\n`);
   return { checks };
 }

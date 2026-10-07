@@ -40,22 +40,95 @@ test('采样只处理已确认账号的启用、新鲜数据；重复观察不�
   store.close(); assert.equal(store.record(snapshot(time)), false);
 });
 
-test('账号隔离、周期换段、余额回升/大跳变和长断档重新采样', () => {
+test('账号与真实周期隔离，余额回升/大跳变和长断档保留旧采样', () => {
   let time = NOW; const store = createQuotaHistory({ now: () => time }); store.setAccount('a');
   store.record(snapshot(time, [quotaWindow(300, 80)]));
   time += 120000; store.record(snapshot(time, [quotaWindow(300, 78)]));
   assert.equal(store.getState().windows[0].samples.length, 2);
   time += 120000; store.record(snapshot(time, [quotaWindow(300, 90)]));
-  assert.deepEqual(store.getState().windows[0].samples, [{ at: time, remaining: 90 }]);
+  assert.equal(store.getState().windows[0].samples.length, 3);
+  assert.deepEqual(store.getState().windows[0].samples.at(-1), { at: time, remaining: 90 });
   time += 120000; store.record(snapshot(time, [quotaWindow(300, 40)]));
-  assert.equal(store.getState().windows[0].samples.length, 1);
+  assert.equal(store.getState().windows[0].samples.length, 4);
   time += 600000; store.record(snapshot(time, [quotaWindow(300, 39)]));
-  assert.equal(store.getState().windows[0].samples.length, 1);
+  assert.equal(store.getState().windows[0].samples.length, 5);
   time += 120000; store.record(snapshot(time, [quotaWindow(300, 80, time + 5 * 3600000)]));
   assert.equal(store.getState().windows.length, 2);
   store.setAccount('b'); assert.deepEqual(store.getState().windows, []);
   store.setAccount('a'); assert.equal(store.getState().windows.length, 2);
   store.setAccount(null); assert.equal(store.getState().available, false);
+});
+
+test('关闭更新后重开仍保留同周历史，秒级重置波动不产生新周期', t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'qiuqiu-history-upgrade-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const filePath = path.join(directory, 'history.json'); let time = NOW;
+  const reset = NOW + 7 * 86400000;
+  const original = createQuotaHistory({ filePath, now: () => time }); original.setAccount('a');
+  original.record(snapshot(time, [quotaWindow(10080, 90, reset)]));
+  time += 120000; original.record(snapshot(time, [quotaWindow(10080, 89, reset + 1000)]));
+  original.close(); time += 6 * 3600000;
+  const reopened = createQuotaHistory({ filePath, now: () => time }); reopened.setAccount('a');
+  reopened.record(snapshot(time, [quotaWindow(10080, 70, reset)]));
+  const windows = reopened.getState().windows;
+  assert.equal(windows.length, 1); assert.equal(windows[0].samples.length, 3);
+  assert.equal(windows[0].samples[0].at, NOW);
+  assert.equal(windows[0].samples.at(-1).at, time);
+  const source = snapshot(time, [quotaWindow(10080, 70, reset + 1000)]);
+  source.history = reopened.getState();
+  assert.equal(buildCodexDetailsModel(source, {}, time).trend.samples.length, 3);
+  reopened.record(snapshot(time, [quotaWindow(10080, 70, reset + 60000)]));
+  assert.equal(reopened.getState().windows.length, 2);
+});
+
+test('已有秒级重复周期加载时合并、排序并去重合法样本', t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'qiuqiu-history-merge-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const filePath = path.join(directory, 'history.json'); let time = NOW;
+  const original = createQuotaHistory({ filePath, now: () => time }); original.setAccount('a');
+  original.record(snapshot(time, [quotaWindow(300, 80)]));
+  const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  const account = Object.values(data.accounts)[0]; const row = account.windows[0];
+  account.windows.push({ ...row, resetsAt: row.resetsAt + 1000, samples: [
+    {at:NOW+240000,remaining:74}, {at:NOW+120000,remaining:78},
+    {at:NOW+240000,remaining:75}, {at:NOW-4*3600000,remaining:100}, {at:NOW+360000,remaining:101}
+  ] });
+  fs.writeFileSync(filePath, JSON.stringify(data)); time += 240000;
+  const loaded = createQuotaHistory({ filePath, now: () => time }); loaded.setAccount('a');
+  const windows = loaded.getState().windows;
+  assert.equal(windows.length, 1);
+  assert.deepEqual(windows[0].samples, [
+    {at:NOW,remaining:80}, {at:NOW+120000,remaining:78}, {at:NOW+240000,remaining:75}
+  ]);
+});
+
+test('日志采样仅导入确认账户的可信当前周期，同时间本地优先、重复导入不写盘', t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'qiuqiu-history-import-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const filePath = path.join(directory, 'history.json'); const store = createQuotaHistory({filePath,now:()=>NOW});
+  const window = quotaWindow(); const sample = (at,remaining,extra={}) => ({at,remaining,
+    id:window.id,windowMinutes:window.windowMinutes,resetsAt:window.resetsAt,...extra});
+  const entries = [sample(NOW-60000,62),sample(NOW-120000,63,{resetsAt:window.resetsAt+1000}),
+    sample(NOW-120000,64),sample(NOW,99),sample(NOW+1,50),
+    sample(window.resetsAt-window.windowMinutes*60000-1,90),sample(NOW-180000,-1),
+    sample(NOW-180000,101),sample(NOW-180000,65,{resetsAt:window.resetsAt+2000}),
+    sample(NOW-180000,65,{id:'codex:secondary'}),sample(NOW-180000,65,{windowMinutes:10080})];
+  assert.equal(store.importSamples([window],entries),false);
+  store.setAccount('a'); store.record(snapshot(NOW,[window]));
+  const rename = fs.renameSync; let writes = 0;
+  fs.renameSync = (from,to) => { if (to===filePath) writes++; return rename(from,to); };
+  try { assert.equal(store.importSamples([window],entries),true); } finally { fs.renameSync=rename; }
+  assert.equal(writes,1);
+  assert.deepEqual(store.getState().windows[0].samples,[
+    {at:NOW-120000,remaining:64},{at:NOW-60000,remaining:62},{at:NOW,remaining:60}]);
+  const saved = fs.readFileSync(filePath,'utf8');
+  assert.equal(store.importSamples([window],entries),false);
+  assert.equal(fs.readFileSync(filePath,'utf8'),saved);
+  assert.equal(store.importSamples([window],Array(12001).fill(sample(NOW,50))),false);
+  store.setAccount('b');
+  assert.equal(store.importSamples([window],[sample(NOW-60000,65,{resetsAt:window.resetsAt+60000})]),false);
+  assert.deepEqual(store.getState().windows,[]);
+  store.close(); assert.equal(store.importSamples([window],entries),false);
 });
 
 test('5h预测要求连续采样跨度10分钟，stale/不足/跨重置不估计', () => {
@@ -93,6 +166,24 @@ test('周周期持续24小时仍能估计，6000上限保留整周，5h换段不
   const weekly = store.getState().windows.find(row => row.windowMinutes === 10080);
   assert.equal(weekly.samples.length, 722);
   assert.equal(weekly.samples.at(-1).at - weekly.samples[0].at, 721 * 120000);
+});
+
+test('旧断档/余额回升/骤降不会阻止恢复后的连续预测，也不会跨边界外推', () => {
+  for (const boundary of ['gap','increase','drop']) {
+    let time = NOW; const store = createQuotaHistory({now:()=>time}); store.setAccount('a');
+    store.record(snapshot(time,[quotaWindow(300,80)]));
+    time += 120000; store.record(snapshot(time,[quotaWindow(300,78)]));
+    const resumed = time + (boundary==='gap' ? 600000 : 120000);
+    const startRemaining = boundary==='increase' ? 90 : boundary==='drop' ? 40 : 76;
+    for (let index=0;index<=5;index++) {
+      time=resumed+index*120000;
+      const source=snapshot(time,[quotaWindow(300,startRemaining-index)]);
+      store.record(source); source.history=store.getState();
+      const trend=buildCodexDetailsModel(source,{},time).trend;
+      assert.equal(trend.samples.length,index+3);
+      assert.equal(trend.forecast.state,index<5?'unknown':'estimate',`${boundary}, ${index}`);
+    }
+  }
 });
 
 test('重置数量0与未知、null与空明细、返回部分和真实到期/使用严格区分', () => {

@@ -37,7 +37,7 @@ test('定制preload只转发现有API与安全归一的主题消息，可取消�
   const unsubscribe = bridge.onColorMode((...message) => messages.push(message));
   ipc.emit('pet:color-mode', {}, 'accessible', 'dark');
   ipc.emit('pet:color-mode', {}, 'unexpected', 'unexpected');
-  assert.deepEqual(messages, [['accessible', 'dark'], ['standard', 'system']]);
+  assert.deepEqual(messages, [['accessible', 'dark', 'green'], ['standard', 'system', 'green']]);
   unsubscribe();
   ipc.emit('pet:color-mode', {}, 'accessible', 'light');
   assert.equal(messages.length, 2);

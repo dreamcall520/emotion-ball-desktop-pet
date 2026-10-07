@@ -6,7 +6,7 @@ html,body{min-width:0;min-height:580px}.studio{max-width:none;margin:0;backgroun
 .controls{padding-right:7px}.preview-heading{margin-bottom:14px;min-height:42px;align-items:flex-start}
 .preview-heading h2{font-size:20px;font-weight:650;line-height:1.35}.preview-heading p{font-size:12px;color:var(--muted);margin-top:4px}
 .preview-heading .icon-button{width:24px;height:26px;color:var(--muted)}.preview-heading .icon{width:15px;height:15px}
-.stage{position:relative;min-height:270px;background:#f1f4f3;border-color:var(--line);border-radius:12px}
+.stage{position:relative;min-height:270px;border-color:var(--line);border-radius:12px}
 .preview-mode{position:absolute;z-index:2;top:12px;right:12px;display:flex;align-items:center;gap:0;margin:0;padding:0;border:0;background:transparent;border-radius:0}
 .preview-mode button{height:28px;padding:4px 10px;font-size:11px;font-weight:500;color:var(--muted);border:0;border-radius:5px}
 .preview-mode button+button{margin-left:4px;position:relative}.preview-mode button+button:before{content:"";position:absolute;left:-3px;top:8px;width:1px;height:12px;background:var(--line)}
@@ -15,13 +15,13 @@ html,body{min-width:0;min-height:580px}.studio{max-width:none;margin:0;backgroun
 .source-switch,.codex-source .source-switch{display:flex;gap:26px;height:42px;margin-bottom:14px;padding:0;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;position:relative}
 .source-switch button{position:relative;flex:none;padding:0 2px 13px;height:42px;border:0;border-radius:0;font-size:14px;font-weight:600;color:var(--muted);background:transparent}
 .source-switch button[aria-pressed=true]{background:transparent;color:var(--accent-text);box-shadow:none}.source-switch button[aria-pressed=true]:after{content:"";position:absolute;bottom:-1px;left:0;right:0;height:2px;background:var(--accent)}
-.source-switch button:hover{color:var(--text)}.codex-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;height:28px;margin-bottom:12px}
-.read-status{font-size:12px;font-weight:500;color:var(--text)}.refresh-pets{height:26px;padding:3px 0 3px 6px;font-size:11px;gap:5px}.refresh-pets .icon{width:14px;height:14px}.refresh-pets:disabled{opacity:.5}
+.source-switch button:not([aria-pressed=true]):hover{color:var(--text)}.codex-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;height:28px;margin-bottom:12px}
+.read-status{font-size:12px;font-weight:500;color:var(--text)}.refresh-pets{height:26px;padding:3px 0 3px 6px;font-size:11px;gap:5px;color:var(--text)}.refresh-pets .icon{width:14px;height:14px}.refresh-pets:disabled{opacity:.5}
 .pet-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-.pet-card,.codex-source .pet-card{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;min-height:128px;padding:8px 6px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-size:12px;color:var(--muted);transition:border-color .15s,background .15s}
-.pet-card:hover{background:var(--raised);border-color:#bdcbc6;color:var(--text)}
+.pet-card,.codex-source .pet-card{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;min-height:128px;padding:8px 6px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-size:12px;color:var(--text);transition:border-color .15s,background .15s}
+.pet-card:hover{background:var(--raised);border-color:var(--selected-line);color:var(--text)}
 .pet-card[aria-pressed=true]{background:var(--surface);border-color:var(--selected-line);box-shadow:none;color:var(--accent-text);font-weight:600}
-.pet-card .selection-mark{display:none;position:absolute;top:9px;right:9px;width:17px;height:17px;border-radius:50%;background:var(--accent);color:var(--surface);align-items:center;justify-content:center}.pet-card .selection-mark svg{width:11px;height:11px;stroke-width:2.5}.pet-card[aria-pressed=true] .selection-mark{display:flex}
+.pet-card .selection-mark{display:none;position:absolute;top:9px;right:9px;width:17px;height:17px;border-radius:50%;background:var(--accent);color:var(--accessible-on-accent,var(--surface));align-items:center;justify-content:center}.pet-card .selection-mark svg{width:11px;height:11px;stroke-width:2.5}.pet-card[aria-pressed=true] .selection-mark{display:flex}
 .pet-sprite{display:block;flex:none;width:var(--sprite-size,78px);height:calc(var(--sprite-size,78px)*208/192);background-image:var(--sprite);background-size:calc(var(--sprite-size,78px)*8) calc(var(--sprite-size,78px)*208/192*var(--rows,11));background-repeat:no-repeat;background-position:calc(var(--frame,0)*var(--sprite-size,78px)*-1) calc(var(--row,0)*var(--sprite-size,78px)*208/192*-1);pointer-events:none}
 .codex-source .pet-card .pet-sprite{--sprite-size:78px}.pet-name{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pet-settings,.codex-source .pet-settings{margin-top:24px;padding-top:0;border-top:0}
@@ -72,3 +72,9 @@ html,body{min-width:0;min-height:580px}.studio{max-width:none;margin:0;backgroun
 /* Section titles and spacing separate controls; only source tabs keep a rule. */
 .form-section{margin-top:24px;padding-top:0;border-top:0}
 .saved-pet{border-top:0}
+
+/* The shared palette owns contrast; sprite and shape artwork retain their colors. */
+:root[data-color-mode=accessible] .pet-card[aria-pressed=true]{border:2px solid var(--accessible-blue)}
+/* Data-URL arrows cannot inherit the surrounding text color. */
+:root[data-color-mode=accessible] :is(.preview-animation select,#pet-size){background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23c5d1df' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E")}
+:root[data-color-mode=accessible][data-accessible-appearance=light] :is(.preview-animation select,#pet-size){background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23455467' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E")}

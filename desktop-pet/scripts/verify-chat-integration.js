@@ -87,8 +87,9 @@ async function verifyChatUnified({ win, pet, getMenu, chat, poll }) {
   const preferences = win.webContents.getLastWebPreferences();
   assert.equal(preferences.contextIsolation, true); assert.equal(preferences.nodeIntegration, false); assert.equal(preferences.sandbox, true);
   const select = id => { const item = getMenu().getMenuItemById(id); assert.ok(item?.enabled, id); item.click(item, pet, {}); };
+  const setMode = mode => { const item = getMenu().getMenuItemById('color-accessible'); if (item.checked !== (mode === 'accessible')) item.click(item, pet, {}); };
   for (const width of [360, 320]) for (const mode of ['standard', 'accessible']) for (const appearance of ['light', 'dark']) {
-    select('color-accessible'); select(`color-appearance-${appearance}`); select(`color-${mode}`);
+    select(`color-appearance-${appearance}`); setMode(mode);
     win.setContentSize(width, 480);
     await poll(() => page(`innerWidth === ${width} && document.documentElement.dataset.colorMode === '${mode}' && document.documentElement.dataset.accessibleAppearance === '${appearance}'`), Boolean, '聊天主题与尺寸同步');
     await page("document.querySelector('#message-input').value = Array(7).fill('四行之后继续在输入框内滚动').join('\\n'); document.querySelector('#message-input').dispatchEvent(new Event('input'))");
@@ -118,7 +119,7 @@ async function verifyChatUnified({ win, pet, getMenu, chat, poll }) {
   }
   // Real pointer events through the production IPC retain the exact draft on
   // a rejected synthetic turn. No personal conversation or Codex process runs.
-  select('color-standard'); select('color-appearance-light'); win.setContentSize(360, 480);
+  setMode('standard'); select('color-appearance-light'); win.setContentSize(360, 480);
   await poll(() => page('innerWidth'), value => value === 360, '恢复聊天宽度');
   const unsafe = '<img src=x onerror="window.chatSmokeInjected=true"><script>window.chatSmokeInjected=true</script>';
   const beforeSafeSend = counts.turns;
@@ -303,9 +304,9 @@ async function verifyChatIntegration({ pet, chat, chatWindow, screen, getMenu, g
   }
   process.stdout.write('PET_CHAT_EDGE_DRAG_OK\n');
   const chooseColor = mode => {
-    const item = getMenu().getMenuItemById(`color-${mode}`);
+    const item = getMenu().getMenuItemById('color-accessible');
     assert.ok(item?.enabled, 'global color menu is independent of Codex monitoring');
-    item.click(item, pet, {});
+    if (item.checked !== (mode === 'accessible')) item.click(item, pet, {});
   };
   const petPaint = () => pet.webContents.executeJavaScript(`(() => {
     const head = getComputedStyle(document.querySelector('#pet .eb-head'));

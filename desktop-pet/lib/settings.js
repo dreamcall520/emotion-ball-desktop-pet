@@ -11,6 +11,7 @@ const DEFAULTS = Object.freeze({
   keepAwake: true,
   bubblesEnabled: true,
   colorMode: 'standard',
+  uiTheme: 'green',
   chatModel: 'auto',
   notesDefaultTab: 'note',
   notesAppearance: 'light',
@@ -70,6 +71,7 @@ function normalizeSettings(raw = {}) {
     bubblesEnabled:
       typeof raw.bubblesEnabled === 'boolean' ? raw.bubblesEnabled : DEFAULTS.bubblesEnabled,
     colorMode: ['standard', 'accessible'].includes(raw.colorMode) ? raw.colorMode : DEFAULTS.colorMode,
+    uiTheme: ['green', 'blue'].includes(raw.uiTheme) ? raw.uiTheme : DEFAULTS.uiTheme,
     chatModel: normalizeModelSelection(raw.chatModel),
     notesDefaultTab: ['note', 'todo'].includes(raw.notesDefaultTab) ? raw.notesDefaultTab : DEFAULTS.notesDefaultTab,
     notesAppearance: ['system', 'light', 'dark'].includes(raw.notesAppearance) ? raw.notesAppearance : DEFAULTS.notesAppearance,

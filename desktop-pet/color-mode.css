@@ -182,3 +182,66 @@
   opacity: 1;
   color: var(--accessible-muted) !important;
 }
+
+/* Approved notes high-contrast labels and count badge. Scope the text token to
+ * notes so filled controls in chat and API keep their on-accent text. */
+:root[data-color-mode="accessible"][data-ui-window="notes"] {
+  --accent-text: var(--accessible-blue) !important;
+}
+
+:root[data-color-mode="accessible"][data-ui-window="notes"] .group-count {
+  background: var(--accessible-raised);
+  color: var(--accessible-text);
+  border: 1px solid var(--accessible-line);
+}
+
+/* Approved customization high-contrast palette; artwork and hue pickers keep
+ * their own colors. These tokens apply identically in green and blue themes. */
+:root[data-color-mode="accessible"][data-ui-window="customize"] {
+  --surface: var(--accessible-panel) !important;
+  --raised: var(--accessible-surface);
+  --input: var(--accessible-panel);
+  --accent-text: var(--accessible-blue) !important;
+  --selected: var(--accessible-raised);
+  --selected-line: var(--accessible-line);
+  --primary: var(--accessible-blue);
+  --primary-hover: var(--accessible-blue);
+  --primary-text: var(--accessible-on-accent);
+  --secondary: var(--accessible-surface);
+  --disabled: var(--accessible-surface);
+  --disabled-text: var(--accessible-muted);
+  --panel-wash: var(--accessible-panel);
+  --range-track: var(--accessible-line);
+  --range-thumb-edge: var(--accessible-line);
+  --shadow: none;
+}
+
+:root[data-color-mode="accessible"][data-ui-window="customize"] .segmented button[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 1px var(--accessible-line);
+}
+
+:root[data-color-mode="accessible"][data-ui-window="customize"] .shape-option[aria-pressed="true"] {
+  border: 2px solid var(--accessible-blue);
+  box-shadow: none;
+}
+
+:root[data-color-mode="accessible"][data-ui-window="customize"] .stage {
+  border-color: var(--accessible-line);
+}
+
+:root[data-color-mode="accessible"][data-ui-window="customize"] .toast {
+  background: var(--accessible-blue);
+  color: var(--accessible-on-accent);
+}
+
+:root[data-color-mode="accessible"][data-ui-window="customize"] button:disabled {
+  color: var(--accessible-muted) !important;
+  background: var(--accessible-surface) !important;
+  opacity: 1;
+  box-shadow: none !important;
+}
+
+:root[data-color-mode="accessible"] .primary-button {
+  background: var(--accessible-blue);
+  color: var(--accessible-on-accent);
+}

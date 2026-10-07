@@ -1,0 +1,57 @@
+/* Approved R3 blue palette differences only. Base layout remains in customize.css.
+ * :where keeps selector weight identical to the reviewed stylesheet.
+ * Standard mode is explicit so green and accessible modes keep their palette. */
+:root:where([data-ui-theme="blue"][data-color-mode="standard"]) {
+  --raised: #f5f7fa;
+  --accent: #356bbf;
+  --accent-text: #356bbf;
+  --selected: #eaf6ff;
+  --selected-line: #c2dff7;
+  --primary: #e6f5ff;
+  --primary-hover: #d8efff;
+  --primary-text: #356bbf;
+  --disabled: #eef0f2;
+  --disabled-text: #9a9fa5;
+  --panel-wash: linear-gradient(180deg,#e6f5ff 0,#f4fbff 64px,#fff 130px);
+}
+:root:where([data-ui-theme="blue"][data-color-mode="standard"])[data-theme="dark"] {
+  --bg: #111922;
+  --surface: #141c25;
+  --raised: #1b2734;
+  --input: #17222e;
+  --text: #eef1f5;
+  --line: #303d4c;
+  --accent: #98caff;
+  --accent-text: #b3d9ff;
+  --selected: #1e354c;
+  --selected-line: #3d678e;
+  --primary: #27486b;
+  --primary-hover: #305780;
+  --primary-text: #c6e5ff;
+  --disabled: #263544;
+  --secondary: #243442;
+  --panel-wash: linear-gradient(180deg,#203347 0,#1a2938 52px,#141c25 106px);
+}
+:where(:root[data-ui-theme="blue"][data-color-mode="standard"]) .stage {
+  background: rgb(243, 246, 249);
+}
+:where(:root[data-ui-theme="blue"][data-color-mode="standard"]) .stage.dark {
+  background: rgb(32, 43, 54);
+}
+:root:where([data-ui-theme="blue"][data-color-mode="standard"])[data-theme="dark"] .stage:not(.dark) {
+  background: rgb(37, 49, 61);
+}
+:root:where([data-ui-theme="blue"][data-color-mode="standard"])[data-theme="dark"] .stage.dark {
+  background: rgb(237, 242, 248);
+  border-color: rgb(189, 200, 216);
+}
+:root:where([data-ui-theme="blue"][data-color-mode="standard"]) {
+  --range-track: #e6edf5;
+  --range-thumb-edge: #c5d6e9;
+}
+:root:where([data-ui-theme="blue"][data-color-mode="standard"])[data-theme="dark"] {
+  --range-thumb-edge: #b7cfe6;
+}
+:where(:root[data-ui-theme="blue"][data-color-mode="standard"]) input[type="range"]::-webkit-slider-thumb {
+  background: linear-gradient(rgb(255, 255, 255), rgb(245, 250, 255));
+}

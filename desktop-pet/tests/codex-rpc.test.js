@@ -20,7 +20,7 @@ function fakeChild() {
   return child;
 }
 function setup({ reply = () => ({}), timeoutMs = 100, installed = true, installedAt, ignoreThread,
-  fetch = null, now = Date.now, historyTimeoutMs = 5000 } = {}) {
+  fetch = null, now = Date.now, historyTimeoutMs = 5000, readUsageHistory } = {}) {
   const child = fakeChild(); const sent = []; const probes = []; const launches = [];
   child.stdin.on('data', chunk => {
     const packet = JSON.parse(chunk);
@@ -34,7 +34,7 @@ function setup({ reply = () => ({}), timeoutMs = 100, installed = true, installe
     fs: { promises: {
       lstat: async file => { probes.push(file); if (!installed || (installedAt && file !== installedAt)) throw Object.assign(new Error('SECRET'), { code: 'ENOENT' }); return { isFile: () => true, isSymbolicLink: () => false }; },
       access: async () => {}
-    } }, homedir: () => '/private/test-user', timeoutMs, ignoreThread, fetch, now, historyTimeoutMs
+    } }, homedir: () => '/private/test-user', timeoutMs, ignoreThread, fetch, now, historyTimeoutMs, readUsageHistory
   });
   return { rpc, child, sent, probes, launches };
 }
@@ -251,6 +251,52 @@ function historyFixture({ accountId = () => 'account-a', backendOrigin = 'https:
   } });
 }
 const historyResponse = value => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } });
+
+test('本地额度历史仅扫描当前账户周期一次，重置秒级抖动不重扫，换账户重新读取', async t => {
+  let account = 'account-a'; let reset = Math.floor(HISTORY_NOW / 1000) + 18000;
+  const calls = [];
+  const h = setup({ now: () => HISTORY_NOW, readUsageHistory: async options => {
+    calls.push(options);
+    return [{ at: HISTORY_NOW - 60000, id: 'codex:primary', windowMinutes: 300,
+      resetsAt: options.windows[0].resetsAt, remaining: 86 }];
+  }, reply: packet => ({ result: packet.method === 'account/read'
+    ? { account: { type: 'chatgpt', email: 'person@example.test' }, workspaceRouting: { chatgptAccountId: account } }
+    : packet.method === 'account/rateLimits/read'
+      ? { rateLimits: { primary: { usedPercent: 15, windowDurationMins: 300, resetsAt: reset } } } : {} }) });
+  t.after(() => h.rpc.close()); await h.rpc.start(); await h.rpc.readAccount();
+  assert.equal((await h.rpc.readQuota(HISTORY_NOW)).historySamples.length, 1);
+  assert.equal((await h.rpc.readQuota(HISTORY_NOW)).historySamples, undefined);
+  reset++; await h.rpc.readQuota(HISTORY_NOW); assert.equal(calls.length, 1);
+  reset += 18000; await h.rpc.readQuota(HISTORY_NOW); assert.equal(calls.length, 2);
+  account = 'account-b'; await h.rpc.readAccount(); await h.rpc.readQuota(HISTORY_NOW);
+  assert.deepEqual(calls.map(call => call.accountId), ['account-a', 'account-a', 'account-b']);
+  assert.equal(calls[0].root, '/private/test-user/.codex');
+  assert.equal(calls[0].now, HISTORY_NOW);
+});
+
+test('本地历史迟到结果不能跨账户；读取失败和缺失工作区身份不影响实时额度', async t => {
+  let account = 'account-a'; let finish; let entered;
+  const started = new Promise(resolve => { entered = resolve; });
+  const h = historyFixture({ accountId: () => account, readUsageHistory: () => {
+    entered(); return new Promise(resolve => { finish = resolve; });
+  } });
+  t.after(() => h.rpc.close()); await h.rpc.start(); await h.rpc.readAccount();
+  const pending = h.rpc.readQuota(HISTORY_NOW); await started;
+  account = 'account-b'; await h.rpc.readAccount();
+  finish([{ at: HISTORY_NOW, id: 'codex:primary', windowMinutes: 300, resetsAt: 2000000000000, remaining: 85 }]);
+  await assert.rejects(pending, { code: 'DISCONNECTED' });
+  const failed = historyFixture({ readUsageHistory: async () => { throw new Error('unreadable'); } });
+  t.after(() => failed.rpc.close()); await failed.rpc.start(); await failed.rpc.readAccount();
+  const quota = await failed.rpc.readQuota(HISTORY_NOW);
+  assert.equal(quota.windows[0].remaining, 85); assert.equal(quota.historySamples, undefined);
+  let reads = 0;
+  const unknown = setup({ readUsageHistory: () => { reads++; return []; }, reply: packet => ({ result:
+    packet.method === 'account/read' ? { account: { type: 'chatgpt', email: 'person@example.test' } }
+      : packet.method === 'account/rateLimits/read' ? { rateLimits: { primary: { usedPercent: 15, windowDurationMins: 300, resetsAt: 2000000000 } } } : {} }) });
+  t.after(() => unknown.rpc.close()); await unknown.rpc.start(); await unknown.rpc.readAccount();
+  assert.equal((await unknown.rpc.readQuota(HISTORY_NOW)).windows[0].remaining, 85);
+  assert.equal(reads, 0);
+});
 
 test('账户历史只GET固定官方路径、瞬时认证、分页去重并缓存，零可用仍展示获得和使用事件', async t => {
   let time = HISTORY_NOW; const calls = [];

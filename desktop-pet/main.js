@@ -143,7 +143,7 @@ const windowMotion = createWindowMotion({
 
 app.setName(APP_NAME);
 const colorModes = createColorModeManager({ getMode: () => settings?.colorMode,
-  getAppearance: () => settings?.codexQuotaAppearance });
+  getAppearance: () => settings?.codexQuotaAppearance, getTheme: () => settings?.uiTheme });
 app.on('browser-window-created', (_event, win) => colorModes.track(win));
 
 function writeError(scope, error) {
@@ -1102,6 +1102,23 @@ function setColorMode(value) {
     return false;
   }
   colorModes.sync();
+  notesCompanion?.syncAppearance();
+  refreshTrayMenu();
+  return true;
+}
+
+function setUiTheme(value) {
+  if (!settings || isQuitting || !['green', 'blue'].includes(value) || settings.uiTheme === value) return false;
+  const previous = settings.uiTheme;
+  settings.uiTheme = value;
+  try { persistSettings(); }
+  catch (error) {
+    settings.uiTheme = previous;
+    writeError('保存主题色', error);
+    refreshTrayMenu();
+    return false;
+  }
+  colorModes.sync();
   refreshTrayMenu();
   return true;
 }
@@ -1523,16 +1540,19 @@ function menuTemplate() {
     { label: '球球尺寸', submenu: sizeMenu() },
     {
       id: 'color-mode', label: '界面配色', submenu: [
-        { id: 'color-standard', label: '标准配色', type: 'radio', checked: settings.colorMode !== 'accessible',
-          click: () => setColorMode('standard') },
-        { id: 'color-accessible', label: '色弱友好（高对比）', type: 'radio', checked: settings.colorMode === 'accessible',
-          click: () => setColorMode('accessible') },
-        { type: 'separator' },
         { id: 'color-appearance', label: '外观（所有窗口）',
           submenu: [['system', '跟随系统'], ['light', '浅色'], ['dark', '深色']].map(([value, label]) => ({
             id: `color-appearance-${value}`, label, type: 'radio', checked: settings.codexQuotaAppearance === value,
             click: () => setInterfaceAppearance(value)
-          })) }
+          })) },
+        { type: 'separator' },
+        { id: 'ui-theme', label: '主题色', submenu: [['green', '薄荷绿'], ['blue', '晴空蓝']].map(([value, label]) => ({
+          id: `ui-theme-${value}`, label, type: 'radio', checked: settings.uiTheme === value,
+          click: () => setUiTheme(value)
+        })) },
+        { type: 'separator' },
+        { id: 'color-accessible', label: '色弱友好（增强对比度）', type: 'checkbox', checked: settings.colorMode === 'accessible',
+          click: item => setColorMode(item.checked ? 'accessible' : 'standard') }
       ]
     },
     { label: '常规设置', submenu: [
@@ -1614,12 +1634,24 @@ async function finishSmokeTest() {
     );
     if (!companionReady) throw new Error('轻陪伴活动感知尚未接入');
 
+    if (process.env.PET_SMOKE_UI_THEME_ONLY === '1') {
+      await require('./scripts/verify-ui-theme').verifyUiTheme({
+        pet: petWindow, notes: notesCompanion, chat, settingsFile, nativeTheme,
+        openWindows: () => { openChat(); openCustomization(); openApiUsage(); },
+        getWindows: () => [petWindow, notesCompanion.getWindows().panel,
+          ...notesCompanion.getWindows().notes, chatWindow.getWindow(), customizationWindow, apiUsageWindow],
+        getMenu: () => Menu.buildFromTemplate(menuTemplate()), getSettings: () => structuredClone(settings)
+      });
+      if (process.env.PET_SMOKE_UI_THEME_HOLD !== '1') app.exit(0);
+      return;
+    }
     if (process.env.PET_SMOKE_CODEX_PETS_ONLY === '1') {
       openCustomization();
       await require('./scripts/verify-codex-pets').verifyCodexPets({ pet: petWindow,
         customize: customizationWindow, openCustomization, openChat,
         getChatWindow: () => chatWindow.getWindow(), getSettings: () => settings,
-        setSize: setPetSize, store: codexPets, packaged: app.isPackaged });
+        setSize: setPetSize, store: codexPets, packaged: app.isPackaged,
+        getMenu: () => Menu.buildFromTemplate(menuTemplate()), nativeTheme });
       app.exit(0); return;
     }
 
@@ -2523,6 +2555,7 @@ async function bootstrap() {
     getPetPresentation: () => ({ ...edgeTuck?.getPresentation(), shape: settings?.customization?.appearance?.shape }),
     getDefaultTab: () => settings.notesDefaultTab,
     getAppearance: getNotesAppearance,
+    getColorMode: () => settings.colorMode,
     isSuppressed: () => screenLocked || isQuitting,
     onComplete: () => { if (!screenLocked && !isQuitting) sendCommand({ command: 'again', motion: 'hop' }); },
     onError: error => writeError('便签与待办', error) });

@@ -10,7 +10,7 @@ const { setImmediate: flush } = require('node:timers/promises');
 // 真实 main、动作控制器和对白规则；替代 Electron、系统采样、磁盘设置及聊天服务边界。
 async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   codexQuotaAlwaysVisible = false, codexQuotaPeriod = 'auto', codexQuotaLabelSize = 'standard',
-  codexQuotaAppearance = 'system', codexShowExtraCredits = true, bubblesEnabled = true, colorMode = 'standard',
+  codexQuotaAppearance = 'system', codexShowExtraCredits = true, bubblesEnabled = true, colorMode = 'standard', uiTheme = 'green',
   consent = async () => ({ response: 1 }), openExternal = async () => {}, saveError = null,
   loadedSettings = null, notesDefaultTab = 'note', notesAppearance = 'light', argv = [], updateFetch = async currentVersion => ({ currentVersion,
     latestVersion: '0.3.26', hasUpdate: true,
@@ -48,7 +48,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
       this.visible = false; this.destroyed = false;
       this.messages = [];
       this.webContents = Object.assign(new EventEmitter(), { setWindowOpenHandler() {},
-        send: (channel, packet, appearance) => { if (channel === 'pet:color-mode') this.colorAppearance = appearance; this.messages.push({ channel, packet }); if (channel === 'pet:command') commands.push(packet); } });
+        send: (channel, packet, appearance, theme) => { if (channel === 'pet:color-mode') { this.colorAppearance = appearance; this.uiTheme = theme; } this.messages.push({ channel, packet }); if (channel === 'pet:command') commands.push(packet); } });
       windows.push(this);
       app.emit('browser-window-created', {}, this);
       NativeWindow.onConstruct?.(this);
@@ -160,7 +160,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
         shell: { openExternal: url => { external.push(url); return openExternal(url); } },
         Menu: { buildFromTemplate: value => Object.assign(value, { popup: options => popups.push({ value, options }) }) }, nativeImage: { createFromPath: () => ({ setTemplateImage() {} }) } };
       if (name === './lib/settings') return { ...realRequire(name), loadSettings: () => loadedSettings ? structuredClone(loadedSettings) : ({ size: 'tiny', x: -600, y: 100,
-        bubblesEnabled, colorMode, notesDefaultTab, notesAppearance, keepAwake: false, alwaysOnTop: true, codexEnabled, codexTaskNameInAlerts,
+        bubblesEnabled, colorMode, uiTheme, notesDefaultTab, notesAppearance, keepAwake: false, alwaysOnTop: true, codexEnabled, codexTaskNameInAlerts,
         codexQuotaAlwaysVisible, codexQuotaPeriod, codexQuotaLabelSize, codexQuotaAppearance, codexShowExtraCredits,
         customization: realRequire('./lib/customization').normalizeCustomization(),
         startupAppearance: realRequire('./lib/customization').normalizeCustomization().appearance }),
@@ -2403,10 +2403,15 @@ test('监控按专用 workspace 提前排除球球聊天，不依赖新 thread I
 
 
 test('界面配色在未开启Codex时可切换，持久化并同步已打开和后创建的窗口', async () => {
-  const f = await fixture({ codexQuotaAppearance: 'light' });
+  const f = await fixture({ codexQuotaAppearance: 'light', uiTheme: 'blue' });
   const menu = findMenuItem(f.call('menuTemplate()'), 'color-mode');
   assert.equal(menu.label, '界面配色');
-  findMenuItem(menu.submenu, 'color-accessible').click();
+  assert.deepEqual(Array.from(menu.submenu.filter(item => item.id), item => item.id), ['color-appearance', 'ui-theme', 'color-accessible']);
+  assert.equal(findMenuItem(menu.submenu, 'color-standard'), null);
+  const toggle = findMenuItem(menu.submenu, 'color-accessible');
+  assert.equal(toggle.label, '色弱友好（增强对比度）');
+  assert.equal(toggle.type, 'checkbox');
+  toggle.click({ checked: true });
   assert.equal(f.saved.at(-1).colorMode, 'accessible');
   assert.equal(f.saved.at(-1).codexQuotaAppearance, 'light');
   assert.equal(f.connections.length, 0);
@@ -2414,10 +2419,11 @@ test('界面配色在未开启Codex时可切换，持久化并同步已打开和
   const late = new f.windowClass({ x: 0, y: 0, width: 100, height: 100 });
   late.webContents.emit('did-finish-load');
   assert.equal(late.messages.at(-1).packet, 'accessible');
-  f.call("setColorMode('standard')");
+  findMenuItem(f.call('menuTemplate()'), 'color-accessible').click({ checked: false });
   assert.equal(late.messages.at(-1).packet, 'standard');
+  assert.equal(f.saved.at(-1).uiTheme, 'blue');
   assert.equal(f.saved.at(-1).codexQuotaAppearance, 'light');
-  assert.equal(findMenuItem(f.call('menuTemplate()'), 'color-standard').checked, true);
+  assert.equal(findMenuItem(f.call('menuTemplate()'), 'color-accessible').checked, false);
 });
 
 test('保存配色失败时保留原有选择，不向窗口广播未保存的模式', async () => {
@@ -2527,6 +2533,40 @@ test('收藏名称20项上限与同名改名拒绝，不接受客户端伪造ID�
   assert.equal((await f.invoke('pet:appearance-preset-rename',{id:first,name:'形象1'},editor.webContents)).ok,false);
   assert.equal((await f.invoke('pet:appearance-preset-delete',{id:'forged'},editor.webContents)).ok,false);
   assert.equal(f.call('settings.appearancePresets.length'),20);
+});
+
+
+test('主题菜单独立保存薄荷绿与晴空蓝，不覆盖浅深外观、色弱或球球形象，重启保留', async () => {
+  const f = await fixture({ colorMode: 'accessible', codexQuotaAppearance: 'dark' });
+  const before = f.call('JSON.stringify({customization:settings.customization,startup:settings.startupAppearance})');
+  const themes = findMenuItem(f.call('menuTemplate()'), 'ui-theme');
+  assert.deepEqual(Array.from(themes.submenu, item => item.label), ['薄荷绿', '晴空蓝']);
+  assert.equal(findMenuItem(themes.submenu, 'ui-theme-green').checked, true);
+  findMenuItem(themes.submenu, 'ui-theme-blue').click();
+  assert.equal(f.saved.at(-1).uiTheme, 'blue');
+  assert.equal(f.saved.at(-1).colorMode, 'accessible');
+  assert.equal(f.saved.at(-1).codexQuotaAppearance, 'dark');
+  assert.equal(f.pet.uiTheme, 'blue');
+  assert.equal(f.pet.colorAppearance, 'dark');
+  assert.equal(f.call('JSON.stringify({customization:settings.customization,startup:settings.startupAppearance})'), before);
+  const restarted = await fixture({ loadedSettings: f.saved.at(-1) });
+  assert.equal(findMenuItem(restarted.call('menuTemplate()'), 'ui-theme-blue').checked, true);
+  restarted.pet.webContents.emit('did-finish-load');
+  assert.equal(restarted.pet.uiTheme, 'blue');
+  const writes = f.saved.length;
+  assert.equal(f.call("setUiTheme('purple')"), false);
+  assert.equal(f.call("setUiTheme('blue')"), false);
+  assert.equal(f.saved.length, writes);
+});
+
+test('主题保存失败时回滚且不广播，菜单保持之前的选择', async () => {
+  const f = await fixture({ uiTheme: 'blue', saveError: Error('THEME_WRITE_FAILURE') });
+  f.call('writeError = () => {}');
+  const messages = f.pet.messages.length;
+  assert.equal(f.call("setUiTheme('green')"), false);
+  assert.equal(f.call('settings.uiTheme'), 'blue');
+  assert.equal(f.pet.messages.length, messages);
+  assert.equal(findMenuItem(f.call('menuTemplate()'), 'ui-theme-blue').checked, true);
 });
 
 test('可信定制入口完整解码副本后保存内容ID，源与副本引用都可收藏且不持久化URL', async () => {

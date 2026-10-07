@@ -3,7 +3,7 @@
 const M=window.QiuModel,api=window.qiuNotes,$=id=>document.getElementById(id);
 const params=new URLSearchParams(location.search);
 let mode=params.get('mode')||'panel',noteId=params.get('id'),state={schema:2,revision:0,categories:[],notes:[],todos:[]};
-let tab='todo',filter='today',query='',editorContext=null,actionsContext=null,organizeContext=null,reminder={items:[]};
+let tab='todo',filter='today',noteCategoryFilter=null,query='',editorContext=null,actionsContext=null,organizeContext=null,reminder={items:[]};
 let blocked=false,pendingWrite=null,writeChain=Promise.resolve(),saveTimer,toastTimer,closing=false,reminderBusy=false,heldCloseToken=null,panelPinned=false;
 const drafts=new Map(),unsubscribers=[];
 let quickCategory=null,quickDue=M.day(),quickReminder=null,quickComposing=false,quickSaving=false,quickSavePromise=null,categoryRename=null,categoryMenu=null,categoryDeleteId=null,categoryMoveId=null;
@@ -45,9 +45,10 @@ async function action(kind,id,name){
     if($('actions').open&&actionsContext?.kind===kind&&actionsContext.id===id)$('actions').close();
   });
 }
-function recordsInGroup(kind,group){const today=M.day();return(kind==='note'?state.notes:state.todos).filter(r=>{
+function recordsInGroup(kind,group,category=noteCategoryFilter){const today=M.day();return(kind==='note'?state.notes:state.todos).filter(r=>{
+  if(kind==='note'&&category!==null&&(r.categoryId||'')!==category)return false;
   if(group==='trash')return !!r.deletedAt;if(r.deletedAt)return false;
-  if(kind==='note'){if(group.startsWith('category:'))return (r.categoryId||'')===group.slice(9);return group==='favorites'?!!r.favorite:group!=='desktop'||r.desktopOpen}
+  if(kind==='note')return group==='favorites'?!!r.favorite:group!=='desktop'||r.desktopOpen;
   if(group==='all')return true;if(group==='completed')return r.completed&&!r.archived;if(group==='archived')return r.archived;
   if(r.archived)return false;if(group==='today')return r.dueDate===today;
   if(r.completed)return false;if(group==='overdue')return !!r.dueDate&&r.dueDate<today;
@@ -59,15 +60,26 @@ function categories(){return [{id:'',name:'未分类'},...(state.categories||[])
 function categoryName(id){return M.categoryName(state,id||'')}
 function categoryCount(id){return state.notes.filter(n=>!n.deletedAt&&(n.categoryId||'')===id).length}
 function categoryOptions(select,value=''){select.replaceChildren(...categories().map(c=>{const option=node('option','',c.name);option.value=c.id;return option}));select.value=categories().some(c=>c.id===value)?value:''}
-function assignedCategory(){const id=quickCategory??(filter.startsWith('category:')?filter.slice(9):'');return categories().some(c=>c.id===id)?id:''}
-function closeFilter(){ $('filter-menu').hidden=true;$('filter').setAttribute('aria-expanded','false') }
-function selectFilter(value){filter=value;quickCategory=null;closeFilter();renderList();$('filter').focus()}
+function assignedCategory(){const id=quickCategory??noteCategoryFilter??'';return categories().some(c=>c.id===id)?id:''}
+function closeFilter(){for(const [trigger,menu] of [['filter','filter-menu'],['category-filter','category-menu']]){$(menu).hidden=true;$(trigger).setAttribute('aria-expanded','false')}}
+function toggleFilter(trigger,menu){const open=$(menu).hidden;closeFilter();if(open){$(menu).hidden=false;$(trigger).setAttribute('aria-expanded','true')}}
+function selectFilter(value){if(!(tab==='note'?noteFilters:todoFilters).some(([id])=>id===value))return;filter=value;quickCategory=null;closeFilter();renderList();$('filter').focus()}
+function selectCategoryFilter(value){if(tab!=='note'||value!==null&&!categories().some(c=>c.id===value))return;noteCategoryFilter=value;quickCategory=null;closeFilter();renderList();$('category-filter').focus()}
 function renderFilter(options){
-  $('filter').value=filter;$('filter-label').textContent=`${options.find(([value])=>value===filter)?.[1]||'全部便签'} ${recordsInGroup(tab,filter).length}`;
+  $('filter').value=filter;$('filter-label').textContent='状态';
+  $('filter').title=`状态：${options.find(([value])=>value===filter)?.[1]||'全部便签'} · ${recordsInGroup(tab,filter).length} ${tab==='note'?'条':'项'}`;
+  $('filter').setAttribute('aria-description',$('filter').title);$('filter').classList.toggle('is-filtered',filter!==(tab==='note'?'all':'today'));
   const menu=$('filter-menu');menu.replaceChildren();
-  const add=([value,label])=>{const item=button('',()=>selectFilter(value));item.setAttribute('aria-current',String(filter===value));item.append(node('span','view-check',filter===value?'✓':''),node('span','',label),node('span','view-count',String(recordsInGroup(tab,value).length)));menu.append(item)};
-  for(const option of tab==='note'?noteFilters:todoFilters)add(option);
-  if(tab==='note'){menu.append(node('div','menu-divider'),node('p','menu-label','分类'));for(const c of categories())add(['category:'+c.id,c.name]);menu.append(node('div','menu-divider'),button('管理分类',()=>{closeFilter();openCategoryManager()},'manage-entry'))}
+  for(const [value,label] of options){const item=button('',()=>selectFilter(value));item.dataset.filter=value;item.setAttribute('aria-current',String(filter===value));item.append(node('span','view-check',filter===value?'✓':''),node('span','',label),node('span','view-count',String(recordsInGroup(tab,value).length)));menu.append(item)}
+  renderCategoryFilter();
+}
+function renderCategoryFilter(){
+  $('category-filter-control').hidden=tab!=='note';const menu=$('category-menu');menu.replaceChildren();
+  if(tab!=='note'){menu.hidden=true;$('category-filter').setAttribute('aria-expanded','false');return}
+  $('category-filter-label').textContent='分类';$('category-filter').title=`分类：${noteCategoryFilter===null?'全部分类':categoryName(noteCategoryFilter)}`;
+  $('category-filter').setAttribute('aria-description',$('category-filter').title);$('category-filter').classList.toggle('is-filtered',noteCategoryFilter!==null);
+  const heading=node('div','category-menu-heading'),manage=button('管理',()=>{closeFilter();openCategoryManager()},'category-manage');manage.id='manage-categories';manage.setAttribute('aria-label','管理分类');manage.setAttribute('aria-haspopup','dialog');manage.setAttribute('aria-controls','category-manager');heading.append(node('span','menu-label','分类'),manage);menu.append(heading);
+  for(const c of [{id:null,name:'全部分类'},...categories()]){const selected=noteCategoryFilter===c.id,item=button('',()=>selectCategoryFilter(c.id));item.dataset.categoryFilter=c.id===null?'all':c.id;item.setAttribute('aria-current',String(selected));item.append(node('span','view-check',selected?'✓':''),node('span','',c.name),node('span','view-count',String(recordsInGroup('note',filter,c.id).length)));menu.append(item)}
 }
 function renderQuickProperties(){
   const isNote=tab==='note';$('quick-category-picker').hidden=!isNote;$('quick-due').hidden=$('quick-reminder').hidden=isNote;
@@ -114,10 +126,11 @@ async function submitQuick(allowClosing=false){
 function renderList(){
   $('notes-tab').classList.toggle('active',tab==='note');$('todos-tab').classList.toggle('active',tab==='todo');$('notes-tab').setAttribute('aria-selected',tab==='note');$('todos-tab').setAttribute('aria-selected',tab==='todo');
   $('records').setAttribute('aria-labelledby',tab==='note'?'notes-tab':'todos-tab');
-  if(tab==='note'&&filter.startsWith('category:')&&!categories().some(c=>c.id===filter.slice(9)))filter='category:';const options=tab==='note'?[...noteFilters,...categories().map(c=>['category:'+c.id,c.name])]:todoFilters;renderFilter(options);
-  $('filter').setAttribute('aria-label',tab==='note'?'便签分组':'待办分组');$('search').placeholder=tab==='note'?'搜索便签':'搜索待办';$('new-button').setAttribute('aria-label',tab==='note'?'新建便签':'新建待办');$('new-button').title=tab==='note'?'新建便签 · 完整编辑':'新建待办 · 设置日期和提醒';
-  $('group-title').textContent=options.find(([v])=>v===filter)?.[1]||'今天';const p=M.progress(state);const today=tab==='todo'&&filter==='today';$('progress-text').hidden=!today;if(p.total)$('progress-text').replaceChildren(node('span','','已完成 '),node('span','completed-count',String(p.done)),node('span','progress-total',` / ${p.total}`));else $('progress-text').textContent='暂无计划';
-  const records=filteredRecords();$('group-count').hidden=false;$('group-count').textContent=`${records.length} ${tab==='note'?'条':'项'}`;$('list-description').textContent=query.trim()?`找到 ${records.length} 项记录`:filter==='trash'?'删除的记录会保留，恢复或永久删除由你决定':'';
+  if(noteCategoryFilter!==null&&!categories().some(c=>c.id===noteCategoryFilter))noteCategoryFilter='';const options=tab==='note'?noteFilters:todoFilters;renderFilter(options);
+  $('filter').setAttribute('aria-label',tab==='note'?'便签状态':'待办分组');$('search').placeholder=tab==='note'?'搜索便签':'搜索待办';$('new-button').setAttribute('aria-label',tab==='note'?'新建便签':'新建待办');$('new-button').title=tab==='note'?'新建便签 · 完整编辑':'新建待办 · 设置日期和提醒';
+  $('group-heading').hidden=tab==='note'?filter==='all'&&noteCategoryFilter===null:filter==='today';
+  $('group-title').textContent=`${options.find(([v])=>v===filter)?.[1]||'今天'}${tab==='note'&&noteCategoryFilter!==null?' · '+categoryName(noteCategoryFilter):''}`;const p=M.progress(state);const today=tab==='todo'&&filter==='today';$('progress-text').hidden=!today||!p.total;$('progress-text').title=`今天已完成 ${p.done} 项，共 ${p.total} 项`;$('progress-text').setAttribute('aria-label',$('progress-text').title);$('progress-text').replaceChildren(node('span','completed-count',String(p.done)),node('span','progress-total',`/${p.total}`));
+  const records=filteredRecords();$('list-description').textContent=query.trim()?`找到 ${records.length} 项记录`:filter==='trash'?'删除的记录会保留，恢复或永久删除由你决定':'';
   $('list-description').hidden=!$('list-description').textContent;
   $('records').replaceChildren();if(!records.length)$('records').append(node('p','empty',query.trim()?'没有找到相关记录':filter==='trash'?'回收站是空的':filter==='today'?'今天还没有计划，添加一件想做的事吧':'这里还没有记录'));
   for(const item of records){
@@ -179,7 +192,7 @@ async function openTodo(id,sourceNote=null){
   if($('editor').open&&!await closeEditor())return;const item=id?find('todo',id):M.newTodo(sourceNote?titleOf(sourceNote):'');if(!item||item.deletedAt)return;
   if(sourceNote){item.body=sourceNote.body;item.sourceNoteId=sourceNote.id}
   editorContext={kind:'todo',id:item.id,isNew:!id,original:M.copy(item),sourceNoteId:item.sourceNoteId||null};$('editor-title').textContent=sourceNote?'便签转为待办':id?'编辑待办':'新建待办';
-  $('editor-fields').innerHTML=(sourceNote?'<p class="transfer-hint">新建待办，原便签保留。超过 5,000 字时需缩减说明或另行复制，不会自动截断。</p>':'')+'<label class="field">待办标题<input id="edit-todo-title" required placeholder="想做什么？"></label><label class="field">补充说明<textarea id="edit-todo-body" placeholder="可选"></textarea></label><label class="field">截止日期<input id="edit-due" type="date"></label><label class="field-check"><input id="edit-reminder-enabled" type="checkbox">设置提醒</label><div id="reminder-fields" class="date-pair"><label class="field">提醒日期<input id="edit-reminder-date" type="date"></label><label class="field">提醒时间<input id="edit-reminder-time" type="time"></label></div><p class="field-hint">截止日期和提醒时间独立。提醒需球球保持运行；退出期间的提醒会在下次启动汇总。</p>';
+  $('editor-fields').innerHTML=(sourceNote?'<p class="transfer-hint">新建待办，原便签保留。超过 5,000 字时需缩减说明或另行复制，不会自动截断。</p>':'')+'<label class="field">待办标题<input id="edit-todo-title" required placeholder="想做什么？"></label><label class="field">补充说明<textarea id="edit-todo-body" placeholder="可选"></textarea></label><label class="field">截止日期<input id="edit-due" type="date"></label><label class="field-check"><input id="edit-reminder-enabled" type="checkbox">设置提醒</label><div id="reminder-fields" class="date-pair"><label class="field">提醒日期<input id="edit-reminder-date" type="date"></label><label class="field">提醒时间<input id="edit-reminder-time" type="time"></label></div><div class="field-hint reminder-help"><p>截止日期和提醒时间可以分开设置。</p><p>球球运行时才能按时提醒。退出期间错过的提醒，会在下次打开时汇总显示。</p></div>';
   $('edit-todo-title').value=item.title;$('edit-todo-body').value=item.body;$('edit-due').value=item.dueDate;
   $('edit-reminder-enabled').checked=item.reminderAt!==null&&['pending','presented'].includes(item.reminderState);const at=item.reminderAt||Date.now()+3600000,d=new Date(at);$('edit-reminder-date').value=M.day(at);$('edit-reminder-time').value=`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   const toggle=()=>{$('reminder-fields').hidden=!$('edit-reminder-enabled').checked};$('edit-reminder-enabled').onchange=toggle;toggle();$('editor-error').textContent='';$('editor-save').textContent=sourceNote?'确认创建':'保存';$('editor-cancel').textContent='取消';editorContext.formOriginal=todoFormValues();$('editor').showModal();$('edit-todo-title').focus();
@@ -285,12 +298,12 @@ async function beforeClose(packet){
   }finally{closing=false;if(hold&&!allowed)cancelClose(token)}
 }
 async function hide(){if(!await beforeClose())return false;const result=await (mode==='panel'?api.hidePanel():api.closeWindow());if(result?.ok===false){notify(result.message||'窗口尚未关闭');return false}return true}
-async function handleOpen(value){if(value?.tab==='note'||value?.tab==='todo'){tab=value.tab;filter=tab==='note'?'all':'today'}query='';$('search').value='';if(mode==='panel')renderList();if(value?.create){if(tab==='note')await openNoteEditor();else await openTodo()}else if(value?.id){if(tab==='note')await openNote(value.id);else await openTodo(value.id)}}
+async function handleOpen(value){if(value?.tab==='note'||value?.tab==='todo'){tab=value.tab;filter=tab==='note'?'all':'today';noteCategoryFilter=null;quickCategory=null;closeFilter()}query='';$('search').value='';if(mode==='panel')renderList();if(value?.create){if(tab==='note')await openNoteEditor();else await openTodo()}else if(value?.id){if(tab==='note')await openNote(value.id);else await openTodo(value.id)}}
 function bindCategories(){
   const close=id=>()=>$(id).close();$('category-manager-close').onclick=$('category-manager-done').onclick=close('category-manager');$('category-manager').addEventListener('cancel',e=>{if(categoryRename){e.preventDefault();categoryRename=null;categoryMenu=null;renderCategoryManager()}});$('category-add').onclick=openNewCategory;
   $('new-category-cancel').onclick=$('new-category-close').onclick=cancelNewCategory;$('new-category').addEventListener('cancel',e=>{e.preventDefault();cancelNewCategory()});$('new-category-name').oninput=()=>$('new-category-error').textContent='';
   let creating=false;$('new-category-form').onsubmit=async e=>{e.preventDefault();if(creating)return;creating=true;$('new-category-save').disabled=true;const name=$('new-category-name').value;try{await commit(()=>M.addCategory(state,name),()=>{$('new-category').close();openCategoryManager();notify('分类已创建')},message=>$('new-category-error').textContent=message,false)}finally{creating=false;$('new-category-save').disabled=false}};
-  $('delete-category-cancel').onclick=$('delete-category-close').onclick=cancelDeleteCategory;$('delete-category').addEventListener('cancel',e=>{e.preventDefault();cancelDeleteCategory()});$('delete-category-confirm').onclick=async()=>{const id=categoryDeleteId,control=$('delete-category-confirm');if(control.disabled)return;control.disabled=true;try{await commit(()=>M.deleteCategory(state,id),()=>{$('delete-category').close();if(filter==='category:'+id)filter='category:';if(quickCategory===id)quickCategory='';openCategoryManager();notify('分类已删除，所有便签保留在未分类')},message=>$('delete-category-error').textContent=message,false)}finally{control.disabled=false}};
+  $('delete-category-cancel').onclick=$('delete-category-close').onclick=cancelDeleteCategory;$('delete-category').addEventListener('cancel',e=>{e.preventDefault();cancelDeleteCategory()});$('delete-category-confirm').onclick=async()=>{const id=categoryDeleteId,control=$('delete-category-confirm');if(control.disabled)return;control.disabled=true;try{await commit(()=>M.deleteCategory(state,id),()=>{$('delete-category').close();if(noteCategoryFilter===id)noteCategoryFilter='';if(quickCategory===id)quickCategory='';openCategoryManager();notify('分类已删除，所有便签保留在未分类')},message=>$('delete-category-error').textContent=message,false)}finally{control.disabled=false}};
   $('move-category-cancel').onclick=$('move-category-close').onclick=close('move-category');$('move-category-form').onsubmit=async e=>{e.preventDefault();const control=$('move-category-save');if(control.disabled)return;const selected=$('move-category-list').querySelector('input:checked');if(!selected)return;const id=categoryMoveId,categoryId=selected.value,targetName=categories().find(c=>c.id===categoryId)?.name||'未分类';control.disabled=true;try{await commit(()=>M.moveNoteCategory(state,id,categoryId),()=>{$('move-category').close();const draft=drafts.get(id);if(draft&&!draft.categoryChanged){draft.categoryId=categoryId;draft.baseCategoryId=categoryId}notify(`已移至「${targetName}」`)},message=>$('move-category-error').textContent=message,false)}finally{control.disabled=false}};
   $('quick-category-select').onchange=()=>quickCategory=$('quick-category-select').value;
   $('quick-due').onclick=()=>{$('quick-due-date').value=quickDue;$('quick-due-error').textContent='';$('quick-due-dialog').showModal()};$('quick-due-close').onclick=$('quick-due-cancel').onclick=close('quick-due-dialog');
@@ -302,7 +315,9 @@ function bindCategories(){
 }
 function bind(){
   document.addEventListener('pointerdown',()=>document.documentElement.dataset.inputMode='pointer',true);document.addEventListener('keydown',e=>{if(['Tab','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End'].includes(e.key))document.documentElement.dataset.inputMode='keyboard'},true);
-  $('notes-tab').onclick=()=>{tab='note';filter='all';quickCategory=null;query='';$('search').value='';renderList()};$('todos-tab').onclick=()=>{tab='todo';filter='today';quickCategory=null;query='';$('search').value='';renderList()};$('filter').onchange=()=>selectFilter($('filter').value);$('filter').onclick=()=>{const open=$('filter-menu').hidden;$('filter-menu').hidden=!open;$('filter').setAttribute('aria-expanded',String(open))};$('filter').onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();closeFilter()}};$('filter-menu').onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();closeFilter();$('filter').focus()}};document.addEventListener('pointerdown',e=>{if(e.target?.closest&&!e.target.closest('.filter-control'))closeFilter()});$('search').oninput=()=>{query=$('search').value;renderList()};
+  $('notes-tab').onclick=()=>{tab='note';filter='all';noteCategoryFilter=null;quickCategory=null;query='';closeFilter();$('search').value='';renderList()};$('todos-tab').onclick=()=>{tab='todo';filter='today';noteCategoryFilter=null;quickCategory=null;query='';closeFilter();$('search').value='';renderList()};$('filter').onchange=()=>selectFilter($('filter').value);
+  for(const [trigger,menu] of [['filter','filter-menu'],['category-filter','category-menu']]){$(trigger).onclick=()=>{if(trigger==='category-filter'&&tab!=='note')return;toggleFilter(trigger,menu)};const escape=e=>{if(e.key==='Escape'){e.preventDefault();closeFilter();$(trigger).focus()}};$(trigger).onkeydown=escape;$(menu).onkeydown=escape}
+  document.addEventListener('pointerdown',e=>{if(e.target?.closest&&!e.target.closest('.filter-control'))closeFilter()});$('search').oninput=()=>{query=$('search').value;renderList()};
   $('toggle-search').onclick=()=>setSearchOpen($('search-row').hidden);$('search').onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();setSearchOpen(false)}};
   document.querySelector('.tabs').onkeydown=e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const target=e.key==='Home'||e.key==='ArrowLeft'?$('notes-tab'):$('todos-tab');target.click();target.focus()};
   $('new-button').onclick=()=>tab==='note'?openNoteEditor():openTodo();$('hide-panel').onclick=hide;
@@ -311,7 +326,7 @@ function bind(){
   quickInput.onkeydown=e=>{if(e.key!=='Enter'||e.shiftKey||e.isComposing||quickComposing||e.keyCode===229)return;e.preventDefault();$('quick-add').requestSubmit()};
   $('quick-add').onsubmit=e=>{e.preventDefault();return submitQuick()};
   bindCategories();
-  document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'&&mode==='panel'&&heldCloseToken===null&&!document.querySelector('dialog[open]')){e.preventDefault();setSearchOpen(true);$('search').select()}});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&(!$('filter-menu').hidden||!$('category-menu').hidden)){e.preventDefault();closeFilter()}if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'&&mode==='panel'&&heldCloseToken===null&&!document.querySelector('dialog[open]')){e.preventDefault();setSearchOpen(true);$('search').select()}});
   $('desktop-title').oninput=$('desktop-body').oninput=()=>inputNote(noteId,$('desktop-title').value,$('desktop-body').value);$('hide-note').onclick=hide;$('desktop-more').onclick=()=>openActions('note',noteId);$('pin-note').onclick=()=>togglePin(noteId);
   $('editor-close').onclick=$('editor-cancel').onclick=closeEditor;$('editor').addEventListener('cancel',e=>{e.preventDefault();closeEditor()});
   let editorSaving=false;$('editor-form').onsubmit=async e=>{e.preventDefault();if(editorSaving||!editorContext||heldCloseToken!==null)return;editorSaving=true;$('editor-save').disabled=true;try{if(editorContext.kind==='note'){const id=editorContext.id;if(await flushNote(id)&&!drafts.has(id)){$('editor').close();editorContext=null;notify('便签已保存')}}else await saveTodo()}finally{editorSaving=false;$('editor-save').disabled=false}};
@@ -329,7 +344,6 @@ async function start(){
   if(api.onStorageError)unsubscribers.push(api.onStorageError(message=>notify(message)));
   if(api.onCloseCancelled)unsubscribers.push(api.onCloseCancelled(cancelClose));
   let today=M.day();const refreshDay=()=>{if(today!==M.day()){today=M.day();if(mode==='panel')renderList()}};const dayTimer=setInterval(refreshDay,60000);window.addEventListener('focus',refreshDay);unsubscribers.push(()=>{clearInterval(dayTimer);window.removeEventListener('focus',refreshDay)});
-  if(api.onColorMode){const system=window.matchMedia('(prefers-color-scheme: dark)');let preference='system';const appearance=()=>document.documentElement.dataset.accessibleAppearance=preference==='system'?(system.matches?'dark':'light'):preference;unsubscribers.push(api.onColorMode((value,pref)=>{document.documentElement.dataset.colorMode=value==='accessible'?'accessible':'standard';preference=['light','dark'].includes(pref)?pref:'system';appearance()}));system.addEventListener('change',appearance);unsubscribers.push(()=>system.removeEventListener('change',appearance))}
   try{const loaded=await api.load();applyAppearance(loaded.notesAppearance);mode=['note','reminder'].includes(loaded.mode)?loaded.mode:'panel';noteId=loaded.id||noteId;reminder=loaded.reminder||{items:[]};panelPinned=loaded.panelPinned===true;renderPanelPin();if(loaded.state)acceptState(loaded.state);if(loaded.error){blocked=true;showStorageError(loaded.error,true)}document.body.dataset.mode=mode;document.title=mode==='reminder'?'球球 · 待办提醒':mode==='note'?'球球便签':'便签与待办';$('panel').hidden=mode!=='panel';$('desktop-note').hidden=mode!=='note';$('reminder').hidden=mode!=='reminder';ready=true;render();if(opening)await handleOpen(opening);else if(mode==='panel'&&loaded.tab)await handleOpen(loaded)}catch(error){blocked=true;showStorageError(error.message||'记录读取失败',true)}
 }
 window.addEventListener('beforeunload',()=>{clearTimeout(saveTimer);clearTimeout(toastTimer);for(const unsubscribe of unsubscribers)if(typeof unsubscribe==='function')unsubscribe()},{once:true});

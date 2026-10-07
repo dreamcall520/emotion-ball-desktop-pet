@@ -227,8 +227,8 @@
     return '#' + rgb.map(value => Math.round((value + m) * 255).toString(16).padStart(2, '0')).join('').toUpperCase();
   }
 
-  function paintRange(id) {
-    const input = $(id), [min, max] = rangeLimits[id];
+  function paintRange(id, limits = rangeLimits[id]) {
+    const input = $(id), [min, max] = limits;
     const fill = Math.max(0, Math.min(100, (Number(input.value) - min) / (max - min) * 100));
     input.style.setProperty('--range-fill', fill + '%');
   }
@@ -896,6 +896,7 @@
     $('reset-appearance').hidden = codex; $('preview-animation').hidden = !codex;
     $('pet-opacity').value = state.appearance.auroraTransparency;
     $('pet-opacity-value').textContent = state.appearance.auroraTransparency + '%';
+    paintRange('pet-opacity', [0, 60]);
     for (const card of $('pet-grid').children) card.setAttribute('aria-pressed', String(codex &&
       (card.dataset.petId === state.appearance.codexPetId || card.dataset.importedId === state.appearance.codexPetId)));
   }
@@ -975,7 +976,7 @@
   $('pet-opacity').addEventListener('input', () => {
     state.appearance.auroraTransparency = Number($('pet-opacity').value);
     $('pet-opacity-value').textContent = state.appearance.auroraTransparency + '%';
-    $('pet-opacity').style.setProperty('--range-fill', state.appearance.auroraTransparency / 60 * 100 + '%');
+    paintRange('pet-opacity', [0, 60]);
     $('startup-default').checked = matchesStartup();
     if (codexPlayer) codexPlayer.setOpacity(1 - state.appearance.auroraTransparency / 100);
     else schedulePreview();

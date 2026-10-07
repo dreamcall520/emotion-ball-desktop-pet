@@ -34,7 +34,7 @@ function reminderBounds(bounds, area, size, presentation) {
 }
 
 function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialog, filePath,
-  getPetBounds, getPetWindow = null, getPetPresentation = () => null, getDefaultTab = () => 'todo', getAppearance = () => 'light', onComplete = () => {}, onError = () => {}, isSuppressed = () => false,
+  getPetBounds, getPetWindow = null, getPetPresentation = () => null, getDefaultTab = () => 'todo', getAppearance = () => 'light', getColorMode = () => 'standard', onComplete = () => {}, onError = () => {}, isSuppressed = () => false,
   organizer = null,
   now = Date.now, setTimer = setInterval, clearTimer = clearInterval, closeTimeoutMs = 60000 }) {
   const store = createNotesStore(filePath, { onError });
@@ -60,10 +60,13 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
     return false;
   };
   const appearance = () => getAppearance() === 'dark' ? 'dark' : 'light';
+  const backgroundColor = () => getColorMode() === 'accessible'
+    ? (appearance() === 'dark' ? '#101820' : '#FFFFFF')
+    : (appearance() === 'dark' ? '#182125' : '#F7FAF9');
   function syncAppearance() {
     const value = appearance();
     for (const entry of entries.values()) if (alive(entry.win)) {
-      entry.win.setBackgroundColor?.(value === 'dark' ? '#182125' : '#F7FAF9');
+      entry.win.setBackgroundColor?.(backgroundColor());
       send(entry.win, 'notes:appearance', value);
     }
   }
@@ -111,7 +114,7 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
     const win = new BrowserWindow({ ...bounds, minWidth: note ? 240 : 360, minHeight: note || reminder ? 160 : 420,
       ...(note ? { maxWidth: 1400, maxHeight: 1200 } : {}),
       frame: false, hasShadow: note || reminder, title: reminder ? '待办提醒' : note ? '球球便签' : '便签与待办',
-      backgroundColor: appearance() === 'dark' ? '#182125' : '#F7FAF9', show: false, resizable: !reminder, maximizable: false,
+      backgroundColor: backgroundColor(), show: false, resizable: !reminder, maximizable: false,
       fullscreenable: false, skipTaskbar: note || reminder, alwaysOnTop: reminder,
       webPreferences: { preload: path.join(__dirname, '..', 'notes-preload.js'), contextIsolation: true,
         nodeIntegration: false, sandbox: true, spellcheck: false, webviewTag: false }

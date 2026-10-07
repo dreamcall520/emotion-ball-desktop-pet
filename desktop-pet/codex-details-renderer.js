@@ -179,12 +179,23 @@
     const x = at => 30 + (at - start) / (end - start) * 320, y = remaining => 102 - remaining * .8;
     svg.appendChild(svgNode('path',{class:'axis',d:'M30 22H350M30 62H350M30 102H350'}));
     [100,50,0].forEach((value,index) => svg.appendChild(svgNode('text',{x: value === 100 ? 1 : value === 50 ? 7 : 13,y:25+index*40},`${value}%`)));
-    const path = 'M' + valid.map(sample => `${x(sample.at).toFixed(1)} ${y(sample.remaining).toFixed(1)}`).join('L');
+    const segments = [];
+    valid.forEach((sample,index) => {
+      const previous = valid[index-1];
+      if (!previous || sample.at-previous.at >= 300000 || sample.remaining > previous.remaining
+        || previous.remaining-sample.remaining >= 25) segments.push([]);
+      segments.at(-1).push(sample);
+    });
+    const coordinate = sample => `${x(sample.at).toFixed(1)} ${y(sample.remaining).toFixed(1)}`;
+    const paths = segments.map(segment => 'M'+segment.map(coordinate).join('L'));
+    const path = paths.map((value,index) => segments[index].length === 1 ? `${value}L${coordinate(segments[index][0])}` : value).join('');
     const last = valid.at(-1), first = valid[0];
-    svg.appendChild(svgNode('path',{class:'observed-area',d:`${path}L${x(last.at)} 102L${x(first.at)} 102Z`}));
+    const area = paths.flatMap((value,index) => segments[index].length > 1
+      ? [`${value}L${x(segments[index].at(-1).at)} 102L${x(segments[index][0].at)} 102Z`] : []).join('');
+    if (area) svg.appendChild(svgNode('path',{class:'observed-area',d:area}));
     if (reset) svg.appendChild(svgNode('path',{class:'time-path',d:`M${x(first.at)} ${y((end-first.at)/(end-start)*100)}L${x(last.at)} ${y((end-last.at)/(end-start)*100)}`}));
     svg.appendChild(svgNode('path',{class:'now',d:`M${x(last.at)} 16V102`}));
-    svg.appendChild(svgNode('path',{class:'observed-line',d:path}));
+    svg.appendChild(svgNode('path',{class:'observed-line',d:path,'stroke-linecap':'round'}));
     const markerStride = Math.max(1, Math.ceil((valid.length - 1) / 6));
     valid.forEach((sample,index) => {
       const endpoint = index === 0 || index === valid.length - 1;
