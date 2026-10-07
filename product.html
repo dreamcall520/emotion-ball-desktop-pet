@@ -7,10 +7,10 @@
   <link rel="canonical" href="https://qiuqiu.pet/product/">
   <meta name="robots" content="noindex, follow">
   <script>
-    const updates = location.hash === '#updates';
-    const destination = new URL(updates ? './updates/' : './product/', location.href);
+    const standalone = { '#updates': './updates/', '#privacy': './privacy/' }[location.hash];
+    const destination = new URL(standalone || './product/', location.href);
     destination.search = location.search;
-    if (!updates) destination.hash = location.hash;
+    if (!standalone) destination.hash = location.hash;
     location.replace(destination.href);
   </script>
 </head>

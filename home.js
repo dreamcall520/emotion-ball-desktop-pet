@@ -83,8 +83,8 @@
   // Preserve existing section URLs when the long page moves into product/.
   const oldSections = ['features', 'codex', 'chat', 'customize', 'notes', 'appearance', 'download', 'install', 'privacy', 'license'];
   function followOldSection() {
-    if (location.hash === '#updates') { location.replace(`updates/${location.search}`); return; }
-    if (oldSections.includes(location.hash.slice(1))) location.replace(`product/${location.hash}`);
+    if (location.hash === '#updates' || location.hash === '#privacy') { location.replace(`${location.hash.slice(1)}/${location.search}`); return; }
+    if (oldSections.includes(location.hash.slice(1))) location.replace(`product/${location.search}${location.hash}`);
   }
   window.addEventListener('hashchange', followOldSection);
   followOldSection();

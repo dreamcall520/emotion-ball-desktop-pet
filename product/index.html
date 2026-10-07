@@ -17,19 +17,17 @@
     <meta name="twitter:card" content="summary_large_image">
     <link rel="icon" href="../assets/favicon.png">
     <link rel="manifest" href="../site.webmanifest">
-    <script>
-      if (location.hash === '#updates') {
-        const destination = new URL('../updates/', location.href);
+    <script data-standalone-redirect>
+      const standalonePages = { '#updates': '../updates/', '#privacy': '../privacy/' };
+      function followStandalonePage() {
+        const path = standalonePages[location.hash];
+        if (!path) return;
+        const destination = new URL(path, location.href);
         destination.search = location.search;
         location.replace(destination.href);
       }
-      window.addEventListener('hashchange', () => {
-        if (location.hash === '#updates') {
-          const destination = new URL('../updates/', location.href);
-          destination.search = location.search;
-          location.replace(destination.href);
-        }
-      });
+      followStandalonePage();
+      window.addEventListener('hashchange', followStandalonePage);
     </script>
     <script>
       try {
@@ -47,41 +45,47 @@
     <link rel="stylesheet" href="../review-refinements.css?v=20261006-type">
     <link rel="stylesheet" href="../native-demos.css?v=20261006-both-edges-floor">
     <link rel="stylesheet" href="../image-preview.css?v=20261006">
+    <link rel="stylesheet" href="../product-layout.css?v=20261007-final">
     <title>球球桌宠 · 功能介绍</title>
   </head>
-  <body>
+  <body class="product-redesign">
     <a class="skip-link" href="#main">跳到主要内容</a>
 
     <header class="site-header" data-header>
-      <a class="brand" href="../" aria-label="球球桌宠首页">球球桌宠</a>
+      <a class="brand" href="../" aria-label="球球桌宠首页"><img src="../assets/brand-72.webp" width="32" height="32" alt="">球球桌宠</a>
       <nav class="nav-core" aria-label="常用导航">
-        <a href="#features">功能</a>
+        <a href="#features">桌面互动</a>
+        <a href="#notes">便签待办</a>
         <a href="#codex">Codex 陪伴</a>
-        <a href="#chat">和球球聊聊</a>
-        <a href="#customize">来定制球球</a>
-        <a href="#notes">便签与待办</a>
-        <a href="#download">下载</a>
+        <a href="#chat">聊天</a>
+        <a href="#customize">定制球球</a>
+        <a href="#download" class="nav-download">下载</a>
       </nav>
       <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav">更多</button>
       <nav class="site-nav" id="site-nav" aria-label="更多导航">
+        <div class="mobile-primary-nav">
+          <a href="#features">桌面互动</a>
+          <a href="#notes">便签待办</a>
+          <a href="#codex">Codex 陪伴</a>
+          <a href="#chat">聊天</a>
+          <a href="#customize">定制球球</a>
+        </div>
         <a href="#appearance">色弱友好</a>
         <a href="#install">安装指南</a>
-        <a href="#privacy">隐私</a>
+        <a href="../privacy/" target="_blank" rel="noopener">隐私说明</a>
         <a href="../updates/" target="_blank" rel="noopener">更新日志</a>
         <a href="#license">开源与许可</a>
         <button class="theme-toggle theme-toggle-mobile" type="button" aria-label="切换页面外观" data-theme-toggle>外观</button>
       </nav>
-      <button class="theme-toggle" type="button" aria-label="切换页面外观" data-theme-toggle>外观</button>
     </header>
 
     <main id="main">
       <section class="hero" id="top" aria-labelledby="hero-title" tabindex="-1">
         <div class="hero-copy">
-          <p class="release-badge">0.4.01 · 球球的新里程碑</p>
-          <h1 id="hero-title">桌面上，<br>多一个安静陪你的球球</h1>
+          <h1 id="hero-title">球球，陪你自在一点</h1>
           <p class="hero-lead">免费 · 安静陪伴 · 不打扰你</p>
           <div class="hero-actions">
-            <a class="button button-primary" data-download-arch="arm64" data-download-position="hero" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.1/Qiuqiu-0.4.01-macOS-arm64-share.zip">下载 Apple 芯片版</a>
+            <a class="button button-primary" data-download-arch="arm64" data-download-position="hero" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.1/Qiuqiu-0.4.01-macOS-arm64-share.zip"><svg class="apple-logo" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>下载 Apple 芯片版</a>
             <a class="button button-secondary" href="#features">看看它会什么</a>
           </div>
         </div>
@@ -104,9 +108,7 @@
         <div class="section-heading">
           <h2 id="features-title">真实陪伴，细腻回应</h2>
           <p class="section-lead">它不会占据你的工作，只在你愿意时回应。</p>
-        </div>
-        <div class="feature-layout">
-          <div class="feature-list">
+          <details class="product-details"><summary>功能与使用说明</summary>          <div class="feature-list">
             <article>
               <h3>拖动与互动</h3>
               <p>拖放后转身站稳，朝向桌面内侧；唤醒时绕个小圈。</p>
@@ -123,7 +125,9 @@
               <h3>六档尺寸与置顶</h3>
               <p>从 60 × 60 到 260 × 260，六档可选，支持始终置顶。</p>
             </article>
-          </div>
+          </div></details>
+        </div>
+        <div class="feature-layout">
           <div class="motion-panel feature-playground" data-motion-scene="feature">
             <div class="motion-panel-heading"><span data-motion-label>放下 · 转面站稳</span><button class="motion-toggle" type="button" data-motion-toggle aria-pressed="false">暂停动效</button></div>
             <div class="motion-stage">
@@ -148,11 +152,40 @@
         </div>
       </section>
 
+      <section class="notes-section section" id="notes" aria-labelledby="notes-title">
+        <div class="notes-intro">
+          <h2 id="notes-title">便签与待办，<br>留住眼前的小事。</h2>
+          <p class="section-lead">灵感放在桌面，计划交给提醒。想起来时，随手记一笔。</p>
+
+          <details class="product-details"><summary>功能与使用说明</summary><dl class="notes-benefits">
+            <div><dt>在桌面，也在列表里</dt><dd>独立便签可置顶；用分类、收藏和搜索找到想记住的事。</dd></div>
+            <div><dt>日期与提醒，分别设置</dt><dd>为待办安排截止日期，另选提醒时间；忙时可稍后 10 分钟处理。</dd></div>
+            <div><dt>完成了，收好记录</dt><dd>已完成待办可以归档，移入回收站的记录也能找回来。</dd></div>
+            <div><dt>整理之前，先看一眼</dt><dd>Codex 帮你理顺便签，预览并确认后才替换原文，也可立即撤销。</dd></div>
+          </dl></details>
+          <p class="notes-requirements section-note">便签与待办保存在本机。提醒需球球保持运行；智能整理需登录 Codex 并联网。</p>
+        </div>
+        <div class="notes-native-demo" data-notes-native-demo>
+          <div class="notes-native-workspace">
+            <div class="notes-native-panel">
+              <iframe class="native-demo native-notes-panel" data-src="../demos/notes/panel.html?v=20261006-layout" title="0.4.00 便签与待办列表演示" data-app-demo data-notes-frame="panel" height="520" loading="lazy"></iframe>
+              <button type="button" class="button button-secondary" data-notes-reopen-panel hidden>重新打开便签与待办</button>
+            </div>
+            <div class="notes-native-desktop">
+              <iframe class="native-demo native-notes-card" data-src="../demos/notes/desktop.html?v=20261006-layout" title="0.4.00 桌面便签演示" data-app-demo data-notes-frame="desktop" height="220" loading="lazy"></iframe>
+              <button type="button" class="button button-secondary" data-notes-reopen-note hidden>重新打开桌面便签</button>
+            </div>
+          </div>
+          <div class="notes-native-actions"><button type="button" class="button button-secondary" data-notes-demo-reminder>体验待办提醒</button><button type="button" class="text-button" data-notes-demo-reset>重置演示</button></div>
+          <p class="demo-note" data-notes-native-status role="status" aria-live="polite"></p>
+        </div>
+      </section>
+
       <section class="codex-section section" id="codex" aria-labelledby="codex-title">
         <div class="codex-copy">
           <h2 id="codex-title">Codex 在忙，球球替你留意。</h2>
           <p class="codex-lead section-lead">工作交给 Codex，进展让球球轻轻提醒你。</p>
-          <dl class="fact-list">
+          <details class="product-details"><summary>功能与使用说明</summary><dl class="fact-list">
             <div>
               <dt>看额度</dt>
               <dd>套餐额度与额外点数分开查看，还能查看趋势、用量预估和重置历史。</dd>
@@ -161,11 +194,12 @@
               <dt>API 费用</dt>
               <dd>可常驻本月费用，展开查看今日费用与报告。</dd>
             </div>
-          </dl>
-          <div class="release-note codex-privacy-note"><p><strong>默认关闭，可选开启</strong><span>只查看状态，不代你操作。</span></p><a href="#privacy">了解隐私边界 <span aria-hidden="true">→</span></a></div>
+          </dl></details>
+          <div class="release-note codex-privacy-note"><p><strong>默认关闭，可选开启</strong><span>只查看状态，不代你操作。</span></p><a href="../privacy/" target="_blank" rel="noopener">了解隐私边界 <span aria-hidden="true">→</span></a></div>
         </div>
         <div class="codex-live-showcase">
-          <div class="codex-task-demo" data-motion-scene="codex" data-task-state="processing">
+          <iframe class="native-demo native-quota" src="../demos/quota/index.html?v=20261006-card-period" title="0.4.00 额度卡片与趋势演示" data-app-demo data-demo="quota" height="740" loading="lazy"></iframe>
+          <details class="product-details task-details"><summary>体验任务提醒</summary><div class="codex-task-demo" data-motion-scene="codex" data-task-state="processing">
             <div class="codex-task-heading"><span>体验任务提醒</span><button class="motion-toggle" type="button" data-motion-toggle aria-pressed="false">暂停动效</button></div>
             <div class="codex-task-body">
               <div class="motion-stage">
@@ -181,24 +215,22 @@
                 <button class="button button-primary" type="button" data-task-next>模拟完成</button>
               </div>
             </div>
-          </div>
-          <iframe class="native-demo native-quota" src="../demos/quota/index.html?v=20261006-card-period" title="0.4.00 额度卡片与趋势演示" data-app-demo data-demo="quota" height="740" loading="lazy"></iframe>
+          </div></details>
         </div>
       </section>
 
       <section class="chat-section section" id="chat" aria-labelledby="chat-title">
         <div class="chat-intro">
-          <p class="chat-release">Apple 芯片版已支持聊天</p>
           <h2 id="chat-title">和球球聊聊，<br>接着上次的话。</h2>
           <p class="chat-lead section-lead">想说点什么，就打开球球旁边的聊天面板。</p>
           <p class="chat-requirements section-note">需登录 Codex 并联网，使用你的 Codex 额度。普通桌宠仍可离线使用。</p>
-          <details class="section-howto"><summary>打开方式</summary><p>右键球球或菜单栏 → 和球球聊聊</p></details>
-          <dl class="chat-benefits">
+
+          <details class="product-details"><summary>功能与使用说明</summary><p class="chat-release">Apple 芯片版已支持聊天</p><dl class="chat-benefits">
             <div><dt>接着上次聊</dt><dd>关闭后再回来，仍是熟悉的那一段。</dd></div>
             <div><dt>找回旧聊天</dt><dd>从历史记录切回来，之前的话不会丢。</dd></div>
             <div><dt>用小动作回应</dt><dd>让球球跳一跳、转个圈，或安静休息。</dd></div>
-          </dl>
-          <details class="content-details"><summary>模型与使用说明</summary><p>模型可以自动选择，也能在输入框左下角手选，以本机账号可用列表为准。无需另填 API Key；模型不可用时会明确提示。球球只执行预设动作，不运行模型返回的代码或命令。</p></details>
+          </dl><p class="detail-opening"><strong>模型与使用说明</strong><br>模型可以自动选择，也能在输入框左下角手选，以本机账号可用列表为准。无需另填 API Key；模型不可用时会明确提示。球球只执行预设动作，不运行模型返回的代码或命令。</p></details>
+
         </div>
         <div class="chat-demo-wrap">
           <iframe class="native-demo native-chat" src="../demos/chat/index.html?v=20261006-layout" title="0.4.00 聊天交互演示" data-app-demo data-demo="chat" height="520" loading="lazy"></iframe>
@@ -210,47 +242,18 @@
           <h2 id="customize-title">来定制球球</h2>
           <p class="section-lead">实时预览形态与配色，收藏喜欢的形象。</p>
           <p class="section-note">0.4.01 支持直接选择本机 Codex 自定义宠物，预览动作后保存为球球外观。</p>
-          <details class="section-howto"><summary>打开方式</summary><p>右键球球 → 来定制球球；大小在「球球尺寸」调整。</p></details>
+
         </div>
         <div class="native-custom-wrap">
           <iframe class="native-demo native-customize" src="../demos/customize/index.html?v=20261006-focus" title="0.4.00 定制球球交互演示" data-app-demo data-demo="customize" height="700" loading="lazy"></iframe>
         </div>
       </section>
 
-      <section class="notes-section section" id="notes" aria-labelledby="notes-title">
-        <div class="notes-intro">
-          <h2 id="notes-title">便签与待办，<br>留住眼前的小事。</h2>
-          <p class="section-lead">灵感放在桌面，计划交给提醒。想起来时，随手记一笔。</p>
-          <details class="section-howto"><summary>打开方式</summary><p>右键球球或菜单栏 → 便签与待办</p></details>
-          <dl class="notes-benefits">
-            <div><dt>在桌面，也在列表里</dt><dd>独立便签可置顶；用分类、收藏和搜索找到想记住的事。</dd></div>
-            <div><dt>日期与提醒，分别设置</dt><dd>为待办安排截止日期，另选提醒时间；忙时可稍后 10 分钟处理。</dd></div>
-            <div><dt>完成了，收好记录</dt><dd>已完成待办可以归档，移入回收站的记录也能找回来。</dd></div>
-            <div><dt>整理之前，先看一眼</dt><dd>Codex 帮你理顺便签，预览并确认后才替换原文，也可立即撤销。</dd></div>
-          </dl>
-          <p class="notes-requirements section-note">便签与待办保存在本机。提醒需球球保持运行；智能整理需登录 Codex 并联网。</p>
-        </div>
-        <div class="notes-native-demo" data-notes-native-demo>
-          <div class="notes-native-workspace">
-            <div class="notes-native-panel">
-              <iframe class="native-demo native-notes-panel" src="../demos/notes/panel.html?v=20261006-layout" title="0.4.00 便签与待办列表演示" data-app-demo data-notes-frame="panel" height="520" loading="lazy"></iframe>
-              <button type="button" class="button button-secondary" data-notes-reopen-panel hidden>重新打开便签与待办</button>
-            </div>
-            <div class="notes-native-desktop">
-              <iframe class="native-demo native-notes-card" src="../demos/notes/desktop.html?v=20261006-layout" title="0.4.00 桌面便签演示" data-app-demo data-notes-frame="desktop" height="220" loading="lazy"></iframe>
-              <button type="button" class="button button-secondary" data-notes-reopen-note hidden>重新打开桌面便签</button>
-            </div>
-          </div>
-          <div class="notes-native-actions"><button type="button" class="button button-secondary" data-notes-demo-reminder>体验待办提醒</button><button type="button" class="text-button" data-notes-demo-reset>重置演示</button></div>
-          <p class="demo-note" data-notes-native-status role="status" aria-live="polite"></p>
-        </div>
-      </section>
-
       <section class="appearance-section section" id="appearance" aria-labelledby="appearance-title">
-        <div class="section-heading">
+        <div class="appearance-intro">
           <h2 id="appearance-title">看得清楚，也自在。</h2>
-          <p class="section-lead">浅色、深色与色弱友好，一键切换。</p>
-          <details class="section-howto"><summary>打开方式</summary><p>右键球球 → 界面配色 → 色弱友好（高对比）。</p></details>
+          <p class="section-lead"><span>浅色、深色，一键切换。</span><span>支持色弱友好高对比配色。</span></p>
+
         </div>
         <div class="ap-demo" data-appearance-demo data-mode="standard" data-look="light">
           <div class="ap-controls">
@@ -265,12 +268,11 @@
             </div>
           </div>
           <div class="ap-preview native-appearance-preview">
-            <iframe class="native-demo native-quota" src="../demos/quota/index.html?appearanceDemo=1&v=20261006-card-period" title="新版额度卡标准与色弱配色演示" data-app-demo data-demo="quota" data-demo-appearance height="740" loading="lazy"></iframe>
             <iframe class="native-demo native-chat" src="../demos/chat/index.html?v=20261006-layout" title="新版聊天标准与色弱配色演示" data-app-demo data-demo="chat" data-demo-appearance height="520" loading="lazy"></iframe>
+            <details class="product-details secondary-demo"><summary>查看额度与趋势界面</summary><iframe class="native-demo native-quota" src="../demos/quota/index.html?appearanceDemo=1&v=20261006-card-period" title="新版额度卡标准与色弱配色演示" data-app-demo data-demo="quota" data-demo-appearance height="740" loading="lazy"></iframe></details>
           </div>
         </div>
       </section>
-
 
       <section class="download-section section" id="download" aria-labelledby="download-title">
         <div class="download-intro">
@@ -292,7 +294,7 @@
               <div><dt>发布日期</dt><dd>2026-10-07</dd></div>
             </dl>
             <div class="download-actions">
-              <a class="button button-primary" data-download-arch="arm64" data-download-position="download" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.1/Qiuqiu-0.4.01-macOS-arm64-share.zip">下载 ZIP</a>
+              <a class="button button-primary" data-download-arch="arm64" data-download-position="download" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.1/Qiuqiu-0.4.01-macOS-arm64-share.zip"><svg class="apple-logo" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>下载 ZIP</a>
               <a class="button button-secondary" data-download-arch="arm64" data-download-position="download" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.1/Qiuqiu-0.4.01-macOS-arm64.dmg">下载 DMG</a>
             </div>
           </article>
@@ -318,32 +320,6 @@
         </div>
       </section>
 
-      <section class="privacy-section section" id="privacy" aria-labelledby="privacy-title">
-        <div class="privacy-title-block">
-          <h2 id="privacy-title">安静，也尊重你的隐私</h2>
-          <p class="section-lead">普通桌宠不需要登录。</p>
-          <details class="content-details"><summary>球球的数据与隐私说明</summary><p>Codex 任务监控只提取必要状态；额度趋势、待查看标记和重置记录仅保存在本机，不上传这些监控记录。状态包可能附带已加载聊天内容，正文会立即丢弃；不会创建、发送、审批、中断任务或重置额度。聊天与便签智能整理由你主动发起，按下方说明单独处理。</p></details>
-        </div>
-        <div class="privacy-points">
-          <article>
-            <h3>普通桌宠完全本地运行</h3>
-            <p>不读取输入内容、剪贴板或其他窗口，也不会上传个人数据。</p>
-          </article>
-          <article>
-            <h3>只用必要的系统状态</h3>
-            <p>鼠标坐标、系统空闲时长和锁屏状态只用于动作与休息判断。</p>
-          </article>
-          <article>
-            <h3>Codex 联动由你决定</h3>
-            <p>默认关闭，关闭后立即停止读取并清理当前监控状态。</p>
-          </article>
-          <article>
-            <h3>主动使用的 AI 能力</h3>
-            <p>聊天与便签智能整理需联网，你主动发送的聊天或当前便签内容交由 Codex 处理，并使用 Codex 额度。聊天记录与便签保存在本机；不会读取其他聊天或便签，也不会运行模型返回的代码或命令。</p>
-          </article>
-        </div>
-      </section>
-
       <section class="install-section section" id="install" aria-labelledby="install-title">
         <div class="install-copy">
           <h2 id="install-title">三步放到桌面上</h2>
@@ -356,6 +332,15 @@
             </div>
             <figcaption>DMG 也可从<a href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.4.1">版本下载页</a>下载。</figcaption>
           </figure>
+          <details class="product-details">
+            <summary>常用功能入口</summary>
+            <dl class="fact-list">
+              <div><dt>便签与待办</dt><dd>右键球球或菜单栏 → 便签与待办</dd></div>
+              <div><dt>聊天</dt><dd>右键球球或菜单栏 → 和球球聊聊</dd></div>
+              <div><dt>定制球球</dt><dd>右键球球 → 来定制球球；大小在「球球尺寸」调整。</dd></div>
+              <div><dt>界面配色</dt><dd>右键球球 → 界面配色 → 色弱友好（高对比）。</dd></div>
+            </dl>
+          </details>
         </div>
         <figure class="install-settings">
             <a class="install-settings-image" href="../assets/macos-privacy-security-open-anyway.png" data-image-preview aria-haspopup="dialog">
@@ -370,17 +355,47 @@
         </figure>
       </section>
 
-
-
+      <section class="closing-download" aria-labelledby="closing-download-title">
+        <h2 id="closing-download-title">陪你工作，也帮你记事。</h2>
+        <p>随手记便签、安排待办，Codex 进展也有球球替你留意。</p>
+        <a class="button button-primary" data-download-arch="arm64" data-download-position="download" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.1/Qiuqiu-0.4.01-macOS-arm64-share.zip"><svg class="apple-logo" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>macOS 版下载</a>
+        <div class="closing-download-meta"><span>0.4.01 · Apple 芯片</span><a href="#download">Intel Mac / 其他下载</a></div>
+      </section>
     </main>
 
     <footer class="site-footer" id="license" aria-label="开源、署名与许可">
-      <p>球球桌宠 · 由马晓坤设计与开发</p>
-      <p>球球桌宠，免费、非商业使用。角色与动画来自原作者 sam70361；再次分发须保留署名、LICENSE 和 NOTICE。</p>
+      <span class="credit">球球桌宠 · 由马晓坤设计与开发</span>
+      <div class="footer-links">
+        <a href="../privacy/" target="_blank" rel="noopener">隐私说明</a>
+        <button type="button" data-license-open aria-haspopup="dialog" aria-controls="license-dialog">免费、非商业 · 署名与许可</button>
+      </div>
     </footer>
+
+    <dialog class="license-dialog" id="license-dialog" aria-labelledby="license-title" aria-describedby="license-details">
+      <header>
+        <h2 id="license-title">署名与许可</h2>
+        <form method="dialog"><button type="submit" aria-label="关闭许可说明" autofocus><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button></form>
+      </header>
+      <dl id="license-details">
+        <div><dt>使用范围</dt><dd>免费、非商业使用。</dd></div>
+        <div><dt>原作者</dt><dd><a href="https://github.com/sam70361/aora-bot" target="_blank" rel="noopener" aria-label="查看原作者 sam70361 的 GitHub 项目">sam70361 <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6m0-6L10 14M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" /></svg></a><small>角色与动画来源</small></dd></div>
+        <div><dt>再次分发</dt><dd>须保留署名、LICENSE 和 NOTICE。</dd></div>
+      </dl>
+    </dialog>
 
     <button class="back-to-top" type="button" aria-hidden="true" tabindex="-1" data-back-to-top><span aria-hidden="true">↑</span>回到顶部</button>
     <div class="copy-toast" role="status" aria-live="polite" data-toast></div>
+
+    <script data-license-controller>
+    (() => {
+      const licenseDialog = document.querySelector('#license-dialog');
+      document.querySelector('[data-license-open]').addEventListener('click', () => licenseDialog.showModal());
+      licenseDialog.addEventListener('click', event => {
+        const rect = licenseDialog.getBoundingClientRect();
+        if (event.target === licenseDialog && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)) licenseDialog.close();
+      });
+    })();
+    </script>
 
     <script src="../assets/vendor/emotion-ball/rings.js"></script>
     <script src="../assets/vendor/emotion-ball/emotions.js"></script>
@@ -394,8 +409,8 @@
     <script src="../app.js?v=20260928-release"></script>
     <script src="../motion-showcase.js?v=20261006-task"></script>
     <script src="../appearance-showcase.js?v=20261006-layout"></script>
-    <script src="../demos/notes/embed.js?v=20261006-native"></script>
-    <script src="../demo-embed.js?v=20261006-task"></script>
+    <script src="../demos/notes/embed.js?v=20261007-v2"></script>
+    <script src="../demo-embed.js?v=20261007-v2.6"></script>
     <script src="../image-preview.js?v=20261006"></script>
     <script src="../analytics.js?v=20260924-1" data-website-id="fe855bb0-9000-49aa-820b-baa55887bd11"></script>
   </body>

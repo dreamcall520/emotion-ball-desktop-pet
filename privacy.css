@@ -1,0 +1,18 @@
+/* Reading layout for the standalone privacy document. */
+.privacy-document .privacy-document-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; width: min(1064px, calc(100% - 64px)); margin: 0 auto; padding: 24px 0; }
+.privacy-document-header > a:last-child { display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; color: var(--text-soft); }
+.privacy-document-main { width: min(760px, calc(100% - 48px)); margin: 0 auto; padding: 40px 0 64px; }
+.privacy-document-main h1 { margin: 0; font-size: clamp(30px, 4vw, 40px); font-weight: 600; line-height: 1.35; letter-spacing: -.025em; }
+.privacy-document-main .privacy-document-date { margin: 14px 0 24px; color: var(--text-faint); font-size: 13px; }
+.privacy-document-main .privacy-document-intro { color: var(--text); }
+.privacy-document-main section { margin-top: 36px; }
+.privacy-document-main h2 { margin: 0 0 14px; font-size: 20px; line-height: 1.5; font-weight: 600; letter-spacing: 0; }
+.privacy-document-main p { margin: 12px 0; font-size: 15px; line-height: 1.9; color: var(--text-soft); overflow-wrap: anywhere; }
+.privacy-document-main a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.privacy-document-main a:hover, .privacy-document-header > a:last-child:hover { color: var(--accent-strong); }
+@media (max-width: 680px) {
+  .privacy-document .privacy-document-header { width: calc(100% - 40px); padding-block: 16px; gap: 16px; }
+  .privacy-document-main { width: calc(100% - 40px); padding: 28px 0 40px; }
+  .privacy-document-main section { margin-top: 28px; }
+  .privacy-document-main h2 { font-size: 18px; }
+}

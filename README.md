@@ -2,13 +2,15 @@
 
 这是球球桌宠的独立静态官网源码，部署目标为 GitHub Pages。
 
-## 首页、功能介绍与更新日志
+## 首页、功能介绍、更新日志与隐私说明
 
-首页采用确认后的整屏银白/夜景玻璃主视觉，品牌语「球球-陪你自在一点」。`home.js` 复用原生 WebGL 实现自动柔光、曲面折射与鼠标水波；眼睛以2～4秒随机间隔自然眨动，约四分之一概率快速连眨两次，闭眼以像素宽度的抗锯齿圆弧收合并沿用原眼睛颜色；暂停、减少动态、页面隐藏及静态回退保持可用。主下载按钮为「macOS 版下载」，下方注明版本与 Apple 芯片，Intel 保持独立说明入口。
+首页采用确认后的整屏银白/夜景玻璃主视觉，品牌语「球球-陪你自在一点」。`home.js` 复用原生 WebGL 实现自动柔光、曲面折射与鼠标水波；眼睛以2～4秒随机间隔自然眨动，约四分之一概率快速连眨两次，闭眼以像素宽度的抗锯齿圆弧收合并沿用原眼睛颜色；暂停、减少动态、页面隐藏及静态回退保持可用。主下载按钮为「macOS 版下载」并使用内联 Apple 标识，下方注明版本与 Apple 芯片，Intel 保持独立说明入口。首页顶部导航叠加半透明渐变、柔和高光与背景模糊；浅深色分别处理，并支持减少透明度与无模糊能力的静态回退。
 
-原官网功能和演示保留在 `product/index.html`，地址为 `https://qiuqiu.pet/product/`。导航的功能介绍、安装指南与更新日志在新页签打开；旧首页功能锚点通过 `location.replace` 跳转到对应功能分区。旧 `product.html` 仅保留兼容跳转，并携带原查询参数和锚点。产品正文和演示、许可及署名保持。14 条完整日志位于 `updates/index.html`（`https://qiuqiu.pet/updates/`），原 13 篇逐字保留，桌面以侧栏选版本，手机用版本选择器；hash 支持直链与历史返回，无 JavaScript 时显示全部原文。13 条版本记录配有 29 个下载入口，原 27 个已通过 GitHub API 和 HEAD 回读，新版 2 个已完成公开地址的完整下载、大小、SHA-256 与 App 签名核验；官网上线事件不虚构安装包。旧 `/product/#updates` 及 `product.html#updates` 转到独立日志页。三页均有独立 canonical 和分享封面，并已加入 sitemap。
+原官网功能和演示保留在 `product/index.html`，地址为 `https://qiuqiu.pet/product/`。导航的功能介绍、安装指南与更新日志在新页签打开；旧首页功能锚点通过 `location.replace` 跳转到对应功能分区。旧 `product.html` 仅保留兼容跳转，并携带原查询参数和锚点。产品正文和演示、许可及署名保持。14 条完整日志位于 `updates/index.html`（`https://qiuqiu.pet/updates/`），原 13 篇逐字保留，桌面以侧栏选版本，手机用版本选择器；hash 支持直链与历史返回，无 JavaScript 时显示全部原文。13 条版本记录配有 29 个下载入口，原 27 个已通过 GitHub API 和 HEAD 回读，新版 2 个已完成公开地址的完整下载、大小、SHA-256 与 App 签名核验；官网上线事件不虚构安装包。旧 `/product/#updates` 及 `product.html#updates` 转到独立日志页。首页、功能介绍、更新日志保留独立 canonical 和分享封面；隐私说明独立位于 `https://qiuqiu.pet/privacy/`，四页均已加入 sitemap。
 
 首页「免费、非商业 · 署名与许可」使用原生小弹窗，分行展示使用范围、原作者 GitHub 项目与再次分发说明，可通过关闭按钮、Esc 或点击背景关闭；不再跳转功能介绍。原作者旧项目地址已重定向为 `sam70361/aora-bot`，弹窗链接使用 GitHub API 回读的现地址。首页新页签入口统一为细线圆角新窗口图标。更新日志只展示对应版本下载，不附加 GitHub Release 页面入口。
+
+功能介绍采用统一宽度模块、左文案/右真实演示与圆角玻璃胶囊导航，彩色细边流光尊重减少动态设置；浅深色主下载统一为蓝色并加 Apple 标识。主下载按下时轻微放大，松开回弹，减少动态时不启用缩放过渡。页尾提供「陪你工作，也帮你记事。」和下载入口，许可复用首页原生弹窗。普通演示固定浅色标准配色，外观模块继续独立演示浅/深/系统和高对比；便签两窗口单次带 scope 初始化。隐私说明改为独立文档，联系邮箱为用户确认的 `920022027@qq.com`；旧首页和产品页隐私锚点保留查询参数跳转。
 
 主视觉为本项目生成的静态资产；自动柔光在玻璃区域内渲染；鼠标移动和点击水波覆盖空白背景并保护角色，文字始终固定。以30fps、130万像素和最多3组鼠标波为上限，没有新增项目依赖。
 
@@ -25,13 +27,13 @@
 
 Umami Cloud 网站“球球官网”，website ID 为 `fe855bb0-9000-49aa-820b-baa55887bd11`。从 2026-09-24 发布接入后开始累计，不包含此前访问。私有[统计看板](https://cloud.umami.is/analytics/us/websites/fe855bb0-9000-49aa-820b-baa55887bd11)需使用本次已登录的 Umami 账号。后台时区已核对为 Asia/Shanghai，当前套餐为 Hobby（$0/月）。
 
-配置在首页、`product/index.html` 和 `updates/index.html` 中 `analytics.js` 的 `data-website-id`。清空该值即可停用，停用时也不加载第三方脚本；停用或更换平台时同步修改功能介绍的隐私分区。此 ID 为公开网站配置，不是 API 密钥。
+配置在首页、`product/index.html`、`updates/index.html` 和 `privacy/index.html` 中 `analytics.js` 的 `data-website-id`。清空该值即可停用，停用时也不加载第三方脚本；维护时保持本记录与实际脚本配置一致。此 ID 为公开网站配置，不是 API 密钥。
 
 - 仅在 `https://qiuqiu.pet` 加载；本地预览、其他域名、DNT 开启或 `localStorage['umami.disabled'] = '1'` 时不加载。
 - 一次页面加载上报一次 PV；站内锚点切换不重复计数。UV 是 Umami 的匿名访客估算，不能当作真实人数，跨设备或浏览器可能重复。
 - `download` 事件只包含 `architecture`（`arm64` / `x64`）与 `position`（`hero` / `download`）。下载点击不代表下载完成或安装成功；脚本拦截、网络失败与过早离开可能造成漏计。
 - 页面 URL 固定为 `/`，来源仅保留外部网站 origin；不传 URL 查询参数、hash、来源路径、聊天演示内容、邮箱或账号信息。不启用身份识别、回放或热图。
-- 首页、功能介绍和更新日志各加载一次PV，继续汇总为站点访问，不区分页面路径；下载事件继续仅统计 ZIP，DMG不计入此指标。日志页的历史下载不加入当前下载指标，切换版本不新增 PV。
+- 首页、功能介绍、更新日志和隐私说明各加载一次PV，继续汇总为站点访问，不区分页面路径；下载事件继续仅统计 ZIP，DMG不计入此指标。日志页的历史下载不加入当前下载指标，切换版本不新增 PV。
 - 保留浏览器语言、屏幕尺寸等基础访问维度；Umami 根据网络请求识别粗略地区及设备。统计不使用 Cookie，尊重 DNT；不影响桌宠本地运行的隐私边界。
 - Umami Hobby 当前免费额度为每月 100,000 个事件、1 个网站、保留 6 个月；PV 与下载点击均消耗事件额度。免费版不含 API/MCP，日报需从已登录的后台读取。不升级、不添加付款方式。
 - 历史访问无法补回。首日按接入时间注明不完整；日报按 Asia/Shanghai 的前一自然日统计，读取失败不能记为 0。
@@ -50,6 +52,14 @@ Apple 芯片版 **0.4.01**，发布日期 **2026-10-07**，GitHub 兼容标签 `
 | [Qiuqiu-0.4.01-macOS-arm64.dmg](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.1/Qiuqiu-0.4.01-macOS-arm64.dmg) | 137834518 | `605e838eb5ff9f88ec19cfa6f23162db2dc932c06af7292a9e7dbbdf14de08b9` |
 
 本轮附件的精确大小与 SHA-256 已由公开下载回读核验，详见项目验收记录 `v0.4.01-codex-pets/public-release-download-verification.json`。
+
+### Intel 下载记录
+
+Intel 0.3.13 构建候选仍未在真实 Intel Mac 验收。下表为 2026-10-07 GitHub 资产 API 返回的大小与 SHA-256 digest，HEAD 大小匹配；本轮未重新完整下载安装包。
+
+| 文件 | 精确大小（bytes） | SHA-256 |
+| --- | ---: | --- |
+| [Qiuqiu-0.3.13-macOS-x64-share.zip](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.13/Qiuqiu-0.3.13-macOS-x64-share.zip) | 137676767 | `f4b1ee54f99da7222780cbd0d98799a2db79128329c9e12d8b8b0e0a2f6bc12a` |
 
 ### 0.4.00 下载记录（保留）
 
@@ -103,12 +113,9 @@ python3 -m http.server 4179 --bind 127.0.0.1
 
 ```bash
 node --test tests/*.test.cjs
-# 另开本地静态服务器，使用已经安装的 Playwright 与 Chrome；无需新增依赖。
-NODE_PATH=/path/to/existing/node_modules QIUQIU_SITE_URL=http://127.0.0.1:4185/product/ QIUQIU_QA_OUTPUT=/tmp/qiuqiu-website-0400 node tests/showcases.browser.cjs
-NODE_PATH=/path/to/existing/node_modules QIUQIU_UPDATES_URL=http://127.0.0.1:4185/updates/ QIUQIU_QA_OUTPUT=/tmp/qiuqiu-website-updates node tests/updates.browser.cjs
 ```
 
-浏览器检查包括 1440/1080/390/320px 浅深色、系统深色、减少动态及真实界面和跨窗口/保存头像联动的实际操作，并检查放大卡片、聊天四角和实际安装截图。检查使用浏览器临时设置退出匿名统计；分区截图暂隐藏固定导航与回顶按钮，检查仍在完整页面运行。
+当前检查涵盖旧地址跳转、演示主题、便签窗口 scope、原生许可弹窗控制、历史日志及下载契约。`tests/showcases.browser.cjs` 保留的是改版前完整页面的浏览器脚本，其旧版布局断言不适用于当前结构；独立日志的浏览器脚本为 `tests/updates.browser.cjs`。本轮自动浏览器访问受地址策略限制，最新玻璃、按压反馈及四宽度浅深色渲染尚未复验，源码/HTTP 检查不替代实际视觉验收。
 
 部署沿用 `gh-pages` 根目录与 `qiuqiu.pet`。本地检查通过后提交、推送；必须回读 Pages 的实际构建提交及线上 HTML/变更资源，不能把推送成功当作部署完成。
 
@@ -116,14 +123,15 @@ NODE_PATH=/path/to/existing/node_modules QIUQIU_UPDATES_URL=http://127.0.0.1:418
 
 额度、趋势、聊天、定制、便签/待办采用公开 App 0.4.00 `main@7f5c291d34512f629c17275c93bed472f421e8b9` 的真实 HTML、CSS、renderer 和形态引擎，直接嵌入官网。当前演示未接入 0.4.01 的 Codex 宠物导入，继续标注 0.4.00。来源哈希和必要适配见各演示目录 `source-manifest.json`。主介绍不再叠放截图或折叠简化示例；历史截图文件仅作归档。
 
-Electron IPC 替换为本页内存桥接，不连接账户、模型或账单，不修改 App 或用户资料；刷新页面恢复示例。定制保存后同步本页聊天头像，收藏载入仅影响预览。公开六瓣幻彩采用原 Rive 引擎。外层官网沿用浅灰蓝/深灰，演示保留当前 App 薄荷/石墨配色；手机仅适配原控件，不用截图缩放。离屏、页面隐藏、暂停与减少动态均可停止演示动效。嵌入窗口在用户进入前不自动抢焦点，脚本聚焦不滚动官网。
+Electron IPC 替换为本页内存桥接，不连接账户、模型或账单，不修改 App 或用户资料；刷新页面恢复示例。定制保存后同步本页聊天头像，收藏载入仅影响预览。公开六瓣幻彩采用原 Rive 引擎。外层官网沿用浅灰蓝/深灰，普通演示保留 App 薄荷浅色，外观模块可独立切换石墨深色；手机仅适配原控件，不用截图缩放。离屏、页面隐藏、暂停与减少动态均可停止演示动效。嵌入窗口在用户进入前不自动抢焦点，脚本聚焦不滚动官网。
 
 安装区保留三步图示，右侧为 [Apple 官方说明](https://support.apple.com/zh-cn/102445)中的真实 macOS「隐私与安全性」截图，标出「仍要打开」的实际位置；原图来自 [Apple CDN](https://cdsassets.apple.com/live/7WUAS350/images/macos/sequoia/locale/zh-cn/macos-sequoia-system-settings-privacy-and-security-open-app-anyway.png)，未修改、未包含用户个人设置。
 
 ## 目录
 
 - `index.html`、`home.js`、`home.css`：整屏品牌首页、玻璃柔光/鼠标水波和首页菜单。
-- `product/index.html`、`styles.css`、`dark-theme.css`：功能介绍全文、外层配色与响应式布局；`product.html` 仅兼容旧地址跳转。
+- `product/index.html`、`product-layout.css`、`styles.css`、`dark-theme.css`：功能介绍全文、外层配色与响应式布局；`product.html` 仅兼容旧地址跳转。
+- `privacy/index.html`、`privacy.css`：独立隐私说明与用户确认的联系邮箱。
 - `updates/index.html`、`updates.css`、`updates.js`：独立版本日志、响应式版本选择、真实版本下载与无脚本阅读。
 - `app.js`：主题、移动导航等原有页面操作。
 - `motion-showcase.js/css`、`assets/motion/`：复用 V5 互动、思绪游光与身体动作；支持离屏暂停、手动点选和减少动态。

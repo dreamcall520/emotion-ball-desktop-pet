@@ -7,7 +7,7 @@ assert.doesNotMatch(html, /download-checks|app-capture|data-showcase-try/);
 assert.doesNotMatch(html, /<section[^>]+id="updates"|class="updates-history"|class="milestone-update"/);
 assert.ok(html.includes('href="../updates/" target="_blank" rel="noopener">更新日志'));
 const arm64 = [...html.matchAll(/data-download-arch="arm64"[^>]*href="([^"]+)"/g)];
-assert.equal(arm64.length, 3);
+assert.equal(arm64.length, 4);
 assert.ok(arm64.every(m => /\/v0\.4\.1\/Qiuqiu-0\.4\.01-macOS-arm64(?:-share\.zip|\.dmg)$/.test(m[1])));
 assert.match(html, /<dt>版本<\/dt><dd>0\.4\.01<\/dd>/);
 const updates = fs.readFileSync(path.join(productDir, '../updates/index.html'), 'utf8');

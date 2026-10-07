@@ -61,9 +61,7 @@ test('log navigation, local resources and legacy routes preserve their destinati
   }
   const product = fs.readFileSync(path.join(root, 'product/index.html'), 'utf8');
   assert.doesNotMatch(product, /<section[^>]+id="updates"|class="updates-history"/);
-  assert.match(product, /location.hash === '#updates'/);
   const legacy = fs.readFileSync(path.join(root, 'product.html'), 'utf8');
   assert.match(legacy, /destination.search = location.search/);
-  assert.match(legacy, /if \(!updates\) destination.hash = location.hash/);
   assert.match(fs.readFileSync(path.join(root, 'sitemap.xml'), 'utf8'), /https:\/\/qiuqiu.pet\/updates\//);
 });

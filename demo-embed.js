@@ -11,7 +11,7 @@
   let savedAppearance;
   function theme(frame) {
     const preview = frame.closest('[data-appearance-demo]');
-    const choice = preview ? preview.dataset.look : document.documentElement.dataset.theme;
+    const choice = preview ? preview.dataset.look : 'light';
     return {
       type: 'qiuqiu-demo-theme',
       appearance: choice === 'light' || choice === 'dark' ? choice : system.matches ? 'dark' : 'light',
@@ -52,7 +52,6 @@
       frames.filter(item => item.dataset.demo === 'chat').forEach(item => send(item, { type: 'qiuqiu-demo-avatar', appearance }));
     }
   });
-  new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   const preview = document.querySelector('[data-appearance-demo]');
   if (preview) new MutationObserver(sync).observe(preview, { attributes: true, attributeFilter: ['data-look', 'data-mode'] });
   system.addEventListener('change', sync);

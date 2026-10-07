@@ -3,7 +3,7 @@
   for (const root of document.querySelectorAll('[data-notes-native-demo]')) {
     const panel = root.querySelector('iframe[data-notes-frame="panel"]'), desktop = root.querySelector('iframe[data-notes-frame="desktop"]');
     if (!panel || !desktop) continue;
-    const panelUrl = new URL(panel.getAttribute('src'), location.href), desktopUrl = new URL(desktop.getAttribute('src'), location.href);
+    const panelUrl = new URL(panel.getAttribute('data-src') || panel.getAttribute('src'), location.href), desktopUrl = new URL(desktop.getAttribute('data-src') || desktop.getAttribute('src'), location.href);
     const status = root.querySelector('[data-notes-native-status]');
     let scope, activeId = 'sample-weekend', activeView = 'note';
     const say = text => { if (status) status.textContent = text; };
