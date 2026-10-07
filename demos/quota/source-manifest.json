@@ -1,13 +1,13 @@
 {
   "repository": "https://github.com/dreamcall520/emotion-ball-desktop-pet",
-  "commit": "7f5c291d34512f629c17275c93bed472f421e8b9",
-  "version": "0.4.00",
+  "commit": "16809908dd3cd4d9cb29fb5cb84cfea5a16bd2c7",
+  "version": "0.4.04",
   "files": [
     {
       "source": "desktop-pet/quota-label.html",
       "target": "quota-label.html",
       "sha256": "4853b4f04a6f6427dd84de1ad80cfef290b9a34e01a0c29a05e4c35aac4692bf",
-      "embeddedSha256": "e91a63788e644ac74b9a8994093b77755e8bc9cbeefc36a0a8ec3f3b26d5e496"
+      "embeddedSha256": "7a6b77bb7814bb8d4f784e4f2e86abccf978e08c6d4f328fbc24b9db25a0b475"
     },
     {
       "source": "desktop-pet/quota-label.css",
@@ -24,32 +24,32 @@
     {
       "source": "desktop-pet/codex-details.html",
       "target": "codex-details.html",
-      "sha256": "e17406ad730db3816f2e7a29907d038a2d11191aeb9d5576f80e93d97b09d511",
-      "embeddedSha256": "e48b58d74ab20d4aa76e3a36f7126db38ba219fddc27ad6cc70afe6cf8623703"
+      "sha256": "d248e0881bde2011aa3df988acea33723a4aa5229fad83d858bda04eb4d4e0e3",
+      "embeddedSha256": "57902870a5fd3f3b145e4c43f1793b136ff2c99c91a41e1acff90937c63be114"
     },
     {
       "source": "desktop-pet/codex-details.css",
       "target": "codex-details.css",
-      "sha256": "f73c06bb8d83d0dd0f8931aedf1c647d611f4e690e2c9494d3c668b16c0e4ff0",
-      "embeddedSha256": "f73c06bb8d83d0dd0f8931aedf1c647d611f4e690e2c9494d3c668b16c0e4ff0"
+      "sha256": "36529f1f994054c6301c5bb795db1bd10a788cf67b1afac62dd4b5d91db92737",
+      "embeddedSha256": "36529f1f994054c6301c5bb795db1bd10a788cf67b1afac62dd4b5d91db92737"
     },
     {
       "source": "desktop-pet/codex-details-renderer.js",
       "target": "codex-details-renderer.js",
-      "sha256": "ab2bc968bce1a5dcfa1b0b1906399baacd1526329d6e2fc8d2365ea3521f0138",
-      "embeddedSha256": "ab2bc968bce1a5dcfa1b0b1906399baacd1526329d6e2fc8d2365ea3521f0138"
+      "sha256": "9d6953f2c6f142a990fee2347c3abff9a2fbe7a89cb25db503ab74be3ef6c44a",
+      "embeddedSha256": "9d6953f2c6f142a990fee2347c3abff9a2fbe7a89cb25db503ab74be3ef6c44a"
     },
     {
       "source": "desktop-pet/color-mode.css",
       "target": "color-mode.css",
-      "sha256": "a5fafde24c1233618d2af25bb546fc6dbbba0f589ee051d0f9d2046aa2872d37",
-      "embeddedSha256": "a5fafde24c1233618d2af25bb546fc6dbbba0f589ee051d0f9d2046aa2872d37"
+      "sha256": "11aee590ecd86642c15b4562ad611f59983ed267610eef71de69c7f75100ad42",
+      "embeddedSha256": "11aee590ecd86642c15b4562ad611f59983ed267610eef71de69c7f75100ad42"
     },
     {
       "source": "desktop-pet/color-mode.js",
       "target": "color-mode.js",
-      "sha256": "503835f76918495a3188cfdbd368f1e477e118df53bb1105b5c02d57be4161f4",
-      "embeddedSha256": "503835f76918495a3188cfdbd368f1e477e118df53bb1105b5c02d57be4161f4"
+      "sha256": "3b63526ba85a5c09c59ac6160367190e6d0bcf81609f82b8335b9a4a84d3a5dd",
+      "embeddedSha256": "3b63526ba85a5c09c59ac6160367190e6d0bcf81609f82b8335b9a4a84d3a5dd"
     },
     {
       "source": "desktop-pet/credit-balance.js",
@@ -61,7 +61,7 @@
       "source": "desktop-pet/api-usage-label.html",
       "target": "api-usage-label.html",
       "sha256": "198b4bb27e2c69387daa8a4d3ba5154624ad043044bf3e7e8e7d339fef330121",
-      "embeddedSha256": "fc61a2a812da95d931969ee964c926e97612529cf88f27b8617038b3c0de3917"
+      "embeddedSha256": "04bbf4b89907a25e2d48960e5526ae1ba61283c210687a5b88a9a30cc25189b6"
     },
     {
       "source": "desktop-pet/api-usage-label.css",
@@ -78,32 +78,45 @@
     {
       "source": "desktop-pet/api-usage.html",
       "target": "api-usage.html",
-      "sha256": "810cb6361c92e03e22e2d331589401a1b7f433024b792f5b0d11952d31f36664",
-      "embeddedSha256": "a7000192951fdc905643a95e277a2e4538521e82abcf309bab2b814c94e34327"
+      "sha256": "f6bc61fe8de96e5e17d58993e8a56fc62055168a5c4f90249c665889b0840f80",
+      "embeddedSha256": "faefb902aa9a70c3f1eabd3d04fd341470f1140effd8582e1f3bb396312a1a19"
     },
     {
       "source": "desktop-pet/api-usage.css",
       "target": "api-usage.css",
-      "sha256": "947373cae324f9bd37b1753988aafb6e7bf632c0c26689346d5763c8c8aa5d51",
-      "embeddedSha256": "947373cae324f9bd37b1753988aafb6e7bf632c0c26689346d5763c8c8aa5d51"
+      "sha256": "95a179607af92cce44f2bf5ed900ab5c91aeeaa8cc50fc255d9e91b530d9de2c",
+      "embeddedSha256": "95a179607af92cce44f2bf5ed900ab5c91aeeaa8cc50fc255d9e91b530d9de2c"
     },
     {
       "source": "desktop-pet/api-usage-renderer.js",
       "target": "api-usage-renderer.js",
       "sha256": "590752b7416e50f116209a493cb1ece29f5507e81bdd4c64d145b8ce3bdfb380",
       "embeddedSha256": "590752b7416e50f116209a493cb1ece29f5507e81bdd4c64d145b8ce3bdfb380"
+    },
+    {
+      "source": "desktop-pet/quota-trend-curve.js",
+      "target": "quota-trend-curve.js",
+      "sha256": "3d1cb9278faa391477ab448447507eee639cc3a3d7d237b67da47008c733f543",
+      "embeddedSha256": "3d1cb9278faa391477ab448447507eee639cc3a3d7d237b67da47008c733f543"
+    },
+    {
+      "source": "desktop-pet/quota-daily-model.js",
+      "target": "quota-daily-model.js",
+      "sha256": "8ea98781c62c345da024855acee23dde01e5b5293e7c52140ebee494f7246222",
+      "embeddedSha256": "8ea98781c62c345da024855acee23dde01e5b5293e7c52140ebee494f7246222"
     }
   ],
   "adaptations": [
-    "HTML inserts the in-memory demo bridge; core DOM, CSS and renderers unchanged.",
+    "HTML inserts the in-memory demo bridge and rewrites theme asset paths for same-origin website adapters; core DOM, CSS and renderers unchanged.",
     "Composition layout, verified messages, independent dual / 5-hour / weekly native items, uniform 280px main / 224px appearance card scaling with preserved dual 196x144 and single 196x131 viewports, responsive detail sizing and example dialog are website-only.",
     "API connection settings are hidden in the website; no credentials are accepted.",
+    "Public 0.4.04 package supplies native trends, daily-use model, reset-expiry markers and mark-read button. Website models are synthetic; mark-read affects only example memory.",
     "Load the shared same-origin embedding fallback before page rendering."
   ],
   "adapters": [
     {
       "target": "README.md",
-      "sha256": "f29568785ffcdfdda972fcabfdf247b4c674f04089117fd4d99a63f7901aa6e8"
+      "sha256": "c66d7cbc42231705a5df0f85a86e68ed2738e486c525caaea36322847cb8c0cf"
     },
     {
       "target": "check.browser.cjs",
@@ -115,7 +128,7 @@
     },
     {
       "target": "demo-bridge.js",
-      "sha256": "67d7c336457170cf11a1a326ce8cd87704c9ecc1f5286f551f69d77778a49591"
+      "sha256": "6936a316985ab82ea7b91a6ec3c091476b617f43ab8b50359a560303f37c0b0a"
     },
     {
       "target": "demo.css",
@@ -123,11 +136,12 @@
     },
     {
       "target": "demo.js",
-      "sha256": "af8e7d9c19b739bf0a854a545ac51e6289f62f3df1bc8c7c7fb0b294bd7c4749"
+      "sha256": "97292ab548a417866964946c609be32aee497f36200b8ac49cf7f0bd51abc995"
     },
     {
       "target": "index.html",
-      "sha256": "14600e27b63232433f514a6f12b3c8ff93a10f366150b83f3e4fa43dca90b340"
+      "sha256": "81b9cea4570dda5ae22035af0df204b8fef14ad5c02a835699de861970388231"
     }
-  ]
+  ],
+  "packageAsarSha256": "8a4062ae6c907eea4417ebcadbb8f2f5127e8fe0ff3d21b66ca41c2f5ee151c8"
 }

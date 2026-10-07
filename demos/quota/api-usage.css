@@ -79,3 +79,5 @@ input:disabled { opacity: .65; }
 .api-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 10px; }
 .api-footer > span { color: var(--muted); font-size: 10px; }
 @media (max-width: 430px) { .api-header { padding: 16px 18px; } .api-content { padding: 16px 18px; } .cost-summary { gap: 16px; } .month-cost { font-size: 29px; } .cost-today { min-width: 90px; } .filter-fields { grid-template-columns: 1fr; gap: 8px; } .report-meta > div { gap: 10px; } .meta-label { flex-basis: 75px; } .scope-note { margin-left: 85px; } }
+
+:root[data-color-mode="accessible"] body{background:var(--accessible-panel)}

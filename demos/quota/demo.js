@@ -9,19 +9,22 @@
   const appearanceDemo=new URLSearchParams(location.search).get('appearanceDemo')==='1';
   document.documentElement.dataset.appearanceDemo=String(appearanceDemo);
   const now = Date.now(), day = 86400000;
+  let generation = 0;
   let appearance = 'light', colorMode = 'standard', uiTheme = 'blue', scenario = 'balanced', cardPeriod = 'dual', expanded = true, apiExpanded = true, action = 'trend', period = 10080, unread = appearanceDemo, apiVisible = false, paused = false, taskState = 'processing';
   const report = { month: new Date(now).toISOString().slice(0,7), updatedAt: now, costs: { month: [{currency:'usd',value:32.48}], today: [{currency:'usd',value:1.26}] }, usage: {inputTokens:2840000,cachedInputTokens:1120000,outputTokens:420000,requests:137} };
   function quotaModel() {
     const fast = scenario === 'fast', unknown = scenario === 'unknown';
-    const items = [{label:'CODEX',windowMinutes:300,remaining:fast ? 12 : 82,resetsAt:now+4*3600000,pace:{state:unknown ? 'unknown' : fast ? 'fast' : 'balanced',remainingTimePercent:80}}, {label:'CODEX',windowMinutes:10080,remaining:fast ? 8 : 68,resetsAt:now+5*day,pace:{state:unknown ? 'unknown' : fast ? 'fast' : 'balanced',remainingTimePercent:71}}].filter(item=>cardWindows[cardPeriod]===null || item.windowMinutes===cardWindows[cardPeriod]);
+    const items = [{label:'CODEX',windowMinutes:300,remaining:fast ? 12 : 82,resetsAt:now+2*3600000,pace:{state:unknown ? 'unknown' : fast ? 'fast' : 'balanced',remainingTimePercent:40}}, {label:'CODEX',windowMinutes:10080,remaining:fast ? 8 : 68,resetsAt:now+2*day,pace:{state:unknown ? 'unknown' : fast ? 'fast' : 'balanced',remainingTimePercent:29}}].filter(item=>cardWindows[cardPeriod]===null || item.windowMinutes===cardWindows[cardPeriod]);
     const item = items.find(item => item.windowMinutes === period), start = item.resetsAt-item.windowMinutes*60000;
+    const count = Math.ceil((now-start)/240000);
+    const samples = unknown ? [] : Array.from({length:count+1},(_,index)=>({at:Math.round(start+(now-start)*index/count),remaining:Math.round((100-(100-item.remaining)*(index/count)**1.3)*10)/10}));
     const runningCount=appearanceDemo || taskState==='processing' ? 1 : 0;
-    return {state:'ready',size:'compact',expanded,appearance,colorMode,items,resetCreditsAvailable:2,extraCredits:{state:'balance',balance:'1250.00'},activity:{runningCount,unreadCount:unread?1:0},action,period,
+    return {state:'ready',observedAt:now,quotaUpdatedAt:now,generation,size:'compact',expanded,appearance,colorMode,items,resetCreditsAvailable:2,extraCredits:{state:'balance',balance:'1250.00'},activity:{runningCount,unreadCount:unread?1:0},action,period,
       tasks:runningCount?[{id:'demo-layout',title:'检查示例页面布局',state:'active',updatedAt:now}]:[],results:unread?[{id:'demo-notes',title:appearanceDemo?'整理今日待办':'检查示例页面布局',state:'completed',updatedAt:now}]:[],
-      resetDetailsState:'known',resetOpportunities:[{expiresAt:now+3*day,status:'available'},{expiresAt:null,status:'available'}],
+      resetDetailsState:'known',resetOpportunities:[{expiresAt:now+3600000,status:'available'},{expiresAt:now+day,status:'available'}],
       accountResetHistory:{state:'ready',updatedAt:now,events:[{kind:'granted',occurredAt:now-5*day},{kind:'redeemed',occurredAt:now-12*day},{kind:'granted',occurredAt:now-20*day}]},
       returnToTrend:action!=='trend',returnPeriod:period,
-      trend:{windowMinutes:period,resetsAt:item.resetsAt,resetLabel:period===300?'4 小时后重置':'5 天后重置',samples:unknown?[]:[100,97,93,86,Math.max(item.remaining,80),item.remaining].map((remaining,index)=>({at:Math.round(start+(now-start)*index/5),remaining})),forecast:{state:unknown?'unknown':'estimate',status:fast?'risk':'safe',summary:unknown?'暂无法预估额度用完时间':fast?'额度可能在重置前用完':'按当前节奏，预计可用至重置',detail:unknown?'连续用量记录不足，稍后再查看':'按近期用量估算，会随实际用量变化'}}};
+      trend:{windowMinutes:period,resetsAt:item.resetsAt,resetLabel:period===300?'2 小时后重置':'2 天后重置',samples,forecast:{state:unknown?'unknown':'estimate',status:fast?'risk':'safe',summary:unknown?'暂无法预估额度用完时间':fast?'额度可能在重置前用完':'按当前节奏，预计可用至重置',detail:unknown?'连续用量记录不足，稍后再查看':'按近期用量估算，会随实际用量变化'}}};
   }
   function apiModel() { return {connected:true,busy:false,error:null,report,config:{},expanded:apiExpanded,appearance,colorMode}; }
   const post = (frame,data) => frame.contentWindow.postMessage(data,location.origin);
@@ -45,6 +48,7 @@
   }
   function feedback(text) { $('demo-feedback').textContent=text; $('demo-feedback').hidden=false; resize(); }
   function render() {
+    generation++;
     document.documentElement.dataset.appearance=appearance; document.documentElement.dataset.colorMode=colorMode; document.documentElement.dataset.demoPaused=String(paused);
     document.querySelectorAll('[data-card-period]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.cardPeriod===cardPeriod)));
     sizeCards();
@@ -104,6 +108,10 @@
     else if(data.action==='resize' && kind==='details' && Number.isFinite(data.height)) {frames.details.height=Math.max(120,Math.min(700,data.height));resize();}
     else if(data.action==='thread' && kind==='details' && ['demo-layout','demo-notes'].includes(data.id)) {
       openThread(data.id);
+    } else if(data.action==='mark-all-read' && kind==='details') {
+      const success=data.generation===generation;
+      if(success) {unread=false;if(!appearanceDemo && taskState==='completed') taskState='viewed';render();}
+      post(frames.details,{type:'qiuqiu-quota-read-result',generation:data.generation,success});
     } else if(data.action==='refresh-api' && kind==='api-report') {feedback('报告已刷新。');}
     else if(data.action==='guide' && kind==='api-report') {feedback('网页无需输入密钥。');}
   });

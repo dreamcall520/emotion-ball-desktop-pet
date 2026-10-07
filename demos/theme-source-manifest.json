@@ -1,12 +1,16 @@
 {
   "publicCommit": "eac7a8d12bd425fb98f005828ab80afabe18ca0b",
   "publicVersion": "0.4.03",
-  "scope": "Published palette overlays only; embedded layout and renderer baseline remains 0.4.00.",
+  "scope": "Published palette overlays only. Per-file source versions override the default; embedded component versions are recorded in each demo source manifest.",
   "files": [
     {
       "source": "desktop-pet/chat-blue.css",
       "target": "chat/chat-blue.css",
-      "sha256": "464f21ff3015215539e7ff25bd5e5616d36bedc6ff43a896a361104d0d7e887b"
+      "sha256": "464f21ff3015215539e7ff25bd5e5616d36bedc6ff43a896a361104d0d7e887b",
+      "commit": "16809908dd3cd4d9cb29fb5cb84cfea5a16bd2c7",
+      "version": "0.4.04",
+      "tag": "v0.4.4",
+      "packageAsset": "Qiuqiu-0.4.04-macOS-arm64-share.zip"
     },
     {
       "source": "desktop-pet/notes-blue.css",

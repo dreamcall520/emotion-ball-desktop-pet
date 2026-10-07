@@ -17,7 +17,7 @@ for (const folder of ['chat', 'notes', 'customize', 'quota']) {
     if (!html.startsWith('<!doctype html>')) continue;
     assert.match(html, /data-ui-theme="blue"/);
     assert.match(html, /src="..\/ui-theme.js/);
-    assert.match(html, /href="..\/ui-theme-blue.css"/);
+    assert.match(html, /href="..\/ui-theme-blue.css(?:\?[^\"]*)?"/);
   }
 }
 const parent = { postMessage() {} }, handlers = {}, root = { dataset: {} };

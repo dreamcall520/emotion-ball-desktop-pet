@@ -6,18 +6,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'">
   <title>Codex 详情</title>
-  <link rel="stylesheet" href="color-mode.css">
-  <link rel="stylesheet" href="codex-details.css">
-  <link rel="stylesheet" href="demo-adapter.css">
-  <script src="../../demo-focus.js"></script>
-<script src="demo-bridge.js"></script>
-  <link rel="stylesheet" href="../ui-theme-blue.css">
-  <script src="../ui-theme.js?v=20261007-blue"></script>
+  <link rel="stylesheet" href="color-mode.css?v=20261007-v0404">
+  <link rel="stylesheet" href="codex-details.css?v=20261007-v0404">
+  <link rel="stylesheet" href="demo-adapter.css?v=20261007-v0404">
+  <script src="../../demo-focus.js?v=20261007-v0404"></script>
+  <script src="demo-bridge.js?v=20261007-v0404"></script>
+  <link rel="stylesheet" href="../ui-theme-blue.css?v=20261007-v0404">
+  <script src="../ui-theme.js?v=20261007-v0404"></script>
 </head>
 <body>
   <section id="details-panel" aria-label="Codex 详情">
     <header class="panel-header">
       <h1 id="details-title" tabindex="-1">Codex 详情</h1>
+      <button id="details-read-all" type="button" hidden title="清除当前未看标记，保留会话记录"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 7V4a2 2 0 0 1 4 0v3"/><rect x="4" y="7" width="16" height="4.5" rx="2.25"/><path d="m6.5 11.5-1.6 8Q4.6 21 6.1 21h11.8q1.5 0 1.2-1.5l-1.6-8M10 15l-1 6"/></svg><span>清除未看</span></button>
       <nav class="panel-tools" aria-label="详情操作">
         <button id="details-back" type="button" hidden>‹ 返回趋势</button>
         <button id="details-close" type="button" aria-label="关闭详情">×</button>
@@ -25,7 +26,9 @@
     </header>
     <main id="details-content" aria-live="polite"><p class="empty-state">正在读取…</p></main>
   </section>
-  <script src="credit-balance.js"></script>
-  <script src="codex-details-renderer.js"></script>
+  <script src="credit-balance.js?v=20261007-v0404"></script>
+  <script src="quota-trend-curve.js?v=20261007-v0404"></script>
+  <script src="quota-daily-model.js?v=20261007-v0404"></script>
+  <script src="codex-details-renderer.js?v=20261007-v0404"></script>
 </body>
 </html>

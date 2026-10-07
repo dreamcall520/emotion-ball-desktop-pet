@@ -1,37 +1,37 @@
 {
   "repository": "https://github.com/dreamcall520/emotion-ball-desktop-pet",
-  "commit": "7f5c291d34512f629c17275c93bed472f421e8b9",
-  "version": "0.4.00",
+  "commit": "16809908dd3cd4d9cb29fb5cb84cfea5a16bd2c7",
+  "version": "0.4.04",
   "files": [
     {
       "source": "desktop-pet/chat.html",
       "target": "index.html",
-      "sha256": "b06a3ebed1d0ef39e8ac79d97be1297de2ee10c1afb91363fe01e57982877ae8",
-      "embeddedSha256": "4ef2e99545b315cb4da5d67461d8486d7e8c2263a4aec5ff9b639bac9c878639"
+      "sha256": "9e3a0d495a02b7dc804d1b7c37098bc018efe79be8ba32f240ef39859a466d1a",
+      "embeddedSha256": "84fb675b853574c0486bd6cfbf1202cd420fc1974d1bf89fe9b854f1f2553eb3"
     },
     {
       "source": "desktop-pet/chat.css",
       "target": "chat.css",
-      "sha256": "72384bc54721f8cefa6d5aa6e22abb08ac1b408ef30c18c6a26ccdd38295f0d8",
-      "embeddedSha256": "72384bc54721f8cefa6d5aa6e22abb08ac1b408ef30c18c6a26ccdd38295f0d8"
+      "sha256": "331d803fcf42629c02654e94366b31f7a31217d61e3c2f4a4be9592e472375b0",
+      "embeddedSha256": "331d803fcf42629c02654e94366b31f7a31217d61e3c2f4a4be9592e472375b0"
     },
     {
       "source": "desktop-pet/chat-renderer.js",
       "target": "chat-renderer.js",
-      "sha256": "b4184fec3ebe0a3f8f1474d081382532bcaa4479e2b84014f5cbe34c07eaee73",
-      "embeddedSha256": "512064642ea3fbef351f5322f189013a7e3e2f859f59cccb20f5d3f56ed622b4"
+      "sha256": "84e25a904f85bcaa64b414febe73a734ea84c63b2beb052ce2a8dcc7ee0e9f74",
+      "embeddedSha256": "580b384bf5fc0ec992134e58f0f2f1af7c0effc88806217292732f42b3a84f54"
     },
     {
       "source": "desktop-pet/color-mode.css",
       "target": "color-mode.css",
-      "sha256": "a5fafde24c1233618d2af25bb546fc6dbbba0f589ee051d0f9d2046aa2872d37",
-      "embeddedSha256": "a5fafde24c1233618d2af25bb546fc6dbbba0f589ee051d0f9d2046aa2872d37"
+      "sha256": "11aee590ecd86642c15b4562ad611f59983ed267610eef71de69c7f75100ad42",
+      "embeddedSha256": "11aee590ecd86642c15b4562ad611f59983ed267610eef71de69c7f75100ad42"
     },
     {
       "source": "desktop-pet/color-mode.js",
       "target": "color-mode.js",
-      "sha256": "503835f76918495a3188cfdbd368f1e477e118df53bb1105b5c02d57be4161f4",
-      "embeddedSha256": "503835f76918495a3188cfdbd368f1e477e118df53bb1105b5c02d57be4161f4"
+      "sha256": "3b63526ba85a5c09c59ac6160367190e6d0bcf81609f82b8335b9a4a84d3a5dd",
+      "embeddedSha256": "1e86388e19fbfa75bc2d5b6aa6105acac9af27b088d92eb8e19733d65bfb04e9"
     },
     {
       "source": "desktop-pet/aurora-rive.css",
@@ -43,17 +43,13 @@
       "source": "desktop-pet/lib/customization.js",
       "target": "lib/customization.js",
       "sha256": "7362471008d3db5e281c78f8607f2488b2d402874819d96ea83f3e198a0e3569",
-      "embeddedSha256": "7362471008d3db5e281c78f8607f2488b2d402874819d96ea83f3e198a0e3569",
-      "commit": "eac7a8d12bd425fb98f005828ab80afabe18ca0b",
-      "version": "0.4.03"
+      "embeddedSha256": "7362471008d3db5e281c78f8607f2488b2d402874819d96ea83f3e198a0e3569"
     },
     {
       "source": "desktop-pet/lib/chat-avatar.js",
       "target": "lib/chat-avatar.js",
       "sha256": "6d95a47fdb268a30ee0c2f31cf94fd19d5ea7cac5fed5e159a4aad55cec316f6",
-      "embeddedSha256": "6d95a47fdb268a30ee0c2f31cf94fd19d5ea7cac5fed5e159a4aad55cec316f6",
-      "commit": "eac7a8d12bd425fb98f005828ab80afabe18ca0b",
-      "version": "0.4.03"
+      "embeddedSha256": "6d95a47fdb268a30ee0c2f31cf94fd19d5ea7cac5fed5e159a4aad55cec316f6"
     },
     {
       "source": "desktop-pet/lib/rive.js",
@@ -114,20 +110,27 @@
       "target": "emotion-ball/js/engine.js",
       "sha256": "fb1131c1d752dfeb2f5a109b659918288f55b8a0e8b3eca1fbc93c724f623961",
       "embeddedSha256": "fb1131c1d752dfeb2f5a109b659918288f55b8a0e8b3eca1fbc93c724f623961"
+    },
+    {
+      "source": "desktop-pet/chat-blue.css",
+      "target": "chat-blue.css",
+      "sha256": "464f21ff3015215539e7ff25bd5e5616d36bedc6ff43a896a361104d0d7e887b",
+      "embeddedSha256": "464f21ff3015215539e7ff25bd5e5616d36bedc6ff43a896a361104d0d7e887b"
     }
   ],
   "adaptations": [
-    "HTML changes relative engine paths, inserts the in-memory demo bridge and cache query tags.",
-    "The iframe adapter adds 2px padding to preserve all native 15px panel border corners; no App CSS changes.",
+    "HTML changes relative engine paths, inserts the in-memory demo bridge and cache query tags, sets the default blue palette, and loads the shared same-origin Codex sprite player.",
+    "The iframe adapter adds 2px padding to preserve all native 15px panel border corners; the package chat.css/color-mode.css/chat-blue.css are unchanged.",
     "The empty privacy-note node remains for renderer history toggles but is permanently hidden by the website adapter; close/reopen copy is concise.",
-    "Avatar activity includes parent pause state. The onAppearance callback forwards the public 0.4.03 Codex pet descriptor to the shared avatar engine.",
-    "Customization and chat-avatar libraries use public 0.4.03 at eac7a8d12bd425fb98f005828ab80afabe18ca0b. The shared native Codex sprite player uses 0.4.04 idle timing (6.6s) and is loaded from ../customize/lib/codex-pet-player.js; its source and same-origin URL adaptation are recorded in ../customize/source-manifest.json. The memory bridge accepts only the two fixed website examples.",
+    "The 0.4.04 renderer preserves native pointer/keyboard focus logic. Avatar activity additionally includes parent pause state and listens for qiuqiu-demo-motion; appearance forwards the third Codex pet descriptor unchanged.",
+    "The 0.4.04 color-mode.js initializer preserves the HTML blue palette. The memory bridge supplies native (colorMode, appearance, uiTheme) callbacks and validates same-origin parent messages; only the two fixed website pet examples are accepted.",
+    "The shared native Codex sprite player uses 0.4.04 idle timing (6.6s) and is loaded from ../customize/lib/codex-pet-player.js; its source and precise same-origin URL adaptation are recorded in ../customize/source-manifest.json.",
     "Load the shared same-origin embedding fallback before page rendering."
   ],
   "adapters": [
     {
       "target": "README.md",
-      "sha256": "1f4a744852cebbd26d485af38b8b25c3bdf9dea888b8563d03196d103e81d732"
+      "sha256": "87770fb064ab0802beb5da15c737b1d88216fd472f481240e74a31081b1fb5e0"
     },
     {
       "target": "demo-adapter.css",
@@ -135,7 +138,14 @@
     },
     {
       "target": "demo-bridge.js",
-      "sha256": "34f3b51e29176269ab08155d99d77336b88cd6e3af9443657b08936c759c5413"
+      "sha256": "6ce0c605ce204b81486eeeaf57ac63a8752110e3580427e34cbf388bd661f1c5"
     }
-  ]
+  ],
+  "tag": "v0.4.4",
+  "package": {
+    "asset": "Qiuqiu-0.4.04-macOS-arm64-share.zip",
+    "sha256": "22e80247088db2fdd5a5cc81b12703138a3bf7421427895ed77a16fdcdc81be9",
+    "asarSha256": "8a4062ae6c907eea4417ebcadbb8f2f5127e8fe0ff3d21b66ca41c2f5ee151c8",
+    "sourceFilesMatchTag": true
+  }
 }

@@ -3,16 +3,21 @@
   const system = window.matchMedia?.('(prefers-color-scheme: dark)');
   let appearance = 'system';
   const refreshAppearance = () => {
-    root.dataset.accessibleAppearance = appearance === 'system' ? (system?.matches ? 'dark' : 'light') : appearance;
+    const resolved = appearance === 'system' ? (system?.matches ? 'dark' : 'light') : appearance;
+    root.dataset.appearance = resolved;
+    root.dataset.accessibleAppearance = resolved;
   };
-  const apply = (value, preference) => {
+  const apply = (value, preference, theme) => {
+    root.dataset.uiTheme = theme === 'blue' ? 'blue' : 'green';
+    const blueStyle = document.getElementById?.('blue-style');
+    if (blueStyle) blueStyle.disabled = root.dataset.uiTheme !== 'blue';
     root.dataset.colorMode = value === 'accessible' ? 'accessible' : 'standard';
     appearance = ['light', 'dark'].includes(preference) ? preference : 'system';
     refreshAppearance();
   };
-  apply('standard');
+  apply('standard', undefined, root.dataset.uiTheme);
   const api = [window.petDesktop, window.petQuotaLabel, window.qiuqiuChat, window.qiuqiuAbout, window.qiuqiuApiUsage, window.qiuqiuApiUsageLabel,
-    window.petBubble, window.edgeNotice, window.petThought].find(candidate => candidate?.onColorMode);
+    window.petBubble, window.edgeNotice, window.petThought, window.qiuNotes, window.petCustomizer, window.petCodexDetails].find(candidate => candidate?.onColorMode);
   if (!api) return;
   const unsubscribe = api.onColorMode(apply);
   system?.addEventListener('change', refreshAppearance);

@@ -2,7 +2,7 @@
 (() => {
   'use strict';
   const states = new Set(), colors = new Set(), avatars = new Set();
-  let appearance='light',colorMode='standard',avatar=null,avatarPet=null,activeId='demo-today',busy=false,selection='auto',sequence=0,timer=null;
+  let appearance='light',colorMode='standard',uiTheme='blue',avatar=null,avatarPet=null,activeId='demo-today',busy=false,selection='auto',sequence=0,timer=null;
   const petAssets = new Map([
     ['codex-1efa22ef14f812a00e6bbeaea6ab410bf441085df26fa194bbbaea1c0c18789d', { name: 'ikun', version: 2, rows: 11, file: '../customize/assets/demo-ikun.webp' }],
     ['codex-1d0c978a2b7a9598bf8e1b06259ebf75b1ffd4225dedba52f1c893bb95eba007', { name: '春野', version: 2, rows: 11, file: '../customize/assets/demo-chunye.webp' }]
@@ -21,9 +21,9 @@
   function snapshot() { const chat=current();return {messages:chat?.messages||[],history:chats.map(({id,title,updatedAt})=>({id,title,updatedAt})),activeChatId:activeId,busy,connection:'connected',error:null,hasConversation:Boolean(chat),canStartNewChat:Boolean(chat),modelsStatus:'ready',modelSelection:selection,models:[{id:'demo-fast',displayName:'轻量模型 · 示例'},{id:'demo-strong',displayName:'分析模型 · 示例'}],activeModel:{automatic:selection==='auto',displayName:'轻量模型 · 示例'}}; }
   const emit=()=>states.forEach(fn=>fn(snapshot()));
   const subscribe=(set,fn)=>{set.add(fn);return()=>set.delete(fn);};
-  function theme() { const root=document.documentElement;root.dataset.appearance=appearance;root.dataset.accessibleAppearance=appearance;root.dataset.colorMode=colorMode;colors.forEach(fn=>fn(colorMode,appearance)); }
+  function theme() { const root=document.documentElement;root.dataset.appearance=appearance;root.dataset.accessibleAppearance=appearance;root.dataset.colorMode=colorMode;root.dataset.uiTheme=uiTheme;colors.forEach(fn=>fn(colorMode,appearance,uiTheme)); }
   window.qiuqiuChat={
-    getState:async()=>snapshot(),onState:fn=>subscribe(states,fn),onColorMode:fn=>{fn(colorMode,appearance);return subscribe(colors,fn);},onAppearance:fn=>{if(avatar)fn(avatar,null,avatarPet);return subscribe(avatars,fn);},
+    getState:async()=>snapshot(),onState:fn=>subscribe(states,fn),onColorMode:fn=>{fn(colorMode,appearance,uiTheme);return subscribe(colors,fn);},onAppearance:fn=>{if(avatar)fn(avatar,null,avatarPet);return subscribe(avatars,fn);},
     send:async text=>{
       if(typeof text!=='string'||!text.trim()||text.length>2000) return {accepted:false,error:'请输入 1–2000 字的消息。'};
       if(busy) return {accepted:false,error:'请等待当前示例回复。'};
@@ -43,7 +43,7 @@
   window.addEventListener('message',event=>{
     if(event.source!==parent||event.origin!==location.origin)return;
     const data=event.data;
-    if(data?.type==='qiuqiu-demo-theme'&&['light','dark'].includes(data.appearance)&&['standard','accessible'].includes(data.colorMode)){appearance=data.appearance;colorMode=data.colorMode;theme();}
+    if(data?.type==='qiuqiu-demo-theme'&&['light','dark'].includes(data.appearance)&&['standard','accessible'].includes(data.colorMode)){appearance=data.appearance;colorMode=data.colorMode;if(['blue','green'].includes(data.uiTheme))uiTheme=data.uiTheme;theme();}
     else if(data?.type==='qiuqiu-demo-avatar'&&data.appearance&&typeof data.appearance==='object'&&!Array.isArray(data.appearance)){
       const raw=data.appearance;
       if(!['blob','cloud','square','aurora-cloud','codex-pet'].includes(raw.shape))return;
@@ -60,5 +60,5 @@
     parent.postMessage({type:'qiuqiu-demo-ready'},location.origin);
     parent.postMessage({type:'qiuqiu-demo-resize',height:520},location.origin);
   });
-  window.QiuqiuChatDemo=Object.freeze({getState:()=>Object.freeze({appearance,colorMode,avatar,busy,selection,activeChatId:activeId,historyCount:chats.length,paused:Boolean(window.QiuqiuDemoPaused)})});
+  window.QiuqiuChatDemo=Object.freeze({getState:()=>Object.freeze({appearance,colorMode,uiTheme,avatar,busy,selection,activeChatId:activeId,historyCount:chats.length,paused:Boolean(window.QiuqiuDemoPaused)})});
 })();
