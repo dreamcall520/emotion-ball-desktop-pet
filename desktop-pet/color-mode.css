@@ -232,7 +232,11 @@
 }
 
 /* Decorative containers stay quiet; inputs and selected choices retain contrast. */
-:root[data-color-mode="accessible"][data-ui-window="customize"] :is(.stage, .color-editor, .manual-controls, .shape-option:not([aria-pressed="true"]), .aurora-style-options button:not([aria-pressed="true"])) {
+:root[data-color-mode="accessible"][data-ui-window="customize"] .stage,
+:root[data-color-mode="accessible"][data-ui-window="customize"] .color-editor,
+:root[data-color-mode="accessible"][data-ui-window="customize"] .manual-controls,
+:root[data-color-mode="accessible"][data-ui-window="customize"] .shape-option:not([aria-pressed="true"]),
+:root[data-color-mode="accessible"][data-ui-window="customize"] .aurora-style-options button:not([aria-pressed="true"]) {
   border-color: var(--accessible-divider);
 }
 
