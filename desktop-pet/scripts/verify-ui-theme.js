@@ -4,8 +4,9 @@ const path = require('node:path');
 const { setTimeout: wait } = require('node:timers/promises');
 const M = require('../lib/notes-model');
 const { capturePaintedWindow } = require('./verify-codex-companion');
+const { pointerClick } = require('./verify-chat-integration');
 
-const luminance = color => color.match(/[\d.]+/g).slice(0, 3).map(Number).map(value => {
+const luminance = color => color.match(/[\d.]+/g).slice(0, 3).map(value => Number(value) * (color.startsWith('color(srgb ') ? 255 : 1)).map(value => {
   const channel = value / 255; return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
 }).reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
 const contrast = (foreground, background) => {
@@ -13,7 +14,7 @@ const contrast = (foreground, background) => {
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 };
 const textStyles = (win, selectors) => win.webContents.executeJavaScript( `(() => {
-  const parse = color => { const channels = color.match(/[\\d.]+/g).map(Number); return [...channels.slice(0, 3), channels[3] ?? 1]; };
+  const parse = color => { const channels = color.match(/[\\d.]+/g).map(Number); return [...channels.slice(0, 3).map(value => value * (color.startsWith('color(srgb ') ? 255 : 1)), channels[3] ?? 1]; };
   return ${JSON.stringify(selectors)}.flatMap(({ label, selector }) => {
     const elements = [...document.querySelectorAll(selector)];
     if (!elements.length) throw Error('缺少对比度检查节点: ' + selector);
@@ -76,6 +77,8 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
   openWindows();
   await poll(() => getWindows().every(win => win && !win.webContents.isLoading()), Boolean, '实际窗口加载');
   const windows = getWindows();
+  // Capture every fixture even when the other test windows overlap it.
+  for (const win of windows) win.webContents.setBackgroundThrottling(false);
   const page = (win, code) => win.webContents.executeJavaScript(code);
   const captures = [];
   const capture = async (win, name) => {
@@ -86,8 +89,9 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
   };
   const surface = win => page(win, `(() => {
     const root = document.documentElement;
+    const { inputMode, ...themeData } = root.dataset;
     const el = document.querySelector('#notes-tab, #send-message, #save, #connect-report');
-    return { ...root.dataset, blueDisabled: document.getElementById('blue-style')?.disabled ?? null,
+    return { ...themeData, blueDisabled: document.getElementById('blue-style')?.disabled ?? null,
       accent: getComputedStyle(root).getPropertyValue('--accent').trim(),
       action: el && getComputedStyle(el).color,
       glass: document.querySelector('.panel') && getComputedStyle(document.querySelector('.panel')).backgroundImage,
@@ -274,7 +278,7 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
             return { radius: outer.borderTopLeftRadius, background: outer.backgroundColor, image: outer.backgroundImage }; })() }; })()`);
         const raw = win.getBackgroundColor(), normalized = raw.toLowerCase().replace(/^(#[a-f\d]{6})ff$/, '$1');
         return { title: win.getTitle(), nativeBackground: raw, normalized, ...body };
-      })), entries => entries.every(entry => entry.normalized === expectedBacking && entry.radii.every(radius => radius === '18px') && entry.surface.radius === '18px'), `${theme}/${appearance} 原生便签底色和圆角`);
+      })), entries => entries.every(entry => entry.normalized === expectedBacking && entry.radii.every(radius => radius === '0px') && entry.surface.radius === '0px'), `${theme}/${appearance} 使用原生圆角且无叠加页面圆角`);
       for (const entry of backing) { assert.equal(entry.surface.image, 'none', '色弱便签使用均匀纯色底');
         assert.equal(entry.surface.background, resolved === 'dark' ? 'rgb(16, 24, 32)' : 'rgb(255, 255, 255)'); }
       const [composer, shapes, apiBody] = await Promise.all([
@@ -286,9 +290,48 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
       for (const pseudo of composer) { assert.equal(pseudo.backgroundImage, 'none', `高对比输入区 ${pseudo.pseudo} 无渐变`); assert.equal(pseudo.animationName, 'none', `高对比输入区 ${pseudo.pseudo} 无动画`); }
       assert.equal(shapes.length, 1, '定制窗口有一个选中形态');
       assert.equal(shapes[0].boxShadow, 'none', '选中形态无叠加描边阴影');
+      const customBorders = await page(customWin, `(() => {
+        const border = selector => [...document.querySelectorAll(selector)].map(element => { const style = getComputedStyle(element); return { color: style.borderTopColor, width: style.borderTopWidth }; });
+        const underline = getComputedStyle(document.querySelector('.source-switch button[aria-pressed="true"]'), '::after');
+        return { decorations: border('.stage, .color-editor, .manual-controls, .source-switch, .shape-option:not([aria-pressed="true"]), .pet-card:not([aria-pressed="true"]), .aurora-style-options button:not([aria-pressed="true"])'),
+          inputs: border('#body-hex, #eye-hex, .color-trigger'), selected: border('.shape-option[aria-pressed="true"], .pet-card[aria-pressed="true"], .aurora-style-options button[aria-pressed="true"]'),
+          sourceUnderline: { color: underline.backgroundColor, height: underline.height } };
+      })()`);
+      const dividerColor = resolved === 'dark' ? 'rgb(51, 67, 82)' : 'rgb(217, 225, 233)';
+      const panelColor = resolved === 'dark' ? 'rgb(16, 24, 32)' : 'rgb(255, 255, 255)';
+      for (const border of customBorders.decorations) assert.equal(border.color, dividerColor, '定制装饰容器使用轻分界线');
+      for (const border of [...customBorders.inputs, ...customBorders.selected]) assert.ok(contrast(border.color, panelColor) >= 3, '输入控件与选中态保留清晰边界');
+      assert.equal(customBorders.sourceUnderline.height, '2px');
+      assert.ok(contrast(customBorders.sourceUnderline.color, panelColor) >= 3, '选中来源下划线保留清晰对比');
+      const chatShell = await page(chatWin, `(() => { const panel = getComputedStyle(document.querySelector('.chat-panel')); return { border: panel.borderTopWidth, radius: panel.borderTopLeftRadius, shadow: panel.boxShadow, background: panel.backgroundColor, bodyBackground: getComputedStyle(document.body).backgroundColor }; })()`);
+      assert.equal(chatShell.border, '0px'); assert.equal(chatShell.radius, '15px', '透明聊天窗口保留原有圆角'); assert.equal(chatShell.shadow, 'none');
+      assert.equal(chatShell.background, panelColor); assert.equal(chatShell.bodyBackground, 'rgba(0, 0, 0, 0)');
+      const chatPixels = (await chatWin.webContents.capturePage()).toBitmap();
+      assert.equal(chatPixels[3], 0, '透明聊天窗口四角没有被页面底色填成方角');
       assert.equal(apiBody.accessiblePanel.toLowerCase(), expectedBacking);
       assert.equal(apiBody.background, resolved === 'dark' ? 'rgb(16, 24, 32)' : 'rgb(255, 255, 255)', 'API body 使用当前高对比面板底色');
-      accessibility = { texts, backing, selectedTabShadow, composer, shapes, apiBody };
+      chatWin.webContents.focus(); await wait(80);
+      await pointerClick(chatWin, '#message-input');
+      const mouseFocus = await page(chatWin, "({mode:document.documentElement.dataset.inputMode,outline:getComputedStyle(document.querySelector('.composer')).outlineStyle})");
+      assert.equal(mouseFocus.mode, 'pointer'); assert.equal(mouseFocus.outline, 'none', '鼠标输入不显示双重焦点框');
+      chatWin.webContents.sendInputEvent({type:'keyDown',keyCode:'Tab'});
+      chatWin.webContents.sendInputEvent({type:'keyUp',keyCode:'Tab'});
+      const keyboardFocus = await poll(() => page(chatWin, "({mode:document.documentElement.dataset.inputMode,outline:getComputedStyle(document.querySelector('.composer')).outlineStyle,active:document.activeElement.id,focused:document.hasFocus(),within:document.querySelector('.composer').matches(':focus-within')})"), view => view.mode === 'keyboard', '键盘焦点');
+      assert.equal(keyboardFocus.outline, 'solid', '键盘操作仍有清晰焦点: '+JSON.stringify(keyboardFocus));
+      await pointerClick(chatWin, '#message-input');
+      await page(panelWin, "document.querySelector('.record-more').click()");
+      const actionStyles = await textStyles(panelWin, [{label:'note-action',selector:'#actions-list > button'}, {label:'actions-close',selector:'#actions-close'}]);
+      for (const style of actionStyles) {
+        assert.equal(style.ownBackground, 'rgba(0, 0, 0, 0)', '普通菜单和关闭按钮无实心主按钮底色');
+        assert.ok(contrast(style.color,style.background)>=4.5, '菜单文字清晰');
+      }
+      const closeBorder = await page(panelWin, "getComputedStyle(document.querySelector('#actions-close')).borderTopWidth");
+      assert.equal(closeBorder, '0px', '关闭按钮无方形边框');
+      if (screenshot) await capture(panelWin, `notes-actions-${suffix}`);
+      await page(panelWin, "document.querySelector('#actions-close').click()");
+      const previewSwitch = await page(customWin, `(() => {const selected=document.querySelector('.preview-mode button[aria-pressed="true"]'),buttons=[...document.querySelectorAll('.preview-mode button')],style=getComputedStyle(selected);return {shadow:style.boxShadow,gap:buttons[1].getBoundingClientRect().left-buttons[0].getBoundingClientRect().right,separator:getComputedStyle(buttons[1],'::before').display};})()`);
+      assert.equal(previewSwitch.shadow, 'none'); assert.ok(previewSwitch.gap>=6); assert.equal(previewSwitch.separator,'none');
+      accessibility = { texts, backing, selectedTabShadow, composer, shapes, customBorders, chatShell, apiBody, mouseFocus, keyboardFocus, actionStyles, closeBorder, previewSwitch };
       if (screenshot) {
         await capture(notes.getWindows().notes[0], `desktop-note-${suffix}`);
         await capture(chatWin, `chat-${suffix}`);

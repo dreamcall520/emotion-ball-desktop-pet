@@ -4,7 +4,8 @@ const {
   PERIOD_MINUTES,
   selectQuotaWindows,
   selectPrimaryQuotaWindows,
-  buildQuotaLabelModel
+  buildQuotaLabelModel,
+  buildCodexDetailsModel
 } = require('../lib/codex-quota-view');
 
 const NOW = 1800000000000;
@@ -16,6 +17,20 @@ const snapshot = (windows, overrides = {}) => ({
   enabled: true,
   quota: { state: 'connected', stale: false, updatedAt: NOW, windows, ...overrides }
 });
+const forecastSnapshot = (remaining = 40, consumed = 10, period = 300) => {
+  const window = quotaWindow(`codex:${period}`, period, remaining);
+  const span = period === 300 ? 10 * 60000 : 24 * 3600000;
+  const intervals = span / 120000;
+  const source = snapshot([window], { resetCreditsAvailable: 1, resetOpportunities: [{
+    id: 'available-credit', status: 'available', resetType: 'codexRateLimits',
+    grantedAt: NOW - 3600000, expiresAt: NOW + 5 * 60000
+  }] });
+  source.history = { available: true, windows: [{ ...window,
+    samples: Array.from({ length: intervals + 1 }, (_, index) => ({
+      at: NOW - span + index * 120000, remaining: remaining + consumed * (intervals - index) / intervals
+    })) }] };
+  return source;
+};
 
 test('额外点数按返回数据默认开启，余额、零、无点数、无限、未知与过期独立于套餐比例和重置机会', () => {
   const windows = [quotaWindow('codex:weekly', 10080, 79)];
@@ -421,4 +436,122 @@ test('已知非连接状态原样返回，不要求 windows、stale 或有效 no
       state, items: [], overflow: 0
     });
   }
+});
+
+test('详情观察时间与额度更新时间独立，陈旧快照保留真实时间，无效或未来时间未知', () => {
+  const source = forecastSnapshot();
+  source.quota.updatedAt = NOW - 120000;
+  let model = buildCodexDetailsModel(source, {}, NOW);
+  assert.equal(model.observedAt, NOW);
+  assert.equal(model.quotaUpdatedAt, NOW - 120000);
+  source.quota.stale = true;
+  model = buildCodexDetailsModel(source, {}, NOW + 60000);
+  assert.equal(model.observedAt, NOW + 60000);
+  assert.equal(model.quotaUpdatedAt, NOW - 120000);
+  for (const updatedAt of [undefined, null, -1, 1.5, Number.NaN, Infinity, MAX_TIME + 1, '1800000000000', NOW + 1]) {
+    source.quota.updatedAt = updatedAt;
+    assert.equal(buildCodexDetailsModel(source, {}, NOW).quotaUpdatedAt, null);
+  }
+  source.quota.updatedAt = 0;
+  assert.equal(buildCodexDetailsModel(source, {}, NOW).quotaUpdatedAt, 0);
+  source.enabled = false;
+  assert.equal(buildCodexDetailsModel(source, {}, NOW).quotaUpdatedAt, null);
+  assert.equal(buildCodexDetailsModel(null, {}, NOW).quotaUpdatedAt, null);
+});
+
+test('可用机会只复用已成立的连续预测速率，不更改原始机会或历史', () => {
+  const source = forecastSnapshot();
+  const before = structuredClone(source);
+  const model = buildCodexDetailsModel(source, { action: 'opportunities' }, NOW);
+  assert.equal(model.trend.forecast.state, 'estimate');
+  assert.equal(model.resetOpportunities[0].estimatedRemaining, 35);
+  assert.deepEqual(model.trend.samples, before.history.windows[0].samples);
+  assert.deepEqual(source, before);
+});
+
+test('机会估值仅覆盖选中周期内的未来可用 Codex 机会，不跨重置且不估已用或过期', () => {
+  const source = forecastSnapshot();
+  const original = source.quota.resetOpportunities[0];
+  source.quota.resetOpportunities = [
+    original,
+    { ...original, id: 'reset-boundary', expiresAt: source.quota.windows[0].resetsAt },
+    { ...original, id: 'next-cycle', expiresAt: source.quota.windows[0].resetsAt + 1 },
+    { ...original, id: 'never-expires', expiresAt: null },
+    { ...original, id: 'unknown-expiry', expiresAt: 'unknown' },
+    { ...original, id: 'redeeming', status: 'redeeming' },
+    { ...original, id: 'unknown-status', status: 'unknown' },
+    { ...original, id: 'other-reset', resetType: 'unknown' },
+    { ...original, id: 'expired', expiresAt: NOW },
+    { ...original, id: 'used', status: 'redeemed' }
+  ];
+  const model = buildCodexDetailsModel(source, {}, NOW);
+  assert.equal(model.resetOpportunities[0].estimatedRemaining, 35);
+  for (const row of model.resetOpportunities.slice(1)) {
+    assert.equal(Object.hasOwn(row, 'estimatedRemaining'), false, row.id);
+  }
+  assert.deepEqual(model.resetHistory.map(row => [row.id, row.state]), [['expired', 'expired'], ['used', 'used']]);
+  assert.ok(model.resetHistory.every(row => !Object.hasOwn(row, 'estimatedRemaining')));
+});
+
+test('明确零机会、未知列表或空列表不产生估值，零机会也不改变原有趋势预测', () => {
+  const source = forecastSnapshot();
+  source.quota.resetCreditsAvailable = 0;
+  let model = buildCodexDetailsModel(source, {}, NOW);
+  assert.equal(model.trend.forecast.state, 'estimate');
+  assert.equal(Object.hasOwn(model.resetOpportunities[0], 'estimatedRemaining'), false);
+  for (const rows of [null, undefined, []]) {
+    source.quota.resetOpportunities = rows;
+    model = buildCodexDetailsModel(source, {}, NOW);
+    assert.deepEqual(model.resetOpportunities, Array.isArray(rows) ? [] : null);
+  }
+});
+
+test('机会估值不放宽快照新鲜度、连续跨度、断档、校正、匹配周期与最新值门槛', () => {
+  const cases = [
+    ['stale', source => { source.quota.stale = true; }],
+    ['disconnected', source => { source.quota.state = 'disconnected'; }],
+    ['disabled', source => { source.enabled = false; }],
+    ['old-update', source => { source.quota.updatedAt = NOW - 300000; }],
+    ['future-update', source => { source.quota.updatedAt = NOW + 1; }],
+    ['invalid-update', source => { source.quota.updatedAt = null; }],
+    ['unavailable-history', source => { source.history.available = false; }],
+    ['too-few', source => { source.history.windows[0].samples = source.history.windows[0].samples.slice(-2); }],
+    ['short-span', source => { source.history.windows[0].samples.forEach((row, index) => { row.at = NOW - (5 - index) * 60000; }); }],
+    ['old-sample', source => { source.history.windows[0].samples.forEach(row => { row.at -= 300000; }); }],
+    ['gap', source => { source.history.windows[0].samples.splice(2, 2); }],
+    ['increase', source => { source.history.windows[0].samples.at(-2).remaining = 39; }],
+    ['large-drop', source => { source.history.windows[0].samples.forEach((row, index) => { row.remaining = index === 5 ? 40 : 100 - index * 2; }); }],
+    ['other-cycle', source => { source.history.windows[0].resetsAt += 1001; }],
+    ['value-mismatch', source => { source.history.windows[0].samples.at(-1).remaining = 41; }]
+  ];
+  for (const [name, change] of cases) {
+    const source = forecastSnapshot(); change(source);
+    const model = buildCodexDetailsModel(source, {}, NOW);
+    assert.equal(model.trend.forecast.state, 'unknown', name);
+    assert.ok((model.resetOpportunities || []).every(row => !Object.hasOwn(row, 'estimatedRemaining')), name);
+  }
+});
+
+test('已成立的零消耗预测保留当前余额，耗尽估值限制为0且不超过100', () => {
+  for (const [remaining, consumed, expected] of [[100, 0, 100], [40, 0, 40], [2, 10, 0], [0, 10, 0]]) {
+    const model = buildCodexDetailsModel(forecastSnapshot(remaining, consumed), {}, NOW);
+    assert.equal(model.trend.forecast.state, 'estimate');
+    assert.equal(model.resetOpportunities[0].estimatedRemaining, expected);
+  }
+});
+
+test('估值采用所选5小时或周周期的独立速率，无周预测依据时不借用5小时速率', () => {
+  const source = forecastSnapshot();
+  const weekly = forecastSnapshot(70, 10, 10080);
+  source.quota.windows.push(weekly.quota.windows[0]);
+  source.history.windows.push(weekly.history.windows[0]);
+  const model = buildCodexDetailsModel(source, { period: 'weekly' }, NOW);
+  assert.equal(model.period, 10080);
+  assert.equal(model.trend.forecast.state, 'estimate');
+  assert.ok(Math.abs(model.resetOpportunities[0].estimatedRemaining - (70 - 10 * 300000 / 86400000)) < 1e-10);
+  assert.equal(buildCodexDetailsModel(source, { period: 300 }, NOW).resetOpportunities[0].estimatedRemaining, 35);
+  source.history.windows.pop();
+  const unknown = buildCodexDetailsModel(source, { period: 10080 }, NOW);
+  assert.equal(unknown.trend.forecast.state, 'unknown');
+  assert.equal(Object.hasOwn(unknown.resetOpportunities[0], 'estimatedRemaining'), false);
 });

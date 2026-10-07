@@ -3,8 +3,8 @@ const { pathToFileURL } = require('node:url');
 const { randomUUID } = require('node:crypto');
 const M = require('./notes-model');
 const { createNotesStore } = require('./notes-store');
-const { GAP } = require('./quota-label-placement');
 const { petVisualBounds } = require('./pet-visual-bounds');
+const { adjacentBounds, positionWindowNearPet } = require('./window-placement');
 
 // Pet placement's fallback is a square pet; notes keep their own rectangular size.
 function visibleBounds(bounds, screen) {
@@ -17,24 +17,11 @@ function visibleBounds(bounds, screen) {
 }
 
 function reminderBounds(bounds, area, size, presentation) {
-  const pet = petVisualBounds(bounds, presentation?.shape, presentation);
-  const width = Math.min(size.width, area.width), height = Math.min(size.height, area.height);
-  const x = pet.x + (pet.width - width) / 2, y = pet.y + (pet.height - height) / 2;
-  const candidates = [
-    { x, y: pet.y - height - GAP }, { x, y: pet.y + pet.height + GAP },
-    { x: pet.x + pet.width + GAP, y }, { x: pet.x - width - GAP, y }
-  ].map(candidate => ({ x: Math.round(candidate.x), y: Math.round(candidate.y), width, height }));
-  const inside = b => b.x >= area.x && b.y >= area.y && b.x + width <= area.x + area.width && b.y + height <= area.y + area.height;
-  const fits = candidates.find(inside);
-  if (fits) return fits;
-  const bounded = candidates.map(b => ({ ...b,
-    x: Math.min(Math.max(b.x, area.x), area.x + area.width - width),
-    y: Math.min(Math.max(b.y, area.y), area.y + area.height - height) }));
-  return bounded.find(b => b.x + width <= pet.x || b.x >= pet.x + pet.width || b.y + height <= pet.y || b.y >= pet.y + pet.height) || bounded[0];
+  return adjacentBounds(petVisualBounds(bounds, presentation?.shape, presentation), area, size);
 }
 
 function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialog, filePath,
-  getPetBounds, getPetWindow = null, getPetPresentation = () => null, getDefaultTab = () => 'todo', getAppearance = () => 'light', getColorMode = () => 'standard', onComplete = () => {}, onError = () => {}, isSuppressed = () => false,
+  getPetBounds, getPetWindow = null, getWindowObstacles = () => [], getPetPresentation = () => null, getDefaultTab = () => 'todo', getAppearance = () => 'light', getColorMode = () => 'standard', onComplete = () => {}, onError = () => {}, isSuppressed = () => false,
   organizer = null,
   now = Date.now, setTimer = setInterval, clearTimer = clearInterval, closeTimeoutMs = 60000 }) {
   const store = createNotesStore(filePath, { onError });
@@ -132,10 +119,14 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
       entry.allowedClose = true; if (alive(win)) win.destroy();
     });
     win.once('ready-to-show', () => {
+      if (!alive(win)) return;
       entry.ready = true;
       if (entry.open) send(win, 'notes:open', entry.open);
       if (reminder) updateReminderWindow();
-      else show(win, note && !entry.focusOnReady);
+      else if (!suppressed()) {
+        if (mode === 'panel') positionWindowNearPet(win, getPetBounds?.(), screen, getWindowObstacles());
+        show(win, note && !entry.focusOnReady);
+      }
     });
     win.on('close', event => {
       if (entry.allowedClose) return;
@@ -273,18 +264,32 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
     if (suppressed()) return null;
     if (!['note', 'todo'].includes(tab)) tab = getDefaultTab() === 'note' ? 'note' : 'todo';
     if (!alive(panel)) panel = createWindow('panel', null, anchor(380, 520));
+    positionWindowNearPet(panel, getPetBounds?.(), screen, getWindowObstacles());
     const entry = windowEntries.get(panel);
     entry.open = { tab, create: create === true, id: typeof id === 'string' ? id : null };
     if (entry.ready) send(panel, 'notes:open', entry.open);
     show(panel); return panel;
   }
-  function openNote(id) {
+  function openNote(id, sourceWindow = null) {
     if (suppressed()) return { ok: false, message: '球球暂时暂停。' };
     const item = store.getState().notes.find(item => item.id === id && !item.deletedAt);
     if (!item) return { ok: false, message: '便签不存在或已删除。' };
-    if (!item.desktopOpen) {
-      const result = nativeUpdate(state => { state.notes.find(item => item.id === id).desktopOpen = true; return state; });
+    const currentWindow = noteWindows.get(id);
+    const currentBounds = alive(currentWindow) ? currentWindow.getBounds() : item.windowBounds;
+    const source = alive(sourceWindow) ? sourceWindow.getBounds() : null;
+    const display = source && screen.getDisplayMatching(source);
+    const moveToPanel = display && (!currentBounds || screen.getDisplayMatching(currentBounds).id !== display.id);
+    if (!item.desktopOpen || moveToPanel) {
+      const bounds = source ? adjacentBounds(source, display.workArea,
+        currentBounds || { width: 300, height: 220 }) : null;
+      const result = nativeUpdate(state => {
+        const note = state.notes.find(item => item.id === id);
+        note.desktopOpen = true;
+        if (bounds) { note.windowBounds = bounds; note.position = { x: bounds.x, y: bounds.y }; }
+        return state;
+      });
       if (!result.ok) return result;
+      if (bounds && alive(currentWindow)) currentWindow.setBounds(bounds, false);
     } else syncWindows(store.getState());
     const win = noteWindows.get(id);
     if (alive(win)) windowEntries.get(win).focusOnReady = true;
@@ -324,7 +329,7 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
     }
     return { ok: true, state: store.save(next, revision) };
   });
-  handle('notes:open-note', (_entry, id) => { if (typeof id !== 'string' || id.length > 200) throw Error('便签标识不合法。'); return openNote(id); });
+  handle('notes:open-note', (entry, id) => { if (typeof id !== 'string' || id.length > 200) throw Error('便签标识不合法。'); return openNote(id, entry.mode === 'panel' ? entry.win : null); });
   handle('notes:hide-panel', entry => entry.mode === 'panel' ? hideEntry(entry) : { ok: false, message: '请在主面板收起。' });
   handle('notes:close-window', entry => {
     if (entry.mode !== 'reminder') return hideEntry(entry);

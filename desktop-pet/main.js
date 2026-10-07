@@ -22,7 +22,8 @@ const { createCodexPetStore } = require('./lib/codex-pets');
 const {
   SIZES,
   defaultBounds,
-  ensureVisibleBounds
+  ensureVisibleBounds,
+  positionWindowNearPet
 } = require('./lib/window-placement');
 const {
   BOUNCE_TOTAL_MS,
@@ -191,9 +192,21 @@ function fromApiUsageWindow(event, requireVisible = true) {
     (!requireVisible || apiUsageWindow.isVisible()) && event.sender === apiUsageWindow.webContents);
 }
 
+function functionWindowObstacles() {
+  return [quotaLabel, apiUsageLabel].flatMap(controller => {
+    const win = controller?.getWindow();
+    return win && !win.isDestroyed() && win.isVisible() ? [win.getBounds()] : [];
+  });
+}
+
+function positionFunctionWindow(win) {
+  positionWindowNearPet(win, petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null, screen, functionWindowObstacles());
+}
+
 function openApiUsage() {
   if (isQuitting || screenLocked) return;
   if (apiUsageWindow && !apiUsageWindow.isDestroyed()) {
+    positionFunctionWindow(apiUsageWindow);
     apiUsageWindow.show();
     apiUsageWindow.focus();
     return;
@@ -208,11 +221,14 @@ function openApiUsage() {
     }
   });
   apiUsageWindow = win;
+  positionFunctionWindow(win);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', event => event.preventDefault());
   win.webContents.on('will-attach-webview', event => event.preventDefault());
   win.on('closed', () => { if (apiUsageWindow === win) apiUsageWindow = null; });
-  win.once('ready-to-show', () => { if (!win.isDestroyed() && !screenLocked) win.show(); });
+  win.once('ready-to-show', () => {
+    if (!isQuitting && !win.isDestroyed() && !screenLocked) { positionFunctionWindow(win); win.show(); }
+  });
   void win.loadFile(path.join(__dirname, 'api-usage.html')).catch(error => writeError('API 费用面板', error));
 }
 
@@ -224,7 +240,7 @@ function fromAboutWindow(event, requireVisible = false) {
 function openAbout() {
   if (isQuitting || screenLocked) return;
   if (aboutWindow && !aboutWindow.isDestroyed()) {
-    if (aboutReady) { aboutWindow.show(); aboutWindow.focus(); }
+    if (aboutReady) { positionFunctionWindow(aboutWindow); aboutWindow.show(); aboutWindow.focus(); }
     return aboutWindow;
   }
   const win = new BrowserWindow({
@@ -236,6 +252,7 @@ function openAbout() {
       spellcheck: false, devTools: !app.isPackaged }
   });
   aboutWindow = win;
+  positionFunctionWindow(win);
   aboutReady = false;
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', event => event.preventDefault());
@@ -244,7 +261,7 @@ function openAbout() {
   win.once('ready-to-show', () => {
     if (aboutWindow !== win || win.isDestroyed()) return;
     aboutReady = true;
-    if (!isQuitting && !screenLocked) { win.show(); win.focus(); }
+    if (!isQuitting && !screenLocked) { positionFunctionWindow(win); win.show(); win.focus(); }
   });
   void win.loadFile(path.join(__dirname, 'about.html')).catch(error => {
     writeError('关于球球', error);
@@ -354,6 +371,7 @@ function setAutoUpdateCheck(value) {
 function openCustomization() {
   if (isQuitting || screenLocked) return;
   if (customizationWindow && !customizationWindow.isDestroyed()) {
+    positionFunctionWindow(customizationWindow);
     customizationWindow.show();
     customizationWindow.focus();
     return;
@@ -373,6 +391,7 @@ function openCustomization() {
   const [contentWidth, contentHeight] = win.getContentSize();
   win.setMinimumSize(760 + outerWidth - contentWidth, 580 + outerHeight - contentHeight);
   customizationWindow = win;
+  positionFunctionWindow(win);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', event => event.preventDefault());
   win.webContents.on('did-fail-load', (_event, code, description) => writeError('定制面板加载', `${code} ${description}`));
@@ -380,7 +399,9 @@ function openCustomization() {
     if (customizationWindow !== win) return;
     customizationWindow = null;
   });
-  win.once('ready-to-show', () => { if (!win.isDestroyed() && !screenLocked) win.show(); });
+  win.once('ready-to-show', () => {
+    if (!isQuitting && !win.isDestroyed() && !screenLocked) { positionFunctionWindow(win); win.show(); }
+  });
   void win.loadFile(path.join(__dirname, 'customize.html')).catch(error => writeError('定制面板', error));
 }
 
@@ -904,7 +925,7 @@ function codexDetailModel(snapshot, action, period) {
   const selected = card.items.find(item => item.windowMinutes === period) || card.items[0];
   const model = buildCodexDetailsModel(snapshot, { action, period: selected?.windowMinutes || period,
     appearance: settings?.codexQuotaAppearance }, codexNow());
-  return { ...model, action, items: model.items.filter(item => card.items.some(row => row.windowMinutes === item.windowMinutes)),
+  return { ...model, action, generation: snapshot.generation, items: model.items.filter(item => card.items.some(row => row.windowMinutes === item.windowMinutes)),
     colorMode: settings?.colorMode === 'accessible' ? 'accessible' : 'standard',
     ...(codexDetailReturn ? { returnToTrend: true, returnPeriod: codexDetailReturn.period } : {}) };
 }
@@ -1634,6 +1655,22 @@ async function finishSmokeTest() {
     );
     if (!companionReady) throw new Error('轻陪伴活动感知尚未接入');
 
+    if (process.env.PET_SMOKE_FUNCTION_WINDOWS_ONLY === '1') {
+      await require('./scripts/verify-function-windows').verifyFunctionWindows({
+        pet: petWindow, screen, notes: notesCompanion, getObstacles: functionWindowObstacles,
+        showCards: () => {
+          quotaLabel.show({ state: 'ready', items: [{ label: 'Codex', windowMinutes: 10080, remaining: 95 }] });
+          apiUsageLabel.show({ connected: true, busy: false, config: {}, report: null });
+        },
+        openers: [
+          ['customize', () => { openCustomization(); return customizationWindow; }],
+          ['notes', () => notesCompanion.openPanel()],
+          ['api-usage', () => { openApiUsage(); return apiUsageWindow; }],
+          ['about', openAbout]
+        ]
+      });
+      app.exit(0); return;
+    }
     if (process.env.PET_SMOKE_UI_THEME_ONLY === '1') {
       await require('./scripts/verify-ui-theme').verifyUiTheme({
         pet: petWindow, notes: notesCompanion, chat, settingsFile, nativeTheme,
@@ -2266,6 +2303,13 @@ function registerIpc() {
   ipcMain.on('pet:codex-details-close', event => { if (codexDetails?.owns(event)) { codexDetailReturn = null; codexDetails.close(); } });
   ipcMain.on('pet:codex-details-open', (event, action, period) => { if (codexDetails?.owns(event)) openCodexDetails(action, period); });
   ipcMain.on('pet:codex-details-thread', (event, id, turnId) => { if (codexDetails?.owns(event)) void openCodexDetailThread(id, turnId); });
+  ipcMain.handle('pet:codex-details-read-all', (event, generation) => {
+    if (!codexDetails?.owns(event) || !codexDetails.isVisible() || codexDetails.getAction() !== 'results' || isQuitting || screenLocked) return false;
+    const snapshot = codexCompanion?.getSnapshot();
+    if (snapshot?.enabled !== true || !Number.isSafeInteger(generation) || generation !== snapshot.generation) return false;
+    try { return codexCompanion.markAllRead(); }
+    catch (error) { writeError('标记 Codex 结果已读', error); return false; }
+  });
   ipcMain.on('pet:codex-details-resize', (event, height) => { if (codexDetails?.owns(event)) codexDetails.resize(height); });
   ipcMain.handle('pet:api-usage-get', event => fromApiUsageWindow(event, false) ? apiUsage.getState() : null);
   ipcMain.handle('pet:api-usage-connect', (event, value) => fromApiUsageWindow(event) ? apiUsage.connect(value) : null);
@@ -2552,6 +2596,7 @@ async function bootstrap() {
     filePath: path.join(app.getPath('userData'), 'notes-todos.json'),
     getPetBounds: () => petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null,
     getPetWindow: () => petWindow,
+    getWindowObstacles: functionWindowObstacles,
     getPetPresentation: () => ({ ...edgeTuck?.getPresentation(), shape: settings?.customization?.appearance?.shape }),
     getDefaultTab: () => settings.notesDefaultTab,
     getAppearance: getNotesAppearance,

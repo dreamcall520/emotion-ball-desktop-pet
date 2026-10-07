@@ -321,3 +321,51 @@ test('节奏仅比较真实周期剩余比例，断线未知，周日期跨年�
   assert.equal(formatQuotaDate(new Date(2026, 11, 31, 18, 5).getTime(), 10080, time), '12/31 18:05');
   assert.equal(formatQuotaDate(new Date(2027, 0, 1, 18, 5).getTime(), 10080, time), '2027/01/01 18:05');
 });
+
+
+test('全部已读一次持久化，保留任务及结果记录，账号隔离且后续新轮次仍待查看', async t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(),'qiuqiu-all-read-'));
+  t.after(() => fs.rmSync(directory,{recursive:true,force:true}));
+  const filePath = path.join(directory,'history.json'); let time = NOW, callbacks;
+  const history = createQuotaHistory({filePath,now:() => time});
+  const companion = createCodexCompanion({history,now:() => time,createConnection(value) {
+    callbacks = value; return {start() { value.onAccount({accountKey:'a'}); value.onStatus({channel:'tasks',state:'connected'}); },close() {}};
+  }});
+  t.after(() => companion.close());
+  assert.equal(companion.markAllRead(),false); await companion.setEnabled(true);
+  const send = (id,state,turnId) => callbacks.onTask({id,state,turnId,title:'测试任务',updatedAt:time});
+  send(ID,'active','first'); send(ID2,'active','first'); time++;
+  send(ID,'completed','first'); send(ID2,'failed','first');
+  assert.equal(buildQuotaLabelModel(companion.getSnapshot(),{},time).activity.unreadCount,2);
+  const before = companion.getSnapshot().tasks.items, rename = fs.renameSync; let writes = 0;
+  fs.renameSync = (from,to) => { if (to === filePath) writes++; return rename(from,to); };
+  try { assert.equal(companion.markAllRead(),true); assert.equal(companion.markAllRead(),false); } finally { fs.renameSync = rename; }
+  assert.equal(writes,1); assert.deepEqual(companion.getSnapshot().tasks.items,before);
+  assert.equal(companion.getSnapshot().history.results.length,2);
+  assert.equal(buildQuotaLabelModel(companion.getSnapshot(),{},time).activity.unreadCount,0);
+  const loaded = createQuotaHistory({filePath,now:() => time}); loaded.setAccount('a');
+  assert.ok(loaded.getState().results.every(row => row.readAt === time));
+  send(ID,'active','second'); time++; send(ID,'completed','second');
+  assert.equal(buildQuotaLabelModel(companion.getSnapshot(),{},time).activity.unreadCount,1);
+  callbacks.onAccount({accountKey:'b'}); assert.equal(companion.markAllRead(),false);
+  callbacks.onAccount({accountKey:'a'});
+  assert.equal(buildQuotaLabelModel(companion.getSnapshot(),{},time).activity.unreadCount,1);
+  await companion.setEnabled(false); assert.equal(companion.markAllRead(),false);
+});
+
+test('标读写盘失败回滚本机标记，不伪装清空，重试后读态可恢复', t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(),'qiuqiu-read-failed-'));
+  t.after(() => fs.rmSync(directory,{recursive:true,force:true}));
+  const filePath = path.join(directory,'history.json'), errors = [];
+  const store = createQuotaHistory({filePath,now:() => NOW,onError:code => errors.push(code)});
+  store.setAccount('a'); store.record({...snapshot(NOW),tasks:{results:[ID,ID2].map(id => ({id,turnId:'one',title:'结果',state:'completed',updatedAt:NOW}))}});
+  const original = fs.readFileSync(filePath,'utf8'), rename = fs.renameSync;
+  fs.renameSync = (from,to) => { if (to === filePath) throw new Error('write failed'); return rename(from,to); };
+  try { assert.equal(store.markAllRead(),false); assert.equal(store.markRead(ID,'one'),false); } finally { fs.renameSync = rename; }
+  assert.deepEqual(errors,['HISTORY_WRITE_FAILED','HISTORY_WRITE_FAILED']);
+  assert.ok(store.getState().results.every(row => row.readAt === null));
+  assert.equal(fs.readFileSync(filePath,'utf8'),original);
+  assert.equal(store.markAllRead(),true);
+  const loaded = createQuotaHistory({filePath,now:() => NOW}); loaded.setAccount('a');
+  assert.ok(loaded.getState().results.every(row => row.readAt === NOW));
+});

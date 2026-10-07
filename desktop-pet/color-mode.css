@@ -9,6 +9,7 @@
   --accessible-text: #f7f9fc;
   --accessible-muted: #c5d1df;
   --accessible-line: #809bb8;
+  --accessible-divider: #334352;
   --accessible-blue: #8fc9ff;
   --accessible-on-accent: #101820;
   --accessible-yellow: #ffe08a;
@@ -47,6 +48,7 @@
   --accessible-text: #14212e;
   --accessible-muted: #455467;
   --accessible-line: #667c94;
+  --accessible-divider: #d9e1e9;
   --accessible-blue: #07569b;
   --accessible-on-accent: #ffffff;
   --accessible-yellow: #715200;
@@ -144,14 +146,14 @@
   border-color: var(--accessible-yellow) !important;
 }
 
-:root[data-color-mode="accessible"] #actions button {
+:root[data-color-mode="accessible"] #bubble #actions button {
   color: var(--accessible-on-accent) !important;
   background: var(--accessible-blue) !important;
   box-shadow: inset 0 0 0 1px var(--accessible-blue);
 }
 
-:root[data-color-mode="accessible"] #actions button:last-child,
-:root[data-color-mode="accessible"] #actions button:hover {
+:root[data-color-mode="accessible"] #bubble #actions button:last-child,
+:root[data-color-mode="accessible"] #bubble #actions button:hover {
   color: var(--accessible-text) !important;
   background: var(--accessible-raised) !important;
   box-shadow: inset 0 0 0 1px var(--accessible-line);
@@ -160,7 +162,7 @@
 :root[data-color-mode="accessible"] .chat-panel {
   background: var(--accessible-panel) !important;
   color: var(--accessible-text) !important;
-  border-color: var(--accessible-line) !important;
+  border: 0;
 }
 
 :root[data-color-mode="accessible"] button:disabled,
@@ -172,10 +174,14 @@
 }
 
 :root[data-color-mode="accessible"] button:focus-visible,
-:root[data-color-mode="accessible"] #quota-label:focus-visible,
-:root[data-color-mode="accessible"] .composer:focus-within {
+:root[data-color-mode="accessible"] #quota-label:focus-visible {
   outline: 2px solid var(--accessible-yellow) !important;
   outline-offset: 2px;
+}
+
+:root[data-color-mode="accessible"][data-input-mode="keyboard"] .composer:focus-within {
+  outline: 2px solid var(--accessible-blue);
+  outline-offset: -2px;
 }
 
 :root[data-color-mode="accessible"] textarea::placeholder {
@@ -216,7 +222,7 @@
   --shadow: none;
 }
 
-:root[data-color-mode="accessible"][data-ui-window="customize"] .segmented button[aria-pressed="true"] {
+:root[data-color-mode="accessible"][data-ui-window="customize"] .segmented:not(.preview-mode) button[aria-pressed="true"] {
   box-shadow: inset 0 0 0 1px var(--accessible-line);
 }
 
@@ -225,8 +231,19 @@
   box-shadow: none;
 }
 
-:root[data-color-mode="accessible"][data-ui-window="customize"] .stage {
-  border-color: var(--accessible-line);
+/* Decorative containers stay quiet; inputs and selected choices retain contrast. */
+:root[data-color-mode="accessible"][data-ui-window="customize"] .stage,
+:root[data-color-mode="accessible"][data-ui-window="customize"] .color-editor,
+:root[data-color-mode="accessible"][data-ui-window="customize"] .manual-controls,
+:root[data-color-mode="accessible"][data-ui-window="customize"] .source-switch,
+:root[data-color-mode="accessible"][data-ui-window="customize"] .shape-option:not([aria-pressed="true"]),
+:root[data-color-mode="accessible"][data-ui-window="customize"] .pet-card:not([aria-pressed="true"]),
+:root[data-color-mode="accessible"][data-ui-window="customize"] .aurora-style-options button:not([aria-pressed="true"]) {
+  border-color: var(--accessible-divider);
+}
+
+:root[data-color-mode="accessible"][data-ui-window="customize"] .aurora-style-options button[aria-pressed="true"] {
+  border-color: var(--accessible-blue);
 }
 
 :root[data-color-mode="accessible"][data-ui-window="customize"] .toast {

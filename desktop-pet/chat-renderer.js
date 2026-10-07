@@ -442,6 +442,7 @@
     enabled[next]?.scrollIntoView({ block: 'nearest' });
   });
   document.addEventListener('pointerdown', event => {
+    document.documentElement.dataset.inputMode = 'pointer';
     if (modelMenuOpen && !modelMenu.contains(event.target) && !byId('model-bar').contains(event.target)) closeModelMenu(false);
   });
   document.addEventListener('focusin', event => {
@@ -478,6 +479,7 @@
   });
   byId('close-chat').addEventListener('click', () => api.close());
   document.addEventListener('keydown', event => {
+    if (['Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) document.documentElement.dataset.inputMode = 'keyboard';
     if (event.defaultPrevented) return;
     if (event.key === 'Escape' && !event.isComposing && !composing && event.keyCode !== 229) {
       event.preventDefault();

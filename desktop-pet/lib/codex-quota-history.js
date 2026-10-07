@@ -89,7 +89,7 @@ function createQuotaHistory({ filePath, now = Date.now, onError = () => {} } = {
     } catch (error) { if (error.code !== 'ENOENT') reportError('HISTORY_READ_FAILED'); }
   }
   function persist() {
-    if (typeof filePath !== 'string') return;
+    if (typeof filePath !== 'string') return true;
     const temporary = `${filePath}.tmp`;
     try {
       let data = JSON.stringify({ version: 1, accounts });
@@ -109,9 +109,11 @@ function createQuotaHistory({ filePath, now = Date.now, onError = () => {} } = {
       fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
       fs.writeFileSync(temporary, data, { mode: 0o600 });
       fs.renameSync(temporary, filePath);
+      return true;
     } catch (_error) {
       try { fs.unlinkSync(temporary); } catch (_ignored) {}
       reportError('HISTORY_WRITE_FAILED');
+      return false;
     }
   }
   function setAccount(value) {
@@ -201,19 +203,26 @@ function createQuotaHistory({ filePath, now = Date.now, onError = () => {} } = {
     saveAccount(account, time);
     return true;
   }
-  function markRead(id, turnId) {
+  function markResultsRead(matches) {
     const time = now();
-    if (closed || !accountKey || !validTime(time) || !isTaskId(id) || (turnId != null && typeof turnId !== 'string')) return false;
+    if (closed || !accountKey || !validTime(time)) return false;
     const account = accounts[accountKey];
-    if (!account) return false;
-    let changed = false;
-    for (const row of account.results) if (row.id === id && (turnId == null || row.turnId === turnId) && row.readAt === null) {
-      row.readAt = time; changed = true;
-    }
-    if (changed) { account.updatedAt = time; persist(); }
-    return changed;
+    const rows = account?.results.filter(row => row.readAt === null && matches(row)) || [];
+    if (!rows.length) return false;
+    const updatedAt = account.updatedAt;
+    rows.forEach(row => { row.readAt = time; });
+    account.updatedAt = time;
+    if (persist()) return true;
+    rows.forEach(row => { row.readAt = null; });
+    account.updatedAt = updatedAt;
+    return false;
   }
-  return { setAccount, record, importSamples, markRead, getState, close() { closed = true; accountKey = null; } };
+  function markRead(id, turnId) {
+    if (!isTaskId(id) || (turnId != null && typeof turnId !== 'string')) return false;
+    return markResultsRead(row => row.id === id && (turnId == null || row.turnId === turnId));
+  }
+  function markAllRead() { return markResultsRead(() => true); }
+  return { setAccount, record, importSamples, markRead, markAllRead, getState, close() { closed = true; accountKey = null; } };
 }
 
 module.exports = { createQuotaHistory };

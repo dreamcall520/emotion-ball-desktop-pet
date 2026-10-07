@@ -52,6 +52,7 @@ function fixture(overrides = {}) {
   const elements = new Map();
   const get = id => { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); };
   const document = new Element();
+  document.documentElement = new Element();
   document.getElementById = get;
   document.createElement = () => new Element();
   document.createElementNS = () => new Element();

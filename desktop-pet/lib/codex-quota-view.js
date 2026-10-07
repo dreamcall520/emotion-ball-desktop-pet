@@ -241,7 +241,7 @@ function buildQuotaLabelModel(snapshot, options = {}, now = Date.now()) {
   return model;
 }
 
-function buildTrend(snapshot, window, now) {
+function buildTrend(snapshot, window, now, resetOpportunities = null) {
   const unknown = { state: 'unknown', status: 'unknown', exhaustsAt: null, label: '',
     summary: '暂无法预估额度用完时间', detail: '连续用量记录不足，稍后再查看' };
   const base = { period: window?.windowMinutes ?? null,
@@ -292,6 +292,13 @@ function buildTrend(snapshot, window, now) {
       : status === 'tight' ? '预计够用到重置' : '额度充裕',
     detail: status === 'risk' ? `早于 ${base.resetLabel} 重置`
       : status === 'tight' ? '刚够，留意用量' : '预计够用到重置' };
+  // These are normalized output rows, not the source snapshot. Reuse only the
+  // rate that passed every existing forecast gate; never project across reset.
+  for (const row of resetOpportunities || []) {
+    if (row.status !== 'available' || row.resetType !== 'codexRateLimits'
+      || !validNow(row.expiresAt) || row.expiresAt <= now || row.expiresAt >= window.resetsAt) continue;
+    row.estimatedRemaining = Math.max(0, Math.min(100, window.remaining - rate * (row.expiresAt - now)));
+  }
   return base;
 }
 
@@ -325,14 +332,19 @@ function buildCodexDetailsModel(snapshot, options = {}, now = Date.now()) {
         .includes(row.state) ? row.state : 'unknown',
       turnId: typeof row.turnId === 'string' ? row.turnId.slice(0, 160) : null,
       updatedAt: validNow(row.updatedAt) ? row.updatedAt : null }));
+  const resetOpportunities = rows === null ? null : rows.filter(row => row.status !== 'redeemed'
+    && !(typeof row.expiresAt === 'number' && row.expiresAt <= now));
+  const trend = buildTrend(snapshot, selectedWindow, now,
+    fresh && details.resetCreditsAvailable !== 0 ? resetOpportunities : null);
+  const quotaUpdatedAt = snapshot?.enabled === true && validNow(now)
+    && validNow(snapshot.quota?.updatedAt) && snapshot.quota.updatedAt <= now ? snapshot.quota.updatedAt : null;
   return { ...model, action: reasonableText(safeOptions.action) ? safeOptions.action.slice(0, 40) : 'trend',
+    observedAt: now, quotaUpdatedAt,
     period, appearance: ['light', 'dark', 'system'].includes(safeOptions.appearance) ? safeOptions.appearance : 'system',
     ...details, activity: buildActivity(snapshot), tasks,
     results: safeResults(snapshot).filter(row => row.readAt === null),
     resetDetailsState: rows === null ? 'unknown' : 'known',
-    resetOpportunities: rows === null ? null : rows.filter(row => row.status !== 'redeemed'
-      && !(typeof row.expiresAt === 'number' && row.expiresAt <= now)),
-    resetHistory, accountResetHistory, trend: buildTrend(snapshot, selectedWindow, now) };
+    resetOpportunities, resetHistory, accountResetHistory, trend };
 }
 
 module.exports = {

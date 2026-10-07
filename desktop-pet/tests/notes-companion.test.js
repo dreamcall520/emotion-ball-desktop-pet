@@ -10,7 +10,7 @@ const M = require('../lib/notes-model');
 const { createNotesCompanion, visibleBounds } = require('../lib/notes-companion');
 const { petVisualBounds } = require('../lib/pet-visual-bounds');
 
-function fixture(t, initial, getDefaultTab, organizer, getAppearance, getColorMode) {
+function fixture(t, initial, getDefaultTab, organizer, getAppearance, getColorMode, getWindowObstacles) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qiu-notes-window-'));
   const file = path.join(dir, 'notes.json');
   if (initial) fs.writeFileSync(file, JSON.stringify(initial));
@@ -47,6 +47,8 @@ function fixture(t, initial, getDefaultTab, organizer, getAppearance, getColorMo
     setAlwaysOnTop(value) { this.pinned = value; }
     isAlwaysOnTop() { return this.pinned === true; }
     getBounds() { return { ...this.bounds }; }
+    getMinimumSize() { return this.minimumSize || [this.options.minWidth, this.options.minHeight]; }
+    setMinimumSize(width, height) { this.minimumSize = [width, height]; }
     setBounds(bounds) { this.bounds = { ...bounds }; this.boundsWrites = (this.boundsWrites || 0) + 1; }
   }
   const ipc = Object.assign(new EventEmitter(), { handle: (channel, fn) => handlers.set(channel, fn), removeHandler: channel => handlers.delete(channel) });
@@ -61,7 +63,7 @@ function fixture(t, initial, getDefaultTab, organizer, getAppearance, getColorMo
     clipboard: { writeText: text => clipboard.push(text) },
     dialog: { showSaveDialog: async () => ({ canceled: true }), showMessageBox: async (...args) => { dialogs.push(args.at(-1)); dialogCalls.push(args); return dialogResult; } },
     getPetBounds: () => pet.destroyed ? null : pet.getBounds(), getPetWindow: () => pet,
-    getPetPresentation: () => ({ shape: 'aurora-cloud' }), getDefaultTab, getAppearance, getColorMode, organizer, onError: error => errors.push(error),
+    getWindowObstacles, getPetPresentation: () => ({ shape: 'aurora-cloud' }), getDefaultTab, getAppearance, getColorMode, organizer, onError: error => errors.push(error),
     onComplete: id => completions.push(id), now: () => clock,
     setTimer: fn => { tick = fn; return { unref() {} }; }, clearTimer: () => { tick = null; }, closeTimeoutMs: 50 });
   t.after(async () => {
@@ -87,6 +89,42 @@ test('notes windows deny unrelated/subframe/navigation IPC and use isolated loca
   assert.equal((await f.handlers.get('notes:copy')({ sender: panel.webContents, senderFrame: {} }, 'secret')).ok, false);
   panel.url = 'https://example.test/';
   assert.equal((await f.call(panel, 'notes:copy', 'secret')).ok, false); assert.equal(f.clipboard.length, 0);
+});
+
+test('panel opens follow the current pet display, including loading and reopening a dragged/resized panel', t => {
+  const f = fixture(t), primary = f.screen.area, external = { x: 1440, y: -300, width: 1920, height: 1080 };
+  f.screen.getDisplayMatching = rect => ({ workArea: rect.x >= 1440 ? external : primary });
+  const inside = area => {
+    const b = panel.getBounds();
+    assert.ok(b.x >= area.x && b.y >= area.y && b.x + b.width <= area.x + area.width && b.y + b.height <= area.y + area.height);
+  };
+  const panel = f.controller.openPanel({ tab: 'note', create: true });
+  inside(primary); // 球球贴着两屏接缝，面板不能按候选位置误选邻屏。
+  f.pet.bounds = { x: 3200, y: 600, width: 80, height: 80 };
+  f.ready(panel); inside(external);
+  panel.setBounds({ x: 1500, y: 0, width: 460, height: 560 }); panel.hide();
+  f.pet.bounds = { x: 100, y: 100, width: 80, height: 80 };
+  assert.equal(f.controller.openPanel({ tab: 'todo' }), panel); inside(primary);
+  assert.equal(panel.bounds.width, 460); assert.equal(panel.bounds.height, 560);
+  assert.equal(panel.sent.filter(([channel]) => channel === 'notes:open').at(-1)[1].tab, 'todo');
+  panel.setBounds({ x: 500, y: 200, width: 460, height: 560 });
+  f.pet.bounds.x = 300;
+  f.time(f.now());
+  assert.equal(panel.bounds.x, 500, '已经打开的面板仍可自由摆放');
+  f.controller.openPanel();
+  assert.notEqual(panel.bounds.x, 500, '在同一屏复开也重新靠近球球');
+});
+
+test('late ready callbacks never position destroyed or paused panels', t => {
+  const f = fixture(t), closed = f.controller.openPanel();
+  closed.destroy();
+  closed.getMinimumSize = () => { throw Error('Object has been destroyed'); };
+  assert.doesNotThrow(() => f.ready(closed)); assert.equal(closed.isVisible(), false);
+  const panel = f.controller.openPanel(), writes = panel.boundsWrites;
+  f.controller.pause(); f.ready(panel);
+  assert.equal(panel.boundsWrites, writes); assert.equal(panel.isVisible(), false);
+  f.controller.resume(); assert.equal(panel.isVisible(), false);
+  f.controller.openPanel(); assert.equal(panel.isVisible(), true);
 });
 
 test('normal opens use the current default even in an existing panel, explicit routes override it', t => {
@@ -498,4 +536,74 @@ test('accessible note window backing follows both appearance and contrast mode',
   for (const win of windows) assert.equal(win.backgroundColor, '#FFFFFF');
   mode = 'standard'; f.controller.syncAppearance();
   for (const win of windows) assert.equal(win.backgroundColor, '#F7FAF9');
+});
+
+
+test('panel placement reads current visible cards again at ready and reopen', t => {
+  let obstacles = [];
+  const f = fixture(t, undefined, undefined, undefined, undefined, undefined, () => obstacles);
+  f.pet.bounds = { x: 600, y: 80, width: 80, height: 80 };
+  const panel = f.controller.openPanel();
+  assert.equal(panel.getBounds().y, 168);
+  obstacles = [{ x: 576, y: 168, width: 128, height: 32 }];
+  f.ready(panel); assert.equal(panel.getBounds().y, 208);
+  obstacles.push({ x: 576, y: 208, width: 128, height: 32 });
+  panel.hide(); f.controller.openPanel(); assert.equal(panel.getBounds().y, 248);
+  obstacles = []; panel.hide(); f.controller.openPanel(); assert.equal(panel.getBounds().y, 168);
+});
+
+test('panel desktop display uses its own screen for new and closed notes, preserving live/restored positions', async t => {
+  const f = fixture(t), primary = f.screen.area, external = { x: -1920, y: -300, width: 1920, height: 1080 };
+  f.screen.getDisplayMatching = rect => ({ workArea: rect.x < 0 ? external : primary });
+  const store = f.controller.getStore(), panel = f.ready(f.controller.openPanel());
+  const old = M.newNote('closed with old primary position', '', f.now()), fresh = M.newNote('new', '', f.now());
+  old.windowBounds = { x: 100, y: 200, width: 320, height: 300 };
+  store.update(state => { state.notes.push(old, fresh); return state; });
+  panel.setBounds({ x: -1800, y: -200, width: 380, height: 520 });
+  for (const item of [old, fresh]) {
+    assert.equal((await f.call(panel, 'notes:open-note', item.id)).ok, true);
+    const win = f.ready(f.controller.getWindows().notes.at(-1)), bounds = win.getBounds();
+    assert.ok(bounds.x >= external.x && bounds.y >= external.y && bounds.x + bounds.width <= 0 && bounds.y + bounds.height <= 780);
+    assert.equal(bounds.width, item === old ? 320 : 300); assert.equal(bounds.height, item === old ? 300 : 220);
+    assert.deepEqual(store.getState().notes.find(note => note.id === item.id).windowBounds, bounds);
+    // 同屏查看便签只聚焦，保留用户手动摆放的位置。
+    win.setBounds({ ...bounds, x: -1300, y: 200 });
+    await f.call(panel, 'notes:open-note', item.id);
+    assert.equal(win.getBounds().x, -1300);
+  }
+  store.update(state => { state.notes.push({ ...M.newNote('automatic restore', '', f.now()), desktopOpen: true,
+    windowBounds: { x: 350, y: 400, width: 320, height: 300 } }); return state; });
+  assert.equal(f.controller.getWindows().notes.at(-1).getBounds().x, 350, '自动恢复继续使用保存位置');
+});
+
+
+test('explicit panel display moves an already-restored note from another screen only after saving', async t => {
+  const f = fixture(t), primary = { id: 1, workArea: f.screen.area }, external = { id: 2,
+    workArea: { x: -1920, y: -300, width: 1920, height: 1080 } };
+  f.screen.getDisplayMatching = rect => rect.x < 0 ? external : primary;
+  const savedBounds = { x: 100, y: 200, width: 460, height: 350 };
+  const item = { ...M.newNote('already on desktop from previous version', '', f.now()), desktopOpen: true, windowBounds: savedBounds };
+  const store = f.controller.getStore();
+  store.update(state => { state.notes.push(item); return state; });
+  const win = f.ready(f.controller.getWindows().notes[0]), panel = f.ready(f.controller.openPanel());
+  panel.setBounds({ x: -1800, y: -200, width: 380, height: 520 });
+  assert.deepEqual(win.getBounds(), savedBounds, '启动自动恢复不搬动便签');
+  f.controller.openNote(item.id); assert.deepEqual(win.getBounds(), savedBounds, '非面板入口仍保留位置');
+  const rename = fs.renameSync; fs.renameSync = () => { throw Error('disk failed'); };
+  try {
+    assert.equal((await f.call(panel, 'notes:open-note', item.id)).ok, false);
+    assert.deepEqual(win.getBounds(), savedBounds, '存储失败时不先移动窗口');
+  } finally { fs.renameSync = rename; }
+  assert.equal((await f.call(panel, 'notes:open-note', item.id)).ok, true);
+  assert.equal(f.controller.getWindows().notes[0], win, '直接移动原有便签窗口，不创建副本');
+  const relocated = win.getBounds();
+  assert.equal(f.screen.getDisplayMatching(relocated).id, external.id);
+  assert.deepEqual([relocated.width, relocated.height], [460, 350]);
+  assert.deepEqual(store.getState().notes[0].windowBounds, relocated);
+  assert.deepEqual(JSON.parse(fs.readFileSync(f.file)).notes[0].windowBounds, relocated, '新位置已持久化');
+  win.setBounds({ ...relocated, x: -1200, y: 200 });
+  await f.call(panel, 'notes:open-note', item.id); assert.equal(win.getBounds().x, -1200, '同屏展示保留手动位置');
+  panel.setBounds({ x: 200, y: 200, width: 380, height: 520 });
+  await f.call(panel, 'notes:open-note', item.id);
+  assert.equal(f.screen.getDisplayMatching(win.getBounds()).id, primary.id, '再次显式展示可随面板回到另一屏');
 });

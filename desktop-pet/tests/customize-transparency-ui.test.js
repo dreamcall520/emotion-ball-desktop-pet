@@ -194,6 +194,7 @@ test('幻彩云禁用手动微调，但透明度仍可独立调整', async () =>
   const f = await fixture({ shape: 'aurora-cloud', auroraTransparency: 51 });
   assert.equal(f.get('manual-toggle').disabled, true);
   assert.equal(f.get('manual-hint').textContent, '为了保持完整的动效体验，暂不支持轮廓与五官微调');
+  assert.equal(f.get('manual-hint').hidden, false);
   assert.equal(f.get('manual-controls').hidden, true);
   assert.equal(f.get('aurora-transparency-field').hidden, false);
   assert.equal(f.get('aurora-transparency-value').textContent, '51%');

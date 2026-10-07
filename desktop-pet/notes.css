@@ -75,7 +75,7 @@ dialog.compact-actions{width:300px;padding:12px;border-radius:11px}
 .organize-entry{font-size:12px;color:var(--accent-text);padding:3px 0;margin-top:1px}.organize-entry:before{content:"✦";margin-right:5px}#organize details{border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-size:12px;color:var(--muted)}#organize summary{cursor:pointer}#organize pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.7;color:var(--text);max-height:145px;overflow:auto;margin:10px 0 0}#organize-result{margin-top:13px}#organize-result-body{min-height:155px}#organize .dialog-footer{flex-wrap:wrap;gap:7px}#organize .dialog-footer button{font-size:12px;padding:8px 10px}
 #organize[open]{display:flex;flex-direction:column;overflow:hidden}#organize>*{flex-shrink:0}#organize .dialog-header{margin-bottom:9px}#organize-result{flex-shrink:1;min-height:0;overflow:auto}#organize-result-body{min-height:98px;height:112px}#organize .error-text:empty{display:none}#organize .dialog-footer{margin-top:8px}
 
-.note-row{display:grid;grid-template-columns:minmax(0,1fr) 22px;column-gap:11px;row-gap:0}.note-row .record-content{display:contents}.note-row .record-heading{grid-column:1;grid-row:1}.note-row>.record-more{grid-column:2;grid-row:1}.note-row .note-preview,.note-row .note-meta{grid-column:1/-1}
+.note-row{display:grid;grid-template-columns:minmax(0,1fr) 24px;column-gap:11px;row-gap:0}.note-row .record-content{display:contents}.note-row .record-heading{grid-column:1;grid-row:1}.note-row>.record-more{grid-column:2;grid-row:1}.note-row .note-preview,.note-row .note-meta{grid-column:1/-1}
 
 #progress-text{flex:none;font-size:11px;line-height:18px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}#progress-text .completed-count{color:var(--accent-text);font-weight:600;font-variant-numeric:tabular-nums}
 
@@ -134,6 +134,11 @@ body:has(dialog[open]) :is(.panel-header,.note-toolbar,.reminder-top),dialog,dia
 .quick-add .quick-actions{grid-column:1;grid-row:2;display:flex;align-items:center;justify-content:space-between;gap:8px}.quick-add .quick-actions .quick-category-picker{max-width:100%}
 
 .quick-properties{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;flex:1}.quick-actions .send-button{flex:none;align-self:flex-end}.quick-option{display:flex;align-items:center;gap:4px;max-width:100%;height:28px;padding:3px 6px;border:0;border-radius:5px;background:transparent;color:var(--muted);font-size:11px;white-space:nowrap}.quick-option span{overflow:hidden;text-overflow:ellipsis}.quick-option svg{flex:none;width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.quick-option:hover{background:#F0F7F3}.quick-option.is-set{color:var(--accent-text)}.timing-shortcuts{display:flex;gap:7px}.timing-shortcuts button{padding:5px 10px;border:0;border-radius:6px;background:#F0F7F3;color:#52685C;font-size:12px}#quick-reminder-clear{margin-right:auto}.field-select{display:block;position:relative;margin-top:6px}.category-dialog .field-select select{appearance:none;margin:0;height:36px;padding:7px 34px 7px 12px}.field-select svg{position:absolute;right:12px;top:50%;transform:translateY(-50%);width:12px;height:12px;fill:none;stroke:var(--muted);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}.category-dialog .dialog-footer :is(.primary,.secondary){min-height:34px;display:inline-flex;align-items:center;justify-content:center;padding:7px 13px;line-height:18px}.category-dialog .date-pair{gap:12px}.category-dialog .date-pair input{min-width:0}
+
+/* Keep the scrollbar clear of row actions and fade it between interactions. */
+.records{scrollbar-gutter:stable;padding-right:12px;scrollbar-color:transparent transparent;transition:scrollbar-color .18s}
+.records:is([data-scrolling="true"],:active){scrollbar-color:var(--muted) transparent}
+@media(prefers-reduced-motion:reduce){.records{transition:none}}
 
 /* Match the chat composer edge treatment and slower input orbit. */
 @property --input-beam-angle {
@@ -295,10 +300,20 @@ dialog .dialog-footer{position:sticky;bottom:0;z-index:1;background:var(--surfac
 .category-menu-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 8px 6px;margin-bottom:4px;border-bottom:1px solid var(--line);color:var(--muted);font-size:11px}
 .filter-popover .category-manage{width:auto;min-height:24px;padding:3px 5px;color:var(--accent-text);font-size:11px;font-weight:500}
 .group-label{min-width:0}.group-label h2{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-/* Keep the high-contrast stroke inside macOS's native corner mask. */
-:root[data-color-mode="accessible"] body{background:transparent;border-radius:18px}
-:root[data-color-mode="accessible"] :is(.panel,.desktop-note){border-radius:18px}
-:root[data-color-mode="accessible"] body[data-mode="reminder"]{border-radius:0}
+/* Native windows clip the corners; a second CSS frame leaves a backing fringe. */
+:root[data-color-mode="accessible"] body{background:var(--accessible-panel);border-radius:0}
+:root[data-color-mode="accessible"] :is(.panel,.desktop-note){border:0;border-radius:0}
+:root[data-color-mode="accessible"] :is(.record,.section-heading,.action-separator,.category-menu-heading,dialog,.filter-popover){border-color:var(--accessible-divider)}
+:root[data-color-mode="accessible"] .tabs{border-color:transparent;background:var(--accessible-surface)}
+:root[data-color-mode="accessible"] .tabs button{border-color:transparent;font-weight:500}
+:root[data-color-mode="accessible"] .tabs .active{font-weight:650}
+:root[data-color-mode="accessible"] .compact-actions .actions-list button{background:transparent;color:var(--accessible-text)}
+:root[data-color-mode="accessible"] dialog.compact-actions{border-color:var(--accessible-divider)}
+:root[data-color-mode="accessible"] .compact-actions .actions-list button:hover{background:var(--accessible-raised);color:var(--accessible-blue)}
+:root[data-color-mode="accessible"] .compact-actions .actions-list .danger{color:var(--accessible-yellow)}
+:root[data-color-mode="accessible"] .compact-actions .actions-list .danger:hover{background:var(--accessible-warning);color:var(--accessible-yellow)}
+:root[data-color-mode="accessible"] .dialog-header .icon-button{border:0;border-radius:6px;background:transparent}
+:root[data-color-mode="accessible"] .dialog-header .icon-button:hover{background:var(--accessible-raised)}
 :root[data-color-mode="accessible"] :is(.tabs button,.filter-popover button){color:var(--accessible-text)}
 :root[data-color-mode="accessible"] :is(.filter-trigger[aria-expanded=true],.filter-popover button:hover,.category-manage:hover,.collapse-button:hover,.new-button:hover,.search-toggle:hover,.search-toggle[aria-expanded=true],.filter-control:hover,.category-row .icon-button:hover,.move-option:hover,.quick-add .quick-category-picker:hover,.quick-option:hover){background:var(--accessible-raised);color:var(--accessible-blue)}
 :root[data-color-mode="accessible"] .filter-popover :is(.view-check,.category-manage),:root[data-color-mode="accessible"] .category-add{color:var(--accessible-blue)}

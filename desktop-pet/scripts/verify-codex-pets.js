@@ -60,10 +60,42 @@ async function verifyCodexPets({ pet, customize, openCustomization, openChat, ge
     value.state.codexPetId === id, '桌面导入图已绘制');
   const capture = (window, name) => capturePaintedWindow({ win: window, artifactPath: path.join(output, `${name}.png`) });
   const checks = [];
+  let idleCadence = null;
   let actualPetsObserved = 0;
   assert.equal(await page("document.querySelector('#source-ball').getAttribute('aria-pressed')"), 'true', '打开默认球球来源');
   checks.push('default ball source');
   if (phase === 'save') await capture(customize, 'customizer-ball-sections');
+
+  async function verifyIdleCadence(chatWindow) {
+    const targets = [[customize,'#stage .codex-pet-sprite','preview'],[pet,'#pet .codex-pet-sprite','desktop'],[chatWindow,'#chat-avatar .codex-pet-sprite','chat']];
+    const rows = await Promise.all(targets.map(async ([win,selector,surface]) => {
+      win.webContents.setBackgroundThrottling(false);
+      const samples = await win.webContents.executeJavaScript(`new Promise((resolve,reject) => {
+        const canvas=document.querySelector(${JSON.stringify(selector)}), samples=[];
+        if(!canvas || canvas.dataset.codexAction!=='idle')return reject(Error('Idle sprite required'));
+        let last=canvas.dataset.codexFrame;
+        const observer=new MutationObserver(() => {
+          const frame=Number(canvas.dataset.codexFrame);
+          if(canvas.dataset.codexAction!=='idle'){stop();reject(Error('Idle action changed'));return;}
+          if(String(frame)===last)return;last=String(frame);
+          if(!samples.length && frame!==0)return;
+          samples.push({frame,at:performance.now()});
+          if(samples.length===7){stop();resolve(samples);}
+        });
+        const timer=setTimeout(()=>{stop();reject(Error('Idle cadence timed out'));},18000);
+        const stop=()=>{observer.disconnect();clearTimeout(timer);};
+        observer.observe(canvas,{attributes:true,attributeFilter:['data-codex-frame']});
+      })`);
+      assert.deepEqual(samples.map(sample=>sample.frame),[0,1,2,3,4,5,0], surface+'完整待机循环');
+      const intervals=samples.slice(1).map((sample,index)=>sample.at-samples[index].at), expected=[1680,660,660,840,840,1920];
+      intervals.forEach((ms,index)=>assert.ok(Math.abs(ms-expected[index])<=180, surface+'第'+index+'帧保留Codex节奏: '+ms));
+      const cycleMs=samples.at(-1).at-samples[0].at;
+      assert.ok(Math.abs(cycleMs-6600)<=300, surface+'待机一轮6.6秒');
+      return {surface,intervals,cycleMs};
+    }));
+    checks.push('native 6.6s idle cadence in preview / desktop / chat');
+    return rows;
+  }
 
   async function verifyChat(id) {
     await openChat();
@@ -221,6 +253,7 @@ async function verifyCodexPets({ pet, customize, openCustomization, openChat, ge
     const copied = store.getImported(startupId);
     assert.notEqual(copied.spritesheetPath, last.spritesheetPath); assert.equal(digest(copied.spritesheetPath), digest(last.spritesheetPath));
     await readyDesktop(startupId); const chat = await verifyChat(startupId);
+    idleCadence = await verifyIdleCadence(chat);
     await capture(pet, 'desktop-imported');
     await choose(temporaryPet); await page("document.querySelector('#startup-default').checked=false"); await click('#save');
     await waitFor(() => getSettings().customization.appearance.codexPetId, id => typeof id === 'string' && id !== startupId && id !== temporaryPet.id, '临时形象已导入');
@@ -273,15 +306,16 @@ async function verifyCodexPets({ pet, customize, openCustomization, openChat, ge
       })()`), view => view.background === (resolved === 'light' ?
         (view.dark ? 'rgb(32, 43, 54)' : 'rgb(243, 246, 249)') :
         (view.dark ? 'rgb(237, 242, 248)' : 'rgb(37, 49, 61)')), '晴空蓝样式加载完成');
-      const visual = await page(`(() => {
+      const visual = await waitFor(() => page(`(() => {
         const selected = document.querySelector('.pet-card[aria-pressed=true]'), stage = document.querySelector('#stage'), range = document.querySelector('#pet-opacity');
         const style = selected && getComputedStyle(selected), dimensions = document.querySelector('#pet-grid');
         return { root: {...document.documentElement.dataset}, selected: selected && {id:selected.dataset.petId, border:style.borderColor, background:style.backgroundColor, color:style.color},
           stage:getComputedStyle(stage).backgroundColor, stageDark:stage.classList.contains('dark'),
+          ordinaryBorders:[...document.querySelectorAll('.pet-card[aria-pressed=false], .shape-option[aria-pressed=false]')].map(el=>getComputedStyle(el).borderTopColor),
           columns:getComputedStyle(dimensions).gridTemplateColumns.split(' ').length,
           selects:['pet-action','pet-size'].map(id=>({id,color:getComputedStyle(document.getElementById(id)).color, background:getComputedStyle(document.getElementById(id)).backgroundColor, arrow:getComputedStyle(document.getElementById(id)).backgroundImage})),
           opacity:Number(range.value), fill:range.style.getPropertyValue('--range-fill'), saveColor:getComputedStyle(document.querySelector('#save')).color };
-      })()`);
+      })()`), view => mode !== 'accessible' || view.ordinaryBorders.every(border => border === (resolved === 'dark' ? 'rgb(51, 67, 82)' : 'rgb(217, 225, 233)')), '色弱卡片边界过渡完成');
       assert.ok(visual.selected, '切换主题保留选中宠物'); assert.equal(visual.columns, 3);
       assert.equal(visual.fill, visual.opacity / 60 * 100 + '%', '透明度轨道与当前位置一致');
       if (theme === 'blue' && mode === 'standard') assert.equal(visual.stage,
@@ -289,6 +323,9 @@ async function verifyCodexPets({ pet, customize, openCustomization, openChat, ge
         (visual.stageDark ? 'rgb(237, 242, 248)' : 'rgb(37, 49, 61)'), '蓝色预览底未被新增CSS覆盖');
       let texts;
       if (mode === 'accessible') {
+        assert.ok(visual.ordinaryBorders.length > 1, '真实宠物库与形态卡片均存在');
+        for (const border of visual.ordinaryBorders) assert.equal(border, resolved === 'dark' ? 'rgb(51, 67, 82)' : 'rgb(217, 225, 233)', '两类普通卡片使用一致的轻边界');
+        assert.ok(contrast(visual.selected.border, resolved === 'dark' ? 'rgb(16, 24, 32)' : 'rgb(255, 255, 255)') >= 3, '选中宠物保留清晰边界');
         texts = await textStyles(customize, [
           {label:'source-tab',selector:'#source-codex'}, {label:'pet-name',selector:'.pet-card[aria-pressed=true] .pet-name'},
           {label:'ordinary-pet',selector:'.pet-card[aria-pressed=false] .pet-name'}, {label:'selected-check',selector:'.pet-card[aria-pressed=true] .selection-mark'},
@@ -317,7 +354,7 @@ async function verifyCodexPets({ pet, customize, openCustomization, openChat, ge
   assert.deepEqual(errors, [], '没有原生页面加载失败');
   fs.writeFileSync(path.join(output, `report-${phase}.json`), JSON.stringify({ ok: true, packaged,
     isolatedUserData: true, sourceFixtures: phase === 'local' ? 0 : 30, actualPetsObserved,
-    actualModelCalls: 0, phase, checks, themeChecks }, null, 2));
+    actualModelCalls: 0, phase, checks, themeChecks, idleCadence }, null, 2));
   process.stdout.write(`PET_CODEX_PETS_${phase.toUpperCase()}_OK\n`);
   return { checks };
 }
