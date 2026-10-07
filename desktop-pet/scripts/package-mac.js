@@ -119,6 +119,7 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/lib/companion-behavior.js',
     'desktop-pet/lib/codex-state.js',
     'desktop-pet/lib/codex-rpc.js',
+    'desktop-pet/lib/codex-usage-history.js',
     'desktop-pet/lib/codex-frame.js',
     'desktop-pet/lib/codex-stream.js',
     'desktop-pet/lib/codex-connection.js',

@@ -8,12 +8,40 @@ const MAX_ACCOUNTS = 4;
 const MAX_CYCLES = 8;
 const MAX_SAMPLES = Object.freeze({ 300: 192, 10080: 6000 });
 const MAX_RESULTS = 64;
+const MAX_IMPORT_SAMPLES = 12000;
+const RESET_TOLERANCE_MS = 1000;
 const STALE_MS = 300000;
 const MIN_SAMPLE_MS = 60000;
 const validTime = value => Number.isSafeInteger(value) && value >= 0 && value <= 8640000000000000;
 const validRemaining = value => Number.isFinite(value) && value >= 0 && value <= 100;
 const clone = value => JSON.parse(JSON.stringify(value));
 const blankAccount = () => ({ updatedAt: 0, windows: [], results: [], resetHistory: [] });
+
+const validCycle = row => typeof row?.id === 'string' && row.id.length <= 200 && row.id.startsWith('codex:')
+  && [300, 10080].includes(row.windowMinutes) && validTime(row.resetsAt);
+const sameCycle = (row, window) => row.id === window.id && row.windowMinutes === window.windowMinutes
+  && Math.abs(row.resetsAt - window.resetsAt) <= RESET_TOLERANCE_MS;
+
+function mergeSamples(samples, cycle) {
+  const byTime = new Map();
+  for (const sample of samples) {
+    if (validTime(sample?.at) && validRemaining(sample.remaining)
+      && sample.at >= cycle.resetsAt - cycle.windowMinutes * 60000 - RESET_TOLERANCE_MS
+      && sample.at <= cycle.resetsAt + RESET_TOLERANCE_MS) {
+      byTime.set(sample.at, { at: sample.at, remaining: sample.remaining });
+    }
+  }
+  return [...byTime.values()].sort((a, b) => a.at - b.at).slice(-MAX_SAMPLES[cycle.windowMinutes]);
+}
+
+function cycleFor(account, window) {
+  const matches = account.windows.filter(row => sameCycle(row, window));
+  const cycle = matches[0] || { id: window.id, windowMinutes: window.windowMinutes,
+    resetsAt: window.resetsAt, samples: [] };
+  if (matches.length > 1) cycle.samples = mergeSamples(matches.flatMap(row => row.samples), cycle);
+  account.windows = [...account.windows.filter(row => !matches.includes(row)), cycle];
+  return cycle;
+}
 
 function safeResult(row) {
   if (!isTaskId(row?.id) || typeof row.turnId !== 'string' || !row.turnId || row.turnId.length > 160
@@ -26,15 +54,10 @@ function safeAccount(raw) {
   const account = blankAccount();
   account.updatedAt = validTime(raw?.updatedAt) ? raw.updatedAt : 0;
   for (const row of Array.isArray(raw?.windows) ? raw.windows.slice(-MAX_CYCLES) : []) {
-    if (typeof row?.id !== 'string' || row.id.length > 200 || !row.id.startsWith('codex:')
-      || ![300, 10080].includes(row.windowMinutes) || !validTime(row.resetsAt)) continue;
-    let previousAt = -1;
-    const samples = (Array.isArray(row.samples) ? row.samples.slice(-MAX_SAMPLES[row.windowMinutes]) : []).flatMap(sample => {
-      if (!validTime(sample?.at) || sample.at <= previousAt || !validRemaining(sample.remaining)) return [];
-      previousAt = sample.at;
-      return [{ at: sample.at, remaining: sample.remaining }];
-    });
-    account.windows.push({ id: row.id, windowMinutes: row.windowMinutes, resetsAt: row.resetsAt, samples });
+    if (!validCycle(row)) continue;
+    const cycle = cycleFor(account, row);
+    cycle.samples = mergeSamples([...cycle.samples,
+      ...(Array.isArray(row.samples) ? row.samples.slice(-MAX_SAMPLES[row.windowMinutes]) : [])], cycle);
   }
   const keys = new Set();
   for (const rawRow of Array.isArray(raw?.results) ? raw.results.slice(-MAX_RESULTS) : []) {
@@ -100,6 +123,41 @@ function createQuotaHistory({ filePath, now = Date.now, onError = () => {} } = {
     return clone(account ? { available: true, windows: account.windows, results: account.results, resetHistory: account.resetHistory }
       : { available: accountKey !== null, windows: [], results: [], resetHistory: [] });
   }
+  function saveAccount(account, time) {
+    account.updatedAt = time;
+    account.windows = account.windows.slice(-MAX_CYCLES);
+    accounts[accountKey] = account;
+    const ordered = Object.entries(accounts).sort((a, b) => b[1].updatedAt - a[1].updatedAt);
+    accounts = Object.fromEntries(ordered.slice(0, MAX_ACCOUNTS));
+    persist();
+  }
+  function importSamples(trustedWindows, samples) {
+    const time = now();
+    if (closed || !accountKey || !validTime(time) || !Array.isArray(samples)
+      || samples.length > MAX_IMPORT_SAMPLES) return false;
+    const trusted = (Array.isArray(trustedWindows) ? trustedWindows.slice(0, 64) : [])
+      .filter(window => validCycle(window) && window.resetsAt > time);
+    const account = accounts[accountKey] || blankAccount();
+    const before = JSON.stringify(account);
+    const imported = new Map();
+    for (const sample of samples) {
+      if (!validCycle(sample) || !validTime(sample.at) || sample.at > time || !validRemaining(sample.remaining)) continue;
+      const window = trusted.find(row => sameCycle(row, sample)
+        && sample.at >= row.resetsAt - row.windowMinutes * 60000);
+      if (!window) continue;
+      const key = JSON.stringify([window.id, window.windowMinutes, window.resetsAt]);
+      if (!imported.has(key)) imported.set(key, { window, samples: [] });
+      imported.get(key).samples.push({ at: sample.at, remaining: sample.remaining });
+    }
+    for (const group of imported.values()) {
+      const cycle = cycleFor(account, group.window);
+      // Local observations win when a rollout repeats an already sampled timestamp.
+      cycle.samples = mergeSamples([...group.samples, ...cycle.samples], cycle);
+    }
+    if (JSON.stringify(account) === before) return false;
+    saveAccount(account, time);
+    return true;
+  }
   function record(snapshot) {
     const time = now();
     if (closed || !accountKey || snapshot?.enabled !== true || !validTime(time)) return false;
@@ -110,21 +168,15 @@ function createQuotaHistory({ filePath, now = Date.now, onError = () => {} } = {
       && quota.updatedAt <= time && time - quota.updatedAt < STALE_MS) {
       const at = quota.updatedAt;
       for (const window of Array.isArray(quota.windows) ? quota.windows.slice(0, 64) : []) {
-        if (typeof window?.id !== 'string' || !window.id.startsWith('codex:') || window.id.length > 200
-          || ![300, 10080].includes(window.windowMinutes) || !validRemaining(window.remaining)
-          || !validTime(window.resetsAt) || window.resetsAt <= time) continue;
-        let cycle = account.windows.find(row => row.id === window.id && row.windowMinutes === window.windowMinutes
-          && row.resetsAt === window.resetsAt);
-        if (!cycle) {
-          cycle = { id: window.id, windowMinutes: window.windowMinutes, resetsAt: window.resetsAt, samples: [] };
-          account.windows.push(cycle);
-        } else account.windows = [...account.windows.filter(row => row !== cycle), cycle];
+        if (!validCycle(window) || !validRemaining(window.remaining) || window.resetsAt <= time
+          || at < window.resetsAt - window.windowMinutes * 60000) continue;
+        const cycle = cycleFor(account, window);
         const previous = cycle.samples.at(-1);
         if (previous && at <= previous.at) continue;
-        // A reset/correction, large balance jump, or gap must not look like consumption.
-        if (previous && (window.remaining > previous.remaining || previous.remaining - window.remaining >= 25
-          || at - previous.at >= STALE_MS)) cycle.samples = [];
-        else if (previous && at - previous.at < MIN_SAMPLE_MS) continue;
+        // Retain interruptions/corrections; the trend and forecast split at these boundaries.
+        const interrupted = previous && (window.remaining > previous.remaining
+          || previous.remaining - window.remaining >= 25 || at - previous.at >= STALE_MS);
+        if (previous && !interrupted && at - previous.at < MIN_SAMPLE_MS) continue;
         cycle.samples.push({ at, remaining: window.remaining });
         cycle.samples = cycle.samples.slice(-MAX_SAMPLES[window.windowMinutes]);
       }
@@ -146,11 +198,7 @@ function createQuotaHistory({ filePath, now = Date.now, onError = () => {} } = {
     }
     account.results = account.results.slice(-MAX_RESULTS);
     if (JSON.stringify(account) === before) return false;
-    account.updatedAt = time;
-    accounts[accountKey] = account;
-    const ordered = Object.entries(accounts).sort((a, b) => b[1].updatedAt - a[1].updatedAt);
-    accounts = Object.fromEntries(ordered.slice(0, MAX_ACCOUNTS));
-    persist();
+    saveAccount(account, time);
     return true;
   }
   function markRead(id, turnId) {
@@ -165,7 +213,7 @@ function createQuotaHistory({ filePath, now = Date.now, onError = () => {} } = {
     if (changed) { account.updatedAt = time; persist(); }
     return changed;
   }
-  return { setAccount, record, markRead, getState, close() { closed = true; accountKey = null; } };
+  return { setAccount, record, importSamples, markRead, getState, close() { closed = true; accountKey = null; } };
 }
 
 module.exports = { createQuotaHistory };
