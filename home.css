@@ -72,7 +72,7 @@ details[open] .caret { transform: rotate(180deg); }
 .hero-lead { font-size: 16px; color: var(--muted); letter-spacing: .16em; margin: 0 0 34px; }
 .hero-actions { display: flex; flex-direction: column; align-items: center; gap: 18px; }
 .download-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 18px; font-size: 12px; color: var(--muted); }
-.download-button { position: relative; display: inline-flex; justify-content: center; align-items: center; gap: 15px; min-width: 260px; padding: 19px 34px; border-radius: 50px; color: var(--ink); background: var(--nav); border: 1px solid var(--button-edge); box-shadow: 0 9px 30px #2c355111, inset 0 1px 0 var(--button-glow); backdrop-filter: blur(24px); font-size: 18px; font-weight: 500; white-space: nowrap; transition: transform .2s, background .2s; }
+.download-button { position: relative; display: inline-flex; justify-content: center; align-items: center; gap: 15px; min-width: 260px; padding: 19px 34px; border-radius: 50px; color: var(--ink); background: var(--nav); border: 1px solid var(--button-edge); box-shadow: 0 9px 30px #2c355111, inset 0 1px 0 var(--button-glow); backdrop-filter: blur(24px); font-size: 18px; font-weight: 500; white-space: nowrap; transition: transform .2s; }
 .download-button .apple-logo { display: block; flex: none; }
 .download-button.flow-border::before { inset: -2px; padding: 2px; opacity: 1; animation-duration: 6s; }
 .download-button:hover { transform: translateY(-3px); background: var(--menu); }

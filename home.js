@@ -10,9 +10,13 @@
   const canvas = document.querySelector('.scene-material');
   const systemTheme = matchMedia('(prefers-color-scheme: dark)');
   const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
+  let image = document.querySelector('.scene-image');
+  const darkSource = document.querySelector('.scene-dark-source');
+  const lightSource = image.src;
+  let sceneTheme = root.dataset.theme || (systemTheme.matches ? 'dark' : 'light'), themeRequest = 0;
   let paused = false, replyTimer;
   let lastDrop = -Infinity, lastX = NaN, lastY = NaN;
-  let frame = 0, lastFrame = 0, elapsed = 0, gl, program, uniforms, texture;
+  let frame = 0, lastFrame = 0, elapsed = 0, gl, program, uniforms, texture, textureImage;
   let waves = [], imageRect = [0, 0, 1, 1], width = 1, height = 1;
   let blinkAt = 2 + Math.random() * 2, blinkStart = -10, blinkCount = 1;
 
@@ -22,8 +26,9 @@
     root.classList.toggle('motion-paused', stopped());
     cancelAnimationFrame(frame); frame = 0; lastFrame = 0;
     if (stopped()) waves = [];
-    canvas.dataset.state = reduced.matches ? 'reduced' : !gl ? 'static' : stopped() ? 'paused' : 'running';
-    if (gl && texture && image.complete && image.naturalWidth) {
+    const ready = gl && texture && textureImage === image && image.complete && image.naturalWidth;
+    canvas.dataset.state = reduced.matches ? 'reduced' : !ready ? 'static' : stopped() ? 'paused' : 'running';
+    if (ready) {
       draw();
       if (!stopped()) frame = requestAnimationFrame(animate);
     }
@@ -38,20 +43,34 @@
   reduced.addEventListener('change', reconcile);
   document.addEventListener('visibilitychange', reconcile);
 
-  function setTheme(theme) {
-    if (theme === 'auto') delete root.dataset.theme;
-    else root.dataset.theme = theme;
-    for (const source of document.querySelectorAll('.scene-dark-source')) {
-      source.media = theme === 'auto' ? '(prefers-color-scheme: dark)' : theme === 'dark' ? 'all' : 'not all';
+  async function setTheme(theme) {
+    const request = ++themeRequest;
+    const nextTheme = theme === 'auto' ? (systemTheme.matches ? 'dark' : 'light') : theme;
+    themeButton.dataset.choice = theme;
+    let nextImage = image;
+    if (nextTheme !== sceneTheme) {
+      nextImage = image.cloneNode(false);
+      nextImage.src = nextTheme === 'dark' ? darkSource.srcset : lightSource;
+      try { await nextImage.decode(); } catch {}
+      if (request !== themeRequest) return;
     }
+    // Keep the complete current scene until the next image can be committed with its colors.
+    cancelAnimationFrame(frame); frame = 0; lastFrame = 0;
     canvas.style.opacity = '0';
-    requestAnimationFrame(imageState);
+    root.dataset.theme = nextTheme;
+    darkSource.media = nextTheme === 'dark' ? 'all' : 'not all';
+    if (nextImage !== image) {
+      image.replaceWith(nextImage); image = nextImage;
+      image.addEventListener('load', imageState);
+      image.addEventListener('error', imageState);
+    }
+    sceneTheme = nextTheme;
+    imageState();
     document.querySelector('meta[name="theme-color"]').content = getComputedStyle(root).getPropertyValue('--page').trim();
     const label = { auto: '跟随系统', light: '浅色外观', dark: '深色外观' }[theme];
     themeButton.querySelector('use').setAttribute('href', { auto: '#icon-monitor', light: '#icon-sun', dark: '#icon-moon' }[theme]);
     themeButton.setAttribute('aria-label', `切换外观，当前${label}`);
     themeButton.title = `外观：${label}`;
-    themeButton.dataset.choice = theme;
     try { localStorage.setItem('emotion-ball-site-theme', theme); } catch {}
   }
   setTheme(root.dataset.theme || 'auto');
@@ -87,8 +106,6 @@
   }
   window.addEventListener('hashchange', followOldSection);
   followOldSection();
-
-  const image = document.querySelector('.scene-image');
 
   function staticScene() {
     cancelAnimationFrame(frame); frame = 0; waves = [];
@@ -206,6 +223,7 @@
     if (gl && texture) draw();
   }
   function draw() {
+    if (textureImage !== image) return;
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.uniform2f(uniforms.size, width, height); gl.uniform4fv(uniforms.imageRect, imageRect);
     gl.uniform1f(uniforms.time, elapsed);
@@ -247,6 +265,7 @@
     if (gl && texture) {
       gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+      textureImage = image;
       waves = []; fit(); reconcile();
     } else reconcile();
   }
@@ -255,8 +274,7 @@
   if (image.complete) imageState();
   new ResizeObserver(fit).observe(canvas.parentElement);
   systemTheme.addEventListener('change', () => {
-    document.querySelector('meta[name="theme-color"]').content = getComputedStyle(root).getPropertyValue('--page').trim();
-    fit();
+    if (themeButton.dataset.choice === 'auto') setTheme('auto');
   });
   reduced.addEventListener('change', imageState);
   canvas.addEventListener('webglcontextlost', event => { event.preventDefault(); gl = null; texture = null; staticScene(); reconcile(); });

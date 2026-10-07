@@ -4,7 +4,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '../home.js'), 'utf8');
-const controller = source.slice(source.indexOf('  function stopped()'), source.indexOf('  function setTheme('));
+const controller = source.slice(source.indexOf('  function stopped()'), source.indexOf('  async function setTheme('));
 assert.ok(controller.includes('function reconcile()'));
 const handlers = {}, attributes = {}, icon = {};
 const root = { classList: { toggle: (name, value) => { root[name] = value; } } };
