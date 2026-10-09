@@ -241,7 +241,7 @@ function buildQuotaLabelModel(snapshot, options = {}, now = Date.now()) {
   return model;
 }
 
-function buildTrend(snapshot, window, now, resetOpportunities = null) {
+function buildTrend(snapshot, window, now, resetOpportunities = null, accountResetHistory = null) {
   const unknown = { state: 'unknown', status: 'unknown', exhaustsAt: null, label: '',
     summary: '暂无法预估额度用完时间', detail: '连续用量记录不足，稍后再查看' };
   const base = { period: window?.windowMinutes ?? null,
@@ -249,7 +249,9 @@ function buildTrend(snapshot, window, now, resetOpportunities = null) {
     resetLabel: window ? formatQuotaDate(window.resetsAt, window.windowMinutes, now) : '',
     samples: [], forecast: unknown };
   if (!window || snapshot?.enabled !== true || snapshot.history?.available !== true) return base;
-  const maximum = window.windowMinutes === 10080 ? 6000 : 192;
+  const weekly = window.windowMinutes === 10080;
+  if (weekly) base.forecast.detail = '本周期有效记录不足 24 小时，积累后提供参考预估';
+  const maximum = weekly ? 6000 : 192;
   const byTime = new Map();
   for (const cycle of Array.isArray(snapshot.history.windows) ? snapshot.history.windows.slice(-8) : []) {
     if (cycle?.id !== window.id || cycle.windowMinutes !== window.windowMinutes
@@ -265,21 +267,31 @@ function buildTrend(snapshot, window, now, resetOpportunities = null) {
     || snapshot.quota.updatedAt > now || now - snapshot.quota.updatedAt >= 300000) {
     base.forecast.detail = '用量尚未更新，稍后再看'; return base;
   }
-  const horizon = window.windowMinutes === 300 ? 30 * 60000 : 48 * 3600000;
-  let recent = base.samples.filter(sample => sample.at >= now - horizon);
+  const lastRedeemed = weekly ? Math.max(0, ...(accountResetHistory?.events || [])
+    .filter(event => event.kind === 'redeemed' && event.occurredAt <= now).map(event => event.occurredAt)) : 0;
+  let recent = weekly ? base.samples.filter(sample => !lastRedeemed || sample.at > lastRedeemed)
+    : base.samples.filter(sample => sample.at >= now - 30 * 60000);
   if (recent.length < 3 || now - recent.at(-1).at >= 300000) return base;
   for (let index = recent.length - 1; index > 0; index--) {
     const previous = recent[index - 1]; const current = recent[index];
-    if (current.at - previous.at >= 300000 || current.remaining > previous.remaining
+    if ((!weekly && current.at - previous.at >= 300000) || current.remaining > previous.remaining
       || previous.remaining - current.remaining >= 25) {
       recent = recent.slice(index); break;
     }
   }
   if (recent.length < 3) return base;
   const first = recent[0]; const last = recent.at(-1);
-  const minimumSpan = window.windowMinutes === 300 ? 10 * 60000 : 24 * 3600000;
-  if (last.at - first.at < minimumSpan || last.remaining !== window.remaining) return base;
+  const minimumSpan = weekly ? 24 * 3600000 : 10 * 60000;
+  if (last.remaining !== window.remaining) {
+    if (weekly) base.forecast.detail = '额度刚有变化，等待采样同步';
+    return base;
+  }
+  if (last.at - first.at < minimumSpan) return base;
   const consumed = first.remaining - last.remaining;
+  if (weekly && consumed <= 0) {
+    base.forecast.detail = '已记录时段内额度暂无下降，暂不推算用完时间'; return base;
+  }
+  // ponytail: cycle-average reference; use a richer model only if real forecast error warrants it.
   const rate = consumed / (last.at - first.at);
   const remainingAtReset = window.remaining - rate * (window.resetsAt - now);
   const status = remainingAtReset < 0 ? 'risk' : remainingAtReset < 10 ? 'tight' : 'safe';
@@ -287,13 +299,14 @@ function buildTrend(snapshot, window, now, resetOpportunities = null) {
   const exhaustsAt = validResetTime(projectedAt) ? projectedAt : null;
   if (status === 'risk' && exhaustsAt === null) return base;
   const label = exhaustsAt === null ? '' : formatQuotaDate(exhaustsAt, window.windowMinutes, now);
-  base.forecast = { state: 'estimate', status, exhaustsAt, label,
+  base.forecast = { state: 'estimate', status, exhaustsAt, label, ...(weekly ? { reference: true } : {}),
     summary: status === 'risk' ? window.remaining <= 0 ? '额度已用完' : `预计约 ${label} 用完`
       : status === 'tight' ? '预计够用到重置' : '额度充裕',
     detail: status === 'risk' ? `早于 ${base.resetLabel} 重置`
       : status === 'tight' ? '刚够，留意用量' : '预计够用到重置' };
+  if (weekly) base.forecast.detail = `按本周期平均用量粗估，${base.forecast.detail}`;
   // These are normalized output rows, not the source snapshot. Reuse only the
-  // rate that passed every existing forecast gate; never project across reset.
+  // validated forecast rate; never project across reset.
   for (const row of resetOpportunities || []) {
     if (row.status !== 'available' || row.resetType !== 'codexRateLimits'
       || !validNow(row.expiresAt) || row.expiresAt <= now || row.expiresAt >= window.resetsAt) continue;
@@ -335,7 +348,7 @@ function buildCodexDetailsModel(snapshot, options = {}, now = Date.now()) {
   const resetOpportunities = rows === null ? null : rows.filter(row => row.status !== 'redeemed'
     && !(typeof row.expiresAt === 'number' && row.expiresAt <= now));
   const trend = buildTrend(snapshot, selectedWindow, now,
-    fresh && details.resetCreditsAvailable !== 0 ? resetOpportunities : null);
+    fresh && details.resetCreditsAvailable !== 0 ? resetOpportunities : null, accountResetHistory);
   const quotaUpdatedAt = snapshot?.enabled === true && validNow(now)
     && validNow(snapshot.quota?.updatedAt) && snapshot.quota.updatedAt <= now ? snapshot.quota.updatedAt : null;
   return { ...model, action: reasonableText(safeOptions.action) ? safeOptions.action.slice(0, 40) : 'trend',

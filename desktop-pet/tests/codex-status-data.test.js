@@ -186,7 +186,7 @@ test('旧断档/余额回升/骤降不会阻止恢复后的连续预测，也不
   }
 });
 
-test('可作虚线端点的稀疏5h和周记录保留展示，但不能累计成连续预测', () => {
+test('周额度断档保留真实端点作参考预估，5h仍要求连续记录', () => {
   for (const [period, offsets] of [[300,[1200000,600000,0]],[10080,[90000000,43200000,0]]]) {
     const window=quotaWindow(period,88,NOW+3600000);
     const samples=offsets.map((offset,index)=>({at:NOW-offset,remaining:90-index}));
@@ -195,9 +195,68 @@ test('可作虚线端点的稀疏5h和周记录保留展示，但不能累计成
     const before=JSON.stringify(source);
     const trend=buildCodexDetailsModel(source,{period},NOW).trend;
     assert.deepEqual(trend.samples,samples);
-    assert.equal(trend.forecast.state,'unknown');
+    assert.equal(trend.forecast.state,period===10080?'estimate':'unknown');
+    if (period===10080) {
+      assert.equal(trend.forecast.reference,true);
+      assert.match(trend.forecast.detail,/本周期/);
+    }
     assert.equal(JSON.stringify(source),before);
   }
+});
+
+test('周额度用本周期实际经过时间预估，不被48小时窗口截短', () => {
+  const window=quotaWindow(10080,60,NOW+4*86400000);
+  const samples=[{at:NOW-53*3600000,remaining:100},{at:NOW-40*3600000,remaining:95},
+    {at:NOW-25*3600000,remaining:80},{at:NOW-12*3600000,remaining:70},
+    {at:NOW-3600000,remaining:61},{at:NOW,remaining:60}];
+  const source=snapshot(NOW,[window]);
+  source.history={available:true,windows:[{...window,samples}]};
+  const before=JSON.stringify(source);
+  const forecast=buildCodexDetailsModel(source,{period:10080},NOW).trend.forecast;
+  assert.equal(forecast.state,'estimate'); assert.equal(forecast.reference,true);
+  assert.equal(forecast.status,'risk');
+  assert.equal(forecast.exhaustsAt,NOW+60/(40/(53*3600000)));
+  assert.equal(JSON.stringify(source),before);
+  for (const invalid of ['stale','lastMismatch','oldSample','noConsumption','shortSpan']) {
+    const copy=structuredClone(source);
+    if (invalid==='stale') copy.quota.stale=true;
+    if (invalid==='lastMismatch') copy.quota.windows[0].remaining=59;
+    if (invalid==='oldSample') copy.history.windows[0].samples.at(-1).at-=300000;
+    if (invalid==='noConsumption') copy.history.windows[0].samples.forEach(row=>{row.remaining=60;});
+    if (invalid==='shortSpan') copy.history.windows[0].samples=copy.history.windows[0].samples.slice(-3);
+    if (invalid==='shortSpan') copy.history.windows[0].samples[0].at=NOW-23*3600000;
+    assert.equal(buildCodexDetailsModel(copy,{period:10080},NOW).trend.forecast.state,'unknown',invalid);
+  }
+});
+
+test('周额度预估不跨余额校正和已知使用重置，满24小时后可恢复', () => {
+  for (const boundary of ['increase','drop','redeemed']) {
+    const window=quotaWindow(10080,50,NOW+3*86400000);
+    const source=snapshot(NOW,[window]);
+    const samples=[{at:NOW-50*3600000,remaining:90},{at:NOW-49*3600000,remaining:80},
+      {at:NOW-2*3600000,remaining:boundary==='increase'?85:boundary==='drop'?55:79},
+      {at:NOW-3600000,remaining:boundary==='redeemed'?60:54},{at:NOW,remaining:50}];
+    source.history={available:true,windows:[{...window,samples}]};
+    source.quota.accountResetHistory={state:'ready',updatedAt:NOW,events:[
+      {id:'boundary-event',kind:boundary==='redeemed'?'redeemed':'granted',occurredAt:NOW-3*3600000}]};
+    assert.equal(buildCodexDetailsModel(source,{period:10080},NOW).trend.forecast.state,'unknown',boundary);
+    // A fresh segment spans 25 hours without carrying the pre-boundary rate.
+    samples.splice(2,3,{at:NOW-25*3600000,remaining:70},{at:NOW-3600000,remaining:54},{at:NOW,remaining:50});
+    samples[1].remaining=boundary==='increase'?65:boundary==='drop'?100:80;
+    source.quota.accountResetHistory.events[0].occurredAt=NOW-26*3600000;
+    const forecast=buildCodexDetailsModel(source,{period:10080},NOW).trend.forecast;
+    assert.equal(forecast.state,'estimate',boundary);
+    assert.equal(forecast.exhaustsAt,NOW+50/(20/(25*3600000)),boundary);
+  }
+});
+
+test('与使用重置同时的采样不作为重置后的预估锚点', () => {
+  const window=quotaWindow(10080,60,NOW+3*86400000);
+  const source=snapshot(NOW,[window],{accountResetHistory:{state:'ready',updatedAt:NOW,
+    events:[{id:'reset-event',kind:'redeemed',occurredAt:NOW-25*3600000}]}});
+  source.history={available:true,windows:[{...window,samples:[
+    {at:NOW-25*3600000,remaining:70},{at:NOW-3600000,remaining:65},{at:NOW,remaining:60}]}]};
+  assert.equal(buildCodexDetailsModel(source,{period:10080},NOW).trend.forecast.state,'unknown');
 });
 
 test('重置数量0与未知、null与空明细、返回部分和真实到期/使用严格区分', () => {

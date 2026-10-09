@@ -84,7 +84,7 @@
           .filter(event => ['granted','redeemed'].includes(event.kind) && event.occurredAt !== null) },
       returnToTrend: source.returnToTrend === true, returnPeriod: Number.isSafeInteger(source.returnPeriod) ? source.returnPeriod : null,
       trend: { samples, resetsAt: timestamp(trend.resetsAt), resetLabel: clean(trend.resetLabel,40), windowMinutes: Number.isSafeInteger(trend.windowMinutes) ? trend.windowMinutes : null,
-        forecast: { state: forecast.state === 'estimate' ? 'estimate' : 'unknown', exhaustsAt: timestamp(forecast.exhaustsAt), label: clean(forecast.label,100),
+        forecast: { state: forecast.state === 'estimate' ? 'estimate' : 'unknown', reference: forecast.reference === true, exhaustsAt: timestamp(forecast.exhaustsAt), label: clean(forecast.label,100),
           status: ['risk','tight','safe'].includes(forecast.status) ? forecast.status : 'unknown', summary: clean(forecast.summary,100), detail: clean(forecast.detail,100) } } };
   }
   function setTitle(text, amount) {
@@ -345,8 +345,9 @@
     const forecast = node('div',`forecast-note ${model.trend.forecast.status}`), copy = node('div','forecast-copy');
     const known = model.trend.forecast.state === 'estimate';
     copy.replaceChildren(node('b','',model.trend.forecast.summary || (known ? '预估结果暂未提供' : '暂无法预估额度用完时间')),node('p','',model.trend.forecast.detail || (known ? '按近期用量估算，会随实际用量变化' : '连续用量记录不足，稍后再查看')));
-    forecast.title = '根据连续用量记录，估算当前周期额度何时用完、能否够用到重置';
-    forecast.replaceChildren(node('span','forecast-symbol',known ? ({risk:'⚠️',tight:'⏳',safe:'🌿'}[model.trend.forecast.status] || '⏳') : '🔎'),copy,node('span','forecast-badge',known ? '预估' : '待预估'));
+    forecast.title = model.trend.forecast.reference ? '按本周期已记录的余额变化与实际经过时间粗估，会随实际用量变化'
+      : '根据连续用量记录，估算当前周期额度何时用完、能否够用到重置';
+    forecast.replaceChildren(node('span','forecast-symbol',known ? ({risk:'⚠️',tight:'⏳',safe:'🌿'}[model.trend.forecast.status] || '⏳') : '🔎'),copy,node('span','forecast-badge',known ? model.trend.forecast.reference ? '参考预估' : '预估' : '待预估'));
     const bottom = node('div','panel-bottom'), reset = node('p','');
     reset.replaceChildren(node('span','','本周期重置'),node('b','',model.trend.resetLabel || item.resetLabel || dateLabel(model.trend.resetsAt || item.resetsAt)));
     const opportunities = button('','reset-link',() => invoke('openDetail','opportunities',model.period));
