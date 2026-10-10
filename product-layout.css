@@ -91,6 +91,21 @@ html[data-theme="dark"] .product-redesign {
 .product-redesign .hero-copy > .hero-lead { margin: 0 0 28px; font-size: 18px; line-height: 1.8; }
 .product-redesign .hero-actions { justify-content: center; }
 .product-redesign .hero-actions .button { border-radius: 999px; }
+/* Native split download: GitHub primary, domestic option in the disclosure. */
+.product-redesign .download-split { position: relative; display: flex; align-items: stretch; min-height: 52px; border: 1px solid #6da8ff80; border-radius: 999px; background: linear-gradient(115deg, #1756e8, #0066ff); color: #fff; box-shadow: 0 8px 24px #0066ff30; }
+.product-redesign .download-split a.button-primary[data-download-arch] { flex: 1; min-width: 0; border: 0; background: transparent; box-shadow: none; transform: none; }
+.product-redesign .download-split details { position: static; display: flex; flex: none; }
+.product-redesign .download-split summary { display: grid; place-items: center; width: 52px; min-height: 50px; padding: 0; border-radius: 0 999px 999px 0; cursor: pointer; list-style: none; }
+.product-redesign .download-split summary::before { content: ''; position: absolute; top: 14px; bottom: 14px; right: 52px; width: 1px; background: #ffffff50; }
+.product-redesign .download-split summary::-webkit-details-marker { display: none; }
+.product-redesign .download-split summary:hover { background: #ffffff16; }
+.product-redesign .download-split summary .ui-icon { width: 16px; height: 16px; }
+.product-redesign .download-split details[open] summary .ui-icon { transform: rotate(180deg); }
+.product-redesign .download-popover { position: absolute; top: calc(100% + 12px); right: 0; z-index: 3; width: 240px; max-width: 100%; padding: 6px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-solid); color: var(--text); box-shadow: 0 16px 44px #13233b26; }
+.product-redesign .download-split details:not([open]) .download-popover { display: none; }
+.product-redesign .download-popover .domestic-download { display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 0 16px; border-radius: 10px; font-size: 14px; }
+.product-redesign .download-popover a:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.product-redesign :is(.domestic-download, .download-split summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .product-redesign .hero-stage { height: 280px; min-height: 0; margin: 36px auto 0; max-width: 760px; border: 0; border-radius: 0; background: transparent; }
 .product-redesign .hero-stage .ambient { display: none; }
 .product-redesign .hero .hero-motion-stage { --pet-size: 220px; min-height: 280px; padding-top: 50px; }
@@ -166,6 +181,11 @@ html[data-theme="dark"] .product-redesign {
 .product-redesign .download-card h3 { font-size: 24px; }
 .product-redesign .download-card > p { font-size: 14px; line-height: 1.8; }
 .product-redesign .download-card .button { border-radius: 999px; }
+.product-redesign .button[hidden] { display: none; }
+.product-redesign .download-card-primary .download-actions { display: grid; grid-template-columns: minmax(0, 1fr) 124px; gap: 12px; }
+.product-redesign .download-card-primary .download-actions .button { min-width: 0; }
+.product-redesign .download-card-primary .domestic-download { padding-inline: 12px; font-size: 14px; font-weight: 500; white-space: nowrap; }
+
 .product-redesign .install-section { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; }
 .product-redesign .install-guide { padding: 0; border: 0; background: transparent; }
 .product-redesign .install-visual-step { padding: 16px; }
@@ -260,4 +280,13 @@ html[data-theme="dark"] .product-redesign {
 }
 @media (prefers-reduced-transparency: reduce) {
   :root .product-redesign .site-header { background: var(--surface-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
+@media (max-width: 760px) {
+  .product-redesign .download-card-primary .download-actions { grid-template-columns: minmax(0, 1fr) 112px; gap: 10px; }
+  .product-redesign .download-card-primary .download-actions .button { font-size: 13px; padding-inline: 10px; }
+}
+@media (max-width: 400px) {
+  .product-redesign .download-card-primary .download-actions { grid-template-columns: 1fr; }
+  .product-redesign .download-card-primary .domestic-download { min-height: 44px; }
 }

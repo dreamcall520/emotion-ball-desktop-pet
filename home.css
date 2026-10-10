@@ -77,7 +77,9 @@ details[open] .caret { transform: rotate(180deg); }
 .download-button.flow-border::before { inset: -2px; padding: 2px; opacity: 1; animation-duration: 6s; }
 .download-button:hover { transform: translateY(-3px); background: var(--menu); }
 @media (prefers-reduced-motion: no-preference) { .download-button:active { transform: scale(1.045); transition-duration: 120ms; } }
-.other-download { padding: 6px 0; font-size: 12px; color: var(--muted); letter-spacing: .03em; }
+.download-meta .other-download { gap: 18px; }
+.download-meta .other-download::before { content: ''; width: 1px; height: 14px; background: var(--line); }
+.other-download { display: inline-flex; align-items: center; min-height: 44px; padding: 6px 0; font-size: 12px; color: var(--muted); letter-spacing: .03em; }
 .pet-button { position: absolute; width: 24vw; height: 27vw; right: 1vw; bottom: -3vw; padding: 0; border-radius: 50%; -webkit-tap-highlight-color: transparent; }
 .pet-reply { position: absolute; right: 5vw; top: clamp(70px, 16vh, 150px); max-width: 230px; padding: 12px 18px; border: 1px solid var(--line); border-radius: 24px 24px 4px 24px; background: var(--menu); font-size: 14px; opacity: 0; transform: translateY(10px); transition: opacity .25s, transform .25s; pointer-events: none; }
 .pet-reply.visible { opacity: 1; transform: translateY(0); }

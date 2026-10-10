@@ -5,6 +5,7 @@
   const themeButtons = document.querySelectorAll('[data-theme-toggle]');
   const navButton = document.querySelector('.nav-toggle');
   const navigation = document.getElementById('site-nav');
+  const channelMenus = document.querySelectorAll('[data-channel-menu]');
   const toast = document.querySelector('[data-toast]');
   const backToTopButton = document.querySelector('[data-back-to-top]');
   const topSection = document.getElementById('top');
@@ -62,11 +63,17 @@
 
   document.addEventListener('click', (event) => {
     if (!navigation.contains(event.target) && !navButton.contains(event.target)) setNavigation(false);
+    for (const menu of channelMenus) {
+      if (!menu.parentElement.contains(event.target)) menu.open = false;
+    }
   });
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && navigation.classList.contains('is-open')) {
       setNavigation(false);
       navButton.focus();
+    }
+    if (event.key === 'Escape') for (const menu of channelMenus) {
+      if (menu.open) { menu.open = false; menu.querySelector('summary').focus(); }
     }
   });
 
