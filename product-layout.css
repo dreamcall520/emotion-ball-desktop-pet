@@ -98,7 +98,6 @@ html[data-theme="dark"] .product-redesign {
 .product-redesign .download-split summary { display: grid; place-items: center; width: 52px; min-height: 50px; padding: 0; border-radius: 0 999px 999px 0; cursor: pointer; list-style: none; }
 .product-redesign .download-split summary::before { content: ''; position: absolute; top: 14px; bottom: 14px; right: 52px; width: 1px; background: #ffffff50; }
 .product-redesign .download-split summary::-webkit-details-marker { display: none; }
-.product-redesign .download-split summary:hover { background: #ffffff16; }
 .product-redesign .download-split summary .ui-icon { width: 16px; height: 16px; }
 .product-redesign .download-split details[open] summary .ui-icon { transform: rotate(180deg); }
 .product-redesign .download-popover { position: absolute; top: calc(100% + 12px); right: 0; z-index: 3; width: 240px; max-width: 100%; padding: 6px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-solid); color: var(--text); box-shadow: 0 16px 44px #13233b26; }
