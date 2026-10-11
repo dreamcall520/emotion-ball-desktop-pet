@@ -132,11 +132,11 @@ function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, g
         quota.width > 0 && quota.height > 0 ? quota : null;
       const obstacles = [...getWindowObstacles(), getReminderBounds(), pet].filter(item => item &&
         ['x', 'y', 'width', 'height'].every(key => Number.isFinite(item[key])) && item.width > 0 && item.height > 0);
-      const active = ['running', 'paused', 'complete'].includes(state.status);
+      const active = ['running', 'paused'].includes(state.status);
       const views = [];
       if (panelOpen) views.push(['panel', { width: 320, height: settingsOpen || state.face !== 'analog' ? 384 : 476 }]);
       if (state.reminder) views.push(['message', { width: 256, height: state.mode === 'focus' ? 188 : 164 }]);
-      if (panelOpen || active) views.push(['mini', { width: 112, height: 48 }]);
+      if (!state.reminder && active) views.push(['mini', { width: 112, height: 48 }]);
       if (!state.reminder && state.encouragement) views.push(['message', { width: 196, height: messageCardHeight + 12 }]);
       const visible = new Set(views.map(([view]) => view));
       for (const [view, entry] of entries) if (!visible.has(view) && alive(entry.win)) entry.win.hide();

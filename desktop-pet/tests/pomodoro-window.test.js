@@ -79,9 +79,10 @@ test('左右贴边时小入口跟随真实额度边界，消息跟随，隐藏�
     assert.equal(message.passthrough, true); assert.notEqual(message.focused, true);
     f.state.encouragement = ''; f.state.reminder = true; f.manager.sync();
     assert.equal(f.pet.bounds.y - message.bounds.y - message.bounds.height, 8, '完成提示改用球锚，mini 不把完成提示推离顶部');
-    assert.equal(overlaps(face(mini), face(message)), false, 'mini 主动避开已定位的完成提示');
+    assert.equal(mini.visible, false, '完成提示显示期间收起重复的 mini');
     assert.equal(message.passthrough, false);
     f.state.reminder = false; f.quota(null); f.manager.sync();
+    assert.equal(mini.visible, true, '完成提示关闭后恢复 mini');
     assert.equal(f.pet.bounds.y - face(mini).y - face(mini).height, 14, '额度隐藏或无数据时回退球锚');
     f.quota(quota); f.presentation({ mode: 'free', shape: 'blob' }); f.manager.sync();
     assert.equal(f.pet.bounds.y - face(mini).y - face(mini).height, 14, '自由态保留头顶布局');
@@ -94,10 +95,12 @@ test('左右贴边时小入口跟随真实额度边界，消息跟随，隐藏�
   f.state.reminder = true; f.manager.sync();
   assert.ok(!overlaps(face(f.win('message')), panel.bounds), '完成提示避开面板');
   f.quota(null); f.presentation({ mode: 'tucked', side: 'right', shape: 'blob', suppressed: true }); f.manager.sync();
-  for (const view of ['panel', 'mini', 'message']) assert.equal(f.win(view).visible, true, `贴边收起球体不隐藏 ${view}`);
+  for (const view of ['panel', 'message']) assert.equal(f.win(view).visible, true, `贴边收起球体不隐藏 ${view}`);
+  assert.equal(mini.visible, false, '贴边完成提示期间也不重复展示 mini');
   f.presentation({ mode: 'hidden', side: 'right', shape: 'blob' }); f.manager.sync();
   for (const view of ['panel', 'mini', 'message']) assert.equal(f.win(view).visible, false, `用户真正隐藏球球时隐藏 ${view}`);
   f.presentation({ mode: 'peeked', side: 'right', shape: 'blob' });
+  f.state.reminder = false; f.state.encouragement = '慢慢来。';
   for (const area of [{ x: -1200, y: -200, width: 1440, height: 900 }, { x: 0, y: 0, width: 700, height: 560 }]) {
     Object.assign(f.area, area); Object.assign(f.pet.bounds, { x: area.x + area.width - 80, y: area.y + 10 });
     f.quota({ x: area.x + area.width - 168, y: area.y + 4, width: 168, height: 58 }); f.manager.sync();
@@ -114,7 +117,9 @@ test('番茄窗懒创建、原尺寸、不抢焦点、拖动稳定与屏幕边�
   const f = fixture(); t.after(() => f.manager.close());
   f.manager.sync(); assert.equal(f.windows.length, 0);
   f.manager.open(); await flush();
-  const panel = f.win('panel'), mini = f.win('mini');
+  const panel = f.win('panel'); assert.equal(f.win('mini'), undefined, '未开始计时，打开面板也不显示 mini');
+  f.state.status = 'paused'; f.manager.sync(); await flush();
+  const mini = f.win('mini');
   assert.equal(panel.bounds.width, 320); assert.equal(panel.bounds.height, 476);
   assert.deepEqual([mini.bounds.width, mini.bounds.height], [112, 48]);
   assert.equal(f.pet.bounds.y - (mini.bounds.y + 6 + 36), 14);
@@ -155,10 +160,10 @@ test('番茄窗懒创建、原尺寸、不抢焦点、拖动稳定与屏幕边�
   f.state.mode = 'focus'; f.manager.sync();
   assert.equal(message.bounds.height, 188, '切回专注完成卡恢复两项操作空间');
   await f.invoke('panel', 'pin', true); assert.equal(panel.topmost, true);
-  await f.invoke('panel', 'close-panel'); assert.equal(panel.visible, false); assert.equal(mini.visible, true);
+  await f.invoke('panel', 'close-panel'); assert.equal(panel.visible, false); assert.equal(mini.visible, false);
   f.suppress(true); f.manager.sync(); assert.equal(mini.visible, false); assert.equal(message.visible, false);
-  f.suppress(false); f.manager.sync(); assert.equal(mini.visible, true);
-  f.state.reminder = false;
+  f.suppress(false); f.manager.sync(); assert.equal(mini.visible, false); assert.equal(message.visible, true);
+  f.state.reminder = false; f.manager.sync(); assert.equal(mini.visible, true);
   const originalMiniY = mini.bounds.y;
   f.obstacles([{ x: 270, y: 240, width: 140, height: 50 }]); f.manager.sync();
   assert.notEqual(mini.bounds.y, originalMiniY, '被现有卡片挡住时，小入口需要避让');
@@ -175,25 +180,30 @@ test('番茄窗懒创建、原尺寸、不抢焦点、拖动稳定与屏幕边�
   assert.deepEqual(f.errors, []);
 });
 
-test('完成提示优先在球上方，mini 避让且两种待办到达顺序均不重叠', async t => {
+test('完成提示优先在球上方并收起 mini，两种待办到达顺序均不重叠', async t => {
   const f = fixture(); t.after(() => f.manager.close());
   const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
   const face = win => ({ x: win.bounds.x + 6, y: win.bounds.y + 6, width: win.bounds.width - 12, height: win.bounds.height - 12 });
   Object.assign(f.pet.bounds, { x: 600, y: 500 });
   Object.assign(f.state, { status: 'complete', reminder: true }); f.manager.sync(); await flush();
-  const message = f.win('message'), mini = f.win('mini');
+  const message = f.win('message');
   assert.equal(message.bounds.x + message.bounds.width / 2, f.pet.bounds.x + f.pet.bounds.width / 2);
   assert.equal(f.pet.bounds.y - message.bounds.y - message.bounds.height, 8);
-  assert.equal(overlaps(face(message), face(mini)), false, '完成提示先定位，mini 自己避让');
-  assert.notEqual(message.focused, true); assert.notEqual(mini.focused, true);
+  assert.equal(f.win('mini'), undefined, '直接恢复完成状态不创建重复 mini');
+  assert.notEqual(message.focused, true);
+  f.state.reminder = false; f.manager.sync();
+  assert.equal(f.win('mini'), undefined, '完成提示关闭后仍无计时任务，不显示 mini');
+  f.state.reminder = true; f.manager.sync();
   const todo = { x: 460, y: 302, width: 360, height: 190 };
   const originalTodo = { ...todo };
   f.todoReminder(todo); f.manager.sync();
   const completionFirst = { ...message.bounds };
   assert.equal(overlaps(face(message), todo), false, '完成先到，待办随后出现时完成卡避让');
   assert.deepEqual(todo, originalTodo, '番茄窗不写入待办原位置');
-  Object.assign(f.state, { status: 'paused', reminder: false }); f.manager.sync();
+  Object.assign(f.state, { status: 'paused', reminder: false }); f.manager.sync(); await flush();
+  const mini = f.win('mini'); assert.equal(mini.visible, true, '暂停中的有效计时显示小入口');
   Object.assign(f.state, { status: 'complete', reminder: true }); f.manager.sync();
+  assert.equal(mini.visible, false);
   assert.deepEqual(message.bounds, completionFirst, '待办先到与完成先到得到相同避让结果');
   const expanded = { ...todo, y: 262, height: 230 };
   f.todoReminder(expanded); f.manager.sync(); assert.equal(overlaps(face(message), expanded), false);
@@ -206,20 +216,28 @@ test('完成提示优先在球上方，mini 避让且两种待办到达顺序均
       f.presentation({ mode: 'tucked', side, shape: 'blob' }); f.manager.sync();
       assert.equal(f.pet.bounds.y - message.bounds.y - message.bounds.height, 8, '左右贴边优先横向夹紧后保持球上方');
       assert.equal(message.bounds.x, side === 'left' ? area.x : area.x + area.width - message.bounds.width);
-      assert.equal(overlaps(face(message), face(mini)), false);
+      assert.equal(mini.visible, false);
       f.pet.bounds.y = area.y + 10; f.manager.sync();
-      for (const win of [message, mini]) {
-        const b = win.bounds;
-        assert.ok(b.x >= area.x && b.y >= area.y && b.x + b.width <= area.x + area.width && b.y + b.height <= area.y + area.height);
-      }
+      const b = message.bounds;
+      assert.ok(b.x >= area.x && b.y >= area.y && b.x + b.width <= area.x + area.width && b.y + b.height <= area.y + area.height);
       assert.equal(overlaps(face(message), f.pet.bounds), false, '球顶部没有空间时再切换侧面');
     }
+  }
+  for (const mode of ['short', 'long', 'focus']) {
+    Object.assign(f.state, { mode, status: 'running', reminder: false }); f.manager.sync();
+    assert.equal(mini.visible, true, `${mode} 开始计时恢复 mini`);
+    Object.assign(f.state, { status: 'complete', reminder: true }); f.manager.sync();
+    assert.equal(mini.visible, false, `${mode} 完成提示收起 mini`);
+    f.state.reminder = false; f.manager.sync();
+    assert.equal(mini.visible, false, `${mode} 关闭完成提示后也不显示无任务 mini`);
+    f.state.status = 'idle'; f.manager.open(); f.manager.sync(); await flush();
+    assert.equal(mini.visible, false, `${mode} 空闲时打开面板也不显示 mini`);
   }
   assert.deepEqual(f.errors, []);
 });
 
 test('唯一来源、主frame、按窗口动作白名单及固定布局枚举保护 IPC', async t => {
-  const f = fixture(); t.after(() => f.manager.close()); f.manager.open(); await flush();
+  const f = fixture(); t.after(() => f.manager.close()); f.state.status = 'running'; f.manager.open(); await flush();
   const invoke = f.handlers.get('pomodoro:action'), load = f.handlers.get('pomodoro:load');
   assert.equal((await invoke({ sender: {}, senderFrame: {} }, 'toggle')).ok, false);
   assert.equal((await invoke({ ...f.event('panel'), senderFrame: {} }, 'toggle')).ok, false);

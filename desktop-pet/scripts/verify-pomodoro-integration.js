@@ -215,13 +215,18 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     assert.equal(service.getSnapshot().face, 'analog', '新安装默认刻度表盘');
     assert.equal(service.getSnapshot().status, 'idle');
     select('pomodoro-open');
-    const panel = await ready('panel'); mini = await ready('mini');
-    await poll(() => panel.isVisible() && mini.isVisible(), Boolean, '面板与迷你入口可见');
+    const panel = await ready('panel');
+    await poll(() => panel.isVisible(), Boolean, '面板可见');
+    assert.equal(find('mini'), undefined, '空闲时打开面板不创建无任务 mini');
     assert.equal((await load(panel)).panelOpen, true);
     assert.deepEqual(await page(panel, 'Object.keys(qiuPomodoro).sort()'), ['action', 'load', 'onColorMode', 'onState']);
+    await pointerClick(panel, '#start'); mini = await ready('mini');
+    await poll(() => mini.isVisible(), Boolean, '实际开始计时后出现 mini');
     assert.equal((await load(mini)).face, 'analog');
     const invalidMini = await page(mini, "qiuPomodoro.action('reset')");
     assert.equal(invalidMini.ok, false, '迷你入口不能越权重置计时');
+    await pointerClick(panel, '#reset');
+    await poll(() => !mini.isVisible(), Boolean, '重置回空闲后收起 mini');
     result.checks.push('menu-default-native-bridge');
 
     for (const value of ['green', 'blue']) for (const light of ['light', 'dark']) for (const mode of ['standard', 'accessible']) {
@@ -258,6 +263,7 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     stamp = service.getSnapshot().deadline; service.tick();
     const message = await ready('message');
     await poll(() => message.isVisible(), Boolean, '完成提醒原生窗口');
+    assert.equal(mini.isVisible(), false, '完成提醒期间收起 mini');
     await poll(() => page(message, "!document.querySelector('#reminder').hidden"), Boolean, '完成提醒渲染');
     assert.equal(service.getSnapshot().completed, 1); assert.equal(getQuiet(), false);
     assert.equal(message.isFocusable(), false);
@@ -267,6 +273,7 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     assert.deepEqual(focusReminder.buttons, ['rest-now', 'five-more']);
     await capture(message, 'completion-blue-light');
     await pointerClick(message, '#five-more');
+    await poll(() => mini.isVisible() && !message.isVisible(), Boolean, '继续专注计时恢复 mini');
     assert.equal(service.getSnapshot().total, 300); assert.equal(service.getSnapshot().extension, true);
     assert.equal(service.getSnapshot().completed, 1); assert.equal(getQuiet(), true);
     stamp = service.getSnapshot().deadline; service.tick();
@@ -274,11 +281,13 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     await poll(() => message.isVisible(), Boolean, '加时完成提醒');
     await pointerClick(message, '#rest-now');
     assert.equal(service.getSnapshot().mode, 'short'); assert.equal(service.getSnapshot().status, 'running');
+    await poll(() => mini.isVisible() && !message.isVisible(), Boolean, '开始休息计时恢复 mini');
     assert.equal(getQuiet(), false, '休息时恢复陪伴提示');
     await page(pet, "petDesktop.say('play')");
     await poll(ordinaryBubbleVisible, Boolean, '休息时允许真实手动互动气泡，专注期间未占用冷却');
     stamp = service.getSnapshot().deadline; service.tick();
     await poll(() => page(message, "document.querySelector('#five-more').hidden"), Boolean, '休息完成状态');
+    assert.equal(mini.isVisible(), false, '休息完成时不重复显示 mini');
     const restReminder = await reminderGeometry(message);
     assert.equal(message.getContentBounds().height, 164); assert.equal(restReminder.height, 152);
     assert.deepEqual(restReminder.buttons, ['rest-now']);
@@ -289,6 +298,7 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     await capture(message, 'rest-completion-blue-light');
     await pointerClick(message, '#rest-now');
     assert.equal(service.getSnapshot().mode, 'focus'); assert.equal(service.getSnapshot().status, 'running');
+    assert.equal(mini.isVisible(), true, '下一次专注恢复 mini');
     assert.equal(service.getSnapshot().completed, 1);
     await poll(() => !ordinaryBubbleVisible(), Boolean, '下一次专注收起休息时已有互动气泡');
     result.checks.push('focus-completion-extend-and-rest-through-message-bridge');
@@ -451,11 +461,15 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     assert.equal(service.getSnapshot().deadline, stamp + paused.remaining * 1000, '暂停后继续按剩余秒数恢复');
     stamp = service.getSnapshot().deadline; service.tick();
     await poll(() => message.isVisible(), Boolean, '恢复后的完成提醒');
+    assert.equal(mini.isVisible(), false, '完成状态收起 mini');
     assert.equal(service.getSnapshot().completed, 2); assert.equal(service.getSnapshot().minutes, 16); assert.equal(getQuiet(), false);
     await pointerClick(message, '#dismiss-reminder');
     await poll(() => !message.isVisible(), Boolean, '关闭完成提醒');
     assert.equal(service.getSnapshot().status, 'complete'); assert.equal(service.getSnapshot().reminder, false);
-    assert.equal(mini.isVisible(), true);
+    assert.equal(mini.isVisible(), false, '关闭完成提示后没有计时任务，mini 仍隐藏');
+    await bridge(panel, 'close-panel'); select('pomodoro-open');
+    await poll(() => panel.isVisible(), Boolean, '完成状态可以主动打开面板');
+    assert.equal(mini.isVisible(), false, '完成状态打开面板也不显示无任务 mini');
     result.checks.push('pause-resume-deadline-quiet-and-dismiss');
 
     const area = screen.getDisplayMatching(pet.getBounds()).workArea;
@@ -527,18 +541,21 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     core('toggle'); stamp = service.getSnapshot().deadline; service.tick();
     await poll(() => message.isVisible(), Boolean, '球体贴边收起时专注完成提示仍显示');
     assert.equal(message.getBounds().height, 188);
-    for (const win of [panel, mini, message]) assert.ok(inArea(win.getBounds()), '贴边番茄窗均在工作区内');
+    for (const win of [panel, message]) assert.ok(inArea(win.getBounds()), '贴边番茄窗均在工作区内');
+    assert.equal(mini.isVisible(), false, '贴边完成提示收起 mini');
     assert.equal(overlaps(painted(message), panel.getBounds()), false, '贴边完成提示避开面板');
     await capture(message, 'tucked-completion-blue-light');
     core('rest'); assert.equal(getQuiet(), false, '贴边休息仍允许普通互动');
+    assert.equal(mini.isVisible(), true, '贴边开始休息恢复 mini');
     assert.equal(panel.isVisible(), true); stamp = service.getSnapshot().deadline; service.tick();
     await poll(() => message.isVisible() && message.getBounds().height === 164, Boolean, '贴边休息完成卡保持紧凑可见');
+    assert.equal(mini.isVisible(), false, '贴边休息完成也收起 mini');
     result.tucked = { presentation: edgeTuck.getPresentation(), panel: panel.getBounds(), mini: mini.getBounds(),
       message: message.getBounds(), state: service.getSnapshot() };
     edgeTuck.hide();
     await poll(() => allWindows().every(win => !win.isVisible()), Boolean, '真正隐藏球球仍隐藏全部番茄窗');
     edgeTuck.restore(); pet.setBounds(originalPetBounds, false); quotaLabel.hide();
-    await poll(() => panel.isVisible() && mini.isVisible() && message.isVisible(), Boolean, '恢复球球后番茄窗恢复');
+    await poll(() => panel.isVisible() && !mini.isVisible() && message.isVisible(), Boolean, '恢复球球后只恢复完成提示与面板');
     result.checks.push('edge-quota-native-anchor-follow-empty-hidden-fallback-and-tucked-panel-reminders');
 
     await bridge(panel, 'close-panel');
@@ -566,7 +583,7 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
       if (order === 'todo-first') todoId = addTodo(); else finishFocus();
       if (order === 'pomodoro-first') {
         await poll(() => message.isVisible() && abovePet(), Boolean, '无待办时完成提示球上方居中');
-        assert.equal(overlaps(painted(message), painted(mini)), false, 'mini 避开完成提示，不推走完成卡');
+        assert.equal(mini.isVisible(), false, '完成卡出现时收起 mini');
         todoId = addTodo();
       }
       const todoWindow = await poll(() => notesCompanion.getWindows().reminder, win => Boolean(win && win.isVisible()), '真实到期待办提醒');
@@ -575,12 +592,12 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
       if (!normalTodoBounds) normalTodoBounds = before;
       else assert.deepEqual(before, normalTodoBounds, '完成先出现时，待办仍使用自己的既有位置');
       if (order === 'todo-first') finishFocus();
-      const positioned = await poll(() => ({ todo: todoWindow.getBounds(), completion: message.getBounds(), mini: mini.getBounds() }),
+      const positioned = await poll(() => ({ todo: todoWindow.getBounds(), completion: message.getBounds(), miniVisible: mini.isVisible() }),
         view => message.isVisible() && !overlaps(painted(message), view.todo), `${order} 完成卡即时避开待办`);
       assert.deepEqual(positioned.todo, before, '完成避让不移动待办');
-      assert.equal(overlaps(painted(message), painted(mini)), false, '两种到达顺序都不重叠 mini');
+      assert.equal(positioned.miniVisible, false, '两种到达顺序都收起 mini');
       assert.equal(message.isFocusable(), false);
-      for (const bounds of Object.values(positioned)) assert.ok(inArea(bounds), '同时提醒都在工作区内');
+      for (const bounds of [positioned.todo, positioned.completion]) assert.ok(inArea(bounds), '同时提醒都在工作区内');
       result.reminderPlacement.push({ order, ...positioned });
       if (order === 'pomodoro-first') {
         await capture(todoWindow, 'coexisting-todo-blue-light'); await capture(message, 'coexisting-completion-blue-light');
@@ -594,8 +611,8 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
       edgeTuck.dock(side);
       await poll(() => message.isVisible() && abovePet(), Boolean, `${side} 贴边完成提示横向夹紧后保持球上方`);
       assert.equal(message.getBounds().x, side === 'left' ? area.x : area.x + area.width - message.getBounds().width);
-      assert.equal(overlaps(painted(message), painted(mini)), false, '贴边 mini 避开完成卡');
-      result.reminderPlacement.push({ side, pet: pet.getBounds(), completion: message.getBounds(), mini: mini.getBounds() });
+      assert.equal(mini.isVisible(), false, '贴边完成卡收起 mini');
+      result.reminderPlacement.push({ side, pet: pet.getBounds(), completion: message.getBounds(), miniVisible: mini.isVisible() });
       if (side === 'right') await capture(message, 'edge-completion-blue-light');
     }
     edgeTuck.restore(); pet.setBounds(originalPetBounds, false);
