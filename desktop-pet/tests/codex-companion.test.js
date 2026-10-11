@@ -759,6 +759,82 @@ test('切换账号清空额度提醒基线、当前提示及排队，新账号�
   assert.equal(f.alerts.length, 1);
 });
 
+test('专注免打扰清除正在展示和待展示提示，退出不补发，之后的新事件仍提醒', async t => {
+  const f = fixture(); t.after(() => f.companion.close());
+  await f.companion.setEnabled(true);
+  f.task(1, 'active', { baseline: true }); f.task(1, 'waiting');
+  await f.tick(5000);
+  f.task(2, 'active', { baseline: true }); f.task(2, 'waiting');
+  const clears = f.clears.length;
+  assert.equal(f.companion.setQuietMode(true), true);
+  assert.equal(f.companion.setQuietMode(true), false);
+  assert.equal(f.companion.setQuietMode('false'), false);
+  assert.equal(f.companion.getSnapshot().currentAlert, null);
+  assert.equal(f.clears.length, clears + 1);
+  await f.tick(5000);
+  assert.equal(f.companion.setQuietMode(false), true);
+  await f.tick(30000);
+  assert.equal(f.alerts.length, 1);
+  f.task(3, 'active', { baseline: true }); f.task(3, 'waiting');
+  await f.tick(5000);
+  assert.deepEqual(f.alerts.at(-1).taskIds, [taskId(3)]);
+});
+
+test('免打扰继续轮询、完成历史、手动刷新和阈值观察，已静默事件不会重放', async t => {
+  const f = fixture(); t.after(() => f.companion.close());
+  await f.companion.setEnabled(true);
+  f.companion.setPreferences({ taskNameInAlerts: true });
+  f.quota(95);
+  f.task(1, 'active', { baseline: true }); f.task(1, 'idle');
+  f.companion.setQuietMode(true);
+  f.task(1, 'completed');
+  f.task(2, 'active', { baseline: true }); f.task(2, 'failed');
+  f.quota(19); f.quota(9);
+  await f.tick(15000);
+  const snapshot = f.companion.getSnapshot();
+  assert.equal(snapshot.enabled, true);
+  assert.equal(snapshot.quota.windows[0].remaining, 9);
+  assert.deepEqual(snapshot.history.results.map(row => row.state), ['completed', 'failed']);
+  assert.equal(f.companion.markRead(taskId(1), 'turn-1'), true);
+  assert.equal(f.calls.some(call => call.kind === 'refresh' && call.tasks), true);
+  assert.equal(f.connections[0].closed, false);
+  assert.equal(await f.companion.refresh(), true);
+  f.quota(9);
+  f.task(1, 'active', { baseline: true }); f.task(1, 'completed');
+  f.companion.setQuietMode(false);
+  f.quota(9);
+  await f.tick(30000);
+  assert.equal(f.alerts.length, 0);
+  f.quota(0);
+  f.task(3, 'active', { baseline: true }); f.task(3, 'completed');
+  await f.tick(5000);
+  assert.equal(f.alerts[0].kind, 'quota', '退出后仅提醒新跨越的额度阈值');
+  await f.tick(30000);
+  assert.match(f.alerts.at(-1).text, /任务 3/, '用户原有提示偏好保持不变');
+});
+
+test('展示许可或菜单回调中开启免打扰，不再播放已选中的提示', async t => {
+  for (const callback of ['canPresent', 'onChange']) {
+    let changed = false;
+    const quiet = companion => {
+      if (!changed) { changed = true; companion.setQuietMode(true); }
+    };
+    const f = fixture(callback === 'canPresent'
+      ? { canPresent: companion => { quiet(companion); return true; } }
+      : { onChange: (snapshot, companion) => { if (snapshot.currentAlert) quiet(companion); } });
+    t.after(() => f.companion.close());
+    await f.companion.setEnabled(true);
+    f.task(1, 'active', { baseline: true }); f.task(1, 'waiting');
+    await f.tick(5000);
+    assert.equal(changed, true, callback);
+    assert.equal(f.companion.getSnapshot().currentAlert, null, callback);
+    assert.equal(f.alerts.length, 0, callback);
+    f.companion.setQuietMode(false);
+    await f.tick(30000);
+    assert.equal(f.alerts.length, 0, callback);
+  }
+});
+
 test('首次与重连基线不回放历史完成、失败、等待和运行提示', async () => {
   const f = fixture();
   await f.companion.setEnabled(true);

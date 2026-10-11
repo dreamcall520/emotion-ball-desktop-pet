@@ -147,9 +147,13 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     getWindows() { return this.windows; },
     getStore() { return { getState: () => ({ todos: this.todos }) }; },
     pause() { this.pauses++; }, resume() { this.resumes++; },
-    async close() { this.closes++; return this.closeAllowed; }
+    async close({ beforeCommit = () => true } = {}) { this.closes++; return this.closeAllowed && beforeCommit(); }
   };
   const realRequire = createRequire(path.resolve(__dirname, '../main.js'));
+  const pomodoro = { state: { quiet: false }, getSnapshot() { return this.state; },
+    change(quiet) { this.state = { quiet }; this.options.onChange(this.state); }, close() { return { ok: true }; } };
+  const pomodoroWindows = { opens: 0, sync() {}, reposition() {}, hide() {}, close() {},
+    open() { this.opens++; } };
   const context = vm.createContext({ __dirname: path.resolve(__dirname, '..'), console,
     process: { env: {}, argv, stderr: { write(message) { throw new Error(message); } } }, performance: { now: () => now },
     Date: class extends Date { static now() { return 1800000000000 + now; } },
@@ -194,6 +198,8 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
       } };
       if (name === './lib/chat-companion') return { createChatCompanion: options => { chat.options = options; return chat; } };
       if (name === './lib/notes-companion') return { createNotesCompanion: options => { notes.options = options; return notes; } };
+      if (name === './lib/pomodoro') return { createPomodoro: options => { pomodoro.options = options; return pomodoro; } };
+      if (name === './lib/pomodoro-window') return { createPomodoroWindows: options => { pomodoroWindows.options = options; return pomodoroWindows; } };
       if (name === './lib/codex-chat-rpc') return { createCodexChatRpc: () => { throw new Error('real Codex process is forbidden in main fixture'); } };
       if (name === './lib/activity-monitor') return { ...realRequire(name), createActivityMonitor: options => { activity.sample = options.onSample; return activity; } };
       return realRequire(name);
@@ -205,7 +211,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   pet.emit('ready-to-show');
   pet.webContents.emit('did-finish-load');
   return { pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
-    notes, nativeTheme, call: expression => vm.runInContext(expression, context),
+    notes, pomodoro, pomodoroWindows, nativeTheme, call: expression => vm.runInContext(expression, context),
     invoke(channel, packet, sender = pet.webContents) {
       assert.ok(ipcHandlers.has(channel), `${channel} handler must be registered`);
       return Promise.resolve(ipcHandlers.get(channel)({ sender }, packet));
@@ -441,7 +447,7 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   const menu = f.call('menuTemplate()');
   const top = menu.filter(item => item.type !== 'separator');
   assert.deepEqual(Array.from(top, item => item.label), [
-    '和球球聊聊', '来定制球球', '便签与待办', '球球与互动', 'Codex 与 API',
+    '和球球聊聊', '来定制球球', '便签与待办', '番茄钟', '球球与互动', 'Codex 与 API',
     '贴边与显示', '球球尺寸', '界面配色', '常规设置', '关于球球', '检查更新', '退出球球'
   ]);
   const group = label => top.find(item => item.label === label).submenu.filter(item => item.type !== 'separator');
@@ -2661,4 +2667,47 @@ test('副本解码失败或尺寸不符时拒绝保存与新增收藏，原设�
     assert.equal(f.saved.length, 0); assert.equal(f.pet.messages.length, messages);
     assert.equal(f.chatWindow.appearances, appearances);
   }
+});
+
+test('番茄免打扰只抑制主动联动，保留后台额度、手动回应和待办提醒', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  const menu = f.call('menuTemplate()');
+  const entry = menu.findIndex(item => item.id === 'pomodoro-open');
+  assert.equal(menu[entry - 1].label, '便签与待办');
+  menu[entry].click();
+  assert.equal(f.pomodoroWindows.opens, 1);
+  assert.equal(f.call('pomodoroQuiet'), false, '打开面板尚不免打扰');
+  f.pomodoro.change(true);
+  assert.equal(f.call('canPresentCodex()'), false);
+  assert.equal(f.call("showDialogue('work')"), null);
+  assert.equal(f.call("showDialogue('thought')"), null);
+  assert.equal(f.call("showUpdateBubble({ latestVersion: '9.9.9' })"), false);
+  assert.equal(f.notes.pauses, 0, '专注不暂停用户待办到时提醒');
+  const before = f.commands.length;
+  f.notes.options.onComplete();
+  assert.equal(f.commands.length, before, '待办完成不附带球球跳动');
+  assert.equal(f.connections[0].closed, false, '后台联动继续');
+  assert.equal(f.call('settings.bubblesEnabled'), true, '不覆盖用户互动偏好');
+  assert.equal(f.pet.messages.filter(row => row.channel === 'pet:settings').at(-1).packet.focusQuiet, true);
+  f.call('dialogue.lastShownAt = -Infinity');
+  assert.ok(f.call("showDialogue('pet')"), '主动摸球球仍可回应');
+  f.pomodoro.change(false);
+  f.notes.options.onComplete();
+  assert.equal(f.commands.at(-1).motion, 'hop');
+  assert.equal(f.call('settings.bubblesEnabled'), true);
+});
+
+test('番茄退出保存失败保留应用和后台资源，成功重试才清理', async () => {
+  const f = await fixture({ codexEnabled: true });
+  f.pomodoro.close = () => ({ ok: false, message: '保存失败' });
+  let prevented = 0;
+  f.app.emit('before-quit', { preventDefault() { prevented++; } });
+  assert.equal(prevented, 1);
+  assert.equal(f.call('isQuitting'), false);
+  assert.equal(f.call('quitCleanupStarted'), false);
+  assert.equal(f.connections[0].closed, false);
+  assert.equal(f.dialogs.at(-1)[0].title, '番茄钟尚未保存');
+  f.pomodoro.close = () => ({ ok: true });
+  f.app.emit('before-quit', { preventDefault() { prevented++; } });
+  assert.equal(f.call('quitCleanupStarted'), true);
 });

@@ -1242,3 +1242,22 @@ test('missing or mismatched Codex descriptor keeps a usable ball instead of an e
   assert.equal(r.pet.children[0].tag, 'svg');
   r.click(); r.advanceTo(260); assert.ok(r.host.scenes.includes('play'));
 });
+
+test('番茄免打扰清思考展示与闲聊，手动互动仍可用，结束后恢复任务感知', () => {
+  const r = createRenderer();
+  r.codexSettings({ enabled: true, generation: 1, activeTaskCount: 1 });
+  assert.equal(r.pet.dataset.codexWorking, 'true');
+  r.settings({ focusQuiet: true, keepAwake: true });
+  assert.equal(r.pet.dataset.codexWorking, 'false');
+  assert.equal(r.host.thoughts.at(-1).visible, false);
+  assert.equal(r.host.availability.at(-1).available, false);
+  r.advanceTo(90000); r.activity();
+  assert.equal(r.pet.dataset.codexWorking, 'false');
+  assert.deepEqual(r.host.scenes, []);
+  r.click(); r.advanceTo(90260);
+  assert.notEqual(r.pet.dataset.lastAction, 'thought');
+  assert.ok(r.host.scenes.length > 0, '手动点击保留互动反馈');
+  r.advanceTo(100000);
+  r.settings({ focusQuiet: false, keepAwake: true });
+  assert.equal(r.pet.dataset.focusQuiet, 'false');
+});

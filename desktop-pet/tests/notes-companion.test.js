@@ -607,3 +607,15 @@ test('explicit panel display moves an already-restored note from another screen 
   await f.call(panel, 'notes:open-note', item.id);
   assert.equal(f.screen.getDisplayMatching(win.getBounds()).id, primary.id, '再次显式展示可随面板回到另一屏');
 });
+
+test('其他功能退出保存失败时，便签尚未拆除，可继续使用并重试退出', async t => {
+  const f = fixture(t);
+  f.controller.openPanel(); await flush();
+  const panel = f.controller.getWindows().panel;
+  panel.allowClose = true;
+  assert.equal(await f.controller.close({ beforeCommit: () => false }), false);
+  assert.equal(panel.isDestroyed(), false);
+  assert.equal(f.handlers.has('notes:load'), true);
+  assert.equal(await f.controller.close({ beforeCommit: () => true }), true);
+  assert.equal(panel.isDestroyed(), true);
+});

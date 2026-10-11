@@ -27,6 +27,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
   now = Date.now, random = Math.random, schedule = setTimeout, cancel = clearTimeout } = {}) {
   let enabled = false;
   let closed = false;
+  let quiet = false;
   let generation = 0;
   let connectionEpoch = 0;
   let connection = null;
@@ -232,6 +233,18 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     if (dedupe) { quotaTracker.reset(); quotaNeedsBaseline = true; terminalSeen.clear(); resumableTurns.clear(); }
     if (cooldown) lastPresentedAt = -Infinity;
   }
+  function setQuietMode(value) {
+    if (closed || typeof value !== 'boolean' || quiet === value) return false;
+    quiet = value;
+    if (quiet) {
+      clearTimer('drain'); clearTimer('alert');
+      queued = []; currentAlert = null;
+      // Silence presentation only; observations still advance dedupe and quota thresholds.
+      onClear();
+    }
+    notify();
+    return true;
+  }
   function removeOrdinaryQuotaAlerts() {
     queued = queued.filter(event => {
       if (event.kind !== 'quota') return true;
@@ -298,7 +311,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
   function armDrain() {
     clearTimer('drain');
     pruneAlerts();
-    if (!enabled || closed || !queued.length) return;
+    if (!enabled || closed || quiet || !queued.length) return;
     const mergedAt = Math.min(...queued.map(event => event.createdAt + MERGE_MS));
     const readyAt = Math.max(mergedAt, lastPresentedAt + ALERT_GAP_MS);
     const quotaResets = queued.flatMap(event => event.kind === 'quota'
@@ -312,6 +325,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     setTimer('drain', wakeAt - now(), drain);
   }
   function drain() {
+    if (quiet) return;
     const cleared = pruneAlerts();
     const readyEvents = queued.filter(event => event.createdAt + MERGE_MS <= now());
     let ready = readyEvents[0];
@@ -323,7 +337,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
       })[0] || ready;
     }
     if (ready && now() - lastPresentedAt >= ALERT_GAP_MS && canPresent() === true
-      && enabled && !closed && queued.includes(ready) && eventValid(ready)) {
+      && enabled && !closed && !quiet && queued.includes(ready) && eventValid(ready)) {
       refreshEventRefs(ready);
       queued = queued.filter(event => event !== ready);
       const durationMs = eventDuration(ready, [...ready.refs.values()]);
@@ -331,7 +345,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
       currentAlert = candidate;
       armCurrentAlert(candidate);
       notify();
-      if (enabled && !closed && currentAlert === candidate && eventValid(candidate)) {
+      if (enabled && !closed && !quiet && currentAlert === candidate && eventValid(candidate)) {
         refreshEventRefs(candidate);
         lastPresentedAt = now();
         onAlert(publicAlert(candidate));
@@ -341,6 +355,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     armDrain();
   }
   function enqueue(kind, ref) {
+    if (quiet) return;
     let event = kind === 'quota' ? queued.find(item => item.kind === kind && item.refs.has(ref.key)) : null;
     const previousRef = kind === 'quota' ? event?.refs.get(ref.key) : null;
     if (!event) event = queued.find(item => item.kind === kind && now() - item.createdAt < MERGE_MS);
@@ -637,7 +652,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     if (changed) notify();
     return changed;
   }
-  return { setEnabled, setPreferences, refresh, getSnapshot, dismiss, markRead, markAllRead, close };
+  return { setEnabled, setPreferences, setQuietMode, refresh, getSnapshot, dismiss, markRead, markAllRead, close };
 }
 
 module.exports = { createCodexCompanion };

@@ -400,7 +400,7 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
     scan();
   }, 1000);
   timer.unref?.(); scan();
-  function close() {
+  function close({ beforeCommit = () => true } = {}) {
     if (closed) return Promise.resolve(true);
     if (closeAttempt) return closeAttempt;
     exitTokens = new Map();
@@ -416,6 +416,7 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
         }
         for (const entry of entries.values()) if (!await canClose(entry, true)) return false;
         for (const entry of entries.values()) if (entry.mode === 'note' && !saveBounds(entry).ok) return false;
+        if (beforeCommit() !== true) return false;
         approved = true;
       } catch (error) { report(error); return false; }
       finally {

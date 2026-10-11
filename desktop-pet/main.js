@@ -53,6 +53,8 @@ const { createCodexChatRpc } = require('./lib/codex-chat-rpc');
 const { createChatWindow } = require('./lib/chat-window');
 const { createNotesCompanion } = require('./lib/notes-companion');
 const { createNotesOrganizer } = require('./lib/notes-organizer');
+const { createPomodoro } = require('./lib/pomodoro');
+const { createPomodoroWindows } = require('./lib/pomodoro-window');
 const { createApiUsage } = require('./lib/api-usage');
 const { createApiUsageLabelWindow } = require('./lib/api-usage-label-window');
 const { checkLatestRelease } = require('./lib/app-update');
@@ -92,6 +94,10 @@ let codexThreadOpener = url => shell.openExternal(url);
 let chat = null;
 let chatWindow = null;
 let notesCompanion = null;
+let pomodoro = null;
+let pomodoroWindows = null;
+let pomodoroQuiet = false;
+let pomodoroNow = Date.now;
 let notesQuitReady = false;
 let notesQuitFlight = null;
 let customizationWindow = null;
@@ -175,6 +181,41 @@ function fromPetWindow(event) {
 
 function presentationSuppressed() {
   return edgeTuck?.getPresentation().suppressed === true;
+}
+
+function openPomodoro() {
+  if (isQuitting || screenLocked) return;
+  if (!petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) restorePet();
+  if (edgeTuck?.getPresentation().side) edgeTuck.restore();
+  pomodoroWindows?.open();
+}
+
+function syncPomodoro(snapshot = pomodoro?.getSnapshot()) {
+  const quiet = snapshot?.quiet === true;
+  if (quiet !== pomodoroQuiet) {
+    pomodoroQuiet = quiet;
+    codexCompanion?.setQuietMode(quiet);
+    if (quiet) {
+      clearCodexPresentation();
+      dialogue?.dismiss();
+      hideBubble();
+      thoughts?.hide();
+      edgeNotice?.reset();
+    }
+    sendCompanionSettings();
+    tickEdgeNotice(true);
+  }
+  pomodoroWindows?.sync();
+}
+
+function savePomodoroForQuit() {
+  const previous = isQuitting;
+  isQuitting = true;
+  const saved = pomodoro?.close().ok !== false;
+  isQuitting = previous;
+  if (!saved) void dialog.showMessageBox({ type: 'error', title: '番茄钟尚未保存',
+    message: '番茄钟暂时无法保存，请检查本机存储后再退出。', buttons: ['知道了'] });
+  return saved;
 }
 
 function fromChatWindow(event) {
@@ -293,7 +334,7 @@ async function showUpdateResult(result) {
 }
 
 function showUpdateBubble(result) {
-  if (isQuitting || screenLocked || chatWindow?.isVisible() || presentationSuppressed() ||
+  if (pomodoroQuiet || isQuitting || screenLocked || chatWindow?.isVisible() || presentationSuppressed() ||
     !petWindow || petWindow.isDestroyed() || !petWindow.isVisible() || dragState || hostMotion || bounceState) return false;
   const payload = dialogue?.offerUpdate(result.latestVersion, performance.now());
   return Boolean(payload && showBubble(payload));
@@ -527,6 +568,7 @@ function openChat() {
   apiUsageLabel?.hide();
   edgeNoticeWindow?.hide();
   chatWindow.show(chatSnapshot());
+  pomodoroWindows?.sync();
   // Opening checks login and shows local history; only send() can create a thread.
   void chat.connect().catch(() => {});
 }
@@ -553,7 +595,7 @@ function tickEdgeNotice(force = false) {
   if (!force && now - lastEdgeNoticeTick < 500) return;
   lastEdgeNoticeTick = now;
   const presentation = edgeTuck?.getPresentation();
-  const visible = Boolean(!isQuitting && !chatWindow?.isVisible() && codexPageReady && petWindow && !petWindow.isDestroyed() && petWindow.isVisible());
+  const visible = Boolean(!pomodoroQuiet && !isQuitting && !chatWindow?.isVisible() && codexPageReady && petWindow && !petWindow.isDestroyed() && petWindow.isVisible());
   const quotaEnabled = settings?.codexEnabled === true && settings.codexQuotaAlwaysVisible === true;
   edgeNotice?.tick({ presentation, visible, locked: screenLocked,
     bubblesEnabled: settings?.bubblesEnabled === true, quotaEnabled,
@@ -574,6 +616,7 @@ function applyPresentation(packet) {
     safelyInvokeWindow('收起时 API 卡片隐藏', () => apiUsageLabel?.hide());
   } else syncQuotaLabel(codexCompanion?.getSnapshot());
   tickEdgeNotice(true);
+  pomodoroWindows?.sync();
   refreshTrayMenu();
 }
 
@@ -616,7 +659,7 @@ function hidePet() {
 }
 
 function codexHostAvailable() {
-  return codexPageReady && !isQuitting && !screenLocked && !chatWindow?.isVisible() && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible() &&
+  return !pomodoroQuiet && codexPageReady && !isQuitting && !screenLocked && !chatWindow?.isVisible() && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible() &&
     !dragState && !bounceState && !hostMotion && !dialogue?.hasBubble(performance.now());
 }
 
@@ -786,6 +829,7 @@ function repositionBubble() {
   safelyInvokeWindow('气泡重排', () => bubble?.reposition());
   safelyInvokeWindow('聊天面板重排', () => chatWindow?.reposition());
   repositionQuotaLabel();
+  safelyInvokeWindow('番茄钟重排', () => pomodoroWindows?.reposition());
 }
 
 function destroyBubbleSafely() {
@@ -917,6 +961,7 @@ function initializeCodexCompanion(options = {}) {
     quotaAlwaysVisible: settings?.codexQuotaAlwaysVisible === true,
     quotaPeriod: settings?.codexQuotaPeriod
   });
+  codexCompanion.setQuietMode(pomodoroQuiet);
 }
 
 function codexDetailModel(snapshot, action, period) {
@@ -1321,6 +1366,7 @@ function sendCompanionSettings() {
   if (!petWindow || petWindow.isDestroyed()) return;
   petWindow.webContents.send('pet:settings', {
     keepAwake: settings.keepAwake,
+    focusQuiet: pomodoroQuiet,
     bubblesEnabled: settings.bubblesEnabled,
     customization: effectiveCustomization(settings.customization),
     size: settings.size, codexPet: codexPetDescriptor(settings.customization.appearance)
@@ -1341,6 +1387,8 @@ function setCompanionSetting(name, enabled) {
 }
 
 function showDialogue(event) {
+  const scene = typeof event === 'string' ? event : event?.event;
+  if (pomodoroQuiet && ['work', 'thought'].includes(scene)) return null;
   if (screenLocked || chatWindow?.isVisible() || presentationSuppressed() || !petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return null;
   const payload = dialogue.offer(event, performance.now());
   if (payload) dismissCodexPresentation();
@@ -1536,6 +1584,7 @@ function menuTemplate() {
         click: item => { item.checked = (settings.notesDefaultTab === 'note' ? 'note' : 'todo') === value; setNotesDefaultTab(value); }
       })) }
     ] },
+    { id: 'pomodoro-open', label: '番茄钟', click: openPomodoro },
     { type: 'separator' },
     { label: '球球与互动', submenu: [
       { label: '随机表情', click: () => sendCommand('random') },
@@ -1654,6 +1703,15 @@ async function finishSmokeTest() {
       "Boolean(window.petDesktop.onActivity && document.getElementById('pet').dataset.mode)"
     );
     if (!companionReady) throw new Error('轻陪伴活动感知尚未接入');
+
+    if (process.env.PET_SMOKE_POMODORO_ONLY === '1') {
+      await require('./scripts/verify-pomodoro-integration').verifyPomodoro({
+        pet: petWindow, service: pomodoro, windows: pomodoroWindows, BrowserWindow, powerMonitor,
+        getMenu: () => Menu.buildFromTemplate(menuTemplate()), getSettings: () => settings,
+        getQuiet: () => pomodoroQuiet, setClock: read => { pomodoroNow = read; }
+      });
+      app.exit(0); return;
+    }
 
     if (process.env.PET_SMOKE_FUNCTION_WINDOWS_ONLY === '1') {
       await require('./scripts/verify-function-windows').verifyFunctionWindows({
@@ -2183,6 +2241,7 @@ function createPetWindow() {
     createdPetWindow.showInactive();
     if (!isCurrentPetWindow()) return;
     syncQuotaLabel(codexCompanion?.getSnapshot());
+    pomodoroWindows?.sync();
   });
   createdPetWindow.webContents.on('did-finish-load', () => {
     if (!isCurrentPetWindow()) return;
@@ -2218,6 +2277,7 @@ function createPetWindow() {
     if (!isCurrentPetWindow()) return;
     if (edgeTuck?.getPresentation().mode === 'hidden') edgeTuck.restore();
     notesCompanion?.repositionReminder?.(true);
+    pomodoroWindows?.sync();
   });
   createdPetWindow.on('hide', () => {
     // macOS may deliver hide after a quick hide/show pair. Do not hide a newly
@@ -2230,6 +2290,7 @@ function createPetWindow() {
     safelyInvokeWindow('隐藏时停止动作', stopMotion);
     if (!isCurrentPetWindow()) return;
     hideBubble();
+    pomodoroWindows?.sync();
     if (!isCurrentPetWindow()) return;
     safelyInvokeWindow('隐藏时额度标签隐藏', () => quotaLabel?.hide());
     safelyInvokeWindow('隐藏时 Codex 详情隐藏', () => codexDetails?.close());
@@ -2395,7 +2456,7 @@ function registerIpc() {
     if (!fromPetWindow(event) || typeof request?.visible !== 'boolean') return;
     if (!request.visible) { thoughts?.hide(); return; }
     const snapshot = codexCompanion?.getSnapshot();
-    if (!settings.codexEnabled || !codexPageReady || screenLocked || chatWindow?.isVisible() || presentationSuppressed() || dragState || hostMotion ||
+    if (pomodoroQuiet || !settings.codexEnabled || !codexPageReady || screenLocked || chatWindow?.isVisible() || presentationSuppressed() || dragState || hostMotion ||
         !petWindow.isVisible() || !snapshot?.tasks.items.some(task => task.state === 'active')) return;
     thoughts?.show(request);
   });
@@ -2591,6 +2652,19 @@ async function bootstrap() {
   // The existing saved appearance wins over per-page legacy preferences.
   if (nativeTheme) nativeTheme.themeSource = settings.codexQuotaAppearance;
   settings.customization = { ...settings.customization, appearance: settings.startupAppearance };
+  pomodoro = createPomodoro({ filePath: path.join(app.getPath('userData'), 'pomodoro.json'), now: () => pomodoroNow(),
+    canEncourage: () => !screenLocked && !isQuitting && !chatWindow?.isVisible() && !presentationSuppressed() &&
+      Boolean(petWindow && !petWindow.isDestroyed() && petWindow.isVisible() && !dragState && !hostMotion),
+    onChange: syncPomodoro, onError: error => writeError('番茄钟记录', error) });
+  pomodoroWindows = createPomodoroWindows({ BrowserWindow, ipcMain, screen,
+    getPetWindow: () => petWindow,
+    getPetBounds: () => petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null,
+    getPetPresentation: () => ({ ...edgeTuck?.getPresentation(), shape: settings?.customization?.appearance?.shape }),
+    getWindowObstacles: functionWindowObstacles,
+    getSnapshot: () => pomodoro.getSnapshot(), onAction: (type, value) => pomodoro.action(type, value),
+    isSuppressed: () => screenLocked || isQuitting || chatWindow?.isVisible() || presentationSuppressed(),
+    onError: error => writeError('番茄钟窗口', error) });
+  syncPomodoro();
   notesCompanion = createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialog,
     organizer: createNotesOrganizer({ workspaceDir: path.join(app.getPath('userData'), 'notes-workspace') }),
     filePath: path.join(app.getPath('userData'), 'notes-todos.json'),
@@ -2602,7 +2676,7 @@ async function bootstrap() {
     getAppearance: getNotesAppearance,
     getColorMode: () => settings.colorMode,
     isSuppressed: () => screenLocked || isQuitting,
-    onComplete: () => { if (!screenLocked && !isQuitting) sendCommand({ command: 'again', motion: 'hop' }); },
+    onComplete: () => { if (!pomodoroQuiet && !screenLocked && !isQuitting) sendCommand({ command: 'again', motion: 'hop' }); },
     onError: error => writeError('便签与待办', error) });
   nativeTheme?.on('updated', () => { if (settings.codexQuotaAppearance === 'system') notesCompanion?.syncAppearance(); });
   chatWindow = createChatWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
@@ -2698,12 +2772,13 @@ async function bootstrap() {
     edgeTuck?.suspend();
     safelyInvokeWindow('锁屏时暂停活动监测', () => activityMonitor.pause());
     hideBubble();
+    pomodoroWindows?.hide();
     safelyInvokeWindow('锁屏时额度标签隐藏', () => quotaLabel?.hide());
     safelyInvokeWindow('锁屏时 Codex 详情隐藏', () => codexDetails?.close());
     safelyInvokeWindow('锁屏时 API 卡片隐藏', () => apiUsageLabel?.hide());
     safelyInvokeWindow('锁屏时对白清理', () => dialogue.dismiss());
   };
-  const resume = () => { screenLocked = false; notesCompanion?.resume(); edgeTuck?.resume(); activityMonitor.resume(); syncQuotaLabel(codexCompanion?.getSnapshot()); scheduleUpdateCheck(); };
+  const resume = () => { screenLocked = false; notesCompanion?.resume(); edgeTuck?.resume(); activityMonitor.resume(); syncQuotaLabel(codexCompanion?.getSnapshot()); syncPomodoro(); scheduleUpdateCheck(); };
   const powerGuard = createPowerGuard({ pause, resume });
   powerMonitor.on('lock-screen', () => powerGuard.setLocked(true));
   powerMonitor.on('suspend', () => powerGuard.setSuspended(true));
@@ -2714,6 +2789,7 @@ async function bootstrap() {
   initializeCodexCompanion();
   createPetWindow();
   createTray();
+  if (process.argv.includes('--pomodoro-preview')) openPomodoro();
   if (process.argv.includes('--notes-preview')) notesCompanion.openPanel();
   scheduleUpdateCheck();
   if (settings.codexEnabled) void codexCompanion.setEnabled(true);
@@ -2724,9 +2800,10 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv) => {
     if (settings) restorePet();
     if (argv.includes('--notes-preview')) notesCompanion?.openPanel();
+    if (argv.includes('--pomodoro-preview')) openPomodoro();
   });
 
   app.on('before-quit', event => {
@@ -2736,13 +2813,18 @@ if (!hasSingleInstanceLock) {
     if (!quitCleanupStarted && !notesQuitReady && event?.preventDefault &&
       (pendingReminders || noteWindows?.panel || noteWindows?.notes.length || noteWindows?.reminder)) {
       event.preventDefault();
-      if (!notesQuitFlight) notesQuitFlight = Promise.resolve(notesCompanion.close()).then(allowed => {
+      if (!notesQuitFlight) notesQuitFlight = Promise.resolve(notesCompanion.close({ beforeCommit: savePomodoroForQuit })).then(allowed => {
         notesQuitFlight = null;
         if (allowed) { notesQuitReady = true; setTimeout(() => app.quit(), 0); }
       }).catch(error => { notesQuitFlight = null; writeError('便签保存后退出', error); });
       return;
     }
     isQuitting = true;
+    if (!quitCleanupStarted && !savePomodoroForQuit()) {
+      isQuitting = false;
+      event?.preventDefault?.();
+      return;
+    }
     if (quitCleanupStarted) {
       if (!quitReady) event?.preventDefault?.();
       return;
@@ -2754,6 +2836,7 @@ if (!hasSingleInstanceLock) {
     clearTimeout(apiRefreshTimer);
     apiRefreshTimer = null;
     apiUsage?.close();
+    safelyInvokeWindow('退出时番茄钟窗口销毁', () => pomodoroWindows?.close());
     safelyInvokeWindow('退出时关于窗口销毁', () => aboutWindow?.destroy());
     let chatClosing;
     safelyInvokeWindow('退出时聊天停止', () => { chatClosing = chat?.close(); });

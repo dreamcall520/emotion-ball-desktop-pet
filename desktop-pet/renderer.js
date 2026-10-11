@@ -48,6 +48,7 @@
   let nextMotionToken = 0;
   let lastDoubleMotion = null;
   let codexEnabled = false;
+  let focusQuiet = false;
   let codexGeneration = 0;
   let codexPageEpoch = 0;
   let lastCodexAlertId = 0;
@@ -94,7 +95,7 @@
   }
 
   function canShowCodex() {
-    return !presentationSuppressed && codexEnabled && Boolean(lastSample) && !lastSample.locked && !companion.manualSleep &&
+    return !focusQuiet && !presentationSuppressed && codexEnabled && Boolean(lastSample) && !lastSample.locked && !companion.manualSleep &&
       currentState.mode !== 'sleep' && !dragState && !singleClickTimer && !helloTimer &&
       performance.now() >= actionUntil && !activeMotion;
   }
@@ -118,7 +119,7 @@
     clearTimeout(codexThinkingTimer);
     codexThinkingTimer = setTimeout(() => {
       codexThinkingTimer = null;
-      if (!codexEnabled || codexActiveTaskCount <= 0) return;
+      if (focusQuiet || !codexEnabled || codexActiveTaskCount <= 0) return;
       codexThinkingVisible = visible;
       syncCodexWorking();
       scheduleCodexThinkingPhase(!visible,
@@ -128,12 +129,13 @@
 
   function startCodexThinkingCadence() {
     stopCodexThinkingCadence();
+    if (focusQuiet) return;
     codexThinkingVisible = true;
     scheduleCodexThinkingPhase(false, CODEX_THINKING_BURST_MS);
   }
 
   function syncCodexWorking() {
-    const eligible = !presentationSuppressed && codexEnabled && codexActiveTaskCount > 0 && Boolean(lastSample) && !lastSample.locked &&
+    const eligible = !focusQuiet && !presentationSuppressed && codexEnabled && codexActiveTaskCount > 0 && Boolean(lastSample) && !lastSample.locked &&
       !companion.manualSleep && currentState.mode !== 'sleep' && !dragState && !singleClickTimer && !helloTimer &&
       performance.now() >= actionUntil && !activeMotion;
     const working = eligible && codexThinkingVisible;
@@ -532,12 +534,12 @@
       clearAction();
       stopMotion();
     }
-    if (currentState.welcome && !wakeOnDoubleClick && !activeMotion && !dragState?.dragged && now >= actionUntil) {
+    if (!focusQuiet && currentState.welcome && !wakeOnDoubleClick && !activeMotion && !dragState?.dragged && now >= actionUntil) {
       playCompanionReaction('stretch', 'wake');
     } else {
       restoreState();
     }
-    if (currentState.mode === 'sleep' && previousMode !== 'sleep' && !companion.manualSleep) {
+    if (!focusQuiet && currentState.mode === 'sleep' && previousMode !== 'sleep' && !companion.manualSleep) {
       desktop.say('sleep');
     }
     if (activeMotion) return;
@@ -548,7 +550,7 @@
       setBallGaze(null);
       petElement.dataset.gaze = '0,0';
     }
-    if (!companion.manualSleep && ['awake', 'focus'].includes(currentState.mode) &&
+    if (!focusQuiet && !companion.manualSleep && ['awake', 'focus'].includes(currentState.mode) &&
         now - lastWorkAttempt >= 60000 && !activeMotion && !dragState && now >= actionUntil) {
       lastWorkAttempt = now;
       desktop.say('work');
@@ -665,7 +667,7 @@
     if (presentationSuppressed || companion.manualSleep || lastSample?.locked) return;
     if (activeMotion) stopMotion();
     noteInteraction();
-    if (speak && codexEnabled && codexActiveTaskCount > 0) {
+    if (speak && !focusQuiet && codexEnabled && codexActiveTaskCount > 0) {
       clearAction();
       startCodexThinkingCadence();
       desktop.say('thought');
@@ -883,6 +885,11 @@
   listeners.push(desktop.onMotion(observe(onMotion)));
   listeners.push(desktop.onActivity(observe(updateActivity)));
   listeners.push(desktop.onSettings(observe(settings => {
+    const wasQuiet = focusQuiet;
+    focusQuiet = settings.focusQuiet === true;
+    petElement.dataset.focusQuiet = String(focusQuiet);
+    if (focusQuiet) stopCodexThinkingCadence();
+    else if (wasQuiet && codexEnabled && codexActiveTaskCount > 0) startCodexThinkingCadence();
     const next = PetCustomization.normalizeCustomization(settings.customization);
     const nextPet = next.appearance.shape === 'codex-pet' && settings.codexPet?.id === next.appearance.codexPetId &&
       window.CodexPetPlayer?.validDescriptor(settings.codexPet) ? settings.codexPet : null;

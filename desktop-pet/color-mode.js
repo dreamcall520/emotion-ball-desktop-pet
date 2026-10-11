@@ -17,7 +17,7 @@
   };
   apply('standard');
   const api = [window.petDesktop, window.petQuotaLabel, window.qiuqiuChat, window.qiuqiuAbout, window.qiuqiuApiUsage, window.qiuqiuApiUsageLabel,
-    window.petBubble, window.edgeNotice, window.petThought, window.qiuNotes, window.petCustomizer, window.petCodexDetails].find(candidate => candidate?.onColorMode);
+    window.petBubble, window.edgeNotice, window.petThought, window.qiuNotes, window.qiuPomodoro, window.petCustomizer, window.petCodexDetails].find(candidate => candidate?.onColorMode);
   if (!api) return;
   const unsubscribe = api.onColorMode(apply);
   system?.addEventListener('change', refreshAppearance);
