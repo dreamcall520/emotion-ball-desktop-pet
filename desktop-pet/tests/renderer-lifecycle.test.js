@@ -964,6 +964,67 @@ test('收起展示包清掉迟到落地姿态，旧窗口帧不能复活动作',
   assert.equal(r.engine.emotionId, '55');
 });
 
+function svgEyes(renderer) {
+  const eyes = [];
+  const walk = node => {
+    if (node.attributes?.class === 'eb-eye') eyes.push(node);
+    node.children?.forEach(walk);
+  };
+  walk(renderer.pet);
+  return eyes;
+}
+
+for (const side of ['left', 'right']) for (const previous of ['awake', 'thinking', 'manual-sleep', 'natural-sleep']) {
+  test(`${previous}从${side}收起的同一任务内，真实SVG立即采用靠边眼形`, () => {
+    const r = createRenderer();
+    if (previous === 'thinking') r.codexSettings({ enabled: true, generation: 1, activeTaskCount: 1 });
+    else if (previous === 'manual-sleep') r.command('sleep');
+    else if (previous === 'natural-sleep') r.activity(false, { idleSeconds: 901 });
+    r.advanceTo(1000);
+    const sleeping = previous.endsWith('sleep');
+    r.present({ mode: 'tucked', side, dragging: false, suppressed: true });
+    // 不推进时间或人工补帧：展示包返回时就应替换旧SVG眼睛。
+    const eyes = svgEyes(r);
+    assert.equal(eyes.length, 2);
+    for (const eye of eyes) {
+      const [, sx, sy] = eye.attributes.transform.match(/scale\(([^ ]+) ([^)]+)\)/).map(Number);
+      assert.ok(Math.abs(sx) <= 1.18, '入口首帧不能保留普通/思考态的大眼缩放');
+      assert.ok(Math.abs(sy) <= (sleeping ? 0.1 : 1.18), '睡眠收起首帧必须立即闭眼');
+    }
+    assert.equal(r.engine.emotionId, sleeping ? '56' : '55');
+    assert.ok(r.engine._lastPose, '入口首帧已真实绘制，而非只更新表情编号');
+    assert.equal(r.engine._lastPose.left.y, sleeping ? 24 : 20);
+    assert.equal(r.engine._lastPose.body.zzz, 0);
+    assert.equal(r.engine._active, true);
+  });
+}
+
+for (const size of [80, 180]) for (const side of ['left', 'right']) for (const sleeping of ['manual', 'natural']) {
+  test(`${size}px ${sleeping}睡眠收起在${side}时，真实闭眼路径不越过半头中心边界`, () => {
+    const r = createRenderer();
+    if (size !== 80) r.resize(size);
+    if (sleeping === 'manual') r.command('sleep');
+    else r.activity(false, { idleSeconds: 901 });
+    r.advanceTo(1000);
+    r.present({ mode: 'tucked', side, suppressed: true });
+    for (const now of [1000, 1016, 1500, 5000]) {
+      if (now > 1000) r.advanceTo(now);
+      assert.ok(r.engine._lastPose.left.open <= 0.081);
+      for (const eye of svgEyes(r)) {
+        const transform = eye.attributes.transform.match(/^translate\(([^ ]+) ([^)]+)\) scale\(([^ ]+) ([^)]+)\) translate\(([^ ]+) ([^)]+)\)$/);
+        assert.ok(transform, '靠边闭眼路径无额外旋转');
+        const [, tx, ty, sx, sy, cx, cy] = transform.map(Number);
+        const points = eye.attributes.d.match(/-?\d+(?:\.\d+)?/g).map(Number);
+        for (let index = 0; index < points.length; index += 2) {
+          const x = tx + sx * (points[index] + cx), y = ty + sy * (points[index + 1] + cy);
+          assert.ok(side === 'left' ? x >= 114.27 : x <= 114.27, `闭眼路径越过可见半头中心：${x},${y}`);
+          assert.ok(y >= 34 && y <= 195, `闭眼路径越过半头上下边界：${x},${y}`);
+        }
+      }
+    }
+  });
+}
+
 test('收起在125ms活动采样下仍按原定时间眨眼，仅保留微呼吸', () => {
   const r = createRenderer();
   r.codexSettings({ enabled: true, generation: 1, activeTaskCount: 2 });

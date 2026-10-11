@@ -2158,6 +2158,7 @@ async function finishSmokeTest() {
           try {
             await require('./scripts/verify-edge-companion').verifyEdgeCompanion({
               pet: petWindow, screen, quotaLabel, notice: edgeNoticeWindow,
+              command: sendCommand,
               dock: dockPet, hide: hidePet, restore: restorePet,
               pause: () => edgeTuck.suspend(), resume: () => edgeTuck.resume(),
               setSetting: setCompanionSetting, setQuotaPreference: setCodexPreference,

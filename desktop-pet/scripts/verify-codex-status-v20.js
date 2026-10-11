@@ -186,6 +186,7 @@ const paint = win => win.webContents.executeJavaScript('new Promise(resolve => r
 async function cardView(win) {
   const view = await win.webContents.executeJavaScript(`(() => {
     const card = document.getElementById('quota-label'), root = document.getElementById('codex-expanded');
+    const guard = document.getElementById('quota-guard-entry');
     const visible = e => e && e.getClientRects().length > 0;
     const elements = [...root.querySelectorAll('strong,button,.v20-reset,.v20-caption,.period-pill,.v20-pace')].filter(visible);
     const rect = card.getBoundingClientRect();
@@ -205,6 +206,7 @@ async function cardView(win) {
       borderColor:getComputedStyle(card).borderTopColor,bevel:getComputedStyle(card).boxShadow,
       radius:parseFloat(getComputedStyle(card).borderTopLeftRadius),beamRadius:parseFloat(getComputedStyle(card.parentElement).borderTopLeftRadius),
       face:rect.toJSON(),panel:card.parentElement.getBoundingClientRect().toJSON(),viewport:{width:innerWidth,height:innerHeight},
+      guardVisible:visible(guard),
       overflow:document.documentElement.scrollWidth>innerWidth,
       fits:elements.every(e=>{const r=e.getBoundingClientRect();return r.left>=rect.left-1&&r.right<=rect.right+1&&r.top>=rect.top-1&&r.bottom<=rect.bottom+1;}),
       colorMode:document.documentElement.dataset.colorMode||'standard', appearance:document.documentElement.dataset.appearance,
@@ -292,15 +294,17 @@ function pixelSamples(image, view) {
 
 function namePeriods(name) { return name==='fiveHour'?[300]:name==='weekly'?[10080]:[300,10080]; }
 function outlinePixels(image,view,appearance,colorMode) {
-  const data=image.toBitmap(),{width,height}=image.getSize(),w=view.viewport.width,h=view.viewport.height,r=view.radius;
+  const data=image.toBitmap(),{width,height}=image.getSize(),w=view.panel.width,h=view.panel.height,r=view.radius;
+  const pixelIndex=(x,y)=>(Math.floor((view.panel.top+y)*height/view.viewport.height)*width+
+    Math.floor((view.panel.left+x)*width/view.viewport.width))*4;
   const offset=r*(1-1/Math.sqrt(2))+.5;
   const positions=[['top',w/2,.5],['bottom',w/2,h-.5],['left',.5,h/2],['right',w-.5,h/2],
     ['top-left',offset,offset],['top-right',w-offset,offset],['bottom-left',offset,h-offset],['bottom-right',w-offset,h-offset]];
-  return positions.map(([name,x,y])=>{const i=(Math.floor(y*height/h)*width+Math.floor(x*width/w))*4,a=data[i+3]/255;
+  return positions.map(([name,x,y])=>{const i=pixelIndex(x,y),a=data[i+3]/255;
     // nativeImage bitmap channels already contain premultiplied alpha.
     const white=[data[i+2],data[i+1],data[i]].map(v=>Math.min(255,Math.round(v+255*(1-a))));
     const inwardX=x<w/2?1:x>w/2?-1:0,inwardY=y<h/2?1:y>h/2?-1:0;
-    const j=(Math.floor((y+inwardY*3)*height/h)*width+Math.floor((x+inwardX*3)*width/w))*4;
+    const j=pixelIndex(x+inwardX*3,y+inwardY*3);
     assert.ok(data[j+3]>=200,'圆角内侧背景完整 '+name);
     if(appearance==='light'&&colorMode==='standard')assert.ok(Math.max(...white)>=190,'白色玻璃边缘无黑线 '+name+': '+white);
     return{name,alpha:data[i+3],onWhite:white};});
@@ -364,7 +368,10 @@ async function verifyCodexStatusV20({ pet, quotaLabel, details, BrowserWindow, s
     setQuotaPreference('codexShowExtraCredits', true);
     const label = await poll(() => quotaLabel.getWindow(), win => win?.isVisible(), '额度卡首次显示');
     await paint(label);
-    assertContentEdges(await cardView(label),'收起主卡');
+    await poll(() => cardView(label), view => view.expanded === 'false' && view.guardVisible &&
+      view.panel.width === 128 && view.panel.height === 32, '收起主卡和守护入口完成布局');
+    await assertQuotaLabelWindow(quotaLabel, label, pet.getBounds(), { size: 'compact',
+      workArea: screen.getDisplayMatching(pet.getBounds()).workArea });
     await label.webContents.executeJavaScript('window.petQuotaLabel.toggleExpanded()');
     await poll(() => cardView(label), view => view.expanded === 'true', '展开原生卡片');
     for (const colorMode of ['standard', 'accessible']) for (const appearance of ['light', 'dark']) {
@@ -380,7 +387,7 @@ async function verifyCodexStatusV20({ pet, quotaLabel, details, BrowserWindow, s
           '周期设置完成后展开');
         assertCardLayout(view, periods.length);
         assert.equal(view.radius,view.beamRadius,'背景与外圈采用同一圆角，不被裁切');
-        await assertQuotaLabelWindow(quotaLabel, label, pet.getBounds(), { expanded: true, itemCount: periods.length,
+        await assertQuotaLabelWindow(quotaLabel, label, pet.getBounds(), { size: 'compact', expanded: true, itemCount: periods.length,
           workArea: screen.getDisplayMatching(pet.getBounds()).workArea });
         assert.deepEqual(view.values, periods.map(minutes => minutes === 300 ? '44%' : '62%'));
         assert.deepEqual(view.counts, ['3', '1'], '真实任务和本地待查看计数');
@@ -428,11 +435,14 @@ async function verifyCodexStatusV20({ pet, quotaLabel, details, BrowserWindow, s
       await poll(()=>label.isVisible(),Boolean,'详情关闭后恢复卡片');
       report.windowRestoration.push({colorMode,appearance,restored:true,expanded:(await cardView(label)).expanded});
       await clickRegion(label,'.v20-collapse');
-      const collapsed=await poll(()=>cardView(label),value=>value.expanded==='false'&&value.width===128,'明确收起按钮实际生效');
-      assertContentEdges(collapsed,'收起主卡四边');
+      const collapsed=await poll(()=>cardView(label),value=>value.expanded==='false'&&value.guardVisible&&
+        value.panel.width===128&&value.panel.height===32,'明确收起按钮实际生效');
+      await assertQuotaLabelWindow(quotaLabel,label,pet.getBounds(),{size:'compact',
+        workArea:screen.getDisplayMatching(pet.getBounds()).workArea});
       assert.equal(collapsed.radius,11,'正式小卡主体圆角11px');
       assert.equal(collapsed.beamRadius,13,'正式小卡完整外轮廓圆角13px');
-      assert.deepEqual([collapsed.face.left,collapsed.face.top,collapsed.face.width,collapsed.face.height],[2,2,124,28],'正式小卡主体与完整外轮廓同心');
+      assert.deepEqual([collapsed.face.left-collapsed.panel.left,collapsed.face.top-collapsed.panel.top,
+        collapsed.face.width,collapsed.face.height],[2,2,124,28],'正式小卡主体与完整外轮廓同心');
       const compactPng=await capture(label,`card-compact-${colorMode}-${appearance}`,quotaLabel);
       report.compact.push({colorMode,appearance,...collapsed,outline:outlinePixels(nativeImage.createFromBuffer(compactPng),collapsed,appearance,colorMode)});
       await clickRegion(label,'#summary');
@@ -721,4 +731,4 @@ async function verifyCodexStatusV20({ pet, quotaLabel, details, BrowserWindow, s
 }
 
 module.exports = { verifyCodexStatusV20, syntheticSnapshot, detailFixtures, assertCardLayout,
-  assertContentEdges, assertAnchoredDetails, assertDetailsSurface, assertFilledPixels, isRenderedDetailNode, contrast, rgb, sampleContrast };
+  assertContentEdges, assertAnchoredDetails, assertDetailsSurface, assertFilledPixels, isRenderedDetailNode, contrast, rgb, sampleContrast, outlinePixels };

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { syntheticSnapshot, detailFixtures, assertCardLayout, assertContentEdges,
-  assertDetailsSurface, assertFilledPixels, isRenderedDetailNode, contrast, sampleContrast } = require('../scripts/verify-codex-status-v20');
+  assertDetailsSurface, assertFilledPixels, isRenderedDetailNode, contrast, sampleContrast, outlinePixels } = require('../scripts/verify-codex-status-v20');
 const { buildQuotaLabelModel, buildCodexDetailsModel } = require('../lib/codex-quota-view');
 
 test('v20 原生验收只用合成数据，比例与重置剩余时间一致且不虚构缺失周期', () => {
@@ -47,6 +47,22 @@ test('native 四边检查拒绝内缩、高度差、透明带和系统黑边，�
   assert.doesNotThrow(()=>assertFilledPixels(pixels.map(pixel=>({...pixel,alpha:240}))));
   assert.throws(()=>assertFilledPixels([...pixels.slice(0,7),{name:'inner-corner',alpha:0}]));
   assert.throws(()=>assertFilledPixels([...pixels.slice(0,7),{name:'inner-corner',alpha:239}]));
+});
+
+test('收起卡像素采样按真实流光壳定位，允许守护透明留白但拒绝卡面透明缺口', () => {
+  const view = { panel: { left: 0, top: 18, width: 128, height: 32 },
+    viewport: { width: 200, height: 50 }, radius: 11 };
+  for (const scale of [1, 2]) {
+    const width = 200 * scale, height = 50 * scale, data = Buffer.alloc(width * height * 4);
+    for (let y = 18 * scale; y < height; y++) for (let x = 0; x < 128 * scale; x++) {
+      data.fill(255, (y * width + x) * 4, (y * width + x) * 4 + 4);
+    }
+    const image = { toBitmap: () => data, getSize: () => ({ width, height }) };
+    assert.ok(outlinePixels(image, view, 'light', 'standard').every(sample => sample.alpha === 255));
+    assert.throws(() => outlinePixels(image, { ...view, panel: { ...view.panel, top: 0 } }, 'light', 'standard'), /背景完整/);
+    data[(Math.floor(21.5 * scale) * width + 64 * scale) * 4 + 3] = 0;
+    assert.throws(() => outlinePixels(image, view, 'light', 'standard'), /背景完整 top/);
+  }
 });
 
 test('R2 打包矩阵同时保留任务与结果空态、单周/双周期、精确长数余额', () => {

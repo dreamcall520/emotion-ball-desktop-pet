@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { setTimeout: wait } = require('node:timers/promises');
+const { readQuotaLabelGeometry } = require('./verify-codex-companion');
 
 const demoKey = 'sk-admin-demo-not-a-real-key';
 let mode = 'normal';
@@ -90,10 +91,31 @@ async function verifyApiUsage({ getWindow, getMenu, pet, service, powerMonitor, 
   await poll(() => quotaLabel.getWindow()?.isVisible(), Boolean, 'simulated subscription card appears');
   const quotaWin = quotaLabel.getWindow();
   const quotaPage = code => quotaWin.webContents.executeJavaScript(code);
+  const expandedState = page => page('document.querySelector("#quota-label").dataset.expanded === "true"');
+  const assertLabels = async (quotaExpanded, apiExpanded, label, side = null) => {
+    // This demo has one weekly quota; its expanded card is 131px, not the dual-period 144px.
+    const quotaSize = quotaExpanded ? { width: 196, height: 131 } : { width: 200, height: 50 };
+    const apiSize = apiExpanded ? { width: 196, height: 92 } : { width: 128, height: 32 };
+    const exactSize = (bounds, expected) => bounds.width === expected.width && bounds.height === expected.height;
+    const value = await poll(async () => ({ quota: quotaWin.getBounds(), api: card.getBounds(),
+      quotaDOM: await readQuotaLabelGeometry(quotaWin), apiDOM: await readQuotaLabelGeometry(card) }), current =>
+      current.quotaDOM.expanded === quotaExpanded && current.apiDOM.expanded === apiExpanded &&
+      exactSize(current.quota, quotaSize) && exactSize(current.api, apiSize) && !overlaps(current.api, current.quota) &&
+      (!side || (side === 'right' ? current.api.x + current.api.width === current.quota.x + current.quota.width : current.api.x === current.quota.x) &&
+        current.api.y === current.quota.y + current.quota.height + 8), label);
+    assert.equal(value.quotaDOM.size, 'compact', 'demo subscription remains compact');
+    assert.deepEqual(value.quotaDOM.viewport, quotaSize, 'subscription viewport fits native window');
+    assert.deepEqual(value.apiDOM.viewport, apiSize, 'API viewport fits native window');
+    assert.deepEqual(value.quotaDOM.beam, quotaExpanded
+      ? { x: 0, y: 0, width: 196, height: 131 } : { x: 0, y: 18, width: 128, height: 32 }, 'subscription keeps original beam');
+    assert.deepEqual(value.quotaDOM.card, quotaExpanded
+      ? { x: 0, y: 0, width: 196, height: 131 } : { x: 2, y: 20, width: 124, height: 28 }, 'subscription keeps original card');
+    assert.equal(value.quotaDOM.guard.visible, !quotaExpanded, 'guard role appears only beside the folded subscription');
+    if (!quotaExpanded) assert.deepEqual(value.quotaDOM.guard.bounds,
+      { x: 136, y: 6, width: 64, height: 44 }, 'guard role fits the separate right-hand area');
+  };
   await poll(() => quotaPage('document.querySelector(".summary-value").textContent'), value => value === '79%', 'existing subscription renderer');
-  await poll(() => ({ api: card.getBounds(), codex: quotaWin.getBounds(), pet: pet.getBounds(),
-    apiVisible: card.isVisible(), quotaVisible: quotaWin.isVisible(), listeners: quotaWin.listenerCount('resize') }),
-    bounds => !overlaps(bounds.api, bounds.codex), 'two folded cards do not overlap');
+  await assertLabels(false, false, 'two folded cards do not overlap');
   const screenshotDirectory = process.env.PET_SMOKE_API_LABEL_SCREENSHOTS;
   const captures = {};
   const capture = async name => {
@@ -114,9 +136,9 @@ async function verifyApiUsage({ getWindow, getMenu, pet, service, powerMonitor, 
   assert.equal(card.getBounds().width, 196);
   assert.match(await cardPage('document.querySelector("#api-month-cost").textContent'), /27\.34USD/);
   assert.equal(await cardPage('document.documentElement.scrollHeight > innerHeight'), false, 'expanded card fits native window');
-  assert.equal(overlaps(card.getBounds(), quotaWin.getBounds()), false);
+  await assertLabels(false, true, 'API expands independently beside folded subscription');
   await quotaPage('document.querySelector("#quota-label").click()');
-  await poll(() => quotaWin.getBounds().height, value => value > 32, 'subscription expands independently');
+  await assertLabels(true, true, 'subscription expands independently');
   await wait(100);
   assert.equal(overlaps(card.getBounds(), quotaWin.getBounds()), false, 'API avoids expanded subscription card');
   assert.equal(overlaps(card.getBounds(), pet.getBounds()), false);
@@ -145,13 +167,9 @@ async function verifyApiUsage({ getWindow, getMenu, pet, service, powerMonitor, 
     showDemoQuota();
     await poll(() => quotaWin.isVisible() && card.isVisible(), Boolean, 'edge cards visible');
     for (const [quotaExpanded, apiExpanded] of [[false, false], [false, true], [true, true], [true, false]]) {
-      if ((quotaWin.getBounds().height > 32) !== quotaExpanded) await quotaPage('document.querySelector("#quota-label").click()');
-      if ((card.getBounds().height > 32) !== apiExpanded) await cardPage('document.querySelector("#quota-label").click()');
-      await poll(() => ({ quota: quotaWin.getBounds(), api: card.getBounds() }), value =>
-        (value.quota.height > 32) === quotaExpanded && (value.api.height > 32) === apiExpanded &&
-        (side === 'right' ? value.api.x + value.api.width === value.quota.x + value.quota.width : value.api.x === value.quota.x) &&
-        value.api.y === value.quota.y + value.quota.height + 8,
-      `${sizeName} ${side} expansions ${quotaExpanded}/${apiExpanded} aligned`);
+      if (await expandedState(quotaPage) !== quotaExpanded) await quotaPage('document.querySelector("#quota-label").click()');
+      if (await expandedState(cardPage) !== apiExpanded) await cardPage('document.querySelector("#quota-label").click()');
+      await assertLabels(quotaExpanded, apiExpanded, `${sizeName} ${side} expansions ${quotaExpanded}/${apiExpanded} aligned`, side);
       await capture(`edge-${sizeName}-${side}-${Number(quotaExpanded)}${Number(apiExpanded)}`);
     }
   }
@@ -161,7 +179,7 @@ async function verifyApiUsage({ getWindow, getMenu, pet, service, powerMonitor, 
   setShape('blob');
   showDemoQuota();
   await poll(() => quotaWin.isVisible() && card.isVisible(), Boolean, 'cards restore after edge checks');
-  if (card.getBounds().height === 32) await cardPage('document.querySelector("#quota-label").click()');
+  if (!await expandedState(cardPage)) await cardPage('document.querySelector("#quota-label").click()');
   win.hide();
   await cardPage('document.querySelector("#api-open-details").click()');
   await poll(() => win.isVisible(), Boolean, 'card opens full report');

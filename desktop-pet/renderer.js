@@ -219,8 +219,9 @@
   });
   EmotionBall.config.register({
     id: '56', name: '靠边小憩', group: 'custom', gaze: false, antics: false,
-    pool: [13], blinkMs: null, transition: 0, anims: [],
+    pool: [0], blinkMs: null, transition: 0, anims: [],
     body: { breathe: 0.006 },
+    // 沿用靠边清醒眼环的位置，以闭合度表现睡眠，避免原睡眼环跨出半头。
     // 刚收起时可能还留有上一表情的眨眼关键帧，基础眼形也保持闭合。
     eyes: { both: { open: 0.08, scaleX: 0.78, scaleY: 0.78, y: 24, lookY: 2 }, left: { x: 10 }, right: { x: 2 } }
   });
@@ -434,12 +435,15 @@
     const emotion = presentationMode === 'tucked' ? (sleeping ? '56' : '55') :
       (sleeping ? '00' : currentState.emotionId);
     if (!quiet) ball.setActive(false);
+    const emotionChanged = ball.emotionId !== emotion;
     showEmotion(emotion);
     ball.clearGaze();
     petElement.dataset.gaze = '0,0';
     // 保留现有引擎的呼吸和眨眼时间线；125ms活动采样不能重排眨眼。
-    if (quiet) ball.setActive(true);
-    else ball.renderStatic();
+    if (quiet) {
+      if (emotionChanged) ball.renderStatic();
+      ball.setActive(true);
+    } else ball.renderStatic();
     presentationFrozen = !quiet;
   }
 
