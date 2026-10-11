@@ -36,5 +36,17 @@ test('额度模型区分零、未知和过期，动效数值限制于百分比�
   const model = effects.model({ config: { style: 'duo' }, quotas: { fiveHour: -1, weekly: 120 } });
   assert.deepEqual(model.values, { fiveHour: 0, weekly: 100 });
   assert.equal(model.available, true);
-  assert.equal(effects.model({ config: { style: 'duo' }, quotas: { fiveHour: 0 } }).available, false);
+  assert.equal(effects.model({ config: { style: 'duo' }, quotas: { fiveHour: 0 } }).style, 'ring');
+});
+
+test('新额度样式按实际周期展示，忽略旧手选周期，零有效且不补空位', () => {
+  for (const style of display.STYLES) {
+    const config = display.normalize({ style, period: 'fiveHour' });
+    const weekly = { state: 'ready', items: [{ windowMinutes: 10080, remaining: 90 }] };
+    assert.deepEqual(display.periods(config, weekly), ['weekly']);
+    assert.deepEqual(display.periods(config, { state: 'disconnected', items: [] }), []);
+    const both = { state: 'ready', items: [...weekly.items, { windowMinutes: 300, remaining: 0 }] };
+    assert.deepEqual(display.periods(config, both), ['pool', 'ring'].includes(style) ? ['fiveHour'] : ['fiveHour', 'weekly']);
+    assert.deepEqual(display.periods(config, { ...weekly, state: 'stale' }), ['weekly']);
+  }
 });

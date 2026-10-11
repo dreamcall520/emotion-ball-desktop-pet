@@ -2,14 +2,28 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const effects = require('../quota-effects');
 
-test('quota effects keep zero distinct from missing, with dual-ring eligibility', () => {
+test('quota effects automatically use present quotas and keep zero distinct from missing', () => {
   const dual = quotas => effects.model({ config: { style: 'duo' }, quotas });
   assert.equal(dual({ fiveHour: 0, weekly: 0 }).available, true);
-  assert.equal(dual({ fiveHour: 74, weekly: null }).available, false);
+  assert.equal(dual({ fiveHour: 74, weekly: null }).style, 'ring');
+  assert.equal(dual({ fiveHour: 74, weekly: null }).available, true);
+  assert.equal(dual({ fiveHour: null, weekly: null }).available, false);
   assert.deepEqual(dual({ fiveHour: '74', weekly: NaN }).values, { fiveHour: null, weekly: null });
   assert.deepEqual(dual({ fiveHour: -5, weekly: 120 }).values, { fiveHour: 0, weekly: 100 });
   assert.equal(effects.model({ appearance: { shape: 'codex-pet' }, config: { style: 'ring' } }).visible, false);
   assert.equal(effects.model({ visible: false, config: { style: 'pool' } }).visible, false);
+  const config = { style: 'split', period: 'weekly' };
+  assert.equal(effects.model({ config, quotas: { fiveHour: 0, weekly: 94 } }).period, 'fiveHour');
+  const weeklyOnly = effects.model({ config, quotas: { fiveHour: null, weekly: 0 } });
+  assert.equal(weeklyOnly.period, 'weekly');
+  assert.equal(weeklyOnly.style, 'ring');
+  assert.equal(weeklyOnly.available, true);
+  assert.equal(config.style, 'split');
+  assert.equal(effects.model({ config, quotas: { fiveHour: 74, weekly: 94 } }).style, 'split');
+  for (const style of ['duo','split','stages']) {
+    assert.equal(effects.model({ config: { style }, quotas: { fiveHour: null, weekly: 38 } }).style, 'ring');
+    assert.equal(effects.model({ config: { style }, quotas: { fiveHour: 74, weekly: 38 } }).style, style);
+  }
 });
 
 test('ring palette follows body hue and distinguishes the two quotas', () => {

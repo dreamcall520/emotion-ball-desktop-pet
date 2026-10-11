@@ -27,11 +27,13 @@
   function quota(value) { return typeof value === 'number' && Number.isFinite(value) ? clamp(value, 0, 100) : null; }
   function model(input = {}) {
     const config = input.config || {}, quotas = input.quotas || {};
-    const style = ['card','pool','ring','duo','split','stages'].includes(config.style) ? config.style : 'card';
+    let style = ['card','pool','ring','duo','split','stages'].includes(config.style) ? config.style : 'card';
     const values = { fiveHour: quota(quotas.fiveHour), weekly: quota(quotas.weekly) };
+    const count = Object.values(values).filter(value => value !== null).length;
+    if (count < 2 && ['duo','split','stages'].includes(style)) style = 'ring';
     return { style, material: config.material === 'glass' ? 'glass' : 'soft',
-      period: config.period === 'weekly' ? 'weekly' : 'fiveHour', values,
-      available: style !== 'duo' || Object.values(values).every(value => value !== null),
+      period: values.fiveHour !== null ? 'fiveHour' : 'weekly', values,
+      available: count > 0,
       palette: palette(input.appearance), dark: input.theme === 'dark', still: Boolean(input.reducedMotion),
       visible: input.visible !== false && input.appearance?.shape !== 'codex-pet' };
   }
@@ -47,7 +49,7 @@ function createColorRing(size){
  if(!gl)throw Error('当前浏览器无法显示液态动效，请使用支持 WebGL 的浏览器。');
  const vertex='attribute vec2 position;void main(){gl_Position=vec4(position,0.,1.);}';
  const fragment=`precision highp float;
- uniform float seconds,dark;
+ uniform float seconds,dark,detail,spread,contrast;
  uniform vec3 tint,shine;
  float gaussian(float d,float width){return exp(-d*d/(width*width));}
  void main(){
@@ -59,9 +61,9 @@ function createColorRing(size){
   vec3 blue=tint,ice=shine;
   vec3 color=mix(blue,ice,.10+.22*drift);
   // All profiles share one center: the glow decays continuously out of the glass.
-  float core=gaussian(d,1.15)*(.66+.055*breath);
-  float glass=gaussian(d,2.7)*.15;
-  float glow=gaussian(d,10.)*mix(.042,.075,dark)*(.82+.32*breath);
+  float core=gaussian(d,1.15*detail)*(mix(.66,.91,contrast)+.04*breath);
+  float glass=gaussian(d,2.7*sqrt(detail))*.15;
+  float glow=gaussian(d,spread)*mix(.042,.12,contrast)*mix(1.,1.45,dark)*(.82+.32*breath);
   glow*=smoothstep(-10.,-6.,d)*(1.-smoothstep(23.,29.,d));
   float alpha=1.-(1.-core)*(1.-glass)*(1.-glow);
   gl_FragColor=vec4(mix(ice,color,(core+glass)/max(core+glass+glow,.001)),alpha);
@@ -73,13 +75,17 @@ function createColorRing(size){
  gl.useProgram(program);const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);
  const position=gl.getAttribLocation(program,'position');gl.enableVertexAttribArray(position);gl.vertexAttribPointer(position,2,gl.FLOAT,false,0,0);
- const uniforms=Object.fromEntries(['seconds','dark','tint','shine'].map(key=>[key,gl.getUniformLocation(program,key)]));
+ const uniforms=Object.fromEntries(['seconds','dark','detail','spread','contrast','tint','shine'].map(key=>[key,gl.getUniformLocation(program,key)]));
  const caches=[false,true].map(()=>{const c=document.createElement('canvas');c.width=c.height=size;return {canvas:c,ctx:c.getContext('2d'),key:null};});
  return {
   frame(t,isDark,isAurora,still,palette){
-   const cache=caches[Number(still)],seconds=still?0:t,key=[seconds,isDark,...palette.base,...palette.light].join(':');
+   const cssScale=renderedWidth()/SIZE;
+   const detail=Math.max(1,(current.style==='duo'?1.2:1.5)/(1.665*1.15*cssScale));
+   const spread=Math.max(10,2.6/cssScale),contrast=clamp((240-geometry.width)/160,0,1);
+   const cache=caches[Number(still)],seconds=still?0:t,key=[seconds,isDark,detail,spread,contrast,...palette.base,...palette.light].join(':');
    if(cache.key!==key){
     gl.uniform1f(uniforms.seconds,seconds);gl.uniform1f(uniforms.dark,Number(isDark));
+    gl.uniform1f(uniforms.detail,detail);gl.uniform1f(uniforms.spread,spread);gl.uniform1f(uniforms.contrast,contrast);
     gl.uniform3fv(uniforms.tint,palette.base.map(v=>v/255));gl.uniform3fv(uniforms.shine,palette.light.map(v=>v/255));
     gl.viewport(0,0,size*2,size*2);gl.drawArrays(gl.TRIANGLES,0,3);
     cache.ctx.clearRect(0,0,size,size);cache.ctx.drawImage(canvas,0,0,size,size);cache.key=key;
@@ -102,7 +108,7 @@ function drawRingFlow(ctx, t, radius, width, start = 0, end = Math.PI * 2) {
   ]) flow.addColorStop(deg / 360, color);
   ctx.save();
   ctx.lineCap = 'round';
-  ctx.lineWidth = width;
+  ctx.lineWidth = Math.max(width,pixelWidth(current.material==='glass'?.55:.45));
   ctx.strokeStyle = flow;
   ctx.beginPath();
   ctx.arc(170, 170, radius, start, end);
@@ -118,7 +124,7 @@ function drawRingFlow(ctx, t, radius, width, start = 0, end = Math.PI * 2) {
  */
 function drawReferenceRing(ctx, q, t, palette, dark, still) {
   const C = 170, SIZE = 340, TAU = Math.PI * 2;
-  const GLASS_R = 151, TRACK_R = 139, TRACK_W = 7.6;
+  const GLASS_R = 151, TRACK_R = 139, TRACK_W = Math.max(7.6,pixelWidth(2.1));
   const TOP = -Math.PI / 2, END = TOP + TAU;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const finite = (v, fallback) => Number.isFinite(Number(v)) ? Number(v) : fallback;
@@ -138,7 +144,7 @@ function drawReferenceRing(ctx, q, t, palette, dark, still) {
   const strokeArc = (target, radius, width, style, start, end) => {
     target.beginPath();
     target.arc(C, C, radius, start, end);
-    target.lineWidth = width;
+    target.lineWidth = width < 2 ? Math.max(width,pixelWidth(.3)) : width;
     target.strokeStyle = style;
     target.stroke();
   };
@@ -177,10 +183,10 @@ function drawReferenceRing(ctx, q, t, palette, dark, still) {
     // Shallow grey track: complete circumference, same width as the lit arc.
     const track = ctx.createRadialGradient(C, C, TRACK_R - 4.3, C, C, TRACK_R + 4.3);
     track.addColorStop(0, rgba(neutral, 0));
-    track.addColorStop(.13, rgba(neutral, dark ? .105 : .14));
-    track.addColorStop(.40, rgba(neutral, dark ? .17 : .21));
-    track.addColorStop(.60, rgba(neutral, dark ? .17 : .21));
-    track.addColorStop(.87, rgba(neutral, dark ? .10 : .13));
+    track.addColorStop(.13, rgba(neutral, dark ? .14 : .18));
+    track.addColorStop(.40, rgba(neutral, dark ? .24 : .30));
+    track.addColorStop(.60, rgba(neutral, dark ? .24 : .30));
+    track.addColorStop(.87, rgba(neutral, dark ? .13 : .17));
     track.addColorStop(1, rgba(neutral, 0));
     ctx.save();
     annulus(ctx, TRACK_R - 4.3, TRACK_R + 4.3);
@@ -308,12 +314,12 @@ function drawDualTrack(ctx,mode,value,t,palette,dark,still,radius,orb,flow){
  const q=value===null?0:Math.max(0,Math.min(1,value/100)),c=dualContext,TAU=Math.PI*2,top=-Math.PI/2;
  const rgba=(rgb,a)=>'rgba('+rgb.map(Math.round).join(',')+','+a+')';
  const mix=(a,b,k)=>a.map((v,i)=>v+(b[i]-v)*k);
- const stroke=(r,w,color,start=0,end=TAU)=>{c.beginPath();c.arc(170,170,r,start,end);c.lineWidth=w;c.strokeStyle=color;c.stroke();};
+ const stroke=(r,w,color,start=0,end=TAU)=>{c.beginPath();c.arc(170,170,r,start,end);c.lineWidth=w<2?Math.max(w,pixelWidth(.3)):w;c.strokeStyle=color;c.stroke();};
  c.clearRect(0,0,340,340);c.lineCap='round';c.shadowBlur=0;
  const neutral=dark?[157,172,187]:[142,156,170];
  if(mode==='halo'){
-  const track=c.createRadialGradient(170,170,132,170,170,146);
-  for(const [at,a] of [[0,0],[.18,.008],[.3,.035],[.4,.12],[.5,.24],[.6,.12],[.7,.035],[.82,.008],[1,0]])track.addColorStop(at,rgba(neutral,a));
+  const half=Math.max(7,pixelWidth(2.6)),track=c.createRadialGradient(170,170,139-half,170,170,139+half);
+  for(const [at,a] of [[0,0],[.18,.012],[.3,.05],[.4,.17],[.5,.32],[.6,.17],[.7,.05],[.82,.012],[1,0]])track.addColorStop(at,rgba(neutral,a));
   c.fillStyle=track;c.fillRect(0,0,340,340);
   if(q>0){
    // Apply the quota mask to the coloured layer, leaving the closed neutral track.
@@ -330,9 +336,9 @@ function drawDualTrack(ctx,mode,value,t,palette,dark,still,radius,orb,flow){
   for(const [at,a] of [[0,0],[.39,0],[.44,.38],[.49,0],[.81,0],[.85,.9],[.86,1],[.87,.9],[.92,0],[1,0]])reflection.addColorStop(at,'rgba(239,250,255,'+a+')');
   stroke(139.1,1.25,reflection);
  }else{
-  const width=6,breath=.5-.5*Math.cos(t*TAU/5.6);
+  const width=Math.max(6,pixelWidth(1.8)),breath=.5-.5*Math.cos(t*TAU/5.6);
   const track=c.createRadialGradient(170,170,135.4,170,170,142.6);
-  for(const [at,a] of [[0,0],[.12,.10],[.40,.19],[.60,.19],[.88,.10],[1,0]])track.addColorStop(at,rgba(neutral,a));
+  for(const [at,a] of [[0,0],[.12,.14],[.40,.28],[.60,.28],[.88,.14],[1,0]])track.addColorStop(at,rgba(neutral,a));
   c.fillStyle=track;c.fillRect(0,0,340,340);
   if(q>0){
    const start=top+TAU*(1-q),end=top+TAU;
@@ -396,11 +402,11 @@ function drawStageHalf(ctx,mode,value,t,palette,dark,still,left){
  const stages=quotaStages(value),s=still?0:t,rgba=(rgb,a)=>'rgba('+rgb.map(Math.round).join(',')+','+a+')';
  ctx.save();ctx.globalAlpha=.42;drawSplitHalf(ctx,mode,0,s,palette,dark,true,left,null);ctx.restore();
  ctx.save();ctx.beginPath();ctx.rect(left?0:170,0,170,340);ctx.clip();ctx.lineCap='round';
- const width=mode==='halo'?3.2:6;
+ const width=mode==='halo'?Math.max(3.2,pixelWidth(1.55)):Math.max(6,pixelWidth(1.9));
  const stroke=(radius,w,color,start,end)=>{ctx.beginPath();ctx.arc(170,170,radius,start,end,!left);ctx.lineWidth=w;ctx.strokeStyle=color;ctx.stroke();};
  for(let group=0;group<5;group++){
   const [start,end]=stageAngles(group,left,mode),fraction=stages?.[group]||0;
-  stroke(139,width,dark?'rgba(159,179,198,.20)':'rgba(127,150,170,.22)',start,end);
+  stroke(139,width,dark?'rgba(159,179,198,.28)':'rgba(127,150,170,.30)',start,end);
   if(!fraction)continue;
   const finish=start+(end-start)*fraction,breath=.5-.5*Math.cos(s*Math.PI*2/5.6-group*.18);
   const colour=ctx.createLinearGradient(170+139*Math.cos(start),170+139*Math.sin(start),170+139*Math.cos(end),170+139*Math.sin(end));
@@ -437,6 +443,10 @@ function drawStageDividers(ctx,dark){
     let current = model(), options = {}, frame = 0, sampleRetry = 0, sampleAttempts = 0, previousFrame = -Infinity, orb = null;
     let pool = null, rawCanvas = null, rawOpacity = '', scaled = [];
     let geometry = { x: 0, y: 0, width: 0 }, destroyed = false;
+    // Keep a readable core in CSS pixels; the desktop shares its 340px artwork with the enlarged preview.
+    // Hidden thumbnails have no measured geometry. Tiny hosts must not turn a CSS pixel floor into an oversized source radius.
+    const renderedWidth = () => geometry.width > 0 && Number.isFinite(geometry.width) ? Math.max(24,geometry.width) : SIZE;
+    const pixelWidth = pixels => pixels * SIZE / renderedWidth();
     const motionPreference = root.matchMedia?.('(prefers-reduced-motion: reduce)');
     const originalScale = element => scaled.find(item => item.element === element)?.scale ?? element.style.scale;
     function restoreScale() {
@@ -634,9 +644,9 @@ function drawStageDividers(ctx,dark){
         if(usableMode==='reference')drawReferenceRing(ctx,(values[current.period]||0)/100,t,current.palette,dark,still);
         else{
           const q=(values[current.period]||0)/100,neutral=dark?'157,172,187':'142,156,170';
-          const track=ctx.createRadialGradient(CENTER,CENTER,132,CENTER,CENTER,146);
-          for(const [at,alpha] of [[0,0],[.18,.008],[.3,.035],[.4,.12],[.5,.24],[.6,.12],[.7,.035],[.82,.008],[1,0]])track.addColorStop(at,'rgba('+neutral+','+alpha+')');
-          ctx.fillStyle=track;ctx.beginPath();ctx.arc(CENTER,CENTER,146,0,TAU);ctx.fill();
+          const half=Math.max(7,pixelWidth(2.6)),track=ctx.createRadialGradient(CENTER,CENTER,139-half,CENTER,CENTER,139+half);
+          for(const [at,alpha] of [[0,0],[.18,.012],[.3,.05],[.4,.17],[.5,.32],[.6,.17],[.7,.05],[.82,.012],[1,0]])track.addColorStop(at,'rgba('+neutral+','+alpha+')');
+          ctx.fillStyle=track;ctx.beginPath();ctx.arc(CENTER,CENTER,139+half,0,TAU);ctx.fill();
           if(q>0){
             wetContext.clearRect(0,0,SIZE,SIZE);wetContext.drawImage(orb.frame(t,dark,false,still,current.palette),0,0);
             drawRingFlow(wetContext,t,139.2,2);
@@ -649,7 +659,7 @@ function drawStageDividers(ctx,dark){
           }
           const reflection=ctx.createConicGradient(-Math.PI/2+.08*Math.sin(t*.24),CENTER,CENTER);
           for(const [at,alpha] of [[0,0],[.39,0],[.44,.38],[.49,0],[.81,0],[.85,.9],[.86,1],[.87,.9],[.92,0],[1,0]])reflection.addColorStop(at,'rgba(239,250,255,'+alpha+')');
-          ctx.beginPath();ctx.arc(CENTER,CENTER,139.1,0,TAU);ctx.lineWidth=1.25;ctx.strokeStyle=reflection;ctx.stroke();
+          ctx.beginPath();ctx.arc(CENTER,CENTER,139.1,0,TAU);ctx.lineWidth=Math.max(1.25,pixelWidth(.3));ctx.strokeStyle=reflection;ctx.stroke();
         }
       }else{
         if(usableMode==='reference')current.style==='duo'?drawDualShell(ctx,dark):drawSplitShell(ctx,dark);
@@ -691,9 +701,13 @@ function drawStageDividers(ctx,dark){
       canvas.dataset.style=current.style;canvas.dataset.material=current.material;canvas.dataset.quotaAvailable=String(current.available);
       for(const period of ['fiveHour','weekly'])canvas.dataset[period]=current.values[period]===null?'unknown':String(current.values[period]);
       if(!current.visible||current.style==='card'||!current.available){canvas.remove();return;}
+      const bounds=host.getBoundingClientRect();
+      if(!(bounds.width>0&&bounds.height>0)){
+        geometry={x:0,y:0,width:0};ctx.clearRect(0,0,SIZE,SIZE);canvas.remove();return;
+      }
       attach();
       if(current.style!=='pool')positionRing();
-      else{const bounds=host.getBoundingClientRect();Object.assign(canvas.style,{left:'0px',top:'0px',width:bounds.width+'px',height:bounds.height+'px'});}
+      else Object.assign(canvas.style,{left:'0px',top:'0px',width:bounds.width+'px',height:bounds.height+'px'});
       paint(current.still?0:root.performance.now()/1000);
       if(!current.still&&!document.hidden)frame=root.requestAnimationFrame(tick);
     }

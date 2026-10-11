@@ -800,17 +800,8 @@ body {
 :root[data-color-mode="accessible"][data-accessible-appearance] #quota-label[data-size="compact"][data-expanded="false"] { border-color: transparent !important; }
 
 #quota-numbers { display: none; }
-#quota-beam:has(#quota-label[data-display="numbers"])::before,
-#quota-beam:has(#quota-label[data-display="numbers"])::after,
-#quota-beam #quota-label[data-display="numbers"]::before,
-#quota-beam #quota-label[data-display="numbers"]::after { display: none !important; }
 #quota-beam #quota-label[data-display="numbers"] {
-  padding: 0;
-  border: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
+  padding: 0 7px;
   color: var(--quota-value-normal);
 }
 #quota-beam #quota-label[data-display="numbers"] > :not(#quota-numbers) { display: none !important; }
@@ -833,7 +824,8 @@ body {
   font-size: 10px;
   cursor: pointer;
 }
-.quota-reading-period, .quota-reading-separator { color: var(--quota-muted); font-weight: 450; }
+.quota-reading-period, .quota-reading-separator { color: var(--quota-muted); font-weight: 500; }
+.quota-reading-period.period-pill { padding: 0 3px; font-size: 9px; line-height: 14px; }
 .quota-reading-value { font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .quota-reading-dot { width: 3px; height: 3px; border-radius: 50%; background: #45a2e3; }
 .quota-reading:hover { opacity: .75; }

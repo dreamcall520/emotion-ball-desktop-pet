@@ -354,7 +354,7 @@
       const item = model.state === 'ready' ? model.items.find(item => item.windowMinutes === minutes) : null;
       const text = item ? `${Math.round(item.remaining)}%` : '—';
       const button = detailButton('', 'trend', minutes, 'quota-reading');
-      const badge = node('span', 'quota-reading-period', periodBadgeText(minutes));
+      const badge = node('span', 'quota-reading-period period-pill', periodBadgeText(minutes));
       const dot = node('i', 'quota-reading-dot');
       dot.setAttribute?.('aria-hidden', 'true');
       if (colors[index] && dot.style) dot.style.backgroundColor = `rgb(${colors[index].base.join(',')})`;

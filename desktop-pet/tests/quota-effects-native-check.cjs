@@ -56,9 +56,9 @@ window.ready=(async()=>{
   }
   return true;
 })();
-window.checkEffects=()=>{
+window.checkEffects=async()=>{
   const report=[];
-  for(const entry of results)for(const size of [108,260])for(const material of ['soft','glass'])
+  for(const entry of results)for(const size of [80,120,180,260])for(const material of ['soft','glass'])
     for(const style of ['card','pool','ring','duo','split','stages']){
       const {host,appearance,effect,original,eyes}=entry;
       host.style.width=host.style.height=size+'px';
@@ -69,18 +69,47 @@ window.checkEffects=()=>{
       const poolLine=style!=='pool'||Number.isFinite(Number(effect.canvas.dataset.liquidY));
       const riveSource=host.querySelector('canvas.eb-rive-aurora.ready');
       const rivePool=style!=='pool'||!riveSource||(riveSource.style.opacity==='0'&&effect.canvas.style.opacity==='0.68'&&effect.canvas.style.filter===riveSource.style.filter);
-      report.push({shape:appearance.shape,size,style,material,sameBody,drawable,bodyScale,poolLine,rivePool});
+      let smallRingAlpha=null;
+      if(size===80&&style==='ring'&&material==='soft'){
+        // Measure the rendered result after desktop-sized downsampling, not the source artwork.
+        const width=parseFloat(effect.canvas.style.width),check=document.createElement('canvas');
+        check.width=check.height=Math.ceil(width);check.getContext('2d').drawImage(effect.canvas,0,0,width,width);
+        const data=check.getContext('2d').getImageData(0,0,check.width,check.height).data;
+        let peak=0;
+        for(let offset=-3;offset<=3;offset+=.25){
+          const x=Math.round(width/2),y=Math.round(width/2+139*width/340+offset);
+          peak=Math.max(peak,data[(y*check.width+x)*4+3]/255);
+        }
+        smallRingAlpha=peak;
+      }
+      report.push({shape:appearance.shape,size,style,material,sameBody,drawable,bodyScale,poolLine,rivePool,smallRingAlpha});
+    }
+  for(const {host,appearance,effect,original} of results)for(const hiddenMode of ['display-none','zero-size'])
+    for(const material of ['soft','glass'])for(const style of ['pool','ring','duo','split','stages']){
+      host.style.display=hiddenMode==='display-none'?'none':'';
+      host.style.width=host.style.height=hiddenMode==='zero-size'?'0px':'80px';
+      effect.update({appearance,quotas:{fiveHour:74,weekly:38},config:{style,material},reducedMotion:true});
+      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+      const hiddenInit=!effect.canvas.isConnected&&original.style.scale===''&&!original.querySelector('[id^="qiuqiu-pool-"]');
+      host.style.display='';host.style.width=host.style.height='80px';
+      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+      const resizeRestored=effect.canvas.isConnected&&parseFloat(effect.canvas.style.width)>0;
+      report.push({shape:appearance.shape,hiddenMode,material,hiddenStyle:style,hiddenInit,resizeRestored});
     }
   for(const {appearance,effect,original,host} of results){
     effect.update({appearance,quotas:{fiveHour:0,weekly:0},config:{style:'duo'},reducedMotion:true});
     const zero=effect.canvas.isConnected&&effect.canvas.dataset.quotaAvailable==='true';
     effect.update({appearance,quotas:{fiveHour:74,weekly:null},config:{style:'duo'},reducedMotion:true});
+    const fallback=effect.canvas.isConnected&&effect.canvas.dataset.style==='ring';
+    effect.update({appearance,quotas:{fiveHour:null,weekly:null},config:{style:'duo'},reducedMotion:true});
     const missing=!effect.canvas.isConnected&&original.style.scale==='';
     effect.update({appearance,quotas:{fiveHour:null,weekly:0},config:{style:'pool'},reducedMotion:true});
-    const unknown=effect.canvas.dataset.fiveHour==='unknown'&&!original.querySelector('[id^="qiuqiu-pool-"]');
+    const weeklyOnly=effect.canvas.isConnected&&effect.canvas.dataset.fiveHour==='unknown'&&effect.canvas.dataset.weekly==='0'&&Number.isFinite(Number(effect.canvas.dataset.liquidY));
+    effect.update({appearance,quotas:{fiveHour:null,weekly:null},config:{style:'pool'},reducedMotion:true});
+    const unknown=!effect.canvas.isConnected&&effect.canvas.dataset.fiveHour==='unknown'&&effect.canvas.dataset.weekly==='unknown'&&!original.querySelector('[id^="qiuqiu-pool-"]');
     effect.destroy();effect.update({appearance,config:{style:'ring'}});
     const restored=!effect.canvas.isConnected&&original.style.scale===''&&(!host.querySelector('.eb-rive-aurora')||host.querySelector('.eb-rive-aurora').style.opacity==='0.68');
-    report.push({shape:appearance.shape,zero,missing,unknown,restored});
+    report.push({shape:appearance.shape,zero,fallback,missing,weeklyOnly,unknown,restored});
   }
   return report;
 };
@@ -96,7 +125,9 @@ app.whenReady().then(async () => {
       if ('style' in result) {
         assert.ok(result.sameBody && result.drawable && result.poolLine && result.rivePool, JSON.stringify(result));
         assert.ok(result.bodyScale > 0 && result.bodyScale <= 1, JSON.stringify(result));
-      } else assert.ok(result.zero && result.missing && result.unknown && result.restored, JSON.stringify(result));
+        if(result.smallRingAlpha!==null)assert.ok(result.smallRingAlpha>=.65, JSON.stringify(result));
+      } else if('hiddenMode' in result)assert.ok(result.hiddenInit&&result.resizeRestored,JSON.stringify(result));
+      else assert.ok(result.zero && result.fallback && result.missing && result.weeklyOnly && result.unknown && result.restored, JSON.stringify(result));
     }
     console.log('QUOTA_EFFECTS_NATIVE_OK: ' + report.length + ' SVG/Rive material, size and missing/zero checks');
     fs.rmSync(directory, { recursive: true, force: true });

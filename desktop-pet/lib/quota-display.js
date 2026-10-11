@@ -13,7 +13,13 @@
       showNumbers: raw.showNumbers === true
     };
   }
-  function periods(config) {
+  function periods(config, model) {
+    if (model !== undefined) {
+      const available = ['fiveHour', 'weekly'].filter(period =>
+        model?.items?.some(item => item.windowMinutes === (period === 'fiveHour' ? 300 : 10080) &&
+          typeof item.remaining === 'number' && Number.isFinite(item.remaining) && item.remaining >= 0 && item.remaining <= 100));
+      return ['pool', 'ring'].includes(config.style) ? available.slice(0, 1) : available;
+    }
     return ['duo', 'split', 'stages'].includes(config.style) || config.period === 'both' && config.style === 'card'
       ? ['fiveHour', 'weekly'] : [config.period === 'weekly' ? 'weekly' : 'fiveHour'];
   }

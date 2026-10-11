@@ -13,7 +13,7 @@ const UPDATE_INSTALLER = { name: 'Qiuqiu-0.3.26-macOS-arm64.dmg',
 async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   codexQuotaAlwaysVisible = false, codexQuotaPeriod = 'auto', codexQuotaLabelSize = 'standard',
   codexQuotaAppearance = 'system', codexShowExtraCredits = true, bubblesEnabled = true, colorMode = 'standard', uiTheme = 'green',
-  consent = async () => ({ response: 1 }), openExternal = async () => {}, saveError = null,
+  consent = async () => ({ response: 1 }), consentReady = true, openExternal = async () => {}, saveError = null,
   download = async (_contents, _installer, { onProgress }) => {
     onProgress({ state: 'downloading', percent: 100 });
     return { state: 'completed', path: '/fixture/Qiuqiu.dmg' };
@@ -35,7 +35,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   const popups = [];
   const trayMenus = [];
   const updateChecks = [];
-  const downloads = [], revealed = [];
+  const downloads = [], revealed = [], consents = [];
   const app = Object.assign(new EventEmitter(), { quitCalls: 0, setName() {}, getPath: () => '/fixture',
     requestSingleInstanceLock: () => true, whenReady: () => Promise.resolve(), setActivationPolicy() {}, getVersion: () => '0.3.25',
     quit() { this.quitCalls++; }, exit(code) { throw new Error(`unexpected exit ${code}`); } });
@@ -73,6 +73,15 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     setBounds(bounds) { this.bounds = { ...bounds }; this.emit('resize'); }
     loadFile(file) {
       if (file.endsWith('/about.html')) queueMicrotask(() => { if (!this.destroyed) this.emit('ready-to-show'); });
+      if (file.endsWith('/codex-consent.html')) {
+        consents.push(this);
+        if (consentReady) queueMicrotask(async () => {
+          if (this.destroyed) return;
+          this.emit('ready-to-show');
+          const result = await consent();
+          await ipcHandlers.get('pet:codex-consent-answer')({ sender: this.webContents }, result.response === 0);
+        });
+      }
       return { catch: handler => { this.loadFailure = handler; } };
     }
     showInactive() { this.visible = true; this.emit('show'); } show() { this.showInactive(); }
@@ -220,7 +229,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   const pet = windows[0];
   pet.emit('ready-to-show');
   pet.webContents.emit('did-finish-load');
-  return { pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, downloads, revealed, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
+  return { pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, downloads, revealed, consents, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
     notes, nativeTheme, call: expression => vm.runInContext(expression, context),
     invoke(channel, packet, sender = pet.webContents) {
       assert.ok(ipcHandlers.has(channel), `${channel} handler must be registered`);
@@ -272,7 +281,8 @@ test('定制、API 费用和关于窗口首次及复开均跟随当前球球，�
     assert.deepEqual(win.getBounds(), openedBounds, '窗口打开后仍由用户摆放');
     win.setBounds({ ...openedBounds, x: 100, y: 32 });
     f.call(`${open}()`);
-    assert.notDeepEqual(win.getBounds(), { ...openedBounds, x: 100, y: 32 }, '同屏再次打开也随球球重新定位');
+    if (open === 'openAbout') assert.deepEqual(win.getBounds(), { ...openedBounds, x: 100, y: 32 }, '可见关于窗口保留用户摆放位置');
+    else assert.notDeepEqual(win.getBounds(), { ...openedBounds, x: 100, y: 32 }, '同屏再次打开也随球球重新定位');
   }
 });
 
@@ -786,13 +796,12 @@ test('默认关闭和取消确认都零连接、零轮询，并保留原设置',
   assert.equal(menuItem(f, 'codex-task-names').checked, false);
   assert.equal(menuItem(f, 'codex-status'), null);
   await f.call('setCodexEnabled(true)');
-  assert.equal(f.dialogs.length, 1);
-  assert.equal(f.dialogs[0].length, 1, '小尺寸球球不能作为确认 sheet 宿主');
-  const options = f.dialogs[0][0];
-  assert.equal(options.defaultId, 1);
-  assert.equal(options.cancelId, 1);
-  assert.match(options.detail, /可能.*聊天内容/);
-  assert.match(options.detail, /不保存.*不上传/);
+  assert.equal(f.dialogs.length, 0, '联动确认不再使用系统提示');
+  assert.equal(f.consents.length, 1);
+  const options = f.consents[0].options;
+  assert.equal(options.titleBarStyle, 'hiddenInset');
+  assert.equal(options.webPreferences.sandbox, true);
+  assert.equal(options.parent, undefined, '确认窗口独立于小尺寸球球');
   assert.equal(f.connections.length, 0);
   assert.equal(f.saved.length, 0);
   assert.equal(f.timers.size, 0);
@@ -840,6 +849,36 @@ test('关于窗口复用、安全读取版本与固定官网；锁屏、外来�
   f.app.emit('before-quit');
   assert.equal(reopened.isDestroyed(), true);
   assert.equal(await f.invoke('pet:about-get', null, reopened.webContents), null);
+});
+
+test('拖动关于窗口后，检查更新、合并查询、返回结果、缓存及重复菜单入口均保留当前位置', async () => {
+  let complete, requests = 0;
+  const f = await fixture({ updateFetch: currentVersion => {
+    if (++requests > 1) throw Error('NETWORK_FAILURE');
+    return new Promise(resolve => { complete = () => resolve({ currentVersion, latestVersion: '0.3.26',
+      hasUpdate: true, installer: UPDATE_INSTALLER }); });
+  } });
+  menuItem(f, 'about-open').click();
+  const win = f.call('aboutWindow'); win.emit('ready-to-show');
+  win.setPosition(-790, 5, false);
+  const firstPosition = win.getBounds();
+  f.pet.setPosition(-200, 110, false);
+  const pending = f.invoke('pet:about-update', null, win.webContents);
+  assert.deepEqual(win.getBounds(), firstPosition, '点击检查更新不得重定位');
+  await flush();
+  win.setPosition(-730, 85, false);
+  const currentPosition = win.getBounds();
+  const joined = f.call('checkForUpdates(true)');
+  menuItem(f, 'about-open').click();
+  assert.deepEqual(win.getBounds(), currentPosition, '检查中重复入口不得重定位');
+  complete(); await pending; await joined;
+  assert.deepEqual(win.getBounds(), currentPosition, '异步结果返回不得重定位');
+  await f.invoke('pet:about-update', null, win.webContents);
+  assert.equal(requests, 1); assert.deepEqual(win.getBounds(), currentPosition, '复用缓存不得重定位');
+  f.advanceTo(60001);
+  await f.invoke('pet:about-update', null, win.webContents);
+  assert.equal(f.call('aboutUpdateState.state'), 'error');
+  assert.deepEqual(win.getBounds(), currentPosition, '检查失败也保留当前位置');
 });
 
 test('更新手动检查可复用一分钟报告，同一新版只自动提醒一次，关闭自动后仍可手动', async () => {
@@ -1165,6 +1204,24 @@ test('新额度样式停用经典卡菜单，Codex 宠物临时回退卡片并�
   assert.equal(effect().config.style, 'ring'); assert.equal(effect().config.period, 'weekly');
   assert.equal(f.quotaLabel.visible, false); assert.equal(menuItem(f, 'codex-quota-settings').enabled, false);
   assert.equal(f.saved.length, writes, '有效样式回退不能覆盖持久偏好');
+});
+
+test('保存额度样式立即广播到桌面，单周套餐不显示空5h且不受旧周期设置影响', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true, codexQuotaPeriod: 'fiveHour' });
+  f.connections[0].callbacks.onQuota({ updatedAt: 1800000000000, windows: [
+    { id: 'codex:secondary', label: 'Codex', windowMinutes: 10080, remaining: 90, resetsAt: 1800604800000 }
+  ] });
+  assert.equal(f.call("saveCustomization(settings.customization,false,{style:'split',period:'fiveHour',showNumbers:true})"), true);
+  assert.equal(f.saved.at(-1).quotaDisplay.style, 'split');
+  const effect = f.pet.messages.filter(item => item.channel === 'pet:quota-display').at(-1).packet;
+  assert.equal(effect.config.style, 'split'); assert.equal(effect.visible, true);
+  assert.deepEqual(Array.from(f.quotaLabel.shows.at(-1).numberPeriods), ['weekly']);
+  assert.equal(f.quotaLabel.shows.at(-1).items.length, 1);
+  assert.equal(f.quotaLabel.shows.at(-1).items[0].remaining, 90);
+  assert.equal(f.quotaLabel.options.getSize(), 'compact');
+  assert.equal(f.call("saveCustomization(settings.customization,false,{style:'ring',showNumbers:false})"), true);
+  assert.equal(f.quotaLabel.visible, false);
+  assert.equal(f.pet.messages.filter(item => item.channel === 'pet:quota-display').at(-1).packet.config.style, 'ring');
 });
 
 test('原生 smoke 的受控闭包可精确恢复尺寸与空坐标设置且不移动窗口', async () => {
@@ -1686,12 +1743,73 @@ test('重复开启只弹一个确认，关闭及退出后的迟到确认不会�
     assert.equal(f.call('typeof setCodexEnabled'), 'function');
     const pending = f.call('setCodexEnabled(true)');
     await f.call('setCodexEnabled(true)');
-    assert.equal(f.dialogs.length, 1);
+    assert.equal(f.consents.length, 1); assert.equal(f.dialogs.length, 0);
     if (reason === 'off') await f.call('setCodexEnabled(false)'); else f.app.emit('before-quit');
     approve({ response: 0 }); await pending;
     assert.equal(f.connections.length, 0);
     assert.equal(f.saved.some(value => value.codexEnabled), false);
   }
+});
+
+test('联动确认只接受当前可见可信窗口，显示前和重复回答均无效', async () => {
+  const f = await fixture({ consentReady: false, codexQuotaAppearance: 'dark', colorMode: 'accessible' });
+  const pending = f.call('setCodexEnabled(true)'), win = f.consents[0];
+  assert.equal(win.isVisible(), false); assert.equal(f.connections.length, 0); assert.equal(f.saved.length, 0);
+  assert.equal(await f.invoke('pet:codex-consent-get', null, win.webContents), null);
+  assert.equal(await f.invoke('pet:codex-consent-answer', true, win.webContents), false);
+  assert.equal(await f.invoke('pet:codex-consent-answer', true), false);
+  win.emit('ready-to-show'); win.webContents.emit('did-finish-load');
+  assert.equal(win.colorAppearance, 'dark');
+  assert.ok(win.messages.some(item => item.channel === 'pet:color-mode' && item.packet === 'accessible'));
+  const info = await f.invoke('pet:codex-consent-get', null, win.webContents);
+  assert.equal(info.appearance.shape, f.call('settings.customization.appearance.shape'));
+  assert.equal(win.options.webPreferences.contextIsolation, true); assert.equal(win.options.webPreferences.nodeIntegration, false);
+  assert.equal(await f.invoke('pet:codex-consent-answer', 'true', win.webContents), false);
+  assert.equal(await f.invoke('pet:codex-consent-answer', true, win.webContents), true);
+  assert.equal(await f.invoke('pet:codex-consent-answer', true, win.webContents), false);
+  assert.equal(await pending, true); assert.equal(f.connections.length, 1); assert.equal(f.saved.length, 1);
+  assert.equal(win.isDestroyed(), true); assert.equal(f.call('codexConsentWindow'), null);
+});
+
+test('确认窗口取消、隐藏、锁屏、休眠、退出和加载失败均取消，迟到就绪与旧 sender 不复活', async () => {
+  for (const reason of ['cancel', 'close', 'hide', 'off', 'lock', 'suspend', 'quit', 'load-event', 'load-promise', 'crash', 'timeout']) {
+    const f = await fixture({ consentReady: false });
+    const pending = f.call('setCodexEnabled(true)'), win = f.consents[0];
+    if (reason !== 'timeout') win.emit('ready-to-show');
+    if (reason === 'cancel') await f.invoke('pet:codex-consent-answer', false, win.webContents);
+    else if (reason === 'close') win.close();
+    else if (reason === 'hide') win.hide();
+    else if (reason === 'off') await f.call('setCodexEnabled(false)');
+    else if (reason === 'lock') f.powerMonitor.emit('lock-screen');
+    else if (reason === 'suspend') f.powerMonitor.emit('suspend');
+    else if (reason === 'quit') f.app.emit('before-quit');
+    else if (reason === 'load-event') win.webContents.emit('did-fail-load');
+    else if (reason === 'load-promise') win.loadFailure(Error('PRIVATE_LOAD_ERROR'));
+    else if (reason === 'crash') win.webContents.emit('render-process-gone');
+    else f.advanceTo(30000);
+    assert.equal(await pending, false, reason);
+    win.emit('ready-to-show');
+    assert.equal(win.isDestroyed(), true, reason); assert.equal(win.isVisible(), false, reason);
+    assert.equal(await f.invoke('pet:codex-consent-answer', true, win.webContents), false, reason);
+    assert.equal(await f.invoke('pet:codex-consent-get', null, win.webContents), null, reason);
+    assert.equal(f.connections.length, 0, reason); assert.equal(f.saved.length, 0, reason);
+    assert.equal(f.call('settings.codexEnabled'), false, reason);
+    assert.equal(f.call('codexConsentFlight'), null, reason); assert.equal(f.call('codexConsentRequest'), null, reason);
+    assert.equal(f.timers.size, 0, reason);
+  }
+});
+
+test('旧确认窗不能回答新一轮确认，锁屏期间不创建确认窗', async () => {
+  const f = await fixture({ consentReady: false });
+  const first = f.call('setCodexEnabled(true)'), old = f.consents[0];
+  old.close(); assert.equal(await first, false);
+  const next = f.call('setCodexEnabled(true)'), current = f.consents[1];
+  current.emit('ready-to-show');
+  assert.equal(await f.invoke('pet:codex-consent-answer', true, old.webContents), false);
+  assert.equal(current.isVisible(), true); assert.equal(f.connections.length, 0);
+  await f.invoke('pet:codex-consent-answer', false, current.webContents); assert.equal(await next, false);
+  f.powerMonitor.emit('lock-screen');
+  assert.equal(await f.call('setCodexEnabled(true)'), false); assert.equal(f.consents.length, 2);
 });
 
 test('确认后才启用，已保存开启的重启不重复确认，关闭只清联动', async () => {

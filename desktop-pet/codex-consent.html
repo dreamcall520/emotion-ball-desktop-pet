@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <title>开启 Codex 联动</title>
+  <link rel="stylesheet" href="about.css">
+  <link rel="stylesheet" href="aurora-rive.css">
+  <link rel="stylesheet" href="codex-consent.css">
+  <link rel="stylesheet" href="color-mode.css">
+  <script defer src="color-mode.js"></script>
+  <script defer src="../emotion-ball/js/rings.js"></script>
+  <script defer src="../emotion-ball/js/custom-shapes.js"></script>
+  <script defer src="../emotion-ball/js/emotions.js"></script>
+  <script defer src="../emotion-ball/js/ball.js"></script>
+  <script defer src="../emotion-ball/js/engine.js"></script>
+  <script defer src="lib/customization.js"></script>
+  <script defer src="lib/rive.js"></script>
+  <script defer src="lib/boo-binary.js"></script>
+  <script defer src="lib/aurora-rive.js"></script>
+  <script defer src="lib/codex-pet-player.js"></script>
+  <script defer src="lib/chat-avatar.js"></script>
+  <script defer src="codex-consent-renderer.js"></script>
+</head>
+<body>
+  <main class="about-window consent-window" aria-labelledby="consent-title" aria-describedby="consent-subtitle">
+    <div class="about-titlebar" aria-hidden="true"></div>
+    <section class="consent-content">
+      <div id="consent-avatar" class="consent-avatar" aria-hidden="true"></div>
+      <h1 id="consent-title">让球球陪你关注 Codex</h1>
+      <p id="consent-subtitle">提醒额度余量，也留意任务进展。</p>
+      <div class="consent-disclosure">
+        <section><h2>只读状态</h2><p>在本机读取 Codex 的额度与任务状态，并只读查询官方服务的账户重置历史。</p></section>
+        <section><h2>保护隐私</h2><p>账户令牌仅用于官方查询，不保存、不发送给其他服务。状态包可能附带已加载的聊天内容；球球只提取进展，正文立即丢弃，不保存、不上传。</p></section>
+        <section><h2>由你掌控</h2><p>不监听键盘，也不会代你创建、发送、审批或中断任务。随时关闭即可停止读取。</p></section>
+      </div>
+      <footer class="consent-footer">
+        <div class="consent-actions">
+          <button id="consent-cancel" type="button" autofocus>暂不开启</button>
+          <button id="consent-accept" type="button" class="consent-primary" disabled>开启联动</button>
+        </div>
+        <p id="consent-status" role="status" aria-live="polite">可随时在「Codex 与 API」中关闭。</p>
+      </footer>
+    </section>
+  </main>
+</body>
+</html>

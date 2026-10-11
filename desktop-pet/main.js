@@ -118,6 +118,8 @@ let codexCompanion = null;
 let codexNow = Date.now;
 let codexConsentFlight = null;
 let codexConsentToken = 0;
+let codexConsentWindow = null;
+let codexConsentRequest = null;
 let codexPresentation = null;
 let codexRenderer = null;
 let codexPageReady = false;
@@ -242,7 +244,10 @@ function fromAboutWindow(event, requireVisible = false) {
 function openAbout() {
   if (isQuitting || screenLocked) return;
   if (aboutWindow && !aboutWindow.isDestroyed()) {
-    if (aboutReady) { positionFunctionWindow(aboutWindow); aboutWindow.show(); aboutWindow.focus(); }
+    if (aboutReady) {
+      if (!aboutWindow.isVisible()) positionFunctionWindow(aboutWindow);
+      aboutWindow.show(); aboutWindow.focus();
+    }
     return aboutWindow;
   }
   const win = new BrowserWindow({
@@ -270,6 +275,68 @@ function openAbout() {
     if (!win.isDestroyed()) win.destroy();
   });
   return win;
+}
+
+function fromCodexConsentWindow(event) {
+  return Boolean(!isQuitting && !screenLocked && codexConsentRequest?.ready && codexConsentWindow &&
+    !codexConsentWindow.isDestroyed() && codexConsentWindow.isVisible() && event.sender === codexConsentWindow.webContents);
+}
+
+function finishCodexConsent(accepted = false) {
+  const request = codexConsentRequest;
+  if (!request) return false;
+  codexConsentRequest = null;
+  if (codexConsentWindow === request.win) codexConsentWindow = null;
+  clearTimeout(request.timer);
+  request.resolve(accepted === true);
+  try { if (!request.win.isDestroyed()) request.win.destroy(); } catch (_) { /* The request is already invalidated. */ }
+  return true;
+}
+
+function codexConsentInfo() {
+  return { appearance: effectiveCustomization(settings.customization).appearance,
+    codexPet: codexPetDescriptor(settings.customization.appearance) };
+}
+
+function requestCodexConsent() {
+  if (isQuitting || screenLocked || codexConsentRequest) return Promise.resolve(false);
+  const win = new BrowserWindow({
+    width: 460, height: 656, resizable: false, maximizable: false, fullscreenable: false,
+    title: '开启 Codex 联动', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 },
+    backgroundColor: getNotesAppearance() === 'dark' ? '#242838' : '#EDF4FF', show: false,
+    webPreferences: { preload: path.join(__dirname, 'codex-consent-preload.js'),
+      contextIsolation: true, nodeIntegration: false, sandbox: true,
+      spellcheck: false, devTools: !app.isPackaged }
+  });
+  let resolve;
+  const result = new Promise(done => { resolve = done; });
+  const request = { win, resolve, ready: false, timer: null };
+  codexConsentWindow = win;
+  codexConsentRequest = request;
+  const cancel = () => { if (codexConsentRequest === request) finishCodexConsent(false); };
+  request.timer = setTimeout(cancel, 30000);
+  try {
+    positionFunctionWindow(win);
+    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    win.webContents.on('will-navigate', event => event.preventDefault());
+    win.webContents.on('will-attach-webview', event => event.preventDefault());
+    win.webContents.on('did-fail-load', cancel);
+    win.webContents.on('render-process-gone', cancel);
+    win.on('closed', cancel);
+    win.on('hide', cancel);
+    win.once('ready-to-show', () => {
+      if (codexConsentRequest !== request || win.isDestroyed()) return;
+      if (isQuitting || screenLocked) { cancel(); return; }
+      try {
+        clearTimeout(request.timer); request.timer = null; request.ready = true;
+        positionFunctionWindow(win); win.show(); win.focus();
+        win.webContents.send('pet:codex-consent-info', codexConsentInfo());
+      } catch (_) { cancel(); }
+    });
+    void win.loadFile(path.join(__dirname, 'codex-consent.html')).catch(cancel);
+  }
+  catch (_) { cancel(); }
+  return result;
 }
 
 function setAboutUpdate(state) {
@@ -866,12 +933,14 @@ function syncQuotaLabel(snapshot = null) {
       }
       try {
         const model = buildQuotaLabelModel(current, {
-          period: display.style === 'card' ? settings.codexQuotaPeriod : QuotaDisplay.periods(display).length === 2 ? 'auto' : QuotaDisplay.periods(display)[0],
-          size: settings.codexQuotaLabelSize,
-          showExtraCredits: settings.codexShowExtraCredits
+          period: display.style === 'card' ? settings.codexQuotaPeriod : 'auto',
+          size: display.style === 'card' ? settings.codexQuotaLabelSize : 'compact',
+          showExtraCredits: display.style === 'card' && settings.codexShowExtraCredits
         }, codexNow());
-        quotaLabel.show(display.style === 'card' ? model : { ...model, display: 'numbers',
-          numberPeriods: QuotaDisplay.periods(display), numberColors: settings.customization.appearance });
+        const numberPeriods = QuotaDisplay.periods(display, model);
+        quotaLabel.show(display.style === 'card' || numberPeriods.length === 0 ? model : { ...model, display: 'numbers',
+          items: model.items.filter(item => numberPeriods.includes(item.windowMinutes === 300 ? 'fiveHour' : 'weekly')),
+          numberPeriods, numberColors: settings.customization.appearance });
         shown = true;
       } catch (error) {
         shown = false;
@@ -961,7 +1030,7 @@ function initializeCodexCompanion(options = {}) {
 }
 
 function codexDetailModel(snapshot, action, period) {
-  const card = buildQuotaLabelModel(snapshot, { period: settings?.codexQuotaPeriod,
+  const card = buildQuotaLabelModel(snapshot, { period: quotaDisplayConfig().style === 'card' ? settings?.codexQuotaPeriod : 'auto',
     size: settings?.codexQuotaLabelSize, showExtraCredits: settings?.codexShowExtraCredits }, codexNow());
   const selected = card.items.find(item => item.windowMinutes === period) || card.items[0];
   const model = buildCodexDetailsModel(snapshot, { action, period: selected?.windowMinutes || period,
@@ -1054,6 +1123,7 @@ async function setCodexEnabled(enabled) {
   if (!codexCompanion || isQuitting) return false;
   if (enabled !== true) {
     codexConsentToken++;
+    finishCodexConsent(false);
     const changed = settings.codexEnabled === true;
     settings.codexEnabled = false;
     if (changed) {
@@ -1070,17 +1140,13 @@ async function setCodexEnabled(enabled) {
     refreshTrayMenu();
     return true;
   }
-  if (settings.codexEnabled || codexConsentFlight) return false;
+  if (screenLocked || settings.codexEnabled || codexConsentFlight) return false;
   const token = ++codexConsentToken;
   const flight = {};
   codexConsentFlight = flight;
   try {
-    const result = await dialog.showMessageBox({
-      type: 'info', title: '开启 Codex 联动？', message: '让球球提醒 Codex 额度与任务进展',
-      detail: '开启后，在本机读取 Codex 的额度与任务状态，并只读查询官方服务的账户重置历史。账户令牌仅用于官方查询，不保存、不发送给其他服务。状态包可能附带已加载的聊天内容；球球只提取进展，正文立即丢弃，不保存、不上传。\n不监听键盘，也不会代你创建、发送、审批或中断任务。随时关闭即可停止读取。',
-      buttons: ['开启联动', '暂不开启'], defaultId: 1, cancelId: 1, noLink: true
-    });
-    if (result.response !== 0 || token !== codexConsentToken || isQuitting) return false;
+    const accepted = await requestCodexConsent();
+    if (!accepted || token !== codexConsentToken || isQuitting || screenLocked) return false;
     const previous = {
       codexEnabled: settings.codexEnabled,
       codexTaskNameInAlerts: settings.codexTaskNameInAlerts,
@@ -1702,7 +1768,13 @@ async function finishSmokeTest() {
       persistSettings();
       await require('./scripts/verify-quota-display').verifyQuotaDisplay({ pet: petWindow, settingsFile,
         open: () => { openCustomization(); return customizationWindow; }, about: openAbout,
+        requestConsent: requestCodexConsent, getConsentWindow: () => codexConsentWindow,
         showNumbers: model => { quotaLabel.show(model); return quotaLabel.getWindow(); },
+        previewSavedQuota: windows => {
+          settings.codexEnabled = true; settings.codexQuotaAlwaysVisible = true;
+          syncQuotaLabel({ enabled: true, quota: { state: 'connected', stale: false, updatedAt: codexNow(), windows } });
+          return quotaLabel.getWindow();
+        },
         sendModel: payload => petWindow.webContents.send('pet:quota-display', payload) });
       app.exit(0); return;
     }
@@ -2334,6 +2406,11 @@ function createPetWindow() {
 }
 
 function registerIpc() {
+  ipcMain.handle('pet:codex-consent-get', event => fromCodexConsentWindow(event) ? codexConsentInfo() : null);
+  ipcMain.handle('pet:codex-consent-answer', (event, accepted) => {
+    if (!fromCodexConsentWindow(event) || typeof accepted !== 'boolean') return false;
+    return finishCodexConsent(accepted);
+  });
   ipcMain.handle('pet:about-get', event => fromAboutWindow(event)
     ? { version: app.getVersion(), website: APP_WEBSITE, developer: '春野', update: aboutUpdateState } : null);
   ipcMain.handle('pet:about-website', event => {
@@ -2762,6 +2839,8 @@ async function bootstrap() {
   });
   const pause = () => {
     screenLocked = true;
+    codexConsentToken++;
+    finishCodexConsent(false);
     notesCompanion?.pause();
     if (customizationWindow && !customizationWindow.isDestroyed()) customizationWindow.hide();
     if (apiUsageWindow && !apiUsageWindow.isDestroyed()) apiUsageWindow.hide();
@@ -2804,6 +2883,8 @@ if (!hasSingleInstanceLock) {
   });
 
   app.on('before-quit', event => {
+    codexConsentToken++;
+    finishCodexConsent(false);
     const noteWindows = notesCompanion?.getWindows();
     const pendingReminders = notesCompanion?.getStore().getState().todos.some(item =>
       !item.deletedAt && !item.completed && ['pending', 'presented'].includes(item.reminderState));
