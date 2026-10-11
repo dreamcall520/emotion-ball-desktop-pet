@@ -71,33 +71,45 @@ function bounded(candidate, size, area) {
   };
 }
 
-function quotaLabelSize(value, expanded = false, itemCount = 1, extraCredits = false) {
+function quotaLabelSize(value, expanded = false, itemCount = 1, extraCredits = false, guardEntry = false) {
   if (expanded === true && itemCount > 1 && value === 'standard') return LABEL_SIZES.standardExpandedDual;
   if (expanded === true && itemCount > 1 && value === 'compact') return LABEL_SIZES.compactExpandedDual;
   if (expanded === true && value === 'standard') return LABEL_SIZES.standardExpanded;
   if (expanded === true && value === 'compact') return LABEL_SIZES.compactExpanded;
-  return LABEL_SIZES[value] || LABEL_SIZES.standard;
+  const card = LABEL_SIZES[value] || LABEL_SIZES.standard;
+  return guardEntry && !expanded ? { width: card.width + 72, height: Math.max(card.height, 44) + 6 } : card;
 }
 
 function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName = 'standard', expanded = false, itemCount = 1,
-  presentation = null, extraCredits = false) {
+  presentation = null, extraCredits = false, guardEntry = false) {
   const area = safeArea(workArea);
   const nativePet = safePet(petBounds, area);
   const pet = petVisualBounds(nativePet, presentation?.shape, presentation);
   const obstacle = safeObstacle(obstacleBounds);
-  const requestedSize = quotaLabelSize(sizeName, expanded, itemCount, extraCredits);
+  const cardSize = quotaLabelSize(sizeName, expanded, itemCount, extraCredits);
+  const requestedSize = quotaLabelSize(sizeName, expanded, itemCount, extraCredits, guardEntry);
   const size = {
     width: Math.min(requestedSize.width, area.width),
     height: Math.min(requestedSize.height, area.height)
   };
   const centerX = pet.x + pet.width / 2;
   const centerY = pet.y + pet.height / 2;
+  const topGutter = Math.max(0, size.height - cardSize.height);
+  // Reserve the right-hand role without moving the visible card's center.
+  // On a left placement the role sits between the card and the pet.
   const candidates = [
-    { placement: 'below', x: centerX - size.width / 2, y: pet.y + pet.height + GAP },
-    { placement: 'above', x: centerX - size.width / 2, y: pet.y - size.height - GAP },
-    { placement: 'right', x: pet.x + pet.width + GAP, y: centerY - size.height / 2 },
-    { placement: 'left', x: pet.x - size.width - GAP, y: centerY - size.height / 2 }
-  ].map(candidate => ({ ...candidate, x: Math.round(candidate.x), y: Math.round(candidate.y) }));
+    { placement: 'below', x: centerX - cardSize.width / 2, y: pet.y + pet.height + GAP - topGutter },
+    { placement: 'above', x: centerX - cardSize.width / 2, y: pet.y - size.height - GAP },
+    { placement: 'right', x: pet.x + pet.width + GAP, y: centerY - cardSize.height / 2 - topGutter },
+    { placement: 'left', x: pet.x - size.width - GAP, y: centerY - cardSize.height / 2 - topGutter }
+  ].map(candidate => {
+    // Compact role art is taller than the card; keep that extra area below
+    // the pet instead of allowing its transparent native surface to overlap.
+    if (guardEntry && candidate.placement === 'below' && overlaps(candidate, size, pet)) {
+      candidate = { ...candidate, y: pet.y + pet.height + GAP };
+    }
+    return { ...candidate, x: Math.round(candidate.x), y: Math.round(candidate.y) };
+  });
 
   const valid = candidates.find(candidate => inside(candidate, size, area) &&
     !overlaps(candidate, size, obstacle));

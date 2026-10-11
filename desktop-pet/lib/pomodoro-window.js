@@ -29,6 +29,7 @@ function validAction(type, value, view) {
 
 function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, getPetBounds,
   getPetPresentation = () => null, getWindowObstacles = () => [], getQuotaBounds = () => null,
+  getQuotaWindowBounds = () => null,
   getReminderBounds = () => null, getSnapshot, onAction,
   isSuppressed = () => false, onError = () => {} }) {
   const entries = new Map();
@@ -130,6 +131,7 @@ function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, g
       const quota = presentation?.mode === 'peeked' && ['left', 'right'].includes(presentation.side) ? getQuotaBounds() : null;
       const quotaBounds = quota && ['x', 'y', 'width', 'height'].every(key => Number.isFinite(quota[key])) &&
         quota.width > 0 && quota.height > 0 ? quota : null;
+      const quotaWindowBounds = quotaBounds ? getQuotaWindowBounds() : null;
       const obstacles = [...getWindowObstacles(), getReminderBounds(), pet].filter(item => item &&
         ['x', 'y', 'width', 'height'].every(key => Number.isFinite(item[key])) && item.width > 0 && item.height > 0);
       const active = ['running', 'paused'].includes(state.status);
@@ -145,8 +147,13 @@ function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, g
         const entry = ensure(view);
         if (!alive(entry.win) || !entry.ready) continue;
         const current = entry.win.getBounds();
-        const bounds = view === 'panel' && entry.positioned && !panelAnchorPending ?
-          fit({ ...current, ...size }, screen.getDisplayMatching(current).workArea) : place(view, size, pet, area, obstacles, miniBounds, quotaBounds, state.reminder);
+        // The anchored stack follows the card face, not its guard role's transparent gutter.
+        const placementObstacles = quotaWindowBounds && (view === 'mini' || (view === 'message' && !state.reminder)) ?
+          obstacles.map(item => ['x', 'y', 'width', 'height'].every(key => item[key] === quotaWindowBounds[key]) ? quotaBounds : item) : obstacles;
+        const retainedPanelBounds = view === 'panel' && entry.positioned && !panelAnchorPending ?
+          fit({ ...current, ...size }, screen.getDisplayMatching(current).workArea) : null;
+        const bounds = retainedPanelBounds && !obstacles.some(obstacle => obstacle !== pet && intersects(retainedPanelBounds, obstacle)) ?
+          retainedPanelBounds : place(view, size, pet, area, placementObstacles, miniBounds, quotaBounds, state.reminder);
         if (['x', 'y', 'width', 'height'].some(key => bounds[key] !== current[key])) entry.win.setBounds(bounds, false);
         entry.positioned = true;
         if (view === 'panel') panelAnchorPending = false;

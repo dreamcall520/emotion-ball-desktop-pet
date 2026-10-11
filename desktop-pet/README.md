@@ -71,6 +71,16 @@
 
 联动依赖本机 Codex 版本提供的只读状态能力，兼容性可能随 Codex 更新变化。已在获授权的两条已打开任务上验证真实完成、合并气泡、跳跃与关闭清理；未打开后台任务仍可能无法读取，真实等待确认/失败/中断及实际跳转仍待验，请以 Codex 界面为准。常规自动检查使用模拟任务，不创建真实任务或消耗模型额度。
 
+## 额度守护战（独立开发候选）
+
+在有效额度的小卡右侧显示角色：100% 是戴皇冠的球球，1–99% 是走动的僵尸，0% 是半个球球、光环和戴皇冠的僵尸。点击卡片仍展开原有额度详情；点击右侧角色打开守护战。
+
+球球自动发射能量球，点击球球加快发射并击退僵尸，点击僵尸让它逼近。手动命中 30 次后球球转圈甩出原生彩带，僵尸退场留下墓碑；失败时球球被吃掉一半，皇冠转给僵尸。游戏只改变本局状态，额度数字和背景进度条保持真实额度。关闭再打开继续同一局；隐藏球球、锁屏、关闭额度卡或 Codex 联动时同步收起。未知或过期额度不显示旧角色，系统“减少动态”时停止动画。
+
+本候选只保留卡片右侧入口。趣味动画的独立关闭和其他入口样式留到后续版本；原有的额度卡与联动开关继续有效。
+
+在项目根目录运行 `node desktop-pet/scripts/package-quota-guard-preview.js` 可生成 Apple 芯片候选包“球球额度守护候选”。候选使用独立应用标识和 `~/Library/Application Support/qiuqiu-quota-guard-preview` 资料目录，不替换正式 App，也不复制正式版设置。运行 `PET_SMOKE_QUOTA_GUARD_ONLY=1 node desktop-pet/scripts/smoke-electron.js` 检查主进程接入；`node_modules/.bin/electron desktop-pet/scripts/verify-quota-guard.js` 检查原生角色、交互和窗口表现。
+
 ## OpenAI API 费用与用量（0.3.26）
 
 右键或菜单栏选择“Codex 与 API → OpenAI API → 费用与用量…”，查询官方统计的 UTC 本月／今日费用，以及 Responses / Chat Completions 的本月输入、输出和其中缓存 tokens。这个入口也可在订阅联动关闭时使用，保留 Plus 现有额度卡片与提醒行为。

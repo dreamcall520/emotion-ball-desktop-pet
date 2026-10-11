@@ -11,7 +11,7 @@ const contains = (r, p, margin = 0) => Boolean(r && p && p.x >= r.x - margin && 
 
 function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
   getPresentation, getConfig, getErrors, save, onAction, onPin, onRecording,
-  isSuppressed = () => false, onError = () => {} }) {
+  isSuppressed = () => false, onLayout = () => {}, onError = () => {} }) {
   let win = null, ready = false, opened = false, stopped = false, view = null, layout = null, session = 0;
   let focusPending = false, ignored = null, hoverTimer = null, leaveTimer = null, blocked = false;
   const alive = () => win && !win.isDestroyed();
@@ -30,6 +30,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
     opened = false; focusPending = false; cancelHover(); cancelLeave(); blocked = true;
     onRecording(false); onPin(false);
     if (alive()) win.hide();
+    onLayout();
   }
   function ensure() {
     if (alive()) return;
@@ -76,6 +77,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
     if (focusPending) { setIgnored(false); win.show(); win.focus(); }
     else if (!win.isVisible()) win.showInactive();
     focusPending = false;
+    onLayout();
     sampleCursor(screen.getCursorScreenPoint());
   }
   function open({ focus = true, settings = false } = {}) {

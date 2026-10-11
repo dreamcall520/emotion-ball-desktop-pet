@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>球球守护战</title>
+  <link rel="stylesheet" href="quota-guard.css">
+  <link rel="stylesheet" href="color-mode.css">
+</head>
+<body>
+  <main id="guard-panel" data-outcome="playing" aria-labelledby="guard-title">
+    <header class="fun-header">
+      <div class="fun-title-group"><span class="fun-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 4 8 9 8 9s8-5 8-9V6Z"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg></span><div><span class="fun-eyebrow">趣味互动</span><h1 id="guard-title">球球守护战</h1></div></div>
+      <button id="guard-close" class="close-fun" type="button" aria-label="关闭球球守护战"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg></button>
+    </header>
+    <div class="fun-stat"><div class="quota-readout"><span class="readout-label" id="guard-period">Codex 额度</span><strong id="guard-number" aria-live="polite" aria-atomic="true">--%</strong></div><span id="guard-status" role="status">等待额度更新</span></div>
+    <div class="battle-field">
+      <div class="stage-hints" aria-hidden="true"><span>球球 · 点击发射</span><span>僵尸 · 点击逼近</span></div>
+      <div class="large-stage"><div id="guard-theatre" class="theatre">
+        <div class="lane"><div id="guard-charge" class="scene-charge"></div></div><div class="floor"></div>
+        <span id="guard-grave" class="victory-grave" aria-hidden="true"><img src="assets/quota-guard/tombstone.svg" alt=""></span>
+        <div id="guard-effects" aria-hidden="true"></div>
+        <button id="guard-qiuqiu" class="actor" type="button" aria-label="点击球球发射能量球"><span id="guard-pet" class="pet-art" aria-hidden="true"></span></button>
+        <button id="guard-monster" class="actor monster" type="button" aria-label="点击僵尸让它向前逼近"><span id="guard-monster-art" class="monster-art" aria-hidden="true"><canvas id="guard-zombie-canvas" width="87" height="124"></canvas><svg id="guard-zombie-crown" class="zombie-crown" viewBox="0 0 87 94"></svg></span></button>
+      </div></div>
+      <div class="battle-feedback"><span>本局命中</span><div id="guard-hit-pips" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div><span id="guard-hit-count" aria-live="polite">0 / 30</span></div>
+    </div>
+    <p id="guard-instruction" class="fun-instruction">额度更新后，继续陪球球守护能量。</p>
+    <footer class="fun-footer"><button id="guard-restart" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M20 11a8 8 0 1 0-1.5 6"/></svg>重开一局</button><button id="guard-pause" type="button" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6v12M15 6v12"/></svg><span id="guard-pause-label">暂停动画</span></button></footer>
+  </main>
+  <script src="../emotion-ball/js/rings.js"></script>
+  <script src="../emotion-ball/js/ball.js"></script>
+  <script src="assets/quota-guard/zombie-data.js"></script>
+  <script src="quota-guard-renderer.js"></script>
+</body>
+</html>

@@ -9,7 +9,7 @@ function fixture() {
   const windows = [], handlers = new Map(), actions = [], errors = [];
   const state = { status: 'idle', mode: 'focus', face: 'analog', remaining: 1500, total: 1500,
     pinned: false, reminder: false, encouragement: '', durations: { focus: 25, short: 5, long: 15 } };
-  let suppressed = false, obstacles = [], quota = null, todoReminder = null, presentation = { shape: 'blob' };
+  let suppressed = false, obstacles = [], visibleQuota = null, nativeQuota = null, todoReminder = null, presentation = { shape: 'blob' };
   const area = { x: 0, y: 0, width: 1440, height: 900 };
   const pet = { bounds: { x: 300, y: 300, width: 80, height: 80 }, visible: true,
     isDestroyed: () => false, isVisible() { return this.visible; }, getBounds() { return { ...this.bounds }; } };
@@ -41,15 +41,16 @@ function fixture() {
     ipcMain: { handle: (key, fn) => handlers.set(key, fn), removeHandler: key => handlers.delete(key) },
     screen: { getDisplayMatching: () => ({ workArea: area }) }, getPetWindow: () => pet,
     getPetBounds: () => pet.getBounds(), getPetPresentation: () => presentation,
-    getQuotaBounds: () => quota, getReminderBounds: () => todoReminder,
-    getWindowObstacles: () => [...obstacles, ...(quota ? [quota] : [])],
+    getQuotaBounds: () => visibleQuota, getQuotaWindowBounds: () => nativeQuota, getReminderBounds: () => todoReminder,
+    getWindowObstacles: () => [...obstacles, ...(nativeQuota ? [nativeQuota] : [])],
     getSnapshot: () => state, isSuppressed: () => suppressed, onError: error => errors.push(error),
     onAction: (type, value) => { actions.push([type, value]); if (type === 'pin') state.pinned = value; return { ok: true, state: { ...state } }; } });
   const win = view => windows.findLast(item => item.view === view && !item.destroyed);
   const event = view => ({ sender: win(view).webContents, senderFrame: win(view).webContents.mainFrame });
   return { manager, state, windows, handlers, actions, errors, pet, area, win, event,
     invoke: (view, type, value) => handlers.get('pomodoro:action')(event(view), type, value),
-    suppress: value => { suppressed = value; }, obstacles: value => { obstacles = value; }, quota: value => { quota = value; },
+    suppress: value => { suppressed = value; }, obstacles: value => { obstacles = value; },
+    quota: (visible, native = visible) => { visibleQuota = visible; nativeQuota = native; },
     todoReminder: value => { todoReminder = value; },
     presentation: value => { presentation = value; } };
 }
@@ -110,6 +111,67 @@ test('左右贴边时小入口跟随真实额度边界，消息跟随，隐藏�
         `${view} 在屏幕边角保持工作区内`);
     }
   }
+  assert.deepEqual(f.errors, []);
+});
+
+test('标准与小巧额度的守护外窗不推偏计时条，其他障碍及面板和完成提醒保留完整避让', async t => {
+  const f = fixture(); t.after(() => f.manager.close());
+  const face = win => ({ x: win.bounds.x + 6, y: win.bounds.y + 6, width: win.bounds.width - 12, height: win.bounds.height - 12 });
+  const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+  Object.assign(f.pet.bounds, { x: 0, y: 400 });
+  f.presentation({ mode: 'peeked', side: 'left', shape: 'blob' }); f.state.status = 'paused';
+  for (const [size, width, height, inset, gutter] of [['standard', 168, 58, 0, 6], ['compact', 128, 32, 2, 18]]) {
+    for (const guard of [true, false]) {
+      const native = { x: 88, y: 420, width: width + (guard ? 72 : 0), height: height + (guard ? gutter : 0) };
+      const quota = { x: native.x + inset, y: native.y + (guard ? gutter : 0) + inset,
+        width: width - inset * 2, height: height - inset * 2 };
+      f.state.encouragement = ''; f.obstacles([]); f.quota(quota, native); f.manager.sync(); await flush();
+      const mini = f.win('mini');
+      assert.equal(face(mini).x + face(mini).width / 2, quota.x + quota.width / 2, `${size} 守护入口 ${guard} 保持卡面中心`);
+      assert.equal(quota.y - face(mini).y - face(mini).height, 8, `${size} 守护入口 ${guard} 保持卡面8px间距`);
+      f.state.encouragement = '慢慢来。'; f.manager.sync(); await flush();
+      assert.equal(face(mini).y - face(f.win('message')).y - face(f.win('message')).height, 8, '鼓励卡继续跟随计时条堆叠');
+      if (guard) {
+        const neighboringWindow = { ...native, x: native.x + 1 };
+        f.obstacles([neighboringWindow]); f.manager.sync();
+        assert.equal(overlaps(face(mini), neighboringWindow), false, '仅替换逐项相等的额度外窗，邻近窗口继续避让');
+        assert.notEqual(face(mini).x + face(mini).width / 2, quota.x + quota.width / 2);
+        assert.equal(face(mini).y - face(f.win('message')).y - face(f.win('message')).height, 8);
+      }
+    }
+  }
+  f.obstacles([]); f.state.encouragement = ''; f.state.status = 'idle';
+  Object.assign(f.pet.bounds, { x: 300, y: 300 });
+  const panelObstacle = { x: 220, y: 200, width: 240, height: 64 };
+  f.quota({ x: 220, y: 206, width: 168, height: 58 }, panelObstacle); f.manager.open(); await flush();
+  assert.notDeepEqual(f.win('panel').bounds, { x: 404, y: 102, width: 320, height: 476 }, '面板不能进入守护外窗的透明侧边');
+  assert.equal(overlaps(f.win('panel').bounds, panelObstacle), false);
+  await f.invoke('panel', 'close-panel');
+  const reminderObstacle = { x: 220, y: 280, width: 200, height: 50 };
+  f.quota({ x: 222, y: 300, width: 124, height: 28 }, reminderObstacle);
+  Object.assign(f.state, { status: 'complete', reminder: true }); f.manager.sync();
+  assert.notDeepEqual(f.win('message').bounds, { x: 212, y: 104, width: 256, height: 188 }, '完成提醒保留额度原生窗口的完整避让');
+  assert.equal(overlaps(face(f.win('message')), reminderObstacle), false);
+  assert.deepEqual(f.errors, []);
+});
+
+test('已打开面板避让后来出现的伴随窗口，障碍关闭后保留位置且不因球体移动回跳', async t => {
+  const f = fixture(); t.after(() => f.manager.close());
+  const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+  Object.assign(f.pet.bounds, { x: 600, y: 300 }); f.manager.open(); await flush();
+  const panel = f.win('panel');
+  assert.deepEqual(panel.bounds, { x: 704, y: 102, width: 320, height: 476 });
+  const guard = { x: 430, y: 388, width: 420, height: 410 };
+  assert.equal(overlaps(panel.bounds, guard), true, '复现先打开番茄钟再显示守护时的交叠');
+  f.obstacles([guard]); f.manager.reposition();
+  assert.equal(overlaps(panel.bounds, guard), false, '后来出现的守护或快捷窗口触发重新避让');
+  const retained = { ...panel.bounds }; f.obstacles([]); f.manager.sync();
+  assert.deepEqual(panel.bounds, retained, '障碍关闭后不把面板拉回原始位置');
+  Object.assign(f.pet.bounds, { x: retained.x, y: retained.y }); f.manager.sync();
+  assert.deepEqual(panel.bounds, retained, '只有球体移动进入面板时仍保留面板位置');
+  const reminder = { x: retained.x + 20, y: retained.y + 20, width: 360, height: 190 };
+  f.todoReminder(reminder); f.manager.sync();
+  assert.equal(overlaps(panel.bounds, reminder), false, '后来出现的待办提醒同样触发避让');
   assert.deepEqual(f.errors, []);
 });
 

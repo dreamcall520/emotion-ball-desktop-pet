@@ -140,6 +140,7 @@ function safeModel(value) {
 function createQuotaLabelWindow({
   BrowserWindow, screen, getPetWindow, getObstacle = () => null, getSize = () => 'standard',
   getAppearance = () => 'system', getPresentation = () => null, getSuppressed = () => false,
+  getGuardEntry = () => false,
   onError = () => {}, onLayout = () => {}, alwaysOnTop = true
 }) {
   let win = null;
@@ -152,6 +153,12 @@ function createQuotaLabelWindow({
   let reporting = false;
   let silentWindow = null;
   const topmostSyncing = new Set();
+
+  function guardEntryVisible() {
+    try { return getGuardEntry() === true && currentModel?.state === 'ready' &&
+      currentModel.items.length > 0 && currentModel.expanded !== true; }
+    catch (error) { report(error); return false; }
+  }
 
   function requestedSize() {
     try {
@@ -239,6 +246,11 @@ function createQuotaLabelWindow({
       return;
     }
     if (win !== target || operation !== token) return;
+    if (ready && currentModel) {
+      try { target.webContents.send(CHANNEL, { ...currentModel, visible: false }); }
+      catch (error) { detach(target, error); return; }
+      if (win !== target || operation !== token) return;
+    }
     try { target.hide(); } catch (error) { detach(target, error); return; }
     if (win !== target || operation !== token) return;
     const afterHide = health(target);
@@ -260,7 +272,7 @@ function createQuotaLabelWindow({
       const display = screen.getDisplayMatching(petBounds);
       return quotaLabelBounds(petBounds, display && display.workArea, getObstacle(),
         currentModel?.size, currentModel?.expanded === true, currentModel?.items?.length,
-        getPresentation(), Boolean(currentModel?.extraCredits));
+        getPresentation(), Boolean(currentModel?.extraCredits), guardEntryVisible());
     } catch (error) {
       report(error);
       return null;
@@ -285,7 +297,7 @@ function createQuotaLabelWindow({
     const { x, y, width, height } = layout;
     try { target.setBounds({ x, y, width, height }, false); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
-    try { target.webContents.send(CHANNEL, model); } catch (error) { detach(target, error); return; }
+    try { target.webContents.send(CHANNEL, { ...model, visible: true }); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
     try {
       if (model.items.length > 0) target.setIgnoreMouseEvents(false);
@@ -368,7 +380,7 @@ function createQuotaLabelWindow({
     const expectedWindow = win;
     let loadingWindow = null;
     const initialSize = quotaLabelSize(currentModel?.size, currentModel?.expanded === true,
-      currentModel?.items?.length, Boolean(currentModel?.extraCredits));
+      currentModel?.items?.length, Boolean(currentModel?.extraCredits), guardEntryVisible());
     try { loadingWindow = new BrowserWindow({
       width: initialSize.width,
       height: initialSize.height,
@@ -508,8 +520,15 @@ function createQuotaLabelWindow({
     getWindow,
     getVisibleBounds() {
       const target = getWindow();
-      return target && requestedVisible && currentModel?.items.length && target.isVisible()
-        ? target.getBounds() : null;
+      if (!target || !requestedVisible || !currentModel?.items.length || !target.isVisible()) return null;
+      const bounds = target.getBounds();
+      const card = quotaLabelSize(currentModel.size, currentModel.expanded, currentModel.items.length,
+        Boolean(currentModel.extraCredits));
+      // The guard role only grows the native window; the card stays at its bottom-left.
+      const inset = currentModel.size === 'compact' && !currentModel.expanded ? 2 : 0;
+      const width = Math.min(bounds.width, card.width), height = Math.min(bounds.height, card.height);
+      return { x: bounds.x + inset, y: bounds.y + bounds.height - height + inset,
+        width: width - inset * 2, height: height - inset * 2 };
     },
     setAlwaysOnTop(enabled) {
       operation += 1;
@@ -524,4 +543,4 @@ function createQuotaLabelWindow({
   };
 }
 
-module.exports = { createQuotaLabelWindow };
+module.exports = { createQuotaLabelWindow, safeModel };

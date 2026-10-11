@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 88 112" width="88" height="112" role="img" aria-label="灰蓝圆拱墓碑，刻有 RIP">
+  <title>卡通圆拱墓碑</title>
+  <ellipse cx="44" cy="106" rx="39" ry="4" fill="#4d5b59" opacity=".18"/>
+  <path d="M10 104 13 49 11 43 15 36C17 16 28 5 45 5 63 5 75 18 77 37L79 64 77 70 80 104Z" fill="#75838a" stroke="#3f4b50" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M45 5C63 5 75 18 77 37L79 64 77 70 80 104 69 104 66 37C64 20 56 11 45 5Z" fill="#5e6d75"/>
+  <path d="M15 101 18 45 17 40C19 20 29 10 44 9 58 10 68 22 69 39L72 101Z" fill="#9ba6a8" stroke="#526168" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M22 94 24 39C25 24 32 17 44 17 56 18 62 27 63 41L66 94Z" fill="#8b989c" stroke="#6b7b80" stroke-width="2"/>
+  <path d="M18 36C21 19 30 11 44 10 54 11 62 17 66 28" fill="none" stroke="#c6cdca" stroke-width="2.3" stroke-linecap="round"/>
+  <path d="M23 45H32Q39 45 39 52 39 57 34 58L41 67H35L29 59H28V67H23ZM28 50V54H32Q34 54 34 52 34 50 32 50ZM43 45H48V67H43ZM53 45H61Q68 45 68 53 68 60 61 60H58V67H53ZM58 50V55H61Q63 55 63 53 63 50 61 50Z" fill="#c3ccc9" transform="translate(0 1.3)"/>
+  <path d="M23 45H32Q39 45 39 52 39 57 34 58L41 67H35L29 59H28V67H23ZM28 50V54H32Q34 54 34 52 34 50 32 50ZM43 45H48V67H43ZM53 45H61Q68 45 68 53 68 60 61 60H58V67H53ZM58 50V55H61Q63 55 63 53 63 50 61 50Z" fill="#47565c" fill-rule="evenodd"/>
+  <path d="m65 23-6 8 6 3-3 7M34 102l7-9-4-7m4 7 6 1" fill="none" stroke="#55656b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m12 105-4-12 8 8 1-7 5 12m43 0 5-11 1 7 8-8-4 13" fill="#6a8256" stroke="#4b6346" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

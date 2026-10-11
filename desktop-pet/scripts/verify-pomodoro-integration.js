@@ -477,10 +477,26 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     const painted = win => { const b = win.getBounds(); return { x: b.x + 6, y: b.y + 6, width: b.width - 12, height: b.height - 12 }; };
     const inArea = bounds => bounds.x >= area.x && bounds.y >= area.y &&
       bounds.x + bounds.width <= area.x + area.width && bounds.y + bounds.height <= area.y + area.height;
-    const anchorState = () => ({ quota: quotaLabel.getVisibleBounds(), mini: painted(mini), pet: pet.getBounds(),
-      presentation: edgeTuck.getPresentation(), focus: BrowserWindow.getFocusedWindow()?.id || null });
-    const onQuota = value => value.quota && value.mini.x + value.mini.width / 2 === value.quota.x + value.quota.width / 2 &&
-      value.quota.y - value.mini.y - value.mini.height === 8;
+    const anchorState = async () => {
+      const target = quotaLabel.getWindow();
+      let quota = null;
+      if (target?.isVisible()) {
+        const rect = await page(target, `(() => {
+          const card = document.querySelector('#quota-label');
+          return card?.dataset.hasItems === 'true' ? card.getBoundingClientRect().toJSON() : null;
+        })()`);
+        if (rect) {
+          const bounds = target.getBounds();
+          quota = { x: bounds.x + rect.x, y: bounds.y + rect.y, width: rect.width, height: rect.height };
+        }
+      }
+      return { quota, reportedQuota: quotaLabel.getVisibleBounds(), mini: painted(mini), pet: pet.getBounds(),
+        presentation: edgeTuck.getPresentation(), focus: BrowserWindow.getFocusedWindow()?.id || null };
+    };
+    const onQuota = value => value.quota && value.reportedQuota &&
+      ['x', 'y', 'width', 'height'].every(key => Math.abs(value.quota[key] - value.reportedQuota[key]) <= 1) &&
+      Math.abs(value.mini.x + value.mini.width / 2 - value.quota.x - value.quota.width / 2) <= 1 &&
+      Math.abs(value.quota.y - value.mini.y - value.mini.height - 8) <= 1;
     const quotaModel = { state: 'ready', items: [{ label: 'Codex', windowMinutes: 10080, remaining: 79 }] };
     core('reset'); core('toggle'); core('toggle');
     await bridge(panel, 'close-panel');
@@ -507,11 +523,11 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
       const movedQuota = await poll(anchorState, value => onQuota(value) && value.quota.y !== expanded.quota.y,
         `${side} 球球移动后额度与 mini 同步`);
       quotaLabel.show({ state: 'empty', items: [] });
-      const empty = await poll(anchorState, value => value.quota === null && value.pet.y - value.mini.y - value.mini.height === 14,
+      const empty = await poll(anchorState, value => value.quota === null && value.reportedQuota === null && value.pet.y - value.mini.y - value.mini.height === 14,
         `${side} 无额度数据回退球锚`);
       assert.equal(quotaWindow.isVisible(), true, '空数据卡仍可见，但不作为番茄锚');
       quotaLabel.hide();
-      const hidden = await poll(anchorState, value => value.quota === null && value.pet.y - value.mini.y - value.mini.height === 14,
+      const hidden = await poll(anchorState, value => value.quota === null && value.reportedQuota === null && value.pet.y - value.mini.y - value.mini.height === 14,
         `${side} 额度隐藏回退球锚`);
       quotaLabel.show(quotaModel);
       const restored = await poll(anchorState, onQuota, `${side} 恢复额度后重接真实锚`);
@@ -522,7 +538,7 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
       await poll(anchorState, onQuota, `${side} 专注开始后恢复临时额度模型`);
       stamp = service.getSnapshot().deadline - service.getSnapshot().total * 500; service.tick();
       await poll(() => message.isVisible() && service.getSnapshot().encouragement, Boolean, `${side} 贴边鼓励显示`);
-      const encouraged = await poll(() => ({ ...anchorState(), message: painted(message) }), value =>
+      const encouraged = await poll(async () => ({ ...await anchorState(), message: painted(message) }), value =>
         onQuota(value) && value.mini.y - value.message.y - value.message.height === 8, `${side} 鼓励跟随 mini 锚`);
       assert.equal(message.isFocusable(), false); assert.deepEqual(mouseCalls.get(message), { ignore: true, forward: true });
       stamp += 6000; service.tick(); core('toggle');

@@ -7,7 +7,7 @@ const { createShortcutWindow } = require('../lib/shortcut-window');
 
 function fixture() {
   const windows = [], handlers = new Map(), listeners = new Map(), globalShortcutCalls = [];
-  const pins = [], recording = [], actions = [], errors = [];
+  const pins = [], recording = [], actions = [], errors = [], layouts = [];
   let cursor = { x: 340, y: 340 }, suppressed = false;
   let presentation = { mode: 'free', shape: 'blob' }, config = { shape: 'floating', enabled: true, launcher: 'Ctrl+Alt+Q' };
   const pet = { isDestroyed: () => false, isVisible: () => true, getBounds: () => ({ x: 300, y: 300, width: 80, height: 80 }) };
@@ -41,13 +41,22 @@ function fixture() {
     unregister: key => globalShortcutCalls.push(['unregister', key]) }, getPetWindow: () => pet,
   getPresentation: () => presentation, getConfig: () => config, getErrors: () => [],
   save: value => { config = value; return { ok: true }; }, onAction: id => actions.push(id), onPin: value => pins.push(value),
-  onRecording: value => recording.push(value), isSuppressed: () => suppressed, onError: error => errors.push(error) });
+  onRecording: value => recording.push(value), isSuppressed: () => suppressed,
+  onLayout: () => layouts.push(windows.at(-1)?.visible === true), onError: error => errors.push(error) });
   const win = () => manager.getWindow();
   const event = () => ({ sender: win().webContents, senderFrame: win().webContents.mainFrame });
-  return { manager, windows, handlers, listeners, globalShortcutCalls, pins, recording, actions, errors, win, event,
+  return { manager, windows, handlers, listeners, globalShortcutCalls, pins, recording, actions, errors, layouts, win, event,
     cursor: point => { cursor = point; }, suppress: value => { suppressed = value; }, presentation: value => { presentation = value; },
     send: (channel, ...args) => listeners.get(channel)(event(), ...args), invoke: (channel, ...args) => handlers.get(channel)(event(), ...args) };
 }
+
+test('显示与关闭立即通知伴随窗口重新避让', async t => {
+  const f = fixture(); t.after(() => f.manager.dispose());
+  f.manager.open({ focus: false }); await flush();
+  assert.equal(f.layouts.at(-1), true);
+  f.manager.close();
+  assert.equal(f.layouts.at(-1), false);
+});
 
 test('悬停450ms才显示，不抢焦点；只接收六张按钮，球体与透明空白继续穿透', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
