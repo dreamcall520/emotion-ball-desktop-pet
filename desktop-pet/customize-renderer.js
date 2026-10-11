@@ -58,7 +58,8 @@
   const motionPreference = window.matchMedia?.('(prefers-reduced-motion: reduce)');
   const matchesStartup = () => JSON.stringify(PetCustomization.normalizeAppearance(state.appearance)) ===
     JSON.stringify(startupAppearance);
-  const quotaEditor = window.QuotaCustomizer?.create({ bridge, getAppearance: () => state.appearance, announce });
+  const quotaEditor = window.QuotaCustomizer?.create({ bridge, getAppearance: () => state.appearance,
+    getCodexPet: () => codexDescriptors.get(state.appearance.codexPetId), announce });
 
   $('save').disabled = true;
   $('startup-default').disabled = true;

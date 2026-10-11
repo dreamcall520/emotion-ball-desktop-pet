@@ -1179,8 +1179,12 @@ test('所有 Codex 设置只保留一个顶层入口并完整归入子菜单', a
   assert.equal(findMenuItem(menu, 'notes-appearance'), null);
 });
 
-test('新额度样式停用经典卡菜单，Codex 宠物临时回退卡片并保留球球样式', async () => {
+test('新额度样式停用经典卡菜单，Codex 宠物支持四种圆环且仅液态池临时回退卡片', async () => {
   const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  f.connections[0].callbacks.onQuota({ updatedAt: 1800000000000, windows: [
+    { id: 'codex:primary', label: 'Codex', windowMinutes: 300, remaining: 74, resetsAt: 1800018000000 },
+    { id: 'codex:secondary', label: 'Codex', windowMinutes: 10080, remaining: 38, resetsAt: 1800604800000 }
+  ] });
   f.call("settings.quotaDisplay=QuotaDisplay.normalize({style:'ring',period:'weekly',showNumbers:false});syncQuotaLabel();refreshTrayMenu()");
   const effect = () => f.pet.messages.filter(item => item.channel === 'pet:quota-display').at(-1).packet;
   assert.equal(effect().config.style, 'ring'); assert.equal(effect().visible, true);
@@ -1192,16 +1196,27 @@ test('新额度样式停用经典卡菜单，Codex 宠物临时回退卡片并�
   assert.equal(menuItem(f, 'codex-quota-visible').enabled, true);
   const writes = f.saved.length;
   f.call(`settings.customization.appearance=normalizeAppearance({shape:'codex-pet',codexPetId:'codex-${'a'.repeat(64)}'});syncQuotaLabel();refreshTrayMenu()`);
-  assert.equal(effect().config.style, 'card'); assert.equal(f.quotaLabel.visible, true, '不支持轮廓的宠物仍显示额度');
+  for (const style of ['ring', 'duo', 'split', 'stages']) {
+    f.call(`settings.quotaDisplay=QuotaDisplay.normalize({style:'${style}',period:'weekly',showNumbers:false});syncQuotaLabel();refreshTrayMenu()`);
+    assert.equal(effect().config.style, style, `${style} 保留 Codex 宠物圆环`);
+    assert.equal(effect().visible, true); assert.equal(f.quotaLabel.visible, false, '数字关闭不额外显示经典卡');
+    assert.equal(menuItem(f, 'codex-quota-settings').enabled, false);
+    assert.equal(f.call('settings.quotaDisplay.style'), style);
+    f.call('settings.quotaDisplay.showNumbers=true;syncQuotaLabel()');
+    assert.equal(f.quotaLabel.visible, true, '数字开启时保留独立数字卡');
+    assert.equal(f.quotaLabel.shows.at(-1).display, 'numbers');
+  }
+  f.call("settings.quotaDisplay=QuotaDisplay.normalize({style:'pool',period:'weekly',showNumbers:false});syncQuotaLabel();refreshTrayMenu()");
+  assert.equal(effect().config.style, 'card'); assert.equal(f.quotaLabel.visible, true, '液态池仅用于球球，Codex 宠物显示经典卡');
   assert.equal(menuItem(f, 'codex-quota-settings').enabled, true);
-  assert.equal(f.call('settings.quotaDisplay.style'), 'ring');
+  assert.equal(f.call('settings.quotaDisplay.style'), 'pool');
   f.call('openCustomization()');
   const editor = f.call('customizationWindow');
   const preview = await f.invoke('pet:customization-get', null, editor.webContents);
-  assert.equal(preview.quotaDisplay.style, 'ring', '重新打开设置仍读取用户选择');
+  assert.equal(preview.quotaDisplay.style, 'pool', '重新打开设置仍读取用户选择');
   assert.equal(preview.quotaDisplay.period, 'weekly');
   f.call("settings.customization.appearance=normalizeAppearance({shape:'classic'});syncQuotaLabel();refreshTrayMenu()");
-  assert.equal(effect().config.style, 'ring'); assert.equal(effect().config.period, 'weekly');
+  assert.equal(effect().config.style, 'pool'); assert.equal(effect().config.period, 'weekly');
   assert.equal(f.quotaLabel.visible, false); assert.equal(menuItem(f, 'codex-quota-settings').enabled, false);
   assert.equal(f.saved.length, writes, '有效样式回退不能覆盖持久偏好');
 });

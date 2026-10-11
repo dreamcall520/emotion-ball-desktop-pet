@@ -35,7 +35,7 @@
       period: values.fiveHour !== null ? 'fiveHour' : 'weekly', values,
       available: count > 0, dual: count === 2,
       palette: palette(input.appearance), dark: input.theme === 'dark', still: Boolean(input.reducedMotion),
-      visible: input.visible !== false && input.appearance?.shape !== 'codex-pet' };
+      visible: input.visible !== false && !(input.appearance?.shape === 'codex-pet' && style === 'pool') };
   }
   function quotaStages(value) { return value === null ? null : Array.from({ length: 5 }, (_, i) => clamp(value / 20 - i, 0, 1)); }
   function create(host) {
@@ -410,16 +410,18 @@ function drawStageHalf(ctx,mode,value,t,palette,dark,still,left){
  const width=mode==='halo'?Math.max(3.2,pixelWidth(1.55)):Math.max(6,pixelWidth(1.9));
  const stroke=(radius,w,color,start,end)=>{ctx.beginPath();ctx.arc(170,170,radius,start,end,left===false);ctx.lineWidth=w;ctx.strokeStyle=color;ctx.stroke();};
  for(let group=0;group<5;group++){
-  const [start,end]=stageAngles(group,left,mode),fraction=stages?.[group]||0;
+  const [start,end]=stageAngles(group,left,mode),fraction=stages?.[left===null?4-group:group]||0;
   stroke(139,width,dark?'rgba(159,179,198,.28)':'rgba(127,150,170,.30)',start,end);
   if(!fraction)continue;
-  const finish=start+(end-start)*fraction,breath=.5-.5*Math.cos(s*Math.PI*2/5.6-group*.18);
+  // A single circle consumes clockwise from twelve o'clock, just like A/B's continuous arc.
+  const begin=left===null?end-(end-start)*fraction:start,finish=left===null?end:start+(end-start)*fraction;
+  const breath=.5-.5*Math.cos(s*Math.PI*2/5.6-group*.18);
   const colour=ctx.createLinearGradient(170+139*Math.cos(start),170+139*Math.sin(start),170+139*Math.cos(end),170+139*Math.sin(end));
   colour.addColorStop(0,rgba(palette.base,.93));colour.addColorStop(.5,rgba(palette.base.map((v,i)=>v+(palette.light[i]-v)*(.16+.1*breath)),.96));colour.addColorStop(1,rgba(palette.base,.93));
   ctx.shadowColor=rgba(palette.light,.12+.035*breath);ctx.shadowBlur=2.5;
-  stroke(139,width,colour,start,finish);ctx.shadowBlur=0;
-  stroke(138.3,mode==='halo'?.55:.8,rgba(palette.light,.25+.11*breath),start,finish);
-  drawRingFlow(ctx,s,139.4,mode==='halo'?.7:1.1,Math.min(start,finish),Math.max(start,finish));
+  stroke(139,width,colour,begin,finish);ctx.shadowBlur=0;
+  stroke(138.3,mode==='halo'?.55:.8,rgba(palette.light,.25+.11*breath),begin,finish);
+  drawRingFlow(ctx,s,139.4,mode==='halo'?.7:1.1,Math.min(begin,finish),Math.max(begin,finish));
  }
  ctx.restore();
 }
@@ -445,9 +447,11 @@ function drawStageDividers(ctx,dark){
     const wetContext = wet.getContext('2d');
     const eyes = document.createElement('canvas'); eyes.width = eyes.height = SIZE;
     const eyeContext = eyes.getContext('2d');
+    const contour = document.createElement('canvas'); contour.width = contour.height = 128;
+    const contourContext = contour.getContext('2d', { willReadFrequently: true });
     let current = model(), options = {}, frame = 0, sampleRetry = 0, sampleAttempts = 0, previousFrame = -Infinity, orb = null;
     let pool = null, rawCanvas = null, rawOpacity = '', scaled = [];
-    let geometry = { x: 0, y: 0, width: 0 }, destroyed = false;
+    let geometry = { x: 0, y: 0, width: 0 }, destroyed = false, nativeFit = null;
     // Keep a readable core in CSS pixels; the desktop shares its 340px artwork with the enlarged preview.
     // Hidden thumbnails have no measured geometry. Tiny hosts must not turn a CSS pixel floor into an oversized source radius.
     const renderedWidth = () => geometry.width > 0 && Number.isFinite(geometry.width) ? Math.max(24,geometry.width) : SIZE;
@@ -455,7 +459,10 @@ function drawStageDividers(ctx,dark){
     const motionPreference = root.matchMedia?.('(prefers-reduced-motion: reduce)');
     const originalScale = element => scaled.find(item => item.element === element)?.scale ?? element.style.scale;
     function restoreScale() {
-      for (const item of scaled) item.element.style.scale = item.scale;
+      for (const item of scaled) {
+        item.element.style.scale = item.scale;
+        if(item.translate!==undefined)item.element.style.translate=item.translate;
+      }
       scaled = [];
     }
     function restorePool() {
@@ -471,8 +478,64 @@ function drawStageDividers(ctx,dark){
       }
     }
     function attach() { if (canvas.parentNode !== host) host.appendChild(canvas); }
+    function ringOuterRadius() {
+      const singleRing=current.style==='ring'||current.style==='split'&&!current.dual;
+      return current.style==='duo'?163:current.material==='glass'?158:singleRing?168:153;
+    }
+    function positionNativeRing(source, sprite) {
+      const bounds=host.getBoundingClientRect(),width=source.clientWidth,height=source.clientHeight;
+      if(!(bounds.width>0&&bounds.height>0&&width>0&&height>0))return false;
+      const style=root.getComputedStyle(source),saved=scaled.find(item=>item.element===source);
+      const baseScale=saved?.computedScale??style.scale,original=baseScale&&baseScale!=='none'?baseScale.split(' ').map(Number):[1,1];
+      const baseTranslate=saved?.computedTranslate??style.translate,translation=baseTranslate&&baseTranslate!=='none'?baseTranslate.split(' '):['0','0'];
+      const tx=parseFloat(translation[0])*(translation[0].includes('%')?width/100:1),ty=parseFloat(translation[1]||'0')*((translation[1]||'0').includes('%')?height/100:1);
+      const [ox,oy]=style.transformOrigin.split(' ').map(parseFloat),px=source.offsetLeft+ox+tx,py=source.offsetTop+oy+ty;
+      const matrix=new root.DOMMatrix().translate(px,py).scale(original[0],original[1]??original[0]);
+      if(style.transform!=='none')matrix.multiplySelf(new root.DOMMatrix(style.transform));
+      matrix.translateSelf(-ox,-oy);
+      let points;
+      if(sprite){
+        // Every animation frame shares this complete rectangle; fitting ink alone would make sprites jump.
+        points=[[0,0],[width,0],[0,height],[width,height]];
+      }else{
+        contourContext.clearRect(0,0,128,128);contourContext.drawImage(source,0,0,128,128);
+        const pixels=contourContext.getImageData(0,0,128,128).data;points=[];
+        for(let y=0;y<128;y++){
+          let first=128,last=-1;
+          for(let x=0;x<128;x++)if(pixels[(y*128+x)*4+3]>8){first=Math.min(first,x);last=x;}
+          if(last>=0)for(const x of [first,last+1])for(const edgeY of [y,y+1])points.push([x*width/128,edgeY*height/128]);
+        }
+        if(!points.length)return false;
+      }
+      const cx=bounds.width/2,cy=bounds.height/2,outer=ringOuterRadius(),room=Math.min(cx,cy)*.97;
+      const radius=room*125/outer;
+      let factor=1;
+      for(const [x,y] of points){
+        const point=matrix.transformPoint({x,y});
+        // Rive can breathe between samples. Reserve 8% of its real outline instead of the hidden SVG proxy.
+        const distance=Math.hypot(point.x-cx,point.y-cy)*(sprite?1:1.08);
+        if(distance>0)factor=Math.min(factor,radius/distance);
+      }
+      const key=[bounds.width,bounds.height,width,height,source.offsetLeft,source.offsetTop,outer].join(':');
+      if(nativeFit?.source!==source||nativeFit.key!==key)nativeFit={source,key,factor:1};
+      // Retain the largest observed envelope. The housing stays still as the native body deforms.
+      nativeFit.factor=Math.min(nativeFit.factor,clamp(factor,.001,1));factor=nativeFit.factor;
+      if(!saved)scaled.push({element:source,scale:source.style.scale,computedScale:baseScale,
+        translate:source.style.translate,computedTranslate:baseTranslate});
+      source.style.scale=String(original[0]*factor)+' '+String((original[1]??original[0])*factor);
+      // Rive rotates around 50% 58%. Compensate that pivot only for the added scale,
+      // keeping its existing pose/eye transform while centring the fitted body in the housing.
+      source.style.translate=(tx+(cx-px)*(1-factor))+'px '+(ty+(cy-py)*(1-factor))+'px';
+      const ringWidth=room*SIZE/outer;
+      geometry={x:cx-ringWidth/2,y:cy-ringWidth/2,width:ringWidth};
+      Object.assign(canvas.style,{left:geometry.x+'px',top:geometry.y+'px',width:ringWidth+'px',height:ringWidth+'px'});
+      canvas.dataset.bodyScale=String(factor);
+      return true;
+    }
     function positionRing() {
       restoreScale();
+      const native=host.querySelector(':scope > canvas.eb-rive-aurora.ready,:scope > canvas.codex-pet-sprite');
+      if(native)return positionNativeRing(native,native.classList.contains('codex-pet-sprite'));
       const bounds = host.getBoundingClientRect(), svg = host.querySelector(':scope > svg');
       const head = svg?.querySelector('.eb-head');
       let cx = bounds.width / 2, cy = bounds.height / 2, radius = Math.min(bounds.width, bounds.height) * .4;
@@ -489,8 +552,7 @@ function drawStageDividers(ctx,dark){
           radius = Math.max(...points.map(p => Math.hypot(p.x - cx, p.y - cy)));
         }
       }
-      const singleRing=current.style==='ring'||current.style==='split'&&!current.dual;
-      const outer = current.style === 'duo' ? 163 : current.material === 'glass' ? 158 : singleRing ? 168 : 153;
+      const outer = ringOuterRadius();
       const room = Math.max(0, Math.min(cx, cy, bounds.width - cx, bounds.height - cy) * .97);
       const factor = radius > 0 ? Math.min(1, room * 125 / (outer * radius)) : 1;
       if (factor < 1) {
@@ -523,11 +585,14 @@ function drawStageDividers(ctx,dark){
       for (const [offset, opacity] of [[0,0],[.3,.85],[.65,.35],[1,0]]) reflection.appendChild(svgElement('stop', { offset, 'stop-color': '#fff', 'stop-opacity': opacity }));
       const rim = svgElement('linearGradient', { id: id + '-rim', x1: '0%', y1: '0%', x2: '100%', y2: '100%' });
       for (const [offset, opacity] of [[0,.16],[.45,.025],[1,.06]]) rim.appendChild(svgElement('stop', { offset, 'stop-color': '#91a4b3', 'stop-opacity': opacity }));
-      const defs = svg.querySelector('defs'); for (const element of [mask,clip,reflection,rim]) defs.appendChild(element);
+      const emptyVolume=svgElement('radialGradient',{id:id+'-empty',cx:'32%',cy:'22%',r:'84%'});
+      for(const [offset,tint,opacity] of [[0,'#e4edf5',.64],[.48,'#c1d0de',.48],[1,'#a6b6c5',.5]])
+        emptyVolume.appendChild(svgElement('stop',{offset,'stop-color':tint,'stop-opacity':opacity}));
+      const defs = svg.querySelector('defs'); for (const element of [mask,clip,reflection,rim,emptyVolume]) defs.appendChild(element);
       const targets = [...material.children].filter(element => !element.matches('.eb-eye') && !element.querySelector('.eb-eye'))
         .map(element => ({ element, mask: element.getAttribute('mask') }));
       for (const target of targets) target.element.setAttribute('mask', 'url(#' + id + ')');
-      const shell = svgElement('path', { fill: head.getAttribute('fill') || 'none', opacity: '.075', 'pointer-events': 'none' });
+      const shell = svgElement('path', { fill: current.dark?head.getAttribute('fill')||'none':'url(#'+id+'-empty)', opacity: current.dark?'.075':'1', 'pointer-events': 'none' });
       const bevel = svgElement('path', { fill: 'none', stroke: 'url(#' + id + '-rim)', 'stroke-width': '1.7', 'pointer-events': 'none' });
       const surface = svgElement('g', { 'clip-path': 'url(#' + id + '-shape)', 'pointer-events': 'none' });
       const shadow = svgElement('path', { fill: 'none', stroke: current.dark ? '#15263b' : '#71899b', 'stroke-opacity': '.12', 'stroke-width': '2.2' });
@@ -537,14 +602,14 @@ function drawStageDividers(ctx,dark){
       const face = [...material.children].find(element => element.matches('.eb-eye') || element.querySelector('.eb-eye'));
       material.insertBefore(surface, face || null);
       pool = { svg, head, water, outline, shell, bevel, surface, shadow, light, targets,
-        added: [mask,clip,reflection,rim,shell,bevel,surface], path: null, rows: [] };
+        added: [mask,clip,reflection,rim,emptyVolume,shell,bevel,surface], path: null, rows: [] };
     }
     function svgWaterline(q) {
       const path = pool.head.getAttribute('d');
       if (path !== pool.path) {
         pool.path = path;
         for (const element of [pool.outline,pool.shell,pool.bevel]) element.setAttribute('d', path);
-        pool.shell.setAttribute('fill', pool.head.getAttribute('fill') || 'none');
+        if(current.dark)pool.shell.setAttribute('fill', pool.head.getAttribute('fill') || 'none');
         const box = pool.head.getBBox(), length = pool.head.getTotalLength(), points = [];
         for (let i = 0; i < 128; i++) points.push(pool.head.getPointAtLength(length * i / 128));
         const rows = []; let total = 0;
@@ -717,7 +782,15 @@ function drawStageDividers(ctx,dark){
             sampleRetry=root.requestAnimationFrame(()=>{sampleRetry=0;paint(seconds);});
           }
         }else{ctx.clearRect(0,0,SIZE,SIZE);drawSvgPool(value/100,seconds);}
-      }else{ctx.clearRect(0,0,SIZE,SIZE);drawRing(seconds);}
+      }else{
+        const native=host.querySelector(':scope > canvas.eb-rive-aurora.ready,:scope > canvas.codex-pet-sprite');
+        if(native&&!positionNativeRing(native,native.classList.contains('codex-pet-sprite'))){
+          ctx.clearRect(0,0,SIZE,SIZE);
+          if(current.still&&sampleAttempts++<60&&!sampleRetry)sampleRetry=root.requestAnimationFrame(()=>{sampleRetry=0;paint(seconds);});
+          return;
+        }
+        ctx.clearRect(0,0,SIZE,SIZE);drawRing(seconds);
+      }
     }
     function tick(time) {
       frame=0;
@@ -751,8 +824,8 @@ function drawStageDividers(ctx,dark){
     resizeObserver?.observe(host);
     const nativeObserver=typeof root.MutationObserver==='function'?new root.MutationObserver(records=>{
       if(records.some(record=>record.type==='attributes'
-        ?record.target.matches?.('.eb-rive-aurora')
-        :record.target===host&&[...record.addedNodes].some(element=>element!==canvas&&element.matches?.('svg,.eb-rive-aurora'))))refresh();
+        ?record.target.matches?.('.eb-rive-aurora,.codex-pet-sprite')
+        :record.target===host&&[...record.addedNodes].some(element=>element!==canvas&&element.matches?.('svg,.eb-rive-aurora,.codex-pet-sprite'))))refresh();
     }):null;
     nativeObserver?.observe(host,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
     function destroy(){

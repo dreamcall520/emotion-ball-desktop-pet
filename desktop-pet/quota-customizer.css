@@ -78,3 +78,4 @@
   animation: quotaPreviewBeamOrbit 4.5s linear infinite;
 }
 @media(prefers-reduced-motion:reduce) { .quota-preview-card::after { animation: none; } }
+.quota-style:disabled { opacity: .5; }

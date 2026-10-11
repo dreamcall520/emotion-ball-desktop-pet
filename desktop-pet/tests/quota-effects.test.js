@@ -10,7 +10,9 @@ test('quota effects automatically use present quotas and keep zero distinct from
   assert.equal(dual({ fiveHour: null, weekly: null }).available, false);
   assert.deepEqual(dual({ fiveHour: '74', weekly: NaN }).values, { fiveHour: null, weekly: null });
   assert.deepEqual(dual({ fiveHour: -5, weekly: 120 }).values, { fiveHour: 0, weekly: 100 });
-  assert.equal(effects.model({ appearance: { shape: 'codex-pet' }, config: { style: 'ring' } }).visible, false);
+  for (const style of ['ring','duo','split','stages'])
+    assert.equal(effects.model({ appearance: { shape: 'codex-pet' }, config: { style } }).visible, true);
+  assert.equal(effects.model({ appearance: { shape: 'codex-pet' }, config: { style: 'pool' } }).visible, false);
   assert.equal(effects.model({ visible: false, config: { style: 'pool' } }).visible, false);
   const config = { style: 'split', period: 'weekly' };
   assert.equal(effects.model({ config, quotas: { fiveHour: 0, weekly: 94 } }).period, 'fiveHour');

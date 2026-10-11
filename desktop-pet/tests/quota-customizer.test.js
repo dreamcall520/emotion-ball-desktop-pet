@@ -13,7 +13,7 @@ test('额度预览跟随实际周期，零与未知分开，双样式保存选�
       setAttribute(name, text) { this[name] = text; }, addEventListener(name, callback) { this.listeners[name] = callback; },
       click() { this.listeners.click?.({ target: this }); },
       querySelector(selector) { for (const child of this.children) {
-        if (child.className.split(' ').includes(selector.slice(1))) return child;
+        if (selector.startsWith('.') ? child.className.split(' ').includes(selector.slice(1)) : child.tagName?.toLowerCase() === selector) return child;
         const nested = child.querySelector(selector); if (nested) return nested;
       } return null; } };
     value.classList = { contains: name => value.className.split(' ').includes(name),
@@ -26,21 +26,23 @@ test('额度预览跟随实际周期，零与未知分开，双样式保存选�
   const materials = ['soft', 'glass'].map(quotaMaterial => Object.assign(node(), { dataset: { quotaMaterial } }));
   const presets = ['fiveHour', 'weekly'].flatMap(demoPeriod => ['100', '10', '0', 'unknown'].map(demoValue =>
     Object.assign(node(), { dataset: { demoPeriod, demoValue } })));
-  const document = { hidden: false, documentElement: { dataset: {} }, getElementById: get, createElement: node,
+  const document = { hidden: false, documentElement: { dataset: {} }, getElementById: get, createElement: tag => Object.assign(node(), {tagName:tag.toUpperCase()}),
     addEventListener() {}, removeEventListener() {}, querySelectorAll(selector) {
       return selector === '[data-quota-material]' ? materials : selector === '[data-quota-source]' ? sources
         : presets.filter(preset => selector === `[data-demo-period="${preset.dataset.demoPeriod}"]`);
     } };
-  let receive, effectInput, reduce, avatars = 0, avatarDestroys = 0;
+  let receive, effectInput, reduce, avatars = 0, avatarDestroys = 0, avatarDescriptor;
+  let appearance = { shape: 'blob', bodyColor: '#EEEBE4' };
+  const descriptor = { id: 'check-pet', imageURL: 'file:///check.png' };
   const motion = { matches: false, addEventListener(_name, callback) { reduce = callback; }, removeEventListener() {} };
   const window = { matchMedia: () => motion,
-    PetChatAvatar: { create: () => { avatars++; return { update() {}, setActive() {}, destroy() { avatarDestroys++; } }; } },
+    PetChatAvatar: { create: () => { avatars++; return { update(_appearance,_image,pet) { avatarDescriptor = pet; }, setActive() {}, destroy() { avatarDestroys++; } }; } },
     QuotaEffects: { ...require('../quota-effects'), create: host => ({ update(input) { if (host === get('preview-ball')) effectInput = input; }, destroy() {} }) } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../quota-customizer.js'), 'utf8'), {
     window, document, requestAnimationFrame: () => 1, cancelAnimationFrame() {}, QuotaDisplay: require('../lib/quota-display'), clearInterval() {}, setInterval() {}, performance: { now: () => 0 }
   });
   const ui = window.QuotaCustomizer.create({ bridge: { onQuota(callback) { receive = callback; return () => {}; } },
-    getAppearance: () => ({ shape: 'blob', bodyColor: '#EEEBE4' }) });
+    getAppearance: () => appearance, getCodexPet: () => appearance.shape === 'codex-pet' ? descriptor : undefined });
   const weekly = { state: 'ready', items: [{ windowMinutes: 10080, remaining: 38 }] };
   ui.load({ style: 'ring', showNumbers: true, period: 'fiveHour' }, weekly);
   assert.equal(avatars, 0, '隐藏标签不初始化零尺寸 Rive');
@@ -73,5 +75,17 @@ test('额度预览跟随实际周期，零与未知分开，双样式保存选�
   assert.equal(get('quota-demo-note').textContent, '减少动态已开启，可拖动滑杆预览额度');
   get('stage').classList.add('dark'); ui.refresh();
   assert.equal(numbers.classList.contains('dark'), true);
+  appearance = { shape: 'codex-pet', codexPetId: descriptor.id }; ui.appearanceChanged();
+  assert.equal(avatarDescriptor, descriptor, '精灵缩略图复用已有宠物描述，不额外读取用户目录');
+  const poolButton = get('quota-styles').children.find(button => button.dataset.style === 'pool');
+  assert.equal(poolButton.disabled, true);
+  for (const style of ['ring','duo','split','stages']) {
+    get('quota-styles').children.find(button => button.dataset.style === style).click();
+    assert.equal(effectInput.config.style, style, 'Codex宠物保留所选圆环');
+  }
+  ui.load({ style: 'pool' }, weekly);
+  assert.equal(effectInput.config.style, 'card'); assert.equal(ui.getConfig().style, 'pool', '保留切回球球的液态池偏好');
+  appearance = { shape: 'blob', bodyColor: '#EEEBE4' }; ui.appearanceChanged();
+  assert.equal(poolButton.disabled, false); assert.equal(effectInput.config.style, 'pool');
   ui.destroy();
 });

@@ -884,9 +884,9 @@ function destroyBubbleSafely() {
 
 function quotaDisplayConfig({ fallback = true } = {}) {
   const config = QuotaDisplay.normalize(settings?.quotaDisplay, settings);
-  // Sprite pets have no ball outline to attach an effect to. Keep the chosen
-  // preference so returning to a ball restores it, and use its readable card.
-  if (fallback && settings?.customization?.appearance?.shape === 'codex-pet') config.style = 'card';
+  // Liquid reserves need a separable ball body. Sprite pets retain their whole
+  // original frame inside the rings; keep a pool preference for switching back.
+  if (fallback && config.style === 'pool' && settings?.customization?.appearance?.shape === 'codex-pet') config.style = 'card';
   return config.style === 'card' ? { ...config,
     period: settings?.codexQuotaPeriod === 'auto' ? 'both' : settings?.codexQuotaPeriod || 'both',
     cardSize: settings?.codexQuotaLabelSize || 'compact' } : config;
@@ -1812,7 +1812,17 @@ async function finishSmokeTest() {
         customize: customizationWindow, openCustomization, openChat,
         getChatWindow: () => chatWindow.getWindow(), getSettings: () => settings,
         setSize: setPetSize, store: codexPets, packaged: app.isPackaged,
-        getMenu: () => Menu.buildFromTemplate(menuTemplate()), nativeTheme });
+        getMenu: () => Menu.buildFromTemplate(menuTemplate()), nativeTheme,
+        previewSavedQuota: windows => {
+          const enabled = settings.codexEnabled, alwaysVisible = settings.codexQuotaAlwaysVisible;
+          try {
+            settings.codexEnabled = true; settings.codexQuotaAlwaysVisible = true;
+            syncQuotaLabel({ enabled: true, quota: { state: 'connected', stale: false, updatedAt: codexNow(), windows } });
+            return quotaLabel.getWindow();
+          } finally {
+            settings.codexEnabled = enabled; settings.codexQuotaAlwaysVisible = alwaysVisible;
+          }
+        } });
       app.exit(0); return;
     }
 

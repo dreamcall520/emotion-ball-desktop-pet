@@ -1,6 +1,6 @@
 (function () {
   'use strict';
-  window.QuotaCustomizer = { create({ bridge, getAppearance, announce }) {
+  window.QuotaCustomizer = { create({ bridge, getAppearance, getCodexPet, announce }) {
     const $ = id => document.getElementById(id);
     const styles = [
       ['card','经典额度卡','数字与进度一目了然'],['pool','液态额度池','余量化作一池波光'],
@@ -41,7 +41,7 @@
       const appearance = getAppearance(), v = values(), model = previewModel();
       const periods = QuotaDisplay.periods(config, model);
       const preview = {...config,period:periods[0]||'fiveHour',
-        ...(appearance.shape === 'codex-pet'?{style:'card'}:{})};
+        ...(appearance.shape === 'codex-pet' && config.style === 'pool'?{style:'card'}:{})};
       const visible = shown && !document.hidden;
       effect ||= window.QuotaEffects?.create($('preview-ball'));
       effect?.update({config:preview,appearance,quotas:v,theme:stage.classList.contains('dark') !== (document.documentElement.dataset.theme === 'dark')?'dark':'light',reducedMotion:motion.matches,visible});
@@ -50,13 +50,17 @@
       numbers.classList.toggle('dark',stage.classList.contains('dark') !== (document.documentElement.dataset.theme === 'dark'));
       card.classList.toggle('dark',numbers.classList.contains('dark'));
       drawNumbers(numbers, preview, v, model); drawNumbers(card, preview, v, model);
-      for (const button of $('quota-styles').children) button.setAttribute('aria-pressed',String(button.dataset.style === config.style));
+      for (const button of $('quota-styles').children) {
+        button.setAttribute('aria-pressed',String(button.dataset.style === config.style));
+        button.disabled = appearance.shape === 'codex-pet' && button.dataset.style === 'pool';
+        if (button.dataset.style === 'pool') button.querySelector('small').textContent = button.disabled ? '仅球球形态可用' : '余量化作一池波光';
+      }
       $('quota-material-row').hidden = ['card','pool'].includes(config.style);
       $('quota-numbers-row').hidden = config.style === 'card';
       $('quota-card-row').hidden = config.style !== 'card';
       $('quota-card-size').value = config.cardSize; $('quota-numbers').checked = config.showNumbers;
       document.querySelectorAll('[data-quota-material]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.quotaMaterial === config.material)));
-      $('quota-description').textContent = appearance.shape === 'codex-pet' ? 'Codex 宠物使用经典额度卡，已选样式会在切回球球后恢复。'
+      $('quota-description').textContent = appearance.shape === 'codex-pet' && config.style === 'pool' ? '液态额度池仅适用于球球，当前使用经典额度卡；可选择四种圆环。'
         : config.style === 'duo' ? '同时有 5 小时和周额度时显示双环，内环 5 小时、外环本周；仅一个周期时自动显示单环。'
         : config.style === 'stages' ? '双额度左右各五段；单额度整圈五段，每段代表 20%。'
         : config.style === 'split' ? '双额度左侧为 5 小时、右侧为本周；单额度使用整圈。' : styles.find(s=>s[0]===config.style)[2]+'。';
@@ -78,7 +82,7 @@
       let pending = false;
       for (const thumb of thumbs) {
         if (thumb.readyFrames >= 2) continue;
-        if (thumb.art.dataset.avatarEngine !== 'rive' || thumb.art.dataset.avatarReady === 'true') thumb.readyFrames++;
+        if (!['rive','codex-sprite'].includes(thumb.art.dataset.avatarEngine) || thumb.art.dataset.avatarReady === 'true') thumb.readyFrames++;
         if (thumb.readyFrames >= 2) thumb.avatar.setActive(false);
         else pending = true;
       }
@@ -86,7 +90,7 @@
     }
     function renderThumbnails() {
       if (!shown || document.hidden || disposed) return;
-      const appearance = getAppearance(), key = JSON.stringify(appearance);
+      const appearance = getAppearance(), descriptor = getCodexPet?.(), key = JSON.stringify([appearance,descriptor?.imageURL]);
       for (const [index,button] of [...$('quota-styles').children].entries()) {
         const art = button.querySelector('.quota-thumb-body');
         let thumb = thumbs[index];
@@ -95,7 +99,7 @@
           thumb = thumbs[index] = { art, avatar, effect: window.QuotaEffects?.create(art), readyFrames: 0 };
         }
         if (thumb.key !== key) {
-          thumb.readyFrames = 0; thumb.avatar.setActive(true); thumb.avatar.update(appearance); thumb.key = key;
+          thumb.readyFrames = 0; thumb.avatar.setActive(true); thumb.avatar.update(appearance,null,descriptor); thumb.key = key;
         }
         if (thumb.readyFrames < 2) thumb.avatar.setActive(true);
         thumb.effect?.update({appearance,config:{...config,style:button.dataset.style},quotas:{fiveHour:74,weekly:38},theme:document.documentElement.dataset.theme==='dark'?'dark':'light',reducedMotion:true,visible:true});

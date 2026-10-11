@@ -102,7 +102,7 @@ window.checkEffects=async()=>{
       const input={appearance,quotas:{fiveHour:null,weekly:null,[singlePeriod]:88},config:{style,material},reducedMotion:true};
       effect.update(input);
       const singleVisible=effect.canvas.isConnected&&effect.canvas.dataset.style===(style==='duo'?'ring':style);
-      let fiveSegments=true,stageFraction=true,zeroIsGrey=true,stageCount=null;
+      let fiveSegments=true,stageFraction=true,zeroIsGrey=true,stageDirection=true,stageCount=null;
       if(style==='stages'){
         const occupancy=value=>{
           effect.update({...input,quotas:{...input.quotas,[singlePeriod]:value}});
@@ -114,7 +114,8 @@ window.checkEffects=async()=>{
             if(data[pixel+3]>128&&Math.max(...rgb)-Math.min(...rgb)>45)chromatic=true;
             return data[pixel+3]>128;
           });
-          return {pixels,chromatic};
+          const alphaAt=angle=>data[(Math.round(170+139*Math.sin(angle))*340+Math.round(170+139*Math.cos(angle)))*4+3];
+          return {pixels,chromatic,topRight:alphaAt(-Math.PI/4),bottomLeft:alphaAt(Math.PI*3/4)};
         };
         const full=occupancy(100),partial=occupancy(88),empty=occupancy(0);
         stageCount=full.pixels.filter((lit,i)=>lit&&!full.pixels[(i+719)%720]).length;
@@ -122,8 +123,10 @@ window.checkEffects=async()=>{
         const ratio=partial.pixels.filter(Boolean).length/full.pixels.filter(Boolean).length;
         stageFraction=Math.abs(ratio-.88)<.04;
         zeroIsGrey=!empty.chromatic;
+        const half=occupancy(50);
+        stageDirection=half.topRight<half.bottomLeft*.6;
       }
-      report.push({shape:appearance.shape,size,material,singlePeriod,singleStyle:style,singleVisible,fiveSegments,stageFraction,zeroIsGrey,stageCount});
+      report.push({shape:appearance.shape,size,material,singlePeriod,singleStyle:style,singleVisible,fiveSegments,stageFraction,zeroIsGrey,stageDirection,stageCount});
     }
   for(const {host,appearance,effect,rive} of results.filter(entry=>entry.rive)){
     effect.update({appearance,config:{style:'card'}});host.style.width=host.style.height='260px';
@@ -140,6 +143,40 @@ window.checkEffects=async()=>{
         nativeEyes:source.style.opacity==='0'&&effect.canvas.style.filter===source.style.filter});
     }
     effect.update({appearance,config:{style:'card'}});source.style.cssText=css;
+  }
+  for(const {host,appearance,effect,rive} of results.filter(entry=>entry.rive)){
+    const source=host.querySelector('.eb-rive-aurora.ready'),css=source.style.cssText;
+    const outline=document.createElement('canvas');outline.width=outline.height=128;
+    const c=outline.getContext('2d',{willReadFrequently:true});
+    for(const size of [80,260])for(const material of ['soft','glass'])for(const style of ['ring','duo','split','stages'])
+      for(const pose of ['none','rotate(-12deg)','scaleX(-1) rotate(-12deg)']){
+        effect.update({appearance,config:{style:'card'}});host.style.width=host.style.height=size+'px';
+        Object.assign(source.style,{width:'210%',height:'210%',left:'-55%',top:'-55%',transform:pose});
+        rive.setActive(true);dispatchEvent(new Event('resize'));
+        await new Promise(resolve=>setTimeout(resolve,40));
+        effect.update({appearance,quotas:{fiveHour:74,weekly:38},config:{style,material},reducedMotion:false});
+        let maxRadius=0;const scales=[];
+        for(let f=0;f<4;f++){
+          await new Promise(resolve=>setTimeout(resolve,34));
+          c.clearRect(0,0,128,128);c.drawImage(source,0,0,128,128);const d=c.getImageData(0,0,128,128).data;
+          const computed=getComputedStyle(source),[ox,oy]=computed.transformOrigin.split(' ').map(parseFloat);
+          const scale=computed.scale==='none'?[1]:computed.scale.split(' ').map(Number),tr=computed.translate==='none'?[0,0]:computed.translate.split(' ').map(parseFloat);
+          const matrix=new DOMMatrix().translate(source.offsetLeft+ox+(tr[0]||0),source.offsetTop+oy+(tr[1]||0)).scale(scale[0],scale[1]??scale[0]);
+          if(computed.transform!=='none')matrix.multiplySelf(new DOMMatrix(computed.transform));matrix.translateSelf(-ox,-oy);
+          const width=parseFloat(effect.canvas.style.width),cx=parseFloat(effect.canvas.style.left)+width/2,cy=parseFloat(effect.canvas.style.top)+width/2;
+          for(let y=0;y<128;y++)for(let x=0;x<128;x++)if(d[(y*128+x)*4+3]>8){
+            const point=matrix.transformPoint({x:(x+.5)*source.clientWidth/128,y:(y+.5)*source.clientHeight/128});
+            maxRadius=Math.max(maxRadius,Math.hypot(point.x-cx,point.y-cy)*340/width);
+          }
+          scales.push(Number(effect.canvas.dataset.bodyScale));
+        }
+        rive.setActive(false);
+        const stableFit=scales.every((value,i)=>i===0||value<=scales[i-1]+.00001);
+        effect.update({appearance,config:{style:'card'}});
+        report.push({shape:appearance.shape,nativeRingPose:pose,size,material,ringStyle:style,maxRadius,
+          safeOutline:maxRadius>60&&maxRadius<=125,stableFit,restoredPivot:source.style.scale===''&&source.style.translate===''});
+      }
+    source.style.cssText=css;
   }
   for(const {appearance,effect,original,host} of results){
     effect.update({appearance,quotas:{fiveHour:0,weekly:0},config:{style:'duo'},reducedMotion:true});
@@ -162,7 +199,7 @@ window.checkEffects=async()=>{
 
 app.whenReady().then(async () => {
   try {
-    const window = new BrowserWindow({ width: 1250, height: 360, show: false });
+    const window = new BrowserWindow({ width: 1250, height: 360, show: false, webPreferences: { backgroundThrottling: false } });
     await window.loadFile(path.join(directory, 'index.html'));
     await window.webContents.executeJavaScript('ready');
     const report = await window.webContents.executeJavaScript('checkEffects()');
@@ -172,8 +209,9 @@ app.whenReady().then(async () => {
         assert.ok(result.bodyScale > 0 && result.bodyScale <= 1, JSON.stringify(result));
         if(result.smallRingAlpha!==null)assert.ok(result.smallRingAlpha>=.65, JSON.stringify(result));
       } else if('hiddenMode' in result)assert.ok(result.hiddenInit&&result.resizeRestored,JSON.stringify(result));
-      else if('singlePeriod' in result)assert.ok(result.singleVisible&&result.fiveSegments&&result.stageFraction&&result.zeroIsGrey,JSON.stringify(result));
+      else if('singlePeriod' in result)assert.ok(result.singleVisible&&result.fiveSegments&&result.stageFraction&&result.zeroIsGrey&&result.stageDirection,JSON.stringify(result));
       else if('poolPose' in result)assert.ok(result.completeFootprint&&result.nativeEyes,JSON.stringify(result));
+      else if('nativeRingPose' in result)assert.ok(result.safeOutline&&result.stableFit&&result.restoredPivot,JSON.stringify(result));
       else assert.ok(result.zero && result.fallback && result.missing && result.weeklyOnly && result.unknown && result.restored, JSON.stringify(result));
     }
     console.log('QUOTA_EFFECTS_NATIVE_OK: ' + report.length + ' SVG/Rive material, size and missing/zero checks');
