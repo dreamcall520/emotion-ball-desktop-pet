@@ -12,8 +12,20 @@ fs.mkdirSync(output, { recursive: true });
 (async () => {
   const chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
   const browser = await chromium.launch({ headless: true, args: ['--disable-gpu'], ...(fs.existsSync(chrome) ? { executablePath: chrome } : {}) });
-  const errors = [], results = [];
+  const errors = [], results = [], dragRegions = [], textContrast = [];
   try {
+    const notesReference = await browser.newPage();
+    await notesReference.route('**/*.js', route => route.abort());
+    await notesReference.goto(pathToFileURL(path.join(__dirname, '../notes.html')).href);
+    await notesReference.evaluate(() => { const node = document.createElement('div'); node.className = 'timing-shortcuts';
+      const button = document.createElement('button'); button.textContent = '便签二级操作'; node.append(button); document.body.append(node); });
+    const luminance = color => {
+      if (color.startsWith('#') && color.length === 4) color = `#${[...color.slice(1)].map(value => value.repeat(2)).join('')}`;
+      const rgb = color.startsWith('#') ? color.slice(1).match(/../g).map(value => parseInt(value, 16)) : color.match(/[\d.]+/g).slice(0, 3).map(Number);
+      const linear = rgb.map(value => { value /= 255; return value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4; });
+      return linear[0] * .2126 + linear[1] * .7152 + linear[2] * .0722;
+    };
+    const contrast = (foreground, background) => { const values = [luminance(foreground), luminance(background)].sort((a, b) => b - a); return (values[0] + .05) / (values[1] + .05); };
     async function pageFor(view, width, height, reducedMotion = 'reduce') {
       const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 2, reducedMotion });
       page.on('pageerror', error => errors.push(error.message));
@@ -38,7 +50,7 @@ fs.mkdirSync(output, { recursive: true });
               state = { ...state, ...value, ...(changed ? { status: 'idle', remaining: value.durations[state.mode] * 60, total: value.durations[state.mode] * 60 } : {}) };
             }
             if (type === 'pin') state.pinned = value;
-            if (type === 'mode') state = { ...state, mode: value, total: state.durations[value] * 60, remaining: state.durations[value] * 60 };
+            if (type === 'mode' && value !== state.mode) state = { ...state, mode: value, total: state.durations[value] * 60, remaining: state.durations[value] * 60 };
             if (type === 'intention') state.intention = value;
             if (type === 'toggle') state.status = state.status === 'running' ? 'paused' : 'running';
             receive(state); return { ok: true, state };
@@ -56,6 +68,23 @@ fs.mkdirSync(output, { recursive: true });
     assert.equal(await panel.locator('#pin').evaluate(node => getComputedStyle(node).webkitAppRegion), 'no-drag');
     assert.equal(await panel.locator('#pin').evaluate(node => getComputedStyle(node).backgroundColor), 'rgba(0, 0, 0, 0)');
     const bounds = async (page, selector) => page.locator(selector).boundingBox();
+    async function checkDragRegion(page, selector, frameSelector, theme, appearance, mode, face) {
+      const measured = await page.evaluate(({ selector, frameSelector }) => {
+        const node = document.querySelector(selector), frame = document.querySelector(frameSelector), rect = node.getBoundingClientRect(), frameRect = frame.getBoundingClientRect();
+        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, frameX: frameRect.x, frameY: frameRect.y, frameWidth: frameRect.width,
+          titleX: node.querySelector('h2,h3').getBoundingClientRect().x,
+          points: [[160, 8], [8, 28], [160, rect.bottom - 4]].map(([x, y]) => ({ x, y, inHeader: Boolean(document.elementFromPoint(x, y)?.closest(selector)) })),
+          controls: [...frame.querySelectorAll('button,input,select,label')].map(control => ({ control: control.id || control.name || control.className,
+            region: getComputedStyle(control).webkitAppRegion })) };
+      }, { selector, frameSelector });
+      const border = selector === '.panel-header' && mode === 'standard' ? 1 : 0;
+      assert.equal(measured.x, measured.frameX + border); assert.equal(measured.y, measured.frameY + border);
+      assert.equal(measured.width, measured.frameWidth - border * 2);
+      assert.equal(measured.titleX, measured.x + 20, '扩大拖动区不改变标题的位置');
+      assert.ok(measured.points.every(point => point.inHeader), '顶部、侧边和标题下方空白均属于原生拖动头部');
+      assert.ok(measured.controls.every(control => control.region === 'no-drag'), '所有实际操作控件排除原生拖动');
+      dragRegions.push({ selector, theme, appearance, mode, face, ...measured });
+    }
     for (const theme of ['green', 'blue']) for (const appearance of ['light', 'dark']) for (const mode of ['standard', 'accessible']) {
       await panel.evaluate(([mode, appearance, theme]) => testTheme(mode, appearance, theme), [mode, appearance, theme]);
       await panel.waitForFunction(value => document.documentElement.dataset.notesAppearance === value, appearance);
@@ -68,14 +97,34 @@ fs.mkdirSync(output, { recursive: true });
         await panel.setViewportSize({ width: 320, height: face === 'analog' ? 488 : 384 });
         await panel.evaluate(face => testState({ face }), face);
         await panel.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        await checkDragRegion(panel, '.panel-header', '#focus-panel', theme, appearance, mode, face);
         for (const selector of ['#time', '#start', '.panel-footer']) { const b = await bounds(panel, selector);
           assert.ok(b.x >= 0 && b.y >= 0 && b.x + b.width <= 320.1 && b.y + b.height <= (face === 'analog' ? 488.1 : 384.1), `${selector} clipped in ${theme}/${appearance}/${mode}/${face}: ${JSON.stringify(b)}`); }
         if (mode === 'standard' || face === 'analog') await panel.screenshot({ path: path.join(output, `${theme}-${appearance}-${mode === 'accessible' ? 'accessible-' : ''}${face}.png`), omitBackground: true });
       }
+      const smallText = await panel.evaluate(() => [...document.querySelectorAll('.modes button:not(.active),.optional,#reset')].map(node => ({ color: getComputedStyle(node).color,
+        background: getComputedStyle(document.documentElement).getPropertyValue('--control').trim() })).concat({ color: getComputedStyle(document.getElementById('intention'), '::placeholder').color,
+        background: getComputedStyle(document.documentElement).getPropertyValue('--control').trim() }));
+      const ratios = smallText.map(item => contrast(item.color, item.background));
+      assert.ok(ratios.every(ratio => ratio >= 4.5), `小字对比度不足 ${theme}/${appearance}/${mode}: ${ratios}`);
+      if (appearance === 'light' && mode === 'standard') {
+        await notesReference.evaluate(theme => { document.documentElement.dataset.uiTheme = theme; document.documentElement.dataset.colorMode = 'standard';
+          document.documentElement.dataset.notesAppearance = 'light'; document.documentElement.dataset.appearance = 'light'; document.getElementById('blue-style').disabled = theme !== 'blue'; }, theme);
+        if (theme === 'blue') await notesReference.waitForFunction(() => Boolean(document.getElementById('blue-style').sheet));
+        const notesColor = await notesReference.locator('body > .timing-shortcuts button').evaluate(node => getComputedStyle(node).color);
+        assert.ok(smallText.every(item => item.color === notesColor), '番茄钟浅色二级文字沿用当前便签二级操作颜色');
+      }
+      textContrast.push({ theme, appearance, mode, ratios });
+      await panel.locator('#settings-open').click();
+      await checkDragRegion(panel, '.settings-head', '#settings', theme, appearance, mode, 'settings');
+      await panel.locator('#settings-cancel').click();
       results.push({ theme, appearance, mode, ...styles });
     }
     await panel.evaluate(() => { testTheme('standard', 'light', 'green'); testState({ face: 'analog', status: 'running', remaining: 1200 }); });
     await panel.setViewportSize({ width: 320, height: 488 });
+    await panel.evaluate(() => { window.testActions = []; });
+    await panel.locator('[data-mode=focus]').click();
+    assert.equal(await panel.evaluate(() => testActions.some(item => item.type === 'mode')), false, '点击当前计时模式不再派发重置动作');
     await panel.locator('#intention').fill('先写这一版');
     await panel.evaluate(() => testState({ remaining: 1199, intention: '旧内容' }));
     assert.equal(await panel.locator('#intention').inputValue(), '先写这一版');
@@ -121,6 +170,13 @@ fs.mkdirSync(output, { recursive: true });
       assert.ok(!fill.startsWith('rgba'), '鼓励必须有不透明底色');
       await mini.screenshot({ path: path.join(output, `mini-${theme}-${appearance}-${mode}.png`), omitBackground: true });
       await message.screenshot({ path: path.join(output, `encouragement-${theme}-${appearance}-${mode}.png`), omitBackground: true });
+      await message.setViewportSize({ width: 256, height: 244 });
+      await message.evaluate(() => testState({ mode: 'focus', reminder: true, status: 'complete' }));
+      await message.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      const copy = await message.locator('#reminder-copy').evaluate(node => ({ color: getComputedStyle(node).color,
+        background: getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() }));
+      assert.ok(contrast(copy.color, copy.background) >= 4.5, `完成提示正文对比度 ${theme}/${appearance}/${mode}: ${JSON.stringify(copy)} ratio=${contrast(copy.color, copy.background)}`);
+      if (mode === 'standard') await message.screenshot({ path: path.join(output, `complete-reminder-${theme}-${appearance}.png`), omitBackground: true });
     }
     await mini.locator('#mini').click(); assert.equal(await mini.evaluate(() => testActions.at(-1).type), 'open');
     for (const [text, height] of [['不急，专心做好眼前这一件。再向前一点点。', 54], ['先做一件事。', 36]]) {
@@ -166,7 +222,8 @@ fs.mkdirSync(output, { recursive: true });
     await animated.locator('[data-mode=long]').click(); assert.equal(await angle(), 90);
     assert.equal(await animated.locator('#clock-scale').evaluate(node => node.getBoundingClientRect().width), 1, '刻度说明仅保留给辅助阅读');
     assert.deepEqual(errors, []);
-    fs.writeFileSync(path.join(output, 'checks.json'), JSON.stringify({ ok: true, themes: results, messageCardHeights: [36, 54], reminderCardHeights: [232, 192], pinFocus: true, needleTransition: true, reducedMotion: true, errors }, null, 2));
+    fs.writeFileSync(path.join(output, 'checks.json'), JSON.stringify({ ok: true, themes: results, dragRegions, textContrast, sameModeClick: true,
+      messageCardHeights: [36, 54], reminderCardHeights: [232, 192], pinFocus: true, needleTransition: true, reducedMotion: true, errors }, null, 2));
     console.log(`Pomodoro UI: 32 face/theme combinations, draft/error/focus behavior, mini + opaque messages passed. Screenshots: ${output}`);
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -146,7 +146,9 @@
   $('reset').onclick = () => action('reset');
   $('pin').onclick = () => action('pin', !state?.pinned);
   $('collapse').onclick = async () => { if (await saveIntention()) action('close-panel'); };
-  for (const button of document.querySelectorAll('.modes button')) button.onclick = () => action('mode', button.dataset.mode);
+  for (const button of document.querySelectorAll('.modes button')) button.onclick = () => {
+    if (button.dataset.mode !== state?.mode) void action('mode', button.dataset.mode);
+  };
   $('intention').oninput = () => { intentionDirty = true; clearTimeout(intentionTimer); intentionTimer = setTimeout(saveIntention, 350); };
   $('settings-open').onclick = async () => {
     if (!state || !(await saveIntention()) || !(await action('layout', { face: state.face, settings: true }))) return;

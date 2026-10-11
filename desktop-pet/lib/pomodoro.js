@@ -154,6 +154,7 @@ function createPomodoro({ filePath, now = Date.now, onChange = () => {}, onError
       requireValid(typeof type === 'string' && ['toggle', 'reset', 'mode', 'settings', 'intention', 'pin', 'rest', 'extend', 'dismiss'].includes(type));
       if (['toggle', 'reset', 'rest', 'extend', 'dismiss'].includes(type)) requireValid(value === undefined);
       if (type === 'mode') requireValid(MODES.includes(value));
+      if (type === 'mode' && value === state.mode) return { ok: true, state: getSnapshot() };
       if (type === 'intention') requireValid(validIntention(value), '专注目标最多 60 个字符，不能包含控制字符。');
       if (type === 'pin') requireValid(value === undefined || typeof value === 'boolean');
       if (type === 'settings') {

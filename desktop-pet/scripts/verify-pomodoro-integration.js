@@ -135,9 +135,15 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     const selectors = editing ? ['.settings-head', '.settings-body', '.settings-actions', '#settings-cancel', '#settings button[type=submit]'] :
       ['.panel-header', '.modes', '.dial', '#time', '.task-row', '#start', '.panel-footer'];
     const body = form.querySelector('.settings-body');
+    const header = document.querySelector(editing ? '.settings-head' : '.panel-header');
+    const controls = editing ? ['#settings-close', '#settings-cancel', '#settings button[type=submit]', '[name=focus]'] :
+      ['#pin', '#settings-open', '#collapse', '.modes button', '#intention', '#start', '#reset'];
     return { width: innerWidth, height: innerHeight, face: document.querySelector('#focus-panel').dataset.face, editing,
       scrollWidth: document.documentElement.scrollWidth, bodyScrollWidth: document.body.scrollWidth,
       panel: rect('#focus-panel'), nodes: selectors.map(selector => ({ selector, ...rect(selector) })),
+      drag: { header: header.getBoundingClientRect().toJSON(), region: getComputedStyle(header).getPropertyValue('-webkit-app-region'),
+        points: [[160,8],[10,28],[160,52]].map(([x,y]) => ({ x, y, covered: header.contains(document.elementFromPoint(x,y)) })),
+        controls: controls.map(selector => ({ selector, region: getComputedStyle(document.querySelector(selector)).getPropertyValue('-webkit-app-region') })) },
       settings: editing ? { form: rect('#settings'), scrollWidth: body.scrollWidth, clientWidth: body.clientWidth,
         scrollHeight: body.scrollHeight, clientHeight: body.clientHeight } : null };
   })()`);
@@ -148,6 +154,11 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     assert.equal(native.width, 320); assert.equal(native.height, height);
     assert.equal(view.face, face); assert.equal(view.editing, editing);
     assert.ok(view.scrollWidth <= 320 && view.bodyScrollWidth <= 320, '面板没有横向溢出');
+    assert.equal(view.drag.region, 'drag');
+    assert.ok(view.drag.header.left <= 1 && view.drag.header.top <= 1 && view.drag.header.right >= 319 && view.drag.header.bottom >= 54,
+      '顶部拖动区覆盖整幅顶边与标题区');
+    assert.ok(view.drag.points.every(point => point.covered), '顶部空白与标题上下留白均在拖动区内');
+    assert.ok(view.drag.controls.every(control => control.region === 'no-drag'), '工具栏、模式与输入等操作明确排除拖动');
     assert.ok(Math.abs(view.panel.left) <= 1 && Math.abs(view.panel.top) <= 1 &&
       Math.abs(view.panel.right - 320) <= 1 && Math.abs(view.panel.bottom - height) <= 1, '卡片填满真实内容区');
     for (const node of view.nodes) assert.ok(node.width > 0 && node.height > 0 && node.left >= -1 &&
@@ -173,6 +184,7 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
       scrollHeight: card.scrollHeight, clientHeight: card.clientHeight };
   })()`);
   const keyboard = async (win, keyCode) => {
+    require('electron').app.focus({ steal: true });
     win.focus(); win.webContents.focus();
     await poll(() => page(win, 'document.hasFocus()'), Boolean, '原生键盘焦点');
     win.webContents.sendInputEvent({ type: 'keyDown', keyCode });
@@ -283,6 +295,22 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     await bridge(panel, 'intention', '把眼前这件事推进一步');
     await pointerClick(panel, '#start');
     const started = service.getSnapshot();
+    stamp += 17000; service.tick();
+    const running = service.getSnapshot(), positionBeforeTab = panel.getPosition();
+    await pointerClick(panel, '.modes [data-mode=focus]');
+    assert.deepEqual(timerIdentity(service.getSnapshot()), timerIdentity(running), '运行中再次点击当前模式保留deadline、status及已有记录');
+    assert.equal(service.getSnapshot().remaining, running.remaining, '运行中再次点击当前模式不恢复完整时长');
+    assert.equal(getQuiet(), true); assert.deepEqual(panel.getPosition(), positionBeforeTab, '点击模式不拖动窗口');
+    await pointerClick(panel, '#start');
+    const sameModePaused = service.getSnapshot();
+    await pointerClick(panel, '.modes [data-mode=focus]');
+    assert.deepEqual(timerIdentity(service.getSnapshot()), timerIdentity(sameModePaused), '暂停时再次点击当前模式保持暂停');
+    assert.equal(service.getSnapshot().remaining, sameModePaused.remaining); assert.equal(getQuiet(), true);
+    await pointerClick(panel, '#start');
+    const resumedAfterTab = service.getSnapshot();
+    assert.equal(resumedAfterTab.deadline, running.deadline);
+    result.sameMode = { running, paused: sameModePaused, resumed: resumedAfterTab };
+    result.checks.push('current-mode-pointer-click-preserves-running-paused-countdown-and-position');
     await page(panel, `(() => {
       __pomodoroSmoke.pinDisabledButtons = [];
       new MutationObserver(records => {

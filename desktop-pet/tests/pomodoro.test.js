@@ -55,7 +55,7 @@ test('deadline handles sleep; pause freezes, resume continues, seconds never wri
 test('four focus sessions select a long break; extension adds minutes, not sessions', t => {
   const f = fixture(t), model = f.open(); ok(model, 'settings', { durations: { focus: 1, short: 1, long: 1 } });
   for (let i = 1; i <= 4; i++) {
-    ok(model, 'mode', 'focus'); ok(model, 'toggle'); f.advance(60000); model.tick();
+    ok(model, 'reset'); ok(model, 'toggle'); f.advance(60000); model.tick();
     assert.equal(model.getSnapshot().completed, i); assert.equal(model.getSnapshot().cycleCompleted, i);
   }
   ok(model, 'extend'); assert.equal(model.getSnapshot().extension, true); assert.equal(model.getSnapshot().total, 300);
@@ -71,7 +71,7 @@ test('four focus sessions select a long break; extension adds minutes, not sessi
 
 test('style and encouragement settings preserve timer and records; duration changes reset only current timer', t => {
   const f = fixture(t), model = f.open(); ok(model, 'settings', { durations: { focus: 1 } }); ok(model, 'toggle'); f.advance(60000); model.tick();
-  ok(model, 'mode', 'focus'); ok(model, 'intention', '整理产品方案'); ok(model, 'pin', true); ok(model, 'toggle'); f.advance(10000); model.tick();
+  ok(model, 'reset'); ok(model, 'intention', '整理产品方案'); ok(model, 'pin', true); ok(model, 'toggle'); f.advance(10000); model.tick();
   const before = model.getSnapshot();
   for (const face of ['timeline', 'modules', 'minutes', 'analog']) {
     const after = ok(model, 'settings', { face, encouragementEnabled: false });
@@ -81,6 +81,30 @@ test('style and encouragement settings preserve timer and records; duration chan
   assert.equal(changed.status, 'idle'); assert.equal(changed.deadline, 0); assert.equal(changed.remaining, 1560);
   assert.equal(changed.completed, 1); assert.equal(changed.minutes, 1); assert.equal(changed.intention, '整理产品方案'); assert.equal(changed.pinned, true);
   ok(model, 'reset'); assert.equal(model.getSnapshot().completed, 1);
+});
+
+test('selecting the current mode preserves running, paused and completed timers without saving', t => {
+  const f = fixture(t), model = f.open();
+  for (const mode of ['focus', 'short', 'long']) {
+    ok(model, 'mode', mode); ok(model, 'toggle'); f.advance(12345); model.tick();
+    for (const status of ['running', 'paused']) {
+      if (status === 'paused') ok(model, 'toggle');
+      const before = model.getSnapshot(), saved = fs.readFileSync(f.filePath, 'utf8'), changes = f.changes.length;
+      assert.equal(before.status, status);
+      assert.deepEqual(ok(model, 'mode', mode), before);
+      assert.equal(fs.readFileSync(f.filePath, 'utf8'), saved);
+      assert.equal(f.changes.length, changes, '重复选择不触发保存或状态广播');
+    }
+    ok(model, 'toggle'); f.advance(model.getSnapshot().remaining * 1000); model.tick();
+    const complete = model.getSnapshot(); assert.equal(complete.reminder, true);
+    assert.deepEqual(ok(model, 'mode', mode), complete, '重复选择也不收起到时提醒');
+  }
+  ok(model, 'mode', 'focus'); ok(model, 'toggle'); f.advance(3000); model.tick();
+  const switched = ok(model, 'mode', 'short');
+  assert.equal(switched.mode, 'short'); assert.equal(switched.status, 'idle');
+  assert.equal(switched.remaining, 300); assert.equal(switched.deadline, 0);
+  ok(model, 'toggle'); f.advance(3000); model.tick();
+  const reset = ok(model, 'reset'); assert.equal(reset.remaining, 300); assert.equal(reset.status, 'idle');
 });
 
 test('trust boundary rejects invalid types, out of range numbers and unsafe text without mutation', t => {
