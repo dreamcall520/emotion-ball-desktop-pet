@@ -1,4 +1,5 @@
 const https = require('node:https');
+const path = require('node:path');
 
 const REPOSITORY = 'https://github.com/dreamcall520/emotion-ball-desktop-pet';
 const ENDPOINT = 'https://api.github.com/repos/dreamcall520/emotion-ball-desktop-pet/releases/latest';
@@ -15,6 +16,86 @@ function parseVersion(value) {
   if (!match) return null;
   const parts = match.slice(1).map(Number);
   return parts.every(Number.isSafeInteger) ? { parts, version: match.slice(1).join('.') } : null;
+}
+
+function installerName(value) {
+  if (typeof value !== 'string' || value.length > 128) return null;
+  const match = /^Qiuqiu-(\d+\.\d+\.\d+)-macOS-(arm64|x64)\.dmg$/.exec(value);
+  const version = match && parseVersion(match[1]);
+  return version ? { ...version, arch: match[2] } : null;
+}
+
+function selectInstaller(release, platform, arch) {
+  if (platform !== 'darwin' || !['arm64', 'x64'].includes(arch) || !Array.isArray(release.assets)) return null;
+  const latest = parseVersion(release.tag_name);
+  for (const asset of release.assets) {
+    const name = installerName(asset?.name);
+    if (!name || name.arch !== arch || name.parts.some((part, index) => part !== latest.parts[index]) ||
+        asset.state !== 'uploaded' || !Number.isSafeInteger(asset.size) || asset.size <= 0) continue;
+    const url = `${REPOSITORY}/releases/download/${encodeURIComponent(release.tag_name)}/${encodeURIComponent(asset.name)}`;
+    if (asset.browser_download_url === url) return { name: asset.name, url };
+  }
+  return null;
+}
+
+function downloadInstaller(webContents, installer, { onProgress = () => {}, downloadsPath } = {}) {
+  let valid = false;
+  try {
+    const url = new URL(installer?.url), segments = url.pathname.split('/');
+    const tag = parseVersion(decodeURIComponent(segments[5] || '')), name = installerName(installer.name);
+    valid = Boolean(tag && name && name.parts.every((part, index) => part === tag.parts[index]) &&
+      installer.url === `${REPOSITORY}/releases/download/${encodeURIComponent(segments[5])}/${encodeURIComponent(installer.name)}`);
+  } catch (_) {}
+  if (!valid || !webContents || webContents.isDestroyed()) return Promise.resolve({ state: 'error', message: '新版安装包暂不可用，请重新检查更新。' });
+  return new Promise(resolve => {
+    const session = webContents.session;
+    let item = null, finished = false;
+    const notify = value => { try { onProgress(value); } catch (_) {} };
+    const finish = result => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      session.removeListener('will-download', receive);
+      webContents.removeListener('destroyed', closed);
+      item?.removeListener('updated', progress);
+      item?.removeListener('done', done);
+      notify(result);
+      resolve(result);
+    };
+    const closed = () => finish({ state: 'error', message: '下载尚未开始，请重新打开关于球球后重试。' });
+    const progress = (_event, state) => {
+      if (state === 'interrupted') {
+        finish({ state: 'error', message: '下载中断，请检查网络后重试。' });
+        item.cancel();
+        return;
+      }
+      const total = item.getTotalBytes(), received = item.getReceivedBytes();
+      notify({ state: 'downloading', percent: total > 0 ? Math.min(100, Math.floor(received / total * 100)) : null });
+    };
+    const done = (_event, state) => finish(state === 'completed'
+      ? { state: 'completed', path: item.getSavePath() }
+      : state === 'cancelled' ? { state: 'cancelled', message: '已取消下载，可以重新下载。' }
+        : { state: 'error', message: '下载失败，请检查网络和保存位置后重试。' });
+    const receive = (_event, download, sender) => {
+      if (sender !== webContents || !download.getURLChain().includes(installer.url)) return;
+      item = download;
+      clearTimeout(timer);
+      session.removeListener('will-download', receive);
+      webContents.removeListener('destroyed', closed);
+      item.setSaveDialogOptions({ title: '下载球球安装包', buttonLabel: '下载',
+        defaultPath: downloadsPath ? path.join(downloadsPath, installer.name) : installer.name,
+        filters: [{ name: 'macOS 安装包', extensions: ['dmg'] }] });
+      item.on('updated', progress);
+      item.once('done', done);
+      notify({ state: 'downloading', percent: null });
+    };
+    const timer = setTimeout(() => finish({ state: 'error', message: '下载启动超时，请检查网络后重试。' }), 30000);
+    session.on('will-download', receive);
+    webContents.once('destroyed', closed);
+    notify({ state: 'starting' });
+    try { webContents.downloadURL(installer.url); }
+    catch (_) { finish({ state: 'error', message: '暂时无法开始下载，请稍后重试。' }); }
+  });
 }
 
 function getJson(url, options) {
@@ -61,7 +142,7 @@ function getJson(url, options) {
   });
 }
 
-async function checkLatestRelease(currentVersion, { get = getJson } = {}) {
+async function checkLatestRelease(currentVersion, { get = getJson, platform = process.platform, arch = process.arch } = {}) {
   const current = parseVersion(currentVersion);
   if (!current) throw updateError('当前版本号无效，无法检查更新。');
   let release;
@@ -87,8 +168,11 @@ async function checkLatestRelease(currentVersion, { get = getJson } = {}) {
     hasUpdate = latest.parts[index] > current.parts[index];
     break;
   }
+  const installer = selectInstaller(release, platform, arch);
+  const device = arch === 'arm64' ? 'Apple 芯片 Mac' : arch === 'x64' ? 'Intel Mac' : '当前设备';
   return { currentVersion: current.version, latestVersion: latest.version, hasUpdate,
-    url: `${REPOSITORY}/releases/tag/${encodeURIComponent(tag)}` };
+    url: `${REPOSITORY}/releases/tag/${encodeURIComponent(tag)}`, installer,
+    downloadMessage: installer ? '' : `暂无适合 ${device} 的新版安装包，请稍后重试。` };
 }
 
-module.exports = { checkLatestRelease };
+module.exports = { checkLatestRelease, downloadInstaller };

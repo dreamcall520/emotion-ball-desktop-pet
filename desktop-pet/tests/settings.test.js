@@ -17,15 +17,16 @@ test('无效设置回退默认值', () => {
   );
 });
 
-test('主题色兼容旧设置且独立持久化，不改写形象及既有外观偏好', t => {
-  assert.equal(DEFAULTS.uiTheme, 'green');
-  assert.equal(normalizeSettings({}).uiTheme, 'green');
+test('无主题设置默认晴空蓝，保留已选主题及形象外观偏好', t => {
+  assert.equal(DEFAULTS.uiTheme, 'blue');
+  assert.equal(normalizeSettings({}).uiTheme, 'blue');
   for (const uiTheme of [undefined, null, '', 'Green', 'blue ', 'mint', 1, true, {}, []]) {
-    assert.equal(normalizeSettings({ uiTheme }).uiTheme, 'green');
+    assert.equal(normalizeSettings({ uiTheme }).uiTheme, 'blue');
   }
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emotion-ui-theme-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const file = path.join(dir, 'settings.json');
+  assert.equal(loadSettings(file).uiTheme, 'blue', '首次安装没有设置文件时使用晴空蓝');
   const legacy = {
     notesAppearance: 'dark', notesDefaultTab: 'todo', codexQuotaAppearance: 'light', colorMode: 'accessible',
     customization: { appearance: { shape: 'square', bodyColor: '#123456', eyeColor: '#ABCDEF' } },
@@ -37,7 +38,7 @@ test('主题色兼容旧设置且独立持久化，不改写形象及既有外�
   };
   fs.writeFileSync(file, JSON.stringify(legacy));
   const original = loadSettings(file), before = JSON.stringify(original);
-  assert.equal(original.uiTheme, 'green', '旧文件没有主题色字段时沿用薄荷绿');
+  assert.equal(original.uiTheme, 'blue', '没有保存主题选择时使用晴空蓝');
   for (const uiTheme of ['green', 'blue']) for (const colorMode of ['standard', 'accessible']) for (const codexQuotaAppearance of ['system', 'light', 'dark']) {
     const saved = saveSettings(file, { ...original, uiTheme, colorMode, codexQuotaAppearance });
     const loaded = loadSettings(file);
@@ -101,10 +102,11 @@ test('损坏文件回退且有效设置可回读', t => {
     keepAwake: true,
     bubblesEnabled: true,
     colorMode: 'standard',
-    uiTheme: 'green',
+    uiTheme: 'blue',
     chatModel: 'auto',
     notesDefaultTab: 'note', notesAppearance: 'light',
     customization: DEFAULTS.customization,
+    quotaDisplay: DEFAULTS.quotaDisplay,
     startupAppearance: DEFAULTS.startupAppearance,
     appearancePresets: [],
     codexEnabled: false,
@@ -124,7 +126,8 @@ test('损坏文件回退且有效设置可回读', t => {
 test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
   assert.deepEqual(normalizeSettings({ size: 'small', x: -102.3, y: 81.8, alwaysOnTop: false }), {
     size: 'small', x: -102, y: 82, alwaysOnTop: false,
-    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', uiTheme: 'green', chatModel: 'auto', notesDefaultTab: 'note', notesAppearance: 'light', customization: DEFAULTS.customization,
+    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', uiTheme: 'blue', chatModel: 'auto', notesDefaultTab: 'note', notesAppearance: 'light', customization: DEFAULTS.customization,
+    quotaDisplay: DEFAULTS.quotaDisplay,
     startupAppearance: DEFAULTS.startupAppearance,
     appearancePresets: [], codexEnabled: false,
     codexTaskNameInAlerts: true, codexQuotaAlwaysVisible: true,
@@ -288,6 +291,7 @@ test('Codex 只持久化开关，不保存账号额度快照阈值或任务信�
   });
   assert.deepEqual(saved, {
     ...DEFAULTS,
+    quotaDisplay: { ...DEFAULTS.quotaDisplay, period: 'weekly' },
     codexEnabled: true,
     codexQuotaAlwaysVisible: true,
     codexQuotaPeriod: 'weekly',

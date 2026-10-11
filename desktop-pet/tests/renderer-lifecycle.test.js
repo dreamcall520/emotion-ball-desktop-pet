@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 // 运行真实 renderer、状态规则和动画引擎；仅替代 DOM、宿主通信及时间。
-function createRenderer(randomValue = 0.5, auroraRive = null) {
+function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = null) {
   let now = 0;
   let nextTimer = 1;
   let engine;
@@ -15,6 +15,11 @@ function createRenderer(randomValue = 0.5, auroraRive = null) {
   const events = {};
   const subscriptions = {};
   const windowEvents = {};
+  const quotaFrames = [], systemListeners = new Set();
+  const root = { dataset: { appearance: 'light' } };
+  const systemAppearance = { matches: false,
+    addEventListener(_name, listener) { systemListeners.add(listener); },
+    removeEventListener(_name, listener) { systemListeners.delete(listener); } };
   const host = { dragEnds: 0, dragMoves: [], bounces: 0, stops: 0, scenes: [], motions: [], frames: [], positions: [], codexAcks: [], availability: [], thoughts: [] };
   const bounds = { x: 100, y: 100, width: 80, height: 80 };
   let windowController;
@@ -62,9 +67,11 @@ function createRenderer(randomValue = 0.5, auroraRive = null) {
     },
     clearTimeout(id) { timers.delete(id); },
     clearInterval() {},
-    requestAnimationFrame() { return 1; }, cancelAnimationFrame() {},
-    document: { getElementById: () => pet, createElementNS: (_ns, tag) => node(tag), createElement: node,
+    requestAnimationFrame(callback) { if (quotaUpdates) quotaFrames.push(callback); return 1; }, cancelAnimationFrame() {},
+    document: { documentElement: root, getElementById: () => pet, createElementNS: (_ns, tag) => node(tag), createElement: node,
       addEventListener() {}, removeEventListener() {} },
+    QuotaEffects: quotaUpdates ? { create: () => ({ update: value => quotaUpdates.push(value), destroy() {} }) } : undefined,
+    matchMedia: query => query === '(prefers-color-scheme: dark)' ? systemAppearance : { matches: false },
     AuroraRive: auroraRive,
     innerWidth: 80,
     addEventListener(name, callback) { windowEvents[name] = callback; },
@@ -94,6 +101,7 @@ function createRenderer(randomValue = 0.5, auroraRive = null) {
       onActivity: subscribe('activity'),
       onSettings: subscribe('settings'),
       onMotion: subscribe('motion'),
+      onColorMode: subscribe('colorMode'),
       onCodexSettings: subscribe('codexSettings')
     }
   });
@@ -131,7 +139,8 @@ function createRenderer(randomValue = 0.5, auroraRive = null) {
   }
   activity();
   return {
-    host, pet, get engine() { return engine; }, get lastBallOptions() { return lastBallOptions; },
+    host, pet, root, systemAppearance, systemListeners, quotaFrames, subscriptions,
+    get engine() { return engine; }, get lastBallOptions() { return lastBallOptions; },
     activity, bounds, events, windowEvents, timers,
     frame: packet => subscriptions.motion(packet),
     stopHost: () => windowController?.stop(),
@@ -167,6 +176,28 @@ function createRenderer(randomValue = 0.5, auroraRive = null) {
 }
 
 const codexCommand = (overrides = {}) => ({ command: 'codex', alertId: 1, generation: 1, pageEpoch: 1, motion: 'hop', ...overrides });
+
+test('桌面额度材质读取 App 外观，配色与系统事件在根节点更新后刷新并释放监听', () => {
+  const updates = [], r = createRenderer(0.5, null, updates);
+  const draw = () => r.quotaFrames.splice(0).forEach(callback => callback(0));
+  r.root.dataset.appearance = 'dark';
+  draw();
+  assert.equal(updates.at(-1).theme, 'dark', 'App 深色应覆盖系统浅色');
+  r.subscriptions.colorMode('standard', 'light');
+  r.root.dataset.appearance = 'light'; // color-mode.js 在同一个事件中完成更新。
+  draw();
+  assert.equal(updates.at(-1).theme, 'light');
+  r.systemAppearance.matches = true;
+  r.systemListeners.forEach(callback => callback());
+  draw();
+  assert.equal(updates.at(-1).theme, 'light', '明确浅色不随系统变暗');
+  r.systemListeners.forEach(callback => callback());
+  r.root.dataset.appearance = 'dark'; // 跟随系统时的已解析外观。
+  draw();
+  assert.equal(updates.at(-1).theme, 'dark');
+  r.windowEvents.beforeunload();
+  assert.equal(r.systemListeners.size, 0); assert.equal(r.subscriptions.colorMode, undefined);
+});
 
 test('定制形态、手调轮廓和配色应用到同一个球球窗口', () => {
   const r = createRenderer();

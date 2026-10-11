@@ -199,6 +199,67 @@ test('小巧档创建可点击的 128×32 横条，点击展开和收起时复�
   assert.equal(win.sent.at(-1)[1].expanded, false);
 });
 
+test('具体数字模式贯穿窗口与桥接，未知和零分开，点击周期直达详情且不展开卡片', async t => {
+  const f = fixture(() => Promise.resolve(), { labelSize: 'compact' });
+  t.after(() => f.label.destroy());
+  const numbers = { ...readyModel(), display: 'numbers', numberPeriods: ['fiveHour', 'weekly'],
+    numberColors: { shape: 'aurora-cloud', bodyColor: '#5038AF', glowPinkColor: '#E08AD9', private: 'SECRET' } };
+  numbers.items[0].remaining = 0;
+  f.label.show(numbers); await flush();
+  const win = f.windows[0], packet = win.sent.at(-1)[1];
+  assert.equal(packet.expanded, false);
+  assert.equal(win.bounds.width, 128); assert.equal(win.bounds.height, 32);
+  assert.equal(JSON.stringify(packet).includes('SECRET'), false);
+  win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  assert.equal(win.sent.at(-1)[1].expanded, false);
+  let api, listener, receive, received, toggles = 0;
+  const sent = [];
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../quota-label-preload.js'), 'utf8'), {
+    require: () => ({ contextBridge: { exposeInMainWorld(_name, value) { api = value; } },
+      ipcRenderer: { on(_name, callback) { listener = callback; }, removeListener() {}, send: (...args) => sent.push(args) } })
+  });
+  api.onModel(value => { received = value; }); listener({}, packet);
+  assert.deepEqual(JSON.parse(JSON.stringify(received.numberColors)), {
+    shape: 'aurora-cloud', bodyColor: '#5038AF', glowPinkColor: '#E08AD9'
+  });
+  const element = () => ({ dataset: {}, style: {}, children: [], listeners: {}, attributes: {}, _text: '',
+    set textContent(value) { this._text = String(value); this.children = []; },
+    get textContent() { return this.children.length ? this.children.map(child => child.textContent).join('') : this._text; },
+    replaceChildren(...children) { this._text = ''; this.children = children; },
+    setAttribute(name, value) { this.attributes[name] = value; },
+    addEventListener(name, callback) { this.listeners[name] = callback; } });
+  const nodes = Object.fromEntries(['quota-label', 'status', 'summary', 'items', 'overflow', 'quota-numbers'].map(id => [id, element()]));
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8'), {
+    document: { documentElement: element(), getElementById: id => nodes[id], createElement: element },
+    window: { QuotaEffects: require('../quota-effects'), addEventListener() {}, petQuotaLabel: {
+      onModel(callback) { receive = callback; return () => {}; },
+      toggleExpanded() { toggles++; }, openDetail: api.openDetail
+    } }
+  });
+  receive(received);
+  const readings = nodes['quota-numbers'];
+  assert.equal(readings.textContent, '5h0%·周—');
+  assert.equal(nodes['quota-label'].dataset.display, 'numbers');
+  assert.equal(nodes['quota-label'].dataset.expanded, 'false');
+  assert.notEqual(readings.children[0].children[0].style.backgroundColor, readings.children[2].children[0].style.backgroundColor);
+  readings.children[2].listeners.click({ stopPropagation() {} });
+  assert.deepEqual(sent.at(-1), ['pet:quota-label-detail', 'trend', 10080]);
+  nodes['quota-label'].listeners.click(); assert.equal(toggles, 0);
+  receive({ ...received, state: 'stale' }); assert.equal(readings.textContent, '5h—·周—');
+  receive({ ...received, numberPeriods: ['weekly'], items: [{ label: 'Codex', windowMinutes: 10080, remaining: 38 }] });
+  assert.equal(readings.textContent, '周38%');
+  f.label.show({ state: 'disconnected', display: 'numbers', numberPeriods: ['weekly', 'weekly'],
+    numberColors: { bodyColor: 'red;background:url(https://example.com)', shape: '<script>' } });
+  const unknown = win.sent.at(-1)[1];
+  assert.deepEqual(unknown.numberPeriods, ['weekly']);
+  assert.equal(unknown.numberColors.bodyColor, '#EEEBE4');
+  assert.deepEqual(win.ignoreCalls.at(-1), [false], '未知数字仍可查看对应额度详情');
+  listener({}, unknown); receive(received); assert.equal(readings.textContent, '周—');
+  f.label.show(readyModel());
+  win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  assert.equal(win.sent.at(-1)[1].expanded, true, '切回经典额度卡恢复原展开行为');
+});
+
 test('余额通过原生窗口与 preload 白名单，显示与隐藏复用辅助行且高度不变', async t => {
   const f = fixture(() => Promise.resolve(), { labelSize: 'compact' });
   t.after(() => f.label.destroy());

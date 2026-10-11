@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { normalizeModelSelection } = require('./chat-models');
 const { normalizeAppearance, normalizeCustomization, appearanceContentKey } = require('./customization');
+const { normalize: normalizeQuotaDisplay } = require('./quota-display');
 
 const DEFAULTS = Object.freeze({
   size: 'tiny',
@@ -11,7 +12,7 @@ const DEFAULTS = Object.freeze({
   keepAwake: true,
   bubblesEnabled: true,
   colorMode: 'standard',
-  uiTheme: 'green',
+  uiTheme: 'blue',
   chatModel: 'auto',
   notesDefaultTab: 'note',
   notesAppearance: 'light',
@@ -27,7 +28,8 @@ const DEFAULTS = Object.freeze({
   lastUpdateNotifiedVersion: '',
   codexQuotaPeriod: 'auto',
   codexQuotaLabelSize: 'compact',
-  codexQuotaAppearance: 'system'
+  codexQuotaAppearance: 'system',
+  quotaDisplay: Object.freeze(normalizeQuotaDisplay())
 });
 
 function normalizePresetName(raw) {
@@ -76,6 +78,7 @@ function normalizeSettings(raw = {}) {
     notesDefaultTab: ['note', 'todo'].includes(raw.notesDefaultTab) ? raw.notesDefaultTab : DEFAULTS.notesDefaultTab,
     notesAppearance: ['system', 'light', 'dark'].includes(raw.notesAppearance) ? raw.notesAppearance : DEFAULTS.notesAppearance,
     customization,
+    quotaDisplay: normalizeQuotaDisplay(raw.quotaDisplay, raw),
     appearancePresets: normalizeAppearancePresets(raw.appearancePresets),
     startupAppearance: raw.startupAppearance && typeof raw.startupAppearance === 'object' && !Array.isArray(raw.startupAppearance)
       ? normalizeAppearance(raw.startupAppearance) : customization.appearance,

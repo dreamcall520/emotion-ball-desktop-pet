@@ -30,6 +30,14 @@
   let codexPet = null;
   let lastAuroraClick = null;
   let customization = PetCustomization.normalizeCustomization();
+  const quotaEffects = window.QuotaEffects?.create(petElement);
+  let quotaPacket = { config: window.QuotaDisplay?.normalize(), model: null, visible: false };
+  function syncQuotaEffects() {
+    quotaEffects?.update({ config: quotaPacket.config, appearance: customization.appearance,
+      quotas: window.QuotaDisplay?.values(quotaPacket.model),
+      theme: document.documentElement?.dataset.appearance === 'dark' ? 'dark' : 'light',
+      reducedMotion: reducedMotion(), visible: quotaPacket.visible && !presentationSuppressed && presentationMode !== 'tucked' });
+  }
   let presentationSuppressed = false;
   let presentationMode = 'free';
   let presentationPaused = false;
@@ -295,6 +303,7 @@
   }
 
   function createBall(emotionId) {
+    if (quotaEffects) requestAnimationFrame(syncQuotaEffects);
     const nextCompactMode = window.innerWidth <= 120;
     const previousShape = petElement.dataset.shape;
     const previousSvg = previousShape !== 'aurora-cloud' && customization.appearance.shape === 'aurora-cloud'
@@ -458,6 +467,7 @@
     presentationMode = packet.mode;
     presentationPaused = packet.paused === true;
     presentationSuppressed = packet.suppressed === true || presentationPaused;
+    syncQuotaEffects();
     petElement.dataset.presentation = packet.mode;
     petElement.dataset.edge = packet.side === 'left' || packet.side === 'right' ? packet.side : 'none';
     petElement.dataset.dragging = packet.dragging ? 'true' : 'false';
@@ -858,6 +868,7 @@
   });
 
   onWindow('beforeunload', () => {
+    quotaEffects?.destroy();
     codexEnabled = false;
     stopCodexThinkingCadence();
     cancelPendingInteraction();
@@ -879,10 +890,22 @@
   petElement.dataset.codexActiveTasks = '0';
   petElement.dataset.codexThoughtSide = 'right';
   if (desktop.onPresentation) listeners.push(desktop.onPresentation(observe(updatePresentation)));
+  if (desktop.onQuota) listeners.push(desktop.onQuota(observe(packet => {
+    quotaPacket = packet || { visible: false };
+    syncQuotaEffects();
+  })));
+  // color-mode.js resolves the app preference on the same event. Draw after
+  // all its listeners have updated the root, including system appearance.
+  const refreshQuotaTheme = () => requestAnimationFrame(syncQuotaEffects);
+  if (desktop.onColorMode) listeners.push(desktop.onColorMode(refreshQuotaTheme));
+  const quotaSystemAppearance = window.matchMedia?.('(prefers-color-scheme: dark)');
+  quotaSystemAppearance?.addEventListener?.('change', refreshQuotaTheme);
+  listeners.push(() => quotaSystemAppearance?.removeEventListener?.('change', refreshQuotaTheme));
   listeners.push(desktop.onCommand(observe(runCommand)));
   listeners.push(desktop.onMotion(observe(onMotion)));
   listeners.push(desktop.onActivity(observe(updateActivity)));
   listeners.push(desktop.onSettings(observe(settings => {
+    quotaPacket.config = settings.quotaDisplay || quotaPacket.config;
     const next = PetCustomization.normalizeCustomization(settings.customization);
     const nextPet = next.appearance.shape === 'codex-pet' && settings.codexPet?.id === next.appearance.codexPetId &&
       window.CodexPetPlayer?.validDescriptor(settings.codexPet) ? settings.codexPet : null;
@@ -894,6 +917,7 @@
       registerIdleAppearance();
       createBall(ball.emotionId);
     } else customization = next;
+    syncQuotaEffects();
     companion.setKeepAwake(settings.keepAwake);
     if (lastSample) updateActivity(lastSample);
   })));

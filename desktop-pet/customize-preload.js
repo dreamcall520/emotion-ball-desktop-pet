@@ -20,6 +20,14 @@ contextBridge.exposeInMainWorld('petCustomizer', {
   addPreset: (name, appearance) => ipcRenderer.invoke('pet:appearance-preset-add', { name, appearance }),
   renamePreset: (id, name) => ipcRenderer.invoke('pet:appearance-preset-rename', { id, name }),
   deletePreset: id => ipcRenderer.invoke('pet:appearance-preset-delete', { id }),
-  save: (value, setAsStartupDefault) => ipcRenderer.invoke('pet:customization-save', value, setAsStartupDefault),
+  save: (value, setAsStartupDefault, quotaDisplay) => quotaDisplay === undefined
+    ? ipcRenderer.invoke('pet:customization-save', value, setAsStartupDefault)
+    : ipcRenderer.invoke('pet:customization-save', value, setAsStartupDefault, quotaDisplay),
+  onQuota: callback => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, model) => callback(model);
+    ipcRenderer.on('pet:quota-display', listener);
+    return () => ipcRenderer.removeListener('pet:quota-display', listener);
+  },
   preview: appearance => ipcRenderer.send('pet:customization-preview', appearance)
 });

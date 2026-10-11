@@ -102,6 +102,22 @@
     } catch (_) { return {}; }
   }
 
+  function numberFields(source) {
+    try {
+      if (source.display !== 'numbers') return {};
+      const rawPeriods = source.numberPeriods;
+      const periods = Array.isArray(rawPeriods) && rawPeriods.length <= 2
+        ? [...new Set(rawPeriods.filter(value => ['fiveHour', 'weekly'].includes(value)))] : [];
+      const colors = record(source.numberColors);
+      const bodyColor = colors?.bodyColor, glowPinkColor = colors?.glowPinkColor, shape = colors?.shape;
+      return { display: 'numbers', numberPeriods: periods.length ? periods : ['fiveHour'], numberColors: {
+        shape: shape === 'aurora-cloud' ? 'aurora-cloud' : 'blob',
+        bodyColor: typeof bodyColor === 'string' && /^#[\da-f]{6}$/i.test(bodyColor) ? bodyColor : '#EEEBE4',
+        glowPinkColor: typeof glowPinkColor === 'string' && /^#[\da-f]{6}$/i.test(glowPinkColor) ? glowPinkColor : '#D05ED6'
+      } };
+    } catch (_) { return {}; }
+  }
+
   function safeModel(value) {
     const source = record(value);
     if (!source) return { state: 'disconnected', items: [], overflow: 0, size: 'standard', appearance: 'system', expanded: false };
@@ -118,8 +134,9 @@
     const state = states.has(stateValue) ? stateValue : 'disconnected';
     const size = sizeValue === 'compact' ? 'compact' : 'standard';
     const appearance = ['light', 'dark'].includes(appearanceValue) ? appearanceValue : 'system';
-    const expanded = expandedValue === true;
-    if (!['ready', 'stale'].includes(state)) return { state, items: [], overflow: 0, size, appearance, expanded: false };
+    const numbers = numberFields(source);
+    const expanded = numbers.display !== 'numbers' && expandedValue === true;
+    if (!['ready', 'stale'].includes(state)) return { state, items: [], overflow: 0, size, appearance, expanded: false, ...numbers };
     let rawItems;
     let overflowValue;
     let resetCreditsAvailable;
@@ -127,11 +144,12 @@
       rawItems = source.items;
       overflowValue = source.overflow;
       resetCreditsAvailable = source.resetCreditsAvailable;
-    } catch (_) { return { state, items: [], overflow: 0, size, appearance, expanded }; }
+    } catch (_) { return { state, items: [], overflow: 0, size, appearance, expanded, ...numbers }; }
     const hidden = Number.isSafeInteger(overflowValue) && overflowValue > 0
       ? Math.min(overflowValue, 99) : 0;
     return {
       state,
+      ...numbers,
       items: copyItems(rawItems),
       overflow: hidden,
       size,
@@ -279,6 +297,7 @@
   let root;
   let bridge;
   let expandedCard;
+  let quotaNumbers;
   try {
     root = document.documentElement;
     label = document.getElementById('quota-label');
@@ -300,6 +319,7 @@
     creditsUnit = document.getElementById('credits-unit');
     bridge = window.petQuotaLabel;
     expandedCard = document.getElementById('codex-expanded');
+    quotaNumbers = document.getElementById('quota-numbers');
   } catch (_) { return; }
   if (!label || !label.dataset || !status || !summary || typeof summary.replaceChildren !== 'function' ||
     !items || typeof items.replaceChildren !== 'function' ||
@@ -323,6 +343,29 @@
       try { bridge.openDetail?.(action, period); } catch (_) {}
     });
     return button;
+  }
+  function renderNumbers(model) {
+    if (!quotaNumbers?.replaceChildren) return;
+    const palette = window.QuotaEffects?.palette(model.numberColors);
+    const colors = palette ? model.numberPeriods.length === 2
+      ? window.QuotaEffects.dualPalettes(palette) : [palette] : [];
+    const readings = model.numberPeriods.map((period, index) => {
+      const minutes = period === 'weekly' ? 10080 : 300;
+      const item = model.state === 'ready' ? model.items.find(item => item.windowMinutes === minutes) : null;
+      const text = item ? `${Math.round(item.remaining)}%` : '—';
+      const button = detailButton('', 'trend', minutes, 'quota-reading');
+      const badge = node('span', 'quota-reading-period', periodBadgeText(minutes));
+      const dot = node('i', 'quota-reading-dot');
+      dot.setAttribute?.('aria-hidden', 'true');
+      if (colors[index] && dot.style) dot.style.backgroundColor = `rgb(${colors[index].base.join(',')})`;
+      const value = node('strong', 'quota-reading-value', text);
+      button.setAttribute?.('aria-label', `${periodTypeText(minutes)}${item ? `剩余 ${text}` : '额度暂不可用'}，查看详情`);
+      button.title = model.state === 'stale' ? '额度已过期，等待更新' : `查看${periodTypeText(minutes)}详情`;
+      button.replaceChildren(dot, badge, value);
+      return button;
+    });
+    quotaNumbers.replaceChildren(...readings.flatMap((reading, index) => index
+      ? [node('span', 'quota-reading-separator', '·'), reading] : [reading]));
   }
   function renderExpanded(model) {
     if (!expandedCard?.replaceChildren) return;
@@ -432,6 +475,7 @@
     try {
       status.textContent = states.get(model.state);
       label.dataset.state = model.state;
+      label.dataset.display = model.display === 'numbers' ? 'numbers' : 'card';
       label.dataset.size = model.size;
       label.dataset.appearance = model.appearance;
       if (root?.dataset) root.dataset.appearance = model.appearance;
@@ -442,6 +486,8 @@
       label.dataset.hasExtraCredits = model.extraCredits ? 'true' : 'false';
       label.dataset.status = model.state === 'ready' && model.extraCredits?.usageStatus === 'blocked' ? 'blocked'
         : model.state === 'ready' && model.extraCredits && model.items[0]?.remaining === 0 ? 'exhausted' : '';
+      if (model.display === 'numbers') { renderNumbers(model); return; }
+      quotaNumbers?.replaceChildren();
       renderExpanded(model);
       const rows = [];
       let overallSeverity = 'normal';
@@ -541,6 +587,7 @@
   if (typeof label.addEventListener === 'function' && typeof bridge.toggleExpanded === 'function') {
     try {
       label.addEventListener('click', () => {
+        if (label.dataset.display === 'numbers') return;
         if (label.dataset.hasItems !== 'true') return;
         try { bridge.toggleExpanded(); } catch (_) {}
       });
