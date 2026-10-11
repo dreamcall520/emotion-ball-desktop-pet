@@ -79,6 +79,8 @@
  .thanks-page .thanks-hero .lede { font-size: 12px; margin-top: 18px !important; }
  .thanks-page .thanks-art { max-width: 340px; justify-self: center; }
  .thanks-character { aspect-ratio: 1.38; }
+ /* Center the visible figure within the original PNG's asymmetric transparent padding. */
+ .thanks-page .thanks-character img { width: auto; left: 50%; right: auto; transform: translateX(-55.18%); }
  .thanks-page .thanks-section { gap: 20px; padding-block: 20px 32px; }
  .thanks-page .section-intro { display: block; }
  .thanks-page .section-intro h2 { font-size: 25px; }
