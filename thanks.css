@@ -30,8 +30,10 @@
 .thanks-page .person-description { font-size: 11px; margin-top: 4px !important; line-height: 1.7; }
 .thanks-page .roster-controls { margin-top: 8px; justify-content: flex-end; }
 .thanks-page .roster-controls[hidden] { display: none; }
-.thanks-page .roster-controls button { display: grid; place-items: center; width: 44px; height: 44px; min-height: 44px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--text-soft); }
+.thanks-page .roster-controls button { display: grid; place-items: center; width: 44px; height: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text-soft); opacity: .65; }
 .thanks-page .roster-controls [data-roster-toggle] { min-width: 44px; }
+.thanks-page .roster-controls button svg { width: 14px; height: 14px; }
+.thanks-page .roster-controls button:is(:hover,:focus-visible) { color: var(--accent); opacity: 1; }
 .thanks-page .roster-controls button[aria-pressed="false"] .roster-play-icon,
 .thanks-page .roster-controls button[aria-pressed="true"] .roster-pause-icon { display: none; }
 .thanks-page .supporter-info { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; }
