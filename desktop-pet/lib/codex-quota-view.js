@@ -250,7 +250,7 @@ function buildTrend(snapshot, window, now, resetOpportunities = null, accountRes
     samples: [], forecast: unknown };
   if (!window || snapshot?.enabled !== true || snapshot.history?.available !== true) return base;
   const weekly = window.windowMinutes === 10080;
-  if (weekly) base.forecast.detail = '本周期有效记录不足 24 小时，积累后提供参考预估';
+  if (weekly) base.forecast.detail = '本周期有效记录不足 1 小时，积累后提供初步预估';
   const maximum = weekly ? 6000 : 192;
   const byTime = new Map();
   for (const cycle of Array.isArray(snapshot.history.windows) ? snapshot.history.windows.slice(-8) : []) {
@@ -281,7 +281,7 @@ function buildTrend(snapshot, window, now, resetOpportunities = null, accountRes
   }
   if (recent.length < 3) return base;
   const first = recent[0]; const last = recent.at(-1);
-  const minimumSpan = weekly ? 24 * 3600000 : 10 * 60000;
+  const minimumSpan = weekly ? 3600000 : 10 * 60000;
   if (last.remaining !== window.remaining) {
     if (weekly) base.forecast.detail = '额度刚有变化，等待采样同步';
     return base;
@@ -299,12 +299,14 @@ function buildTrend(snapshot, window, now, resetOpportunities = null, accountRes
   const exhaustsAt = validResetTime(projectedAt) ? projectedAt : null;
   if (status === 'risk' && exhaustsAt === null) return base;
   const label = exhaustsAt === null ? '' : formatQuotaDate(exhaustsAt, window.windowMinutes, now);
-  base.forecast = { state: 'estimate', status, exhaustsAt, label, ...(weekly ? { reference: true } : {}),
+  base.forecast = { state: 'estimate', status, exhaustsAt, label,
+    ...(weekly ? { reference: true, preliminary: last.at - first.at < 24 * 3600000 } : {}),
     summary: status === 'risk' ? window.remaining <= 0 ? '额度已用完' : `预计约 ${label} 用完`
       : status === 'tight' ? '预计够用到重置' : '额度充裕',
     detail: status === 'risk' ? `早于 ${base.resetLabel} 重置`
       : status === 'tight' ? '刚够，留意用量' : '预计够用到重置' };
   if (weekly) base.forecast.detail = `按本周期平均用量粗估，${base.forecast.detail}`;
+  if (base.forecast.preliminary) base.forecast.detail = '按本周期平均用量粗估，短时用量易波动';
   // These are normalized output rows, not the source snapshot. Reuse only the
   // validated forecast rate; never project across reset.
   for (const row of resetOpportunities || []) {

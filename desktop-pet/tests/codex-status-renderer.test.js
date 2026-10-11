@@ -223,6 +223,8 @@ test('周额度参考预估明确标注依据，普通5h预估标签保留',() =
   assert.equal(h.nodes['details-content'].querySelector('.forecast-badge').textContent,'参考预估');
   assert.match(h.nodes['details-content'].querySelector('.forecast-note').title,/实际经过时间/);
   assert.match(h.nodes['details-content'].querySelector('.forecast-copy').textContent,/本周期平均用量粗估/);
+  h.receive({...base,trend:{...base.trend,forecast:{...forecast,preliminary:true}}});
+  assert.equal(h.nodes['details-content'].querySelector('.forecast-badge').textContent,'初步预估');
   h.receive({...base,trend:{...base.trend,forecast:{...forecast,reference:false}}});
   assert.equal(h.nodes['details-content'].querySelector('.forecast-badge').textContent,'预估');
 });
