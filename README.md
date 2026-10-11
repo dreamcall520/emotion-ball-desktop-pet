@@ -23,7 +23,7 @@
 - 主下载使用公开 GitHub Release DMG 直链，同步版本和发布日期；文件大小、SHA-256 保留在本维护文档。国内备用仅指向已核验的 Apple 0.4.04 微云分享 https://share.weiyun.com/c6lIDCBc ，Intel 和历史版本不复用该入口。
 - Intel 构建候选在真实 Intel Mac 验收前，必须保留明显说明。
 - `LICENSE`、`NOTICE.md` 和原作者 `sam70361/emotion-ball` 署名不得删除。
-- 官网不使用 Cookie、表单或远程字体；访问统计仅限下方说明的匿名汇总范围。
+- 官网不使用 Cookie 或远程字体；意见反馈仅在用户主动提交时上传填写内容和所选截图，访问统计仅限下方说明的匿名汇总范围。
 
 ## 基础防护
 
@@ -158,6 +158,14 @@ API 报告需要组织所有者提供具有费用与用量读取权限的 Admin 
 新版检查只提供版本结果和下载页面入口。本目录内容更新及本地检查不代表 Release 已上传或官网已发布，发布后须回读公开安装附件与线上页面。
 
 官网模型菜单是预设演示，不读取账号模型列表、不发送真实消息、不保存桌宠设置。实际应用的模型目录以本机 Codex 当前账号为准，切换保持同一聊天；不承诺固定响应时间。
+
+## 意见反馈
+
+`feedback/` 提供官网内的意见反馈表单：首页、功能介绍、更新日志与隐私页均有入口。支持问题反馈、使用建议和功能需求，可附最多3张截图，每张最多1MiB。失败保留输入，同一内容重试沿用提交编号，后端确认保存后才显示回执。
+
+`feedback/config.js` 中的 `endpoint` 为提交地址，当前为自有 Cloudflare 账号下的 `https://qiuqiu-feedback-entry.pages.dev/api/feedback`。Pages 通过 Service binding 调用已部署的 Worker 和 D1，官网现有 DNSPod 解析无需迁移；若地址留空，表单会显示通道尚未开放并禁用提交。后端源码及部署说明在 App 的 `feature/feedback-entry` 工作树 `feedback-server/`，App 共用相同表单并通过主进程提交。
+
+本地浏览器检查为 `node tests/feedback.browser.cjs`，需要可用的 Playwright 与 Chrome；它覆盖布局及模拟接口交互，不能替代线上保存和国内无 VPN 验证。
 
 ## 本地预览
 
