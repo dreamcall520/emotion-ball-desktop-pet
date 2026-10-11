@@ -199,7 +199,7 @@ test('小巧档创建可点击的 128×32 横条，点击展开和收起时复�
   assert.equal(win.sent.at(-1)[1].expanded, false);
 });
 
-test('具体数字模式贯穿窗口与桥接，未知和零分开，点击周期直达详情且不展开卡片', async t => {
+test('具体数字复用经典摘要徽标，单项左右排布且不补缺失周期，点击详情不展开', async t => {
   const f = fixture(() => Promise.resolve(), { labelSize: 'compact' });
   t.after(() => f.label.destroy());
   const numbers = { ...readyModel(), display: 'numbers', numberPeriods: ['fiveHour', 'weekly'],
@@ -238,23 +238,32 @@ test('具体数字模式贯穿窗口与桥接，未知和零分开，点击周�
   });
   receive(received);
   const readings = nodes['quota-numbers'];
-  assert.equal(readings.textContent, '5h0%·周—');
+  assert.equal(readings.textContent, '5h已用尽0%');
+  assert.equal(readings.children.length, 1, '不存在的周额度不生成空项');
+  assert.equal(nodes['quota-label'].dataset.readings, '1');
+  assert.deepEqual(readings.children[0].children.map(child => child.className),
+    ['summary-period', 'summary-value quota-reading-value']);
+  assert.equal(readings.children[0].children[0].children[0].className, 'summary-badge');
   assert.equal(nodes['quota-label'].dataset.display, 'numbers');
   assert.equal(nodes['quota-label'].dataset.expanded, 'false');
-  assert.notEqual(readings.children[0].children[0].style.backgroundColor, readings.children[2].children[0].style.backgroundColor);
-  readings.children[2].listeners.click({ stopPropagation() {} });
+  const dual = { ...received, items: [...received.items, { label: 'Codex', windowMinutes: 10080, remaining: 38 }] };
+  receive(dual); assert.equal(readings.textContent, '5h0%周38%');
+  assert.equal(readings.children.length, 2);
+  assert.equal(nodes['quota-label'].dataset.readings, '2');
+  assert.ok(readings.children.every(reading => reading.children[0].className === 'summary-badge'));
+  readings.children[1].listeners.click({ stopPropagation() {} });
   assert.deepEqual(sent.at(-1), ['pet:quota-label-detail', 'trend', 10080]);
   nodes['quota-label'].listeners.click(); assert.equal(toggles, 0);
-  receive({ ...received, state: 'stale' }); assert.equal(readings.textContent, '5h—·周—');
+  receive({ ...dual, state: 'stale' }); assert.equal(readings.textContent, '5h—周—');
   receive({ ...received, numberPeriods: ['weekly'], items: [{ label: 'Codex', windowMinutes: 10080, remaining: 38 }] });
-  assert.equal(readings.textContent, '周38%');
+  assert.equal(readings.textContent, '周额度38%');
   f.label.show({ state: 'disconnected', display: 'numbers', numberPeriods: ['weekly', 'weekly'],
     numberColors: { bodyColor: 'red;background:url(https://example.com)', shape: '<script>' } });
   const unknown = win.sent.at(-1)[1];
   assert.deepEqual(unknown.numberPeriods, ['weekly']);
   assert.equal(unknown.numberColors.bodyColor, '#EEEBE4');
   assert.deepEqual(win.ignoreCalls.at(-1), [false], '未知数字仍可查看对应额度详情');
-  listener({}, unknown); receive(received); assert.equal(readings.textContent, '周—');
+  listener({}, unknown); receive(received); assert.equal(readings.textContent, '周额度—');
   f.label.show(readyModel());
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
   assert.equal(win.sent.at(-1)[1].expanded, true, '切回经典额度卡恢复原展开行为');

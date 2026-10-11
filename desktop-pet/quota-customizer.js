@@ -9,7 +9,7 @@
     ];
     let config = QuotaDisplay.normalize(), current = {fiveHour:null,weekly:null}, currentModel = {state:'disconnected',items:[]};
     const demo = {fiveHour:74,weekly:38}, thumbs = [];
-    let source = 'demo', playing = false, lastTick = 0, timer = null, effect = null, disposed = false, shown = false;
+    let source = 'demo', playing = false, lastTick = 0, timer = null, effect = null, disposed = false, shown = false, thumbFrame = 0;
     const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const numbers = document.createElement('div'); numbers.className = 'quota-preview-numbers quota-preview-card';
     const card = document.createElement('div'); card.className = 'quota-preview-card';
@@ -22,13 +22,18 @@
     }
     function drawNumbers(node, c, v, model) {
       node.replaceChildren();
-      const periods=QuotaDisplay.periods(c,model),palette=window.QuotaEffects?.palette(getAppearance());
-      const colors=palette?(periods.length===2?window.QuotaEffects.dualPalettes(palette):[palette]):[];
-      for (const [index,period] of periods.entries()) {
+      const periods = QuotaDisplay.periods(c,model);
+      node.dataset.readings = String(periods.length);
+      for (const period of periods) {
         const line = document.createElement('span'), label = document.createElement('small'), value = document.createElement('strong');
-        line.dataset.period = period; label.className = 'quota-preview-period'; label.textContent = period === 'fiveHour' ? '5h' : '周';
-        if(colors[index])line.style.setProperty('--quota-dot','rgb('+colors[index].base.join(',')+')');
-        value.textContent = v[period] === null ? '—' : Math.round(v[period]) + '%'; line.append(label, value); node.append(line);
+        label.className = 'summary-badge'; label.textContent = period === 'fiveHour' ? '5h' : '周';
+        value.className = 'summary-value'; value.textContent = v[period] === null ? '—' : Math.round(v[period]) + '%';
+        if (periods.length === 1) {
+          const title = document.createElement('span'), caption = document.createElement('span');
+          title.className = 'summary-period'; caption.className = 'summary-period-label'; caption.textContent = '额度';
+          title.append(label, caption); line.append(title, value);
+        } else line.append(label, value);
+        node.append(line);
       }
     }
     function refresh() {
@@ -53,7 +58,8 @@
       document.querySelectorAll('[data-quota-material]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.quotaMaterial === config.material)));
       $('quota-description').textContent = appearance.shape === 'codex-pet' ? 'Codex 宠物使用经典额度卡，已选样式会在切回球球后恢复。'
         : config.style === 'duo' ? '同时有 5 小时和周额度时显示双环，内环 5 小时、外环本周；仅一个周期时自动显示单环。'
-        : ['split','stages'].includes(config.style) ? '左侧代表 5 小时，右侧代表本周；仅一个周期时自动显示单环。' : styles.find(s=>s[0]===config.style)[2]+'。';
+        : config.style === 'stages' ? '双额度左右各五段；单额度整圈五段，每段代表 20%。'
+        : config.style === 'split' ? '双额度左侧为 5 小时、右侧为本周；单额度使用整圈。' : styles.find(s=>s[0]===config.style)[2]+'。';
       $('quota-preview-state').hidden = source === 'demo';
       $('quota-preview-state').textContent = source === 'demo' ? '' : '当前额度 · ' + (Object.values(v).some(x=>x!==null) ? '已连接' : '暂未返回可用额度');
       for (const period of ['fiveHour','weekly']) {
@@ -66,15 +72,35 @@
       $('quota-demo-note').hidden = source !== 'demo';
       $('quota-demo-note').textContent = motion.matches ? '减少动态已开启，可拖动滑杆预览额度' : '演示额度仅供预览，保存后应用样式';
     }
-    function renderThumbnails() {
-      thumbs.splice(0).forEach(t=>{t.effect?.destroy();t.avatar?.destroy();});
-      for (const button of $('quota-styles').children) {
-        const host=button.querySelector('.quota-thumb'), art=host.querySelector('.quota-thumb-body'); art.replaceChildren();
-        const avatar=window.PetChatAvatar.create(art);
-        avatar.setActive(false);avatar.update(getAppearance());
-        const e=window.QuotaEffects?.create(art); e?.update({appearance:getAppearance(),config:{...config,style:button.dataset.style},quotas:{fiveHour:74,weekly:38},theme:document.documentElement.dataset.theme==='dark'?'dark':'light',reducedMotion:true,visible:true});
-        thumbs.push({avatar,effect:e});
+    function freezeThumbnails() {
+      thumbFrame = 0;
+      if (disposed || !shown || document.hidden) return;
+      let pending = false;
+      for (const thumb of thumbs) {
+        if (thumb.readyFrames >= 2) continue;
+        if (thumb.art.dataset.avatarEngine !== 'rive' || thumb.art.dataset.avatarReady === 'true') thumb.readyFrames++;
+        if (thumb.readyFrames >= 2) thumb.avatar.setActive(false);
+        else pending = true;
       }
+      if (pending) thumbFrame = requestAnimationFrame(freezeThumbnails);
+    }
+    function renderThumbnails() {
+      if (!shown || document.hidden || disposed) return;
+      const appearance = getAppearance(), key = JSON.stringify(appearance);
+      for (const [index,button] of [...$('quota-styles').children].entries()) {
+        const art = button.querySelector('.quota-thumb-body');
+        let thumb = thumbs[index];
+        if (!thumb) {
+          const avatar = window.PetChatAvatar.create(art);
+          thumb = thumbs[index] = { art, avatar, effect: window.QuotaEffects?.create(art), readyFrames: 0 };
+        }
+        if (thumb.key !== key) {
+          thumb.readyFrames = 0; thumb.avatar.setActive(true); thumb.avatar.update(appearance); thumb.key = key;
+        }
+        if (thumb.readyFrames < 2) thumb.avatar.setActive(true);
+        thumb.effect?.update({appearance,config:{...config,style:button.dataset.style},quotas:{fiveHour:74,weekly:38},theme:document.documentElement.dataset.theme==='dark'?'dark':'light',reducedMotion:true,visible:true});
+      }
+      if (!thumbFrame) thumbFrame = requestAnimationFrame(freezeThumbnails);
     }
     for (const [id,name,description] of styles) {
       const button=document.createElement('button');button.type='button';button.className='quota-style';button.dataset.style=id;
@@ -98,14 +124,14 @@
     document.querySelectorAll('[data-quota-source]').forEach(b=>b.addEventListener('click',()=>{source=b.dataset.quotaSource;stop();document.querySelectorAll('[data-quota-source]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));refresh();}));
     const unsubscribe=bridge.onQuota?.(model=>{currentModel=model;current=QuotaDisplay.values(model);if(source==='current')refresh();});
     const reduce=()=>{if(motion.matches)stop();refresh();}; motion.addEventListener('change',reduce);
-    const visibility=()=>{if(document.hidden)stop();refresh();};document.addEventListener('visibilitychange',visibility);
+    const visibility=()=>{if(document.hidden){stop();cancelAnimationFrame(thumbFrame);thumbFrame=0;thumbs.forEach(t=>t.avatar.setActive(false));}refresh();renderThumbnails();};document.addEventListener('visibilitychange',visibility);
     return {
       getConfig:()=>QuotaDisplay.normalize({...config,period:'both'}),
       load(value,model){config=QuotaDisplay.normalize(value);currentModel=model;current=QuotaDisplay.values(model);refresh();renderThumbnails();},
       refresh,
       appearanceChanged(){refresh();renderThumbnails();},
-      show(value){shown=value;$('quota-demo-tools').hidden=!value;if(!value)stop();refresh();},
-      destroy(){disposed=true;stop();unsubscribe?.();motion.removeEventListener('change',reduce);document.removeEventListener('visibilitychange',visibility);effect?.destroy();thumbs.forEach(t=>{t.effect?.destroy();t.avatar?.destroy();});}
+      show(value){shown=value;$('quota-demo-tools').hidden=!value;if(!value){stop();cancelAnimationFrame(thumbFrame);thumbFrame=0;thumbs.forEach(t=>t.avatar.setActive(false));}refresh();renderThumbnails();},
+      destroy(){disposed=true;stop();cancelAnimationFrame(thumbFrame);unsubscribe?.();motion.removeEventListener('change',reduce);document.removeEventListener('visibilitychange',visibility);effect?.destroy();thumbs.forEach(t=>{t.effect?.destroy();t.avatar?.destroy();});}
     };
   }};
 })();

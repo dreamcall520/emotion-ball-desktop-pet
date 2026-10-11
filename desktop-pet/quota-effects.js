@@ -30,10 +30,10 @@
     let style = ['card','pool','ring','duo','split','stages'].includes(config.style) ? config.style : 'card';
     const values = { fiveHour: quota(quotas.fiveHour), weekly: quota(quotas.weekly) };
     const count = Object.values(values).filter(value => value !== null).length;
-    if (count < 2 && ['duo','split','stages'].includes(style)) style = 'ring';
+    if (count < 2 && style === 'duo') style = 'ring';
     return { style, material: config.material === 'glass' ? 'glass' : 'soft',
       period: values.fiveHour !== null ? 'fiveHour' : 'weekly', values,
-      available: count > 0,
+      available: count > 0, dual: count === 2,
       palette: palette(input.appearance), dark: input.theme === 'dark', still: Boolean(input.reducedMotion),
       visible: input.visible !== false && input.appearance?.shape !== 'codex-pet' };
   }
@@ -396,14 +396,19 @@ function drawSplitHalf(ctx,mode,value,t,palette,dark,still,left,orb){
 
 function stageAngles(group,left,mode){
  const gap=mode==='halo'?3.8:5.2,sign=left?1:-1,deg=Math.PI/180;
+ if(left===null)return [-Math.PI/2+(group*72+gap/2)*deg,-Math.PI/2+((group+1)*72-gap/2)*deg];
  return [Math.PI/2+sign*(group*36+(group===0?6:gap/2))*deg,Math.PI/2+sign*((group+1)*36-(group===4?6:gap/2))*deg];
 }
 function drawStageHalf(ctx,mode,value,t,palette,dark,still,left){
  const stages=quotaStages(value),s=still?0:t,rgba=(rgb,a)=>'rgba('+rgb.map(Math.round).join(',')+','+a+')';
- ctx.save();ctx.globalAlpha=.42;drawSplitHalf(ctx,mode,0,s,palette,dark,true,left,null);ctx.restore();
- ctx.save();ctx.beginPath();ctx.rect(left?0:170,0,170,340);ctx.clip();ctx.lineCap='round';
+ ctx.save();ctx.globalAlpha=.42;
+ if(left===null)drawDualTrack(ctx,mode,0,s,palette,dark,true,139,null,false);
+ else drawSplitHalf(ctx,mode,0,s,palette,dark,true,left,null);
+ ctx.restore();ctx.save();
+ if(left!==null){ctx.beginPath();ctx.rect(left?0:170,0,170,340);ctx.clip();}
+ ctx.lineCap='round';
  const width=mode==='halo'?Math.max(3.2,pixelWidth(1.55)):Math.max(6,pixelWidth(1.9));
- const stroke=(radius,w,color,start,end)=>{ctx.beginPath();ctx.arc(170,170,radius,start,end,!left);ctx.lineWidth=w;ctx.strokeStyle=color;ctx.stroke();};
+ const stroke=(radius,w,color,start,end)=>{ctx.beginPath();ctx.arc(170,170,radius,start,end,left===false);ctx.lineWidth=w;ctx.strokeStyle=color;ctx.stroke();};
  for(let group=0;group<5;group++){
   const [start,end]=stageAngles(group,left,mode),fraction=stages?.[group]||0;
   stroke(139,width,dark?'rgba(159,179,198,.28)':'rgba(127,150,170,.30)',start,end);
@@ -484,7 +489,8 @@ function drawStageDividers(ctx,dark){
           radius = Math.max(...points.map(p => Math.hypot(p.x - cx, p.y - cy)));
         }
       }
-      const outer = current.style === 'duo' ? 163 : current.material === 'glass' ? 158 : current.style === 'ring' ? 168 : 153;
+      const singleRing=current.style==='ring'||current.style==='split'&&!current.dual;
+      const outer = current.style === 'duo' ? 163 : current.material === 'glass' ? 158 : singleRing ? 168 : 153;
       const room = Math.max(0, Math.min(cx, cy, bounds.width - cx, bounds.height - cy) * .97);
       const factor = radius > 0 ? Math.min(1, room * 125 / (outer * radius)) : 1;
       if (factor < 1) {
@@ -592,16 +598,40 @@ function drawStageDividers(ctx,dark){
       if (rawCanvas !== source) {
         restorePool(); rawCanvas=source; rawOpacity=source.style.opacity;
       }
-      const bounds=host.getBoundingClientRect(), scale=SIZE/Math.max(1,bounds.width);
       const style=root.getComputedStyle(source), width=source.clientWidth, height=source.clientHeight;
       const origin=style.transformOrigin.split(' ').map(parseFloat);
-      sampleContext.clearRect(0,0,SIZE,SIZE); sampleContext.save(); sampleContext.scale(scale,scale);
-      sampleContext.translate(source.offsetLeft+origin[0],source.offsetTop+origin[1]);
-      if(style.transform!=='none'){
-        const transform=new root.DOMMatrix(style.transform);
-        sampleContext.transform(transform.a,transform.b,transform.c,transform.d,transform.e,transform.f);
+      const matrix=new root.DOMMatrix().translate(source.offsetLeft+origin[0],source.offsetTop+origin[1]);
+      if(style.scale&&style.scale!=='none'){
+        const scale=style.scale.split(' ').map(Number);matrix.scaleSelf(scale[0],scale[1]??scale[0]);
       }
-      sampleContext.drawImage(source,-origin[0],-origin[1],width,height); sampleContext.restore();
+      if(style.transform!=='none'){
+        matrix.multiplySelf(new root.DOMMatrix(style.transform));
+      }
+      matrix.translateSelf(-origin[0],-origin[1]);
+      const corners=[[0,0],[width,0],[0,height],[width,height]].map(([x,y])=>matrix.transformPoint({x,y}));
+      const left=Math.min(...corners.map(p=>p.x)),right=Math.max(...corners.map(p=>p.x));
+      const top=Math.min(...corners.map(p=>p.y)),bottom=Math.max(...corners.map(p=>p.y)),side=Math.max(right-left,bottom-top);
+      const full={x:(left+right-side)/2,y:(top+bottom-side)/2,width:side};
+      const capture=box=>{
+        sampleContext.clearRect(0,0,SIZE,SIZE);sampleContext.save();
+        const scale=SIZE/box.width;sampleContext.scale(scale,scale);sampleContext.translate(-box.x,-box.y);
+        sampleContext.transform(matrix.a,matrix.b,matrix.c,matrix.d,matrix.e,matrix.f);
+        sampleContext.drawImage(source,0,0,width,height);sampleContext.restore();
+      };
+      // The native large preview overflows its host. First locate its whole painted footprint,
+      // then resample that footprint at full resolution instead of clipping at the host edges.
+      if(!(side>0)){source.style.opacity=rawOpacity;ctx.clearRect(0,0,SIZE,SIZE);return false;}
+      capture(full);
+      const footprint=sampleContext.getImageData(0,0,SIZE,SIZE).data;
+      let minX=SIZE,minY=SIZE,maxX=-1,maxY=-1;
+      for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++)if(footprint[(y*SIZE+x)*4+3]){
+        minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);
+      }
+      if(maxX<0){source.style.opacity=rawOpacity;ctx.clearRect(0,0,SIZE,SIZE);return false;}
+      const paintedSide=Math.max(maxX-minX+1,maxY-minY+1)*side/SIZE,padding=Math.max(1,paintedSide*.025);
+      const box={x:full.x+(minX+maxX+1)*side/SIZE/2-paintedSide/2-padding,
+        y:full.y+(minY+maxY+1)*side/SIZE/2-paintedSide/2-padding,width:paintedSide+2*padding};
+      capture(box);
       const image=sampleContext.getImageData(0,0,SIZE,SIZE), eyePixels=eyeContext.createImageData(SIZE,SIZE), rows=new Float64Array(SIZE);
       let total=0;
       // Match the native Rive eye filter: only almost-white pixels are eye ink.
@@ -612,7 +642,7 @@ function drawStageDividers(ctx,dark){
           for(let component=0;component<4;component++)eyePixels.data[i+component]=image.data[i+component];
         }
       }
-      if(total===0)return false;
+      if(total===0){source.style.opacity=rawOpacity;ctx.clearRect(0,0,SIZE,SIZE);return false;}
       source.style.opacity='0';
       eyeContext.putImageData(eyePixels,0,0);
       let y=SIZE, sum=0, target=total*q;
@@ -632,7 +662,7 @@ function drawStageDividers(ctx,dark){
         wetContext.globalCompositeOperation='destination-in';wetContext.drawImage(sample,0,0);wetContext.globalCompositeOperation='source-over';ctx.drawImage(wet,0,0);
       }
       ctx.drawImage(eyes,0,0);
-      Object.assign(canvas.style,{left:'0px',top:'0px',width:bounds.width+'px',height:bounds.width+'px',filter:source.style.filter||'none',opacity:rawOpacity||'1'});
+      Object.assign(canvas.style,{left:box.x+'px',top:box.y+'px',width:box.width+'px',height:box.width+'px',filter:source.style.filter||'none',opacity:rawOpacity||'1'});
       canvas.dataset.liquidY=String(y);canvas.dataset.liquidSurfaces='1';
       return true;
     }
@@ -640,7 +670,7 @@ function drawStageDividers(ctx,dark){
       const mode=current.material==='glass'?'reference':'halo',values=current.values,dark=current.dark,still=current.still;
       if(!orb&&mode==='halo')try{orb=createColorRing(SIZE);}catch(_){/* Canvas-only fallback keeps quota readable. */}
       const usableMode=mode==='halo'&&!orb?'reference':mode;
-      if(current.style==='ring'){
+      if(current.style==='ring'||current.style==='split'&&!current.dual){
         if(usableMode==='reference')drawReferenceRing(ctx,(values[current.period]||0)/100,t,current.palette,dark,still);
         else{
           const q=(values[current.period]||0)/100,neutral=dark?'157,172,187':'142,156,170';
@@ -661,6 +691,9 @@ function drawStageDividers(ctx,dark){
           for(const [at,alpha] of [[0,0],[.39,0],[.44,.38],[.49,0],[.81,0],[.85,.9],[.86,1],[.87,.9],[.92,0],[1,0]])reflection.addColorStop(at,'rgba(239,250,255,'+alpha+')');
           ctx.beginPath();ctx.arc(CENTER,CENTER,139.1,0,TAU);ctx.lineWidth=Math.max(1.25,pixelWidth(.3));ctx.strokeStyle=reflection;ctx.stroke();
         }
+      }else if(current.style==='stages'&&!current.dual){
+        if(usableMode==='reference')drawSplitShell(ctx,dark);
+        drawStageHalf(ctx,usableMode,values[current.period],t,current.palette,dark,still,null);
       }else{
         if(usableMode==='reference')current.style==='duo'?drawDualShell(ctx,dark):drawSplitShell(ctx,dark);
         const colors=dualPalettes(current.palette);

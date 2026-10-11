@@ -29,8 +29,10 @@
   cancel.addEventListener('click', () => { void answer(false); });
   accept.addEventListener('click', () => { void answer(true); });
   document.addEventListener('keydown', event => {
+    if (event.key === 'Tab') document.documentElement.dataset.consentKeyboard = 'true';
     if (event.key === 'Escape') { event.preventDefault(); void answer(false); }
   });
+  document.addEventListener('pointerdown', () => { delete document.documentElement.dataset.consentKeyboard; });
   document.addEventListener('visibilitychange', refresh);
   motion?.addEventListener('change', refresh);
   const unsubscribe = bridge?.onInfo(receive);

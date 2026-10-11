@@ -96,6 +96,51 @@ window.checkEffects=async()=>{
       const resizeRestored=effect.canvas.isConnected&&parseFloat(effect.canvas.style.width)>0;
       report.push({shape:appearance.shape,hiddenMode,material,hiddenStyle:style,hiddenInit,resizeRestored});
     }
+  for(const {host,appearance,effect} of results)for(const size of [80,260])for(const material of ['soft','glass'])
+    for(const singlePeriod of ['fiveHour','weekly'])for(const style of ['duo','split','stages']){
+      host.style.width=host.style.height=size+'px';
+      const input={appearance,quotas:{fiveHour:null,weekly:null,[singlePeriod]:88},config:{style,material},reducedMotion:true};
+      effect.update(input);
+      const singleVisible=effect.canvas.isConnected&&effect.canvas.dataset.style===(style==='duo'?'ring':style);
+      let fiveSegments=true,stageFraction=true,zeroIsGrey=true,stageCount=null;
+      if(style==='stages'){
+        const occupancy=value=>{
+          effect.update({...input,quotas:{...input.quotas,[singlePeriod]:value}});
+          const data=effect.canvas.getContext('2d').getImageData(0,0,340,340).data;
+          let chromatic=false;
+          const pixels=Array.from({length:720},(_,i)=>{
+            const angle=-Math.PI/2+i*Math.PI/360,x=Math.round(170+139*Math.cos(angle)),y=Math.round(170+139*Math.sin(angle));
+            const pixel=(y*340+x)*4,rgb=[data[pixel],data[pixel+1],data[pixel+2]];
+            if(data[pixel+3]>128&&Math.max(...rgb)-Math.min(...rgb)>45)chromatic=true;
+            return data[pixel+3]>128;
+          });
+          return {pixels,chromatic};
+        };
+        const full=occupancy(100),partial=occupancy(88),empty=occupancy(0);
+        stageCount=full.pixels.filter((lit,i)=>lit&&!full.pixels[(i+719)%720]).length;
+        fiveSegments=stageCount===5;
+        const ratio=partial.pixels.filter(Boolean).length/full.pixels.filter(Boolean).length;
+        stageFraction=Math.abs(ratio-.88)<.04;
+        zeroIsGrey=!empty.chromatic;
+      }
+      report.push({shape:appearance.shape,size,material,singlePeriod,singleStyle:style,singleVisible,fiveSegments,stageFraction,zeroIsGrey,stageCount});
+    }
+  for(const {host,appearance,effect,rive} of results.filter(entry=>entry.rive)){
+    effect.update({appearance,config:{style:'card'}});host.style.width=host.style.height='260px';
+    const source=host.querySelector('.eb-rive-aurora.ready'),css=source.style.cssText;
+    for(const pose of ['none','rotate(-12deg)','scaleX(-1) rotate(-12deg)']){
+      Object.assign(source.style,{width:'210%',height:'210%',left:'-55%',top:'-55%',transform:pose});
+      effect.update({appearance,quotas:{fiveHour:null,weekly:88},config:{style:'pool'},reducedMotion:true});
+      const data=effect.canvas.getContext('2d').getImageData(0,0,340,340).data;
+      let leftEdge=0,rightEdge=0,painted=0;
+      for(let y=0;y<340;y++)for(let x=0;x<340;x++)if(data[(y*340+x)*4+3]){
+        painted++;if(x===0)leftEdge++;if(x===339)rightEdge++;
+      }
+      report.push({shape:appearance.shape,poolPose:pose,completeFootprint:painted>1000&&leftEdge===0&&rightEdge===0,
+        nativeEyes:source.style.opacity==='0'&&effect.canvas.style.filter===source.style.filter});
+    }
+    effect.update({appearance,config:{style:'card'}});source.style.cssText=css;
+  }
   for(const {appearance,effect,original,host} of results){
     effect.update({appearance,quotas:{fiveHour:0,weekly:0},config:{style:'duo'},reducedMotion:true});
     const zero=effect.canvas.isConnected&&effect.canvas.dataset.quotaAvailable==='true';
@@ -127,6 +172,8 @@ app.whenReady().then(async () => {
         assert.ok(result.bodyScale > 0 && result.bodyScale <= 1, JSON.stringify(result));
         if(result.smallRingAlpha!==null)assert.ok(result.smallRingAlpha>=.65, JSON.stringify(result));
       } else if('hiddenMode' in result)assert.ok(result.hiddenInit&&result.resizeRestored,JSON.stringify(result));
+      else if('singlePeriod' in result)assert.ok(result.singleVisible&&result.fiveSegments&&result.stageFraction&&result.zeroIsGrey,JSON.stringify(result));
+      else if('poolPose' in result)assert.ok(result.completeFootprint&&result.nativeEyes,JSON.stringify(result));
       else assert.ok(result.zero && result.fallback && result.missing && result.weeklyOnly && result.unknown && result.restored, JSON.stringify(result));
     }
     console.log('QUOTA_EFFECTS_NATIVE_OK: ' + report.length + ' SVG/Rive material, size and missing/zero checks');

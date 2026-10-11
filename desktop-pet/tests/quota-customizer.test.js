@@ -31,31 +31,39 @@ test('额度预览跟随实际周期，零与未知分开，双样式保存选�
       return selector === '[data-quota-material]' ? materials : selector === '[data-quota-source]' ? sources
         : presets.filter(preset => selector === `[data-demo-period="${preset.dataset.demoPeriod}"]`);
     } };
-  let receive, effectInput, reduce;
+  let receive, effectInput, reduce, avatars = 0, avatarDestroys = 0;
   const motion = { matches: false, addEventListener(_name, callback) { reduce = callback; }, removeEventListener() {} };
   const window = { matchMedia: () => motion,
-    PetChatAvatar: { create: () => ({ update() {}, setActive() {}, destroy() {} }) },
+    PetChatAvatar: { create: () => { avatars++; return { update() {}, setActive() {}, destroy() { avatarDestroys++; } }; } },
     QuotaEffects: { ...require('../quota-effects'), create: host => ({ update(input) { if (host === get('preview-ball')) effectInput = input; }, destroy() {} }) } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../quota-customizer.js'), 'utf8'), {
-    window, document, QuotaDisplay: require('../lib/quota-display'), clearInterval() {}, setInterval() {}, performance: { now: () => 0 }
+    window, document, requestAnimationFrame: () => 1, cancelAnimationFrame() {}, QuotaDisplay: require('../lib/quota-display'), clearInterval() {}, setInterval() {}, performance: { now: () => 0 }
   });
   const ui = window.QuotaCustomizer.create({ bridge: { onQuota(callback) { receive = callback; return () => {}; } },
     getAppearance: () => ({ shape: 'blob', bodyColor: '#EEEBE4' }) });
   const weekly = { state: 'ready', items: [{ windowMinutes: 10080, remaining: 38 }] };
-  ui.load({ style: 'ring', showNumbers: true, period: 'fiveHour' }, weekly); ui.show(true); sources[1].click();
+  ui.load({ style: 'ring', showNumbers: true, period: 'fiveHour' }, weekly);
+  assert.equal(avatars, 0, '隐藏标签不初始化零尺寸 Rive');
+  ui.show(true); sources[1].click();
+  assert.equal(avatars, 6);
+  for (const button of get('quota-styles').children) button.click();
+  materials[1].click();
+  assert.equal(avatars, 6, '切换样式和材质复用已绘制形象，不能重建留下空白');
+  assert.equal(avatarDestroys, 0);
+  get('quota-styles').children.find(button => button.dataset.style === 'ring').click();
   const numbers = get('stage').querySelector('.quota-preview-numbers');
-  assert.equal(numbers.textContent, '周38%'); assert.equal(effectInput.config.period, 'weekly');
+  assert.equal(numbers.textContent, '周额度38%'); assert.equal(effectInput.config.period, 'weekly');
   assert.equal(ui.getConfig().period, 'both', '保存时不继续携带已删除的手选周期');
   assert.equal(numbers.classList.contains('quota-preview-card'), true);
-  assert.equal(numbers.children[0].children[0].className, 'quota-preview-period');
+  assert.equal(numbers.children[0].children[0].children[0].className, 'summary-badge');
   receive({ state: 'ready', items: [{ windowMinutes: 300, remaining: 0 }, ...weekly.items] });
-  assert.equal(numbers.textContent, '5h0%'); assert.equal(effectInput.config.period, 'fiveHour');
+  assert.equal(numbers.textContent, '5h额度0%'); assert.equal(effectInput.config.period, 'fiveHour');
   ui.load({ style: 'duo', showNumbers: true }, weekly);
-  assert.equal(numbers.textContent, '周38%'); assert.equal(ui.getConfig().style, 'duo');
-  receive({ ...weekly, state: 'stale' }); assert.equal(numbers.textContent, '周—');
+  assert.equal(numbers.textContent, '周额度38%'); assert.equal(ui.getConfig().style, 'duo');
+  receive({ ...weekly, state: 'stale' }); assert.equal(numbers.textContent, '周额度—');
   sources[0].click(); assert.equal(numbers.textContent, '5h74%周38%');
   presets.find(preset => preset.dataset.demoPeriod === 'fiveHour' && preset.dataset.demoValue === 'unknown').click();
-  assert.equal(numbers.textContent, '周38%');
+  assert.equal(numbers.textContent, '周额度38%');
   assert.equal(get('quota-preview-state').hidden, true);
   assert.equal(get('quota-demo-note').textContent, '演示额度仅供预览，保存后应用样式');
   assert.equal(ids.has('quota-period'), false, '预览不再读取或注册周期下拉');

@@ -344,28 +344,34 @@
     });
     return button;
   }
+  function compactReading(minutes, text, caption) {
+    const period = node('span', 'summary-period');
+    period.replaceChildren(node('span', 'summary-badge', periodBadgeText(minutes)),
+      node('span', 'summary-period-label', caption));
+    return [period, node('span', 'summary-value', text)];
+  }
   function renderNumbers(model) {
     if (!quotaNumbers?.replaceChildren) return;
-    const palette = window.QuotaEffects?.palette(model.numberColors);
-    const colors = palette ? model.numberPeriods.length === 2
-      ? window.QuotaEffects.dualPalettes(palette) : [palette] : [];
-    const readings = model.numberPeriods.map((period, index) => {
+    const periods = model.items.length ? model.numberPeriods.filter(period =>
+      model.items.some(item => item.windowMinutes === (period === 'weekly' ? 10080 : 300))) : model.numberPeriods;
+    const single = periods.length === 1;
+    label.dataset.readings = String(periods.length);
+    const readings = periods.map(period => {
       const minutes = period === 'weekly' ? 10080 : 300;
       const item = model.state === 'ready' ? model.items.find(item => item.windowMinutes === minutes) : null;
       const text = item ? `${Math.round(item.remaining)}%` : '—';
       const button = detailButton('', 'trend', minutes, 'quota-reading');
-      const badge = node('span', 'quota-reading-period period-pill', periodBadgeText(minutes));
-      const dot = node('i', 'quota-reading-dot');
-      dot.setAttribute?.('aria-hidden', 'true');
-      if (colors[index] && dot.style) dot.style.backgroundColor = `rgb(${colors[index].base.join(',')})`;
-      const value = node('strong', 'quota-reading-value', text);
       button.setAttribute?.('aria-label', `${periodTypeText(minutes)}${item ? `剩余 ${text}` : '额度暂不可用'}，查看详情`);
       button.title = model.state === 'stale' ? '额度已过期，等待更新' : `查看${periodTypeText(minutes)}详情`;
-      button.replaceChildren(dot, badge, value);
+      if (single) {
+        const [periodNode, valueNode] = compactReading(minutes, text, item ? severityText(item.remaining) || '额度' : '额度');
+        valueNode.className += ' quota-reading-value';
+        button.replaceChildren(periodNode, valueNode);
+      } else button.replaceChildren(node('span', 'summary-badge', periodBadgeText(minutes)),
+        node('strong', 'summary-value quota-reading-value', text));
       return button;
     });
-    quotaNumbers.replaceChildren(...readings.flatMap((reading, index) => index
-      ? [node('span', 'quota-reading-separator', '·'), reading] : [reading]));
+    quotaNumbers.replaceChildren(...readings);
   }
   function renderExpanded(model) {
     if (!expandedCard?.replaceChildren) return;
@@ -529,19 +535,8 @@
       if (summary.dataset) summary.dataset.severity = label.dataset.status === 'blocked' ? 'urgent'
         : summaryItem ? severityOf(summaryItem.remaining) : 'normal';
       if (summaryItem) {
-        const periodNode = document.createElement('span');
-        const badgeNode = document.createElement('span');
-        const periodLabelNode = document.createElement('span');
-        const valueNode = document.createElement('span');
-        periodNode.className = 'summary-period';
-        badgeNode.className = 'summary-badge';
-        badgeNode.textContent = periodBadgeText(summaryItem.windowMinutes);
-        periodLabelNode.className = 'summary-period-label';
-        periodLabelNode.textContent = label.dataset.status === 'blocked' ? '受限' : severityText(summaryItem.remaining) || '额度';
-        periodNode.replaceChildren(badgeNode, periodLabelNode);
-        valueNode.className = 'summary-value';
-        valueNode.textContent = `${Math.round(summaryItem.remaining)}%`;
-        summary.replaceChildren(periodNode, valueNode);
+        summary.replaceChildren(...compactReading(summaryItem.windowMinutes, `${Math.round(summaryItem.remaining)}%`,
+          label.dataset.status === 'blocked' ? '受限' : severityText(summaryItem.remaining) || '额度'));
         if (compactProduct) compactProduct.textContent = 'CODEX';
         if (compactPeriod) compactPeriod.textContent = periodTypeText(summaryItem.windowMinutes);
       } else {

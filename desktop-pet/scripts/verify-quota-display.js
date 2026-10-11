@@ -7,7 +7,7 @@ async function verifyQuotaDisplay({ pet, open, settingsFile, sendModel, about, s
   const out = process.env.PET_QUOTA_VERIFY_OUTPUT;
   if (out) fs.mkdirSync(out, { recursive: true });
   const capture = async (win, name) => {
-    await win.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+    await win.webContents.executeJavaScript('new Promise(resolve => { setTimeout(resolve, 150); requestAnimationFrame(() => requestAnimationFrame(resolve)); })');
     fs.writeFileSync(path.join(out, name), (await win.webContents.capturePage()).toPNG());
   };
   let editor = open(); const errors=[];
@@ -44,7 +44,7 @@ async function verifyQuotaDisplay({ pet, open, settingsFile, sendModel, about, s
   const weeklyWindow = {id:'codex:secondary',label:'Codex',windowMinutes:10080,remaining:90,resetsAt:Date.now()+86400000};
   let desktopLabel = previewSavedQuota([weeklyWindow]);
   await until(()=>desktopLabel.webContents.executeJavaScript('document.querySelectorAll(".quota-reading-value").length===1'));
-  assert.equal(await desktopLabel.webContents.executeJavaScript('document.getElementById("quota-numbers").textContent'),'周90%');
+  assert.equal(await desktopLabel.webContents.executeJavaScript('document.getElementById("quota-numbers").textContent'),'周额度90%');
   await until(()=>pet.webContents.executeJavaScript('document.querySelector(".quota-effects")?.dataset.style==="ring"'));
   if(out)await capture(desktopLabel, 'saved-weekly-only.png');
   previewSavedQuota([{id:'codex:primary',label:'Codex',windowMinutes:300,remaining:0,resetsAt:Date.now()+3600000},weeklyWindow]);
@@ -68,9 +68,9 @@ async function verifyQuotaDisplay({ pet, open, settingsFile, sendModel, about, s
     if(out&&width===760)await capture(editor, 'settings-small.png');
   }
   for(const state of ['ready','stale']){
-    const label=showNumbers({state,items:[{label:'Codex',windowMinutes:300,remaining:0}],display:'numbers',numberPeriods:['fiveHour','weekly'],numberColors:saved.customization.appearance});
+    const label=showNumbers({state,items:[{label:'Codex',windowMinutes:300,remaining:0},{label:'Codex',windowMinutes:10080,remaining:38}],display:'numbers',numberPeriods:['fiveHour','weekly'],numberColors:saved.customization.appearance});
     await until(()=>label.webContents.executeJavaScript('document.querySelectorAll(".quota-reading-value").length===2'));
-    assert.deepEqual(await label.webContents.executeJavaScript('[...document.querySelectorAll(".quota-reading-value")].map(n=>n.textContent)'),state==='ready'?['0%','—']:['—','—']);
+    assert.deepEqual(await label.webContents.executeJavaScript('[...document.querySelectorAll(".quota-reading-value")].map(n=>n.textContent)'),state==='ready'?['0%','38%']:['—','—']);
     assert.equal(label.getBounds().height,32);
     const material=await label.webContents.executeJavaScript(`(()=>{const s=getComputedStyle(document.getElementById('quota-label'));return {background:s.backgroundImage,border:s.borderTopWidth,filter:s.backdropFilter};})()`);
     assert.ok(material.background.includes('gradient')&&material.border==='1px'&&material.filter.includes('blur'),'数字复用原额度卡材质与边框');
@@ -83,6 +83,21 @@ async function verifyQuotaDisplay({ pet, open, settingsFile, sendModel, about, s
     if(out)await capture(pet, 'desktop-'+style+'.png');
   }
   if(out){await wait(2000);await js(`document.querySelector('button[data-style="stages"]').click();true`);await wait(160);await capture(editor, 'settings-quota.png');await js(`document.getElementById('source-ball').click();true`);await wait(160);assert.equal(await js('document.querySelector(".quota-preview-numbers").hidden'),true);await capture(editor, 'settings-appearance.png');}
+  // Rive thumbnails must survive style/material changes without restarting the shape renderer.
+  await js(`document.getElementById('source-ball').click();document.querySelector('button[data-shape="aurora-cloud"]').click();document.getElementById('source-quota').click();true`);
+  await until(()=>js(`[...document.querySelectorAll('.quota-thumb-body')].every(n=>n.dataset.avatarReady==='true'&&n.querySelector('.eb-rive-aurora.ready'))`));
+  await js(`window.__quotaThumbCanvases=[...document.querySelectorAll('.quota-thumb-body')].map(n=>n.querySelector('.eb-rive-aurora'));true`);
+  for(const style of ['pool','ring','duo','split','stages','ring']) {
+    await js(`document.querySelector('button[data-style="${style}"]').click();true`);
+    assert.equal(await js(`[...document.querySelectorAll('.quota-thumb-body')].every((n,i)=>n.dataset.avatarReady==='true'&&n.querySelector('.eb-rive-aurora')===window.__quotaThumbCanvases[i])`),true,'幻彩缩略图切换不得重建留白');
+  }
+  for(const mode of ['large','desktop','large']) {
+    await js(`document.getElementById('preview-${mode}').click();document.querySelector('button[data-style="pool"]').click();true`);
+    await until(()=>js(`Boolean(document.querySelector('#preview-ball > .eb-rive-aurora.ready'))`));
+    await wait(200);
+    if(out)await capture(editor, 'settings-aurora-pool-'+mode+'.png');
+  }
+  if(out)await capture(editor, 'settings-aurora-thumbnails.png');
   const win=about();await until(()=>win.webContents.executeJavaScript('Boolean(window.qiuqiuAbout)'));
   assert.equal((await win.webContents.executeJavaScript('window.qiuqiuAbout.getInfo()')).developer,'春野');
   await until(()=>win.isVisible());

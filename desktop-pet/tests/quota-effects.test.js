@@ -16,13 +16,18 @@ test('quota effects automatically use present quotas and keep zero distinct from
   assert.equal(effects.model({ config, quotas: { fiveHour: 0, weekly: 94 } }).period, 'fiveHour');
   const weeklyOnly = effects.model({ config, quotas: { fiveHour: null, weekly: 0 } });
   assert.equal(weeklyOnly.period, 'weekly');
-  assert.equal(weeklyOnly.style, 'ring');
+  assert.equal(weeklyOnly.style, 'split');
+  assert.equal(weeklyOnly.dual, false);
   assert.equal(weeklyOnly.available, true);
   assert.equal(config.style, 'split');
   assert.equal(effects.model({ config, quotas: { fiveHour: 74, weekly: 94 } }).style, 'split');
   for (const style of ['duo','split','stages']) {
-    assert.equal(effects.model({ config: { style }, quotas: { fiveHour: null, weekly: 38 } }).style, 'ring');
-    assert.equal(effects.model({ config: { style }, quotas: { fiveHour: 74, weekly: 38 } }).style, style);
+    const single=effects.model({ config: { style }, quotas: { fiveHour: null, weekly: 38 } });
+    assert.equal(single.style, style === 'duo' ? 'ring' : style);
+    assert.equal(single.dual, false);
+    const pair=effects.model({ config: { style }, quotas: { fiveHour: 74, weekly: 38 } });
+    assert.equal(pair.style, style);
+    assert.equal(pair.dual, true);
   }
 });
 

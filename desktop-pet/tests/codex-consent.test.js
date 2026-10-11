@@ -28,6 +28,7 @@ function fixture({ reduced = false, hidden = false, answer = async () => true } 
   return { node, calls, portraits, active, document, receive: value => receive(value),
     click: id => node(id).listeners.get('click')(),
     key(key) { let prevented = false; documentEvents.get('keydown')({ key, preventDefault() { prevented = true; } }); return prevented; },
+    pointer() { documentEvents.get('pointerdown')(); },
     visibility(value) { document.hidden = value; documentEvents.get('visibilitychange')(); },
     reduced(value) { media.matches = value; mediaChange?.(); },
     unload() { windowEvents.get('beforeunload')(); },
@@ -40,6 +41,9 @@ test('确认页保持完整披露与默认取消，复用关于页及真实球�
     '账户令牌仅用于官方查询，不保存、不发送给其他服务', '状态包可能附带已加载的聊天内容',
     '正文立即丢弃，不保存、不上传', '不监听键盘', '不会代你创建、发送、审批或中断任务', '随时关闭即可停止读取']) assert.ok(html.includes(text), text);
   assert.match(html, /id="consent-cancel"[^>]*autofocus/);
+  assert.equal([...html.matchAll(/<li>/g)].length, 2, '隐私披露分为令牌和聊天正文两条');
+  assert.match(html, /<li>账户令牌仅用于官方查询，不保存、不发送给其他服务。<\/li>/);
+  assert.match(html, /<li>状态包可能附带已加载的聊天内容；球球只提取进展，正文立即丢弃，不保存、不上传。<\/li>/);
   assert.match(html, /id="consent-accept"[^>]*disabled/);
   assert.match(html, /href="about.css"/); assert.match(html, /src="lib\/chat-avatar.js"/);
   assert.match(html, /connect-src 'none'/); assert.doesNotMatch(html, /https?:\/\//);
@@ -59,6 +63,9 @@ test('收到可信形象后才能确认，真实外观传入现有头像，默�
   assert.equal(f.node('consent-accept').disabled, false); assert.equal(f.node('consent-cancel').focusCalls, 1);
   assert.equal(f.portraits[0].args[0], info.appearance); assert.equal(f.portraits[0].args[2], null);
   assert.equal(f.key('Enter'), false); await flush(); assert.deepEqual(f.calls, [], '不绑定全局 Enter 自动同意');
+  assert.equal(f.document.documentElement.dataset.consentKeyboard, undefined, '初始默认取消不显示焦点框');
+  f.key('Tab'); assert.equal(f.document.documentElement.dataset.consentKeyboard, 'true', 'Tab 恢复键盘焦点提示');
+  f.pointer(); assert.equal(f.document.documentElement.dataset.consentKeyboard, undefined, '鼠标操作移除键盘焦点提示');
   assert.equal(f.key('Escape'), true); await flush(); assert.deepEqual(f.calls, [false]);
 });
 
