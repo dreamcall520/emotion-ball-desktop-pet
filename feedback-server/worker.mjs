@@ -143,7 +143,7 @@ async function changePassword(request, env, url, credential) {
   await limitAdmin(request, env);
   const body = await readJson(request, 4096);
   const password = body?.newPassword;
-  if (typeof password !== 'string' || password.length > 512 || Array.from(password).length < 15 || Array.from(password).length > 128 || !password.trim() || password.includes('\0')) invalid('新密码需15–128个字符，不能全部为空白。');
+  if (typeof password !== 'string' || password.length > 512 || Array.from(password).length < 10 || Array.from(password).length > 128 || !password.trim() || password.includes('\0')) invalid('新密码需10–128个字符，不能全部为空白。');
   if (!(await matchingPassword(body?.currentPassword, env.ADMIN_TOKEN, credential))) throw new HttpError(403, 'current_password_incorrect', '当前密码不正确，请重新输入。');
   const salt = Buffer.from(crypto.getRandomValues(new Uint8Array(16))).toString('base64url');
   const hash = await passwordHash(password, salt, env.ADMIN_TOKEN), version = crypto.randomUUID();

@@ -194,7 +194,7 @@
   $('password-form').addEventListener('submit', async event => {
     event.preventDefault();
     const length = Array.from($('new-password').value).length;
-    if (length < 15 || length > 128 || !$('new-password').value.trim()) { status('password-status', '新密码需 15–128 个字符，且不能全部为空白。', true); return; }
+    if (length < 10 || length > 128 || !$('new-password').value.trim()) { status('password-status', '新密码需 10–128 个字符，且不能全部为空白。', true); return; }
     if ($('new-password').value !== $('confirm-password').value) { status('password-status', '两次输入的新密码不一致。', true); return; }
     const body = JSON.stringify({ currentPassword:$('current-password').value, newPassword:$('new-password').value });
     $('password-form').reset();
@@ -206,7 +206,7 @@
       showLogin('密码已修改，请用新密码登录。');
     } catch (error) {
       if (error.status === 409) showLogin('密码信息已更新，请重新登录。', true);
-      else if (error.status === 400) status('password-status', '新密码需 15–128 个字符，且不能全部为空白，请重新输入。', true);
+      else if (error.status === 400) status('password-status', '新密码需 10–128 个字符，且不能全部为空白，请重新输入。', true);
       else if (error.status === 403 && error.code === 'current_password_incorrect') status('password-status', '当前密码不正确，请重新输入。', true);
       else handleError(error, 'password-status');
     } finally { $('save-password').disabled = false; }

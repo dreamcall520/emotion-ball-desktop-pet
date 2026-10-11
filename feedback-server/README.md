@@ -91,7 +91,7 @@ npm exec --yes --package=wrangler@4.149.0 -- wrangler deploy
 
 打开 `https://qiuqiu-feedback-entry.pages.dev/admin/`，输入管理员专用密码后可查看文字、分类、时间、联系方式、版本、系统和来源；截图支持预览与下载，列表按提交时间倒序并支持加载更多。
 
-首次登录密码沿用 Worker 的 `ADMIN_TOKEN`，初始值只保存在本机 `/Users/allan/Library/Application Support/球球反馈服务/admin-token`（0600）及 Worker secret，不放入网页、App、URL或Git。登录后点击右上角“修改密码”，输入当前密码和两次新密码即可自行设置；新密码为15–128个 Unicode 字符，支持中文和空格，不能全部为空白或含 NUL，不作 trim。自行修改后，本机初始密码文件不会同步更新，请用密码管理器保存新密码。
+首次登录密码沿用 Worker 的 `ADMIN_TOKEN`，初始值只保存在本机 `/Users/allan/Library/Application Support/球球反馈服务/admin-token`（0600）及 Worker secret，不放入网页、App、URL或Git。登录后点击右上角“修改密码”，输入当前密码和两次新密码即可自行设置；新密码为10–128个 Unicode 字符，支持中文和空格，不能全部为空白或含 NUL，不作 trim。自行修改后，本机初始密码文件不会同步更新，请用密码管理器保存新密码。
 
 D1 仅保存一条 `admin_credentials`：16字节随机盐、PBKDF2-SHA256（100,000次、256bits）后再用 `ADMIN_TOKEN` 作 HMAC-SHA256 pepper 的摘要，以及随机会话版本；不保存自设密码原文。100,000次是当前 Workers 的 PBKDF2 上限，额外的服务器 secret 防护仅数据库泄露后的离线猜测；线上需实际核验 CPU 配额。[Web Crypto](https://developers.cloudflare.com/workers/runtime-apis/web-crypto/)、[workerd 上限说明](https://github.com/cloudflare/workerd/issues/1346)、[OWASP pepper 说明](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html#peppering)。
 

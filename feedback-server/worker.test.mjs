@@ -206,7 +206,7 @@ test('real workerd + D1 feedback API', { timeout: 180_000 }, async (t) => {
   };
   assert.deepEqual(await credentials(), []);
   const changePassword = (currentPassword, newPassword, headers = adminHeaders()) => adminPost('password', { currentPassword, newPassword }, headers);
-  const firstPassword = `${'球'.repeat(14)}🌕`;
+  const firstPassword = `${'球'.repeat(9)}🌕`;
   const secondPassword = `${'球'.repeat(127)}🌕`;
   assert.equal((await changePassword(token, firstPassword, {})).status, 401);
   assert.equal((await changePassword(token, firstPassword, { ...adminHeaders(), Origin: 'https://qiuqiu.example' })).status, 403);
@@ -217,14 +217,14 @@ test('real workerd + D1 feedback API', { timeout: 180_000 }, async (t) => {
   const wrongCurrent = await changePassword('wrong-current-password', firstPassword);
   assert.equal(wrongCurrent.status, 403);
   assert.equal((await wrongCurrent.json()).error, 'current_password_incorrect');
-  for (const invalidPassword of [null, 1, `${'x'.repeat(13)}🌕`, `${'球'.repeat(128)}🌕`, ' '.repeat(15), '　'.repeat(15), ' \t\n'.repeat(5), 'abcdefg\0hijklmnop']) {
+  for (const invalidPassword of [null, 1, `${'x'.repeat(8)}🌕`, `${'球'.repeat(128)}🌕`, ' '.repeat(15), '　'.repeat(15), ' \t\n'.repeat(5), 'abcdefg\0hijklmnop']) {
     assert.equal((await changePassword(token, invalidPassword)).status, 400, `reject invalid new password ${JSON.stringify(invalidPassword)}`);
   }
   assert.deepEqual(await credentials(), [], 'rejected changes must not create credentials');
   const originalLogin = await adminPost('session', { password: token });
   const originalCookie = originalLogin.headers.get('Set-Cookie').split(';')[0];
   const firstChange = await changePassword(token, firstPassword, { Cookie: originalCookie });
-  assert.equal(firstChange.status, 200, '15 Unicode code points including an emoji are allowed');
+  assert.equal(firstChange.status, 200, '10 Unicode code points including an emoji are allowed');
   assert.deepEqual(await firstChange.json(), { ok: true });
   assert.equal(firstChange.headers.get('Cache-Control'), 'no-store');
   assert.match(firstChange.headers.get('Set-Cookie'), /^__Host-qiuqiu-admin=;.*Max-Age=0/);
