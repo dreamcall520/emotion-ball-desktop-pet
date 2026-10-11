@@ -44,6 +44,7 @@ const { createQuotaHistory } = require('./lib/codex-quota-history');
 const { createCodexDetailsWindow, ACTIONS: CODEX_DETAIL_ACTIONS } = require('./lib/codex-details-window');
 const { isTaskId } = require('./lib/codex-state');
 const { createQuotaLabelWindow } = require('./lib/quota-label-window');
+const { createQuotaGuardWindow } = require('./lib/quota-guard-window');
 const { createEdgeTuck } = require('./lib/edge-tuck');
 const { createEdgeNotice } = require('./lib/edge-notice');
 const { createEdgeNoticeWindow } = require('./lib/edge-notice-window');
@@ -86,6 +87,7 @@ let bubble = null;
 let thoughts = null;
 let bubbleVisibilityBinding = null;
 let quotaLabel = null;
+let quotaGuard = null;
 let codexDetails = null;
 let codexDetailReturn = null;
 let codexThreadOpener = url => shell.openExternal(url);
@@ -193,7 +195,7 @@ function fromApiUsageWindow(event, requireVisible = true) {
 }
 
 function functionWindowObstacles() {
-  return [quotaLabel, apiUsageLabel].flatMap(controller => {
+  return [quotaLabel, apiUsageLabel, quotaGuard].flatMap(controller => {
     const win = controller?.getWindow();
     return win && !win.isDestroyed() && win.isVisible() ? [win.getBounds()] : [];
   });
@@ -523,6 +525,7 @@ function openChat() {
   dialogue?.dismiss();
   hideBubble();
   thoughts?.hide();
+  quotaGuard?.close();
   quotaLabel?.hide();
   apiUsageLabel?.hide();
   edgeNoticeWindow?.hide();
@@ -571,6 +574,7 @@ function applyPresentation(packet) {
     dialogue?.dismiss();
     hideBubble();
     safelyInvokeWindow('收起时额度标签隐藏', () => quotaLabel?.hide());
+    safelyInvokeWindow('收起时守护战隐藏', () => quotaGuard?.close());
     safelyInvokeWindow('收起时 API 卡片隐藏', () => apiUsageLabel?.hide());
   } else syncQuotaLabel(codexCompanion?.getSnapshot());
   tickEdgeNotice(true);
@@ -578,7 +582,7 @@ function applyPresentation(packet) {
 }
 
 function edgeRetentionBounds() {
-  return [bubble, quotaLabel, apiUsageLabel, chatWindow].flatMap(controller => {
+  return [bubble, quotaLabel, apiUsageLabel, chatWindow, quotaGuard].flatMap(controller => {
     try {
       const win = controller?.getWindow();
       return win && !win.isDestroyed() && win.isVisible() ? [win.getBounds()] : [];
@@ -671,6 +675,7 @@ function safelyInvokeWindow(scope, callback) {
 }
 
 function repositionQuotaLabel() {
+  safelyInvokeWindow('守护战重排', () => quotaGuard?.reposition());
   try { quotaLabel?.reposition(); } catch (error) { reportQuotaError('额度标签重排', error); }
   safelyInvokeWindow('API 卡片重排', () => apiUsageLabel?.reposition());
 }
@@ -821,20 +826,24 @@ function syncQuotaLabel(snapshot = null) {
       }
       if (!visible) {
         shown = false;
+        safelyInvokeWindow('额度隐藏时守护战隐藏', () => quotaGuard?.close());
         try { quotaLabel.hide(); } catch (error) { reportQuotaError('额度标签隐藏', error); }
         continue;
       }
       try {
         const current = requestedSnapshot || codexCompanion?.getSnapshot();
-        quotaLabel.show(buildQuotaLabelModel(current, {
+        const model = buildQuotaLabelModel(current, {
           period: settings.codexQuotaPeriod,
           size: settings.codexQuotaLabelSize,
           showExtraCredits: settings.codexShowExtraCredits
-        }, codexNow()));
+        }, codexNow());
+        quotaLabel.show(model);
+        quotaGuard?.update(model);
         shown = true;
       } catch (error) {
         shown = false;
         reportQuotaError('额度标签同步', error);
+        safelyInvokeWindow('额度同步失败时守护战隐藏', () => quotaGuard?.close());
         try { quotaLabel.hide(); } catch (_) {}
       }
     }
@@ -844,6 +853,7 @@ function syncQuotaLabel(snapshot = null) {
       shown = false;
       try { quotaLabel.hide(); } catch (_) {}
       reportQuotaError('额度标签同步', new Error('额度标签状态持续重入'));
+      safelyInvokeWindow('额度同步重入时守护战隐藏', () => quotaGuard?.close());
     }
     return shown;
   } finally {
@@ -938,6 +948,7 @@ function syncCodexDetails(snapshot = codexCompanion?.getSnapshot()) {
 
 function openCodexDetails(action, period) {
   if (!CODEX_DETAIL_ACTIONS.has(action) || isQuitting || screenLocked || settings?.codexEnabled !== true || !codexDetails) return false;
+  quotaGuard?.close();
   if (action === 'opportunities' && codexDetails.getAction() === 'trend' && codexDetails.isVisible()) {
     codexDetailReturn = { period: codexDetails.getPeriod() };
   } else if (action !== 'opportunities' || !codexDetails.isVisible()) codexDetailReturn = null;
@@ -948,6 +959,21 @@ function fromQuotaLabel(event) {
   const win = quotaLabel?.getWindow();
   return Boolean(win && event?.sender === win.webContents && event.senderFrame === event.sender.mainFrame &&
     event.sender.getURL() === pathToFileURL(path.join(__dirname, 'quota-label.html')).href);
+}
+
+function canShowQuotaGuard() {
+  return Boolean(!isQuitting && !screenLocked && settings?.codexEnabled === true &&
+    settings.codexQuotaAlwaysVisible === true && !chatWindow?.isVisible() && !codexDetails?.isVisible() &&
+    !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible());
+}
+
+function openQuotaGuard() {
+  if (!canShowQuotaGuard() || !quotaGuard) return false;
+  const model = buildQuotaLabelModel(codexCompanion?.getSnapshot(), {
+    period: settings.codexQuotaPeriod, size: settings.codexQuotaLabelSize,
+    showExtraCredits: settings.codexShowExtraCredits
+  }, codexNow());
+  return quotaGuard.open(model);
 }
 
 async function openCodexDetailThread(id, turnId) {
@@ -1017,6 +1043,7 @@ async function setCodexEnabled(enabled) {
     settings.codexEnabled = false;
     if (changed) {
       try { quotaLabel?.destroy(); } catch (error) { reportQuotaError('额度标签销毁', error); }
+      quotaGuard?.close();
       codexDetails?.close();
     }
     // 停止读取不依赖磁盘写入成功；保存失败也必须先释放连接和计时器。
@@ -1387,6 +1414,7 @@ function setAlwaysOnTop(enabled) {
   });
   safelyInvokeWindow('气泡窗口置顶', () => bubble?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('额度标签置顶', () => quotaLabel?.setAlwaysOnTop(settings.alwaysOnTop));
+  safelyInvokeWindow('守护战置顶', () => quotaGuard?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('Codex 详情置顶', () => codexDetails?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('API 卡片置顶', () => apiUsageLabel?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('边缘提示置顶', () => edgeNoticeWindow?.setAlwaysOnTop(settings.alwaysOnTop));
@@ -1655,6 +1683,14 @@ async function finishSmokeTest() {
     );
     if (!companionReady) throw new Error('轻陪伴活动感知尚未接入');
 
+    if (process.env.PET_SMOKE_QUOTA_GUARD_ONLY === '1') {
+      await require('./scripts/verify-quota-guard-integration').verifyQuotaGuardIntegration({
+        pet: petWindow, label: quotaLabel, guard: quotaGuard, prepare: initializeCodexCompanion,
+        getCompanion: () => codexCompanion, getSettings: () => settings, sync: syncQuotaLabel,
+        setPreference: setCodexPreference, setTopmost: setAlwaysOnTop, hidePet, restorePet, ipcMain, powerMonitor
+      });
+      app.exit(0); return;
+    }
     if (process.env.PET_SMOKE_FUNCTION_WINDOWS_ONLY === '1') {
       await require('./scripts/verify-function-windows').verifyFunctionWindows({
         pet: petWindow, screen, notes: notesCompanion, getObstacles: functionWindowObstacles,
@@ -2232,6 +2268,7 @@ function createPetWindow() {
     hideBubble();
     if (!isCurrentPetWindow()) return;
     safelyInvokeWindow('隐藏时额度标签隐藏', () => quotaLabel?.hide());
+    safelyInvokeWindow('隐藏时守护战隐藏', () => quotaGuard?.close());
     safelyInvokeWindow('隐藏时 Codex 详情隐藏', () => codexDetails?.close());
     safelyInvokeWindow('隐藏时 API 卡片隐藏', () => apiUsageLabel?.hide());
     if (!isCurrentPetWindow()) return;
@@ -2259,6 +2296,7 @@ function createPetWindow() {
     destroyBubbleSafely();
     if (!isCurrentPetWindow()) return;
     safelyInvokeWindow('关闭时额度标签销毁', () => quotaLabel?.destroy());
+    safelyInvokeWindow('关闭时守护战销毁', () => quotaGuard?.destroy());
     safelyInvokeWindow('关闭时 Codex 详情销毁', () => codexDetails?.destroy());
     safelyInvokeWindow('关闭时 API 卡片销毁', () => apiUsageLabel?.destroy());
     thoughts?.destroy();
@@ -2300,6 +2338,8 @@ function registerIpc() {
   });
   ipcMain.on('pet:about-close', event => { if (fromAboutWindow(event)) aboutWindow.close(); });
   ipcMain.on('pet:quota-label-detail', (event, action, period) => { if (fromQuotaLabel(event)) openCodexDetails(action, period); });
+  ipcMain.on('pet:quota-guard-open', event => { if (fromQuotaLabel(event) && quotaLabel.getWindow()?.isVisible()) openQuotaGuard(); });
+  ipcMain.on('pet:quota-guard-close', event => { if (quotaGuard?.owns(event)) quotaGuard.close(); });
   ipcMain.on('pet:codex-details-close', event => { if (codexDetails?.owns(event)) { codexDetailReturn = null; codexDetails.close(); } });
   ipcMain.on('pet:codex-details-open', (event, action, period) => { if (codexDetails?.owns(event)) openCodexDetails(action, period); });
   ipcMain.on('pet:codex-details-thread', (event, id, turnId) => { if (codexDetails?.owns(event)) void openCodexDetailThread(id, turnId); });
@@ -2654,7 +2694,8 @@ async function bootstrap() {
     getObstacle: quotaObstacleBounds,
     getSize: () => settings?.codexQuotaLabelSize,
     getAppearance: () => settings?.codexQuotaAppearance,
-    getSuppressed: () => codexDetails?.isVisible() === true,
+    getGuardEntry: () => true,
+    getSuppressed: () => codexDetails?.isVisible() === true || quotaGuard?.isVisible() === true,
     getPresentation: () => ({
       ...edgeTuck?.getPresentation(),
       shape: settings?.customization?.appearance?.shape
@@ -2662,6 +2703,13 @@ async function bootstrap() {
     alwaysOnTop: settings.alwaysOnTop,
     onError: error => writeError('额度标签窗口', error)
   });
+  quotaGuard = createQuotaGuardWindow({ BrowserWindow, screen,
+    getAnchor: () => petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null,
+    getSize: () => settings?.codexQuotaLabelSize,
+    getAppearance: () => settings?.codexQuotaAppearance,
+    canShow: canShowQuotaGuard,
+    onVisibilityChange: () => safelyInvokeWindow('守护战显隐时额度卡重排', () => quotaLabel?.reposition()),
+    alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('守护战窗口', error) });
   apiUsageLabel = createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
     getQuotaWindow: () => quotaLabel?.getWindow(), getObstacleBounds: quotaObstacleBounds,
     getAppearance: () => settings?.codexQuotaAppearance,
@@ -2699,6 +2747,7 @@ async function bootstrap() {
     safelyInvokeWindow('锁屏时暂停活动监测', () => activityMonitor.pause());
     hideBubble();
     safelyInvokeWindow('锁屏时额度标签隐藏', () => quotaLabel?.hide());
+    safelyInvokeWindow('锁屏时守护战隐藏', () => quotaGuard?.close());
     safelyInvokeWindow('锁屏时 Codex 详情隐藏', () => codexDetails?.close());
     safelyInvokeWindow('锁屏时 API 卡片隐藏', () => apiUsageLabel?.hide());
     safelyInvokeWindow('锁屏时对白清理', () => dialogue.dismiss());
@@ -2774,6 +2823,7 @@ if (!hasSingleInstanceLock) {
     safelyInvokeWindow('退出时活动监测清理', () => activityMonitor?.stop());
     destroyBubbleSafely();
     safelyInvokeWindow('退出时额度标签销毁', () => quotaLabel?.destroy());
+    safelyInvokeWindow('退出时守护战销毁', () => quotaGuard?.destroy());
     safelyInvokeWindow('退出时 Codex 详情销毁', () => codexDetails?.destroy());
     safelyInvokeWindow('退出时 API 卡片销毁', () => apiUsageLabel?.destroy());
     thoughts?.destroy();

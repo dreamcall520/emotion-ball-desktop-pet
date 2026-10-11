@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="55 -55 120 90" role="img" aria-labelledby="crown-title">
+  <title id="crown-title">五尖金皇冠</title>
+  <defs>
+    <linearGradient id="crown-gold" x1="0" y1="0" x2=".85" y2="1">
+      <stop stop-color="#fff4be"/>
+      <stop offset=".2" stop-color="#f8dc83"/>
+      <stop offset=".43" stop-color="#d9a544"/>
+      <stop offset=".64" stop-color="#f7d77b"/>
+      <stop offset="1" stop-color="#b57c2b"/>
+    </linearGradient>
+    <linearGradient id="crown-band" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#fff2b8"/>
+      <stop offset=".18" stop-color="#edc768"/>
+      <stop offset=".7" stop-color="#bb852f"/>
+      <stop offset="1" stop-color="#f2cf76"/>
+    </linearGradient>
+    <radialGradient id="crown-tip" cx=".28" cy=".2" r=".8">
+      <stop stop-color="#fff9d9"/>
+      <stop offset=".45" stop-color="#f0ce77"/>
+      <stop offset="1" stop-color="#b37c2a"/>
+    </radialGradient>
+    <radialGradient id="crown-ruby" cx=".3" cy=".2" r=".85">
+      <stop stop-color="#f6a9a1"/>
+      <stop offset=".35" stop-color="#c85b55"/>
+      <stop offset=".8" stop-color="#943d3f"/>
+      <stop offset="1" stop-color="#6d3037"/>
+    </radialGradient>
+    <radialGradient id="crown-pearl" cx=".3" cy=".2" r=".85">
+      <stop stop-color="#fffef1"/>
+      <stop offset=".5" stop-color="#f3e5bd"/>
+      <stop offset="1" stop-color="#be9e68"/>
+    </radialGradient>
+  </defs>
+  <g id="crown-art" stroke-linejoin="round" stroke-linecap="round">
+    <path class="crown-metal" d="M82 5 76-22q-.8-3 2.1-1.2L89-11q1 1.5 2-.3l4-17q.7-3 2.6-.5l9.4 16q1 1.6 1.8-.4l5.2-19.6q1.2-3.7 3.1 0l7.1 19.5q.7 2 1.8.4l8.4-16.1q1.6-2.8 2.6.4l5.1 17.1q.5 1.8 1.9.3l8.9-13q2-2.4 2 1.1L150 5q-34 9-68 0Z" fill="url(#crown-gold)" stroke="#a77830" stroke-width="1.35"/>
+    <path d="m79-18 9 11q2.7 2.3 5-1.5l4-15m11 16 7.5-21m11.5 21 8.5-18" fill="none" stroke="#fff4c4" stroke-opacity=".72" stroke-width="1.25"/>
+    <path d="m96-25 1 27q5 2 10 2l.2-15zm39 0-1 28q-5 1-9 1l.2-15z" fill="#9b6a26" opacity=".12"/>
+    <path d="m115-29-4 31q5 2 10 0l-4-31z" fill="#fff8d4" opacity=".18"/>
+    <g fill="url(#crown-tip)" stroke="#ac7c31" stroke-width=".8">
+      <circle cx="77.5" cy="-23" r="2.1"/>
+      <circle cx="96" cy="-29" r="2.3"/>
+      <circle cx="116" cy="-33" r="2.7"/>
+      <circle cx="135.4" cy="-29" r="2.3"/>
+      <circle cx="153" cy="-23" r="2.1"/>
+    </g>
+    <path d="M81 2q35 9 70 0l-2.5 13q-32.5 8-65 0Z" fill="url(#crown-band)" stroke="#a77830" stroke-width="1.2"/>
+    <path d="M83.5 4.6q32.5 8 65 0m-63 9q30.5 7 61 0" fill="none" stroke="#fff0b3" stroke-opacity=".85" stroke-width="1.1"/>
+    <path d="M84 7q10 3 20 3m24 0q10-.5 20-3" fill="none" stroke="#916225" stroke-opacity=".3" stroke-width=".8"/>
+    <ellipse cx="116" cy="11.1" rx="5.3" ry="5.8" fill="#a16f29"/>
+    <ellipse class="crown-gem" cx="116" cy="10.7" rx="4.1" ry="4.7" fill="url(#crown-ruby)" stroke="#ffdfa0" stroke-width=".9"/>
+    <path d="m113.4 8.9 2.4-1.9 1.4 2.2-3.7 1z" fill="#ffe8d5" opacity=".58"/>
+    <g fill="url(#crown-pearl)" stroke="#bf9451" stroke-width=".65">
+      <circle cx="96.6" cy="9" r="2.3"/>
+      <circle cx="135.4" cy="9" r="2.3"/>
+    </g>
+  </g>
+</svg>

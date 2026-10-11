@@ -176,6 +176,43 @@ test('标准档只在 show 时懒创建安全、透明、不聚焦的鼠标穿�
   assert.equal(win.showInactiveCalls, 1);
 });
 
+test('原生显隐显式广播 visible，隐藏前暂停入口且暂时避让不改变原卡展开语义', async t => {
+  let suppressed = false;
+  const f = fixture(() => Promise.resolve(), { getSuppressed: () => suppressed,
+    onCall(name, _count, target) { if (name === 'hide' && target.sent.length) assert.equal(target.sent.at(-1)[1].visible, false); } });
+  t.after(() => f.label.destroy());
+  f.label.show(readyModel()); await flush();
+  const win = f.windows[0];
+  assert.equal(win.sent.at(-1)[1].visible, true);
+  win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  suppressed = true; f.label.reposition();
+  assert.equal(win.sent.at(-1)[1].visible, false);
+  assert.equal(win.sent.at(-1)[1].expanded, true);
+  suppressed = false; f.label.reposition();
+  assert.equal(win.sent.at(-1)[1].visible, true);
+  assert.equal(win.sent.at(-1)[1].expanded, true);
+  f.label.hide();
+  assert.equal(win.sent.at(-1)[1].visible, false);
+  assert.equal(win.sent.at(-1)[1].expanded, false);
+  assert.equal(win.sent.at(-1)[1].items[0].remaining, 47.6);
+});
+
+test('额度 preload 仅保留明确 visible 布尔，不接受字符串或读取异常', () => {
+  let api, listener, received;
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../quota-label-preload.js'), 'utf8'), {
+    require: () => ({ contextBridge: { exposeInMainWorld(_name, value) { api = value; } },
+      ipcRenderer: { on(_name, callback) { listener = callback; }, removeListener() {} } })
+  });
+  api.onModel(value => { received = value; });
+  for (const visible of [false, true]) {
+    listener({}, { ...readyModel(), visible }); assert.equal(received.visible, visible);
+  }
+  listener({}, { ...readyModel(), visible: 'false' }); assert.equal('visible' in received, false);
+  const throwing = readyModel(); Object.defineProperty(throwing, 'visible', { get() { throw new Error('visibility getter'); } });
+  assert.doesNotThrow(() => listener({}, throwing)); assert.equal('visible' in received, false);
+  assert.equal(received.items[0].remaining, 47.6);
+});
+
 test('小巧档创建可点击的 128×32 横条，点击展开和收起时复用同一窗口', async t => {
   const f = fixture(() => Promise.resolve(), { labelSize: 'compact' });
   t.after(() => f.label.destroy());
@@ -341,6 +378,7 @@ test('按球球当前屏定位并避让气泡，只发固定通道的白名单�
     size: 'standard',
     appearance: 'system',
     expanded: false,
+    visible: true,
     state: 'ready',
     items: [
       { label: 'Codex', windowMinutes: 300, remaining: 9.44, resetsAt: 2000000000000 },
@@ -874,6 +912,7 @@ test('主进程模型每个外部字段只读一次，且数组最多检查前�
     size: 'standard',
     appearance: 'system',
     expanded: false,
+    visible: true,
     state: 'ready',
     items: [
       { label: 'Codex', windowMinutes: 300, remaining: 49.5, resetsAt: 2000000000000 },
@@ -893,14 +932,14 @@ test('撤销 Proxy 或抛错 getter 不能穿透 show，必须降级为断开模
   assert.doesNotThrow(() => f.label.show(revoked.proxy));
   await flush();
   assert.deepEqual(f.windows[0].sent[0][1], {
-    state: 'disconnected', items: [], overflow: 0, size: 'standard', appearance: 'system', expanded: false
+    state: 'disconnected', items: [], overflow: 0, size: 'standard', appearance: 'system', expanded: false, visible: true
   });
 
   const throwing = {};
   Object.defineProperty(throwing, 'state', { get() { throw new Error('getter failed'); } });
   assert.doesNotThrow(() => f.label.show(throwing));
   assert.deepEqual(f.windows[0].sent.at(-1)[1], {
-    state: 'disconnected', items: [], overflow: 0, size: 'standard', appearance: 'system', expanded: false
+    state: 'disconnected', items: [], overflow: 0, size: 'standard', appearance: 'system', expanded: false, visible: true
   });
 });
 

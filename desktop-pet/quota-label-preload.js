@@ -150,6 +150,9 @@ contextBridge.exposeInMainWorld('petQuotaLabel', {
   toggleExpanded() {
     try { ipcRenderer.send(TOGGLE_CHANNEL); } catch (_) {}
   },
+  openGuard() {
+    try { ipcRenderer.send('pet:quota-guard-open'); } catch (_) {}
+  },
   openDetail(action, period) {
     if (!['tasks', 'results', 'trend', 'opportunities', 'credits'].includes(action)) return;
     try { ipcRenderer.send('pet:quota-label-detail', action, period === 10080 ? 10080 : 300); } catch (_) {}
@@ -158,6 +161,11 @@ contextBridge.exposeInMainWorld('petQuotaLabel', {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, payload) => {
       const model = safeModel(payload);
+      try {
+        const source = record(payload);
+        const visible = source?.visible;
+        if (typeof visible === 'boolean') model.visible = visible;
+      } catch (_) {}
       try { callback(model); } catch (_) {}
     };
     try { ipcRenderer.on(CHANNEL, listener); } catch (_) { return () => {}; }

@@ -1127,7 +1127,7 @@
     function applyPose(pose) {
       lastPose = pose;
       var b = pose.body;
-      var now = performance.now();
+      var now = typeof opts.now === 'function' ? opts.now() : performance.now();
       var sketch = b.sketch || 0;
 
       bodyG.setAttribute('transform',

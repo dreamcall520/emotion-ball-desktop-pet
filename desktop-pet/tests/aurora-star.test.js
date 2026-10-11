@@ -22,7 +22,7 @@ class SvgNode {
 
 const descendants = node => [node, ...node.children.flatMap(descendants)];
 
-function fixture(customColors = false, auroraStyle = 'dimensional') {
+function fixture(customColors = false, auroraStyle = 'dimensional', clock) {
   let now = 0;
   let reducedMotion = false;
   let frames = 0;
@@ -57,7 +57,7 @@ function fixture(customColors = false, auroraStyle = 'dimensional') {
     auroraBodyTexture: null,
     glowPinkColor: customColors ? '#CB78D4' : '#D05ED6',
     glowGoldColor: customColors ? '#E1AC76' : '#D0AD8A',
-    lite: true, liveAuroraEyes: true
+    lite: true, liveAuroraEyes: true, now: clock
   });
   const nodes = descendants(container);
   const material = nodes.find(node => node.attrs.class === 'eb-aurora-material');
@@ -82,6 +82,15 @@ function fixture(customColors = false, auroraStyle = 'dimensional') {
     hover: enabled => { hovered = enabled; },
     reduceMotion: enabled => { reducedMotion = enabled; } };
 }
+
+test('可暂停场景时钟冻结材质动效，恢复后连续推进', () => {
+  let sceneTime = 100;
+  const cloud = fixture(false, 'dimensional', () => sceneTime);
+  const initial = cloud.render(100).transform;
+  assert.equal(cloud.render(5000).transform, initial, '墙钟推进不能跳过已暂停的场景');
+  sceneTime += 100;
+  assert.notEqual(cloud.render(5100).transform, initial, '恢复场景时钟后继续动画');
+});
 
 test('简色幻彩云只保留渐变云体和清晰白眼', () => {
   const cloud = fixture(false, 'simple');
