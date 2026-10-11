@@ -2,7 +2,7 @@
 .shop-intro { padding-block: 48px 32px; }
 .shop-intro h1 { font-size: clamp(30px,3.2vw,42px); }
 .shop-intro .lede { margin-top: 14px !important; font-size: 14px; }
-.catalog-bar { margin-bottom: 24px; padding-bottom: 10px; }
+.catalog-bar { flex-wrap: wrap; gap: 8px 20px; margin-bottom: 24px; padding-bottom: 10px; }
 .product-grid { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 24px; }
 .product-art { aspect-ratio: 1.5; border-radius: 22px; }
 .product-art.has-product-photo::after { display: none; }
@@ -16,9 +16,7 @@
 .product-title-link svg { flex: none; }
 .product-title-link:hover, .product-title-link:focus-visible { color: var(--accent); }
 .card-price .price-currency, .detail-price .price-currency { font-size: .6em; margin: 0 2px 0 0; color: inherit; font-weight: inherit; }
-.shop-bottom { margin-top: 30px; padding-block: 24px 34px; }
-.shop-bottom p { margin: 0; }
-.shop-list-page .shop-bottom { border-top: 0; }
+.shop-list-page main { padding-bottom: 56px; }
 .shop-list-page .c-footer { border-image: linear-gradient(90deg, transparent, var(--line) 20%, var(--line) 80%, transparent) 1; }
 .breadcrumb { margin-top: 32px; }
 .detail-grid { gap: 48px; padding-block: 24px 54px; align-items: center; }
@@ -52,12 +50,12 @@
   .shop-intro { padding-block: 36px 28px; }
   .product-grid { grid-template-columns: 1fr; gap: 30px; }
   .product-info { flex-wrap: nowrap; }
-  .shop-bottom { gap: 8px; margin-top: 28px; }
   .detail-grid { gap: 26px; padding-block: 22px 36px; }
   .detail-copy h1 { font-size: 28px; }
   .wechat-contact-dialog { padding: 22px; }
   .wechat-contact-dialog .dialog-heading h2 { font-size: 21px; }
   .wechat-contact-dialog .contact-actions .c-button { padding-inline: 10px; font-size: 12px; }
 }
-.shop-works-link { display: inline-flex; align-items: center; gap: 6px; margin: 0; min-height: 44px; padding-block: 10px; font-size: 12px; white-space: nowrap; color: var(--text-soft) !important; }
-.shop-works-link:is(:hover,:focus-visible) { color: var(--accent) !important; }
+.shop-community-links { display: flex; gap: 18px; margin-left: auto; }
+.shop-community-links a { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; border-radius: 3px; font-size: 12px; white-space: nowrap; color: var(--text-soft); }
+.shop-community-links a:is(:hover,:focus-visible) { color: var(--accent); }

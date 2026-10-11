@@ -90,7 +90,7 @@
     const inquiry = dialog.querySelector('[data-inquiry]');
     if (inquiry) {
       const product = document.querySelector('[data-product-title]');
-      inquiry.textContent = `${product.textContent}${variant ? ` · ${variant.value}` : ''} · ¥${product.dataset.productPrice}\n想确认运费和发货时间。`;
+      inquiry.textContent = `${product.textContent}${variant ? ` · ${variant.value}` : ''} · ¥${product.dataset.productPrice}\n想确认商品细节与发货安排。`;
     }
     const status = dialog.querySelector('[data-copy-status]');
     if (status) status.textContent = '';
