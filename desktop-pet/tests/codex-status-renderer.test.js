@@ -213,6 +213,22 @@ test('趋势只画已采样数据；单周期无切换，双周期切换传真�
   assert.doesNotMatch(h.nodes['details-content'].textContent,/预计约.*用完/);
 });
 
+test('周额度参考预估明确标注依据，普通5h预估标签保留',() => {
+  const h=harness('codex-details-renderer.js',detailIds,'petCodexDetails');
+  const forecast={state:'estimate',status:'risk',reference:true,summary:'预计约 10/12 18:00 用完',
+    detail:'按本周期平均用量粗估，早于 10/14 13:54 重置'};
+  const base={action:'trend',period:10080,items:[item(10080)],
+    trend:{windowMinutes:10080,resetsAt:NOW+10800000,samples:[],forecast}};
+  h.receive(base);
+  assert.equal(h.nodes['details-content'].querySelector('.forecast-badge').textContent,'参考预估');
+  assert.match(h.nodes['details-content'].querySelector('.forecast-note').title,/实际经过时间/);
+  assert.match(h.nodes['details-content'].querySelector('.forecast-copy').textContent,/本周期平均用量粗估/);
+  h.receive({...base,trend:{...base.trend,forecast:{...forecast,preliminary:true}}});
+  assert.equal(h.nodes['details-content'].querySelector('.forecast-badge').textContent,'初步预估');
+  h.receive({...base,trend:{...base.trend,forecast:{...forecast,reference:false}}});
+  assert.equal(h.nodes['details-content'].querySelector('.forecast-badge').textContent,'预估');
+});
+
 test('额度图表在断档处仅虚线连接已知端点，余额校正和骤降仍断开，填色不跨边界',() => {
   const h=harness('codex-details-renderer.js',detailIds,'petCodexDetails');
   const samples=[
