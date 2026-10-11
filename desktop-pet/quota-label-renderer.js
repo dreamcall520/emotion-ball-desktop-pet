@@ -434,7 +434,6 @@
       label.dataset.state = model.state;
       label.dataset.size = model.size;
       label.dataset.appearance = model.appearance;
-      if (root?.dataset) root.dataset.appearance = model.appearance;
       label.dataset.expanded = model.expanded ? 'true' : 'false';
       label.dataset.hasItems = 'false';
       label.dataset.itemCount = '0';

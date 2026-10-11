@@ -656,7 +656,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
         `${appearance} 外观必须通过正式设置入口切换`);
       await emulate(scheme);
       const result = await waitForLabelView(view => view.appearance === appearance &&
-        view.documentAppearance === appearance && view.expanded === baseline.expanded &&
+        view.documentAppearance === theme && view.expanded === baseline.expanded &&
         view.rows.length === baseline.rows.length, `${name} 外观模型`);
       assert.equal(result.win, win, `${name} 不能重建额度窗口`);
       assert.deepEqual(result.win.getBounds(), originalBounds, `${name} 不能改变额度窗口尺寸或位置`);

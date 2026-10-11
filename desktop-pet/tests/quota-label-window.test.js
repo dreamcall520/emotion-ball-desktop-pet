@@ -1054,6 +1054,9 @@ test('预加载层只接收固定通道，白名单纯标量且可取消订阅',
 test('小巧横条只显示摘要，小巧和标准卡片均可点击展开明细', () => {
   let receive;
   let click;
+  let colorUpdate;
+  let mediaChange;
+  const media = { matches: false, addEventListener(_name, callback) { mediaChange = callback; }, removeEventListener() {} };
   let toggles = 0;
   const root = { dataset: {} };
   const label = { dataset: {}, addEventListener(name, callback) { if (name === 'click') click = callback; } };
@@ -1080,7 +1083,7 @@ test('小巧横条只显示摘要，小巧和标准卡片均可点击展开明�
       ? this.children.map(child => child.textContent).join('') : this._text; },
     replaceChildren(...children) { this._text = ''; this.children = children; }
   });
-  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8'), {
+  const context = {
     document: {
       documentElement: root,
       getElementById: id => ({ 'quota-label': label, status, summary, items, overflow,
@@ -1093,13 +1096,18 @@ test('小巧横条只显示摘要，小巧和标准卡片均可点击展开明�
     },
     window: {
       addEventListener() {},
+      matchMedia: () => media,
       petQuotaLabel: {
+        onColorMode(callback) { colorUpdate = callback; return () => {}; },
         onModel(callback) { receive = callback; return () => {}; },
         toggleExpanded() { toggles += 1; }
       }
     },
     Date: FixedDate
-  });
+  };
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../color-mode.js'), 'utf8'), context);
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8'), context);
+  colorUpdate('standard', 'dark', 'green');
   receive({ state: 'ready', size: 'compact', appearance: 'dark', expanded: false, items: [
     { label: 'codex', windowMinutes: 10080, remaining: 64 },
     { label: 'gpt-reserve', windowMinutes: 10080, remaining: 78 }
@@ -1148,6 +1156,17 @@ test('小巧横条只显示摘要，小巧和标准卡片均可点击展开明�
     { label: 'codex', windowMinutes: 10080, remaining: 64 }
   ], overflow: 0 });
   assert.equal(label.dataset.expanded, 'true');
+  for (const [appearance, scheme, resolved] of [
+    ['system', 'light', 'light'], ['system', 'dark', 'dark'],
+    ['light', 'dark', 'light'], ['dark', 'light', 'dark']
+  ]) {
+    colorUpdate('standard', appearance, 'green');
+    media.matches = scheme === 'dark'; mediaChange();
+    receive({ state: 'ready', appearance, items: [{ label: 'codex', windowMinutes: 300, remaining: 64 }] });
+    assert.equal(label.dataset.appearance, appearance, '额度模型保留用户的外观偏好');
+    assert.equal(root.dataset.appearance, resolved, '模型刷新不能覆盖公共配色解析的实际外观');
+    assert.equal(root.dataset.accessibleAppearance, resolved);
+  }
 });
 
 test('预加载每个外部字段只读一次，Proxy 和回调异常不穿透 IPC', () => {
