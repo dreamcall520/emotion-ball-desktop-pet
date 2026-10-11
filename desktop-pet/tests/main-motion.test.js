@@ -96,7 +96,8 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   const quotaLabel = { shows: [], hides: 0, moves: 0, destroys: 0, topmost: [], visible: false,
     show(model) { this.shows.push(model); this.visible = true; }, hide() { this.hides++; this.visible = false; },
     reposition() { this.moves++; }, destroy() { this.destroys++; this.visible = false; },
-    setAlwaysOnTop(value) { this.topmost.push(value); }, getWindow: () => null };
+    setAlwaysOnTop(value) { this.topmost.push(value); }, getWindow: () => null,
+    getVisibleBounds() { return this.visible && this.shows.at(-1)?.items?.length ? { x: -600, y: 300, width: 168, height: 38 } : null; } };
   const apiLabel = { ...quotaLabel, shows: [], topmost: [] };
   const apiUsage = { options: null, refreshes: 0,
     state: { connected: false, busy: false, report: null, error: null, config: {} },
@@ -2701,6 +2702,38 @@ test('番茄免打扰收起全部普通气泡，保留后台与待办提醒，�
   f.notes.options.onComplete();
   assert.equal(f.commands.at(-1).motion, 'hop');
   assert.equal(f.call('settings.bubblesEnabled'), true);
+});
+
+test('贴边保留番茄窗口与鼓励权限，普通互动继续收起，隐藏和锁屏仍禁用', async () => {
+  const f = await fixture();
+  for (const side of ['left', 'right']) {
+    f.call(`dockPet('${side}')`);
+    assert.equal(f.call('edgeTuck.getPresentation().mode'), 'tucked');
+    assert.equal(f.pomodoroWindows.options.isSuppressed(), false);
+    assert.equal(f.pomodoro.options.canEncourage(), true);
+    f.call('openPomodoro()');
+    assert.equal(f.call('edgeTuck.getPresentation().side'), side, '打开面板保持贴边');
+    assert.equal(f.call('edgeTuck.getPresentation().mode'), 'tucked');
+    assert.equal(f.call("showDialogue('pet')"), null);
+    assert.equal(f.call("showBubble({id:'edge',text:'普通互动'})"), false);
+    f.pomodoro.change(true);
+    assert.equal(f.pomodoroWindows.options.isSuppressed(), false, '专注静默不遮住自身窗口');
+    f.pomodoro.change(false);
+    f.call('edgeTuck.suspend()');
+    assert.equal(f.pomodoroWindows.options.isSuppressed(), true);
+    assert.equal(f.pomodoro.options.canEncourage(), false);
+    f.call('edgeTuck.resume()');
+  }
+  f.call('screenLocked = true');
+  assert.equal(f.pomodoroWindows.options.isSuppressed(), true);
+  assert.equal(f.pomodoro.options.canEncourage(), false);
+  f.call('screenLocked = false; edgeTuck.hide()');
+  assert.equal(f.pomodoroWindows.options.isSuppressed(), true);
+  assert.equal(f.pomodoro.options.canEncourage(), false);
+  f.quotaLabel.show({ items: [{ remaining: 79 }] });
+  assert.deepEqual(f.pomodoroWindows.options.getQuotaBounds(), f.quotaLabel.getVisibleBounds());
+  f.quotaLabel.hide(); assert.equal(f.pomodoroWindows.options.getQuotaBounds(), null);
+  f.quotaLabel.show({ items: [] }); assert.equal(f.pomodoroWindows.options.getQuotaBounds(), null);
 });
 
 test('专注中的自动更新只记住版本，不回退弹窗或结束后补弹，手动检查仍可用', async () => {

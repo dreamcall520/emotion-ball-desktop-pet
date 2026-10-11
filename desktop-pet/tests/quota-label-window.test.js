@@ -72,6 +72,8 @@ function fixture(load = () => Promise.resolve(), options = {}) {
     showInactive() { maybeThrow('showInactive', this); this.visible = true; this.showInactiveCalls = (this.showInactiveCalls || 0) + 1; }
     hide() { maybeThrow('hide', this); this.visible = false; this.hideCalls = (this.hideCalls || 0) + 1; }
     isDestroyed() { maybeThrow('isDestroyed', this); return this.destroyed; }
+    isVisible() { return this.visible; }
+    getBounds() { return { ...this.bounds }; }
     destroy() {
       maybeThrow('destroy', this);
       if (this.destroyed) return;
@@ -96,6 +98,7 @@ function fixture(load = () => Promise.resolve(), options = {}) {
     getAppearance: () => options.appearance || 'system',
     getPresentation: () => presentation,
     getSuppressed: () => options.getSuppressed?.() === true,
+    onLayout: () => options.onLayout?.(),
     onError: error => {
       errors.push(error);
       if (typeof options.onError === 'function') options.onError(error);
@@ -109,6 +112,38 @@ function fixture(load = () => Promise.resolve(), options = {}) {
     set presentation(value) { presentation = value; }
   };
 }
+
+test('可见额度边界随加载、展开、移动和隐藏同步，空卡不能作为锚点', async t => {
+  const loading = deferred();
+  let changes = 0;
+  const f = fixture(() => loading.promise, { onLayout: () => changes++ });
+  t.after(() => f.label.destroy());
+  assert.equal(f.label.getVisibleBounds(), null);
+  f.label.show(readyModel());
+  assert.equal(f.label.getVisibleBounds(), null, '加载期间没有可见卡');
+  loading.resolve(); await flush();
+  assert.deepEqual(f.label.getVisibleBounds(), f.windows[0].getBounds());
+  assert.ok(changes > 0, '首次异步显示通知跟随窗口');
+  const compact = f.label.getVisibleBounds();
+  const beforeExpand = changes;
+  f.windows[0].webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  assert.ok(changes > beforeExpand);
+  assert.ok(f.label.getVisibleBounds().height > compact.height);
+  f.pet.bounds.x += 100;
+  const beforeMove = changes;
+  f.label.reposition();
+  assert.ok(changes > beforeMove);
+  assert.notEqual(f.label.getVisibleBounds().x, compact.x);
+  f.label.show({ state: 'empty', items: [] });
+  assert.equal(f.label.getVisibleBounds(), null);
+  f.label.show(readyModel());
+  const beforeHide = changes;
+  f.label.hide();
+  assert.equal(f.label.getVisibleBounds(), null);
+  assert.ok(changes > beforeHide);
+  f.label.show(readyModel()); f.label.destroy();
+  assert.equal(f.label.getVisibleBounds(), null);
+});
 
 test('详情打开期间暂时隐藏额度卡，刷新与重排不抬升，关闭后保留展开和最新数据', async t => {
   let suppressed = false;

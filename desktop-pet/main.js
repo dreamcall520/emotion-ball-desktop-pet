@@ -183,10 +183,15 @@ function presentationSuppressed() {
   return edgeTuck?.getPresentation().suppressed === true;
 }
 
+function pomodoroSuppressed() {
+  const presentation = edgeTuck?.getPresentation();
+  return screenLocked || isQuitting || chatWindow?.isVisible() ||
+    presentation?.mode === 'hidden' || presentation?.paused === true;
+}
+
 function openPomodoro() {
   if (isQuitting || screenLocked) return;
   if (!petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) restorePet();
-  if (edgeTuck?.getPresentation().side) edgeTuck.restore();
   pomodoroWindows?.open();
 }
 
@@ -1705,6 +1710,7 @@ async function finishSmokeTest() {
     if (process.env.PET_SMOKE_POMODORO_ONLY === '1') {
       await require('./scripts/verify-pomodoro-integration').verifyPomodoro({
         pet: petWindow, service: pomodoro, windows: pomodoroWindows, BrowserWindow, powerMonitor,
+        quotaLabel, edgeTuck, screen,
         getMenu: () => Menu.buildFromTemplate(menuTemplate()), getSettings: () => settings,
         getQuiet: () => pomodoroQuiet, setClock: read => { pomodoroNow = read; }
       });
@@ -2651,7 +2657,7 @@ async function bootstrap() {
   if (nativeTheme) nativeTheme.themeSource = settings.codexQuotaAppearance;
   settings.customization = { ...settings.customization, appearance: settings.startupAppearance };
   pomodoro = createPomodoro({ filePath: path.join(app.getPath('userData'), 'pomodoro.json'), now: () => pomodoroNow(),
-    canEncourage: () => !screenLocked && !isQuitting && !chatWindow?.isVisible() && !presentationSuppressed() &&
+    canEncourage: () => !pomodoroSuppressed() &&
       Boolean(petWindow && !petWindow.isDestroyed() && petWindow.isVisible() && !dragState && !hostMotion),
     onChange: syncPomodoro, onError: error => writeError('番茄钟记录', error) });
   pomodoroWindows = createPomodoroWindows({ BrowserWindow, ipcMain, screen,
@@ -2659,8 +2665,9 @@ async function bootstrap() {
     getPetBounds: () => petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null,
     getPetPresentation: () => ({ ...edgeTuck?.getPresentation(), shape: settings?.customization?.appearance?.shape }),
     getWindowObstacles: functionWindowObstacles,
+    getQuotaBounds: () => quotaLabel?.getVisibleBounds(),
     getSnapshot: () => pomodoro.getSnapshot(), onAction: (type, value) => pomodoro.action(type, value),
-    isSuppressed: () => screenLocked || isQuitting || chatWindow?.isVisible() || presentationSuppressed(),
+    isSuppressed: pomodoroSuppressed,
     onError: error => writeError('番茄钟窗口', error) });
   syncPomodoro();
   notesCompanion = createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialog,
@@ -2732,6 +2739,7 @@ async function bootstrap() {
       shape: settings?.customization?.appearance?.shape
     }),
     alwaysOnTop: settings.alwaysOnTop,
+    onLayout: () => pomodoroWindows?.sync(),
     onError: error => writeError('额度标签窗口', error)
   });
   apiUsageLabel = createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,

@@ -9,7 +9,7 @@ function fixture() {
   const windows = [], handlers = new Map(), actions = [], errors = [];
   const state = { status: 'idle', mode: 'focus', face: 'analog', remaining: 1500, total: 1500,
     pinned: false, reminder: false, encouragement: '', durations: { focus: 25, short: 5, long: 15 } };
-  let suppressed = false, obstacles = [], presentation = { shape: 'blob' };
+  let suppressed = false, obstacles = [], quota = null, presentation = { shape: 'blob' };
   const area = { x: 0, y: 0, width: 1440, height: 900 };
   const pet = { bounds: { x: 300, y: 300, width: 80, height: 80 }, visible: true,
     isDestroyed: () => false, isVisible() { return this.visible; }, getBounds() { return { ...this.bounds }; } };
@@ -40,15 +40,72 @@ function fixture() {
   const manager = createPomodoroWindows({ BrowserWindow: Window,
     ipcMain: { handle: (key, fn) => handlers.set(key, fn), removeHandler: key => handlers.delete(key) },
     screen: { getDisplayMatching: () => ({ workArea: area }) }, getPetWindow: () => pet,
-    getPetBounds: () => pet.getBounds(), getPetPresentation: () => presentation, getWindowObstacles: () => obstacles,
+    getPetBounds: () => pet.getBounds(), getPetPresentation: () => presentation,
+    getQuotaBounds: () => quota, getWindowObstacles: () => [...obstacles, ...(quota ? [quota] : [])],
     getSnapshot: () => state, isSuppressed: () => suppressed, onError: error => errors.push(error),
     onAction: (type, value) => { actions.push([type, value]); if (type === 'pin') state.pinned = value; return { ok: true, state: { ...state } }; } });
   const win = view => windows.findLast(item => item.view === view && !item.destroyed);
   const event = view => ({ sender: win(view).webContents, senderFrame: win(view).webContents.mainFrame });
   return { manager, state, windows, handlers, actions, errors, pet, area, win, event,
     invoke: (view, type, value) => handlers.get('pomodoro:action')(event(view), type, value),
-    suppress: value => { suppressed = value; }, obstacles: value => { obstacles = value; }, presentation: value => { presentation = value; } };
+    suppress: value => { suppressed = value; }, obstacles: value => { obstacles = value; }, quota: value => { quota = value; },
+    presentation: value => { presentation = value; } };
 }
+
+test('左右贴边时小入口跟随真实额度边界，消息跟随，隐藏额度回退且贴边不隐藏番茄窗', async t => {
+  const f = fixture(); t.after(() => f.manager.close());
+  f.state.status = 'paused';
+  const face = win => ({ x: win.bounds.x + 6, y: win.bounds.y + 6,
+    width: win.bounds.width - 12, height: win.bounds.height - 12 });
+  const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+  for (const side of ['left', 'right']) {
+    Object.assign(f.pet.bounds, { x: side === 'left' ? 0 : 1360, y: 400 });
+    f.presentation({ mode: 'peeked', side, shape: 'blob' });
+    let quota = { x: side === 'left' ? 88 : 1224, y: 411, width: 128, height: 32 };
+    f.quota(quota); f.manager.sync(); await flush();
+    const mini = f.win('mini');
+    assert.equal(face(mini).x + 50, quota.x + quota.width / 2, `${side} 贴边以额度卡可见中心为锚`);
+    assert.equal(quota.y - face(mini).y - face(mini).height, 8);
+    assert.notEqual(mini.focused, true);
+    quota = { ...quota, x: quota.x + (side === 'left' ? 12 : -12), y: quota.y + 40, width: 168, height: 58 };
+    f.quota(quota); f.manager.reposition();
+    assert.equal(face(mini).x + 50, quota.x + quota.width / 2, '额度移动和改变大小后重新取实际边界');
+    assert.equal(quota.y - face(mini).y - face(mini).height, 8);
+    f.state.encouragement = '慢慢来。'; f.manager.sync(); await flush();
+    const message = f.win('message');
+    assert.equal(face(mini).y - face(message).y - face(message).height, 8);
+    assert.equal(message.passthrough, true); assert.notEqual(message.focused, true);
+    f.state.encouragement = ''; f.state.reminder = true; f.manager.sync();
+    assert.equal(face(mini).y - face(message).y - face(message).height, 8, '完成提示沿用 mini 锚');
+    assert.equal(message.passthrough, false);
+    f.state.reminder = false; f.quota(null); f.manager.sync();
+    assert.equal(f.pet.bounds.y - face(mini).y - face(mini).height, 14, '额度隐藏或无数据时回退球锚');
+    f.quota(quota); f.presentation({ mode: 'free', shape: 'blob' }); f.manager.sync();
+    assert.equal(f.pet.bounds.y - face(mini).y - face(mini).height, 14, '自由态保留头顶布局');
+  }
+  f.presentation({ mode: 'peeked', side: 'right', shape: 'blob' });
+  f.quota({ x: 1224, y: 451, width: 168, height: 58 }); f.manager.open(); await flush();
+  const panel = f.win('panel'), mini = f.win('mini');
+  panel.bounds = { x: 1130, y: 320, width: 320, height: 476 }; f.manager.sync();
+  assert.ok(!overlaps(face(mini), panel.bounds), '邻近用户拖动后的面板时，小入口沿同一行避让');
+  f.state.reminder = true; f.manager.sync();
+  assert.ok(!overlaps(face(f.win('message')), panel.bounds), '完成提示避开面板');
+  f.quota(null); f.presentation({ mode: 'tucked', side: 'right', shape: 'blob', suppressed: true }); f.manager.sync();
+  for (const view of ['panel', 'mini', 'message']) assert.equal(f.win(view).visible, true, `贴边收起球体不隐藏 ${view}`);
+  f.presentation({ mode: 'hidden', side: 'right', shape: 'blob' }); f.manager.sync();
+  for (const view of ['panel', 'mini', 'message']) assert.equal(f.win(view).visible, false, `用户真正隐藏球球时隐藏 ${view}`);
+  f.presentation({ mode: 'peeked', side: 'right', shape: 'blob' });
+  for (const area of [{ x: -1200, y: -200, width: 1440, height: 900 }, { x: 0, y: 0, width: 700, height: 560 }]) {
+    Object.assign(f.area, area); Object.assign(f.pet.bounds, { x: area.x + area.width - 80, y: area.y + 10 });
+    f.quota({ x: area.x + area.width - 168, y: area.y + 4, width: 168, height: 58 }); f.manager.sync();
+    for (const view of ['panel', 'mini', 'message']) {
+      const b = f.win(view).bounds;
+      assert.ok(b.x >= area.x && b.y >= area.y && b.x + b.width <= area.x + area.width && b.y + b.height <= area.y + area.height,
+        `${view} 在屏幕边角保持工作区内`);
+    }
+  }
+  assert.deepEqual(f.errors, []);
+});
 
 test('番茄窗懒创建、原尺寸、不抢焦点、拖动稳定与屏幕边缘避让', async t => {
   const f = fixture(); t.after(() => f.manager.close());

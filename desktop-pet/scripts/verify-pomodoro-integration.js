@@ -9,15 +9,15 @@ const { pointerClick } = require('./verify-chat-integration');
 // Run through smoke-electron.js so main.js verifies the temporary user-data dir.
 // This verifier never opens the installed app or writes its preferences.
 async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonitor,
-  getMenu, getSettings, getQuiet, setClock }) {
+  getMenu, getSettings, getQuiet, setClock, quotaLabel, edgeTuck, screen }) {
   assert.equal(process.env.PET_SMOKE_TEST, '1');
   assert.equal(process.env.PET_SMOKE_POMODORO_ONLY, '1');
-  assert.ok(pet && service && windows && BrowserWindow && powerMonitor);
+  assert.ok(pet && service && windows && BrowserWindow && powerMonitor && quotaLabel && edgeTuck && screen);
   const output = path.resolve(process.env.PET_SMOKE_POMODORO_OUTPUT ||
     path.join(os.tmpdir(), `qiuqiu-pomodoro-native-${process.pid}`));
   fs.mkdirSync(output, { recursive: true });
   const result = { ok: false, checks: [], themes: [], layouts: [], screenshots: [], errors: [] };
-  const original = { ...getSettings() };
+  const original = { ...getSettings() }, originalPetBounds = pet.getBounds();
   let stamp = Date.now(), locked = false, debuggerAttached = false, mini;
   const observed = new Set(), mouseCalls = new WeakMap();
   const originalIgnoreMouse = BrowserWindow.prototype.setIgnoreMouseEvents;
@@ -455,6 +455,89 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     assert.equal(service.getSnapshot().status, 'complete'); assert.equal(service.getSnapshot().reminder, false);
     assert.equal(mini.isVisible(), true);
     result.checks.push('pause-resume-deadline-quiet-and-dismiss');
+
+    const area = screen.getDisplayMatching(pet.getBounds()).workArea;
+    const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+    const painted = win => { const b = win.getBounds(); return { x: b.x + 6, y: b.y + 6, width: b.width - 12, height: b.height - 12 }; };
+    const inArea = bounds => bounds.x >= area.x && bounds.y >= area.y &&
+      bounds.x + bounds.width <= area.x + area.width && bounds.y + bounds.height <= area.y + area.height;
+    const anchorState = () => ({ quota: quotaLabel.getVisibleBounds(), mini: painted(mini), pet: pet.getBounds(),
+      presentation: edgeTuck.getPresentation(), focus: BrowserWindow.getFocusedWindow()?.id || null });
+    const onQuota = value => value.quota && value.mini.x + value.mini.width / 2 === value.quota.x + value.quota.width / 2 &&
+      value.quota.y - value.mini.y - value.mini.height === 8;
+    const quotaModel = { state: 'ready', items: [{ label: 'Codex', windowMinutes: 10080, remaining: 79 }] };
+    core('reset'); core('toggle'); core('toggle');
+    await bridge(panel, 'close-panel');
+    assert.equal(getQuiet(), true, '贴边布局不改变专注暂停静默');
+    result.edgeAnchors = [];
+    for (const side of ['left', 'right']) {
+      edgeTuck.restore();
+      pet.setPosition(Math.round(area.x + area.width / 2), Math.round(area.y + area.height * .65), false);
+      edgeTuck.dock(side);
+      const petBounds = pet.getBounds();
+      edgeTuck.sampleCursor({ x: petBounds.x + (side === 'left' ? 5 : petBounds.width - 5), y: petBounds.y + petBounds.height / 2 });
+      edgeTuck.pin(true);
+      await poll(() => edgeTuck.getPresentation().mode, value => value === 'peeked', `${side} 真实半露状态`);
+      const focus = BrowserWindow.getFocusedWindow();
+      quotaLabel.show(quotaModel);
+      const folded = await poll(anchorState, onQuota, `${side} 真实可见额度卡上方居中 8px`);
+      assert.equal(folded.presentation.side, side); assert.equal(mini.isFocusable(), false);
+      assert.equal(BrowserWindow.getFocusedWindow(), focus, '额度锚与 mini 同步不抢焦点');
+      const quotaWindow = quotaLabel.getWindow();
+      await pointerClick(quotaWindow, '#quota-label');
+      const expanded = await poll(anchorState, value => onQuota(value) && value.quota.width === 196 && value.quota.height > 58,
+        `${side} 展开额度详情后 mini 跟随真实边界`);
+      pet.setPosition(petBounds.x, petBounds.y + 24, false);
+      const movedQuota = await poll(anchorState, value => onQuota(value) && value.quota.y !== expanded.quota.y,
+        `${side} 球球移动后额度与 mini 同步`);
+      quotaLabel.show({ state: 'empty', items: [] });
+      const empty = await poll(anchorState, value => value.quota === null && value.pet.y - value.mini.y - value.mini.height === 14,
+        `${side} 无额度数据回退球锚`);
+      assert.equal(quotaWindow.isVisible(), true, '空数据卡仍可见，但不作为番茄锚');
+      quotaLabel.hide();
+      const hidden = await poll(anchorState, value => value.quota === null && value.pet.y - value.mini.y - value.mini.height === 14,
+        `${side} 额度隐藏回退球锚`);
+      quotaLabel.show(quotaModel);
+      const restored = await poll(anchorState, onQuota, `${side} 恢复额度后重接真实锚`);
+      core('reset'); core('toggle');
+      // The isolated profile has Codex disabled. Quiet transitions refresh its
+      // real visibility policy, so re-show the demo after starting focus.
+      quotaLabel.show(quotaModel);
+      await poll(anchorState, onQuota, `${side} 专注开始后恢复临时额度模型`);
+      stamp = service.getSnapshot().deadline - service.getSnapshot().total * 500; service.tick();
+      await poll(() => message.isVisible() && service.getSnapshot().encouragement, Boolean, `${side} 贴边鼓励显示`);
+      const encouraged = await poll(() => ({ ...anchorState(), message: painted(message) }), value =>
+        onQuota(value) && value.mini.y - value.message.y - value.message.height === 8, `${side} 鼓励跟随 mini 锚`);
+      assert.equal(message.isFocusable(), false); assert.deepEqual(mouseCalls.get(message), { ignore: true, forward: true });
+      stamp += 6000; service.tick(); core('toggle');
+      await poll(() => !message.isVisible(), Boolean, '鼓励过期收起');
+      if (side === 'right') {
+        await capture(mini, 'edge-right-mini'); await capture(quotaWindow, 'edge-right-quota');
+      }
+      result.edgeAnchors.push({ side, folded, expanded, movedQuota, empty, hidden, restored, encouraged });
+    }
+    edgeTuck.dock('right');
+    await poll(() => edgeTuck.getPresentation().mode === 'tucked' && !quotaLabel.getWindow().isVisible(), Boolean, '收球时额度隐藏');
+    select('pomodoro-open');
+    await poll(() => panel.isVisible() && mini.isVisible(), Boolean, '球体贴边收起时仍可打开番茄钟面板');
+    assert.equal(edgeTuck.getPresentation().mode, 'tucked', '打开番茄钟不拉出贴边球体');
+    assert.equal(getQuiet(), true);
+    core('toggle'); stamp = service.getSnapshot().deadline; service.tick();
+    await poll(() => message.isVisible(), Boolean, '球体贴边收起时专注完成提示仍显示');
+    assert.equal(message.getBounds().height, 244);
+    for (const win of [panel, mini, message]) assert.ok(inArea(win.getBounds()), '贴边番茄窗均在工作区内');
+    assert.equal(overlaps(painted(message), panel.getBounds()), false, '贴边完成提示避开面板');
+    await capture(message, 'tucked-completion-blue-light');
+    core('rest'); assert.equal(getQuiet(), false, '贴边休息仍允许普通互动');
+    assert.equal(panel.isVisible(), true); stamp = service.getSnapshot().deadline; service.tick();
+    await poll(() => message.isVisible() && message.getBounds().height === 204, Boolean, '贴边休息完成卡保持紧凑可见');
+    result.tucked = { presentation: edgeTuck.getPresentation(), panel: panel.getBounds(), mini: mini.getBounds(),
+      message: message.getBounds(), state: service.getSnapshot() };
+    edgeTuck.hide();
+    await poll(() => allWindows().every(win => !win.isVisible()), Boolean, '真正隐藏球球仍隐藏全部番茄窗');
+    edgeTuck.restore(); pet.setBounds(originalPetBounds, false); quotaLabel.hide();
+    await poll(() => panel.isVisible() && mini.isVisible() && message.isVisible(), Boolean, '恢复球球后番茄窗恢复');
+    result.checks.push('edge-quota-native-anchor-follow-empty-hidden-fallback-and-tucked-panel-reminders');
     for (const win of allWindows()) {
       const errors = await page(win, '__pomodoroSmoke.errors');
       assert.deepEqual(errors, [], '页面没有未处理错误');
@@ -463,7 +546,7 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
       if (win !== message) assert.ok(events.colors > 0, 'onColorMode 实际收到广播');
     }
     assert.deepEqual(result.errors, [], '原生页面加载与渲染无错误');
-    assert.equal(result.screenshots.length, 5);
+    assert.equal(result.screenshots.length, 8);
     result.finalState = service.getSnapshot(); result.ok = true;
     fs.writeFileSync(path.join(output, 'result.json'), `${JSON.stringify(result, null, 2)}\n`);
     process.stdout.write(`PET_POMODORO_INTEGRATION_OK ${JSON.stringify({ checks: result.checks.length, themes: result.themes.length,
@@ -480,6 +563,7 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
       try { mini.webContents.debugger.detach(); } catch (_) {}
     }
     if (locked) powerMonitor.emit('unlock-screen');
+    edgeTuck.restore(); pet.setBounds(originalPetBounds, false); quotaLabel.hide();
     BrowserWindow.prototype.setIgnoreMouseEvents = originalIgnoreMouse;
     select(`ui-theme-${original.uiTheme}`);
     select(`color-appearance-${original.codexQuotaAppearance}`);

@@ -140,7 +140,7 @@ function safeModel(value) {
 function createQuotaLabelWindow({
   BrowserWindow, screen, getPetWindow, getObstacle = () => null, getSize = () => 'standard',
   getAppearance = () => 'system', getPresentation = () => null, getSuppressed = () => false,
-  onError = () => {}, alwaysOnTop = true
+  onError = () => {}, onLayout = () => {}, alwaysOnTop = true
 }) {
   let win = null;
   let ready = false;
@@ -190,6 +190,10 @@ function createQuotaLabelWindow({
     reporting = false;
   }
 
+  function notifyLayout() {
+    try { onLayout(); } catch (error) { report(error); }
+  }
+
   function detach(target, error = null) {
     const current = win === target;
     if (current) {
@@ -198,6 +202,7 @@ function createQuotaLabelWindow({
       operation += 1;
     }
     safeDestroy(target);
+    if (current) notifyLayout();
     if (current && error) report(error, target);
   }
 
@@ -243,6 +248,7 @@ function createQuotaLabelWindow({
     }
     if (win !== target || operation !== token) return;
     try { target.setIgnoreMouseEvents(true, { forward: true }); } catch (error) { detach(target, error); }
+    if (win === target && operation === token) notifyLayout();
   }
 
   function petLayout() {
@@ -292,6 +298,7 @@ function createQuotaLabelWindow({
       return;
     }
     if (silentWindow === target) silentWindow = null;
+    notifyLayout();
   }
 
   function syncTopmost(target) {
@@ -419,6 +426,7 @@ function createQuotaLabelWindow({
         ready = false;
         requestedVisible = false;
         operation += 1;
+        notifyLayout();
       })
     ];
     for (const step of steps) if (!setupStep(loadingWindow, step)) return;
@@ -461,6 +469,18 @@ function createQuotaLabelWindow({
     win = null;
     ready = false;
     safeDestroy(previous);
+    notifyLayout();
+  }
+
+  function getWindow() {
+    const target = win;
+    if (!target) return null;
+    const status = health(target);
+    if (!status.ok) {
+      detach(target, status.error);
+      return null;
+    }
+    return win === target ? target : null;
   }
 
   return {
@@ -485,15 +505,11 @@ function createQuotaLabelWindow({
       operation += 1;
       try { present(); } catch (error) { if (win) detach(win, error); else report(error); }
     },
-    getWindow() {
-      const target = win;
-      if (!target) return null;
-      const status = health(target);
-      if (!status.ok) {
-        detach(target, status.error);
-        return null;
-      }
-      return win === target ? target : null;
+    getWindow,
+    getVisibleBounds() {
+      const target = getWindow();
+      return target && requestedVisible && currentModel?.items.length && target.isVisible()
+        ? target.getBounds() : null;
     },
     setAlwaysOnTop(enabled) {
       operation += 1;

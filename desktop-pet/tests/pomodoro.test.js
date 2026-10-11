@@ -27,6 +27,7 @@ test('defaults, isolated snapshots and one notification per action/second', t =>
   assert.deepEqual(initial.durations, { focus: 25, short: 5, long: 15 });
   assert.equal(initial.face, 'analog'); assert.equal(initial.status, 'idle'); assert.equal(initial.total, 1500);
   assert.equal(initial.quiet, false); assert.equal(initial.encouragement, ''); assert.equal(initial.pinned, false);
+  assert.equal(initial.encouragementEnabled, true, '新用户默认开启偶尔鼓励，已保存的关闭选项仍保留');
   initial.durations.focus = 99; assert.equal(model.getSnapshot().durations.focus, 25);
   assert.equal(fs.existsSync(f.filePath), false);
   ok(model, 'toggle'); f.advance(1000); f.fire();

@@ -28,7 +28,7 @@ function validAction(type, value, view) {
 }
 
 function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, getPetBounds,
-  getPetPresentation = () => null, getWindowObstacles = () => [], getSnapshot, onAction,
+  getPetPresentation = () => null, getWindowObstacles = () => [], getQuotaBounds = () => null, getSnapshot, onAction,
   isSuppressed = () => false, onError = () => {} }) {
   const entries = new Map();
   let panelOpen = false, settingsOpen = false, stopped = false, panelAnchorPending = false, panelFocusPending = false;
@@ -57,21 +57,23 @@ function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, g
       y: Math.round(Math.max(area.y, Math.min(bounds.y, area.y + area.height - height))), width, height };
   }
   const intersects = (a, b) => a.x < b.x + b.width + 6 && a.x + a.width + 6 > b.x && a.y < b.y + b.height + 6 && a.y + a.height + 6 > b.y;
-  function place(view, size, pet, area, obstacles, miniBounds) {
-    const centered = pet.x + (pet.width - size.width) / 2;
+  function place(view, size, pet, area, obstacles, miniBounds, quotaBounds) {
     if (view === 'panel') {
       const right = { x: pet.x + pet.width + 24, y: pet.y + (pet.height - size.height) / 2, ...size };
       if (right.x + size.width <= area.x + area.width && right.y >= area.y && right.y + size.height <= area.y + area.height &&
         !obstacles.some(obstacle => intersects(right, obstacle))) return right;
       return adjacentBounds(pet, area, size, obstacles);
     }
-    const first = fit({ x: view === 'message' && miniBounds ? miniBounds.x + (miniBounds.width - size.width) / 2 : centered,
-      y: view === 'message' && miniBounds ? miniBounds.y + 4 - size.height : pet.y - size.height - 8, ...size }, area);
+    const miniAnchor = quotaBounds || pet;
+    const first = fit({ x: view === 'message' && miniBounds ? miniBounds.x + (miniBounds.width - size.width) / 2 :
+      miniAnchor.x + (miniAnchor.width - size.width) / 2,
+      y: view === 'message' && miniBounds ? miniBounds.y + 4 - size.height :
+        miniAnchor.y - size.height - (quotaBounds ? 2 : 8), ...size }, area);
     const face = { x: first.x + 6, y: first.y + 6, width: first.width - 12, height: first.height - 12 };
     if (!obstacles.some(obstacle => intersects(face, obstacle))) return first;
-    // Keep the message directly above its mini when a neighboring panel only
-    // blocks one side; move along the same row before trying another side.
-    if (view === 'message') {
+    // Keep the quota/mini/message stack on the same row when a neighboring
+    // panel only blocks one side before trying another side of the anchor.
+    if (view === 'message' || quotaBounds) {
       const alongRow = obstacles.filter(obstacle => intersects(face, obstacle))
         .flatMap(obstacle => [obstacle.x - size.width, obstacle.x + obstacle.width])
         .map(x => fit({ ...first, x }, area)).sort((a, b) => Math.abs(a.x - first.x) - Math.abs(b.x - first.x));
@@ -79,7 +81,7 @@ function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, g
         { x: bounds.x + 6, y: bounds.y + 6, width: bounds.width - 12, height: bounds.height - 12 }, obstacle)));
       if (available) return available;
     }
-    return adjacentBounds(miniBounds || pet, area, size, obstacles);
+    return adjacentBounds(miniBounds || miniAnchor, area, size, obstacles);
   }
   function ensure(view) {
     const previous = entries.get(view);
@@ -118,6 +120,9 @@ function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, g
       const state = snapshot(), nativePet = getPetBounds?.() || getPetWindow().getBounds();
       const presentation = getPetPresentation(), pet = petVisualBounds(nativePet, presentation?.shape, presentation);
       const area = screen.getDisplayMatching(pet).workArea;
+      const quota = presentation?.mode === 'peeked' && ['left', 'right'].includes(presentation.side) ? getQuotaBounds() : null;
+      const quotaBounds = quota && ['x', 'y', 'width', 'height'].every(key => Number.isFinite(quota[key])) &&
+        quota.width > 0 && quota.height > 0 ? quota : null;
       const obstacles = [...getWindowObstacles().filter(item => item && Number.isFinite(item.x) && item.width > 0 && item.height > 0), pet];
       const active = ['running', 'paused', 'complete'].includes(state.status);
       const views = [];
@@ -132,7 +137,7 @@ function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, g
         if (!alive(entry.win) || !entry.ready) continue;
         const current = entry.win.getBounds();
         const bounds = view === 'panel' && entry.positioned && !panelAnchorPending ?
-          fit({ ...current, ...size }, screen.getDisplayMatching(current).workArea) : place(view, size, pet, area, obstacles, miniBounds);
+          fit({ ...current, ...size }, screen.getDisplayMatching(current).workArea) : place(view, size, pet, area, obstacles, miniBounds, quotaBounds);
         if (['x', 'y', 'width', 'height'].some(key => bounds[key] !== current[key])) entry.win.setBounds(bounds, false);
         entry.positioned = true;
         if (view === 'panel') panelAnchorPending = false;
