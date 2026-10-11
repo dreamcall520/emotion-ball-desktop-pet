@@ -999,6 +999,35 @@ for (const side of ['left', 'right']) for (const previous of ['awake', 'thinking
   });
 }
 
+for (const side of ['left', 'right']) for (const sleeping of [false, true]) {
+  test(`${side}收起${sleeping ? '睡眠' : '清醒'}首帧及同表情重入不残留思考注视`, () => {
+    const prepare = thinking => {
+      const r = createRenderer();
+      const x = side === 'left' ? 100 : 900;
+      r.activity(false, { cursor: { x: x + 40, y: 140 }, petBounds: { x, y: 100, width: 80, height: 80 },
+        workArea: { x: 0, y: 0, width: 1000, height: 800 } });
+      if (thinking) r.codexSettings({ enabled: true, generation: 1, activeTaskCount: 1 });
+      for (let now = 16; now <= 112; now += 16) r.advanceTo(now);
+      if (thinking) assert.ok(Math.abs(r.engine._gaze.x) > 10 && r.engine._gaze.y < -7);
+      if (sleeping) r.command('sleep');
+      r.present({ mode: 'tucked', side, suppressed: true });
+      return r;
+    };
+    const centers = r => svgEyes(r).map(eye => eye.attributes.transform.match(/^translate\([^)]+\)/)[0]);
+    const expected = centers(prepare(false));
+    const r = prepare(true);
+    assert.deepEqual(centers(r), expected, '禁用注视首帧应与没有旧注视的真实SVG位置一致');
+    assert.equal(r.engine._gaze.x, 0);
+    assert.equal(r.engine._gaze.y, 0);
+    const blinkNext = r.engine._blinkNext, emotionStart = r.engine._emoStart;
+    r.present({ mode: 'tucked', side, suppressed: true });
+    assert.equal(r.engine.emotionId, sleeping ? '56' : '55');
+    assert.deepEqual(centers(r), expected, '同表情重入不保留偏移眼睛');
+    assert.equal(r.engine._blinkNext, blinkNext);
+    assert.equal(r.engine._emoStart, emotionStart);
+  });
+}
+
 for (const size of [80, 180]) for (const side of ['left', 'right']) for (const sleeping of ['manual', 'natural']) {
   test(`${size}px ${sleeping}睡眠收起在${side}时，真实闭眼路径不越过半头中心边界`, () => {
     const r = createRenderer();

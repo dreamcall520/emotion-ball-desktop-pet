@@ -756,8 +756,8 @@
       var k = 1 - Math.exp(-5.66 * dt);
       var gx = def.gaze !== false ? this._gaze.tx : 0;
       var gy = def.gaze !== false ? this._gaze.ty : 0;
-      this._gaze.x += (gx - this._gaze.x) * k;
-      this._gaze.y += (gy - this._gaze.y) * k;
+      this._gaze.x = def.gaze === false ? 0 : this._gaze.x + (gx - this._gaze.x) * k;
+      this._gaze.y = def.gaze === false ? 0 : this._gaze.y + (gy - this._gaze.y) * k;
       pose.left.lookX += this._gaze.x;
       pose.right.lookX += this._gaze.x;
       pose.left.lookY += this._gaze.y;

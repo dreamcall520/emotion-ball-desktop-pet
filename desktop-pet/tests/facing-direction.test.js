@@ -149,6 +149,58 @@ test('左侧脸的注视仍使用屏幕坐标，正值始终向屏幕右侧移�
   ));
 });
 
+for (const id of ['00', '06', '41']) {
+  test(`gaze:false 表情${id}首帧不继承上个表情的鼠标注视`, () => {
+    const fixture = createEngine({ emotion: '02', autostart: true });
+    const { engine } = fixture;
+    engine.setGaze(1, -1);
+    for (let now = 1016; now <= 1208; now += 16) fixture.tick(now);
+    assert.ok(engine._gaze.x > 10 && engine._gaze.y < -5, '先由真实动画形成非零当前注视');
+    engine.setEmotion(id);
+    engine.renderStatic();
+    assert.equal(engine._gaze.x, 0);
+    assert.equal(engine._gaze.y, 0);
+    assert.equal(engine._lastPose.left.lookX, engine._def.base.left.lookX);
+    assert.equal(engine._lastPose.left.lookY, engine._def.base.left.lookY);
+    engine.setGaze(-1, 1);
+    fixture.tick(1224);
+    assert.equal(engine._gaze.x, 0, '禁用注视时后续目标也不移动眼睛');
+    assert.equal(engine._gaze.y, 0);
+  });
+}
+
+test('正常注视与 clearGaze 继续缓动，鼠标离开不会瞬间跳回', () => {
+  const fixture = createEngine({ emotion: '02', autostart: true });
+  const { engine } = fixture;
+  engine.setGaze(1, -1);
+  fixture.tick(1016);
+  const first = { ...engine._gaze };
+  assert.ok(first.x > 0 && first.x < 24 && first.y < 0 && first.y > -15);
+  fixture.tick(1032);
+  const second = { ...engine._gaze };
+  assert.ok(second.x > first.x && second.x < 24 && second.y < first.y && second.y > -15);
+  engine.clearGaze();
+  fixture.tick(1048);
+  assert.ok(engine._gaze.x > 0 && engine._gaze.x < second.x);
+  assert.ok(engine._gaze.y < 0 && engine._gaze.y > second.y);
+  assert.equal(engine._gaze.tx, 0);
+  assert.equal(engine._gaze.ty, 0);
+});
+
+test('gaze:false 仍保留受控动作帧明确提供的眼睛姿态', () => {
+  const fixture = createEngine({ emotion: '00', autostart: true });
+  const { engine } = fixture;
+  engine.setGaze(1, -1);
+  engine.setMotionFrame({ body: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotate: 0, yaw: 0 }, gaze: { x: 5, y: -6 } });
+  fixture.tick(1016);
+  assert.equal(engine._gaze.x, 0);
+  assert.equal(engine._gaze.y, 0);
+  assert.equal(engine._lastPose.left.lookX, 5);
+  assert.equal(engine._lastPose.left.lookY, -6);
+  assert.equal(engine._lastPose.right.lookX, 5);
+  assert.equal(engine._lastPose.right.lookY, -6);
+});
+
 test('朝左时表情过渡与 yaw 仍产生有限且可恢复的眼睛变换', () => {
   const fixture = createEngine({ lite: true, liteRibbons: true });
   const { engine } = fixture;
