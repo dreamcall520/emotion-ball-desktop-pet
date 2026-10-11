@@ -21,7 +21,7 @@ function reminderBounds(bounds, area, size, presentation) {
 }
 
 function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialog, filePath,
-  getPetBounds, getPetWindow = null, getWindowObstacles = () => [], getPetPresentation = () => null, getDefaultTab = () => 'todo', getAppearance = () => 'light', getColorMode = () => 'standard', onComplete = () => {}, onError = () => {}, isSuppressed = () => false,
+  getPetBounds, getPetWindow = null, getWindowObstacles = () => [], getPetPresentation = () => null, getDefaultTab = () => 'todo', getAppearance = () => 'light', getColorMode = () => 'standard', onComplete = () => {}, onReminderLayout = () => {}, onError = () => {}, isSuppressed = () => false,
   organizer = null,
   now = Date.now, setTimer = setInterval, clearTimer = clearInterval, closeTimeoutMs = 60000 }) {
   const store = createNotesStore(filePath, { onError });
@@ -39,6 +39,7 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
     try { await organizer?.cancel(); } finally { if (organizing === current) organizing = null; }
   }
   const report = error => { try { onError(error); } catch (_) {} };
+  const notifyReminderLayout = () => { try { onReminderLayout(); } catch (error) { report(error); } };
   const suppressed = () => closed || paused || isSuppressed();
   const alive = win => win && !win.isDestroyed();
   const send = (win, channel, value) => {
@@ -141,10 +142,13 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
       entries.delete(contents); windowEntries.delete(win);
       if (noteWindows.get(id) === win) noteWindows.delete(id);
       if (panel === win) panel = null;
-      if (reminderWindow === win) { reminderWindow = null; active = null; }
+      if (reminderWindow === win) { reminderWindow = null; active = null; notifyReminderLayout(); }
       const pending = closing.get(contents);
       if (pending) pending.finish(true);
     });
+    if (reminder) {
+      for (const event of ['show', 'hide', 'move', 'resize']) win.on(event, notifyReminderLayout);
+    }
     if (note) {
       const persistBounds = () => {
         clearTimeout(entry.boundsTimer);

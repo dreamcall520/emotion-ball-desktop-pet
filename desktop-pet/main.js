@@ -1710,7 +1710,7 @@ async function finishSmokeTest() {
     if (process.env.PET_SMOKE_POMODORO_ONLY === '1') {
       await require('./scripts/verify-pomodoro-integration').verifyPomodoro({
         pet: petWindow, service: pomodoro, windows: pomodoroWindows, BrowserWindow, powerMonitor,
-        quotaLabel, edgeTuck, screen,
+        quotaLabel, edgeTuck, screen, notes: notesCompanion,
         getMenu: () => Menu.buildFromTemplate(menuTemplate()), getSettings: () => settings,
         getQuiet: () => pomodoroQuiet, setClock: read => { pomodoroNow = read; }
       });
@@ -2666,6 +2666,10 @@ async function bootstrap() {
     getPetPresentation: () => ({ ...edgeTuck?.getPresentation(), shape: settings?.customization?.appearance?.shape }),
     getWindowObstacles: functionWindowObstacles,
     getQuotaBounds: () => quotaLabel?.getVisibleBounds(),
+    getReminderBounds: () => {
+      const win = notesCompanion?.getWindows().reminder;
+      return win && !win.isDestroyed() && win.isVisible() ? win.getBounds() : null;
+    },
     getSnapshot: () => pomodoro.getSnapshot(), onAction: (type, value) => pomodoro.action(type, value),
     isSuppressed: pomodoroSuppressed,
     onError: error => writeError('番茄钟窗口', error) });
@@ -2682,6 +2686,7 @@ async function bootstrap() {
     getColorMode: () => settings.colorMode,
     isSuppressed: () => screenLocked || isQuitting,
     onComplete: () => { if (!pomodoroQuiet && !screenLocked && !isQuitting) sendCommand({ command: 'again', motion: 'hop' }); },
+    onReminderLayout: () => pomodoroWindows?.sync(),
     onError: error => writeError('便签与待办', error) });
   nativeTheme?.on('updated', () => { if (settings.codexQuotaAppearance === 'system') notesCompanion?.syncAppearance(); });
   chatWindow = createChatWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,

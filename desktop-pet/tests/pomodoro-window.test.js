@@ -9,7 +9,7 @@ function fixture() {
   const windows = [], handlers = new Map(), actions = [], errors = [];
   const state = { status: 'idle', mode: 'focus', face: 'analog', remaining: 1500, total: 1500,
     pinned: false, reminder: false, encouragement: '', durations: { focus: 25, short: 5, long: 15 } };
-  let suppressed = false, obstacles = [], quota = null, presentation = { shape: 'blob' };
+  let suppressed = false, obstacles = [], quota = null, todoReminder = null, presentation = { shape: 'blob' };
   const area = { x: 0, y: 0, width: 1440, height: 900 };
   const pet = { bounds: { x: 300, y: 300, width: 80, height: 80 }, visible: true,
     isDestroyed: () => false, isVisible() { return this.visible; }, getBounds() { return { ...this.bounds }; } };
@@ -41,7 +41,8 @@ function fixture() {
     ipcMain: { handle: (key, fn) => handlers.set(key, fn), removeHandler: key => handlers.delete(key) },
     screen: { getDisplayMatching: () => ({ workArea: area }) }, getPetWindow: () => pet,
     getPetBounds: () => pet.getBounds(), getPetPresentation: () => presentation,
-    getQuotaBounds: () => quota, getWindowObstacles: () => [...obstacles, ...(quota ? [quota] : [])],
+    getQuotaBounds: () => quota, getReminderBounds: () => todoReminder,
+    getWindowObstacles: () => [...obstacles, ...(quota ? [quota] : [])],
     getSnapshot: () => state, isSuppressed: () => suppressed, onError: error => errors.push(error),
     onAction: (type, value) => { actions.push([type, value]); if (type === 'pin') state.pinned = value; return { ok: true, state: { ...state } }; } });
   const win = view => windows.findLast(item => item.view === view && !item.destroyed);
@@ -49,6 +50,7 @@ function fixture() {
   return { manager, state, windows, handlers, actions, errors, pet, area, win, event,
     invoke: (view, type, value) => handlers.get('pomodoro:action')(event(view), type, value),
     suppress: value => { suppressed = value; }, obstacles: value => { obstacles = value; }, quota: value => { quota = value; },
+    todoReminder: value => { todoReminder = value; },
     presentation: value => { presentation = value; } };
 }
 
@@ -76,7 +78,8 @@ test('左右贴边时小入口跟随真实额度边界，消息跟随，隐藏�
     assert.equal(face(mini).y - face(message).y - face(message).height, 8);
     assert.equal(message.passthrough, true); assert.notEqual(message.focused, true);
     f.state.encouragement = ''; f.state.reminder = true; f.manager.sync();
-    assert.equal(face(mini).y - face(message).y - face(message).height, 8, '完成提示沿用 mini 锚');
+    assert.equal(f.pet.bounds.y - message.bounds.y - message.bounds.height, 8, '完成提示改用球锚，mini 不把完成提示推离顶部');
+    assert.equal(overlaps(face(mini), face(message)), false, 'mini 主动避开已定位的完成提示');
     assert.equal(message.passthrough, false);
     f.state.reminder = false; f.quota(null); f.manager.sync();
     assert.equal(f.pet.bounds.y - face(mini).y - face(mini).height, 14, '额度隐藏或无数据时回退球锚');
@@ -142,15 +145,15 @@ test('番茄窗懒创建、原尺寸、不抢焦点、拖动稳定与屏幕边�
   assert.equal((await f.invoke('message', 'layout', { cardHeight: 36 })).ok, true);
   f.state.reminder = true; f.manager.sync();
   assert.equal(message.passthrough, false); assert.equal(message.bounds.width, 256);
-  assert.equal(message.bounds.height, 244, '专注完成卡保留两项操作空间');
+  assert.equal(message.bounds.height, 188, '专注完成卡保留两项紧凑操作空间');
   for (const mode of ['short', 'long']) {
     f.state.mode = mode; f.manager.sync();
-    assert.equal(message.bounds.height, 204, '休息完成卡收合隐藏的加时操作空间');
+    assert.equal(message.bounds.height, 164, '休息完成卡收合隐藏的加时操作空间');
     await f.invoke('message', 'layout', { cardHeight: 54 });
-    assert.equal(message.bounds.height, 204, '鼓励卡尺寸请求不能覆盖完成卡固定尺寸');
+    assert.equal(message.bounds.height, 164, '鼓励卡尺寸请求不能覆盖完成卡固定尺寸');
   }
   f.state.mode = 'focus'; f.manager.sync();
-  assert.equal(message.bounds.height, 244, '切回专注完成卡恢复两项操作空间');
+  assert.equal(message.bounds.height, 188, '切回专注完成卡恢复两项操作空间');
   await f.invoke('panel', 'pin', true); assert.equal(panel.topmost, true);
   await f.invoke('panel', 'close-panel'); assert.equal(panel.visible, false); assert.equal(mini.visible, true);
   f.suppress(true); f.manager.sync(); assert.equal(mini.visible, false); assert.equal(message.visible, false);
@@ -168,6 +171,49 @@ test('番茄窗懒创建、原尺寸、不抢焦点、拖动稳定与屏幕边�
     f.presentation({ shape: 'cloud' }); f.manager.reposition();
     for (const view of ['mini', 'message']) { const b = f.win(view).bounds;
       assert.ok(b.x >= bounds.x && b.y >= bounds.y && b.x + b.width <= bounds.x + bounds.width && b.y + b.height <= bounds.y + bounds.height); }
+  }
+  assert.deepEqual(f.errors, []);
+});
+
+test('完成提示优先在球上方，mini 避让且两种待办到达顺序均不重叠', async t => {
+  const f = fixture(); t.after(() => f.manager.close());
+  const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+  const face = win => ({ x: win.bounds.x + 6, y: win.bounds.y + 6, width: win.bounds.width - 12, height: win.bounds.height - 12 });
+  Object.assign(f.pet.bounds, { x: 600, y: 500 });
+  Object.assign(f.state, { status: 'complete', reminder: true }); f.manager.sync(); await flush();
+  const message = f.win('message'), mini = f.win('mini');
+  assert.equal(message.bounds.x + message.bounds.width / 2, f.pet.bounds.x + f.pet.bounds.width / 2);
+  assert.equal(f.pet.bounds.y - message.bounds.y - message.bounds.height, 8);
+  assert.equal(overlaps(face(message), face(mini)), false, '完成提示先定位，mini 自己避让');
+  assert.notEqual(message.focused, true); assert.notEqual(mini.focused, true);
+  const todo = { x: 460, y: 302, width: 360, height: 190 };
+  const originalTodo = { ...todo };
+  f.todoReminder(todo); f.manager.sync();
+  const completionFirst = { ...message.bounds };
+  assert.equal(overlaps(face(message), todo), false, '完成先到，待办随后出现时完成卡避让');
+  assert.deepEqual(todo, originalTodo, '番茄窗不写入待办原位置');
+  Object.assign(f.state, { status: 'paused', reminder: false }); f.manager.sync();
+  Object.assign(f.state, { status: 'complete', reminder: true }); f.manager.sync();
+  assert.deepEqual(message.bounds, completionFirst, '待办先到与完成先到得到相同避让结果');
+  const expanded = { ...todo, y: 262, height: 230 };
+  f.todoReminder(expanded); f.manager.sync(); assert.equal(overlaps(face(message), expanded), false);
+  f.todoReminder(null); f.manager.sync();
+  assert.equal(f.pet.bounds.y - message.bounds.y - message.bounds.height, 8, '待办关闭后完成卡回到球上方');
+  for (const area of [{ x: 0, y: 0, width: 1440, height: 900 }, { x: -1400, y: -100, width: 1200, height: 800 }]) {
+    Object.assign(f.area, area);
+    for (const side of ['left', 'right']) {
+      Object.assign(f.pet.bounds, { x: side === 'left' ? area.x : area.x + area.width - 80, y: area.y + 500 });
+      f.presentation({ mode: 'tucked', side, shape: 'blob' }); f.manager.sync();
+      assert.equal(f.pet.bounds.y - message.bounds.y - message.bounds.height, 8, '左右贴边优先横向夹紧后保持球上方');
+      assert.equal(message.bounds.x, side === 'left' ? area.x : area.x + area.width - message.bounds.width);
+      assert.equal(overlaps(face(message), face(mini)), false);
+      f.pet.bounds.y = area.y + 10; f.manager.sync();
+      for (const win of [message, mini]) {
+        const b = win.bounds;
+        assert.ok(b.x >= area.x && b.y >= area.y && b.x + b.width <= area.x + area.width && b.y + b.height <= area.y + area.height);
+      }
+      assert.equal(overlaps(face(message), f.pet.bounds), false, '球顶部没有空间时再切换侧面');
+    }
   }
   assert.deepEqual(f.errors, []);
 });

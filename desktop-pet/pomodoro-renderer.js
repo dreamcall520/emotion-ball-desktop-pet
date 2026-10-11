@@ -29,8 +29,13 @@
     });
   }
   function feedback(message) {
-    const node = document.body.dataset.view === 'message' ? $('message-feedback') : $('feedback');
+    const messageView = document.body.dataset.view === 'message';
+    const node = messageView ? $('message-feedback') : $('feedback');
     node.textContent = message || ''; node.hidden = !message;
+    if (messageView) {
+      $('reminder-copy').hidden = Boolean(message);
+      $('reminder').setAttribute('aria-describedby', message ? 'message-feedback' : 'reminder-copy');
+    }
   }
   async function action(type, value) {
     if (!api) { feedback('番茄钟尚未连接，请重新打开。'); return false; }
@@ -99,8 +104,8 @@
       $('encouragement').hidden = Boolean(state.reminder) || !state.encouragement;
       $('encouragement').textContent = typeof state.encouragement === 'string' ? state.encouragement : '';
       if (!state.reminder && state.encouragement) fitMessage();
-      $('reminder-title').textContent = focus ? '这次专注，完成了。' : '休息好了，再出发。';
-      $('reminder-copy').textContent = focus ? `专注了 ${Number((total / 60).toFixed(1))} 分钟，歇一会儿吧。` : '下一次专注，继续按自己的节奏来。';
+      $('reminder-heading').textContent = focus ? '专注完成' : '休息完成';
+      $('reminder-copy').textContent = focus ? `专注了 ${Number((total / 60).toFixed(1))} 分钟，歇一会儿吧。` : '休息好了，再出发。下一次专注，继续按自己的节奏来。';
       const rest = state.cycleCompleted >= 4 ? 'long' : 'short';
       $('rest-now').textContent = focus ? `${rest === 'long' ? '长休息' : '休息'} ${state.durations?.[rest] || (rest === 'long' ? 15 : 5)} 分钟` : '开始下一次专注';
       $('five-more').hidden = !focus;

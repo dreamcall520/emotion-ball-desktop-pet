@@ -28,7 +28,8 @@ function validAction(type, value, view) {
 }
 
 function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, getPetBounds,
-  getPetPresentation = () => null, getWindowObstacles = () => [], getQuotaBounds = () => null, getSnapshot, onAction,
+  getPetPresentation = () => null, getWindowObstacles = () => [], getQuotaBounds = () => null,
+  getReminderBounds = () => null, getSnapshot, onAction,
   isSuppressed = () => false, onError = () => {} }) {
   const entries = new Map();
   let panelOpen = false, settingsOpen = false, stopped = false, panelAnchorPending = false, panelFocusPending = false;
@@ -57,11 +58,17 @@ function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, g
       y: Math.round(Math.max(area.y, Math.min(bounds.y, area.y + area.height - height))), width, height };
   }
   const intersects = (a, b) => a.x < b.x + b.width + 6 && a.x + a.width + 6 > b.x && a.y < b.y + b.height + 6 && a.y + a.height + 6 > b.y;
-  function place(view, size, pet, area, obstacles, miniBounds, quotaBounds) {
+  function place(view, size, pet, area, obstacles, miniBounds, quotaBounds, reminder) {
     if (view === 'panel') {
       const right = { x: pet.x + pet.width + 24, y: pet.y + (pet.height - size.height) / 2, ...size };
       if (right.x + size.width <= area.x + area.width && right.y >= area.y && right.y + size.height <= area.y + area.height &&
         !obstacles.some(obstacle => intersects(right, obstacle))) return right;
+      return adjacentBounds(pet, area, size, obstacles);
+    }
+    if (view === 'message' && reminder) {
+      const above = fit({ x: pet.x + (pet.width - size.width) / 2, y: pet.y - size.height - 8, ...size }, area);
+      const face = { x: above.x + 6, y: above.y + 6, width: above.width - 12, height: above.height - 12 };
+      if (above.y + above.height <= pet.y - 8 && !obstacles.some(obstacle => intersects(face, obstacle))) return above;
       return adjacentBounds(pet, area, size, obstacles);
     }
     const miniAnchor = quotaBounds || pet;
@@ -73,7 +80,7 @@ function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, g
     if (!obstacles.some(obstacle => intersects(face, obstacle))) return first;
     // Keep the quota/mini/message stack on the same row when a neighboring
     // panel only blocks one side before trying another side of the anchor.
-    if (view === 'message' || quotaBounds) {
+    if (view === 'message' || quotaBounds || reminder) {
       const alongRow = obstacles.filter(obstacle => intersects(face, obstacle))
         .flatMap(obstacle => [obstacle.x - size.width, obstacle.x + obstacle.width])
         .map(x => fit({ ...first, x }, area)).sort((a, b) => Math.abs(a.x - first.x) - Math.abs(b.x - first.x));
@@ -123,12 +130,14 @@ function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, g
       const quota = presentation?.mode === 'peeked' && ['left', 'right'].includes(presentation.side) ? getQuotaBounds() : null;
       const quotaBounds = quota && ['x', 'y', 'width', 'height'].every(key => Number.isFinite(quota[key])) &&
         quota.width > 0 && quota.height > 0 ? quota : null;
-      const obstacles = [...getWindowObstacles().filter(item => item && Number.isFinite(item.x) && item.width > 0 && item.height > 0), pet];
+      const obstacles = [...getWindowObstacles(), getReminderBounds(), pet].filter(item => item &&
+        ['x', 'y', 'width', 'height'].every(key => Number.isFinite(item[key])) && item.width > 0 && item.height > 0);
       const active = ['running', 'paused', 'complete'].includes(state.status);
       const views = [];
       if (panelOpen) views.push(['panel', { width: 320, height: settingsOpen || state.face !== 'analog' ? 384 : 476 }]);
+      if (state.reminder) views.push(['message', { width: 256, height: state.mode === 'focus' ? 188 : 164 }]);
       if (panelOpen || active) views.push(['mini', { width: 112, height: 48 }]);
-      if (state.reminder || state.encouragement) views.push(['message', state.reminder ? { width: 256, height: state.mode === 'focus' ? 244 : 204 } : { width: 196, height: messageCardHeight + 12 }]);
+      if (!state.reminder && state.encouragement) views.push(['message', { width: 196, height: messageCardHeight + 12 }]);
       const visible = new Set(views.map(([view]) => view));
       for (const [view, entry] of entries) if (!visible.has(view) && alive(entry.win)) entry.win.hide();
       let miniBounds = null;
@@ -137,7 +146,7 @@ function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, g
         if (!alive(entry.win) || !entry.ready) continue;
         const current = entry.win.getBounds();
         const bounds = view === 'panel' && entry.positioned && !panelAnchorPending ?
-          fit({ ...current, ...size }, screen.getDisplayMatching(current).workArea) : place(view, size, pet, area, obstacles, miniBounds, quotaBounds);
+          fit({ ...current, ...size }, screen.getDisplayMatching(current).workArea) : place(view, size, pet, area, obstacles, miniBounds, quotaBounds, state.reminder);
         if (['x', 'y', 'width', 'height'].some(key => bounds[key] !== current[key])) entry.win.setBounds(bounds, false);
         entry.positioned = true;
         if (view === 'panel') panelAnchorPending = false;

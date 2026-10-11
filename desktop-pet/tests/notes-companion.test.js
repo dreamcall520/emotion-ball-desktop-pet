@@ -10,7 +10,7 @@ const M = require('../lib/notes-model');
 const { createNotesCompanion, visibleBounds } = require('../lib/notes-companion');
 const { petVisualBounds } = require('../lib/pet-visual-bounds');
 
-function fixture(t, initial, getDefaultTab, organizer, getAppearance, getColorMode, getWindowObstacles) {
+function fixture(t, initial, getDefaultTab, organizer, getAppearance, getColorMode, getWindowObstacles, onReminderLayout) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qiu-notes-window-'));
   const file = path.join(dir, 'notes.json');
   if (initial) fs.writeFileSync(file, JSON.stringify(initial));
@@ -38,10 +38,10 @@ function fixture(t, initial, getDefaultTab, organizer, getAppearance, getColorMo
     loadFile(filePath, { query }) { this.url = pathToFileURL(filePath).href + '?' + new URLSearchParams(query); return Promise.resolve(); }
     isDestroyed() { return this.destroyed; }
     isVisible() { return this.visible; }
-    show() { this.visible = true; this.activeShow = true; }
-    showInactive() { this.visible = true; this.inactiveShow = true; this.inactiveShows = (this.inactiveShows || 0) + 1; }
+    show() { const changed = !this.visible; this.visible = true; this.activeShow = true; if (changed) this.emit('show'); }
+    showInactive() { const changed = !this.visible; this.visible = true; this.inactiveShow = true; this.inactiveShows = (this.inactiveShows || 0) + 1; if (changed) this.emit('show'); }
     focus() { this.focused = true; }
-    hide() { this.visible = false; }
+    hide() { const changed = this.visible; this.visible = false; if (changed) this.emit('hide'); }
     destroy() { this.destroyed = true; this.visible = false; this.emit('closed'); }
     setBackgroundColor(value) { this.backgroundColor = value; }
     setAlwaysOnTop(value) { this.pinned = value; }
@@ -64,7 +64,7 @@ function fixture(t, initial, getDefaultTab, organizer, getAppearance, getColorMo
     dialog: { showSaveDialog: async () => ({ canceled: true }), showMessageBox: async (...args) => { dialogs.push(args.at(-1)); dialogCalls.push(args); return dialogResult; } },
     getPetBounds: () => pet.destroyed ? null : pet.getBounds(), getPetWindow: () => pet,
     getWindowObstacles, getPetPresentation: () => ({ shape: 'aurora-cloud' }), getDefaultTab, getAppearance, getColorMode, organizer, onError: error => errors.push(error),
-    onComplete: id => completions.push(id), now: () => clock,
+    onComplete: id => completions.push(id), onReminderLayout, now: () => clock,
     setTimer: fn => { tick = fn; return { unref() {} }; }, clearTimer: () => { tick = null; }, closeTimeoutMs: 50 });
   t.after(async () => {
     for (const win of windows) win.allowClose = true;
@@ -435,6 +435,37 @@ test('reminders appear next to the painted pet, follow native changes and avoid 
   f.pet.visible = true; f.controller.repositionReminder(true); assert.equal(win.visible, true);
   f.pet.destroyed = true; f.controller.repositionReminder(); assert.equal(win.visible, false);
   win.destroy(); assert.equal(f.controller.repositionReminder(), false);
+});
+
+test('reminder layout notifies companions on visibility, native geometry and disposal without changing reminder placement', t => {
+  let f, fail = false;
+  const layouts = [];
+  f = fixture(t, undefined, undefined, undefined, undefined, undefined, undefined, () => {
+    const win = f.controller.getWindows().reminder;
+    layouts.push(win && !win.isDestroyed() && win.isVisible() ? win.getBounds() : null);
+    if (fail) throw Error('companion layout failed');
+  });
+  const panel = f.ready(f.controller.openPanel());
+  panel.hide(); panel.emit('move'); panel.emit('resize');
+  assert.equal(layouts.length, 0, 'ordinary notes windows must not trigger reminder layout');
+  f.pet.bounds = { x: 600, y: 400, width: 80, height: 80 };
+  f.controller.getStore().update(state => {
+    state.todos.push({ ...M.newTodo('companion placement', f.now()), reminderAt: f.now() + 1000, reminderState: 'pending' });
+    return state;
+  });
+  f.time(f.now() + 1000);
+  const win = f.ready(f.controller.getWindows().reminder);
+  const original = win.getBounds();
+  assert.deepEqual(layouts.at(-1), original);
+  win.emit('move'); win.emit('resize');
+  assert.equal(layouts.length, 3); assert.deepEqual(win.getBounds(), original);
+  f.controller.pause(); assert.equal(layouts.at(-1), null);
+  f.controller.resume(); assert.deepEqual(layouts.at(-1), original);
+  fail = true;
+  assert.doesNotThrow(() => win.emit('move'));
+  assert.equal(f.errors.at(-1).message, 'companion layout failed');
+  fail = false; win.destroy();
+  assert.equal(layouts.at(-1), null); assert.equal(f.controller.getWindows().reminder, null);
 });
 
 test('reminder write failure keeps current token/window and completion feedback waits for save', async t => {

@@ -2736,6 +2736,21 @@ test('贴边保留番茄窗口与鼓励权限，普通互动继续收起，隐�
   f.quotaLabel.show({ items: [] }); assert.equal(f.pomodoroWindows.options.getQuotaBounds(), null);
 });
 
+test('番茄完成避让只读取真实可见待办，待办布局变化立即同步番茄窗口', async () => {
+  const f = await fixture();
+  assert.equal(f.pomodoroWindows.options.getReminderBounds(), null);
+  const bounds = { x: 120, y: 160, width: 360, height: 190 };
+  const reminder = { visible: true, destroyed: false, isVisible() { return this.visible; },
+    isDestroyed() { return this.destroyed; }, getBounds() { assert.equal(this.destroyed, false); return bounds; } };
+  f.notes.windows.reminder = reminder;
+  assert.deepEqual(f.pomodoroWindows.options.getReminderBounds(), bounds);
+  let syncs = 0; f.pomodoroWindows.sync = () => syncs++;
+  f.notes.options.onReminderLayout(); assert.equal(syncs, 1);
+  reminder.visible = false; assert.equal(f.pomodoroWindows.options.getReminderBounds(), null);
+  reminder.visible = true; reminder.destroyed = true;
+  assert.equal(f.pomodoroWindows.options.getReminderBounds(), null);
+});
+
 test('专注中的自动更新只记住版本，不回退弹窗或结束后补弹，手动检查仍可用', async () => {
   const f = await fixture();
   f.pomodoro.change(true);

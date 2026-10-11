@@ -12,7 +12,7 @@ fs.mkdirSync(output, { recursive: true });
 (async () => {
   const chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
   const browser = await chromium.launch({ headless: true, args: ['--disable-gpu'], ...(fs.existsSync(chrome) ? { executablePath: chrome } : {}) });
-  const errors = [], results = [], dragRegions = [], textContrast = [], settingsTypography = [], analogSpacing = [];
+  const errors = [], results = [], dragRegions = [], textContrast = [], settingsTypography = [], analogSpacing = [], completionCards = [], completionErrors = [];
   try {
     const notesReference = await browser.newPage();
     await notesReference.route('**/*.js', route => route.abort());
@@ -44,7 +44,7 @@ fs.mkdirSync(output, { recursive: true });
           action: async (type, value) => {
             window.testActions.push({ type, value });
             if (window.testHold === type) await new Promise(resolve => { window.testRelease = resolve; });
-            if (window.testFail && type === 'settings') return { ok: false, message: '保存失败，请重试。' };
+            if (window.testFail === type || window.testFail === true && type === 'settings') return { ok: false, message: window.testFailureCopy || '保存失败，请重试。' };
             if (type === 'settings') {
               const changed = Object.keys(value.durations).some(key => value.durations[key] !== state.durations[key]);
               state = { ...state, ...value, ...(changed ? { status: 'idle', remaining: value.durations[state.mode] * 60, total: value.durations[state.mode] * 60 } : {}) };
@@ -193,7 +193,7 @@ fs.mkdirSync(output, { recursive: true });
     await panel.locator('#collapse').click();
     assert.equal(await panel.evaluate(() => testActions.at(-1).type), 'close-panel');
 
-    const mini = await pageFor('mini', 112, 48), message = await pageFor('message', 256, 244);
+    const mini = await pageFor('mini', 112, 48), message = await pageFor('message', 256, 188);
     for (const theme of ['green', 'blue']) for (const appearance of ['light', 'dark']) for (const mode of ['standard', 'accessible']) {
       for (const page of [mini, message]) await page.evaluate(([mode, appearance, theme]) => testTheme(mode, appearance, theme), [mode, appearance, theme]);
       await mini.waitForFunction(value => document.documentElement.dataset.notesAppearance === value, appearance);
@@ -207,13 +207,25 @@ fs.mkdirSync(output, { recursive: true });
       assert.ok(!fill.startsWith('rgba'), '鼓励必须有不透明底色');
       await mini.screenshot({ path: path.join(output, `mini-${theme}-${appearance}-${mode}.png`), omitBackground: true });
       await message.screenshot({ path: path.join(output, `encouragement-${theme}-${appearance}-${mode}.png`), omitBackground: true });
-      await message.setViewportSize({ width: 256, height: 244 });
-      await message.evaluate(() => testState({ mode: 'focus', reminder: true, status: 'complete' }));
-      await message.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-      const copy = await message.locator('#reminder-copy').evaluate(node => ({ color: getComputedStyle(node).color,
-        background: getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() }));
-      assert.ok(contrast(copy.color, copy.background) >= 4.5, `完成提示正文对比度 ${theme}/${appearance}/${mode}: ${JSON.stringify(copy)} ratio=${contrast(copy.color, copy.background)}`);
-      if (mode === 'standard') await message.screenshot({ path: path.join(output, `complete-reminder-${theme}-${appearance}.png`), omitBackground: true });
+      for (const [timerMode, height] of [['focus', 176], ['short', 152]]) {
+        await message.setViewportSize({ width: 256, height: height + 12 });
+        const active = await message.evaluate(() => document.activeElement.id);
+        await message.evaluate(mode => testState({ mode, total: mode === 'focus' ? 1500 : 300, reminder: true, status: 'complete' }), timerMode);
+        await message.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        assert.equal(await message.evaluate(() => document.activeElement.id), active, '完成提醒渲染不主动抢键盘焦点');
+        assert.equal(await message.getByRole('complementary', { name: timerMode === 'focus' ? '专注完成' : '休息完成' }).isVisible(), true);
+        const layout = await message.locator('#reminder').evaluate(node => {
+          const copy = document.getElementById('reminder-copy'), style = getComputedStyle(copy), buttons = [...node.querySelectorAll('.reminder-actions button:not([hidden])')];
+          return { height: node.getBoundingClientRect().height, clipped: node.scrollHeight > node.clientHeight, fontSize: parseFloat(style.fontSize), color: style.color,
+            background: getComputedStyle(document.documentElement).getPropertyValue('--surface').trim(),
+            bottomGap: node.getBoundingClientRect().bottom - buttons.at(-1).getBoundingClientRect().bottom };
+        });
+        assert.equal(layout.height, height); assert.equal(layout.clipped, false);
+        assert.ok(layout.bottomGap >= 15 && layout.bottomGap <= 24, '按内容收紧完成卡，不留下第二按钮空白');
+        assert.ok(layout.fontSize >= 12 && contrast(layout.color, layout.background) >= 4.5, '完成提示文字清晰可读');
+        completionCards.push({ theme, appearance, mode, timerMode, ...layout });
+        await message.screenshot({ path: path.join(output, `${timerMode === 'focus' ? 'focus' : 'rest'}-complete-${theme}-${appearance}-${mode}.png`), omitBackground: true });
+      }
     }
     await mini.locator('#mini').click(); assert.equal(await mini.evaluate(() => testActions.at(-1).type), 'open');
     for (const [text, height] of [['不急，专心做好眼前这一件。再向前一点点。', 54], ['先做一件事。', 36]]) {
@@ -225,18 +237,48 @@ fs.mkdirSync(output, { recursive: true });
       assert.equal(card.height, height); assert.equal(card.clipped, false, '单行和双行鼓励均完整显示');
       await message.screenshot({ path: path.join(output, `encouragement-${height}px.png`), omitBackground: true });
     }
-    await message.setViewportSize({ width: 256, height: 244 });
-    await message.evaluate(() => testState({ status: 'complete', reminder: true, cycleCompleted: 4 }));
+    await message.setViewportSize({ width: 256, height: 188 });
+    await message.evaluate(() => testState({ mode: 'focus', total: 1500, status: 'complete', reminder: true, cycleCompleted: 4 }));
     assert.equal(await message.locator('#rest-now').textContent(), '长休息 15 分钟');
     await message.locator('#rest-now').click(); assert.equal(await message.evaluate(() => testActions.at(-1).type), 'rest');
     await message.screenshot({ path: path.join(output, 'complete-reminder.png'), omitBackground: true });
-    await message.setViewportSize({ width: 256, height: 204 });
+    await message.setViewportSize({ width: 256, height: 164 });
     await message.evaluate(() => testState({ mode: 'short', total: 300, status: 'complete', reminder: true }));
     assert.equal(await message.locator('#five-more').isVisible(), false);
     const restCard = await bounds(message, '#reminder'), restButton = await bounds(message, '#rest-now');
-    assert.equal(restCard.height, 192); assert.ok(restCard.y + restCard.height <= 204);
+    assert.equal(restCard.height, 152); assert.ok(restCard.y + restCard.height <= 164);
     assert.ok(restCard.y + restCard.height - restButton.y - restButton.height < 40, '休息完成卡不保留第二个按钮的空位');
     await message.screenshot({ path: path.join(output, 'rest-complete-reminder.png'), omitBackground: true });
+
+    for (const timerMode of ['focus', 'short']) {
+      await message.setViewportSize({ width: 256, height: timerMode === 'focus' ? 188 : 164 });
+      await message.evaluate(mode => {
+        testState({ mode, total: mode === 'focus' ? 1500 : 300, status: 'complete', reminder: true });
+        window.testFail = 'rest'; window.testFailureCopy = '操作未完成，请稍后再试。当前记录仍然保留，检查数据文件后可以重新尝试。';
+      }, timerMode);
+      await message.locator('#rest-now').click();
+      assert.equal(await message.evaluate(() => testActions.at(-1).type), 'rest', '经实际操作API返回失败');
+      assert.equal(await message.locator('#message-feedback').isVisible(), true);
+      assert.equal(await message.locator('#reminder-copy').isVisible(), false);
+      assert.equal(await message.locator('#reminder').getAttribute('aria-describedby'), 'message-feedback');
+      const failed = await message.locator('#reminder').evaluate(card => {
+        const error = document.getElementById('message-feedback'), actions = card.querySelector('.reminder-actions');
+        return { height: card.getBoundingClientRect().height, clipped: card.scrollHeight > card.clientHeight,
+          errorBottom: error.getBoundingClientRect().bottom, actionsTop: actions.getBoundingClientRect().top,
+          errorHeight: error.clientHeight, errorScrollable: error.scrollHeight > error.clientHeight,
+          buttonsClickable: [...actions.querySelectorAll('button:not([hidden])')].every(button => { const r = button.getBoundingClientRect();
+            return !button.disabled && button.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }) };
+      });
+      assert.equal(failed.clipped, false); assert.ok(failed.errorHeight <= 36 && failed.errorScrollable);
+      assert.ok(failed.errorBottom < failed.actionsTop && failed.buttonsClickable, '失败提示与操作按钮互不覆盖');
+      await message.screenshot({ path: path.join(output, `${timerMode === 'focus' ? 'focus' : 'rest'}-complete-error.png`), omitBackground: true });
+      await message.evaluate(() => { window.testFail = ''; window.testFailureCopy = ''; });
+      await message.locator('#rest-now').click();
+      assert.equal(await message.locator('#message-feedback').isVisible(), false);
+      assert.equal(await message.locator('#reminder-copy').isVisible(), true);
+      assert.equal(await message.locator('#reminder').getAttribute('aria-describedby'), 'reminder-copy');
+      completionErrors.push({ timerMode, ...failed, retryRestored: true });
+    }
 
     const animated = await pageFor('panel', 320, 476, 'no-preference');
     const angle = () => animated.locator('#clock-needle').getAttribute('transform').then(value => Number(value.match(/rotate\(([^ ]+)/)[1]));
@@ -259,8 +301,8 @@ fs.mkdirSync(output, { recursive: true });
     await animated.locator('[data-mode=long]').click(); assert.equal(await angle(), 90);
     assert.equal(await animated.locator('#clock-scale').evaluate(node => node.getBoundingClientRect().width), 1, '刻度说明仅保留给辅助阅读');
     assert.deepEqual(errors, []);
-    fs.writeFileSync(path.join(output, 'checks.json'), JSON.stringify({ ok: true, themes: results, dragRegions, textContrast, settingsTypography, analogSpacing, sameModeClick: true,
-      messageCardHeights: [36, 54], reminderCardHeights: [232, 192], pinFocus: true, needleTransition: true, reducedMotion: true, errors }, null, 2));
+    fs.writeFileSync(path.join(output, 'checks.json'), JSON.stringify({ ok: true, themes: results, dragRegions, textContrast, settingsTypography, analogSpacing, completionCards, completionErrors, sameModeClick: true,
+      messageCardHeights: [36, 54], reminderCardHeights: [176, 152], pinFocus: true, needleTransition: true, reducedMotion: true, errors }, null, 2));
     console.log(`Pomodoro UI: 32 face/theme combinations, draft/error/focus behavior, mini + opaque messages passed. Screenshots: ${output}`);
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -9,16 +9,17 @@ const { pointerClick } = require('./verify-chat-integration');
 // Run through smoke-electron.js so main.js verifies the temporary user-data dir.
 // This verifier never opens the installed app or writes its preferences.
 async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonitor,
-  getMenu, getSettings, getQuiet, setClock, quotaLabel, edgeTuck, screen }) {
+  getMenu, getSettings, getQuiet, setClock, quotaLabel, edgeTuck, screen, notes: notesCompanion }) {
   assert.equal(process.env.PET_SMOKE_TEST, '1');
   assert.equal(process.env.PET_SMOKE_POMODORO_ONLY, '1');
-  assert.ok(pet && service && windows && BrowserWindow && powerMonitor && quotaLabel && edgeTuck && screen);
+  assert.ok(pet && service && windows && BrowserWindow && powerMonitor && quotaLabel && edgeTuck && screen && notesCompanion);
   const output = path.resolve(process.env.PET_SMOKE_POMODORO_OUTPUT ||
     path.join(os.tmpdir(), `qiuqiu-pomodoro-native-${process.pid}`));
   fs.mkdirSync(output, { recursive: true });
   const result = { ok: false, checks: [], themes: [], layouts: [], screenshots: [], errors: [] };
   const original = { ...getSettings() }, originalPetBounds = pet.getBounds();
   let stamp = Date.now(), locked = false, debuggerAttached = false, mini;
+  const temporaryTodos = new Set();
   const observed = new Set(), mouseCalls = new WeakMap();
   const originalIgnoreMouse = BrowserWindow.prototype.setIgnoreMouseEvents;
   // Electron has no getter for this setting. Observe the real native method and
@@ -262,7 +263,7 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     assert.equal(message.isFocusable(), false);
     assert.deepEqual(mouseCalls.get(message), { ignore: false, forward: true }, '完成提醒可接收按钮点击');
     const focusReminder = await reminderGeometry(message);
-    assert.equal(message.getContentBounds().height, 244); assert.equal(focusReminder.height, 232);
+    assert.equal(message.getContentBounds().height, 188); assert.equal(focusReminder.height, 176);
     assert.deepEqual(focusReminder.buttons, ['rest-now', 'five-more']);
     await capture(message, 'completion-blue-light');
     await pointerClick(message, '#five-more');
@@ -279,9 +280,10 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     stamp = service.getSnapshot().deadline; service.tick();
     await poll(() => page(message, "document.querySelector('#five-more').hidden"), Boolean, '休息完成状态');
     const restReminder = await reminderGeometry(message);
-    assert.equal(message.getContentBounds().height, 204); assert.equal(restReminder.height, 192);
+    assert.equal(message.getContentBounds().height, 164); assert.equal(restReminder.height, 152);
     assert.deepEqual(restReminder.buttons, ['rest-now']);
-    assert.ok(Math.abs(restReminder.bottomGap - focusReminder.bottomGap) <= 1, '休息完成卡底部留白与双按钮完成卡一致');
+    assert.ok(Math.abs(focusReminder.bottomGap - 20) <= 1, '双按钮完成卡底部留白紧凑');
+    assert.ok(Math.abs(restReminder.bottomGap - 18) <= 1, '单按钮休息卡没有保留第二按钮空位');
     assert.ok(restReminder.scrollHeight <= restReminder.clientHeight + 1, '紧凑休息卡没有裁切');
     result.reminders = { focus: focusReminder, rest: restReminder };
     await capture(message, 'rest-completion-blue-light');
@@ -524,13 +526,13 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     assert.equal(getQuiet(), true);
     core('toggle'); stamp = service.getSnapshot().deadline; service.tick();
     await poll(() => message.isVisible(), Boolean, '球体贴边收起时专注完成提示仍显示');
-    assert.equal(message.getBounds().height, 244);
+    assert.equal(message.getBounds().height, 188);
     for (const win of [panel, mini, message]) assert.ok(inArea(win.getBounds()), '贴边番茄窗均在工作区内');
     assert.equal(overlaps(painted(message), panel.getBounds()), false, '贴边完成提示避开面板');
     await capture(message, 'tucked-completion-blue-light');
     core('rest'); assert.equal(getQuiet(), false, '贴边休息仍允许普通互动');
     assert.equal(panel.isVisible(), true); stamp = service.getSnapshot().deadline; service.tick();
-    await poll(() => message.isVisible() && message.getBounds().height === 204, Boolean, '贴边休息完成卡保持紧凑可见');
+    await poll(() => message.isVisible() && message.getBounds().height === 164, Boolean, '贴边休息完成卡保持紧凑可见');
     result.tucked = { presentation: edgeTuck.getPresentation(), panel: panel.getBounds(), mini: mini.getBounds(),
       message: message.getBounds(), state: service.getSnapshot() };
     edgeTuck.hide();
@@ -538,6 +540,66 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     edgeTuck.restore(); pet.setBounds(originalPetBounds, false); quotaLabel.hide();
     await poll(() => panel.isVisible() && mini.isVisible() && message.isVisible(), Boolean, '恢复球球后番茄窗恢复');
     result.checks.push('edge-quota-native-anchor-follow-empty-hidden-fallback-and-tucked-panel-reminders');
+
+    await bridge(panel, 'close-panel');
+    pet.setPosition(Math.round(area.x + area.width * .55), Math.round(area.y + area.height * .65), false);
+    const M = require('../lib/notes-model');
+    const todoStore = notesCompanion.getStore();
+    const clearTodo = id => todoStore.update(state => { state.todos = state.todos.filter(item => item.id !== id); return state; });
+    const addTodo = () => {
+      const time = Date.now(), todo = { ...M.newTodo('待办提醒与番茄钟位置验收', time), reminderAt: time - 1000, reminderState: 'pending' };
+      temporaryTodos.add(todo.id);
+      todoStore.update(state => { state.todos.push(todo); return state; });
+      return todo.id;
+    };
+    const finishFocus = () => { core('reset'); core('toggle'); stamp = service.getSnapshot().deadline; service.tick(); };
+    const abovePet = () => {
+      const p = pet.getBounds(), b = message.getBounds();
+      return b.x === Math.round(Math.max(area.x, Math.min(p.x + (p.width - b.width) / 2, area.x + area.width - b.width))) &&
+        b.y + b.height === p.y - 8;
+    };
+    result.reminderPlacement = [];
+    let normalTodoBounds;
+    core('mode', 'focus'); core('reset');
+    for (const order of ['todo-first', 'pomodoro-first']) {
+      let todoId;
+      if (order === 'todo-first') todoId = addTodo(); else finishFocus();
+      if (order === 'pomodoro-first') {
+        await poll(() => message.isVisible() && abovePet(), Boolean, '无待办时完成提示球上方居中');
+        assert.equal(overlaps(painted(message), painted(mini)), false, 'mini 避开完成提示，不推走完成卡');
+        todoId = addTodo();
+      }
+      const todoWindow = await poll(() => notesCompanion.getWindows().reminder, win => Boolean(win && win.isVisible()), '真实到期待办提醒');
+      observe(todoWindow);
+      const before = todoWindow.getBounds();
+      if (!normalTodoBounds) normalTodoBounds = before;
+      else assert.deepEqual(before, normalTodoBounds, '完成先出现时，待办仍使用自己的既有位置');
+      if (order === 'todo-first') finishFocus();
+      const positioned = await poll(() => ({ todo: todoWindow.getBounds(), completion: message.getBounds(), mini: mini.getBounds() }),
+        view => message.isVisible() && !overlaps(painted(message), view.todo), `${order} 完成卡即时避开待办`);
+      assert.deepEqual(positioned.todo, before, '完成避让不移动待办');
+      assert.equal(overlaps(painted(message), painted(mini)), false, '两种到达顺序都不重叠 mini');
+      assert.equal(message.isFocusable(), false);
+      for (const bounds of Object.values(positioned)) assert.ok(inArea(bounds), '同时提醒都在工作区内');
+      result.reminderPlacement.push({ order, ...positioned });
+      if (order === 'pomodoro-first') {
+        await capture(todoWindow, 'coexisting-todo-blue-light'); await capture(message, 'coexisting-completion-blue-light');
+      }
+      clearTodo(todoId); temporaryTodos.delete(todoId);
+      await poll(() => !todoWindow.isVisible() && abovePet(), Boolean, '待办关闭后完成提示回到球上方');
+      core('reset');
+    }
+    finishFocus();
+    for (const side of ['left', 'right']) {
+      edgeTuck.dock(side);
+      await poll(() => message.isVisible() && abovePet(), Boolean, `${side} 贴边完成提示横向夹紧后保持球上方`);
+      assert.equal(message.getBounds().x, side === 'left' ? area.x : area.x + area.width - message.getBounds().width);
+      assert.equal(overlaps(painted(message), painted(mini)), false, '贴边 mini 避开完成卡');
+      result.reminderPlacement.push({ side, pet: pet.getBounds(), completion: message.getBounds(), mini: mini.getBounds() });
+      if (side === 'right') await capture(message, 'edge-completion-blue-light');
+    }
+    edgeTuck.restore(); pet.setBounds(originalPetBounds, false);
+    result.checks.push('completion-pet-anchor-priority-two-native-todo-arrival-orders-and-edge-clamp');
     for (const win of allWindows()) {
       const errors = await page(win, '__pomodoroSmoke.errors');
       assert.deepEqual(errors, [], '页面没有未处理错误');
@@ -546,7 +608,7 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
       if (win !== message) assert.ok(events.colors > 0, 'onColorMode 实际收到广播');
     }
     assert.deepEqual(result.errors, [], '原生页面加载与渲染无错误');
-    assert.equal(result.screenshots.length, 8);
+    assert.equal(result.screenshots.length, 11);
     result.finalState = service.getSnapshot(); result.ok = true;
     fs.writeFileSync(path.join(output, 'result.json'), `${JSON.stringify(result, null, 2)}\n`);
     process.stdout.write(`PET_POMODORO_INTEGRATION_OK ${JSON.stringify({ checks: result.checks.length, themes: result.themes.length,
@@ -563,6 +625,9 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
       try { mini.webContents.debugger.detach(); } catch (_) {}
     }
     if (locked) powerMonitor.emit('unlock-screen');
+    if (temporaryTodos.size) notesCompanion.getStore().update(state => {
+      state.todos = state.todos.filter(item => !temporaryTodos.has(item.id)); return state;
+    });
     edgeTuck.restore(); pet.setBounds(originalPetBounds, false); quotaLabel.hide();
     BrowserWindow.prototype.setIgnoreMouseEvents = originalIgnoreMouse;
     select(`ui-theme-${original.uiTheme}`);
