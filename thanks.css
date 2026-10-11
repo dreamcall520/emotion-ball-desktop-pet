@@ -5,9 +5,17 @@
 .thanks-eyebrow span { width: 6px; height: 6px; border-radius: 50%; background: #7d9e89; box-shadow: 0 0 0 4px rgb(125 158 137 / .08); }
 .thanks-page h1 { font-size: clamp(44px,4.7vw,64px); line-height: 1.28; font-weight: 550; letter-spacing: -.05em; }
 .thanks-page .thanks-hero .lede { font-size: 14px; line-height: 2; margin-top: 26px !important; }
-.thanks-page .thanks-art { aspect-ratio: 1.12; max-width: 470px; justify-self: end; width: 100%; }
+.thanks-page .thanks-art { aspect-ratio: auto; max-width: 470px; justify-self: end; width: 100%; }
 .thanks-page .thanks-art::before { width: 85%; height: 72%; background: radial-gradient(ellipse, rgb(190 210 195 / .16), transparent 72%); }
 .thanks-page .thanks-art img { position: absolute; inset: 0; transform: none; }
+.thanks-character { position: relative; width: 100%; aspect-ratio: 1.12; padding: 0; border: 0; border-radius: 18px; background: transparent; }
+.thanks-message { position: absolute; top: -8px; right: -28px; z-index: 1; max-width: 190px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-solid); color: var(--text); font-size: 12px; line-height: 1.7; text-wrap: balance; box-shadow: 0 8px 24px rgb(37 52 77 / .08); pointer-events: none; animation: thanks-message-appear .18s ease-out; }
+.thanks-message::after { content: ""; position: absolute; bottom: -5px; left: 20px; width: 8px; height: 8px; background: var(--surface-solid); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); transform: rotate(45deg); }
+.thanks-works-link { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 7px 14px 7px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-solid); font-size: 12px; color: var(--text-soft) !important; }
+.thanks-works-link::before { content: ""; width: 26px; height: 26px; background: url("assets/works/seven-cover.png") center / contain no-repeat; }
+.thanks-works-link:is(:hover,:focus-visible) { color: var(--accent) !important; }
+@keyframes thanks-message-appear { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .thanks-message { animation: none; } }
 .thanks-page .thanks-section { display: grid; grid-template-columns: 240px minmax(0,1fr); gap: 48px; align-items: start; padding-block: 24px 56px; }
 .thanks-page .section-intro { padding-top: 26px; }
 .thanks-page .section-intro h2 { font-size: 32px; line-height: 1.5; margin-top: 18px; }
@@ -48,6 +56,8 @@
 
 @media (max-width: 1100px) {
  .thanks-page .thanks-hero { min-height: 420px; }
+ .thanks-page .thanks-art { margin-top: 72px; }
+ .thanks-message { top: -72px; right: 0; }
  .thanks-page .thanks-section { grid-template-columns: 1fr; gap: 24px; }
  .thanks-page .section-intro { padding: 0; display: grid; grid-template-columns: 1fr 1fr; column-gap: 36px; align-items: end; }
  .thanks-page .section-intro .section-label { grid-column: 1/-1; }
@@ -61,7 +71,8 @@
  .thanks-page h1 { font-size: clamp(31px,8.5vw,42px); }
  .thanks-eyebrow { margin-bottom: 18px !important; font-size: 10px; }
  .thanks-page .thanks-hero .lede { font-size: 12px; margin-top: 18px !important; }
- .thanks-page .thanks-art { aspect-ratio: 1.38; max-width: 340px; justify-self: center; }
+ .thanks-page .thanks-art { max-width: 340px; justify-self: center; }
+ .thanks-character { aspect-ratio: 1.38; }
  .thanks-page .thanks-section { gap: 20px; padding-block: 20px 32px; }
  .thanks-page .section-intro { display: block; }
  .thanks-page .section-intro h2 { font-size: 25px; }
