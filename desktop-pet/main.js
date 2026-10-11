@@ -251,7 +251,7 @@ function initializeShortcuts() {
     onLayout: () => pomodoroWindows?.sync(),
     onError: error => writeError('快捷面板', error) });
   app.on('browser-window-focus', (_event, focused) => {
-    if (focused !== shortcutWindow?.getWindow() && focused !== petWindow) shortcutWindow?.close();
+    if (!shortcutWindow?.getState().focus && focused !== shortcutWindow?.getWindow() && focused !== petWindow) shortcutWindow?.close();
   });
 }
 

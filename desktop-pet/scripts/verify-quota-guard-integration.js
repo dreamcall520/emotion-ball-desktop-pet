@@ -5,8 +5,9 @@ const { pointerClick } = require('./verify-chat-integration');
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(read, accept, label) {
   const deadline = Date.now() + 6000;
-  while (Date.now() < deadline) { const value = await read(); if (accept(value)) return value; await wait(25); }
-  throw new Error(label + '超时');
+  let value;
+  while (Date.now() < deadline) { value = await read(); if (accept(value)) return value; await wait(25); }
+  throw new Error(label + '超时：' + JSON.stringify(value));
 }
 
 async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getCompanion, getSettings,
@@ -64,7 +65,8 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
       assert.equal(shortcuts.isOpen(), false, '守护战打开时悬停不覆盖游戏');
       const round = (await state()).round;
       openShortcuts();
-      await until(() => shortcuts.getWindow()?.isVisible(), Boolean, '主动打开快捷入口');
+      await until(() => ({ visible: shortcuts.getWindow()?.isVisible(), opened: shortcuts.isOpen(), state: shortcuts.getState() }),
+        value => value.visible, '主动打开快捷入口');
       await until(() => separated(shortcuts.getWindow()), Boolean, '已打开番茄钟避让快捷面板');
       assert.equal(guard.isVisible(), false, '主动快捷入口先收起守护战');
       await until(() => card.isVisible(), Boolean, '主动快捷入口恢复额度卡');

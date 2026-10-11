@@ -380,7 +380,7 @@ async function verifyCodexStatusV20({ pet, quotaLabel, details, BrowserWindow, s
           '周期设置完成后展开');
         assertCardLayout(view, periods.length);
         assert.equal(view.radius,view.beamRadius,'背景与外圈采用同一圆角，不被裁切');
-        assertQuotaLabelWindow(quotaLabel, label, pet.getBounds(), { expanded: true, itemCount: periods.length,
+        await assertQuotaLabelWindow(quotaLabel, label, pet.getBounds(), { expanded: true, itemCount: periods.length,
           workArea: screen.getDisplayMatching(pet.getBounds()).workArea });
         assert.deepEqual(view.values, periods.map(minutes => minutes === 300 ? '44%' : '62%'));
         assert.deepEqual(view.counts, ['3', '1'], '真实任务和本地待查看计数');

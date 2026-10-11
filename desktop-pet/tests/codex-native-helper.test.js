@@ -80,35 +80,75 @@ test('真实启动流程必须调用并要求 Codex 模拟验收完成标记', (
   ]) assert.match(smoke, new RegExp(marker));
 });
 
-test('额度标签原生校验区分收起、196×131 单周期展开和 196×144 双周期展开', () => {
+test('额度原生校验分别核对 DOM 卡面、流光壳与守护外窗，拒绝裁剪和伪造可见边界', async () => {
   const { assertQuotaLabelWindow } = require('../scripts/verify-codex-companion');
   const petBounds = { x: 300, y: 300, width: 80, height: 80 };
-  const win = {
-    isFocusable: () => false,
-    isVisible: () => true,
-    getBounds: () => ({ x: 256, y: 388, width: 168, height: 58 })
+  const fixture = (nativeSize, card, beam = card, guard = null, options = {}) => {
+    const bounds = { x: 256, y: 388, ...nativeSize };
+    const geometry = { card: { ...card }, beam: { ...beam }, viewport: { ...nativeSize }, size: options.size || 'standard',
+      expanded: options.expanded === true, state: 'ready', hasItems: true,
+      guard: { visible: Boolean(guard), bounds: guard, content: guard ? [{ ...guard, width: 24, height: 24 }] : [] } };
+    const win = { isFocusable: () => false, isVisible: () => true, getBounds: () => ({ ...bounds }),
+      webContents: { async executeJavaScript(source) {
+        assert.match(source, /getElementById\('quota-label'\)/);
+        assert.match(source, /getBoundingClientRect\(\)/);
+        return geometry;
+      } } };
+    const controller = { getWindow: () => win, getVisibleBounds: () => ({ x: bounds.x + card.x, y: bounds.y + card.y,
+      width: card.width, height: card.height }) };
+    return { bounds, geometry, win, controller, check: () => assertQuotaLabelWindow(controller, win, petBounds, options) };
   };
-  const controller = { getWindow: () => win };
-  assert.doesNotThrow(() => assertQuotaLabelWindow(controller, win, petBounds));
-  assert.throws(() => assertQuotaLabelWindow({ getWindow: () => ({}) }, win, petBounds), /当前窗口/);
-  assert.throws(() => assertQuotaLabelWindow({ getWindow: () => ({ ...win }) }, win, petBounds), /当前窗口/,
-    '旧孤立窗口外观正常也不能通过');
-  assert.throws(() => assertQuotaLabelWindow({ getWindow: () => win }, { ...win, isFocusable: () => true }, petBounds), /当前窗口/);
-  const focusable = { ...win, isFocusable: () => true };
-  assert.throws(() => assertQuotaLabelWindow({ getWindow: () => focusable }, focusable, petBounds), /聚焦/);
-  const overlap = { ...win, getBounds: () => ({ x: 300, y: 300, width: 168, height: 58 }) };
-  assert.throws(() => assertQuotaLabelWindow({ getWindow: () => overlap }, overlap, petBounds), /相交/);
-  const wrongSize = { ...win, getBounds: () => ({ x: 256, y: 388, width: 167, height: 58 }) };
-  assert.throws(() => assertQuotaLabelWindow({ getWindow: () => wrongSize }, wrongSize, petBounds), /168×58/);
-  const compact = { ...win, getBounds: () => ({ x: 276, y: 388, width: 128, height: 32 }) };
-  assert.doesNotThrow(() => assertQuotaLabelWindow({ getWindow: () => compact }, compact, petBounds,
-    { size: 'compact' }));
-  const expanded = { ...win, getBounds: () => ({ x: 242, y: 388, width: 196, height: 131 }) };
-  assert.doesNotThrow(() => assertQuotaLabelWindow({ getWindow: () => expanded }, expanded, petBounds,
-    { size: 'compact', expanded: true }));
-  const expandedDual = { ...win, getBounds: () => ({ x: 242, y: 388, width: 196, height: 144 }) };
-  assert.doesNotThrow(() => assertQuotaLabelWindow({ getWindow: () => expandedDual }, expandedDual, petBounds,
-    { size: 'compact', expanded: true, itemCount: 2 }));
+  const standard = fixture({ width: 168, height: 58 }, { x: 0, y: 0, width: 168, height: 58 });
+  await standard.check();
+  await assert.rejects(assertQuotaLabelWindow({ getWindow: () => ({}) }, standard.win, petBounds), /当前窗口/);
+  await assert.rejects(assertQuotaLabelWindow({ getWindow: () => ({ ...standard.win }) }, standard.win, petBounds), /当前窗口/);
+  standard.win.isFocusable = () => true; await assert.rejects(standard.check(), /聚焦/);
+  standard.win.isFocusable = () => false;
+  standard.bounds.y = 300; await assert.rejects(standard.check(), /相交/); standard.bounds.y = 388;
+  standard.bounds.width = 167; await assert.rejects(standard.check(), /168×58/); standard.bounds.width = 168;
+  standard.geometry.card.width = 167; await assert.rejects(standard.check(), /DOM 卡面/); standard.geometry.card.width = 168;
+  standard.controller.getVisibleBounds = () => ({ ...standard.bounds, x: 257 });
+  await assert.rejects(standard.check(), /独立读取的 DOM/);
+  for (const [native, card, beam, guard, options] of [
+    [{ width: 240, height: 64 }, { x: 0, y: 6, width: 168, height: 58 }, { x: 0, y: 6, width: 168, height: 58 },
+      { x: 176, y: 20, width: 64, height: 44 }, {}],
+    [{ width: 128, height: 32 }, { x: 2, y: 2, width: 124, height: 28 }, { x: 0, y: 0, width: 128, height: 32 }, null, { size: 'compact' }],
+    [{ width: 200, height: 50 }, { x: 2, y: 20, width: 124, height: 28 }, { x: 0, y: 18, width: 128, height: 32 },
+      { x: 136, y: 6, width: 64, height: 44 }, { size: 'compact' }],
+    [{ width: 196, height: 131 }, { x: 0, y: 0, width: 196, height: 131 }, { x: 0, y: 0, width: 196, height: 131 }, null,
+      { size: 'compact', expanded: true }],
+    [{ width: 196, height: 144 }, { x: 0, y: 0, width: 196, height: 144 }, { x: 0, y: 0, width: 196, height: 144 }, null,
+      { size: 'standard', expanded: true, itemCount: 2 }]
+  ]) {
+    const f = fixture(native, card, beam, guard, options); await f.check();
+    if (guard) {
+      f.geometry.guard.bounds.x++; await assert.rejects(f.check(), /守护入口必须/); f.geometry.guard.bounds.x--;
+      f.geometry.guard.content[0].y = native.height - 10; await assert.rejects(f.check(), /角色不能.*裁剪/);
+      f.geometry.guard.content[0].y = guard.y;
+      f.geometry.state = 'stale'; await assert.rejects(f.check(), /隐藏守护入口/);
+    }
+  }
+});
+
+test('额度几何读取直接测量 DOM，不从控制器 getter 推导卡面和角色矩形', async () => {
+  const vm = require('node:vm');
+  const { readQuotaLabelGeometry } = require('../scripts/verify-codex-companion');
+  const node = (rect, visible = true) => ({ getBoundingClientRect: () => rect,
+    getClientRects: () => visible ? [rect] : [], dataset: { size: 'compact', expanded: 'false', state: 'ready', hasItems: 'true' } });
+  const nodes = { 'quota-label': node({ x: 2, y: 20, width: 124, height: 28 }),
+    'quota-beam': node({ x: 0, y: 18, width: 128, height: 32 }),
+    'quota-guard-entry': node({ x: 136, y: 6, width: 64, height: 44 }) };
+  const win = { webContents: { async executeJavaScript(source) {
+    return JSON.parse(JSON.stringify(vm.runInNewContext(source, {
+      document: { getElementById: id => nodes[id], querySelectorAll: () => [node({ x: 136, y: 22, width: 24, height: 24 })] },
+      getComputedStyle: () => ({ display: 'block' }), innerWidth: 200, innerHeight: 50
+    })));
+  } } };
+  const result = await readQuotaLabelGeometry(win);
+  assert.deepEqual(result.card, { x: 2, y: 20, width: 124, height: 28 });
+  assert.deepEqual(result.beam, { x: 0, y: 18, width: 128, height: 32 });
+  assert.deepEqual(result.guard.bounds, { x: 136, y: 6, width: 64, height: 44 });
+  assert.deepEqual(result.guard.content, [{ x: 136, y: 22, width: 24, height: 24 }]);
 });
 
 test('普通 10% 合成额度先建立 100% 基线，80% 以上可直接合成', () => {
@@ -258,9 +298,12 @@ test('存在负坐标显示器时真实移动球球验证标签，且只改位�
   };
   const labelWindow = {
     isFocusable: () => false, isVisible: () => true,
-    getBounds: () => ({ x: bounds.x, y: bounds.y + bounds.height + 8, width: 168, height: 58 })
+    getBounds: () => ({ x: bounds.x, y: bounds.y + bounds.height + 8, width: 168, height: 58 }),
+    webContents: { executeJavaScript: async () => ({ card: { x: 0, y: 0, width: 168, height: 58 },
+      beam: { x: 0, y: 0, width: 168, height: 58 }, viewport: { width: 168, height: 58 },
+      size: 'standard', expanded: false, state: 'ready', hasItems: true, guard: { visible: false } }) }
   };
-  const quotaLabel = { getWindow: () => labelWindow };
+  const quotaLabel = { getWindow: () => labelWindow, getVisibleBounds: () => labelWindow.getBounds() };
   const poll = async (read, predicate, label) => {
     const value = await read();
     assert.ok(predicate(value), label);
