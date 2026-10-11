@@ -85,7 +85,7 @@ function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, g
     const previous = entries.get(view);
     if (previous && alive(previous.win)) return previous;
     const win = new BrowserWindow({ width: view === 'panel' ? 320 : view === 'mini' ? 112 : 196,
-      height: view === 'panel' ? 488 : 48, title: '球球 · 番茄钟',
+      height: view === 'panel' ? 476 : 48, title: '球球 · 番茄钟',
       transparent: true, frame: false, resizable: false, focusable: view === 'panel',
       skipTaskbar: true, show: false, fullscreenable: false, maximizable: false, minimizable: false,
       hasShadow: false, backgroundColor: '#00000000', webPreferences: {
@@ -121,7 +121,7 @@ function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, g
       const obstacles = [...getWindowObstacles().filter(item => item && Number.isFinite(item.x) && item.width > 0 && item.height > 0), pet];
       const active = ['running', 'paused', 'complete'].includes(state.status);
       const views = [];
-      if (panelOpen) views.push(['panel', { width: 320, height: settingsOpen || state.face !== 'analog' ? 384 : 488 }]);
+      if (panelOpen) views.push(['panel', { width: 320, height: settingsOpen || state.face !== 'analog' ? 384 : 476 }]);
       if (panelOpen || active) views.push(['mini', { width: 112, height: 48 }]);
       if (state.reminder || state.encouragement) views.push(['message', state.reminder ? { width: 256, height: state.mode === 'focus' ? 244 : 204 } : { width: 196, height: messageCardHeight + 12 }]);
       const visible = new Set(views.map(([view]) => view));

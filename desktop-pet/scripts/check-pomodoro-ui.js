@@ -12,7 +12,7 @@ fs.mkdirSync(output, { recursive: true });
 (async () => {
   const chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
   const browser = await chromium.launch({ headless: true, args: ['--disable-gpu'], ...(fs.existsSync(chrome) ? { executablePath: chrome } : {}) });
-  const errors = [], results = [], dragRegions = [], textContrast = [];
+  const errors = [], results = [], dragRegions = [], textContrast = [], settingsTypography = [], analogSpacing = [];
   try {
     const notesReference = await browser.newPage();
     await notesReference.route('**/*.js', route => route.abort());
@@ -63,7 +63,7 @@ fs.mkdirSync(output, { recursive: true });
       await page.waitForTimeout(30);
       return page;
     }
-    const panel = await pageFor('panel', 320, 488);
+    const panel = await pageFor('panel', 320, 476);
     assert.equal(await panel.locator('.panel-header').evaluate(node => getComputedStyle(node).webkitAppRegion), 'drag');
     assert.equal(await panel.locator('#pin').evaluate(node => getComputedStyle(node).webkitAppRegion), 'no-drag');
     assert.equal(await panel.locator('#pin').evaluate(node => getComputedStyle(node).backgroundColor), 'rgba(0, 0, 0, 0)');
@@ -94,12 +94,19 @@ fs.mkdirSync(output, { recursive: true });
       if (mode === 'accessible') { assert.equal(styles.image, 'none'); assert.ok(!styles.background.startsWith('rgba')); assert.equal(styles.border, '0px'); }
       else assert.ok(styles.image.includes(theme === 'green' ? appearance === 'dark' ? '38, 61, 66' : '221, 244, 234' : appearance === 'dark' ? '32, 51, 71' : '230, 245, 255'));
       for (const face of ['analog', 'timeline', 'modules', 'minutes']) {
-        await panel.setViewportSize({ width: 320, height: face === 'analog' ? 488 : 384 });
+        await panel.setViewportSize({ width: 320, height: face === 'analog' ? 476 : 384 });
         await panel.evaluate(face => testState({ face }), face);
         await panel.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         await checkDragRegion(panel, '.panel-header', '#focus-panel', theme, appearance, mode, face);
         for (const selector of ['#time', '#start', '.panel-footer']) { const b = await bounds(panel, selector);
-          assert.ok(b.x >= 0 && b.y >= 0 && b.x + b.width <= 320.1 && b.y + b.height <= (face === 'analog' ? 488.1 : 384.1), `${selector} clipped in ${theme}/${appearance}/${mode}/${face}: ${JSON.stringify(b)}`); }
+          assert.ok(b.x >= 0 && b.y >= 0 && b.x + b.width <= 320.1 && b.y + b.height <= (face === 'analog' ? 476.1 : 384.1), `${selector} clipped in ${theme}/${appearance}/${mode}/${face}: ${JSON.stringify(b)}`); }
+        if (face === 'analog') {
+          const spacing = await panel.evaluate(() => ({ gap: document.querySelector('.task-row').getBoundingClientRect().top - document.getElementById('time').getBoundingClientRect().bottom,
+            footerBottom: document.querySelector('.panel-footer').getBoundingClientRect().bottom }));
+          assert.ok(spacing.gap >= 10 && spacing.gap <= 13, `表盘时间与任务间距约12px: ${JSON.stringify(spacing)}`);
+          assert.ok(spacing.footerBottom >= 473 && spacing.footerBottom <= 476, '缩短窗口后底部不新增空白');
+          analogSpacing.push({ theme, appearance, mode, ...spacing });
+        }
         if (mode === 'standard' || face === 'analog') await panel.screenshot({ path: path.join(output, `${theme}-${appearance}-${mode === 'accessible' ? 'accessible-' : ''}${face}.png`), omitBackground: true });
       }
       const smallText = await panel.evaluate(() => [...document.querySelectorAll('.modes button:not(.active),.optional,#reset')].map(node => ({ color: getComputedStyle(node).color,
@@ -117,11 +124,41 @@ fs.mkdirSync(output, { recursive: true });
       textContrast.push({ theme, appearance, mode, ratios });
       await panel.locator('#settings-open').click();
       await checkDragRegion(panel, '.settings-head', '#settings', theme, appearance, mode, 'settings');
+      const typography = await panel.evaluate(() => {
+        const root = getComputedStyle(document.documentElement), body = document.querySelector('.settings-body'), bodyRect = body.getBoundingClientRect();
+        const selectors = ['.settings-head h3', '.display-field legend', '.choice-card', '.duration-fields label', '.duration-unit', '.encouragement-option', '.settings-note', '.sample-timeline', '.sample-modules i', '.sample-minutes small'];
+        const samples = selectors.flatMap(selector => [...document.querySelectorAll(`#settings ${selector}`)].map(node => {
+          const style = getComputedStyle(node); let parent = node, background = style.backgroundColor;
+          while (background === 'rgba(0, 0, 0, 0)' && parent.parentElement) { parent = parent.parentElement; background = getComputedStyle(parent).backgroundColor; }
+          return { selector, fontSize: parseFloat(style.fontSize), weight: style.fontWeight, color: style.color,
+            background: background === 'rgba(0, 0, 0, 0)' ? root.getPropertyValue('--surface').trim() : background };
+        }));
+        const canvas = document.createElement('canvas').getContext('2d');
+        const inputs = [...document.querySelectorAll('.duration-fields input')].map(input => { const style = getComputedStyle(input); canvas.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+          return { name: input.name, maxTextWidth: canvas.measureText(input.max).width, contentWidth: input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) }; });
+        return { samples, inputs, bodyHeight: body.clientHeight, scrollHeight: body.scrollHeight, bodyBottom: bodyRect.bottom,
+          noteBottom: document.querySelector('.settings-note').getBoundingClientRect().bottom,
+          actionsTop: document.querySelector('.settings-actions').getBoundingClientRect().top,
+          cardsFit: [...document.querySelectorAll('.choice-card')].every(node => node.scrollWidth <= node.clientWidth),
+          previewsFit: [...document.querySelectorAll('.choice-sample')].every(node => node.scrollWidth <= node.clientWidth) };
+      });
+      for (const sample of typography.samples) {
+        const minimum = ['.duration-unit', '.settings-note', '.sample-minutes small'].includes(sample.selector) ? 11 : sample.selector === '.settings-head h3' ? 16 : 12;
+        assert.ok(sample.fontSize >= minimum, `${sample.selector} 设置文字不再微缩: ${sample.fontSize}`);
+        assert.ok(contrast(sample.color, sample.background) >= 4.5, `${sample.selector} 设置文字对比度 ${theme}/${appearance}/${mode}: ${JSON.stringify(sample)}`);
+      }
+      assert.ok(typography.cardsFit && typography.previewsFit, '放大的四款预览文字保持完整');
+      assert.ok(typography.inputs.every(input => input.maxTextWidth <= input.contentWidth), '最大时长数字与单位不重叠');
+      assert.ok(typography.scrollHeight <= typography.bodyHeight + 1, `384px设置内容不引入可避免的截断: ${JSON.stringify(typography)}`);
+      assert.ok(typography.noteBottom <= typography.bodyBottom && typography.bodyBottom <= typography.actionsTop, '设置说明与固定操作区互不遮挡');
+      settingsTypography.push({ theme, appearance, mode, ...typography });
+      await panel.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      await panel.screenshot({ path: path.join(output, `settings-${theme}-${appearance}-${mode}.png`), omitBackground: true });
       await panel.locator('#settings-cancel').click();
       results.push({ theme, appearance, mode, ...styles });
     }
     await panel.evaluate(() => { testTheme('standard', 'light', 'green'); testState({ face: 'analog', status: 'running', remaining: 1200 }); });
-    await panel.setViewportSize({ width: 320, height: 488 });
+    await panel.setViewportSize({ width: 320, height: 476 });
     await panel.evaluate(() => { window.testActions = []; });
     await panel.locator('[data-mode=focus]').click();
     assert.equal(await panel.evaluate(() => testActions.some(item => item.type === 'mode')), false, '点击当前计时模式不再派发重置动作');
@@ -201,7 +238,7 @@ fs.mkdirSync(output, { recursive: true });
     assert.ok(restCard.y + restCard.height - restButton.y - restButton.height < 40, '休息完成卡不保留第二个按钮的空位');
     await message.screenshot({ path: path.join(output, 'rest-complete-reminder.png'), omitBackground: true });
 
-    const animated = await pageFor('panel', 320, 488, 'no-preference');
+    const animated = await pageFor('panel', 320, 476, 'no-preference');
     const angle = () => animated.locator('#clock-needle').getAttribute('transform').then(value => Number(value.match(/rotate\(([^ ]+)/)[1]));
     assert.equal(await angle(), 150);
     await animated.locator('[data-mode=short]').click();
@@ -222,7 +259,7 @@ fs.mkdirSync(output, { recursive: true });
     await animated.locator('[data-mode=long]').click(); assert.equal(await angle(), 90);
     assert.equal(await animated.locator('#clock-scale').evaluate(node => node.getBoundingClientRect().width), 1, '刻度说明仅保留给辅助阅读');
     assert.deepEqual(errors, []);
-    fs.writeFileSync(path.join(output, 'checks.json'), JSON.stringify({ ok: true, themes: results, dragRegions, textContrast, sameModeClick: true,
+    fs.writeFileSync(path.join(output, 'checks.json'), JSON.stringify({ ok: true, themes: results, dragRegions, textContrast, settingsTypography, analogSpacing, sameModeClick: true,
       messageCardHeights: [36, 54], reminderCardHeights: [232, 192], pinFocus: true, needleTransition: true, reducedMotion: true, errors }, null, 2));
     console.log(`Pomodoro UI: 32 face/theme combinations, draft/error/focus behavior, mini + opaque messages passed. Screenshots: ${output}`);
   } finally { await browser.close(); }

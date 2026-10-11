@@ -55,7 +55,7 @@ test('番茄窗懒创建、原尺寸、不抢焦点、拖动稳定与屏幕边�
   f.manager.sync(); assert.equal(f.windows.length, 0);
   f.manager.open(); await flush();
   const panel = f.win('panel'), mini = f.win('mini');
-  assert.equal(panel.bounds.width, 320); assert.equal(panel.bounds.height, 488);
+  assert.equal(panel.bounds.width, 320); assert.equal(panel.bounds.height, 476);
   assert.deepEqual([mini.bounds.width, mini.bounds.height], [112, 48]);
   assert.equal(f.pet.bounds.y - (mini.bounds.y + 6 + 36), 14);
   assert.equal(mini.options.focusable, false); assert.equal(mini.passthrough, false);
@@ -67,13 +67,13 @@ test('番茄窗懒创建、原尺寸、不抢焦点、拖动稳定与屏幕边�
   assert.equal((mini.bounds.y + 6) - (firstMessage.bounds.y + 42), 8, '邻近面板占住一侧时，鼓励卡沿同一行避让');
   assert.ok(firstMessage.bounds.x + firstMessage.bounds.width - 6 <= panel.bounds.x - 6);
   f.state.encouragement = ''; f.state.status = 'idle'; f.manager.sync();
-  panel.bounds = { x: 800, y: 150, width: 320, height: 488 };
+  panel.bounds = { x: 800, y: 150, width: 320, height: 476 };
   const moves = panel.moves; f.state.remaining--; f.manager.sync();
   assert.equal(panel.moves, moves, '每秒更新不得把用户拖动的面板拉回球球');
   await f.invoke('panel', 'layout', { face: 'analog', settings: true });
   assert.deepEqual(panel.bounds, { x: 800, y: 150, width: 320, height: 384 });
   await f.invoke('panel', 'layout', { face: 'analog', settings: false });
-  assert.equal(panel.bounds.height, 488);
+  assert.equal(panel.bounds.height, 476);
   f.state.status = 'running'; f.state.encouragement = '一点点推进，也是在向前。'; f.manager.sync(); await flush();
   const message = f.win('message');
   assert.equal(message.bounds.height, 48, '单行鼓励卡原生窗口为36px卡+12px留白');

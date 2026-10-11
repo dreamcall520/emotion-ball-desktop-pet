@@ -148,7 +148,7 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
         scrollHeight: body.scrollHeight, clientHeight: body.clientHeight } : null };
   })()`);
   const assertLayout = (view, win, face, editing) => {
-    const height = editing || face !== 'analog' ? 384 : 488;
+    const height = editing || face !== 'analog' ? 384 : 476;
     const native = win.getContentBounds();
     assert.equal(view.width, 320); assert.equal(view.height, height);
     assert.equal(native.width, 320); assert.equal(native.height, height);
@@ -228,7 +228,7 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
       result.themes.push({ ...paint, requested: { value, light, mode } });
       for (const face of ['analog', 'timeline', 'modules', 'minutes']) {
         await bridge(panel, 'settings', settingsValue(face));
-        await poll(() => geometry(panel), view => view.face === face && view.height === (face === 'analog' ? 488 : 384), '表盘尺寸更新');
+        await poll(() => geometry(panel), view => view.face === face && view.height === (face === 'analog' ? 476 : 384), '表盘尺寸更新');
         const normal = await geometry(panel); assertLayout(normal, panel, face, false);
         result.layouts.push({ value, light, mode, ...normal });
         await settingsOpen(panel);
