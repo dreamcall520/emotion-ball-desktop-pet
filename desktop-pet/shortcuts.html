@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN" data-ui-window="shortcuts" data-ui-theme="green" data-color-mode="standard" data-appearance="light" data-accessible-appearance="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'">
+  <title>球球快捷打开</title>
+  <link rel="stylesheet" href="color-mode.css">
+  <link rel="stylesheet" href="shortcuts.css">
+  <link rel="stylesheet" id="blue-style" href="ui-theme-blue.css" disabled>
+  <script defer src="shortcuts-renderer.js"></script>
+</head>
+<body>
+  <svg class="symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z"/></symbol>
+    <symbol id="i-custom" viewBox="0 0 24 24"><path d="M4 21v-7m0-4V3m8 18v-9m0-4V3m8 18v-5m0-4V3M1 14h6m2-6h6m2 8h6"/></symbol>
+    <symbol id="i-note" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8m-8 4h6M8 9h2"/></symbol>
+    <symbol id="i-todo" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5"/><path d="m8 12 3 3 5-6"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="14" r="8"/><path d="M12 10v4l-2 2M9 2h6m-3 0v4m6 1 2-2"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="m9.5 3-.6 2a7 7 0 0 0-1.4.8L5.4 5.3l-2.5 4.3 1.5 1.5a8 8 0 0 0 0 1.8l-1.5 1.5 2.5 4.3 2.1-.5a7 7 0 0 0 1.4.8l.6 2h5l.6-2a7 7 0 0 0 1.4-.8l2.1.5 2.5-4.3-1.5-1.5a8 8 0 0 0 0-1.8l1.5-1.5-2.5-4.3-2.1.5a7 7 0 0 0-1.4-.8l-.6-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M7 16h10"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+    <symbol id="i-orbit" viewBox="0 0 24 24"><circle cx="9" cy="12" r="4"/><path d="M16 4h.01M20 8h.01M21 13h.01M18 18h.01M13 21h.01"/></symbol>
+  </defs></svg>
+
+  <main id="floating" class="floating" aria-label="球球快捷功能" hidden></main>
+
+  <section id="list" class="panel list-panel" aria-labelledby="list-title" hidden>
+    <header class="panel-header">
+      <h1 id="list-title"><svg><use href="#i-keyboard"/></svg>快捷打开</h1>
+      <div class="header-tools"><span id="launcher-keys" class="keycaps"></span><button type="button" data-close class="icon-button" aria-label="关闭快捷面板"><svg><use href="#i-close"/></svg></button></div>
+    </header>
+    <div id="list-actions" class="list-actions"></div>
+    <footer class="list-footer">
+      <span><kbd>↑</kbd><kbd>↓</kbd>选择 <kbd>↵</kbd>打开 <kbd>Esc</kbd>收起</span>
+      <div><button id="switch-floating" type="button" class="icon-button" aria-label="切换为悬浮按钮" title="悬浮按钮"><svg><use href="#i-orbit"/></svg></button><button id="settings-open" type="button" class="icon-button" aria-label="快捷键设置" title="快捷键设置"><svg><use href="#i-settings"/></svg></button></div>
+    </footer>
+  </section>
+
+  <form id="settings" class="panel settings-panel" aria-labelledby="settings-title" hidden>
+    <header class="panel-header"><h1 id="settings-title"><svg><use href="#i-keyboard"/></svg>快捷键设置</h1><button type="button" data-close class="icon-button" aria-label="取消快捷键设置"><svg><use href="#i-close"/></svg></button></header>
+    <div class="settings-body">
+      <fieldset class="shape-setting"><legend class="group-label">面板形态</legend><div class="shape-options">
+        <label><input type="radio" name="shape" value="list"><span><svg><use href="#i-list"/></svg>列表面板</span></label>
+        <label><input type="radio" name="shape" value="floating"><span><svg><use href="#i-orbit"/></svg>悬浮按钮</span></label>
+      </div></fieldset>
+      <h2 class="group-label">全局唤起</h2>
+      <div class="global-setting">
+        <div class="switch-row"><div><strong>快捷面板</strong><p>打开常用功能的统一入口</p></div><label class="switch"><input id="enabled" type="checkbox" aria-label="启用全局唤起"><span></span></label></div>
+        <div class="global-binding"><span>唤起快捷键</span><div id="launcher-binding" class="binding-controls"></div></div>
+      </div>
+      <h2 class="group-label direct-heading">功能直达</h2>
+      <div id="direct-settings"></div>
+      <p id="record-hint" class="record-hint" role="status">按习惯设置，可留空。点击右侧，按下你想使用的组合键。</p>
+      <p id="error" class="error" role="alert" hidden></p>
+    </div>
+    <footer class="settings-footer"><button id="restore" type="button" class="text-button">恢复默认</button><div><button id="cancel" type="button" class="secondary">取消</button><button id="save" type="submit" class="primary">保存</button></div></footer>
+  </form>
+  <p id="runtime-error" class="runtime-error" role="alert" hidden></p>
+</body>
+</html>

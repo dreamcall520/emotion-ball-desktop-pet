@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { normalizeModelSelection } = require('./chat-models');
 const { normalizeAppearance, normalizeCustomization, appearanceContentKey } = require('./customization');
+const { DEFAULT_SHORTCUT_SETTINGS, normalizeShortcutSettings, validateShortcutSettings } = require('./shortcuts');
 
 const DEFAULTS = Object.freeze({
   size: 'tiny',
@@ -15,6 +16,7 @@ const DEFAULTS = Object.freeze({
   chatModel: 'auto',
   notesDefaultTab: 'note',
   notesAppearance: 'light',
+  shortcutSettings: DEFAULT_SHORTCUT_SETTINGS,
   customization: normalizeCustomization(),
   startupAppearance: normalizeCustomization().appearance,
   appearancePresets: Object.freeze([]),
@@ -75,6 +77,7 @@ function normalizeSettings(raw = {}) {
     chatModel: normalizeModelSelection(raw.chatModel),
     notesDefaultTab: ['note', 'todo'].includes(raw.notesDefaultTab) ? raw.notesDefaultTab : DEFAULTS.notesDefaultTab,
     notesAppearance: ['system', 'light', 'dark'].includes(raw.notesAppearance) ? raw.notesAppearance : DEFAULTS.notesAppearance,
+    shortcutSettings: normalizeShortcutSettings(raw.shortcutSettings),
     customization,
     appearancePresets: normalizeAppearancePresets(raw.appearancePresets),
     startupAppearance: raw.startupAppearance && typeof raw.startupAppearance === 'object' && !Array.isArray(raw.startupAppearance)
@@ -117,6 +120,15 @@ function loadSettings(filePath) {
 }
 
 function saveSettings(filePath, value) {
+  if (value && Object.hasOwn(value, 'shortcutSettings')) {
+    const validation = validateShortcutSettings(value.shortcutSettings);
+    if (!validation.ok) {
+      const error = new TypeError('Invalid shortcut settings');
+      error.code = 'INVALID_SHORTCUT_SETTINGS';
+      error.errors = validation.errors;
+      throw error;
+    }
+  }
   const normalized = normalizeSettings(value);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const temporary = `${filePath}.tmp`;

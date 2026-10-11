@@ -176,3 +176,14 @@ test('暂停快照显式阻止安静动画，恢复后不保留paused字段', ()
   assert.equal(f.packets.at(-1).paused, undefined);
   assert.equal(f.controller.getPresentation().suppressed, true, '恢复微动画仍禁止大动作');
 });
+
+
+test('快捷面板与右键菜单分别保留展开，关闭一个不解除另一个的保护', () => {
+  const f = fixture({ side: 'left' });
+  f.sample(-780);
+  f.controller.pin(true, 'shortcuts'); f.controller.pin(true);
+  f.sample(-500); f.controller.pin(false); f.advance(2000);
+  assert.equal(f.controller.getPresentation().mode, 'peeked');
+  f.controller.pin(false, 'shortcuts'); f.advance(2650);
+  assert.equal(f.controller.getPresentation().mode, 'tucked');
+});

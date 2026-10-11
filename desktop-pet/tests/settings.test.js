@@ -103,7 +103,7 @@ test('损坏文件回退且有效设置可回读', t => {
     colorMode: 'standard',
     uiTheme: 'green',
     chatModel: 'auto',
-    notesDefaultTab: 'note', notesAppearance: 'light',
+    notesDefaultTab: 'note', notesAppearance: 'light', shortcutSettings: DEFAULTS.shortcutSettings,
     customization: DEFAULTS.customization,
     startupAppearance: DEFAULTS.startupAppearance,
     appearancePresets: [],
@@ -124,7 +124,7 @@ test('损坏文件回退且有效设置可回读', t => {
 test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
   assert.deepEqual(normalizeSettings({ size: 'small', x: -102.3, y: 81.8, alwaysOnTop: false }), {
     size: 'small', x: -102, y: 82, alwaysOnTop: false,
-    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', uiTheme: 'green', chatModel: 'auto', notesDefaultTab: 'note', notesAppearance: 'light', customization: DEFAULTS.customization,
+    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', uiTheme: 'green', chatModel: 'auto', notesDefaultTab: 'note', notesAppearance: 'light', shortcutSettings: DEFAULTS.shortcutSettings, customization: DEFAULTS.customization,
     startupAppearance: DEFAULTS.startupAppearance,
     appearancePresets: [], codexEnabled: false,
     codexTaskNameInAlerts: true, codexQuotaAlwaysVisible: true,

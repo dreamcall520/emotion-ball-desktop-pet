@@ -37,10 +37,24 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     assert.equal(ipcHandlers.has(channel), false, `${channel} must only be registered once`);
     ipcHandlers.set(channel, handler);
   };
+  ipcMain.removeHandler = channel => ipcHandlers.delete(channel);
+  const shortcutCallbacks = new Map();
+  let shortcutsSuspended = false;
+  const globalShortcut = {
+    register(accelerator, callback) {
+      if (shortcutsSuspended || shortcutCallbacks.has(accelerator)) return false;
+      shortcutCallbacks.set(accelerator, callback); return true;
+    },
+    unregister(accelerator) { shortcutCallbacks.delete(accelerator); },
+    isRegistered: accelerator => shortcutCallbacks.has(accelerator),
+    setSuspended(value) { shortcutsSuspended = value; },
+    isSuspended: () => shortcutsSuspended
+  };
   const powerMonitor = new EventEmitter();
   const nativeTheme = Object.assign(new EventEmitter(), { shouldUseDarkColors: false });
   const display = { id: 1, bounds: { x: -800, y: 0, width: 800, height: 600 }, workArea: { x: -800, y: 0, width: 800, height: 600 } };
-  const screen = Object.assign(new EventEmitter(), { getPrimaryDisplay: () => display, getAllDisplays: () => [display], getDisplayMatching: () => display });
+  const screen = Object.assign(new EventEmitter(), { getPrimaryDisplay: () => display, getAllDisplays: () => [display], getDisplayMatching: () => display,
+    getCursorScreenPoint: () => ({ x: -900, y: -100 }) });
   class NativeWindow extends EventEmitter {
     constructor(options) {
       super(); this.bounds = { x: options.x, y: options.y, width: options.width, height: options.height };
@@ -61,6 +75,8 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     setMinimumSize(width, height) { this.minimumSize = [width, height]; }
     getPosition() { return [this.bounds.x, this.bounds.y]; }
     isDestroyed() { return this.destroyed; } isVisible() { return this.visible; }
+    isFocused() { return this.focused === true; }
+    setIgnoreMouseEvents(value) { this.ignoresMouseEvents = value; }
     setPosition(x, y, animate) { assert.equal(animate, false); Object.assign(this.bounds, { x, y }); this.emit('move'); }
     setBounds(bounds) { this.bounds = { ...bounds }; this.emit('resize'); }
     loadFile(file) {
@@ -161,7 +177,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     setTimeout(callback, delay) { timers.set(++serial, { callback, at: now + delay }); return serial; },
     clearTimeout(id) { timers.delete(id); },
     require(name) {
-      if (name === 'electron') return { app, ipcMain, powerMonitor, nativeTheme, screen, BrowserWindow: NativeWindow, Tray,
+      if (name === 'electron') return { app, ipcMain, powerMonitor, nativeTheme, screen, globalShortcut, BrowserWindow: NativeWindow, Tray,
         dialog: { showMessageBox: (...args) => { dialogs.push(args); return consent(...args); } },
         shell: { openExternal: url => { external.push(url); return openExternal(url); } },
         Menu: { buildFromTemplate: value => Object.assign(value, { popup: options => popups.push({ value, options }) }) }, nativeImage: { createFromPath: () => ({ setTemplateImage() {} }) } };
@@ -448,7 +464,7 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   const menu = f.call('menuTemplate()');
   const top = menu.filter(item => item.type !== 'separator');
   assert.deepEqual(Array.from(top, item => item.label), [
-    '和球球聊聊', '来定制球球', '便签与待办', '番茄钟', '球球与互动', 'Codex 与 API',
+    '和球球聊聊', '来定制球球', '便签与待办', '番茄钟', '快捷面板', '快捷键设置…', '球球与互动', 'Codex 与 API',
     '贴边与显示', '球球尺寸', '界面配色', '常规设置', '关于球球', '检查更新', '退出球球'
   ]);
   const group = label => top.find(item => item.label === label).submenu.filter(item => item.type !== 'separator');

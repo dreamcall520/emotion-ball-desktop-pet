@@ -148,6 +148,24 @@ test('安装包包含定制面板及球球外观配置模块', () => {
   }
 });
 
+test('安装包完整包含快捷打开界面及可加载的原生依赖', t => {
+  const root = path.resolve(__dirname, '../..');
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'qiu-shortcuts-pack-'));
+  t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
+  const staging = prepareStaging(root, path.join(temporary, 'app'));
+  for (const file of ['shortcuts.html', 'shortcuts.css', 'shortcuts-preload.js', 'shortcuts-renderer.js',
+    'lib/shortcuts.js', 'lib/shortcut-layout.js', 'lib/shortcut-window.js', 'scripts/verify-shortcuts-integration.js']) {
+    assert.deepEqual(fs.readFileSync(path.join(staging, 'desktop-pet', file)),
+      fs.readFileSync(path.join(root, 'desktop-pet', file)), `${file} 必须完整进入安装包`);
+  }
+  const stagedRequire = file => require(path.join(staging, 'desktop-pet', file));
+  assert.equal(typeof stagedRequire('lib/shortcuts.js').createShortcutRegistrar, 'function');
+  assert.equal(typeof stagedRequire('lib/shortcut-window.js').createShortcutWindow, 'function');
+  assert.equal(typeof stagedRequire('lib/shortcut-layout.js').layoutShortcuts, 'function');
+  assert.equal(typeof stagedRequire('scripts/verify-shortcuts-integration.js').verifyShortcuts, 'function');
+  assert.equal(stagedRequire('lib/settings.js').DEFAULTS.shortcutSettings.launcher, 'Ctrl+Alt+Q');
+});
+
 test('安装包完整包含便签待办资源与可加载的中央存储，未夹带用户记录', () => {
   const root = path.resolve(__dirname, '../..');
   const staging = prepareStaging(root);

@@ -184,7 +184,7 @@ async function getSmokeRelease(url) {
 
 function createSmokeChatRpc({ onNotification }) {
   assert.equal(process.env.PET_SMOKE_TEST, '1');
-  assert.equal(process.env.PET_SMOKE_CHAT_ONLY, '1');
+  assert.ok(['PET_SMOKE_CHAT_ONLY', 'PET_SMOKE_CODEX_PETS_ONLY', 'PET_SMOKE_SHORTCUT_ONLY'].some(key => process.env[key] === '1'));
   counts.connections++;
   let closed = false, timer;
   const emit = (method, params) => { if (!closed) onNotification({ method, params }); };

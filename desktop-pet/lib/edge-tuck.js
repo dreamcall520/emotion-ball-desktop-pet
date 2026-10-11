@@ -12,7 +12,8 @@ function contains(bounds, point, margin = 0) {
 function createEdgeTuck({ getWindow, getWorkArea, onChange = () => {},
   getRetentionBounds = () => [], schedule = setTimeout, cancel = clearTimeout }) {
   let mode = 'free', side = null, dragging = false, paused = false, disposed = false;
-  let pinned = false, timer = null, revision = 0, ignored = null, lastCursor = null;
+  const pins = new Set();
+  let timer = null, revision = 0, ignored = null, lastCursor = null;
 
   function getPresentation() {
     return { mode, side, dragging, suppressed: mode === 'tucked' || mode === 'hidden' || paused,
@@ -54,13 +55,13 @@ function createEdgeTuck({ getWindow, getWorkArea, onChange = () => {},
   }
   function dock(nextSide) {
     if (disposed || !['left', 'right'].includes(nextSide)) return false;
-    cancelTuck(); dragging = false; pinned = false;
+    cancelTuck(); dragging = false; pins.clear();
     side = nextSide; mode = 'tucked'; placeAtEdge(); publish();
     return true;
   }
   function restore() {
     if (disposed) return;
-    cancelTuck(); dragging = false; pinned = false; side = null; mode = 'free';
+    cancelTuck(); dragging = false; pins.clear(); side = null; mode = 'free';
     placeAtEdge(); publish({ cancelDrag: true });
   }
   function sampleCursor(point) {
@@ -72,13 +73,13 @@ function createEdgeTuck({ getWindow, getWorkArea, onChange = () => {},
       if (hovered) { cancelTuck(); mode = 'peeked'; publish(); }
       return;
     }
-    const retained = pinned || contains(window()?.getBounds(), point, HOVER_MARGIN) ||
+    const retained = pins.size > 0 || contains(window()?.getBounds(), point, HOVER_MARGIN) ||
       getRetentionBounds().some(bounds => contains(bounds, point, HOVER_MARGIN));
     if (retained) { cancelTuck(); return; }
     if (timer !== null) return;
     const token = ++revision;
     timer = schedule(() => {
-      if (token !== revision || disposed || paused || dragging || pinned || mode !== 'peeked') return;
+      if (token !== revision || disposed || paused || dragging || pins.size > 0 || mode !== 'peeked') return;
       timer = null; mode = 'tucked'; publish();
     }, TUCK_DELAY);
   }
@@ -104,18 +105,19 @@ function createEdgeTuck({ getWindow, getWorkArea, onChange = () => {},
     },
     hide() {
       if (disposed) return;
-      cancelTuck(); dragging = false; pinned = false; mode = 'hidden'; publish();
+      cancelTuck(); dragging = false; pins.clear(); mode = 'hidden'; publish();
     },
-    pin(value) { pinned = Boolean(value); cancelTuck(); if (!pinned) sampleCursor(lastCursor); },
+    pin(value, owner = 'menu') { if (value) pins.add(owner); else pins.delete(owner);
+      cancelTuck(); if (!pins.size) sampleCursor(lastCursor); },
     recover() {
       if (disposed) return;
-      cancelTuck(); dragging = false; pinned = false;
+      cancelTuck(); dragging = false; pins.clear();
       if (side && mode !== 'hidden') mode = 'tucked';
       placeAtEdge(); publish({ cancelDrag: true });
     },
     suspend() {
       if (disposed) return;
-      cancelTuck(); dragging = false; pinned = false; paused = true;
+      cancelTuck(); dragging = false; pins.clear(); paused = true;
       if (side && mode !== 'hidden') mode = 'tucked';
       placeAtEdge(); publish();
     },

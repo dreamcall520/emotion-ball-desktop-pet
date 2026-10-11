@@ -7,6 +7,7 @@ const {
   BrowserWindow,
   clipboard,
   dialog,
+  globalShortcut,
   ipcMain,
   Menu,
   nativeImage,
@@ -55,6 +56,8 @@ const { createNotesCompanion } = require('./lib/notes-companion');
 const { createNotesOrganizer } = require('./lib/notes-organizer');
 const { createPomodoro } = require('./lib/pomodoro');
 const { createPomodoroWindows } = require('./lib/pomodoro-window');
+const { createShortcutRegistrar } = require('./lib/shortcuts');
+const { createShortcutWindow } = require('./lib/shortcut-window');
 const { createApiUsage } = require('./lib/api-usage');
 const { createApiUsageLabelWindow } = require('./lib/api-usage-label-window');
 const { checkLatestRelease } = require('./lib/app-update');
@@ -96,6 +99,8 @@ let chatWindow = null;
 let notesCompanion = null;
 let pomodoro = null;
 let pomodoroWindows = null;
+let shortcutRegistrar = null;
+let shortcutWindow = null;
 let pomodoroQuiet = false;
 let pomodoroNow = Date.now;
 let notesQuitReady = false;
@@ -195,6 +200,55 @@ function openPomodoro() {
   pomodoroWindows?.open();
 }
 
+function openShortcuts(showSettings = false) {
+  if (screenLocked || isQuitting) return;
+  if (!petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) restorePet();
+  stopMotion();
+  shortcutWindow?.open({ settings: showSettings });
+}
+
+function openShortcutAction(id) {
+  if (screenLocked || isQuitting) return;
+  if (!petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) restorePet();
+  if (id === 'launcher') { if (shortcutWindow?.isOpen()) shortcutWindow.close(); else openShortcuts(); return; }
+  shortcutWindow?.close();
+  if (id === 'chat') openChat();
+  else if (id === 'custom') openCustomization();
+  else if (id === 'note' || id === 'todo') notesCompanion?.openPanel({ tab: id });
+  else if (id === 'pomodoro') openPomodoro();
+}
+
+function initializeShortcuts() {
+  shortcutRegistrar = createShortcutRegistrar({ globalShortcut, config: settings.shortcutSettings, onAction: openShortcutAction });
+  shortcutRegistrar.start();
+  shortcutWindow = createShortcutWindow({ BrowserWindow, ipcMain, screen,
+    getPetWindow: () => petWindow,
+    getPresentation: () => ({ ...edgeTuck?.getPresentation(), dragging: dragState?.moved === true, shape: settings?.customization?.appearance?.shape }),
+    getConfig: () => shortcutRegistrar.getConfig(), getErrors: () => shortcutRegistrar.getErrors(),
+    save: config => {
+      let nextSettings;
+      const result = shortcutRegistrar.apply(config, shortcutSettings => {
+        nextSettings = saveSettings(settingsFile, { ...settings, shortcutSettings });
+      });
+      if (result.ok) { settings = nextSettings; safelyInvokeWindow('快捷键保存后刷新菜单', refreshTrayMenu); }
+      return result;
+    },
+    onAction: openShortcutAction,
+    onPin: value => {
+      if (value && edgeTuck?.getPresentation().mode === 'tucked' && petWindow && !petWindow.isDestroyed()) {
+        const bounds = petWindow.getBounds();
+        edgeTuck.sampleCursor({ x: bounds.x + bounds.width * (edgeTuck.getPresentation().side === 'left' ? .25 : .75), y: bounds.y + bounds.height / 2 });
+      }
+      edgeTuck?.pin(value, 'shortcuts');
+    },
+    onRecording: value => shortcutRegistrar.setRecording(value),
+    isSuppressed: () => screenLocked || isQuitting || dragState?.moved === true || Boolean(hostMotion && !shortcutWindow?.isOpen()),
+    onError: error => writeError('快捷面板', error) });
+  app.on('browser-window-focus', (_event, focused) => {
+    if (focused !== shortcutWindow?.getWindow() && focused !== petWindow) shortcutWindow?.close();
+  });
+}
+
 function syncPomodoro(snapshot = pomodoro?.getSnapshot()) {
   const quiet = snapshot?.quiet === true;
   if (quiet !== pomodoroQuiet) {
@@ -239,7 +293,7 @@ function fromApiUsageWindow(event, requireVisible = true) {
 }
 
 function functionWindowObstacles() {
-  return [quotaLabel, apiUsageLabel].flatMap(controller => {
+  return [quotaLabel, apiUsageLabel, shortcutWindow].flatMap(controller => {
     const win = controller?.getWindow();
     return win && !win.isDestroyed() && win.isVisible() ? [win.getBounds()] : [];
   });
@@ -622,11 +676,12 @@ function applyPresentation(packet) {
   } else syncQuotaLabel(codexCompanion?.getSnapshot());
   tickEdgeNotice(true);
   pomodoroWindows?.sync();
+  shortcutWindow?.sync();
   refreshTrayMenu();
 }
 
 function edgeRetentionBounds() {
-  return [bubble, quotaLabel, apiUsageLabel, chatWindow].flatMap(controller => {
+  return [bubble, quotaLabel, apiUsageLabel, chatWindow, shortcutWindow].flatMap(controller => {
     try {
       const win = controller?.getWindow();
       return win && !win.isDestroyed() && win.isVisible() ? [win.getBounds()] : [];
@@ -635,6 +690,7 @@ function edgeRetentionBounds() {
 }
 
 function dockPet(side) {
+  shortcutWindow?.interrupt();
   if (!petWindow || petWindow.isDestroyed() || screenLocked) return;
   dragState = null;
   stopMotion();
@@ -1588,6 +1644,8 @@ function menuTemplate() {
       })) }
     ] },
     { id: 'pomodoro-open', label: '番茄钟', click: openPomodoro },
+    { id: 'shortcut-open', label: '快捷面板', click: () => openShortcuts() },
+    { id: 'shortcut-settings', label: '快捷键设置…', click: () => openShortcuts(true) },
     { type: 'separator' },
     { label: '球球与互动', submenu: [
       { label: '随机表情', click: () => sendCommand('random') },
@@ -1680,6 +1738,7 @@ function popupPetMenu(items) {
 }
 
 function showPetContextMenu() {
+  shortcutWindow?.interrupt();
   return popupPetMenu(menuTemplate());
 }
 
@@ -1706,6 +1765,19 @@ async function finishSmokeTest() {
       "Boolean(window.petDesktop.onActivity && document.getElementById('pet').dataset.mode)"
     );
     if (!companionReady) throw new Error('轻陪伴活动感知尚未接入');
+
+    if (process.env.PET_SMOKE_SHORTCUT_ONLY === '1') {
+      await require('./scripts/verify-shortcuts-integration').verifyShortcuts({
+        pet: petWindow, controller: shortcutWindow, registrar: shortcutRegistrar,
+        screen, BrowserWindow, globalShortcut, edgeTuck, powerMonitor, settingsFile,
+        getMenu: () => Menu.buildFromTemplate(menuTemplate()), getSettings: () => settings,
+        getWindows: () => ({ chat: chatWindow?.getWindow(), custom: customizationWindow,
+          note: notesCompanion?.getWindows().panel, todo: notesCompanion?.getWindows().panel,
+          pomodoro: BrowserWindow.getAllWindows().find(win => !win.isDestroyed() &&
+            win.webContents.getURL().includes('/pomodoro.html?view=panel')) }), pomodoro
+      });
+      app.exit(0); return;
+    }
 
     if (process.env.PET_SMOKE_POMODORO_ONLY === '1') {
       await require('./scripts/verify-pomodoro-integration').verifyPomodoro({
@@ -2266,12 +2338,14 @@ function createPetWindow() {
   createdPetWindow.on('move', () => {
     if (!isCurrentPetWindow()) return;
     notesCompanion?.repositionReminder?.();
+    shortcutWindow?.sync();
     if (chatWindow?.isFollowingChat?.()) return;
     thoughts?.hide(); repositionBubble(); edgeNoticeWindow?.reposition();
   });
   createdPetWindow.on('resize', () => {
     if (!isCurrentPetWindow()) return;
     dragState = null;
+    shortcutWindow?.interrupt();
     stopMotion();
     edgeTuck?.recover();
     notesCompanion?.repositionReminder?.();
@@ -2287,6 +2361,7 @@ function createPetWindow() {
     // macOS may deliver hide after a quick hide/show pair. Do not hide a newly
     // reopened chat or re-tuck the pet for an obsolete native notification.
     if (!isCurrentPetWindow() || createdPetWindow.isVisible()) return;
+    shortcutWindow?.interrupt();
     notesCompanion?.repositionReminder?.();
     dragState = null;
     chatWindow?.hide();
@@ -2306,6 +2381,7 @@ function createPetWindow() {
   createdPetWindow.on('closed', () => {
     if (!isCurrentPetWindow() || closedCleanupStarted) return;
     closedCleanupStarted = true;
+    shortcutWindow?.interrupt();
     notesCompanion?.repositionReminder?.();
     chatWindow?.hide();
     edgeTuck?.dispose();
@@ -2493,6 +2569,7 @@ function registerIpc() {
     if (!fromPetWindow(event) || screenLocked || !petWindow.isVisible()) return;
     const point = validPoint(rawPoint);
     if (!point) return;
+    shortcutWindow?.cancelHover();
     // 页面已在 pointerdown 清理待执行互动；不发送全局 stop，避免迟到后误杀新双击。
     stopMotion({ notifyRenderer: false });
     edgeTuck?.beginDrag();
@@ -2504,7 +2581,9 @@ function registerIpc() {
     if (!fromPetWindow(event) || !dragState || screenLocked) return;
     const point = validPoint(rawPoint);
     if (!point) return;
-    if (Math.hypot(point.x - dragState.pointer.x, point.y - dragState.pointer.y) > 6) dragState.moved = true;
+    if (!dragState.moved && Math.hypot(point.x - dragState.pointer.x, point.y - dragState.pointer.y) > 6) {
+      dragState.moved = true; shortcutWindow?.interrupt();
+    }
     petWindow.setPosition(
       dragState.window.x + point.x - dragState.pointer.x,
       dragState.window.y + point.y - dragState.pointer.y,
@@ -2606,6 +2685,7 @@ function registerIpc() {
 
 function registerDisplayRecovery() {
   const recover = () => {
+    shortcutWindow?.interrupt();
     if (petWindow && !petWindow.isDestroyed()) {
       dragState = null;
       makeWindowVisible();
@@ -2717,7 +2797,7 @@ async function bootstrap() {
     initialModelSelection: settings.chatModel,
     onModelSelection: chatModel => { settings = saveSettings(settingsFile, { ...settings, chatModel }); },
     createRpc: options => {
-      if (IS_SMOKE_TEST && (process.env.PET_SMOKE_CHAT_ONLY === '1' || process.env.PET_SMOKE_CODEX_PETS_ONLY === '1')) return require('./scripts/verify-chat-integration').createSmokeChatRpc(options);
+      if (IS_SMOKE_TEST && (process.env.PET_SMOKE_CHAT_ONLY === '1' || process.env.PET_SMOKE_CODEX_PETS_ONLY === '1' || process.env.PET_SMOKE_SHORTCUT_ONLY === '1')) return require('./scripts/verify-chat-integration').createSmokeChatRpc(options);
       fs.mkdirSync(options.workspaceDir, { recursive: true, mode: 0o700 });
       return createCodexChatRpc(options);
     },
@@ -2762,10 +2842,11 @@ async function bootstrap() {
   edgeNotice = createEdgeNotice({ now: () => edgeNoticeNow(), onChange: payload => {
     safelyInvokeWindow('边缘提示', () => payload ? edgeNoticeWindow.show(payload) : edgeNoticeWindow.hide());
   } });
+  initializeShortcuts();
   activityMonitor = createActivityMonitor({
     screen, powerMonitor, getWindow: () => petWindow,
     onSample: packet => {
-      if (!packet.locked) edgeTuck?.sampleCursor(packet.cursor);
+      if (!packet.locked) { edgeTuck?.sampleCursor(packet.cursor); shortcutWindow?.sampleCursor(packet.cursor); }
       if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send('pet:activity', packet);
       tickEdgeNotice();
     },
@@ -2773,6 +2854,7 @@ async function bootstrap() {
   });
   const pause = () => {
     screenLocked = true;
+    shortcutWindow?.interrupt();
     notesCompanion?.pause();
     if (customizationWindow && !customizationWindow.isDestroyed()) customizationWindow.hide();
     if (apiUsageWindow && !apiUsageWindow.isDestroyed()) apiUsageWindow.hide();
@@ -2800,6 +2882,8 @@ async function bootstrap() {
   initializeCodexCompanion();
   createPetWindow();
   createTray();
+  if (process.argv.includes('--shortcuts-preview')) openShortcuts();
+  if (process.argv.includes('--shortcut-settings-preview')) openShortcuts(true);
   if (process.argv.includes('--pomodoro-preview')) openPomodoro();
   if (process.argv.includes('--notes-preview')) notesCompanion.openPanel();
   scheduleUpdateCheck();
@@ -2813,6 +2897,8 @@ if (!hasSingleInstanceLock) {
 } else {
   app.on('second-instance', (_event, argv) => {
     if (settings) restorePet();
+    if (argv.includes('--shortcuts-preview')) openShortcuts();
+    if (argv.includes('--shortcut-settings-preview')) openShortcuts(true);
     if (argv.includes('--notes-preview')) notesCompanion?.openPanel();
     if (argv.includes('--pomodoro-preview')) openPomodoro();
   });
@@ -2847,6 +2933,7 @@ if (!hasSingleInstanceLock) {
     clearTimeout(apiRefreshTimer);
     apiRefreshTimer = null;
     apiUsage?.close();
+    safelyInvokeWindow('退出时快捷入口清理', () => { shortcutWindow?.dispose(); shortcutRegistrar?.dispose(); });
     safelyInvokeWindow('退出时番茄钟窗口销毁', () => pomodoroWindows?.close());
     safelyInvokeWindow('退出时关于窗口销毁', () => aboutWindow?.destroy());
     let chatClosing;
