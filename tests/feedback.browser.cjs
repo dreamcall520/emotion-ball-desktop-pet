@@ -53,6 +53,10 @@ fs.mkdirSync(out, { recursive: true });
         assert.ok(await page.locator('#submit').isDisabled());
         assert.match(await page.locator('#status').innerText(), /暂未开放/);
         assert.equal(await page.locator('#success').isVisible(), false);
+        assert.equal(await page.locator('#version').getAttribute('autocomplete'), 'off');
+        assert.equal(await page.locator('#os').getAttribute('autocomplete'), 'off');
+        assert.match(await page.locator('#version').getAttribute('placeholder'), /关于球球/);
+        assert.doesNotMatch(await page.locator('#version').getAttribute('placeholder'), /\d+\.\d+/);
         assert.ok(await inViewport(page.locator('header')));
         assert.ok(await inViewport(page.locator('.type-options')));
         const feedbackLayout = await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth, background: getComputedStyle(document.body).backgroundColor }));
@@ -70,9 +74,13 @@ fs.mkdirSync(out, { recursive: true });
         for (const route of ['', 'product/', 'updates/', 'privacy/']) {
           await page.goto(new URL(route, base).href);
           const floating = page.locator('.feedback-entry');
-          assert.ok(await inViewport(floating), `${route || 'home'} floating entry visible`);
-          assert.equal(new URL(await floating.getAttribute('href'), page.url()).pathname, '/feedback/');
-          assert.ok(await floating.evaluate(element => { const r = element.getBoundingClientRect(); return element.contains(document.elementFromPoint(r.x + r.width/2, r.y + r.height/2)); }), 'floating entry clickable');
+          if (route) {
+            assert.ok(await inViewport(floating), `${route} floating entry visible`);
+            assert.equal(new URL(await floating.getAttribute('href'), page.url()).pathname, '/feedback/');
+            assert.ok(await floating.evaluate(element => { const r = element.getBoundingClientRect(); return element.contains(document.elementFromPoint(r.x + r.width/2, r.y + r.height/2)); }), 'floating entry clickable');
+          } else {
+            assert.equal(await floating.count(), 0, 'home has no floating feedback entry');
+          }
           if (route === 'updates/' || route === 'privacy/') {
             assert.deepEqual(await page.locator('.brand').evaluate(element => { const s=getComputedStyle(element), image=element.querySelector('img'); return {size:s.fontSize, weight:s.fontWeight, gap:s.gap, imageWidth:image.getBoundingClientRect().width, imageLoaded:image.complete && image.naturalWidth > 0}; }), brandStyle);
           }
@@ -99,15 +107,15 @@ fs.mkdirSync(out, { recursive: true });
         }
       }
     }
-    checks.push('30 desktop/mobile320/mobile390 light/dark layouts: no horizontal overflow; privacy, updates and feedback brands match; floating links visible and reach /feedback/');
-    for (const route of ['', 'product/', 'updates/', 'privacy/']) {
+    checks.push('30 desktop/mobile320/mobile390 light/dark layouts: no horizontal overflow; privacy, updates and feedback brands match; home retains footer feedback link without a floating entry; other floating links reach /feedback/; version input guides users to About and disables history autocomplete');
+    for (const route of ['product/', 'updates/', 'privacy/']) {
       await page.goto(new URL(route, base).href);
       await page.locator('.feedback-entry').focus();
       await page.keyboard.press('Enter');
       await page.waitForURL(new URL('feedback/', base).href);
       assert.equal(await page.title(), '意见反馈 · 球球桌宠');
     }
-    checks.push('all four floating feedback entries work with keyboard Enter');
+    checks.push('all three floating feedback entries work with keyboard Enter');
     assert.equal(requests.length, 0, 'unconfigured page never sends a feedback request');
     checks.push('unconfigured channel keeps submit disabled and never displays success');
 
