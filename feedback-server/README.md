@@ -87,6 +87,21 @@ npm exec --yes --package=wrangler@4.149.0 -- wrangler deploy
 
 ## 查看与管理
 
+### 私密反馈管理页
+
+打开 `https://qiuqiu-feedback-entry.pages.dev/admin/`，输入管理员专用密码后可查看文字、分类、时间、联系方式、版本、系统和来源；截图支持预览与下载，列表按提交时间倒序并支持加载更多。
+
+管理员密码沿用 Worker 的 `ADMIN_TOKEN`，只保存在本机 `/Users/allan/Library/Application Support/球球反馈服务/admin-token`（0600）及 Worker secret，不放入网页、App、URL或Git。页面不将密码写入 localStorage/sessionStorage；登录成功签发7天、绑定来源的 HMAC Cookie，设为 HttpOnly、Secure、SameSite=Strict。
+
+- `POST /api/admin/session`：同源 JSON `{ "password": "管理密码" }`，通过原生限流后验证，成功返回 `{ "ok": true }` 与会话 Cookie。
+- `POST /api/admin/logout`：同源 JSON `{}`，清除当前浏览器 Cookie。退出、过期及离开页面时清空已展示文字和截图 blob；签名会话本身在7天后到期，轮换 `ADMIN_TOKEN` 可令所有现有会话失效。
+- 列表及附件接口同时接受 Cookie 和原有 Bearer token；管理 API 不接受跨域页面访问，未授权返回401，不提供公共截图链接。
+- 页面及敏感响应均 no-store，无第三方脚本/统计，限制 CSP、禁止嵌入及索引。其他人打开页面只会看到登录框。
+
+页面不提供删除、工单状态或邮件通知。
+
+### 管理员接口
+
 设置本地环境变量 `FEEDBACK_ADMIN_TOKEN` 为密码管理器中保存的密钥；示例域名需替换为实际地址。
 
 ```bash
@@ -101,6 +116,6 @@ curl --fail -H "Authorization: Bearer $FEEDBACK_ADMIN_TOKEN" 'https://feedback.�
 - 截图 base64 单独存一行，1MiB 原图约1.4MB，低于 [D1 单行/字符串2,000,000字节上限](https://developers.cloudflare.com/d1/platform/limits/)。免费单库500MB，适合低频、小规模反馈；接近额度时需导出清理或将截图迁往对象存储。没有引入 R2 或额外付费服务。
 - [原生 Rate Limiting API](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/) 按 IP 在单个 Cloudflare 位置约束每60秒10次，是近似限流；共享 IP 可能共用额度，不能保证全球精确计数或抵御所有垃圾反馈。
 - CORS 约束浏览器来源，无法阻止直接调用公开提交 API。管理员读取单独鉴权；日志不记录反馈内容、联系方式、图片或管理员密钥。IP 仅用作限流 key，不写入反馈表。
-- 无邮箱通知、用户登录、工单处理状态或管理界面；可直接用管理员 API 和 D1 控制台处理当前小规模反馈。
+- 无邮箱通知、普通用户登录或工单处理状态；管理员可用私密管理页查看当前小规模反馈，也保留管理员 API 和 D1 控制台。
 
 官方依据：[D1 batch 事务行为](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch)。

@@ -1,12 +1,12 @@
 import { Buffer } from 'node:buffer';
 import { HttpError, invalid, validateSubmission, MAX_BODY_BYTES, UUID } from './validation.mjs';
 
-async function readJson(request) {
+async function readJson(request, maxBytes = MAX_BODY_BYTES) {
   if (request.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase() !== 'application/json') {
     throw new HttpError(415, 'unsupported_media_type', '请使用JSON提交反馈。');
   }
   const declared = request.headers.get('Content-Length');
-  if (declared && (!/^\d+$/.test(declared) || Number(declared) > MAX_BODY_BYTES)) throw new HttpError(413, 'payload_too_large', '反馈内容过大，请减少截图后重试。');
+  if (declared && (!/^\d+$/.test(declared) || Number(declared) > maxBytes)) throw new HttpError(413, 'payload_too_large', '提交内容过大，请减少后重试。');
   if (!request.body) invalid('反馈内容不能为空。');
   const reader = request.body.getReader();
   const chunks = [];
@@ -16,9 +16,9 @@ async function readJson(request) {
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > MAX_BODY_BYTES) {
+      if (size > maxBytes) {
         await reader.cancel();
-        throw new HttpError(413, 'payload_too_large', '反馈内容过大，请减少截图后重试。');
+        throw new HttpError(413, 'payload_too_large', '提交内容过大，请减少后重试。');
       }
       chunks.push(value);
     }
@@ -61,15 +61,56 @@ async function saveSubmission(db, submission) {
   return json({ id: submission.id }, 201);
 }
 
-async function authorized(request, token) {
+const ADMIN_COOKIE = '__Host-qiuqiu-admin';
+const SESSION_SECONDS = 7 * 24 * 60 * 60;
+
+async function matchingSecret(supplied, token) {
   if (typeof token !== 'string' || !token) return false;
-  const supplied = request.headers.get('Authorization')?.match(/^Bearer (.+)$/)?.[1] ?? '';
   const hashes = await Promise.all([supplied, token].map((value) => crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))));
   const left = new Uint8Array(hashes[0]);
   const right = new Uint8Array(hashes[1]);
   let different = 0;
   for (let i = 0; i < left.length; i++) different |= left[i] ^ right[i];
   return different === 0;
+}
+
+function sessionCookie(value, seconds = SESSION_SECONDS) {
+  return `${ADMIN_COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${seconds}`;
+}
+
+async function sessionKey(token) {
+  return crypto.subtle.importKey('raw', new TextEncoder().encode(token), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
+}
+
+function sessionMessage(request, expires, nonce) {
+  return new TextEncoder().encode(`${new URL(request.url).origin}\n${expires}\n${nonce}`);
+}
+
+async function authorized(request, token) {
+  const bearer = request.headers.get('Authorization')?.match(/^Bearer (.+)$/)?.[1];
+  if (bearer && await matchingSecret(bearer, token)) return true;
+  if (typeof token !== 'string' || !token) return false;
+  const cookie = request.headers.get('Cookie')?.split(';').map(value => value.trim()).find(value => value.startsWith(`${ADMIN_COOKIE}=`))?.slice(ADMIN_COOKIE.length + 1);
+  if (!cookie || cookie.length > 200) return false;
+  const [expires, nonce, signature, extra] = cookie.split('.');
+  const now = Math.floor(Date.now() / 1000);
+  if (extra !== undefined || !/^\d{10}$/.test(expires) || Number(expires) <= now || Number(expires) > now + SESSION_SECONDS || !UUID.test(nonce ?? '') || !/^[\w-]{43}$/.test(signature ?? '')) return false;
+  return crypto.subtle.verify('HMAC', await sessionKey(token), Buffer.from(signature, 'base64url'), sessionMessage(request, expires, nonce));
+}
+
+async function adminSession(request, env, url) {
+  if (request.headers.get('Origin') !== url.origin) throw new HttpError(403, 'origin_forbidden', '请从反馈管理页登录。');
+  if (url.pathname === '/api/admin/logout') {
+    await readJson(request, 4096);
+    return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie('', 0) });
+  }
+  const key = request.headers.get('CF-Connecting-IP') || 'local-development';
+  if (!env.FEEDBACK_RATE_LIMIT || !(await env.FEEDBACK_RATE_LIMIT.limit({ key: `admin-login:${key}` })).success) throw new HttpError(429, 'rate_limited', '尝试较频繁，请稍后再登录。');
+  const body = await readJson(request, 4096);
+  if (typeof body?.password !== 'string' || body.password.length > 1024 || !(await matchingSecret(body.password, env.ADMIN_TOKEN))) throw new HttpError(401, 'unauthorized', '管理密码不正确，请重新输入。');
+  const expires = String(Math.floor(Date.now() / 1000) + SESSION_SECONDS), nonce = crypto.randomUUID();
+  const signature = Buffer.from(await crypto.subtle.sign('HMAC', await sessionKey(env.ADMIN_TOKEN), sessionMessage(request, expires, nonce))).toString('base64url');
+  return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie(`${expires}.${nonce}.${signature}`) });
 }
 
 async function listFeedback(db, url) {
@@ -102,6 +143,7 @@ async function route(request, env) {
     return saveSubmission(env.FEEDBACK_DB, await validateSubmission(await readJson(request)));
   }
   if (url.pathname.startsWith('/api/admin/')) {
+    if (request.method === 'POST' && ['/api/admin/session', '/api/admin/logout'].includes(url.pathname)) return adminSession(request, env, url);
     if (!(await authorized(request, env.ADMIN_TOKEN))) throw new HttpError(401, 'unauthorized', '需要管理员授权。');
     if (request.method === 'GET' && url.pathname === '/api/admin/feedback') return listFeedback(env.FEEDBACK_DB, url);
     const match = url.pathname.match(/^\/api\/admin\/feedback\/([0-9a-f-]{36})\/attachments\/(attachment-[1-3]\.(?:png|jpg|gif|webp))$/i);
@@ -115,26 +157,32 @@ async function route(request, env) {
 
 export default {
   async fetch(request, env) {
+    const url = new URL(request.url);
+    const isAdmin = url.pathname.startsWith('/api/admin/');
     const origin = request.headers.get('Origin');
     const allowed = new Set((env.CORS_ORIGINS ?? '').split(',').map((value) => value.trim()).filter((value) => value && value !== '*'));
     let response;
     try {
-      if (origin && !allowed.has(origin)) throw new HttpError(403, 'origin_forbidden', '这个页面暂不能提交反馈。');
+      if (origin && (isAdmin ? origin !== url.origin : !allowed.has(origin))) throw new HttpError(403, 'origin_forbidden', isAdmin ? '请从反馈管理页访问。' : '这个页面暂不能提交反馈。');
       if (request.method === 'OPTIONS') {
         const method = request.headers.get('Access-Control-Request-Method');
         const headers = (request.headers.get('Access-Control-Request-Headers') ?? '').toLowerCase().split(',').map((header) => header.trim()).filter(Boolean);
-        if (!origin || !['POST', 'GET'].includes(method) || headers.some((header) => !['content-type', 'authorization'].includes(header))) throw new HttpError(403, 'origin_forbidden', '跨域请求未获允许。');
+        if (isAdmin || !origin || !['POST', 'GET'].includes(method) || headers.some((header) => !['content-type', 'authorization'].includes(header))) throw new HttpError(403, 'origin_forbidden', '跨域请求未获允许。');
         response = new Response(null, { status: 204, headers: { 'Access-Control-Allow-Methods': 'POST, GET', 'Access-Control-Allow-Headers': 'Content-Type, Authorization', 'Access-Control-Max-Age': '600' } });
       } else {
         response = await route(request, env);
       }
     } catch (error) {
       if (!(error instanceof HttpError)) console.error('feedback service failure');
-      response = json({ error: error instanceof HttpError ? error.code : 'unavailable', message: error instanceof HttpError ? error.message : '反馈暂未保存，请稍后重试。' }, error instanceof HttpError ? error.status : 503);
+      response = json({ error: error instanceof HttpError ? error.code : 'unavailable', message: error instanceof HttpError ? error.message : isAdmin ? '反馈管理暂时不可用，请稍后重试。' : '反馈暂未保存，请稍后重试。' }, error instanceof HttpError ? error.status : 503);
       if (error instanceof HttpError && error.status === 429) response.headers.set('Retry-After', '60');
     }
     response.headers.set('Vary', 'Origin');
-    if (origin && allowed.has(origin)) response.headers.set('Access-Control-Allow-Origin', origin);
+    if (isAdmin) {
+      response.headers.set('Referrer-Policy', 'no-referrer');
+      response.headers.set('X-Frame-Options', 'DENY');
+      response.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive');
+    } else if (origin && allowed.has(origin)) response.headers.set('Access-Control-Allow-Origin', origin);
     return response;
   },
 };

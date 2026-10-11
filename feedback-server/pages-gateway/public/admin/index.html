@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <title>反馈管理 · 球球桌宠</title>
+  <link rel="icon" href="./brand.webp" type="image/webp">
+  <link rel="stylesheet" href="./admin.css">
+  <script src="./admin.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+  <header>
+    <a class="brand" href="https://qiuqiu.pet/" aria-label="球球桌宠官网"><img src="./brand.webp" width="32" height="32" alt="">球球桌宠</a>
+    <button id="logout" type="button" hidden>退出登录</button>
+  </header>
+  <main id="main">
+    <h1>反馈管理</h1>
+    <p class="intro">用户的每一个想法，都在这里。仅管理员登录后可见。</p>
+    <section id="login" aria-labelledby="login-title">
+      <h2 id="login-title">登录查看反馈</h2>
+      <form id="login-form">
+        <label for="password">管理密码</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button class="primary" id="login-button" type="submit">登录</button>
+      </form>
+      <p id="login-status" class="status" role="status" aria-live="polite">正在确认登录状态…</p>
+      <button id="retry-logout" type="button" hidden>重试退出</button>
+    </section>
+    <section id="dashboard" aria-label="用户提交的反馈" hidden>
+      <div class="toolbar"><p id="summary">按提交时间由新到旧</p><button id="refresh" type="button">刷新反馈</button></div>
+      <p id="list-status" class="status" role="status" aria-live="polite"></p>
+      <div id="records"></div>
+      <div class="more"><button id="load-more" type="button" hidden>加载更多</button></div>
+    </section>
+    <noscript><p class="status">请开启浏览器的 JavaScript 后查看反馈。</p></noscript>
+  </main>
+  <dialog id="preview" aria-labelledby="preview-title">
+    <div class="preview-header"><h2 id="preview-title">截图预览</h2><button id="close-preview" type="button" aria-label="关闭截图预览">关闭</button></div>
+    <img id="preview-image" alt="">
+    <div class="preview-footer"><a id="download" class="button primary" download>下载截图</a></div>
+  </dialog>
+</body>
+</html>
