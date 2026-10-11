@@ -1,4 +1,5 @@
 const fs = require('node:fs');
+const os = require('node:os');
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -9,6 +10,7 @@ const {
   dialog,
   ipcMain,
   Menu,
+  net,
   nativeImage,
   nativeTheme,
   powerMonitor,
@@ -108,6 +110,8 @@ let lastUpdateResult = null;
 let availableUpdate = null;
 let aboutWindow = null;
 let aboutReady = false;
+let feedbackWindow = null;
+let feedbackReady = false;
 let aboutUpdateState = { state: 'idle' };
 const API_REFRESH_MS = 5 * 60 * 1000;
 let smokeCustomizationSaveFailure = false;
@@ -273,6 +277,89 @@ function openAbout() {
 function setAboutUpdate(state) {
   aboutUpdateState = state;
   if (aboutWindow && !aboutWindow.isDestroyed()) aboutWindow.webContents.send('pet:about-update-state', state);
+}
+
+function fromFeedbackWindow(event) {
+  return Boolean(!isQuitting && !screenLocked && feedbackWindow && !feedbackWindow.isDestroyed() &&
+    event.sender === feedbackWindow.webContents);
+}
+
+function feedbackContext() {
+  return { source: 'app', version: app.getVersion(), os: `${os.type()} ${os.release()} (${os.arch()})` };
+}
+
+function openFeedbackWindow() {
+  if (isQuitting || screenLocked) return;
+  if (feedbackWindow && !feedbackWindow.isDestroyed()) {
+    if (feedbackReady) { positionFunctionWindow(feedbackWindow); feedbackWindow.show(); feedbackWindow.focus(); }
+    return feedbackWindow;
+  }
+  const win = new BrowserWindow({
+    width: 600, height: 720, minWidth: 420, minHeight: 480, maximizable: false, fullscreenable: false,
+    title: '意见反馈', backgroundColor: '#EDF4FF', show: false,
+    webPreferences: { preload: path.join(__dirname, 'feedback-preload.js'),
+      contextIsolation: true, nodeIntegration: false, sandbox: true,
+      spellcheck: false, devTools: !app.isPackaged }
+  });
+  feedbackWindow = win;
+  feedbackReady = false;
+  positionFunctionWindow(win);
+  let confirmingClose = false;
+  win.webContents.on('will-prevent-unload', () => {
+    if (confirmingClose || win.isDestroyed()) return;
+    confirmingClose = true;
+    void dialog.showMessageBox(win, { type: 'question', title: '关闭意见反馈？',
+      message: '反馈还未确认提交', detail: '关闭会丢失本次填写的内容。',
+      buttons: ['继续编辑', '放弃并关闭'], defaultId: 0, cancelId: 0 })
+      .then(({ response }) => { if (response === 1 && !win.isDestroyed()) win.destroy(); })
+      .catch(error => writeError('反馈关闭确认', error)).finally(() => { confirmingClose = false; });
+  });
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', event => event.preventDefault());
+  win.webContents.on('will-attach-webview', event => event.preventDefault());
+  win.on('closed', () => { if (feedbackWindow === win) { feedbackWindow = null; feedbackReady = false; } });
+  win.once('ready-to-show', () => {
+    if (feedbackWindow !== win || win.isDestroyed()) return;
+    feedbackReady = true;
+    if (!isQuitting && !screenLocked) { positionFunctionWindow(win); win.show(); win.focus(); }
+  });
+  void win.loadFile(path.join(__dirname, 'feedback/index.html')).catch(error => {
+    writeError('意见反馈窗口', error);
+    if (!win.isDestroyed()) win.destroy();
+  });
+  return win;
+}
+
+async function submitFeedback(value) {
+  const endpoint = require('./feedback/config.js').endpoint;
+  if (!endpoint || !/^https:\/\//.test(endpoint)) throw Error('意见反馈暂未开放，请稍后再试。');
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+    typeof value.submissionId !== 'string' ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.submissionId) ||
+    !['problem', 'suggestion', 'feature'].includes(value.type) ||
+    !['title', 'detail', 'contact'].every(key => typeof value[key] === 'string') ||
+    !value.title.trim() || value.title.length > 100 || !value.detail.trim() || value.detail.length > 5000 || value.contact.length > 200 ||
+    !Array.isArray(value.attachments) || value.attachments.length > 3) throw Error('请检查反馈内容和截图后重试。');
+  const attachments = value.attachments.map(file => {
+    if (!file || typeof file.name !== 'string' || !file.name.trim() || file.name.length > 200 ||
+      !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type) ||
+      typeof file.data !== 'string' || !file.data || file.data.length > 1398104 ||
+      file.data.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(file.data) ||
+      Buffer.from(file.data, 'base64').length > 1024 * 1024) throw Error('截图格式不支持，或单张超过 1 MB。');
+    return { name: file.name, type: file.type, data: file.data };
+  });
+  let response;
+  try {
+    response = await net.fetch(endpoint, { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ submissionId: value.submissionId, type: value.type, title: value.title.trim(),
+        detail: value.detail.trim(), contact: value.contact.trim(), ...feedbackContext(), attachments }),
+      signal: AbortSignal.timeout(30000) });
+  } catch (_) { throw Error('网络连接失败，反馈尚未确认提交，请重试。'); }
+  if (!response.ok) throw Error(response.status === 429 ? '提交太频繁，请稍后再试。' : '反馈未提交成功，请稍后重试。');
+  let result;
+  try { result = await response.json(); } catch (_) { throw Error('未能确认提交结果，请重试。'); }
+  if (typeof result?.id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(result.id)) throw Error('未能确认提交结果，请重试。');
+  return { id: result.id };
 }
 
 function chatSnapshot(state = chat?.getState()) {
@@ -1589,6 +1676,7 @@ function menuTemplate() {
     ] },
     { type: 'separator' },
     { id: 'about-open', label: '关于球球', click: () => { void openAbout(); } },
+    { id: 'feedback-open', label: '意见反馈', click: () => { void openFeedbackWindow(); } },
     ...(!availableUpdate ? [updateEntry] : []),
     {
       label: '退出球球',
@@ -1655,6 +1743,12 @@ async function finishSmokeTest() {
     );
     if (!companionReady) throw new Error('轻陪伴活动感知尚未接入');
 
+    if (process.env.PET_SMOKE_FEEDBACK_ONLY === '1') {
+      await require('./scripts/verify-feedback-integration').verifyFeedbackIntegration({
+        open: openFeedbackWindow, setAppearance: setInterfaceAppearance, getVersion: () => app.getVersion()
+      });
+      app.exit(0); return;
+    }
     if (process.env.PET_SMOKE_FUNCTION_WINDOWS_ONLY === '1') {
       await require('./scripts/verify-function-windows').verifyFunctionWindows({
         pet: petWindow, screen, notes: notesCompanion, getObstacles: functionWindowObstacles,
@@ -1666,7 +1760,8 @@ async function finishSmokeTest() {
           ['customize', () => { openCustomization(); return customizationWindow; }],
           ['notes', () => notesCompanion.openPanel()],
           ['api-usage', () => { openApiUsage(); return apiUsageWindow; }],
-          ['about', openAbout]
+          ['about', openAbout],
+          ['feedback', openFeedbackWindow]
         ]
       });
       app.exit(0); return;
@@ -2288,6 +2383,16 @@ function registerIpc() {
     if (!fromAboutWindow(event, true)) return false;
     return shell.openExternal(APP_WEBSITE).then(() => true, () => false);
   });
+  ipcMain.handle('pet:about-feedback', event => {
+    if (!fromAboutWindow(event, true)) return false;
+    return Boolean(openFeedbackWindow());
+  });
+  ipcMain.handle('pet:feedback-context', event => fromFeedbackWindow(event) ? feedbackContext() : null);
+  ipcMain.handle('pet:feedback-submit', async (event, value) => {
+    if (!fromFeedbackWindow(event) || !feedbackWindow.isVisible()) throw Error('请重新打开意见反馈后再试。');
+    return submitFeedback(value);
+  });
+  ipcMain.on('pet:feedback-close', event => { if (fromFeedbackWindow(event)) feedbackWindow.close(); });
   ipcMain.handle('pet:about-update', async event => {
     if (!fromAboutWindow(event, true)) return false;
     await checkForUpdates(true);
@@ -2691,6 +2796,7 @@ async function bootstrap() {
     notesCompanion?.pause();
     if (customizationWindow && !customizationWindow.isDestroyed()) customizationWindow.hide();
     if (apiUsageWindow && !apiUsageWindow.isDestroyed()) apiUsageWindow.hide();
+    if (feedbackWindow && !feedbackWindow.isDestroyed()) feedbackWindow.hide();
     chatWindow?.hide();
     void chat?.stop();
     dragState = null;
@@ -2755,6 +2861,7 @@ if (!hasSingleInstanceLock) {
     apiRefreshTimer = null;
     apiUsage?.close();
     safelyInvokeWindow('退出时关于窗口销毁', () => aboutWindow?.destroy());
+    safelyInvokeWindow('退出时反馈窗口销毁', () => feedbackWindow?.destroy());
     let chatClosing;
     safelyInvokeWindow('退出时聊天停止', () => { chatClosing = chat?.close(); });
     if (event?.preventDefault && chatClosing?.then) {

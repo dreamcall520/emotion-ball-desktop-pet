@@ -32,6 +32,7 @@ function fixture({ reduced = false, random = .4, hidden = false } = {}) {
   const bridge = { getInfo: async () => ({ version: '0.3.32' }),
     checkUpdates: () => { calls.push('checkUpdates'); }, openRelease: () => { calls.push('openRelease'); },
     openWebsite: () => { calls.push('openWebsite'); }, close: () => { calls.push('close'); },
+    openFeedback: () => { calls.push('openFeedback'); },
     onUpdate(fn) { receive = fn; return () => { unsubscribed++; }; } };
   const media = { matches: reduced, addEventListener: (_name, fn) => { mediaChange = fn; }, removeEventListener: () => { mediaChange = null; } };
   const document = { documentElement: { dataset: {} }, hidden, getElementById: get,
@@ -203,8 +204,9 @@ test('试玩不写桌面偏好或覆盖版本提醒，官网与升级仍调用�
   f.receive({ state: 'ready', hasUpdate: true, latestVersion: '0.3.33' });
   avatar.dispatch('dblclick'); assert.equal(f.get('about-status').textContent, '发现新版本 0.3.33');
   await f.get('about-website').dispatch('click'); await f.get('about-open-release').dispatch('click');
+  await f.get('about-feedback').dispatch('click');
   f.receive({ state: 'ready', hasUpdate: false }); await f.get('about-check-updates').dispatch('click');
-  assert.deepEqual(f.calls, ['openWebsite', 'openRelease', 'checkUpdates']);
+  assert.deepEqual(f.calls, ['openWebsite', 'openRelease', 'openFeedback', 'checkUpdates']);
   const second = fixture(); await flush(); assert.equal(second.get('about-avatar').dataset.shape, 'blob', '新关于页从经典开始，试玩不保存');
   avatar.dispatch('click', { detail: 1 }); f.unload(); f.clock.advance(1000); assert.equal(f.engine._active, false); assert.equal(f.timers.size, 0);
 });

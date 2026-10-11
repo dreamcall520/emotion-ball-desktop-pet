@@ -120,6 +120,7 @@
   function refreshControls() {
     const checking = update.state === 'checking';
     $('about-website').disabled = busy || typeof bridge?.openWebsite !== 'function';
+    $('about-feedback').disabled = busy || typeof bridge?.openFeedback !== 'function';
     $('about-check-updates').hidden = releaseAvailable;
     $('about-check-updates').disabled = busy || checking || typeof bridge?.checkUpdates !== 'function';
     $('about-open-release').disabled = busy || checking || typeof bridge?.openRelease !== 'function';
@@ -170,6 +171,7 @@
   }
 
   $('about-website').addEventListener('click', () => perform('openWebsite', '', '暂时无法打开官网，请稍后重试。'));
+  $('about-feedback').addEventListener('click', () => perform('openFeedback', '', '暂时无法打开意见反馈，请稍后重试。'));
   $('about-check-updates').addEventListener('click', () => perform('checkUpdates', '正在检查更新…', '暂时无法检查更新，请稍后重试。'));
   $('about-open-release').addEventListener('click', () => perform('openRelease', '', '暂时无法打开新版页面，请稍后重试。'));
   document.addEventListener('keydown', event => {
@@ -192,6 +194,7 @@
   if (typeof bridge?.getInfo !== 'function') {
     $('about-version').textContent = '版本暂不可用';
     $('about-website').disabled = true;
+    $('about-feedback').disabled = true;
     $('about-check-updates').disabled = true;
     $('about-open-release').disabled = true;
     status.textContent = '请重新打开关于球球。';

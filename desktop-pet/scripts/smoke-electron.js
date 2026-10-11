@@ -23,7 +23,7 @@ function runSmokeTest() {
     };
     const child = spawn(
       electronBinary,
-      [`--user-data-dir=${smokeUserData}`, ...(packagedApp ? [] : [root])],
+      [`--user-data-dir=${smokeUserData}`, ...(process.env.PET_SMOKE_NO_PROXY === '1' ? ['--no-proxy-server'] : []), ...(packagedApp ? [] : [root])],
       {
         cwd: root,
         env: {
@@ -60,6 +60,11 @@ function runSmokeTest() {
       cleanup();
       try {
         assert.equal(code, 0, output);
+        if (process.env.PET_SMOKE_FEEDBACK_ONLY === '1') {
+          assert.match(output, /PET_FEEDBACK_INTEGRATION_OK/);
+          assert.doesNotMatch(output, /Uncaught|ERR_FILE_NOT_FOUND|did-fail-load/i);
+          resolve(output); return;
+        }
         if (process.env.PET_SMOKE_FUNCTION_WINDOWS_ONLY === '1') {
           assert.match(output, /PET_FUNCTION_WINDOWS_OK/);
           assert.doesNotMatch(output, /Uncaught|ERR_FILE_NOT_FOUND|did-fail-load/i);

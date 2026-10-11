@@ -83,7 +83,7 @@ test('真实窗口closed之后不可再访问webContents，清理使用已捕获
 });
 
 for (const [preload, apiName] of [['preload.js', 'petDesktop'], ['quota-label-preload.js', 'petQuotaLabel'],
-  ['chat-preload.js', 'qiuqiuChat'], ['about-preload.js', 'qiuqiuAbout'], ['bubble-preload.js', 'petBubble'], ['edge-notice-preload.js', 'edgeNotice'], ['thought-preload.js', 'petThought'],
+  ['chat-preload.js', 'qiuqiuChat'], ['about-preload.js', 'qiuqiuAbout'], ['feedback-preload.js', 'qiuqiuFeedback'], ['bubble-preload.js', 'petBubble'], ['edge-notice-preload.js', 'edgeNotice'], ['thought-preload.js', 'petThought'],
   ['customize-preload.js', 'petCustomizer'], ['notes-preload.js', 'qiuNotes'], ['api-usage-preload.js', 'qiuqiuApiUsage'], ['api-usage-label-preload.js', 'qiuqiuApiUsageLabel'], ['codex-details-preload.js', 'petCodexDetails']]) {
   test(`${preload} 过滤三项配色枚举，兼容两参数回调，可注销且没有改变设置权限`, () => {
     const ipc = new EventEmitter(); let api; const sends = [];

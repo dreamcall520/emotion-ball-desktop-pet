@@ -1,0 +1,34 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "qiuqiu-feedback",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-10-11",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": true,
+  "vars": {
+    "CORS_ORIGINS": "https://qiuqiu.pet"
+  },
+  "d1_databases": [
+    {
+      "binding": "FEEDBACK_DB",
+      "database_name": "qiuqiu-feedback",
+      "database_id": "b312690b-d7be-4956-b954-463a09caabe7"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "FEEDBACK_RATE_LIMIT",
+      "namespace_id": "681011",
+      "simple": {
+        "limit": 10,
+        "period": 60
+      }
+    }
+  ],
+  "observability": {
+    "enabled": true
+  },
+  "account_id": "d0e926e5883e12282d94d1da9e5561f0"
+}

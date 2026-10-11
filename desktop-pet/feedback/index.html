@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="referrer" content="no-referrer">
+  <title>意见反馈 · 球球桌宠</title>
+  <link rel="stylesheet" href="feedback.css">
+  <script src="config.js" defer></script>
+  <script src="feedback.js" defer></script>
+</head>
+<body>
+  <header><span>球球桌宠</span><a class="website-only" href="../">返回首页</a><button class="app-only" id="close" type="button" hidden>关闭</button></header>
+  <main>
+    <h1>意见反馈</h1>
+    <p class="intro">遇到的问题、使用建议，或想要的新功能，都可以告诉我们。</p>
+    <form id="feedback-form">
+      <fieldset><legend>你想反馈什么？</legend><div class="type-options">
+        <label><input type="radio" name="type" value="problem" checked><span>遇到问题</span></label>
+        <label><input type="radio" name="type" value="suggestion"><span>使用建议</span></label>
+        <label><input type="radio" name="type" value="feature"><span>想要的功能</span></label>
+      </div></fieldset>
+      <label class="field" for="title">一句话说说<input id="title" name="title" maxlength="100" required placeholder="例如：便签打开后没有显示文字"></label>
+      <label class="field" for="detail">详细说明<textarea id="detail" name="detail" rows="5" maxlength="5000" required placeholder="发生了什么？你希望它怎样工作？如果遇到问题，也可以写下操作步骤。"></textarea></label>
+      <div class="field"><label for="attachments">截图附件 <small>选填</small></label>
+        <label class="upload" for="attachments"><strong>选择截图</strong><span>PNG、JPG、GIF 或 WebP，最多 3 张，每张 1 MB</span><input id="attachments" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple aria-describedby="attachment-note"></label>
+        <small id="attachment-note">上传前请遮住截图中的账号、密钥等私人信息。</small>
+        <ul id="attachment-list" aria-label="已选截图"></ul>
+      </div>
+      <div class="environment"><label class="field" for="version">球球版本 <small>选填</small><input id="version" name="version" maxlength="80" placeholder="例如：0.4.04"></label><label class="field" for="os">系统版本 <small>选填</small><input id="os" name="os" maxlength="120" placeholder="例如：macOS 15"></label></div>
+      <label class="field" for="contact">联系方式 <small>选填</small><input id="contact" name="contact" maxlength="200" placeholder="邮箱或其他联系方式，方便我们进一步了解" autocomplete="off"></label>
+      <p class="privacy-note">仅发送你填写的内容、使用环境和选择的截图，用于排查问题与改进球球。联系方式不会公开。</p>
+      <button class="submit" id="submit" type="submit" disabled>提交反馈</button>
+    </form>
+    <p id="status" role="status" aria-live="polite" tabindex="-1"></p>
+    <section id="success" hidden tabindex="-1"><h2>收到你的反馈了</h2><p>谢谢你帮球球变得更好。</p><p id="receipt"></p><button id="again" type="button">再写一条</button></section>
+    <noscript><p>请启用 JavaScript 后提交反馈。</p></noscript>
+  </main>
+</body>
+</html>
