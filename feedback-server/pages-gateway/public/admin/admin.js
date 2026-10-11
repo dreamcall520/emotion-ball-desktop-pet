@@ -2,7 +2,7 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const login = $('login'), dashboard = $('dashboard'), records = $('records'), password = $('password');
-  const preview = $('preview'), urls = new Set();
+  const preview = $('preview'), passwordDialog = $('password-dialog'), urls = new Set();
   const types = { problem:'遇到问题', suggestion:'使用建议', feature:'想要的功能' };
   const sources = { website:'官网', app:'App' };
   let cursor = null, count = 0, generation = 0, loading = false, controller = new AbortController();
@@ -14,6 +14,7 @@
     return element;
   };
   const closePreview = () => { preview.close(); $('preview-image').removeAttribute('src'); $('preview-image').alt = ''; $('download').removeAttribute('href'); $('download').removeAttribute('download'); $('preview-title').textContent = '截图预览'; };
+  const closePassword = () => { passwordDialog.close(); $('password-form').reset(); status('password-status'); };
   const observer = new IntersectionObserver(entries => entries.forEach(entry => {
     if (entry.isIntersecting) { observer.unobserve(entry.target); entry.target.loadImage(); }
   }), { rootMargin:'200px' });
@@ -23,6 +24,7 @@
     controller = new AbortController();
     observer.disconnect();
     closePreview();
+    closePassword();
     records.replaceChildren();
     urls.forEach(url => URL.revokeObjectURL(url));
     urls.clear();
@@ -38,6 +40,7 @@
     login.hidden = false;
     dashboard.hidden = true;
     $('logout').hidden = true;
+    $('change-password').hidden = true;
     password.value = '';
     status('list-status');
     status('login-status', message, error);
@@ -47,7 +50,13 @@
     const current = generation;
     const response = await fetch(path, { ...options, credentials:'same-origin', cache:'no-store', signal:controller.signal });
     if (current !== generation) throw new DOMException('页面已更新', 'AbortError');
-    if (!response.ok) { const error = new Error(); error.status = response.status; throw error; }
+    if (!response.ok) {
+      const error = new Error();
+      error.status = response.status;
+      try { error.code = (await response.json()).error || ''; } catch {}
+      if (current !== generation) throw new DOMException('页面已更新', 'AbortError');
+      throw error;
+    }
     return response;
   }
   function handleError(error, id, initial = false) {
@@ -136,6 +145,7 @@
       login.hidden = true;
       dashboard.hidden = false;
       $('logout').hidden = false;
+      $('change-password').hidden = false;
       $('retry-logout').hidden = true;
       password.value = '';
       result.items.forEach(item => records.append(render(item)));
@@ -178,6 +188,29 @@
     } finally { $('login-button').disabled = false; }
   }
   $('logout').addEventListener('click', logout);
+  $('change-password').addEventListener('click', () => { closePassword(); passwordDialog.showModal(); });
+  $('cancel-password').addEventListener('click', closePassword);
+  passwordDialog.addEventListener('cancel', closePassword);
+  $('password-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const length = Array.from($('new-password').value).length;
+    if (length < 15 || length > 128 || !$('new-password').value.trim()) { status('password-status', '新密码需 15–128 个字符，且不能全部为空白。', true); return; }
+    if ($('new-password').value !== $('confirm-password').value) { status('password-status', '两次输入的新密码不一致。', true); return; }
+    const body = JSON.stringify({ currentPassword:$('current-password').value, newPassword:$('new-password').value });
+    $('password-form').reset();
+    $('save-password').disabled = true;
+    status('password-status', '正在修改密码…');
+    try {
+      const response = await request('/api/admin/password', { method:'POST', headers:{ 'Content-Type':'application/json' }, body });
+      if (response.status !== 200) throw new Error('修改未完成');
+      showLogin('密码已修改，请用新密码登录。');
+    } catch (error) {
+      if (error.status === 409) showLogin('密码信息已更新，请重新登录。', true);
+      else if (error.status === 400) status('password-status', '新密码需 15–128 个字符，且不能全部为空白，请重新输入。', true);
+      else if (error.status === 403 && error.code === 'current_password_incorrect') status('password-status', '当前密码不正确，请重新输入。', true);
+      else handleError(error, 'password-status');
+    } finally { $('save-password').disabled = false; }
+  });
   $('retry-logout').addEventListener('click', logout);
   $('refresh').addEventListener('click', () => loadFeedback(true));
   $('load-more').addEventListener('click', () => loadFeedback());

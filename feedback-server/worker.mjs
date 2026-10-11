@@ -78,24 +78,49 @@ function sessionCookie(value, seconds = SESSION_SECONDS) {
   return `${ADMIN_COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${seconds}`;
 }
 
-async function sessionKey(token) {
-  return crypto.subtle.importKey('raw', new TextEncoder().encode(token), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
+async function sessionKey(token, credential) {
+  return crypto.subtle.importKey('raw', new TextEncoder().encode(credential ? `${token}\n${credential.version}` : token), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
+}
+
+async function passwordHash(password, salt, token) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  // ponytail: Workers caps PBKDF2 at 100k; a secret pepper protects DB-only leaks. Raise cost when the runtime permits.
+  const derived = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', iterations: 100000, salt: Buffer.from(salt, 'base64url') }, key, 256);
+  return Buffer.from(await crypto.subtle.sign('HMAC', await sessionKey(token), derived)).toString('base64url');
+}
+
+async function matchingPassword(password, token, credential) {
+  if (typeof password !== 'string' || password.length > 1024 || typeof token !== 'string' || !token) return false;
+  return matchingSecret(credential ? await passwordHash(password, credential.salt, token) : password, credential ? credential.password_hash : token);
+}
+
+function adminCredential(env) {
+  return env.FEEDBACK_DB.prepare('SELECT salt, password_hash, version FROM admin_credentials WHERE id = 1').first();
 }
 
 function sessionMessage(request, expires, nonce) {
   return new TextEncoder().encode(`${new URL(request.url).origin}\n${expires}\n${nonce}`);
 }
 
-async function authorized(request, token) {
+async function limitAdmin(request, env) {
+  const key = request.headers.get('CF-Connecting-IP') || 'local-development';
+  if (!env.FEEDBACK_RATE_LIMIT || !(await env.FEEDBACK_RATE_LIMIT.limit({ key: `admin-login:${key}` })).success) throw new HttpError(429, 'rate_limited', '操作太频繁，请稍后再试。');
+}
+
+async function authorized(request, env, credential) {
+  const token = env.ADMIN_TOKEN;
   const bearer = request.headers.get('Authorization')?.match(/^Bearer (.+)$/)?.[1];
-  if (bearer && await matchingSecret(bearer, token)) return true;
+  if (bearer) {
+    await limitAdmin(request, env);
+    if (await matchingPassword(bearer, token, credential)) return true;
+  }
   if (typeof token !== 'string' || !token) return false;
   const cookie = request.headers.get('Cookie')?.split(';').map(value => value.trim()).find(value => value.startsWith(`${ADMIN_COOKIE}=`))?.slice(ADMIN_COOKIE.length + 1);
   if (!cookie || cookie.length > 200) return false;
   const [expires, nonce, signature, extra] = cookie.split('.');
   const now = Math.floor(Date.now() / 1000);
   if (extra !== undefined || !/^\d{10}$/.test(expires) || Number(expires) <= now || Number(expires) > now + SESSION_SECONDS || !UUID.test(nonce ?? '') || !/^[\w-]{43}$/.test(signature ?? '')) return false;
-  return crypto.subtle.verify('HMAC', await sessionKey(token), Buffer.from(signature, 'base64url'), sessionMessage(request, expires, nonce));
+  return crypto.subtle.verify('HMAC', await sessionKey(token, credential), Buffer.from(signature, 'base64url'), sessionMessage(request, expires, nonce));
 }
 
 async function adminSession(request, env, url) {
@@ -104,13 +129,29 @@ async function adminSession(request, env, url) {
     await readJson(request, 4096);
     return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie('', 0) });
   }
-  const key = request.headers.get('CF-Connecting-IP') || 'local-development';
-  if (!env.FEEDBACK_RATE_LIMIT || !(await env.FEEDBACK_RATE_LIMIT.limit({ key: `admin-login:${key}` })).success) throw new HttpError(429, 'rate_limited', '尝试较频繁，请稍后再登录。');
+  await limitAdmin(request, env);
   const body = await readJson(request, 4096);
-  if (typeof body?.password !== 'string' || body.password.length > 1024 || !(await matchingSecret(body.password, env.ADMIN_TOKEN))) throw new HttpError(401, 'unauthorized', '管理密码不正确，请重新输入。');
+  const credential = await adminCredential(env);
+  if (!(await matchingPassword(body?.password, env.ADMIN_TOKEN, credential))) throw new HttpError(401, 'unauthorized', '管理密码不正确，请重新输入。');
   const expires = String(Math.floor(Date.now() / 1000) + SESSION_SECONDS), nonce = crypto.randomUUID();
-  const signature = Buffer.from(await crypto.subtle.sign('HMAC', await sessionKey(env.ADMIN_TOKEN), sessionMessage(request, expires, nonce))).toString('base64url');
+  const signature = Buffer.from(await crypto.subtle.sign('HMAC', await sessionKey(env.ADMIN_TOKEN, credential), sessionMessage(request, expires, nonce))).toString('base64url');
   return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie(`${expires}.${nonce}.${signature}`) });
+}
+
+async function changePassword(request, env, url, credential) {
+  if (request.headers.get('Origin') !== url.origin) throw new HttpError(403, 'origin_forbidden', '请从反馈管理页修改密码。');
+  await limitAdmin(request, env);
+  const body = await readJson(request, 4096);
+  const password = body?.newPassword;
+  if (typeof password !== 'string' || password.length > 512 || Array.from(password).length < 15 || Array.from(password).length > 128 || !password.trim() || password.includes('\0')) invalid('新密码需15–128个字符，不能全部为空白。');
+  if (!(await matchingPassword(body?.currentPassword, env.ADMIN_TOKEN, credential))) throw new HttpError(403, 'current_password_incorrect', '当前密码不正确，请重新输入。');
+  const salt = Buffer.from(crypto.getRandomValues(new Uint8Array(16))).toString('base64url');
+  const hash = await passwordHash(password, salt, env.ADMIN_TOKEN), version = crypto.randomUUID();
+  const result = credential
+    ? await env.FEEDBACK_DB.prepare('UPDATE admin_credentials SET salt = ?, password_hash = ?, version = ? WHERE id = 1 AND version = ?').bind(salt, hash, version, credential.version).run()
+    : await env.FEEDBACK_DB.prepare('INSERT INTO admin_credentials (id, salt, password_hash, version) VALUES (1, ?, ?, ?) ON CONFLICT(id) DO NOTHING').bind(salt, hash, version).run();
+  if (result.meta.changes !== 1) throw new HttpError(409, 'credential_conflict', '密码信息已更新，请重新登录。');
+  return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie('', 0) });
 }
 
 async function listFeedback(db, url) {
@@ -144,7 +185,10 @@ async function route(request, env) {
   }
   if (url.pathname.startsWith('/api/admin/')) {
     if (request.method === 'POST' && ['/api/admin/session', '/api/admin/logout'].includes(url.pathname)) return adminSession(request, env, url);
-    if (!(await authorized(request, env.ADMIN_TOKEN))) throw new HttpError(401, 'unauthorized', '需要管理员授权。');
+    if (!request.headers.has('Authorization') && !request.headers.has('Cookie')) throw new HttpError(401, 'unauthorized', '需要管理员授权。');
+    const credential = await adminCredential(env);
+    if (!(await authorized(request, env, credential))) throw new HttpError(401, 'unauthorized', '需要管理员授权。');
+    if (request.method === 'POST' && url.pathname === '/api/admin/password') return changePassword(request, env, url, credential);
     if (request.method === 'GET' && url.pathname === '/api/admin/feedback') return listFeedback(env.FEEDBACK_DB, url);
     const match = url.pathname.match(/^\/api\/admin\/feedback\/([0-9a-f-]{36})\/attachments\/(attachment-[1-3]\.(?:png|jpg|gif|webp))$/i);
     if (request.method === 'GET' && match && UUID.test(match[1])) {

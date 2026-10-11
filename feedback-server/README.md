@@ -23,7 +23,7 @@ wrangler pages deploy --project-name qiuqiu-feedback-entry --branch main
 node --test worker.test.mjs
 ```
 
-测试通过临时目录启动真实 `workerd`、D1 和原生限流绑定，检查 HTTP 提交、幂等重试、错误图片、大小限制、CORS、管理员权限、附件读取以及截图写入失败的事务回滚。测试不登录 Cloudflare，不访问远端 D1，结束后清理本次临时状态。
+测试通过临时目录启动真实 `workerd`、D1 和原生限流绑定，检查 HTTP 提交、幂等重试、错误图片、大小限制、CORS、管理员权限、附件读取、事务回滚，以及自设密码的 Unicode 边界、加盐摘要、会话撤销和并发修改。测试不登录 Cloudflare，不访问远端 D1，结束后清理本次临时状态。
 
 手工开发：
 
@@ -91,25 +91,32 @@ npm exec --yes --package=wrangler@4.149.0 -- wrangler deploy
 
 打开 `https://qiuqiu-feedback-entry.pages.dev/admin/`，输入管理员专用密码后可查看文字、分类、时间、联系方式、版本、系统和来源；截图支持预览与下载，列表按提交时间倒序并支持加载更多。
 
-管理员密码沿用 Worker 的 `ADMIN_TOKEN`，只保存在本机 `/Users/allan/Library/Application Support/球球反馈服务/admin-token`（0600）及 Worker secret，不放入网页、App、URL或Git。页面不将密码写入 localStorage/sessionStorage；登录成功签发7天、绑定来源的 HMAC Cookie，设为 HttpOnly、Secure、SameSite=Strict。
+首次登录密码沿用 Worker 的 `ADMIN_TOKEN`，初始值只保存在本机 `/Users/allan/Library/Application Support/球球反馈服务/admin-token`（0600）及 Worker secret，不放入网页、App、URL或Git。登录后点击右上角“修改密码”，输入当前密码和两次新密码即可自行设置；新密码为15–128个 Unicode 字符，支持中文和空格，不能全部为空白或含 NUL，不作 trim。自行修改后，本机初始密码文件不会同步更新，请用密码管理器保存新密码。
+
+D1 仅保存一条 `admin_credentials`：16字节随机盐、PBKDF2-SHA256（100,000次、256bits）后再用 `ADMIN_TOKEN` 作 HMAC-SHA256 pepper 的摘要，以及随机会话版本；不保存自设密码原文。100,000次是当前 Workers 的 PBKDF2 上限，额外的服务器 secret 防护仅数据库泄露后的离线猜测；线上需实际核验 CPU 配额。[Web Crypto](https://developers.cloudflare.com/workers/runtime-apis/web-crypto/)、[workerd 上限说明](https://github.com/cloudflare/workerd/issues/1346)、[OWASP pepper 说明](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html#peppering)。
+
+页面不将密码写入 localStorage/sessionStorage；登录成功签发7天、绑定来源和当前凭据版本的 HMAC Cookie，设为 HttpOnly、Secure、SameSite=Strict。
 
 - `POST /api/admin/session`：同源 JSON `{ "password": "管理密码" }`，通过原生限流后验证，成功返回 `{ "ok": true }` 与会话 Cookie。
-- `POST /api/admin/logout`：同源 JSON `{}`，清除当前浏览器 Cookie。退出、过期及离开页面时清空已展示文字和截图 blob；签名会话本身在7天后到期，轮换 `ADMIN_TOKEN` 可令所有现有会话失效。
-- 列表及附件接口同时接受 Cookie 和原有 Bearer token；管理 API 不接受跨域页面访问，未授权返回401，不提供公共截图链接。
+- `POST /api/admin/password`：登录后同源 JSON `{ "currentPassword": "当前密码", "newPassword": "自设密码" }`，再次验证当前密码，原子更新凭据版本。成功清除当前 Cookie，所有先前会话失效并需重新登录；当前密码错误403、格式错误400、并发修改冲突409（若旧会话已撤销则401），失败不覆盖现有凭据。
+- `POST /api/admin/logout`：同源 JSON `{}`，清除当前浏览器 Cookie。退出、过期及离开页面时清空已展示文字和截图 blob；签名会话本身在7天后到期。
+- 列表及附件同时接受 Cookie 和当前密码的 Bearer（仅可放入 HTTP Header 的字符）；自设中文密码使用网页 Cookie 登录即可。设置自定义密码后，原 `ADMIN_TOKEN` 不再作为登录或 Bearer 的后备密码。登录、改密和 Bearer 验证共用原生每IP限流，Cookie 查看反馈不消耗改密额度。管理 API 不接受跨域页面访问，未授权返回401，不提供公共截图链接。
 - 页面及敏感响应均 no-store，无第三方脚本/统计，限制 CSP、禁止嵌入及索引。其他人打开页面只会看到登录框。
 
 页面不提供删除、工单状态或邮件通知。
 
+忘记自设密码时，由 Cloudflare 账号持有人先将 Worker secret `ADMIN_TOKEN` 轮换为新随机值，再在 D1 控制台执行 `DELETE FROM admin_credentials WHERE id = 1`，使用新随机值登录并重设；不删除反馈或截图。先轮换可防止重启用旧初始密码与尚未到期的初始会话。自设密码存在时，直接轮换 `ADMIN_TOKEN` 会使 pepper 摘要无法验证，也需按此方式恢复；不要丢失此服务器 secret。迁移现有服务时先执行增量 `schema.sql`，再部署 Worker 和 Pages。
+
 ### 管理员接口
 
-设置本地环境变量 `FEEDBACK_ADMIN_TOKEN` 为密码管理器中保存的密钥；示例域名需替换为实际地址。
+设置本地环境变量 `FEEDBACK_ADMIN_TOKEN` 为当前管理密码（含中文时使用网页登录）；示例域名需替换为实际地址。
 
 ```bash
 curl --fail -H "Authorization: Bearer $FEEDBACK_ADMIN_TOKEN" 'https://feedback.你的域名/api/admin/feedback?limit=50'
 curl --fail -H "Authorization: Bearer $FEEDBACK_ADMIN_TOKEN" 'https://feedback.你的域名/api/admin/feedback/反馈UUID/attachments/attachment-1.png' --output screenshot.png
 ```
 
-列表返回 `{items, nextCursor}`，每次最多100条；下一页传 `cursor`（URL编码）。列表含文字及截图元信息，不含截图 base64。附件和列表都需要同一个管理员 Bearer token，没有公共截图链接。数据库管理或导出也可使用 Cloudflare D1 控制台；删除反馈时外键级联删除对应截图。
+列表返回 `{items, nextCursor}`，每次最多100条；下一页传 `cursor`（URL编码）。列表含文字及截图元信息，不含截图 base64。附件和列表都需要当前管理员授权，没有公共截图链接。数据库管理或导出也可使用 Cloudflare D1 控制台；删除反馈时外键级联删除对应截图。
 
 ## 已知边界
 

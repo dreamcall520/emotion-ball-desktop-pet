@@ -7,6 +7,7 @@ a { color:var(--accent); text-decoration:none; }
 header { display:flex; align-items:center; justify-content:space-between; gap:20px; width:min(1064px,calc(100% - 64px)); margin:auto; padding:24px 0; }
 .brand { display:flex; align-items:center; gap:9px; min-height:44px; color:var(--text); font-size:19px; font-weight:600; white-space:nowrap; }
 .brand img { display:block; width:32px; height:32px; }
+.account-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; min-width:0; }
 main { width:min(800px,calc(100% - 48px)); margin:40px auto 64px; }
 h1 { margin:0 0 12px; font-size:clamp(30px,4vw,40px); font-weight:600; line-height:1.35; letter-spacing:-.025em; }
 h2 { margin:0; font-size:20px; font-weight:600; line-height:1.5; }
@@ -53,5 +54,11 @@ dialog::backdrop { background:rgba(0,0,0,.65); }
 .preview-header h2 { min-width:0; font-size:16px; overflow-wrap:anywhere; }
 #preview-image { display:block; width:100%; max-height:calc(100dvh - 220px); object-fit:contain; }
 .preview-footer { display:flex; justify-content:flex-end; margin-top:16px; }
+#password-dialog { width:min(440px,calc(100% - 32px)); padding:24px; }
+.password-note { margin:12px 0 20px; color:var(--soft); font-size:13px; }
+#password-form { display:grid; gap:8px; }
+#password-form label:not(:first-child) { margin-top:8px; }
+#password-status { margin:4px 0; }
+.password-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; margin-top:12px; }
 @media(max-width:680px) { header { width:calc(100% - 40px); padding:16px 0; } .brand { font-size:16px; gap:6px; } .brand img { width:27px; height:27px; } main { width:calc(100% - 40px); margin-top:28px; } .record { padding:20px; } #login { padding:24px; } }
 @media(max-width:480px) { .intro { margin-bottom:24px; } dl { grid-template-columns:1fr; gap:12px; } .toolbar { align-items:flex-start; } .toolbar button { flex-shrink:0; } .attachment,.thumbnail { width:120px; } .thumbnail { height:88px; } }

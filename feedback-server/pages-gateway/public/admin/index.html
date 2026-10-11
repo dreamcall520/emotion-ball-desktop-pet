@@ -14,7 +14,7 @@
   <a class="skip-link" href="#main">跳到主要内容</a>
   <header>
     <a class="brand" href="https://qiuqiu.pet/" aria-label="球球桌宠官网"><img src="./brand.webp" width="32" height="32" alt="">球球桌宠</a>
-    <button id="logout" type="button" hidden>退出登录</button>
+    <div class="account-actions"><button id="change-password" type="button" hidden>修改密码</button><button id="logout" type="button" hidden>退出登录</button></div>
   </header>
   <main id="main">
     <h1>反馈管理</h1>
@@ -41,6 +41,20 @@
     <div class="preview-header"><h2 id="preview-title">截图预览</h2><button id="close-preview" type="button" aria-label="关闭截图预览">关闭</button></div>
     <img id="preview-image" alt="">
     <div class="preview-footer"><a id="download" class="button primary" download>下载截图</a></div>
+  </dialog>
+  <dialog id="password-dialog" aria-labelledby="password-title">
+    <h2 id="password-title">修改管理密码</h2>
+    <p class="password-note" id="password-note">新密码需 15–128 个字符，支持中文长句。修改后需重新登录。</p>
+    <form id="password-form">
+      <label for="current-password">当前密码</label>
+      <input id="current-password" name="currentPassword" type="password" autocomplete="current-password" required>
+      <label for="new-password">新密码</label>
+      <input id="new-password" name="newPassword" type="password" autocomplete="new-password" aria-describedby="password-note" required>
+      <label for="confirm-password">确认新密码</label>
+      <input id="confirm-password" name="confirmPassword" type="password" autocomplete="new-password" required>
+      <p id="password-status" class="status" role="status" aria-live="polite"></p>
+      <div class="password-actions"><button id="cancel-password" type="button">取消</button><button id="save-password" class="primary" type="submit">保存新密码</button></div>
+    </form>
   </dialog>
 </body>
 </html>

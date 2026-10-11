@@ -25,3 +25,10 @@ CREATE TABLE IF NOT EXISTS feedback_attachments (
   data_base64 TEXT NOT NULL,
   PRIMARY KEY (feedback_id, filename)
 );
+
+CREATE TABLE IF NOT EXISTS admin_credentials (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  salt TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  version TEXT NOT NULL
+);
