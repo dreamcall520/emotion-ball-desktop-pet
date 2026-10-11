@@ -18,8 +18,8 @@
 .collection-copy h3 { margin-top: 22px; font-size: 18px; }
 .collection-description { max-width: 360px; margin-top: 12px !important; font-size: 14px; line-height: 1.9; color: var(--text-soft); }
 .collection-banner { display: block; width: 100%; height: auto; border-radius: 18px; margin-top: 26px; }
-.collection-action { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 24px; }
-.collection-action > span { font-size: 11px; color: var(--text-soft); }
+.collection-action { margin-top: 20px; }
+.collection-action .c-button { min-height: 44px; padding: 10px 20px; font-size: 13px; box-shadow: none; }
 .sticker-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
 .sticker-tile { margin: 0; background: var(--surface-solid); border: 1px solid var(--line); border-radius: 22px; padding: 18px 24px 14px; text-align: center; }
 .sticker-tile img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; }

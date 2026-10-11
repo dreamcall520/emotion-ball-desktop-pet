@@ -57,4 +57,5 @@
   .wechat-contact-dialog .dialog-heading h2 { font-size: 21px; }
   .wechat-contact-dialog .contact-actions .c-button { padding-inline: 10px; font-size: 12px; }
 }
-.shop-works-link { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--accent) !important; }
+.shop-works-link { display: inline-flex; align-items: center; gap: 6px; margin: 0; min-height: 44px; padding-block: 10px; font-size: 12px; white-space: nowrap; color: var(--text-soft) !important; }
+.shop-works-link:is(:hover,:focus-visible) { color: var(--accent) !important; }

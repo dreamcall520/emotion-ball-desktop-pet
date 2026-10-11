@@ -17,7 +17,6 @@
 .thanks-page .thanks-group:first-child, .thanks-page .thanks-group + .thanks-group { padding: 0; border: 0; min-width: 0; }
 .group-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .thanks-page .group-heading h3 { font-size: 17px; }
-.group-heading > span { color: var(--text-soft); opacity: .5; font-size: 11px; font-variant-numeric: tabular-nums; }
 .thanks-page .group-note { font-size: 11px; line-height: 1.8; margin-top: 8px !important; min-height: 40px; }
 .thanks-page .roster-viewport { height: 252px; margin-top: 12px; border-radius: 0; border-top: 0; scrollbar-width: none; mask-image: linear-gradient(transparent, #000 12px, #000 calc(100% - 12px), transparent); }
 .thanks-page .roster-list { padding-right: 4px; }
@@ -28,7 +27,7 @@
 .thanks-page .person-avatar { display: block; width: 36px; height: 36px; flex: 0 0 36px; border-radius: 50%; object-fit: cover; }
 .thanks-page .person-name { font-size: 13px; }
 .thanks-page .person-description { font-size: 11px; margin-top: 4px !important; line-height: 1.7; }
-.thanks-page .roster-controls { margin-top: 8px; justify-content: flex-end; }
+.thanks-page .roster-controls { margin: 0; flex: none; justify-content: flex-end; }
 .thanks-page .roster-controls[hidden] { display: none; }
 .thanks-page .roster-controls button { display: grid; place-items: center; width: 44px; height: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text-soft); opacity: .65; }
 .thanks-page .roster-controls [data-roster-toggle] { min-width: 44px; }
