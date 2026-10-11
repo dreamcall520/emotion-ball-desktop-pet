@@ -1,0 +1,76 @@
+/* Thanks page composition; shared dialogs and navigation stay in community.css. */
+.thanks-page .thanks-hero { grid-template-columns: 1.14fr 1fr; gap: 24px; padding-block: 48px 42px; min-height: 480px; }
+.thanks-eyebrow, .thanks-page .section-label { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 500; letter-spacing: .12em; color: var(--text-soft); }
+.thanks-eyebrow { margin-bottom: 24px !important; }
+.thanks-eyebrow span { width: 6px; height: 6px; border-radius: 50%; background: #7d9e89; box-shadow: 0 0 0 4px rgb(125 158 137 / .08); }
+.thanks-page h1 { font-size: clamp(44px,4.7vw,64px); line-height: 1.28; font-weight: 550; letter-spacing: -.05em; }
+.thanks-page .thanks-hero .lede { font-size: 14px; line-height: 2; margin-top: 26px !important; }
+.thanks-page .thanks-art { aspect-ratio: 1.12; max-width: 470px; justify-self: end; width: 100%; }
+.thanks-page .thanks-art::before { width: 85%; height: 72%; background: radial-gradient(ellipse, rgb(190 210 195 / .16), transparent 72%); }
+.thanks-page .thanks-art img { position: absolute; inset: 0; transform: none; }
+.thanks-page .thanks-section { display: grid; grid-template-columns: 240px minmax(0,1fr); gap: 48px; align-items: start; padding-block: 24px 56px; }
+.thanks-page .section-intro { padding-top: 26px; }
+.thanks-page .section-intro h2 { font-size: 32px; line-height: 1.5; margin-top: 18px; }
+.thanks-page .section-intro .section-label { margin: 0; }
+.thanks-page .people-description { font-size: 12px; line-height: 2; margin-top: 18px; }
+.thanks-page .thanks-columns { gap: 36px; margin: 0; padding: 30px; border-radius: 28px; box-shadow: inset 0 1px 0 rgb(255 255 255 / .4), 0 20px 50px -38px rgb(37 52 77 / .15); }
+.thanks-page .thanks-group:first-child, .thanks-page .thanks-group + .thanks-group { padding: 0; border: 0; min-width: 0; }
+.group-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.thanks-page .group-heading h3 { font-size: 17px; }
+.group-heading > span { color: var(--text-soft); opacity: .5; font-size: 11px; font-variant-numeric: tabular-nums; }
+.thanks-page .group-note { font-size: 11px; line-height: 1.8; margin-top: 8px !important; min-height: 40px; }
+.thanks-page .roster-viewport { height: 252px; margin-top: 12px; border-radius: 0; border-top: 0; scrollbar-width: none; mask-image: linear-gradient(transparent, #000 12px, #000 calc(100% - 12px), transparent); }
+.thanks-page .roster-list { padding-right: 4px; }
+.thanks-page .roster-viewport .person { height: 84px; gap: 12px; border-bottom: 0; }
+.thanks-page .initial { width: 36px; height: 36px; font-size: 12px; color: #62796a; border: 0; background: rgb(125 158 137 / .11); }
+.thanks-page .person:nth-child(3n+2) .initial { color: #8f7a61; background: rgb(178 150 110 / .11); }
+.thanks-page .person:nth-child(3n) .initial { color: #77859a; background: rgb(125 145 171 / .11); }
+.thanks-page .person-avatar { display: block; width: 36px; height: 36px; flex: 0 0 36px; border-radius: 50%; object-fit: cover; }
+.thanks-page .person-name { font-size: 13px; }
+.thanks-page .person-description { font-size: 11px; margin-top: 4px !important; line-height: 1.7; }
+.thanks-page .roster-controls { margin-top: 8px; justify-content: flex-end; }
+.thanks-page .roster-controls[hidden] { display: none; }
+.thanks-page .roster-controls button { display: grid; place-items: center; width: 44px; height: 44px; min-height: 44px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--text-soft); }
+.thanks-page .roster-controls [data-roster-toggle] { min-width: 44px; }
+.thanks-page .roster-controls button[aria-pressed="false"] .roster-play-icon,
+.thanks-page .roster-controls button[aria-pressed="true"] .roster-pause-icon { display: none; }
+.thanks-page .supporter-info { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; }
+.thanks-page .person-amount { font-size: 13px; font-weight: 500; color: var(--text-soft); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.thanks-page .support-section { grid-template-columns: 1fr 320px; gap: 40px; padding: 38px 46px; border-radius: 28px; margin-bottom: 48px; background: linear-gradient(120deg,var(--surface-solid),var(--accent-soft)); }
+.thanks-page .support-section > div:first-child { padding: 0; }
+.thanks-page .support-section .section-label { margin: 0 0 12px; }
+.thanks-page .support-section h2 { font-size: 30px; }
+.thanks-page .support-section p:not(.section-label) { font-size: 12px; margin-top: 12px; }
+.thanks-page .support-action { display: grid; place-content: center; justify-items: center; align-self: stretch; padding: 0; border: 0; }
+.thanks-page .support-action .c-button { margin-top: 0; min-width: 220px; }
+.thanks-page .support-action .feedback-button { margin-top: 10px; background: transparent; box-shadow: none; font-size: 12px; }
+
+@media (max-width: 1100px) {
+ .thanks-page .thanks-hero { min-height: 420px; }
+ .thanks-page .thanks-section { grid-template-columns: 1fr; gap: 24px; }
+ .thanks-page .section-intro { padding: 0; display: grid; grid-template-columns: 1fr 1fr; column-gap: 36px; align-items: end; }
+ .thanks-page .section-intro .section-label { grid-column: 1/-1; }
+ .thanks-page .section-intro h2 { font-size: 28px; margin-top: 12px; }
+ .thanks-page .section-intro h2 br { display: none; }
+ .thanks-page .people-description { margin: 0; justify-self: end; }
+ .thanks-page .thanks-columns { gap: 48px; padding: 30px 34px; }
+}
+@media (max-width: 767px) {
+ .thanks-page .thanks-hero { grid-template-columns: 1fr; gap: 10px; padding-block: 38px 18px; min-height: 0; }
+ .thanks-page h1 { font-size: clamp(31px,8.5vw,42px); }
+ .thanks-eyebrow { margin-bottom: 18px !important; font-size: 10px; }
+ .thanks-page .thanks-hero .lede { font-size: 12px; margin-top: 18px !important; }
+ .thanks-page .thanks-art { aspect-ratio: 1.38; max-width: 340px; justify-self: center; }
+ .thanks-page .thanks-section { gap: 20px; padding-block: 20px 32px; }
+ .thanks-page .section-intro { display: block; }
+ .thanks-page .section-intro h2 { font-size: 25px; }
+ .thanks-page .people-description { font-size: 11px; margin-top: 8px; justify-self: start; width: 100%; text-align: left; }
+ .thanks-page .people-description br { display: none; }
+ .thanks-page .thanks-columns { grid-template-columns: 1fr; padding: 24px; gap: 28px; border-radius: 24px; }
+ .thanks-page .thanks-group + .thanks-group { border-top: 1px solid var(--line); padding-top: 26px; }
+ .thanks-page .group-note { min-height: 0; }
+ .thanks-page .support-section { grid-template-columns: 1fr; gap: 24px; padding: 28px 24px; border-radius: 24px; margin-bottom: 32px; }
+ .thanks-page .support-section h2 { font-size: 25px; }
+ .thanks-page .support-action { justify-items: stretch; width: 100%; }
+ .thanks-page .support-action .c-button { width: 100%; min-width: 0; }
+}

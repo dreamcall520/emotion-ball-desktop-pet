@@ -1,0 +1,49 @@
+.works-intro { padding: 64px 0 32px; }
+.works-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 18px; }
+.works-series-nav { display: flex; flex-wrap: wrap; gap: 4px; }
+.works-series-nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 12px; font-size: 13px; border-radius: 999px; color: var(--text-soft); }
+.works-series-nav a:hover { background: var(--accent-soft); color: var(--accent); }
+.sticker-collection { scroll-margin-top: 28px; }
+.eyebrow { font-size: 12px; color: var(--text-soft); letter-spacing: .09em; }
+.works-intro h1 { margin-top: 18px; font-size: clamp(38px, 4.5vw, 58px); }
+.works-intro .lede { margin-top: 20px !important; }
+.motion-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 44px; padding: 10px 16px; border: 1px solid var(--line); border-radius: 999px; background: transparent; font-size: 12px !important; white-space: nowrap; }
+.motion-toggle[hidden], .motion-toggle[aria-pressed="true"] .pause-icon, .motion-toggle[aria-pressed="false"] .play-icon { display: none; }
+.motion-toggle:hover { color: var(--accent); border-color: var(--accent); }
+.sticker-collection { display: grid; grid-template-columns: minmax(0,.8fr) minmax(0,1.2fr); gap: 72px; align-items: start; padding-block: 30px 64px; }
+.sticker-collection + .sticker-collection { border-top: 1px solid var(--line); padding-top: 64px; }
+.collection-heading { display: flex; align-items: center; gap: 16px; }
+.collection-cover { width: 64px; height: 64px; object-fit: contain; }
+.collection-heading h2 { margin-top: 5px; font-size: 28px; }
+.collection-copy h3 { margin-top: 22px; font-size: 18px; }
+.collection-description { max-width: 360px; margin-top: 12px !important; font-size: 14px; line-height: 1.9; color: var(--text-soft); }
+.collection-banner { display: block; width: 100%; height: auto; border-radius: 18px; margin-top: 26px; }
+.collection-action { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 24px; }
+.collection-action > span { font-size: 11px; color: var(--text-soft); }
+.sticker-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
+.sticker-tile { margin: 0; background: var(--surface-solid); border: 1px solid var(--line); border-radius: 22px; padding: 18px 24px 14px; text-align: center; }
+.sticker-tile img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; }
+.sticker-tile figcaption { margin-top: 8px; color: var(--text-soft); font-size: 12px; line-height: 1.6; }
+.works-bottom { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 10px 0 40px; }
+.works-bottom p { color: var(--text-soft); font-size: 13px; line-height: 1.8; }
+.works-bottom a, .shop-works-link { display: inline-flex; gap: 8px; align-items: center; }
+@media (max-width: 1050px) { .sticker-collection { gap: 40px; } .sticker-tile { padding-inline: 16px; } }
+@media (max-width: 767px) {
+  .works-intro { padding-block: 40px 24px; }
+  .works-toolbar { align-items: flex-start; flex-wrap: wrap; gap: 10px; padding-bottom: 10px; }
+  .works-series-nav a { padding-inline: 8px; font-size: 12px; }
+  .works-intro h1 { margin-top: 14px; font-size: clamp(32px,8.5vw,42px); }
+  .works-intro .lede { margin-top: 16px !important; }
+  .sticker-collection { grid-template-columns: 1fr; gap: 28px; padding-block: 22px 42px; }
+  .sticker-collection + .sticker-collection { padding-top: 36px; }
+  .collection-cover { width: 52px; height: 52px; }
+  .collection-heading { gap: 12px; }
+  .collection-heading h2 { font-size: 25px; }
+  .collection-copy h3 { margin-top: 20px; font-size: 17px; }
+  .collection-banner { margin-top: 20px; border-radius: 16px; }
+  .collection-action { margin-top: 20px; }
+  .sticker-grid { gap: 12px; }
+  .sticker-tile { border-radius: 18px; padding: 12px 12px 10px; }
+  .sticker-tile figcaption { font-size: 11px; }
+  .works-bottom { flex-direction: column; align-items: flex-start; gap: 8px; padding-bottom: 28px; }
+}

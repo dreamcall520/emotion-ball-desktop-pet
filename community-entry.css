@@ -1,0 +1,32 @@
+/* Independent design candidate; existing heroes and download controls are retained. */
+.desktop-nav { gap: clamp(16px, 2vw, 32px); }
+.home-footer .footer-links, .site-footer .footer-links { flex-wrap: wrap; justify-content: center; }
+@media (min-width: 1024px) and (max-width: 1250px) {
+  .desktop-nav { gap: 16px; font-size: 12px; }
+  .home-header { padding-inline: 28px; gap: 16px; }
+  .home-brand { font-size: 20px; }
+}
+@media (max-width: 767px) {
+  .home-footer .footer-links { gap: 8px 14px; max-width: 380px; }
+  .home-footer { padding-block: 8px 12px; }
+}
+@media (min-width: 768px) {
+  .home-footer .credit, .home-footer .footer-links > * { position: relative; }
+  .home-footer .credit::after, .home-footer .footer-links > * + *::before { content: ""; position: absolute; top: 50%; width: 1px; height: 11px; background: var(--line); transform: translateY(-50%); pointer-events: none; }
+  .home-footer .credit::after { right: -14px; }
+  .home-footer .footer-links > * + *::before { left: -10px; }
+}
+
+/* Keep the header refraction behind the support panel, without changing either border. */
+.support-entry > .nav-menu { z-index: 1; }
+.support-entry, .support-mobile-link { --support-color: #2468bb; --support-fill: #3b82f614; --support-edge: #3b82f629; }
+.desktop-nav .support-entry > summary { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 9px 14px; border: 1px solid var(--support-edge); border-radius: 999px; color: var(--support-color); background: var(--support-fill); font-weight: 550; letter-spacing: 0; white-space: nowrap; }
+.support-entry > summary .caret { margin-left: 0; width: 13px; height: 13px; }
+.support-heart { width: 16px; height: 16px; }
+.desktop-nav .support-entry > summary:hover, .desktop-nav .support-entry[open] > summary { background: color-mix(in srgb,var(--support-color) 15%,transparent); color: var(--support-color); }
+.support-entry > summary:focus-visible, .support-mobile-link:focus-visible { outline-color: var(--support-color); }
+.mobile-nav .nav-menu .support-mobile-link { display: flex; align-items: center; gap: 8px; min-height: 44px; color: var(--support-color); background: var(--support-fill); }
+:root[data-theme="dark"] :is(.support-entry,.support-mobile-link) { --support-color: #b8d8ff; --support-fill: #4d92ef24; --support-edge: #87b6f044; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) :is(.support-entry,.support-mobile-link) { --support-color: #b8d8ff; --support-fill: #4d92ef24; --support-edge: #87b6f044; }
+}
