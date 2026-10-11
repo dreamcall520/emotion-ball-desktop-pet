@@ -61,6 +61,9 @@ test('four focus sessions select a long break; extension adds minutes, not sessi
   ok(model, 'extend'); assert.equal(model.getSnapshot().extension, true); assert.equal(model.getSnapshot().total, 300);
   f.advance(300000); model.tick(); assert.equal(model.getSnapshot().completed, 4); assert.equal(model.getSnapshot().cycleCompleted, 4); assert.equal(model.getSnapshot().minutes, 9);
   const rest = ok(model, 'rest'); assert.equal(rest.mode, 'long'); assert.equal(rest.status, 'running');
+  assert.equal(rest.quiet, false, '休息计时允许普通互动');
+  assert.equal(ok(model, 'toggle').quiet, false, '暂停休息也允许普通互动');
+  ok(model, 'toggle');
   f.advance(60000); model.tick(); assert.equal(model.getSnapshot().completed, 4); assert.equal(model.getSnapshot().minutes, 9);
   const next = ok(model, 'toggle'); assert.equal(next.mode, 'focus'); assert.equal(next.cycleCompleted, 0);
   f.advance(60000); model.tick(); assert.equal(model.getSnapshot().completed, 5); assert.equal(model.getSnapshot().cycleCompleted, 1);

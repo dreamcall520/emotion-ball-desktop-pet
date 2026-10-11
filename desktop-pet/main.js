@@ -365,8 +365,8 @@ function checkForUpdates(manual = false) {
     if (updateCheckManual) await showUpdateResult(result);
     else if (settings.autoUpdateCheck !== false && result.hasUpdate &&
       settings.lastUpdateNotifiedVersion !== result.latestVersion) {
-      const shown = chatWindow?.isVisible() || showUpdateBubble(result) || await showUpdateResult(result);
-      if (shown && settings.autoUpdateCheck !== false && !isQuitting) {
+      const handled = pomodoroQuiet || chatWindow?.isVisible() || showUpdateBubble(result) || await showUpdateResult(result);
+      if (handled && settings.autoUpdateCheck !== false && !isQuitting) {
         settings.lastUpdateNotifiedVersion = result.latestVersion;
         persistSettings();
       }
@@ -812,7 +812,7 @@ function bindBubbleVisibilityEvents() {
 }
 
 function showBubble(payload) {
-  if (!payload || presentationSuppressed() || chatWindow?.isVisible()) return false;
+  if (!payload || pomodoroQuiet || presentationSuppressed() || chatWindow?.isVisible()) return false;
   const shown = safelyInvokeWindow('气泡显示', () => bubble?.show(payload));
   if (shown) bindBubbleVisibilityEvents();
   repositionQuotaLabel();
@@ -1387,9 +1387,7 @@ function setCompanionSetting(name, enabled) {
 }
 
 function showDialogue(event) {
-  const scene = typeof event === 'string' ? event : event?.event;
-  if (pomodoroQuiet && ['work', 'thought'].includes(scene)) return null;
-  if (screenLocked || chatWindow?.isVisible() || presentationSuppressed() || !petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return null;
+  if (pomodoroQuiet || screenLocked || chatWindow?.isVisible() || presentationSuppressed() || !petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return null;
   const payload = dialogue.offer(event, performance.now());
   if (payload) dismissCodexPresentation();
   if (payload) showBubble(payload);

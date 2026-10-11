@@ -85,6 +85,15 @@ test('番茄窗懒创建、原尺寸、不抢焦点、拖动稳定与屏幕边�
   assert.equal((await f.invoke('message', 'layout', { cardHeight: 36 })).ok, true);
   f.state.reminder = true; f.manager.sync();
   assert.equal(message.passthrough, false); assert.equal(message.bounds.width, 256);
+  assert.equal(message.bounds.height, 244, '专注完成卡保留两项操作空间');
+  for (const mode of ['short', 'long']) {
+    f.state.mode = mode; f.manager.sync();
+    assert.equal(message.bounds.height, 204, '休息完成卡收合隐藏的加时操作空间');
+    await f.invoke('message', 'layout', { cardHeight: 54 });
+    assert.equal(message.bounds.height, 204, '鼓励卡尺寸请求不能覆盖完成卡固定尺寸');
+  }
+  f.state.mode = 'focus'; f.manager.sync();
+  assert.equal(message.bounds.height, 244, '切回专注完成卡恢复两项操作空间');
   await f.invoke('panel', 'pin', true); assert.equal(panel.topmost, true);
   await f.invoke('panel', 'close-panel'); assert.equal(panel.visible, false); assert.equal(mini.visible, true);
   f.suppress(true); f.manager.sync(); assert.equal(mini.visible, false); assert.equal(message.visible, false);

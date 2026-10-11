@@ -2669,7 +2669,7 @@ test('副本解码失败或尺寸不符时拒绝保存与新增收藏，原设�
   }
 });
 
-test('番茄免打扰只抑制主动联动，保留后台额度、手动回应和待办提醒', async () => {
+test('番茄免打扰收起全部普通气泡，保留后台与待办提醒，休息时恢复互动', async () => {
   const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
   const menu = f.call('menuTemplate()');
   const entry = menu.findIndex(item => item.id === 'pomodoro-open');
@@ -2681,6 +2681,13 @@ test('番茄免打扰只抑制主动联动，保留后台额度、手动回应�
   assert.equal(f.call('canPresentCodex()'), false);
   assert.equal(f.call("showDialogue('work')"), null);
   assert.equal(f.call("showDialogue('thought')"), null);
+  const bubbles = f.bubble.shows.length;
+  const lastDirect = f.call('dialogue._lastDirectAt'), lastBubble = f.call('dialogue._lastBubbleAt');
+  for (const scene of ['pet', 'play', 'hello', 'drop']) assert.equal(f.call(`showDialogue(${JSON.stringify(scene)})`), null);
+  assert.equal(f.call('dialogue._lastDirectAt'), lastDirect, '免打扰期间不消耗互动冷却');
+  assert.equal(f.call('dialogue._lastBubbleAt'), lastBubble, '免打扰期间不消耗气泡冷却');
+  assert.equal(f.call("showBubble({id: 'late', text: '迟到的普通会话'})"), false, '共享出口拦截迟到或新来源的气泡');
+  assert.equal(f.bubble.shows.length, bubbles);
   assert.equal(f.call("showUpdateBubble({ latestVersion: '9.9.9' })"), false);
   assert.equal(f.notes.pauses, 0, '专注不暂停用户待办到时提醒');
   const before = f.commands.length;
@@ -2689,12 +2696,30 @@ test('番茄免打扰只抑制主动联动，保留后台额度、手动回应�
   assert.equal(f.connections[0].closed, false, '后台联动继续');
   assert.equal(f.call('settings.bubblesEnabled'), true, '不覆盖用户互动偏好');
   assert.equal(f.pet.messages.filter(row => row.channel === 'pet:settings').at(-1).packet.focusQuiet, true);
-  f.call('dialogue.lastShownAt = -Infinity');
-  assert.ok(f.call("showDialogue('pet')"), '主动摸球球仍可回应');
   f.pomodoro.change(false);
+  assert.ok(f.call("showDialogue('pet')"), '进入休息或结束专注后可正常回应');
   f.notes.options.onComplete();
   assert.equal(f.commands.at(-1).motion, 'hop');
   assert.equal(f.call('settings.bubblesEnabled'), true);
+});
+
+test('专注中的自动更新只记住版本，不回退弹窗或结束后补弹，手动检查仍可用', async () => {
+  const f = await fixture();
+  f.pomodoro.change(true);
+  await f.call('checkForUpdates()');
+  assert.equal(f.call('availableUpdate.latestVersion'), '0.3.26', '后台更新结果与菜单入口保持');
+  assert.equal(f.bubble.shows.length, 0);
+  assert.equal(f.call('aboutWindow'), null, '气泡静默后不能回退打开更新窗口');
+  assert.equal(f.saved.at(-1).lastUpdateNotifiedVersion, '0.3.26', '静默期版本已消费');
+  f.pomodoro.change(false);
+  f.advanceTo(6 * 60 * 60 * 1000);
+  await f.call('checkForUpdates()');
+  assert.equal(f.updateChecks.length, 2);
+  assert.equal(f.bubble.shows.length, 0);
+  assert.equal(f.call('aboutWindow'), null, '后续自动检查不补弹同一版本');
+  f.pomodoro.change(true);
+  await f.call('checkForUpdates(true)');
+  assert.equal(f.call('aboutWindow.isVisible()'), true, '用户主动检查更新可以打开');
 });
 
 test('番茄退出保存失败保留应用和后台资源，成功重试才清理', async () => {

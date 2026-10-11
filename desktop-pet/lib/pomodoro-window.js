@@ -123,7 +123,7 @@ function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, g
       const views = [];
       if (panelOpen) views.push(['panel', { width: 320, height: settingsOpen || state.face !== 'analog' ? 384 : 488 }]);
       if (panelOpen || active) views.push(['mini', { width: 112, height: 48 }]);
-      if (state.reminder || state.encouragement) views.push(['message', state.reminder ? { width: 256, height: 244 } : { width: 196, height: messageCardHeight + 12 }]);
+      if (state.reminder || state.encouragement) views.push(['message', state.reminder ? { width: 256, height: state.mode === 'focus' ? 244 : 204 } : { width: 196, height: messageCardHeight + 12 }]);
       const visible = new Set(views.map(([view]) => view));
       for (const [view, entry] of entries) if (!visible.has(view) && alive(entry.win)) entry.win.hide();
       let miniBounds = null;

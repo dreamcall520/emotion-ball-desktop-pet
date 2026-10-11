@@ -45,6 +45,8 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     catch (_) { return false; }
   });
   const find = view => allWindows().find(win => new URL(win.webContents.getURL()).searchParams.get('view') === view);
+  const ordinaryBubbleVisible = () => BrowserWindow.getAllWindows().some(win => !win.isDestroyed() && win.isVisible() &&
+    win.webContents.getURL().endsWith('/bubble.html'));
   const observe = win => {
     if (observed.has(win)) return;
     observed.add(win);
@@ -163,6 +165,13 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     const png = await capturePaintedWindow({ win, artifactPath });
     result.screenshots.push({ name, path: artifactPath, bytes: png.length, native: win.getContentBounds() });
   };
+  const reminderGeometry = win => page(win, `(() => {
+    const card = document.querySelector('#reminder'), rect = card.getBoundingClientRect();
+    const buttons = [...card.querySelectorAll('.reminder-actions button')].filter(button => !button.hidden);
+    return { height: rect.height, buttons: buttons.map(button => button.id),
+      bottomGap: rect.bottom - buttons.at(-1).getBoundingClientRect().bottom,
+      scrollHeight: card.scrollHeight, clientHeight: card.clientHeight };
+  })()`);
   const keyboard = async (win, keyCode) => {
     win.focus(); win.webContents.focus();
     await poll(() => page(win, 'document.hasFocus()'), Boolean, '原生键盘焦点');
@@ -225,6 +234,14 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     await bridge(panel, 'settings', settingsValue('analog', { focus: 1, short: 5, long: 15 }));
     await pointerClick(panel, '#start');
     assert.equal(service.getSnapshot().status, 'running'); assert.equal(getQuiet(), true);
+    assert.equal(getSettings().bubblesEnabled, true);
+    await page(pet, "petDesktop.say('play')"); await wait(100);
+    assert.equal(ordinaryBubbleVisible(), false, '真实 pet:say 在专注中不显示普通互动气泡');
+    await pointerClick(panel, '#start');
+    assert.equal(service.getSnapshot().status, 'paused'); assert.equal(getQuiet(), true);
+    await page(pet, "petDesktop.say('play')"); await wait(100);
+    assert.equal(ordinaryBubbleVisible(), false, '专注暂停仍屏蔽普通互动气泡');
+    await pointerClick(panel, '#start');
     stamp = service.getSnapshot().deadline; service.tick();
     const message = await ready('message');
     await poll(() => message.isVisible(), Boolean, '完成提醒原生窗口');
@@ -232,6 +249,9 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     assert.equal(service.getSnapshot().completed, 1); assert.equal(getQuiet(), false);
     assert.equal(message.isFocusable(), false);
     assert.deepEqual(mouseCalls.get(message), { ignore: false, forward: true }, '完成提醒可接收按钮点击');
+    const focusReminder = await reminderGeometry(message);
+    assert.equal(message.getContentBounds().height, 244); assert.equal(focusReminder.height, 232);
+    assert.deepEqual(focusReminder.buttons, ['rest-now', 'five-more']);
     await capture(message, 'completion-blue-light');
     await pointerClick(message, '#five-more');
     assert.equal(service.getSnapshot().total, 300); assert.equal(service.getSnapshot().extension, true);
@@ -242,19 +262,37 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     await pointerClick(message, '#rest-now');
     assert.equal(service.getSnapshot().mode, 'short'); assert.equal(service.getSnapshot().status, 'running');
     assert.equal(getQuiet(), false, '休息时恢复陪伴提示');
+    await page(pet, "petDesktop.say('play')");
+    await poll(ordinaryBubbleVisible, Boolean, '休息时允许真实手动互动气泡，专注期间未占用冷却');
     stamp = service.getSnapshot().deadline; service.tick();
     await poll(() => page(message, "document.querySelector('#five-more').hidden"), Boolean, '休息完成状态');
+    const restReminder = await reminderGeometry(message);
+    assert.equal(message.getContentBounds().height, 204); assert.equal(restReminder.height, 192);
+    assert.deepEqual(restReminder.buttons, ['rest-now']);
+    assert.ok(Math.abs(restReminder.bottomGap - focusReminder.bottomGap) <= 1, '休息完成卡底部留白与双按钮完成卡一致');
+    assert.ok(restReminder.scrollHeight <= restReminder.clientHeight + 1, '紧凑休息卡没有裁切');
+    result.reminders = { focus: focusReminder, rest: restReminder };
+    await capture(message, 'rest-completion-blue-light');
     await pointerClick(message, '#rest-now');
     assert.equal(service.getSnapshot().mode, 'focus'); assert.equal(service.getSnapshot().status, 'running');
     assert.equal(service.getSnapshot().completed, 1);
+    await poll(() => !ordinaryBubbleVisible(), Boolean, '下一次专注收起休息时已有互动气泡');
     result.checks.push('focus-completion-extend-and-rest-through-message-bridge');
 
     await bridge(panel, 'settings', settingsValue('analog', { focus: 25, short: 5, long: 15 }));
     await bridge(panel, 'intention', '把眼前这件事推进一步');
     await pointerClick(panel, '#start');
     const started = service.getSnapshot();
+    await page(panel, `(() => {
+      __pomodoroSmoke.pinDisabledButtons = [];
+      new MutationObserver(records => {
+        for (const record of records) if (record.attributeName === 'disabled')
+          __pomodoroSmoke.pinDisabledButtons.push(record.target.id);
+      }).observe(document.querySelector('#focus-panel'), { subtree: true, attributes: true, attributeFilter: ['disabled'] });
+    })()`);
     await pointerClick(panel, '#pin');
     assert.equal(service.getSnapshot().pinned, true); assert.equal(panel.isAlwaysOnTop(), true);
+    assert.deepEqual(await page(panel, '__pomodoroSmoke.pinDisabledButtons'), [], '置顶不短暂禁用主操作按钮，避免色弱友好模式按钮边框闪现');
     await poll(() => page(panel, "!document.querySelector('#pin').disabled"), Boolean, '置顶按钮完成上次动作');
     await page(panel, `(() => {
       const pin = document.querySelector('#pin'); pin.focus();
@@ -268,6 +306,7 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     result.keyboard = await page(panel, '({ focused: document.hasFocus(), active: document.activeElement.id, events: __pomodoroSmoke.keys })');
     assert.ok(result.keyboard.events.some(event => event.type === 'keypress' && event.key === 'Enter' && event.trusted), '真实 Enter keypress');
     assert.ok(result.keyboard.events.some(event => event.type === 'click' && event.trusted), '原生键盘触发可信按钮点击');
+    assert.equal(result.keyboard.active, 'pin', '置顶完成后保留键盘焦点');
     assert.equal(panel.isAlwaysOnTop(), false);
     assert.deepEqual(timerIdentity(service.getSnapshot()), timerIdentity(started), '置顶不改变计时与记录');
     await pointerClick(panel, '#collapse');
@@ -396,7 +435,7 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
       if (win !== message) assert.ok(events.colors > 0, 'onColorMode 实际收到广播');
     }
     assert.deepEqual(result.errors, [], '原生页面加载与渲染无错误');
-    assert.equal(result.screenshots.length, 4);
+    assert.equal(result.screenshots.length, 5);
     result.finalState = service.getSnapshot(); result.ok = true;
     fs.writeFileSync(path.join(output, 'result.json'), `${JSON.stringify(result, null, 2)}\n`);
     process.stdout.write(`PET_POMODORO_INTEGRATION_OK ${JSON.stringify({ checks: result.checks.length, themes: result.themes.length,
