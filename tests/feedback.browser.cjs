@@ -12,7 +12,7 @@ const file = (name, buffer = png, mimeType = 'image/png') => ({ name, mimeType, 
 fs.mkdirSync(out, { recursive: true });
 
 (async () => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--no-proxy-server'] });
   const context = await browser.newContext();
   await context.addInitScript(() => {
     localStorage.setItem('umami.disabled', '1');
@@ -37,7 +37,7 @@ fs.mkdirSync(out, { recursive: true });
     await route.fulfill({ status: response.status, contentType: 'application/json', body: JSON.stringify(response.body) });
   });
   const page = await context.newPage();
-  page.on('pageerror', error => errors.push(error.message));
+  page.on('pageerror', error => errors.push(`${page.url()}: ${error.stack || error.message}`));
   page.on('dialog', dialog => dialog.accept());
   const inViewport = async locator => locator.evaluate(element => {
     const box = element.getBoundingClientRect();
@@ -57,12 +57,25 @@ fs.mkdirSync(out, { recursive: true });
         assert.ok(await inViewport(page.locator('.type-options')));
         const feedbackLayout = await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth, background: getComputedStyle(document.body).backgroundColor }));
         assert.ok(feedbackLayout.scrollWidth <= width, `feedback overflow ${width}/${scheme}`);
-        assert.equal(feedbackLayout.background, scheme === 'dark' ? 'rgb(17, 21, 27)' : 'rgb(246, 248, 251)');
+        assert.equal(feedbackLayout.background, scheme === 'dark' ? 'rgb(17, 21, 27)' : 'rgb(251, 252, 254)');
+        assert.equal(await page.locator('.feedback-entry').count(), 0);
+        const brandStyle = await page.locator('.brand').evaluate(element => {
+          const style = getComputedStyle(element), image = element.querySelector('img');
+          return { size:style.fontSize, weight:style.fontWeight, gap:style.gap, imageWidth:image.getBoundingClientRect().width, imageLoaded:image.complete && image.naturalWidth > 0 };
+        });
+        assert.deepEqual(brandStyle, { size:width <= 680 ? '16px' : '19px', weight:'600', gap:width <= 680 ? '6px' : '9px', imageWidth:width <= 680 ? 27 : 32, imageLoaded:true });
         layouts.push({ page: 'feedback', height, scheme, ...feedbackLayout });
         await page.screenshot({ path: path.join(out, `feedback-${width}x${height}-${scheme}.png`), fullPage: true });
 
         for (const route of ['', 'product/', 'updates/', 'privacy/']) {
           await page.goto(new URL(route, base).href);
+          const floating = page.locator('.feedback-entry');
+          assert.ok(await inViewport(floating), `${route || 'home'} floating entry visible`);
+          assert.equal(new URL(await floating.getAttribute('href'), page.url()).pathname, '/feedback/');
+          assert.ok(await floating.evaluate(element => { const r = element.getBoundingClientRect(); return element.contains(document.elementFromPoint(r.x + r.width/2, r.y + r.height/2)); }), 'floating entry clickable');
+          if (route === 'updates/' || route === 'privacy/') {
+            assert.deepEqual(await page.locator('.brand').evaluate(element => { const s=getComputedStyle(element), image=element.querySelector('img'); return {size:s.fontSize, weight:s.fontWeight, gap:s.gap, imageWidth:image.getBoundingClientRect().width, imageLoaded:image.complete && image.naturalWidth > 0}; }), brandStyle);
+          }
           if (!route) {
             await page.waitForFunction(() => document.documentElement.dataset.sceneState === 'ready');
             if (width < 600) await page.locator('.mobile-nav summary').click();
@@ -86,7 +99,15 @@ fs.mkdirSync(out, { recursive: true });
         }
       }
     }
-    checks.push('30 desktop/mobile320/mobile390 light/dark layouts: no horizontal overflow; feedback links visible and reach /feedback/');
+    checks.push('30 desktop/mobile320/mobile390 light/dark layouts: no horizontal overflow; privacy, updates and feedback brands match; floating links visible and reach /feedback/');
+    for (const route of ['', 'product/', 'updates/', 'privacy/']) {
+      await page.goto(new URL(route, base).href);
+      await page.locator('.feedback-entry').focus();
+      await page.keyboard.press('Enter');
+      await page.waitForURL(new URL('feedback/', base).href);
+      assert.equal(await page.title(), '意见反馈 · 球球桌宠');
+    }
+    checks.push('all four floating feedback entries work with keyboard Enter');
     assert.equal(requests.length, 0, 'unconfigured page never sends a feedback request');
     checks.push('unconfigured channel keeps submit disabled and never displays success');
 

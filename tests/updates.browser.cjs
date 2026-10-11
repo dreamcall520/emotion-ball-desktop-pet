@@ -8,7 +8,7 @@ const out = process.env.QIUQIU_QA_OUTPUT || '/tmp/qiuqiu-updates';
 fs.mkdirSync(out, { recursive: true });
 
 (async () => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--no-proxy-server'] });
   const errors = [], failed = [];
   const report = { url: base, layouts: [], checks: [], errors, failed };
   try {
@@ -19,6 +19,7 @@ fs.mkdirSync(out, { recursive: true });
     page.on('response', response => { if (response.status() >= 400) failed.push(`${response.status()} ${response.url()}`); });
     page.on('requestfailed', request => failed.push(`${request.failure()?.errorText} ${request.url()}`));
     await page.goto(base);
+    await page.waitForFunction(() => document.documentElement.dataset.updatesReady === 'true');
     assert.equal(await page.title(), '球球桌宠 · 更新日志');
     assert.equal(await page.locator('[data-release-panel]:visible').count(), 1);
     assert.equal(await page.locator('[data-release-panel]').count(), 16);

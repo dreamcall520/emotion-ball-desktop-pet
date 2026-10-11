@@ -1,5 +1,7 @@
 .updates-page { background: var(--surface-solid); }
 .updates-page .site-header { background: var(--surface-solid); backdrop-filter: none; }
+.updates-page .brand { display:flex; align-items:center; gap:9px; font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; font-size:19px; font-weight:600; letter-spacing:0; }
+.updates-page .brand img { display:block; width:32px; height:32px; }
 .updates-page .nav-core [aria-current="page"] { color: var(--text); }
 .updates-page .mobile-main-nav { display: none; }
 .updates-layout {
@@ -61,7 +63,8 @@ html:not([data-updates-ready]) .release-panel + .release-panel { margin-top: 60p
 }
 @media (max-width: 680px) {
   .updates-page .site-header { grid-template-columns: auto minmax(0, 1fr) auto; }
-  .updates-page .brand { font-size: 17px; }
+  .updates-page .brand { font-size:16px; gap:6px; }
+  .updates-page .brand img { width:27px; height:27px; }
   .updates-page .nav-core { gap: 16px; }
   .updates-page .nav-core a:not([aria-current]) { display: none; }
   .updates-page .nav-core { justify-content: flex-end; }

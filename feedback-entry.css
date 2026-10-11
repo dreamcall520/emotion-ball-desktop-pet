@@ -1,0 +1,25 @@
+.feedback-entry {
+  position: fixed;
+  right: max(20px, env(safe-area-inset-right));
+  bottom: calc(84px + env(safe-area-inset-bottom));
+  z-index: 35;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 18px;
+  border: 1px solid var(--line-strong, var(--line));
+  border-radius: 999px;
+  background: var(--surface-solid, var(--menu));
+  color: var(--text, var(--ink));
+  box-shadow: 0 8px 24px #17213b1a;
+  font: 600 13px/1.3 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  text-decoration: none;
+}
+.feedback-entry svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.feedback-entry:hover { border-color: var(--accent); color: var(--accent); }
+.feedback-entry:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+@media (max-width: 680px) {
+  .feedback-entry { right: max(16px, env(safe-area-inset-right)); bottom: calc(80px + env(safe-area-inset-bottom)); flex-direction: column; gap: 3px; width: 56px; min-height: 56px; padding: 8px 0; font-size: 11px; }
+}
