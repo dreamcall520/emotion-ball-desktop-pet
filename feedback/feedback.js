@@ -6,6 +6,18 @@
   const list = document.getElementById('attachment-list');
   const bridge = window.qiuqiuFeedback;
   const endpoint = window.QIUQIU_FEEDBACK_CONFIG?.endpoint;
+  const prompts = {
+    problem: { title: '例如：便签打开后没有显示文字', detail: '遇到了什么问题？可以写下操作步骤、实际表现，以及你期望的结果。' },
+    suggestion: { title: '例如：希望操作按钮更容易找到', detail: '哪里用起来不够顺手？你希望怎样改进？可以说说使用场景和原因。' },
+    feature: { title: '例如：希望增加番茄专注计时', detail: '你希望增加什么功能？会在什么场景使用？它能帮你解决什么问题？' }
+  };
+  const updatePrompts = () => {
+    const prompt = prompts[form.elements.type.value];
+    form.elements.title.placeholder = prompt.title;
+    form.elements.detail.placeholder = prompt.detail;
+  };
+  form.querySelectorAll('input[name="type"]').forEach(control => control.addEventListener('change', updatePrompts));
+  updatePrompts();
   let files = [], sending = false, retryKey = '', submissionId = '';
   const message = (text, error = false) => { status.textContent = text; status.dataset.error = String(error); };
   try {
@@ -87,6 +99,7 @@
   document.getElementById('again').onclick = () => {
     const version = form.elements.version.value, os = form.elements.os.value;
     form.reset();
+    updatePrompts();
     if (bridge) { form.elements.version.value = version; form.elements.os.value = os; }
     files.forEach(item => URL.revokeObjectURL(item.url)); files = []; renderFiles();
     retryKey = ''; submissionId = ''; form.hidden = false; document.getElementById('success').hidden = true; form.elements.title.focus();

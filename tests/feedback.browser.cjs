@@ -9,6 +9,11 @@ const receipt = '36f60f54-ecb9-4c01-a281-111111111111';
 const uuid = /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i;
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/zFEAAAAASUVORK5CYII=', 'base64');
 const file = (name, buffer = png, mimeType = 'image/png') => ({ name, mimeType, buffer });
+const prompts = {
+  problem: ['例如：便签打开后没有显示文字', '遇到了什么问题？可以写下操作步骤、实际表现，以及你期望的结果。'],
+  suggestion: ['例如：希望操作按钮更容易找到', '哪里用起来不够顺手？你希望怎样改进？可以说说使用场景和原因。'],
+  feature: ['例如：希望增加番茄专注计时', '你希望增加什么功能？会在什么场景使用？它能帮你解决什么问题？']
+};
 fs.mkdirSync(out, { recursive: true });
 
 (async () => {
@@ -43,6 +48,11 @@ fs.mkdirSync(out, { recursive: true });
     const box = element.getBoundingClientRect();
     return box.width > 0 && box.height > 0 && box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight;
   });
+  const assertPrompts = async type => {
+    assert.ok(await page.locator(`input[name="type"][value="${type}"]`).isChecked());
+    assert.equal(await page.locator('#title').getAttribute('placeholder'), prompts[type][0]);
+    assert.equal(await page.locator('#detail').getAttribute('placeholder'), prompts[type][1]);
+  };
   try {
     for (const [width, height] of [[1440, 900], [390, 844], [320, 568]]) {
       for (const scheme of ['light', 'dark']) {
@@ -123,6 +133,7 @@ fs.mkdirSync(out, { recursive: true });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.emulateMedia({ colorScheme: 'dark' });
     await page.goto(new URL('feedback/', base).href);
+    await assertPrompts('problem');
     assert.ok(await page.locator('#submit').isEnabled());
     await page.locator('#submit').click();
     assert.equal(await page.locator('#title').evaluate(element => element.validity.valueMissing), true);
@@ -160,6 +171,20 @@ fs.mkdirSync(out, { recursive: true });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'long attachment filename wraps on mobile');
     checks.push('required/whitespace fields, supported image types, non-empty size, exact 1MiB boundary, 3-image limit and removal; files stay local before submit');
 
+    const filledTitle = await page.locator('#title').inputValue();
+    const filledDetail = await page.locator('#detail').inputValue();
+    const attachedNames = await page.locator('#attachment-list li').allTextContents();
+    for (const type of ['suggestion', 'problem', 'feature']) {
+      await page.locator(`input[name="type"][value="${type}"]`).check();
+      await assertPrompts(type);
+      assert.equal(await page.locator('#title').inputValue(), filledTitle, `${type} preserves title`);
+      assert.equal(await page.locator('#detail').inputValue(), filledDetail, `${type} preserves detail`);
+      assert.deepEqual(await page.locator('#attachment-list li').allTextContents(), attachedNames, `${type} preserves screenshots`);
+      assert.equal(requests.length, 0, 'changing feedback type never submits');
+      if (type !== 'problem') await page.screenshot({ path: path.join(out, `feedback-mobile-type-${type}.png`), fullPage: true });
+    }
+    checks.push('problem, suggestion and feature each show matching title/detail prompts; changing type preserves entered text and all screenshots without submitting');
+
     await page.locator('#submit').click();
     await page.waitForFunction(() => document.querySelector('#status').textContent.includes('提交失败'));
     const first = requests[0];
@@ -187,6 +212,7 @@ fs.mkdirSync(out, { recursive: true });
     checks.push('HTTP failure and invalid receipt preserve text/images; retries reuse submission UUID; only a valid UUID receipt shows success');
 
     await page.getByRole('button', { name: '再写一条', exact: true }).click();
+    await assertPrompts('problem');
     assert.equal(await page.locator('#title').inputValue(), '');
     assert.equal(await page.locator('#detail').inputValue(), '');
     assert.equal(await page.locator('#contact').inputValue(), '');
@@ -200,7 +226,7 @@ fs.mkdirSync(out, { recursive: true });
     assert.notEqual(requests[3].submissionId, first.submissionId);
     assert.equal(requests[3].attachments.length, 0);
     assert.deepEqual(errors, []);
-    checks.push('new feedback clears user fields and screenshots, returns focus and uses a new submission UUID');
+    checks.push('new feedback resets problem prompts, clears user fields and screenshots, returns focus and uses a new submission UUID');
     fs.writeFileSync(path.join(out, 'feedback-checks.json'), JSON.stringify({ base, mockOnly: true, note: 'Responses were intercepted locally; this does not verify the deployed backend or mainland connectivity.', layouts, checks, pageErrors: errors, layoutFailures, submissionCount: requests.length }, null, 2));
     assert.deepEqual(layoutFailures, []);
     console.log(`${layouts.length} layouts and ${checks.length} interaction groups passed; 4 mock submissions, no real feedback sent`);
