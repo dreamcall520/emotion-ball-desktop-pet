@@ -12,6 +12,8 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   codexQuotaAlwaysVisible = false, codexQuotaPeriod = 'auto', codexQuotaLabelSize = 'standard',
   codexQuotaAppearance = 'system', codexShowExtraCredits = true, bubblesEnabled = true, colorMode = 'standard', uiTheme = 'green',
   consent = async () => ({ response: 1 }), openExternal = async () => {}, saveError = null,
+  feedbackEndpoint = 'https://feedback.qiuqiu.pet/api/feedback',
+  feedbackFetch = async () => ({ ok: true, status: 201, json: async () => ({ id: '22222222-2222-4222-8222-222222222222' }) }),
   loadedSettings = null, notesDefaultTab = 'note', notesAppearance = 'light', argv = [], updateFetch = async currentVersion => ({ currentVersion,
     latestVersion: '0.3.26', hasUpdate: true,
     url: 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.26' }) } = {}) {
@@ -28,6 +30,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   const popups = [];
   const trayMenus = [];
   const updateChecks = [];
+  const feedbackRequests = [];
   const app = Object.assign(new EventEmitter(), { quitCalls: 0, setName() {}, getPath: () => '/fixture',
     requestSingleInstanceLock: () => true, whenReady: () => Promise.resolve(), setActivationPolicy() {}, getVersion: () => '0.3.25',
     quit() { this.quitCalls++; }, exit(code) { throw new Error(`unexpected exit ${code}`); } });
@@ -151,7 +154,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   };
   const realRequire = createRequire(path.resolve(__dirname, '../main.js'));
   const context = vm.createContext({ __dirname: path.resolve(__dirname, '..'), console,
-    process: { env: {}, argv, stderr: { write(message) { throw new Error(message); } } }, performance: { now: () => now },
+    process: { env: {}, argv, stderr: { write(message) { throw new Error(message); } } }, Buffer, AbortSignal, performance: { now: () => now },
     Date: class extends Date { static now() { return 1800000000000 + now; } },
     setTimeout(callback, delay) { timers.set(++serial, { callback, at: now + delay }); return serial; },
     clearTimeout(id) { timers.delete(id); },
@@ -159,6 +162,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
       if (name === 'electron') return { app, ipcMain, powerMonitor, nativeTheme, screen, BrowserWindow: NativeWindow, Tray,
         dialog: { showMessageBox: (...args) => { dialogs.push(args); return consent(...args); } },
         shell: { openExternal: url => { external.push(url); return openExternal(url); } },
+        net: { fetch: (url, options) => { feedbackRequests.push({ url, options }); return feedbackFetch(url, options); } },
         Menu: { buildFromTemplate: value => Object.assign(value, { popup: options => popups.push({ value, options }) }) }, nativeImage: { createFromPath: () => ({ setTemplateImage() {} }) } };
       if (name === './lib/settings') return { ...realRequire(name), loadSettings: () => loadedSettings ? structuredClone(loadedSettings) : ({ size: 'tiny', x: -600, y: 100,
         bubblesEnabled, colorMode, uiTheme, notesDefaultTab, notesAppearance, keepAwake: false, alwaysOnTop: true, codexEnabled, codexTaskNameInAlerts,
@@ -183,6 +187,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
       if (name === './lib/bubble-window') return { createBubbleWindow: () => bubble };
       if (name === './lib/quota-label-window') return { createQuotaLabelWindow: options => { quotaLabel.options = options; return quotaLabel; } };
       if (name === './lib/app-update') return { checkLatestRelease: version => { updateChecks.push(version); return updateFetch(version); } };
+      if (name === './feedback/config.js') return { endpoint: feedbackEndpoint };
       if (name === './lib/api-usage-label-window') return { createApiUsageLabelWindow: options => { apiLabel.options = options; return apiLabel; } };
       if (name === './lib/api-usage') return { createApiUsage: options => { apiUsage.options = options; return apiUsage; } };
       if (name === './lib/edge-notice-window') return { createEdgeNoticeWindow: () => edgeNoticeWindow };
@@ -204,7 +209,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   const pet = windows[0];
   pet.emit('ready-to-show');
   pet.webContents.emit('did-finish-load');
-  return { pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
+  return { pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, feedbackRequests, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
     notes, nativeTheme, call: expression => vm.runInContext(expression, context),
     invoke(channel, packet, sender = pet.webContents) {
       assert.ok(ipcHandlers.has(channel), `${channel} handler must be registered`);
@@ -229,7 +234,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
 
 const TASK_ID = '11111111-1111-4111-8111-111111111111';
 
-test('定制、API 费用和关于窗口首次及复开均跟随当前球球，加载期间移动也生效', async () => {
+test('定制、API 费用、关于和反馈窗口首次及复开均跟随当前球球，加载期间移动也生效', async () => {
   const f = await fixture();
   const primary = { x: 0, y: 24, width: 1440, height: 876 }, external = { x: 1440, y: 24, width: 1920, height: 1016 },
     left = { x: -1920, y: -300, width: 1920, height: 1040 };
@@ -238,7 +243,7 @@ test('定制、API 费用和关于窗口首次及复开均跟随当前球球，�
     const b = win.getBounds();
     assert.ok(b.x >= area.x && b.y >= area.y && b.x + b.width <= area.x + area.width && b.y + b.height <= area.y + area.height);
   };
-  for (const [open, variable] of [['openCustomization', 'customizationWindow'], ['openApiUsage', 'apiUsageWindow'], ['openAbout', 'aboutWindow']]) {
+  for (const [open, variable] of [['openCustomization', 'customizationWindow'], ['openApiUsage', 'apiUsageWindow'], ['openAbout', 'aboutWindow'], ['openFeedbackWindow', 'feedbackWindow']]) {
     f.pet.bounds = { x: 3260, y: 900, width: 80, height: 80 };
     f.call(`${open}()`);
     const win = f.call(variable); inside(win, external);
@@ -442,7 +447,7 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   const top = menu.filter(item => item.type !== 'separator');
   assert.deepEqual(Array.from(top, item => item.label), [
     '和球球聊聊', '来定制球球', '便签与待办', '球球与互动', 'Codex 与 API',
-    '贴边与显示', '球球尺寸', '界面配色', '常规设置', '关于球球', '检查更新', '退出球球'
+    '贴边与显示', '球球尺寸', '界面配色', '常规设置', '关于球球', '意见反馈', '检查更新', '退出球球'
   ]);
   const group = label => top.find(item => item.label === label).submenu.filter(item => item.type !== 'separator');
   assert.equal(top.find(item => item.id === 'chat-open').submenu, undefined);
@@ -820,6 +825,95 @@ test('关于窗口复用、安全读取版本与固定官网；锁屏、外来�
   f.app.emit('before-quit');
   assert.equal(reopened.isDestroyed(), true);
   assert.equal(await f.invoke('pet:about-get', null, reopened.webContents), null);
+});
+
+test('反馈在 App 内复用窗口，只向固定服务提交，外来页面、隐藏、锁屏和退出时拒绝访问', async () => {
+  const f = await fixture();
+  menuItem(f, 'feedback-open').click();
+  const win = f.windows.at(-1), count = f.windows.length;
+  assert.equal(win.options.title, '意见反馈');
+  assert.equal(win.options.webPreferences.sandbox, true);
+  assert.equal(win.options.webPreferences.contextIsolation, true);
+  assert.equal(win.options.webPreferences.nodeIntegration, false);
+  assert.equal(win.isVisible(), false);
+  win.emit('ready-to-show');
+  assert.equal(win.isVisible(), true);
+  const context = await f.invoke('pet:feedback-context', null, win.webContents);
+  assert.equal(context.source, 'app');
+  assert.equal(context.version, '0.3.25');
+  assert.equal(context.os, `${require('node:os').type()} ${require('node:os').release()} (${require('node:os').arch()})`);
+  assert.deepEqual(Object.keys(context).sort(), ['os', 'source', 'version']);
+  assert.equal(await f.invoke('pet:feedback-context'), null);
+  menuItem(f, 'feedback-open').click();
+  assert.equal(f.windows.length, count);
+  assert.equal(win.focused, true);
+  menuItem(f, 'about-open').click();
+  const about = f.windows.at(-1); about.emit('ready-to-show');
+  assert.equal(await f.invoke('pet:about-feedback'), false);
+  assert.equal(await f.invoke('pet:about-feedback', null, about.webContents), true);
+  assert.equal(f.windows.length, count + 1);
+  const payload = { submissionId: '11111111-1111-4111-8111-111111111111', type: 'problem',
+    title: ' 遇到问题 ', detail: ' 复现步骤 ', contact: '', attachments: [],
+    endpoint: 'https://untrusted.invalid/', source: 'website', version: 'forged', os: 'forged', secret: 'drop' };
+  await assert.rejects(f.invoke('pet:feedback-submit', payload), /重新打开/);
+  assert.equal(JSON.stringify(await f.invoke('pet:feedback-submit', payload, win.webContents)), JSON.stringify({ id: '22222222-2222-4222-8222-222222222222' }));
+  const request = f.feedbackRequests[0];
+  assert.equal(request.url, 'https://feedback.qiuqiu.pet/api/feedback');
+  assert.equal(request.options.method, 'POST');
+  assert.ok(request.options.signal instanceof AbortSignal);
+  assert.deepEqual(JSON.parse(request.options.body), { submissionId: payload.submissionId, type: 'problem',
+    title: '遇到问题', detail: '复现步骤', contact: '', ...JSON.parse(JSON.stringify(context)), attachments: [] });
+  assert.deepEqual(f.external, [], '反馈不打开外部浏览器');
+  for (const patch of [{ type: 'other' }, { title: ' ' }, { detail: 'x'.repeat(5001) },
+    { attachments: Array(4).fill({}) }, { attachments: [{ name: 'bad.png', type: 'image/png', data: 'invalid' }] },
+    { attachments: [{ name: 'large.png', type: 'image/png', data: Buffer.alloc(1024 * 1024 + 1).toString('base64') }] }]) {
+    await assert.rejects(f.invoke('pet:feedback-submit', { ...payload, ...patch }, win.webContents), /检查|截图/);
+  }
+  assert.equal(f.feedbackRequests.length, 1, '非法内容不能发送');
+  win.hide();
+  await assert.rejects(f.invoke('pet:feedback-submit', payload, win.webContents), /重新打开/);
+  menuItem(f, 'feedback-open').click();
+  f.powerMonitor.emit('lock-screen');
+  assert.equal(win.isVisible(), false);
+  assert.equal(await f.invoke('pet:feedback-context', null, win.webContents), null);
+  await assert.rejects(f.invoke('pet:feedback-submit', payload, win.webContents), /重新打开/);
+  f.powerMonitor.emit('unlock-screen');
+  menuItem(f, 'feedback-open').click();
+  f.app.emit('before-quit');
+  assert.equal(win.isDestroyed(), true);
+  assert.equal(await f.invoke('pet:feedback-context', null, win.webContents), null);
+});
+
+test('反馈未配置、网络失败、服务失败或无有效编号时均不报告提交成功', async () => {
+  const payload = { submissionId: '11111111-1111-4111-8111-111111111111', type: 'feature',
+    title: '想要的功能', detail: '具体使用场景', contact: '', attachments: [] };
+  for (const options of [{ feedbackEndpoint: '' }, { feedbackEndpoint: 'http://untrusted.invalid/' },
+    { feedbackFetch: async () => { throw Error('network failed'); } },
+    { feedbackFetch: async () => ({ ok: false, status: 429 }) },
+    { feedbackFetch: async () => ({ ok: false, status: 500 }) },
+    { feedbackFetch: async () => ({ ok: true, json: async () => ({}) }) },
+    { feedbackFetch: async () => ({ ok: true, json: async () => { throw Error('bad JSON'); } }) }]) {
+    const f = await fixture(options);
+    menuItem(f, 'feedback-open').click();
+    const win = f.windows.at(-1); win.emit('ready-to-show');
+    await assert.rejects(f.invoke('pet:feedback-submit', payload, win.webContents), /暂未开放|网络|频繁|未提交|确认/);
+  }
+});
+
+test('反馈关闭保护只在用户明确放弃时销毁窗口，重复关闭不会叠加确认框', async () => {
+  for (const response of [0, 1]) {
+    const f = await fixture({ consent: async () => ({ response }) });
+    menuItem(f, 'feedback-open').click();
+    const win = f.windows.at(-1); win.emit('ready-to-show');
+    win.webContents.emit('will-prevent-unload');
+    win.webContents.emit('will-prevent-unload');
+    assert.equal(f.dialogs.length, 1);
+    assert.equal(f.dialogs[0][0], win);
+    assert.equal(f.dialogs[0][1].defaultId, 0);
+    assert.deepEqual(Array.from(f.dialogs[0][1].buttons), ['继续编辑', '放弃并关闭']);
+    await flush();
+    assert.equal(win.isDestroyed(), response === 1);
+  }
 });
 
 test('更新手动检查可复用一分钟报告，同一新版只自动提醒一次，关闭自动后仍可手动', async () => {

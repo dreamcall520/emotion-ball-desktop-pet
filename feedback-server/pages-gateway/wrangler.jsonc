@@ -1,0 +1,6 @@
+{
+  "name": "qiuqiu-feedback-entry",
+  "compatibility_date": "2026-10-11",
+  "pages_build_output_dir": "public",
+  "services": [{ "binding": "FEEDBACK_SERVICE", "service": "qiuqiu-feedback" }]
+}
