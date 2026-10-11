@@ -18,6 +18,8 @@
 .card-price .price-currency, .detail-price .price-currency { font-size: .6em; margin: 0 2px 0 0; color: inherit; font-weight: inherit; }
 .shop-bottom { margin-top: 30px; padding-block: 24px 34px; }
 .shop-bottom p { margin: 0; }
+.shop-list-page .shop-bottom { border-top: 0; }
+.shop-list-page .c-footer { border-image: linear-gradient(90deg, transparent, var(--line) 20%, var(--line) 80%, transparent) 1; }
 .breadcrumb { margin-top: 32px; }
 .detail-grid { gap: 48px; padding-block: 24px 54px; align-items: center; }
 .detail-grid .product-art { aspect-ratio: 1.5; }
