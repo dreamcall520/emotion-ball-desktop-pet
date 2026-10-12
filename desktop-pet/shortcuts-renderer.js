@@ -11,12 +11,14 @@
     { id: 'pomodoro', name: '番茄钟', icon: 'clock' }
   ];
   const floatingActions = [...actions, { id: 'settings', name: '设置', icon: 'settings' }];
-  const defaults = { shape: 'floating', enabled: true, launcher: 'Ctrl+Alt+Q', chat: '', custom: '', note: '', todo: '', pomodoro: '' };
+  const defaults = { shape: 'floating', enabled: true, launcher: 'Ctrl+Alt+Q', chat: '', custom: '', note: '', todo: '', pomodoro: '', noteBehavior: 'panel', todoBehavior: 'panel' };
+  const startBehaviors = { note: 'noteBehavior', todo: 'todoBehavior' };
   const bindingIds = ['launcher', ...actions.map(action => action.id)];
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
   const symbols = isMac ? { Ctrl: '⌃', Alt: '⌥', Shift: '⇧', Meta: '⌘', Space: '空格' } : { Ctrl: 'Ctrl', Alt: 'Alt', Shift: 'Shift', Meta: 'Win', Space: '空格' };
-  let state = null, draft = { ...defaults }, recording = null, selected = 0, busy = false, pointerFrame = null;
-  let appearance = 'system';
+  let state = null, draft = { ...defaults }, recording = null, selected = -1, busy = false, pointerFrame = null;
+  let appearance = 'system', motionKey = '', motions = [];
+  const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
   const system = window.matchMedia?.('(prefers-color-scheme: dark)');
   const currentActions = () => state?.view === 'list' ? actions : floatingActions;
   const icon = name => `<svg aria-hidden="true"><use href="#i-${name}"/></svg>`;
@@ -48,11 +50,11 @@
 
   function select(index, focus = false) {
     const entries = currentActions();
-    selected = ((index % entries.length) + entries.length) % entries.length;
+    selected = index < 0 ? -1 : ((index % entries.length) + entries.length) % entries.length;
     document.querySelectorAll('[data-action]').forEach(button => {
-      const current = button.dataset.action === entries[selected].id;
+      const current = button.dataset.action === entries[selected]?.id;
       button.setAttribute('aria-current', String(current));
-      button.tabIndex = current ? 0 : -1;
+      button.tabIndex = current || (selected < 0 && button.dataset.action === entries[0].id) ? 0 : -1;
       if (focus && current && button.getClientRects().length) button.focus({ preventScroll: true });
     });
   }
@@ -68,7 +70,7 @@
       if (typeof item === 'string') return item;
       if (!item || typeof item !== 'object') return '';
       const id = item.field || item.id || item.key;
-      const name = id === 'launcher' ? '快捷面板' : actions.find(action => action.id === id)?.name;
+      const name = id === 'launcher' ? '快捷面板' : actions.find(action => action.id === id || startBehaviors[action.id] === id)?.name;
       return [name, item.message || item.error || '快捷键无法注册，请换一个组合。'].filter(Boolean).join('：');
     }).filter(Boolean).join('\n');
   }
@@ -117,6 +119,7 @@
 
   function renderSettings() {
     const focusedRecord = document.activeElement?.dataset.record;
+    const focusedBehavior = document.activeElement?.dataset.startBehavior;
     document.querySelectorAll('[name="shape"]').forEach(input => { input.checked = input.value === draft.shape; input.disabled = busy; });
     $('enabled').checked = draft.enabled;
     $('enabled').disabled = busy;
@@ -130,7 +133,31 @@
       name.className = 'direct-name';
       name.innerHTML = icon(action.icon);
       name.append(document.createTextNode(action.name));
-      row.append(name, bindingControl(action.id));
+      const behaviorField = startBehaviors[action.id];
+      if (behaviorField) {
+        row.classList.add('has-start-behavior');
+        const bindingRow = document.createElement('div');
+        bindingRow.className = 'direct-binding-row';
+        bindingRow.append(name, bindingControl(action.id));
+        const label = document.createElement('label');
+        label.className = 'start-behavior';
+        label.append(document.createTextNode('启动方式'));
+        label.title = '面板按钮和功能直达快捷键使用同一启动方式';
+        const select = document.createElement('select');
+        select.className = 'start-behavior-select';
+        select.dataset.startBehavior = behaviorField;
+        select.setAttribute('aria-label', `${action.name}快捷启动方式`);
+        for (const [value, text] of [['panel', '打开面板'], ['create', '直接新建']]) {
+          const option = document.createElement('option');
+          option.value = value;
+          option.textContent = text;
+          select.append(option);
+        }
+        select.value = draft[behaviorField];
+        select.disabled = busy;
+        label.append(select);
+        row.append(bindingRow, label);
+      } else row.append(name, bindingControl(action.id));
       $('direct-settings').append(row);
     }
     $('save').disabled = busy || (draft.enabled && !draft.launcher);
@@ -138,22 +165,62 @@
     $('cancel').disabled = busy;
     $('settings').querySelector('[data-close]').disabled = busy;
     $('save').textContent = busy ? '保存中…' : '保存';
-    $('record-hint').textContent = recording ? '按 ⌘ / ⌃ / ⌥ 与字母、数字或功能键组合。Esc 取消。' : '按习惯设置，可留空。点击右侧，按下你想使用的组合键。';
+    $('record-hint').textContent = recording ? '按 ⌘ / ⌃ / ⌥ 与字母、数字或功能键组合。Esc 取消。' : '快捷键按习惯设置，可留空。便签、待办的启动方式也用于面板按钮。';
     if (focusedRecord) $('settings').querySelector(`[data-record="${focusedRecord}"]`)?.focus({ preventScroll: true });
+    else if (focusedBehavior) $('settings').querySelector(`[data-start-behavior="${focusedBehavior}"]`)?.focus({ preventScroll: true });
+  }
+
+  function animateState() {
+    const phase = state.animation?.phase || 'opening';
+    const key = state.session + ':' + state.view + ':' + phase;
+    document.body.dataset.phase = phase;
+    if (key === motionKey) return;
+    motionKey = key;
+    motions.forEach(animation => animation.cancel()); motions = [];
+    if (reducedMotion?.matches) return;
+    const closing = phase === 'closing';
+    const nodes = state.view === 'floating'
+      ? [...$('floating').querySelectorAll('[data-action]')].filter(node => !node.hidden)
+      : [$(state.view)];
+    const duration = state.animation?.duration || (closing ? 180 : 260);
+    nodes.forEach((node, index) => {
+      const rect = node.getBoundingClientRect();
+      const origin = state.origin || { x: innerWidth / 2, y: innerHeight / 2 };
+      const dx = origin.x - rect.x - rect.width / 2, dy = origin.y - rect.y - rect.height / 2;
+      const floating = state.view === 'floating';
+      const collapsed = { transform: 'translate(' + dx * (floating ? 1 : .12) + 'px,' + dy * (floating ? 1 : .12) + 'px) scale(' + (floating ? .28 : .96) + ')', opacity: 0 };
+      const expanded = { transform: 'translate(0,0) scale(1)', opacity: 1 };
+      const delay = !closing && floating ? index * 10 : 0;
+      const animation = node.animate(closing ? [expanded, collapsed] : [collapsed, expanded], {
+        duration: Math.max(1, duration - delay), delay,
+        easing: closing ? 'cubic-bezier(.4,0,.7,.2)' : 'cubic-bezier(.16,1,.3,1)',
+        fill: closing ? 'forwards' : 'backwards'
+      });
+      animation.finished.catch(() => {});
+      motions.push(animation);
+    });
   }
 
   function applyState(next) {
     if (!next || !['floating', 'list', 'settings'].includes(next.view)) return;
     const enteringSettings = next.view === 'settings' && (state?.view !== 'settings' || state?.session !== next.session);
+    if (next.view !== 'settings' && (state?.view !== next.view || state?.session !== next.session)) {
+      selected = -1;
+      if (document.activeElement?.matches('[data-action]')) document.activeElement.blur();
+    }
     if (next.view !== 'settings' && recording) setRecording(null);
     state = { ...next, config: configCopy(next.config) };
+    document.body.dataset.session = String(state.session);
     document.body.dataset.view = state.view;
     for (const view of ['floating', 'list', 'settings']) $(view).hidden = view !== state.view;
     $('runtime-error').hidden = true;
     if (state.view === 'settings') {
-      if (enteringSettings) { draft = configCopy(state.config); setRecording(null); busy = false; }
-      renderSettings();
-      if (enteringSettings) showError(registrationMessage(state.registrationErrors));
+      if (enteringSettings) {
+        draft = configCopy(state.config); setRecording(null); busy = false;
+        renderSettings();
+        showError(registrationMessage(state.registrationErrors));
+      }
+      animateState();
       if (state.focus === true && enteringSettings) requestAnimationFrame(() => $('settings').querySelector('[name="shape"]:checked')?.focus({ preventScroll: true }));
       return;
     }
@@ -176,7 +243,8 @@
         button.style.height = item.height + 'px';
       });
     }
-    select(selected, state.focus === true);
+    select(selected);
+    animateState();
   }
 
   function close() {
@@ -218,8 +286,14 @@
   };
 
   $('settings').addEventListener('change', event => {
+    if (busy) return;
     if (event.target.name === 'shape') draft.shape = event.target.value;
     if (event.target.id === 'enabled') { draft.enabled = event.target.checked; showError(); renderSettings(); }
+    const field = event.target.dataset.startBehavior;
+    if (Object.values(startBehaviors).includes(field) && ['panel', 'create'].includes(event.target.value)) {
+      draft[field] = event.target.value;
+      showError();
+    }
   });
   $('settings').addEventListener('click', event => {
     const record = event.target.closest('[data-record]'), clear = event.target.closest('[data-clear]');
@@ -237,6 +311,7 @@
 
   function validate(config) {
     if (config.enabled && !config.launcher) return '请设置唤起快捷键，或关闭全局唤起。';
+    if (Object.values(startBehaviors).some(field => !['panel', 'create'].includes(config[field]))) return '请选择打开面板或直接新建。';
     const seen = new Map();
     for (const id of bindingIds) {
       const value = config[id];
@@ -293,9 +368,13 @@
     if (event.key === 'Escape') { event.preventDefault(); close(); return; }
     if (!state || state.view === 'settings') return;
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-      event.preventDefault(); select(selected + (['ArrowDown', 'ArrowRight'].includes(event.key) ? 1 : -1), true);
+      event.preventDefault();
+      const forward = ['ArrowDown', 'ArrowRight'].includes(event.key);
+      const count = currentActions().length;
+      select(selected < 0 ? (forward ? 0 : count - 1) : (selected + (forward ? 1 : -1) + count) % count, true);
     } else if (event.key === 'Enter' && document.activeElement.matches('[data-action]')) {
-      event.preventDefault(); choose(currentActions()[selected].id);
+      event.preventDefault();
+      if (selected >= 0) choose(currentActions()[selected].id);
     } else if (!event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey && /^[1-6]$/.test(event.key)) {
       const action = currentActions()[Number(event.key) - 1];
       if (action) { event.preventDefault(); choose(action.id); }

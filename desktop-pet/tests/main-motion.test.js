@@ -18,7 +18,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     onProgress({ state: 'downloading', percent: 100 });
     return { state: 'completed', path: '/fixture/Qiuqiu.dmg' };
   },
-  loadedSettings = null, notesDefaultTab = 'note', notesAppearance = 'light', argv = [], updateFetch = async currentVersion => ({ currentVersion,
+  loadedSettings = null, notesDefaultTab = 'note', notesAppearance = 'light', nativeQuotaLabel = false, argv = [], updateFetch = async currentVersion => ({ currentVersion,
     latestVersion: '0.3.26', hasUpdate: true,
     url: 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.26',
     installer: UPDATE_INSTALLER, downloadMessage: '' }) } = {}) {
@@ -126,7 +126,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
       return { previous, current: bubbleWindow };
     } };
   bubbleWindow.webContents = bubble;
-  const quotaLabel = { shows: [], hides: 0, moves: 0, destroys: 0, topmost: [], visible: false,
+  let quotaLabel = { shows: [], hides: 0, moves: 0, destroys: 0, topmost: [], visible: false,
     show(model) { this.shows.push(model); this.visible = true; }, hide() { this.hides++; this.visible = false; },
     reposition() { this.moves++; }, destroy() { this.destroys++; this.visible = false; },
     setAlwaysOnTop(value) { this.topmost.push(value); }, getWindow: () => null,
@@ -219,7 +219,11 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
         return controller;
       } };
       if (name === './lib/bubble-window') return { createBubbleWindow: () => bubble };
-      if (name === './lib/quota-label-window') return { createQuotaLabelWindow: options => { quotaLabel.options = options; return quotaLabel; } };
+      if (name === './lib/quota-label-window') return { createQuotaLabelWindow: options => {
+        if (nativeQuotaLabel) quotaLabel = realRequire(name).createQuotaLabelWindow(options);
+        else quotaLabel.options = options;
+        return quotaLabel;
+      } };
       if (name === './lib/app-update') return {
         checkLatestRelease: version => { updateChecks.push(version); return updateFetch(version); },
         downloadInstaller: (contents, installer, options) => {
@@ -254,6 +258,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   pet.webContents.emit('did-finish-load');
   return { pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, downloads, revealed, consents, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
     notes, pomodoro, pomodoroWindows, nativeTheme, call: expression => vm.runInContext(expression, context),
+    pressShortcut(accelerator) { if (!shortcutsSuspended) shortcutCallbacks.get(accelerator)?.(); },
     invoke(channel, packet, sender = pet.webContents) {
       assert.ok(ipcHandlers.has(channel), `${channel} handler must be registered`);
       return Promise.resolve(ipcHandlers.get(channel)({ sender }, packet));
@@ -390,6 +395,150 @@ test('所有 Codex 详情打开与关闭均触发额度卡避让和恢复，不�
   f.app.emit('before-quit');
 });
 
+test('快捷面板至收起动效结束隐藏额度与守护入口，刷新不复活，按原条件恢复', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true, bubblesEnabled: false });
+  t.after(() => f.app.emit('before-quit'));
+  const loadFile = f.windowClass.prototype.loadFile;
+  f.windowClass.prototype.loadFile = function (file) {
+    return file.endsWith('/shortcuts.html') ? Promise.resolve() : loadFile.call(this, file);
+  };
+  f.call('edgeNotice = { tick(state) { globalThis.shortcutEdgeQuotaState = state; }, reset() {} }');
+  f.call('settings.openaiApiAlwaysVisible = true; syncApiUsageLabel()');
+  f.connections[0].callbacks.onQuota({ updatedAt: 1800000000000,
+    windows: [{ id: 'codex:primary', label: 'Codex', windowMinutes: 300, remaining: 42, resetsAt: 1800003600000 }] });
+  assert.equal(f.quotaLabel.visible, true);
+  f.call("edgeTuck.dock('left')");
+  const shows = f.quotaLabel.shows.length;
+  f.call('openShortcuts()'); await flush();
+  assert.equal(f.call('edgeTuck.getPresentation().mode'), 'peeked', 'opening re-enters presentation sync from the tucked pet');
+  assert.equal(f.quotaLabel.shows.length, shows, 'edge expansion cannot briefly reshow the card');
+  assert.equal(f.quotaLabel.visible, false);
+  assert.equal(f.quotaLabel.options.getSuppressed(), true, 'native pending quota presentation and its guard role remain suppressed');
+  assert.equal(f.call('canShowQuotaGuard()'), false);
+  assert.equal(f.call('openQuotaGuard()'), false);
+  assert.equal(f.call('shortcutEdgeQuotaState.quotaEnabled'), false);
+  assert.equal(f.apiLabel.visible, true, 'the independently enabled API card keeps its existing rule');
+  f.connections[0].callbacks.onQuota({ updatedAt: 1800000000001,
+    windows: [{ id: 'codex:primary', label: 'Codex', windowMinutes: 300, remaining: 37, resetsAt: 1800003600000 }] });
+  assert.equal(f.quotaLabel.visible, false, 'background refresh cannot reshow quota while shortcuts are presenting');
+  f.call('shortcutWindow.close()');
+  assert.equal(f.call('shortcutWindow.isOpen()'), false);
+  t.mock.timers.tick(179); f.call('syncQuotaLabel(codexCompanion.getSnapshot())');
+  assert.equal(f.quotaLabel.visible, false);
+  assert.equal(f.call('canShowQuotaGuard()'), false);
+  t.mock.timers.tick(1);
+  assert.equal(f.quotaLabel.visible, true);
+  assert.equal(f.quotaLabel.shows.at(-1).items[0].remaining, 37, 'restore uses the latest quota, not a cached card');
+  assert.equal(f.quotaLabel.options.getSuppressed(), false);
+  assert.equal(f.call('canShowQuotaGuard()'), true);
+  assert.equal(f.call('shortcutEdgeQuotaState.quotaEnabled'), true);
+  assert.equal(f.call("shortcutRegistrar.apply({ ...shortcutRegistrar.getConfig(), shape: 'list' }, () => true).ok"), true);
+  f.call('openShortcuts()');
+  assert.equal(f.call('shortcutWindow.getState().view'), 'list');
+  assert.equal(f.quotaLabel.visible, false);
+  const menu = f.call('menuTemplate()'), pomodoroIndex = menu.findIndex(item => item.id === 'pomodoro-open');
+  assert.equal(menu.some(item => item.id === 'shortcut-open'), false);
+  assert.equal(menu[pomodoroIndex + 1].id, 'shortcut-settings');
+  assert.equal(menu[pomodoroIndex + 1].label, '快捷键设置…');
+  menu[pomodoroIndex + 1].click();
+  assert.equal(f.call('shortcutWindow.getState().view'), 'settings');
+  f.call("setCodexPreference('codexQuotaAlwaysVisible', false); shortcutWindow.close()");
+  t.mock.timers.tick(180);
+  assert.equal(f.quotaLabel.visible, false, 'closing must respect quota being disabled while shortcuts were open');
+  assert.equal(f.call('shortcutEdgeQuotaState.quotaEnabled'), false);
+});
+
+test('守护战转快捷面板不短暂重显原生额度卡，打开被拒时恢复原显示规则', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true, nativeQuotaLabel: true });
+  t.after(() => f.app.emit('before-quit'));
+  const loadFile = f.windowClass.prototype.loadFile;
+  f.windowClass.prototype.loadFile = function (file) {
+    return file.endsWith('/shortcuts.html') ? Promise.resolve() : loadFile.call(this, file);
+  };
+  f.connections[0].callbacks.onQuota({ updatedAt: 1800000000000,
+    windows: [{ id: 'codex:primary', label: 'Codex', windowMinutes: 300, remaining: 42, resetsAt: 1800003600000 }] });
+  await flush();
+  const label = f.quotaLabel.getWindow();
+  assert.equal(label.isVisible(), true);
+  const show = t.mock.method(label, 'showInactive');
+  queueCodexCompletion(f);
+  assert.ok(f.call('codexCompanion.getSnapshot().currentAlert'), 'stopMotion must exercise a real dismiss → onChange quota refresh');
+  for (const view of ['floating', 'list', 'settings']) {
+    assert.equal(f.call(`shortcutRegistrar.apply({ ...shortcutRegistrar.getConfig(), shape: '${view === 'settings' ? 'floating' : view}' }, () => true).ok`), true);
+    assert.equal(f.call('openQuotaGuard()'), true);
+    f.call('quotaGuard.getWindow()').webContents.emit('did-finish-load');
+    assert.equal(label.isVisible(), false);
+    const shows = show.mock.callCount();
+    f.call(`openShortcuts(${view === 'settings'})`); await flush();
+    assert.equal(show.mock.callCount(), shows, `${view}: guard close and motion cleanup must not call native quota show`);
+    assert.equal(f.call('quotaGuard.isVisible()'), false);
+    assert.equal(f.call('shortcutWindow.getState().view'), view);
+    assert.equal(label.isVisible(), false);
+    assert.equal(f.call('codexCompanion.getSnapshot().currentAlert'), null);
+    f.call('shortcutWindow.close()'); t.mock.timers.tick(180);
+    assert.equal(label.isVisible(), true);
+  }
+  assert.equal(f.call('openQuotaGuard()'), true);
+  f.call('dragState = { moved: true }; openShortcuts()');
+  assert.equal(f.call('shortcutWindow.isPresenting()'), false);
+  assert.equal(f.call('quotaGuard.isVisible()'), false);
+  assert.equal(label.isVisible(), true, 'a rejected open cannot leave a normally enabled quota card hidden');
+  f.call('dragState = null');
+});
+
+test('迟到或已销毁窗口的 focus 通知不关闭快捷面板，真实其他窗口聚焦仍收起', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = await fixture();
+  t.after(() => f.app.emit('before-quit'));
+  const loadFile = f.windowClass.prototype.loadFile;
+  f.windowClass.prototype.loadFile = function (file) {
+    return file.endsWith('/shortcuts.html') ? Promise.resolve() : loadFile.call(this, file);
+  };
+  const other = new f.windowClass({ width: 400, height: 400, title: '番茄钟' });
+  other.showInactive();
+  f.call('openShortcuts()'); await flush();
+  const quick = f.call('shortcutWindow.getWindow()');
+  assert.equal(quick.isFocused(), true);
+  assert.equal(f.call('shortcutWindow.getState().focus'), false, 'the one-shot focus request is already consumed');
+  f.app.emit('browser-window-focus', {}, other);
+  assert.equal(f.call('shortcutWindow.isOpen()'), true, 'a late notification from a visible but unfocused window must be ignored');
+  other.destroyed = true; other.focused = true;
+  f.app.emit('browser-window-focus', {}, other);
+  assert.equal(f.call('shortcutWindow.isOpen()'), true, 'a destroyed window cannot own focus');
+  other.destroyed = false; other.focused = true; quick.focused = false;
+  f.app.emit('browser-window-focus', {}, other);
+  assert.equal(f.call('shortcutWindow.isOpen()'), false, 'genuine focus on another App window must still close the panel');
+  t.mock.timers.tick(180);
+  assert.equal(quick.isVisible(), false);
+});
+
+test('快捷按钮和全局绑定共用便签待办启动偏好，两种形态均保留番茄计时', async () => {
+  const f = await fixture();
+  f.call("shortcutWindow.action('note'); shortcutWindow.action('todo')");
+  assert.deepEqual(f.notes.opens.map(value => ({ ...value })), [{ tab: 'note' }, { tab: 'todo' }], '旧配置默认打开各自面板');
+  const timer = f.pomodoro.state = { status: 'focus', deadline: 1800001500000, quiet: true };
+  for (const shape of ['floating', 'list']) for (const noteBehavior of ['panel', 'create']) for (const todoBehavior of ['panel', 'create']) {
+    const next = { shape, noteBehavior, todoBehavior, note: 'Alt+N', todo: 'Alt+T' };
+    assert.equal(f.call(`shortcutRegistrar.apply({ ...shortcutRegistrar.getConfig(), ...${JSON.stringify(next)} }, () => {}).ok`), true);
+    f.notes.opens.length = 0;
+    f.call("shortcutWindow.action('note'); shortcutWindow.action('todo')");
+    f.pressShortcut('Alt+N'); f.pressShortcut('Alt+T');
+    const expected = [{ tab: 'note', ...(noteBehavior === 'create' ? { create: true } : {}) },
+      { tab: 'todo', ...(todoBehavior === 'create' ? { create: true } : {}) }];
+    assert.deepEqual(f.notes.opens.map(value => ({ ...value })), [...expected, ...expected], JSON.stringify(next));
+    assert.equal(f.pomodoro.state, timer);
+    assert.equal(f.pomodoroWindows.opens, 0);
+  }
+  f.powerMonitor.emit('lock-screen');
+  const count = f.notes.opens.length;
+  f.call("shortcutWindow.action('note'); shortcutWindow.action('todo')");
+  f.pressShortcut('Alt+N'); f.pressShortcut('Alt+T');
+  assert.equal(f.notes.opens.length, count, '锁屏仍阻止快捷打开');
+  f.app.emit('before-quit');
+});
+
 test('便签待办入口、独立存储、锁屏暂停与成功完成反馈接入主进程', async () => {
   const f = await fixture({ argv: ['--notes-preview'] });
   assert.equal(f.notes.options.filePath, '/fixture/notes-todos.json');
@@ -510,7 +659,7 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   const menu = f.call('menuTemplate()');
   const top = menu.filter(item => item.type !== 'separator');
   assert.deepEqual(Array.from(top, item => item.label), [
-    '和球球聊聊', '来定制球球', '便签与待办', '番茄钟', '快捷面板', '快捷键设置…', '球球与互动', 'Codex 与 API',
+    '和球球聊聊', '来定制球球', '便签与待办', '番茄钟', '快捷键设置…', '球球与互动', 'Codex 与 API',
     '贴边与显示', '球球尺寸', '界面配色', '常规设置', '关于球球', '检查更新', '退出球球'
   ]);
   const group = label => top.find(item => item.label === label).submenu.filter(item => item.type !== 'separator');

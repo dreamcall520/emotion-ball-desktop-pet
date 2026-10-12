@@ -56,6 +56,10 @@ function layoutShortcuts({ petBounds: pet, workArea: area, shape = 'floating', s
       const bounds = { x, y, width: Math.max(...cards.map(card => card.x + cardSize)) + PAD - x,
         height: Math.max(...cards.map(card => card.y + cardSize)) + PAD - y };
       if (bounds.x < area.x || bounds.y < area.y || bounds.x + bounds.width > area.x + area.width || bounds.y + bounds.height > area.y + area.height) continue;
+      // Keep the transparent animation path to the pet inside the native canvas.
+      const right = Math.max(bounds.x + bounds.width, pet.x + pet.width), bottom = Math.max(bounds.y + bounds.height, pet.y + pet.height);
+      bounds.x = Math.min(bounds.x, pet.x); bounds.y = Math.min(bounds.y, pet.y);
+      bounds.width = right - bounds.x; bounds.height = bottom - bounds.y;
       return { shape: 'floating', direction, bounds, cardSize,
         items: cards.map(card => ({ ...card, x: card.x - bounds.x, y: card.y - bounds.y })) };
     }
@@ -65,8 +69,8 @@ function layoutShortcuts({ petBounds: pet, workArea: area, shape = 'floating', s
   const inset = Math.min(8, area.width / 4, area.height / 4);
   const candidates = directions.map(direction => {
     const horizontal = direction === 'above' || direction === 'below';
-    const width = Math.max(1, Math.min(416, horizontal ? area.width - inset * 2 : room[direction] - GAP - inset));
-    const height = Math.max(1, Math.min(404, horizontal ? room[direction] - GAP - inset : area.height - inset * 2));
+    const width = Math.max(1, Math.min(320, horizontal ? area.width - inset * 2 : room[direction] - GAP - inset));
+    const height = Math.max(1, Math.min(326, horizontal ? room[direction] - GAP - inset : area.height - inset * 2));
     const cx = pet.x + pet.width / 2, cy = pet.y + pet.height / 2;
     return { direction, bounds: { x: Math.round(horizontal ? clamp(cx - width / 2, area.x + inset, area.x + area.width - inset - width)
       : direction === 'right' ? pet.x + pet.width + GAP : pet.x - GAP - width),
@@ -78,7 +82,7 @@ function layoutShortcuts({ petBounds: pet, workArea: area, shape = 'floating', s
   const placed = candidates[0];
   if (!placed) throw new RangeError('Work area has no space beside the pet for shortcuts');
   return { shape: 'list', ...placed, cardSize: 52,
-    items: IDS.slice(0, 5).map((id, index) => ({ id, x: 8, y: 64 + index * 56, width: Math.max(1, placed.bounds.width - 16), height: 52 })) };
+    items: IDS.slice(0, 5).map((id, index) => ({ id, x: 15, y: 55 + index * 45, width: Math.max(1, placed.bounds.width - 30), height: 44 })) };
 }
 
 module.exports = { layoutShortcuts };

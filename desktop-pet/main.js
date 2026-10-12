@@ -210,9 +210,13 @@ function openShortcuts(showSettings = false) {
   if (screenLocked || isQuitting) return;
   if (!petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) restorePet();
   // ponytail: share the pet-side space; add obstacle layout if both panels must stay open.
-  quotaGuard?.close();
+  // Motion cleanup can synchronously refresh quota. Finish it while the guard
+  // still suppresses the card, then cancel the card's requested visibility
+  // before guard.close() repositions it and before shortcuts acquire their pin.
   stopMotion();
-  shortcutWindow?.open({ settings: showSettings });
+  quotaLabel?.hide();
+  quotaGuard?.close();
+  if (!shortcutWindow?.open({ settings: showSettings })) syncQuotaLabel(codexCompanion?.getSnapshot());
 }
 
 function openShortcutAction(id) {
@@ -222,7 +226,11 @@ function openShortcutAction(id) {
   shortcutWindow?.close();
   if (id === 'chat') openChat();
   else if (id === 'custom') openCustomization();
-  else if (id === 'note' || id === 'todo') notesCompanion?.openPanel({ tab: id });
+  else if (id === 'note' || id === 'todo') {
+    const field = id === 'note' ? 'noteBehavior' : 'todoBehavior';
+    const create = shortcutRegistrar?.getConfig()[field] === 'create';
+    notesCompanion?.openPanel({ tab: id, ...(create ? { create: true } : {}) });
+  }
   else if (id === 'pomodoro') openPomodoro();
 }
 
@@ -243,6 +251,9 @@ function initializeShortcuts() {
     },
     onAction: openShortcutAction,
     onPin: value => {
+      // The controller keeps its presentation pin through the closing animation.
+      // Apply the shared visibility rule before edge expansion can re-enter sync.
+      syncQuotaLabel(codexCompanion?.getSnapshot());
       if (value && edgeTuck?.getPresentation().mode === 'tucked' && petWindow && !petWindow.isDestroyed()) {
         const bounds = petWindow.getBounds();
         edgeTuck.sampleCursor({ x: bounds.x + bounds.width * (edgeTuck.getPresentation().side === 'left' ? .25 : .75), y: bounds.y + bounds.height / 2 });
@@ -255,6 +266,8 @@ function initializeShortcuts() {
     onLayout: () => pomodoroWindows?.sync(),
     onError: error => writeError('快捷面板', error) });
   app.on('browser-window-focus', (_event, focused) => {
+    // Native focus notifications may arrive after another window has taken focus.
+    if (!focused || focused.isDestroyed() || !focused.isFocused()) return;
     if (!shortcutWindow?.getState().focus && focused !== shortcutWindow?.getWindow() && focused !== petWindow) shortcutWindow?.close();
   });
 }
@@ -745,7 +758,7 @@ function tickEdgeNotice(force = false) {
   lastEdgeNoticeTick = now;
   const presentation = edgeTuck?.getPresentation();
   const visible = Boolean(!pomodoroQuiet && !isQuitting && !chatWindow?.isVisible() && codexPageReady && petWindow && !petWindow.isDestroyed() && petWindow.isVisible());
-  const quotaEnabled = settings?.codexEnabled === true && settings.codexQuotaAlwaysVisible === true;
+  const quotaEnabled = settings?.codexEnabled === true && settings.codexQuotaAlwaysVisible === true && !shortcutWindow?.isPresenting();
   edgeNotice?.tick({ presentation, visible, locked: screenLocked,
     bubblesEnabled: settings?.bubblesEnabled === true, quotaEnabled,
     appearance: settings?.codexQuotaAppearance,
@@ -1044,7 +1057,7 @@ function syncQuotaLabel(snapshot = null) {
       quotaSyncSnapshot = null;
       let visible = false;
       try {
-        visible = !isQuitting && settings?.codexEnabled === true && settings.codexQuotaAlwaysVisible === true &&
+        visible = !isQuitting && !shortcutWindow?.isPresenting() && settings?.codexEnabled === true && settings.codexQuotaAlwaysVisible === true &&
           !screenLocked && !chatWindow?.isVisible() && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
       } catch (error) {
         reportQuotaError('额度标签状态', error);
@@ -1187,7 +1200,7 @@ function fromQuotaLabel(event) {
 }
 
 function canShowQuotaGuard() {
-  return Boolean(!isQuitting && !screenLocked && settings?.codexEnabled === true &&
+  return Boolean(!isQuitting && !screenLocked && !shortcutWindow?.isPresenting() && settings?.codexEnabled === true &&
     settings.codexQuotaAlwaysVisible === true && settings.codexQuotaFunEnabled !== false &&
     !chatWindow?.isVisible() && !codexDetails?.isVisible() &&
     !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible());
@@ -1793,7 +1806,6 @@ function menuTemplate() {
       })) }
     ] },
     { id: 'pomodoro-open', label: '番茄钟', click: openPomodoro },
-    { id: 'shortcut-open', label: '快捷面板', click: () => openShortcuts() },
     { id: 'shortcut-settings', label: '快捷键设置…', click: () => openShortcuts(true) },
     { type: 'separator' },
     { label: '球球与互动', submenu: [
@@ -3036,7 +3048,7 @@ async function bootstrap() {
     getSize: () => quotaDisplayConfig().style === 'card' ? settings?.codexQuotaLabelSize : 'compact',
     getAppearance: () => settings?.codexQuotaAppearance,
     getGuardEntry: () => settings?.codexQuotaFunEnabled !== false,
-    getSuppressed: () => codexDetails?.isVisible() === true || quotaGuard?.isVisible() === true,
+    getSuppressed: () => shortcutWindow?.isPresenting() === true || codexDetails?.isVisible() === true || quotaGuard?.isVisible() === true,
     getPresentation: () => ({
       ...edgeTuck?.getPresentation(),
       shape: settings?.customization?.appearance?.shape
