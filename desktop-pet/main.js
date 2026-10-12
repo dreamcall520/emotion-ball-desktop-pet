@@ -1188,7 +1188,8 @@ function fromQuotaLabel(event) {
 
 function canShowQuotaGuard() {
   return Boolean(!isQuitting && !screenLocked && settings?.codexEnabled === true &&
-    settings.codexQuotaAlwaysVisible === true && !chatWindow?.isVisible() && !codexDetails?.isVisible() &&
+    settings.codexQuotaAlwaysVisible === true && settings.codexQuotaFunEnabled !== false &&
+    !chatWindow?.isVisible() && !codexDetails?.isVisible() &&
     !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible());
 }
 
@@ -1221,7 +1222,7 @@ function setCodexPreference(name, value) {
   if (!settings || settings.codexEnabled !== true || !codexCompanion || isQuitting) return false;
   const allowed = new Set([
     'codexTaskNameInAlerts', 'codexQuotaAlwaysVisible', 'codexQuotaPeriod', 'codexQuotaLabelSize',
-    'codexShowExtraCredits'
+    'codexShowExtraCredits', 'codexQuotaFunEnabled'
   ]);
   if (!allowed.has(name)) return false;
   const previous = settings[name];
@@ -1711,6 +1712,12 @@ function codexMenu() {
         click: item => { const enabled = item.checked; item.checked = settings.codexQuotaAlwaysVisible === true;
           setCodexPreference('codexQuotaAlwaysVisible', enabled); }
       },
+      {
+        id: 'codex-quota-fun', label: '额度趣味互动', type: 'checkbox',
+        enabled: settings.codexEnabled === true, checked: settings.codexQuotaFunEnabled !== false,
+        click: item => { const enabled = item.checked; item.checked = settings.codexQuotaFunEnabled !== false;
+          setCodexPreference('codexQuotaFunEnabled', enabled); }
+      },
       { id: 'codex-quota-settings', label: '经典额度卡设置', enabled: cardSettingsEnabled, submenu: [
         {
           id: 'codex-extra-credits', label: '显示额外点数', type: 'checkbox',
@@ -1936,7 +1943,8 @@ async function finishSmokeTest() {
         pet: petWindow, label: quotaLabel, guard: quotaGuard, prepare: initializeCodexCompanion,
         getCompanion: () => codexCompanion, getSettings: () => settings, sync: syncQuotaLabel,
         setPreference: setCodexPreference, setTopmost: setAlwaysOnTop, hidePet, restorePet, ipcMain, powerMonitor,
-        shortcuts: shortcutWindow, openShortcuts, screen, windows: pomodoroWindows, BrowserWindow
+        shortcuts: shortcutWindow, openShortcuts, screen, windows: pomodoroWindows, BrowserWindow,
+        getMenuTemplate: menuTemplate, readSettings: () => loadSettings(settingsFile)
       });
       app.exit(0); return;
     }
@@ -3027,7 +3035,7 @@ async function bootstrap() {
     getObstacle: quotaObstacleBounds,
     getSize: () => quotaDisplayConfig().style === 'card' ? settings?.codexQuotaLabelSize : 'compact',
     getAppearance: () => settings?.codexQuotaAppearance,
-    getGuardEntry: () => true,
+    getGuardEntry: () => settings?.codexQuotaFunEnabled !== false,
     getSuppressed: () => codexDetails?.isVisible() === true || quotaGuard?.isVisible() === true,
     getPresentation: () => ({
       ...edgeTuck?.getPresentation(),

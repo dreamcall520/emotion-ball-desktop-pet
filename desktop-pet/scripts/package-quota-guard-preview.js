@@ -38,7 +38,7 @@ async function packagePreview(root = path.resolve(__dirname, '../..')) {
   const outputs = await packager({
     ...buildPackagerOptions(root, makeIcon(root), findElectronZipDir()),
     dir: staging, name: NAME, appBundleId: 'local.xiaokun.emotionball.quotaguardpreview',
-    out: path.join(root, 'dist/quota-guard-preview')
+    out: path.join(root, 'dist/quota-guard-preview-r2')
   });
   if (!outputs.length) throw new Error('未生成额度守护候选包');
   const appPath = path.join(outputs[0], `${NAME}.app`);

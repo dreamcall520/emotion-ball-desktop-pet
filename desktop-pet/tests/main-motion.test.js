@@ -1206,7 +1206,7 @@ test('所有 Codex 设置只保留一个顶层入口并完整归入子菜单', a
   assert.equal(JSON.stringify(menu.filter(item => String(item.id || '').startsWith('codex-')).map(item => item.id)),
     JSON.stringify(['codex-menu']));
   assert.equal(JSON.stringify(group.submenu.filter(item => item.id).map(item => item.id)), JSON.stringify([
-    'codex-enabled', 'codex-task-names', 'codex-quota-visible', 'codex-quota-settings', 'openai-api-menu', 'codex-status'
+    'codex-enabled', 'codex-task-names', 'codex-quota-visible', 'codex-quota-fun', 'codex-quota-settings', 'openai-api-menu', 'codex-status'
   ]));
   assert.equal(group.submenu.find(item => item.id === 'codex-enabled').label, '启用 Codex 联动');
   assert.equal(group.submenu[1].type, 'separator', '总开关与依赖设置分隔');
@@ -1299,6 +1299,60 @@ test('守护战打开与刷新沿用当前额度样式的周期，不被旧卡�
   }
 });
 
+test('额度趣味开关默认勾选，菜单保存后启动保持关闭，保存失败保留原值', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  const item = menuItem(f, 'codex-quota-fun');
+  assert.equal(item.label, '额度趣味互动');
+  assert.equal(item.type, 'checkbox');
+  assert.equal(item.checked, true);
+  item.click({ checked: false });
+  assert.equal(f.saved.at(-1).codexQuotaFunEnabled, false);
+  assert.equal(menuItem(f, 'codex-quota-fun').checked, false);
+  assert.equal(f.call('canShowQuotaGuard()'), false);
+  const restarted = await fixture({ loadedSettings: f.saved.at(-1) });
+  assert.equal(menuItem(restarted, 'codex-quota-fun').checked, false);
+  menuItem(restarted, 'codex-quota-fun').click({ checked: true });
+  assert.equal(restarted.saved.at(-1).codexQuotaFunEnabled, true);
+  const failed = await fixture({ codexEnabled: true, saveError: Error('QUOTA_FUN_WRITE_FAILURE') });
+  menuItem(failed, 'codex-quota-fun').click({ checked: false });
+  assert.equal(menuItem(failed, 'codex-quota-fun').checked, true);
+});
+
+test('经典卡及五种新样式都能直接切换趣味互动，保留数字显隐、周期及经典专属禁用', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true, codexQuotaPeriod: 'weekly' });
+  f.connections[0].callbacks.onQuota({ updatedAt: 1800000000000, windows: [
+    { id: 'codex:primary', label: 'Codex', windowMinutes: 300, remaining: 70, resetsAt: 1800003600000 },
+    { id: 'codex:secondary', label: 'Codex', windowMinutes: 10080, remaining: 90, resetsAt: 1800604800000 }
+  ] });
+  for (const style of ['card', 'ring', 'duo', 'split', 'stages', 'pool']) for (const showNumbers of [false, true]) {
+    f.call(`settings.quotaDisplay = QuotaDisplay.normalize({style:'${style}', period:'weekly', showNumbers:${showNumbers}}); syncQuotaLabel(); refreshTrayMenu()`);
+    const group = menuItem(f, 'codex-menu');
+    const fun = group.submenu.find(item => item.id === 'codex-quota-fun');
+    assert.equal(fun?.enabled, true, `${style} 趣味开关不依赖经典卡父菜单`);
+    const before = f.call('JSON.stringify(quotaLabelModel())');
+    const visible = style === 'card' || showNumbers;
+    fun.click({ checked: false });
+    assert.equal(f.saved.at(-1).codexQuotaFunEnabled, false);
+    assert.equal(f.quotaLabel.options.getGuardEntry(), false);
+    assert.equal(f.call('canShowQuotaGuard()'), false);
+    assert.equal(f.call('openQuotaGuard()'), false, '关闭后不能通过旧入口打开游戏');
+    assert.equal(f.quotaLabel.visible, visible, `${style} 保留原数字显隐`);
+    assert.equal(f.call('JSON.stringify(quotaLabelModel())'), before, '趣味开关不改当前周期和额度模型');
+    assert.equal(f.call('settings.quotaDisplay.style'), style);
+    assert.equal(f.call('settings.quotaDisplay.showNumbers'), showNumbers);
+    assert.equal(f.quotaLabel.options.getSize(), style === 'card' ? 'standard' : 'compact');
+    for (const id of ['codex-quota-settings', 'codex-extra-credits', 'codex-quota-period', 'codex-quota-label-size']) {
+      assert.equal(menuItem(f, id).enabled, style === 'card', `${id} 仍仅用于经典卡`);
+    }
+    menuItem(f, 'codex-quota-fun').click({ checked: true });
+    assert.equal(f.saved.at(-1).codexQuotaFunEnabled, true);
+    assert.equal(f.quotaLabel.options.getGuardEntry(), true);
+    assert.equal(f.quotaLabel.visible, visible);
+    assert.equal(f.call('quotaGuard.getWindow()'), null, '恢复趣味开关不自动创建游戏');
+    assert.equal(f.call('JSON.stringify(quotaLabelModel())'), before);
+  }
+});
+
 test('原生 smoke 的受控闭包可精确恢复尺寸与空坐标设置且不移动窗口', async () => {
   const f = await fixture();
   const before = f.pet.getBounds();
@@ -1370,7 +1424,7 @@ test('Codex 额度菜单只在总联动开启时可操作，周期为互斥单�
   assert.equal(findMenuItem(offMenu, 'codex-quota-period').enabled, false);
   assert.equal(off.call("setCodexPreference('codexQuotaAlwaysVisible', true)"), false);
   assert.equal(off.saved.length, 0);
-  for (const id of ['codex-task-names', 'codex-quota-visible', 'codex-quota-settings', 'codex-extra-credits', 'codex-quota-period', 'codex-quota-label-size']) {
+  for (const id of ['codex-task-names', 'codex-quota-visible', 'codex-quota-fun', 'codex-quota-settings', 'codex-extra-credits', 'codex-quota-period', 'codex-quota-label-size']) {
     assert.equal(menuItem(off, id).enabled, false, id + '依赖总联动');
   }
   for (const id of ['openai-api-menu', 'openai-api-usage', 'openai-api-visible']) {
@@ -1378,6 +1432,7 @@ test('Codex 额度菜单只在总联动开启时可操作，周期为互斥单�
   }
   assert.equal(off.call("setCodexTaskNameInAlerts(true)"), false);
   assert.equal(off.call("setCodexPreference('codexShowExtraCredits', false)"), false);
+  assert.equal(off.call("setCodexPreference('codexQuotaFunEnabled', false)"), false);
   assert.equal(off.saved.length, 0, 'disabled菜单调用仍受主进程保护');
 
   const f = await fixture({ codexEnabled: true, codexQuotaPeriod: 'weekly' });

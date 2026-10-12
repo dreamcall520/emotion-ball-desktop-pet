@@ -25,6 +25,7 @@ const DEFAULTS = Object.freeze({
   codexTaskNameInAlerts: true,
   codexQuotaAlwaysVisible: true,
   codexShowExtraCredits: true,
+  codexQuotaFunEnabled: true,
   openaiApiAlwaysVisible: false,
   autoUpdateCheck: true,
   lastUpdateNotifiedVersion: '',
@@ -97,6 +98,8 @@ function normalizeSettings(raw = {}) {
         : DEFAULTS.codexQuotaAlwaysVisible,
     codexShowExtraCredits: typeof raw.codexShowExtraCredits === 'boolean'
       ? raw.codexShowExtraCredits : DEFAULTS.codexShowExtraCredits,
+    codexQuotaFunEnabled: typeof raw.codexQuotaFunEnabled === 'boolean'
+      ? raw.codexQuotaFunEnabled : DEFAULTS.codexQuotaFunEnabled,
     openaiApiAlwaysVisible: typeof raw.openaiApiAlwaysVisible === 'boolean'
       ? raw.openaiApiAlwaysVisible : DEFAULTS.openaiApiAlwaysVisible,
     autoUpdateCheck: typeof raw.autoUpdateCheck === 'boolean' ? raw.autoUpdateCheck : DEFAULTS.autoUpdateCheck,
