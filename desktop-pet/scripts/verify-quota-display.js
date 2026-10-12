@@ -71,7 +71,17 @@ async function verifyQuotaDisplay({ pet, open, settingsFile, sendModel, about, s
     const label=showNumbers({state,items:[{label:'Codex',windowMinutes:300,remaining:0},{label:'Codex',windowMinutes:10080,remaining:38}],display:'numbers',numberPeriods:['fiveHour','weekly'],numberColors:saved.customization.appearance});
     await until(()=>label.webContents.executeJavaScript('document.querySelectorAll(".quota-reading-value").length===2'));
     assert.deepEqual(await label.webContents.executeJavaScript('[...document.querySelectorAll(".quota-reading-value")].map(n=>n.textContent)'),state==='ready'?['0%','38%']:['—','—']);
-    assert.equal(label.getBounds().height,32);
+    const geometry = await label.webContents.executeJavaScript(`(()=>{
+      const rect=id=>{const r=document.getElementById(id).getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};
+      return {card:rect('quota-label'),numbers:rect('quota-numbers'),guard:rect('quota-guard-entry'),
+        guardVisible:document.body.dataset.guardEntry==='true',width:innerWidth,height:innerHeight};
+    })()`);
+    assert.equal(label.getBounds().height,geometry.guardVisible?50:32);
+    assert.equal(geometry.card.height,28,'角色入口只扩大原生窗口，不放大数字卡本体');
+    for(const box of [geometry.card,geometry.numbers,...(geometry.guardVisible?[geometry.guard]:[])]) {
+      assert.ok(box.x>=0&&box.y>=0&&box.right<=geometry.width&&box.bottom<=geometry.height,JSON.stringify(geometry));
+    }
+    if(geometry.guardVisible)assert.ok(geometry.guard.x-geometry.card.right>=8,'数字卡与守护战入口保持独立间距');
     const material=await label.webContents.executeJavaScript(`(()=>{const s=getComputedStyle(document.getElementById('quota-label'));return {background:s.backgroundImage,border:s.borderTopWidth,filter:s.backdropFilter};})()`);
     assert.ok(material.background.includes('gradient')&&material.border==='1px'&&material.filter.includes('blur'),'数字复用原额度卡材质与边框');
     if(out&&state==='ready')await capture(label, 'desktop-numbers.png');
