@@ -253,6 +253,12 @@ async function verifyCustomizeUnified({ pet, editor, chatWindow, open, getWindow
     while (Date.now() < deadline) { const value = await read(); if (test(value)) return value; await wait(40); }
     assert.fail(label);
   };
+  const focusKeyboard = async () => {
+    require('electron').app.focus({ steal: true });
+    win.focus(); win.webContents.focus();
+    await poll(() => page('!document.hidden && document.hasFocus()'), Boolean, '选色器键盘验收需活动编辑窗口');
+    assert.equal(win.isFocused(), true, '原生编辑窗口保留键盘焦点');
+  };
   const ready = async () => {
     await poll(() => getWindow(), value => Boolean(value && !value.isDestroyed()), '定制窗口存在'); win = getWindow();
     await poll(() => page('window.__customizerReady === true && !document.querySelector("#save").disabled'), Boolean, '定制设置加载');
@@ -279,6 +285,7 @@ async function verifyCustomizeUnified({ pet, editor, chatWindow, open, getWindow
   };
   const capture = async name => { const file = path.join(output, `${name}.png`); await capturePaintedWindow({ win, artifactPath: file }); screenshots.push(file); };
   const verifyPicker = async appearance => {
+    win.show(); win.moveTop(); await focusKeyboard();
     const entrances = [];
     await chooseShape('aurora-cloud');
     await page("document.querySelector('#aurora-style-dimensional').click()");
@@ -308,6 +315,7 @@ async function verifyCustomizeUnified({ pet, editor, chatWindow, open, getWindow
         await setField(hexId, originalHex);
       }
       entrances.push({ id, title: label + '颜色', hexLinked: true });
+      await focusKeyboard();
       win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
       win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
       await poll(() => page(`document.querySelector('#color-picker').hidden && document.activeElement.id===${JSON.stringify(id)}`), Boolean, '每个选色入口Esc返回焦点');
@@ -360,6 +368,7 @@ async function verifyCustomizeUnified({ pet, editor, chatWindow, open, getWindow
     await poll(() => page("document.querySelector('#body-hex').value"), value => value === '#0000FF', '黑色拖动仍保留色相并向右上夹紧');
     pointer('mouseUp', sv.right + 14, sv.top - 8);
     await poll(() => page("document.querySelector('#color-sv').hasPointerCapture(1)"), value => !value, '拖动结束释放pointer capture');
+    await focusKeyboard();
     await page("document.querySelector('#color-sv').focus({preventScroll:true})");
     win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Left' });
     win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Left' });
@@ -367,7 +376,12 @@ async function verifyCustomizeUnified({ pet, editor, chatWindow, open, getWindow
     win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Down', modifiers: ['shift'] });
     await poll(() => page("document.querySelector('#color-sv').getAttribute('aria-valuetext')"),
       value => value === '饱和度 99%，明度 90%', '二维色盘方向键与Shift调整有可读双值');
-    const keyboardSv = await page("({hex:document.querySelector('#body-hex').value,focus:document.activeElement.id,outline:getComputedStyle(document.querySelector('#color-sv')).outlineStyle})");
+    const keyboardSv = { nativeFocused: win.isFocused(), ...await page("({hex:document.querySelector('#body-hex').value,focus:document.activeElement.id,outline:getComputedStyle(document.querySelector('#color-sv')).outlineStyle,hasFocus:document.hasFocus(),hidden:document.hidden,focusVisible:document.querySelector('#color-sv').matches(':focus-visible')})") };
+    if (!keyboardSv.nativeFocused || !keyboardSv.hasFocus || keyboardSv.hidden || keyboardSv.focus !== 'color-sv' || keyboardSv.outline !== 'solid') {
+      process.stderr.write('PET_CUSTOMIZE_KEYBOARD_FOCUS ' + JSON.stringify({ appearance, ...keyboardSv }) + '\n');
+    }
+    assert.equal(keyboardSv.nativeFocused, true, '二维键盘操作保留原生窗口焦点');
+    assert.equal(keyboardSv.hasFocus, true, '二维键盘操作保留文档焦点');
     assert.equal(keyboardSv.focus, 'color-sv'); assert.equal(keyboardSv.outline, 'solid', '二维键盘操作保留可见焦点');
     await setField('color-picker-hex', '#2A8B6F');
     assert.deepEqual(await page("['color-red','color-green','color-blue'].map(id=>document.getElementById(id).value)"), ['42','139','111'], 'HEX同步RGB');
@@ -382,6 +396,7 @@ async function verifyCustomizeUnified({ pet, editor, chatWindow, open, getWindow
     await pointerClick(win, '#color-picker-presets .swatch');
     assert.equal(await page("document.querySelector('#body-hex').value"), '#EEEBE4', '浮层复用当前字段推荐配色');
     await setField('color-hue', 120);
+    await focusKeyboard();
     await page("document.querySelector('#color-hue').focus()");
     win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Right' });
     win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Right' });
@@ -389,6 +404,7 @@ async function verifyCustomizeUnified({ pet, editor, chatWindow, open, getWindow
     await pointerClick(win, '#color-picker-title');
     assert.equal(await page("document.querySelector('#color-picker').hidden"), false, '浮层内非交互区点击保持打开');
     await capture(`customize-760-picker-${appearance}`);
+    await focusKeyboard();
     win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
     win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
     await poll(() => page("document.querySelector('#color-picker').hidden && document.activeElement.id==='body-color'"), Boolean, 'Esc关闭并还原选色按钮焦点');

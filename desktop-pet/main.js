@@ -2126,6 +2126,10 @@ async function finishSmokeTest() {
         }, screen, monitor: activityMonitor, setSize: setPetSize, dock: dockPet,
         restoreEdge: () => edgeTuck.restore(), getPresentation: () => edgeTuck.getPresentation()
       });
+      openCustomization();
+      await waitFor(() => editor.webContents.executeJavaScript(`window.__customizerReady === true &&
+        !document.hidden && Boolean(document.getElementById('preview-ball').dataset.renderedAppearance) &&
+        Boolean(document.querySelector('#preview-ball svg .eb-head'))`));
       if (process.env.PET_SMOKE_AURORA_SCREENSHOT) {
         await editor.webContents.executeJavaScript("document.querySelector('[data-shape=\"aurora-cloud\"]').click(); true");
         await waitFor(() => editor.webContents.executeJavaScript(`(() =>

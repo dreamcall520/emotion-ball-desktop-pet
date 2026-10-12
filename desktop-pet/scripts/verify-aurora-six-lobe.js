@@ -17,7 +17,20 @@ async function verifyAuroraSixLobe({ editor, pet, chatWindow, getSettings, readS
       timer = setTimeout(() => reject(new Error(`六瓣验收等待超时：${label}; loading=${editor.webContents.isLoading()}; visible=${editor.isVisible()}; crashed=${editor.webContents.isCrashed()}`)), 20000);
     })]); } finally { clearTimeout(timer); }
   };
-  const page = code => bounded(editor.webContents.executeJavaScript(code), code.slice(0, 100));
+  const rendererDiagnostic = (_event, details, message) => {
+    const value = typeof details === 'object' ? details.message : message;
+    if (String(value).startsWith('PET_SIX_LOBE_RENDERER_ERROR')) process.stderr.write(value + '\n');
+  };
+  editor.webContents.on('console-message', rendererDiagnostic);
+  const page = async code => {
+    try { return await bounded(editor.webContents.executeJavaScript(
+      `try { ${code} } catch (error) { console.error('PET_SIX_LOBE_RENDERER_ERROR ' + error.stack); throw error; }`
+    ), code.slice(0, 100)); }
+    catch (error) {
+      process.stderr.write(`PET_SIX_LOBE_SCRIPT_DIAGNOSTIC ${JSON.stringify({ code })}\n`);
+      throw error;
+    }
+  };
   const reloadEditor = () => bounded(editor.loadFile(path.join(__dirname, '../customize.html')), 'reload editor');
   const poll = async (read, label) => {
     const deadline = Date.now() + 10000;
@@ -26,6 +39,13 @@ async function verifyAuroraSixLobe({ editor, pet, chatWindow, getSettings, readS
       await wait(50);
     }
     assert.fail(label);
+  };
+  const showEditor = async () => {
+    editor.show(); editor.moveTop(); require('electron').app.focus({ steal: true });
+    editor.focus(); editor.webContents.focus();
+    await poll(() => page(`window.__customizerReady === true && !document.hidden && document.hasFocus() &&
+      Boolean(document.getElementById('preview-ball').dataset.renderedAppearance) &&
+      Boolean(document.querySelector('#preview-ball svg .eb-head'))`), '编辑器尚未恢复可见预览');
   };
   const ready = (target, contour, fields = {}) => `(() => {
     const target = document.querySelector(${JSON.stringify(target)});
@@ -64,12 +84,14 @@ async function verifyAuroraSixLobe({ editor, pet, chatWindow, getSettings, readS
     assert.ok(updates.every(value => JSON.stringify(value) === JSON.stringify(savedAppearance)), '未保存预览不能把其他外观广播给聊天');
     assert.equal(await chatWindow.getWindow().webContents.executeJavaScript("document.querySelector('#chat-avatar').dataset.shape"), savedAppearance.shape, '头像继续展示保存的形态');
     await chatWindow.getWindow().webContents.executeJavaScript('window.__qaAppearanceOff(); true');
+    await showEditor();
     assert.equal(await page(`window.petCustomizer.save({appearance:${JSON.stringify(legacy)}}, false)`), true);
     assert.equal(readSettings().customization.appearance.auroraContour, 'six-lobe', '旧配置保存必须归一为六瓣');
     process.stdout.write('PET_SIX_LOBE_IPC_SAVE_OK\n');
     await poll(() => pet.webContents.executeJavaScript(ready('#pet', 'six-lobe')), '桌面必须显示六瓣外观');
     // Reload verifies saved appearance and the four shape cards.
     await reloadEditor();
+    await showEditor();
     process.stdout.write('PET_SIX_LOBE_EDITOR_RELOADED_OK\n');
     await preview('six-lobe');
     if (process.env.PET_SMOKE_SIX_LOBE_SCREENSHOT) {
@@ -79,7 +101,7 @@ async function verifyAuroraSixLobe({ editor, pet, chatWindow, getSettings, readS
     }
     assert.equal(restore(before), true);
     await reloadEditor();
-    await poll(() => page('window.__customizerReady === true'), '定制页未就绪');
+    await showEditor();
     await select('six-lobe');
     process.stdout.write('PET_WEBSITE_FOUR_SHAPES_OK\n');
     assert.equal(await page(`(() => {
@@ -117,9 +139,10 @@ async function verifyAuroraSixLobe({ editor, pet, chatWindow, getSettings, readS
     {
       await page(`(() => {
         const prototype = window.rive.Rive.prototype;
+        window.__qaRive = null;
         window.__qaRiveInputs = prototype.stateMachineInputs;
         prototype.stateMachineInputs = function (...args) {
-          window.__qaRive = this;
+          if (this.canvas?.parentElement === document.getElementById('preview-ball')) window.__qaRive = this;
           return window.__qaRiveInputs.apply(this, args);
         };
         document.querySelector('[data-shape="blob"]').click();
@@ -127,15 +150,38 @@ async function verifyAuroraSixLobe({ editor, pet, chatWindow, getSettings, readS
       })()`);
       await poll(() => page("!document.querySelector('#preview-ball > .eb-rive-aurora')"), '经典预览未完成切换');
       await select('six-lobe');
-      await poll(() => page('Boolean(window.__qaRive)'), '未捕获幻彩状态机');
-      await page('window.rive.Rive.prototype.stateMachineInputs = window.__qaRiveInputs; true');
+      const currentRive = async () => {
+        try {
+          await showEditor();
+          await poll(() => page(`(() => {
+            const instance = window.__qaRive;
+            return !document.hidden && instance?.loaded && !instance.destroyed && instance.canvas?.isConnected &&
+              instance.canvas === document.querySelector('#preview-ball > .eb-rive-aurora.ready');
+          })()`), '当前可见幻彩状态机未就绪');
+        } catch (error) {
+          process.stderr.write('PET_SIX_LOBE_INSTANCE_DIAGNOSTIC ' + JSON.stringify(await page(`(() => {
+            const instance = window.__qaRive, canvas = instance?.canvas;
+            return { hidden: document.hidden, visibility: document.visibilityState,
+              loaded: instance?.loaded, destroyed: instance?.destroyed, connected: canvas?.isConnected,
+              parent: canvas?.parentElement?.id, className: canvas?.className,
+              current: canvas === document.querySelector('#preview-ball > .eb-rive-aurora.ready') };
+          })()`)) + '\n');
+          throw error;
+        }
+      };
+      try {
+      await currentRive();
+      const inputNames = await page("window.__qaRive.stateMachineInputs('Main_SM').map(input => input.name)");
+      assert.ok(['clickIndex', 'click', 'isHover'].every(name => inputNames.includes(name)), '幻彩状态机输入必须完整');
       for (const [event, expected] of [['pointerenter', true], ['pointerleave', false]]) {
+        await currentRive();
         assert.equal(await page(`(() => {
           document.getElementById('preview-ball').dispatchEvent(new PointerEvent('${event}'));
           return window.__qaRive.stateMachineInputs('Main_SM').find(input => input.name === 'isHover').value;
         })()`), expected);
       }
       for (let index = 0; index < 3; index++) {
+        await currentRive();
         assert.equal(await page(`(() => {
           document.getElementById('preview-ball').click();
           return window.__qaRive.stateMachineInputs('Main_SM').find(input => input.name === 'clickIndex').value;
@@ -147,6 +193,9 @@ async function verifyAuroraSixLobe({ editor, pet, chatWindow, getSettings, readS
           fs.writeFileSync(process.env.PET_SMOKE_SIX_LOBE_SCREENSHOT.replace(/\.png$/, `-click-${index}.png`), frame.toPNG());
         }
         await wait(2000);
+      }
+      } finally {
+        await page('window.rive.Rive.prototype.stateMachineInputs = window.__qaRiveInputs; true');
       }
       process.stdout.write('PET_WEBSITE_HOVER_THREE_CLICKS_OK\n');
     }
@@ -247,7 +296,8 @@ async function verifyAuroraSixLobe({ editor, pet, chatWindow, getSettings, readS
     monitor.start();
     assert.equal(restore(before), true, '六瓣专项结束后必须恢复原设置和启动外观');
     await reloadEditor();
-    await poll(() => page('window.__customizerReady === true'), '恢复后定制页未就绪');
+    await showEditor();
+    editor.webContents.removeListener('console-message', rendererDiagnostic);
   }
 }
 
