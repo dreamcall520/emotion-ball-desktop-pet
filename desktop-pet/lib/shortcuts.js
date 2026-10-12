@@ -2,7 +2,8 @@ const DIRECT_ACTIONS = Object.freeze(['chat', 'custom', 'note', 'todo', 'pomodor
 const SHORTCUT_ACTIONS = Object.freeze(['launcher', ...DIRECT_ACTIONS]);
 const DEFAULT_SHORTCUT_SETTINGS = Object.freeze({
   shape: 'floating', enabled: true, launcher: 'Ctrl+Alt+Q',
-  chat: '', custom: '', note: '', todo: '', pomodoro: ''
+  chat: '', custom: '', note: '', todo: '', pomodoro: '',
+  noteBehavior: 'panel', todoBehavior: 'panel'
 });
 const MODIFIERS = Object.freeze({ ctrl: 'Ctrl', alt: 'Alt', shift: 'Shift', meta: 'Meta' });
 const MODIFIER_ORDER = Object.freeze(['Ctrl', 'Alt', 'Shift', 'Meta']);
@@ -44,6 +45,11 @@ function validateShortcutSettings(raw) {
   const config = { shape: raw.shape, enabled: raw.enabled };
   if (!['floating', 'list'].includes(raw.shape)) errors.push(issue('shape', 'invalid_shape', '请选择悬浮按钮或列表。'));
   if (typeof raw.enabled !== 'boolean') errors.push(issue('enabled', 'invalid_enabled', '快捷入口开关必须为布尔值。'));
+  for (const field of ['noteBehavior', 'todoBehavior']) {
+    const value = Object.hasOwn(raw, field) ? raw[field] : DEFAULT_SHORTCUT_SETTINGS[field];
+    if (!['panel', 'create'].includes(value)) errors.push(issue(field, 'invalid_behavior', '请选择打开面板或直接新建。'));
+    else config[field] = value;
+  }
   const seen = new Map();
   for (const action of SHORTCUT_ACTIONS) {
     const value = action === 'launcher' || Object.hasOwn(raw, action) ? raw[action] : '';

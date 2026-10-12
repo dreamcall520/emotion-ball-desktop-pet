@@ -13,7 +13,7 @@ function renderer(save,mode='note'){
   const document={getElementById(id){if(!nodes.has(id))nodes.set(id,make());return nodes.get(id)},createElement:make,activeElement:null,documentElement:{dataset:{}},body:{dataset:{}},events:{},addEventListener(name,fn,capture){this.events[`${name}:${!!capture}`]=fn},querySelector(selector){return selector==='dialog[open]'?[...nodes.values()].find(n=>n.open):make()}};
   const clipboard=[];const bridge={save,async copyText(text){clipboard.push(text);return{ok:true}},async closeWindow(){return{ok:true}},async pinPanel(value){return{ok:true,pinned:value}},async load(){return {state:{schema:1,revision:0,notes:[],todos:[]},mode:'panel'}},onState(){},onReminder(){},onOpen(){},onBeforeClose(){}};
   const source=fs.readFileSync(path.join(__dirname,'../notes-renderer.js'),'utf8').replace('start();',
-    'window.check={commit,inputNote,flushNote,flushAll,copyNote,beforeClose,acceptState,start,showStorageError,cancelClose,openNoteEditor,openCategoryManager,openNewCategory,openDeleteCategory,openMoveCategory,submitQuick,openOrganize,generateOrganized,applyOrganized,closeOrganize,render,state:()=>state,draft:id=>drafts.get(id)};');
+    'window.check={commit,inputNote,flushNote,flushAll,copyNote,beforeClose,acceptState,start,showStorageError,cancelClose,openNoteEditor,openCategoryManager,openNewCategory,openDeleteCategory,openMoveCategory,submitQuick,handleOpen,openOrganize,generateOrganized,applyOrganized,closeOrganize,render,state:()=>state,draft:id=>drafts.get(id)};');
   const window={QiuModel:M,qiuNotes:bridge,addEventListener(){}};
   vm.runInNewContext(source,{window,document,location:{search:`?mode=${mode}&id=n1`},URLSearchParams,setTimeout:(fn,delay)=>{const id=++nextTimer;timers.set(id,{fn,delay});return id},clearTimeout:id=>timers.delete(id),setInterval:()=>1,clearInterval(){},confirm:()=>false,console});
   const n=M.newNote('标题','初始内容');n.id='n1';window.check.acceptState({schema:1,revision:0,notes:[n],todos:[]});
@@ -341,6 +341,49 @@ test('quick deadline and reminder save independently, reject past time and reset
 test('closing saves quick input including typing during an in-flight write, and failure keeps the text',async()=>{
   const pending=[];const r=renderer((next,revision)=>new Promise(resolve=>pending.push(()=>resolve({ok:true,state:{...next,revision:revision+1}}))),'panel');await r.start();r.nodes.get('notes-tab').onclick();const input=r.nodes.get('quick-title');input.value='关闭前第一条';const closing=r.beforeClose();await turn();input.value='保存时输入的最后一条';pending.shift()();await turn();pending.shift()();assert.equal(await closing,true);assert.deepEqual(Array.from(r.state().notes,n=>n.body),['关闭前第一条','保存时输入的最后一条']);assert.equal(input.value,'');
   const failed=renderer(async()=>({ok:false,message:'磁盘不可写'}),'panel');await failed.start();failed.nodes.get('quick-title').value='未保存的新待办';assert.equal(await failed.beforeClose(),false);assert.equal(failed.nodes.get('quick-title').value,'未保存的新待办');assert.equal(failed.nodes.get('save-guard').open,true);
+});
+
+test('external panel and create routes save quick input in its original kind before switching tabs',async()=>{
+  for(const from of ['note','todo'])for(const create of [false,true]){
+    const r=renderer(async(next,revision)=>({ok:true,state:{...next,revision:revision+1}}),'panel');await r.start();
+    r.nodes.get(from==='note'?'notes-tab':'todos-tab').onclick();
+    const to=from==='note'?'todo':'note',text=`${from}未提交内容`,input=r.nodes.get('quick-title');input.value=text;
+    await r.handleOpen({tab:to,create});
+    assert.equal(input.value,'');
+    assert.deepEqual(Array.from(r.state().notes,n=>n.body),from==='note'?[text]:[]);
+    assert.deepEqual(Array.from(r.state().todos,n=>n.title),from==='todo'?[text]:[]);
+    assert.equal(r.nodes.get(to==='note'?'notes-tab':'todos-tab').attributes['aria-selected'],'true');
+    if(create){assert.equal(r.nodes.get('editor').open,true);assert.equal(r.nodes.get('editor-title').textContent,to==='note'?'新建便签':'新建待办')}
+    else assert.equal(r.nodes.get('editor')?.open||false,false);
+  }
+});
+
+test('external create waits for saving and keeps input typed during the write in the original tab',async()=>{
+  const pending=[],r=renderer((next,revision)=>new Promise(resolve=>pending.push(()=>resolve({ok:true,state:{...next,revision:revision+1}}))),'panel');await r.start();
+  r.nodes.get('notes-tab').onclick();const input=r.nodes.get('quick-title');input.value='新建前第一条';
+  const opening=r.handleOpen({tab:'todo',create:true});await turn();
+  assert.equal(r.nodes.get('notes-tab').attributes['aria-selected'],'true');assert.equal(r.nodes.get('editor')?.open||false,false);
+  input.value='保存中继续输入';pending.shift()();await turn();
+  assert.equal(r.nodes.get('notes-tab').attributes['aria-selected'],'true');assert.equal(pending.length,1);
+  pending.shift()();await opening;
+  assert.deepEqual(Array.from(r.state().notes,n=>n.body),['新建前第一条','保存中继续输入']);assert.equal(r.state().todos.length,0);
+  assert.equal(r.nodes.get('editor-title').textContent,'新建待办');assert.equal(input.value,'');
+});
+
+test('failed save or active IME cancels external opening and retains the original tab and input',async()=>{
+  for(const composing of [false,true]){
+    let saves=0;const r=renderer(async()=>{saves++;return{ok:false,message:'磁盘不可写'}},'panel');await r.start();r.nodes.get('notes-tab').onclick();
+    const input=r.nodes.get('quick-title');input.value='仍在原便签页';if(composing)input.events.compositionstart();
+    assert.equal(await r.handleOpen({tab:'todo',create:true}),false);
+    assert.equal(input.value,'仍在原便签页');assert.equal(r.nodes.get('notes-tab').attributes['aria-selected'],'true');
+    assert.equal(r.nodes.get('editor')?.open||false,false);assert.equal(r.state().notes.length,0);assert.equal(r.state().todos.length,0);
+    assert.equal(saves,composing?0:1);assert.equal(r.nodes.get('storage-alert').hidden,false);
+    assert.match(r.nodes.get('storage-alert').children[0].textContent,composing?/输入法仍在确认文字/:/磁盘不可写/);
+    if(composing)input.events.compositionend();
+    r.bridge.save=async(next,revision)=>({ok:true,state:{...next,revision:revision+1}});
+    await r.handleOpen({tab:'todo',create:true});
+    assert.deepEqual(Array.from(r.state().notes,n=>n.body),['仍在原便签页']);assert.equal(r.state().todos.length,0);assert.equal(r.nodes.get('editor-title').textContent,'新建待办');
+  }
 });
 
 test('notes appearance initializes and broadcasts for panel, desktop note and reminder without saving',async()=>{

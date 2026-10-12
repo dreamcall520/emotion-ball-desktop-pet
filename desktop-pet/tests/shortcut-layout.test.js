@@ -13,9 +13,12 @@ function checkLayout(layout, pet, area) {
   if (layout.shape === 'list') {
     assert.equal(overlap(bounds, pet), false);
     assert.equal(layout.items.length, 5);
+    assert.ok(bounds.width <= 320 && bounds.height <= 326, 'list stays within the compact window size');
+    assert.ok(layout.items.every(item => item.height === 44), 'list retains readable 44 DIP rows');
     return;
   }
   assert.equal(layout.items.length, 6);
+  assert.ok(pet.x >= bounds.x && pet.y >= bounds.y && pet.x + pet.width <= bounds.x + bounds.width && pet.y + pet.height <= bounds.y + bounds.height, 'native canvas includes the expansion path to the pet');
   assert.ok(layout.cardSize >= 52);
   const cards = globalCards(layout);
   for (const [index, card] of cards.entries()) {
@@ -86,4 +89,15 @@ test('工作区太小放不下完整弧形时退为可滚动列表，非法坐�
   checkLayout(layout, pet, area);
   assert.throws(() => layoutShortcuts({ petBounds: { ...pet, x: NaN }, workArea: area }), TypeError);
   assert.throws(() => layoutShortcuts({ petBounds: pet, workArea: { ...area, width: 0 } }), TypeError);
+});
+
+
+test('普通工作区列表采用320×326紧凑窗，五行坐标与44px行高一致', () => {
+  const area = { x: -1440, y: 24, width: 1440, height: 876 };
+  const pet = { x: -760, y: 400, width: 80, height: 80 };
+  const layout = layoutShortcuts({ petBounds: pet, workArea: area, shape: 'list' });
+  checkLayout(layout, pet, area);
+  assert.deepEqual({ width: layout.bounds.width, height: layout.bounds.height }, { width: 320, height: 326 });
+  assert.deepEqual(layout.items.map(({ x, y, width, height }) => ({ x, y, width, height })),
+    Array.from({ length: 5 }, (_, index) => ({ x: 15, y: 55 + index * 45, width: 290, height: 44 })));
 });

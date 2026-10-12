@@ -114,7 +114,7 @@ function futureReminder(date,time){if(!date||!time||!M.validDate(date)||!/^\d{2}
 function updateQuickInput(){const input=$('quick-title');$('quick-save').disabled=quickSaving||!input.value.trim();input.style.height='22px';input.style.height=`${Math.max(22,Math.min(88,input.scrollHeight))}px`}
 async function flushQuick(){for(let pass=0;pass<3&&$('quick-title').value.trim();pass++)if(!await submitQuick(true))return false;return !quickComposing&&!$('quick-title').value.trim()}
 async function submitQuick(allowClosing=false){
-  if(quickSaving)return allowClosing?quickSavePromise:false;if(quickComposing){if(allowClosing)showStorageError('输入法仍在确认文字，请确认后再关闭；输入已保留。');return false}if(heldCloseToken!==null&&!allowClosing)return false;
+  if(quickSaving)return allowClosing?quickSavePromise:false;if(quickComposing){if(allowClosing)showStorageError('输入法仍在确认文字，请确认后再操作；输入已保留。');return false}if(heldCloseToken!==null&&!allowClosing)return false;
   const input=$('quick-title'),raw=input.value,text=raw.trim(),isNote=tab==='note',categoryId=assignedCategory(),targetName=categoryName(categoryId),dueDate=quickDue,reminderAt=quickReminder;
   if(!text)return true;if(Array.from(text).length>(isNote?20000:200)){notify(isNote?'便签内容最多 20,000 字，输入已保留':'待办标题最多 200 字，输入已保留');return false}
   if(!isNote&&(!M.validDate(dueDate)||reminderAt!==null&&reminderAt<=Date.now())){notify(reminderAt!==null&&reminderAt<=Date.now()?'提醒时间已过去，请重新设置；输入已保留':'请填写有效的截止日期；输入已保留');return false}
@@ -298,7 +298,11 @@ async function beforeClose(packet){
   }finally{closing=false;if(hold&&!allowed)cancelClose(token)}
 }
 async function hide(){if(!await beforeClose())return false;const result=await (mode==='panel'?api.hidePanel():api.closeWindow());if(result?.ok===false){notify(result.message||'窗口尚未关闭');return false}return true}
-async function handleOpen(value){if(value?.tab==='note'||value?.tab==='todo'){tab=value.tab;filter=tab==='note'?'all':'today';noteCategoryFilter=null;quickCategory=null;closeFilter()}query='';$('search').value='';if(mode==='panel')renderList();if(value?.create){if(tab==='note')await openNoteEditor();else await openTodo()}else if(value?.id){if(tab==='note')await openNote(value.id);else await openTodo(value.id)}}
+async function handleOpen(value){
+  // Save quick input using its original tab before an external route changes the kind.
+  if(mode==='panel'&&!await flushQuick())return false;
+  if(value?.tab==='note'||value?.tab==='todo'){tab=value.tab;filter=tab==='note'?'all':'today';noteCategoryFilter=null;quickCategory=null;closeFilter()}query='';$('search').value='';if(mode==='panel')renderList();if(value?.create){if(tab==='note')await openNoteEditor();else await openTodo()}else if(value?.id){if(tab==='note')await openNote(value.id);else await openTodo(value.id)}
+}
 function bindCategories(){
   const close=id=>()=>$(id).close();$('category-manager-close').onclick=$('category-manager-done').onclick=close('category-manager');$('category-manager').addEventListener('cancel',e=>{if(categoryRename){e.preventDefault();categoryRename=null;categoryMenu=null;renderCategoryManager()}});$('category-add').onclick=openNewCategory;
   $('new-category-cancel').onclick=$('new-category-close').onclick=cancelNewCategory;$('new-category').addEventListener('cancel',e=>{e.preventDefault();cancelNewCategory()});$('new-category-name').oninput=()=>$('new-category-error').textContent='';

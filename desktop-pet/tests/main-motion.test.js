@@ -229,6 +229,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   pet.webContents.emit('did-finish-load');
   return { pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
     notes, pomodoro, pomodoroWindows, nativeTheme, call: expression => vm.runInContext(expression, context),
+    pressShortcut(accelerator) { if (!shortcutsSuspended) shortcutCallbacks.get(accelerator)?.(); },
     invoke(channel, packet, sender = pet.webContents) {
       assert.ok(ipcHandlers.has(channel), `${channel} handler must be registered`);
       return Promise.resolve(ipcHandlers.get(channel)({ sender }, packet));
@@ -341,6 +342,31 @@ test('所有 Codex 详情打开与关闭均触发额度卡避让和恢复，不�
     assert.equal(f.quotaLabel.options.getSuppressed(), false);
     assert.equal(f.quotaLabel.moves, before + 2, `${action} 关闭时即时恢复`);
   }
+  f.app.emit('before-quit');
+});
+
+test('快捷按钮和全局绑定共用便签待办启动偏好，两种形态均保留番茄计时', async () => {
+  const f = await fixture();
+  f.call("shortcutWindow.action('note'); shortcutWindow.action('todo')");
+  assert.deepEqual(f.notes.opens.map(value => ({ ...value })), [{ tab: 'note' }, { tab: 'todo' }], '旧配置默认打开各自面板');
+  const timer = f.pomodoro.state = { status: 'focus', deadline: 1800001500000, quiet: true };
+  for (const shape of ['floating', 'list']) for (const noteBehavior of ['panel', 'create']) for (const todoBehavior of ['panel', 'create']) {
+    const next = { shape, noteBehavior, todoBehavior, note: 'Alt+N', todo: 'Alt+T' };
+    assert.equal(f.call(`shortcutRegistrar.apply({ ...shortcutRegistrar.getConfig(), ...${JSON.stringify(next)} }, () => {}).ok`), true);
+    f.notes.opens.length = 0;
+    f.call("shortcutWindow.action('note'); shortcutWindow.action('todo')");
+    f.pressShortcut('Alt+N'); f.pressShortcut('Alt+T');
+    const expected = [{ tab: 'note', ...(noteBehavior === 'create' ? { create: true } : {}) },
+      { tab: 'todo', ...(todoBehavior === 'create' ? { create: true } : {}) }];
+    assert.deepEqual(f.notes.opens.map(value => ({ ...value })), [...expected, ...expected], JSON.stringify(next));
+    assert.equal(f.pomodoro.state, timer);
+    assert.equal(f.pomodoroWindows.opens, 0);
+  }
+  f.powerMonitor.emit('lock-screen');
+  const count = f.notes.opens.length;
+  f.call("shortcutWindow.action('note'); shortcutWindow.action('todo')");
+  f.pressShortcut('Alt+N'); f.pressShortcut('Alt+T');
+  assert.equal(f.notes.opens.length, count, '锁屏仍阻止快捷打开');
   f.app.emit('before-quit');
 });
 

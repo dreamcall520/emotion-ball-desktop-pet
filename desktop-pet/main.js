@@ -218,7 +218,11 @@ function openShortcutAction(id) {
   shortcutWindow?.close();
   if (id === 'chat') openChat();
   else if (id === 'custom') openCustomization();
-  else if (id === 'note' || id === 'todo') notesCompanion?.openPanel({ tab: id });
+  else if (id === 'note' || id === 'todo') {
+    const field = id === 'note' ? 'noteBehavior' : 'todoBehavior';
+    const create = shortcutRegistrar?.getConfig()[field] === 'create';
+    notesCompanion?.openPanel({ tab: id, ...(create ? { create: true } : {}) });
+  }
   else if (id === 'pomodoro') openPomodoro();
 }
 

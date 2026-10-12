@@ -69,6 +69,55 @@ test('旧文件补齐快捷配置，无效历史值降级默认，保存无效�
   assert.equal(fs.existsSync(file + '.tmp'), false);
 });
 
+test('便签和待办启动方式独立保存，旧配置默认面板，非法枚举拒绝覆盖', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qiuqiu-shortcut-behavior-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'settings.json');
+  const legacy = { shape: 'list', enabled: true, launcher: 'Alt+Q', note: 'Alt+N' };
+  fs.writeFileSync(file, JSON.stringify({ shortcutSettings: legacy }));
+  assert.deepEqual(loadSettings(file).shortcutSettings, { ...defaults, ...legacy });
+  assert.deepEqual(validateShortcutSettings(legacy).config, { ...defaults, ...legacy });
+  for (const noteBehavior of ['panel', 'create']) for (const todoBehavior of ['panel', 'create']) {
+    const config = { ...defaults, noteBehavior, todoBehavior };
+    const saved = saveSettings(file, { shortcutSettings: config });
+    assert.deepEqual(saved.shortcutSettings, config);
+    assert.deepEqual(loadSettings(file).shortcutSettings, config);
+  }
+  const before = fs.readFileSync(file, 'utf8');
+  for (const field of ['noteBehavior', 'todoBehavior']) for (const value of ['new', 'Panel', '', null, undefined, true, {}, []]) {
+    const config = { ...defaults, [field]: value };
+    const invalid = validateShortcutSettings(config);
+    assert.equal(invalid.ok, false);
+    assert.equal(invalid.errors[0].field, field);
+    assert.equal(invalid.errors[0].code, 'invalid_behavior');
+    assert.throws(() => saveSettings(file, { shortcutSettings: config }), { code: 'INVALID_SHORTCUT_SETTINGS' });
+    assert.equal(fs.readFileSync(file, 'utf8'), before);
+    assert.deepEqual(normalizeShortcutSettings(config), defaults);
+  }
+});
+
+test('只改启动方式不重新注册全局键，持久化成功后才切换，失败保留旧行为', () => {
+  const globalShortcut = fakeGlobalShortcut(), fired = [];
+  const initial = { ...defaults, note: 'Alt+N', todo: 'Alt+T' };
+  const registrar = createShortcutRegistrar({ globalShortcut, config: initial,
+    onAction: id => fired.push([id, registrar.getConfig()[id + 'Behavior']]) });
+  registrar.start();
+  const count = globalShortcut.calls.length;
+  const next = { ...initial, noteBehavior: 'create' };
+  assert.equal(registrar.apply(next, candidate => {
+    assert.deepEqual(candidate, next);
+    globalShortcut.fire('Alt+N');
+  }).ok, true);
+  globalShortcut.fire('Alt+N'); globalShortcut.fire('Alt+T');
+  assert.deepEqual(fired, [['note', 'panel'], ['note', 'create'], ['todo', 'panel']]);
+  assert.equal(globalShortcut.calls.length, count);
+  assert.equal(registrar.apply({ ...next, noteBehavior: 'panel', todoBehavior: 'create' }, () => { throw new Error('disk failure'); }).ok, false);
+  assert.deepEqual(registrar.getConfig(), next);
+  assert.equal(globalShortcut.calls.length, count);
+  globalShortcut.fire('Alt+N'); globalShortcut.fire('Alt+T');
+  assert.deepEqual(fired.slice(-2), [['note', 'create'], ['todo', 'panel']]);
+});
+
 test('启动有占用时只降级对应快捷键，保留配置和其他可用直达', () => {
   const globalShortcut = fakeGlobalShortcut(), actions = [];
   globalShortcut.blocked.add(defaults.launcher);
