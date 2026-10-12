@@ -88,6 +88,8 @@ async function verifyChatUnified({ win, pet, getMenu, chat, poll }) {
   assert.equal(preferences.contextIsolation, true); assert.equal(preferences.nodeIntegration, false); assert.equal(preferences.sandbox, true);
   const select = id => { const item = getMenu().getMenuItemById(id); assert.ok(item?.enabled, id); item.click(item, pet, {}); };
   const setMode = mode => { const item = getMenu().getMenuItemById('color-accessible'); if (item.checked !== (mode === 'accessible')) item.click(item, pet, {}); };
+  select('ui-theme-green');
+  await poll(() => page('document.documentElement.dataset.uiTheme'), value => value === 'green', '聊天认可配色基准');
   for (const width of [360, 320]) for (const mode of ['standard', 'accessible']) for (const appearance of ['light', 'dark']) {
     select(`color-appearance-${appearance}`); setMode(mode);
     win.setContentSize(width, 480);
@@ -179,7 +181,9 @@ async function getSmokeRelease(url) {
   assert.equal(process.env.PET_SMOKE_TEST, '1');
   assert.equal(process.env.PET_SMOKE_CHAT_ONLY, '1');
   assert.equal(url, 'https://api.github.com/repos/dreamcall520/emotion-ball-desktop-pet/releases/latest');
-  return { tag_name: `v${nextVersion}`, draft: false, prerelease: false };
+  return { tag_name: `v${nextVersion}`, draft: false, prerelease: false,
+    assets: ['arm64', 'x64'].map(arch => ({ name: `Qiuqiu-${nextVersion}-macOS-${arch}.dmg`, state: 'uploaded', size: 123,
+      browser_download_url: `https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v${nextVersion}/Qiuqiu-${nextVersion}-macOS-${arch}.dmg` })) };
 }
 
 function createSmokeChatRpc({ onNotification }) {
