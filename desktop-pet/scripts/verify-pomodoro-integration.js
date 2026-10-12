@@ -209,8 +209,10 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
   })()`);
   try {
     const menu = getMenu(), index = menu.items.findIndex(item => item.id === 'pomodoro-open');
-    assert.ok(index > 0);
-    assert.equal(menu.items[index - 1].label, '便签与待办', '番茄钟紧跟便签与待办');
+    assert.ok(index > 1);
+    assert.equal(menu.items[index - 2].label, '便签与待办');
+    assert.equal(menu.items[index - 1].id, 'shortcut-settings', '快捷键设置位于番茄钟上方');
+    assert.equal(menu.items[index - 1].label, '快捷键设置');
     assert.equal(menu.items[index].label, '番茄钟');
     assert.equal(service.getSnapshot().face, 'analog', '新安装默认刻度表盘');
     assert.equal(service.getSnapshot().status, 'idle');
