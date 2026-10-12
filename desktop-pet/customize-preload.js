@@ -1,6 +1,12 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('petCustomizer', {
+  onVisibility: callback => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, visible) => callback(visible === true);
+    ipcRenderer.on('pet:customization-visible', listener);
+    return () => ipcRenderer.removeListener('pet:customization-visible', listener);
+  },
   onColorMode: callback => {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, value, appearance, theme) => callback(value === 'accessible' ? 'accessible' : 'standard',

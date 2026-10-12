@@ -43,6 +43,15 @@ test('定制preload只转发现有API与安全归一的主题消息，可取消�
   assert.equal(messages.length, 2);
   assert.equal(ipc.listenerCount('pet:color-mode'), 0);
   assert.doesNotThrow(() => bridge.onColorMode(null)());
+  const visibility = [];
+  const unsubscribeVisibility = bridge.onVisibility(value => visibility.push(value));
+  for (const value of [true, false, 'true', undefined]) ipc.emit('pet:customization-visible', {}, value);
+  assert.deepEqual(visibility, [true, false, false, false]);
+  unsubscribeVisibility();
+  ipc.emit('pet:customization-visible', {}, true);
+  assert.equal(visibility.length, 4);
+  assert.equal(ipc.listenerCount('pet:customization-visible'), 0);
+  assert.doesNotThrow(() => bridge.onVisibility(null)());
   const customization = { appearance: { shape: 'square' } };
   await bridge.load();
   await bridge.save(customization, false);

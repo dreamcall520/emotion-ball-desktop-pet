@@ -30,6 +30,8 @@
   let canSave = false;
   let canPreview = false;
   let disposed = false;
+  let nativeVisible = true;
+  let loadFailed = false;
   let appearancePreference = 'system';
   let appearancePresets = [];
   let selectedPresetId = null;
@@ -411,7 +413,7 @@
   setColorControlsEnabled(false);
 
   function syncPresetThumbnail(record) {
-    if (disposed || document.hidden || !record.visible) {
+    if (disposed || document.hidden || !nativeVisible || !record.visible) {
       record.controller?.destroy(); record.controller = null;
       return;
     }
@@ -592,7 +594,7 @@
 
   function renderBall() {
     frameId = 0;
-    if (disposed || document.hidden) return;
+    if (disposed || document.hidden || !nativeVisible) return;
     if (canPreview) bridge.preview?.(state.appearance);
     const target = $('preview-ball');
     codexPlayer?.destroy(); codexPlayer = null;
@@ -687,7 +689,7 @@
     delete $('preview-ball').dataset.renderedAppearance;
     if (frameId) cancelAnimationFrame(frameId);
     frameId = 0;
-    if (disposed || document.hidden) return;
+    if (disposed || document.hidden || !nativeVisible) return;
     frameId = requestAnimationFrame(() => {
       renderBall();
       $('stage').style.setProperty('--quota-preview-radius', (parseFloat($('preview-ball').style.width) / 2) + 'px');
@@ -869,12 +871,18 @@
     schedulePreview();
   }
   function updateVisibility() {
-    if (document.hidden) stopPreview();
+    if (document.hidden || !nativeVisible) stopPreview();
     else schedulePreview();
     for (const record of presetThumbnails.values()) syncPresetThumbnail(record);
   }
   motionPreference?.addEventListener('change', refreshMotion);
   document.addEventListener?.('visibilitychange', updateVisibility);
+  const unsubscribeVisibility = bridge.onVisibility?.(visible => {
+    nativeVisible = visible;
+    quotaEditor?.setWindowVisible(visible);
+    updateVisibility();
+    if (visible && loadFailed) void loadCustomization();
+  });
   window.addEventListener('pagehide', () => {
     disposed = true;
     quotaEditor?.destroy();
@@ -884,6 +892,7 @@
     clearTimeout(messageTimer);
     unsubscribeColorMode?.();
     unsubscribeSize?.();
+    unsubscribeVisibility?.();
     petReadFlight++;
     systemAppearance?.removeEventListener('change', applyTheme);
     motionPreference?.removeEventListener('change', refreshMotion);
@@ -1023,32 +1032,39 @@
   });
   setSource('ball'); void refreshPets();
 
-  bridge.load().then(value => {
-    if (disposed) return;
-    if (!value) throw new Error('customization unavailable');
-    if (value.codexPet) codexDescriptors.set(value.codexPet.id, value.codexPet);
-    for (const item of value.appearancePresets || []) if (item.codexPet) codexDescriptors.set(item.codexPet.id, item.codexPet);
-    appearancePresets = Array.isArray(value.appearancePresets) ? value.appearancePresets.map(item => ({ id: item.id, name: item.name, appearance: PetCustomization.normalizeAppearance(item.appearance) })) : [];
-    if (value?.customization) {
-      state = PetCustomization.normalizeCustomization(value.customization);
-      petSize = value.size || 'tiny';
-      $('pet-size').value = petSize;
-      startupAppearance = PetCustomization.normalizeAppearance(value.startupAppearance || state.appearance);
-      $('startup-default').checked = matchesStartup();
-    } else if (value) state = PetCustomization.normalizeCustomization(value);
-    quotaEditor?.load(value.quotaDisplay, value.quotaModel);
-    syncAppearance();
-    renderPresets();
-    canPreview = true;
-    canSave = true;
-    setColorControlsEnabled(true);
-    $('save').disabled = false;
-    $('startup-default').disabled = false;
-    window.__customizerReady = true;
-  }).catch(() => {
-    if (disposed) return;
-    syncAppearance();
-    announce('读取设置失败，请重新打开定制窗口');
-    window.__customizerReady = true;
-  });
+  function loadCustomization() {
+    loadFailed = false;
+    clearTimeout(messageTimer);
+    $('message').hidden = true;
+    return bridge.load().then(value => {
+      if (disposed) return;
+      if (!value) throw new Error('customization unavailable');
+      if (value.codexPet) codexDescriptors.set(value.codexPet.id, value.codexPet);
+      for (const item of value.appearancePresets || []) if (item.codexPet) codexDescriptors.set(item.codexPet.id, item.codexPet);
+      appearancePresets = Array.isArray(value.appearancePresets) ? value.appearancePresets.map(item => ({ id: item.id, name: item.name, appearance: PetCustomization.normalizeAppearance(item.appearance) })) : [];
+      if (value?.customization) {
+        state = PetCustomization.normalizeCustomization(value.customization);
+        petSize = value.size || 'tiny';
+        $('pet-size').value = petSize;
+        startupAppearance = PetCustomization.normalizeAppearance(value.startupAppearance || state.appearance);
+        $('startup-default').checked = matchesStartup();
+      } else if (value) state = PetCustomization.normalizeCustomization(value);
+      quotaEditor?.load(value.quotaDisplay, value.quotaModel);
+      syncAppearance();
+      renderPresets();
+      canPreview = true;
+      canSave = true;
+      setColorControlsEnabled(true);
+      $('save').disabled = false;
+      $('startup-default').disabled = false;
+      window.__customizerReady = true;
+    }).catch(() => {
+      if (disposed) return;
+      loadFailed = true;
+      syncAppearance();
+      announce('读取设置失败，请重新打开定制窗口');
+      window.__customizerReady = true;
+    });
+  }
+  void loadCustomization();
 })();

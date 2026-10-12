@@ -48,7 +48,7 @@ async function fixture(appearance, startupAppearance = appearance, options = {})
     change(matches) { this.matches = matches; this.listeners.get('change')?.(); }
   });
   const systemAppearance = media(options.dark === true), motion = media(options.reduced === true);
-  let colorModeListener = null;
+  let colorModeListener = null, visibilityListener = null, loadAttempts = 0;
   let frameId = 0;
   const document = {
     documentElement: { dataset: {} }, body: new Node('body'), hidden: false,
@@ -70,8 +70,12 @@ async function fixture(appearance, startupAppearance = appearance, options = {})
       observe(target) { this.targets.push(target); this.callback([{ target, isIntersecting: this.targets.length <= 4 }]); }
       disconnect() { this.disconnected = true; }
     }, petCustomizer: {
-    load: async () => options.loadFailure ? null : ({ customization: { appearance }, startupAppearance,
-      appearancePresets: presetRecords, size: options.size || 'tiny', codexPet: options.codexPet }),
+    load: async () => {
+      loadAttempts++;
+      const failed = typeof options.loadFailure === 'function' ? options.loadFailure(loadAttempts) : options.loadFailure;
+      return failed ? null : { customization: { appearance }, startupAppearance,
+        appearancePresets: presetRecords, size: options.size || 'tiny', codexPet: options.codexPet };
+    },
     save: async (state, startupChoice) => {
       saves.push(state); startupChoices.push(startupChoice);
       if (options.save) return options.save(state, startupChoice);
@@ -96,6 +100,7 @@ async function fixture(appearance, startupAppearance = appearance, options = {})
     },
     listCodexPets: async () => ({ ok: true, pets: options.pets || [] }),
     onColorMode: listener => { colorModeListener = listener; return () => { colorModeListener = null; }; },
+    onVisibility: listener => { visibilityListener = listener; return () => { visibilityListener = null; }; },
     preview: appearance => avatarPreviews.push({ ...appearance })
   }, addEventListener(name, listener) { windowEvents.set(name, listener); },
     matchMedia: query => query.includes('color-scheme') ? systemAppearance : motion };
@@ -142,6 +147,8 @@ async function fixture(appearance, startupAppearance = appearance, options = {})
     resize: () => windowEvents.get('resize')?.(),
     theme: (mode, appearance) => colorModeListener?.(mode, appearance),
     hide(hidden) { document.hidden = hidden; documentEvents.get('visibilitychange')?.(); },
+    nativeVisibility: visible => visibilityListener?.(visible),
+    loadAttempts: () => loadAttempts,
     close() { windowEvents.get('pagehide')?.(); },
     pendingFrames: () => frames.size,
     card: (shape, contour = shape === 'aurora-cloud' ? 'six-lobe' : 'original') => nodes.get('shape-options').children.find(node =>
@@ -359,6 +366,55 @@ test('真实桌面尺寸保留，减少动态及不可见页面停止预览，�
   f.close();
   assert.equal(f.get('preview-ball').children.length, 0);
   assert.ok(f.destroyed.length >= 3);
+});
+
+test('原生隐藏停止主预览与收藏，DOM仍可见时后续更新不能重新启动', async () => {
+  const f = await fixture({ shape: 'square' }, undefined, { presets: [{
+    id: '00000000-0000-4000-8000-000000000001', name: '收藏', appearance: { shape: 'blob' }
+  }] });
+  f.flushPreview();
+  assert.equal(f.get('preview-ball').children.length, 1);
+  assert.equal(f.thumbnailInstances.filter(instance => !instance.destroyed).length, 1);
+  const rendered = f.previews.length;
+  f.nativeVisibility(false);
+  assert.equal(f.get('preview-ball').children.length, 0);
+  assert.equal(f.thumbnailInstances.filter(instance => !instance.destroyed).length, 0);
+  assert.equal(f.pendingFrames(), 0);
+  f.resize(); f.motion.change(true); f.intersect(0, true);
+  f.get('aurora-transparency').value = '42';
+  f.get('aurora-transparency').dispatch('input');
+  f.flushPreview();
+  assert.equal(f.previews.length, rendered);
+  assert.equal(f.thumbnailInstances.filter(instance => !instance.destroyed).length, 0);
+  assert.equal(f.pendingFrames(), 0);
+  f.nativeVisibility(true); f.flushPreview();
+  assert.equal(f.get('preview-ball').children.length, 1);
+  assert.equal(f.previews.at(-1).auroraTransparency, 42);
+  assert.equal(f.thumbnailInstances.filter(instance => !instance.destroyed).length, 1);
+  f.close(); f.nativeVisibility(true); f.flushPreview();
+  assert.equal(f.get('preview-ball').children.length, 0);
+  assert.equal(f.pendingFrames(), 0);
+});
+
+test('首次读取失败后重新显现重试初始化，重复通知不重复读且成功后保留草稿', async () => {
+  const f = await fixture({ shape: 'square' }, undefined, { loadFailure: attempt => attempt === 1 });
+  assert.equal(f.get('save').disabled, true);
+  assert.equal(f.loadAttempts(), 1);
+  f.nativeVisibility(false);
+  assert.equal(f.loadAttempts(), 1, '隐藏期间不重试读取');
+  f.nativeVisibility(true); f.nativeVisibility(true);
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(f.loadAttempts(), 2, '重显事件和显式通知不能重入读设置');
+  assert.equal(f.get('save').disabled, false);
+  assert.equal(f.get('message').hidden, true, '重试成功不残留读取失败提示');
+  assert.equal(f.card('square').attributes['aria-pressed'], 'true');
+  f.get('aurora-transparency').value = '42'; f.get('aurora-transparency').dispatch('input');
+  f.nativeVisibility(false); f.nativeVisibility(true);
+  await Promise.resolve();
+  assert.equal(f.loadAttempts(), 2, '成功读入后普通重显不重新读取');
+  assert.equal(f.get('aurora-transparency').value, '42', '成功窗口的未保存草稿不被重置');
+  await f.get('save').dispatch('click');
+  assert.equal(f.saves.at(-1).appearance.auroraTransparency, 42);
 });
 
 test('保存失败与异常保留编辑值并允许重试，读取失败不开放保存', async () => {

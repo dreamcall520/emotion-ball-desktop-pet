@@ -567,12 +567,19 @@ function setAutoUpdateCheck(value) {
   refreshTrayMenu();
 }
 
+function syncCustomizationVisibility() {
+  const win = customizationWindow;
+  if (!win || win.isDestroyed()) return;
+  win.webContents.send('pet:customization-visible', !screenLocked && win.isVisible() && !win.isMinimized());
+}
+
 function openCustomization() {
   if (isQuitting || screenLocked) return;
   if (customizationWindow && !customizationWindow.isDestroyed()) {
     positionFunctionWindow(customizationWindow);
     customizationWindow.show();
     customizationWindow.focus();
+    syncCustomizationVisibility();
     return;
   }
   const win = new BrowserWindow({
@@ -590,6 +597,7 @@ function openCustomization() {
   const [contentWidth, contentHeight] = win.getContentSize();
   win.setMinimumSize(760 + outerWidth - contentWidth, 580 + outerHeight - contentHeight);
   customizationWindow = win;
+  for (const event of ['show', 'hide', 'minimize', 'restore']) win.on(event, syncCustomizationVisibility);
   positionFunctionWindow(win);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', event => event.preventDefault());
@@ -600,6 +608,7 @@ function openCustomization() {
   });
   win.once('ready-to-show', () => {
     if (!isQuitting && !win.isDestroyed() && !screenLocked) { positionFunctionWindow(win); win.show(); }
+    syncCustomizationVisibility();
   });
   void win.loadFile(path.join(__dirname, 'customize.html')).catch(error => writeError('定制面板', error));
 }
@@ -1968,7 +1977,7 @@ async function finishSmokeTest() {
     }
     if (process.env.PET_SMOKE_QUOTA_DISPLAY_ONLY === '1') {
       persistSettings();
-      await require('./scripts/verify-quota-display').verifyQuotaDisplay({ pet: petWindow, settingsFile,
+      await require('./scripts/verify-quota-display').verifyQuotaDisplay({ pet: petWindow, settingsFile, powerMonitor,
         open: () => { openCustomization(); return customizationWindow; }, about: openAbout,
         requestConsent: requestCodexConsent, getConsentWindow: () => codexConsentWindow,
         showNumbers: model => { quotaLabel.show(model); return quotaLabel.getWindow(); },
@@ -3110,7 +3119,10 @@ async function bootstrap() {
     codexConsentToken++;
     finishCodexConsent(false);
     notesCompanion?.pause();
-    if (customizationWindow && !customizationWindow.isDestroyed()) customizationWindow.hide();
+    if (customizationWindow && !customizationWindow.isDestroyed()) {
+      syncCustomizationVisibility();
+      customizationWindow.hide();
+    }
     if (apiUsageWindow && !apiUsageWindow.isDestroyed()) apiUsageWindow.hide();
     chatWindow?.hide();
     void chat?.stop();

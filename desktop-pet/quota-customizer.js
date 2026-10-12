@@ -9,7 +9,7 @@
     ];
     let config = QuotaDisplay.normalize(), current = {fiveHour:null,weekly:null}, currentModel = {state:'disconnected',items:[]};
     const demo = {fiveHour:74,weekly:38}, thumbs = [];
-    let source = 'demo', playing = false, lastTick = 0, timer = null, effect = null, disposed = false, shown = false, thumbFrame = 0;
+    let source = 'demo', playing = false, lastTick = 0, timer = null, effect = null, disposed = false, shown = false, windowVisible = true, thumbFrame = 0;
     const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const numbers = document.createElement('div'); numbers.className = 'quota-preview-numbers quota-preview-card';
     const card = document.createElement('div'); card.className = 'quota-preview-card';
@@ -42,7 +42,7 @@
       const periods = QuotaDisplay.periods(config, model);
       const preview = {...config,period:periods[0]||'fiveHour',
         ...(appearance.shape === 'codex-pet' && config.style === 'pool'?{style:'card'}:{})};
-      const visible = shown && !document.hidden;
+      const visible = shown && windowVisible && !document.hidden;
       effect ||= window.QuotaEffects?.create($('preview-ball'));
       effect?.update({config:preview,appearance,quotas:v,theme:stage.classList.contains('dark') !== (document.documentElement.dataset.theme === 'dark')?'dark':'light',reducedMotion:motion.matches,visible});
       numbers.hidden = !visible || preview.style === 'card' || !preview.showNumbers;
@@ -78,7 +78,7 @@
     }
     function freezeThumbnails() {
       thumbFrame = 0;
-      if (disposed || !shown || document.hidden) return;
+      if (disposed || !shown || !windowVisible || document.hidden) return;
       let pending = false;
       for (const thumb of thumbs) {
         if (thumb.readyFrames >= 2) continue;
@@ -89,7 +89,7 @@
       if (pending) thumbFrame = requestAnimationFrame(freezeThumbnails);
     }
     function renderThumbnails() {
-      if (!shown || document.hidden || disposed) return;
+      if (!shown || !windowVisible || document.hidden || disposed) return;
       const appearance = getAppearance(), descriptor = getCodexPet?.(), key = JSON.stringify([appearance,descriptor?.imageURL]);
       for (const [index,button] of [...$('quota-styles').children].entries()) {
         const art = button.querySelector('.quota-thumb-body');
@@ -123,16 +123,17 @@
     }
     function stop(){playing=false;clearInterval(timer);timer=null;}
     $('quota-consume').addEventListener('click',()=>{
-      if(playing)stop();else if(!motion.matches){playing=true;lastTick=performance.now();timer=setInterval(()=>{const now=performance.now(),dt=(now-lastTick)/1000;lastTick=now;for(const p of ['fiveHour','weekly'])if(demo[p]!==null)demo[p]=Math.max(0,demo[p]-dt*(p==='fiveHour'?4:1.4));refresh();if(Object.values(demo).every(v=>v===null||v===0)){stop();refresh();}},80);}refresh();
+      if(playing)stop();else if(shown&&windowVisible&&!document.hidden&&!motion.matches){playing=true;lastTick=performance.now();timer=setInterval(()=>{const now=performance.now(),dt=(now-lastTick)/1000;lastTick=now;for(const p of ['fiveHour','weekly'])if(demo[p]!==null)demo[p]=Math.max(0,demo[p]-dt*(p==='fiveHour'?4:1.4));refresh();if(Object.values(demo).every(v=>v===null||v===0)){stop();refresh();}},80);}refresh();
     });
     document.querySelectorAll('[data-quota-source]').forEach(b=>b.addEventListener('click',()=>{source=b.dataset.quotaSource;stop();document.querySelectorAll('[data-quota-source]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));refresh();}));
     const unsubscribe=bridge.onQuota?.(model=>{currentModel=model;current=QuotaDisplay.values(model);if(source==='current')refresh();});
     const reduce=()=>{if(motion.matches)stop();refresh();}; motion.addEventListener('change',reduce);
-    const visibility=()=>{if(document.hidden){stop();cancelAnimationFrame(thumbFrame);thumbFrame=0;thumbs.forEach(t=>t.avatar.setActive(false));}refresh();renderThumbnails();};document.addEventListener('visibilitychange',visibility);
+    const visibility=()=>{if(document.hidden||!windowVisible){stop();cancelAnimationFrame(thumbFrame);thumbFrame=0;thumbs.forEach(t=>t.avatar.setActive(false));}refresh();renderThumbnails();};document.addEventListener('visibilitychange',visibility);
     return {
       getConfig:()=>QuotaDisplay.normalize({...config,period:'both'}),
       load(value,model){config=QuotaDisplay.normalize(value);currentModel=model;current=QuotaDisplay.values(model);refresh();renderThumbnails();},
       refresh,
+      setWindowVisible(value){windowVisible=value;visibility();},
       appearanceChanged(){refresh();renderThumbnails();},
       show(value){shown=value;$('quota-demo-tools').hidden=!value;if(!value){stop();cancelAnimationFrame(thumbFrame);thumbFrame=0;thumbs.forEach(t=>t.avatar.setActive(false));}refresh();renderThumbnails();},
       destroy(){disposed=true;stop();cancelAnimationFrame(thumbFrame);unsubscribe?.();motion.removeEventListener('change',reduce);document.removeEventListener('visibilitychange',visibility);effect?.destroy();thumbs.forEach(t=>{t.effect?.destroy();t.avatar?.destroy();});}

@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { setTimeout: wait } = require('node:timers/promises');
 
-async function verifyQuotaDisplay({ pet, open, settingsFile, sendModel, about, showNumbers, previewSavedQuota, requestConsent, getConsentWindow }) {
+async function verifyQuotaDisplay({ pet, open, settingsFile, powerMonitor, sendModel, about, showNumbers, previewSavedQuota, requestConsent, getConsentWindow }) {
   const out = process.env.PET_QUOTA_VERIFY_OUTPUT;
   if (out) fs.mkdirSync(out, { recursive: true });
   const capture = async (win, name) => {
@@ -11,10 +11,24 @@ async function verifyQuotaDisplay({ pet, open, settingsFile, sendModel, about, s
     fs.writeFileSync(path.join(out, name), (await win.webContents.capturePage()).toPNG());
   };
   let editor = open(); const errors=[];
+  powerMonitor.emit('lock-screen');
   for(const win of [pet,editor])win.webContents.on('console-message',(_e,level,message)=>{if(level===3)errors.push(message);});
   const until = async probe => { for (let n=0;n<150;n++){if(await probe())return;await wait(50);}throw Error('额度设置运行检查等待超时'); };
   const js = code => editor.webContents.executeJavaScript(code);
   await until(()=>js('Boolean(window.__customizerReady)'));
+  const firstLoad = { locked: { visible: editor.isVisible(),
+    ...await js('({ready:window.__customizerReady,saveDisabled:document.getElementById("save").disabled,message:document.getElementById("message").textContent})') } };
+  assert.equal(firstLoad.locked.visible,false);
+  assert.equal(firstLoad.locked.saveDisabled,true,'首次加载时锁屏，未读取设置不能保存');
+  assert.match(firstLoad.locked.message,/读取设置失败/);
+  const originalEditor = editor;
+  powerMonitor.emit('unlock-screen'); editor=open();
+  await until(()=>editor.isVisible()&&js('!document.getElementById("save").disabled'));
+  firstLoad.reopened = { sameWindow: editor===originalEditor, visible: editor.isVisible(),
+    ...await js('({saveDisabled:document.getElementById("save").disabled,messageHidden:document.getElementById("message").hidden})') };
+  assert.equal(firstLoad.reopened.sameWindow,true);
+  assert.equal(firstLoad.reopened.messageHidden,true,'重新打开成功后清除读取失败提示');
+  if(out)fs.writeFileSync(path.join(out,'first-load-lock-recovery.json'),JSON.stringify(firstLoad,null,2));
   const before = JSON.parse(fs.readFileSync(settingsFile,'utf8'));
   assert.equal(before.uiTheme,'blue');
   assert.equal(await js('document.querySelectorAll("#quota-styles button").length'),6);
@@ -70,10 +84,51 @@ async function verifyQuotaDisplay({ pet, open, settingsFile, sendModel, about, s
   await js('document.getElementById("source-quota").click();true');
   assert.equal(await js('document.querySelector("button[data-style=duo]").getAttribute("aria-pressed")'),'true');
   assert.equal(await js('document.getElementById("quota-numbers").checked'),true);
+  await until(()=>editor.isVisible()&&js('!document.querySelector(".quota-preview-numbers").hidden'));
+  const visibilityChecks = [], nativeEvents = [];
+  for (const name of ['show','hide','minimize','restore']) editor.on(name, () => nativeEvents.push({
+    event: name, at: performance.now(), visible: editor.isVisible(), minimized: editor.isMinimized()
+  }));
+  const playback = async stage => {
+    const state = { stage, visible: editor.isVisible(), minimized: editor.isMinimized(), focused: editor.isFocused(),
+      ...await js('({hidden:document.hidden,button:document.getElementById("quota-consume").textContent,values:["fiveHour","weekly"].map(p=>document.getElementById("quota-output-"+p).textContent)})') };
+    visibilityChecks.push(state);
+    if(out)fs.writeFileSync(path.join(out,'native-visibility.json'),JSON.stringify({checks:visibilityChecks,nativeEvents},null,2));
+    return state;
+  };
+  editor.blur(); await until(()=>!editor.isFocused());
+  await js('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+  await until(()=>editor.isVisible()&&js('!document.hidden&&!document.querySelector(".quota-preview-numbers").hidden'));
   await js('document.getElementById("quota-consume").click();true');
-  editor.hide();await wait(200);
-  assert.equal(await js('document.getElementById("quota-consume").textContent'),'▷ 播放消耗');
-  editor.showInactive();await wait(120);
+  await until(()=>js('Number(document.getElementById("quota-demo-fiveHour").value)<74'));
+  const unfocused = await playback('unfocused-before-lock');
+  assert.equal(unfocused.focused,false,'锁屏前窗口已失焦');
+  assert.equal(unfocused.button,'Ⅱ 暂停消耗','已失焦窗口的演示正在运行，停止不能依赖新的 blur');
+  powerMonitor.emit('lock-screen'); await wait(200);
+  const locked = await playback('lock-200ms');
+  assert.equal(locked.visible,false,'实际锁屏入口隐藏定制窗口');
+  assert.equal(locked.button,'▷ 播放消耗','锁屏后停止演示，不依赖 DOM visibilitychange');
+  await wait(240);
+  assert.deepEqual((await playback('lock-stable')).values,locked.values,'隐藏后额度保持不变');
+  powerMonitor.emit('unlock-screen'); await wait(120);
+  assert.equal(editor.isVisible(),false,'解锁不自行弹出定制窗口');
+  editor=open(); await until(()=>editor.isVisible()&&js('!document.querySelector(".quota-preview-numbers").hidden'));
+  assert.equal((await playback('reopen')).button,'▷ 播放消耗','重新打开不自动播放');
+  await js('document.getElementById("quota-consume").click();true');
+  assert.equal((await playback('before-minimize')).button,'Ⅱ 暂停消耗');
+  editor.minimize(); await wait(200);
+  if (editor.isMinimized()) {
+    const minimized = await playback('minimize-200ms');
+    assert.equal(minimized.button,'▷ 播放消耗','实际最小化停止演示');
+    await wait(240);
+    assert.deepEqual((await playback('minimize-stable')).values,minimized.values);
+    editor.restore(); await until(()=>!editor.isMinimized()&&js('!document.querySelector(".quota-preview-numbers").hidden'));
+    assert.equal((await playback('restore')).button,'▷ 播放消耗','恢复窗口不自动播放');
+  } else {
+    visibilityChecks.push({stage:'minimize-unavailable',reason:'原生窗口未进入 minimized 状态'});
+    await js('const consume=document.getElementById("quota-consume");if(consume.textContent==="Ⅱ 暂停消耗")consume.click();true');
+  }
+  if(out)fs.writeFileSync(path.join(out,'native-visibility.json'),JSON.stringify({checks:visibilityChecks,nativeEvents},null,2));
   await js(`document.getElementById('source-ball').click();const n=document.getElementById('body-hex');n.value='#NOPE';n.dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('source-quota').click();document.querySelector('button[data-style="ring"]').click();document.getElementById('save').click();true`);
   await wait(100);assert.deepEqual(JSON.parse(fs.readFileSync(settingsFile,'utf8')).quotaDisplay,quotaConfig,'无效外观不能部分保存额度');
   await js(`document.getElementById('source-ball').click();document.getElementById('reset-appearance').click();document.getElementById('source-quota').click();true`);

@@ -83,6 +83,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     setMinimumSize(width, height) { this.minimumSize = [width, height]; }
     getPosition() { return [this.bounds.x, this.bounds.y]; }
     isDestroyed() { return this.destroyed; } isVisible() { return this.visible; }
+    isMinimized() { return this.minimized === true; }
     isFocused() { return this.focused === true; }
     setIgnoreMouseEvents(value) { this.ignoresMouseEvents = value; }
     setPosition(x, y, animate) { assert.equal(animate, false); Object.assign(this.bounds, { x, y }); this.emit('move'); }
@@ -312,6 +313,35 @@ test('定制、API 费用和关于窗口首次及复开均跟随当前球球，�
     if (open === 'openAbout') assert.deepEqual(win.getBounds(), { ...openedBounds, x: 100, y: 32 }, '可见关于窗口保留用户摆放位置');
     else assert.notDeepEqual(win.getBounds(), { ...openedBounds, x: 100, y: 32 }, '同屏再次打开也随球球重新定位');
   }
+});
+
+test('定制页原生显隐通知覆盖锁屏缺失 hide 事件、最小化及加载期间锁屏', async () => {
+  const f = await fixture();
+  f.call('openCustomization()');
+  const editor = f.call('customizationWindow');
+  const visible = () => editor.messages.filter(({ channel }) => channel === 'pet:customization-visible').at(-1)?.packet;
+  editor.emit('ready-to-show');
+  assert.equal(visible(), true);
+  editor.focused = false;
+  editor.hide = () => { editor.visible = false; }; // 原生可能不发 hide，锁屏仍须先通知停止。
+  f.powerMonitor.emit('lock-screen');
+  assert.equal(editor.isVisible(), false);
+  assert.equal(visible(), false);
+  f.powerMonitor.emit('unlock-screen');
+  assert.equal(editor.isVisible(), false, '解锁不自动重开定制页');
+  f.call('openCustomization()');
+  assert.equal(visible(), true);
+  editor.minimized = true; editor.emit('minimize');
+  assert.equal(visible(), false);
+  editor.minimized = false; editor.emit('restore');
+  assert.equal(visible(), true);
+  editor.close();
+  f.call('openCustomization()');
+  const loading = f.call('customizationWindow');
+  f.powerMonitor.emit('lock-screen');
+  loading.emit('ready-to-show');
+  assert.equal(loading.isVisible(), false);
+  assert.equal(loading.messages.filter(({ channel }) => channel === 'pet:customization-visible').at(-1).packet, false);
 });
 
 test('再次打开已有应用会恢复隐藏或贴边的球球，锁屏和退出时保持隐藏', async () => {

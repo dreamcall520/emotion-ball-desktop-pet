@@ -31,15 +31,17 @@ test('额度预览跟随实际周期，零与未知分开，双样式保存选�
       return selector === '[data-quota-material]' ? materials : selector === '[data-quota-source]' ? sources
         : presets.filter(preset => selector === `[data-demo-period="${preset.dataset.demoPeriod}"]`);
     } };
-  let receive, effectInput, reduce, avatars = 0, avatarDestroys = 0, avatarDescriptor;
+  let receive, effectInput, reduce, avatars = 0, avatarDestroys = 0, avatarDescriptor, clock = 0, intervalId = 0;
+  const intervals = new Map(), avatarStates = [];
   let appearance = { shape: 'blob', bodyColor: '#EEEBE4' };
   const descriptor = { id: 'check-pet', imageURL: 'file:///check.png' };
   const motion = { matches: false, addEventListener(_name, callback) { reduce = callback; }, removeEventListener() {} };
   const window = { matchMedia: () => motion,
-    PetChatAvatar: { create: () => { avatars++; return { update(_appearance,_image,pet) { avatarDescriptor = pet; }, setActive() {}, destroy() { avatarDestroys++; } }; } },
+    PetChatAvatar: { create: () => { const index = avatars++; return { update(_appearance,_image,pet) { avatarDescriptor = pet; }, setActive(value) { avatarStates[index] = value; }, destroy() { avatarDestroys++; } }; } },
     QuotaEffects: { ...require('../quota-effects'), create: host => ({ update(input) { if (host === get('preview-ball')) effectInput = input; }, destroy() {} }) } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../quota-customizer.js'), 'utf8'), {
-    window, document, requestAnimationFrame: () => 1, cancelAnimationFrame() {}, QuotaDisplay: require('../lib/quota-display'), clearInterval() {}, setInterval() {}, performance: { now: () => 0 }
+    window, document, requestAnimationFrame: () => 1, cancelAnimationFrame() {}, QuotaDisplay: require('../lib/quota-display'),
+    clearInterval: id => intervals.delete(id), setInterval: callback => { intervals.set(++intervalId, callback); return intervalId; }, performance: { now: () => clock }
   });
   const ui = window.QuotaCustomizer.create({ bridge: { onQuota(callback) { receive = callback; return () => {}; } },
     getAppearance: () => appearance, getCodexPet: () => appearance.shape === 'codex-pet' ? descriptor : undefined });
@@ -81,6 +83,26 @@ test('额度预览跟随实际周期，零与未知分开，双样式保存选�
   assert.equal(get('quota-demo-note').textContent, '演示额度仅供预览，保存后应用样式');
   assert.equal(ids.has('quota-period'), false, '预览不再读取或注册周期下拉');
   assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '../customize.html'), 'utf8'), /id="quota-period(?:-row|-both)?"/);
+  get('quota-consume').click();
+  assert.equal(intervals.size, 1);
+  clock = 1000; [...intervals.values()].forEach(callback => callback());
+  const remaining = get('quota-output-weekly').textContent;
+  ui.setWindowVisible(false);
+  assert.equal(document.hidden, false, '原生隐藏信号独立于仍为 visible 的 DOM');
+  assert.equal(intervals.size, 0, '原生隐藏停止实际消耗计时器');
+  assert.equal(get('quota-consume').textContent, '▷ 播放消耗');
+  assert.equal(effectInput.visible, false);
+  assert.equal(avatarStates.every(active => !active), true);
+  ui.appearanceChanged(); ui.show(true); get('quota-consume').click();
+  assert.equal(intervals.size, 0, '隐藏时后续外观更新、标签切换和程序点击不能重新启动');
+  assert.equal(effectInput.visible, false);
+  assert.equal(avatarStates.every(active => !active), true);
+  clock = 3000; [...intervals.values()].forEach(callback => callback());
+  assert.equal(get('quota-output-weekly').textContent, remaining);
+  ui.setWindowVisible(true);
+  assert.equal(effectInput.visible, true);
+  assert.equal(intervals.size, 0, '重显不自动恢复演示播放');
+  assert.equal(get('quota-consume').textContent, '▷ 播放消耗');
   motion.matches = true; reduce();
   assert.equal(get('quota-consume').disabled, true);
   assert.equal(get('quota-demo-note').textContent, '减少动态已开启，可拖动滑杆预览额度');
