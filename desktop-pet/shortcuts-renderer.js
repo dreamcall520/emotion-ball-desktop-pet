@@ -13,6 +13,7 @@
   const floatingActions = [...actions, { id: 'settings', name: '设置', icon: 'settings' }];
   const defaults = { shape: 'floating', enabled: true, launcher: 'Ctrl+Alt+Q', chat: '', custom: '', note: '', todo: '', pomodoro: '', noteBehavior: 'panel', todoBehavior: 'panel' };
   const startBehaviors = { note: 'noteBehavior', todo: 'todoBehavior' };
+  const recordHint = '快捷键可留空。便签、待办的启动方式同时用于面板按钮。';
   const bindingIds = ['launcher', ...actions.map(action => action.id)];
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
   const symbols = isMac ? { Ctrl: '⌃', Alt: '⌥', Shift: '⇧', Meta: '⌘', Space: '空格' } : { Ctrl: 'Ctrl', Alt: 'Alt', Shift: 'Shift', Meta: 'Win', Space: '空格' };
@@ -82,10 +83,13 @@
 
   function stopRecording(restoreFocus = false) {
     const id = recording;
+    const wasFocused = document.activeElement?.dataset.record === id;
     setRecording(null);
     if (state?.view === 'settings') {
-      renderSettings();
-      if (restoreFocus && id) $('settings').querySelector(`[data-record="${id}"]`)?.focus({ preventScroll: true });
+      const control = $('settings').querySelector(`[data-record="${id}"]`)?.parentElement;
+      if (control) control.replaceChildren(...bindingControl(id).childNodes);
+      $('record-hint').textContent = recordHint;
+      if ((restoreFocus || wasFocused) && id) $('settings').querySelector(`[data-record="${id}"]`)?.focus({ preventScroll: true });
     }
   }
 
@@ -133,18 +137,12 @@
       name.className = 'direct-name';
       name.innerHTML = icon(action.icon);
       name.append(document.createTextNode(action.name));
+      row.append(name);
       const behaviorField = startBehaviors[action.id];
       if (behaviorField) {
-        row.classList.add('has-start-behavior');
-        const bindingRow = document.createElement('div');
-        bindingRow.className = 'direct-binding-row';
-        bindingRow.append(name, bindingControl(action.id));
-        const label = document.createElement('label');
-        label.className = 'start-behavior';
-        label.append(document.createTextNode('启动方式'));
-        label.title = '面板按钮和功能直达快捷键使用同一启动方式';
         const select = document.createElement('select');
         select.className = 'start-behavior-select';
+        select.title = '面板按钮和功能直达快捷键使用同一启动方式';
         select.dataset.startBehavior = behaviorField;
         select.setAttribute('aria-label', `${action.name}快捷启动方式`);
         for (const [value, text] of [['panel', '打开面板'], ['create', '直接新建']]) {
@@ -155,9 +153,9 @@
         }
         select.value = draft[behaviorField];
         select.disabled = busy;
-        label.append(select);
-        row.append(bindingRow, label);
-      } else row.append(name, bindingControl(action.id));
+        row.append(select);
+      }
+      row.append(bindingControl(action.id));
       $('direct-settings').append(row);
     }
     $('save').disabled = busy || (draft.enabled && !draft.launcher);
@@ -165,7 +163,7 @@
     $('cancel').disabled = busy;
     $('settings').querySelector('[data-close]').disabled = busy;
     $('save').textContent = busy ? '保存中…' : '保存';
-    $('record-hint').textContent = recording ? '按 ⌘ / ⌃ / ⌥ 与字母、数字或功能键组合。Esc 取消。' : '快捷键按习惯设置，可留空。便签、待办的启动方式也用于面板按钮。';
+    $('record-hint').textContent = recording ? '按 ⌘ / ⌃ / ⌥ 与字母、数字或功能键组合。Esc 取消。' : recordHint;
     if (focusedRecord) $('settings').querySelector(`[data-record="${focusedRecord}"]`)?.focus({ preventScroll: true });
     else if (focusedBehavior) $('settings').querySelector(`[data-start-behavior="${focusedBehavior}"]`)?.focus({ preventScroll: true });
   }

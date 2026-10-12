@@ -250,6 +250,11 @@ function initializeShortcuts() {
       // The controller keeps its presentation pin through the closing animation.
       // Apply the shared visibility rule before edge expansion can re-enter sync.
       syncQuotaLabel(codexCompanion?.getSnapshot());
+      if (value) {
+        dialogue?.dismiss();
+        hideBubble();
+        dismissCodexPresentation();
+      }
       if (value && edgeTuck?.getPresentation().mode === 'tucked' && petWindow && !petWindow.isDestroyed()) {
         const bounds = petWindow.getBounds();
         edgeTuck.sampleCursor({ x: bounds.x + bounds.width * (edgeTuck.getPresentation().side === 'left' ? .25 : .75), y: bounds.y + bounds.height / 2 });
@@ -412,7 +417,7 @@ async function showUpdateResult(result) {
 }
 
 function showUpdateBubble(result) {
-  if (pomodoroQuiet || isQuitting || screenLocked || chatWindow?.isVisible() || presentationSuppressed() ||
+  if (pomodoroQuiet || shortcutWindow?.isPresenting() || isQuitting || screenLocked || chatWindow?.isVisible() || presentationSuppressed() ||
     !petWindow || petWindow.isDestroyed() || !petWindow.isVisible() || dragState || hostMotion || bounceState) return false;
   const payload = dialogue?.offerUpdate(result.latestVersion, performance.now());
   return Boolean(payload && showBubble(payload));
@@ -674,7 +679,7 @@ function tickEdgeNotice(force = false) {
   if (!force && now - lastEdgeNoticeTick < 500) return;
   lastEdgeNoticeTick = now;
   const presentation = edgeTuck?.getPresentation();
-  const visible = Boolean(!pomodoroQuiet && !isQuitting && !chatWindow?.isVisible() && codexPageReady && petWindow && !petWindow.isDestroyed() && petWindow.isVisible());
+  const visible = Boolean(!pomodoroQuiet && !shortcutWindow?.isPresenting() && !isQuitting && !chatWindow?.isVisible() && codexPageReady && petWindow && !petWindow.isDestroyed() && petWindow.isVisible());
   const quotaEnabled = settings?.codexEnabled === true && settings.codexQuotaAlwaysVisible === true && !shortcutWindow?.isPresenting();
   edgeNotice?.tick({ presentation, visible, locked: screenLocked,
     bubblesEnabled: settings?.bubblesEnabled === true, quotaEnabled,
@@ -741,7 +746,7 @@ function hidePet() {
 }
 
 function codexHostAvailable() {
-  return !pomodoroQuiet && codexPageReady && !isQuitting && !screenLocked && !chatWindow?.isVisible() && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible() &&
+  return !pomodoroQuiet && !shortcutWindow?.isPresenting() && codexPageReady && !isQuitting && !screenLocked && !chatWindow?.isVisible() && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible() &&
     !dragState && !bounceState && !hostMotion && !dialogue?.hasBubble(performance.now());
 }
 
@@ -895,7 +900,7 @@ function bindBubbleVisibilityEvents() {
 }
 
 function showBubble(payload) {
-  if (!payload || pomodoroQuiet || presentationSuppressed() || chatWindow?.isVisible()) return false;
+  if (!payload || pomodoroQuiet || shortcutWindow?.isPresenting() || presentationSuppressed() || chatWindow?.isVisible()) return false;
   const shown = safelyInvokeWindow('气泡显示', () => bubble?.show(payload));
   if (shown) bindBubbleVisibilityEvents();
   repositionQuotaLabel();
@@ -1492,7 +1497,7 @@ function setCompanionSetting(name, enabled) {
 }
 
 function showDialogue(event) {
-  if (pomodoroQuiet || screenLocked || chatWindow?.isVisible() || presentationSuppressed() || !petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return null;
+  if (pomodoroQuiet || shortcutWindow?.isPresenting() || screenLocked || chatWindow?.isVisible() || presentationSuppressed() || !petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return null;
   const payload = dialogue.offer(event, performance.now());
   if (payload) dismissCodexPresentation();
   if (payload) showBubble(payload);
@@ -1688,8 +1693,8 @@ function menuTemplate() {
         click: item => { item.checked = (settings.notesDefaultTab === 'note' ? 'note' : 'todo') === value; setNotesDefaultTab(value); }
       })) }
     ] },
+    { id: 'shortcut-settings', label: '快捷键设置', click: () => openShortcuts(true) },
     { id: 'pomodoro-open', label: '番茄钟', click: openPomodoro },
-    { id: 'shortcut-settings', label: '快捷键设置…', click: () => openShortcuts(true) },
     { type: 'separator' },
     { label: '球球与互动', submenu: [
       { label: '随机表情', click: () => sendCommand('random') },
@@ -1813,6 +1818,7 @@ async function finishSmokeTest() {
     if (process.env.PET_SMOKE_SHORTCUT_ONLY === '1') {
       await require('./scripts/verify-shortcuts-integration').verifyShortcuts({
         pet: petWindow, controller: shortcutWindow, registrar: shortcutRegistrar,
+        bubble, dialogue, showDialogue, showBubble, showUpdateBubble,
         screen, BrowserWindow, globalShortcut, edgeTuck, powerMonitor, settingsFile,
         getMenu: () => Menu.buildFromTemplate(menuTemplate()), getSettings: () => settings,
         getWindows: () => ({ chat: chatWindow?.getWindow(), custom: customizationWindow,

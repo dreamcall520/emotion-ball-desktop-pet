@@ -393,9 +393,9 @@ test('快捷面板至收起动效结束隐藏额度与守护入口，刷新不�
   assert.equal(f.quotaLabel.visible, false);
   const menu = f.call('menuTemplate()'), pomodoroIndex = menu.findIndex(item => item.id === 'pomodoro-open');
   assert.equal(menu.some(item => item.id === 'shortcut-open'), false);
-  assert.equal(menu[pomodoroIndex + 1].id, 'shortcut-settings');
-  assert.equal(menu[pomodoroIndex + 1].label, '快捷键设置…');
-  menu[pomodoroIndex + 1].click();
+  assert.equal(menu[pomodoroIndex - 1].id, 'shortcut-settings');
+  assert.equal(menu[pomodoroIndex - 1].label, '快捷键设置');
+  menu[pomodoroIndex - 1].click();
   assert.equal(f.call('shortcutWindow.getState().view'), 'settings');
   f.call("setCodexPreference('codexQuotaAlwaysVisible', false); shortcutWindow.close()");
   t.mock.timers.tick(180);
@@ -466,6 +466,88 @@ test('迟到或已销毁窗口的 focus 通知不关闭快捷面板，真实其�
   assert.equal(f.call('shortcutWindow.isOpen()'), false, 'genuine focus on another App window must still close the panel');
   t.mock.timers.tick(180);
   assert.equal(quick.isVisible(), false);
+});
+
+test('快捷展开至收起结束隐藏旧对白并拦截新提示，不补播问候或占用冷却', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const view of ['floating', 'list', 'settings']) {
+    const f = await fixture({ codexEnabled: true });
+    t.after(() => f.app.emit('before-quit'));
+    const loadFile = f.windowClass.prototype.loadFile;
+    f.windowClass.prototype.loadFile = function (file) {
+      return file.endsWith('/shortcuts.html') ? Promise.resolve() : loadFile.call(this, file);
+    };
+    const generation = f.call('codexCompanion.getSnapshot().generation');
+    f.send('pet:codex-availability', { generation, available: true });
+    assert.ok(f.call("showDialogue('hello')"));
+    assert.equal(f.bubble.getWindow().isVisible(), true);
+    const shows = f.bubble.shows.length;
+    const directAt = f.call('dialogue._lastDirectAt'), bubbleAt = f.call('dialogue._lastBubbleAt');
+    assert.equal(f.call(`shortcutRegistrar.apply({ ...shortcutRegistrar.getConfig(), shape: '${view === 'settings' ? 'floating' : view}' }, () => true).ok`), true);
+    // Hover also opens through the controller directly, bypassing openShortcuts.
+    f.call(`shortcutWindow.open({ focus: false, settings: ${view === 'settings'} })`); await flush();
+    assert.equal(f.call('shortcutWindow.getState().view'), view);
+    assert.equal(f.bubble.getWindow().isVisible(), false, `${view}: opening dismisses an already visible bubble`);
+    assert.equal(f.call('dialogue.hasBubble(performance.now())'), false);
+    for (const event of ['hello', 'pet', 'play', 'thought', 'work']) assert.equal(f.call(`showDialogue('${event}')`), null);
+    f.send('pet:say', 'welcome');
+    assert.equal(f.call("showUpdateBubble({ latestVersion: '9.9.9' })"), false);
+    assert.equal(f.call("showBubble({ id: 'late', text: '迟到提示', actions: [], durationMs: 4000 })"), false);
+    assert.equal(f.call('canPresentCodex()'), false);
+    assert.equal(f.call('dialogue._lastDirectAt'), directAt);
+    assert.equal(f.call('dialogue._lastBubbleAt'), bubbleAt);
+    assert.equal(f.bubble.shows.length, shows);
+    assert.equal(f.pomodoroWindows.options.isSuppressed(), false, 'independent Pomodoro windows remain available');
+    assert.equal(f.pomodoro.options.canEncourage(), true, 'independent Pomodoro encouragement keeps its normal rule');
+    f.call('shortcutWindow.close()'); t.mock.timers.tick(179);
+    assert.equal(f.call("showDialogue('welcome')"), null, 'the closing animation remains quiet');
+    assert.equal(f.call("showBubble({ id: 'closing', text: '收起中', actions: [], durationMs: 4000 })"), false);
+    t.mock.timers.tick(1);
+    assert.equal(f.bubble.shows.length, shows, 'closing does not replay discarded greetings');
+    assert.equal(f.call('dialogue.hasBubble(performance.now())'), false);
+    assert.ok(f.call("showDialogue('welcome')"), 'a fresh later event can show normally');
+    assert.equal(f.call('settings.bubblesEnabled'), true);
+    f.call("openShortcutAction('chat')");
+    assert.equal(f.chatWindow.isVisible(), true, 'the actual chat window still opens');
+  }
+});
+
+test('快捷面板取消旧 Codex 待确认提示，关闭后迟到确认也不补播', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = await fixture({ codexEnabled: true });
+  t.after(() => f.app.emit('before-quit'));
+  const loadFile = f.windowClass.prototype.loadFile;
+  f.windowClass.prototype.loadFile = function (file) {
+    return file.endsWith('/shortcuts.html') ? Promise.resolve() : loadFile.call(this, file);
+  };
+  const ack = queueCodexCompletion(f), shows = f.bubble.shows.length;
+  f.call('shortcutWindow.open({ focus: false })'); await flush();
+  assert.equal(f.call('codexCompanion.getSnapshot().currentAlert'), null);
+  f.send('pet:codex-motion-ready', ack);
+  assert.equal(f.bubble.shows.length, shows);
+  f.call('shortcutWindow.close()'); t.mock.timers.tick(180);
+  f.send('pet:codex-motion-ready', ack);
+  assert.equal(f.bubble.shows.length, shows);
+  assert.equal(f.call('hostMotion'), null);
+});
+
+test('快捷面板同步清除贴边悄悄话，展开期间不会重新触发', async t => {
+  const f = await fixture();
+  t.after(() => f.app.emit('before-quit'));
+  const loadFile = f.windowClass.prototype.loadFile;
+  f.windowClass.prototype.loadFile = function (file) {
+    return file.endsWith('/shortcuts.html') ? Promise.resolve() : loadFile.call(this, file);
+  };
+  f.call("dockPet('left'); edgeNoticeNow = () => 0; tickEdgeNotice(true); edgeNoticeNow = () => 90000; tickEdgeNotice(true)");
+  assert.equal(f.edgeNoticeWindow.visible, true);
+  assert.equal(f.edgeNoticeWindow.shows.at(-1).kind, 'text');
+  const shows = f.edgeNoticeWindow.shows.length;
+  f.call('openShortcuts()'); await flush();
+  assert.equal(f.edgeNoticeWindow.visible, false);
+  assert.equal(f.edgeNoticeWindow.shows.length, shows, 'pin expansion cannot briefly re-show an edge greeting');
+  f.call('edgeNoticeNow = () => 1000000; tickEdgeNotice(true)');
+  assert.equal(f.edgeNoticeWindow.visible, false);
+  assert.equal(f.edgeNoticeWindow.shows.length, shows);
 });
 
 test('快捷按钮和全局绑定共用便签待办启动偏好，两种形态均保留番茄计时', async () => {
@@ -613,7 +695,7 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   const menu = f.call('menuTemplate()');
   const top = menu.filter(item => item.type !== 'separator');
   assert.deepEqual(Array.from(top, item => item.label), [
-    '和球球聊聊', '来定制球球', '便签与待办', '番茄钟', '快捷键设置…', '球球与互动', 'Codex 与 API',
+    '和球球聊聊', '来定制球球', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API',
     '贴边与显示', '球球尺寸', '界面配色', '常规设置', '关于球球', '检查更新', '退出球球'
   ]);
   const group = label => top.find(item => item.label === label).submenu.filter(item => item.type !== 'separator');
@@ -2839,7 +2921,8 @@ test('番茄免打扰收起全部普通气泡，保留后台与待办提醒，�
   const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
   const menu = f.call('menuTemplate()');
   const entry = menu.findIndex(item => item.id === 'pomodoro-open');
-  assert.equal(menu[entry - 1].label, '便签与待办');
+  assert.equal(menu[entry - 1].id, 'shortcut-settings');
+  assert.equal(menu[entry - 2].label, '便签与待办');
   menu[entry].click();
   assert.equal(f.pomodoroWindows.opens, 1);
   assert.equal(f.call('pomodoroQuiet'), false, '打开面板尚不免打扰');
