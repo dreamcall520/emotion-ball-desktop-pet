@@ -5,23 +5,32 @@ const os = require('node:os');
 const path = require('node:path');
 const display = require('../lib/quota-display');
 const effects = require('../quota-effects');
-const { saveSettings, loadSettings } = require('../lib/settings');
+const { DEFAULTS, normalizeSettings, saveSettings, loadSettings } = require('../lib/settings');
 
 test('额度展示保留旧卡片偏好，过滤非法选项并持久化新样式', t => {
   assert.deepEqual(display.normalize(undefined, { codexQuotaPeriod: 'weekly', codexQuotaLabelSize: 'standard' }), {
-    style: 'card', material: 'soft', period: 'weekly', cardSize: 'standard', showNumbers: false
+    style: 'card', material: 'soft', period: 'weekly', cardSize: 'standard', showNumbers: true
   });
   for (const raw of [null, [], { style: '<script>', material: 'bad', period: 'bad', cardSize: 'bad', showNumbers: 'true' }]) {
-    assert.deepEqual(display.normalize(raw), { style: 'card', material: 'soft', period: 'both', cardSize: 'compact', showNumbers: false });
+    assert.deepEqual(display.normalize(raw), { style: 'card', material: 'soft', period: 'both', cardSize: 'compact', showNumbers: true });
   }
+  assert.equal(DEFAULTS.quotaDisplay.showNumbers, true);
+  for (const raw of [{}, { quotaDisplay: { style: 'ring' } }]) assert.equal(normalizeSettings(raw).quotaDisplay.showNumbers, true);
+  assert.equal(display.normalize({ showNumbers: false }).showNumbers, false);
   assert.deepEqual(display.periods(display.normalize({ style: 'ring', period: 'weekly' })), ['weekly']);
   for (const style of ['duo', 'split', 'stages']) assert.deepEqual(display.periods(display.normalize({ style })), ['fiveHour', 'weekly']);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qiuqiu-quota-display-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const file = path.join(dir, 'settings.json');
   const quotaDisplay = { style: 'split', material: 'glass', period: 'both', cardSize: 'compact', showNumbers: true };
-  saveSettings(file, { uiTheme: 'green', quotaDisplay, remaining: 74 });
-  assert.deepEqual(loadSettings(file).quotaDisplay, quotaDisplay);
+  assert.equal(loadSettings(file).quotaDisplay.showNumbers, true);
+  fs.writeFileSync(file, JSON.stringify({ quotaDisplay: { style: 'ring' } }));
+  assert.equal(loadSettings(file).quotaDisplay.showNumbers, true);
+  for (const showNumbers of [true, false]) {
+    const value = { ...quotaDisplay, showNumbers };
+    saveSettings(file, { uiTheme: 'green', quotaDisplay: value, remaining: 74 });
+    assert.deepEqual(loadSettings(file).quotaDisplay, value);
+  }
   assert.equal(loadSettings(file).uiTheme, 'green');
   assert.equal(fs.readFileSync(file, 'utf8').includes('remaining'), false);
 });

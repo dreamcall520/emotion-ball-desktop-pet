@@ -44,7 +44,9 @@ test('额度预览跟随实际周期，零与未知分开，双样式保存选�
   const ui = window.QuotaCustomizer.create({ bridge: { onQuota(callback) { receive = callback; return () => {}; } },
     getAppearance: () => appearance, getCodexPet: () => appearance.shape === 'codex-pet' ? descriptor : undefined });
   const weekly = { state: 'ready', items: [{ windowMinutes: 10080, remaining: 38 }] };
-  ui.load({ style: 'ring', showNumbers: true, period: 'fiveHour' }, weekly);
+  assert.equal(ui.getConfig().showNumbers, true, '新用户默认显示数字');
+  ui.load({ style: 'ring', period: 'fiveHour' }, weekly);
+  assert.equal(get('quota-numbers').checked, true, '旧设置缺字段时默认显示数字');
   assert.equal(avatars, 0, '隐藏标签不初始化零尺寸 Rive');
   ui.show(true); sources[1].click();
   assert.equal(avatars, 6);
@@ -58,6 +60,15 @@ test('额度预览跟随实际周期，零与未知分开，双样式保存选�
   assert.equal(ui.getConfig().period, 'both', '保存时不继续携带已删除的手选周期');
   assert.equal(numbers.classList.contains('quota-preview-card'), true);
   assert.equal(numbers.children[0].children[0].children[0].className, 'summary-badge');
+  get('quota-numbers').checked = false;
+  get('quota-numbers').listeners.change({ target: get('quota-numbers') });
+  const saved = ui.getConfig();
+  ui.load(saved, weekly);
+  assert.equal(get('quota-numbers').checked, false, '保存重开保留用户明确关闭');
+  assert.equal(numbers.hidden, true);
+  ui.load({ ...saved, showNumbers: true }, weekly);
+  assert.equal(get('quota-numbers').checked, true);
+  assert.equal(numbers.hidden, false);
   receive({ state: 'ready', items: [{ windowMinutes: 300, remaining: 0 }, ...weekly.items] });
   assert.equal(numbers.textContent, '5h额度0%'); assert.equal(effectInput.config.period, 'fiveHour');
   ui.load({ style: 'duo', showNumbers: true }, weekly);

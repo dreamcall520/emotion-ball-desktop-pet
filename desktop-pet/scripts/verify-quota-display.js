@@ -19,6 +19,15 @@ async function verifyQuotaDisplay({ pet, open, settingsFile, sendModel, about, s
   assert.equal(before.uiTheme,'blue');
   assert.equal(await js('document.querySelectorAll("#quota-styles button").length'),6);
   await js('document.getElementById("source-quota").click();true');
+  await js(`document.querySelector('button[data-style="ring"]').click();true`);
+  const palette = await js(`(() => {
+    const root = document.documentElement, selected = document.querySelector('.quota-style[aria-pressed=true]');
+    return { theme: root.dataset.uiTheme, mode: root.dataset.colorMode,
+      title: getComputedStyle(selected).color, border: getComputedStyle(selected).borderTopColor,
+      material: getComputedStyle(document.querySelector('[data-quota-material][aria-pressed=true]')).color };
+  })()`);
+  assert.deepEqual(palette, { theme: 'blue', mode: 'standard', title: 'rgb(8, 99, 232)',
+    border: 'rgb(171, 212, 241)', material: 'rgb(8, 99, 232)' }, '额度样式控件沿用晴空蓝界面主题');
   assert.equal(await js('document.getElementById("quota-period")'),null,'周期跟随实际额度，无需手动设置');
   await js(`document.getElementById('source-quota').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}));true`);
   assert.equal(await js('document.getElementById("source-codex").getAttribute("aria-selected")'),'true');
@@ -31,6 +40,13 @@ async function verifyQuotaDisplay({ pet, open, settingsFile, sendModel, about, s
     assert.equal(await js(`document.querySelector('button[data-style="${style}"]').getAttribute('aria-pressed')`),'true');
     assert.deepEqual(JSON.parse(fs.readFileSync(settingsFile,'utf8')),before,'预览不能写真实额度或配置');
   }
+  assert.equal(await js('document.getElementById("quota-numbers").checked'),true,'新设置默认显示具体数字');
+  assert.equal(await js('getComputedStyle(document.getElementById("quota-numbers")).backgroundColor'),'rgb(9, 136, 247)','数字开关沿用晴空蓝');
+  await js(`document.getElementById('quota-numbers').click();document.getElementById('save').click();true`);
+  await until(()=>JSON.parse(fs.readFileSync(settingsFile,'utf8')).quotaDisplay.showNumbers===false);
+  editor.destroy();editor=open();await until(()=>js('Boolean(window.__customizerReady)'));
+  await js('document.getElementById("source-quota").click();true');
+  assert.equal(await js('document.getElementById("quota-numbers").checked'),false,'主动关闭数字后重开仍关闭');
   await js(`document.querySelector('button[data-style="duo"]').click();document.getElementById('quota-numbers').click();document.getElementById('startup-default').checked=false;document.getElementById('save').click();true`);
   await until(()=>js('!document.getElementById("save").disabled')).catch(async error=>{
     error.message += JSON.stringify({quota:JSON.parse(fs.readFileSync(settingsFile,'utf8')).quotaDisplay,

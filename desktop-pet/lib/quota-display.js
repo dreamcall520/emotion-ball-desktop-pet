@@ -10,7 +10,7 @@
         : ['fiveHour', 'weekly'].includes(legacy.codexQuotaPeriod) ? legacy.codexQuotaPeriod : 'both',
       cardSize: ['standard', 'compact'].includes(raw.cardSize) ? raw.cardSize
         : legacy.codexQuotaLabelSize === 'standard' ? 'standard' : 'compact',
-      showNumbers: raw.showNumbers === true
+      showNumbers: raw.showNumbers !== false
     };
   }
   function periods(config, model) {
