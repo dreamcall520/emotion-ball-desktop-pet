@@ -111,6 +111,7 @@ test('损坏文件回退且有效设置可回读', t => {
     codexTaskNameInAlerts: true,
     codexQuotaAlwaysVisible: true,
     codexShowExtraCredits: true,
+    codexQuotaFunEnabled: true,
     openaiApiAlwaysVisible: false,
     autoUpdateCheck: true,
     lastUpdateNotifiedVersion: '',
@@ -129,6 +130,7 @@ test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
     appearancePresets: [], codexEnabled: false,
     codexTaskNameInAlerts: true, codexQuotaAlwaysVisible: true,
     codexShowExtraCredits: true,
+    codexQuotaFunEnabled: true,
     openaiApiAlwaysVisible: false,
     autoUpdateCheck: true, lastUpdateNotifiedVersion: '',
     codexQuotaPeriod: 'auto', codexQuotaLabelSize: 'compact', codexQuotaAppearance: 'system'
@@ -145,6 +147,20 @@ test('旧外观沿用为启动默认，临时换装不覆盖已选启动外观',
     customization: { appearance: { shape: 'square' } } });
   assert.equal(saved.customization.appearance.shape, 'square');
   assert.equal(loadSettings(file).startupAppearance.shape, 'cloud');
+});
+
+test('额度趣味互动默认开启，旧配置补齐，开关保存后重读保持', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emotion-quota-fun-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'settings.json');
+  assert.equal(DEFAULTS.codexQuotaFunEnabled, true);
+  for (const value of [undefined, null, 0, 'false', {}]) {
+    assert.equal(normalizeSettings({ codexQuotaFunEnabled: value }).codexQuotaFunEnabled, true);
+  }
+  for (const enabled of [false, true]) {
+    saveSettings(file, { codexQuotaFunEnabled: enabled });
+    assert.equal(loadSettings(file).codexQuotaFunEnabled, enabled);
+  }
 });
 
 test('额外点数默认显示，明确关闭可持久化，余额不进入设置文件', t => {

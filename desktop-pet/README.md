@@ -77,7 +77,7 @@
 
 球球自动发射能量球，点击球球加快发射并击退僵尸，点击僵尸让它逼近。手动命中 30 次后球球转圈甩出原生彩带，僵尸退场留下墓碑；失败时球球被吃掉一半，皇冠转给僵尸。游戏只改变本局状态，额度数字和背景进度条保持真实额度。关闭再打开继续同一局；隐藏球球、锁屏、关闭额度卡或 Codex 联动时同步收起。未知或过期额度不显示旧角色，系统“减少动态”时停止动画。
 
-本候选只保留卡片右侧入口。趣味动画的独立关闭和其他入口样式留到后续版本；原有的额度卡与联动开关继续有效。
+本候选只保留卡片右侧入口。在「Codex 与 API → 额度卡设置」可切换「额度趣味互动」，默认开启；关闭后隐藏右侧角色并收起守护战，保留原额度卡，重启后保持选择。其他入口样式留到后续版本；原有的额度卡与联动开关继续有效。
 
 在项目根目录运行 `node desktop-pet/scripts/package-quota-guard-preview.js` 可生成 Apple 芯片候选包“球球额度守护候选”。候选使用独立应用标识和 `~/Library/Application Support/qiuqiu-quota-guard-preview` 资料目录，不替换正式 App，也不复制正式版设置。运行 `PET_SMOKE_QUOTA_GUARD_ONLY=1 node desktop-pet/scripts/smoke-electron.js` 检查主进程接入；`node_modules/.bin/electron desktop-pet/scripts/verify-quota-guard.js` 检查原生角色、交互和窗口表现。
 

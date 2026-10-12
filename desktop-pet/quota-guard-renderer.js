@@ -166,7 +166,7 @@
   if ($('quota-guard-entry')) {
     const button = $('quota-guard-entry'), bridge = root.petQuotaLabel, pet = createPet($('guard-entry-pet'), 'entry', () => time), zombie = $('guard-entry-zombie');
     let model = null, time = 0, raf = 0, last = 0; zombieCrown(zombie.querySelector('svg'));
-    const visible = () => Boolean(primary(model)) && model.expanded !== true;
+    const visible = () => Boolean(primary(model)) && model.expanded !== true && model.guardEntry !== false;
     const moving = () => sprites && visible() && model.visible !== false && !doc.hidden && !reduced.matches;
     function draw() {
       const item = primary(model); if (!item || !sprites) return; const q = item.remaining;

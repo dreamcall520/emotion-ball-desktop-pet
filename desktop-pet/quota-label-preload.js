@@ -165,6 +165,8 @@ contextBridge.exposeInMainWorld('petQuotaLabel', {
         const source = record(payload);
         const visible = source?.visible;
         if (typeof visible === 'boolean') model.visible = visible;
+        const guardEntry = source?.guardEntry;
+        if (typeof guardEntry === 'boolean') model.guardEntry = guardEntry;
       } catch (_) {}
       try { callback(model); } catch (_) {}
     };

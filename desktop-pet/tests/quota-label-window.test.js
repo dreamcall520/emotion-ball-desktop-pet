@@ -197,19 +197,21 @@ test('原生显隐显式广播 visible，隐藏前暂停入口且暂时避让不
   assert.equal(win.sent.at(-1)[1].items[0].remaining, 47.6);
 });
 
-test('额度 preload 仅保留明确 visible 布尔，不接受字符串或读取异常', () => {
+test('额度 preload 仅保留明确 visible/guardEntry 布尔，不接受字符串或读取异常', () => {
   let api, listener, received;
   vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../quota-label-preload.js'), 'utf8'), {
     require: () => ({ contextBridge: { exposeInMainWorld(_name, value) { api = value; } },
       ipcRenderer: { on(_name, callback) { listener = callback; }, removeListener() {} } })
   });
   api.onModel(value => { received = value; });
-  for (const visible of [false, true]) {
-    listener({}, { ...readyModel(), visible }); assert.equal(received.visible, visible);
+  for (const key of ['visible', 'guardEntry']) {
+    for (const value of [false, true]) {
+      listener({}, { ...readyModel(), [key]: value }); assert.equal(received[key], value);
+    }
+    listener({}, { ...readyModel(), [key]: 'false' }); assert.equal(key in received, false);
+    const throwing = readyModel(); Object.defineProperty(throwing, key, { get() { throw new Error('boolean getter'); } });
+    assert.doesNotThrow(() => listener({}, throwing)); assert.equal(key in received, false);
   }
-  listener({}, { ...readyModel(), visible: 'false' }); assert.equal('visible' in received, false);
-  const throwing = readyModel(); Object.defineProperty(throwing, 'visible', { get() { throw new Error('visibility getter'); } });
-  assert.doesNotThrow(() => listener({}, throwing)); assert.equal('visible' in received, false);
   assert.equal(received.items[0].remaining, 47.6);
 });
 
@@ -379,6 +381,7 @@ test('按球球当前屏定位并避让气泡，只发固定通道的白名单�
     appearance: 'system',
     expanded: false,
     visible: true,
+    guardEntry: false,
     state: 'ready',
     items: [
       { label: 'Codex', windowMinutes: 300, remaining: 9.44, resetsAt: 2000000000000 },
@@ -913,6 +916,7 @@ test('主进程模型每个外部字段只读一次，且数组最多检查前�
     appearance: 'system',
     expanded: false,
     visible: true,
+    guardEntry: false,
     state: 'ready',
     items: [
       { label: 'Codex', windowMinutes: 300, remaining: 49.5, resetsAt: 2000000000000 },
@@ -932,14 +936,14 @@ test('撤销 Proxy 或抛错 getter 不能穿透 show，必须降级为断开模
   assert.doesNotThrow(() => f.label.show(revoked.proxy));
   await flush();
   assert.deepEqual(f.windows[0].sent[0][1], {
-    state: 'disconnected', items: [], overflow: 0, size: 'standard', appearance: 'system', expanded: false, visible: true
+    state: 'disconnected', items: [], overflow: 0, size: 'standard', appearance: 'system', expanded: false, visible: true, guardEntry: false
   });
 
   const throwing = {};
   Object.defineProperty(throwing, 'state', { get() { throw new Error('getter failed'); } });
   assert.doesNotThrow(() => f.label.show(throwing));
   assert.deepEqual(f.windows[0].sent.at(-1)[1], {
-    state: 'disconnected', items: [], overflow: 0, size: 'standard', appearance: 'system', expanded: false, visible: true
+    state: 'disconnected', items: [], overflow: 0, size: 'standard', appearance: 'system', expanded: false, visible: true, guardEntry: false
   });
 });
 

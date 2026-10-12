@@ -242,7 +242,7 @@ function createQuotaLabelWindow({
     }
     if (win !== target || operation !== token) return;
     if (ready && currentModel) {
-      try { target.webContents.send(CHANNEL, { ...currentModel, visible: false }); }
+      try { target.webContents.send(CHANNEL, { ...currentModel, visible: false, guardEntry: guardEntryVisible() }); }
       catch (error) { detach(target, error); return; }
       if (win !== target || operation !== token) return;
     }
@@ -291,7 +291,7 @@ function createQuotaLabelWindow({
     const { x, y, width, height } = layout;
     try { target.setBounds({ x, y, width, height }, false); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
-    try { target.webContents.send(CHANNEL, { ...model, visible: true }); } catch (error) { detach(target, error); return; }
+    try { target.webContents.send(CHANNEL, { ...model, visible: true, guardEntry: guardEntryVisible() }); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
     try {
       if (model.items.length > 0) target.setIgnoreMouseEvents(false);

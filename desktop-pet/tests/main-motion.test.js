@@ -1047,12 +1047,31 @@ test('所有 Codex 设置只保留一个顶层入口并完整归入子菜单', a
   assert.equal(menuItem(f, 'codex-task-names').label, '任务完成提醒显示名称');
   assert.equal(menuItem(f, 'codex-quota-visible').label, '显示 Codex 额度卡');
   assert.deepEqual(Array.from(menuItem(f, 'codex-quota-settings').submenu, item => item.id),
-    ['codex-extra-credits', 'codex-quota-period', 'codex-quota-label-size']);
+    ['codex-quota-fun', 'codex-extra-credits', 'codex-quota-period', 'codex-quota-label-size']);
   assert.deepEqual(Array.from(menuItem(f, 'openai-api-menu').submenu, item => item.id),
     ['openai-api-usage', 'openai-api-visible']);
   assert.equal(menuItem(f, 'openai-api-visible').label, '显示 API 本月费用卡');
   assert.equal(findMenuItem(menu, 'codex-quota-appearance'), null);
   assert.equal(findMenuItem(menu, 'notes-appearance'), null);
+});
+
+test('额度趣味开关默认勾选，菜单保存后启动保持关闭，保存失败保留原值', async () => {
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  const item = menuItem(f, 'codex-quota-fun');
+  assert.equal(item.label, '额度趣味互动');
+  assert.equal(item.type, 'checkbox');
+  assert.equal(item.checked, true);
+  item.click({ checked: false });
+  assert.equal(f.saved.at(-1).codexQuotaFunEnabled, false);
+  assert.equal(menuItem(f, 'codex-quota-fun').checked, false);
+  assert.equal(f.call('canShowQuotaGuard()'), false);
+  const restarted = await fixture({ loadedSettings: f.saved.at(-1) });
+  assert.equal(menuItem(restarted, 'codex-quota-fun').checked, false);
+  menuItem(restarted, 'codex-quota-fun').click({ checked: true });
+  assert.equal(restarted.saved.at(-1).codexQuotaFunEnabled, true);
+  const failed = await fixture({ codexEnabled: true, saveError: Error('QUOTA_FUN_WRITE_FAILURE') });
+  menuItem(failed, 'codex-quota-fun').click({ checked: false });
+  assert.equal(menuItem(failed, 'codex-quota-fun').checked, true);
 });
 
 test('原生 smoke 的受控闭包可精确恢复尺寸与空坐标设置且不移动窗口', async () => {

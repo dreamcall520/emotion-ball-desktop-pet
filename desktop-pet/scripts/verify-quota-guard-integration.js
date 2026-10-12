@@ -9,8 +9,27 @@ async function until(read, accept, label) {
 }
 
 async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getCompanion, getSettings,
-  sync, setPreference, setTopmost, hidePet, restorePet, ipcMain, powerMonitor }) {
+  sync, setPreference, setTopmost, hidePet, restorePet, ipcMain, powerMonitor,
+  getMenuTemplate, readSettings }) {
   const settings = getSettings();
+  assert.equal(settings.codexQuotaFunEnabled, true, '新设置默认开启趣味互动');
+  assert.equal(readSettings().codexQuotaFunEnabled, true, '未配置时从设置文件读取默认开启');
+  function funMenu() {
+    const find = (items, id) => {
+      for (const item of items) {
+        if (item.id === id) return item;
+        if (Array.isArray(item.submenu)) { const child = find(item.submenu, id); if (child) return child; }
+      }
+      return null;
+    };
+    const section = find(getMenuTemplate(), 'codex-quota-settings');
+    assert.equal(section?.label, '额度卡设置');
+    const item = section.submenu.find(value => value.id === 'codex-quota-fun');
+    assert.equal(item?.label, '额度趣味互动');
+    assert.equal(item.type, 'checkbox');
+    assert.equal(item.enabled, true);
+    return item;
+  }
   settings.codexEnabled = true; settings.codexQuotaAlwaysVisible = true;
   settings.codexQuotaLabelSize = 'compact'; settings.codexQuotaPeriod = 'fiveHour';
   let callbacks;
@@ -43,6 +62,56 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
   await until(state, value => value?.spritesReady && value.ready && value.visible && value.quota === 77, '守护战接收所选真实模型');
   assert.equal(await panel.webContents.executeJavaScript("document.querySelector('#guard-number').textContent"), '77%');
   await capture(panel, 'main-route-panel');
+  assert.equal(funMenu().checked, true, '额度卡设置菜单默认勾选');
+  const toggleBefore = await state();
+  funMenu().click({ checked: false });
+  assert.equal(getSettings().codexQuotaFunEnabled, false, '真实菜单回调关闭开关');
+  assert.equal(readSettings().codexQuotaFunEnabled, false, '关闭后保存并 loadSettings 读回 false');
+  assert.equal(funMenu().checked, false, '重新生成菜单保持未勾选');
+  await until(() => guard.isVisible(), value => !value, '关闭趣味互动立即收起大游戏');
+  await until(() => card.isVisible(), Boolean, '关闭趣味互动保留原额度卡');
+  const offCard = await until(() => card.webContents.executeJavaScript(`(() => {
+    const entry = document.querySelector('#quota-guard-entry');
+    const beam = document.querySelector('#quota-beam').getBoundingClientRect();
+    return { entryHidden: entry.hidden, entryDisplay: getComputedStyle(entry).display,
+      entryState: window.quotaGuardEntry.state, guardEntry: document.body.dataset.guardEntry,
+      viewport: [innerWidth, innerHeight], card: [beam.width, beam.height],
+      summary: document.querySelector('#summary').textContent };
+  })()`), value => value.entryHidden && value.entryDisplay === 'none' &&
+    value.viewport[0] === 128 && value.viewport[1] === 32, '关闭后无透明入口占位');
+  assert.deepEqual(offCard.card, [128, 32], '恢复原生小巧卡尺寸');
+  assert.ok(offCard.summary.includes('77%'), '原卡额度文字保持');
+  assert.equal(offCard.entryState.visible, false, '关闭时角色不接受点击');
+  const offBounds = card.getContentBounds();
+  assert.equal(offBounds.width, 128); assert.equal(offBounds.height, 32);
+  const offGame = await until(state, value => value.visible === false, '隐藏模型到达游戏');
+  await wait(220);
+  assert.equal((await state()).time, offGame.time, '关闭开关时大游戏时钟冻结');
+  assert.equal((await card.webContents.executeJavaScript('window.quotaGuardEntry.state')).entryTime,
+    offCard.entryState.entryTime, '关闭开关时小角色时钟冻结');
+  await card.webContents.executeJavaScript('window.petQuotaLabel.openGuard()');
+  await wait(80);
+  assert.equal(guard.isVisible(), false, '关闭时可信原卡桥也不能打开游戏');
+  assert.equal(panel.isVisible(), false, '关闭时无原生游戏窗口点击区');
+  assert.equal((await state()).time, offGame.time, '可信被拒入口不会重新启动时钟');
+  await capture(card, 'main-route-fun-off-card');
+  funMenu().click({ checked: true });
+  assert.equal(getSettings().codexQuotaFunEnabled, true, '真实菜单回调重新开启');
+  assert.equal(readSettings().codexQuotaFunEnabled, true, '开启后保存并 loadSettings 读回 true');
+  assert.equal(funMenu().checked, true, '重新生成菜单恢复勾选');
+  const onEntry = await until(() => card.webContents.executeJavaScript('window.quotaGuardEntry.state'),
+    value => value?.ready && value.visible, '开启后右侧角色恢复');
+  assert.equal(guard.isVisible(), false, '开启开关不会自动弹出游戏');
+  await card.webContents.executeJavaScript('window.petQuotaLabel.openGuard()');
+  await until(() => guard.isVisible(), Boolean, '开启后可信入口恢复可用');
+  await until(state, value => value?.ready && value.visible, '重新开启游戏恢复模型');
+  assert.equal(guard.getWindow(), panel, '开关切换重用原游戏窗口');
+  assert.equal((await state()).round, toggleBefore.round, '开关切换保留同局');
+  if (directory) fs.writeFileSync(path.join(directory, 'main-route-toggle.json'), JSON.stringify({
+    passed: true, defaultChecked: true, savedOff: false, savedOn: true,
+    offCard, offBounds, offGame, onEntry, reopened: await state()
+  }, null, 2));
+  process.stdout.write('PET_QUOTA_GUARD_TOGGLE_OK\n');
   const before = await state();
   callbacks.onQuota(fixture());
   await wait(150);
