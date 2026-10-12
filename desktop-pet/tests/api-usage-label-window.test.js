@@ -124,6 +124,7 @@ test('lazy native window has safe flags, local resources, denied navigation and 
   const win = f.windows[0];
   assert.equal(win.visible, false);
   assert.equal(win.options.frame, false); assert.equal(win.options.focusable, false);
+  assert.equal(win.options.roundedCorners, false, '系统圆角不能再裁剪共用额度卡边框');
   assert.equal(win.options.transparent, true); assert.equal(win.options.show, false);
   assert.equal(win.options.webPreferences.contextIsolation, true);
   assert.equal(win.options.webPreferences.nodeIntegration, false);

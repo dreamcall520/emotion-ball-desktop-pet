@@ -201,7 +201,7 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
     const token = revision;
     const size = quotaLabelSize(expanded ? 'apiExpanded' : 'compact');
     const target = new BrowserWindow({
-      ...size, title: 'OpenAI API 费用', transparent: true, frame: false,
+      ...size, title: 'OpenAI API 费用', transparent: true, frame: false, roundedCorners: false,
       resizable: false, focusable: false, skipTaskbar: true, show: false,
       fullscreenable: false, maximizable: false, minimizable: false,
       hasShadow: false, backgroundColor: '#00000000',

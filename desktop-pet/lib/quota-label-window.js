@@ -405,6 +405,7 @@ function createQuotaLabelWindow({
       title: 'Codex 剩余额度',
       transparent: true,
       frame: false,
+      roundedCorners: false, // CSS owns the card corners, including the edge beside the role gutter.
       useContentSize: true,
       resizable: false,
       focusable: false,

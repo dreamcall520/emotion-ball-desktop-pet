@@ -228,6 +228,7 @@ test('标准档只在 show 时懒创建安全、透明、不聚焦的鼠标穿�
   assert.equal(win.options.height, 58);
   assert.equal(win.options.transparent, true);
   assert.equal(win.options.frame, false);
+  assert.equal(win.options.roundedCorners, false, '系统圆角不能再裁剪CSS卡片边框');
   assert.equal(win.options.focusable, false);
   assert.equal(win.options.hasShadow, false);
   assert.equal(win.options.skipTaskbar, true);

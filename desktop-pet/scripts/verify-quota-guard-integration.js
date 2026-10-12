@@ -59,6 +59,17 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
     fs.mkdirSync(directory, { recursive: true }); fs.writeFileSync(path.join(directory, name + '.png'), (await win.webContents.capturePage()).toPNG());
   } }
   await capture(card, 'main-route-card');
+  settings.codexQuotaLabelSize = 'standard';
+  const exhausted = fixture(); exhausted.windows[0].remaining = 0;
+  callbacks.onQuota(exhausted); sync();
+  await until(() => card.webContents.executeJavaScript('window.quotaGuardEntry?.state'),
+    value => value?.quota === 0 && value.visible, '截图同场景标准卡0%角色');
+  const standardFace = await card.webContents.executeJavaScript(`(() => {const r=document.getElementById('quota-label').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};})()`);
+  assert.deepEqual(standardFace, { x: 0, y: 6, width: 168, height: 58 }, '修复原生裁剪不改卡片与角色布局');
+  await capture(card, 'main-route-standard-exhausted');
+  settings.codexQuotaLabelSize = 'compact'; callbacks.onQuota(fixture()); sync();
+  await until(() => card.webContents.executeJavaScript('window.quotaGuardEntry?.state'),
+    value => value?.quota === 77 && value.visible, '恢复小巧卡主流程');
   windows.open();
   const timerPanel = await until(() => BrowserWindow.getAllWindows().find(win =>
     !win.isDestroyed() && /pomodoro\.html\?view=panel$/.test(win.webContents.getURL())),

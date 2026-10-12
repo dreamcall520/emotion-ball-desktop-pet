@@ -10,7 +10,7 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
   edgeTuck, powerMonitor, settingsFile, getMenu, getSettings, getWindows, pomodoro }) {
   const output = path.resolve(process.env.PET_SMOKE_SHORTCUT_OUTPUT || path.join(os.tmpdir(), `qiuqiu-shortcuts-${process.pid}`));
   fs.mkdirSync(output, { recursive: true });
-  const result = { ok: false, checks: [], themes: [], listThemes: [], layouts: [], displays: screen.getAllDisplays().map(({ id, workArea, scaleFactor }) => ({ id, workArea, scaleFactor })) };
+  const result = { ok: false, checks: [], themes: [], listThemes: [], layouts: [], peekedLayouts: [], displays: screen.getAllDisplays().map(({ id, workArea, scaleFactor }) => ({ id, workArea, scaleFactor })) };
   const original = pet.getBounds(), originalCursor = screen.getCursorScreenPoint;
   const originalIgnore = BrowserWindow.prototype.setIgnoreMouseEvents;
   const ignores = new WeakMap();
@@ -202,6 +202,88 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     controller.close(); edgeTuck.sampleCursor(cursor);
     await poll(() => edgeTuck.getPresentation().mode, mode => mode === 'tucked', 'edge re-tucks after collapse and leave delay');
     result.checks.push('edge-open-pin-release');
+    const originalCustomization = structuredClone(getSettings().customization);
+    const edgeFrames = async phase => {
+      const session = String(controller.getState().session);
+      await poll(() => page(win, `document.body.dataset.session === ${JSON.stringify(session)} && document.body.dataset.phase === ${JSON.stringify(phase)}`), Boolean, `edge renderer ${phase}`);
+      return page(win, `(async () => {
+        const frames = [];
+        for (let i = 0; i < 6; i++) {
+          frames.push({ x: screenX, y: screenY, width: innerWidth, height: innerHeight,
+            buttons: [...document.querySelectorAll('[data-action]')].filter(node => node.getClientRects().length).map(node => ({ id: node.dataset.action, ...node.getBoundingClientRect().toJSON() })) });
+          await new Promise(resolve => { const timer = setTimeout(resolve, 25); requestAnimationFrame(() => { clearTimeout(timer); resolve(); }); });
+        }
+        return frames;
+      })()`);
+    };
+    const checkEdgeFrames = (frames, area, phase) => {
+      assert.ok(frames.length > 0);
+      for (const frame of frames) {
+        assert.equal(frame.buttons.length, 6, `${phase} keeps all six floating actions`);
+        for (const button of frame.buttons) {
+          const slack = { x: -1, y: -1, width: frame.width + 2, height: frame.height + 2 };
+          assert.ok(inside(button, slack), `${phase} ${button.id} is complete inside native viewport`);
+          assert.ok(inside({ ...button, x: frame.x + button.x, y: frame.y + button.y },
+            { x: area.x - 1, y: area.y - 1, width: area.width + 2, height: area.height + 2 }), `${phase} ${button.id} remains on its physical display`);
+        }
+      }
+    };
+    try {
+      controller.interrupt(); edgeTuck.restore();
+      getSettings().customization = { ...originalCustomization,
+        appearance: { ...originalCustomization.appearance, shape: 'aurora-cloud' } };
+      pet.webContents.send('pet:settings', getSettings());
+      await poll(() => page(pet, "document.querySelector('#pet').dataset.shape"), shape => shape === 'aurora-cloud', 'native aurora shape received');
+      await poll(() => page(pet, "Boolean(document.querySelector('.eb-rive-aurora.ready'))"), Boolean, 'native aurora art ready');
+      for (const display of screen.getAllDisplays()) for (const side of ['left', 'right']) {
+        controller.interrupt(); edgeTuck.restore();
+        const area = display.workArea;
+        pet.setBounds({ x: area.x + Math.round((area.width - 80) / 2), y: area.y + Math.round((area.height - 80) / 2), width: 80, height: 80 }, false);
+        await wait(100); edgeTuck.dock(side);
+        const anchor = pet.getBounds();
+        assert.equal(anchor.width, 80); assert.equal(anchor.height, 80);
+        cursor = { x: anchor.x + (side === 'left' ? 20 : 60), y: anchor.y + 40 };
+        edgeTuck.sampleCursor(cursor);
+        await poll(() => page(pet, "({shape:document.querySelector('#pet').dataset.shape,mode:document.querySelector('#pet').dataset.presentation,side:document.querySelector('#pet').dataset.edge,ready:Boolean(document.querySelector('.eb-rive-aurora.ready'))})"),
+          value => value.shape === 'aurora-cloud' && value.ready && value.mode === 'peeked' && value.side === side, '80 DIP aurora native peek');
+        controller.open({ focus: false }); await ready();
+        const opening = await edgeFrames('opening'); checkEdgeFrames(opening, area, 'opening');
+        await settled(win);
+        const state = controller.getState(), actual = win.getBounds();
+        assert.equal(state.view, 'floating'); assert.equal(edgeTuck.getPresentation().mode, 'peeked');
+        const dom = await page(win, `({ x: screenX, y: screenY, width: innerWidth, height: innerHeight,
+          buttons: [...document.querySelectorAll('[data-action]')].filter(node => node.getClientRects().length).map(node => ({ id: node.dataset.action, ...node.getBoundingClientRect().toJSON(),
+            nameWidth: node.querySelector('.action-name').clientWidth, nameScroll: node.querySelector('.action-name').scrollWidth })) })`);
+        assert.ok(Math.abs(dom.x - actual.x) <= 1 && Math.abs(dom.y - actual.y) <= 1, 'renderer screen origin matches actual native bounds');
+        assert.equal(dom.width, actual.width); assert.equal(dom.height, actual.height);
+        checkEdgeFrames([dom], area, 'expanded');
+        for (const button of dom.buttons) {
+          const expected = state.layout.items.find(item => item.id === button.id);
+          assert.ok(expected, button.id);
+          for (const axis of ['x', 'y']) assert.ok(Math.abs(actual[axis] + button[axis] - state.layout.bounds[axis] - expected[axis]) <= 1,
+            `${side} ${button.id} global ${axis} is not shifted by native gutter clamping`);
+          assert.ok(Math.abs(button.width - expected.width) <= 1 && Math.abs(button.height - expected.height) <= 1);
+          assert.ok(button.nameScroll <= button.nameWidth + 1, `${button.id} name remains complete`);
+        }
+        // The animation canvas may extend 28 DIP beyond a screen for the cloud's
+        // transparent peek. Validate painted buttons, not whole-window containment.
+        await capture(win, `native-aurora-80-${display.id}-${side}-peeked.png`);
+        cursor = { x: -10000, y: -10000 }; edgeTuck.sampleCursor(cursor);
+        assert.equal(edgeTuck.getPresentation().mode, 'peeked', 'open shortcut pins the peek');
+        controller.close();
+        assert.equal(win.isVisible(), true, 'aurora closing animation retains the native canvas');
+        assert.equal(edgeTuck.getPresentation().mode, 'peeked', 'aurora closing animation retains the peek');
+        const closing = await edgeFrames('closing'); checkEdgeFrames(closing, area, 'closing');
+        await poll(() => win.isVisible(), value => !value, 'aurora close hides native shortcut');
+        await poll(() => edgeTuck.getPresentation().mode, mode => mode === 'tucked', 'aurora close releases peek pin');
+        result.peekedLayouts.push({ displayId: display.id, side, pet: anchor, requested: state.layout.bounds, actual, origin: state.origin, dom, opening, closing });
+      }
+      result.checks.push('aurora-80-left-right-peeked-native-animation-and-global-buttons');
+    } finally {
+      controller.interrupt(); edgeTuck.restore();
+      getSettings().customization = originalCustomization;
+      pet.webContents.send('pet:settings', getSettings());
+    }
     edgeTuck.restore(); pet.setBounds(original); controller.open(); await ready();
     // Invoke real renderer APIs and verify reuse of the existing feature windows.
     for (const id of ['custom', 'note', 'todo', 'pomodoro', 'chat']) {
