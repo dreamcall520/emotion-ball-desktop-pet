@@ -30,7 +30,7 @@ function fixture({ reduced = false, random = .4, hidden = false } = {}) {
   let time = 1000, timerId = 0, receive, mediaChange, unsubscribed = 0, randomValue = random;
   const get = id => { if (!nodes.has(id)) nodes.set(id, new Node('span')); return nodes.get(id); };
   const bridge = { getInfo: async () => ({ version: '0.3.32' }),
-    checkUpdates: () => { calls.push('checkUpdates'); }, openRelease: () => { calls.push('openRelease'); },
+    checkUpdates: () => { calls.push('checkUpdates'); }, downloadUpdate: () => { calls.push('downloadUpdate'); },
     openWebsite: () => { calls.push('openWebsite'); }, close: () => { calls.push('close'); },
     onUpdate(fn) { receive = fn; return () => { unsubscribed++; }; } };
   const media = { matches: reduced, addEventListener: (_name, fn) => { mediaChange = fn; }, removeEventListener: () => { mediaChange = null; } };
@@ -204,9 +204,29 @@ test('试玩不写桌面偏好或覆盖版本提醒，官网与升级仍调用�
   avatar.dispatch('dblclick'); assert.equal(f.get('about-status').textContent, '发现新版本 0.3.33');
   await f.get('about-website').dispatch('click'); await f.get('about-open-release').dispatch('click');
   f.receive({ state: 'ready', hasUpdate: false }); await f.get('about-check-updates').dispatch('click');
-  assert.deepEqual(f.calls, ['openWebsite', 'openRelease', 'checkUpdates']);
+  assert.deepEqual(f.calls, ['openWebsite', 'downloadUpdate', 'checkUpdates']);
   const second = fixture(); await flush(); assert.equal(second.get('about-avatar').dataset.shape, 'blob', '新关于页从经典开始，试玩不保存');
   avatar.dispatch('click', { detail: 1 }); f.unload(); f.clock.advance(1000); assert.equal(f.engine._active, false); assert.equal(f.timers.size, 0);
+});
+
+test('新版直接下载按钮显示进度，失败或取消可重试，缺本机安装包不能误下载其他架构', async () => {
+  const f = fixture(); await flush();
+  const ready = { state: 'ready', hasUpdate: true, latestVersion: '0.4.05', downloadAvailable: true };
+  for (const [download, text] of [
+    [{ state: 'starting' }, '正在准备安装包…'], [{ state: 'downloading', percent: 42 }, '正在下载 42%'],
+    [{ state: 'completed' }, '安装包已下载，可从保存位置打开。'],
+    [{ state: 'cancelled', message: '已取消下载' }, '已取消下载'],
+    [{ state: 'error', message: '网络中断，请重试' }, '网络中断，请重试']
+  ]) {
+    f.receive({ ...ready, download }); assert.equal(f.get('about-status').textContent, text);
+    assert.equal(f.get('about-open-release').disabled, ['starting', 'downloading'].includes(download.state));
+    assert.equal(f.get('about-open-release').hidden, false);
+  }
+  f.receive({ ...ready, downloadAvailable: false, downloadMessage: '暂无 Intel Mac 安装包' });
+  assert.equal(f.get('about-open-release').disabled, true); assert.equal(f.get('about-status').textContent, '暂无 Intel Mac 安装包');
+  assert.equal(f.get('about-check-updates').hidden, false, '缺匹配安装包时仍可重新检查');
+  const html = fs.readFileSync(path.join(__dirname, '../about.html'), 'utf8');
+  assert.match(html, /开发者 春野/); assert.match(html, />下载安装包<\/button>/);
 });
 
 test('关于页载入既有真实视觉模块，保留满铺与渐变名，背景8秒可见并尊重辅助模式', () => {

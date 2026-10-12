@@ -93,6 +93,22 @@ function extraCreditsFields(source, state) {
   } catch (_) { return {}; }
 }
 
+function numberFields(source) {
+  try {
+    if (source.display !== 'numbers') return {};
+    const rawPeriods = source.numberPeriods;
+    const periods = Array.isArray(rawPeriods) && rawPeriods.length <= 2
+      ? [...new Set(rawPeriods.filter(value => ['fiveHour', 'weekly'].includes(value)))] : [];
+    const colors = record(source.numberColors);
+    const bodyColor = colors?.bodyColor, glowPinkColor = colors?.glowPinkColor, shape = colors?.shape;
+    return { display: 'numbers', numberPeriods: periods.length ? periods : ['fiveHour'], numberColors: {
+      shape: shape === 'aurora-cloud' ? 'aurora-cloud' : 'blob',
+      bodyColor: typeof bodyColor === 'string' && /^#[\da-f]{6}$/i.test(bodyColor) ? bodyColor : '#EEEBE4',
+      glowPinkColor: typeof glowPinkColor === 'string' && /^#[\da-f]{6}$/i.test(glowPinkColor) ? glowPinkColor : '#D05ED6'
+    } };
+  } catch (_) { return {}; }
+}
+
 function safeModel(value) {
   const source = record(value);
   if (!source) return { state: 'disconnected', size: 'standard', appearance: 'system', expanded: false, items: [], overflow: 0 };
@@ -111,8 +127,9 @@ function safeModel(value) {
   const state = STATES.has(stateValue) ? stateValue : 'disconnected';
   const size = sizeValue === 'compact' ? 'compact' : 'standard';
   const appearance = ['light', 'dark'].includes(appearanceValue) ? appearanceValue : 'system';
-  const expanded = expandedValue === true;
-  if (!['ready', 'stale'].includes(state)) return { state, size, appearance, expanded: false, items: [], overflow: 0 };
+  const numbers = numberFields(source);
+  const expanded = numbers.display !== 'numbers' && expandedValue === true;
+  if (!['ready', 'stale'].includes(state)) return { state, size, appearance, expanded: false, items: [], overflow: 0, ...numbers };
   let rawItems;
   let overflowValue;
   let resetCreditsAvailable;
@@ -122,11 +139,12 @@ function safeModel(value) {
     overflowValue = source.overflow;
     resetCreditsAvailable = source.resetCreditsAvailable;
     activity = record(source.activity);
-  } catch (_) { return { state, size, appearance, expanded, items: [], overflow: 0 }; }
+  } catch (_) { return { state, size, appearance, expanded, items: [], overflow: 0, ...numbers }; }
   const overflow = Number.isSafeInteger(overflowValue) && overflowValue > 0
     ? Math.min(overflowValue, 99) : 0;
   return {
     state,
+    ...numbers,
     size,
     appearance,
     expanded,

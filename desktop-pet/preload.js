@@ -67,5 +67,6 @@ contextBridge.exposeInMainWorld('petDesktop', {
   onMotion: callback => subscribe('pet:motion-frame', callback),
   onActivity: callback => subscribe('pet:activity', callback),
   onSettings: callback => subscribe('pet:settings', callback),
+  onQuota: callback => subscribe('pet:quota-display', callback),
   onCodexSettings: callback => subscribe('pet:codex-settings', callback)
 });

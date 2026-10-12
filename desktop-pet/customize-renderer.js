@@ -58,6 +58,8 @@
   const motionPreference = window.matchMedia?.('(prefers-reduced-motion: reduce)');
   const matchesStartup = () => JSON.stringify(PetCustomization.normalizeAppearance(state.appearance)) ===
     JSON.stringify(startupAppearance);
+  const quotaEditor = window.QuotaCustomizer?.create({ bridge, getAppearance: () => state.appearance,
+    getCodexPet: () => codexDescriptors.get(state.appearance.codexPetId), announce });
 
   $('save').disabled = true;
   $('startup-default').disabled = true;
@@ -601,7 +603,8 @@
     if (auroraPreview && auroraPreview !== displayedAurora) auroraPreview.destroy();
     if (ball) ball.destroy();
     target.replaceChildren();
-    const pixels = previewMode === 'desktop' ? (petPixels[petSize] || petPixels.tiny) : previewPixels;
+    const pixels = previewMode === 'desktop' ? (petPixels[petSize] || petPixels.tiny)
+      : document.body.classList.contains('quota-source') ? Math.max(80, Math.min(previewPixels, $('stage').clientHeight - 90)) : previewPixels;
     target.style.width = pixels + 'px';
     target.style.height = pixels + 'px';
     $('stage').dataset.previewMode = previewMode;
@@ -685,7 +688,11 @@
     if (frameId) cancelAnimationFrame(frameId);
     frameId = 0;
     if (disposed || document.hidden) return;
-    frameId = requestAnimationFrame(renderBall);
+    frameId = requestAnimationFrame(() => {
+      renderBall();
+      $('stage').style.setProperty('--quota-preview-radius', (parseFloat($('preview-ball').style.width) / 2) + 'px');
+      quotaEditor?.appearanceChanged();
+    });
   }
 
   function showPreviewMode(mode) {
@@ -822,7 +829,8 @@
     try {
       state = PetCustomization.normalizeCustomization(state);
       const setAsStartupDefault = $('startup-default').checked;
-      const saved = await bridge.save(state, setAsStartupDefault);
+      const saved = quotaEditor ? await bridge.save(state, setAsStartupDefault, quotaEditor.getConfig())
+        : await bridge.save(state, setAsStartupDefault);
       if (saved && state.appearance.shape === 'codex-pet') {
         const current = await bridge.load();
         if (current?.customization) {
@@ -869,6 +877,7 @@
   document.addEventListener?.('visibilitychange', updateVisibility);
   window.addEventListener('pagehide', () => {
     disposed = true;
+    quotaEditor?.destroy();
     clearPresetThumbnails();
     closeColorPicker(false);
     stopPreview();
@@ -884,10 +893,24 @@
 
   function setSource(next) {
     const codex = next === 'codex';
+    const quota = next === 'quota';
     document.body.classList.toggle('codex-source', codex);
-    $('source-ball').setAttribute('aria-pressed', String(!codex));
+    document.body.classList.toggle('quota-source', quota);
+    $('source-ball').setAttribute('aria-pressed', String(!codex && !quota));
     $('source-codex').setAttribute('aria-pressed', String(codex));
-    $('ball-options').hidden = codex; $('codex-panel').hidden = !codex;
+    $('source-quota')?.setAttribute('aria-pressed', String(quota));
+    for (const name of ['ball','codex','quota']) {
+      const tab = $('source-' + name);
+      if (!tab) continue;
+      tab.setAttribute('role', 'tab');
+      tab.setAttribute('aria-selected', String(name === next));
+      tab.setAttribute('tabindex', name === next ? '0' : '-1');
+    }
+    $('ball-options').hidden = codex || quota; $('codex-panel').hidden = !codex;
+    if ($('quota-panel')) $('quota-panel').hidden = !quota;
+    quotaEditor?.show(quota);
+    if (quotaEditor) schedulePreview();
+    closeColorPicker(false);
     renderAuroraVisibility();
   }
   function syncCandidate() {
@@ -964,6 +987,15 @@
   });
   $('source-ball').addEventListener('click', () => setSource('ball'));
   $('source-codex').addEventListener('click', () => setSource('codex'));
+  $('source-quota')?.addEventListener('click', () => setSource('quota'));
+  const sourceTabs = ['ball','codex','quota'].filter(name => $('source-' + name));
+  for (const name of sourceTabs) $('source-' + name).addEventListener('keydown', event => {
+    if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+    event.preventDefault();
+    const index = event.key === 'Home' ? 0 : event.key === 'End' ? sourceTabs.length - 1
+      : (sourceTabs.indexOf(name) + (event.key === 'ArrowRight' ? 1 : sourceTabs.length - 1)) % sourceTabs.length;
+    setSource(sourceTabs[index]); $('source-' + sourceTabs[index]).focus();
+  });
   $('refresh-pets').addEventListener('click', refreshPets);
   $('pet-search').addEventListener('input', renderPets);
   $('pet-size').addEventListener('change', async () => {
@@ -1004,6 +1036,7 @@
       startupAppearance = PetCustomization.normalizeAppearance(value.startupAppearance || state.appearance);
       $('startup-default').checked = matchesStartup();
     } else if (value) state = PetCustomization.normalizeCustomization(value);
+    quotaEditor?.load(value.quotaDisplay, value.quotaModel);
     syncAppearance();
     renderPresets();
     canPreview = true;

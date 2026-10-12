@@ -105,13 +105,30 @@ function extraCreditsFields(source, state) {
   } catch (_) { return {}; }
 }
 
+function numberFields(source) {
+  try {
+    if (source.display !== 'numbers') return {};
+    const rawPeriods = source.numberPeriods;
+    const periods = Array.isArray(rawPeriods) && rawPeriods.length <= 2
+      ? [...new Set(rawPeriods.filter(value => ['fiveHour', 'weekly'].includes(value)))] : [];
+    const colors = record(source.numberColors);
+    const bodyColor = colors?.bodyColor, glowPinkColor = colors?.glowPinkColor, shape = colors?.shape;
+    return { display: 'numbers', numberPeriods: periods.length ? periods : ['fiveHour'], numberColors: {
+      shape: shape === 'aurora-cloud' ? 'aurora-cloud' : 'blob',
+      bodyColor: typeof bodyColor === 'string' && /^#[\da-f]{6}$/i.test(bodyColor) ? bodyColor : '#EEEBE4',
+      glowPinkColor: typeof glowPinkColor === 'string' && /^#[\da-f]{6}$/i.test(glowPinkColor) ? glowPinkColor : '#D05ED6'
+    } };
+  } catch (_) { return {}; }
+}
+
 function safeModel(value) {
   const source = record(value);
   if (!source) return { state: EMPTY_MODEL.state, items: [], overflow: 0 };
   let stateValue;
   try { stateValue = source.state; } catch (_) { return { state: EMPTY_MODEL.state, items: [], overflow: 0 }; }
   const state = STATES.has(stateValue) ? stateValue : 'disconnected';
-  if (!['ready', 'stale'].includes(state)) return { state, items: [], overflow: 0 };
+  const numbers = numberFields(source);
+  if (!['ready', 'stale'].includes(state)) return { state, items: [], overflow: 0, ...numbers };
   let rawItems;
   let overflowValue;
   let resetCreditsAvailable;
@@ -122,12 +139,13 @@ function safeModel(value) {
     resetCreditsAvailable = source.resetCreditsAvailable;
     activity = record(source.activity);
   } catch (_) {
-    return { state, items: [], overflow: 0 };
+    return { state, items: [], overflow: 0, ...numbers };
   }
   const overflow = Number.isSafeInteger(overflowValue) && overflowValue > 0
     ? Math.min(overflowValue, 99) : 0;
   return {
     state,
+    ...numbers,
     items: copyItems(rawItems),
     overflow,
     ...extraCreditsFields(source, state),
@@ -300,7 +318,7 @@ function createQuotaLabelWindow({
     try { target.webContents.send(CHANNEL, { ...model, visible: true }); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
     try {
-      if (model.items.length > 0) target.setIgnoreMouseEvents(false);
+      if (model.items.length > 0 || model.display === 'numbers') target.setIgnoreMouseEvents(false);
       else target.setIgnoreMouseEvents(true, { forward: true });
     } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
@@ -422,7 +440,7 @@ function createQuotaLabelWindow({
       }),
       () => loadingWindow.webContents.on('ipc-message', (_event, channel) => {
         if (channel !== TOGGLE_CHANNEL || win !== loadingWindow || !requestedVisible || !ready ||
-          !currentModel?.items.length) return;
+          !currentModel?.items.length || currentModel.display === 'numbers') return;
         operation += 1;
         currentModel = { ...currentModel, expanded: currentModel.expanded !== true };
         try { present(); } catch (error) { detach(loadingWindow, error); }
@@ -505,7 +523,8 @@ function createQuotaLabelWindow({
       if (operation !== token) return;
       const appearance = requestedAppearance();
       if (operation !== token) return;
-      const expanded = currentModel?.size === size.name && currentModel.expanded === true &&
+      const expanded = copied.display !== 'numbers' && currentModel?.display !== 'numbers' &&
+        currentModel?.size === size.name && currentModel.expanded === true &&
         copied.items.length > 0;
       currentModel = { ...copied, size: size.name, appearance, expanded };
       requestedVisible = true;

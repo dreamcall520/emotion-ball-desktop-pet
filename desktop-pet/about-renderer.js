@@ -119,11 +119,13 @@
 
   function refreshControls() {
     const checking = update.state === 'checking';
+    const downloading = ['starting', 'downloading'].includes(update.download?.state);
     $('about-website').disabled = busy || typeof bridge?.openWebsite !== 'function';
-    $('about-check-updates').hidden = releaseAvailable;
+    $('about-check-updates').hidden = releaseAvailable && update.downloadAvailable !== false;
     $('about-check-updates').disabled = busy || checking || typeof bridge?.checkUpdates !== 'function';
-    $('about-open-release').disabled = busy || checking || typeof bridge?.openRelease !== 'function';
+    $('about-open-release').disabled = busy || checking || downloading || update.downloadAvailable === false || typeof bridge?.downloadUpdate !== 'function';
     $('about-open-release').hidden = !releaseAvailable;
+    $('about-open-release').textContent = downloading ? '正在下载…' : update.download?.state === 'completed' ? '重新下载安装包' : '下载安装包';
   }
 
   function renderUpdate(value) {
@@ -137,6 +139,15 @@
         : `已是最新版本${version ? '（' + version + '）' : ''}`
         : value.state === 'error' ? typeof value.message === 'string' && value.message ? value.message : '暂时无法检查更新，请稍后重试。'
           : '';
+    if (value.state === 'ready' && value.hasUpdate) {
+      const download = value.download;
+      if (download?.state === 'starting') status.textContent = '正在准备安装包…';
+      else if (download?.state === 'downloading') status.textContent = Number.isFinite(download.percent)
+        ? `正在下载 ${Math.max(0, Math.min(100, Math.floor(download.percent)))}%` : '请选择安装包保存位置…';
+      else if (download?.state === 'completed') status.textContent = '安装包已下载，可从保存位置打开。';
+      else if (['error', 'cancelled'].includes(download?.state)) status.textContent = download.message || '下载未完成，请重试。';
+      else if (value.downloadAvailable === false) status.textContent = value.downloadMessage || '暂无适合当前设备的新版安装包。';
+    }
     status.title = status.textContent;
     refreshControls();
     return true;
@@ -171,7 +182,7 @@
 
   $('about-website').addEventListener('click', () => perform('openWebsite', '', '暂时无法打开官网，请稍后重试。'));
   $('about-check-updates').addEventListener('click', () => perform('checkUpdates', '正在检查更新…', '暂时无法检查更新，请稍后重试。'));
-  $('about-open-release').addEventListener('click', () => perform('openRelease', '', '暂时无法打开新版页面，请稍后重试。'));
+  $('about-open-release').addEventListener('click', () => perform('downloadUpdate', '正在准备安装包…', '暂时无法下载安装包，请稍后重试。'));
   document.addEventListener('keydown', event => {
     if (event.key !== 'Escape') return;
     event.preventDefault();

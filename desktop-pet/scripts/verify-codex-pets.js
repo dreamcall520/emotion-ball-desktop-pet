@@ -15,7 +15,7 @@ const clone = value => JSON.parse(JSON.stringify(value));
 // Called only from the explicit isolated source or packaged smoke branch.
 async function verifyCodexPets({ pet, customize, openCustomization, openChat, getChatWindow,
   getSettings, setSize, store, poll, getMenu, nativeTheme, packaged = false, output = process.env.PET_CODEX_PETS_QA_OUT,
-  phase = process.env.PET_CODEX_PETS_QA_PHASE || 'all' }) {
+  phase = process.env.PET_CODEX_PETS_QA_PHASE || 'all', previewSavedQuota }) {
   assert.equal(process.env.PET_SMOKE_TEST, '1');
   assert.equal(process.env.PET_SMOKE_CODEX_PETS_ONLY, '1');
   assert.equal(typeof packaged, 'boolean', 'packaged 取自主 App 的实际 isPackaged');
@@ -60,6 +60,7 @@ async function verifyCodexPets({ pet, customize, openCustomization, openChat, ge
     value.state.codexPetId === id, '桌面导入图已绘制');
   const capture = (window, name) => capturePaintedWindow({ win: window, artifactPath: path.join(output, `${name}.png`) });
   const checks = [];
+  const quotaChecks = [];
   let idleCadence = null;
   let actualPetsObserved = 0;
   assert.equal(await page("document.querySelector('#source-ball').getAttribute('aria-pressed')"), 'true', '打开默认球球来源');
@@ -108,6 +109,30 @@ async function verifyCodexPets({ pet, customize, openCustomization, openChat, ge
     await capture(chat, `chat-${phase}`);
     checks.push('matching live chat avatar');
     return chat;
+  }
+
+  function quotaWindows() {
+    return [{ id: 'codex:primary', label: 'Codex', windowMinutes: 300, remaining: 74, resetsAt: Date.now() + 3600000 },
+      { id: 'codex:secondary', label: 'Codex', windowMinutes: 10080, remaining: 38, resetsAt: Date.now() + 86400000 }];
+  }
+  const ringView = (win, selector) => win.webContents.executeJavaScript(`(() => {
+    const host=document.querySelector(${JSON.stringify(selector)}), sprite=host?.querySelector(':scope > .codex-pet-sprite'), effect=host?.querySelector(':scope > .quota-effects');
+    const rect=node=>node?.getBoundingClientRect().toJSON();
+    return {style:effect?.dataset.style, quotas:effect?{fiveHour:effect.dataset.fiveHour,weekly:effect.dataset.weekly}:null,
+      host:rect(host),sprite:rect(sprite),ring:rect(effect),spriteCount:host?.querySelectorAll('.codex-pet-sprite').length,
+      original:sprite?{width:sprite.width,height:sprite.height,ready:sprite.dataset.codexReady,opacity:sprite.style.opacity}:null};
+  })()`);
+  function assertWholeSprite(view, label) {
+    assert.equal(view.spriteCount, 1, label + '只保留一个原生播放器');
+    assert.deepEqual([view.original?.width, view.original?.height], [192, 208], label + '原始帧未裁剪');
+    assert.equal(view.original.ready, 'ready');
+    assert.ok(Math.abs(view.sprite.width / view.sprite.height - 192 / 208) < .001, label + '角色等比例');
+    const cx = view.ring.x + view.ring.width / 2, cy = view.ring.y + view.ring.height / 2;
+    const inner = view.ring.width * (view.style === 'duo' ? 134 : 139) / 340;
+    for (const x of [view.sprite.left, view.sprite.right]) for (const y of [view.sprite.top, view.sprite.bottom])
+      assert.ok(Math.hypot(x - cx, y - cy) < inner, label + '完整帧四角在环内');
+    assert.ok(view.sprite.left >= view.host.left - 1 && view.sprite.right <= view.host.right + 1 &&
+      view.sprite.top >= view.host.top - 1 && view.sprite.bottom <= view.host.bottom + 1, label + '角色未超出窗口');
   }
 
   if (phase === 'local') {
@@ -160,6 +185,12 @@ async function verifyCodexPets({ pet, customize, openCustomization, openChat, ge
     assert.equal(digest(imported.spritesheetPath), state.sheetDigest, '重启读取持久资源副本');
     await readyDesktop(state.startupId);
     await readyPreview(state.startupId);
+    if (state.quotaDisplay && previewSavedQuota) {
+      assert.deepEqual(getSettings().quotaDisplay, state.quotaDisplay, '重启保留 Codex 宠物圆环偏好');
+      previewSavedQuota(quotaWindows());
+      const restored = await waitFor(() => ringView(pet, '#pet'), value => value.style === state.quotaDisplay.style, '重启恢复桌面圆环');
+      assertWholeSprite(restored, '重启圆环'); quotaChecks.push({ restart: restored });
+    }
     await verifyChat(state.startupId);
     await capture(customize, 'customizer-restart'); await capture(pet, 'desktop-restart');
     checks.push('source removed', 'startup wins after actual process restart', 'copied asset still renders');
@@ -351,10 +382,56 @@ async function verifyCodexPets({ pet, customize, openCustomization, openChat, ge
     const toggle=getMenu().getMenuItemById('color-accessible');if(toggle.checked)toggle.click(toggle,pet,{});
     checks.push('12 Codex pet theme combinations and accessible controls', 'theme changes preserve imported assets / startup / favorites');
   }
+  if (previewSavedQuota && phase === 'save') {
+    assert.equal(actualPetsObserved, 0, '圆环检查使用虚构测试素材');
+    getChatWindow()?.hide();
+    await click('#source-quota');
+    const initialQuota = clone(getSettings().quotaDisplay), startup = clone(getSettings().startupAppearance);
+    const activeId = getSettings().customization.appearance.codexPetId;
+    const sourceEnabled = getSettings().codexEnabled;
+    for (const style of ['ring', 'duo', 'split', 'stages']) {
+      await click(`#quota-styles button[data-style="${style}"]`);
+      const candidate = await waitFor(() => ringView(customize, '#preview-ball'), value => value.style === style && value.original?.ready === 'ready', style + '原生精灵预览');
+      assertWholeSprite(candidate, style + '预览');
+      assert.deepEqual(getSettings().quotaDisplay, initialQuota, '预览不修改已保存样式');
+      const thumbnail = await waitFor(() => page(`(() => {
+        const sprite=document.querySelector('button[data-style="${style}"] .codex-pet-sprite');
+        return {ready:sprite?.dataset.codexReady,width:sprite?.width,height:sprite?.height};
+      })()`), value => value.ready === 'ready', style + '缩略图实际精灵');
+      assert.deepEqual([thumbnail.width, thumbnail.height], [192, 208]);
+      quotaChecks.push({ style, candidate, thumbnail });
+    }
+    for (const style of ['ring', 'duo', 'split', 'stages']) {
+      await click(`#quota-styles button[data-style="${style}"]`);
+      await page("document.querySelector('#startup-default').checked=false"); await click('#save');
+      await waitFor(() => getSettings().quotaDisplay.style, value => value === style, style + '圆环已保存');
+      previewSavedQuota(quotaWindows());
+      const running = await waitFor(() => ringView(pet, '#pet'), value => value.style === style, style + '桌面圆环');
+      assertWholeSprite(running, style + '桌面');
+      assert.equal(getSettings().customization.appearance.codexPetId, activeId, '额度样式不替换角色');
+      assert.deepEqual(getSettings().startupAppearance, startup, '额度样式不改变启动形象');
+      assert.equal(getSettings().codexEnabled, sourceEnabled, '原生虚构额度不启用真实连接');
+      previewSavedQuota([quotaWindows()[1]]);
+      const single = await waitFor(() => ringView(pet, '#pet'), value => value.style === (style === 'duo' ? 'ring' : style) && value.quotas?.fiveHour === 'unknown', style + '仅周额度');
+      assertWholeSprite(single, style + '单周期');
+      previewSavedQuota([{ ...quotaWindows()[0], remaining: 0 }]);
+      await waitFor(() => ringView(pet, '#pet'), value => value.quotas?.fiveHour === '0', style + '保留零额度');
+      previewSavedQuota([]);
+      await waitFor(() => ringView(pet, '#pet'), value => !value.style && value.original?.ready === 'ready', style + '缺数据不显示虚构圆环');
+      previewSavedQuota(quotaWindows());
+      quotaChecks.push({ style, running, single, zeroAndMissing: true });
+      if (style === 'split') { await capture(customize, 'codex-quota-split-settings'); await capture(pet, 'codex-quota-split-desktop'); }
+    }
+    const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+    state.quotaDisplay = clone(getSettings().quotaDisplay);
+    fs.writeFileSync(stateFile, JSON.stringify(state));
+    checks.push('four native Codex rings / whole sprite / actual thumbnails', 'ring save / missing quota / single quota / zero quota',
+      'quota demo never enables actual Codex connection');
+  }
   assert.deepEqual(errors, [], '没有原生页面加载失败');
   fs.writeFileSync(path.join(output, `report-${phase}.json`), JSON.stringify({ ok: true, packaged,
     isolatedUserData: true, sourceFixtures: phase === 'local' ? 0 : 30, actualPetsObserved,
-    actualModelCalls: 0, phase, checks, themeChecks, idleCadence }, null, 2));
+    actualModelCalls: 0, phase, checks, themeChecks, idleCadence, quotaChecks }, null, 2));
   process.stdout.write(`PET_CODEX_PETS_${phase.toUpperCase()}_OK\n`);
   return { checks };
 }

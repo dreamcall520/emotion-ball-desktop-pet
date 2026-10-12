@@ -819,3 +819,37 @@ body[data-guard-size="standard"] .guard-entry-pet { top: 3px; }
 body[data-guard-size="standard"] .guard-entry-zombie { top: -2px; }
 body[data-guard-size="compact"] .guard-entry-pet { top: 16px; }
 body[data-guard-size="compact"] .guard-entry-zombie { top: 11px; }
+
+#quota-numbers { display: none; }
+#quota-beam #quota-label[data-display="numbers"] {
+  padding: 0 2px;
+  color: var(--quota-value-normal);
+}
+#quota-beam #quota-label[data-display="numbers"][data-readings="1"] { padding: 0 10px 0 7px; }
+#quota-beam #quota-label[data-display="numbers"] > :not(#quota-numbers) { display: none !important; }
+#quota-label[data-display="numbers"] #quota-numbers {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  white-space: nowrap;
+}
+.quota-reading {
+  display: inline-flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+#quota-label[data-readings="2"] .quota-reading-value { font-size: 11px; font-weight: 650; }
+.quota-reading:hover { opacity: .75; }
+.quota-reading:focus-visible { outline: 1px solid var(--quota-action-blue); outline-offset: 2px; border-radius: 4px; }

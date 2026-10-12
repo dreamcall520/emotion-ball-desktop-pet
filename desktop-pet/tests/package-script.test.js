@@ -25,6 +25,19 @@ test('打包后执行整个应用的本机临时签名', () => {
   assert.equal(typeof adhocSign, 'function');
 });
 
+test('联动确认窗口及全部本地视觉依赖进入安装包', () => {
+  const root = path.resolve(__dirname, '../..');
+  const staging = fs.mkdtempSync(path.join(os.tmpdir(), 'qiuqiu-consent-package-'));
+  try {
+    prepareStaging(root, staging);
+    for (const file of ['codex-consent.html', 'codex-consent.css', 'codex-consent-preload.js', 'codex-consent-renderer.js',
+      'about.css', 'color-mode.js', 'color-mode.css', 'lib/chat-avatar.js', 'lib/customization.js', 'lib/codex-pet-player.js', 'lib/aurora-rive.js']) {
+      const relative = path.join('desktop-pet', file);
+      assert.deepEqual(fs.readFileSync(path.join(staging, relative)), fs.readFileSync(path.join(root, relative)), file);
+    }
+  } finally { fs.rmSync(staging, { recursive: true, force: true }); }
+});
+
 test('打包暂存区包含主进程依赖的跳跃模块', () => {
   const root = path.resolve(__dirname, '../..');
   const staging = prepareStaging(root);
