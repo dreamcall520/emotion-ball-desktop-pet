@@ -700,6 +700,7 @@ async function verifyCodexStatusV20({ pet, quotaLabel, details, BrowserWindow, s
       webPreferences: { preload: path.join(__dirname, '../api-usage-label-preload.js'), contextIsolation: true,
         nodeIntegration: false, sandbox: true, backgroundThrottling: false } });
     await apiWindow.loadFile(path.join(__dirname, '../api-usage-label.html'));
+    apiWindow.showInactive();
     for (const colorMode of ['standard', 'accessible']) for (const appearance of ['light', 'dark']) {
       apiWindow.webContents.send('pet:color-mode', colorMode, appearance);
       apiWindow.webContents.send('pet:api-usage-label', { connected: true, busy: false, expanded: true,
