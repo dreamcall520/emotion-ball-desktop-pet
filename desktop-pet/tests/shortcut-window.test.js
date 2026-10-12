@@ -146,6 +146,16 @@ test('IPC只接受本地面板主frame；未知来源不能读取、保存、录
   f.send('shortcut:action', 'chat'); assert.deepEqual(f.actions, ['chat']); assert.equal(f.manager.isOpen(), false);
 });
 
+test('实体面板不随光标采样切换穿透，标题栏和关闭按钮始终接收鼠标', async t => {
+  const f = fixture(); t.after(() => f.manager.dispose());
+  for (const settings of [true, false]) {
+    if (!settings) f.invoke('shortcut:save', { shape: 'list' });
+    f.manager.open({ settings }); await flush();
+    f.manager.sampleCursor({ x: -10000, y: -10000 });
+    assert.equal(f.win().passthrough, false);
+  }
+});
+
 test('悬停计时结束时重新检查真实轮廓，不把透明留白当成球体', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const f = fixture(); t.after(() => f.manager.dispose());

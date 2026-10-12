@@ -155,7 +155,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
     if (!overPet) blocked = false;
     if (closing) return;
     if (opened) {
-      const hit = view !== 'floating' ? contains(layout?.bounds, point) : layout?.items.some(item => contains({
+      const hit = view !== 'floating' || layout?.items.some(item => contains({
         ...item, x: item.x + layout.bounds.x, y: item.y + layout.bounds.y }, point));
       setIgnored(!hit);
       if (view === 'settings' || alive() && win.isFocused() || overPet || contains(layout?.bounds, point, 16)) cancelLeave();

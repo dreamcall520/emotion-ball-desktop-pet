@@ -115,6 +115,7 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     assert.deepEqual(win.getBounds(), movedBounds, 'settings manual placement survives sync');
     assert.equal(await page(win, "getComputedStyle(document.querySelector('.settings-panel .panel-header')).webkitAppRegion"), 'drag');
     assert.equal(await page(win, "getComputedStyle(document.querySelector('.settings-panel [data-close]')).webkitAppRegion"), 'no-drag');
+    controller.sampleCursor({ x: -10000, y: -10000 }); assert.equal(ignores.get(win), false, 'solid settings window always accepts native mouse input');
     result.checks.push('settings-native-drag-region-and-position-retained');
     for (const method of ['close', 'cancel', 'escape']) {
       controller.open({ settings: true }); await wait(80);
@@ -142,12 +143,15 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
       const menu = getMenu(); menu.getMenuItemById(`ui-theme-${theme}`).click();
       menu.getMenuItemById(`color-appearance-${appearance}`).click();
       if ((getSettings().colorMode === 'accessible') !== accessible) menu.getMenuItemById('color-accessible').click();
-      controller.open(); await wait(100); await settled(win);
+      controller.interrupt(); await wait(100);
+      const anchor = pet.getBounds(); cursor = { x: anchor.x + anchor.width / 2, y: anchor.y + anchor.height / 2 };
+      controller.open({ focus: false }); await settled(win);
       const surface = await page(win, `({theme:document.documentElement.dataset.uiTheme,appearance:document.documentElement.dataset.appearance,mode:document.documentElement.dataset.colorMode,buttons:[...document.querySelectorAll('[data-action]')].filter(n=>n.getClientRects().length).map(n=>({text:n.textContent.trim(),width:n.getBoundingClientRect().width,height:n.getBoundingClientRect().height}))})`);
       assert.equal(surface.theme, theme); assert.equal(surface.appearance, appearance); assert.equal(surface.mode, accessible ? 'accessible' : 'standard');
       assert.equal(surface.buttons.length, 6); assert.ok(surface.buttons.every(button => button.width >= 52 && button.width === button.height));
       result.themes.push(surface); await capture(win, `native-${theme}-${appearance}-${accessible ? 'accessible' : 'standard'}.png`);
       await save(win, { ...registrar.getConfig(), shape: 'list' });
+      controller.interrupt(); await wait(100); controller.open({ focus: false });
       const listSurface = await compactList(win);
       assert.equal(listSurface.theme, theme); assert.equal(listSurface.appearance, appearance); assert.equal(listSurface.mode, accessible ? 'accessible' : 'standard');
       result.listThemes.push(listSurface); await capture(win, `native-list-${theme}-${appearance}-${accessible ? 'accessible' : 'standard'}.png`);
