@@ -2085,6 +2085,8 @@ async function finishSmokeTest() {
       ), false);
       assert.equal(menuTemplate().some(item => item.id === 'custom-sequence-play'), false);
       process.stdout.write('PET_CUSTOMIZE_READY\n');
+      assert.equal(editor.isVisible(), true, '定制形态验收使用真实可见窗口');
+      editor.webContents.setBackgroundThrottling(false);
       for (const [shape, bodyColor, eyeColor] of [
         ['blob', '#EEEBE4', '#1A1A1A'],
         ['cloud', '#5B3BC7', '#FFFFFF'],

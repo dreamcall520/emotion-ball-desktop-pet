@@ -43,9 +43,19 @@ async function verifyAuroraSixLobe({ editor, pet, chatWindow, getSettings, readS
   const showEditor = async () => {
     editor.show(); editor.moveTop(); require('electron').app.focus({ steal: true });
     editor.focus(); editor.webContents.focus();
-    await poll(() => page(`window.__customizerReady === true && !document.hidden && document.hasFocus() &&
+    assert.equal(editor.isVisible(), true, '六瓣预览使用真实可见窗口');
+    await poll(() => page(`window.__customizerReady === true && !document.hidden &&
       Boolean(document.getElementById('preview-ball').dataset.renderedAppearance) &&
-      Boolean(document.querySelector('#preview-ball svg .eb-head'))`), '编辑器尚未恢复可见预览');
+      Boolean(document.querySelector('#preview-ball svg .eb-head'))`), '编辑器尚未恢复可见预览').catch(async error => {
+      process.stderr.write('PET_SIX_LOBE_EDITOR_DIAGNOSTIC ' + JSON.stringify({
+        nativeVisible: editor.isVisible(), nativeFocused: editor.isFocused(),
+        throttling: editor.webContents.getBackgroundThrottling(),
+        ...await page(`({ready:window.__customizerReady,hidden:document.hidden,focused:document.hasFocus(),
+          rendered:document.getElementById('preview-ball')?.dataset.renderedAppearance,
+          head:Boolean(document.querySelector('#preview-ball svg .eb-head'))})`)
+      }) + '\n');
+      throw error;
+    });
   };
   const ready = (target, contour, fields = {}) => `(() => {
     const target = document.querySelector(${JSON.stringify(target)});

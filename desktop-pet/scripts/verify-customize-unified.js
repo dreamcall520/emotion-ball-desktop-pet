@@ -256,13 +256,15 @@ async function verifyCustomizeUnified({ pet, editor, chatWindow, open, getWindow
   const focusKeyboard = async () => {
     require('electron').app.focus({ steal: true });
     win.focus(); win.webContents.focus();
-    await poll(() => page('!document.hidden && document.hasFocus()'), Boolean, '选色器键盘验收需活动编辑窗口');
+    await poll(async () => win.isFocused() && await page('!document.hidden && document.hasFocus()'), Boolean,
+      '选色器键盘验收需原生与页面均处于活动状态');
     assert.equal(win.isFocused(), true, '原生编辑窗口保留键盘焦点');
   };
   const ready = async () => {
     await poll(() => getWindow(), value => Boolean(value && !value.isDestroyed()), '定制窗口存在'); win = getWindow();
     await poll(() => page('window.__customizerReady === true && !document.querySelector("#save").disabled'), Boolean, '定制设置加载');
     await poll(() => win.isVisible(), Boolean, '定制可见');
+    win.webContents.setBackgroundThrottling(false);
   };
   const reopen = async () => { if (win && !win.isDestroyed()) win.close(); await poll(() => getWindow(), value => !value, '关闭释放定制窗口'); open(); await ready(); };
   const setField = async (id, value) => page(`(() => { const node=document.getElementById(${JSON.stringify(id)}); node.value=${JSON.stringify(String(value))}; node.dispatchEvent(new Event('input',{bubbles:true})); })()`);
@@ -275,7 +277,17 @@ async function verifyCustomizeUnified({ pet, editor, chatWindow, open, getWindow
       rendered.eyeColor===document.querySelector('#eye-hex').value.toUpperCase()&&
       target.querySelector(':scope > svg .eb-head')&&
       (rendered.shape!=='aurora-cloud'||target.querySelector('.eb-rive-aurora.ready')));
-  })()`),Boolean,'当前形态和配色完成真实预览绘制');
+  })()`),Boolean,'当前形态和配色完成真实预览绘制').catch(async error => {
+    const state = { nativeVisible: !win.isDestroyed() && win.isVisible(), currentWindow: win === getWindow(),
+      ...await page(`({ hidden:document.hidden,
+        selected:document.querySelector('#shape-options [aria-pressed="true"]')?.dataset,
+        rendered:document.querySelector('#preview-ball')?.dataset.renderedAppearance || null,
+        body:document.querySelector('#body-hex')?.value, eye:document.querySelector('#eye-hex')?.value,
+        rive:[...document.querySelectorAll('#preview-ball .eb-rive-aurora')].map(canvas=>canvas.className)
+      })`).catch(failure => ({ diagnosticError: String(failure) })) };
+    process.stderr.write('PET_CUSTOMIZE_PREVIEW_DIAGNOSTIC ' + JSON.stringify(state) + '\n');
+    throw error;
+  });
   const shapeSelector = shape => shape === 'aurora-cloud'
     ? '#shape-options [data-shape="aurora-cloud"][data-aurora-contour="six-lobe"]' : `#shape-options [data-shape="${shape}"]`;
   const chooseShape = async shape => {
@@ -528,6 +540,7 @@ async function verifyCustomizeUnified({ pet, editor, chatWindow, open, getWindow
         await poll(() => page("!document.querySelector('#save').disabled"), Boolean, '幻彩配色保存完成');
       }
       chatWindow.hide();
+      assert.equal(avatarWindow.isVisible(), false, '头像暂停检查必须先真实隐藏聊天窗口');
       await poll(() => avatarWindow.webContents.executeJavaScript("document.querySelector('#chat-avatar').dataset.avatarActive"), value => value === 'false', '隐藏聊天暂停头像');
       if (shape === 'aurora-cloud') {
         await setField('aurora-transparency', 42);

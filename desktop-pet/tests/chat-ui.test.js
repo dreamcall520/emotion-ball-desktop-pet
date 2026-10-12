@@ -23,6 +23,7 @@ const withModels = (state = stored()) => ({
 function fixture(overrides = {}) {
   let receive;
   let receiveAppearance;
+  let receiveVisibility;
   const sent = [];
   const avatars = [];
   const animations = [];
@@ -64,6 +65,7 @@ function fixture(overrides = {}) {
     getState: () => Promise.resolve(idle()),
     onState(callback) { receive = callback; return () => {}; },
     onAppearance(callback) { receiveAppearance = callback; return () => {}; },
+    onVisibility(callback) { receiveVisibility = callback; return () => { receiveVisibility = null; }; },
     async send(text) { sent.push(text); return { accepted: true }; },
     async stop() {},
     async newChat() { return { accepted: true }; },
@@ -87,7 +89,8 @@ function fixture(overrides = {}) {
   vm.runInNewContext(source, { document, window });
   return { get, sent, document, window, avatars, animations, activities, motion,
     options: () => get('model-menu').children.filter(item => item.dataset.model),
-    receive: next => receive(next), receiveAppearance: (...args) => receiveAppearance(...args) };
+    receive: next => receive(next), receiveAppearance: (...args) => receiveAppearance(...args),
+    receiveVisibility: next => receiveVisibility?.(next) };
 }
 
 test('聊天头像在窗口内收到外观更新，不受聊天消息刷新影响', async () => {
@@ -142,10 +145,30 @@ test('聊天外观与原生快照交给唯一头像控制器，消息刷新不�
   assert.equal(f.animations.length, 1);
   f.window.dispatch('beforeunload');
   assert.equal(f.animations[0].destroyed, true);
+  const activities = f.activities.length;
+  f.receiveVisibility(true);
+  f.document.dispatch('visibilitychange');
+  f.motion.dispatch('change');
+  assert.equal(f.activities.length, activities, '卸载后解除原生显隐、DOM 与动态偏好订阅');
 });
 
-test('头像活动同时取决于页面可见与减少动态，重开及偏好变化立即同步', () => {
+test('头像活动同时取决于原生窗口、页面可见与减少动态，隐藏中刷新不能重启', () => {
   const f = fixture();
+  assert.equal(f.activities.at(-1), false, '原生显隐尚未同步时保持暂停');
+  f.receiveVisibility(true);
+  assert.equal(f.activities.at(-1), true);
+  f.receiveVisibility(false);
+  assert.equal(f.document.hidden, false);
+  assert.equal(f.activities.at(-1), false, 'DOM 仍可见也服从原生隐藏');
+  f.receiveAppearance({ shape: 'aurora-cloud' });
+  assert.equal(f.activities.at(-1), false);
+  f.document.hidden = true; f.document.dispatch('visibilitychange');
+  f.document.hidden = false; f.document.dispatch('visibilitychange');
+  assert.equal(f.activities.at(-1), false);
+  f.motion.matches = true; f.motion.dispatch('change');
+  f.motion.matches = false; f.motion.dispatch('change');
+  assert.equal(f.activities.at(-1), false);
+  f.receiveVisibility(true);
   assert.equal(f.activities.at(-1), true);
   f.document.hidden = true; f.document.dispatch('visibilitychange');
   assert.equal(f.activities.at(-1), false);
@@ -722,12 +745,18 @@ test('预加载限制消息类型、长度、固定频道，并能解除订阅',
   const unsubscribe = api.onState(next => { snapshot = next; });
   let appearance;
   const unsubscribeAppearance = api.onAppearance(next => { appearance = next; });
+  assert.doesNotThrow(() => api.onVisibility(null)());
+  const visibility = [];
+  const unsubscribeVisibility = api.onVisibility(next => { visibility.push(next); });
+  for (const value of [false, true, 'true', 1, undefined]) listeners.get('pet:chat-visible')({}, value);
+  assert.deepEqual(visibility, [false, true, false, false, false]);
   listeners.get('pet:chat-state')({}, { busy: true });
   listeners.get('pet:chat-appearance')({}, { shape: 'cloud' });
   assert.equal(snapshot.busy, true);
   assert.equal(appearance.shape, 'cloud');
   unsubscribe();
   unsubscribeAppearance();
+  unsubscribeVisibility();
   assert.equal(listeners.size, 0);
   api.close();
   assert.deepEqual(sent, [['pet:chat-close']]);

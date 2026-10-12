@@ -54,6 +54,13 @@ function createChatWindow({ BrowserWindow, screen, getPetWindow, getAppearance =
     onVisibilityChange(visible);
   }
 
+  function syncVisibility() {
+    if (!win || win.isDestroyed()) return;
+    const visible = win.isVisible() && !win.isMinimized();
+    if (ready) win.webContents.send('pet:chat-visible', visible);
+    visibilityChanged(visible);
+  }
+
   function reposition() {
     if (!win || win.isDestroyed()) return;
     const pet = getPetWindow();
@@ -148,6 +155,7 @@ function createChatWindow({ BrowserWindow, screen, getPetWindow, getAppearance =
     reposition();
     win.show();
     win.focus();
+    syncVisibility();
   }
 
   function hide() {
@@ -155,7 +163,10 @@ function createChatWindow({ BrowserWindow, screen, getPetWindow, getAppearance =
     cancelSettle();
     nativeMoving = false;
     movedPet = null;
-    if (win && !win.isDestroyed()) win.hide();
+    if (win && !win.isDestroyed()) {
+      win.hide();
+      syncVisibility();
+    }
   }
 
   function destroy() {
@@ -205,8 +216,10 @@ function createChatWindow({ BrowserWindow, screen, getPetWindow, getAppearance =
       destroy();
       onError(new Error(`聊天面板意外退出：${details.reason}`));
     });
-    win.on('show', () => { if (win === loadingWindow) visibilityChanged(true); });
-    win.on('hide', () => { if (win === loadingWindow) visibilityChanged(false); });
+    for (const event of ['show', 'hide', 'minimize', 'restore']) {
+      win.on(event, () => { if (win === loadingWindow) syncVisibility(); });
+    }
+    win.webContents.on('did-finish-load', () => { if (win === loadingWindow) syncVisibility(); });
     win.on('will-move', (_event, bounds) => { if (win === loadingWindow) followChatMove(bounds); });
     win.on('move', () => { if (win === loadingWindow) followChatMove(); });
     win.on('close', event => {
@@ -229,6 +242,7 @@ function createChatWindow({ BrowserWindow, screen, getPetWindow, getAppearance =
     win.loadFile(path.join(__dirname, '../chat.html')).then(() => {
       if (win !== loadingWindow || loadingWindow.isDestroyed()) return;
       ready = true;
+      syncVisibility();
       deliver();
       syncAppearance();
       present();

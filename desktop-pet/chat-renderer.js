@@ -580,8 +580,13 @@
   });
   const avatarController = window.PetChatAvatar.create(avatar);
   const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
-  const syncAvatarActivity = () => avatarController.setActive(!document.hidden && !reduceMotion?.matches);
+  let nativeVisible = false;
+  const syncAvatarActivity = () => avatarController.setActive(nativeVisible && !document.hidden && !reduceMotion?.matches);
   syncAvatarActivity();
+  const unsubscribeVisibility = api.onVisibility?.(visible => {
+    nativeVisible = visible;
+    syncAvatarActivity();
+  });
   reduceMotion?.addEventListener('change', syncAvatarActivity);
   document.addEventListener('visibilitychange', syncAvatarActivity);
   const unsubscribeAppearance = api.onAppearance?.((appearance, image, codexPet) => {
@@ -594,6 +599,7 @@
     document.removeEventListener('visibilitychange', syncAvatarActivity);
     unsubscribe();
     unsubscribeAppearance?.();
+    unsubscribeVisibility?.();
   });
   avatarController.update();
   const initialEvents = stateEvents;

@@ -60,6 +60,7 @@ function fixture(load = () => Promise.resolve(), getAppearance = () => null, get
       this.options = options;
       this.destroyed = false;
       this.visible = false;
+      this.minimized = false;
       this.focusCount = 0;
       this.messages = [];
       this.bounds = { x: 0, y: 0, width: options.width, height: options.height };
@@ -83,6 +84,7 @@ function fixture(load = () => Promise.resolve(), getAppearance = () => null, get
     hide() { this.visible = false; this.emit('hide'); }
     isDestroyed() { return this.destroyed; }
     isVisible() { return this.visible; }
+    isMinimized() { return this.minimized; }
     destroy() { this.destroyed = true; this.visible = false; this.emit('closed'); }
   }
   const chat = createChatWindow({
@@ -216,9 +218,40 @@ test('加载中关闭，加载完成后也不会自己弹出；再次打开复�
   resolve();
   await flush();
   assert.equal(f.windows[0].visible, false);
+  assert.deepEqual(f.windows[0].messages.filter(([channel]) => channel === 'pet:chat-visible'),
+    [['pet:chat-visible', false]]);
   f.chat.show({ messages: [], busy: false });
   assert.equal(f.windows.length, 1);
   assert.equal(f.chat.isVisible(), true);
+});
+
+test('原生显隐按实际窗口状态同步，静默隐藏、迟到事件与重载都不会误启停', async t => {
+  const f = fixture();
+  t.after(() => f.chat.destroy());
+  f.chat.show({ messages: [] });
+  await flush();
+  const win = f.windows[0];
+  const visibleMessages = () => win.messages.filter(([channel]) => channel === 'pet:chat-visible').map(([, value]) => value);
+  assert.equal(visibleMessages()[0], false);
+  assert.equal(visibleMessages().at(-1), true);
+  win.hide = () => { win.visible = false; };
+  f.chat.hide();
+  assert.equal(visibleMessages().at(-1), false, '原生 hide 不发事件也必须立即暂停');
+  win.show = () => { win.visible = true; };
+  f.chat.show({ messages: [] });
+  assert.equal(visibleMessages().at(-1), true, '主动显示不依赖原生 show 事件');
+  const beforeStale = visibleMessages().length;
+  win.emit('hide');
+  win.webContents.emit('did-finish-load');
+  assert.deepEqual(visibleMessages().slice(beforeStale), [true, true]);
+  assert.deepEqual(f.visibility, [true, false, true], '迟到 hide 与重载不会改变真实显隐回调');
+  win.minimized = true;
+  win.emit('minimize');
+  assert.equal(visibleMessages().at(-1), false);
+  win.minimized = false;
+  win.emit('restore');
+  assert.equal(visibleMessages().at(-1), true);
+  assert.deepEqual(f.visibility, [true, false, true, false, true]);
 });
 
 test('系统关闭只隐藏并保留渲染器；外部窗口与导航都被拦截', async t => {
@@ -251,6 +284,17 @@ test('渲染进程失败后下次可重建，旧窗口迟到的失败不能销�
   rejectOld(new Error('old failed'));
   await flush();
   assert.equal(f.chat.isVisible(), true);
+  assert.equal(f.errors.length, 0);
+  const current = f.windows[1];
+  const messages = current.messages.slice(), visibility = f.visibility.slice();
+  const oldMessageCount = f.windows[0].messages.length;
+  for (const event of ['show', 'hide', 'minimize', 'restore', 'closed']) f.windows[0].emit(event);
+  f.windows[0].webContents.emit('did-finish-load');
+  f.windows[0].webContents.emit('render-process-gone', {}, { reason: 'crashed' });
+  assert.equal(f.chat.getWindow(), current);
+  assert.deepEqual(current.messages, messages, '旧窗口事件不能向当前窗口重发显隐');
+  assert.deepEqual(f.visibility, visibility);
+  assert.equal(f.windows[0].messages.length, oldMessageCount);
   assert.equal(f.errors.length, 0);
   f.windows[1].webContents.emit('render-process-gone', {}, { reason: 'crashed' });
   assert.equal(f.chat.getWindow(), null);
