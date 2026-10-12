@@ -26,6 +26,11 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
   const ready = async () => { const win = await poll(() => controller.getWindow(), Boolean, 'shortcut window missing');
     await poll(() => win.isVisible() && !win.webContents.isLoading(), Boolean, 'shortcut window not ready');
     await poll(() => page(win, 'Boolean(document.querySelector("[data-action]"))'), Boolean, 'shortcut actions not rendered'); return win; };
+  const focusReady = async win => {
+    win.focus(); win.webContents.focus();
+    await poll(async () => win.isFocused() && await page(win, 'document.hasFocus() && !document.hidden'), Boolean, 'native shortcut focus is ready');
+    assert.equal(controller.isOpen(), true, 'focused shortcut remains open before input');
+  };
   const save = async (win, config) => { controller.open({ settings: true }); await wait(60);
     const reply = await page(win, `qiuShortcuts.save(${JSON.stringify(config)})`); assert.equal(reply.ok, true, reply.error); await wait(60); return reply; };
   const settled = async win => {
@@ -260,7 +265,8 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
 
     cursor = { x: original.x + original.width / 2, y: original.y + original.height / 2 };
     await save(win, { ...registrar.getConfig(), shape: 'floating' });
-    controller.open(); await wait(40);
+    require('electron').app.focus({ steal: true });
+    controller.open(); await ready(); await focusReady(win); await wait(40);
     const motion = await page(win, "({phase:document.body.dataset.phase,frames:document.getAnimations().map(a=>a.effect.getKeyframes())})");
     assert.equal(motion.phase, 'opening'); assert.equal(motion.frames.length, 6);
     assert.ok(motion.frames.every(frames => Number(frames[0].opacity) === 0 && Number(frames.at(-1).opacity) === 1 && frames[0].transform.includes('scale(0.28)')), 'six cards expand from the pet');
@@ -517,8 +523,11 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     controller.open(); await ready();
     powerMonitor.emit('lock-screen'); await wait(100); assert.equal(controller.isOpen(), false);
     assert.equal(controller.open(), false); powerMonitor.emit('unlock-screen');
-    controller.open(); await ready();
+    require('electron').app.focus({ steal: true });
+    controller.open(); await ready(); await focusReady(win); await settled(win);
+    result.pointer = { before: { open: controller.isOpen(), focused: win.isFocused(), documentFocus: await page(win, 'document.hasFocus()') } };
     await page(pet, `petDesktop.beginDrag({x:200,y:200}); petDesktop.endDrag(); true`); await wait(100);
+    result.pointer.after = { open: controller.isOpen(), focused: win.isFocused(), documentFocus: await page(win, 'document.hasFocus()') };
     assert.equal(controller.isOpen(), true, 'ordinary pointerdown/up keeps existing menu');
     await page(pet, `petDesktop.beginDrag({x:200,y:200}); petDesktop.dragTo({x:220,y:200}); petDesktop.endDrag(); true`); await wait(500);
     assert.equal(controller.isOpen(), false, 'real drag closes menu');
