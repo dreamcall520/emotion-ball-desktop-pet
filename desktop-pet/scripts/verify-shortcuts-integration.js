@@ -14,6 +14,7 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
   const output = path.resolve(process.env.PET_SMOKE_SHORTCUT_OUTPUT || path.join(os.tmpdir(), `qiuqiu-shortcuts-${process.pid}`));
   fs.mkdirSync(output, { recursive: true });
   const result = { ok: false, checks: [], themes: [], listThemes: [], settingsThemes: [], layouts: [], peekedLayouts: [], displays: screen.getAllDisplays().map(({ id, workArea, scaleFactor }) => ({ id, workArea, scaleFactor })) };
+  let closingDiagnostic = null, restoreClosingDiagnostic = () => {};
   const original = pet.getBounds(), originalCursor = screen.getCursorScreenPoint;
   const originalIgnore = BrowserWindow.prototype.setIgnoreMouseEvents;
   const ignores = new WeakMap();
@@ -263,13 +264,58 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     const motion = await page(win, "({phase:document.body.dataset.phase,frames:document.getAnimations().map(a=>a.effect.getKeyframes())})");
     assert.equal(motion.phase, 'opening'); assert.equal(motion.frames.length, 6);
     assert.ok(motion.frames.every(frames => Number(frames[0].opacity) === 0 && Number(frames.at(-1).opacity) === 1 && frames[0].transform.includes('scale(0.28)')), 'six cards expand from the pet');
-    await settled(win); await page(win, 'qiuShortcuts.close(); true');
-    await poll(() => controller.isOpen(), value => !value, 'closing starts');
-    suppressedBubbles('closing');
+    await settled(win);
+    const closingSession = controller.getState().session, originalSend = win.webContents.send, originalHide = win.hide;
+    let closingAt = null, hiddenAt = null, closingTimer = null, closingFailure = null;
+    closingDiagnostic = { session: closingSession, samples: 0 };
+    const checkClosing = () => {
+      closingDiagnostic.samples++;
+      try { suppressedBubbles('closing'); }
+      catch (error) { closingFailure ||= error; closingDiagnostic.error ||= error.message; }
+    };
+    win.webContents.send = function (channel, ...args) {
+      const next = args[0];
+      if (channel === 'shortcut:state' && next.session === closingSession && next.animation?.phase === 'closing' && closingAt === null) {
+        closingAt = performance.now(); closingDiagnostic.durationMs = next.animation.duration;
+        checkClosing(); closingTimer = setInterval(checkClosing, 10);
+      }
+      return originalSend.call(this, channel, ...args);
+    };
+    win.hide = function (...args) {
+      if (closingAt !== null && hiddenAt === null) {
+        hiddenAt = performance.now(); clearInterval(closingTimer); checkClosing();
+        closingDiagnostic.elapsedMs = hiddenAt - closingAt; closingDiagnostic.presentingBeforeHide = controller.isPresenting();
+        try { assert.ok(closingDiagnostic.elapsedMs >= closingDiagnostic.durationMs - 3, 'native hide preserves the full closing duration'); }
+        catch (error) { closingFailure ||= error; closingDiagnostic.error ||= error.message; }
+      }
+      return originalHide.apply(this, args);
+    };
+    restoreClosingDiagnostic = async () => {
+      clearInterval(closingTimer); win.webContents.send = originalSend; win.hide = originalHide;
+      if (!win.isDestroyed()) await page(win, 'window.__unsubscribeClosing?.(); delete window.__unsubscribeClosing; true').catch(() => {});
+    };
+    await page(win, `window.__closingFrames=null; window.__unsubscribeClosing=qiuShortcuts.onState(next => {
+      if (next.session === ${closingSession} && next.animation?.phase === 'closing') window.__closingFrames={
+        session:next.session,phase:document.body.dataset.phase,frames:document.getAnimations().map(a=>a.effect.getKeyframes())};
+    }); true`);
+    assert.equal(controller.isOpen(), true, 'native window remains open before close is sent');
+    assert.equal(win.isVisible(), true, 'native window is visible before close is sent');
+    closingDiagnostic.openBeforeRequest = controller.isOpen();
+    await page(win, 'qiuShortcuts.close(); true');
+    await poll(() => hiddenAt, Boolean, 'native animated hide occurs');
+    if (closingFailure) throw closingFailure;
+    assert.equal(closingDiagnostic.durationMs, 180);
+    assert.equal(controller.isOpen(), false); assert.equal(controller.isPresenting(), false, 'closing releases the presentation pin');
+    assert.equal(bubbleVisible(), false, 'complete closing does not replay old dialogue');
+    assert.equal(dialogue.hasBubble(performance.now()), false, 'complete closing leaves no queued dialogue');
     result.checks.push('shortcut-closing-blocks-new-and-update-bubbles');
-    const collapse = await page(win, "({phase:document.body.dataset.phase,frames:document.getAnimations().map(a=>a.effect.getKeyframes())})");
-    assert.equal(collapse.phase, 'closing'); assert.equal(collapse.frames.length, 6);
+    result.checks.push('shortcut-native-close-duration-and-pin-release');
+    const collapse = await page(win, 'window.__closingFrames');
+    assert.equal(collapse.session, closingSession); assert.equal(collapse.phase, 'closing'); assert.equal(collapse.frames.length, 6);
     assert.ok(collapse.frames.every(frames => Number(frames[0].opacity) === 1 && Number(frames.at(-1).opacity) === 0), 'close reverses expansion');
+    await restoreClosingDiagnostic(); restoreClosingDiagnostic = () => {};
+    controller.open(); await ready(); await settled(win);
+    controller.close(); assert.equal(controller.isPresenting(), true);
     controller.open(); await wait(230); assert.equal(win.isVisible(), true, 'reopen cancels pending animated hide');
     result.checks.push('six-card-expand-collapse-and-reopen');
     // Run both themes, appearances and contrast modes through real menu setters.
@@ -486,6 +532,8 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     result.ok = true;
     process.stdout.write(`PET_SHORTCUT_INTEGRATION_OK checks=${result.checks.length} themes=${result.themes.length} settingsThemes=${result.settingsThemes.length} layouts=${result.layouts.length}\n`);
   } finally {
+    await restoreClosingDiagnostic();
+    if (closingDiagnostic) fs.writeFileSync(path.join(output, 'closing-diagnostic.json'), JSON.stringify(closingDiagnostic, null, 2));
     controller.close(); screen.getCursorScreenPoint = originalCursor;
     BrowserWindow.prototype.setIgnoreMouseEvents = originalIgnore;
     if (!pet.isDestroyed()) pet.setBounds(original, false);
