@@ -4,8 +4,10 @@ const { EventEmitter } = require('node:events');
 const { setImmediate: flush } = require('node:timers/promises');
 const { pathToFileURL } = require('node:url');
 const { createShortcutWindow } = require('../lib/shortcut-window');
+const { layoutShortcuts } = require('../lib/shortcut-layout');
+const { petVisualBounds } = require('../lib/pet-visual-bounds');
 
-function fixture() {
+function fixture({ nativePlacement = bounds => bounds } = {}) {
   const windows = [], handlers = new Map(), listeners = new Map(), globalShortcutCalls = [];
   const pins = [], recording = [], actions = [], errors = [], layouts = [];
   let cursor = { x: 340, y: 340 }, suppressed = false, petVisible = true;
@@ -22,7 +24,7 @@ function fixture() {
       this.webContents.setWindowOpenHandler = callback => { this.openHandler = callback; }; windows.push(this);
     }
     loadFile(file) { this.url = pathToFileURL(file).href; return Promise.resolve(); }
-    setBounds(bounds) { this.bounds = { ...bounds }; this.boundsCalls.push({ ...bounds }); }
+    setBounds(bounds) { this.bounds = { ...nativePlacement(bounds) }; this.boundsCalls.push({ ...bounds }); }
     getBounds() { return { ...this.bounds }; }
     isDestroyed() { return this.destroyed; }
     isVisible() { return this.visible; }
@@ -207,6 +209,69 @@ test('动效原点使用真实球轮廓中心，并随设置窗口拖动更新�
   f.win().setBounds({ x: 700, y: 100, width: 416, height: 680 }); f.win().emit('move');
   checkOrigin();
   assert.deepEqual(f.manager.getState().layout.bounds, { x: 700, y: 100, width: 416, height: 680 });
+});
+
+test('系统裁回半露云的透明gutter后，六入口全局位置、命中与动效原点保持一致', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const areas = [{ x: 0, y: 24, width: 1440, height: 876 },
+    { x: -1920, y: -1080, width: 1920, height: 1040 }, { x: 1440, y: 40, width: 1280, height: 760 }];
+  for (const area of areas) for (const side of ['left', 'right']) {
+    const f = fixture({ nativePlacement: bounds => ({ ...bounds,
+      x: Math.min(Math.max(bounds.x, area.x), area.x + area.width - bounds.width),
+      y: Math.min(Math.max(bounds.y, area.y), area.y + area.height - bounds.height) }) });
+    try {
+      const bounds = { x: side === 'left' ? area.x : area.x + area.width - 80,
+        y: area.y + Math.round((area.height - 80) / 2), width: 80, height: 80 };
+      const presentation = { mode: 'peeked', shape: 'aurora-cloud', side };
+      f.petBounds(bounds); f.presentation(presentation); f.displayMatching(() => ({ workArea: area }));
+      const visual = petVisualBounds(bounds, presentation.shape, presentation);
+      const planned = layoutShortcuts({ petBounds: visual, workArea: area, shape: 'floating', side });
+      f.manager.open({ focus: false }); await flush();
+      const state = f.manager.getState(), actual = f.win().getBounds();
+      assert.equal(Math.abs(actual.x - planned.bounds.x), 28, 'fixture reproduces native gutter clamping');
+      assert.deepEqual(state.layout.bounds, actual);
+      assert.equal(state.layout.items.length, 6);
+      for (const item of state.layout.items) {
+        const expected = planned.items.find(value => value.id === item.id);
+        assert.equal(actual.x + item.x, planned.bounds.x + expected.x, item.id);
+        assert.equal(actual.y + item.y, planned.bounds.y + expected.y, item.id);
+        assert.ok(item.x >= 0 && item.y >= 0 && item.x + item.width <= actual.width && item.y + item.height <= actual.height,
+          `${item.id} stays inside the actual native viewport`);
+        f.manager.sampleCursor({ x: actual.x + item.x + item.width / 2, y: actual.y + item.y + item.height / 2 });
+        assert.equal(f.win().passthrough, false, `${item.id} visible card receives the pointer`);
+      }
+      assert.equal(actual.x + state.origin.x, visual.x + visual.width / 2);
+      assert.equal(actual.y + state.origin.y, visual.y + visual.height / 2);
+      const placements = f.win().boundsCalls.length, messages = f.win().sent.length;
+      for (let i = 0; i < 30; i++) f.manager.sync();
+      assert.equal(f.win().boundsCalls.length, placements, 'stable native clamping is not retried on every sync');
+      assert.equal(f.win().sent.length, messages);
+      f.manager.close(); assert.equal(f.pins.at(-1), true);
+      t.mock.timers.tick(180); assert.equal(f.win().visible, false); assert.equal(f.pins.at(-1), false);
+    } finally { f.manager.dispose(); }
+  }
+});
+
+test('原生显示后迟到的move裁回gutter仍修正按钮和命中，稳定sync不重新请求越界', async t => {
+  const f = fixture(); t.after(() => f.manager.dispose());
+  f.petBounds({ x: 0, y: 400, width: 80, height: 80 });
+  f.presentation({ mode: 'peeked', shape: 'aurora-cloud', side: 'left' });
+  f.manager.open({ focus: false }); await flush();
+  const planned = f.manager.getState(), win = f.win();
+  assert.equal(planned.layout.bounds.x, -28);
+  win.bounds = { ...win.bounds, x: 0 }; win.emit('move');
+  const moved = f.manager.getState();
+  assert.equal(moved.layout.bounds.x, 0);
+  for (const item of moved.layout.items) {
+    const expected = planned.layout.items.find(value => value.id === item.id);
+    assert.equal(item.x, expected.x - 28);
+    f.manager.sampleCursor({ x: item.x + item.width / 2, y: moved.layout.bounds.y + item.y + item.height / 2 });
+    assert.equal(win.passthrough, false);
+  }
+  assert.equal(moved.origin.x, planned.origin.x - 28);
+  const placements = win.boundsCalls.length;
+  for (let i = 0; i < 30; i++) f.manager.sync();
+  assert.equal(win.boundsCalls.length, placements);
 });
 
 test('设置拖动后sync保持用户位置；同一设置session不重新锚定球球', async t => {

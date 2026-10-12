@@ -4,6 +4,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { setTimeout: wait } = require('node:timers/promises');
 const { loadSettings } = require('../lib/settings');
+const { layoutShortcuts } = require('../lib/shortcut-layout');
+const { petVisualBounds } = require('../lib/pet-visual-bounds');
 
 // The smoke runner supplies a separate profile; no installed settings are read.
 async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWindow, globalShortcut,
@@ -246,6 +248,8 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
         edgeTuck.sampleCursor(cursor);
         await poll(() => page(pet, "({shape:document.querySelector('#pet').dataset.shape,mode:document.querySelector('#pet').dataset.presentation,side:document.querySelector('#pet').dataset.edge,ready:Boolean(document.querySelector('.eb-rive-aurora.ready'))})"),
           value => value.shape === 'aurora-cloud' && value.ready && value.mode === 'peeked' && value.side === side, '80 DIP aurora native peek');
+        const planned = layoutShortcuts({ petBounds: petVisualBounds(pet.getBounds(), 'aurora-cloud', edgeTuck.getPresentation()),
+          workArea: area, shape: registrar.getConfig().shape, side });
         controller.open({ focus: false }); await ready();
         const opening = await edgeFrames('opening'); checkEdgeFrames(opening, area, 'opening');
         await settled(win);
@@ -254,13 +258,22 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
         const dom = await page(win, `({ x: screenX, y: screenY, width: innerWidth, height: innerHeight,
           buttons: [...document.querySelectorAll('[data-action]')].filter(node => node.getClientRects().length).map(node => ({ id: node.dataset.action, ...node.getBoundingClientRect().toJSON(),
             nameWidth: node.querySelector('.action-name').clientWidth, nameScroll: node.querySelector('.action-name').scrollWidth })) })`);
+        const evidence = { displayId: display.id, side, pet: anchor, presentation: edgeTuck.getPresentation(),
+          requested: planned.bounds, actual, layout: state.layout, origin: state.origin, dom, opening,
+          globals: dom.buttons.map(button => { const item = planned.items.find(value => value.id === button.id); return {
+            id: button.id, actual: { x: dom.x + button.x, y: dom.y + button.y },
+            expected: item && { x: planned.bounds.x + item.x, y: planned.bounds.y + item.y }, item }; }) };
+        // Write the geometry before assertions so a native clamp remains diagnosable.
+        result.peekedLayouts.push(evidence);
+        fs.writeFileSync(path.join(output, `native-aurora-80-${display.id}-${side}-geometry.json`), JSON.stringify(evidence, null, 2));
         assert.ok(Math.abs(dom.x - actual.x) <= 1 && Math.abs(dom.y - actual.y) <= 1, 'renderer screen origin matches actual native bounds');
+        assert.deepEqual(state.layout.bounds, actual, 'hit regions use the actual native canvas');
         assert.equal(dom.width, actual.width); assert.equal(dom.height, actual.height);
         checkEdgeFrames([dom], area, 'expanded');
         for (const button of dom.buttons) {
-          const expected = state.layout.items.find(item => item.id === button.id);
+          const expected = planned.items.find(item => item.id === button.id);
           assert.ok(expected, button.id);
-          for (const axis of ['x', 'y']) assert.ok(Math.abs(actual[axis] + button[axis] - state.layout.bounds[axis] - expected[axis]) <= 1,
+          for (const axis of ['x', 'y']) assert.ok(Math.abs(actual[axis] + button[axis] - planned.bounds[axis] - expected[axis]) <= 1,
             `${side} ${button.id} global ${axis} is not shifted by native gutter clamping`);
           assert.ok(Math.abs(button.width - expected.width) <= 1 && Math.abs(button.height - expected.height) <= 1);
           assert.ok(button.nameScroll <= button.nameWidth + 1, `${button.id} name remains complete`);
@@ -276,7 +289,7 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
         const closing = await edgeFrames('closing'); checkEdgeFrames(closing, area, 'closing');
         await poll(() => win.isVisible(), value => !value, 'aurora close hides native shortcut');
         await poll(() => edgeTuck.getPresentation().mode, mode => mode === 'tucked', 'aurora close releases peek pin');
-        result.peekedLayouts.push({ displayId: display.id, side, pet: anchor, requested: state.layout.bounds, actual, origin: state.origin, dom, opening, closing });
+        evidence.closing = closing;
       }
       result.checks.push('aurora-80-left-right-peeked-native-animation-and-global-buttons');
     } finally {

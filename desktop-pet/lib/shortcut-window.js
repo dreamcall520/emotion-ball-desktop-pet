@@ -17,7 +17,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
   let win = null, ready = false, opened = false, stopped = false, view = null, layout = null, session = 0;
   let focusPending = false, ignored = null, hoverTimer = null, leaveTimer = null, blocked = false;
   let closeTimer = null, closing = false, pinned = false, recording = false, settingsPositioned = false;
-  let origin = null, animation = null, lastPublished = null;
+  let origin = null, animation = null, lastPublished = null, lastPlacement = null;
   const alive = () => win && !win.isDestroyed();
   const pet = () => { const value = getPetWindow(); return value && !value.isDestroyed() ? value : null; };
   const unavailable = () => stopped || isSuppressed() || !pet()?.isVisible() || getPresentation()?.mode === 'hidden';
@@ -59,6 +59,20 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
     origin = { x: visual.x + visual.width / 2 - layout.bounds.x, y: visual.y + visual.height / 2 - layout.bounds.y };
     publish(); onLayout(); sampleCursor(screen.getCursorScreenPoint());
   }
+  function rebaseCanvas(actual) {
+    const dx = layout.bounds.x - actual.x, dy = layout.bounds.y - actual.y;
+    layout = { ...layout, bounds: actual, items: layout.items.map(item => ({ ...item, x: item.x + dx, y: item.y + dy })) };
+    origin = { x: origin.x + dx, y: origin.y + dy };
+  }
+  function canvasMoved() {
+    if (view === 'settings') { settingsMoved(); return; }
+    if (!(opened || closing) || !alive() || !layout) return;
+    const actual = win.getBounds();
+    if (sameBounds(actual, layout.bounds)) return;
+    // The OS can finish clamping only after showInactive returns.
+    if (lastPlacement) lastPlacement.actual = actual;
+    rebaseCanvas(actual); publish(); onLayout(); sampleCursor(screen.getCursorScreenPoint());
+  }
   function close({ immediate = false } = {}) {
     cancelHover(); cancelLeave(); blocked = true;
     // Closing and recording cancellation must remain possible during suppression.
@@ -83,7 +97,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
       show: false, hasShadow: false, fullscreenable: false, maximizable: false, minimizable: false,
       backgroundColor: '#00000000', webPreferences: { preload: path.join(__dirname, '../shortcuts-preload.js'),
         contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false, backgroundThrottling: false } });
-    ready = false; ignored = null; lastPublished = null;
+    ready = false; ignored = null; lastPublished = null; lastPlacement = null;
     const created = win;
     created.setAlwaysOnTop(true, 'floating');
     created.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
@@ -95,7 +109,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
       close({ immediate: true }); created.destroy(); onError(new Error(`快捷面板渲染退出：${details.reason}`));
     });
     created.on('blur', () => { if (created !== win) return; setRecording(false); if (view !== 'settings') close(); });
-    created.on('move', () => { if (created === win) settingsMoved(); });
+    created.on('move', () => { if (created === win) canvasMoved(); });
     created.on('close', event => { if (!stopped && created === win) { event.preventDefault(); close(); } });
     created.on('closed', () => { if (created === win) { close({ immediate: true }); ready = false; win = null; settingsPositioned = false; } });
     created.loadFile(FILE).then(() => { if (created !== win || created.isDestroyed()) return; ready = true; sync(); })
@@ -130,7 +144,15 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
     origin = { x: visual.x + visual.width / 2 - layout.bounds.x, y: visual.y + visual.height / 2 - layout.bounds.y };
     ensure();
     if (!ready) return;
-    if (!sameBounds(win.getBounds(), layout.bounds)) win.setBounds(layout.bounds, false);
+    const requested = layout.bounds, current = win.getBounds();
+    // macOS can clamp the transparent animation gutter at a display edge.
+    // Keep painted cards, their hit regions and the motion origin at the same
+    // global positions when the native canvas does not accept that origin.
+    if (!sameBounds(current, requested) && !(sameBounds(lastPlacement?.requested, requested) &&
+        sameBounds(lastPlacement?.actual, current))) win.setBounds(requested, false);
+    const actual = win.getBounds();
+    lastPlacement = { requested, actual };
+    rebaseCanvas(actual);
     if (view === 'settings') settingsPositioned = true;
     publish();
     if (focusPending) { setIgnored(false); win.show(); win.focus(); }
