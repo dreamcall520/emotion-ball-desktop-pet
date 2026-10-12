@@ -1986,7 +1986,10 @@ async function finishSmokeTest() {
     if (process.env.PET_SMOKE_QUOTA_DISPLAY_ONLY === '1') {
       persistSettings();
       await require('./scripts/verify-quota-display').verifyQuotaDisplay({ pet: petWindow, settingsFile, powerMonitor,
-        open: () => { openCustomization(); return customizationWindow; }, about: openAbout,
+        open: () => {
+          openCustomization(); customizationWindow.webContents.setBackgroundThrottling(false);
+          return customizationWindow;
+        }, about: openAbout,
         requestConsent: requestCodexConsent, getConsentWindow: () => codexConsentWindow,
         showNumbers: model => { quotaLabel.show(model); return quotaLabel.getWindow(); },
         previewSavedQuota: windows => {
