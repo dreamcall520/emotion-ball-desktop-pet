@@ -53,16 +53,16 @@ async function capturePaintedWindow({ win, controller = null, settle = wait,
   assert.ok(win?.webContents, '截图窗口必须存在');
   const assertCurrent = () => {
     if (controller) assert.equal(controller.getWindow(), win, '截图对象必须仍是当前标签窗口');
+    assert.equal(win.isVisible(), true, '截图窗口必须原生可见');
   };
   assertCurrent();
   if (typeof win.webContents.invalidate === 'function') win.webContents.invalidate();
-  await withCaptureTimeout(win.webContents.executeJavaScript(`new Promise(resolve => {
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
-  })`), timeoutMs, '额度标签截图等待页面绘制超时');
   assertCurrent();
   await settle(60);
   assertCurrent();
-  const image = await withCaptureTimeout(win.webContents.capturePage(), timeoutMs,
+  // Native visibility can remain true while Chromium pauses DOM animation frames.
+  // Capture the compositor directly, without making an actually hidden window visible.
+  const image = await withCaptureTimeout(win.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true }), timeoutMs,
     '额度标签截图捕获超时');
   const buffer = image.toPNG();
   captureDigest(buffer);

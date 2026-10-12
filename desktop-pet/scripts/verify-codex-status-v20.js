@@ -181,7 +181,7 @@ async function poll(read, test, label) {
   do { value = await read(); if (test(value)) return value; await wait(25); } while (Date.now() < deadline);
   assert.fail(`${label} 超时：${JSON.stringify(value)}`);
 }
-const paint = win => win.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+const paint = win => capturePaintedWindow({ win });
 
 async function cardView(win) {
   const view = await win.webContents.executeJavaScript(`(() => {
@@ -458,6 +458,8 @@ async function verifyCodexStatusV20({ pet, quotaLabel, details, BrowserWindow, s
       report.details.push({ action: 'trend', colorMode, appearance, ...view });
       win.setContentSize(320, win.getContentBounds().height);
       await paint(win); view = await detailsView(win);
+      assert.equal(view.viewport.width, 320, '趋势窄屏验收实际 DOM 视口宽度为 320px');
+      assert.equal(view.contentBounds.width, 320, '趋势窄屏验收实际原生内容宽度为 320px');
       assert.equal(view.overflow, false, '趋势在 320px 宽下没有横向滚动');
       await capture(win, `trend-320-${colorMode}-${appearance}`, details);
       report.details.push({ action: 'trend-320', colorMode, appearance, ...view });
@@ -560,6 +562,7 @@ async function verifyCodexStatusV20({ pet, quotaLabel, details, BrowserWindow, s
               win.setContentSize(320,Math.ceil(view.panel.height));await paint(win);view=await detailsView(win);
             }
             assert.equal(view.viewport.width,320,'窄屏验收实际使用320px原生内容宽度');
+            assert.equal(view.contentBounds.width,320,'窄屏验收实际原生内容区宽度为320px');
           }
           assertDetailsSurface(view,`${fixture.name}/${width}/${colorMode}/${appearance}`);
           assert.equal(view.dragRegion,'drag','详情文字、图表与空白均可拖动');

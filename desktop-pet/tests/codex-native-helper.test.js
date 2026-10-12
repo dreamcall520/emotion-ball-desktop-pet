@@ -159,18 +159,22 @@ test('普通 10% 合成额度先建立 100% 基线，80% 以上可直接合成',
   assert.deepEqual(syntheticQuotaSteps(100), [0]);
 });
 
-test('截图证据先等待双帧与短暂绘制稳定，并在捕获前后锁定当前标签窗口', async () => {
+test('截图不依赖会暂停的双帧，先短暂稳定再原生捕获并锁定当前标签窗口', { timeout: 1000 }, async () => {
   const { capturePaintedWindow } = require('../scripts/verify-codex-companion');
   const calls = [];
   const expected = Buffer.from('painted-frame');
-  const win = { webContents: {
-    async executeJavaScript(source) {
+  const win = { isVisible: () => true, webContents: {
+    executeJavaScript(source) {
       calls.push(['raf', source]);
-      assert.match(source, /requestAnimationFrame[\s\S]*requestAnimationFrame/);
-      return true;
+      return new Promise(() => {});
     },
     invalidate() { calls.push(['invalidate']); },
-    async capturePage() { calls.push(['capture']); return { toPNG: () => expected }; }
+    async capturePage(rect, options) {
+      calls.push(['capture']);
+      assert.equal(rect, undefined);
+      assert.deepEqual(options, { stayHidden: true, stayAwake: true });
+      return { toPNG: () => expected };
+    }
   } };
   let currentWindow = win;
   let identityReads = 0;
@@ -178,15 +182,16 @@ test('截图证据先等待双帧与短暂绘制稳定，并在捕获前后锁�
   const result = await capturePaintedWindow({ win, controller,
     settle: async milliseconds => { calls.push(['settle', milliseconds]); } });
   assert.equal(result, expected);
-  assert.ok(identityReads >= 4, '双帧、稳定等待和捕获后都必须确认当前窗口身份');
-  assert.ok(calls.some(([kind, milliseconds]) => kind === 'settle' && milliseconds >= 30),
+  assert.ok(identityReads >= 4, '重绘、稳定等待和捕获后都必须确认当前窗口身份');
+  assert.ok(calls.some(([kind, milliseconds]) => kind === 'settle' && milliseconds === 60),
     '截图前必须有短暂 paint settle');
-  assert.ok(calls.findIndex(([kind]) => kind === 'raf') < calls.findIndex(([kind]) => kind === 'capture'),
-    '截图不能早于双帧等待');
+  assert.equal(calls.some(([kind]) => kind === 'raf'), false, 'rAF 永不返回也不阻塞原生捕获');
+  assert.ok(calls.findIndex(([kind]) => kind === 'settle') < calls.findIndex(([kind]) => kind === 'capture'),
+    '原生捕获不能早于绘制稳定等待');
   assert.ok(calls.some(([kind]) => kind === 'invalidate'), '支持安全重绘时应主动请求重绘');
 
   const replacement = {};
-  const replacingWindow = { webContents: {
+  const replacingWindow = { isVisible: () => true, webContents: {
     async executeJavaScript() { return true; },
     async capturePage() {
       currentWindow = replacement;
@@ -197,31 +202,48 @@ test('截图证据先等待双帧与短暂绘制稳定，并在捕获前后锁�
   await assert.rejects(() => capturePaintedWindow({ win: replacingWindow, controller,
     settle: async () => {} }), /当前标签窗口/,
   '捕获期间替换窗口时旧截图必须失败');
+  currentWindow = win;
+  win.webContents.capturePage = async () => ({ toPNG: () => Buffer.alloc(0) });
+  await assert.rejects(capturePaintedWindow({ win, controller, settle: async () => {} }), /非空 PNG/,
+    '原生捕获完成也不能接受空 PNG');
 });
 
-test('截图绘制和捕获各自局部超时，固定报错且清除计时器', async () => {
+test('真实隐藏窗口在捕获前后均被拒绝，截图不会抬起或重新显示窗口', async () => {
+  const { capturePaintedWindow } = require('../scripts/verify-codex-companion');
+  let visible = false, captures = 0, shown = 0;
+  const win = { isVisible: () => visible, show() { shown++; visible = true; },
+    showInactive() { shown++; visible = true; }, webContents: {
+      async capturePage(_rect, options) {
+        captures++; assert.equal(options.stayHidden, true);
+        return { toPNG: () => Buffer.from('native-frame') };
+      }
+    } };
+  await assert.rejects(capturePaintedWindow({ win, settle: async () => {} }), /原生可见/);
+  assert.equal(captures, 0); assert.equal(shown, 0); assert.equal(visible, false);
+  visible = true;
+  await assert.rejects(capturePaintedWindow({ win, settle: async () => { visible = false; } }), /原生可见/);
+  assert.equal(captures, 0); assert.equal(shown, 0);
+  visible = true;
+  win.webContents.capturePage = async () => { captures++; visible = false; return { toPNG: () => Buffer.from('native-frame') }; };
+  await assert.rejects(capturePaintedWindow({ win, settle: async () => {} }), /原生可见/);
+  assert.equal(captures, 1); assert.equal(shown, 0);
+});
+
+test('原生捕获局部超时固定报错且清除计时器', async () => {
   const { capturePaintedWindow, withCaptureTimeout } =
     require('../scripts/verify-codex-companion');
   assert.equal(typeof withCaptureTimeout, 'function', '截图操作需要独立的局部超时门禁');
   const never = new Promise(() => {});
   const controllerFor = win => ({ getWindow: () => win });
-  const rafHung = { webContents: {
+  const captureHung = { isVisible: () => true, webContents: {
     executeJavaScript: () => never,
-    capturePage: async () => { throw new Error('不应进入捕获'); }
-  } };
-  const startedAt = Date.now();
-  await assert.rejects(() => capturePaintedWindow({ win: rafHung,
-    controller: controllerFor(rafHung), timeoutMs: 15, settle: async () => {} }),
-  error => error?.message === '额度标签截图等待页面绘制超时');
-  assert.ok(Date.now() - startedAt < 500, '页面绘制卡住不能等整轮 smoke 超时');
-
-  const captureHung = { webContents: {
-    executeJavaScript: async () => true,
     capturePage: () => never
   } };
+  const startedAt = Date.now();
   await assert.rejects(() => capturePaintedWindow({ win: captureHung,
     controller: controllerFor(captureHung), timeoutMs: 15, settle: async () => {} }),
   error => error?.message === '额度标签截图捕获超时');
+  assert.ok(Date.now() - startedAt < 500, '原生捕获卡住不能等整轮 smoke 超时');
 
   const timerCalls = [];
   const value = await withCaptureTimeout(Promise.resolve('ok'), 3000, '固定超时', {
@@ -323,9 +345,9 @@ test('验收截图超时且中途已关闭时，清理会恢复偏好并继续�
   const { capturePaintedWindow, restoreSmokeState, combinedSmokeError } =
     require('../scripts/verify-codex-companion');
   let primary = null;
-  const hungWindow = { webContents: {
+  const hungWindow = { isVisible: () => true, webContents: {
     executeJavaScript: () => new Promise(() => {}),
-    capturePage: async () => { throw new Error('不应进入捕获'); }
+    capturePage: () => new Promise(() => {})
   } };
   try {
     await capturePaintedWindow({ win: hungWindow, controller: { getWindow: () => hungWindow },
@@ -333,7 +355,7 @@ test('验收截图超时且中途已关闭时，清理会恢复偏好并继续�
   } catch (error) {
     primary = error;
   }
-  assert.equal(primary?.message, '额度标签截图等待页面绘制超时');
+  assert.equal(primary?.message, '额度标签截图捕获超时');
   const settings = {
     codexEnabled: false, codexQuotaPeriod: 'weekly', codexQuotaAlwaysVisible: true,
     codexTaskNameInAlerts: true, keepAwake: true, bubblesEnabled: true, size: 'large',
@@ -393,7 +415,7 @@ test('验收截图超时且中途已关闭时，清理会恢复偏好并继续�
   ]);
   const combined = combinedSmokeError(primary, cleanup);
   assert.equal(combined.errors[0], primary, '聚合错误必须保留原始失败为第一条');
-  assert.match(combined.message, /等待页面绘制超时/);
+  assert.match(combined.message, /截图捕获超时/);
   assert.equal(combined.errors.length, cleanup.length + 1);
 });
 
