@@ -205,7 +205,8 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
   assert.equal(await page(panelWin, "document.querySelector('#editor').open"), false);
   panelWin.setBounds(panelBounds);
   const editorFooter = { before: editorBefore, after: editorAfter, categoryEntry: true };
-  await page(chatWin, "document.querySelector('#message-input').value='还没发送的草稿'; document.querySelector('#message-input').dispatchEvent(new Event('input'))");
+  // Keep this theme fixture stable against unrelated native/IME input; CHAT verifies editing and sending.
+  await page(chatWin, "document.querySelector('#message-input').readOnly=true; document.querySelector('#message-input').value='还没发送的草稿'; document.querySelector('#message-input').dispatchEvent(new Event('input'))");
   setMode('standard'); select('color-appearance-light'); select('ui-theme-green');
   const green = await Promise.all(windows.map(surface));
   const checks = [];
@@ -344,6 +345,7 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
     assert.deepEqual(await paint(), originalPaint, '界面主题不改变球球和聊天头像的外观输入');
     checks.push({ theme, appearance, mode, resolved, views, ...(accessibility ? { accessibility } : {}) });
   }
+  await page(chatWin, "document.querySelector('#message-input').readOnly=false");
   select('ui-theme-green'); setMode('standard'); select('color-appearance-light');
   await poll(() => Promise.all(windows.map(surface)), views => views.every(view => view.appearance === 'light'), '恢复绿色浅色');
   assert.deepEqual(await Promise.all(windows.map(surface)), green, '往返切换恢复原绿色样式');

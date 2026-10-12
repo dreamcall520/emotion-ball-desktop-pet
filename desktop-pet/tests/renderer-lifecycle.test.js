@@ -177,6 +177,25 @@ function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = nul
 
 const codexCommand = (overrides = {}) => ({ command: 'codex', alertId: 1, generation: 1, pageEpoch: 1, motion: 'hop', ...overrides });
 
+test('休息后悬停保留900ms问候，不先启动两秒位移；普通唤醒仍伸展', () => {
+  const hover = createRenderer();
+  hover.activity(false, { idleSeconds: 360 });
+  assert.equal(hover.pet.dataset.mode, 'spacing');
+  hover.events.pointerenter();
+  assert.equal(hover.host.motions.length, 0, 'hover intent must not first launch the window-moving welcome');
+  hover.advanceTo(450);
+  assert.equal(hover.host.scenes.length, 0, 'greeting has its independent original delay');
+  hover.advanceTo(899); assert.equal(hover.host.scenes.length, 0);
+  hover.advanceTo(900);
+  assert.equal(hover.host.scenes.at(-1), 'hello');
+  assert.equal(hover.engine.emotionId, '03');
+  assert.equal(hover.host.motions.length, 0);
+  const ordinary = createRenderer();
+  ordinary.activity(false, { idleSeconds: 360 }); ordinary.activity();
+  assert.equal(ordinary.host.motions.at(-1).action, 'stretch', 'non-hover welcome keeps its existing motion');
+  assert.equal(ordinary.host.scenes.at(-1), 'wake');
+});
+
 test('桌面额度材质读取 App 外观，配色与系统事件在根节点更新后刷新并释放监听', () => {
   const updates = [], r = createRenderer(0.5, null, updates);
   const draw = () => r.quotaFrames.splice(0).forEach(callback => callback(0));

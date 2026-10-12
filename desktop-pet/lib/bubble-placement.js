@@ -1,7 +1,8 @@
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const { petVisualBounds } = require('./pet-visual-bounds');
+const { adjacentBounds } = require('./window-placement');
 
-function bubbleBounds(petBounds, workArea, interactive = false, preferredHeight = null, shape = 'blob') {
+function bubbleBounds(petBounds, workArea, interactive = false, preferredHeight = null, shape = 'blob', obstacles = []) {
   petBounds = petVisualBounds(petBounds, shape);
   const areaWidth = Math.max(1, Math.floor(workArea.width));
   const areaHeight = Math.max(1, Math.floor(workArea.height));
@@ -17,10 +18,15 @@ function bubbleBounds(petBounds, workArea, interactive = false, preferredHeight 
   const minY = workArea.y + paddingY;
   const centerX = petBounds.x + petBounds.width / 2;
   const aboveY = petBounds.y - height - 8;
-  const placement = aboveY >= minY ? 'above' : 'below';
+  let placement = aboveY >= minY ? 'above' : 'below';
   const targetY = placement === 'above' ? aboveY : petBounds.y + petBounds.height + 8;
-  const x = Math.round(clamp(centerX - width / 2, minX, workArea.x + areaWidth - paddingX - width));
-  const y = Math.round(clamp(targetY, minY, workArea.y + areaHeight - paddingY - height));
+  let x = Math.round(clamp(centerX - width / 2, minX, workArea.x + areaWidth - paddingX - width));
+  let y = Math.round(clamp(targetY, minY, workArea.y + areaHeight - paddingY - height));
+  const occupied = obstacles.filter(rect => rect && ['x', 'y', 'width', 'height'].every(key => Number.isFinite(rect[key])) && rect.width > 0 && rect.height > 0);
+  if (occupied.some(rect => x < rect.x + rect.width && x + width > rect.x && y < rect.y + rect.height && y + height > rect.y)) {
+    ({ x, y } = adjacentBounds(petBounds, { x: minX, y: minY, width: areaWidth - paddingX * 2, height: areaHeight - paddingY * 2 }, { width, height }, occupied));
+    placement = y + height / 2 < petBounds.y + petBounds.height / 2 ? 'above' : 'below';
+  }
   const anchorInset = Math.min(20, width / 2);
   return { x, y, width, height, placement, anchorX: clamp(centerX - x, anchorInset, width - anchorInset) };
 }

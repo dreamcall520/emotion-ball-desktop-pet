@@ -23,7 +23,62 @@ function layoutShortcuts({ petBounds: pet, workArea: area, shape = 'floating', s
   const directions = [preferred, ...Object.keys(room).filter(key => key !== preferred).sort((a, b) => room[b] - room[a])];
 
   if (shape === 'floating') {
-    for (const direction of directions) {
+    const placed = (cards, direction) => {
+      const x = Math.min(...cards.map(card => card.x)) - PAD, y = Math.min(...cards.map(card => card.y)) - PAD;
+      const bounds = { x, y, width: Math.max(...cards.map(card => card.x + cardSize)) + PAD - x,
+        height: Math.max(...cards.map(card => card.y + cardSize)) + PAD - y };
+      if (bounds.x < area.x || bounds.y < area.y || bounds.x + bounds.width > area.x + area.width || bounds.y + bounds.height > area.y + area.height) return null;
+      // Keep the transparent animation path to the pet inside the native canvas.
+      const right = Math.max(bounds.x + bounds.width, pet.x + pet.width), bottom = Math.max(bounds.y + bounds.height, pet.y + pet.height);
+      bounds.x = Math.min(bounds.x, pet.x); bounds.y = Math.min(bounds.y, pet.y);
+      bounds.width = right - bounds.x; bounds.height = bottom - bounds.y;
+      return { shape: 'floating', direction, bounds, cardSize,
+        items: cards.map(card => ({ ...card, x: card.x - bounds.x, y: card.y - bounds.y })) };
+    };
+    const cornerReach = reach + cardSize;
+    const nearX = Math.min(room.left, room.right), nearY = Math.min(room.above, room.below);
+    const sx = nearX < cornerReach ? room.left <= room.right ? 1 : -1 : 0;
+    const sy = nearY < cornerReach ? room.above <= room.below ? 1 : -1 : 0;
+    if (sx && sy) {
+      // A corner constrains both axes. Keep the real visual center and narrow
+      // the fan toward the screen instead of clamping and shifting its center.
+      const cx = pet.x + pet.width / 2, cy = pet.y + pet.height / 2, margin = PAD + cardSize / 2;
+      const edgeX = sx === 1 ? cx - area.x : area.x + area.width - cx;
+      const edgeY = sy === 1 ? cy - area.y : area.y + area.height - cy;
+      const maxRadius = Math.SQRT2 * Math.min(area.width - edgeX - margin, area.height - edgeY - margin);
+      const horizontal = preferred === 'above' || preferred === 'below';
+      // Leave packing slack while a second edge clips the arc, then ease back
+      // to the original radius over one card width. This avoids a radius jump
+      // when a barely clipped semicircle cannot fit six equally spaced squares.
+      const firstRadius = radius + Math.ceil(clamp(cornerReach - Math.max(nearX, nearY), 0, cardSize));
+      const releaseRadius = firstRadius * (1 + cardSize / radius);
+      const easedX = Math.PI / 2 * (1 + clamp((edgeX - margin) / releaseRadius, 0, 1));
+      const easedY = -Math.PI / 2 * clamp((edgeY - margin) / releaseRadius, 0, 1);
+      for (let r = firstRadius; r <= maxRadius; r++) {
+        // Stay inside the exact limits, while easing their tangent near a free
+        // endpoint so a one-DIP move does not fling that card across the arc.
+        const limitX = Math.min(Math.acos(clamp((margin - edgeX) / r, -1, 1)), easedX);
+        const limitY = Math.max(Math.asin(clamp((margin - edgeY) / r, -1, 1)), easedY);
+        // Clip only the constrained angles of the existing semicircle. As the
+        // pet leaves the corner, this becomes that same 180-degree arc/order.
+        const start = horizontal ? Math.max(0, limitY) : Math.max(-Math.PI / 2, limitY, -limitX);
+        const end = horizontal ? Math.min(Math.PI, limitX, Math.PI - limitY) : Math.min(Math.PI / 2, limitX);
+        const cards = IDS.map((id, index) => {
+          const order = (horizontal ? sx === 1 : sy === -1) ? IDS.length - 1 - index : index;
+          const angle = start + (end - start) * order / (IDS.length - 1);
+          return { id, x: Math.round(cx + sx * Math.cos(angle) * r - cardSize / 2),
+            y: Math.round(cy + sy * Math.sin(angle) * r - cardSize / 2), width: cardSize, height: cardSize };
+        });
+        if (cards.some((card, index) =>
+          (overlapsAxis(card.x, cardSize, pet.x - GAP, pet.width + GAP * 2) &&
+          overlapsAxis(card.y, cardSize, pet.y - GAP, pet.height + GAP * 2)) ||
+          cards.slice(index + 1).some(other => Math.hypot(
+            Math.max(0, card.x - other.x - cardSize, other.x - card.x - cardSize),
+            Math.max(0, card.y - other.y - cardSize, other.y - card.y - cardSize)) < 6))) continue;
+        const layout = placed(cards, preferred);
+        if (layout) return layout;
+      }
+    } else for (const direction of directions) {
       const horizontal = direction === 'above' || direction === 'below';
       const crossLength = horizontal ? area.width : area.height;
       if (radius * 2 + cardSize + PAD * 2 > crossLength) continue;
@@ -52,20 +107,12 @@ function layoutShortcuts({ petBounds: pet, workArea: area, shape = 'floating', s
           : direction === 'right' ? area.x + PAD - Math.min(...cards.map(card => card.x))
             : Math.max(...cards.map(card => card.x + cardSize)) + PAD - area.x - area.width);
       for (const card of cards) card[horizontal ? 'y' : 'x'] += sign * Math.ceil(shift);
-      const x = Math.min(...cards.map(card => card.x)) - PAD, y = Math.min(...cards.map(card => card.y)) - PAD;
-      const bounds = { x, y, width: Math.max(...cards.map(card => card.x + cardSize)) + PAD - x,
-        height: Math.max(...cards.map(card => card.y + cardSize)) + PAD - y };
-      if (bounds.x < area.x || bounds.y < area.y || bounds.x + bounds.width > area.x + area.width || bounds.y + bounds.height > area.y + area.height) continue;
-      // Keep the transparent animation path to the pet inside the native canvas.
-      const right = Math.max(bounds.x + bounds.width, pet.x + pet.width), bottom = Math.max(bounds.y + bounds.height, pet.y + pet.height);
-      bounds.x = Math.min(bounds.x, pet.x); bounds.y = Math.min(bounds.y, pet.y);
-      bounds.width = right - bounds.x; bounds.height = bottom - bounds.y;
-      return { shape: 'floating', direction, bounds, cardSize,
-        items: cards.map(card => ({ ...card, x: card.x - bounds.x, y: card.y - bounds.y })) };
+      const layout = placed(cards, direction);
+      if (layout) return layout;
     }
   }
 
-  // A list can scroll when a full semicircle cannot fit the current work area.
+  // A list can scroll when the arc cannot fit the current work area.
   const inset = Math.min(8, area.width / 4, area.height / 4);
   const candidates = directions.map(direction => {
     const horizontal = direction === 'above' || direction === 'below';

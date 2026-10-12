@@ -425,6 +425,39 @@ test('所有 Codex 详情打开与关闭均触发额度卡避让和恢复，不�
   f.app.emit('before-quit');
 });
 
+test('零窗口位移动作和对白不阻塞450ms快捷；真实位移动作仍安全阻塞', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = await fixture(); t.after(() => f.app.emit('before-quit'));
+  const loadFile = f.windowClass.prototype.loadFile;
+  f.windowClass.prototype.loadFile = function (file) {
+    return file.endsWith('/shortcuts.html') ? Promise.resolve() : loadFile.call(this, file);
+  };
+  const center = () => { const b = f.pet.getBounds(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; };
+  f.screen.getCursorScreenPoint = center;
+  const Interaction = require('../lib/interaction-motion'), Companion = require('../lib/companion-motion');
+  for (const action of ['jelly', 'bow', 'spin', 'dizzy', 'turn', 'land']) {
+    const motion = Companion.getMotion(action) || Interaction.getMotion(action);
+    for (let ms = 0; ms <= motion.durationMs; ms += 16) {
+      const frame = Companion.getMotion(action) ? Companion.sample(action, ms) : Interaction.sampleMotion(action, ms);
+      assert.deepEqual(frame.window, { x: 0, y: 0 }, action + ' is stationary through its whole timeline');
+    }
+    f.call('shortcutWindow.close({ immediate: true }); stopMotion(); shortcutWindow.sampleCursor({ x: -10000, y: -10000 })');
+    f.send('pet:motion-start', { token: 1, action });
+    f.call('shortcutWindow.sampleCursor(screen.getCursorScreenPoint())');
+    t.mock.timers.tick(449); assert.equal(f.call('shortcutWindow.isOpen()'), false);
+    t.mock.timers.tick(1); await flush();
+    assert.equal(f.call('shortcutWindow.isOpen()'), true, action + ' need not finish before shortcuts');
+    assert.equal(f.call('hostMotion.action'), action, 'opening does not cancel the stationary expression');
+  }
+  for (const action of ['hop', 'sway', 'peek', 'nuzzle', 'stretch']) {
+    f.call('shortcutWindow.close({ immediate: true }); stopMotion(); shortcutWindow.sampleCursor({ x: -10000, y: -10000 })');
+    f.send('pet:motion-start', { token: 2, action });
+    f.call('shortcutWindow.sampleCursor(screen.getCursorScreenPoint())');
+    t.mock.timers.tick(500); await flush();
+    assert.equal(f.call('shortcutWindow.isOpen()'), false, action + ' still protects a moving anchor');
+  }
+});
+
 test('快捷面板至收起动效结束隐藏额度与守护入口，刷新不复活，按原条件恢复', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true, bubblesEnabled: false });
@@ -544,7 +577,7 @@ test('迟到或已销毁窗口的 focus 通知不关闭快捷面板，真实其�
   assert.equal(quick.isVisible(), false);
 });
 
-test('快捷展开至收起结束隐藏旧对白并拦截新提示，不补播问候或占用冷却', async t => {
+test('浮动与列表快捷保留普通对白并行，设置仍安静，通知不插入且收起不重播', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   for (const view of ['floating', 'list', 'settings']) {
     const f = await fixture({ codexEnabled: true });
@@ -563,24 +596,33 @@ test('快捷展开至收起结束隐藏旧对白并拦截新提示，不补播�
     // Hover also opens through the controller directly, bypassing openShortcuts.
     f.call(`shortcutWindow.open({ focus: false, settings: ${view === 'settings'} })`); await flush();
     assert.equal(f.call('shortcutWindow.getState().view'), view);
-    assert.equal(f.bubble.getWindow().isVisible(), false, `${view}: opening dismisses an already visible bubble`);
-    assert.equal(f.call('dialogue.hasBubble(performance.now())'), false);
-    for (const event of ['hello', 'pet', 'play', 'thought', 'work']) assert.equal(f.call(`showDialogue('${event}')`), null);
-    f.send('pet:say', 'welcome');
+    if (view === 'settings') {
+      assert.equal(f.bubble.getWindow().isVisible(), false);
+      assert.equal(f.call('dialogue.hasBubble(performance.now())'), false);
+      for (const event of ['hello', 'pet', 'play', 'thought', 'work']) assert.equal(f.call(`showDialogue('${event}')`), null);
+      f.send('pet:say', 'welcome');
+    } else {
+      assert.equal(f.bubble.getWindow().isVisible(), true, `${view}: existing greeting and shortcuts coexist`);
+      assert.equal(f.call('dialogue.hasBubble(performance.now())'), true);
+      assert.equal(f.bubble.shows.length, shows, 'opening preserves the greeting without replay');
+      f.send('pet:say', 'wake');
+      assert.equal(f.bubble.shows.length, shows + 1, 'a new ordinary interaction is not suppressed by shortcuts');
+      assert.equal(f.bubble.getWindow().isVisible(), true);
+    }
     assert.equal(f.call("showUpdateBubble({ latestVersion: '9.9.9' })"), false);
     assert.equal(f.call("showBubble({ id: 'late', text: '迟到提示', actions: [], durationMs: 4000 })"), false);
     assert.equal(f.call('canPresentCodex()'), false);
     assert.equal(f.call('dialogue._lastDirectAt'), directAt);
     assert.equal(f.call('dialogue._lastBubbleAt'), bubbleAt);
-    assert.equal(f.bubble.shows.length, shows);
+    assert.equal(f.bubble.shows.length, shows + (view === 'settings' ? 0 : 1));
     assert.equal(f.pomodoroWindows.options.isSuppressed(), false, 'independent Pomodoro windows remain available');
     assert.equal(f.pomodoro.options.canEncourage(), true, 'independent Pomodoro encouragement keeps its normal rule');
     f.call('shortcutWindow.close()'); t.mock.timers.tick(179);
-    assert.equal(f.call("showDialogue('welcome')"), null, 'the closing animation remains quiet');
+    assert.equal(Boolean(f.call("showDialogue('welcome')")), view !== 'settings', 'ordinary dialogue stays parallel through collapse; settings remain quiet');
     assert.equal(f.call("showBubble({ id: 'closing', text: '收起中', actions: [], durationMs: 4000 })"), false);
     t.mock.timers.tick(1);
-    assert.equal(f.bubble.shows.length, shows, 'closing does not replay discarded greetings');
-    assert.equal(f.call('dialogue.hasBubble(performance.now())'), false);
+    assert.equal(f.bubble.shows.length, shows + (view === 'settings' ? 0 : 2), 'closing does not replay greetings');
+    assert.equal(f.call('dialogue.hasBubble(performance.now())'), view !== 'settings');
     assert.ok(f.call("showDialogue('welcome')"), 'a fresh later event can show normally');
     assert.equal(f.call('settings.bubblesEnabled'), true);
     f.call("openShortcutAction('chat')");

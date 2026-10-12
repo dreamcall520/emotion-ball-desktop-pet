@@ -1,7 +1,7 @@
 const path = require('node:path');
 const { bubbleBounds } = require('./bubble-placement');
 
-function createBubbleWindow({ BrowserWindow, screen, getPetWindow, getShape = () => 'blob', onError, alwaysOnTop = true }) {
+function createBubbleWindow({ BrowserWindow, screen, getPetWindow, getShape = () => 'blob', getObstacles = () => [], onError, alwaysOnTop = true }) {
   let win = null;
   let ready = false;
   let current = null;
@@ -35,7 +35,8 @@ function createBubbleWindow({ BrowserWindow, screen, getPetWindow, getShape = ()
       screen.getDisplayMatching(petBounds).workArea,
       current.actions.length > 0,
       current.preferredHeight,
-      getShape()
+      getShape(),
+      getObstacles()
     );
     const { x, y, width, height, placement, anchorX } = layout;
     win.setBounds({ x, y, width, height }, false);

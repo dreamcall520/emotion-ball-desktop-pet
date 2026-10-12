@@ -184,6 +184,15 @@ async function verifyQuotaDisplay({ pet, open, settingsFile, powerMonitor, sendM
   await until(()=>win.isVisible());
   const original=win.getBounds();win.setPosition(original.x+32,original.y+20,false);
   const moved=win.getBounds();about();assert.deepEqual(win.getBounds(),moved,'可见关于窗口再次进入不能跳回旧位置');
+  await until(()=>win.webContents.executeJavaScript('!document.getElementById("about-check-updates").disabled'));
+  await win.webContents.executeJavaScript('document.getElementById("about-check-updates").click();true');
+  await wait(100);
+  assert.deepEqual(win.getBounds(),moved,'实际点击检查更新不能重置关于窗口位置');
+  for(let n=0;n<250&&await win.webContents.executeJavaScript('document.getElementById("about-check-updates").disabled');n++)await wait(50);
+  const update=await win.webContents.executeJavaScript('({disabled:document.getElementById("about-check-updates").disabled,status:document.getElementById("about-status").textContent})');
+  assert.equal(update.disabled,false,'检查更新正常返回或显示网络失败');
+  assert.deepEqual(win.getBounds(),moved,'检查更新结果返回仍保留关于窗口位置');
+  if(out){fs.writeFileSync(path.join(out,'about-update-position.json'),JSON.stringify({moved,afterResult:win.getBounds(),...update},null,2));await capture(win,'about-update-position.png');}
   const settingsBeforeConsent=fs.readFileSync(settingsFile,'utf8');
   for(const accepted of [false,true]){
     const pending=requestConsent(),consent=getConsentWindow();

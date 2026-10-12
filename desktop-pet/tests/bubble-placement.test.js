@@ -3,6 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { bubbleBounds } = require('../lib/bubble-placement');
+const { layoutShortcuts } = require('../lib/shortcut-layout');
+const { petVisualBounds } = require('../lib/pet-visual-bounds');
 
 const workArea = { x: 0, y: 0, width: 1440, height: 900 };
 
@@ -93,4 +95,27 @@ test('非经典外观的气泡贴近实际可见顶部，保留经典外观的�
     const gap = pet.y + pet.height * visibleTop - bubble.y - bubble.height;
     assert.ok(Math.abs(gap - classicGap) <= 1, `${shape} 的气泡与可见轮廓间距应接近经典`);
   }
+});
+
+test('同场气泡避开六张真实快捷卡，四角内缩与负坐标屏幕均不遮挡', () => {
+  const intersects = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+  for (const area of [workArea, { x: -1920, y: -1080, width: 1920, height: 1040 }])
+    for (const size of [80, 180, 260]) for (const inset of [0, 40, 80]) for (const px of [0, 1]) for (const py of [0, 1]) {
+      const pet = { x: area.x + (px ? area.width - size - inset : inset), y: area.y + (py ? area.height - size - inset : inset), width: size, height: size };
+      const shape = 'aurora-cloud', visual = petVisualBounds(pet, shape);
+      const layout = layoutShortcuts({ petBounds: visual, workArea: area, shape: 'floating' });
+      const obstacles = layout.items.map(item => ({ ...item, x: layout.bounds.x + item.x, y: layout.bounds.y + item.y }));
+      const result = bubbleBounds(pet, area, false, null, shape, obstacles);
+      assert.ok(obstacles.every(card => !intersects(card, result)), `${size}/${inset}/${px}/${py} bubble leaves every action clear`);
+      assert.ok(!intersects(visual, result), 'bubble does not cover the pet');
+      assert.ok(result.x >= area.x + 8 && result.y >= area.y + 8 && result.x + result.width <= area.x + area.width - 8 && result.y + result.height <= area.y + area.height - 8);
+      assert.ok(result.anchorX >= 20 && result.anchorX <= result.width - 20);
+      assert.equal(result.placement, result.y + result.height / 2 < visual.y + visual.height / 2 ? 'above' : 'below');
+    }
+});
+
+test('快捷卡不挡原位置时气泡布局逐字段保持原样', () => {
+  const pet = { x: 600, y: 400, width: 80, height: 80 };
+  assert.deepEqual(bubbleBounds(pet, workArea, true, 146, 'blob', [{ x: 0, y: 0, width: 24, height: 24 }]),
+    bubbleBounds(pet, workArea, true, 146, 'blob'));
 });

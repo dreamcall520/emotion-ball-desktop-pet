@@ -4,7 +4,7 @@ const { EventEmitter } = require('node:events');
 const { setImmediate: flush } = require('node:timers/promises');
 const { createBubbleWindow } = require('../lib/bubble-window');
 
-function fixture(load) {
+function fixture(load, getObstacles = () => []) {
   const windows = [];
   const errors = [];
   class NativeWindow extends EventEmitter {
@@ -21,7 +21,7 @@ function fixture(load) {
     setVisibleOnAllWorkspaces() {}
     setHiddenInMissionControl() {}
     setBounds(bounds) { this.bounds = { ...bounds }; }
-    setIgnoreMouseEvents() {}
+    setIgnoreMouseEvents(value) { this.ignored = value; }
     loadFile() { return load(windows.length); }
     showInactive() { this.visible = true; }
     hide() { this.visible = false; }
@@ -32,6 +32,7 @@ function fixture(load) {
     BrowserWindow: NativeWindow,
     screen: { getDisplayMatching: () => ({ workArea: { x: 0, y: 0, width: 1512, height: 982 } }) },
     getPetWindow: () => ({ isDestroyed: () => false, isVisible: () => true, getBounds: () => ({ x: 300, y: 300, width: 80, height: 80 }) }),
+    getObstacles,
     onError: error => errors.push(error)
   });
   const show = id => bubble.show({ id, text: '我在呢。', actions: [], durationMs: 4000 });
@@ -99,4 +100,22 @@ test('渲染层测得长文案高度后只调整当前气泡', async t => {
   assert.equal(f.windows[0].bounds.height, 146);
   assert.equal(f.bubble.resize({ id: 0, height: 180 }), false);
   assert.equal(f.windows[0].bounds.height, 146);
+});
+
+test('快捷布局与长文案变化即时避让，仍保留互动鼠标与原四秒隐藏计时', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let obstacles = [];
+  const f = fixture(() => Promise.resolve(), () => obstacles); t.after(() => f.bubble.destroy());
+  f.bubble.show({ id: 1, text: '我在呢。', actions: [{ id: 'rest', label: '歇会儿' }], durationMs: 4000 });
+  await flush();
+  const win = f.windows[0], initial = { ...win.bounds };
+  assert.equal(win.ignored, false, 'interactive dialogue remains clickable');
+  obstacles = [initial]; f.bubble.reposition();
+  const intersects = b => b.x < initial.x + initial.width && b.x + b.width > initial.x && b.y < initial.y + initial.height && b.y + b.height > initial.y;
+  assert.equal(intersects(win.bounds), false);
+  f.bubble.resize({ id: 1, height: 146 });
+  assert.equal(intersects(win.bounds), false, 'measured text height uses the same obstacles');
+  t.mock.timers.tick(3999); assert.equal(win.visible, true);
+  t.mock.timers.tick(1); assert.equal(win.visible, false, 'reposition does not restart the original lifetime');
+  assert.equal(win.ignored, true);
 });

@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { layoutShortcuts } = require('../lib/shortcut-layout');
+const { petVisualBounds } = require('../lib/pet-visual-bounds');
 
 const overlap = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 const distance = (a, b) => Math.hypot(Math.max(0, a.x - b.x - b.width, b.x - a.x - a.width), Math.max(0, a.y - b.y - b.height, b.y - a.y - a.height));
@@ -62,6 +63,97 @@ test('上下沿朝屏内展开，左右贴边朝相反侧展开，卡片始终�
   }
 });
 
+test('桌角扇弧以真实球中心等距等角展开，不移动弧心来避开屏幕边界', () => {
+  const areas = [{ x: 0, y: 24, width: 1440, height: 876 },
+    { x: -1920, y: -1080, width: 1920, height: 1040 }];
+  for (const area of areas) for (const size of [60, 80, 108, 120, 180, 260]) {
+    for (const sx of [1, -1]) for (const sy of [1, -1]) for (const inset of [0, 24, 80]) {
+      const pet = { x: sx === 1 ? area.x + inset : area.x + area.width - size - inset,
+        y: sy === 1 ? area.y + inset : area.y + area.height - size - inset, width: size, height: size };
+      const layout = layoutShortcuts({ petBounds: pet, workArea: area, side: sx === 1 ? 'left' : 'right' });
+      assert.equal(layout.shape, 'floating');
+      checkLayout(layout, pet, area);
+      const cx = pet.x + size / 2, cy = pet.y + size / 2;
+      const vectors = globalCards(layout).map(card => ({
+        x: sx * (card.x + card.width / 2 - cx), y: sy * (card.y + card.height / 2 - cy)
+      }));
+      const radii = vectors.map(({ x, y }) => Math.hypot(x, y));
+      assert.ok(Math.max(...radii) - Math.min(...radii) < 1.5, 'all six cards share the real pet center');
+      const angles = vectors.map(({ x, y }) => Math.atan2(y, x));
+      const steps = angles.slice(1).map((angle, index) => angle - angles[index]);
+      assert.ok(steps.every(step => step * sy > 0) && Math.max(...steps) - Math.min(...steps) < .015,
+        'the fan keeps equal angular spacing into the screen');
+      assert.ok(angles.every(angle => angle >= -Math.PI / 2 - .01 && angle <= Math.PI / 2 + .01),
+        'the fan faces the available inner corner');
+      for (const card of globalCards(layout)) assert.equal(overlap(card,
+        { x: pet.x - 12, y: pet.y - 12, width: size + 24, height: size + 24 }), false,
+      'corner cards keep the existing pet clearance');
+    }
+  }
+});
+
+test('离开桌角阈值时扇弧自然恢复原半圆，不突变圆心或交换入口顺序', () => {
+  const area = { x: -1920, y: -1080, width: 1920, height: 1040 };
+  for (const size of [60, 80, 108, 120, 180, 260]) {
+    const card = size <= 108 ? 52 : 58;
+    const radius = Math.max(card * 2 + 12, Math.ceil((size / 2 + card / 2 + 12) / Math.cos(Math.PI / 5)));
+    const reach = radius + card / 2 - size / 2 + 12;
+    for (const sx of [1, -1]) for (const sy of [1, -1]) for (const horizontal of [false, true]) {
+      const layouts = Array.from({ length: Math.ceil(reach + card + 3) }, (_, inset) => {
+        const ix = horizontal ? inset : 0, iy = horizontal ? 0 : inset;
+        const pet = { x: sx === 1 ? area.x + ix : area.x + area.width - size - ix,
+          y: sy === 1 ? area.y + iy : area.y + area.height - size - iy, width: size, height: size };
+        const side = horizontal ? sy === 1 ? 'top' : 'bottom' : sx === 1 ? 'left' : 'right';
+        const layout = layoutShortcuts({ petBounds: pet, workArea: area, side });
+        assert.equal(layout.shape, 'floating');
+        checkLayout(layout, pet, area);
+        return globalCards(layout);
+      });
+      for (let index = 1; index < layouts.length; index++) for (let card = 0; card < 6; card++) {
+        assert.equal(layouts[index][card].id, layouts[index - 1][card].id);
+        assert.ok(Math.hypot(layouts[index][card].x - layouts[index - 1][card].x,
+          layouts[index][card].y - layouts[index - 1][card].y) <= 10, 'one DIP crossing does not move a card to the opposite arc');
+      }
+    }
+  }
+});
+
+test('60..260每个整数尺寸在四角及近角保持完整扇弧或安全列表兜底', () => {
+  const areas = [{ x: -1920, y: -1080, width: 1920, height: 1040 },
+    { x: -640, y: 24, width: 640, height: 480 }];
+  for (const area of areas) for (let size = 60; size <= 260; size++) {
+    for (const sx of [1, -1]) for (const sy of [1, -1]) for (const inset of [0, 12, 24, 80]) {
+      const pet = { x: sx === 1 ? area.x + inset : area.x + area.width - size - inset,
+        y: sy === 1 ? area.y + inset : area.y + area.height - size - inset, width: size, height: size };
+      const layout = layoutShortcuts({ petBounds: pet, workArea: area, side: sx === 1 ? 'left' : 'right' });
+      checkLayout(layout, pet, area);
+      if (layout.shape !== 'floating') continue;
+      const radii = globalCards(layout).map(card => Math.hypot(
+        card.x + card.width / 2 - pet.x - size / 2, card.y + card.height / 2 - pet.y - size / 2));
+      assert.ok(Math.max(...radii) - Math.min(...radii) < 1.5,
+        `size ${size}, corner ${sx}/${sy}, inset ${inset} keeps the real center`);
+      assert.ok(layout.items.every(item => item.width === item.height), 'corner cards stay square');
+    }
+  }
+});
+
+test('桌角非正方形轮廓使用实际visual center，支持负坐标显示器', () => {
+  const area = { x: -1440, y: -900, width: 1440, height: 900 };
+  for (const shape of ['dumpling', 'cloud', 'aurora-cloud', 'egg', 'square', 'wedge', 'gem']) {
+    for (const size of [60, 80, 108, 120, 180, 260]) for (const sx of [1, -1]) for (const sy of [1, -1]) {
+      const native = { x: sx === 1 ? area.x : area.x + area.width - size,
+        y: sy === 1 ? area.y : area.y + area.height - size, width: size, height: size };
+      const pet = petVisualBounds(native, shape);
+      const layout = layoutShortcuts({ petBounds: pet, workArea: area, side: sx === 1 ? 'left' : 'right' });
+      assert.equal(layout.shape, 'floating');
+      checkLayout(layout, pet, area);
+      const radii = globalCards(layout).map(card => Math.hypot(
+        card.x + card.width / 2 - pet.x - pet.width / 2, card.y + card.height / 2 - pet.y - pet.height / 2));
+      assert.ok(Math.max(...radii) - Math.min(...radii) < 1.5, `${shape}/${size} uses its actual visual center`);
+    }
+  }
+});
+
 test('半圆为等角度180度弧；移动时整组平移，不逐卡裁边', () => {
   const area = { x: 0, y: 0, width: 1440, height: 900 };
   for (const direction of ['left', 'right', 'top', 'bottom']) {
@@ -82,7 +174,7 @@ test('半圆为等角度180度弧；移动时整组平移，不逐卡裁边', ()
 });
 
 test('工作区太小放不下完整弧形时退为可滚动列表，非法坐标被拒绝', () => {
-  const area = { x: -640, y: 20, width: 640, height: 480 };
+  const area = { x: -640, y: 20, width: 480, height: 360 };
   const pet = { x: -640, y: 20, width: 260, height: 260 };
   const layout = layoutShortcuts({ petBounds: pet, workArea: area, side: 'left' });
   assert.equal(layout.shape, 'list');

@@ -255,8 +255,7 @@ function initializeShortcuts() {
       // Apply the shared visibility rule before edge expansion can re-enter sync.
       syncQuotaLabel(codexCompanion?.getSnapshot());
       if (value) {
-        dialogue?.dismiss();
-        hideBubble();
+        if (shortcutWindow?.getState().view === 'settings') { dialogue?.dismiss(); hideBubble(); }
         dismissCodexPresentation();
       }
       if (value && edgeTuck?.getPresentation().mode === 'tucked' && petWindow && !petWindow.isDestroyed()) {
@@ -267,8 +266,12 @@ function initializeShortcuts() {
     },
     onRecording: value => shortcutRegistrar.setRecording(value),
     isSuppressed: () => screenLocked || isQuitting || quotaGuard?.isVisible() === true ||
-      dragState?.moved === true || Boolean(hostMotion && !shortcutWindow?.isOpen()),
-    onLayout: () => pomodoroWindows?.sync(),
+      dragState?.moved === true || Boolean(hostMotion && !['jelly', 'bow', 'spin', 'dizzy', 'turn', 'land'].includes(hostMotion.action) && !shortcutWindow?.isOpen()),
+    onLayout: () => {
+      if (shortcutDialogueSuppressed()) { dialogue?.dismiss(); hideBubble(); }
+      else safelyInvokeWindow('快捷布局变化时气泡避让', () => bubble?.reposition());
+      pomodoroWindows?.sync();
+    },
     onError: error => writeError('快捷面板', error) });
   app.on('browser-window-focus', (_event, focused) => {
     // Native focus notifications may arrive after another window has taken focus.
@@ -991,8 +994,13 @@ function bindBubbleVisibilityEvents() {
   }
 }
 
-function showBubble(payload) {
-  if (!payload || pomodoroQuiet || shortcutWindow?.isPresenting() || presentationSuppressed() || chatWindow?.isVisible()) return false;
+function shortcutDialogueSuppressed() {
+  return shortcutWindow?.isPresenting() && shortcutWindow.getState().view === 'settings';
+}
+
+function showBubble(payload, { ordinary = false } = {}) {
+  if (!payload || pomodoroQuiet || (shortcutWindow?.isPresenting() && (!ordinary || shortcutDialogueSuppressed())) ||
+    presentationSuppressed() || chatWindow?.isVisible()) return false;
   const shown = safelyInvokeWindow('气泡显示', () => bubble?.show(payload));
   if (shown) bindBubbleVisibilityEvents();
   repositionQuotaLabel();
@@ -1616,10 +1624,10 @@ function setCompanionSetting(name, enabled) {
 }
 
 function showDialogue(event) {
-  if (pomodoroQuiet || shortcutWindow?.isPresenting() || screenLocked || chatWindow?.isVisible() || presentationSuppressed() || !petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return null;
+  if (pomodoroQuiet || shortcutDialogueSuppressed() || screenLocked || chatWindow?.isVisible() || presentationSuppressed() || !petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return null;
   const payload = dialogue.offer(event, performance.now());
   if (payload) dismissCodexPresentation();
-  if (payload) showBubble(payload);
+  if (payload) showBubble(payload, { ordinary: true });
   else if (!dialogue.hasBubble(performance.now())) hideBubble();
   return payload;
 }
@@ -3058,6 +3066,12 @@ async function bootstrap() {
   bubble = createBubbleWindow({
     BrowserWindow, screen, getPetWindow: () => petWindow,
     getShape: () => settings?.customization?.appearance?.shape,
+    getObstacles: () => {
+      const state = shortcutWindow?.getState();
+      if (!shortcutWindow?.isPresenting() || !state?.layout) return [];
+      const { bounds, items } = state.layout;
+      return state.view === 'floating' ? items.map(item => ({ ...item, x: bounds.x + item.x, y: bounds.y + item.y })) : [bounds];
+    },
     alwaysOnTop: settings.alwaysOnTop,
     onError: error => writeError('气泡窗口', error)
   });

@@ -49,13 +49,14 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
   const capture = async (win, name) => { await settled(win); await wait(40); fs.writeFileSync(path.join(output, name), (await win.webContents.capturePage()).toPNG()); };
   const inside = (r, a) => r.x >= a.x && r.y >= a.y && r.x + r.width <= a.x + a.width && r.y + r.height <= a.y + a.height;
   const bubbleVisible = () => Boolean(bubble.getWindow() && !bubble.getWindow().isDestroyed() && bubble.getWindow().isVisible());
-  const suppressedBubbles = phase => {
+  const shortcutBubbles = phase => {
     assert.equal(controller.isPresenting(), true, phase + ' retains presentation suppression');
     assert.equal(showBubble({ id: -1, text: '不应显示的旧提示', actions: [], durationMs: 4000 }), false, phase + ' blocks direct bubbles');
-    assert.equal(showDialogue('wake'), null, phase + ' blocks dialogue before offering it');
     assert.equal(showUpdateBubble({ latestVersion: '99.0.0' }), false, phase + ' blocks update prompts');
-    assert.equal(dialogue.hasBubble(performance.now()), false, phase + ' does not queue dialogue');
-    assert.equal(bubbleVisible(), false, phase + ' keeps native bubble hidden');
+    const settings = controller.getState().view === 'settings';
+    if (settings) assert.equal(showDialogue('wake'), null, phase + ' settings remain quiet');
+    assert.equal(dialogue.hasBubble(performance.now()), !settings, phase + ' ordinary dialogue remains parallel outside settings');
+    assert.equal(bubbleVisible(), !settings, phase + ' native bubble follows the current view rule');
   };
   const compactSettings = async win => {
     await settled(win);
@@ -150,15 +151,31 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     await poll(bubbleVisible, Boolean, 'existing dialogue is visible before opening');
     cursor = { x: original.x + original.width / 2, y: original.y + original.height / 2 };
     const focused = BrowserWindow.getFocusedWindow();
-    controller.sampleCursor(cursor); await wait(300); assert.equal(controller.isOpen(), false, 'hover waits');
-    await wait(220); const win = await ready();
+    const hoverStartedAt = performance.now();
+    controller.sampleCursor(cursor);
+    await page(pet, "document.querySelector('#pet').dispatchEvent(new PointerEvent('pointerenter')); true");
+    await wait(300); assert.equal(controller.isOpen(), false, 'hover waits');
+    await poll(() => controller.isOpen(), Boolean, 'first hover opens without waiting for the greeting');
+    const hoverOpenMs = performance.now() - hoverStartedAt;
+    assert.ok(hoverOpenMs >= 440 && hoverOpenMs < 900, `450ms hover opens before 900ms greeting: ${hoverOpenMs}`);
+    assert.equal(bubbleVisible(), true, 'opening preserves the already visible ordinary greeting');
+    assert.equal(dialogue._current?.id, previousDialogue.id, 'opening does not replace or replay the greeting');
+    // Retire only the old fixture so the renderer's independently scheduled hello can be observed.
+    dialogue.dismiss(); bubble.hide();
+    const win = await ready(), firstWindowReadyMs = performance.now() - hoverStartedAt;
+    await poll(() => dialogue._current?.event, event => event === 'hello', 'renderer hover still produces its ordinary hello');
+    const helloMs = performance.now() - hoverStartedAt;
+    assert.ok(helloMs >= 880 && helloMs < 1600, `900ms hello remains independent: ${helloMs}`);
+    assert.equal(controller.isOpen(), true, 'greeting does not close the shortcut buttons');
+    await poll(bubbleVisible, Boolean, 'hello and shortcut buttons are both visible');
+    result.firstHover = { hoverOpenMs, firstWindowReadyMs, helloMs, hoverDelayMs: 450, helloDelayMs: 900 };
     assert.equal(BrowserWindow.getFocusedWindow(), focused, 'hover must not take focus');
     assert.equal(await page(win, 'typeof require'), 'undefined');
     const prefs = win.webContents.getLastWebPreferences();
     assert.equal(prefs.sandbox, true); assert.equal(prefs.contextIsolation, true); assert.equal(prefs.nodeIntegration, false);
     result.checks.push('hover-delay-no-focus-and-sandbox');
-    suppressedBubbles('opening');
-    result.checks.push('shortcut-open-dismisses-existing-and-blocks-new-bubbles');
+    shortcutBubbles('opening');
+    result.checks.push('first-hover-450ms-and-renderer-hello-900ms-parallel');
     await settled(win);
     const selectedAction = () => page(win, "document.querySelector('[data-action][aria-current=true]')?.dataset.action || null");
     assert.equal(await selectedAction(), null, 'opening does not preselect a function');
@@ -181,8 +198,8 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     assert.equal(controller.isOpen(), false); result.checks.push('hover-leave-close');
     await poll(() => controller.isPresenting(), value => !value, 'suppression ends after close animation');
     await wait(60);
-    assert.equal(bubbleVisible(), false, 'closing does not replay previous or suppressed prompts');
-    assert.equal(dialogue.hasBubble(performance.now()), false, 'closing leaves no queued dialogue');
+    assert.equal(bubbleVisible(), true, 'closing retains the ordinary greeting for its original lifetime');
+    assert.equal(dialogue._current?.event, 'hello', 'closing does not replay the retired greeting');
     const freshDialogue = showDialogue('wake'); assert.ok(freshDialogue, 'new dialogue resumes after closing');
     assert.notEqual(freshDialogue.id, previousDialogue.id);
     await poll(bubbleVisible, Boolean, 'fresh dialogue becomes visible');
@@ -193,6 +210,8 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     result.checks.push('shortcut-close-no-replay-and-fresh-dialogue-resumes');
     controller.open(); await ready();
     await page(win, `qiuShortcuts.openSettings()`); await wait(80);
+    shortcutBubbles('settings');
+    result.checks.push('settings-still-dismisses-and-blocks-ordinary-dialogue');
     const invalid = await page(win, `qiuShortcuts.save({...${JSON.stringify(registrar.getConfig())},chat:'Ctrl+Alt+Q'})`);
     assert.equal(invalid.ok, false); assert.equal(registrar.getConfig().chat, '');
     result.checks.push('duplicate-save-keeps-previous');
@@ -267,6 +286,8 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     await save(win, { ...registrar.getConfig(), shape: 'floating' });
     require('electron').app.focus({ steal: true });
     controller.open(); await ready(); await focusReady(win); await wait(40);
+    const closingDialogue = showDialogue('wake'); assert.ok(closingDialogue, 'ordinary dialogue is present before testing collapse');
+    await poll(bubbleVisible, Boolean, 'collapse starts with ordinary dialogue visible');
     const motion = await page(win, "({phase:document.body.dataset.phase,frames:document.getAnimations().map(a=>a.effect.getKeyframes())})");
     assert.equal(motion.phase, 'opening'); assert.equal(motion.frames.length, 6);
     assert.ok(motion.frames.every(frames => Number(frames[0].opacity) === 0 && Number(frames.at(-1).opacity) === 1 && frames[0].transform.includes('scale(0.28)')), 'six cards expand from the pet');
@@ -276,7 +297,7 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     closingDiagnostic = { session: closingSession, samples: 0 };
     const checkClosing = () => {
       closingDiagnostic.samples++;
-      try { suppressedBubbles('closing'); }
+      try { shortcutBubbles('closing'); }
       catch (error) { closingFailure ||= error; closingDiagnostic.error ||= error.message; }
     };
     win.webContents.send = function (channel, ...args) {
@@ -312,9 +333,10 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     if (closingFailure) throw closingFailure;
     assert.equal(closingDiagnostic.durationMs, 180);
     assert.equal(controller.isOpen(), false); assert.equal(controller.isPresenting(), false, 'closing releases the presentation pin');
-    assert.equal(bubbleVisible(), false, 'complete closing does not replay old dialogue');
-    assert.equal(dialogue.hasBubble(performance.now()), false, 'complete closing leaves no queued dialogue');
-    result.checks.push('shortcut-closing-blocks-new-and-update-bubbles');
+    assert.equal(bubbleVisible(), true, 'complete closing keeps the same ordinary dialogue for its original lifetime');
+    assert.equal(dialogue._current?.id, closingDialogue.id, 'complete closing does not replay or replace dialogue');
+    result.checks.push('shortcut-closing-preserves-ordinary-and-blocks-direct-update-bubbles');
+    bubble.hide(); dialogue.dismiss();
     result.checks.push('shortcut-native-close-duration-and-pin-release');
     const collapse = await page(win, 'window.__closingFrames');
     assert.equal(collapse.session, closingSession); assert.equal(collapse.phase, 'closing'); assert.equal(collapse.frames.length, 6);
@@ -363,28 +385,117 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
       assert.deepEqual(surfaces[0].buttons.map(button => button.background), surfaces[1].buttons.map(button => button.background));
     }
     result.checks.push('neutral-surfaces-solid-cards-and-shadowless-panels-eight-themes');
+    const edgeFrames = async phase => {
+      const session = String(controller.getState().session);
+      await poll(() => page(win, `document.body.dataset.session === ${JSON.stringify(session)} && document.body.dataset.phase === ${JSON.stringify(phase)}`), Boolean, `edge renderer ${phase}`);
+      const frames = [], started = performance.now();
+      for (let i = 0; i < 6; i++) {
+        const frame = await page(win, `({ x: screenX, y: screenY, width: innerWidth, height: innerHeight,
+          buttons: [...document.querySelectorAll('[data-action]')].filter(node => node.getClientRects().length).map(node => ({ id: node.dataset.action, opacity: Number(getComputedStyle(node).opacity), ...node.getBoundingClientRect().toJSON() })) })`);
+        frames.push({ ...frame, elapsedMs: performance.now() - started, bubble: bubbleVisible() ? bubble.getWindow().getBounds() : null });
+        await wait(25);
+      }
+      return frames;
+    };
     // Physical displays are enumerated here; virtual negative displays are covered by the pure geometry tests.
-    for (const display of screen.getAllDisplays()) for (const [px, py] of [[.5,.5],[0,.5],[1,.5],[.5,0],[.5,1],[0,0],[1,0],[0,1],[1,1]]) {
+    const positions = [[.5,.5],[0,.5],[1,.5],[.5,0],[.5,1],[0,0],[1,0],[0,1],[1,1],
+      ...[40, 80].flatMap(inset => [[0,0,inset],[1,0,inset],[0,1,inset],[1,1,inset]])];
+    for (const display of screen.getAllDisplays()) for (const [px, py, inset = 0] of positions) {
       controller.interrupt(); edgeTuck.restore();
+      dialogue.dismiss(); bubble.hide();
       const area = display.workArea;
-      pet.setBounds({ ...original, x: Math.round(area.x + (area.width - original.width) * px), y: Math.round(area.y + (area.height - original.height) * py) }, false);
+      pet.setBounds({ ...original, x: Math.round(area.x + (area.width - original.width) * px + (px === 0 ? inset : px === 1 ? -inset : 0)),
+        y: Math.round(area.y + (area.height - original.height) * py + (py === 0 ? inset : py === 1 ? -inset : 0)) }, false);
       await wait(100); // Drain native move/scale notifications before simulating hover.
       const placed = pet.getBounds(); cursor = { x: placed.x + placed.width / 2, y: placed.y + placed.height / 2 };
-      controller.open({ focus: false }); await wait(60); await settled(win);
+      const isCorner = px !== .5 && py !== .5;
+      let cornerGreeting = null;
+      if (isCorner) {
+        cornerGreeting = showDialogue('wake'); assert.ok(cornerGreeting, 'ordinary greeting is visible before corner expansion');
+        await poll(bubbleVisible, Boolean, 'corner greeting is ready before expansion');
+        await poll(() => page(bubble.getWindow(), 'document.querySelector("#message").textContent'), text => text === cornerGreeting.text, 'corner greeting content is current');
+      }
+      controller.open({ focus: false });
+      const opening = isCorner ? await edgeFrames('opening') : null;
+      await wait(60); await settled(win);
       assert.equal(controller.isOpen(), true, 'hover layout remains open');
       const state = controller.getState(); assert.ok(inside(state.layout.bounds, area));
+      const actual = win.getBounds(), beforePointerFocus = BrowserWindow.getFocusedWindow();
+      const visual = petVisualBounds(placed, getSettings().customization.appearance.shape, edgeTuck.getPresentation());
+      const planned = layoutShortcuts({ petBounds: visual, workArea: area, shape: registrar.getConfig().shape, side: edgeTuck.getPresentation().side });
+      let globals = [], corner = null;
+      const evidence = { displayId: display.id, px, py, inset, pet: pet.getBounds(), ...state.layout, actual, planned, globals, opening };
+      result.layouts.push(evidence);
+      if (isCorner) assert.equal(state.view, 'floating', 'physical display corners keep all six floating buttons');
       if (state.view === 'floating') {
         const dom = await page(win, `[...document.querySelectorAll('[data-action]')].filter(n=>n.getClientRects().length).map(n=>({id:n.dataset.action,...n.getBoundingClientRect().toJSON(),transform:getComputedStyle(n).transform,animations:n.getAnimations().map(a=>({state:a.playState,time:a.currentTime,pending:a.pending,frames:a.effect.getKeyframes()}))}))`);
+        evidence.dom = dom;
         assert.equal(dom.length, 6);
         for (const card of dom) {
           const expected = state.layout.items.find(item => item.id === card.id);
           for (const key of ['x', 'y', 'width', 'height']) assert.ok(Math.abs(card[key] - expected[key]) <= 1, `${card.id} DOM ${key} ${card[key]} matches native layout ${expected[key]}: ${display.id},${px},${py}; ${JSON.stringify(card)}`);
           assert.ok(card.x >= 0 && card.y >= 0 && card.right <= win.getBounds().width && card.bottom <= win.getBounds().height);
+          const intended = planned.items.find(item => item.id === card.id);
+          const global = { id: card.id, x: actual.x + card.x, y: actual.y + card.y, width: card.width, height: card.height };
+          for (const axis of ['x', 'y']) assert.ok(Math.abs(global[axis] - planned.bounds[axis] - intended[axis]) <= 1, `${card.id} native global ${axis} matches the intended position`);
+          globals.push(global);
+          cursor = { x: global.x + global.width / 2, y: global.y + global.height / 2 };
+          controller.sampleCursor(cursor);
+          assert.equal(ignores.get(win), false, `${card.id} native hit region accepts the pointer`);
+          const x = Math.round(card.x + card.width / 2), y = Math.round(card.y + card.height / 2);
+          assert.equal(await page(win, `document.elementFromPoint(${x},${y})?.closest('[data-action]')?.dataset.action`), card.id, `${card.id} painted center hits its own DOM button`);
+          win.webContents.sendInputEvent({ type: 'mouseMove', x, y });
+          await poll(() => page(win, "document.querySelector('[data-action][aria-current=true]')?.dataset.action"), id => id === card.id, card.id + ' receives native pointer movement');
+        }
+        assert.equal(BrowserWindow.getFocusedWindow(), beforePointerFocus, 'hovering all six buttons does not take focus');
+        if (isCorner) {
+          const cx = visual.x + visual.width / 2, cy = visual.y + visual.height / 2;
+          const radii = globals.map(card => Math.hypot(card.x + card.width / 2 - cx, card.y + card.height / 2 - cy));
+          const angles = globals.map(card => Math.atan2((py ? -1 : 1) * (card.y + card.height / 2 - cy),
+            (px ? -1 : 1) * (card.x + card.width / 2 - cx)));
+          const steps = angles.slice(1).map((angle, index) => Math.atan2(Math.sin(angle - angles[index]), Math.cos(angle - angles[index])));
+          const angularGaps = steps.map(Math.abs);
+          evidence.corner = { center: { x: cx, y: cy }, radii, angles, steps };
+          assert.ok(Math.max(...radii) - Math.min(...radii) < 1.5, 'corner fan keeps the actual pet center');
+          assert.ok(steps.every(step => Math.sign(step) === Math.sign(steps[0])), 'corner fan retains its entry order');
+          assert.ok(Math.max(...angularGaps) - Math.min(...angularGaps) < .015, 'corner fan uses equal angular spacing');
+          const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+          for (let i = 0; i < globals.length; i++) for (const other of globals.slice(i + 1)) {
+            const card = globals[i];
+            assert.ok(Math.hypot(Math.max(0, card.x - other.x - other.width, other.x - card.x - card.width),
+              Math.max(0, card.y - other.y - other.height, other.y - card.y - card.height)) >= 6, 'corner cards retain their minimum 6 DIP gap');
+          }
+          assert.ok(globals.every(card => !overlaps(card, { x: visual.x - 12, y: visual.y - 12, width: visual.width + 24, height: visual.height + 24 })), 'all corner buttons leave the pet clear');
+          await poll(bubbleVisible, Boolean, 'corner bubble is visible with the shortcuts');
+          await poll(() => page(bubble.getWindow(), 'document.querySelector("#message").textContent'), text => text === cornerGreeting.text, 'corner native bubble shows the same ordinary dialogue');
+          const bubbleBounds = bubble.getWindow().getBounds();
+          assert.ok(inside(bubbleBounds, area), 'corner bubble remains on the same physical display');
+          assert.ok(globals.every(card => !overlaps(card, bubbleBounds)), 'corner bubble does not overlap any clickable shortcut card');
+          assert.ok(!overlaps(visual, bubbleBounds), 'corner bubble leaves the pet visible');
+          corner = { center: { x: cx, y: cy }, radii, angles, steps, bubble: bubbleBounds, greetingId: cornerGreeting.id, opening };
+          const prefix = `native-corner-${display.id}-${px}-${py}-inset-${inset}`;
+          await capture(win, `${prefix}-shortcuts.png`);
+          fs.writeFileSync(path.join(output, `${prefix}-bubble.png`), (await bubble.getWindow().webContents.capturePage()).toPNG());
+          controller.close(); corner.closing = await edgeFrames('closing');
+          const collisions = [];
+          for (const [phase, frames] of [['opening', opening], ['closing', corner.closing]]) for (const frame of frames) {
+            assert.ok(frame.bubble, phase + ' retains the same visible ordinary bubble');
+            for (const button of frame.buttons) {
+              if (button.opacity === 0) continue;
+              const global = { ...button, x: frame.x + button.x, y: frame.y + button.y };
+              if (overlaps(global, frame.bubble)) collisions.push({ phase, elapsedMs: frame.elapsedMs, button: global, bubble: frame.bubble });
+            }
+          }
+          corner.collisions = collisions;
+          fs.writeFileSync(path.join(output, `${prefix}-geometry.json`), JSON.stringify({ pet: placed, visual, actual, planned, globals, corner }, null, 2));
+          assert.deepEqual(collisions, [], 'corner opening and closing painted cards do not overlap the native bubble');
+          await poll(() => controller.isPresenting(), value => !value, 'corner collapse releases the pin');
         }
       }
-      result.layouts.push({ displayId: display.id, px, py, pet: pet.getBounds(), ...state.layout });
+      evidence.corner = corner;
     }
     result.checks.push('native-display-edges-and-corners');
+    result.checks.push('native-corners-inset-40-80-true-center-pointer-hits-and-parallel-bubble');
     controller.interrupt(); edgeTuck.dock('left'); controller.open({ focus: false }); await wait(100);
     assert.equal(edgeTuck.getPresentation().mode, 'peeked');
     cursor = { x: -10000, y: -10000 }; edgeTuck.sampleCursor(cursor); await wait(300);
@@ -393,19 +504,6 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     await poll(() => edgeTuck.getPresentation().mode, mode => mode === 'tucked', 'edge re-tucks after collapse and leave delay');
     result.checks.push('edge-open-pin-release');
     const originalCustomization = structuredClone(getSettings().customization);
-    const edgeFrames = async phase => {
-      const session = String(controller.getState().session);
-      await poll(() => page(win, `document.body.dataset.session === ${JSON.stringify(session)} && document.body.dataset.phase === ${JSON.stringify(phase)}`), Boolean, `edge renderer ${phase}`);
-      return page(win, `(async () => {
-        const frames = [];
-        for (let i = 0; i < 6; i++) {
-          frames.push({ x: screenX, y: screenY, width: innerWidth, height: innerHeight,
-            buttons: [...document.querySelectorAll('[data-action]')].filter(node => node.getClientRects().length).map(node => ({ id: node.dataset.action, ...node.getBoundingClientRect().toJSON() })) });
-          await new Promise(resolve => { const timer = setTimeout(resolve, 25); requestAnimationFrame(() => { clearTimeout(timer); resolve(); }); });
-        }
-        return frames;
-      })()`);
-    };
     const checkEdgeFrames = (frames, area, phase) => {
       assert.ok(frames.length > 0);
       for (const frame of frames) {

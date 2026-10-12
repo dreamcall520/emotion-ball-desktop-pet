@@ -47,6 +47,7 @@
   let singleClickTimer = null;
   let wakeOnDoubleClick = false;
   let helloTimer = null;
+  let petHovered = false;
   let actionTimer = null;
   let actionUntil = 0;
   let lastWorkAttempt = 0;
@@ -548,7 +549,7 @@
       clearAction();
       stopMotion();
     }
-    if (!focusQuiet && currentState.welcome && !wakeOnDoubleClick && !activeMotion && !dragState?.dragged && now >= actionUntil) {
+    if (!focusQuiet && currentState.welcome && !petHovered && !wakeOnDoubleClick && !activeMotion && !dragState?.dragged && now >= actionUntil) {
       playCompanionReaction('stretch', 'wake');
     } else {
       restoreState();
@@ -841,6 +842,7 @@
   });
 
   onPet('pointerenter', () => {
+    petHovered = true;
     if (presentationSuppressed || companion.manualSleep || lastSample?.locked || activeMotion) return;
     noteInteraction();
     clearTimeout(helloTimer);
@@ -852,6 +854,7 @@
   });
 
   onPet('pointerleave', () => {
+    petHovered = false;
     clearTimeout(helloTimer);
     helloTimer = null;
     petting.reset();
