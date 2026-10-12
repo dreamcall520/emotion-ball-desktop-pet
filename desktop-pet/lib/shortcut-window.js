@@ -94,7 +94,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
       if (created !== win) return;
       close({ immediate: true }); created.destroy(); onError(new Error(`快捷面板渲染退出：${details.reason}`));
     });
-    created.on('blur', () => { if (created === win) close(); });
+    created.on('blur', () => { if (created !== win) return; setRecording(false); if (view !== 'settings') close(); });
     created.on('move', () => { if (created === win) settingsMoved(); });
     created.on('close', event => { if (!stopped && created === win) { event.preventDefault(); close(); } });
     created.on('closed', () => { if (created === win) { close({ immediate: true }); ready = false; win = null; settingsPositioned = false; } });

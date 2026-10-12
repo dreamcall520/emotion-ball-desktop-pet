@@ -156,6 +156,15 @@ test('实体面板不随光标采样切换穿透，标题栏和关闭按钮始�
   }
 });
 
+test('设置表单失焦保留，仍可明确关闭；快捷面板失焦收起', async t => {
+  const f = fixture(); t.after(() => f.manager.dispose());
+  f.manager.open({ settings: true }); await flush();
+  f.send('shortcut:recording', true);
+  f.win().emit('blur'); assert.equal(f.manager.isOpen(), true); assert.equal(f.recording.at(-1), false);
+  f.send('shortcut:close'); assert.equal(f.manager.isOpen(), false);
+  f.manager.open(); f.win().emit('blur'); assert.equal(f.manager.isOpen(), false);
+});
+
 test('悬停计时结束时重新检查真实轮廓，不把透明留白当成球体', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const f = fixture(); t.after(() => f.manager.dispose());

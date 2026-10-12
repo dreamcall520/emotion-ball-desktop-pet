@@ -116,6 +116,7 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     assert.equal(await page(win, "getComputedStyle(document.querySelector('.settings-panel .panel-header')).webkitAppRegion"), 'drag');
     assert.equal(await page(win, "getComputedStyle(document.querySelector('.settings-panel [data-close]')).webkitAppRegion"), 'no-drag');
     controller.sampleCursor({ x: -10000, y: -10000 }); assert.equal(ignores.get(win), false, 'solid settings window always accepts native mouse input');
+    win.blur(); await wait(60); assert.equal(controller.isOpen(), true, 'settings stays open across native focus changes');
     result.checks.push('settings-native-drag-region-and-position-retained');
     for (const method of ['close', 'cancel', 'escape']) {
       controller.open({ settings: true }); await wait(80);
