@@ -60,15 +60,18 @@ test('关闭先播180ms聚拢，保留pin与避让直到原生窗口隐藏', asy
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const f = fixture(); t.after(() => f.manager.dispose());
   f.manager.open({ focus: false }); await flush();
+  assert.equal(f.manager.isPresenting(), true);
   assert.equal(f.layouts.at(-1), true);
   f.manager.close();
   assert.equal(f.manager.isOpen(), false);
+  assert.equal(f.manager.isPresenting(), true, 'presentation remains active through the closing animation');
   assert.equal(f.win().visible, true);
   assert.equal(f.pins.at(-1), true);
   assert.deepEqual(f.win().sent.at(-1)[1].animation, { session: 1, phase: 'closing', duration: 180 });
   assert.equal(f.win().passthrough, true);
   t.mock.timers.tick(179); assert.equal(f.win().visible, true);
   t.mock.timers.tick(1); assert.equal(f.win().visible, false);
+  assert.equal(f.manager.isPresenting(), false);
   assert.equal(f.pins.at(-1), false);
   assert.equal(f.layouts.at(-1), false);
 });

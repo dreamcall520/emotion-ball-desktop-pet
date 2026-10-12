@@ -203,7 +203,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
   };
   for (const [channel, listener] of Object.entries(listeners)) ipcMain.on(channel, listener);
   return { open, close, sync, sampleCursor, action, getWindow: () => alive() ? win : null,
-    getState: state, isOpen: () => opened,
+    getState: state, isOpen: () => opened, isPresenting: () => pinned,
     cancelHover() { cancelHover(); blocked = true; },
     interrupt() { close({ immediate: true }); blocked = true; },
     dispose() { close({ immediate: true }); stopped = true; for (const channel of Object.keys(handlers)) ipcMain.removeHandler(channel);

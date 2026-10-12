@@ -16,7 +16,7 @@
   const bindingIds = ['launcher', ...actions.map(action => action.id)];
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
   const symbols = isMac ? { Ctrl: '⌃', Alt: '⌥', Shift: '⇧', Meta: '⌘', Space: '空格' } : { Ctrl: 'Ctrl', Alt: 'Alt', Shift: 'Shift', Meta: 'Win', Space: '空格' };
-  let state = null, draft = { ...defaults }, recording = null, selected = 0, busy = false, pointerFrame = null;
+  let state = null, draft = { ...defaults }, recording = null, selected = -1, busy = false, pointerFrame = null;
   let appearance = 'system', motionKey = '', motions = [];
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
   const system = window.matchMedia?.('(prefers-color-scheme: dark)');
@@ -50,11 +50,11 @@
 
   function select(index, focus = false) {
     const entries = currentActions();
-    selected = ((index % entries.length) + entries.length) % entries.length;
+    selected = index < 0 ? -1 : ((index % entries.length) + entries.length) % entries.length;
     document.querySelectorAll('[data-action]').forEach(button => {
-      const current = button.dataset.action === entries[selected].id;
+      const current = button.dataset.action === entries[selected]?.id;
       button.setAttribute('aria-current', String(current));
-      button.tabIndex = current ? 0 : -1;
+      button.tabIndex = current || (selected < 0 && button.dataset.action === entries[0].id) ? 0 : -1;
       if (focus && current && button.getClientRects().length) button.focus({ preventScroll: true });
     });
   }
@@ -204,6 +204,10 @@
   function applyState(next) {
     if (!next || !['floating', 'list', 'settings'].includes(next.view)) return;
     const enteringSettings = next.view === 'settings' && (state?.view !== 'settings' || state?.session !== next.session);
+    if (next.view !== 'settings' && (state?.view !== next.view || state?.session !== next.session)) {
+      selected = -1;
+      if (document.activeElement?.matches('[data-action]')) document.activeElement.blur();
+    }
     if (next.view !== 'settings' && recording) setRecording(null);
     state = { ...next, config: configCopy(next.config) };
     document.body.dataset.session = String(state.session);
@@ -239,7 +243,7 @@
         button.style.height = item.height + 'px';
       });
     }
-    select(selected, state.focus === true);
+    select(selected);
     animateState();
   }
 
@@ -364,9 +368,13 @@
     if (event.key === 'Escape') { event.preventDefault(); close(); return; }
     if (!state || state.view === 'settings') return;
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-      event.preventDefault(); select(selected + (['ArrowDown', 'ArrowRight'].includes(event.key) ? 1 : -1), true);
+      event.preventDefault();
+      const forward = ['ArrowDown', 'ArrowRight'].includes(event.key);
+      const count = currentActions().length;
+      select(selected < 0 ? (forward ? 0 : count - 1) : (selected + (forward ? 1 : -1) + count) % count, true);
     } else if (event.key === 'Enter' && document.activeElement.matches('[data-action]')) {
-      event.preventDefault(); choose(currentActions()[selected].id);
+      event.preventDefault();
+      if (selected >= 0) choose(currentActions()[selected].id);
     } else if (!event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey && /^[1-6]$/.test(event.key)) {
       const action = currentActions()[Number(event.key) - 1];
       if (action) { event.preventDefault(); choose(action.id); }

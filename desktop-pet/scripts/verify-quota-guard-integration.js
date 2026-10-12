@@ -56,25 +56,131 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
   await until(() => separated(panel), Boolean, '已打开番茄钟避让后来守护战');
   const panelLayout = { pomodoro: timerPanel.getBounds(), guard: panel.getBounds() };
   await capture(panel, 'main-route-panel');
+  const shortcutQuota = [];
   if (shortcuts) {
     const readCursor = screen.getCursorScreenPoint;
     const bounds = pet.getBounds(), cursor = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+    const entryTime = () => card.webContents.executeJavaScript('window.quotaGuardEntry?.state.entryTime');
+    let earliestShow = Infinity, closeStarted = null;
+    const nativeShows = [], prematureShows = [];
+    const originalShow = card.show, originalShowInactive = card.showInactive;
+    const { app } = require('electron');
+    const focusEvents = [], watched = new Map();
+    const describe = win => !win || win.isDestroyed() ? null : ({ id: win.id, url: win.webContents.getURL(), visible: win.isVisible(), focused: win.isFocused() });
+    const focusSnapshot = (event, target) => {
+      const current = shortcuts.getState();
+      return { at: performance.now(), event, target: describe(target), focusedWindow: describe(BrowserWindow.getFocusedWindow()),
+        shortcut: describe(shortcuts.getWindow()), guard: describe(panel), opened: shortcuts.isOpen(), presenting: shortcuts.isPresenting(),
+        view: current.view, session: current.session, animation: current.animation };
+    };
+    const watch = win => {
+      if (watched.has(win)) return;
+      const focus = () => focusEvents.push(focusSnapshot('window:focus', win)), blur = () => focusEvents.push(focusSnapshot('window:blur', win));
+      win.on('focus', focus); win.on('blur', blur); watched.set(win, { focus, blur });
+    };
+    const appFocus = (_event, win) => focusEvents.push(focusSnapshot('app:focus', win));
+    const observeShow = () => {
+      const at = performance.now(), presenting = shortcuts.isPresenting();
+      const value = { at, presenting, elapsed: closeStarted === null ? null : at - closeStarted };
+      nativeShows.push(value);
+      if (at < earliestShow || presenting) prematureShows.push(value);
+    };
     try {
       screen.getCursorScreenPoint = () => cursor;
       shortcuts.sampleCursor(cursor); await wait(550);
       assert.equal(shortcuts.isOpen(), false, '守护战打开时悬停不覆盖游戏');
       const round = (await state()).round;
+      app.on('browser-window-focus', appFocus); watch(panel);
+      // macOS showInactive need not synchronously emit the generic `show`
+      // event. Observe the actual native presentation calls on this card only.
+      card.show = function (...args) { const result = originalShow.apply(this, args); if (this.isVisible()) observeShow(); return result; };
+      card.showInactive = function (...args) { const result = originalShowInactive.apply(this, args); if (this.isVisible()) observeShow(); return result; };
+      for (const view of ['floating', 'list', 'settings']) {
+        earliestShow = Infinity; closeStarted = null;
+        openShortcuts(view === 'settings');
+        assert.equal(card.isVisible(), false, `${view} 展开立即隐藏原卡与内嵌角色`);
+        await until(() => ({ opened: shortcuts.isOpen(), visible: shortcuts.getWindow()?.isVisible(),
+          focused: shortcuts.getWindow()?.isFocused(), loading: shortcuts.getWindow()?.webContents.isLoading(),
+          guard: guard.isVisible(), view: shortcuts.getState().view }),
+        value => value.opened && value.visible && value.focused && !value.loading, '主动打开可交互快捷入口');
+        const quick = shortcuts.getWindow();
+        watch(quick);
+        if (view !== 'settings' && shortcuts.getState().view !== view) {
+          const result = await quick.webContents.executeJavaScript(`window.qiuShortcuts.setShape(${JSON.stringify(view)})`);
+          assert.equal(result.ok, true, `${result.error || ''} ${JSON.stringify(focusSnapshot('shape-result', quick))}`);
+        }
+        await until(() => shortcuts.getState().view, value => value === view, `${view} 快捷形态`);
+        await until(() => separated(quick), Boolean, '已打开番茄钟避让快捷面板');
+        assert.equal(guard.isVisible(), false, '主动快捷入口先收起守护战');
+        assert.equal(shortcuts.isPresenting(), true, '展开保持呈现 pin');
+        await wait(50);
+        const pausedEntry = await entryTime();
+        assert.equal(typeof pausedEntry, 'number', '复用已有角色入口');
+        callbacks.onQuota(fixture()); sync(); shortcuts.sync();
+        await wait(110);
+        assert.equal(card.isVisible(), false, '同值额度刷新及窗口同步不能重显原卡');
+        // The entry's state.visible denotes available content; the hidden native
+        // card hosts both it and the quota. Its stopped clock verifies concealment.
+        assert.equal(await entryTime(), pausedEntry, '快捷展开时内嵌角色停止动画');
+        assert.deepEqual(prematureShows, [], '切换到快捷入口期间原卡不能闪现');
+        const showCount = nativeShows.length;
+        closeStarted = performance.now();
+        shortcuts.close();
+        const duration = shortcuts.getState().animation.duration;
+        assert.equal(shortcuts.getState().animation.phase, 'closing');
+        assert.equal(duration, 180);
+        earliestShow = closeStarted + duration - 2;
+        assert.equal(shortcuts.isOpen(), false);
+        assert.equal(shortcuts.isPresenting(), true, '收起动画结束前保留呈现 pin');
+        assert.equal(card.isVisible(), false, '收起开始不恢复额度卡');
+        callbacks.onQuota(fixture()); sync();
+        await wait(75);
+        assert.equal(shortcuts.isPresenting(), true);
+        assert.equal(card.isVisible(), false, '收起动画中刷新仍隐藏额度卡');
+        await until(() => card.isVisible(), Boolean, '收起动画结束后原卡恢复');
+        assert.equal(shortcuts.isPresenting(), false);
+        assert.deepEqual(prematureShows, [], '额度卡只能在收起动画完成后恢复');
+        const restored = nativeShows[showCount];
+        assert.ok(restored, '记录原卡原生显示调用');
+        assert.ok(restored.elapsed >= duration - 2, '180ms 收起期内不提前显示（2ms 时钟取样容差）');
+        await card.webContents.executeJavaScript('window.petQuotaLabel.openGuard()');
+        await until(() => guard.isVisible() && panel.isVisible() && panel.isFocused(), Boolean, '快捷收起后恢复可交互守护战');
+        assert.equal((await state()).round, round, '切换面板不重开游戏');
+        shortcutQuota.push({ view, closeDuration: duration, restoredAfter: restored.elapsed, round, hiddenDuringRefresh: true, entryPaused: true });
+      }
+      setPreference('codexQuotaAlwaysVisible', false);
+      await until(() => guard.isVisible(), value => !value, '用户关闭原额度卡');
+      earliestShow = Infinity; closeStarted = null;
       openShortcuts();
-      await until(() => ({ visible: shortcuts.getWindow()?.isVisible(), opened: shortcuts.isOpen(), state: shortcuts.getState() }),
-        value => value.visible, '主动打开快捷入口');
-      await until(() => separated(shortcuts.getWindow()), Boolean, '已打开番茄钟避让快捷面板');
-      assert.equal(guard.isVisible(), false, '主动快捷入口先收起守护战');
-      await until(() => card.isVisible(), Boolean, '主动快捷入口恢复额度卡');
+      await until(() => shortcuts.isOpen() && shortcuts.getWindow()?.isVisible(), Boolean, '原卡关闭时仍可展开快捷入口');
+      callbacks.onQuota(fixture()); sync();
+      assert.equal(card.isVisible(), false);
+      shortcuts.close();
+      await until(() => shortcuts.isPresenting(), value => !value, '原卡关闭时快捷收起完成');
+      callbacks.onQuota(fixture()); sync(); await wait(50);
+      assert.equal(card.isVisible(), false, '收起快捷不强制打开用户已关闭的原卡');
+      assert.equal(getSettings().codexQuotaAlwaysVisible, false, '原显示偏好保持关闭');
+      assert.deepEqual(prematureShows, []);
+      card.show = originalShow; card.showInactive = originalShowInactive;
+      setPreference('codexQuotaAlwaysVisible', true); sync();
+      await until(() => card.isVisible(), Boolean, '恢复测试前原卡显示偏好');
       await card.webContents.executeJavaScript('window.petQuotaLabel.openGuard()');
       await until(() => guard.isVisible(), Boolean, '快捷后恢复守护战');
       assert.equal(shortcuts.isOpen(), false, '守护战打开立即收起快捷入口');
       assert.equal((await state()).round, round, '切换面板不重开游戏');
-    } finally { screen.getCursorScreenPoint = readCursor; }
+      if (directory) fs.writeFileSync(path.join(directory, 'shortcut-focus-diagnostic.json'), JSON.stringify({
+        ok: true, shortcutQuota, nativeShows, prematureShows, focusEvents
+      }, null, 2) + '\n');
+    } catch (error) {
+      if (directory) fs.writeFileSync(path.join(directory, 'shortcut-focus-diagnostic.json'), JSON.stringify({
+        ok: false, error: error.message, current: focusSnapshot('failure', shortcuts.getWindow()), shortcutQuota, nativeShows, prematureShows, focusEvents
+      }, null, 2) + '\n');
+      throw error;
+    } finally {
+      app.removeListener('browser-window-focus', appFocus);
+      for (const [win, events] of watched) { win.removeListener('focus', events.focus); win.removeListener('blur', events.blur); }
+      card.show = originalShow; card.showInactive = originalShowInactive; screen.getCursorScreenPoint = readCursor;
+    }
   }
   const before = await state();
   callbacks.onQuota(fixture());
@@ -133,8 +239,10 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
   getSettings().codexEnabled = false;
   await getCompanion().setEnabled(false); sync();
   if (directory) fs.writeFileSync(path.join(directory, 'integration-checks.json'), JSON.stringify({
-    ok: true, crossPanelSwitch: Boolean(shortcuts), panelLayout, automatic, won,
+    ok: true, crossPanelSwitch: Boolean(shortcuts), shortcutQuota, panelLayout, automatic, won,
     checks: ['trusted-entry-and-selected-quota', 'shortcut-hover-suppression-and-explicit-switch',
+      'shortcut-floating-list-settings-hide-quota-and-role', 'quota-refresh-does-not-reveal-during-shortcuts',
+      'shortcut-close-180ms-keeps-quota-hidden', 'shortcut-close-preserves-user-disabled-quota',
       'same-value-refresh-keeps-round', 'foreign-close-rejected', 'always-on-top',
       'automatic-hits-do-not-score', '30-manual-hits-and-victory-animation',
       'close-freezes-and-reopen-keeps-round', 'period-switch-resets-round',
