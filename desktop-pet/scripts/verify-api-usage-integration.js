@@ -97,22 +97,27 @@ async function verifyApiUsage({ getWindow, getMenu, pet, service, powerMonitor, 
     const quotaSize = quotaExpanded ? { width: 196, height: 131 } : { width: 200, height: 50 };
     const apiSize = apiExpanded ? { width: 196, height: 92 } : { width: 128, height: 32 };
     const exactSize = (bounds, expected) => bounds.width === expected.width && bounds.height === expected.height;
-    const value = await poll(async () => ({ quota: quotaWin.getBounds(), api: card.getBounds(),
+    const value = await poll(async () => ({ quota: quotaWin.getBounds(), quotaFace: quotaLabel.getVisibleBounds(), api: card.getBounds(),
       quotaDOM: await readQuotaLabelGeometry(quotaWin), apiDOM: await readQuotaLabelGeometry(card) }), current =>
       current.quotaDOM.expanded === quotaExpanded && current.apiDOM.expanded === apiExpanded &&
-      exactSize(current.quota, quotaSize) && exactSize(current.api, apiSize) && !overlaps(current.api, current.quota) &&
-      (!side || (side === 'right' ? current.api.x + current.api.width === current.quota.x + current.quota.width : current.api.x === current.quota.x) &&
-        current.api.y === current.quota.y + current.quota.height + 8), label);
+      exactSize(current.quota, quotaSize) && exactSize(current.api, apiSize) && current.quotaFace && !overlaps(current.api, current.quotaFace) &&
+      (!side || (side === 'right' ? current.api.x + current.api.width === current.quotaFace.x + current.quotaFace.width : current.api.x === current.quotaFace.x) &&
+        current.api.y === current.quotaFace.y + current.quotaFace.height + 8), label);
     assert.equal(value.quotaDOM.size, 'compact', 'demo subscription remains compact');
     assert.deepEqual(value.quotaDOM.viewport, quotaSize, 'subscription viewport fits native window');
     assert.deepEqual(value.apiDOM.viewport, apiSize, 'API viewport fits native window');
+    const leftRole = !quotaExpanded && value.quotaDOM.guard.bounds.x < value.quotaDOM.beam.x;
+    const beamX = leftRole ? 72 : 0;
     assert.deepEqual(value.quotaDOM.beam, quotaExpanded
-      ? { x: 0, y: 0, width: 196, height: 131 } : { x: 0, y: 18, width: 128, height: 32 }, 'subscription keeps original beam');
+      ? { x: 0, y: 0, width: 196, height: 131 } : { x: beamX, y: 18, width: 128, height: 32 }, 'subscription keeps original beam with the inward role gutter');
     assert.deepEqual(value.quotaDOM.card, quotaExpanded
-      ? { x: 0, y: 0, width: 196, height: 131 } : { x: 2, y: 20, width: 124, height: 28 }, 'subscription keeps original card');
+      ? { x: 0, y: 0, width: 196, height: 131 } : { x: beamX + 2, y: 20, width: 124, height: 28 }, 'subscription keeps original card');
     assert.equal(value.quotaDOM.guard.visible, !quotaExpanded, 'guard role appears only beside the folded subscription');
     if (!quotaExpanded) assert.deepEqual(value.quotaDOM.guard.bounds,
-      { x: 136, y: 6, width: 64, height: 44 }, 'guard role fits the separate right-hand area');
+      { x: leftRole ? 0 : 136, y: 6, width: 64, height: 44 }, 'guard role fits its separate left or right area at an 8px gap');
+    const absolute = rect => ({ ...rect, x: value.quota.x + rect.x, y: value.quota.y + rect.y });
+    assert.deepEqual(value.quotaFace, absolute(value.quotaDOM.card), 'API anchor agrees with independently measured painted subscription face');
+    assert.ok(value.quotaDOM.guard.content.every(rect => !overlaps(value.api, absolute(rect))), 'API cannot cover a painted guard role');
   };
   await poll(() => quotaPage('document.querySelector(".summary-value").textContent'), value => value === '79%', 'existing subscription renderer');
   await assertLabels(false, false, 'two folded cards do not overlap');

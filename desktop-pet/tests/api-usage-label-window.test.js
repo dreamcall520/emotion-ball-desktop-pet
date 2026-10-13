@@ -26,7 +26,7 @@ function nativeObstacle(bounds, visible = true) {
   });
 }
 
-function fixture() {
+function fixture(options = {}) {
   const windows = [], errors = [], opened = [];
   const pet = nativeObstacle({ x: 600, y: 400, width: 80, height: 80 });
   const area = { x: 0, y: 0, width: 1440, height: 900 };
@@ -56,6 +56,7 @@ function fixture() {
   const controller = createApiUsageLabelWindow({ BrowserWindow: Window, getPetWindow: () => pet,
     getQuotaWindow: () => state.quota, getObstacleBounds: () => state.bubble,
     getAppearance: () => state.appearance, getPresentation: () => state.presentation,
+    ...options,
     screen: { getDisplayMatching: bounds => { state.matches.push(bounds); return { workArea: area }; } },
     onOpenDetails: () => opened.push(true), onError: error => errors.push(error) });
   const ipc = (win, channel, event = { sender: win.webContents, senderFrame: win.webContents.mainFrame }) =>
@@ -113,6 +114,17 @@ test('peeked edge cards share an inward edge and an 8px gap across sizes and exp
       }
     }
   }
+});
+
+test('API stacks against the painted Codex face, ignoring its left role gutter and top transparent strip', async () => {
+  let visible = { x: 578, y: 490, width: 124, height: 28 };
+  const f = fixture({ getQuotaBounds: () => visible });
+  f.state.quota = nativeObstacle({ x: 504, y: 470, width: 200, height: 50 });
+  f.controller.show(STATE); const win = await f.ready();
+  assert.deepEqual(win.bounds, { x: 576, y: 526, width: 128, height: 32, placement: 'below' });
+  visible = null; f.controller.reposition();
+  assert.deepEqual(win.bounds, { x: 576, y: 488, width: 128, height: 32, placement: 'below' }, '空卡不再以原生承载框作为堆叠锚点');
+  f.controller.destroy();
 });
 
 test('lazy native window has safe flags, local resources, denied navigation and a dark safe report', async () => {

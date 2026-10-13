@@ -288,7 +288,7 @@ test('设置拖动后sync保持用户位置；同一设置session不重新锚定
   assert.notDeepEqual(f.win().getBounds(), moved, 'a new settings session starts beside the current pet');
 });
 
-test('设置跨屏跟随自身所在屏幕并clamp，窄屏缩小窗口，保存后恢复球旁布局', async t => {
+test('设置跨屏跟随自身所在屏幕并clamp，窄屏缩小窗口，保存保持设置位置', async t => {
   const f = fixture(); t.after(() => f.manager.dispose());
   f.displayMatching(bounds => ({ workArea: bounds.x < 0 ?
     { x: -1000, y: -200, width: 800, height: 700 } : { x: 0, y: 0, width: 1440, height: 900 } }));
@@ -301,11 +301,36 @@ test('设置跨屏跟随自身所在屏幕并clamp，窄屏缩小窗口，保存
   f.manager.sync();
   assert.deepEqual(f.win().getBounds(), { x: -400, y: 20, width: 300, height: 480 });
   f.displayMatching(() => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } }));
+  f.manager.sync(); const savedPosition = f.win().getBounds();
   const reply = f.invoke('shortcut:save', { shape: 'floating', enabled: true, launcher: 'Ctrl+Alt+Q' });
-  assert.equal(reply.ok, true); assert.equal(f.manager.getState().view, 'floating');
-  assert.equal(f.manager.getState().layout.items.length, 6);
-  assert.equal(f.manager.getState().session, 2);
-  assert.deepEqual(f.manager.getState().animation, { session: 2, phase: 'opening', duration: 260 });
+  assert.equal(reply.ok, true); assert.equal(f.manager.getState().view, 'settings');
+  assert.deepEqual(f.win().getBounds(), savedPosition);
+  assert.equal(f.manager.getState().session, 1);
+});
+
+test('关闭快捷面板后取消悬停与普通展开，设置仍可打开保存且不自动弹出面板', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = fixture(); t.after(() => f.manager.dispose());
+  f.manager.open({ settings: true }); await flush();
+  const before = f.win().getBounds(), session = f.manager.getState().session;
+  assert.equal(f.invoke('shortcut:save', { shape: 'floating', enabled: false, launcher: 'Ctrl+Alt+Q' }).ok, true);
+  assert.equal(f.manager.getState().view, 'settings');
+  assert.equal(f.manager.getState().session, session);
+  assert.deepEqual(f.win().getBounds(), before);
+  f.manager.sampleCursor({ x: 340, y: 340 }); f.manager.sync();
+  assert.equal(f.manager.isOpen(), true, 'disabled settings remain usable');
+  f.manager.close({ immediate: true });
+  f.cursor({ x: 100, y: 100 }); f.manager.sampleCursor({ x: 100, y: 100 });
+  f.cursor({ x: 340, y: 340 }); f.manager.sampleCursor({ x: 340, y: 340 });
+  t.mock.timers.tick(1000); await flush();
+  assert.equal(f.manager.isOpen(), false);
+  assert.equal(f.manager.open(), false);
+  assert.equal(f.manager.open({ settings: true }), true);
+  assert.equal(f.invoke('shortcut:save', { shape: 'floating', enabled: true, launcher: 'Ctrl+Alt+Q' }).ok, true);
+  assert.equal(f.manager.getState().view, 'settings');
+  f.manager.close({ immediate: true });
+  f.manager.sampleCursor({ x: 100, y: 100 }); f.manager.sampleCursor({ x: 340, y: 340 });
+  t.mock.timers.tick(450); await flush(); assert.equal(f.manager.isOpen(), true);
 });
 
 test('原生拖动经过屏幕接缝只回读位置，不在每个move事件中拉回旧屏', async t => {

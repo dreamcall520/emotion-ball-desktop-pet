@@ -29,8 +29,8 @@ function layoutShortcuts({ petBounds: pet, workArea: area, shape = 'floating', s
         height: Math.max(...cards.map(card => card.y + cardSize)) + PAD - y };
       if (bounds.x < area.x || bounds.y < area.y || bounds.x + bounds.width > area.x + area.width || bounds.y + bounds.height > area.y + area.height) return null;
       // Keep the transparent animation path to the pet inside the native canvas.
-      const right = Math.max(bounds.x + bounds.width, pet.x + pet.width), bottom = Math.max(bounds.y + bounds.height, pet.y + pet.height);
-      bounds.x = Math.min(bounds.x, pet.x); bounds.y = Math.min(bounds.y, pet.y);
+      const right = Math.ceil(Math.max(bounds.x + bounds.width, pet.x + pet.width)), bottom = Math.ceil(Math.max(bounds.y + bounds.height, pet.y + pet.height));
+      bounds.x = Math.floor(Math.min(bounds.x, pet.x)); bounds.y = Math.floor(Math.min(bounds.y, pet.y));
       bounds.width = right - bounds.x; bounds.height = bottom - bounds.y;
       return { shape: 'floating', direction, bounds, cardSize,
         items: cards.map(card => ({ ...card, x: card.x - bounds.x, y: card.y - bounds.y })) };
@@ -45,20 +45,13 @@ function layoutShortcuts({ petBounds: pet, workArea: area, shape = 'floating', s
       const cx = pet.x + pet.width / 2, cy = pet.y + pet.height / 2, margin = PAD + cardSize / 2;
       const edgeX = sx === 1 ? cx - area.x : area.x + area.width - cx;
       const edgeY = sy === 1 ? cy - area.y : area.y + area.height - cy;
-      const maxRadius = Math.SQRT2 * Math.min(area.width - edgeX - margin, area.height - edgeY - margin);
+      const maxRadius = radius + 6;
       const horizontal = preferred === 'above' || preferred === 'below';
-      // Leave packing slack while a second edge clips the arc, then ease back
-      // to the original radius over one card width. This avoids a radius jump
-      // when a barely clipped semicircle cannot fit six equally spaced squares.
-      const firstRadius = radius + Math.ceil(clamp(cornerReach - Math.max(nearX, nearY), 0, cardSize));
-      const releaseRadius = firstRadius * (1 + cardSize / radius);
-      const easedX = Math.PI / 2 * (1 + clamp((edgeX - margin) / releaseRadius, 0, 1));
-      const easedY = -Math.PI / 2 * clamp((edgeY - margin) / releaseRadius, 0, 1);
-      for (let r = firstRadius; r <= maxRadius; r++) {
-        // Stay inside the exact limits, while easing their tangent near a free
-        // endpoint so a one-DIP move does not fling that card across the arc.
-        const limitX = Math.min(Math.acos(clamp((margin - edgeX) / r, -1, 1)), easedX);
-        const limitY = Math.max(Math.asin(clamp((margin - edgeY) / r, -1, 1)), easedY);
+      // A six-card quarter circle cannot keep the normal spacing. Try only a
+      // six-DIP radius adjustment; a compact arrangement handles tighter corners.
+      for (let r = radius; r <= maxRadius; r++) {
+        const limitX = Math.acos(clamp((margin - edgeX) / r, -1, 1));
+        const limitY = Math.asin(clamp((margin - edgeY) / r, -1, 1));
         // Clip only the constrained angles of the existing semicircle. As the
         // pet leaves the corner, this becomes that same 180-degree arc/order.
         const start = horizontal ? Math.max(0, limitY) : Math.max(-Math.PI / 2, limitY, -limitX);
@@ -78,6 +71,20 @@ function layoutShortcuts({ petBounds: pet, workArea: area, shape = 'floating', s
         const layout = placed(cards, preferred);
         if (layout) return layout;
       }
+      // Keep corner buttons close to the same visual pet. Stagger the two
+      // endpoints instead of enlarging the entire fan to fit a quarter circle.
+      const step = cardSize + 6, x0 = Math.max(0, margin - edgeX), y0 = Math.max(0, margin - edgeY);
+      const ax = Math.max(pet.width / 2 + GAP + cardSize / 2, x0 + step);
+      const ay = Math.max(pet.height / 2 + GAP + cardSize / 2, y0 + step);
+      const points = [[x0, ay], [x0, ay + step], [x0 + step, ay],
+        [x0 + step * 2, ay], [ax + step, y0], [ax, y0]];
+      const cards = IDS.map((id, index) => {
+        const [x, y] = points[(horizontal ? sx === 1 : sy === -1) ? index : IDS.length - 1 - index];
+        return { id, x: (sx === 1 ? Math.ceil : Math.floor)(cx + sx * x - cardSize / 2),
+          y: (sy === 1 ? Math.ceil : Math.floor)(cy + sy * y - cardSize / 2), width: cardSize, height: cardSize };
+      });
+      const compact = placed(cards, preferred);
+      if (compact) return compact;
     } else for (const direction of directions) {
       const horizontal = direction === 'above' || direction === 'below';
       const crossLength = horizontal ? area.width : area.height;

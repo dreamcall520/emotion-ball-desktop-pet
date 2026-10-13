@@ -1,8 +1,11 @@
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const { quotaLabelBounds, quotaLabelSize } = require('./quota-label-placement');
 
 const CHANNEL = 'pet:quota-label';
 const TOGGLE_CHANNEL = 'pet:quota-label-toggle';
+const POINTER_CHANNEL = 'pet:quota-label-pointer';
+const FILE = path.join(__dirname, '../quota-label.html');
 const STATES = new Set([
   'disabled', 'connecting', 'connected', 'ready', 'stale', 'reset-wait', 'period-missing',
   'empty', 'missing', 'unauthenticated', 'unsupported', 'disconnected'
@@ -165,6 +168,7 @@ function createQuotaLabelWindow({
   let ready = false;
   let requestedVisible = false;
   let currentModel = null;
+  let currentLayout = null;
   let topmost = Boolean(alwaysOnTop);
   let topmostRevision = 0;
   let operation = 0;
@@ -265,7 +269,8 @@ function createQuotaLabelWindow({
     }
     if (win !== target || operation !== token) return;
     if (ready && currentModel) {
-      try { target.webContents.send(CHANNEL, { ...currentModel, visible: false, guardEntry: guardEntryVisible() }); }
+      try { target.webContents.send(CHANNEL, { ...currentModel, visible: false, guardEntry: guardEntryVisible(),
+        ...(currentLayout?.guardSide ? { guardSide: currentLayout.guardSide, cardInset: currentLayout.cardInset } : {}) }); }
       catch (error) { detach(target, error); return; }
       if (win !== target || operation !== token) return;
     }
@@ -315,10 +320,22 @@ function createQuotaLabelWindow({
     const { x, y, width, height } = layout;
     try { target.setBounds({ x, y, width, height }, false); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
-    try { target.webContents.send(CHANNEL, { ...model, visible: true, guardEntry: guardEntryVisible() }); } catch (error) { detach(target, error); return; }
+    currentLayout = layout;
+    try { target.webContents.send(CHANNEL, { ...model, visible: true, guardEntry: guardEntryVisible(),
+      ...(layout.guardSide ? { guardSide: layout.guardSide, cardInset: layout.cardInset } : {}) }); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
     try {
-      if (model.items.length > 0 || model.display === 'numbers') target.setIgnoreMouseEvents(false);
+      if (layout.guardSide && typeof screen.getCursorScreenPoint === 'function') {
+        const cursor = screen.getCursorScreenPoint(), native = target.getBounds();
+        const card = quotaLabelSize(model.size, model.expanded, model.items.length, Boolean(model.extraCredits));
+        const face = { x: native.x + layout.cardInset.x, y: native.y + layout.cardInset.y, ...card };
+        const role = { x: layout.guardSide === 'left' ? native.x : face.x + card.width + 8,
+          y: face.y + card.height - 44, width: 64, height: 44 };
+        const inside = bounds => cursor.x >= bounds.x && cursor.y >= bounds.y &&
+          cursor.x < bounds.x + bounds.width && cursor.y < bounds.y + bounds.height;
+        target.setIgnoreMouseEvents(!inside(face) && !inside(role), { forward: true });
+      } else if (layout.guardSide) target.setIgnoreMouseEvents(true, { forward: true });
+      else if (model.items.length > 0 || model.display === 'numbers') target.setIgnoreMouseEvents(false);
       else target.setIgnoreMouseEvents(true, { forward: true });
     } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
@@ -439,7 +456,15 @@ function createQuotaLabelWindow({
       () => loadingWindow.webContents.on('will-navigate', event => {
         try { event.preventDefault(); } catch (_) {}
       }),
-      () => loadingWindow.webContents.on('ipc-message', (_event, channel) => {
+      () => loadingWindow.webContents.on('ipc-message', (event, channel, value) => {
+        if (channel === POINTER_CHANNEL) {
+          if (typeof value !== 'boolean' || win !== loadingWindow || !requestedVisible || !ready ||
+            !loadingWindow.isVisible() || event?.sender !== loadingWindow.webContents ||
+            event.senderFrame !== event.sender.mainFrame || event.sender.getURL() !== pathToFileURL(FILE).href) return;
+          try { loadingWindow.setIgnoreMouseEvents(!value || (!currentModel?.items.length && currentModel?.display !== 'numbers'), { forward: true }); }
+          catch (error) { detach(loadingWindow, error); }
+          return;
+        }
         if (channel !== TOGGLE_CHANNEL || win !== loadingWindow || !requestedVisible || !ready ||
           !currentModel?.items.length || currentModel.display === 'numbers') return;
         operation += 1;
@@ -476,7 +501,7 @@ function createQuotaLabelWindow({
     if (!setupStep(loadingWindow,
       () => loadingWindow.webContents.on('did-finish-load', markReady))) return;
     let loading;
-    try { loading = loadingWindow.loadFile(path.join(__dirname, '../quota-label.html')); }
+    try { loading = loadingWindow.loadFile(FILE); }
     catch (error) { detach(loadingWindow, error); return; }
     if (win !== loadingWindow) {
       detach(loadingWindow);
@@ -544,10 +569,11 @@ function createQuotaLabelWindow({
       const bounds = target.getBounds();
       const card = quotaLabelSize(currentModel.size, currentModel.expanded, currentModel.items.length,
         Boolean(currentModel.extraCredits));
-      // The guard role only grows the native window; the card stays at its bottom-left.
+      // Use the painted card offset even when the role moves to its left at an edge.
       const inset = currentModel.size === 'compact' && !currentModel.expanded ? 2 : 0;
       const width = Math.min(bounds.width, card.width), height = Math.min(bounds.height, card.height);
-      return { x: bounds.x + inset, y: bounds.y + bounds.height - height + inset,
+      return { x: bounds.x + (currentLayout?.cardInset?.x || 0) + inset,
+        y: bounds.y + (currentLayout?.cardInset?.y ?? bounds.height - height) + inset,
         width: width - inset * 2, height: height - inset * 2 };
     },
     setAlwaysOnTop(enabled) {

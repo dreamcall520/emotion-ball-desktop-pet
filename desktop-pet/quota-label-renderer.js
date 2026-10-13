@@ -588,9 +588,20 @@
     } catch (_) {}
   }
 
+  let pointerInteractive = null;
+  if (typeof document.addEventListener === 'function' && typeof bridge.setPointerInteractive === 'function') {
+    const interactive = value => { if (pointerInteractive !== value) {
+      pointerInteractive = value; bridge.setPointerInteractive(value);
+    } };
+    document.addEventListener('mousemove', event => {
+      const hit = event.target?.closest?.('#quota-beam, #quota-guard-entry');
+      interactive(Boolean(hit && !hit.hidden && !hit.disabled));
+    });
+    document.addEventListener('mouseleave', () => interactive(false));
+  }
   let unsubscribe = null;
   try {
-    const candidate = bridge.onModel(render);
+    const candidate = bridge.onModel(value => { pointerInteractive = null; render(value); });
     if (typeof candidate === 'function') unsubscribe = candidate;
   } catch (_) { return; }
   if (unsubscribe && typeof window.addEventListener === 'function') {

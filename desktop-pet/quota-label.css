@@ -800,10 +800,11 @@ body {
 :root[data-color-mode="accessible"][data-accessible-appearance] #quota-label[data-size="compact"][data-expanded="false"] { border-color: transparent !important; }
 
 /* The card keeps its formal face; only the native transparent window grows. */
-body[data-guard-entry="true"] #quota-beam { inset: auto; left: 0; bottom: 0; width: 168px; height: 58px; }
+body[data-guard-entry="true"] #quota-beam { inset: auto; left: var(--quota-card-left, 0px); top: var(--quota-card-top, 6px); width: 168px; height: 58px; }
 body[data-guard-entry="true"][data-guard-size="compact"] #quota-beam { width: 128px; height: 32px; }
-#quota-guard-entry { position: absolute; left: 176px; bottom: 0; width: 64px; height: 44px; padding: 0; border: 0; border-radius: 6px; background: none; cursor: pointer; -webkit-app-region: no-drag; }
-body[data-guard-size="compact"] #quota-guard-entry { left: 136px; }
+#quota-guard-entry { position: absolute; left: 176px; top: calc(var(--quota-card-top, 6px) + 14px); width: 64px; height: 44px; padding: 0; border: 0; border-radius: 6px; background: none; cursor: pointer; -webkit-app-region: no-drag; }
+body[data-guard-size="compact"] #quota-guard-entry { left: 136px; top: calc(var(--quota-card-top, 18px) - 12px); }
+body[data-guard-side="left"] #quota-guard-entry { left: 0; }
 #quota-guard-entry[hidden] { display: none !important; }
 #quota-guard-entry:focus-visible { outline: 2px solid #356bbf; outline-offset: -2px; }
 #quota-guard-entry:disabled { cursor: default; }

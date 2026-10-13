@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { quotaLabelBounds } = require('../lib/quota-label-placement');
 const { pointerClick } = require('./verify-chat-integration');
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(read, accept, label) {
@@ -52,7 +53,45 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
   sync();
   const card = await until(() => label.getWindow(), value => value?.isVisible(), '原生额度卡');
   await until(() => card.webContents.executeJavaScript('window.quotaGuardEntry?.state'), value => value?.ready && value.visible, '原生角色入口');
+  const originalPet = pet.getBounds(), cursorReader = screen.getCursorScreenPoint;
+  const ignoreMouse = card.setIgnoreMouseEvents;
+  let ignored = null;
+  const cardSpacing = [];
+  card.setIgnoreMouseEvents = function(value, options) { ignored = value; return ignoreMouse.call(this, value, options); };
+  try {
+    const area = screen.getDisplayMatching(originalPet).workArea;
+    for (const [name, x] of [['center', area.x + Math.floor(area.width / 2) - 40], ['near-right', area.x + area.width - 115]]) {
+      pet.setBounds({ x, y: area.y + 180, width: 80, height: 80 }, false); sync();
+      const baseline = quotaLabelBounds(pet.getBounds(), area, null, 'compact', false, 1,
+        { shape: settings.customization?.appearance?.shape, mode: 'free' });
+      const geometry = await until(() => card.webContents.executeJavaScript(`(()=>{
+        const face=document.getElementById('quota-beam').getBoundingClientRect();
+        return {x:face.x,y:face.y,width:face.width,height:face.height,side:document.body.dataset.guardSide};
+      })()`), value => value.width === 128 && value.height === 32, '原生卡面布局');
+      const bounds = card.getBounds();
+      assert.equal(bounds.x + geometry.x, baseline.x, '可见卡 x 与线上卡面基线一致');
+      assert.equal(bounds.y + geometry.y, baseline.y, '可见卡 y 与线上卡面基线一致');
+      if (name === 'near-right') assert.equal(geometry.side, 'left', '右侧空间不足时角色让到左侧，卡保留下方位置');
+      const cursor = { x: bounds.x + geometry.x + 64, y: bounds.y + Math.max(1, geometry.y / 2) };
+      screen.getCursorScreenPoint = () => cursor; sync();
+      assert.equal(ignored, true, '透明顶沿初始化穿透');
+      card.webContents.sendInputEvent({ type: 'mouseMove', x: Math.round(geometry.x + 64), y: Math.round(geometry.y + 16) });
+      await until(() => ignored, value => value === false, '进入可见卡面恢复鼠标命中');
+      await pointerClick(card, '#quota-label');
+      await until(() => card.getBounds().height, value => value === 144, '双周期可见卡点击仍可展开');
+      await pointerClick(card, '#quota-label');
+      await until(() => card.getBounds().height, value => value === 50, '可见卡正常收起');
+      cardSpacing.push({ name, baseline, bounds, geometry, transparentTopPassesMouse: true, cardClickExpands: true });
+    }
+  } finally {
+    card.setIgnoreMouseEvents = ignoreMouse; screen.getCursorScreenPoint = cursorReader;
+    pet.setBounds(originalPet, false); sync();
+  }
   const directory = process.env.PET_SMOKE_ARTIFACT_DIR;
+  if (directory) {
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(path.join(directory, 'quota-spacing-native.json'), JSON.stringify(cardSpacing, null, 2));
+  }
   async function capture(win, name) { if (directory) {
     await win.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
     await wait(40);
@@ -64,8 +103,8 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
   callbacks.onQuota(exhausted); sync();
   await until(() => card.webContents.executeJavaScript('window.quotaGuardEntry?.state'),
     value => value?.role === 'empty' && value.visible, '截图同场景标准卡0%角色');
-  const standardFace = await card.webContents.executeJavaScript(`(() => {const r=document.getElementById('quota-label').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};})()`);
-  assert.deepEqual(standardFace, { x: 0, y: 6, width: 168, height: 58 }, '修复原生裁剪不改卡片与角色布局');
+  const standardFace = await card.webContents.executeJavaScript(`(() => {const r=document.getElementById('quota-label').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,side:document.body.dataset.guardSide};})()`);
+  assert.deepEqual(standardFace, { x: standardFace.side === 'left' ? 72 : 0, y: 6, width: 168, height: 58, side: standardFace.side }, '角色让位仅调整卡面本地偏移，不改标准卡尺寸和垂直间距');
   await capture(card, 'main-route-standard-exhausted');
   settings.codexQuotaLabelSize = 'compact'; callbacks.onQuota(fixture()); sync();
   await until(() => card.webContents.executeJavaScript('window.quotaGuardEntry?.state'),
@@ -330,11 +369,11 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
       openShortcuts();
       assert.equal(card.isVisible(), false, '光环快捷展开立即隐藏数字与角色');
       await until(() => shortcuts.isOpen() && shortcuts.getWindow()?.isVisible(), Boolean, '光环样式快捷展开');
-      await until(ringVisible, value => !value, '快捷展开隐藏球球光环');
+      await until(ringVisible, Boolean, '快捷展开保留球球光环外观');
       const pausedEntry = (await numberView()).entry.entryTime;
       callbacks.onQuota(fixture()); sync(); await wait(100);
       assert.equal(card.isVisible(), false, '光环样式刷新不重显快捷下数字');
-      assert.equal(await ringVisible(), false, '光环样式刷新不重显快捷下光环');
+      assert.equal(await ringVisible(), true, '光环样式刷新保持快捷下球体外观');
       assert.equal((await numberView()).entry.entryTime, pausedEntry, '光环快捷下角色停钟');
       shortcuts.close();
       assert.equal(shortcuts.getState().animation.duration, 180);
@@ -342,13 +381,32 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
       await wait(75);
       assert.equal(shortcuts.isPresenting(), true, '光环样式收起动画中仍持有呈现状态');
       assert.equal(card.isVisible(), false);
-      assert.equal(await ringVisible(), false, '180ms收起动画未结束光环仍隐藏');
+      assert.equal(await ringVisible(), true, '180ms收起动画期间保持光环外观');
       await until(() => shortcuts.isPresenting(), value => !value, '光环样式快捷收起完成');
       await until(ringVisible, Boolean, '收起结束后光环恢复');
       await until(() => card.isVisible(), value => value === showNumbers, '收起结束按原数字偏好恢复');
       assert.equal(getSettings().quotaDisplay.showNumbers, showNumbers);
       assert.equal(guard.isVisible(), false, '收起快捷不自动重开游戏');
       numericChecks.push({ showNumbers, shortcutHidden: true, restoredAfterClosing: true });
+    }
+    if (shortcuts) for (const style of ['pool', 'ring', 'duo', 'split', 'stages']) {
+      guard.close(); getSettings().quotaDisplay = { ...getSettings().quotaDisplay, style }; sync();
+      await until(() => pet.webContents.executeJavaScript(`Boolean(document.querySelector('.quota-effects[data-style="${style}"]'))`), Boolean, `${style} 真实球体额度效果显示`);
+      await pet.webContents.executeJavaScript(`(() => {
+        const node = document.querySelector('.quota-effects'); window.__r18QuotaRemovals = [];
+        window.__r18QuotaObserver = new MutationObserver(records => {
+          for (const record of records) if ([...record.removedNodes].includes(node)) window.__r18QuotaRemovals.push(performance.now());
+        }); window.__r18QuotaObserver.observe(document.querySelector('#pet'), { childList: true, subtree: true });
+      })()`);
+      for (const settingsView of [false, true]) {
+        openShortcuts(settingsView);
+        await until(() => shortcuts.isOpen() && shortcuts.getWindow()?.isVisible(), Boolean, `${style} 快捷窗口显示`);
+        assert.equal(await pet.webContents.executeJavaScript(`Boolean(document.querySelector('.quota-effects[data-style="${style}"]'))`), true);
+        shortcuts.close(); await until(() => shortcuts.isPresenting(), value => !value, '额度外观检查收起完成');
+      }
+      const removed = await pet.webContents.executeJavaScript('window.__r18QuotaObserver.disconnect();window.__r18QuotaRemovals');
+      assert.deepEqual(removed, [], `${style} 打开设置/按钮及收起全过程未恢复默认球体`);
+      numericChecks.push({ style, quotaEffectRetainedThroughSettingsAndButtons: true, removed });
     }
   } finally {
     shortcuts?.interrupt(); guard.close();

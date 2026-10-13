@@ -20,7 +20,8 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
   let origin = null, animation = null, lastPublished = null, lastPlacement = null;
   const alive = () => win && !win.isDestroyed();
   const pet = () => { const value = getPetWindow(); return value && !value.isDestroyed() ? value : null; };
-  const unavailable = () => stopped || isSuppressed() || !pet()?.isVisible() || getPresentation()?.mode === 'hidden';
+  const unavailable = (settings = view === 'settings') => stopped || isSuppressed() || !pet()?.isVisible() ||
+    getPresentation()?.mode === 'hidden' || (!settings && getConfig().enabled !== true);
   const state = () => ({ view, session, config: getConfig(), registrationErrors: getErrors(), layout, origin, animation, focus: focusPending });
   const trustedSource = event => Boolean(!stopped && alive() && ready &&
     event?.sender === win.webContents && event.senderFrame === event.sender.mainFrame && event.sender.getURL() === pathToFileURL(FILE).href);
@@ -162,7 +163,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
     sampleCursor(screen.getCursorScreenPoint());
   }
   function open({ focus = true, settings = false } = {}) {
-    if (unavailable()) return false;
+    if (unavailable(settings)) return false;
     cancelClose(); cancelHover(); cancelLeave(); setRecording(false);
     opened = true; session++; view = settings ? 'settings' : getConfig().shape; settingsPositioned = false;
     animation = { session, phase: 'opening', duration: OPEN_DURATION };
@@ -170,7 +171,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
     sync(); return true;
   }
   function sampleCursor(point) {
-    if (unavailable() || getPresentation()?.dragging) { if (opened || closing) close({ immediate: true }); cancelHover(); return; }
+    if (unavailable(opened && view === 'settings') || getPresentation()?.dragging) { if (opened || closing) close({ immediate: true }); cancelHover(); return; }
     const bounds = pet().getBounds(), presentation = getPresentation();
     const target = petVisualBounds(bounds, presentation?.shape, presentation);
     const overPet = contains(target, point);
@@ -188,7 +189,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
     if (!hoverTimer) hoverTimer = setTimeout(() => {
       hoverTimer = null;
       const current = pet(), presentation = getPresentation();
-      if (!blocked && !unavailable() && !presentation?.dragging && presentation?.mode !== 'tucked' && current &&
+      if (!blocked && !unavailable(false) && !presentation?.dragging && presentation?.mode !== 'tucked' && current &&
         contains(petVisualBounds(current.getBounds(), presentation?.shape, presentation), screen.getCursorScreenPoint())) open({ focus: false });
     }, 450);
   }
@@ -201,9 +202,12 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
     setRecording(false);
     const result = save(config);
     if (result.ok) {
-      view = getConfig().shape; settingsPositioned = false; session++;
-      animation = { session, phase: 'opening', duration: OPEN_DURATION };
-      focusPending = true; sync();
+      if (view !== 'settings') {
+        view = getConfig().shape; settingsPositioned = false; session++;
+        animation = { session, phase: 'opening', duration: OPEN_DURATION };
+        focusPending = true;
+      }
+      sync();
     }
     return { ok: result.ok, error: result.errors?.map(error => [error.accelerator, error.message].filter(Boolean).join('：')).join('\n'), state: state() };
   }

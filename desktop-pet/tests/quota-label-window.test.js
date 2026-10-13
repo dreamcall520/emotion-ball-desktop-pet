@@ -87,6 +87,7 @@ function fixture(load = () => Promise.resolve(), options = {}) {
   const label = createQuotaLabelWindow({
     BrowserWindow: NativeWindow,
     screen: {
+      ...(options.getCursorScreenPoint ? { getCursorScreenPoint: options.getCursorScreenPoint } : {}),
       getDisplayMatching(bounds) {
         matching.push({ ...bounds });
         return { workArea: AREA };
@@ -179,6 +180,35 @@ test('标准与小巧锚点读取实际卡面，守护角色只扩大原生避�
     assert.equal(f.label.getVisibleBounds().height, 144, '双周期展开使用完整卡面高度');
     assert.deepEqual(f.errors, []);
   }
+});
+
+test('角色透明顶沿首次显示和重显均穿透，仅可信主页面可切换卡面/角色点击', async t => {
+  let cursor = { x: 340, y: 375 };
+  const f = fixture(() => Promise.resolve(), { labelSize: 'compact', getGuardEntry: () => true,
+    getCursorScreenPoint: () => cursor });
+  t.after(() => f.label.destroy());
+  f.label.show(readyModel()); await flush();
+  const win = f.windows[0], contents = win.webContents, frame = {};
+  contents.mainFrame = frame;
+  contents.getURL = () => require('node:url').pathToFileURL(win.loadedFile).href;
+  const trusted = { sender: contents, senderFrame: frame };
+  const pointer = (value, event = trusted) => contents.emit('ipc-message', event, 'pet:quota-label-pointer', value);
+  assert.deepEqual(win.ignoreCalls.at(-1), [true, { forward: true }], '球体底部透明顶沿不挡球体 hover');
+  const before = win.ignoreCalls.length;
+  pointer('true'); pointer(true, { sender: {}, senderFrame: frame }); pointer(true, { sender: contents, senderFrame: {} });
+  assert.equal(win.ignoreCalls.length, before, '非布尔值、其它窗口与子 frame 均拒绝');
+  cursor = { x: 300, y: 400 }; pointer(true);
+  assert.deepEqual(win.ignoreCalls.at(-1), [false, { forward: true }]);
+  contents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  assert.equal(win.bounds.height, 131, '恢复命中后保留正常卡点击展开');
+  contents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  pointer(false); assert.deepEqual(win.ignoreCalls.at(-1), [true, { forward: true }]);
+  f.label.hide(); const hiddenCalls = win.ignoreCalls.length;
+  pointer(true); assert.equal(win.ignoreCalls.length, hiddenCalls, '隐藏态不能被迟到 mouse move 重新拦截');
+  cursor = { x: 340, y: 375 }; f.label.show(readyModel());
+  assert.deepEqual(win.ignoreCalls.at(-1), [true, { forward: true }], '重显重新按真实 cursor 初始化');
+  cursor = { x: 420, y: 392 }; f.label.reposition();
+  assert.deepEqual(win.ignoreCalls.at(-1), [false, { forward: true }], '真实角色按钮区域可接收点击');
 });
 
 test('详情打开期间暂时隐藏额度卡，刷新与重排不抬升，关闭后保留展开和最新数据', async t => {
@@ -285,6 +315,13 @@ test('额度 preload 仅保留明确 visible/guardEntry 布尔，不接受字符
     assert.doesNotThrow(() => listener({}, throwing)); assert.equal(key in received, false);
   }
   assert.equal(received.items[0].remaining, 47.6);
+  listener({}, { ...readyModel(), guardSide: 'left', cardInset: { x: 72, y: 18 } });
+  assert.equal(received.guardSide, 'left');
+  assert.equal(JSON.stringify(received.cardInset), JSON.stringify({ x: 72, y: 18 }));
+  for (const cardInset of [{ x: Infinity, y: 0 }, { x: 73, y: 0 }, { x: 0, y: -1 }, { x: '72', y: 18 }]) {
+    listener({}, { ...readyModel(), guardSide: 'invalid', cardInset });
+    assert.equal('guardSide' in received, false); assert.equal('cardInset' in received, false);
+  }
 });
 
 test('小巧档创建可点击的 128×32 横条，点击展开和收起时复用同一窗口', async t => {

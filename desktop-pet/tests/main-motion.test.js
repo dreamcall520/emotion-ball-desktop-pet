@@ -512,6 +512,33 @@ test('快捷面板至收起动效结束隐藏额度与守护入口，刷新不�
   assert.equal(f.call('shortcutEdgeQuotaState.quotaEnabled'), false);
 });
 
+test('快捷设置与面板只收起外置额度卡，保留所有球体额度外观直到关闭结束', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+  t.after(() => f.app.emit('before-quit'));
+  const loadFile = f.windowClass.prototype.loadFile;
+  f.windowClass.prototype.loadFile = function (file) {
+    return file.endsWith('/shortcuts.html') ? Promise.resolve() : loadFile.call(this, file);
+  };
+  f.connections[0].callbacks.onQuota({ updatedAt: 1800000000000, windows: [
+    { id: 'codex:primary', label: 'Codex', windowMinutes: 300, remaining: 74, resetsAt: 1800018000000 }
+  ] });
+  const effect = () => f.pet.messages.filter(item => item.channel === 'pet:quota-display').at(-1).packet;
+  for (const style of ['pool', 'ring', 'duo', 'split', 'stages']) {
+    f.call(`settings.quotaDisplay=QuotaDisplay.normalize({style:'${style}',showNumbers:true});syncQuotaLabel()`);
+    for (const settings of [false, true]) {
+      f.call(`openShortcuts(${settings})`); await flush();
+      assert.equal(f.quotaLabel.visible, false);
+      assert.equal(effect().config.style, style); assert.equal(effect().visible, true);
+      f.call('syncQuotaLabel();shortcutWindow.close()'); t.mock.timers.tick(179);
+      assert.equal(effect().visible, true, 'closing does not restore the base body');
+      t.mock.timers.tick(1); assert.equal(effect().visible, true);
+    }
+  }
+  f.call('powerMonitor.emit("lock-screen")');
+  assert.equal(effect().visible, false, 'lock still removes quota effects');
+});
+
 test('守护战转快捷面板不短暂重显原生额度卡，打开被拒时恢复原显示规则', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true, nativeQuotaLabel: true });

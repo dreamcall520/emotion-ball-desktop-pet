@@ -285,6 +285,7 @@
 
   $('settings').addEventListener('change', event => {
     if (busy) return;
+    $('save').textContent = '保存';
     if (event.target.name === 'shape') draft.shape = event.target.value;
     if (event.target.id === 'enabled') { draft.enabled = event.target.checked; showError(); renderSettings(); }
     const field = event.target.dataset.startBehavior;
@@ -308,7 +309,7 @@
   $('restore').onclick = () => { setRecording(null); draft = { ...defaults }; showError(); renderSettings(); $('restore').focus({ preventScroll: true }); };
 
   function validate(config) {
-    if (config.enabled && !config.launcher) return '请设置唤起快捷键，或关闭全局唤起。';
+    if (config.enabled && !config.launcher) return '请设置唤起快捷键，或关闭快捷面板。';
     if (Object.values(startBehaviors).some(field => !['panel', 'create'].includes(config[field]))) return '请选择打开面板或直接新建。';
     const seen = new Map();
     for (const id of bindingIds) {
@@ -333,7 +334,9 @@
       if (result?.ok === false) throw new Error(result.error || registrationMessage(result.registrationErrors) || '快捷键保存失败，请重试。');
       busy = false;
       if (result?.state) applyState(result.state);
-      else renderSettings();
+      draft = configCopy(result?.state?.config || draft);
+      renderSettings();
+      $('save').textContent = '已保存';
     } catch (error) {
       busy = false; showError(error.message || '快捷键保存失败，请重试。'); renderSettings();
       $('save').focus({ preventScroll: true });

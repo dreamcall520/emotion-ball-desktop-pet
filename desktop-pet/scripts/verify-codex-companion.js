@@ -116,28 +116,35 @@ async function assertQuotaLabelWindow(controller, expectedWindow, petBounds, opt
   assert.deepEqual({ width: bounds.width, height: bounds.height }, expectedSize,
     `额度原生窗口必须保持 ${expectedSize.width}×${expectedSize.height}`);
   assert.deepEqual(geometry.viewport, expectedSize, '额度 DOM 视口必须与原生窗口一致');
-  assert.deepEqual(geometry.beam, { x: 0, y: bounds.height - expectedBeam.height, ...expectedBeam },
-    '额度流光壳必须保留原卡尺寸并靠原生窗口左下角');
+  const leftRole = geometry.guard.visible && geometry.guard.bounds.x < geometry.beam.x;
+  const beamX = leftRole ? 72 : 0;
+  assert.deepEqual({ x: geometry.beam.x, width: geometry.beam.width, height: geometry.beam.height },
+    { x: beamX, ...expectedBeam }, '额度流光壳固定原卡尺寸，角色换左只增加72px卡面本地偏移');
+  assert.ok(Number.isInteger(geometry.beam.y) && geometry.beam.y >= 0 &&
+    geometry.beam.y <= bounds.height - expectedBeam.height, '卡面顶沿偏移仅使用原角色顶部留白并保持完整');
   const inset = compact && !expanded ? 2 : 0;
-  const expectedCard = { x: inset, y: geometry.beam.y + inset,
+  const expectedCard = { x: beamX + inset, y: geometry.beam.y + inset,
     width: expectedBeam.width - inset * 2, height: expectedBeam.height - inset * 2 };
   assert.deepEqual(geometry.card, expectedCard,
     `额度 DOM 卡面必须保持 ${expectedCard.width}×${expectedCard.height} 及原卡位置`);
   const inside = rect => rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= bounds.width && rect.y + rect.height <= bounds.height;
   assert.ok(inside(geometry.card) && inside(geometry.beam), '额度卡面和流光不能被原生窗口裁剪');
   if (geometry.guard.visible) {
-    assert.deepEqual(geometry.guard.bounds, { x: expectedBeam.width + 8, y: bounds.height - 44, width: 64, height: 44 },
-      '守护入口必须位于卡片右侧8px并保持64×44');
+    assert.deepEqual(geometry.guard.bounds, { x: leftRole ? 0 : geometry.beam.x + expectedBeam.width + 8,
+      y: geometry.beam.y + expectedBeam.height - 44, width: 64, height: 44 },
+      '守护入口必须位于卡片左或右侧8px并保持64×44');
     assert.ok(inside(geometry.guard.bounds) && geometry.guard.content.length > 0 && geometry.guard.content.every(inside),
       '守护入口及可见角色不能被原生窗口裁剪');
     assert.equal(intersects(geometry.card, geometry.guard.bounds), false, '守护入口不能遮住原额度卡');
   }
-  assert.deepEqual(controller.getVisibleBounds(), { x: bounds.x + geometry.card.x, y: bounds.y + geometry.card.y,
-    width: geometry.card.width, height: geometry.card.height }, '额度可见边界必须与独立读取的 DOM 卡面屏幕矩形一致');
-  assert.equal(intersects(bounds, petBounds), false,
-    `额度标签不能与球球相交：label=${JSON.stringify(bounds)} pet=${JSON.stringify(petBounds)}`);
+  const absolute = rect => ({ ...rect, x: bounds.x + rect.x, y: bounds.y + rect.y });
+  const cardBounds = absolute(geometry.card), painted = [cardBounds,
+    ...(geometry.guard.visible ? geometry.guard.content.map(absolute) : [])];
+  assert.deepEqual(controller.getVisibleBounds(), cardBounds, '额度可见边界必须与独立读取的 DOM 卡面屏幕矩形一致');
+  assert.equal(painted.some(rect => intersects(rect, petBounds)), false,
+    `额度卡面/可见角色不能与球球相交：painted=${JSON.stringify(painted)} pet=${JSON.stringify(petBounds)}`);
   if (options.obstacleBounds) {
-    assert.equal(intersects(bounds, options.obstacleBounds), false, '额度标签不能与可见气泡相交');
+    assert.equal(painted.some(rect => intersects(rect, options.obstacleBounds)), false, '额度卡面/可见角色不能与可见气泡相交');
   }
   if (options.workArea) {
     const area = options.workArea;
@@ -199,7 +206,7 @@ async function verifyNegativeDisplay({ screen, pet, quotaLabel, bubble, poll }) 
     '球球移入负坐标显示器');
     const expectedWindow = await poll(() => Promise.resolve(quotaLabel.getWindow()),
       value => value?.isVisible(), '负坐标显示器额度标签');
-    await poll(() => {
+    await poll(async () => {
       if (quotaLabel.getWindow() !== expectedWindow) return null;
       const labelBounds = expectedWindow.getBounds();
       const bubbleWindow = bubble?.getWindow?.();
@@ -207,9 +214,12 @@ async function verifyNegativeDisplay({ screen, pet, quotaLabel, bubble, poll }) 
       const inside = labelBounds.x >= area.x && labelBounds.y >= area.y &&
         labelBounds.x + labelBounds.width <= area.x + area.width &&
         labelBounds.y + labelBounds.height <= area.y + area.height;
-      return { labelBounds, obstacleBounds, inside };
-    }, value => Boolean(value?.inside && !intersects(value.labelBounds, petBounds) &&
-      (!value.obstacleBounds || !intersects(value.labelBounds, value.obstacleBounds))),
+      const geometry = await readQuotaLabelGeometry(expectedWindow);
+      const painted = [geometry.card, ...(geometry.guard.visible ? geometry.guard.content : [])]
+        .map(rect => ({ ...rect, x: labelBounds.x + rect.x, y: labelBounds.y + rect.y }));
+      return { labelBounds, obstacleBounds, inside, painted };
+    }, value => Boolean(value?.inside && value.painted.every(rect => !intersects(rect, petBounds) &&
+      (!value.obstacleBounds || !intersects(rect, value.obstacleBounds)))),
     '负坐标显示器标签重排');
     const bubbleWindow = bubble?.getWindow?.();
     const obstacleBounds = bubbleWindow?.isVisible?.() ? bubbleWindow.getBounds() : null;

@@ -83,33 +83,41 @@ function quotaLabelSize(value, expanded = false, itemCount = 1, extraCredits = f
 function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName = 'standard', expanded = false, itemCount = 1,
   presentation = null, extraCredits = false, guardEntry = false) {
   const area = safeArea(workArea);
+  if (guardEntry && !expanded) {
+    // Choose the formal card position first. A transparent role gutter must not
+    // change its spacing or turn a below-card into a side-card at the screen edge.
+    const card = quotaLabelBounds(petBounds, area, obstacleBounds, sizeName, expanded,
+      itemCount, presentation, extraCredits);
+    const requested = quotaLabelSize(sizeName, expanded, itemCount, extraCredits, true);
+    const width = Math.min(requested.width, area.width), height = Math.min(requested.height, area.height);
+    const gutter = Math.max(0, width - card.width), topGutter = Math.max(0, height - card.height);
+    const guardSide = (card.placement === 'left' && card.x - gutter >= area.x) ||
+      card.x + width > area.x + area.width ? 'left' : 'right';
+    const x = Math.round(clamp(card.x - (guardSide === 'left' ? gutter : 0), area.x, area.x + area.width - width));
+    const y = Math.round(clamp(card.y - topGutter, area.y, area.y + area.height - height));
+    return { x, y, width, height, placement: card.placement,
+      guardSide, cardInset: { x: card.x - x, y: card.y - y } };
+  }
   const nativePet = safePet(petBounds, area);
-  const pet = petVisualBounds(nativePet, presentation?.shape, presentation);
+  const visual = petVisualBounds(nativePet, presentation?.shape, presentation);
+  // Rings fit the native host's outer edge while shrinking the body inside it.
+  // Keep the cloud's horizontal peek anchor, but reserve the ring envelope vertically.
+  const pet = ['ring', 'duo', 'split', 'stages'].includes(presentation?.quotaStyle)
+    ? { ...visual, y: nativePet.y, height: nativePet.height } : visual;
   const obstacle = safeObstacle(obstacleBounds);
-  const cardSize = quotaLabelSize(sizeName, expanded, itemCount, extraCredits);
-  const requestedSize = quotaLabelSize(sizeName, expanded, itemCount, extraCredits, guardEntry);
+  const requestedSize = quotaLabelSize(sizeName, expanded, itemCount, extraCredits);
   const size = {
     width: Math.min(requestedSize.width, area.width),
     height: Math.min(requestedSize.height, area.height)
   };
   const centerX = pet.x + pet.width / 2;
   const centerY = pet.y + pet.height / 2;
-  const topGutter = Math.max(0, size.height - cardSize.height);
-  // Reserve the right-hand role without moving the visible card's center.
-  // On a left placement the role sits between the card and the pet.
   const candidates = [
-    { placement: 'below', x: centerX - cardSize.width / 2, y: pet.y + pet.height + GAP - topGutter },
-    { placement: 'above', x: centerX - cardSize.width / 2, y: pet.y - size.height - GAP },
-    { placement: 'right', x: pet.x + pet.width + GAP, y: centerY - cardSize.height / 2 - topGutter },
-    { placement: 'left', x: pet.x - size.width - GAP, y: centerY - cardSize.height / 2 - topGutter }
-  ].map(candidate => {
-    // Compact role art is taller than the card; keep that extra area below
-    // the pet instead of allowing its transparent native surface to overlap.
-    if (guardEntry && candidate.placement === 'below' && overlaps(candidate, size, pet)) {
-      candidate = { ...candidate, y: pet.y + pet.height + GAP };
-    }
-    return { ...candidate, x: Math.round(candidate.x), y: Math.round(candidate.y) };
-  });
+    { placement: 'below', x: centerX - size.width / 2, y: pet.y + pet.height + GAP },
+    { placement: 'above', x: centerX - size.width / 2, y: pet.y - size.height - GAP },
+    { placement: 'right', x: pet.x + pet.width + GAP, y: centerY - size.height / 2 },
+    { placement: 'left', x: pet.x - size.width - GAP, y: centerY - size.height / 2 }
+  ].map(candidate => ({ ...candidate, x: Math.round(candidate.x), y: Math.round(candidate.y) }));
 
   const valid = candidates.find(candidate => inside(candidate, size, area) &&
     !overlaps(candidate, size, obstacle));

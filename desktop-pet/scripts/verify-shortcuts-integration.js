@@ -32,7 +32,13 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     assert.equal(controller.isOpen(), true, 'focused shortcut remains open before input');
   };
   const save = async (win, config) => { controller.open({ settings: true }); await wait(60);
-    const reply = await page(win, `qiuShortcuts.save(${JSON.stringify(config)})`); assert.equal(reply.ok, true, reply.error); await wait(60); return reply; };
+    const before = win.getBounds(), session = controller.getState().session;
+    const reply = await page(win, `qiuShortcuts.save(${JSON.stringify(config)})`); assert.equal(reply.ok, true, reply.error); await wait(60);
+    assert.equal(reply.state.view, 'settings'); assert.equal(controller.getState().session, session);
+    assert.equal(await page(win, 'document.body.dataset.view'), 'settings', 'save does not open floating buttons');
+    assert.deepEqual(win.getBounds(), before, 'save keeps the settings window position');
+    if (config.enabled) { controller.open(); await wait(60); }
+    return reply; };
   const settled = async win => {
     const expected = controller.getState();
     await poll(() => page(win, `document.body.dataset.session === ${JSON.stringify(String(expected.session))} && document.body.dataset.view === ${JSON.stringify(expected.view)} && document.body.dataset.phase === ${JSON.stringify(expected.animation.phase)}`), Boolean, 'renderer receives current shortcut session');
@@ -263,7 +269,9 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     assert.equal(globalShortcut.isSuspended(), false);
     await page(win, "document.querySelector('#settings').requestSubmit(); true");
     await poll(() => registrar.getConfig(), config => config.noteBehavior === 'create' && config.todoBehavior === 'panel', 'form saves both startup selectors');
-    await poll(() => page(win, 'document.body.dataset.view'), view => view !== 'settings', 'successful form save exits settings');
+    await poll(() => page(win, 'document.querySelector("#save").textContent'), text => text === '已保存', 'successful form save is acknowledged');
+    assert.equal(controller.getState().view, 'settings', 'form save remains in settings');
+    assert.deepEqual(win.getBounds(), movedBounds, 'form save retains manually moved position');
     const persistedBehaviors = loadSettings(settingsFile).shortcutSettings;
     assert.equal(persistedBehaviors.noteBehavior, 'create'); assert.equal(persistedBehaviors.todoBehavior, 'panel');
     controller.close(); await poll(() => controller.isPresenting(), value => !value, 'settings save closes fully');
@@ -273,6 +281,20 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     ]);
     await save(win, behaviorConfig);
     result.checks.push('recording-select-node-retained-and-form-save-reopen');
+    await save(win, { ...registrar.getConfig(), enabled: false });
+    assert.equal(globalShortcut.isRegistered(registrar.getConfig().launcher), false);
+    assert.equal(loadSettings(settingsFile).shortcutSettings.enabled, false);
+    controller.close({ immediate: true });
+    cursor = { x: -10000, y: -10000 }; controller.sampleCursor(cursor);
+    cursor = { x: pet.getBounds().x + pet.getBounds().width / 2, y: pet.getBounds().y + pet.getBounds().height / 2 };
+    controller.sampleCursor(cursor); await wait(650);
+    assert.equal(controller.isOpen(), false, 'disabled panel does not open on hover');
+    assert.equal(controller.open(), false, 'disabled panel rejects ordinary launch');
+    assert.equal(controller.open({ settings: true }), true, 'settings remain accessible while disabled');
+    await ready();
+    await save(win, { ...registrar.getConfig(), enabled: true });
+    assert.equal(globalShortcut.isRegistered(registrar.getConfig().launcher), true);
+    result.checks.push('master-switch-blocks-hover-and-launcher-settings-remain-accessible');
     for (const method of ['close', 'cancel', 'escape']) {
       controller.open({ settings: true }); await wait(80);
       await page(win, method === 'escape' ? "document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); true"
@@ -454,11 +476,11 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
           const angles = globals.map(card => Math.atan2((py ? -1 : 1) * (card.y + card.height / 2 - cy),
             (px ? -1 : 1) * (card.x + card.width / 2 - cx)));
           const steps = angles.slice(1).map((angle, index) => Math.atan2(Math.sin(angle - angles[index]), Math.cos(angle - angles[index])));
-          const angularGaps = steps.map(Math.abs);
-          evidence.corner = { center: { x: cx, y: cy }, radii, angles, steps };
-          assert.ok(Math.max(...radii) - Math.min(...radii) < 1.5, 'corner fan keeps the actual pet center');
-          assert.ok(steps.every(step => Math.sign(step) === Math.sign(steps[0])), 'corner fan retains its entry order');
-          assert.ok(Math.max(...angularGaps) - Math.min(...angularGaps) < .015, 'corner fan uses equal angular spacing');
+          const cardSize = state.layout.cardSize;
+          const normalRadius = Math.max(cardSize * 2 + 12,
+            Math.ceil((Math.max(visual.width, visual.height) / 2 + cardSize / 2 + 12) / Math.cos(Math.PI / 5)));
+          evidence.corner = { center: { x: cx, y: cy }, radii, angles, steps, normalRadius };
+          assert.ok(Math.max(...radii) <= normalRadius + cardSize + 8, 'corner buttons stay close to the real pet instead of enlarging the fan');
           const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
           for (let i = 0; i < globals.length; i++) for (const other of globals.slice(i + 1)) {
             const card = globals[i];

@@ -163,6 +163,54 @@ test('非经典外观的额度标签贴近实际可见底部，保留经典外�
   }
 });
 
+test('趣味角色开启后保持正式版卡面坐标、方向和八像素间距；右缘角色让到卡左', () => {
+  for (const area of [AREA, { x: -1920, y: -180, width: 1920, height: 1080 }]) {
+    for (const size of ['compact', 'standard']) for (const shape of ['blob', 'aurora-cloud']) {
+      for (const width of [60, 80, 180, 260]) for (const side of ['left', 'right', null]) {
+        const pet = { x: side === 'left' ? area.x : side === 'right' ? area.x + area.width - width : area.x + 500,
+          y: area.y + 240, width, height: width };
+        const presentation = { shape, side, mode: side ? 'peeked' : 'free' };
+        const baseline = quotaLabelBounds(pet, area, null, size, false, 1, presentation);
+        const guard = quotaLabelBounds(pet, area, null, size, false, 1, presentation, false, true);
+        assert.equal(guard.placement, baseline.placement);
+        assert.equal(guard.x + guard.cardInset.x, baseline.x);
+        assert.equal(guard.y + guard.cardInset.y, baseline.y);
+        assertInside(guard, area);
+        if (baseline.placement === 'left') assert.equal(guard.guardSide, 'left', '卡左侧布局时角色远离球球');
+      }
+    }
+    const pet = { x: area.x + area.width - 115, y: area.y + 200, width: 80, height: 80 };
+    const baseline = quotaLabelBounds(pet, area, null, 'compact');
+    const guard = quotaLabelBounds(pet, area, null, 'compact', false, 1, null, false, true);
+    assert.equal(baseline.placement, 'below');
+    assert.equal(guard.placement, 'below', '角色承载窗宽度不能把下方卡切换成左侧卡');
+    assert.equal(guard.guardSide, 'left');
+    assert.equal(guard.x + guard.cardInset.x, baseline.x);
+    assert.equal(guard.y + guard.cardInset.y, baseline.y);
+  }
+});
+
+test('光环按外圈承载包络留八像素，不能按缩小的云主体推卡到光圈内；card/pool保持旧锚点', () => {
+  for (const width of [60, 80, 180, 260]) {
+    const pet = { x: 600, y: 300, width, height: width };
+    const classic = quotaLabelBounds(pet, AREA, null, 'compact', false, 1, { shape: 'aurora-cloud', mode: 'free' });
+    for (const quotaStyle of ['card', 'pool']) {
+      assert.deepEqual(quotaLabelBounds(pet, AREA, null, 'compact', false, 1,
+        { shape: 'aurora-cloud', mode: 'free', quotaStyle }), classic);
+    }
+    for (const quotaStyle of ['ring', 'duo', 'split', 'stages']) {
+      const ring = quotaLabelBounds(pet, AREA, null, 'compact', false, 1,
+        { shape: 'aurora-cloud', mode: 'free', quotaStyle }, false, true);
+      assert.equal(ring.y + ring.cardInset.y - pet.y - pet.height, 8);
+      assert.equal(ring.x + ring.cardInset.x, classic.x);
+      const peeked = { x: 1360, y: 300, width: 80, height: 80 };
+      const side = quotaLabelBounds(peeked, AREA, null, 'compact', false, 1,
+        { shape: 'aurora-cloud', mode: 'peeked', side: 'right', quotaStyle }, false, true);
+      assert.equal(side.x + side.cardInset.x, 1252, '保留幻彩半露35%横向锚点');
+    }
+  }
+});
+
 test('候选位置必须完整在屏内且不与气泡相交', () => {
   const pet = { x: 600, y: 400, width: 80, height: 80 };
   const below = { x: 556, y: 488, width: 168, height: 58 };

@@ -68,7 +68,7 @@ test('右侧角色仅扩原生承载区域，保持卡面尺寸及横向中心�
   }
 });
 
-test('80/180/260px 球体、真实云轮廓及负坐标屏幕均不与完整角色承载区域相交', () => {
+test('80/180/260px 球体和云轮廓保持正式卡面位置，透明角色留白不再推远可见卡', () => {
   for (const area of [AREA, { x: -1920, y: -180, width: 1920, height: 1080 }]) {
     for (const width of [80, 180, 260]) for (const size of ['compact', 'standard']) for (const shape of ['sphere', 'aurora-cloud']) {
       for (const [x, y] of [[area.x + 500, area.y + 240], [area.x, area.y], [area.x + area.width - width, area.y + area.height - width]]) {
@@ -76,7 +76,12 @@ test('80/180/260px 球体、真实云轮廓及负坐标屏幕均不与完整角�
         const result = quotaLabelBounds(pet, area, null, size, false, 1, presentation, false, true);
         assert(result.x >= area.x && result.x + result.width <= area.x + area.width);
         assert(result.y >= area.y && result.y + result.height <= area.y + area.height);
-        assert.equal(intersects(result, petVisualBounds(pet, shape, presentation)), false, JSON.stringify({ result, pet, shape, size }));
+        const baseline = quotaLabelBounds(pet, area, null, size, false, 1, presentation);
+        const face = { x: result.x + result.cardInset.x, y: result.y + result.cardInset.y,
+          width: baseline.width, height: baseline.height };
+        assert.deepEqual(face, { x: baseline.x, y: baseline.y, width: baseline.width, height: baseline.height });
+        assert.equal(result.placement, baseline.placement);
+        assert.equal(intersects(face, petVisualBounds(pet, shape, presentation)), false, JSON.stringify({ result, pet, shape, size }));
       }
     }
   }

@@ -179,7 +179,11 @@
     }
     function frame(now) { raf = 0; if (!moving()) return; time += last ? clamp(now - last, 0, 64) : 16; last = now; draw(); raf = requestAnimationFrame(frame); }
     function wake() { cancelAnimationFrame(raf); raf = 0; last = 0; draw(); if (moving()) raf = requestAnimationFrame(frame); }
-    cleanup.push(bridge.onModel(value => { model = value; doc.body.dataset.guardEntry = String(visible()); doc.body.dataset.guardSize = value?.size === 'compact' ? 'compact' : 'standard'; button.hidden = !visible(); button.disabled = !sprites; wake(); }));
+    cleanup.push(bridge.onModel(value => { model = value; doc.body.dataset.guardEntry = String(visible()); doc.body.dataset.guardSize = value?.size === 'compact' ? 'compact' : 'standard';
+      doc.body.dataset.guardSide = value?.guardSide === 'left' ? 'left' : 'right';
+      doc.body.style.setProperty('--quota-card-left', `${value?.cardInset?.x || 0}px`);
+      doc.body.style.setProperty('--quota-card-top', `${value?.cardInset?.y ?? (value?.size === 'compact' ? 18 : 6)}px`);
+      button.hidden = !visible(); button.disabled = !sprites; wake(); }));
     button.addEventListener('click', event => { event.stopPropagation(); if (visible() && sprites) bridge.openGuard?.(); });
     reduced.addEventListener('change', wake); doc.addEventListener('visibilitychange', wake);
     cleanup.push(() => { cancelAnimationFrame(raf); reduced.removeEventListener('change', wake); doc.removeEventListener('visibilitychange', wake); pet.ball.destroy(); });

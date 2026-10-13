@@ -152,7 +152,7 @@ async function verifyQuotaDisplay({ pet, open, settingsFile, powerMonitor, sendM
     for(const box of [geometry.card,geometry.numbers,...(geometry.guardVisible?[geometry.guard]:[])]) {
       assert.ok(box.x>=0&&box.y>=0&&box.right<=geometry.width&&box.bottom<=geometry.height,JSON.stringify(geometry));
     }
-    if(geometry.guardVisible)assert.ok(geometry.guard.x-geometry.card.right>=8,'数字卡与守护战入口保持独立间距');
+    if(geometry.guardVisible)assert.ok(Math.max(geometry.guard.x-geometry.card.right,geometry.card.x-geometry.guard.right)>=8,'数字卡与守护战入口在左右任一侧保持独立间距');
     const material=await label.webContents.executeJavaScript(`(()=>{const s=getComputedStyle(document.getElementById('quota-label'));return {background:s.backgroundImage,border:s.borderTopWidth,filter:s.backdropFilter};})()`);
     assert.ok(material.background.includes('gradient')&&material.border==='1px'&&material.filter.includes('blur'),'数字复用原额度卡材质与边框');
     if(out&&state==='ready')await capture(label, 'desktop-numbers.png');

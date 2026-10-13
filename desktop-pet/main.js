@@ -1079,7 +1079,7 @@ function syncQuotaLabel(snapshot = null) {
       quotaSyncSnapshot = null;
       let visible = false;
       try {
-        visible = !isQuitting && !shortcutWindow?.isPresenting() && settings?.codexEnabled === true && settings.codexQuotaAlwaysVisible === true &&
+        visible = !isQuitting && settings?.codexEnabled === true && settings.codexQuotaAlwaysVisible === true &&
           !screenLocked && !chatWindow?.isVisible() && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
       } catch (error) {
         reportQuotaError('额度标签状态', error);
@@ -1087,6 +1087,7 @@ function syncQuotaLabel(snapshot = null) {
       const current = requestedSnapshot || codexCompanion?.getSnapshot();
       const display = quotaDisplayConfig();
       publishQuotaDisplay(current, Boolean(visible));
+      if (shortcutWindow?.isPresenting()) visible = false;
       if (display.style !== 'card' && !display.showNumbers) visible = false;
       if (!visible) {
         shown = false;
@@ -3089,7 +3090,8 @@ async function bootstrap() {
     getSuppressed: () => shortcutWindow?.isPresenting() === true || codexDetails?.isVisible() === true || quotaGuard?.isVisible() === true,
     getPresentation: () => ({
       ...edgeTuck?.getPresentation(),
-      shape: settings?.customization?.appearance?.shape
+      shape: settings?.customization?.appearance?.shape,
+      quotaStyle: quotaDisplayConfig().style
     }),
     alwaysOnTop: settings.alwaysOnTop,
     onLayout: () => pomodoroWindows?.sync(),
@@ -3109,8 +3111,10 @@ async function bootstrap() {
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('守护战窗口', error) });
   apiUsageLabel = createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
     getQuotaWindow: () => quotaLabel?.getWindow(), getObstacleBounds: quotaObstacleBounds,
+    getQuotaBounds: () => quotaLabel?.getVisibleBounds(),
     getAppearance: () => settings?.codexQuotaAppearance,
-    getPresentation: () => ({ ...edgeTuck?.getPresentation(), shape: settings?.customization?.appearance?.shape }),
+    getPresentation: () => ({ ...edgeTuck?.getPresentation(), shape: settings?.customization?.appearance?.shape,
+      quotaStyle: quotaDisplayConfig().style }),
     onOpenDetails: openApiUsage, alwaysOnTop: settings.alwaysOnTop,
     onError: error => writeError('API 常驻卡片', error) });
   codexDetails = createCodexDetailsWindow({ BrowserWindow, screen,

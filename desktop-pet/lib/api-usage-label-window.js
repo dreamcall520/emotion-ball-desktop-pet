@@ -26,7 +26,9 @@ function apiLabelBounds(pet, area, quota, bubble, expanded = false, presentation
   const side = presentation?.side;
   const x = Math.round(side === 'left' ? quota.x : side === 'right'
     ? quota.x + quota.width - width : quota.x + (quota.width - width) / 2);
-  const visiblePet = petVisualBounds(pet, presentation?.shape, presentation);
+  const visual = petVisualBounds(pet, presentation?.shape, presentation);
+  const visiblePet = ['ring', 'duo', 'split', 'stages'].includes(presentation?.quotaStyle)
+    ? { ...visual, y: pet.y, height: pet.height } : visual;
   const overlaps = (a, b) => validBounds(b) && a.x < b.x + b.width && a.x + a.width > b.x &&
     a.y < b.y + b.height && a.y + a.height > b.y;
   // Stack against the actual Codex card; transparent pet-window padding is usable space.
@@ -72,7 +74,7 @@ function safeState(state) {
   }
 }
 
-function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuotaWindow = () => null,
+function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuotaWindow = () => null, getQuotaBounds = null,
   getObstacleBounds = () => null, getAppearance = () => 'system', getPresentation = () => null,
   onOpenDetails = () => {}, alwaysOnTop = true, onError = () => {} }) {
   let win = null, ready = false, requestedVisible = false, current = null, expanded = false;
@@ -147,7 +149,7 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
         for (const event of QUOTA_EVENTS) next.on(event, listener);
       }
     }
-    return next && next.isVisible() ? next.getBounds() : null;
+    return next && next.isVisible() ? (getQuotaBounds ? getQuotaBounds() : next.getBounds()) : null;
   }
   function present() {
     if (presenting) { pending = true; return; }

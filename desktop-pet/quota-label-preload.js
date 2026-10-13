@@ -168,6 +168,10 @@ contextBridge.exposeInMainWorld('petQuotaLabel', {
   toggleExpanded() {
     try { ipcRenderer.send(TOGGLE_CHANNEL); } catch (_) {}
   },
+  setPointerInteractive(value) {
+    if (typeof value !== 'boolean') return;
+    try { ipcRenderer.send('pet:quota-label-pointer', value); } catch (_) {}
+  },
   openGuard() {
     try { ipcRenderer.send('pet:quota-guard-open'); } catch (_) {}
   },
@@ -185,6 +189,11 @@ contextBridge.exposeInMainWorld('petQuotaLabel', {
         if (typeof visible === 'boolean') model.visible = visible;
         const guardEntry = source?.guardEntry;
         if (typeof guardEntry === 'boolean') model.guardEntry = guardEntry;
+        const side = source?.guardSide;
+        if (['left', 'right'].includes(side)) model.guardSide = side;
+        const inset = record(source?.cardInset);
+        const x = inset?.x, y = inset?.y;
+        if (Number.isFinite(x) && x >= 0 && x <= 72 && Number.isFinite(y) && y >= 0 && y <= 18) model.cardInset = { x, y };
       } catch (_) {}
       try { callback(model); } catch (_) {}
     };
