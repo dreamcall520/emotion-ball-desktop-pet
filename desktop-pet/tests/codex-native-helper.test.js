@@ -169,6 +169,25 @@ test('普通 10% 合成额度先建立 100% 基线，80% 以上可直接合成',
   assert.deepEqual(syntheticQuotaSteps(100), [0]);
 });
 
+test('共用额度几何助手支持没有守护角色节点的 API 卡 DOM', async () => {
+  const vm = require('node:vm');
+  const { readQuotaLabelGeometry } = require('../scripts/verify-codex-companion');
+  const node = bounds => ({ getBoundingClientRect: () => bounds,
+    dataset: { size: 'compact', expanded: 'false', state: 'ready', hasItems: 'true' } });
+  const nodes = { 'quota-label': node({ x: 2, y: 2, width: 124, height: 28 }),
+    'quota-beam': node({ x: 0, y: 0, width: 128, height: 32 }) };
+  const win = { webContents: { async executeJavaScript(source) {
+    return JSON.parse(JSON.stringify(vm.runInNewContext(source, {
+      document: { getElementById: id => nodes[id] || null, querySelectorAll: () => [] },
+      innerWidth: 128, innerHeight: 32
+    })));
+  } } };
+  const geometry = await readQuotaLabelGeometry(win);
+  assert.deepEqual(geometry.card, { x: 2, y: 2, width: 124, height: 28 });
+  assert.deepEqual(geometry.beam, { x: 0, y: 0, width: 128, height: 32 });
+  assert.deepEqual(geometry.guard, { visible: false, bounds: null, role: null, paintedRight: null, content: [] });
+});
+
 test('截图不依赖会暂停的双帧，先短暂稳定再原生捕获并锁定当前标签窗口', { timeout: 1000 }, async () => {
   const { capturePaintedWindow } = require('../scripts/verify-codex-companion');
   const calls = [];

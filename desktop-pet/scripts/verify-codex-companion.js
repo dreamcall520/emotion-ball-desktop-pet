@@ -97,7 +97,7 @@ async function readQuotaLabelGeometry(win) {
     return { card: rect(card), beam: rect(beam), size: card.dataset.size,
       expanded: card.dataset.expanded === 'true', state: card.dataset.state,
       hasItems: card.dataset.hasItems === 'true', viewport: { width: innerWidth, height: innerHeight },
-      guard: { visible: visible(entry), bounds: visible(entry) ? rect(entry) : null, role: entry.dataset.role, paintedRight,
+      guard: { visible: visible(entry), bounds: visible(entry) ? rect(entry) : null, role: entry?.dataset.role ?? null, paintedRight,
         content: [...document.querySelectorAll('.guard-entry-pet,.guard-entry-zombie')].filter(visible).map(rect) } };
   })()`);
 }
