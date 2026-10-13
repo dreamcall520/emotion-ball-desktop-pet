@@ -6,8 +6,8 @@ const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
 const html = read('shop/mousepad/index.html');
 const styles = [...html.matchAll(/name="style" value="([^"]+)" data-variant-image="([^"]+)"/g)];
 const sizes = [...html.matchAll(/name="variant" value="([^"]+)" data-variant-price="(\d+)"/g)];
-assert.equal(styles.length, 11);
-assert.deepEqual(styles.map(match => match[1]), ["春野拼布", "夕光雾蓝", "雏菊晴风", "暖杏雏菊", "蜜桃晨光", "奶油雏菊", "夜航银灰", "月夜微风", "薄荷花信", "花房光影", "雏菊艺境"]);
+assert.equal(styles.length, 15);
+assert.deepEqual(styles.map(match => match[1]), ["春野拼布", "夕光雾蓝", "蜜桃奶油", "奶油花格", "春野涂鸦", "花野派对", "雏菊晴风", "暖杏雏菊", "蜜桃晨光", "奶油雏菊", "夜航银灰", "月夜微风", "薄荷花信", "花房光影", "雏菊艺境"]);
 assert.deepEqual(sizes.map(match => [match[1], match[2]]), [['800×300mm · 厚3mm', '50'], ['800×400mm · 厚3mm', '60']]);
 for (const [, , image] of styles) assert.ok(fs.existsSync(path.join(__dirname, '../shop/mousepad', image)));
 assert.match(read('shop/index.html'), /href="mousepad\/"/);
@@ -49,4 +49,4 @@ for (const style of state.styleInputs) {
 const cup = run(false);
 cup.button.handlers.click();
 assert.equal(cup.inquiry.textContent, '春野奶白随行杯 · 260ml · ¥66\n想确认商品细节与发货安排。');
-console.log('Mousepad: 22 image/size/price/inquiry combinations and existing cup inquiry passed');
+console.log('Mousepad: 30 image/size/price/inquiry combinations and existing cup inquiry passed');
