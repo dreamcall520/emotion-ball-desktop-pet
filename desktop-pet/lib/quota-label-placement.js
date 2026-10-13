@@ -91,12 +91,15 @@ function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName =
     const requested = quotaLabelSize(sizeName, expanded, itemCount, extraCredits, true);
     const width = Math.min(requested.width, area.width), height = Math.min(requested.height, area.height);
     const gutter = Math.max(0, width - card.width), topGutter = Math.max(0, height - card.height);
-    const guardSide = (card.placement === 'left' && card.x - gutter >= area.x) ||
-      card.x + width > area.x + area.width ? 'left' : 'right';
-    const x = Math.round(clamp(card.x - (guardSide === 'left' ? gutter : 0), area.x, area.x + area.width - width));
+    // Keep the role and card together on the same side. Only translate the
+    // complete pair when the left gutter cannot fit on this display.
+    // On the right of the pet the role occupies the original card-to-pet gap;
+    // reserve its gutter there as well, rather than drawing it over the pet.
+    const x = Math.round(clamp(card.x - (card.placement === 'right' ? 0 : gutter),
+      area.x, area.x + area.width - width));
     const y = Math.round(clamp(card.y - topGutter, area.y, area.y + area.height - height));
     return { x, y, width, height, placement: card.placement,
-      guardSide, cardInset: { x: card.x - x, y: card.y - y } };
+      guardSide: 'left', cardInset: { x: gutter, y: card.y - y } };
   }
   const nativePet = safePet(petBounds, area);
   const visual = petVisualBounds(nativePet, presentation?.shape, presentation);

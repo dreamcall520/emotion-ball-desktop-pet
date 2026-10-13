@@ -71,20 +71,33 @@ function layoutShortcuts({ petBounds: pet, workArea: area, shape = 'floating', s
         const layout = placed(cards, preferred);
         if (layout) return layout;
       }
-      // Keep corner buttons close to the same visual pet. Stagger the two
-      // endpoints instead of enlarging the entire fan to fit a quarter circle.
-      const step = cardSize + 6, x0 = Math.max(0, margin - edgeX), y0 = Math.max(0, margin - edgeY);
-      const ax = Math.max(pet.width / 2 + GAP + cardSize / 2, x0 + step);
-      const ay = Math.max(pet.height / 2 + GAP + cardSize / 2, y0 + step);
-      const points = [[x0, ay], [x0, ay + step], [x0 + step, ay],
-        [x0 + step * 2, ay], [ax + step, y0], [ax, y0]];
-      const cards = IDS.map((id, index) => {
-        const [x, y] = points[(horizontal ? sx === 1 : sy === -1) ? index : IDS.length - 1 - index];
-        return { id, x: (sx === 1 ? Math.ceil : Math.floor)(cx + sx * x - cardSize / 2),
-          y: (sy === 1 ? Math.ceil : Math.floor)(cy + sy * y - cardSize / 2), width: cardSize, height: cardSize };
-      });
-      const compact = placed(cards, preferred);
-      if (compact) return compact;
+      // A tight corner uses two concentric arcs instead of a grid or a distant
+      // single fan. The two inner endpoints keep the real pet center and order.
+      const x0 = Math.max(0, margin - edgeX), y0 = Math.max(0, margin - edgeY);
+      const inner = Math.max(radius - 16, Math.max(pet.width, pet.height) / 2 + cardSize / 2 + GAP);
+      const outerStart = Math.max(inner + cardSize + 6,
+        Math.ceil((cardSize + 6) / (Math.cos(Math.PI / 6) - Math.sin(Math.PI / 6))) + 1);
+      for (let outer = outerStart; x0 < inner && y0 < inner && outer <= radius + cardSize + 8; outer++) {
+        const start = Math.asin(clamp(y0 / outer, 0, 1)), end = Math.acos(clamp(x0 / outer, 0, 1));
+        const points = [[x0, Math.sqrt(inner * inner - x0 * x0)],
+          ...Array.from({ length: 4 }, (_, i) => {
+            const angle = end - (end - start) * i / 3;
+            return [Math.cos(angle) * outer, Math.sin(angle) * outer];
+          }), [Math.sqrt(inner * inner - y0 * y0), y0]];
+        const cards = IDS.map((id, index) => {
+          const [x, y] = points[(horizontal ? sx === 1 : sy === -1) ? index : IDS.length - 1 - index];
+          return { id, x: Math.round(cx + sx * x - cardSize / 2),
+            y: Math.round(cy + sy * y - cardSize / 2), width: cardSize, height: cardSize };
+        });
+        if (cards.some((card, index) =>
+          (overlapsAxis(card.x, cardSize, pet.x - GAP, pet.width + GAP * 2) &&
+          overlapsAxis(card.y, cardSize, pet.y - GAP, pet.height + GAP * 2)) ||
+          cards.slice(index + 1).some(other => Math.hypot(
+            Math.max(0, card.x - other.x - cardSize, other.x - card.x - cardSize),
+            Math.max(0, card.y - other.y - cardSize, other.y - card.y - cardSize)) < 6))) continue;
+        const compact = placed(cards, preferred);
+        if (compact) return compact;
+      }
     } else for (const direction of directions) {
       const horizontal = direction === 'above' || direction === 'below';
       const crossLength = horizontal ? area.width : area.height;

@@ -2,6 +2,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { safeModel } = require('./quota-label-window');
 const { placeDetails } = require('./codex-details-window');
+const { adjacentBounds } = require('./window-placement');
 
 const CHANNEL = 'pet:quota-guard-model';
 
@@ -12,7 +13,7 @@ function guardModel(value, size = 'standard', appearance = 'system', visible = f
 }
 
 function createQuotaGuardWindow({ BrowserWindow, screen, getAnchor, getSize = () => 'standard',
-  getAppearance = () => 'system', canShow = () => true, alwaysOnTop = true,
+  getAppearance = () => 'system', getObstacles = () => [], canShow = () => true, alwaysOnTop = true,
   onError = () => {}, onVisibilityChange = () => {}, onLayout = () => {} }) {
   const file = path.join(__dirname, '../quota-guard.html');
   const url = pathToFileURL(file).href;
@@ -35,7 +36,11 @@ function createQuotaGuardWindow({ BrowserWindow, screen, getAnchor, getSize = ()
   function bounds() {
     const anchor = getAnchor?.() || screen.getPrimaryDisplay().workArea;
     const area = screen.getDisplayMatching(anchor).workArea;
-    const { x, y, width, height } = placeDetails(anchor, area, { width: Math.min(420, area.width), height: Math.min(410, area.height) });
+    const size = { width: Math.min(420, area.width), height: Math.min(410, area.height) };
+    const placed = placeDetails(anchor, area, size), obstacles = getObstacles();
+    const intersects = obstacle => obstacle && placed.x < obstacle.x + obstacle.width && placed.x + placed.width > obstacle.x &&
+      placed.y < obstacle.y + obstacle.height && placed.y + placed.height > obstacle.y;
+    const { x, y, width, height } = obstacles.some(intersects) ? adjacentBounds(anchor, area, size, obstacles) : placed;
     return { x, y, width, height };
   }
   function close() {

@@ -12,6 +12,20 @@ const normalRadius = pet => {
 };
 const checkCompactDistance = (layout, pet) => {
   const cards = globalCards(layout), limit = normalRadius(pet) + layout.cardSize + 6 + 1.5;
+  const cx = pet.x + pet.width / 2, cy = pet.y + pet.height / 2;
+  const radii = cards.map(card => Math.hypot(card.x + card.width / 2 - cx, card.y + card.height / 2 - cy));
+  const singleArc = Math.max(...radii) - Math.min(...radii) <= 1.5;
+  if (!singleArc) {
+    assert.ok(Math.abs(radii[0] - radii[5]) <= 1.5, 'two inner endpoints share the real pet center/radius');
+    assert.ok(Math.max(...radii.slice(1, 5)) - Math.min(...radii.slice(1, 5)) <= 1.5,
+      'four outer cards form one concentric arc, never a stepped grid');
+    assert.ok(Math.min(...radii.slice(1, 5)) > Math.max(radii[0], radii[5]) + layout.cardSize,
+      'inner and outer arcs remain visibly separate');
+  }
+  const arc = singleArc ? cards : cards.slice(1, 5);
+  const angles = arc.map(card => Math.atan2(card.y + card.height / 2 - cy, card.x + card.width / 2 - cx));
+  const steps = angles.slice(1).map((angle, index) => Math.atan2(Math.sin(angle - angles[index]), Math.cos(angle - angles[index])));
+  assert.ok(steps.every(step => Math.abs(step - steps[0]) < .022), 'cards use equal angular steps on each arc');
   for (const card of cards) {
     assert.ok(Math.hypot(card.x + card.width / 2 - pet.x - pet.width / 2,
       card.y + card.height / 2 - pet.y - pet.height / 2) <= limit, 'corner cards remain within one extra card of the normal radius');
@@ -156,10 +170,10 @@ test('近角已有正常半圆空间时优先正常间距，80 DIP真角紧凑�
     checkLayout(layout, pet, area); return globalCards(layout).map(card => Math.hypot(
       card.x + card.width / 2 - pet.x - pet.width / 2, card.y + card.height / 2 - pet.y - pet.height / 2)); };
   const corner = { x: 1360, y: 820, width: 80, height: 80 };
-  assert.ok(Math.max(...radii(corner)) <= 141, 'true corner uses compact staggered cards, not a distant 254 DIP arc');
+  assert.ok(Math.max(...radii(corner)) <= 161, 'true corner uses two concentric arcs up to 160 DIP, not a distant 254 DIP arc');
   for (let inset = 0; inset <= 125; inset++) {
-    assert.ok(Math.max(...radii({ ...corner, x: corner.x - inset, y: corner.y - inset })) <= 141,
-      'near-corner positions do not retain the old 168..230 DIP distant arc');
+    assert.ok(Math.max(...radii({ ...corner, x: corner.x - inset, y: corner.y - inset })) <= 161,
+      'near-corner positions retain the compact 160 DIP concentric arc or the normal single arc');
   }
   const nearCorner = { ...corner, x: corner.x - 125, y: corner.y - 125 };
   assert.ok(Math.max(...radii(nearCorner)) <= 117, 'available space restores the normal 116 DIP radius');

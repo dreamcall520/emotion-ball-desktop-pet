@@ -134,9 +134,23 @@
     if (destroyed) { for (const seq of Object.values(result)) for (const frame of seq.frames) frame.bitmap.close(); return null; }
     return result;
   }
-  function drawSprite(canvas, mode, time) {
+  function drawSprite(canvas, mode, time, alignRight = false) {
     const seq = sprites[mode], local = time % seq.duration, frame = seq.frames.find(frame => local < frame.at + frame.duration) || seq.frames[0];
     const context = canvas.getContext('2d'); context.clearRect(0, 0, 87, 124); context.drawImage(frame.bitmap, 63, 20, 87, 124, 0, 0, 87, 124);
+    if (alignRight) {
+      if (frame.rightOffset === undefined) {
+        const pixels = context.getImageData(0, 0, 87, 124).data;
+        let right = -1;
+        for (let x = 86; x >= 0 && right < 0; x--) for (let y = 0; y < 124; y++) {
+          if (pixels[(y * 87 + x) * 4 + 3] > 0) { right = x; break; }
+        }
+        frame.rightOffset = right < 0 ? 0 : 86 - right;
+      }
+      if (frame.rightOffset) {
+        context.clearRect(0, 0, 87, 124);
+        context.drawImage(frame.bitmap, 63, 20, 87, 124, frame.rightOffset, 0, 87, 124);
+      }
+    }
   }
   function createPet(host, id, clock) {
     const ball = root.EmotionBall.createBall(host, { shape: 'blob', lite: true, liteRibbons: true, now: clock });
@@ -173,14 +187,14 @@
       button.setAttribute('aria-label', `${periodText(item.windowMinutes)}剩余 ${Math.round(q)}%，进入球球守护战`);
       button.dataset.role = q === 100 ? 'full' : q === 0 ? 'empty' : 'roaming';
       renderPet(pet, q === 0 ? 1 : 0, q === 0 ? 'halo' : q === 100 ? 'crown' : 'none', time, !moving());
-      drawSprite(zombie.querySelector('canvas'), 'walk', q > 0 && q < 100 ? time * .75 : 0);
+      drawSprite(zombie.querySelector('canvas'), 'walk', q > 0 && q < 100 ? time * .75 : 0, true);
       zombie.style.transform = `rotate(${q === 0 && moving() ? Math.sin(time / 520) * 2 : 0}deg)`;
       zombie.querySelector('svg').setAttribute('visibility', q === 0 ? 'visible' : 'hidden');
     }
     function frame(now) { raf = 0; if (!moving()) return; time += last ? clamp(now - last, 0, 64) : 16; last = now; draw(); raf = requestAnimationFrame(frame); }
     function wake() { cancelAnimationFrame(raf); raf = 0; last = 0; draw(); if (moving()) raf = requestAnimationFrame(frame); }
     cleanup.push(bridge.onModel(value => { model = value; doc.body.dataset.guardEntry = String(visible()); doc.body.dataset.guardSize = value?.size === 'compact' ? 'compact' : 'standard';
-      doc.body.dataset.guardSide = value?.guardSide === 'left' ? 'left' : 'right';
+      doc.body.dataset.guardSide = 'left';
       doc.body.style.setProperty('--quota-card-left', `${value?.cardInset?.x || 0}px`);
       doc.body.style.setProperty('--quota-card-top', `${value?.cardInset?.y ?? (value?.size === 'compact' ? 18 : 6)}px`);
       button.hidden = !visible(); button.disabled = !sprites; wake(); }));

@@ -155,7 +155,7 @@ test('标准与小巧额度的守护外窗不推偏计时条，其他障碍及�
   assert.deepEqual(f.errors, []);
 });
 
-test('已打开面板避让后来出现的伴随窗口，障碍关闭后保留位置且不因球体移动回跳', async t => {
+test('已打开面板保持自身位置，球体和伴随窗口移动不追随，仅工作区变化时夹紧', async t => {
   const f = fixture(); t.after(() => f.manager.close());
   const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
   Object.assign(f.pet.bounds, { x: 600, y: 300 }); f.manager.open(); await flush();
@@ -163,15 +163,32 @@ test('已打开面板避让后来出现的伴随窗口，障碍关闭后保留�
   assert.deepEqual(panel.bounds, { x: 704, y: 102, width: 320, height: 476 });
   const guard = { x: 430, y: 388, width: 420, height: 410 };
   assert.equal(overlaps(panel.bounds, guard), true, '复现先打开番茄钟再显示守护时的交叠');
+  const retained = { ...panel.bounds }, moves = panel.moves;
   f.obstacles([guard]); f.manager.reposition();
-  assert.equal(overlaps(panel.bounds, guard), false, '后来出现的守护或快捷窗口触发重新避让');
-  const retained = { ...panel.bounds }; f.obstacles([]); f.manager.sync();
+  assert.deepEqual(panel.bounds, retained, '后来出现的伴随窗不得覆盖已打开面板的位置');
+  for (const x of [650, 780, 500, 900, 600]) {
+    Object.assign(f.pet.bounds, { x, y: 300 });
+    f.quota({ x: x - 80, y: 388, width: 168, height: 58 });
+    f.obstacles([{ x: x - 170, y: 388, width: 420, height: 410 }]);
+    f.manager.reposition();
+    assert.deepEqual(panel.bounds, retained, '移动球球、额度和角色时面板不得左右换位');
+  }
+  assert.equal(panel.moves, moves, '不反复提交已打开面板的原生位置');
+  f.obstacles([]); f.quota(null); f.manager.sync();
   assert.deepEqual(panel.bounds, retained, '障碍关闭后不把面板拉回原始位置');
   Object.assign(f.pet.bounds, { x: retained.x, y: retained.y }); f.manager.sync();
   assert.deepEqual(panel.bounds, retained, '只有球体移动进入面板时仍保留面板位置');
   const reminder = { x: retained.x + 20, y: retained.y + 20, width: 360, height: 190 };
   f.todoReminder(reminder); f.manager.sync();
-  assert.equal(overlaps(panel.bounds, reminder), false, '后来出现的待办提醒同样触发避让');
+  assert.deepEqual(panel.bounds, retained, '后来出现的待办提醒也不覆盖面板位置');
+  panel.bounds = { x: 800, y: 150, width: 320, height: 476 };
+  f.state.status = 'paused'; f.manager.sync(); await flush();
+  const dragged = { ...panel.bounds }, mini = f.win('mini'), miniBefore = { ...mini.bounds };
+  Object.assign(f.pet.bounds, { x: 400, y: 500 }); f.manager.sync();
+  assert.deepEqual(panel.bounds, dragged, '用户手动摆放后球球移动仍保留面板位置');
+  assert.notDeepEqual(mini.bounds, miniBefore, '迷你计时条继续跟随球球');
+  Object.assign(f.area, { width: 900, height: 600 }); f.manager.reposition();
+  assert.deepEqual(panel.bounds, { x: 580, y: 124, width: 320, height: 476 }, '屏幕工作区缩小时按面板自身位置夹紧');
   assert.deepEqual(f.errors, []);
 });
 

@@ -17,7 +17,7 @@ const model = (remaining = 64, windowMinutes = 300) => ({ state: 'ready', items:
 ], secret: 'PRIVATE', overflow: 0 });
 const intersects = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 
-function fixture() {
+function fixture({ getObstacles = () => [] } = {}) {
   const windows = [], errors = [], visibility = [], layouts = [];
   let anchor = { x: 600, y: 300, width: 80, height: 80 }, allowed = true, size = 'standard', appearance = 'light';
   class Window extends EventEmitter {
@@ -49,19 +49,19 @@ function fixture() {
   }
   const screen = { getDisplayMatching: bounds => ({ workArea: bounds.x < 0 ? { x: -1280, y: -100, width: 1280, height: 900 } : AREA }), getPrimaryDisplay: () => ({ workArea: AREA }) };
   const guard = createQuotaGuardWindow({ BrowserWindow: Window, screen,
-    getAnchor: () => anchor, canShow: () => allowed, getSize: () => size, getAppearance: () => appearance,
+    getAnchor: () => anchor, canShow: () => allowed, getSize: () => size, getAppearance: () => appearance, getObstacles,
     onError: error => errors.push(error), onVisibilityChange: value => visibility.push(value),
     onLayout: () => { const win = guard.getWindow(); layouts.push({ visible: win?.isVisible(), bounds: win?.getBounds() }); } });
   return { guard, windows, errors, visibility, layouts, Window, screen, get anchor() { return anchor; }, set anchor(value) { anchor = value; },
     set allowed(value) { allowed = value; }, set size(value) { size = value; }, set appearance(value) { appearance = value; } };
 }
 
-test('右侧角色仅扩原生承载区域，保持卡面尺寸及横向中心，展开尺寸不变', () => {
+test('左侧角色仅扩原生承载区域，保持卡面尺寸及横向中心，展开尺寸不变', () => {
   for (const [size, cardWidth, cardHeight, width, height] of [['compact', 128, 32, 200, 50], ['standard', 168, 58, 240, 64]]) {
     assert.deepEqual(quotaLabelSize(size, false, 1, false, true), { width, height });
     const pet = { x: 600, y: 300, width: 80, height: 80 };
     const result = quotaLabelBounds(pet, AREA, null, size, false, 1, null, false, true);
-    assert.equal(result.x + cardWidth / 2, pet.x + pet.width / 2);
+    assert.equal(result.x + result.cardInset.x + cardWidth / 2, pet.x + pet.width / 2);
     assert.equal(result.width, width); assert.equal(result.height, height);
     assert.equal(result.y + result.height - cardHeight >= pet.y + pet.height + 8, true);
     for (const count of [1, 2]) assert.deepEqual(quotaLabelSize(size, true, count, false, true), quotaLabelSize(size, true, count));
@@ -79,7 +79,9 @@ test('80/180/260px 球体和云轮廓保持正式卡面位置，透明角色留�
         const baseline = quotaLabelBounds(pet, area, null, size, false, 1, presentation);
         const face = { x: result.x + result.cardInset.x, y: result.y + result.cardInset.y,
           width: baseline.width, height: baseline.height };
-        assert.deepEqual(face, { x: baseline.x, y: baseline.y, width: baseline.width, height: baseline.height });
+        assert.deepEqual(face, { x: Math.max(area.x + 72, baseline.x + (baseline.placement === 'right' ? 72 : 0)),
+          y: baseline.y, width: baseline.width, height: baseline.height });
+        assert.equal(result.guardSide, 'left');
         assert.equal(result.placement, baseline.placement);
         assert.equal(intersects(face, petVisualBounds(pet, shape, presentation)), false, JSON.stringify({ result, pet, shape, size }));
       }
@@ -234,4 +236,18 @@ test('主进程打开入口验证原额度卡 webContents、主frame、精确fil
   open({ ...event, senderFrame: {} }); open({ ...event, sender: {} }); assert.equal(opened, 1);
   const originalURL = contents.getURL; contents.getURL = () => originalURL() + '#spoof'; open(event); assert.equal(opened, 1);
   contents.getURL = originalURL; visible = false; open(event); assert.equal(opened, 1);
+});
+
+
+test('守护战让开已固定的番茄钟主面板，不反过来推动主面板', () => {
+  const baseline = fixture(); baseline.guard.open(model());
+  const first = baseline.guard.getWindow().getBounds(); baseline.guard.destroy();
+  const retainedPanel = { ...first, width: 320, height: 476 }, original = { ...retainedPanel };
+  const f = fixture({ getObstacles: () => [retainedPanel] });
+  f.guard.open(model()); f.guard.getWindow().webContents.emit('did-finish-load');
+  assert.equal(intersects(f.guard.getWindow().getBounds(), retainedPanel), false);
+  f.anchor = { ...f.anchor, x: 700, y: 360 }; f.guard.reposition();
+  assert.equal(intersects(f.guard.getWindow().getBounds(), retainedPanel), false);
+  assert.deepEqual(retainedPanel, original);
+  f.guard.destroy();
 });

@@ -481,6 +481,17 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
             Math.ceil((Math.max(visual.width, visual.height) / 2 + cardSize / 2 + 12) / Math.cos(Math.PI / 5)));
           evidence.corner = { center: { x: cx, y: cy }, radii, angles, steps, normalRadius };
           assert.ok(Math.max(...radii) <= normalRadius + cardSize + 8, 'corner buttons stay close to the real pet instead of enlarging the fan');
+          const singleArc = Math.max(...radii) - Math.min(...radii) <= 2;
+          if (!singleArc) {
+            assert.ok(Math.abs(radii[0] - radii[5]) <= 2, 'native inner endpoints share the real pet center/radius');
+            assert.ok(Math.max(...radii.slice(1, 5)) - Math.min(...radii.slice(1, 5)) <= 2,
+              'native outer cards form one concentric arc, never a grid');
+            assert.ok(Math.min(...radii.slice(1, 5)) > Math.max(radii[0], radii[5]) + cardSize,
+              'native inner and outer arcs remain separate');
+          }
+          const arcAngles = singleArc ? angles : angles.slice(1, 5);
+          const arcSteps = arcAngles.slice(1).map((angle, index) => Math.atan2(Math.sin(angle - arcAngles[index]), Math.cos(angle - arcAngles[index])));
+          assert.ok(arcSteps.every(step => Math.abs(step - arcSteps[0]) < .025), 'native cards retain equal angular steps');
           const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
           for (let i = 0; i < globals.length; i++) for (const other of globals.slice(i + 1)) {
             const card = globals[i];
@@ -494,7 +505,7 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
           assert.ok(inside(bubbleBounds, area), 'corner bubble remains on the same physical display');
           assert.ok(globals.every(card => !overlaps(card, bubbleBounds)), 'corner bubble does not overlap any clickable shortcut card');
           assert.ok(!overlaps(visual, bubbleBounds), 'corner bubble leaves the pet visible');
-          corner = { center: { x: cx, y: cy }, radii, angles, steps, bubble: bubbleBounds, greetingId: cornerGreeting.id, opening };
+          corner = { center: { x: cx, y: cy }, radii, angles, steps, arc: singleArc ? 'single' : 'concentric-2-plus-4', bubble: bubbleBounds, greetingId: cornerGreeting.id, opening };
           const prefix = `native-corner-${display.id}-${px}-${py}-inset-${inset}`;
           await capture(win, `${prefix}-shortcuts.png`);
           fs.writeFileSync(path.join(output, `${prefix}-bubble.png`), (await bubble.getWindow().webContents.capturePage()).toPNG());

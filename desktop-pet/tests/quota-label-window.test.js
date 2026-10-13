@@ -160,7 +160,7 @@ test('标准与小巧锚点读取实际卡面，守护角色只扩大原生避�
       const native = f.label.getWindow().getBounds(), roleVisible = enabled && state === 'ready';
       assert.equal(native.width, width + (roleVisible ? 72 : 0));
       assert.equal(native.height, height + (roleVisible ? gutter : 0));
-      assert.deepEqual(f.label.getVisibleBounds(), { x: native.x + inset,
+      assert.deepEqual(f.label.getVisibleBounds(), { x: native.x + (roleVisible ? 72 : 0) + inset,
         y: native.y + (roleVisible ? gutter : 0) + inset,
         width: width - inset * 2, height: height - inset * 2 });
       assert.deepEqual(f.label.getWindow().getBounds(), native, '读取卡面不改变完整原生避让边界');
@@ -207,7 +207,7 @@ test('角色透明顶沿首次显示和重显均穿透，仅可信主页面可�
   pointer(true); assert.equal(win.ignoreCalls.length, hiddenCalls, '隐藏态不能被迟到 mouse move 重新拦截');
   cursor = { x: 340, y: 375 }; f.label.show(readyModel());
   assert.deepEqual(win.ignoreCalls.at(-1), [true, { forward: true }], '重显重新按真实 cursor 初始化');
-  cursor = { x: 420, y: 392 }; f.label.reposition();
+  cursor = { x: 250, y: 392 }; f.label.reposition();
   assert.deepEqual(win.ignoreCalls.at(-1), [false, { forward: true }], '真实角色按钮区域可接收点击');
 });
 

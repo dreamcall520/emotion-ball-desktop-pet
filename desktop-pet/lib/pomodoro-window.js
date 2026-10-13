@@ -152,8 +152,7 @@ function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, g
           obstacles.map(item => ['x', 'y', 'width', 'height'].every(key => item[key] === quotaWindowBounds[key]) ? quotaBounds : item) : obstacles;
         const retainedPanelBounds = view === 'panel' && entry.positioned && !panelAnchorPending ?
           fit({ ...current, ...size }, screen.getDisplayMatching(current).workArea) : null;
-        const bounds = retainedPanelBounds && !obstacles.some(obstacle => obstacle !== pet && intersects(retainedPanelBounds, obstacle)) ?
-          retainedPanelBounds : place(view, size, pet, area, placementObstacles, miniBounds, quotaBounds, state.reminder);
+        const bounds = retainedPanelBounds || place(view, size, pet, area, placementObstacles, miniBounds, quotaBounds, state.reminder);
         if (['x', 'y', 'width', 'height'].some(key => bounds[key] !== current[key])) entry.win.setBounds(bounds, false);
         entry.positioned = true;
         if (view === 'panel') panelAnchorPending = false;
@@ -194,7 +193,8 @@ function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, g
     for (const { win } of entries.values()) if (alive(win)) win.destroy();
     entries.clear();
   }
-  return { open, sync, reposition: sync, hide, close };
+  return { open, sync, reposition: sync, hide, close,
+    getPanelBounds() { const win = entries.get('panel')?.win; return alive(win) && win.isVisible() ? win.getBounds() : null; } };
 }
 
 module.exports = { createPomodoroWindows };

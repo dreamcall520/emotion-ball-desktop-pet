@@ -187,7 +187,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   const realRequire = createRequire(path.resolve(__dirname, '../main.js'));
   const pomodoro = { state: { quiet: false }, getSnapshot() { return this.state; },
     change(quiet) { this.state = { quiet }; this.options.onChange(this.state); }, close() { return { ok: true }; } };
-  const pomodoroWindows = { opens: 0, sync() {}, reposition() {}, hide() {}, close() {},
+  const pomodoroWindows = { opens: 0, sync() {}, reposition() {}, hide() {}, close() {}, getPanelBounds() { return null; },
     open() { this.opens++; } };
   const context = vm.createContext({ __dirname: path.resolve(__dirname, '..'), console,
     process: { env: {}, argv, stderr: { write(message) { throw new Error(message); } } }, performance: { now: () => now },

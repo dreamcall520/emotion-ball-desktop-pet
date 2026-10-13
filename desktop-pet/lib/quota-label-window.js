@@ -329,7 +329,7 @@ function createQuotaLabelWindow({
         const cursor = screen.getCursorScreenPoint(), native = target.getBounds();
         const card = quotaLabelSize(model.size, model.expanded, model.items.length, Boolean(model.extraCredits));
         const face = { x: native.x + layout.cardInset.x, y: native.y + layout.cardInset.y, ...card };
-        const role = { x: layout.guardSide === 'left' ? native.x : face.x + card.width + 8,
+        const role = { x: face.x - 72,
           y: face.y + card.height - 44, width: 64, height: 44 };
         const inside = bounds => cursor.x >= bounds.x && cursor.y >= bounds.y &&
           cursor.x < bounds.x + bounds.width && cursor.y < bounds.y + bounds.height;

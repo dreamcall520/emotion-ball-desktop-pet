@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { quotaLabelBounds } = require('../lib/quota-label-placement');
+const { readQuotaLabelGeometry } = require('./verify-codex-companion');
 const { pointerClick } = require('./verify-chat-integration');
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(read, accept, label) {
@@ -60,7 +61,8 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
   card.setIgnoreMouseEvents = function(value, options) { ignored = value; return ignoreMouse.call(this, value, options); };
   try {
     const area = screen.getDisplayMatching(originalPet).workArea;
-    for (const [name, x] of [['center', area.x + Math.floor(area.width / 2) - 40], ['near-right', area.x + area.width - 115]]) {
+    for (const [name, x] of [['center', area.x + Math.floor(area.width / 2) - 40],
+      ['left-edge', area.x], ['near-right', area.x + area.width - 115], ['right-edge', area.x + area.width - 80]]) {
       pet.setBounds({ x, y: area.y + 180, width: 80, height: 80 }, false); sync();
       const baseline = quotaLabelBounds(pet.getBounds(), area, null, 'compact', false, 1,
         { shape: settings.customization?.appearance?.shape, mode: 'free' });
@@ -69,9 +71,18 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
         return {x:face.x,y:face.y,width:face.width,height:face.height,side:document.body.dataset.guardSide};
       })()`), value => value.width === 128 && value.height === 32, '原生卡面布局');
       const bounds = card.getBounds();
-      assert.equal(bounds.x + geometry.x, baseline.x, '可见卡 x 与线上卡面基线一致');
+      assert.equal(bounds.x + geometry.x, Math.max(area.x + 72, baseline.x + (baseline.placement === 'right' ? 72 : 0)),
+        '可见卡 x 保持线上基线，左屏缘不足只整体最小平移');
       assert.equal(bounds.y + geometry.y, baseline.y, '可见卡 y 与线上卡面基线一致');
-      if (name === 'near-right') assert.equal(geometry.side, 'left', '右侧空间不足时角色让到左侧，卡保留下方位置');
+      assert.equal(geometry.side, 'left', '角色在所有位置均固定卡左');
+      const paintedFrames = [];
+      for (let frame = 0; frame < 4; frame++) {
+        const value = await readQuotaLabelGeometry(card);
+        assert.equal(value.guard.role, 'roaming');
+        assert.ok(Number.isFinite(value.guard.paintedRight) && Math.abs(value.beam.x - value.guard.paintedRight - 8) < .01,
+          '僵尸动画实际可见轮廓固定卡左8DIP，不能只校验透明按钮');
+        paintedFrames.push(value.guard.paintedRight); await wait(80);
+      }
       const cursor = { x: bounds.x + geometry.x + 64, y: bounds.y + Math.max(1, geometry.y / 2) };
       screen.getCursorScreenPoint = () => cursor; sync();
       assert.equal(ignored, true, '透明顶沿初始化穿透');
@@ -81,7 +92,7 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
       await until(() => card.getBounds().height, value => value === 144, '双周期可见卡点击仍可展开');
       await pointerClick(card, '#quota-label');
       await until(() => card.getBounds().height, value => value === 50, '可见卡正常收起');
-      cardSpacing.push({ name, baseline, bounds, geometry, transparentTopPassesMouse: true, cardClickExpands: true });
+      cardSpacing.push({ name, baseline, bounds, geometry, paintedFrames, transparentTopPassesMouse: true, cardClickExpands: true });
     }
   } finally {
     card.setIgnoreMouseEvents = ignoreMouse; screen.getCursorScreenPoint = cursorReader;
@@ -104,7 +115,7 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
   await until(() => card.webContents.executeJavaScript('window.quotaGuardEntry?.state'),
     value => value?.role === 'empty' && value.visible, '截图同场景标准卡0%角色');
   const standardFace = await card.webContents.executeJavaScript(`(() => {const r=document.getElementById('quota-label').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,side:document.body.dataset.guardSide};})()`);
-  assert.deepEqual(standardFace, { x: standardFace.side === 'left' ? 72 : 0, y: 6, width: 168, height: 58, side: standardFace.side }, '角色让位仅调整卡面本地偏移，不改标准卡尺寸和垂直间距');
+  assert.deepEqual(standardFace, { x: 72, y: 6, width: 168, height: 58, side: 'left' }, '角色固定卡左，仅增加卡面本地偏移，不改标准卡尺寸和垂直间距');
   await capture(card, 'main-route-standard-exhausted');
   settings.codexQuotaLabelSize = 'compact'; callbacks.onQuota(fixture()); sync();
   await until(() => card.webContents.executeJavaScript('window.quotaGuardEntry?.state'),

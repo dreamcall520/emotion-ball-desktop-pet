@@ -3099,6 +3099,7 @@ async function bootstrap() {
   });
   quotaGuard = createQuotaGuardWindow({ BrowserWindow, screen,
     getAnchor: () => petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null,
+    getObstacles: () => { const panel = pomodoroWindows?.getPanelBounds(); return panel ? [panel] : []; },
     getSize: () => settings?.codexQuotaLabelSize,
     getAppearance: () => settings?.codexQuotaAppearance,
     canShow: canShowQuotaGuard,

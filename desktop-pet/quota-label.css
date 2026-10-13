@@ -802,20 +802,19 @@ body {
 /* The card keeps its formal face; only the native transparent window grows. */
 body[data-guard-entry="true"] #quota-beam { inset: auto; left: var(--quota-card-left, 0px); top: var(--quota-card-top, 6px); width: 168px; height: 58px; }
 body[data-guard-entry="true"][data-guard-size="compact"] #quota-beam { width: 128px; height: 32px; }
-#quota-guard-entry { position: absolute; left: 176px; top: calc(var(--quota-card-top, 6px) + 14px); width: 64px; height: 44px; padding: 0; border: 0; border-radius: 6px; background: none; cursor: pointer; -webkit-app-region: no-drag; }
-body[data-guard-size="compact"] #quota-guard-entry { left: 136px; top: calc(var(--quota-card-top, 18px) - 12px); }
-body[data-guard-side="left"] #quota-guard-entry { left: 0; }
+#quota-guard-entry { position: absolute; left: calc(var(--quota-card-left, 72px) - 72px); top: calc(var(--quota-card-top, 6px) + 14px); width: 64px; height: 44px; padding: 0; border: 0; border-radius: 6px; background: none; cursor: pointer; -webkit-app-region: no-drag; }
+body[data-guard-size="compact"] #quota-guard-entry { top: calc(var(--quota-card-top, 18px) - 12px); }
 #quota-guard-entry[hidden] { display: none !important; }
 #quota-guard-entry:focus-visible { outline: 2px solid #356bbf; outline-offset: -2px; }
 #quota-guard-entry:disabled { cursor: default; }
-.guard-entry-pet { position: absolute; left: 0; top: 10px; width: 24px; height: 24px; }
+.guard-entry-pet { position: absolute; right: 0; top: 10px; width: 24px; height: 24px; }
 .guard-entry-pet svg { display: block; width: 100%; height: 100%; overflow: visible; }
-.guard-entry-zombie { position: absolute; left: 0; top: 5px; width: 22px; height: 32px; transform-origin: 50% 100%; }
+.guard-entry-zombie { position: absolute; right: 0; top: 5px; width: 22px; height: 32px; transform-origin: 50% 100%; }
 .guard-entry-zombie canvas { display: block; width: 22px; height: auto; aspect-ratio: 87 / 124; }
 .guard-entry-zombie svg { position: absolute; top: 0; left: 0; width: 22px; height: 23.77px; overflow: visible; }
 #quota-guard-entry[data-role="full"] .guard-entry-zombie,
 #quota-guard-entry[data-role="roaming"] .guard-entry-pet { display: none; }
-#quota-guard-entry[data-role="empty"] .guard-entry-zombie { left: 28px; }
+#quota-guard-entry[data-role="empty"] .guard-entry-pet { right: 28px; }
 body[data-guard-size="standard"] .guard-entry-pet { top: 3px; }
 body[data-guard-size="standard"] .guard-entry-zombie { top: -2px; }
 body[data-guard-size="compact"] .guard-entry-pet { top: 16px; }

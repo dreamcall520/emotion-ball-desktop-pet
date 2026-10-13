@@ -163,7 +163,7 @@ test('非经典外观的额度标签贴近实际可见底部，保留经典外�
   }
 });
 
-test('趣味角色开启后保持正式版卡面坐标、方向和八像素间距；右缘角色让到卡左', () => {
+test('趣味角色始终在卡左，保持正式卡面方向与间距；屏幕左缘只平移整个组合', () => {
   for (const area of [AREA, { x: -1920, y: -180, width: 1920, height: 1080 }]) {
     for (const size of ['compact', 'standard']) for (const shape of ['blob', 'aurora-cloud']) {
       for (const width of [60, 80, 180, 260]) for (const side of ['left', 'right', null]) {
@@ -173,10 +173,12 @@ test('趣味角色开启后保持正式版卡面坐标、方向和八像素间�
         const baseline = quotaLabelBounds(pet, area, null, size, false, 1, presentation);
         const guard = quotaLabelBounds(pet, area, null, size, false, 1, presentation, false, true);
         assert.equal(guard.placement, baseline.placement);
-        assert.equal(guard.x + guard.cardInset.x, baseline.x);
+        assert.equal(guard.guardSide, 'left');
+        assert.equal(guard.cardInset.x, 72);
+        assert.equal(guard.x + guard.cardInset.x,
+          Math.max(area.x + 72, baseline.x + (baseline.placement === 'right' ? 72 : 0)));
         assert.equal(guard.y + guard.cardInset.y, baseline.y);
         assertInside(guard, area);
-        if (baseline.placement === 'left') assert.equal(guard.guardSide, 'left', '卡左侧布局时角色远离球球');
       }
     }
     const pet = { x: area.x + area.width - 115, y: area.y + 200, width: 80, height: 80 };
@@ -209,6 +211,20 @@ test('光环按外圈承载包络留八像素，不能按缩小的云主体推�
       assert.equal(side.x + side.cardInset.x, 1252, '保留幻彩半露35%横向锚点');
     }
   }
+});
+
+test('上下被气泡占用而改到球球右侧时，角色与卡整体留位，角色不得压在球球上', () => {
+  const pet = { x: 600, y: 400, width: 80, height: 80 };
+  const obstacle = { x: 542, y: 310, width: 146, height: 252 };
+  const baseline = quotaLabelBounds(pet, AREA, obstacle);
+  const guard = quotaLabelBounds(pet, AREA, obstacle, 'standard', false, 1, null, false, true);
+  assert.equal(baseline.placement, 'right');
+  assert.equal(guard.placement, 'right');
+  assert.equal(guard.guardSide, 'left');
+  assert.equal(guard.x, baseline.x, '原卡与球球间距留给左侧角色');
+  assert.equal(guard.x + guard.cardInset.x, baseline.x + 72);
+  assert.equal(guard.y + guard.cardInset.y, baseline.y);
+  assertInside(guard, AREA);
 });
 
 test('候选位置必须完整在屏内且不与气泡相交', () => {

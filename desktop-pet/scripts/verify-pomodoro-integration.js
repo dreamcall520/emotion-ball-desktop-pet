@@ -227,6 +227,28 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     assert.equal((await load(mini)).face, 'analog');
     const invalidMini = await page(mini, "qiuPomodoro.action('reset')");
     assert.equal(invalidMini.ok, false, '迷你入口不能越权重置计时');
+
+    const panelBeforeMove = panel.getBounds(), petBeforeMove = pet.getBounds();
+    const panelArea = screen.getDisplayMatching(panelBeforeMove).workArea;
+    panel.setPosition(Math.round(panelArea.x + (panelArea.width - panelBeforeMove.width) / 2),
+      Math.round(panelArea.y + (panelArea.height - panelBeforeMove.height) / 2), false);
+    const retainedPanel = panel.getBounds(), timerBeforeMove = timerIdentity(service.getSnapshot());
+    result.panelMovement = [];
+    for (const offset of [-80, 80, -40, 40]) {
+      pet.setPosition(Math.round(retainedPanel.x + offset), Math.round(retainedPanel.y + 180), false);
+      quotaLabel.show({ state: 'ready', items: [{ label: 'Codex', windowMinutes: 10080, remaining: 79 }] });
+      await poll(() => quotaLabel.getWindow()?.isVisible(), Boolean, '球球移动时额度卡可见');
+      windows.reposition();
+      for (let sample = 0; sample < 3; sample++) {
+        await wait(30);
+        const bounds = panel.getBounds();
+        assert.deepEqual(bounds, retainedPanel, '球球及额度卡移动不得覆盖番茄钟主面板的手动位置');
+        result.panelMovement.push({ pet: pet.getBounds(), quota: quotaLabel.getWindow().getBounds(), panel: bounds });
+      }
+    }
+    assert.deepEqual(timerIdentity(service.getSnapshot()), timerBeforeMove, '布局重排不改变计时任务');
+    quotaLabel.hide(); pet.setBounds(petBeforeMove, false); panel.setBounds(panelBeforeMove, false); windows.sync();
+    result.checks.push('opened-panel-retains-manual-position-through-pet-and-quota-movement');
     await pointerClick(panel, '#reset');
     await poll(() => !mini.isVisible(), Boolean, '重置回空闲后收起 mini');
     result.checks.push('menu-default-native-bridge');
