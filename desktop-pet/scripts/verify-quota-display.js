@@ -194,13 +194,21 @@ async function verifyQuotaDisplay({ pet, open, settingsFile, powerMonitor, sendM
   assert.deepEqual(win.getBounds(),moved,'检查更新结果返回仍保留关于窗口位置');
   if(out){fs.writeFileSync(path.join(out,'about-update-position.json'),JSON.stringify({moved,afterResult:win.getBounds(),...update},null,2));await capture(win,'about-update-position.png');}
   const settingsBeforeConsent=fs.readFileSync(settingsFile,'utf8');
+  const consentChecks=[];
   for(const accepted of [false,true]){
     const pending=requestConsent(),consent=getConsentWindow();
     await until(()=>consent.webContents.executeJavaScript('!document.getElementById("consent-accept").disabled'));
     assert.equal(await consent.webContents.executeJavaScript('document.activeElement.id'),'consent-cancel');
     if(out&&!accepted)await capture(consent, 'codex-consent.png');
+    require('electron').app.focus({steal:true});consent.focus();consent.webContents.focus();
+    await until(()=>consent.isVisible()&&consent.webContents.executeJavaScript('!document.hidden&&document.hasFocus()&&!document.getElementById("consent-accept").disabled'));
+    const readConsent=async()=>({visible:consent.isVisible(),focused:consent.isFocused(),...await consent.webContents.executeJavaScript('({hidden:document.hidden,focus:document.hasFocus(),acceptDisabled:document.getElementById("consent-accept").disabled,cancelDisabled:document.getElementById("consent-cancel").disabled,status:document.getElementById("consent-status").textContent})')});
+    const check={accepted,before:await readConsent()};consentChecks.push(check);
     await consent.webContents.executeJavaScript(`document.getElementById('consent-${accepted?'accept':'cancel'}').click();true`);
-    assert.equal(await pending,accepted);assert.equal(consent.isDestroyed(),true);
+    const result=await Promise.race([pending,wait(2000).then(()=>null)]);
+    check.result=result;check.destroyed=consent.isDestroyed();if(!check.destroyed)check.after=await readConsent();
+    if(out)fs.writeFileSync(path.join(out,'consent-diagnostic.json'),JSON.stringify(consentChecks,null,2));
+    assert.equal(result,accepted);assert.equal(consent.isDestroyed(),true);
   }
   assert.equal(fs.readFileSync(settingsFile,'utf8'),settingsBeforeConsent,'单独预览确认窗不启动真实Codex或改设置');
   assert.deepEqual(errors,[],'浏览器控制台错误');
