@@ -16,6 +16,7 @@
 .product-title-link svg { flex: none; }
 .product-title-link:hover, .product-title-link:focus-visible { color: var(--accent); }
 .card-price .price-currency, .detail-price .price-currency { font-size: .6em; margin: 0 2px 0 0; color: inherit; font-weight: inherit; }
+.detail-price [data-price-value] { font: inherit; color: inherit; margin: 0; }
 .shop-list-page main { padding-bottom: 56px; }
 .shop-list-page .c-footer { border-image: linear-gradient(90deg, transparent, var(--line) 20%, var(--line) 80%, transparent) 1; }
 .breadcrumb { margin-top: 32px; }
@@ -59,3 +60,11 @@
 .shop-community-links { display: flex; gap: 18px; margin-left: auto; }
 .shop-community-links a { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; border-radius: 3px; font-size: 12px; white-space: nowrap; color: var(--text-soft); }
 .shop-community-links a:is(:hover,:focus-visible) { color: var(--accent); }
+.product-art.mousepad-cover, .detail-grid .product-art.mousepad-detail { aspect-ratio: 2; }
+.mousepad-styles { margin: 0 0 54px; border: 0; padding: 0; }
+.mousepad-styles legend { margin-bottom: 18px; font-size: 17px; font-weight: 550; }
+.mousepad-styles .variant-options { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 16px; }
+.mousepad-styles .variant-option span { padding: 6px 6px 10px; text-align: center; line-height: 1.5; }
+.mousepad-styles img { display: block; width: 100%; height: auto; aspect-ratio: 2; border-radius: 7px; margin-bottom: 8px; }
+@media (max-width: 900px) { .mousepad-styles .variant-options { grid-template-columns: repeat(3,minmax(0,1fr)); } }
+@media (max-width: 767px) { .mousepad-styles .variant-options { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; } }

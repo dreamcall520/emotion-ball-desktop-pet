@@ -87,10 +87,11 @@
   document.querySelectorAll('[data-dialog-open]').forEach(button => button.addEventListener('click', () => {
     const dialog = document.getElementById(button.dataset.dialogOpen);
     const variant = document.querySelector('input[name="variant"]:checked');
+    const style = document.querySelector('input[name="style"]:checked');
     const inquiry = dialog.querySelector('[data-inquiry]');
     if (inquiry) {
       const product = document.querySelector('[data-product-title]');
-      inquiry.textContent = `${product.textContent}${variant ? ` · ${variant.value}` : ''} · ¥${product.dataset.productPrice}\n想确认商品细节与发货安排。`;
+      inquiry.textContent = `${product.textContent}${style ? ` · ${style.value}` : ''}${variant ? ` · ${variant.value}` : ''} · ¥${product.dataset.productPrice}\n想确认商品细节与发货安排。`;
     }
     const status = dialog.querySelector('[data-copy-status]');
     if (status) status.textContent = '';
@@ -125,6 +126,10 @@
     const image = document.querySelector('[data-product-image]');
     image.src = input.dataset.variantImage;
     image.alt = `${document.querySelector('[data-product-title]').textContent} · ${input.value}设计效果图`;
+  }));
+  document.querySelectorAll('[data-variant-price]').forEach(input => input.addEventListener('change', () => {
+    document.querySelector('[data-product-title]').dataset.productPrice = input.dataset.variantPrice;
+    document.querySelector('[data-price-value]').textContent = input.dataset.variantPrice;
   }));
   document.addEventListener('click', event => {
     document.querySelectorAll('.c-mobile[open]').forEach(menu => { if (!menu.contains(event.target)) menu.open = false; });
