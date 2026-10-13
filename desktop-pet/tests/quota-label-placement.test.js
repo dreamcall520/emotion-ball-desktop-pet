@@ -227,6 +227,28 @@ test('上下被气泡占用而改到球球右侧时，角色与卡整体留位�
   assertInside(guard, AREA);
 });
 
+test('固定左侧角色后最终组合仍避让气泡，包括左缘平移和仅角色撞气泡', () => {
+  const intersects = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x &&
+    a.y < b.y + b.height && a.y + a.height > b.y;
+  for (const area of [AREA, { x: -1920, y: -180, width: 1920, height: 1080 }]) {
+    for (const size of ['compact', 'standard']) for (const [petX, bubbleX, bubbleWidth] of [[44, 170, 360], [600, 530, 20]]) {
+      const pet = { x: area.x + petX, y: area.y + 400, width: 80, height: 80 };
+      const bubble = { x: area.x + bubbleX, y: area.y + 488, width: bubbleWidth, height: 84 };
+      const baseline = quotaLabelBounds(pet, area, bubble, size);
+      assert.equal(baseline.placement, 'below');
+      assert.equal(intersects(baseline, bubble), false, '普通卡面本身未碰气泡');
+      const guard = quotaLabelBounds(pet, area, bubble, size, false, 1, null, false, true);
+      const face = { x: guard.x + guard.cardInset.x, y: guard.y + guard.cardInset.y,
+        ...quotaLabelSize(size) };
+      assert.equal(guard.guardSide, 'left');
+      assertInside(guard, area);
+      assert.equal(intersects(guard, bubble), false, '最终卡面与角色组合不能因左侧留位而盖住气泡');
+      assert.equal(intersects(face, pet), false, '重新避让不得把卡面放到球球上');
+      assert.equal(guard.placement, 'above');
+    }
+  }
+});
+
 test('候选位置必须完整在屏内且不与气泡相交', () => {
   const pet = { x: 600, y: 400, width: 80, height: 80 };
   const below = { x: 556, y: 488, width: 168, height: 58 };

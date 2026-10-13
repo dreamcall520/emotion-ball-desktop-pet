@@ -83,9 +83,10 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
           '僵尸动画实际可见轮廓固定卡左8DIP，不能只校验透明按钮');
         paintedFrames.push(value.guard.paintedRight); await wait(80);
       }
-      const cursor = { x: bounds.x + geometry.x + 64, y: bounds.y + Math.max(1, geometry.y / 2) };
+      const cursor = { x: bounds.x + 4, y: bounds.y + 1 }; // Transparent corner stays outside the pet's hover target.
       screen.getCursorScreenPoint = () => cursor; sync();
       assert.equal(ignored, true, '透明顶沿初始化穿透');
+      cursor.x = bounds.x + geometry.x + 64; cursor.y = bounds.y + geometry.y + 16;
       card.webContents.sendInputEvent({ type: 'mouseMove', x: Math.round(geometry.x + 64), y: Math.round(geometry.y + 16) });
       await until(() => ignored, value => value === false, '进入可见卡面恢复鼠标命中');
       await pointerClick(card, '#quota-label');
@@ -128,12 +129,14 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
     const a = timerPanel.getBounds(), b = win.getBounds();
     return a.x >= b.x + b.width || a.x + a.width <= b.x || a.y >= b.y + b.height || a.y + a.height <= b.y;
   };
+  const retainedTimerPanel = timerPanel.getBounds();
   await card.webContents.executeJavaScript('window.petQuotaLabel.openGuard()');
   const panel = await until(() => guard.getWindow(), value => guard.isVisible() && value?.isVisible(), '可信入口打开守护战');
   const state = () => panel.webContents.executeJavaScript('window.quotaGuardView?.state');
   await until(state, value => value?.spritesReady && value.ready && value.visible && value.quota === 77, '守护战接收所选真实模型');
   assert.equal(await panel.webContents.executeJavaScript("document.querySelector('#guard-number').textContent"), '77%');
-  await until(() => separated(panel), Boolean, '已打开番茄钟避让后来守护战');
+  await until(() => separated(panel), Boolean, '守护战避让已定位番茄钟');
+  assert.deepEqual(timerPanel.getBounds(), retainedTimerPanel, '打开守护战不移动番茄钟主面板');
   const panelLayout = { pomodoro: timerPanel.getBounds(), guard: panel.getBounds() };
   await capture(panel, 'main-route-panel');
   const shortcutQuota = [];
@@ -190,7 +193,7 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
           assert.equal(result.ok, true, `${result.error || ''} ${JSON.stringify(focusSnapshot('shape-result', quick))}`);
         }
         await until(() => shortcuts.getState().view, value => value === view, `${view} 快捷形态`);
-        await until(() => separated(quick), Boolean, '已打开番茄钟避让快捷面板');
+        assert.deepEqual(timerPanel.getBounds(), panelLayout.pomodoro, '快捷面板切换不得移动已打开的番茄钟主面板');
         assert.equal(guard.isVisible(), false, '主动快捷入口先收起守护战');
         assert.equal(shortcuts.isPresenting(), true, '展开保持呈现 pin');
         await wait(50);
@@ -198,6 +201,7 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
         assert.equal(typeof pausedEntry, 'number', '复用已有角色入口');
         callbacks.onQuota(fixture()); sync(); shortcuts.sync();
         await wait(110);
+        assert.deepEqual(timerPanel.getBounds(), retainedTimerPanel, '额度与快捷刷新不移动番茄钟主面板');
         assert.equal(card.isVisible(), false, '同值额度刷新及窗口同步不能重显原卡');
         // The entry's state.visible denotes available content; the hidden native
         // card hosts both it and the quota. Its stopped clock verifies concealment.
@@ -219,6 +223,7 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
         assert.equal(card.isVisible(), false, '收起动画中刷新仍隐藏额度卡');
         await until(() => card.isVisible(), Boolean, '收起动画结束后原卡恢复');
         assert.equal(shortcuts.isPresenting(), false);
+        assert.deepEqual(timerPanel.getBounds(), retainedTimerPanel, '快捷收起后番茄钟主面板保持位置');
         assert.deepEqual(prematureShows, [], '额度卡只能在收起动画完成后恢复');
         const restored = nativeShows[showCount];
         assert.ok(restored, '记录原卡原生显示调用');

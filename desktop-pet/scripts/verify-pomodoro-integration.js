@@ -249,6 +249,9 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     assert.deepEqual(timerIdentity(service.getSnapshot()), timerBeforeMove, '布局重排不改变计时任务');
     quotaLabel.hide(); pet.setBounds(petBeforeMove, false); panel.setBounds(panelBeforeMove, false); windows.sync();
     result.checks.push('opened-panel-retains-manual-position-through-pet-and-quota-movement');
+    fs.writeFileSync(path.join(output, 'panel-after-move-focus.json'), JSON.stringify({native: panel.isFocused(), document: await page(panel, 'document.hasFocus()'), bounds: panel.getBounds()}, null, 2));
+    require('electron').app.focus({ steal: true }); panel.focus(); panel.webContents.focus();
+    await poll(() => page(panel, 'document.hasFocus()'), Boolean, '恢复移动后面板的原生输入焦点');
     await pointerClick(panel, '#reset');
     await poll(() => !mini.isVisible(), Boolean, '重置回空闲后收起 mini');
     result.checks.push('menu-default-native-bridge');

@@ -83,24 +83,6 @@ function quotaLabelSize(value, expanded = false, itemCount = 1, extraCredits = f
 function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName = 'standard', expanded = false, itemCount = 1,
   presentation = null, extraCredits = false, guardEntry = false) {
   const area = safeArea(workArea);
-  if (guardEntry && !expanded) {
-    // Choose the formal card position first. A transparent role gutter must not
-    // change its spacing or turn a below-card into a side-card at the screen edge.
-    const card = quotaLabelBounds(petBounds, area, obstacleBounds, sizeName, expanded,
-      itemCount, presentation, extraCredits);
-    const requested = quotaLabelSize(sizeName, expanded, itemCount, extraCredits, true);
-    const width = Math.min(requested.width, area.width), height = Math.min(requested.height, area.height);
-    const gutter = Math.max(0, width - card.width), topGutter = Math.max(0, height - card.height);
-    // Keep the role and card together on the same side. Only translate the
-    // complete pair when the left gutter cannot fit on this display.
-    // On the right of the pet the role occupies the original card-to-pet gap;
-    // reserve its gutter there as well, rather than drawing it over the pet.
-    const x = Math.round(clamp(card.x - (card.placement === 'right' ? 0 : gutter),
-      area.x, area.x + area.width - width));
-    const y = Math.round(clamp(card.y - topGutter, area.y, area.y + area.height - height));
-    return { x, y, width, height, placement: card.placement,
-      guardSide: 'left', cardInset: { x: gutter, y: card.y - y } };
-  }
   const nativePet = safePet(petBounds, area);
   const visual = petVisualBounds(nativePet, presentation?.shape, presentation);
   // Rings fit the native host's outer edge while shrinking the body inside it.
@@ -124,7 +106,6 @@ function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName =
 
   const valid = candidates.find(candidate => inside(candidate, size, area) &&
     !overlaps(candidate, size, obstacle));
-  if (valid) return { x: valid.x, y: valid.y, ...size, placement: valid.placement };
 
   const fallbacks = candidates.map(candidate => bounded(candidate, size, area));
   const safe = fallbacks.find(candidate => !overlaps(candidate, size, pet) &&
@@ -137,8 +118,28 @@ function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName =
   ].map(candidate => bounded(candidate, size, area)) : [];
   const aroundObstacleSafe = aroundObstacle.find(candidate =>
     !overlaps(candidate, size, pet) && !overlaps(candidate, size, obstacle));
-  return safe || aroundObstacleSafe ||
+  const card = valid ? { x: valid.x, y: valid.y, ...size, placement: valid.placement } : safe || aroundObstacleSafe ||
     fallbacks.find(candidate => !overlaps(candidate, size, obstacle)) || fallbacks[0];
+  if (!guardEntry || expanded) return card;
+
+  const requested = quotaLabelSize(sizeName, expanded, itemCount, extraCredits, true);
+  const width = Math.min(requested.width, area.width), height = Math.min(requested.height, area.height);
+  const gutter = Math.max(0, width - size.width), topGutter = Math.max(0, height - size.height);
+  const withGuard = candidate => {
+    // Keep the formal card baseline unless its complete left-role pair needs
+    // clamping or a different side to avoid the existing dialogue bubble.
+    const x = Math.round(clamp(candidate.x - (candidate.placement === 'right' ? 0 : gutter),
+      area.x, area.x + area.width - width));
+    const y = Math.round(clamp(candidate.y - topGutter, area.y, area.y + area.height - height));
+    return { x, y, width, height, placement: candidate.placement,
+      guardSide: 'left', cardInset: { x: gutter, y: candidate.y - y } };
+  };
+  const pair = withGuard(card);
+  if (!overlaps(pair, pair, obstacle)) return pair;
+  return [...fallbacks, ...aroundObstacle].map(withGuard).find(candidate =>
+    !overlaps(candidate, candidate, obstacle) && !overlaps({
+      x: candidate.x + candidate.cardInset.x, y: candidate.y + candidate.cardInset.y
+    }, size, pet)) || pair;
 }
 
 module.exports = { GAP, LABEL_SIZES, quotaLabelSize, quotaLabelBounds };
