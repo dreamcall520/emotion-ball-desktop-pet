@@ -20,6 +20,24 @@
   system.addEventListener('change', () => applyTheme(select.value));
   document.addEventListener('visibilitychange', () => root.classList.toggle('motion-paused', document.hidden));
 
+  // Confirmed sales are maintained here; unreported styles stay unlabelled.
+  const styleSales = { '花野派对': 1, '春野拼布': 3, '夕光雾蓝': 5, '橘日咖啡': 1 };
+  const productSales = { 'handle-cup': 1, cup: 1, vest: 1, mousepad: Object.values(styleSales).reduce((sum, count) => sum + count, 0) };
+  const hottestStyle = Math.max(...Object.values(styleSales));
+  const hottestProduct = Math.max(...Object.values(productSales));
+  function renderSales(target, count, hottest) {
+    if (!target) return;
+    target.hidden = !Number.isInteger(count) || count < 0;
+    target.innerHTML = target.hidden ? '' : `<b class="sales-count">已售 ${count} 件</b>${count > 0 && count === hottest ? '<i class="sales-hot"><svg viewBox="0 0 16 20" width="12" height="15" aria-hidden="true" focusable="false"><path fill="currentColor" d="M9 0C10 5 4 6 5 10c-2-1-2-3-2-3C-3 15 2 20 8 20s11-7 5-13c0 3-2 4-2 4C13 6 11 2 9 0Z"/></svg>热度最高</i>' : ''}`;
+  }
+  document.querySelectorAll('[data-product-sales]').forEach(target => renderSales(target, productSales[target.dataset.productSales], hottestProduct));
+  document.querySelectorAll('[data-style-sales]').forEach(target => renderSales(target, styleSales[target.dataset.styleSales], hottestStyle));
+  function updateStyleSales(input) {
+    renderSales(document.querySelector('[data-selected-sales]'), styleSales[input.value], hottestStyle);
+  }
+  const initialStyle = document.querySelector('input[name="style"]:checked');
+  if (initialStyle) updateStyleSales(initialStyle);
+
   const reducedRosterMotion = matchMedia('(prefers-reduced-motion: reduce)');
   document.querySelectorAll('[data-roster]').forEach(group => {
     const viewport = group.querySelector('[data-roster-viewport]');
@@ -126,6 +144,7 @@
     const image = document.querySelector('[data-product-image]');
     image.src = input.dataset.variantImage;
     image.alt = `${document.querySelector('[data-product-title]').textContent} · ${input.value}设计效果图`;
+    updateStyleSales(input);
   }));
   document.querySelectorAll('[data-variant-price]').forEach(input => input.addEventListener('change', () => {
     document.querySelector('[data-product-title]').dataset.productPrice = input.dataset.variantPrice;

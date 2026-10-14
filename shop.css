@@ -17,6 +17,13 @@
 .product-title-link:hover, .product-title-link:focus-visible { color: var(--accent); }
 .card-price .price-currency, .detail-price .price-currency { font-size: .6em; margin: 0 2px 0 0; color: inherit; font-weight: inherit; }
 .detail-price [data-price-value] { font: inherit; color: inherit; margin: 0; }
+.sales-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; color: var(--text-soft); font-size: 12px; line-height: 1.6; }
+.sales-meta[hidden] { display: none; }
+.sales-count { font: inherit; white-space: nowrap; }
+.sales-hot { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 6px; background: rgb(244 130 50 / .13); color: var(--text); font: inherit; font-size: 11px; white-space: nowrap; }
+.sales-hot svg { flex: none; color: #ed762c; }
+.product-info .sales-meta { margin-top: 8px; }
+.detail-sales { margin-top: 8px !important; }
 .shop-list-page main { padding-bottom: 56px; }
 .shop-list-page .c-footer { border-image: linear-gradient(90deg, transparent, var(--line) 20%, var(--line) 80%, transparent) 1; }
 .breadcrumb { margin-top: 32px; }
@@ -66,5 +73,6 @@
 .mousepad-styles .variant-options { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 16px; }
 .mousepad-styles .variant-option span { padding: 6px 6px 10px; text-align: center; line-height: 1.5; }
 .mousepad-styles img { display: block; width: 100%; height: auto; aspect-ratio: 2; border-radius: 7px; margin-bottom: 8px; }
+.mousepad-styles .sales-meta { justify-content: center; margin-top: 6px; }
 @media (max-width: 900px) { .mousepad-styles .variant-options { grid-template-columns: repeat(3,minmax(0,1fr)); } }
 @media (max-width: 767px) { .mousepad-styles .variant-options { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; } }

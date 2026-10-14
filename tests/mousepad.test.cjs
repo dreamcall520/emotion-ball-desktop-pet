@@ -19,25 +19,31 @@ function run(withOptions) {
     addEventListener(event, fn) { this.handlers[event] = fn; }, ...properties });
   const theme = element(), button = element({ dataset: { dialogOpen: 'wechat-dialog' } });
   const product = element({ textContent: withOptions ? '春野定制鼠标垫' : '春野奶白随行杯', dataset: { productPrice: withOptions ? '50' : '66' } });
-  const image = element(), price = element(), inquiry = element(), status = element();
+  const image = element(), price = element(), inquiry = element(), status = element(), sales = element();
   const styleInputs = withOptions ? styles.map(([, value, url]) => element({ value, dataset: { variantImage: url } })) : [];
   const sizeInputs = sizes.map(([, value, amount]) => element({ value, dataset: { variantPrice: amount } }));
   const selected = { style: styleInputs[0], variant: withOptions ? sizeInputs[0] : { value: '260ml' } };
   const dialog = { querySelector: selector => selector === '[data-inquiry]' ? inquiry : status, showModal() {} };
   const document = { documentElement: { dataset: {} }, addEventListener() {},
     getElementById: () => dialog,
-    querySelector: selector => ({ '[data-theme-select]': theme, '[data-product-title]': product, '[data-product-image]': image, '[data-price-value]': price, 'input[name="variant"]:checked': selected.variant, 'input[name="style"]:checked': selected.style })[selector],
+    querySelector: selector => ({ '[data-theme-select]': theme, '[data-product-title]': product, '[data-product-image]': image, '[data-price-value]': price, '[data-selected-sales]': sales, 'input[name="variant"]:checked': selected.variant, 'input[name="style"]:checked': selected.style })[selector],
     querySelectorAll: selector => ({ '[data-dialog-open]': [button], '[data-variant-image]': styleInputs, '[data-variant-price]': withOptions ? sizeInputs : [] })[selector] || []
   };
   vm.runInNewContext(read('community.js'), { document, matchMedia: () => ({ matches: false, addEventListener() {} }), localStorage: { getItem() {} } });
-  return { selected, styleInputs, sizeInputs, button, product, image, price, inquiry };
+  return { selected, styleInputs, sizeInputs, button, product, image, price, inquiry, sales };
 }
 const state = run(true);
+assert.match(state.sales.innerHTML, /已售 3 件/);
+const confirmedSales = { '花野派对': 1, '春野拼布': 3, '夕光雾蓝': 5, '橘日咖啡': 1 };
 for (const style of state.styleInputs) {
   state.selected.style = style;
   style.handlers.change();
   assert.equal(state.image.src, style.dataset.variantImage);
   assert.ok(state.image.alt.includes(style.value));
+  assert.equal(state.sales.hidden, confirmedSales[style.value] === undefined);
+  assert.equal(state.sales.innerHTML.includes('热度最高'), style.value === '夕光雾蓝');
+  if (confirmedSales[style.value] !== undefined) assert.ok(state.sales.innerHTML.includes(`已售 ${confirmedSales[style.value]} 件`));
+  else assert.equal(state.sales.innerHTML, '');
   for (const size of state.sizeInputs) {
     state.selected.variant = size;
     size.handlers.change();
