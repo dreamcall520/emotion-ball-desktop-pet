@@ -22,6 +22,7 @@
 .sales-count { font: inherit; white-space: nowrap; }
 .sales-hot { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 6px; background: rgb(244 130 50 / .13); color: var(--text); font: inherit; font-size: 11px; white-space: nowrap; }
 .sales-hot svg { flex: none; color: #ed762c; }
+.sales-hot-label { font: inherit; }
 .product-info .sales-meta { margin-top: 8px; }
 .detail-sales { margin-top: 8px !important; }
 .shop-list-page main { padding-bottom: 56px; }
@@ -70,9 +71,12 @@
 .product-art.mousepad-cover, .detail-grid .product-art.mousepad-detail { aspect-ratio: 2; }
 .mousepad-styles { margin: 0 0 54px; border: 0; padding: 0; }
 .mousepad-styles legend { margin-bottom: 18px; font-size: 17px; font-weight: 550; }
-.mousepad-styles .variant-options { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 16px; }
-.mousepad-styles .variant-option span { padding: 6px 6px 10px; text-align: center; line-height: 1.5; }
+.mousepad-styles .variant-options { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); grid-auto-rows: 1fr; gap: 16px; }
+.mousepad-styles .variant-option { display: grid; min-width: 0; }
+.mousepad-styles .variant-option > span { position: relative; min-width: 0; padding: 6px 6px 40px; text-align: center; line-height: 1.5; }
 .mousepad-styles img { display: block; width: 100%; height: auto; aspect-ratio: 2; border-radius: 7px; margin-bottom: 8px; }
-.mousepad-styles .sales-meta { justify-content: center; margin-top: 6px; }
+.mousepad-styles .sales-meta { position: absolute; left: 6px; right: 6px; bottom: 10px; height: 24px; justify-content: center; flex-wrap: nowrap; }
+.mousepad-styles .sales-hot { gap: 0; padding: 2px 5px; }
+.mousepad-styles .sales-hot-label { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @media (max-width: 900px) { .mousepad-styles .variant-options { grid-template-columns: repeat(3,minmax(0,1fr)); } }
 @media (max-width: 767px) { .mousepad-styles .variant-options { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; } }
