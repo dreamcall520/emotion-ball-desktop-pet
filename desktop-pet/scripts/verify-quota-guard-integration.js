@@ -449,7 +449,9 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
   const automatic = await state();
   assert.ok(automatic.autoShots > 0 && automatic.hits > 0);
   assert.equal(automatic.playerHits, 0, '自动攻击不计手动命中');
-  await pointerClick(panel, '#guard-qiuqiu');
+  for (let inputs = 0; (await state()).clickShots === 0 && inputs < 6; inputs++) {
+    await pointerClick(panel, '#guard-qiuqiu'); await wait(130);
+  }
   await until(state, value => value.playerHits > 0, '未结束局手动命中');
   await pointerClick(panel, '#guard-pause');
   const unfinished = await state();
