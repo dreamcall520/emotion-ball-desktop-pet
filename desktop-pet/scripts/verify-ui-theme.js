@@ -315,9 +315,12 @@ async function verifyUiTheme({ pet, notes, chat, openWindows, getWindows, getMen
       await pointerClick(chatWin, '#message-input');
       const mouseFocus = await page(chatWin, "({mode:document.documentElement.dataset.inputMode,outline:getComputedStyle(document.querySelector('.composer')).outlineStyle})");
       assert.equal(mouseFocus.mode, 'pointer'); assert.equal(mouseFocus.outline, 'none', '鼠标输入不显示双重焦点框');
+      require('electron').app.focus({ steal: true });
+      chatWin.focus(); chatWin.webContents.focus();
+      await poll(() => page(chatWin, 'document.hasFocus()'), value => chatWin.isFocused() && value, '聊天原生键盘焦点');
       chatWin.webContents.sendInputEvent({type:'keyDown',keyCode:'Tab'});
       chatWin.webContents.sendInputEvent({type:'keyUp',keyCode:'Tab'});
-      const keyboardFocus = await poll(() => page(chatWin, "({mode:document.documentElement.dataset.inputMode,outline:getComputedStyle(document.querySelector('.composer')).outlineStyle,active:document.activeElement.id,focused:document.hasFocus(),within:document.querySelector('.composer').matches(':focus-within')})"), view => view.mode === 'keyboard', '键盘焦点');
+      const keyboardFocus = await poll(() => page(chatWin, "({mode:document.documentElement.dataset.inputMode,outline:getComputedStyle(document.querySelector('.composer')).outlineStyle,active:document.activeElement.id,focused:document.hasFocus(),within:document.querySelector('.composer').matches(':focus-within')})"), view => view.mode === 'keyboard' && view.focused && chatWin.isFocused(), '键盘焦点');
       assert.equal(keyboardFocus.outline, 'solid', '键盘操作仍有清晰焦点: '+JSON.stringify(keyboardFocus));
       await pointerClick(chatWin, '#message-input');
       await page(panelWin, "document.querySelector('.record-more').click()");
