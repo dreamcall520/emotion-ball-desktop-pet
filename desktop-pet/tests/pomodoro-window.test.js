@@ -232,7 +232,7 @@ test('mini renderer只接收上下方向与有界数字偏移，色弱外边框�
   assert.equal(get('mini').dataset.arrow,'bottom');assert.equal(get('mini').style['--mini-arrow-offset'],'50px');
   const css=fs.readFileSync(path.join(__dirname,'../pomodoro.css'),'utf8');
   assert.match(css,/\.mini-entry\[data-arrow=top\]::after\{top:-3px;bottom:auto;transform:rotate\(225deg\)/);
-  assert.match(css,/:root\[data-color-mode=accessible\] \.mini-entry\{border-color:var\(--accessible-divider\)!important\}/);
+  assert.match(css,/:root\[data-color-mode=accessible\] #mini\{border-color:var\(--accessible-divider\)!important\}/);
   assert.match(css,/\.mini-entry::after\{background:var\(--accessible-panel\);border-color:var\(--accessible-divider\)/);
   assert.match(css,/\.entry-label\{[^}]*border-color:var\(--accessible-line\)/,'模式pill保留清晰控件边界');
 });
