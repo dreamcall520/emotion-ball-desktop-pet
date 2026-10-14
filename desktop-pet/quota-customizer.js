@@ -1,6 +1,6 @@
 (function () {
   'use strict';
-  window.QuotaCustomizer = { create({ bridge, getAppearance, getCodexPet, announce }) {
+  window.QuotaCustomizer = { create({ bridge, getAppearance, getCodexPet, announce, onLayoutChange = () => {} }) {
     const $ = id => document.getElementById(id);
     const styles = [
       ['card','经典额度卡','数字与进度一目了然'],['pool','液态额度池','余量化作一池波光'],
@@ -9,7 +9,7 @@
     ];
     let config = QuotaDisplay.normalize(), current = {fiveHour:null,weekly:null}, currentModel = {state:'disconnected',items:[]};
     const demo = {fiveHour:74,weekly:38}, thumbs = [];
-    let source = 'demo', playing = false, lastTick = 0, timer = null, effect = null, disposed = false, shown = false, windowVisible = true, thumbFrame = 0;
+    let source = 'demo', playing = false, lastTick = 0, timer = null, effect = null, disposed = false, shown = false, windowVisible = true, thumbFrame = 0, previewTail = -1;
     const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const numbers = document.createElement('div'); numbers.className = 'quota-preview-numbers quota-preview-card';
     const card = document.createElement('div'); card.className = 'quota-preview-card';
@@ -47,6 +47,13 @@
       effect?.update({config:preview,appearance,quotas:v,theme:stage.classList.contains('dark') !== (document.documentElement.dataset.theme === 'dark')?'dark':'light',reducedMotion:motion.matches,visible});
       numbers.hidden = !visible || preview.style === 'card' || !preview.showNumbers;
       card.hidden = !visible || preview.style !== 'card'; card.dataset.size = preview.cardSize;
+      const labelHeight = preview.style === 'card' ? (preview.cardSize === 'standard' ? 58 : 32) : preview.showNumbers ? 32 : 0;
+      const tail = shown && labelHeight ? labelHeight + 10 : 0;
+      if (tail !== previewTail) {
+        previewTail = tail;
+        stage.style.setProperty('--quota-preview-offset', `${18 - tail / 2}px`);
+        onLayoutChange();
+      }
       numbers.classList.toggle('dark',stage.classList.contains('dark') !== (document.documentElement.dataset.theme === 'dark'));
       card.classList.toggle('dark',numbers.classList.contains('dark'));
       drawNumbers(numbers, preview, v, model); drawNumbers(card, preview, v, model);
@@ -131,6 +138,7 @@
     const visibility=()=>{if(document.hidden||!windowVisible){stop();cancelAnimationFrame(thumbFrame);thumbFrame=0;thumbs.forEach(t=>t.avatar.setActive(false));}refresh();renderThumbnails();};document.addEventListener('visibilitychange',visibility);
     return {
       getConfig:()=>QuotaDisplay.normalize({...config,period:'both'}),
+      fitPreview(pixels){return shown ? Math.max(1, Math.floor(Math.min(pixels,stage.clientWidth-32,stage.clientHeight-previewTail-68))) : pixels;},
       load(value,model){config=QuotaDisplay.normalize(value);currentModel=model;current=QuotaDisplay.values(model);refresh();renderThumbnails();},
       refresh,
       setWindowVisible(value){windowVisible=value;visibility();},

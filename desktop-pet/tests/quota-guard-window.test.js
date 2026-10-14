@@ -56,7 +56,7 @@ function fixture({ getObstacles = () => [] } = {}) {
     set allowed(value) { allowed = value; }, set size(value) { size = value; }, set appearance(value) { appearance = value; } };
 }
 
-test('左侧角色仅扩原生承载区域，保持卡面尺寸及横向中心，展开尺寸不变', () => {
+test('右侧角色仅扩原生承载区域，保持卡面尺寸及横向中心，展开尺寸不变', () => {
   for (const [size, cardWidth, cardHeight, width, height] of [['compact', 128, 32, 200, 50], ['standard', 168, 58, 240, 64]]) {
     assert.deepEqual(quotaLabelSize(size, false, 1, false, true), { width, height });
     const pet = { x: 600, y: 300, width: 80, height: 80 };
@@ -71,7 +71,9 @@ test('左侧角色仅扩原生承载区域，保持卡面尺寸及横向中心�
 test('80/180/260px 球体和云轮廓保持正式卡面位置，透明角色留白不再推远可见卡', () => {
   for (const area of [AREA, { x: -1920, y: -180, width: 1920, height: 1080 }]) {
     for (const width of [80, 180, 260]) for (const size of ['compact', 'standard']) for (const shape of ['sphere', 'aurora-cloud']) {
-      for (const [x, y] of [[area.x + 500, area.y + 240], [area.x, area.y], [area.x + area.width - width, area.y + area.height - width]]) {
+      for (const [x, y] of [[area.x + 500, area.y + 240],
+        ...[0, (area.width - width) / 2, area.width - width].flatMap(x =>
+          [0, (area.height - width) / 2, area.height - width].map(y => [area.x + x, area.y + y]))]) {
         const pet = { x, y, width, height: width }, presentation = { shape, mode: 'free' };
         const result = quotaLabelBounds(pet, area, null, size, false, 1, presentation, false, true);
         assert(result.x >= area.x && result.x + result.width <= area.x + area.width);
@@ -79,11 +81,14 @@ test('80/180/260px 球体和云轮廓保持正式卡面位置，透明角色留�
         const baseline = quotaLabelBounds(pet, area, null, size, false, 1, presentation);
         const face = { x: result.x + result.cardInset.x, y: result.y + result.cardInset.y,
           width: baseline.width, height: baseline.height };
-        assert.deepEqual(face, { x: Math.max(area.x + 72, baseline.x + (baseline.placement === 'right' ? 72 : 0)),
+        assert.deepEqual(face, { x: Math.min(area.x + area.width - result.width, baseline.x - (baseline.placement === 'left' ? 72 : 0)),
           y: baseline.y, width: baseline.width, height: baseline.height });
-        assert.equal(result.guardSide, 'left');
+        assert.equal(result.guardSide, 'right');
         assert.equal(result.placement, baseline.placement);
         assert.equal(intersects(face, petVisualBounds(pet, shape, presentation)), false, JSON.stringify({ result, pet, shape, size }));
+        const role = { x: face.x + face.width + 8, y: face.y, width: 50, height: face.height };
+        assert.equal(intersects(role, petVisualBounds(pet, shape, presentation)), false,
+          '四边与四角的右侧角色不能因整体clamp而覆盖球球');
       }
     }
   }

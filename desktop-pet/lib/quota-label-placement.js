@@ -126,20 +126,23 @@ function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName =
   const width = Math.min(requested.width, area.width), height = Math.min(requested.height, area.height);
   const gutter = Math.max(0, width - size.width), topGutter = Math.max(0, height - size.height);
   const withGuard = candidate => {
-    // Keep the formal card baseline unless its complete left-role pair needs
+    // Keep the formal card baseline unless its complete right-role pair needs
     // clamping or a different side to avoid the existing dialogue bubble.
-    const x = Math.round(clamp(candidate.x - (candidate.placement === 'right' ? 0 : gutter),
+    const x = Math.round(clamp(candidate.x - (candidate.placement === 'left' ? gutter : 0),
       area.x, area.x + area.width - width));
     const y = Math.round(clamp(candidate.y - topGutter, area.y, area.y + area.height - height));
     return { x, y, width, height, placement: candidate.placement,
-      guardSide: 'left', cardInset: { x: gutter, y: candidate.y - y } };
+      guardSide: 'right', cardInset: { x: 0, y: candidate.y - y } };
   };
   const pair = withGuard(card);
-  if (!overlaps(pair, pair, obstacle)) return pair;
-  return [...fallbacks, ...aroundObstacle].map(withGuard).find(candidate =>
-    !overlaps(candidate, candidate, obstacle) && !overlaps({
-      x: candidate.x + candidate.cardInset.x, y: candidate.y + candidate.cardInset.y
-    }, size, pet)) || pair;
+  const clear = candidate => {
+    // The compact zombie reaches 1 DIP above the face; the remaining native top gutter is transparent.
+    const top = sizeName === 'compact' ? 1 : 0;
+    const visualPair = { ...candidate, y: candidate.y + candidate.cardInset.y - top, height: size.height + top };
+    return !overlaps(candidate, candidate, obstacle) && !overlaps(visualPair, visualPair, pet);
+  };
+  if (clear(pair)) return pair;
+  return [...fallbacks, ...aroundObstacle].map(withGuard).find(clear) || pair;
 }
 
 module.exports = { GAP, LABEL_SIZES, quotaLabelSize, quotaLabelBounds };

@@ -5,6 +5,8 @@
 @media(max-width:900px){.quota-style{gap:7px;padding:16px 8px}.quota-style strong{font-size:12px}.quota-style small{font-size:9px}.quota-thumb{width:50px}.quota-thumb-body{width:48px;height:48px}.source-switch{gap:20px}}
 .quota-source .preview-foot,.quota-source .preview-note,.quota-source .preview-animation{display:none}
 .quota-source .stage{min-height:160px}
+.quota-source #preview-ball{transform:translateY(var(--quota-preview-offset,0px))}
+.quota-preview-numbers,.quota-preview-card{top:calc(50% + var(--quota-preview-radius,103px) + 10px + var(--quota-preview-offset,0px))}
 .quota-preview-numbers span:before,.quota-preview-numbers span[data-period=weekly]:before{background:var(--quota-dot,#53b5e6)}
 .quota-preview-numbers.dark strong{color:#d8e5ef}
 .quota-preview-numbers:not(.dark) strong{color:#344654}

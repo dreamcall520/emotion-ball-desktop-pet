@@ -71,17 +71,18 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
         return {x:face.x,y:face.y,width:face.width,height:face.height,side:document.body.dataset.guardSide};
       })()`), value => value.width === 128 && value.height === 32, '原生卡面布局');
       const bounds = card.getBounds();
-      assert.equal(bounds.x + geometry.x, Math.max(area.x + 72, baseline.x + (baseline.placement === 'right' ? 72 : 0)),
-        '可见卡 x 保持线上基线，左屏缘不足只整体最小平移');
+      assert.equal(bounds.x + geometry.x, Math.min(area.x + area.width - bounds.width,
+        baseline.x - (baseline.placement === 'left' ? 72 : 0)),
+        '可见卡 x 保持线上基线，右屏缘不足只整体最小平移');
       assert.equal(bounds.y + geometry.y, baseline.y, '可见卡 y 与线上卡面基线一致');
-      assert.equal(geometry.side, 'left', '角色在所有位置均固定卡左');
+      assert.equal(geometry.side, 'right', '角色在所有位置均固定卡右');
       const paintedFrames = [];
       for (let frame = 0; frame < 4; frame++) {
         const value = await readQuotaLabelGeometry(card);
         assert.equal(value.guard.role, 'roaming');
-        assert.ok(Number.isFinite(value.guard.paintedRight) && Math.abs(value.beam.x - value.guard.paintedRight - 8) < .01,
-          '僵尸动画实际可见轮廓固定卡左8DIP，不能只校验透明按钮');
-        paintedFrames.push(value.guard.paintedRight); await wait(80);
+        assert.ok(Number.isFinite(value.guard.paintedLeft) && Math.abs(value.guard.paintedLeft - value.beam.x - value.beam.width - 8) < .01,
+          '僵尸动画实际可见轮廓固定卡右8DIP，不能只校验透明按钮');
+        paintedFrames.push(value.guard.paintedLeft); await wait(80);
       }
       const cursor = { x: bounds.x + 4, y: bounds.y + 1 }; // Transparent corner stays outside the pet's hover target.
       screen.getCursorScreenPoint = () => cursor; sync();
@@ -116,7 +117,7 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
   await until(() => card.webContents.executeJavaScript('window.quotaGuardEntry?.state'),
     value => value?.role === 'empty' && value.visible, '截图同场景标准卡0%角色');
   const standardFace = await card.webContents.executeJavaScript(`(() => {const r=document.getElementById('quota-label').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,side:document.body.dataset.guardSide};})()`);
-  assert.deepEqual(standardFace, { x: 72, y: 6, width: 168, height: 58, side: 'left' }, '角色固定卡左，仅增加卡面本地偏移，不改标准卡尺寸和垂直间距');
+  assert.deepEqual(standardFace, { x: 0, y: 6, width: 168, height: 58, side: 'right' }, '角色固定卡右，不改标准卡尺寸和垂直间距');
   await capture(card, 'main-route-standard-exhausted');
   settings.codexQuotaLabelSize = 'compact'; callbacks.onQuota(fixture()); sync();
   await until(() => card.webContents.executeJavaScript('window.quotaGuardEntry?.state'),
@@ -448,6 +449,21 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
   const automatic = await state();
   assert.ok(automatic.autoShots > 0 && automatic.hits > 0);
   assert.equal(automatic.playerHits, 0, '自动攻击不计手动命中');
+  await pointerClick(panel, '#guard-qiuqiu');
+  await until(state, value => value.playerHits > 0, '未结束局手动命中');
+  await pointerClick(panel, '#guard-pause');
+  const unfinished = await state();
+  assert.equal(unfinished.paused, true); assert.equal(unfinished.outcome, null);
+  await panel.webContents.executeJavaScript('window.petQuotaGuard.close()');
+  await until(state, value => !value.visible, '未结束局可信关闭');
+  await wait(220); assert.equal((await state()).time, unfinished.time, '未结束局关闭停钟');
+  await until(() => card.isVisible(), Boolean, '未结束局关闭后原卡恢复');
+  await card.webContents.executeJavaScript('window.petQuotaLabel.openGuard()');
+  const continued = await until(state, value => guard.isVisible() && value.visible, '未结束局重开');
+  for (const key of ['round', 'time', 'playerHits', 'outcome', 'paused', 'quota', 'period']) {
+    assert.equal(continued[key], unfinished[key], '未结束局重开保留' + key);
+  }
+  await pointerClick(panel, '#guard-pause');
   await pointerClick(panel, '#guard-restart');
   for (let inputs = 0; (await state()).playerHits < 30 && inputs < 90; inputs++) {
     const previous = await state();
@@ -462,17 +478,21 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
   await until(state, value => value.endingProgress === 1, '胜利动画完成');
   assert.equal(await panel.webContents.executeJavaScript("getComputedStyle(document.querySelector('#guard-grave')).opacity"), '1');
   await capture(panel, 'main-route-victory');
+  callbacks.onQuota(fixture()); await wait(150);
+  assert.equal((await state()).round, won.round, '胜局可见时同值刷新不自动重开');
+  assert.equal((await state()).outcome, 'qiuqiu');
   await panel.webContents.executeJavaScript('window.petQuotaGuard.close()');
   await until(() => guard.isVisible(), value => !value, '可信关闭');
   const closed = await state(); await wait(220);
   assert.equal((await state()).time, closed.time, '关闭时游戏时钟冻结');
   await until(() => card.isVisible(), Boolean, '关闭后原卡恢复');
   await card.webContents.executeJavaScript('window.petQuotaLabel.openGuard()');
-  await until(() => guard.isVisible(), Boolean, '重开');
+  const reopened = await until(state, value => guard.isVisible() && value.visible && value.round === closed.round + 1 &&
+    value.outcome === null && value.playerHits === 0, '已结束局重开自动开始新局');
   assert.equal(guard.getWindow(), panel, '重用同一窗口');
-  assert.equal((await state()).round, closed.round, '重开继续同局');
+  assert.equal(reopened.quota, 77); assert.equal(reopened.period, 300); assert.equal(reopened.paused, false);
   setPreference('codexQuotaPeriod', 'weekly');
-  await until(state, value => value.quota === 62 && value.period === 10080 && value.round > closed.round, '原菜单切周期同步');
+  await until(state, value => value.quota === 62 && value.period === 10080 && value.round > reopened.round, '原菜单切周期同步');
   setPreference('codexQuotaAlwaysVisible', false);
   await until(() => guard.isVisible(), value => !value, '原卡关闭同步隐藏游戏');
   setPreference('codexQuotaAlwaysVisible', true); sync();
@@ -492,14 +512,14 @@ async function verifyQuotaGuardIntegration({ pet, label, guard, prepare, getComp
   getSettings().codexEnabled = false;
   await getCompanion().setEnabled(false); sync();
   if (directory) fs.writeFileSync(path.join(directory, 'integration-checks.json'), JSON.stringify({
-    ok: true, crossPanelSwitch: Boolean(shortcuts), shortcutQuota, numericChecks, panelLayout, automatic, won,
+    ok: true, crossPanelSwitch: Boolean(shortcuts), shortcutQuota, numericChecks, panelLayout, automatic, unfinished, continued, won, reopened,
     checks: ['trusted-entry-and-selected-quota', 'shortcut-hover-suppression-and-explicit-switch',
       'shortcut-floating-list-settings-hide-quota-and-role', 'quota-refresh-does-not-reveal-during-shortcuts',
       'shortcut-close-180ms-keeps-quota-hidden', 'shortcut-close-preserves-user-disabled-quota',
       'numeric-quota-fun-toggle-saves-pauses-and-keeps-round', 'ring-shortcut-hide-restore-preserves-number-preference',
       'same-value-refresh-keeps-round', 'foreign-close-rejected', 'always-on-top',
       'automatic-hits-do-not-score', '30-manual-hits-and-victory-animation',
-      'close-freezes-and-reopen-keeps-round', 'period-switch-resets-round',
+      'unfinished-close-freezes-and-reopen-keeps-round', 'completed-close-reopen-starts-new-round', 'period-switch-resets-round',
       'quota-disable-and-pet-hide', 'lock-screen-closes', 'real-quota-unchanged']
   }, null, 2) + '\n');
   process.stdout.write('PET_QUOTA_GUARD_INTEGRATION_OK\n');

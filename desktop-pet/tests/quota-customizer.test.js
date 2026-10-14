@@ -6,7 +6,7 @@ const vm = require('node:vm');
 
 test('额度预览跟随实际周期，零与未知分开，双样式保存选择不受单周期影响', () => {
   const node = () => {
-    const value = { children: [], dataset: {}, style: { setProperty() {} }, listeners: {}, className: '', _text: '',
+    const value = { children: [], dataset: {}, style: { setProperty(name, value) { this[name] = value; } }, listeners: {}, className: '', _text: '',
       set textContent(text) { this._text = text; this.children = []; },
       get textContent() { return this.children.length ? this.children.map(child => child.textContent).join('') : this._text; },
       append(...children) { this.children.push(...children); }, replaceChildren(...children) { this._text = ''; this.children = children; },
@@ -31,7 +31,7 @@ test('额度预览跟随实际周期，零与未知分开，双样式保存选�
       return selector === '[data-quota-material]' ? materials : selector === '[data-quota-source]' ? sources
         : presets.filter(preset => selector === `[data-demo-period="${preset.dataset.demoPeriod}"]`);
     } };
-  let receive, effectInput, reduce, avatars = 0, avatarDestroys = 0, avatarDescriptor, clock = 0, intervalId = 0;
+  let receive, effectInput, reduce, avatars = 0, avatarDestroys = 0, avatarDescriptor, clock = 0, intervalId = 0, layouts = 0;
   const intervals = new Map(), avatarStates = [];
   let appearance = { shape: 'blob', bodyColor: '#EEEBE4' };
   const descriptor = { id: 'check-pet', imageURL: 'file:///check.png' };
@@ -44,7 +44,8 @@ test('额度预览跟随实际周期，零与未知分开，双样式保存选�
     clearInterval: id => intervals.delete(id), setInterval: callback => { intervals.set(++intervalId, callback); return intervalId; }, performance: { now: () => clock }
   });
   const ui = window.QuotaCustomizer.create({ bridge: { onQuota(callback) { receive = callback; return () => {}; } },
-    getAppearance: () => appearance, getCodexPet: () => appearance.shape === 'codex-pet' ? descriptor : undefined });
+    getAppearance: () => appearance, getCodexPet: () => appearance.shape === 'codex-pet' ? descriptor : undefined,
+    onLayoutChange: () => layouts++ });
   const weekly = { state: 'ready', items: [{ windowMinutes: 10080, remaining: 38 }] };
   assert.equal(ui.getConfig().showNumbers, true, '新用户默认显示数字');
   ui.load({ style: 'ring', period: 'fiveHour' }, weekly);
@@ -120,5 +121,40 @@ test('额度预览跟随实际周期，零与未知分开，双样式保存选�
   assert.equal(effectInput.config.style, 'card'); assert.equal(ui.getConfig().style, 'pool', '保留切回球球的液态池偏好');
   appearance = { shape: 'blob', bodyColor: '#EEEBE4' }; ui.appearanceChanged();
   assert.equal(poolButton.disabled, false); assert.equal(effectInput.config.style, 'pool');
+  for (const shape of ['blob','codex-pet']) for (const style of ['card','pool','ring','duo','split','stages']) {
+    appearance = { shape };
+    for (const cardSize of ['compact','standard']) for (const showNumbers of [false,true]) {
+      ui.load({ style,cardSize,showNumbers },weekly);
+      const effectiveStyle = shape === 'codex-pet' && style === 'pool' ? 'card' : style;
+      const height = effectiveStyle === 'card' ? (cardSize === 'standard' ? 58 : 32) : showNumbers ? 32 : 0;
+      for (const [width,stageHeight] of [[260,160],[300,240],[450,400]]) {
+        get('stage').clientWidth = width; get('stage').clientHeight = stageHeight;
+        for (const requested of [80,205,260,300]) {
+          const pixels = ui.fitPreview(requested), offset = parseFloat(get('stage').style['--quota-preview-offset']);
+          const top = stageHeight / 2 + offset - pixels / 2;
+          const bottom = stageHeight / 2 + offset + pixels / 2 + (height ? 10 + height : 0);
+          assert.ok(pixels > 0 && pixels <= requested && (width-pixels)/2 >= 16 && top >= 52 && bottom <= stageHeight-16,
+            JSON.stringify({shape,style,cardSize,showNumbers,width,stageHeight,requested,pixels,top,bottom}));
+        }
+      }
+      assert.equal(ui.getConfig().style,style,'预览缩放不修改用户选择');
+    }
+  }
+  const stableLayouts = layouts; ui.refresh(); ui.refresh();
+  assert.equal(layouts,stableLayouts,'相同包络的额度刷新不得触发头像重建');
+  ui.show(false); assert.equal(ui.fitPreview(260),260,'离开额度页保留桌面实际尺寸预览');
   ui.destroy();
+});
+
+test('原生预览检查拒绝越界数字卡、隐藏卡和未绘制形象', async () => {
+  const { assertQuotaPreviewBounds } = require('../scripts/verify-quota-display');
+  const label = {left:26,right:154,top:160,bottom:192};
+  const layout = {stage:{left:0,top:0,right:200,bottom:220},ball:{left:50,right:150,top:50,bottom:150},
+    ready:true,expectedLabels:1,labels:[label]};
+  const win = {isVisible:()=>true,webContents:{executeJavaScript:async()=>layout}};
+  await assertQuotaPreviewBounds(win);
+  label.bottom=221;await assert.rejects(assertQuotaPreviewBounds(win),/完整保留在预览框/);label.bottom=192;
+  layout.labels=[];await assert.rejects(assertQuotaPreviewBounds(win),/不能隐藏越界卡/);layout.labels=[label];
+  layout.ready=false;await assert.rejects(assertQuotaPreviewBounds(win),/实际绘制完成/);layout.ready=true;
+  label.top=149;await assert.rejects(assertQuotaPreviewBounds(win),/10px预览间隔/);
 });

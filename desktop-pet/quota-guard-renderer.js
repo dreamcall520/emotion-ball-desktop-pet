@@ -26,7 +26,7 @@
 
   class GuardGame {
     constructor() {
-      this.available = false; this.visible = true; this.paused = false; this.reduced = false;
+      this.available = false; this.visible = true; this.modelVisible = true; this.paused = false; this.reduced = false;
       this.signature = ''; this.quota = null; this.period = null; this.round = 0;
       this.time = 0; this.flight = []; this.effects = []; this.outcome = null;
       this.playerHits = this.hits = this.clickShots = this.autoShots = this.shots = 0;
@@ -39,10 +39,15 @@
     get endingProgress() { return this.reduced ? 1 : clamp((this.time - this.endingAt) / END_DURATION, 0, 1); }
     get animating() { return this.active && (!this.ended || this.endingProgress < 1 || Math.abs(this.bite - this.desiredBite) > .001); }
     setModel(value) {
-      const item = primary(value); this.available = Boolean(item); this.visible = value?.visible !== false;
+      const item = primary(value), reopened = this.modelVisible === false && value?.visible !== false;
+      this.available = Boolean(item); this.visible = this.modelVisible = value?.visible !== false;
       if (item) {
         const signature = `${item.windowMinutes}:${item.remaining}`;
-        if (signature !== this.signature) { this.signature = signature; this.quota = item.remaining; this.period = item.windowMinutes; this.reset(); }
+        const restart = reopened && this.ended && item.remaining > 0;
+        if (signature !== this.signature || restart) {
+          if (restart) this.paused = false;
+          this.signature = signature; this.quota = item.remaining; this.period = item.windowMinutes; this.reset();
+        }
       }
     }
     reset() {
@@ -134,21 +139,21 @@
     if (destroyed) { for (const seq of Object.values(result)) for (const frame of seq.frames) frame.bitmap.close(); return null; }
     return result;
   }
-  function drawSprite(canvas, mode, time, alignRight = false) {
+  function drawSprite(canvas, mode, time, alignLeft = false) {
     const seq = sprites[mode], local = time % seq.duration, frame = seq.frames.find(frame => local < frame.at + frame.duration) || seq.frames[0];
     const context = canvas.getContext('2d'); context.clearRect(0, 0, 87, 124); context.drawImage(frame.bitmap, 63, 20, 87, 124, 0, 0, 87, 124);
-    if (alignRight) {
-      if (frame.rightOffset === undefined) {
+    if (alignLeft) {
+      if (frame.leftOffset === undefined) {
         const pixels = context.getImageData(0, 0, 87, 124).data;
-        let right = -1;
-        for (let x = 86; x >= 0 && right < 0; x--) for (let y = 0; y < 124; y++) {
-          if (pixels[(y * 87 + x) * 4 + 3] > 0) { right = x; break; }
+        let left = -1;
+        for (let x = 0; x < 87 && left < 0; x++) for (let y = 0; y < 124; y++) {
+          if (pixels[(y * 87 + x) * 4 + 3] > 0) { left = x; break; }
         }
-        frame.rightOffset = right < 0 ? 0 : 86 - right;
+        frame.leftOffset = left < 0 ? 0 : -left;
       }
-      if (frame.rightOffset) {
+      if (frame.leftOffset) {
         context.clearRect(0, 0, 87, 124);
-        context.drawImage(frame.bitmap, 63, 20, 87, 124, frame.rightOffset, 0, 87, 124);
+        context.drawImage(frame.bitmap, 63, 20, 87, 124, frame.leftOffset, 0, 87, 124);
       }
     }
   }
@@ -194,7 +199,7 @@
     function frame(now) { raf = 0; if (!moving()) return; time += last ? clamp(now - last, 0, 64) : 16; last = now; draw(); raf = requestAnimationFrame(frame); }
     function wake() { cancelAnimationFrame(raf); raf = 0; last = 0; draw(); if (moving()) raf = requestAnimationFrame(frame); }
     cleanup.push(bridge.onModel(value => { model = value; doc.body.dataset.guardEntry = String(visible()); doc.body.dataset.guardSize = value?.size === 'compact' ? 'compact' : 'standard';
-      doc.body.dataset.guardSide = 'left';
+      doc.body.dataset.guardSide = 'right';
       doc.body.style.setProperty('--quota-card-left', `${value?.cardInset?.x || 0}px`);
       doc.body.style.setProperty('--quota-card-top', `${value?.cardInset?.y ?? (value?.size === 'compact' ? 18 : 6)}px`);
       button.hidden = !visible(); button.disabled = !sprites; wake(); }));

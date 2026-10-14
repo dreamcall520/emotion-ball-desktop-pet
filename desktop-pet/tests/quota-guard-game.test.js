@@ -14,6 +14,31 @@ test('真实主周期与额度变更重开，同值刷新、尺寸/主题、隐�
   game.setModel(model(63, 10080)); assert.equal(game.quota, 63); assert.equal(game.round, first.round + 2);
 });
 
+test('已结束对局仅原生关闭后重开自动开始，同值刷新和DOM显隐不重开；未结束暂停局继续保留', () => {
+  for (const outcome of ['qiuqiu', 'zombie']) {
+    const game = new GuardGame(), source = model(), original = JSON.stringify(source);
+    game.setModel(source); game.shoot(); elapse(game, 400); game.finish(outcome); game.paused = true;
+    const ended = game.snapshot();
+    game.setModel(model(64, 300, { appearance: 'dark' }));
+    assert.equal(game.round, ended.round); assert.equal(game.outcome, outcome);
+    game.visible = false; game.setModel(source);
+    assert.equal(game.round, ended.round, '仅DOM显隐变化不当成原生关闭重开');
+    game.setModel(model(64, 300, { visible: false })); elapse(game, 10000);
+    assert.equal(game.time, ended.time); assert.equal(game.outcome, outcome);
+    game.setModel(model(64, 300, { visible: false })); game.setModel(source);
+    assert.equal(game.round, ended.round + 1); assert.equal(game.time, 0);
+    assert.equal(game.outcome, null); assert.equal(game.playerHits, 0); assert.equal(game.flight.length, 0);
+    assert.equal(game.paused, false); assert.equal(game.quota, 64); assert.equal(JSON.stringify(source), original);
+    game.setModel(source); assert.equal(game.round, ended.round + 1, '重开后的重复模型不能再开一局');
+  }
+  const paused = new GuardGame(); paused.setModel(model()); paused.shoot(); elapse(paused, 400); paused.paused = true;
+  const before = paused.snapshot(); paused.setModel(model(64, 300, { visible: false })); paused.setModel(model());
+  assert.deepEqual(paused.snapshot(), before, '未结束局的原生关闭重开保持进度和暂停偏好');
+  const empty = new GuardGame(); empty.setModel(model(0)); const round = empty.round;
+  empty.setModel(model(0, 300, { visible: false })); empty.setModel(model(0));
+  assert.equal(empty.round, round); assert.equal(empty.quota, 0); assert.equal(empty.outcome, 'zombie');
+});
+
 test('暂停、减少动态和非ready数据冻结时钟、弹丸及胜负；未知不转成零，0初始半球败局', () => {
   const game = new GuardGame(); game.setModel(model()); game.shoot(); game.step(16);
   for (const state of ['paused', 'reduced']) {

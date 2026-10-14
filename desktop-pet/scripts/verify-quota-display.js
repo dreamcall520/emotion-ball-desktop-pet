@@ -3,6 +3,28 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { setTimeout: wait } = require('node:timers/promises');
 
+async function assertQuotaPreviewBounds(win) {
+  assert.equal(win.isVisible(),true,'预览验收对象必须原生可见');
+  const layout = await win.webContents.executeJavaScript(`(() => {
+    const box = node => node.getBoundingClientRect().toJSON(), target = document.getElementById('preview-ball');
+    const style = document.querySelector('#quota-styles [aria-pressed=true]').dataset.style;
+    const shape = target.dataset.renderedAppearance ? JSON.parse(target.dataset.renderedAppearance).shape : null;
+    const expectsCard = style === 'card' || shape === 'codex-pet' && style === 'pool';
+    return { stage:box(document.getElementById('stage')), ball:box(target), mode:document.getElementById('stage').dataset.previewMode,
+      style,shape,ready:Boolean(target.dataset.renderedAppearance),
+      expectedLabels:expectsCard || document.getElementById('quota-numbers').checked ? 1 : 0,
+      labels:[...document.querySelectorAll('.quota-preview-numbers,.quota-preview-card')].filter(node =>
+        !node.hidden && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden').map(box) };
+  })()`);
+  assert.equal(layout.ready,true,'预览实际绘制完成，不能拿空形象验证布局');
+  assert.equal(layout.labels.length,layout.expectedLabels,'数字/经典卡按用户开关真实显示，不能隐藏越界卡');
+  for (const box of [layout.ball,...layout.labels]) assert.ok(box.left >= layout.stage.left+12 && box.right <= layout.stage.right-12 &&
+    box.top >= layout.stage.top+12 && box.bottom <= layout.stage.bottom-12,
+  '形象和额度卡完整保留在预览框内并留边距：'+JSON.stringify(layout));
+  for (const label of layout.labels) assert.ok(label.top-layout.ball.bottom >= 9.5,'额度卡与形象保持10px预览间隔');
+  return layout;
+}
+
 async function verifyQuotaDisplay({ pet, open, settingsFile, powerMonitor, sendModel, about, showNumbers, previewSavedQuota, requestConsent, getConsentWindow }) {
   const out = process.env.PET_QUOTA_VERIFY_OUTPUT;
   if (out) fs.mkdirSync(out, { recursive: true });
@@ -132,12 +154,23 @@ async function verifyQuotaDisplay({ pet, open, settingsFile, powerMonitor, sendM
   await js(`document.getElementById('source-ball').click();const n=document.getElementById('body-hex');n.value='#NOPE';n.dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('source-quota').click();document.querySelector('button[data-style="ring"]').click();document.getElementById('save').click();true`);
   await wait(100);assert.deepEqual(JSON.parse(fs.readFileSync(settingsFile,'utf8')).quotaDisplay,quotaConfig,'无效外观不能部分保存额度');
   await js(`document.getElementById('source-ball').click();document.getElementById('reset-appearance').click();document.getElementById('source-quota').click();true`);
+  const previewLayouts = [];
   for (const [width,height] of [[960,700],[760,580],[1180,820]]) {
     editor.setContentSize(width,height);await wait(160);
     const layout=await js(`(()=>{const s=document.getElementById('save').getBoundingClientRect(),p=document.querySelector('.preview-pane').getBoundingClientRect(),d=document.getElementById('quota-demo-tools').getBoundingClientRect();return {width:innerWidth,height:innerHeight,scroll:document.documentElement.scrollWidth,save:s.top>=0&&s.bottom<=innerHeight,preview:d.bottom<=p.bottom+1};})()`);
     assert.ok(layout.scroll<=layout.width&&layout.save&&layout.preview,JSON.stringify(layout));
+    for (const style of ['card','pool','ring','duo','split','stages']) for (const mode of ['large','desktop']) {
+      await js(`document.querySelector('button[data-style="${style}"]').click();document.getElementById('preview-${mode}').click();true`);
+      for (const cardSize of style === 'card' ? ['compact','standard'] : ['compact']) for (const showNumbers of [false,true]) {
+        await js(`(() => {const size=document.getElementById('quota-card-size');size.value='${cardSize}';size.dispatchEvent(new Event('change'));
+          const numbers=document.getElementById('quota-numbers');if(numbers.checked!==${showNumbers})numbers.click();})()`);
+        await until(()=>js('Boolean(document.getElementById("preview-ball").dataset.renderedAppearance)'));
+        previewLayouts.push(await assertQuotaPreviewBounds(editor));
+      }
+    }
     if(out&&width===760)await capture(editor, 'settings-small.png');
   }
+  if(out)fs.writeFileSync(path.join(out,'quota-preview-envelopes.json'),JSON.stringify(previewLayouts,null,2));
   for(const state of ['ready','stale']){
     const label=showNumbers({state,items:[{label:'Codex',windowMinutes:300,remaining:0},{label:'Codex',windowMinutes:10080,remaining:38}],display:'numbers',numberPeriods:['fiveHour','weekly'],numberColors:saved.customization.appearance});
     await until(()=>label.webContents.executeJavaScript('document.querySelectorAll(".quota-reading-value").length===2'));
@@ -214,4 +247,4 @@ async function verifyQuotaDisplay({ pet, open, settingsFile, powerMonitor, sendM
   assert.deepEqual(errors,[],'浏览器控制台错误');
   process.stdout.write('PET_QUOTA_DISPLAY_OK\n');
 }
-module.exports={verifyQuotaDisplay};
+module.exports={verifyQuotaDisplay,assertQuotaPreviewBounds};

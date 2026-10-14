@@ -7,6 +7,7 @@ const { SIZES } = require('../lib/window-placement');
 const { ACTIONS } = require('../lib/codex-pet-player');
 const { capturePaintedWindow } = require('./verify-codex-companion');
 const { pointerClick } = require('./verify-chat-integration');
+const { assertQuotaPreviewBounds } = require('./verify-quota-display');
 const { textStyles, contrast } = require('./verify-ui-theme');
 
 const digest = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -399,7 +400,15 @@ async function verifyCodexPets({ pet, customize, openCustomization, openChat, ge
         return {ready:sprite?.dataset.codexReady,width:sprite?.width,height:sprite?.height};
       })()`), value => value.ready === 'ready', style + '缩略图实际精灵');
       assert.deepEqual([thumbnail.width, thumbnail.height], [192, 208]);
-      quotaChecks.push({ style, candidate, thumbnail });
+      const previews = [];
+      for (const mode of ['large','desktop']) for (const showNumbers of [false,true]) {
+        await click('#preview-'+mode);
+        await page(`(() => {const numbers=document.getElementById('quota-numbers');if(numbers.checked!==${showNumbers})numbers.click();})()`);
+        await readyPreview(activeId);
+        await waitFor(()=>page('Boolean(document.getElementById("preview-ball").dataset.renderedAppearance)'),Boolean,'当前精灵与额度包络完成重排');
+        previews.push(await assertQuotaPreviewBounds(customize));
+      }
+      quotaChecks.push({ style, candidate, thumbnail, previews });
     }
     for (const style of ['ring', 'duo', 'split', 'stages']) {
       await click(`#quota-styles button[data-style="${style}"]`);

@@ -61,7 +61,7 @@
   const matchesStartup = () => JSON.stringify(PetCustomization.normalizeAppearance(state.appearance)) ===
     JSON.stringify(startupAppearance);
   const quotaEditor = window.QuotaCustomizer?.create({ bridge, getAppearance: () => state.appearance,
-    getCodexPet: () => codexDescriptors.get(state.appearance.codexPetId), announce });
+    getCodexPet: () => codexDescriptors.get(state.appearance.codexPetId), announce, onLayoutChange: schedulePreview });
 
   $('save').disabled = true;
   $('startup-default').disabled = true;
@@ -605,22 +605,22 @@
     if (auroraPreview && auroraPreview !== displayedAurora) auroraPreview.destroy();
     if (ball) ball.destroy();
     target.replaceChildren();
-    const pixels = previewMode === 'desktop' ? (petPixels[petSize] || petPixels.tiny)
-      : document.body.classList.contains('quota-source') ? Math.max(80, Math.min(previewPixels, $('stage').clientHeight - 90)) : previewPixels;
+    const requestedPixels = previewMode === 'desktop' ? (petPixels[petSize] || petPixels.tiny)
+      : state.appearance.shape === 'codex-pet' ? Math.min(300, $('stage').clientHeight - 64, $('stage').clientWidth - 24) : previewPixels;
+    const pixels = quotaEditor?.fitPreview(requestedPixels) ?? requestedPixels;
     target.style.width = pixels + 'px';
     target.style.height = pixels + 'px';
     $('stage').dataset.previewMode = previewMode;
     $('preview-size-label').textContent = previewMode === 'desktop'
-      ? '桌面实际尺寸 · ' + pixels + ' × ' + pixels + ' px' : '大图预览';
+      ? '桌面实际尺寸 · ' + requestedPixels + ' × ' + requestedPixels + ' px' + (pixels < requestedPixels ? ' · 预览缩放至 ' + pixels + ' px' : '') : '大图预览';
+    $('preview-desktop').title = previewMode === 'desktop' ? $('preview-size-label').textContent : '按当前桌面球球的实际尺寸展示';
     $('preview-status').textContent = motionPreference?.matches ? '减少动态已开启' : '眨眼与呼吸动效保留';
     if (state.appearance.shape === 'codex-pet') {
       auroraPreview?.destroy(); displayedAurora?.destroy(); auroraPreview = displayedAurora = null;
       ball = null;
       const descriptor = codexDescriptors.get(state.appearance.codexPetId);
       if (!descriptor) { target.textContent = '宠物暂不可用，请重新读取或选择其他形象'; return; }
-      const petPixels = previewMode === 'desktop' ? pixels : Math.min(300, $('stage').clientHeight - 64, $('stage').clientWidth - 24);
-      target.style.width = petPixels + 'px'; target.style.height = petPixels + 'px';
-      codexPlayer = CodexPetPlayer.create(target, { descriptor, size: petPixels,
+      codexPlayer = CodexPetPlayer.create(target, { descriptor, size: pixels,
         opacity: 1 - state.appearance.auroraTransparency / 100,
         onFrame: () => { target.dataset.renderedAppearance = appearanceKey; },
         onError: () => announce('宠物图片暂不可用，请重新读取后再试') });

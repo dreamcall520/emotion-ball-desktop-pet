@@ -163,7 +163,7 @@ test('非经典外观的额度标签贴近实际可见底部，保留经典外�
   }
 });
 
-test('趣味角色始终在卡左，保持正式卡面方向与间距；屏幕左缘只平移整个组合', () => {
+test('趣味角色始终在卡右，保持正式卡面方向与间距；屏幕右缘只平移整个组合', () => {
   for (const area of [AREA, { x: -1920, y: -180, width: 1920, height: 1080 }]) {
     for (const size of ['compact', 'standard']) for (const shape of ['blob', 'aurora-cloud']) {
       for (const width of [60, 80, 180, 260]) for (const side of ['left', 'right', null]) {
@@ -173,10 +173,10 @@ test('趣味角色始终在卡左，保持正式卡面方向与间距；屏幕�
         const baseline = quotaLabelBounds(pet, area, null, size, false, 1, presentation);
         const guard = quotaLabelBounds(pet, area, null, size, false, 1, presentation, false, true);
         assert.equal(guard.placement, baseline.placement);
-        assert.equal(guard.guardSide, 'left');
-        assert.equal(guard.cardInset.x, 72);
+        assert.equal(guard.guardSide, 'right');
+        assert.equal(guard.cardInset.x, 0);
         assert.equal(guard.x + guard.cardInset.x,
-          Math.max(area.x + 72, baseline.x + (baseline.placement === 'right' ? 72 : 0)));
+          Math.min(area.x + area.width - guard.width, baseline.x - (baseline.placement === 'left' ? 72 : 0)));
         assert.equal(guard.y + guard.cardInset.y, baseline.y);
         assertInside(guard, area);
       }
@@ -186,8 +186,8 @@ test('趣味角色始终在卡左，保持正式卡面方向与间距；屏幕�
     const guard = quotaLabelBounds(pet, area, null, 'compact', false, 1, null, false, true);
     assert.equal(baseline.placement, 'below');
     assert.equal(guard.placement, 'below', '角色承载窗宽度不能把下方卡切换成左侧卡');
-    assert.equal(guard.guardSide, 'left');
-    assert.equal(guard.x + guard.cardInset.x, baseline.x);
+    assert.equal(guard.guardSide, 'right');
+    assert.equal(guard.x + guard.cardInset.x, area.x + area.width - guard.width);
     assert.equal(guard.y + guard.cardInset.y, baseline.y);
   }
 });
@@ -208,45 +208,56 @@ test('光环按外圈承载包络留八像素，不能按缩小的云主体推�
       const peeked = { x: 1360, y: 300, width: 80, height: 80 };
       const side = quotaLabelBounds(peeked, AREA, null, 'compact', false, 1,
         { shape: 'aurora-cloud', mode: 'peeked', side: 'right', quotaStyle }, false, true);
-      assert.equal(side.x + side.cardInset.x, 1252, '保留幻彩半露35%横向锚点');
+      assert.equal(side.x + side.cardInset.x, 1180, '保留幻彩半露35%横向锚点并给卡右角色留位');
     }
   }
 });
 
-test('上下被气泡占用而改到球球右侧时，角色与卡整体留位，角色不得压在球球上', () => {
+test('上下被气泡占用而改到球球左侧时，角色与卡整体留位，角色不得压在球球上', () => {
   const pet = { x: 600, y: 400, width: 80, height: 80 };
-  const obstacle = { x: 542, y: 310, width: 146, height: 252 };
+  const obstacle = { x: 648, y: 310, width: 146, height: 252 };
   const baseline = quotaLabelBounds(pet, AREA, obstacle);
   const guard = quotaLabelBounds(pet, AREA, obstacle, 'standard', false, 1, null, false, true);
-  assert.equal(baseline.placement, 'right');
-  assert.equal(guard.placement, 'right');
-  assert.equal(guard.guardSide, 'left');
-  assert.equal(guard.x, baseline.x, '原卡与球球间距留给左侧角色');
-  assert.equal(guard.x + guard.cardInset.x, baseline.x + 72);
+  assert.equal(baseline.placement, 'left');
+  assert.equal(guard.placement, 'left');
+  assert.equal(guard.guardSide, 'right');
+  assert.equal(guard.x, baseline.x - 72, '原卡与球球间距留给右侧角色');
+  assert.equal(guard.x + guard.cardInset.x, baseline.x - 72);
   assert.equal(guard.y + guard.cardInset.y, baseline.y);
   assertInside(guard, AREA);
 });
 
-test('固定左侧角色后最终组合仍避让气泡，包括左缘平移和仅角色撞气泡', () => {
+test('固定右侧角色后最终组合仍避让气泡，包括右缘平移和仅角色撞气泡', () => {
   const intersects = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x &&
     a.y < b.y + b.height && a.y + a.height > b.y;
   for (const area of [AREA, { x: -1920, y: -180, width: 1920, height: 1080 }]) {
     for (const size of ['compact', 'standard']) for (const [petX, bubbleX, bubbleWidth] of [[44, 170, 360], [600, 530, 20]]) {
-      const pet = { x: area.x + petX, y: area.y + 400, width: 80, height: 80 };
-      const bubble = { x: area.x + bubbleX, y: area.y + 488, width: bubbleWidth, height: 84 };
+      const pet = { x: area.x + area.width - petX - 80, y: area.y + 400, width: 80, height: 80 };
+      const bubble = { x: area.x + area.width - bubbleX - bubbleWidth, y: area.y + 488, width: bubbleWidth, height: 84 };
       const baseline = quotaLabelBounds(pet, area, bubble, size);
       assert.equal(baseline.placement, 'below');
       assert.equal(intersects(baseline, bubble), false, '普通卡面本身未碰气泡');
       const guard = quotaLabelBounds(pet, area, bubble, size, false, 1, null, false, true);
       const face = { x: guard.x + guard.cardInset.x, y: guard.y + guard.cardInset.y,
         ...quotaLabelSize(size) };
-      assert.equal(guard.guardSide, 'left');
+      assert.equal(guard.guardSide, 'right');
       assertInside(guard, area);
-      assert.equal(intersects(guard, bubble), false, '最终卡面与角色组合不能因左侧留位而盖住气泡');
+      assert.equal(intersects(guard, bubble), false, '最终卡面与角色组合不能因右侧留位而盖住气泡');
       assert.equal(intersects(face, pet), false, '重新避让不得把卡面放到球球上');
       assert.equal(guard.placement, 'above');
     }
   }
+});
+
+test('左缘收敛后右侧角色不得压球，整组改用气泡旁的可见位置', () => {
+  const pet = { x: 176, y: 400, width: 80, height: 80 };
+  const bubble = { x: 240, y: 310, width: 146, height: 252 };
+  const result = quotaLabelBounds(pet, AREA, bubble, 'standard', false, 1, null, false, true);
+  assert.equal(result.guardSide, 'right');
+  assertInside(result, AREA);
+  for (const obstacle of [pet, bubble]) assert.equal(result.x < obstacle.x + obstacle.width &&
+    result.x + result.width > obstacle.x && result.y < obstacle.y + obstacle.height &&
+    result.y + result.height > obstacle.y, false);
 });
 
 test('候选位置必须完整在屏内且不与气泡相交', () => {
