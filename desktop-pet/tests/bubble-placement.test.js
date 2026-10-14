@@ -54,7 +54,7 @@ test('正负坐标屏幕四角均保持八像素留白且箭头在气泡内', ()
           assert.ok(result.y >= area.y + 8);
           assert.ok(result.x + result.width <= area.x + area.width - 8);
           assert.ok(result.y + result.height <= area.y + area.height - 8);
-          assert.ok(result.anchorX >= 20 && result.anchorX <= result.width - 20);
+          assert.ok(result.anchorX >= 35 && result.anchorX <= result.width - 35);
         }
       }
     }
@@ -64,9 +64,22 @@ test('正负坐标屏幕四角均保持八像素留白且箭头在气泡内', ()
 test('靠边箭头指向宠物中心并限于安全范围', () => {
   const left = bubbleBounds({ x: 0, y: 400, width: 80, height: 80 }, workArea);
   assert.equal(left.x, 8);
-  assert.equal(left.anchorX, 32);
+  assert.equal(left.anchorX, 35);
   const far = bubbleBounds({ x: -1000, y: 400, width: 80, height: 80 }, workArea);
-  assert.equal(far.anchorX, 20);
+  assert.equal(far.anchorX, 35);
+});
+
+test('侧移后的箭头留在气泡直边，旋转边框不进入17px圆角', () => {
+  for (const area of [workArea, { x: -1920, y: -200, width: 1920, height: 1080 }]) {
+    for (const x of [area.x - 1000, area.x + area.width + 1000]) for (const y of [area.y, area.y + 400]) {
+      const bubble = bubbleBounds({ x, y, width: 80, height: 80 }, area, true);
+      // bubble.css: native inset 10, radius 17, 8px square + 1px border,
+      // absolute left anchor-16 places its rotated center at anchor-.5.
+      const arrowCenter = bubble.anchorX - .5, half = 9 / Math.SQRT2;
+      assert.ok(arrowCenter - half >= 10 + 17 && arrowCenter + half <= bubble.width - 10 - 17,
+        '箭头必须完整连接直边，不能叠到圆角上形成突出折角：' + JSON.stringify(bubble));
+    }
+  }
 });
 
 test('极小工作区合理压缩但不越界', () => {
@@ -109,7 +122,7 @@ test('同场气泡避开六张真实快捷卡，四角内缩与负坐标屏幕�
       assert.ok(obstacles.every(card => !intersects(card, result)), `${size}/${inset}/${px}/${py} bubble leaves every action clear`);
       assert.ok(!intersects(visual, result), 'bubble does not cover the pet');
       assert.ok(result.x >= area.x + 8 && result.y >= area.y + 8 && result.x + result.width <= area.x + area.width - 8 && result.y + result.height <= area.y + area.height - 8);
-      assert.ok(result.anchorX >= 20 && result.anchorX <= result.width - 20);
+      assert.ok(result.anchorX >= 35 && result.anchorX <= result.width - 35);
       assert.equal(result.placement, result.y + result.height / 2 < visual.y + visual.height / 2 ? 'above' : 'below');
     }
 });

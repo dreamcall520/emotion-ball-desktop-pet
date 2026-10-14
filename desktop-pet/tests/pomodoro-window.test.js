@@ -155,6 +155,88 @@ test('标准与小巧额度的守护外窗不推偏计时条，其他障碍及�
   assert.deepEqual(f.errors, []);
 });
 
+test('真实贴边拖动序列中，移离边缘尚未pointerup也改用当前球体头顶锚点', async t => {
+  const { createEdgeTuck } = require('../lib/edge-tuck');
+  const { quotaLabelBounds } = require('../lib/quota-label-placement');
+  const { petVisualBounds } = require('../lib/pet-visual-bounds');
+  const f = fixture(); t.after(() => f.manager.close()); f.state.status = 'paused';
+  f.pet.setPosition = (x,y) => Object.assign(f.pet.bounds,{x,y}); f.pet.setIgnoreMouseEvents = () => {};
+  let shape = 'blob';
+  const update = presentation => {
+    f.presentation({...presentation,shape});
+    const card = quotaLabelBounds(f.pet.getBounds(),f.area,null,'compact',false,1,{...presentation,shape},false,true);
+    f.quota({x:card.x+card.cardInset.x+2,y:card.y+card.cardInset.y+2,width:124,height:28},card);
+    f.manager.sync();
+  };
+  const edge = createEdgeTuck({getWindow:()=>f.pet,getWorkArea:()=>f.area,onChange:update});
+  t.after(()=>edge.dispose());
+  for (shape of ['blob','aurora-cloud']) for (const side of ['left','right']) {
+    Object.assign(f.pet.bounds,{x:600,y:400,width:80,height:80});edge.restore();edge.dock(side);
+    const docked=f.pet.getBounds();edge.sampleCursor({x:docked.x+(side==='left'?5:75),y:docked.y+40});await flush();
+    assert.equal(edge.getPresentation().mode,'peeked');edge.beginDrag();
+    Object.assign(f.pet.bounds,{x:600,y:500});update(edge.getPresentation());
+    assert.equal(edge.getPresentation().mode,'peeked','复现边缘控制器拖动期间尚未切free');
+    assert.equal(edge.getPresentation().dragging,true);
+    const visual=petVisualBounds(f.pet.getBounds(),shape,edge.getPresentation()),mini=f.win('mini');
+    assert.ok(Math.abs(visual.y-mini.bounds.y-42-14)<=.5,'拖出时即跟随真实可见球体头顶，不能仍锚在额度卡 '+JSON.stringify({shape,side,visual,mini:mini.bounds}));
+    assert.ok(Math.abs(mini.bounds.x+56-visual.x-visual.width/2)<=.5);
+    assert.equal(mini.sent.at(-1)[1].miniPointer.side,'bottom','头顶计时条下箭头指向球体');
+    f.presentation({...edge.getPresentation(),dragging:false,shape});f.manager.sync();
+    assert.ok(Math.abs(visual.y-mini.bounds.y-42-14)<=.5,'迟到peeked状态也不能把已移离物理边缘的小提示拉回额度锚');
+    edge.endDrag(true);assert.equal(edge.getPresentation().mode,'free');
+    const free=petVisualBounds(f.pet.getBounds(),shape,edge.getPresentation());
+    assert.ok(Math.abs(free.y-mini.bounds.y-42-14)<=.5,'松手后保持自由态头顶');
+  }
+  assert.deepEqual(f.errors,[]);
+});
+
+test('顶部没有头顶空间时mini在真实卡面下方居中，箭头向上且不含角色透明槽', async t => {
+  const { quotaLabelBounds } = require('../lib/quota-label-placement');
+  const f = fixture();t.after(()=>f.manager.close());f.state.status='paused';
+  for (const area of [{x:0,y:0,width:1440,height:900},{x:-1920,y:-180,width:1920,height:1080}]) {
+    Object.assign(f.area,area);Object.assign(f.pet.bounds,{x:area.x+600,y:area.y,width:80,height:80});
+    f.presentation({mode:'free',shape:'blob'});
+    const card=quotaLabelBounds(f.pet.getBounds(),area,null,'compact',false,1,null,false,true);
+    const face={x:card.x+2,y:card.y+card.cardInset.y+2,width:124,height:28};
+    f.quota(face,card);f.manager.sync();await flush();
+    const mini=f.win('mini');
+    assert.equal(mini.bounds.x+56,face.x+face.width/2,'只取真实卡面中心，不能加右侧角色槽宽');
+    assert.equal(mini.bounds.y+6-face.y-face.height,8);
+    assert.deepEqual(mini.sent.at(-1)[1].miniPointer,{side:'top',offset:50});
+    const loaded=f.handlers.get('pomodoro:load')(f.event('mini'));
+    assert.deepEqual(loaded.state.miniPointer,{side:'top',offset:50},'load与broadcast方向一致，避免首次加载闪回下箭头');
+  }
+  assert.deepEqual(f.errors,[]);
+});
+
+test('mini renderer只接收上下方向与有界数字偏移，色弱外边框与箭头使用轻分隔线', async () => {
+  const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+  const nodes=new Map(),get=id=>{if(!nodes.has(id))nodes.set(id,{dataset:{},style:{setProperty(key,value){this[key]=value;}},setAttribute(){}});return nodes.get(id);};
+  let receive;
+  const state={mode:'focus',status:'paused',remaining:1410,total:1500,miniPointer:{side:'top',offset:50}};
+  const api={onState(callback){receive=callback;return()=>{};},load:async()=>({ok:true,state})};
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../pomodoro-renderer.js'),'utf8'),{
+    window:{qiuPomodoro:api,addEventListener(){}},document:{body:{dataset:{}},documentElement:{dataset:{appearance:'light'}},getElementById:get,querySelectorAll:()=>[],addEventListener(){}},
+    URLSearchParams,location:{search:'?view=mini'},MutationObserver:class{observe(){}},cancelAnimationFrame(){},clearTimeout(){},setTimeout(){}
+  });
+  await Promise.resolve();
+  assert.equal(get('mini').dataset.arrow,'top');assert.equal(get('mini').style['--mini-arrow-offset'],'50px');
+  receive({...state,miniPointer:{side:'bottom',offset:999}});
+  assert.equal(get('mini').dataset.arrow,'bottom');assert.equal(get('mini').style['--mini-arrow-offset'],'78px');
+  for (const offset of [-999,999]) {
+    receive({...state,miniPointer:{side:'top',offset}});
+    const center=parseFloat(get('mini').style['--mini-arrow-offset']),halfWidth=6*Math.SQRT2/2;
+    assert.ok(center-halfWidth>=17&&center+halfWidth<=100-17,'6px旋转箭头整体落在radius17之外的直边');
+  }
+  receive({...state,miniPointer:{side:'left;display:none',offset:'0px;display:none'}});
+  assert.equal(get('mini').dataset.arrow,'bottom');assert.equal(get('mini').style['--mini-arrow-offset'],'50px');
+  const css=fs.readFileSync(path.join(__dirname,'../pomodoro.css'),'utf8');
+  assert.match(css,/\.mini-entry\[data-arrow=top\]::after\{top:-3px;bottom:auto;transform:rotate\(225deg\)/);
+  assert.match(css,/:root\[data-color-mode=accessible\] \.mini-entry\{border-color:var\(--accessible-divider\)!important\}/);
+  assert.match(css,/\.mini-entry::after\{background:var\(--accessible-panel\);border-color:var\(--accessible-divider\)/);
+  assert.match(css,/\.entry-label\{[^}]*border-color:var\(--accessible-line\)/,'模式pill保留清晰控件边界');
+});
+
 test('已打开面板保持自身位置，球体和伴随窗口移动不追随，仅工作区变化时夹紧', async t => {
   const f = fixture(); t.after(() => f.manager.close());
   const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;

@@ -124,7 +124,7 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
       const panel = document.querySelector('.list-panel'), actions = document.querySelector('.list-actions');
       const rect = node => node.getBoundingClientRect().toJSON();
       return {theme:document.documentElement.dataset.uiTheme,appearance:document.documentElement.dataset.appearance,mode:document.documentElement.dataset.colorMode,
-        panel:rect(panel),panelShadow:getComputedStyle(panel).boxShadow,actions:rect(actions),scrollHeight:actions.scrollHeight,clientHeight:actions.clientHeight,
+        panel:rect(panel),panelShadow:getComputedStyle(panel).boxShadow,panelBorder:getComputedStyle(panel).borderTopColor,footerBorder:getComputedStyle(panel.querySelector('.list-footer')).borderTopColor,keyBorders:[...panel.querySelectorAll('kbd')].filter(node=>parseFloat(getComputedStyle(node).borderTopWidth)>0).map(node=>getComputedStyle(node).borderTopColor),actions:rect(actions),scrollHeight:actions.scrollHeight,clientHeight:actions.clientHeight,
         header:rect(panel.querySelector('.panel-header')),footer:rect(panel.querySelector('.list-footer')),
         keysVisible:Boolean(document.querySelector('#launcher-keys').getClientRects().length),hintVisible:Boolean(panel.querySelector('.list-footer>span').getClientRects().length),
         horizontal:[panel,...panel.querySelectorAll('.panel-header,.list-footer,.action')].map(node=>({width:node.clientWidth,scroll:node.scrollWidth})),
@@ -267,9 +267,26 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     assert.equal(preservedSelect.recording, false);
     await poll(() => registrar.getState().recording, value => !value, 'select click resumes native shortcuts');
     assert.equal(globalShortcut.isSuspended(), false);
+    const saveSession = controller.getState().session;
+    const saveButtonBounds = await page(win, "document.querySelector('#save').getBoundingClientRect().toJSON()");
     await page(win, "document.querySelector('#settings').requestSubmit(); true");
     await poll(() => registrar.getConfig(), config => config.noteBehavior === 'create' && config.todoBehavior === 'panel', 'form saves both startup selectors');
-    await poll(() => page(win, 'document.querySelector("#save").textContent'), text => text === '已保存', 'successful form save is acknowledged');
+    await poll(() => page(win, '({text:document.querySelector("#save-status").textContent,hidden:document.querySelector("#save-status").hidden})'), value => !value.hidden && value.text === '快捷键设置已保存', 'successful form save has an explicit notice');
+    await wait(1200);
+    const saveFeedback = await page(win, `(() => { const notice=document.querySelector('#save-status'),panel=document.querySelector('#settings'),button=document.querySelector('#save');return {text:notice.textContent,hidden:notice.hidden,role:notice.getAttribute('role'),rect:notice.getBoundingClientRect().toJSON(),panel:panel.getBoundingClientRect().toJSON(),opacity:getComputedStyle(panel).opacity,animations:panel.getAnimations().filter(a=>a.playState==='running').length,button:button.getBoundingClientRect().toJSON()}; })()`);
+    assert.equal(saveFeedback.hidden, false, 'save notice lasts long enough to read');
+    assert.equal(saveFeedback.text, '快捷键设置已保存'); assert.equal(saveFeedback.role, 'status');
+    assert.ok(inside(saveFeedback.rect, saveFeedback.panel), 'save notice stays within the settings panel');
+    assert.equal(saveFeedback.opacity, '1'); assert.equal(saveFeedback.animations, 0, 'save does not replay the opening animation');
+    assert.equal(saveFeedback.button.width, saveButtonBounds.width, 'save button does not flash wider');
+    assert.equal(controller.getState().session, saveSession, 'save keeps the same session');
+    await capture(win, 'native-settings-save-success.png');
+    await page(win, "document.querySelector('[data-record=note]').click(); document.dispatchEvent(new KeyboardEvent('keydown',{key:'A',code:'KeyA',bubbles:true})); true");
+    assert.equal(await page(win, "document.querySelector('#save-status').hidden && !document.querySelector('#error').hidden"), true, 'a new recording error never appears beside stale save success');
+    await page(win, "document.querySelector('[data-record=note]').click(); true");
+    await page(win, "document.querySelector('[name=shape]:checked').dispatchEvent(new Event('change',{bubbles:true})); true");
+    assert.equal(await page(win, "document.querySelector('#save-status').hidden"), true, 'a new edit clears stale success feedback');
+    result.checks.push('form-save-readable-notice-no-opening-flash');
     assert.equal(controller.getState().view, 'settings', 'form save remains in settings');
     assert.deepEqual(win.getBounds(), movedBounds, 'form save retains manually moved position');
     const persistedBehaviors = loadSettings(settingsFile).shortcutSettings;
@@ -376,7 +393,7 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
       controller.interrupt(); await wait(100);
       const anchor = pet.getBounds(); cursor = { x: anchor.x + anchor.width / 2, y: anchor.y + anchor.height / 2 };
       controller.open({ focus: false }); await settled(win);
-      const surface = await page(win, `({theme:document.documentElement.dataset.uiTheme,appearance:document.documentElement.dataset.appearance,mode:document.documentElement.dataset.colorMode,palette:Object.fromEntries(['--surface','--control','--text','--muted','--accent','--accent-text','--selected'].map(key=>[key,getComputedStyle(document.documentElement).getPropertyValue(key).trim()])),selected:[...document.querySelectorAll('[data-action][aria-current=true]')].filter(n=>n.getClientRects().length).map(n=>n.dataset.action),buttons:[...document.querySelectorAll('[data-action]')].filter(n=>n.getClientRects().length).map(n=>({text:n.textContent.trim(),width:n.getBoundingClientRect().width,height:n.getBoundingClientRect().height,background:getComputedStyle(n).backgroundColor,image:getComputedStyle(n).backgroundImage}))})`);
+      const surface = await page(win, `({theme:document.documentElement.dataset.uiTheme,appearance:document.documentElement.dataset.appearance,mode:document.documentElement.dataset.colorMode,palette:Object.fromEntries(['--surface','--control','--text','--muted','--accent','--accent-text','--selected'].map(key=>[key,getComputedStyle(document.documentElement).getPropertyValue(key).trim()])),selected:[...document.querySelectorAll('[data-action][aria-current=true]')].filter(n=>n.getClientRects().length).map(n=>n.dataset.action),buttons:[...document.querySelectorAll('[data-action]')].filter(n=>n.getClientRects().length).map(n=>({text:n.textContent.trim(),width:n.getBoundingClientRect().width,height:n.getBoundingClientRect().height,background:getComputedStyle(n).backgroundColor,image:getComputedStyle(n).backgroundImage,border:getComputedStyle(n).borderTopColor}))})`);
       assert.equal(surface.theme, theme); assert.equal(surface.appearance, appearance); assert.equal(surface.mode, accessible ? 'accessible' : 'standard');
       assert.deepEqual(surface.selected, [], 'theme reopening starts without a highlighted function');
       assert.equal(surface.buttons.length, 6); assert.ok(surface.buttons.every(button => button.width >= 52 && button.width === button.height));
@@ -390,11 +407,22 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
       controller.interrupt(); await wait(100); controller.open({ focus: false });
       const listSurface = await compactList(win);
       assert.equal(listSurface.theme, theme); assert.equal(listSurface.appearance, appearance); assert.equal(listSurface.mode, accessible ? 'accessible' : 'standard');
+      if (accessible) { const divider=appearance==='dark'?'rgb(51, 67, 82)':'rgb(217, 225, 233)'; assert.equal(listSurface.panelBorder,divider,'list frame shares notes light dividers'); assert.equal(listSurface.footerBorder,divider); assert.ok(listSurface.keyBorders.every(color=>color===divider),'keycaps do not add heavy decoration'); assert.ok(surface.buttons.every(button=>button.border===divider),'floating cards use light outlines'); }
       result.listThemes.push(listSurface); await capture(win, `native-list-${theme}-${appearance}-${accessible ? 'accessible' : 'standard'}.png`);
       controller.open({ settings: true }); await settled(win);
       await page(win, "document.querySelector('[data-record=note]').click(); document.dispatchEvent(new KeyboardEvent('keydown',{key:'F12',code:'F12',ctrlKey:true,altKey:true,shiftKey:true,metaKey:true,bubbles:true})); true");
       const settingsSurface = await compactSettings(win);
       assert.equal(settingsSurface.theme, theme); assert.equal(settingsSurface.appearance, appearance); assert.equal(settingsSurface.mode, accessible ? 'accessible' : 'standard');
+      if (accessible) {
+        const borders = await page(win, `(() => {const style=node=>getComputedStyle(node),line=selector=>[...document.querySelectorAll(selector)].map(node=>({color:style(node).borderTopColor,width:style(node).borderTopWidth})).filter(border=>parseFloat(border.width)>0);return {decorations:line('.panel,.global-setting,.global-binding,.settings-footer,.shape-options input:not(:checked)+span,kbd'),rows:[...document.querySelectorAll('.direct-row:not(:last-child)')].map(node=>style(node).borderBottomColor),selected:line('.shape-options input:checked+span'),controls:line('.record-button,.secondary')};})()`);
+        const divider = appearance === 'dark' ? 'rgb(51, 67, 82)' : 'rgb(217, 225, 233)';
+        assert.ok(borders.decorations.every(border=>border.color===divider), 'shortcut decorations share notes light dividers');
+        assert.ok(borders.rows.every(color=>color===divider), 'shortcut rows have light separators');
+        assert.equal(borders.selected[0].width, '1px', 'selected choice avoids a heavy double border');
+        assert.ok(borders.selected.every(border=>border.color!==divider), 'selected choice remains distinguishable');
+        assert.ok(borders.controls.every(border=>border.color!==divider), 'editable controls keep a visible boundary');
+        settingsSurface.accessibleBorders = borders;
+      }
       result.settingsThemes.push(settingsSurface); await capture(win, `native-settings-${theme}-${appearance}-${accessible ? 'accessible' : 'standard'}.png`);
       await save(win, { ...registrar.getConfig(), shape: 'floating' });
     }

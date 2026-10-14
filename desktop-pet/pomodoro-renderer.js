@@ -93,6 +93,9 @@
     if (document.body.dataset.view === 'mini') {
       $('mini').hidden = false;
       $('mini').dataset.status = state.status;
+      $('mini').dataset.arrow = state.miniPointer?.side === 'top' ? 'top' : 'bottom';
+      const offset = state.miniPointer?.offset;
+      $('mini').style.setProperty('--mini-arrow-offset', `${Number.isFinite(offset) ? Math.max(22,Math.min(78,offset)) : 50}px`);
       $('mini-label').textContent = paused ? '暂停' : focus ? '专注' : '休息';
       $('mini-time').textContent = complete ? '完成' : time;
       $('mini').setAttribute('aria-label', `${labels[state.mode] || '专注'}${complete ? '完成' : time}，展开番茄钟`);

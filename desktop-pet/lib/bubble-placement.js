@@ -27,7 +27,8 @@ function bubbleBounds(petBounds, workArea, interactive = false, preferredHeight 
     ({ x, y } = adjacentBounds(petBounds, { x: minX, y: minY, width: areaWidth - paddingX * 2, height: areaHeight - paddingY * 2 }, { width, height }, occupied));
     placement = y + height / 2 < petBounds.y + petBounds.height / 2 ? 'above' : 'below';
   }
-  const anchorInset = Math.min(20, width / 2);
+  // Native inset 10 + corner radius 17 + rotated arrow half-width 6.4.
+  const anchorInset = Math.min(35, width / 2);
   return { x, y, width, height, placement, anchorX: clamp(centerX - x, anchorInset, width - anchorInset) };
 }
 module.exports = { bubbleBounds };

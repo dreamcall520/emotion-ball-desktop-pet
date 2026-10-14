@@ -19,6 +19,7 @@
   const symbols = isMac ? { Ctrl: '⌃', Alt: '⌥', Shift: '⇧', Meta: '⌘', Space: '空格' } : { Ctrl: 'Ctrl', Alt: 'Alt', Shift: 'Shift', Meta: 'Win', Space: '空格' };
   let state = null, draft = { ...defaults }, recording = null, selected = -1, busy = false, pointerFrame = null;
   let appearance = 'system', motionKey = '', motions = [];
+  let saveNoticeTimer = null;
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
   const system = window.matchMedia?.('(prefers-color-scheme: dark)');
   const currentActions = () => state?.view === 'list' ? actions : floatingActions;
@@ -63,6 +64,13 @@
   function showError(message = '') {
     $('error').textContent = message;
     $('error').hidden = !message;
+  }
+
+  function clearSaveNotice() {
+    clearTimeout(saveNoticeTimer);
+    saveNoticeTimer = null;
+    $('save-status').hidden = true;
+    $('save-status').textContent = '';
   }
 
   function registrationMessage(errors = []) {
@@ -214,6 +222,7 @@
     $('runtime-error').hidden = true;
     if (state.view === 'settings') {
       if (enteringSettings) {
+        clearSaveNotice();
         draft = configCopy(state.config); setRecording(null); busy = false;
         renderSettings();
         showError(registrationMessage(state.registrationErrors));
@@ -250,6 +259,7 @@
     setRecording(null);
     draft = configCopy(state?.config);
     showError();
+    clearSaveNotice();
     api?.close();
   }
 
@@ -285,7 +295,7 @@
 
   $('settings').addEventListener('change', event => {
     if (busy) return;
-    $('save').textContent = '保存';
+    clearSaveNotice();
     if (event.target.name === 'shape') draft.shape = event.target.value;
     if (event.target.id === 'enabled') { draft.enabled = event.target.checked; showError(); renderSettings(); }
     const field = event.target.dataset.startBehavior;
@@ -298,15 +308,17 @@
     const record = event.target.closest('[data-record]'), clear = event.target.closest('[data-clear]');
     if (busy) return;
     if (clear) {
+      clearSaveNotice();
       setRecording(null); draft[clear.dataset.clear] = ''; showError(); renderSettings();
       $('settings').querySelector(`[data-record="${clear.dataset.clear}"]`)?.focus({ preventScroll: true });
     } else if (record) {
+      clearSaveNotice();
       setRecording(recording === record.dataset.record ? null : record.dataset.record);
       showError(); renderSettings();
       $('settings').querySelector(`[data-record="${record.dataset.record}"]`)?.focus({ preventScroll: true });
     } else if (recording) stopRecording();
   });
-  $('restore').onclick = () => { setRecording(null); draft = { ...defaults }; showError(); renderSettings(); $('restore').focus({ preventScroll: true }); };
+  $('restore').onclick = () => { clearSaveNotice(); setRecording(null); draft = { ...defaults }; showError(); renderSettings(); $('restore').focus({ preventScroll: true }); };
 
   function validate(config) {
     if (config.enabled && !config.launcher) return '请设置唤起快捷键，或关闭快捷面板。';
@@ -325,18 +337,21 @@
   $('settings').onsubmit = async event => {
     event.preventDefault();
     if (busy) return;
+    clearSaveNotice();
     setRecording(null);
     const invalid = validate(draft);
     if (invalid) { showError(invalid); renderSettings(); return; }
     busy = true; showError(); renderSettings();
     try {
       const result = await api.save({ ...draft });
-      if (result?.ok === false) throw new Error(result.error || registrationMessage(result.registrationErrors) || '快捷键保存失败，请重试。');
+      if (result?.ok !== true) throw new Error(result?.error || registrationMessage(result?.registrationErrors) || '快捷键保存失败，请重试。');
       busy = false;
       if (result?.state) applyState(result.state);
       draft = configCopy(result?.state?.config || draft);
       renderSettings();
-      $('save').textContent = '已保存';
+      $('save-status').textContent = '快捷键设置已保存';
+      $('save-status').hidden = false;
+      saveNoticeTimer = setTimeout(clearSaveNotice, 6000);
     } catch (error) {
       busy = false; showError(error.message || '快捷键保存失败，请重试。'); renderSettings();
       $('save').focus({ preventScroll: true });
@@ -355,7 +370,7 @@
       if (event.key === 'Tab') { stopRecording(); return; }
       event.preventDefault();
       if (event.key === 'Escape') { showError(); stopRecording(true); return; }
-      if (event.key === 'Backspace' || event.key === 'Delete') { draft[recording] = ''; showError(); stopRecording(true); return; }
+      if (event.key === 'Backspace' || event.key === 'Delete') { clearSaveNotice(); draft[recording] = ''; showError(); stopRecording(true); return; }
       if (['Control', 'Alt', 'Shift', 'Meta'].includes(event.key)) return;
       const value = combo(event);
       if (!value) { showError('请使用 ⌘ / ⌃ / ⌥ 与字母、数字或功能键组合。'); return; }
@@ -364,7 +379,7 @@
         const name = duplicate === 'launcher' ? '快捷面板' : actions.find(action => action.id === duplicate).name;
         showError(`与「${name}」的快捷键重复，请换一个组合。`); return;
       }
-      draft[recording] = value; showError(); stopRecording(true); return;
+      clearSaveNotice(); draft[recording] = value; showError(); stopRecording(true); return;
     }
     if (event.key === 'Escape') { event.preventDefault(); close(); return; }
     if (!state || state.view === 'settings') return;
@@ -404,6 +419,7 @@
   const unsubscribeState = api?.onState(applyState);
   const unsubscribeColor = api?.onColorMode(applyColorMode);
   window.addEventListener('beforeunload', () => {
+    clearTimeout(saveNoticeTimer);
     api?.recording(false);
     unsubscribeState?.(); unsubscribeColor?.();
     if (pointerFrame !== null) cancelAnimationFrame(pointerFrame);

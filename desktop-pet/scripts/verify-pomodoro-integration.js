@@ -5,6 +5,7 @@ const path = require('node:path');
 const { setTimeout: wait } = require('node:timers/promises');
 const { capturePaintedWindow } = require('./verify-codex-companion');
 const { pointerClick } = require('./verify-chat-integration');
+const { petVisualBounds } = require('../lib/pet-visual-bounds');
 
 // Run through smoke-electron.js so main.js verifies the temporary user-data dir.
 // This verifier never opens the installed app or writes its preferences.
@@ -123,6 +124,12 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
   const settingsValue = (face, durations = service.getSnapshot().durations) =>
     ({ face, durations, encouragementEnabled: true });
   const settingsOpen = async panel => {
+    const before = { nativeFocused: panel.isFocused(), visible: panel.isVisible(),
+      ...(await page(panel, '({focused:document.hasFocus(),hidden:document.hidden})')) };
+    (result.settingsPointerFocus ||= []).push(before);
+    require('electron').app.focus({ steal: true }); panel.focus(); panel.webContents.focus();
+    await poll(async () => panel.isFocused() && panel.isVisible() &&
+      await page(panel, 'document.hasFocus() && !document.hidden'), Boolean, '设置点击前原生输入焦点');
     await pointerClick(panel, '#settings-open');
     await poll(() => page(panel, "!document.querySelector('#settings').hidden && innerHeight === 384"), Boolean, '原生设置展开');
   };
@@ -418,6 +425,22 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
     result.checks.push('settings-cancel-escape-draft-updates-style-save-and-duration-reset');
 
     await pointerClick(panel, '#start');
+    result.miniAccessible = [];
+    for (const light of ['light','dark']) {
+      await theme(panel,'blue',light,'accessible');
+      await poll(()=>mini.isVisible(),Boolean,'色弱mini实际可见');
+      const decoration = await page(mini,`(() => {const node=document.getElementById('mini'),style=getComputedStyle(node),arrow=getComputedStyle(node,'::after'),root=getComputedStyle(document.documentElement);
+        return {outer:style.borderTopColor,pill:getComputedStyle(document.getElementById('mini-label')).borderTopColor,
+          arrow:arrow.borderRightColor,background:style.backgroundColor,arrowBackground:arrow.backgroundColor,
+          divider:root.getPropertyValue('--accessible-divider').trim(),line:root.getPropertyValue('--accessible-line').trim()};})()`);
+      const rgb = hex => { assert.match(hex,/^#[\da-f]{6}$/i);return 'rgb('+[1,3,5].map(index=>parseInt(hex.slice(index,index+2),16)).join(', ')+')'; };
+      assert.equal(decoration.outer,rgb(decoration.divider),'色弱mini装饰外框使用轻分隔线');
+      assert.equal(decoration.arrow,decoration.outer,'箭头与外框同色连续');
+      assert.equal(decoration.arrowBackground,decoration.background,'箭头与卡面同色连续');
+      assert.equal(decoration.pill,rgb(decoration.line),'模式pill保留清晰控件边界');
+      result.miniAccessible.push({light,...decoration});await capture(mini,'mini-accessible-'+light);
+    }
+    await theme(panel,'blue','light','standard');
     mini.webContents.debugger.attach('1.3'); debuggerAttached = true;
     await mini.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
     const beam = () => page(mini, `(() => {
@@ -517,7 +540,9 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
           quota = { x: bounds.x + rect.x, y: bounds.y + rect.y, width: rect.width, height: rect.height };
         }
       }
-      return { quota, reportedQuota: quotaLabel.getVisibleBounds(), mini: painted(mini), pet: pet.getBounds(),
+      const pointer = await page(mini,`(() => {const node=document.getElementById('mini'),style=getComputedStyle(node,'::after');return {
+        side:node.dataset.arrow,offset:node.style.getPropertyValue('--mini-arrow-offset'),top:style.top,bottom:style.bottom};})()`);
+      return { quota, reportedQuota: quotaLabel.getVisibleBounds(), mini: painted(mini), pet: pet.getBounds(), pointer,
         presentation: edgeTuck.getPresentation(), focus: BrowserWindow.getFocusedWindow()?.id || null };
     };
     const onQuota = value => value.quota && value.reportedQuota &&
@@ -575,6 +600,28 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
       }
       result.edgeAnchors.push({ side, folded, expanded, movedQuota, empty, hidden, restored, encouraged });
     }
+    result.dragOutAnchors = [];
+    const visualPet = value => petVisualBounds(value.pet,getSettings().customization.appearance.shape,value.presentation);
+    const onHead = value => { const visual=visualPet(value);return Math.abs(visual.y-value.mini.y-value.mini.height-14)<=1 &&
+      Math.abs(value.mini.x+value.mini.width/2-visual.x-visual.width/2)<=1 && value.pointer.side==='bottom'; };
+    for (const side of ['left','right']) {
+      edgeTuck.restore();pet.setPosition(Math.round(area.x+area.width/2),Math.round(area.y+area.height*.6),false);edgeTuck.dock(side);
+      const docked=pet.getBounds();edgeTuck.sampleCursor({x:docked.x+(side==='left'?5:docked.width-5),y:docked.y+docked.height/2});
+      edgeTuck.pin(true);quotaLabel.show(quotaModel);await poll(anchorState,onQuota,side+'拖出前保持真实额度锚');
+      edgeTuck.beginDrag();pet.setPosition(Math.round(area.x+(area.width-docked.width)/2),Math.round(area.y+area.height*.6),false);
+      quotaLabel.show(quotaModel);windows.reposition();
+      const dragging=await poll(anchorState,value=>value.presentation.dragging&&onHead(value),side+'真实drag期间立即回到当前可见球体头顶');
+      edgeTuck.endDrag(true);windows.reposition();
+      const free=await poll(anchorState,value=>value.presentation.mode==='free'&&onHead(value),side+'松手自由态仍保持头顶');
+      result.dragOutAnchors.push({side,dragging,free});
+    }
+    edgeTuck.restore();pet.setPosition(Math.round(area.x+(area.width-pet.getBounds().width)/2),area.y,false);
+    quotaLabel.show(quotaModel);windows.reposition();
+    result.topQuotaAnchor=await poll(anchorState,value=>value.quota && value.reportedQuota &&
+      Math.abs(value.mini.x+value.mini.width/2-value.quota.x-value.quota.width/2)<=1 &&
+      Math.abs(value.mini.y-value.quota.y-value.quota.height-8)<=1 &&value.pointer.side==='top'&&value.pointer.top==='-3px',
+    '屏顶mini在真实卡面下方居中8px，上沿箭头指向球体');
+    await capture(mini,'top-quota-centered-mini');
     edgeTuck.dock('right');
     await poll(() => edgeTuck.getPresentation().mode === 'tucked' && !quotaLabel.getWindow().isVisible(), Boolean, '收球时额度隐藏');
     select('pomodoro-open');
@@ -668,7 +715,7 @@ async function verifyPomodoro({ pet, service, windows, BrowserWindow, powerMonit
       if (win !== message) assert.ok(events.colors > 0, 'onColorMode 实际收到广播');
     }
     assert.deepEqual(result.errors, [], '原生页面加载与渲染无错误');
-    assert.equal(result.screenshots.length, 11);
+    assert.equal(result.screenshots.length, 14, '原11图加浅深色mini与顶部定位3图');
     result.finalState = service.getSnapshot(); result.ok = true;
     fs.writeFileSync(path.join(output, 'result.json'), `${JSON.stringify(result, null, 2)}\n`);
     process.stdout.write(`PET_POMODORO_INTEGRATION_OK ${JSON.stringify({ checks: result.checks.length, themes: result.themes.length,

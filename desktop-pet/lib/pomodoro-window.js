@@ -37,7 +37,8 @@ function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, g
   let messageCardHeight = 36;
   const alive = win => win && !win.isDestroyed();
   const report = error => { try { onError(error); } catch (_) {} };
-  const snapshot = () => ({ ...getSnapshot(), panelOpen });
+  const snapshot = view => ({ ...getSnapshot(), panelOpen,
+    ...(view === 'mini' && entries.get('mini')?.pointer ? { miniPointer: { ...entries.get('mini').pointer } } : {}) });
   const url = view => { const result = pathToFileURL(FILE); result.searchParams.set('view', view); return result.href; };
   function source(event) {
     for (const [view, entry] of entries) {
@@ -59,7 +60,7 @@ function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, g
       y: Math.round(Math.max(area.y, Math.min(bounds.y, area.y + area.height - height))), width, height };
   }
   const intersects = (a, b) => a.x < b.x + b.width + 6 && a.x + a.width + 6 > b.x && a.y < b.y + b.height + 6 && a.y + a.height + 6 > b.y;
-  function place(view, size, pet, area, obstacles, miniBounds, quotaBounds, reminder) {
+  function place(view, size, pet, area, obstacles, miniBounds, quotaBounds, reminder, visibleQuotaBounds) {
     if (view === 'panel') {
       const right = { x: pet.x + pet.width + 24, y: pet.y + (pet.height - size.height) / 2, ...size };
       if (right.x + size.width <= area.x + area.width && right.y >= area.y && right.y + size.height <= area.y + area.height &&
@@ -78,7 +79,17 @@ function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, g
       y: view === 'message' && miniBounds ? miniBounds.y + 4 - size.height :
         miniAnchor.y - size.height - (quotaBounds ? 2 : 8), ...size }, area);
     const face = { x: first.x + 6, y: first.y + 6, width: first.width - 12, height: first.height - 12 };
-    if (!obstacles.some(obstacle => intersects(face, obstacle))) return first;
+    const aboveFits = view !== 'mini' || first.y + size.height <= miniAnchor.y - (quotaBounds ? 2 : 8) + .5;
+    if (aboveFits && !obstacles.some(obstacle => intersects(face, obstacle))) return first;
+    if (view === 'mini' && (!aboveFits || intersects(face, pet))) {
+      // At the top edge, keep the fallback under the painted card, not the
+      // native card+role envelope which would shift the timer sideways.
+      const anchor = visibleQuotaBounds || pet, gap = visibleQuotaBounds ? 2 : 8;
+      const below = fit({ x: anchor.x + (anchor.width - size.width) / 2,
+        y: anchor.y + anchor.height + gap, ...size }, area);
+      const belowFace = { x: below.x + 6, y: below.y + 6, width: below.width - 12, height: below.height - 12 };
+      if (below.y >= anchor.y + anchor.height + gap && !obstacles.some(obstacle => intersects(belowFace, obstacle))) return below;
+    }
     // Keep the quota/mini/message stack on the same row when a neighboring
     // panel only blocks one side before trying another side of the anchor.
     if (view === 'message' || quotaBounds || reminder) {
@@ -128,10 +139,13 @@ function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, g
       const state = snapshot(), nativePet = getPetBounds?.() || getPetWindow().getBounds();
       const presentation = getPetPresentation(), pet = petVisualBounds(nativePet, presentation?.shape, presentation);
       const area = screen.getDisplayMatching(pet).workArea;
-      const quota = presentation?.mode === 'peeked' && ['left', 'right'].includes(presentation.side) ? getQuotaBounds() : null;
-      const quotaBounds = quota && ['x', 'y', 'width', 'height'].every(key => Number.isFinite(quota[key])) &&
+      const quota = getQuotaBounds();
+      const visibleQuotaBounds = quota && ['x', 'y', 'width', 'height'].every(key => Number.isFinite(quota[key])) &&
         quota.width > 0 && quota.height > 0 ? quota : null;
-      const quotaWindowBounds = quotaBounds ? getQuotaWindowBounds() : null;
+      const atEdge = presentation?.side === 'left' ? Math.abs(nativePet.x - area.x) <= 1 :
+        presentation?.side === 'right' && Math.abs(nativePet.x + nativePet.width - area.x - area.width) <= 1;
+      const quotaBounds = presentation?.mode === 'peeked' && presentation.dragging !== true && atEdge ? visibleQuotaBounds : null;
+      const quotaWindowBounds = visibleQuotaBounds ? getQuotaWindowBounds() : null;
       const obstacles = [...getWindowObstacles(), getReminderBounds(), pet].filter(item => item &&
         ['x', 'y', 'width', 'height'].every(key => Number.isFinite(item[key])) && item.width > 0 && item.height > 0);
       const active = ['running', 'paused'].includes(state.status);
@@ -149,18 +163,23 @@ function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, g
         const current = entry.win.getBounds();
         // The anchored stack follows the card face, not its guard role's transparent gutter.
         const placementObstacles = quotaWindowBounds && (view === 'mini' || (view === 'message' && !state.reminder)) ?
-          obstacles.map(item => ['x', 'y', 'width', 'height'].every(key => item[key] === quotaWindowBounds[key]) ? quotaBounds : item) : obstacles;
+          obstacles.map(item => ['x', 'y', 'width', 'height'].every(key => item[key] === quotaWindowBounds[key]) ? visibleQuotaBounds : item) : obstacles;
         const retainedPanelBounds = view === 'panel' && entry.positioned && !panelAnchorPending ?
           fit({ ...current, ...size }, screen.getDisplayMatching(current).workArea) : null;
-        const bounds = retainedPanelBounds || place(view, size, pet, area, placementObstacles, miniBounds, quotaBounds, state.reminder);
+        const bounds = retainedPanelBounds || place(view, size, pet, area, placementObstacles, miniBounds, quotaBounds, state.reminder, visibleQuotaBounds);
         if (['x', 'y', 'width', 'height'].some(key => bounds[key] !== current[key])) entry.win.setBounds(bounds, false);
         entry.positioned = true;
         if (view === 'panel') panelAnchorPending = false;
-        if (view === 'mini') miniBounds = bounds;
+        if (view === 'mini') {
+          miniBounds = bounds;
+          const actual = entry.win.getBounds(), face = { x: actual.x + 6, y: actual.y + 6, width: actual.width - 12, height: actual.height - 12 };
+          entry.pointer = { side: face.y + face.height / 2 < pet.y + pet.height / 2 ? 'bottom' : 'top',
+            offset: Math.max(22, Math.min(face.width - 22, pet.x + pet.width / 2 - face.x)) };
+        }
         obstacles.push(view === 'panel' ? bounds : { x: bounds.x + 6, y: bounds.y + 6, width: bounds.width - 12, height: bounds.height - 12 });
         entry.win.setAlwaysOnTop(view === 'panel' ? state.pinned === true : true, 'floating');
         entry.win.setIgnoreMouseEvents(view === 'message' && !state.reminder, { forward: true });
-        entry.win.webContents.send('pomodoro:state', state);
+        entry.win.webContents.send('pomodoro:state', view === 'mini' ? { ...state, miniPointer: entry.pointer } : state);
         if (view === 'panel' && panelFocusPending) {
           entry.win.show(); entry.win.focus(); panelFocusPending = false;
         } else if (!entry.win.isVisible()) entry.win.showInactive();
@@ -172,7 +191,7 @@ function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, g
     if (!view || !entries.get(view).win.isVisible() || !ACTIONS[view].has(type) || !validAction(type, value, view) ||
       (view === 'message' && type !== 'layout' && !getSnapshot().reminder)) return { ok: false, message: '无法执行此操作。' };
     if (stopped || isSuppressed()) return { ok: false, message: '当前无法操作番茄钟。' };
-    if (type === 'open') { open(); return { ok: true, state: snapshot() }; }
+    if (type === 'open') { open(); return { ok: true, state: snapshot(view) }; }
     if (type === 'close-panel') { panelOpen = false; settingsOpen = false; panelFocusPending = false; sync(); return { ok: true, state: snapshot() }; }
     if (type === 'layout') {
       if (view === 'message') messageCardHeight = value.cardHeight; else settingsOpen = value.settings;
@@ -185,7 +204,7 @@ function createPomodoroWindows({ BrowserWindow, ipcMain, screen, getPetWindow, g
     } catch (error) { report(error); return { ok: false, message: '操作未完成，请重试。' }; }
   }
   function open() { if (stopped) return; panelAnchorPending = !panelOpen; panelOpen = true; panelFocusPending = !unavailable(); sync(); }
-  ipcMain.handle('pomodoro:load', event => source(event) ? { ok: true, state: snapshot() } : { ok: false, message: '来源无效。' });
+  ipcMain.handle('pomodoro:load', event => { const view = source(event); return view ? { ok: true, state: snapshot(view) } : { ok: false, message: '来源无效。' }; });
   ipcMain.handle('pomodoro:action', action);
   function close() {
     stopped = true; panelOpen = false;
