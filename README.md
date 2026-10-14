@@ -8,7 +8,7 @@
 
 首页采用确认后的整屏银白/夜景玻璃主视觉，品牌语「球球-陪你自在一点」。`home.js` 复用原生 WebGL 实现自动柔光、曲面折射与鼠标水波；眼睛以2～4秒随机间隔自然眨动，约四分之一概率快速连眨两次，闭眼以像素宽度的抗锯齿圆弧收合并沿用原眼睛颜色；暂停、减少动态、页面隐藏及静态回退保持可用。主下载按钮为「macOS 版下载」并使用内联 Apple 标识，下方注明版本与 Apple 芯片，并提供「国内下载 ↗」备用入口；Intel 保留顶部独立说明入口。首页顶部导航叠加半透明渐变、柔和高光与背景模糊；浅深色分别处理，并支持减少透明度与无模糊能力的静态回退。
 
-原官网功能和演示保留在 `product/index.html`，地址为 `https://qiuqiu.pet/product/`。导航的功能介绍、安装指南与更新日志在新页签打开；旧首页功能锚点通过 `location.replace` 跳转到对应功能分区。旧 `product.html` 仅保留兼容跳转，并携带原查询参数和锚点。产品正文和演示、许可及署名保持。日志位于 `updates/index.html`（`https://qiuqiu.pet/updates/`），按用户要求移除 0.4.03 条目，本次新增 0.4.04，保留其余 15 条记录；0.4.00 在侧栏、正文及手机选择器标为「大版本更新」。官网下载为最新 0.4.04。历史下载每种架构只保留 DMG，共 17 个入口（16 个 DMG 与唯一无 DMG 的 0.3.10 热修复 ZIP）；重复的 Apple／Intel 版本提示已删。桌面侧栏、手机选择器、hash 直链与历史返回保持，无 JavaScript 时显示全部记录。旧 `/product/#updates` 及 `product.html#updates` 转到独立日志页。首页、功能介绍、更新日志保留独立 canonical 和分享封面；隐私说明独立位于 `https://qiuqiu.pet/privacy/`，四页均已加入 sitemap。
+原官网功能和演示保留在 `product/index.html`，地址为 `https://qiuqiu.pet/product/`。导航的功能介绍、安装指南与更新日志在新页签打开；旧首页功能锚点通过 `location.replace` 跳转到对应功能分区。旧 `product.html` 仅保留兼容跳转，并携带原查询参数和锚点。产品正文和演示、许可及署名保持。日志位于 `updates/index.html`（`https://qiuqiu.pet/updates/`），按用户要求移除 0.4.03 条目，本次新增 0.4.05，保留其余 16 条记录；0.4.00 在侧栏、正文及手机选择器标为「大版本更新」。官网下载为最新 0.4.05。历史下载每种架构只保留 DMG，共 18 个入口（17 个 DMG 与唯一无 DMG 的 0.3.10 热修复 ZIP）；重复的 Apple／Intel 版本提示已删。桌面侧栏、手机选择器、hash 直链与历史返回保持，无 JavaScript 时显示全部记录。旧 `/product/#updates` 及 `product.html#updates` 转到独立日志页。首页、功能介绍、更新日志保留独立 canonical 和分享封面；隐私说明独立位于 `https://qiuqiu.pet/privacy/`，四页均已加入 sitemap。
 
 首页「免费、非商业 · 署名与许可」使用原生小弹窗，分行展示使用范围、原作者 GitHub 项目与再次分发说明，可通过关闭按钮、Esc 或点击背景关闭；不再跳转功能介绍。原作者旧项目地址已重定向为 `sam70361/aora-bot`，弹窗链接使用 GitHub API 回读的现地址。首页新页签入口统一为细线圆角新窗口图标。更新日志只展示对应版本下载，不附加 GitHub Release 页面入口。
 
@@ -70,6 +70,19 @@ Umami Cloud 网站“球球官网”，website ID 为 `fe855bb0-9000-49aa-820b-b
 首页版本行、桌面下载菜单和手机菜单均提供国内入口；产品页顶部采用 C 分体展开菜单，下载卡片采用 A 主次并排（窄手机上下排列），页尾为文字入口。主按钮仍直接下载 GitHub 安装包；菜单使用原生 details，可用 Escape 或外部点击关闭。界面不展示 GitHub 默认或登录说明，不承诺免登录、速度或所有国内网络可用。备用点击不扩展原有 GitHub 下载统计口径。
 
 ## 当前下载记录
+
+Apple 芯片版 **0.4.05**，发布日期 **2026-10-15**，GitHub 兼容标签 `v0.4.5`。GitHub Release 已公开，DMG/ZIP 均经匿名 HTTP 200 完整下载，大小与 SHA-256 和本地正式归档一致。
+
+本次整合额度预估、番茄钟、额度守护战、悬浮快捷面板与六种额度展示样式，并修复贴边布局、对白层级、关于窗口检查更新位置、Codex 联动确认、定制预览与保存反馈。Intel 仍为实际 0.3.13 候选；国内备用保持 0.4.04 微云链接，等待最后一步单独替换。网页演示仍按各自 manifest 标注 0.4.04/0.4.00 来源，未升级或冒充新版运行界面。
+
+| 文件 | 精确大小（bytes） | SHA-256 |
+| --- | ---: | --- |
+| [Qiuqiu-0.4.05-macOS-arm64-share.zip](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.5/Qiuqiu-0.4.05-macOS-arm64-share.zip) | 123889683 | `b0051dc2a7573cd86bf6d18d55cfa74e6ad0ef368a487dd3353c13abb0b402cb` |
+| [Qiuqiu-0.4.05-macOS-arm64.dmg](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.5/Qiuqiu-0.4.05-macOS-arm64.dmg) | 136895385 | `902a67ac443f75c348870dba9781f21072b250f47af53a4cb653b9e252283437` |
+
+大小与 SHA-256 来自已验收的 r25 正式归档；公开源码 `main@341a89f0d54e3f7a313ecc3099f8621b83065b6f`，本地归档已真挂载/解包。公开 tag 指向同一源码提交。Release 完整下载及官网部署/线上字节回读证据位于项目 `验收记录/v0.4.05-release-20261015/`。
+
+### 0.4.04 下载记录（保留）
 
 Apple 芯片版 **0.4.04**，发布日期 **2026-10-07**，GitHub 兼容标签 `v0.4.4`。
 
@@ -186,6 +199,8 @@ python3 -m http.server 4179 --bind 127.0.0.1
 ```
 
 ## 官网验证与发布
+
+0.4.05 本轮通过 20 项 Node 检查、118 个本地引用和全部 16 条历史日志逐字节核验；没有启动浏览器或 App，本轮不声称新增浏览器视觉检查。国内 0.4.04 和 Intel 0.3.13 入口保持，国内新分享链接确认后单独更新。
 
 ```bash
 node --test tests/*.test.cjs
