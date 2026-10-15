@@ -18,7 +18,7 @@ test('logs add 0.4.05, retain 16 historical records and omit 0.4.03', () => {
   assert.equal((html.match(/<option /g) || []).length, 17);
   assert.doesNotMatch(html, /v0\.4\.03-apple|本次更新仅适用于 Apple 芯片；Intel x64 最新公开构建/);
   assert.match(articleBlocks[0], /id="v0\.4\.05-apple"/);
-  assert.deepEqual([...articles[0].matchAll(/<h4>(.*?)<\/h4>/g)].map(m => m[1]), ['【新增】悬浮快捷面板', '【新增】番茄钟', '【新增】额度预估', '【新增】额度展示定制', '【新增】球球守护战', '【优化】使用体验']);
+  assert.deepEqual([...articles[0].matchAll(/<h4>(.*?)<\/h4>/g)].map(m => m[1]), ['【新增】悬浮快捷面板', '【新增】番茄钟', '【新增】额度展示定制', '【新增】球球守护战', '【优化】额度预估', '【优化】使用体验']);
   for (const text of ['悬浮快捷面板', '番茄钟', '六种展示样式', '额度预估参考', '球球守护战', '色弱模式']) assert.ok(articles[0].includes(text));
   assert.equal(createHash('sha256').update(articleBlocks.slice(1).join('\n')).digest('hex'), '280656136c6fbcf27302d48ec4f8992b0c050d44263578c74cabf419896bb064', 'all sixteen historical release blocks remain byte-identical');
   assert.match(articleBlocks[1], /id="v0\.4\.04-apple"/);
