@@ -23,7 +23,7 @@
 - 主下载使用公开 GitHub Release DMG 直链，同步版本和发布日期；文件大小、SHA-256 保留在本维护文档。国内备用仅指向已核验的 Apple 0.4.04 微云分享 https://share.weiyun.com/c6lIDCBc ，Intel 和历史版本不复用该入口。
 - Intel 构建候选在真实 Intel Mac 验收前，必须保留明显说明。
 - `LICENSE`、`NOTICE.md` 和原作者 `sam70361/emotion-ball` 署名不得删除。
-- 官网不使用 Cookie 或远程字体；意见反馈仅在用户主动提交时上传填写内容和所选截图，访问统计仅限下方说明的匿名汇总范围。
+- 官网不使用远程字体；意见反馈仅在用户主动提交时上传填写内容和所选截图。Umami 不使用 Cookie，GA4 使用第一方 Cookie，访问统计范围见下文。
 
 ## 搜索与站点地图
 
@@ -60,6 +60,16 @@ Umami Cloud 网站“球球官网”，website ID 为 `fe855bb0-9000-49aa-820b-b
 参考：[Umami 价格](https://umami.is/pricing)、[追踪配置](https://docs.umami.is/docs/tracker-configuration)、[指标口径](https://docs.umami.is/docs/metric-definitions)。
 
 本地检查：`node --test tests/analytics.test.cjs`。这些测试不会连接统计后台。
+
+### GA4 访问来源与下载点击
+
+GA4 媒体资源“球球官网”，网站数据流“球球官网 Web”，衡量 ID `G-4SKBHMHFLJ`、数据流 ID `16143253967`，报告时区为中国时间、币种 CNY。与既有 Umami 并行，覆盖 sitemap 中的 12 个正式页面；演示、测试和 Google 验证文件不加载统计。各页 `analytics.js` 的 `data-ga4-id` 配置同一个真实衡量 ID，空值时不加载 Google 脚本。GA4 使用第一方 Cookie 区分浏览器与会话，不代表真实人数或登录身份；不启用 Google Signals、广告个性化和增强型衡量。
+
+- 手动发送每页一次 `page_view`，只包含正式页面路径、固定官网标题和外部来源 origin。已知 `utm_source`/`utm_medium` 组合可以归因微信、小红书等渠道，其它查询参数、hash、来源路径及任意营销字段不上传。来源缺失时可能记为直接访问。
+- `download_click` 统计带现有标记的 GitHub 当前下载入口及官网现有微云入口，参数为 `architecture`、`position`、`download_source`、`version`；历史日志下载不计。微云仍对应 Apple 0.4.04，不能冒充新版。点击不等于下载完成或安装成功。
+- 原 Umami 四页 PV 汇总与 GitHub 下载事件保持，不扩大旧口径；两平台覆盖页数、来源和下载范围不同，不直接相加或强求一致。
+- 仅在正式 HTTPS 域名加载，尊重 DNT、旧 `umami.disabled` 及统一 `localStorage['qiuqiu.analytics.disabled']='1'`；退出后重新加载页面生效。统计不发送聊天、便签、反馈文本、截图、邮箱或桌宠本机资料，失败不阻断下载或页面使用。
+- GA4 从接入后开始累计，历史访问不能补回；来源看“流量获取”，点击看 `download_click` 事件。必须以真实事件送达和后台实时回读验收，安装提示或前端请求成功不能单独证明后台已收数。
 
 ## 致谢、周边与春野作品
 
