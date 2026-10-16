@@ -34,7 +34,7 @@ function run(withOptions) {
 }
 const state = run(true);
 assert.match(state.sales.innerHTML, /已售 3 件/);
-const confirmedSales = { '花野派对': 1, '春野拼布': 3, '夕光雾蓝': 5, '橘日咖啡': 1 };
+const confirmedSales = { '花野派对': 1, '春野拼布': 3, '夕光雾蓝': 5, '橘日咖啡': 1, '春野杂货铺': 1 };
 for (const style of state.styleInputs) {
   state.selected.style = style;
   style.handlers.change();

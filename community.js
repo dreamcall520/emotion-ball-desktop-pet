@@ -21,7 +21,7 @@
   document.addEventListener('visibilitychange', () => root.classList.toggle('motion-paused', document.hidden));
 
   // Confirmed sales are maintained here; unreported styles stay unlabelled.
-  const styleSales = { '花野派对': 1, '春野拼布': 3, '夕光雾蓝': 5, '橘日咖啡': 1 };
+  const styleSales = { '花野派对': 1, '春野拼布': 3, '夕光雾蓝': 5, '橘日咖啡': 1, '春野杂货铺': 1 };
   const productSales = { 'handle-cup': 1, cup: 1, vest: 1, mousepad: Object.values(styleSales).reduce((sum, count) => sum + count, 0) };
   const hottestStyle = Math.max(...Object.values(styleSales));
   const hottestProduct = Math.max(...Object.values(productSales));
