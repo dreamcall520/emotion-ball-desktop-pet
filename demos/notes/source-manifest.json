@@ -28,7 +28,8 @@
     "Insert demo-bridge.js before original renderer.",
     "Keep organize guidance concise: preserve meaning and replace only after confirmation.",
     "Insert demo-focus.js to prevent embedded windows stealing parent focus/scroll.",
-    "Load the shared same-origin embedding fallback before page rendering."
+    "Load the shared same-origin embedding fallback before page rendering.",
+    "Add noindex, follow, indexifembedded so demos are excluded as standalone search results while their embedded content remains eligible for Google indexing."
   ],
   "unchangedCopies": [
     "notes.css",
@@ -39,15 +40,15 @@
   "embeddedFiles": [
     {
       "file": "panel.html",
-      "sha256": "bfbab4e10859a7edd1b76e1d0947c91fa565cf3225b41e8c17bf148e7182eea7"
+      "sha256": "fac1259f07beb5e1a6ab6ef4758bffee049c9229af4122110b8c164f4b27f587"
     },
     {
       "file": "desktop.html",
-      "sha256": "bfbab4e10859a7edd1b76e1d0947c91fa565cf3225b41e8c17bf148e7182eea7"
+      "sha256": "fac1259f07beb5e1a6ab6ef4758bffee049c9229af4122110b8c164f4b27f587"
     },
     {
       "file": "reminder.html",
-      "sha256": "bfbab4e10859a7edd1b76e1d0947c91fa565cf3225b41e8c17bf148e7182eea7"
+      "sha256": "fac1259f07beb5e1a6ab6ef4758bffee049c9229af4122110b8c164f4b27f587"
     },
     {
       "file": "embed-fragment.html",

@@ -7,7 +7,7 @@
       "source": "desktop-pet/chat.html",
       "target": "index.html",
       "sha256": "9e3a0d495a02b7dc804d1b7c37098bc018efe79be8ba32f240ef39859a466d1a",
-      "embeddedSha256": "50d4cb6edd5dd3d0726f2bbf2072c3c5f628c419c809e6a283d7853d7a722746"
+      "embeddedSha256": "dc86fad7ec89d27f18e22c4909d612933ffacb573653fad9ad44e70a4abcd362"
     },
     {
       "source": "desktop-pet/chat.css",
@@ -125,7 +125,8 @@
     "The 0.4.04 renderer preserves native pointer/keyboard focus logic. Avatar activity additionally includes parent pause state and listens for qiuqiu-demo-motion; appearance forwards the third Codex pet descriptor unchanged.",
     "The 0.4.04 color-mode.js initializer preserves the HTML blue palette. The memory bridge supplies native (colorMode, appearance, uiTheme) callbacks and validates same-origin parent messages; only the two fixed website pet examples are accepted.",
     "The shared native Codex sprite player uses 0.4.04 idle timing (6.6s) and is loaded from ../customize/lib/codex-pet-player.js; its source and precise same-origin URL adaptation are recorded in ../customize/source-manifest.json.",
-    "Load the shared same-origin embedding fallback before page rendering."
+    "Load the shared same-origin embedding fallback before page rendering.",
+    "Add noindex, follow, indexifembedded so demos are excluded as standalone search results while their embedded content remains eligible for Google indexing."
   ],
   "adapters": [
     {

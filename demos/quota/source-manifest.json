@@ -7,7 +7,7 @@
       "source": "desktop-pet/quota-label.html",
       "target": "quota-label.html",
       "sha256": "4853b4f04a6f6427dd84de1ad80cfef290b9a34e01a0c29a05e4c35aac4692bf",
-      "embeddedSha256": "9a453b40e485e6f25ae47f9dc236a9d9c7f2f60369ee9341e2134e6e751b9c3c"
+      "embeddedSha256": "20fa45260bf6a1860ee490ec15a024882e45f75d304808b71cd118ec9117abed"
     },
     {
       "source": "desktop-pet/quota-label.css",
@@ -25,7 +25,7 @@
       "source": "desktop-pet/codex-details.html",
       "target": "codex-details.html",
       "sha256": "d248e0881bde2011aa3df988acea33723a4aa5229fad83d858bda04eb4d4e0e3",
-      "embeddedSha256": "c5f4de288156bc5d530dd306ec2f92ac331289cc70fa2b2776cebf942ad30dde"
+      "embeddedSha256": "0d4712c9b8431270d85b8bdfce6dc463f95a033b0c6bd3303bc1bbf8d67cba83"
     },
     {
       "source": "desktop-pet/codex-details.css",
@@ -61,7 +61,7 @@
       "source": "desktop-pet/api-usage-label.html",
       "target": "api-usage-label.html",
       "sha256": "198b4bb27e2c69387daa8a4d3ba5154624ad043044bf3e7e8e7d339fef330121",
-      "embeddedSha256": "0881489cde8b88a01ff1695bbcb454476a769153151853ad8037695a2624db27"
+      "embeddedSha256": "38bc2719ff37e8b449d560d67e4cbfb94c786b0fa1b79cae156ce04246607ef2"
     },
     {
       "source": "desktop-pet/api-usage-label.css",
@@ -79,7 +79,7 @@
       "source": "desktop-pet/api-usage.html",
       "target": "api-usage.html",
       "sha256": "f6bc61fe8de96e5e17d58993e8a56fc62055168a5c4f90249c665889b0840f80",
-      "embeddedSha256": "414cb35b9291f7e461765cb2c9e07c2e6617a840a243dd93c26a30885ce01b5f"
+      "embeddedSha256": "78d2e291bb1cb0f7071d474a3a962765ed98c517820ec9276308d3b9f5430c53"
     },
     {
       "source": "desktop-pet/api-usage.css",
@@ -111,7 +111,8 @@
     "Composition layout, verified messages, independent dual / 5-hour / weekly native items, uniform 280px main / 224px appearance card scaling with preserved dual 196x144 and single 196x131 viewports, responsive detail sizing and example dialog are website-only.",
     "API connection settings are hidden in the website; no credentials are accepted.",
     "Public 0.4.04 package supplies native trends, daily-use model, reset-expiry markers and mark-read button. Website models are synthetic; mark-read affects only example memory.",
-    "Load the shared same-origin embedding fallback before page rendering."
+    "Load the shared same-origin embedding fallback before page rendering.",
+    "Add noindex, follow, indexifembedded so demos are excluded as standalone search results while their embedded content remains eligible for Google indexing."
   ],
   "adapters": [
     {
@@ -140,7 +141,7 @@
     },
     {
       "target": "index.html",
-      "sha256": "bfc61dbd5495fae71ad252eec716b6ba703be5e9660b1c159bcfcf513491265c"
+      "sha256": "3bb7a4f5ac36488e5f4a3782a4e4422329d2e68bd05e05f8b5814ebc9ed1564b"
     }
   ],
   "packageAsarSha256": "8a4062ae6c907eea4417ebcadbb8f2f5127e8fe0ff3d21b66ca41c2f5ee151c8"
