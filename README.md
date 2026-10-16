@@ -29,6 +29,8 @@
 
 12 个公开页面分别维护标题、描述、canonical 与 OG/Twitter 分享信息，首页和功能页提供基本结构化数据。`sitemap.xml` 仅列正式页面；页面正文或搜索元信息有实际更新时，同步该页的 `lastmod`，不要按每日构建机械刷新。完整演示页使用 `noindex, follow, indexifembedded`，不独立出现在搜索结果中，同时允许 Google 理解产品页嵌入的演示；不要在 `robots.txt` 中禁止抓取演示资源。检查：`node --test tests/seo.test.cjs`。Google Search Console 的所有权验证、sitemap 提交及收录状态须在后台单独回读。
 
+根目录 `google8197da8dce207df0.html` 是 `https://qiuqiu.pet/` 的 Search Console 所有权验证文件，必须保留原文件名与内容，成功验证后也不要移除；不加入 sitemap。
+
 ## 基础防护
 
 - `robots.txt` 保留普通搜索抓取及 sitemap，拒绝 GPTBot、ClaudeBot、Google-Extended、CCBot，并请求所有爬虫跳过测试目录。这是对遵守协议的爬虫的声明，不能限制请求频率或拦截伪装爬虫；Google-Extended 同时控制部分 Gemini 内容使用。
