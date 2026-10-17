@@ -36,14 +36,9 @@ function makeIcon(root = path.resolve(__dirname, '../..')) {
   fs.mkdirSync(iconset, { recursive: true });
 
   for (const [fileName, size] of ICON_FILES) {
-    run('sips', [
-      '-z',
-      String(size),
-      String(size),
-      source,
-      '--out',
-      path.join(iconset, fileName)
-    ]);
+    const prepared = size === 1024 ? source
+      : path.join(root, 'desktop-pet/assets/app-icon-sizes', `${size}.png`);
+    fs.copyFileSync(prepared, path.join(iconset, fileName));
   }
 
   run('iconutil', ['-c', 'icns', iconset, '-o', output]);
