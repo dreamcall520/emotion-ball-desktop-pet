@@ -1,6 +1,14 @@
 (() => {
   const api = window.qiuqiuSettings;
   const $ = id => document.getElementById(id);
+  // Render the original character, with its real silhouette, lighting and eyes.
+  const source = window.EmotionBall.config.get('02').raw;
+  window.EmotionBall.config.register({ ...source, id: '50', name: '设置页球球', group: 'custom', antics: false, anims: [], pool: [0] });
+  const brandPet = window.EmotionBall.create($('brand-pet'), {
+    emotion: '50', fallbackId: '50', shape: 'blob', color: '#EEEBE4', eyeColor: '#1A1A1A',
+    idle: false, autostart: false, lite: false, label: '经典球球'
+  });
+  window.addEventListener('beforeunload', () => brandPet.destroy(), { once: true });
   let snapshot = null, selected = 'common', busy = false, last = '', request = 0;
   const descriptions = {
     '保持清醒': '关闭后，球球会根据系统空闲时间自动休息。',
@@ -69,8 +77,13 @@
     $('section-title').textContent = query ? '搜索结果' : nav.find(item => item.id === selected).label;
     const sections = [];
     let count = 0;
-    const commonLabels = new Set(['始终置顶', '保持清醒', '互动气泡', '外观（所有窗口）', '主题色', '色弱友好（增强对比度）', '自动提醒新版本']);
-    const displayed = !query && selected === 'common' ? [{ id: 'common', label: '让球球更合心意', children: snapshot.entries.flatMap(entry => entry.children ? entry.children : []).filter(entry => commonLabels.has(entry.label)).concat(snapshot.entries.filter(entry => entry.label === '球球尺寸')) }] : categories;
+    const allEntries = snapshot.entries.flatMap(entry => entry.children ? entry.children : []);
+    const commonGroups = [
+      { id: 'common', label: '日常陪伴', children: allEntries.filter(entry => ['保持清醒', '互动气泡', '始终置顶'].includes(entry.label)) },
+      { id: 'common', label: '外观与感受', children: allEntries.filter(entry => ['外观（所有窗口）', '主题色', '色弱友好（增强对比度）'].includes(entry.label)).concat(snapshot.entries.filter(entry => entry.label === '球球尺寸')) },
+      { id: 'common', label: '应用偏好', children: allEntries.filter(entry => entry.label === '自动提醒新版本') }
+    ];
+    const displayed = !query && selected === 'common' ? commonGroups : categories;
     for (const category of displayed) {
       if (!query && selected !== 'all' && selected !== category.id) continue;
       const items = category.children.flatMap(item => leaves(item)).filter(item =>

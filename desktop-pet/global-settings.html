@@ -7,20 +7,26 @@
   <title>球球 · 全局设置</title>
   <link rel="stylesheet" href="global-settings.css">
   <script defer src="color-mode.js"></script>
+  <script defer src="../emotion-ball/js/rings.js"></script>
+  <script defer src="../emotion-ball/js/emotions.js"></script>
+  <script defer src="../emotion-ball/js/ball.js"></script>
+  <script defer src="../emotion-ball/js/engine.js"></script>
   <script defer src="global-settings-renderer.js"></script>
 </head>
 <body>
   <aside>
-    <div class="brand"><strong>球球</strong><span>设置中心</span></div>
+    <div class="brand"><div id="brand-pet" role="img" aria-label="经典球球"></div><div class="brand-copy"><strong>球球</strong><span>陪伴你的每一天</span></div></div>
     <p class="nav-caption">功能分类</p>
     <nav aria-label="设置分类" id="navigation"></nav>
     <footer id="version">本地设置中心</footer>
   </aside>
   <main>
     <header><div><h1>全局设置</h1><p>查看球球状态，让陪伴更合心意。</p></div><div class="header-tools"><div id="appearance-switch" class="segmented" role="group" aria-label="界面外观快捷切换"></div><span class="save-hint">修改即时生效 · 自动保存</span></div></header>
-    <nav id="view-navigation" class="source-switch" aria-label="设置视图"></nav>
     <div id="summary" aria-label="当前概况"></div>
+    <div class="toolbar">
+    <nav id="view-navigation" class="source-switch" aria-label="设置视图"></nav>
     <label class="search"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 4.5 4.5"></path></svg><input id="search" type="search" placeholder="搜索设置与功能…" aria-label="搜索全部设置"><kbd>⌘ K</kbd></label>
+    </div>
     <div class="section-heading"><h2 id="section-title">全部设置</h2><span id="count"></span></div>
     <p id="feedback" role="status" aria-live="polite"></p>
     <div id="content"><p>正在读取设置…</p></div>
