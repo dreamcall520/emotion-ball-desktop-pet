@@ -260,9 +260,9 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   return { pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, downloads, revealed, consents, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
     notes, pomodoro, pomodoroWindows, nativeTheme, call: expression => vm.runInContext(expression, context),
     pressShortcut(accelerator) { if (!shortcutsSuspended) shortcutCallbacks.get(accelerator)?.(); },
-    invoke(channel, packet, sender = pet.webContents) {
+    invoke(channel, packet, sender = pet.webContents, ...args) {
       assert.ok(ipcHandlers.has(channel), `${channel} handler must be registered`);
-      return Promise.resolve(ipcHandlers.get(channel)({ sender }, packet));
+      return Promise.resolve(ipcHandlers.get(channel)({ sender, senderFrame: sender.mainFrame }, packet, ...args));
     },
     send(channel, packet, sender = pet.webContents) {
       // 与实际预加载一致，默认携带当前页面代次；显式传旧值可验迟到报文。
@@ -840,12 +840,12 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   const menu = f.call('menuTemplate()');
   const top = menu.filter(item => item.type !== 'separator');
   assert.deepEqual(Array.from(top, item => item.label), [
-    '和球球聊聊', '来定制球球', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API',
+    '全局设置…', '和球球聊聊', '来定制球球', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API',
     '贴边与显示', '球球尺寸', '界面配色', '常规设置', '关于球球', '检查更新', '退出球球'
   ]);
   const group = label => top.find(item => item.label === label).submenu.filter(item => item.type !== 'separator');
   assert.equal(top.find(item => item.id === 'chat-open').submenu, undefined);
-  assert.equal(top[1].id, 'customize-open');
+  assert.equal(top[2].id, 'customize-open');
   assert.equal(top[1].submenu, undefined);
   assert.deepEqual(Array.from(group('便签与待办'), item => item.id), ['notes-open', 'notes-new', 'notes-todo-new', 'notes-default-tab']);
   assert.deepEqual(Array.from(group('便签与待办'), item => item.label), ['打开主面板', '新建便签', '添加待办', '默认打开']);
@@ -861,7 +861,7 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
     ['始终置顶', '开机自动启动（打包后可用）', '恢复默认位置', '自动提醒新版本']);
   assert.equal(top.find(item => item.label === '球球尺寸').submenu.length, 6);
   assert.equal(top.find(item => item.label === '界面配色').id, 'color-mode');
-  assert.equal(menu[0].id, 'chat-open');
+  assert.equal(menu[0].id, 'global-settings');
   assert.equal(menu.at(-2).id, 'update-check');
   assert.equal(menu.filter(item => item.id === 'update-check').length, 1);
 });
@@ -1420,7 +1420,7 @@ test('桌面新版气泡只主动出现一次，可信当前按钮打开关于�
   const menu = f.call('menuTemplate()');
   assert.equal(menu[0].id, 'update-check');
   assert.equal(menu[1].type, 'separator');
-  assert.equal(menu[2].id, 'chat-open');
+  assert.equal(menu[2].id, 'global-settings');
   assert.equal(menu.filter(item => item.id === 'update-check').length, 1);
   const count = f.windows.length;
   f.send('pet:bubble-reply', { id: shown.id, action: 'app-update-open' }, f.bubble);
@@ -1476,7 +1476,7 @@ test('新版在会话内提示并保留菜单标记，失败不丢已知新版�
   assert.equal((await f.invoke('pet:chat-get', undefined, sender)).appUpdate, null);
   assert.equal(menuItem(f, 'update-check').label, '检查更新');
   const currentMenu = f.call('menuTemplate()');
-  assert.equal(currentMenu[0].id, 'chat-open');
+  assert.equal(currentMenu[0].id, 'global-settings');
   assert.equal(currentMenu.at(-2).id, 'update-check');
   assert.equal(currentMenu.filter(item => item.id === 'update-check').length, 1);
   assert.equal(f.call('aboutUpdateState.hasUpdate'), false);
@@ -3048,7 +3048,7 @@ test('桌面右键菜单以第一项为锚点，保留完整菜单及关闭回�
   const { value, options } = f.popups.at(-1);
   assert.equal(options.window, f.pet);
   assert.equal(options.positioningItem, 0);
-  assert.equal(value[0].label, '和球球聊聊');
+  assert.equal(value[0].label, '全局设置…');
   assert.equal(value.at(-1).label, '退出球球');
   assert.equal(typeof options.callback, 'function');
 });
@@ -3467,4 +3467,44 @@ test('番茄退出保存失败保留应用和后台资源，成功重试才清�
   f.pomodoro.close = () => ({ ok: true });
   f.app.emit('before-quit', { preventDefault() { prevented++; } });
   assert.equal(f.call('quitCleanupStarted'), true);
+});
+
+
+test('全局设置复用单一窗口、拒绝其他窗口操作并同步现有设置', async () => {
+  const f = await fixture();
+  menuItem(f, 'global-settings').click();
+  const win = f.call('globalSettingsWindow');
+  win.emit('ready-to-show');
+  menuItem(f, 'global-settings').click();
+  assert.equal(f.call('globalSettingsWindow'), win);
+  assert.equal(await f.invoke('pet:global-settings-get'), null);
+  const read = () => f.invoke('pet:global-settings-get', undefined, win.webContents);
+  let state = await read();
+  assert.ok(!JSON.stringify(state).includes('global-settings'));
+  const interaction = state.entries.find(item => item.label === '球球与互动');
+  const bubbles = interaction.children.find(item => item.label === '互动气泡');
+  assert.equal(bubbles.checked, true);
+  const result = await f.invoke('pet:global-settings-action', bubbles.id, win.webContents, false);
+  assert.equal(result.error, undefined);
+  assert.equal(f.call('settings.bubblesEnabled'), false);
+  assert.equal(f.saved.at(-1).bubblesEnabled, false);
+  f.call("setCompanionSetting('bubblesEnabled', true)");
+  state = await read();
+  assert.equal(state.entries.find(item => item.label === '球球与互动').children.find(item => item.label === '互动气泡').checked, true);
+  const codex = state.entries.find(item => item.id === '/codex-menu');
+  const disabled = codex.children.find(item => item.id.endsWith('/codex-quota-visible'));
+  assert.ok((await f.invoke('pet:global-settings-action', disabled.id, win.webContents, true)).error);
+  win.hide();
+  assert.ok(await read());
+  assert.ok((await f.invoke('pet:global-settings-action', bubbles.id, win.webContents, false)).error);
+});
+
+test('全局设置启用 Codex 必须完成原有授权，取消后保持关闭', async () => {
+  const f = await fixture({ consent: async () => ({ response: 1 }) });
+  f.call('openGlobalSettings()');
+  const win = f.call('globalSettingsWindow'); win.emit('ready-to-show');
+  const result = await f.invoke('pet:global-settings-action', '/codex-menu/codex-enabled', win.webContents, true);
+  assert.equal(f.consents.length, 1);
+  assert.equal(f.call('settings.codexEnabled'), false);
+  assert.ok(result.error);
 });

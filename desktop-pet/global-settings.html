@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>球球 · 全局设置</title>
+  <link rel="stylesheet" href="global-settings.css">
+  <script defer src="color-mode.js"></script>
+  <script defer src="global-settings-renderer.js"></script>
+</head>
+<body>
+  <aside>
+    <div class="brand"><span class="ball" aria-hidden="true">··</span><strong>球球</strong></div>
+    <p class="nav-caption">设置与功能</p>
+    <nav aria-label="设置分类" id="navigation"></nav>
+    <footer id="version">本地设置中心</footer>
+  </aside>
+  <main>
+    <header><div><h1>全局设置</h1><p>球球的一切，都在这里。</p></div><span class="save-hint">修改即时生效</span></header>
+    <div id="summary" aria-label="当前概况"></div>
+    <label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="搜索设置与功能…" aria-label="搜索全部设置"><kbd>⌘ K</kbd></label>
+    <div class="section-heading"><h2 id="section-title">全部设置</h2><span id="count"></span></div>
+    <p id="feedback" role="status" aria-live="polite"></p>
+    <div id="content"><p>正在读取设置…</p></div>
+    <p id="empty" hidden>没有找到相关设置，试试“额度”“外观”或“便签”。</p>
+  </main>
+</body>
+</html>

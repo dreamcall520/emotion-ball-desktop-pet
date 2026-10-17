@@ -1,3 +1,4 @@
+const { settingsEntries, findSettingsAction } = require('./lib/global-settings');
 const fs = require('node:fs');
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
@@ -332,6 +333,46 @@ function functionWindowObstacles() {
 
 function positionFunctionWindow(win) {
   positionWindowNearPet(win, petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null, screen, functionWindowObstacles());
+}
+
+let globalSettingsWindow = null;
+let globalSettingsBusy = false;
+
+function globalSettingsSnapshot() {
+  return { version: app.getVersion(), entries: settingsEntries(menuTemplate()),
+    summary: [
+      { label: '球球状态', value: edgeTuck?.getPresentation().mode === 'hidden' ? '暂时隐藏' : '陪伴中' },
+      { label: 'Codex 联动', value: settings.codexEnabled ? '已启用' : '未启用' },
+      { label: 'API 统计', value: apiUsage?.getState().connected ? '已连接' : '未连接' },
+      { label: '界面外观', value: { system: '跟随系统', light: '浅色', dark: '深色' }[settings.codexQuotaAppearance] }
+    ] };
+}
+
+function fromGlobalSettings(event, requireVisible = true) {
+  return !isQuitting && !screenLocked && globalSettingsWindow && !globalSettingsWindow.isDestroyed() &&
+    (!requireVisible || globalSettingsWindow.isVisible()) && event.sender === globalSettingsWindow.webContents &&
+    event.senderFrame === globalSettingsWindow.webContents.mainFrame;
+}
+
+function openGlobalSettings() {
+  if (isQuitting || screenLocked) return;
+  if (globalSettingsWindow && !globalSettingsWindow.isDestroyed()) {
+    globalSettingsWindow.show(); globalSettingsWindow.focus(); return;
+  }
+  const win = new BrowserWindow({ width: 980, height: 760, minWidth: 620, minHeight: 480,
+    title: '球球 · 全局设置', backgroundColor: '#F5F7FB', show: false,
+    webPreferences: { preload: path.join(__dirname, 'global-settings-preload.js'),
+      contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false }
+  });
+  globalSettingsWindow = win;
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', event => event.preventDefault());
+  win.webContents.on('will-attach-webview', event => event.preventDefault());
+  win.on('closed', () => { if (globalSettingsWindow === win) globalSettingsWindow = null; });
+  win.once('ready-to-show', () => { if (!isQuitting && !screenLocked && !win.isDestroyed()) win.show(); });
+  void win.loadFile(path.join(__dirname, 'global-settings.html')).catch(error => {
+    writeError('全局设置', error); if (!win.isDestroyed()) win.destroy();
+  });
 }
 
 function openApiUsage() {
@@ -1816,6 +1857,7 @@ function menuTemplate() {
     click: () => { void (availableUpdate ? showUpdateResult(availableUpdate) : checkForUpdates(true)); } };
   return [
     ...(availableUpdate ? [updateEntry, { type: 'separator' }] : []),
+    { id: 'global-settings', label: '全局设置…', accelerator: 'CommandOrControl+,', click: openGlobalSettings },
     { id: 'chat-open', label: '和球球聊聊', click: openChat },
     { id: 'customize-open', label: '来定制球球', click: openCustomization },
     { label: '便签与待办', submenu: [
@@ -2655,6 +2697,22 @@ function createPetWindow() {
 }
 
 function registerIpc() {
+  ipcMain.handle('pet:global-settings-get', event => fromGlobalSettings(event, false) ? globalSettingsSnapshot() : null);
+  ipcMain.handle('pet:global-settings-action', async (event, id, checked) => {
+    if (!fromGlobalSettings(event) || globalSettingsBusy || typeof id !== 'string') return { error: '当前无法修改，请稍后重试。' };
+    const item = findSettingsAction(menuTemplate(), id);
+    if (!item || (item.type === 'checkbox' && typeof checked !== 'boolean')) return { error: '该选项暂不可用，请刷新后重试。' };
+    globalSettingsBusy = true;
+    try {
+      // Await consent instead of reporting success while its window is still open.
+      if (item.id === 'codex-enabled') await setCodexEnabled(checked);
+      else await item.click({ ...item, checked: item.type === 'checkbox' ? checked : true });
+      const current = findSettingsAction(menuTemplate(), id);
+      const mismatch = current && (item.type === 'checkbox' && current.checked !== checked || item.type === 'radio' && !current.checked);
+      return { snapshot: globalSettingsSnapshot(), ...(mismatch ? { error: '设置未更改，请确认授权或稍后重试。' } : {}) };
+    } catch (_) { return { error: '操作未完成，请重试。', snapshot: globalSettingsSnapshot() }; }
+    finally { globalSettingsBusy = false; }
+  });
   ipcMain.handle('pet:codex-consent-get', event => fromCodexConsentWindow(event) ? codexConsentInfo() : null);
   ipcMain.handle('pet:codex-consent-answer', (event, accepted) => {
     if (!fromCodexConsentWindow(event) || typeof accepted !== 'boolean') return false;
@@ -3148,6 +3206,7 @@ async function bootstrap() {
       customizationWindow.hide();
     }
     if (apiUsageWindow && !apiUsageWindow.isDestroyed()) apiUsageWindow.hide();
+    if (globalSettingsWindow && !globalSettingsWindow.isDestroyed()) globalSettingsWindow.hide();
     chatWindow?.hide();
     void chat?.stop();
     dragState = null;
@@ -3176,6 +3235,7 @@ async function bootstrap() {
   if (process.argv.includes('--shortcuts-preview')) openShortcuts();
   if (process.argv.includes('--shortcut-settings-preview')) openShortcuts(true);
   if (process.argv.includes('--pomodoro-preview')) openPomodoro();
+  if (process.argv.includes('--settings-preview')) openGlobalSettings();
   if (process.argv.includes('--notes-preview')) notesCompanion.openPanel();
   scheduleUpdateCheck();
   if (settings.codexEnabled) void codexCompanion.setEnabled(true);
@@ -3190,6 +3250,7 @@ if (!hasSingleInstanceLock) {
     if (settings) restorePet();
     if (argv.includes('--shortcuts-preview')) openShortcuts();
     if (argv.includes('--shortcut-settings-preview')) openShortcuts(true);
+    if (argv.includes('--settings-preview')) openGlobalSettings();
     if (argv.includes('--notes-preview')) notesCompanion?.openPanel();
     if (argv.includes('--pomodoro-preview')) openPomodoro();
   });
@@ -3228,6 +3289,7 @@ if (!hasSingleInstanceLock) {
     apiUsage?.close();
     safelyInvokeWindow('退出时快捷入口清理', () => { shortcutWindow?.dispose(); shortcutRegistrar?.dispose(); });
     safelyInvokeWindow('退出时番茄钟窗口销毁', () => pomodoroWindows?.close());
+    safelyInvokeWindow('退出时全局设置销毁', () => globalSettingsWindow?.destroy());
     safelyInvokeWindow('退出时关于窗口销毁', () => aboutWindow?.destroy());
     let chatClosing;
     safelyInvokeWindow('退出时聊天停止', () => { chatClosing = chat?.close(); });
