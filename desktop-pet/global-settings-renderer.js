@@ -30,6 +30,13 @@
   };
   // Original 24px line icons, kept local to the settings navigation.
   const navigationIcons = {
+    '和球球聊聊': ['M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-8l-6 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z', 'M7 9h10M7 13h6'],
+    '定制球球': ['M12 4a8 8 0 1 0 8 8', 'm15 4 2-2 5 5-2 2-5-5ZM15 4l-6 6-1 4 4-1 6-6'],
+    'API 费用与用量': ['M4 4v16h16', 'M8 16v-4M13 16V8M18 16V5'],
+
+    '常用设置': ['m12 3 2.6 5.6 6.1.8-4.5 4.3 1.1 6.1-5.3-3-5.3 3 1.1-6.1-4.5-4.3 6.1-.8Z'],
+    '番茄钟': ['M9 3h6M12 3v3M18 7l2-2', 'M12 6a8 8 0 1 0 0 16 8 8 0 0 0 0-16M12 10v4l-2 2'],
+    '快捷键': ['M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z', 'M7 9h.01M12 9h.01M17 9h.01M7 12h.01M12 12h.01M17 12h.01M8 16h8'],
     '球球与互动': ['M8 4h8a5 5 0 0 1 5 5v4a5 5 0 0 1-5 5h-5l-5 3v-4a5 5 0 0 1-3-4V9a5 5 0 0 1 5-5Z', 'M8 10h.01M16 10h.01M9 13q3 3 6 0'],
     '便签与待办': ['M7 3h10a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Z', 'M8 8h8M8 12h5M8 16l2 2 5-5'],
     '球球尺寸': ['M9 4H4v5M15 4h5v5M4 15v5h5M20 15v5h-5', 'M9 9h6v6H9Z'],
@@ -50,9 +57,21 @@
     }
     return svg;
   }
+  const externalIds = new Set(['/chat-open', '/customize-open', '/pomodoro-open', '/about-open']);
   function groups() {
-    const shortcuts = snapshot.entries.filter(entry => !entry.children);
-    return [{ id: 'quick', label: '功能入口', children: shortcuts }, ...snapshot.entries.filter(entry => entry.children)];
+    const categories = snapshot.entries.filter(entry => entry.children);
+    const general = categories.find(entry => entry.label === '常规设置');
+    if (general) categories[categories.indexOf(general)] = { ...general, children: [...general.children,
+      ...snapshot.entries.filter(entry => entry.id === '/update-check')] };
+    return categories;
+  }
+  function externalIcon() {
+    const icon = navigationIcon('常规设置');
+    icon.setAttribute('class', 'external-icon');
+    icon.replaceChildren();
+    const path = document.createElementNS(icon.namespaceURI, 'path');
+    path.setAttribute('d', 'M7 17 17 7M7 7h10v10'); icon.append(path);
+    return icon;
   }
   function leaves(entry, trail = []) {
     if (entry.children?.length && entry.children.every(child => child.type === 'radio')) return [{ ...entry, type: 'select', choices: entry.children, trail }];
@@ -63,42 +82,43 @@
     if (!snapshot) return;
     const focusId = document.activeElement?.dataset?.action;
     $('version').textContent = `球球 v${snapshot.version} · 本地设置`;
-    $('summary').replaceChildren(...snapshot.summary.map(item => {
-      const node = el('div'); node.append(el('span', item.label, 'stat-label'), el('span', item.value, 'stat-value')); return node;
-    }));
     const categories = groups();
-    const nav = [{ id: 'common', label: '常用设置' }, { id: 'all', label: '全部设置' }, ...categories];
+    const nav = [{ id: 'common', label: '常用设置' }, ...categories,
+      { id: 'shortcuts', label: '快捷键' },
+      ...categories.flatMap(category => category.children.flatMap(item => item.children || [])).filter(item => item.id.endsWith('/openai-api-usage')).map(item => ({ ...item, label: 'API 费用与用量', external: true })),
+      ...snapshot.entries.filter(entry => externalIds.has(entry.id)).map(entry => ({ ...entry,
+        label: ({ '/chat-open': '和球球聊聊', '/customize-open': '定制球球' })[entry.id] || entry.label, external: true }))];
     if (!nav.some(item => item.id === selected)) selected = 'common';
     const selectView = id => {
-      selected = id; $('search').value = ''; render(); document.querySelector('main').scrollTop = 0;
+      selected = id; $('search').value = ''; $('search-panel').hidden = true;
+      $('search-toggle').setAttribute('aria-expanded', 'false'); $('feedback').textContent = '';
+      render(); document.querySelector('main').scrollTop = 0;
     };
     const navigationGroups = [
-      ['日常陪伴', ['球球与互动', '便签与待办']],
-      ['外观与显示', ['球球尺寸', '贴边与显示', '界面配色']],
-      ['应用与联动', ['Codex 与 API', '常规设置']]
+      ['', ['常用设置']],
+      ['日常陪伴', ['球球与互动', '和球球聊聊', '便签与待办', '番茄钟']],
+      ['外观与显示', ['定制球球', '球球尺寸', '贴边与显示', '界面配色']],
+      ['应用与联动', ['Codex 与 API', 'API 费用与用量', '快捷键', '常规设置']]
     ];
     $('navigation').replaceChildren(...navigationGroups.map(([label, labels]) => {
       const section = el('div', '', 'nav-group');
-      section.setAttribute('role', 'group'); section.setAttribute('aria-label', label);
-      section.append(el('div', label, 'nav-group-title'));
+      section.setAttribute('role', 'group'); section.setAttribute('aria-label', label || '快捷导航');
+      if (label) section.append(el('div', label, 'nav-group-title'));
       for (const name of labels) {
-        const item = categories.find(category => category.label === name);
+        const item = nav.find(category => category.label === name);
         if (!item) continue;
         const button = el('button');
-        button.append(navigationIcon(item.label), el('span', item.label));
+        button.dataset.view = item.id;
+        const iconLabel = item.label;
+        button.append(navigationIcon(iconLabel), el('span', item.label));
+        if (item.external) { button.append(externalIcon()); button.title = '在独立窗口打开'; }
         if (selected === item.id) button.setAttribute('aria-current', 'page');
-        button.onclick = () => selectView(item.id);
+        button.onclick = () => item.external ? act(item) : selectView(item.id);
         section.append(button);
       }
       return section;
     }));
-    $('view-navigation').replaceChildren(...nav.slice(0, 2).concat(nav.filter(item => item.id === 'quick')).map(item => {
-      const button = el('button', item.label);
-      button.dataset.view = item.id;
-      button.setAttribute('aria-pressed', String(selected === item.id || item.id === 'all' && !['common', 'quick'].includes(selected)));
-      button.onclick = () => selectView(item.id);
-      return button;
-    }));
+    $('about-link').onclick = () => act(snapshot.entries.find(entry => entry.id === '/about-open'));
     const appearance = snapshot.entries.find(item => item.id === '/color-mode')?.children.find(item => item.id.endsWith('/color-appearance'));
     $('appearance-switch').replaceChildren(...(appearance?.children || []).map(item => {
       const button = el('button', item.label);
@@ -119,9 +139,14 @@
       { id: 'common', label: '外观与感受', children: allEntries.filter(entry => ['外观（所有窗口）', '主题色', '色弱友好（增强对比度）'].includes(entry.label)).concat(snapshot.entries.filter(entry => entry.label === '球球尺寸')) },
       { id: 'common', label: '应用偏好', children: allEntries.filter(entry => entry.label === '自动提醒新版本') }
     ];
-    const displayed = !query && selected === 'common' ? commonGroups : categories;
+    if (!query && selected === 'shortcuts') {
+      $('content').replaceChildren(); $('empty').hidden = true;
+      window.renderSettingsShortcuts($('content'), snapshot.shortcuts, api); return;
+    }
+    const searchable = [...categories, { id: 'shortcuts', label: '快捷键', children: snapshot.entries.filter(entry => entry.id === '/shortcut-settings') }, { id: 'windows', label: '独立功能', children: snapshot.entries.filter(entry => externalIds.has(entry.id)) }];
+    const displayed = query ? searchable : selected === 'common' ? commonGroups : categories;
     for (const category of displayed) {
-      if (!query && selected !== 'all' && selected !== category.id) continue;
+      if (!query && selected !== category.id) continue;
       const items = category.children.flatMap(item => leaves(item)).filter(item =>
         !query || [category.label, ...item.trail, item.label, ...(item.choices || []).map(choice => choice.label), descriptions[item.label] || ''].join(' ').toLocaleLowerCase().includes(query));
       if (!items.length) continue;
@@ -147,13 +172,14 @@
         } else if (item.actionable) {
           const choice = ['checkbox', 'radio'].includes(item.type);
           const button = el('button', choice ? '' : '打开', choice ? item.type === 'checkbox' ? 'toggle' : 'radio' : 'action');
+          if (!choice && (externalIds.has(item.id) || /notes-open|openai-api-usage/.test(item.id))) { button.textContent = '打开'; button.append(externalIcon()); }
           if (!choice && /恢复|靠左|靠右|离开|隐藏|显示|睡眠|唤醒|表情|检查|刷新/.test(item.label)) button.textContent = '执行';
           button.setAttribute('aria-label', item.label);
           button.title = choice ? `${item.label}：${item.checked ? '已开启 / 已选择' : '未开启 / 未选择'}` : item.label;
           if (choice) { button.setAttribute('role', item.type === 'checkbox' ? 'switch' : 'radio'); button.setAttribute('aria-checked', String(item.checked)); }
           button.dataset.action = item.id;
           button.disabled = !item.enabled || busy;
-          button.onclick = () => act(item);
+          button.onclick = () => item.id === '/shortcut-settings' ? selectView('shortcuts') : act(item);
           row.append(button);
         }
         section.append(row);
@@ -161,7 +187,6 @@
       sections.push(section);
     }
     $('content').replaceChildren(...sections);
-    $('count').textContent = `${count} 项`;
     $('empty').hidden = count !== 0;
     if (focusId) Array.from(document.querySelectorAll('[data-action]')).find(node => node.dataset.action === focusId)?.focus();
   }
@@ -186,9 +211,17 @@
       if (last !== serialized) { snapshot = value; last = serialized; render(); }
     } catch (_) { $('feedback').textContent = '暂时无法读取设置，请重新打开窗口。'; }
   }
+  function setSearchOpen(open) {
+    $('search-panel').hidden = !open;
+    $('search-toggle').setAttribute('aria-expanded', String(open));
+    if (open) $('search').focus();
+    else { $('search').value = ''; render(); $('search-toggle').focus(); }
+  }
+  $('search-toggle').addEventListener('click', () => setSearchOpen($('search-panel').hidden));
   $('search').addEventListener('input', render);
   document.addEventListener('keydown', event => {
-    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); $('search').focus(); }
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setSearchOpen(true); }
+    if (event.key === 'Escape' && !$('search-panel').hidden) { event.preventDefault(); setSearchOpen(false); }
   });
   window.addEventListener('focus', refresh);
   const timer = setInterval(refresh, 2000);

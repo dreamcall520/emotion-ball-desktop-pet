@@ -235,6 +235,15 @@ function openShortcutAction(id) {
   else if (id === 'pomodoro') openPomodoro();
 }
 
+function saveShortcutConfig(config) {
+  let nextSettings;
+  const result = shortcutRegistrar.apply(config, shortcutSettings => {
+    nextSettings = saveSettings(settingsFile, { ...settings, shortcutSettings });
+  });
+  if (result.ok) { settings = nextSettings; safelyInvokeWindow('快捷键保存后刷新菜单', refreshTrayMenu); }
+  return result;
+}
+
 function initializeShortcuts() {
   shortcutRegistrar = createShortcutRegistrar({ globalShortcut, config: settings.shortcutSettings, onAction: openShortcutAction });
   shortcutRegistrar.start();
@@ -242,14 +251,7 @@ function initializeShortcuts() {
     getPetWindow: () => petWindow,
     getPresentation: () => ({ ...edgeTuck?.getPresentation(), dragging: dragState?.moved === true, shape: settings?.customization?.appearance?.shape }),
     getConfig: () => shortcutRegistrar.getConfig(), getErrors: () => shortcutRegistrar.getErrors(),
-    save: config => {
-      let nextSettings;
-      const result = shortcutRegistrar.apply(config, shortcutSettings => {
-        nextSettings = saveSettings(settingsFile, { ...settings, shortcutSettings });
-      });
-      if (result.ok) { settings = nextSettings; safelyInvokeWindow('快捷键保存后刷新菜单', refreshTrayMenu); }
-      return result;
-    },
+    save: saveShortcutConfig,
     onAction: openShortcutAction,
     onPin: value => {
       // The controller keeps its presentation pin through the closing animation.
@@ -340,6 +342,7 @@ let globalSettingsBusy = false;
 
 function globalSettingsSnapshot() {
   return { version: app.getVersion(), entries: settingsEntries(menuTemplate()),
+    shortcuts: shortcutRegistrar?.getConfig(),
     summary: [
       { label: '球球状态', value: edgeTuck?.getPresentation().mode === 'hidden' ? '暂时隐藏' : '陪伴中' },
       { label: 'Codex 联动', value: settings.codexEnabled ? '已启用' : '未启用' },
@@ -365,6 +368,8 @@ function openGlobalSettings() {
       contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false }
   });
   globalSettingsWindow = win;
+  win.on('blur', () => shortcutRegistrar?.setRecording(false));
+  win.on('closed', () => shortcutRegistrar?.setRecording(false));
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', event => event.preventDefault());
   win.webContents.on('will-attach-webview', event => event.preventDefault());
@@ -2697,6 +2702,15 @@ function createPetWindow() {
 }
 
 function registerIpc() {
+  ipcMain.handle('pet:global-shortcuts-save', (event, config) => {
+    if (!fromGlobalSettings(event) || !shortcutRegistrar) return { ok: false };
+    const result = saveShortcutConfig(config);
+    shortcutWindow?.sync();
+    return result;
+  });
+  ipcMain.on('pet:global-shortcuts-record', (event, value) => {
+    if (fromGlobalSettings(event, false) && typeof value === 'boolean') shortcutRegistrar?.setRecording(value && fromGlobalSettings(event));
+  });
   ipcMain.handle('pet:global-settings-get', event => fromGlobalSettings(event, false) ? globalSettingsSnapshot() : null);
   ipcMain.handle('pet:global-settings-action', async (event, id, checked) => {
     if (!fromGlobalSettings(event) || globalSettingsBusy || typeof id !== 'string') return { error: '当前无法修改，请稍后重试。' };

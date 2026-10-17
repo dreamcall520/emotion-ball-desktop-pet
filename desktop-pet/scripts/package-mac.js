@@ -28,6 +28,7 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/global-settings.css',
     'desktop-pet/global-settings-preload.js',
     'desktop-pet/global-settings-renderer.js',
+    'desktop-pet/global-settings-shortcuts.js',
     'desktop-pet/lib/global-settings.js',
     'desktop-pet/color-mode.css',
     'desktop-pet/ui-theme-blue.css',
