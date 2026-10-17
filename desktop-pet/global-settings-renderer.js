@@ -16,6 +16,9 @@
   }
   let snapshot = null, selected = 'common', busy = false, last = '', request = 0;
   const descriptions = {
+    '外观（所有窗口）': '统一设置各功能窗口的浅色或深色外观。',
+    '主题色': '调整功能窗口的强调色；球球本身的颜色请到「定制球球」修改。',
+    '球球尺寸': '调整桌面上球球的显示大小。',
     '保持清醒': '关闭后，球球会根据系统空闲时间自动休息。',
     '互动气泡': '控制球球的对白与互动提示。',
     '始终置顶': '让球球保持在其他窗口上方。',
@@ -163,7 +166,7 @@
       for (const item of items) {
         const row = el('div', '', `row${item.enabled ? '' : ' unavailable'}`);
         const text = el('div'); text.append(el('div', item.label, 'row-title'));
-        const detail = [item.trail.join(' / '), descriptions[item.label], !item.enabled && '当前不可用，请先开启对应功能或满足使用条件。'].filter(Boolean).join(' · ');
+        const detail = [item.trail.join(' / '), descriptions[item.label], !item.enabled && (item.id.includes('/codex-') && snapshot.entries.find(entry => entry.id === '/codex-menu')?.children.find(entry => entry.id.endsWith('/codex-enabled'))?.checked === false ? '请先开启「启用 Codex 联动」。' : '当前不可用，请先开启对应功能或满足使用条件。')].filter(Boolean).join(' · ');
         if (detail) text.append(el('p', detail, 'description'));
         row.append(text);
         if (item.type === 'select') {
@@ -180,7 +183,7 @@
           const choice = ['checkbox', 'radio'].includes(item.type);
           const button = el('button', choice ? '' : '打开', choice ? item.type === 'checkbox' ? 'toggle' : 'radio' : 'action');
           if (!choice && (externalIds.has(item.id) || /notes-open|openai-api-usage/.test(item.id))) { button.textContent = '打开'; button.append(externalIcon()); }
-          if (!choice && /恢复|靠左|靠右|离开|隐藏|显示|睡眠|唤醒|表情|检查|刷新/.test(item.label)) button.textContent = '执行';
+          if (!choice && /恢复|靠左|靠右|离开|隐藏|显示|睡眠|唤醒|表情|检查|刷新/.test(item.label)) button.textContent = /恢复/.test(item.label) ? '恢复位置' : /检查|刷新/.test(item.label) ? '检查更新' : item.label;
           button.setAttribute('aria-label', item.label);
           button.title = choice ? `${item.label}：${item.checked ? '已开启 / 已选择' : '未开启 / 未选择'}` : item.label;
           if (choice) { button.setAttribute('role', item.type === 'checkbox' ? 'switch' : 'radio'); button.setAttribute('aria-checked', String(item.checked)); }

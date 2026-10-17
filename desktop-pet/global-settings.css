@@ -240,3 +240,7 @@ body { padding-top:38px; }
 #navigation button[aria-current=page],#navigation button:hover { color:var(--accent-text); }
 .nav-group-title { color:var(--nav-caption); }
 #navigation .nav-icon { opacity:1; }
+.shortcut-footer { align-items:center; justify-content:space-between; gap:12px; }
+.shortcut-footer .description { margin:0; max-width:65%; }
+.shortcut-save-controls { display:flex; gap:8px; flex:none; }
+@media(max-width:760px) { .shortcut-footer { flex-wrap:wrap; } .shortcut-footer .description { max-width:100%; } }

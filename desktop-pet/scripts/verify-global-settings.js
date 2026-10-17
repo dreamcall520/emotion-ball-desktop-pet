@@ -45,6 +45,12 @@ app.whenReady().then(async () => {
     assert.equal(await evaluate('document.querySelector("#section-title").textContent'), '常用设置');
     await evaluate(`document.querySelector('[data-view=shortcuts]').click()`);
     assert.equal(await evaluate('document.querySelector("#section-title").textContent'), '快捷键');
+    assert.equal(await evaluate('document.querySelector(".shortcut-footer button").disabled'), true, 'save disabled without changes');
+    await evaluate(`document.querySelector('[aria-label=启用快捷面板]').click()`);
+    assert.equal(await evaluate('document.querySelector(".shortcut-footer button").disabled'), false);
+    await evaluate(`Array.from(document.querySelectorAll('.shortcut-footer button')).find(b => b.textContent === '撤销更改').click()`);
+    assert.equal(await evaluate(`document.querySelector('[aria-label=启用快捷面板]').getAttribute('aria-checked')`), 'true', 'discard restores saved preferences');
+    assert.equal(await evaluate('document.querySelector(".shortcut-footer button").disabled'), true);
     await evaluate(`(() => { const select = document.querySelector('select[aria-label="面板形态"]'); select.value = 'list'; select.dispatchEvent(new Event('change')); document.querySelector('#appearance-switch button[aria-label="界面外观：浅色"]').click(); })()`);
     await sleep(200);
     assert.equal(await evaluate(`document.querySelector('select[aria-label="面板形态"]').value`), 'list', 'theme refresh preserves shortcut draft');
@@ -92,6 +98,12 @@ app.whenReady().then(async () => {
     assert.ok(BrowserWindow.getAllWindows().some(item => item.webContents.getURL().endsWith('/about.html')));
     await evaluate(`document.querySelector('#search-toggle').click(); const input = document.querySelector('#search'); input.value = '快捷键'; input.dispatchEvent(new Event('input')); document.querySelector('[aria-label=快捷键设置]').click()`);
     assert.equal(await evaluate('document.querySelector("#section-title").textContent'), '快捷键', 'search routes to embedded shortcut editor');
+    const localViews = await evaluate(`Array.from(document.querySelectorAll('#navigation button')).filter(b => !b.querySelector('.external-icon')).map(b => b.dataset.view)`);
+    for (const view of localViews) {
+      await evaluate(`document.querySelector('[data-view=' + CSS.escape(${JSON.stringify(view)}) + ']').click()`);
+      assert.ok(await evaluate('document.querySelectorAll("#content .row").length > 0'), view + ' has content');
+    }
+    await evaluate(`document.querySelector('[data-view=shortcuts]').click()`);
     win.setSize(620, 520);
     await sleep(100);
     assert.equal(await evaluate('document.querySelector("main").scrollWidth <= document.querySelector("main").clientWidth'), true);

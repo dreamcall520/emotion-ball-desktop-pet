@@ -3535,7 +3535,7 @@ test('原生菜单仅保留设置中心与独立入口，完整偏好仍可在�
   const f = await fixture(); t.after(() => f.app.emit('before-quit'));
   const menu = f.call('compactMenuTemplate()');
   assert.deepEqual(Array.from(menu.filter(item => item.type !== 'separator'), item => item.label),
-    ['和球球聊聊', '便签与待办', '番茄钟', '定制球球', 'API 费用与用量', '设置中心', '关于球球', '检查更新', '退出球球']);
+    ['和球球聊聊', '便签与待办', '番茄钟', '来定制球球', 'API 费用与用量', '设置中心', '关于球球', '检查更新', '退出球球']);
   assert.ok(menu.every(item => !item.submenu));
   assert.ok(findMenuItem(f.call('menuTemplate()'), 'notes-default-note'));
   assert.ok(findMenuItem(f.call('menuTemplate()'), 'codex-quota-period'));

@@ -1954,7 +1954,7 @@ function compactMenuTemplate() {
   const notes = items.find(item => item.label === '便签与待办')?.submenu.find(item => item.id === 'notes-open');
   const api = items.find(item => item.label === 'Codex 与 API').submenu.find(item => item.id === 'openai-api-menu')?.submenu.find(item => item.id === 'openai-api-usage');
   return [find('chat-open'), notes && { ...notes, label: '便签与待办' }, find('pomodoro-open'),
-    { type: 'separator' }, find('customize-open'), api,
+    { type: 'separator' }, { ...find('customize-open'), label: '来定制球球' }, api,
     { type: 'separator' }, find('global-settings'), find('about-open'), find('update-check'),
     { type: 'separator' }, items.find(item => item.label === '退出球球')].filter(Boolean);
 }
