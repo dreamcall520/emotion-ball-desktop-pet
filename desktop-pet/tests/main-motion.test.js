@@ -2146,6 +2146,41 @@ test('旧球球窗口迟到的移动、缩放、隐藏和关闭事件不伤害�
   assert.equal(f.call('codexPageReady'), true);
 });
 
+test('球球渲染被终止后自动重载，恢复外观及活动监测而不修改设置', async () => {
+  const f = await fixture({ codexEnabled: true });
+  f.call('writeError = () => {}');
+  let reloads = 0;
+  f.pet.webContents.reload = () => { reloads++; f.pet.webContents.emit('did-start-loading'); };
+  const before = { settings: f.call('JSON.stringify(settings)'), saves: f.saved.length, starts: f.activity.starts };
+  f.pet.webContents.emit('render-process-gone', {}, { reason: 'killed', exitCode: 15 });
+  assert.equal(f.call('codexPageReady'), false);
+  assert.equal(f.activity.stops, 1);
+  f.advanceTo(999); assert.equal(reloads, 0);
+  f.advanceTo(1000); assert.equal(reloads, 1);
+  f.pet.webContents.emit('did-finish-load');
+  assert.equal(f.call('codexPageReady'), true);
+  assert.equal(f.activity.starts, before.starts + 1);
+  assert.equal(f.pet.messages.filter(m => m.channel === 'pet:settings').at(-1).packet.customization.appearance.shape,
+    f.call('settings.customization.appearance.shape'));
+  assert.equal(f.call('JSON.stringify(settings)'), before.settings);
+  assert.equal(f.saved.length, before.saves);
+});
+
+test('渲染恢复不重载已恢复、已替换、已关闭或正在退出的窗口', async () => {
+  for (const state of ['recovered', 'replaced', 'closed', 'quitting']) {
+    const f = await fixture(); let reloads = 0;
+    f.call('writeError = () => {}');
+    f.pet.webContents.reload = () => { reloads++; };
+    f.pet.webContents.emit('render-process-gone', {}, { reason: 'killed', exitCode: 15 });
+    if (state === 'recovered') f.pet.webContents.emit('did-finish-load');
+    if (state === 'replaced') f.call('petWindow = null; createPetWindow()');
+    if (state === 'closed') f.pet.destroy();
+    if (state === 'quitting') f.app.emit('before-quit');
+    f.advanceTo(1000);
+    assert.equal(reloads, 0, state);
+  }
+});
+
 test('旧球球窗口迟到的加载和渲染事件不改写新窗口就绪状态', async () => {
   const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
   const stale = f.call('petWindow = null; createPetWindow()');
