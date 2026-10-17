@@ -28,6 +28,28 @@
     if (className) node.className = className;
     return node;
   };
+  // Original 24px line icons, kept local to the settings navigation.
+  const navigationIcons = {
+    '球球与互动': ['M8 4h8a5 5 0 0 1 5 5v4a5 5 0 0 1-5 5h-5l-5 3v-4a5 5 0 0 1-3-4V9a5 5 0 0 1 5-5Z', 'M8 10h.01M16 10h.01M9 13q3 3 6 0'],
+    '便签与待办': ['M7 3h10a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Z', 'M8 8h8M8 12h5M8 16l2 2 5-5'],
+    '球球尺寸': ['M9 4H4v5M15 4h5v5M4 15v5h5M20 15v5h-5', 'M9 9h6v6H9Z'],
+    '贴边与显示': ['M6 4h12a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Z', 'M8 4v16M17 9l-3 3 3 3M14 12h4'],
+    '界面配色': ['M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.4-3.4 1.7 1.7 0 0 1 1.2-2.9H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3Z', 'M7 10h.01M10 7h.01M15 7h.01M18 10h.01'],
+    'Codex 与 API': ['m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16'],
+    '常规设置': ['M4 6h7M15 6h5M4 12h2M10 12h10M4 18h10M18 18h2', 'M11 4v4M6 10v4M14 16v4']
+  };
+  function navigationIcon(label) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('class', 'nav-icon');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    for (const data of navigationIcons[label] || navigationIcons['常规设置']) {
+      const path = document.createElementNS(svg.namespaceURI, 'path');
+      path.setAttribute('d', data); svg.append(path);
+    }
+    return svg;
+  }
   function groups() {
     const shortcuts = snapshot.entries.filter(entry => !entry.children);
     return [{ id: 'quick', label: '功能入口', children: shortcuts }, ...snapshot.entries.filter(entry => entry.children)];
@@ -50,11 +72,25 @@
     const selectView = id => {
       selected = id; $('search').value = ''; render(); document.querySelector('main').scrollTop = 0;
     };
-    $('navigation').replaceChildren(...categories.filter(item => item.id !== 'quick').map(item => {
-      const button = el('button', item.label);
-      if (selected === item.id) button.setAttribute('aria-current', 'page');
-      button.onclick = () => selectView(item.id);
-      return button;
+    const navigationGroups = [
+      ['日常陪伴', ['球球与互动', '便签与待办']],
+      ['外观与显示', ['球球尺寸', '贴边与显示', '界面配色']],
+      ['应用与联动', ['Codex 与 API', '常规设置']]
+    ];
+    $('navigation').replaceChildren(...navigationGroups.map(([label, labels]) => {
+      const section = el('div', '', 'nav-group');
+      section.setAttribute('role', 'group'); section.setAttribute('aria-label', label);
+      section.append(el('div', label, 'nav-group-title'));
+      for (const name of labels) {
+        const item = categories.find(category => category.label === name);
+        if (!item) continue;
+        const button = el('button');
+        button.append(navigationIcon(item.label), el('span', item.label));
+        if (selected === item.id) button.setAttribute('aria-current', 'page');
+        button.onclick = () => selectView(item.id);
+        section.append(button);
+      }
+      return section;
     }));
     $('view-navigation').replaceChildren(...nav.slice(0, 2).concat(nav.filter(item => item.id === 'quick')).map(item => {
       const button = el('button', item.label);
