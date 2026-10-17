@@ -209,3 +209,24 @@ footer { padding-top:22px; }
 @media(max-width:760px) { #navigation { gap:12px; } #navigation button { font-size:11px; padding-inline:7px; gap:7px; } }
 .shortcut-settings-group .row { min-height:42px; padding-block:6px; }
 .shortcut-settings-group .description { margin-top:10px; }
+
+/* The titlebar shares the same canvas as the settings, like the customization window. */
+.window-drag { position:fixed; z-index:5; inset:0 0 auto; height:34px; -webkit-app-region:drag; }
+body { padding-top:38px; }
+.radio { padding:0; min-width:18px; min-height:18px; width:18px; height:18px; aspect-ratio:1; appearance:none; }
+#feedback { position:fixed; bottom:22px; left:50%; transform:translateX(-50%); z-index:20; margin:0; padding:9px 16px; border-radius:10px; background:var(--control-selected); box-shadow:0 4px 22px #24394c18; pointer-events:none; }
+:root[data-color-mode=accessible] .group { border-color:var(--module-edge); }
+:root[data-color-mode=accessible] .group h3 { border-bottom-color:var(--line); }
+.notes-settings .row { padding-block:15px; }
+.notes-settings .notes-preference { margin-top:12px; border-top:1px solid var(--module-line); border-radius:0; padding-top:20px; }
+.shortcut-settings-group .group-intro { margin:0 0 10px; }
+.binding-controls { display:flex; align-items:center; gap:6px; flex:none; }
+.binding-button { min-height:32px; display:flex; align-items:center; gap:4px; padding:4px 8px; border-radius:8px; font-size:11px; color:var(--muted); }
+.binding-button:hover,.binding-clear:hover { background:var(--control); }
+.binding-button kbd { display:grid; place-items:center; min-width:25px; height:25px; padding:0 5px; border:1px solid var(--control-selected-edge); border-radius:6px; background:var(--control); color:var(--text); font-size:12px; box-shadow:0 1px 0 #6a7a8c25; }
+.binding-button.recording { outline:2px solid var(--accent); color:var(--accent-text); background:var(--nav-active); }
+.binding-clear { width:26px; height:26px; padding:0; border-radius:7px; color:var(--muted); font-size:18px; }
+.shortcut-settings-group>.description { padding-inline:8px; }
+.shortcut-settings-group>.shortcut-footer { position:sticky; bottom:-36px; padding:12px 8px; background:var(--control-selected); border-radius:12px; }
+@media(max-width:760px) { body { padding-top:38px; } .shortcut-settings-group>.shortcut-footer { bottom:-24px; } }
+.shortcut-settings-group>.shortcut-footer { background:var(--module); backdrop-filter:blur(18px); border:1px solid var(--module-edge); }

@@ -11,12 +11,18 @@
     if (!dirty()) { draft = { ...config }; baseline = incoming; }
     container.replaceChildren();
     const node = (tag, text, cls) => { const n = document.createElement(tag); n.textContent = text || ''; if (cls) n.className = cls; return n; };
-    const section = node('section', '', 'group shortcut-settings-group');
+    const section = node('div', '', 'shortcut-settings-group');
     mounted = section;
-    section.append(node('h3', '快捷打开'));
+    let group;
+    function startGroup(title, description) {
+      group = node('section', '', 'group'); group.append(node('h3', title));
+      if (description) group.append(node('p', description, 'description group-intro'));
+      section.append(group);
+    }
+    startGroup('快捷面板', '鼠标悬停球球时出现的功能入口，也可以用快捷键唤起。');
     const notice = node('p', '点击组合键后，按下想使用的快捷键。Esc 取消，退格清除。', 'description');
     notice.setAttribute('role', 'status');
-    const row = (label, control) => { const r = node('div', '', 'row'); r.append(node('div', label, 'row-title'), control); section.append(r); };
+    const row = (label, control) => { const r = node('div', '', 'row'); r.append(node('div', label, 'row-title'), control); group.append(r); };
     function choice(label, field, values) {
       const select = node('select'); select.setAttribute('aria-label', label);
       for (const [value, name] of values) { const o = node('option', name); o.value = value; o.selected = String(draft[field]) === value; select.append(o); }
@@ -27,14 +33,26 @@
     choice('面板形态', 'shape', [['floating', '悬浮按钮'], ['list', '列表面板']]);
     let active = null;
     const labels = { launcher: '唤起快捷面板', chat: '和球球聊聊', custom: '定制球球', note: '便签', todo: '待办', pomodoro: '番茄钟' };
-    const buttons = {};
-    const finish = () => { if (active) buttons[active].textContent = draft[active] || '未设置'; active = null; api.recordShortcuts(false); };
-    for (const [field, label] of Object.entries(labels)) {
-      const button = node('button', draft[field] || '未设置', 'action'); button.type = 'button';
-      button.setAttribute('aria-label', `${label}快捷键`); buttons[field] = button;
-      button.onclick = () => { finish(); active = field; button.textContent = '请按组合键…'; api.recordShortcuts(true); };
-      row(label, button);
+    const buttons = {}, clears = {};
+    function paint(field) {
+      const button = buttons[field]; button.replaceChildren();
+      button.classList.remove('recording');
+      if (!draft[field]) button.textContent = '设置快捷键';
+      else for (const key of draft[field].split('+')) button.append(node('kbd', ({ Ctrl: '⌃', Alt: '⌥', Shift: '⇧', Meta: '⌘', Space: '空格' })[key] || key));
+      clears[field].hidden = !draft[field];
     }
+    const finish = () => { if (active) paint(active); active = null; api.recordShortcuts(false); };
+    for (const [field, label] of Object.entries(labels)) {
+      if (field === 'chat') startGroup('功能快捷键', '直接打开对应功能，无需先唤起快捷面板。');
+      const button = node('button', '', 'binding-button'); button.type = 'button';
+      button.setAttribute('aria-label', `${label}快捷键`); buttons[field] = button;
+      const controls = node('div', '', 'binding-controls');
+      const clear = node('button', '×', 'binding-clear'); clear.type = 'button'; clear.setAttribute('aria-label', `删除${label}快捷键`); clear.title = '删除快捷键'; clears[field] = clear;
+      clear.onclick = () => { finish(); draft[field] = ''; paint(field); notice.textContent = '快捷键已清除，保存后生效。'; };
+      button.onclick = () => { finish(); active = field; button.textContent = '请按组合键…'; button.classList.add('recording'); api.recordShortcuts(true); };
+      paint(field); controls.append(button, clear); row(label, controls);
+    }
+    startGroup('便签与待办的启动方式', '同时用于快捷面板按钮和功能快捷键。');
     choice('便签启动方式', 'noteBehavior', [['panel', '打开主面板'], ['create', '新建便签']]);
     choice('待办启动方式', 'todoBehavior', [['panel', '打开主面板'], ['create', '添加待办']]);
     const handler = event => {

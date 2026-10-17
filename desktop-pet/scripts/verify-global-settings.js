@@ -24,7 +24,7 @@ app.whenReady().then(async () => {
     assert.equal(await evaluate('document.querySelector("#section-title").textContent'), '常用设置');
     assert.equal(await evaluate('document.querySelectorAll("select").length'), 3);
     assert.equal(await evaluate('document.querySelector("#search-panel").hidden'), true);
-    assert.equal(await evaluate('document.querySelector(".group").getBoundingClientRect().top < 130'), true);
+    assert.equal(await evaluate('document.querySelector(".group").getBoundingClientRect().top < 160'), true);
     assert.equal(await evaluate('document.querySelectorAll("#navigation [aria-current=page]").length'), 1);
     await evaluate('document.querySelector("[aria-label=互动气泡]").click()');
     await sleep(150);
@@ -36,6 +36,9 @@ app.whenReady().then(async () => {
     assert.equal(await evaluate('document.documentElement.dataset.appearance'), 'dark');
     assert.equal(await evaluate(`document.querySelector('#appearance-switch [aria-pressed=true]').textContent`), '深色');
     assert.equal(await evaluate('document.querySelector("[data-view=quick]")'), null);
+    await evaluate(`Array.from(document.querySelectorAll('#navigation button')).find(b => b.textContent === '球球尺寸').click()`);
+    assert.equal(await evaluate(`Array.from(document.querySelectorAll('.radio')).every(b => { const r = b.getBoundingClientRect(); return r.width === r.height && r.width === 18; })`), true, 'size radios stay circular including selected state');
+    await evaluate(`document.querySelector('[data-view=common]').click()`);
     await evaluate(`document.querySelector('[data-view="/customize-open"]').click()`);
     await sleep(300);
     assert.ok(BrowserWindow.getAllWindows().some(item => item.webContents.getURL().endsWith('/customize.html')));
@@ -50,7 +53,7 @@ app.whenReady().then(async () => {
     await evaluate(`document.querySelector('[aria-label=和球球聊聊快捷键]').click(); document.dispatchEvent(new KeyboardEvent('keydown', {key:'q', code:'KeyQ', ctrlKey:true, altKey:true, bubbles:true}))`);
     assert.ok(await evaluate(`document.querySelector('.shortcut-settings-group [role=status]').textContent.includes('已经用于')`));
     await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}))`);
-    assert.equal(await evaluate(`document.querySelector('[aria-label=和球球聊聊快捷键]').textContent`), '未设置');
+    assert.equal(await evaluate(`document.querySelector('[aria-label=和球球聊聊快捷键]').textContent`), '设置快捷键');
     await evaluate(`document.querySelector('#appearance-switch button[aria-label="界面外观：深色"]').click()`);
     await sleep(200);
     await evaluate(`document.querySelector('[aria-label=和球球聊聊快捷键]').click(); document.dispatchEvent(new KeyboardEvent('keydown', {key:'j', code:'KeyJ', ctrlKey:true, altKey:true, bubbles:true}))`);
@@ -58,6 +61,9 @@ app.whenReady().then(async () => {
     await sleep(200);
     assert.equal(JSON.parse(fs.readFileSync(path.join(userData, 'settings.json'), 'utf8')).shortcutSettings.shape, 'list');
     assert.equal(JSON.parse(fs.readFileSync(path.join(userData, 'settings.json'), 'utf8')).shortcutSettings.chat, 'Ctrl+Alt+J');
+    await evaluate(`document.querySelector('[aria-label=删除和球球聊聊快捷键]').click()`);
+    assert.equal(await evaluate(`document.querySelector('[aria-label=和球球聊聊快捷键]').textContent`), '设置快捷键');
+    assert.equal(await evaluate(`document.querySelector('[aria-label=删除和球球聊聊快捷键]').hidden`), true);
     await evaluate(`document.querySelector('[data-view=common]').click()`);
     assert.equal(await evaluate(`document.querySelector('select[aria-label="外观（所有窗口）"] option:checked').textContent`), '深色');
     await evaluate(`document.querySelector('#search-toggle').click()`);

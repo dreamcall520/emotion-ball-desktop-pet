@@ -875,7 +875,7 @@ test('便签待办默认页保存后下次打开生效，失败恢复当前和�
   assert.equal(f.saved.at(-1).notesDefaultTab, 'note');
   assert.equal(f.notes.options.getDefaultTab(), 'note');
   assert.equal(f.notes.opens.length, opens, '修改偏好不打断当前编辑窗口');
-  assert.equal(findMenuItem(f.trayMenus.at(-1), 'notes-default-note').checked, true);
+  assert.equal(findMenuItem(f.call('menuTemplate()'), 'notes-default-note').checked, true);
   const restarted = await fixture({ loadedSettings: f.saved.at(-1) });
   assert.equal(restarted.notes.options.getDefaultTab(), 'note');
   const saves = f.saved.length;
@@ -886,8 +886,8 @@ test('便签待办默认页保存后下次打开生效，失败恢复当前和�
   todo.checked = true; todo.click(todo);
   assert.equal(todo.checked, false); assert.equal(failed.notes.options.getDefaultTab(), 'note');
   assert.ok(failed.trayMenus.length > refreshes);
-  assert.equal(findMenuItem(failed.trayMenus.at(-1), 'notes-default-note').checked, true);
-  assert.equal(findMenuItem(failed.trayMenus.at(-1), 'notes-default-todo').checked, false);
+  assert.equal(findMenuItem(failed.call('menuTemplate()'), 'notes-default-note').checked, true);
+  assert.equal(findMenuItem(failed.call('menuTemplate()'), 'notes-default-todo').checked, false);
   assert.equal(failed.saved.length, 0);
 });
 
@@ -917,7 +917,7 @@ test('便签外观跟随全局已保存选择，旧偏好不覆盖全局，系�
   light.checked = true; light.click(light);
   assert.equal(failed.notes.options.getAppearance(), 'dark'); assert.equal(failed.notes.appearances, 0);
   assert.equal(failed.nativeTheme.themeSource, 'dark', '失败不改变应用外观');
-  assert.equal(findMenuItem(failed.trayMenus.at(-1), 'color-appearance-dark').checked, true);
+  assert.equal(findMenuItem(failed.call('menuTemplate()'), 'color-appearance-dark').checked, true);
   assert.equal(failed.saved.length, 0);
 });
 
@@ -1905,7 +1905,7 @@ test('额度周期单选只在保存成功后切换，失败同时回滚点击�
   failedWeekly.click(failedWeekly);
   assert.equal(failedWeekly.checked, false, '当次点击项要立即恢复真实旧值');
   assert.ok(failed.trayMenus.length > failedRefreshes, '保存失败也要刷新整个托盘菜单');
-  const failedFreshPeriod = findMenuItem(failed.trayMenus.at(-1), 'codex-quota-period');
+  const failedFreshPeriod = findMenuItem(failed.call('menuTemplate()'), 'codex-quota-period');
   assert.equal(failedFreshPeriod.submenu.find(item => item.checked).id, 'codex-quota-auto');
 
   const success = await fixture({ codexEnabled: true });
@@ -1915,7 +1915,7 @@ test('额度周期单选只在保存成功后切换，失败同时回滚点击�
   successWeekly.checked = true;
   successWeekly.click(successWeekly);
   assert.equal(success.saved.at(-1).codexQuotaPeriod, 'weekly');
-  const successFreshPeriod = findMenuItem(success.trayMenus.at(-1), 'codex-quota-period');
+  const successFreshPeriod = findMenuItem(success.call('menuTemplate()'), 'codex-quota-period');
   assert.equal(successFreshPeriod.submenu.find(item => item.checked).id, 'codex-quota-weekly');
 });
 
@@ -3528,4 +3528,15 @@ test('全局快捷键保存校验来源、持久化并拒绝隐藏窗口操作',
   assert.equal(f.saved.at(-1).shortcutSettings.shape, 'list');
   win.hide();
   assert.equal((await f.invoke('pet:global-shortcuts-save', config, win.webContents)).ok, false);
+});
+
+
+test('原生菜单仅保留设置中心与独立入口，完整偏好仍可在设置中心访问', async t => {
+  const f = await fixture(); t.after(() => f.app.emit('before-quit'));
+  const menu = f.call('compactMenuTemplate()');
+  assert.deepEqual(Array.from(menu.filter(item => item.type !== 'separator'), item => item.label),
+    ['全局设置…', '和球球聊聊', '来定制球球', '便签与待办', '番茄钟', 'OpenAI API 费用与用量…', '关于球球', '检查更新', '退出球球']);
+  assert.ok(menu.every(item => !item.submenu));
+  assert.ok(findMenuItem(f.call('menuTemplate()'), 'notes-default-note'));
+  assert.ok(findMenuItem(f.call('menuTemplate()'), 'codex-quota-period'));
 });

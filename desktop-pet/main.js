@@ -370,7 +370,7 @@ function openGlobalSettings(view) {
   }
   globalSettingsInitialView = target || 'common';
   const win = new BrowserWindow({ width: 980, height: 760, minWidth: 620, minHeight: 480,
-    title: '球球 · 全局设置', backgroundColor: '#F5F7FB', show: false,
+    title: '球球 · 全局设置', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 }, backgroundColor: '#F5F7FB', show: false,
     webPreferences: { preload: path.join(__dirname, 'global-settings-preload.js'),
       contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false }
   });
@@ -1947,9 +1947,20 @@ function menuTemplate() {
   ];
 }
 
+// Keep the full command catalog for settings; native menus show only destinations.
+function compactMenuTemplate() {
+  const items = menuTemplate();
+  const find = id => items.find(item => item.id === id);
+  const notes = items.find(item => item.label === '便签与待办')?.submenu.find(item => item.id === 'notes-open');
+  const api = items.find(item => item.label === 'Codex 与 API').submenu.find(item => item.id === 'openai-api-menu')?.submenu.find(item => item.id === 'openai-api-usage');
+  return [find('global-settings'), { type: 'separator' }, find('chat-open'), find('customize-open'),
+    notes && { ...notes, label: '便签与待办' }, find('pomodoro-open'), api,
+    { type: 'separator' }, find('about-open'), find('update-check'), items.find(item => item.label === '退出球球')].filter(Boolean);
+}
+
 function refreshTrayMenu() {
   if (!tray || !settings) return;
-  tray.setContextMenu(Menu.buildFromTemplate(menuTemplate()));
+  tray.setContextMenu(Menu.buildFromTemplate(compactMenuTemplate()));
 }
 
 function popupPetMenu(items) {
@@ -1979,7 +1990,7 @@ function popupPetMenu(items) {
 
 function showPetContextMenu() {
   shortcutWindow?.interrupt();
-  return popupPetMenu(menuTemplate());
+  return popupPetMenu(compactMenuTemplate());
 }
 
 function createTray() {

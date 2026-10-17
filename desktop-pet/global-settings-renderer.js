@@ -9,6 +9,11 @@
     idle: false, autostart: false, lite: false, label: '经典球球'
   });
   window.addEventListener('beforeunload', () => brandPet.destroy(), { once: true });
+  let feedbackTimer;
+  function feedback(message) {
+    clearTimeout(feedbackTimer); $('feedback').textContent = message;
+    if (message) feedbackTimer = setTimeout(() => { $('feedback').textContent = ''; }, 3200);
+  }
   let snapshot = null, selected = 'common', busy = false, last = '', request = 0;
   const descriptions = {
     '保持清醒': '关闭后，球球会根据系统空闲时间自动休息。',
@@ -153,7 +158,8 @@
       if (!items.length) continue;
       count += items.length;
       const section = el('section', '', 'group');
-      section.append(el('h3', category.label));
+      section.append(el('h3', category.label === '便签与待办' ? '打开与创建' : category.label));
+      if (category.label === '便签与待办') section.classList.add('notes-settings');
       for (const item of items) {
         const row = el('div', '', `row${item.enabled ? '' : ' unavailable'}`);
         const text = el('div'); text.append(el('div', item.label, 'row-title'));
@@ -183,6 +189,15 @@
           button.onclick = () => item.id === '/shortcut-settings' ? selectView('shortcuts') : act(item);
           row.append(button);
         }
+        if (category.label === '便签与待办') {
+          if (item.type === 'select') { row.classList.add('notes-preference'); text.querySelector('.row-title').textContent = '主面板默认显示'; }
+          else {
+            const labels = { '打开主面板': ['便签与待办', '查看、整理全部便签和待办。'], '新建便签': ['新建便签', '随手记录，支持固定在桌面。'], '添加待办': ['添加待办', '记录任务并设置提醒。'] };
+            const copy = labels[item.label];
+            if (copy) { text.querySelector('.row-title').textContent = copy[0]; text.append(el('p', copy[1], 'description')); }
+            row.querySelector('button').textContent = item.label === '打开主面板' ? '打开面板 ↗' : '新建 ↗';
+          }
+        }
         section.append(row);
       }
       sections.push(section);
@@ -194,12 +209,12 @@
   async function act(item) {
     if (busy) return;
     busy = true; request++;
-    $('feedback').textContent = '正在处理…'; render();
+    feedback(''); render();
     try {
       const result = await api.act(item.id, !item.checked);
       if (result?.snapshot) { snapshot = result.snapshot; last = JSON.stringify(snapshot); }
-      $('feedback').textContent = result?.error || (['checkbox', 'radio'].includes(item.type) ? '设置已更新' : '已执行操作');
-    } catch (_) { $('feedback').textContent = '操作未完成，请稍后重试。'; }
+      feedback(result?.error || (['checkbox', 'radio'].includes(item.type) ? '设置已更新' : ''));
+    } catch (_) { feedback('操作未完成，请稍后重试。'); }
     finally { busy = false; render(); }
   }
   async function refresh() {
