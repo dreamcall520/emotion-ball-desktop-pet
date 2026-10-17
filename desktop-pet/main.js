@@ -203,6 +203,8 @@ function pomodoroSuppressed() {
 
 function openPomodoro() {
   if (isQuitting || screenLocked) return;
+  // An explicit open takes precedence over chat's passive companion suppression.
+  chatWindow?.hide();
   if (!petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) restorePet();
   pomodoroWindows?.open();
 }
@@ -339,10 +341,11 @@ function positionFunctionWindow(win) {
 
 let globalSettingsWindow = null;
 let globalSettingsBusy = false;
+let globalSettingsInitialView = 'common';
 
 function globalSettingsSnapshot() {
   return { version: app.getVersion(), entries: settingsEntries(menuTemplate()),
-    shortcuts: shortcutRegistrar?.getConfig(),
+    shortcuts: shortcutRegistrar?.getConfig(), initialView: globalSettingsInitialView,
     summary: [
       { label: '球球状态', value: edgeTuck?.getPresentation().mode === 'hidden' ? '暂时隐藏' : '陪伴中' },
       { label: 'Codex 联动', value: settings.codexEnabled ? '已启用' : '未启用' },
@@ -357,11 +360,15 @@ function fromGlobalSettings(event, requireVisible = true) {
     event.senderFrame === globalSettingsWindow.webContents.mainFrame;
 }
 
-function openGlobalSettings() {
+function openGlobalSettings(view) {
+  const target = view === 'shortcuts' ? 'shortcuts' : null;
   if (isQuitting || screenLocked) return;
   if (globalSettingsWindow && !globalSettingsWindow.isDestroyed()) {
-    globalSettingsWindow.show(); globalSettingsWindow.focus(); return;
+    globalSettingsWindow.show(); globalSettingsWindow.focus();
+    if (target) globalSettingsWindow.webContents.send('pet:global-settings-navigate', target);
+    return;
   }
+  globalSettingsInitialView = target || 'common';
   const win = new BrowserWindow({ width: 980, height: 760, minWidth: 620, minHeight: 480,
     title: '球球 · 全局设置', backgroundColor: '#F5F7FB', show: false,
     webPreferences: { preload: path.join(__dirname, 'global-settings-preload.js'),
@@ -369,6 +376,8 @@ function openGlobalSettings() {
   });
   globalSettingsWindow = win;
   win.on('blur', () => shortcutRegistrar?.setRecording(false));
+  win.on('hide', () => shortcutRegistrar?.setRecording(false));
+  win.webContents.on('render-process-gone', () => shortcutRegistrar?.setRecording(false));
   win.on('closed', () => shortcutRegistrar?.setRecording(false));
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', event => event.preventDefault());
@@ -1875,7 +1884,7 @@ function menuTemplate() {
         click: item => { item.checked = (settings.notesDefaultTab === 'note' ? 'note' : 'todo') === value; setNotesDefaultTab(value); }
       })) }
     ] },
-    { id: 'shortcut-settings', label: '快捷键设置', click: () => openShortcuts(true) },
+    { id: 'shortcut-settings', label: '快捷键设置', click: () => openGlobalSettings('shortcuts') },
     { id: 'pomodoro-open', label: '番茄钟', click: openPomodoro },
     { type: 'separator' },
     { label: '球球与互动', submenu: [

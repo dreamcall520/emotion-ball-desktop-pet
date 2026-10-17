@@ -1,10 +1,18 @@
 (() => {
-  let cancelRecording = () => {};
+  let cancelRecording = () => {}, draft = null, baseline = '', mounted = null;
+  const signature = value => JSON.stringify(value);
+  const dirty = () => draft && signature(draft) !== baseline;
+  window.addEventListener('beforeunload', () => cancelRecording());
   window.renderSettingsShortcuts = (container, config, api) => {
+    const incoming = signature(config);
+    // Background refreshes and theme changes must not discard an unfinished edit.
+    if (mounted?.isConnected && (dirty() || incoming === baseline)) return;
     cancelRecording();
-    const draft = { ...config };
+    if (!dirty()) { draft = { ...config }; baseline = incoming; }
+    container.replaceChildren();
     const node = (tag, text, cls) => { const n = document.createElement(tag); n.textContent = text || ''; if (cls) n.className = cls; return n; };
     const section = node('section', '', 'group shortcut-settings-group');
+    mounted = section;
     section.append(node('h3', '快捷打开'));
     const notice = node('p', '点击组合键后，按下想使用的快捷键。Esc 取消，退格清除。', 'description');
     notice.setAttribute('role', 'status');
@@ -30,7 +38,7 @@
     choice('便签启动方式', 'noteBehavior', [['panel', '打开主面板'], ['create', '新建便签']]);
     choice('待办启动方式', 'todoBehavior', [['panel', '打开主面板'], ['create', '添加待办']]);
     const handler = event => {
-      if (!active) return;
+      if (!active || event.isComposing || event.repeat || event.keyCode === 229) return;
       if (event.key === 'Tab') { finish(); return; }
       event.preventDefault(); event.stopImmediatePropagation();
       if (event.key === 'Escape') { finish(); return; }
@@ -44,15 +52,18 @@
     };
     document.addEventListener('keydown', handler, true);
     window.addEventListener('blur', finish);
-    const observer = new MutationObserver(() => { if (!section.isConnected) cancelRecording(); });
+    const observer = new MutationObserver(() => { if (!section.isConnected) cleanup(); });
     observer.observe(container, { childList: true });
-    cancelRecording = () => { finish(); document.removeEventListener('keydown', handler, true); window.removeEventListener('blur', finish); observer.disconnect(); };
+    const cleanup = () => { finish(); document.removeEventListener('keydown', handler, true); window.removeEventListener('blur', finish); observer.disconnect(); };
+    cancelRecording = cleanup;
     const save = node('button', '保存快捷键', 'action'); save.type = 'button';
     save.onclick = async () => {
-      finish(); save.disabled = true;
-      try { const result = await api.saveShortcuts(draft); notice.textContent = result.ok ? '快捷键已保存' : result.errors?.map(e => e.message).join('；') || '保存失败，请重试。'; }
+      finish();
+      const controls = [...section.querySelectorAll('button, select')];
+      controls.forEach(control => { control.disabled = true; });
+      try { const result = await api.saveShortcuts({ ...draft }); if (result.ok) baseline = signature(draft); notice.textContent = result.ok ? '快捷键已保存' : result.errors?.map(e => e.message).join('；') || '保存失败，请重试。'; }
       catch (_) { notice.textContent = '保存失败，请重试。'; }
-      finally { save.disabled = false; }
+      finally { controls.forEach(control => { control.disabled = false; }); }
     };
     section.append(notice);
     const actions = node('div', '', 'shortcut-footer'); actions.append(save); section.append(actions);

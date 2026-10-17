@@ -111,13 +111,14 @@
         button.dataset.view = item.id;
         const iconLabel = item.label;
         button.append(navigationIcon(iconLabel), el('span', item.label));
-        if (item.external) { button.append(externalIcon()); button.title = '在独立窗口打开'; }
+        if (item.external) { button.append(externalIcon()); button.title = '在独立窗口打开'; button.setAttribute('aria-label', `${item.label}（独立窗口）`); button.disabled = busy || !item.enabled; }
         if (selected === item.id) button.setAttribute('aria-current', 'page');
         button.onclick = () => item.external ? act(item) : selectView(item.id);
         section.append(button);
       }
       return section;
     }));
+    $('about-link').disabled = busy;
     $('about-link').onclick = () => act(snapshot.entries.find(entry => entry.id === '/about-open'));
     const appearance = snapshot.entries.find(item => item.id === '/color-mode')?.children.find(item => item.id.endsWith('/color-appearance'));
     $('appearance-switch').replaceChildren(...(appearance?.children || []).map(item => {
@@ -140,7 +141,7 @@
       { id: 'common', label: '应用偏好', children: allEntries.filter(entry => entry.label === '自动提醒新版本') }
     ];
     if (!query && selected === 'shortcuts') {
-      $('content').replaceChildren(); $('empty').hidden = true;
+      $('empty').hidden = true;
       window.renderSettingsShortcuts($('content'), snapshot.shortcuts, api); return;
     }
     const searchable = [...categories, { id: 'shortcuts', label: '快捷键', children: snapshot.entries.filter(entry => entry.id === '/shortcut-settings') }, { id: 'windows', label: '独立功能', children: snapshot.entries.filter(entry => externalIds.has(entry.id)) }];
@@ -208,7 +209,7 @@
       const value = await api.get();
       if (current !== request || busy || !value) return;
       const serialized = JSON.stringify(value);
-      if (last !== serialized) { snapshot = value; last = serialized; render(); }
+      if (last !== serialized) { if (!snapshot && value.initialView === 'shortcuts') selected = 'shortcuts'; snapshot = value; last = serialized; render(); }
     } catch (_) { $('feedback').textContent = '暂时无法读取设置，请重新打开窗口。'; }
   }
   function setSearchOpen(open) {
@@ -222,6 +223,12 @@
   document.addEventListener('keydown', event => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setSearchOpen(true); }
     if (event.key === 'Escape' && !$('search-panel').hidden) { event.preventDefault(); setSearchOpen(false); }
+  });
+  api.onNavigate(view => {
+    if (view !== 'shortcuts') return;
+    selected = view; $('search').value = ''; $('search-panel').hidden = true;
+    $('search-toggle').setAttribute('aria-expanded', 'false');
+    render(); document.querySelector('main').scrollTop = 0;
   });
   window.addEventListener('focus', refresh);
   const timer = setInterval(refresh, 2000);

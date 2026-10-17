@@ -505,6 +505,9 @@ test('快捷面板至收起动效结束隐藏额度与守护入口，刷新不�
   assert.equal(menu[pomodoroIndex - 1].id, 'shortcut-settings');
   assert.equal(menu[pomodoroIndex - 1].label, '快捷键设置');
   menu[pomodoroIndex - 1].click();
+  assert.equal(f.call('globalSettingsInitialView'), 'shortcuts');
+  assert.ok(f.call('globalSettingsWindow'));
+  f.call('openShortcuts(true)');
   assert.equal(f.call('shortcutWindow.getState().view'), 'settings');
   f.call("setCodexPreference('codexQuotaAlwaysVisible', false); shortcutWindow.close()");
   t.mock.timers.tick(180);
@@ -3507,4 +3510,22 @@ test('全局设置启用 Codex 必须完成原有授权，取消后保持关闭'
   assert.equal(f.consents.length, 1);
   assert.equal(f.call('settings.codexEnabled'), false);
   assert.ok(result.error);
+});
+
+
+test('全局快捷键保存校验来源、持久化并拒绝隐藏窗口操作', async t => {
+  const f = await fixture();
+  t.after(() => f.app.emit('before-quit'));
+  f.call('openGlobalSettings("shortcuts")');
+  const win = f.call('globalSettingsWindow'); win.emit('ready-to-show');
+  const config = f.call('shortcutRegistrar.getConfig()');
+  assert.equal((await f.invoke('pet:global-shortcuts-save', config)).ok, false);
+  const invalid = await f.invoke('pet:global-shortcuts-save', { ...config, shape: 'invalid' }, win.webContents);
+  assert.equal(invalid.ok, false);
+  assert.equal(f.call('shortcutRegistrar.getConfig().shape'), config.shape);
+  const result = await f.invoke('pet:global-shortcuts-save', { ...config, shape: 'list' }, win.webContents);
+  assert.equal(result.ok, true);
+  assert.equal(f.saved.at(-1).shortcutSettings.shape, 'list');
+  win.hide();
+  assert.equal((await f.invoke('pet:global-shortcuts-save', config, win.webContents)).ok, false);
 });

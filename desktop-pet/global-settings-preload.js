@@ -4,6 +4,11 @@ contextBridge.exposeInMainWorld('qiuqiuSettings', {
   recordShortcuts: value => ipcRenderer.send('pet:global-shortcuts-record', value),
   get: () => ipcRenderer.invoke('pet:global-settings-get'),
   act: (id, checked) => ipcRenderer.invoke('pet:global-settings-action', id, checked),
+  onNavigate(callback) {
+    const listener = (_event, view) => callback(view);
+    ipcRenderer.on('pet:global-settings-navigate', listener);
+    return () => ipcRenderer.removeListener('pet:global-settings-navigate', listener);
+  },
   onColorMode(callback) {
     const listener = (_event, mode, appearance, theme) => callback(mode, appearance, theme);
     ipcRenderer.on('pet:color-mode', listener);

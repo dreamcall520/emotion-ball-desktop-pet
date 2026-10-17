@@ -9,7 +9,7 @@ app.setPath('userData', userData);
 process.argv.push('--settings-preview');
 require('../main');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-const timeout = setTimeout(() => { console.error('Global settings verification timed out'); app.exit(1); }, 20000);
+const timeout = setTimeout(() => { console.error('Global settings verification timed out'); app.exit(1); }, 40000);
 app.whenReady().then(async () => {
   try {
     let win;
@@ -42,6 +42,17 @@ app.whenReady().then(async () => {
     assert.equal(await evaluate('document.querySelector("#section-title").textContent'), '常用设置');
     await evaluate(`document.querySelector('[data-view=shortcuts]').click()`);
     assert.equal(await evaluate('document.querySelector("#section-title").textContent'), '快捷键');
+    await evaluate(`(() => { const select = document.querySelector('select[aria-label="面板形态"]'); select.value = 'list'; select.dispatchEvent(new Event('change')); document.querySelector('#appearance-switch button[aria-label="界面外观：浅色"]').click(); })()`);
+    await sleep(200);
+    assert.equal(await evaluate(`document.querySelector('select[aria-label="面板形态"]').value`), 'list', 'theme refresh preserves shortcut draft');
+    await evaluate(`document.querySelector('[data-view=common]').click(); document.querySelector('[data-view=shortcuts]').click()`);
+    assert.equal(await evaluate(`document.querySelector('select[aria-label="面板形态"]').value`), 'list', 'navigation preserves shortcut draft');
+    await evaluate(`document.querySelector('[aria-label=和球球聊聊快捷键]').click(); document.dispatchEvent(new KeyboardEvent('keydown', {key:'q', code:'KeyQ', ctrlKey:true, altKey:true, bubbles:true}))`);
+    assert.ok(await evaluate(`document.querySelector('.shortcut-settings-group [role=status]').textContent.includes('已经用于')`));
+    await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}))`);
+    assert.equal(await evaluate(`document.querySelector('[aria-label=和球球聊聊快捷键]').textContent`), '未设置');
+    await evaluate(`document.querySelector('#appearance-switch button[aria-label="界面外观：深色"]').click()`);
+    await sleep(200);
     await evaluate(`document.querySelector('[aria-label=和球球聊聊快捷键]').click(); document.dispatchEvent(new KeyboardEvent('keydown', {key:'j', code:'KeyJ', ctrlKey:true, altKey:true, bubbles:true}))`);
     await evaluate(`(() => { const select = document.querySelector('select[aria-label="面板形态"]'); select.value = 'list'; select.dispatchEvent(new Event('change')); document.querySelector('.shortcut-footer button').click(); })()`);
     await sleep(200);
@@ -63,6 +74,18 @@ app.whenReady().then(async () => {
     await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', {key:'k', metaKey:true, bubbles:true}))`);
     assert.equal(await evaluate('document.activeElement.id'), 'search');
     await evaluate(`document.querySelector('[data-view=common]').click()`);
+    for (const [id, file] of [['/chat-open', 'chat.html'], ['/pomodoro-open', 'pomodoro.html'], ['/Codex%20%E4%B8%8E%20API/openai-api-menu/openai-api-usage', 'api-usage.html']]) {
+      // Resolve API's encoded category from the live menu, without coupling to translated paths.
+      const selector = id.includes('openai-api-usage') ? '[data-view$="/openai-api-usage"]' : `[data-view="${id}"]`;
+      await evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
+      await sleep(300);
+      assert.ok(BrowserWindow.getAllWindows().some(item => item.webContents.getURL().split('?')[0].endsWith('/' + file)), file + ' opens independently');
+    }
+    await evaluate(`document.querySelector('#about-link').click()`);
+    await sleep(200);
+    assert.ok(BrowserWindow.getAllWindows().some(item => item.webContents.getURL().endsWith('/about.html')));
+    await evaluate(`document.querySelector('#search-toggle').click(); const input = document.querySelector('#search'); input.value = '快捷键'; input.dispatchEvent(new Event('input')); document.querySelector('[aria-label=快捷键设置]').click()`);
+    assert.equal(await evaluate('document.querySelector("#section-title").textContent'), '快捷键', 'search routes to embedded shortcut editor');
     win.setSize(620, 520);
     await sleep(100);
     assert.equal(await evaluate('document.querySelector("main").scrollWidth <= document.querySelector("main").clientWidth'), true);
