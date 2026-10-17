@@ -39,10 +39,30 @@
     const categories = groups();
     const nav = [{ id: 'common', label: '常用设置' }, { id: 'all', label: '全部设置' }, ...categories];
     if (!nav.some(item => item.id === selected)) selected = 'common';
-    $('navigation').replaceChildren(...nav.map(item => {
+    const selectView = id => {
+      selected = id; $('search').value = ''; render(); document.querySelector('main').scrollTop = 0;
+    };
+    $('navigation').replaceChildren(...categories.filter(item => item.id !== 'quick').map(item => {
       const button = el('button', item.label);
       if (selected === item.id) button.setAttribute('aria-current', 'page');
-      button.onclick = () => { selected = item.id; $('search').value = ''; render(); document.querySelector('main').scrollTop = 0; };
+      button.onclick = () => selectView(item.id);
+      return button;
+    }));
+    $('view-navigation').replaceChildren(...nav.slice(0, 2).concat(nav.filter(item => item.id === 'quick')).map(item => {
+      const button = el('button', item.label);
+      button.dataset.view = item.id;
+      button.setAttribute('aria-pressed', String(selected === item.id || item.id === 'all' && !['common', 'quick'].includes(selected)));
+      button.onclick = () => selectView(item.id);
+      return button;
+    }));
+    const appearance = snapshot.entries.find(item => item.id === '/color-mode')?.children.find(item => item.id.endsWith('/color-appearance'));
+    $('appearance-switch').replaceChildren(...(appearance?.children || []).map(item => {
+      const button = el('button', item.label);
+      button.setAttribute('aria-pressed', String(item.checked));
+      button.setAttribute('aria-label', `界面外观：${item.label}`);
+      button.dataset.action = `header:${item.id}`;
+      button.disabled = busy || !item.enabled;
+      button.onclick = () => act(item);
       return button;
     }));
     const query = $('search').value.trim().toLocaleLowerCase();
