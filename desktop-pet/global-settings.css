@@ -163,7 +163,6 @@ select { padding:7px 23px 7px 11px; }
 }
 
 :root[data-color-mode=accessible] h1,:root[data-color-mode=accessible] .brand strong { background:none; -webkit-text-fill-color:currentColor; }
-:root[data-color-mode=accessible] .group { border-color:var(--muted); }
 @media(max-width:760px) { .group { padding:13px 14px 6px; border-radius:15px; } }
 
 .nav-group { display:grid; gap:4px; }
@@ -216,7 +215,7 @@ body { padding-top:38px; }
 .radio { padding:0; min-width:18px; min-height:18px; width:18px; height:18px; aspect-ratio:1; appearance:none; }
 #feedback { position:fixed; bottom:22px; left:50%; transform:translateX(-50%); z-index:20; margin:0; padding:9px 16px; border-radius:10px; background:var(--control-selected); box-shadow:0 4px 22px #24394c18; pointer-events:none; }
 :root[data-color-mode=accessible] .group { border-color:var(--module-edge); }
-:root[data-color-mode=accessible] .group h3 { border-bottom-color:var(--line); }
+:root[data-color-mode=accessible] .group h3 { border-bottom-color:var(--module-line); }
 .notes-settings .row { padding-block:15px; }
 .notes-settings .notes-preference { margin-top:12px; border-top:1px solid var(--module-line); border-radius:0; padding-top:20px; }
 .shortcut-settings-group .group-intro { margin:0 0 10px; }
@@ -225,7 +224,9 @@ body { padding-top:38px; }
 .binding-button:hover,.binding-clear:hover { background:var(--control); }
 .binding-button kbd { display:grid; place-items:center; min-width:25px; height:25px; padding:0 5px; border:1px solid var(--control-selected-edge); border-radius:6px; background:var(--control); color:var(--text); font-size:12px; box-shadow:0 1px 0 #6a7a8c25; }
 .binding-button.recording { outline:2px solid var(--accent); color:var(--accent-text); background:var(--nav-active); }
-.binding-clear { width:26px; height:26px; padding:0; border-radius:7px; color:var(--muted); font-size:18px; }
+.binding-clear { display:grid; place-items:center; width:28px; height:28px; padding:0; border-radius:7px; color:var(--muted); }
+.binding-clear svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; opacity:.75; }
+.binding-clear:hover svg { opacity:1; }
 .shortcut-settings-group>.description { padding-inline:8px; }
 .shortcut-settings-group>.shortcut-footer { position:sticky; bottom:-36px; padding:12px 8px; background:var(--control-selected); border-radius:12px; }
 @media(max-width:760px) { body { padding-top:38px; } .shortcut-settings-group>.shortcut-footer { bottom:-24px; } }

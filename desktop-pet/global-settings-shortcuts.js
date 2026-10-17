@@ -47,7 +47,12 @@
       const button = node('button', '', 'binding-button'); button.type = 'button';
       button.setAttribute('aria-label', `${label}快捷键`); buttons[field] = button;
       const controls = node('div', '', 'binding-controls');
-      const clear = node('button', '×', 'binding-clear'); clear.type = 'button'; clear.setAttribute('aria-label', `删除${label}快捷键`); clear.title = '删除快捷键'; clears[field] = clear;
+      const clear = node('button', '', 'binding-clear'); clear.type = 'button'; clear.setAttribute('aria-label', `删除${label}快捷键`); clear.title = '删除快捷键'; clears[field] = clear;
+      const trash = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      trash.setAttribute('viewBox', '0 0 24 24'); trash.setAttribute('aria-hidden', 'true');
+      const path = document.createElementNS(trash.namespaceURI, 'path');
+      path.setAttribute('d', 'M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M10 11v6M14 11v6');
+      trash.append(path); clear.append(trash);
       clear.onclick = () => { finish(); draft[field] = ''; paint(field); notice.textContent = '快捷键已清除，保存后生效。'; };
       button.onclick = () => { finish(); active = field; button.textContent = '请按组合键…'; button.classList.add('recording'); api.recordShortcuts(true); };
       paint(field); controls.append(button, clear); row(label, controls);
