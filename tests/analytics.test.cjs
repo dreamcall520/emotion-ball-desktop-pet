@@ -220,12 +220,12 @@ test('current downloads reach GA4 without changing Umami; history, arbitrary lin
   link.dataset = {}; // Historical release links have no current-download markers.
   state.listeners.click(event);
   assert.equal(downloads().length, 1);
-  link.href = 'https://share.weiyun.com/c6lIDCBc';
+  link.href = 'https://share.weiyun.com/OJvZzed5';
   for (const [ancestor, position] of [['nav', 'navigation'], ['.hero-actions', 'hero'], ['', 'download']]) {
     link.closest = selector => selector === ancestor ? {} : null;
     state.listeners.click(event);
     assert.equal(downloads().at(-1)[2].position, position);
-    assert.equal(downloads().at(-1)[2].version, '0.4.04');
+    assert.equal(downloads().at(-1)[2].version, '0.4.05');
     assert.equal(downloads().at(-1)[2].download_source, 'weiyun');
   }
   assert.equal(state.calls.length, 1, 'domestic links do not extend the legacy Umami metric');
@@ -235,7 +235,7 @@ test('current downloads reach GA4 without changing Umami; history, arbitrary lin
   assert.equal(downloads().length, 5);
   link.href = 'https://unrelated.example/file.dmg'; state.listeners.auxclick(event);
   assert.equal(downloads().length, 5);
-  link.href = 'https://share.weiyun.com/c6lIDCBc';
+  link.href = 'https://share.weiyun.com/OJvZzed5';
   for (const gtag of [undefined, () => { throw Error('blocked'); }, () => Promise.reject(Error('offline'))]) {
     state.window.gtag = gtag;
     assert.doesNotThrow(() => state.listeners.auxclick(event));
