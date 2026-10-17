@@ -25,7 +25,7 @@ function run(command, args) {
 }
 
 function makeIcon(root = path.resolve(__dirname, '../..')) {
-  const source = path.join(root, 'emotion-ball/assets/img/favicon.png');
+  const source = path.join(root, 'desktop-pet/assets/app-icon.png');
   const buildDir = path.join(root, 'desktop-pet/build');
   const iconset = path.join(buildDir, 'AppIcon.iconset');
   const output = path.join(buildDir, 'app.icns');
