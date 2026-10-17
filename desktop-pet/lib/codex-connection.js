@@ -12,6 +12,7 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
   let closed = false;
   let rpc = null;
   let rpcReady = false;
+  let rpcAccountReady = false;
   let rpcGeneration = 0;
   let rpcStarting = null;
   let stream = null;
@@ -42,6 +43,7 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
   }
   function reportError(channel, error) {
     const code = ERROR_CODES.includes(error?.code) ? error.code : 'DISCONNECTED';
+    if (channel === 'quota' && code === 'TIMEOUT') rpcReady = false;
     const state = code === 'MISSING' ? 'missing' : code === 'UNAUTHENTICATED' ? 'unauthenticated'
       : ['UNSUPPORTED', 'UNSAFE_SOCKET', 'INVALID_FRAME'].includes(code) ? 'unsupported' : 'disconnected';
     report(channel, state, code);
@@ -49,7 +51,7 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
   function beginRpc() {
     if (rpcStarting) return rpcStarting;
     const generation = ++rpcGeneration;
-    rpcReady = false; rpc?.close(); report('quota', 'connecting');
+    rpcReady = false; rpcAccountReady = false; rpc?.close(); report('quota', 'connecting');
     // RPC applies the workspace filter before its public metadata projection drops cwd.
     const target = createRpc({ ignoreThread, onDisconnect: code => {
       if (!closed && generation === rpcGeneration) { rpcReady = false; reportError('quota', { code }); }
@@ -58,7 +60,7 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
     const opening = Promise.resolve().then(() => {
       if (!closed && generation === rpcGeneration) return target.start();
     }).then(() => {
-      if (!closed && generation === rpcGeneration) { rpcReady = true; drainDiscoveries(); }
+      if (!closed && generation === rpcGeneration) rpcReady = true;
     }).finally(() => { if (rpcStarting === opening) rpcStarting = null; });
     rpcStarting = opening;
     return opening;
@@ -82,24 +84,24 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
   }
   function queueDiscovery(id) {
     if (closed || authenticated === false || !accountSupported || ignoreTask(id)) return;
-    if (!rpcReady || authenticated !== true) {
+    if (!rpcReady || !rpcAccountReady || authenticated !== true) {
       if (pendingDiscoveries.size < 64) pendingDiscoveries.add(id);
       return;
     }
     void discoverTask(id);
   }
   function drainDiscoveries() {
-    if (closed || !rpcReady || authenticated !== true || !accountSupported) return;
+    if (closed || !rpcReady || !rpcAccountReady || authenticated !== true || !accountSupported) return;
     const ids = [...pendingDiscoveries]; pendingDiscoveries.clear();
     for (const id of ids) queueDiscovery(id);
   }
   function discoverTask(id) {
-    if (closed || !rpcReady || authenticated === false || !accountSupported || ignoreTask(id) || discoveryFlights.has(id)) {
+    if (closed || !rpcReady || !rpcAccountReady || authenticated === false || !accountSupported || ignoreTask(id) || discoveryFlights.has(id)) {
       return discoveryFlights.get(id) || Promise.resolve();
     }
     const account = accountGeneration; const rpcEpoch = rpcGeneration; const streamEpoch = streamGeneration;
     const targetRpc = rpc; const targetStream = stream;
-    const current = () => !closed && rpcReady && account === accountGeneration && rpcEpoch === rpcGeneration
+    const current = () => !closed && rpcReady && rpcAccountReady && account === accountGeneration && rpcEpoch === rpcGeneration
       && streamEpoch === streamGeneration && targetRpc === rpc && targetStream === stream;
     const lookup = discoveryQueue.then(async () => {
       if (!current() || ignoreTask(id)) return;
@@ -143,9 +145,11 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
       if (current()) return target.readAccount();
     }).then(value => {
       if (!current() || !value) return false;
+      rpcAccountReady = value.supported !== false && value.authenticated === true;
       acceptAccount(value);
       if (!accountSupported) { report('quota', 'unsupported', 'UNSUPPORTED'); return false; }
       if (!value.authenticated) { report('quota', 'unauthenticated', 'UNAUTHENTICATED'); return false; }
+      drainDiscoveries();
       return true;
     }).catch(error => { if (current()) reportError('quota', error); return false; });
     flight.promise = flight.account.then(async success => {
@@ -163,9 +167,9 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
     const generation = accountGeneration;
     const rpcEpoch = rpcGeneration; const streamEpoch = streamGeneration;
     if (tasksFlight?.generation === generation && tasksFlight.rpcEpoch === rpcEpoch && tasksFlight.streamEpoch === streamEpoch) return tasksFlight.promise;
-    if (closed || !rpcReady || authenticated === false || !accountSupported) return Promise.resolve();
+    if (closed || !rpcReady || !rpcAccountReady || authenticated === false || !accountSupported) return Promise.resolve();
     const targetRpc = rpc; const targetStream = stream;
-    const current = () => !closed && rpcReady && generation === accountGeneration && rpcEpoch === rpcGeneration && streamEpoch === streamGeneration;
+    const current = () => !closed && rpcReady && rpcAccountReady && generation === accountGeneration && rpcEpoch === rpcGeneration && streamEpoch === streamGeneration;
     const flight = { generation, rpcEpoch, streamEpoch, promise: null };
     flight.promise = Promise.resolve().then(() => {
       if (current()) return targetRpc.listThreads();
@@ -212,6 +216,7 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
       streamGeneration++; stream?.close(); stream = null; hasMetadata = false;
       report('tasks', 'disconnected', 'DISCONNECTED'); return Promise.resolve();
     }
+    if (!rpcAccountReady) return Promise.resolve();
     if (taskRetryFlight?.generation === streamGeneration) return taskRetryFlight.promise;
     const opening = beginStream();
     const flight = { generation: streamGeneration, promise: null };
@@ -238,7 +243,7 @@ function createCodexConnection({ onQuota = () => {}, onTask = () => {}, onStatus
   function close() {
     if (closed) return;
     closed = true; accountGeneration++; streamGeneration++; rpcGeneration++;
-    rpcReady = false; accountKey = undefined; authenticated = null; accountSupported = true; hasMetadata = false;
+    rpcReady = false; rpcAccountReady = false; accountKey = undefined; authenticated = null; accountSupported = true; hasMetadata = false;
     stream?.close(); rpc?.close(); stream = null; rpc = null; discoveryFlights.clear(); pendingDiscoveries.clear(); lastStatus.clear();
   }
   return { start, refresh, retry, close };

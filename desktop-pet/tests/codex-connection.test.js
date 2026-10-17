@@ -346,6 +346,102 @@ test('quota-only retry对仍ready的RPC只刷新账号额度，不重新建连�
   assert.deepEqual(h.calls, ['account', 'quota']); assert.equal(h.rpcs.length, 1); assert.equal(h.streams.length, 1);
 });
 
+for (const method of ['account', 'quota']) {
+  test(`${method}读取TIMEOUT后quota-only retry重建卡住的RPC，保留任务流和同账号身份`, async t => {
+    let failing = false;
+    const timeout = index => {
+      if (failing && index === 0) throw Object.assign(new Error('TIMEOUT'), { code: 'TIMEOUT' });
+    };
+    const h = harness({
+      account: index => { if (method === 'account') timeout(index); return { authenticated: true, accountKey: 'one' }; },
+      quota: index => { if (method === 'quota') timeout(index); return { windows: [], updatedAt: 100 }; }
+    });
+    t.after(() => h.connection.close()); await h.connection.start();
+    const old = h.rpcs[0]; const stream = h.streams[0];
+    stream.options.onStatus({ state: 'connected', code: null });
+    failing = true;
+    await h.connection.refresh({ quota: true, tasks: false });
+    assert.equal(h.statuses.filter(value => value.channel === 'quota').at(-1).code, 'TIMEOUT');
+    h.calls.length = 0;
+    await retry(h, { quota: true, tasks: false });
+    assert.equal(h.rpcs.length, 2); assert.equal(old.closed, true);
+    assert.deepEqual(h.calls, ['close-rpc', 'construct-rpc', 'start-rpc', 'account', 'quota']);
+    assert.equal(h.streams.length, 1); assert.equal(stream.closed, false);
+    assert.deepEqual(h.accounts, [{ accountKey: 'one' }]); assert.equal(h.quotas.length, 2);
+    assert.equal(h.statuses.filter(value => value.channel === 'quota').at(-1).state, 'connected');
+    assert.equal(h.statuses.filter(value => value.channel === 'tasks').at(-1).state, 'connected');
+    stream.options.onTask({ id: ID, state: 'active' }); assert.equal(h.tasks.at(-1).state, 'active');
+  });
+}
+
+for (const accountKey of ['one', 'two']) {
+  test(`quota TIMEOUT重连先确认账号${accountKey}再发现线程，保留同账号流并隔离换号`, async t => {
+    const following = '019fae37-6bb8-7873-8873-14a6661bd1f2';
+    let failing = false, finishAccount;
+    const h = harness({
+      account: index => index === 0 ? { authenticated: true, accountKey: 'one' }
+        : new Promise(resolve => { finishAccount = resolve; }),
+      quota: index => {
+        if (failing && index === 0) throw Object.assign(new Error('TIMEOUT'), { code: 'TIMEOUT' });
+        return { windows: [], updatedAt: 100 };
+      },
+      find: id => {
+        if (accountKey === 'two') assert.equal(h.streams[0].closed, true);
+        return { id, title: '重新发现的任务', state: 'unknown', partial: true };
+      }
+    });
+    t.after(() => { finishAccount?.({ authenticated: true, accountKey }); h.connection.close(); });
+    await h.connection.start(); const oldStream = h.streams[0];
+    failing = true; await h.connection.refresh({ quota: true, tasks: false });
+    oldStream.options.onDiscovered(following); h.calls.length = 0;
+    const opening = retry(h, { quota: true, tasks: false }); await tick();
+    assert.equal(typeof finishAccount, 'function');
+    assert.equal(h.calls.includes('find'), false, '新RPC账号未核验，不读取旧流发现的线程');
+    assert.equal(oldStream.rows.some(row => row.id === following), false);
+    finishAccount({ authenticated: true, accountKey }); await opening; await tick();
+    if (accountKey === 'one') {
+      assert.equal(oldStream.closed, false); assert.equal(h.streams.length, 1);
+      assert.equal(oldStream.rows.some(row => row.id === following), true);
+      assert.deepEqual(h.accounts, [{ accountKey: 'one' }]);
+    } else {
+      assert.equal(oldStream.closed, true); assert.equal(h.streams.length, 2);
+      assert.equal(h.streams[1].rows.some(row => row.id === ID), true, '换号确认后新流已建立metadata基线');
+      assert.equal(h.calls.includes('find'), false, '换号丢弃旧账号排队的线程');
+      h.streams[1].options.onDiscovered(following); await tick();
+      assert.equal(h.streams[1].rows.some(row => row.id === following), true);
+      assert.equal(oldStream.rows.some(row => row.id === following), false);
+    }
+  });
+}
+
+for (const accountKey of ['one', 'two']) {
+  test(`新RPC账号${accountKey}未确认时并发tasks-only refresh和retry保留旧流且不读metadata`, async t => {
+    let failing = false, finishAccount;
+    const h = harness({
+      account: index => index === 0 ? { authenticated: true, accountKey: 'one' }
+        : new Promise(resolve => { finishAccount = resolve; }),
+      quota: index => {
+        if (failing && index === 0) throw Object.assign(new Error('TIMEOUT'), { code: 'TIMEOUT' });
+        return { windows: [], updatedAt: 100 };
+      }
+    });
+    t.after(() => { finishAccount?.({ authenticated: true, accountKey }); h.connection.close(); });
+    await h.connection.start(); const oldStream = h.streams[0];
+    failing = true; await h.connection.refresh({ quota: true, tasks: false });
+    const opening = retry(h, { quota: true, tasks: false }); await tick(); h.calls.length = 0;
+    const refreshing = h.connection.refresh({ quota: false, tasks: true });
+    await retry(h, { quota: false, tasks: true }); await tick();
+    assert.equal(h.calls.includes('list'), false); assert.equal(h.calls.includes('find'), false);
+    assert.equal(h.streams.length, 1); assert.equal(oldStream.closed, false);
+    finishAccount({ authenticated: true, accountKey }); await Promise.all([opening, refreshing]); await tick();
+    assert.equal(h.streams.length, accountKey === 'one' ? 1 : 2);
+    assert.equal(oldStream.closed, accountKey === 'two');
+    assert.equal(h.streams.at(-1).rows.some(row => row.id === ID), true);
+    h.calls.length = 0; await h.connection.refresh({ quota: false, tasks: true });
+    assert.deepEqual(h.calls, ['list', 'set-threads']);
+  });
+}
+
 test('tasks-only retry只重建stream和metadata，不触碰健康RPC或账号额度', async t => {
   const h = harness(); t.after(() => h.connection.close()); await h.connection.start();
   const old = h.streams[0]; old.options.onStatus({ state: 'disconnected', code: 'DISCONNECTED' }); h.calls.length = 0;
