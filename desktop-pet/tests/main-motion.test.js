@@ -843,7 +843,7 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   const menu = f.call('menuTemplate()');
   const top = menu.filter(item => item.type !== 'separator');
   assert.deepEqual(Array.from(top, item => item.label), [
-    '全局设置…', '和球球聊聊', '来定制球球', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API',
+    '设置中心', '和球球聊聊', '定制球球', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API',
     '贴边与显示', '球球尺寸', '界面配色', '常规设置', '关于球球', '检查更新', '退出球球'
   ]);
   const group = label => top.find(item => item.label === label).submenu.filter(item => item.type !== 'separator');
@@ -3051,7 +3051,7 @@ test('桌面右键菜单以第一项为锚点，保留完整菜单及关闭回�
   const { value, options } = f.popups.at(-1);
   assert.equal(options.window, f.pet);
   assert.equal(options.positioningItem, 0);
-  assert.equal(value[0].label, '全局设置…');
+  assert.equal(value[0].label, '和球球聊聊');
   assert.equal(value.at(-1).label, '退出球球');
   assert.equal(typeof options.callback, 'function');
 });
@@ -3535,7 +3535,7 @@ test('原生菜单仅保留设置中心与独立入口，完整偏好仍可在�
   const f = await fixture(); t.after(() => f.app.emit('before-quit'));
   const menu = f.call('compactMenuTemplate()');
   assert.deepEqual(Array.from(menu.filter(item => item.type !== 'separator'), item => item.label),
-    ['全局设置…', '和球球聊聊', '来定制球球', '便签与待办', '番茄钟', 'OpenAI API 费用与用量…', '关于球球', '检查更新', '退出球球']);
+    ['和球球聊聊', '便签与待办', '番茄钟', '定制球球', 'API 费用与用量', '设置中心', '关于球球', '检查更新', '退出球球']);
   assert.ok(menu.every(item => !item.submenu));
   assert.ok(findMenuItem(f.call('menuTemplate()'), 'notes-default-note'));
   assert.ok(findMenuItem(f.call('menuTemplate()'), 'codex-quota-period'));

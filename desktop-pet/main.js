@@ -370,7 +370,7 @@ function openGlobalSettings(view) {
   }
   globalSettingsInitialView = target || 'common';
   const win = new BrowserWindow({ width: 980, height: 760, minWidth: 620, minHeight: 480,
-    title: '球球 · 全局设置', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 }, backgroundColor: '#F5F7FB', show: false,
+    title: '球球 · 设置中心', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 }, backgroundColor: '#F5F7FB', show: false,
     webPreferences: { preload: path.join(__dirname, 'global-settings-preload.js'),
       contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false }
   });
@@ -1851,7 +1851,7 @@ function codexMenu() {
         : []),
       { type: 'separator' },
       { id: 'openai-api-menu', label: 'OpenAI API', submenu: [
-        { id: 'openai-api-usage', label: 'OpenAI API 费用与用量…', click: openApiUsage },
+        { id: 'openai-api-usage', label: 'API 费用与用量', click: openApiUsage },
         { id: 'openai-api-visible', label: '显示 API 本月费用卡', type: 'checkbox',
           checked: settings.openaiApiAlwaysVisible === true,
           click: item => { const enabled = item.checked; item.checked = settings.openaiApiAlwaysVisible === true;
@@ -1871,9 +1871,9 @@ function menuTemplate() {
     click: () => { void (availableUpdate ? showUpdateResult(availableUpdate) : checkForUpdates(true)); } };
   return [
     ...(availableUpdate ? [updateEntry, { type: 'separator' }] : []),
-    { id: 'global-settings', label: '全局设置…', accelerator: 'CommandOrControl+,', click: openGlobalSettings },
+    { id: 'global-settings', label: '设置中心', accelerator: 'CommandOrControl+,', click: openGlobalSettings },
     { id: 'chat-open', label: '和球球聊聊', click: openChat },
-    { id: 'customize-open', label: '来定制球球', click: openCustomization },
+    { id: 'customize-open', label: '定制球球', click: openCustomization },
     { label: '便签与待办', submenu: [
       { id: 'notes-open', label: '打开主面板', click: () => notesCompanion?.openPanel() },
       { id: 'notes-new', label: '新建便签', click: () => notesCompanion?.openPanel({ tab: 'note', create: true }) },
@@ -1953,9 +1953,10 @@ function compactMenuTemplate() {
   const find = id => items.find(item => item.id === id);
   const notes = items.find(item => item.label === '便签与待办')?.submenu.find(item => item.id === 'notes-open');
   const api = items.find(item => item.label === 'Codex 与 API').submenu.find(item => item.id === 'openai-api-menu')?.submenu.find(item => item.id === 'openai-api-usage');
-  return [find('global-settings'), { type: 'separator' }, find('chat-open'), find('customize-open'),
-    notes && { ...notes, label: '便签与待办' }, find('pomodoro-open'), api,
-    { type: 'separator' }, find('about-open'), find('update-check'), items.find(item => item.label === '退出球球')].filter(Boolean);
+  return [find('chat-open'), notes && { ...notes, label: '便签与待办' }, find('pomodoro-open'),
+    { type: 'separator' }, find('customize-open'), api,
+    { type: 'separator' }, find('global-settings'), find('about-open'), find('update-check'),
+    { type: 'separator' }, items.find(item => item.label === '退出球球')].filter(Boolean);
 }
 
 function refreshTrayMenu() {
