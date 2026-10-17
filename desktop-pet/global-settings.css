@@ -232,8 +232,8 @@ body { padding-top:38px; }
 @media(max-width:760px) { body { padding-top:38px; } .shortcut-settings-group>.shortcut-footer { bottom:-24px; } }
 .shortcut-settings-group>.shortcut-footer { background:var(--module); backdrop-filter:blur(18px); border:1px solid var(--module-edge); }
 
-/* A clearer blue-gray keeps the navigation light against the pastel canvas. */
-:root { --nav-text:#7d90aa; --nav-caption:#8a9ab0; }
+/* Give navigation labels enough contrast against the pastel canvas. */
+:root { --nav-text:#536780; --nav-caption:#65768d; }
 :root[data-appearance=dark] { --nav-text:#bac9dc; --nav-caption:#a1b1c8; }
 :root[data-color-mode=accessible] { --nav-text:var(--text); --nav-caption:var(--text); }
 #navigation button { color:var(--nav-text); }
