@@ -273,12 +273,16 @@ function adhocSign(appPath) {
   runTool('codesign', ['--verify', '--deep', '--strict', appPath]);
 }
 
-async function packageMac(root = path.resolve(__dirname, '../..'), { website = false } = {}) {
+async function packageMac(root = path.resolve(__dirname, '../..'), { website = false, nativeIcon = false } = {}) {
   const icon = makeIcon(root);
   const staging = prepareStaging(root, website ? path.join(root, 'desktop-pet/build/website-staging') : undefined);
   const electronZipDir = findElectronZipDir();
   const options = buildPackagerOptions(root, icon, electronZipDir);
   options.dir = staging;
+  if (nativeIcon) {
+    options.extraResource = [path.join(root, 'desktop-pet/assets/app-icon-native/Assets.car')];
+    options.extendInfo = { CFBundleIconName: 'QiuqiuA1' };
+  }
   if (website) options.out = path.join(root, 'dist/website');
   const paths = await packager(options);
   if (!paths.length) throw new Error('未生成 macOS 应用');
@@ -290,7 +294,7 @@ async function packageMac(root = path.resolve(__dirname, '../..'), { website = f
 }
 
 if (require.main === module) {
-  packageMac(undefined, { website: process.argv.includes('--website') }).catch(error => {
+  packageMac(undefined, { website: process.argv.includes('--website'), nativeIcon: process.argv.includes('--local-native-icon') }).catch(error => {
     process.stderr.write(`${error.stack || error.message}\n`);
     process.exitCode = 1;
   });
