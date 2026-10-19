@@ -1947,14 +1947,17 @@ function menuTemplate() {
   ];
 }
 
-// Keep the full command catalog for settings; native menus show only destinations.
+// Keep the full command catalog for settings; native menus expose destinations and the core Codex toggle.
 function compactMenuTemplate() {
   const items = menuTemplate();
   const find = id => items.find(item => item.id === id);
   const notes = items.find(item => item.label === '便签与待办')?.submenu.find(item => item.id === 'notes-open');
-  const api = items.find(item => item.label === 'Codex 与 API').submenu.find(item => item.id === 'openai-api-menu')?.submenu.find(item => item.id === 'openai-api-usage');
-  return [find('chat-open'), notes && { ...notes, label: '便签与待办' }, find('pomodoro-open'),
-    { type: 'separator' }, { ...find('customize-open'), label: '来定制球球' }, api,
+  const codex = items.find(item => item.id === 'codex-menu').submenu;
+  const codexEnabled = codex.find(item => item.id === 'codex-enabled');
+  const api = codex.find(item => item.id === 'openai-api-menu')?.submenu.find(item => item.id === 'openai-api-usage');
+  return [find('chat-open'), { ...find('customize-open'), label: '来定制球球' },
+    notes && { ...notes, label: '便签与待办' }, find('pomodoro-open'),
+    { type: 'separator' }, codexEnabled, api,
     { type: 'separator' }, find('global-settings'), find('about-open'), find('update-check'),
     { type: 'separator' }, items.find(item => item.label === '退出球球')].filter(Boolean);
 }

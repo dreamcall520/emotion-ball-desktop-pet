@@ -3531,12 +3531,35 @@ test('全局快捷键保存校验来源、持久化并拒绝隐藏窗口操作',
 });
 
 
-test('原生菜单仅保留设置中心与独立入口，完整偏好仍可在设置中心访问', async t => {
+test('原生菜单保留核心联动开关与独立入口，完整偏好仍可在设置中心访问', async t => {
   const f = await fixture(); t.after(() => f.app.emit('before-quit'));
   const menu = f.call('compactMenuTemplate()');
   assert.deepEqual(Array.from(menu.filter(item => item.type !== 'separator'), item => item.label),
-    ['和球球聊聊', '便签与待办', '番茄钟', '来定制球球', 'API 费用与用量', '设置中心', '关于球球', '检查更新', '退出球球']);
+    ['和球球聊聊', '来定制球球', '便签与待办', '番茄钟', '启用 Codex 联动', 'API 费用与用量', '设置中心', '关于球球', '检查更新', '退出球球']);
   assert.ok(menu.every(item => !item.submenu));
   assert.ok(findMenuItem(f.call('menuTemplate()'), 'notes-default-note'));
   assert.ok(findMenuItem(f.call('menuTemplate()'), 'codex-quota-period'));
+});
+
+
+test('右键菜单核心联动开关跟随真实状态并复用授权入口', async t => {
+  const f = await fixture({ consent: async () => ({ response: 1 }) });
+  t.after(() => f.app.emit('before-quit'));
+  const item = findMenuItem(f.call('compactMenuTemplate()'), 'codex-enabled');
+  assert.equal(item.type, 'checkbox');
+  assert.equal(item.checked, false);
+  item.checked = true;
+  item.click(item);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.consents.length, 1);
+  assert.equal(f.call('settings.codexEnabled'), false);
+  assert.equal(findMenuItem(f.call('compactMenuTemplate()'), 'codex-enabled').checked, false);
+  const enabled = await fixture({ codexEnabled: true });
+  t.after(() => enabled.app.emit('before-quit'));
+  const toggle = findMenuItem(enabled.call('compactMenuTemplate()'), 'codex-enabled');
+  assert.equal(toggle.checked, true);
+  toggle.checked = false; toggle.click(toggle);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(enabled.call('settings.codexEnabled'), false);
+  assert.equal(findMenuItem(enabled.call('compactMenuTemplate()'), 'codex-enabled').checked, false);
 });
