@@ -6,8 +6,8 @@ const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
 const html = read('shop/mousepad/index.html');
 const styles = [...html.matchAll(/name="style" value="([^"]+)" data-variant-image="([^"]+)"/g)];
 const sizes = [...html.matchAll(/name="variant" value="([^"]+)" data-variant-price="(\d+)"/g)];
-assert.equal(styles.length, 41);
-assert.deepEqual(styles.map(match => match[1]), ["春野拼布", "夕光雾蓝", "蜜桃奶油", "奶油花格", "春野涂鸦", "花野派对", "焦糖海岸", "桂花暮紫", "春野杂货铺", "林间花笺", "橘日咖啡", "薄荷周末", "雏菊晴风", "暖杏雏菊", "蜜桃晨光", "奶油雏菊", "夜航银灰", "月夜微风", "薄荷花信", "花房光影", "雏菊艺境", "晴日生活拼布", "焦糖曲奇时光", "好运云朵", "午夜花砖", "杏霞蓝汐", "薄荷休息站", "快乐补给站", "柠檬气泡", "奶油小剧场", "蓝莓偷乐", "橘子捣蛋日", "晴天野餐会", "午夜摸鱼站", "森林偷乐站", "橘晴好运", "莓莓开心云", "可可偷吃日", "奶糖恶作剧", "森林元气云", "午夜活力云"]);
+assert.equal(styles.length, 44);
+assert.deepEqual(styles.map(match => match[1]), ["春野拼布", "夕光雾蓝", "蜜桃奶油", "奶油花格", "春野涂鸦", "花野派对", "焦糖海岸", "桂花暮紫", "春野杂货铺", "林间花笺", "橘日咖啡", "薄荷周末", "晴日生活拼布", "焦糖曲奇时光", "好运云朵", "午夜花砖", "杏霞蓝汐", "薄荷休息站", "快乐补给站", "柠檬气泡", "奶油小剧场", "蓝莓偷乐", "橘子捣蛋日", "晴天野餐会", "午夜摸鱼站", "森林偷乐站", "橘晴好运", "莓莓开心云", "可可偷吃日", "奶糖恶作剧", "森林元气云", "午夜活力云", "健身拼布复古配色", "健身拼布·明亮原色", "橘红元气小剧场", "暖橘贴纸俱乐部", "焦糖手账角落", "午夜蓝贴纸俱乐部", "薄荷手账角落", "橘暖休息站", "焦糖偷乐站", "奶油漫画小剧场", "暖杏快乐小剧场", "好运花色小剧场"]);
 assert.deepEqual(sizes.map(match => [match[1], match[2]]), [['800×300mm · 厚3mm', '50'], ['800×400mm · 厚3mm', '60']]);
 for (const [, , image] of styles) assert.ok(fs.existsSync(path.join(__dirname, '../shop/mousepad', image)));
 assert.match(read('shop/index.html'), /href="mousepad\/"/);
@@ -55,4 +55,4 @@ for (const style of state.styleInputs) {
 const cup = run(false);
 cup.button.handlers.click();
 assert.equal(cup.inquiry.textContent, '春野奶白随行杯 · 260ml · ¥66\n想确认商品细节与发货安排。');
-console.log('Mousepad: 82 image/size/price/inquiry combinations and existing cup inquiry passed');
+console.log('Mousepad: 88 image/size/price/inquiry combinations and existing cup inquiry passed');
