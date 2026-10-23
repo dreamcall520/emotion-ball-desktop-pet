@@ -2595,6 +2595,7 @@ function createPetWindow() {
     schedule: setTimeout, cancel: clearTimeout });
   const createdPetWindow = candidatePetWindow;
   const isCurrentPetWindow = () => petWindow === createdPetWindow;
+  let renderRecoveryTimer = null;
 
   createdPetWindow.setAlwaysOnTop(settings.alwaysOnTop, 'floating');
   createdPetWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
@@ -2608,10 +2609,19 @@ function createPetWindow() {
   });
   createdPetWindow.webContents.on('render-process-gone', (_event, details) => {
     if (!isCurrentPetWindow()) return;
+    activityMonitor?.stop();
     invalidateCodexPage();
     if (!isCurrentPetWindow()) return;
     writeError('渲染进程退出', JSON.stringify(details));
-    if (IS_SMOKE_TEST) app.exit(1);
+    if (IS_SMOKE_TEST) { app.exit(1); return; }
+    clearTimeout(renderRecoveryTimer);
+    if (isQuitting) return;
+    renderRecoveryTimer = setTimeout(() => {
+      renderRecoveryTimer = null;
+      if (isCurrentPetWindow() && !createdPetWindow.isDestroyed() && !isQuitting && !codexPageReady) {
+        createdPetWindow.webContents.reload();
+      }
+    }, 1000);
   });
   createdPetWindow.once('ready-to-show', () => {
     if (!isCurrentPetWindow() || createdPetWindow.isDestroyed()) return;
@@ -2622,6 +2632,8 @@ function createPetWindow() {
   });
   createdPetWindow.webContents.on('did-finish-load', () => {
     if (!isCurrentPetWindow()) return;
+    clearTimeout(renderRecoveryTimer);
+    renderRecoveryTimer = null;
     codexPageReady = true;
     if (!isCurrentPetWindow()) return;
     sendCompanionSettings();
@@ -2681,6 +2693,7 @@ function createPetWindow() {
   });
   let closedCleanupStarted = false;
   createdPetWindow.on('closed', () => {
+    clearTimeout(renderRecoveryTimer);
     if (!isCurrentPetWindow() || closedCleanupStarted) return;
     closedCleanupStarted = true;
     shortcutWindow?.interrupt();

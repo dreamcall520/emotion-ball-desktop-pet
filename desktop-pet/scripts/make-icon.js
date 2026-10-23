@@ -25,7 +25,7 @@ function run(command, args) {
 }
 
 function makeIcon(root = path.resolve(__dirname, '../..')) {
-  const source = path.join(root, 'emotion-ball/assets/img/favicon.png');
+  const source = path.join(root, 'desktop-pet/assets/app-icon.png');
   const buildDir = path.join(root, 'desktop-pet/build');
   const iconset = path.join(buildDir, 'AppIcon.iconset');
   const output = path.join(buildDir, 'app.icns');
@@ -36,14 +36,9 @@ function makeIcon(root = path.resolve(__dirname, '../..')) {
   fs.mkdirSync(iconset, { recursive: true });
 
   for (const [fileName, size] of ICON_FILES) {
-    run('sips', [
-      '-z',
-      String(size),
-      String(size),
-      source,
-      '--out',
-      path.join(iconset, fileName)
-    ]);
+    const prepared = size === 1024 ? source
+      : path.join(root, 'desktop-pet/assets/app-icon-sizes', `${size}.png`);
+    fs.copyFileSync(prepared, path.join(iconset, fileName));
   }
 
   run('iconutil', ['-c', 'icns', iconset, '-o', output]);

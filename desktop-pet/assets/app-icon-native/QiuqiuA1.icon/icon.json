@@ -1,0 +1,37 @@
+{
+  "fill": {
+    "solid": "srgb:0.94,0.91,0.86,1"
+  },
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name": "A1-opaque.png",
+          "name": "A1-opaque",
+          "glass": false,
+          "position": {
+            "scale": 1,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "specular": false,
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": [
+      "macOS"
+    ]
+  }
+}
