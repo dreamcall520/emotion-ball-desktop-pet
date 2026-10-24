@@ -15,7 +15,10 @@ const oldArticles = articles.slice(1), oldBlocks = articleBlocks.slice(1);
 test('logs add 0.4.06 and preserve all seventeen historical records', () => {
   assert.match(articleBlocks[0], /id="v0\.4\.06-apple"/);
   assert.match(articles[0], /datetime="2026-10-24"/);
-  assert.deepEqual([...articles[0].matchAll(/<h4>(.*?)<\/h4>/g)].map(m=>m[1]), ['【升级】设置中心', '【新增】四主题咩咩', '【新增】主题互动与烟花', '【优化】主题记忆', '【优化】靠边位置']);
+  assert.deepEqual([...articles[0].matchAll(/<h4>(.*?)<\/h4>/g)].map(m=>m[1]), ['【升级】设置中心', '【新增】咩咩主题', '【优化】已知问题']);
+  assert.equal((articles[0].match(/<li>/g) || []).length, 2);
+  assert.match(articles[0], /<h4>【优化】已知问题<\/h4><\/div>/);
+  assert.doesNotMatch(articles[0], /主题记忆|靠边位置|卡面|小角色/);
   assert.equal(articles.length,18);
   assert.match(articles[0], /v0\.4\.6\/Qiuqiu-0\.4\.06-macOS-arm64\.dmg/);
 });
