@@ -29,7 +29,20 @@
       .slice(0, 32).join('');
   }
 
-  function copyItem(value) {
+  function bucketFields(item, sourceId) {
+    if (sourceId !== 'zcode') return {};
+    try { return {
+      planName: cleanText(item.planName),
+      bucketId: typeof item.bucketId === 'string' && /^[^\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]{1,400}$/u.test(item.bucketId) ? item.bucketId : '',
+      periodKind: ['one_time', 'expiry', 'daily', 'rolling', 'weekly', 'monthly', 'unknown'].includes(item.periodKind) ? item.periodKind : 'unknown',
+      periodStart: Number.isSafeInteger(item.periodStart) && item.periodStart > 0 ? item.periodStart : null,
+      total: Number.isFinite(item.total) && item.total >= 0 ? item.total : null,
+      remainingUnits: Number.isFinite(item.remainingUnits) && item.remainingUnits >= 0 ? item.remainingUnits : null,
+      unit: typeof item.unit === 'string' ? item.unit.replace(/[^a-zA-Z\u4e00-\u9fff]/gu, '').slice(0, 16) : ''
+    }; } catch (_) { return {}; }
+  }
+
+  function copyItem(value, sourceId = 'codex') {
     const item = record(value);
     if (!item) return null;
     let labelValue;
@@ -45,12 +58,13 @@
       paceValue = item.pace;
     } catch (_) { return null; }
     const itemLabel = cleanText(labelValue);
-    if (!itemLabel || !Number.isSafeInteger(windowMinutes) || windowMinutes <= 0 ||
+    if (!itemLabel || (sourceId === 'zcode' ? windowMinutes !== null && (!Number.isFinite(windowMinutes) || windowMinutes <= 0) : !Number.isSafeInteger(windowMinutes) || windowMinutes <= 0) ||
       typeof remaining !== 'number' || !Number.isFinite(remaining) || remaining < 0 || remaining > 100) return null;
     return {
       label: itemLabel,
       windowMinutes,
       remaining,
+      ...bucketFields(item, sourceId),
       pace: copyPace(paceValue),
       ...(Number.isSafeInteger(resetsAt) && resetsAt > 0 ? { resetsAt } : {})
     };
@@ -74,16 +88,16 @@
     } catch (_) { return { activity: { runningCount: null, unreadCount: null } }; }
   }
 
-  function copyItems(value) {
+  function copyItems(value, sourceId = 'codex') {
     try { if (!Array.isArray(value)) return []; } catch (_) { return []; }
     let length;
     try { length = value.length; } catch (_) { return []; }
-    const limit = Number.isSafeInteger(length) && length >= 0 ? Math.min(length, 2) : 0;
+    const limit = Number.isSafeInteger(length) && length >= 0 ? Math.min(length, sourceId === 'zcode' ? 32 : 2) : 0;
     const items = [];
     for (let index = 0; index < limit; index += 1) {
       let raw;
       try { raw = value[index]; } catch (_) { continue; }
-      const item = copyItem(raw);
+      const item = copyItem(raw, sourceId);
       if (item) items.push(item);
     }
     return items;
@@ -131,12 +145,14 @@
       appearanceValue = source.appearance;
       expandedValue = source.expanded;
     } catch (_) { return { state: 'disconnected', items: [], overflow: 0, size: 'standard', appearance: 'system', expanded: false }; }
+    const sourceId = source.sourceId === 'zcode' ? 'zcode' : 'codex';
     const state = states.has(stateValue) ? stateValue : 'disconnected';
+    const identity = sourceId === 'zcode' ? { sourceId: 'zcode' } : {};
     const size = sizeValue === 'compact' ? 'compact' : 'standard';
     const appearance = ['light', 'dark'].includes(appearanceValue) ? appearanceValue : 'system';
     const numbers = numberFields(source);
     const expanded = numbers.display !== 'numbers' && expandedValue === true;
-    if (!['ready', 'stale'].includes(state)) return { state, items: [], overflow: 0, size, appearance, expanded: false, ...numbers };
+    if (!['ready', 'stale'].includes(state)) return { ...identity, state, items: [], overflow: 0, size, appearance, expanded: false, ...numbers };
     let rawItems;
     let overflowValue;
     let resetCreditsAvailable;
@@ -144,23 +160,28 @@
       rawItems = source.items;
       overflowValue = source.overflow;
       resetCreditsAvailable = source.resetCreditsAvailable;
-    } catch (_) { return { state, items: [], overflow: 0, size, appearance, expanded, ...numbers }; }
+    } catch (_) { return { ...identity, state, items: [], overflow: 0, size, appearance, expanded, ...numbers }; }
     const hidden = Number.isSafeInteger(overflowValue) && overflowValue > 0
       ? Math.min(overflowValue, 99) : 0;
     return {
+      ...identity,
       state,
       ...numbers,
-      items: copyItems(rawItems),
+      items: copyItems(rawItems, sourceId),
       overflow: hidden,
       size,
       appearance,
       expanded,
       ...activityFields(source),
-      ...extraCreditsFields(source, state),
-      ...(Number.isSafeInteger(resetCreditsAvailable) && resetCreditsAvailable >= 0
+      ...(sourceId === 'zcode' ? {} : extraCreditsFields(source, state)),
+      ...(sourceId !== 'zcode' && Number.isSafeInteger(resetCreditsAvailable) && resetCreditsAvailable >= 0
         ? { resetCreditsAvailable } : {})
     };
   }
+
+  const itemPeriod = (model, item) => model.sourceId === 'zcode' ? item.bucketId : item.windowMinutes;
+  const shortPlanName = item => /start\s*plan|体验/i.test(item.planName) ? '体验' : /1024/.test(item.planName) ? '1024' : /coding\s*plan/i.test(item.planName) ? '套餐' : Array.from(item.planName.replace(/^ZCode\s*/i, '')).slice(0, 4).join('');
+  const itemTitle = item => item.bucketId ? item.planName && !item.label.includes(item.planName) ? `${item.planName} · ${item.label}` : item.label : periodTypeText(item.windowMinutes);
 
   function periodText(minutes) {
     if (minutes % 1440 === 0) return `${minutes / 1440}天`;
@@ -212,15 +233,16 @@
   function labelProgress(node, item) {
     if (!node || typeof node.setAttribute !== 'function') return;
     const state = severityText(item.remaining);
-    node.setAttribute('aria-label', `${periodTypeText(item.windowMinutes)}剩余额度`);
+    node.setAttribute('aria-label', `${itemTitle(item)}剩余额度`);
     node.setAttribute('aria-valuetext', `${Math.round(item.remaining)}%${state ? `，${state}` : ''}`);
   }
 
   function resetTimeText(model, item = model.items[0]) {
-    if (model.state === 'stale') return '重置时间待额度更新';
+    const verb = model.sourceId === 'zcode' ? ({ one_time: '到期', expiry: '到期', daily: '刷新', monthly: '刷新', rolling: '重置', weekly: '重置' }[item?.periodKind] || '有效期更新') : '重置';
+    if (model.state === 'stale') return `${verb}时间待额度更新`;
     const now = Date.now();
     const resetsAt = Number.isSafeInteger(item?.resetsAt) && item.resetsAt > now ? item.resetsAt : null;
-    if (!resetsAt) return '重置时间暂不可用';
+    if (!resetsAt) return `${verb}时间暂不可用`;
     const totalMinutes = Math.max(1, Math.ceil((resetsAt - now) / 60000));
     const days = Math.floor(totalMinutes / 1440);
     const hours = Math.floor((totalMinutes % 1440) / 60);
@@ -232,7 +254,7 @@
         : `${minutes}分钟`;
     const date = new Date(resetsAt);
     const exact = `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-    return `${relative}后重置 · ${exact}`;
+    return `${relative}后${verb} · ${exact}`;
   }
 
   function resetCreditsText(value) {
@@ -344,9 +366,9 @@
     });
     return button;
   }
-  function compactReading(minutes, text, caption) {
+  function compactReading(minutes, text, caption, badge = null) {
     const period = node('span', 'summary-period');
-    period.replaceChildren(node('span', 'summary-badge', periodBadgeText(minutes)),
+    period.replaceChildren(node('span', 'summary-badge', badge || periodBadgeText(minutes)),
       node('span', 'summary-period-label', caption));
     return [period, node('span', 'summary-value', text)];
   }
@@ -379,7 +401,8 @@
     const dual = model.items.length > 1;
     const header = node('div', 'v20-header');
     const brand = node('span', 'v20-brand');
-    brand.replaceChildren(node('b', '', 'CODEX'), ...(!dual ? [node('span', 'period-pill', periodTypeText(model.items[0].windowMinutes))] : []));
+    brand.replaceChildren(node('b', '', model.sourceId === 'zcode' ? 'ZCODE' : 'CODEX'), ...(!dual ? [node('span', 'period-pill', itemTitle(model.items[0]))] : []));
+    if (model.sourceId === 'zcode') brand.title = itemTitle(model.items[0]);
     const headerTools = node('div', 'v20-header-tools');
     const collapse = node('button', 'v20-collapse', '⌃');
     if (document.createElementNS) {
@@ -401,7 +424,7 @@
     periods.replaceChildren(...model.items.map(item => {
       const cell = node('section', 'v20-period');
       cell.dataset.severity = severityOf(item.remaining);
-      cell.setAttribute?.('aria-label', `${periodTypeText(item.windowMinutes)}，本周期剩余 ${Math.round(item.remaining)}%`);
+      cell.setAttribute?.('aria-label', `${itemTitle(item)}，本周期剩余 ${Math.round(item.remaining)}%`);
       const valueRow = node('div', 'v20-value-row');
       const pace = node('span', `v20-pace ${item.pace.state}`, model.state === 'stale' ? '待更新'
         : ({ fast: dual ? '偏快' : '用量偏快', balanced: dual ? '均衡' : '节奏均衡', slow: dual ? '较慢' : '用量较慢', unknown: '待记录' }[item.pace.state]));
@@ -416,7 +439,12 @@
       reset.title = resetTimeText(model, item);
       reset.replaceChildren(node('span', '', parts[0]), ...(!dual && parts[1] ? [node('span', 'v20-date', parts[1])] : []));
       cell.replaceChildren(...(dual ? [node('div', 'v20-cell-label', '')] : []), valueRow, progress, reset);
-      if (dual) cell.children[0].replaceChildren(node('span', 'period-pill', periodTypeText(item.windowMinutes)));
+      if (dual) {
+        const heading = cell.children[0];
+        heading.title = itemTitle(item);
+        heading.replaceChildren(...(model.sourceId === 'zcode' && item.planName ? [node('span', 'v20-plan-name', item.planName)] : []),
+          node('span', 'period-pill', model.sourceId === 'zcode' ? item.label : itemTitle(item)));
+      }
       return cell;
     }));
     const auxiliary = node('div', 'v20-auxiliary');
@@ -440,7 +468,8 @@
       hands.setAttribute('d', 'M8 4.5V8L10.5 9.5');
       clock.appendChild(outline); clock.appendChild(hands); reset.appendChild(clock);
     }
-    shared.replaceChildren(reset);
+    shared.replaceChildren(model.sourceId === 'zcode'
+      ? detailButton('额度明细', 'quota', model.items[0].bucketId, 'v20-opportunities') : reset);
     if (model.extraCredits) {
       const credit = model.extraCredits;
       const text = credit.state === 'balance' ? creditBalanceText(credit.balance) : credit.state === 'none' ? '暂无' : credit.state === 'unlimited' ? '不限额' : '暂未提供';
@@ -451,19 +480,19 @@
       shared.appendChild(balance);
     }
     const links = node('nav', 'v20-links');
-    links.setAttribute?.('aria-label', 'Codex 详情');
+    links.setAttribute?.('aria-label', model.sourceId === 'zcode' ? 'ZCode 详情' : 'Codex 详情');
     const activity = node('div', 'v20-activity');
     const running = model.activity?.runningCount, unread = model.activity?.unreadCount;
-    const tasks = detailButton('', 'tasks', model.items[0].windowMinutes);
+    const tasks = detailButton('', 'tasks', itemPeriod(model, model.items[0]));
     tasks.title = Number.isSafeInteger(running) ? '球球已观察到的进行中任务' : '任务状态暂未提供';
     tasks.setAttribute?.('aria-label', Number.isSafeInteger(running) ? `进行中任务 ${running} 项，查看任务` : '进行中任务数量暂未提供，查看任务');
     tasks.replaceChildren(node('span', '', '进行中'), node('b', 'v20-count', countText(running)));
-    const results = detailButton('', 'results', model.items[0].windowMinutes, 'v20-unread');
+    const results = detailButton('', 'results', itemPeriod(model, model.items[0]), 'v20-unread');
     results.title = Number.isSafeInteger(unread) ? '球球本地记录的待查看结果' : '待查看结果暂未提供';
     results.setAttribute?.('aria-label', Number.isSafeInteger(unread) ? `待查看结果 ${unread} 项，查看结果` : '待查看结果数量暂未提供，查看结果');
     results.replaceChildren(node('span', '', '待查看'), node('b', 'v20-count', countText(unread)));
     activity.replaceChildren(tasks, results);
-    const trend = detailButton('趋势', 'trend', model.items[0].windowMinutes, 'v20-trend');
+    const trend = detailButton('趋势', 'trend', itemPeriod(model, model.items[0]), 'v20-trend');
     if (document.createElementNS) {
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('aria-hidden', 'true');
@@ -479,7 +508,11 @@
   const render = value => {
     const model = safeModel(value);
     try {
-      status.textContent = states.get(model.state);
+      status.textContent = model.sourceId === 'zcode' ? states.get(model.state).replaceAll('Codex', 'ZCode') : states.get(model.state);
+      label.dataset.source = model.sourceId || 'codex';
+      document.title = model.sourceId === 'zcode' ? 'ZCode 剩余额度' : 'Codex 剩余额度';
+      label.setAttribute?.('aria-label', model.sourceId === 'zcode' ? 'ZCode 剩余额度' : 'Codex 剩余额度');
+      expandedCard?.setAttribute?.('aria-label', model.sourceId === 'zcode' ? 'ZCode 额度与状态' : 'Codex 额度与状态');
       label.dataset.state = model.state;
       label.dataset.display = model.display === 'numbers' ? 'numbers' : 'card';
       label.dataset.size = model.size;
@@ -509,8 +542,10 @@
         row.dataset.role = index === 0 ? 'primary' : 'secondary';
         nameNode.className = 'quota-name';
         nameNode.textContent = item.label;
+        if (model.sourceId === 'zcode') nameNode.title = itemTitle(item);
         periodNode.className = 'quota-period period-pill';
-        periodNode.textContent = `${model.state === 'stale' ? '已过期 ' : ''}${periodText(item.windowMinutes)}`;
+        periodNode.textContent = `${model.state === 'stale' ? '已过期 ' : ''}${model.sourceId === 'zcode' && item.planName ? shortPlanName(item) : model.sourceId === 'zcode' ? ({one_time:'活动',expiry:'活动',daily:'每日',monthly:'每月',weekly:'每周',rolling:'周期'}[item.periodKind] || '有效期') : periodText(item.windowMinutes)}`;
+        if (model.sourceId === 'zcode') periodNode.title = item.planName || itemTitle(item);
         valueNode.className = 'quota-value';
         renderValue(valueNode, item.remaining);
         progressNode.className = 'quota-progress';
@@ -535,12 +570,12 @@
         : summaryItem ? severityOf(summaryItem.remaining) : 'normal';
       if (summaryItem) {
         summary.replaceChildren(...compactReading(summaryItem.windowMinutes, `${Math.round(summaryItem.remaining)}%`,
-          label.dataset.status === 'blocked' ? '受限' : severityText(summaryItem.remaining) || '额度'));
-        if (compactProduct) compactProduct.textContent = 'CODEX';
-        if (compactPeriod) compactPeriod.textContent = periodTypeText(summaryItem.windowMinutes);
+          model.sourceId === 'zcode' ? itemTitle(summaryItem) : label.dataset.status === 'blocked' ? '受限' : severityText(summaryItem.remaining) || '额度', model.sourceId === 'zcode' ? 'Z' : null));
+        if (compactProduct) compactProduct.textContent = model.sourceId === 'zcode' ? 'ZCODE' : 'CODEX';
+        if (compactPeriod) compactPeriod.textContent = itemTitle(summaryItem);
       } else {
         summary.replaceChildren();
-        if (compactProduct) compactProduct.textContent = 'CODEX';
+        if (compactProduct) compactProduct.textContent = model.sourceId === 'zcode' ? 'ZCODE' : 'CODEX';
         if (compactPeriod) compactPeriod.textContent = '';
       }
       label.dataset.hasItems = rows.length > 0 ? 'true' : 'false';

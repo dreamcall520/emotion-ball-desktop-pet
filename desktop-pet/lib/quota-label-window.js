@@ -47,7 +47,20 @@ function activityFields(value) {
   } catch (_) { return {}; }
 }
 
-function copyItem(value) {
+function bucketFields(item, sourceId) {
+  if (sourceId !== 'zcode') return {};
+  try { return {
+      planName: cleanLabel(item.planName),
+      bucketId: typeof item.bucketId === 'string' && /^[^\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]{1,400}$/u.test(item.bucketId) ? item.bucketId : '',
+      periodKind: ['one_time', 'expiry', 'daily', 'rolling', 'weekly', 'monthly', 'unknown'].includes(item.periodKind) ? item.periodKind : 'unknown',
+      periodStart: Number.isSafeInteger(item.periodStart) && item.periodStart > 0 ? item.periodStart : null,
+      total: Number.isFinite(item.total) && item.total >= 0 ? item.total : null,
+      remainingUnits: Number.isFinite(item.remainingUnits) && item.remainingUnits >= 0 ? item.remainingUnits : null,
+      unit: typeof item.unit === 'string' ? item.unit.replace(/[^a-zA-Z\u4e00-\u9fff]/gu, '').slice(0, 16) : ''
+  }; } catch (_) { return {}; }
+}
+
+function copyItem(value, sourceId = 'codex') {
   const item = record(value);
   if (!item) return null;
   let labelValue;
@@ -67,19 +80,20 @@ function copyItem(value) {
     return null;
   }
   const label = cleanLabel(labelValue);
-  if (!label || !Number.isSafeInteger(windowMinutes) || windowMinutes <= 0 ||
+  if (!label || (sourceId === 'zcode' ? windowMinutes !== null && (!Number.isFinite(windowMinutes) || windowMinutes <= 0) : !Number.isSafeInteger(windowMinutes) || windowMinutes <= 0) ||
     typeof remaining !== 'number' || !Number.isFinite(remaining) || remaining < 0 || remaining > 100) return null;
   return {
     label,
     windowMinutes,
     remaining,
+    ...bucketFields(item, sourceId),
     ...(Number.isSafeInteger(resetsAt) && resetsAt > 0 ? { resetsAt } : {}),
     ...paceFields(pace),
     ...(resetLabel ? { resetLabel } : {})
   };
 }
 
-function copyItems(value) {
+function copyItems(value, sourceId = 'codex') {
   try {
     if (!Array.isArray(value)) return [];
   } catch (_) {
@@ -87,12 +101,12 @@ function copyItems(value) {
   }
   let length;
   try { length = value.length; } catch (_) { return []; }
-  const limit = Number.isSafeInteger(length) && length >= 0 ? Math.min(length, 2) : 0;
+  const limit = Number.isSafeInteger(length) && length >= 0 ? Math.min(length, sourceId === 'zcode' ? 32 : 2) : 0;
   const items = [];
   for (let index = 0; index < limit; index += 1) {
     let raw;
     try { raw = value[index]; } catch (_) { continue; }
-    const item = copyItem(raw);
+    const item = copyItem(raw, sourceId);
     if (item) items.push(item);
   }
   return items;
@@ -127,14 +141,15 @@ function numberFields(source) {
   } catch (_) { return {}; }
 }
 
-function safeModel(value) {
+function safeModel(value, sourceId = 'codex') {
   const source = record(value);
   if (!source) return { state: EMPTY_MODEL.state, items: [], overflow: 0 };
   let stateValue;
   try { stateValue = source.state; } catch (_) { return { state: EMPTY_MODEL.state, items: [], overflow: 0 }; }
   const state = STATES.has(stateValue) ? stateValue : 'disconnected';
+  const identity = sourceId === 'zcode' ? { sourceId: 'zcode' } : {};
   const numbers = numberFields(source);
-  if (!['ready', 'stale'].includes(state)) return { state, items: [], overflow: 0, ...numbers };
+  if (!['ready', 'stale'].includes(state)) return { ...identity, state, items: [], overflow: 0, ...numbers };
   let rawItems;
   let overflowValue;
   let resetCreditsAvailable;
@@ -145,28 +160,33 @@ function safeModel(value) {
     resetCreditsAvailable = source.resetCreditsAvailable;
     activity = record(source.activity);
   } catch (_) {
-    return { state, items: [], overflow: 0, ...numbers };
+    return { ...identity, state, items: [], overflow: 0, ...numbers };
   }
   const overflow = Number.isSafeInteger(overflowValue) && overflowValue > 0
     ? Math.min(overflowValue, 99) : 0;
   return {
+    ...identity,
     state,
     ...numbers,
-    items: copyItems(rawItems),
+    items: copyItems(rawItems, sourceId),
     overflow,
-    ...extraCreditsFields(source, state),
+    ...(sourceId === 'zcode' ? {} : extraCreditsFields(source, state)),
     ...activityFields(activity),
-    ...(Number.isSafeInteger(resetCreditsAvailable) && resetCreditsAvailable >= 0
+    ...(sourceId !== 'zcode' && Number.isSafeInteger(resetCreditsAvailable) && resetCreditsAvailable >= 0
       ? { resetCreditsAvailable } : {})
   };
 }
 
 function createQuotaLabelWindow({
-  BrowserWindow, screen, getPetWindow, getObstacle = () => null, getSize = () => 'standard',
+  BrowserWindow, screen, sourceId = 'codex', getPetWindow, getObstacle = () => null, getSize = () => 'standard',
   getAppearance = () => 'system', getPresentation = () => null, getSuppressed = () => false,
   getGuardEntry = () => false,
   onError = () => {}, onLayout = () => {}, alwaysOnTop = true
 }) {
+  sourceId = sourceId === 'zcode' ? 'zcode' : 'codex';
+  const channel = sourceId === 'zcode' ? 'pet:zcode-quota-label' : CHANNEL;
+  const toggleChannel = sourceId === 'zcode' ? 'pet:zcode-quota-label-toggle' : TOGGLE_CHANNEL;
+  const pointerChannel = sourceId === 'zcode' ? 'pet:zcode-quota-label-pointer' : POINTER_CHANNEL;
   let win = null;
   let ready = false;
   let requestedVisible = false;
@@ -272,7 +292,7 @@ function createQuotaLabelWindow({
     }
     if (win !== target || operation !== token) return;
     if (ready && currentModel) {
-      try { target.webContents.send(CHANNEL, { ...currentModel, visible: false, guardEntry: guardEntryVisible(),
+      try { target.webContents.send(channel, { ...currentModel, visible: false, guardEntry: guardEntryVisible(),
         ...(currentLayout?.guardSide ? { guardSide: currentLayout.guardSide, cardInset: currentLayout.cardInset, guardTargetWidth: quotaRoleTargetWidth(rolePaintWidth()) } : {}) }); }
       catch (error) { detach(target, error); return; }
       if (win !== target || operation !== token) return;
@@ -352,7 +372,7 @@ function createQuotaLabelWindow({
     try { target.setBounds({ x, y, width, height }, false); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
     currentLayout = layout;
-    try { target.webContents.send(CHANNEL, { ...model, visible: true, guardEntry: guardEntryVisible(),
+    try { target.webContents.send(channel, { ...model, visible: true, guardEntry: guardEntryVisible(),
       ...(layout.guardSide ? { guardSide: layout.guardSide, cardInset: layout.cardInset, guardTargetWidth: quotaRoleTargetWidth(rolePaintWidth()) } : {}) }); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
     try {
@@ -450,7 +470,7 @@ function createQuotaLabelWindow({
     try { loadingWindow = new BrowserWindow({
       width: initialSize.width,
       height: initialSize.height,
-      title: 'Codex 剩余额度',
+      title: sourceId === 'zcode' ? 'ZCode 剩余额度' : 'Codex 剩余额度',
       transparent: true,
       frame: false,
       roundedCorners: false, // CSS owns the card corners, including the edge beside the role gutter.
@@ -466,6 +486,7 @@ function createQuotaLabelWindow({
       backgroundColor: '#00000000',
       webPreferences: {
         preload: path.join(__dirname, '../quota-label-preload.js'),
+        ...(sourceId === 'zcode' ? { additionalArguments: ['--pet-source=zcode'] } : {}),
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
@@ -488,7 +509,7 @@ function createQuotaLabelWindow({
         try { event.preventDefault(); } catch (_) {}
       }),
       () => loadingWindow.webContents.on('ipc-message', (event, channel, value) => {
-        if (channel === POINTER_CHANNEL) {
+        if (channel === pointerChannel) {
           if (typeof value !== 'boolean' || win !== loadingWindow || !requestedVisible || !ready ||
             !loadingWindow.isVisible() || event?.sender !== loadingWindow.webContents ||
             event.senderFrame !== event.sender.mainFrame || event.sender.getURL() !== pathToFileURL(FILE).href) return;
@@ -496,8 +517,10 @@ function createQuotaLabelWindow({
           catch (error) { detach(loadingWindow, error); }
           return;
         }
-        if (channel !== TOGGLE_CHANNEL || win !== loadingWindow || !requestedVisible || !ready ||
+        if (channel !== toggleChannel || win !== loadingWindow || !requestedVisible || !ready ||
           !currentModel?.items.length || currentModel.display === 'numbers') return;
+        if (sourceId === 'zcode' && (event?.sender !== loadingWindow.webContents ||
+          event.senderFrame !== event.sender.mainFrame || event.sender.getURL() !== pathToFileURL(FILE).href)) return;
         operation += 1;
         currentModel = { ...currentModel, expanded: currentModel.expanded !== true };
         try { present(); } catch (error) { detach(loadingWindow, error); }
@@ -574,7 +597,7 @@ function createQuotaLabelWindow({
     show(model) {
       operation += 1;
       const token = operation;
-      const copied = safeModel(model);
+      const copied = safeModel(model, sourceId);
       if (operation !== token) return;
       const size = requestedSize();
       if (operation !== token) return;

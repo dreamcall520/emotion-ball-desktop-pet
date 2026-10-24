@@ -1,0 +1,145 @@
+{
+  "server_time": 1792849848,
+  "plans": [
+    {
+      "name": "ZCode 1024 Dev Day",
+      "plan_id": "zcode-v3-start-plan-1024",
+      "status": "active",
+      "starts_at": 1792844679,
+      "ends_at": 1792976400,
+      "entitlements": [
+        {
+          "entitlement_id": "ent-zcode-v3-start-plan-1024-1",
+          "show_name": "GLM-5.3-Flash",
+          "meter": "model_usage",
+          "unit_type": "token",
+          "grant_units": 300000000,
+          "period": "one_time",
+          "priority": 101,
+          "effective_at": 1792767600,
+          "capabilities": [
+            "model:glm-5.3-flash"
+          ]
+        },
+        {
+          "entitlement_id": "ent-zcode-v3-start-plan-1024-2",
+          "show_name": "GLM-5.3",
+          "meter": "model_usage",
+          "unit_type": "token",
+          "grant_units": 200000000,
+          "period": "one_time",
+          "priority": 100,
+          "effective_at": 1792767600,
+          "capabilities": [
+            "model:glm-5.3"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ZCode Start Plan",
+      "plan_id": "zcode-v3-start-plan-0817",
+      "status": "active",
+      "starts_at": 1792844662,
+      "ends_at": 1793203199,
+      "entitlements": [
+        {
+          "entitlement_id": "ent_2_0817_glm_5p3",
+          "show_name": "GLM-5.3",
+          "meter": "model_usage",
+          "unit_type": "token",
+          "grant_units": 3000000,
+          "period": "daily",
+          "priority": 110,
+          "effective_at": 0,
+          "capabilities": [
+            "model:glm-5.3"
+          ]
+        },
+        {
+          "entitlement_id": "ent_2_0817_glm_5p3f",
+          "show_name": "GLM-5.3-Flash",
+          "meter": "model_usage",
+          "unit_type": "token",
+          "grant_units": 5000000,
+          "period": "daily",
+          "priority": 80,
+          "effective_at": 0,
+          "capabilities": [
+            "model:glm-5.3-flash"
+          ]
+        }
+      ]
+    }
+  ],
+  "balances": [
+    {
+      "plan_id": "zcode-v3-start-plan-0817",
+      "entitlement_id": "ent_2_0817_glm_5p3",
+      "show_name": "GLM-5.3",
+      "meter": "model_usage",
+      "unit_type": "token",
+      "total_units": 3000000,
+      "used_units": 0,
+      "remaining_units": 3000000,
+      "available_units": 3000000,
+      "period_start": 1792771200,
+      "period_end": 1792857599,
+      "expires_at": 1792857599,
+      "capabilities": [
+        "model:glm-5.3"
+      ]
+    },
+    {
+      "plan_id": "zcode-v3-start-plan-1024",
+      "entitlement_id": "ent-zcode-v3-start-plan-1024-1",
+      "show_name": "GLM-5.3-Flash",
+      "meter": "model_usage",
+      "unit_type": "token",
+      "total_units": 300000000,
+      "used_units": 0,
+      "remaining_units": 300000000,
+      "available_units": 300000000,
+      "period_start": 1792844679,
+      "period_end": 1792976400,
+      "expires_at": 1792976400,
+      "capabilities": [
+        "model:glm-5.3-flash"
+      ]
+    },
+    {
+      "plan_id": "zcode-v3-start-plan-1024",
+      "entitlement_id": "ent-zcode-v3-start-plan-1024-2",
+      "show_name": "GLM-5.3",
+      "meter": "model_usage",
+      "unit_type": "token",
+      "total_units": 200000000,
+      "used_units": 0,
+      "remaining_units": 200000000,
+      "available_units": 200000000,
+      "period_start": 1792844679,
+      "period_end": 1792976400,
+      "expires_at": 1792976400,
+      "capabilities": [
+        "model:glm-5.3"
+      ]
+    },
+    {
+      "plan_id": "zcode-v3-start-plan-0817",
+      "entitlement_id": "ent_2_0817_glm_5p3f",
+      "show_name": "GLM-5.3-Flash",
+      "meter": "model_usage",
+      "unit_type": "token",
+      "total_units": 5000000,
+      "used_units": 0,
+      "remaining_units": 5000000,
+      "available_units": 5000000,
+      "period_start": 1792771200,
+      "period_end": 1792857599,
+      "expires_at": 1792857599,
+      "capabilities": [
+        "model:glm-5.3-flash"
+      ]
+    }
+  ]
+}

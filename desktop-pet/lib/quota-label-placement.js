@@ -79,11 +79,13 @@ function bounded(candidate, size, area) {
 function quotaRoleTargetWidth(paintWidth) { return [22,24].includes(paintWidth) ? 48 : 64; }
 
 function quotaLabelSize(value, expanded = false, itemCount = 1, extraCredits = false, guardEntry = false, rolePaintWidth = null) {
+  if (expanded === true && itemCount > 2) return { width: 196, height: 144 + (Math.ceil(Math.min(itemCount, 32) / 2) - 1) * 84 };
   if (expanded === true && itemCount > 1 && value === 'standard') return LABEL_SIZES.standardExpandedDual;
   if (expanded === true && itemCount > 1 && value === 'compact') return LABEL_SIZES.compactExpandedDual;
   if (expanded === true && value === 'standard') return LABEL_SIZES.standardExpanded;
   if (expanded === true && value === 'compact') return LABEL_SIZES.compactExpanded;
-  const card = LABEL_SIZES[value] || LABEL_SIZES.standard;
+  const card = value !== 'compact' && itemCount > 2
+    ? { width: 168, height: 58 + (Math.min(itemCount, 32) - 2) * 22 } : LABEL_SIZES[value] || LABEL_SIZES.standard;
   return guardEntry && !expanded ? { width: card.width + ROLE_GAP + quotaRoleTargetWidth(rolePaintWidth), height: Math.max(card.height, 44) + 6 } : card;
 }
 

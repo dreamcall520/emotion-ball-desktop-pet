@@ -223,3 +223,59 @@ test('八个日期的密集周图用简短辅助标签，完整含义保留给�
   const single=content.querySelectorAll('.daily-empty').find(label=>label.textContent==='仅1次');
   assert.ok(single);assert.match(single.getAttribute('aria-label'),/仅 1 次记录/);
 });
+
+test('ZCode 趋势按桶切换，同周期不同模型互不串，明细和到期语义独立',() => {
+  const h = renderer();
+  const items = ['activity-glm','trial-glm','activity-flash','trial-flash'].map((bucketId,i) => ({...item(1440),bucketId,label:bucketId,periodKind:'expiry',total:200000000,remainingUnits:150000000,unit:'tokens'}));
+  h.receive({sourceId:'zcode',action:'trend',bucketId:'trial-glm',items});
+  assert.match(h.nodes['details-title'].textContent,/ZCODE/);
+  const tabs = h.nodes['details-panel'].querySelector('.trend-tabs');
+  assert.equal(tabs.children.length,4);
+  assert.equal(tabs.children[1].attributes['aria-pressed'],'true');
+  tabs.children[2].events.click();
+  assert.deepEqual(h.calls.at(-1),['trend','activity-flash']);
+  assert.match(h.nodes['details-content'].textContent,/到期/);
+  assert.doesNotMatch(h.nodes['details-content'].textContent,/重置机会/);
+  h.receive({sourceId:'zcode',action:'quota',items});
+  assert.match(h.nodes['details-content'].textContent,/activity-flash/);
+  assert.match(h.nodes['details-content'].textContent,/150,000,000/);
+});
+
+test('ZCode 详情 preload 仅绑定独立 IPC 且桶参数不能降级成 Codex 周期', () => {
+  const handlers=new Map(),calls=[];let api;
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../codex-details-preload.js'),'utf8'),{
+    process:{argv:['electron','--pet-source=zcode']},
+    require:()=>({contextBridge:{exposeInMainWorld(_name,value){api=value;}},ipcRenderer:{on(channel,callback){handlers.set(channel,callback);},removeListener(){},send(...args){calls.push(args);},invoke(){return Promise.resolve(true);}}})
+  });
+  let model;api.onModel(value=>{model=value;});
+  assert.equal(handlers.has('pet:codex-details'),false);
+  handlers.get('pet:zcode-details')({}, {action:'quota',sourceId:'codex'});
+  assert.equal(model.sourceId,'zcode');
+  api.openDetail('trend',10080);api.openDetail('opportunities','activity-glm');assert.equal(calls.length,0);
+  api.openDetail('trend','activity-glm');api.close();
+  assert.deepEqual(calls,[['pet:zcode-details-open','trend','activity-glm'],['pet:zcode-details-close']]);
+});
+
+test('ZCode MCP 月额无周期起点仍保留余额，趋势明确不可绘制', () => {
+  const h=renderer();const bucketId='zcode:'+ 'p'.repeat(160) + ':' + 'e'.repeat(160);
+  const items=[{bucketId,label:'MCP 工具',windowMinutes:null,periodStart:null,periodKind:'monthly',remaining:80,total:1000,remainingUnits:800,unit:'次',resetsAt:Date.now()+1000000}];
+  h.receive({sourceId:'zcode',action:'quota',bucketId,items});
+  assert.match(h.nodes['details-content'].textContent,/剩余 800 \/ 1,000 次/);
+  h.nodes['details-content'].querySelector('.reset-link').events.click();assert.deepEqual(h.calls.at(-1),['trend',bucketId]);
+  h.receive({sourceId:'zcode',action:'trend',bucketId,items});
+  assert.match(h.nodes['details-content'].textContent,/接口未提供周期起点，暂无法绘制趋势/);
+  assert.equal(h.nodes['details-content'].querySelector('.trend-chart'),null);
+});
+
+test('ZCode 同模型不同套餐在趋势标签和每桶明细中均可区分，Codex 不增加套餐标签', () => {
+  const h=renderer(),items=['1024 活动','Start Plan 体验'].map((planName,i)=>({...item(1440),bucketId:`zcode:plan-${i}:glm`,label:'GLM-5.3',planName,periodKind:i?'daily':'one_time'}));
+  h.receive({sourceId:'zcode',action:'trend',bucketId:items[0].bucketId,items});
+  const tabs=h.nodes['details-panel'].querySelector('.trend-tabs').children;
+  assert.equal(tabs[0].textContent,'1024 活动 · GLM-5.3');assert.equal(tabs[1].textContent,'Start Plan 体验 · GLM-5.3');
+  tabs[1].events.click();assert.deepEqual(h.calls.at(-1),['trend','zcode:plan-1:glm']);
+  h.receive({sourceId:'zcode',action:'quota',items});
+  const buckets=h.nodes['details-content'].querySelectorAll('.zcode-quota-bucket');
+  assert.match(buckets[0].textContent,/1024 活动/);assert.match(buckets[1].textContent,/Start Plan 体验/);
+  h.receive({action:'trend',period:300,items:[{...item(300),planName:'should not appear'},{...item(10080),planName:'should not appear'}]});
+  assert.deepEqual(h.nodes['details-panel'].querySelector('.trend-tabs').children.map(tab=>tab.textContent),['5 小时','周']);
+});

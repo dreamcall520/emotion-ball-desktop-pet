@@ -859,3 +859,19 @@ body[data-guard-size="compact"] .guard-entry-zombie { top: 11px; }
 #quota-label[data-readings="2"] .quota-reading-value { font-size: 11px; font-weight: 650; }
 .quota-reading:hover { opacity: .75; }
 .quota-reading:focus-visible { outline: 1px solid var(--quota-action-blue); outline-offset: 2px; border-radius: 4px; }
+
+/* ZCode keeps the shared card while allowing separate model/plan buckets. */
+#quota-label[data-source="zcode"] { max-height: 100vh; overflow-y: auto; }
+#quota-label[data-source="zcode"] .v20-cell-label .period-pill { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 12px; }
+#quota-label[data-source="zcode"] .v20-periods.dual { row-gap: 9px; }
+#quota-label[data-source="zcode"] .v20-periods.dual .v20-period:nth-child(odd) { padding-left: 0; border-left: 0; }
+#quota-label[data-source="zcode"] .v20-cell-label { height: 27px; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; }
+#quota-label[data-source="zcode"] .v20-plan-name { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--quota-subtle); font-size: 7px; line-height: 10px; }
+#quota-label[data-source="zcode"] .v20-brand { min-width: 0; }
+#quota-label[data-source="zcode"] .v20-brand .period-pill { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+#quota-label[data-source="zcode"][data-expanded="false"] #items li { grid-template-columns: minmax(0, 1fr) auto auto; }
+#quota-label[data-source="zcode"][data-expanded="false"] .quota-name { font-size: 10px; }
+#quota-label[data-source="zcode"][data-expanded="false"] .quota-period { padding-inline: 3px; }
+#quota-label[data-source="zcode"] .v20-brand .period-pill { flex-shrink: 1; }
+#quota-label[data-source="zcode"] .v20-header-tools { flex: none; }

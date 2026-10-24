@@ -38,8 +38,11 @@ function placeDetails(pet, area, size, preferred = null) {
   return { x: Math.round(x), y: Math.round(y), width, height, placement: space.side };
 }
 
-function createCodexDetailsWindow({ BrowserWindow, screen, getAnchor, alwaysOnTop = true,
+function createCodexDetailsWindow({ BrowserWindow, screen, getAnchor, sourceId = 'codex', alwaysOnTop = true,
   onError = () => {}, onVisibilityChange = () => {} }) {
+  sourceId = sourceId === 'zcode' ? 'zcode' : 'codex';
+  const actions = sourceId === 'zcode' ? new Set(['tasks', 'results', 'trend', 'quota']) : ACTIONS;
+  const channel = sourceId === 'zcode' ? 'pet:zcode-details' : 'pet:codex-details';
   const file = path.join(__dirname, '../codex-details.html');
   const url = pathToFileURL(file).href;
   let win = null, ready = false, model = null, visible = false, topmost = alwaysOnTop;
@@ -78,7 +81,7 @@ function createCodexDetailsWindow({ BrowserWindow, screen, getAnchor, alwaysOnTo
   }
   function send() {
     if (!alive() || !ready || !model) return;
-    try { win.webContents.send('pet:codex-details', model); }
+    try { win.webContents.send(channel, model); }
     catch (error) { report(error); }
   }
   function close() { visible = false; if (alive()) win.hide(); visibilityChanged(false); }
@@ -93,7 +96,8 @@ function createCodexDetailsWindow({ BrowserWindow, screen, getAnchor, alwaysOnTo
     win = new BrowserWindow({ ...bounds(model?.action === 'trend' ? 420 : 300),
       show: false, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false, resizable: false, useContentSize: true,
       fullscreenable: false, minimizable: false, maximizable: false, skipTaskbar: true,
-      title: 'Codex 详情', webPreferences: { preload: path.join(__dirname, '../codex-details-preload.js'),
+      title: sourceId === 'zcode' ? 'ZCode 详情' : 'Codex 详情', webPreferences: { preload: path.join(__dirname, '../codex-details-preload.js'),
+        ...(sourceId === 'zcode' ? { additionalArguments: ['--pet-source=zcode'] } : {}),
         contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true,
         spellcheck: false } });
     const target = win;
@@ -110,12 +114,12 @@ function createCodexDetailsWindow({ BrowserWindow, screen, getAnchor, alwaysOnTo
   }
   return {
     open(value) {
-      if (!ACTIONS.has(value?.action)) return false;
-      model = value; visible = true;
+      if (!actions.has(value?.action)) return false;
+      model = sourceId === 'zcode' ? { ...value, sourceId } : value; visible = true;
       try { ensure(); applyBounds(bounds(value.action === 'trend' ? 420 : 300, { fromAnchor: true })); visibilityChanged(true); send(); if (ready) win.show(); return true; }
       catch (error) { report(error); destroy(); return false; }
     },
-    update(value) { if (!visible || !alive()) return; model = value; send(); },
+    update(value) { if (!visible || !alive()) return; model = sourceId === 'zcode' ? { ...value, sourceId } : value; send(); },
     owns(event) {
       return Boolean(alive() && event?.sender === win.webContents && event.senderFrame === event.sender.mainFrame && event.sender.getURL() === url);
     },
@@ -126,7 +130,7 @@ function createCodexDetailsWindow({ BrowserWindow, screen, getAnchor, alwaysOnTo
     setAlwaysOnTop(value) { topmost = Boolean(value); if (alive()) win.setAlwaysOnTop(topmost, 'floating'); },
     getWindow() { return alive() ? win : null; },
     getAction() { return model?.action || null; },
-    getPeriod() { return model?.period || null; },
+    getPeriod() { return sourceId === 'zcode' ? model?.bucketId || null : model?.period || null; },
     isVisible() { return visible && Boolean(alive()); },
     close, destroy
   };

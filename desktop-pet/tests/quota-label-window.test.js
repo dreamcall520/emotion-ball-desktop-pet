@@ -86,6 +86,7 @@ function fixture(load = () => Promise.resolve(), options = {}) {
 
   const label = createQuotaLabelWindow({
     BrowserWindow: NativeWindow,
+    sourceId: options.sourceId,
     screen: {
       ...(options.getCursorScreenPoint ? { getCursorScreenPoint: options.getCursorScreenPoint } : {}),
       getDisplayMatching(bounds) {
@@ -1544,7 +1545,7 @@ test('额度卡片使用大写品牌标识、蓝色周期边界及四周一致�
   const renderer = fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8');
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
   assert.match(html, /id="compact-product">CODEX</);
-  assert.match(renderer, /compactProduct\.textContent\s*=\s*'CODEX'/);
+  assert.match(renderer, /compactProduct\.textContent\s*=\s*model\.sourceId === 'zcode' \? 'ZCODE' : 'CODEX'/);
   assert.match(css, /\.period-pill\s*\{[\s\S]*?border:\s*1px solid rgba\(112, 171, 238, \.24\)/,
     '周期胶囊应使用轻蓝边界，不能用高亮白边形成白色外圈');
   assert.match(css, /:root\[data-appearance="dark"\] #quota-label::after\s*\{\s*border-color:\s*transparent/,
@@ -1726,7 +1727,7 @@ test('168×58 内两条额度的文字和进度条不裁切', () => {
   const needed = (rowText + rowGap + rowProgress) * 2 + itemsGap;
   assert.ok(lineHeight >= 14, `真实 11px 正文行高不得低于 14px，当前为 ${lineHeight}px`);
   assert.ok(needed <= available, `两条额度需要 ${needed}px，实际可用 ${available}px`);
-  assert.doesNotMatch(css, /overflow(?:-y)?:\s*(?:auto|scroll)/);
+  assert.doesNotMatch(css.replace(/#quota-label\[data-source="zcode"\][^{]*\{[^}]*\}/g, ''), /overflow(?:-y)?:\s*(?:auto|scroll)/);
 });
 
 test('浅色卡片在深色壁纸上的次级文字和深色 urgent 对比度均不低于 4.5', () => {
@@ -1787,4 +1788,81 @@ test('实际controller区分22/24/50角色，普通48px与大角色64px同源传
     assert.equal(packet.cardInset.x,remaining===0?72:56);assert.equal(b.x+packet.cardInset.x+128,AREA.width);
     assert.equal(b.width,remaining===0?200:184);assert.equal(f.windows[0].sent.at(-1)[1].guardTargetWidth,remaining===0?64:48);assert.deepEqual(f.errors,[]);
   }
+});
+
+ test('ZCode 卡片保留四个独立额度桶并独立 IPC，Codex 仍限制两周期', async () => {
+  const { safeModel } = require('../lib/quota-label-window');
+  const model = { state: 'ready', sourceId: 'zcode', items: Array.from({length:4}, (_, i) => ({
+    bucketId: `bucket-${i}`, label: `活动 GLM-${i}`, planName: i % 2 ? 'Start Plan 体验' : '1024 活动', windowMinutes: 1440, remaining: 100,
+    periodKind: 'expiry', periodStart: 1900000000000, total: 200000000, remainingUnits: 200000000, unit: 'tokens'
+  })) };
+  assert.equal(safeModel(model).items.length, 2);
+  assert.equal(safeModel(model, 'zcode').items.length, 4);
+  assert.equal(safeModel(model, 'zcode').items[3].bucketId, 'bucket-3');
+  assert.equal(safeModel(model, 'zcode').items[3].planName, 'Start Plan 体验');
+  const h = fixture(undefined, {sourceId:'zcode'});
+  h.label.show(model);
+  await flush();
+  const w = h.windows[0];
+  w.webContents.emit('did-finish-load');
+  assert.deepEqual(w.options.webPreferences.additionalArguments, ['--pet-source=zcode']);
+  assert.equal(w.sent.at(-1)[0], 'pet:zcode-quota-label');
+  assert.equal(w.sent.at(-1)[1].items.length, 4);
+});
+
+ test('ZCode preload 固定来源，拒绝数字周期和跨来源操作，保留小数周期与四桶', () => {
+  const handlers = new Map(), sent = [];
+  let api;
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../quota-label-preload.js'), 'utf8'), {
+    process: {argv:['electron','--pet-source=zcode']},
+    require: name => { assert.equal(name, 'electron'); return {
+      contextBridge: {exposeInMainWorld(_name, value) {api = value;}},
+      ipcRenderer: {on(channel, callback) {handlers.set(channel,callback);},removeListener() {},send(...args) {sent.push(args);}}
+    }; }
+  });
+  let model;
+  api.onModel(value => {model = value;});
+  handlers.get('pet:zcode-quota-label')({}, {sourceId:'codex',state:'ready',items:Array.from({length:4}, (_,i) => ({label:`GLM-${i}`,planName:'1024 活动',bucketId:`bucket-${i}`,windowMinutes:18.5,remaining:70}))});
+  assert.equal(model.sourceId,'zcode'); assert.equal(model.items[0].planName,'1024 活动'); assert.equal(model.items.length,4); assert.equal(model.items[0].windowMinutes,18.5);
+  api.openDetail('trend',300); api.openDetail('opportunities','bucket-0'); api.openGuard();
+  assert.equal(sent.length,0);
+  api.openDetail('quota','bucket-0'); api.toggleExpanded(); api.setPointerInteractive(true);
+  assert.deepEqual(sent,[['pet:zcode-quota-label-detail','quota','bucket-0'],['pet:zcode-quota-label-toggle'],['pet:zcode-quota-label-pointer',true]]);
+});
+
+ test('ZCode 四桶展开显示真实模型/到期且详情入口不串入 Codex 重置机会', () => {
+  class Element {
+    constructor() {this.dataset={};this.children=[];this.events={};this.attributes={};this._text='';}
+    set textContent(value) {this._text=String(value);this.children=[];}
+    get textContent() {return this._text+this.children.map(child=>child.textContent).join('');}
+    replaceChildren(...children) {this._text='';this.children=children;}
+    appendChild(child) {this.children.push(child);}
+    setAttribute(key,value) {this.attributes[key]=String(value);}
+    addEventListener(type, callback) {this.events[type]=callback;}
+  }
+  const nodes=Object.fromEntries(['quota-label','status','summary','items','overflow','codex-expanded','compact-product','compact-period','quota-numbers'].map(id=>[id,new Element()]));
+  let receive; const calls=[];
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../quota-label-renderer.js'),'utf8'), {
+    document:{documentElement:new Element(),getElementById:id=>nodes[id],createElement:()=>new Element()},
+    window:{addEventListener() {},petQuotaLabel:{onModel(callback){receive=callback;},openDetail(...args){calls.push(args);},toggleExpanded(){}}}
+  });
+  receive({sourceId:'zcode',state:'ready',expanded:true,items:Array.from({length:4},(_,i)=>({label:'GLM-5.3',planName:i%2?'Start Plan 体验':'1024 活动',bucketId:`bucket-${i}`,windowMinutes:1440,remaining:70,resetsAt:Date.now()+86400000,periodKind:'expiry'}))});
+  const expanded=nodes['codex-expanded'];
+  assert.equal(nodes['quota-label'].dataset.source,'zcode');
+  assert.equal(expanded.children[1].children.length,4);
+  assert.equal(nodes.items.children[0].children[0].textContent,'GLM-5.3');
+  assert.equal(nodes.items.children[0].children[1].textContent,'1024');
+  assert.equal(nodes.items.children[1].children[1].textContent,'体验');
+  assert.match(expanded.textContent,/ZCODE/); assert.match(expanded.textContent,/Start Plan 体验/); assert.match(expanded.textContent,/1024 活动/); assert.match(expanded.textContent,/后到期/);
+  assert.doesNotMatch(expanded.textContent,/重置机会/);
+  expanded.children[2].children[0].children[0].events.click({stopPropagation(){}});
+  assert.deepEqual(calls,[['quota','bucket-0']]);
+});
+
+test('ZCode 无周期起点与完整长桶 ID 不丢余额，Codex 仍拒绝空周期', () => {
+  const {safeModel}=require('../lib/quota-label-window');
+  const bucketId='zcode:'+ 'p'.repeat(160) + ':' + 'e'.repeat(160);
+  const model={state:'ready',items:[{bucketId,label:'MCP 工具',windowMinutes:null,remaining:80,periodKind:'monthly'}]};
+  assert.equal(safeModel(model).items.length,0);
+  const item=safeModel(model,'zcode').items[0];assert.equal(item.bucketId,bucketId);assert.equal(item.windowMinutes,null);assert.equal(item.remaining,80);
 });

@@ -13,6 +13,9 @@
   const modelSelect = byId('chat-model');
   const modelMenu = byId('model-menu');
   const modelRetry = byId('refresh-models');
+  const sourceSelect = byId('chat-source');
+  const sourceMenu = byId('source-menu');
+  const sourceBar = byId('source-bar');
   const avatar = byId('chat-avatar');
   let snapshot = { messages: [], history: [], activeChatId: null, busy: false, connection: 'idle', error: null, hasConversation: false };
   let pending = false;
@@ -31,6 +34,9 @@
   let modelOptionsKey = '';
   let modelMenuOpen = false;
   let modelOptions = [];
+  let sourceMenuOpen = false;
+  let sourceOptions = [];
+  let sourceOptionsKey = '';
   let updateVersion = null;
   const rows = new Map();
   const historyRows = new Map();
@@ -44,7 +50,76 @@
   }
 
   function changeBlocked() {
-    return pending || snapshot.busy || snapshot.connection === 'connecting';
+    return pending || snapshot.busy || snapshot.connection === 'connecting' || snapshot.sourceChanging === true;
+  }
+
+  const sourceId = () => snapshot.source === 'zcode' ? 'zcode' : 'codex';
+  const sourceName = () => sourceId() === 'zcode' ? 'ZCode' : 'Codex';
+  function availableSources() {
+    const seen = new Set();
+    return (Array.isArray(snapshot.sources) ? snapshot.sources : []).filter(item => {
+      if (!['codex', 'zcode'].includes(item?.id) || seen.has(item.id)) return false;
+      seen.add(item.id); return true;
+    });
+  }
+  function renderSources() {
+    if (!sourceSelect || !sourceMenu || !sourceBar) return;
+    const choices = availableSources();
+    sourceBar.hidden = historyOpen || !choices.some(item => item.id === 'zcode' && item.enabled === true);
+    sourceSelect.textContent = sourceName();
+    sourceSelect.title = `聊天来源：${sourceName()} · 各自保留聊天记录`;
+    sourceSelect.disabled = changeBlocked() || typeof api.setSource !== 'function';
+    const key = JSON.stringify(choices.map(item => [item.id, item.enabled === true]));
+    if (key !== sourceOptionsKey) {
+      closeSourceMenu(false); sourceOptionsKey = key;
+      sourceOptions = choices.map(item => {
+        const option = document.createElement('button');
+        option.type = 'button'; option.className = 'model-option'; option.value = item.id;
+        option.dataset.source = item.id; option.tabIndex = -1; option.disabled = item.enabled !== true;
+        option.setAttribute('role', 'menuitemradio');
+        const check = document.createElement('span'); check.className = 'model-option-check'; check.setAttribute('aria-hidden', 'true');
+        const label = document.createElement('span'); label.className = 'model-option-label'; label.textContent = item.id === 'zcode' ? 'ZCode' : 'Codex';
+        option.append(check, label); option.addEventListener('click', () => chooseSource(item.id)); return option;
+      });
+      sourceMenu.replaceChildren(...sourceOptions);
+    }
+    for (const option of sourceOptions) {
+      const checked = option.value === sourceId(); option.setAttribute('aria-checked', String(checked)); option.children[0].textContent = checked ? '✓' : '';
+    }
+    if (sourceBar.hidden || sourceSelect.disabled) closeSourceMenu(false);
+  }
+  function closeSourceMenu(returnFocus = true) {
+    const wasOpen = sourceMenuOpen; sourceMenuOpen = false;
+    if (sourceMenu) sourceMenu.hidden = true;
+    sourceSelect?.setAttribute('aria-expanded', 'false');
+    if (wasOpen && returnFocus && !sourceSelect?.disabled) sourceSelect?.focus();
+  }
+  function positionSourceMenu() {
+    if (!sourceMenuOpen) return;
+    const anchor = sourceSelect.getBoundingClientRect(), width = Math.min(180, window.innerWidth - 24);
+    sourceMenu.style.width = `${width}px`;
+    sourceMenu.style.left = `${Math.max(12, Math.min(anchor.left, window.innerWidth - width - 12))}px`;
+    sourceMenu.style.bottom = `${Math.max(0, window.innerHeight - anchor.top + 6)}px`;
+    sourceMenu.style.maxHeight = `${Math.max(1, anchor.top - 18)}px`;
+  }
+  function openSourceMenu(edge) {
+    if (!sourceSelect || sourceSelect.disabled || sourceBar?.hidden || historyOpen || changeBlocked()) return;
+    closeModelMenu(false); sourceMenuOpen = true; sourceMenu.hidden = false;
+    sourceSelect.setAttribute('aria-expanded', 'true'); positionSourceMenu();
+    const enabled = sourceOptions.filter(option => !option.disabled);
+    const target = edge === 'last' ? enabled.at(-1) : edge === 'first' ? enabled[0] : enabled.find(option => option.value === sourceId()) || enabled[0];
+    target?.focus(); target?.scrollIntoView({ block: 'nearest' });
+  }
+  async function chooseSource(id) {
+    if (changeBlocked() || historyOpen || sourceBar?.hidden || typeof api.setSource !== 'function' || !availableSources().some(item => item.id === id && item.enabled === true)) return;
+    closeSourceMenu(); if (id === sourceId()) return;
+    pending = true; localError = ''; refreshControls();
+    try {
+      const result = await api.setSource(id);
+      if (!result?.accepted) localError = result?.error || '聊天来源没有切换，请重试。';
+      else { failedDraft = ''; modelChanged = false; modelError = ''; }
+    } catch (error) { localError = errorMessage(error); }
+    finally { pending = false; refreshControls(); }
   }
 
   function modelSelection() {
@@ -72,7 +147,7 @@
       ...models.map(model => ({ id: model.id, label: typeof model.displayName === 'string' && model.displayName.trim() ? model.displayName : model.id }))
     ];
     if (missing) choices.push({ id: selected, label: `${selected}（暂不可用）`, disabled: true });
-    const optionsKey = JSON.stringify(choices);
+    const optionsKey = JSON.stringify([sourceId(), choices]);
     if (optionsKey !== modelOptionsKey) {
       closeModelMenu(false);
       modelOptionsKey = optionsKey;
@@ -97,7 +172,7 @@
         if (choice.id === 'auto') {
           const description = document.createElement('span');
           description.className = 'model-option-description';
-          description.textContent = '日常用快模型，分析用强模型';
+          description.textContent = sourceId() === 'zcode' ? '使用 ZCode 默认可用模型' : '日常用快模型，分析用强模型';
           content.appendChild(description);
         }
         option.append(check, content);
@@ -130,7 +205,7 @@
           : modelChanged ? '下条消息起生效 · 继续当前聊天'
             : selected === 'auto' ? active?.automatic && activeName
               ? `${snapshot.busy ? '本次' : '上次'}自动选用 ${activeName}`
-              : '日常优先轻量模型，需要分析时换更强模型'
+              : sourceId() === 'zcode' ? '使用 ZCode 默认可用模型，可在菜单中手动选择' : '日常优先轻量模型，需要分析时换更强模型'
             : '使用所选模型 · 继续当前聊天');
     hint.title = hint.textContent;
     modelSelect.title = `${selectedLabel}\n${hint.textContent}`;
@@ -161,6 +236,7 @@
 
   function openModelMenu(edge) {
     if (modelSelect.disabled || historyOpen || changeBlocked()) return;
+    closeSourceMenu(false);
     modelMenuOpen = true;
     modelMenu.hidden = false;
     modelSelect.setAttribute('aria-expanded', 'true');
@@ -281,11 +357,19 @@
     count.textContent = `${input.value.length} / 2000`;
     byId('input-hint').hidden = !count.hidden;
     const status = byId('connection-status');
-    status.textContent = snapshot.connection === 'connecting' ? '正在连接 Codex…' : busy
+    status.textContent = snapshot.sourceChanging ? `正在切换到 ${sourceName()}…` : snapshot.connection === 'connecting' ? `正在连接 ${sourceName()}…` : busy
       ? '球球正在想…'
       : error ? '连接遇到了一点问题'
         : snapshot.hasConversation ? '接着聊，我还记得这一段' : '想说什么，我在听';
+    byId('privacy-note').textContent = `使用 ${sourceName()} 额度 · 延续同一段聊天`;
+    const sourceNote = byId('empty-source-note');
+    if (sourceNote) {
+      const accountNote = `使用本机已登录的 ${sourceName()} 账号。`;
+      if (typeof document.createTextNode === 'function') sourceNote.replaceChildren(document.createTextNode(accountNote), document.createElement('br'), document.createTextNode('首次发送才创建聊天，之后接着聊。'));
+      else sourceNote.textContent = `${accountNote}首次发送才创建聊天，之后接着聊。`;
+    }
     refreshHistory();
+    renderSources();
     renderModels();
   }
 
@@ -416,6 +500,20 @@
       refreshControls();
     }
   }
+  sourceSelect?.addEventListener('click', () => sourceMenuOpen ? closeSourceMenu() : openSourceMenu());
+  sourceSelect?.addEventListener('keydown', event => {
+    if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) { event.preventDefault(); openSourceMenu(event.key === 'ArrowUp' || event.key === 'End' ? 'last' : 'first'); }
+  });
+  sourceMenu?.addEventListener('keydown', event => {
+    if (event.key === 'Tab') { closeSourceMenu(); return; }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter', ' ', 'Escape'].includes(event.key)) return;
+    event.preventDefault(); event.stopPropagation();
+    if (event.key === 'Escape') { closeSourceMenu(); return; }
+    const enabled = sourceOptions.filter(option => !option.disabled), index = enabled.indexOf(document.activeElement);
+    if (event.key === 'Enter' || event.key === ' ') { if (index >= 0) chooseSource(enabled[index].value); return; }
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? enabled.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + enabled.length) % enabled.length;
+    enabled[next]?.focus(); enabled[next]?.scrollIntoView({ block: 'nearest' });
+  });
   modelSelect.addEventListener('change', () => chooseModel(modelSelect.value));
   modelSelect.addEventListener('click', () => modelMenuOpen ? closeModelMenu() : openModelMenu());
   modelSelect.addEventListener('keydown', event => {
@@ -443,13 +541,15 @@
   });
   document.addEventListener('pointerdown', event => {
     document.documentElement.dataset.inputMode = 'pointer';
+    if (sourceMenuOpen && !sourceMenu.contains(event.target) && !sourceBar.contains(event.target)) closeSourceMenu(false);
     if (modelMenuOpen && !modelMenu.contains(event.target) && !byId('model-bar').contains(event.target)) closeModelMenu(false);
   });
   document.addEventListener('focusin', event => {
+    if (sourceMenuOpen && !sourceMenu.contains(event.target) && !sourceBar.contains(event.target)) closeSourceMenu(false);
     if (modelMenuOpen && !modelMenu.contains(event.target) && !byId('model-bar').contains(event.target)) closeModelMenu(false);
   });
-  window.addEventListener('resize', () => { resizeInput(); positionModelMenu(); });
-  window.addEventListener('blur', () => closeModelMenu(false));
+  window.addEventListener('resize', () => { resizeInput(); positionModelMenu(); positionSourceMenu(); });
+  window.addEventListener('blur', () => { closeModelMenu(false); closeSourceMenu(false); });
   modelRetry.addEventListener('click', async () => {
     if (changeBlocked() || historyOpen || modelsRefreshing) return;
     modelsRefreshing = true;
@@ -483,7 +583,8 @@
     if (event.defaultPrevented) return;
     if (event.key === 'Escape' && !event.isComposing && !composing && event.keyCode !== 229) {
       event.preventDefault();
-      if (modelMenuOpen) closeModelMenu();
+      if (sourceMenuOpen) closeSourceMenu();
+      else if (modelMenuOpen) closeModelMenu();
       else if (confirmingNew) cancelNewChat();
       else if (historyOpen) closeHistory();
       else api.close();

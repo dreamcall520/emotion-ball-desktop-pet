@@ -1,0 +1,59 @@
+{
+  "officialCliVersion": "0.17.0",
+  "officialAppVersion": "3.16.3",
+  "chat": {
+    "source": "official-zcode-cli-0.17.0",
+    "workspace": "isolated-probe",
+    "events": [
+      {
+        "method": "item/completed",
+        "text": "{\"text\":\"我上一句是：「你好呀！今天过得怎么样？」\",\"action\":\"none\"}"
+      },
+      {
+        "method": "turn/completed",
+        "status": "completed"
+      },
+      {
+        "method": "item/completed",
+        "text": ""
+      },
+      {
+        "method": "turn/completed",
+        "status": "interrupted"
+      }
+    ],
+    "resumeContext": true,
+    "stop": true,
+    "checkedAt": "2026-10-24T14:25:29.573Z"
+  },
+  "taskLiveObservation": {
+    "checkedAt": "2026-10-24T14:38:06.791Z",
+    "stateDuringTurn": "unknown",
+    "liveVerified": true,
+    "source": "zcode-message-turn",
+    "stateAfterStop": "unknown",
+    "resultAfterStop": "interrupted",
+    "modelRequestHeldBeforeAuth": true
+  },
+  "requestSafety": [
+    {
+      "type": "model_io",
+      "toolNames": [],
+      "requestToolCount": 0,
+      "toolsFieldPresent": false
+    },
+    {
+      "type": "model_io",
+      "toolNames": [],
+      "requestToolCount": 0,
+      "toolsFieldPresent": false
+    }
+  ],
+  "limits": [
+    "paid/team authentication not exercised",
+    "native desktop-created task transition not exercised; isolated official CLI database was exercised",
+    "task list is partial; no global idle or zero-running claim",
+    "pending tool approval mapping is source/schema + unit verified, not exercised with a real external tool",
+    "captcha interactive claims are not bypassed; current official config has skip_model_request=true"
+  ]
+}

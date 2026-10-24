@@ -835,7 +835,7 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   const menu = f.call('menuTemplate()');
   const top = menu.filter(item => item.type !== 'separator');
   assert.deepEqual(Array.from(top, item => item.label), [
-    '设置中心', '和球球聊聊', '定制球球', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API',
+    '设置中心', '和球球聊聊', '定制球球', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API', 'ZCode 联动',
     '贴边与显示', '球球尺寸', '界面配色', '常规设置', '关于球球', '检查更新', '退出球球'
   ]);
   const group = label => top.find(item => item.label === label).submenu.filter(item => item.type !== 'separator');
@@ -994,7 +994,7 @@ test('聊天 IPC 只接受当前聊天窗口；球球和其他窗口无法读记
   assert.equal(f.chat.stops, 0);
   assert.equal(f.chatWindow.isVisible(), true);
   assert.equal(JSON.stringify(await f.invoke('pet:chat-get', undefined, sender)),
-    JSON.stringify({ ...f.chat.state, appUpdate: null }));
+    JSON.stringify({ ...f.chat.state, source: 'codex', sources: [{ id: 'codex', label: 'Codex', enabled: true }, { id: 'zcode', label: 'ZCode', enabled: false }], sourceChanging: false, appUpdate: null }));
   assert.equal((await f.invoke('pet:chat-send', '有效消息', sender)).accepted, true);
   assert.deepEqual(f.chat.sends, ['有效消息']);
   assert.equal((await f.invoke('pet:chat-new', undefined, sender)).accepted, true);
@@ -3624,7 +3624,7 @@ test('原生菜单保留核心联动开关与独立入口，完整偏好仍可�
   const f = await fixture(); t.after(() => f.app.emit('before-quit'));
   const menu = f.call('compactMenuTemplate()');
   assert.deepEqual(Array.from(menu.filter(item => item.type !== 'separator'), item => item.label),
-    ['和球球聊聊', '来定制球球', '便签与待办', '番茄钟', '启用 Codex 联动', 'API 费用与用量', '设置中心', '关于球球', '检查更新', '退出球球']);
+    ['和球球聊聊', '来定制球球', '便签与待办', '番茄钟', '启用 Codex 联动', '启用 ZCode 联动', 'API 费用与用量', '设置中心', '关于球球', '检查更新', '退出球球']);
   assert.ok(menu.every(item => !item.submenu));
   assert.ok(findMenuItem(f.call('menuTemplate()'), 'notes-default-note'));
   assert.ok(findMenuItem(f.call('menuTemplate()'), 'codex-quota-period'));

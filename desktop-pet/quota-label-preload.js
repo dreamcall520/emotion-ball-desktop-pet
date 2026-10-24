@@ -1,7 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-const CHANNEL = 'pet:quota-label';
-const TOGGLE_CHANNEL = 'pet:quota-label-toggle';
+const sourceId = typeof process !== 'undefined' && process.argv?.includes('--pet-source=zcode') ? 'zcode' : 'codex';
+const CHANNEL = sourceId === 'zcode' ? 'pet:zcode-quota-label' : 'pet:quota-label';
+const TOGGLE_CHANNEL = sourceId === 'zcode' ? 'pet:zcode-quota-label-toggle' : 'pet:quota-label-toggle';
 const STATES = new Set([
   'disabled', 'connecting', 'connected', 'ready', 'stale', 'reset-wait', 'period-missing',
   'empty', 'missing', 'unauthenticated', 'unsupported', 'disconnected'
@@ -35,7 +36,20 @@ function activityFields(value) {
   } catch (_) { return {}; }
 }
 
-function copyItem(value) {
+function bucketFields(item, sourceId) {
+  if (sourceId !== 'zcode') return {};
+  try { return {
+      planName: cleanLabel(item.planName),
+      bucketId: typeof item.bucketId === 'string' && /^[^\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]{1,400}$/u.test(item.bucketId) ? item.bucketId : '',
+      periodKind: ['one_time', 'expiry', 'daily', 'rolling', 'weekly', 'monthly', 'unknown'].includes(item.periodKind) ? item.periodKind : 'unknown',
+      periodStart: Number.isSafeInteger(item.periodStart) && item.periodStart > 0 ? item.periodStart : null,
+      total: Number.isFinite(item.total) && item.total >= 0 ? item.total : null,
+      remainingUnits: Number.isFinite(item.remainingUnits) && item.remainingUnits >= 0 ? item.remainingUnits : null,
+      unit: typeof item.unit === 'string' ? item.unit.replace(/[^a-zA-Z\u4e00-\u9fff]/gu, '').slice(0, 16) : ''
+  }; } catch (_) { return {}; }
+}
+
+function copyItem(value, sourceId = 'codex') {
   const item = record(value);
   if (!item) return null;
   let labelValue;
@@ -53,28 +67,29 @@ function copyItem(value) {
     resetLabel = cleanLabel(item.resetLabel);
   } catch (_) { return null; }
   const label = cleanLabel(labelValue);
-  if (!label || !Number.isSafeInteger(windowMinutes) || windowMinutes <= 0 ||
+  if (!label || (sourceId === 'zcode' ? windowMinutes !== null && (!Number.isFinite(windowMinutes) || windowMinutes <= 0) : !Number.isSafeInteger(windowMinutes) || windowMinutes <= 0) ||
     typeof remaining !== 'number' || !Number.isFinite(remaining) || remaining < 0 || remaining > 100) return null;
   return {
     label,
     windowMinutes,
     remaining,
+    ...bucketFields(item, sourceId),
     ...(Number.isSafeInteger(resetsAt) && resetsAt > 0 ? { resetsAt } : {}),
     ...paceFields(pace),
     ...(resetLabel ? { resetLabel } : {})
   };
 }
 
-function copyItems(value) {
+function copyItems(value, sourceId = 'codex') {
   try { if (!Array.isArray(value)) return []; } catch (_) { return []; }
   let length;
   try { length = value.length; } catch (_) { return []; }
-  const limit = Number.isSafeInteger(length) && length >= 0 ? Math.min(length, 2) : 0;
+  const limit = Number.isSafeInteger(length) && length >= 0 ? Math.min(length, sourceId === 'zcode' ? 32 : 2) : 0;
   const items = [];
   for (let index = 0; index < limit; index += 1) {
     let raw;
     try { raw = value[index]; } catch (_) { continue; }
-    const item = copyItem(raw);
+    const item = copyItem(raw, sourceId);
     if (item) items.push(item);
   }
   return items;
@@ -125,11 +140,12 @@ function safeModel(value) {
     return { state: 'disconnected', size: 'standard', appearance: 'system', expanded: false, items: [], overflow: 0 };
   }
   const state = STATES.has(stateValue) ? stateValue : 'disconnected';
+  const identity = sourceId === 'zcode' ? { sourceId: 'zcode' } : {};
   const size = sizeValue === 'compact' ? 'compact' : 'standard';
   const appearance = ['light', 'dark'].includes(appearanceValue) ? appearanceValue : 'system';
   const numbers = numberFields(source);
   const expanded = numbers.display !== 'numbers' && expandedValue === true;
-  if (!['ready', 'stale'].includes(state)) return { state, size, appearance, expanded: false, items: [], overflow: 0, ...numbers };
+  if (!['ready', 'stale'].includes(state)) return { ...identity, state, size, appearance, expanded: false, items: [], overflow: 0, ...numbers };
   let rawItems;
   let overflowValue;
   let resetCreditsAvailable;
@@ -139,20 +155,21 @@ function safeModel(value) {
     overflowValue = source.overflow;
     resetCreditsAvailable = source.resetCreditsAvailable;
     activity = record(source.activity);
-  } catch (_) { return { state, size, appearance, expanded, items: [], overflow: 0, ...numbers }; }
+  } catch (_) { return { ...identity, state, size, appearance, expanded, items: [], overflow: 0, ...numbers }; }
   const overflow = Number.isSafeInteger(overflowValue) && overflowValue > 0
     ? Math.min(overflowValue, 99) : 0;
   return {
+    ...identity,
     state,
     ...numbers,
     size,
     appearance,
     expanded,
-    items: copyItems(rawItems),
+    items: copyItems(rawItems, sourceId),
     overflow,
-    ...extraCreditsFields(source, state),
+    ...(sourceId === 'zcode' ? {} : extraCreditsFields(source, state)),
     ...activityFields(activity),
-    ...(Number.isSafeInteger(resetCreditsAvailable) && resetCreditsAvailable >= 0
+    ...(sourceId !== 'zcode' && Number.isSafeInteger(resetCreditsAvailable) && resetCreditsAvailable >= 0
       ? { resetCreditsAvailable } : {})
   };
 }
@@ -170,12 +187,18 @@ contextBridge.exposeInMainWorld('petQuotaLabel', {
   },
   setPointerInteractive(value) {
     if (typeof value !== 'boolean') return;
-    try { ipcRenderer.send('pet:quota-label-pointer', value); } catch (_) {}
+    try { ipcRenderer.send(sourceId === 'zcode' ? 'pet:zcode-quota-label-pointer' : 'pet:quota-label-pointer', value); } catch (_) {}
   },
   openGuard() {
+    if (sourceId !== 'codex') return;
     try { ipcRenderer.send('pet:quota-guard-open'); } catch (_) {}
   },
   openDetail(action, period) {
+    if (sourceId === 'zcode') {
+      if (!['tasks', 'results', 'trend', 'quota'].includes(action) || typeof period !== 'string' || !/^[^\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]{1,400}$/u.test(period)) return;
+      try { ipcRenderer.send('pet:zcode-quota-label-detail', action, period); } catch (_) {}
+      return;
+    }
     if (!['tasks', 'results', 'trend', 'opportunities', 'credits'].includes(action)) return;
     try { ipcRenderer.send('pet:quota-label-detail', action, period === 10080 ? 10080 : 300); } catch (_) {}
   },

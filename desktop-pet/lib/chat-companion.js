@@ -25,8 +25,6 @@ const ERRORS = {
   TOOL_BLOCKED: '这次请求超出了球球的聊天能力，已停止。可以继续聊或让球球做个小动作。',
   CLOSED: '聊天已关闭。'
 };
-const fault = code => Object.assign(new Error(ERRORS[code] || ERRORS.TURN_FAILED), { code });
-const readableError = error => ERRORS[error?.code] || ERRORS.TURN_FAILED;
 
 // Decode only the text field of a partially received JSON response. Never show the
 // JSON envelope, execute model text, or interpret an action until the turn completes.
@@ -60,7 +58,11 @@ function finalReply(raw) {
 }
 
 function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => {}, onAction = () => {}, turnTimeoutMs = 180000,
-  initialModelSelection = 'auto', onModelSelection = () => {} }) {
+  initialModelSelection = 'auto', onModelSelection = () => {}, providerName = 'Codex', resolveModel = resolveChatModel, providerErrors = {} }) {
+  const errors = Object.fromEntries(Object.entries(ERRORS).map(([code, text]) => [code, text.replaceAll('Codex', providerName)]));
+  Object.assign(errors, providerErrors);
+  const fault = code => Object.assign(new Error(errors[code] || errors.TURN_FAILED), { code });
+  const readableError = error => errors[error?.code] || errors.TURN_FAILED;
   let record = normalizeArchive(emptyRecord()), storageProblem = false, storageLoaded = false;
   const readArchive = () => {
     const archive = normalizeArchive(store.read());
@@ -69,7 +71,7 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
   };
   try { record = readArchive(); storageLoaded = true; } catch (_) { storageProblem = true; }
   let rpc = null, connecting = null, loadedThread = null, accountKey = null;
-  let connection = 'idle', error = storageProblem ? ERRORS.STORAGE : null;
+  let connection = 'idle', error = storageProblem ? errors.STORAGE : null;
   let verified = false, closed = false, active = null, epoch = 0;
   let draining = Promise.resolve();
   let modelSelection = normalizeModelSelection(initialModelSelection), models = [], modelsStatus = 'idle', modelsError = null;
@@ -104,7 +106,7 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
         models = available; modelsClient = client; modelsAccount = operation.account; modelsStatus = 'ready';
       } catch (_) {
         if (closed || rpc !== client || !verified || accountKey !== operation.account) return;
-        models = []; modelsClient = null; modelsAccount = null; modelsStatus = 'error'; modelsError = ERRORS.MODELS_UNAVAILABLE;
+        models = []; modelsClient = null; modelsAccount = null; modelsStatus = 'error'; modelsError = errors.MODELS_UNAVAILABLE;
       } finally {
         if (modelLoad === operation) modelLoad = null;
         if (rpc === client) emit();
@@ -117,14 +119,14 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
     if (closed || active || connecting || modelsStatus === 'loading') return { accepted: false, error: '请先等待当前回复或连接完成。' };
     if (typeof value !== 'string' || normalizeModelSelection(value) !== value ||
       (value !== 'auto' && (!verified || modelsStatus !== 'ready' || !models.some(model => model.id === value)))) {
-      return { accepted: false, error: ERRORS.MODEL_UNAVAILABLE };
+      return { accepted: false, error: errors.MODEL_UNAVAILABLE };
     }
     if (value === modelSelection) return { accepted: true };
     try { onModelSelection(value); }
     catch (_) { return { accepted: false, error: '模型设置未能保存，请稍后再试。' }; }
     modelSelection = value;
     activeModel = null;
-    if (error === ERRORS.MODEL_UNAVAILABLE || error === ERRORS.MODELS_UNAVAILABLE) error = null;
+    if (error === errors.MODEL_UNAVAILABLE || error === errors.MODELS_UNAVAILABLE) error = null;
     emit(); return { accepted: true };
   }
   async function refreshModels() {
@@ -133,8 +135,8 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
       const previousRevision = modelRevision;
       const client = await connect();
       if (previousRevision === modelRevision) await loadModels(client, true);
-      if (modelsStatus !== 'ready') return { accepted: false, error: modelsError || ERRORS.MODELS_UNAVAILABLE };
-      if (error === ERRORS.MODELS_UNAVAILABLE) { error = null; emit(); }
+      if (modelsStatus !== 'ready') return { accepted: false, error: modelsError || errors.MODELS_UNAVAILABLE };
+      if (error === errors.MODELS_UNAVAILABLE) { error = null; emit(); }
       return { accepted: true };
     } catch (cause) { return { accepted: false, error: readableError(cause) }; }
   }
@@ -256,7 +258,7 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
       if (record.accountKey && record.accountKey !== accountKey) { verified = false; throw fault('ACCOUNT_CHANGED'); }
       if (modelsAccount && modelsAccount !== accountKey) { models = []; modelsClient = null; modelsAccount = null; activeModel = null; }
       verified = true; connection = 'ready';
-      error = storageProblem ? ERRORS.STORAGE : record.creationPending ? ERRORS.CREATION_UNCERTAIN : null;
+      error = storageProblem ? errors.STORAGE : record.creationPending ? errors.CREATION_UNCERTAIN : null;
       await loadModels(client);
       if (closed || currentEpoch !== epoch || rpc !== client) throw fault('CLOSED');
       emit(); return client;
@@ -275,7 +277,7 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
   }
 
   async function send(text) {
-    if (closed || active) return { accepted: false, error: closed ? ERRORS.CLOSED : '球球正在回复，可以先停止再发送。' };
+    if (closed || active) return { accepted: false, error: closed ? errors.CLOSED : '球球正在回复，可以先停止再发送。' };
     if (typeof text !== 'string' || !text.trim() || text.length > 2000 || text.includes('\0')) return { accepted: false, error: '请输入 1–2000 字的消息。' };
     if (storageProblem) {
       try {
@@ -284,7 +286,7 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
           for (const chat of [record, ...record.history]) if (chat.threadId) ownedThreads.add(chat.threadId);
         }
         persist();
-      } catch (_) { return { accepted: false, error: ERRORS.STORAGE }; }
+      } catch (_) { return { accepted: false, error: errors.STORAGE }; }
     }
     const request = { phase: 'preparing', threadId: null, turnId: null, assistantId: randomUUID(), raw: '', final: '', items: {}, cancelled: false, interruptedIds: new Set() };
     active = request; error = null; emit();
@@ -293,7 +295,7 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
       request.client = client;
       if (active !== request || request.cancelled) throw fault('CLOSED');
       if (modelsStatus !== 'ready' || modelsClient !== client) throw fault('MODELS_UNAVAILABLE');
-      const selectedModel = resolveChatModel(models, modelSelection, text);
+      const selectedModel = resolveModel(models, modelSelection, text);
       if (record.creationPending) throw fault('CREATION_UNCERTAIN');
       if (!record.threadId) {
         const previousAccount = record.accountKey;
@@ -363,7 +365,7 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
 
   async function newChat() {
     if (closed || active || connecting) return { accepted: false, error: '请先等待当前回复或连接完成。' };
-    if (!storageLoaded || storageProblem) return { accepted: false, error: ERRORS.STORAGE };
+    if (!storageLoaded || storageProblem) return { accepted: false, error: errors.STORAGE };
     // Reuse the existing empty draft; confirmation alone never creates a Codex thread.
     if (!hasChat(record) && (!record.accountKey || record.accountKey === accountKey)) return { accepted: true };
     const draft = record.history.find(chat => !hasChat(chat) && chat.accountKey === accountKey);
@@ -387,8 +389,8 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
 
   async function selectChat(id) {
     if (closed || active || connecting) return { accepted: false, error: '请先等待当前回复或连接完成。' };
-    if (!storageLoaded || storageProblem) return { accepted: false, error: ERRORS.STORAGE };
-    if (!accountKey) return { accepted: false, error: ERRORS.UNAUTHENTICATED };
+    if (!storageLoaded || storageProblem) return { accepted: false, error: errors.STORAGE };
+    if (!accountKey) return { accepted: false, error: errors.UNAUTHENTICATED };
     const target = [record, ...record.history].find(chat => chat.chatId === id && chat.accountKey === accountKey);
     if (!target) return { accepted: false, error: '这段聊天暂不可用，请选择当前账号的聊天记录。' };
     if (target.chatId === record.chatId) return { accepted: true };

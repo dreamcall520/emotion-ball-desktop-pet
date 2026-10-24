@@ -104,6 +104,7 @@ test('损坏文件回退且有效设置可回读', t => {
     colorMode: 'standard',
     uiTheme: 'blue',
     chatModel: 'auto',
+    chatSource: 'codex', zcodeChatModel: 'auto', zcodeEnabled: false, zcodeQuotaAlwaysVisible: true, zcodeQuotaLabelSize: 'compact',
     notesDefaultTab: 'note', notesAppearance: 'light', shortcutSettings: DEFAULTS.shortcutSettings,
     customization: DEFAULTS.customization,
     quotaDisplay: DEFAULTS.quotaDisplay,
@@ -127,7 +128,7 @@ test('损坏文件回退且有效设置可回读', t => {
 test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
   assert.deepEqual(normalizeSettings({ size: 'small', x: -102.3, y: 81.8, alwaysOnTop: false }), {
     size: 'small', x: -102, y: 82, alwaysOnTop: false,
-    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', uiTheme: 'blue', chatModel: 'auto', notesDefaultTab: 'note', notesAppearance: 'light', shortcutSettings: DEFAULTS.shortcutSettings, customization: DEFAULTS.customization,
+    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', uiTheme: 'blue', chatModel: 'auto', chatSource: 'codex', zcodeChatModel: 'auto', zcodeEnabled: false, zcodeQuotaAlwaysVisible: true, zcodeQuotaLabelSize: 'compact', notesDefaultTab: 'note', notesAppearance: 'light', shortcutSettings: DEFAULTS.shortcutSettings, customization: DEFAULTS.customization,
     quotaDisplay: DEFAULTS.quotaDisplay,
     startupAppearance: DEFAULTS.startupAppearance,
     appearancePresets: [], codexEnabled: false,

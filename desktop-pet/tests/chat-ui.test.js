@@ -761,3 +761,57 @@ test('预加载限制消息类型、长度、固定频道，并能解除订阅',
   api.close();
   assert.deepEqual(sent, [['pet:chat-close']]);
 });
+
+const dualSourceState = (source = 'codex', state = withModels()) => ({...state, source, sources:[{id:'codex',label:'Codex',enabled:true},{id:'zcode',label:'ZCode',enabled:true}],sourceChanging:state.sourceChanging===true});
+test('聊天来源复用模型菜单交互，仅启用 ZCode 后可见，切换不发送消息也不改模型', async () => {
+  const selected=[],models=[]; let f;
+  f=fixture({async setSource(id){selected.push(id);f.receive(dualSourceState(id));return {accepted:true};},async setModel(id){models.push(id);return {accepted:true};}});
+  await flush();
+  assert.equal(f.get('source-bar').hidden,true);
+  f.receive(dualSourceState());
+  assert.equal(f.get('source-bar').hidden,false);assert.equal(f.get('chat-source').textContent,'Codex');
+  f.get('message-input').value='还没发出的草稿';
+  f.get('chat-source').dispatch('click');
+  assert.equal(f.get('source-menu').hidden,false);
+  const options=f.get('source-menu').children;
+  await options[1].dispatch('click');
+  assert.deepEqual(selected,['zcode']);assert.deepEqual(models,[]);assert.deepEqual(f.sent,[]);
+  assert.equal(f.get('chat-source').textContent,'ZCode');assert.equal(f.get('source-menu').hidden,true);
+  assert.match(f.get('privacy-note').textContent,/ZCode/);assert.doesNotMatch(f.get('privacy-note').textContent,/Codex/);
+  assert.equal(f.get('message-input').value,'还没发出的草稿');
+});
+test('聊天来源在回复、连接或切换期间禁用，Escape 和键盘导航作用于来源菜单', async () => {
+  const selected=[];const f=fixture({async setSource(id){selected.push(id);return {accepted:true};}});await flush();
+  for(const state of [{busy:true},{connection:'connecting'},{sourceChanging:true}]){
+    f.receive(dualSourceState('zcode',{...withModels(),...state}));
+    assert.equal(f.get('chat-source').disabled,true);f.get('chat-source').dispatch('click');assert.equal(f.get('source-menu').hidden,true);
+    assert.equal(f.get('send-message').disabled,true);
+  }
+  f.receive(dualSourceState());f.get('chat-source').dispatch('keydown',{key:'ArrowDown'});
+  assert.equal(f.get('source-menu').hidden,false);assert.equal(f.document.activeElement,f.get('source-menu').children[0]);
+  f.get('source-menu').dispatch('keydown',{key:'End'});assert.equal(f.document.activeElement,f.get('source-menu').children[1]);
+  f.get('source-menu').dispatch('keydown',{key:'Escape'});assert.equal(f.get('source-menu').hidden,true);assert.equal(f.document.activeElement,f.get('chat-source'));assert.deepEqual(selected,[]);
+  f.receive(dualSourceState('zcode',{...withModels(),connection:'connecting'}));assert.match(f.get('connection-status').textContent,/ZCode/);
+});
+
+test('聊天来源切换失败保留当前来源与草稿，来源 preload 只接受固定两个值', async () => {
+  const f=fixture({async setSource(){return {accepted:false,error:'ZCode 尚未登录'};}});await flush();
+  f.receive(dualSourceState());f.get('message-input').value='保留这个草稿';
+  f.get('chat-source').dispatch('click');await f.get('source-menu').children[1].dispatch('click');
+  assert.equal(f.get('chat-source').textContent,'Codex');assert.equal(f.get('message-input').value,'保留这个草稿');assert.match(f.get('error-text').textContent,/尚未登录/);
+  const calls=[];let api;
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../chat-preload.js'),'utf8'),{
+    require:()=>({contextBridge:{exposeInMainWorld(_name,value){api=value;}},ipcRenderer:{invoke(...args){calls.push(args);return Promise.resolve({accepted:true});}}})
+  });
+  for(const invalid of [null,'ZCode','zcode ','other',{},123])assert.equal((await api.setSource(invalid)).accepted,false);
+  await api.setSource('codex');await api.setSource('zcode');assert.deepEqual(calls,[['pet:chat-source','codex'],['pet:chat-source','zcode']]);
+});
+
+test('ZCode 自动模型说明不承诺按问题自动升级，Codex 原说明保留', async () => {
+  const f=fixture();await flush();f.receive(dualSourceState('zcode'));
+  const auto=f.options().find(option=>option.value==='auto');
+  assert.equal(auto.children[1].children[1].textContent,'使用 ZCode 默认可用模型');
+  assert.doesNotMatch(f.get('model-hint').textContent,/更强模型/);
+  f.receive(dualSourceState('codex'));
+  assert.equal(f.options().find(option=>option.value==='auto').children[1].children[1].textContent,'日常用快模型，分析用强模型');
+});

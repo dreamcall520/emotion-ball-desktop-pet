@@ -57,6 +57,9 @@ const { createChatStore } = require('./lib/chat-store');
 const { createChatCompanion } = require('./lib/chat-companion');
 const { createCodexChatRpc } = require('./lib/codex-chat-rpc');
 const { createChatWindow } = require('./lib/chat-window');
+const { createChatSources } = require('./lib/chat-sources');
+const { createZcodeLink } = require('./lib/zcode-link');
+const { createZcodeChatRpc, resolveZcodeChatModel } = require('./lib/zcode-chat-rpc');
 const { createNotesCompanion } = require('./lib/notes-companion');
 const { createNotesOrganizer } = require('./lib/notes-organizer');
 const { createPomodoro } = require('./lib/pomodoro');
@@ -71,6 +74,7 @@ const { normalizeCustomization, normalizeAppearance, effectiveAppearance } = req
 const QuotaDisplay = require('./lib/quota-display');
 
 const APP_NAME = '球球桌宠';
+const IS_ACCEPTANCE = require('../package.json').qiuqiuAcceptance === 'zcode';
 const APP_WEBSITE = 'https://qiuqiu.pet/';
 const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const IS_SMOKE_TEST = process.env.PET_SMOKE_TEST === '1';
@@ -105,6 +109,7 @@ let codexDetailReturn = null;
 let codexThreadOpener = url => shell.openExternal(url);
 let chat = null;
 let chatWindow = null;
+let zcodeLink = null;
 let notesCompanion = null;
 let pomodoro = null;
 let pomodoroWindows = null;
@@ -165,7 +170,12 @@ const windowMotion = createWindowMotion({
   }
 });
 
-app.setName(APP_NAME);
+app.setName(IS_ACCEPTANCE ? '球球桌宠-ZCode验收' : APP_NAME);
+if (IS_ACCEPTANCE && !IS_SMOKE_TEST) {
+  const acceptanceData = path.join(app.getPath('appData'), '球球桌宠-ZCode验收');
+  fs.mkdirSync(acceptanceData, { recursive: true, mode: 0o700 });
+  app.setPath('userData', acceptanceData);
+}
 const colorModes = createColorModeManager({ getMode: () => settings?.colorMode,
   getAppearance: () => settings?.codexQuotaAppearance, getTheme: () => settings?.uiTheme });
 app.on('browser-window-created', (_event, win) => colorModes.track(win));
@@ -334,7 +344,7 @@ function fromApiUsageWindow(event, requireVisible = true) {
 }
 
 function functionWindowObstacles() {
-  return [quotaLabel, apiUsageLabel, shortcutWindow, quotaGuard].flatMap(controller => {
+  return [quotaLabel, apiUsageLabel, shortcutWindow, quotaGuard, zcodeLink].flatMap(controller => {
     const win = controller?.getWindow();
     return win && !win.isDestroyed() && win.isVisible() ? [win.getBounds()] : [];
   });
@@ -562,6 +572,10 @@ function showUpdateBubble(result) {
 }
 
 function checkForUpdates(manual = false) {
+  if (IS_ACCEPTANCE && !IS_SMOKE_TEST) {
+    if (manual) { openAbout(); setAboutUpdate({ state: 'error', message: '独立验收版通过本次提供的安装包更新。' }); }
+    return Promise.resolve();
+  }
   if (downloadFlight) return downloadFlight;
   if (isQuitting || screenLocked || (!manual && settings?.autoUpdateCheck === false)) return Promise.resolve();
   if (updateCheck) {
@@ -612,6 +626,7 @@ function checkForUpdates(manual = false) {
 }
 
 function scheduleUpdateCheck(delay = 30000) {
+  if (IS_ACCEPTANCE) return;
   clearTimeout(updateTimer);
   updateTimer = null;
   if (isQuitting || !app.isPackaged || IS_SMOKE_TEST || settings?.autoUpdateCheck === false) return;
@@ -804,12 +819,16 @@ function openChat() {
   thoughts?.hide();
   quotaGuard?.close();
   quotaLabel?.hide();
+  zcodeLink?.hide();
   apiUsageLabel?.hide();
   edgeNoticeWindow?.hide();
   chatWindow.show(chatSnapshot());
   pomodoroWindows?.sync();
   // Opening checks login and shows local history; only send() can create a thread.
-  void chat.connect().catch(() => {});
+  const state = chat.getState();
+  const connection = !settings.codexEnabled && zcodeLink?.isEnabled() && state.source === 'codex' && !state.hasConversation
+    ? chat.selectSource('zcode') : chat.connect();
+  void connection.catch(() => {});
 }
 
 function performChatAction(action) {
@@ -898,6 +917,7 @@ function hidePet() {
   dragState = null;
   edgeTuck?.hide();
   petWindow.hide();
+  zcodeLink?.hide();
 }
 
 function codexHostAvailable() {
@@ -959,6 +979,7 @@ function repositionQuotaLabel() {
   safelyInvokeWindow('守护战重排', () => quotaGuard?.reposition());
   try { quotaLabel?.reposition(); } catch (error) { reportQuotaError('额度标签重排', error); }
   safelyInvokeWindow('API 卡片重排', () => apiUsageLabel?.reposition());
+  safelyInvokeWindow('ZCode 卡片重排', () => zcodeLink?.reposition());
 }
 
 function syncApiUsageLabel() {
@@ -1179,6 +1200,7 @@ function syncQuotaLabel(snapshot = null) {
   } finally {
     quotaSyncing = false;
     syncApiUsageLabel();
+    zcodeLink?.sync();
   }
 }
 
@@ -1749,6 +1771,7 @@ function setAlwaysOnTop(enabled) {
   safelyInvokeWindow('API 卡片置顶', () => apiUsageLabel?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('边缘提示置顶', () => edgeNoticeWindow?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('聊天面板置顶', () => chatWindow?.setAlwaysOnTop(settings.alwaysOnTop));
+  safelyInvokeWindow('ZCode 窗口置顶', () => zcodeLink?.setAlwaysOnTop(settings.alwaysOnTop));
   thoughts?.setAlwaysOnTop(settings.alwaysOnTop);
   sheepOfferingWindow?.setAlwaysOnTop(settings.alwaysOnTop);
   persistSettings();
@@ -1932,6 +1955,7 @@ function menuTemplate() {
         click: item => setCompanionSetting('bubblesEnabled', item.checked) }
     ] },
     codexMenu(),
+    ...(zcodeLink ? [zcodeLink.menu()] : []),
     { label: '贴边与显示', submenu: [
       { id: 'edge-left', label: '靠左收起', click: () => dockPet('left') },
       { id: 'edge-right', label: '靠右收起', click: () => dockPet('right') },
@@ -1990,7 +2014,7 @@ function compactMenuTemplate() {
   const api = codex.find(item => item.id === 'openai-api-menu')?.submenu.find(item => item.id === 'openai-api-usage');
   return [find('chat-open'), { ...find('customize-open'), label: '来定制球球' },
     notes && { ...notes, label: '便签与待办' }, find('pomodoro-open'),
-    { type: 'separator' }, codexEnabled, api,
+    { type: 'separator' }, codexEnabled, zcodeLink?.menu().submenu[0], api,
     { type: 'separator' }, find('global-settings'), find('about-open'), find('update-check'),
     { type: 'separator' }, items.find(item => item.label === '退出球球')].filter(Boolean);
 }
@@ -2053,6 +2077,12 @@ async function finishSmokeTest() {
       "Boolean(window.petDesktop.onActivity && document.getElementById('pet').dataset.mode)"
     );
     if (!companionReady) throw new Error('轻陪伴活动感知尚未接入');
+
+    if (process.env.PET_SMOKE_ZCODE_LINK_ONLY === '1') {
+      await require('./scripts/verify-zcode-link').verifyZcodeLink({ pet: petWindow, chat, chatWindow, zcodeLink,
+        openChat, BrowserWindow, getSettings: () => settings, getMenu: () => Menu.buildFromTemplate(menuTemplate()) });
+      app.quit(); return;
+    }
 
     if (process.env.PET_SMOKE_SHORTCUT_ONLY === '1') {
       await require('./scripts/verify-shortcuts-integration').verifyShortcuts({
@@ -2724,6 +2754,7 @@ function createPetWindow() {
     safelyInvokeWindow('隐藏时守护战隐藏', () => quotaGuard?.close());
     safelyInvokeWindow('隐藏时 Codex 详情隐藏', () => codexDetails?.close());
     safelyInvokeWindow('隐藏时 API 卡片隐藏', () => apiUsageLabel?.hide());
+    safelyInvokeWindow('隐藏时 ZCode 窗口隐藏', () => zcodeLink?.hide());
     if (!isCurrentPetWindow()) return;
     safelyInvokeWindow('隐藏时对白清理', () => dialogue?.dismiss());
   });
@@ -2754,6 +2785,7 @@ function createPetWindow() {
     safelyInvokeWindow('关闭时守护战销毁', () => quotaGuard?.destroy());
     safelyInvokeWindow('关闭时 Codex 详情销毁', () => codexDetails?.destroy());
     safelyInvokeWindow('关闭时 API 卡片销毁', () => apiUsageLabel?.destroy());
+    safelyInvokeWindow('关闭时 ZCode 窗口隐藏', () => zcodeLink?.hide());
     thoughts?.destroy();
     sheepOfferingWindow?.destroy();
     if (!isCurrentPetWindow()) return;
@@ -2937,6 +2969,12 @@ function registerIpc() {
   ipcMain.handle('pet:chat-models-refresh', event => {
     if (!fromChatWindow(event) || screenLocked || !chatWindow.isVisible()) return { accepted: false, error: '请打开聊天面板后再操作。' };
     return chat.refreshModels();
+  });
+  ipcMain.handle('pet:chat-source', (event, source) => {
+    if (!fromChatWindow(event) || event.senderFrame !== event.sender.mainFrame || screenLocked || !chatWindow.isVisible()) {
+      return { accepted: false, error: '请打开聊天面板后再操作。' };
+    }
+    return chat.selectSource(source);
   });
   ipcMain.on('pet:chat-close', event => { if (fromChatWindow(event)) chatWindow.hide(); });
   ipcMain.on('pet:offering-state', (event, state) => {
@@ -3257,8 +3295,31 @@ async function bootstrap() {
       fs.mkdirSync(options.workspaceDir, { recursive: true, mode: 0o700 });
       return createCodexChatRpc(options);
     },
-    onChange: state => { if (!screenLocked) chatWindow.update(chatSnapshot(state)); },
+    onChange: state => {
+      if (chat?.sourceChanged) chat.sourceChanged('codex');
+      else if (!screenLocked) chatWindow.update(chatSnapshot(state));
+    },
     onAction: performChatAction });
+  chat = createChatSources({ codex: chat,
+    initialSource: settings.chatSource,
+    isZcodeEnabled: () => zcodeLink ? zcodeLink.isEnabled() : settings.zcodeEnabled === true,
+    onSelect: chatSource => { settings = saveSettings(settingsFile, { ...settings, chatSource }); },
+    onChange: state => { if (!screenLocked) chatWindow.update(chatSnapshot(state)); },
+    createZcode: () => createChatCompanion({
+      store: createChatStore(path.join(app.getPath('userData'), 'zcode-chat.json')),
+      workspaceDir: path.join(app.getPath('userData'), 'zcode-chat-workspace'),
+      providerName: 'ZCode', resolveModel: resolveZcodeChatModel,
+      providerErrors: { UNSUPPORTED: '当前 ZCode 版本或登录方式暂不支持球球聊天，请更新 ZCode 或更换可用账号后重试。',
+        VERIFICATION_REQUIRED: '请先在 ZCode 中完成安全验证后重试。',
+        UNSAFE_CONFIG: '当前 ZCode 无法以仅聊天方式连接，请检查设置或更新 ZCode 后重试。' },
+      initialModelSelection: settings.zcodeChatModel,
+      onModelSelection: zcodeChatModel => { settings = saveSettings(settingsFile, { ...settings, zcodeChatModel }); },
+      createRpc: options => {
+        fs.mkdirSync(options.workspaceDir, { recursive: true, mode: 0o700 });
+        return createZcodeChatRpc(options);
+      },
+      onChange: () => chat?.sourceChanged('zcode'), onAction: performChatAction
+    }) });
   dialogue = new DialogueDirector({ now: performance.now(), enabled: settings.bubblesEnabled });
   sheepOfferingWindow = createSheepOfferingWindow({BrowserWindow,screen,getPetWindow:()=>petWindow,
     getTheme:()=>settings?.customization?.appearance?.shape==='new-year-sheep'?SheepTheme.resolveTheme(settings.customization.appearance.sheepTheme,new Date()):'none',
@@ -3300,7 +3361,7 @@ async function bootstrap() {
       sheepInk: sheepQuotaInk?.quotaStyle === quotaDisplayConfig().style ? sheepQuotaInk : null
     }),
     alwaysOnTop: settings.alwaysOnTop,
-    onLayout: () => pomodoroWindows?.sync(),
+    onLayout: () => { pomodoroWindows?.sync(); zcodeLink?.reposition(); },
     onError: error => writeError('额度标签窗口', error)
   });
   quotaGuard = createQuotaGuardWindow({ BrowserWindow, screen,
@@ -3328,6 +3389,38 @@ async function bootstrap() {
     getAnchor: () => petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null,
     onVisibilityChange: () => safelyInvokeWindow('Codex 详情显隐时额度卡重排', () => quotaLabel?.reposition()),
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('Codex 详情窗口', error) });
+  zcodeLink = createZcodeLink({ BrowserWindow, screen, ipcMain,
+    getSettings: () => settings,
+    save: patch => { settings = saveSettings(settingsFile, { ...settings, ...patch }); },
+    filePath: path.join(app.getPath('userData'), 'zcode-status-history.json'),
+    getPetWindow: () => petWindow,
+    getObstacles: () => [quotaLabel?.getVisibleBounds(), apiUsageLabel?.getWindow()?.isVisible()
+      ? apiUsageLabel.getWindow().getBounds() : null, quotaObstacleBounds()].filter(Boolean),
+    getPresentation: () => ({ ...edgeTuck?.getPresentation(), shape: settings?.customization?.appearance?.shape }),
+    getSuppressed: () => isQuitting || screenLocked || chatWindow?.isVisible() || shortcutWindow?.isPresenting() || presentationSuppressed(),
+    onChange: () => refreshTrayMenu(),
+    onLayout: () => pomodoroWindows?.sync(),
+    onEnabledChanged: async enabled => {
+      if (!enabled) await chat?.zcodeDisabled();
+      else chat?.sourceChanged(settings.chatSource);
+    },
+    requestConsent: async () => {
+      if (IS_SMOKE_TEST && process.env.PET_SMOKE_ZCODE_LINK_ONLY === '1') return true;
+      const result = await dialog.showMessageBox({ type: 'question', title: '启用 ZCode 联动',
+        message: '允许球球连接本机 ZCode？',
+        detail: '读取当前登录账号的套餐、额度和任务状态。聊天时使用 ZCode 对应模型与额度；只操作球球自己的聊天会话。可随时在设置中关闭。',
+        buttons: ['允许联动', '取消'], defaultId: 0, cancelId: 1, noLink: true });
+      return result.response === 0 && !screenLocked && !isQuitting;
+    },
+    openTask: async id => {
+      const result = await require('./lib/zcode-tasks').openZcodeTask(id);
+      if (result?.opened || screenLocked || isQuitting) return;
+      const choice = await dialog.showMessageBox({ type: 'info', title: 'ZCode 任务',
+        message: '当前 ZCode 版本暂不支持直接定位单个任务。', detail: '可以在 ZCode 中按任务名称查看。',
+        buttons: ['打开 ZCode', '关闭'], defaultId: 0, cancelId: 1, noLink: true });
+      if (choice.response === 0 && !screenLocked && !isQuitting) await shell.openPath('/Applications/ZCode.app');
+    },
+    onError: error => writeError('ZCode 联动', error?.code || 'ZCODE_UNAVAILABLE') });
   edgeNoticeWindow = createEdgeNoticeWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('边缘提示窗口', error) });
   edgeNotice = createEdgeNotice({ now: () => edgeNoticeNow(), onChange: payload => {
@@ -3368,6 +3461,7 @@ async function bootstrap() {
     safelyInvokeWindow('锁屏时守护战隐藏', () => quotaGuard?.close());
     safelyInvokeWindow('锁屏时 Codex 详情隐藏', () => codexDetails?.close());
     safelyInvokeWindow('锁屏时 API 卡片隐藏', () => apiUsageLabel?.hide());
+    safelyInvokeWindow('锁屏时 ZCode 窗口隐藏', () => zcodeLink?.hide());
     safelyInvokeWindow('锁屏时对白清理', () => dialogue.dismiss());
   };
   const resume = () => { screenLocked = false; notesCompanion?.resume(); edgeTuck?.resume(); activityMonitor.resume(); syncQuotaLabel(codexCompanion?.getSnapshot()); syncPomodoro(); scheduleUpdateCheck(); };
@@ -3388,6 +3482,7 @@ async function bootstrap() {
   if (process.argv.includes('--notes-preview')) notesCompanion.openPanel();
   scheduleUpdateCheck();
   if (settings.codexEnabled) void codexCompanion.setEnabled(true);
+  void zcodeLink.start();
 }
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -3455,6 +3550,7 @@ if (!hasSingleInstanceLock) {
     safelyInvokeWindow('退出时边缘提示销毁', () => edgeNoticeWindow?.destroy());
     codexConsentToken++;
     safelyInvokeWindow('退出时 Codex 联动清理', () => codexCompanion?.close());
+    safelyInvokeWindow('退出时 ZCode 联动清理', () => zcodeLink?.close());
     safelyInvokeWindow('退出时停止动作', stopMotion);
     safelyInvokeWindow('退出时活动监测清理', () => activityMonitor?.stop());
     destroyBubbleSafely();
