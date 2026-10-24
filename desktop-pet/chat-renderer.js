@@ -14,7 +14,17 @@
   const modelMenu = byId('model-menu');
   const modelRetry = byId('refresh-models');
   const providerSelect = byId('chat-provider');
-  let providerSaving = false;
+  const providerMenu = byId('provider-menu');
+  let providerSaving = false, providerMenuOpen = false;
+  const providerOptions = ['codex', 'workbuddy'].map(value => {
+    const option = document.createElement('button');
+    option.type = 'button'; option.className = 'model-option'; option.value = value; option.tabIndex = -1;
+    option.setAttribute('role', 'menuitemradio');
+    const check = document.createElement('span'); check.className = 'model-option-check'; check.setAttribute('aria-hidden', 'true');
+    const label = document.createElement('span'); label.className = 'model-option-label'; label.textContent = value === 'codex' ? 'Codex' : 'WorkBuddy';
+    option.append(check, label); option.addEventListener('click', () => chooseProvider(value)); return option;
+  });
+  providerMenu.replaceChildren(...providerOptions);
   const avatar = byId('chat-avatar');
   let snapshot = { messages: [], history: [], activeChatId: null, busy: false, connection: 'idle', error: null, hasConversation: false };
   let pending = false;
@@ -74,7 +84,7 @@
       ...models.map(model => ({ id: model.id, label: typeof model.displayName === 'string' && model.displayName.trim() ? model.displayName : model.id }))
     ];
     if (missing) choices.push({ id: selected, label: `${selected}（暂不可用）`, disabled: true });
-    const optionsKey = JSON.stringify(choices);
+    const optionsKey = JSON.stringify([snapshot.provider || 'codex', choices]);
     if (optionsKey !== modelOptionsKey) {
       closeModelMenu(false);
       modelOptionsKey = optionsKey;
@@ -99,7 +109,7 @@
         if (choice.id === 'auto') {
           const description = document.createElement('span');
           description.className = 'model-option-description';
-          description.textContent = '日常用快模型，分析用强模型';
+          description.textContent = snapshot.provider === 'workbuddy' ? '按 WorkBuddy 可用模型自动选择' : '日常用快模型，分析用强模型';
           content.appendChild(description);
         }
         option.append(check, content);
@@ -132,7 +142,7 @@
           : modelChanged ? '下条消息起生效 · 继续当前聊天'
             : selected === 'auto' ? active?.automatic && activeName
               ? `${snapshot.busy ? '本次' : '上次'}自动选用 ${activeName}`
-              : '日常优先轻量模型，需要分析时换更强模型'
+              : snapshot.provider === 'workbuddy' ? '按 WorkBuddy 可用模型自动选择' : '日常优先轻量模型，需要分析时换更强模型'
             : '使用所选模型 · 继续当前聊天');
     hint.title = hint.textContent;
     modelSelect.title = `${selectedLabel}\n${hint.textContent}`;
@@ -153,16 +163,21 @@
 
   function positionModelMenu() {
     if (!modelMenuOpen) return;
-    const anchor = modelSelect.getBoundingClientRect();
+    positionChoiceMenu(modelMenu, modelSelect);
+  }
+
+  function positionChoiceMenu(menu, button) {
+    const anchor = button.getBoundingClientRect();
     const width = Math.min(226, window.innerWidth - 24);
-    modelMenu.style.width = `${width}px`;
-    modelMenu.style.left = `${Math.max(12, Math.min(anchor.left, window.innerWidth - width - 12))}px`;
-    modelMenu.style.bottom = `${Math.max(0, window.innerHeight - anchor.top + 6)}px`;
-    modelMenu.style.maxHeight = `${Math.max(1, anchor.top - 18)}px`;
+    menu.style.width = `${width}px`;
+    menu.style.left = `${Math.max(12, Math.min(anchor.left, window.innerWidth - width - 12))}px`;
+    menu.style.bottom = `${Math.max(0, window.innerHeight - anchor.top + 6)}px`;
+    menu.style.maxHeight = `${Math.max(1, anchor.top - 18)}px`;
   }
 
   function openModelMenu(edge) {
     if (modelSelect.disabled || historyOpen || changeBlocked()) return;
+    closeProviderMenu(false);
     modelMenuOpen = true;
     modelMenu.hidden = false;
     modelSelect.setAttribute('aria-expanded', 'true');
@@ -289,7 +304,13 @@
         : snapshot.hasConversation ? '接着聊，我还记得这一段' : '想说什么，我在听';
     if (providerSelect) {
       providerSelect.value = snapshot.provider === 'workbuddy' ? 'workbuddy' : 'codex';
-      providerSelect.disabled = providerSaving || changeBlocked() || snapshot.connection === 'connecting';
+      providerSelect.textContent = providerSelect.value === 'codex' ? 'Codex' : 'WorkBuddy';
+      providerSelect.disabled = changeBlocked();
+      if (providerSelect.disabled || historyOpen) closeProviderMenu(false);
+      for (const option of providerOptions) {
+        const checked = option.value === providerSelect.value;
+        option.setAttribute('aria-checked', String(checked)); option.children[0].textContent = checked ? '✓' : '';
+      }
     }
     const description = byId('provider-description');
     const provider = snapshot.provider === 'workbuddy' ? 'WorkBuddy' : 'Codex';
@@ -455,12 +476,14 @@
   document.addEventListener('pointerdown', event => {
     document.documentElement.dataset.inputMode = 'pointer';
     if (modelMenuOpen && !modelMenu.contains(event.target) && !byId('model-bar').contains(event.target)) closeModelMenu(false);
+    if (providerMenuOpen && !providerMenu.contains(event.target) && !byId('provider-bar').contains(event.target)) closeProviderMenu(false);
   });
   document.addEventListener('focusin', event => {
     if (modelMenuOpen && !modelMenu.contains(event.target) && !byId('model-bar').contains(event.target)) closeModelMenu(false);
+    if (providerMenuOpen && !providerMenu.contains(event.target) && !byId('provider-bar').contains(event.target)) closeProviderMenu(false);
   });
-  window.addEventListener('resize', () => { resizeInput(); positionModelMenu(); });
-  window.addEventListener('blur', () => closeModelMenu(false));
+  window.addEventListener('resize', () => { resizeInput(); positionModelMenu(); if (providerMenuOpen) positionChoiceMenu(providerMenu, providerSelect); });
+  window.addEventListener('blur', () => { closeModelMenu(false); closeProviderMenu(false); });
   modelRetry.addEventListener('click', async () => {
     if (changeBlocked() || historyOpen || modelsRefreshing) return;
     modelsRefreshing = true;
@@ -494,7 +517,8 @@
     if (event.defaultPrevented) return;
     if (event.key === 'Escape' && !event.isComposing && !composing && event.keyCode !== 229) {
       event.preventDefault();
-      if (modelMenuOpen) closeModelMenu();
+      if (providerMenuOpen) closeProviderMenu();
+      else if (modelMenuOpen) closeModelMenu();
       else if (confirmingNew) cancelNewChat();
       else if (historyOpen) closeHistory();
       else api.close();
@@ -585,19 +609,49 @@
   window.addEventListener('focus', () => {
     if (!historyOpen && [document.body, historyButton, newButton].includes(document.activeElement)) input.focus();
   });
-  providerSelect?.addEventListener('change', async () => {
-    if (providerSaving || changeBlocked()) return;
-    const provider = providerSelect.value;
-    providerSaving = true;
-    refreshControls();
-    localError = ''; failedDraft = ''; modelError = ''; modelChanged = false;
-    closeModelMenu(false);
+  function closeProviderMenu(returnFocus = true) {
+    const wasOpen = providerMenuOpen;
+    providerMenuOpen = false; providerMenu.hidden = true; providerSelect.setAttribute('aria-expanded', 'false');
+    if (wasOpen && returnFocus && !providerSelect.disabled) providerSelect.focus();
+  }
+  function openProviderMenu(edge) {
+    if (providerSelect.disabled || historyOpen || changeBlocked()) return;
+    closeModelMenu(false); providerMenuOpen = true; providerMenu.hidden = false;
+    providerSelect.setAttribute('aria-expanded', 'true'); positionChoiceMenu(providerMenu, providerSelect);
+    const target = edge === 'last' ? providerOptions.at(-1) : edge === 'first' ? providerOptions[0]
+      : providerOptions.find(option => option.value === providerSelect.value);
+    target?.focus(); target?.scrollIntoView({ block: 'nearest' });
+  }
+  async function chooseProvider(provider) {
+    if (changeBlocked() || historyOpen || !['codex', 'workbuddy'].includes(provider)) return;
+    closeProviderMenu(); closeModelMenu(false);
+    if (provider === (snapshot.provider || 'codex')) { refreshControls(); return; }
+    providerSaving = true; refreshControls();
+    localError = ''; modelError = ''; modelChanged = false;
     try {
       const result = await api.setProvider(provider);
       if (!result?.accepted) localError = result?.error || '暂时无法切换聊天来源。';
-      else { input.value = ''; historyOpen = false; confirmingNew = false; resizeInput(); }
+      else { snapshot = { ...snapshot, provider }; failedDraft = ''; input.value = ''; historyOpen = false; confirmingNew = false; resizeInput(); }
     } catch (_) { localError = '暂时无法切换聊天来源。'; }
     finally { providerSaving = false; refreshControls(); }
+  }
+  providerSelect.addEventListener('change', () => chooseProvider(providerSelect.value));
+  providerSelect.addEventListener('click', () => providerMenuOpen ? closeProviderMenu() : openProviderMenu());
+  providerSelect.addEventListener('keydown', event => {
+    if (['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter', ' '].includes(event.key)) {
+      event.preventDefault(); openProviderMenu(event.key === 'ArrowUp' || event.key === 'End' ? 'last' : ['ArrowDown', 'Home'].includes(event.key) ? 'first' : undefined);
+    }
+  });
+  providerMenu.addEventListener('keydown', event => {
+    if (event.key === 'Tab') { closeProviderMenu(); return; }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter', ' ', 'Escape'].includes(event.key)) return;
+    event.preventDefault(); event.stopPropagation();
+    if (event.key === 'Escape') { closeProviderMenu(); return; }
+    const index = providerOptions.indexOf(document.activeElement);
+    if (event.key === 'Enter' || event.key === ' ') { if (index >= 0) void chooseProvider(providerOptions[index].value); return; }
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? providerOptions.length - 1
+      : (index + (event.key === 'ArrowDown' ? 1 : -1) + providerOptions.length) % providerOptions.length;
+    providerOptions[next]?.focus(); providerOptions[next]?.scrollIntoView({ block: 'nearest' });
   });
   const unsubscribe = api.onState(next => {
     stateEvents += 1;

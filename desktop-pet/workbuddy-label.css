@@ -1,1 +1,23 @@
-:root{color-scheme:light dark;--bg:#f3faf5;--fg:#224a38;--muted:#536d5e;--line:#bad3c4}*{box-sizing:border-box}body{margin:0;font:12px -apple-system,BlinkMacSystemFont,sans-serif;color:var(--fg)}#card{background:var(--bg);border:1px solid var(--line);border-radius:14px;height:100vh;padding:0 10px;overflow:hidden}button{font:inherit;color:inherit;cursor:pointer}button:focus-visible{outline:2px solid #369369;outline-offset:-3px}#toggle{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;height:40px;border:0;background:transparent;padding:0}#total{font-variant-numeric:tabular-nums}p{margin:7px 0;font-size:11px;line-height:1.4}dl{display:grid;grid-template-columns:1fr 1fr;margin:8px 0;gap:6px}dd{margin:0;text-align:right}dt,#updated{color:var(--muted)}.actions{display:flex;gap:7px;margin-top:10px}.actions button{background:transparent;border:1px solid var(--line);border-radius:7px;padding:6px}#status{color:#9b502a}body[data-invalid=true] #total{color:#9b502a}body[data-expanded=false] #status{position:absolute;clip-path:inset(50%);height:1px;width:1px;overflow:hidden}:root[data-appearance=dark]{--bg:#203b30;--fg:#dbeee2;--muted:#a4c2b1;--line:#456556}@media(prefers-color-scheme:dark){:root[data-appearance=system]{--bg:#203b30;--fg:#dbeee2;--muted:#a4c2b1;--line:#456556}}
+/* Reuse the quota card face, beam, badge and theme tokens unchanged. */
+#toggle { display: block; width: 100%; min-width: 0; flex: none; border: 0; background: transparent; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+#summary { min-height: 24px; }
+#quota-label[data-expanded="true"] #summary { display: none; }
+#quota-label[data-expanded="true"] #compact-header { width: 100%; }
+#details { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; margin-top: 3px; }
+#api-month-cost { min-height: 29px; max-height: 29px; flex: none; line-height: 29px; overflow: hidden; white-space: nowrap; }
+#details[hidden] { display: none; }
+#balances { display: flex; justify-content: space-between; gap: 5px; color: var(--quota-subtle); font-size: 8px; line-height: 12px; }
+#balances strong { color: var(--quota-value-normal); font-weight: 650; font-variant-numeric: tabular-nums; }
+#details p { margin: 1px 0 0; color: var(--quota-subtle); font-size: 8px; line-height: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#dates { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 4px; }
+#dates p { font-size: 7px; line-height: 11px; }
+#dates p:last-child { text-align: right; }
+#api-footer { margin-top: auto; padding-top: 4px; }
+#api-footer #status { min-width: 0; margin: 0; color: var(--quota-subtle); font-size: 7px; line-height: 12px; }
+#quota-label[data-query-state="error"] #period, #quota-label[data-query-state="error"] #status { color: var(--quota-urgent-text); }
+.actions { display: flex; justify-content: space-between; gap: 8px; flex: none; }
+.actions button { min-height: 15px; border: 0; background: transparent; padding: 0; color: var(--quota-subtle); font: inherit; font-size: 7px; line-height: 12px; font-weight: 600; cursor: pointer; }
+.actions button:hover { color: var(--quota-value-normal); }
+.actions button:disabled { opacity: .6; cursor: default; }
+#toggle:focus-visible, .actions button:focus-visible { outline: 2px solid var(--quota-action-blue); outline-offset: 1px; border-radius: 3px; }
+:root[data-color-mode="accessible"] .actions button { color: var(--accessible-blue); }

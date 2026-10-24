@@ -96,7 +96,7 @@
       <textarea id="message-input" rows="1" maxlength="2000" placeholder="和球球说句话…" aria-describedby="input-hint" title="Shift + Enter 换行" spellcheck="false"></textarea>
       <div class="composer-tools">
         <span id="input-hint" class="sr-only">Shift + Enter 换行</span>
-        <label class="provider-choice"><span class="sr-only">聊天来源</span><select id="chat-provider" aria-label="聊天来源"><option value="codex">Codex</option><option value="workbuddy">WorkBuddy</option></select></label>
+        <div id="provider-bar" class="model-choice provider-choice"><button id="chat-provider" type="button" value="codex" aria-label="聊天来源" aria-haspopup="menu" aria-controls="provider-menu" aria-expanded="false">Codex</button></div>
         <div id="model-bar" class="model-choice">
           <button id="chat-model" type="button" value="auto" aria-label="聊天模型" aria-haspopup="menu" aria-controls="model-menu" aria-expanded="false" aria-describedby="model-hint" disabled>自动选择</button>
         </div>
@@ -104,6 +104,7 @@
         <button id="stop-message" class="stop-button" type="button" hidden><span class="stop-mark" aria-hidden="true"></span><span id="stop-message-label" class="button-label">停止</span></button>
         <button id="send-message" class="send-button" type="submit" disabled><span class="button-label">发送</span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 16V4m-4 4 4-4 4 4"/></svg></button>
       </div>
+      <div id="provider-menu" class="model-menu" role="menu" aria-label="选择聊天来源" hidden></div>
       <div id="model-menu" class="model-menu" role="menu" aria-label="选择聊天模型" hidden></div>
       <div id="model-feedback" class="sr-only">
         <p id="model-hint" role="status">正在读取可用模型…</p>

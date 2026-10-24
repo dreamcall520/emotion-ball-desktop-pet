@@ -1,10 +1,13 @@
 const path = require('node:path');
+const { quotaLabelSize } = require('./quota-label-placement');
 const CHANNEL = 'pet:workbuddy-label';
 const valid = b => b && ['x', 'y', 'width', 'height'].every(k => Number.isFinite(b[k])) && b.width > 0 && b.height > 0;
 const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 function workBuddyLabelBounds(pet, area, obstacles = [], expanded = false) {
   if (!valid(pet) || !valid(area)) return null;
-  const width = expanded ? 270 : 190, height = expanded ? 280 : 42, gap = 8;
+  const { width } = quotaLabelSize(expanded ? 'compactExpanded' : 'compact');
+  const height = expanded ? 108 : quotaLabelSize('compact').height;
+  const gap = 8;
   const blocked = [pet, ...obstacles.filter(valid)];
   const xs = [pet.x, pet.x + pet.width - width, area.x, area.x + area.width - width];
   const ys = [pet.y + pet.height + gap, pet.y - height - gap, area.y, area.y + area.height - height];
@@ -52,7 +55,7 @@ function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getOb
   }
   function ensure() {
     if (live(win)) return;
-    const target = new BrowserWindow({ width: 190, height: 42, title: 'WorkBuddy 积分', transparent: true, frame: false, resizable: false, skipTaskbar: true, show: false, hasShadow: false, fullscreenable: false, maximizable: false, minimizable: false,
+    const target = new BrowserWindow({ ...quotaLabelSize('compact'), title: 'WorkBuddy 积分', transparent: true, frame: false, resizable: false, skipTaskbar: true, show: false, hasShadow: false, fullscreenable: false, maximizable: false, minimizable: false,
       webPreferences: { preload: path.join(__dirname, '../workbuddy-label-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false } });
     win = target; ready = false;
     target.setAlwaysOnTop(top, 'floating');

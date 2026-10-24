@@ -2,6 +2,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function capture(win) {
+  await win.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+  return win.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true });
+}
 const accountKey = '9'.repeat(64);
 const report = () => ({ total: 7400, basic: 500, reward: 6900, purchased: 0, plan: '体验版',
   nextRefreshAt: Date.now() + 7 * 86400000, expires: [{ amount: 100, at: Date.now() + 3 * 86400000 }], updatedAt: Date.now() });
@@ -42,10 +46,21 @@ async function verifyWorkBuddyIntegration({ pet, quota, label, chat, chatWindow,
     assert(!(a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y));
   }
   setSize('tiny');
-  if (outputDir) fs.writeFileSync(path.join(outputDir, 'quota-compact.png'), (await win.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG());
+  if (outputDir) fs.writeFileSync(path.join(outputDir, 'quota-compact.png'), (await capture(win)).toPNG());
   await page("document.querySelector('button').click()");
   await wait(100);
-  if (outputDir) fs.writeFileSync(path.join(outputDir, 'quota-expanded.png'), (await win.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG());
+  const cardFit = await page(`(() => { const ids = ['toggle','api-month-cost','balances','refresh-date','expiry','status','refresh','chat']; return ids.every(id => { const e = document.getElementById(id); if (!e || getComputedStyle(e).display === 'none') return true; const r=e.getBoundingClientRect(); return r.x >= 0 && r.y >= 0 && r.right <= innerWidth && r.bottom <= innerHeight; }); })()`);
+  assert.equal(cardFit, true, '展开信息和操作完整显示');
+  if (outputDir) fs.writeFileSync(path.join(outputDir, 'quota-expanded.png'), (await capture(win)).toPNG());
+  for (const [mode, appearance] of [['standard','dark'],['accessible','light'],['accessible','dark']]) {
+    win.webContents.send('pet:color-mode', mode, appearance, 'blue');
+    await until(() => page(`document.documentElement.dataset.colorMode === ${JSON.stringify(mode)} && document.documentElement.dataset.appearance === ${JSON.stringify(appearance)}`), '额度卡主题');
+    await page('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+    assert.equal(await page("document.getElementById('chat').getBoundingClientRect().bottom <= innerHeight"), true);
+    if (outputDir) fs.writeFileSync(path.join(outputDir, `quota-${mode}-${appearance}.png`), (await capture(win)).toPNG());
+  }
+  win.webContents.send('pet:color-mode', 'standard', 'system', 'blue');
+
   await setProvider('workbuddy'); openChat();
   await until(() => chat.getState().modelsStatus === 'ready' && chatWindow.isVisible(), '聊天连接');
   const chatWin = chatWindow.getWindow();
@@ -63,7 +78,16 @@ async function verifyWorkBuddyIntegration({ pet, quota, label, chat, chatWindow,
   await until(() => ui(`document.querySelector('#messages').innerText.includes(${JSON.stringify(reply)})`), '聊天正文');
   await until(() => ui("document.querySelector('#stop-message').hidden && !document.querySelector('#send-message').hidden"), '最终聊天状态');
   await ui('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
-  if (outputDir) fs.writeFileSync(path.join(outputDir, 'workbuddy-chat.png'), (await chatWin.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG());
+  if (outputDir) fs.writeFileSync(path.join(outputDir, 'workbuddy-chat.png'), (await capture(chatWin)).toPNG());
+  const styles = await ui(`(() => { const keys=['fontFamily','fontSize','fontWeight','borderTopWidth','borderRadius','backgroundColor','height','color']; const read=id=>Object.fromEntries(keys.map(k=>[k,getComputedStyle(document.getElementById(id))[k]])); return {provider:read('chat-provider'),model:read('chat-model'),native:document.querySelector('select#chat-provider')!==null}; })()`);
+  assert.equal(styles.native, false);
+  assert.deepEqual(styles.provider, styles.model, '来源和模型按钮使用同一现有样式');
+  await ui("document.getElementById('chat-provider').click()");
+  assert.equal(await ui("!document.getElementById('provider-menu').hidden && document.querySelectorAll('#provider-menu [role=menuitemradio]').length === 2"), true);
+  await ui('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+  if (outputDir) fs.writeFileSync(path.join(outputDir, 'provider-menu.png'), (await capture(chatWin)).toPNG());
+  await ui("document.getElementById('chat-provider').click()");
+
   assert.equal((await ui('window.qiuqiuChat.setProvider("codex")')).accepted, true);
   await until(() => ui("document.querySelector('#chat-provider').value === 'codex'"), '切回Codex');
   assert.equal(JSON.stringify(getCodex()), codexBefore, 'Codex额度快照保持');
