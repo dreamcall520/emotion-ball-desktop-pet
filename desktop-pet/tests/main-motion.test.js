@@ -260,9 +260,9 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   return { pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, downloads, revealed, consents, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
     notes, pomodoro, pomodoroWindows, nativeTheme, call: expression => vm.runInContext(expression, context),
     pressShortcut(accelerator) { if (!shortcutsSuspended) shortcutCallbacks.get(accelerator)?.(); },
-    invoke(channel, packet, sender = pet.webContents) {
+    invoke(channel, packet, sender = pet.webContents, ...args) {
       assert.ok(ipcHandlers.has(channel), `${channel} handler must be registered`);
-      return Promise.resolve(ipcHandlers.get(channel)({ sender }, packet));
+      return Promise.resolve(ipcHandlers.get(channel)({ sender, senderFrame: sender.mainFrame }, packet, ...args));
     },
     send(channel, packet, sender = pet.webContents) {
       // 与实际预加载一致，默认携带当前页面代次；显式传旧值可验迟到报文。
@@ -505,6 +505,9 @@ test('快捷面板至收起动效结束隐藏额度与守护入口，刷新不�
   assert.equal(menu[pomodoroIndex - 1].id, 'shortcut-settings');
   assert.equal(menu[pomodoroIndex - 1].label, '快捷键设置');
   menu[pomodoroIndex - 1].click();
+  assert.equal(f.call('globalSettingsInitialView'), 'shortcuts');
+  assert.ok(f.call('globalSettingsWindow'));
+  f.call('openShortcuts(true)');
   assert.equal(f.call('shortcutWindow.getState().view'), 'settings');
   f.call("setCodexPreference('codexQuotaAlwaysVisible', false); shortcutWindow.close()");
   t.mock.timers.tick(180);
@@ -832,12 +835,12 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   const menu = f.call('menuTemplate()');
   const top = menu.filter(item => item.type !== 'separator');
   assert.deepEqual(Array.from(top, item => item.label), [
-    '和球球聊聊', '来定制球球', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API',
+    '设置中心', '和球球聊聊', '定制球球', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API',
     '贴边与显示', '球球尺寸', '界面配色', '常规设置', '关于球球', '检查更新', '退出球球'
   ]);
   const group = label => top.find(item => item.label === label).submenu.filter(item => item.type !== 'separator');
   assert.equal(top.find(item => item.id === 'chat-open').submenu, undefined);
-  assert.equal(top[1].id, 'customize-open');
+  assert.equal(top[2].id, 'customize-open');
   assert.equal(top[1].submenu, undefined);
   assert.deepEqual(Array.from(group('便签与待办'), item => item.id), ['notes-open', 'notes-new', 'notes-todo-new', 'notes-default-tab']);
   assert.deepEqual(Array.from(group('便签与待办'), item => item.label), ['打开主面板', '新建便签', '添加待办', '默认打开']);
@@ -853,7 +856,7 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
     ['始终置顶', '开机自动启动（打包后可用）', '恢复默认位置', '自动提醒新版本']);
   assert.equal(top.find(item => item.label === '球球尺寸').submenu.length, 6);
   assert.equal(top.find(item => item.label === '界面配色').id, 'color-mode');
-  assert.equal(menu[0].id, 'chat-open');
+  assert.equal(menu[0].id, 'global-settings');
   assert.equal(menu.at(-2).id, 'update-check');
   assert.equal(menu.filter(item => item.id === 'update-check').length, 1);
 });
@@ -864,7 +867,7 @@ test('便签待办默认页保存后下次打开生效，失败恢复当前和�
   assert.equal(f.saved.at(-1).notesDefaultTab, 'note');
   assert.equal(f.notes.options.getDefaultTab(), 'note');
   assert.equal(f.notes.opens.length, opens, '修改偏好不打断当前编辑窗口');
-  assert.equal(findMenuItem(f.trayMenus.at(-1), 'notes-default-note').checked, true);
+  assert.equal(findMenuItem(f.call('menuTemplate()'), 'notes-default-note').checked, true);
   const restarted = await fixture({ loadedSettings: f.saved.at(-1) });
   assert.equal(restarted.notes.options.getDefaultTab(), 'note');
   const saves = f.saved.length;
@@ -875,8 +878,8 @@ test('便签待办默认页保存后下次打开生效，失败恢复当前和�
   todo.checked = true; todo.click(todo);
   assert.equal(todo.checked, false); assert.equal(failed.notes.options.getDefaultTab(), 'note');
   assert.ok(failed.trayMenus.length > refreshes);
-  assert.equal(findMenuItem(failed.trayMenus.at(-1), 'notes-default-note').checked, true);
-  assert.equal(findMenuItem(failed.trayMenus.at(-1), 'notes-default-todo').checked, false);
+  assert.equal(findMenuItem(failed.call('menuTemplate()'), 'notes-default-note').checked, true);
+  assert.equal(findMenuItem(failed.call('menuTemplate()'), 'notes-default-todo').checked, false);
   assert.equal(failed.saved.length, 0);
 });
 
@@ -906,7 +909,7 @@ test('便签外观跟随全局已保存选择，旧偏好不覆盖全局，系�
   light.checked = true; light.click(light);
   assert.equal(failed.notes.options.getAppearance(), 'dark'); assert.equal(failed.notes.appearances, 0);
   assert.equal(failed.nativeTheme.themeSource, 'dark', '失败不改变应用外观');
-  assert.equal(findMenuItem(failed.trayMenus.at(-1), 'color-appearance-dark').checked, true);
+  assert.equal(findMenuItem(failed.call('menuTemplate()'), 'color-appearance-dark').checked, true);
   assert.equal(failed.saved.length, 0);
 });
 
@@ -1432,7 +1435,7 @@ test('桌面新版气泡只主动出现一次，可信当前按钮打开关于�
   const menu = f.call('menuTemplate()');
   assert.equal(menu[0].id, 'update-check');
   assert.equal(menu[1].type, 'separator');
-  assert.equal(menu[2].id, 'chat-open');
+  assert.equal(menu[2].id, 'global-settings');
   assert.equal(menu.filter(item => item.id === 'update-check').length, 1);
   const count = f.windows.length;
   f.send('pet:bubble-reply', { id: shown.id, action: 'app-update-open' }, f.bubble);
@@ -1488,7 +1491,7 @@ test('新版在会话内提示并保留菜单标记，失败不丢已知新版�
   assert.equal((await f.invoke('pet:chat-get', undefined, sender)).appUpdate, null);
   assert.equal(menuItem(f, 'update-check').label, '检查更新');
   const currentMenu = f.call('menuTemplate()');
-  assert.equal(currentMenu[0].id, 'chat-open');
+  assert.equal(currentMenu[0].id, 'global-settings');
   assert.equal(currentMenu.at(-2).id, 'update-check');
   assert.equal(currentMenu.filter(item => item.id === 'update-check').length, 1);
   assert.equal(f.call('aboutUpdateState.hasUpdate'), false);
@@ -1914,7 +1917,7 @@ test('额度周期单选只在保存成功后切换，失败同时回滚点击�
   failedWeekly.click(failedWeekly);
   assert.equal(failedWeekly.checked, false, '当次点击项要立即恢复真实旧值');
   assert.ok(failed.trayMenus.length > failedRefreshes, '保存失败也要刷新整个托盘菜单');
-  const failedFreshPeriod = findMenuItem(failed.trayMenus.at(-1), 'codex-quota-period');
+  const failedFreshPeriod = findMenuItem(failed.call('menuTemplate()'), 'codex-quota-period');
   assert.equal(failedFreshPeriod.submenu.find(item => item.checked).id, 'codex-quota-auto');
 
   const success = await fixture({ codexEnabled: true });
@@ -1924,7 +1927,7 @@ test('额度周期单选只在保存成功后切换，失败同时回滚点击�
   successWeekly.checked = true;
   successWeekly.click(successWeekly);
   assert.equal(success.saved.at(-1).codexQuotaPeriod, 'weekly');
-  const successFreshPeriod = findMenuItem(success.trayMenus.at(-1), 'codex-quota-period');
+  const successFreshPeriod = findMenuItem(success.call('menuTemplate()'), 'codex-quota-period');
   assert.equal(successFreshPeriod.submenu.find(item => item.checked).id, 'codex-quota-weekly');
 });
 
@@ -3556,4 +3559,96 @@ test('主进程短动作无ink暂停保留入口deadline，不信伪造sender且
  const count=f.windows.length;t.mock.timers.tick(60000);assert.equal(f.windows.length,count,'到期仍动作中不创建入口');
  f.send('pet:offering-state',state);const source=f.windows.at(-1);assert.notEqual(source,f.pet);source.webContents.emit('did-finish-load');assert.equal(source.visible,true,'动作后沿用已到deadline');
  f.send('pet:offering-state',{eligible:false},{});assert.equal(source.visible,true,'伪造sender不能清空排期');
+});
+
+
+test('全局设置复用单一窗口、拒绝其他窗口操作并同步现有设置', async () => {
+  const f = await fixture();
+  menuItem(f, 'global-settings').click();
+  const win = f.call('globalSettingsWindow');
+  win.emit('ready-to-show');
+  menuItem(f, 'global-settings').click();
+  assert.equal(f.call('globalSettingsWindow'), win);
+  assert.equal(await f.invoke('pet:global-settings-get'), null);
+  const read = () => f.invoke('pet:global-settings-get', undefined, win.webContents);
+  let state = await read();
+  assert.ok(!JSON.stringify(state).includes('global-settings'));
+  const interaction = state.entries.find(item => item.label === '球球与互动');
+  const bubbles = interaction.children.find(item => item.label === '互动气泡');
+  assert.equal(bubbles.checked, true);
+  const result = await f.invoke('pet:global-settings-action', bubbles.id, win.webContents, false);
+  assert.equal(result.error, undefined);
+  assert.equal(f.call('settings.bubblesEnabled'), false);
+  assert.equal(f.saved.at(-1).bubblesEnabled, false);
+  f.call("setCompanionSetting('bubblesEnabled', true)");
+  state = await read();
+  assert.equal(state.entries.find(item => item.label === '球球与互动').children.find(item => item.label === '互动气泡').checked, true);
+  const codex = state.entries.find(item => item.id === '/codex-menu');
+  const disabled = codex.children.find(item => item.id.endsWith('/codex-quota-visible'));
+  assert.ok((await f.invoke('pet:global-settings-action', disabled.id, win.webContents, true)).error);
+  win.hide();
+  assert.ok(await read());
+  assert.ok((await f.invoke('pet:global-settings-action', bubbles.id, win.webContents, false)).error);
+});
+
+test('全局设置启用 Codex 必须完成原有授权，取消后保持关闭', async () => {
+  const f = await fixture({ consent: async () => ({ response: 1 }) });
+  f.call('openGlobalSettings()');
+  const win = f.call('globalSettingsWindow'); win.emit('ready-to-show');
+  const result = await f.invoke('pet:global-settings-action', '/codex-menu/codex-enabled', win.webContents, true);
+  assert.equal(f.consents.length, 1);
+  assert.equal(f.call('settings.codexEnabled'), false);
+  assert.ok(result.error);
+});
+
+
+test('全局快捷键保存校验来源、持久化并拒绝隐藏窗口操作', async t => {
+  const f = await fixture();
+  t.after(() => f.app.emit('before-quit'));
+  f.call('openGlobalSettings("shortcuts")');
+  const win = f.call('globalSettingsWindow'); win.emit('ready-to-show');
+  const config = f.call('shortcutRegistrar.getConfig()');
+  assert.equal((await f.invoke('pet:global-shortcuts-save', config)).ok, false);
+  const invalid = await f.invoke('pet:global-shortcuts-save', { ...config, shape: 'invalid' }, win.webContents);
+  assert.equal(invalid.ok, false);
+  assert.equal(f.call('shortcutRegistrar.getConfig().shape'), config.shape);
+  const result = await f.invoke('pet:global-shortcuts-save', { ...config, shape: 'list' }, win.webContents);
+  assert.equal(result.ok, true);
+  assert.equal(f.saved.at(-1).shortcutSettings.shape, 'list');
+  win.hide();
+  assert.equal((await f.invoke('pet:global-shortcuts-save', config, win.webContents)).ok, false);
+});
+
+
+test('原生菜单保留核心联动开关与独立入口，完整偏好仍可在设置中心访问', async t => {
+  const f = await fixture(); t.after(() => f.app.emit('before-quit'));
+  const menu = f.call('compactMenuTemplate()');
+  assert.deepEqual(Array.from(menu.filter(item => item.type !== 'separator'), item => item.label),
+    ['和球球聊聊', '来定制球球', '便签与待办', '番茄钟', '启用 Codex 联动', 'API 费用与用量', '设置中心', '关于球球', '检查更新', '退出球球']);
+  assert.ok(menu.every(item => !item.submenu));
+  assert.ok(findMenuItem(f.call('menuTemplate()'), 'notes-default-note'));
+  assert.ok(findMenuItem(f.call('menuTemplate()'), 'codex-quota-period'));
+});
+
+
+test('右键菜单核心联动开关跟随真实状态并复用授权入口', async t => {
+  const f = await fixture({ consent: async () => ({ response: 1 }) });
+  t.after(() => f.app.emit('before-quit'));
+  const item = findMenuItem(f.call('compactMenuTemplate()'), 'codex-enabled');
+  assert.equal(item.type, 'checkbox');
+  assert.equal(item.checked, false);
+  item.checked = true;
+  item.click(item);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.consents.length, 1);
+  assert.equal(f.call('settings.codexEnabled'), false);
+  assert.equal(findMenuItem(f.call('compactMenuTemplate()'), 'codex-enabled').checked, false);
+  const enabled = await fixture({ codexEnabled: true });
+  t.after(() => enabled.app.emit('before-quit'));
+  const toggle = findMenuItem(enabled.call('compactMenuTemplate()'), 'codex-enabled');
+  assert.equal(toggle.checked, true);
+  toggle.checked = false; toggle.click(toggle);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(enabled.call('settings.codexEnabled'), false);
+  assert.equal(findMenuItem(enabled.call('compactMenuTemplate()'), 'codex-enabled').checked, false);
 });

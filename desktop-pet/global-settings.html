@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>球球 · 设置中心</title>
+  <link rel="stylesheet" href="global-settings.css">
+  <script defer src="color-mode.js"></script>
+  <script defer src="../emotion-ball/js/rings.js"></script>
+  <script defer src="../emotion-ball/js/emotions.js"></script>
+  <script defer src="../emotion-ball/js/ball.js"></script>
+  <script defer src="../emotion-ball/js/engine.js"></script>
+  <script defer src="global-settings-shortcuts.js"></script>
+  <script defer src="global-settings-renderer.js"></script>
+</head>
+<body>
+  <div class="window-drag" aria-hidden="true"></div>
+  <aside>
+    <div class="brand"><div id="brand-pet" role="img" aria-label="经典球球"></div><div class="brand-copy"><strong>球球</strong><span>设置中心</span></div></div>
+    <nav aria-label="设置分类" id="navigation"></nav>
+    <footer><button id="about-link" type="button">关于球球 <span aria-hidden="true">↗</span></button><div id="version">本地设置中心</div></footer>
+  </aside>
+  <main>
+    <header>
+      <h1 id="section-title">常用设置</h1>
+      <div class="header-tools">
+        <button id="search-toggle" class="search-toggle" type="button" aria-label="搜索全部设置" aria-expanded="false" aria-controls="search-panel" title="搜索设置（⌘K）"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 4.5 4.5"></path></svg></button>
+        <div id="appearance-switch" class="segmented" role="group" aria-label="界面外观快捷切换"></div>
+      </div>
+    </header>
+    <label id="search-panel" class="search" hidden><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 4.5 4.5"></path></svg><input id="search" type="search" placeholder="搜索全部设置与功能…" aria-label="搜索全部设置"><kbd>Esc 收起</kbd></label>
+    <p id="feedback" role="status" aria-live="polite"></p>
+    <div id="content"><p>正在读取设置…</p></div>
+    <p id="empty" hidden>没有找到相关设置，试试“额度”“外观”或“便签”。</p>
+  </main>
+</body>
+</html>

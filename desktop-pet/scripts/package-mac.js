@@ -26,6 +26,12 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     fs.readFileSync(path.join(root, 'desktop-pet/assets/sheep/manifest.json'), 'utf8')));
   const files = [
     'desktop-pet/main.js',
+    'desktop-pet/global-settings.html',
+    'desktop-pet/global-settings.css',
+    'desktop-pet/global-settings-preload.js',
+    'desktop-pet/global-settings-renderer.js',
+    'desktop-pet/global-settings-shortcuts.js',
+    'desktop-pet/lib/global-settings.js',
     'desktop-pet/color-mode.css',
     'desktop-pet/ui-theme-blue.css',
     'desktop-pet/color-mode.js',

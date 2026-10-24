@@ -1,3 +1,4 @@
+const { settingsEntries, findSettingsAction } = require('./lib/global-settings');
 const fs = require('node:fs');
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
@@ -207,6 +208,8 @@ function pomodoroSuppressed() {
 
 function openPomodoro() {
   if (isQuitting || screenLocked) return;
+  // An explicit open takes precedence over chat's passive companion suppression.
+  chatWindow?.hide();
   if (!petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) restorePet();
   pomodoroWindows?.open();
 }
@@ -239,6 +242,15 @@ function openShortcutAction(id) {
   else if (id === 'pomodoro') openPomodoro();
 }
 
+function saveShortcutConfig(config) {
+  let nextSettings;
+  const result = shortcutRegistrar.apply(config, shortcutSettings => {
+    nextSettings = saveSettings(settingsFile, { ...settings, shortcutSettings });
+  });
+  if (result.ok) { settings = nextSettings; safelyInvokeWindow('快捷键保存后刷新菜单', refreshTrayMenu); }
+  return result;
+}
+
 function initializeShortcuts() {
   shortcutRegistrar = createShortcutRegistrar({ globalShortcut, config: settings.shortcutSettings, onAction: openShortcutAction });
   shortcutRegistrar.start();
@@ -246,14 +258,7 @@ function initializeShortcuts() {
     getPetWindow: () => petWindow,
     getPresentation: () => ({ ...edgeTuck?.getPresentation(), dragging: dragState?.moved === true, shape: settings?.customization?.appearance?.shape }),
     getConfig: () => shortcutRegistrar.getConfig(), getErrors: () => shortcutRegistrar.getErrors(),
-    save: config => {
-      let nextSettings;
-      const result = shortcutRegistrar.apply(config, shortcutSettings => {
-        nextSettings = saveSettings(settingsFile, { ...settings, shortcutSettings });
-      });
-      if (result.ok) { settings = nextSettings; safelyInvokeWindow('快捷键保存后刷新菜单', refreshTrayMenu); }
-      return result;
-    },
+    save: saveShortcutConfig,
     onAction: openShortcutAction,
     onPin: value => {
       // The controller keeps its presentation pin through the closing animation.
@@ -337,6 +342,56 @@ function functionWindowObstacles() {
 
 function positionFunctionWindow(win) {
   positionWindowNearPet(win, petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null, screen, functionWindowObstacles());
+}
+
+let globalSettingsWindow = null;
+let globalSettingsBusy = false;
+let globalSettingsInitialView = 'common';
+
+function globalSettingsSnapshot() {
+  return { version: app.getVersion(), entries: settingsEntries(menuTemplate()),
+    shortcuts: shortcutRegistrar?.getConfig(), initialView: globalSettingsInitialView,
+    summary: [
+      { label: '球球状态', value: edgeTuck?.getPresentation().mode === 'hidden' ? '暂时隐藏' : '陪伴中' },
+      { label: 'Codex 联动', value: settings.codexEnabled ? '已启用' : '未启用' },
+      { label: 'API 统计', value: apiUsage?.getState().connected ? '已连接' : '未连接' },
+      { label: '界面外观', value: { system: '跟随系统', light: '浅色', dark: '深色' }[settings.codexQuotaAppearance] }
+    ] };
+}
+
+function fromGlobalSettings(event, requireVisible = true) {
+  return !isQuitting && !screenLocked && globalSettingsWindow && !globalSettingsWindow.isDestroyed() &&
+    (!requireVisible || globalSettingsWindow.isVisible()) && event.sender === globalSettingsWindow.webContents &&
+    event.senderFrame === globalSettingsWindow.webContents.mainFrame;
+}
+
+function openGlobalSettings(view) {
+  const target = view === 'shortcuts' ? 'shortcuts' : null;
+  if (isQuitting || screenLocked) return;
+  if (globalSettingsWindow && !globalSettingsWindow.isDestroyed()) {
+    globalSettingsWindow.show(); globalSettingsWindow.focus();
+    if (target) globalSettingsWindow.webContents.send('pet:global-settings-navigate', target);
+    return;
+  }
+  globalSettingsInitialView = target || 'common';
+  const win = new BrowserWindow({ width: 980, height: 760, minWidth: 620, minHeight: 480,
+    title: '球球 · 设置中心', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 }, backgroundColor: '#F5F7FB', show: false,
+    webPreferences: { preload: path.join(__dirname, 'global-settings-preload.js'),
+      contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false }
+  });
+  globalSettingsWindow = win;
+  win.on('blur', () => shortcutRegistrar?.setRecording(false));
+  win.on('hide', () => shortcutRegistrar?.setRecording(false));
+  win.webContents.on('render-process-gone', () => shortcutRegistrar?.setRecording(false));
+  win.on('closed', () => shortcutRegistrar?.setRecording(false));
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', event => event.preventDefault());
+  win.webContents.on('will-attach-webview', event => event.preventDefault());
+  win.on('closed', () => { if (globalSettingsWindow === win) globalSettingsWindow = null; });
+  win.once('ready-to-show', () => { if (!isQuitting && !screenLocked && !win.isDestroyed()) win.show(); });
+  void win.loadFile(path.join(__dirname, 'global-settings.html')).catch(error => {
+    writeError('全局设置', error); if (!win.isDestroyed()) win.destroy();
+  });
 }
 
 function openApiUsage() {
@@ -1815,7 +1870,7 @@ function codexMenu() {
         : []),
       { type: 'separator' },
       { id: 'openai-api-menu', label: 'OpenAI API', submenu: [
-        { id: 'openai-api-usage', label: 'OpenAI API 费用与用量…', click: openApiUsage },
+        { id: 'openai-api-usage', label: 'API 费用与用量', click: openApiUsage },
         { id: 'openai-api-visible', label: '显示 API 本月费用卡', type: 'checkbox',
           checked: settings.openaiApiAlwaysVisible === true,
           click: item => { const enabled = item.checked; item.checked = settings.openaiApiAlwaysVisible === true;
@@ -1835,8 +1890,9 @@ function menuTemplate() {
     click: () => { void (availableUpdate ? showUpdateResult(availableUpdate) : checkForUpdates(true)); } };
   return [
     ...(availableUpdate ? [updateEntry, { type: 'separator' }] : []),
+    { id: 'global-settings', label: '设置中心', accelerator: 'CommandOrControl+,', click: openGlobalSettings },
     { id: 'chat-open', label: '和球球聊聊', click: openChat },
-    { id: 'customize-open', label: '来定制球球', click: openCustomization },
+    { id: 'customize-open', label: '定制球球', click: openCustomization },
     { label: '便签与待办', submenu: [
       { id: 'notes-open', label: '打开主面板', click: () => notesCompanion?.openPanel() },
       { id: 'notes-new', label: '新建便签', click: () => notesCompanion?.openPanel({ tab: 'note', create: true }) },
@@ -1847,7 +1903,7 @@ function menuTemplate() {
         click: item => { item.checked = (settings.notesDefaultTab === 'note' ? 'note' : 'todo') === value; setNotesDefaultTab(value); }
       })) }
     ] },
-    { id: 'shortcut-settings', label: '快捷键设置', click: () => openShortcuts(true) },
+    { id: 'shortcut-settings', label: '快捷键设置', click: () => openGlobalSettings('shortcuts') },
     { id: 'pomodoro-open', label: '番茄钟', click: openPomodoro },
     { type: 'separator' },
     { label: '球球与互动', submenu: [
@@ -1924,9 +1980,24 @@ function menuTemplate() {
   ];
 }
 
+// Keep the full command catalog for settings; native menus expose destinations and the core Codex toggle.
+function compactMenuTemplate() {
+  const items = menuTemplate();
+  const find = id => items.find(item => item.id === id);
+  const notes = items.find(item => item.label === '便签与待办')?.submenu.find(item => item.id === 'notes-open');
+  const codex = items.find(item => item.id === 'codex-menu').submenu;
+  const codexEnabled = codex.find(item => item.id === 'codex-enabled');
+  const api = codex.find(item => item.id === 'openai-api-menu')?.submenu.find(item => item.id === 'openai-api-usage');
+  return [find('chat-open'), { ...find('customize-open'), label: '来定制球球' },
+    notes && { ...notes, label: '便签与待办' }, find('pomodoro-open'),
+    { type: 'separator' }, codexEnabled, api,
+    { type: 'separator' }, find('global-settings'), find('about-open'), find('update-check'),
+    { type: 'separator' }, items.find(item => item.label === '退出球球')].filter(Boolean);
+}
+
 function refreshTrayMenu() {
   if (!tray || !settings) return;
-  tray.setContextMenu(Menu.buildFromTemplate(menuTemplate()));
+  tray.setContextMenu(Menu.buildFromTemplate(compactMenuTemplate()));
 }
 
 function popupPetMenu(items) {
@@ -1956,7 +2027,7 @@ function popupPetMenu(items) {
 
 function showPetContextMenu() {
   shortcutWindow?.interrupt();
-  return popupPetMenu(menuTemplate());
+  return popupPetMenu(compactMenuTemplate());
 }
 
 function createTray() {
@@ -2705,6 +2776,31 @@ function createPetWindow() {
 }
 
 function registerIpc() {
+  ipcMain.handle('pet:global-shortcuts-save', (event, config) => {
+    if (!fromGlobalSettings(event) || !shortcutRegistrar) return { ok: false };
+    const result = saveShortcutConfig(config);
+    shortcutWindow?.sync();
+    return result;
+  });
+  ipcMain.on('pet:global-shortcuts-record', (event, value) => {
+    if (fromGlobalSettings(event, false) && typeof value === 'boolean') shortcutRegistrar?.setRecording(value && fromGlobalSettings(event));
+  });
+  ipcMain.handle('pet:global-settings-get', event => fromGlobalSettings(event, false) ? globalSettingsSnapshot() : null);
+  ipcMain.handle('pet:global-settings-action', async (event, id, checked) => {
+    if (!fromGlobalSettings(event) || globalSettingsBusy || typeof id !== 'string') return { error: '当前无法修改，请稍后重试。' };
+    const item = findSettingsAction(menuTemplate(), id);
+    if (!item || (item.type === 'checkbox' && typeof checked !== 'boolean')) return { error: '该选项暂不可用，请刷新后重试。' };
+    globalSettingsBusy = true;
+    try {
+      // Await consent instead of reporting success while its window is still open.
+      if (item.id === 'codex-enabled') await setCodexEnabled(checked);
+      else await item.click({ ...item, checked: item.type === 'checkbox' ? checked : true });
+      const current = findSettingsAction(menuTemplate(), id);
+      const mismatch = current && (item.type === 'checkbox' && current.checked !== checked || item.type === 'radio' && !current.checked);
+      return { snapshot: globalSettingsSnapshot(), ...(mismatch ? { error: '设置未更改，请确认授权或稍后重试。' } : {}) };
+    } catch (_) { return { error: '操作未完成，请重试。', snapshot: globalSettingsSnapshot() }; }
+    finally { globalSettingsBusy = false; }
+  });
   ipcMain.handle('pet:codex-consent-get', event => fromCodexConsentWindow(event) ? codexConsentInfo() : null);
   ipcMain.handle('pet:codex-consent-answer', (event, accepted) => {
     if (!fromCodexConsentWindow(event) || typeof accepted !== 'boolean') return false;
@@ -3258,6 +3354,7 @@ async function bootstrap() {
       customizationWindow.hide();
     }
     if (apiUsageWindow && !apiUsageWindow.isDestroyed()) apiUsageWindow.hide();
+    if (globalSettingsWindow && !globalSettingsWindow.isDestroyed()) globalSettingsWindow.hide();
     chatWindow?.hide();
     void chat?.stop();
     dragState = null;
@@ -3287,6 +3384,7 @@ async function bootstrap() {
   if (process.argv.includes('--shortcuts-preview')) openShortcuts();
   if (process.argv.includes('--shortcut-settings-preview')) openShortcuts(true);
   if (process.argv.includes('--pomodoro-preview')) openPomodoro();
+  if (process.argv.includes('--settings-preview')) openGlobalSettings();
   if (process.argv.includes('--notes-preview')) notesCompanion.openPanel();
   scheduleUpdateCheck();
   if (settings.codexEnabled) void codexCompanion.setEnabled(true);
@@ -3301,6 +3399,7 @@ if (!hasSingleInstanceLock) {
     if (settings) restorePet();
     if (argv.includes('--shortcuts-preview')) openShortcuts();
     if (argv.includes('--shortcut-settings-preview')) openShortcuts(true);
+    if (argv.includes('--settings-preview')) openGlobalSettings();
     if (argv.includes('--notes-preview')) notesCompanion?.openPanel();
     if (argv.includes('--pomodoro-preview')) openPomodoro();
   });
@@ -3339,6 +3438,7 @@ if (!hasSingleInstanceLock) {
     apiUsage?.close();
     safelyInvokeWindow('退出时快捷入口清理', () => { shortcutWindow?.dispose(); shortcutRegistrar?.dispose(); });
     safelyInvokeWindow('退出时番茄钟窗口销毁', () => pomodoroWindows?.close());
+    safelyInvokeWindow('退出时全局设置销毁', () => globalSettingsWindow?.destroy());
     safelyInvokeWindow('退出时关于窗口销毁', () => aboutWindow?.destroy());
     let chatClosing;
     safelyInvokeWindow('退出时聊天停止', () => { chatClosing = chat?.close(); });
