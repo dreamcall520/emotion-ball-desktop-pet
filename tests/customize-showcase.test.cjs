@@ -8,9 +8,9 @@ assert.doesNotMatch(html, /<section[^>]+id="updates"|class="updates-history"|cla
 assert.ok(html.includes('href="../updates/" target="_blank" rel="noopener">更新日志'));
 const arm64 = [...html.matchAll(/data-download-arch="arm64"[^>]*href="([^"]+)"/g)];
 assert.equal(arm64.length, 3);
-assert.ok(arm64.every(m => /\/v0\.4\.5\/Qiuqiu-0\.4\.05-macOS-arm64\.dmg$/.test(m[1])));
-assert.match(html, /<dt>版本<\/dt><dd>0\.4\.05<\/dd>/);
-assert.ok(html.includes('<dt>发布日期</dt><dd>2026-10-15</dd>'));
+assert.ok(arm64.every(m => /\/v0\.4\.6\/Qiuqiu-0\.4\.06-macOS-arm64\.dmg$/.test(m[1])));
+assert.match(html, /<dt>版本<\/dt><dd>0\.4\.06<\/dd>/);
+assert.ok(html.includes('<dt>发布日期</dt><dd>2026-10-24</dd>'));
 assert.match(html, /直接选择本机 Codex 自定义宠物/);
 assert.match(html, /9 类动作/);
 assert.match(html, /保存后应用到桌面，并同步聊天头像/);
@@ -21,8 +21,8 @@ assert.ok(demoTitles.every(title => !title.includes('0.4.01')));
 const home = fs.readFileSync(path.join(productDir, '../index.html'), 'utf8');
 const homeDownloads = [...home.matchAll(/href="(https:\/\/github\.com\/dreamcall520\/emotion-ball-desktop-pet\/releases\/download\/[^\"]+)"/g)];
 assert.equal(homeDownloads.length, 2);
-assert.ok(homeDownloads.every(m => /\/v0\.4\.5\/Qiuqiu-0\.4\.05-macOS-arm64\.dmg$/.test(m[1])));
-assert.match(home, /0\.4\.05 · Apple 芯片/);
+assert.ok(homeDownloads.every(m => /\/v0\.4\.6\/Qiuqiu-0\.4\.06-macOS-arm64\.dmg$/.test(m[1])));
+assert.match(home, /0\.4\.06 · Apple 芯片/);
 assert.match(html, /v0\.3\.13\/Qiuqiu-0\.3\.13-macOS-x64\.dmg/);
 assert.match(html, /下载并打开 DMG/);
 assert.match(html, /双击挂载磁盘镜像/);
@@ -35,3 +35,12 @@ for (const ref of html.matchAll(/(?:src|href)="([^"#][^"]+)"/g)) {
   if (!/^https?:/.test(file)) assert.ok(fs.existsSync(path.join(productDir, file)), `missing ${file}`);
 }
 console.log('Functionality page: retained demos, moved history, release downloads and local resources passed');
+
+for (const page of [html,home]) {
+  const domestic=[...page.matchAll(/<a[^>]*href="https:\/\/share\.weiyun\.com\/OJvZzed5"[^>]*>([\s\S]*?)<\/a>/g)];
+  assert.ok(domestic.length>0);
+  assert.ok(domestic.every(m=>m[1].includes('0.4.05')&&m[1].includes('旧版')));
+  assert.ok(domestic.every(m=>!m[1].includes('0.4.06')));
+}
+assert.match(html,/Intel 构建候选/);
+assert.match(html,/尚未在真实 Intel Mac 上验收/);

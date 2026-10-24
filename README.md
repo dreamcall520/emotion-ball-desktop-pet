@@ -8,7 +8,7 @@
 
 首页采用确认后的整屏银白/夜景玻璃主视觉，品牌语「球球-陪你自在一点」。`home.js` 复用原生 WebGL 实现自动柔光、曲面折射与鼠标水波；眼睛以2～4秒随机间隔自然眨动，约四分之一概率快速连眨两次，闭眼以像素宽度的抗锯齿圆弧收合并沿用原眼睛颜色；暂停、减少动态、页面隐藏及静态回退保持可用。主下载按钮为「macOS 版下载」并使用内联 Apple 标识，下方注明版本与 Apple 芯片，并提供「国内下载 ↗」备用入口；Intel 保留顶部独立说明入口。首页顶部导航叠加半透明渐变、柔和高光与背景模糊；浅深色分别处理，并支持减少透明度与无模糊能力的静态回退。
 
-原官网功能和演示保留在 `product/index.html`，地址为 `https://qiuqiu.pet/product/`。导航的功能介绍、安装指南与更新日志在新页签打开；旧首页功能锚点通过 `location.replace` 跳转到对应功能分区。旧 `product.html` 仅保留兼容跳转，并携带原查询参数和锚点。产品正文和演示、许可及署名保持。日志位于 `updates/index.html`（`https://qiuqiu.pet/updates/`），按用户要求移除 0.4.03 条目，本次新增 0.4.05，保留其余 16 条记录；0.4.00 在侧栏、正文及手机选择器标为「大版本更新」。官网下载为最新 0.4.05。历史下载每种架构只保留 DMG，共 18 个入口（17 个 DMG 与唯一无 DMG 的 0.3.10 热修复 ZIP）；重复的 Apple／Intel 版本提示已删。桌面侧栏、手机选择器、hash 直链与历史返回保持，无 JavaScript 时显示全部记录。旧 `/product/#updates` 及 `product.html#updates` 转到独立日志页。首页、功能介绍、更新日志保留独立 canonical 和分享封面；隐私说明独立位于 `https://qiuqiu.pet/privacy/`，四页均已加入 sitemap。
+原官网功能和演示保留在 `product/index.html`，地址为 `https://qiuqiu.pet/product/`。导航的功能介绍、安装指南与更新日志在新页签打开；旧首页功能锚点通过 `location.replace` 跳转到对应功能分区。旧 `product.html` 仅保留兼容跳转，并携带原查询参数和锚点。产品正文和演示、许可及署名保持。日志位于 `updates/index.html`（`https://qiuqiu.pet/updates/`），按用户要求移除 0.4.03 条目，本次新增 0.4.06，保留其余 17 条记录；0.4.00 在侧栏、正文及手机选择器标为「大版本更新」。官网下载为最新 0.4.06。历史下载每种架构只保留 DMG，共 19 个入口（18 个 DMG 与唯一无 DMG 的 0.3.10 热修复 ZIP）；重复的 Apple／Intel 版本提示已删。桌面侧栏、手机选择器、hash 直链与历史返回保持，无 JavaScript 时显示全部记录。旧 `/product/#updates` 及 `product.html#updates` 转到独立日志页。首页、功能介绍、更新日志保留独立 canonical 和分享封面；隐私说明独立位于 `https://qiuqiu.pet/privacy/`，四页均已加入 sitemap。
 
 首页「免费、非商业 · 署名与许可」使用原生小弹窗，分行展示使用范围、原作者 GitHub 项目与再次分发说明，可通过关闭按钮、Esc 或点击背景关闭；不再跳转功能介绍。原作者旧项目地址已重定向为 `sam70361/aora-bot`，弹窗链接使用 GitHub API 回读的现地址。首页新页签入口统一为细线圆角新窗口图标。更新日志只展示对应版本下载，不附加 GitHub Release 页面入口。
 
@@ -66,7 +66,7 @@ Umami Cloud 网站“球球官网”，website ID 为 `fe855bb0-9000-49aa-820b-b
 GA4 媒体资源“球球官网”，网站数据流“球球官网 Web”，衡量 ID `G-4SKBHMHFLJ`、数据流 ID `16143253967`，报告时区为中国时间、币种 CNY。与既有 Umami 并行，覆盖 sitemap 中的 12 个正式页面；演示、测试和 Google 验证文件不加载统计。各页 `analytics.js` 的 `data-ga4-id` 配置同一个真实衡量 ID，空值时不加载 Google 脚本。GA4 使用第一方 Cookie 区分浏览器与会话，不代表真实人数或登录身份；不启用 Google Signals、广告个性化和增强型衡量。
 
 - 手动发送每页一次 `page_view`，只包含正式页面路径、固定官网标题和外部来源 origin。已知 `utm_source`/`utm_medium` 组合可以归因微信、小红书等渠道，其它查询参数、hash、来源路径及任意营销字段不上传。来源缺失时可能记为直接访问。
-- `download_click` 统计带现有标记的 GitHub 当前下载入口及官网现有微云入口，参数为 `architecture`、`position`、`download_source`、`version`；历史日志下载不计。微云对应 Apple 0.4.05，与当前正式 DMG 一致。点击不等于下载完成或安装成功。
+- `download_click` 统计带现有标记的 GitHub 当前下载入口及官网现有微云入口，参数为 `architecture`、`position`、`download_source`、`version`；历史日志下载不计。微云仍对应 Apple 0.4.05 旧版，未同步 0.4.06。点击不等于下载完成或安装成功。
 - 原 Umami 四页 PV 汇总与 GitHub 下载事件保持，不扩大旧口径；两平台覆盖页数、来源和下载范围不同，不直接相加或强求一致。
 - 仅在正式 HTTPS 域名加载，尊重 DNT、旧 `umami.disabled` 及统一 `localStorage['qiuqiu.analytics.disabled']='1'`；退出后重新加载页面生效。统计不发送聊天、便签、反馈文本、截图、邮箱或桌宠本机资料，失败不阻断下载或页面使用。
 - GA4 从接入后开始累计，历史访问不能补回；来源看“流量获取”，点击看 `download_click` 事件。必须以真实事件送达和后台实时回读验收，安装提示或前端请求成功不能单独证明后台已收数。
@@ -86,6 +86,19 @@ GA4 媒体资源“球球官网”，网站数据流“球球官网 Web”，衡
 首页版本行、桌面下载菜单和手机菜单均提供国内入口；产品页顶部采用 C 分体展开菜单，下载卡片采用 A 主次并排（窄手机上下排列），页尾为文字入口。主按钮仍直接下载 GitHub 安装包；菜单使用原生 details，可用 Escape 或外部点击关闭。界面不展示 GitHub 默认或登录说明，不承诺免登录、速度或所有国内网络可用。备用点击不扩展原有 GitHub 下载统计口径。
 
 ## 当前下载记录
+
+Apple 芯片版 **0.4.06**，发布日期 **2026-10-24**，GitHub 兼容标签 `v0.4.6`。正式 Release 已公开；DMG/ZIP 已通过无登录完整 GET，大小与 SHA-256 和冻结正式附件一致。
+
+本次更新设置中心，新增日常、万圣、圣诞、春节四主题咩咩与主题互动、烟花，修复手动主题记忆和靠边位置。Intel 仍为 0.3.13 候选；国内微云保持实际 0.4.05 旧版，尚未上传新版。既有网页演示与商城图片保持原版本，不冒充新版运行界面。
+
+| 文件 | 精确大小（bytes） | SHA-256 |
+| --- | ---: | --- |
+| [Qiuqiu-0.4.06-macOS-arm64.dmg](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.6/Qiuqiu-0.4.06-macOS-arm64.dmg) | 184112825 | `d260895779d076f40f002a9b590229a0ea02e0b74207f46cae626a6775fe55fc` |
+| [Qiuqiu-0.4.06-macOS-arm64-share.zip](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.6/Qiuqiu-0.4.06-macOS-arm64-share.zip) | 169428505 | `6942a47a7bee1495c4549f3f10114d41a7b65040048dc577ad2efb399056f1a9` |
+
+大小与 SHA-256 来自主线冻结的正式附件元数据，并经公开完整下载核验一致。公开 Release 为 `v0.4.6`，源码提交 `03b7aac`；回读证据位于项目 `验收记录/v0.4.06-release-20261024/github-public-readback.json`。页面主下载及日志只提供 DMG，ZIP 作为维护记录保留。
+
+### 0.4.05 下载记录（保留）
 
 Apple 芯片版 **0.4.05**，发布日期 **2026-10-15**，GitHub 兼容标签 `v0.4.5`。GitHub Release 已公开，DMG/ZIP 均经匿名 HTTP 200 完整下载，大小与 SHA-256 和本地正式归档一致。
 

@@ -10,12 +10,23 @@ const articles = [...html.matchAll(/<article[^>]*data-release-panel[^>]*>([\s\S]
 const downloads = [...html.matchAll(/class="release-download [^"]+" href="([^"]+)"/g)].map(m => m[1]);
 const articleBlocks = html.match(/<article[^>]*data-release-panel[^>]*>[\s\S]*?<\/article>/g);
 
-test('logs add 0.4.05, retain 16 historical records and omit 0.4.03', () => {
+const oldArticles = articles.slice(1), oldBlocks = articleBlocks.slice(1);
+
+test('logs add 0.4.06 and preserve all seventeen historical records', () => {
+  assert.match(articleBlocks[0], /id="v0\.4\.06-apple"/);
+  assert.match(articles[0], /datetime="2026-10-24"/);
+  assert.deepEqual([...articles[0].matchAll(/<h4>(.*?)<\/h4>/g)].map(m=>m[1]), ['【升级】设置中心', '【新增】四主题咩咩', '【新增】主题互动与烟花', '【优化】主题记忆', '【优化】靠边位置']);
+  assert.equal(articles.length,18);
+  assert.match(articles[0], /v0\.4\.6\/Qiuqiu-0\.4\.06-macOS-arm64\.dmg/);
+});
+
+test('0.4.05 and sixteen earlier historical blocks remain unchanged, omitting 0.4.03', () => {
+  const articles = oldArticles, articleBlocks = oldBlocks;
   assert.match(html, /<title>球球桌宠 · 更新日志<\/title>/);
   assert.match(html, /rel="canonical" href="https:\/\/qiuqiu.pet\/updates\/"/);
   assert.equal(articles.length, 17);
-  assert.equal((html.match(/data-release-link/g) || []).length, 17);
-  assert.equal((html.match(/<option /g) || []).length, 17);
+  assert.equal((html.match(/data-release-link/g) || []).length, 18);
+  assert.equal((html.match(/<option /g) || []).length, 18);
   assert.doesNotMatch(html, /v0\.4\.03-apple|本次更新仅适用于 Apple 芯片；Intel x64 最新公开构建/);
   assert.match(articleBlocks[0], /id="v0\.4\.05-apple"/);
   assert.deepEqual([...articles[0].matchAll(/<h4>(.*?)<\/h4>/g)].map(m => m[1]), ['【新增】悬浮快捷面板', '【新增】番茄钟', '【新增】额度展示定制', '【新增】球球守护战', '【优化】额度预估', '【优化】使用体验']);
@@ -47,8 +58,8 @@ test('logs add 0.4.05, retain 16 historical records and omit 0.4.03', () => {
 });
 
 test('each architecture offers DMG; the ZIP-only hotfix and website event stay accurate', () => {
-  assert.equal(downloads.length, 18);
-  assert.equal(new Set(downloads).size, 18);
+  assert.equal(downloads.length, 19);
+  assert.equal(new Set(downloads).size, 19);
   assert.doesNotMatch(html, /release-source|查看 GitHub Release/);
   assert.ok(downloads.every(url => /^https:\/\/github\.com\/dreamcall520\/emotion-ball-desktop-pet\/releases\/download\/v[\d.]+\/.+\.(?:zip|dmg)$/.test(url)));
   for (const article of articles) {
