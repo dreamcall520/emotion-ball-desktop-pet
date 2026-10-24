@@ -1,0 +1,30 @@
+(() => {
+  const api = window.qiuqiuWorkBuddyLabel;
+  const el = id => document.getElementById(id);
+  const amount = n => n.toLocaleString('zh-CN', { maximumFractionDigits: 2 });
+  const date = n => n === null ? '未知' : new Date(n).toLocaleString('zh-CN', { hour12: false });
+  el('toggle').addEventListener('click', () => api.toggle());
+  el('refresh').addEventListener('click', () => api.refresh());
+  el('chat').addEventListener('click', () => api.chat());
+  api.onState(state => {
+    document.documentElement.dataset.appearance = state.appearance;
+    document.body.dataset.expanded = String(state.expanded);
+    document.body.dataset.invalid = String(Boolean(state.error || state.stale));
+    el('toggle').setAttribute('aria-expanded', String(state.expanded));
+    el('details').hidden = !state.expanded;
+    const r = state.report, invalid = state.error || state.stale;
+    el('total').textContent = r ? `${amount(r.total)}${invalid ? ' · 失效' : ' 积分'}` : '未更新';
+    el('plan').textContent = r?.plan || '尚无积分数据';
+    for (const key of ['basic', 'reward', 'purchased']) el(key).textContent = r ? amount(r[key]) : '—';
+    el('refresh-date').textContent = `基础刷新：${r ? date(r.nextRefreshAt) : '未知'}`;
+    const first = r?.expires?.slice().sort((a, b) => a.at - b.at)[0];
+    const expiring = first ? r.expires.filter(e => e.at === first.at).reduce((n, e) => n + e.amount, 0) : 0;
+    el('expiry').textContent = first ? `最近到期：${amount(expiring)} 积分 · ${date(first.at)}` : '最近到期：暂无数据';
+    el('updated').textContent = `更新：${r ? date(r.updatedAt) : '尚未更新'}`;
+    const status = state.spaceError ? '空间不足，保持收起；可移动球球后重试' : state.error || (state.stale ? '旧数据已失效，请刷新' : state.busy ? '正在更新…' : '');
+    el('status').textContent = status; el('status').hidden = !status;
+    el('toggle').title = status || '展开 WorkBuddy 积分';
+    el('toggle').setAttribute('aria-label', `WorkBuddy ${el('total').textContent}${status ? `，${status}` : ''}`);
+    el('refresh').disabled = state.busy;
+  });
+})();

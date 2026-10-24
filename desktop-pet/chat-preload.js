@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('qiuqiuChat', {
     return () => ipcRenderer.removeListener('pet:chat-appearance', listener);
   },
   getState: () => ipcRenderer.invoke('pet:chat-get'),
+  setProvider: provider => ['codex', 'workbuddy'].includes(provider)
+    ? ipcRenderer.invoke('pet:chat-provider', provider) : Promise.resolve({ accepted: false }),
   onState(callback) {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, snapshot) => callback(snapshot);

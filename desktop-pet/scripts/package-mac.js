@@ -26,6 +26,17 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     fs.readFileSync(path.join(root, 'desktop-pet/assets/sheep/manifest.json'), 'utf8')));
   const files = [
     'desktop-pet/main.js',
+    'desktop-pet/scripts/verify-workbuddy-integration.js',
+    'desktop-pet/lib/workbuddy-helper.cjs',
+    'desktop-pet/lib/WORKBUDDY-REFERENCE-LICENSE.txt',
+    'desktop-pet/lib/workbuddy-client.js',
+    'desktop-pet/lib/workbuddy-quota.js',
+    'desktop-pet/lib/workbuddy-chat.js',
+    'desktop-pet/lib/workbuddy-label-window.js',
+    'desktop-pet/workbuddy-label.html',
+    'desktop-pet/workbuddy-label.css',
+    'desktop-pet/workbuddy-label-preload.js',
+    'desktop-pet/workbuddy-label-renderer.js',
     'desktop-pet/global-settings.html',
     'desktop-pet/global-settings.css',
     'desktop-pet/global-settings-preload.js',

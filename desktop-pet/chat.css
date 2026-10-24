@@ -213,3 +213,8 @@ textarea::placeholder { color: var(--muted); }
 }
 
 :root[data-color-mode="accessible"] .composer::before,:root[data-color-mode="accessible"] .composer::after{background:none;animation:none}
+
+.provider-choice { flex: 0 0 auto; }
+.provider-choice select { font: inherit; font-size: 11px; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 8px; max-width: 105px; padding: 5px 3px; opacity: .8; }
+.provider-choice select:focus-visible { outline: 2px solid #4b94cd; outline-offset: 2px; }
+.provider-choice select:disabled { opacity: .45; }

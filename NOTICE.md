@@ -27,3 +27,11 @@
    Some Pomodoro SVG icons use Lucide under the ISC license; see `desktop-pet/LICENSE-lucide`.
 
 4. **Contact**: If you consider any content of this repository inappropriate, please contact **1251579308@qq.com** and it will be handled promptly upon notice.
+
+## WorkBuddy integration reference
+
+The WorkBuddy billing package codes and protocol adaptation reference
+[magpie-community/plugins](https://github.com/magpie-community/plugins/tree/main/packages/workbuddy),
+MIT License, Copyright (c) 2026 magpie-community contributors.
+The license text is retained at `desktop-pet/lib/WORKBUDDY-REFERENCE-LICENSE.txt`.
+WorkBuddy and its desktop runtime remain third-party products and are not redistributed here.

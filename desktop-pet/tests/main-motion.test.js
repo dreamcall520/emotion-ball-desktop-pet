@@ -18,7 +18,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     onProgress({ state: 'downloading', percent: 100 });
     return { state: 'completed', path: '/fixture/Qiuqiu.dmg' };
   },
-  loadedSettings = null, notesDefaultTab = 'note', notesAppearance = 'light', nativeQuotaLabel = false, argv = [], updateFetch = async currentVersion => ({ currentVersion,
+  workbuddyRun = null, loadedSettings = null, notesDefaultTab = 'note', notesAppearance = 'light', nativeQuotaLabel = false, argv = [], updateFetch = async currentVersion => ({ currentVersion,
     latestVersion: '0.3.26', hasUpdate: true,
     url: 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.26',
     installer: UPDATE_INSTALLER, downloadMessage: '' }) } = {}) {
@@ -175,6 +175,14 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     change(state) { this.state = state; this.options.onChange(state); },
     action(action) { this.options.onAction(action); }
   };
+  const workbuddyCalls = [], workbuddyRecords = new Map();
+  const runWorkBuddy = async (operation, payload = {}, control = {}) => {
+    workbuddyCalls.push({ operation, payload, control });
+    if (workbuddyRun) return workbuddyRun(operation, payload, control);
+    if (operation === 'quota') return { accountKey: 'a'.repeat(64), report: { total: 7400 } };
+    if (operation === 'models') return { accountKey: 'a'.repeat(64), models: [{ id: 'auto', displayName: '自动' }] };
+    return { accountKey: 'a'.repeat(64), text: '{"text":"WorkBuddy 回复","action":"none"}' };
+  };
   const notes = { options: null, opens: [], pauses: 0, resumes: 0, closes: 0, appearances: 0,
     syncAppearance() { this.appearances++; },
     windows: { panel: null, notes: [], reminder: null }, closeAllowed: true, todos: [],
@@ -240,9 +248,17 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
       if (name === './lib/chat-window') return { createChatWindow: options => { chatWindow.options = options; return chatWindow; } };
       if (name === './lib/chat-store') return { createChatStore: file => {
         chat.storePaths.push(file);
+        if (file.endsWith('/workbuddy-chat.json')) return {
+          read: () => structuredClone(workbuddyRecords.get(file) || realRequire('./lib/chat-store').emptyRecord()),
+          write: value => workbuddyRecords.set(file, structuredClone(value))
+        };
         return { read() { throw new Error('chat disk access is forbidden in main fixture'); },
           write() { throw new Error('chat disk access is forbidden in main fixture'); } };
       } };
+      if (name === './lib/workbuddy-client') return { runWorkBuddy };
+      if (name === './lib/workbuddy-label-window') return { createWorkBuddyLabelWindow: () => ({
+        show() {}, hide() {}, reposition() {}, setAlwaysOnTop() {}, destroy() {}, getWindow: () => null
+      }) };
       if (name === './lib/chat-companion') return { createChatCompanion: options => { chat.options = options; return chat; } };
       if (name === './lib/notes-companion') return { createNotesCompanion: options => { notes.options = options; return notes; } };
       if (name === './lib/pomodoro') return { createPomodoro: options => { pomodoro.options = options; return pomodoro; } };
@@ -258,7 +274,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   pet.emit('ready-to-show');
   pet.webContents.emit('did-finish-load');
   return { pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, downloads, revealed, consents, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
-    notes, pomodoro, pomodoroWindows, nativeTheme, call: expression => vm.runInContext(expression, context),
+    workbuddyCalls, workbuddyRecords, notes, pomodoro, pomodoroWindows, nativeTheme, call: expression => vm.runInContext(expression, context),
     pressShortcut(accelerator) { if (!shortcutsSuspended) shortcutCallbacks.get(accelerator)?.(); },
     invoke(channel, packet, sender = pet.webContents, ...args) {
       assert.ok(ipcHandlers.has(channel), `${channel} handler must be registered`);
@@ -835,12 +851,12 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   const menu = f.call('menuTemplate()');
   const top = menu.filter(item => item.type !== 'separator');
   assert.deepEqual(Array.from(top, item => item.label), [
-    '设置中心', '和球球聊聊', '定制球球', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API',
+    '设置中心', '和球球聊聊', 'WorkBuddy', '定制球球', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API',
     '贴边与显示', '球球尺寸', '界面配色', '常规设置', '关于球球', '检查更新', '退出球球'
   ]);
   const group = label => top.find(item => item.label === label).submenu.filter(item => item.type !== 'separator');
   assert.equal(top.find(item => item.id === 'chat-open').submenu, undefined);
-  assert.equal(top[2].id, 'customize-open');
+  assert.equal(top[3].id, 'customize-open');
   assert.equal(top[1].submenu, undefined);
   assert.deepEqual(Array.from(group('便签与待办'), item => item.id), ['notes-open', 'notes-new', 'notes-todo-new', 'notes-default-tab']);
   assert.deepEqual(Array.from(group('便签与待办'), item => item.label), ['打开主面板', '新建便签', '添加待办', '默认打开']);
@@ -947,7 +963,7 @@ test('聊天菜单复用同一个面板和控制器，打开关闭不会发送�
   const f = await fixture();
   assert.equal(f.chatWindow.getWindow(), null);
   assert.equal(f.chat.connects, 0);
-  assert.deepEqual(f.chat.storePaths, ['/fixture/chat.json']);
+  assert.deepEqual(f.chat.storePaths, ['/fixture/chat.json', '/fixture/workbuddy-chat.json']);
   const item = menuItem(f, 'chat-open');
   assert.ok(item);
   item.click();
@@ -994,7 +1010,7 @@ test('聊天 IPC 只接受当前聊天窗口；球球和其他窗口无法读记
   assert.equal(f.chat.stops, 0);
   assert.equal(f.chatWindow.isVisible(), true);
   assert.equal(JSON.stringify(await f.invoke('pet:chat-get', undefined, sender)),
-    JSON.stringify({ ...f.chat.state, appUpdate: null }));
+    JSON.stringify({ ...f.chat.state, provider: 'codex', appUpdate: null }));
   assert.equal((await f.invoke('pet:chat-send', '有效消息', sender)).accepted, true);
   assert.deepEqual(f.chat.sends, ['有效消息']);
   assert.equal((await f.invoke('pet:chat-new', undefined, sender)).accepted, true);
@@ -3624,8 +3640,10 @@ test('原生菜单保留核心联动开关与独立入口，完整偏好仍可�
   const f = await fixture(); t.after(() => f.app.emit('before-quit'));
   const menu = f.call('compactMenuTemplate()');
   assert.deepEqual(Array.from(menu.filter(item => item.type !== 'separator'), item => item.label),
-    ['和球球聊聊', '来定制球球', '便签与待办', '番茄钟', '启用 Codex 联动', 'API 费用与用量', '设置中心', '关于球球', '检查更新', '退出球球']);
-  assert.ok(menu.every(item => !item.submenu));
+    ['和球球聊聊', 'WorkBuddy', '来定制球球', '便签与待办', '番茄钟', '启用 Codex 联动', 'API 费用与用量', '设置中心', '关于球球', '检查更新', '退出球球']);
+  assert.ok(menu.filter(item => item.id !== 'workbuddy-menu').every(item => !item.submenu));
+  assert.ok(findMenuItem(menu, 'workbuddy-enabled'));
+  assert.ok(findMenuItem(menu, 'workbuddy-chat'));
   assert.ok(findMenuItem(f.call('menuTemplate()'), 'notes-default-note'));
   assert.ok(findMenuItem(f.call('menuTemplate()'), 'codex-quota-period'));
 });
@@ -3651,4 +3669,69 @@ test('右键菜单核心联动开关跟随真实状态并复用授权入口', as
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(enabled.call('settings.codexEnabled'), false);
   assert.equal(findMenuItem(enabled.call('compactMenuTemplate()'), 'codex-enabled').checked, false);
+});
+
+test('WorkBuddy 默认关闭且开启积分查询不改变 Codex 状态或原有设置', async t => {
+  const f = await fixture({ codexEnabled: true }); t.after(() => f.app.emit('before-quit'));
+  assert.equal(f.call('settings.workbuddyEnabled === true'), false);
+  assert.equal(f.call('workbuddyQuota.getState().enabled'), false);
+  assert.deepEqual(f.workbuddyCalls, []);
+  const before = f.call('JSON.stringify(codexCompanion.getSnapshot())');
+  const original = f.call('JSON.stringify({codexEnabled:settings.codexEnabled,chatModel:settings.chatModel,codexQuotaPeriod:settings.codexQuotaPeriod})');
+  assert.equal(await f.call('setWorkBuddyEnabled(true)'), true); await flush();
+  assert.deepEqual(f.workbuddyCalls.map(item => item.operation), ['quota']);
+  assert.equal(f.call('workbuddyQuota.getState().report.total'), 7400);
+  assert.equal(f.call('JSON.stringify(codexCompanion.getSnapshot())'), before);
+  assert.equal(f.call('JSON.stringify({codexEnabled:settings.codexEnabled,chatModel:settings.chatModel,codexQuotaPeriod:settings.codexQuotaPeriod})'), original);
+});
+
+test('WorkBuddy IPC 独立发送和保存历史，陌生窗口无法切来源或访问聊天', async t => {
+  const f = await fixture(); t.after(() => f.app.emit('before-quit'));
+  menuItem(f, 'chat-open').click();
+  const sender = f.chatWindow.getWindow().webContents;
+  for (const foreign of [f.pet.webContents, {}]) {
+    assert.equal((await f.invoke('pet:chat-provider', 'workbuddy', foreign)).accepted, false);
+    assert.equal(await f.invoke('pet:chat-get', undefined, foreign), null);
+    assert.equal((await f.invoke('pet:chat-send', '秘密', foreign)).accepted, false);
+  }
+  assert.equal((await f.invoke('pet:chat-provider', 'workbuddy', sender)).accepted, true); await flush();
+  assert.equal((await f.invoke('pet:chat-send', '只给 WorkBuddy 的文字', sender)).accepted, true); await flush();
+  const state = await f.invoke('pet:chat-get', undefined, sender);
+  assert.equal(state.provider, 'workbuddy'); assert.equal(state.messages[0].text, '只给 WorkBuddy 的文字');
+  assert.equal(state.messages[1].text, 'WorkBuddy 回复'); assert.equal(state.history.length, 1);
+  assert.deepEqual(f.chat.sends, []);
+  assert.equal(f.workbuddyRecords.get('/fixture/workbuddy-chat.json').messages[0].text, '只给 WorkBuddy 的文字');
+  const wbId = state.activeChatId;
+  assert.equal((await f.invoke('pet:chat-new', undefined, sender)).accepted, true);
+  assert.equal((await f.invoke('pet:chat-select', wbId, sender)).accepted, true);
+  assert.equal((await f.invoke('pet:chat-provider', 'codex', sender)).accepted, true);
+  assert.equal((await f.invoke('pet:chat-get', undefined, sender)).provider, 'codex');
+  assert.deepEqual((await f.invoke('pet:chat-get', undefined, sender)).messages, []);
+  await f.invoke('pet:chat-send', '只给 Codex 的文字', sender);
+  assert.deepEqual(f.chat.sends, ['只给 Codex 的文字']);
+  assert.equal(f.workbuddyCalls.filter(item => item.operation === 'chat').length, 1);
+});
+
+test('WorkBuddy provider 忙碌锁拒绝切换，禁用会停止独立请求并保留 Codex 操作', async t => {
+  let chatSignal;
+  const f = await fixture({ workbuddyRun: async (operation, _payload, { signal }) => {
+    if (operation === 'quota') return { accountKey: 'a'.repeat(64), report: { total: 7400 } };
+    if (operation === 'models') return { accountKey: 'a'.repeat(64), models: [{ id: 'auto', displayName: '自动' }] };
+    chatSignal = signal;
+    return new Promise((_, reject) => signal.addEventListener('abort', () => reject(Object.assign(Error(), { code: 'CANCELLED' })), { once: true }));
+  } }); t.after(() => f.app.emit('before-quit'));
+  menuItem(f, 'chat-open').click(); const sender = f.chatWindow.getWindow().webContents;
+  f.chat.state.busy = true;
+  assert.equal((await f.invoke('pet:chat-provider', 'workbuddy', sender)).accepted, false);
+  f.chat.state.busy = false;
+  assert.equal((await f.invoke('pet:chat-provider', 'workbuddy', sender)).accepted, true); await flush();
+  await f.invoke('pet:chat-send', '开始回复', sender); await flush();
+  assert.equal((await f.invoke('pet:chat-provider', 'codex', sender)).accepted, false);
+  assert.equal(f.call('settings.chatProvider'), 'workbuddy');
+  await f.call('setWorkBuddyEnabled(false)'); await flush();
+  assert.equal(chatSignal.aborted, true); assert.equal(f.call('workbuddyQuota.getState().enabled'), false);
+  assert.equal(f.call('workbuddyChat.getState().busy'), false); assert.equal(f.call('settings.chatProvider'), 'codex');
+  assert.equal(f.chat.stops, 0);
+  await f.invoke('pet:chat-send', '原有聊天继续', sender);
+  assert.deepEqual(f.chat.sends, ['原有聊天继续']);
 });

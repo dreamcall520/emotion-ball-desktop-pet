@@ -57,6 +57,10 @@ const { createChatStore } = require('./lib/chat-store');
 const { createChatCompanion } = require('./lib/chat-companion');
 const { createCodexChatRpc } = require('./lib/codex-chat-rpc');
 const { createChatWindow } = require('./lib/chat-window');
+const { runWorkBuddy } = require('./lib/workbuddy-client');
+const { createWorkBuddyQuota } = require('./lib/workbuddy-quota');
+const { createWorkBuddyChat } = require('./lib/workbuddy-chat');
+const { createWorkBuddyLabelWindow } = require('./lib/workbuddy-label-window');
 const { createNotesCompanion } = require('./lib/notes-companion');
 const { createNotesOrganizer } = require('./lib/notes-organizer');
 const { createPomodoro } = require('./lib/pomodoro');
@@ -104,6 +108,10 @@ let codexDetails = null;
 let codexDetailReturn = null;
 let codexThreadOpener = url => shell.openExternal(url);
 let chat = null;
+let workbuddyChat = null;
+let workbuddyQuota = null;
+let workbuddyLabel = null;
+let chatProviderChanging = false;
 let chatWindow = null;
 let notesCompanion = null;
 let pomodoro = null;
@@ -538,8 +546,10 @@ function aboutReleaseState(result) {
       ? { download: aboutUpdateState.download } : {}) };
 }
 
-function chatSnapshot(state = chat?.getState()) {
-  return { ...state, appUpdate: availableUpdate ? { latestVersion: availableUpdate.latestVersion } : null };
+function activeChat() { return settings?.chatProvider === 'workbuddy' ? workbuddyChat : chat; }
+
+function chatSnapshot(state = activeChat()?.getState()) {
+  return { ...state, provider: settings?.chatProvider || 'codex', appUpdate: availableUpdate ? { latestVersion: availableUpdate.latestVersion } : null };
 }
 
 async function showUpdateResult(result) {
@@ -794,7 +804,7 @@ function saveCustomization(value, setAsStartupDefault = true, quotaDisplay) {
 }
 
 function openChat() {
-  if (isQuitting || screenLocked || !chat) return;
+  if (isQuitting || screenLocked || !activeChat()) return;
   if (!petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) restorePet();
   else if (edgeTuck?.getPresentation().side) edgeTuck.restore();
   stopMotion();
@@ -805,11 +815,12 @@ function openChat() {
   quotaGuard?.close();
   quotaLabel?.hide();
   apiUsageLabel?.hide();
+  workbuddyLabel?.hide();
   edgeNoticeWindow?.hide();
   chatWindow.show(chatSnapshot());
   pomodoroWindows?.sync();
   // Opening checks login and shows local history; only send() can create a thread.
-  void chat.connect().catch(() => {});
+  void activeChat().connect().catch(() => {});
 }
 
 function performChatAction(action) {
@@ -959,6 +970,7 @@ function repositionQuotaLabel() {
   safelyInvokeWindow('守护战重排', () => quotaGuard?.reposition());
   try { quotaLabel?.reposition(); } catch (error) { reportQuotaError('额度标签重排', error); }
   safelyInvokeWindow('API 卡片重排', () => apiUsageLabel?.reposition());
+  safelyInvokeWindow('WorkBuddy 卡片重排', () => workbuddyLabel?.reposition());
 }
 
 function syncApiUsageLabel() {
@@ -981,6 +993,48 @@ function syncApiUsageLabel() {
     apiLastAttemptAt = Date.now();
     void apiUsage.refresh();
   }
+}
+
+function syncWorkBuddyLabel() {
+  if (!workbuddyLabel || !workbuddyQuota) return;
+  const visible = settings?.workbuddyEnabled === true && !isQuitting && !screenLocked && !pomodoroQuiet &&
+    !chatWindow?.isVisible() && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
+  safelyInvokeWindow('WorkBuddy 积分显示', () => visible ? workbuddyLabel.show(workbuddyQuota.getState()) : workbuddyLabel.hide());
+}
+
+async function setWorkBuddyEnabled(value) {
+  const enabled = value === true;
+  try {
+    settings = saveSettings(settingsFile, { ...settings, workbuddyEnabled: enabled,
+      ...(!enabled && settings.chatProvider === 'workbuddy' ? { chatProvider: 'codex' } : {}) });
+  } catch (_) { return false; }
+  if (!enabled) await workbuddyChat?.stop();
+  workbuddyQuota?.setEnabled(enabled);
+  syncWorkBuddyLabel();
+  chatWindow?.update(chatSnapshot());
+  refreshTrayMenu();
+  return true;
+}
+
+async function setChatProvider(provider) {
+  if (!['codex', 'workbuddy'].includes(provider) || isQuitting || screenLocked || chatProviderChanging) return { accepted: false };
+  const busy = () => [chat?.getState(), workbuddyChat?.getState()].some(state => state?.busy || state?.connection === 'connecting');
+  if (busy()) return { accepted: false, error: '请先等待当前回复或连接完成。' };
+  chatProviderChanging = true;
+  try {
+    if (provider === 'workbuddy' && !settings.workbuddyEnabled && !await setWorkBuddyEnabled(true)) return { accepted: false, error: 'WorkBuddy 设置未能保存。' };
+    if (busy() || isQuitting || screenLocked) return { accepted: false, error: '请先等待当前回复或连接完成。' };
+    settings = saveSettings(settingsFile, { ...settings, chatProvider: provider });
+    chatWindow?.update(chatSnapshot());
+    void activeChat()?.connect().catch(() => {});
+    return { accepted: true };
+  } catch (_) { return { accepted: false, error: '聊天来源未能保存。' }; }
+  finally { chatProviderChanging = false; }
+}
+
+async function openWorkBuddyChat() {
+  const result = await setChatProvider('workbuddy');
+  if (result.accepted) openChat();
 }
 
 function setApiUsageVisible(value) {
@@ -1179,6 +1233,7 @@ function syncQuotaLabel(snapshot = null) {
   } finally {
     quotaSyncing = false;
     syncApiUsageLabel();
+    syncWorkBuddyLabel();
   }
 }
 
@@ -1747,6 +1802,7 @@ function setAlwaysOnTop(enabled) {
   safelyInvokeWindow('守护战置顶', () => quotaGuard?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('Codex 详情置顶', () => codexDetails?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('API 卡片置顶', () => apiUsageLabel?.setAlwaysOnTop(settings.alwaysOnTop));
+  safelyInvokeWindow('WorkBuddy 卡片置顶', () => workbuddyLabel?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('边缘提示置顶', () => edgeNoticeWindow?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('聊天面板置顶', () => chatWindow?.setAlwaysOnTop(settings.alwaysOnTop));
   thoughts?.setAlwaysOnTop(settings.alwaysOnTop);
@@ -1892,6 +1948,12 @@ function menuTemplate() {
     ...(availableUpdate ? [updateEntry, { type: 'separator' }] : []),
     { id: 'global-settings', label: '设置中心', accelerator: 'CommandOrControl+,', click: openGlobalSettings },
     { id: 'chat-open', label: '和球球聊聊', click: openChat },
+    { id: 'workbuddy-menu', label: 'WorkBuddy', submenu: [
+      { id: 'workbuddy-enabled', label: '启用 WorkBuddy 积分', type: 'checkbox', checked: settings.workbuddyEnabled,
+        click: item => { void setWorkBuddyEnabled(item.checked); } },
+      { id: 'workbuddy-refresh', label: '刷新积分', enabled: settings.workbuddyEnabled, click: () => { void workbuddyQuota?.refresh(); } },
+      { id: 'workbuddy-chat', label: '用 WorkBuddy 和球球聊聊', click: () => { void openWorkBuddyChat(); } }
+    ] },
     { id: 'customize-open', label: '定制球球', click: openCustomization },
     { label: '便签与待办', submenu: [
       { id: 'notes-open', label: '打开主面板', click: () => notesCompanion?.openPanel() },
@@ -1988,7 +2050,7 @@ function compactMenuTemplate() {
   const codex = items.find(item => item.id === 'codex-menu').submenu;
   const codexEnabled = codex.find(item => item.id === 'codex-enabled');
   const api = codex.find(item => item.id === 'openai-api-menu')?.submenu.find(item => item.id === 'openai-api-usage');
-  return [find('chat-open'), { ...find('customize-open'), label: '来定制球球' },
+  return [find('chat-open'), find('workbuddy-menu'), { ...find('customize-open'), label: '来定制球球' },
     notes && { ...notes, label: '便签与待办' }, find('pomodoro-open'),
     { type: 'separator' }, codexEnabled, api,
     { type: 'separator' }, find('global-settings'), find('about-open'), find('update-check'),
@@ -2054,6 +2116,14 @@ async function finishSmokeTest() {
     );
     if (!companionReady) throw new Error('轻陪伴活动感知尚未接入');
 
+    if (process.env.PET_SMOKE_WORKBUDDY_ONLY === '1') {
+      await require('./scripts/verify-workbuddy-integration').verifyWorkBuddyIntegration({
+        pet: petWindow, quota: workbuddyQuota, label: workbuddyLabel, chat: workbuddyChat, chatWindow,
+        openChat, setProvider: setChatProvider, setEnabled: setWorkBuddyEnabled, getSettings: () => settings,
+        getCodex: () => codexCompanion?.getSnapshot(), menuTemplate, setSize: setPetSize,
+        outputDir: process.env.PET_SMOKE_WORKBUDDY_OUTPUT, live: process.env.PET_SMOKE_WORKBUDDY_LIVE === '1' });
+      app.exit(0); return;
+    }
     if (process.env.PET_SMOKE_SHORTCUT_ONLY === '1') {
       await require('./scripts/verify-shortcuts-integration').verifyShortcuts({
         pet: petWindow, controller: shortcutWindow, registrar: shortcutRegistrar,
@@ -2915,28 +2985,32 @@ function registerIpc() {
     if (!fromChatWindow(event) || screenLocked || isQuitting || !chatWindow.isVisible() || !availableUpdate) return false;
     return showUpdateResult(availableUpdate);
   });
+  ipcMain.handle('pet:chat-provider', (event, provider) => {
+    if (!fromChatWindow(event) || screenLocked || !chatWindow.isVisible()) return { accepted: false };
+    return setChatProvider(provider);
+  });
   ipcMain.handle('pet:chat-send', (event, text) => {
-    if (!fromChatWindow(event) || screenLocked || !chatWindow.isVisible()) return { accepted: false, error: '请打开聊天面板后再发送。' };
-    return chat.send(text);
+    if (!fromChatWindow(event) || screenLocked || chatProviderChanging || !chatWindow.isVisible()) return { accepted: false, error: '请打开聊天面板并等待来源切换完成后再发送。' };
+    return activeChat().send(text);
   });
   ipcMain.handle('pet:chat-stop', event => {
-    if (fromChatWindow(event)) return chat.stop();
+    if (fromChatWindow(event)) return activeChat().stop();
   });
   ipcMain.handle('pet:chat-new', event => {
     if (!fromChatWindow(event) || screenLocked || !chatWindow.isVisible()) return { accepted: false, error: '请打开聊天面板后再操作。' };
-    return chat.newChat();
+    return activeChat().newChat();
   });
   ipcMain.handle('pet:chat-select', (event, id) => {
     if (!fromChatWindow(event) || screenLocked || !chatWindow.isVisible()) return { accepted: false, error: '请打开聊天面板后再操作。' };
-    return chat.selectChat(id);
+    return activeChat().selectChat(id);
   });
   ipcMain.handle('pet:chat-model', (event, id) => {
     if (!fromChatWindow(event) || screenLocked || !chatWindow.isVisible()) return { accepted: false, error: '请打开聊天面板后再操作。' };
-    return chat.setModel(id);
+    return activeChat().setModel(id);
   });
   ipcMain.handle('pet:chat-models-refresh', event => {
     if (!fromChatWindow(event) || screenLocked || !chatWindow.isVisible()) return { accepted: false, error: '请打开聊天面板后再操作。' };
-    return chat.refreshModels();
+    return activeChat().refreshModels();
   });
   ipcMain.on('pet:chat-close', event => { if (fromChatWindow(event)) chatWindow.hide(); });
   ipcMain.on('pet:offering-state', (event, state) => {
@@ -3253,12 +3327,35 @@ async function bootstrap() {
     initialModelSelection: settings.chatModel,
     onModelSelection: chatModel => { settings = saveSettings(settingsFile, { ...settings, chatModel }); },
     createRpc: options => {
-      if (IS_SMOKE_TEST && (process.env.PET_SMOKE_CHAT_ONLY === '1' || process.env.PET_SMOKE_CODEX_PETS_ONLY === '1' || process.env.PET_SMOKE_SHORTCUT_ONLY === '1')) return require('./scripts/verify-chat-integration').createSmokeChatRpc(options);
+      if (IS_SMOKE_TEST && (process.env.PET_SMOKE_CHAT_ONLY === '1' || process.env.PET_SMOKE_WORKBUDDY_ONLY === '1' || process.env.PET_SMOKE_CODEX_PETS_ONLY === '1' || process.env.PET_SMOKE_SHORTCUT_ONLY === '1')) return require('./scripts/verify-chat-integration').createSmokeChatRpc(options);
       fs.mkdirSync(options.workspaceDir, { recursive: true, mode: 0o700 });
       return createCodexChatRpc(options);
     },
-    onChange: state => { if (!screenLocked) chatWindow.update(chatSnapshot(state)); },
+    onChange: state => { if (!screenLocked && settings.chatProvider !== 'workbuddy') chatWindow.update(chatSnapshot(state)); },
     onAction: performChatAction });
+  const workbuddyRun = IS_SMOKE_TEST && process.env.PET_SMOKE_WORKBUDDY_ONLY === '1' && process.env.PET_SMOKE_WORKBUDDY_LIVE !== '1'
+    ? require('./scripts/verify-workbuddy-integration').createSmokeWorkBuddyRunner() : runWorkBuddy;
+  workbuddyChat = createWorkBuddyChat({ store: createChatStore(path.join(app.getPath('userData'), 'workbuddy-chat.json')),
+    run: workbuddyRun, initialModelSelection: settings.workbuddyModel,
+    onModelSelection: workbuddyModel => { settings = saveSettings(settingsFile, { ...settings, workbuddyModel }); },
+    onChange: state => { if (!screenLocked && settings.chatProvider === 'workbuddy') chatWindow.update(chatSnapshot(state)); },
+    onAction: performChatAction });
+  workbuddyQuota = createWorkBuddyQuota({ run: workbuddyRun, onChange: () => syncWorkBuddyLabel() });
+  workbuddyLabel = createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
+    getObstacles: () => [quotaLabel, apiUsageLabel, bubble, shortcutWindow, quotaGuard].flatMap(controller => {
+      const win = controller?.getWindow();
+      return win && !win.isDestroyed() && win.isVisible() ? [win.getBounds()] : [];
+    }),
+    getAppearance: () => settings.codexQuotaAppearance,
+    alwaysOnTop: settings.alwaysOnTop,
+    onRefresh: () => { void workbuddyQuota.refresh(); }, onChat: () => { void openWorkBuddyChat(); },
+    onError: () => {} });
+  app.on('browser-window-created', (_event, win) => {
+    for (const event of ['move', 'resize', 'show', 'hide', 'closed']) win.on(event, () => {
+      if (win !== workbuddyLabel?.getWindow()) syncWorkBuddyLabel();
+    });
+  });
+  workbuddyQuota.setEnabled(settings.workbuddyEnabled);
   dialogue = new DialogueDirector({ now: performance.now(), enabled: settings.bubblesEnabled });
   sheepOfferingWindow = createSheepOfferingWindow({BrowserWindow,screen,getPetWindow:()=>petWindow,
     getTheme:()=>settings?.customization?.appearance?.shape==='new-year-sheep'?SheepTheme.resolveTheme(settings.customization.appearance.sheepTheme,new Date()):'none',
@@ -3357,6 +3454,8 @@ async function bootstrap() {
     if (globalSettingsWindow && !globalSettingsWindow.isDestroyed()) globalSettingsWindow.hide();
     chatWindow?.hide();
     void chat?.stop();
+    void workbuddyChat?.stop();
+    workbuddyLabel?.hide();
     dragState = null;
     safelyInvokeWindow('锁屏时停止动作', stopMotion);
     edgeTuck?.suspend();
@@ -3436,12 +3535,14 @@ if (!hasSingleInstanceLock) {
     clearTimeout(apiRefreshTimer);
     apiRefreshTimer = null;
     apiUsage?.close();
+    workbuddyQuota?.close();
+    workbuddyLabel?.destroy();
     safelyInvokeWindow('退出时快捷入口清理', () => { shortcutWindow?.dispose(); shortcutRegistrar?.dispose(); });
     safelyInvokeWindow('退出时番茄钟窗口销毁', () => pomodoroWindows?.close());
     safelyInvokeWindow('退出时全局设置销毁', () => globalSettingsWindow?.destroy());
     safelyInvokeWindow('退出时关于窗口销毁', () => aboutWindow?.destroy());
     let chatClosing;
-    safelyInvokeWindow('退出时聊天停止', () => { chatClosing = chat?.close(); });
+    safelyInvokeWindow('退出时聊天停止', () => { workbuddyChat?.close(); chatClosing = chat?.close(); });
     if (event?.preventDefault && chatClosing?.then) {
       event.preventDefault();
       // Leave the cancelled native quit event before starting the next one.

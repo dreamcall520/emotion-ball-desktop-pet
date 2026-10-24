@@ -103,7 +103,7 @@ test('损坏文件回退且有效设置可回读', t => {
     bubblesEnabled: true,
     colorMode: 'standard',
     uiTheme: 'blue',
-    chatModel: 'auto',
+    chatModel: 'auto', chatProvider: 'codex', workbuddyEnabled: false, workbuddyModel: 'auto',
     notesDefaultTab: 'note', notesAppearance: 'light', shortcutSettings: DEFAULTS.shortcutSettings,
     customization: DEFAULTS.customization,
     quotaDisplay: DEFAULTS.quotaDisplay,
@@ -127,7 +127,7 @@ test('损坏文件回退且有效设置可回读', t => {
 test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
   assert.deepEqual(normalizeSettings({ size: 'small', x: -102.3, y: 81.8, alwaysOnTop: false }), {
     size: 'small', x: -102, y: 82, alwaysOnTop: false,
-    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', uiTheme: 'blue', chatModel: 'auto', notesDefaultTab: 'note', notesAppearance: 'light', shortcutSettings: DEFAULTS.shortcutSettings, customization: DEFAULTS.customization,
+    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', uiTheme: 'blue', chatModel: 'auto', chatProvider: 'codex', workbuddyEnabled: false, workbuddyModel: 'auto', notesDefaultTab: 'note', notesAppearance: 'light', shortcutSettings: DEFAULTS.shortcutSettings, customization: DEFAULTS.customization,
     quotaDisplay: DEFAULTS.quotaDisplay,
     startupAppearance: DEFAULTS.startupAppearance,
     appearancePresets: [], codexEnabled: false,
@@ -442,4 +442,20 @@ test('命名形象原子保存与重启回读，独立于桌面及启动外观�
   assert.equal(loadSettings(file).customization.appearance.shape,'square');
   assert.equal(loadSettings(file).startupAppearance.shape,'cloud');
   assert.equal(fs.existsSync(file+'.tmp'),false);
+});
+
+
+test('WorkBuddy 设置独立保存，保留 Codex 额度偏好与原聊天模型', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qiuqiu-workbuddy-settings-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'settings.json');
+  const before = normalizeSettings({ codexEnabled: true, codexQuotaPeriod: 'weekly', codexQuotaAlwaysVisible: false, chatModel: 'gpt-6-luna' });
+  const after = saveSettings(file, { ...before, workbuddyEnabled: true, workbuddyModel: 'glm-5.3-flash', chatProvider: 'workbuddy' });
+  assert.deepEqual(loadSettings(file), after);
+  for (const key of Object.keys(before).filter(key => key.startsWith('codex') || key === 'chatModel')) assert.deepEqual(after[key], before[key]);
+  assert.equal(after.workbuddyEnabled, true);
+  assert.equal(after.workbuddyModel, 'glm-5.3-flash');
+  assert.equal(after.chatProvider, 'workbuddy');
+  assert.equal(normalizeSettings({ chatProvider: 'other', workbuddyEnabled: 'true', workbuddyModel: 'bad\nmodel' }).chatProvider, 'codex');
+  assert.equal(normalizeSettings({ workbuddyEnabled: 'true' }).workbuddyEnabled, false);
 });

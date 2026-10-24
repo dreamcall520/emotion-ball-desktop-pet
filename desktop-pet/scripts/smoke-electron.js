@@ -60,6 +60,10 @@ function runSmokeTest() {
       cleanup();
       try {
         assert.equal(code, 0, output);
+        if (process.env.PET_SMOKE_WORKBUDDY_ONLY === '1') {
+          assert.match(output, /PET_WORKBUDDY_INTEGRATION_OK/);
+          resolve(); return;
+        }
         if (process.env.PET_SMOKE_SHORTCUT_ONLY === '1') {
           assert.match(output, /PET_SHORTCUT_INTEGRATION_OK/);
           assert.doesNotMatch(output, /Uncaught|ERR_FILE_NOT_FOUND|did-fail-load/i);

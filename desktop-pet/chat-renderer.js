@@ -13,6 +13,8 @@
   const modelSelect = byId('chat-model');
   const modelMenu = byId('model-menu');
   const modelRetry = byId('refresh-models');
+  const providerSelect = byId('chat-provider');
+  let providerSaving = false;
   const avatar = byId('chat-avatar');
   let snapshot = { messages: [], history: [], activeChatId: null, busy: false, connection: 'idle', error: null, hasConversation: false };
   let pending = false;
@@ -44,7 +46,7 @@
   }
 
   function changeBlocked() {
-    return pending || snapshot.busy || snapshot.connection === 'connecting';
+    return providerSaving || pending || snapshot.busy || snapshot.connection === 'connecting';
   }
 
   function modelSelection() {
@@ -281,10 +283,19 @@
     count.textContent = `${input.value.length} / 2000`;
     byId('input-hint').hidden = !count.hidden;
     const status = byId('connection-status');
-    status.textContent = snapshot.connection === 'connecting' ? '正在连接 Codex…' : busy
+    status.textContent = snapshot.connection === 'connecting' ? `正在连接 ${snapshot.provider === 'workbuddy' ? 'WorkBuddy' : 'Codex'}…` : busy
       ? '球球正在想…'
       : error ? '连接遇到了一点问题'
         : snapshot.hasConversation ? '接着聊，我还记得这一段' : '想说什么，我在听';
+    if (providerSelect) {
+      providerSelect.value = snapshot.provider === 'workbuddy' ? 'workbuddy' : 'codex';
+      providerSelect.disabled = providerSaving || changeBlocked() || snapshot.connection === 'connecting';
+    }
+    const description = byId('provider-description');
+    const provider = snapshot.provider === 'workbuddy' ? 'WorkBuddy' : 'Codex';
+    if (description) description.textContent = `使用本机已登录的 ${provider} 账号。聊天记录按来源独立保存。`;
+    const privacy = byId('privacy-note');
+    if (privacy) privacy.textContent = `使用 ${provider} ${provider === 'WorkBuddy' ? '积分' : '额度'} · 延续同一段聊天`;
     refreshHistory();
     renderModels();
   }
@@ -573,6 +584,20 @@
   });
   window.addEventListener('focus', () => {
     if (!historyOpen && [document.body, historyButton, newButton].includes(document.activeElement)) input.focus();
+  });
+  providerSelect?.addEventListener('change', async () => {
+    if (providerSaving || changeBlocked()) return;
+    const provider = providerSelect.value;
+    providerSaving = true;
+    refreshControls();
+    localError = ''; failedDraft = ''; modelError = ''; modelChanged = false;
+    closeModelMenu(false);
+    try {
+      const result = await api.setProvider(provider);
+      if (!result?.accepted) localError = result?.error || '暂时无法切换聊天来源。';
+      else { input.value = ''; historyOpen = false; confirmingNew = false; resizeInput(); }
+    } catch (_) { localError = '暂时无法切换聊天来源。'; }
+    finally { providerSaving = false; refreshControls(); }
   });
   const unsubscribe = api.onState(next => {
     stateEvents += 1;
