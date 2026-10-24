@@ -81,13 +81,13 @@ test('80/180/260px 球体和云轮廓保持正式卡面位置，透明角色留�
         const baseline = quotaLabelBounds(pet, area, null, size, false, 1, presentation);
         const face = { x: result.x + result.cardInset.x, y: result.y + result.cardInset.y,
           width: baseline.width, height: baseline.height };
-        assert.deepEqual(face, { x: Math.min(area.x + area.width - result.width, baseline.x - (baseline.placement === 'left' ? 72 : 0)),
+        if(result.guardSide==='right')assert.deepEqual(face, { x: Math.min(area.x + area.width - result.width, baseline.x - (baseline.placement === 'left' ? 54 : baseline.placement === 'right' ? 4 : 0)),
           y: baseline.y, width: baseline.width, height: baseline.height });
-        assert.equal(result.guardSide, 'right');
+        if(result.guardSide==='left'){assert.equal(face.x+face.width,area.x+area.width);assert.equal(result.cardInset.x,72);}
         assert.equal(result.placement, baseline.placement);
-        assert.equal(intersects(face, petVisualBounds(pet, shape, presentation)), false, JSON.stringify({ result, pet, shape, size }));
-        const role = { x: face.x + face.width + 8, y: face.y, width: 50, height: face.height };
-        assert.equal(intersects(role, petVisualBounds(pet, shape, presentation)), false,
+        assert.equal(intersects(face, petVisualBounds(pet, shape, { ...presentation, quotaAnchor: true, quotaGuard: true })), false, JSON.stringify({ result, pet, shape, size }));
+        const role = { x: result.guardSide==='left'?face.x-8-50:face.x+face.width+8, y: face.y, width: 50, height: face.height };
+        assert.equal(intersects(role, petVisualBounds(pet, shape, { ...presentation, quotaAnchor: true, quotaGuard: true })), false,
           '四边与四角的右侧角色不能因整体clamp而覆盖球球');
       }
     }
@@ -101,11 +101,11 @@ test('额度标签 ready 折叠才为角色扩窗，stale/unknown 还原原卡�
     getSize: () => 'compact', getGuardEntry: () => true });
   label.show(model()); await flush();
   const win = f.windows[0];
-  assert.equal(win.bounds.width, 200); assert.equal(win.bounds.height, 50);
+  assert.equal(win.bounds.width, 184); assert.equal(win.bounds.height, 50);
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
   assert.equal(win.bounds.width, 196); assert.equal(win.bounds.height, 131);
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
-  assert.equal(win.bounds.width, 200);
+  assert.equal(win.bounds.width, 184);
   label.show({ ...model(), state: 'stale' });
   assert.equal(win.bounds.width, 128); assert.equal(win.bounds.height, 32);
   label.show({ state: 'reset-wait', items: [] });

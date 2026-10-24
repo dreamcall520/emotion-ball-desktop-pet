@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const vm = require('node:vm');
 const { normalizeAppearance, effectiveAppearance, normalizeCustomization, applyShapeRecommendation, auroraReferenceTexture } = require('../lib/customization');
@@ -38,9 +39,68 @@ test('定制配置只保存允许的外观与动作，非法值回退且时间�
     appearance: { shape: 'blob', bodyColor: '#EEEBE4', eyeColor: '#123456',
       glowPinkColor: '#D05ED6', glowGoldColor: '#D0AD8A', eyeScale: 1.25,
       eyeSpacing: 1, eyeHeight: 0, auroraTransparency: 0, auroraStyle: 'dimensional', auroraContour: 'original',
-      shapeTuning: { width: 1, height: 1, softness: 0.5, asymmetry: 0 }, idleEyes: 'curious' },
+      shapeTuning: { width: 1, height: 1, softness: 0.5, asymmetry: 0 }, idleEyes: 'curious', sheepTheme: 'auto' },
     sequence: [{ action: 'peek', pauseMs: 0 }, { action: 'spin', pauseMs: 2000 }]
   });
+});
+
+test('小羊主题兼容旧配置，五种选择原样保留且非法值回到默认', () => {
+  const { SHEEP_THEMES, SHAPES } = require('../lib/customization');
+  assert.deepEqual(SHEEP_THEMES, ['none', 'halloween', 'christmas', 'spring-festival', 'auto']);
+  for (const shape of SHAPES) {
+    assert.equal(normalizeAppearance({ shape }).sheepTheme, 'auto', shape);
+    for (const sheepTheme of SHEEP_THEMES) {
+      const normalized = normalizeAppearance({ shape, sheepTheme });
+      assert.equal(normalized.sheepTheme, sheepTheme);
+      assert.equal(effectiveAppearance(normalized).sheepTheme, sheepTheme, '日期解析不得覆盖手动或自动模式的原选择');
+    }
+  }
+  for (const sheepTheme of [undefined, null, '', 'Halloween', 'christmas ', '__proto__', 1, true, {}, []]) {
+    assert.equal(normalizeAppearance({ shape: 'new-year-sheep', sheepTheme }).sheepTheme, 'auto');
+  }
+  assert.equal(normalizeAppearance({ shape: 'codex-pet', codexPetId: 'codex-' + 'a'.repeat(64), sheepTheme: 'christmas' }).sheepTheme, 'christmas');
+});
+
+test('切换形态保留主题，小羊收藏区分主题，其他形态不受未生效主题影响', () => {
+  const { appearanceContentKey } = require('../lib/customization');
+  let appearance = normalizeAppearance({ shape: 'new-year-sheep', sheepTheme: 'halloween', auroraTransparency: 23 });
+  for (const shape of ['blob', 'cloud', 'aurora-cloud', 'square', 'new-year-sheep']) {
+    appearance = normalizeAppearance(applyShapeRecommendation(appearance, shape));
+    assert.equal(appearance.sheepTheme, 'halloween', shape);
+    assert.equal(appearance.auroraTransparency, 23);
+  }
+  const sheepKeys = ['none', 'halloween', 'christmas', 'spring-festival', 'auto'].map(sheepTheme => appearanceContentKey({ ...appearance, sheepTheme }));
+  assert.equal(new Set(sheepKeys).size, 5);
+  assert.equal(appearanceContentKey({ shape: 'blob' }), appearanceContentKey({ shape: 'blob', sheepTheme: 'christmas' }));
+});
+
+test('小羊主题当前设置、启动外观与收藏真实保存回读，旧外观不丢失', t => {
+  const { saveSettings, loadSettings } = require('../lib/settings');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qiuqiu-sheep-theme-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'settings.json');
+  fs.writeFileSync(file, JSON.stringify({ customization: { appearance: { shape: 'new-year-sheep' } },
+    startupAppearance: { shape: 'cloud', bodyColor: '#123456' } }));
+  const legacy = loadSettings(file);
+  assert.equal(legacy.customization.appearance.sheepTheme, 'auto');
+  assert.equal(legacy.startupAppearance.sheepTheme, 'auto');
+  const settings = { ...legacy, customization: { appearance: { shape: 'new-year-sheep', sheepTheme: 'spring-festival', auroraTransparency: 28 } },
+    startupAppearance: { shape: 'new-year-sheep', sheepTheme: 'auto' }, appearancePresets: [
+      { id: '00000000-0000-4000-8000-000000000001', name: '万圣小羊', appearance: { shape: 'new-year-sheep', sheepTheme: 'halloween' } },
+      { id: '00000000-0000-4000-8000-000000000002', name: '旧云朵', appearance: legacy.startupAppearance }
+    ] };
+  const saved = saveSettings(file, settings);
+  const loaded = loadSettings(file);
+  assert.deepEqual(loaded, saved);
+  assert.equal(loaded.customization.appearance.sheepTheme, 'spring-festival');
+  assert.equal(loaded.customization.appearance.auroraTransparency, 28);
+  assert.equal(loaded.startupAppearance.sheepTheme, 'auto');
+  assert.equal(loaded.appearancePresets[0].appearance.sheepTheme, 'halloween');
+  assert.deepEqual(loaded.appearancePresets[1].appearance, legacy.startupAppearance);
+  const next = { ...loaded, customization: { appearance: applyShapeRecommendation(loaded.customization.appearance, 'blob') } };
+  saveSettings(file, next);
+  assert.equal(loadSettings(file).customization.appearance.sheepTheme, 'spring-festival', '非小羊保存后仍记住手动选择');
+  assert.equal(fs.existsSync(file + '.tmp'), false);
 });
 
 test('旧外观设置保持默认球球轮廓，新手调数值按安全范围保存', () => {

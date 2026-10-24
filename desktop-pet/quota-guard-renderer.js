@@ -193,13 +193,16 @@
       button.dataset.role = q === 100 ? 'full' : q === 0 ? 'empty' : 'roaming';
       renderPet(pet, q === 0 ? 1 : 0, q === 0 ? 'halo' : q === 100 ? 'crown' : 'none', time, !moving());
       drawSprite(zombie.querySelector('canvas'), 'walk', q > 0 && q < 100 ? time * .75 : 0, true);
-      zombie.style.transform = `rotate(${q === 0 && moving() ? Math.sin(time / 520) * 2 : 0}deg)`;
+      const faceRight = model?.guardSide === 'left';
+      zombie.dataset.facing = faceRight ? 'right' : 'left';
+      zombie.style.transform = `rotate(${q === 0 && moving() ? Math.sin(time / 520) * 2 : 0}deg) scaleX(${faceRight ? -1 : 1})`;
       zombie.querySelector('svg').setAttribute('visibility', q === 0 ? 'visible' : 'hidden');
     }
     function frame(now) { raf = 0; if (!moving()) return; time += last ? clamp(now - last, 0, 64) : 16; last = now; draw(); raf = requestAnimationFrame(frame); }
     function wake() { cancelAnimationFrame(raf); raf = 0; last = 0; draw(); if (moving()) raf = requestAnimationFrame(frame); }
     cleanup.push(bridge.onModel(value => { model = value; doc.body.dataset.guardEntry = String(visible()); doc.body.dataset.guardSize = value?.size === 'compact' ? 'compact' : 'standard';
-      doc.body.dataset.guardSide = 'right';
+      doc.body.dataset.guardSide = value?.guardSide === 'left' ? 'left' : 'right';
+      doc.body.style.setProperty('--quota-role-target-width', `${value?.guardTargetWidth === 48 ? 48 : 64}px`);
       doc.body.style.setProperty('--quota-card-left', `${value?.cardInset?.x || 0}px`);
       doc.body.style.setProperty('--quota-card-top', `${value?.cardInset?.y ?? (value?.size === 'compact' ? 18 : 6)}px`);
       button.hidden = !visible(); button.disabled = !sprites; wake(); }));

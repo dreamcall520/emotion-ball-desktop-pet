@@ -3,6 +3,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 const motionIds = new Set(['hop', 'jelly', 'sway', 'peek', 'bow', 'spin']);
 const auroraClickIds = new Set(['dizzy', 'turn']);
 const companionIds = new Set(['nuzzle', 'land', 'stretch']);
+const sheepActionIds = new Set(['walk','greet','joy','sleep','ear','bell','stretch','working','complete',
+  'candy','magic','pumpkin','gift','receive-gift','scarf','snow','fortune','firecrackers','dumplings']);
 
 function pointPayload(point) {
   return { x: point && point.x, y: point && point.y };
@@ -45,7 +47,8 @@ contextBridge.exposeInMainWorld('petDesktop', {
       Number.isSafeInteger(request.alertId) && request.alertId > 0 && Number.isSafeInteger(request.generation) && request.generation > 0 &&
       Number.isSafeInteger(request.pageEpoch) && request.pageEpoch > 0) {
       ipcRenderer.send('pet:codex-motion-ready', {
-        token: request.token, action: request.action, alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch
+        token: request.token, action: request.action, alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch,
+        ...(Number.isInteger(request.durationMs) && request.durationMs >= 10 && request.durationMs <= 60000 ? { durationMs: request.durationMs } : {})
       });
     }
   },
@@ -57,11 +60,25 @@ contextBridge.exposeInMainWorld('petDesktop', {
   },
   say: event => {
     if (typeof event === 'string') ipcRenderer.send('pet:say', event);
-    else if (event?.event === 'play' && motionIds.has(event.motion)) {
+    else if (event?.event === 'play' && typeof event.sheepAction === 'string' && sheepActionIds.has(event.sheepAction)) {
+      ipcRenderer.send('pet:say', { event: 'play', sheepAction: event.sheepAction });
+    } else if (event?.event === 'play' && motionIds.has(event.motion)) {
       ipcRenderer.send('pet:say', { event: 'play', motion: event.motion });
     }
   },
   showContextMenu: () => ipcRenderer.send('pet:context-menu'),
+  updateOffering: value => {
+    if(value?.eligible===false&&value.transient===true&&value.playing!==true&&!value.ink&&['halloween','christmas'].includes(value.theme)&&['left','right'].includes(value.facing)){
+      ipcRenderer.send('pet:offering-state',{eligible:false,transient:true,theme:value.theme,facing:value.facing});return;
+    }
+    if(value?.eligible===false&&!value.ink){ipcRenderer.send('pet:offering-state',{eligible:false});return;}
+    const b=value?.ink;
+    if(value&&typeof value.eligible==='boolean'&&['halloween','christmas'].includes(value.theme)&&['left','right'].includes(value.facing)&&b&&
+      [b.x,b.y,b.width,b.height].every(Number.isFinite)&&b.x>=0&&b.y>=0&&b.width>0&&b.height>0&&b.x+b.width<=1.001&&b.y+b.height<=1.001){
+      ipcRenderer.send('pet:offering-state',{eligible:value.eligible,transient:value.transient===true&&value.eligible===false&&value.playing!==true,theme:value.theme,facing:value.facing,playing:value.playing===true,dragging:value.dragging===true,hideSource:value.hideSource===true,settled:value.settled===true,ink:{x:b.x,y:b.y,width:b.width,height:b.height}});
+    }else ipcRenderer.send('pet:offering-state',{eligible:false});
+  },
+  onOfferingPointer: callback => subscribe('pet:offering-pointer',callback),
   onPresentation: callback => subscribe('pet:presentation', callback),
   onCommand: callback => subscribe('pet:command', callback),
   onMotion: callback => subscribe('pet:motion-frame', callback),

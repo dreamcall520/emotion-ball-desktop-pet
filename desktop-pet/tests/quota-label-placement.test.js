@@ -137,7 +137,7 @@ test('幻彩云半露时额度跟随可见云瓣，左右屏边与各尺寸都�
   }
 });
 
-test('只有幻彩云半露状态改变额度横向锚点，自由状态只校准垂直轮廓', () => {
+test('只有幻彩云半露改变视觉锚点，free靠边可先夹紧下方卡，其余模式保持', () => {
   const pet = { x: 1360, y: 300, width: 80, height: 80 };
   const original = quotaLabelBounds(pet, AREA, null, 'compact');
   for (const presentation of [
@@ -147,8 +147,11 @@ test('只有幻彩云半露状态改变额度横向锚点，自由状态只校�
     { shape: 'aurora-cloud', mode: 'peeked', side: null }
   ]) {
     const result = quotaLabelBounds(pet, AREA, null, 'compact', false, 1, presentation);
-    assert.equal(result.placement, original.placement);
-    assert.equal(result.x, original.x);
+    if (presentation.mode === 'free') {
+      assert.equal(result.placement, 'below');assert.equal(result.x, AREA.width - 128);assertInside(result, AREA);
+    } else {
+      assert.equal(result.placement, original.placement);assert.equal(result.x, original.x);
+    }
   }
 });
 
@@ -163,7 +166,7 @@ test('非经典外观的额度标签贴近实际可见底部，保留经典外�
   }
 });
 
-test('趣味角色始终在卡右，保持正式卡面方向与间距；屏幕右缘只平移整个组合', () => {
+test('角色常规在卡右，右近边上下卡改为左列并贴边，正式卡面方向不变', () => {
   for (const area of [AREA, { x: -1920, y: -180, width: 1920, height: 1080 }]) {
     for (const size of ['compact', 'standard']) for (const shape of ['blob', 'aurora-cloud']) {
       for (const width of [60, 80, 180, 260]) for (const side of ['left', 'right', null]) {
@@ -172,12 +175,14 @@ test('趣味角色始终在卡右，保持正式卡面方向与间距；屏幕�
         const presentation = { shape, side, mode: side ? 'peeked' : 'free' };
         const baseline = quotaLabelBounds(pet, area, null, size, false, 1, presentation);
         const guard = quotaLabelBounds(pet, area, null, size, false, 1, presentation, false, true);
-        assert.equal(guard.placement, baseline.placement);
-        assert.equal(guard.guardSide, 'right');
-        assert.equal(guard.cardInset.x, 0);
-        assert.equal(guard.x + guard.cardInset.x,
-          Math.min(area.x + area.width - guard.width, baseline.x - (baseline.placement === 'left' ? 72 : 0)));
-        assert.equal(guard.y + guard.cardInset.y, baseline.y);
+        if(guard.guardSide==='right')assert.equal(guard.placement, baseline.placement);
+        if (guard.guardSide === 'left') {
+          assert.equal(side,'right');assert.equal(guard.cardInset.x,72);assert.equal(guard.x+guard.cardInset.x+baseline.width,area.x+area.width);
+        } else assert.equal(guard.cardInset.x,0);
+        const shiftedX = baseline.x + (shape === 'aurora-cloud' && side ? (side === 'right' ? 1 : -1) * width * .08 : 0);
+        if(guard.guardSide==='right')assert.ok(Math.abs(guard.x + guard.cardInset.x - Math.min(area.x + area.width - guard.width, shiftedX - (baseline.placement === 'left' ? 54 : baseline.placement === 'right' ? 4 : 0))) <= 1, '角色锚点匹配43%实际半露位移');
+        if(guard.guardSide==='right')assert.equal(guard.y + guard.cardInset.y, baseline.y);
+        else {const v=require('../lib/pet-visual-bounds').petVisualBounds(pet,shape,{...presentation,quotaAnchor:true,quotaGuard:true});assert.ok(Math.abs(guard.y+guard.cardInset.y-(guard.placement==='below'?v.y+v.height+8:v.y-baseline.height-8))<=.51);}
         assertInside(guard, area);
       }
     }
@@ -208,7 +213,7 @@ test('光环按外圈承载包络留八像素，不能按缩小的云主体推�
       const peeked = { x: 1360, y: 300, width: 80, height: 80 };
       const side = quotaLabelBounds(peeked, AREA, null, 'compact', false, 1,
         { shape: 'aurora-cloud', mode: 'peeked', side: 'right', quotaStyle }, false, true);
-      assert.equal(side.x + side.cardInset.x, 1180, '保留幻彩半露35%横向锚点并给卡右角色留位');
+      assert.equal(side.guardSide,'left');assert.equal(side.x+side.cardInset.x+128,AREA.width,'半露右边界卡面贴屏、角色左列');assert.equal(side.y+side.cardInset.y-peeked.y-peeked.height,8);
     }
   }
 });
@@ -219,11 +224,11 @@ test('上下被气泡占用而改到球球左侧时，角色与卡整体留位�
   const baseline = quotaLabelBounds(pet, AREA, obstacle);
   const guard = quotaLabelBounds(pet, AREA, obstacle, 'standard', false, 1, null, false, true);
   assert.equal(baseline.placement, 'left');
-  assert.equal(guard.placement, 'left');
+  assert.equal(guard.placement, 'below', '短横移即可沿气泡下缘保留近侧位置');
   assert.equal(guard.guardSide, 'right');
-  assert.equal(guard.x, baseline.x - 72, '原卡与球球间距留给右侧角色');
-  assert.equal(guard.x + guard.cardInset.x, baseline.x - 72);
-  assert.equal(guard.y + guard.cardInset.y, baseline.y);
+  assert.equal(guard.x, 414);
+  assert.equal(guard.y + guard.cardInset.y, 488);
+  assert.equal(guard.x + 226 + 8, obstacle.x, '最宽角色包络仍与气泡留8px');
   assertInside(guard, AREA);
 });
 
@@ -242,9 +247,10 @@ test('固定右侧角色后最终组合仍避让气泡，包括右缘平移和�
         ...quotaLabelSize(size) };
       assert.equal(guard.guardSide, 'right');
       assertInside(guard, area);
-      assert.equal(intersects(guard, bubble), false, '最终卡面与角色组合不能因右侧留位而盖住气泡');
+      assert.equal(intersects({ ...guard, width: guard.width - 14, y: guard.y + guard.cardInset.y - (size === 'compact' ? 1 : 0), height: face.height + (size === 'compact' ? 1 : 0) }, bubble), false, '最终卡面与角色组合不能因右侧留位而盖住气泡');
       assert.equal(intersects(face, pet), false, '重新避让不得把卡面放到球球上');
-      assert.equal(guard.placement, 'above');
+      assert.equal(guard.placement, petX === 600 && size === 'compact' ? 'below' : 'above');
+      if (petX === 600 && size === 'compact') assert.equal(guard.x, area.x + area.width - 744, '横向微调后仍在羊下方');
     }
   }
 });
@@ -255,9 +261,10 @@ test('左缘收敛后右侧角色不得压球，整组改用气泡旁的可见�
   const result = quotaLabelBounds(pet, AREA, bubble, 'standard', false, 1, null, false, true);
   assert.equal(result.guardSide, 'right');
   assertInside(result, AREA);
-  for (const obstacle of [pet, bubble]) assert.equal(result.x < obstacle.x + obstacle.width &&
-    result.x + result.width > obstacle.x && result.y < obstacle.y + obstacle.height &&
-    result.y + result.height > obstacle.y, false);
+  const painted = { ...result, width: result.width - 14, y: result.y + result.cardInset.y, height: 58 };
+  for (const obstacle of [pet, bubble]) assert.equal(painted.x < obstacle.x + obstacle.width &&
+    painted.x + painted.width > obstacle.x && painted.y < obstacle.y + obstacle.height &&
+    painted.y + painted.height > obstacle.y, false);
 });
 
 test('候选位置必须完整在屏内且不与气泡相交', () => {
@@ -330,4 +337,121 @@ test('Number.MAX_VALUE 级别的有限坐标与尺寸不得在中间加法中溢
     assertFiniteBounds(result);
     assert.ok(['below', 'above', 'right', 'left'].includes(result.placement));
   }
+});
+
+
+test('右下角气泡只压住角色5px时向下滑14px，不能整组跳到气泡最左', () => {
+  const pet = { x: 1360, y: 820, width: 80, height: 80 };
+  const bubble = { x: 1200, y: 730, width: 224, height: 118 };
+  const result = quotaLabelBounds(pet, AREA, bubble, 'compact', false, 1,
+    { shape: 'aurora-cloud', mode: 'free' }, false, true);
+  assert.deepEqual(result, { x: 1170, y: 839, width: 200, height: 50,
+    placement: 'left', guardSide: 'right', cardInset: { x: 0, y: 18 } });
+  assert.equal(result.x + 128 + 8 + 22, 1328, '僵尸绘制右缘');
+  assert.equal(pet.x - 1328, 32, '旧几何间距210px，现32px');
+  assert.equal(result.y + result.cardInset.y - 1 - (bubble.y + bubble.height), 8);
+});
+
+test('260px羊半露与外露侧边角色净距约减半，入口200px原生窗不缩水', () => {
+  const area = { x: 0, y: 0, width: 1440, height: 300 };
+  const pet = { x: 1180, y: 20, width: 260, height: 260 };
+  for (const mode of ['free', 'peeked']) {
+    const result = quotaLabelBounds(pet, area, null, 'compact', false, 1,
+      { shape: 'new-year-sheep', side: 'right', mode }, false, true);
+    assert.equal(result.x, 1000); assert.equal(result.width, 200);
+    assert.equal(result.placement, 'left');
+    const paintedPetLeft = pet.x + pet.width * .04;
+    const roleRight = result.x + 128 + 8 + 22;
+    assert.ok(Math.abs(paintedPetLeft - roleRight - 32.4) < .01, '旧60.4px→32.4px，减少46%');
+    assertInside(result, area);
+  }
+});
+
+test('2px角色气泡冲突只横移10px，原卡不跳到上方', () => {
+  const result = quotaLabelBounds({ x: 760, y: 400, width: 80, height: 80 }, AREA,
+    { x: 920, y: 488, width: 20, height: 84 }, 'compact', false, 1, null, false, true);
+  assert.deepEqual(result, { x: 726, y: 470, width: 200, height: 50,
+    placement: 'below', guardSide: 'right', cardInset: { x: 0, y: 18 } });
+});
+
+
+test('四主题80/120/260实际左右朝向按绘制包络留16px，角色0/100也不压道具', () => {
+  const { petVisualBounds } = require('../lib/pet-visual-bounds');
+  for (const theme of ['none','halloween','christmas','spring-festival']) for (const width of [80,108,120,260]) {
+    const area = { x: -1440, y: 32, width: 1440, height: width + 20 };
+    for (const side of ['left','right']) for (const mode of ['free','peeked']) for (const quotaRoleWidth of [22,24,50]) {
+      const pet = { x: side === 'left' ? area.x : area.x+area.width-width, y:area.y+10,width,height:width };
+      const p = {shape:'new-year-sheep',sheepTheme:theme,side,mode,facing:side==='right'?'left':'right',quotaRoleWidth};
+      const v = petVisualBounds(pet,p.shape,{...p,quotaAnchor:true});
+      const b = quotaLabelBounds(pet,area,null,'compact',false,1,p,false,true);
+      assertInside(b,area);assert.equal(b.width,quotaRoleWidth===50?200:184);
+      if(side==='right')assert.ok(Math.abs(v.x-(b.x+128+8+quotaRoleWidth)-16)<=.51,JSON.stringify({theme,width,p,b,v}));
+      else assert.ok(Math.abs(b.x-(v.x+v.width)-4)<=.51,JSON.stringify({theme,width,p,b,v}));
+    }
+  }
+});
+
+test('圣诞元素与空场按当前原生绘制包络近身，旧朝向和非法包络不生效', () => {
+  const { petVisualBounds } = require('../lib/pet-visual-bounds');
+  const pet = { x: 900, y: 100, width: 260, height: 260 };
+  const base = { shape:'new-year-sheep', sheepTheme:'christmas', facing:'left', quotaAnchor:true, quotaStyle:'card' };
+  for (const ink of [{x:.025,width:.94},{x:.29,width:.67}]) {
+    const p = { ...base, sheepInk:{theme:'christmas',facing:'left',ink} };
+    assert.deepEqual(petVisualBounds(pet,base.shape,p),{...pet,x:pet.x+260*ink.x,width:260*ink.width});
+    const card = quotaLabelBounds(pet,{x:0,y:90,width:1160,height:280},null,'compact',false,1,{...p,quotaRoleWidth:22},false,true);
+    assert.ok(Math.abs(pet.x+260*ink.x-(card.x+128+8+22)-16)<=.51);
+  }
+  const expected = petVisualBounds(pet,base.shape,base);
+  for (const sheepInk of [{theme:'christmas',facing:'right',ink:{x:.2,width:.6}},
+    {theme:'christmas',facing:'left',ink:{x:NaN,width:.6}},
+    {theme:'christmas',facing:'left',ink:{x:.9,width:.6}}]) {
+    assert.deepEqual(petVisualBounds(pet,base.shape,{...base,sheepInk}),expected);
+  }
+});
+
+test('free边角先沿屏幕夹紧近侧上下候选，不因卡宽提前跳到远侧',()=>{
+ const area={x:-800,y:30,width:800,height:500};
+ for(const side of['left','right'])for(const corner of['top','bottom'])for(const size of['compact','standard'])for(const guarded of[false,true]){
+  const pet={x:side==='left'?area.x+2:area.x+area.width-82,y:corner==='top'?area.y+2:area.y+area.height-82,width:80,height:80};
+  const p={shape:'new-year-sheep',sheepTheme:'none',facing:side==='left'?'right':'left',mode:'free',quotaRoleWidth:22};
+  const b=quotaLabelBounds(pet,area,null,size,false,1,p,false,guarded);
+  assert.equal(b.placement,corner==='top'?'below':'above','上下候选可夹紧时优先近侧');assertInside(b,area);
+  const card={x:b.x+(b.cardInset?.x||0),y:b.y+(b.cardInset?.y||0),...quotaLabelSize(size)};
+  assert.equal(card.x<pet.x+pet.width&&card.x+card.width>pet.x&&card.y<pet.y+pet.height&&card.y+card.height>pet.y,false);
+  if(guarded){assert.equal(b.width,quotaLabelSize(size).width+56);assert.equal(b.guardSide,side==='right'?'left':'right');}
+ }
+});
+
+
+test('普通角色收16px透明尾且组合更贴右缘，大角色和未知角色保持64目标',()=>{
+ const pet={x:710,y:130,width:80,height:80},area={x:0,y:0,width:800,height:500};
+ for(const size of['compact','standard'])for(const role of[22,24,50,null,undefined]){
+  const b=quotaLabelBounds(pet,area,null,size,false,1,{shape:'new-year-sheep',sheepTheme:'none',mode:'free',facing:'left',quotaRoleWidth:role},false,true);
+  const width=[22,24].includes(role)?48:64;assert.equal(b.width,quotaLabelSize(size).width+8+width);assert.equal(b.x+b.width,800);assertInside(b,area);
+  assert.equal(b.x+quotaLabelSize(size).width+8+width,800,'卡与角色整体平移，目标完整留在workArea');
+ }
+});
+
+test('free夹紧近侧仍避让气泡，保卡面/角色画面在workArea且不盖羊',()=>{
+ const area={x:-1000,y:40,width:1000,height:650};
+ for(const corner of['top-left','top-right','bottom-left','bottom-right'])for(const role of[22,24,50]){
+  const left=corner.includes('left'),top=corner.includes('top'),pet={x:left?area.x+2:area.x+area.width-122,y:top?area.y+2:area.y+area.height-122,width:120,height:120};
+  const bubble={x:left?area.x:area.x+area.width-224,y:top?pet.y+pet.height+2:pet.y-90,width:224,height:86};
+  const p={shape:'new-year-sheep',sheepTheme:'none',mode:'free',facing:left?'right':'left',quotaRoleWidth:role};
+  const b=quotaLabelBounds(pet,area,bubble,'compact',false,1,p,false,true),paint={x:b.x+(b.guardSide==='left'?b.cardInset.x-8-role:0),y:b.y+b.cardInset.y-1,width:128+8+role,height:33};
+  assertInside(b,area);const overlaps=(a,c)=>a.x<c.x+c.width&&a.x+a.width>c.x&&a.y<c.y+c.height&&a.y+a.height>c.y;
+  assert.equal(overlaps(paint,bubble),false,JSON.stringify({corner,role,b,bubble}));assert.equal(overlaps(paint,require('../lib/pet-visual-bounds').petVisualBounds(pet,p.shape,{...p,quotaAnchor:true})),false);
+ }
+});
+
+test('右近边free/peeked角色在左且卡右贴边，中部/左侧原右置，不裁点击目标',()=>{
+ const area={x:-800,y:30,width:800,height:600};
+ for(const width of[80,120,260])for(const role of[22,24,50])for(const size of['compact','standard']){
+  const p={shape:'new-year-sheep',sheepTheme:'none',mode:'free',facing:'left',quotaRoleWidth:role},pet={x:-width-2,y:180,width,height:width};
+  const b=quotaLabelBounds(pet,area,null,size,false,1,p,false,true),target=role===50?64:48,face=quotaLabelSize(size);
+  assert.equal(b.guardSide,'left');assert.equal(b.cardInset.x,target+8);assert.equal(b.x+b.cardInset.x+face.width,0);assertInside(b,area);
+  assert.equal(b.x+b.cardInset.x-8-target,b.x,'目标从窗左开始且不盖卡');
+  for(const x of[-798,-500]){const other=quotaLabelBounds({...pet,x},area,null,size,false,1,p,false,true);assert.equal(other.guardSide,'right');assert.equal(other.cardInset.x,0);}
+  const peek=quotaLabelBounds(pet,area,null,size,false,1,{...p,mode:'peeked'},false,true);assert.equal(peek.guardSide,'left');assert.equal(peek.x+peek.cardInset.x+face.width,0);
+ }
 });

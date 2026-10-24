@@ -43,17 +43,17 @@
 
 // One analytic glass cross-section; fixed geometry, light intensity breathes.
 // Previous Iridescence-derived candidates and their license remain in reference/.
-function createColorRing(size){
- const canvas=document.createElement('canvas');canvas.width=canvas.height=size*2;
+function createColorRing(size, backing){
+ const canvas=document.createElement('canvas');canvas.width=canvas.height=backing*2;
  const gl=canvas.getContext('webgl',{alpha:true,premultipliedAlpha:false,preserveDrawingBuffer:true,antialias:false});
  if(!gl)throw Error('当前浏览器无法显示液态动效，请使用支持 WebGL 的浏览器。');
  const vertex='attribute vec2 position;void main(){gl_Position=vec4(position,0.,1.);}';
  const fragment=`precision highp float;
- uniform float seconds,dark,detail,spread,contrast;
+ uniform float seconds,dark,detail,spread,contrast,backingScale;
  uniform vec3 tint,shine;
  float gaussian(float d,float width){return exp(-d*d/(width*width));}
  void main(){
-  vec2 uv=(gl_FragCoord.xy*.5-vec2(170.))/170.;
+  vec2 uv=(gl_FragCoord.xy/backingScale-vec2(170.))/170.;
   float d=length(uv)*170.-139.;
   if(d<-10.||d>29.){gl_FragColor=vec4(0.);return;}
   float angle=atan(uv.y,uv.x),breath=.5-.5*cos(seconds*1.122);
@@ -75,8 +75,8 @@ function createColorRing(size){
  gl.useProgram(program);const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);
  const position=gl.getAttribLocation(program,'position');gl.enableVertexAttribArray(position);gl.vertexAttribPointer(position,2,gl.FLOAT,false,0,0);
- const uniforms=Object.fromEntries(['seconds','dark','detail','spread','contrast','tint','shine'].map(key=>[key,gl.getUniformLocation(program,key)]));
- const caches=[false,true].map(()=>{const c=document.createElement('canvas');c.width=c.height=size;return {canvas:c,ctx:c.getContext('2d'),key:null};});
+ const uniforms=Object.fromEntries(['seconds','dark','detail','spread','contrast','tint','shine','backingScale'].map(key=>[key,gl.getUniformLocation(program,key)]));
+ const caches=[false,true].map(()=>{const c=document.createElement('canvas');c.width=c.height=backing;const ctx=c.getContext('2d');ctx.setTransform(backing/SIZE,0,0,backing/SIZE,0,0);return {canvas:c,ctx,key:null};});
  return {
   frame(t,isDark,isAurora,still,palette){
    const cssScale=renderedWidth()/SIZE;
@@ -87,7 +87,7 @@ function createColorRing(size){
     gl.uniform1f(uniforms.seconds,seconds);gl.uniform1f(uniforms.dark,Number(isDark));
     gl.uniform1f(uniforms.detail,detail);gl.uniform1f(uniforms.spread,spread);gl.uniform1f(uniforms.contrast,contrast);
     gl.uniform3fv(uniforms.tint,palette.base.map(v=>v/255));gl.uniform3fv(uniforms.shine,palette.light.map(v=>v/255));
-    gl.viewport(0,0,size*2,size*2);gl.drawArrays(gl.TRIANGLES,0,3);
+    gl.uniform1f(uniforms.backingScale,backing*2/SIZE);gl.viewport(0,0,backing*2,backing*2);gl.drawArrays(gl.TRIANGLES,0,3);
     cache.ctx.clearRect(0,0,size,size);cache.ctx.drawImage(canvas,0,0,size,size);cache.key=key;
    }
    return cache.canvas;
@@ -198,16 +198,16 @@ function drawReferenceRing(ctx, q, t, palette, dark, still) {
       // Cache just the scratch surface. Every frame is cleared, including masks.
       const cache = drawReferenceRing._layers || (drawReferenceRing._layers = new WeakMap());
       let layer = cache.get(ctx.canvas);
-      if (!layer) {
+      if (!layer || layer.canvas.width !== ctx.canvas.width) {
         const canvas = document.createElement('canvas');
-        canvas.width = canvas.height = SIZE;
+        canvas.width = canvas.height = ctx.canvas.width;
         layer = {canvas, ctx: canvas.getContext('2d')};
         cache.set(ctx.canvas, layer);
       }
       const lc = layer.ctx;
       lc.save();
       try {
-        lc.setTransform(1, 0, 0, 1, 0, 0);
+        lc.setTransform(layer.canvas.width/SIZE, 0, 0, layer.canvas.width/SIZE, 0, 0);
         lc.clearRect(0, 0, SIZE, SIZE);
         lc.globalAlpha = 1;
         lc.globalCompositeOperation = 'source-over';
@@ -228,7 +228,7 @@ function drawReferenceRing(ctx, q, t, palette, dark, still) {
 
         // Fixed spread; gentle breathing changes intensity rather than ring size.
         lc.shadowColor = rgba(light, .18 + .07 * breath);
-        lc.shadowBlur = 7;
+        lc.shadowBlur = 7 * lc.canvas.width/SIZE;
         strokeArc(lc, TRACK_R, TRACK_W + 1, rgba(base, .15 + .035 * breath), start, END);
         lc.shadowBlur = 0;
         strokeArc(lc, TRACK_R, TRACK_W, colour, start, END);
@@ -286,7 +286,7 @@ function drawReferenceRing(ctx, q, t, palette, dark, still) {
     ]) glints.addColorStop(at, rgba(white, alpha * (dark ? .90 : .68)));
     strokeArc(ctx, GLASS_R - .65, .65, glints, 0, TAU);
     ctx.shadowColor = rgba(white, dark ? .13 : .045);
-    ctx.shadowBlur = 3;
+    ctx.shadowBlur = 3 * ctx.canvas.width/SIZE;
     strokeArc(ctx, GLASS_R + .15, .45, glints, 0, TAU);
   } finally {
     ctx.restore();
@@ -323,14 +323,14 @@ function drawDualTrack(ctx,mode,value,t,palette,dark,still,radius,orb,flow){
   c.fillStyle=track;c.fillRect(0,0,340,340);
   if(q>0){
    // Apply the quota mask to the coloured layer, leaving the closed neutral track.
-   const lc=dualLightContext;lc.clearRect(0,0,340,340);lc.drawImage(orb.frame(t,dark,false,still,palette),0,0);
+   const lc=dualLightContext;lc.clearRect(0,0,340,340);lc.drawImage(orb.frame(t,dark,false,still,palette),0,0,SIZE,SIZE);
    if(flow)drawRingFlow(lc,t,139.2,2);
    if(q<1){
     const used=1-q,half=Math.min(.018,q/2,used/2)/2,mask=lc.createConicGradient(top,170,170);
     for(const [at,a] of [[0,.5],[half,0],[used-half,0],[used+half,1],[1-half,1],[1,.5]])mask.addColorStop(at,'rgba(255,255,255,'+a+')');
     lc.globalCompositeOperation='destination-in';lc.fillStyle=mask;lc.fillRect(0,0,340,340);lc.globalCompositeOperation='source-over';
    }
-   c.drawImage(dualLight,0,0);
+   c.drawImage(dualLight,0,0,SIZE,SIZE);
   }
   const reflection=c.createConicGradient(top+.08*Math.sin(t*.24),170,170);
   for(const [at,a] of [[0,0],[.39,0],[.44,.38],[.49,0],[.81,0],[.85,.9],[.86,1],[.87,.9],[.92,0],[1,0]])reflection.addColorStop(at,'rgba(239,250,255,'+a+')');
@@ -344,7 +344,7 @@ function drawDualTrack(ctx,mode,value,t,palette,dark,still,radius,orb,flow){
    const start=top+TAU*(1-q),end=top+TAU;
    const colour=c.createConicGradient(top,170,170);
    for(const [at,rgb] of [[0,mix(palette.base,palette.accent,.28)],[.2,palette.base],[.43,mix(palette.base,palette.light,.3)],[.62,mix(palette.light,palette.base,.24)],[.8,mix(palette.base,palette.accent,.45)],[1,mix(palette.base,palette.accent,.28)]])colour.addColorStop(at,rgba(rgb,.93));
-   c.shadowColor=rgba(palette.light,.18+.07*breath);c.shadowBlur=5;
+   c.shadowColor=rgba(palette.light,.18+.07*breath);c.shadowBlur= 5*c.canvas.width/SIZE;
    stroke(139,width+1,rgba(palette.base,.15+.035*breath),start,end);c.shadowBlur=0;
    stroke(139,width,colour,start,end);
    const face=c.createConicGradient(top,170,170);
@@ -388,7 +388,7 @@ function drawSplitHalf(ctx,mode,value,t,palette,dark,still,left,orb){
   c.globalCompositeOperation='destination-in';c.beginPath();
   c.arc(170,170,r,Math.PI/2+(left?1:-1)*Math.PI*q,Math.PI/2,left);
   c.lineWidth=mode==='halo'?5:8;c.lineCap='round';c.strokeStyle='white';c.stroke();c.globalCompositeOperation='source-over';
-  ctx.drawImage(splitFlow,0,0);
+  ctx.drawImage(splitFlow,0,0,SIZE,SIZE);
  }
  ctx.restore();
 }
@@ -418,7 +418,7 @@ function drawStageHalf(ctx,mode,value,t,palette,dark,still,left){
   const breath=.5-.5*Math.cos(s*Math.PI*2/5.6-group*.18);
   const colour=ctx.createLinearGradient(170+139*Math.cos(start),170+139*Math.sin(start),170+139*Math.cos(end),170+139*Math.sin(end));
   colour.addColorStop(0,rgba(palette.base,.93));colour.addColorStop(.5,rgba(palette.base.map((v,i)=>v+(palette.light[i]-v)*(.16+.1*breath)),.96));colour.addColorStop(1,rgba(palette.base,.93));
-  ctx.shadowColor=rgba(palette.light,.12+.035*breath);ctx.shadowBlur=2.5;
+  ctx.shadowColor=rgba(palette.light,.12+.035*breath);ctx.shadowBlur= 2.5*ctx.canvas.width/SIZE;
   stroke(139,width,colour,begin,finish);ctx.shadowBlur=0;
   stroke(138.3,mode==='halo'?.55:.8,rgba(palette.light,.25+.11*breath),begin,finish);
   drawRingFlow(ctx,s,139.4,mode==='halo'?.7:1.1,Math.min(begin,finish),Math.max(begin,finish));
@@ -451,11 +451,45 @@ function drawStageDividers(ctx,dark){
     const contourContext = contour.getContext('2d', { willReadFrequently: true });
     let current = model(), options = {}, frame = 0, sampleRetry = 0, sampleAttempts = 0, previousFrame = -Infinity, orb = null;
     let pool = null, rawCanvas = null, rawOpacity = '', scaled = [];
-    let geometry = { x: 0, y: 0, width: 0 }, destroyed = false, nativeFit = null;
+    let geometry = { x: 0, y: 0, width: 0, height: 0 }, destroyed = false, nativeFit = null;
+    const sheepIdleCenters = new WeakMap();
+    // Current Halloween primary-idle alpha>24 spans y=[23,304) in the 320px cell.
+    const sheepRingCenter = 163.5 / 320;
+    function sheepIdleCenter(sheep) {
+      if (!sheep || !['none','spring-festival'].includes(sheep.dataset.theme)) return null;
+      const cached = sheepIdleCenters.get(sheep);
+      if (cached?.theme === sheep.dataset.theme) return cached.center;
+      if (sheep.dataset.ready !== 'true' || sheep.dataset.action !== 'idle' ||
+          sheep.dataset.idlePose === 'alternate' || sheep.dataset.transition || !sheep.width || !sheep.height) return null;
+      try {
+        const pixels = sheep.getContext?.('2d')?.getImageData(0,0,sheep.width,sheep.height).data;
+        if (!pixels) return null;
+        let top = sheep.height, bottom = 0;
+        for (let y=0;y<sheep.height;y++) for (let x=0;x<sheep.width;x++) if (pixels[(y*sheep.width+x)*4+3]>24) {
+          top=Math.min(top,y);bottom=y+1;break;
+        }
+        if (bottom <= top) return null;
+        const center = (top+bottom)/2/sheep.height;
+        sheepIdleCenters.set(sheep,{theme:sheep.dataset.theme,center});
+        return center;
+      } catch (_) { return null; }
+    }
     // Keep a readable core in CSS pixels; the desktop shares its 340px artwork with the enlarged preview.
     // Hidden thumbnails have no measured geometry. Tiny hosts must not turn a CSS pixel floor into an oversized source radius.
     const renderedWidth = () => geometry.width > 0 && Number.isFinite(geometry.width) ? Math.max(24,geometry.width) : SIZE;
     const pixelWidth = pixels => pixels * SIZE / renderedWidth();
+    function syncResolution() {
+      // Keep the existing 340-unit drawing coordinates; rasterise every ring layer
+      // at actual display density, instead of stretching one 340px bitmap on Retina.
+      const dpr = Number.isFinite(root.devicePixelRatio) ? Math.max(1, root.devicePixelRatio) : 1;
+      const backing = current.style === 'pool' ? SIZE : Math.max(SIZE, Math.ceil(renderedWidth() * dpr));
+      if (canvas.width === backing && canvas.height === backing) return;
+      for (const [surface, context] of [[canvas,ctx],[wet,wetContext],[dualLayer,dualContext],[dualLight,dualLightContext],[dualShell,dualShellContext],[splitFlow,splitFlowContext]]) {
+        surface.width = surface.height = backing;
+        context.setTransform(backing/SIZE,0,0,backing/SIZE,0,0);
+      }
+      orb?.destroy(); orb = null;
+    }
     const motionPreference = root.matchMedia?.('(prefers-reduced-motion: reduce)');
     const originalScale = element => scaled.find(item => item.element === element)?.scale ?? element.style.scale;
     function restoreScale() {
@@ -527,13 +561,36 @@ function drawStageDividers(ctx,dark){
       // keeping its existing pose/eye transform while centring the fitted body in the housing.
       source.style.translate=(tx+(cx-px)*(1-factor))+'px '+(ty+(cy-py)*(1-factor))+'px';
       const ringWidth=room*SIZE/outer;
-      geometry={x:cx-ringWidth/2,y:cy-ringWidth/2,width:ringWidth};
+      geometry={x:cx-ringWidth/2,y:cy-ringWidth/2,width:ringWidth,height:ringWidth};
       Object.assign(canvas.style,{left:geometry.x+'px',top:geometry.y+'px',width:ringWidth+'px',height:ringWidth+'px'});
       canvas.dataset.bodyScale=String(factor);
       return true;
     }
     function positionRing() {
       restoreScale();
+      const sheep=host.querySelector(':scope > canvas.sheep-skin');
+      if(sheep){
+        const bounds=host.getBoundingClientRect();
+        // Use the same circular housing as the other pets, even in a rectangular
+        // customizer host. Keep the sheep readable; its alpha masks the ring behind
+        // ears and hats without stretching either layer or refitting every frame.
+        const factor = .74;
+        const width=Math.min(bounds.width,bounds.height)*.97*SIZE/(158*2),height=width;
+        scaled.push({element:sheep,scale:sheep.style.scale,translate:sheep.style.translate ?? ''});
+        sheep.style.scale=String(factor);
+        const idleCenter=sheepIdleCenter(sheep);
+        const shift=idleCenter===null?0:(sheepRingCenter-idleCenter)*Math.min(sheep.clientWidth,sheep.clientHeight)*factor;
+        if(shift){
+          const translate=(sheep.style.translate||'0 0').split(/\s+/);
+          const y=parseFloat(translate[1]||'0')*((translate[1]||'0').includes('%')?sheep.clientHeight/100:1);
+          sheep.style.translate=translate[0]+' '+(y+shift)+'px';
+        }
+        geometry={x:(bounds.width-width)/2,y:(bounds.height-height)/2,width,height};
+        Object.assign(canvas.style,{left:geometry.x+'px',top:geometry.y+'px',width:width+'px',height:height+'px'});
+        canvas.dataset.bodyScale=String(factor);
+        canvas.dataset.bodyShiftY=String(shift);
+        return;
+      }
       const native=host.querySelector(':scope > canvas.eb-rive-aurora.ready,:scope > canvas.codex-pet-sprite');
       if(native)return positionNativeRing(native,native.classList.contains('codex-pet-sprite'));
       const bounds = host.getBoundingClientRect(), svg = host.querySelector(':scope > svg');
@@ -564,7 +621,7 @@ function drawStageDividers(ctx,dark){
         cy = bounds.height / 2 + (cy - bounds.height / 2) * factor;
       }
       const width = radius * factor * SIZE / 125;
-      geometry = { x: cx - width / 2, y: cy - width / 2, width };
+      geometry = { x: cx - width / 2, y: cy - width / 2, width, height: width };
       Object.assign(canvas.style, { left: geometry.x + 'px', top: geometry.y + 'px', width: width + 'px', height: width + 'px' });
       canvas.dataset.bodyScale = String(factor);
     }
@@ -659,7 +716,7 @@ function drawStageDividers(ctx,dark){
         if (x) context.lineTo(x,py); else context.moveTo(x,py);
       }
     }
-    function drawRivePool(source, q, t) {
+    function drawCanvasPool(source, q, t, sheep=false) {
       if (rawCanvas !== source) {
         restorePool(); rawCanvas=source; rawOpacity=source.style.opacity;
       }
@@ -699,11 +756,13 @@ function drawStageDividers(ctx,dark){
       capture(box);
       const image=sampleContext.getImageData(0,0,SIZE,SIZE), eyePixels=eyeContext.createImageData(SIZE,SIZE), rows=new Float64Array(SIZE);
       let total=0;
-      // Match the native Rive eye filter: only almost-white pixels are eye ink.
-      // ponytail: Rive does not expose eye layers; use its existing white-ink threshold.
+      // Preserve face ink while the painted body becomes a liquid volume.
+      // shortcut: retain dark raster face ink until separate face layers are available.
       for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++){
-        const i=(y*SIZE+x)*4, alpha=image.data[i+3]; rows[y]+=alpha; total+=alpha;
-        if(y<SIZE*.8&&16*(image.data[i]+image.data[i+1]+image.data[i+2])/255-47>0){
+        const i=(y*SIZE+x)*4, alpha=image.data[i+3];
+        rows[y]+=alpha;total+=alpha;
+        if(sheep?y>SIZE*.24&&y<SIZE*.56&&x>SIZE*.25&&x<SIZE*.75&&image.data[i]<120&&image.data[i+1]<90&&image.data[i+2]<75:
+          y<SIZE*.8&&16*(image.data[i]+image.data[i+1]+image.data[i+2])/255-47>0){
           for(let component=0;component<4;component++)eyePixels.data[i+component]=image.data[i+component];
         }
       }
@@ -713,10 +772,10 @@ function drawStageDividers(ctx,dark){
       let y=SIZE, sum=0, target=total*q;
       if(q>=1)y=0;
       else if(q>0)for(let row=SIZE-1;row>=0;row--){if(sum+rows[row]>=target){y=row+1-(target-sum)/Math.max(rows[row],.001);break;}sum+=rows[row];}
-      ctx.clearRect(0,0,SIZE,SIZE); ctx.save(); ctx.globalAlpha=.08;ctx.drawImage(sample,0,0);ctx.restore();
+      ctx.clearRect(0,0,SIZE,SIZE); ctx.save(); ctx.globalAlpha=sheep ? .48 : .08;ctx.drawImage(sample,0,0);ctx.restore();
       if(q>0){
         wetContext.clearRect(0,0,SIZE,SIZE);wetContext.save();canvasWave(wetContext,y,q,t,current.still?5.5:12.8);
-        wetContext.lineTo(SIZE,SIZE);wetContext.lineTo(0,SIZE);wetContext.closePath();wetContext.clip();wetContext.drawImage(sample,0,0);wetContext.restore();ctx.drawImage(wet,0,0);
+        wetContext.lineTo(SIZE,SIZE);wetContext.lineTo(0,SIZE);wetContext.closePath();wetContext.clip();wetContext.drawImage(sample,0,0);wetContext.restore();ctx.drawImage(wet,0,0,SIZE,SIZE);
       }
       if(q>0&&q<1){
         wetContext.clearRect(0,0,SIZE,SIZE);canvasWave(wetContext,y+1.4,q,t,current.still?5.5:12.8);
@@ -724,7 +783,7 @@ function drawStageDividers(ctx,dark){
         const light=wetContext.createLinearGradient(40,0,300,0);
         for(const [at,alpha] of [[0,0],[.3,.85],[.65,.35],[1,0]])light.addColorStop(at,'rgba(255,255,255,'+alpha+')');
         canvasWave(wetContext,y-.4,q,t,current.still?5.5:12.8);wetContext.lineWidth=1.1;wetContext.strokeStyle=light;wetContext.stroke();
-        wetContext.globalCompositeOperation='destination-in';wetContext.drawImage(sample,0,0);wetContext.globalCompositeOperation='source-over';ctx.drawImage(wet,0,0);
+        wetContext.globalCompositeOperation='destination-in';wetContext.drawImage(sample,0,0);wetContext.globalCompositeOperation='source-over';ctx.drawImage(wet,0,0,SIZE,SIZE);
       }
       ctx.drawImage(eyes,0,0);
       Object.assign(canvas.style,{left:box.x+'px',top:box.y+'px',width:box.width+'px',height:box.width+'px',filter:source.style.filter||'none',opacity:rawOpacity||'1'});
@@ -733,7 +792,7 @@ function drawStageDividers(ctx,dark){
     }
     function drawRing(t) {
       const mode=current.material==='glass'?'reference':'halo',values=current.values,dark=current.dark,still=current.still;
-      if(!orb&&mode==='halo')try{orb=createColorRing(SIZE);}catch(_){/* Canvas-only fallback keeps quota readable. */}
+      if(!orb&&mode==='halo')try{orb=createColorRing(SIZE,canvas.width);}catch(_){/* Canvas-only fallback keeps quota readable. */}
       const usableMode=mode==='halo'&&!orb?'reference':mode;
       if(current.style==='ring'||current.style==='split'&&!current.dual){
         if(usableMode==='reference')drawReferenceRing(ctx,(values[current.period]||0)/100,t,current.palette,dark,still);
@@ -743,14 +802,14 @@ function drawStageDividers(ctx,dark){
           for(const [at,alpha] of [[0,0],[.18,.012],[.3,.05],[.4,.17],[.5,.32],[.6,.17],[.7,.05],[.82,.012],[1,0]])track.addColorStop(at,'rgba('+neutral+','+alpha+')');
           ctx.fillStyle=track;ctx.beginPath();ctx.arc(CENTER,CENTER,139+half,0,TAU);ctx.fill();
           if(q>0){
-            wetContext.clearRect(0,0,SIZE,SIZE);wetContext.drawImage(orb.frame(t,dark,false,still,current.palette),0,0);
+            wetContext.clearRect(0,0,SIZE,SIZE);wetContext.drawImage(orb.frame(t,dark,false,still,current.palette),0,0,SIZE,SIZE);
             drawRingFlow(wetContext,t,139.2,2);
             if(q<1){
               const used=1-q,half=Math.min(.018,q/2,used/2)/2,mask=wetContext.createConicGradient(-Math.PI/2,CENTER,CENTER);
               for(const [at,alpha] of [[0,.5],[half,0],[used-half,0],[used+half,1],[1-half,1],[1,.5]])mask.addColorStop(at,'rgba(255,255,255,'+alpha+')');
               wetContext.globalCompositeOperation='destination-in';wetContext.fillStyle=mask;wetContext.fillRect(0,0,SIZE,SIZE);wetContext.globalCompositeOperation='source-over';
             }
-            ctx.drawImage(wet,0,0);
+            ctx.drawImage(wet,0,0,SIZE,SIZE);
           }
           const reflection=ctx.createConicGradient(-Math.PI/2+.08*Math.sin(t*.24),CENTER,CENTER);
           for(const [at,alpha] of [[0,0],[.39,0],[.44,.38],[.49,0],[.81,0],[.85,.9],[.86,1],[.87,.9],[.92,0],[1,0]])reflection.addColorStop(at,'rgba(239,250,255,'+alpha+')');
@@ -776,9 +835,9 @@ function drawStageDividers(ctx,dark){
       if(current.style==='pool'){
         const value=current.values[current.period];
         if(value===null){ctx.clearRect(0,0,SIZE,SIZE);restorePool();return;}
-        const source=host.querySelector(':scope > canvas.eb-rive-aurora.ready');
+        const source=host.querySelector(':scope > canvas.eb-rive-aurora.ready,:scope > canvas.sheep-skin');
         if(source){
-          if(!drawRivePool(source,value/100,seconds)&&current.still&&sampleAttempts++<60&&!sampleRetry){
+          if(!drawCanvasPool(source,value/100,seconds,source.classList.contains('sheep-skin'))&&current.still&&sampleAttempts++<60&&!sampleRetry){
             sampleRetry=root.requestAnimationFrame(()=>{sampleRetry=0;paint(seconds);});
           }
         }else{ctx.clearRect(0,0,SIZE,SIZE);drawSvgPool(value/100,seconds);}
@@ -789,7 +848,20 @@ function drawStageDividers(ctx,dark){
           if(current.still&&sampleAttempts++<60&&!sampleRetry)sampleRetry=root.requestAnimationFrame(()=>{sampleRetry=0;paint(seconds);});
           return;
         }
-        ctx.clearRect(0,0,SIZE,SIZE);drawRing(seconds);
+        syncResolution();ctx.clearRect(0,0,SIZE,SIZE);drawRing(seconds);
+        const sheep=host.querySelector(':scope > canvas.sheep-skin');
+        if(sheep){
+          // The halo sits behind the full silhouette, never across the face or ears.
+          ctx.save();ctx.globalCompositeOperation='destination-out';
+          const sx=SIZE/geometry.width,sy=SIZE/geometry.height;
+          ctx.translate(-geometry.x*sx,-geometry.y*sy);
+          ctx.scale(sx,sy);ctx.filter='blur('+(2*canvas.width/SIZE)+'px)';
+          const factor=Number(canvas.dataset.bodyScale)||1;
+          const side=Math.min(sheep.clientWidth,sheep.clientHeight)*factor;
+          const x=sheep.offsetLeft+(sheep.clientWidth-side)/2,y=sheep.offsetTop+(sheep.clientHeight-side)/2+(Number(canvas.dataset.bodyShiftY)||0);
+          ctx.drawImage(sheep,x,y,side,side);
+          ctx.filter='none';ctx.drawImage(sheep,x,y,side,side);ctx.restore();
+        }
       }
     }
     function tick(time) {
@@ -801,9 +873,10 @@ function drawStageDividers(ctx,dark){
     function update(input={}) {
       if (destroyed) return;
       options=input;current=model(input);current.still ||= Boolean(motionPreference?.matches);
+      sheepIdleCenter(host.querySelector(':scope > canvas.sheep-skin'));
       root.cancelAnimationFrame(frame);root.cancelAnimationFrame(sampleRetry);frame=sampleRetry=sampleAttempts=0;restorePool();restoreScale();
       Object.assign(canvas.style,{display:'',filter:'none',opacity:'1'});
-      for(const key of ['liquidY','liquidSurfaces','bodyScale'])delete canvas.dataset[key];
+      for(const key of ['liquidY','liquidSurfaces','bodyScale','bodyShiftY'])delete canvas.dataset[key];
       canvas.dataset.style=current.style;canvas.dataset.material=current.material;canvas.dataset.quotaAvailable=String(current.available);
       for(const period of ['fiveHour','weekly'])canvas.dataset[period]=current.values[period]===null?'unknown':String(current.values[period]);
       if(!current.visible||current.style==='card'||!current.available){canvas.remove();return;}
@@ -813,7 +886,8 @@ function drawStageDividers(ctx,dark){
       }
       attach();
       if(current.style!=='pool')positionRing();
-      else Object.assign(canvas.style,{left:'0px',top:'0px',width:bounds.width+'px',height:bounds.height+'px'});
+      else { geometry={x:0,y:0,width:bounds.width,height:bounds.height};Object.assign(canvas.style,{left:'0px',top:'0px',width:bounds.width+'px',height:bounds.height+'px'}); }
+      syncResolution();
       paint(current.still?0:root.performance.now()/1000);
       if(!current.still&&!document.hidden)frame=root.requestAnimationFrame(tick);
     }
@@ -824,10 +898,10 @@ function drawStageDividers(ctx,dark){
     resizeObserver?.observe(host);
     const nativeObserver=typeof root.MutationObserver==='function'?new root.MutationObserver(records=>{
       if(records.some(record=>record.type==='attributes'
-        ?record.target.matches?.('.eb-rive-aurora,.codex-pet-sprite')
-        :record.target===host&&[...record.addedNodes].some(element=>element!==canvas&&element.matches?.('svg,.eb-rive-aurora,.codex-pet-sprite'))))refresh();
+        ?record.target.matches?.('.eb-rive-aurora,.codex-pet-sprite,.sheep-skin')
+        :record.target===host&&[...record.addedNodes].some(element=>element!==canvas&&element.matches?.('svg,.eb-rive-aurora,.codex-pet-sprite,.sheep-skin'))))refresh();
     }):null;
-    nativeObserver?.observe(host,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
+    nativeObserver?.observe(host,{childList:true,subtree:true,attributes:true,attributeFilter:['class','data-ready','data-facing']});
     function destroy(){
       destroyed=true;root.cancelAnimationFrame(frame);root.cancelAnimationFrame(sampleRetry);restorePool();restoreScale();canvas.remove();orb?.destroy();resizeObserver?.disconnect();nativeObserver?.disconnect();
       root.removeEventListener('resize',refresh);document.removeEventListener('visibilitychange',refresh);motionPreference?.removeEventListener('change',refresh);

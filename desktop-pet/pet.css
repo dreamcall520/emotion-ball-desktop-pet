@@ -133,3 +133,25 @@ body {
   #pet { transition: none; }
   #pet[data-shape="aurora-cloud"] { transition: none; }
 }
+
+/* A near-body seasonal offering stays on the face's front side inside the existing pet window.
+ * The 60/80px sizes use the same native-menu action instead of a tiny drag handle. */
+.sheep-offering {
+  position: absolute; z-index: 3; left: 6px; bottom: 6px; width: 24px; height: 24px;
+  display: grid; place-items: center;
+  box-sizing: border-box; padding: 2px; border: 1px solid rgba(169, 131, 103, .35);
+  border-radius: 8px; background: rgba(255, 249, 239, .94); cursor: grab;
+  touch-action: none; user-select: none;
+  transform: translate(var(--offering-x, 0px), var(--offering-y, 0px));
+}
+.sheep-offering[hidden] { display: none; }
+.sheep-offering img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.sheep-offering.dragging { cursor: grabbing; }
+.sheep-offering:focus-visible { outline: 2px solid #9164bc; outline-offset: 2px; }
+.sheep-offering[data-hint="true"]::after {
+  content: '↗'; position: absolute; left: 21px; top: -12px; color: #9b718d; font-size: 15px;
+  pointer-events: none;
+}
+
+.sheep-offering[data-side="right"] { left: auto; right: 6px; }
+.sheep-offering[data-side="right"][data-hint="true"]::after { content: "↖"; left: auto; right: 21px; }

@@ -607,7 +607,7 @@ test('迟到或已销毁窗口的 focus 通知不关闭快捷面板，真实其�
   assert.equal(quick.isVisible(), false);
 });
 
-test('浮动与列表快捷保留普通对白并行，设置仍安静，通知不插入且收起不重播', async t => {
+test('三种快捷面板展开到收起全程隐藏互动对白，关闭后只响应新事件不重播', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   for (const view of ['floating', 'list', 'settings']) {
     const f = await fixture({ codexEnabled: true });
@@ -626,33 +626,25 @@ test('浮动与列表快捷保留普通对白并行，设置仍安静，通知�
     // Hover also opens through the controller directly, bypassing openShortcuts.
     f.call(`shortcutWindow.open({ focus: false, settings: ${view === 'settings'} })`); await flush();
     assert.equal(f.call('shortcutWindow.getState().view'), view);
-    if (view === 'settings') {
-      assert.equal(f.bubble.getWindow().isVisible(), false);
-      assert.equal(f.call('dialogue.hasBubble(performance.now())'), false);
-      for (const event of ['hello', 'pet', 'play', 'thought', 'work']) assert.equal(f.call(`showDialogue('${event}')`), null);
-      f.send('pet:say', 'welcome');
-    } else {
-      assert.equal(f.bubble.getWindow().isVisible(), true, `${view}: existing greeting and shortcuts coexist`);
-      assert.equal(f.call('dialogue.hasBubble(performance.now())'), true);
-      assert.equal(f.bubble.shows.length, shows, 'opening preserves the greeting without replay');
-      f.send('pet:say', 'wake');
-      assert.equal(f.bubble.shows.length, shows + 1, 'a new ordinary interaction is not suppressed by shortcuts');
-      assert.equal(f.bubble.getWindow().isVisible(), true);
-    }
+    assert.equal(f.bubble.getWindow().isVisible(), false, `${view}: existing greeting closes before cards appear`);
+    assert.equal(f.call('dialogue.hasBubble(performance.now())'), false);
+    for (const event of ['hello', 'pet', 'play', 'thought', 'work']) assert.equal(f.call(`showDialogue('${event}')`), null);
+    f.send('pet:say', 'wake');
+    assert.equal(f.bubble.shows.length, shows, 'approaching or clicking cards cannot open a new greeting');
     assert.equal(f.call("showUpdateBubble({ latestVersion: '9.9.9' })"), false);
     assert.equal(f.call("showBubble({ id: 'late', text: '迟到提示', actions: [], durationMs: 4000 })"), false);
     assert.equal(f.call('canPresentCodex()'), false);
     assert.equal(f.call('dialogue._lastDirectAt'), directAt);
     assert.equal(f.call('dialogue._lastBubbleAt'), bubbleAt);
-    assert.equal(f.bubble.shows.length, shows + (view === 'settings' ? 0 : 1));
+    assert.equal(f.bubble.shows.length, shows);
     assert.equal(f.pomodoroWindows.options.isSuppressed(), false, 'independent Pomodoro windows remain available');
     assert.equal(f.pomodoro.options.canEncourage(), true, 'independent Pomodoro encouragement keeps its normal rule');
     f.call('shortcutWindow.close()'); t.mock.timers.tick(179);
-    assert.equal(Boolean(f.call("showDialogue('welcome')")), view !== 'settings', 'ordinary dialogue stays parallel through collapse; settings remain quiet');
+    assert.equal(f.call("showDialogue('welcome')"), null, 'collapse animation still owns the presentation');
     assert.equal(f.call("showBubble({ id: 'closing', text: '收起中', actions: [], durationMs: 4000 })"), false);
     t.mock.timers.tick(1);
-    assert.equal(f.bubble.shows.length, shows + (view === 'settings' ? 0 : 2), 'closing does not replay greetings');
-    assert.equal(f.call('dialogue.hasBubble(performance.now())'), view !== 'settings');
+    assert.equal(f.bubble.shows.length, shows, 'closing does not replay greetings');
+    assert.equal(f.call('dialogue.hasBubble(performance.now())'), false);
     assert.ok(f.call("showDialogue('welcome')"), 'a fresh later event can show normally');
     assert.equal(f.call('settings.bubblesEnabled'), true);
     f.call("openShortcutAction('chat')");
@@ -929,6 +921,26 @@ test('临时换装保留启动外观，重启后恢复用户指定外观', async
   assert.equal(f.call('settings.startupAppearance.shape'), 'cloud');
   const reopened = await fixture({ loadedSettings: f.saved.at(-1) });
   assert.equal(reopened.call('settings.customization.appearance.shape'), 'cloud');
+});
+
+test('咩咩默认自动换装，保存的主题跨重启保留且不改启动形态', async t => {
+  const initial = await fixture();
+  t.after(() => initial.app.emit('before-quit'));
+  assert.equal(initial.call('settings.customization.appearance.sheepTheme'), 'auto');
+  for (const shape of ['new-year-sheep', 'cloud']) {
+    for (const sheepTheme of ['auto', 'none', 'halloween', 'christmas', 'spring-festival']) {
+      const f = await fixture();
+      t.after(() => f.app.emit('before-quit'));
+      assert.equal(f.call(`saveCustomization({appearance:{shape:'${shape}',sheepTheme:'halloween'}},true)`), true);
+      const startup = f.call('JSON.stringify(settings.startupAppearance)');
+      assert.equal(f.call(`saveCustomization({appearance:{shape:'new-year-sheep',sheepTheme:'${sheepTheme}'}},false)`), true);
+      const reopened = await fixture({ loadedSettings: f.saved.at(-1) });
+      t.after(() => reopened.app.emit('before-quit'));
+      assert.equal(reopened.call('settings.customization.appearance.shape'), shape);
+      assert.equal(reopened.call('settings.customization.appearance.sheepTheme'), sheepTheme);
+      assert.equal(reopened.call('JSON.stringify(settings.startupAppearance)'), startup);
+    }
+  }
 });
 
 test('聊天菜单复用同一个面板和控制器，打开关闭不会发送或新建聊天', async () => {
@@ -3505,6 +3517,48 @@ test('番茄退出保存失败保留应用和后台资源，成功重试才清�
   f.pomodoro.close = () => ({ ok: true });
   f.app.emit('before-quit', { preventDefault() { prevented++; } });
   assert.equal(f.call('quitCleanupStarted'), true);
+});
+
+test('咩咩完成提醒使用本地原画时长，拒绝渲染端伪造时长，其他形态保持原协议', async t => {
+  const manifest=require('../assets/sheep/manifest.json');
+  for(const shape of ['new-year-sheep','blob']) {
+    const f=await fixture({codexEnabled:true}); t.after(()=>f.app.emit('before-quit'));
+    f.call(`settings.customization.appearance.shape='${shape}'; settings.customization.appearance.sheepTheme='none'`);
+    const ack=queueCodexCompletion(f);
+    f.call('windowMotion.start = request => { globalThis.lastSheepHostRequest = request; return true; }');
+    f.send('pet:codex-motion-ready',{...ack,durationMs:60000});
+    const actual=f.call('lastSheepHostRequest'); assert.ok(actual);
+    const duration=shape==='new-year-sheep' ? manifest.themes.none.actions.complete.durations.reduce((sum,ms)=>sum+ms,0) : undefined;
+    assert.equal(actual.durationMs,duration);
+    assert.equal(actual.action,ack.action,'保留原所有权、token和action协议');
+    assert.equal(actual.token,ack.token);
+  }
+});
+
+
+test('独立送物主进程只接受当前羊页面状态和自有源窗手势，改尺寸/隐藏/退出取消且不移动羊',async t=>{
+ t.mock.timers.enable({apis:['setTimeout','Date']});t.mock.method(Math,'random',()=>0);
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call("settings.customization.appearance.shape='new-year-sheep';settings.customization.appearance.sheepTheme='halloween'");
+ const state={eligible:true,theme:'halloween',facing:'right',ink:{x:.15,y:.1,width:.7,height:.85}},before=f.pet.getBounds(),count=f.windows.length;
+ f.send('pet:offering-state',state,{});assert.equal(f.windows.length,count);
+ f.send('pet:offering-state',state);assert.equal(f.windows.length,count);t.mock.timers.tick(120000);const source=f.windows.at(-1);assert.notEqual(source,f.pet);source.webContents.emit('did-finish-load');assert.equal(source.visible,true);assert.equal(source.options.width,44);assert.equal(source.options.focusable,false);
+ f.send('pet:offering-input',{type:'begin',x:22,y:22},f.pet.webContents);assert.equal(f.pet.messages.filter(v=>v.channel==='pet:offering-pointer').length,0);
+ f.send('pet:offering-input',{type:'begin',x:22,y:22},source.webContents);assert.equal(f.pet.messages.at(-1).packet.type,'begin');assert.deepEqual(f.pet.getBounds(),before);
+ f.pet.emit('resize');assert.equal(source.visible,false);assert.equal(f.pet.messages.some(v=>v.channel==='pet:offering-pointer'&&v.packet.type==='cancel'),true);
+ f.send('pet:offering-state',state);assert.equal(source.visible,false);t.mock.timers.tick(120000);assert.equal(source.visible,true);f.pet.hide();assert.equal(source.visible,false);
+ f.app.emit('before-quit');assert.equal(source.destroyed,true);
+});
+
+test('主进程短动作无ink暂停保留入口deadline，不信伪造sender且不污染C额度墨迹',async t=>{
+ t.mock.timers.enable({apis:['setTimeout','Date']});t.mock.method(Math,'random',()=>0);
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call("settings.customization.appearance.shape='new-year-sheep';settings.customization.appearance.sheepTheme='christmas'");
+ const state={eligible:true,theme:'christmas',facing:'right',settled:true,ink:{x:.15,y:.1,width:.7,height:.85}};
+ f.send('pet:offering-state',state);t.mock.timers.tick(60000);const saved=f.call('sheepQuotaInk.ink.width');
+ f.send('pet:offering-state',{eligible:false,transient:true,theme:'christmas',facing:'right',settled:true});
+ assert.equal(f.call('sheepQuotaInk.ink.width'),saved,'临时无轮廓状态不能写入额度卡');
+ const count=f.windows.length;t.mock.timers.tick(60000);assert.equal(f.windows.length,count,'到期仍动作中不创建入口');
+ f.send('pet:offering-state',state);const source=f.windows.at(-1);assert.notEqual(source,f.pet);source.webContents.emit('did-finish-load');assert.equal(source.visible,true,'动作后沿用已到deadline');
+ f.send('pet:offering-state',{eligible:false},{});assert.equal(source.visible,true,'伪造sender不能清空排期');
 });
 
 

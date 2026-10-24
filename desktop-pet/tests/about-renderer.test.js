@@ -238,7 +238,7 @@ test('关于页载入既有真实视觉模块，保留满铺与渐变名，背�
   assert.match(html, /id="about-name">球球桌宠<\/h1>/); assert.match(html, /id="about-avatar-help" class="about-sr-only"/);
   for (const script of ['rings', 'custom-shapes', 'emotions', 'ball', 'engine']) assert.match(html, new RegExp('../emotion-ball/js/' + script + '\\.js'));
   for (const script of ['customization', 'rive', 'boo-binary', 'aurora-rive']) assert.match(html, new RegExp('lib/' + script + '\\.js'));
-  assert.match(html, /href="aurora-rive.css"/); assert.match(html, /connect-src 'none'/);
+  assert.match(html, /href="aurora-rive.css"/); assert.match(html, /connect-src 'self';/);
   assert.doesNotMatch(html + css + renderer, /chat-avatar|PetChatAvatar|egg-turn|egg-shell|is-static-egg|变出一颗彩蛋/);
   assert.match(css, /about-drift 8s/); assert.match(css, /translate\(6%, 3%\) scale\(1.08\)/);
   assert.match(css, /data-about-visible="false".*animation-play-state: paused/);

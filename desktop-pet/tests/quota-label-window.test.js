@@ -158,7 +158,7 @@ test('标准与小巧锚点读取实际卡面，守护角色只扩大原生避�
       guard = enabled;
       f.label.show({ ...readyModel(), state }); await flush();
       const native = f.label.getWindow().getBounds(), roleVisible = enabled && state === 'ready';
-      assert.equal(native.width, width + (roleVisible ? 72 : 0));
+      assert.equal(native.width, width + (roleVisible ? 56 : 0));
       assert.equal(native.height, height + (roleVisible ? gutter : 0));
       assert.deepEqual(f.label.getVisibleBounds(), { x: native.x + inset,
         y: native.y + (roleVisible ? gutter : 0) + inset,
@@ -314,6 +314,8 @@ test('额度 preload 仅保留明确 visible/guardEntry 布尔，不接受字符
     const throwing = readyModel(); Object.defineProperty(throwing, key, { get() { throw new Error('boolean getter'); } });
     assert.doesNotThrow(() => listener({}, throwing)); assert.equal(key in received, false);
   }
+  for(const width of[48,64]){listener({}, {...readyModel(),guardTargetWidth:width});assert.equal(received.guardTargetWidth,width);}
+  for(const width of[22,24,44,50,'48',Infinity]){listener({}, {...readyModel(),guardTargetWidth:width});assert.equal('guardTargetWidth' in received,false);}
   assert.equal(received.items[0].remaining, 47.6);
   listener({}, { ...readyModel(), guardSide: 'left', cardInset: { x: 72, y: 18 } });
   assert.equal(received.guardSide, 'left');
@@ -1743,4 +1745,46 @@ test('浅色卡片在深色壁纸上的次级文字和深色 urgent 对比度均
   const urgentColor = numbers(urgentMatch);
   assert.ok(contrast(periodColor, lightBackground) >= 4.5);
   assert.ok(contrast(urgentColor, darkBackground) >= 4.5);
+});
+
+
+test('侧卡透明尾跨进羊或气泡时仍穿透，普通48px入口有效区域保持', async t => {
+  let cursor = { x: 1372, y: 440 };
+  const f = fixture(() => Promise.resolve(), { labelSize: 'compact', getGuardEntry: () => true,
+    presentation: { shape: 'new-year-sheep', mode: 'peeked', side: 'right' }, getCursorScreenPoint: () => cursor });
+  t.after(() => f.label.destroy());
+  f.pet.bounds = { x: 1360, y: 400, width: 80, height: 80 };
+  f.label.show(readyModel()); await flush();
+  const win = f.windows[0], contents = win.webContents, frame = {};
+  contents.mainFrame = frame;
+  contents.getURL = () => require('node:url').pathToFileURL(win.loadedFile).href;
+  const pointer = () => contents.emit('ipc-message', { sender: contents, senderFrame: frame }, 'pet:quota-label-pointer', true);
+  assert.equal(win.bounds.width, 184, '普通角色48px目标继续存在');
+  assert.equal(win.bounds.x + win.bounds.width > f.pet.bounds.x + 3.2, true, '真实复现透明尾与羊轮廓相交');
+  assert.equal(win.ignoreCalls.at(-1)[0], true, '首次显示不能抢羊hover');
+  pointer(); assert.equal(win.ignoreCalls.at(-1)[0], true, '迟到renderer命中不能抢羊点击');
+  cursor = { x: 1340, y: 440 }; pointer();
+  assert.equal(win.ignoreCalls.at(-1)[0], false, '羊外的完整角色目标仍可点击');
+  f.pet.bounds = { x: 176, y: 400, width: 80, height: 80 };
+  f.obstacle = { x: 240, y: 310, width: 146, height: 252 };
+  cursor = { x: 242, y: 510 }; f.label.reposition(); pointer();
+  assert.equal(win.ignoreCalls.at(-1)[0], true, '气泡下的透明尾不吃气泡点击');
+  cursor = { x: 210, y: 510 }; pointer();
+  assert.equal(win.ignoreCalls.at(-1)[0], false, '气泡外仍有角色点击目标');
+  assert.deepEqual(f.errors, []);
+});
+
+
+test('实际controller区分22/24/50角色，普通48px与大角色64px同源传给页面', async t => {
+  let theme='christmas';
+  const f=fixture(()=>Promise.resolve(),{labelSize:'compact',getGuardEntry:()=>true});t.after(()=>f.label.destroy());
+  f.pet.bounds={x:1360,y:400,width:80,height:80};
+  for(const [remaining,roleWidth]of [[84,22],[100,24],[0,50]]){
+    f.presentation={shape:'new-year-sheep',sheepTheme:theme,mode:'peeked',side:'right'};
+    const m=readyModel();m.items[0].remaining=remaining;f.label.show(m);await flush();
+    const b=f.label.getWindow().getBounds();
+    const packet=f.windows[0].sent.at(-1)[1];assert.equal(packet.guardSide,'left');
+    assert.equal(packet.cardInset.x,remaining===0?72:56);assert.equal(b.x+packet.cardInset.x+128,AREA.width);
+    assert.equal(b.width,remaining===0?200:184);assert.equal(f.windows[0].sent.at(-1)[1].guardTargetWidth,remaining===0?64:48);assert.deepEqual(f.errors,[]);
+  }
 });

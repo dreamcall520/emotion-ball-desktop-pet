@@ -8,6 +8,8 @@ node_modules
 dist/
 desktop-pet/build/
 desktop-pet/output/
+__pycache__/
+*.py[cod]
 
 # editor / agent internals
 .cursor/

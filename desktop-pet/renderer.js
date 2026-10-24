@@ -25,6 +25,7 @@
   const petting = new CompanionBehavior.PettingTracker();
 
   let ball = null;
+  let sheepOffering = null;
   let clickVisual = null;
   let officialAurora = null;
   let codexPet = null;
@@ -50,6 +51,14 @@
   let petHovered = false;
   let actionTimer = null;
   let actionUntil = 0;
+  let sheepActionBall = null;
+  let lastSheepClick = null;
+  let nextSheepAmbientAt = 0;
+  let lastSheepAmbient = null;
+  let sheepAutoNap = false;
+  let sheepLastInteractionAt = performance.now();
+  let sheepLastNapAt = null;
+  let sheepAutomaticWakeUntil = 0;
   let lastWorkAttempt = 0;
   let lastSample = null;
   let currentState = { mode: 'awake', emotionId: '50', gaze: null };
@@ -103,10 +112,10 @@
     desktop.thought?.({ visible, side, reducedMotion: reducedMotion() });
   }
 
-  function canShowCodex() {
+  function canShowCodex(preparedMotion = null) {
     return !focusQuiet && !presentationSuppressed && codexEnabled && Boolean(lastSample) && !lastSample.locked && !companion.manualSleep &&
-      currentState.mode !== 'sleep' && !dragState && !singleClickTimer && !helloTimer &&
-      performance.now() >= actionUntil && !activeMotion;
+      currentState.mode !== 'sleep' && !dragState && !sheepOffering?.isDragging() && !singleClickTimer && !helloTimer &&
+      performance.now() >= actionUntil && (!activeMotion || activeMotion === preparedMotion);
   }
 
   function reportCodexAvailability() {
@@ -145,7 +154,7 @@
 
   function syncCodexWorking() {
     const eligible = !focusQuiet && !presentationSuppressed && codexEnabled && codexActiveTaskCount > 0 && Boolean(lastSample) && !lastSample.locked &&
-      !companion.manualSleep && currentState.mode !== 'sleep' && !dragState && !singleClickTimer && !helloTimer &&
+      !companion.manualSleep && currentState.mode !== 'sleep' && !dragState && !sheepOffering?.isDragging() && !singleClickTimer && !helloTimer &&
       performance.now() >= actionUntil && !activeMotion;
     const working = eligible && codexThinkingVisible;
     syncFacing();
@@ -173,7 +182,7 @@
   function observe(callback) {
     return (...args) => {
       try { return callback(...args); }
-      finally { syncCodexWorking(); reportCodexAvailability(); }
+      finally { syncCodexWorking(); reportCodexAvailability(); sheepOffering?.update(); }
     };
   }
   const onPet = (name, callback) => petElement.addEventListener(name, observe(callback));
@@ -195,13 +204,23 @@
     activeMotion = { token: ++nextMotionToken, action: motion.id, owner: 'codex',
       alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch };
     petElement.dataset.motionOwner = 'codex';
-    ball.setEmotion(motion.emotion);
+    if (customization.appearance.shape !== 'new-year-sheep') ball.setEmotion(motion.emotion);
     ball.setMotionAction?.(motion.id, 'codex');
     ball.setMotionFrame(InteractionMotion.sampleMotion(motion.id, 0));
     petElement.dataset.lastAction = motion.id;
-    // 只准备本地姿态。宿主复核提醒和所有权后才开始移动窗口、显示气泡。
-    desktop.codexMotionReady({ token: activeMotion.token, action: motion.id,
-      alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch });
+    const preparedBall = ball, preparedMotion = activeMotion;
+    const acknowledge = ready => {
+      if (activeMotion !== preparedMotion || ball !== preparedBall) return;
+      if (ready === false || !canShowCodex(preparedMotion)) { cancelCodex(request); return; }
+      const durationMs = customization.appearance.shape === 'new-year-sheep'
+        ? preparedBall.getActionDuration?.(motion.id, 'codex') : undefined;
+      desktop.codexMotionReady({ token: preparedMotion.token, action: motion.id,
+        alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch,
+        ...(Number.isInteger(durationMs) && durationMs >= 10 && durationMs <= 60000 ? { durationMs } : {}) });
+    };
+    // 完整原画先就绪，宿主再开始同长计时，首播慢加载也不会截断动作。
+    if (customization.appearance.shape === 'new-year-sheep' && ball.whenMotionReady) ball.whenMotionReady().then(acknowledge);
+    else acknowledge(true);
   }
 
   // 只调整此桌宠页面的配置，不改变原项目表情库。
@@ -307,6 +326,9 @@
   }
 
   function createBall(emotionId) {
+    sheepAutoNap = false; sheepLastNapAt = null; sheepAutomaticWakeUntil = 0;
+    sheepLastInteractionAt = performance.now();
+    petElement.dataset.autoNap = 'false';
     if (quotaEffects) requestAnimationFrame(syncQuotaEffects);
     const nextCompactMode = window.innerWidth <= 120;
     const previousShape = petElement.dataset.shape;
@@ -342,6 +364,9 @@
       auroraBodyTexture: referenceTexture,
       auroraStyle: customization.appearance.auroraStyle,
       auroraTransparency: customization.appearance.auroraTransparency,
+      sheepTheme: customization.appearance.sheepTheme,
+      christmasBuddies: true,
+      ambientFireworks: true,
       // 桌面球球需要每一帧都用可转动的 SVG 眼睛；素材里的静态白眼只用作外观参考。
       liveAuroraEyes: customization.appearance.shape === 'aurora-cloud',
       auroraTurnRing: customization.appearance.shape === 'aurora-cloud'
@@ -369,12 +394,21 @@
       return ball;
     };
     ball.on('change', ({ id }) => { petElement.dataset.emotion = id; });
+    const createdBall = ball;
+    ball.on('buddychange', () => { if (ball === createdBall) sheepOffering?.update(); });
+    ball.on('motionend', () => {
+      if (ball !== createdBall || sheepActionBall !== createdBall) return;
+      clearAction(); restoreState(); sheepOffering?.update();
+    });
     petElement.dataset.emotion = ball.emotionId;
     if (customization.appearance.shape === 'aurora-cloud' &&
         ['tucked', 'peeked'].includes(presentationMode) && ['left', 'right'].includes(petElement.dataset.edge)) {
       facing = 'right';
     }
     ball.setFacing(visualFacing());
+    if (customization.appearance.shape === 'new-year-sheep' && typeof createdBall.whenReady === 'function') {
+      createdBall.whenReady().then(() => { if (ball === createdBall) sheepOffering?.update(); });
+    }
     if (customization.appearance.shape === 'aurora-cloud') {
       officialAurora = window.AuroraRive?.create(petElement, customization.appearance, referenceTexture) || null;
       if (officialAurora) {
@@ -410,17 +444,19 @@
   }
 
   function clearAction() {
+    sheepOffering?.cancel(false);
     clearTimeout(actionTimer);
     actionTimer = null;
     actionUntil = 0;
+    sheepActionBall = null;
   }
 
-  function stopMotion(notifyHost = true) {
+  function stopMotion(notifyHost = true, preserveSheepClip = false) {
     activeMotion = null;
     petElement.dataset.motionOwner = 'none';
     delete petElement.dataset.clickVisual;
     clickVisual?.clear();
-    ball.stopMotion();
+    if (!preserveSheepClip || customization.appearance.shape !== 'new-year-sheep') ball.stopMotion();
     if (notifyHost) desktop.stopMotion();
   }
 
@@ -435,7 +471,7 @@
   function restoreState() {
     if (presentationSuppressed) { syncSuppressedAnimation(); return; }
     if (activeMotion || dragState?.dragged || performance.now() < actionUntil) return;
-    showEmotion(companion.manualSleep ? '00' : currentState.emotionId);
+    showEmotion(companion.manualSleep || sheepAutoNap ? '00' : currentState.emotionId);
   }
 
   function syncSuppressedAnimation(refresh = false) {
@@ -496,6 +532,7 @@
       petElement.classList.remove('dragging');
     }
     if (presentationSuppressed) {
+      clearSheepAutoNap();
       cancelPendingInteraction();
       clearAction();
       stopMotion(false);
@@ -513,6 +550,76 @@
     }
   }
 
+  function clearSheepAutoNap() {
+    sheepAutoNap = false;
+    petElement.dataset.autoNap = 'false';
+  }
+
+  function wakeSheep(quiet = true) {
+    if (customization.appearance.shape !== 'new-year-sheep' || presentationSuppressed || lastSample?.locked) return;
+    clearSheepAutoNap();
+    cancelPendingInteraction(); clearAction(); stopMotion(false);
+    companion.setManualSleep(false, performance.now());
+    currentState = { ...currentState, mode: 'awake', emotionId: '50', welcome: false };
+    petElement.dataset.mode = 'awake';
+    sheepAutomaticWakeUntil = performance.now() + 400;
+    lastWorkAttempt = performance.now();
+    noteInteraction();
+    const theme = SheepTheme.resolveTheme(customization.appearance.sheepTheme, new Date());
+    startSheepInteraction(theme === 'none' ? 'stretch' : 'greet', true);
+    if (!quiet) desktop.say('wake');
+  }
+
+  function wakeSheepAutomaticSleep() {
+    if (customization.appearance.shape !== 'new-year-sheep' || presentationSuppressed || lastSample?.locked ||
+        (!companion.manualSleep && !sheepAutoNap && currentState.mode !== 'sleep')) return false;
+    // All sheep sleep modes share the same quiet hover/click wake and real clip lifecycle.
+    wakeSheep();
+    return true;
+  }
+
+  function resetSheepAmbient(now = performance.now()) {
+    nextSheepAmbientAt = customization.appearance.shape === 'new-year-sheep'
+      ? now + 45000 + Math.floor(Math.random() * 30001) : 0;
+  }
+
+  function maybePlaySheepAmbient(now) {
+    if (customization.appearance.shape !== 'new-year-sheep' || !['awake', 'spacing', 'tired'].includes(currentState.mode) || sheepAutoNap ||
+        codexActiveTaskCount > 0 || focusQuiet || presentationSuppressed || presentationPaused || lastSample?.locked ||
+        companion.manualSleep || dragState || sheepOffering?.isDragging() || singleClickTimer || helloTimer || activeMotion ||
+        now < actionUntil || reducedMotion()) {
+      resetSheepAmbient(now);
+      return false;
+    }
+    if (!nextSheepAmbientAt) { resetSheepAmbient(now); return false; }
+    if (now < nextSheepAmbientAt) return false;
+    const mayNap = !petHovered && now - sheepLastInteractionAt >= 300000 &&
+      (!companion.keepAwake || (Number.isFinite(lastSample?.idleSeconds) && lastSample.idleSeconds >= 300)) &&
+      (sheepLastNapAt === null || (now - sheepLastNapAt >= 600000 && Math.random() < .25));
+    if (mayNap) {
+      resetSheepAmbient(now); clearAction(); stopMotion(false);
+      sheepAutoNap = true; sheepLastNapAt = now; petElement.dataset.autoNap = 'true';
+      showEmotion('00');
+      return true;
+    }
+    if (currentState.mode !== 'awake') { resetSheepAmbient(now); return false; }
+    const theme = SheepTheme.resolveTheme(customization.appearance.sheepTheme, new Date());
+    const pools = {
+      none: ['ear', 'bell', 'stretch', 'joy'],
+      halloween: ['magic', 'joy', 'greet'],
+      christmas: ['scarf', 'snow', 'joy'],
+      'spring-festival': ['fortune', 'greet', 'joy']
+    };
+    const actions = pools[theme].filter(action => action !== lastSheepAmbient && SheepSkin.supportsAction(action, theme));
+    resetSheepAmbient(now);
+    const action = actions[Math.floor(Math.random() * actions.length)];
+    if (!action) return false;
+    lastSheepAmbient = action;
+    // A quiet automatic gesture must not count as human activity or prevent natural sleep.
+    runCommand({ command: 'sheep-action', action, ambient: true });
+    return true;
+  }
+
   function updateActivity(sample) {
     const previouslyLocked = lastSample?.locked === true;
     lastSample = sample;
@@ -520,7 +627,11 @@
     const now = performance.now();
     const previousMode = currentState.mode;
     currentState = companion.update(sample, now);
+    if (sample.locked || presentationSuppressed || presentationPaused || focusQuiet || codexActiveTaskCount > 0) clearSheepAutoNap();
+    if (sheepAutoNap && companion.keepAwake && !companion.manualSleep &&
+        Number.isFinite(sample.idleSeconds) && sample.idleSeconds >= 0 && sample.idleSeconds <= 2) wakeSheepAutomaticSleep();
     petElement.dataset.mode = companion.manualSleep ? 'manual-sleep' : currentState.mode;
+    maybePlaySheepAmbient(now);
     if (presentationSuppressed) {
       syncSuppressedAnimation();
       return;
@@ -549,12 +660,12 @@
       clearAction();
       stopMotion();
     }
-    if (!focusQuiet && currentState.welcome && !petHovered && !wakeOnDoubleClick && !activeMotion && !dragState?.dragged && now >= actionUntil) {
+    if (!sheepAutoNap && !focusQuiet && currentState.welcome && !sheepOffering?.isDragging() && !petHovered && !wakeOnDoubleClick && !activeMotion && !dragState?.dragged && now >= actionUntil) {
       playCompanionReaction('stretch', 'wake');
     } else {
       restoreState();
     }
-    if (!focusQuiet && currentState.mode === 'sleep' && previousMode !== 'sleep' && !companion.manualSleep) {
+    if (customization.appearance.shape !== 'new-year-sheep' && !focusQuiet && currentState.mode === 'sleep' && previousMode !== 'sleep' && !companion.manualSleep) {
       desktop.say('sleep');
     }
     if (activeMotion) return;
@@ -565,19 +676,24 @@
       setBallGaze(null);
       petElement.dataset.gaze = '0,0';
     }
-    if (!focusQuiet && !companion.manualSleep && ['awake', 'focus'].includes(currentState.mode) &&
-        now - lastWorkAttempt >= 60000 && !activeMotion && !dragState && now >= actionUntil) {
+    if (!sheepAutoNap && !focusQuiet && !companion.manualSleep && ['awake', 'focus'].includes(currentState.mode) &&
+        now - lastWorkAttempt >= 60000 && !activeMotion && !dragState && !sheepOffering?.isDragging() && now >= actionUntil) {
       lastWorkAttempt = now;
       desktop.say('work');
     }
   }
 
   function noteInteraction() {
+    clearSheepAutoNap();
+    sheepLastInteractionAt = performance.now();
+    resetSheepAmbient();
     companion.noteInteraction(performance.now());
     if (lastSample) updateActivity(lastSample);
   }
 
   function wake() {
+    if (customization.appearance.shape === 'new-year-sheep') { wakeSheep(false); return; }
+    clearSheepAutoNap();
     cancelPendingInteraction();
     clearAction();
     stopMotion();
@@ -588,6 +704,7 @@
   }
 
   function sleep() {
+    clearSheepAutoNap();
     cancelPendingInteraction();
     clearAction();
     stopMotion();
@@ -600,11 +717,16 @@
   }
 
   function runDoubleClickAction() {
+    if (wakeSheepAutomaticSleep() || (customization.appearance.shape === 'new-year-sheep' && performance.now() < sheepAutomaticWakeUntil)) return;
     const shouldWake = wakeOnDoubleClick || companion.manualSleep || ball.emotionId === '00';
     cancelPendingInteraction();
     if (presentationSuppressed || lastSample?.locked) return;
     if (shouldWake) {
       wake();
+      return;
+    }
+    if (customization.appearance.shape === 'new-year-sheep') {
+      runSingleClickAction();
       return;
     }
     const motion = InteractionMotion.chooseMotion(Math.random(), lastDoubleMotion);
@@ -617,11 +739,11 @@
     if (!motion || presentationSuppressed || lastSample?.locked || companion.manualSleep) return;
     cancelPendingInteraction();
     clearAction();
-    stopMotion(!withinSequence);
+    stopMotion(!withinSequence, true);
     noteInteraction();
     activeMotion = { token: ++nextMotionToken, action, owner: 'user', side: facing || 'right' };
     petElement.dataset.motionOwner = 'user';
-    ball.setEmotion(motion.emotion);
+    if (customization.appearance.shape !== 'new-year-sheep') ball.setEmotion(motion.emotion);
     ball.setMotionAction?.(action, 'user');
     const firstFrame = InteractionMotion.sampleMotion(action, 0);
     ball.setMotionFrame(firstFrame);
@@ -635,16 +757,17 @@
   }
 
   function playCompanionReaction(action, scene) {
+    if (customization.appearance.shape === 'new-year-sheep' && scene === 'wake') { wakeSheep(false); return; }
     const motion = CompanionMotion.getMotion(action);
     if (!motion || presentationSuppressed || lastSample?.locked || companion.manualSleep) return;
     cancelPendingInteraction();
     clearAction();
-    stopMotion();
+    stopMotion(true, true);
     syncFacing();
     activeMotion = { token: ++nextMotionToken, action, owner: 'user', side: facing || 'right' };
     petElement.dataset.motionOwner = 'user';
     petElement.dataset.lastAction = action;
-    ball.setEmotion(reducedMotion() ? '50' : motion.emotion);
+    if (customization.appearance.shape !== 'new-year-sheep') ball.setEmotion(reducedMotion() ? '50' : motion.emotion);
     if (!reducedMotion()) ball.setMotionAction?.(action, 'user');
     ball.setMotionFrame(reducedMotion() ? CompanionMotion.neutralFrame() : CompanionMotion.sample(action, 0, activeMotion.side));
     desktop.playMotion({ ...activeMotion, reducedMotion: reducedMotion() });
@@ -665,7 +788,10 @@
       petElement.dataset.motionOwner = 'none';
       delete petElement.dataset.clickVisual;
       clickVisual?.clear();
-      ball.stopMotion();
+      if (customization.appearance.shape === 'new-year-sheep') {
+        // Clear ownership and restore emotion in one selection; never briefly re-enter stale working art.
+        ball.setEmotion(companion.manualSleep || sheepAutoNap ? '00' : currentState.emotionId);
+      } else ball.stopMotion();
       restoreState();
       if (finishedOwner === 'codex' && codexEnabled && codexActiveTaskCount > 0) {
         startCodexThinkingCadence();
@@ -679,14 +805,28 @@
   }
 
   function runSingleClickAction(speak = true) {
-    if (presentationSuppressed || companion.manualSleep || lastSample?.locked) return;
-    if (activeMotion) stopMotion();
+    if (presentationSuppressed || lastSample?.locked) return;
+    if (wakeSheepAutomaticSleep() || (customization.appearance.shape === 'new-year-sheep' && performance.now() < sheepAutomaticWakeUntil)) return;
+    if (companion.manualSleep) return;
+    if (activeMotion) stopMotion(true, true);
     noteInteraction();
     if (speak && !focusQuiet && codexEnabled && codexActiveTaskCount > 0) {
       clearAction();
       startCodexThinkingCadence();
       desktop.say('thought');
       petElement.dataset.lastAction = 'thought';
+      return;
+    }
+    if (customization.appearance.shape === 'new-year-sheep') {
+      const theme = SheepTheme.resolveTheme(customization.appearance.sheepTheme, new Date());
+      const actions = Object.keys(SheepSkin.getActions(theme)).filter(action =>
+        !['walk', 'sleep', 'working', 'complete', 'receive-gift'].includes(action));
+      const previous = actions.indexOf(lastSheepClick);
+      const action = actions[previous < 0 ? Math.floor(Math.random() * actions.length) : (previous + 1) % actions.length];
+      lastSheepClick = action;
+      if (!startSheepInteraction(action, false, true)) return;
+      petElement.dataset.lastAction = action;
+      if (speak) desktop.say({ event: 'play', sheepAction: action });
       return;
     }
     if (officialAurora?.click()) {
@@ -715,6 +855,15 @@
     }), 260);
   }
 
+  function runBuddyClick(buddy) {
+    const action = { reindeer: 'greet', tree: 'joy', santa: 'gift', snowman: 'snow' }[buddy];
+    if (!action || SheepTheme.resolveTheme(customization.appearance.sheepTheme, new Date()) !== 'christmas' ||
+        focusQuiet || (codexEnabled && codexActiveTaskCount > 0) || !startSheepInteraction(action)) return false;
+    petElement.dataset.lastAction = `buddy:${buddy}`;
+    desktop.say({ event: 'play', sheepAction: action });
+    return true;
+  }
+
   function runRandomEmotion() {
     cancelPendingInteraction();
     stopMotion();
@@ -722,6 +871,23 @@
     const definitions = EmotionBall.config.list().filter(definition => !['55', '56'].includes(definition.id));
     const selected = definitions[Math.floor(Math.random() * definitions.length)];
     if (selected) playEmotion(selected.id, 5000);
+  }
+
+  function startSheepInteraction(action, ambient = false, clicked = false) {
+    if (customization.appearance.shape !== 'new-year-sheep' || presentationSuppressed || lastSample?.locked || companion.manualSleep ||
+        !SheepSkin.supportsAction(action, SheepTheme.resolveTheme(customization.appearance.sheepTheme, new Date()))) return false;
+    cancelPendingInteraction(); clearAction(); stopMotion(true, true);
+    sheepActionBall = ball;
+    actionUntil = Number.POSITIVE_INFINITY;
+    if (!ambient) noteInteraction();
+    ball.setMotionAction(action);
+    if (clicked) {
+      const receiver = ball;
+      receiver.whenMotionReady?.().then(ready => {
+        if (ready === true && ball === receiver && sheepActionBall === receiver) receiver.notifySuccessfulClick?.();
+      });
+    }
+    return true;
   }
 
   function runCommand(command) {
@@ -735,6 +901,8 @@
       return;
     }
     if (presentationSuppressed || lastSample?.locked) return;
+    if (command?.command === 'sheep-offer') { sheepOffering?.offer(command.kind); return; }
+    if (command?.command === 'sheep-action') { startSheepInteraction(command.action, command.ambient === true); return; }
     if (command?.command === 'again') playReaction(command.motion, false);
     else if (command === 'random') runRandomEmotion();
     else if (command === 'sleep') sleep();
@@ -754,24 +922,61 @@
     }
   }
 
+  function sheepOfferingState() {
+    const ownReceipt = sheepOffering?.isPlaying() && sheepActionBall === ball;
+    const drawn = petElement.querySelector?.('canvas.sheep-skin');
+    const settled = !drawn || (drawn.dataset.action === 'idle' && drawn.dataset.ready === 'true' && !drawn.dataset.transition);
+    const available = customization.appearance.shape === 'new-year-sheep' && !document.hidden &&
+      presentationMode === 'free' && !presentationSuppressed && !presentationPaused &&
+      !lastSample?.locked && !focusQuiet && codexActiveTaskCount === 0 && !companion.manualSleep &&
+      !sheepAutoNap && !['sleep', 'focus'].includes(currentState.mode) && !activeMotion && !dragState && !singleClickTimer;
+    const idleReady = settled && !sheepActionBall && performance.now() >= actionUntil;
+    return {
+      theme: customization.appearance.shape === 'new-year-sheep'
+        ? SheepTheme.resolveTheme(customization.appearance.sheepTheme, new Date()) : 'none',
+      ink: window.SheepOffering?.measureInk?.(petElement) || null,
+      settled,
+      hideSource: false,
+      transient: available && !ownReceipt && !idleReady,
+      eligible: available && (ownReceipt || idleReady)
+    };
+  }
+
+  function playSheepOffering(kind) {
+    const state = sheepOfferingState();
+    if (!state.eligible || (kind === 'candy' ? state.theme !== 'halloween' : kind !== 'gift' || state.theme !== 'christmas')) return false;
+    const action = kind === 'candy' ? 'candy' : 'receive-gift';
+    runCommand({ command: 'sheep-action', action });
+    const receiver = ball;
+    receiver.whenMotionReady?.().then(ready => {
+      if (ready === false && receiver === ball && sheepActionBall === receiver) {
+        clearAction(); restoreState(); sheepOffering?.update();
+      }
+    });
+    return sheepActionBall === receiver;
+  }
+
   function eventPoint(event) {
     return { x: event.screenX, y: event.screenY };
   }
 
   onPet('pointerdown', event => {
     if (event.button !== 0 || presentationSuppressed || lastSample?.locked) return;
+    const wokeSheep = wakeSheepAutomaticSleep() ||
+      (customization.appearance.shape === 'new-year-sheep' && performance.now() < sheepAutomaticWakeUntil);
     // 第一次松手会刷新系统空闲状态；保留本次双击最初是否睡着。
     const startedSleeping = companion.manualSleep || ball.emotionId === '00' || (singleClickTimer && wakeOnDoubleClick);
     cancelPendingInteraction();
     wakeOnDoubleClick = Boolean(startedSleeping);
-    clearAction();
-    stopMotion();
+    // A click immediately following hover belongs to the same wake, not a new action cancellation.
+    if (!wokeSheep) { clearAction(); stopMotion(); }
     petting.reset();
     const point = eventPoint(event);
     dragState = {
       pointerId: event.pointerId,
       start: point,
       dragged: false,
+      wokeSheep,
       lastX: point.x
     };
     petElement.setPointerCapture(event.pointerId);
@@ -819,6 +1024,7 @@
   function finishPointer(event, cancelled) {
     if (!dragState || dragState.pointerId !== event.pointerId) return;
     const wasDragged = dragState.dragged;
+    const wokeSheep = dragState.wokeSheep;
     dragState = null;
     petElement.classList.remove('dragging');
     if (petElement.hasPointerCapture(event.pointerId)) {
@@ -830,7 +1036,11 @@
       if (!cancelled) playCompanionReaction('land', 'drop');
       else restoreState();
     }
-    if (!cancelled && !wasDragged && event.button === 0) scheduleSingleClick();
+    if (!cancelled && !wasDragged && !wokeSheep && event.button === 0) {
+      const buddy = ball.hitBuddy?.(event.clientX, event.clientY);
+      if (buddy === 'gift') sheepOffering?.offer('gift');
+      else if (!runBuddyClick(buddy)) scheduleSingleClick();
+    }
   }
 
   onPet('pointerup', event => finishPointer(event, false));
@@ -838,12 +1048,15 @@
 
   onPet('dblclick', event => {
     if (event.button !== 0) return;
+    if (ball.hitBuddy?.(event.clientX, event.clientY) || sheepOffering?.isPlaying()) return;
     runDoubleClickAction();
   });
 
   onPet('pointerenter', () => {
     petHovered = true;
-    if (presentationSuppressed || companion.manualSleep || lastSample?.locked || activeMotion) return;
+    if (wakeSheepAutomaticSleep()) return;
+    if (presentationSuppressed || companion.manualSleep || lastSample?.locked || activeMotion || sheepOffering?.blocksHover() ||
+        (customization.appearance.shape === 'new-year-sheep' && codexEnabled && codexActiveTaskCount > 0)) return;
     noteInteraction();
     clearTimeout(helloTimer);
     helloTimer = setTimeout(observe(() => {
@@ -862,6 +1075,9 @@
 
   onPet('contextmenu', event => {
     event.preventDefault();
+    // Opening the seasonal offering menu is deliberate interaction, not a delayed hover greeting.
+    if (customization.appearance.shape === 'new-year-sheep' &&
+        ['halloween', 'christmas'].includes(SheepTheme.resolveTheme(customization.appearance.sheepTheme, new Date()))) cancelPendingInteraction();
     desktop.showContextMenu();
   });
 
@@ -874,9 +1090,12 @@
     else { compactMode = shouldBeCompact; ball.resize?.(); }
     restoreState();
     if (presentationSuppressed) syncSuppressedAnimation(true);
+    sheepOffering?.update();
   });
 
   onWindow('beforeunload', () => {
+    clearSheepAutoNap(); sheepLastNapAt = null; sheepAutomaticWakeUntil = 0;
+    sheepOffering?.destroy();
     quotaEffects?.destroy();
     codexEnabled = false;
     stopCodexThinkingCadence();
@@ -890,6 +1109,12 @@
   });
 
   createBall('50');
+  sheepOffering = window.SheepOffering?.create({ target: petElement, getState: sheepOfferingState,
+    onReceive: playSheepOffering, onInteract: noteInteraction,
+    external: desktop.updateOffering && desktop.onOfferingPointer ? {update:desktop.updateOffering,onPointer:desktop.onOfferingPointer} : null,
+    onApproach() { clearTimeout(helloTimer); helloTimer = null; },
+    onCancel() { clearAction(); stopMotion(); restoreState(); }
+  }) || null;
   petElement.dataset.mode = 'awake';
   petElement.dataset.presentation = 'free';
   petElement.dataset.edge = 'none';
@@ -917,7 +1142,7 @@
     const wasQuiet = focusQuiet;
     focusQuiet = settings.focusQuiet === true;
     petElement.dataset.focusQuiet = String(focusQuiet);
-    if (focusQuiet) stopCodexThinkingCadence();
+    if (focusQuiet) { clearSheepAutoNap(); stopCodexThinkingCadence(); }
     else if (wasQuiet && codexEnabled && codexActiveTaskCount > 0) startCodexThinkingCadence();
     quotaPacket.config = settings.quotaDisplay || quotaPacket.config;
     const next = PetCustomization.normalizeCustomization(settings.customization);
@@ -925,6 +1150,7 @@
       window.CodexPetPlayer?.validDescriptor(settings.codexPet) ? settings.codexPet : null;
     if (JSON.stringify(customization.appearance) !== JSON.stringify(next.appearance) ||
         JSON.stringify(codexPet) !== JSON.stringify(nextPet)) {
+      cancelPendingInteraction(); clearAction();
       stopMotion();
       codexPet = nextPet;
       customization = next;
@@ -933,6 +1159,7 @@
     } else customization = next;
     syncQuotaEffects();
     companion.setKeepAwake(settings.keepAwake);
+    resetSheepAmbient();
     if (lastSample) updateActivity(lastSample);
   })));
   listeners.push(desktop.onCodexSettings(observe(settings => {
@@ -950,6 +1177,7 @@
     codexActiveTaskCount = Number.isSafeInteger(settings.activeTaskCount) && settings.activeTaskCount >= 0 &&
       settings.activeTaskCount <= 64 ? settings.activeTaskCount : 0;
     const isActive = codexEnabled && codexActiveTaskCount > 0;
+    if (isActive) { clearSheepAutoNap(); restoreState(); }
     if (!isActive || presentationSuppressed) stopCodexThinkingCadence();
     else if (changed || !wasActive) startCodexThinkingCadence();
   })));

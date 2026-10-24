@@ -78,6 +78,36 @@ test('关闭先播180ms聚拢，保留pin与避让直到原生窗口隐藏', asy
   assert.equal(f.layouts.at(-1), false);
 });
 
+test('送物拖动暂停快捷窗口可见性并保留会话，结束恢复；暂停期间不悬停打开新菜单', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f=fixture();t.after(()=>f.manager.dispose());
+  f.manager.open({focus:false});await flush();
+  const before=f.manager.getState(),win=f.win();
+  f.manager.setSuspended(true);assert.equal(win.visible,false);assert.equal(f.manager.isOpen(),true);
+  win.emit('blur');f.manager.sync();f.manager.sampleCursor({x:340,y:340});t.mock.timers.tick(1000);
+  assert.equal(win.visible,false);assert.equal(f.manager.open({focus:false}),false);
+  assert.equal(f.manager.getState().session,before.session);assert.deepEqual(f.pins,[true]);
+  f.manager.setSuspended(false);await flush();
+  assert.equal(win.visible,true);assert.equal(f.manager.getState().session,before.session);
+  assert.equal(win.focused,false,'resume never takes focus from a drag');
+  f.manager.close({immediate:true});
+  f.cursor({x:0,y:0});f.manager.sampleCursor({x:0,y:0});f.cursor({x:340,y:340});f.manager.sampleCursor({x:340,y:340});
+  t.mock.timers.tick(449);f.manager.setSuspended(true);t.mock.timers.tick(1);await flush();
+  assert.equal(f.manager.isOpen(),false);assert.equal(win.visible,false);
+  f.manager.setSuspended(false);t.mock.timers.tick(1000);assert.equal(f.manager.isOpen(),false);
+});
+
+test('送物暂停中主动关闭或锁屏不复活已关闭菜单；设置视图与位置保留',async t=>{
+  const f=fixture();t.after(()=>f.manager.dispose());
+  f.manager.open({settings:true,focus:false});await flush();const before=f.manager.getState();
+  f.manager.setSuspended(true);f.manager.setSuspended(false);await flush();
+  assert.equal(f.manager.getState().view,'settings');assert.equal(f.manager.getState().session,before.session);
+  f.manager.setSuspended(true);f.manager.close({immediate:true});f.manager.setSuspended(false);
+  assert.equal(f.manager.isOpen(),false);assert.equal(f.win().visible,false);
+  f.manager.open({focus:false});await flush();f.manager.setSuspended(true);f.suppress(true);f.manager.setSuspended(false);
+  assert.equal(f.manager.isOpen(),false);assert.equal(f.win().visible,false);
+});
+
 test('悬停450ms才显示，不抢焦点；只接收六张按钮，球体与透明空白继续穿透', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const f = fixture(); t.after(() => f.manager.dispose());

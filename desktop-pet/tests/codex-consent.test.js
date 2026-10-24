@@ -46,7 +46,7 @@ test('确认页保持完整披露与默认取消，复用关于页及真实球�
   assert.match(html, /<li>状态包可能附带已加载的聊天内容；球球只提取进展，正文立即丢弃，不保存、不上传。<\/li>/);
   assert.match(html, /id="consent-accept"[^>]*disabled/);
   assert.match(html, /href="about.css"/); assert.match(html, /src="lib\/chat-avatar.js"/);
-  assert.match(html, /connect-src 'none'/); assert.doesNotMatch(html, /https?:\/\//);
+  assert.match(html, /connect-src 'self';/); assert.doesNotMatch(html, /https?:\/\//);
   for (const source of html.matchAll(/(?:src|href)="([^"]+)"/g)) {
     assert.equal(fs.existsSync(path.resolve(__dirname, '..', source[1])), true, source[1]);
   }

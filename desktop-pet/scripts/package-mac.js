@@ -22,6 +22,8 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
   fs.rmSync(staging, { recursive: true, force: true });
   fs.mkdirSync(staging, { recursive: true });
 
+  const sheepManifest = require('../lib/sheep-skin').validateManifest(JSON.parse(
+    fs.readFileSync(path.join(root, 'desktop-pet/assets/sheep/manifest.json'), 'utf8')));
   const files = [
     'desktop-pet/main.js',
     'desktop-pet/global-settings.html',
@@ -54,6 +56,27 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/lib/quota-display.js',
     'desktop-pet/scripts/verify-quota-display.js',
     'desktop-pet/lib/customization.js',
+    'desktop-pet/lib/sheep-skin.js',
+    'desktop-pet/lib/sheep-fireworks.js',
+    'desktop-pet/lib/christmas-buddy-rotation.js',
+    ...['reindeer', 'tree', 'santa', 'snowman', 'gift'].map(name => `desktop-pet/assets/sheep/buddies/${name}.png`),
+    'desktop-pet/sheep-skin.css',
+    'desktop-pet/lib/sheep-theme.js',
+    'desktop-pet/lib/sheep-offering.js',
+    'desktop-pet/lib/sheep-offering-window.js',
+    'desktop-pet/sheep-offering.html',
+    'desktop-pet/sheep-offering-renderer.js',
+    'desktop-pet/sheep-offering-preload.js',
+    'desktop-pet/assets/sheep/props/candy.png',
+    'desktop-pet/assets/sheep/props/gift.png',
+    'desktop-pet/assets/sheep/manifest.json',
+    ...Object.values(sheepManifest.themes).flatMap(theme => [theme.idleAlternate, theme.idleTransition, theme.workingTransition, theme.sleepTransition]
+      .filter(Boolean).map(clip => `desktop-pet/assets/sheep/${clip.file}`)),
+    ...['none', 'halloween', 'christmas', 'spring-festival'].flatMap(theme =>
+      [...(theme === 'none' ? [] : ['static']), 'idle', 'walk', 'greet', 'joy', 'sleep',
+        'working', 'complete',
+        ...({ none: ['ear', 'bell', 'stretch'], halloween: ['candy', 'magic', 'pumpkin'],
+          christmas: ['gift', 'receive-gift', 'scarf', 'snow'], 'spring-festival': ['fortune', 'firecrackers', 'dumplings'] }[theme])].map(name => `desktop-pet/assets/sheep/${theme}/${name}.png`)),
     'desktop-pet/bubble.html',
     'desktop-pet/bubble.css',
     'desktop-pet/bubble-preload.js',

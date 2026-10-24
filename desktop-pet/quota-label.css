@@ -802,7 +802,7 @@ body {
 /* The card keeps its formal face; only the native transparent window grows. */
 body[data-guard-entry="true"] #quota-beam { inset: auto; left: var(--quota-card-left, 0px); top: var(--quota-card-top, 6px); width: 168px; height: 58px; }
 body[data-guard-entry="true"][data-guard-size="compact"] #quota-beam { width: 128px; height: 32px; }
-#quota-guard-entry { position: absolute; left: calc(var(--quota-card-left, 0px) + 176px); top: calc(var(--quota-card-top, 6px) + 14px); width: 64px; height: 44px; padding: 0; border: 0; border-radius: 6px; background: none; cursor: pointer; -webkit-app-region: no-drag; }
+#quota-guard-entry { position: absolute; left: calc(var(--quota-card-left, 0px) + 176px); top: calc(var(--quota-card-top, 6px) + 14px); width: var(--quota-role-target-width, 64px); height: 44px; padding: 0; border: 0; border-radius: 6px; background: none; cursor: pointer; -webkit-app-region: no-drag; }
 body[data-guard-size="compact"] #quota-guard-entry { left: calc(var(--quota-card-left, 0px) + 136px); top: calc(var(--quota-card-top, 18px) - 12px); }
 #quota-guard-entry[hidden] { display: none !important; }
 #quota-guard-entry:focus-visible { outline: 2px solid #356bbf; outline-offset: -2px; }
@@ -815,6 +815,12 @@ body[data-guard-size="compact"] #quota-guard-entry { left: calc(var(--quota-card
 #quota-guard-entry[data-role="full"] .guard-entry-zombie,
 #quota-guard-entry[data-role="roaming"] .guard-entry-pet { display: none; }
 #quota-guard-entry[data-role="empty"] .guard-entry-zombie { left: 28px; }
+/* Right screen edge: retain the artwork and its 8px gap, put its target before the card. */
+body[data-guard-side="left"] #quota-guard-entry { left: calc(var(--quota-card-left, 0px) - 8px - var(--quota-role-target-width, 64px)); }
+body[data-guard-side="left"] .guard-entry-pet { left: calc(100% - 24px); }
+body[data-guard-side="left"] .guard-entry-zombie { left: calc(100% - 22px); }
+body[data-guard-side="left"] #quota-guard-entry[data-role="empty"] .guard-entry-pet { left: calc(100% - 50px); }
+body[data-guard-side="left"] #quota-guard-entry[data-role="empty"] .guard-entry-zombie { left: calc(100% - 22px); }
 body[data-guard-size="standard"] .guard-entry-pet { top: 3px; }
 body[data-guard-size="standard"] .guard-entry-zombie { top: -2px; }
 body[data-guard-size="compact"] .guard-entry-pet { top: 16px; }

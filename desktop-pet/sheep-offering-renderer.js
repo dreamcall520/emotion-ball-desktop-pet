@@ -1,0 +1,12 @@
+(()=>{'use strict';const api=window.sheepOfferingWindow,button=document.getElementById('offering');let pointer=null;
+const send=(type,e)=>api.pointer({type,x:e?.clientX,y:e?.clientY});
+api.onView(v=>{if(v?.reset){const previous=pointer;pointer=null;if(previous!==null&&button.hasPointerCapture(previous))button.releasePointerCapture(previous);return;}if(!['candy','gift'].includes(v?.kind))return;document.getElementById('art').src='assets/sheep/props/'+v.kind+'.png';button.dataset.kind=v.kind;const name=v.kind==='candy'?'糖果':'礼物';button.title='点击'+name+'送出，也可拖给咩咩';button.setAttribute('aria-label','给咩咩送'+name+'：点击或拖到身上，也可从互动菜单送出');});
+window.addEventListener('mousemove',e=>{if(pointer===null)send('hit',e);});window.addEventListener('mouseleave',()=>api.pointer({type:'hit',x:-1,y:-1}));
+button.addEventListener('pointerenter',()=>send('approach'));
+button.addEventListener('pointerdown',e=>{e.preventDefault();if(e.button!==0||e.isPrimary===false||pointer!==null)return;pointer=e.pointerId;button.setPointerCapture(pointer);send('begin',e);});
+button.addEventListener('pointermove',e=>{if(e.pointerId===pointer)send('move',e);else send('approach');});
+button.addEventListener('pointerup',e=>{if(e.pointerId!==pointer)return;pointer=null;send('end',e);if(button.hasPointerCapture(e.pointerId))button.releasePointerCapture(e.pointerId);});
+button.addEventListener('pointercancel',()=>{pointer=null;send('cancel');});button.addEventListener('lostpointercapture',()=>{if(pointer!==null){pointer=null;send('cancel');}});
+button.addEventListener('click',e=>{e.preventDefault();if(e.detail===0)send('activate');});button.addEventListener('contextmenu',e=>e.preventDefault());
+window.addEventListener('blur',()=>{if(pointer!==null){pointer=null;send('cancel');}});window.addEventListener('pagehide',()=>send('cancel'));
+})();

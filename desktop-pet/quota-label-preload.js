@@ -189,6 +189,8 @@ contextBridge.exposeInMainWorld('petQuotaLabel', {
         if (typeof visible === 'boolean') model.visible = visible;
         const guardEntry = source?.guardEntry;
         if (typeof guardEntry === 'boolean') model.guardEntry = guardEntry;
+        const targetWidth = source?.guardTargetWidth;
+        if ([48,64].includes(targetWidth)) model.guardTargetWidth = targetWidth;
         const side = source?.guardSide;
         if (['left', 'right'].includes(side)) model.guardSide = side;
         const inset = record(source?.cardInset);

@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 const { PHRASES, DialogueDirector } = require('../lib/dialogue');
 const { completionText } = require('../lib/codex-text');
 
@@ -244,6 +245,175 @@ test('六种双击动作各保留两句并追加两句可选择且不连着重�
   }
 });
 
+test('羊年皮肤的十种场景共有112句专属短语，普通皮肤维持原词库', () => {
+  const all = new Set();
+  for (const event of events) {
+    const texts = new Set();
+    const count = event === 'work' ? 40 : 8;
+    for (let index = 0; index < count; index++) {
+      const makeDirector = () => new DialogueDirector({ random: () => index / count, now: -600000 });
+      const ordinary = makeDirector().offer(event, 0);
+      const themed = makeDirector().offer(event, 0, { shape: 'new-year-sheep' });
+      assert.ok(themed, event);
+      assert.ok(!PHRASES[event].includes(themed.text), `${event} 应使用羊年词库`);
+      assert.deepEqual({ ...themed, text: ordinary.text }, ordinary, '仅替换文字，气泡编号、时长和按钮不变');
+      for (const shape of ['sphere', 'aurora-cloud', 'unknown']) {
+        assert.deepEqual(makeDirector().offer(event, 0, { shape }), ordinary, shape);
+      }
+      texts.add(themed.text);
+      all.add(themed.text);
+    }
+    assert.equal(texts.size, event === 'work' ? 40 : 8, event);
+  }
+  assert.equal(all.size, 112);
+});
+
+test('日常咩咩完整112句短语全局唯一，与节日和专属动作不重复，场景不串台', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../lib/dialogue.js'), 'utf8');
+  const pools = vm.runInNewContext(`${source.slice(source.indexOf('const SHEEP_PHRASES ='), source.indexOf('const DIRECT_EVENTS ='))}
+    ({daily:SHEEP_PHRASES,motion:SHEEP_MOTION_PHRASES,holiday:SHEEP_HOLIDAY_PHRASES,spring:SHEEP_SPRING_ACTION_PHRASES})`);
+  assert.deepEqual(Object.keys(pools.daily).sort(), [...events].sort());
+  for (const text of ['和你待着就很好','思路可以慢慢理','给你留一点空白']) assert.ok(pools.daily.work.includes(text), '保留用户认可的陪伴语气');
+  assert.ok(pools.daily.work.filter(text => Array.from(text).length >= 5 && Array.from(text).length <= 10).length >= Math.ceil(pools.daily.work.length * .8), '工作陪伴以5到10字为主');
+  for (const text of pools.daily.work) assert.doesNotMatch(text, /羊毛软|脚步轻|小铃铛静音|一小团暖|敲代码|读文档/, '不写无场景装饰或假设具体工作内容');
+  const all = Object.values(pools.daily).flat();
+  assert.equal(all.length, 112);
+  assert.equal(new Set(all).size, 112, '不同日常场景也不能重复');
+  const reserved = new Set([pools.motion, pools.holiday, pools.spring].flatMap(pool => Object.values(pool).flat()));
+  for (const [event, phrases] of Object.entries(pools.daily)) {
+    assert.equal(phrases.length, event === 'work' ? 40 : 8, event);
+    for (const text of phrases) {
+      assert.ok(Array.from(text).length >= 4 && Array.from(text).length <= 12, `${event}: ${text}`);
+      assert.ok(!reserved.has(text), `${event} 不能复用节日或专属动作句子`);
+      if (['work', 'thought'].includes(event)) assert.doesNotMatch(text, /完成|成功|做好|办妥|修好|很快|马上|已经结束/, '陪伴与进行中不能伪称任务完成或承诺时间');
+      if (event === 'welcome') assert.doesNotMatch(text, /睡|醒|困|眯/, '用户回来不等同于小羊睡醒');
+      if (event === 'drag') assert.doesNotMatch(text, /落稳|落地|放好|站稳/, '拖动回应发生在放下之前');
+      if (event === 'drop') assert.doesNotMatch(text, /悬着|离地|抱起来|出发/, '放下回应不能继续悬空');
+    }
+  }
+});
+
+test('羊年皮肤六种玩耍动作各有四句对应专属短语，重复按钮保留动作', () => {
+  for (const motion of ['hop', 'jelly', 'sway', 'peek', 'bow', 'spin']) {
+    const texts = new Set();
+    for (let index = 0; index < 4; index++) {
+      const director = new DialogueDirector({ random: () => index / 4 });
+      const request = { event: 'play', motion };
+      const result = director.offer(request, 0, { shape: 'new-year-sheep' });
+      const ordinary = new DialogueDirector({ random: () => index / 4 }).offer(request, 0);
+      assert.notEqual(result.text, ordinary.text);
+      assert.deepEqual(request, { event: 'play', motion }, '不改写调用者的动作请求');
+      assert.deepEqual(director.respond(result.id, 'again', 1), { command: 'again', motion });
+      assert.equal(director.respond(result.id, 'again', 2), null, '按钮使用后仍失效');
+      texts.add(result.text);
+    }
+    assert.equal(texts.size, 4, motion);
+  }
+});
+
+test('羊年对白避让上一句，切换皮肤时分别记忆并保持六秒冷却', () => {
+  for (const request of ['hello', { event: 'play', motion: 'bow' }]) {
+    const director = new DialogueDirector({ random: () => 0 });
+    const sheep = { shape: 'new-year-sheep' };
+    const first = director.offer(request, 0, sheep);
+    assert.equal(director.offer(request, 5999, sheep), null);
+    const ordinary = director.offer(request, 8000, { shape: 'sphere' });
+    assert.ok(ordinary);
+    const second = director.offer(request, 16000, sheep);
+    assert.notEqual(second.text, first.text, '回到羊年皮肤时仍避让上次羊年对白');
+    const nextOrdinary = director.offer(request, 24000);
+    assert.notEqual(nextOrdinary.text, ordinary.text, '普通词库也分别避让');
+  }
+});
+
+test('羊年对白保留拖放接续、安静陪伴节流和禁用权限', () => {
+  const director = new DialogueDirector({ random: () => 0 });
+  const sheep = { shape: 'new-year-sheep' };
+  assert.ok(director.offer('drag', 0, sheep));
+  assert.ok(director.offer('drop', 100, sheep));
+  assert.equal(director.offer('drop', 200, sheep), null);
+  assert.equal(director.offer('work', 599999, sheep), null);
+  assert.ok(director.offer('work', 600000, sheep));
+  assert.equal(director.offer('work', 1199999, sheep), null);
+  director.setEnabled(false);
+  assert.equal(director.offer('hello', 1200000, sheep), null);
+  assert.equal(director.offer({ event: 'play', motion: 'unknown' }, 1200000, sheep), null);
+});
+
+test('默认小羊对白不预设节日与额外道具，动作回应不描述未制作的跳跃福字', () => {
+  const seasonal = /春节|新年|拜年|年味|过年|暖年|围巾|福字|红包|这张福|南瓜|糖果|小巫师|圣诞|冬青/;
+  for (const event of events) for (let index = 0; index < 8; index++) {
+    const offer = sheepTheme => new DialogueDirector({ random: () => index / 8, now: -600000 })
+      .offer(event, 0, { shape: 'new-year-sheep', sheepTheme });
+    const ordinarySheep = offer('none');
+    assert.ok(!seasonal.test(ordinarySheep.text), ordinarySheep.text);
+    for (const sheepTheme of [undefined, 'auto', 'unknown', '__proto__', null]) {
+      assert.deepEqual(offer(sheepTheme), ordinarySheep, '只接受已解析的节日结果，其他模式回到中性对白');
+    }
+  }
+  for (const motion of ['hop', 'jelly', 'sway', 'peek', 'bow', 'spin']) for (let index = 0; index < 4; index++) {
+    const result = new DialogueDirector({ random: () => index / 4 })
+      .offer({ event: 'play', motion }, 0, { shape: 'new-year-sheep', sheepTheme: 'none' });
+    assert.ok(!seasonal.test(result.text), result.text);
+    assert.ok(!/跳|蹦|跃|起飞|转圈|放大|缩小|捧福/.test(result.text), result.text);
+  }
+});
+
+test('已解析的万圣、圣诞和春节主题穿插对应互动语，安静工作与睡眠保持中性', () => {
+  const themeWords = { halloween: /糖果|小巫师|披肩|南瓜|戴帽子/, christmas: /圣诞|围巾|帽尖|冬青|暖暖的梦/,
+    'spring-festival': /拜年|新年|春节|过年|新的一年/ };
+  for (const [sheepTheme, words] of Object.entries(themeWords)) {
+    for (const event of ['hello', 'pet', 'play']) {
+      const texts = [];
+      for (let index = 0; index < 8; index++) {
+        const result = new DialogueDirector({ random: () => index / 8 }).offer(event, 0, { shape: 'new-year-sheep', sheepTheme });
+        texts.push(result.text);
+      }
+      assert.equal(new Set(texts).size, 8);
+      assert.equal(texts.filter(text => words.test(text)).length, 5, `${sheepTheme}:${event} 包含5句对应节日短语与3句中性陪伴语`);
+      for (const [otherTheme, otherWords] of Object.entries(themeWords)) {
+        if (otherTheme !== sheepTheme) assert.ok(texts.every(text => !otherWords.test(text)), '不串入另一节日');
+      }
+    }
+    for (const event of ['work', 'sleep']) for (let index = 0; index < 8; index++) {
+      const make = () => new DialogueDirector({ random: () => index / 8, now: -600000 });
+      assert.deepEqual(make().offer(event, 0, { shape: 'new-year-sheep', sheepTheme }),
+        make().offer(event, 0, { shape: 'new-year-sheep', sheepTheme: 'none' }));
+    }
+    for (const motion of ['hop', 'jelly', 'sway', 'peek', 'bow', 'spin']) {
+      const texts = [];
+      for (let index = 0; index < 4; index++) {
+        const result = new DialogueDirector({ random: () => index / 4 }).offer({ event: 'play', motion }, 0, { shape: 'new-year-sheep', sheepTheme });
+        texts.push(result.text);
+      }
+      assert.equal(new Set(texts).size, 4);
+      assert.equal(texts.filter(text => words.test(text)).length, 2, '带动作的玩耍也能命中节日短语，保留四句池');
+    }
+    for (const shape of ['blob', 'aurora-cloud', 'codex-pet']) {
+      assert.deepEqual(new DialogueDirector({ random: () => 0 }).offer('hello', 0, { shape, sheepTheme }),
+        new DialogueDirector({ random: () => 0 }).offer('hello', 0), '其他形态不受小羊主题影响');
+    }
+  }
+});
+
+test('默认、万圣、圣诞、春节分别记忆上一句，跨主题不占用彼此的重复避让', () => {
+  for (const request of ['hello', { event: 'play', motion: 'bow' }]) {
+    const director = new DialogueDirector({ random: () => 0 });
+    const first = new Map();
+    for (const [index, sheepTheme] of ['none', 'halloween', 'christmas', 'spring-festival'].entries()) {
+      const context = { shape: 'new-year-sheep', sheepTheme };
+      const result = director.offer(request, index * 8000, context);
+      first.set(sheepTheme, result.text);
+      assert.equal(result.text, new DialogueDirector({ random: () => 0 }).offer(request, 0, context).text,
+        '第一次进入该主题时应从独立词库选择首句');
+    }
+    for (const [index, sheepTheme] of ['none', 'halloween', 'christmas', 'spring-festival'].entries()) {
+      const result = director.offer(request, (index + 4) * 8000, { shape: 'new-year-sheep', sheepTheme });
+      assert.notEqual(result.text, first.get(sheepTheme), `再次回到${sheepTheme}时避让该主题自己的上一句`);
+    }
+  }
+});
+
 test('普通气泡四秒并输出约定字段', () => {
   for (const event of events.filter(value => value !== 'play')) {
     const director = new DialogueDirector({ random: () => 0, now: -600000 });
@@ -408,4 +578,43 @@ test('让它歇会儿只抑制主动工作对白十分钟', () => {
   assert.ok(director.offer('pet', 606000));
   assert.equal(director.offer('work', 1200999), null);
   assert.ok(director.offer('work', 1201000));
+});
+
+test('春节三项互动各用自己的短语，再来一次复播同一动作，普通play不串入道具', () => {
+  const words={fortune:/福/,firecrackers:/鞭炮|开门红/,dumplings:/饺子/};
+  for(const [sheepAction,word] of Object.entries(words)) {
+    for(let index=0;index<4;index++) {
+      const director=new DialogueDirector({random:()=>index/4});
+      const context={shape:'new-year-sheep',sheepTheme:'spring-festival',sheepAction};
+      const result=director.offer('play',0,context); assert.match(result.text,word);
+      assert.deepEqual(director.respond(result.id,'again',100),{command:'sheep-action',action:sheepAction});
+      for(const theme of ['none','halloween','christmas']) {
+        const make=()=>new DialogueDirector({random:()=>index/4});
+        assert.deepEqual(make().offer('play',0,{...context,sheepTheme:theme}),
+          make().offer('play',0,{shape:'new-year-sheep',sheepTheme:theme}));
+      }
+    }
+  }
+  for(let index=0;index<8;index++) {
+    const result=new DialogueDirector({random:()=>index/8}).offer('play',0,{shape:'new-year-sheep',sheepTheme:'spring-festival'});
+    assert.doesNotMatch(result.text,/饺子|鞭炮|这张|这只/);
+  }
+  const director=new DialogueDirector({random:()=>0}), context={shape:'new-year-sheep',sheepTheme:'spring-festival'};
+  assert.ok(director.offer('play',0,{...context,sheepAction:'fortune'}));
+  assert.equal(director.offer('play',100,{...context,sheepAction:'dumplings'}),null);
+  assert.equal(director.hasBubble(100),false,'冷却拒绝新气泡也清掉已失效的动作文案');
+});
+
+test('三个新增主题动作词库和重播按钮都保留实际动作，不覆盖日常默认词库',()=>{
+  const actions={none:['ear','bell','stretch'],halloween:['candy','magic','pumpkin'],christmas:['gift','scarf','snow']};
+  for(const [sheepTheme,ids] of Object.entries(actions)) for(const sheepAction of ids) {
+    const phrases=new Set();
+    for(let i=0;i<4;i++) {
+      const d=new DialogueDirector({random:()=>i/4});
+      const item=d.offer('play',0,{shape:'new-year-sheep',sheepTheme,sheepAction});
+      assert.ok(item); assert.ok(item.text.length<=12,item.text); phrases.add(item.text);
+      assert.deepEqual(d.respond(item.id,'again',1),{command:'sheep-action',action:sheepAction});
+    }
+    assert.equal(phrases.size,4);
+  }
 });

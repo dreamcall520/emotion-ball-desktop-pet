@@ -264,3 +264,19 @@ test('减少动态时三个新动作保持中性且按正常时长结束，不�
     assert.equal(f.timers.size, 0);
   }
 });
+
+test('原画动作可按受限时长延展宿主时间线，结束归位且不改变普通动作', () => {
+  const f = fixture();
+  f.controller.start({ token: 1, action: 'hop', durationMs: 3600 });
+  f.at(1800);
+  assert.equal(f.frames.at(-1).frame.done, false);
+  assert.deepEqual(f.frames.at(-1).frame, sampleMotion('hop',900));
+  f.at(3600);
+  assert.equal(f.frames.at(-1).frame.done, true);
+  assert.deepEqual(f.bounds,f.origin);
+  assert.equal(f.timers.size,0);
+  for (const durationMs of [NaN,Infinity,-1,0,9,60001,'3000']) {
+    const other=fixture(); other.controller.start({token:1,action:'hop',durationMs}); other.at(1800);
+    assert.equal(other.frames.at(-1).frame.done,true,String(durationMs));
+  }
+});

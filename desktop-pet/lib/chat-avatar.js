@@ -169,7 +169,17 @@
     const key = JSON.stringify(appearance);
     const previous = cache.get(target);
     // Another portrait renderer may have replaced this subtree (e.g. Rive).
-    if (previous?.key === key && target.firstChild === previous.svg) return;
+    if (previous?.key === key && target.firstChild === previous.node) return;
+    previous?.sheep?.destroy();
+    cache.delete(target);
+    if (appearance.shape === 'new-year-sheep') {
+      target.replaceChildren();
+      const sheep = window.SheepSkin.create(target, { autostart: false, portraitRaster: true, sheepTheme: appearance.sheepTheme,
+        auroraTransparency: appearance.auroraTransparency });
+      cache.set(target, { key, node: target.firstChild, sheep });
+      target.dataset.shape = appearance.shape;
+      return;
+    }
     const shape = window.EB_CUSTOM_SHAPES.createShape(appearance) ||
       window.EB_RINGS.SHAPES[appearance.shape] || window.EB_RINGS.SHAPES.blob;
     const svg = element('svg', { viewBox: '-15 -15 259 259', 'aria-hidden': 'true' });
@@ -178,10 +188,12 @@
     drawEyes(svg, appearance, shape);
     target.dataset.shape = appearance.shape;
     target.replaceChildren(svg);
-    cache.set(target, { key, svg });
+    cache.set(target, { key, node: svg });
   }
 
   function create(target) {
+    cache.get(target)?.sheep?.destroy();
+    cache.delete(target);
     let key = null, appearance = null, ball = null, rive = null, poster = null, sprite = null;
     let active = true, destroyed = false, revision = 0, displayed = null;
 
@@ -266,6 +278,7 @@
       }
       ball = window.EmotionBall.create(target, {
         emotion, fallbackId: emotion, shape: appearance.shape, customShape: shape,
+        sheepTheme: appearance.sheepTheme, portraitRaster: appearance.shape === 'new-year-sheep',
         auroraBodyTexture: texture, auroraStyle: appearance.auroraStyle,
         auroraTransparency: appearance.auroraTransparency,
         color: appearance.bodyColor, eyeColor: appearance.eyeColor,
@@ -274,7 +287,17 @@
         idle: false, autostart: active, lite: true, liteRibbons: true, label: ''
       });
       target.dataset.avatarEngine = 'emotion-ball';
-      target.dataset.avatarReady = 'true';
+      target.dataset.avatarReady = appearance.shape === 'new-year-sheep' ? 'false' : 'true';
+      if (appearance.shape === 'new-year-sheep') {
+        const current = ball, generation = revision;
+        current.whenReady().then(ready => {
+          if (destroyed || generation !== revision || current !== ball) return;
+          target.dataset.avatarReady = String(ready === true);
+        }, () => {
+          if (destroyed || generation !== revision || current !== ball) return;
+          target.dataset.avatarReady = 'false';
+        });
+      }
       const svg = target.querySelector(':scope > svg');
       if (appearance.shape !== 'aurora-cloud' && svg) {
         svg.style.opacity = String(1 - appearance.auroraTransparency / 100);

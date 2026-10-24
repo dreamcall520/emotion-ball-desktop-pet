@@ -852,7 +852,10 @@
 
   /* ---------------- 对外入口 ---------------- */
 
-  EB.create = function (target, opts) { return new Engine(target, opts); };
+  EB.create = function (target, opts) {
+    if (opts && opts.shape === 'new-year-sheep' && window.SheepSkin) return window.SheepSkin.create(target, opts);
+    return new Engine(target, opts);
+  };
   EB.version = '1.0.0';
 
   /* 载入种子配置（emotions.js 在本脚本之前加载） */
