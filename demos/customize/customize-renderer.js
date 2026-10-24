@@ -5,7 +5,7 @@
   const $ = id => document.getElementById(id);
   const shapeNames = [
     ['blob', '经典'], ['cloud', '云朵'],
-    ['aurora-cloud', '幻彩', 'six-lobe'], ['square', '方糖']
+    ['aurora-cloud', '幻彩', 'six-lobe'], ['square', '方糖'], ['new-year-sheep', '咩咩']
   ];
   const bodyColors = ['#EEEBE4', '#1B1C20', '#F5D9C5', '#DCE8DD', '#D9E5F2', '#8B72D8', '#5B3BC7'];
   const eyeColors = ['#1A1A1A', '#FFFFFF', '#1A3444', '#3B2B32'];
@@ -82,9 +82,14 @@
     messageTimer = setTimeout(() => { node.hidden = true; }, 2600);
   }
 
+  const sheepIcons = [];
   function shapeIcon(shape, contour) {
     const target = document.createElement('span');
     target.className = 'shape-art';
+    if (shape === 'new-year-sheep') {
+      sheepIcons.push(SheepSkin.create(target, { sheepTheme: 'none', autostart: false, portraitRaster: true }));
+      return target;
+    }
     if (shape === 'aurora-cloud') {
       const icon = document.createElement('img');
       icon.src = 'assets/aurora-six-lobe-icon.png';
@@ -105,6 +110,7 @@
 
   function renderShapeOptions() {
     const target = $('shape-options');
+    sheepIcons.splice(0).forEach(icon => icon.destroy());
     target.replaceChildren();
     $('shape-hint').textContent = shapeNames.some(([id]) => id === state.appearance.shape)
       ? '点选一个起点，再按喜好调整'
@@ -178,13 +184,20 @@
   function renderAuroraVisibility() {
     const visible = state.appearance.shape === 'aurora-cloud';
     const codex = state.appearance.shape === 'codex-pet';
-    $('manual-toggle').disabled = visible || codex;
+    const sheep = state.appearance.shape === 'new-year-sheep';
+    $('sheep-theme-field').hidden = !sheep;
+    $('sheep-theme').value = state.appearance.sheepTheme;
+    $('ball-color-fields').hidden = sheep;
+    $('ball-manual-fields').hidden = sheep;
+    $('preview-note').textContent = sheep ? '切换主题查看咩咩，满意后再保存。' : '颜色与细节实时更新，满意后再保存。';
+    if (sheep && pickerBinding) closeColorPicker(false);
+    $('manual-toggle').disabled = visible || codex || sheep;
     $('manual-hint').textContent = codex ? '选择球球形态后，可调整轮廓与五官' : visible
       ? '为了保持完整的动效体验，暂不支持轮廓与五官微调'
       : '让轮廓与五官长成你喜欢的样子';
-    showManual(visible || codex ? false : !$('manual-controls').hidden);
+    showManual(visible || codex || sheep ? false : !$('manual-controls').hidden);
     renderSliders();
-    for (const id of Object.keys(rangeLimits)) if (id !== 'aurora-transparency') $(id).disabled = !canSave || visible || codex;
+    for (const id of Object.keys(rangeLimits)) if (id !== 'aurora-transparency') $(id).disabled = !canSave || visible || codex || sheep;
     $('aurora-style-field').hidden = !visible;
     for (const style of ['dimensional', 'simple']) {
       $('aurora-style-' + style).setAttribute('aria-pressed', String(state.appearance.auroraStyle === style));
@@ -303,10 +316,11 @@
       for (const button of $(id).children) button.disabled = !enabled;
     }
     for (const [, id] of colorBindings) $(id).disabled = !enabled;
-    for (const id of Object.keys(rangeLimits)) $(id).disabled = !enabled || (id !== 'aurora-transparency' && ['aurora-cloud', 'codex-pet'].includes(state.appearance.shape));
+    for (const id of Object.keys(rangeLimits)) $(id).disabled = !enabled || (id !== 'aurora-transparency' && ['aurora-cloud', 'codex-pet', 'new-year-sheep'].includes(state.appearance.shape));
     for (const button of $('shape-options').children) button.disabled = !enabled;
     for (const id of ['reset-appearance', 'aurora-style-dimensional', 'aurora-style-simple', 'aurora-reference', 'reset-manual']) $(id).disabled = !enabled;
     $('startup-default').disabled = !enabled;
+    $('sheep-theme').disabled = !enabled;
     setPresetControlsEnabled(enabled);
     if (!enabled) closeColorPicker(false);
   }
@@ -514,7 +528,7 @@
   }
 
   function validateDraftColors() {
-    if (state.appearance.shape === 'codex-pet') return true;
+    if (['codex-pet', 'new-year-sheep'].includes(state.appearance.shape)) return true;
     const colorFields = [['body-hex', 'bodyColor'], ['eye-hex', 'eyeColor']];
     if (state.appearance.shape === 'aurora-cloud' && state.appearance.auroraStyle === 'dimensional') colorFields.push(
       ['glow-pink-hex', 'glowPinkColor'], ['glow-gold-hex', 'glowGoldColor']);
@@ -605,6 +619,18 @@
     $('preview-size-label').textContent = previewMode === 'desktop'
       ? '桌面实际尺寸 · ' + pixels + ' × ' + pixels + ' px' : '大图预览';
     $('preview-status').textContent = motionPreference?.matches ? '减少动态已开启' : '眨眼与呼吸动效保留';
+    if (state.appearance.shape === 'new-year-sheep') {
+      auroraPreview?.destroy(); displayedAurora?.destroy(); auroraPreview = displayedAurora = null;
+      ball = EmotionBall.create(target, { shape: 'new-year-sheep', sheepTheme: state.appearance.sheepTheme,
+        auroraTransparency: state.appearance.auroraTransparency, autostart: !motionPreference?.matches, label: '咩咩主题预览' });
+      const current = ball;
+      current.whenReady().then(ready => {
+        if (disposed || ball !== current) return;
+        if (ready) target.dataset.renderedAppearance = appearanceKey;
+        else announce('咩咩图片暂不可用，请重试');
+      });
+      return;
+    }
     if (state.appearance.shape === 'codex-pet') {
       auroraPreview?.destroy(); displayedAurora?.destroy(); auroraPreview = displayedAurora = null;
       ball = null;
@@ -959,6 +985,12 @@
   const unsubscribeSize = bridge.onSize?.(size => {
     if (disposed || !Object.hasOwn(petPixels, size)) return;
     petSize = size; $('pet-size').value = size; schedulePreview();
+  });
+  $('sheep-theme').addEventListener('change', event => {
+    if (!canSave || state.appearance.shape !== 'new-year-sheep') return;
+    state.appearance = PetCustomization.normalizeAppearance({ ...state.appearance, sheepTheme: event.target.value });
+    $('startup-default').checked = matchesStartup();
+    schedulePreview();
   });
   $('source-ball').addEventListener('click', () => setSource('ball'));
   $('source-codex').addEventListener('click', () => setSource('codex'));

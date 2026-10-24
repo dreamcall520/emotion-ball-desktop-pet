@@ -5,7 +5,7 @@
   <meta name="robots" content="noindex, follow, indexifembedded">
   <script src="../../site-protection.js?v=20261008-content"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
   <title>聊一会儿</title>
   <link rel="stylesheet" href="chat.css?v=20261007-v0404">
   <link rel="stylesheet" href="aurora-rive.css">
@@ -17,19 +17,25 @@
   <script defer src="emotion-ball/js/emotions.js"></script>
   <script defer src="emotion-ball/js/ball.js"></script>
   <script defer src="emotion-ball/js/engine.js"></script>
-  <script defer src="lib/customization.js?v=20261007-codex"></script>
+  <script defer src="../sheep/lib/sheep-theme.js?v=20261024"></script>
+  <script defer src="../sheep/lib/christmas-buddy-rotation.js?v=20261024"></script>
+  <script defer src="../sheep/lib/sheep-fireworks.js?v=20261024"></script>
+  <script defer src="../sheep/lib/sheep-skin.js?v=20261024"></script>
+  <script defer src="../sheep/adapter.js?v=20261024"></script>
+  <script defer src="lib/customization.js?v=20261024-sheep"></script>
   <script defer src="../customize/lib/codex-pet-player.js?v=20261007-idle6"></script>
-  <script defer src="lib/chat-avatar.js?v=20261007-codex"></script>
+  <script defer src="lib/chat-avatar.js?v=20261024-sheep"></script>
   <script defer src="lib/rive.js"></script>
   <script defer src="lib/boo-binary.js"></script>
   <script defer src="lib/aurora-rive.js"></script>
-  <script defer src="demo-bridge.js?v=20261007-v0404"></script>
+  <script defer src="demo-bridge.js?v=20261024-sheep"></script>
   <script defer src="chat-renderer.js?v=20261007-v0404"></script>
   <link rel="stylesheet" href="demo-adapter.css?v=20261006-layout">
   <link rel="icon" href="../../assets/huancai-icon.png">
   <link rel="stylesheet" href="chat-blue.css">
   <link rel="stylesheet" href="../ui-theme-blue.css">
   <script src="../ui-theme.js?v=20261007-blue"></script>
+  <link rel="stylesheet" href="../sheep/sheep-skin.css?v=20261024">
 </head>
 <body>
   <main class="chat-panel" aria-label="聊一会儿">

@@ -1,0 +1,1182 @@
+{
+  "version": 1,
+  "width": 320,
+  "height": 320,
+  "themes": {
+    "none": {
+      "actions": {
+        "idle": {
+          "file": "none/idle.png",
+          "columns": 6,
+          "frameCount": 3,
+          "cellSize": 320,
+          "durations": [
+            2600,
+            120,
+            500
+          ],
+          "sha256": "a452ec2d4b489848bd7acce862b901426868f34b1314db943d3aa7964814785e",
+          "startsAtIdle": true,
+          "startsAtWorking": false
+        },
+        "walk": {
+          "file": "none/walk.png",
+          "columns": 6,
+          "frameCount": 7,
+          "cellSize": 320,
+          "durations": [
+            180,
+            100,
+            180,
+            100,
+            140,
+            120,
+            80
+          ],
+          "sha256": "d3a15e483acd7e2cfd4301e2e0ad8f458ca870d2407683eb53fce2b24c0de6ac",
+          "startsAtIdle": false,
+          "startsAtWorking": false
+        },
+        "greet": {
+          "file": "none/greet.png",
+          "columns": 6,
+          "frameCount": 8,
+          "cellSize": 320,
+          "durations": [
+            450,
+            160,
+            180,
+            180,
+            160,
+            300,
+            200,
+            450
+          ],
+          "sha256": "c2a771114997eb9dd4262b9420ea10560696f0235396924246e82c2362b861c9",
+          "startsAtIdle": true,
+          "startsAtWorking": false
+        },
+        "joy": {
+          "file": "none/joy.png",
+          "columns": 6,
+          "frameCount": 8,
+          "cellSize": 320,
+          "durations": [
+            300,
+            200,
+            240,
+            360,
+            200,
+            220,
+            180,
+            300
+          ],
+          "sha256": "061b2a45efc91c2a5f8ed8801a51a118b0aef2c4d67408838112a106a9a31b3f",
+          "startsAtIdle": true,
+          "startsAtWorking": false
+        },
+        "sleep": {
+          "file": "none/sleep.png",
+          "columns": 6,
+          "frameCount": 8,
+          "cellSize": 320,
+          "durations": [
+            1100,
+            1100,
+            1100,
+            800,
+            600,
+            800,
+            700,
+            1100
+          ],
+          "sha256": "266fc016a2dba2b2bf9f59cc040ebc6bd46b1b6e4a481f8077bfe6ed6a074726",
+          "startsAtIdle": false,
+          "startsAtWorking": false
+        },
+        "ear": {
+          "file": "none/ear.png",
+          "columns": 6,
+          "frameCount": 8,
+          "cellSize": 320,
+          "durations": [
+            260,
+            220,
+            260,
+            300,
+            220,
+            220,
+            180,
+            360
+          ],
+          "sha256": "fdecf2ac939a5e7dda8fd090ce86b1633e2875bdea1ef86cdbe669a476cd2577",
+          "startsAtIdle": true,
+          "startsAtWorking": false
+        },
+        "bell": {
+          "file": "none/bell.png",
+          "columns": 6,
+          "frameCount": 7,
+          "cellSize": 320,
+          "durations": [
+            300,
+            220,
+            500,
+            650,
+            250,
+            180,
+            400
+          ],
+          "sha256": "80dd74014d2ce7f290c61c3ef7d405e14464b562006f7eb8928009eef8075871",
+          "startsAtIdle": true,
+          "startsAtWorking": false
+        },
+        "stretch": {
+          "file": "none/stretch.png",
+          "columns": 6,
+          "frameCount": 8,
+          "cellSize": 320,
+          "durations": [
+            260,
+            200,
+            320,
+            500,
+            280,
+            280,
+            180,
+            400
+          ],
+          "sha256": "7edd6fee631bc358ea4a49a79107096b0fec30b9e7045307bf027ca162d89d9a",
+          "startsAtIdle": true,
+          "startsAtWorking": false
+        },
+        "working": {
+          "file": "none/working.png",
+          "columns": 6,
+          "frameCount": 7,
+          "cellSize": 320,
+          "durations": [
+            800,
+            650,
+            850,
+            650,
+            800,
+            750,
+            500
+          ],
+          "sha256": "3eb7dc2c615417253c15faa3b98caf0c3040a1d208b883d7a7e03cb9af191c71",
+          "startsAtIdle": false,
+          "startsAtWorking": true
+        },
+        "complete": {
+          "file": "none/complete.png",
+          "columns": 6,
+          "frameCount": 7,
+          "cellSize": 320,
+          "durations": [
+            400,
+            250,
+            450,
+            600,
+            250,
+            250,
+            450
+          ],
+          "sha256": "8a8f7dded5aa174002b4ea78c44184e41e4831c37893bcbf727b744fc9e9fb0b",
+          "startsAtIdle": true,
+          "startsAtWorking": false,
+          "uprightRegions": [
+            null,
+            [
+              147,
+              208,
+              27,
+              23
+            ],
+            [
+              144,
+              204,
+              28,
+              24
+            ],
+            [
+              146,
+              196,
+              27,
+              24
+            ],
+            [
+              146,
+              202,
+              26,
+              23
+            ],
+            [
+              146,
+              205,
+              27,
+              23
+            ],
+            null
+          ]
+        }
+      },
+      "idleAlternate": {
+        "file": "none/idle-alternate.png",
+        "columns": 6,
+        "frameCount": 3,
+        "cellSize": 320,
+        "durations": [
+          2600,
+          120,
+          500
+        ],
+        "sha256": "fd049abcc646a9d49adc09e311e733bf98f525086dabbf21fbafacd309853f08",
+        "startsAtIdle": false,
+        "startsAtWorking": false
+      },
+      "idleTransition": {
+        "file": "none/idle-transition.png",
+        "columns": 6,
+        "frameCount": 5,
+        "cellSize": 320,
+        "durations": [
+          80,
+          80,
+          80,
+          80,
+          80
+        ],
+        "sha256": "790fa316d0e384fbe79047b7b01bd02f4f6ed83c06521d9e1c3c635ec93711ef",
+        "startsAtIdle": true,
+        "startsAtWorking": false
+      },
+      "workingTransition": {
+        "file": "none/working-transition.png",
+        "columns": 6,
+        "frameCount": 5,
+        "cellSize": 320,
+        "durations": [
+          100,
+          100,
+          100,
+          100,
+          100
+        ],
+        "sha256": "f012eed1bcf863c37c96dd50bd422c22cde973efe7a90f40ec1200e7ed570e04",
+        "startsAtIdle": true,
+        "startsAtWorking": false
+      }
+    },
+    "halloween": {
+      "actions": {
+        "idle": {
+          "file": "halloween/idle.png",
+          "columns": 6,
+          "frameCount": 3,
+          "cellSize": 320,
+          "durations": [
+            2600,
+            120,
+            500
+          ],
+          "sha256": "e25cbaf2deeef3d72d40d1e5b317704c6eb38365de90f7ac932448eaa471351e",
+          "startsAtIdle": true,
+          "startsAtWorking": false
+        },
+        "walk": {
+          "file": "halloween/walk.png",
+          "columns": 6,
+          "frameCount": 7,
+          "cellSize": 320,
+          "durations": [
+            180,
+            120,
+            120,
+            180,
+            120,
+            120,
+            80
+          ],
+          "sha256": "6ffeac91dfe2c13d56fcf92c496642ec1764496752a84f853c1c59e8f0809613",
+          "startsAtIdle": false,
+          "startsAtWorking": false
+        },
+        "greet": {
+          "file": "halloween/greet.png",
+          "columns": 6,
+          "frameCount": 6,
+          "cellSize": 320,
+          "durations": [
+            300,
+            220,
+            300,
+            190,
+            220,
+            350
+          ],
+          "sha256": "0bff108cf56ab5173bc5540eef240847dac203619de6d35f89e8e006f5efe32e",
+          "startsAtIdle": false,
+          "startsAtWorking": false
+        },
+        "joy": {
+          "file": "halloween/joy.png",
+          "columns": 6,
+          "frameCount": 7,
+          "cellSize": 320,
+          "durations": [
+            160,
+            130,
+            150,
+            200,
+            130,
+            130,
+            160
+          ],
+          "sha256": "3f5ea69cf1a88b6b466ceb19ceb49459f56af1bf84a6ff8ddb099f0c120af00b",
+          "startsAtIdle": false,
+          "startsAtWorking": false
+        },
+        "sleep": {
+          "file": "halloween/sleep.png",
+          "columns": 6,
+          "frameCount": 81,
+          "cellSize": 320,
+          "durations": [
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          "sha256": "8fcf021e378b054b312e39194649e050c890029c366705d738637ec7028883ce",
+          "startsAtIdle": false,
+          "startsAtWorking": false
+        },
+        "candy": {
+          "file": "halloween/candy.png",
+          "columns": 6,
+          "frameCount": 7,
+          "cellSize": 320,
+          "durations": [
+            300,
+            150,
+            350,
+            280,
+            350,
+            230,
+            300
+          ],
+          "sha256": "eb0f06a44d30d577e447800db0245babf1db32869e7e11a5bbad511c52bd16b5",
+          "startsAtIdle": false,
+          "startsAtWorking": false
+        },
+        "magic": {
+          "file": "halloween/magic.png",
+          "columns": 6,
+          "frameCount": 7,
+          "cellSize": 320,
+          "durations": [
+            300,
+            150,
+            220,
+            350,
+            250,
+            180,
+            300
+          ],
+          "sha256": "1139acb0dd600deccb16c0c6cbeeb322e3150861f77c54a8209c7a4f064129be",
+          "startsAtIdle": false,
+          "startsAtWorking": false
+        },
+        "pumpkin": {
+          "file": "halloween/pumpkin.png",
+          "columns": 6,
+          "frameCount": 7,
+          "cellSize": 320,
+          "durations": [
+            300,
+            170,
+            250,
+            350,
+            240,
+            200,
+            300
+          ],
+          "sha256": "17e6a128b0fee74939e509fc3d929b04e549d4fa159c273c55f608a25ef19d1a",
+          "startsAtIdle": false,
+          "startsAtWorking": false
+        },
+        "working": {
+          "file": "halloween/working.png",
+          "columns": 6,
+          "frameCount": 7,
+          "cellSize": 320,
+          "durations": [
+            720,
+            520,
+            420,
+            650,
+            120,
+            650,
+            520
+          ],
+          "sha256": "7e4406904ab604cdcd25077a152e566e0ba6fc3388204c5645312ab6d12c55d7",
+          "startsAtIdle": false,
+          "startsAtWorking": true
+        },
+        "complete": {
+          "file": "halloween/complete.png",
+          "columns": 6,
+          "frameCount": 8,
+          "cellSize": 320,
+          "durations": [
+            180,
+            160,
+            450,
+            180,
+            140,
+            120,
+            140,
+            180
+          ],
+          "sha256": "40e7821777d5d2f057a8c9c7d037686dec54a5ccb7c6695820088823d2428c2f",
+          "startsAtIdle": false,
+          "startsAtWorking": true
+        }
+      },
+      "staticFile": "halloween/static.png",
+      "workingTransition": {
+        "file": "halloween/working-transition.png",
+        "columns": 6,
+        "frameCount": 6,
+        "cellSize": 320,
+        "durations": [
+          60,
+          70,
+          90,
+          100,
+          100,
+          60
+        ],
+        "sha256": "3f8065fac171280ad4e3425f06df9a374955c2a064b9284835dad5838495016b",
+        "startsAtIdle": true,
+        "startsAtWorking": false
+      }
+    },
+    "christmas": {
+      "actions": {
+        "idle": {
+          "file": "christmas/idle.png",
+          "columns": 6,
+          "cellSize": 320,
+          "frameCount": 3,
+          "durations": [
+            2600,
+            120,
+            500
+          ],
+          "sha256": "89a8cfa258bd1a14bfa47250f9eb2ffef97fb79f19613914f359d2add2978b29",
+          "startsAtIdle": true,
+          "startsAtWorking": false
+        },
+        "walk": {
+          "file": "christmas/walk.png",
+          "columns": 6,
+          "cellSize": 320,
+          "frameCount": 10,
+          "durations": [
+            220,
+            300,
+            220,
+            220,
+            140,
+            220,
+            140,
+            220,
+            300,
+            300
+          ],
+          "sha256": "bc8038a4752c9506e4289df18106098dc4f3a9d560a57d276fea75a347873b3d",
+          "startsAtIdle": true,
+          "startsAtWorking": false
+        },
+        "greet": {
+          "file": "christmas/greet.png",
+          "columns": 6,
+          "cellSize": 320,
+          "frameCount": 7,
+          "durations": [
+            300,
+            200,
+            260,
+            500,
+            220,
+            180,
+            400
+          ],
+          "sha256": "59fb5f79f69df3d4ad6b5de5d067bbe197965b547048975736b5f0caf3795ed4",
+          "startsAtIdle": true,
+          "startsAtWorking": false
+        },
+        "joy": {
+          "file": "christmas/joy.png",
+          "columns": 6,
+          "cellSize": 320,
+          "frameCount": 6,
+          "durations": [
+            260,
+            220,
+            650,
+            240,
+            240,
+            400
+          ],
+          "sha256": "13323657b68a62b222051e5e253d7fe78cc96b5dd0cf456924dafecc29120406",
+          "startsAtIdle": true,
+          "startsAtWorking": false
+        },
+        "sleep": {
+          "file": "christmas/sleep.png",
+          "columns": 6,
+          "cellSize": 320,
+          "frameCount": 81,
+          "durations": [
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          "sha256": "bf2c1633d6e3511dd06565ef5de811a8682589ba2e3acb36ae318a0e330c943e",
+          "startsAtIdle": false,
+          "startsAtWorking": false
+        },
+        "gift": {
+          "file": "christmas/gift.png",
+          "columns": 6,
+          "cellSize": 320,
+          "frameCount": 11,
+          "durations": [
+            220,
+            180,
+            320,
+            280,
+            650,
+            500,
+            240,
+            250,
+            400,
+            250,
+            400
+          ],
+          "sha256": "91ded0d450d2b83d56234dfffdeaa8dd3f2683715ecb37be9ee0bd116b90b940",
+          "startsAtIdle": true,
+          "startsAtWorking": false
+        },
+        "scarf": {
+          "file": "christmas/scarf.png",
+          "columns": 6,
+          "cellSize": 320,
+          "frameCount": 11,
+          "durations": [
+            220,
+            180,
+            240,
+            180,
+            200,
+            650,
+            200,
+            200,
+            240,
+            180,
+            350
+          ],
+          "sha256": "4fe56d11965a38031eb4123e832397418133cc75fd1423903911574143dd0879",
+          "startsAtIdle": true,
+          "startsAtWorking": false
+        },
+        "snow": {
+          "file": "christmas/snow.png",
+          "columns": 6,
+          "cellSize": 320,
+          "frameCount": 8,
+          "durations": [
+            220,
+            160,
+            180,
+            430,
+            740,
+            550,
+            180,
+            350
+          ],
+          "sha256": "8a4b3f142654046e500cb7d256b3ed1c916ad46460b56ed0cb2545de127e72be",
+          "startsAtIdle": true,
+          "startsAtWorking": false
+        },
+        "working": {
+          "file": "christmas/working.png",
+          "columns": 6,
+          "cellSize": 320,
+          "frameCount": 7,
+          "durations": [
+            720,
+            520,
+            420,
+            650,
+            120,
+            650,
+            520
+          ],
+          "sha256": "6b0c4c9039ceb6eeae8c85ed69677e9560de725627b18d14d3ff1088b2e28770",
+          "startsAtIdle": false,
+          "startsAtWorking": true
+        },
+        "complete": {
+          "file": "christmas/complete.png",
+          "columns": 6,
+          "cellSize": 320,
+          "frameCount": 12,
+          "durations": [
+            140,
+            260,
+            240,
+            500,
+            700,
+            300,
+            280,
+            320,
+            280,
+            350,
+            200,
+            350
+          ],
+          "sha256": "a95b3d7bfd7ced42a3681ca595f7b61f084e071b59ead0f5db6f7fec1365f635",
+          "startsAtIdle": false,
+          "startsAtWorking": true,
+          "uprightRegions": [
+            null,
+            [
+              134,
+              228,
+              31,
+              28
+            ],
+            [
+              128,
+              206,
+              30,
+              28
+            ],
+            [
+              131,
+              217,
+              32,
+              28
+            ],
+            [
+              133,
+              223,
+              32,
+              28
+            ],
+            [
+              132,
+              226,
+              29,
+              28
+            ],
+            [
+              133,
+              230,
+              30,
+              28
+            ],
+            [
+              134,
+              228,
+              31,
+              28
+            ],
+            [
+              131,
+              220,
+              28,
+              29
+            ],
+            [
+              92,
+              241,
+              27,
+              25
+            ],
+            null,
+            null
+          ]
+        },
+        "receive-gift": {
+          "file": "christmas/receive-gift.png",
+          "columns": 6,
+          "cellSize": 320,
+          "frameCount": 8,
+          "durations": [
+            180,
+            260,
+            850,
+            220,
+            400,
+            500,
+            250,
+            300
+          ],
+          "sha256": "8419ec0ba7c75ebaff22d606e919b62a60ff924728247b9fd98c80abcff2029d",
+          "startsAtIdle": false,
+          "startsAtWorking": false,
+          "resultFrame": 2
+        }
+      },
+      "staticFile": "christmas/static.png",
+      "workingTransition": {
+        "file": "christmas/working-transition.png",
+        "columns": 6,
+        "cellSize": 320,
+        "frameCount": 5,
+        "durations": [
+          60,
+          90,
+          120,
+          150,
+          80
+        ],
+        "sha256": "8fe2caf9db59465926d403b83ba48a25d37d19bdd4116e75749e731fd11292d2",
+        "startsAtIdle": true,
+        "startsAtWorking": false
+      }
+    },
+    "spring-festival": {
+      "actions": {
+        "idle": {
+          "file": "spring-festival/idle.png",
+          "columns": 6,
+          "frameCount": 3,
+          "cellSize": 320,
+          "durations": [
+            2600,
+            120,
+            500
+          ],
+          "sha256": "f2c3bca05d6a76a51343731ddb3b2c755dca78d4f46253e63ab126c6f6824872",
+          "startsAtIdle": true,
+          "startsAtWorking": false
+        },
+        "walk": {
+          "file": "spring-festival/walk.png",
+          "columns": 6,
+          "frameCount": 4,
+          "cellSize": 320,
+          "durations": [
+            240,
+            240,
+            240,
+            240
+          ],
+          "sha256": "b1a0c1488178d6c7bfff4f2ddce9cfb679ac955fc6ea89aaaf3034ec9d4d09e4",
+          "startsAtIdle": false,
+          "startsAtWorking": false
+        },
+        "greet": {
+          "file": "spring-festival/greet.png",
+          "columns": 6,
+          "frameCount": 6,
+          "cellSize": 320,
+          "durations": [
+            300,
+            350,
+            420,
+            800,
+            450,
+            450
+          ],
+          "sha256": "d0ac224c099cc373693023da797347ff2d0dbabaee2d4e30378ef7c14dd0b159",
+          "startsAtIdle": true,
+          "startsAtWorking": false
+        },
+        "joy": {
+          "file": "spring-festival/joy.png",
+          "columns": 6,
+          "frameCount": 6,
+          "cellSize": 320,
+          "durations": [
+            220,
+            250,
+            550,
+            250,
+            230,
+            300
+          ],
+          "sha256": "3d95841e2d6e1a6a5f1f7ba1293648de884935785c86ff775ad1a72d0053c732",
+          "startsAtIdle": true,
+          "startsAtWorking": false
+        },
+        "sleep": {
+          "file": "spring-festival/sleep.png",
+          "columns": 6,
+          "frameCount": 7,
+          "cellSize": 320,
+          "durations": [
+            650,
+            650,
+            650,
+            650,
+            500,
+            650,
+            350
+          ],
+          "sha256": "4ce888a12c3934ba37d74a36a13a51db06fd6a04e6e1427e3b1e80608709c1e7",
+          "startsAtIdle": false,
+          "startsAtWorking": false
+        },
+        "fortune": {
+          "file": "spring-festival/fortune.png",
+          "columns": 6,
+          "frameCount": 6,
+          "cellSize": 320,
+          "durations": [
+            250,
+            350,
+            650,
+            500,
+            350,
+            300
+          ],
+          "sha256": "87ba61cfeca5a3a6370a31eb557a031f59b9921ea36c1212dc95a86c141333a7",
+          "startsAtIdle": true,
+          "startsAtWorking": false,
+          "uprightRegions": [
+            null,
+            [
+              143,
+              202,
+              43,
+              42
+            ],
+            [
+              140,
+              164,
+              45,
+              45
+            ],
+            [
+              139,
+              164,
+              45,
+              45
+            ],
+            [
+              139,
+              192,
+              45,
+              44
+            ],
+            null
+          ]
+        },
+        "firecrackers": {
+          "file": "spring-festival/firecrackers.png",
+          "columns": 6,
+          "frameCount": 6,
+          "cellSize": 320,
+          "durations": [
+            250,
+            450,
+            450,
+            350,
+            500,
+            300
+          ],
+          "sha256": "01fc47947bf9f139021074eb13f3e95a172f3fdabe902dac31c0bbbff12724db",
+          "startsAtIdle": true,
+          "startsAtWorking": false
+        },
+        "dumplings": {
+          "file": "spring-festival/dumplings.png",
+          "columns": 6,
+          "frameCount": 6,
+          "cellSize": 320,
+          "durations": [
+            250,
+            500,
+            500,
+            650,
+            400,
+            300
+          ],
+          "sha256": "84313c113bb70d27b67631845e3b772f05b89c45e8f1e772e67d4183054593d3",
+          "startsAtIdle": true,
+          "startsAtWorking": false
+        },
+        "working": {
+          "file": "spring-festival/working.png",
+          "columns": 6,
+          "frameCount": 7,
+          "cellSize": 320,
+          "durations": [
+            450,
+            400,
+            450,
+            450,
+            120,
+            550,
+            300
+          ],
+          "sha256": "f8f12789176330999258760aba21ed16c74902caa0862d570cf75d0da49e4e00",
+          "startsAtIdle": false,
+          "startsAtWorking": true
+        },
+        "complete": {
+          "file": "spring-festival/complete.png",
+          "columns": 6,
+          "frameCount": 10,
+          "cellSize": 320,
+          "durations": [
+            150,
+            80,
+            220,
+            250,
+            300,
+            250,
+            350,
+            260,
+            140,
+            220
+          ],
+          "sha256": "c4e5320cb5d4ca7203436b8777d19b4fdd6ac6025354ce58f11b4f68786492d1",
+          "startsAtIdle": false,
+          "startsAtWorking": true,
+          "uprightRegions": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            [
+              143,
+              192,
+              16,
+              15
+            ],
+            [
+              166,
+              193,
+              15,
+              15
+            ],
+            null,
+            null,
+            null
+          ]
+        }
+      },
+      "staticFile": "spring-festival/static.png",
+      "idleAlternate": {
+        "file": "spring-festival/idle-alternate.png",
+        "columns": 6,
+        "frameCount": 3,
+        "cellSize": 320,
+        "durations": [
+          2600,
+          120,
+          500
+        ],
+        "sha256": "e1f809e314ffa09282af1c817417309830fa33084120b59b016a73ab959c25b0",
+        "startsAtIdle": false,
+        "startsAtWorking": false
+      },
+      "idleTransition": {
+        "file": "spring-festival/idle-transition.png",
+        "columns": 6,
+        "frameCount": 5,
+        "cellSize": 320,
+        "durations": [
+          80,
+          80,
+          80,
+          80,
+          80
+        ],
+        "sha256": "8ceacae06b0487537ae6022f5f5fac51dbd8388bda9ba3712b33dbea0c5ec283",
+        "startsAtIdle": true,
+        "startsAtWorking": false
+      },
+      "workingTransition": {
+        "file": "spring-festival/working-transition.png",
+        "columns": 6,
+        "frameCount": 5,
+        "cellSize": 320,
+        "durations": [
+          100,
+          100,
+          100,
+          100,
+          100
+        ],
+        "sha256": "1994ef27db08b0ef9b87510bc54d8564ac2484fd3483e07c79e6369b9e99c9c3",
+        "startsAtIdle": true,
+        "startsAtWorking": false
+      }
+    }
+  }
+}

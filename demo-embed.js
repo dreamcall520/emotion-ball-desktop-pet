@@ -65,7 +65,7 @@
     if (event.data.type === 'qiuqiu-demo-avatar' && frame.dataset.demo === 'customize') {
       const appearance = event.data.appearance;
       if (!appearance || typeof appearance !== 'object' || Array.isArray(appearance) ||
-        !['blob', 'cloud', 'square', 'aurora-cloud', 'codex-pet'].includes(appearance.shape)) return;
+        !['blob', 'cloud', 'square', 'aurora-cloud', 'new-year-sheep', 'codex-pet'].includes(appearance.shape)) return;
       const codexPet = appearance.shape === 'codex-pet' ? safePet(appearance, event.data.codexPet) : null;
       if (appearance.shape === 'codex-pet' && !codexPet) return;
       savedAvatar = { type: 'qiuqiu-demo-avatar', appearance, codexPet };

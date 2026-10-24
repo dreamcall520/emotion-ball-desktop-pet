@@ -28,3 +28,6 @@
   #preset-name { flex-basis: 100%; }
   .range-grid { gap: 13px 10px; }
 }
+
+#sheep-theme { width:100%; padding:10px 12px; color:var(--text); background:var(--field, #f7f9fb); border:1px solid var(--border, #d8e0e8); border-radius:10px; font:inherit; }
+@media(max-width:420px){ .shape-options { grid-template-columns:repeat(3,minmax(0,1fr)); } }

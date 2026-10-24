@@ -46,7 +46,7 @@
     if(data?.type==='qiuqiu-demo-theme'&&['light','dark'].includes(data.appearance)&&['standard','accessible'].includes(data.colorMode)){appearance=data.appearance;colorMode=data.colorMode;if(['blue','green'].includes(data.uiTheme))uiTheme=data.uiTheme;theme();}
     else if(data?.type==='qiuqiu-demo-avatar'&&data.appearance&&typeof data.appearance==='object'&&!Array.isArray(data.appearance)){
       const raw=data.appearance;
-      if(!['blob','cloud','square','aurora-cloud','codex-pet'].includes(raw.shape))return;
+      if(!['blob','cloud','square','aurora-cloud','new-year-sheep','codex-pet'].includes(raw.shape))return;
       const pet=raw.shape==='codex-pet'?safePet(raw,data.codexPet):null;
       if(raw.shape==='codex-pet'&&!pet)return;
       avatar=window.PetCustomization.normalizeAppearance(raw);avatarPet=pet;

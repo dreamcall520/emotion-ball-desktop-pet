@@ -19,9 +19,11 @@
     {
       "file": "lib/customization.js",
       "source": "desktop-pet/lib/customization.js",
-      "sourceSha256": "7362471008d3db5e281c78f8607f2488b2d402874819d96ea83f3e198a0e3569",
-      "sha256": "7362471008d3db5e281c78f8607f2488b2d402874819d96ea83f3e198a0e3569",
-      "adaptation": null
+      "sourceSha256": "ec721ce981e76793305ac5fb60b504c105598228be59f46f3b1d11c7d109758c",
+      "sha256": "ec721ce981e76793305ac5fb60b504c105598228be59f46f3b1d11c7d109758c",
+      "adaptation": null,
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06"
     },
     {
       "file": "lib/rive.js",
@@ -47,9 +49,11 @@
     {
       "file": "lib/chat-avatar.js",
       "source": "desktop-pet/lib/chat-avatar.js",
-      "sourceSha256": "6d95a47fdb268a30ee0c2f31cf94fd19d5ea7cac5fed5e159a4aad55cec316f6",
-      "sha256": "6d95a47fdb268a30ee0c2f31cf94fd19d5ea7cac5fed5e159a4aad55cec316f6",
-      "adaptation": null
+      "sourceSha256": "dcd2ca7a9ab79e693068b2cdb132a9d4c635fea6b9806ef2ed07244ae12446a0",
+      "sha256": "dcd2ca7a9ab79e693068b2cdb132a9d4c635fea6b9806ef2ed07244ae12446a0",
+      "adaptation": null,
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06"
     },
     {
       "file": "lib/RIVE-LICENSE.txt",
@@ -76,15 +80,15 @@
       "file": "index.html",
       "source": "desktop-pet/customize.html",
       "sourceSha256": "5b665e095cfc68db8d330407d1146c48bcd0ac03561f7d288f35644fd5a62e0a",
-      "sha256": "3698f62804efd117813273db9f1d6ec287de3e336a585c690f001435e2995843",
-      "adaptation": "Native DOM retained; website dependency URLs, public favicon, browser IPC bridge, blue palette, responsive stylesheet, static example note and explicit memory-only feedback. Load the shared same-origin embedding fallback before page rendering. Add noindex, follow, indexifembedded so demos are excluded as standalone search results while their embedded content remains eligible for Google indexing."
+      "sha256": "668758a8db95712fcde1ddd7e6a57cbec6988b766cd8cfe18db080f4c54d8863",
+      "adaptation": "Native DOM retained; website dependency URLs, public favicon, browser IPC bridge, blue palette, responsive stylesheet, static example note and explicit memory-only feedback. Load the shared same-origin embedding fallback before page rendering. Add noindex, follow, indexifembedded so demos are excluded as standalone search results while their embedded content remains eligible for Google indexing. Website sheep theme selection, real preview and memory-only save support."
     },
     {
       "file": "customize-renderer.js",
       "source": "desktop-pet/customize-renderer.js",
       "sourceSha256": "fb225786c4d133d073f6aa8ac859c10fee12a6014aff3ad12ea0e94f4e09f9d5",
-      "sha256": "877b17a4f3f6e9f8f6cfc77616a608b6659a86806a8e10bdcc2553e974056290",
-      "adaptation": "Public native renderer; eight feedback strings name the public sample catalogue and isolated browser save/reset boundary."
+      "sha256": "0ef519f465f8ad7716a3e0e3d1fd6040ff31fde3ef112749bf85809c372f9e72",
+      "adaptation": "Public native renderer; eight feedback strings name the public sample catalogue and isolated browser save/reset boundary. Website sheep theme selection, real preview and memory-only save support."
     },
     {
       "file": "../../assets/vendor/emotion-ball/rings.js",
@@ -161,28 +165,622 @@
     {
       "file": "../chat/lib/customization.js",
       "source": "desktop-pet/lib/customization.js",
-      "sourceSha256": "7362471008d3db5e281c78f8607f2488b2d402874819d96ea83f3e198a0e3569",
-      "sha256": "7362471008d3db5e281c78f8607f2488b2d402874819d96ea83f3e198a0e3569",
-      "adaptation": null
+      "sourceSha256": "ec721ce981e76793305ac5fb60b504c105598228be59f46f3b1d11c7d109758c",
+      "sha256": "ec721ce981e76793305ac5fb60b504c105598228be59f46f3b1d11c7d109758c",
+      "adaptation": null,
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06"
     },
     {
       "file": "../chat/lib/chat-avatar.js",
       "source": "desktop-pet/lib/chat-avatar.js",
-      "sourceSha256": "6d95a47fdb268a30ee0c2f31cf94fd19d5ea7cac5fed5e159a4aad55cec316f6",
-      "sha256": "6d95a47fdb268a30ee0c2f31cf94fd19d5ea7cac5fed5e159a4aad55cec316f6",
+      "sourceSha256": "dcd2ca7a9ab79e693068b2cdb132a9d4c635fea6b9806ef2ed07244ae12446a0",
+      "sha256": "dcd2ca7a9ab79e693068b2cdb132a9d4c635fea6b9806ef2ed07244ae12446a0",
+      "adaptation": null,
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06"
+    },
+    {
+      "file": "../sheep/assets/sheep/buddies/gift.png",
+      "source": "desktop-pet/assets/sheep/buddies/gift.png",
+      "sourceSha256": "e5c013bec5c2474d4b6177aa983811ffc522c6fcbd14b72010e808218dba39aa",
+      "sha256": "e5c013bec5c2474d4b6177aa983811ffc522c6fcbd14b72010e808218dba39aa",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/buddies/reindeer.png",
+      "source": "desktop-pet/assets/sheep/buddies/reindeer.png",
+      "sourceSha256": "02bdfdaa21d84725801bc0578ea66ec5e8bcee46be924f6967fb3ae6efdfba32",
+      "sha256": "02bdfdaa21d84725801bc0578ea66ec5e8bcee46be924f6967fb3ae6efdfba32",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/buddies/santa.png",
+      "source": "desktop-pet/assets/sheep/buddies/santa.png",
+      "sourceSha256": "fa7b3869928a9c9b1ebd1616dfd409b462771bf213ffb53d6307c9e1df9e7ee2",
+      "sha256": "fa7b3869928a9c9b1ebd1616dfd409b462771bf213ffb53d6307c9e1df9e7ee2",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/buddies/snowman.png",
+      "source": "desktop-pet/assets/sheep/buddies/snowman.png",
+      "sourceSha256": "dbfc26c2f1e9e8dbfcb5333891ebe23476edc80e4388e72e56b3f4eccaea097b",
+      "sha256": "dbfc26c2f1e9e8dbfcb5333891ebe23476edc80e4388e72e56b3f4eccaea097b",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/buddies/tree.png",
+      "source": "desktop-pet/assets/sheep/buddies/tree.png",
+      "sourceSha256": "8e5b011d712221fa506d471b994d5dbf03e85de166f95d2ee3e6c9499b0dca75",
+      "sha256": "8e5b011d712221fa506d471b994d5dbf03e85de166f95d2ee3e6c9499b0dca75",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/christmas/complete.png",
+      "source": "desktop-pet/assets/sheep/christmas/complete.png",
+      "sourceSha256": "a95b3d7bfd7ced42a3681ca595f7b61f084e071b59ead0f5db6f7fec1365f635",
+      "sha256": "a95b3d7bfd7ced42a3681ca595f7b61f084e071b59ead0f5db6f7fec1365f635",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/christmas/gift.png",
+      "source": "desktop-pet/assets/sheep/christmas/gift.png",
+      "sourceSha256": "91ded0d450d2b83d56234dfffdeaa8dd3f2683715ecb37be9ee0bd116b90b940",
+      "sha256": "91ded0d450d2b83d56234dfffdeaa8dd3f2683715ecb37be9ee0bd116b90b940",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/christmas/greet.png",
+      "source": "desktop-pet/assets/sheep/christmas/greet.png",
+      "sourceSha256": "59fb5f79f69df3d4ad6b5de5d067bbe197965b547048975736b5f0caf3795ed4",
+      "sha256": "59fb5f79f69df3d4ad6b5de5d067bbe197965b547048975736b5f0caf3795ed4",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/christmas/idle.png",
+      "source": "desktop-pet/assets/sheep/christmas/idle.png",
+      "sourceSha256": "89a8cfa258bd1a14bfa47250f9eb2ffef97fb79f19613914f359d2add2978b29",
+      "sha256": "89a8cfa258bd1a14bfa47250f9eb2ffef97fb79f19613914f359d2add2978b29",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/christmas/joy.png",
+      "source": "desktop-pet/assets/sheep/christmas/joy.png",
+      "sourceSha256": "13323657b68a62b222051e5e253d7fe78cc96b5dd0cf456924dafecc29120406",
+      "sha256": "13323657b68a62b222051e5e253d7fe78cc96b5dd0cf456924dafecc29120406",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/christmas/receive-gift.png",
+      "source": "desktop-pet/assets/sheep/christmas/receive-gift.png",
+      "sourceSha256": "8419ec0ba7c75ebaff22d606e919b62a60ff924728247b9fd98c80abcff2029d",
+      "sha256": "8419ec0ba7c75ebaff22d606e919b62a60ff924728247b9fd98c80abcff2029d",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/christmas/scarf.png",
+      "source": "desktop-pet/assets/sheep/christmas/scarf.png",
+      "sourceSha256": "4fe56d11965a38031eb4123e832397418133cc75fd1423903911574143dd0879",
+      "sha256": "4fe56d11965a38031eb4123e832397418133cc75fd1423903911574143dd0879",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/christmas/sleep.png",
+      "source": "desktop-pet/assets/sheep/christmas/sleep.png",
+      "sourceSha256": "bf2c1633d6e3511dd06565ef5de811a8682589ba2e3acb36ae318a0e330c943e",
+      "sha256": "bf2c1633d6e3511dd06565ef5de811a8682589ba2e3acb36ae318a0e330c943e",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/christmas/snow.png",
+      "source": "desktop-pet/assets/sheep/christmas/snow.png",
+      "sourceSha256": "8a4b3f142654046e500cb7d256b3ed1c916ad46460b56ed0cb2545de127e72be",
+      "sha256": "8a4b3f142654046e500cb7d256b3ed1c916ad46460b56ed0cb2545de127e72be",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/christmas/static.png",
+      "source": "desktop-pet/assets/sheep/christmas/static.png",
+      "sourceSha256": "9323046e16342419ea0dba60bcee7eb9afc46ae95f687c8e11b75a7246408aa1",
+      "sha256": "9323046e16342419ea0dba60bcee7eb9afc46ae95f687c8e11b75a7246408aa1",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/christmas/walk.png",
+      "source": "desktop-pet/assets/sheep/christmas/walk.png",
+      "sourceSha256": "bc8038a4752c9506e4289df18106098dc4f3a9d560a57d276fea75a347873b3d",
+      "sha256": "bc8038a4752c9506e4289df18106098dc4f3a9d560a57d276fea75a347873b3d",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/christmas/working-transition.png",
+      "source": "desktop-pet/assets/sheep/christmas/working-transition.png",
+      "sourceSha256": "8fe2caf9db59465926d403b83ba48a25d37d19bdd4116e75749e731fd11292d2",
+      "sha256": "8fe2caf9db59465926d403b83ba48a25d37d19bdd4116e75749e731fd11292d2",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/christmas/working.png",
+      "source": "desktop-pet/assets/sheep/christmas/working.png",
+      "sourceSha256": "6b0c4c9039ceb6eeae8c85ed69677e9560de725627b18d14d3ff1088b2e28770",
+      "sha256": "6b0c4c9039ceb6eeae8c85ed69677e9560de725627b18d14d3ff1088b2e28770",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/halloween/candy.png",
+      "source": "desktop-pet/assets/sheep/halloween/candy.png",
+      "sourceSha256": "eb0f06a44d30d577e447800db0245babf1db32869e7e11a5bbad511c52bd16b5",
+      "sha256": "eb0f06a44d30d577e447800db0245babf1db32869e7e11a5bbad511c52bd16b5",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/halloween/complete.png",
+      "source": "desktop-pet/assets/sheep/halloween/complete.png",
+      "sourceSha256": "40e7821777d5d2f057a8c9c7d037686dec54a5ccb7c6695820088823d2428c2f",
+      "sha256": "40e7821777d5d2f057a8c9c7d037686dec54a5ccb7c6695820088823d2428c2f",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/halloween/greet.png",
+      "source": "desktop-pet/assets/sheep/halloween/greet.png",
+      "sourceSha256": "0bff108cf56ab5173bc5540eef240847dac203619de6d35f89e8e006f5efe32e",
+      "sha256": "0bff108cf56ab5173bc5540eef240847dac203619de6d35f89e8e006f5efe32e",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/halloween/idle.png",
+      "source": "desktop-pet/assets/sheep/halloween/idle.png",
+      "sourceSha256": "e25cbaf2deeef3d72d40d1e5b317704c6eb38365de90f7ac932448eaa471351e",
+      "sha256": "e25cbaf2deeef3d72d40d1e5b317704c6eb38365de90f7ac932448eaa471351e",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/halloween/joy.png",
+      "source": "desktop-pet/assets/sheep/halloween/joy.png",
+      "sourceSha256": "3f5ea69cf1a88b6b466ceb19ceb49459f56af1bf84a6ff8ddb099f0c120af00b",
+      "sha256": "3f5ea69cf1a88b6b466ceb19ceb49459f56af1bf84a6ff8ddb099f0c120af00b",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/halloween/magic.png",
+      "source": "desktop-pet/assets/sheep/halloween/magic.png",
+      "sourceSha256": "1139acb0dd600deccb16c0c6cbeeb322e3150861f77c54a8209c7a4f064129be",
+      "sha256": "1139acb0dd600deccb16c0c6cbeeb322e3150861f77c54a8209c7a4f064129be",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/halloween/pumpkin.png",
+      "source": "desktop-pet/assets/sheep/halloween/pumpkin.png",
+      "sourceSha256": "17e6a128b0fee74939e509fc3d929b04e549d4fa159c273c55f608a25ef19d1a",
+      "sha256": "17e6a128b0fee74939e509fc3d929b04e549d4fa159c273c55f608a25ef19d1a",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/halloween/sleep.png",
+      "source": "desktop-pet/assets/sheep/halloween/sleep.png",
+      "sourceSha256": "8fcf021e378b054b312e39194649e050c890029c366705d738637ec7028883ce",
+      "sha256": "8fcf021e378b054b312e39194649e050c890029c366705d738637ec7028883ce",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/halloween/static.png",
+      "source": "desktop-pet/assets/sheep/halloween/static.png",
+      "sourceSha256": "5d556469db3eea35721a725858a223a4da09984d96610b0a7833b3335b7cab54",
+      "sha256": "5d556469db3eea35721a725858a223a4da09984d96610b0a7833b3335b7cab54",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/halloween/walk.png",
+      "source": "desktop-pet/assets/sheep/halloween/walk.png",
+      "sourceSha256": "6ffeac91dfe2c13d56fcf92c496642ec1764496752a84f853c1c59e8f0809613",
+      "sha256": "6ffeac91dfe2c13d56fcf92c496642ec1764496752a84f853c1c59e8f0809613",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/halloween/working-transition.png",
+      "source": "desktop-pet/assets/sheep/halloween/working-transition.png",
+      "sourceSha256": "3f8065fac171280ad4e3425f06df9a374955c2a064b9284835dad5838495016b",
+      "sha256": "3f8065fac171280ad4e3425f06df9a374955c2a064b9284835dad5838495016b",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/halloween/working.png",
+      "source": "desktop-pet/assets/sheep/halloween/working.png",
+      "sourceSha256": "7e4406904ab604cdcd25077a152e566e0ba6fc3388204c5645312ab6d12c55d7",
+      "sha256": "7e4406904ab604cdcd25077a152e566e0ba6fc3388204c5645312ab6d12c55d7",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/manifest.json",
+      "source": "desktop-pet/assets/sheep/manifest.json",
+      "sourceSha256": "a561ccf91e2da8d507350c6ec12ec141df5be245d61f6a5207f3d53452b0c615",
+      "sha256": "a561ccf91e2da8d507350c6ec12ec141df5be245d61f6a5207f3d53452b0c615",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/none/bell.png",
+      "source": "desktop-pet/assets/sheep/none/bell.png",
+      "sourceSha256": "80dd74014d2ce7f290c61c3ef7d405e14464b562006f7eb8928009eef8075871",
+      "sha256": "80dd74014d2ce7f290c61c3ef7d405e14464b562006f7eb8928009eef8075871",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/none/complete.png",
+      "source": "desktop-pet/assets/sheep/none/complete.png",
+      "sourceSha256": "8a8f7dded5aa174002b4ea78c44184e41e4831c37893bcbf727b744fc9e9fb0b",
+      "sha256": "8a8f7dded5aa174002b4ea78c44184e41e4831c37893bcbf727b744fc9e9fb0b",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/none/ear.png",
+      "source": "desktop-pet/assets/sheep/none/ear.png",
+      "sourceSha256": "fdecf2ac939a5e7dda8fd090ce86b1633e2875bdea1ef86cdbe669a476cd2577",
+      "sha256": "fdecf2ac939a5e7dda8fd090ce86b1633e2875bdea1ef86cdbe669a476cd2577",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/none/greet.png",
+      "source": "desktop-pet/assets/sheep/none/greet.png",
+      "sourceSha256": "c2a771114997eb9dd4262b9420ea10560696f0235396924246e82c2362b861c9",
+      "sha256": "c2a771114997eb9dd4262b9420ea10560696f0235396924246e82c2362b861c9",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/none/idle-alternate.png",
+      "source": "desktop-pet/assets/sheep/none/idle-alternate.png",
+      "sourceSha256": "fd049abcc646a9d49adc09e311e733bf98f525086dabbf21fbafacd309853f08",
+      "sha256": "fd049abcc646a9d49adc09e311e733bf98f525086dabbf21fbafacd309853f08",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/none/idle-transition.png",
+      "source": "desktop-pet/assets/sheep/none/idle-transition.png",
+      "sourceSha256": "790fa316d0e384fbe79047b7b01bd02f4f6ed83c06521d9e1c3c635ec93711ef",
+      "sha256": "790fa316d0e384fbe79047b7b01bd02f4f6ed83c06521d9e1c3c635ec93711ef",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/none/idle.png",
+      "source": "desktop-pet/assets/sheep/none/idle.png",
+      "sourceSha256": "a452ec2d4b489848bd7acce862b901426868f34b1314db943d3aa7964814785e",
+      "sha256": "a452ec2d4b489848bd7acce862b901426868f34b1314db943d3aa7964814785e",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/none/joy.png",
+      "source": "desktop-pet/assets/sheep/none/joy.png",
+      "sourceSha256": "061b2a45efc91c2a5f8ed8801a51a118b0aef2c4d67408838112a106a9a31b3f",
+      "sha256": "061b2a45efc91c2a5f8ed8801a51a118b0aef2c4d67408838112a106a9a31b3f",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/none/sleep.png",
+      "source": "desktop-pet/assets/sheep/none/sleep.png",
+      "sourceSha256": "266fc016a2dba2b2bf9f59cc040ebc6bd46b1b6e4a481f8077bfe6ed6a074726",
+      "sha256": "266fc016a2dba2b2bf9f59cc040ebc6bd46b1b6e4a481f8077bfe6ed6a074726",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/none/stretch.png",
+      "source": "desktop-pet/assets/sheep/none/stretch.png",
+      "sourceSha256": "7edd6fee631bc358ea4a49a79107096b0fec30b9e7045307bf027ca162d89d9a",
+      "sha256": "7edd6fee631bc358ea4a49a79107096b0fec30b9e7045307bf027ca162d89d9a",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/none/walk.png",
+      "source": "desktop-pet/assets/sheep/none/walk.png",
+      "sourceSha256": "d3a15e483acd7e2cfd4301e2e0ad8f458ca870d2407683eb53fce2b24c0de6ac",
+      "sha256": "d3a15e483acd7e2cfd4301e2e0ad8f458ca870d2407683eb53fce2b24c0de6ac",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/none/working-transition.png",
+      "source": "desktop-pet/assets/sheep/none/working-transition.png",
+      "sourceSha256": "f012eed1bcf863c37c96dd50bd422c22cde973efe7a90f40ec1200e7ed570e04",
+      "sha256": "f012eed1bcf863c37c96dd50bd422c22cde973efe7a90f40ec1200e7ed570e04",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/none/working.png",
+      "source": "desktop-pet/assets/sheep/none/working.png",
+      "sourceSha256": "3eb7dc2c615417253c15faa3b98caf0c3040a1d208b883d7a7e03cb9af191c71",
+      "sha256": "3eb7dc2c615417253c15faa3b98caf0c3040a1d208b883d7a7e03cb9af191c71",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/props/candy.png",
+      "source": "desktop-pet/assets/sheep/props/candy.png",
+      "sourceSha256": "a494629dca27f8190a62a241bdf3fffd6939215c52631cb11f9e388fa7847015",
+      "sha256": "a494629dca27f8190a62a241bdf3fffd6939215c52631cb11f9e388fa7847015",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/props/gift.png",
+      "source": "desktop-pet/assets/sheep/props/gift.png",
+      "sourceSha256": "775fe180bcd19d8b9023c24dc074a874e92c1ca10a0f9e7ee9e1c215b6f19cb5",
+      "sha256": "775fe180bcd19d8b9023c24dc074a874e92c1ca10a0f9e7ee9e1c215b6f19cb5",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/spring-festival/complete.png",
+      "source": "desktop-pet/assets/sheep/spring-festival/complete.png",
+      "sourceSha256": "c4e5320cb5d4ca7203436b8777d19b4fdd6ac6025354ce58f11b4f68786492d1",
+      "sha256": "c4e5320cb5d4ca7203436b8777d19b4fdd6ac6025354ce58f11b4f68786492d1",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/spring-festival/dumplings.png",
+      "source": "desktop-pet/assets/sheep/spring-festival/dumplings.png",
+      "sourceSha256": "84313c113bb70d27b67631845e3b772f05b89c45e8f1e772e67d4183054593d3",
+      "sha256": "84313c113bb70d27b67631845e3b772f05b89c45e8f1e772e67d4183054593d3",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/spring-festival/firecrackers.png",
+      "source": "desktop-pet/assets/sheep/spring-festival/firecrackers.png",
+      "sourceSha256": "01fc47947bf9f139021074eb13f3e95a172f3fdabe902dac31c0bbbff12724db",
+      "sha256": "01fc47947bf9f139021074eb13f3e95a172f3fdabe902dac31c0bbbff12724db",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/spring-festival/fortune.png",
+      "source": "desktop-pet/assets/sheep/spring-festival/fortune.png",
+      "sourceSha256": "87ba61cfeca5a3a6370a31eb557a031f59b9921ea36c1212dc95a86c141333a7",
+      "sha256": "87ba61cfeca5a3a6370a31eb557a031f59b9921ea36c1212dc95a86c141333a7",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/spring-festival/greet.png",
+      "source": "desktop-pet/assets/sheep/spring-festival/greet.png",
+      "sourceSha256": "d0ac224c099cc373693023da797347ff2d0dbabaee2d4e30378ef7c14dd0b159",
+      "sha256": "d0ac224c099cc373693023da797347ff2d0dbabaee2d4e30378ef7c14dd0b159",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/spring-festival/idle-alternate.png",
+      "source": "desktop-pet/assets/sheep/spring-festival/idle-alternate.png",
+      "sourceSha256": "e1f809e314ffa09282af1c817417309830fa33084120b59b016a73ab959c25b0",
+      "sha256": "e1f809e314ffa09282af1c817417309830fa33084120b59b016a73ab959c25b0",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/spring-festival/idle-transition.png",
+      "source": "desktop-pet/assets/sheep/spring-festival/idle-transition.png",
+      "sourceSha256": "8ceacae06b0487537ae6022f5f5fac51dbd8388bda9ba3712b33dbea0c5ec283",
+      "sha256": "8ceacae06b0487537ae6022f5f5fac51dbd8388bda9ba3712b33dbea0c5ec283",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/spring-festival/idle.png",
+      "source": "desktop-pet/assets/sheep/spring-festival/idle.png",
+      "sourceSha256": "f2c3bca05d6a76a51343731ddb3b2c755dca78d4f46253e63ab126c6f6824872",
+      "sha256": "f2c3bca05d6a76a51343731ddb3b2c755dca78d4f46253e63ab126c6f6824872",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/spring-festival/joy.png",
+      "source": "desktop-pet/assets/sheep/spring-festival/joy.png",
+      "sourceSha256": "3d95841e2d6e1a6a5f1f7ba1293648de884935785c86ff775ad1a72d0053c732",
+      "sha256": "3d95841e2d6e1a6a5f1f7ba1293648de884935785c86ff775ad1a72d0053c732",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/spring-festival/sleep.png",
+      "source": "desktop-pet/assets/sheep/spring-festival/sleep.png",
+      "sourceSha256": "4ce888a12c3934ba37d74a36a13a51db06fd6a04e6e1427e3b1e80608709c1e7",
+      "sha256": "4ce888a12c3934ba37d74a36a13a51db06fd6a04e6e1427e3b1e80608709c1e7",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/spring-festival/static.png",
+      "source": "desktop-pet/assets/sheep/spring-festival/static.png",
+      "sourceSha256": "a00dcdc0330e9a82203f6209efe7ed022774eb93df95591d741ec5bd13b01ae2",
+      "sha256": "a00dcdc0330e9a82203f6209efe7ed022774eb93df95591d741ec5bd13b01ae2",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/spring-festival/walk.png",
+      "source": "desktop-pet/assets/sheep/spring-festival/walk.png",
+      "sourceSha256": "b1a0c1488178d6c7bfff4f2ddce9cfb679ac955fc6ea89aaaf3034ec9d4d09e4",
+      "sha256": "b1a0c1488178d6c7bfff4f2ddce9cfb679ac955fc6ea89aaaf3034ec9d4d09e4",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/spring-festival/working-transition.png",
+      "source": "desktop-pet/assets/sheep/spring-festival/working-transition.png",
+      "sourceSha256": "1994ef27db08b0ef9b87510bc54d8564ac2484fd3483e07c79e6369b9e99c9c3",
+      "sha256": "1994ef27db08b0ef9b87510bc54d8564ac2484fd3483e07c79e6369b9e99c9c3",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/assets/sheep/spring-festival/working.png",
+      "source": "desktop-pet/assets/sheep/spring-festival/working.png",
+      "sourceSha256": "f8f12789176330999258760aba21ed16c74902caa0862d570cf75d0da49e4e00",
+      "sha256": "f8f12789176330999258760aba21ed16c74902caa0862d570cf75d0da49e4e00",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/lib/christmas-buddy-rotation.js",
+      "source": "desktop-pet/lib/christmas-buddy-rotation.js",
+      "sourceSha256": "4ddca29d7077e456dd135354a1195b12b9822ce9eaa2fa776ecadbff35e78aef",
+      "sha256": "4ddca29d7077e456dd135354a1195b12b9822ce9eaa2fa776ecadbff35e78aef",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/lib/sheep-fireworks.js",
+      "source": "desktop-pet/lib/sheep-fireworks.js",
+      "sourceSha256": "38e52aaea5b3a5032d04da92aa1c45fd495dae9590ce6176f199f8032b0fdd5e",
+      "sha256": "38e52aaea5b3a5032d04da92aa1c45fd495dae9590ce6176f199f8032b0fdd5e",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/lib/sheep-skin.js",
+      "source": "desktop-pet/lib/sheep-skin.js",
+      "sourceSha256": "c990a70cde32e4d19ddc5d32c9c07cb72701340194939e677583ef181a1c4f64",
+      "sha256": "c990a70cde32e4d19ddc5d32c9c07cb72701340194939e677583ef181a1c4f64",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/lib/sheep-theme.js",
+      "source": "desktop-pet/lib/sheep-theme.js",
+      "sourceSha256": "d858bfc9cedfaf424070c9cceb5169715a03dbc9e8bb97cccf3d541aa1dd7732",
+      "sha256": "d858bfc9cedfaf424070c9cceb5169715a03dbc9e8bb97cccf3d541aa1dd7732",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
+      "adaptation": null
+    },
+    {
+      "file": "../sheep/sheep-skin.css",
+      "source": "desktop-pet/sheep-skin.css",
+      "sourceSha256": "6f016dbaa889912f17705f051e60ba80185635bad9d7c57dc3731851c4be8b13",
+      "sha256": "6f016dbaa889912f17705f051e60ba80185635bad9d7c57dc3731851c4be8b13",
+      "publicCommit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "publicVersion": "0.4.06",
       "adaptation": null
     }
   ],
   "websiteFiles": [
     {
       "file": "browser-bridge.js",
-      "sha256": "e9bc7f6bfaae2e3a7e6ff766b806c20084aa7f095264ac562d2343214c0692f7",
+      "sha256": "3f19275755f62f42d6eb8ab2e82bb5ac924c0a0757cf458ed82a7b6da5ef0a90",
       "purpose": "In-memory examples, presets, save-only parent avatar messages, same-origin/source checks, size/theme/pause lifecycle."
     },
     {
       "file": "web-adapter.css",
-      "sha256": "5e317a97755102f808726a596ba481726cc581daf23f1107524588e3ad00eccb",
+      "sha256": "ac6a92ed3e3db4f132b98c147d2ae612d41d01bdbc57ad20dffe82cb2b30091e",
       "purpose": "Narrow-screen stacking of the unchanged native panes."
+    },
+    {
+      "file": "../sheep/adapter.js",
+      "sha256": "9553e6b66afdc6e5b99fc6d2646810199ba4942c16fba5e2b8e6d22b4ff3876c",
+      "purpose": "Route only sheep requests to the released canvas renderer; retain existing engines."
     }
   ],
   "demoPetCatalog": [
@@ -209,5 +807,5 @@
       "sha256": "1d0c978a2b7a9598bf8e1b06259ebf75b1ffd4225dedba52f1c893bb95eba007"
     }
   ],
-  "scope": "Native customizer and chat avatar support retain the published 0.4.03 baseline; the shared sprite player timing is updated from 0.4.04 as recorded per file. The user-selected example sprites are documented separately by the website maintainer. No visitor directory access or App writes."
+  "scope": "Native customizer and chat avatar support retain the published 0.4.03 baseline; the shared sprite player timing is updated from 0.4.04 as recorded per file. The user-selected example sprites are documented separately by the website maintainer. No visitor directory access or App writes. Sheep module and resources are shared from released 0.4.06, loaded on demand; no App writes or visitor filesystem access."
 }

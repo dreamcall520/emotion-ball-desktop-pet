@@ -9,16 +9,18 @@
     shape: 'blob', bodyColor: '#EEEBE4', eyeColor: '#1A1A1A',
     glowPinkColor: '#D05ED6', glowGoldColor: '#D0AD8A', eyeScale: 1,
     eyeSpacing: 1, eyeHeight: 0, auroraTransparency: 0, auroraStyle: 'dimensional', auroraContour: 'original',
-    shapeTuning: DEFAULT_SHAPE_TUNING, idleEyes: 'original'
+    shapeTuning: DEFAULT_SHAPE_TUNING, idleEyes: 'original', sheepTheme: 'auto'
   });
+  const SHEEP_THEMES = Object.freeze(['none', 'halloween', 'christmas', 'spring-festival', 'auto']);
   const EYE_PRESETS = Object.freeze({ original: null, happy: 2, curious: 3, sleepy: 4, puzzled: 14 });
-  const SHAPES = Object.freeze(['blob', 'dumpling', 'cloud', 'aurora-cloud', 'egg', 'square', 'wedge', 'gem']);
+  const SHAPES = Object.freeze(['blob', 'dumpling', 'cloud', 'aurora-cloud', 'egg', 'square', 'wedge', 'gem', 'new-year-sheep']);
   const SHAPE_RECOMMENDED_COLORS = Object.freeze({
     blob: Object.freeze({ bodyColor: '#EEEBE4', eyeColor: '#1A1A1A' }),
     cloud: Object.freeze({ bodyColor: '#5B3BC7', eyeColor: '#FFFFFF' }),
     'aurora-cloud': Object.freeze({ bodyColor: '#5B3BC7', eyeColor: '#FFFFFF',
       glowPinkColor: '#D05ED6', glowGoldColor: '#D0AD8A' }),
-    square: Object.freeze({ bodyColor: '#EEEBE4', eyeColor: '#1A1A1A' })
+    square: Object.freeze({ bodyColor: '#EEEBE4', eyeColor: '#1A1A1A' }),
+    'new-year-sheep': Object.freeze({ bodyColor: '#FFF4E5', eyeColor: '#4E322A' })
   });
   const ACTIONS = Object.freeze({ hop: 1800, jelly: 1600, sway: 1800, peek: 1900, bow: 1600, spin: 1600 });
   const DEFAULT_SEQUENCE = Object.freeze([
@@ -39,14 +41,17 @@
   function normalizeAppearance(raw) {
     const value = raw && typeof raw === 'object' ? raw : {};
     const tuning = value.shapeTuning && typeof value.shapeTuning === 'object' ? value.shapeTuning : {};
+    const sheepTheme = SHEEP_THEMES.includes(value.sheepTheme) ? value.sheepTheme : DEFAULT_APPEARANCE.sheepTheme;
     if (value.shape === 'codex-pet' && typeof value.codexPetId === 'string' && /^codex-[a-f0-9]{64}$/.test(value.codexPetId)) {
       return { ...DEFAULT_APPEARANCE, shape: 'codex-pet', codexPetId: value.codexPetId,
-        shapeTuning: { ...DEFAULT_SHAPE_TUNING },
+        shapeTuning: { ...DEFAULT_SHAPE_TUNING }, sheepTheme,
         auroraTransparency: bounded(value.auroraTransparency, 0, 60, 0, 0) };
     }
     const shape = SHAPES.includes(value.shape) ? value.shape : DEFAULT_APPEARANCE.shape;
+    if (shape === 'new-year-sheep') return { ...DEFAULT_APPEARANCE, ...SHAPE_RECOMMENDED_COLORS[shape], shape, sheepTheme,
+      shapeTuning: { ...DEFAULT_SHAPE_TUNING }, auroraTransparency: bounded(value.auroraTransparency, 0, 60, 0, 0) };
     return {
-      shape,
+      shape, sheepTheme,
       bodyColor: color(value.bodyColor, DEFAULT_APPEARANCE.bodyColor),
       eyeColor: color(value.eyeColor, DEFAULT_APPEARANCE.eyeColor),
       glowPinkColor: color(value.glowPinkColor, DEFAULT_APPEARANCE.glowPinkColor),
@@ -74,6 +79,7 @@
     const appearance = normalizeAppearance(raw);
     if (appearance.shape === 'codex-pet') return JSON.stringify({ shape: appearance.shape,
       codexPetId: appearance.codexPetId, auroraTransparency: appearance.auroraTransparency });
+    if (appearance.shape !== 'new-year-sheep') delete appearance.sheepTheme;
     if (appearance.shape !== 'aurora-cloud' || appearance.auroraStyle === 'simple') {
       delete appearance.glowPinkColor;
       delete appearance.glowGoldColor;
@@ -147,7 +153,7 @@
     });
   }
 
-  return Object.freeze({ DEFAULT_APPEARANCE, DEFAULT_SHAPE_TUNING, DEFAULT_SEQUENCE, EYE_PRESETS, SHAPES, ACTIONS,
+  return Object.freeze({ DEFAULT_APPEARANCE, DEFAULT_SHAPE_TUNING, DEFAULT_SEQUENCE, EYE_PRESETS, SHAPES, ACTIONS, SHEEP_THEMES,
     SHAPE_RECOMMENDED_COLORS, applyShapeRecommendation,
     normalizeAppearance, appearanceContentKey, effectiveAppearance, normalizeSequence, normalizeCustomization, auroraReferenceTexture, auroraTurnRing });
 }));

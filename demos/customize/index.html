@@ -5,7 +5,7 @@
   <meta name="robots" content="noindex, follow, indexifembedded">
   <script src="../../site-protection.js?v=20261008-content"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>定制球球 · 官网演示</title>
   <link rel="icon" href="assets/aurora-six-lobe-icon.png">
   <link rel="stylesheet" href="customize.css">
@@ -15,8 +15,9 @@
   <link id="blue-style" rel="stylesheet" href="customize-blue.css" disabled>
   <link rel="stylesheet" href="../ui-theme-blue.css">
   <script src="../ui-theme.js?v=20261007-blue"></script>
-  <link rel="stylesheet" href="web-adapter.css?v=20261007-codex">
+  <link rel="stylesheet" href="web-adapter.css?v=20261024-sheep">
   <script defer src="color-mode.js"></script>
+  <link rel="stylesheet" href="../sheep/sheep-skin.css?v=20261024">
 </head>
 <body>
   <main class="studio panel">
@@ -32,7 +33,7 @@
           <button id="preview-desktop" type="button" aria-pressed="false" title="按当前桌面球球的实际尺寸展示">桌面效果</button>
         </div></div>
         <div class="preview-foot"><span id="preview-size-label">大图预览</span><span id="preview-status" role="status" aria-live="polite">眨眼与呼吸动效保留</span></div>
-        <p class="preview-note">颜色与细节实时更新，满意后再保存。</p>
+        <p id="preview-note" class="preview-note">颜色与细节实时更新，满意后再保存。</p>
         <div id="preview-animation" class="preview-animation" hidden><label for="pet-action">动作</label><div class="preview-animation-actions"><select id="pet-action" aria-label="预览宠物动作"><option value="idle">待机</option><option value="wave">挥手</option><option value="jump">跳跃</option><option value="running">处理中</option><option value="waiting">等待</option><option value="checking">检查</option><option value="fail">失败</option><option value="run-right">向右跑</option><option value="run-left">向左跑</option></select><button id="pet-play" class="icon-button" type="button" aria-label="暂停动画">Ⅱ</button></div></div>
       </section>
       <section class="controls" aria-label="选择与定制形象">
@@ -40,6 +41,10 @@
         <div id="ball-options">
         <div class="group-heading"><h3>形态</h3><span id="shape-hint">选择喜欢的起点</span></div>
         <div id="shape-options" class="shape-options" role="group" aria-label="球球形态"></div>
+        <div id="sheep-theme-field" class="form-section" hidden>
+          <div class="group-heading"><h3><label for="sheep-theme">咩咩主题</label></h3></div>
+          <select id="sheep-theme" aria-label="咩咩主题"><option value="auto">自动换装</option><option value="none">日常</option><option value="halloween">万圣</option><option value="christmas">圣诞</option><option value="spring-festival">春节</option></select>
+        </div>
         <section id="preset-section" class="preset-section" aria-labelledby="preset-title">
           <div class="group-heading"><h3 id="preset-title">我的形象 <span id="preset-count">0 / 20</span></h3><button id="preset-add" class="preset-add" type="button" disabled><span aria-hidden="true">＋</span> 保存当前形象</button></div>
           <p id="preset-empty" class="preset-empty">保存喜欢的配色，下次载入预览。</p>
@@ -58,7 +63,7 @@
             <button id="aurora-style-simple" type="button" aria-pressed="false"><span class="style-swatch simple" aria-hidden="true"></span><span><strong>简色渐变</strong><small>干净柔和的颜色</small></span></button>
           </div>
         </div>
-        <div class="form-section">
+        <div id="ball-color-fields" class="form-section">
           <div class="group-heading"><h3>颜色</h3><span>色块或 HEX 色值</span></div>
           <div class="color-editor">
             <div class="color-editor-head"><label for="body-color">球体</label><div class="color-row"><button id="body-color" class="color-trigger" type="button" aria-label="选取球体颜色" aria-haspopup="dialog" aria-controls="color-picker" aria-expanded="false" disabled><span class="color-chip" aria-hidden="true"></span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"></path></svg></button><input id="body-hex" class="hex-input" type="text" inputmode="text" maxlength="7" spellcheck="false" aria-label="球体 HEX 色值"></div></div>
@@ -84,7 +89,7 @@
           <label for="aurora-transparency">透明度 <output id="aurora-transparency-value">0%</output></label>
           <input id="aurora-transparency" type="range" min="0" max="60" step="1" value="0">
         </div>
-        <div class="form-section manual-section">
+        <div id="ball-manual-fields" class="form-section manual-section">
           <button id="manual-toggle" class="manual-toggle" type="button" aria-controls="manual-controls" aria-expanded="false"><span>手动调整</span><span class="manual-toggle-end"><span id="manual-toggle-label">展开</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></span></button>
           <p id="manual-hint">微调轮廓与五官，让球球长成喜欢的样子。</p>
           <div id="manual-controls" class="manual-controls" hidden>
@@ -131,13 +136,18 @@
   <script src="../../assets/vendor/emotion-ball/emotions.js"></script>
   <script src="../../assets/vendor/emotion-ball/ball.js"></script>
   <script src="../../assets/vendor/emotion-ball/engine.js"></script>
-  <script src="lib/customization.js"></script>
+  <script src="../sheep/lib/sheep-theme.js?v=20261024"></script>
+  <script src="../sheep/lib/christmas-buddy-rotation.js?v=20261024"></script>
+  <script src="../sheep/lib/sheep-fireworks.js?v=20261024"></script>
+  <script src="../sheep/lib/sheep-skin.js?v=20261024"></script>
+  <script src="../sheep/adapter.js?v=20261024"></script>
+  <script src="lib/customization.js?v=20261024-sheep"></script>
   <script src="lib/rive.js"></script>
   <script src="lib/boo-binary.js"></script>
   <script src="lib/aurora-rive.js"></script>
   <script src="lib/codex-pet-player.js?v=20261007-idle6"></script>
-  <script src="lib/chat-avatar.js"></script>
-  <script src="browser-bridge.js?v=20261007-codex"></script>
-  <script src="customize-renderer.js?v=20261007-codex"></script>
+  <script src="lib/chat-avatar.js?v=20261024-sheep"></script>
+  <script src="browser-bridge.js?v=20261024-sheep"></script>
+  <script src="customize-renderer.js?v=20261024-sheep"></script>
 </body>
 </html>

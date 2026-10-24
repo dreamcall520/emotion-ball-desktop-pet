@@ -7,7 +7,7 @@
       "source": "desktop-pet/chat.html",
       "target": "index.html",
       "sha256": "9e3a0d495a02b7dc804d1b7c37098bc018efe79be8ba32f240ef39859a466d1a",
-      "embeddedSha256": "dc86fad7ec89d27f18e22c4909d612933ffacb573653fad9ad44e70a4abcd362"
+      "embeddedSha256": "da0bd96b6dfc69aed7c8319b34f66d311248ed0c296e886c575b6c6429d9ca0a"
     },
     {
       "source": "desktop-pet/chat.css",
@@ -42,14 +42,18 @@
     {
       "source": "desktop-pet/lib/customization.js",
       "target": "lib/customization.js",
-      "sha256": "7362471008d3db5e281c78f8607f2488b2d402874819d96ea83f3e198a0e3569",
-      "embeddedSha256": "7362471008d3db5e281c78f8607f2488b2d402874819d96ea83f3e198a0e3569"
+      "sha256": "ec721ce981e76793305ac5fb60b504c105598228be59f46f3b1d11c7d109758c",
+      "embeddedSha256": "ec721ce981e76793305ac5fb60b504c105598228be59f46f3b1d11c7d109758c",
+      "commit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "version": "0.4.06"
     },
     {
       "source": "desktop-pet/lib/chat-avatar.js",
       "target": "lib/chat-avatar.js",
-      "sha256": "6d95a47fdb268a30ee0c2f31cf94fd19d5ea7cac5fed5e159a4aad55cec316f6",
-      "embeddedSha256": "6d95a47fdb268a30ee0c2f31cf94fd19d5ea7cac5fed5e159a4aad55cec316f6"
+      "sha256": "dcd2ca7a9ab79e693068b2cdb132a9d4c635fea6b9806ef2ed07244ae12446a0",
+      "embeddedSha256": "dcd2ca7a9ab79e693068b2cdb132a9d4c635fea6b9806ef2ed07244ae12446a0",
+      "commit": "03b7aac49cf4b4639771a8dfa9ac7212ad75db84",
+      "version": "0.4.06"
     },
     {
       "source": "desktop-pet/lib/rive.js",

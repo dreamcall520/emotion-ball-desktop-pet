@@ -73,12 +73,21 @@ function customizer() {
   }
   const actions = [...html.match(/<select id="pet-action"[\s\S]*?<\/select>/)[0].matchAll(/value="([^"]+)"/g)].map(match => match[1]);
   assert.equal(actions.length, 9);
-  assert.match(html, /connect-src 'none'/);
+  assert.match(html, /connect-src 'self'/);
   assert.match(html, /仅为网页演示，刷新后恢复/);
   assert.match(html, /data-ui-theme="blue"/);
   assert.ok(html.indexOf('lib/codex-pet-player.js') < html.indexOf('browser-bridge.js'));
   assert.ok(html.indexOf('browser-bridge.js') < html.indexOf('src="customize-renderer.js'));
 
+  const sheepDemo = customizer();
+  const sheep = { shape:'new-year-sheep', sheepTheme:'christmas' };
+  assert.equal((await sheepDemo.bridge.save({appearance:sheep},true)),true);
+  const sheepSaved = await sheepDemo.bridge.load();
+  assert.equal(sheepSaved.customization.appearance.sheepTheme,'christmas');
+  assert.equal(sheepSaved.startupAppearance.shape,'new-year-sheep');
+  assert.equal((await customizer().bridge.load()).customization.appearance.shape,'blob');
+  assert.equal((await sheepDemo.bridge.addPreset('圣诞咩咩',sheep)).ok,true);
+  assert.equal((await sheepDemo.bridge.addPreset('春节咩咩',{...sheep,sheepTheme:'spring-festival'})).ok,true);
   const demo = customizer(), api = demo.bridge;
   let theme;
   api.onColorMode((mode, appearance, uiTheme) => { theme = { mode, appearance, uiTheme }; });

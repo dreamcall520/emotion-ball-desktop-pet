@@ -4,7 +4,7 @@
   // Replace only Electron IPC. The public customizer renderer owns the UI.
   const customization = window.PetCustomization;
   const clone = value => JSON.parse(JSON.stringify(value));
-  const supportedShapes = new Set(['blob', 'cloud', 'aurora-cloud', 'square', 'codex-pet']);
+  const supportedShapes = new Set(['blob', 'cloud', 'aurora-cloud', 'square', 'new-year-sheep', 'codex-pet']);
   // A static public example catalogue, never the visitor's Codex directory.
   const catalogue = [
     { id: 'codex-1efa22ef14f812a00e6bbeaea6ab410bf441085df26fa194bbbaea1c0c18789d',
