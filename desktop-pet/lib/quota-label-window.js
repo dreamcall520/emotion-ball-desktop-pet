@@ -1,6 +1,9 @@
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { quotaLabelBounds, quotaLabelSize } = require('./quota-label-placement');
+const { quotaLabelBounds, quotaLabelSize, quotaRoleTargetWidth } = require('./quota-label-placement');
+const { petVisualBounds } = require('./pet-visual-bounds');
+const SheepTheme = require('./sheep-theme');
+const PetFacing = require('./pet-facing');
 
 const CHANNEL = 'pet:quota-label';
 const TOGGLE_CHANNEL = 'pet:quota-label-toggle';
@@ -270,7 +273,7 @@ function createQuotaLabelWindow({
     if (win !== target || operation !== token) return;
     if (ready && currentModel) {
       try { target.webContents.send(CHANNEL, { ...currentModel, visible: false, guardEntry: guardEntryVisible(),
-        ...(currentLayout?.guardSide ? { guardSide: currentLayout.guardSide, cardInset: currentLayout.cardInset } : {}) }); }
+        ...(currentLayout?.guardSide ? { guardSide: currentLayout.guardSide, cardInset: currentLayout.cardInset, guardTargetWidth: quotaRoleTargetWidth(rolePaintWidth()) } : {}) }); }
       catch (error) { detach(target, error); return; }
       if (win !== target || operation !== token) return;
     }
@@ -286,6 +289,18 @@ function createQuotaLabelWindow({
     if (win === target && operation === token) notifyLayout();
   }
 
+  function rolePaintWidth() {
+    const q = currentModel?.items?.[0]?.remaining;
+    return q === 0 ? 50 : q === 100 ? 24 : Number.isFinite(q) && q > 0 && q < 100 ? 22 : null;
+  }
+
+  function visualPresentation(petBounds, area) {
+    const value = getPresentation() || {};
+    return { ...value, sheepTheme: SheepTheme.resolveTheme(value.sheepTheme, new Date()),
+      facing: value.facing || PetFacing.resolve(petBounds, area),
+      quotaRoleWidth: rolePaintWidth() };
+  }
+
   function petLayout() {
     try {
       const pet = getPetWindow();
@@ -295,11 +310,27 @@ function createQuotaLabelWindow({
       const display = screen.getDisplayMatching(petBounds);
       return quotaLabelBounds(petBounds, display && display.workArea, getObstacle(),
         currentModel?.size, currentModel?.expanded === true, currentModel?.items?.length,
-        getPresentation(), Boolean(currentModel?.extraCredits), guardEntryVisible());
+        visualPresentation(petBounds, display && display.workArea), Boolean(currentModel?.extraCredits), guardEntryVisible(), rolePaintWidth());
     } catch (error) {
       report(error);
       return null;
     }
+  }
+
+  function pointerBlockedByNeighbor() {
+    if (!currentLayout?.guardSide || typeof screen.getCursorScreenPoint !== 'function') return false;
+    const point = screen.getCursorScreenPoint();
+    const contains = bounds => bounds && point.x >= bounds.x && point.y >= bounds.y &&
+      point.x < bounds.x + bounds.width && point.y < bounds.y + bounds.height;
+    const pet = getPetWindow();
+    const bounds = pet && !pet.isDestroyed() ? pet.getBounds() : null;
+    const area = bounds && screen.getDisplayMatching(bounds)?.workArea;
+    const presentation = bounds && visualPresentation(bounds, area);
+    const body = bounds && (presentation?.shape === 'new-year-sheep' && ['ring','duo','split','stages'].includes(presentation.quotaStyle) ? bounds : petVisualBounds(bounds, presentation?.shape,
+      { ...presentation, quotaAnchor: true, quotaGuard: true }));
+    // The role target is 48px for ordinary roles, 64px for the composite. Its transparent tail
+    // can overlap a neighbor, but must never intercept that neighbor's clicks.
+    return Boolean(contains(body) || contains(getObstacle()));
   }
 
   function present() {
@@ -322,18 +353,18 @@ function createQuotaLabelWindow({
     if (!confirm(target, token, model)) return;
     currentLayout = layout;
     try { target.webContents.send(CHANNEL, { ...model, visible: true, guardEntry: guardEntryVisible(),
-      ...(layout.guardSide ? { guardSide: layout.guardSide, cardInset: layout.cardInset } : {}) }); } catch (error) { detach(target, error); return; }
+      ...(layout.guardSide ? { guardSide: layout.guardSide, cardInset: layout.cardInset, guardTargetWidth: quotaRoleTargetWidth(rolePaintWidth()) } : {}) }); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
     try {
       if (layout.guardSide && typeof screen.getCursorScreenPoint === 'function') {
         const cursor = screen.getCursorScreenPoint(), native = target.getBounds();
         const card = quotaLabelSize(model.size, model.expanded, model.items.length, Boolean(model.extraCredits));
         const face = { x: native.x + layout.cardInset.x, y: native.y + layout.cardInset.y, ...card };
-        const role = { x: face.x + card.width + 8,
-          y: face.y + card.height - 44, width: 64, height: 44 };
+        const role = { x: layout.guardSide === 'left' ? face.x - 8 - quotaRoleTargetWidth(rolePaintWidth()) : face.x + card.width + 8,
+          y: face.y + card.height - 44, width: quotaRoleTargetWidth(rolePaintWidth()), height: 44 };
         const inside = bounds => cursor.x >= bounds.x && cursor.y >= bounds.y &&
           cursor.x < bounds.x + bounds.width && cursor.y < bounds.y + bounds.height;
-        target.setIgnoreMouseEvents(!inside(face) && !inside(role), { forward: true });
+        target.setIgnoreMouseEvents(pointerBlockedByNeighbor() || (!inside(face) && !inside(role)), { forward: true });
       } else if (layout.guardSide) target.setIgnoreMouseEvents(true, { forward: true });
       else if (model.items.length > 0 || model.display === 'numbers') target.setIgnoreMouseEvents(false);
       else target.setIgnoreMouseEvents(true, { forward: true });
@@ -415,7 +446,7 @@ function createQuotaLabelWindow({
     const expectedWindow = win;
     let loadingWindow = null;
     const initialSize = quotaLabelSize(currentModel?.size, currentModel?.expanded === true,
-      currentModel?.items?.length, Boolean(currentModel?.extraCredits), guardEntryVisible());
+      currentModel?.items?.length, Boolean(currentModel?.extraCredits), guardEntryVisible(), rolePaintWidth());
     try { loadingWindow = new BrowserWindow({
       width: initialSize.width,
       height: initialSize.height,
@@ -461,7 +492,7 @@ function createQuotaLabelWindow({
           if (typeof value !== 'boolean' || win !== loadingWindow || !requestedVisible || !ready ||
             !loadingWindow.isVisible() || event?.sender !== loadingWindow.webContents ||
             event.senderFrame !== event.sender.mainFrame || event.sender.getURL() !== pathToFileURL(FILE).href) return;
-          try { loadingWindow.setIgnoreMouseEvents(!value || (!currentModel?.items.length && currentModel?.display !== 'numbers'), { forward: true }); }
+          try { loadingWindow.setIgnoreMouseEvents(!value || pointerBlockedByNeighbor() || (!currentModel?.items.length && currentModel?.display !== 'numbers'), { forward: true }); }
           catch (error) { detach(loadingWindow, error); }
           return;
         }

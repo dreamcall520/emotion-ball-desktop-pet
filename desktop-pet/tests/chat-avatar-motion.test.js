@@ -23,9 +23,16 @@ function fixture() {
   window.EmotionBall = {
     config: { get: () => ({ raw: { id: '02', pool: [0,8] } }), register: value => registrations.push(value) },
     create(target, options) {
-      const svg = new Element('svg'); target.appendChild(svg);
+      const svg = new Element(options.shape === 'new-year-sheep' ? 'canvas' : 'svg'); target.appendChild(svg);
       const ball = { options, svg, active: options.autostart, destroyed: false,
         setActive(value) { this.active = value; }, destroy() { this.destroyed = true; this.active = false; svg.remove(); } };
+      if (options.shape === 'new-year-sheep') {
+        let resolve, reject;
+        const ready = new Promise((yes, no) => { resolve = yes; reject = no; });
+        ball.whenReady = () => ready;
+        ball.resolve = (value, fallback = false) => { svg.dataset.ready = fallback ? 'static' : value ? 'true' : 'error'; resolve(value); };
+        ball.reject = () => { svg.dataset.ready = 'error'; reject(new Error('资源加载失败')); };
+      }
       balls.push(ball); return ball;
     }
   };
@@ -65,6 +72,65 @@ test('普通头像用现有轻量引擎；形态、配色、眼睛和自定义�
   }
   assert.ok(f.balls.slice(0,-1).every(ball => ball.destroyed));
   assert.equal(f.rives.length,0);
+});
+
+test('动态小羊传递主题，首帧就绪后再标记ready，重复更新不重建', async () => {
+  const f = fixture(), appearance = { shape: 'new-year-sheep', sheepTheme: 'halloween', auroraTransparency: 23 };
+  f.controller.update(appearance);
+  const sheep = f.balls[0];
+  assert.equal(sheep.options.sheepTheme, 'halloween');
+  assert.equal(sheep.options.portraitRaster, true);
+  assert.equal(sheep.options.auroraTransparency, 23);
+  assert.equal(f.target.dataset.avatarReady, 'false');
+  f.controller.update({ ...appearance });
+  assert.equal(f.balls.length, 1);
+  sheep.resolve(true); await Promise.resolve();
+  assert.equal(f.target.dataset.avatarReady, 'true');
+  f.controller.setActive(false);
+  assert.equal(sheep.active, false);
+  f.controller.destroy();
+  assert.equal(sheep.destroyed, true);
+  assert.equal(f.target.dataset.avatarReady, undefined);
+});
+
+test('小羊换主题、换形态或销毁后，迟到ready不能改写当前头像状态', async () => {
+  for (const transition of ['theme', 'shape', 'destroy']) {
+    const f = fixture();
+    f.controller.update({ shape: 'new-year-sheep', sheepTheme: 'halloween' });
+    const previous = f.balls[0];
+    if (transition === 'theme') f.controller.update({ shape: 'new-year-sheep', sheepTheme: 'christmas' });
+    else if (transition === 'shape') f.controller.update({ shape: 'cloud' });
+    else f.controller.destroy();
+    assert.equal(previous.destroyed, true);
+    const ready = f.target.dataset.avatarReady;
+    previous.resolve(true); await Promise.resolve();
+    assert.equal(f.target.dataset.avatarReady, ready, transition);
+    if (transition === 'theme') {
+      assert.equal(f.balls[1].options.sheepTheme, 'christmas');
+      assert.equal(ready, 'false');
+      f.balls[1].resolve(true); await Promise.resolve();
+      assert.equal(f.target.dataset.avatarReady, 'true');
+    } else if (transition === 'shape') assert.equal(f.target.dataset.shape, 'cloud');
+    else assert.equal(f.target.children.length, 0);
+  }
+});
+
+test('小羊资源失败保持未就绪，已绘制静态回退可就绪，迟到失败不影响新形态', async () => {
+  for (const result of ['false', 'reject', 'static']) {
+    const f = fixture();
+    f.controller.update({ shape: 'new-year-sheep', sheepTheme: 'auto' });
+    if (result === 'reject') f.balls[0].reject();
+    else f.balls[0].resolve(result === 'static', result === 'static');
+    await Promise.resolve();
+    assert.equal(f.target.dataset.avatarReady, result === 'static' ? 'true' : 'false');
+    assert.equal(f.balls[0].svg.dataset.ready, result === 'static' ? 'static' : 'error');
+  }
+  const f = fixture();
+  f.controller.update({ shape: 'new-year-sheep' });
+  f.controller.update({ shape: 'blob' });
+  f.balls[0].reject(); await Promise.resolve();
+  assert.equal(f.target.dataset.avatarReady, 'true');
+  assert.equal(f.target.dataset.shape, 'blob');
 });
 
 test('自选常驻眼睛由原引擎眼环预设驱动，保留当前表情设置', () => {

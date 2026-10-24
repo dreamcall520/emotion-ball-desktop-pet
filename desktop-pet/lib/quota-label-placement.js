@@ -8,6 +8,11 @@ const LABEL_SIZES = Object.freeze({
   compactExpandedDual: Object.freeze({ width: 196, height: 144 })
 });
 const GAP = 8;
+// Ordinary 22/24px roles need a 48px target; the 50px composite and
+// unknown roles retain 64px. Painted collision geometry remains independent.
+const ROLE_PAINT_WIDTH = 50;
+const ROLE_GAP = 8;
+const SIDE_GAP = 4;
 const { petVisualBounds } = require('./pet-visual-bounds');
 const GEOMETRY_LIMIT = Math.floor(Number.MAX_SAFE_INTEGER / 4);
 
@@ -71,24 +76,26 @@ function bounded(candidate, size, area) {
   };
 }
 
-function quotaLabelSize(value, expanded = false, itemCount = 1, extraCredits = false, guardEntry = false) {
+function quotaRoleTargetWidth(paintWidth) { return [22,24].includes(paintWidth) ? 48 : 64; }
+
+function quotaLabelSize(value, expanded = false, itemCount = 1, extraCredits = false, guardEntry = false, rolePaintWidth = null) {
   if (expanded === true && itemCount > 1 && value === 'standard') return LABEL_SIZES.standardExpandedDual;
   if (expanded === true && itemCount > 1 && value === 'compact') return LABEL_SIZES.compactExpandedDual;
   if (expanded === true && value === 'standard') return LABEL_SIZES.standardExpanded;
   if (expanded === true && value === 'compact') return LABEL_SIZES.compactExpanded;
   const card = LABEL_SIZES[value] || LABEL_SIZES.standard;
-  return guardEntry && !expanded ? { width: card.width + 72, height: Math.max(card.height, 44) + 6 } : card;
+  return guardEntry && !expanded ? { width: card.width + ROLE_GAP + quotaRoleTargetWidth(rolePaintWidth), height: Math.max(card.height, 44) + 6 } : card;
 }
 
 function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName = 'standard', expanded = false, itemCount = 1,
   presentation = null, extraCredits = false, guardEntry = false) {
   const area = safeArea(workArea);
   const nativePet = safePet(petBounds, area);
-  const visual = petVisualBounds(nativePet, presentation?.shape, presentation);
+  const visual = petVisualBounds(nativePet, presentation?.shape, { ...presentation, quotaAnchor: true, quotaGuard: guardEntry === true && expanded !== true });
   // Rings fit the native host's outer edge while shrinking the body inside it.
   // Keep the cloud's horizontal peek anchor, but reserve the ring envelope vertically.
   const pet = ['ring', 'duo', 'split', 'stages'].includes(presentation?.quotaStyle)
-    ? { ...visual, y: nativePet.y, height: nativePet.height } : visual;
+    ? presentation?.shape === 'new-year-sheep' ? nativePet : { ...visual, y: nativePet.y, height: nativePet.height } : visual;
   const obstacle = safeObstacle(obstacleBounds);
   const requestedSize = quotaLabelSize(sizeName, expanded, itemCount, extraCredits);
   const size = {
@@ -118,31 +125,77 @@ function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName =
   ].map(candidate => bounded(candidate, size, area)) : [];
   const aroundObstacleSafe = aroundObstacle.find(candidate =>
     !overlaps(candidate, size, pet) && !overlaps(candidate, size, obstacle));
-  const card = valid ? { x: valid.x, y: valid.y, ...size, placement: valid.placement } : safe || aroundObstacleSafe ||
+  // In free mode a horizontal edge only needs a slide along that edge.
+  // Try the bounded near-side anchors before jumping to a distant side.
+  const ordinary = valid ? { x: valid.x, y: valid.y, ...size, placement: valid.placement } : null;
+  const card = (presentation?.mode === 'free' ? safe || ordinary : ordinary || safe) || aroundObstacleSafe ||
     fallbacks.find(candidate => !overlaps(candidate, size, obstacle)) || fallbacks[0];
   if (!guardEntry || expanded) return card;
 
-  const requested = quotaLabelSize(sizeName, expanded, itemCount, extraCredits, true);
+  const requested = quotaLabelSize(sizeName, expanded, itemCount, extraCredits, true, presentation?.quotaRoleWidth);
   const width = Math.min(requested.width, area.width), height = Math.min(requested.height, area.height);
   const gutter = Math.max(0, width - size.width), topGutter = Math.max(0, height - size.height);
+  const knownRole = [22,24,50].includes(presentation?.quotaRoleWidth);
+  const roleWidth = knownRole ? presentation.quotaRoleWidth : ROLE_PAINT_WIDTH;
+  const leftGap = knownRole && !['ring','duo','split','stages'].includes(presentation?.quotaStyle) ? 16 : SIDE_GAP;
+  const rightEdge = ['free','peeked'].includes(presentation?.mode) && centerX > area.x + area.width / 2 &&
+    (nativePet.x + nativePet.width >= area.x + area.width - gutter || centerX + size.width / 2 + gutter >= area.x + area.width);
   const withGuard = candidate => {
     // Keep the formal card baseline unless its complete right-role pair needs
     // clamping or a different side to avoid the existing dialogue bubble.
-    const x = Math.round(clamp(candidate.x - (candidate.placement === 'left' ? gutter : 0),
+    const x = Math.round(clamp(candidate.x - (candidate.placement === 'left' ? Math.min(gutter, ROLE_GAP + roleWidth - GAP + leftGap) : candidate.placement === 'right' ? GAP - SIDE_GAP : 0),
       area.x, area.x + area.width - width));
     const y = Math.round(clamp(candidate.y - topGutter, area.y, area.y + area.height - height));
-    return { x, y, width, height, placement: candidate.placement,
-      guardSide: 'right', cardInset: { x: 0, y: candidate.y - y } };
+    // Along the right boundary the visible card, rather than the transparent
+    // role tail, owns the outer edge. Keep side fallbacks for crowded heights.
+    const roleLeft = rightEdge && ['above','below'].includes(candidate.placement);
+    return { x: roleLeft ? area.x + area.width - width : x, y, width, height, placement: candidate.placement,
+      guardSide: roleLeft ? 'left' : 'right', cardInset: { x: roleLeft ? gutter : 0, y: candidate.y - y } };
   };
-  const pair = withGuard(card);
+  // Score from the normal pet anchor, not from an already distant bubble fallback.
+  const preferred = candidates.find(candidate => inside(candidate, size, area)) || fallbacks[0];
+  const pair = withGuard(preferred);
+  const paintOffset = candidate => candidate.guardSide === 'left' ? gutter - ROLE_GAP - roleWidth : 0;
   const clear = candidate => {
     // The compact zombie reaches 1 DIP above the face; the remaining native top gutter is transparent.
     const top = sizeName === 'compact' ? 1 : 0;
-    const visualPair = { ...candidate, y: candidate.y + candidate.cardInset.y - top, height: size.height + top };
-    return !overlaps(candidate, candidate, obstacle) && !overlaps(visualPair, visualPair, pet);
+    const visualPair = { ...candidate, x: candidate.x + paintOffset(candidate), width: Math.min(candidate.width, size.width + ROLE_GAP + roleWidth),
+      y: candidate.y + candidate.cardInset.y - top, height: size.height + top };
+    return !overlaps(visualPair, visualPair, obstacle) && !overlaps(visualPair, visualPair, pet);
   };
+  if (presentation?.mode === 'free' || rightEdge) {
+    const near = fallbacks.map(withGuard).find(clear);
+    if (near) return near;
+  }
   if (clear(pair)) return pair;
-  return [...fallbacks, ...aroundObstacle].map(withGuard).find(clear) || pair;
+  const choices = [...fallbacks, ...aroundObstacle].map(withGuard);
+  if (obstacle) {
+    // A small overlap needs only a short slide along the bubble edge. Keep the
+    // card/role pair together, including the compact role's 1px upper reach.
+    const top = sizeName === 'compact' ? 1 : 0;
+    for (const anchor of [...choices, pair]) {
+      const width = Math.min(anchor.width, size.width + ROLE_GAP + roleWidth);
+      const shifts = [
+        { x: obstacle.x - width - GAP - paintOffset(anchor), y: anchor.y },
+        { x: obstacle.x + obstacle.width + GAP - paintOffset(anchor), y: anchor.y },
+        { x: anchor.x, y: obstacle.y - size.height - GAP - anchor.cardInset.y },
+        { x: anchor.x, y: obstacle.y + obstacle.height + GAP + top - anchor.cardInset.y }
+      ];
+      for (const shift of shifts) choices.push({ ...anchor,
+        x: Math.round(clamp(shift.x, area.x, area.x + area.width - anchor.width)),
+        y: Math.round(clamp(shift.y, area.y, area.y + area.height - anchor.height)) });
+    }
+  }
+  const distance = candidate => (candidate.x - pair.x) ** 2 + (candidate.y - pair.y) ** 2;
+  const safeChoices = choices.filter(clear);
+  const nearby = safeChoices.filter(candidate => distance(candidate) <= size.height ** 2)
+    .sort((a, b) => distance(a) - distance(b))[0];
+  const proximity = candidate => {
+    const x = candidate.x + paintOffset(candidate) + Math.min(candidate.width, size.width + ROLE_GAP + roleWidth) / 2;
+    const y = candidate.y + candidate.cardInset.y + size.height / 2;
+    return (x - centerX) ** 2 + (y - centerY) ** 2;
+  };
+  return nearby || safeChoices.sort((a, b) => proximity(a) - proximity(b) || distance(a) - distance(b))[0] || pair;
 }
 
-module.exports = { GAP, LABEL_SIZES, quotaLabelSize, quotaLabelBounds };
+module.exports = { GAP, LABEL_SIZES, quotaLabelSize, quotaLabelBounds, quotaRoleTargetWidth };

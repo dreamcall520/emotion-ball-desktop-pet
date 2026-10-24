@@ -4,6 +4,20 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
+test('送物桥保留礼物去重和静止绘制状态，仍只透传有限轮廓及布尔白名单', () => {
+  let desktop; const sent=[];
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../preload.js'),'utf8'), {
+    require:()=>({contextBridge:{exposeInMainWorld(_name,api){desktop=api;}},ipcRenderer:{send:(...args)=>sent.push(args)}})
+  });
+  const input={eligible:true,theme:'christmas',facing:'left',hideSource:true,settled:true,ink:{x:.1,y:.1,width:.8,height:.8},secret:'drop'};
+  desktop.updateOffering(input);
+  assert.equal(sent.at(-1)[1].hideSource,true);assert.equal(sent.at(-1)[1].settled,true);assert.equal(sent.at(-1)[1].secret,undefined);
+  desktop.updateOffering({...input,hideSource:'true',settled:1});
+  assert.equal(sent.at(-1)[1].hideSource,false);assert.equal(sent.at(-1)[1].settled,false);
+  desktop.updateOffering({...input,ink:{...input.ink,width:Infinity}});
+  assert.equal(JSON.stringify(sent.at(-1)),JSON.stringify(['pet:offering-state',{eligible:false}]));
+});
+
 test('Codex 预加载只发送最小状态与受控动作确认', () => {
   let desktop;
   const messages = [];
@@ -214,4 +228,25 @@ test('边缘展示为可退订的只读固定频道，不暴露任意宿主指�
   remove();
   assert.equal(listeners.has('pet:presentation'), false);
   assert.equal(api.setPresentation, undefined);
+});
+
+test('羊Codex就绪可传有界真实时长，非法值不越过原有ACK字段边界',()=>{
+  let api;const sent=[];vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../preload.js'),'utf8'),{require:()=>({contextBridge:{exposeInMainWorld(_name,a){api=a;}},ipcRenderer:{send:(...p)=>sent.push(p)}})});
+  const base={token:4,action:'hop',alertId:2,generation:1,pageEpoch:3};
+  api.codexMotionReady({...base,durationMs:1340});assert.equal(sent.at(-1)[1].durationMs,1340);
+  for(const durationMs of [0,60001,NaN,'1340',[],{}]){api.codexMotionReady({...base,durationMs});assert.equal(Object.hasOwn(sent.at(-1)[1],'durationMs'),false);}
+});
+
+test('独立送物预加载仅透传归一ink和局部手势，不接受屏幕移动目标或任意动作',()=>{
+ let api;const sent=[];const load=file=>vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../'+file),'utf8'),{require:()=>({contextBridge:{exposeInMainWorld:(_n,v)=>api=v},ipcRenderer:{send:(...v)=>sent.push(v),on(){},removeListener(){}}})});
+ load('preload.js');api.updateOffering({theme:'halloween',eligible:true,facing:'left',ink:{x:.1,y:.1,width:.8,height:.8},screenX:9999,secret:'x'});assert.equal(sent.length,1);assert.equal(sent[0][1].screenX,undefined);assert.equal(sent[0][1].secret,undefined);
+ api.updateOffering({theme:'christmas',eligible:true,facing:'right',ink:{x:.5,y:.1,width:Infinity,height:.8}});assert.equal(sent.at(-1)[1].eligible,false);
+ load('sheep-offering-preload.js');const before=sent.length;api.pointer({type:'move',x:Infinity,y:0});api.pointer({type:'shell',x:0,y:0});assert.equal(sent.length,before);api.pointer({type:'begin',x:22,y:22,screenX:10000});assert.equal(sent.at(-1)[0],'pet:offering-input');assert.equal(sent.at(-1)[1].screenX,undefined);
+});
+
+test('短动作暂停可在atlas加载无ink时透传，伪布尔/非法轮廓不能绕过白名单',()=>{
+ let api;const sent=[];vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../preload.js'),'utf8'),{require:()=>({contextBridge:{exposeInMainWorld:(_n,v)=>api=v},ipcRenderer:{send:(...v)=>sent.push(v)}})});
+ const pause={eligible:false,transient:true,theme:'christmas',facing:'left',ink:null,settled:true,secret:'drop'};
+ api.updateOffering(pause);assert.equal(JSON.stringify(sent.at(-1)[1]),JSON.stringify({eligible:false,transient:true,theme:'christmas',facing:'left'}));
+ for(const bad of[{...pause,transient:'true'},{...pause,theme:'none'},{...pause,playing:true},{...pause,ink:{x:0,y:0,width:Infinity,height:1}}]){api.updateOffering(bad);assert.equal(JSON.stringify(sent.at(-1)[1]),JSON.stringify({eligible:false}));}
 });

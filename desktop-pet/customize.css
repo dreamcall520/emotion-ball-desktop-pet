@@ -58,13 +58,35 @@ body{padding:0;background:var(--surface);overflow:hidden}
 .swatch.selected:after{content:"";position:absolute;right:-2px;bottom:-2px;width:5px;height:5px;border-radius:50%;background:var(--accent);border:1px solid var(--surface)}
 .aurora-style-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .aurora-style-options button{display:flex;align-items:center;gap:9px;padding:9px 10px;border:1px solid var(--line);border-radius:9px;background:var(--raised);text-align:left}
-.aurora-style-options button[aria-pressed=true]{border-color:var(--selected-line);background:var(--selected)}
+.aurora-style-options button[aria-pressed=true],.aurora-style-options button[aria-checked=true]{border-color:var(--selected-line);background:var(--selected)}
 .aurora-style-options button>span:last-child{display:grid;gap:1px}
 .aurora-style-options strong{font-size:11px;font-weight:600}
 .aurora-style-options small{font-size:10px;color:var(--muted)}
 .style-swatch{width:26px;height:26px;flex:none;border-radius:50%}
 .style-swatch.dimensional{background:radial-gradient(circle at 62% 36%,#f5c97e 0,#d467c9 28%,#402e9a 65%,#141044 100%);box-shadow:inset 1px 2px 3px #ffffffad}
 .style-swatch.simple{background:linear-gradient(180deg,#A98BFF 0%,#8B72FF 42%,#675EFF 76%,#5757ED 100%)}
+.sheep-theme-options .sheep-theme-swatch{width:36px;height:36px;border-radius:0;background-position:left top;background-repeat:no-repeat;background-size:600% 100%}
+.sheep-theme-options .sheep-theme-swatch.daily{background-image:url('assets/sheep/none/idle.png');background-size:600% 100%;background-position:left top;transform:scale(.844);transform-origin:center bottom}
+.sheep-theme-swatch.halloween{background-image:url('assets/sheep/halloween/idle.png')}
+.sheep-theme-options .sheep-theme-swatch.christmas{background-image:url('assets/sheep/christmas/static.png');background-size:contain;background-position:center}
+.sheep-theme-swatch.spring-festival{background-image:url('assets/sheep/spring-festival/idle.png')}
+.sheep-theme-options .sheep-theme-swatch.spring-festival{transform:scale(.893);transform-origin:center bottom}
+#sheep-theme-auto{grid-column:1/-1}
+.sheep-auto-swatch{display:grid;place-items:center;width:36px;height:36px;flex:none;color:var(--muted)}
+.sheep-auto-swatch svg.icon{width:32px;height:32px}
+.sheep-theme-dates{margin-top:7px;color:var(--muted);font-size:11px;line-height:1.5}
+.sheep-theme-dates summary{width:max-content;cursor:pointer}
+.sheep-schedule-content{width:100%;max-width:none;margin-top:8px;padding:0 11px 9px;border:1px solid var(--line);border-radius:8px;background:var(--raised)}
+.sheep-holiday-schedule{margin:0}
+.sheep-holiday-schedule>div{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:34px}
+.sheep-holiday-schedule>div+div{border-top:1px solid var(--line)}
+.sheep-holiday-schedule dt{display:flex;align-items:center;gap:7px;color:var(--text);white-space:nowrap;font-size:12px}
+.holiday-dot{width:5px;height:5px;border-radius:50%;background:#ed8b23}
+.holiday-dot.christmas{background:#17b577}.holiday-dot.spring-festival{background:#e44949}
+.sheep-holiday-schedule dd{margin:0;padding:2px 7px;border-radius:4px;background:none;font-size:11px;line-height:1.5;font-variant-numeric:tabular-nums;white-space:nowrap}
+.sheep-spring-dates{text-align:right}.sheep-spring-dates span,.sheep-spring-dates small{display:inline}.sheep-spring-dates small{margin-left:4px;font-size:10px;line-height:1.5;color:var(--muted)}
+.sheep-theme-dates .sheep-schedule-content p{margin:0;padding-top:7px;border-top:1px solid var(--line);font-size:12px;line-height:1.6}
+
 .aurora-colors{padding-top:7px}
 .aurora-colors .group-heading{margin-bottom:7px}
 .aurora-colors .text-button{height:26px;font-size:10px}

@@ -1,4 +1,5 @@
 const { getMotion } = require('./interaction-motion');
+const SheepSkin = require('./sheep-skin');
 const MOTION_PHRASES = Object.freeze({
   hop: Object.freeze(['看我蹦两下！', '快乐，起飞！', '第一下！第二下！', '高一点，下一拍轻一点。']),
   jelly: Object.freeze(['我是软乎乎的！', '晃一晃，烦恼散掉。', '软一下，又圆回来啦。', '揉圆，再慢慢弹回来。']),
@@ -63,6 +64,92 @@ const PHRASES = Object.freeze({
     '困意落在眼皮上啦。', '呼吸放慢一点点。', '梦里也要圆滚滚。', '把这一刻轻轻收好。',
     '我先安静窝一会儿。', '安静慢慢落下来啦。', '这一会儿，先停在这里。', '让脑袋也休息一会儿。'
   ])
+});
+const SHEEP_PHRASES = Object.freeze({
+  hello: Object.freeze([
+    '咩咩来报到', '嗨，小毛团来了', '给你一个软软的嗨', '今天也请多关照',
+    '耳朵竖好，问个好', '和你碰个眼神', '一团可爱已就位', '小铃铛向你问好'
+  ]),
+  pet: Object.freeze([
+    '摸摸收好啦', '耳根也想被揉揉', '羊毛借你摸摸', '小角要轻一点哦',
+    '摸得耳朵软啦', '再揉一下下嘛', '嘿嘿，好舒服呀', '这边也想被摸摸'
+  ]),
+  drag: Object.freeze([
+    '抱紧这团软乎乎', '搬家专车出发', '去哪儿溜达呀', '小蹄子悬空啦',
+    '铃铛还没跟上呢', '带我换个风景吧', '耳朵收好，抱抱', '咩，慢一点点呀'
+  ]),
+  drop: Object.freeze([
+    '落稳啦，刚刚好', '这里够我待着啦', '新角落，收到了', '小蹄子站稳啦',
+    '羊毛都没弄乱', '换个地方眨眨眼', '这个位置真不错', '铃铛也摆正啦'
+  ]),
+  welcome: Object.freeze([
+    '回来啦，见到你啦', '又见面，好开心呀', '老地方，小毛团在', '给你留了个笑脸',
+    '咩，欢迎回来呀', '有新鲜事要说吗', '屏幕边向你招手', '小角落还是暖的'
+  ]),
+  wake: Object.freeze([
+    '醒啦，耳朵慢半拍', '哈欠先打一个', '小眼睛开门啦', '睡意溜走一点点',
+    '羊毛睡翘起来啦', '等耳朵醒一醒', '从软软的梦里回来', '眨眨眼，见到你啦'
+  ]),
+  thought: Object.freeze([
+    '小脑袋转个弯', '找找思路的线头', '想法正在排队呢', '先琢磨这一点',
+    '把线索捋一捋', '这团思路慢慢理', '耳朵也来帮忙听', '咩，还在想一想'
+  ]),
+  work: Object.freeze([
+    '和你待着就很好', '你专心，我不打岔', '不用回应我呀', '抬头时就能看见我',
+    '有话想说时我听着', '想笑一笑就看看我', '不想说话也没关系', '等你忙完，我也在',
+    '思路可以慢慢理', '给你留一点空白', '不用一下想得周全', '小小的想法也很好',
+    '绕个弯也不算白走', '先留个问号也可以', '想明白一点也算数', '不必和谁比快慢',
+    '等结果时，我陪你', '不用一直盯着呀', '有结果再一起看', '等一等也没关系',
+    '要是卡住了，我陪你', '思路先歇一小会', '没头绪也别为难自己', '想说说难处，我听着',
+    '答案不必一下找到', '放一放再回来也行', '想歇会儿，我陪你', '歇一歇，心也松一点',
+    '眼睛也值得歇一歇', '喝口水也算照顾自己', '肩膀累了就松一松', '想发会儿呆也很好',
+    '休息不用找理由', '不忙着把休息填满', '今天也值得被温柔对待', '你比进度更重要',
+    '认真之外也可以轻松', '不顺的时候也值得被喜欢', '愿你忙完还有小开心', '平常的一天也想陪你'
+  ]),
+  play: Object.freeze([
+    '小蹄子有两下子', '这点可爱分给你', '嘿嘿，被你发现啦', '藏不住的小得意',
+    '软毛团也会耍宝', '给你看看小调皮', '陪你玩一小会儿', '咩，有点想显摆'
+  ]),
+  sleep: Object.freeze([
+    '羊毛当小被子', '小脑袋先歇歇', '眼皮想打烊啦', '收好小蹄子，晚安',
+    '去做个软软的梦', '铃铛也要睡啦', '咩，先眯一小会儿', '小毛团充电中'
+  ])
+});
+const SHEEP_MOTION_PHRASES = Object.freeze({
+  hop: Object.freeze(['小羊的开心，被你看见啦。', '咩，这会儿特别有精神。', '陪你笑一下，心情就暖啦。', '这一点小快乐，也分给你。']),
+  jelly: Object.freeze(['咩～听见你叫我啦。', '耳朵朝你这边，认真听你说。', '这声小小的咩，专门回应你。', '咩问题，我在这里呢。']),
+  sway: Object.freeze(['小羊和你待着，就很开心。', '左边咩，右边也咩。', '一点点开心，慢慢攒起来。', '这颗小铃铛，也想陪着你。']),
+  peek: Object.freeze(['小脑袋好奇，想听听你的事。', '咩，你刚刚叫我了吗？', '小羊就在旁边，随时听你说。', '被你发现，小羊有点得意。']),
+  bow: Object.freeze(['小羊认真和你打个招呼。', '咩，今天也请多陪陪我。', '谢谢你，把时间分给小羊。', '这一声问好，暖暖送给你。']),
+  spin: Object.freeze(['这会儿有点小得意，咩。', '收到你的喜欢，小羊开心啦。', '小羊乖乖陪着，也很拿手。', '给你看看今天的好心情。'])
+});
+const SHEEP_HOLIDAY_PHRASES = Object.freeze({
+  halloween: Object.freeze(['咩？糖果可以分我一颗吗？', '小巫师到啦，今天只变开心。', '披肩一抖，藏着的糖掉出来啦。', '南瓜篮给你挑，最甜的那颗归你。', '别怕别怕，是戴帽子的小羊呀。']),
+  christmas: Object.freeze(['铃铛叮一下，圣诞快乐呀。', '围巾暖好了，给你靠一会儿。', '帽尖晃一晃，今天也有点小得意。', '冬青戴端正，小羊来陪你过节。', '咩，愿你今晚有个暖暖的梦。']),
+  'spring-festival': Object.freeze(['咩咩来拜年，新年好呀。', '新的一年，愿你每天都有小欢喜。', '春节也陪着你，把日子过得暖暖的。', '咩，给你送一声平平安安的新年祝福。', '过年啦，今天的好心情分你一半。'])
+});
+const SHEEP_SPRING_ACTION_PHRASES = Object.freeze({
+  fortune: Object.freeze(['福到啦，咩咩把好运送给你。', '这张小小的福，愿你每天都有好事。', '接住咩咩的福气，新的一年顺顺利利。', '把福捧到你面前，平安喜乐都归你。']),
+  firecrackers: Object.freeze(['咩咩放一串小鞭炮，热热闹闹迎新年。', '红红的小鞭炮，替你迎来新年的好彩头。', '新年开门红，咩咩陪你一起庆祝。', '鞭炮开花啦，愿你的好事也接连不断。']),
+  dumplings: Object.freeze(['热乎乎的饺子，咩咩先尝一口。', '一口小饺子，吃进新年的暖和气。', '咩，这只饺子真香，也想分给你。', '饺子圆鼓鼓，今天也要好好吃饭呀。'])
+});
+const SHEEP_ACTION_PHRASES = Object.freeze({
+  none: Object.freeze({
+    ear: Object.freeze(['耳根揉揉，好舒服', '小耳朵也要摸摸', '嘿嘿，挠到啦', '咩，轻一点点']),
+    bell: Object.freeze(['抱住我的小铃铛', '这点暖暖收好啦', '铃铛安静，抱抱', '小蹄子抱个满怀']),
+    stretch: Object.freeze(['小蹄子伸一伸', '慢半拍，伸个懒腰', '羊毛也松快啦', '伸完继续软乎乎'])
+  }),
+  halloween: Object.freeze({
+    candy: Object.freeze(['糖果分我一颗嘛', '南瓜篮接住甜甜', '咩，这颗糖好甜', '谢谢你的糖呀']),
+    magic: Object.freeze(['变一颗小星星', '小魔法来啦', '一点星光分给你', '咩，亮晶晶的']),
+    pumpkin: Object.freeze(['抱住我的小南瓜', '南瓜也软乎乎', '和小南瓜贴贴', '这颗可爱收好啦'])
+  }),
+  christmas: Object.freeze({
+    gift: Object.freeze(['小礼物，送给你', '拆开一点小惊喜', '暖暖心意装好啦', '这份可爱请收下']),
+    scarf: Object.freeze(['小围巾裹好啦', '把暖和留一点', '围巾软软，刚刚好', '咩，暖到耳朵啦']),
+    snow: Object.freeze(['小雪花落下来啦', '接住一朵小雪花', '给你看看亮晶晶', '雪花在蹄尖歇歇'])
+  }),
+  'spring-festival': SHEEP_SPRING_ACTION_PHRASES
 });
 const DIRECT_EVENTS = new Set(['hello', 'pet', 'drag', 'drop', 'play', 'thought']);
 const PRIORITY = { work: 0, hello: 1, welcome: 2, wake: 2, sleep: 2, pet: 3, drag: 3, drop: 3, play: 3, thought: 3 };
@@ -177,9 +264,12 @@ class DialogueDirector {
     };
   }
 
-  offer(request, nowMs) {
+  offer(request, nowMs, context = {}) {
     const motion = request && typeof request === 'object' ? request.motion : null;
     const event = typeof request === 'string' ? request : request?.event;
+    const actionPhrases = SHEEP_ACTION_PHRASES[context.sheepTheme || 'none'];
+    const sheepAction = event === 'play' && context.shape === 'new-year-sheep' &&
+      SheepSkin.supportsAction(context.sheepAction, context.sheepTheme) ? context.sheepAction : null;
     if (typeof request !== 'string' && (event !== 'play' || !getMotion(motion))) return null;
     if (!this.enabled || !Number.isFinite(nowMs) || typeof event !== 'string' ||
       !Object.prototype.hasOwnProperty.call(PHRASES, event)) return null;
@@ -187,7 +277,8 @@ class DialogueDirector {
     if (DIRECT_EVENTS.has(event)) this.dismissCodex();
     // 新的直接互动即使遇到六秒冷却，也不能留下已被取代的动作专属文案。
     if (DIRECT_EVENTS.has(event) && this._current?.event === 'play' &&
-      (motion || this._current.motion) && motion !== this._current.motion) this.dismiss();
+      ((motion || this._current.motion) && motion !== this._current.motion ||
+        (sheepAction || this._current.sheepAction) && sheepAction !== this._current.sheepAction)) this.dismiss();
     // 睡眠是状态切换：先让旧玩耍按钮失效，醒来后的欢迎仍可正常接上。
     if (event === 'sleep') this.dismiss();
     if (this._current && PRIORITY[event] < this._current.priority) return null;
@@ -201,8 +292,14 @@ class DialogueDirector {
       if (!continuingDrop && nowMs - this._lastDirectAt < 6000) return null;
     }
 
-    const phrases = motion ? MOTION_PHRASES[motion] : PHRASES[event];
-    const phraseKey = motion ? `play:${motion}` : event;
+    const sheep = context?.shape === 'new-year-sheep';
+    const sheepTheme = sheep && ['halloween', 'christmas', 'spring-festival'].includes(context?.sheepTheme) ? context.sheepTheme : 'none';
+    let phrases = sheepAction && actionPhrases?.[sheepAction] ? actionPhrases[sheepAction] : motion ? (sheep ? SHEEP_MOTION_PHRASES : MOTION_PHRASES)[motion] : (sheep ? SHEEP_PHRASES : PHRASES)[event];
+    if (!sheepAction && sheepTheme !== 'none' && ['hello', 'pet', 'play'].includes(event)) {
+      const holiday = SHEEP_HOLIDAY_PHRASES[sheepTheme];
+      phrases = motion ? [...holiday.slice(0, 2), ...phrases.slice(0, 2)] : [...holiday, ...phrases.slice(0, 3)];
+    }
+    const phraseKey = `${sheep ? `new-year-sheep:${sheepTheme}:` : ''}${sheepAction ? `play:${sheepAction}` : motion ? `play:${motion}` : event}`;
     const randomValue = this._random();
     let index = Number.isFinite(randomValue) ? Math.max(0, Math.min(phrases.length - 1, Math.floor(randomValue * phrases.length))) : 0;
     if (index === this._lastPhrase.get(phraseKey)) index = (index + 1) % phrases.length;
@@ -211,7 +308,7 @@ class DialogueDirector {
     const id = this._nextId++;
     const durationMs = event === 'play' ? 8000 : 4000;
     const actions = event === 'play' ? PLAY_ACTIONS : [];
-    this._current = { id, event, motion, actions, priority: PRIORITY[event], expiresAt: nowMs + durationMs };
+    this._current = { id, event, motion, sheepAction, actions, priority: PRIORITY[event], expiresAt: nowMs + durationMs };
     this._lastBubbleAt = nowMs;
     if (DIRECT_EVENTS.has(event)) {
       this._lastDirectAt = nowMs;
@@ -228,10 +325,12 @@ class DialogueDirector {
     const descriptor = this._current.descriptors?.[action];
     const updateVersion = this._current.event === 'app-update' ? this._current.version : null;
     const motion = this._current.motion;
+    const sheepAction = this._current.sheepAction;
     this.dismiss();
     if (updateVersion) return { command: 'app-update', version: updateVersion, open: action === 'app-update-open' };
     if (descriptor) return { command: 'codex', descriptor: { ...descriptor } };
     if (action === 'rest') this._workQuietUntil = nowMs + TEN_MINUTES;
+    if (action === 'again' && sheepAction) return { command: 'sheep-action', action: sheepAction };
     return action === 'again' && motion ? { command: 'again', motion } : action;
   }
 }

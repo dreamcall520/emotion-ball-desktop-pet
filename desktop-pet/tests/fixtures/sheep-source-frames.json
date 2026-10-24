@@ -1,0 +1,3105 @@
+{
+  "none": {
+    "actions": {
+      "idle": {
+        "sourceSha256": "31c8e39c75119124e3ed9bd169a8f27fd670349d0f5953c4379b36a6532cb631",
+        "sourcePngSha256": "31c8e39c75119124e3ed9bd169a8f27fd670349d0f5953c4379b36a6532cb631",
+        "durations": [
+          2600,
+          120,
+          500
+        ],
+        "frames": [
+          "8be38cd8342b8ce04c722953f0ef6f11b882265dd8e5f9a87dae915397004e01",
+          "1cc02ceb4059572818f3a08c87d954e1ced61e80b9f29d6430a5d17076b0ed59",
+          "8be38cd8342b8ce04c722953f0ef6f11b882265dd8e5f9a87dae915397004e01"
+        ]
+      },
+      "walk": {
+        "sourceSha256": "234e4890e78e062d6c96027d8d29b8080c575f52ff2e571636401f9fc5eb1841",
+        "sourcePngSha256": "234e4890e78e062d6c96027d8d29b8080c575f52ff2e571636401f9fc5eb1841",
+        "durations": [
+          180,
+          100,
+          180,
+          100,
+          140,
+          120,
+          80
+        ],
+        "frames": [
+          "4300203cf45c09845cc7e5538c3b565c0267d49b2afd2f3a51ba30fb7031bc77",
+          "6745481a40a4efa8afdeb16a0bb53ce7a0c63e99c9d0e064a975ed9d99a5f716",
+          "a49539aa7f97a12ee470b5dad49622debcf4bc134d84c8dbda736781999f9f06",
+          "00daa7d552b686892825d7da3a539a45b206afea899aad458de82ec3796050b8",
+          "a0d3e5bdbddfdf9cf559f00099a5f8c41651f5f42def205fd6fee05ad7fded65",
+          "b755ef0d8d2dd7713e627cd86336cd8ca2467adf414695873917348c8a376eb6",
+          "4300203cf45c09845cc7e5538c3b565c0267d49b2afd2f3a51ba30fb7031bc77"
+        ]
+      },
+      "greet": {
+        "sourceSha256": "ba8f7645a5045a0d1f782e77b34a03903e35a0fdd5b48526786d87a35eedae02",
+        "sourcePngSha256": "ba8f7645a5045a0d1f782e77b34a03903e35a0fdd5b48526786d87a35eedae02",
+        "durations": [
+          450,
+          160,
+          180,
+          180,
+          160,
+          300,
+          200,
+          450
+        ],
+        "frames": [
+          "8be38cd8342b8ce04c722953f0ef6f11b882265dd8e5f9a87dae915397004e01",
+          "88ce82f87439a5c3fa6dc0bc068655449213bc1ad4cd131dab0159b19446201b",
+          "7a16ed0032d18b6843d4753c1019c26166c7be1044c5d85bafed78b4ef31801a",
+          "538951457dd45389a1b10c2ee0af93be9896657af77a1df8403b0409a56b6eed",
+          "7a16ed0032d18b6843d4753c1019c26166c7be1044c5d85bafed78b4ef31801a",
+          "07203702f608a43828e1209468531708843f90be6602e3d3ccf24c891d601460",
+          "8f0fbca361cd11772088cf6178c7f9eb44472e1249cfde7d3af388b71cdbf6a7",
+          "8be38cd8342b8ce04c722953f0ef6f11b882265dd8e5f9a87dae915397004e01"
+        ]
+      },
+      "joy": {
+        "sourceSha256": "1e6cfc09c29ada7aa113ee3acf887e20fd449959b7854237f9ec6b1dcb276d8e",
+        "sourcePngSha256": "1e6cfc09c29ada7aa113ee3acf887e20fd449959b7854237f9ec6b1dcb276d8e",
+        "durations": [
+          300,
+          200,
+          240,
+          360,
+          200,
+          220,
+          180,
+          300
+        ],
+        "frames": [
+          "8be38cd8342b8ce04c722953f0ef6f11b882265dd8e5f9a87dae915397004e01",
+          "7b0380fa2d985394283e99c997551cf641f0bc0b5093a72c25c288ee462d3e12",
+          "d9f19e4ea43a1c1011ced3af62be8abb63f8457b5b4db91e41c2c779c739ca26",
+          "2b765470ecac22f4f5278799f917bb27cd51c6aa29ac3517d032492dcac03b32",
+          "d9f19e4ea43a1c1011ced3af62be8abb63f8457b5b4db91e41c2c779c739ca26",
+          "977a2a472852dc1e450194a46408390762d67c8addf537318b2745e359a6a511",
+          "f8cfd7e97e65ed27f8d761825f5b785171a9d38009fcf533d9a6ef82e8003940",
+          "8be38cd8342b8ce04c722953f0ef6f11b882265dd8e5f9a87dae915397004e01"
+        ]
+      },
+      "sleep": {
+        "sourceSha256": "a79f472a40ecc51bf415bc5ffbdc512b34df7fc628ad4359c46a2fb886506d2d",
+        "sourcePngSha256": "a79f472a40ecc51bf415bc5ffbdc512b34df7fc628ad4359c46a2fb886506d2d",
+        "durations": [
+          1100,
+          1100,
+          1100,
+          800,
+          600,
+          800,
+          700,
+          1100
+        ],
+        "frames": [
+          "f7e84a49633d6762a3e311a80e7b31f43f1f95fa663c223d0f14de4644dc4b64",
+          "268bf7bc918d78605ccac388945ea76ceee6be4415a030fe56a088bf9544d74e",
+          "f7e84a49633d6762a3e311a80e7b31f43f1f95fa663c223d0f14de4644dc4b64",
+          "c3419638f936c517e3899fef39db621050b1cad44583000884f79a15724c6115",
+          "207074ca14a694b4417f481b8f8efe3f58a47e6c9a0e25cdc3693c495b2008b7",
+          "29d901ce134e564af8e3510da75a509d446a788f475cfdcd791d9283d69eaabc",
+          "1de8b1f173fc7311a685f4d2384781b9f4a781a3c35adfe345254b8353437202",
+          "f7e84a49633d6762a3e311a80e7b31f43f1f95fa663c223d0f14de4644dc4b64"
+        ]
+      },
+      "ear": {
+        "sourceSha256": "752c34e7381c352879d031271c722744c1366dd5386ea2d65cc0d99660837303",
+        "sourcePngSha256": "752c34e7381c352879d031271c722744c1366dd5386ea2d65cc0d99660837303",
+        "durations": [
+          260,
+          220,
+          260,
+          300,
+          220,
+          220,
+          180,
+          360
+        ],
+        "frames": [
+          "8be38cd8342b8ce04c722953f0ef6f11b882265dd8e5f9a87dae915397004e01",
+          "264b21341a4f59bdfdf77a7a9ab265b667081f5e8e636f0c96bf7803ab2e0f8a",
+          "792041065532a5e8e40c82e92a386a547f3b391330db0889920c5f160e59bf02",
+          "117deb85ddd719b6a8713eba2a37d74671c0e78e05a626ff43b458c76064e4e7",
+          "792041065532a5e8e40c82e92a386a547f3b391330db0889920c5f160e59bf02",
+          "339117aacbc84138f49f552a1e5ea53787b54f216218741481b7f06949ce462e",
+          "444597cf8d1c0953c3be98cf337f5dbeaf202526aced99a5685ec131ba3a0b4e",
+          "8be38cd8342b8ce04c722953f0ef6f11b882265dd8e5f9a87dae915397004e01"
+        ]
+      },
+      "bell": {
+        "sourceSha256": "e0746d5f11b66ce868236170f574e75f1f75686e9d7dad0e55bd5d63632dcda7",
+        "sourcePngSha256": "e0746d5f11b66ce868236170f574e75f1f75686e9d7dad0e55bd5d63632dcda7",
+        "durations": [
+          300,
+          220,
+          500,
+          650,
+          250,
+          180,
+          400
+        ],
+        "frames": [
+          "8be38cd8342b8ce04c722953f0ef6f11b882265dd8e5f9a87dae915397004e01",
+          "efdd492483f1930df7883d4192dbb873f3e37326cdb36f018a9602946f469632",
+          "7fc42c1ea5566d8c33b7f8b48c8c5dd743931ef8d008b44b0b23b1677b5ced17",
+          "78f39aeada410e899d6fadc26aeea127ccd0713e633abfb24371305440df9316",
+          "4b60a7f214867e6354de0ded3682759e29ec914c6929ef7f99607bca49f77cb9",
+          "08395851bceceacabeff651f45739f15e0656632af37ffb3d09e902a6eddd0c2",
+          "8be38cd8342b8ce04c722953f0ef6f11b882265dd8e5f9a87dae915397004e01"
+        ]
+      },
+      "stretch": {
+        "sourceSha256": "3ab35da4e1018cec12e8c3370a9ef82bc6370189e43d472f0b1ef58b78381bae",
+        "sourcePngSha256": "3ab35da4e1018cec12e8c3370a9ef82bc6370189e43d472f0b1ef58b78381bae",
+        "durations": [
+          260,
+          200,
+          320,
+          500,
+          280,
+          280,
+          180,
+          400
+        ],
+        "frames": [
+          "8be38cd8342b8ce04c722953f0ef6f11b882265dd8e5f9a87dae915397004e01",
+          "ecc51c3f13c98733fef712895252b44c65b7f0787772b640b8ea1739a7beb859",
+          "937b89a8effc2f3c98b7c16740b6ee46636f65570fffc3099c67578de02fd4c1",
+          "71a410edcd1aa63fa6a8c7e3a547694992fb8ddd0eac495f1246baa575acba58",
+          "937b89a8effc2f3c98b7c16740b6ee46636f65570fffc3099c67578de02fd4c1",
+          "dbbd670f1894bf2d6147fc496653a9904bad6dde50adca036be490fad97744c7",
+          "a4aa9d55878bbf1d30db61668fc9c01c4db3aaa0ce922edd2a2e7f9f2a0d40f4",
+          "8be38cd8342b8ce04c722953f0ef6f11b882265dd8e5f9a87dae915397004e01"
+        ]
+      },
+      "working": {
+        "sourceSha256": "5c3762cad9b04f7096be1fc66a2961c2264d557eeea1e35c573035153690cc43",
+        "sourcePngSha256": "5c3762cad9b04f7096be1fc66a2961c2264d557eeea1e35c573035153690cc43",
+        "durations": [
+          800,
+          650,
+          850,
+          650,
+          800,
+          750,
+          500
+        ],
+        "frames": [
+          "16852919e15eb802eefd147831a8cc583767b85591ccabc6fcbf72cd04961183",
+          "d3584e3583dc8250f0c7aa8b5f65bb9c0c0c1e634c69a002ba5147f68f674c1e",
+          "faf27acd9016b6a09381887953347d36aa8bd3190e5be01b5b8db2652d06df49",
+          "93213a220ec181111d35d3de10695eea9cb35902c9c63f1cf0c8b8583c7b1d77",
+          "f7bfab7097ebc3e5a36004c0095a9aa259b37f799664e2049f4983ee67cc9c17",
+          "edb74a99106e90cdcd5305e82c0c8e72ae88f51ba839bcd9697dbd3fdf7a9f54",
+          "16852919e15eb802eefd147831a8cc583767b85591ccabc6fcbf72cd04961183"
+        ]
+      },
+      "complete": {
+        "sourceSha256": "c010d9cfa52e6ca246f2c63aa68f93f1f0c97295e2893ab179f8c35c4cb5fea0",
+        "sourcePngSha256": "c010d9cfa52e6ca246f2c63aa68f93f1f0c97295e2893ab179f8c35c4cb5fea0",
+        "durations": [
+          400,
+          250,
+          450,
+          600,
+          250,
+          250,
+          450
+        ],
+        "frames": [
+          "8be38cd8342b8ce04c722953f0ef6f11b882265dd8e5f9a87dae915397004e01",
+          "708f7894fcee441b4655812fa586be28295299cfcb6b5481db5d3703e80240ba",
+          "52ba34894db0a1887521bfe00d4bef6a86f06438b6829b70da457dad4eb31fe1",
+          "469368359a29408e39d94e39e780d6497720a29a0d6a7e3edae4eb528a08601d",
+          "6f6e40530222600212c895e3c2baa1f9e06a8a684babc1b992a09ef6c1522874",
+          "18c63daab78ce91434c6f95f7f8de910ea029c7fe44b7f3101c7d1edd7688a0f",
+          "8be38cd8342b8ce04c722953f0ef6f11b882265dd8e5f9a87dae915397004e01"
+        ]
+      }
+    },
+    "idleAlternate": {
+      "sourceSha256": "aee3cf7b26c22536cc0525f3b92cdfa10700c3ffb0edb0335fa10ea77fa42e17",
+      "sourcePngSha256": "aee3cf7b26c22536cc0525f3b92cdfa10700c3ffb0edb0335fa10ea77fa42e17",
+      "durations": [
+        2600,
+        120,
+        500
+      ],
+      "frames": [
+        "bf7d26b08d41fa97e2c69b0715f6beb0f9caaa074534f3db9c6e7464b043c94d",
+        "b118a60eaa609317733be1654c773b5d04f09a26a523b9709437da4639b7ef6c",
+        "bf7d26b08d41fa97e2c69b0715f6beb0f9caaa074534f3db9c6e7464b043c94d"
+      ]
+    },
+    "idleTransition": {
+      "sourceSha256": "2203079c722eb7ef60cd26b679f2f26266027ff918badb2824466c3c18b3d0af",
+      "sourcePngSha256": "2203079c722eb7ef60cd26b679f2f26266027ff918badb2824466c3c18b3d0af",
+      "durations": [
+        80,
+        80,
+        80,
+        80,
+        80
+      ],
+      "frames": [
+        "8be38cd8342b8ce04c722953f0ef6f11b882265dd8e5f9a87dae915397004e01",
+        "0e64a2ab2e9b90af6f001087045efa2468cb247d85fdf70f416db41403e5c8dc",
+        "1d9c31a15b1b2439f77f1bbe3d403968743dd271390d4f9795fa375e7eb7c121",
+        "f785bdb86a895dfb9386f05a2b448b0445c3999dae1022d49870387d51407bc5",
+        "bf7d26b08d41fa97e2c69b0715f6beb0f9caaa074534f3db9c6e7464b043c94d"
+      ]
+    },
+    "workingTransition": {
+      "sourceSha256": "3d42cd5c5ea7114109ed9de68c974c3e86a103518eca4fe74b01e7d4257d2210",
+      "sourcePngSha256": "3d42cd5c5ea7114109ed9de68c974c3e86a103518eca4fe74b01e7d4257d2210",
+      "durations": [
+        100,
+        100,
+        100,
+        100,
+        100
+      ],
+      "frames": [
+        "8be38cd8342b8ce04c722953f0ef6f11b882265dd8e5f9a87dae915397004e01",
+        "76dd81f90b7e65255cb3c2f4e835f6f620d09423d6f1dff20cf02259be075f78",
+        "97c8b690835084e8a98c989b0f58cf1a10f61a72e1a3a8da98d9fefc85046606",
+        "5dc8444b47b7fca2820a00f5c0756c697e4effbc46fbc802411efc07e98feb8b",
+        "16852919e15eb802eefd147831a8cc583767b85591ccabc6fcbf72cd04961183"
+      ]
+    }
+  },
+  "halloween": {
+    "actions": {
+      "idle": {
+        "sourceSha256": "f3ae00b13a071e20fd516e7a816431159fe0f8ffffa099427d2f4ab9b0d17774",
+        "sourcePngSha256": "f3ae00b13a071e20fd516e7a816431159fe0f8ffffa099427d2f4ab9b0d17774",
+        "durations": [
+          2600,
+          120,
+          500
+        ],
+        "frames": [
+          "8fa32225931a4c9eeb5be285945a6cceaf96d1e023c6811394f0b5c36f17c5fa",
+          "f4d4a16810b9c1a8c788c46d18bb5ec6145d4c90f241fe136ba72070519d11d9",
+          "8fa32225931a4c9eeb5be285945a6cceaf96d1e023c6811394f0b5c36f17c5fa"
+        ]
+      },
+      "walk": {
+        "sourceSha256": "ec553f9bb3aeb448f83bd005d18679ae40d2abc7115d462524963d6ccd02c927",
+        "sourcePngSha256": "ec553f9bb3aeb448f83bd005d18679ae40d2abc7115d462524963d6ccd02c927",
+        "durations": [
+          180,
+          120,
+          120,
+          180,
+          120,
+          120,
+          80
+        ],
+        "frames": [
+          "a3c9c191cbc275fdba6de56226ff212597f7fa5ebaf8dfcc25a6806dde8cdb9e",
+          "d675af3b3431737bab7e49dec07a22a93ae8d2dd7a151b4fd3d0c6f05327ee6f",
+          "5a3715bcafe76abf0c270ea85ab951e99839bf932270da6d7e997d90d3fe9f03",
+          "6976adf0a66958285e1e72b233f5ef9c7e212266e58cafee7205164bbdd6932f",
+          "e29f67bd9f7627b80c085dc29512cbe6256755f18a03d612b9148f50446a763b",
+          "76b6867caa05e52bc24f0d96adcf191f9538b0e73e14f6eb04d69e7fe3d86298",
+          "a3c9c191cbc275fdba6de56226ff212597f7fa5ebaf8dfcc25a6806dde8cdb9e"
+        ]
+      },
+      "greet": {
+        "sourceSha256": "9be9c3a5801c17b9a301996a9290abc163f4b6821ba6f51543a8de6ebb0afc54",
+        "sourcePngSha256": "9be9c3a5801c17b9a301996a9290abc163f4b6821ba6f51543a8de6ebb0afc54",
+        "durations": [
+          300,
+          220,
+          300,
+          190,
+          220,
+          350
+        ],
+        "frames": [
+          "aab3c9eed6a7b076ec696adb9196276d8fad701326895e85d330dc24814ff20a",
+          "74be76e66c25d7989f9f58aa39cdfc1301f9c45c51fbb4dbcc3f87adf88bf260",
+          "6fc3f6ea195b383281f60d2e2fff4ca867c1c1fe559eb1593c32a9e249acc81a",
+          "679eafb5d1e9baa9eca81eccc0b2a478fa6a922cf0cd5877854f4a22600a7bba",
+          "79c74e552abefe3b5c27ee6ac58218e8491114b8e060c39824074a1d8e9384a9",
+          "aab3c9eed6a7b076ec696adb9196276d8fad701326895e85d330dc24814ff20a"
+        ]
+      },
+      "joy": {
+        "sourceSha256": "2efe471e864d64ab87f9dc91e06a279d64f210ea6d0e056008279bdc4ce178f1",
+        "sourcePngSha256": "2efe471e864d64ab87f9dc91e06a279d64f210ea6d0e056008279bdc4ce178f1",
+        "durations": [
+          160,
+          130,
+          150,
+          200,
+          130,
+          130,
+          160
+        ],
+        "frames": [
+          "4187942d3a7fc9060c9c5882a226b4e7e2aa36821021f0fd31d2d55c720f0ff6",
+          "bba556a6eae252a68565c234ee4b1f7be1b97620add6012c65fcdaa2ccef46dc",
+          "a5cb185c59cd30947bfcddda776ec79db811fb2394946878a40ae2048fb7575c",
+          "21bf0a91042b0f12fffd4c11db1cd0b0d598c5ada866d2f8904bc88701840c92",
+          "12fe710cf12edf4858aaf153ca59e3d6f87362dd7345668dd00dfb123c280b92",
+          "d9a171ab25e94b917ed9da45021141b9d77d358a0d3b825a5b5a16451f06eb63",
+          "4187942d3a7fc9060c9c5882a226b4e7e2aa36821021f0fd31d2d55c720f0ff6"
+        ]
+      },
+      "sleep": {
+        "sourceSha256": "8df19a98a4c15fd22a340f289d7050b6ead57d0790f1efc6e7adf052ed7f883f",
+        "sourcePngSha256": "8df19a98a4c15fd22a340f289d7050b6ead57d0790f1efc6e7adf052ed7f883f",
+        "durations": [
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100
+        ],
+        "frames": [
+          "b6af4e074dc1b3f9a36469161b91b00f1f52f72950a063793c078bfd7ab28e0d",
+          "34824c62fa35086823acd42195daa0da2d1affb845b6bce16bc072137c449a55",
+          "3702915786a0db0845121ef5af870043088dc22aaddaa0ac29cab9a7179217ea",
+          "c8d3dffc3f0530df38dc8b864c0084af97cd9bf1108d887ecd538a1f54b22504",
+          "645f5168163d2c416392727d50ccd576fe1959f9112c17bfba095dd4b0a486e4",
+          "75ec2ca76c7e4877f6626a625658a84d17f40b0b40b2b678a572ad03c4945311",
+          "a9ba1cf545250fca8e1f83e650759ebe14a808e6c162a329ef866d3261071bea",
+          "90811da1d56a9833f986d3955ead88df28b1fa681c02df95eb92aa13afcf1046",
+          "e91d37ebb6cd979f18f2055f4e74452b25b0164b7477875b783dda341cccd822",
+          "3a34e0c19b9f51452e718f15a8527a59ac9c852ea21a80d80bf3192c0c95716e",
+          "515f504639fe659637256f3c41f6dd172497c5da18541723a947298acc2735ea",
+          "56566d36634dbc98a7264a23a469c29604107546a9c802e532af8451af40497f",
+          "94e849cac49aa9e873046d9cca19feb7a05ed7d76df43e70809fd005712c3528",
+          "3dd4d882e95eddae28ab0d9c9e352b75175b23f5155ddb4b2db62f3151d9cc52",
+          "c4ca50c929218b8efda187a7f5a3da466cae45cdac593162826ddf643e7bedfc",
+          "371118cd362cb141b18f12e03888d8ac930add1c90e1f7a3bb666fb947490c2e",
+          "7fba824104affa53a45554edd40636f4c4c308334822fc62b0c33a2f221ef597",
+          "b1617200d3d8ea13f3a031c1bdee759ae140c37d1251306f15f73bb975ecdc9b",
+          "7688fd169b661060d4d24a26de11e65975af09bd5d6911597124367aea30e509",
+          "8bbe3fc1d8a7607bd5478557de1951142602eaf6c5e619cd7c61bb4a6904b05a",
+          "61fad43b1dd9c6ffc678b0eada6f042fed978c77d7b704af5eecd3787e4d91c5",
+          "d9e0e43b2ba95d3bd9a94f5463881b408be41b54cbddbe210e29a3e34c4e34b5",
+          "0d2c6006a1ad7af3ee36a9398fe2174f5bb6445bcf843fe2d0d1243a136c84ee",
+          "9eb24541808f82bce596b78713124297717741618df9622fea39fb7ebadb42a0",
+          "eff57972a720f8092af1cfdf5fadd86d3908161e548a76eaf73315772cdd6499",
+          "5fe1a6d0ad09b27ef850bc08ee4c04ff72cd997a5dc8b9a2bec493b4a8fa0afe",
+          "9be7c0cd20f20e9670568c85e4191c23344b5a980bf2dce4fca00818a12faa71",
+          "47f1a9260247573a53caa55567b6f622701e86a6a12143ab3bf8032ebda2d8c5",
+          "e70bd4dd9956a880c7b561c7d4e885ed96d621e46e21806ce71bd6d3966f0183",
+          "595dd01b1d15107d42d1ac6eade126b1ffb5600f01ae90f9b237a1c76d45eed4",
+          "32fff6b4b314353476f727c508e034b6286443f18e8c616993353fc3ebdac31e",
+          "18ce1a7accd20cbbcdf86a47d5f85438828f971aa2b6fb3979c2599617fb2fc2",
+          "73868645e396dbcc116c2cda84279c4134fef1d0e8338943de7e37651f3da393",
+          "ecec097790878ab30dad8d1848aeb2169c0e80063be1d8139fda315308968864",
+          "001ef4e858900d79ec590e6c5f471a0c53b712f32dceddbfd584e22d4b5c69f1",
+          "f7f0b0a712587104f6094f1f8c70ac4142e4f37193af693c3e5bea5b7555172d",
+          "92b8aeb73b4373f27d0cf6818ff2e450a686ccccc4e98e59a7025ef2d7812301",
+          "754687f324765b7132deee04167477106c5f266052e6648bd0b9390b9b64d1c6",
+          "7759fbbcbefa59af454859dad446eb3a067fd1581035fb52757eb09386e4bd22",
+          "8d7b8acec64616662cadaa6669c6f45af20d82cb01f4dfe4a700f0f5d70ed467",
+          "7ec2130848a7d1cc6cf2a6739a45f7d45e1d40bc214ca8dcd107c0347feb4b33",
+          "7fd354d1154e882b06f21c6b264091cf9b9886fd78d3ddc38586fb8faa0f1cea",
+          "07c86e23bb54253c7eb6c401807f2b5ff0a29bb6037f135cdd1f49f02f6d0c58",
+          "32f09e2d432b7d4ef33675a25a7b2b2cc19f4a8f12ee85284ec2e301724add7d",
+          "4115da85251904c5112f480aa97fe28d79bba4b45d26b3339d927d50fd9594b4",
+          "e7d90f0a24ae16456b0081e3be0fd89ba4128870ddb4746db9ad8f9b3c28ad14",
+          "2486c3161df3d3e8a55f7252c500afbb62aff6c6612aab64ab0bf4f8c35dc40b",
+          "a3beff63e9cf5427318b796d6e1d2e1d0199aeec64a16afb7ea0b6f627b47b3d",
+          "2d5e4f89e6e433ae9189cf6532c3f9a5cd132e5bb37584734b9396cdf025b60e",
+          "689fc2b2cb50477fe45e33b3ec658d89a1cffbd4a5aad7329a6340e40f51b9d2",
+          "0a457979e1a0d1f7114a16ede0aa6055ee673b7e5eb47f1349e14dceab282f82",
+          "c4a1e23955cd273056b88fb0557ad5895033faf04eb1e7e51ceea283d1b3a137",
+          "6e68621e2b4f2e2eacde03455ca229a4cfc6189363c4827458d2e07a0fda52b7",
+          "dafa089ef5ab633cc0ae2c1baf484b03a363fc7b3c3cda6cd84d6740db5e40c1",
+          "ffb322fbef8aa25ce54769645062c0382ad177333fd9613055197c3735ad358b",
+          "f542db0de1c0ff7d18733b009e41159b978df8d1c65daf5e01ea37752e86a04b",
+          "ac7efc2c8037ee10b5603ffb4a333b6b2fd50ac1cf609d33012923e48d14e366",
+          "4dbaa7fa98e5304b453eaf8f2f9238b3018bc9ad1be0edddaf7c578162060839",
+          "8b9c11315c448e45edc24d5689c542794f5d5295c64240471d20908029aa82fa",
+          "9bf5c8f6adfd34bfed55da733003200f026692ae704328c00013baa3f634470c",
+          "8e04e76aba03bacd812a6e250f10f20a2669f1bbbef138ef14dea2f2dd7c2e38",
+          "0274a54f77a2760ad9e398e8a794d47a7dc6e9589c41c6ade62bc426d007cf3b",
+          "c504930817cae41c80fb2727d2c2a6ee3cf0abd74de56307f8abf3d1629e17c0",
+          "76c801ad837db594686c2e906c3a78386400fdda528f994725e38960cc350a3f",
+          "3bcd37af0a3c063b049093e74cd2c4712bdef93810556e46a39f7802d8539ae9",
+          "0ef691e9e503bfdac07988c73ef83fbea1176d65a11b9ad9d9fccbac530f386f",
+          "e2f6ab377362c1ea8fe1c84891e75295f74f836dd57adcf09e06c22c1d0936c3",
+          "f9348cea738e07479f67f36e5f81fdf35a744378a7909f43a15a126c09f4c60c",
+          "287b6f288d6285eb89ccc6eb50bab2dbafc3da1a504228e95b52bcd31b0d87fe",
+          "e0605f9e04c3f3058fa5495cf0ba994c4a7f6c7ace658005f9fba975d92658f7",
+          "b7172bfc078393d6b14cbbe4b20ed44c8639a1b7274ae92842fbbd886c8ed110",
+          "c63aa5e519996f6471a489682d4682c34c09de425c1e73a5d85c2cb823829906",
+          "d4545505e7d3f4f4bee9da7b3910682f6ba42caab7e3330d9e96ac28a08ea016",
+          "f68b9697be26db29c1c7d5b1a35e6c989511cd5038ad614d2fd3d3f901d878ca",
+          "a9ba1cf545250fca8e1f83e650759ebe14a808e6c162a329ef866d3261071bea",
+          "75ec2ca76c7e4877f6626a625658a84d17f40b0b40b2b678a572ad03c4945311",
+          "645f5168163d2c416392727d50ccd576fe1959f9112c17bfba095dd4b0a486e4",
+          "c8d3dffc3f0530df38dc8b864c0084af97cd9bf1108d887ecd538a1f54b22504",
+          "3702915786a0db0845121ef5af870043088dc22aaddaa0ac29cab9a7179217ea",
+          "34824c62fa35086823acd42195daa0da2d1affb845b6bce16bc072137c449a55",
+          "b6af4e074dc1b3f9a36469161b91b00f1f52f72950a063793c078bfd7ab28e0d"
+        ]
+      },
+      "candy": {
+        "sourceSha256": "11a22010a303ad2e8349d0ed04bef34ca9b151bf89a75d0d718a8353565daf80",
+        "sourcePngSha256": "11a22010a303ad2e8349d0ed04bef34ca9b151bf89a75d0d718a8353565daf80",
+        "durations": [
+          300,
+          150,
+          350,
+          280,
+          350,
+          230,
+          300
+        ],
+        "frames": [
+          "102397cc6c80f8187cf569d382b8502e52918756005835424e04d90464c3247b",
+          "edf326c6faadc1ae4eb7b5f833146f9b64efd435f9d3099299d062ced7cac704",
+          "17076761a22973c528492d470d394adfd321199cbcb084054c6ae1984cb01c33",
+          "46830581e26b70ec60f43c1bf3e095970cec9a3a254c9dd148be3e830f885b9d",
+          "637c64ecbb185a4b32a488124c76f412c930d5ec101b81a8cee0964638c5fb56",
+          "1bb850b7d1ccd39bb77291533fa7d4e38b27d6c9ca9fbabc82c55438b58cae1c",
+          "102397cc6c80f8187cf569d382b8502e52918756005835424e04d90464c3247b"
+        ]
+      },
+      "magic": {
+        "sourceSha256": "0e4443d0ada0c162ca7d8760d357ad6f4545049e9294c46ae3af1ebd13c422ec",
+        "sourcePngSha256": "0e4443d0ada0c162ca7d8760d357ad6f4545049e9294c46ae3af1ebd13c422ec",
+        "durations": [
+          300,
+          150,
+          220,
+          350,
+          250,
+          180,
+          300
+        ],
+        "frames": [
+          "b2dfef111e86b0488d13df5a3f17b66f1dcad8bd022ff2d0c60991bdb64ee70d",
+          "64b51aefa839470b788fc98e821217163a7398c6dbf35de082ec9e318075a2fe",
+          "6dc7c2d31942faf0ba5696a986680abb3a56a0fa4d44bae275f0477659f6bb85",
+          "e7e3f5d96eaf298be641b0f4cb1087c4584d27d8129447abd17ed898c7092c28",
+          "4bbb93e0447876d4fba00043945bd5d66d6b3694558c9084bbaf4749743fb8da",
+          "fa2474d3d1c374e64d0c9731bfc4786580b78f3f6022d546c7ffda8a6600b7ce",
+          "b2dfef111e86b0488d13df5a3f17b66f1dcad8bd022ff2d0c60991bdb64ee70d"
+        ]
+      },
+      "pumpkin": {
+        "sourceSha256": "c7f5925234d0997f42a8bfb4bea0a341538708b9174c9d6855c3d614a3119d05",
+        "sourcePngSha256": "c7f5925234d0997f42a8bfb4bea0a341538708b9174c9d6855c3d614a3119d05",
+        "durations": [
+          300,
+          170,
+          250,
+          350,
+          240,
+          200,
+          300
+        ],
+        "frames": [
+          "769b31be91b8b25362e0ef7f39b1d20ec572130eafcaa39f29944e687f0364ac",
+          "704b5e50031cae0627b9c593b43fcf3506d222a06aaef260216a9a0d2263f030",
+          "15ce3632f9df05c5ed056e70a9f764e6460dbada9ad13f9d84a358886395d844",
+          "1a6736a6271377a5b247fce1b98308fcf74a25eac8c72d3ee270cb1f3d676c4c",
+          "32c5f840488b2c864801c59dacea77d88ec74ad4bb0fdb0044c6ccdff0a6a3cd",
+          "52f64947f4b670f1cc93c638911ea31b3e2ba6cd3fe60219a6804f731883e6a9",
+          "769b31be91b8b25362e0ef7f39b1d20ec572130eafcaa39f29944e687f0364ac"
+        ]
+      },
+      "working": {
+        "sourceSha256": "ea5d168834988e047ed43b9a43a45db335884c8294f5d94892a72643b1cd3335",
+        "sourcePngSha256": "ea5d168834988e047ed43b9a43a45db335884c8294f5d94892a72643b1cd3335",
+        "durations": [
+          720,
+          520,
+          420,
+          650,
+          120,
+          650,
+          520
+        ],
+        "frames": [
+          "b6a484c95aa3322b292570806465e2ee6b2a96112fbf38338f27de26ddb509f9",
+          "225f326359e5d91ad8866b49c4736fe6d0e812eded46533df546c61d6b0009eb",
+          "53f60d62f0b647374ee701bdc1cef751c32d566f06f4348fb0cd14d087bada92",
+          "95ccd32cb85ea4f219f693c1497264e3dae5b9e5fad75691e1c24979c79ac604",
+          "cbf7e2d0fa5de619157e1eb3ff2cd39775c72c039f9266df538c67fba6ed83e8",
+          "e17064d0ece6a0d228df6c1f93de23e5e778bc9108734e1a43bb6187fc8daccc",
+          "b6a484c95aa3322b292570806465e2ee6b2a96112fbf38338f27de26ddb509f9"
+        ]
+      },
+      "complete": {
+        "sourceSha256": "5b573ea2a3a304910c1f52aad4e47949b4cc7672973a6dc3fbf1bac621f499bd",
+        "sourcePngSha256": "5b573ea2a3a304910c1f52aad4e47949b4cc7672973a6dc3fbf1bac621f499bd",
+        "durations": [
+          180,
+          160,
+          450,
+          180,
+          140,
+          120,
+          140,
+          180
+        ],
+        "frames": [
+          "b6a484c95aa3322b292570806465e2ee6b2a96112fbf38338f27de26ddb509f9",
+          "c6b2c3ebc123e8e370dec6dd00993944721042acba045dc2aa4e7952d8979f9c",
+          "e0be415f6c030e5da8ada525e60f7e7fcae8cc56e65abec645d145898a0ca303",
+          "832fea6ead42a8d8886a769d5111285155345a99369bc2f703d1413e7d090222",
+          "c8323391cea269d61d9ad1310d174e947ea1d6f1517c63dd9feba60615538e0a",
+          "94c62da67ea14ebbe215619b99578199d5226a8d4648d4e669cd7e422e7f4e9a",
+          "4d79f19bcd792f5b7960feae0d46022187c8718a46ac288b9d70241734319266",
+          "8fa32225931a4c9eeb5be285945a6cceaf96d1e023c6811394f0b5c36f17c5fa"
+        ]
+      }
+    },
+    "staticSha256": "5d556469db3eea35721a725858a223a4da09984d96610b0a7833b3335b7cab54",
+    "workingTransition": {
+      "sourceSha256": "51a244f6f1edae7b06de1ed3eeb17a062413043dc40a93bb1fb98efc47fd174d",
+      "sourcePngSha256": "51a244f6f1edae7b06de1ed3eeb17a062413043dc40a93bb1fb98efc47fd174d",
+      "durations": [
+        60,
+        70,
+        90,
+        100,
+        100,
+        60
+      ],
+      "frames": [
+        "8fa32225931a4c9eeb5be285945a6cceaf96d1e023c6811394f0b5c36f17c5fa",
+        "4d79f19bcd792f5b7960feae0d46022187c8718a46ac288b9d70241734319266",
+        "94c62da67ea14ebbe215619b99578199d5226a8d4648d4e669cd7e422e7f4e9a",
+        "832fea6ead42a8d8886a769d5111285155345a99369bc2f703d1413e7d090222",
+        "c6b2c3ebc123e8e370dec6dd00993944721042acba045dc2aa4e7952d8979f9c",
+        "b6a484c95aa3322b292570806465e2ee6b2a96112fbf38338f27de26ddb509f9"
+      ]
+    }
+  },
+  "christmas": {
+    "actions": {
+      "idle": {
+        "sourceSha256": "47527c82c2ceb0ca32b670e961fba65883d3aaacb5274687283d1f2a96db4fd1",
+        "sourcePngSha256": "47527c82c2ceb0ca32b670e961fba65883d3aaacb5274687283d1f2a96db4fd1",
+        "frames": [
+          "95ee6ffd15402021d59538c73082f8b441ba63dac6454283736ec46e10fd08d0",
+          "1c5dae94c5974b5269db7ebe19d584d82c7b7f732f7311588f6a9ad5a3c30641",
+          "95ee6ffd15402021d59538c73082f8b441ba63dac6454283736ec46e10fd08d0"
+        ],
+        "durations": [
+          2600,
+          120,
+          500
+        ],
+        "motionSource": "v17-original-performance-disconnected-ground-gift-only",
+        "originalFrames": [
+          "98ccaa146b43856063bfc3d5840285e03a8913555c3c3110cef28d0bab131f6a",
+          "66ef5578a9c39b72d20d31612512cb28da9bca28e3f7d10d2a914e003b42450c",
+          "98ccaa146b43856063bfc3d5840285e03a8913555c3c3110cef28d0bab131f6a"
+        ],
+        "removedGroundGiftPixels": [
+          0,
+          0,
+          0
+        ],
+        "redrawnIdleAnchor": [
+          true,
+          true,
+          true
+        ],
+        "sourceArtSha256": {
+          "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+          "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+          "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+          "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+          "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+        },
+        "idleRedraw": {
+          "sourceArtSha256": {
+            "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+            "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+            "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+            "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+            "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+          },
+          "registration": {
+            "source": "normal-stance-mouth-composite.png",
+            "sourceSize": [
+              1254,
+              1254
+            ],
+            "scale": 0.2449899567,
+            "position": [
+              3.696407625399985,
+              12.19692139709997
+            ],
+            "sourceFootBaseline": 1187,
+            "sourceFootCenterX": 638,
+            "targetFoot": 303,
+            "sourceEyeDistance": 249.8515,
+            "targetEyeDistance": 61.211,
+            "basis": "H actual eye distance and body, not hat-top total height",
+            "method": "uniform scale and position only"
+          },
+          "rule": "Original normal standing redraw; uniform scale and position only. Other original performances unchanged.",
+          "eyeComposite": {
+            "eyeRegions": [
+              [
+                430,
+                435,
+                565,
+                570
+              ],
+              [
+                680,
+                435,
+                815,
+                570
+              ]
+            ],
+            "outsideEyeChangedRGBAPixels": 0,
+            "originalMasterSha256": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+            "closedOriginalSha256": "c5520717b23d336997531fa7433381e65027c6efd386716bdadcc9304370fa06"
+          },
+          "mouthPatch": {
+            "ROI": [
+              540,
+              556,
+              684,
+              614
+            ],
+            "featherSourcePixels": 4,
+            "outsideROIChangedRGBAPixels": 0,
+            "closedOutsideROIChangedRGBAPixels": 0,
+            "noseROI": [
+              585,
+              520,
+              645,
+              556
+            ],
+            "noseChangedRGBAPixels": 0,
+            "sourceSha256": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2",
+            "basis": "Only remove tooth-like central red triangle and white edge; nose, eyes, posture and other artwork remain v23 unchanged."
+          }
+        }
+      },
+      "walk": {
+        "sourceSha256": "42a7c457977e94d6e9f9be081a008cd216f8e33566224e2ecfc9d5f027cd677c",
+        "sourcePngSha256": "42a7c457977e94d6e9f9be081a008cd216f8e33566224e2ecfc9d5f027cd677c",
+        "frames": [
+          "95ee6ffd15402021d59538c73082f8b441ba63dac6454283736ec46e10fd08d0",
+          "840123d4ddd7b0c66107cfac2dd23d2138fc300bf7f23c81f9a456fd7e17cc41",
+          "f2cab2c77731145d8d446da5c0c11b3b9c7d65b00d949817675ec5db264a64db",
+          "614dce35e482c12c1b1147bfb21554e07679896ec4bb3e58cf9bcdf7d817c6e1",
+          "352e52aaba25f3221af7403b9f981fe57a793cd09dc94440651739b3db754c09",
+          "08eecdad98cbbfe2d66a4417f796268c7df5d197b964f35d0e2efc14782d99ed",
+          "9229b2d750d70fd3096bf6600cc0add0c7b61d0963372b6e6c4b48a10590f564",
+          "f2cab2c77731145d8d446da5c0c11b3b9c7d65b00d949817675ec5db264a64db",
+          "840123d4ddd7b0c66107cfac2dd23d2138fc300bf7f23c81f9a456fd7e17cc41",
+          "95ee6ffd15402021d59538c73082f8b441ba63dac6454283736ec46e10fd08d0"
+        ],
+        "durations": [
+          220,
+          300,
+          220,
+          220,
+          140,
+          220,
+          140,
+          220,
+          300,
+          300
+        ],
+        "motionSource": "v17-original-performance-disconnected-ground-gift-only",
+        "originalFrames": [
+          "98ccaa146b43856063bfc3d5840285e03a8913555c3c3110cef28d0bab131f6a",
+          "840123d4ddd7b0c66107cfac2dd23d2138fc300bf7f23c81f9a456fd7e17cc41",
+          "f2cab2c77731145d8d446da5c0c11b3b9c7d65b00d949817675ec5db264a64db",
+          "614dce35e482c12c1b1147bfb21554e07679896ec4bb3e58cf9bcdf7d817c6e1",
+          "352e52aaba25f3221af7403b9f981fe57a793cd09dc94440651739b3db754c09",
+          "08eecdad98cbbfe2d66a4417f796268c7df5d197b964f35d0e2efc14782d99ed",
+          "9229b2d750d70fd3096bf6600cc0add0c7b61d0963372b6e6c4b48a10590f564",
+          "f2cab2c77731145d8d446da5c0c11b3b9c7d65b00d949817675ec5db264a64db",
+          "840123d4ddd7b0c66107cfac2dd23d2138fc300bf7f23c81f9a456fd7e17cc41",
+          "98ccaa146b43856063bfc3d5840285e03a8913555c3c3110cef28d0bab131f6a"
+        ],
+        "removedGroundGiftPixels": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "redrawnIdleAnchor": [
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true
+        ],
+        "sourceArtSha256": {
+          "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+          "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+          "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+          "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+          "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+        },
+        "idleRedraw": {
+          "sourceArtSha256": {
+            "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+            "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+            "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+            "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+            "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+          },
+          "registration": {
+            "source": "normal-stance-mouth-composite.png",
+            "sourceSize": [
+              1254,
+              1254
+            ],
+            "scale": 0.2449899567,
+            "position": [
+              3.696407625399985,
+              12.19692139709997
+            ],
+            "sourceFootBaseline": 1187,
+            "sourceFootCenterX": 638,
+            "targetFoot": 303,
+            "sourceEyeDistance": 249.8515,
+            "targetEyeDistance": 61.211,
+            "basis": "H actual eye distance and body, not hat-top total height",
+            "method": "uniform scale and position only"
+          },
+          "rule": "Original normal standing redraw; uniform scale and position only. Other original performances unchanged.",
+          "eyeComposite": {
+            "eyeRegions": [
+              [
+                430,
+                435,
+                565,
+                570
+              ],
+              [
+                680,
+                435,
+                815,
+                570
+              ]
+            ],
+            "outsideEyeChangedRGBAPixels": 0,
+            "originalMasterSha256": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+            "closedOriginalSha256": "c5520717b23d336997531fa7433381e65027c6efd386716bdadcc9304370fa06"
+          },
+          "mouthPatch": {
+            "ROI": [
+              540,
+              556,
+              684,
+              614
+            ],
+            "featherSourcePixels": 4,
+            "outsideROIChangedRGBAPixels": 0,
+            "closedOutsideROIChangedRGBAPixels": 0,
+            "noseROI": [
+              585,
+              520,
+              645,
+              556
+            ],
+            "noseChangedRGBAPixels": 0,
+            "sourceSha256": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2",
+            "basis": "Only remove tooth-like central red triangle and white edge; nose, eyes, posture and other artwork remain v23 unchanged."
+          }
+        }
+      },
+      "greet": {
+        "sourceSha256": "e09a7d318b56d9774f96310eba74865253422623938e9ef6e67e62ac2b68fcf8",
+        "sourcePngSha256": "e09a7d318b56d9774f96310eba74865253422623938e9ef6e67e62ac2b68fcf8",
+        "frames": [
+          "95ee6ffd15402021d59538c73082f8b441ba63dac6454283736ec46e10fd08d0",
+          "798acd924c61131103ec0d9a090336d10e106ba38de92deec1c618d10f2d89a5",
+          "0d9f601153f760a5229966a5539d00ded259968224bf3cd3c5c7bc4c403eb21a",
+          "62f9ab17f8dddc74802a8f7e4e885f2f0cf9dc5d30eb265ad50474f1d7fb80d4",
+          "0d9f601153f760a5229966a5539d00ded259968224bf3cd3c5c7bc4c403eb21a",
+          "798acd924c61131103ec0d9a090336d10e106ba38de92deec1c618d10f2d89a5",
+          "95ee6ffd15402021d59538c73082f8b441ba63dac6454283736ec46e10fd08d0"
+        ],
+        "durations": [
+          300,
+          200,
+          260,
+          500,
+          220,
+          180,
+          400
+        ],
+        "motionSource": "v17-original-performance-disconnected-ground-gift-only",
+        "originalFrames": [
+          "98ccaa146b43856063bfc3d5840285e03a8913555c3c3110cef28d0bab131f6a",
+          "798acd924c61131103ec0d9a090336d10e106ba38de92deec1c618d10f2d89a5",
+          "0d9f601153f760a5229966a5539d00ded259968224bf3cd3c5c7bc4c403eb21a",
+          "62f9ab17f8dddc74802a8f7e4e885f2f0cf9dc5d30eb265ad50474f1d7fb80d4",
+          "0d9f601153f760a5229966a5539d00ded259968224bf3cd3c5c7bc4c403eb21a",
+          "798acd924c61131103ec0d9a090336d10e106ba38de92deec1c618d10f2d89a5",
+          "98ccaa146b43856063bfc3d5840285e03a8913555c3c3110cef28d0bab131f6a"
+        ],
+        "removedGroundGiftPixels": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "redrawnIdleAnchor": [
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true
+        ],
+        "sourceArtSha256": {
+          "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+          "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+          "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+          "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+          "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+        },
+        "idleRedraw": {
+          "sourceArtSha256": {
+            "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+            "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+            "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+            "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+            "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+          },
+          "registration": {
+            "source": "normal-stance-mouth-composite.png",
+            "sourceSize": [
+              1254,
+              1254
+            ],
+            "scale": 0.2449899567,
+            "position": [
+              3.696407625399985,
+              12.19692139709997
+            ],
+            "sourceFootBaseline": 1187,
+            "sourceFootCenterX": 638,
+            "targetFoot": 303,
+            "sourceEyeDistance": 249.8515,
+            "targetEyeDistance": 61.211,
+            "basis": "H actual eye distance and body, not hat-top total height",
+            "method": "uniform scale and position only"
+          },
+          "rule": "Original normal standing redraw; uniform scale and position only. Other original performances unchanged.",
+          "eyeComposite": {
+            "eyeRegions": [
+              [
+                430,
+                435,
+                565,
+                570
+              ],
+              [
+                680,
+                435,
+                815,
+                570
+              ]
+            ],
+            "outsideEyeChangedRGBAPixels": 0,
+            "originalMasterSha256": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+            "closedOriginalSha256": "c5520717b23d336997531fa7433381e65027c6efd386716bdadcc9304370fa06"
+          },
+          "mouthPatch": {
+            "ROI": [
+              540,
+              556,
+              684,
+              614
+            ],
+            "featherSourcePixels": 4,
+            "outsideROIChangedRGBAPixels": 0,
+            "closedOutsideROIChangedRGBAPixels": 0,
+            "noseROI": [
+              585,
+              520,
+              645,
+              556
+            ],
+            "noseChangedRGBAPixels": 0,
+            "sourceSha256": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2",
+            "basis": "Only remove tooth-like central red triangle and white edge; nose, eyes, posture and other artwork remain v23 unchanged."
+          }
+        }
+      },
+      "joy": {
+        "sourceSha256": "4d86a39739ef6867e929e2dbc8e571d208bdf5ad73b904b79af4c3caabf6138d",
+        "sourcePngSha256": "4d86a39739ef6867e929e2dbc8e571d208bdf5ad73b904b79af4c3caabf6138d",
+        "frames": [
+          "95ee6ffd15402021d59538c73082f8b441ba63dac6454283736ec46e10fd08d0",
+          "903d7466fa4c2acdeb97dd27807f6bbee70fdd0d05ba7ed662a003605d1597c6",
+          "9740953e939c8d22e9cbbe0b00a41122fea10f1ae827eb75a233f061c8bfd609",
+          "903d7466fa4c2acdeb97dd27807f6bbee70fdd0d05ba7ed662a003605d1597c6",
+          "6d0fa573ea41ca42635530006b750d7efeae725aab9642cda4c2c26f13aaca1a",
+          "95ee6ffd15402021d59538c73082f8b441ba63dac6454283736ec46e10fd08d0"
+        ],
+        "durations": [
+          260,
+          220,
+          650,
+          240,
+          240,
+          400
+        ],
+        "motionSource": "v17-original-performance-disconnected-ground-gift-only",
+        "originalFrames": [
+          "98ccaa146b43856063bfc3d5840285e03a8913555c3c3110cef28d0bab131f6a",
+          "903d7466fa4c2acdeb97dd27807f6bbee70fdd0d05ba7ed662a003605d1597c6",
+          "9740953e939c8d22e9cbbe0b00a41122fea10f1ae827eb75a233f061c8bfd609",
+          "903d7466fa4c2acdeb97dd27807f6bbee70fdd0d05ba7ed662a003605d1597c6",
+          "6d0fa573ea41ca42635530006b750d7efeae725aab9642cda4c2c26f13aaca1a",
+          "98ccaa146b43856063bfc3d5840285e03a8913555c3c3110cef28d0bab131f6a"
+        ],
+        "removedGroundGiftPixels": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "redrawnIdleAnchor": [
+          true,
+          false,
+          false,
+          false,
+          false,
+          true
+        ],
+        "sourceArtSha256": {
+          "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+          "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+          "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+          "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+          "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+        },
+        "idleRedraw": {
+          "sourceArtSha256": {
+            "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+            "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+            "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+            "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+            "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+          },
+          "registration": {
+            "source": "normal-stance-mouth-composite.png",
+            "sourceSize": [
+              1254,
+              1254
+            ],
+            "scale": 0.2449899567,
+            "position": [
+              3.696407625399985,
+              12.19692139709997
+            ],
+            "sourceFootBaseline": 1187,
+            "sourceFootCenterX": 638,
+            "targetFoot": 303,
+            "sourceEyeDistance": 249.8515,
+            "targetEyeDistance": 61.211,
+            "basis": "H actual eye distance and body, not hat-top total height",
+            "method": "uniform scale and position only"
+          },
+          "rule": "Original normal standing redraw; uniform scale and position only. Other original performances unchanged.",
+          "eyeComposite": {
+            "eyeRegions": [
+              [
+                430,
+                435,
+                565,
+                570
+              ],
+              [
+                680,
+                435,
+                815,
+                570
+              ]
+            ],
+            "outsideEyeChangedRGBAPixels": 0,
+            "originalMasterSha256": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+            "closedOriginalSha256": "c5520717b23d336997531fa7433381e65027c6efd386716bdadcc9304370fa06"
+          },
+          "mouthPatch": {
+            "ROI": [
+              540,
+              556,
+              684,
+              614
+            ],
+            "featherSourcePixels": 4,
+            "outsideROIChangedRGBAPixels": 0,
+            "closedOutsideROIChangedRGBAPixels": 0,
+            "noseROI": [
+              585,
+              520,
+              645,
+              556
+            ],
+            "noseChangedRGBAPixels": 0,
+            "sourceSha256": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2",
+            "basis": "Only remove tooth-like central red triangle and white edge; nose, eyes, posture and other artwork remain v23 unchanged."
+          }
+        }
+      },
+      "sleep": {
+        "sourceSha256": "43d25988c5b8cae65b3aef4472c8975499d9d9e1e991bee04fd22c70a41b6985",
+        "sourcePngSha256": "43d25988c5b8cae65b3aef4472c8975499d9d9e1e991bee04fd22c70a41b6985",
+        "frames": [
+          "880c91e86324cb9a65d030a6b332d23a1c0e8f8cdea7cfd1016921f40892c7de",
+          "653243800af67bd47ff3b94a4c664cc534e186343ab641edf2f68ca43e9b4255",
+          "2050cbb97b3619604ce87f059bf749f3d5cc7253e9a5f397984690fd4b49e5e3",
+          "c156f7ab65223fd8e482c9e3a401a9e483c7e90f5e24494dc27ed2ce77681ba2",
+          "56614c3b94a999a0c45fde50d090dad432632555bec026c5af75835cb05f315a",
+          "851b6758edad116898c81ded8058592bb0fccda3a54b5f417e53555be5068af5",
+          "2b795e0b13a0bd2ecc032ee73e72cdbc5704517b9dd61006e4205ed6b1d7fe11",
+          "aab6014b1a55e2b83593b76df46fb64b6c18f7c6e6360af380f6ac1d3044e642",
+          "66fbbd9b63c9fd85fc32baa46c3b4bb385abf5f07270e68b6746bd8ed12e44a1",
+          "7f5a5bc45c7222d892374eba67161fc533ab25d56e2ba5576f043ec8177efa3c",
+          "9c39fbd6f29f2140860aaad6c4efe732a643d36fd6a421a5d2f233bed85d3748",
+          "1aa9c9f1390f121e423dbb97127ccecdc8859fd5b6f58f628cf0e19176352c9c",
+          "bb2911c786e29caca3285556f5954a44e63604c7b30a818370c98cc4bd729ff3",
+          "38f181cbba43d1963091ed00b9a615184856c317770508fa9c8e21a6994e5140",
+          "bd3c4534a337923982a70de77857263eb5d0e58b5652c391a57af9bd99c65ec3",
+          "301d407bde9ad3aa5972f9ad6ca75a035572b586c2730843d8fde83413ee72a5",
+          "f245005f6898e9c5e0e04c774bbffb6d02a55e65b356e218fc039afbd0a20096",
+          "818d4b7bd6aaf7d22bfcc3428366b56d813933e81c60106695d83a7fb1070f5b",
+          "597b947e0ca3003edbfe25c612f88f5d005609c4f23fe25408b1993744c6ef9a",
+          "dd7cef4e16ff9de00afdf839665a92afe0a2bb376c1183990f614192efb43634",
+          "b9fc6e8e3e1183365b89b63a105f84d66bf03e44b34c45162e64616888abaae9",
+          "ee2ef7e62ab297a721625bd80c1bdc4762b014ff5fc3dcb867310d5bfcec033f",
+          "4e783d90e1d62a1e6249522cdb9e8189b3f8afa4bb5043963598b7f5a3d9431c",
+          "5507becc628a369373dbf4c504dcab96bc57e3322c5d01b3c6c14821114f8c8b",
+          "3b2fdf825c9af3e4a7231f3c123c08403dcded42941dbe1be7b5b1cab1849c34",
+          "6a7576229c76ef6f87cd947073fba9de3a26637576519eef2d337a13eab2a3f1",
+          "e074f586324ef5a89005488e863032429625af8a5fc7ad6af87f3926f15e8d08",
+          "aff1b0ccbf658851cc1328b89cd32760ded2afda61c92aa72c843df7d80f1449",
+          "6f03527ec2c337808f532fbc80bb48f1cb1839368a3a2ab71d29d72d887edd4b",
+          "f70c3f5fc980294c5c0723f5493f2a2f8720b10eada36a8722cfa1562fd1bb94",
+          "4835c25aa00c65995d226b0bb9815dca1a28b24b99d96db11cb509cb45b54bac",
+          "10918611a6b9d28072ace3b6171649cf9ab571061e2c0daf932eccbf0deeff2a",
+          "a1c461d84b80582ad14416b0140f6b109c71a24b38047b8a2cfb650d8562eb46",
+          "2f92e8ab0d43250e63d5059fdf5073d77c59fb9f59a12e0878f7f50bed551568",
+          "e27a276326a067d1f940b6688c4574063e27c72bde716d963311764b4513d8ae",
+          "0117e89957ed4ae14a0182617378d44abfa6d5ef6b5065d4dc981466ec6e6f69",
+          "bed9bf658d820823a88b5b799f077093177580d7dd20daeb20763e3c1716da3f",
+          "e8c42c02f29ad89cbabc937b1ca9df298df4620323d89067958d12de531805ca",
+          "e6c4aeab6c6750ae7268dd4d0959df4b8133345adf1f344368eeaf5ed8345f7b",
+          "c3bdbdd86bb29374a4ba0ea90ee72177c6b1df3c214e1ff92e494f926094bfb5",
+          "8f9f0a12e384b11504aaae0fcb1fa89c024d9a02dd35bb38e77e87dd2442b9e5",
+          "f65f6d14326eb3d085853ca052fcbc1d10a672c75b6dc694adb3eae4dfd84080",
+          "d1e3f90d9a3d31528d5639fdec83ebc1db8c503586bfa95138e073b5635538ed",
+          "ee301a9c4893c96f2127574341c298e638adbb061f4c3e9754b10bf5f848bc03",
+          "21359a3b54f90ab5d33a94a4c3f6d0fab3b3556e9d1d1de98de8bcdec2192d1c",
+          "aee0f15b476379f551c9b6da8c92cec11f1f0c0d72cbadf585b268cc4c71ed34",
+          "1a04ff37d4e814a082457409d463643d7c2e286345653b261cfc2093eb16dd15",
+          "56e1acb11c47de57a11c59bad79d3a711dc60d693cb69e891be702d1ed7e1e82",
+          "8bff4cf561f9a96809d7994b746c11aa2558219dff40201531a6182ba1f1b910",
+          "11bc5748c3bb40bea947c4edbe81a6334494830a78c203a4d01395da5cac9eff",
+          "beba1c1bfd72ced8c0614ec50104b83b43191899215aa05cd4637d451cedd6d5",
+          "14ccd8f8dabb5c2a82befaaa25725ddf93aefe6a850cbcb017989c219cd6f554",
+          "507edb93788c5f50ae23d22d9bcd1660d2a58f549fcd7b4a978099672f0dfd46",
+          "67cecbd6cad4beb503912a5b4ed4da98f2e3248b891e8be9dec654ef232a385e",
+          "546a9872d524fbce7e3876b6d9f3cbd232012dbde3882e63c30152f85cc895e4",
+          "37f763759ef36b4a845453be67483c8bf4aeaf7f9f57479f557c43ede1f8bee5",
+          "4bfba30551c68976a41813d0deac2bcbcfe93c2a6a3a713cc236a5894ba1c195",
+          "b6e382a5b6914cea86939c67402c4d6e56a50f85d3ca354f5e379e84e4039e11",
+          "a0fa42a39e4c43d0d5670d5800e329e007c2318632a764e64b9d2a4ec25e9eac",
+          "6575706e784c0962c0b238f12b56762533817636eab4e5fc1f64d5d356fda604",
+          "836796add6c95f3408b14810ed31bc3eb8977fc66ecf6ee3442b77180993a309",
+          "ed78e424f161f5647310d6868c67f8b1dfb8bb9750cacccbbb985a754795138c",
+          "905df6069b59f1fba07b24452e7e817eb049140226560a93862a879d2f8ea51d",
+          "ec52890fdaa5582be5315c5233e515acd3164bb9fbaed4103142505a1eac94c9",
+          "36aa07c0c8fcbc77218a7a214d591ca07d981a2adf6ac011ad6658ec51eeafa0",
+          "a83c34834ee6507973812c1b25d1bdacd4efed0ec0df5ca89b5249816251c92e",
+          "b14f0d23b4e5af81b32e6c6f0603fe5eece81b15dc606dc8abf9ef9ca64b0e84",
+          "7535f6c83d502e7ee1bc4c24664def90a9613baabf8e2373ea0287d820bbae6d",
+          "a90b2891a5192888992e57f125b302abcbb617b3375a35bb956b84395aa5a2d2",
+          "c9eaffad1aa8e96a29e8f6e29f37953375268e64bf48e602f0dcc75f02768b41",
+          "dc2796ac00d0e0cddfc9c2b2d7f87eac070555e6f3218e6f0ea7ebc5a370ab14",
+          "efe81b41d32c133a88dcc69a30cf8cc56f7c41f7a868dd99ce99a4db56364e7d",
+          "c17d04f5a100e109769d508f4a72492fd6dad83e18d4d7ee912ad11479e225fc",
+          "e948f3312711e77b7a6d4320a7c3c9ca1394b0efea5521238efbc1079d7df138",
+          "2b795e0b13a0bd2ecc032ee73e72cdbc5704517b9dd61006e4205ed6b1d7fe11",
+          "851b6758edad116898c81ded8058592bb0fccda3a54b5f417e53555be5068af5",
+          "56614c3b94a999a0c45fde50d090dad432632555bec026c5af75835cb05f315a",
+          "c156f7ab65223fd8e482c9e3a401a9e483c7e90f5e24494dc27ed2ce77681ba2",
+          "2050cbb97b3619604ce87f059bf749f3d5cc7253e9a5f397984690fd4b49e5e3",
+          "653243800af67bd47ff3b94a4c664cc534e186343ab641edf2f68ca43e9b4255",
+          "880c91e86324cb9a65d030a6b332d23a1c0e8f8cdea7cfd1016921f40892c7de"
+        ],
+        "durations": [
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100
+        ],
+        "motionSource": "v17-original-performance-disconnected-ground-gift-only",
+        "originalFrames": [
+          "880c91e86324cb9a65d030a6b332d23a1c0e8f8cdea7cfd1016921f40892c7de",
+          "653243800af67bd47ff3b94a4c664cc534e186343ab641edf2f68ca43e9b4255",
+          "2050cbb97b3619604ce87f059bf749f3d5cc7253e9a5f397984690fd4b49e5e3",
+          "c156f7ab65223fd8e482c9e3a401a9e483c7e90f5e24494dc27ed2ce77681ba2",
+          "56614c3b94a999a0c45fde50d090dad432632555bec026c5af75835cb05f315a",
+          "851b6758edad116898c81ded8058592bb0fccda3a54b5f417e53555be5068af5",
+          "2b795e0b13a0bd2ecc032ee73e72cdbc5704517b9dd61006e4205ed6b1d7fe11",
+          "aab6014b1a55e2b83593b76df46fb64b6c18f7c6e6360af380f6ac1d3044e642",
+          "66fbbd9b63c9fd85fc32baa46c3b4bb385abf5f07270e68b6746bd8ed12e44a1",
+          "7f5a5bc45c7222d892374eba67161fc533ab25d56e2ba5576f043ec8177efa3c",
+          "9c39fbd6f29f2140860aaad6c4efe732a643d36fd6a421a5d2f233bed85d3748",
+          "1aa9c9f1390f121e423dbb97127ccecdc8859fd5b6f58f628cf0e19176352c9c",
+          "bb2911c786e29caca3285556f5954a44e63604c7b30a818370c98cc4bd729ff3",
+          "38f181cbba43d1963091ed00b9a615184856c317770508fa9c8e21a6994e5140",
+          "bd3c4534a337923982a70de77857263eb5d0e58b5652c391a57af9bd99c65ec3",
+          "301d407bde9ad3aa5972f9ad6ca75a035572b586c2730843d8fde83413ee72a5",
+          "f245005f6898e9c5e0e04c774bbffb6d02a55e65b356e218fc039afbd0a20096",
+          "818d4b7bd6aaf7d22bfcc3428366b56d813933e81c60106695d83a7fb1070f5b",
+          "597b947e0ca3003edbfe25c612f88f5d005609c4f23fe25408b1993744c6ef9a",
+          "dd7cef4e16ff9de00afdf839665a92afe0a2bb376c1183990f614192efb43634",
+          "b9fc6e8e3e1183365b89b63a105f84d66bf03e44b34c45162e64616888abaae9",
+          "ee2ef7e62ab297a721625bd80c1bdc4762b014ff5fc3dcb867310d5bfcec033f",
+          "4e783d90e1d62a1e6249522cdb9e8189b3f8afa4bb5043963598b7f5a3d9431c",
+          "5507becc628a369373dbf4c504dcab96bc57e3322c5d01b3c6c14821114f8c8b",
+          "3b2fdf825c9af3e4a7231f3c123c08403dcded42941dbe1be7b5b1cab1849c34",
+          "6a7576229c76ef6f87cd947073fba9de3a26637576519eef2d337a13eab2a3f1",
+          "e074f586324ef5a89005488e863032429625af8a5fc7ad6af87f3926f15e8d08",
+          "aff1b0ccbf658851cc1328b89cd32760ded2afda61c92aa72c843df7d80f1449",
+          "6f03527ec2c337808f532fbc80bb48f1cb1839368a3a2ab71d29d72d887edd4b",
+          "f70c3f5fc980294c5c0723f5493f2a2f8720b10eada36a8722cfa1562fd1bb94",
+          "4835c25aa00c65995d226b0bb9815dca1a28b24b99d96db11cb509cb45b54bac",
+          "10918611a6b9d28072ace3b6171649cf9ab571061e2c0daf932eccbf0deeff2a",
+          "a1c461d84b80582ad14416b0140f6b109c71a24b38047b8a2cfb650d8562eb46",
+          "2f92e8ab0d43250e63d5059fdf5073d77c59fb9f59a12e0878f7f50bed551568",
+          "e27a276326a067d1f940b6688c4574063e27c72bde716d963311764b4513d8ae",
+          "0117e89957ed4ae14a0182617378d44abfa6d5ef6b5065d4dc981466ec6e6f69",
+          "bed9bf658d820823a88b5b799f077093177580d7dd20daeb20763e3c1716da3f",
+          "e8c42c02f29ad89cbabc937b1ca9df298df4620323d89067958d12de531805ca",
+          "e6c4aeab6c6750ae7268dd4d0959df4b8133345adf1f344368eeaf5ed8345f7b",
+          "c3bdbdd86bb29374a4ba0ea90ee72177c6b1df3c214e1ff92e494f926094bfb5",
+          "8f9f0a12e384b11504aaae0fcb1fa89c024d9a02dd35bb38e77e87dd2442b9e5",
+          "f65f6d14326eb3d085853ca052fcbc1d10a672c75b6dc694adb3eae4dfd84080",
+          "d1e3f90d9a3d31528d5639fdec83ebc1db8c503586bfa95138e073b5635538ed",
+          "ee301a9c4893c96f2127574341c298e638adbb061f4c3e9754b10bf5f848bc03",
+          "21359a3b54f90ab5d33a94a4c3f6d0fab3b3556e9d1d1de98de8bcdec2192d1c",
+          "aee0f15b476379f551c9b6da8c92cec11f1f0c0d72cbadf585b268cc4c71ed34",
+          "1a04ff37d4e814a082457409d463643d7c2e286345653b261cfc2093eb16dd15",
+          "56e1acb11c47de57a11c59bad79d3a711dc60d693cb69e891be702d1ed7e1e82",
+          "8bff4cf561f9a96809d7994b746c11aa2558219dff40201531a6182ba1f1b910",
+          "11bc5748c3bb40bea947c4edbe81a6334494830a78c203a4d01395da5cac9eff",
+          "beba1c1bfd72ced8c0614ec50104b83b43191899215aa05cd4637d451cedd6d5",
+          "14ccd8f8dabb5c2a82befaaa25725ddf93aefe6a850cbcb017989c219cd6f554",
+          "507edb93788c5f50ae23d22d9bcd1660d2a58f549fcd7b4a978099672f0dfd46",
+          "67cecbd6cad4beb503912a5b4ed4da98f2e3248b891e8be9dec654ef232a385e",
+          "546a9872d524fbce7e3876b6d9f3cbd232012dbde3882e63c30152f85cc895e4",
+          "37f763759ef36b4a845453be67483c8bf4aeaf7f9f57479f557c43ede1f8bee5",
+          "4bfba30551c68976a41813d0deac2bcbcfe93c2a6a3a713cc236a5894ba1c195",
+          "b6e382a5b6914cea86939c67402c4d6e56a50f85d3ca354f5e379e84e4039e11",
+          "a0fa42a39e4c43d0d5670d5800e329e007c2318632a764e64b9d2a4ec25e9eac",
+          "6575706e784c0962c0b238f12b56762533817636eab4e5fc1f64d5d356fda604",
+          "836796add6c95f3408b14810ed31bc3eb8977fc66ecf6ee3442b77180993a309",
+          "ed78e424f161f5647310d6868c67f8b1dfb8bb9750cacccbbb985a754795138c",
+          "905df6069b59f1fba07b24452e7e817eb049140226560a93862a879d2f8ea51d",
+          "ec52890fdaa5582be5315c5233e515acd3164bb9fbaed4103142505a1eac94c9",
+          "36aa07c0c8fcbc77218a7a214d591ca07d981a2adf6ac011ad6658ec51eeafa0",
+          "a83c34834ee6507973812c1b25d1bdacd4efed0ec0df5ca89b5249816251c92e",
+          "b14f0d23b4e5af81b32e6c6f0603fe5eece81b15dc606dc8abf9ef9ca64b0e84",
+          "7535f6c83d502e7ee1bc4c24664def90a9613baabf8e2373ea0287d820bbae6d",
+          "a90b2891a5192888992e57f125b302abcbb617b3375a35bb956b84395aa5a2d2",
+          "c9eaffad1aa8e96a29e8f6e29f37953375268e64bf48e602f0dcc75f02768b41",
+          "dc2796ac00d0e0cddfc9c2b2d7f87eac070555e6f3218e6f0ea7ebc5a370ab14",
+          "efe81b41d32c133a88dcc69a30cf8cc56f7c41f7a868dd99ce99a4db56364e7d",
+          "c17d04f5a100e109769d508f4a72492fd6dad83e18d4d7ee912ad11479e225fc",
+          "e948f3312711e77b7a6d4320a7c3c9ca1394b0efea5521238efbc1079d7df138",
+          "2b795e0b13a0bd2ecc032ee73e72cdbc5704517b9dd61006e4205ed6b1d7fe11",
+          "851b6758edad116898c81ded8058592bb0fccda3a54b5f417e53555be5068af5",
+          "56614c3b94a999a0c45fde50d090dad432632555bec026c5af75835cb05f315a",
+          "c156f7ab65223fd8e482c9e3a401a9e483c7e90f5e24494dc27ed2ce77681ba2",
+          "2050cbb97b3619604ce87f059bf749f3d5cc7253e9a5f397984690fd4b49e5e3",
+          "653243800af67bd47ff3b94a4c664cc534e186343ab641edf2f68ca43e9b4255",
+          "880c91e86324cb9a65d030a6b332d23a1c0e8f8cdea7cfd1016921f40892c7de"
+        ],
+        "removedGroundGiftPixels": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "redrawnIdleAnchor": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "sourceArtSha256": {
+          "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+          "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+          "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+          "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+          "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+        },
+        "idleRedraw": {
+          "sourceArtSha256": {
+            "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+            "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+            "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+            "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+            "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+          },
+          "registration": {
+            "source": "normal-stance-mouth-composite.png",
+            "sourceSize": [
+              1254,
+              1254
+            ],
+            "scale": 0.2449899567,
+            "position": [
+              3.696407625399985,
+              12.19692139709997
+            ],
+            "sourceFootBaseline": 1187,
+            "sourceFootCenterX": 638,
+            "targetFoot": 303,
+            "sourceEyeDistance": 249.8515,
+            "targetEyeDistance": 61.211,
+            "basis": "H actual eye distance and body, not hat-top total height",
+            "method": "uniform scale and position only"
+          },
+          "rule": "Original normal standing redraw; uniform scale and position only. Other original performances unchanged.",
+          "eyeComposite": {
+            "eyeRegions": [
+              [
+                430,
+                435,
+                565,
+                570
+              ],
+              [
+                680,
+                435,
+                815,
+                570
+              ]
+            ],
+            "outsideEyeChangedRGBAPixels": 0,
+            "originalMasterSha256": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+            "closedOriginalSha256": "c5520717b23d336997531fa7433381e65027c6efd386716bdadcc9304370fa06"
+          },
+          "mouthPatch": {
+            "ROI": [
+              540,
+              556,
+              684,
+              614
+            ],
+            "featherSourcePixels": 4,
+            "outsideROIChangedRGBAPixels": 0,
+            "closedOutsideROIChangedRGBAPixels": 0,
+            "noseROI": [
+              585,
+              520,
+              645,
+              556
+            ],
+            "noseChangedRGBAPixels": 0,
+            "sourceSha256": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2",
+            "basis": "Only remove tooth-like central red triangle and white edge; nose, eyes, posture and other artwork remain v23 unchanged."
+          }
+        }
+      },
+      "gift": {
+        "sourceSha256": "bb80c13cf6e91b34c5ed2cad526ec247a6769078a3546281fcff0ee7d657c335",
+        "sourcePngSha256": "bb80c13cf6e91b34c5ed2cad526ec247a6769078a3546281fcff0ee7d657c335",
+        "frames": [
+          "95ee6ffd15402021d59538c73082f8b441ba63dac6454283736ec46e10fd08d0",
+          "c8e9389814b2ad69c1bfc8656f9dfde0548b437bbd996d2b756c8414f6533da5",
+          "39dd36fefa00c0ac032866bb5ad98cb65cb3dae1afc3004b4eb8e0ab8f894888",
+          "2c4ab61dcfb9729428faf0b9ff1108ab85743bccb9049388fee7d7ccb617118e",
+          "80ed196ef190e2b3141318af566994cdf71b9d0026c8f2bd20ddc4f55904b2f4",
+          "1314e01c82e9c75becab5b73a064f0eed18ccbe5f1bd145dcf33f0090d574370",
+          "80ed196ef190e2b3141318af566994cdf71b9d0026c8f2bd20ddc4f55904b2f4",
+          "2c4ab61dcfb9729428faf0b9ff1108ab85743bccb9049388fee7d7ccb617118e",
+          "c1e89038328f33b7b5e30a6af8a5cb9b33a308d25a3eb44a893c4ec0c836aeb8",
+          "c8e9389814b2ad69c1bfc8656f9dfde0548b437bbd996d2b756c8414f6533da5",
+          "95ee6ffd15402021d59538c73082f8b441ba63dac6454283736ec46e10fd08d0"
+        ],
+        "durations": [
+          220,
+          180,
+          320,
+          280,
+          650,
+          500,
+          240,
+          250,
+          400,
+          250,
+          400
+        ],
+        "motionSource": "v17-original-performance-disconnected-ground-gift-only",
+        "originalFrames": [
+          "98ccaa146b43856063bfc3d5840285e03a8913555c3c3110cef28d0bab131f6a",
+          "c8e9389814b2ad69c1bfc8656f9dfde0548b437bbd996d2b756c8414f6533da5",
+          "39dd36fefa00c0ac032866bb5ad98cb65cb3dae1afc3004b4eb8e0ab8f894888",
+          "2c4ab61dcfb9729428faf0b9ff1108ab85743bccb9049388fee7d7ccb617118e",
+          "80ed196ef190e2b3141318af566994cdf71b9d0026c8f2bd20ddc4f55904b2f4",
+          "1314e01c82e9c75becab5b73a064f0eed18ccbe5f1bd145dcf33f0090d574370",
+          "80ed196ef190e2b3141318af566994cdf71b9d0026c8f2bd20ddc4f55904b2f4",
+          "2c4ab61dcfb9729428faf0b9ff1108ab85743bccb9049388fee7d7ccb617118e",
+          "c1e89038328f33b7b5e30a6af8a5cb9b33a308d25a3eb44a893c4ec0c836aeb8",
+          "c8e9389814b2ad69c1bfc8656f9dfde0548b437bbd996d2b756c8414f6533da5",
+          "98ccaa146b43856063bfc3d5840285e03a8913555c3c3110cef28d0bab131f6a"
+        ],
+        "removedGroundGiftPixels": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "redrawnIdleAnchor": [
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true
+        ],
+        "sourceArtSha256": {
+          "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+          "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+          "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+          "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+          "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+        },
+        "idleRedraw": {
+          "sourceArtSha256": {
+            "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+            "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+            "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+            "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+            "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+          },
+          "registration": {
+            "source": "normal-stance-mouth-composite.png",
+            "sourceSize": [
+              1254,
+              1254
+            ],
+            "scale": 0.2449899567,
+            "position": [
+              3.696407625399985,
+              12.19692139709997
+            ],
+            "sourceFootBaseline": 1187,
+            "sourceFootCenterX": 638,
+            "targetFoot": 303,
+            "sourceEyeDistance": 249.8515,
+            "targetEyeDistance": 61.211,
+            "basis": "H actual eye distance and body, not hat-top total height",
+            "method": "uniform scale and position only"
+          },
+          "rule": "Original normal standing redraw; uniform scale and position only. Other original performances unchanged.",
+          "eyeComposite": {
+            "eyeRegions": [
+              [
+                430,
+                435,
+                565,
+                570
+              ],
+              [
+                680,
+                435,
+                815,
+                570
+              ]
+            ],
+            "outsideEyeChangedRGBAPixels": 0,
+            "originalMasterSha256": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+            "closedOriginalSha256": "c5520717b23d336997531fa7433381e65027c6efd386716bdadcc9304370fa06"
+          },
+          "mouthPatch": {
+            "ROI": [
+              540,
+              556,
+              684,
+              614
+            ],
+            "featherSourcePixels": 4,
+            "outsideROIChangedRGBAPixels": 0,
+            "closedOutsideROIChangedRGBAPixels": 0,
+            "noseROI": [
+              585,
+              520,
+              645,
+              556
+            ],
+            "noseChangedRGBAPixels": 0,
+            "sourceSha256": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2",
+            "basis": "Only remove tooth-like central red triangle and white edge; nose, eyes, posture and other artwork remain v23 unchanged."
+          }
+        }
+      },
+      "scarf": {
+        "sourceSha256": "dbfb2a60bd03dcd9810eae1b2dfa32548177a941c2c59035c7123dfa9cf0e76c",
+        "sourcePngSha256": "dbfb2a60bd03dcd9810eae1b2dfa32548177a941c2c59035c7123dfa9cf0e76c",
+        "frames": [
+          "95ee6ffd15402021d59538c73082f8b441ba63dac6454283736ec46e10fd08d0",
+          "cb4c0184cdef11db547abaa772b967ba95bf485af64d43b287c225ca77dee4b5",
+          "da13554801941b1ab0c142f59331a057113575ae742f856f7f97b3474ec13077",
+          "a4494db06494b316b987e6570ebe8da5e54a94a9ad887fba9d8f90089a56d72f",
+          "74b77bac1d2b988e5934527b33711805798f0a77cc29374db59c01a498484778",
+          "94d872b34807ddf0cd2974545964f450e35374f64ba3883ef7917979c2e70b33",
+          "74b77bac1d2b988e5934527b33711805798f0a77cc29374db59c01a498484778",
+          "a4494db06494b316b987e6570ebe8da5e54a94a9ad887fba9d8f90089a56d72f",
+          "da13554801941b1ab0c142f59331a057113575ae742f856f7f97b3474ec13077",
+          "cb4c0184cdef11db547abaa772b967ba95bf485af64d43b287c225ca77dee4b5",
+          "95ee6ffd15402021d59538c73082f8b441ba63dac6454283736ec46e10fd08d0"
+        ],
+        "durations": [
+          220,
+          180,
+          240,
+          180,
+          200,
+          650,
+          200,
+          200,
+          240,
+          180,
+          350
+        ],
+        "motionSource": "v17-original-performance-disconnected-ground-gift-only",
+        "originalFrames": [
+          "98ccaa146b43856063bfc3d5840285e03a8913555c3c3110cef28d0bab131f6a",
+          "cb4c0184cdef11db547abaa772b967ba95bf485af64d43b287c225ca77dee4b5",
+          "da13554801941b1ab0c142f59331a057113575ae742f856f7f97b3474ec13077",
+          "a4494db06494b316b987e6570ebe8da5e54a94a9ad887fba9d8f90089a56d72f",
+          "74b77bac1d2b988e5934527b33711805798f0a77cc29374db59c01a498484778",
+          "94d872b34807ddf0cd2974545964f450e35374f64ba3883ef7917979c2e70b33",
+          "74b77bac1d2b988e5934527b33711805798f0a77cc29374db59c01a498484778",
+          "a4494db06494b316b987e6570ebe8da5e54a94a9ad887fba9d8f90089a56d72f",
+          "da13554801941b1ab0c142f59331a057113575ae742f856f7f97b3474ec13077",
+          "cb4c0184cdef11db547abaa772b967ba95bf485af64d43b287c225ca77dee4b5",
+          "98ccaa146b43856063bfc3d5840285e03a8913555c3c3110cef28d0bab131f6a"
+        ],
+        "removedGroundGiftPixels": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "redrawnIdleAnchor": [
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true
+        ],
+        "sourceArtSha256": {
+          "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+          "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+          "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+          "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+          "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+        },
+        "idleRedraw": {
+          "sourceArtSha256": {
+            "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+            "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+            "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+            "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+            "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+          },
+          "registration": {
+            "source": "normal-stance-mouth-composite.png",
+            "sourceSize": [
+              1254,
+              1254
+            ],
+            "scale": 0.2449899567,
+            "position": [
+              3.696407625399985,
+              12.19692139709997
+            ],
+            "sourceFootBaseline": 1187,
+            "sourceFootCenterX": 638,
+            "targetFoot": 303,
+            "sourceEyeDistance": 249.8515,
+            "targetEyeDistance": 61.211,
+            "basis": "H actual eye distance and body, not hat-top total height",
+            "method": "uniform scale and position only"
+          },
+          "rule": "Original normal standing redraw; uniform scale and position only. Other original performances unchanged.",
+          "eyeComposite": {
+            "eyeRegions": [
+              [
+                430,
+                435,
+                565,
+                570
+              ],
+              [
+                680,
+                435,
+                815,
+                570
+              ]
+            ],
+            "outsideEyeChangedRGBAPixels": 0,
+            "originalMasterSha256": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+            "closedOriginalSha256": "c5520717b23d336997531fa7433381e65027c6efd386716bdadcc9304370fa06"
+          },
+          "mouthPatch": {
+            "ROI": [
+              540,
+              556,
+              684,
+              614
+            ],
+            "featherSourcePixels": 4,
+            "outsideROIChangedRGBAPixels": 0,
+            "closedOutsideROIChangedRGBAPixels": 0,
+            "noseROI": [
+              585,
+              520,
+              645,
+              556
+            ],
+            "noseChangedRGBAPixels": 0,
+            "sourceSha256": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2",
+            "basis": "Only remove tooth-like central red triangle and white edge; nose, eyes, posture and other artwork remain v23 unchanged."
+          }
+        }
+      },
+      "snow": {
+        "sourceSha256": "d9a13ed55ecf7ac49a98d0548b254903f535fae7715c05ce1d60dd43467727bf",
+        "sourcePngSha256": "d9a13ed55ecf7ac49a98d0548b254903f535fae7715c05ce1d60dd43467727bf",
+        "frames": [
+          "95ee6ffd15402021d59538c73082f8b441ba63dac6454283736ec46e10fd08d0",
+          "cb4c0184cdef11db547abaa772b967ba95bf485af64d43b287c225ca77dee4b5",
+          "39bed8bb993e3901dcf0b333bc8648c02341a11965614b3bd9dbd670712f122c",
+          "cc2a5e42cd27cd37d8266351e10959e72694ab1037c447edb271ee2d0b86f0b9",
+          "1b6396e873725b007cc8145144c2502b3a2acf71f5a964cfa6a0bad066ca1c7f",
+          "39bed8bb993e3901dcf0b333bc8648c02341a11965614b3bd9dbd670712f122c",
+          "cb4c0184cdef11db547abaa772b967ba95bf485af64d43b287c225ca77dee4b5",
+          "95ee6ffd15402021d59538c73082f8b441ba63dac6454283736ec46e10fd08d0"
+        ],
+        "durations": [
+          220,
+          160,
+          180,
+          430,
+          740,
+          550,
+          180,
+          350
+        ],
+        "motionSource": "v17-original-performance-disconnected-ground-gift-only",
+        "originalFrames": [
+          "98ccaa146b43856063bfc3d5840285e03a8913555c3c3110cef28d0bab131f6a",
+          "cb4c0184cdef11db547abaa772b967ba95bf485af64d43b287c225ca77dee4b5",
+          "39bed8bb993e3901dcf0b333bc8648c02341a11965614b3bd9dbd670712f122c",
+          "cc2a5e42cd27cd37d8266351e10959e72694ab1037c447edb271ee2d0b86f0b9",
+          "1b6396e873725b007cc8145144c2502b3a2acf71f5a964cfa6a0bad066ca1c7f",
+          "39bed8bb993e3901dcf0b333bc8648c02341a11965614b3bd9dbd670712f122c",
+          "cb4c0184cdef11db547abaa772b967ba95bf485af64d43b287c225ca77dee4b5",
+          "98ccaa146b43856063bfc3d5840285e03a8913555c3c3110cef28d0bab131f6a"
+        ],
+        "removedGroundGiftPixels": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "redrawnIdleAnchor": [
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true
+        ],
+        "sourceArtSha256": {
+          "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+          "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+          "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+          "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+          "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+        },
+        "idleRedraw": {
+          "sourceArtSha256": {
+            "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+            "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+            "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+            "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+            "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+          },
+          "registration": {
+            "source": "normal-stance-mouth-composite.png",
+            "sourceSize": [
+              1254,
+              1254
+            ],
+            "scale": 0.2449899567,
+            "position": [
+              3.696407625399985,
+              12.19692139709997
+            ],
+            "sourceFootBaseline": 1187,
+            "sourceFootCenterX": 638,
+            "targetFoot": 303,
+            "sourceEyeDistance": 249.8515,
+            "targetEyeDistance": 61.211,
+            "basis": "H actual eye distance and body, not hat-top total height",
+            "method": "uniform scale and position only"
+          },
+          "rule": "Original normal standing redraw; uniform scale and position only. Other original performances unchanged.",
+          "eyeComposite": {
+            "eyeRegions": [
+              [
+                430,
+                435,
+                565,
+                570
+              ],
+              [
+                680,
+                435,
+                815,
+                570
+              ]
+            ],
+            "outsideEyeChangedRGBAPixels": 0,
+            "originalMasterSha256": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+            "closedOriginalSha256": "c5520717b23d336997531fa7433381e65027c6efd386716bdadcc9304370fa06"
+          },
+          "mouthPatch": {
+            "ROI": [
+              540,
+              556,
+              684,
+              614
+            ],
+            "featherSourcePixels": 4,
+            "outsideROIChangedRGBAPixels": 0,
+            "closedOutsideROIChangedRGBAPixels": 0,
+            "noseROI": [
+              585,
+              520,
+              645,
+              556
+            ],
+            "noseChangedRGBAPixels": 0,
+            "sourceSha256": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2",
+            "basis": "Only remove tooth-like central red triangle and white edge; nose, eyes, posture and other artwork remain v23 unchanged."
+          }
+        }
+      },
+      "working": {
+        "sourceSha256": "7d46b95be5444416e872a2750a9632dfe6d6a975d3657a2e77a484b2485bbb36",
+        "sourcePngSha256": "7d46b95be5444416e872a2750a9632dfe6d6a975d3657a2e77a484b2485bbb36",
+        "frames": [
+          "f0697351a5aa7cb1243238acc1c1a26bbc70bfa487e493b72d5d9067ad6d15ca",
+          "796a662ed54440319da9a02d50a3aad237a27a35f9402a68782dff956e4855fa",
+          "3649f66132715ee62102bc4aacf83943dc806716ec0cd34ff1638261d8d8e684",
+          "5d3104dd52853beb97d1316b7b47a641ae660d516393bee2c57d2ded63c7de38",
+          "e36fb9eeee1a90be14a6e67a5cf7ebf196c2b2c1b727acffdb977058f4791abd",
+          "d2f199d12017d57557be03f4aaab8f2c5a7fb7a62e86763ca78e41fb1051d3f6",
+          "f0697351a5aa7cb1243238acc1c1a26bbc70bfa487e493b72d5d9067ad6d15ca"
+        ],
+        "durations": [
+          720,
+          520,
+          420,
+          650,
+          120,
+          650,
+          520
+        ],
+        "motionSource": "v17-original-performance-disconnected-ground-gift-only",
+        "originalFrames": [
+          "f0697351a5aa7cb1243238acc1c1a26bbc70bfa487e493b72d5d9067ad6d15ca",
+          "5de853a4c85b399b6c5fabbae90a9da4d5a1df4dbd39a3d645ff9769e9058072",
+          "a3425c9cd09bfaa2d7285798748453abc489b4ce754d40bffeb5c8839512502c",
+          "5d3104dd52853beb97d1316b7b47a641ae660d516393bee2c57d2ded63c7de38",
+          "e36fb9eeee1a90be14a6e67a5cf7ebf196c2b2c1b727acffdb977058f4791abd",
+          "d2f199d12017d57557be03f4aaab8f2c5a7fb7a62e86763ca78e41fb1051d3f6",
+          "f0697351a5aa7cb1243238acc1c1a26bbc70bfa487e493b72d5d9067ad6d15ca"
+        ],
+        "removedGroundGiftPixels": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "redrawnIdleAnchor": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "sourceArtSha256": {
+          "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+          "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+          "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+          "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+          "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+        },
+        "idleRedraw": {
+          "sourceArtSha256": {
+            "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+            "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+            "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+            "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+            "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+          },
+          "registration": {
+            "source": "normal-stance-mouth-composite.png",
+            "sourceSize": [
+              1254,
+              1254
+            ],
+            "scale": 0.2449899567,
+            "position": [
+              3.696407625399985,
+              12.19692139709997
+            ],
+            "sourceFootBaseline": 1187,
+            "sourceFootCenterX": 638,
+            "targetFoot": 303,
+            "sourceEyeDistance": 249.8515,
+            "targetEyeDistance": 61.211,
+            "basis": "H actual eye distance and body, not hat-top total height",
+            "method": "uniform scale and position only"
+          },
+          "rule": "Original normal standing redraw; uniform scale and position only. Other original performances unchanged.",
+          "eyeComposite": {
+            "eyeRegions": [
+              [
+                430,
+                435,
+                565,
+                570
+              ],
+              [
+                680,
+                435,
+                815,
+                570
+              ]
+            ],
+            "outsideEyeChangedRGBAPixels": 0,
+            "originalMasterSha256": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+            "closedOriginalSha256": "c5520717b23d336997531fa7433381e65027c6efd386716bdadcc9304370fa06"
+          },
+          "mouthPatch": {
+            "ROI": [
+              540,
+              556,
+              684,
+              614
+            ],
+            "featherSourcePixels": 4,
+            "outsideROIChangedRGBAPixels": 0,
+            "closedOutsideROIChangedRGBAPixels": 0,
+            "noseROI": [
+              585,
+              520,
+              645,
+              556
+            ],
+            "noseChangedRGBAPixels": 0,
+            "sourceSha256": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2",
+            "basis": "Only remove tooth-like central red triangle and white edge; nose, eyes, posture and other artwork remain v23 unchanged."
+          }
+        },
+        "workingEyePatches": [
+          {
+            "frame": 1,
+            "file": "working-patched-1.png",
+            "originalRGBA": "5de853a4c85b399b6c5fabbae90a9da4d5a1df4dbd39a3d645ff9769e9058072",
+            "patchedRGBA": "796a662ed54440319da9a02d50a3aad237a27a35f9402a68782dff956e4855fa",
+            "sourceRightEyeFrame": 0,
+            "sourceRightEyeCenter": [
+              180.7703488372093,
+              171.00872093023256
+            ],
+            "targetRightEyeCenter": [
+              177.05548884958174,
+              171.27049530475912
+            ],
+            "leftEyeROI": [
+              99,
+              157,
+              127,
+              183
+            ],
+            "rightEyeROI": [
+              163,
+              160,
+              192,
+              185
+            ],
+            "scale": 0.9985785351734189,
+            "translation": [
+              -3.4579012950666765,
+              0.5048572563675293
+            ],
+            "roi": [
+              155,
+              151,
+              201,
+              197
+            ],
+            "outsideEyeChangedRGBAPixels": 0,
+            "originalOutsideEyeRGBA": "2ae0592d40bfb99db60f98400a9145c421a803b4d2ccf7e2dbf2d08922599d86",
+            "clipFrame": 1
+          },
+          {
+            "frame": 2,
+            "file": "working-patched-2.png",
+            "originalRGBA": "a3425c9cd09bfaa2d7285798748453abc489b4ce754d40bffeb5c8839512502c",
+            "patchedRGBA": "3649f66132715ee62102bc4aacf83943dc806716ec0cd34ff1638261d8d8e684",
+            "sourceRightEyeFrame": 0,
+            "sourceRightEyeCenter": [
+              180.7703488372093,
+              171.00872093023256
+            ],
+            "targetRightEyeCenter": [
+              174.53618447842797,
+              178.9922586921331
+            ],
+            "leftEyeROI": [
+              101,
+              167,
+              129,
+              190
+            ],
+            "rightEyeROI": [
+              161,
+              168,
+              188,
+              192
+            ],
+            "scale": 0.9216462543632553,
+            "translation": [
+              7.929869572674988,
+              21.382711583333048
+            ],
+            "roi": [
+              155,
+              151,
+              201,
+              197
+            ],
+            "outsideEyeChangedRGBAPixels": 0,
+            "originalOutsideEyeRGBA": "6b1a52d6babe0f9d1461b66f5d955fb0e0bb44b6ef13bae9674ae6a80c95f978",
+            "clipFrame": 2
+          }
+        ],
+        "workingEyeRepair": {
+          "rule": "Use the original RIGHT eye from working frame 0, never mirror the left; match the current left-eye openness and head position. Only frames 1/2 right-eye regions change.",
+          "frames": [
+            {
+              "frame": 1,
+              "file": "working-patched-1.png",
+              "originalRGBA": "5de853a4c85b399b6c5fabbae90a9da4d5a1df4dbd39a3d645ff9769e9058072",
+              "patchedRGBA": "796a662ed54440319da9a02d50a3aad237a27a35f9402a68782dff956e4855fa",
+              "sourceRightEyeFrame": 0,
+              "sourceRightEyeCenter": [
+                180.7703488372093,
+                171.00872093023256
+              ],
+              "targetRightEyeCenter": [
+                177.05548884958174,
+                171.27049530475912
+              ],
+              "leftEyeROI": [
+                99,
+                157,
+                127,
+                183
+              ],
+              "rightEyeROI": [
+                163,
+                160,
+                192,
+                185
+              ],
+              "scale": 0.9985785351734189,
+              "translation": [
+                -3.4579012950666765,
+                0.5048572563675293
+              ],
+              "roi": [
+                155,
+                151,
+                201,
+                197
+              ],
+              "outsideEyeChangedRGBAPixels": 0,
+              "originalOutsideEyeRGBA": "2ae0592d40bfb99db60f98400a9145c421a803b4d2ccf7e2dbf2d08922599d86"
+            },
+            {
+              "frame": 2,
+              "file": "working-patched-2.png",
+              "originalRGBA": "a3425c9cd09bfaa2d7285798748453abc489b4ce754d40bffeb5c8839512502c",
+              "patchedRGBA": "3649f66132715ee62102bc4aacf83943dc806716ec0cd34ff1638261d8d8e684",
+              "sourceRightEyeFrame": 0,
+              "sourceRightEyeCenter": [
+                180.7703488372093,
+                171.00872093023256
+              ],
+              "targetRightEyeCenter": [
+                174.53618447842797,
+                178.9922586921331
+              ],
+              "leftEyeROI": [
+                101,
+                167,
+                129,
+                190
+              ],
+              "rightEyeROI": [
+                161,
+                168,
+                188,
+                192
+              ],
+              "scale": 0.9216462543632553,
+              "translation": [
+                7.929869572674988,
+                21.382711583333048
+              ],
+              "roi": [
+                155,
+                151,
+                201,
+                197
+              ],
+              "outsideEyeChangedRGBAPixels": 0,
+              "originalOutsideEyeRGBA": "6b1a52d6babe0f9d1461b66f5d955fb0e0bb44b6ef13bae9674ae6a80c95f978"
+            }
+          ]
+        }
+      },
+      "complete": {
+        "sourceSha256": "5f32a7f2a1c4e54f3195810f8feb54355c082ff51df11b388cea696352aab5cf",
+        "sourcePngSha256": "5f32a7f2a1c4e54f3195810f8feb54355c082ff51df11b388cea696352aab5cf",
+        "frames": [
+          "f0697351a5aa7cb1243238acc1c1a26bbc70bfa487e493b72d5d9067ad6d15ca",
+          "3bbe94c73fdf3867d4db708fe1beb30237ccecfecbc4be264318ff6bf08478bd",
+          "058acb5d2bb2ce31ae8a81dcfab586316d2c93c58f7052a4510a49ceb7391f36",
+          "9254f2615ae70c172d3a1fd9f103e33683c164a14c7f8a8dada28d054eb147f4",
+          "16cd952515665d9846de99381297f28fd95e62e77d8b35c2976fb3157be3b9ff",
+          "d406c636000e3cc8673281fa1027c3814c5519a98b63772405fe5e7026aa309f",
+          "1d53f93eb245968d4cd7431ebb8956fbf2327d32ac8e447de42a8118885358e3",
+          "3bbe94c73fdf3867d4db708fe1beb30237ccecfecbc4be264318ff6bf08478bd",
+          "7a8f1c087f476736d6e60b973ad65c3b331cef205c128ea619d9dc6b2b65ea18",
+          "387bd59876e1e1725673c6c739d42bded8778a785eb2fec2de6f9806cba32e10",
+          "c8e9389814b2ad69c1bfc8656f9dfde0548b437bbd996d2b756c8414f6533da5",
+          "95ee6ffd15402021d59538c73082f8b441ba63dac6454283736ec46e10fd08d0"
+        ],
+        "durations": [
+          140,
+          260,
+          240,
+          500,
+          700,
+          300,
+          280,
+          320,
+          280,
+          350,
+          200,
+          350
+        ],
+        "motionSource": "v17-original-performance-disconnected-ground-gift-only",
+        "originalFrames": [
+          "f0697351a5aa7cb1243238acc1c1a26bbc70bfa487e493b72d5d9067ad6d15ca",
+          "3bbe94c73fdf3867d4db708fe1beb30237ccecfecbc4be264318ff6bf08478bd",
+          "058acb5d2bb2ce31ae8a81dcfab586316d2c93c58f7052a4510a49ceb7391f36",
+          "9254f2615ae70c172d3a1fd9f103e33683c164a14c7f8a8dada28d054eb147f4",
+          "16cd952515665d9846de99381297f28fd95e62e77d8b35c2976fb3157be3b9ff",
+          "d406c636000e3cc8673281fa1027c3814c5519a98b63772405fe5e7026aa309f",
+          "1d53f93eb245968d4cd7431ebb8956fbf2327d32ac8e447de42a8118885358e3",
+          "3bbe94c73fdf3867d4db708fe1beb30237ccecfecbc4be264318ff6bf08478bd",
+          "7a8f1c087f476736d6e60b973ad65c3b331cef205c128ea619d9dc6b2b65ea18",
+          "387bd59876e1e1725673c6c739d42bded8778a785eb2fec2de6f9806cba32e10",
+          "c8e9389814b2ad69c1bfc8656f9dfde0548b437bbd996d2b756c8414f6533da5",
+          "98ccaa146b43856063bfc3d5840285e03a8913555c3c3110cef28d0bab131f6a"
+        ],
+        "removedGroundGiftPixels": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "redrawnIdleAnchor": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true
+        ],
+        "sourceArtSha256": {
+          "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+          "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+          "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+          "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+          "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+        },
+        "idleRedraw": {
+          "sourceArtSha256": {
+            "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+            "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+            "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+            "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+            "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+          },
+          "registration": {
+            "source": "normal-stance-mouth-composite.png",
+            "sourceSize": [
+              1254,
+              1254
+            ],
+            "scale": 0.2449899567,
+            "position": [
+              3.696407625399985,
+              12.19692139709997
+            ],
+            "sourceFootBaseline": 1187,
+            "sourceFootCenterX": 638,
+            "targetFoot": 303,
+            "sourceEyeDistance": 249.8515,
+            "targetEyeDistance": 61.211,
+            "basis": "H actual eye distance and body, not hat-top total height",
+            "method": "uniform scale and position only"
+          },
+          "rule": "Original normal standing redraw; uniform scale and position only. Other original performances unchanged.",
+          "eyeComposite": {
+            "eyeRegions": [
+              [
+                430,
+                435,
+                565,
+                570
+              ],
+              [
+                680,
+                435,
+                815,
+                570
+              ]
+            ],
+            "outsideEyeChangedRGBAPixels": 0,
+            "originalMasterSha256": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+            "closedOriginalSha256": "c5520717b23d336997531fa7433381e65027c6efd386716bdadcc9304370fa06"
+          },
+          "mouthPatch": {
+            "ROI": [
+              540,
+              556,
+              684,
+              614
+            ],
+            "featherSourcePixels": 4,
+            "outsideROIChangedRGBAPixels": 0,
+            "closedOutsideROIChangedRGBAPixels": 0,
+            "noseROI": [
+              585,
+              520,
+              645,
+              556
+            ],
+            "noseChangedRGBAPixels": 0,
+            "sourceSha256": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2",
+            "basis": "Only remove tooth-like central red triangle and white edge; nose, eyes, posture and other artwork remain v23 unchanged."
+          }
+        }
+      },
+      "receive-gift": {
+        "sourceSha256": "a78de686eea848f2917220f5313f3460c859d04f9d081ed9388425528e1d4aba",
+        "sourcePngSha256": "a78de686eea848f2917220f5313f3460c859d04f9d081ed9388425528e1d4aba",
+        "frames": [
+          "3311fbfdd967e3ba55af364b5d37e83a77c78ed6d2a9a4f4256f5b36322d6e55",
+          "7c10d9bc41745d1203d61d6e06a2a63a93562ee0f01506a12025c1af2188b5b4",
+          "5f3406faade9c59618f8d20ecedd1525c9197d2345dc545a4f2de908e10b0070",
+          "7c10d9bc41745d1203d61d6e06a2a63a93562ee0f01506a12025c1af2188b5b4",
+          "6c1467ac44d42cd0164b9d7677014f33f3a2541d475a51f251366ef745c9a2ba",
+          "6cab470440a9adfe693685bfe7fc8d0a4d6c40871743eb8fb02bb0360cfb8ad1",
+          "c8e9389814b2ad69c1bfc8656f9dfde0548b437bbd996d2b756c8414f6533da5",
+          "95ee6ffd15402021d59538c73082f8b441ba63dac6454283736ec46e10fd08d0"
+        ],
+        "durations": [
+          180,
+          260,
+          850,
+          220,
+          400,
+          500,
+          250,
+          300
+        ],
+        "motionSource": "v17-original-performance-disconnected-ground-gift-only",
+        "originalFrames": [
+          "3311fbfdd967e3ba55af364b5d37e83a77c78ed6d2a9a4f4256f5b36322d6e55",
+          "7c10d9bc41745d1203d61d6e06a2a63a93562ee0f01506a12025c1af2188b5b4",
+          "5f3406faade9c59618f8d20ecedd1525c9197d2345dc545a4f2de908e10b0070",
+          "7c10d9bc41745d1203d61d6e06a2a63a93562ee0f01506a12025c1af2188b5b4",
+          "6c1467ac44d42cd0164b9d7677014f33f3a2541d475a51f251366ef745c9a2ba",
+          "6cab470440a9adfe693685bfe7fc8d0a4d6c40871743eb8fb02bb0360cfb8ad1",
+          "c8e9389814b2ad69c1bfc8656f9dfde0548b437bbd996d2b756c8414f6533da5",
+          "98ccaa146b43856063bfc3d5840285e03a8913555c3c3110cef28d0bab131f6a"
+        ],
+        "removedGroundGiftPixels": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "redrawnIdleAnchor": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true
+        ],
+        "sourceArtSha256": {
+          "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+          "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+          "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+          "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+          "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+        },
+        "idleRedraw": {
+          "sourceArtSha256": {
+            "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+            "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+            "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+            "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+            "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+          },
+          "registration": {
+            "source": "normal-stance-mouth-composite.png",
+            "sourceSize": [
+              1254,
+              1254
+            ],
+            "scale": 0.2449899567,
+            "position": [
+              3.696407625399985,
+              12.19692139709997
+            ],
+            "sourceFootBaseline": 1187,
+            "sourceFootCenterX": 638,
+            "targetFoot": 303,
+            "sourceEyeDistance": 249.8515,
+            "targetEyeDistance": 61.211,
+            "basis": "H actual eye distance and body, not hat-top total height",
+            "method": "uniform scale and position only"
+          },
+          "rule": "Original normal standing redraw; uniform scale and position only. Other original performances unchanged.",
+          "eyeComposite": {
+            "eyeRegions": [
+              [
+                430,
+                435,
+                565,
+                570
+              ],
+              [
+                680,
+                435,
+                815,
+                570
+              ]
+            ],
+            "outsideEyeChangedRGBAPixels": 0,
+            "originalMasterSha256": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+            "closedOriginalSha256": "c5520717b23d336997531fa7433381e65027c6efd386716bdadcc9304370fa06"
+          },
+          "mouthPatch": {
+            "ROI": [
+              540,
+              556,
+              684,
+              614
+            ],
+            "featherSourcePixels": 4,
+            "outsideROIChangedRGBAPixels": 0,
+            "closedOutsideROIChangedRGBAPixels": 0,
+            "noseROI": [
+              585,
+              520,
+              645,
+              556
+            ],
+            "noseChangedRGBAPixels": 0,
+            "sourceSha256": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2",
+            "basis": "Only remove tooth-like central red triangle and white edge; nose, eyes, posture and other artwork remain v23 unchanged."
+          }
+        }
+      }
+    },
+    "staticSha256": "9323046e16342419ea0dba60bcee7eb9afc46ae95f687c8e11b75a7246408aa1",
+    "workingTransition": {
+      "sourceSha256": "62b05b6d236158ef83e425df3ed94203c6ea384d3c9ab293e6d55223ee95ce97",
+      "sourcePngSha256": "62b05b6d236158ef83e425df3ed94203c6ea384d3c9ab293e6d55223ee95ce97",
+      "frames": [
+        "95ee6ffd15402021d59538c73082f8b441ba63dac6454283736ec46e10fd08d0",
+        "c8e9389814b2ad69c1bfc8656f9dfde0548b437bbd996d2b756c8414f6533da5",
+        "d3530a9f390c012004aca68b1fc7d641b615e3ff10f79d9968dedcd19b65d144",
+        "6e4e2daea198fc1b09b50317b5df8aaaf4fcb311066e458c9e980a0af124aa84",
+        "f0697351a5aa7cb1243238acc1c1a26bbc70bfa487e493b72d5d9067ad6d15ca"
+      ],
+      "durations": [
+        60,
+        90,
+        120,
+        150,
+        80
+      ],
+      "motionSource": "v17-original-performance-disconnected-ground-gift-only",
+      "originalFrames": [
+        "98ccaa146b43856063bfc3d5840285e03a8913555c3c3110cef28d0bab131f6a",
+        "c8e9389814b2ad69c1bfc8656f9dfde0548b437bbd996d2b756c8414f6533da5",
+        "d3530a9f390c012004aca68b1fc7d641b615e3ff10f79d9968dedcd19b65d144",
+        "6e4e2daea198fc1b09b50317b5df8aaaf4fcb311066e458c9e980a0af124aa84",
+        "f0697351a5aa7cb1243238acc1c1a26bbc70bfa487e493b72d5d9067ad6d15ca"
+      ],
+      "removedGroundGiftPixels": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "redrawnIdleAnchor": [
+        true,
+        false,
+        false,
+        false,
+        false
+      ],
+      "sourceArtSha256": {
+        "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+        "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+        "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+        "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+        "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+      },
+      "idleRedraw": {
+        "sourceArtSha256": {
+          "normal-stance-generated-original.png": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+          "normal-stance-master-320.png": "ecedaac3a366e4bdcf73b7c205333168b5e46cdce4af4caf9ce611496610921c",
+          "normal-stance-closed-320.png": "b7849e09defe23584311f99c3545cee1713fa8233e53fe66e13a3ced686d7b7c",
+          "normal-stance-mouth-composite.png": "5b87bb8657cc7b147048c32456056659d111e657a1312277c928de8d90138e27",
+          "normal-stance-mouth-generated-original.png": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2"
+        },
+        "registration": {
+          "source": "normal-stance-mouth-composite.png",
+          "sourceSize": [
+            1254,
+            1254
+          ],
+          "scale": 0.2449899567,
+          "position": [
+            3.696407625399985,
+            12.19692139709997
+          ],
+          "sourceFootBaseline": 1187,
+          "sourceFootCenterX": 638,
+          "targetFoot": 303,
+          "sourceEyeDistance": 249.8515,
+          "targetEyeDistance": 61.211,
+          "basis": "H actual eye distance and body, not hat-top total height",
+          "method": "uniform scale and position only"
+        },
+        "rule": "Original normal standing redraw; uniform scale and position only. Other original performances unchanged.",
+        "eyeComposite": {
+          "eyeRegions": [
+            [
+              430,
+              435,
+              565,
+              570
+            ],
+            [
+              680,
+              435,
+              815,
+              570
+            ]
+          ],
+          "outsideEyeChangedRGBAPixels": 0,
+          "originalMasterSha256": "61e0a713cdd88f1c7e470c915d360ce59887d1df417ed0f1653534f886655383",
+          "closedOriginalSha256": "c5520717b23d336997531fa7433381e65027c6efd386716bdadcc9304370fa06"
+        },
+        "mouthPatch": {
+          "ROI": [
+            540,
+            556,
+            684,
+            614
+          ],
+          "featherSourcePixels": 4,
+          "outsideROIChangedRGBAPixels": 0,
+          "closedOutsideROIChangedRGBAPixels": 0,
+          "noseROI": [
+            585,
+            520,
+            645,
+            556
+          ],
+          "noseChangedRGBAPixels": 0,
+          "sourceSha256": "721c4e7922c444cb358e86a9d6697881a3b63dc1319ef6cd1611811e5998c3d2",
+          "basis": "Only remove tooth-like central red triangle and white edge; nose, eyes, posture and other artwork remain v23 unchanged."
+        }
+      },
+      "workingEyePatches": [],
+      "workingEyeRepair": {
+        "rule": "Use the original RIGHT eye from working frame 0, never mirror the left; match the current left-eye openness and head position. Only frames 1/2 right-eye regions change.",
+        "frames": [
+          {
+            "frame": 1,
+            "file": "working-patched-1.png",
+            "originalRGBA": "5de853a4c85b399b6c5fabbae90a9da4d5a1df4dbd39a3d645ff9769e9058072",
+            "patchedRGBA": "796a662ed54440319da9a02d50a3aad237a27a35f9402a68782dff956e4855fa",
+            "sourceRightEyeFrame": 0,
+            "sourceRightEyeCenter": [
+              180.7703488372093,
+              171.00872093023256
+            ],
+            "targetRightEyeCenter": [
+              177.05548884958174,
+              171.27049530475912
+            ],
+            "leftEyeROI": [
+              99,
+              157,
+              127,
+              183
+            ],
+            "rightEyeROI": [
+              163,
+              160,
+              192,
+              185
+            ],
+            "scale": 0.9985785351734189,
+            "translation": [
+              -3.4579012950666765,
+              0.5048572563675293
+            ],
+            "roi": [
+              155,
+              151,
+              201,
+              197
+            ],
+            "outsideEyeChangedRGBAPixels": 0,
+            "originalOutsideEyeRGBA": "2ae0592d40bfb99db60f98400a9145c421a803b4d2ccf7e2dbf2d08922599d86"
+          },
+          {
+            "frame": 2,
+            "file": "working-patched-2.png",
+            "originalRGBA": "a3425c9cd09bfaa2d7285798748453abc489b4ce754d40bffeb5c8839512502c",
+            "patchedRGBA": "3649f66132715ee62102bc4aacf83943dc806716ec0cd34ff1638261d8d8e684",
+            "sourceRightEyeFrame": 0,
+            "sourceRightEyeCenter": [
+              180.7703488372093,
+              171.00872093023256
+            ],
+            "targetRightEyeCenter": [
+              174.53618447842797,
+              178.9922586921331
+            ],
+            "leftEyeROI": [
+              101,
+              167,
+              129,
+              190
+            ],
+            "rightEyeROI": [
+              161,
+              168,
+              188,
+              192
+            ],
+            "scale": 0.9216462543632553,
+            "translation": [
+              7.929869572674988,
+              21.382711583333048
+            ],
+            "roi": [
+              155,
+              151,
+              201,
+              197
+            ],
+            "outsideEyeChangedRGBAPixels": 0,
+            "originalOutsideEyeRGBA": "6b1a52d6babe0f9d1461b66f5d955fb0e0bb44b6ef13bae9674ae6a80c95f978"
+          }
+        ]
+      }
+    }
+  },
+  "spring-festival": {
+    "actions": {
+      "idle": {
+        "sourceSha256": "b262046c6b738685bfe8f64133373ab0ff2d016f0fe25a474c3a0f995eeaef0e",
+        "sourcePngSha256": "b262046c6b738685bfe8f64133373ab0ff2d016f0fe25a474c3a0f995eeaef0e",
+        "durations": [
+          2600,
+          120,
+          500
+        ],
+        "frames": [
+          "8018f146973f87979cad3d19d87f355f78fb409ea4c5f7d5789f6bc0ef07582d",
+          "15d08f46f0d587469950c98c899c98087d4b38560c2d2eb886627a0b73abfb1a",
+          "8018f146973f87979cad3d19d87f355f78fb409ea4c5f7d5789f6bc0ef07582d"
+        ]
+      },
+      "walk": {
+        "sourceSha256": "b23efb8c1f07312177584a8d0f1b675d789f5debe1594db67c28d3a268046563",
+        "sourcePngSha256": "b23efb8c1f07312177584a8d0f1b675d789f5debe1594db67c28d3a268046563",
+        "durations": [
+          240,
+          240,
+          240,
+          240
+        ],
+        "frames": [
+          "bb1cc375df55226bd9eeacc5aa425022fe4ec8a5e636ab56f77d49fbdab420d7",
+          "6ed26844de68c08e06c9af7f3279e835a0ecc45e3377250cbc5d8666d692fcd7",
+          "c59c51cfdb423d33d12cef35f0bdea7d3fce7f07a22fc134781b17c402b13e45",
+          "bfdfd93152cadb92815c4c74762fb4254cac43f3bc9f487de0d1790af75f5e77"
+        ]
+      },
+      "greet": {
+        "sourceSha256": "f89071fcfd898cfa71c06c9ab3b87803f133d18fe3f2ed611bdc8dd3168718d2",
+        "sourcePngSha256": "f89071fcfd898cfa71c06c9ab3b87803f133d18fe3f2ed611bdc8dd3168718d2",
+        "durations": [
+          300,
+          350,
+          420,
+          800,
+          450,
+          450
+        ],
+        "frames": [
+          "8018f146973f87979cad3d19d87f355f78fb409ea4c5f7d5789f6bc0ef07582d",
+          "8ad28718219e7b23632ee09750005913ce401ed8e7bb4cf4f483c2a51ad8b7a7",
+          "873666fe5a1fa8fae521af8f576b2f343c57dedfa55388bee9f096cd00631381",
+          "8c6c1d384f8a64131fb5e85e04fa970b5b9eae3ca754cfb3bcedca055245d53b",
+          "b53962991f6f1a6c7cb36210f593615e38d29d7bf4db90fd1559220188f5578b",
+          "8018f146973f87979cad3d19d87f355f78fb409ea4c5f7d5789f6bc0ef07582d"
+        ]
+      },
+      "joy": {
+        "sourceSha256": "cbb08823b482cc3746a39ee54f892b5431992c65319cfd6ffd8db934b088a7ea",
+        "sourcePngSha256": "cbb08823b482cc3746a39ee54f892b5431992c65319cfd6ffd8db934b088a7ea",
+        "durations": [
+          220,
+          250,
+          550,
+          250,
+          230,
+          300
+        ],
+        "frames": [
+          "8018f146973f87979cad3d19d87f355f78fb409ea4c5f7d5789f6bc0ef07582d",
+          "33400beae961a0b0257da86ff2af48e573101e96e54d79a7c7d374f331fe62d1",
+          "c78484e9e468e2850e2eeee271a9f8be21788644b910127fdd99839ebea62bfd",
+          "cb700dd4b62a96eb2738613715c14631f84b27c8c3b136e6a55519b0197b7903",
+          "24aafa71729e5c169a628c559854390fff24fbfc6f9ac000da50d9721252a803",
+          "8018f146973f87979cad3d19d87f355f78fb409ea4c5f7d5789f6bc0ef07582d"
+        ]
+      },
+      "sleep": {
+        "sourceSha256": "96442872dd1eb173f44ab4f0fdce3fb4daf0201772d62c0b3676b98b05e8742a",
+        "sourcePngSha256": "96442872dd1eb173f44ab4f0fdce3fb4daf0201772d62c0b3676b98b05e8742a",
+        "durations": [
+          650,
+          650,
+          650,
+          650,
+          500,
+          650,
+          350
+        ],
+        "frames": [
+          "b77d75f083d6e4571694acf64af30eb9320c511d8c6454fb9bcbdae3e2250c40",
+          "45cc7dcce3dd3cd0231c19415db76209c4a6fe0235ab0f17286e6fd00028bd07",
+          "e5a2a441316ff8a5a39efc138600a5ae78ef24549e20c8c374e5232bd61e0094",
+          "8a45baeac4c3e5fd5cbb0cb902736c33c62b334d3a397f9b3b4c3f46b046330c",
+          "84b287c09ed9fe30789e9cdd74968c060acf9d402d01cf7f50a00f90c4de04e7",
+          "e425d76ff56f6ecfefd4c4740594194dc6bca893c934ee985a359c80cb2b0657",
+          "b77d75f083d6e4571694acf64af30eb9320c511d8c6454fb9bcbdae3e2250c40"
+        ]
+      },
+      "fortune": {
+        "sourceSha256": "4b4401b2965bfe46eda05ad9550ebd9965c4059f4889762e6277b795266bb164",
+        "sourcePngSha256": "4b4401b2965bfe46eda05ad9550ebd9965c4059f4889762e6277b795266bb164",
+        "durations": [
+          250,
+          350,
+          650,
+          500,
+          350,
+          300
+        ],
+        "frames": [
+          "8018f146973f87979cad3d19d87f355f78fb409ea4c5f7d5789f6bc0ef07582d",
+          "d2563882298ebe5893ac516d4cee355d342a087b7288588197a307c585c108c4",
+          "4b56e3efcebedbbcfe7723a5d016136f9203271ea146a53249556a94f7e36856",
+          "217b818d3fe8a3a7979042490e61c4406979307fb3e3f6ca41200b5dbf80afdc",
+          "520b95f2095ec2987508da78e0e9588de89d379eff90c014c17ece7e40f39275",
+          "8018f146973f87979cad3d19d87f355f78fb409ea4c5f7d5789f6bc0ef07582d"
+        ]
+      },
+      "firecrackers": {
+        "sourceSha256": "6ce05ee2b2ac89d36e054b92fa09696163e464bd055ef599d02954dc8abd540d",
+        "sourcePngSha256": "6ce05ee2b2ac89d36e054b92fa09696163e464bd055ef599d02954dc8abd540d",
+        "durations": [
+          250,
+          450,
+          450,
+          350,
+          500,
+          300
+        ],
+        "frames": [
+          "8018f146973f87979cad3d19d87f355f78fb409ea4c5f7d5789f6bc0ef07582d",
+          "007afc88adffe7c3026a8b15e87ef9d05ddbf0654998140e68b730fdae8d14e6",
+          "1a05acd70590709a7d0194a9241ab9be2a51e3d6267bf43cdeee31c8faf51b68",
+          "90836742fdc5a7d94c1662e2a8858e89300d0672b71e6c1fedaefaba6d25b3e3",
+          "560fe05fb25e7207af9678dcf695adf7ebb765a4e63e72e953c826885888a2c8",
+          "8018f146973f87979cad3d19d87f355f78fb409ea4c5f7d5789f6bc0ef07582d"
+        ]
+      },
+      "dumplings": {
+        "sourceSha256": "e080782536d9131578cdd270c57522c5d6f0ea0185a9861368363cfb3eb7f010",
+        "sourcePngSha256": "e080782536d9131578cdd270c57522c5d6f0ea0185a9861368363cfb3eb7f010",
+        "durations": [
+          250,
+          500,
+          500,
+          650,
+          400,
+          300
+        ],
+        "frames": [
+          "8018f146973f87979cad3d19d87f355f78fb409ea4c5f7d5789f6bc0ef07582d",
+          "6efad0d072be232eaf841cb6ba4a43753959cdc18ee73c2737865addd415a975",
+          "f9f6960dfe06a4d7645ecbfa3bffbda7f2c4280b9adc014bce38df8e12d98808",
+          "fc15021d43b978610abf1450815d84c8062ffb20da9fbad2c07bdb2797bba7b2",
+          "ecee3cab8ce2b58ff5f6a0f0dcbcc2ffd0bfa8d7ba47431a31aef75967e6b6fc",
+          "8018f146973f87979cad3d19d87f355f78fb409ea4c5f7d5789f6bc0ef07582d"
+        ]
+      },
+      "working": {
+        "sourceSha256": "8aba7719f97ecae2a98f208a1d25b62d7dec09b5bfb11a198944f0970a430002",
+        "sourcePngSha256": "8aba7719f97ecae2a98f208a1d25b62d7dec09b5bfb11a198944f0970a430002",
+        "durations": [
+          450,
+          400,
+          450,
+          450,
+          120,
+          550,
+          300
+        ],
+        "frames": [
+          "42ee4b050f4ff16c2ffa64cab3f91ea0cef99b9c27481e84532a9d908641bc51",
+          "140ff54cd41ff320e8b527d322bed6f9c0ada4262f4f02e25cb17316d4778fd5",
+          "4f2834132a90d5ed6b4c24e9b79e79a36864a29c25957a3b69699a3618495cde",
+          "05bfdac59a059fe6fc23a9c008007dba8b327d12e165296d5e01e5114052f98f",
+          "90f133d1442b974856871556e859538884753e0963b6171e5c03a8e883cb4b26",
+          "fa74d436bd7d693882590ddbc890ff358a99d12be37fc4d86602b8e0d2448c8f",
+          "42ee4b050f4ff16c2ffa64cab3f91ea0cef99b9c27481e84532a9d908641bc51"
+        ]
+      },
+      "complete": {
+        "sourceSha256": "f90aef117b4a80aaaac634ff9b58a6023b290341f5bbb38018dddf6893ef0028",
+        "sourcePngSha256": "f90aef117b4a80aaaac634ff9b58a6023b290341f5bbb38018dddf6893ef0028",
+        "durations": [
+          150,
+          80,
+          220,
+          250,
+          300,
+          250,
+          350,
+          260,
+          140,
+          220
+        ],
+        "frames": [
+          "42ee4b050f4ff16c2ffa64cab3f91ea0cef99b9c27481e84532a9d908641bc51",
+          "2125bc6c46b9054ee2298308eb9c8a283454452c8412de443793b81d48de4178",
+          "cd94652b57304230219c44b236c9b8d44c6a5c3e28d8e695f1cd480b7ac47788",
+          "5c68947c3f0fac6c94280ca7d29a8c49f5a8ac2f6be89e09b355cedb9967ef6d",
+          "ad9a505d77afe17b33b8138832e69db76473d5ff4689eec3ad4052d7c0193a4f",
+          "1a19f8a71bfcc10fab7c0413412220131b6080bfe2bbf62ca2a9053f6b952dd6",
+          "abb674cf0dd9044dbab53ccfe357472217bee8f057075bb84b4ea38fe19c3a2c",
+          "309adb5f26d8ba2ac81744db03442ac30b64837921096d96e834c4a68ab6058b",
+          "1c02cbb9178079e38e443f9b899033c1f9cf1198328eaeb3798181a3651e2b78",
+          "8018f146973f87979cad3d19d87f355f78fb409ea4c5f7d5789f6bc0ef07582d"
+        ]
+      }
+    },
+    "staticSha256": "a00dcdc0330e9a82203f6209efe7ed022774eb93df95591d741ec5bd13b01ae2",
+    "idleAlternate": {
+      "sourceSha256": "f89f4b1af7097295943fe53e4d494e47eb4b29ada6716a04f05e25e720e3394e",
+      "sourcePngSha256": "f89f4b1af7097295943fe53e4d494e47eb4b29ada6716a04f05e25e720e3394e",
+      "durations": [
+        2600,
+        120,
+        500
+      ],
+      "frames": [
+        "42dbdbc4768439b3c84ed1372b5a1e8cf4a5e535daaad37a8722a54367c51f38",
+        "c104de64781d32fd92b4deb9402632357d2283dbe8c296aca2b2d0113a58d900",
+        "42dbdbc4768439b3c84ed1372b5a1e8cf4a5e535daaad37a8722a54367c51f38"
+      ]
+    },
+    "idleTransition": {
+      "sourceSha256": "cfe3518abad82e289a58acdf22d42ebefc8f2a6af4c13953ffc530aff2c2177f",
+      "sourcePngSha256": "cfe3518abad82e289a58acdf22d42ebefc8f2a6af4c13953ffc530aff2c2177f",
+      "durations": [
+        80,
+        80,
+        80,
+        80,
+        80
+      ],
+      "frames": [
+        "8018f146973f87979cad3d19d87f355f78fb409ea4c5f7d5789f6bc0ef07582d",
+        "2d6555127a69ab925757b009cd9717a149dec0bd1f1cb0425b5b45fea5ee5d6a",
+        "008e02fc1b172c36428d3886a9b8bb3196e9bdbd7a874939e76b80045dd94264",
+        "111a0781d316447a1f1f265e288375c7c27928f9cb53621f29c2b969e25815d8",
+        "42dbdbc4768439b3c84ed1372b5a1e8cf4a5e535daaad37a8722a54367c51f38"
+      ]
+    },
+    "workingTransition": {
+      "sourceSha256": "a122b07228abe800c3c13eb8db21a3544c48f6ae688a0ffb3f3c5438a587aa8e",
+      "sourcePngSha256": "a122b07228abe800c3c13eb8db21a3544c48f6ae688a0ffb3f3c5438a587aa8e",
+      "durations": [
+        100,
+        100,
+        100,
+        100,
+        100
+      ],
+      "frames": [
+        "8018f146973f87979cad3d19d87f355f78fb409ea4c5f7d5789f6bc0ef07582d",
+        "f3441b782c1a5ff35d68cb07d430eec1b48e859188c2e9e2b790adde9bc8a9e5",
+        "b5a8935cf4abf445c3401c32070759a239ddac6d111b47d205404602960c8f78",
+        "2125bc6c46b9054ee2298308eb9c8a283454452c8412de443793b81d48de4178",
+        "42ee4b050f4ff16c2ffa64cab3f91ea0cef99b9c27481e84532a9d908641bc51"
+      ]
+    }
+  }
+}

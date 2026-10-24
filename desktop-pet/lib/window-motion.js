@@ -61,7 +61,9 @@ function createWindowMotion({ getWindow, getWorkArea, getDisplayId = () => null,
       const workArea = { ...getWorkArea(bounds) };
       const startedAt = now();
       if (!Number.isFinite(startedAt) || !positionForMotion(bounds, workArea, { x: 0, y: 0 })) return false;
-      const state = { window, bounds, workArea, displayId: getDisplayId(bounds), startedAt,
+      const durationMs = Number.isInteger(request.durationMs) && request.durationMs >= 10 && request.durationMs <= 60000
+        ? request.durationMs : getMotion(request.action).durationMs;
+      const state = { window, bounds, workArea, durationMs, displayId: getDisplayId(bounds), startedAt,
         lastFrameAt: startedAt, visualElapsed: 0, side: request.side === 'left' ? 'left' : 'right',
         reducedMotion: request.reducedMotion === true && Boolean(CompanionMotion.getMotion(request.action)),
         token: request.token, action: request.action, timer: null, offset: { x: 0, y: 0 } };
@@ -83,7 +85,7 @@ function createWindowMotion({ getWindow, getWorkArea, getDisplayId = () => null,
           const frame = state.reducedMotion
             ? { ...CompanionMotion.neutralFrame(), done: elapsed >= getMotion(state.action).durationMs,
               durationMs: getMotion(state.action).durationMs }
-            : sampleMotion(state.action, elapsed, state.side);
+            : sampleMotion(state.action, elapsed * getMotion(state.action).durationMs / state.durationMs, state.side);
           if (frame.done) { stop(); return; }
           const position = positionForMotion(state.bounds, state.workArea, frame.window);
           state.offset = { ...frame.window };

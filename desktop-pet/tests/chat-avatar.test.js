@@ -9,27 +9,72 @@ function fixture() {
   class Node {
     constructor(name) { this.name = name; this.attributes = {}; this.children = []; this.dataset = {}; }
     setAttribute(name, value) { this.attributes[name] = String(value); }
-    appendChild(child) { this.children.push(child); return child; }
+    appendChild(child) { child.parent = this; this.children.push(child); return child; }
     append(...children) { children.forEach(child => this.appendChild(child)); }
     insertBefore(child) { this.children.unshift(child); }
-    replaceChildren(...children) { this.children = children; }
+    replaceChildren(...children) { this.children.forEach(child => { child.parent = null; }); this.children = []; this.append(...children); }
+    remove() { if (this.parent) this.parent.children = this.parent.children.filter(child => child !== this); this.parent = null; }
     get firstChild() { return this.children[0] || null; }
     find(name) { return this.name === name ? this : this.children.map(child => child.find(name)).find(Boolean); }
     findAll(name) { return [...(this.name === name ? [this] : []), ...this.children.flatMap(child => child.findAll(name))]; }
   }
   const document = { createElementNS: (_ns, name) => new Node(name) };
-  const window = {};
+  const sheep = [], timers = new Set();
+  const window = { SheepSkin: { create(target, options) {
+    const canvas = new Node('canvas'); target.appendChild(canvas);
+    const timer = options.sheepTheme === 'auto' ? {} : null;
+    if (timer) timers.add(timer);
+    const instance = { options, canvas, destroyed: false,
+      destroy() { this.destroyed = true; timers.delete(timer); canvas.remove(); } };
+    sheep.push(instance); return instance;
+  } } };
   const context = vm.createContext({ document, window });
   for (const file of ['emotion-ball/js/rings.js', 'emotion-ball/js/custom-shapes.js',
     'desktop-pet/lib/customization.js', 'desktop-pet/lib/chat-avatar.js']) {
     const absolute = path.join(__dirname, '../..', file);
     vm.runInContext(fs.readFileSync(absolute, 'utf8'), context, { filename: file });
   }
-  return { target: new Node('span'), render: window.PetChatAvatar.render };
+  return { target: new Node('span'), render: window.PetChatAvatar.render, create: window.PetChatAvatar.create, sheep, timers };
 }
 
 const eyes = portrait => [...portrait.findAll('rect'), ...portrait.findAll('path')]
   .filter(node => node.attributes.class === 'avatar-eye');
+
+test('静态小羊传递主题并复用同一实例，不重复创建自动日历定时器', () => {
+  const f = fixture(), appearance = { shape: 'new-year-sheep', sheepTheme: 'auto', auroraTransparency: 23 };
+  f.render(f.target, appearance);
+  const first = f.sheep[0];
+  assert.equal(first.options.sheepTheme, 'auto');
+  assert.equal(first.options.auroraTransparency, 23);
+  assert.equal(first.options.autostart, false);
+  for (let index = 0; index < 5; index++) f.render(f.target, { ...appearance });
+  assert.equal(f.sheep.length, 1);
+  assert.equal(f.timers.size, 1);
+  assert.equal(f.target.firstChild, first.canvas);
+  f.render(f.target, { ...appearance, sheepTheme: 'christmas' });
+  assert.equal(first.destroyed, true);
+  assert.equal(f.timers.size, 0);
+  assert.equal(f.sheep[1].options.sheepTheme, 'christmas');
+  f.render(f.target, { shape: 'blob' });
+  assert.equal(f.sheep[1].destroyed, true);
+  assert.equal(f.target.firstChild.name, 'svg');
+});
+
+test('静态小羊子树失效会释放旧实例，切换为动态控制器也清理自动计时器', () => {
+  const f = fixture(), appearance = { shape: 'new-year-sheep', sheepTheme: 'auto' };
+  f.render(f.target, appearance);
+  const first = f.sheep[0];
+  f.target.replaceChildren();
+  f.render(f.target, appearance);
+  assert.equal(first.destroyed, true);
+  assert.equal(f.sheep.length, 2);
+  assert.equal(f.timers.size, 1, '替换后只有当前实例的计时器');
+  const controller = f.create(f.target);
+  assert.equal(f.sheep[1].destroyed, true);
+  assert.equal(f.timers.size, 0);
+  controller.destroy(); controller.destroy();
+  assert.equal(f.target.children.length, 0);
+});
 
 test('相同外观的头像子树被其他渲染器替换后重新绘制，不命中失效缓存', () => {
   const { target, render } = fixture();

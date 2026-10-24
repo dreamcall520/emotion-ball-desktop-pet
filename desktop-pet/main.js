@@ -34,9 +34,12 @@ const { createActivityMonitor, createPowerGuard } = require('./lib/activity-moni
 const { DialogueDirector } = require('./lib/dialogue');
 const { createBubbleWindow } = require('./lib/bubble-window');
 const { getMotion } = require('./lib/interaction-motion');
+const SheepSkin = require('./lib/sheep-skin');
+const SheepTheme = require('./lib/sheep-theme');
 const CompanionMotion = require('./lib/companion-motion');
 const PetFacing = require('./lib/pet-facing');
 const { createThoughtWindow } = require('./lib/thought-window');
+const { createSheepOfferingWindow, normalizeState: normalizeSheepOfferingState } = require('./lib/sheep-offering-window');
 const { createWindowMotion } = require('./lib/window-motion');
 const { createCodexCompanion } = require('./lib/codex-companion');
 const { buildCodexMenu, buildCodexResultMenu, resolveCodexAction } = require('./lib/codex-menu');
@@ -91,6 +94,8 @@ let activityMonitor = null;
 let dialogue = null;
 let bubble = null;
 let thoughts = null;
+let sheepOfferingWindow = null;
+let sheepQuotaInk = null;
 let bubbleVisibilityBinding = null;
 let quotaLabel = null;
 let quotaGuard = null;
@@ -255,7 +260,7 @@ function initializeShortcuts() {
       // Apply the shared visibility rule before edge expansion can re-enter sync.
       syncQuotaLabel(codexCompanion?.getSnapshot());
       if (value) {
-        if (shortcutWindow?.getState().view === 'settings') { dialogue?.dismiss(); hideBubble(); }
+        dialogue?.dismiss(); hideBubble();
         dismissCodexPresentation();
       }
       if (value && edgeTuck?.getPresentation().mode === 'tucked' && petWindow && !petWindow.isDestroyed()) {
@@ -995,11 +1000,11 @@ function bindBubbleVisibilityEvents() {
 }
 
 function shortcutDialogueSuppressed() {
-  return shortcutWindow?.isPresenting() && shortcutWindow.getState().view === 'settings';
+  return Boolean(shortcutWindow?.isPresenting());
 }
 
-function showBubble(payload, { ordinary = false } = {}) {
-  if (!payload || pomodoroQuiet || (shortcutWindow?.isPresenting() && (!ordinary || shortcutDialogueSuppressed())) ||
+function showBubble(payload) {
+  if (!payload || pomodoroQuiet || shortcutDialogueSuppressed() ||
     presentationSuppressed() || chatWindow?.isVisible()) return false;
   const shown = safelyInvokeWindow('气泡显示', () => bubble?.show(payload));
   if (shown) bindBubbleVisibilityEvents();
@@ -1587,8 +1592,19 @@ function makeWindowVisible(notifyRenderer = true) {
 function sendCommand(command) {
   if (!petWindow || petWindow.isDestroyed()) return;
   if (typeof command !== 'string') {
-    if (command?.command !== 'again' || !getMotion(command.motion)) return;
-    command = { command: 'again', motion: command.motion };
+    if (command?.command === 'sheep-offer') {
+      const appearance = effectiveCustomization(settings.customization).appearance;
+      const theme = SheepTheme.resolveTheme(appearance.sheepTheme, new Date());
+      if (appearance.shape !== 'new-year-sheep' || !((theme === 'halloween' && command.kind === 'candy') || (theme === 'christmas' && command.kind === 'gift'))) return;
+      command = { command: 'sheep-offer', kind: command.kind };
+    } else if (command?.command === 'sheep-action') {
+      const appearance = effectiveCustomization(settings.customization).appearance;
+      if (appearance.shape !== 'new-year-sheep' || !SheepSkin.supportsAction(command.action, SheepTheme.resolveTheme(appearance.sheepTheme, new Date()))) return;
+      command = { command: 'sheep-action', action: command.action };
+    } else {
+      if (command?.command !== 'again' || !getMotion(command.motion)) return;
+      command = { command: 'again', motion: command.motion };
+    }
   }
   if (command === 'sleep' || command === 'rest') {
     dragState = null;
@@ -1624,11 +1640,13 @@ function setCompanionSetting(name, enabled) {
   refreshTrayMenu();
 }
 
-function showDialogue(event) {
+function showDialogue(event, sheepAction) {
   if (pomodoroQuiet || shortcutDialogueSuppressed() || screenLocked || chatWindow?.isVisible() || presentationSuppressed() || !petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return null;
-  const payload = dialogue.offer(event, performance.now());
+  const appearance = effectiveCustomization(settings.customization).appearance;
+  const payload = dialogue.offer(event, performance.now(), { shape: appearance.shape,
+    sheepTheme: SheepTheme.resolveTheme(appearance.sheepTheme, new Date()), sheepAction });
   if (payload) dismissCodexPresentation();
-  if (payload) showBubble(payload, { ordinary: true });
+  if (payload) showBubble(payload);
   else if (!dialogue.hasBubble(performance.now())) hideBubble();
   return payload;
 }
@@ -1677,6 +1695,7 @@ function setAlwaysOnTop(enabled) {
   safelyInvokeWindow('边缘提示置顶', () => edgeNoticeWindow?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('聊天面板置顶', () => chatWindow?.setAlwaysOnTop(settings.alwaysOnTop));
   thoughts?.setAlwaysOnTop(settings.alwaysOnTop);
+  sheepOfferingWindow?.setAlwaysOnTop(settings.alwaysOnTop);
   persistSettings();
   refreshTrayMenu();
 }
@@ -1833,6 +1852,20 @@ function menuTemplate() {
     { type: 'separator' },
     { label: '球球与互动', submenu: [
       { label: '随机表情', click: () => sendCommand('random') },
+      ...(settings.customization.appearance.shape === 'new-year-sheep' ? [{ label: '咩咩互动', submenu: [
+        ['greet', SheepTheme.resolveTheme(effectiveCustomization(settings.customization).appearance.sheepTheme, new Date()) === 'spring-festival' ? '拱手拜年' : '咩咩问好', 'hello'], ['joy', '开心回应', 'play'],
+        ['walk', '迈迈小蹄', 'play'], ['sleep', '暖暖打盹', 'sleep'],
+        ...({
+          none: [['ear', '揉揉耳朵', 'play'], ['bell', '抱住小铃铛', 'play'], ['stretch', '慢半拍伸懒腰', 'play']],
+          halloween: [['candy', '送咩咩一颗糖', 'offering'], ['magic', '一点小魔法', 'play'], ['pumpkin', '抱抱南瓜', 'play']],
+          christmas: [['receive-gift', '送咩咩一份礼物', 'offering'], ['gift', '咩咩递一份礼物', 'play'], ['scarf', '裹好小围巾', 'play'], ['snow', '接住小雪花', 'play']],
+          'spring-festival': [['fortune', '送福到家', 'play'], ['firecrackers', '放鞭炮', 'play'], ['dumplings', '吃饺子', 'play']]
+        }[SheepTheme.resolveTheme(effectiveCustomization(settings.customization).appearance.sheepTheme, new Date())])
+      ].map(([action, label, scene]) => ({ label, click: () => {
+        if (scene === 'offering') sendCommand({ command: 'sheep-offer', kind: action === 'candy' ? 'candy' : 'gift' });
+        else if (action === 'sleep') sendCommand('sleep');
+        else { sendCommand({ command: 'sheep-action', action }); showDialogue(scene, action); }
+      } })) }] : []),
       { type: 'separator' },
       { label: '立即睡眠', click: () => sendCommand('sleep') },
       { label: '立即唤醒', click: () => sendCommand('wake') },
@@ -2575,17 +2608,19 @@ function createPetWindow() {
     finishSmokeTest();
   });
   createdPetWindow.webContents.on('did-start-loading', () => {
-    if (isCurrentPetWindow()) invalidateCodexPage();
+    if (isCurrentPetWindow()) { invalidateCodexPage(); sheepOfferingWindow?.hide(); }
   });
   createdPetWindow.on('move', () => {
     if (!isCurrentPetWindow()) return;
     notesCompanion?.repositionReminder?.();
+    sheepOfferingWindow?.reposition();
     shortcutWindow?.sync();
     if (chatWindow?.isFollowingChat?.()) return;
     thoughts?.hide(); repositionBubble(); edgeNoticeWindow?.reposition();
   });
   createdPetWindow.on('resize', () => {
     if (!isCurrentPetWindow()) return;
+    sheepOfferingWindow?.update({eligible:false});
     dragState = null;
     shortcutWindow?.interrupt();
     stopMotion();
@@ -2614,6 +2649,7 @@ function createPetWindow() {
     pomodoroWindows?.sync();
     if (!isCurrentPetWindow()) return;
     safelyInvokeWindow('隐藏时额度标签隐藏', () => quotaLabel?.hide());
+    sheepOfferingWindow?.hide();
     safelyInvokeWindow('隐藏时守护战隐藏', () => quotaGuard?.close());
     safelyInvokeWindow('隐藏时 Codex 详情隐藏', () => codexDetails?.close());
     safelyInvokeWindow('隐藏时 API 卡片隐藏', () => apiUsageLabel?.hide());
@@ -2648,6 +2684,7 @@ function createPetWindow() {
     safelyInvokeWindow('关闭时 Codex 详情销毁', () => codexDetails?.destroy());
     safelyInvokeWindow('关闭时 API 卡片销毁', () => apiUsageLabel?.destroy());
     thoughts?.destroy();
+    sheepOfferingWindow?.destroy();
     if (!isCurrentPetWindow()) return;
     safelyInvokeWindow('关闭时对白清理', () => dialogue?.dismiss());
     if (isCurrentPetWindow()) petWindow = null;
@@ -2806,6 +2843,17 @@ function registerIpc() {
     return chat.refreshModels();
   });
   ipcMain.on('pet:chat-close', event => { if (fromChatWindow(event)) chatWindow.hide(); });
+  ipcMain.on('pet:offering-state', (event, state) => {
+    if (!fromPetWindow(event)) return;
+    sheepOfferingWindow?.update(state);
+    const next = normalizeSheepOfferingState(state);
+    if (next?.theme !== 'christmas') sheepQuotaInk = null;
+    else if (next.ink && !next.transient && state.settled === true) {
+      sheepQuotaInk = { ...next, quotaStyle: quotaDisplayConfig().style };
+      quotaLabel?.reposition();
+    }
+  });
+  ipcMain.on('pet:offering-input', (event, input) => { sheepOfferingWindow?.handle(event,input); });
   ipcMain.on('pet:thought', (event, request) => {
     if (!fromPetWindow(event) || typeof request?.visible !== 'boolean') return;
     if (!request.visible) { thoughts?.hide(); return; }
@@ -2816,7 +2864,12 @@ function registerIpc() {
   });
   ipcMain.on('pet:say', (event, scene) => {
     if (scene === 'thought' && !codexCompanion?.getSnapshot().tasks.items.some(task => task.state === 'active')) return;
-    if (fromPetWindow(event)) showDialogue(scene);
+    if (!fromPetWindow(event)) return;
+    if (scene?.event === 'play' && scene.sheepAction !== undefined) {
+      const appearance = effectiveCustomization(settings.customization).appearance;
+      if (appearance.shape !== 'new-year-sheep' || !SheepSkin.supportsAction(scene.sheepAction, SheepTheme.resolveTheme(appearance.sheepTheme, new Date()))) return;
+      showDialogue('play', scene.sheepAction);
+    } else showDialogue(scene);
   });
 
   ipcMain.on('pet:bubble-reply', (event, payload) => {
@@ -2938,7 +2991,37 @@ function registerIpc() {
     thoughts?.hide();
     hostMotion = { owner: 'codex', token: request.token, action: request.action, anchor: petWindow.getBounds() };
     const bounds = petWindow.getBounds();
-    if (!windowMotion.start({ token: request.token, action: request.action,
+    const appearance = effectiveCustomization(settings.customization).appearance;
+    const theme = SheepTheme.resolveTheme(appearance.sheepTheme, new Date());
+    const sheepAction = appearance.shape === 'new-year-sheep' ? SheepSkin.resolveAction(request.action, theme, 'codex') : null;
+    const sheepTheme = sheepAction && require('./assets/sheep/manifest.json').themes[theme];
+    const clip = sheepTheme?.actions[sheepAction];
+    const baseDuration = clip?.durations.reduce((sum, ms) => sum + ms, 0);
+    const legalDurations = [baseDuration];
+    const reversePrefixes = bridge => {
+      let sum = 0;
+      return (bridge?.durations || []).map(ms => (sum += ms)).slice(1);
+    };
+    let leadingDurations;
+    const targetWorking = sheepAction === 'working' || Boolean(clip?.startsAtWorking);
+    if (targetWorking) {
+      let sum = 0;
+      const workHolds = sheepTheme?.workingTransition?.durations || [];
+      leadingDurations = [...workHolds].reverse().map(ms => (sum += ms)).slice(1);
+      if (workHolds.length) {
+        const fullWork = workHolds.reduce((total, ms) => total + ms, 0);
+        leadingDurations.push(...reversePrefixes(sheepTheme.idleTransition).map(ms => ms + fullWork));
+        leadingDurations.push(...reversePrefixes(sheepTheme.sleepTransition).map(ms => ms + fullWork));
+      }
+    } else {
+      leadingDurations = [...reversePrefixes(sheepTheme?.idleTransition), ...reversePrefixes(sheepTheme?.workingTransition), ...reversePrefixes(sheepTheme?.sleepTransition)];
+    }
+    // Only finite A/B/work/sleep bridge paths are legal; retain every bridge endpoint hold.
+    const skipFirstHold = (targetWorking ? clip?.startsAtWorking : clip?.startsAtIdle) ? clip.durations[0] : 0;
+    legalDurations.push(...leadingDurations.map(ms => baseDuration + ms - skipFirstHold));
+    const durationMs = Number.isInteger(request.durationMs) && legalDurations.includes(request.durationMs)
+      ? request.durationMs : baseDuration;
+    if (!windowMotion.start({ token: request.token, action: request.action, durationMs,
       side: PetFacing.resolve(bounds, screen.getDisplayMatching(bounds).workArea) })) {
       dismissCodexPresentation();
       return;
@@ -3009,7 +3092,9 @@ async function bootstrap() {
   settings = loadSettings(settingsFile);
   // The existing saved appearance wins over per-page legacy preferences.
   if (nativeTheme) nativeTheme.themeSource = settings.codexQuotaAppearance;
-  settings.customization = { ...settings.customization, appearance: settings.startupAppearance };
+  // Theme choice survives restarts independently of the startup shape snapshot.
+  settings.customization = { ...settings.customization, appearance: {
+    ...settings.startupAppearance, sheepTheme: settings.customization.appearance.sheepTheme } };
   pomodoro = createPomodoro({ filePath: path.join(app.getPath('userData'), 'pomodoro.json'), now: () => pomodoroNow(),
     canEncourage: () => !pomodoroSuppressed() &&
       Boolean(petWindow && !petWindow.isDestroyed() && petWindow.isVisible() && !dragState && !hostMotion),
@@ -3079,6 +3164,16 @@ async function bootstrap() {
     onChange: state => { if (!screenLocked) chatWindow.update(chatSnapshot(state)); },
     onAction: performChatAction });
   dialogue = new DialogueDirector({ now: performance.now(), enabled: settings.bubblesEnabled });
+  sheepOfferingWindow = createSheepOfferingWindow({BrowserWindow,screen,getPetWindow:()=>petWindow,
+    getTheme:()=>settings?.customization?.appearance?.shape==='new-year-sheep'?SheepTheme.resolveTheme(settings.customization.appearance.sheepTheme,new Date()):'none',
+    getSuppressed:()=>screenLocked||!codexPageReady||presentationSuppressed()||edgeTuck?.getPresentation().mode!=='free',
+    alwaysOnTop:settings.alwaysOnTop,
+    onPointer:packet=>{
+      if (packet.type === 'begin') shortcutWindow?.setSuspended(true);
+      else if (packet.type === 'drop' || packet.type === 'cancel') shortcutWindow?.setSuspended(false);
+      if(petWindow&&!petWindow.isDestroyed())petWindow.webContents.send('pet:offering-pointer',packet);
+    },
+    onError:error=>writeError('咩咩送物窗口',error)});
   thoughts = createThoughtWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
     getObstacle: quotaObstacleBounds,
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('思考光迹窗口', error) });
@@ -3104,7 +3199,9 @@ async function bootstrap() {
     getPresentation: () => ({
       ...edgeTuck?.getPresentation(),
       shape: settings?.customization?.appearance?.shape,
-      quotaStyle: quotaDisplayConfig().style
+      quotaStyle: quotaDisplayConfig().style,
+      sheepTheme: settings?.customization?.appearance?.sheepTheme,
+      sheepInk: sheepQuotaInk?.quotaStyle === quotaDisplayConfig().style ? sheepQuotaInk : null
     }),
     alwaysOnTop: settings.alwaysOnTop,
     onLayout: () => pomodoroWindows?.sync(),
@@ -3170,6 +3267,7 @@ async function bootstrap() {
     hideBubble();
     pomodoroWindows?.hide();
     safelyInvokeWindow('锁屏时额度标签隐藏', () => quotaLabel?.hide());
+    sheepOfferingWindow?.hide();
     safelyInvokeWindow('锁屏时守护战隐藏', () => quotaGuard?.close());
     safelyInvokeWindow('锁屏时 Codex 详情隐藏', () => codexDetails?.close());
     safelyInvokeWindow('锁屏时 API 卡片隐藏', () => apiUsageLabel?.hide());
@@ -3265,6 +3363,7 @@ if (!hasSingleInstanceLock) {
     safelyInvokeWindow('退出时 Codex 详情销毁', () => codexDetails?.destroy());
     safelyInvokeWindow('退出时 API 卡片销毁', () => apiUsageLabel?.destroy());
     thoughts?.destroy();
+    sheepOfferingWindow?.destroy();
     safelyInvokeWindow('退出时对白清理', () => dialogue?.dismiss());
   });
 

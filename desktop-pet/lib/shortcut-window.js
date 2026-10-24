@@ -17,7 +17,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
   let win = null, ready = false, opened = false, stopped = false, view = null, layout = null, session = 0;
   let focusPending = false, ignored = null, hoverTimer = null, leaveTimer = null, blocked = false;
   let closeTimer = null, closing = false, pinned = false, recording = false, settingsPositioned = false;
-  let origin = null, animation = null, lastPublished = null, lastPlacement = null;
+  let origin = null, animation = null, lastPublished = null, lastPlacement = null, suspended = false;
   const alive = () => win && !win.isDestroyed();
   const pet = () => { const value = getPetWindow(); return value && !value.isDestroyed() ? value : null; };
   const unavailable = (settings = view === 'settings') => stopped || isSuppressed() || !pet()?.isVisible() ||
@@ -25,7 +25,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
   const state = () => ({ view, session, config: getConfig(), registrationErrors: getErrors(), layout, origin, animation, focus: focusPending });
   const trustedSource = event => Boolean(!stopped && alive() && ready &&
     event?.sender === win.webContents && event.senderFrame === event.sender.mainFrame && event.sender.getURL() === pathToFileURL(FILE).href);
-  const source = event => trustedSource(event) && opened && !isSuppressed();
+  const source = event => trustedSource(event) && opened && !suspended && !isSuppressed();
   const cancelHover = () => { clearTimeout(hoverTimer); hoverTimer = null; };
   const cancelLeave = () => { clearTimeout(leaveTimer); leaveTimer = null; };
   function setIgnored(value) {
@@ -109,7 +109,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
       if (created !== win) return;
       close({ immediate: true }); created.destroy(); onError(new Error(`快捷面板渲染退出：${details.reason}`));
     });
-    created.on('blur', () => { if (created !== win) return; setRecording(false); if (view !== 'settings') close(); });
+    created.on('blur', () => { if (created !== win || suspended) return; setRecording(false); if (view !== 'settings') close(); });
     created.on('move', () => { if (created === win) canvasMoved(); });
     created.on('close', event => { if (!stopped && created === win) { event.preventDefault(); close(); } });
     created.on('closed', () => { if (created === win) { close({ immediate: true }); ready = false; win = null; settingsPositioned = false; } });
@@ -117,6 +117,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
       .catch(error => { if (created === win) close({ immediate: true }); if (!created.isDestroyed()) created.destroy(); onError(error); });
   }
   function sync() {
+    if (suspended) return;
     if (!opened) {
       if (closing && (unavailable() || getPresentation()?.dragging)) close({ immediate: true });
       return;
@@ -163,7 +164,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
     sampleCursor(screen.getCursorScreenPoint());
   }
   function open({ focus = true, settings = false } = {}) {
-    if (unavailable(settings)) return false;
+    if (suspended || unavailable(settings)) return false;
     cancelClose(); cancelHover(); cancelLeave(); setRecording(false);
     opened = true; session++; view = settings ? 'settings' : getConfig().shape; settingsPositioned = false;
     animation = { session, phase: 'opening', duration: OPEN_DURATION };
@@ -171,6 +172,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
     sync(); return true;
   }
   function sampleCursor(point) {
+    if (suspended) { cancelHover(); cancelLeave(); return; }
     if (unavailable(opened && view === 'settings') || getPresentation()?.dragging) { if (opened || closing) close({ immediate: true }); cancelHover(); return; }
     const bounds = pet().getBounds(), presentation = getPresentation();
     const target = petVisualBounds(bounds, presentation?.shape, presentation);
@@ -192,6 +194,18 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
       if (!blocked && !unavailable(false) && !presentation?.dragging && presentation?.mode !== 'tucked' && current &&
         contains(petVisualBounds(current.getBounds(), presentation?.shape, presentation), screen.getCursorScreenPoint())) open({ focus: false });
     }, 450);
+  }
+  function setSuspended(value) {
+    value = value === true;
+    if (suspended === value) return;
+    suspended = value; cancelHover(); cancelLeave(); focusPending = false;
+    if (suspended) {
+      if (closing) { finishClose(); return; }
+      // A drag borrows the screen without ending the menu/settings session.
+      setIgnored(true);
+      if (alive() && win.isVisible()) win.hide();
+      onLayout();
+    } else if (opened) sync();
   }
   function action(id) {
     if (!ACTIONS.has(id)) return;
@@ -228,7 +242,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
     }
   };
   for (const [channel, listener] of Object.entries(listeners)) ipcMain.on(channel, listener);
-  return { open, close, sync, sampleCursor, action, getWindow: () => alive() ? win : null,
+  return { open, close, sync, sampleCursor, action, setSuspended, getWindow: () => alive() ? win : null,
     getState: state, isOpen: () => opened, isPresenting: () => pinned,
     cancelHover() { cancelHover(); blocked = true; },
     interrupt() { close({ immediate: true }); blocked = true; },

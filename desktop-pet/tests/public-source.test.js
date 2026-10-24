@@ -7,12 +7,12 @@ const vm = require('node:vm');
 const { normalizeAppearance } = require('../lib/customization');
 const { prepareStaging } = require('../scripts/package-mac');
 
-test('公开源码保留四形态、六瓣配置与内嵌主体，打包文件和本地依赖完整', t => {
+test('公开源码保留五形态、六瓣配置与内嵌主体，打包文件和本地依赖完整', t => {
   const root = path.resolve(__dirname, '../..');
   const read = file => fs.readFileSync(path.join(root, file), 'utf8');
   const renderer = read('desktop-pet/customize-renderer.js');
   const cards = vm.runInNewContext(`[${renderer.match(/const shapeNames = \[([\s\S]*?)\n  \];/)[1]}]`);
-  assert.deepEqual(Array.from(cards, card => card[1]), ['经典', '云朵', '幻彩', '方糖']);
+  assert.deepEqual(Array.from(cards, card => card[1]), ['经典', '幻彩', '云朵', '方糖', '咩咩']);
   assert.equal(cards.filter(card => card[0] === 'aurora-cloud').length, 1);
   for (const auroraContour of [undefined, 'original', 'six-lobe', 'invalid']) {
     assert.equal(normalizeAppearance({ shape: 'aurora-cloud', auroraContour }).auroraContour, 'six-lobe');

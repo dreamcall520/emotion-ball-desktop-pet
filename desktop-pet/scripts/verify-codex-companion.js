@@ -85,19 +85,24 @@ async function readQuotaLabelGeometry(win) {
     };
     const visible = node => Boolean(node && node.getClientRects().length && getComputedStyle(node).display !== 'none');
     const zombie = document.getElementById('guard-entry-zombie');
-    let paintedLeft = null;
+    let paintedLeft = null, paintedRight = null;
     if (visible(entry) && entry.dataset.role === 'roaming' && visible(zombie)) {
       const canvas = zombie.querySelector('canvas'), pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
-      let left = -1;
+      let left = -1, right = -1;
       for (let x = 0; x < canvas.width && left < 0; x++) for (let y = 0; y < canvas.height; y++) {
         if (pixels[(y * canvas.width + x) * 4 + 3] > 0) { left = x; break; }
       }
-      if (left >= 0) { const bounds = rect(canvas); paintedLeft = bounds.x + left * bounds.width / canvas.width; }
+      for (let x = canvas.width-1; x >= 0 && right < 0; x--) for (let y = 0; y < canvas.height; y++) {
+        if (pixels[(y * canvas.width + x) * 4 + 3] > 0) { right = x; break; }
+      }
+      if (left >= 0) { const bounds = rect(canvas), flipped = zombie.dataset.facing === 'right';
+        paintedLeft = bounds.x + (flipped ? canvas.width-right-1 : left) * bounds.width/canvas.width;
+        paintedRight = bounds.x + (flipped ? canvas.width-left : right+1) * bounds.width/canvas.width; }
     }
     return { card: rect(card), beam: rect(beam), size: card.dataset.size,
       expanded: card.dataset.expanded === 'true', state: card.dataset.state,
       hasItems: card.dataset.hasItems === 'true', viewport: { width: innerWidth, height: innerHeight },
-      guard: { visible: visible(entry), bounds: visible(entry) ? rect(entry) : null, role: entry?.dataset.role ?? null, paintedLeft,
+      guard: { side: document.body?.dataset?.guardSide || 'right', visible: visible(entry), bounds: visible(entry) ? rect(entry) : null, role: entry?.dataset.role ?? null, paintedLeft, paintedRight,
         content: [...document.querySelectorAll('.guard-entry-pet,.guard-entry-zombie')].filter(visible).map(rect) } };
   })()`);
 }
@@ -121,14 +126,16 @@ async function assertQuotaLabelWindow(controller, expectedWindow, petBounds, opt
   if (expanded || geometry.state !== 'ready' || !geometry.hasItems) {
     assert.equal(geometry.guard.visible, false, '展开、过期或无额度时必须隐藏守护入口');
   }
+  const guardWidth = ['roaming','full'].includes(geometry.guard.role) ? 48 : 64;
   const expectedSize = geometry.guard.visible
-    ? { width: expectedBeam.width + 72, height: Math.max(expectedBeam.height, 44) + 6 } : expectedBeam;
+    ? { width: expectedBeam.width + 8 + guardWidth, height: Math.max(expectedBeam.height, 44) + 6 } : expectedBeam;
   assert.deepEqual({ width: bounds.width, height: bounds.height }, expectedSize,
     `额度原生窗口必须保持 ${expectedSize.width}×${expectedSize.height}`);
   assert.deepEqual(geometry.viewport, expectedSize, '额度 DOM 视口必须与原生窗口一致');
-  const beamX = 0;
+  const guardLeft = geometry.guard.visible && geometry.guard.side === 'left';
+  const beamX = guardLeft ? guardWidth + 8 : 0;
   assert.deepEqual({ x: geometry.beam.x, width: geometry.beam.width, height: geometry.beam.height },
-    { x: beamX, ...expectedBeam }, '额度流光壳固定原卡尺寸，角色始终在卡右的72px承载槽');
+    { x: beamX, ...expectedBeam }, '额度流光壳固定原卡尺寸，角色始终在卡右的独立承载槽');
   assert.ok(Number.isInteger(geometry.beam.y) && geometry.beam.y >= 0 &&
     geometry.beam.y <= bounds.height - expectedBeam.height, '卡面顶沿偏移仅使用原角色顶部留白并保持完整');
   const inset = compact && !expanded ? 2 : 0;
@@ -139,17 +146,18 @@ async function assertQuotaLabelWindow(controller, expectedWindow, petBounds, opt
   const inside = rect => rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= bounds.width && rect.y + rect.height <= bounds.height;
   assert.ok(inside(geometry.card) && inside(geometry.beam), '额度卡面和流光不能被原生窗口裁剪');
   if (geometry.guard.visible) {
-    assert.deepEqual(geometry.guard.bounds, { x: expectedBeam.width + 8,
-      y: geometry.beam.y + expectedBeam.height - 44, width: 64, height: 44 },
-      '守护入口必须位于卡片右侧8px并保持64×44');
+    assert.deepEqual(geometry.guard.bounds, { x: guardLeft ? 0 : expectedBeam.width + 8,
+      y: geometry.beam.y + expectedBeam.height - 44, width: guardWidth, height: 44 },
+      '守护入口必须位于卡右8px，普通48×44/大角色64×44');
     assert.ok(inside(geometry.guard.bounds) && geometry.guard.content.length > 0 && geometry.guard.content.every(inside),
       '守护入口及可见角色不能被原生窗口裁剪');
     assert.equal(intersects(geometry.card, geometry.guard.bounds), false, '守护入口不能遮住原额度卡');
-    assert.ok(Math.abs(Math.min(...geometry.guard.content.map(rect => rect.x)) - geometry.beam.x - geometry.beam.width - 8) <
-      (geometry.guard.role === 'empty' ? 1.5 : .01),
-      '可见角色画面必须贴近卡右，不能在透明槽右端留下大空白');
-    if (geometry.guard.role === 'roaming') assert.ok(Number.isFinite(geometry.guard.paintedLeft) &&
-      Math.abs(geometry.guard.paintedLeft - geometry.beam.x - geometry.beam.width - 8) < .01,
+    const roleEdge = guardLeft ? Math.max(...geometry.guard.content.map(rect=>rect.x+rect.width)) : Math.min(...geometry.guard.content.map(rect=>rect.x));
+    const expectedRoleEdge = guardLeft ? geometry.beam.x-8 : geometry.beam.x+geometry.beam.width+8;
+    assert.ok(Math.abs(roleEdge-expectedRoleEdge)<(geometry.guard.role==='empty'?1.5:.01),
+      '可见角色画面必须与卡保持8px，不能在透明槽留额外空白');
+    if (geometry.guard.role === 'roaming') assert.ok(Number.isFinite(guardLeft ? geometry.guard.paintedRight : geometry.guard.paintedLeft) &&
+      Math.abs((guardLeft ? geometry.guard.paintedRight : geometry.guard.paintedLeft) - (guardLeft ? geometry.beam.x - 8 : geometry.beam.x + geometry.beam.width + 8)) < .01,
     '僵尸各帧实际alpha轮廓与卡右保持8px，不能只检查透明画布');
   }
   const absolute = rect => ({ ...rect, x: bounds.x + rect.x, y: bounds.y + rect.y });

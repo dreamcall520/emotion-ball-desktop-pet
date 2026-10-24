@@ -14,7 +14,27 @@ function petVisualBounds(bounds, shape, presentation = null) {
   // Preserve the existing quota anchor for the cloud's peeked presentation.
   if (shape === 'aurora-cloud' && presentation?.mode === 'peeked' &&
       ['left', 'right'].includes(presentation.side)) {
-    bounds = { ...bounds, x: bounds.x + (presentation.side === 'right' ? 1 : -1) * bounds.width * 0.35 };
+    bounds = { ...bounds, x: bounds.x + (presentation.side === 'right' ? 1 : -1) * bounds.width * (presentation?.quotaGuard ? .43 : .35) };
+  }
+  // Measured from the approved idle/A+B atlases, alpha>=32, plus 2 source px
+  // padding. Match each theme and facing; never change shortcut/bubble anchors.
+  if (shape === 'new-year-sheep' && presentation?.quotaAnchor) {
+    const live = presentation.sheepInk;
+    const ink = live?.ink;
+    if (presentation.sheepTheme === 'christmas' && live?.theme === 'christmas' &&
+        live.facing === presentation.facing && !['ring','duo','split','stages'].includes(presentation.quotaStyle) &&
+        ink && [ink.x,ink.width].every(Number.isFinite) && ink.x >= 0 && ink.width > 0 && ink.x + ink.width <= 1.001) {
+      return { ...bounds, x: bounds.x + bounds.width * ink.x, width: bounds.width * ink.width };
+    }
+    const envelopes = { none: [40,270], halloween: [45,270], christmas: [39,318], 'spring-festival': [42,278] };
+    const measured = envelopes[presentation.sheepTheme];
+    if (!measured) return { ...bounds, x: bounds.x + bounds.width * .04, width: bounds.width * .92 };
+    let [left, right] = measured;
+    if (presentation.facing === 'right') [left,right] = [320-right,320-left];
+    // The ring fitter uniformly scales sheep around the middle of the host.
+    const factor = ['ring','duo','split','stages'].includes(presentation.quotaStyle) ? .74 : 1;
+    const start = .5 + (left/320-.5)*factor, end = .5+(right/320-.5)*factor;
+    return { ...bounds, x: bounds.x + bounds.width*start, width: bounds.width*(end-start) };
   }
   const insets = VERTICAL_INSETS[shape];
   if (!insets) return bounds;

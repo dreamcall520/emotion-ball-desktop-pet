@@ -8,7 +8,7 @@ const { EventEmitter } = require('node:events');
 test('定制页唯一保存位于固定底栏，恢复位于顶部，沿用全部实际资源', () => {
   const html = fs.readFileSync(path.join(__dirname, '../customize.html'), 'utf8');
   assert.equal((html.match(/id="save"/g) || []).length, 1);
-  assert.doesNotMatch(html, /save-bottom|runtime\/|theme\.js|foundation\.css|设计稿/);
+  assert.doesNotMatch(html, /save-bottom|runtime\/|(?<!sheep-)theme\.js|foundation\.css|设计稿/);
   assert.match(html, /<header class="studio-header">[\s\S]*?id="reset-appearance"[\s\S]*?<\/header>/);
   assert.match(html, /<footer class="studio-footer">[\s\S]*?id="startup-default"[\s\S]*?id="save"[\s\S]*?<\/footer>/);
   assert.match(html, /id="manual-toggle"[^>]*type="button"[^>]*aria-controls="manual-controls"[^>]*aria-expanded="false"/);

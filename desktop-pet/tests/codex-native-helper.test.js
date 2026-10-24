@@ -125,7 +125,8 @@ test('额度原生校验分别核对 DOM 卡面、流光壳与守护外窗，拒
       f.geometry.guard.bounds.x++; await assert.rejects(f.check(), /守护入口必须/); f.geometry.guard.bounds.x--;
       f.geometry.guard.content[0].y = native.height - 10; await assert.rejects(f.check(), /角色不能.*裁剪/);
       f.geometry.guard.content[0].y = guard.y;
-      f.geometry.guard.role = 'roaming'; f.geometry.guard.paintedLeft = guard.x; await f.check();
+      f.geometry.guard.role = 'roaming'; f.geometry.guard.paintedLeft = guard.x;
+      f.bounds.width -= 16;f.geometry.viewport.width -= 16;f.geometry.guard.bounds.width = 48;await f.check();
       f.geometry.guard.paintedLeft = guard.x + 2; await assert.rejects(f.check(), /实际alpha轮廓/);
       f.geometry.guard.paintedLeft = guard.x;
       f.geometry.state = 'stale'; await assert.rejects(f.check(), /隐藏守护入口/);
@@ -185,7 +186,7 @@ test('共用额度几何助手支持没有守护角色节点的 API 卡 DOM', as
   const geometry = await readQuotaLabelGeometry(win);
   assert.deepEqual(geometry.card, { x: 2, y: 2, width: 124, height: 28 });
   assert.deepEqual(geometry.beam, { x: 0, y: 0, width: 128, height: 32 });
-  assert.deepEqual(geometry.guard, { visible: false, bounds: null, role: null, paintedLeft: null, content: [] });
+  assert.deepEqual(geometry.guard, { side: 'right', visible: false, bounds: null, role: null, paintedLeft: null, paintedRight: null, content: [] });
 });
 
 test('截图不依赖会暂停的双帧，先短暂稳定再原生捕获并锁定当前标签窗口', { timeout: 1000 }, async () => {
