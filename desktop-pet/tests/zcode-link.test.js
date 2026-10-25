@@ -77,3 +77,15 @@ test('completed result rows keep the ZCode app entry and reject unknown IDs', as
   assert.deepEqual(opened, ['known']);
   f.link.close();
 });
+
+
+test('disabling while consent is pending cancels it without enabling or saving true', async () => {
+  let answer, cancelled = 0;
+  const f = fixture({ requestConsent: () => new Promise(resolve => { answer = resolve; }),
+    cancelConsent: () => { cancelled++; answer?.(false); } });
+  const pending = f.link.setEnabled(true);
+  await f.link.setEnabled(false);
+  assert.equal(await pending, false); assert.equal(f.prefs().zcodeEnabled, false);
+  assert.equal(f.calls.some(row => row[0] === 'enabled' && row[1] === true), false);
+  f.link.close(); assert.equal(cancelled, 2);
+});

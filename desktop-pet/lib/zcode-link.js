@@ -4,7 +4,7 @@ const { pathToFileURL } = require('node:url');
 function createZcodeLink({ BrowserWindow, screen, ipcMain, getSettings, save, filePath,
   getPetWindow, getObstacles = () => [], getPresentation = () => null,
   getSuppressed = () => false, onChange = () => {}, onEnabledChanged = () => {},
-  onLayout = () => {}, onError = () => {}, requestConsent = async () => true,
+  onLayout = () => {}, onError = () => {}, requestConsent = async () => true, cancelConsent = () => {},
   openTask = async () => false,
   createCompanion = require('./zcode-companion').createZcodeCompanion,
   createCard = require('./quota-label-window').createQuotaLabelWindow,
@@ -59,7 +59,7 @@ function createZcodeLink({ BrowserWindow, screen, ipcMain, getSettings, save, fi
     if (closed || (value === true && (enabled || enabling))) return false;
     const token = ++revision;
     if (value !== true) {
-      enabled = false;
+      enabled = false; cancelConsent();
       try { save({ zcodeEnabled: false }); preferenceWarning = null; }
       catch (error) { preferenceWarning = '联动已关闭，但未保存；重启可能恢复开启'; report(error); }
       card.destroy(); details.close();
@@ -144,7 +144,7 @@ function createZcodeLink({ BrowserWindow, screen, ipcMain, getSettings, save, fi
     setAlwaysOnTop(value) { card.setAlwaysOnTop(value); details.setAlwaysOnTop(value); },
     close() {
       if (closed) return;
-      closed = true; enabled = false; revision++; service.close(); card.destroy(); details.destroy();
+      closed = true; enabled = false; revision++; cancelConsent(); service.close(); card.destroy(); details.destroy();
       for (const [channel, fn, invoke] of handlers) {
         if (invoke) ipcMain.removeHandler?.(channel); else ipcMain.removeListener(channel, fn);
       }

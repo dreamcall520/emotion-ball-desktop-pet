@@ -42,7 +42,69 @@
   const media = window.matchMedia?.('(prefers-color-scheme: dark)');
   let appearance = 'system', colorMode = 'standard', lastModel = null, markingRead = false;
   const chartViews = new Map();
-  let expiryTimer;
+  let expiryTimer, bucketTrigger = null, bucketMenu = null, bucketMenuOpen = false, pendingBucket = null;
+  let bucketOptions = [];
+  function closeBucketMenu(returnFocus = true) {
+    const wasOpen = bucketMenuOpen; bucketMenuOpen = false;
+    if (bucketMenu) bucketMenu.hidden = true;
+    bucketTrigger?.setAttribute('aria-expanded','false');
+    if (wasOpen && returnFocus) bucketTrigger?.focus();
+  }
+  function positionBucketMenu() {
+    if (!bucketMenuOpen || !bucketTrigger || !bucketMenu) return;
+    const anchor = bucketTrigger.getBoundingClientRect(), width = Math.min(320, (window.innerWidth || 404) - 24);
+    bucketMenu.style.width = `${width}px`;
+    bucketMenu.style.left = `${Math.max(12,Math.min(anchor.left,(window.innerWidth || 404)-width-12))}px`;
+    bucketMenu.style.top = `${anchor.bottom+6}px`;
+    bucketMenu.style.maxHeight = `${Math.max(1,(window.innerHeight || 420)-anchor.bottom-18)}px`;
+  }
+  function openBucketMenu(edge) {
+    if (!bucketTrigger || bucketTrigger.disabled || !bucketMenu) return;
+    bucketMenuOpen = true; bucketMenu.hidden = false; bucketTrigger.setAttribute('aria-expanded','true');
+    positionBucketMenu();
+    const target = edge === 'last' ? bucketOptions.at(-1) : edge === 'first' ? bucketOptions[0]
+      : bucketOptions.find(option=>option.dataset.bucketOption === lastModel?.bucketId) || bucketOptions[0];
+    target?.focus(); target?.scrollIntoView?.({block:'nearest'});
+  }
+  function selectBucket(id) {
+    closeBucketMenu();
+    if (id !== lastModel?.bucketId) { pendingBucket = id; invoke('openDetail','trend',id); }
+  }
+  function bucketSelector(model, item) {
+    const selector = node('section','zcode-bucket-selector'), row = node('div','zcode-bucket-row');
+    const shortPlan = /start\s*plan|体验/i.test(item.planName) ? '体验' : /1024/.test(item.planName) ? '1024' : /coding\s*plan/i.test(item.planName) ? '套餐' : clean(item.planName.replace(/^ZCode\s*/i,''),12);
+    const choice = node('div','zcode-bucket-choice');
+    bucketTrigger = button(`${item.label}${shortPlan ? ` · ${shortPlan}` : ''}`,'zcode-bucket-trigger',()=>bucketMenuOpen ? closeBucketMenu() : openBucketMenu());
+    bucketTrigger.title = bucketTitle(item); bucketTrigger.disabled = model.items.length < 2;
+    bucketTrigger.setAttribute('aria-label',`选择额度：${bucketTitle(item)}`); bucketTrigger.setAttribute('aria-haspopup','menu');
+    bucketTrigger.setAttribute('aria-expanded','false'); bucketTrigger.setAttribute('aria-controls','zcode-bucket-menu');
+    bucketTrigger.addEventListener('keydown',event=>{
+      if (['ArrowDown','ArrowUp','Home','End'].includes(event.key)) { event.preventDefault(); openBucketMenu(['ArrowUp','End'].includes(event.key) ? 'last' : 'first'); }
+    });
+    choice.appendChild(bucketTrigger); row.replaceChildren(node('span','zcode-bucket-caption','额度来源'),choice);
+    bucketMenu = node('div','zcode-bucket-menu'); bucketMenu.id = 'zcode-bucket-menu'; bucketMenu.hidden = true;
+    bucketMenu.setAttribute('role','menu'); bucketMenu.setAttribute('aria-label','选择额度来源');
+    bucketOptions = model.items.map(value=>{
+      const option = button('','zcode-bucket-option',()=>selectBucket(value.bucketId));
+      option.dataset.bucketOption = value.bucketId; option.tabIndex = -1;
+      option.setAttribute('role','menuitemradio'); option.setAttribute('aria-checked',String(value.bucketId === item.bucketId));
+      const check = node('span','zcode-bucket-check',value.bucketId === item.bucketId ? '✓' : ''); check.setAttribute('aria-hidden','true');
+      const copy = node('span','zcode-bucket-option-copy'); copy.replaceChildren(node('b','zcode-model-name',value.label),node('small','zcode-plan-name',value.planName));
+      option.replaceChildren(check,copy); return option;
+    });
+    bucketMenu.replaceChildren(...bucketOptions);
+    bucketMenu.addEventListener('keydown',event=>{
+      if (event.key === 'Tab') { closeBucketMenu(); return; }
+      if (!['ArrowDown','ArrowUp','Home','End','Enter',' ','Escape'].includes(event.key)) return;
+      event.preventDefault(); event.stopPropagation();
+      if (event.key === 'Escape') { closeBucketMenu(); return; }
+      const index = bucketOptions.indexOf(document.activeElement);
+      if (['Enter',' '].includes(event.key)) { if (index >= 0) selectBucket(bucketOptions[index].dataset.bucketOption); return; }
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? bucketOptions.length-1 : (index+(event.key === 'ArrowDown' ? 1 : -1)+bucketOptions.length)%bucketOptions.length;
+      bucketOptions[next]?.focus(); bucketOptions[next]?.scrollIntoView?.({block:'nearest'});
+    });
+    selector.replaceChildren(row,node('p','zcode-bucket-description',bucketTitle(item)),bucketMenu); return selector;
+  }
   function theme() {
     const resolved = appearance === 'system' ? media?.matches ? 'dark' : 'light' : appearance;
     root.dataset.appearance = appearance;
@@ -336,12 +398,12 @@
     setTitle(zcode || model.items.length > 1 ? '额度趋势' : model.period === 10080 ? '周额度趋势' : `${periodName(model.period)}趋势`);
     title.appendChild(node('small','title-product',zcode ? 'ZCODE' : 'CODEX'));
     if (!item) { content.replaceChildren(node('p','empty-state','暂无周期额度')); return; }
-    if (model.items.length > 1) {
+    if (!zcode && model.items.length > 1) {
       const tabs = node('div','trend-tabs');
       tabs.replaceChildren(...model.items.map(period => {
-        const tab = button(zcode ? bucketTitle(period) : periodName(period.windowMinutes),'',() => invoke('openDetail','trend',zcode ? period.bucketId : period.windowMinutes));
-        tab.dataset.period = String(zcode ? period.bucketId : period.windowMinutes);
-        tab.setAttribute('aria-pressed',String(zcode ? selected === period.bucketId : model.period === period.windowMinutes)); return tab;
+        const tab = button(periodName(period.windowMinutes),'',() => invoke('openDetail','trend',period.windowMinutes));
+        tab.dataset.period = String(period.windowMinutes);
+        tab.setAttribute('aria-pressed',String(model.period === period.windowMinutes)); return tab;
       }));
       tabs.setAttribute('role','group'); tabs.setAttribute('aria-label','趋势周期'); panel.querySelector('.panel-header').insertBefore(tabs,panel.querySelector('.panel-tools'));
     }
@@ -415,7 +477,7 @@
       tab.addEventListener('keydown',event=>{if(event.key==='ArrowRight'||event.key==='ArrowLeft'){event.preventDefault();const next=kind==='line'?'daily':'line';selectView(next);switcher.querySelector(`[data-view="${next}"]`).focus();}});
       switcher.appendChild(tab);
     });
-    content.replaceChildren(stats,meta,graph,forecast,bottom);
+    content.replaceChildren(...(zcode ? [bucketSelector(model,item)] : []),stats,meta,graph,forecast,bottom);
     selectView(chartViews.get(selected)||'line');
   }
   function renderQuota(model) {
@@ -459,6 +521,11 @@
     try {
       const model = copyModel(value);
       const change = !lastModel || lastModel.action !== model.action || lastModel.period !== model.period || lastModel.bucketId !== model.bucketId;
+      const menuWasOpen = !change && bucketMenuOpen;
+      const focusedBucket = !change ? document.activeElement?.dataset?.bucketOption : null;
+      const triggerHadFocus = !change && document.activeElement === bucketTrigger;
+      closeBucketMenu(false); bucketTrigger = null; bucketMenu = null; bucketOptions = [];
+      if (model.sourceId !== 'zcode' || model.action !== 'trend') pendingBucket = null;
       const historyOpen = !change && panel.querySelector('.opportunity-history')?.open === true;
       const focusedThread = !change ? document.activeElement?.dataset?.threadId : null;
       const focusedPeriod = !change ? document.activeElement?.dataset?.period : null;
@@ -483,7 +550,10 @@
       if (historyOpen && panel.querySelector('.opportunity-history')) panel.querySelector('.opportunity-history').open = true;
       if (openExpiry) { const event = Array.from(content.querySelectorAll('.reset-event')).find(event=>event.dataset.expiry===openExpiry); if(event)event.open=true; }
       if (helpOpen && content.querySelector('.chart-help')) content.querySelector('.chart-help').open=true;
-      if (change) title.focus();
+      if (change) {
+        if (pendingBucket && pendingBucket === model.bucketId) { bucketTrigger?.focus(); pendingBucket = null; }
+        else title.focus();
+      }
       else if (focusedThread) {
         const next = Array.from(content.querySelectorAll('.activity-item')).find(element => element.dataset.threadId === focusedThread);
         (next || title).focus();
@@ -498,6 +568,10 @@
       } else if (focusedHelp) {
         content.querySelector('.chart-help summary')?.focus();
       }
+      if (menuWasOpen) {
+        openBucketMenu();
+        bucketOptions.find(option=>option.dataset.bucketOption === focusedBucket)?.focus();
+      } else if (triggerHadFocus) bucketTrigger?.focus();
       scheduleExpiry(model);
       resize();
     } catch (_) { window.clearTimeout?.(expiryTimer); content.replaceChildren(node('p','empty-state','详情暂未提供')); resize(); }
@@ -518,7 +592,12 @@
   });
   close.addEventListener('click',() => invoke('close'));
   back.addEventListener('click',() => invoke('openDetail','trend',lastModel?.returnPeriod || (lastModel?.sourceId === 'zcode' ? lastModel?.bucketId : lastModel?.period)));
-  window.addEventListener('keydown',event => { if (event.key === 'Escape') { event.preventDefault(); invoke('close'); } });
+  window.addEventListener('keydown',event => { if (event.key === 'Escape') { event.preventDefault(); if (bucketMenuOpen) closeBucketMenu(); else invoke('close'); } });
+  document.addEventListener?.('pointerdown',event=>{ if (bucketMenuOpen && !bucketMenu?.contains(event.target) && !bucketTrigger?.contains(event.target)) closeBucketMenu(false); });
+  document.addEventListener?.('focusin',event=>{ if (bucketMenuOpen && !bucketMenu?.contains(event.target) && !bucketTrigger?.contains(event.target)) closeBucketMenu(false); });
+  panel.addEventListener('scroll',()=>closeBucketMenu(false));
+  window.addEventListener('blur',()=>closeBucketMenu(false));
+  window.addEventListener('resize',positionBucketMenu);
   const unsubscribe = bridge.onModel(render);
   const unsubscribeColor = bridge.onColorMode?.((value, preference) => { colorMode = value === 'accessible' ? 'accessible' : 'standard'; if (['light','dark','system'].includes(preference)) appearance = preference; theme(); });
   const mediaChange = () => theme(); media?.addEventListener?.('change',mediaChange);

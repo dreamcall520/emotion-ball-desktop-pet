@@ -60,6 +60,11 @@ function runSmokeTest() {
       cleanup();
       try {
         assert.equal(code, 0, output);
+        if (process.env.PET_SMOKE_ZCODE_STYLE_ONLY === '1') {
+          assert.match(output, /PET_ZCODE_STYLE_OK/);
+          assert.doesNotMatch(output, /Uncaught|ERR_FILE_NOT_FOUND|did-fail-load/i);
+          resolve(output); return;
+        }
         if (process.env.PET_SMOKE_ZCODE_LINK_ONLY === '1') {
           assert.match(output, /PET_ZCODE_LINK_INTEGRATION_OK/);
           assert.doesNotMatch(output, /Uncaught|ERR_FILE_NOT_FOUND|did-fail-load/i);

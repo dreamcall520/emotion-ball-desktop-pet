@@ -34,7 +34,7 @@ Real data: compare exact four native Start Plan buckets; test task lifecycle and
 No success claim for unsupported task/live auth paths; document and keep working on required scope rather than silently removing features.
 
 
-## Verified outcome
+## Verified outcome — initial 2026-10-24
 
 - Full suite: 1966 passed. Baseline: 1904 passed.
 - Official ZCode 3.16.3 / CLI 0.17.0: real four-bucket balance, model entitlement overlay, streaming chat, session resume, stop and tool-free requests verified.
@@ -47,3 +47,12 @@ No success claim for unsupported task/live auth paths; document and keep working
 ## Known boundaries
 
 Task monitoring is partial: real message/turn persistence plus a unique live CLI owner proves individual active rows; the global count stays unknown. No public per-task deep link was verified. The app offers opening ZCode for manual task lookup. Paid/team accounts, real native-desktop task creation, actual tool approval prompts, Intel, broad multiple-display behavior and Apple notarization were not accepted by this run. User visual acceptance remains pending.
+
+
+## UI return — 2026-10-25
+
+- [x] Match ZCode enable consent to the actual Codex page/style/avatar, preserving Codex defaults and independent ZCode pending/answer/cancel lifecycle.
+- [x] Replace ZCode trend header tabs with one compact custom bucket picker and complete selected-plan description; preserve Codex period tabs.
+- [x] Replace the truncated collapsed plan caption with 额度 and retain complete information in title/aria.
+- [x] 1976 full tests; packaged visual/cancel/disable/lock/confirm/real-balance/picker-IPC checks; 16 Codex cards/88 panels/36 clicks; native widths/themes/long labels and card matrices pass. No model requests in this UI return.
+- [x] Updated isolated DMG/ZIP verified via mount/native extraction/CRC/signature/exact ASAR. 267 resource files match; formal ASAR and formal/candidate settings hashes unchanged. No installation or main merge/release; user visual acceptance pending.

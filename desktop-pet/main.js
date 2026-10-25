@@ -59,6 +59,7 @@ const { createCodexChatRpc } = require('./lib/codex-chat-rpc');
 const { createChatWindow } = require('./lib/chat-window');
 const { createChatSources } = require('./lib/chat-sources');
 const { createZcodeLink } = require('./lib/zcode-link');
+const { createZcodeConsentWindow } = require('./lib/zcode-consent-window');
 const { createZcodeChatRpc, resolveZcodeChatModel } = require('./lib/zcode-chat-rpc');
 const { createNotesCompanion } = require('./lib/notes-companion');
 const { createNotesOrganizer } = require('./lib/notes-organizer');
@@ -110,6 +111,7 @@ let codexThreadOpener = url => shell.openExternal(url);
 let chat = null;
 let chatWindow = null;
 let zcodeLink = null;
+let zcodeConsent = null;
 let notesCompanion = null;
 let pomodoro = null;
 let pomodoroWindows = null;
@@ -2078,6 +2080,13 @@ async function finishSmokeTest() {
     );
     if (!companionReady) throw new Error('轻陪伴活动感知尚未接入');
 
+    if (process.env.PET_SMOKE_ZCODE_STYLE_ONLY === '1') {
+      await require('./scripts/verify-zcode-style').verifyZcodeStyle({ pet: petWindow, zcodeLink, zcodeConsent,
+        codex: { request: requestCodexConsent, getWindow: () => codexConsentWindow },
+        getMenu: () => Menu.buildFromTemplate(menuTemplate()), getSettings: () => settings, powerMonitor, BrowserWindow });
+      app.quit(); return;
+    }
+
     if (process.env.PET_SMOKE_ZCODE_LINK_ONLY === '1') {
       await require('./scripts/verify-zcode-link').verifyZcodeLink({ pet: petWindow, chat, chatWindow, zcodeLink,
         openChat, BrowserWindow, getSettings: () => settings, getMenu: () => Menu.buildFromTemplate(menuTemplate()) });
@@ -3389,6 +3398,9 @@ async function bootstrap() {
     getAnchor: () => petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null,
     onVisibilityChange: () => safelyInvokeWindow('Codex 详情显隐时额度卡重排', () => quotaLabel?.reposition()),
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('Codex 详情窗口', error) });
+  zcodeConsent = createZcodeConsentWindow({ BrowserWindow, ipcMain,
+    getInfo: codexConsentInfo, position: positionFunctionWindow, getAppearance: getNotesAppearance,
+    isBlocked: () => isQuitting || screenLocked, onError: error => writeError('ZCode 授权窗口', error?.code || 'CONSENT_UNAVAILABLE') });
   zcodeLink = createZcodeLink({ BrowserWindow, screen, ipcMain,
     getSettings: () => settings,
     save: patch => { settings = saveSettings(settingsFile, { ...settings, ...patch }); },
@@ -3404,14 +3416,9 @@ async function bootstrap() {
       if (!enabled) await chat?.zcodeDisabled();
       else chat?.sourceChanged(settings.chatSource);
     },
-    requestConsent: async () => {
-      if (IS_SMOKE_TEST && process.env.PET_SMOKE_ZCODE_LINK_ONLY === '1') return true;
-      const result = await dialog.showMessageBox({ type: 'question', title: '启用 ZCode 联动',
-        message: '允许球球连接本机 ZCode？',
-        detail: '读取当前登录账号的套餐、额度和任务状态。聊天时使用 ZCode 对应模型与额度；只操作球球自己的聊天会话。可随时在设置中关闭。',
-        buttons: ['允许联动', '取消'], defaultId: 0, cancelId: 1, noLink: true });
-      return result.response === 0 && !screenLocked && !isQuitting;
-    },
+    requestConsent: () => IS_SMOKE_TEST && process.env.PET_SMOKE_ZCODE_LINK_ONLY === '1'
+      ? Promise.resolve(true) : zcodeConsent.open(),
+    cancelConsent: () => zcodeConsent.cancel(),
     openTask: async id => {
       const result = await require('./lib/zcode-tasks').openZcodeTask(id);
       if (result?.opened || screenLocked || isQuitting) return;
@@ -3441,6 +3448,7 @@ async function bootstrap() {
     shortcutWindow?.interrupt();
     codexConsentToken++;
     finishCodexConsent(false);
+    zcodeConsent?.cancel();
     notesCompanion?.pause();
     if (customizationWindow && !customizationWindow.isDestroyed()) {
       syncCustomizationVisibility();
@@ -3502,6 +3510,7 @@ if (!hasSingleInstanceLock) {
   app.on('before-quit', event => {
     codexConsentToken++;
     finishCodexConsent(false);
+    zcodeConsent?.cancel();
     const noteWindows = notesCompanion?.getWindows();
     const pendingReminders = notesCompanion?.getStore().getState().todos.some(item =>
       !item.deletedAt && !item.completed && ['pending', 'presented'].includes(item.reminderState));
@@ -3551,6 +3560,7 @@ if (!hasSingleInstanceLock) {
     codexConsentToken++;
     safelyInvokeWindow('退出时 Codex 联动清理', () => codexCompanion?.close());
     safelyInvokeWindow('退出时 ZCode 联动清理', () => zcodeLink?.close());
+    safelyInvokeWindow('退出时 ZCode 授权清理', () => zcodeConsent?.close());
     safelyInvokeWindow('退出时停止动作', stopMotion);
     safelyInvokeWindow('退出时活动监测清理', () => activityMonitor?.stop());
     destroyBubbleSafely();

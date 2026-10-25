@@ -4,7 +4,7 @@
   const cancel = $('consent-cancel'), accept = $('consent-accept'), status = $('consent-status');
   const motion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
   const avatar = window.PetChatAvatar.create($('consent-avatar'));
-  let ready = false, busy = false, disposed = false;
+  let ready = false, busy = false, disposed = false, zcodeCopyApplied = false;
   const refresh = () => {
     document.documentElement.dataset.aboutVisible = String(!document.hidden);
     avatar.setActive(!disposed && !document.hidden && !motion?.matches);
@@ -13,6 +13,23 @@
   };
   const receive = info => {
     if (disposed || !info?.appearance || typeof info.appearance !== 'object') return;
+    if (info.sourceId === 'zcode' && !zcodeCopyApplied) {
+      document.title = '开启 ZCode 联动';
+      const copy = {
+        'consent-title': '让球球陪你关注 ZCode',
+        'consent-subtitle': '提醒额度余量，也留意任务进展。',
+        'consent-state-title': '本机状态',
+        'consent-state-body': '读取本机 ZCode 当前登录账号的套餐、额度与任务状态。',
+        'consent-privacy-title': '保护隐私',
+        'consent-privacy-credentials': '账户凭据仅用于连接 ZCode 对应官方服务，不保存、不发送给其他服务。',
+        'consent-privacy-messages': '聊天仅在你主动发送时进行，使用 ZCode 对应模型与额度，只操作球球自身的聊天会话。',
+        'consent-control-title': '由你掌控',
+        'consent-control-body': '不监听键盘，也不会代你操作其他 ZCode 任务。可随时在「ZCode 联动」中关闭。',
+        'consent-status': '可随时在「ZCode 联动」中关闭。'
+      };
+      for (const [id, text] of Object.entries(copy)) $(id).textContent = text;
+      zcodeCopyApplied = true;
+    }
     avatar.update(info.appearance, null, info.codexPet);
     const first = !ready; ready = true; refresh();
     if (first && !document.hidden) cancel.focus();

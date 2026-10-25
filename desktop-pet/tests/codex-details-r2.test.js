@@ -42,6 +42,7 @@ class Element {
       return true;
     });
   }
+  contains(target) { return target === this || this.children.some(child => child.contains(target)); }
   getBoundingClientRect() { return {top:0,bottom:220,height:220}; }
   focus() { if (this.ownerDocument) this.ownerDocument.activeElement = this; }
 }
@@ -229,10 +230,13 @@ test('ZCode 趋势按桶切换，同周期不同模型互不串，明细和到�
   const items = ['activity-glm','trial-glm','activity-flash','trial-flash'].map((bucketId,i) => ({...item(1440),bucketId,label:bucketId,periodKind:'expiry',total:200000000,remainingUnits:150000000,unit:'tokens'}));
   h.receive({sourceId:'zcode',action:'trend',bucketId:'trial-glm',items});
   assert.match(h.nodes['details-title'].textContent,/ZCODE/);
-  const tabs = h.nodes['details-panel'].querySelector('.trend-tabs');
-  assert.equal(tabs.children.length,4);
-  assert.equal(tabs.children[1].attributes['aria-pressed'],'true');
-  tabs.children[2].events.click();
+  assert.equal(h.nodes['details-panel'].querySelector('.trend-tabs'),null);
+  const trigger = h.nodes['details-content'].querySelector('.zcode-bucket-trigger');
+  trigger.events.click();
+  const options = h.nodes['details-content'].querySelectorAll('.zcode-bucket-option');
+  assert.equal(options.length,4);
+  assert.equal(options[1].attributes['aria-checked'],'true');
+  options[2].events.click();
   assert.deepEqual(h.calls.at(-1),['trend','activity-flash']);
   assert.match(h.nodes['details-content'].textContent,/到期/);
   assert.doesNotMatch(h.nodes['details-content'].textContent,/重置机会/);
@@ -270,12 +274,35 @@ test('ZCode MCP 月额无周期起点仍保留余额，趋势明确不可绘制'
 test('ZCode 同模型不同套餐在趋势标签和每桶明细中均可区分，Codex 不增加套餐标签', () => {
   const h=renderer(),items=['1024 活动','Start Plan 体验'].map((planName,i)=>({...item(1440),bucketId:`zcode:plan-${i}:glm`,label:'GLM-5.3',planName,periodKind:i?'daily':'one_time'}));
   h.receive({sourceId:'zcode',action:'trend',bucketId:items[0].bucketId,items});
-  const tabs=h.nodes['details-panel'].querySelector('.trend-tabs').children;
-  assert.equal(tabs[0].textContent,'1024 活动 · GLM-5.3');assert.equal(tabs[1].textContent,'Start Plan 体验 · GLM-5.3');
-  tabs[1].events.click();assert.deepEqual(h.calls.at(-1),['trend','zcode:plan-1:glm']);
+  assert.equal(h.nodes['details-panel'].querySelector('.trend-tabs'),null);
+  const content=h.nodes['details-content'];
+  assert.equal(content.querySelector('.zcode-bucket-trigger').textContent,'GLM-5.3 · 1024');
+  assert.equal(content.querySelector('.zcode-bucket-description').textContent,'1024 活动 · GLM-5.3');
+  content.querySelector('.zcode-bucket-trigger').events.click();
+  const options=content.querySelectorAll('.zcode-bucket-option');
+  assert.match(options[0].textContent,/1024 活动/);assert.match(options[1].textContent,/Start Plan 体验/);
+  options[1].events.click();assert.deepEqual(h.calls.at(-1),['trend','zcode:plan-1:glm']);
   h.receive({sourceId:'zcode',action:'quota',items});
   const buckets=h.nodes['details-content'].querySelectorAll('.zcode-quota-bucket');
   assert.match(buckets[0].textContent,/1024 活动/);assert.match(buckets[1].textContent,/Start Plan 体验/);
   h.receive({action:'trend',period:300,items:[{...item(300),planName:'should not appear'},{...item(10080),planName:'should not appear'}]});
   assert.deepEqual(h.nodes['details-panel'].querySelector('.trend-tabs').children.map(tab=>tab.textContent),['5 小时','周']);
+});
+
+test('ZCode 选择菜单键盘导航、Escape仅收菜单、刷新保留焦点，Codex仍用原双周期标签', () => {
+  const h=renderer();const items=['1024 活动','Start Plan 体验','更长的额外活动套餐名称','额外体验'].map((planName,i)=>({...item(1440),bucketId:`zcode:${i}`,label:i%2?'GLM-5.3-Flash':'GLM-5.3',planName}));
+  const model={sourceId:'zcode',action:'trend',bucketId:'zcode:0',items};h.receive(model);
+  const key=key=>({key,preventDefault(){},stopPropagation(){}});
+  let trigger=h.nodes['details-content'].querySelector('.zcode-bucket-trigger');
+  trigger.events.keydown(key('ArrowDown'));
+  let options=h.nodes['details-content'].querySelectorAll('.zcode-bucket-option'),menu=h.nodes['details-content'].querySelector('.zcode-bucket-menu');
+  assert.equal(menu.hidden,false);assert.equal(options[0].ownerDocument.activeElement,options[0]);
+  menu.events.keydown(key('End'));assert.equal(options[0].ownerDocument.activeElement,options[3]);
+  h.receive({...model,items:items.map(value=>({...value,remaining:61}))});
+  menu=h.nodes['details-content'].querySelector('.zcode-bucket-menu');options=h.nodes['details-content'].querySelectorAll('.zcode-bucket-option');
+  assert.equal(menu.hidden,false);assert.equal(options[0].ownerDocument.activeElement,options[3]);
+  menu.events.keydown(key('Enter'));assert.deepEqual(h.calls.at(-1),['trend','zcode:3']);assert.equal(menu.hidden,true);
+  h.receive({...model,bucketId:'zcode:3'});trigger=h.nodes['details-content'].querySelector('.zcode-bucket-trigger');trigger.events.click();
+  h.nodes['details-content'].querySelector('.zcode-bucket-menu').events.keydown(key('Escape'));
+  assert.equal(h.nodes['details-content'].querySelector('.zcode-bucket-menu').hidden,true);assert.equal(trigger.ownerDocument.activeElement,trigger);
 });

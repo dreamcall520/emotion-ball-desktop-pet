@@ -6,20 +6,20 @@ const vm = require('node:vm');
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
 
-function fixture({ reduced = false, hidden = false, answer = async () => true } = {}) {
+function fixture({ reduced = false, hidden = false, answer = async () => true, info = null } = {}) {
   const nodes = new Map(), documentEvents = new Map(), windowEvents = new Map(), calls = [], portraits = [], active = [];
   let receive, mediaChange, unsubscribed = 0, destroyed = 0;
   const node = id => {
-    if (!nodes.has(id)) nodes.set(id, { disabled: false, textContent: '', listeners: new Map(), focusCalls: 0,
+    if (!nodes.has(id)) nodes.set(id, { disabled: false, textContent: new RegExp(`<[^>]+id="${id}"[^>]*>([^<]*)`).exec(read('codex-consent.html'))?.[1] || '', listeners: new Map(), focusCalls: 0,
       addEventListener(name, fn) { this.listeners.set(name, fn); }, focus() { this.focusCalls++; } });
     return nodes.get(id);
   };
   const media = { matches: reduced, addEventListener(_name, fn) { mediaChange = fn; }, removeEventListener() { mediaChange = null; } };
-  const document = { hidden, documentElement: { dataset: {} }, getElementById: node,
+  const document = { hidden, title: '开启 Codex 联动', documentElement: { dataset: {} }, getElementById: node,
     addEventListener(name, fn) { documentEvents.set(name, fn); } };
   const context = vm.createContext({ document, matchMedia: () => media, Promise,
     addEventListener(name, fn) { windowEvents.set(name, fn); },
-    qiuqiuConsent: { getInfo: async () => null, answer(value) { calls.push(value); return answer(value); },
+    qiuqiuConsent: { getInfo: async () => info, answer(value) { calls.push(value); return answer(value); },
       onInfo(fn) { receive = fn; return () => { unsubscribed++; }; } },
     PetChatAvatar: { create: target => ({ update: (...args) => portraits.push({ target, args }),
       setActive: value => active.push(value), destroy: () => { destroyed++; } }) } });
@@ -41,9 +41,9 @@ test('确认页保持完整披露与默认取消，复用关于页及真实球�
     '账户令牌仅用于官方查询，不保存、不发送给其他服务', '状态包可能附带已加载的聊天内容',
     '正文立即丢弃，不保存、不上传', '不监听键盘', '不会代你创建、发送、审批或中断任务', '随时关闭即可停止读取']) assert.ok(html.includes(text), text);
   assert.match(html, /id="consent-cancel"[^>]*autofocus/);
-  assert.equal([...html.matchAll(/<li>/g)].length, 2, '隐私披露分为令牌和聊天正文两条');
-  assert.match(html, /<li>账户令牌仅用于官方查询，不保存、不发送给其他服务。<\/li>/);
-  assert.match(html, /<li>状态包可能附带已加载的聊天内容；球球只提取进展，正文立即丢弃，不保存、不上传。<\/li>/);
+  assert.equal([...html.matchAll(/<li(?:\s|>)/g)].length, 2, '隐私披露分为令牌和聊天正文两条');
+  assert.match(html, /<li[^>]*>账户令牌仅用于官方查询，不保存、不发送给其他服务。<\/li>/);
+  assert.match(html, /<li[^>]*>状态包可能附带已加载的聊天内容；球球只提取进展，正文立即丢弃，不保存、不上传。<\/li>/);
   assert.match(html, /id="consent-accept"[^>]*disabled/);
   assert.match(html, /href="about.css"/); assert.match(html, /src="lib\/chat-avatar.js"/);
   assert.match(html, /connect-src 'self';/); assert.doesNotMatch(html, /https?:\/\//);
@@ -100,4 +100,58 @@ test('确认预加载只暴露固定布尔回答和只读订阅，监听可释�
   handlers.get('pet:codex-consent-info')({}, { appearance: { shape: 'blob' } }); assert.equal(info.appearance.shape, 'blob');
   handlers.get('pet:color-mode')({}, 'accessible', 'dark', 'blue'); assert.deepEqual(mode, ['accessible', 'dark', 'blue']);
   offInfo(); offMode(); assert.equal(handlers.size, 0);
+});
+
+test('ZCode 信息复用相同头像与控件，仅用文本替换完整授权事实', async () => {
+  const info = { sourceId: 'zcode', appearance: { shape: 'blob' } };
+  const f = fixture({ info }); await flush();
+  assert.equal(f.document.title, '开启 ZCode 联动');
+  assert.equal(f.node('consent-title').textContent, '让球球陪你关注 ZCode');
+  assert.equal(f.node('consent-subtitle').textContent, '提醒额度余量，也留意任务进展。');
+  assert.match(f.node('consent-state-body').textContent, /本机 ZCode 当前登录账号的套餐、额度与任务状态/);
+  assert.match(f.node('consent-privacy-credentials').textContent, /凭据.*官方服务.*不保存/);
+  assert.match(f.node('consent-privacy-messages').textContent, /你主动发送.*对应模型与额度.*球球自身的聊天会话/);
+  assert.match(f.node('consent-control-body').textContent, /其他 ZCode 任务/);
+  assert.equal(f.node('consent-status').textContent, '可随时在「ZCode 联动」中关闭。');
+  assert.equal(f.portraits[0].args[0], info.appearance); assert.equal(f.node('consent-cancel').focusCalls, 1);
+  f.click('consent-accept'); await flush(); assert.deepEqual(f.calls, [true]);
+  assert.doesNotMatch(read('codex-consent-renderer.js'), /innerHTML/);
+});
+
+test('默认 Codex 披露不随来源扩展变化，onInfo 同样可更新 ZCode 授权文案', async () => {
+  const f = fixture(); f.receive({ appearance: { shape: 'blob' } });
+  assert.equal(f.document.title, '开启 Codex 联动');
+  assert.equal(f.node('consent-title').textContent, '让球球陪你关注 Codex');
+  assert.match(f.node('consent-control-body').textContent, /不会代你创建、发送、审批或中断任务/);
+  f.receive({ sourceId: 'zcode', appearance: { shape: 'blob' } });
+  assert.equal(f.node('consent-title').textContent, '让球球陪你关注 ZCode');
+  assert.doesNotMatch(f.node('consent-control-body').textContent, /不会.*发送/);
+});
+
+test('ZCode 预加载固定绑定独立频道，不能切到 Codex 授权频道', async () => {
+  let api; const calls = [], handlers = new Map();
+  const context = vm.createContext({ Promise, process: { argv: ['electron', '--pet-source=zcode'] }, require: name => {
+    assert.equal(name, 'electron');
+    return { contextBridge: { exposeInMainWorld(_key, value) { api = value; } }, ipcRenderer: {
+      invoke: (...args) => { calls.push(args); return Promise.resolve(true); },
+      on: (key, fn) => handlers.set(key, fn), removeListener: key => handlers.delete(key)
+    } };
+  } });
+  vm.runInContext(read('codex-consent-preload.js'), context);
+  await api.getInfo(); await api.answer(true); context.process.argv = []; await api.answer(false); await api.answer({ accepted: true });
+  assert.deepEqual(calls, [['pet:zcode-consent-get'], ['pet:zcode-consent-answer', true], ['pet:zcode-consent-answer', false]]);
+  let received; const off = api.onInfo(value => { received = value; });
+  assert.equal(handlers.has('pet:codex-consent-info'), false);
+  handlers.get('pet:zcode-consent-info')({}, { sourceId: 'zcode', appearance: { shape: 'blob' } });
+  assert.equal(received.sourceId, 'zcode'); off(); assert.equal(handlers.size, 0);
+});
+
+test('ZCode 形象信息刷新不会覆盖提交失败反馈', async () => {
+  const f = fixture({ answer: async () => false });
+  f.receive({ sourceId: 'zcode', appearance: { shape: 'blob' } });
+  f.click('consent-accept'); await flush(); const error = f.node('consent-status').textContent;
+  assert.match(error, /已失效/);
+  f.receive({ sourceId: 'zcode', appearance: { shape: 'aurora-cloud' } });
+  assert.equal(f.node('consent-status').textContent, error);
+  assert.equal(f.portraits.length, 2);
 });

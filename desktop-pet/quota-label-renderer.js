@@ -511,7 +511,10 @@
       status.textContent = model.sourceId === 'zcode' ? states.get(model.state).replaceAll('Codex', 'ZCode') : states.get(model.state);
       label.dataset.source = model.sourceId || 'codex';
       document.title = model.sourceId === 'zcode' ? 'ZCode 剩余额度' : 'Codex 剩余额度';
-      label.setAttribute?.('aria-label', model.sourceId === 'zcode' ? 'ZCode 剩余额度' : 'Codex 剩余额度');
+      if (model.sourceId === 'zcode') {
+        label.title = `ZCode 剩余额度${model.items.length ? '：' + model.items.map(item => `${itemTitle(item)}，剩余 ${Math.round(item.remaining)}%`).join('；') : ''}`;
+        label.setAttribute?.('aria-label', label.title);
+      } else label.setAttribute?.('aria-label', 'Codex 剩余额度');
       expandedCard?.setAttribute?.('aria-label', model.sourceId === 'zcode' ? 'ZCode 额度与状态' : 'Codex 额度与状态');
       label.dataset.state = model.state;
       label.dataset.display = model.display === 'numbers' ? 'numbers' : 'card';
@@ -570,7 +573,7 @@
         : summaryItem ? severityOf(summaryItem.remaining) : 'normal';
       if (summaryItem) {
         summary.replaceChildren(...compactReading(summaryItem.windowMinutes, `${Math.round(summaryItem.remaining)}%`,
-          model.sourceId === 'zcode' ? itemTitle(summaryItem) : label.dataset.status === 'blocked' ? '受限' : severityText(summaryItem.remaining) || '额度', model.sourceId === 'zcode' ? 'Z' : null));
+          model.sourceId === 'zcode' ? '额度' : label.dataset.status === 'blocked' ? '受限' : severityText(summaryItem.remaining) || '额度', model.sourceId === 'zcode' ? 'Z' : null));
         if (compactProduct) compactProduct.textContent = model.sourceId === 'zcode' ? 'ZCODE' : 'CODEX';
         if (compactPeriod) compactPeriod.textContent = itemTitle(summaryItem);
       } else {
