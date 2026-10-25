@@ -4053,6 +4053,9 @@ test('quota card collection uses real enable flags, persists pin/order and rejec
  const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,quotaCardPinned:[]});t.after(()=>f.app.emit('before-quit'));
  f.call('settings.openaiApiAlwaysVisible=true;syncQuotaLabel(codexCompanion.getSnapshot())');
  assert.equal(f.call('quotaCardGroup.getState().bar'),true);assert.equal(f.call("quotaCardCollected('codex')"),true);
+ assert.equal(f.call("quotaCardGroupAnimate('codex')"),true);
+ f.call('screenLocked=true');assert.equal(f.call("quotaCardGroupAnimate('codex')"),false);f.call('screenLocked=false');
+ f.call('dragState={moved:true}');assert.equal(f.call("quotaCardGroupAnimate('codex')"),false);f.call('dragState=null');
  f.call('quotaCardGroup.activate()');assert.equal(f.call("quotaCardCollected('codex')"),false);
  f.call('openGlobalSettings()');const win=f.call('globalSettingsWindow');win.emit('ready-to-show');
  assert.equal((await f.invoke('pet:global-quota-cards-save',{order:['api','codex'],pinned:['api']})).ok,false);
@@ -4060,5 +4063,6 @@ test('quota card collection uses real enable flags, persists pin/order and rejec
  assert.equal(result.ok,true);assert.deepEqual(Array.from(result.config.order),['api','codex','zcode','workbuddy']);
  f.call('quotaCardGroup.dismiss()');assert.equal(f.call("quotaCardCollected('codex')"),true);assert.equal(f.call("quotaCardCollected('api')"),false);
  assert.deepEqual(Array.from(f.saved.at(-1).quotaCardPinned),['api']);
+ assert.equal(f.call("quotaCardGroupAnimate('api')"),false);assert.equal(f.call("quotaCardGroupAnimate('codex')"),true);
  f.call('settings.openaiApiAlwaysVisible=false;syncQuotaLabel(codexCompanion.getSnapshot())');assert.equal(f.call('quotaCardGroup.getState().bar'),false);assert.equal(f.call("quotaCardCollected('codex')"),false);
 });

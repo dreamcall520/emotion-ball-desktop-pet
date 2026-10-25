@@ -82,6 +82,7 @@ function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getOb
       const presentation = getPresentation();
       // Stop before reading a disappearing stack anchor during the edge exit.
       if (presentation?.mode === 'tucked' && presentation.quotaAnimateHide === true) { hide({ animate: true }); return; }
+      if (presentation?.quotaGroupHidden === true) { guard.hide(); win.setIgnoreMouseEvents?.(true, { forward: true }); fade.hide(win, { animate: presentation.quotaGroupAnimate === true }); return; }
       const pet = getPetWindow();
       if (!pet || pet.isDestroyed() || !pet.isVisible()) { fade.hide(win); guard.hide(); return; }
       const p = pet.getBounds(), area = screen.getDisplayMatching(p).workArea, obstacles = getObstacles() || [];
@@ -93,7 +94,7 @@ function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getOb
       win.setBounds(bounds, false);
       win.webContents.send(CHANNEL, { ...current, expanded, spaceError, appearance: ['light', 'dark'].includes(appearance) ? appearance : 'system' });
       win.setIgnoreMouseEvents?.(false);
-      fade.show(win, ['peeked', 'tucked'].includes(presentation?.mode));
+      fade.show(win, presentation?.quotaGroupAnimate === true || ['peeked', 'tucked'].includes(presentation?.mode));
       if (!expanded && getGuardEntry() === true) guard.show(bounds, area, [p, ...obstacles], presentation?.side);
       else guard.hide();
     } catch (e) { guard.hide(); if (live(win)) fade.hide(win); error(e); }

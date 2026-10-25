@@ -53,7 +53,7 @@ if (!process.versions.electron) {
       assert.equal(settings.customization.appearance.shape, shape, 'fixture shape must be supported, not silently normalized');
       let config={order:['codex','api','zcode','workbuddy'],pinned:[]};
       let plan = () => null, sync = () => {}, stack = () => null;
-      const presentationFor = id => { const group = plan(); return { ...presentation, quotaGroupLayout: group?.cards[id], quotaGroupHidden: !groupState.visible.includes(id) || group?.hidden?.includes(id) }; };
+      const presentationFor = id => { const group = plan(); const animate=!suppressed && groupState.bar && !config.pinned.includes(id); return { ...presentation, quotaGroupAnimate:animate, quotaAnimateHide:animate, quotaGroupLayout: group?.cards[id], quotaGroupHidden: !groupState.visible.includes(id) || group?.hidden?.includes(id) }; };
       const onError = error => errors.push(String(error?.stack || error));
       codex = createQuotaLabelWindow({ BrowserWindow: HiddenWindow, screen, getPetWindow: () => pet, getSize: () => 'compact', getGuardEntry: () => true,
         getObstacle: () => bubble, getPresentation: () => ({ ...presentationFor('codex'), quotaGroupNeighbors: [api?.getVisibleBounds(), zcode?.getVisibleBounds(), workbuddy?.getVisibleBounds()].filter(Boolean) }), onLayout: () => sync(), onError });
@@ -71,7 +71,6 @@ if (!process.versions.electron) {
       // Execute the owning main helper so a fixture cannot silently use a different plan.
       const main = fs.readFileSync(path.join(sourceRoot, 'desktop-pet/main.js'), 'utf8');
       const scope = { quotaLabel: codex, apiUsageLabel: api, zcodeLink: zcode, workbuddyLabel: workbuddy, petWindow: pet, screen, settings, SheepTheme, PetFacing,
-        quotaCardConfig: () => fixtureCardConfig, quotaCardCollected: () => false, quotaCardGroupWindow: null,
         quotaCardConfig:()=>({order:config.order,pinned:config.pinned}),quotaCardCollected:id=>!groupState.visible.includes(id),quotaCardGroupWindow:{getBounds:()=>bar?.getBounds()},sheepQuotaInk: null, quotaFreeStackBounds, edgeTuck: { getPresentation: () => presentation }, quotaDisplayConfig: () => ({ style: 'card' }), quotaObstacleBounds: () => bubble, safelyInvokeWindow: (_name, fn) => fn() };
       Function('scope', 'with(scope){' + main.slice(main.indexOf('let quotaFreeStackKey ='), main.indexOf('\nfunction reportQuotaError')) + ';scope.plan=quotaFreeStackPlan;scope.sync=syncQuotaFreeStack;scope.stack=zcodeQuotaStackBounds;}')(scope);
       plan = scope.plan; sync = scope.sync; stack = scope.stack;
@@ -81,23 +80,28 @@ if (!process.versions.electron) {
       const {createQuotaCardGroup}=require(path.join(sourceRoot,'desktop-pet/lib/quota-card-group'));
       const {createQuotaCardGroupWindow}=require(path.join(sourceRoot,'desktop-pet/lib/quota-card-group-window'));
       let cursor={x:-10000,y:-10000},clock=0,job,suppressed=false;
+      const fullyShown=async()=>{const deadline=Date.now()+10000;while(!Object.values(controllers).every(c=>c.getWindow()?.isVisible()&&c.getWindow().getOpacity()===1)){if(Date.now()>deadline)throw Error('group did not finish entry');await wait(16);}};
       const update=()=>{for(const c of Object.values(controllers))c.reposition();sync();};
       bar=createQuotaCardGroupWindow({BrowserWindow:HiddenWindow,screen,getPetWindow:()=>pet,getPresentation:()=>presentation,ipcMain,onActivate:()=>group.activate(),onDismiss:()=>group.dismiss()});
       group=createQuotaCardGroup({getState:()=>({config,eligible:['codex','api','zcode','workbuddy'],suppressed}),getCursor:()=>cursor,getBounds:expanded=>[bar.getBounds(),...(expanded?Object.values(controllers).map(c=>c.getVisibleBounds()):[])].filter(Boolean),now:()=>clock,schedule:fn=>(job=fn,1),cancel(){job=null;},onChange:state=>{groupState=state;if(state.bar)bar.show(state);else bar.hide();update();}});
       showAll();group.start();await wait(300);
-      for(const side of ['left','right'])for(const bottom of [false,true]){
-        presentation={mode:'peeked',side,shape};pet.setBounds({x:side==='left'?area.x:area.x+area.width-80,y:bottom?area.y+area.height-80:area.y,width:80,height:80});
-        config={order:['workbuddy','api','codex','zcode'],pinned:[]};group.dismiss();group.sync();bar.show(groupState);update();await wait(250);
+      for(const mode of ['free','peeked'])for(const side of ['left','right'])for(const bottom of [false,true]){
+        presentation={mode,side,shape};pet.setBounds({x:side==='left'?area.x:area.x+area.width-80,y:bottom?area.y+area.height-80:area.y,width:80,height:80});
+        config={order:['workbuddy','api','codex','zcode'],pinned:[]};group.dismiss();group.sync();bar.show(groupState);update();{const deadline=Date.now()+10000;while(!bar.getBounds()){if(Date.now()>deadline)throw Error('bar not ready');await wait(16);}}await wait(210);
         assert(Object.values(controllers).every(c=>!c.getVisibleBounds()),'default four cards collected');assert(bar.getBounds(),'bar visible');
-        const b=bar.getBounds();cursor={x:b.x+10,y:b.y+10};clock+=80;job();await wait(250);update();
+        const b=bar.getBounds();cursor={x:b.x+10,y:b.y+10};clock+=80;job();await fullyShown();update();
         assert(Object.values(controllers).every(c=>c.getVisibleBounds()),'hover expands actual native cards');
         const faces=config.order.map(id=>controllers[id].getVisibleBounds());for(let i=1;i<faces.length;i++)assert(faces[i].y>=faces[i-1].y+faces[i-1].height,'configured top-to-bottom order');
         cursor={x:faces[2].x+10,y:faces[2].y+10};clock+=500;job();assert(groupState.expanded,'card hover retains entire group');
-        cursor={x:-10000,y:-10000};clock+=80;job();clock+=220;job();await wait(250);assert(Object.values(controllers).every(c=>!c.getVisibleBounds()),'leave closes actual native cards');
+        const origins=Object.fromEntries(Object.entries(controllers).map(([id,c])=>[id,c.getWindow().getBounds()]));
+        cursor={x:-10000,y:-10000};clock+=80;job();clock+=220;job();await wait(50);
+        for(const [id,c]of Object.entries(controllers)){assert.deepEqual(c.getWindow().getBounds(),origins[id],id+' group exit keeps origin');assert(c.getWindow().isVisible());assert(c.getWindow().getOpacity()>0&&c.getWindow().getOpacity()<1,id+' exit interpolates');}
+        cursor={x:b.x+10,y:b.y+10};clock+=80;job();await fullyShown();assert(Object.values(controllers).every(c=>c.getVisibleBounds()),'rapid hover cancels pending exit');
+        cursor={x:-10000,y:-10000};clock+=80;job();clock+=220;job();await wait(210);assert(Object.values(controllers).every(c=>!c.getWindow().isVisible()),'leave completes native fade');
         config.pinned=['api'];group.sync();update();await wait(250);assert(api.getVisibleBounds());assert(!codex.getVisibleBounds());
-        group.activate();await wait(250);assert(groupState.expanded);suppressed=true;group.sync();bar.hide();for(const c of Object.values(controllers))c.hide();await wait(250);assert(!bar.getBounds());assert(Object.values(controllers).every(c=>!c.getVisibleBounds()));
+        group.activate();await fullyShown();assert(groupState.expanded);group.dismiss();await wait(50);assert.equal(api.getWindow().getOpacity(),1,'pinned API never fades on group collection');await wait(160);group.activate();await fullyShown();suppressed=true;group.sync();bar.hide();for(const c of Object.values(controllers))c.hide();assert(Object.values(controllers).every(c=>!c.getWindow().isVisible()),'external safety hide is immediate');await wait(250);assert(!bar.getBounds());assert(Object.values(controllers).every(c=>!c.getVisibleBounds()));
         suppressed=false;showAll();group.sync();update();await wait(250);assert(api.getVisibleBounds(),'pin restores after external suppression');
-        report.cases.push({side,bottom,passed:true});
+        report.cases.push({mode,side,bottom,passed:true,fade:{duration:180,originPreserved:true,rapidReentry:true,pinNotFaded:true,safetyHideImmediate:true}});
       }
       group.close();bar.destroy();report.passed=true;
       assert(windows.every(w=>w.isDestroyed()||!w.nativeVisible()),'all native hosts remain hidden');assert.deepEqual(errors,[]);

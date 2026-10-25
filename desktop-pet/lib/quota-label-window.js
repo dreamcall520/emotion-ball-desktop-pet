@@ -408,7 +408,7 @@ function createQuotaLabelWindow({
       else target.setIgnoreMouseEvents(true, { forward: true });
     } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
-    try { fade.show(target, ['peeked', 'tucked'].includes(getPresentation()?.mode)); } catch (error) { detach(target, error); return; }
+    try { fade.show(target, presentation?.quotaGroupAnimate === true || ['peeked', 'tucked'].includes(presentation?.mode)); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) {
       if (win === target && !requestedVisible) conceal(target, operation);
       return;

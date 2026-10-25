@@ -1051,6 +1051,7 @@ function quotaCardGroupInput() {
     suppressed:Boolean(isQuitting||screenLocked||dragState?.moved||pomodoroQuiet||presentationSuppressed()||shortcutWindow?.isPresenting()||chatWindow?.isVisible()||apiUsageWindow?.isVisible()||codexDetails?.isVisible()||zcodeLink?.isDetailsVisible?.()||workbuddyDetails?.isVisible?.()||quotaGuard?.isVisible?.()||!petWindow||petWindow.isDestroyed()||!petWindow.isVisible())};
 }
 function quotaCardCollected(id) { if(apiUsageWindow?.isVisible())return true; const state=quotaCardGroup?.getState(); return Boolean(state && state.eligible.includes(id) && !quotaCardGroupInput().suppressed && !state.visible.includes(id)); }
+function quotaCardGroupAnimate(id) { const state=quotaCardGroup?.getState(); return Boolean(state?.bar && !quotaCardGroupInput().suppressed && state.eligible.includes(id) && !quotaCardConfig().pinned.includes(id)); }
 function syncQuotaCardGroup() { const state=quotaCardGroup?.sync(); if(state?.bar)quotaCardGroupWindow?.show(state);else quotaCardGroupWindow?.hide(); }
 let quotaFreeStackKey = 'null', quotaFreeStackApplying = false;
 function quotaFreeStackPlan() {
@@ -3609,7 +3610,7 @@ async function bootstrap() {
       const api = apiUsageLabel?.getWindow();
       return zcodeLink?.getVisibleBounds?.() || (api && !api.isDestroyed() && api.isVisible() ? api.getBounds() : quotaLabel?.getVisibleBounds?.());
     },
-    getPresentation: () => ({ ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut, quotaGroupHidden: quotaCardCollected('workbuddy') || quotaFreeStackPlan()?.hidden?.includes('workbuddy'), quotaGroupLayout: quotaFreeStackPlan()?.cards.workbuddy }),
+    getPresentation: () => ({ ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut || quotaCardGroupAnimate('workbuddy'), quotaGroupAnimate: quotaCardGroupAnimate('workbuddy'), quotaGroupHidden: quotaCardCollected('workbuddy') || quotaFreeStackPlan()?.hidden?.includes('workbuddy'), quotaGroupLayout: quotaFreeStackPlan()?.cards.workbuddy }),
     onLayout: syncQuotaFreeStack,
     getGuardEntry: () => settings.workbuddyEnabled === true && settings.workbuddyQuotaAlwaysVisible !== false && settings.workbuddyQuotaFunEnabled !== false
       && !(settings.zcodeQuotaFunEnabled !== false && zcodeLink?.isCardAvailable()) && !quotaLabel?.isGuardEntryVisible?.() && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible(),
@@ -3694,7 +3695,7 @@ async function bootstrap() {
     getGuardEntry: () => settings?.codexQuotaFunEnabled !== false,
     getSuppressed: () => shortcutWindow?.isPresenting() === true || codexDetails?.isVisible() === true || workbuddyDetails?.isVisible() === true || zcodeLink?.isDetailsVisible() === true || quotaGuard?.isVisible() === true,
     getPresentation: () => ({
-      ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut,
+      ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut || quotaCardGroupAnimate('codex'), quotaGroupAnimate: quotaCardGroupAnimate('codex'),
       shape: settings?.customization?.appearance?.shape,
       quotaStyle: quotaDisplayConfig().style,
       quotaGroupHidden: quotaCardCollected('codex') || quotaFreeStackPlan()?.hidden?.includes('codex'), quotaGroupLayout: quotaFreeStackPlan()?.cards.codex,
@@ -3725,7 +3726,7 @@ async function bootstrap() {
     getQuotaWindow: () => quotaLabel?.getWindow(), getObstacleBounds: quotaObstacleBounds,
     getQuotaBounds: () => quotaLabel?.getVisibleBounds(),
     getAppearance: () => settings?.codexQuotaAppearance,
-    getPresentation: () => ({ ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut, shape: settings?.customization?.appearance?.shape,
+    getPresentation: () => ({ ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut || quotaCardGroupAnimate('api'), quotaGroupAnimate: quotaCardGroupAnimate('api'), shape: settings?.customization?.appearance?.shape,
       quotaStyle: quotaDisplayConfig().style, quotaGroupHidden: quotaCardCollected('api') || quotaFreeStackPlan()?.hidden?.includes('api'), quotaGroupLayout: quotaFreeStackPlan()?.cards.api }),
     onOpenDetails: openApiUsage, onLayout: () => { syncQuotaFreeStack(); zcodeLink?.reposition(); workbuddyLabel?.reposition(); }, alwaysOnTop: settings.alwaysOnTop,
     onError: error => writeError('API 常驻卡片', error) });
@@ -3743,7 +3744,7 @@ async function bootstrap() {
     getPetWindow: () => petWindow,
     getObstacles: () => [quotaLabel?.getVisibleBounds(), apiUsageLabel?.getWindow()?.isVisible()
       ? apiUsageLabel.getWindow().getBounds() : null, quotaObstacleBounds()].filter(Boolean),
-    getPresentation: () => ({ ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut, shape: settings?.customization?.appearance?.shape,
+    getPresentation: () => ({ ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut || quotaCardGroupAnimate('zcode'), quotaGroupAnimate: quotaCardGroupAnimate('zcode'), shape: settings?.customization?.appearance?.shape,
       quotaBottomAligned: true, quotaStackBelow: zcodeQuotaStackBounds(),
       quotaStyle: quotaDisplayConfig().style, sheepTheme: settings?.customization?.appearance?.sheepTheme,
       quotaGroupHidden: quotaCardCollected('zcode') || quotaFreeStackPlan()?.hidden?.includes('zcode'), quotaGroupLayout: quotaFreeStackPlan()?.cards.zcode }),

@@ -191,7 +191,7 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
           () => target.setBounds(apiLabelBounds(bounds, area, quota, obstacle, expanded, presentation), false),
           () => target.webContents.send(CHANNEL, payload),
           () => target.setIgnoreMouseEvents(false),
-          () => fade.show(target, ['peeked', 'tucked'].includes(presentation?.mode))
+          () => fade.show(target, presentation?.quotaGroupAnimate === true || ['peeked', 'tucked'].includes(presentation?.mode))
         ];
         for (const step of steps) {
           if (!active(target, token)) break;
