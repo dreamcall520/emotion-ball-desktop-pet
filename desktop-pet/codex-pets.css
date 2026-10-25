@@ -101,3 +101,5 @@ html,body{min-width:0;min-height:580px}.studio{max-width:none;margin:0;backgroun
 .local-import:hover:not(:disabled) { filter:brightness(.97); }
 .local-import:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
 .local-import:disabled { opacity:.55; cursor:wait; }
+
+.local-pet-help pre { margin:7px 0; font-size:11px; line-height:1.8; white-space:pre-wrap; }

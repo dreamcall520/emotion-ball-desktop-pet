@@ -127,7 +127,9 @@
         <section id="local-panel" role="tabpanel" aria-labelledby="source-local" hidden>
           <div class="codex-heading"><span id="local-read-status" class="read-status" role="status">本地导入的伙伴</span><button id="refresh-local-pets" class="text-button refresh-pets" type="button">刷新</button></div>
           <button id="import-local-pet" class="action local-import" type="button"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>导入素材文件夹</button>
-          <div class="local-pet-help"><p><strong>准备素材：</strong>使用完整的动画宠物文件夹，包含 pet.json 和配套动作图。</p><p><strong>导入预览：</strong>选中文件夹，预览满意后保存到桌面。</p><p><strong>提示：</strong>普通照片、GIF 暂不支持直接使用。</p><details><summary>查看制作要求</summary><p>动作图需为 PNG / WebP 精灵图。v1：1536 × 1872；v2：1536 × 2288。</p></details></div>
+          <div class="local-pet-help"><p><strong>准备素材：</strong>使用完整的动画宠物文件夹，包含 pet.json 和配套动作图。</p><p><strong>导入预览：</strong>选中文件夹，预览满意后保存到桌面。</p><p><strong>提示：</strong>普通照片、GIF 暂不支持直接使用。</p><details><summary>查看制作要求</summary><p>动作图格式：PNG 或 WebP。支持两种图片尺寸：1536 × 1872 或 1536 × 2288 像素。</p></details><details><summary>查看文件夹示例</summary><pre>我的小伙伴/
+├── pet.json       宠物名称和动作说明
+└── pet.png        配套动作图片</pre><p>点击上方按钮，选择「我的小伙伴」整个文件夹。图片名称以 pet.json 中填写的名称为准，也可以使用 WebP 图片。</p><p>这只是文件摆放示例；需要已经制作好的完整动画素材，给普通照片改名不能直接使用。</p></details></div>
           <div id="local-pet-grid" class="pet-grid" role="group" aria-label="选择其他伙伴"></div>
           <div id="local-read-state" class="codex-state" role="status">还没有导入伙伴。导入后可预览，保存设置后才应用到桌面。</div>
         </section>

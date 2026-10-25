@@ -1,7 +1,10 @@
 /* One quiet metadata line; actual upcoming expiry gets restrained emphasis. */
-.credit-notes { display:flex; flex-wrap:wrap; align-items:baseline; gap:3px 9px; border-top:1px solid var(--detail-line); padding-top:9px; margin-top:10px; font-size:10px; line-height:17px; font-weight:400; font-variant-numeric:tabular-nums; }
+.credit-notes { display:grid; grid-template-columns:minmax(0,1fr) 1px minmax(0,1fr); align-items:center; gap:3px 9px; border-top:1px solid var(--detail-line); padding-top:9px; margin-top:10px; font-size:10px; line-height:17px; font-weight:400; font-variant-numeric:tabular-nums; }
 .credit-notes > span { min-width:0; overflow-wrap:anywhere; }
 .credit-note-separator { align-self:center; flex:none; width:1px; height:10px; background:var(--detail-line); }
 #expiry-block[data-warning="true"] { color:#a25a25; font-weight:600; }
 :root[data-appearance="dark"] #expiry-block[data-warning="true"] { color:#edb47b; }
 @media(prefers-color-scheme:dark) { :root[data-appearance="system"] #expiry-block[data-warning="true"] { color:#edb47b; } }
+
+#refresh-note { text-align:left; }
+#expiry-block { text-align:right; }
