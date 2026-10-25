@@ -109,7 +109,7 @@
     const inquiry = dialog.querySelector('[data-inquiry]');
     if (inquiry) {
       const product = document.querySelector('[data-product-title]');
-      inquiry.textContent = `${product.textContent}${style ? ` · ${style.value}` : ''}${variant ? ` · ${variant.value}` : ''} · ¥${product.dataset.productPrice}\n想确认商品细节与发货安排。`;
+      inquiry.textContent = `${product.textContent}${style ? ` · ${style.value}` : ''}${variant ? ` · ${variant.value}` : ''} · ¥${product.dataset.productPrice}${product.dataset.productSale ? `（${product.dataset.productSale}活动价）` : ''}\n想确认商品细节与发货安排。`;
     }
     const status = dialog.querySelector('[data-copy-status]');
     if (status) status.textContent = '';
@@ -149,6 +149,8 @@
   document.querySelectorAll('[data-variant-price]').forEach(input => input.addEventListener('change', () => {
     document.querySelector('[data-product-title]').dataset.productPrice = input.dataset.variantPrice;
     document.querySelector('[data-price-value]').textContent = input.dataset.variantPrice;
+    const original = document.querySelector('[data-original-price]');
+    if (original) original.textContent = input.dataset.variantOriginal;
   }));
   document.addEventListener('click', event => {
     document.querySelectorAll('.c-mobile[open]').forEach(menu => { if (!menu.contains(event.target)) menu.open = false; });
