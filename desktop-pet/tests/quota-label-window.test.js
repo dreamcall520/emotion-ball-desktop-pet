@@ -1853,7 +1853,9 @@ test('实际controller区分22/24/50角色，普通48px与大角色64px同源传
   assert.equal(nodes.items.children[0].children[0].textContent,'GLM-5.3');
   assert.equal(nodes.items.children[0].children[1].textContent,'1024');
   assert.equal(nodes.items.children[1].children[1].textContent,'体验');
-  assert.match(expanded.textContent,/ZCODE/); assert.match(expanded.textContent,/Start Plan 体验/); assert.match(expanded.textContent,/1024 活动/); assert.match(expanded.textContent,/后到期/);
+  assert.match(expanded.textContent,/ZCODE/); assert.match(expanded.textContent,/体验/); assert.match(expanded.textContent,/1024/);
+  assert.match(expanded.children[1].children[1].title,/Start Plan 体验/);
+  assert.match(expanded.children[1].children[0].title,/1024 活动/); assert.match(expanded.textContent,/到期/);
   assert.doesNotMatch(expanded.textContent,/重置机会/);
   expanded.children[2].children[0].children[0].events.click({stopPropagation(){}});
   assert.deepEqual(calls,[['quota','bucket-0']]);

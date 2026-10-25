@@ -7,6 +7,59 @@ const validBucket = row => typeof row?.id === 'string' && row.id.startsWith('zco
   && validTime(row.resetsAt)
   && (Number.isFinite(row.windowMinutes) && row.windowMinutes > 0 && validTime(row.periodStart) && row.resetsAt > row.periodStart
     || row.windowMinutes === null && row.periodStart === null);
+function buildPace(row, fresh, now) {
+  const duration = row.resetsAt - row.periodStart, remainingTime = row.resetsAt - now;
+  if (!fresh || row.periodStart === null || !Number.isFinite(row.windowMinutes)
+    || duration <= 0 || remainingTime <= 0 || remainingTime > duration) {
+    return { state: 'unknown', remainingTimePercent: null };
+  }
+  const remainingTimePercent = remainingTime / duration * 100;
+  const difference = row.remaining - remainingTimePercent;
+  return { state: difference < -10 ? 'fast' : difference > 10 ? 'slow' : 'balanced', remainingTimePercent };
+}
+function buildForecast(selected, samples, state, now) {
+  const unknown = (reason, detail) => ({ state: 'unknown', status: 'unknown', reason,
+    exhaustsAt: null, label: '', summary: '暂无法预估额度用完时间', detail });
+  if (!selected || selected.periodStart === null || !Number.isFinite(selected.windowMinutes)) {
+    return unknown('missing-period', '接口未提供周期起点，暂无法预估');
+  }
+  if (selected.periodStart > now) return unknown('missing-period', '额度周期尚未开始，暂无法预估');
+  if (state !== 'ready') return unknown('stale', '额度尚未更新，稍后再看');
+  let recent = samples.filter(sample => sample.at >= now - 1800000);
+  if (recent.length < 3 || now - recent.at(-1).at >= 300000) {
+    return unknown('insufficient-records', '连续用量记录不足，需至少 3 次新鲜采样并覆盖 10 分钟');
+  }
+  let interrupted = false;
+  for (let index = recent.length - 1; index > 0; index--) {
+    const previous = recent[index - 1], current = recent[index];
+    if (current.at - previous.at >= 300000 || current.remaining > previous.remaining
+      || previous.remaining - current.remaining >= 25) {
+      recent = recent.slice(index); interrupted = true; break;
+    }
+  }
+  if (recent.length < 3 || recent.at(-1).at - recent[0].at < 600000) {
+    return unknown(interrupted ? 'discontinuity' : 'insufficient-records', interrupted
+      ? '记录中断或额度校正后，连续记录不足 10 分钟' : '连续用量记录不足，需至少 3 次新鲜采样并覆盖 10 分钟');
+  }
+  const first = recent[0], last = recent.at(-1);
+  if (last.remaining !== selected.remaining) return unknown('value-mismatch', '额度刚有变化，等待采样同步');
+  const consumed = first.remaining - last.remaining;
+  if (consumed <= 0) return unknown('no-decline', '已记录时段内额度未下降，暂不预估用完时间');
+  const rate = consumed / (last.at - first.at);
+  const remainingAtEnd = selected.remaining - rate * (selected.resetsAt - now);
+  const status = remainingAtEnd < 0 ? 'risk' : remainingAtEnd < 10 ? 'tight' : 'safe';
+  const projectedAt = Math.ceil(now + selected.remaining / rate);
+  if (!validTime(projectedAt)) return unknown('insufficient-records', '有效用量变化不足，暂无法预估');
+  const label = formatQuotaDate(projectedAt, selected.windowMinutes, now);
+  const boundary = selected.periodKind === 'daily' || selected.periodKind === 'monthly' ? '刷新'
+    : selected.periodKind === 'one_time' ? '到期'
+      : ['rolling', 'weekly'].includes(selected.periodKind) ? '重置' : '有效期结束';
+  return { state: 'estimate', status, reason: 'estimate', reference: true, exhaustsAt: projectedAt, label,
+    summary: status === 'risk' ? selected.remaining <= 0 ? '额度已用完' : `预计约 ${label} 用完`
+      : status === 'tight' ? `预计够用到${boundary}` : '额度充裕',
+    detail: `按近期连续用量粗估，${status === 'risk' ? `早于 ${formatQuotaDate(selected.resetsAt, selected.windowMinutes, now)} ${boundary}`
+      : status === 'tight' ? `刚够用到${boundary}，留意用量` : `预计够用到${boundary}`}` };
+}
 function safeTasks(snapshot) {
   if (snapshot?.enabled !== true) return [];
   return (Array.isArray(snapshot.tasks?.items) ? snapshot.tasks.items.slice(0, 64) : []).flatMap(row => {
@@ -34,6 +87,7 @@ function buildZcodeQuotaLabelModel(snapshot, options = {}, now = Date.now()) {
   const state = source.enabled === false ? 'disabled' : STATES.has(source.quota?.state) ? source.quota.state : 'disconnected';
   const empty = { sourceId: 'zcode', state, items: [], overflow: 0, activity: activity(snapshot), planName: 'ZCode' };
   if (source.enabled !== true || state !== 'connected' || !validTime(now)) return empty;
+  const stale = source.quota.stale !== false || !validTime(source.quota.updatedAt) || source.quota.updatedAt > now || now - source.quota.updatedAt >= 300000;
   const windows = Array.isArray(source.quota?.windows) ? source.quota.windows : Array.isArray(source.buckets) ? source.buckets : [];
   const items = windows.slice(0, 64).filter(row => validBucket(row) && row.resetsAt > now).map(row => {
     const periodKind = ['one_time', 'daily', 'rolling', 'weekly', 'monthly', 'unknown'].includes(row.periodKind) ? row.periodKind : 'unknown';
@@ -45,9 +99,8 @@ function buildZcodeQuotaLabelModel(snapshot, options = {}, now = Date.now()) {
       total: Number.isFinite(row.total) && row.total >= 0 ? row.total : null,
       remainingUnits: Number.isFinite(row.remainingUnits) && row.remainingUnits >= 0 ? row.remainingUnits : null,
       unit: text(row.unit), periodStart: row.periodStart, periodKind,
-      pace: { state: 'unknown', remainingTimePercent: null } };
+      pace: buildPace(row, !stale, now) };
   });
-  const stale = source.quota.stale === true || !validTime(source.quota.updatedAt) || source.quota.updatedAt > now || now - source.quota.updatedAt >= 300000;
   return { ...empty, state: stale ? 'stale' : items.length ? 'ready' : 'empty', items,
     planName: [...new Set(items.map(row => row.planName))].join(' / ') || 'ZCode' };
 }
@@ -75,9 +128,6 @@ function buildZcodeDetailsModel(snapshot, options = {}, now = Date.now()) {
     trend: { bucketId: selected?.bucketId || null, period: selected?.windowMinutes || null,
       periodStart: selected?.periodStart || null, windowMinutes: selected?.windowMinutes || null,
       resetsAt: selected?.resetsAt || null, resetLabel: selected?.resetLabel || '', samples,
-      forecast: { state: 'unknown', status: 'unknown', exhaustsAt: null, label: '',
-        summary: samples.length ? '已记录真实额度变化' : '记录中',
-        detail: model.state === 'stale' ? '额度尚未更新，稍后再看' : selected?.windowMinutes === null
-          ? '接口未提供周期起点，暂无法绘制趋势' : '仅展示当前额度桶与周期的实际采样' } } };
+      forecast: buildForecast(selected, samples, model.state, now) } };
 }
 module.exports = { buildZcodeQuotaLabelModel, buildZcodeDetailsModel };

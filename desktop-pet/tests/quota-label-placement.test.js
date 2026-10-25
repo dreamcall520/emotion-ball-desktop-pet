@@ -455,3 +455,33 @@ test('右近边free/peeked角色在左且卡右贴边，中部/左侧原右置�
   const peek=quotaLabelBounds(pet,area,null,size,false,1,{...p,mode:'peeked'},false,true);assert.equal(peek.guardSide,'left');assert.equal(peek.x+peek.cardInset.x+face.width,0);
  }
 });
+
+
+test('ZCode 独立可读尺寸不改变 Codex，单开与 Codex 下方锚点一致，双开跟随卡中心', () => {
+  const area={x:0,y:0,width:1000,height:800};
+  for(const size of ['standard','compact']) for(const count of [1,2,4]) for(const expanded of [false,true]) {
+    const pet={x:420,y:120,width:80,height:80};
+    const codex=quotaLabelBounds(pet,area,null,size,expanded,count);
+    const z=quotaLabelBounds(pet,area,null,size,expanded,count,{quotaSourceId:'zcode',quotaBottomAligned:true});
+    assert.equal(z.x+z.width/2,codex.x+codex.width/2); assert.equal(z.y,codex.y);
+    const stacked=quotaLabelBounds(pet,area,codex,size,expanded,count,{quotaSourceId:'zcode',quotaBottomAligned:true,quotaStackBelow:codex,quotaObstacles:[codex]});
+    assert.equal(stacked.y,codex.y+codex.height+8); assert.equal(stacked.x+stacked.width/2,codex.x+codex.width/2);
+    assertInside(stacked,area);
+  }
+  assert.deepEqual(quotaLabelSize('standard',true,2),{width:196,height:144});
+  assert.deepEqual(quotaLabelSize('standard',true,2,false,false,null,'zcode'),{width:196,height:154});
+  assert.deepEqual(quotaLabelSize('standard',true,4,false,false,null,'zcode'),{width:196,height:244});
+});
+
+test('ZCode 左右及底边夹紧后完整显示且不盖宠物/另一卡，分离障碍物不误占空白', () => {
+  const area={x:-1000,y:40,width:1000,height:760};
+  const overlap=(a,b)=>a.x<b.x+b.width&&a.x+a.width>b.x&&a.y<b.y+b.height&&a.y+a.height>b.y;
+  for(const size of ['standard','compact']) for(const expanded of [false,true]) for(const x of [-998,-540,-82]) for(const y of [180,718]) {
+    const pet={x,y,width:80,height:80},codex=quotaLabelBounds(pet,area,null,size,expanded,2);
+    for(const stack of [null,codex]) {
+      const z=quotaLabelBounds(pet,area,stack,size,expanded,4,{quotaSourceId:'zcode',quotaBottomAligned:true,quotaStackBelow:stack,quotaObstacles:[stack].filter(Boolean)});
+      assertInside(z,area); assert.equal(overlap(z,pet),false,JSON.stringify({pet,codex,z}));
+      if(stack) assert.equal(overlap(z,stack),false,JSON.stringify({pet,codex,z}));
+    }
+  }
+});

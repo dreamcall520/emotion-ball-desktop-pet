@@ -27,7 +27,7 @@ function createZcodeLink({ BrowserWindow, screen, ipcMain, getSettings, save, fi
   const card = createCard({ BrowserWindow, screen, sourceId: 'zcode', getPetWindow,
     getObstacle: obstacle, getSize: () => getSettings().zcodeQuotaLabelSize,
     getAppearance: () => getSettings().codexQuotaAppearance,
-    getPresentation, getSuppressed: () => getSuppressed() || details?.isVisible(),
+    getPresentation: () => ({ ...getPresentation(), quotaObstacles: getObstacles().filter(Boolean) }), getSuppressed: () => getSuppressed() || details?.isVisible(),
     alwaysOnTop: getSettings().alwaysOnTop, onLayout, onError: report });
   const details = createDetails({ BrowserWindow, screen, sourceId: 'zcode',
     getAnchor: () => card.getVisibleBounds() || getPetWindow()?.getBounds?.(),

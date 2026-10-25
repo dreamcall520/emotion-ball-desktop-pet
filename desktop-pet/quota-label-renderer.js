@@ -257,6 +257,18 @@
     return `${relative}后${verb} · ${exact}`;
   }
 
+  function zcodeExpandedTime(model, item, dual) {
+    const verb = ({ one_time: '到期', expiry: '到期', daily: '刷新', monthly: '刷新', rolling: '重置', weekly: '重置' }[item.periodKind] || '截止');
+    if (model.state === 'stale') return { text: `${verb}时间待更新`, title: resetTimeText(model, item) };
+    if (!Number.isSafeInteger(item.resetsAt) || item.resetsAt <= Date.now()) return { text: `${verb}时间暂不可用`, title: resetTimeText(model, item) };
+    const date = new Date(item.resetsAt), today = new Date(), tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+    const sameDay = day => date.getFullYear() === day.getFullYear() && date.getMonth() === day.getMonth() && date.getDate() === day.getDate();
+    const time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+    const day = sameDay(today) ? '今天' : sameDay(tomorrow) ? '明天' : `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+    return { text: `${day}${!dual || sameDay(today) || sameDay(tomorrow) ? ` ${time}` : ''}${verb}`,
+      title: `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} ${time} ${verb}（本机时间）` };
+  }
+
   function resetCreditsText(value) {
     if (!Number.isSafeInteger(value) || value < 0) return '重置机会暂不可用';
     if (value === 0) return '暂无重置机会';
@@ -422,27 +434,30 @@
     header.replaceChildren(brand, headerTools);
     const periods = node('div', dual ? 'v20-periods dual' : 'v20-periods');
     periods.replaceChildren(...model.items.map(item => {
-      const cell = node('section', 'v20-period');
+      const cell = model.sourceId === 'zcode'
+        ? detailButton('', 'trend', item.bucketId, 'v20-period') : node('section', 'v20-period');
+      if (model.sourceId === 'zcode') cell.title = `查看 ${itemTitle(item)} 的额度趋势`;
       cell.dataset.severity = severityOf(item.remaining);
-      cell.setAttribute?.('aria-label', `${itemTitle(item)}，本周期剩余 ${Math.round(item.remaining)}%`);
+      cell.setAttribute?.('aria-label', `${itemTitle(item)}，本周期剩余 ${Math.round(item.remaining)}%${model.sourceId === 'zcode' ? '，查看该额度趋势' : ''}`);
       const valueRow = node('div', 'v20-value-row');
       const pace = node('span', `v20-pace ${item.pace.state}`, model.state === 'stale' ? '待更新'
         : ({ fast: dual ? '偏快' : '用量偏快', balanced: dual ? '均衡' : '节奏均衡', slow: dual ? '较慢' : '用量较慢', unknown: '待记录' }[item.pace.state]));
       pace.title = model.state === 'stale' ? '额度数据已过期' : item.pace.state === 'unknown' ? '记录不足，暂无法比较用量节奏' : '对比本周期剩余额度与剩余时间';
       const value = node('strong', 'v20-value', `${Math.round(item.remaining)}%`);
       value.title = severityText(item.remaining);
-      valueRow.replaceChildren(value, pace);
+      valueRow.replaceChildren(value, ...(model.sourceId === 'zcode' && model.state !== 'stale' && item.pace.state === 'unknown' ? [] : [pace]));
       const progress = node('progress', 'v20-progress');
       progress.max = 100; progress.value = item.remaining; labelProgress(progress, item);
       const reset = node('p', 'v20-reset');
       const parts = resetTimeText(model, item).split(' · ');
-      reset.title = resetTimeText(model, item);
-      reset.replaceChildren(node('span', '', parts[0]), ...(!dual && parts[1] ? [node('span', 'v20-date', parts[1])] : []));
+      const zcodeTime = model.sourceId === 'zcode' ? zcodeExpandedTime(model, item, dual) : null;
+      reset.title = zcodeTime ? zcodeTime.title : resetTimeText(model, item);
+      reset.replaceChildren(node('span', '', zcodeTime ? zcodeTime.text : parts[0]), ...(!zcodeTime && !dual && parts[1] ? [node('span', 'v20-date', parts[1])] : []));
       cell.replaceChildren(...(dual ? [node('div', 'v20-cell-label', '')] : []), valueRow, progress, reset);
       if (dual) {
         const heading = cell.children[0];
         heading.title = itemTitle(item);
-        heading.replaceChildren(...(model.sourceId === 'zcode' && item.planName ? [node('span', 'v20-plan-name', item.planName)] : []),
+        heading.replaceChildren(...(model.sourceId === 'zcode' && item.planName ? [node('span', 'v20-plan-name', shortPlanName(item))] : []),
           node('span', 'period-pill', model.sourceId === 'zcode' ? item.label : itemTitle(item)));
       }
       return cell;

@@ -42,68 +42,64 @@
   const media = window.matchMedia?.('(prefers-color-scheme: dark)');
   let appearance = 'system', colorMode = 'standard', lastModel = null, markingRead = false;
   const chartViews = new Map();
-  let expiryTimer, bucketTrigger = null, bucketMenu = null, bucketMenuOpen = false, pendingBucket = null;
+  let expiryTimer, pendingBucket = null;
   let bucketOptions = [];
-  function closeBucketMenu(returnFocus = true) {
-    const wasOpen = bucketMenuOpen; bucketMenuOpen = false;
-    if (bucketMenu) bucketMenu.hidden = true;
-    bucketTrigger?.setAttribute('aria-expanded','false');
-    if (wasOpen && returnFocus) bucketTrigger?.focus();
-  }
-  function positionBucketMenu() {
-    if (!bucketMenuOpen || !bucketTrigger || !bucketMenu) return;
-    const anchor = bucketTrigger.getBoundingClientRect(), width = Math.min(320, (window.innerWidth || 404) - 24);
-    bucketMenu.style.width = `${width}px`;
-    bucketMenu.style.left = `${Math.max(12,Math.min(anchor.left,(window.innerWidth || 404)-width-12))}px`;
-    bucketMenu.style.top = `${anchor.bottom+6}px`;
-    bucketMenu.style.maxHeight = `${Math.max(1,(window.innerHeight || 420)-anchor.bottom-18)}px`;
-  }
-  function openBucketMenu(edge) {
-    if (!bucketTrigger || bucketTrigger.disabled || !bucketMenu) return;
-    bucketMenuOpen = true; bucketMenu.hidden = false; bucketTrigger.setAttribute('aria-expanded','true');
-    positionBucketMenu();
-    const target = edge === 'last' ? bucketOptions.at(-1) : edge === 'first' ? bucketOptions[0]
-      : bucketOptions.find(option=>option.dataset.bucketOption === lastModel?.bucketId) || bucketOptions[0];
-    target?.focus(); target?.scrollIntoView?.({block:'nearest'});
+  const planKind = item => /^(?:ZCode\s*)?Start\s*Plan(?:$|[\s：:])/i.test(item.planName) ? 'trial'
+    : /^(?:ZCode\s*)?1024\s*(?:Dev\s*Day|活动)(?:$|[\s：:])/i.test(item.planName) ? 'event' : '';
+  function bucketLabel(item) {
+    const plan = {trial:'体验',event:'活动'}[planKind(item)];
+    const model = item.label === 'GLM-5.3' ? '5.3' : item.label === 'GLM-5.3-Flash' ? 'Flash' : item.label;
+    return plan ? `${plan}·${model}` : bucketTitle(item);
   }
   function selectBucket(id) {
-    closeBucketMenu();
     if (id !== lastModel?.bucketId) { pendingBucket = id; invoke('openDetail','trend',id); }
   }
   function bucketSelector(model, item) {
-    const selector = node('section','zcode-bucket-selector'), row = node('div','zcode-bucket-row');
-    const shortPlan = /start\s*plan|体验/i.test(item.planName) ? '体验' : /1024/.test(item.planName) ? '1024' : /coding\s*plan/i.test(item.planName) ? '套餐' : clean(item.planName.replace(/^ZCode\s*/i,''),12);
-    const choice = node('div','zcode-bucket-choice');
-    bucketTrigger = button(`${item.label}${shortPlan ? ` · ${shortPlan}` : ''}`,'zcode-bucket-trigger',()=>bucketMenuOpen ? closeBucketMenu() : openBucketMenu());
-    bucketTrigger.title = bucketTitle(item); bucketTrigger.disabled = model.items.length < 2;
-    bucketTrigger.setAttribute('aria-label',`选择额度：${bucketTitle(item)}`); bucketTrigger.setAttribute('aria-haspopup','menu');
-    bucketTrigger.setAttribute('aria-expanded','false'); bucketTrigger.setAttribute('aria-controls','zcode-bucket-menu');
-    bucketTrigger.addEventListener('keydown',event=>{
-      if (['ArrowDown','ArrowUp','Home','End'].includes(event.key)) { event.preventDefault(); openBucketMenu(['ArrowUp','End'].includes(event.key) ? 'last' : 'first'); }
-    });
-    choice.appendChild(bucketTrigger); row.replaceChildren(node('span','zcode-bucket-caption','额度来源'),choice);
-    bucketMenu = node('div','zcode-bucket-menu'); bucketMenu.id = 'zcode-bucket-menu'; bucketMenu.hidden = true;
-    bucketMenu.setAttribute('role','menu'); bucketMenu.setAttribute('aria-label','选择额度来源');
+    const selector = node('section','zcode-bucket-selector'), grid = node('div','zcode-bucket-grid');
+    grid.setAttribute('role','group'); grid.setAttribute('aria-label','选择额度');
     bucketOptions = model.items.map(value=>{
-      const option = button('','zcode-bucket-option',()=>selectBucket(value.bucketId));
-      option.dataset.bucketOption = value.bucketId; option.tabIndex = -1;
-      option.setAttribute('role','menuitemradio'); option.setAttribute('aria-checked',String(value.bucketId === item.bucketId));
-      const check = node('span','zcode-bucket-check',value.bucketId === item.bucketId ? '✓' : ''); check.setAttribute('aria-hidden','true');
-      const copy = node('span','zcode-bucket-option-copy'); copy.replaceChildren(node('b','zcode-model-name',value.label),node('small','zcode-plan-name',value.planName));
-      option.replaceChildren(check,copy); return option;
+      const option = button(bucketLabel(value),'zcode-bucket-button',()=>selectBucket(value.bucketId));
+      option.dataset.bucketOption = value.bucketId; option.title = bucketTitle(value);
+      option.setAttribute('aria-label',bucketTitle(value)); option.setAttribute('aria-pressed',String(value.bucketId === item.bucketId));
+      option.addEventListener('keydown',event=>{
+        if (!['ArrowDown','ArrowUp','ArrowLeft','ArrowRight','Home','End','Enter',' '].includes(event.key)) return;
+        event.preventDefault(); event.stopPropagation();
+        if (['Enter',' '].includes(event.key)) { selectBucket(value.bucketId); return; }
+        const index = bucketOptions.indexOf(option), step = event.key === 'ArrowDown' ? 2 : event.key === 'ArrowUp' ? -2 : event.key === 'ArrowLeft' ? -1 : 1;
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? bucketOptions.length-1 : (index+step+bucketOptions.length)%bucketOptions.length;
+        bucketOptions[next]?.focus();
+      });
+      return option;
     });
-    bucketMenu.replaceChildren(...bucketOptions);
-    bucketMenu.addEventListener('keydown',event=>{
-      if (event.key === 'Tab') { closeBucketMenu(); return; }
-      if (!['ArrowDown','ArrowUp','Home','End','Enter',' ','Escape'].includes(event.key)) return;
-      event.preventDefault(); event.stopPropagation();
-      if (event.key === 'Escape') { closeBucketMenu(); return; }
-      const index = bucketOptions.indexOf(document.activeElement);
-      if (['Enter',' '].includes(event.key)) { if (index >= 0) selectBucket(bucketOptions[index].dataset.bucketOption); return; }
-      const next = event.key === 'Home' ? 0 : event.key === 'End' ? bucketOptions.length-1 : (index+(event.key === 'ArrowDown' ? 1 : -1)+bucketOptions.length)%bucketOptions.length;
-      bucketOptions[next]?.focus(); bucketOptions[next]?.scrollIntoView?.({block:'nearest'});
-    });
-    selector.replaceChildren(row,node('p','zcode-bucket-description',bucketTitle(item)),bucketMenu); return selector;
+    grid.replaceChildren(...bucketOptions);
+    const description = node('p','zcode-bucket-description',bucketTitle(item)); description.title = bucketTitle(item);
+    selector.replaceChildren(grid,description); return selector;
+  }
+  const exactNumber = value => value === null ? '暂未提供' : value.toLocaleString('en-US',{maximumFractionDigits:20});
+  function shortNumber(value) {
+    if (value === null) return '暂未提供';
+    if (value >= 100000000) return `${Number((value/100000000).toFixed(2))}亿`;
+    if (value >= 10000) return `${Number((value/10000).toFixed(2))}万`;
+    return value.toLocaleString('en-US',{maximumFractionDigits:2});
+  }
+  function deadlineCopy(item) {
+    if (['one_time','expiry'].includes(item.periodKind)) return {count:'距到期',label:'使用截止',detail:'到期后剩余额度失效'};
+    if (item.periodKind === 'daily') return {count:'距刷新',label:'下次刷新',detail:'每天重新计算额度'};
+    if (item.periodKind === 'monthly') return {count:'距刷新',label:'下次刷新',detail:''};
+    if (['rolling','weekly'].includes(item.periodKind)) return {count:'距重置',label:'下次重置',detail:''};
+    return {count:'距期限结束',label:'有效至',detail:''};
+  }
+  function deadlineLabel(at) {
+    if (!at) return '暂未提供';
+    const date = new Date(at), now = new Date();
+    return date.toDateString() === now.toDateString() ? `今天 ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}` : dateLabel(at);
+  }
+  function countdown(at) {
+    const minutes = Math.max(0,Math.ceil((at-Date.now())/60000));
+    if (!minutes) return '已结束';
+    if (minutes >= 1440) return `${Math.floor(minutes/1440)}天 ${Math.floor(minutes%1440/60)}小时`;
+    if (minutes >= 60) return `${Math.floor(minutes/60)}小时 ${minutes%60}分`;
+    return `${minutes}分钟`;
   }
   function theme() {
     const resolved = appearance === 'system' ? media?.matches ? 'dark' : 'light' : appearance;
@@ -154,7 +150,7 @@
       returnToTrend: source.returnToTrend === true, returnPeriod: zcode ? bucketKey(source.returnPeriod) : Number.isSafeInteger(source.returnPeriod) ? source.returnPeriod : null,
       trend: { samples, resetsAt: timestamp(trend.resetsAt), resetLabel: clean(trend.resetLabel,40), windowMinutes: (zcode ? Number.isFinite(trend.windowMinutes) : Number.isSafeInteger(trend.windowMinutes)) && trend.windowMinutes > 0 ? trend.windowMinutes : null,
         forecast: { state: forecast.state === 'estimate' ? 'estimate' : 'unknown', reference: forecast.reference === true, preliminary: forecast.preliminary === true, exhaustsAt: timestamp(forecast.exhaustsAt), label: clean(forecast.label,100),
-          status: ['risk','tight','safe'].includes(forecast.status) ? forecast.status : 'unknown', summary: clean(forecast.summary,100), detail: clean(forecast.detail,100) } } };
+          reason: ['missing-period','stale','insufficient-records','discontinuity','value-mismatch','no-decline','estimate'].includes(forecast.reason) ? forecast.reason : '', status: ['risk','tight','safe'].includes(forecast.status) ? forecast.status : 'unknown', summary: clean(forecast.summary,100), detail: clean(forecast.detail,100) } } };
   }
   function setTitle(text, amount) {
     title.replaceChildren(node('span','',text), ...(amount !== undefined && amount !== null ? [node('span','activity-count',countText(amount))] : []));
@@ -353,8 +349,13 @@
   }
   function dailyChart(model,item){
     if (model.sourceId === 'zcode' && (!Number.isFinite(item.windowMinutes) || !item.periodStart)) return node('p','empty-state','接口未提供周期起点，暂无法绘制趋势');
-    const end=model.trend.samples.at(-1)?.at,reset=model.trend.resetsAt||item.resetsAt;
-    const start=model.sourceId === 'zcode' && item.periodStart ? item.periodStart : reset-(model.trend.windowMinutes||item.windowMinutes)*60000;
+    const lastSample=model.trend.samples.at(-1)?.at;
+    const end=model.sourceId === 'zcode' ? Date.now() : lastSample,reset=model.trend.resetsAt||item.resetsAt;
+    let start=model.sourceId === 'zcode' && item.periodStart ? item.periodStart : reset-(model.trend.windowMinutes||item.windowMinutes)*60000;
+    if (model.sourceId === 'zcode') {
+      const recentStart = new Date(); recentStart.setHours(0,0,0,0); recentStart.setDate(recentStart.getDate()-6);
+      start = Math.max(start,recentStart.getTime());
+    }
     const days=TrendDaily.build(model.trend.samples,{start,end});
     if(!days.length)return node('p','empty-state','暂无已记录用量');
     const max=Math.max(10,Math.ceil(Math.max(0,...days.map(d=>d.amount||0))/.8/5)*5);
@@ -382,9 +383,11 @@
         svg.appendChild(svgNode('text',{x:px,y:y(day.amount)-7,'text-anchor':'middle',class:'daily-value'+(latest?' latest':'')},day.amount+'%'));
       }
       svg.appendChild(svgNode('text',{x:px,y:116,'text-anchor':'middle'},date));
-      const secondary=day.increased?'剩余额度增加':day.correction?'额度变化较大':latest?'截至 '+dateLabel(end).split(' ').at(-1):day.amount!==null&&day.partial?'仅部分时段':'';
+      const sampledUntil=model.sourceId === 'zcode' ? lastSample : end;
+      const latestRecorded=latest && (model.sourceId !== 'zcode' || day.count>0);
+      const secondary=day.increased?'剩余额度增加':day.correction?'额度变化较大':latestRecorded?'截至 '+dateLabel(sampledUntil).split(' ').at(-1):day.amount!==null&&day.partial?'仅部分时段':'';
       if(secondary){
-        const compact=day.increased?'余额增加':day.correction?'变化较大':latest?'至'+dateLabel(end).split(' ').at(-1):'部分记录';
+        const compact=day.increased?'余额增加':day.correction?'变化较大':latestRecorded?'至'+dateLabel(sampledUntil).split(' ').at(-1):'部分记录';
         const label=svgNode('text',{x:px,y:128,'text-anchor':'middle',class:'daily-secondary','aria-label':secondary},step<60?compact:secondary);
         if(step<60)label.appendChild(svgNode('title',{},secondary));svg.appendChild(label);
       }
@@ -410,7 +413,11 @@
     const stats = node('div','trend-stats');
     const stat = (text,label,className) => { const p = node('p',''); p.replaceChildren(node('span','',label),node('strong',className,text)); return p; };
     const time = item.pace.remainingTimePercent;
-    stats.replaceChildren(stat(`${Math.round(item.remaining)}%`,'剩余额度',''),stat(time === null ? '—' : `${Math.round(time)}%`,'剩余时间','time-value'),node('span',`trend-pace ${item.pace.state}`,({fast:'用量偏快',balanced:'节奏均衡',slow:'用量较慢',unknown:'待记录'}[item.pace.state])));
+    const pace = node('span',`trend-pace ${item.pace.state}`,({fast:'用量偏快',balanced:'节奏均衡',slow:'用量较慢',unknown:'待记录'}[item.pace.state]));
+    if (zcode) {
+      stats.className += item.resetsAt ? ' zcode-stats' : ' zcode-stats no-deadline';
+      stats.replaceChildren(stat(`${Math.round(item.remaining)}%`,'剩余额度',''),...(item.resetsAt ? [stat(countdown(item.resetsAt),deadlineCopy(item).count,'time-value zcode-countdown')] : []),pace);
+    } else stats.replaceChildren(stat(`${Math.round(item.remaining)}%`,'剩余额度',''),stat(time === null ? '—' : `${Math.round(time)}%`,'剩余时间','time-value'),pace);
     const meta = node('div','chart-meta');
     const trendChart = chart(model,item);
     const hasUnrecorded = Boolean(trendChart.querySelector('.unrecorded-line'));
@@ -420,12 +427,15 @@
     const forecast = node('div',`forecast-note ${model.trend.forecast.status}`), copy = node('div','forecast-copy');
     const known = model.trend.forecast.state === 'estimate';
     copy.replaceChildren(node('b','',model.trend.forecast.summary || (known ? '预估结果暂未提供' : '暂无法预估额度用完时间')),node('p','',model.trend.forecast.detail || (known ? '按近期用量估算，会随实际用量变化' : '连续用量记录不足，稍后再查看')));
-    forecast.title = model.trend.forecast.reference ? '按本周期已记录的余额变化与实际经过时间粗估，会随实际用量变化'
+    forecast.title = zcode ? '按近期连续用量粗估，会随实际用量变化' : model.trend.forecast.reference ? '按本周期已记录的余额变化与实际经过时间粗估，会随实际用量变化'
       : '根据连续用量记录，估算当前周期额度何时用完、能否够用到重置';
-    const forecastBadge = !known ? '待预估' : model.trend.forecast.preliminary ? '初步预估' : model.trend.forecast.reference ? '参考预估' : '预估';
+    const forecastBadge = !known ? zcode ? ({'no-decline':'余额未下降',stale:'待更新','missing-period':'周期待补充',discontinuity:'记录不连续','value-mismatch':'待新记录','insufficient-records':'记录中'}[model.trend.forecast.reason] || '记录中') : '待预估' : model.trend.forecast.preliminary ? '初步预估' : model.trend.forecast.reference ? '参考预估' : '预估';
     forecast.replaceChildren(node('span','forecast-symbol',known ? ({risk:'⚠️',tight:'⏳',safe:'🌿'}[model.trend.forecast.status] || '⏳') : '🔎'),copy,node('span','forecast-badge',forecastBadge));
     const bottom = node('div','panel-bottom'), reset = node('p','');
-    reset.replaceChildren(node('span','',zcode ? ['one_time','expiry'].includes(item.periodKind) ? '额度到期' : ['daily','monthly'].includes(item.periodKind) ? '额度刷新' : '额度有效期' : '本周期重置'),node('b','',model.trend.resetLabel || item.resetLabel || dateLabel(model.trend.resetsAt || item.resetsAt)));
+    if (zcode) {
+      const deadline = deadlineCopy(item);
+      reset.replaceChildren(node('span','',deadline.label),node('b','',deadlineLabel(item.resetsAt)),...(deadline.detail && item.resetsAt ? [node('small','zcode-deadline-note',deadline.detail)] : []));
+    } else reset.replaceChildren(node('span','','本周期重置'),node('b','',model.trend.resetLabel || item.resetLabel || dateLabel(model.trend.resetsAt || item.resetsAt)));
     const opportunities = button('','reset-link',() => invoke('openDetail','opportunities',model.period));
     opportunities.dataset.action = 'opportunities';
     const chevron = node('span','reset-chevron','›');
@@ -444,7 +454,7 @@
     help.addEventListener('toggle',()=>{if(help.open)graph.querySelectorAll('.reset-event').forEach(event=>event.open=false);});
     const status=node('span','chart-status'),actions=node('div','chart-actions');
     actions.replaceChildren(status,updated,help);meta.replaceChildren(switcher,actions);
-    const views=[['line','走势'],['daily','每日消耗']];
+    const views=[['line','走势'],['daily',zcode ? '近7日消耗' : '每日消耗']];
     function selectView(kind){
       chartViews.set(selected,kind);
       graph.querySelector('.trend-chart')?.remove();
@@ -457,6 +467,7 @@
       addResetMarkers(graph,selectedChart,model,item);
       graph.dataset.view=kind;
       const daily=kind==='daily';
+      if (zcode && graph._caption) graph._caption.textContent = daily ? '近7日 · 蓝线：已记录时段内的余额减少，非全天总用量' : `蓝线：实测余额${trendChart.querySelector('.time-path') ? ' · 灰虚线：时间基准' : ''}`;
       status.textContent=daily?'仅供参考':'';
       updated.title=daily?'历史记录不完整，图中数值不能当作全天总用量。':lineTitle;
       const meanings=node('dl','chart-meanings');
@@ -464,7 +475,7 @@
         ['仅 1 次记录','无法计算用量'],
         ['仅部分时段','不代表全天用量'],
         ['剩余额度增加','余额曾增加，仅供参考']
-      ]:[['蓝色实线','有连续记录'],['蓝色虚线','中间没有记录'],['灰色虚线','剩余时间参考']];
+      ]:[['蓝色实线','有连续记录'],['蓝色虚线','中间没有记录'],['灰色虚线',zcode ? '时间基准，非用量预测' : '剩余时间参考']];
       rows.forEach(([label,meaning])=>meanings.append(node('dt','',label),node('dd','',meaning)));
       helpBody.replaceChildren(meanings,node('p','chart-help-foot',daily?'— 无记录 · 虚线只连接参考值':'额度增加或重置时，走势分段显示'));
       help.open=false;
@@ -477,23 +488,58 @@
       tab.addEventListener('keydown',event=>{if(event.key==='ArrowRight'||event.key==='ArrowLeft'){event.preventDefault();const next=kind==='line'?'daily':'line';selectView(next);switcher.querySelector(`[data-view="${next}"]`).focus();}});
       switcher.appendChild(tab);
     });
-    content.replaceChildren(...(zcode ? [bucketSelector(model,item)] : []),stats,meta,graph,forecast,bottom);
+    const zcodeNotes = [];
+    if (zcode) {
+      const caption = node('p','zcode-chart-caption');
+      const sampleInfo = node('p','zcode-sample-info');
+      const samples = model.trend.samples.filter(sample=>!item.periodStart || sample.at >= item.periodStart).filter(sample=>!item.resetsAt || sample.at <= item.resetsAt);
+      sampleInfo.textContent = samples.length ? `${samples.length} 次采样 · ${dateLabel(samples[0].at)} — ${dateLabel(samples.at(-1).at)}` : '尚无本周期采样';
+      zcodeNotes.push(caption,sampleInfo);
+      if (item.total !== null && item.remainingUnits !== null && item.total > item.remainingUnits) {
+        const used = item.total-item.remainingUnits;
+        const usage = node('p','zcode-usage-note',`接口余额折算已用约 ${shortNumber(used)} ${item.unit}`);
+        usage.title = `总额 ${exactNumber(item.total)}；剩余 ${exactNumber(item.remainingUnits)} ${item.unit}`;
+        zcodeNotes.push(usage);
+      }
+      graph.dataset.source = 'zcode';
+      graph._caption = caption;
+    }
+    content.replaceChildren(...(zcode ? [bucketSelector(model,item)] : []),stats,meta,graph,...zcodeNotes,forecast,bottom);
     selectView(chartViews.get(selected)||'line');
   }
   function renderQuota(model) {
     setTitle('额度明细');
     title.appendChild(node('small','title-product','ZCODE'));
-    const format = value => value === null ? '暂未提供' : value.toLocaleString('en-US', { maximumFractionDigits: 2 });
-    const list = node('ul','zcode-quota-list');
-    list.replaceChildren(...model.items.map(item => {
-      const li = node('li','zcode-quota-bucket'), heading = node('b','',bucketTitle(item) || '额度');
-      const values = node('p','',`剩余 ${format(item.remainingUnits)} / ${format(item.total)} ${item.unit}`);
-      const expiry = note(item.resetLabel || `${['one_time','expiry'].includes(item.periodKind) ? '到期' : ['daily','monthly'].includes(item.periodKind) ? '刷新' : '有效期'}：${dateLabel(item.resetsAt)}`);
-      const trend = button('查看趋势','reset-link',() => invoke('openDetail','trend',item.bucketId));
-      li.replaceChildren(heading,values,expiry,trend); return li;
-    }));
-    content.replaceChildren(...(model.planName ? [note(model.planName)] : []), ...(model.items.length ? [list] : [node('p','empty-state','暂未提供额度明细')]), note('不同模型、来源和有效期的额度分别统计。'));
+    const groups = new Map();
+    model.items.forEach(item=>{
+      const kind = planKind(item), groupName = kind === 'trial' && item.periodKind === 'daily' ? '每日体验' : kind === 'event' && ['one_time','expiry'].includes(item.periodKind) ? '限时活动' : item.planName || '额度';
+      const key = `${groupName}\u0000${item.periodKind}`;
+      if (!groups.has(key)) groups.set(key,{groupName,items:[]});
+      groups.get(key).items.push(item);
+    });
+    const sections = Array.from(groups.values(),({groupName,items})=>{
+      const group = node('section','zcode-quota-group'), list = node('ul','zcode-quota-list');
+      list.replaceChildren(...items.map(item=>{
+        const li = node('li','zcode-quota-bucket');
+        const exact = `剩余 ${exactNumber(item.remainingUnits)} / ${exactNumber(item.total)} ${item.unit}`;
+        const row = button('','zcode-quota-row',()=>invoke('openDetail','trend',item.bucketId));
+        row.dataset.bucketId = item.bucketId; row.title = `${bucketTitle(item)} · ${exact} · ${deadlineCopy(item).label}：${deadlineLabel(item.resetsAt)}`;
+        row.setAttribute('aria-label',`${bucketTitle(item)}，${item.remaining}%，${exact}，${deadlineCopy(item).label}：${deadlineLabel(item.resetsAt)}，查看趋势`);
+        const heading = node('span','zcode-quota-heading');
+        heading.replaceChildren(node('b','',item.label || '额度'),node('strong','',`${Math.round(item.remaining)}%`),node('span','reset-chevron','›'));
+        const progress = node('span','zcode-quota-progress'), fill = node('span',''); fill.style.width = `${item.remaining}%`; progress.appendChild(fill); progress.setAttribute('aria-hidden','true');
+        const values = node('span','zcode-quota-values',`剩余 ${shortNumber(item.remainingUnits)} / ${shortNumber(item.total)} ${item.unit}`); values.title = exact;
+        const separateDeadline = items.some(value=>value.resetsAt !== item.resetsAt);
+        const deadline = separateDeadline ? [node('span','zcode-quota-row-deadline',`${deadlineCopy(item).label}：${deadlineLabel(item.resetsAt)}`)] : [];
+        row.replaceChildren(heading,progress,values,...deadline); li.appendChild(row); return li;
+      }));
+      const deadline = deadlineCopy(items[0]), endings = [...new Set(items.map(item=>item.resetsAt))];
+      const foot = node('p','zcode-quota-deadline',endings.length === 1 ? `${deadline.label}：${deadlineLabel(items[0].resetsAt)}${items[0].resetsAt && deadline.detail ? ` · ${deadline.detail}` : ''}` : '各额度有效期限分别统计');
+      group.replaceChildren(node('h2','zcode-quota-group-title',groupName),list,foot); return group;
+    });
+    content.replaceChildren(...(sections.length ? sections : [node('p','empty-state','暂未提供额度明细')]));
   }
+
   function renderCredits(model) {
     setTitle('剩余额度');
     const credit = model.extraCredits, summary = node('div','balance-summary');
@@ -521,10 +567,8 @@
     try {
       const model = copyModel(value);
       const change = !lastModel || lastModel.action !== model.action || lastModel.period !== model.period || lastModel.bucketId !== model.bucketId;
-      const menuWasOpen = !change && bucketMenuOpen;
       const focusedBucket = !change ? document.activeElement?.dataset?.bucketOption : null;
-      const triggerHadFocus = !change && document.activeElement === bucketTrigger;
-      closeBucketMenu(false); bucketTrigger = null; bucketMenu = null; bucketOptions = [];
+      bucketOptions = [];
       if (model.sourceId !== 'zcode' || model.action !== 'trend') pendingBucket = null;
       const historyOpen = !change && panel.querySelector('.opportunity-history')?.open === true;
       const focusedThread = !change ? document.activeElement?.dataset?.threadId : null;
@@ -551,7 +595,7 @@
       if (openExpiry) { const event = Array.from(content.querySelectorAll('.reset-event')).find(event=>event.dataset.expiry===openExpiry); if(event)event.open=true; }
       if (helpOpen && content.querySelector('.chart-help')) content.querySelector('.chart-help').open=true;
       if (change) {
-        if (pendingBucket && pendingBucket === model.bucketId) { bucketTrigger?.focus(); pendingBucket = null; }
+        if (pendingBucket && pendingBucket === model.bucketId) { bucketOptions.find(option=>option.dataset.bucketOption === pendingBucket)?.focus(); pendingBucket = null; }
         else title.focus();
       }
       else if (focusedThread) {
@@ -568,10 +612,7 @@
       } else if (focusedHelp) {
         content.querySelector('.chart-help summary')?.focus();
       }
-      if (menuWasOpen) {
-        openBucketMenu();
-        bucketOptions.find(option=>option.dataset.bucketOption === focusedBucket)?.focus();
-      } else if (triggerHadFocus) bucketTrigger?.focus();
+      if (focusedBucket) bucketOptions.find(option=>option.dataset.bucketOption === focusedBucket)?.focus();
       scheduleExpiry(model);
       resize();
     } catch (_) { window.clearTimeout?.(expiryTimer); content.replaceChildren(node('p','empty-state','详情暂未提供')); resize(); }
@@ -592,12 +633,7 @@
   });
   close.addEventListener('click',() => invoke('close'));
   back.addEventListener('click',() => invoke('openDetail','trend',lastModel?.returnPeriod || (lastModel?.sourceId === 'zcode' ? lastModel?.bucketId : lastModel?.period)));
-  window.addEventListener('keydown',event => { if (event.key === 'Escape') { event.preventDefault(); if (bucketMenuOpen) closeBucketMenu(); else invoke('close'); } });
-  document.addEventListener?.('pointerdown',event=>{ if (bucketMenuOpen && !bucketMenu?.contains(event.target) && !bucketTrigger?.contains(event.target)) closeBucketMenu(false); });
-  document.addEventListener?.('focusin',event=>{ if (bucketMenuOpen && !bucketMenu?.contains(event.target) && !bucketTrigger?.contains(event.target)) closeBucketMenu(false); });
-  panel.addEventListener('scroll',()=>closeBucketMenu(false));
-  window.addEventListener('blur',()=>closeBucketMenu(false));
-  window.addEventListener('resize',positionBucketMenu);
+  window.addEventListener('keydown',event => { if (event.key === 'Escape') { event.preventDefault(); invoke('close'); } });
   const unsubscribe = bridge.onModel(render);
   const unsubscribeColor = bridge.onColorMode?.((value, preference) => { colorMode = value === 'accessible' ? 'accessible' : 'standard'; if (['light','dark','system'].includes(preference)) appearance = preference; theme(); });
   const mediaChange = () => theme(); media?.addEventListener?.('change',mediaChange);

@@ -707,6 +707,8 @@ body {
 .v20-periods { margin-top: 4px; }
 .v20-periods.dual { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; margin-top: 3px; }
 .v20-period { min-width: 0; }
+button.v20-period { display: block; appearance: none; width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+button.v20-period:focus-visible { outline: 1px solid var(--quota-action-blue); outline-offset: 2px; border-radius: 2px; }
 .v20-periods.dual .v20-period + .v20-period { padding-left: 5px; border-left: 1px solid var(--quota-line); }
 .v20-cell-label { height: 15px; display: flex; align-items: center; }
 .v20-value-row { display: flex; justify-content: space-between; align-items: baseline; gap: 3px; min-width: 0; }
@@ -862,11 +864,11 @@ body[data-guard-size="compact"] .guard-entry-zombie { top: 11px; }
 
 /* ZCode keeps the shared card while allowing separate model/plan buckets. */
 #quota-label[data-source="zcode"] { max-height: 100vh; overflow-y: auto; }
-#quota-label[data-source="zcode"] .v20-cell-label .period-pill { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 12px; }
+#quota-label[data-source="zcode"] .v20-cell-label .period-pill { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 9px; line-height: 14px; }
 #quota-label[data-source="zcode"] .v20-periods.dual { row-gap: 9px; }
 #quota-label[data-source="zcode"] .v20-periods.dual .v20-period:nth-child(odd) { padding-left: 0; border-left: 0; }
 #quota-label[data-source="zcode"] .v20-cell-label { height: 27px; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; }
-#quota-label[data-source="zcode"] .v20-plan-name { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--quota-subtle); font-size: 7px; line-height: 10px; }
+#quota-label[data-source="zcode"] .v20-plan-name { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--quota-subtle); font-size: 9px; line-height: 12px; }
 #quota-label[data-source="zcode"] .v20-brand { min-width: 0; }
 #quota-label[data-source="zcode"] .v20-brand .period-pill { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -875,3 +877,9 @@ body[data-guard-size="compact"] .guard-entry-zombie { top: 11px; }
 #quota-label[data-source="zcode"][data-expanded="false"] .quota-period { padding-inline: 3px; }
 #quota-label[data-source="zcode"] .v20-brand .period-pill { flex-shrink: 1; }
 #quota-label[data-source="zcode"] .v20-header-tools { flex: none; }
+
+/* Larger source-specific supporting text; Codex keeps its established scale. */
+#quota-label[data-source="zcode"] .v20-reset { font-size: 9px; line-height: 14px; }
+#quota-label[data-source="zcode"] .v20-pace { font-size: 9px; line-height: 14px; }
+#quota-label[data-source="zcode"] .v20-shared { min-height: 19px; font-size: 9px; line-height: 16px; }
+#quota-label[data-source="zcode"] .v20-links { min-height: 21px; font-size: 10px; line-height: 20px; }

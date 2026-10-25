@@ -44,10 +44,10 @@ if (!process.versions.electron) {
       isolatedUserData: true, appMainLoaded: false, userSettingsWritten: false, actualModelCalls: 0,
       actualQuotaRead: false, taskFixturesOnly: true, checks: [], screenshots: [], rendererErrors: [] };
     const errors = [], handlers = [], listeners = [];
-    let zcode, codex, details, snapshot, appearance = 'light';
+    let zcode, codex, details, snapshot, appearance = 'light', size = 'standard', sameAnchor = false, stackEnabled = false;
     const js = (surface, code) => surface.getWindow().webContents.executeJavaScript(code, true);
     const waitFor = async (surface, code, label) => {
-      for (let i = 0; i < 80; i++) { if (surface.getWindow() && await js(surface, code)) return; await delay(40); }
+      for (let i = 0; i < 80; i++) { if (surface.getWindow() && surface.isVisible?.() !== false && await js(surface, code)) return; await delay(40); }
       throw new Error(`Native UI did not reach: ${label}`);
     };
     const capture = async (surface, name) => {
@@ -92,9 +92,11 @@ if (!process.versions.electron) {
       const fakePet = bounds => ({ isDestroyed: () => false, isVisible: () => true, getBounds: () => bounds });
       nativeTheme.themeSource = 'light';
       zcode = createQuotaLabelWindow({ BrowserWindow, screen, sourceId: 'zcode', getPetWindow: () => fakePet(anchor),
-        getAppearance: () => appearance, onError: error => errors.push(error.message), alwaysOnTop: true });
-      codex = createQuotaLabelWindow({ BrowserWindow, screen, getPetWindow: () => fakePet({ ...anchor, x: anchor.x - 310 }),
-        getAppearance: () => 'light', onError: error => errors.push(error.message), alwaysOnTop: true });
+        getAppearance: () => appearance, getSize: () => size,
+        getObstacle: () => stackEnabled ? codex?.getVisibleBounds() : null,
+        getPresentation: () => ({ quotaBottomAligned: true, quotaStackBelow: stackEnabled ? codex?.getVisibleBounds() : null, quotaObstacles: stackEnabled ? [codex?.getVisibleBounds()].filter(Boolean) : [] }), onError: error => errors.push(error.message), alwaysOnTop: true });
+      codex = createQuotaLabelWindow({ BrowserWindow, screen, getPetWindow: () => fakePet(sameAnchor ? anchor : { ...anchor, x: anchor.x - 310 }),
+        getAppearance: () => 'light', getSize: () => size, onError: error => errors.push(error.message), alwaysOnTop: true });
       details = createCodexDetailsWindow({ BrowserWindow, screen, sourceId: 'zcode', getAnchor: () => ({ ...anchor, x: anchor.x + 260 }),
         onError: error => errors.push(error.message) });
       on('pet:zcode-quota-label-detail', (event, action, bucketId) => { assert.equal(ownsLabel(event), true); openDetails(action, bucketId); });
@@ -130,6 +132,29 @@ if (!process.versions.electron) {
       assert.ok(expandedBounds.footer.right <= expandedBounds.innerWidth, 'Expanded footer must not overflow horizontally.');
       report.expandedBucketText = bucketText;
       await capture(zcode, '02-zcode-expanded-light');
+      const checkTimeLabels = async theme => {
+        const rows = await js(zcode, `[...document.querySelectorAll('.v20-reset')].map(el => { const text = el.querySelector('span'); return { text:text.textContent, title:el.title, clientWidth:text.clientWidth, scrollWidth:text.scrollWidth }; })`);
+        assert.equal(rows.length, 4);
+        assert.ok(rows.every(row => row.clientWidth > 0 && row.scrollWidth <= row.clientWidth), 'Every visible deadline label must fit without ellipsis.');
+        assert.ok(rows.every(row => /(?:到期|刷新)$/.test(row.text)), 'Visible labels must preserve expiry/refresh semantics.');
+        assert.ok(rows.every(row => /^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}/.test(row.title)), 'Hover title must retain the exact local date and time.');
+        (report.timeLabels ||= {})[theme] = rows;
+      };
+      await checkTimeLabels('light');
+      if (process.env.PET_ZCODE_SMOKE_TIME_ONLY === '1') {
+        appearance = 'dark'; nativeTheme.themeSource = 'dark';
+        zcode.show(buildZcodeQuotaLabelModel(snapshot, {}, now));
+        await waitFor(zcode, "document.documentElement.dataset.appearance === 'dark'", 'short time dark appearance');
+        await checkTimeLabels('dark'); await capture(zcode, '07-zcode-expanded-dark');
+        assert.equal(await js(codex, "document.querySelector('#quota-label').outerHTML"), originalCodex);
+        assert.deepEqual(errors, []); assert.deepEqual(report.rendererErrors, []);
+        report.ok = true; report.timeOnly = true;
+        report.checks.push('四桶展开浅深：可见时间全部无截断且保留刷新/到期结尾，title完整本机年月日时分；Codex内容不变');
+        fs.writeFileSync(path.join(outputDirectory, 'report.json'), `${JSON.stringify(report, null, 2)}\n`);
+        console.log(`PET_ZCODE_UI_SMOKE_OK ${JSON.stringify({checks:report.checks.length,screenshots:report.screenshots.length,report:path.join(outputDirectory,'report.json')})}`);
+        app.quit(); return;
+      }
+
       zcode.show(buildZcodeQuotaLabelModel({ ...snapshot, quota: { ...snapshot.quota, windows: usage.buckets.slice(0, 2) } }, {}, now));
       await waitFor(zcode, "document.querySelector('#quota-label').dataset.itemCount === '2' && document.querySelector('#quota-label').dataset.expanded === 'true'", 'two bucket expanded fixture');
       const dualBounds = await js(zcode, `(() => { const footer = document.querySelector('.v20-links').getBoundingClientRect(); return { innerWidth, innerHeight, footer: footer.toJSON() }; })()`);
@@ -149,22 +174,23 @@ if (!process.versions.electron) {
       await waitFor(zcode, "document.querySelector('#quota-label').dataset.itemCount === '4'", 'restore real four buckets');
       report.checks.push('原生指针点击折叠/展开；四桶保留且同名模型来源可区分');
       await pointer(zcode, '[data-action="quota"]');
-      await waitFor(details, "document.querySelectorAll('.zcode-quota-bucket').length === 4 && document.querySelector('#details-panel').dataset.source === 'zcode'", 'four quota details');
+      await waitFor(details, "document.querySelectorAll('button.zcode-quota-row[data-bucket-id]').length === 4 && document.querySelector('#details-panel').dataset.source === 'zcode'", 'four quota details');
       observe(details);
       const detailsText = await js(details, "document.querySelector('#details-content').innerText");
-      for (const row of usage.buckets) assert.ok(detailsText.includes(row.total.toLocaleString('en-US')));
+      const exactTitles = await js(details, "[...document.querySelectorAll('.zcode-quota-values')].map(el => el.title).join(' ')");
+      for (const row of usage.buckets) assert.ok(exactTitles.includes(row.total.toLocaleString('en-US')));
       assert.ok(detailsText.includes('到期') && detailsText.includes('刷新'));
       assert.equal(details.owns({ sender: codex.getWindow().webContents, senderFrame: codex.getWindow().webContents.mainFrame }), false);
       await capture(details, '03-zcode-quota-details-light');
       report.checks.push('同源 IPC 打开额度明细；四份真实总量及到期/刷新分别显示；错误窗口身份不被拥有');
-      await pointer(details, '.zcode-quota-bucket .reset-link');
-      await waitFor(details, "document.querySelectorAll('.trend-tabs button').length === 4", 'four bucket trend tabs');
-      const tabs = await js(details, "[...document.querySelectorAll('.trend-tabs button')].map(el => ({ id: el.dataset.period, text: el.innerText }))");
+      await pointer(details, 'button.zcode-quota-row');
+      await waitFor(details, "document.querySelectorAll('.zcode-bucket-button[data-bucket-option]').length === 4", 'four bucket selector options');
+      const tabs = await js(details, "[...document.querySelectorAll('.zcode-bucket-button[data-bucket-option]')].map(el => ({ id: el.dataset.bucketOption, text: el.innerText }))");
       assert.equal(new Set(tabs.map(row => row.id)).size, 4); assert.equal(new Set(tabs.map(row => row.text)).size, 4);
       report.trendTabs = tabs;
       for (const tab of tabs) {
-        await pointer(details, `.trend-tabs button[data-period=${JSON.stringify(tab.id)}]`);
-        await waitFor(details, `document.querySelector('.trend-tabs [aria-pressed="true"]')?.dataset.period === ${JSON.stringify(tab.id)}`, 'selected bucket trend');
+        await pointer(details, `.zcode-bucket-button[data-bucket-option=${JSON.stringify(tab.id)}]`);
+        await waitFor(details, `document.querySelector('.zcode-bucket-button[data-bucket-option][aria-pressed="true"]')?.dataset.bucketOption === ${JSON.stringify(tab.id)}`, 'selected bucket trend');
         assert.equal(details.getPeriod(), tab.id);
       }
       await capture(details, '04-zcode-trend-last-bucket-light');
@@ -184,6 +210,37 @@ if (!process.versions.electron) {
       openDetails('tasks', usage.buckets[0].id);
       await waitFor(details, "document.querySelector('.empty-state')?.textContent === '暂无进行中任务'", 'known empty task fixture');
       report.checks.push('任务 unknown 明确暂未提供；active/已知空态用显式夹具验证；浅色和深色原生渲染');
+      report.bucketInteractions = []; report.keyboardFocusProvidedByHarness = false; report.keyboard = {state:'not_run', reason:'existing non-focusing native card policy; temporary focus key injection did not activate a button reliably'};
+      for (const count of [1, 2, 4]) for (const nextSize of ['standard', 'compact']) for (const nextAppearance of ['light', 'dark']) {
+        size = nextSize; appearance = nextAppearance;
+        nativeTheme.themeSource = appearance;
+        zcode.show(buildZcodeQuotaLabelModel({ ...snapshot, quota: { ...snapshot.quota, windows: usage.buckets.slice(0, count) } }, {}, now));
+        await waitFor(zcode, `document.querySelector('#quota-label').dataset.itemCount === '${count}'`, 'bucket interaction matrix');
+        if (await js(zcode, "document.querySelector('#quota-label').dataset.expanded !== 'true'")) await pointer(zcode, '#quota-label', true);
+        await waitFor(zcode, "document.querySelector('#quota-label').dataset.expanded === 'true'", 'matrix expanded card');
+        const indexes = [...new Set([Math.min(1, count - 1), count - 1])];
+        for (const index of indexes) {
+          const selector = `.v20-periods > button.v20-period:nth-child(${index + 1})`;
+          const key = usage.buckets[index].bucketId;
+          assert.equal(await js(zcode, `document.querySelector(${JSON.stringify(selector)})?.type`), 'button');
+          await pointer(zcode, selector);
+          await waitFor(details, `document.querySelector('.zcode-bucket-button[data-bucket-option][aria-pressed="true"]')?.dataset.bucketOption === ${JSON.stringify(key)}`, 'clicked bucket selection');
+          assert.equal(details.getPeriod(), key);
+          assert.equal(await js(zcode, "document.querySelector('#quota-label').dataset.expanded"), 'true');
+          details.close();
+          // This card intentionally keeps the existing non-focusing native window policy.
+          // Pointer behavior is exercised here; semantic keyboard defaults are covered by native buttons,
+          // while OS keyboard routing is not claimed as verified by this isolated harness.
+          report.bucketInteractions.push({ count, size, appearance, bucketId: key, pointer: true, keyboard: 'not_run_non_focusing_window' });
+        }
+        if (count === 4 && (size === 'compact' && appearance === 'dark' || size === 'standard' && appearance === 'light')) {
+          await capture(zcode, `11-bucket-buttons-${size}-${appearance}`);
+        }
+      }
+      size = 'standard'; appearance = 'dark';
+      zcode.show(buildZcodeQuotaLabelModel(snapshot, {}, now));
+      await waitFor(zcode, "document.querySelector('#quota-label').dataset.itemCount === '4'", 'restore actual buckets after matrix');
+      report.checks.push('1/2/4桶、128/标准、浅深：第2/末桶整格真实点击直达对应趋势且不收起；键盘原生路由未通过，保持不抢焦点产品策略');
       const before = await js(zcode, "document.querySelector('#quota-label').outerHTML");
       zcode.getWindow().webContents.send('pet:quota-label', { state: 'ready', items: [{ label: 'WRONG_SOURCE', remaining: 1, windowMinutes: 300 }] });
       codex.getWindow().webContents.send('pet:zcode-quota-label', { sourceId: 'zcode', state: 'ready', items: [] });
@@ -195,6 +252,35 @@ if (!process.versions.electron) {
       assert.equal(await js(zcode, "typeof require"), 'undefined');
       await capture(codex, '08-codex-card-unchanged');
       report.checks.push('真实 preload 忽略另一来源频道；隔离 renderer 无 require；ZCode 操作全过程 Codex 卡内容不变');
+      report.placementMatrix = [];
+      sameAnchor = true; details.close();
+      const overlap = (a,b) => a.x < b.x+b.width && a.x+a.width > b.x && a.y < b.y+b.height && a.y+a.height > b.y;
+      for (const sample of [{ edge: 'left', size: 'standard', expanded: false }, { edge: 'right', size: 'compact', expanded: true }, { edge: 'bottom', size: 'standard', expanded: true }]) {
+        size = sample.size;
+        anchor.x = sample.edge === 'left' ? area.x + 2 : sample.edge === 'right' ? area.x + area.width - 82 : Math.round(area.x + area.width / 2 - 40);
+        anchor.y = sample.edge === 'bottom' ? area.y + area.height - 82 : area.y + 120;
+        for (const together of [false, true]) {
+          stackEnabled = together;
+          if (together) { codex.show(codexModel); if (codex.isExpanded?.() !== sample.expanded) { const actual = await js(codex, "document.querySelector('#quota-label').dataset.expanded === 'true'"); if (actual !== sample.expanded) await pointer(codex, actual ? '.v20-collapse' : '#quota-label', !actual); } codex.reposition(); }
+          else codex.hide();
+          zcode.show(buildZcodeQuotaLabelModel(snapshot, {}, now));
+          const zExpanded = await js(zcode, "document.querySelector('#quota-label').dataset.expanded === 'true'");
+          if (zExpanded !== sample.expanded) await pointer(zcode, zExpanded ? '.v20-collapse' : '#quota-label', !zExpanded);
+          zcode.reposition(); await delay(100);
+          const z = zcode.getVisibleBounds(), c = together ? codex.getVisibleBounds() : null;
+          assert.ok(z && z.x >= area.x && z.y >= area.y && z.x+z.width <= area.x+area.width && z.y+z.height <= area.y+area.height);
+          assert.equal(overlap(z, anchor), false, 'ZCode must not cover the pet');
+          if(c) assert.equal(overlap(z,c),false,'ZCode must not cover Codex');
+          if(sample.edge !== 'bottom' && together) { assert.equal(z.y,c.y+c.height+8); assert.equal(z.x+z.width/2,c.x+c.width/2); }
+          if(sample.expanded) {
+            const foot = await js(zcode, "({bottom: document.querySelector('.v20-links').getBoundingClientRect().bottom, height: innerHeight})");
+            assert.ok(foot.bottom < foot.height);
+          }
+          report.placementMatrix.push({ ...sample, together, zcode: z, codex: c });
+          if(together) await capture(zcode, `12-placement-${sample.edge}-${sample.size}`);
+        }
+      }
+      report.checks.push('原生窗口仅ZCode/双卡：左边标准收起、右边小巧展开、底边标准展开，完整可见不重叠；有空间时下方同中心');
       assert.deepEqual(errors, []); assert.deepEqual(report.rendererErrors, []);
       report.ok = true;
       for (const name of ['failure-zcode.png', 'failure-details.png']) {

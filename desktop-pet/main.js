@@ -59,6 +59,7 @@ const { createCodexChatRpc } = require('./lib/codex-chat-rpc');
 const { createChatWindow } = require('./lib/chat-window');
 const { createChatSources } = require('./lib/chat-sources');
 const { createZcodeLink } = require('./lib/zcode-link');
+const { buildZcodeQuotaLabelModel } = require('./lib/zcode-quota-view');
 const { createZcodeConsentWindow } = require('./lib/zcode-consent-window');
 const { createZcodeChatRpc, resolveZcodeChatModel } = require('./lib/zcode-chat-rpc');
 const { createNotesCompanion } = require('./lib/notes-companion');
@@ -857,12 +858,16 @@ function tickEdgeNotice(force = false) {
   const presentation = edgeTuck?.getPresentation();
   const visible = Boolean(!pomodoroQuiet && !shortcutWindow?.isPresenting() && !isQuitting && !chatWindow?.isVisible() && codexPageReady && petWindow && !petWindow.isDestroyed() && petWindow.isVisible());
   const quotaEnabled = settings?.codexEnabled === true && settings.codexQuotaAlwaysVisible === true && !shortcutWindow?.isPresenting();
+  const zcodeQuotaEnabled = settings?.zcodeEnabled === true && zcodeLink?.isEnabled()
+    && settings.zcodeQuotaAlwaysVisible === true && !shortcutWindow?.isPresenting();
   edgeNotice?.tick({ presentation, visible, locked: screenLocked,
-    bubblesEnabled: settings?.bubblesEnabled === true, quotaEnabled,
+    bubblesEnabled: settings?.bubblesEnabled === true, quotaEnabled, zcodeQuotaEnabled,
     appearance: settings?.codexQuotaAppearance,
     quotaModel: visible && quotaEnabled && presentation?.mode === 'tucked'
       ? buildQuotaLabelModel(codexCompanion?.getSnapshot(), { period: settings.codexQuotaPeriod, size: 'compact',
-        showExtraCredits: settings.codexShowExtraCredits }, codexNow()) : null
+        showExtraCredits: settings.codexShowExtraCredits }, codexNow()) : null,
+    zcodeQuotaModel: visible && !screenLocked && zcodeQuotaEnabled && presentation?.mode === 'tucked'
+      ? buildZcodeQuotaLabelModel(zcodeLink.getSnapshot(), { size: 'compact' }) : null
   });
 }
 
@@ -3408,9 +3413,11 @@ async function bootstrap() {
     getPetWindow: () => petWindow,
     getObstacles: () => [quotaLabel?.getVisibleBounds(), apiUsageLabel?.getWindow()?.isVisible()
       ? apiUsageLabel.getWindow().getBounds() : null, quotaObstacleBounds()].filter(Boolean),
-    getPresentation: () => ({ ...edgeTuck?.getPresentation(), shape: settings?.customization?.appearance?.shape }),
+    getPresentation: () => ({ ...edgeTuck?.getPresentation(), shape: settings?.customization?.appearance?.shape,
+      quotaBottomAligned: true, quotaStackBelow: quotaLabel?.getVisibleBounds(),
+      quotaStyle: quotaDisplayConfig().style, sheepTheme: settings?.customization?.appearance?.sheepTheme }),
     getSuppressed: () => isQuitting || screenLocked || chatWindow?.isVisible() || shortcutWindow?.isPresenting() || presentationSuppressed(),
-    onChange: () => refreshTrayMenu(),
+    onChange: () => { refreshTrayMenu(); tickEdgeNotice(true); },
     onLayout: () => pomodoroWindows?.sync(),
     onEnabledChanged: async enabled => {
       if (!enabled) await chat?.zcodeDisabled();

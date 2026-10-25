@@ -78,7 +78,8 @@ function bounded(candidate, size, area) {
 
 function quotaRoleTargetWidth(paintWidth) { return [22,24].includes(paintWidth) ? 48 : 64; }
 
-function quotaLabelSize(value, expanded = false, itemCount = 1, extraCredits = false, guardEntry = false, rolePaintWidth = null) {
+function quotaLabelSize(value, expanded = false, itemCount = 1, extraCredits = false, guardEntry = false, rolePaintWidth = null, sourceId = 'codex') {
+  if (sourceId === 'zcode' && expanded === true && itemCount > 1) return { width: 196, height: 154 + (Math.ceil(Math.min(itemCount, 32) / 2) - 1) * 90 };
   if (expanded === true && itemCount > 2) return { width: 196, height: 144 + (Math.ceil(Math.min(itemCount, 32) / 2) - 1) * 84 };
   if (expanded === true && itemCount > 1 && value === 'standard') return LABEL_SIZES.standardExpandedDual;
   if (expanded === true && itemCount > 1 && value === 'compact') return LABEL_SIZES.compactExpandedDual;
@@ -99,13 +100,36 @@ function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName =
   const pet = ['ring', 'duo', 'split', 'stages'].includes(presentation?.quotaStyle)
     ? presentation?.shape === 'new-year-sheep' ? nativePet : { ...visual, y: nativePet.y, height: nativePet.height } : visual;
   const obstacle = safeObstacle(obstacleBounds);
-  const requestedSize = quotaLabelSize(sizeName, expanded, itemCount, extraCredits);
+  const requestedSize = quotaLabelSize(sizeName, expanded, itemCount, extraCredits, false, null, presentation?.quotaSourceId);
   const size = {
     width: Math.min(requestedSize.width, area.width),
     height: Math.min(requestedSize.height, area.height)
   };
   const centerX = pet.x + pet.width / 2;
   const centerY = pet.y + pet.height / 2;
+  if (presentation?.quotaBottomAligned === true) {
+    // ZCode follows the existing Codex card without changing Codex's own anchor.
+    // Keep obstacle rectangles separate: their bounding union can cover free gaps.
+    const stack = safeObstacle(presentation.quotaStackBelow);
+    const obstacles = Array.isArray(presentation.quotaObstacles)
+      ? presentation.quotaObstacles.map(safeObstacle).filter(Boolean) : [obstacle].filter(Boolean);
+    if (stack && !obstacles.some(row => row.x === stack.x && row.y === stack.y && row.width === stack.width && row.height === stack.height)) obstacles.push(stack);
+    const alignedX = (stack ? stack.x + stack.width / 2 : centerX) - size.width / 2;
+    const positions = [
+      { placement: 'below', x: alignedX, y: stack ? stack.y + stack.height + GAP : pet.y + pet.height + GAP },
+      { placement: 'below', x: centerX - size.width / 2, y: pet.y + pet.height + GAP },
+      { placement: 'above', x: centerX - size.width / 2, y: pet.y - size.height - GAP },
+      { placement: 'right', x: pet.x + pet.width + GAP, y: centerY - size.height / 2 },
+      { placement: 'left', x: pet.x - size.width - GAP, y: centerY - size.height / 2 },
+      ...obstacles.flatMap(row => [
+        { placement: 'right', x: row.x + row.width + GAP, y: row.y },
+        { placement: 'left', x: row.x - size.width - GAP, y: row.y },
+        { placement: 'above', x: alignedX, y: row.y - size.height - GAP }
+      ])
+    ].map(candidate => bounded(candidate, size, area));
+    const clear = candidate => !overlaps(candidate, size, pet) && !obstacles.some(row => overlaps(candidate, size, row));
+    return positions.find(clear) || positions[0];
+  }
   const candidates = [
     { placement: 'below', x: centerX - size.width / 2, y: pet.y + pet.height + GAP },
     { placement: 'above', x: centerX - size.width / 2, y: pet.y - size.height - GAP },

@@ -41,3 +41,75 @@ test('partial live task evidence remains visible while the overall task count st
   ] } }, { action: 'tasks' }, now);
   assert.equal(model.tasks[0].state, 'active'); assert.equal(model.tasks[1].state, 'unknown'); assert.equal(model.activity.runningCount, null);
 });
+
+function forecastFixture({ remaining = 40, kind = 'daily', decline = 10 } = {}) {
+  const row = { ...buckets[0], id: 'zcode:forecast:bucket', periodKind: kind,
+    periodStart: now - 3600000, resetsAt: now + 3600000, windowMinutes: 120, remaining };
+  const samples = Array.from({ length: 6 }, (_, index) => ({ at: now - (5 - index) * 120000,
+    remaining: remaining + decline * (5 - index) / 5 }));
+  return { ...snapshot, quota: { ...snapshot.quota, windows: [row] },
+    history: { available: true, windows: [{ ...row, samples }], results: [] } };
+}
+const forecastModel = source => buildZcodeDetailsModel(source, { action: 'trend' }, now);
+test('ZCode pace uses its actual supplied span and the existing ten-point pace threshold', () => {
+  for (const [remaining, state] of [[30, 'fast'], [40, 'balanced'], [50, 'balanced'], [60, 'balanced'], [70, 'slow']]) {
+    const item = forecastModel(forecastFixture({ remaining })).items[0];
+    assert.equal(item.pace.remainingTimePercent, 50); assert.equal(item.pace.state, state);
+  }
+  const source = forecastFixture(); source.quota.stale = true;
+  assert.deepEqual(forecastModel(source).items[0].pace, { state: 'unknown', remainingTimePercent: null });
+  const future = forecastFixture(); Object.assign(future.quota.windows[0], { periodStart: now + 60000, resetsAt: now + 7200000 });
+  assert.equal(forecastModel(future).items[0].pace.remainingTimePercent, null);
+});
+test('fresh continuous real declines estimate risk, tight and safe within the independent ZCode bucket', () => {
+  for (const [remaining, status] of [[40, 'risk'], [65, 'tight'], [80, 'safe']]) {
+    const source = forecastFixture({ remaining }), before = JSON.stringify(source);
+    const forecast = forecastModel(source).trend.forecast;
+    assert.equal(forecast.state, 'estimate'); assert.equal(forecast.status, status);
+    assert.equal(forecast.reference, true); assert.equal(forecast.exhaustsAt, now + remaining * 60000);
+    assert.match(forecast.detail, /刷新/); assert.equal(JSON.stringify(source), before);
+  }
+  const once = forecastModel(forecastFixture({ kind: 'one_time' })).trend.forecast;
+  assert.match(once.detail, /到期/); assert.doesNotMatch(once.summary + once.detail, /重置|刷新/);
+  const rolling = forecastModel(forecastFixture({ kind: 'rolling' })).trend.forecast;
+  assert.match(rolling.detail, /重置/);
+  const unknown = forecastModel(forecastFixture({ kind: 'unknown' })).trend.forecast;
+  assert.match(unknown.detail, /有效期/);
+});
+test('unusable ZCode observations explain why they cannot estimate without inventing a rate', () => {
+  const scenarios = [
+    ['stale', source => { source.quota.stale = true; }, /未更新/],
+    ['stale', source => { source.quota.updatedAt = now - 300000; }, /未更新/],
+    ['stale', source => { source.quota.updatedAt = now + 1; }, /未更新/],
+    ['insufficient-records', source => { source.history.available = false; }, /记录不足/],
+    ['insufficient-records', source => { source.history.windows[0].samples = source.history.windows[0].samples.slice(-2); }, /记录不足/],
+    ['insufficient-records', source => { source.history.windows[0].samples.forEach(sample => { sample.at += 120000; }); }, /记录不足/],
+    ['insufficient-records', source => { source.history.windows[0].samples.forEach(sample => { sample.at -= 300000; }); }, /记录不足/],
+    ['value-mismatch', source => { source.quota.windows[0].remaining = 39; }, /等待采样同步/],
+    ['discontinuity', source => { source.history.windows[0].samples.splice(1, 2); }, /连续记录不足/],
+    ['discontinuity', source => { source.history.windows[0].samples.at(-2).remaining = 39; }, /连续记录不足/],
+    ['discontinuity', source => { source.history.windows[0].samples.at(-2).remaining = 70; }, /连续记录不足/],
+    ['insufficient-records', source => { source.history.windows[0].id += ':other'; }, /记录不足/],
+    ['insufficient-records', source => { source.history.windows[0].periodStart -= 86400000; }, /记录不足/],
+    ['insufficient-records', source => { source.history.windows[0].resetsAt += 86400000; }, /记录不足/]
+  ];
+  for (const [reason, change, detail] of scenarios) {
+    const source = forecastFixture(); change(source); const forecast = forecastModel(source).trend.forecast;
+    assert.equal(forecast.state, 'unknown', String(change)); assert.equal(forecast.reason, reason, String(change));
+    assert.equal(forecast.exhaustsAt, null); assert.match(forecast.detail, detail);
+  }
+  const unchanged = forecastModel(forecastFixture({ remaining: 100, decline: 0 })).trend.forecast;
+  assert.equal(unchanged.state, 'unknown'); assert.equal(unchanged.reason, 'no-decline');
+  assert.equal(unchanged.detail, '已记录时段内额度未下降，暂不预估用完时间');
+  const noPeriod = forecastFixture(); Object.assign(noPeriod.quota.windows[0], { periodStart: null, windowMinutes: null });
+  const missing = forecastModel(noPeriod);
+  assert.equal(missing.trend.forecast.reason, 'missing-period'); assert.equal(missing.items[0].pace.remainingTimePercent, null);
+  assert.match(missing.trend.forecast.detail, /未提供周期起点/);
+});
+test('a sufficient fresh segment after correction may estimate without using older or future samples', () => {
+  const source = forecastFixture(); const cycle = source.history.windows[0];
+  cycle.samples.unshift({ at: now - 1200000, remaining: 40 }, { at: now - 1100000, remaining: 30 });
+  cycle.samples.push({ at: now + 1, remaining: 1 });
+  assert.equal(forecastModel(source).trend.forecast.state, 'estimate');
+  assert.equal(forecastModel(source).trend.forecast.exhaustsAt, now + 2400000);
+});

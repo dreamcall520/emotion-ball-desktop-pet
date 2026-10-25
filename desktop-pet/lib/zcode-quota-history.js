@@ -86,7 +86,10 @@ function createZcodeQuotaHistory({ filePath, now = Date.now, onError = () => {} 
         if (!cycle) { cycle = { id: window.id, bucketId: window.id, windowMinutes: window.windowMinutes,
           periodStart: window.periodStart, resetsAt: window.resetsAt, samples: [] }; account.windows.push(cycle); }
         const previous = cycle.samples.at(-1);
-        if (previous && (quota.updatedAt <= previous.at || quota.updatedAt - previous.at < 60000)) continue;
+        if (previous && quota.updatedAt <= previous.at) continue;
+        const interrupted = previous && (window.remaining > previous.remaining
+          || previous.remaining - window.remaining >= 25 || quota.updatedAt - previous.at >= 300000);
+        if (previous && !interrupted && quota.updatedAt - previous.at < 60000) continue;
         cycle.samples.push({ at: quota.updatedAt, remaining: window.remaining }); cycle.samples = cycle.samples.slice(-MAX_SAMPLES);
       }
     }

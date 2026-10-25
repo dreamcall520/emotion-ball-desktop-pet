@@ -129,3 +129,54 @@ test('quota capsule respects a work area smaller than the preferred dimensions',
       { x: -80, y: -40, width: 200, height: 30 });
   }
 });
+
+function enableZcode(f) {
+  f.state.zcodeQuotaEnabled = true;
+  f.state.zcodeQuotaModel = { sourceId: 'zcode', state: 'ready', items: [
+    { id: 'zcode:actual:bucket', bucketId: 'zcode:actual:bucket', model: 'GLM-5.3-Flash', remaining: 64.4, periodKind: 'one_time', windowMinutes: 2195.35 }
+  ] };
+}
+test('fresh providers alternate within the existing quota schedule and shared cooldown', () => {
+  const f = fixture(); f.state.bubblesEnabled = false; enableZcode(f);
+  f.tick(0); assert.equal(f.tick(30000).sourceId, 'codex');
+  f.tick(36000); assert.equal(f.tick(120000), null, 'ZCode adds no extra quota opportunity');
+  const zcode = f.tick(330000); assert.equal(zcode.sourceId, 'zcode');
+  assert.equal(zcode.period, '5.3 Flash'); assert.equal(zcode.model, 'GLM-5.3-Flash');
+  assert.equal(zcode.remaining, 64); assert.equal(zcode.bucketId, 'zcode:actual:bucket');
+  f.state.zcodeQuotaModel.items[0].remaining = 20;
+  const updated = f.tick(331000); assert.equal(updated.id, zcode.id); assert.equal(updated.statusLabel, '偏低');
+  assert.equal(updated.expiresAt, zcode.expiresAt);
+  f.tick(336000); assert.equal(f.tick(630000).sourceId, 'codex');
+});
+test('ZCode alone uses true bucket percentages without requiring a Codex period', () => {
+  const f = fixture(); f.state.quotaEnabled = false; f.state.bubblesEnabled = false; enableZcode(f);
+  f.state.zcodeQuotaModel.items[0].remaining = 0;
+  f.tick(0); const shown = f.tick(30000);
+  assert.equal(shown.sourceId, 'zcode'); assert.equal(shown.remaining, 0); assert.equal(shown.statusLabel, '已用尽');
+  assert.doesNotMatch(JSON.stringify(shown), /积分/);
+});
+test('disabled, stale, removed or invalid ZCode buckets cancel their active notice and never reuse its balance', () => {
+  for (const mutate of [
+    s => { s.zcodeQuotaEnabled = false; }, s => { s.zcodeQuotaModel.state = 'stale'; },
+    s => { s.zcodeQuotaModel.state = 'disabled'; }, s => { s.zcodeQuotaModel.items = []; },
+    s => { s.zcodeQuotaModel.items = {}; },
+    s => { s.zcodeQuotaModel.items[0].remaining = NaN; },
+    s => { s.zcodeQuotaModel.items[0].id = s.zcodeQuotaModel.items[0].bucketId = 'zcode:replacement'; }
+  ]) {
+    const f = fixture(); f.state.bubblesEnabled = false; enableZcode(f);
+    f.state.quotaEnabled = false; f.tick(0); assert.equal(f.tick(30000).sourceId, 'zcode');
+    mutate(f.state); assert.equal(f.tick(30100), null);
+  }
+  for (const mutate of [s => { s.visible = false; }, s => { s.locked = true; }]) {
+    const f = fixture(); enableZcode(f); f.state.quotaEnabled = false; f.tick(0); f.tick(30000);
+    mutate(f.state); assert.equal(f.tick(30100), null); assert.equal(f.tick(900000), null);
+  }
+});
+test('unavailable providers are skipped while the other keeps its existing schedule', () => {
+  for (const invalid of ['codex', 'zcode']) {
+    const f = fixture(); f.state.bubblesEnabled = false; enableZcode(f);
+    (invalid === 'codex' ? f.state.quotaModel : f.state.zcodeQuotaModel).state = 'stale';
+    f.tick(0); assert.equal(f.tick(30000).sourceId, invalid === 'codex' ? 'zcode' : 'codex');
+    f.tick(36000); assert.equal(f.tick(330000).sourceId, invalid === 'codex' ? 'zcode' : 'codex');
+  }
+});

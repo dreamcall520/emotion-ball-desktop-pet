@@ -22,37 +22,73 @@ if (!process.versions.electron) {
   async function key(win,keyCode){win.webContents.sendInputEvent({type:'keyDown',keyCode});win.webContents.sendInputEvent({type:'keyUp',keyCode});await wait(50);}
   app.whenReady().then(async()=>{
     fs.mkdirSync(output,{recursive:true});const report={ok:false,fixtureOnly:true,actualModelCalls:0,scenarios:[],screenshots:[]};
-    const now=Date.now(),plans=['ZCode 1024 Dev Day 活动套餐：不同模型分别计量','ZCode Start Plan 体验额度：每天刷新且不合并','另一个名称很长的活动套餐：仅验证长标题和关闭按钮不会发生重叠','名称很长的体验套餐，用来验证四个完整选项在窄窗口内可阅读'];
-    const zitems=plans.map((planName,i)=>({bucketId:`zcode:fixture-${i}`,label:i%2?'GLM-5.3-Flash':'GLM-5.3',planName,windowMinutes:1440,periodStart:now-3600000,resetsAt:now+82800000,remaining:84-i*4,periodKind:i%2?'daily':'one_time',pace:{state:'unknown',remainingTimePercent:null}}));
+    const { buildZcodeDetailsModel } = require('../lib/zcode-quota-view');
+    const now=Date.now(),plans=['ZCode Start Plan 体验额度：每天重新计算，不同模型分别计量','ZCode Start Plan 体验额度：每天重新计算，不同模型分别计量','ZCode 1024 Dev Day 活动套餐：四个很长的来源名称也不能覆盖关闭按钮','ZCode 1024 Dev Day 活动套餐：四个很长的来源名称也不能覆盖关闭按钮'];
+    const zitems=plans.map((planName,i)=>({id:`zcode:fixture-${i}`,label:i%2?'GLM-5.3-Flash':'GLM-5.3',planName,windowMinutes:i<2?1440:43200,periodStart:now-3600000,resetsAt:now+82800000,remaining:100,remainingUnits:199999123.456789,total:200000000,unit:'tokens',periodKind:i<2?'daily':'one_time'}));
     try {
       for(const source of ['zcode','codex'])for(const width of [320,404])for(const appearance of ['light','dark']){
         nativeTheme.themeSource=appearance;const prefix=`pet:${source}-details`,items=source==='zcode'?zitems:[{windowMinutes:300,remaining:64,resetsAt:now+7200000},{windowMinutes:10080,remaining:77,resetsAt:now+604800000}];
         const win=new BrowserWindow({width,height:520,show:false,frame:false,transparent:true,useContentSize:true,webPreferences:{preload:path.resolve(__dirname,'../codex-details-preload.js'),contextIsolation:true,nodeIntegration:false,sandbox:true,...(source==='zcode'?{additionalArguments:['--pet-source=zcode']}: {})}});
-        let selected=source==='zcode'?items[0].bucketId:300,closed=0;const calls=[];
-        const model=()=>({sourceId:source,action:'trend',items,bucketId:source==='zcode'?selected:null,period:source==='codex'?selected:1440,appearance,state:'ready',quotaUpdatedAt:now,trend:{windowMinutes:1440,resetsAt:now+82800000,samples:[{at:now-120000,remaining:90},{at:now-60000,remaining:87},{at:now,remaining:84}]}});
+        let selected=source==='zcode'?items[0].id:300,closed=0,action='trend',estimated=false,monthWindow=false;const calls=[];
+        const model=()=>{
+          if(source!=='zcode')return {sourceId:source,action:'trend',items,period:selected,appearance,state:'ready',quotaUpdatedAt:now,trend:{windowMinutes:1440,resetsAt:now+82800000,samples:[{at:now-120000,remaining:90},{at:now-60000,remaining:87},{at:now,remaining:84}]}};
+          const windows=zitems.map(item=>({...item,remaining:estimated?97:100,...(monthWindow ? {periodStart:now-30*86400000,windowMinutes:31*1440} : {})}));
+          const snapshot={enabled:true,quota:{state:'connected',stale:false,updatedAt:now,windows},history:{available:true,windows:windows.map(item=>({id:item.id,periodStart:item.periodStart,resetsAt:item.resetsAt,samples:(monthWindow ? [-1,0] : [-12,-8,-4,0]).map((minute,i)=>({at:now+minute*60000,remaining:estimated?100-i:100}))}))}};
+          return buildZcodeDetailsModel(snapshot,{action,bucketId:selected,appearance},now);
+        };
         const owns=e=>e.sender===win.webContents&&e.senderFrame===e.sender.mainFrame&&e.sender.getURL()===pathToFileURL(path.resolve(__dirname,'../codex-details.html')).href;
-        const open=(event,action,id)=>{assert.ok(owns(event));assert.equal(action,'trend');assert.ok(items.some(item=>source==='zcode'?item.bucketId===id:item.windowMinutes===id));calls.push(id);selected=id;win.webContents.send(prefix,model());};
+        const open=(event,next,id)=>{assert.ok(owns(event));assert.ok(['trend','quota'].includes(next));assert.ok(items.some(item=>source==='zcode'?item.id===id:item.windowMinutes===id));calls.push({action:next,id});selected=id;action=next;win.webContents.send(prefix,model());};
         const close=event=>{assert.ok(owns(event));closed++;};
         const resize=(event,height)=>{assert.ok(owns(event));win.setContentSize(width,Math.min(700,screen.getPrimaryDisplay().workArea.height-20,Math.max(120,height)));};
         ipcMain.on(`${prefix}-open`,open);ipcMain.on(`${prefix}-close`,close);ipcMain.on(`${prefix}-resize`,resize);
         try {
           await win.loadFile(path.resolve(__dirname,'../codex-details.html'));win.webContents.send(prefix,model());win.showInactive();
           await poll(()=>page(win,"document.querySelector('.title-product')?.textContent"),value=>value===source.toUpperCase(),'initial renderer');await wait(100);
-          const geometry=await page(win,`(()=>{const r=s=>document.querySelector(s)?.getBoundingClientRect().toJSON();return{width:innerWidth,scrollWidth:document.body.scrollWidth,header:r('.panel-header'),close:r('#details-close'),selector:r('.zcode-bucket-selector'),trigger:r('.zcode-bucket-trigger'),description:r('.zcode-bucket-description'),headerTabs:document.querySelectorAll('.panel-header .trend-tabs').length};})()`);
+          const geometry=await page(win,`(()=>{const r=s=>document.querySelector(s)?.getBoundingClientRect().toJSON();return{width:innerWidth,scrollWidth:document.body.scrollWidth,header:r('.panel-header'),close:r('#details-close'),selector:r('.zcode-bucket-selector'),grid:r('.zcode-bucket-grid'),description:r('.zcode-bucket-description'),headerTabs:document.querySelectorAll('.panel-header .trend-tabs').length};})()`);
           assert.equal(geometry.width,width);assert.ok(geometry.scrollWidth<=width);assert.ok(geometry.close.right<=width&&geometry.close.left>=0);
           const scenario={source,width,appearance,geometry};report.scenarios.push(scenario);
           const capture=async suffix=>{await wait(80);const file=path.join(output,`${source}-${width}-${appearance}-${suffix}.png`);const image=await win.webContents.capturePage();assert.ok(!image.isEmpty());fs.writeFileSync(file,image.toPNG());report.screenshots.push(file);};
           if(source==='zcode'){
-            assert.equal(geometry.headerTabs,0);assert.ok(geometry.selector.top>=geometry.header.bottom);assert.ok(geometry.trigger.right<=width-12&&geometry.description.right<=width-12);
-            await capture('closed');await pointer(win,'.zcode-bucket-trigger');
-            await poll(()=>page(win,"document.querySelector('.zcode-bucket-menu').hidden"),value=>value===false,'menu open');
-            scenario.menu=await page(win,`(()=>{const m=document.querySelector('.zcode-bucket-menu'),r=m.getBoundingClientRect(),c=document.querySelector('#details-close').getBoundingClientRect();return{left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:innerWidth,height:innerHeight,scrollWidth:m.scrollWidth,clientWidth:m.clientWidth,count:document.querySelectorAll('.zcode-bucket-option').length,closeHit:Boolean(document.elementFromPoint(c.left+c.width/2,c.top+c.height/2)?.closest('#details-close'))};})()`);
-            assert.equal(scenario.menu.count,4);assert.ok(scenario.menu.left>=0&&scenario.menu.right<=width&&scenario.menu.bottom<=scenario.menu.height);assert.ok(scenario.menu.scrollWidth<=scenario.menu.clientWidth);assert.ok(scenario.menu.closeHit,'menu cannot intercept close');await capture('open');
-            await key(win,'End');await key(win,'Enter');await poll(()=>selected,value=>value===zitems[3].bucketId,'actual bucket IPC');
-            assert.equal(calls.length,1);await poll(()=>page(win,"document.querySelector('.zcode-bucket-description').textContent"),value=>value===`${zitems[3].planName} · ${zitems[3].label}`,'selected description');
-            await pointer(win,'.zcode-bucket-trigger');await key(win,'Escape');assert.equal(closed,0);assert.equal(await page(win,"document.querySelector('.zcode-bucket-menu').hidden"),true);
-            await pointer(win,'.zcode-bucket-trigger');await pointer(win,'.panel-header');assert.equal(await page(win,"document.querySelector('.zcode-bucket-menu').hidden"),true);assert.equal(calls.length,1,'outside click must not select a covered option');assert.equal(selected,zitems[3].bucketId);
-            await capture('selected');scenario.actualBucketChanges=calls.length;
+            assert.equal(geometry.headerTabs,0);assert.ok(geometry.selector.top>=geometry.header.bottom);assert.ok(geometry.grid.right<=width-12&&geometry.description.right<=width-12);
+            scenario.initialForecast=model().trend.forecast;
+            assert.equal(scenario.initialForecast.reason,'no-decline');
+            scenario.buttons=await page(win,`[...document.querySelectorAll('.zcode-bucket-button')].map(n=>({text:n.textContent,selected:n.getAttribute('aria-pressed'),font:parseFloat(getComputedStyle(n).fontSize),rect:n.getBoundingClientRect().toJSON(),scrollWidth:n.scrollWidth,clientWidth:n.clientWidth}))`);
+            assert.deepEqual(scenario.buttons.map(b=>b.text),['体验·5.3','体验·Flash','活动·5.3','活动·Flash']);
+            assert.ok(scenario.buttons.every(b=>b.font>=12&&b.scrollWidth<=b.clientWidth&&b.rect.right<=width-12));
+            assert.equal(scenario.buttons[0].rect.top,scenario.buttons[1].rect.top);assert.equal(scenario.buttons[2].rect.top,scenario.buttons[3].rect.top);assert.ok(scenario.buttons[2].rect.top>scenario.buttons[0].rect.top);
+            assert.equal(await page(win,"document.querySelector('.forecast-badge').textContent"),'余额未下降');
+            assert.match(await page(win,"document.querySelector('.zcode-sample-info').textContent"),/4 次采样/);
+            assert.match(await page(win,"document.querySelector('.zcode-chart-caption').textContent"),/蓝线：实测余额.*灰虚线：时间基准/);
+            assert.match(await page(win,"document.querySelector('.zcode-countdown').textContent"),/小时/);
+            await capture('flat-real-backend');
+            await pointer(win,'.zcode-bucket-button[data-bucket-option="zcode:fixture-3"]');
+            await poll(()=>selected,value=>value===zitems[3].id,'one click bucket IPC');assert.equal(calls.length,1);
+            await poll(()=>page(win,"document.querySelector('.zcode-bucket-description').textContent"),value=>value===`${zitems[3].planName} · ${zitems[3].label}`,'selected description');
+            assert.match(await page(win,"document.querySelector('.panel-bottom').textContent"),/使用截止.*到期后剩余额度失效/);
+            await key(win,'Home');await key(win,'Enter');await poll(()=>selected,value=>value===zitems[0].id,'keyboard bucket IPC');assert.equal(calls.length,2);
+            assert.equal(await page(win,"document.activeElement.dataset.bucketOption"),zitems[0].id);
+            estimated=true;win.webContents.send(prefix,model());await poll(()=>page(win,"document.querySelector('.forecast-badge').textContent"),value=>value==='参考预估','backend estimate');
+            scenario.estimateForecast=model().trend.forecast;assert.equal(scenario.estimateForecast.reason,'estimate');
+            assert.match(await page(win,"document.querySelector('.forecast-note').title"),/近期连续/);await capture('estimate-real-backend');
+            estimated=false;win.webContents.send(prefix,model());await poll(()=>page(win,"document.querySelector('.forecast-badge').textContent"),value=>value==='余额未下降','restore exact usage fixture');
+            await pointer(win,'.panel-bottom .reset-link');await poll(()=>page(win,"document.querySelector('#details-panel').dataset.action"),value=>value==='quota','quota IPC');
+            scenario.quota=await page(win,`({groups:[...document.querySelectorAll('.zcode-quota-group-title')].map(n=>n.textContent),rows:[...document.querySelectorAll('.zcode-quota-row')].map(n=>({aria:n.getAttribute('aria-label'),rect:n.getBoundingClientRect().toJSON(),scrollWidth:n.scrollWidth,clientWidth:n.clientWidth})),width:innerWidth,scrollWidth:document.body.scrollWidth,contentWidth:document.querySelector('#details-content').scrollWidth,panelWidth:document.querySelector('#details-panel').clientWidth})`);
+            assert.deepEqual(scenario.quota.groups,['每日体验','限时活动']);assert.equal(scenario.quota.rows.length,4);
+            assert.ok(scenario.quota.rows.every(row=>row.rect.right<=width-12&&row.scrollWidth<=row.clientWidth));
+            assert.ok(scenario.quota.scrollWidth<=width&&scenario.quota.contentWidth<=scenario.quota.panelWidth);
+            assert.match(scenario.quota.rows[0].aria,/199,999,123.456789 \/ 200,000,000 tokens/);await capture('quota');
+            await pointer(win,'.zcode-quota-row[data-bucket-id="zcode:fixture-2"]');await poll(()=>selected,value=>value===zitems[2].id,'whole row opens bucket trend');
+            assert.equal(calls.at(-1).action,'trend');scenario.actualBucketChanges=calls.filter(call=>call.action==='trend').length;
+            monthWindow=true;win.webContents.send(prefix,model());await pointer(win,'[data-view="daily"]');
+            await poll(()=>page(win,"document.querySelector('.chart-block').dataset.view"),value=>value==='daily','month activity daily view');
+            scenario.monthDaily=await page(win,`({dates:[...document.querySelectorAll('.daily-chart text')].filter(n=>/^\\d\\d\\/\\d\\d$/.test(n.textContent)).map(n=>({text:n.textContent,rect:n.getBoundingClientRect().toJSON()})),emptyDays:document.querySelectorAll('.daily-empty').length,points:[...document.querySelectorAll('.daily-point')].map(n=>({day:n.getAttribute('data-day'),amount:n.getAttribute('data-amount')})),caption:document.querySelector('.zcode-chart-caption').textContent})`);
+            assert.equal(scenario.monthDaily.dates.length,7);assert.equal(scenario.monthDaily.emptyDays,6);assert.equal(scenario.monthDaily.points.length,1);assert.equal(scenario.monthDaily.points[0].amount,'0');
+            assert.match(scenario.monthDaily.caption,/近7日.*非全天/);
+            scenario.monthDaily.dates.forEach((date,index,dates)=>{if(index)assert.ok(dates[index-1].rect.right<date.rect.left,'month dates must not overlap');});
+            await capture('month-near7-daily');await pointer(win,'[data-view="line"]');
+            scenario.monthLineStart=await page(win,"document.querySelector('.trend-chart text[text-anchor=\"start\"]').textContent");
+            const expectedStart=new Date(now-30*86400000);assert.equal(scenario.monthLineStart,`${String(expectedStart.getMonth()+1).padStart(2,'0')}/${String(expectedStart.getDate()).padStart(2,'0')}`,'line view retains the full cycle start');
+            assert.equal(model().items.find(item=>item.bucketId===selected).periodStart,now-30*86400000,'full cycle model remains intact');
           } else {assert.equal(geometry.headerTabs,1);assert.equal(await page(win,"document.querySelectorAll('.trend-tabs button').length"),2);assert.equal(await page(win,"document.querySelectorAll('.zcode-bucket-selector').length"),0);await capture('unchanged');}
           await pointer(win,'#details-close');assert.equal(closed,1,'close remains reachable');
         } finally {ipcMain.removeListener(`${prefix}-open`,open);ipcMain.removeListener(`${prefix}-close`,close);ipcMain.removeListener(`${prefix}-resize`,resize);win.destroy();}

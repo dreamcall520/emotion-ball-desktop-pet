@@ -118,14 +118,14 @@ async function verifyZcodeLink({ pet, chat, chatWindow, zcodeLink, openChat, Bro
     await poll(() => page(details, "document.querySelector('#details-panel').dataset.action"), value => value === 'quota', '明细 renderer');
     assert.equal(await page(details, "document.querySelectorAll('.zcode-quota-bucket').length"), Math.min(snapshot.quota.windows.length, 32));
     await capture(details, 'integrated-03-details');
-    await pointerClick(details, '.zcode-quota-bucket .reset-link');
+    await pointerClick(details, '.zcode-quota-row');
     await poll(() => page(details, "document.querySelector('#details-panel').dataset.action"), value => value === 'trend', '真实趋势入口');
     assert.equal(await page(details, "document.querySelector('.title-product').textContent"), 'ZCODE');
-    const selector = await page(details, "({ trigger:document.querySelector('.zcode-bucket-trigger')?.textContent, description:document.querySelector('.zcode-bucket-description')?.textContent, options:[...document.querySelectorAll('.zcode-bucket-option')].map(node=>({label:node.textContent,selected:node.getAttribute('aria-checked')==='true'})), headerTabs:document.querySelectorAll('.panel-header .trend-tabs').length })");
+    const selector = await page(details, "({ description:document.querySelector('.zcode-bucket-description')?.textContent, options:[...document.querySelectorAll('.zcode-bucket-button')].map(node=>({label:node.textContent,selected:node.getAttribute('aria-pressed')==='true'})), headerTabs:document.querySelectorAll('.panel-header .trend-tabs').length })");
     assert.equal(selector.headerTabs, 0, 'ZCode 来源选择不能挤占标题与关闭按钮');
     assert.equal(selector.options.length, Math.min(snapshot.quota.windows.length, 32));
     assert.equal(selector.options.filter(option => option.selected).length, 1);
-    assert.ok(selector.trigger && selector.description);
+    assert.ok(selector.description);
     report.trend = { selector, note: '真实账户当前周期采样；不足记录时不伪造历史' };
     await capture(details, 'integrated-04-trend');
     await pointerClick(details, '#details-close');

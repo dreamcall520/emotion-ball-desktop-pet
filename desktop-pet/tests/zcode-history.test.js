@@ -148,3 +148,20 @@ test('live observation tracking stays bounded to the latest 64 turns', async () 
   result.results = [{ ...row(64), state: 'completed' }]; await companion.refresh();
   assert.equal(companion.getSnapshot().activity.unreadCount, 1); companion.close();
 });
+
+test('history retains sub-minute correction boundaries while ordinary polls remain throttled', () => {
+  let now = initialNow;
+  const store = createZcodeQuotaHistory({ now: () => now }); store.setAccount('boundaries');
+  const bucket = normalizeZcodeBalance(fixture, now)[0];
+  const record = remaining => store.record({ enabled: true, quota: { state: 'connected', stale: false,
+    updatedAt: now, windows: [{ ...bucket, remaining }] } });
+  record(80); now += 10000; record(79);
+  assert.equal(store.getState().windows[0].samples.length, 1, 'ordinary short poll is not a new history point');
+  now += 10000; record(85);
+  assert.equal(store.getState().windows[0].samples.length, 2, 'increase must split forecasts');
+  now += 10000; record(60);
+  assert.equal(store.getState().windows[0].samples.length, 3, 'large decrease must split forecasts');
+  now += 300000; record(59);
+  assert.deepEqual(store.getState().windows[0].samples.map(row => row.remaining), [80, 85, 60, 59]);
+  store.close();
+});

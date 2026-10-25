@@ -173,27 +173,35 @@ html[data-resolved-appearance=dark] .reset-event-popup{background:#1a222d}
 .reset-event-balance b{font-size:12px;color:var(--detail-ink);font-weight:600}
 .reset-event-popup small{display:block;margin-top:3px;font-size:11px}
 
-.zcode-quota-list { list-style: none; padding: 0; margin: 0; }
-.zcode-quota-bucket { padding: 10px 0; border-bottom: 1px solid var(--panel-line, rgba(128,128,128,.18)); }
-.zcode-quota-bucket p { margin: 6px 0; overflow-wrap: anywhere; }
-
-
-/* The ZCode selector uses the chat model menu pattern; Codex keeps its period tabs. */
+/* ZCode source controls stay in the content area; Codex retains its period tabs. */
 #details-panel[data-source="zcode"] .panel-tools { flex: none; }
 .zcode-bucket-selector { min-width: 0; margin-top: 13px; }
-.zcode-bucket-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.zcode-bucket-caption { flex: none; color: var(--detail-subtle); font-size: 10px; line-height: 16px; }
-.zcode-bucket-choice { position: relative; flex: 0 1 auto; min-width: 0; max-width: 100%; color: var(--detail-muted); }
-.zcode-bucket-choice::after { content: ''; position: absolute; right: 8px; top: 11px; width: 5px; height: 5px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); pointer-events: none; }
-.zcode-bucket-choice:has(> button[aria-expanded="true"])::after { top: 13px; transform: rotate(225deg); }
-.zcode-bucket-trigger { display: block; max-width: 100%; min-width: 0; height: 30px; padding: 0 23px 0 7px; border-radius: 6px; color: var(--detail-ink); background: var(--detail-count); font-size: 11px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
-.zcode-bucket-trigger:hover:not(:disabled), .zcode-bucket-trigger[aria-expanded="true"] { background: color-mix(in srgb, var(--detail-blue) 13%, transparent); }
-.zcode-bucket-trigger:disabled { cursor: default; }
-.zcode-bucket-description { margin: 4px 0 0; color: var(--detail-subtle); font-size: 10px; line-height: 15px; overflow-wrap: anywhere; }
-.zcode-bucket-menu { position: fixed; z-index: 10; width: 320px; padding: 5px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; border: 1px solid var(--detail-line); border-radius: 12px; background: var(--detail-solid-bg); box-shadow: 0 8px 24px #0002, 0 2px 6px #0001; }
-.zcode-bucket-option { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 7px; text-align: left; border-radius: 7px; }
-.zcode-bucket-option:hover, .zcode-bucket-option:focus-visible { background: var(--detail-count); }
-.zcode-bucket-check { flex: none; width: 13px; color: var(--detail-blue); font-size: 12px; }
-.zcode-bucket-option-copy { display: block; min-width: 0; }
-.zcode-bucket-option .zcode-model-name { display: block; color: var(--detail-ink); font-size: 12px; font-weight: 550; line-height: 17px; overflow-wrap: anywhere; }
-.zcode-bucket-option .zcode-plan-name { display: block; color: var(--detail-subtle); font-size: 10px; line-height: 15px; overflow-wrap: anywhere; }
+.zcode-bucket-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; }
+.zcode-bucket-button { min-width: 0; min-height: 32px; padding: 6px 8px; border: 1px solid var(--detail-line); border-radius: 7px; font-size: 12px; line-height: 17px; color: var(--detail-muted); overflow-wrap: anywhere; }
+.zcode-bucket-button:hover { background: var(--detail-count); }
+.zcode-bucket-button[aria-pressed="true"] { color: var(--detail-blue); background: var(--detail-count); border-color: color-mix(in srgb,var(--detail-blue) 45%,transparent); font-weight: 650; }
+.zcode-bucket-description { margin: 6px 0 0; color: var(--detail-subtle); font-size: 11px; line-height: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zcode-stats { grid-template-columns: 1fr 1.3fr auto; gap: 8px; }
+.zcode-stats.no-deadline { grid-template-columns: 1fr auto; }
+.zcode-stats .zcode-countdown { font-size: 18px; line-height: 30px; letter-spacing: -.02em; white-space: nowrap; }
+.zcode-chart-caption,.zcode-sample-info,.zcode-usage-note { margin: 3px 0 0; color: var(--detail-subtle); font-size: 11px; line-height: 16px; overflow-wrap: anywhere; }
+.zcode-chart-caption { color: var(--detail-muted); }
+.zcode-deadline-note { display: block; margin-top: 3px; color: var(--detail-subtle); font-size: 11px; line-height: 16px; }
+#details-panel[data-source="zcode"] .forecast-badge { white-space: normal; max-width: 55px; text-align: center; }
+#details-panel[data-source="zcode"] .forecast-copy { min-width: 0; }
+#details-panel[data-source="zcode"] .panel-bottom { align-items: center; }
+.zcode-quota-group { margin-top: 15px; }
+.zcode-quota-group-title { margin: 0 0 6px; color: var(--detail-muted); font-size: 12px; line-height: 18px; font-weight: 600; overflow-wrap: anywhere; }
+.zcode-quota-list { list-style: none; padding: 0; margin: 0; border: 1px solid var(--detail-line); border-radius: 9px; overflow: hidden; }
+.zcode-quota-bucket + .zcode-quota-bucket { border-top: 1px solid var(--detail-line); }
+.zcode-quota-row { display: block; width: 100%; padding: 10px 11px; text-align: left; }
+.zcode-quota-row:hover,.zcode-quota-row:focus-visible { background: var(--detail-count); }
+.zcode-quota-heading { display: flex; align-items: center; gap: 7px; font-size: 13px; line-height: 19px; }
+.zcode-quota-heading b { min-width: 0; overflow-wrap: anywhere; font-weight: 550; }
+.zcode-quota-heading strong { margin-left: auto; flex: none; font-size: 16px; color: var(--detail-blue); font-variant-numeric: tabular-nums; }
+.zcode-quota-heading .reset-chevron { flex: none; color: var(--detail-subtle); }
+.zcode-quota-progress { display: block; height: 4px; margin: 7px 0 5px; border-radius: 3px; background: var(--detail-count); overflow: hidden; }
+.zcode-quota-progress > span { display: block; height: 100%; border-radius: inherit; background: var(--detail-blue); opacity: .72; }
+.zcode-quota-row-deadline { display: block; color: var(--detail-subtle); font-size: 11px; line-height: 17px; }
+.zcode-quota-values { color: var(--detail-subtle); font-size: 11px; line-height: 17px; overflow-wrap: anywhere; }
+.zcode-quota-deadline { margin: 6px 1px 0; color: var(--detail-subtle); font-size: 11px; line-height: 17px; overflow-wrap: anywhere; }

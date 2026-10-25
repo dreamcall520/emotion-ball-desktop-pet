@@ -67,13 +67,30 @@ async function verifyZcodeStyle({ pet, zcodeLink, zcodeConsent, codex, getMenu, 
       return null;
     };
     const details = await poll(findDetails, visible, '趋势新控件');
-    await poll(() => page(details, "Boolean(document.querySelector('.zcode-bucket-trigger'))"), Boolean, '额度选择器');
-    await pointerClick(details, '.zcode-bucket-trigger');
-    const last = await page(details, "document.querySelector('.zcode-bucket-option:last-child')?.dataset.bucketOption"); assert.ok(last);
-    await pointerClick(details, '.zcode-bucket-option:last-child');
-    await poll(() => page(details, "document.querySelector('.zcode-bucket-option[aria-checked=true]')?.dataset.bucketOption"), value => value === last, '实际换桶IPC');
+    await poll(() => page(details, "document.querySelectorAll('.zcode-bucket-button').length"), value => value > 0, '额度选择器');
+    const buckets = await page(details, "Array.from(document.querySelectorAll('.zcode-bucket-button'), button=>({id:button.dataset.bucketOption,text:button.textContent}))");
+    for (let index = 0; index < buckets.length; index++) {
+      await pointerClick(details, `.zcode-bucket-button:nth-child(${index + 1})`);
+      await poll(() => page(details, "document.querySelector('.zcode-bucket-button[aria-pressed=true]')?.dataset.bucketOption"), value => value === buckets[index].id, '一次点击实际换桶IPC');
+      const copy = await page(details, "({countdown:document.querySelector('.zcode-countdown')?.textContent,bottom:document.querySelector('.panel-bottom')?.textContent,caption:document.querySelector('.zcode-chart-caption')?.textContent})");
+      assert.ok(copy.countdown && !copy.countdown.includes('—'), '真实结束时间有倒计时');
+      assert.match(copy.caption, /实测|余额|蓝线/);
+      assert.match(copy.bottom, /下次刷新|使用截止|下次重置|有效至/);
+      report.checks.push({ bucket: buckets[index].text, countdown: copy.countdown, boundary: copy.bottom });
+    }
     await capture(details, 'trend-bucket-picker'); await pointerClick(details, '#details-close');
-    report.checks.push('真实确认后启用', '简短额度文案', '包内新选择器换桶IPC');
+    zcodeLink.openDetails('quota');
+    const quotaDetails = await poll(findDetails, visible, '额度明细');
+    await poll(() => page(quotaDetails, "document.querySelectorAll('.zcode-quota-row').length"), value => value === buckets.length, '完整额度明细');
+    const quota = await page(quotaDetails, "({groups:Array.from(document.querySelectorAll('.zcode-quota-group-title'),node=>node.textContent),rows:Array.from(document.querySelectorAll('.zcode-quota-row'),node=>({id:node.dataset.bucketId,exact:node.getAttribute('aria-label'),progress:node.querySelector('.zcode-quota-progress span')?.style.width})),width:document.body.scrollWidth,viewport:innerWidth})");
+    assert.ok(quota.width <= quota.viewport, '额度明细不横向溢出');
+    assert.ok(quota.rows.every(row => row.exact.includes('token') && row.progress), '精确余额与进度均保留');
+    await capture(quotaDetails, 'quota-details');
+    await pointerClick(quotaDetails, '.zcode-quota-group:last-child .zcode-quota-bucket:last-child .zcode-quota-row');
+    await poll(() => page(quotaDetails, "document.querySelector('.zcode-bucket-button[aria-pressed=true]')?.dataset.bucketOption"), value => value === quota.rows.at(-1).id, '明细整行进入对应趋势');
+    await pointerClick(quotaDetails, '#details-close');
+    report.quota = quota;
+    report.checks.push('真实确认后启用', '简短额度文案', '包内单击切换全部额度', '明细分组与进度、整行换桶IPC');
     await zcodeLink.setEnabled(false); report.ok = true;
   } catch (error) { report.failure = error.message; throw error; } finally {
     zcodeConsent.cancel(); if (zcodeLink.isEnabled()) await zcodeLink.setEnabled(false);

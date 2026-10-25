@@ -316,7 +316,7 @@ function createQuotaLabelWindow({
 
   function visualPresentation(petBounds, area) {
     const value = getPresentation() || {};
-    return { ...value, sheepTheme: SheepTheme.resolveTheme(value.sheepTheme, new Date()),
+    return { ...value, quotaSourceId: sourceId, sheepTheme: SheepTheme.resolveTheme(value.sheepTheme, new Date()),
       facing: value.facing || PetFacing.resolve(petBounds, area),
       quotaRoleWidth: rolePaintWidth() };
   }
@@ -378,7 +378,7 @@ function createQuotaLabelWindow({
     try {
       if (layout.guardSide && typeof screen.getCursorScreenPoint === 'function') {
         const cursor = screen.getCursorScreenPoint(), native = target.getBounds();
-        const card = quotaLabelSize(model.size, model.expanded, model.items.length, Boolean(model.extraCredits));
+        const card = quotaLabelSize(model.size, model.expanded, model.items.length, Boolean(model.extraCredits), false, null, sourceId);
         const face = { x: native.x + layout.cardInset.x, y: native.y + layout.cardInset.y, ...card };
         const role = { x: layout.guardSide === 'left' ? face.x - 8 - quotaRoleTargetWidth(rolePaintWidth()) : face.x + card.width + 8,
           y: face.y + card.height - 44, width: quotaRoleTargetWidth(rolePaintWidth()), height: 44 };
@@ -466,7 +466,7 @@ function createQuotaLabelWindow({
     const expectedWindow = win;
     let loadingWindow = null;
     const initialSize = quotaLabelSize(currentModel?.size, currentModel?.expanded === true,
-      currentModel?.items?.length, Boolean(currentModel?.extraCredits), guardEntryVisible(), rolePaintWidth());
+      currentModel?.items?.length, Boolean(currentModel?.extraCredits), guardEntryVisible(), rolePaintWidth(), sourceId);
     try { loadingWindow = new BrowserWindow({
       width: initialSize.width,
       height: initialSize.height,
@@ -622,7 +622,7 @@ function createQuotaLabelWindow({
       if (!target || !requestedVisible || !currentModel?.items.length || !target.isVisible()) return null;
       const bounds = target.getBounds();
       const card = quotaLabelSize(currentModel.size, currentModel.expanded, currentModel.items.length,
-        Boolean(currentModel.extraCredits));
+        Boolean(currentModel.extraCredits), false, null, sourceId);
       // Use the painted card offset independently of its transparent role gutter.
       const inset = currentModel.size === 'compact' && !currentModel.expanded ? 2 : 0;
       const width = Math.min(bounds.width, card.width), height = Math.min(bounds.height, card.height);
