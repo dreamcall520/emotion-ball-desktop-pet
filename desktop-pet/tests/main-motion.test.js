@@ -482,7 +482,7 @@ test('快捷面板至收起动效结束隐藏额度与守护入口，刷新不�
   assert.equal(f.call('canShowQuotaGuard()'), false);
   assert.equal(f.call('openQuotaGuard()'), false);
   assert.equal(f.call('shortcutEdgeQuotaState.quotaEnabled'), false);
-  assert.equal(f.apiLabel.visible, true, 'the independently enabled API card keeps its existing rule');
+  assert.equal(f.apiLabel.visible, false, 'the API card also stays clear of the shortcut items');
   f.connections[0].callbacks.onQuota({ updatedAt: 1800000000001,
     windows: [{ id: 'codex:primary', label: 'Codex', windowMinutes: 300, remaining: 37, resetsAt: 1800003600000 }] });
   assert.equal(f.quotaLabel.visible, false, 'background refresh cannot reshow quota while shortcuts are presenting');
@@ -490,9 +490,11 @@ test('快捷面板至收起动效结束隐藏额度与守护入口，刷新不�
   assert.equal(f.call('shortcutWindow.isOpen()'), false);
   t.mock.timers.tick(179); f.call('syncQuotaLabel(codexCompanion.getSnapshot())');
   assert.equal(f.quotaLabel.visible, false);
+  assert.equal(f.apiLabel.visible, false, 'the closing animation still owns the screen');
   assert.equal(f.call('canShowQuotaGuard()'), false);
   t.mock.timers.tick(1);
   assert.equal(f.quotaLabel.visible, true);
+  assert.equal(f.apiLabel.visible, true, 'API restores only after the shortcut presentation ends');
   assert.equal(f.quotaLabel.shows.at(-1).items[0].remaining, 37, 'restore uses the latest quota, not a cached card');
   assert.equal(f.quotaLabel.options.getSuppressed(), false);
   assert.equal(f.call('canShowQuotaGuard()'), true);
@@ -514,6 +516,26 @@ test('快捷面板至收起动效结束隐藏额度与守护入口，刷新不�
   t.mock.timers.tick(180);
   assert.equal(f.quotaLabel.visible, false, 'closing must respect quota being disabled while shortcuts were open');
   assert.equal(f.call('shortcutEdgeQuotaState.quotaEnabled'), false);
+});
+
+test('API card stays hidden through shortcut refresh and close, respects off/chat/lock on restore', async t => {
+  t.mock.timers.enable({ apis:['setTimeout'] });
+  for(const connected of [false,true]) {
+    const f=await fixture();t.after(()=>f.app.emit('before-quit'));
+    const load=f.windowClass.prototype.loadFile;
+    f.windowClass.prototype.loadFile=function(file){return file.endsWith('/shortcuts.html')?Promise.resolve():load.call(this,file);};
+    f.apiUsage.state={connected,busy:false,report:null,config:{}};
+    f.call('settings.openaiApiAlwaysVisible=true;syncApiUsageLabel()');assert.equal(f.apiLabel.visible,true);
+    f.call('openShortcuts()');await flush();assert.equal(f.apiLabel.visible,false);
+    f.apiUsage.change({...f.apiUsage.state,busy:true});assert.equal(f.apiLabel.visible,false,'refresh cannot revive the label');
+    f.call('shortcutWindow.close()');t.mock.timers.tick(179);f.call('syncApiUsageLabel()');assert.equal(f.apiLabel.visible,false);
+    t.mock.timers.tick(1);assert.equal(f.apiLabel.visible,true);
+    f.call('openShortcuts()');await flush();menuItem(f,'openai-api-visible').click({checked:false});f.call('shortcutWindow.close()');t.mock.timers.tick(180);
+    assert.equal(f.apiLabel.visible,false,'disabled during shortcut presentation stays off');
+    f.call('settings.openaiApiAlwaysVisible=true;openShortcuts()');await flush();f.powerMonitor.emit('lock-screen');
+    assert.equal(f.apiLabel.visible,false);f.powerMonitor.emit('unlock-screen');assert.equal(f.apiLabel.visible,true);
+    f.call('openShortcuts()');await flush();menuItem(f,'chat-open').click();t.mock.timers.tick(180);assert.equal(f.apiLabel.visible,false,'chat suppression survives shortcut closing');
+  }
 });
 
 test('快捷设置与面板只收起外置额度卡，保留所有球体额度外观直到关闭结束', async t => {
@@ -3708,4 +3730,21 @@ test('右键菜单核心联动开关跟随真实状态并复用授权入口', as
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(enabled.call('settings.codexEnabled'), false);
   assert.equal(findMenuItem(enabled.call('compactMenuTemplate()'), 'codex-enabled').checked, false);
+});
+
+test('API 报告使用设置中心同款内嵌标题栏，保留安全窗口与尺寸', async () => {
+  const f = await fixture();
+  f.call('openGlobalSettings()');
+  f.call('openApiUsage()');
+  const api = f.call('apiUsageWindow');
+  const settings = f.call('globalSettingsWindow');
+  assert.equal(api.options.titleBarStyle, 'hiddenInset');
+  assert.equal(api.options.titleBarStyle, settings.options.titleBarStyle);
+  assert.deepEqual(api.options.trafficLightPosition, settings.options.trafficLightPosition);
+  assert.equal(api.options.backgroundColor, settings.options.backgroundColor);
+  assert.equal(api.options.width, 620); assert.equal(api.options.height, 700);
+  assert.equal(api.options.minWidth, 460); assert.equal(api.options.minHeight, 520);
+  assert.equal(api.options.webPreferences.sandbox, true);
+  assert.equal(api.options.webPreferences.contextIsolation, true);
+  assert.equal(api.options.webPreferences.nodeIntegration, false);
 });

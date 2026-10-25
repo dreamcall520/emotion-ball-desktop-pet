@@ -25,7 +25,10 @@ if (!process.versions.electron) {
       const errors=[],onError=e=>errors.push(String(e));
       const area=screen.getPrimaryDisplay().workArea;
       pet=new BrowserWindow({x:area.x+400,y:area.y+120,width:80,height:80,frame:false,transparent:true,show:false,focusable:false,skipTaskbar:true,hasShadow:false});
-      await pet.loadURL('data:text/html,<style>body{margin:0;background:transparent}div{width:76px;height:76px;border-radius:50%;background:%23eee9e1;display:grid;place-items:center;font:20px sans-serif;color:%23333}</style><div>•ᴗ•</div>');pet.showInactive();
+      await pet.loadURL('data:text/html;charset=utf-8,<style>body{margin:0;background:transparent}div{width:76px;height:76px;border-radius:50%;background:%23eee9e1;display:grid;place-items:center;font:20px sans-serif;color:%23333}</style><div>•ᴗ•</div>');
+      assert.equal(await pet.webContents.executeJavaScript('document.characterSet'), 'UTF-8');
+      assert.equal(await pet.webContents.executeJavaScript('document.body.textContent'), '•ᴗ•');
+      pet.showInactive();
       const settings=normalizeSettings({zcodeEnabled:true,zcodeQuotaAlwaysVisible:true,codexEnabled:true,codexQuotaAppearance:'light'});
       codex=createQuotaLabelWindow({BrowserWindow,screen,getPetWindow:()=>pet,getSize:()=> 'compact',getAppearance:()=> 'light',getGuardEntry:()=>true,
         getPresentation:()=>({mode:'free',shape:'blob'}),onLayout:()=>zcode?.reposition(),onError});

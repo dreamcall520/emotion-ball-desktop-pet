@@ -419,7 +419,8 @@ function openApiUsage() {
   }
   const win = new BrowserWindow({
     width: 620, height: 700, minWidth: 460, minHeight: 520,
-    title: 'OpenAI API 费用与用量', backgroundColor: '#F6F4EF', show: false,
+    title: 'OpenAI API 费用与用量', titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 14, y: 14 }, backgroundColor: '#F5F7FB', show: false,
     webPreferences: {
       preload: path.join(__dirname, 'api-usage-preload.js'),
       contextIsolation: true, nodeIntegration: false, sandbox: true,
@@ -1000,7 +1001,7 @@ function syncApiUsageLabel() {
   if (!apiUsage || !apiUsageLabel) return;
   const state = apiUsage.getState();
   const enabled = !isQuitting && settings?.openaiApiAlwaysVisible === true;
-  const visible = enabled && !screenLocked && !chatWindow?.isVisible() && !presentationSuppressed() &&
+  const visible = enabled && !screenLocked && !chatWindow?.isVisible() && !shortcutWindow?.isPresenting() && !presentationSuppressed() &&
     petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
   safelyInvokeWindow('API 卡片同步', () => visible ? apiUsageLabel.show(state) : apiUsageLabel.hide());
   if (!enabled || !state.connected) {

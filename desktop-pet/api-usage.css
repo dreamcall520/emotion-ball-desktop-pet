@@ -27,7 +27,9 @@
 :root[data-appearance=dark][data-ui-theme=blue] { --control:#414b61; --control-edge:#71819d35; --control-hover:#4c5b76; --ui-accent:#b5ceed; }
 * { box-sizing:border-box; }
 html,body { width:100%; height:100%; margin:0; overflow:hidden; }
-body { background:var(--canvas); padding:12px; }
+body { background:var(--canvas); padding:38px 12px 12px; }
+/* Match the settings titlebar: native traffic lights stay above the content. */
+body::before { content:""; position:fixed; z-index:5; inset:0 0 auto; height:34px; -webkit-app-region:drag; }
 [hidden] { display:none!important; }
 button,input { font:inherit; }
 button { cursor:pointer; -webkit-app-region:no-drag; }
@@ -63,7 +65,6 @@ h2 span { display:inline-block; margin-left:5px; color:var(--ui-muted); font-wei
 .token-list dt { margin:0; font-weight:450; }
 .token-list dd { min-width:0; margin:0; text-align:right; font-weight:550; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
 .token-list .cached-row { margin-top:-5px; padding-top:0; color:var(--ui-muted); font-size:11px; }
-.cached-row dt { padding-left:10px; }
 .cached-row dd { font-weight:450; }
 .report-meta { padding:14px 17px; margin-bottom:14px; }
 .report-meta>div { display:flex; align-items:baseline; gap:15px; }
@@ -92,7 +93,7 @@ input:disabled { opacity:.65; }
 .api-footer>span { color:var(--ui-muted); font-size:10px; }
 .api-footer .quiet-button { border-color:transparent; background:transparent; padding-inline:3px; color:var(--ui-accent); }
 @media(max-width:480px) {
-  body { padding:8px; }
+  body { padding:38px 8px 8px; }
   .api-header { padding:17px 14px 15px; }
   .api-content { padding:0 14px 16px; }
   h1 { font-size:19px; }
