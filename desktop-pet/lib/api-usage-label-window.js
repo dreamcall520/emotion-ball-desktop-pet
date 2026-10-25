@@ -1,3 +1,6 @@
+const { captureQuotaGroupFrames } = require('./quota-group-capture');
+const { sendQuotaCardMotion } = require('./quota-card-motion');
+const { createNativeWindowFade } = require('./native-window-fade');
 const path = require('node:path');
 const { GAP, quotaLabelBounds, quotaLabelSize } = require('./quota-label-placement');
 const { petVisualBounds } = require('./pet-visual-bounds');
@@ -13,6 +16,8 @@ function validBounds(bounds) {
 }
 
 function apiLabelBounds(pet, area, quota, bubble, expanded = false, presentation = null) {
+  const coordinated=['free','peeked'].includes(presentation?.mode)&&presentation?.quotaGroupLayout;
+  if(coordinated && validBounds(coordinated) && coordinated.width===(expanded?196:128) && coordinated.height===(expanded?92:32)) return coordinated;
   const hasQuota = validBounds(pet) && validBounds(quota);
   const anchor = hasQuota ? {
     x: Math.min(pet.x, quota.x), y: Math.min(pet.y, quota.y),
@@ -76,12 +81,14 @@ function safeState(state) {
 
 function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuotaWindow = () => null, getQuotaBounds = null,
   getObstacleBounds = () => null, getAppearance = () => 'system', getPresentation = () => null,
-  onOpenDetails = () => {}, alwaysOnTop = true, onError = () => {} }) {
-  let win = null, ready = false, requestedVisible = false, current = null, expanded = false;
+  onOpenDetails = () => {}, onLayout = () => {}, alwaysOnTop = true, onError = () => {} }) {
+  let groupTransitionMode = null, groupTransitionEpoch = 0, groupResumeImmediate = false;
+  let win = null, ready = false, requestedVisible = false, current = null, expanded = false, resetExpandedPending = false;
   let topmost = Boolean(alwaysOnTop), revision = 0, presenting = false, pending = false;
   let observedQuota = null, quotaListener = null;
 
   function reportError(error) { try { onError(error); } catch (_) {} }
+  function notifyLayout() { try { onLayout(); } catch (error) { reportError(error); } }
   function live(target) {
     return Boolean(target && !target.isDestroyed() && target.webContents &&
       !target.webContents.isDestroyed?.());
@@ -93,10 +100,13 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
     observedQuota = null;
     quotaListener = null;
   }
+  const fade = createNativeWindowFade({ onError: error => failed(error, win) });
   function safeDestroy(target) {
+    fade.cancel(target);
     try { if (target && !target.isDestroyed()) target.destroy(); } catch (error) { reportError(error); }
   }
   function destroy() {
+    groupTransitionMode=null;groupTransitionEpoch++;
     revision += 1;
     const previous = win;
     win = null;
@@ -106,24 +116,29 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
     expanded = false;
     clearQuotaListeners();
     safeDestroy(previous);
+    if (previous) notifyLayout();
   }
   function failed(error, target) {
     if (target && win !== target) return;
     destroy();
     reportError(error);
   }
-  function conceal(target, token) {
+  function conceal(target, token, animate = false) {
     if (win !== target || revision !== token || !live(target)) return;
     target.setIgnoreMouseEvents(true, { forward: true });
-    if (win === target && revision === token) target.hide();
+    if (win === target && revision === token) {
+      fade.hide(target, { animate: sendQuotaCardMotion(target, false, getPresentation(), animate), ...(getPresentation()?.quotaGroupAnimate ? {duration:220,easing:'group-collapse'} : {}) });
+      if (win === target && revision === token) notifyLayout();
+    }
   }
-  function hide() {
+  function hide({ animate = false } = {}) {
+    groupTransitionMode=null;groupTransitionEpoch++;
     revision += 1;
     requestedVisible = false;
     expanded = false;
     clearQuotaListeners();
     const target = win;
-    try { conceal(target, revision); } catch (error) { failed(error, target); }
+    try { conceal(target, revision, animate && ['peeked', 'tucked'].includes(getPresentation()?.mode)); } catch (error) { failed(error, target); }
   }
   function active(target, token) {
     return win === target && revision === token && requestedVisible && ready && current && live(target);
@@ -152,6 +167,7 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
     return next && next.isVisible() ? (getQuotaBounds ? getQuotaBounds() : next.getBounds()) : null;
   }
   function present() {
+    if(groupTransitionMode==='hold'||groupTransitionMode==='masked')return;
     if (presenting) { pending = true; return; }
     presenting = true;
     let activeTarget = win;
@@ -161,6 +177,12 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
         const target = win, token = revision;
         activeTarget = target;
         if (!active(target, token)) return;
+        const presentation = getPresentation();
+        // Preserve the visible origin while predecessor hide callbacks re-enter layout.
+        if (presentation?.quotaGroupHidden === true || presentation?.mode === 'tucked' && presentation.quotaAnimateHide === true) {
+          conceal(target, token, presentation?.quotaAnimateHide === true); return;
+        }
+        if(resetExpandedPending){expanded=false;resetExpandedPending=false;}
         const pet = getPetWindow();
         if (!active(target, token)) { if (pending) continue; return; }
         if (!pet || pet.isDestroyed() || !pet.isVisible()) { hide(); return; }
@@ -168,22 +190,24 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
         const area = screen.getDisplayMatching(bounds).workArea;
         const quota = watchQuota();
         const obstacle = getObstacleBounds();
-        const presentation = getPresentation();
         const appearanceValue = getAppearance();
         const appearance = ['light', 'dark'].includes(appearanceValue) ? appearanceValue : 'system';
         if (!active(target, token)) { if (pending) continue; return; }
         const payload = { ...current, expanded, appearance };
+        let motionAnimate=false;
         const steps = [
           () => target.setBounds(apiLabelBounds(bounds, area, quota, obstacle, expanded, presentation), false),
           () => target.webContents.send(CHANNEL, payload),
-          () => target.setIgnoreMouseEvents(false),
-          () => target.showInactive()
+          () => target.setIgnoreMouseEvents(groupTransitionMode==='stage', {forward:true}),
+          () => { if(groupTransitionMode==='stage'){sendQuotaCardMotion(target,true,{...presentation,quotaGroupAnimate:false},false);return;} motionAnimate=sendQuotaCardMotion(target, true, presentation, !groupResumeImmediate && (presentation?.quotaGroupAnimate === true || ['peeked', 'tucked'].includes(presentation?.mode))); },
+          () => {if(groupTransitionMode==='stage'){fade.cancel(target);target.hide();}else fade.show(target,motionAnimate);}
         ];
         for (const step of steps) {
           if (!active(target, token)) break;
           step();
         }
         if (win === target && !requestedVisible) conceal(target, revision);
+        if (active(target, token) && target.isVisible()) notifyLayout();
         if (!pending) return;
       }
       failed(new Error('API 费用标签定位持续重入'), win);
@@ -224,9 +248,10 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
       for (const event of ['will-navigate', 'will-attach-webview']) {
         target.webContents.on(event, event => event.preventDefault());
       }
+      target.webContents.on('did-start-loading',()=>{if(win===target){ready=false;groupTransitionEpoch++;}});
       target.webContents.on('ipc-message', (event, channel) => {
         const token = revision;
-        if (![TOGGLE_CHANNEL, OPEN_CHANNEL].includes(channel) || win !== target || !ready ||
+        if (groupTransitionMode || ![TOGGLE_CHANNEL, OPEN_CHANNEL].includes(channel) || win !== target || !ready ||
             !requestedVisible || !live(target) || !target.isVisible() ||
             event?.sender !== target.webContents ||
             target.webContents.mainFrame && event.senderFrame !== target.webContents.mainFrame) return;
@@ -246,6 +271,7 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
         expanded = false;
         revision += 1;
         clearQuotaListeners();
+        notifyLayout();
       });
       const markReady = () => {
         if (win !== target || ready) return;
@@ -266,10 +292,32 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
       requestedVisible = true;
       try { ensureWindow(); present(); } catch (error) { failed(error, win); }
     },
-    hide, reposition, destroy,
+    hide, reposition, destroy, resetExpanded() { resetExpandedPending=true; },
+    setGroupTransitionMode(mode) {
+      if(![null,'hold','stage','masked'].includes(mode)||mode===groupTransitionMode)return;
+      groupTransitionMode=mode;groupTransitionEpoch++;
+      if(live(win)){fade.cancel(win);win.setIgnoreMouseEvents(true,{forward:true});if(mode==='stage'||mode==='masked')win.hide();}
+      groupResumeImmediate=mode===null;try{if(mode===null||mode==='stage')present();}finally{groupResumeImmediate=false;}
+    },
+    captureGroupTransitionFrames() {
+      const stageAvailable=()=>groupTransitionMode!=='stage'||getPresentation()?.quotaGroupHidden!==true;
+      if(!stageAvailable())return Promise.reject(new Error('Quota group stage has no visible layout'));
+      const epoch=groupTransitionEpoch,target=win;
+      return captureQuotaGroupFrames({getTargets:()=>[target],isReady:()=>ready&&requestedVisible&&win===target&&live(target),isCurrent:()=>stageAvailable()&&epoch===groupTransitionEpoch&&target===win});
+    },
     getWindow() {
       if (win && !live(win)) { failed(new Error('API 费用标签窗口不可用'), win); }
       return win;
+    },
+    getVisibleBounds() {
+      if (!requestedVisible || !live(win) || !win.isVisible() && groupTransitionMode!=='stage') return null;
+      const bounds = win.getBounds(), inset = expanded ? 0 : 2;
+      return { x: bounds.x + inset, y: bounds.y + inset,
+        width: bounds.width - inset * 2, height: bounds.height - inset * 2 };
+    },
+    getLayoutMetrics() {
+      return requestedVisible && live(win)
+        ? { ...quotaLabelSize(expanded&&!resetExpandedPending?'apiExpanded':'compact'),inset:expanded&&!resetExpandedPending?0:2 } : null;
     },
     setAlwaysOnTop(value) {
       topmost = Boolean(value);

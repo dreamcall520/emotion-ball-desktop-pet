@@ -72,7 +72,7 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
       const measure = node => ({...rect(node),clientWidth:node.clientWidth,scroll:node.scrollWidth});
       const context = document.createElement('canvas').getContext('2d');
       return {theme:document.documentElement.dataset.uiTheme,appearance:document.documentElement.dataset.appearance,mode:document.documentElement.dataset.colorMode,
-        panel:rect(panel),panelShadow:getComputedStyle(panel).boxShadow,body:rect(body),footer:rect(panel.querySelector('.settings-footer')),scrollHeight:body.scrollHeight,clientHeight:body.clientHeight,
+        panel:rect(panel),panelShadow:getComputedStyle(panel).boxShadow,body:rect(body),header:rect(panel.querySelector('.panel-header')),hintHidden:panel.querySelector('#record-hint').hidden,scrollHeight:body.scrollHeight,clientHeight:body.clientHeight,
         horizontal:[panel,body,...panel.querySelectorAll('h1,.group-label,.shape-options,.shape-options label,.switch-row,.global-binding,.record-hint,.direct-row,.binding-controls')].map(measure),
         rows:[...panel.querySelectorAll('.direct-row')].map(row=>{
           const name=row.querySelector('.direct-name'),select=row.querySelector('[data-start-behavior]'),controls=row.querySelector('.binding-controls'),record=row.querySelector('[data-record]'),clear=row.querySelector('[data-clear]');
@@ -87,7 +87,8 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     assert.equal(surface.rows.length, 5);
     assert.ok(surface.scrollHeight <= surface.clientHeight + 1, 'settings rows and hint fit without scrolling');
     assert.ok(surface.horizontal.every(node => node.scroll <= node.width + 1), 'settings labels and controls do not overflow horizontally');
-    assert.ok(surface.footer.y >= surface.body.bottom - 1, 'settings footer does not cover the body');
+    assert.equal(surface.hintHidden,true,'idle recording guidance occupies no space');
+    assert.ok(surface.header.bottom<=surface.body.y+1,'settings header does not cover the body');
     const names = { chat: '聊天', custom: '定制球球', note: '便签', todo: '待办', pomodoro: '番茄钟' };
     for (const row of surface.rows) {
       assert.equal(row.height, 44, row.id + ' has the shared single-row height');
@@ -238,9 +239,10 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     await capture(win, 'native-list.png'); result.checks.push('save-registration-and-disk-readback');
     controller.open({ settings: true }); await wait(100); await capture(win, 'native-settings.png');
     await page(win, `document.querySelector('[name=shape][value=floating]').click(); true`);
+    await poll(() => registrar.getConfig().shape, value => value === 'floating', 'shape change saves immediately');
     controller.close(); controller.open({ settings: true }); await wait(60);
-    assert.equal(await page(win, `document.querySelector('[name=shape]:checked').value`), 'list', 'blur/close discards settings draft');
-    result.checks.push('reopen-discards-unsaved-draft');
+    assert.equal(await page(win, `document.querySelector('[name=shape]:checked').value`), 'floating', 'reopen preserves automatically saved shape');
+    result.checks.push('reopen-preserves-autosaved-shape');
     controller.open({ settings: true }); await wait(80); await settled(win);
     const settingsBounds = win.getBounds(), settingsArea = screen.getDisplayMatching(settingsBounds).workArea;
     const movedBounds = { ...settingsBounds, x: Math.max(settingsArea.x, Math.min(settingsArea.x + settingsArea.width - settingsBounds.width, settingsBounds.x + (settingsBounds.x < settingsArea.x + settingsArea.width / 2 ? 60 : -60))) };
@@ -268,17 +270,17 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     await poll(() => registrar.getState().recording, value => !value, 'select click resumes native shortcuts');
     assert.equal(globalShortcut.isSuspended(), false);
     const saveSession = controller.getState().session;
-    const saveButtonBounds = await page(win, "document.querySelector('#save').getBoundingClientRect().toJSON()");
-    await page(win, "document.querySelector('#settings').requestSubmit(); true");
-    await poll(() => registrar.getConfig(), config => config.noteBehavior === 'create' && config.todoBehavior === 'panel', 'form saves both startup selectors');
-    await poll(() => page(win, '({text:document.querySelector("#save-status").textContent,hidden:document.querySelector("#save-status").hidden})'), value => !value.hidden && value.text === '快捷键设置已保存', 'successful form save has an explicit notice');
+    const saveButtonBounds = await page(win, "document.querySelector('#restore').getBoundingClientRect().toJSON()");
+    assert.equal(await page(win, "document.querySelector('#save') === null && document.querySelector('#cancel') === null"), true, 'automatic settings have no save or cancel controls');
+    await poll(() => registrar.getConfig(), config => config.noteBehavior === 'create' && config.todoBehavior === 'panel', 'changes automatically save startup selectors');
+    await poll(() => page(win, '({text:document.querySelector("#save-status").textContent,hidden:document.querySelector("#save-status").hidden})'), value => !value.hidden && value.text === '设置已生效', 'successful automatic save has an explicit notice');
     await wait(1200);
-    const saveFeedback = await page(win, `(() => { const notice=document.querySelector('#save-status'),panel=document.querySelector('#settings'),button=document.querySelector('#save');return {text:notice.textContent,hidden:notice.hidden,role:notice.getAttribute('role'),rect:notice.getBoundingClientRect().toJSON(),panel:panel.getBoundingClientRect().toJSON(),opacity:getComputedStyle(panel).opacity,animations:panel.getAnimations().filter(a=>a.playState==='running').length,button:button.getBoundingClientRect().toJSON()}; })()`);
+    const saveFeedback = await page(win, `(() => { const notice=document.querySelector('#save-status'),panel=document.querySelector('#settings'),button=document.querySelector('#restore');return {text:notice.textContent,hidden:notice.hidden,role:notice.getAttribute('role'),rect:notice.getBoundingClientRect().toJSON(),panel:panel.getBoundingClientRect().toJSON(),opacity:getComputedStyle(panel).opacity,animations:panel.getAnimations().filter(a=>a.playState==='running').length,button:button.getBoundingClientRect().toJSON()}; })()`);
     assert.equal(saveFeedback.hidden, false, 'save notice lasts long enough to read');
-    assert.equal(saveFeedback.text, '快捷键设置已保存'); assert.equal(saveFeedback.role, 'status');
+    assert.equal(saveFeedback.text, '设置已生效'); assert.equal(saveFeedback.role, 'status');
     assert.ok(inside(saveFeedback.rect, saveFeedback.panel), 'save notice stays within the settings panel');
     assert.equal(saveFeedback.opacity, '1'); assert.equal(saveFeedback.animations, 0, 'save does not replay the opening animation');
-    assert.equal(saveFeedback.button.width, saveButtonBounds.width, 'save button does not flash wider');
+    assert.equal(saveFeedback.button.width, saveButtonBounds.width, 'restore button does not flash wider');
     assert.equal(controller.getState().session, saveSession, 'save keeps the same session');
     await capture(win, 'native-settings-save-success.png');
     await page(win, "document.querySelector('[data-record=note]').click(); document.dispatchEvent(new KeyboardEvent('keydown',{key:'A',code:'KeyA',bubbles:true})); true");
@@ -286,18 +288,19 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     await page(win, "document.querySelector('[data-record=note]').click(); true");
     await page(win, "document.querySelector('[name=shape]:checked').dispatchEvent(new Event('change',{bubbles:true})); true");
     assert.equal(await page(win, "document.querySelector('#save-status').hidden"), true, 'a new edit clears stale success feedback');
-    result.checks.push('form-save-readable-notice-no-opening-flash');
-    assert.equal(controller.getState().view, 'settings', 'form save remains in settings');
-    assert.deepEqual(win.getBounds(), movedBounds, 'form save retains manually moved position');
+    result.checks.push('autosave-readable-notice-no-opening-flash');
+    assert.equal(controller.getState().view, 'settings', 'autosave remains in settings');
+    assert.deepEqual(win.getBounds(), movedBounds, 'autosave retains manually moved position');
     const persistedBehaviors = loadSettings(settingsFile).shortcutSettings;
     assert.equal(persistedBehaviors.noteBehavior, 'create'); assert.equal(persistedBehaviors.todoBehavior, 'panel');
+    await poll(() => page(win, "document.querySelector('#restore').disabled"), value => !value, 'automatic save settles before close');
     controller.close(); await poll(() => controller.isPresenting(), value => !value, 'settings save closes fully');
     controller.open({ settings: true }); await settled(win);
     assert.deepEqual(await page(win, "[...document.querySelectorAll('[data-start-behavior]')].map(node=>({field:node.dataset.startBehavior,value:node.value}))"), [
       { field: 'noteBehavior', value: 'create' }, { field: 'todoBehavior', value: 'panel' }
     ]);
     await save(win, behaviorConfig);
-    result.checks.push('recording-select-node-retained-and-form-save-reopen');
+    result.checks.push('recording-select-node-retained-and-autosave-reopen');
     await save(win, { ...registrar.getConfig(), enabled: false });
     assert.equal(globalShortcut.isRegistered(registrar.getConfig().launcher), false);
     assert.equal(loadSettings(settingsFile).shortcutSettings.enabled, false);
@@ -312,14 +315,14 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     await save(win, { ...registrar.getConfig(), enabled: true });
     assert.equal(globalShortcut.isRegistered(registrar.getConfig().launcher), true);
     result.checks.push('master-switch-blocks-hover-and-launcher-settings-remain-accessible');
-    for (const method of ['close', 'cancel', 'escape']) {
+    for (const method of ['close', 'escape']) {
       controller.open({ settings: true }); await wait(80);
       await page(win, method === 'escape' ? "document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); true"
-        : "document.querySelector(" + JSON.stringify(method === 'close' ? '.settings-panel [data-close]' : '#cancel') + ").click(); true");
+        : "document.querySelector(" + JSON.stringify('.settings-panel .panel-header [data-close]') + ").click(); true");
       await poll(() => controller.isOpen(), value => value === false, method + ' closes settings');
       await poll(() => win.isVisible(), value => value === false, method + ' hides native settings window');
     }
-    result.checks.push('settings-close-cancel-and-escape');
+    result.checks.push('settings-header-close-and-escape');
 
     cursor = { x: original.x + original.width / 2, y: original.y + original.height / 2 };
     await save(win, { ...registrar.getConfig(), shape: 'floating' });
@@ -414,7 +417,7 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
       const settingsSurface = await compactSettings(win);
       assert.equal(settingsSurface.theme, theme); assert.equal(settingsSurface.appearance, appearance); assert.equal(settingsSurface.mode, accessible ? 'accessible' : 'standard');
       if (accessible) {
-        const borders = await page(win, `(() => {const style=node=>getComputedStyle(node),line=selector=>[...document.querySelectorAll(selector)].map(node=>({color:style(node).borderTopColor,width:style(node).borderTopWidth})).filter(border=>parseFloat(border.width)>0);return {decorations:line('.panel,.global-setting,.global-binding,.settings-footer,.shape-options input:not(:checked)+span,kbd'),rows:[...document.querySelectorAll('.direct-row:not(:last-child)')].map(node=>style(node).borderBottomColor),selected:line('.shape-options input:checked+span'),controls:line('.record-button,.secondary')};})()`);
+        const borders = await page(win, `(() => {const style=node=>getComputedStyle(node),line=selector=>[...document.querySelectorAll(selector)].map(node=>({color:style(node).borderTopColor,width:style(node).borderTopWidth})).filter(border=>parseFloat(border.width)>0);return {decorations:line('.panel,.global-setting,.global-binding,.shape-options input:not(:checked)+span,kbd'),rows:[...document.querySelectorAll('.direct-row:not(:last-child)')].map(node=>style(node).borderBottomColor),selected:line('.shape-options input:checked+span'),controls:line('.record-button,.secondary')};})()`);
         const divider = appearance === 'dark' ? 'rgb(51, 67, 82)' : 'rgb(217, 225, 233)';
         assert.ok(borders.decorations.every(border=>border.color===divider), 'shortcut decorations share notes light dividers');
         assert.ok(borders.rows.every(color=>color===divider), 'shortcut rows have light separators');

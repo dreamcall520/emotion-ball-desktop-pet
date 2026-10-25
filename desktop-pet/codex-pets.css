@@ -82,3 +82,30 @@ html,body{min-width:0;min-height:580px}.studio{max-width:none;margin:0;backgroun
 /* Data-URL arrows cannot inherit the surrounding text color. */
 :root[data-color-mode=accessible] :is(.preview-animation select,#pet-size){background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23c5d1df' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E")}
 :root[data-color-mode=accessible][data-accessible-appearance=light] :is(.preview-animation select,#pet-size){background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23455467' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E")}
+
+/* Local partners share the sprite player and display controls with Codex pets. */
+#local-panel { display:flex; flex-direction:column; flex:1; min-height:0; }
+.local-import { align-self:flex-start; margin:0 0 8px; }
+.local-pet-help { flex:none; margin:0 0 12px; font-size:11px; line-height:1.65; color:var(--muted); }
+.source-switch,.codex-source .source-switch { gap:18px; }
+@media(max-width:359px) { .source-switch,.codex-source .source-switch { gap:12px; } .source-switch button { font-size:12px; } }
+
+.local-pet-help p { margin:0 0 5px; }
+.local-pet-help strong { color:var(--text); font-weight:500; }
+.local-pet-help details { margin-top:6px; }
+.local-pet-help summary { width:fit-content; cursor:pointer; color:var(--muted); }
+.local-pet-help details p { margin-top:5px; }
+
+.local-import { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:34px; padding:7px 12px; border:1px solid var(--selected-line); border-radius:8px; background:var(--selected); color:var(--accent-text); font-size:12px; font-weight:500; cursor:pointer; }
+.local-import .icon { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linejoin:round; }
+.local-import:hover:not(:disabled) { filter:brightness(.97); }
+.local-import:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+.local-import:disabled { opacity:.55; cursor:wait; }
+
+.local-pet-help pre { margin:7px 0; font-size:11px; line-height:1.8; white-space:pre-wrap; }
+
+#local-help-open { width:24px; height:24px; vertical-align:middle; color:var(--accent-text); }
+#local-help-dialog { max-width:480px; }
+#local-help-dialog section + section { margin-top:18px; padding-top:16px; border-top:1px solid var(--line); }
+#local-help-dialog p { margin-top:7px; font-size:12px; line-height:1.7; }
+#local-help-dialog pre { margin:10px 0; padding:12px; background:var(--secondary); border-radius:8px; font-size:12px; white-space:pre-wrap; }

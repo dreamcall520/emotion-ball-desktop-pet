@@ -1,13 +1,16 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+const sourceId = typeof process !== 'undefined' && process.argv?.includes('--pet-source=zcode') ? 'zcode' : 'codex';
+const prefix = sourceId === 'zcode' ? 'pet:zcode-consent' : 'pet:codex-consent';
+
 contextBridge.exposeInMainWorld('qiuqiuConsent', {
-  getInfo: () => ipcRenderer.invoke('pet:codex-consent-get'),
-  answer: accepted => typeof accepted === 'boolean' ? ipcRenderer.invoke('pet:codex-consent-answer', accepted) : Promise.resolve(false),
+  getInfo: () => ipcRenderer.invoke(`${prefix}-get`),
+  answer: accepted => typeof accepted === 'boolean' ? ipcRenderer.invoke(`${prefix}-answer`, accepted) : Promise.resolve(false),
   onInfo: callback => {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, value) => callback(value);
-    ipcRenderer.on('pet:codex-consent-info', listener);
-    return () => ipcRenderer.removeListener('pet:codex-consent-info', listener);
+    ipcRenderer.on(`${prefix}-info`, listener);
+    return () => ipcRenderer.removeListener(`${prefix}-info`, listener);
   },
   onColorMode: callback => {
     if (typeof callback !== 'function') return () => {};

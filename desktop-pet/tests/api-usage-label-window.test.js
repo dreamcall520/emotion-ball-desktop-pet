@@ -47,6 +47,7 @@ function fixture(options = {}) {
     hide() { this.visible = false; }
     showInactive() { this.onShow?.(); this.visible = true; }
     setBounds(value) { this.bounds = { ...value }; this.onBounds?.(); }
+    getBounds() { return { ...this.bounds }; }
     setIgnoreMouseEvents(value) { this.ignoresMouse = value; }
     setAlwaysOnTop(...args) { this.topmost = args; }
     setVisibleOnAllWorkspaces(...args) { this.workspaces = args; }
@@ -183,6 +184,35 @@ test('trusted visible IPC toggles report while open and empty report lead to det
   f.ipc(win, 'pet:api-usage-label-toggle'); assert.equal(f.opened.length, 3);
 });
 
+test('dependent cards are notified after API visibility and size settle, including an unconnected card', async () => {
+  const layouts = [];
+  const f = fixture({ onLayout: () => {
+    const win = f.controller.getWindow();
+    layouts.push(win?.isVisible() ? { ...win.bounds } : null);
+  } });
+  f.controller.show(STATE);
+  assert.deepEqual(layouts, [], 'loading is not yet a visible obstacle');
+  const win = await f.ready();
+  assert.equal(layouts.at(-1)?.height, 32, 'native show publishes its settled bounds');
+  assert.deepEqual(f.controller.getVisibleBounds(), { x: win.bounds.x + 2, y: win.bounds.y + 2, width: 124, height: 28 });
+  assert.deepEqual(f.controller.getLayoutMetrics(), { width:128,height:32,inset:2 });
+  f.ipc(win, 'pet:api-usage-label-toggle');
+  assert.equal(layouts.at(-1)?.height, 92, 'expansion lets the dependent card avoid the larger obstacle');
+  assert.deepEqual(f.controller.getVisibleBounds(), { x: win.bounds.x, y: win.bounds.y, width: 196, height: 92 });
+  assert.deepEqual(f.controller.getLayoutMetrics(), { width:196,height:92,inset:0 });
+  f.ipc(win, 'pet:api-usage-label-toggle');
+  assert.equal(layouts.at(-1)?.height, 32);
+  f.controller.hide(); assert.equal(layouts.at(-1), null);
+  assert.equal(f.controller.getVisibleBounds(), null);
+  assert.equal(f.controller.getLayoutMetrics(), null);
+  f.controller.show({ connected: false });
+  assert.equal(layouts.at(-1)?.height, 32, 'the connection prompt is still a visible obstacle');
+  f.controller.destroy(); assert.equal(layouts.at(-1), null);
+  f.controller.show(STATE); const replacement = await f.ready();
+  replacement.destroy(); assert.equal(layouts.at(-1), null, 'native close retracts its obstacle');
+  assert.equal(f.errors.length, 0);
+});
+
 test('late load cannot restore a hidden, disposed or pet-hidden card; hide resets expansion', async () => {
   for (const cancel of [f => f.controller.hide(), f => f.controller.destroy(), f => { f.pet.visible = false; }]) {
     const f = fixture(); f.controller.show(STATE); const win = f.windows[0];
@@ -282,4 +312,31 @@ test('unknown or invalid amounts remain without a report while a valid zero is r
   assert.equal(win.sent.at(-1)[1].report.costs.month[0].value, 0);
   f.controller.show({ ...STATE, busy: true, error: '未更新' });
   assert.equal(win.sent.at(-1)[1].report.costs.month[0].value, STATE.report.costs.month[0].value);
+});
+
+test('API native peek fade has real exit and default hide remains immediate', async t => {
+  const f = fixture(); t.after(() => f.controller.destroy());
+  f.state.presentation = { mode: 'peeked', side: 'left' };
+  f.controller.show(STATE); const win = await f.ready(); win.setOpacity = value => { win.opacity = value; };
+  f.controller.hide({ animate: true }); assert.equal(win.visible, true); assert.equal(win.ignoresMouse, true);
+  await new Promise(resolve => setTimeout(resolve, 220)); assert.equal(win.visible, false);
+  f.controller.show(STATE); assert.equal(win.opacity, 0);
+  f.controller.hide(); assert.equal(win.visible, false); assert.equal(win.opacity, 1);
+});
+
+test('tucked exit freezes API bounds before predecessor disappearance can reflow it', async t => {
+  const f = fixture(); t.after(() => f.controller.destroy());
+  f.state.presentation = { mode: 'peeked', side: 'left' };
+  f.state.quota = nativeObstacle({ x: 20, y: 100, width: 124, height: 28 });
+  f.controller.show(STATE); const win = await f.ready(); win.setOpacity = value => { win.opacity = value; };
+  const before = win.getBounds();
+  f.state.presentation = { mode: 'tucked', side: 'left', quotaAnimateHide: true };
+  f.pet.bounds.x += 200; f.state.quota = null;
+  f.controller.reposition();
+  assert.deepEqual(win.getBounds(), before); assert.equal(win.visible, true); assert.equal(win.ignoresMouse, true);
+  f.controller.show({ ...STATE, busy: true }); assert.deepEqual(win.getBounds(), before, 'late refresh cannot move a fading card');
+  await new Promise(resolve => setTimeout(resolve, 220)); assert.equal(win.visible, false);
+  f.state.presentation = { mode: 'peeked', side: 'left' }; f.controller.show(STATE);
+  assert.equal(win.visible, true); assert.notDeepEqual(win.getBounds(), before, 'next entry uses the current geometry');
+  f.controller.hide(); assert.equal(win.visible, false);
 });

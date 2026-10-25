@@ -78,12 +78,71 @@ function bounded(candidate, size, area) {
 
 function quotaRoleTargetWidth(paintWidth) { return [22,24].includes(paintWidth) ? 48 : 64; }
 
-function quotaLabelSize(value, expanded = false, itemCount = 1, extraCredits = false, guardEntry = false, rolePaintWidth = null) {
+// Visible free and edge-peek cards share direction. Inputs are sizes, never their last positions.
+function quotaFreeStackBounds(petBounds, workArea, cards, presentation, bubble = null) {
+  const peeked = presentation?.mode === 'peeked' && ['left','right'].includes(presentation.side);
+  if (presentation?.mode !== 'free' && !peeked) return null;
+  const allowed = ['codex','api','zcode','workbuddy'];
+  const requested = Array.isArray(presentation.quotaCardOrder) ? presentation.quotaCardOrder : [];
+  const ids = [...new Set([...requested.filter(id => allowed.includes(id)), ...allowed])].filter(id => cards?.[id]);
+  if (!ids.length) return null;
+  const rows = ids.map(id => ({ id, ...cards?.[id] }));
+  if (rows.some(row => !Number.isFinite(row.width) || row.width <= 0 || !Number.isFinite(row.height) || row.height <= 0)) return null;
+  const area = safeArea(workArea), nativePet = safePet(petBounds, area);
+  let visual = petVisualBounds(nativePet,presentation.shape,{...presentation,quotaAnchor:true,quotaGuard:rows.some(row=>row.guardTargetWidth>0)});
+  const liveInk=presentation.quotaCardVisualInk?.ink;
+  const hasLiveInk=presentation.shape==='new-year-sheep'&&liveInk&&[liveInk.x,liveInk.y,liveInk.width,liveInk.height].every(Number.isFinite)&&liveInk.x>=0&&liveInk.y>=0&&liveInk.width>0&&liveInk.height>0&&liveInk.x+liveInk.width<=1.001&&liveInk.y+liveInk.height<=1.001;
+  if(hasLiveInk)visual={x:nativePet.x+nativePet.width*liveInk.x,y:nativePet.y+nativePet.height*liveInk.y,width:nativePet.width*liveInk.width,height:nativePet.height*liveInk.height};
+  const pet = !hasLiveInk && ['ring','duo','split','stages'].includes(presentation.quotaStyle)
+    ? presentation.shape === 'new-year-sheep' ? nativePet : {...visual,y:nativePet.y,height:nativePet.height} : visual;
+  const preferredCenter=pet.x+pet.width/2, obstacle=safeObstacle(bubble), bar=safeObstacle(presentation.quotaCardBarBounds);
+  for(const row of rows) {
+    row.inset=row.inset===2?2:0;
+    row.faceWidth=row.width-row.inset*2;row.faceHeight=row.height-row.inset*2;
+    if(row.faceWidth<=0||row.faceHeight<=0)return null;
+    row.gutter=[48,64].includes(row.guardTargetWidth)?row.guardTargetWidth+ROLE_GAP:0;
+    row.top=row.gutter?Math.max(row.height,44)+6-row.height:0;
+    row.left=peeked ? row.gutter>0 && presentation.side==='right' : row.gutter>0 && preferredCenter>area.x+area.width/2 && (nativePet.x+nativePet.width>=area.x+area.width-row.gutter || preferredCenter+row.width/2+row.gutter>area.x+area.width);
+  }
+  const left=Math.max(...rows.map(r=>r.width/2+(r.left?r.gutter:0))),right=Math.max(...rows.map(r=>r.width/2+(r.left?0:r.gutter)));
+  if(left+right>area.width)return fallback();
+  const center=Math.round(clamp(preferredCenter,area.x+left,area.x+area.width-right));
+  const stackHeight = rows.reduce((sum,row)=>sum+row.faceHeight,0)+GAP*(rows.length-1);
+  const columnLeft=peeked ? presentation.side==='left'?area.x+2:area.x+area.width-Math.max(...rows.map(row=>row.faceWidth))-2 : center-Math.max(...rows.map(row=>row.faceWidth))/2;
+  const columnRight=columnLeft+Math.max(...rows.map(row=>row.faceWidth));
+  const barInColumn=bar && bar.x<columnRight && bar.x+bar.width>columnLeft;
+  for(const placement of presentation.quotaPreferredPlacement==='above'?['above','below']:['below','above']) {
+    let cursor=placement==='below'?Math.max(pet.y+pet.height,barInColumn?bar.y+bar.height:-Infinity)+GAP
+      :Math.min(pet.y,barInColumn?bar.y:Infinity)-GAP-stackHeight;
+    const result={};let clear=true;
+    for(const row of rows) {
+      const face={x:Math.round(peeked ? presentation.side==='left' ? area.x+2 : area.x+area.width-row.faceWidth-2 : center-row.faceWidth/2),y:Math.round(cursor),width:row.faceWidth,height:row.faceHeight};
+      const x=face.x-row.inset-(row.left?row.gutter:0),y=face.y-row.inset-row.top;
+      const native={x,y,width:row.width+row.gutter,height:row.height+row.top,placement,
+        ...(row.gutter?{guardSide:row.left?'left':'right',cardInset:{x:row.left?row.gutter:0,y:row.top}}:{}),face};
+      const roleWidth=[22,24,50].includes(row.roleWidth)?row.roleWidth:ROLE_PAINT_WIDTH;
+      const ink=row.gutter?{x:face.x-row.inset-(row.left?ROLE_GAP+roleWidth:0),y:face.y-row.inset-(row.inset?1:0),
+        width:row.width+ROLE_GAP+roleWidth,height:row.height+(row.inset?1:0)}:face;
+      if(!inside(native,native,area)||overlaps(ink,ink,pet)||overlaps(ink,ink,obstacle)||overlaps(ink,ink,bar))clear=false;
+      result[row.id]=native;cursor=face.y+face.height+GAP;
+    }
+    if(clear)return {placement,cards:result};
+  }
+  return fallback();
+  function fallback() {
+    return { placement: 'hidden', cards: {}, hidden: ids };
+  }
+}
+
+function quotaLabelSize(value, expanded = false, itemCount = 1, extraCredits = false, guardEntry = false, rolePaintWidth = null, sourceId = 'codex') {
+  if (sourceId === 'zcode' && expanded === true && itemCount > 0) return { width: 196, height: itemCount === 1 ? 154 : 166 + (Math.ceil(Math.min(itemCount, 32) / 2) - 1) * 90 };
+  if (expanded === true && itemCount > 2) return { width: 196, height: 144 + (Math.ceil(Math.min(itemCount, 32) / 2) - 1) * 84 };
   if (expanded === true && itemCount > 1 && value === 'standard') return LABEL_SIZES.standardExpandedDual;
   if (expanded === true && itemCount > 1 && value === 'compact') return LABEL_SIZES.compactExpandedDual;
   if (expanded === true && value === 'standard') return LABEL_SIZES.standardExpanded;
   if (expanded === true && value === 'compact') return LABEL_SIZES.compactExpanded;
-  const card = LABEL_SIZES[value] || LABEL_SIZES.standard;
+  const card = value !== 'compact' && itemCount > 2
+    ? { width: 168, height: 58 + (Math.min(itemCount, 32) - 2) * 22 } : LABEL_SIZES[value] || LABEL_SIZES.standard;
   return guardEntry && !expanded ? { width: card.width + ROLE_GAP + quotaRoleTargetWidth(rolePaintWidth), height: Math.max(card.height, 44) + 6 } : card;
 }
 
@@ -97,13 +156,58 @@ function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName =
   const pet = ['ring', 'duo', 'split', 'stages'].includes(presentation?.quotaStyle)
     ? presentation?.shape === 'new-year-sheep' ? nativePet : { ...visual, y: nativePet.y, height: nativePet.height } : visual;
   const obstacle = safeObstacle(obstacleBounds);
-  const requestedSize = quotaLabelSize(sizeName, expanded, itemCount, extraCredits);
+  const requestedSize = quotaLabelSize(sizeName, expanded, itemCount, extraCredits, false, null, presentation?.quotaSourceId);
   const size = {
     width: Math.min(requestedSize.width, area.width),
     height: Math.min(requestedSize.height, area.height)
   };
   const centerX = pet.x + pet.width / 2;
   const centerY = pet.y + pet.height / 2;
+  const coordinated=['free','peeked'].includes(presentation?.mode)&&presentation?.quotaGroupLayout;
+  if(coordinated && inside(coordinated,coordinated,area) && coordinated.width===size.width+(guardEntry&&!expanded?ROLE_GAP+quotaRoleTargetWidth(presentation?.quotaRoleWidth):0)
+    && coordinated.height===(guardEntry&&!expanded?Math.max(size.height,44)+6:size.height)) return coordinated;
+  if (presentation?.quotaBottomAligned === true) {
+    // ZCode follows the existing Codex card without changing Codex's own anchor.
+    // Keep obstacle rectangles separate: their bounding union can cover free gaps.
+    const stack = safeObstacle(presentation.quotaStackBelow);
+    const obstacles = Array.isArray(presentation.quotaObstacles)
+      ? presentation.quotaObstacles.map(safeObstacle).filter(Boolean) : [obstacle].filter(Boolean);
+    if (stack && !obstacles.some(row => row.x === stack.x && row.y === stack.y && row.width === stack.width && row.height === stack.height)) obstacles.push(stack);
+    const alignedX = (stack ? stack.x + stack.width / 2 : centerX) - size.width / 2;
+    const positions = [
+      { placement: 'below', x: alignedX, y: stack ? stack.y + stack.height + GAP : pet.y + pet.height + GAP },
+      ...(stack ? [{ placement: 'above', x: alignedX, y: stack.y - size.height - GAP }] : []),
+      { placement: 'below', x: centerX - size.width / 2, y: pet.y + pet.height + GAP },
+      { placement: 'above', x: centerX - size.width / 2, y: pet.y - size.height - GAP },
+      { placement: 'right', x: pet.x + pet.width + GAP, y: centerY - size.height / 2 },
+      { placement: 'left', x: pet.x - size.width - GAP, y: centerY - size.height / 2 },
+      ...obstacles.flatMap(row => [
+        { placement: 'right', x: row.x + row.width + GAP, y: row.y },
+        { placement: 'left', x: row.x - size.width - GAP, y: row.y },
+        { placement: 'above', x: alignedX, y: row.y - size.height - GAP }
+      ])
+    ].map(candidate => bounded(candidate, size, area));
+    const clear = candidate => !overlaps(candidate, size, pet) && !obstacles.some(row => overlaps(candidate, size, row));
+    if (!guardEntry || expanded) return positions.find(clear) || positions[0];
+    const gutter = ROLE_GAP + quotaRoleTargetWidth(presentation?.quotaRoleWidth);
+    const group = { width: Math.min(size.width + gutter, area.width), height: Math.min(Math.max(size.height, 44) + 6, area.height) };
+    const top = Math.max(0, group.height - size.height);
+    const rightEdge = ['free','peeked'].includes(presentation?.mode) && centerX > area.x + area.width / 2 &&
+      (nativePet.x + nativePet.width >= area.x + area.width - gutter || centerX + size.width / 2 + gutter >= area.x + area.width);
+    const pairs = positions.flatMap(candidate => (rightEdge ? [true, false] : [false, true]).map(left => ({
+      ...bounded({ ...candidate, x: candidate.x - (left ? gutter : 0), y: candidate.y - top }, group, area),
+      guardSide: left ? 'left' : 'right', cardInset: { x: left ? Math.max(0, group.width - size.width) : 0, y: top }
+    })));
+    const roleWidth = [22,24,50].includes(presentation?.quotaRoleWidth) ? presentation.quotaRoleWidth : ROLE_PAINT_WIDTH;
+    const painted = candidate => ({ x: candidate.x + (candidate.guardSide === 'left' ? gutter - ROLE_GAP - roleWidth : 0),
+      y: candidate.y + candidate.cardInset.y - (sizeName === 'compact' ? 1 : 0),
+      width: Math.min(candidate.width, size.width + ROLE_GAP + roleWidth), height: size.height + (sizeName === 'compact' ? 1 : 0) });
+    return pairs.find(candidate => {
+      // Match Codex's painted pair: the native top/target gutter is transparent.
+      const face = painted(candidate);
+      return !overlaps(face, face, pet) && !obstacles.some(row => overlaps(face, face, row));
+    }) || pairs[0];
+  }
   const candidates = [
     { placement: 'below', x: centerX - size.width / 2, y: pet.y + pet.height + GAP },
     { placement: 'above', x: centerX - size.width / 2, y: pet.y - size.height - GAP },
@@ -198,4 +302,4 @@ function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName =
   return nearby || safeChoices.sort((a, b) => proximity(a) - proximity(b) || distance(a) - distance(b))[0] || pair;
 }
 
-module.exports = { GAP, LABEL_SIZES, quotaLabelSize, quotaLabelBounds, quotaRoleTargetWidth };
+module.exports = { GAP, LABEL_SIZES, quotaLabelSize, quotaLabelBounds, quotaRoleTargetWidth, quotaFreeStackBounds };

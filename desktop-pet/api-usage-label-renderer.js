@@ -82,7 +82,7 @@
     const period = !connected ? '未连接' : current.busy ? '查询中' : current.error ? '未更新' : !report ? '待查询' : '本月';
     $('api-period').textContent = period;
     const reportMonth = typeof report?.month === 'string' && /^\d{4}-\d{2}$/.test(report.month) ? report.month : '本月';
-    const monthTitle = report && month.length ? `${reportMonth} API 费用 · ${exact(month)}` : connected ? '费用尚未查询成功' : 'API 报告未连接，点击打开连接设置';
+    const monthTitle = report && month.length ? `${reportMonth} OpenAI API 费用 · ${exact(month)}` : connected ? 'OpenAI API 费用尚未查询成功' : 'OpenAI API 报告未连接，点击打开连接设置';
     $('summary').title = monthTitle + (current.busy ? ' · 正在查询' : current.error ? ' · 未更新' : '');
     $('api-compact-cost').title = monthTitle;
     $('api-month').title = `${reportMonth} · UTC`;
@@ -93,7 +93,8 @@
     $('api-query-status').textContent = !connected ? '尚未连接，请打开设置' : current.busy ? report ? '正在查询 · 显示上次报告' : '正在查询…' : current.error ? report ? '未更新 · 保留上次报告' : '未更新 · 请查看完整报告' : !report ? '尚未获取官方报告' : updated.short;
     $('api-query-status').title = [typeof current.error === 'string' ? current.error : '', updated.exact].filter(Boolean).join(' · ');
     $('api-open-details').textContent = connected ? '查看完整报告 ↗' : '连接 API 报告 ↗';
-    label.setAttribute('aria-label', `${monthTitle}，${period}，${connected ? expanded ? '点击折叠' : '点击展开' : '打开连接设置'}`);
+    label.title = `${monthTitle}，${period}，${connected ? expanded ? '点击折叠' : '点击展开' : '打开连接设置'}`;
+    label.setAttribute('aria-label', label.title);
   }
 
   function action(method) {

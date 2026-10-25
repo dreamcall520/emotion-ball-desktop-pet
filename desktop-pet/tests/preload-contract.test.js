@@ -250,3 +250,21 @@ test('短动作暂停可在atlas加载无ink时透传，伪布尔/非法轮廓�
  api.updateOffering(pause);assert.equal(JSON.stringify(sent.at(-1)[1]),JSON.stringify({eligible:false,transient:true,theme:'christmas',facing:'left'}));
  for(const bad of[{...pause,transient:'true'},{...pause,theme:'none'},{...pause,playing:true},{...pause,ink:{x:0,y:0,width:Infinity,height:1}}]){api.updateOffering(bad);assert.equal(JSON.stringify(sent.at(-1)[1]),JSON.stringify({eligible:false}));}
 });
+
+test('睡眠状态桥只透传真实状态枚举，不接受任意数据', () => {
+  let desktop;const sent=[];
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../preload.js'),'utf8'),{require:()=>({contextBridge:{exposeInMainWorld(_name,api){desktop=api;}},ipcRenderer:{send:(...args)=>sent.push(args)}})});
+  for(const value of ['awake','sleep','unknown',false,{state:'sleep'},'asleep'])desktop.reportSleepState(value);
+  assert.equal(JSON.stringify(sent),JSON.stringify([['pet:sleep-state','awake'],['pet:sleep-state','sleep']]));
+});
+
+
+test('四卡管理只使用专属保存IPC并保留真实返回结果', async () => {
+  let settings; const calls=[]; const result={ok:false,config:{order:['api','codex','zcode','workbuddy'],pinned:[]},error:'disk full'};
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../global-settings-preload.js'),'utf8'),{
+    require:()=>({contextBridge:{exposeInMainWorld(_name,api){settings=api;}},ipcRenderer:{invoke:async(...args)=>{calls.push(args);return result;}}})
+  });
+  const config={order:['workbuddy','codex','api','zcode'],pinned:['workbuddy']};
+  assert.equal(await settings.saveQuotaCards(config),result);
+  assert.deepEqual(calls,[['pet:global-quota-cards-save',config]]);
+});

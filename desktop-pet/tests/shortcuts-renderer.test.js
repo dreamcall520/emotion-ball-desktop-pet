@@ -1,0 +1,85 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+if (process.versions.electron && process.argv.includes('--shortcut-dom-child')) {
+  const { app, BrowserWindow } = require('electron');
+  app.whenReady().then(async () => {
+    const root = process.env.PET_SHORTCUT_SOURCE_ROOT || path.resolve(__dirname, '../..');
+    const read = file => fs.readFileSync(path.join(root, 'desktop-pet', file), 'utf8');
+    const win = new BrowserWindow({ width:416, height:600, frame:false, useContentSize:true, show:false, webPreferences:{contextIsolation:false,nodeIntegration:false} });
+    win.webContents.on('console-message', (_event, _level, message) => process.stderr.write(String(message)+'\n'));
+    const html = read('shortcuts.html').replace(/<script\b[^>]*>[\s\S]*?<\/script>/g,'').replace(/<link\b[^>]*>/g,tag=>tag.includes('blue-style')?'<link id="blue-style" rel="stylesheet">':'');
+    await win.loadURL('data:text/html,'+encodeURIComponent(html));
+    await win.webContents.insertCSS(read('shortcuts.css'));
+    const run = code => win.webContents.executeJavaScript(code), settle = () => run('new Promise(resolve=>setTimeout(resolve,15))');
+    await run(`window.current={view:'settings',session:1,config:{enabled:true,shape:'floating',launcher:'Ctrl+Alt+Q',chat:'Meta+C',custom:'',note:'',todo:'',pomodoro:'',noteBehavior:'panel',todoBehavior:'panel'},registrationErrors:[]};window.calls=[];window.failNext=false;window.deferNext=false;window.qiuShortcuts={getState:async()=>current,onState:callback=>{window.receive=callback;return ()=>{}},onColorMode:()=>()=>{},recording:value=>calls.push({type:'record',value}),save:async config=>{calls.push({type:'save',config});if(deferNext){deferNext=false;return new Promise((resolve,reject)=>{window.resolveSave=resolve;window.rejectSave=reject})}if(failNext){failNext=false;return {ok:false,error:'快捷键被占用，原设置已保留',state:current}}current={...current,config:{...config}};return {ok:true,state:current}},pointer(){},close(){calls.push({type:'close'})},openAction(){},openSettings(){}};true`);
+    await run(read('shortcuts-renderer.js')); await settle();
+    await run('Promise.allSettled(document.getAnimations().filter(animation=>animation.effect.getComputedTiming().iterations!==Infinity).map(animation=>animation.finished))');
+    await run('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+    assert.equal(await run("document.getElementById('save')===null && document.getElementById('cancel')===null"),true);
+    assert.equal(await run("document.querySelector('.settings-footer')===null"),true);
+    assert.equal(await run("document.getElementById('record-hint').hidden && document.getElementById('record-hint').getBoundingClientRect().height===0"),true);
+    const headerControls=await run("[...document.querySelectorAll('#settings .panel-header button')].map(n=>({id:n.id,label:n.getAttribute('aria-label'),title:n.title,x:n.getBoundingClientRect().x}))");
+    assert.equal(headerControls[0].id,'restore'); assert.equal(headerControls[0].label,'恢复默认'); assert.equal(headerControls[0].title,'恢复默认');
+    assert.equal(headerControls[1].label,'关闭快捷键设置'); assert(headerControls[0].x<headerControls[1].x);
+    assert.equal(await run("(()=>{const b=document.querySelector('.settings-body');return b.scrollHeight<=b.clientHeight+1})()"),true,'600px window fits normal content');
+
+    const positions = await run("[...document.querySelectorAll('#settings [data-clear]')].map(n=>({x:n.getBoundingClientRect().right,width:n.getBoundingClientRect().width,visibility:getComputedStyle(n).visibility,icon:n.querySelector('use').getAttribute('href')}))");
+    assert.equal(positions.length,6); assert(positions.every(p=>Math.abs(p.width-28)<.5 && p.icon==='#i-trash'),JSON.stringify(positions));
+    assert(positions.every(p=>Math.abs(p.x-positions[0].x)<.5),'删除列全部右边缘对齐'); assert.equal(positions[2].visibility,'hidden');
+    await run("document.querySelector('[data-clear=chat]').click()"); await settle();
+    assert.equal(await run("current.config.chat"),'');
+    await run("document.querySelector('[data-record=custom]').click();document.dispatchEvent(new KeyboardEvent('keydown',{key:'K',code:'KeyK',metaKey:true,bubbles:true}))"); await settle();
+    assert.equal(await run('current.config.custom'),'Meta+K');
+    assert.equal(await run("(()=>{const i=calls.findIndex(c=>c.type==='save'&&c.config.custom==='Meta+K');return calls[i-1].type==='record'&&calls[i-1].value===false})()"),true,'先停止录制再注册');
+    await run("document.querySelector('[data-record=custom]').click();current={...current,config:{...current.config,note:'Meta+R'}};receive(current)"); await settle();
+    assert.equal(await run("document.querySelector('[data-record=custom]').getAttribute('aria-pressed')"),'true','外部更新保留当前录制态');
+    await run("document.dispatchEvent(new KeyboardEvent('keydown',{key:'J',code:'KeyJ',metaKey:true,bubbles:true}))"); await settle();
+    assert.equal(await run('current.config.note'),'Meta+R','录制期间收到的外部字段不被旧draft覆盖');
+    assert.equal(await run('current.config.custom'),'Meta+J');
+    const saves = await run("calls.filter(c=>c.type==='save').length");
+    await run("document.querySelector('[data-clear=launcher]').click()"); await settle();
+    assert.equal(await run("calls.filter(c=>c.type==='save').length"),saves); assert.equal(await run('current.config.launcher'),'Ctrl+Alt+Q');
+    assert.match(await run("document.getElementById('error').textContent"),/唤起快捷键/);
+    await run("current={...current,config:{...current.config,todo:'Meta+T'}};failNext=true;{const enabled=document.getElementById('enabled');enabled.checked=false;enabled.dispatchEvent(new Event('change',{bubbles:true}))}"); await settle();
+    assert.equal(await run("document.getElementById('enabled').checked"),true); assert.match(await run("document.getElementById('error').textContent"),/被占用/);
+    assert.equal(await run("document.querySelector('[data-record=todo]').textContent.includes('T')"),true,'失败采用后端返回配置回滚');
+    await run("{const shape=document.querySelector('[name=shape][value=list]');shape.checked=true;shape.dispatchEvent(new Event('change',{bubbles:true}))}"); await settle(); assert.equal(await run('current.config.shape'),'list');
+    await run("document.getElementById('restore').click()"); await settle(); assert.equal(await run('current.config.shape'),'floating'); assert.equal(await run('current.config.custom'),'');
+    await run("current={...current,config:{...current.config,note:'Meta+P'}};receive(current)"); await settle();
+    assert.equal(await run("document.querySelector('[data-record=note]').textContent.includes('P')"),true);
+    await run("{const select=document.querySelector('[data-start-behavior=todoBehavior]');select.value='create';select.dispatchEvent(new Event('change',{bubbles:true}))}"); await settle();
+    assert.equal(await run('current.config.note'),'Meta+P','同session外部修改不被旧draft覆盖');
+    await run("deferNext=true;{const enabled=document.getElementById('enabled');enabled.checked=false;enabled.dispatchEvent(new Event('change',{bubbles:true}))}"); await settle();
+    await run("current={...current,config:{...current.config,note:'Meta+E'}};receive(current);rejectSave(new Error('隔离保存失败'))"); await settle();
+    assert.equal(await run("document.querySelector('[data-record=note]').textContent.includes('E')"),true,'IPC失败回滚到期间收到的真实同session配置');
+    await run("deferNext=true;{const enabled=document.getElementById('enabled');enabled.checked=false;enabled.dispatchEvent(new Event('change',{bubbles:true}))}"); await settle();
+    await run("current={...current,session:2,config:{...current.config,chat:'Meta+N'}};receive(current);resolveSave({ok:true,state:{...current,session:1,config:{...current.config,chat:'Meta+OLD'}}})"); await settle();
+    assert.equal(await run("document.querySelector('[data-record=chat]').textContent.includes('N')"),true,'旧session保存结果不覆盖新session');
+    const out = process.env.PET_SHORTCUT_ARTIFACT_DIR || '/tmp/qiuqiu-shortcut-settings-preview'; fs.mkdirSync(out,{recursive:true});
+    await run('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))'); await new Promise(resolve=>setTimeout(resolve,150));
+    fs.writeFileSync(path.join(out,'shortcuts-settings.png'),(await win.webContents.capturePage(undefined,{stayHidden:true})).toPNG());
+
+    await run("document.querySelector('[data-record=custom]').click()");
+    assert.equal(await run("document.getElementById('record-hint').hidden"),false,'recording alone shows guidance');
+    await run("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))");
+    assert.equal(await run("document.getElementById('record-hint').hidden"),true);
+    win.setSize(320,440); await settle();
+    const small=await run("(()=>{const p=document.querySelector('#settings'),b=p.querySelector('.settings-body'),r=n=>n.getBoundingClientRect().toJSON();return {panel:r(p),body:r(b),scroll:b.scrollHeight,client:b.clientHeight,overflow:getComputedStyle(b).overflowY,header:[...p.querySelectorAll('.panel-header button')].map(r),horizontal:b.scrollWidth<=b.clientWidth}})()");
+    assert(small.panel.width<=320 && small.panel.height<=440); assert(small.scroll>small.client && small.overflow==='auto');
+    assert(small.horizontal,'small settings body never overflows horizontally');
+    assert(small.header.every(r=>r.x>=0&&r.y>=0&&r.x+r.width<=320&&r.y+r.height<=440),'header actions stay reachable');
+    await run("document.querySelector('[data-record=pomodoro]').scrollIntoView({block:'end'})");
+    const lastBinding=await run("(()=>{const row=document.querySelector('[data-record=pomodoro]').getBoundingClientRect(),body=document.querySelector('.settings-body').getBoundingClientRect();return {top:row.top,bottom:row.bottom,bodyTop:body.top,bodyBottom:body.bottom}})()");
+    assert(lastBinding.top>=lastBinding.bodyTop&&lastBinding.bottom<=lastBinding.bodyBottom+1,JSON.stringify(lastBinding));
+    fs.writeFileSync(path.join(out,'shortcuts-settings-small.png'),(await win.webContents.capturePage(undefined,{stayHidden:true})).toPNG());
+    await run("document.querySelector('#settings .panel-header [data-close]').click()");
+    assert.equal(await run("calls.at(-1).type"),'close');
+    win.destroy(); process.stdout.write('SHORTCUT_SETTINGS_DOM_OK\n'); app.exit(0);
+  }).catch(error=>{process.stderr.write(error.stack+'\n');app.exit(1)});
+} else {
+  require('node:test')('standalone shortcut settings autosave, rollback and aligned trash controls in Chromium', {timeout:30000},()=>{
+    const result=require('node:child_process').spawnSync(require('electron'),[__filename,'--shortcut-dom-child'],{encoding:'utf8',timeout:25000});
+    assert.equal(result.status,0,result.stdout+result.stderr);assert.match(result.stdout,/SHORTCUT_SETTINGS_DOM_OK/);
+  });
+}

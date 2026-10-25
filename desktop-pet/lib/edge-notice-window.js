@@ -1,7 +1,7 @@
 const path = require('node:path');
 
 function edgeNoticeBounds(pet, area, side, kind = 'text') {
-  const width = Math.min(kind === 'quota' ? 284 : 244, area.width), height = Math.min(44, area.height);
+  const width = Math.min(kind === 'workbuddy' ? 360 : kind === 'quota' ? 284 : 244, area.width), height = Math.min(44, area.height);
   const inward = side === 'left' ? pet.x + pet.width / 2 + 6 : pet.x + pet.width / 2 - width - 6;
   return { x: Math.round(Math.max(area.x, Math.min(area.x + area.width - width, inward))),
     y: Math.round(Math.max(area.y, Math.min(area.y + area.height - height, pet.y + (pet.height - height) / 2))),

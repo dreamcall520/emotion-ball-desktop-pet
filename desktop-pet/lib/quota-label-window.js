@@ -1,3 +1,6 @@
+const { captureQuotaGroupFrames } = require('./quota-group-capture');
+const { sendQuotaCardMotion } = require('./quota-card-motion');
+const { createNativeWindowFade } = require('./native-window-fade');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { quotaLabelBounds, quotaLabelSize, quotaRoleTargetWidth } = require('./quota-label-placement');
@@ -47,7 +50,21 @@ function activityFields(value) {
   } catch (_) { return {}; }
 }
 
-function copyItem(value) {
+function bucketFields(item, sourceId) {
+  if (sourceId !== 'zcode') return {};
+  try { return {
+      planName: cleanLabel(item.planName),
+      ...(typeof item.model === 'string' ? { model: cleanLabel(item.model) } : {}),
+      bucketId: typeof item.bucketId === 'string' && /^[^\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]{1,400}$/u.test(item.bucketId) ? item.bucketId : '',
+      periodKind: ['one_time', 'expiry', 'daily', 'rolling', 'weekly', 'monthly', 'unknown'].includes(item.periodKind) ? item.periodKind : 'unknown',
+      periodStart: Number.isSafeInteger(item.periodStart) && item.periodStart > 0 ? item.periodStart : null,
+      total: Number.isFinite(item.total) && item.total >= 0 ? item.total : null,
+      remainingUnits: Number.isFinite(item.remainingUnits) && item.remainingUnits >= 0 ? item.remainingUnits : null,
+      unit: typeof item.unit === 'string' ? item.unit.replace(/[^a-zA-Z\u4e00-\u9fff]/gu, '').slice(0, 16) : ''
+  }; } catch (_) { return {}; }
+}
+
+function copyItem(value, sourceId = 'codex') {
   const item = record(value);
   if (!item) return null;
   let labelValue;
@@ -67,19 +84,20 @@ function copyItem(value) {
     return null;
   }
   const label = cleanLabel(labelValue);
-  if (!label || !Number.isSafeInteger(windowMinutes) || windowMinutes <= 0 ||
+  if (!label || (sourceId === 'zcode' ? windowMinutes !== null && (!Number.isFinite(windowMinutes) || windowMinutes <= 0) : !Number.isSafeInteger(windowMinutes) || windowMinutes <= 0) ||
     typeof remaining !== 'number' || !Number.isFinite(remaining) || remaining < 0 || remaining > 100) return null;
   return {
     label,
     windowMinutes,
     remaining,
+    ...bucketFields(item, sourceId),
     ...(Number.isSafeInteger(resetsAt) && resetsAt > 0 ? { resetsAt } : {}),
     ...paceFields(pace),
     ...(resetLabel ? { resetLabel } : {})
   };
 }
 
-function copyItems(value) {
+function copyItems(value, sourceId = 'codex') {
   try {
     if (!Array.isArray(value)) return [];
   } catch (_) {
@@ -87,12 +105,12 @@ function copyItems(value) {
   }
   let length;
   try { length = value.length; } catch (_) { return []; }
-  const limit = Number.isSafeInteger(length) && length >= 0 ? Math.min(length, 2) : 0;
+  const limit = Number.isSafeInteger(length) && length >= 0 ? Math.min(length, sourceId === 'zcode' ? 32 : 2) : 0;
   const items = [];
   for (let index = 0; index < limit; index += 1) {
     let raw;
     try { raw = value[index]; } catch (_) { continue; }
-    const item = copyItem(raw);
+    const item = copyItem(raw, sourceId);
     if (item) items.push(item);
   }
   return items;
@@ -127,14 +145,20 @@ function numberFields(source) {
   } catch (_) { return {}; }
 }
 
-function safeModel(value) {
+function iconPreferenceFields(source) {
+  try { const value = source.codexIconPreference; return ['app-default', 'codex-system', 'space-system'].includes(value) ? { codexIconPreference: value, ...(typeof source.codexIconDark === 'boolean' ? { codexIconDark: source.codexIconDark } : {}) } : {}; }
+  catch (_) { return {}; }
+}
+
+function safeModel(value, sourceId = 'codex') {
   const source = record(value);
   if (!source) return { state: EMPTY_MODEL.state, items: [], overflow: 0 };
   let stateValue;
   try { stateValue = source.state; } catch (_) { return { state: EMPTY_MODEL.state, items: [], overflow: 0 }; }
   const state = STATES.has(stateValue) ? stateValue : 'disconnected';
+  const identity = sourceId === 'zcode' ? { sourceId: 'zcode' } : iconPreferenceFields(source);
   const numbers = numberFields(source);
-  if (!['ready', 'stale'].includes(state)) return { state, items: [], overflow: 0, ...numbers };
+  if (!['ready', 'stale'].includes(state)) return { ...identity, state, items: [], overflow: 0, ...numbers };
   let rawItems;
   let overflowValue;
   let resetCreditsAvailable;
@@ -145,32 +169,38 @@ function safeModel(value) {
     resetCreditsAvailable = source.resetCreditsAvailable;
     activity = record(source.activity);
   } catch (_) {
-    return { state, items: [], overflow: 0, ...numbers };
+    return { ...identity, state, items: [], overflow: 0, ...numbers };
   }
   const overflow = Number.isSafeInteger(overflowValue) && overflowValue > 0
     ? Math.min(overflowValue, 99) : 0;
   return {
+    ...identity,
     state,
     ...numbers,
-    items: copyItems(rawItems),
+    items: copyItems(rawItems, sourceId),
     overflow,
-    ...extraCreditsFields(source, state),
+    ...(sourceId === 'zcode' ? {} : extraCreditsFields(source, state)),
     ...activityFields(activity),
-    ...(Number.isSafeInteger(resetCreditsAvailable) && resetCreditsAvailable >= 0
+    ...(sourceId !== 'zcode' && Number.isSafeInteger(resetCreditsAvailable) && resetCreditsAvailable >= 0
       ? { resetCreditsAvailable } : {})
   };
 }
 
 function createQuotaLabelWindow({
-  BrowserWindow, screen, getPetWindow, getObstacle = () => null, getSize = () => 'standard',
+  BrowserWindow, screen, sourceId = 'codex', getPetWindow, getObstacle = () => null, getSize = () => 'standard',
   getAppearance = () => 'system', getPresentation = () => null, getSuppressed = () => false,
   getGuardEntry = () => false,
   onError = () => {}, onLayout = () => {}, alwaysOnTop = true
 }) {
+  sourceId = sourceId === 'zcode' ? 'zcode' : 'codex';
+  const channel = sourceId === 'zcode' ? 'pet:zcode-quota-label' : CHANNEL;
+  const toggleChannel = sourceId === 'zcode' ? 'pet:zcode-quota-label-toggle' : TOGGLE_CHANNEL;
+  const pointerChannel = sourceId === 'zcode' ? 'pet:zcode-quota-label-pointer' : POINTER_CHANNEL;
+  let groupTransitionMode = null, groupTransitionEpoch = 0, groupResumeImmediate = false;
   let win = null;
   let ready = false;
   let requestedVisible = false;
-  let currentModel = null;
+  let currentModel = null, resetExpandedPending = false;
   let currentLayout = null;
   let topmost = Boolean(alwaysOnTop);
   let topmostRevision = 0;
@@ -206,6 +236,7 @@ function createQuotaLabelWindow({
   }
 
   function safeDestroy(target) {
+    fade.cancel(target);
     if (!target) return;
     let destroyed = false;
     try { destroyed = typeof target.isDestroyed === 'function' && target.isDestroyed(); } catch (_) {}
@@ -222,6 +253,7 @@ function createQuotaLabelWindow({
     reporting = false;
   }
 
+  const fade = createNativeWindowFade({ onError: error => { if (win) detach(win, error); else report(error); } });
   function notifyLayout() {
     try { onLayout(); } catch (error) { report(error); }
   }
@@ -263,7 +295,7 @@ function createQuotaLabelWindow({
       (!requireVisible || requestedVisible);
   }
 
-  function conceal(target = win, token = operation) {
+  function conceal(target = win, token = operation, animate = false) {
     if (!target || win !== target || operation !== token) return;
     const status = health(target);
     if (!status.ok) {
@@ -271,13 +303,19 @@ function createQuotaLabelWindow({
       return;
     }
     if (win !== target || operation !== token) return;
-    if (ready && currentModel) {
-      try { target.webContents.send(CHANNEL, { ...currentModel, visible: false, guardEntry: guardEntryVisible(),
-        ...(currentLayout?.guardSide ? { guardSide: currentLayout.guardSide, cardInset: currentLayout.cardInset, guardTargetWidth: quotaRoleTargetWidth(rolePaintWidth()) } : {}) }); }
-      catch (error) { detach(target, error); return; }
+    const finish = () => {
       if (win !== target || operation !== token) return;
-    }
-    try { target.hide(); } catch (error) { detach(target, error); return; }
+      if (ready && currentModel) {
+        try { target.webContents.send(channel, { ...currentModel, visible: false, guardEntry: guardEntryVisible(),
+          ...(currentLayout?.guardSide ? { guardSide: currentLayout.guardSide, cardInset: currentLayout.cardInset, guardTargetWidth: quotaRoleTargetWidth(rolePaintWidth()) } : {}) }); }
+        catch (error) { detach(target, error); return; }
+        if (win !== target || operation !== token) return;
+      }
+    };
+    try {
+      target.setIgnoreMouseEvents(true, { forward: true });
+      fade.hide(target, { animate: sendQuotaCardMotion(target, false, getPresentation(), animate), onHidden: finish, ...(getPresentation()?.quotaGroupAnimate ? {duration:220,easing:'group-collapse'} : {}) });
+    } catch (error) { detach(target, error); return; }
     if (win !== target || operation !== token) return;
     const afterHide = health(target);
     if (!afterHide.ok) {
@@ -285,7 +323,6 @@ function createQuotaLabelWindow({
       return;
     }
     if (win !== target || operation !== token) return;
-    try { target.setIgnoreMouseEvents(true, { forward: true }); } catch (error) { detach(target, error); }
     if (win === target && operation === token) notifyLayout();
   }
 
@@ -296,7 +333,7 @@ function createQuotaLabelWindow({
 
   function visualPresentation(petBounds, area) {
     const value = getPresentation() || {};
-    return { ...value, sheepTheme: SheepTheme.resolveTheme(value.sheepTheme, new Date()),
+    return { ...value, quotaSourceId: sourceId, sheepTheme: SheepTheme.resolveTheme(value.sheepTheme, new Date()),
       facing: value.facing || PetFacing.resolve(petBounds, area),
       quotaRoleWidth: rolePaintWidth() };
   }
@@ -330,7 +367,8 @@ function createQuotaLabelWindow({
       { ...presentation, quotaAnchor: true, quotaGuard: true }));
     // The role target is 48px for ordinary roles, 64px for the composite. Its transparent tail
     // can overlap a neighbor, but must never intercept that neighbor's clicks.
-    return Boolean(contains(body) || contains(getObstacle()));
+    return Boolean(contains(body) || contains(getObstacle()) || presentation?.quotaGroupLayout &&
+      Array.isArray(presentation.quotaGroupNeighbors) && presentation.quotaGroupNeighbors.some(contains));
   }
 
   function present() {
@@ -338,10 +376,15 @@ function createQuotaLabelWindow({
     const token = operation;
     const model = currentModel;
     if (!ready || !confirm(target, token, model)) return;
-    if (getSuppressed()) {
-      conceal(target, token);
+    if (groupTransitionMode === 'hold' || groupTransitionMode === 'masked') return;
+    const presentation = getPresentation();
+    // Tuck notifications can reflow siblings before their explicit hide call.
+    if (getSuppressed() || presentation?.quotaGroupHidden === true ||
+        presentation?.mode === 'tucked' && presentation.quotaAnimateHide === true) {
+      conceal(target, token, presentation?.quotaAnimateHide === true);
       return;
     }
+    if (resetExpandedPending) { resetExpandedPending=false; if(currentModel?.expanded){currentModel={...currentModel,expanded:false};return present();} }
     const layout = petLayout();
     if (!confirm(target, token, model)) return;
     if (!layout) {
@@ -352,13 +395,13 @@ function createQuotaLabelWindow({
     try { target.setBounds({ x, y, width, height }, false); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
     currentLayout = layout;
-    try { target.webContents.send(CHANNEL, { ...model, visible: true, guardEntry: guardEntryVisible(),
+    try { target.webContents.send(channel, { ...model, visible: true, guardEntry: guardEntryVisible(),
       ...(layout.guardSide ? { guardSide: layout.guardSide, cardInset: layout.cardInset, guardTargetWidth: quotaRoleTargetWidth(rolePaintWidth()) } : {}) }); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
     try {
       if (layout.guardSide && typeof screen.getCursorScreenPoint === 'function') {
         const cursor = screen.getCursorScreenPoint(), native = target.getBounds();
-        const card = quotaLabelSize(model.size, model.expanded, model.items.length, Boolean(model.extraCredits));
+        const card = quotaLabelSize(model.size, model.expanded, model.items.length, Boolean(model.extraCredits), false, null, sourceId);
         const face = { x: native.x + layout.cardInset.x, y: native.y + layout.cardInset.y, ...card };
         const role = { x: layout.guardSide === 'left' ? face.x - 8 - quotaRoleTargetWidth(rolePaintWidth()) : face.x + card.width + 8,
           y: face.y + card.height - 44, width: quotaRoleTargetWidth(rolePaintWidth()), height: 44 };
@@ -370,7 +413,8 @@ function createQuotaLabelWindow({
       else target.setIgnoreMouseEvents(true, { forward: true });
     } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
-    try { target.showInactive(); } catch (error) { detach(target, error); return; }
+    if (groupTransitionMode === 'stage') { fade.cancel(target); target.setIgnoreMouseEvents(true, { forward: true }); sendQuotaCardMotion(target, true, { ...presentation, quotaGroupAnimate: false }, false); target.hide(); notifyLayout(); return; }
+    try { const animate=sendQuotaCardMotion(target, true, presentation, !groupResumeImmediate && (presentation?.quotaGroupAnimate === true || ['peeked', 'tucked'].includes(presentation?.mode))); if(!confirm(target,token,model))return; fade.show(target, animate); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) {
       if (win === target && !requestedVisible) conceal(target, operation);
       return;
@@ -446,11 +490,11 @@ function createQuotaLabelWindow({
     const expectedWindow = win;
     let loadingWindow = null;
     const initialSize = quotaLabelSize(currentModel?.size, currentModel?.expanded === true,
-      currentModel?.items?.length, Boolean(currentModel?.extraCredits), guardEntryVisible(), rolePaintWidth());
+      currentModel?.items?.length, Boolean(currentModel?.extraCredits), guardEntryVisible(), rolePaintWidth(), sourceId);
     try { loadingWindow = new BrowserWindow({
       width: initialSize.width,
       height: initialSize.height,
-      title: 'Codex 剩余额度',
+      title: sourceId === 'zcode' ? 'ZCode 剩余额度' : 'Codex 剩余额度',
       transparent: true,
       frame: false,
       roundedCorners: false, // CSS owns the card corners, including the edge beside the role gutter.
@@ -466,6 +510,7 @@ function createQuotaLabelWindow({
       backgroundColor: '#00000000',
       webPreferences: {
         preload: path.join(__dirname, '../quota-label-preload.js'),
+        ...(sourceId === 'zcode' ? { additionalArguments: ['--pet-source=zcode'] } : {}),
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
@@ -487,8 +532,10 @@ function createQuotaLabelWindow({
       () => loadingWindow.webContents.on('will-navigate', event => {
         try { event.preventDefault(); } catch (_) {}
       }),
+      () => loadingWindow.webContents.on('did-start-loading',()=>{if(win===loadingWindow){ready=false;groupTransitionEpoch++;}}),
       () => loadingWindow.webContents.on('ipc-message', (event, channel, value) => {
-        if (channel === POINTER_CHANNEL) {
+        if (groupTransitionMode) return;
+        if (channel === pointerChannel) {
           if (typeof value !== 'boolean' || win !== loadingWindow || !requestedVisible || !ready ||
             !loadingWindow.isVisible() || event?.sender !== loadingWindow.webContents ||
             event.senderFrame !== event.sender.mainFrame || event.sender.getURL() !== pathToFileURL(FILE).href) return;
@@ -496,8 +543,10 @@ function createQuotaLabelWindow({
           catch (error) { detach(loadingWindow, error); }
           return;
         }
-        if (channel !== TOGGLE_CHANNEL || win !== loadingWindow || !requestedVisible || !ready ||
+        if (channel !== toggleChannel || win !== loadingWindow || !requestedVisible || !ready ||
           !currentModel?.items.length || currentModel.display === 'numbers') return;
+        if (sourceId === 'zcode' && (event?.sender !== loadingWindow.webContents ||
+          event.senderFrame !== event.sender.mainFrame || event.sender.getURL() !== pathToFileURL(FILE).href)) return;
         operation += 1;
         currentModel = { ...currentModel, expanded: currentModel.expanded !== true };
         try { present(); } catch (error) { detach(loadingWindow, error); }
@@ -541,14 +590,16 @@ function createQuotaLabelWindow({
     Promise.resolve(loading).then(markReady).catch(error => detach(loadingWindow, error));
   }
 
-  function hide() {
+  function hide({ animate = false } = {}) {
+    groupTransitionMode = null; groupTransitionEpoch++;
     operation += 1;
     requestedVisible = false;
     if (currentModel?.expanded === true) currentModel = { ...currentModel, expanded: false };
-    conceal(win, operation);
+    conceal(win, operation, animate && ['peeked', 'tucked'].includes(getPresentation()?.mode));
   }
 
   function destroy() {
+    groupTransitionMode = null; groupTransitionEpoch++;
     operation += 1;
     requestedVisible = false;
     currentModel = null;
@@ -574,7 +625,7 @@ function createQuotaLabelWindow({
     show(model) {
       operation += 1;
       const token = operation;
-      const copied = safeModel(model);
+      const copied = safeModel(model, sourceId);
       if (operation !== token) return;
       const size = requestedSize();
       if (operation !== token) return;
@@ -594,12 +645,33 @@ function createQuotaLabelWindow({
       try { present(); } catch (error) { if (win) detach(win, error); else report(error); }
     },
     getWindow,
+    setGroupTransitionMode(mode) {
+      if (![null,'hold','stage','masked'].includes(mode) || mode===groupTransitionMode) return;
+      groupTransitionMode=mode; groupTransitionEpoch++;
+      const target=getWindow();
+      if(target){fade.cancel(target);target.setIgnoreMouseEvents(true,{forward:true});if(mode==='stage'||mode==='masked')target.hide();}
+      groupResumeImmediate=mode===null;try{if(mode===null||mode==='stage')present();}finally{groupResumeImmediate=false;}
+    },
+    captureGroupTransitionFrames() {
+      const stageAvailable=()=>groupTransitionMode!=='stage'||getPresentation()?.quotaGroupHidden!==true;
+      if(!stageAvailable())return Promise.reject(new Error('Quota group stage has no visible layout'));
+      const epoch=groupTransitionEpoch,target=win;
+      return captureQuotaGroupFrames({getTargets:()=>[target],isReady:()=>ready&&requestedVisible&&win===target&&Boolean(target),isCurrent:()=>stageAvailable()&&groupTransitionEpoch===epoch&&win===target});
+    },
+    resetExpanded() { resetExpandedPending=true; },
+    getLayoutMetrics() {
+      const target=getWindow();
+      if (!requestedVisible || !target || getSuppressed() || !currentModel?.items.length || currentModel.display === 'numbers') return null;
+      return { ...quotaLabelSize(currentModel.size,!resetExpandedPending&&currentModel.expanded,currentModel.items.length,Boolean(currentModel.extraCredits),false,null,sourceId),
+        inset: currentModel.size==='compact'&&(resetExpandedPending||!currentModel.expanded)?2:0,
+        guardTargetWidth: guardEntryVisible()?quotaRoleTargetWidth(rolePaintWidth()):0, roleWidth:rolePaintWidth() };
+    },
     getVisibleBounds() {
       const target = getWindow();
-      if (!target || !requestedVisible || !currentModel?.items.length || !target.isVisible()) return null;
+      if (!target || !requestedVisible || !currentModel?.items.length || !target.isVisible() && groupTransitionMode !== 'stage') return null;
       const bounds = target.getBounds();
       const card = quotaLabelSize(currentModel.size, currentModel.expanded, currentModel.items.length,
-        Boolean(currentModel.extraCredits));
+        Boolean(currentModel.extraCredits), false, null, sourceId);
       // Use the painted card offset independently of its transparent role gutter.
       const inset = currentModel.size === 'compact' && !currentModel.expanded ? 2 : 0;
       const width = Math.min(bounds.width, card.width), height = Math.min(bounds.height, card.height);
@@ -615,6 +687,10 @@ function createQuotaLabelWindow({
       if (!target) return;
       try { syncTopmost(target); }
       catch (error) { if (win === target) detach(target, error); else report(error); }
+    },
+    isGuardEntryVisible({ includeStaged = false } = {}) {
+      // Layout priority includes staged paint; IPC callers keep actual visibility.
+      return Boolean(win && !win.isDestroyed() && (win.isVisible() || (includeStaged && groupTransitionMode === 'stage')) && guardEntryVisible());
     },
     destroy
   };

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <title>开启 WorkBuddy 联动</title>
+  <link rel="stylesheet" href="about.css">
+  <link rel="stylesheet" href="aurora-rive.css">
+  <link rel="stylesheet" href="sheep-skin.css">
+  <link rel="stylesheet" href="codex-consent.css">
+  <link rel="stylesheet" href="color-mode.css">
+  <script defer src="color-mode.js"></script>
+  <script defer src="../emotion-ball/js/rings.js"></script>
+  <script defer src="../emotion-ball/js/custom-shapes.js"></script>
+  <script defer src="../emotion-ball/js/emotions.js"></script>
+  <script defer src="../emotion-ball/js/ball.js"></script>
+  <script defer src="lib/sheep-theme.js"></script>
+  <script defer src="lib/sheep-fireworks.js"></script>
+  <script defer src="lib/sheep-skin.js"></script>
+  <script defer src="../emotion-ball/js/engine.js"></script>
+  <script defer src="lib/customization.js"></script>
+  <script defer src="lib/rive.js"></script>
+  <script defer src="lib/boo-binary.js"></script>
+  <script defer src="lib/aurora-rive.js"></script>
+  <script defer src="lib/codex-pet-player.js"></script>
+  <script defer src="lib/chat-avatar.js"></script>
+  <script defer src="workbuddy-consent-renderer.js"></script>
+</head>
+<body>
+  <main class="about-window consent-window" aria-labelledby="consent-title" aria-describedby="consent-subtitle">
+    <div class="about-titlebar" aria-hidden="true"></div>
+    <section class="consent-content">
+      <div id="consent-avatar" class="consent-avatar" aria-hidden="true"></div>
+      <h1 id="consent-title">让球球陪你关注 WorkBuddy</h1>
+      <p id="consent-subtitle">提醒积分余量，也留意本机任务。</p>
+      <div class="consent-disclosure">
+        <section><h2>读取本机登录与积分</h2><ul class="consent-privacy"><li>使用本机 WorkBuddy 已登录的账户，只读查询积分与消耗、到期信息及本机任务状态；不修改待查看标记。</li></ul></section>
+        <section><h2>保护登录信息</h2><ul class="consent-privacy">
+          <li>不向你索要 token 或密码，登录凭据仅在本机用于官方请求，不发送给其他服务。消耗明细仅提取时间和积分，附带正文立即丢弃，不保存、不展示、不上传。</li>
+          <li>仅在你主动发送聊天时，将本轮内容与该账户的聊天上下文发给 WorkBuddy 官方服务。</li>
+        </ul></section>
+        <section><h2>由你掌控</h2><ul class="consent-privacy"><li>不会自动发送消息，也不会代你执行工具或任务。随时关闭即可停止读取和请求。</li></ul></section>
+      </div>
+      <footer class="consent-footer">
+        <div class="consent-actions">
+          <button id="consent-cancel" type="button" autofocus>暂不开启</button>
+          <button id="consent-accept" type="button" class="consent-primary" disabled>开启联动</button>
+        </div>
+        <p id="consent-status" role="status" aria-live="polite">可随时在「WorkBuddy 联动」中关闭。</p>
+      </footer>
+    </section>
+  </main>
+</body>
+</html>

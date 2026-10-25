@@ -455,3 +455,270 @@ test('右近边free/peeked角色在左且卡右贴边，中部/左侧原右置�
   const peek=quotaLabelBounds(pet,area,null,size,false,1,{...p,mode:'peeked'},false,true);assert.equal(peek.guardSide,'left');assert.equal(peek.x+peek.cardInset.x+face.width,0);
  }
 });
+
+
+test('ZCode 独立可读尺寸不改变 Codex，单开与 Codex 下方锚点一致，双开跟随卡中心', () => {
+  const area={x:0,y:0,width:1000,height:800};
+  for(const size of ['standard','compact']) for(const count of [1,2,4]) for(const expanded of [false,true]) {
+    const pet={x:420,y:120,width:80,height:80};
+    const codex=quotaLabelBounds(pet,area,null,size,expanded,count);
+    const z=quotaLabelBounds(pet,area,null,size,expanded,count,{quotaSourceId:'zcode',quotaBottomAligned:true});
+    assert.equal(z.x+z.width/2,codex.x+codex.width/2); assert.equal(z.y,codex.y);
+    const stacked=quotaLabelBounds(pet,area,codex,size,expanded,count,{quotaSourceId:'zcode',quotaBottomAligned:true,quotaStackBelow:codex,quotaObstacles:[codex]});
+    assert.equal(stacked.y,codex.y+codex.height+8); assert.equal(stacked.x+stacked.width/2,codex.x+codex.width/2);
+    assertInside(stacked,area);
+  }
+  assert.deepEqual(quotaLabelSize('standard',true,2),{width:196,height:144});
+  assert.deepEqual(quotaLabelSize('standard',true,1,false,false,null,'zcode'),{width:196,height:154});
+  assert.deepEqual(quotaLabelSize('standard',true,2,false,false,null,'zcode'),{width:196,height:166});
+  assert.deepEqual(quotaLabelSize('standard',true,4,false,false,null,'zcode'),{width:196,height:256});
+});
+
+test('ZCode 左右及底边夹紧后完整显示且不盖宠物/另一卡，分离障碍物不误占空白', () => {
+  const area={x:-1000,y:40,width:1000,height:760};
+  const overlap=(a,b)=>a.x<b.x+b.width&&a.x+a.width>b.x&&a.y<b.y+b.height&&a.y+a.height>b.y;
+  for(const size of ['standard','compact']) for(const expanded of [false,true]) for(const x of [-998,-540,-82]) for(const y of [180,718]) {
+    const pet={x,y,width:80,height:80},codex=quotaLabelBounds(pet,area,null,size,expanded,2);
+    for(const stack of [null,codex]) {
+      const z=quotaLabelBounds(pet,area,stack,size,expanded,4,{quotaSourceId:'zcode',quotaBottomAligned:true,quotaStackBelow:stack,quotaObstacles:[stack].filter(Boolean)});
+      assertInside(z,area); assert.equal(overlap(z,pet),false,JSON.stringify({pet,codex,z}));
+      if(stack) assert.equal(overlap(z,stack),false,JSON.stringify({pet,codex,z}));
+    }
+  }
+});
+
+test('ZCode compact pair stays adjacent to Codex at all four corners before trying a pet fallback', () => {
+  const area = { x: -1440, y: 24, width: 1440, height: 876 };
+  for (const x of [area.x, area.x + area.width - 80]) for (const y of [area.y, area.y + area.height - 80]) {
+    const pet = { x, y, width: 80, height: 80 };
+    const codex = quotaLabelBounds(pet, area, null, 'compact', false, 1, { mode: 'free', quotaRoleWidth: 22 }, false, true);
+    const face = { x: codex.x + codex.cardInset.x + 2, y: codex.y + codex.cardInset.y + 2, width: 124, height: 28 };
+    const zcode = quotaLabelBounds(pet, area, face, 'compact', false, 1,
+      { mode: 'free', quotaSourceId: 'zcode', quotaBottomAligned: true, quotaStackBelow: face, quotaObstacles: [face] });
+    assertInside(zcode, area); assertInside(face, area);
+    assert.equal(zcode.x + zcode.width/2, face.x + face.width/2, JSON.stringify({pet,face,zcode}));
+    assert.ok(zcode.y === face.y + face.height + 8 || zcode.y + zcode.height + 8 === face.y, JSON.stringify({pet,face,zcode}));
+    assert.deepEqual(quotaLabelBounds(pet, area, null, 'compact', false, 1, { mode: 'free', quotaRoleWidth: 22 }, false, true), codex);
+  }
+});
+
+test('three cards prefer Codex → API → ZCode below in free space and avoid both cards at every corner', () => {
+  const { apiLabelBounds } = require('../lib/api-usage-label-window');
+  const area = { x: -1440, y: 24, width: 1440, height: 876 };
+  const overlap = (a,b) => a.x < b.x+b.width && a.x+a.width > b.x && a.y < b.y+b.height && a.y+a.height > b.y;
+  for (const [name,x,y] of [['center', -760, 200], ['top-left', -1440, 24], ['top-right', -80, 24],
+    ['bottom-left', -1440, 820], ['bottom-right', -80, 820]]) {
+    const pet = { x, y, width: 80, height: 80 };
+    const codex = quotaLabelBounds(pet, area, null, 'compact', false, 1, { mode:'free',quotaRoleWidth:22 }, false, true);
+    const face = { x:codex.x+codex.cardInset.x+2, y:codex.y+codex.cardInset.y+2, width:124,height:28 };
+    for (const apiExpanded of [false,true]) for (const expanded of [false,true]) {
+      const api = apiLabelBounds(pet,area,face,null,apiExpanded,{mode:'free'}), inset=apiExpanded?0:2;
+      const apiFace={x:api.x+inset,y:api.y+inset,width:api.width-inset*2,height:api.height-inset*2};
+      const stack = [face,apiFace].sort((a,b)=>b.y+b.height-a.y-a.height)[0];
+      const z = quotaLabelBounds(pet,area,null,'compact',expanded,4,{mode:'free',quotaSourceId:'zcode',quotaBottomAligned:true,
+        quotaStackBelow:stack,quotaObstacles:[face,api]});
+      assertInside(z,area);
+      for(const obstacle of [pet,face,api]) assert.equal(overlap(z,obstacle),false,JSON.stringify({name,expanded,apiExpanded,z,obstacle}));
+      if(name==='center') {
+        assert.equal(z.y,apiFace.y+apiFace.height+8);
+        assert.equal(z.x+z.width/2,face.x+face.width/2);
+      }
+      assert.deepEqual(quotaLabelBounds(pet,area,null,'compact',false,1,{mode:'free',quotaRoleWidth:22},false,true),codex);
+    }
+  }
+});
+
+test('free three-card group chooses one direction from all faces, including guard native gutters', () => {
+  const { quotaFreeStackBounds } = require('../lib/quota-label-placement');
+  const area={x:0,y:32,width:1200,height:800};
+  const cards={codex:{width:128,height:32,inset:2,guardTargetWidth:48,roleWidth:22},api:{width:128,height:32,inset:2},zcode:{width:128,height:32,inset:2}};
+  const pet={x:560,y:690,width:80,height:80};
+  const plan=quotaFreeStackBounds(pet,area,cards,{mode:'free',shape:'blob'});
+  assert.equal(plan.placement,'above');
+  const faces=Object.values(plan.cards).map(row=>row.face);
+  for(const row of Object.values(plan.cards))assertInside(row,area);
+  assert.equal(faces[2].y+faces[2].height,pet.y-8);
+  assert.equal(faces[0].y+faces[0].height+8,faces[1].y);
+  assert.equal(faces[1].y+faces[1].height+8,faces[2].y);
+  assert.ok(faces.every(row=>row.x+row.width/2===600));
+  const low={...pet,y:200},below=quotaFreeStackBounds(low,area,cards,{mode:'free',shape:'blob'});
+  assert.equal(below.placement,'below');
+  const bubble={x:530,y:290,width:180,height:140};
+  assert.equal(quotaFreeStackBounds(low,area,cards,{mode:'free',shape:'blob'},bubble).placement,'above','a bubble only rejects the intersecting candidate');
+  assert.equal(quotaFreeStackBounds(pet,area,cards,{mode:'tucked',side:'left'}),null);
+  assert.deepEqual(Object.keys(quotaFreeStackBounds(pet,area,{...cards,api:null},{mode:'free'}).cards),['codex','zcode'],'hidden cards leave no slot');
+  assert.equal(quotaFreeStackBounds({x:560,y:160,width:80,height:80},{...area,height:300},
+    {...cards,zcode:{width:196,height:256,inset:0}},{mode:'free'}).placement,'hidden','an entire group that fits neither direction hides together');
+});
+
+test('grouped free corners and expanded buckets stay aligned and inside; tucked stays separate and blocked groups hide',()=>{
+  const {quotaFreeStackBounds}=require('../lib/quota-label-placement'),area={x:-1400,y:32,width:1400,height:850};
+  for(const x of[-1400,-80])for(const y of[32,802])for(const role of[22,24,50])for(const apiExpanded of[false,true])for(const count of[1,2,4])for(const expanded of[false,true])for(const size of['compact','standard']){
+    const pet={x,y,width:80,height:80},cards={codex:{width:128,height:32,inset:2,guardTargetWidth:role===50?64:48,roleWidth:role},
+      api:{width:apiExpanded?196:128,height:apiExpanded?92:32,inset:apiExpanded?0:2},zcode:{...quotaLabelSize(size,expanded,count,false,false,null,'zcode'),inset:size==='compact'&&!expanded?2:0}};
+    const before=JSON.stringify(cards),plan=quotaFreeStackBounds(pet,area,cards,{mode:'free'});assert.ok(plan);
+    assert.equal(plan.placement,y===32?'below':'above');
+    const faces=Object.values(plan.cards).map(row=>row.face),center=faces[0].x+faces[0].width/2;
+    for(const row of Object.values(plan.cards))assertInside(row,area);
+    for(const face of faces)assert.equal(face.x+face.width/2,center);
+    for(let i=1;i<faces.length;i++)assert.equal(faces[i].y-faces[i-1].y-faces[i-1].height,8);
+    assert.equal(JSON.stringify(cards),before);
+    for(const side of['left','right'])assert.equal(quotaFreeStackBounds(pet,area,cards,{mode:'tucked',side}),null);
+    assert.equal(quotaFreeStackBounds(pet,area,cards,{mode:'free'},{...area}).placement,'hidden');
+  }
+});
+
+test('four-card free stack shares one direction and hides safely when space runs out', () => {
+  const { quotaFreeStackBounds } = require('../lib/quota-label-placement');
+  const cards = Object.fromEntries(['codex','api','zcode','workbuddy'].map(id => [id,{width:128,height:32,inset:2}]));
+  const area={x:-1000,y:0,width:1000,height:800};
+  for(const y of [100,650]) {
+    const pet={x:-550,y,width:80,height:80};
+    const plan=quotaFreeStackBounds(pet,area,cards,{mode:'free'});
+    assert.equal(Object.keys(plan.cards).length,4);
+    assert.equal(plan.placement,y===100?'below':'above');
+    const rows=Object.values(plan.cards);
+    for(const row of rows) {
+      assert.equal(row.face.x+row.face.width/2,pet.x+pet.width/2);
+      assert.ok(row.y>=area.y && row.y+row.height<=area.height);
+    }
+    for(let i=0;i<rows.length;i++) for(let j=i+1;j<rows.length;j++) {
+      const a=rows[i].face,b=rows[j].face;
+      assert.ok(a.y+a.height<=b.y||b.y+b.height<=a.y);
+    }
+  }
+  const partial=quotaFreeStackBounds({x:-550,y:30,width:80,height:80},{...area,height:230},cards,{mode:'free'});
+  assert.deepEqual(partial.hidden,Object.keys(cards));
+  assert.equal(Object.keys(partial.cards).length,0);
+  const blocked=quotaFreeStackBounds({x:-550,y:30,width:80,height:80},{...area,height:150},cards,{mode:'free'});
+  assert.deepEqual(blocked.hidden,Object.keys(cards));
+  assert.deepEqual(blocked.cards,{});
+});
+
+
+test('peeked four-card group uses mirrored edge columns, stable gaps and safe space recovery without moving pet', () => {
+  const { quotaFreeStackBounds } = require('../lib/quota-label-placement');
+  const area={x:-1000,y:20,width:1000,height:880};
+  for(const side of ['left','right']) for(const y of [20,160,420,820]) for(const expanded of ['none','codex','api','zcode','workbuddy']) {
+    const pet={x:side==='left'?area.x:area.x+area.width-80,y,width:80,height:80}, original={...pet};
+    const cards=Object.fromEntries(['codex','api','zcode','workbuddy'].map(id=>[id,{width:id===expanded?196:128,height:id===expanded?(id==='zcode'?256:id==='api'?92:131):32,inset:id===expanded?0:2,...(id==='codex'&&expanded!=='codex'?{guardTargetWidth:48,roleWidth:22}:{})}]));
+    const plan=quotaFreeStackBounds(pet,area,cards,{mode:'peeked',side,shape:'blob'});
+    assert.equal(Object.keys(plan.cards).length,4);assert.deepEqual(pet,original);
+    const rows=Object.values(plan.cards), faces=rows.map(row=>row.face);
+    for(const row of rows) {
+      assertInside(row,area);
+      assert.equal(row.face.x+(side==='right'?row.face.width:0),side==='left'?area.x+2:area.x+area.width-2);
+    }
+    for(let i=1;i<faces.length;i++) assert.equal(faces[i].y-faces[i-1].y-faces[i-1].height,8);
+    for(let i=0;i<faces.length;i++) for(let j=i+1;j<faces.length;j++) assert.ok(faces[i].y+faces[i].height<=faces[j].y||faces[j].y+faces[j].height<=faces[i].y);
+    const hidden=quotaFreeStackBounds({...pet,y:50},{...area,height:150},cards,{mode:'peeked',side});assert.equal(hidden.placement,'hidden');assert.equal(hidden.hidden.length,4);
+    assert.equal(Object.keys(quotaFreeStackBounds(pet,area,cards,{mode:'peeked',side}).cards).length,4);
+    assert.equal(quotaFreeStackBounds(pet,area,cards,{mode:'tucked',side}),null);
+  }
+});
+
+
+test('sheep four-theme shared groups retain mirrored order, painted guard clearance and whole-group recovery', () => {
+  const { quotaFreeStackBounds } = require('../lib/quota-label-placement');
+  const { petVisualBounds } = require('../lib/pet-visual-bounds');
+  const area = { x:-1440, y:32, width:1440, height:1040 };
+  const overlap = (a,b) => a.x<b.x+b.width && a.x+a.width>b.x && a.y<b.y+b.height && a.y+a.height>b.y;
+  for (const sheepTheme of ['none','halloween','christmas','spring-festival']) for (const width of [80,120,260])
+    for (const side of ['left','right']) for (const mode of ['free','peeked']) for (const nearBottom of [false,true]) for (const roleWidth of [22,24,50]) {
+      const pet = { x:side==='left'?area.x:area.x+area.width-width, y:nearBottom?area.y+area.height-width:area.y, width, height:width };
+      const original = {...pet};
+      const presentation = { mode, side, shape:'new-year-sheep', sheepTheme, facing:side==='left'?'right':'left' };
+      const cards = {codex:{width:128,height:32,inset:2,roleWidth,guardTargetWidth:roleWidth===50?64:48},api:{width:128,height:32,inset:2},
+        zcode:{width:196,height:256,inset:0},workbuddy:{width:128,height:32,inset:2}};
+      const plan = quotaFreeStackBounds(pet,area,cards,presentation);
+      assert.equal(Object.keys(plan.cards).length,4,JSON.stringify({presentation,width,nearBottom,plan}));
+      assert.deepEqual(pet,original);
+      const visual=petVisualBounds(pet,presentation.shape,{...presentation,quotaAnchor:true,quotaGuard:true});
+      const rows=Object.values(plan.cards);
+      for (const row of rows) { assertInside(row,area); assert.equal(overlap(row.face,visual),false); }
+      for (let i=1;i<rows.length;i++) assert.equal(rows[i].face.y-rows[i-1].face.y-rows[i-1].face.height,8);
+      const guard=rows[0], art={x:guard.guardSide==='left'?guard.face.x-2-8-roleWidth:guard.face.x-2+128+8,
+        y:guard.face.y-3,width:roleWidth,height:32};
+      assert.equal(overlap(art,visual),false,JSON.stringify({guard,visual,art}));
+      if(mode==='peeked') for(const row of rows) assert.equal(row.face.x+(side==='right'?row.face.width:0),side==='left'?area.x+2:area.x+area.width-2);
+      const small={...area,height:width+40};
+      const hidden=quotaFreeStackBounds({...pet,y:area.y+20},small,cards,presentation);
+      assert.deepEqual(hidden.hidden,Object.keys(cards)); assert.deepEqual(hidden.cards,{});
+      assert.equal(Object.keys(quotaFreeStackBounds(pet,area,cards,presentation).cards).length,4);
+    }
+});
+
+test('user card order stays top to bottom across corners and both peek edges, with no hidden-card slots', () => {
+  const { quotaFreeStackBounds } = require('../lib/quota-label-placement');
+  const area={x:-1200,y:40,width:1200,height:1000},ids=['codex','api','zcode','workbuddy'];
+  const permutations=values=>values.length?values.flatMap((id,index)=>permutations(values.filter((_,i)=>i!==index)).map(rest=>[id,...rest])):[[]];
+  for(const order of permutations(ids)) for(const mode of ['free','peeked']) for(const side of ['left','right'])
+    for(const y of [40,420,960]) for(const missing of [null,'codex','api','zcode','workbuddy']) {
+      const pet={x:side==='left'?area.x:area.x+area.width-80,y,width:80,height:80},original={...pet};
+      const cards=Object.fromEntries(ids.filter(id=>id!==missing).map(id=>[id,{width:128,height:id==='api'?92:32,inset:0,
+        ...(id==='codex'?{guardTargetWidth:48,roleWidth:22}:{})}]));
+      const presentation={mode,side,quotaCardOrder:order};
+      const plan=quotaFreeStackBounds(pet,area,cards,presentation),expected=order.filter(id=>id!==missing);
+      assert.notEqual(plan.placement,'hidden',JSON.stringify({order,mode,side,y,missing}));
+      assert.deepEqual(Object.keys(plan.cards),expected);assert.deepEqual(pet,original);
+      const rows=expected.map(id=>plan.cards[id]);
+      for(const row of rows) assertInside(row,area);
+      for(let i=1;i<rows.length;i++) {
+        assert.equal(rows[i].face.y-rows[i-1].face.y-rows[i-1].face.height,8);
+        assert.equal(rows[i].face.x,rows[0].face.x);
+      }
+      const hidden=quotaFreeStackBounds({...pet,y:80},{...area,height:150},cards,presentation);
+      assert.equal(hidden.placement,'hidden');assert.deepEqual(hidden.hidden,expected);
+      assert.deepEqual(Object.keys(quotaFreeStackBounds(pet,area,cards,presentation).cards),expected,'restored work area restores every card');
+    }
+});
+
+test('card ordering ignores invalid ids and duplicates and appends omitted whitelist cards', () => {
+  const { quotaFreeStackBounds } = require('../lib/quota-label-placement');
+  const cards=Object.fromEntries(['codex','api','zcode','workbuddy','rogue'].map(id=>[id,{width:128,height:32}]));
+  const plan=order=>quotaFreeStackBounds({x:300,y:50,width:80,height:80},{x:0,y:0,width:800,height:700},cards,{mode:'free',quotaCardOrder:order});
+  assert.deepEqual(Object.keys(plan(['workbuddy','rogue','workbuddy',null,'api']).cards),['workbuddy','api','codex','zcode']);
+  for(const invalid of [null,{},'workbuddy',true]) assert.deepEqual(Object.keys(plan(invalid).cards),['codex','api','zcode','workbuddy']);
+  assert.equal(quotaFreeStackBounds({}, {}, {rogue:cards.rogue},{mode:'free'}),null);
+});
+
+
+test('all nonempty visibility subsets pack without holes, including single and dual cards', () => {
+  const { quotaFreeStackBounds } = require('../lib/quota-label-placement');
+  const order=['workbuddy','zcode','api','codex'],area={x:0,y:0,width:900,height:900};
+  for(let mask=1;mask<16;mask++) for(const mode of ['free','peeked']) for(const y of [0,820]) {
+    const visible=order.filter((_,index)=>mask&(1<<index));
+    const cards=Object.fromEntries(visible.map(id=>[id,{width:128,height:32,inset:2}]));
+    const plan=quotaFreeStackBounds({x:0,y,width:80,height:80},area,cards,{mode,side:'left',quotaCardOrder:order});
+    assert.deepEqual(Object.keys(plan.cards),visible);
+    const rows=Object.values(plan.cards);
+    for(let i=1;i<rows.length;i++)assert.equal(rows[i].face.y-rows[i-1].face.y-rows[i-1].face.height,8);
+  }
+});
+
+test('expanded card group clears the real collection bar below or above without moving the pet', () => {
+  const { quotaFreeStackBounds } = require('../lib/quota-label-placement');
+  const area={x:0,y:0,width:1000,height:900},order=['workbuddy','api','codex','zcode'];
+  const cards=Object.fromEntries(order.map(id=>[id,{width:128,height:32,inset:2}]));
+  for(const mode of ['free','peeked'])for(const side of ['left','right'])for(const y of [0,820]) {
+    const pet={x:side==='left'?0:920,y,width:80,height:80};
+    const bar={x:side==='left'?2:950,y:y===0?84:796,width:48,height:20};
+    const plan=quotaFreeStackBounds(pet,area,cards,{mode,side,quotaCardOrder:order,quotaCardBarBounds:bar});
+    assert.deepEqual(Object.keys(plan.cards),order);
+    const faces=Object.values(plan.cards).map(row=>row.face);
+    assert.equal(y===0?faces[0].y-bar.y-bar.height:bar.y-faces.at(-1).y-faces.at(-1).height,8);
+    for(const row of Object.values(plan.cards))assertInside(row,area);
+  }
+});
+
+test('live sheep ink puts the collected group first face 8px from painted feet or head, with no hidden bar spacer',()=>{
+ const {quotaFreeStackBounds}=require('../lib/quota-label-placement');
+ const area={x:0,y:0,width:1000,height:900},cards={codex:{width:128,height:32,inset:2},api:{width:128,height:32,inset:2}};
+ for(const mode of ['free','peeked'])for(const side of ['left','right'])for(const y of [0,820]){
+  const pet={x:side==='left'?0:920,y,width:80,height:80},ink={x:.15,y:.2,width:.65,height:.6};
+  const plan=quotaFreeStackBounds(pet,area,cards,{mode,side,shape:'new-year-sheep',quotaCardVisualInk:{ink},quotaCardOrder:['codex','api'],quotaCardBarBounds:null});
+  const faces=Object.values(plan.cards).map(c=>c.face);
+  if(plan.placement==='below')assert.equal(faces[0].y-(pet.y+80*.8),8);
+  else assert.equal(pet.y+80*.2-(faces.at(-1).y+faces.at(-1).height),8);
+ }
+});

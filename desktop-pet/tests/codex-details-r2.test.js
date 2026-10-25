@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const formatBalance = require('../credit-balance');
 
 class Element {
-  constructor(tag = 'div') { this.tagName = tag; this.className = ''; this.children = []; this.dataset = {}; this.attributes = {}; this.events = {}; this.style = {}; this._text = ''; }
+  constructor(tag = 'div') { this.tagName = tag; this.className = ''; this.children = []; this.dataset = {}; this.attributes = {}; this.events = {}; this.style = {}; this.scrollLeft = 0; this._text = ''; }
   get parentElement() { return this.parent || null; }
   get classList() { return {contains:value => this.className.split(/\s+/).includes(value)}; }
   set textContent(value) { this.replaceChildren(); this._text = String(value); }
@@ -42,7 +42,9 @@ class Element {
       return true;
     });
   }
+  contains(target) { return target === this || this.children.some(child => child.contains(target)); }
   getBoundingClientRect() { return {top:0,bottom:220,height:220}; }
+  scrollIntoView(options) { (this.scrollRequests ||= []).push(options); }
   focus() { if (this.ownerDocument) this.ownerDocument.activeElement = this; }
 }
 function renderer(search = '') {
@@ -222,4 +224,193 @@ test('八个日期的密集周图用简短辅助标签，完整含义保留给�
   }
   const single=content.querySelectorAll('.daily-empty').find(label=>label.textContent==='仅1次');
   assert.ok(single);assert.match(single.getAttribute('aria-label'),/仅 1 次记录/);
+});
+
+test('ZCode 趋势按桶切换，同周期不同模型互不串，明细和到期语义独立',() => {
+  const h = renderer();
+  const items = ['activity-glm','trial-glm','activity-flash','trial-flash'].map((bucketId,i) => ({...item(1440),bucketId,label:bucketId,periodKind:'expiry',total:200000000,remainingUnits:150000000,unit:'tokens'}));
+  h.receive({sourceId:'zcode',action:'trend',bucketId:'trial-glm',items});
+  assert.match(h.nodes['details-title'].textContent,/ZCODE/);
+  assert.equal(h.nodes['details-panel'].querySelector('.trend-tabs'),null);
+  const options = h.nodes['details-content'].querySelectorAll('.zcode-bucket-button');
+  assert.equal(options.length,4);
+  assert.equal(options[1].attributes['aria-pressed'],'true');
+  options[2].events.click();
+  assert.deepEqual(h.calls.at(-1),['trend','activity-flash']);
+  assert.match(h.nodes['details-content'].textContent,/到期/);
+  assert.doesNotMatch(h.nodes['details-content'].textContent,/重置机会/);
+  h.receive({sourceId:'zcode',action:'quota',items});
+  assert.match(h.nodes['details-content'].textContent,/activity-flash/);
+  assert.match(h.nodes['details-content'].querySelector('.zcode-quota-row').getAttribute('aria-label'),/150,000,000/);
+});
+
+test('ZCode 详情 preload 仅绑定独立 IPC 且桶参数不能降级成 Codex 周期', () => {
+  const handlers=new Map(),calls=[];let api;
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../codex-details-preload.js'),'utf8'),{
+    process:{argv:['electron','--pet-source=zcode']},
+    require:()=>({contextBridge:{exposeInMainWorld(_name,value){api=value;}},ipcRenderer:{on(channel,callback){handlers.set(channel,callback);},removeListener(){},send(...args){calls.push(args);},invoke(){return Promise.resolve(true);}}})
+  });
+  let model;api.onModel(value=>{model=value;});
+  assert.equal(handlers.has('pet:codex-details'),false);
+  handlers.get('pet:zcode-details')({}, {action:'quota',sourceId:'codex'});
+  assert.equal(model.sourceId,'zcode');
+  api.openDetail('trend',10080);api.openDetail('opportunities','activity-glm');assert.equal(calls.length,0);
+  api.openDetail('trend','activity-glm');api.close();
+  assert.deepEqual(calls,[['pet:zcode-details-open','trend','activity-glm'],['pet:zcode-details-close']]);
+});
+
+test('ZCode MCP 月额无周期起点仍保留余额，趋势明确不可绘制', () => {
+  const h=renderer();const bucketId='zcode:'+ 'p'.repeat(160) + ':' + 'e'.repeat(160);
+  const items=[{bucketId,label:'MCP 工具',windowMinutes:null,periodStart:null,periodKind:'monthly',remaining:80,total:1000,remainingUnits:800,unit:'次',resetsAt:Date.now()+1000000}];
+  h.receive({sourceId:'zcode',action:'quota',bucketId,items});
+  assert.match(h.nodes['details-content'].textContent,/剩余 800 \/ 1,000 次/);
+  h.nodes['details-content'].querySelector('.zcode-quota-row').events.click();assert.deepEqual(h.calls.at(-1),['trend',bucketId]);
+  h.receive({sourceId:'zcode',action:'trend',bucketId,items});
+  assert.match(h.nodes['details-content'].textContent,/接口未提供周期起点，暂无法绘制趋势/);
+  assert.equal(h.nodes['details-content'].querySelector('.trend-chart'),null);
+});
+
+const zcodeItems = () => ['ZCode Start Plan','ZCode Start Plan','ZCode 1024 Dev Day','ZCode 1024 Dev Day'].map((planName,i)=>({...item(1440),bucketId:`zcode:${i}`,label:i%2?'GLM-5.3-Flash':'GLM-5.3',planName,periodKind:i<2?'daily':'one_time',periodStart:Date.now()-3600000,total:200000000,remainingUnits:199999123.456789,unit:'tokens'}));
+
+test('ZCode 四桶用可直接单击的短按钮，真实全名保留，Codex 原标签不变', () => {
+  const h=renderer(),items=zcodeItems();
+  h.receive({sourceId:'zcode',action:'trend',bucketId:'zcode:0',items});
+  const c=h.nodes['details-content'], buttons=c.querySelectorAll('.zcode-bucket-button');
+  assert.deepEqual(buttons.map(b=>b.textContent),['体验·5.3','体验·Flash','活动·5.3','活动·Flash']);
+  assert.equal(buttons[0].getAttribute('aria-pressed'),'true');
+  assert.equal(c.querySelector('.zcode-bucket-menu'),null);
+  buttons[3].events.click();assert.deepEqual(h.calls,[['trend','zcode:3']]);
+  assert.equal(c.querySelector('.zcode-bucket-description'),null);assert.equal(buttons[0].title,'ZCode Start Plan · GLM-5.3');assert.equal(buttons[0].getAttribute('aria-label'),'ZCode Start Plan · GLM-5.3');
+  h.receive({sourceId:'zcode',action:'trend',bucketId:'zcode:unknown',items:[{...items[0],bucketId:'zcode:unknown',planName:'新权益计划',label:'新模型'}]});
+  assert.equal(c.querySelector('.zcode-bucket-button').textContent,'新权益计划 · 新模型');
+  h.receive({action:'trend',period:300,items:[item(300),item(10080)]});
+  assert.deepEqual(h.nodes['details-panel'].querySelector('.trend-tabs').children.map(tab=>tab.textContent),['5 小时','周']);
+});
+
+test('ZCode 按钮支持方向键定位、Enter一次切换、刷新保留焦点', () => {
+  const h=renderer(),items=zcodeItems(),model={sourceId:'zcode',action:'trend',bucketId:'zcode:0',items};h.receive(model);
+  const key=key=>({key,preventDefault(){},stopPropagation(){}});
+  let buttons=h.nodes['details-content'].querySelectorAll('.zcode-bucket-button');buttons[0].focus();buttons[0].events.keydown(key('End'));
+  assert.equal(buttons[0].ownerDocument.activeElement,buttons[3]);assert.equal(h.calls.length,0);
+  h.receive({...model,items:items.map(value=>({...value,remaining:61}))});
+  buttons=h.nodes['details-content'].querySelectorAll('.zcode-bucket-button');assert.equal(buttons[0].ownerDocument.activeElement,buttons[3]);
+  buttons[3].events.keydown(key('Enter'));assert.deepEqual(h.calls,[['trend','zcode:3']]);
+  h.receive({...model,bucketId:'zcode:3'});buttons=h.nodes['details-content'].querySelectorAll('.zcode-bucket-button');assert.equal(buttons[0].ownerDocument.activeElement,buttons[3]);
+});
+
+test('ZCode 显示事实倒计时、实测图例、采样与真实用量，不把100%当作未使用', () => {
+  const h=renderer(),now=Date.now(),items=zcodeItems();items[0].remaining=100;
+  const model={sourceId:'zcode',action:'trend',bucketId:'zcode:0',items,trend:{samples:[{at:now-60000,remaining:100},{at:now,remaining:100}],forecast:{state:'unknown',reason:'no-decline',summary:'余额未下降',detail:'已记录时段内额度未下降，暂不预估用完时间'}}};
+  h.receive(model);let c=h.nodes['details-content'];
+  assert.match(c.querySelector('.trend-stats').textContent,/距刷新/);assert.doesNotMatch(c.querySelector('.trend-stats').textContent,/剩余时间|64%/);
+  assert.equal(c.querySelector('.zcode-chart-caption'),null);assert.match(c.querySelector('.chart-help-body').textContent,/实测余额.*时间基准/);
+  assert.equal(c.querySelector('.zcode-sample-info'),null);assert.doesNotMatch(c.querySelector('.chart-help-body').textContent,/\d+\s*次采样|\d{2}\/\d{2}/);assert.match(c.querySelector('.zcode-usage-note').textContent,/已用/);
+  assert.equal(c.querySelector('.forecast-badge'),null);assert.match(c.querySelector('.forecast-copy').textContent,/当前记录尚无消耗.*记录到消耗后/);assert.doesNotMatch(c.querySelector('.panel-bottom').textContent,/每天重新计算额度/);assert.match(c.querySelector('.panel-bottom p').title,/每天重新计算额度/);
+  h.receive({...model,bucketId:'zcode:2'});assert.match(c.querySelector('.panel-bottom').textContent,/使用截止/);assert.match(c.querySelector('.panel-bottom p').title,/到期后剩余额度失效/);
+  h.receive({...model,items:[{...items[0],resetsAt:null,periodStart:null,windowMinutes:null,periodKind:'unknown'}]});
+  assert.doesNotMatch(c.querySelector('.trend-stats').textContent,/距|—/);assert.equal(c.querySelector('.time-path'),null);
+});
+
+test('ZCode 额度明细按已知来源分组，整行可点且保留精确数字和真实单位', () => {
+  const h=renderer(),items=zcodeItems();h.receive({sourceId:'zcode',action:'quota',items});
+  const c=h.nodes['details-content'];assert.deepEqual(c.querySelectorAll('.zcode-quota-group-title').map(n=>n.textContent),['每日体验','限时活动']);
+  const rows=c.querySelectorAll('.zcode-quota-row');assert.equal(rows.length,4);
+  assert.match(rows[0].getAttribute('aria-label'),/199,999,123.456789 \/ 200,000,000 tokens/);
+  assert.match(rows[0].textContent,/GLM-5.3/);assert.ok(rows[0].querySelector('.zcode-quota-progress'));
+  rows[2].events.click();assert.deepEqual(h.calls,[['trend','zcode:2']]);
+});
+
+test('ZCode 月活动每日消耗仅显示今日及前六个本地自然日，未知天不伪造用量，完整走势不截断', () => {
+  const h=renderer(),now=Date.now(),end=now+86400000,start=now-30*86400000;
+  const items=[{...zcodeItems()[2],periodStart:start,resetsAt:end,windowMinutes:31*1440}];
+  const samples=[{at:now-60000,remaining:100},{at:now,remaining:100}];
+  h.receive({sourceId:'zcode',action:'trend',bucketId:items[0].bucketId,items,trend:{samples}});
+  const c=h.nodes['details-content'],line=c.querySelector('.trend-chart');
+  c.querySelector('[data-view="daily"]').events.click();
+  const daily=c.querySelector('.daily-chart'),dates=daily.querySelectorAll('text').map(n=>n.textContent).filter(s=>/^\d\d\/\d\d$/.test(s));
+  assert.equal(dates.length,7);assert.equal(daily.querySelectorAll('.daily-point').length,1);
+  assert.equal(daily.querySelectorAll('.daily-empty').length,6);assert.match(c.querySelector('[data-view="daily"]').textContent,/近7日/);assert.match(c.querySelector('.chart-help-body').textContent,/不代表全天/);
+  const localStart=new Date(now);localStart.setHours(0,0,0,0);localStart.setDate(localStart.getDate()-6);
+  assert.equal(dates[0],`${String(localStart.getMonth()+1).padStart(2,'0')}/${String(localStart.getDate()).padStart(2,'0')}`);
+  c.querySelector('[data-view="line"]').events.click();assert.equal(c.querySelector('.trend-chart'),line);
+  assert.doesNotMatch(c.querySelector('.chart-help-body').textContent,/次采样|\d{2}\/\d{2}/);
+  h.receive({sourceId:'zcode',action:'trend',bucketId:items[0].bucketId,items,trend:{samples:samples.map(sample=>({...sample,at:sample.at-86400000}))}});
+  c.querySelector('[data-view="daily"]').events.click();
+  assert.equal(c.querySelector('.daily-chart').querySelectorAll('text').filter(n=>/^\d\d\/\d\d$/.test(n.textContent)).length,7,'today remains an unknown day when latest samples were yesterday');
+});
+
+
+test('ZCode 仅有效预估保留直白风险等级，Codex未知预估徽标不变', () => {
+  const h=renderer(),items=zcodeItems(),base={sourceId:'zcode',action:'trend',bucketId:items[0].bucketId,items};
+  ['missing-period','stale','insufficient-records','discontinuity','value-mismatch','no-decline'].forEach(reason=>{
+    h.receive({...base,trend:{forecast:{state:'unknown',reason,summary:'真实原因',detail:'真实说明'}}});
+    assert.equal(h.nodes['details-content'].querySelector('.forecast-badge'),null);
+  });
+  [['risk','可能提前用完'],['tight','接近用完'],['safe','预计够用']].forEach(([status,label])=>{
+    h.receive({...base,trend:{forecast:{state:'estimate',reason:'estimate',status,summary:'后端预测',detail:'后端说明',reference:true}}});
+    assert.equal(h.nodes['details-content'].querySelector('.forecast-badge').textContent,label);
+  });
+  h.receive({action:'trend',period:300,items:[item(300)]});
+  assert.equal(h.nodes['details-content'].querySelector('.forecast-badge').textContent,'待预估');
+});
+
+test('ZCode 百分比不隐藏细小消耗，显示精确已用数量，Codex仍取整', () => {
+  const h=renderer(),base=zcodeItems()[0];
+  [[100,'100%'],[0,'0%'],[99.8706,'99.9%'],[99.99,'<100%'],[99.95,'<100%'],[0.01,'<0.1%'],[0.05,'0.1%'],[30.333,'30.3%']].forEach(([remaining,text])=>{
+    const bucket={...base,remaining,total:5000000,remainingUnits:remaining/100*5000000,unit:'token'};
+    h.receive({sourceId:'zcode',action:'trend',bucketId:base.bucketId,items:[bucket]});
+    assert.equal(h.nodes['details-content'].querySelector('.trend-stats strong').textContent,text);
+    h.receive({sourceId:'zcode',action:'quota',items:[bucket]});
+    assert.equal(h.nodes['details-content'].querySelector('.zcode-quota-heading strong').textContent,text);
+  });
+  h.receive({sourceId:'zcode',action:'trend',bucketId:base.bucketId,items:[{...base,remaining:99.8706,total:5000000,remainingUnits:4993530,unit:'token'}]});
+  assert.equal(h.nodes['details-content'].querySelector('.zcode-usage-note').textContent,'本周期已用 6,470 token');
+  h.receive({sourceId:'zcode',action:'trend',bucketId:base.bucketId,items:[{...base,remaining:100,total:5000000,remainingUnits:5000000,unit:'token'}]});
+  assert.equal(h.nodes['details-content'].querySelector('.zcode-usage-note'),null);
+  h.receive({action:'trend',period:300,items:[{...item(300),remaining:99.8706}]});
+  assert.equal(h.nodes['details-content'].querySelector('.trend-stats strong').textContent,'100%');
+});
+
+
+test('ZCode 趋势仅展示同类同排的按钮，完整名称留title/aria，选中与原始桶身份不变', () => {
+  const h=renderer(),items=zcodeItems(),start=Date.now()-3600000;items.forEach(item=>{item.periodStart=start;item.resetsAt=start+86400000;});
+  const mixed=[items[0],items[3],items[2],items[1]],original=mixed.map(item=>item.bucketId);
+  h.receive({sourceId:'zcode',action:'trend',bucketId:items[3].bucketId,items:mixed});
+  const c=h.nodes['details-content'],buttons=c.querySelectorAll('.zcode-bucket-button');
+  assert.deepEqual(buttons.map(b=>b.dataset.bucketOption),[items[0],items[1],items[2],items[3]].map(item=>item.bucketId));
+  assert.deepEqual(buttons.map(b=>b.textContent),['体验·5.3','体验·Flash','活动·5.3','活动·Flash']);
+  assert.equal(buttons[3].getAttribute('aria-pressed'),'true');assert.equal(c.querySelector('.zcode-bucket-description'),null);
+  buttons.forEach((button,index)=>{assert.equal(button.title,`${items[index].planName} · ${items[index].label}`);assert.equal(button.getAttribute('aria-label'),button.title);});
+  buttons[1].events.click();assert.deepEqual(h.calls,[['trend',items[1].bucketId]]);assert.deepEqual(mixed.map(item=>item.bucketId),original);
+  const unknown=mixed.map((item,index)=>({...item,planName:`真实新套餐${index}`,periodKind:'unknown'}));
+  h.receive({sourceId:'zcode',action:'trend',bucketId:unknown[0].bucketId,items:unknown});
+  assert.deepEqual(c.querySelectorAll('.zcode-bucket-button').map(b=>b.dataset.bucketOption),original);
+  assert.ok(c.querySelectorAll('.zcode-bucket-button').every((button,index)=>button.textContent.includes(unknown[index].planName)));
+});
+
+
+test('ZCode 标签键盘目标滚入视野，普通刷新保留横向位置且不强拉回选中项', () => {
+  const h=renderer(),items=zcodeItems(),model={sourceId:'zcode',action:'trend',bucketId:items[0].bucketId,items};h.receive(model);
+  const c=h.nodes['details-content'],key=key=>({key,preventDefault(){},stopPropagation(){}});
+  let buttons=c.querySelectorAll('.zcode-bucket-button');buttons[0].focus();buttons[0].events.keydown(key('End'));
+  assert.equal(buttons[0].ownerDocument.activeElement,buttons[3]);assert.equal(buttons[3].scrollRequests.at(-1).inline,'nearest');
+  c.querySelector('.zcode-bucket-grid').scrollLeft=72;h.receive(model);
+  assert.equal(c.querySelector('.zcode-bucket-grid').scrollLeft,72);
+  buttons=c.querySelectorAll('.zcode-bucket-button');assert.equal(buttons[0].ownerDocument.activeElement,buttons[3]);assert.equal(buttons[3].scrollRequests?.length || 0,0,'ordinary refresh must not reveal or jump rail');
+  buttons[3].events.keydown(key('Home'));assert.equal(buttons[0].ownerDocument.activeElement,buttons[0]);assert.equal(buttons[0].scrollRequests.at(-1).inline,'nearest');
+});
+
+
+test('ZCode 图表帮助只留线型与分段短说明，不重复采样次数或起止串，Codex保持原说明', () => {
+  const h=renderer(),items=zcodeItems(),now=Date.now(),samples=Array.from({length:180},(_,i)=>({at:now-(179-i)*60000,remaining:100}));
+  h.receive({sourceId:'zcode',action:'trend',bucketId:items[0].bucketId,items,trend:{samples}});
+  const c=h.nodes['details-content'];let help=c.querySelector('.chart-help-body');
+  assert.match(help.textContent,/实测余额.*时间基准.*额度增加或重置时/);
+  assert.equal(help.querySelectorAll('.chart-help-foot').length,1);
+  assert.doesNotMatch(help.textContent,/次采样|\d{2}\/\d{2}|尚无本周期采样/);
+  assert.doesNotMatch(c.querySelector('.chart-updated').title,/次采样|\d{2}\/\d{2}| — /);
+  c.querySelector('[data-view="daily"]').events.click();help=c.querySelector('.chart-help-body');
+  assert.equal(help.querySelectorAll('.chart-help-foot').length,1);assert.match(help.textContent,/近7日/);assert.doesNotMatch(help.textContent,/次采样|\d{2}\/\d{2}/);
+  h.receive({action:'trend',period:300,items:[item(300)],trend:{samples}});
+  assert.match(c.querySelector('.chart-updated').title,/已记录至/);assert.match(c.querySelector('.chart-help-body').textContent,/剩余时间参考/);
 });

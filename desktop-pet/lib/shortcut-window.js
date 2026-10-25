@@ -16,6 +16,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
   isSuppressed = () => false, onLayout = () => {}, onError = () => {} }) {
   let win = null, ready = false, opened = false, stopped = false, view = null, layout = null, session = 0;
   let focusPending = false, ignored = null, hoverTimer = null, leaveTimer = null, blocked = false;
+  let edgeIdleTimer = null, edgeWakeConsumed = false;
   let closeTimer = null, closing = false, pinned = false, recording = false, settingsPositioned = false;
   let origin = null, animation = null, lastPublished = null, lastPlacement = null, suspended = false;
   const alive = () => win && !win.isDestroyed();
@@ -28,6 +29,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
   const source = event => trustedSource(event) && opened && !suspended && !isSuppressed();
   const cancelHover = () => { clearTimeout(hoverTimer); hoverTimer = null; };
   const cancelLeave = () => { clearTimeout(leaveTimer); leaveTimer = null; };
+  const cancelEdgeIdle = () => { clearTimeout(edgeIdleTimer); edgeIdleTimer = null; };
   function setIgnored(value) {
     if (!alive() || ignored === value) return;
     win.setIgnoreMouseEvents(value, { forward: true }); ignored = value;
@@ -75,7 +77,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
     rebaseCanvas(actual); publish(); onLayout(); sampleCursor(screen.getCursorScreenPoint());
   }
   function close({ immediate = false } = {}) {
-    cancelHover(); cancelLeave(); blocked = true;
+    cancelHover(); cancelLeave(); cancelEdgeIdle(); blocked = true;
     // Closing and recording cancellation must remain possible during suppression.
     const hideImmediately = immediate || unavailable() || getPresentation()?.dragging;
     if (!opened && !closing) { setRecording(false); return; }
@@ -109,6 +111,8 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
       if (created !== win) return;
       close({ immediate: true }); created.destroy(); onError(new Error(`快捷面板渲染退出：${details.reason}`));
     });
+    created.on('focus', () => { if (created === win && opened) cancelEdgeIdle(); });
+    created.webContents.on('before-input-event', () => { if (created === win && opened) cancelEdgeIdle(); });
     created.on('blur', () => { if (created !== win || suspended) return; setRecording(false); if (view !== 'settings') close(); });
     created.on('move', () => { if (created === win) canvasMoved(); });
     created.on('close', event => { if (!stopped && created === win) { event.preventDefault(); close(); } });
@@ -131,7 +135,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
       // position for the rest of this settings session, including other displays.
       const current = settingsPositioned && alive() ? win.getBounds() : null;
       const workArea = current ? screen.getDisplayMatching(current).workArea : area;
-      const size = { width: Math.min(416, workArea.width), height: Math.min(680, workArea.height) };
+      const size = { width: Math.min(416, workArea.width), height: Math.min(600, workArea.height) };
       const placement = current ? {
         x: Math.round(Math.min(Math.max(current.x, workArea.x), workArea.x + workArea.width - size.width)),
         y: Math.round(Math.min(Math.max(current.y, workArea.y), workArea.y + workArea.height - size.height)), ...size
@@ -165,11 +169,25 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
   }
   function open({ focus = true, settings = false } = {}) {
     if (suspended || unavailable(settings)) return false;
-    cancelClose(); cancelHover(); cancelLeave(); setRecording(false);
+    cancelClose(); cancelHover(); cancelLeave(); cancelEdgeIdle(); setRecording(false);
     opened = true; session++; view = settings ? 'settings' : getConfig().shape; settingsPositioned = false;
     animation = { session, phase: 'opening', duration: OPEN_DURATION };
     focusPending = focus; setPin(true);
     sync(); return true;
+  }
+  function wakeFromEdge(point) {
+    const presentation = getPresentation(), current = pet();
+    if (opened || closing || edgeWakeConsumed || suspended || unavailable(false) || presentation?.dragging ||
+      !presentation?.side || presentation.mode !== 'peeked' || !current ||
+      !contains(petVisualBounds(current.getBounds(), presentation.shape, presentation), point)) return false;
+    if (!open({ focus: false })) return false;
+    blocked = true; edgeWakeConsumed = true;
+    edgeIdleTimer = setTimeout(() => {
+      sampleCursor(screen.getCursorScreenPoint());
+      if (edgeIdleTimer === null) return;
+      edgeIdleTimer = null; close({ immediate: true });
+    }, 2000);
+    return true;
   }
   function sampleCursor(point) {
     if (suspended) { cancelHover(); cancelLeave(); return; }
@@ -177,11 +195,13 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
     const bounds = pet().getBounds(), presentation = getPresentation();
     const target = petVisualBounds(bounds, presentation?.shape, presentation);
     const overPet = contains(target, point);
-    if (!overPet) blocked = false;
+    if (!overPet) { blocked = false; edgeWakeConsumed = false; }
     if (closing) return;
     if (opened) {
       const hit = view !== 'floating' || layout?.items.some(item => contains({
         ...item, x: item.x + layout.bounds.x, y: item.y + layout.bounds.y }, point));
+      if (!overPet && (view === 'settings' || layout?.items.some(item => contains({
+        ...item, x: item.x + layout.bounds.x, y: item.y + layout.bounds.y }, point)))) cancelEdgeIdle();
       setIgnored(!hit);
       if (view === 'settings' || alive() && win.isFocused() || overPet || contains(layout?.bounds, point, 16)) cancelLeave();
       else if (!leaveTimer) leaveTimer = setTimeout(() => close(), 650);
@@ -198,7 +218,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
   function setSuspended(value) {
     value = value === true;
     if (suspended === value) return;
-    suspended = value; cancelHover(); cancelLeave(); focusPending = false;
+    suspended = value; cancelHover(); cancelLeave(); cancelEdgeIdle(); focusPending = false;
     if (suspended) {
       if (closing) { finishClose(); return; }
       // A drag borrows the screen without ending the menu/settings session.
@@ -209,11 +229,12 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
   }
   function action(id) {
     if (!ACTIONS.has(id)) return;
+    cancelEdgeIdle();
     if (id === 'settings') { open({ settings: true }); return; }
     close(); onAction(id);
   }
   function apply(config) {
-    setRecording(false);
+    cancelEdgeIdle(); setRecording(false);
     const result = save(config);
     if (result.ok) {
       if (view !== 'settings') {
@@ -242,7 +263,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
     }
   };
   for (const [channel, listener] of Object.entries(listeners)) ipcMain.on(channel, listener);
-  return { open, close, sync, sampleCursor, action, setSuspended, getWindow: () => alive() ? win : null,
+  return { open, close, sync, sampleCursor, wakeFromEdge, action, setSuspended, getWindow: () => alive() ? win : null,
     getState: state, isOpen: () => opened, isPresenting: () => pinned,
     cancelHover() { cancelHover(); blocked = true; },
     interrupt() { close({ immediate: true }); blocked = true; },
