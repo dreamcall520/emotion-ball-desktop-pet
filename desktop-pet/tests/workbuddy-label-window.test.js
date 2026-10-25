@@ -94,7 +94,12 @@ test('edge-tucked cards share a near-edge column across compact and expanded sta
     const codex={x:side==='left'?-998:-186,y,width:184,height:50};
     const before={...codex};
     const card=workBuddyLabelBounds(pet,area,[codex],expanded,codex,{side,mode:'peeked'});
-    assert(card);
+    if (!card) {
+      const width=expanded?196:128,height=expanded?120:32;
+      const x=side==='left'?codex.x:codex.x+codex.width-width;
+      assert([codex.y+codex.height+8,codex.y-height-8].every(y=>y<area.y||y+height>area.y+area.height||intersects({x,y,width,height},pet)));
+      continue;
+    }
     assert.equal(intersects(card,codex),false);assert.equal(intersects(card,pet),false);
     if(side==='left') assert.equal(card.x,codex.x);
     else assert.equal(card.x+card.width,codex.x+codex.width);
@@ -120,4 +125,30 @@ test('history metadata stays optional and only validated balance/expiry fields c
 test('activity count whitelist preserves unknown running instead of inventing global zero', () => {
   assert.deepEqual(safeState({activity:{runningCount:null,unreadCount:0,token:'secret'}}).activity,{runningCount:null,unreadCount:0,scope:'本机已同步任务'});
   assert.deepEqual(safeState({activity:{runningCount:-1,unreadCount:'3'}}).activity,{runningCount:null,unreadCount:null,scope:'本机已同步任务'});
+});
+
+test('corner bubble stays above the Codex/WB stack; expanded fallback never jumps above bubble', () => {
+  const area={x:0,y:0,width:1200,height:890};
+  for(const side of ['left','right']) {
+    const x=side==='left'?2:1002;
+    const pet={x:side==='left'?-50:1170,y:500,width:80,height:80};
+    const bubble={x,y:650,width:196,height:80},codex={x,y:738,width:196,height:32};
+    const before={...codex};
+    const compact=workBuddyLabelBounds(pet,area,[bubble,codex],false,codex,{side},bubble);
+    assert(compact);assert.equal(compact.y,codex.y+codex.height+8);assert(compact.y>=bubble.y+bubble.height+8);
+    assert.equal(workBuddyLabelBounds(pet,area,[bubble,codex],true,codex,{side},bubble),null);
+    assert.deepEqual(codex,before);
+  }
+});
+test('with a stack anchor WB only uses adjacent positions, never an arbitrary obstacle edge', () => {
+  const area={x:0,y:0,width:1000,height:900},pet={x:0,y:600,width:80,height:80};
+  const codex={x:2,y:800,width:196,height:32},bubble={x:2,y:700,width:196,height:70};
+  assert.equal(workBuddyLabelBounds(pet,area,[codex,bubble],true,codex,{side:'left'},bubble),null);
+  const compact=workBuddyLabelBounds(pet,area,[codex,bubble],false,codex,{side:'left'},bubble);
+  assert(compact);assert.equal(compact.y,840);
+});
+test('bubble priority also prevents single WB card from appearing above a visible same-column bubble', () => {
+  const area={x:0,y:0,width:1000,height:900},pet={x:400,y:500,width:80,height:80},bubble={x:342,y:588,width:196,height:70};
+  const card=workBuddyLabelBounds(pet,area,[bubble],false,null,null,bubble);
+  assert(card);assert.equal(card.y,bubble.y+bubble.height+8);
 });

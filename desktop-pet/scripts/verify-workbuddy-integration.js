@@ -40,7 +40,7 @@ async function until(read, label) {
   for (let n = 0; n < 200; n++) { if (await read()) return; await wait(50); }
   throw new Error('等待失败：' + label);
 }
-async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, details, tasks, guard, codexDetails, edge, edgeNotices, chat, chatWindow, consent, openChat, setProvider, setEnabled, getSettings, getCodex, menuTemplate, getCompactMenu, setTaskOpener, setSize, outputDir, live = false }) {
+async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, details, tasks, guard, codexDetails, edge, edgeNotices, chat, chatWindow, consent, openChat, setProvider, setEnabled, getSettings, getCodex, menuTemplate, getCompactMenu, setTaskOpener, shortcuts, openShortcuts, setSize, outputDir, live = false }) {
   if (outputDir) fs.mkdirSync(outputDir, { recursive: true });
   const codexBefore = JSON.stringify(getCodex());
   const codexSettings = Object.fromEntries(Object.entries(getSettings()).filter(([k]) => k.startsWith('codex')));
@@ -225,6 +225,13 @@ async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, detai
     }
     pet.setBounds(centeredPet);label.reposition();
     if(outputDir)fs.writeFileSync(path.join(outputDir,'edge-dual-cards.json'),JSON.stringify(edgeEvidence,null,2));
+  }
+  if (shortcuts && openShortcuts) {
+    openShortcuts();
+    await until(() => shortcuts.isPresenting(), '快捷面板打开');
+    await until(() => !win.isVisible() && !label.getGuardWindow()?.isVisible(), '快捷面板隐藏WB额度及游戏入口');
+    shortcuts.close({ immediate: true });
+    await until(() => !shortcuts.isPresenting() && win.isVisible(), '快捷面板关闭恢复WB额度');
   }
   if (guard) {
     codexLabel?.hide();

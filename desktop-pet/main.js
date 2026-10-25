@@ -926,7 +926,7 @@ function hidePet() {
 }
 
 function codexHostAvailable() {
-  return !pomodoroQuiet && !shortcutWindow?.isPresenting() && codexPageReady && !isQuitting && !screenLocked && !chatWindow?.isVisible() && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible() &&
+  return !pomodoroQuiet && !shortcutWindow?.isPresenting() && codexPageReady && !isQuitting && !screenLocked && !chatWindow?.isVisible() && !shortcutWindow?.isPresenting() && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible() &&
     !dragState && !bounceState && !hostMotion && !dialogue?.hasBubble(performance.now());
 }
 
@@ -1041,7 +1041,7 @@ function openWorkBuddyTasks(action = 'tasks') {
 function syncWorkBuddyLabel() {
   if (!workbuddyLabel || !workbuddyQuota) return;
   const eligible = settings?.workbuddyEnabled === true && !isQuitting && !screenLocked && !pomodoroQuiet &&
-    !chatWindow?.isVisible() && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
+    !chatWindow?.isVisible() && !shortcutWindow?.isPresenting() && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
   const visible = eligible && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible() && !quotaGuard?.isVisible();
   safelyInvokeWindow('WorkBuddy 积分显示', () => visible ? workbuddyLabel.show(workBuddyCardState()) : workbuddyLabel.hide());
   if (!eligible) workbuddyDetails?.close();
@@ -2169,7 +2169,7 @@ async function finishSmokeTest() {
     if (process.env.PET_SMOKE_WORKBUDDY_ONLY === '1') {
       await require('./scripts/verify-workbuddy-integration').verifyWorkBuddyIntegration({
         pet: petWindow, quota: workbuddyQuota, label: workbuddyLabel, details: workbuddyDetails, tasks: workbuddyTasks,
-        setTaskOpener: opener => { workbuddyTaskOpener = opener; }, getCompactMenu: compactMenuTemplate, consent: workbuddyConsent, guard: quotaGuard, codexDetails, edge: edgeTuck, codexLabel: quotaLabel, chat: workbuddyChat, chatWindow,
+        setTaskOpener: opener => { workbuddyTaskOpener = opener; }, getCompactMenu: compactMenuTemplate, shortcuts: shortcutWindow, openShortcuts, consent: workbuddyConsent, guard: quotaGuard, codexDetails, edge: edgeTuck, codexLabel: quotaLabel, chat: workbuddyChat, chatWindow,
         openChat, setProvider: setChatProvider, setEnabled: setWorkBuddyEnabled, getSettings: () => settings,
         getCodex: () => codexCompanion?.getSnapshot(), menuTemplate, setSize: setPetSize,
         edgeNotices: { tick: (time, state) => { edgeNoticeNow = () => 1000000000 + time; edgeNotice.tick(state); }, getWindow: () => edgeNoticeWindow.getWindow(), reset: () => { activityMonitor.stop(); edgeNoticeNow = () => performance.now(); lastEdgeNoticeTick = -Infinity; edgeNotice.reset(); } },
@@ -3401,7 +3401,7 @@ async function bootstrap() {
     workbuddyTasks.setEnabled(state.enabled); syncWorkBuddyLabel(); workbuddyDetails?.update(workBuddyDetailsState());
     if (state.enabled && !state.busy && !state.error && state.report) void workbuddyTasks.refresh(false);
   } });
-  workbuddyLabel = createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
+  workbuddyLabel = createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow: () => petWindow, getBubbleBounds: quotaObstacleBounds,
     getStackAnchor: () => quotaLabel?.getVisibleBounds?.(),
     getPresentation: () => edgeTuck?.getPresentation(),
     getGuardEntry: () => settings.codexQuotaFunEnabled !== false && !quotaLabel?.getWindow()?.isVisible() && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible(),

@@ -4,14 +4,14 @@ const { createWorkBuddyGuardEntryWindow } = require('./workbuddy-guard-entry-win
 const CHANNEL = 'pet:workbuddy-label';
 const valid = b => b && ['x', 'y', 'width', 'height'].every(k => Number.isFinite(b[k])) && b.width > 0 && b.height > 0;
 const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
-function workBuddyLabelBounds(pet, area, obstacles = [], expanded = false, stackAnchor = null, presentation = null) {
+function workBuddyLabelBounds(pet, area, obstacles = [], expanded = false, stackAnchor = null, presentation = null, bubbleBounds = null) {
   if (!valid(pet) || !valid(area)) return null;
   const { width } = quotaLabelSize(expanded ? 'compactExpanded' : 'compact');
   const height = expanded ? 120 : quotaLabelSize('compact').height;
   if (width > area.width || height > area.height) return null;
   const gap = 8;
   const anchor = valid(stackAnchor) ? stackAnchor : pet;
-  const blocked = [pet, ...obstacles.filter(valid), ...(valid(stackAnchor) ? [stackAnchor] : [])];
+  const blocked = [pet, ...obstacles.filter(valid), ...(valid(stackAnchor) ? [stackAnchor] : []), ...(valid(bubbleBounds) ? [bubbleBounds] : [])];
   const clampX = x => Math.max(area.x, Math.min(x, area.x + area.width - width));
   const centerX = clampX(anchor.x + (anchor.width - width) / 2);
   const preferredX = valid(stackAnchor) && presentation?.side === 'left' ? clampX(anchor.x)
@@ -21,10 +21,14 @@ function workBuddyLabelBounds(pet, area, obstacles = [], expanded = false, stack
   for (const x of xs) {
     const ys = [anchor.y + anchor.height + gap, anchor.y - height - gap];
     const column = { x, y: area.y, width, height: area.height };
-    const nearby = blocked.filter(b => overlaps(column, b));
-    ys.push(...nearby.flatMap(b => [b.y + b.height + gap, b.y - height - gap])
-      .sort((a, b) => Math.abs(a - ys[0]) - Math.abs(b - ys[0])));
+    if (!valid(stackAnchor)) {
+      const nearby = blocked.filter(b => overlaps(column, b));
+      ys.push(...nearby.flatMap(b => [b.y + b.height + gap, b.y - height - gap])
+        .sort((a, b) => Math.abs(a - ys[0]) - Math.abs(b - ys[0])));
+    }
+    const bubbleFloor = valid(bubbleBounds) && overlaps(column, bubbleBounds) ? bubbleBounds.y + bubbleBounds.height + gap : -Infinity;
     for (const y of ys) {
+      if (y < bubbleFloor) continue;
       const b = { x: Math.round(x), y: Math.round(y), width, height };
       if (b.x >= area.x && b.y >= area.y && b.x + width <= area.x + area.width && b.y + height <= area.y + area.height && !blocked.some(o => overlaps(b, o))) return b;
     }
@@ -58,7 +62,7 @@ function safeState(state) {
     activity: { runningCount: Number.isSafeInteger(state?.activity?.runningCount) && state.activity.runningCount >= 0 ? state.activity.runningCount : null,
       unreadCount: Number.isSafeInteger(state?.activity?.unreadCount) && state.activity.unreadCount >= 0 ? state.activity.unreadCount : null, scope: '本机已同步任务' } };
 }
-function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getObstacles = () => [], getStackAnchor = () => null, getPresentation = () => null, getGuardEntry = () => false, onGuard = () => {}, getAppearance = () => 'system', alwaysOnTop = true, onRefresh = () => {}, onTrend = () => {}, onTasks = () => {}, onError = () => {} }) {
+function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getObstacles = () => [], getStackAnchor = () => null, getBubbleBounds = () => null, getPresentation = () => null, getGuardEntry = () => false, onGuard = () => {}, getAppearance = () => 'system', alwaysOnTop = true, onRefresh = () => {}, onTrend = () => {}, onTasks = () => {}, onError = () => {} }) {
   let win = null, ready = false, visible = false, expanded = false, current = null, top = Boolean(alwaysOnTop);
   const error = e => { try { onError(e); } catch (_) {} };
   const guard = createWorkBuddyGuardEntryWindow({ BrowserWindow, alwaysOnTop, onGuard, onError });
@@ -71,9 +75,9 @@ function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getOb
       const pet = getPetWindow();
       if (!pet || pet.isDestroyed() || !pet.isVisible()) { win.hide(); guard.hide(); return; }
       const p = pet.getBounds(), area = screen.getDisplayMatching(p).workArea, obstacles = getObstacles() || [];
-      const stackAnchor = getStackAnchor(), presentation = getPresentation();
-      let bounds = workBuddyLabelBounds(p, area, obstacles, expanded, stackAnchor, presentation), spaceError = false;
-      if (!bounds && expanded) { expanded = false; spaceError = true; bounds = workBuddyLabelBounds(p, area, obstacles, false, stackAnchor, presentation); }
+      const stackAnchor = getStackAnchor(), presentation = getPresentation(), bubbleBounds = getBubbleBounds();
+      let bounds = workBuddyLabelBounds(p, area, obstacles, expanded, stackAnchor, presentation, bubbleBounds), spaceError = false;
+      if (!bounds && expanded) { expanded = false; spaceError = true; bounds = workBuddyLabelBounds(p, area, obstacles, false, stackAnchor, presentation, bubbleBounds); }
       if (!bounds) { win.hide(); guard.hide(); return; }
       const appearance = getAppearance();
       win.setBounds(bounds, false);
