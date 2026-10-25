@@ -296,28 +296,26 @@ test('未保存的颜色变化同步聊天头像，待机表情设置不再显�
   assert.equal(f.saves.length, 0);
 });
 
-test('启动外观选择随保存传递，临时换装默认不覆盖原选择', async () => {
-  const html = fs.readFileSync(path.join(__dirname, '../customize.html'), 'utf8');
-  assert.match(html, /id="startup-default" type="checkbox"/);
+test('新外观默认保存为启动外观，只有手动取消才临时换装', async () => {
   const f = await fixture({ shape: 'square' }, { shape: 'cloud', bodyColor: '#5B3BC7', eyeColor: '#FFFFFF' });
-  assert.equal(f.get('startup-default').checked, false);
-  f.card('cloud').dispatch('click');
-  assert.equal(f.get('startup-default').checked, true, '切回已保存的默认形态应选中');
-  f.card('square').dispatch('click');
-  assert.equal(f.get('startup-default').checked, false, '切到非默认形态应取消选中');
-  await f.get('save').dispatch('click');
-  assert.equal(f.startupChoices.at(-1), false);
-  f.get('startup-default').checked = true;
-  await f.get('save').dispatch('click');
-  assert.equal(f.startupChoices.at(-1), true);
-  f.card('cloud').dispatch('click');
-  assert.equal(f.get('startup-default').checked, false, '保存新默认后旧形态不再选中');
-  f.card('square').dispatch('click');
-  assert.equal(f.get('startup-default').checked, true);
-  const matching = await fixture({ shape: 'cloud' });
-  assert.equal(matching.get('startup-default').checked, true);
+  assert.equal(f.get('startup-default').checked, true, '当前与旧启动外观不同也默认持久保存');
+  for (const startupChoice of [true, false]) {
+    f.get('startup-default').checked = startupChoice;
+    f.card('cloud').dispatch('click');
+    assert.equal(f.get('startup-default').checked, startupChoice);
+    f.card('new-year-sheep').dispatch('click');
+    f.get('sheep-theme').value = 'halloween'; f.get('sheep-theme').dispatch('change');
+    assert.equal(f.get('startup-default').checked, startupChoice, '换形象和主题不能改写用户选择');
+    f.get('pet-opacity').value = '25'; f.get('pet-opacity').dispatch('input');
+    assert.equal(f.get('startup-default').checked, startupChoice, '透明度不能改写用户选择');
+    await f.get('save').dispatch('click');
+    assert.equal(f.startupChoices.at(-1), startupChoice);
+    assert.equal(f.saves.at(-1).appearance.shape, 'new-year-sheep');
+    assert.equal(f.saves.at(-1).appearance.sheepTheme, 'halloween');
+    assert.equal(f.saves.at(-1).appearance.auroraTransparency, 25);
+  }
   const temporary = await fixture({ shape: 'cloud', bodyColor: '#ABCDEF' }, { shape: 'cloud', bodyColor: '#5B3BC7' });
-  assert.equal(temporary.get('startup-default').checked, false, '同形态临时配色不能误标为启动默认');
+  assert.equal(temporary.get('startup-default').checked, true, '重新打开时默认保存为启动外观');
 });
 
 test('主题跟随真实消息，固定主题不随系统变化，关闭后移除监听', async () => {
@@ -638,7 +636,7 @@ test('同长度粉光与金光推荐色仍绑定当前字段，滑钮悬停不�
 });
 
 
-test('收藏当前草稿仅写收藏库，载入恢复精确配色与手调并重算启动勾选', async () => {
+test('收藏当前草稿仅写收藏库，载入恢复配色与手调并保留启动选择', async () => {
   const f=await fixture({shape:'blob',bodyColor:'#EEEBE4'});
   f.get('body-hex').value='#2A8B6F';f.get('body-hex').dispatch('input');
   f.get('shape-width').value='112';f.get('shape-width').dispatch('input');
@@ -653,13 +651,15 @@ test('收藏当前草稿仅写收藏库，载入恢复精确配色与手调并�
   f.get('startup-default').checked=true;
   f.get('preset-list').children[0].children[0].dispatch('click');
   assert.equal(f.get('body-hex').value,'#2A8B6F');assert.equal(f.get('shape-width').value,'112');
-  assert.equal(f.get('aurora-transparency').value,'30');assert.equal(f.get('startup-default').checked,false);
+  assert.equal(f.get('aurora-transparency').value,'30');assert.equal(f.get('startup-default').checked,true);
   assert.equal(f.saves.length,0);f.flushPreview();assert.equal(f.previews.at(-1).color,'#2A8B6F');
   const row=f.get('preset-list').children[0];assert.equal(row.attributes['aria-current'],'true');
   f.get('shape-width').value='115';f.get('shape-width').dispatch('input');
   assert.equal(row.attributes['aria-current'],'false','调整手调后不再把收藏标记为当前匹配');
   f.get('shape-width').value='112';f.get('shape-width').dispatch('input');
   assert.equal(row.attributes['aria-current'],'true');
+  f.get('startup-default').checked=false;row.children[0].dispatch('click');
+  assert.equal(f.get('startup-default').checked,false,'载入收藏也保留主动取消');
   await f.get('save').dispatch('click');assert.equal(f.startupChoices.at(-1),false);
   assert.equal(f.saves.at(-1).appearance.bodyColor,'#2A8B6F');
 });

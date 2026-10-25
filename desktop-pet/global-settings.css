@@ -145,7 +145,10 @@ select,.action { border:1px solid var(--control-edge); border-radius:10px; backg
 select:hover:enabled,.action:hover:enabled { background:var(--control-hover); border-color:var(--control-selected-edge); }
 .segmented button:not([aria-pressed=true]):hover:enabled { background:var(--control-hover); }
 :root[data-appearance=dark] .segmented button[aria-pressed=true] { color:#fff; }
-select { padding:7px 23px 7px 11px; }
+select { appearance:none; padding:7px 30px 7px 11px; }
+.row:has(> select) { position:relative; }
+.row:has(> select)::after { content:""; position:absolute; right:20px; top:50%; width:5px; height:5px; border-right:1px solid currentColor; border-bottom:1px solid currentColor; transform:translateY(-70%) rotate(45deg); pointer-events:none; }
+.row:has(> select:disabled)::after { opacity:.45; }
 :root[data-color-mode=accessible] { --muted:var(--text); --accent:#356bbf; --accent-text:#356bbf; }
 :root[data-color-mode=accessible][data-appearance=dark] { --accent:#ffdc69; --accent-text:#ffdc69; }
 @media(max-width:760px) {

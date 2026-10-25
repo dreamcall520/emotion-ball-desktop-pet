@@ -641,7 +641,7 @@ async function verifyCustomizeUnified({ pet, editor, chatWindow, open, getWindow
     await scrollClick(action('load'));
     assert.equal(await page("document.querySelector('#body-hex').value"), '#D9E5F2', '重开后载入收藏的完整配色');
     assert.equal(await page("document.querySelector('#aurora-transparency').value"), '18');
-    assert.equal(await page("document.querySelector('#startup-default').checked"), false, '载入重新判断启动外观');
+    assert.equal(await page("document.querySelector('#startup-default').checked"), true, '载入收藏保留默认启动选择');
     assert.equal(JSON.stringify(getSettings().customization), desktopBeforePreset, '载入只修改预览');
     assert.deepEqual(await avatarState(), chatBeforePreset, '载入只修改预览，不改聊天');
     await scrollClick(action('rename')); await setField('preset-name', renamed); await scrollClick('#preset-submit');

@@ -52,6 +52,7 @@ test('consumption failure never substitutes balance drops, fake zero, curves or 
   class Element {
     constructor(tag) { this.tag = tag; this.children = []; this.attrs = {}; this.dataset = {}; this.listeners = {}; this.textContent = ''; }
     getBoundingClientRect() { return { top: 10, bottom: 210 }; }
+    getComputedTextLength() { return this.textContent.length * 6; }
     setAttribute(key, value) { this.attrs[key] = value; }
     addEventListener(key, fn) { this.listeners[key] = fn; }
     append(...nodes) { this.children.push(...nodes); }
@@ -83,13 +84,21 @@ test('consumption failure never substitutes balance drops, fake zero, curves or 
   receive({ usage: { report: usage } }); assert.equal(get('change').textContent, '0.09'); assert.equal(get('usage-empty').hidden, true);
   assert.match(get('usage-plot').children[0].attrs['aria-label'], /请求时间累计消耗/);
   const todaySvg = get('usage-plot').children[0], todayDots = todaySvg.children.filter(n => n.tag === 'circle');
-  assert.equal(todayDots.length, 3); assert.equal(todayDots[0].attrs.cx, 62); assert.equal(todayDots[0].attrs.cy, 108); assert.equal(todayDots.at(-1).attrs.cx, 338);
+  assert.equal(todayDots.length, 3); assert.equal(todayDots[0].attrs.cx / 374, 30 / 368); assert.equal(todayDots[0].attrs.cy, 108); assert.equal(todayDots.at(-1).attrs.cx / 374, 350 / 368);
   const times = todaySvg.children.filter(n => n.tag === 'text' && n.attrs.y === 132).map(n => n.textContent);
   assert.deepEqual(times, ['00:00', '11:55']);
-  assert.ok(todaySvg.children.find(n => n.attrs.class === 'observed-line').attrs.d.startsWith('M62 108L'));
+  assert.ok(todaySvg.children.find(n => n.attrs.class === 'observed-line').attrs.d.startsWith(`M${todayDots[0].attrs.cx} 108L`));
+  assert.deepEqual(todaySvg.children.filter(n => n.tag === 'text' && n.attrs.y === 132).map(n => n.attrs['text-anchor']), ['start', 'end']);
   get('week').listeners.click(); assert.equal(get('usage-plot').children[0].children.filter(n => n.tag === 'circle').length, 7);
   get('view-daily').listeners.click();
-  assert.equal(get('usage-plot').children[0].children.filter(n => n.tag === 'rect').length, 7);
+  const dailyBars = get('usage-plot').children[0].children.filter(n => n.tag === 'rect');
+  assert.equal(dailyBars.length, 7);
+  assert.ok(dailyBars[0].attrs.x >= todayDots[0].attrs.cx);
+  assert.ok(dailyBars.at(-1).attrs.x + dailyBars.at(-1).attrs.width <= todayDots.at(-1).attrs.cx);
+  const largeUsage = { ...usage, days: usage.days.map(day => ({ ...day, credits: 12345.67 })) };
+  receive({ usage: { report: largeUsage } });
+  for (const label of get('usage-plot').children[0].children.filter(n => n.tag === 'text' && n.attrs['text-anchor'] === 'end')) assert.ok(label.attrs.x - label.getComputedTextLength() >= 0, 'long axis values remain inside the chart');
+
   assert.equal(get('period-switch').hidden, true); assert.equal(get('change-label').textContent, '近7天消耗');
   const zero = { ...usage, days: usage.days.map(d => ({ ...d, credits: 0 })), todayRecords: [], totalCredits: 0, todayCredits: 0 };
   receive({ usage: { report: zero } }); assert.equal(get('change').textContent, '0'); assert.equal(get('usage-empty').hidden, true);

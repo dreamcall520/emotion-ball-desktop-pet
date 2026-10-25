@@ -37,9 +37,16 @@
     const points = today ? [{ at: midnight, value: 0, credits: 0 }, ...usage.todayRecords.map(record => ({ at: record.at, credits: record.credits, value: cumulative += record.credits }))]
       : usage.days.map(day => ({ date: day.date, credits: day.credits, value: view === 'daily' ? day.credits : cumulative += day.credits }));
     const maximum = Math.max(...points.map(point => point.value)), y = value => maximum ? 108 - value / maximum * 80 : 108;
-    const x = index => today ? points.at(-1).at === midnight ? 62 : 62 + (points[index].at - midnight) / (points.at(-1).at - midnight) * 276 : 62 + index / (points.length - 1) * 276;
     const svg = svgNode('svg', { viewBox: '0 0 374 144', class: `trend-chart${view === 'daily' ? ' daily-chart' : ''}`, role: 'img', 'aria-label': view === 'daily' ? '官方近7天每日实际消耗积分' : today ? '官方今日按真实请求时间累计消耗积分' : '官方近7天按日累计消耗积分' });
-    for (const value of maximum ? [0, maximum / 2, maximum] : [0]) svg.append(svgNode('path', { class: 'axis', d: `M48 ${y(value)}H352` }), svgNode('text', { x: 43, y: y(value) + 3, 'text-anchor': 'end' }, amount(value)));
+    const ticks = (maximum ? [0, maximum / 2, maximum] : [0]).map(value => ({ value, label: svgNode('text', { y: y(value) + 3, 'text-anchor': 'end' }, amount(value)) }));
+    svg.append(...ticks.map(tick => tick.label));
+    el('usage-plot').append(svg);
+    // Match Codex's horizontal bounds without changing chart height; reserve extra room only for long credit values.
+    const left = Math.max(374 * 30 / 368, ...ticks.map(tick => tick.label.getComputedTextLength() + 5)), right = 374 * 350 / 368;
+    const x = index => view === 'daily' ? left + (index + .5) / points.length * (right - left)
+      : today ? points.at(-1).at === midnight ? left : left + (points[index].at - midnight) / (points.at(-1).at - midnight) * (right - left) : left + index / (points.length - 1) * (right - left);
+    for (const { value, label } of ticks) { label.setAttribute('x', left - 5); svg.append(svgNode('path', { class: 'axis', d: `M${left} ${y(value)}H${right}` })); }
+
     if (view === 'daily') {
       for (const [index, point] of points.entries()) { const bar = svgNode('rect', { class: 'daily-bar', x: x(index) - 9, y: y(point.value), width: 18, height: 108 - y(point.value), rx: 3, fill: 'var(--detail-blue)' }); bar.append(svgNode('title', {}, `${point.date} · ${amount(point.credits)}积分`)); svg.append(bar); }
     } else if (points.length > 1) {
@@ -47,12 +54,12 @@
       svg.append(svgNode('path', { class: 'observed-area', d: `${path}L${x(points.length - 1)} 108L${x(0)} 108Z` }), svgNode('path', { class: 'observed-line', d: path }));
     }
     for (const [index, point] of points.entries()) {
+      const anchor = view === 'daily' ? 'middle' : index === 0 ? 'start' : index === points.length - 1 ? 'end' : 'middle';
       const dot = svgNode('circle', { class: `point${!today || index === 0 || index === points.length - 1 ? ' endpoint' : ''}`, cx: x(index), cy: y(point.value), r: 2 });
       dot.append(svgNode('title', {}, `${today ? new Date(point.at).toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hour12: false }) : point.date} · ${view === 'daily' ? '当日' : '累计'}消耗${amount(point.value)}积分`)); svg.append(dot);
-      if (!today || index === 0 || index === points.length - 1) svg.append(svgNode('text', { class: 'daily-value', x: x(index), y: y(point.value) - 8, 'text-anchor': 'middle' }, amount(point.value)));
-      if (!today || index === 0 || index === points.length - 1 && point.at !== points[0].at) svg.append(svgNode('text', { x: x(index), y: 132, 'text-anchor': 'middle' }, today ? new Date(point.at).toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hour12: false }) : point.date.slice(5).replace('-', '/')));
+      if (!today || index === 0 || index === points.length - 1) svg.append(svgNode('text', { class: 'daily-value', x: x(index), y: y(point.value) - 8, 'text-anchor': anchor }, amount(point.value)));
+      if (!today || index === 0 || index === points.length - 1 && point.at !== points[0].at) svg.append(svgNode('text', { x: x(index), y: 132, 'text-anchor': anchor }, today ? new Date(point.at).toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hour12: false }) : point.date.slice(5).replace('-', '/')));
     }
-    el('usage-plot').append(svg);
   }
   function render() {
     el('today').setAttribute('aria-pressed', String(view !== 'daily' && period === 'today'));

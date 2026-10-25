@@ -2586,7 +2586,7 @@ async function finishSmokeTest() {
           `document.querySelector('[data-shape="${shape}"]').click(); true`);
         await waitFor(() => editor.webContents.executeJavaScript(`(() =>
           document.querySelector('[data-shape="${shape}"]').getAttribute('aria-pressed') === 'true' &&
-          document.getElementById('startup-default').checked === ${shape === settings.startupAppearance.shape} &&
+          document.getElementById('startup-default').checked === true &&
           document.getElementById('body-hex').value === '${bodyColor}' &&
           document.getElementById('eye-hex').value === '${eyeColor}' &&
           document.querySelectorAll('#stage svg .eb-head').length === 1
@@ -2774,7 +2774,7 @@ async function finishSmokeTest() {
         return blocked;
       })()`), true);
       assert.notEqual(settings.customization.appearance.bodyColor, '#28415C');
-      await editor.webContents.executeJavaScript("document.getElementById('startup-default').click(); true");
+      await editor.webContents.executeJavaScript("document.getElementById('startup-default').checked = true; true");
       await editor.webContents.executeJavaScript("document.getElementById('save').click(); true");
       await waitFor(() => settings.customization.appearance.bodyColor === '#28415C');
       assert.equal(settings.startupAppearance.bodyColor, '#28415C');

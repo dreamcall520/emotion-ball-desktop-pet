@@ -36,8 +36,13 @@ await run("document.getElementById('source-codex').click()");assert.equal(await 
 assert.equal(await run("document.getElementById('pet-settings').parentElement.id"),'codex-panel');assert.equal(await run('previews.at(-1).codexPetId'),'codex-'+'a'.repeat(64),'switching tabs does not select another pet');
 await run("document.getElementById('source-codex').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}))");assert.equal(await run("document.getElementById('source-local').getAttribute('aria-selected')"),'true');
 await run("document.getElementById('save').click()");await until("saves.length===1&&!document.getElementById('save').disabled",'save completed');assert.equal(await run('saves[0].appearance.codexPetId'),'codex-'+'a'.repeat(64));assert.equal(await run('current.customization.appearance.shape'),'codex-pet');
+assert.equal(await run('current.startupAppearance.codexPetId'),'codex-'+'a'.repeat(64),'默认保存导入伙伴，下次启动沿用');
+await run("document.getElementById('startup-default').checked=false;document.getElementById('source-codex').click();document.querySelector('#pet-grid .pet-card').click();document.getElementById('pet-opacity').value='20';document.getElementById('pet-opacity').dispatchEvent(new Event('input'))");
+assert.equal(await run("document.getElementById('startup-default').checked"),false,'切换伙伴和透明度保留主动临时换装');
+await run("document.getElementById('save').click()");await until("saves.length===2&&!document.getElementById('save').disabled",'temporary save completed');
+assert.equal(await run('current.customization.appearance.codexPetId'),'codex-'+'b'.repeat(64));assert.equal(await run('current.startupAppearance.codexPetId'),'codex-'+'a'.repeat(64),'临时换装不覆盖启动伙伴');
 assert.equal(await run("(()=>{const e=document.querySelector('.source-switch');return e.scrollWidth<=e.clientWidth+1})()"),true,'four tabs fit settings column');
-await run("document.documentElement.dataset.theme='dark'");
+await run("document.getElementById('source-local').click();document.documentElement.dataset.theme='dark'");
 assert.equal(await run("(()=>{const p=document.getElementById('local-panel'),r=p.getBoundingClientRect(),grid=document.getElementById('local-pet-grid');return r.width>0&&p.scrollWidth<=p.clientWidth+1&&grid.scrollWidth<=grid.clientWidth+1})()"),true,'local library fits dark settings panel');
 assert.equal(win.isVisible(),false);console.log('PASS local tab / empty retry / cancel failure preserve sheep / real sprite preview action pause / separate Codex copy / save / keyboard');win.destroy();app.exit(0);
 }catch(error){console.error(error.stack);win?.destroy();app.exit(1);}});

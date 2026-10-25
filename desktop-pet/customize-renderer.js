@@ -16,7 +16,6 @@
   const previewPixels = 205;
   const defaults = PetCustomization.DEFAULT_APPEARANCE;
   let state = PetCustomization.normalizeCustomization();
-  let startupAppearance = PetCustomization.normalizeAppearance();
   let ball = null;
   let codexPlayer = null, pets = [], petReadFlight = 0, petPaused = false;
   const codexDescriptors = new Map();
@@ -59,8 +58,6 @@
   };
   const systemAppearance = window.matchMedia?.('(prefers-color-scheme: dark)');
   const motionPreference = window.matchMedia?.('(prefers-reduced-motion: reduce)');
-  const matchesStartup = () => JSON.stringify(PetCustomization.normalizeAppearance(state.appearance)) ===
-    JSON.stringify(startupAppearance);
   const quotaEditor = window.QuotaCustomizer?.create({ bridge, getAppearance: () => state.appearance,
     getCodexPet: () => codexDescriptors.get(state.appearance.codexPetId), announce, onLayoutChange: schedulePreview });
 
@@ -130,7 +127,6 @@
       button.append(shapeIcon(id, contour), document.createTextNode(label));
       button.addEventListener('click', () => {
         state.appearance = PetCustomization.applyShapeRecommendation(state.appearance, id, contour);
-        $('startup-default').checked = matchesStartup();
         for (const option of target.querySelectorAll('.shape-option')) {
           option.setAttribute('aria-pressed', String(option.dataset.shape === id && option.dataset.auroraContour === contour));
         }
@@ -519,7 +515,6 @@
         closeColorPicker(false); closePresetForm();
         state.appearance = PetCustomization.normalizeAppearance(preset.appearance);
         selectedPresetId = preset.id;
-        $('startup-default').checked = matchesStartup();
         syncAppearance(); markPresetSelection();
         announce('已载入预览，保存外观后应用到桌面');
       });
@@ -800,7 +795,6 @@
   function chooseSheepTheme(value) {
     if (!canSave || disposed || state.appearance.shape !== 'new-year-sheep') return;
     state.appearance = PetCustomization.normalizeAppearance({ ...state.appearance, sheepTheme: value });
-    $('startup-default').checked = matchesStartup();
     renderSheepTheme(); markPresetSelection(); schedulePreview();
   }
   $('sheep-theme').addEventListener('change', event => chooseSheepTheme(event.target.value));
@@ -887,11 +881,9 @@
         if (current?.customization) {
           state = PetCustomization.normalizeCustomization(current.customization);
           if (current.codexPet) codexDescriptors.set(current.codexPet.id, current.codexPet);
-          startupAppearance = PetCustomization.normalizeAppearance(current.startupAppearance);
           await refreshPets(); schedulePreview();
         }
       }
-      if (saved && setAsStartupDefault) startupAppearance = PetCustomization.normalizeAppearance(state.appearance);
       announce(saved ? (setAsStartupDefault
         ? '已保存，下次打开仍使用这套外观'
         : '已保存到桌面，下次打开恢复启动外观') : '保存未完成，请稍后重试');
@@ -994,7 +986,7 @@
     if (state.appearance.shape !== 'codex-pet') lastBallAppearance = PetCustomization.normalizeAppearance(state.appearance);
     codexDescriptors.set(pet.id, pet);
     state.appearance = PetCustomization.normalizeAppearance({ shape: 'codex-pet', codexPetId: pet.id, sheepTheme: state.appearance.sheepTheme });
-    $('startup-default').checked = matchesStartup(); renderAuroraVisibility(); syncCandidate(); schedulePreview();
+    renderAuroraVisibility(); syncCandidate(); schedulePreview();
   }
   function renderLocalPets() {
     const grid = $('local-pet-grid'); if (!grid) return;
@@ -1132,7 +1124,6 @@
     state.appearance.auroraTransparency = Number($('pet-opacity').value);
     $('pet-opacity-value').textContent = state.appearance.auroraTransparency + '%';
     paintRange('pet-opacity', [0, 60]);
-    $('startup-default').checked = matchesStartup();
     if (codexPlayer) codexPlayer.setOpacity(1 - state.appearance.auroraTransparency / 100);
     else schedulePreview();
   });
@@ -1158,8 +1149,7 @@
         state = PetCustomization.normalizeCustomization(value.customization);
         petSize = value.size || 'tiny';
         $('pet-size').value = petSize;
-        startupAppearance = PetCustomization.normalizeAppearance(value.startupAppearance || state.appearance);
-        $('startup-default').checked = matchesStartup();
+        $('startup-default').checked = true;
       } else if (value) state = PetCustomization.normalizeCustomization(value);
       quotaEditor?.load(value.quotaDisplay, value.quotaModel);
       syncAppearance();
