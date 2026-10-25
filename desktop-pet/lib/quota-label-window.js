@@ -351,7 +351,8 @@ function createQuotaLabelWindow({
       { ...presentation, quotaAnchor: true, quotaGuard: true }));
     // The role target is 48px for ordinary roles, 64px for the composite. Its transparent tail
     // can overlap a neighbor, but must never intercept that neighbor's clicks.
-    return Boolean(contains(body) || contains(getObstacle()));
+    return Boolean(contains(body) || contains(getObstacle()) || presentation?.quotaGroupLayout &&
+      Array.isArray(presentation.quotaGroupNeighbors) && presentation.quotaGroupNeighbors.some(contains));
   }
 
   function present() {
@@ -618,6 +619,13 @@ function createQuotaLabelWindow({
       try { present(); } catch (error) { if (win) detach(win, error); else report(error); }
     },
     getWindow,
+    getLayoutMetrics() {
+      const target=getWindow();
+      if (!requestedVisible || !target || !target.isVisible() || !currentModel?.items.length || currentModel.display === 'numbers') return null;
+      return { ...quotaLabelSize(currentModel.size,currentModel.expanded,currentModel.items.length,Boolean(currentModel.extraCredits),false,null,sourceId),
+        inset: currentModel.size==='compact'&&!currentModel.expanded?2:0,
+        guardTargetWidth: guardEntryVisible()?quotaRoleTargetWidth(rolePaintWidth()):0, roleWidth:rolePaintWidth() };
+    },
     getVisibleBounds() {
       const target = getWindow();
       if (!target || !requestedVisible || !currentModel?.items.length || !target.isVisible()) return null;

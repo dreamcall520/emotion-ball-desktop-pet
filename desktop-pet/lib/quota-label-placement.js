@@ -78,6 +78,46 @@ function bounded(candidate, size, area) {
 
 function quotaRoleTargetWidth(paintWidth) { return [22,24].includes(paintWidth) ? 48 : 64; }
 
+// Only the three visible free-mode cards share direction. Inputs are sizes, never their last positions.
+function quotaFreeStackBounds(petBounds, workArea, cards, presentation, bubble = null) {
+  if (presentation?.mode !== 'free') return null;
+  const rows = ['codex','api','zcode'].map(id => ({ id, ...cards?.[id] }));
+  if (rows.some(row => !Number.isFinite(row.width) || row.width <= 0 || !Number.isFinite(row.height) || row.height <= 0)) return null;
+  const area = safeArea(workArea), nativePet = safePet(petBounds, area);
+  const visual = petVisualBounds(nativePet,presentation.shape,{...presentation,quotaAnchor:true,quotaGuard:rows[0].guardTargetWidth>0});
+  const pet = ['ring','duo','split','stages'].includes(presentation.quotaStyle)
+    ? presentation.shape === 'new-year-sheep' ? nativePet : {...visual,y:nativePet.y,height:nativePet.height} : visual;
+  const preferredCenter=pet.x+pet.width/2, obstacle=safeObstacle(bubble);
+  for(const row of rows) {
+    row.inset=row.inset===2?2:0;
+    row.faceWidth=row.width-row.inset*2;row.faceHeight=row.height-row.inset*2;
+    if(row.faceWidth<=0||row.faceHeight<=0)return null;
+    row.gutter=[48,64].includes(row.guardTargetWidth)?row.guardTargetWidth+ROLE_GAP:0;
+    row.top=row.gutter?Math.max(row.height,44)+6-row.height:0;
+    row.left=row.gutter>0 && preferredCenter>area.x+area.width/2 && (nativePet.x+nativePet.width>=area.x+area.width-row.gutter || preferredCenter+row.width/2+row.gutter>area.x+area.width);
+  }
+  const left=Math.max(...rows.map(r=>r.width/2+(r.left?r.gutter:0))),right=Math.max(...rows.map(r=>r.width/2+(r.left?0:r.gutter)));
+  if(left+right>area.width)return null;
+  const center=Math.round(clamp(preferredCenter,area.x+left,area.x+area.width-right));
+  for(const placement of ['below','above']) {
+    let cursor=placement==='below'?pet.y+pet.height+GAP:pet.y-GAP;
+    const result={};let clear=true;
+    for(const row of rows) {
+      const face={x:Math.round(center-row.faceWidth/2),y:Math.round(placement==='below'?cursor:cursor-row.faceHeight),width:row.faceWidth,height:row.faceHeight};
+      const x=face.x-row.inset-(row.left?row.gutter:0),y=face.y-row.inset-row.top;
+      const native={x,y,width:row.width+row.gutter,height:row.height+row.top,placement,
+        ...(row.gutter?{guardSide:row.left?'left':'right',cardInset:{x:row.left?row.gutter:0,y:row.top}}:{}),face};
+      const roleWidth=[22,24,50].includes(row.roleWidth)?row.roleWidth:ROLE_PAINT_WIDTH;
+      const ink=row.gutter?{x:face.x-row.inset-(row.left?ROLE_GAP+roleWidth:0),y:face.y-row.inset-(row.inset?1:0),
+        width:row.width+ROLE_GAP+roleWidth,height:row.height+(row.inset?1:0)}:face;
+      if(!inside(native,native,area)||overlaps(ink,ink,pet)||overlaps(ink,ink,obstacle))clear=false;
+      result[row.id]=native;cursor=placement==='below'?face.y+face.height+GAP:face.y-GAP;
+    }
+    if(clear)return {placement,cards:result};
+  }
+  return null;
+}
+
 function quotaLabelSize(value, expanded = false, itemCount = 1, extraCredits = false, guardEntry = false, rolePaintWidth = null, sourceId = 'codex') {
   if (sourceId === 'zcode' && expanded === true && itemCount > 0) return { width: 196, height: itemCount === 1 ? 154 : 166 + (Math.ceil(Math.min(itemCount, 32) / 2) - 1) * 90 };
   if (expanded === true && itemCount > 2) return { width: 196, height: 144 + (Math.ceil(Math.min(itemCount, 32) / 2) - 1) * 84 };
@@ -107,6 +147,9 @@ function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName =
   };
   const centerX = pet.x + pet.width / 2;
   const centerY = pet.y + pet.height / 2;
+  const coordinated=presentation?.mode==='free'&&presentation?.quotaGroupLayout;
+  if(coordinated && inside(coordinated,coordinated,area) && coordinated.width===size.width+(guardEntry&&!expanded?ROLE_GAP+quotaRoleTargetWidth(presentation?.quotaRoleWidth):0)
+    && coordinated.height===(guardEntry&&!expanded?Math.max(size.height,44)+6:size.height)) return coordinated;
   if (presentation?.quotaBottomAligned === true) {
     // ZCode follows the existing Codex card without changing Codex's own anchor.
     // Keep obstacle rectangles separate: their bounding union can cover free gaps.
@@ -243,4 +286,4 @@ function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName =
   return nearby || safeChoices.sort((a, b) => proximity(a) - proximity(b) || distance(a) - distance(b))[0] || pair;
 }
 
-module.exports = { GAP, LABEL_SIZES, quotaLabelSize, quotaLabelBounds, quotaRoleTargetWidth };
+module.exports = { GAP, LABEL_SIZES, quotaLabelSize, quotaLabelBounds, quotaRoleTargetWidth, quotaFreeStackBounds };

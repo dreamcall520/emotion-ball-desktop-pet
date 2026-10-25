@@ -195,13 +195,16 @@ test('dependent cards are notified after API visibility and size settle, includi
   const win = await f.ready();
   assert.equal(layouts.at(-1)?.height, 32, 'native show publishes its settled bounds');
   assert.deepEqual(f.controller.getVisibleBounds(), { x: win.bounds.x + 2, y: win.bounds.y + 2, width: 124, height: 28 });
+  assert.deepEqual(f.controller.getLayoutMetrics(), { width:128,height:32,inset:2 });
   f.ipc(win, 'pet:api-usage-label-toggle');
   assert.equal(layouts.at(-1)?.height, 92, 'expansion lets the dependent card avoid the larger obstacle');
   assert.deepEqual(f.controller.getVisibleBounds(), { x: win.bounds.x, y: win.bounds.y, width: 196, height: 92 });
+  assert.deepEqual(f.controller.getLayoutMetrics(), { width:196,height:92,inset:0 });
   f.ipc(win, 'pet:api-usage-label-toggle');
   assert.equal(layouts.at(-1)?.height, 32);
   f.controller.hide(); assert.equal(layouts.at(-1), null);
   assert.equal(f.controller.getVisibleBounds(), null);
+  assert.equal(f.controller.getLayoutMetrics(), null);
   f.controller.show({ connected: false });
   assert.equal(layouts.at(-1)?.height, 32, 'the connection prompt is still a visible obstacle');
   f.controller.destroy(); assert.equal(layouts.at(-1), null);

@@ -46,6 +46,7 @@ const { createCodexCompanion } = require('./lib/codex-companion');
 const { buildCodexMenu, buildCodexResultMenu, resolveCodexAction } = require('./lib/codex-menu');
 const { buildQuotaLabelModel, buildCodexDetailsModel } = require('./lib/codex-quota-view');
 const { createQuotaHistory } = require('./lib/codex-quota-history');
+const { quotaFreeStackBounds } = require('./lib/quota-label-placement');
 const { createCodexDetailsWindow, ACTIONS: CODEX_DETAIL_ACTIONS } = require('./lib/codex-details-window');
 const { isTaskId } = require('./lib/codex-state');
 const { createQuotaLabelWindow } = require('./lib/quota-label-window');
@@ -971,6 +972,29 @@ function quotaObstacleBounds() {
   }
 }
 
+let quotaFreeStackKey = 'null', quotaFreeStackApplying = false;
+function quotaFreeStackPlan() {
+  const pet = petWindow && !petWindow.isDestroyed() && petWindow.isVisible() ? petWindow.getBounds() : null;
+  if (!pet) return null;
+  const area=screen.getDisplayMatching(pet).workArea,style=quotaDisplayConfig().style;
+  return quotaFreeStackBounds(pet,area,
+    {codex:quotaLabel?.getLayoutMetrics?.(),api:apiUsageLabel?.getLayoutMetrics?.(),zcode:zcodeLink?.getLayoutMetrics?.()},
+    {...edgeTuck?.getPresentation(),shape:settings?.customization?.appearance?.shape,quotaStyle:style,
+      facing:PetFacing.resolve(pet,area),sheepInk:sheepQuotaInk?.quotaStyle===style?sheepQuotaInk:null,
+      sheepTheme:SheepTheme.resolveTheme(settings?.customization?.appearance?.sheepTheme,new Date())},quotaObstacleBounds());
+}
+function syncQuotaFreeStack() {
+  if (quotaFreeStackApplying) return;
+  quotaFreeStackApplying = true;
+  try {
+    for (let pass=0;pass<3;pass++) {
+      const key=JSON.stringify(quotaFreeStackPlan());
+      if (key===quotaFreeStackKey) break;
+      quotaFreeStackKey=key;
+      safelyInvokeWindow('三卡整组重排',()=>{quotaLabel?.reposition();apiUsageLabel?.reposition();zcodeLink?.reposition();});
+    }
+  } finally { quotaFreeStackApplying=false; }
+}
 function zcodeQuotaStackBounds() {
   return [quotaLabel?.getVisibleBounds(), apiUsageLabel?.getVisibleBounds?.()]
     .filter(Boolean).sort((a, b) => b.y + b.height - a.y - a.height)[0] || null;
@@ -3403,11 +3427,13 @@ async function bootstrap() {
       ...edgeTuck?.getPresentation(),
       shape: settings?.customization?.appearance?.shape,
       quotaStyle: quotaDisplayConfig().style,
+      quotaGroupLayout: quotaFreeStackPlan()?.cards.codex,
+      quotaGroupNeighbors: [apiUsageLabel?.getVisibleBounds?.(),zcodeLink?.getVisibleBounds()].filter(Boolean),
       sheepTheme: settings?.customization?.appearance?.sheepTheme,
       sheepInk: sheepQuotaInk?.quotaStyle === quotaDisplayConfig().style ? sheepQuotaInk : null
     }),
     alwaysOnTop: settings.alwaysOnTop,
-    onLayout: () => { pomodoroWindows?.sync(); zcodeLink?.reposition(); },
+    onLayout: () => { syncQuotaFreeStack(); pomodoroWindows?.sync(); zcodeLink?.reposition(); },
     onError: error => writeError('额度标签窗口', error)
   });
   quotaGuard = createQuotaGuardWindow({ BrowserWindow, screen,
@@ -3428,8 +3454,8 @@ async function bootstrap() {
     getQuotaBounds: () => quotaLabel?.getVisibleBounds(),
     getAppearance: () => settings?.codexQuotaAppearance,
     getPresentation: () => ({ ...edgeTuck?.getPresentation(), shape: settings?.customization?.appearance?.shape,
-      quotaStyle: quotaDisplayConfig().style }),
-    onOpenDetails: openApiUsage, onLayout: () => zcodeLink?.reposition(), alwaysOnTop: settings.alwaysOnTop,
+      quotaStyle: quotaDisplayConfig().style, quotaGroupLayout: quotaFreeStackPlan()?.cards.api }),
+    onOpenDetails: openApiUsage, onLayout: () => { syncQuotaFreeStack(); zcodeLink?.reposition(); }, alwaysOnTop: settings.alwaysOnTop,
     onError: error => writeError('API 常驻卡片', error) });
   codexDetails = createCodexDetailsWindow({ BrowserWindow, screen,
     getAnchor: () => petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null,
@@ -3447,13 +3473,14 @@ async function bootstrap() {
       ? apiUsageLabel.getWindow().getBounds() : null, quotaObstacleBounds()].filter(Boolean),
     getPresentation: () => ({ ...edgeTuck?.getPresentation(), shape: settings?.customization?.appearance?.shape,
       quotaBottomAligned: true, quotaStackBelow: zcodeQuotaStackBounds(),
-      quotaStyle: quotaDisplayConfig().style, sheepTheme: settings?.customization?.appearance?.sheepTheme }),
+      quotaStyle: quotaDisplayConfig().style, sheepTheme: settings?.customization?.appearance?.sheepTheme,
+      quotaGroupLayout: quotaFreeStackPlan()?.cards.zcode }),
     getSuppressed: () => isQuitting || screenLocked || chatWindow?.isVisible() || shortcutWindow?.isPresenting() || presentationSuppressed(),
     onChange: () => { refreshTrayMenu(); tickEdgeNotice(true); syncZcodeQuotaGuard(); },
     getGuardEntry: zcodeGuardEntryAvailable,
     getCardSuppressed: () => quotaGuard?.isVisible() === true,
     onOpenGuard: () => openQuotaGuard('zcode'),
-    onLayout: () => pomodoroWindows?.sync(),
+    onLayout: () => { syncQuotaFreeStack(); pomodoroWindows?.sync(); },
     onEnabledChanged: async enabled => {
       if (!enabled) await chat?.zcodeDisabled();
       else chat?.sourceChanged(settings.chatSource);

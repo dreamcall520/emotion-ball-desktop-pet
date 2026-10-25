@@ -527,3 +527,43 @@ test('three cards prefer Codex → API → ZCode below in free space and avoid b
     }
   }
 });
+
+test('free three-card group chooses one direction from all faces, including guard native gutters', () => {
+  const { quotaFreeStackBounds } = require('../lib/quota-label-placement');
+  const area={x:0,y:32,width:1200,height:800};
+  const cards={codex:{width:128,height:32,inset:2,guardTargetWidth:48,roleWidth:22},api:{width:128,height:32,inset:2},zcode:{width:128,height:32,inset:2}};
+  const pet={x:560,y:690,width:80,height:80};
+  const plan=quotaFreeStackBounds(pet,area,cards,{mode:'free',shape:'blob'});
+  assert.equal(plan.placement,'above');
+  const faces=Object.values(plan.cards).map(row=>row.face);
+  for(const row of Object.values(plan.cards))assertInside(row,area);
+  assert.equal(faces[0].y+faces[0].height,pet.y-8);
+  assert.equal(faces[1].y+faces[1].height+8,faces[0].y);
+  assert.equal(faces[2].y+faces[2].height+8,faces[1].y);
+  assert.ok(faces.every(row=>row.x+row.width/2===600));
+  const low={...pet,y:200},below=quotaFreeStackBounds(low,area,cards,{mode:'free',shape:'blob'});
+  assert.equal(below.placement,'below');
+  const bubble={x:530,y:290,width:180,height:140};
+  assert.equal(quotaFreeStackBounds(low,area,cards,{mode:'free',shape:'blob'},bubble).placement,'above','a bubble only rejects the intersecting candidate');
+  assert.equal(quotaFreeStackBounds(pet,area,cards,{mode:'peeked',side:'left'}),null);
+  assert.equal(quotaFreeStackBounds(pet,area,{...cards,api:null},{mode:'free'}),null,'single and dual layouts stay unchanged');
+  assert.equal(quotaFreeStackBounds({x:560,y:160,width:80,height:80},{...area,height:300},
+    {...cards,zcode:{width:196,height:256,inset:0}},{mode:'free'}),null,'an entire group that fits neither direction uses the existing fallback');
+});
+
+test('grouped free corners and expanded buckets stay aligned and inside; peek and blocked groups retain legacy fallback',()=>{
+  const {quotaFreeStackBounds}=require('../lib/quota-label-placement'),area={x:-1400,y:32,width:1400,height:850};
+  for(const x of[-1400,-80])for(const y of[32,802])for(const role of[22,24,50])for(const apiExpanded of[false,true])for(const count of[1,2,4])for(const expanded of[false,true])for(const size of['compact','standard']){
+    const pet={x,y,width:80,height:80},cards={codex:{width:128,height:32,inset:2,guardTargetWidth:role===50?64:48,roleWidth:role},
+      api:{width:apiExpanded?196:128,height:apiExpanded?92:32,inset:apiExpanded?0:2},zcode:{...quotaLabelSize(size,expanded,count,false,false,null,'zcode'),inset:size==='compact'&&!expanded?2:0}};
+    const before=JSON.stringify(cards),plan=quotaFreeStackBounds(pet,area,cards,{mode:'free'});assert.ok(plan);
+    assert.equal(plan.placement,y===32?'below':'above');
+    const faces=Object.values(plan.cards).map(row=>row.face),center=faces[0].x+faces[0].width/2;
+    for(const row of Object.values(plan.cards))assertInside(row,area);
+    for(const face of faces)assert.equal(face.x+face.width/2,center);
+    for(let i=1;i<faces.length;i++)assert.equal(plan.placement==='above'?faces[i-1].y-faces[i].y-faces[i].height:faces[i].y-faces[i-1].y-faces[i-1].height,8);
+    assert.equal(JSON.stringify(cards),before);
+    for(const side of['left','right'])assert.equal(quotaFreeStackBounds(pet,area,cards,{mode:'peeked',side}),null);
+    assert.equal(quotaFreeStackBounds(pet,area,cards,{mode:'free'},{...area}),null);
+  }
+});

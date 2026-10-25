@@ -13,6 +13,8 @@ function validBounds(bounds) {
 }
 
 function apiLabelBounds(pet, area, quota, bubble, expanded = false, presentation = null) {
+  const coordinated=presentation?.mode==='free'&&presentation?.quotaGroupLayout;
+  if(coordinated && validBounds(coordinated) && coordinated.width===(expanded?196:128) && coordinated.height===(expanded?92:32)) return coordinated;
   const hasQuota = validBounds(pet) && validBounds(quota);
   const anchor = hasQuota ? {
     x: Math.min(pet.x, quota.x), y: Math.min(pet.y, quota.y),
@@ -283,6 +285,10 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
       const bounds = win.getBounds(), inset = expanded ? 0 : 2;
       return { x: bounds.x + inset, y: bounds.y + inset,
         width: bounds.width - inset * 2, height: bounds.height - inset * 2 };
+    },
+    getLayoutMetrics() {
+      return requestedVisible && live(win) && win.isVisible()
+        ? { ...quotaLabelSize(expanded?'apiExpanded':'compact'),inset:expanded?0:2 } : null;
     },
     setAlwaysOnTop(value) {
       topmost = Boolean(value);

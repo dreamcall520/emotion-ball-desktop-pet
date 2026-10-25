@@ -1584,6 +1584,21 @@ test('ZCode follows the lowest visible Codex or API face and API layout changes 
   f.call('zcodeLink = null'); assert.doesNotThrow(() => f.apiLabel.options.onLayout());
 });
 
+test('free three-card coordination reflows once per stable size plan and retires when a participant hides',async()=>{
+  const f=await fixture();const metrics={width:128,height:32,inset:2};
+  f.quotaLabel.getLayoutMetrics=()=>metrics;f.apiLabel.getLayoutMetrics=()=>metrics;
+  f.call('zcodeLink={...zcodeLink,moves:0,getLayoutMetrics:()=>({width:128,height:32,inset:2}),reposition(){this.moves++;syncQuotaFreeStack();}}');
+  f.call('syncQuotaFreeStack()');assert.equal(f.call('zcodeLink.moves'),1,'reentrant layout notifications do not recurse');
+  f.call('syncQuotaFreeStack()');assert.equal(f.call('zcodeLink.moves'),1,'same geometry has no further reflow');
+  assert.equal(f.call('quotaFreeStackPlan().placement'),'below');
+  f.pet.bounds.y=500;f.call('syncQuotaFreeStack()');assert.equal(f.call('quotaFreeStackPlan().placement'),'above');
+  assert.equal(f.call('zcodeLink.moves'),2);
+  f.apiLabel.getLayoutMetrics=()=>null;f.call('syncQuotaFreeStack()');assert.equal(f.call('quotaFreeStackPlan()'),null);
+  assert.equal(f.call('zcodeLink.moves'),3);f.call('syncQuotaFreeStack()');assert.equal(f.call('zcodeLink.moves'),3);
+  f.apiLabel.getLayoutMetrics=()=>metrics;f.call("edgeTuck.dock('left');edgeTuck.sampleCursor({x:petWindow.getBounds().x+10,y:petWindow.getBounds().y+10})");
+  assert.equal(f.call('quotaFreeStackPlan()'),null,'peek keeps the original horizontal layout');
+});
+
 test('所有 Codex 设置只保留一个顶层入口并完整归入子菜单', async () => {
   const f = await fixture({ codexEnabled: true });
   const menu = f.call('menuTemplate()');
