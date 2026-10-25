@@ -8,7 +8,7 @@ const styles = [...html.matchAll(/name="style" value="([^"]+)" data-variant-imag
 const sizes = [...html.matchAll(/name="variant" value="([^"]+)" data-variant-price="(\d+)"/g)];
 assert.equal(styles.length, 44);
 assert.deepEqual(styles.map(match => match[1]), ["春野拼布", "夕光雾蓝", "蜜桃奶油", "奶油花格", "春野涂鸦", "花野派对", "焦糖海岸", "桂花暮紫", "春野杂货铺", "林间花笺", "橘日咖啡", "薄荷周末", "晴日生活拼布", "焦糖曲奇时光", "好运云朵", "午夜花砖", "杏霞蓝汐", "薄荷休息站", "快乐补给站", "柠檬气泡", "奶油小剧场", "蓝莓偷乐", "橘子捣蛋日", "晴天野餐会", "午夜摸鱼站", "森林偷乐站", "橘晴好运", "莓莓开心云", "可可偷吃日", "奶糖恶作剧", "森林元气云", "午夜活力云", "健身拼布复古配色", "健身拼布·明亮原色", "橘红元气小剧场", "暖橘贴纸俱乐部", "焦糖手账角落", "午夜蓝贴纸俱乐部", "薄荷手账角落", "橘暖休息站", "焦糖偷乐站", "奶油漫画小剧场", "暖杏快乐小剧场", "好运花色小剧场"]);
-assert.deepEqual(sizes.map(match => [match[1], match[2]]), [['800×300mm · 厚3mm', '40'], ['800×400mm · 厚3mm', '48']]);
+assert.deepEqual(sizes.map(match => [match[1], match[2]]), [['800×300mm · 厚3mm', '50'], ['800×400mm · 厚3mm', '60']]);
 for (const [, , image] of styles) assert.ok(fs.existsSync(path.join(__dirname, '../shop/mousepad', image)));
 assert.match(read('shop/index.html'), /href="mousepad\/"/);
 assert.match(read('shop/index.html'), /mousepad\/p01.webp/);
@@ -29,7 +29,7 @@ function run(withOptions) {
     querySelector: selector => ({ '[data-theme-select]': theme, '[data-product-title]': product, '[data-product-image]': image, '[data-price-value]': price, '[data-selected-sales]': sales, 'input[name="variant"]:checked': selected.variant, 'input[name="style"]:checked': selected.style })[selector],
     querySelectorAll: selector => ({ '[data-dialog-open]': [button], '[data-variant-image]': styleInputs, '[data-variant-price]': withOptions ? sizeInputs : [] })[selector] || []
   };
-  vm.runInNewContext(read('community.js'), { document, matchMedia: () => ({ matches: false, addEventListener() {} }), localStorage: { getItem() {} } });
+  vm.runInNewContext(read('community.js'), { window: {}, document, matchMedia: () => ({ matches: false, addEventListener() {} }), localStorage: { getItem() {} } });
   return { selected, styleInputs, sizeInputs, button, product, image, price, inquiry, sales };
 }
 const state = run(true);
@@ -59,6 +59,6 @@ console.log('Mousepad: 88 image/size/price/inquiry combinations and existing cup
 
 for (const [product, original, sale] of [['handle-cup', 120, 96], ['cup', 66, 52.8], ['vest', 88, 70.4], ['mousepad', 50, 40]]) {
   assert.equal(sale * 10, original * 8);
-  assert.ok(read(`shop/${product}/index.html`).includes(`data-product-price="${sale}" data-product-sale="双十一 8 折"`));
-  assert.ok(read('shop/index.html').includes(`</span>${sale}`));
+  assert.ok(read(`shop/${product}/index.html`).includes(`data-product-price="${original}" data-product-original="${original}"`));
+  assert.ok(read('shop/index.html').includes(`data-original-price="${original}">${original}</span>`));
 }

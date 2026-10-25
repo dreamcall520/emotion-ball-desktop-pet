@@ -115,6 +115,11 @@
     if (status) status.textContent = '';
     dialog.showModal();
   }));
+  document.addEventListener('shop-sale-change', () => {
+    const button = document.querySelector('[data-dialog-open]');
+    const dialog = button && document.getElementById(button.dataset.dialogOpen);
+    if (dialog?.open) button.click();
+  });
   document.querySelectorAll('.c-dialog').forEach(dialog => {
     dialog.querySelector('[data-dialog-close]').addEventListener('click', () => dialog.close());
     dialog.addEventListener('click', event => {
@@ -149,8 +154,7 @@
   document.querySelectorAll('[data-variant-price]').forEach(input => input.addEventListener('change', () => {
     document.querySelector('[data-product-title]').dataset.productPrice = input.dataset.variantPrice;
     document.querySelector('[data-price-value]').textContent = input.dataset.variantPrice;
-    const original = document.querySelector('[data-original-price]');
-    if (original) original.textContent = input.dataset.variantOriginal;
+    window.updateShopSale?.();
   }));
   document.addEventListener('click', event => {
     document.querySelectorAll('.c-mobile[open]').forEach(menu => { if (!menu.contains(event.target)) menu.open = false; });
