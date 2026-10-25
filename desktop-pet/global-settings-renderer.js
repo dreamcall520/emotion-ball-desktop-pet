@@ -15,7 +15,8 @@
     if (message) feedbackTimer = setTimeout(() => { $('feedback').textContent = ''; }, 3200);
   }
   let snapshot = null, selected = 'common', busy = false, last = '', request = 0, apiSectionRequested = false, codexTab = 'codex';
-  let latestSleepState;
+  let latestSleepState, quotaSectionRequested = false;
+  const quotaCardsView = value => value?.entries?.find(entry => entry.label === '贴边与显示' && entry.children)?.id || 'common';
   const isApiView = view => ['api', 'openai-api', '/codex-menu/openai-api-menu'].includes(view);
   const descriptions = {
     '外观（所有窗口）': '统一设置各功能窗口的浅色或深色外观。',
@@ -146,8 +147,29 @@
     const config = snapshot.quotaCards || { order: Object.keys(names), pinned: [] };
     config.order.forEach((source, index) => {
       if (!names[source]) return;
-      const row = el('div', '', 'row'); row.dataset.quotaCard = source;
-      row.append(el('div', names[source], 'row-title'));
+      const row = el('div', '', 'row'); row.dataset.quotaCard = source; row.draggable = !busy;
+      const heading = el('div', '', 'quota-card-name');
+      const handle = el('span', '⠿', 'quota-card-drag-handle'); handle.setAttribute('aria-hidden', 'true'); handle.title = '拖拽调整顺序';
+      heading.append(handle, el('span', names[source], 'row-title')); row.append(heading);
+      let dragFromControl = false;
+      row.addEventListener('pointerdown', event => { dragFromControl = Boolean(event.target.closest?.('button,input,label')); });
+      row.addEventListener('dragstart', event => {
+        if (busy || dragFromControl || event.target.closest?.('button,input,label')) { event.preventDefault(); return; }
+        event.dataTransfer.setData('application/x-qiuqiu-quota-card', source); event.dataTransfer.effectAllowed = 'move'; row.classList.add('dragging');
+      });
+      row.addEventListener('dragend', () => section.querySelectorAll('.dragging,.drag-over').forEach(node => node.classList.remove('dragging', 'drag-over')));
+      row.addEventListener('dragover', event => {
+        if (busy || !Array.from(event.dataTransfer.types).includes('application/x-qiuqiu-quota-card')) return;
+        event.preventDefault(); event.dataTransfer.dropEffect = 'move'; row.classList.add('drag-over');
+      });
+      row.addEventListener('dragleave', event => { if (!row.contains(event.relatedTarget)) row.classList.remove('drag-over'); });
+      row.addEventListener('drop', event => {
+        event.preventDefault(); row.classList.remove('drag-over');
+        const moved = event.dataTransfer.getData('application/x-qiuqiu-quota-card');
+        if (busy || moved === source || !config.order.includes(moved)) return;
+        const order = config.order.filter(id => id !== moved); order.splice(index, 0, moved);
+        saveQuotaCards({ order, pinned: [...config.pinned] });
+      });
       const controls = el('div', '', 'quota-card-controls');
       for (const [label, offset] of [['上移', -1], ['下移', 1]]) {
         const button = el('button', label, 'action'); button.setAttribute('aria-label', `${names[source]}${label}`);
@@ -346,10 +368,11 @@
       }
       sections.unshift(tabs);
     }
-    if (!query && nav.find(item => item.id === selected)?.label === '贴边与显示') { sections.push(quotaCardSettings()); count++; }
+    if (!query && nav.find(item => item.id === selected)?.label === '贴边与显示') { sections.unshift(quotaCardSettings()); count++; }
     $('content').replaceChildren(...sections);
     if (behaviors) window.renderSettingsShortcuts(behaviors, snapshot.shortcuts, shortcutApi, true);
     $('empty').hidden = count !== 0;
+    if (quotaSectionRequested) { document.querySelector('main').scrollTop = 0; quotaSectionRequested = false; }
     if (apiSectionRequested) { document.querySelector('[data-settings-section="openai-api"]')?.scrollIntoView({ block: 'start' }); apiSectionRequested = false; }
     if (focusId) Array.from(document.querySelectorAll('[data-action]')).find(node => node.dataset.action === focusId)?.focus();
   }
@@ -372,7 +395,8 @@
       if (current !== request || busy || !value) return;
       if (latestSleepState !== undefined) value.petSleepState = latestSleepState;
       const serialized = JSON.stringify(value);
-      if (last !== serialized) { if (!snapshot && value.initialView === 'shortcuts') selected = 'shortcuts';
+      if (last !== serialized) { if (!snapshot && value.initialView === 'quota-cards') { selected = quotaCardsView(value); quotaSectionRequested = true; }
+        else if (!snapshot && value.initialView === 'shortcuts') selected = 'shortcuts';
         else if (!snapshot && isApiView(value.initialView)) { selected = '/codex-menu'; codexTab = 'api'; apiSectionRequested = true; } snapshot = value; last = serialized; render(); }
     } catch (_) { $('feedback').textContent = '暂时无法读取设置，请重新打开窗口。'; }
   }
@@ -389,6 +413,7 @@
     if (event.key === 'Escape' && !$('search-panel').hidden) { event.preventDefault(); setSearchOpen(false); }
   });
   api.onNavigate(view => {
+    if (view === 'quota-cards') { selected = quotaCardsView(snapshot); quotaSectionRequested = true; apiSectionRequested = false; $('search').value = ''; $('search-panel').hidden = true; $('search-toggle').setAttribute('aria-expanded', 'false'); render(); return; }
     if (view !== 'shortcuts' && !isApiView(view)) return;
     apiSectionRequested = isApiView(view); if (apiSectionRequested) codexTab = 'api';
     selected = apiSectionRequested ? '/codex-menu' : view; $('search').value = ''; $('search-panel').hidden = true;

@@ -1,3 +1,4 @@
+const { sendQuotaCardMotion } = require('./quota-card-motion');
 const { createNativeWindowFade } = require('./native-window-fade');
 const path = require('node:path');
 const { GAP, quotaLabelBounds, quotaLabelSize } = require('./quota-label-placement');
@@ -80,7 +81,7 @@ function safeState(state) {
 function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuotaWindow = () => null, getQuotaBounds = null,
   getObstacleBounds = () => null, getAppearance = () => 'system', getPresentation = () => null,
   onOpenDetails = () => {}, onLayout = () => {}, alwaysOnTop = true, onError = () => {} }) {
-  let win = null, ready = false, requestedVisible = false, current = null, expanded = false;
+  let win = null, ready = false, requestedVisible = false, current = null, expanded = false, resetExpandedPending = false;
   let topmost = Boolean(alwaysOnTop), revision = 0, presenting = false, pending = false;
   let observedQuota = null, quotaListener = null;
 
@@ -123,7 +124,7 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
     if (win !== target || revision !== token || !live(target)) return;
     target.setIgnoreMouseEvents(true, { forward: true });
     if (win === target && revision === token) {
-      fade.hide(target, { animate });
+      fade.hide(target, { animate: sendQuotaCardMotion(target, false, getPresentation(), animate) });
       if (win === target && revision === token) notifyLayout();
     }
   }
@@ -176,6 +177,7 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
         if (presentation?.quotaGroupHidden === true || presentation?.mode === 'tucked' && presentation.quotaAnimateHide === true) {
           conceal(target, token, presentation?.quotaAnimateHide === true); return;
         }
+        if(resetExpandedPending){expanded=false;resetExpandedPending=false;}
         const pet = getPetWindow();
         if (!active(target, token)) { if (pending) continue; return; }
         if (!pet || pet.isDestroyed() || !pet.isVisible()) { hide(); return; }
@@ -187,11 +189,13 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
         const appearance = ['light', 'dark'].includes(appearanceValue) ? appearanceValue : 'system';
         if (!active(target, token)) { if (pending) continue; return; }
         const payload = { ...current, expanded, appearance };
+        let motionAnimate=false;
         const steps = [
           () => target.setBounds(apiLabelBounds(bounds, area, quota, obstacle, expanded, presentation), false),
           () => target.webContents.send(CHANNEL, payload),
           () => target.setIgnoreMouseEvents(false),
-          () => fade.show(target, presentation?.quotaGroupAnimate === true || ['peeked', 'tucked'].includes(presentation?.mode))
+          () => { motionAnimate=sendQuotaCardMotion(target, true, presentation, presentation?.quotaGroupAnimate === true || ['peeked', 'tucked'].includes(presentation?.mode)); },
+          () => fade.show(target, motionAnimate)
         ];
         for (const step of steps) {
           if (!active(target, token)) break;
@@ -282,7 +286,7 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
       requestedVisible = true;
       try { ensureWindow(); present(); } catch (error) { failed(error, win); }
     },
-    hide, reposition, destroy,
+    hide, reposition, destroy, resetExpanded() { resetExpandedPending=true; },
     getWindow() {
       if (win && !live(win)) { failed(new Error('API 费用标签窗口不可用'), win); }
       return win;
@@ -295,7 +299,7 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
     },
     getLayoutMetrics() {
       return requestedVisible && live(win)
-        ? { ...quotaLabelSize(expanded?'apiExpanded':'compact'),inset:expanded?0:2 } : null;
+        ? { ...quotaLabelSize(expanded&&!resetExpandedPending?'apiExpanded':'compact'),inset:expanded&&!resetExpandedPending?0:2 } : null;
     },
     setAlwaysOnTop(value) {
       topmost = Boolean(value);

@@ -915,3 +915,6 @@ body[data-guard-size="compact"] .guard-entry-zombie { top: 11px; }
 #quota-label[data-source="codex"][data-size="standard"][data-expanded="false"] { padding-block: 2px; }
 #quota-label[data-source="codex"][data-size="standard"][data-expanded="false"] #items li { grid-template-rows: 20px 3px; }
 #quota-label[data-source="codex"][data-size="standard"][data-expanded="false"] .quota-name { display: flex; align-items: center; }
+
+/* Group motion changes painted content only; host bounds and hit geometry stay fixed. */
+#quota-beam { transform-origin: center bottom; }

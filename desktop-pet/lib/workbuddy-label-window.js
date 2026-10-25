@@ -1,3 +1,4 @@
+const { sendQuotaCardMotion } = require('./quota-card-motion');
 const { createNativeWindowFade } = require('./native-window-fade');
 const path = require('node:path');
 const { quotaLabelSize } = require('./quota-label-placement');
@@ -68,13 +69,13 @@ function safeState(state) {
       unreadCount: Number.isSafeInteger(state?.activity?.unreadCount) && state.activity.unreadCount >= 0 ? state.activity.unreadCount : null, scope: '本机已同步任务' } };
 }
 function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getObstacles = () => [], getStackAnchor = () => null, getBubbleBounds = () => null, getPresentation = () => null, getGuardEntry = () => false, onGuard = () => {}, getAppearance = () => 'system', alwaysOnTop = true, onRefresh = () => {}, onTrend = () => {}, onTasks = () => {}, onError = () => {}, onLayout = () => {} }) {
-  let win = null, ready = false, visible = false, expanded = false, current = null, top = Boolean(alwaysOnTop);
+  let win = null, ready = false, visible = false, expanded = false, current = null, resetExpandedPending = false, top = Boolean(alwaysOnTop);
   const error = e => { try { onError(e); } catch (_) {} };
   const guard = createWorkBuddyGuardEntryWindow({ BrowserWindow, alwaysOnTop, onGuard, onError });
   const live = w => w && !w.isDestroyed() && !w.webContents.isDestroyed?.();
   const fade = createNativeWindowFade({ onError: error });
   function notifyLayout() { try { onLayout(); } catch (e) { error(e); } }
-  function hide({ animate = false } = {}) { const changed = visible || expanded; visible = false; expanded = false; guard.hide(); if (live(win)) { win.setIgnoreMouseEvents?.(true, { forward: true }); fade.hide(win, { animate: animate && ['peeked', 'tucked'].includes(getPresentation()?.mode) }); } if (changed) notifyLayout(); }
+  function hide({ animate = false } = {}) { const changed = visible || expanded; visible = false; expanded = false; guard.hide(); if (live(win)) { win.setIgnoreMouseEvents?.(true, { forward: true }); fade.hide(win, { animate: sendQuotaCardMotion(win, false, getPresentation(), animate && ['peeked', 'tucked'].includes(getPresentation()?.mode)) }); } if (changed) notifyLayout(); }
   function destroy() { fade.cancel(win); guard.destroy(); const old = win; win = null; ready = visible = expanded = false; if (live(old)) old.destroy(); }
   function reposition() {
     if (!ready || !visible || !live(win)) return;
@@ -82,7 +83,8 @@ function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getOb
       const presentation = getPresentation();
       // Stop before reading a disappearing stack anchor during the edge exit.
       if (presentation?.mode === 'tucked' && presentation.quotaAnimateHide === true) { hide({ animate: true }); return; }
-      if (presentation?.quotaGroupHidden === true) { guard.hide(); win.setIgnoreMouseEvents?.(true, { forward: true }); fade.hide(win, { animate: presentation.quotaGroupAnimate === true }); return; }
+      if (presentation?.quotaGroupHidden === true) { guard.hide(); win.setIgnoreMouseEvents?.(true, { forward: true }); fade.hide(win, { animate: sendQuotaCardMotion(win, false, presentation, presentation.quotaGroupAnimate === true) }); return; }
+      if(resetExpandedPending){expanded=false;resetExpandedPending=false;}
       const pet = getPetWindow();
       if (!pet || pet.isDestroyed() || !pet.isVisible()) { fade.hide(win); guard.hide(); return; }
       const p = pet.getBounds(), area = screen.getDisplayMatching(p).workArea, obstacles = getObstacles() || [];
@@ -94,7 +96,7 @@ function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getOb
       win.setBounds(bounds, false);
       win.webContents.send(CHANNEL, { ...current, expanded, spaceError, appearance: ['light', 'dark'].includes(appearance) ? appearance : 'system' });
       win.setIgnoreMouseEvents?.(false);
-      fade.show(win, presentation?.quotaGroupAnimate === true || ['peeked', 'tucked'].includes(presentation?.mode));
+      fade.show(win, sendQuotaCardMotion(win, true, presentation, presentation?.quotaGroupAnimate === true || ['peeked', 'tucked'].includes(presentation?.mode)));
       if (!expanded && getGuardEntry() === true) guard.show(bounds, area, [p, ...obstacles], presentation?.side);
       else guard.hide();
     } catch (e) { guard.hide(); if (live(win)) fade.hide(win); error(e); }
@@ -124,12 +126,12 @@ function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getOb
     target.webContents.on('did-finish-load', loaded);
     Promise.resolve(target.loadFile(path.join(__dirname, '../workbuddy-label.html'))).then(loaded).catch(e => { if (win === target) destroy(); error(e); });
   }
-  return { show(state) { current = safeState(state); if (!current.enabled) { hide(); return; } const changed = !visible; visible = true; try { ensure(); if (changed) notifyLayout(); reposition(); } catch (e) { destroy(); error(e); } }, hide, destroy, reposition,
+  return { show(state) { current = safeState(state); if (!current.enabled) { hide(); return; } const changed = !visible; visible = true; try { ensure(); if (changed) notifyLayout(); reposition(); } catch (e) { destroy(); error(e); } }, hide, destroy, reposition, resetExpanded() { resetExpandedPending=true; },
     getWindow: () => live(win) ? win : null,
     getGuardWindow: () => guard.getWindow(),
     getLayoutMetrics() {
       if (!visible || !current?.enabled) return null;
-      return { width: expanded ? 196 : 128, height: expanded ? 120 : 32, inset: expanded ? 0 : 2 };
+      return { width: expanded&&!resetExpandedPending ? 196 : 128, height: expanded&&!resetExpandedPending ? 120 : 32, inset: expanded&&!resetExpandedPending ? 0 : 2 };
     },
     getVisibleBounds() { if (!live(win) || !win.isVisible()) return null; const bounds = win.getBounds(), inset = expanded ? 0 : 2; return { x: bounds.x + inset, y: bounds.y + inset, width: bounds.width - inset * 2, height: bounds.height - inset * 2 }; },
     setAlwaysOnTop(value) { guard.setAlwaysOnTop(value); top = Boolean(value); try { if (live(win)) win.setAlwaysOnTop(top, 'floating'); } catch (e) { error(e); } } };

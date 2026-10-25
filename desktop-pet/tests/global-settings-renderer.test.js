@@ -208,6 +208,11 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     assert.equal(await run('calls.at(-1).id'),`/${encodeURIComponent('球球与互动')}/${encodeURIComponent('随机表情')}`);
     await run("[...document.querySelectorAll('#navigation button')].find(e=>e.textContent==='贴边与显示').click()");
     assert.deepEqual(await run("[...document.querySelectorAll('[data-quota-card]')].map(e=>e.dataset.quotaCard)"),['codex','api','zcode','workbuddy']);
+    assert.equal(await run("document.querySelector('#content > section').dataset.settingsSection"),'quota-cards','card management is the first section');
+    await run("document.querySelector('main').scrollTop=500;navigate('quota-cards')");
+    assert.equal(await run("document.querySelector('#navigation [aria-current=page]').textContent"),'贴边与显示');
+    assert.equal(await run("document.querySelector('main').scrollTop"),0,'right-click navigation opens card management at the top');
+
     assert.equal(await run("document.querySelector('[aria-label=Codex上移]').disabled"),true);
     await run("document.querySelector('[aria-label=Codex下移]').click()"); await run('new Promise(resolve=>setTimeout(resolve,10))');
     assert.deepEqual(await run('cardCalls.at(-1).order'),['api','codex','zcode','workbuddy']);
@@ -217,9 +222,23 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("window.cardFail=true;document.querySelector('[aria-label=WorkBuddy固定展示]').click()"); await run('new Promise(resolve=>setTimeout(resolve,10))');
     assert.equal(await run("document.querySelector('[aria-label=WorkBuddy固定展示]').checked"),true,'failed save restores real config');
     assert.match(await run("document.getElementById('feedback').textContent"),/保存失败/);
+    await run("window.dragCard=(source,target)=>{const from=document.querySelector('[data-quota-card='+source+']'),to=document.querySelector('[data-quota-card='+target+']'),dataTransfer=new DataTransfer();from.querySelector('.quota-card-drag-handle').dispatchEvent(new DragEvent('dragstart',{bubbles:true,cancelable:true,dataTransfer}));to.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer}));to.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer}));};window.cardFail=false;dragCard('workbuddy','api');void 0"); await run('new Promise(resolve=>setTimeout(resolve,10))');
+    assert.deepEqual(await run("[...document.querySelectorAll('[data-quota-card]')].map(e=>e.dataset.quotaCard)"),['workbuddy','api','codex','zcode'],'drag updates persisted order');
+    assert.deepEqual(await run('cardCalls.at(-1).pinned'),['workbuddy'],'drag keeps pinned config');
+    await run("window.cardFail=true;dragCard('workbuddy','zcode')"); await run('new Promise(resolve=>setTimeout(resolve,10))');
+    assert.deepEqual(await run("[...document.querySelectorAll('[data-quota-card]')].map(e=>e.dataset.quotaCard)"),['workbuddy','api','codex','zcode'],'failed drag save restores order');
+    assert.equal(await run("(()=>{const event=new DragEvent('dragstart',{bubbles:true,cancelable:true,dataTransfer:new DataTransfer()});document.querySelector('[data-quota-card=api] button').dispatchEvent(event);return event.defaultPrevented})()"),true,'buttons do not begin row dragging');
+    assert.equal(await run("(()=>{const event=new DragEvent('dragstart',{bubbles:true,cancelable:true,dataTransfer:new DataTransfer()});document.querySelector('[data-quota-card=api] input').dispatchEvent(event);return event.defaultPrevented})()"),true,'pin checkbox does not begin dragging');
+    assert.equal(await run("(()=>{const row=document.querySelector('[data-quota-card=api]');row.querySelector('input').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));const event=new DragEvent('dragstart',{bubbles:true,cancelable:true,dataTransfer:new DataTransfer()});row.dispatchEvent(event);return event.defaultPrevented})()"),true,'native ancestor dragstart cannot bypass an interactive pointer origin');
+
     await run("document.documentElement.dataset.appearance='light'");
     assert.equal(await run("[...document.querySelectorAll('.quota-card-settings .row')].every(e=>{const r=e.getBoundingClientRect();return e.scrollWidth<=e.clientWidth+1&&r.right<=innerWidth})"),true,'card controls stay within the settings panel');
 
+    await run("window.snapshot.initialView='quota-cards';window.snapshot.version='initial-alias-test'");
+    await run(fs.readFileSync(path.join(sourceRoot, 'desktop-pet/global-settings-renderer.js'), 'utf8'));
+    await run('new Promise(resolve=>setTimeout(resolve,20))');
+    assert.equal(await run("document.querySelector('#navigation [aria-current=page]').textContent"),'贴边与显示','initialView alias opens the real edge category');
+    assert.equal(await run("document.querySelector('#content > section').dataset.settingsSection"),'quota-cards');
     win.destroy(); process.stdout.write('SETTINGS_DOM_OK\n'); app.exit(0);
   }).catch(error => { process.stderr.write(error.stack + '\n'); app.exit(1); });
 } else {

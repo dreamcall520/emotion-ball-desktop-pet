@@ -3751,7 +3751,7 @@ test('原生菜单保留核心联动开关与独立入口，完整偏好仍可�
   const f = await fixture(); t.after(() => f.app.emit('before-quit'));
   const menu = f.call('compactMenuTemplate()');
   assert.deepEqual(Array.from(menu.filter(item => item.type !== 'separator'), item => item.label),
-    ['和球球聊聊', '来定制球球', '便签与待办', '番茄钟', '启用 Codex 联动', '启用 ZCode 联动', '启用 WorkBuddy 联动', '设置中心', '关于球球', '检查更新', '退出球球']);
+    ['和球球聊聊', '来定制球球', '便签与待办', '番茄钟', '启用 Codex 联动', '启用 ZCode 联动', '启用 WorkBuddy 联动', '联动样式管理', '设置中心', '关于球球', '检查更新', '退出球球']);
   assert.ok(menu.every(item => !item.submenu));
   assert.ok(findMenuItem(menu, 'workbuddy-enabled'));
   assert.equal(findMenuItem(menu, 'workbuddy-chat'), null);
@@ -4065,4 +4065,13 @@ test('quota card collection uses real enable flags, persists pin/order and rejec
  assert.deepEqual(Array.from(f.saved.at(-1).quotaCardPinned),['api']);
  assert.equal(f.call("quotaCardGroupAnimate('api')"),false);assert.equal(f.call("quotaCardGroupAnimate('codex')"),true);
  f.call('settings.openaiApiAlwaysVisible=false;syncQuotaLabel(codexCompanion.getSnapshot())');assert.equal(f.call('quotaCardGroup.getState().bar'),false);assert.equal(f.call("quotaCardCollected('codex')"),false);
+});
+
+
+test('compact integration style management opens quota cards directly and navigates an existing settings window',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));const menu=f.call('compactMenuTemplate()');const item=findMenuItem(menu,'quota-cards-settings');
+ assert.equal(item.label,'联动样式管理');assert(menu.indexOf(item)>menu.indexOf(findMenuItem(menu,'workbuddy-enabled')));assert(menu.indexOf(item)<menu.indexOf(findMenuItem(menu,'global-settings')));
+ item.click();const win=f.call('globalSettingsWindow');win.emit('ready-to-show');
+ assert.equal((await f.invoke('pet:global-settings-get',undefined,win.webContents)).initialView,'quota-cards');
+ item.click();assert.equal(f.call('globalSettingsWindow'),win);assert.deepEqual(win.messages.at(-1),{channel:'pet:global-settings-navigate',packet:'quota-cards'});
 });

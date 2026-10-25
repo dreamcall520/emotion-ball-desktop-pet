@@ -1,3 +1,4 @@
+const { sendQuotaCardMotion } = require('./quota-card-motion');
 const { createNativeWindowFade } = require('./native-window-fade');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -197,7 +198,7 @@ function createQuotaLabelWindow({
   let win = null;
   let ready = false;
   let requestedVisible = false;
-  let currentModel = null;
+  let currentModel = null, resetExpandedPending = false;
   let currentLayout = null;
   let topmost = Boolean(alwaysOnTop);
   let topmostRevision = 0;
@@ -311,7 +312,7 @@ function createQuotaLabelWindow({
     };
     try {
       target.setIgnoreMouseEvents(true, { forward: true });
-      fade.hide(target, { animate, onHidden: finish });
+      fade.hide(target, { animate: sendQuotaCardMotion(target, false, getPresentation(), animate), onHidden: finish });
     } catch (error) { detach(target, error); return; }
     if (win !== target || operation !== token) return;
     const afterHide = health(target);
@@ -380,6 +381,7 @@ function createQuotaLabelWindow({
       conceal(target, token, presentation?.quotaAnimateHide === true);
       return;
     }
+    if (resetExpandedPending) { resetExpandedPending=false; if(currentModel?.expanded){currentModel={...currentModel,expanded:false};return present();} }
     const layout = petLayout();
     if (!confirm(target, token, model)) return;
     if (!layout) {
@@ -408,7 +410,7 @@ function createQuotaLabelWindow({
       else target.setIgnoreMouseEvents(true, { forward: true });
     } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
-    try { fade.show(target, presentation?.quotaGroupAnimate === true || ['peeked', 'tucked'].includes(presentation?.mode)); } catch (error) { detach(target, error); return; }
+    try { const animate=sendQuotaCardMotion(target, true, presentation, presentation?.quotaGroupAnimate === true || ['peeked', 'tucked'].includes(presentation?.mode)); if(!confirm(target,token,model))return; fade.show(target, animate); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) {
       if (win === target && !requestedVisible) conceal(target, operation);
       return;
@@ -635,11 +637,12 @@ function createQuotaLabelWindow({
       try { present(); } catch (error) { if (win) detach(win, error); else report(error); }
     },
     getWindow,
+    resetExpanded() { resetExpandedPending=true; },
     getLayoutMetrics() {
       const target=getWindow();
       if (!requestedVisible || !target || getSuppressed() || !currentModel?.items.length || currentModel.display === 'numbers') return null;
-      return { ...quotaLabelSize(currentModel.size,currentModel.expanded,currentModel.items.length,Boolean(currentModel.extraCredits),false,null,sourceId),
-        inset: currentModel.size==='compact'&&!currentModel.expanded?2:0,
+      return { ...quotaLabelSize(currentModel.size,!resetExpandedPending&&currentModel.expanded,currentModel.items.length,Boolean(currentModel.extraCredits),false,null,sourceId),
+        inset: currentModel.size==='compact'&&(resetExpandedPending||!currentModel.expanded)?2:0,
         guardTargetWidth: guardEntryVisible()?quotaRoleTargetWidth(rolePaintWidth()):0, roleWidth:rolePaintWidth() };
     },
     getVisibleBounds() {

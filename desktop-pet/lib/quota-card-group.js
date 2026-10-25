@@ -9,7 +9,7 @@ function createQuotaCardGroup({ getState, getCursor, getBounds, onChange, schedu
   const contains = (b,p) => b && p && p.x >= b.x-5 && p.y >= b.y-5 && p.x < b.x+b.width+5 && p.y < b.y+b.height+5;
   function state() {
     const input=getState(), config=normalizeQuotaCards(input.config), eligible=config.order.filter(id=>input.eligible.includes(id));
-    const active=!input.suppressed, bar=active && eligible.length>1 && eligible.some(id=>!config.pinned.includes(id));
+    const active=!input.suppressed, bar=active && !input.dragging && eligible.length>1 && eligible.some(id=>!config.pinned.includes(id));
     if(!bar) { expanded=false;keyboard=false;outsideAt=null; }
     return { eligible, order:config.order, bar, expanded:bar && expanded, visible:active ? eligible.filter(id=>eligible.length<=1 || config.pinned.includes(id) || expanded) : [] };
   }

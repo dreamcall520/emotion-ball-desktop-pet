@@ -182,6 +182,16 @@ function safeModel(value) {
 }
 
 contextBridge.exposeInMainWorld('petQuotaLabel', {
+  onMotion(callback) {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, value) => {
+      if (!value || typeof value.visible !== 'boolean' || typeof value.animate !== 'boolean') return;
+      callback({visible:value.visible,animate:value.animate,index:Number.isInteger(value.index)?Math.max(0,Math.min(3,value.index)):0});
+    };
+    ipcRenderer.on('pet:quota-card-motion',listener);
+    return () => ipcRenderer.removeListener('pet:quota-card-motion',listener);
+  },
+
   onColorMode: callback => {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, value, appearance, theme) => callback(value === 'accessible' ? 'accessible' : 'standard',

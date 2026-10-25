@@ -14,6 +14,7 @@ const {
   Menu,
   nativeImage,
   nativeTheme,
+  systemPreferences,
   powerMonitor,
   safeStorage,
   screen,
@@ -50,7 +51,7 @@ const { createQuotaHistory } = require('./lib/codex-quota-history');
 const { quotaFreeStackBounds } = require('./lib/quota-label-placement');
 const { createQuotaCardGroup, normalizeQuotaCards } = require('./lib/quota-card-group');
 const { createQuotaCardGroupWindow } = require('./lib/quota-card-group-window');
-let quotaCardGroup = null, quotaCardGroupWindow = null, quotaGroupLastActive = false;
+let quotaCardGroup = null, quotaCardGroupWindow = null, quotaGroupLastActive = false, quotaGroupWasExpanded = false;
 const { createCodexDetailsWindow, ACTIONS: CODEX_DETAIL_ACTIONS } = require('./lib/codex-details-window');
 const { isTaskId } = require('./lib/codex-state');
 const { createQuotaLabelWindow } = require('./lib/quota-label-window');
@@ -117,7 +118,7 @@ let dialogue = null;
 let bubble = null;
 let thoughts = null;
 let sheepOfferingWindow = null;
-let sheepQuotaInk = null;
+let sheepQuotaInk = null, sheepBarInk = null;
 let bubbleVisibilityBinding = null;
 let quotaLabel = null;
 let quotaGuard = null;
@@ -433,7 +434,7 @@ function fromGlobalSettings(event, requireVisible = true) {
 }
 
 function openGlobalSettings(view) {
-  const target = view === 'shortcuts' ? 'shortcuts' : null;
+  const target = ['shortcuts', 'quota-cards'].includes(view) ? view : null;
   if (isQuitting || screenLocked) return;
   if (globalSettingsWindow && !globalSettingsWindow.isDestroyed()) {
     globalSettingsWindow.show(); globalSettingsWindow.focus();
@@ -1048,9 +1049,10 @@ function quotaCardGroupInput() {
     settings?.openaiApiAlwaysVisible===true ? 'api':null,
     settings?.zcodeEnabled===true && settings.zcodeQuotaAlwaysVisible===true ? 'zcode':null,
     settings?.workbuddyEnabled===true && settings.workbuddyQuotaAlwaysVisible!==false ? 'workbuddy':null].filter(Boolean),
-    suppressed:Boolean(isQuitting||screenLocked||dragState?.moved||pomodoroQuiet||presentationSuppressed()||shortcutWindow?.isPresenting()||chatWindow?.isVisible()||apiUsageWindow?.isVisible()||codexDetails?.isVisible()||zcodeLink?.isDetailsVisible?.()||workbuddyDetails?.isVisible?.()||quotaGuard?.isVisible?.()||!petWindow||petWindow.isDestroyed()||!petWindow.isVisible())};
+    dragging:Boolean(dragState),suppressed:Boolean(isQuitting||screenLocked||pomodoroQuiet||presentationSuppressed()||shortcutWindow?.isPresenting()||chatWindow?.isVisible()||apiUsageWindow?.isVisible()||codexDetails?.isVisible()||zcodeLink?.isDetailsVisible?.()||workbuddyDetails?.isVisible?.()||quotaGuard?.isVisible?.()||!petWindow||petWindow.isDestroyed()||!petWindow.isVisible())};
 }
 function quotaCardCollected(id) { if(apiUsageWindow?.isVisible())return true; const state=quotaCardGroup?.getState(); return Boolean(state && state.eligible.includes(id) && !quotaCardGroupInput().suppressed && !state.visible.includes(id)); }
+function quotaReducedMotion() { try { return systemPreferences?.getAnimationSettings?.().prefersReducedMotion === true; } catch (_) { return false; } }
 function quotaCardGroupAnimate(id) { const state=quotaCardGroup?.getState(); return Boolean(state?.bar && !quotaCardGroupInput().suppressed && state.eligible.includes(id) && !quotaCardConfig().pinned.includes(id)); }
 function syncQuotaCardGroup() { const state=quotaCardGroup?.sync(); if(state?.bar)quotaCardGroupWindow?.show(state);else quotaCardGroupWindow?.hide(); }
 let quotaFreeStackKey = 'null', quotaFreeStackApplying = false;
@@ -1060,7 +1062,7 @@ function quotaFreeStackPlan() {
   const area=screen.getDisplayMatching(pet).workArea,style=quotaDisplayConfig().style;
   return quotaFreeStackBounds(pet,area,
     {codex:quotaCardCollected('codex')?null:quotaLabel?.getLayoutMetrics?.(),api:quotaCardCollected('api')?null:apiUsageLabel?.getLayoutMetrics?.(),zcode:quotaCardCollected('zcode')?null:zcodeLink?.getLayoutMetrics?.(),workbuddy:quotaCardCollected('workbuddy')?null:workbuddyLabel?.getLayoutMetrics?.()},
-    {...edgeTuck?.getPresentation(),quotaCardOrder:quotaCardConfig().order,quotaCardBarBounds:quotaCardGroupWindow?.getBounds(),shape:settings?.customization?.appearance?.shape,quotaStyle:style,
+    {...edgeTuck?.getPresentation(),quotaCardOrder:quotaCardConfig().order,quotaCardBarBounds:quotaCardConfig().pinned.some(id=>quotaCardGroup?.getState().eligible.includes(id))?null:quotaCardGroupWindow?.getBounds(),shape:settings?.customization?.appearance?.shape,quotaStyle:style,
       facing:PetFacing.resolve(pet,area),sheepInk:sheepQuotaInk?.quotaStyle===style?sheepQuotaInk:null,
       sheepTheme:SheepTheme.resolveTheme(settings?.customization?.appearance?.sheepTheme,new Date())},quotaObstacleBounds());
 }
@@ -1074,7 +1076,7 @@ function syncQuotaFreeStack() {
       quotaFreeStackKey=key;
       safelyInvokeWindow('三卡整组重排',()=>{quotaLabel?.reposition();apiUsageLabel?.reposition();zcodeLink?.reposition();workbuddyLabel?.reposition();});
     }
-  } finally { quotaFreeStackApplying=false; }
+  } finally { quotaFreeStackApplying=false; if(quotaCardGroup?.getState().bar)quotaCardGroupWindow?.show(quotaCardGroup.getState()); }
 }
 function zcodeQuotaStackBounds() {
   return [quotaLabel?.getVisibleBounds(), apiUsageLabel?.getVisibleBounds?.()]
@@ -2266,6 +2268,7 @@ function compactMenuTemplate() {
   return [find('chat-open'), { ...find('customize-open'), label: '来定制球球' },
     notes && { ...notes, label: '便签与待办' }, find('pomodoro-open'),
     { type: 'separator' }, codexEnabled, zcodeLink?.menu().submenu[0], find('workbuddy-enabled'),
+    { id: 'quota-cards-settings', label: '联动样式管理', click: () => openGlobalSettings('quota-cards') },
     { type: 'separator' }, find('global-settings'), find('about-open'), find('update-check'),
     { type: 'separator' }, items.find(item => item.label === '退出球球')].filter(Boolean);
 }
@@ -3266,6 +3269,10 @@ function registerIpc() {
   });
   ipcMain.on('pet:offering-state', (event, state) => {
     if (!fromPetWindow(event)) return;
+    const ink=state?.ink;
+    if(state?.settled===true&&ink&&[ink.x,ink.y,ink.width,ink.height].every(Number.isFinite)&&ink.x>=0&&ink.y>=0&&ink.width>0&&ink.height>0&&ink.x+ink.width<=1.001&&ink.y+ink.height<=1.001) {
+      sheepBarInk={ink:{x:ink.x,y:ink.y,width:ink.width,height:ink.height}};syncQuotaCardGroup();
+    }
     sheepOfferingWindow?.update(state);
     const next = normalizeSheepOfferingState(state);
     if (next?.theme !== 'christmas') sheepQuotaInk = null;
@@ -3323,6 +3330,7 @@ function registerIpc() {
     edgeTuck?.beginDrag();
     const [x, y] = petWindow.getPosition();
     dragState = { pointer: point, window: { x, y }, moved: false };
+    quotaCardGroup?.dismiss();syncQuotaLabel(codexCompanion?.getSnapshot());
   });
 
   ipcMain.on('pet:drag-move', (event, rawPoint) => {
@@ -3610,7 +3618,7 @@ async function bootstrap() {
       const api = apiUsageLabel?.getWindow();
       return zcodeLink?.getVisibleBounds?.() || (api && !api.isDestroyed() && api.isVisible() ? api.getBounds() : quotaLabel?.getVisibleBounds?.());
     },
-    getPresentation: () => ({ ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut || quotaCardGroupAnimate('workbuddy'), quotaGroupAnimate: quotaCardGroupAnimate('workbuddy'), quotaGroupHidden: quotaCardCollected('workbuddy') || quotaFreeStackPlan()?.hidden?.includes('workbuddy'), quotaGroupLayout: quotaFreeStackPlan()?.cards.workbuddy }),
+    getPresentation: () => ({ ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut || quotaCardGroupAnimate('workbuddy'), quotaGroupAnimate: quotaCardGroupAnimate('workbuddy'), quotaGroupIndex: quotaCardConfig().order.indexOf('workbuddy'), quotaReducedMotion: quotaReducedMotion(), quotaGroupHidden: quotaCardCollected('workbuddy') || quotaFreeStackPlan()?.hidden?.includes('workbuddy'), quotaGroupLayout: quotaFreeStackPlan()?.cards.workbuddy }),
     onLayout: syncQuotaFreeStack,
     getGuardEntry: () => settings.workbuddyEnabled === true && settings.workbuddyQuotaAlwaysVisible !== false && settings.workbuddyQuotaFunEnabled !== false
       && !(settings.zcodeQuotaFunEnabled !== false && zcodeLink?.isCardAvailable()) && !quotaLabel?.isGuardEntryVisible?.() && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible(),
@@ -3695,7 +3703,7 @@ async function bootstrap() {
     getGuardEntry: () => settings?.codexQuotaFunEnabled !== false,
     getSuppressed: () => shortcutWindow?.isPresenting() === true || codexDetails?.isVisible() === true || workbuddyDetails?.isVisible() === true || zcodeLink?.isDetailsVisible() === true || quotaGuard?.isVisible() === true,
     getPresentation: () => ({
-      ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut || quotaCardGroupAnimate('codex'), quotaGroupAnimate: quotaCardGroupAnimate('codex'),
+      ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut || quotaCardGroupAnimate('codex'), quotaGroupAnimate: quotaCardGroupAnimate('codex'), quotaGroupIndex: quotaCardConfig().order.indexOf('codex'), quotaReducedMotion: quotaReducedMotion(),
       shape: settings?.customization?.appearance?.shape,
       quotaStyle: quotaDisplayConfig().style,
       quotaGroupHidden: quotaCardCollected('codex') || quotaFreeStackPlan()?.hidden?.includes('codex'), quotaGroupLayout: quotaFreeStackPlan()?.cards.codex,
@@ -3726,7 +3734,7 @@ async function bootstrap() {
     getQuotaWindow: () => quotaLabel?.getWindow(), getObstacleBounds: quotaObstacleBounds,
     getQuotaBounds: () => quotaLabel?.getVisibleBounds(),
     getAppearance: () => settings?.codexQuotaAppearance,
-    getPresentation: () => ({ ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut || quotaCardGroupAnimate('api'), quotaGroupAnimate: quotaCardGroupAnimate('api'), shape: settings?.customization?.appearance?.shape,
+    getPresentation: () => ({ ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut || quotaCardGroupAnimate('api'), quotaGroupAnimate: quotaCardGroupAnimate('api'), quotaGroupIndex: quotaCardConfig().order.indexOf('api'), quotaReducedMotion: quotaReducedMotion(), shape: settings?.customization?.appearance?.shape,
       quotaStyle: quotaDisplayConfig().style, quotaGroupHidden: quotaCardCollected('api') || quotaFreeStackPlan()?.hidden?.includes('api'), quotaGroupLayout: quotaFreeStackPlan()?.cards.api }),
     onOpenDetails: openApiUsage, onLayout: () => { syncQuotaFreeStack(); zcodeLink?.reposition(); workbuddyLabel?.reposition(); }, alwaysOnTop: settings.alwaysOnTop,
     onError: error => writeError('API 常驻卡片', error) });
@@ -3744,7 +3752,7 @@ async function bootstrap() {
     getPetWindow: () => petWindow,
     getObstacles: () => [quotaLabel?.getVisibleBounds(), apiUsageLabel?.getWindow()?.isVisible()
       ? apiUsageLabel.getWindow().getBounds() : null, quotaObstacleBounds()].filter(Boolean),
-    getPresentation: () => ({ ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut || quotaCardGroupAnimate('zcode'), quotaGroupAnimate: quotaCardGroupAnimate('zcode'), shape: settings?.customization?.appearance?.shape,
+    getPresentation: () => ({ ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut || quotaCardGroupAnimate('zcode'), quotaGroupAnimate: quotaCardGroupAnimate('zcode'), quotaGroupIndex: quotaCardConfig().order.indexOf('zcode'), quotaReducedMotion: quotaReducedMotion(), shape: settings?.customization?.appearance?.shape,
       quotaBottomAligned: true, quotaStackBelow: zcodeQuotaStackBounds(),
       quotaStyle: quotaDisplayConfig().style, sheepTheme: settings?.customization?.appearance?.sheepTheme,
       quotaGroupHidden: quotaCardCollected('zcode') || quotaFreeStackPlan()?.hidden?.includes('zcode'), quotaGroupLayout: quotaFreeStackPlan()?.cards.zcode }),
@@ -3775,11 +3783,17 @@ async function bootstrap() {
   edgeNotice = createEdgeNotice({ now: () => edgeNoticeNow(), ...(IS_SMOKE_TEST && process.env.PET_SMOKE_WORKBUDDY_ONLY === '1' ? { random: () => 0 } : {}), onChange: payload => {
     safelyInvokeWindow('边缘提示', () => payload ? edgeNoticeWindow.show(payload) : edgeNoticeWindow.hide());
   } });
-  quotaCardGroupWindow = createQuotaCardGroupWindow({BrowserWindow,screen,ipcMain,onLayout:()=>syncQuotaFreeStack(),getAlwaysOnTop:()=>settings.alwaysOnTop,getPetWindow:()=>petWindow,getPresentation:()=>edgeTuck?.getPresentation(),
+  quotaCardGroupWindow = createQuotaCardGroupWindow({BrowserWindow,screen,ipcMain,onLayout:()=>syncQuotaFreeStack(),getAlwaysOnTop:()=>settings.alwaysOnTop,getPetWindow:()=>petWindow,getPresentation:()=>{
+      const pet=petWindow?.getBounds(),area=pet&&screen.getDisplayMatching(pet).workArea;
+      const controllers={codex:quotaLabel,api:apiUsageLabel,zcode:zcodeLink,workbuddy:workbuddyLabel};
+      return {...edgeTuck?.getPresentation(),shape:settings?.customization?.appearance?.shape,sheepInk:sheepBarInk||sheepQuotaInk,
+        sheepTheme:SheepTheme.resolveTheme(settings?.customization?.appearance?.sheepTheme,new Date()),facing:pet&&area?PetFacing.resolve(pet,area):'left',
+        cardStackBounds:quotaCardConfig().pinned.map(id=>controllers[id]?.getVisibleBounds?.()).filter(Boolean)};
+    },
     onActivate:()=>quotaCardGroup?.activate(),onDismiss:()=>quotaCardGroup?.dismiss()});
   quotaCardGroup = createQuotaCardGroup({schedule:setTimeout,cancel:clearTimeout,now:()=>Date.now(),getState:quotaCardGroupInput,getCursor:()=>screen.getCursorScreenPoint(),
     getBounds:expanded=>[quotaCardGroupWindow?.getBounds(),...(expanded?[quotaLabel?.getVisibleBounds(),apiUsageLabel?.getVisibleBounds(),zcodeLink?.getVisibleBounds(),workbuddyLabel?.getVisibleBounds()]:[])].filter(Boolean),
-    onChange:state=>{const changedCollection=state.bar||quotaGroupLastActive;quotaGroupLastActive=state.bar;edgeTuck?.pin(state.expanded,'quota-card-group');if(state.bar)quotaCardGroupWindow?.show(state);else quotaCardGroupWindow?.hide();if(changedCollection&&!quotaCardGroupInput().suppressed){syncQuotaLabel(codexCompanion?.getSnapshot());syncQuotaFreeStack();}}});
+    onChange:state=>{if(quotaGroupWasExpanded&&!state.expanded){quotaLabel?.resetExpanded?.();apiUsageLabel?.resetExpanded?.();zcodeLink?.resetExpanded?.();workbuddyLabel?.resetExpanded?.();}quotaGroupWasExpanded=state.expanded;const changedCollection=state.bar||quotaGroupLastActive;quotaGroupLastActive=state.bar;edgeTuck?.pin(state.expanded,'quota-card-group');if(state.bar)quotaCardGroupWindow?.show(state);else quotaCardGroupWindow?.hide();if(changedCollection&&!quotaCardGroupInput().suppressed){syncQuotaLabel(codexCompanion?.getSnapshot());syncQuotaFreeStack();}}});
   quotaCardGroup.start();
   initializeShortcuts();
   codexIconPreference = createCodexIconPreference({ onChange: refreshCodexIcon,

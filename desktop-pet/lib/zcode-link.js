@@ -154,7 +154,7 @@ function createZcodeLink({ BrowserWindow, screen, ipcMain, getSettings, save, fi
         && !details.isVisible() && pet && !pet.isDestroyed() && pet.isVisible()
         && buildCard(service.getSnapshot(), { size: getSettings().zcodeQuotaLabelSize }).state === 'ready');
     },
-    getWindow: card.getWindow, getVisibleBounds: card.getVisibleBounds, getLayoutMetrics: card.getLayoutMetrics,
+    resetExpanded: card.resetExpanded, getWindow: card.getWindow, getVisibleBounds: card.getVisibleBounds, getLayoutMetrics: card.getLayoutMetrics,
     reposition() { card.reposition(); sync(); },
     hide(options) { card.hide(options); details.close(); },
     setAlwaysOnTop(value) { card.setAlwaysOnTop(value); details.setAlwaysOnTop(value); },
