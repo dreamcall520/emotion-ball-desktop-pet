@@ -1,3 +1,4 @@
+const { captureQuotaGroupFrames } = require('./quota-group-capture');
 const { sendQuotaCardMotion } = require('./quota-card-motion');
 const { createNativeWindowFade } = require('./native-window-fade');
 const path = require('node:path');
@@ -81,6 +82,7 @@ function safeState(state) {
 function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuotaWindow = () => null, getQuotaBounds = null,
   getObstacleBounds = () => null, getAppearance = () => 'system', getPresentation = () => null,
   onOpenDetails = () => {}, onLayout = () => {}, alwaysOnTop = true, onError = () => {} }) {
+  let groupTransitionMode = null, groupTransitionEpoch = 0, groupResumeImmediate = false;
   let win = null, ready = false, requestedVisible = false, current = null, expanded = false, resetExpandedPending = false;
   let topmost = Boolean(alwaysOnTop), revision = 0, presenting = false, pending = false;
   let observedQuota = null, quotaListener = null;
@@ -104,6 +106,7 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
     try { if (target && !target.isDestroyed()) target.destroy(); } catch (error) { reportError(error); }
   }
   function destroy() {
+    groupTransitionMode=null;groupTransitionEpoch++;
     revision += 1;
     const previous = win;
     win = null;
@@ -129,6 +132,7 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
     }
   }
   function hide({ animate = false } = {}) {
+    groupTransitionMode=null;groupTransitionEpoch++;
     revision += 1;
     requestedVisible = false;
     expanded = false;
@@ -163,6 +167,7 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
     return next && next.isVisible() ? (getQuotaBounds ? getQuotaBounds() : next.getBounds()) : null;
   }
   function present() {
+    if(groupTransitionMode==='hold'||groupTransitionMode==='masked')return;
     if (presenting) { pending = true; return; }
     presenting = true;
     let activeTarget = win;
@@ -193,9 +198,9 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
         const steps = [
           () => target.setBounds(apiLabelBounds(bounds, area, quota, obstacle, expanded, presentation), false),
           () => target.webContents.send(CHANNEL, payload),
-          () => target.setIgnoreMouseEvents(false),
-          () => { motionAnimate=sendQuotaCardMotion(target, true, presentation, presentation?.quotaGroupAnimate === true || ['peeked', 'tucked'].includes(presentation?.mode)); },
-          () => fade.show(target, motionAnimate)
+          () => target.setIgnoreMouseEvents(groupTransitionMode==='stage', {forward:true}),
+          () => { if(groupTransitionMode==='stage'){sendQuotaCardMotion(target,true,{...presentation,quotaGroupAnimate:false},false);return;} motionAnimate=sendQuotaCardMotion(target, true, presentation, !groupResumeImmediate && (presentation?.quotaGroupAnimate === true || ['peeked', 'tucked'].includes(presentation?.mode))); },
+          () => {if(groupTransitionMode==='stage'){fade.cancel(target);target.hide();}else fade.show(target,motionAnimate);}
         ];
         for (const step of steps) {
           if (!active(target, token)) break;
@@ -243,9 +248,10 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
       for (const event of ['will-navigate', 'will-attach-webview']) {
         target.webContents.on(event, event => event.preventDefault());
       }
+      target.webContents.on('did-start-loading',()=>{if(win===target){ready=false;groupTransitionEpoch++;}});
       target.webContents.on('ipc-message', (event, channel) => {
         const token = revision;
-        if (![TOGGLE_CHANNEL, OPEN_CHANNEL].includes(channel) || win !== target || !ready ||
+        if (groupTransitionMode || ![TOGGLE_CHANNEL, OPEN_CHANNEL].includes(channel) || win !== target || !ready ||
             !requestedVisible || !live(target) || !target.isVisible() ||
             event?.sender !== target.webContents ||
             target.webContents.mainFrame && event.senderFrame !== target.webContents.mainFrame) return;
@@ -287,12 +293,24 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
       try { ensureWindow(); present(); } catch (error) { failed(error, win); }
     },
     hide, reposition, destroy, resetExpanded() { resetExpandedPending=true; },
+    setGroupTransitionMode(mode) {
+      if(![null,'hold','stage','masked'].includes(mode)||mode===groupTransitionMode)return;
+      groupTransitionMode=mode;groupTransitionEpoch++;
+      if(live(win)){fade.cancel(win);win.setIgnoreMouseEvents(true,{forward:true});if(mode==='stage'||mode==='masked')win.hide();}
+      groupResumeImmediate=mode===null;try{if(mode===null||mode==='stage')present();}finally{groupResumeImmediate=false;}
+    },
+    captureGroupTransitionFrames() {
+      const stageAvailable=()=>groupTransitionMode!=='stage'||getPresentation()?.quotaGroupHidden!==true;
+      if(!stageAvailable())return Promise.reject(new Error('Quota group stage has no visible layout'));
+      const epoch=groupTransitionEpoch,target=win;
+      return captureQuotaGroupFrames({getTargets:()=>[target],isReady:()=>ready&&requestedVisible&&win===target&&live(target),isCurrent:()=>stageAvailable()&&epoch===groupTransitionEpoch&&target===win});
+    },
     getWindow() {
       if (win && !live(win)) { failed(new Error('API 费用标签窗口不可用'), win); }
       return win;
     },
     getVisibleBounds() {
-      if (!requestedVisible || !live(win) || !win.isVisible()) return null;
+      if (!requestedVisible || !live(win) || !win.isVisible() && groupTransitionMode!=='stage') return null;
       const bounds = win.getBounds(), inset = expanded ? 0 : 2;
       return { x: bounds.x + inset, y: bounds.y + inset,
         width: bounds.width - inset * 2, height: bounds.height - inset * 2 };

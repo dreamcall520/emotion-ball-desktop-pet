@@ -30,6 +30,7 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
   const commands = [];
   const connections = [];
   const preferences = [];
+  const groupTransition={requests:[],cancels:0,active:false,options:null,current:null};
   const iconPreference = { value: 'codex-system', dark: false, calls: [] };
   const dialogs = [];
   const external = [];
@@ -215,6 +216,12 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
         return { getPreference: () => iconPreference.value, getSystemDark: () => iconPreference.dark, start: () => { iconPreference.calls.push('start'); },
           pause: () => { iconPreference.calls.push('pause'); }, close: () => { iconPreference.calls.push('close'); } };
       } };
+      if(name==='./lib/quota-card-group-transition')return {createQuotaCardGroupTransition:options=>{groupTransition.options=options;return {
+        request(input){groupTransition.requests.push(input);groupTransition.current=input;groupTransition.active=true;input.prepare();return Promise.resolve({ok:true});},
+        cancel(){groupTransition.cancels++;if(groupTransition.active){const input=groupTransition.current;groupTransition.active=false;options.onSettled({expanded:input.expanded,contextKey:input.contextKey,canceled:true});}},
+        isActive:()=>groupTransition.active,getRetentionBounds:()=>[],warm:()=>Promise.resolve(),destroy(){groupTransition.active=false;},
+        finish(){const input=groupTransition.current;groupTransition.active=false;options.onSettled({expanded:input.expanded,contextKey:input.contextKey,canceled:false});}
+      };}};
       if (name === './lib/settings') return { ...realRequire(name), loadSettings: () => loadedSettings ? structuredClone(loadedSettings) : ({ size: 'tiny', x: -600, y: 100,
         quotaCardPinned, bubblesEnabled, colorMode, uiTheme, notesDefaultTab, notesAppearance, keepAwake: false, alwaysOnTop: true, codexEnabled, codexTaskNameInAlerts,
         workbuddyEnabled: false, workbuddyConsentVersion: 0, workbuddyModel: 'auto', chatProvider: 'codex',
@@ -284,7 +291,7 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
   const pet = windows[0];
   pet.emit('ready-to-show');
   pet.webContents.emit('did-finish-load');
-  return { pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, downloads, revealed, consents, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
+  return { groupTransition, pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, downloads, revealed, consents, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
     iconPreference, workbuddyCalls, workbuddyRecords, notes, pomodoro, pomodoroWindows, nativeTheme, call: expression => vm.runInContext(expression, context),
     pressShortcut(accelerator) { if (!shortcutsSuspended) shortcutCallbacks.get(accelerator)?.(); },
     invoke(channel, packet, sender = pet.webContents, ...args) {
@@ -4053,7 +4060,7 @@ test('quota card collection uses real enable flags, persists pin/order and rejec
  const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,quotaCardPinned:[]});t.after(()=>f.app.emit('before-quit'));
  f.call('settings.openaiApiAlwaysVisible=true;syncQuotaLabel(codexCompanion.getSnapshot())');
  assert.equal(f.call('quotaCardGroup.getState().bar'),true);assert.equal(f.call("quotaCardCollected('codex')"),true);
- assert.equal(f.call("quotaCardGroupAnimate('codex')"),true);
+ assert.equal(f.call("quotaCardGroupAnimate('codex')"),false,'single-card fades are replaced by one group overlay');
  f.call('screenLocked=true');assert.equal(f.call("quotaCardGroupAnimate('codex')"),false);f.call('screenLocked=false');
  f.call('dragState={moved:true}');assert.equal(f.call("quotaCardGroupAnimate('codex')"),false);f.call('dragState=null');
  f.call('quotaCardGroup.activate()');assert.equal(f.call("quotaCardCollected('codex')"),false);
@@ -4063,7 +4070,7 @@ test('quota card collection uses real enable flags, persists pin/order and rejec
  assert.equal(result.ok,true);assert.deepEqual(Array.from(result.config.order),['api','codex','zcode','workbuddy']);
  f.call('quotaCardGroup.dismiss()');assert.equal(f.call("quotaCardCollected('codex')"),true);assert.equal(f.call("quotaCardCollected('api')"),false);
  assert.deepEqual(Array.from(f.saved.at(-1).quotaCardPinned),['api']);
- assert.equal(f.call("quotaCardGroupAnimate('api')"),false);assert.equal(f.call("quotaCardGroupAnimate('codex')"),true);
+ assert.equal(f.call("quotaCardGroupAnimate('api')"),false);assert.equal(f.call("quotaCardGroupAnimate('codex')"),false,'single-card fades are replaced by one group overlay');
  f.call('settings.openaiApiAlwaysVisible=false;syncQuotaLabel(codexCompanion.getSnapshot())');assert.equal(f.call('quotaCardGroup.getState().bar'),false);assert.equal(f.call("quotaCardCollected('codex')"),false);
 });
 
@@ -4104,4 +4111,47 @@ test('local import rejects a hidden or reloading customization session while ima
  const state=f.call('JSON.stringify(settings)');const first=f.invoke('pet:local-pets-import',undefined,editor.webContents);await flush();editor.hide();f.call("localPetStore.finish({id:'codex-'+ 'c'.repeat(64),name:'late',rows:9,version:1,spritesheetPath:'/fixture/sprite.png'})");assert.equal((await first).ok,false);assert.equal(f.call('JSON.stringify(settings)'),state);
  editor.show();const second=f.invoke('pet:local-pets-import',undefined,editor.webContents);await flush();editor.webContents.emit('did-start-loading');f.call("localPetStore.finish({id:'codex-'+ 'c'.repeat(64),name:'late',rows:9,version:1,spritesheetPath:'/fixture/sprite.png'})");assert.equal((await second).ok,false);assert.equal(f.call('JSON.stringify(settings)'),state);
  const third=f.invoke('pet:local-pets-import',undefined,editor.webContents);await flush();f.powerMonitor.emit('lock-screen');f.powerMonitor.emit('unlock-screen');editor.show();f.call("localPetStore.finish({id:'codex-'+ 'c'.repeat(64),name:'late',rows:9,version:1,spritesheetPath:'/fixture/sprite.png'})");assert.equal((await third).ok,false,'lock then unlock cannot revive an old import');assert.equal(f.call('JSON.stringify(settings)'),state);
+});
+
+test('pinned native cards detach from both dock edges during drag and reflow at release for blob and sheep',async t=>{
+ for(const shape of ['blob','new-year-sheep'])for(const side of ['left','right']){
+  const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,nativeQuotaLabel:true});t.after(()=>f.app.emit('before-quit'));
+  f.call(`settings.customization.appearance.shape='${shape}';settings.quotaCardPinned=['codex'];settings.openaiApiAlwaysVisible=true;shortcutWindow.wakeFromEdge=()=>false;sheepBarInk={ink:{x:.1,y:.2,width:.8,height:.6}}`);
+  f.connections[0].callbacks.onQuota({updatedAt:1800000000000,windows:[{id:'codex:primary',label:'Codex',windowMinutes:300,remaining:74,resetsAt:1800018000000}]});
+  const card=f.call('quotaLabel.getWindow()');card.webContents.emit('did-finish-load');
+  f.call(`edgeTuck.dock('${side}');edgeTuck.sampleCursor({x:petWindow.getBounds().x+40,y:petWindow.getBounds().y+40})`);
+  const initial=f.pet.getBounds();f.send('pet:drag-start',{x:initial.x+40,y:initial.y+40});f.send('pet:drag-move',{x:-380,y:240});
+  const during=f.call('quotaFreeStackPlan()');assert.equal(f.call('quotaLayoutPresentation().mode'),'free');assert.equal(card.getBounds().x,during.cards.codex.x);assert(during.cards.codex.face.x>-650&&during.cards.codex.face.x<-100,'card follows the moved pet instead of old screen edge');
+  f.send('pet:drag-end');assert.equal(f.call('edgeTuck.getPresentation().mode'),'free');assert.equal(card.getBounds().x,f.call('quotaFreeStackPlan().cards.codex.x'));
+  f.pet.setPosition(-440,520,false);const above=f.call('quotaFreeStackPlan()');assert.equal(above.placement,'above');const paintedTop=shape==='blob'?520:536;assert.equal(paintedTop-(above.cards.codex.face.y+above.cards.codex.face.height),8);
+  const bar=f.call('quotaCardGroupWindow.getBounds()');assert(bar.y+13.5<=above.cards.codex.face.y-6,'bar stays above upper stack without touching blob');
+ }
+});
+test('switching sheep to blob clears alpha caches and ignores late sheep packets',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call("settings.customization.appearance.shape='new-year-sheep';sheepBarInk={ink:{x:.2,y:.4,width:.5,height:.3}};sheepQuotaInk={ink:{x:.2,y:.4,width:.5,height:.3}};saveCustomization({appearance:{shape:'blob'}})");assert.equal(f.call('sheepBarInk'),null);assert.equal(f.call('sheepQuotaInk'),null);
+ f.send('pet:offering-state',{settled:true,eligible:true,theme:'halloween',facing:'left',ink:{x:.2,y:.4,width:.5,height:.3}});assert.equal(f.call('sheepBarInk'),null);
+});
+
+test('group overlay owns unpinned cards, excludes pins and resets card details only after completed exit',async t=>{
+ const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,quotaCardPinned:['api']});t.after(()=>f.app.emit('before-quit'));let resets=0;f.quotaLabel.resetExpanded=()=>resets++;
+ f.call("settings.openaiApiAlwaysVisible=true;syncQuotaLabel();quotaCardGroup.activate({keyboard:false})");
+ assert.equal(f.groupTransition.requests.at(-1).expanded,true);assert.deepEqual(Array.from(f.groupTransition.requests.at(-1).cards,row=>row.id),['codex']);assert.equal(f.groupTransition.requests.at(-1).anchor.width,26);
+ f.call('quotaCardGroupTransition.finish();quotaCardGroup.dismiss()');assert.equal(f.groupTransition.requests.at(-1).expanded,false);assert.equal(resets,0,'exit capture keeps original detail dimensions');f.call('quotaCardGroupTransition.finish()');assert.equal(resets,1);
+ f.call('quotaCardGroup.activate({keyboard:false})');const cancels=f.groupTransition.cancels;f.powerMonitor.emit('lock-screen');assert(f.groupTransition.cancels>cancels);assert.equal(f.groupTransition.active,false);
+});
+
+test('real menu preferences map through the settings snapshot to four checked management DOM controls',async t=>{
+ const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true});t.after(()=>f.app.emit('before-quit'));
+ f.call('settings.zcodeEnabled=true;settings.zcodeQuotaAlwaysVisible=true;settings.openaiApiAlwaysVisible=true;settings.workbuddyEnabled=true;settings.workbuddyQuotaAlwaysVisible=true;openGlobalSettings("quota-cards")');
+ const win=f.call('globalSettingsWindow');win.emit('ready-to-show');const snapshot=await f.invoke('pet:global-settings-get',undefined,win.webContents);
+ const leaves=entries=>entries.flatMap(entry=>[entry,...(entry.children?leaves(entry.children):[])]);
+ for(const id of ['/codex-menu/codex-quota-visible','/zcode-menu/zcode-quota-visible','/codex-menu/openai-api-menu/openai-api-visible','/workbuddy-quota-visible'])assert.equal(leaves(snapshot.entries).find(e=>e.id===id).checked,true,id);
+ await require('./helpers/verify-quota-card-snapshot-dom')(snapshot);
+});
+
+test('drag cancellation of an already-closing overlay still resets details while a newly reopened group is protected',async t=>{
+ const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,quotaCardPinned:[]});t.after(()=>f.app.emit('before-quit'));let resets=0;f.quotaLabel.resetExpanded=()=>resets++;
+ f.call('settings.openaiApiAlwaysVisible=true;syncQuotaLabel();quotaCardGroup.activate({keyboard:false});quotaCardGroupTransition.finish();quotaCardGroup.dismiss()');assert.equal(resets,0);assert.equal(f.groupTransition.current.expanded,false);
+ const pet=f.pet.getBounds();f.send('pet:drag-start',{x:pet.x+40,y:pet.y+40});assert.equal(f.groupTransition.active,false);assert.equal(resets,1,'closing context invalidation must leave a pending compact reset');
+ f.send('pet:drag-end');f.call('quotaCardGroup.activate({keyboard:false})');const before=resets;f.groupTransition.options.onSettled({expanded:false,canceled:true,contextKey:'old-closing-context'});assert.equal(resets,before,'late closing cancellation cannot reset a reopened group');
 });

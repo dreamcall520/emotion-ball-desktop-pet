@@ -75,8 +75,8 @@
     const expiration = upcoming[0], date = at => new Date(at).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
     const expiring = expiration ? upcoming.filter(e => e.at === expiration.at).reduce((total, e) => total + e.amount, 0) : 0;
     el('expiry-block').dataset.warning = String(Boolean(expiration));
-    el('expiry-note').textContent = expiration ? `${amount(expiring)} 积分 · ${date(expiration.at)} 到期` : state.report ? '暂无已知即将到期积分' : '暂未取得积分余额';
-    el('refresh-note').textContent = Number.isFinite(state.report?.nextRefreshAt) ? `${date(state.report.nextRefreshAt)} 刷新` : '刷新时间暂未知';
+    el('expiry-note').textContent = expiration ? `${amount(expiring)} 积分 ${date(expiration.at)} 到期` : state.report ? '暂无已知即将到期积分' : '暂未取得积分余额';
+    el('refresh-note').textContent = Number.isFinite(state.report?.nextRefreshAt) ? `基础积分 ${date(state.report.nextRefreshAt)} 刷新` : '刷新时间暂未知';
     el('balance-note').textContent = state.stale ? '余额为上次查询结果，请刷新。' : '';
     el('balance-note').hidden = !state.stale;
     resize();

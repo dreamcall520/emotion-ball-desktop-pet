@@ -29,3 +29,13 @@ test('peeked capsule centers on real sheep body and bottom fallback is 7px from 
  assert.equal(b.x+24,Math.max(24,Math.min(976,pet.x+80*.4)));
  assert(Math.abs((pet.y+80*.2)-(b.y+13.5)-7)<=.5);}
 });
+
+test('bottom pinned stack keeps capsule above the whole stack instead of overlapping the blob',()=>{
+ const pet={x:400,y:520,width:80,height:80},area={x:0,y:0,width:1000,height:600},card={x:376,y:484,width:128,height:28};
+ const b=quotaCardBarBounds(pet,area,{shape:'blob',cardStackBounds:[card]});assert(b.y+13.5<=card.y-6);assert(b.y+b.height<=pet.y);
+});
+
+test('pointer click opens without a hold, while keyboard hold and Escape remain accessible',()=>{
+ const f=fixture();f.group.start();f.group.activate({keyboard:false});assert.equal(f.group.getState().expanded,true);f.tick(1);f.tick(220);assert.equal(f.group.getState().expanded,false,'pointer activation closes after leaving group');
+ f.group.activate({keyboard:true});f.tick(1000);assert.equal(f.group.getState().expanded,true);f.group.dismiss();f.move({x:10,y:10});assert.equal(f.group.getState().expanded,false,'Escape blocks immediate hover reopen');f.move({x:500,y:500});f.move({x:10,y:10});assert.equal(f.group.getState().expanded,true);f.group.close();
+});

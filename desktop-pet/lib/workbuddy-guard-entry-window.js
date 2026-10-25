@@ -14,20 +14,23 @@ function entryBounds(card, area, obstacles = [], side = null) {
   return null;
 }
 function createWorkBuddyGuardEntryWindow({ BrowserWindow, onGuard = () => {}, onError = () => {}, alwaysOnTop = true }) {
+  let groupTransitionMode=null;
   let win = null, ready = false, visible = false, layout = null, top = Boolean(alwaysOnTop), presenting = false;
   const file = path.join(__dirname, '../workbuddy-guard-entry.html'), url = pathToFileURL(file).href;
   const live = target => target && !target.isDestroyed() && !target.webContents.isDestroyed?.();
   const report = error => { try { onError(error); } catch (_) {} };
-  function hide() { visible = false; if (live(win) && win.isVisible()) win.hide(); }
-  function destroy() { const old = win; win = null; ready = visible = false; if (live(old)) old.destroy(); }
+  function hide({safety=false}={}) { if(safety)groupTransitionMode=null; visible = false; if (live(win) && win.isVisible()) win.hide(); }
+  function destroy() { groupTransitionMode=null; const old = win; win = null; ready = visible = false; if (live(old)) old.destroy(); }
   function present() {
+    if (groupTransitionMode==='hold'||groupTransitionMode==='masked')return;
     if (presenting || !ready || !visible || !layout || !live(win)) return;
     presenting = true;
     try {
       const previous = win.getBounds();
       if (Object.keys(layout.bounds).some(k => previous[k] !== layout.bounds[k])) win.setBounds(layout.bounds, false);
       win.webContents.send(CHANNEL, { state: 'ready', practice: true, items: [], guardEntry: true, expanded: false, visible: true, size: 'compact', guardSide: layout.side, guardTargetWidth: 48 });
-      if (!win.isVisible()) win.showInactive();
+      win.setIgnoreMouseEvents?.(groupTransitionMode!==null,{forward:true});
+      if(groupTransitionMode==='stage')win.hide();else if (!win.isVisible()) win.showInactive();
     } catch (error) { hide(); report(error); }
     finally { presenting = false; }
   }
@@ -40,8 +43,9 @@ function createWorkBuddyGuardEntryWindow({ BrowserWindow, onGuard = () => {}, on
     target.setAlwaysOnTop(top, 'floating'); target.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); target.setHiddenInMissionControl(true);
     target.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     for (const event of ['will-navigate', 'will-attach-webview']) target.webContents.on(event, e => e.preventDefault());
+    target.webContents.on('did-start-loading',()=>{if(win===target)ready=false;});
     target.webContents.on('ipc-message', (event, channel) => {
-      if (channel !== `${CHANNEL}-open` || win !== target || !ready || !visible || !target.isVisible() || event.sender !== target.webContents || event.senderFrame !== target.webContents.mainFrame || event.sender.getURL() !== url) return;
+      if (groupTransitionMode || channel !== `${CHANNEL}-open` || win !== target || !ready || !visible || !target.isVisible() || event.sender !== target.webContents || event.senderFrame !== target.webContents.mainFrame || event.sender.getURL() !== url) return;
       try { onGuard(); } catch (error) { report(error); }
     });
     const loaded = () => { if (win === target && !ready) { ready = true; present(); } };
@@ -52,6 +56,9 @@ function createWorkBuddyGuardEntryWindow({ BrowserWindow, onGuard = () => {}, on
   }
   return { show(card, area, obstacles, side) { layout = entryBounds(card, area, obstacles, side); if (!layout) { hide(); return; } visible = true; try { ensure(); present(); } catch (error) { destroy(); report(error); } }, hide, destroy,
     getWindow: () => live(win) ? win : null,
+    getCaptureWindow: () => visible&&ready&&live(win)?win:null,
+    isCaptureReady: () => !visible || ready&&live(win),
+    setGroupTransitionMode(mode) {if(![null,'hold','stage','masked'].includes(mode))return;groupTransitionMode=mode;if(live(win)){win.setIgnoreMouseEvents?.(true,{forward:true});if(mode==='stage'||mode==='masked')win.hide();}if(mode===null||mode==='stage')present();},
     setAlwaysOnTop(value) { top = Boolean(value); try { if (live(win)) win.setAlwaysOnTop(top, 'floating'); } catch (error) { report(error); } } };
 }
 module.exports = { createWorkBuddyGuardEntryWindow, entryBounds };

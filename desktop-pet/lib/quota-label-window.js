@@ -1,3 +1,4 @@
+const { captureQuotaGroupFrames } = require('./quota-group-capture');
 const { sendQuotaCardMotion } = require('./quota-card-motion');
 const { createNativeWindowFade } = require('./native-window-fade');
 const path = require('node:path');
@@ -195,6 +196,7 @@ function createQuotaLabelWindow({
   const channel = sourceId === 'zcode' ? 'pet:zcode-quota-label' : CHANNEL;
   const toggleChannel = sourceId === 'zcode' ? 'pet:zcode-quota-label-toggle' : TOGGLE_CHANNEL;
   const pointerChannel = sourceId === 'zcode' ? 'pet:zcode-quota-label-pointer' : POINTER_CHANNEL;
+  let groupTransitionMode = null, groupTransitionEpoch = 0, groupResumeImmediate = false;
   let win = null;
   let ready = false;
   let requestedVisible = false;
@@ -374,6 +376,7 @@ function createQuotaLabelWindow({
     const token = operation;
     const model = currentModel;
     if (!ready || !confirm(target, token, model)) return;
+    if (groupTransitionMode === 'hold' || groupTransitionMode === 'masked') return;
     const presentation = getPresentation();
     // Tuck notifications can reflow siblings before their explicit hide call.
     if (getSuppressed() || presentation?.quotaGroupHidden === true ||
@@ -410,7 +413,8 @@ function createQuotaLabelWindow({
       else target.setIgnoreMouseEvents(true, { forward: true });
     } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
-    try { const animate=sendQuotaCardMotion(target, true, presentation, presentation?.quotaGroupAnimate === true || ['peeked', 'tucked'].includes(presentation?.mode)); if(!confirm(target,token,model))return; fade.show(target, animate); } catch (error) { detach(target, error); return; }
+    if (groupTransitionMode === 'stage') { fade.cancel(target); target.setIgnoreMouseEvents(true, { forward: true }); sendQuotaCardMotion(target, true, { ...presentation, quotaGroupAnimate: false }, false); target.hide(); notifyLayout(); return; }
+    try { const animate=sendQuotaCardMotion(target, true, presentation, !groupResumeImmediate && (presentation?.quotaGroupAnimate === true || ['peeked', 'tucked'].includes(presentation?.mode))); if(!confirm(target,token,model))return; fade.show(target, animate); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) {
       if (win === target && !requestedVisible) conceal(target, operation);
       return;
@@ -528,7 +532,9 @@ function createQuotaLabelWindow({
       () => loadingWindow.webContents.on('will-navigate', event => {
         try { event.preventDefault(); } catch (_) {}
       }),
+      () => loadingWindow.webContents.on('did-start-loading',()=>{if(win===loadingWindow){ready=false;groupTransitionEpoch++;}}),
       () => loadingWindow.webContents.on('ipc-message', (event, channel, value) => {
+        if (groupTransitionMode) return;
         if (channel === pointerChannel) {
           if (typeof value !== 'boolean' || win !== loadingWindow || !requestedVisible || !ready ||
             !loadingWindow.isVisible() || event?.sender !== loadingWindow.webContents ||
@@ -585,6 +591,7 @@ function createQuotaLabelWindow({
   }
 
   function hide({ animate = false } = {}) {
+    groupTransitionMode = null; groupTransitionEpoch++;
     operation += 1;
     requestedVisible = false;
     if (currentModel?.expanded === true) currentModel = { ...currentModel, expanded: false };
@@ -592,6 +599,7 @@ function createQuotaLabelWindow({
   }
 
   function destroy() {
+    groupTransitionMode = null; groupTransitionEpoch++;
     operation += 1;
     requestedVisible = false;
     currentModel = null;
@@ -637,6 +645,19 @@ function createQuotaLabelWindow({
       try { present(); } catch (error) { if (win) detach(win, error); else report(error); }
     },
     getWindow,
+    setGroupTransitionMode(mode) {
+      if (![null,'hold','stage','masked'].includes(mode) || mode===groupTransitionMode) return;
+      groupTransitionMode=mode; groupTransitionEpoch++;
+      const target=getWindow();
+      if(target){fade.cancel(target);target.setIgnoreMouseEvents(true,{forward:true});if(mode==='stage'||mode==='masked')target.hide();}
+      groupResumeImmediate=mode===null;try{if(mode===null||mode==='stage')present();}finally{groupResumeImmediate=false;}
+    },
+    captureGroupTransitionFrames() {
+      const stageAvailable=()=>groupTransitionMode!=='stage'||getPresentation()?.quotaGroupHidden!==true;
+      if(!stageAvailable())return Promise.reject(new Error('Quota group stage has no visible layout'));
+      const epoch=groupTransitionEpoch,target=win;
+      return captureQuotaGroupFrames({getTargets:()=>[target],isReady:()=>ready&&requestedVisible&&win===target&&Boolean(target),isCurrent:()=>stageAvailable()&&groupTransitionEpoch===epoch&&win===target});
+    },
     resetExpanded() { resetExpandedPending=true; },
     getLayoutMetrics() {
       const target=getWindow();
@@ -647,7 +668,7 @@ function createQuotaLabelWindow({
     },
     getVisibleBounds() {
       const target = getWindow();
-      if (!target || !requestedVisible || !currentModel?.items.length || !target.isVisible()) return null;
+      if (!target || !requestedVisible || !currentModel?.items.length || !target.isVisible() && groupTransitionMode !== 'stage') return null;
       const bounds = target.getBounds();
       const card = quotaLabelSize(currentModel.size, currentModel.expanded, currentModel.items.length,
         Boolean(currentModel.extraCredits), false, null, sourceId);

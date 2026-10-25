@@ -1,14 +1,7 @@
-/* Two lightweight text groups; only an actual upcoming expiry is emphasized. */
-.credit-notes { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 16px; border:0; padding-top:4px; margin-top:10px; }
-.credit-note { min-width:0; padding:0; border:0; border-radius:0; background:transparent; }
-.credit-note-label { display:block; margin-bottom:3px; color:var(--detail-subtle); font-size:10px; line-height:14px; }
-.credit-note-value { display:block; color:var(--detail-ink); font-size:11px; font-weight:500; line-height:17px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
-.credit-note[data-warning="true"] .credit-note-label { color:#a65b20; }
-.credit-note[data-warning="true"] .credit-note-value { color:#98501a; font-weight:600; }
-:root[data-appearance="dark"] .credit-note[data-warning="true"] .credit-note-label { color:#edb47b; }
-:root[data-appearance="dark"] .credit-note[data-warning="true"] .credit-note-value { color:#f5c18a; }
-@media(prefers-color-scheme:dark) {
-  :root[data-appearance="system"] .credit-note[data-warning="true"] .credit-note-label { color:#edb47b; }
-  :root[data-appearance="system"] .credit-note[data-warning="true"] .credit-note-value { color:#f5c18a; }
-}
-@media(max-width:360px) { .credit-notes { grid-template-columns:minmax(0,1fr); gap:7px; } .credit-note { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:3px 10px; } .credit-note-label { margin:0; } }
+/* One quiet metadata line; actual upcoming expiry gets restrained emphasis. */
+.credit-notes { display:flex; flex-wrap:wrap; align-items:baseline; gap:3px 9px; border-top:1px solid var(--detail-line); padding-top:9px; margin-top:10px; font-size:10px; line-height:17px; font-weight:400; font-variant-numeric:tabular-nums; }
+.credit-notes > span { min-width:0; overflow-wrap:anywhere; }
+.credit-note-separator { align-self:center; flex:none; width:1px; height:10px; background:var(--detail-line); }
+#expiry-block[data-warning="true"] { color:#a25a25; font-weight:600; }
+:root[data-appearance="dark"] #expiry-block[data-warning="true"] { color:#edb47b; }
+@media(prefers-color-scheme:dark) { :root[data-appearance="system"] #expiry-block[data-warning="true"] { color:#edb47b; } }
