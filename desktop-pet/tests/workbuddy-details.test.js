@@ -69,7 +69,10 @@ test('consumption failure never substitutes balance drops, fake zero, curves or 
   receive({ report: { total: 7399.91, updatedAt: now, nextRefreshAt: now + 7 * 86400000, expires: [{ at: now + 2 * 86400000, amount: 99.91 }] }, history: [{ at: now - 300000, total: 7500 }, { at: now, total: 7399.91 }] });
   assert.equal(get('balance').textContent, '7,399.91'); assert.equal(get('change').textContent, '—');
   assert.equal(get('hint').textContent, '消耗统计暂不可用'); assert.equal(get('unavailable-note').textContent, '暂未取得 WorkBuddy 官方消耗记录');
-  assert.match(get('expiry-note').textContent, /99.91积分/); assert.match(get('refresh-note').textContent, /基础积分/);
+  assert.equal(get('expiry-block').dataset.warning,'true');
+  assert.match(get('expiry-note').textContent, /99.91 积分/); assert.match(get('refresh-note').textContent, /刷新/);
+  receive({report:null});assert.equal(get('expiry-block').dataset.warning,'false');assert.equal(get('expiry-note').textContent,'暂未取得积分余额');assert.equal(get('refresh-note').textContent,'刷新时间暂未知');
+  receive({report:{total:0,expires:[]}});assert.equal(get('expiry-note').textContent,'暂无已知即将到期积分');assert.equal(get('refresh-note').textContent,'刷新时间暂未知');
   get('view-daily').listeners.click(); get('week').listeners.click();
   assert.equal(get('change-label').textContent, '近7天消耗'); assert.equal(get('change').textContent, '—');
   assert.equal(get('hint').textContent, '消耗统计暂不可用'); assert.equal(get('view-daily').attrs['aria-selected'], 'true');

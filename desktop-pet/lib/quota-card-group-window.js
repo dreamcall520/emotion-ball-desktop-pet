@@ -8,7 +8,7 @@ function quotaCardBarBounds(pet,area,presentation={}) {
     visual={x:pet.x+pet.width*ink.x,y:pet.y+pet.height*ink.y,width:pet.width*ink.width,height:pet.height*ink.height};
   const cards=(presentation.cardStackBounds||[]).filter(b=>b&&[b.x,b.y,b.width,b.height].every(Number.isFinite));
   const anchor=cards.length?{x:Math.min(...cards.map(b=>b.x)),y:Math.min(...cards.map(b=>b.y)),width:Math.max(...cards.map(b=>b.x+b.width))-Math.min(...cards.map(b=>b.x)),height:Math.max(...cards.map(b=>b.y+b.height))-Math.min(...cards.map(b=>b.y))}:visual;
-  const x=presentation.mode==='peeked' ? presentation.side==='left'?area.x+2:area.x+area.width-width-2 : anchor.x+(anchor.width-width)/2;
+  const x=visual.x+(visual.width-width)/2;
   // The painted 7px capsule starts 6.5px inside its 20px native hit target.
   const below=anchor.y+anchor.height+.5, above=Math.min(anchor.y,visual.y)-height-.5;
   const y=below+height<=area.y+area.height?below:above;

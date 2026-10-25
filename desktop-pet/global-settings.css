@@ -269,3 +269,6 @@ body { padding-top:38px; }
 .quota-card-settings .row[draggable=true] { cursor:grab; }
 .quota-card-settings .row.dragging { opacity:.45; }
 .quota-card-settings .row.drag-over { box-shadow:inset 0 2px 0 var(--accent-text); background:var(--nav-active); }
+
+.quota-card-controls { min-width:0; }
+.quota-card-name { flex-shrink:0; }

@@ -48,6 +48,7 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/workbuddy-guard-entry-preload.js',
     'desktop-pet/lib/workbuddy-details-window.js',
     'desktop-pet/workbuddy-details.html',
+    'desktop-pet/workbuddy-details.css',
     'desktop-pet/workbuddy-details-preload.js',
     'desktop-pet/workbuddy-details-renderer.js',
     'desktop-pet/workbuddy-label.html',

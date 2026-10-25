@@ -145,6 +145,8 @@
     section.append(el('h3', '额度卡管理'), el('p', '调整四张卡的显示顺序。固定展示的卡不参与收纳，仍遵循各来源的联动与显示开关。', 'description group-intro'));
     const names = { codex: 'Codex', api: 'OpenAI API', zcode: 'ZCode', workbuddy: 'WorkBuddy' };
     const config = snapshot.quotaCards || { order: Object.keys(names), pinned: [] };
+    const displayIds = { codex: '/codex-menu/codex-quota-visible', api: '/codex-menu/openai-api-menu/openai-api-visible', zcode: '/zcode-menu/zcode-quota-visible', workbuddy: '/workbuddy-quota-visible' };
+    const displayActions = snapshot.entries.flatMap(entry => leaves(entry));
     config.order.forEach((source, index) => {
       if (!names[source]) return;
       const row = el('div', '', 'row'); row.dataset.quotaCard = source; row.draggable = !busy;
@@ -177,6 +179,14 @@
         button.onclick = () => { const order = [...config.order]; [order[index], order[index + offset]] = [order[index + offset], order[index]]; saveQuotaCards({ order, pinned: [...config.pinned] }); };
         controls.append(button);
       }
+      const visibility = displayActions.find(item => item.id === displayIds[source]);
+      const displayLabel = el('label', '', 'quota-card-pin'); const displayCheckbox = el('input'); displayCheckbox.type = 'checkbox';
+      displayCheckbox.checked = visibility?.checked === true; displayCheckbox.disabled = busy || !visibility?.enabled;
+      displayCheckbox.setAttribute('aria-label', `${names[source]}显示额度卡`);
+      if (visibility) displayCheckbox.dataset.action = visibility.id;
+      if (!visibility?.enabled) displayLabel.title = visibility ? '请先开启该来源的联动。' : '当前来源设置暂不可用。';
+      displayCheckbox.onchange = () => { if (visibility?.enabled) act(visibility); };
+      displayLabel.append(displayCheckbox, document.createTextNode('显示额度卡')); controls.append(displayLabel);
       const label = el('label', '', 'quota-card-pin'); const checkbox = el('input'); checkbox.type = 'checkbox';
       checkbox.checked = config.pinned.includes(source); checkbox.disabled = busy; checkbox.setAttribute('aria-label', `${names[source]}固定展示`);
       checkbox.onchange = () => saveQuotaCards({ order: [...config.order], pinned: checkbox.checked ? [...config.pinned, source] : config.pinned.filter(value => value !== source) });

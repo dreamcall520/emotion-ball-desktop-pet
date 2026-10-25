@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('petCustomizer', {
     return () => ipcRenderer.removeListener('pet:color-mode', listener);
   },
   load: () => ipcRenderer.invoke('pet:customization-get'),
+  listLocalPets: () => ipcRenderer.invoke('pet:local-pets-list'),
+  importLocalPet: () => ipcRenderer.invoke('pet:local-pets-import'),
   listCodexPets: () => ipcRenderer.invoke('pet:codex-pets-list'),
   setSize: size => ipcRenderer.invoke('pet:customization-size', size),
   onSize: callback => {

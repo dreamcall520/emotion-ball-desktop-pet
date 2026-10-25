@@ -83,7 +83,7 @@ function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getOb
       const presentation = getPresentation();
       // Stop before reading a disappearing stack anchor during the edge exit.
       if (presentation?.mode === 'tucked' && presentation.quotaAnimateHide === true) { hide({ animate: true }); return; }
-      if (presentation?.quotaGroupHidden === true) { guard.hide(); win.setIgnoreMouseEvents?.(true, { forward: true }); fade.hide(win, { animate: sendQuotaCardMotion(win, false, presentation, presentation.quotaGroupAnimate === true) }); return; }
+      if (presentation?.quotaGroupHidden === true) { guard.hide(); win.setIgnoreMouseEvents?.(true, { forward: true }); fade.hide(win, { animate: sendQuotaCardMotion(win, false, presentation, presentation.quotaGroupAnimate === true), ...(presentation.quotaGroupAnimate ? {duration:220,easing:'group-collapse'} : {}) }); return; }
       if(resetExpandedPending){expanded=false;resetExpandedPending=false;}
       const pet = getPetWindow();
       if (!pet || pet.isDestroyed() || !pet.isVisible()) { fade.hide(win); guard.hide(); return; }

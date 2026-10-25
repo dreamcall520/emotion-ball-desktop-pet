@@ -39,7 +39,7 @@
         </div>
       </section>
       <section class="controls" aria-label="选择与定制形象">
-        <div class="source-switch" role="tablist" aria-label="定制设置"><button id="source-ball" type="button" aria-controls="ball-options" aria-pressed="true">球球外观</button><button id="source-codex" type="button" aria-controls="codex-panel" aria-pressed="false">Codex 宠物</button><button id="source-quota" type="button" aria-controls="quota-panel" aria-pressed="false">额度展示</button></div>
+        <div class="source-switch" role="tablist" aria-label="定制设置"><button id="source-ball" type="button" aria-controls="ball-options" aria-pressed="true">球球外观</button><button id="source-codex" type="button" aria-controls="codex-panel" aria-pressed="false">Codex 宠物</button><button id="source-local" type="button" aria-controls="local-panel" aria-pressed="false">其他伙伴</button><button id="source-quota" type="button" aria-controls="quota-panel" aria-pressed="false">额度展示</button></div>
         <div id="ball-options" role="tabpanel" aria-labelledby="source-ball">
         <div class="group-heading"><h3>形态</h3><span id="shape-hint" hidden></span></div>
         <div id="shape-options" class="shape-options" role="group" aria-label="球球形态"></div>
@@ -123,6 +123,13 @@
           <div id="pet-grid" class="pet-grid" role="group" aria-label="选择 Codex 宠物" title="在列表内滚动，可查看全部宠物"></div>
           <div id="pet-read-state" class="codex-state" role="status" hidden></div>
           <div id="pet-settings" class="pet-settings"><h3>显示设置</h3><div class="setting-row"><label for="pet-size">桌面尺寸</label><select id="pet-size"><option value="micro">袖珍 · 60 px</option><option value="tiny" selected>迷你 · 80 px</option><option value="compact">紧凑 · 108 px</option><option value="small">标准 · 120 px</option><option value="medium">大 · 180 px</option><option value="large">特大 · 260 px</option></select></div><p class="size-hint">与设置菜单共用尺寸，形象按原比例缩放。</p><div class="setting-row opacity-row"><label for="pet-opacity">透明度</label><input id="pet-opacity" type="range" min="0" max="60" value="0"><output id="pet-opacity-value">0%</output></div></div>
+        </section>
+        <section id="local-panel" role="tabpanel" aria-labelledby="source-local" hidden>
+          <div class="codex-heading"><span id="local-read-status" class="read-status" role="status">本地导入的伙伴</span><button id="refresh-local-pets" class="text-button refresh-pets" type="button">刷新</button></div>
+          <button id="import-local-pet" class="action local-import" type="button">导入素材文件夹</button>
+          <p class="local-pet-help">选择包含 pet.json 与 PNG / WebP 精灵图的文件夹。v1：1536 × 1872；v2：1536 × 2288。普通单图、GIF 不会自动转换为可播放宠物。</p>
+          <div id="local-pet-grid" class="pet-grid" role="group" aria-label="选择其他伙伴"></div>
+          <div id="local-read-state" class="codex-state" role="status">还没有导入伙伴。导入后可预览，保存设置后才应用到桌面。</div>
         </section>
         <section id="quota-panel" role="tabpanel" aria-labelledby="source-quota" hidden>
           <div class="group-heading"><h3>展示样式</h3></div><div id="quota-styles" class="quota-styles" role="group" aria-label="展示样式"></div>

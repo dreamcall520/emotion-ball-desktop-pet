@@ -124,7 +124,7 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
     if (win !== target || revision !== token || !live(target)) return;
     target.setIgnoreMouseEvents(true, { forward: true });
     if (win === target && revision === token) {
-      fade.hide(target, { animate: sendQuotaCardMotion(target, false, getPresentation(), animate) });
+      fade.hide(target, { animate: sendQuotaCardMotion(target, false, getPresentation(), animate), ...(getPresentation()?.quotaGroupAnimate ? {duration:220,easing:'group-collapse'} : {}) });
       if (win === target && revision === token) notifyLayout();
     }
   }

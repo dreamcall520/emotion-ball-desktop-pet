@@ -109,7 +109,7 @@ let petMenuToken = 0;
 let tray = null;
 let settings = null;
 let settingsFile = null;
-let codexPets = null;
+let codexPets = null, localPetStore = null, localPetImportBusy = false, localPetImportSession = null;
 let dragState = null;
 let bounceState = null;
 let isQuitting = false;
@@ -760,15 +760,19 @@ function effectiveCustomization(value) {
     appearance: effectiveAppearance(customization.appearance) };
 }
 
+function importedPet(id) {
+  try { return {...codexPets.getImported(id),origin:'codex'}; } catch (_) {}
+  try { return {...localPetStore.getImported(id),origin:'local'}; } catch (_) {}
+  return {...codexPets.resolve(id),origin:'codex'};
+}
+function fromLocalPetWindow(event) { return fromCustomizationWindow(event)&&customizationWindow.isVisible()&&event.senderFrame===customizationWindow.webContents.mainFrame; }
+function localPetImportIsCurrent() { const s=localPetImportSession;return Boolean(s&&!s.invalid&&customizationWindow===s.owner&&!s.owner.isDestroyed()&&s.owner.isVisible()&&s.owner.webContents.mainFrame===s.frame&&!screenLocked&&!isQuitting); }
+function localPetDescriptor(pet) { return {id:pet.id,importedId:pet.importedId,name:pet.name,version:pet.version,rows:pet.rows,imageURL:pathToFileURL(pet.spritesheetPath).href,imported:true,origin:'local'}; }
 function codexPetDescriptor(appearance) {
   if (appearance?.shape !== 'codex-pet' || !codexPets) return null;
   let pet;
-  try { pet = codexPets.getImported(appearance.codexPetId); }
-  catch (_) {
-    try { pet = codexPets.resolve(appearance.codexPetId); }
-    catch (_) { return null; }
-  }
-  return { id: pet.id, name: pet.name, version: pet.version, rows: pet.rows,
+  try { pet = importedPet(appearance.codexPetId); } catch (_) { return null; }
+  return { id: pet.id, name: pet.name, version: pet.version, rows: pet.rows, origin:pet.origin,
     imageURL: pathToFileURL(pet.spritesheetPath).href };
 }
 
@@ -776,7 +780,7 @@ function importCodexAppearance(appearance) {
   if (appearance.shape !== 'codex-pet') return appearance;
   let pet;
   try { pet = codexPets.getImported(appearance.codexPetId); }
-  catch (_) { pet = codexPets.importPet(appearance.codexPetId); }
+  catch (_) { try { pet=localPetStore.getImported(appearance.codexPetId); } catch (_) { pet = codexPets.importPet(appearance.codexPetId); } }
   return { ...appearance, codexPetId: pet.id };
 }
 
@@ -1062,7 +1066,7 @@ function quotaFreeStackPlan() {
   const area=screen.getDisplayMatching(pet).workArea,style=quotaDisplayConfig().style;
   return quotaFreeStackBounds(pet,area,
     {codex:quotaCardCollected('codex')?null:quotaLabel?.getLayoutMetrics?.(),api:quotaCardCollected('api')?null:apiUsageLabel?.getLayoutMetrics?.(),zcode:quotaCardCollected('zcode')?null:zcodeLink?.getLayoutMetrics?.(),workbuddy:quotaCardCollected('workbuddy')?null:workbuddyLabel?.getLayoutMetrics?.()},
-    {...edgeTuck?.getPresentation(),quotaCardOrder:quotaCardConfig().order,quotaCardBarBounds:quotaCardConfig().pinned.some(id=>quotaCardGroup?.getState().eligible.includes(id))?null:quotaCardGroupWindow?.getBounds(),shape:settings?.customization?.appearance?.shape,quotaStyle:style,
+    {...edgeTuck?.getPresentation(),quotaCardOrder:quotaCardConfig().order,quotaCardBarBounds:null,quotaCardVisualInk:sheepBarInk,shape:settings?.customization?.appearance?.shape,quotaStyle:style,
       facing:PetFacing.resolve(pet,area),sheepInk:sheepQuotaInk?.quotaStyle===style?sheepQuotaInk:null,
       sheepTheme:SheepTheme.resolveTheme(settings?.customization?.appearance?.sheepTheme,new Date())},quotaObstacleBounds());
 }
@@ -3190,6 +3194,33 @@ function registerIpc() {
       startupAppearance: effectiveAppearance(settings.startupAppearance),
       codexPet: codexPetDescriptor(settings.customization.appearance), size: settings.size,
       quotaDisplay: quotaDisplayConfig({ fallback: false }), quotaModel: quotaDisplayModel() } : null);
+  ipcMain.handle('pet:local-pets-list', event => {
+    if(!fromLocalPetWindow(event)||screenLocked)return {ok:false,error:'请重新打开定制页后操作'};
+    try { const result=localPetStore.listImported(); return {ok:true,skipped:result.skipped,pets:result.pets.map(localPetDescriptor)}; }
+    catch (_) {return {ok:false,error:'暂时无法读取本地伙伴，请稍后重试'};}
+  });
+  ipcMain.handle('pet:local-pets-import', async event => {
+    if(!fromLocalPetWindow(event)||screenLocked||localPetImportBusy)return {ok:false,error:'当前无法导入，请稍后重试'};
+    localPetImportBusy=true;
+    const owner=customizationWindow, session={owner,frame:event.senderFrame,invalid:false};
+    localPetImportSession=session;
+    const invalidate=()=>{session.invalid=true;};
+    for(const type of ['hide','closed'])owner.on(type,invalidate);
+    for(const type of ['did-start-loading','render-process-gone'])owner.webContents.on(type,invalidate);
+    try {
+      const result=await dialog.showOpenDialog(owner,{title:'导入本地伙伴',message:'选择包含 pet.json 和精灵图的文件夹',properties:['openDirectory']});
+      if(result.canceled||!result.filePaths?.length)return {ok:false,canceled:true};
+      if(!localPetImportIsCurrent())return {ok:false,error:'请重新打开定制页后操作'};
+      const pet=await localPetStore.importDirectory(result.filePaths[0]);
+      if(!localPetImportIsCurrent())return {ok:false,error:'请重新打开定制页后操作'};
+      return {ok:true,pet:localPetDescriptor(pet)};
+    } catch (_) {return {ok:false,error:'导入失败，请检查 pet.json 与静态 PNG/WebP 精灵图格式及大小'};}
+    finally {
+      for(const type of ['hide','closed'])owner.removeListener(type,invalidate);
+      for(const type of ['did-start-loading','render-process-gone'])owner.webContents.removeListener(type,invalidate);
+      localPetImportBusy=false;localPetImportSession=null;
+    }
+  });
   ipcMain.handle('pet:codex-pets-list', event => {
     if (!fromCustomizationWindow(event) || screenLocked) return { ok: false, error: '请重新打开定制页后操作' };
     try {
@@ -3508,6 +3539,14 @@ async function bootstrap() {
     importRoot: path.join(app.getPath('userData'), 'codex-pets'),
     readImageSize: (buffer, extension, size) => extension === '.png' ? nativeImage.createFromBuffer(buffer).getSize() : size
   });
+  localPetStore=createCodexPetStore({namespace:'local',canPublishImport:localPetImportIsCurrent,sourceRoot:path.join(app.getPath('userData'),'local-pets'),importRoot:path.join(app.getPath('userData'),'local-pets'),
+    readImageSize:(buffer,extension,size)=>extension==='.png'?nativeImage.createFromBuffer(buffer).getSize():size,
+    validateImport:async(pet,buffer)=>{
+      const owner=customizationWindow;if(!localPetImportIsCurrent())return false;
+      const mime=path.extname(pet.spritesheetPath).toLowerCase()==='.webp'?'image/webp':'image/png';
+      const dimensions=await owner.webContents.executeJavaScriptInIsolatedWorld(1004,[{code:`new Promise(resolve=>{const image=new Image();const timer=setTimeout(()=>resolve(null),5000);image.onload=async()=>{try{await image.decode();const bitmap=await createImageBitmap(image);bitmap.close();const canvas=document.createElement('canvas');canvas.width=canvas.height=1;canvas.getContext('2d').drawImage(image,0,0,1,1);clearTimeout(timer);resolve({width:image.naturalWidth,height:image.naturalHeight})}catch(_){clearTimeout(timer);resolve(null)}};image.onerror=()=>{clearTimeout(timer);resolve(null)};image.src=${JSON.stringify(`data:${mime};base64,${buffer.toString('base64')}`)}})`}]);
+      return localPetImportIsCurrent()&&dimensions?.width===1536&&dimensions?.height===pet.rows*208;
+    }});
   apiUsage = createApiUsage({ filePath: path.join(app.getPath('userData'), 'openai-api-usage.enc'), safeStorage,
     ...(IS_SMOKE_TEST && process.env.PET_SMOKE_API_USAGE_ONLY === '1'
       ? { get: require('./scripts/verify-api-usage-integration').smokeGet,
@@ -3809,6 +3848,7 @@ async function bootstrap() {
     onError: error => writeError('活动状态检测', error)
   });
   const pause = () => {
+    if(localPetImportSession)localPetImportSession.invalid=true;
     screenLocked = true;
     codexIconPreference?.pause();
     workbuddyEnableToken++; workbuddyConsent?.cancel();

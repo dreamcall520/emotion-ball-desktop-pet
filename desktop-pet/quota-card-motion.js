@@ -1,21 +1,37 @@
 (function () {
   function createQuotaCardMotion(element, media) {
-    let animation = null, visible = null;
-    function cancel() { if (animation) animation.cancel(); animation = null; }
+    let animation = null, contentAnimations = [], visible = null;
+    const contents = () => {
+      const rows=Array.from(element.querySelector?.('#quota-label')?.children || element.children || []);
+      const guard=element.ownerDocument?.getElementById('quota-guard-entry');
+      if(guard&&!element.contains(guard))rows.push(guard);
+      return rows;
+    };
+    function cancel() { animation?.cancel(); animation = null; for (const item of contentAnimations) item.cancel(); contentAnimations=[]; }
     function update(value) {
       if (!value || typeof value.visible !== 'boolean') return;
       const showing = value.visible;
       if (visible === showing && value.animate === true) return;
       visible = showing;
-      const current = typeof getComputedStyle === 'function' ? getComputedStyle(element).transform : 'none';
+      const style = typeof getComputedStyle === 'function' ? getComputedStyle(element) : null;
+      const current = style?.transform || 'none';
+      const children = contents(), painted = children.map(child => {
+        const state = typeof getComputedStyle === 'function' ? getComputedStyle(child) : null;
+        return { opacity:state?.opacity || '1', filter:state?.filter || 'none' };
+      });
       cancel();
       if (!value.animate || media?.matches || typeof element.animate !== 'function') { element.style.transform = ''; return; }
-      const resting = 'translateY(0px) scale(1)', folded = 'translateY(-.5px) scale(.97)';
+      const resting = 'scale(1, 1)', folded = 'scale(.22, .18)';
       const from = current && current !== 'none' ? current : showing ? folded : resting;
+      const delay = showing ? Math.min(3,Math.max(0,value.index|0))*8 : 0;
       animation = element.animate([{transform:from},{transform:showing?resting:folded}], {
-        duration:showing?160:130, delay:showing ? Math.min(3,Math.max(0,value.index|0))*8:0,
-        easing:showing?'cubic-bezier(.2,.8,.2,1)':'cubic-bezier(.4,0,.8,1)', fill:'both'
+        duration:showing?200:220, delay,
+        easing:'cubic-bezier(.32,0,.2,1)', fill:'both'
       });
+      contentAnimations = children.filter(child=>typeof child.animate==='function').map((child,index) => child.animate(showing
+        ? [{opacity:current==='none'?0:painted[index].opacity,filter:current==='none'?'blur(2px)':painted[index].filter},{opacity:1,filter:'blur(0px)'}]
+        : [{opacity:painted[index].opacity,filter:painted[index].filter},{opacity:0,filter:'blur(2px)',offset:.5},{opacity:0,filter:'blur(2px)'}],
+        {duration:showing?170:220,delay,easing:'cubic-bezier(.2,.7,.2,1)',fill:'both'}));
     }
     const reduce = () => { if(media?.matches){cancel();element.style.transform='';} };
     media?.addEventListener?.('change',reduce);

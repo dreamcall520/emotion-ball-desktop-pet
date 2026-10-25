@@ -710,3 +710,15 @@ test('expanded card group clears the real collection bar below or above without 
     for(const row of Object.values(plan.cards))assertInside(row,area);
   }
 });
+
+test('live sheep ink puts the collected group first face 8px from painted feet or head, with no hidden bar spacer',()=>{
+ const {quotaFreeStackBounds}=require('../lib/quota-label-placement');
+ const area={x:0,y:0,width:1000,height:900},cards={codex:{width:128,height:32,inset:2},api:{width:128,height:32,inset:2}};
+ for(const mode of ['free','peeked'])for(const side of ['left','right'])for(const y of [0,820]){
+  const pet={x:side==='left'?0:920,y,width:80,height:80},ink={x:.15,y:.2,width:.65,height:.6};
+  const plan=quotaFreeStackBounds(pet,area,cards,{mode,side,shape:'new-year-sheep',quotaCardVisualInk:{ink},quotaCardOrder:['codex','api'],quotaCardBarBounds:null});
+  const faces=Object.values(plan.cards).map(c=>c.face);
+  if(plan.placement==='below')assert.equal(faces[0].y-(pet.y+80*.8),8);
+  else assert.equal(pet.y+80*.2-(faces.at(-1).y+faces.at(-1).height),8);
+ }
+});

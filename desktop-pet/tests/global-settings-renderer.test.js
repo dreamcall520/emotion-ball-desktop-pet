@@ -212,6 +212,23 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("document.querySelector('main').scrollTop=500;navigate('quota-cards')");
     assert.equal(await run("document.querySelector('#navigation [aria-current=page]').textContent"),'贴边与显示');
     assert.equal(await run("document.querySelector('main').scrollTop"),0,'right-click navigation opens card management at the top');
+    await run("findEntry('/workbuddy-quota-visible').enabled=false;navigate('quota-cards')");
+    assert.equal(await run("document.querySelector('[aria-label=WorkBuddy显示额度卡]').disabled"),true,'visibility keeps source action eligibility');
+    assert.match(await run("document.querySelector('[aria-label=WorkBuddy显示额度卡]').parentElement.title"),/先开启/);
+    for (const [name,id] of [['Codex','/codex-menu/codex-quota-visible'],['OpenAI API','/codex-menu/openai-api-menu/openai-api-visible'],['ZCode','/zcode-menu/zcode-quota-visible'],['WorkBuddy','/workbuddy-quota-visible']]) {
+      const control=await run(`(()=>{const e=[...document.querySelectorAll('.quota-card-settings input')].find(e=>e.getAttribute('aria-label')===${JSON.stringify(name+'显示额度卡')});return {id:e.dataset.action,checked:e.checked}})()`);
+      assert.equal(control.id,id);assert.equal(control.checked,await run(`findEntry(${JSON.stringify(id)}).checked`));
+    }
+    const apiVisibleBefore=await run("findEntry('/codex-menu/openai-api-menu/openai-api-visible').checked");
+    await run(`window.actMode='apply';document.querySelector('[aria-label="OpenAI API显示额度卡"]').click()`); await run('new Promise(resolve=>setTimeout(resolve,10))');
+    assert.equal(await run("findEntry('/codex-menu/openai-api-menu/openai-api-visible').checked"),!apiVisibleBefore);
+    assert.deepEqual(await run('window.snapshot.quotaCards.pinned'),[],'visibility cannot overwrite pin config');
+    await run(`window.actMode='throw';document.querySelector('[aria-label="OpenAI API显示额度卡"]').click()`); await run('new Promise(resolve=>setTimeout(resolve,10))');
+    assert.equal(await run("document.querySelector('[aria-label=\"OpenAI API显示额度卡\"]').checked"),!apiVisibleBefore,'failed display save restores snapshot state');
+    await run(`window.actMode='apply';navigate('api');document.querySelector('[data-action="/codex-menu/openai-api-menu/openai-api-visible"]').click()`); await run('new Promise(resolve=>setTimeout(resolve,10))');
+    await run("navigate('quota-cards')");
+    assert.equal(await run("document.querySelector('[aria-label=\"OpenAI API显示额度卡\"]').checked"),apiVisibleBefore,'provider page and management share the same setting');
+
 
     assert.equal(await run("document.querySelector('[aria-label=Codex上移]').disabled"),true);
     await run("document.querySelector('[aria-label=Codex下移]').click()"); await run('new Promise(resolve=>setTimeout(resolve,10))');
@@ -234,6 +251,8 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("document.documentElement.dataset.appearance='light'");
     assert.equal(await run("[...document.querySelectorAll('.quota-card-settings .row')].every(e=>{const r=e.getBoundingClientRect();return e.scrollWidth<=e.clientWidth+1&&r.right<=innerWidth})"),true,'card controls stay within the settings panel');
 
+    win.setSize(740,820);await run('new Promise(resolve=>setTimeout(resolve,25))');
+    assert.equal(await run("[...document.querySelectorAll('.quota-card-settings .row')].every(e=>e.scrollWidth<=e.clientWidth+1)"),true,'visibility and pin controls wrap inside narrow settings');
     await run("window.snapshot.initialView='quota-cards';window.snapshot.version='initial-alias-test'");
     await run(fs.readFileSync(path.join(sourceRoot, 'desktop-pet/global-settings-renderer.js'), 'utf8'));
     await run('new Promise(resolve=>setTimeout(resolve,20))');

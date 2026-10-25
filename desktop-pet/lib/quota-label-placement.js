@@ -89,8 +89,11 @@ function quotaFreeStackBounds(petBounds, workArea, cards, presentation, bubble =
   const rows = ids.map(id => ({ id, ...cards?.[id] }));
   if (rows.some(row => !Number.isFinite(row.width) || row.width <= 0 || !Number.isFinite(row.height) || row.height <= 0)) return null;
   const area = safeArea(workArea), nativePet = safePet(petBounds, area);
-  const visual = petVisualBounds(nativePet,presentation.shape,{...presentation,quotaAnchor:true,quotaGuard:rows.some(row=>row.guardTargetWidth>0)});
-  const pet = ['ring','duo','split','stages'].includes(presentation.quotaStyle)
+  let visual = petVisualBounds(nativePet,presentation.shape,{...presentation,quotaAnchor:true,quotaGuard:rows.some(row=>row.guardTargetWidth>0)});
+  const liveInk=presentation.quotaCardVisualInk?.ink;
+  const hasLiveInk=presentation.shape==='new-year-sheep'&&liveInk&&[liveInk.x,liveInk.y,liveInk.width,liveInk.height].every(Number.isFinite)&&liveInk.x>=0&&liveInk.y>=0&&liveInk.width>0&&liveInk.height>0&&liveInk.x+liveInk.width<=1.001&&liveInk.y+liveInk.height<=1.001;
+  if(hasLiveInk)visual={x:nativePet.x+nativePet.width*liveInk.x,y:nativePet.y+nativePet.height*liveInk.y,width:nativePet.width*liveInk.width,height:nativePet.height*liveInk.height};
+  const pet = !hasLiveInk && ['ring','duo','split','stages'].includes(presentation.quotaStyle)
     ? presentation.shape === 'new-year-sheep' ? nativePet : {...visual,y:nativePet.y,height:nativePet.height} : visual;
   const preferredCenter=pet.x+pet.width/2, obstacle=safeObstacle(bubble), bar=safeObstacle(presentation.quotaCardBarBounds);
   for(const row of rows) {

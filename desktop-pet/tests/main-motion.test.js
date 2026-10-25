@@ -4075,3 +4075,33 @@ test('compact integration style management opens quota cards directly and naviga
  assert.equal((await f.invoke('pet:global-settings-get',undefined,win.webContents)).initialView,'quota-cards');
  item.click();assert.equal(f.call('globalSettingsWindow'),win);assert.deepEqual(win.messages.at(-1),{channel:'pet:global-settings-navigate',packet:'quota-cards'});
 });
+
+test('local partner import takes a native directory choice only, keeps current appearance and resolves the independent copy on save',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization()');const editor=f.call('customizationWindow');editor.emit('ready-to-show');
+ const id=`codex-${'e'.repeat(64)}`;f.call(`localPetStore={calls:[],getImported(id){if(id!==${JSON.stringify(id)})throw Error('missing');return {id,importedId:id,name:'本地伙伴',version:2,rows:11,spritesheetPath:'/fixture/local-pets/sprite.png'}},listImported(){return {pets:[this.getImported(${JSON.stringify(id)})],skipped:0}},importDirectory(folder){this.calls.push(folder);return this.getImported(${JSON.stringify(id)})}};dialog.showOpenDialog=async(owner,options)=>{if(owner!==customizationWindow||options.properties[0]!=='openDirectory')throw Error('bad picker');return {canceled:false,filePaths:['/native-selected-folder']}}`);
+ const before=f.call('JSON.stringify(settings)'),saved=f.saved.length;
+ assert.equal((await f.invoke('pet:local-pets-import',{folder:'/renderer-path'})).ok,false);
+ const result=await f.invoke('pet:local-pets-import',{folder:'/renderer-path'},editor.webContents);assert.equal(result.ok,true);assert.equal(result.pet.origin,'local');assert.equal(f.call('localPetStore.calls[0]'),'/native-selected-folder');assert.equal(f.call('JSON.stringify(settings)'),before);assert.equal(f.saved.length,saved);
+ const list=await f.invoke('pet:local-pets-list',undefined,editor.webContents);assert.equal(list.pets[0].origin,'local');assert.equal(list.pets[0].id,id);
+ editor.webContents.executeJavaScriptInIsolatedWorld=async()=>({width:1536,height:2288});assert.equal(await f.invoke('pet:customization-save',{appearance:{shape:'codex-pet',codexPetId:id}},editor.webContents),true);assert.equal(f.call('settings.customization.appearance.codexPetId'),id);assert.equal(f.call('codexPetDescriptor(settings.customization.appearance).origin'),'local');
+ f.call("dialog.showOpenDialog=async()=>({canceled:true,filePaths:[]})");const state=f.call('JSON.stringify(settings)');assert.equal((await f.invoke('pet:local-pets-import',undefined,editor.webContents)).canceled,true);assert.equal(f.call('JSON.stringify(settings)'),state);assert.equal(f.call('localPetStore.calls.length'),1);
+ editor.hide();assert.equal((await f.invoke('pet:local-pets-list',undefined,editor.webContents)).ok,false);
+});
+
+test('local import picker is single flight and a lock or replaced customization window cannot publish after selection',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization()');const editor=f.call('customizationWindow');editor.emit('ready-to-show');
+ f.call("localPetStore={calls:0,importDirectory(){this.calls++;throw Error('must not run')}};dialog.showOpenDialog=()=>new Promise(resolve=>dialog.finishLocalPick=resolve)");
+ const before=f.call('JSON.stringify(settings)'),pending=f.invoke('pet:local-pets-import',undefined,editor.webContents);
+ assert.equal((await f.invoke('pet:local-pets-import',undefined,editor.webContents)).ok,false);
+ f.call("screenLocked=true;dialog.finishLocalPick({canceled:false,filePaths:['/native-folder']})");assert.equal((await pending).ok,false);assert.equal(f.call('localPetStore.calls'),0);assert.equal(f.call('JSON.stringify(settings)'),before);
+ f.call("screenLocked=false");editor.show();const crossed=f.invoke('pet:local-pets-import',undefined,editor.webContents);f.powerMonitor.emit('lock-screen');f.powerMonitor.emit('unlock-screen');editor.show();f.call("dialog.finishLocalPick({canceled:false,filePaths:['/native-folder']})");assert.equal((await crossed).ok,false,'picker opened before lock cannot resume after unlock');assert.equal(f.call('localPetStore.calls'),0);
+ f.call('screenLocked=false');const pending2=f.invoke('pet:local-pets-import',undefined,editor.webContents);f.call("customizationWindow=null;dialog.finishLocalPick({canceled:false,filePaths:['/native-folder']})");assert.equal((await pending2).ok,false);assert.equal(f.call('localPetStore.calls'),0);
+});
+
+test('local import rejects a hidden or reloading customization session while image validation is pending',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization()');const editor=f.call('customizationWindow');editor.emit('ready-to-show');
+ f.call("dialog.showOpenDialog=async()=>({canceled:false,filePaths:['/native-folder']});localPetStore={importDirectory:()=>new Promise(resolve=>localPetStore.finish=resolve)}");
+ const state=f.call('JSON.stringify(settings)');const first=f.invoke('pet:local-pets-import',undefined,editor.webContents);await flush();editor.hide();f.call("localPetStore.finish({id:'codex-'+ 'c'.repeat(64),name:'late',rows:9,version:1,spritesheetPath:'/fixture/sprite.png'})");assert.equal((await first).ok,false);assert.equal(f.call('JSON.stringify(settings)'),state);
+ editor.show();const second=f.invoke('pet:local-pets-import',undefined,editor.webContents);await flush();editor.webContents.emit('did-start-loading');f.call("localPetStore.finish({id:'codex-'+ 'c'.repeat(64),name:'late',rows:9,version:1,spritesheetPath:'/fixture/sprite.png'})");assert.equal((await second).ok,false);assert.equal(f.call('JSON.stringify(settings)'),state);
+ const third=f.invoke('pet:local-pets-import',undefined,editor.webContents);await flush();f.powerMonitor.emit('lock-screen');f.powerMonitor.emit('unlock-screen');editor.show();f.call("localPetStore.finish({id:'codex-'+ 'c'.repeat(64),name:'late',rows:9,version:1,spritesheetPath:'/fixture/sprite.png'})");assert.equal((await third).ok,false,'lock then unlock cannot revive an old import');assert.equal(f.call('JSON.stringify(settings)'),state);
+});

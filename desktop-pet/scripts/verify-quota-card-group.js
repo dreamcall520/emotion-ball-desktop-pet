@@ -71,7 +71,7 @@ if (!process.versions.electron) {
       // Execute the owning main helper so a fixture cannot silently use a different plan.
       const main = fs.readFileSync(path.join(sourceRoot, 'desktop-pet/main.js'), 'utf8');
       const scope = { quotaLabel: codex, apiUsageLabel: api, zcodeLink: zcode, workbuddyLabel: workbuddy, petWindow: pet, screen, settings, SheepTheme, PetFacing,
-        quotaCardGroup:{getState:()=>({eligible:['codex','api','zcode','workbuddy']})},quotaCardConfig:()=>({order:config.order,pinned:config.pinned}),quotaCardCollected:id=>!groupState.visible.includes(id),quotaCardGroupWindow:{getBounds:()=>bar?.getBounds()},sheepQuotaInk: null, quotaFreeStackBounds, edgeTuck: { getPresentation: () => presentation }, quotaDisplayConfig: () => ({ style: 'card' }), quotaObstacleBounds: () => bubble, safelyInvokeWindow: (_name, fn) => fn() };
+        quotaCardGroup:{getState:()=>({eligible:['codex','api','zcode','workbuddy']})},quotaCardConfig:()=>({order:config.order,pinned:config.pinned}),quotaCardCollected:id=>!groupState.visible.includes(id),quotaCardGroupWindow:{getBounds:()=>bar?.getBounds()},sheepBarInk:null,sheepQuotaInk: null, quotaFreeStackBounds, edgeTuck: { getPresentation: () => presentation }, quotaDisplayConfig: () => ({ style: 'card' }), quotaObstacleBounds: () => bubble, safelyInvokeWindow: (_name, fn) => fn() };
       Function('scope', 'with(scope){' + main.slice(main.indexOf('let quotaFreeStackKey ='), main.indexOf('\nfunction reportQuotaError')) + ';scope.plan=quotaFreeStackPlan;scope.sync=syncQuotaFreeStack;scope.stack=zcodeQuotaStackBounds;}')(scope);
       plan = scope.plan; sync = scope.sync; stack = scope.stack;
       const controllers = { codex, api, zcode, workbuddy };
@@ -87,7 +87,7 @@ if (!process.versions.electron) {
       showAll();group.start();await wait(300);
       for(const mode of ['free','peeked'])for(const side of ['left','right'])for(const bottom of [false,true]){
         presentation={mode,side,shape};pet.setBounds({x:side==='left'?area.x:area.x+area.width-80,y:bottom?area.y+area.height-80:area.y,width:80,height:80});
-        config={order:['workbuddy','api','codex','zcode'],pinned:[]};group.dismiss();group.sync();bar.show(groupState);update();{const deadline=Date.now()+10000;while(!bar.getBounds()){if(Date.now()>deadline)throw Error('bar not ready');await wait(16);}}await wait(210);
+        config={order:['workbuddy','api','codex','zcode'],pinned:[]};group.dismiss();group.sync();bar.show(groupState);update();{const deadline=Date.now()+10000;while(!bar.getBounds()){if(Date.now()>deadline)throw Error('bar not ready');await wait(16);}}await wait(250);
         assert(Object.values(controllers).every(c=>!c.getVisibleBounds()),'default four cards collected');assert(bar.getBounds(),'bar visible');
         const b=bar.getBounds();cursor={x:b.x+10,y:b.y+10};clock+=80;job();await fullyShown();update();
         assert(Object.values(controllers).every(c=>c.getVisibleBounds()),'hover expands actual native cards');
@@ -95,16 +95,37 @@ if (!process.versions.electron) {
         cursor={x:faces[2].x+10,y:faces[2].y+10};clock+=500;job();assert(groupState.expanded,'card hover retains entire group');
         const origins=Object.fromEntries(Object.entries(controllers).map(([id,c])=>[id,c.getWindow().getBounds()]));
         cursor={x:-10000,y:-10000};clock+=80;job();clock+=220;job();await wait(50);
-        for(const [id,c]of Object.entries(controllers)){assert.deepEqual(c.getWindow().getBounds(),origins[id],id+' group exit keeps origin');assert(c.getWindow().isVisible());assert(c.getWindow().getOpacity()>0&&c.getWindow().getOpacity()<1,id+' exit interpolates');const frame=await c.getWindow().webContents.executeJavaScript(`(()=>{const e=document.getElementById('quota-beam'),r=e.getBoundingClientRect();return {transform:getComputedStyle(e).transform,x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:innerWidth,height:innerHeight}})()`);assert.notEqual(frame.transform,'none',id+' shared motion loaded');assert(frame.x>=-.1&&frame.y>=-.1&&frame.right<=frame.width+.1&&frame.bottom<=frame.height+.1,id+' middle frame remains in native viewport');if(mode==='free'&&side==='left'&&!bottom)fs.writeFileSync(path.join(out,id+'-exit-mid.png'),(await c.getWindow().webContents.capturePage(undefined,{stayHidden:true})).toPNG());}
+        for(const [id,c]of Object.entries(controllers)){assert.deepEqual(c.getWindow().getBounds(),origins[id],id+' group exit keeps origin');assert(c.getWindow().isVisible(),id+' group exit remains native visible at50ms');assert(c.getWindow().getOpacity()>0&&c.getWindow().getOpacity()<=1,id+' exit remains visible while glass narrows');}
+        for(const [id,c]of Object.entries(controllers)){const frame=await c.getWindow().webContents.executeJavaScript(`(()=>{const e=document.getElementById('quota-beam'),r=e.getBoundingClientRect();return {transform:getComputedStyle(e).transform,x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:innerWidth,height:innerHeight}})()`);assert.notEqual(frame.transform,'none',id+' shared motion loaded');assert(frame.x>=-.1&&frame.y>=-.1&&frame.right<=frame.width+.1&&frame.bottom<=frame.height+.1,id+' middle frame remains in native viewport');if(mode==='free'&&side==='left'&&!bottom)fs.writeFileSync(path.join(out,id+'-exit-mid.png'),(await c.getWindow().webContents.capturePage(undefined,{stayHidden:true})).toPNG());}
         cursor={x:b.x+10,y:b.y+10};clock+=80;job();await fullyShown();assert(Object.values(controllers).every(c=>c.getVisibleBounds()),'rapid hover cancels pending exit');
         for(const [id,c]of Object.entries(controllers)){const channel=id==='codex'?'pet:quota-label-toggle':id==='zcode'?'pet:zcode-quota-label-toggle':id==='api'?'pet:api-usage-label-toggle':'pet:workbuddy-label-toggle';ipcMain.emit(channel,{sender:c.getWindow().webContents});}await fullyShown();
         const expandedOrigins=Object.fromEntries(Object.entries(controllers).map(([id,c])=>[id,c.getWindow().getBounds()]));
-        group.dismiss();await wait(40);for(const [id,c]of Object.entries(controllers))assert.deepEqual(c.getWindow().getBounds(),expandedOrigins[id],id+' expanded exit paint stays fixed');await wait(170);group.activate();await fullyShown();for(const c of Object.values(controllers))assert.equal(c.getLayoutMetrics().height,32,'group reentry resets each individual detail');group.dismiss();await wait(210);cursor={x:b.x+10,y:b.y+10};clock+=80;job();await fullyShown();
-        cursor={x:-10000,y:-10000};clock+=80;job();clock+=220;job();await wait(210);assert(Object.values(controllers).every(c=>!c.getWindow().isVisible()),'leave completes native fade');
+        group.dismiss();await wait(40);for(const [id,c]of Object.entries(controllers))assert.deepEqual(c.getWindow().getBounds(),expandedOrigins[id],id+' expanded exit paint stays fixed');await wait(210);group.activate();await fullyShown();for(const c of Object.values(controllers))assert.equal(c.getLayoutMetrics().height,32,'group reentry resets each individual detail');group.dismiss();await wait(250);cursor={x:b.x+10,y:b.y+10};clock+=80;job();await fullyShown();
+        cursor={x:-10000,y:-10000};clock+=80;job();clock+=220;job();await wait(250);assert(Object.values(controllers).every(c=>!c.getWindow().isVisible()),'leave completes native fade');
         config.pinned=['api'];group.sync();update();await wait(250);assert(api.getVisibleBounds());assert(!codex.getVisibleBounds());bar.show(groupState);const pb=bar.getBounds(),pf=api.getVisibleBounds();assert(pb.y+6.5>=pf.y+pf.height+6||pb.y+20<=pf.y,'bar outside pinned stack');
         group.activate();await fullyShown();assert(groupState.expanded);group.dismiss();await wait(50);assert.equal(api.getWindow().getOpacity(),1,'pinned API never fades on group collection');await wait(160);group.activate();await fullyShown();suppressed=true;group.sync();bar.hide();for(const c of Object.values(controllers))c.hide();assert(Object.values(controllers).every(c=>!c.getWindow().isVisible()),'external safety hide is immediate');await wait(250);assert(!bar.getBounds());assert(Object.values(controllers).every(c=>!c.getVisibleBounds()));
         suppressed=false;showAll();group.sync();update();await wait(250);assert(api.getVisibleBounds(),'pin restores after external suppression');
-        report.cases.push({mode,side,bottom,passed:true,fade:{duration:180,originPreserved:true,rapidReentry:true,pinNotFaded:true,safetyHideImmediate:true}});
+        report.cases.push({mode,side,bottom,passed:true,fade:{duration:220,originPreserved:true,rapidReentry:true,pinNotFaded:true,safetyHideImmediate:true}});
+      }
+      group.activate();await fullyShown();report.collapseFrames={};
+      for(const [id,c]of Object.entries(controllers)){
+        const win=c.getWindow(),origin=win.getBounds();await win.webContents.executeJavaScript(`Promise.all(document.getAnimations().filter(a=>Number.isFinite(a.effect.getTiming().iterations)).map(a=>a.finished.catch(()=>{}))).then(()=>true)`);win.webContents.send('pet:quota-card-motion',{visible:false,animate:true,index:0});
+        report.collapseFrames[id]=[];
+        for(const time of [0,44,88,132,176,220]){
+          const frame=await win.webContents.executeJavaScript(`(()=>{for(const a of document.getAnimations()){a.pause();a.currentTime=${time}}const e=document.getElementById('quota-beam'),r=e.getBoundingClientRect();return {time:${time},x:r.x,y:r.y,width:r.width,height:r.height,transform:getComputedStyle(e).transform}})()`);
+          await win.webContents.executeJavaScript('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true))))');
+          report.collapseFrames[id].push(frame);assert.deepEqual(win.getBounds(),origin,id+' sequence keeps native origin');
+          let picture;
+          for(let attempt=0;attempt<5;attempt++){
+            picture=await win.webContents.capturePage(undefined,{stayHidden:true});
+            if(picture.toBitmap().some((value,index)=>index%4===3&&value>0))break;
+            await win.webContents.executeJavaScript('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true))))');
+          }
+          assert(picture.toBitmap().some((value,index)=>index%4===3&&value>0),id+' '+time+' capture contains painted glass');
+          fs.writeFileSync(path.join(out,id+'-collapse-'+time+'.png'),picture.toPNG());
+        }
+        assert(report.collapseFrames[id].at(-1).width<report.collapseFrames[id][0].width*.25,id+' actual glass visibly narrows');
+        win.webContents.send('pet:quota-card-motion',{visible:true,animate:false,index:0});
       }
       group.close();bar.destroy();report.passed=true;
       assert(windows.every(w=>w.isDestroyed()||!w.nativeVisible()),'all native hosts remain hidden');assert.deepEqual(errors,[]);

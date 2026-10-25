@@ -97,9 +97,9 @@ function imageSize(buffer, extension) {
   return size || frameSize;
 }
 
-function createCodexPetStore({ sourceRoot = path.join(process.env.CODEX_HOME || path.join(os.homedir(), '.codex'), 'pets'), importRoot, readImageSize } = {}) {
+function createCodexPetStore({ sourceRoot = path.join(process.env.CODEX_HOME || path.join(os.homedir(), '.codex'), 'pets'), importRoot, readImageSize, validateImport, canPublishImport, namespace = '' } = {}) {
   if (typeof sourceRoot !== 'string' || !sourceRoot || typeof importRoot !== 'string' || !importRoot ||
-      (readImageSize !== undefined && typeof readImageSize !== 'function')) throw TypeError('需要有效的宠物目录和图片解码器');
+      (readImageSize !== undefined && typeof readImageSize !== 'function') || (validateImport !== undefined && typeof validateImport !== 'function') || (canPublishImport !== undefined && typeof canPublishImport !== 'function') || !['','local'].includes(namespace)) throw TypeError('需要有效的宠物目录和图片解码器');
   sourceRoot = path.resolve(sourceRoot); importRoot = path.resolve(importRoot);
 
   function readPet(root, id) {
@@ -118,7 +118,7 @@ function createCodexPetStore({ sourceRoot = path.join(process.env.CODEX_HOME || 
     if (size.width !== 1536 || size.height !== rows * 208) throw fail('宠物精灵图尺寸不合法');
     const decoded = readImageSize ? readImageSize(image.buffer, extension, { ...size }) : size;
     if (!decoded || decoded.width !== size.width || decoded.height !== size.height) throw fail('宠物图片解码结果不合法');
-    return { descriptor: { id, importedId: digest(manifest.buffer, image.buffer), name: raw.displayName.trim(), description: raw.description || '', version, rows, spritesheetPath: image.file }, manifest, image, raw };
+    return { descriptor: { id, importedId: namespace ? digest(Buffer.from('qiuqiu-local-pet-v1\0'),manifest.buffer,image.buffer) : digest(manifest.buffer, image.buffer), name: raw.displayName.trim(), description: raw.description || '', version, rows, spritesheetPath: image.file }, manifest, image, raw };
   }
 
   function entries(root) {
@@ -145,6 +145,27 @@ function createCodexPetStore({ sourceRoot = path.join(process.env.CODEX_HOME || 
 
   function resolve(id, { imported = false } = {}) {
     return imported ? getImported(id) : readSource(id).descriptor;
+  }
+
+  function copyImported(pet) {
+    const id = pet.descriptor.importedId;
+    fs.mkdirSync(importRoot, { recursive: true, mode: 0o700 });
+    directory(importRoot);
+    const destination = path.join(importRoot, id);
+    if (fs.existsSync(destination)) return getImported(id);
+    const temporary = path.join(importRoot, `.import-${randomUUID()}`);
+    fs.mkdirSync(temporary, { mode: 0o700 });
+    try {
+      const imageFile = path.join(temporary, pet.raw.spritesheetPath);
+      fs.mkdirSync(path.dirname(imageFile), { recursive: true, mode: 0o700 });
+      for (const [file, buffer] of [[path.join(temporary, 'pet.json'), pet.manifest.buffer], [imageFile, pet.image.buffer]]) {
+        const fd = fs.openSync(file, 'wx', 0o600);
+        try { fs.writeFileSync(fd, buffer); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+      }
+      try { fs.renameSync(temporary, destination); }
+      catch (error) { if (!['EEXIST', 'ENOTEMPTY'].includes(error.code)) throw error; }
+      return getImported(id);
+    } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
   }
 
   return {
@@ -175,26 +196,15 @@ function createCodexPetStore({ sourceRoot = path.join(process.env.CODEX_HOME || 
     },
     resolve,
     getImported,
-    importPet(sourceId) {
-      const pet = readSource(sourceId);
-      const id = pet.descriptor.importedId;
-      fs.mkdirSync(importRoot, { recursive: true, mode: 0o700 });
-      directory(importRoot);
-      const destination = path.join(importRoot, id);
-      if (fs.existsSync(destination)) return getImported(id);
-      const temporary = path.join(importRoot, `.import-${randomUUID()}`);
-      fs.mkdirSync(temporary, { mode: 0o700 });
-      try {
-        const imageFile = path.join(temporary, pet.raw.spritesheetPath);
-        fs.mkdirSync(path.dirname(imageFile), { recursive: true, mode: 0o700 });
-        for (const [file, buffer] of [[path.join(temporary, 'pet.json'), pet.manifest.buffer], [imageFile, pet.image.buffer]]) {
-          const fd = fs.openSync(file, 'wx', 0o600);
-          try { fs.writeFileSync(fd, buffer); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
-        }
-        try { fs.renameSync(temporary, destination); }
-        catch (error) { if (!['EEXIST', 'ENOTEMPTY'].includes(error.code)) throw error; }
-        return getImported(id);
-      } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
+    importPet(sourceId) { return copyImported(readSource(sourceId)); },
+    importDirectory(folder) {
+      const pet = readPet(directory(folder), null);
+      const publish = () => { if(canPublishImport && canPublishImport()!==true)throw fail('导入操作已取消');return copyImported(pet); };
+      if (!validateImport) return publish();
+      return Promise.resolve(validateImport({ ...pet.descriptor }, pet.image.buffer)).then(valid => {
+        if (valid !== true) throw fail('宠物图片无法解码');
+        return publish();
+      });
     }
   };
 }

@@ -186,3 +186,36 @@ test('副本库逐项验证内容编号，坏副本跳过且权限错误保留�
     finally { fs.chmodSync(importRoot, 0o700); }
   }
 });
+
+test('local directory import copies only validated data into an independent content-addressed store',async t=>{
+ const f=fixture(t),folder=f.add('本地伙伴',{spriteVersionNumber:2});fs.writeFileSync(path.join(folder,'run.js'),'throw Error("never execute")');
+ const localRoot=path.join(f.root,'private','local-pets');const local=createCodexPetStore({sourceRoot:localRoot,importRoot:localRoot,validateImport:async(pet,bytes)=>pet.rows===11&&bytes.equals(images[2])});
+ const pet=await local.importDirectory(folder);assert.match(pet.id,/^codex-[a-f0-9]{64}$/);assert.deepEqual(fs.readdirSync(path.dirname(pet.spritesheetPath)).sort(),['pet.json','spritesheet.png']);
+ assert.deepEqual(local.listImported().pets,[pet]);assert.deepEqual(f.store.listImported(),{pets:[],skipped:0});
+ fs.rmSync(folder,{recursive:true});assert.deepEqual(local.getImported(pet.id),pet);assert.equal(fs.statSync(pet.spritesheetPath).mode&0o777,0o600);
+});
+test('local import rejects symlink, escapes, malformed and oversized resources before writing copies',t=>{
+ const f=fixture(t),good=f.add('good'),localRoot=path.join(f.root,'local');const local=createCodexPetStore({sourceRoot:localRoot,importRoot:localRoot});
+ const linked=path.join(f.root,'linked');fs.symlinkSync(good,linked);assert.throws(()=>local.importDirectory(linked));
+ for(const [name,relative] of [['escape','../good/spritesheet.png'],['absolute',path.join(good,'spritesheet.png')]]){const root=f.add(name,{spritesheetPath:relative});assert.throws(()=>local.importDirectory(root));}
+ const linkedImage=f.add('linked-image');fs.unlinkSync(path.join(linkedImage,'spritesheet.png'));fs.symlinkSync(path.join(good,'spritesheet.png'),path.join(linkedImage,'spritesheet.png'));assert.throws(()=>local.importDirectory(linkedImage));
+ const broken=f.add('broken',{},Buffer.from('not an image'));assert.throws(()=>local.importDirectory(broken));
+ const huge=f.add('huge');fs.truncateSync(path.join(huge,'spritesheet.png'),MAX_IMAGE_BYTES+1);assert.throws(()=>local.importDirectory(huge),{code:'LIMIT'});
+ assert.equal(fs.existsSync(localRoot),false);
+});
+test('local image decoder validates captured immutable bytes before atomic publish, failures leave no partial imports',async t=>{
+ const f=fixture(t),folder=f.add('captured'),localRoot=path.join(f.root,'local');let finish;
+ const local=createCodexPetStore({sourceRoot:localRoot,importRoot:localRoot,validateImport:(_pet,bytes)=>{assert(bytes.equals(images[1]));return new Promise(resolve=>finish=resolve);}});
+ const pending=local.importDirectory(folder);fs.writeFileSync(path.join(folder,'spritesheet.png'),Buffer.from('changed'));assert.equal(fs.existsSync(localRoot),false);finish(true);const pet=await pending;assert(fs.readFileSync(pet.spritesheetPath).equals(images[1]));
+ const rejectRoot=path.join(f.root,'rejected'),failed=createCodexPetStore({sourceRoot:rejectRoot,importRoot:rejectRoot,validateImport:async()=>false});const good=f.add('reject');await assert.rejects(failed.importDirectory(good),{code:'INVALID_PET'});assert.equal(fs.existsSync(rejectRoot),false);
+});
+
+test('local content namespace keeps identical Codex/local artwork separate without changing existing Codex ids',t=>{
+ const f=fixture(t),folder=f.add('same');const codex=f.store.importPet(f.store.list().pets[0].id),root=path.join(f.root,'local');const local=createCodexPetStore({namespace:'local',sourceRoot:root,importRoot:root});
+ const pet=local.importDirectory(folder);assert.notEqual(pet.id,codex.id);assert.deepEqual(local.getImported(pet.id),pet);assert.deepEqual(f.store.getImported(codex.id),codex);assert.throws(()=>f.store.getImported(pet.id));assert.throws(()=>local.getImported(codex.id));
+});
+test('import cannot publish after its owning window session becomes invalid during decode',async t=>{
+ const f=fixture(t),folder=f.add('late'),root=path.join(f.root,'local');let finish,active=true;
+ const local=createCodexPetStore({namespace:'local',sourceRoot:root,importRoot:root,validateImport:()=>new Promise(resolve=>finish=resolve),canPublishImport:()=>active});
+ const pending=local.importDirectory(folder);active=false;finish(true);await assert.rejects(pending,{code:'INVALID_PET'});assert.equal(fs.existsSync(root),false);
+});

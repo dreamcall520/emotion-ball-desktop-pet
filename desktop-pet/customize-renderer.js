@@ -20,6 +20,7 @@
   let ball = null;
   let codexPlayer = null, pets = [], petReadFlight = 0, petPaused = false;
   const codexDescriptors = new Map();
+  let localPets = [], localReadFlight = 0, localLoaded = false, localBusy = false, activePetSource = 'codex';
   let lastBallAppearance = PetCustomization.normalizeAppearance();
   let auroraPreview = null;
   let displayedAurora = null;
@@ -941,7 +942,7 @@
     unsubscribeColorMode?.();
     unsubscribeSize?.();
     unsubscribeVisibility?.();
-    petReadFlight++;
+    petReadFlight++; localReadFlight++;
     systemAppearance?.removeEventListener('change', applyTheme);
     motionPreference?.removeEventListener('change', refreshMotion);
     document.removeEventListener?.('visibilitychange', updateVisibility);
@@ -949,21 +950,27 @@
 
 
   function setSource(next) {
+    const local = next === 'local';
     const codex = next === 'codex';
+    if (codex || local) activePetSource = next;
     const quota = next === 'quota';
-    document.body.classList.toggle('codex-source', codex);
+    document.body.classList.toggle('codex-source', codex || local);
     document.body.classList.toggle('quota-source', quota);
-    $('source-ball').setAttribute('aria-pressed', String(!codex && !quota));
+    $('source-ball').setAttribute('aria-pressed', String(!codex && !local && !quota));
     $('source-codex').setAttribute('aria-pressed', String(codex));
+    $('source-local')?.setAttribute('aria-pressed', String(local));
     $('source-quota')?.setAttribute('aria-pressed', String(quota));
-    for (const name of ['ball','codex','quota']) {
+    for (const name of ['ball','codex','local','quota']) {
       const tab = $('source-' + name);
       if (!tab) continue;
       tab.setAttribute('role', 'tab');
       tab.setAttribute('aria-selected', String(name === next));
       tab.setAttribute('tabindex', name === next ? '0' : '-1');
     }
-    $('ball-options').hidden = codex || quota; $('codex-panel').hidden = !codex;
+    $('ball-options').hidden = codex || local || quota; $('codex-panel').hidden = !codex;
+    if ($('local-panel')) $('local-panel').hidden = !local;
+    if (codex || local) { $('pet-settings').hidden = !(local ? localPets.length : pets.length); $(local ? 'local-panel' : 'codex-panel').appendChild($('pet-settings')); }
+    if (local && !localLoaded && !localBusy) void refreshLocalPets();
     if ($('quota-panel')) $('quota-panel').hidden = !quota;
     quotaEditor?.show(quota);
     if (quotaEditor) schedulePreview();
@@ -979,8 +986,67 @@
     $('pet-opacity').value = state.appearance.auroraTransparency;
     $('pet-opacity-value').textContent = state.appearance.auroraTransparency + '%';
     paintRange('pet-opacity', [0, 60]);
-    for (const card of $('pet-grid').children) card.setAttribute('aria-pressed', String(codex &&
+    for (const card of [...$('pet-grid').children, ...($('local-pet-grid')?.children || [])]) card.setAttribute('aria-pressed', String(codex &&
       (card.dataset.petId === state.appearance.codexPetId || card.dataset.importedId === state.appearance.codexPetId)));
+  }
+  function choosePet(pet) {
+    if (!canSave || disposed) return;
+    if (state.appearance.shape !== 'codex-pet') lastBallAppearance = PetCustomization.normalizeAppearance(state.appearance);
+    codexDescriptors.set(pet.id, pet);
+    state.appearance = PetCustomization.normalizeAppearance({ shape: 'codex-pet', codexPetId: pet.id, sheepTheme: state.appearance.sheepTheme });
+    $('startup-default').checked = matchesStartup(); renderAuroraVisibility(); syncCandidate(); schedulePreview();
+  }
+  function renderLocalPets() {
+    const grid = $('local-pet-grid'); if (!grid) return;
+    grid.replaceChildren();
+    for (const pet of localPets) {
+      const card = document.createElement('button'); card.type = 'button'; card.className = 'pet-card';
+      card.dataset.petId = pet.id; card.dataset.importedId = pet.importedId || pet.id;
+      card.title = pet.name + ' · 本地导入'; card.setAttribute('aria-label', '选择 ' + pet.name);
+      const sprite = document.createElement('span'); sprite.className = 'pet-sprite'; sprite.setAttribute('aria-hidden', 'true');
+      sprite.style.setProperty('--sprite', 'url(' + JSON.stringify(pet.imageURL) + ')'); sprite.style.setProperty('--rows', pet.rows);
+      const name = document.createElement('span'); name.className = 'pet-name'; name.textContent = pet.name;
+      const mark = document.createElement('span'); mark.className = 'selection-mark'; mark.textContent = '✓'; mark.setAttribute('aria-hidden', 'true');
+      card.append(sprite, name, mark); card.addEventListener('click', () => choosePet(pet)); grid.append(card);
+    }
+    $('local-read-status').textContent = '本地导入 · ' + localPets.length;
+    grid.hidden = !localPets.length;
+    if (activePetSource === 'local') $('pet-settings').hidden = !localPets.length;
+    syncCandidate();
+  }
+  async function refreshLocalPets() {
+    if (localBusy) return;
+    const revision = ++localReadFlight;
+    $('refresh-local-pets').disabled = true;
+    $('local-read-status').textContent = '正在读取本地伙伴…';
+    try {
+      const result = await bridge.listLocalPets?.();
+      if (disposed || revision !== localReadFlight) return;
+      if (!result?.ok || !Array.isArray(result.pets)) throw new Error('local pets unavailable');
+      localPets = result.pets.filter(pet => CodexPetPlayer.validDescriptor(pet)); localLoaded = true;
+      for (const pet of localPets) codexDescriptors.set(pet.id, pet);
+      renderLocalPets(); $('local-read-state').hidden = localPets.length > 0;
+      $('local-read-state').textContent = '还没有导入伙伴。导入后可预览，保存设置后才应用到桌面。';
+      $('local-read-status').title = result.skipped ? '已忽略 ' + result.skipped + ' 个暂不支持的伙伴' : '';
+    } catch (_) {
+      if (disposed || revision !== localReadFlight) return;
+      $('local-read-status').textContent = '读取暂未完成'; $('local-read-state').hidden = false;
+      $('local-read-state').textContent = '暂时无法读取伙伴，请点击刷新重试。';
+    } finally { if (!disposed && revision === localReadFlight) $('refresh-local-pets').disabled = false; }
+  }
+  async function importLocalPet() {
+    if (localBusy || !canSave || disposed) return;
+    localBusy = true; localReadFlight++;
+    $('import-local-pet').disabled = true; $('refresh-local-pets').disabled = true;
+    try {
+      const result = await bridge.importLocalPet?.();
+      if (disposed || result?.canceled) return;
+      if (!result?.ok || !CodexPetPlayer.validDescriptor(result.pet)) throw new Error(result?.error || '导入未完成，请检查素材格式后重试');
+      const pet = result.pet; localPets = localPets.filter(value => value.id !== pet.id).concat(pet); localLoaded = true;
+      codexDescriptors.set(pet.id, pet); renderLocalPets(); $('local-read-state').hidden = true;
+      choosePet(pet); announce('已导入并选中预览，保存设置后应用到桌面');
+    } catch (error) { if (!disposed) announce(error.message || '导入未完成，请重试'); }
+    finally { localBusy = false; if (!disposed) { $('import-local-pet').disabled = false; $('refresh-local-pets').disabled = false; } }
   }
   function renderPets() {
     $('pet-grid').replaceChildren();
@@ -998,12 +1064,7 @@
       sprite.style.setProperty('--sprite', 'url(' + JSON.stringify(pet.imageURL) + ')'); sprite.style.setProperty('--rows', pet.rows);
       const name = document.createElement('span'); name.className = 'pet-name'; name.textContent = pet.name;
       const mark = document.createElement('span'); mark.className = 'selection-mark'; mark.textContent = '✓'; mark.setAttribute('aria-hidden', 'true');
-      card.append(sprite, name, mark); card.addEventListener('click', () => {
-        if (!canSave) return;
-        if (state.appearance.shape !== 'codex-pet') lastBallAppearance = PetCustomization.normalizeAppearance(state.appearance);
-        state.appearance = PetCustomization.normalizeAppearance({ shape: 'codex-pet', codexPetId: pet.id, sheepTheme: state.appearance.sheepTheme });
-        $('startup-default').checked = matchesStartup(); renderAuroraVisibility(); syncCandidate(); schedulePreview();
-      });
+      card.append(sprite, name, mark); card.addEventListener('click', () => choosePet(pet));
       $('pet-grid').append(card);
     }
     syncCandidate();
@@ -1025,7 +1086,7 @@
       }
       $('pet-read-state').hidden = pets.length > 0;
       $('pet-read-state').textContent = pets.length ? '' : '还没有 Codex 宠物。在 Codex 里创建后，点击刷新即可选择。';
-      $('pet-grid').hidden = !pets.length; $('pet-settings').hidden = !pets.length;
+      $('pet-grid').hidden = !pets.length; if (activePetSource === 'codex') $('pet-settings').hidden = !pets.length;
       $('pet-search-field').hidden = pets.length <= 6;
       $('pet-search').value = ''; renderPets();
       $('pet-read-status').title = result.skipped ? '已忽略 ' + result.skipped + ' 个暂不支持的宠物' : '';
@@ -1043,9 +1104,12 @@
     petSize = size; $('pet-size').value = size; schedulePreview();
   });
   $('source-ball').addEventListener('click', () => setSource('ball'));
+  $('source-local')?.addEventListener('click', () => setSource('local'));
+  $('import-local-pet')?.addEventListener('click', importLocalPet);
+  $('refresh-local-pets')?.addEventListener('click', refreshLocalPets);
   $('source-codex').addEventListener('click', () => setSource('codex'));
   $('source-quota')?.addEventListener('click', () => setSource('quota'));
-  const sourceTabs = ['ball','codex','quota'].filter(name => $('source-' + name));
+  const sourceTabs = ['ball','codex','local','quota'].filter(name => $('source-' + name));
   for (const name of sourceTabs) $('source-' + name).addEventListener('keydown', event => {
     if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
     event.preventDefault();

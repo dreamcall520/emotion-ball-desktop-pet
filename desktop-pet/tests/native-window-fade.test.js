@@ -34,3 +34,13 @@ test('destroy cancellation and missing native opacity stay compatible', async ()
   const old = windowFixture(); delete old.setOpacity;
   fade.show(old, true); assert.equal(old.visible, true); fade.hide(old, { animate: true }); assert.equal(old.visible, false);
 });
+test('group collapse keeps native glass visible until shape narrows and retains edge timing', t => {
+  t.mock.timers.enable({apis:['setTimeout','Date'],now:1000});
+  const w=windowFixture(),fade=createNativeWindowFade();let finished=false;
+  fade.show(w);fade.hide(w,{animate:true,duration:220,easing:'group-collapse',onHidden:()=>finished=true});
+  t.mock.timers.tick(150);assert.equal(w.opacity,1);assert.equal(w.visible,true);assert.equal(finished,false);
+  t.mock.timers.tick(45);assert(w.opacity>0&&w.opacity<1);assert.equal(w.visible,true);
+  fade.show(w,true);t.mock.timers.tick(220);assert.equal(w.visible,true);assert.equal(w.opacity,1);assert.equal(finished,false);
+  fade.hide(w,{animate:true,duration:220,easing:'group-collapse'});t.mock.timers.tick(240);assert.equal(w.visible,false);
+  fade.show(w);fade.hide(w,{animate:true});t.mock.timers.tick(100);assert(w.opacity<.5,'ordinary edge still uses its original curve');t.mock.timers.tick(100);assert.equal(w.visible,false);
+});

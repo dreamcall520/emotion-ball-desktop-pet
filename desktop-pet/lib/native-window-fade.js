@@ -5,7 +5,7 @@ function createNativeWindowFade({ onError = () => {}, duration = 180 } = {}) {
     const state = target && states.get(target);
     if (state) { clearTimeout(state.timer); states.delete(target); }
   }
-  function transition(target, showing, animate, done = () => {}) {
+  function transition(target, showing, animate, done = () => {}, options = {}) {
     if (!target || target.isDestroyed()) return;
     const previous = states.get(target);
     if (previous?.showing === showing && (showing ? target.isVisible() && (animate || !previous.timer) : animate && previous.timer)) {
@@ -32,14 +32,15 @@ function createNativeWindowFade({ onError = () => {}, duration = 180 } = {}) {
       if (showing) { target.setOpacity?.(1); target.showInactive(); }
       finish(); return;
     }
+    const transitionDuration = Number.isFinite(options.duration) ? Math.max(1,Math.min(400,options.duration)) : duration;
     const start = Date.now();
     target.setOpacity(opacity);
     if (showing) target.showInactive();
     const tick = () => {
       if (states.get(target) !== state || target.isDestroyed()) return;
       try {
-        const progress = Math.min(1, (Date.now() - start) / duration);
-        const eased = 1 - (1 - progress) ** 3;
+        const progress = Math.min(1, (Date.now() - start) / transitionDuration);
+        const eased = !showing && options.easing === 'group-collapse' ? Math.max(0,(progress-.7)/.3) ** 2 : 1 - (1 - progress) ** 3;
         state.opacity = opacity + ((showing ? 1 : 0) - opacity) * eased;
         target.setOpacity(state.opacity);
         if (progress === 1) finish(); else state.timer = setTimeout(tick, 16);
@@ -49,7 +50,7 @@ function createNativeWindowFade({ onError = () => {}, duration = 180 } = {}) {
   }
   return {
     show: (target, animate = false) => transition(target, true, animate),
-    hide: (target, { animate = false, onHidden } = {}) => transition(target, false, animate, onHidden),
+    hide: (target, { animate = false, onHidden, duration, easing } = {}) => transition(target, false, animate, onHidden, {duration,easing}),
     cancel
   };
 }

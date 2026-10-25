@@ -82,3 +82,10 @@ html,body{min-width:0;min-height:580px}.studio{max-width:none;margin:0;backgroun
 /* Data-URL arrows cannot inherit the surrounding text color. */
 :root[data-color-mode=accessible] :is(.preview-animation select,#pet-size){background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23c5d1df' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E")}
 :root[data-color-mode=accessible][data-accessible-appearance=light] :is(.preview-animation select,#pet-size){background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23455467' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E")}
+
+/* Local partners share the sprite player and display controls with Codex pets. */
+#local-panel { display:flex; flex-direction:column; flex:1; min-height:0; }
+.local-import { align-self:flex-start; margin:0 0 8px; }
+.local-pet-help { flex:none; margin:0 0 12px; font-size:11px; line-height:1.65; color:var(--muted); }
+.source-switch,.codex-source .source-switch { gap:18px; }
+@media(max-width:359px) { .source-switch,.codex-source .source-switch { gap:12px; } .source-switch button { font-size:12px; } }

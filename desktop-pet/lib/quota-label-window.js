@@ -312,7 +312,7 @@ function createQuotaLabelWindow({
     };
     try {
       target.setIgnoreMouseEvents(true, { forward: true });
-      fade.hide(target, { animate: sendQuotaCardMotion(target, false, getPresentation(), animate), onHidden: finish });
+      fade.hide(target, { animate: sendQuotaCardMotion(target, false, getPresentation(), animate), onHidden: finish, ...(getPresentation()?.quotaGroupAnimate ? {duration:220,easing:'group-collapse'} : {}) });
     } catch (error) { detach(target, error); return; }
     if (win !== target || operation !== token) return;
     const afterHide = health(target);
