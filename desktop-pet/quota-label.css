@@ -902,7 +902,7 @@ body[data-guard-size="compact"] .guard-entry-zombie { top: 11px; }
 #quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] .summary-period { flex: none; gap: 2px; overflow: visible; }
 #quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] .summary-period-label { flex: none; overflow: visible; text-overflow: clip; }
 #quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] .summary-badge { padding-inline: 3px; }
-#quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] .summary-value { font-size: 14px; }
+#quota-label:is([data-source="codex"], [data-source="zcode"])[data-size="compact"][data-expanded="false"] .summary-value { font-size: 14px; }
 
 /* Source artwork replaces text badges without changing native card bounds. */
 .source-icon { display: inline-flex; flex: 0 0 20px; width: 20px; height: 20px; align-items: center; justify-content: center; vertical-align: middle; }
