@@ -378,8 +378,8 @@ async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, detai
       if(outputDir)fs.writeFileSync(path.join(outputDir,'workbuddy-official-failure.png'),(await capture(detailWin)).toPNG());
       smokeUsageMode='success';await usage.refresh(true);await until(()=>usage.getState().report&&!usage.getState().error,'恢复官方消费查询');
     }
-    await detailPage("document.querySelector('#explanation summary').click()");assert.equal(await detailPage("document.getElementById('explanation').open"),true);assert.match(await detailPage("document.getElementById('explanation').textContent"),/官方逐请求积分/);
-    const infoList=await detailPage("[...document.querySelectorAll('#explanation .chart-help-body > ul > li')].filter(n=>!n.hidden).map(n=>n.textContent)");assert(infoList.length>=3,'i说明分点列表');assert(infoList.every(text=>text.length<=60),'说明短句易读');await detailPage("document.querySelector('#explanation summary').click()");
+    await detailPage("document.querySelector('#explanation summary').click()");assert.equal(await detailPage("document.getElementById('explanation').open"),true);assert.match(await detailPage("document.getElementById('explanation').textContent"),/统计实际用掉的积分/);
+    const infoList=await detailPage("[...document.querySelectorAll('#explanation .chart-help-body > ul > li')].filter(n=>!n.hidden).map(n=>n.textContent)");assert(infoList.length===4,'i说明拆分为四条');assert(infoList.every(text=>text.length<=60),'说明短句易读');await detailPage("document.querySelector('#explanation summary').click()");
     if(outputDir){fs.writeFileSync(path.join(outputDir,'official-usage-views.json'),JSON.stringify({mode:live?'live':'isolated-mock',source:official.source,views:officialViews},null,2));fs.writeFileSync(path.join(outputDir,'trend-theme.json'),JSON.stringify(themeEvidence,null,2));}
     await detailPage("document.getElementById('details-close').click()");
     await until(() => !details.isVisible(), '关闭趋势详情');
