@@ -13,13 +13,14 @@
     try{
       const pictures=await Promise.all(value.layers.map(layer=>image(layer.image)));
       if(revision!==serial||token!==value.token)return;
+      bridge.trace?.({token:value.token,stage:'decoded'});
       const scale=value.scale,b=value.bounds;
       if(b.width*b.height*scale*scale>32*1024*1024)throw Error('canvas limit');
       canvas.width=Math.ceil(b.width*scale);canvas.height=Math.ceil(b.height*scale);canvas.style.width=b.width+'px';canvas.style.height=b.height+'px';
       context.setTransform(scale,0,0,scale,0,0);context.clearRect(0,0,b.width,b.height);
       pictures.forEach((picture,index)=>{const r=value.layers[index].bounds;context.drawImage(picture,r.x-b.x,r.y-b.y,r.width,r.height);});
       canvas.style.transform=value.expanded?folded():'matrix(1,0,0,1,0,0)';canvas.style.opacity=value.expanded?'0':'1';canvas.style.filter='blur(0px)';
-      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+      await new Promise(resolve=>requestAnimationFrame(()=>{bridge.trace?.({token:value.token,stage:'raf1'});requestAnimationFrame(()=>{bridge.trace?.({token:value.token,stage:'raf2'});resolve();});}));
       if(revision===serial&&token===value.token)bridge.ack({token,phase:'prepared',ok:true});
     }catch(_){if(revision===serial)bridge.ack({token:value.token,phase:'prepared',ok:false});}
   });
@@ -29,6 +30,7 @@
     const style=getComputedStyle(canvas),from={transform:style.transform,opacity:style.opacity,filter:style.filter};stop();
     const target=value.expanded?'matrix(1,0,0,1,0,0)':folded(),opacity=value.expanded?'1':'0';
     if(media.matches){canvas.style.transform=target;canvas.style.opacity=opacity;canvas.style.filter='blur(0px)';bridge.ack({token,phase:'finished',ok:true});return;}
+    bridge.trace?.({token:value.token,stage:'animating'});
     const duration=value.expanded?200:220;
     canvas.style.transform=from.transform;canvas.style.opacity=from.opacity;canvas.style.filter=from.filter;
     const geometry=canvas.animate([{transform:from.transform},{transform:target}],{duration,easing:'cubic-bezier(.32,0,.2,1)',fill:'both'});

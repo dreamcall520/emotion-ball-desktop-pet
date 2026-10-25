@@ -49,7 +49,7 @@ if (!process.versions.electron) {
       const screen = { getDisplayMatching: () => ({ workArea: area }), getCursorScreenPoint: () => ({ x: -10000, y: -10000 }) };
       const pet = new HiddenWindow({ x: area.x + 400, y: area.y + 100, width: 80, height: 80, frame: false, transparent: true, skipTaskbar: true });
       await pet.loadURL('data:text/html,<body></body>'); pet.logicalVisible = true;
-      const settings = normalizeSettings({ quotaCardOrder: fixtureCardConfig.order, quotaCardPinned: fixtureCardConfig.pinned, zcodeEnabled: true, zcodeQuotaAlwaysVisible: true, zcodeQuotaLabelSize: 'compact', codexEnabled: true, customization: { appearance: { shape } } });
+      const settings = normalizeSettings({ quotaCardOrder: fixtureCardConfig.order, quotaCardPinned: fixtureCardConfig.pinned, openaiApiAlwaysVisible:true,workbuddyEnabled:true,workbuddyQuotaAlwaysVisible:true,zcodeEnabled: true, zcodeQuotaAlwaysVisible: true, zcodeQuotaLabelSize: 'compact', codexEnabled: true, customization: { appearance: { shape } } });
       assert.equal(settings.customization.appearance.shape, shape, 'fixture shape must be supported, not silently normalized');
       let config={order:['codex','api','zcode','workbuddy'],pinned:[]};
       let suppressed=false;
@@ -72,7 +72,11 @@ if (!process.versions.electron) {
       // Execute the owning main helper so a fixture cannot silently use a different plan.
       const main = fs.readFileSync(path.join(sourceRoot, 'desktop-pet/main.js'), 'utf8');
       const scope = { quotaLabel: codex, apiUsageLabel: api, zcodeLink: zcode, workbuddyLabel: workbuddy, petWindow: pet, screen, settings, SheepTheme, PetFacing,
-        quotaExpandedStackPlan:()=>null,currentSheepSettledInk:()=>null,currentSheepCapsuleInk:()=>null,quotaCardGroup:{getState:()=>({eligible:['codex','api','zcode','workbuddy']})},quotaCardConfig:()=>({order:config.order,pinned:config.pinned}),quotaCardCollected:id=>!groupState.visible.includes(id),quotaCardGroupWindow:null,showQuotaCardBar:()=>{},quotaLayoutPresentation:()=>presentation,sheepBarInk:null,sheepQuotaInk: null, quotaFreeStackBounds, edgeTuck: { getPresentation: () => presentation }, quotaDisplayConfig: () => ({ style: 'card' }), quotaObstacleBounds: () => bubble, safelyInvokeWindow: (_name, fn) => fn() };
+        currentSheepSettledInk:()=>null,currentSheepCapsuleInk:()=>shape==='new-year-sheep'?{theme:'none',facing:PetFacing.resolve(pet.getBounds(),area),ink:{x:.1,y:.2,width:.8,height:.6}}:null,quotaReducedMotion:()=>false,codexPageEpoch:1,quotaCardGroup:{getState:()=>({eligible:['codex','api','zcode','workbuddy']})},quotaCardConfig:()=>({order:config.order,pinned:config.pinned}),quotaCardCollected:id=>!groupState.visible.includes(id),quotaCardGroupWindow:null,showQuotaCardBar:()=>{},quotaLayoutPresentation:()=>presentation,sheepBarInk:null,sheepQuotaInk: null, quotaFreeStackBounds, edgeTuck: { getPresentation: () => presentation }, quotaDisplayConfig: () => ({ style: 'card' }), quotaObstacleBounds: () => bubble, safelyInvokeWindow: (_name, fn) => fn() };
+      scope.quotaCardControllers=()=>({codex,api,zcode,workbuddy});
+      scope.quotaCardGroupInput=()=>({config,eligible:['codex','api','zcode','workbuddy'],suppressed,dragging:false});
+      Function('scope','with(scope){'+main.slice(main.indexOf('function quotaExpandedStackPlan()'),main.indexOf('function quotaLayoutPresentation()'))+';scope.quotaExpandedStackPlan=quotaExpandedStackPlan;}')(scope);
+      Function('scope','with(scope){'+main.slice(main.indexOf('function quotaGroupTransitionContext()'),main.indexOf('function resetQuotaCardDetails()'))+';scope.quotaGroupTransitionContext=quotaGroupTransitionContext;}')(scope);
       Function('scope', 'with(scope){' + main.slice(main.indexOf('let quotaFreeStackKey ='), main.indexOf('\nfunction reportQuotaError')) + ';scope.plan=quotaFreeStackPlan;scope.sync=syncQuotaFreeStack;scope.stack=zcodeQuotaStackBounds;}')(scope);
       plan = scope.plan; sync = scope.sync; stack = scope.stack;
       const controllers = { codex, api, zcode, workbuddy };
@@ -82,11 +86,11 @@ if (!process.versions.electron) {
       const {createQuotaCardGroupTransition}=require(path.join(sourceRoot,'desktop-pet/lib/quota-card-group-transition'));
       const {createQuotaCardTransitionWindow}=require(path.join(sourceRoot,'desktop-pet/lib/quota-card-transition-window'));
       const {quotaCardBarBounds}=require(path.join(sourceRoot,'desktop-pet/lib/quota-card-group-window'));
-      let overlay,currentKey='',activeContext=true;
+      let overlay,currentKey='',activeContext=true;const settled=[];
       const update=()=>{for(const c of Object.values(controllers))c.reposition();sync();};
       transition=createQuotaCardGroupTransition({screen,createOverlay:()=>overlay=createQuotaCardTransitionWindow({BrowserWindow:HiddenWindow,ipcMain}),
-        isContextCurrent:key=>activeContext&&key===currentKey,onError:error=>errors.push(String(error.message)),
-        onSettled:({expanded,canceled})=>{if(!expanded&&!canceled)for(const c of Object.values(controllers))c.resetExpanded();update();}});
+        isContextCurrent:key=>activeContext&&key===scope.quotaGroupTransitionContext(),onError:error=>errors.push(String(error.message)),
+        onSettled:({expanded,canceled})=>{settled.push({expanded,canceled});if(!expanded&&!canceled)for(const c of Object.values(controllers))c.resetExpanded();update();}});
       await transition.warm();
       const until=async(condition,label)=>{const deadline=Date.now()+10000;while(!await condition()){if(Date.now()>deadline)throw Error('Timeout '+label);await wait(8);}};
       showAll();await until(()=>Object.values(controllers).every(c=>c.getWindow()?.isVisible()&&!c.getWindow().webContents.isLoading()&&c.getWindow().getOpacity()===1),'initial real cards ready');
@@ -96,9 +100,9 @@ if (!process.versions.electron) {
         groupState={visible:config.pinned,expanded:false,bar:true};update();
         assert(Object.entries(controllers).every(([id,c])=>id===pinned?c.getWindow().isVisible():!c.getWindow().isVisible()),'collapsed native cards exclude unpinned');
         const b=quotaCardBarBounds(pet.getBounds(),area,{...presentation,cardStackBounds:config.pinned.map(id=>controllers[id].getVisibleBounds()).filter(Boolean)}),anchor={x:b.x+11,y:b.y+6.5,width:26,height:7};
-        const cards=config.order.filter(id=>id!==pinned).map(id=>({id,controller:controllers[id]}));currentKey=JSON.stringify({mode,side,bottom,pinned});
+        const cards=config.order.filter(id=>id!==pinned).map(id=>({id,controller:controllers[id]}));currentKey=scope.quotaGroupTransitionContext();
         groupState={visible:config.order,expanded:true,bar:true};
-        const entry=transition.request({expanded:true,cards,anchor,contextKey:currentKey,prepare:update});
+        const entry=transition.request({expanded:true,cards,anchor,contextKey:currentKey,prepare:()=>{update();assert.equal(scope.quotaGroupTransitionContext(),currentKey,'real main context stable after stage/hold layout');}});
         await until(()=>overlay.getWindow()?.isVisible(),'entry overlay visible');
         assert(cards.every(row=>!row.controller.getWindow().isVisible()),'overlay stages all original unpinned hosts');if(pinned)assert(controllers[pinned].getWindow().isVisible(),'pin remains live outside snapshot');
         const ow=overlay.getWindow(),bounds=ow.getBounds();
@@ -108,21 +112,21 @@ if (!process.versions.electron) {
         await ow.webContents.executeJavaScript('for(const a of document.getAnimations())a.finish()');assert.equal((await entry).ok,true);assert(cards.every(row=>row.controller.getWindow().isVisible()),'entry hands off to original real hosts');
         groupState={visible:config.pinned,expanded:false,bar:true};
         const origins=Object.fromEntries(cards.map(row=>[row.id,row.controller.getWindow().getBounds()]));
-        const exit=transition.request({expanded:false,cards,anchor,contextKey:currentKey,prepare:update});
+        const exit=transition.request({expanded:false,cards,anchor,contextKey:currentKey,prepare:()=>{update();assert.equal(scope.quotaGroupTransitionContext(),currentKey,'real main context stable after stage/hold layout');}});
         assert(cards.every(row=>row.controller.getWindow().isVisible()),'exit capture holds original painted cards');
         await until(()=>overlay.getWindow().isVisible(),'exit overlay visible');assert(cards.every(row=>!row.controller.getWindow().isVisible()),'exit hides originals only after overlay ready');
         for(const row of cards)assert.deepEqual(row.controller.getWindow().getBounds(),origins[row.id],'exit preserves each native source bounds');
         await ow.webContents.executeJavaScript('for(const a of document.getAnimations()){a.pause();a.currentTime=110}');
         await ow.webContents.executeJavaScript('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true))))');
         if(!pinned&&mode==='free'&&side==='left'&&!bottom)fs.writeFileSync(path.join(out,'whole-group-collapse-mid.png'),(await ow.webContents.capturePage(undefined,{stayHidden:true})).toPNG());
-        groupState={visible:config.order,expanded:true,bar:true};const reverse=transition.request({expanded:true,cards,anchor,contextKey:currentKey,prepare:update});
+        groupState={visible:config.order,expanded:true,bar:true};const reverse=transition.request({expanded:true,cards,anchor,contextKey:currentKey,prepare:()=>{update();assert.equal(scope.quotaGroupTransitionContext(),currentKey,'real main context stable after stage/hold layout');}});
         await until(()=>ow.webContents.executeJavaScript('document.getAnimations()[0]?.effect.getTiming().duration===200'),'reverse direction');await ow.webContents.executeJavaScript('for(const a of document.getAnimations())a.finish()');await Promise.all([exit,reverse]);
         assert(cards.every(row=>row.controller.getWindow().isVisible()),'reverse reveals all originals without recapture');
-        groupState={visible:config.pinned,expanded:false,bar:true};const finish=transition.request({expanded:false,cards,anchor,contextKey:currentKey,prepare:update});await until(()=>ow.isVisible(),'final exit ready');await ow.webContents.executeJavaScript('for(const a of document.getAnimations())a.finish()');await finish;
+        groupState={visible:config.pinned,expanded:false,bar:true};const finish=transition.request({expanded:false,cards,anchor,contextKey:currentKey,prepare:()=>{update();assert.equal(scope.quotaGroupTransitionContext(),currentKey,'real main context stable after stage/hold layout');}});await until(()=>ow.isVisible(),'final exit ready');await ow.webContents.executeJavaScript('for(const a of document.getAnimations())a.finish()');await finish;
         assert(cards.every(row=>!row.controller.getWindow().isVisible()));if(pinned)assert(controllers[pinned].getWindow().isVisible());
-        report.cases.push({mode,side,bottom,pinned,oneCanvas:true,realCardsCaptured:true,noPrematureHide:true,reverse:true});
+        report.cases.push({mode,side,bottom,pinned,realMainExpandedPlan:true,realMainContextStable:true,oneCanvas:true,realCardsCaptured:true,noPrematureHide:true,reverse:true});
       }
-      assert.deepEqual(errors,[]);assert(windows.every(w=>w.isDestroyed()||!w.nativeVisible()),'all native hosts remain hidden');report.passed=true;
+      assert(settled.length>=48,'entry/reverse/exit all settle');assert(settled.every(result=>result.canceled===false),'actual main context never cancels a completed animation');report.settled=settled;assert.deepEqual(errors,[]);assert(windows.every(w=>w.isDestroyed()||!w.nativeVisible()),'all native hosts remain hidden');report.passed=true;
       fs.writeFileSync(path.join(out,'group-transition-report.json'),JSON.stringify(report,null,2));console.log('GROUP_TRANSITION_NATIVE_OK',JSON.stringify({cases:report.cases.length,out}));
     }catch(error){console.error(error.stack);}
     finally{transition?.destroy();zcode?.close();api?.destroy();codex?.destroy();workbuddy?.destroy();for(const win of windows)if(!win.isDestroyed())win.destroy();app.exit(report.passed?0:1);}

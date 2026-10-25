@@ -26,9 +26,21 @@ test('failed local load is recoverable and never leaves a visible stale overlay'
 test('overlay preload accepts PNG data only and exposes no capture, network or arbitrary IPC API',()=>{
  const ipc=new EventEmitter(),sent=[];ipc.send=(...args)=>sent.push(args);let bridge;
  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../quota-card-transition-preload.js'),'utf8'),{require:name=>{assert.equal(name,'electron');return{contextBridge:{exposeInMainWorld:(_name,value)=>bridge=value},ipcRenderer:ipc}}});
- assert.deepEqual(Object.keys(bridge),['onPrepare','onAnimate','onClear','ack']);const values=[];bridge.onPrepare(value=>values.push(value));
+ assert.deepEqual(Object.keys(bridge),['onPrepare','onAnimate','onClear','trace','ack']);const values=[];bridge.onPrepare(value=>values.push(value));
  const bounds={x:0,y:0,width:128,height:152},payload={token:1,bounds,anchor:{x:51,y:0,width:26,height:7},layers:[{bounds,image:'data:image/png;base64,iVBORw0KGgo='}],scale:2};
  ipc.emit('pet:quota-card-transition-prepare',{},payload);assert.equal(values.length,1);
  for(const image of ['https://example.com/snapshot.png','file:///tmp/snapshot.png','data:image/svg+xml;base64,aaa'])ipc.emit('pet:quota-card-transition-prepare',{}, {...payload,layers:[{bounds,image}]});assert.equal(values.length,1);
- bridge.ack({token:1,phase:'finished',ok:true,secret:'drop'});bridge.ack({token:1,phase:'other',ok:true});assert.equal(sent.length,1);assert.deepEqual(JSON.parse(JSON.stringify(sent[0])),['pet:quota-card-transition-ack',{token:1,phase:'finished',ok:true}]);
+ sent.length=0;bridge.ack({token:1,phase:'finished',ok:true,secret:'drop'});bridge.ack({token:1,phase:'other',ok:true});assert.equal(sent.length,1);assert.deepEqual(JSON.parse(JSON.stringify(sent[0])),['pet:quota-card-transition-ack',{token:1,phase:'finished',ok:true}]);
+});
+
+test('timeout diagnostics retain only trusted fixed stages and preserve frame authorization',async()=>{
+ const f=fixture();await f.controller.warm();const w=f.windows[0];
+ const pending=f.controller.prepare({token:1,bounds:{x:0,y:0,width:128,height:152}});await flush();
+ const own={sender:w.webContents,senderFrame:w.webContents.mainFrame};
+ f.ipcMain.emit('pet:quota-card-transition-trace',own,{token:1,stage:'received'});
+ f.ipcMain.emit('pet:quota-card-transition-trace',{sender:{},senderFrame:{}},{token:1,stage:'untrusted'});
+ f.ipcMain.emit('pet:quota-card-transition-trace',own,{token:1,stage:'invalid-anchor'});
+ f.ack(w,{token:1,phase:'prepared',ok:true},{senderFrame:{}});
+ await assert.rejects(pending,/prepared; received>invalid-anchor>ack-frame-rejected/);
+ f.controller.destroy();assert.equal(f.ipcMain.listenerCount('pet:quota-card-transition-trace'),0);
 });

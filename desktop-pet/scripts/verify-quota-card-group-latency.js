@@ -74,7 +74,7 @@ if (!process.versions.electron) {
       // Execute the owning main helper so a fixture cannot silently use a different plan.
       const main = fs.readFileSync(path.join(sourceRoot, 'desktop-pet/main.js'), 'utf8');
       const scope = { quotaLabel: codex, apiUsageLabel: api, zcodeLink: zcode, workbuddyLabel: workbuddy, petWindow: pet, screen, settings, SheepTheme, PetFacing,
-        quotaExpandedStackPlan:()=>null,currentSheepCapsuleInk:()=>null,quotaCardGroup:{getState:()=>({eligible:['codex','api','zcode','workbuddy']})},quotaCardConfig:()=>({order:config.order,pinned:config.pinned}),quotaCardCollected:id=>!groupState.visible.includes(id),quotaCardGroupWindow:null,showQuotaCardBar:()=>{},quotaLayoutPresentation:()=>presentation,sheepBarInk:null,sheepQuotaInk: null, quotaFreeStackBounds, edgeTuck: { getPresentation: () => presentation }, quotaDisplayConfig: () => ({ style: 'card' }), quotaObstacleBounds: () => bubble, safelyInvokeWindow: (_name, fn) => fn() };
+        quotaExpandedStackPlan:()=>null,currentSheepCapsuleInk:()=>null,currentSheepSettledInk:()=>null,quotaCardGroup:{getState:()=>({eligible:['codex','api','zcode','workbuddy']})},quotaCardConfig:()=>({order:config.order,pinned:config.pinned}),quotaCardCollected:id=>!groupState.visible.includes(id),quotaCardGroupWindow:null,showQuotaCardBar:()=>{},quotaLayoutPresentation:()=>presentation,sheepBarInk:null,sheepQuotaInk: null, quotaFreeStackBounds, edgeTuck: { getPresentation: () => presentation }, quotaDisplayConfig: () => ({ style: 'card' }), quotaObstacleBounds: () => bubble, safelyInvokeWindow: (_name, fn) => fn() };
       Function('scope', 'with(scope){' + main.slice(main.indexOf('let quotaFreeStackKey ='), main.indexOf('\nfunction reportQuotaError')) + ';scope.plan=quotaFreeStackPlan;scope.sync=syncQuotaFreeStack;scope.stack=zcodeQuotaStackBounds;}')(scope);
       plan = scope.plan; sync = scope.sync; stack = scope.stack;
       const controllers = { codex, api, zcode, workbuddy };
@@ -87,7 +87,7 @@ if (!process.versions.electron) {
       let overlay,phase='idle',requestAt=0,shownAt=0;const samples=[];
       const update=()=>{for(const c of Object.values(controllers))c.reposition();sync();};
       transition=createQuotaCardGroupTransition({screen,createOverlay:()=>{
-        overlay=createQuotaCardTransitionWindow({BrowserWindow:HiddenWindow,ipcMain});
+        overlay=createQuotaCardTransitionWindow({BrowserWindow:process.env.PET_GROUP_NATIVE_OVERLAY==='1'?NativeWindow:HiddenWindow,ipcMain});
         const prepare=overlay.prepare,show=overlay.show,animate=overlay.animate;
         overlay.prepare=async payload=>{const start=Date.now();try{return await prepare(payload)}finally{timings.push({method:'overlay.prepare',duration:Date.now()-start})}};
         overlay.show=()=>{shownAt=Date.now();timings.push({method:'request-to-overlay',phase,duration:shownAt-requestAt});return show()};

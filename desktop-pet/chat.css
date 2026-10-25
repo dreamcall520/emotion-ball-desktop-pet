@@ -132,12 +132,13 @@ h1 { font-size: 16px; line-height: 22px; font-weight: 600; margin: 0; letter-spa
 .cancel-button { border: 1px solid var(--line); background: var(--panel); color: var(--text); }
 .confirm-button { border: 1px solid transparent; background: var(--primary); color: var(--accent-text); }
 .empty-state { height: 100%; min-height: 128px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding-bottom: 10px; }
-.empty-dot { display:grid; place-items:center; width:48px; height:48px; margin-bottom:18px; color:var(--accent); border-radius:16px; background:color-mix(in srgb,var(--accent) 7%,transparent); animation:empty-breathe 3.6s ease-in-out infinite; transition:transform .2s; }
-.empty-dot svg { width:30px; height:30px; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
-.empty-dot circle { fill:currentColor; stroke:none; }
-.empty-dot:hover { transform:translateY(-3px) rotate(-5deg); }
-@keyframes empty-breathe { 0%,100% { opacity:.65; } 50% { opacity:1; } }
-@media(prefers-reduced-motion:reduce) { .empty-dot { animation:none; transition:none; } }
+.empty-dot { display:flex; align-items:center; justify-content:center; gap:10px; width:72px; height:36px; margin-bottom:18px; }
+.empty-dot i { display:block; width:10px; height:10px; border-radius:50%; background:linear-gradient(135deg,#9ed1ed,#557eb6); box-shadow:0 0 10px #7394c530; animation:empty-glow 3.2s ease-in-out infinite; transition:translate .25s; }
+.empty-dot i:nth-child(2) { background:linear-gradient(135deg,#afb8eb,#7394c5); animation-delay:-1.05s; }
+.empty-dot i:nth-child(3) { background:linear-gradient(135deg,#c6aeef,#8875bb); animation-delay:-2.1s; }
+.empty-dot:hover i:first-child { translate:4px 0; }.empty-dot:hover i:last-child { translate:-4px 0; }
+@keyframes empty-glow { 0%,100% { transform:translateY(2px); opacity:.65; } 50% { transform:translateY(-3px); opacity:1; } }
+@media(prefers-reduced-motion:reduce) { .empty-dot i { animation:none; transition:none; } }
 .empty-state h2 { margin: 0 0 8px; font-size: 17px; font-weight: 500; }
 .empty-state p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.6; opacity:.75; }
 .messages { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
