@@ -306,7 +306,7 @@ test('过期 DOM 即使正确，PNG 仍等于新鲜帧也必须拒绝为旧合�
   const stale = Buffer.from('stale-painted');
   assert.throws(() => assertDistinctCaptureEvidence(light, [Buffer.from(light)], '浅深证据'),
     /旧合成帧|重复/);
-  const staleDom = { state: 'stale', periods: ['已过期 5小时', '已过期 7天'], values: [
+  const staleDom = { state: 'stale', periods: ['已过期 5小时额度', '已过期 周额度'], values: [
     { text: '100%' }, { text: '94%' }
   ] };
   assert.throws(() => assertStaleCaptureEvidence({ before: staleDom, after: staleDom,
@@ -515,9 +515,9 @@ test('原生助手验收任务菜单与名称开关且不具备真实任务写�
   assert.match(source, /codex-quota-auto/);
   assert.match(source, /codex-quota-five-hour/);
   assert.match(source, /codex-quota-weekly/);
-  assert.match(source, /view\.rows\.length === 1 &&\s*view\.itemCount === '1' &&\s*view\.periods\[0\] === '5小时'/s,
+  assert.match(source, /view\.rows\.length === 1 &&\s*view\.itemCount === '1' &&\s*view\.periods\[0\] === '5小时额度'/s,
     '标准卡片手动选 5 小时时必须只验收所选周期');
-  assert.match(source, /view\.rows\.length === 1 &&\s*view\.itemCount === '1' &&\s*view\.periods\[0\] === '7天'/s,
+  assert.match(source, /view\.rows\.length === 1 &&\s*view\.itemCount === '1' &&\s*view\.periods\[0\] === '周额度'/s,
     '标准卡片手动选周额度时必须只验收所选周期');
   assert.match(source, /\['light', 'dark'\]/);
   assert.match(source, /\$\{prefix\}-\$\{scheme\}/);

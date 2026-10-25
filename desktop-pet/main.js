@@ -1149,7 +1149,7 @@ function syncQuotaFreeStack() {
   try {
     for (let pass=0;pass<3;pass++) {
       const key=JSON.stringify(quotaFreeStackPlan());
-      quotaCardGroup?.retainLayout?.(JSON.parse(quotaFreeStackKey),JSON.parse(key),JSON.stringify([petWindow?.getBounds(),petWindow&&!petWindow.isDestroyed()?screen.getDisplayMatching(petWindow.getBounds()).workArea:null,settings?.customization?.appearance,settings?.codexQuotaLabelSize,settings?.zcodeQuotaLabelSize,quotaCardConfig(),quotaCardGroup?.getState().eligible,quotaLayoutPresentation()]));
+      quotaCardGroup?.retainLayout?.(JSON.parse(quotaFreeStackKey),JSON.parse(key),JSON.stringify([petWindow&&!petWindow.isDestroyed()?petWindow.getBounds():null,petWindow&&!petWindow.isDestroyed()?screen.getDisplayMatching(petWindow.getBounds()).workArea:null,settings?.customization?.appearance,settings?.codexQuotaLabelSize,settings?.zcodeQuotaLabelSize,quotaCardConfig(),quotaCardGroup?.getState().eligible,quotaLayoutPresentation()]));
       if (key===quotaFreeStackKey) break;
       quotaFreeStackKey=key;
       safelyInvokeWindow('三卡整组重排',()=>{quotaLabel?.reposition();apiUsageLabel?.reposition();zcodeLink?.reposition();workbuddyLabel?.reposition();});
