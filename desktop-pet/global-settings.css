@@ -244,3 +244,11 @@ body { padding-top:38px; }
 .shortcut-footer .description { margin:0; max-width:65%; }
 .shortcut-save-controls { display:flex; gap:8px; flex:none; }
 @media(max-width:760px) { .shortcut-footer { flex-wrap:wrap; } .shortcut-footer .description { max-width:100%; } }
+
+.codex-status { margin-top:18px; padding:18px 0; text-align:left; border-top:1px solid var(--line); }
+.codex-status h4 { margin:0 0 14px; font-size:13px; }
+.status-values { display:grid; grid-template-columns:88px minmax(0,1fr); gap:10px 16px; margin:0; font-size:12px; line-height:1.6; }
+.status-values dt { color:var(--muted); }
+.status-values dd { margin:0; overflow-wrap:anywhere; }
+.status-tasks { margin:18px 0 12px; font-size:12px; }
+.status-actions { display:flex; flex-wrap:wrap; gap:8px; }

@@ -313,3 +313,13 @@ test('unknown or invalid amounts remain without a report while a valid zero is r
   f.controller.show({ ...STATE, busy: true, error: '未更新' });
   assert.equal(win.sent.at(-1)[1].report.costs.month[0].value, STATE.report.costs.month[0].value);
 });
+
+test('API native peek fade has real exit and default hide remains immediate', async t => {
+  const f = fixture(); t.after(() => f.controller.destroy());
+  f.state.presentation = { mode: 'peeked', side: 'left' };
+  f.controller.show(STATE); const win = await f.ready(); win.setOpacity = value => { win.opacity = value; };
+  f.controller.hide({ animate: true }); assert.equal(win.visible, true); assert.equal(win.ignoresMouse, true);
+  await new Promise(resolve => setTimeout(resolve, 220)); assert.equal(win.visible, false);
+  f.controller.show(STATE); assert.equal(win.opacity, 0);
+  f.controller.hide(); assert.equal(win.visible, false); assert.equal(win.opacity, 1);
+});

@@ -56,7 +56,7 @@ if (!process.versions.electron) {
       const now = Date.now(), quotaWindows = [{ id: 'zcode:fixture:0', label: 'GLM-5.3', model: 'GLM-5.3', planName: 'Fixture', remaining: 75, remainingUnits: 750, total: 1000, unit: 'token', periodKind: 'daily', periodStart: now - 3600000, resetsAt: now + 7200000, windowMinutes: 180 }];
       const snapshot = { enabled: true, quota: { state: 'connected', stale: false, updatedAt: now, windows: quotaWindows }, history: { available: true, windows: [], results: [] }, tasks: { state: 'unknown', items: [] } };
       zcode = createZcodeLink({ BrowserWindow: HiddenWindow, screen, ipcMain, getPetWindow: () => pet, getSettings: () => settings, save: patch => Object.assign(settings, patch),
-        getPresentation: () => ({ ...presentationFor('zcode'), quotaBottomAligned: true, quotaStackBelow: stack() }), onLayout: () => sync(),
+        getSuppressed: () => presentation.mode === 'tucked', getPresentation: () => ({ ...presentationFor('zcode'), quotaBottomAligned: true, quotaStackBelow: stack() }), onLayout: () => sync(),
         getObstacles: () => [codex.getVisibleBounds(), api.getVisibleBounds(), bubble].filter(Boolean),
         createCompanion: () => ({ getSnapshot: () => snapshot, setEnabled: async () => {}, refresh: async () => {}, close() {} }), onError });
       workbuddy = createWorkBuddyLabelWindow({ BrowserWindow: HiddenWindow, screen, getPetWindow: () => pet, getBubbleBounds: () => bubble,
@@ -129,6 +129,31 @@ if (!process.versions.electron) {
           if (controllers[id].getVisibleBounds()) { await toggle(id); check(`peek-${side}-${id}-collapsed`); }
         }
       }
+      presentation = { mode: 'peeked', side: 'left', shape: 'blob' };
+      pet.setBounds({ x: area.x, y: area.y + 100, width: 80, height: 80 }, false); showAll(); await settle();
+      presentation = { ...presentation, mode: 'tucked', quotaAnimateHide: true };
+      for (const controller of Object.values(controllers)) controller.hide({ animate: true });
+      await wait(55);
+      for (const [id, controller] of Object.entries(controllers)) {
+        const win = controller.getWindow(); assert(win.isVisible(), `${id} exit skipped`);
+        assert(win.getOpacity() > 0 && win.getOpacity() < 1, `${id} did not interpolate opacity`);
+      }
+      await wait(170);
+      for (const controller of Object.values(controllers)) assert.equal(controller.getWindow().isVisible(), false);
+      presentation = { ...presentation, mode: 'peeked', quotaAnimateHide: false }; showAll();
+      for (const [id, controller] of Object.entries(controllers)) assert(controller.getWindow().getOpacity() < 1, `${id} entry skipped`);
+      await wait(55);
+      for (const [id, controller] of Object.entries(controllers)) assert(controller.getWindow().getOpacity() > 0 && controller.getWindow().getOpacity() < 1, `${id} entry did not interpolate`);
+      await wait(170); check('native-fade-entry-exit');
+      presentation = { ...presentation, mode: 'tucked', quotaAnimateHide: true };
+      for (const controller of Object.values(controllers)) controller.hide({ animate: true });
+      await wait(35); presentation = { ...presentation, mode: 'peeked', quotaAnimateHide: false }; showAll(); await wait(230);
+      for (const controller of Object.values(controllers)) assert.equal(controller.getWindow().isVisible(), true, 'stale exit hid a reopened card');
+      check('native-fade-rapid-reopen');
+      presentation = { ...presentation, mode: 'tucked', quotaAnimateHide: false };
+      for (const controller of Object.values(controllers)) controller.hide();
+      for (const controller of Object.values(controllers)) assert.equal(controller.getWindow().isVisible(), false, 'safety hide was delayed');
+      report.opacityTransition = { duration: 180, nativeInterpolation: true, realExit: true, rapidReopen: true, immediateSafetyHide: true };
       report.passed = true;
       console.log('COMBINED_LAYOUT_NATIVE_OK', JSON.stringify({ cases: report.cases.length, out }));
     } catch (error) { report.error = error.stack; console.error(error.stack); }

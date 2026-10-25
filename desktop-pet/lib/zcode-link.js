@@ -48,7 +48,7 @@ function createZcodeLink({ BrowserWindow, screen, ipcMain, getSettings, save, fi
       const visible = enabled && prefs.zcodeQuotaAlwaysVisible && !getSuppressed()
         && pet && !pet.isDestroyed() && pet.isVisible();
       if (visible) card.show(buildCard(service.getSnapshot(), { size: prefs.zcodeQuotaLabelSize }));
-      else card.hide();
+      else card.hide({ animate: enabled && prefs.zcodeQuotaAlwaysVisible && getPresentation()?.quotaAnimateHide === true });
       if (details.isVisible()) {
         if (!enabled || getSuppressed()) details.close();
         else details.update(model(details.getAction(), details.getPeriod()));
@@ -156,7 +156,7 @@ function createZcodeLink({ BrowserWindow, screen, ipcMain, getSettings, save, fi
     },
     getWindow: card.getWindow, getVisibleBounds: card.getVisibleBounds, getLayoutMetrics: card.getLayoutMetrics,
     reposition() { card.reposition(); sync(); },
-    hide() { card.hide(); details.close(); },
+    hide(options) { card.hide(options); details.close(); },
     setAlwaysOnTop(value) { card.setAlwaysOnTop(value); details.setAlwaysOnTop(value); },
     close() {
       if (closed) return;

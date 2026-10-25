@@ -10,7 +10,7 @@ test('settings keeps independent WorkBuddy navigation and the native checkbox ac
   const toggle = { id: '/workbuddy-enabled', label: '启用 WorkBuddy 联动', type: 'checkbox', checked: false };
   const snapshot = { entries: [{ id: '/codex-menu', label: 'Codex 与 API', children: [] }, toggle] };
   const groups = vm.runInNewContext(`${source.slice(start, end)};groups()`, { snapshot });
-  assert.deepEqual(Array.from(groups, g => g.label), ['Codex 与 API', 'WorkBuddy']);
+  assert.deepEqual(Array.from(groups, g => g.label), ['Codex', 'WorkBuddy']);
   assert.equal(groups[1].children[0], toggle);
   assert.match(source, /'启用 WorkBuddy 联动':/);
 });

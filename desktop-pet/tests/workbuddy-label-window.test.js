@@ -31,7 +31,7 @@ test('constructor is lazy; IPC verifies sender and frame; expansion falls back; 
     isDestroyed(){return this.dead;} isVisible(){return this.visible;} setAlwaysOnTop(){} setVisibleOnAllWorkspaces(){} setHiddenInMissionControl(){} setBounds(b){this.bounds=b;} showInactive(){this.visible=true;} hide(){this.visible=false;} destroy(){this.dead=true;this.emit('closed');} loadFile(){return Promise.resolve();}
   }
   const pet={isDestroyed:()=>false,isVisible:()=>true,getBounds:()=>({x:100,y:100,width:80,height:80})};
-  const controller=createWorkBuddyLabelWindow({BrowserWindow:Window,screen:{getDisplayMatching:()=>({workArea:{x:0,y:0,width:220,height:200}})},getPetWindow:()=>pet,onRefresh:()=>refresh++,onTrend:()=>trend++,onTasks:()=>tasks++,onLayout:()=>layouts++});
+  const controller=createWorkBuddyLabelWindow({BrowserWindow:Window,screen:{getDisplayMatching:()=>({workArea:{x:0,y:0,width:220,height:200}})},getPetWindow:()=>pet,getPresentation:()=>({mode:'peeked'}),onRefresh:()=>refresh++,onTrend:()=>trend++,onTasks:()=>tasks++,onLayout:()=>layouts++});
   assert.equal(windows.length,0);controller.show({enabled:false});assert.equal(windows.length,0);
   controller.show({enabled:true}); await Promise.resolve(); const w=windows[0];
   assert.deepEqual(controller.getLayoutMetrics(),{width:128,height:32,inset:2});
@@ -54,6 +54,11 @@ test('constructor is lazy; IPC verifies sender and frame; expansion falls back; 
   w.webContents.emit('ipc-message',event,'pet:workbuddy-label-tasks','unknown');assert.equal(tasks,0);
   w.webContents.emit('ipc-message',event,'pet:workbuddy-label-tasks','tasks');assert.equal(tasks,1);
   w.webContents.emit('ipc-message',event,'pet:workbuddy-label-tasks','results');assert.equal(tasks,2);
+  w.setOpacity=value=>{w.opacity=value;};
+  controller.hide({animate:true});assert.equal(w.visible,true);
+  await new Promise(resolve=>setTimeout(resolve,220));assert.equal(w.visible,false);
+  controller.show({enabled:true});assert.equal(w.opacity,0);
+  controller.hide();assert.equal(w.visible,false);assert.equal(w.opacity,1);
   controller.destroy();assert.equal(controller.getWindow(),null);
 });
 

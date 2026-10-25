@@ -128,4 +128,4 @@ function resolveCodexAction(snapshot, descriptor, now = Date.now()) {
   return { type: 'open-task', taskId, url: `codex://threads/${taskId}` };
 }
 
-module.exports = { buildCodexMenu, buildCodexResultMenu, resolveCodexAction };
+module.exports = { buildCodexMenu, buildCodexResultMenu, resolveCodexAction, CONNECTION_LABELS };

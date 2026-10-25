@@ -39,9 +39,9 @@ test('ZCode collapsed summary uses a short fixed caption and preserves every buc
     assert.equal(nodes['quota-label'].attributes['aria-label'], nodes['quota-label'].title);
   }
 });
-test('Codex collapsed caption remains its existing period and severity wording', () => {
+test('Codex collapsed caption identifies its source and period', () => {
   const { nodes, receive } = renderFixture();
   receive({ sourceId: 'codex', state: 'ready', size: 'compact', items: [{ label: 'Codex', windowMinutes: 300, remaining: 15 }] });
-  assert.equal(nodes.summary.textContent, '5h偏低15%');
+  assert.equal(nodes.summary.textContent, 'Codex5h15%');
   assert.equal(nodes['quota-label'].attributes['aria-label'], 'Codex 剩余额度');
 });

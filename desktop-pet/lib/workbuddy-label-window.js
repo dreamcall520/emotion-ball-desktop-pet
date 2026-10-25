@@ -1,3 +1,4 @@
+const { createNativeWindowFade } = require('./native-window-fade');
 const path = require('node:path');
 const { quotaLabelSize } = require('./quota-label-placement');
 const { createWorkBuddyGuardEntryWindow } = require('./workbuddy-guard-entry-window');
@@ -71,26 +72,28 @@ function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getOb
   const error = e => { try { onError(e); } catch (_) {} };
   const guard = createWorkBuddyGuardEntryWindow({ BrowserWindow, alwaysOnTop, onGuard, onError });
   const live = w => w && !w.isDestroyed() && !w.webContents.isDestroyed?.();
+  const fade = createNativeWindowFade({ onError: error });
   function notifyLayout() { try { onLayout(); } catch (e) { error(e); } }
-  function hide() { const changed = visible || expanded; visible = false; expanded = false; guard.hide(); if (live(win)) win.hide(); if (changed) notifyLayout(); }
-  function destroy() { guard.destroy(); const old = win; win = null; ready = visible = expanded = false; if (live(old)) old.destroy(); }
+  function hide({ animate = false } = {}) { const changed = visible || expanded; visible = false; expanded = false; guard.hide(); if (live(win)) { win.setIgnoreMouseEvents?.(true, { forward: true }); fade.hide(win, { animate: animate && ['peeked', 'tucked'].includes(getPresentation()?.mode) }); } if (changed) notifyLayout(); }
+  function destroy() { fade.cancel(win); guard.destroy(); const old = win; win = null; ready = visible = expanded = false; if (live(old)) old.destroy(); }
   function reposition() {
     if (!ready || !visible || !live(win)) return;
     try {
       const pet = getPetWindow();
-      if (!pet || pet.isDestroyed() || !pet.isVisible()) { win.hide(); guard.hide(); return; }
+      if (!pet || pet.isDestroyed() || !pet.isVisible()) { fade.hide(win); guard.hide(); return; }
       const p = pet.getBounds(), area = screen.getDisplayMatching(p).workArea, obstacles = getObstacles() || [];
       const stackAnchor = getStackAnchor(), presentation = getPresentation(), bubbleBounds = getBubbleBounds();
       let bounds = workBuddyLabelBounds(p, area, obstacles, expanded, stackAnchor, presentation, bubbleBounds), spaceError = false;
       if (!bounds && expanded) { expanded = false; spaceError = true; notifyLayout(); bounds = workBuddyLabelBounds(p, area, obstacles, false, stackAnchor, presentation, bubbleBounds); }
-      if (!bounds) { win.hide(); guard.hide(); return; }
+      if (!bounds) { fade.hide(win); guard.hide(); return; }
       const appearance = getAppearance();
       win.setBounds(bounds, false);
       win.webContents.send(CHANNEL, { ...current, expanded, spaceError, appearance: ['light', 'dark'].includes(appearance) ? appearance : 'system' });
-      win.showInactive();
+      win.setIgnoreMouseEvents?.(false);
+      fade.show(win, ['peeked', 'tucked'].includes(presentation?.mode));
       if (!expanded && !valid(stackAnchor) && getGuardEntry() === true) guard.show(bounds, area, [p, ...obstacles], presentation?.side);
       else guard.hide();
-    } catch (e) { guard.hide(); if (live(win)) win.hide(); error(e); }
+    } catch (e) { guard.hide(); if (live(win)) fade.hide(win); error(e); }
   }
   function ensure() {
     if (live(win)) return;

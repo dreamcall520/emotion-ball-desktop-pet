@@ -170,6 +170,7 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/assets/aurora-six-lobe-body.png',
     'desktop-pet/assets/aurora-six-lobe-icon.png',
     'desktop-pet/lib/settings.js',
+    'desktop-pet/lib/native-window-fade.js',
     'desktop-pet/lib/window-bounce.js',
     'desktop-pet/lib/interaction-motion.js',
     'desktop-pet/lib/aurora-click-visual.js',

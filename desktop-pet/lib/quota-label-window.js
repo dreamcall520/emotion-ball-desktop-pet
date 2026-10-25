@@ -1,3 +1,4 @@
+const { createNativeWindowFade } = require('./native-window-fade');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { quotaLabelBounds, quotaLabelSize, quotaRoleTargetWidth } = require('./quota-label-placement');
@@ -227,6 +228,7 @@ function createQuotaLabelWindow({
   }
 
   function safeDestroy(target) {
+    fade.cancel(target);
     if (!target) return;
     let destroyed = false;
     try { destroyed = typeof target.isDestroyed === 'function' && target.isDestroyed(); } catch (_) {}
@@ -243,6 +245,7 @@ function createQuotaLabelWindow({
     reporting = false;
   }
 
+  const fade = createNativeWindowFade({ onError: error => { if (win) detach(win, error); else report(error); } });
   function notifyLayout() {
     try { onLayout(); } catch (error) { report(error); }
   }
@@ -284,7 +287,7 @@ function createQuotaLabelWindow({
       (!requireVisible || requestedVisible);
   }
 
-  function conceal(target = win, token = operation) {
+  function conceal(target = win, token = operation, animate = false) {
     if (!target || win !== target || operation !== token) return;
     const status = health(target);
     if (!status.ok) {
@@ -292,13 +295,19 @@ function createQuotaLabelWindow({
       return;
     }
     if (win !== target || operation !== token) return;
-    if (ready && currentModel) {
-      try { target.webContents.send(channel, { ...currentModel, visible: false, guardEntry: guardEntryVisible(),
-        ...(currentLayout?.guardSide ? { guardSide: currentLayout.guardSide, cardInset: currentLayout.cardInset, guardTargetWidth: quotaRoleTargetWidth(rolePaintWidth()) } : {}) }); }
-      catch (error) { detach(target, error); return; }
+    const finish = () => {
       if (win !== target || operation !== token) return;
-    }
-    try { target.hide(); } catch (error) { detach(target, error); return; }
+      if (ready && currentModel) {
+        try { target.webContents.send(channel, { ...currentModel, visible: false, guardEntry: guardEntryVisible(),
+          ...(currentLayout?.guardSide ? { guardSide: currentLayout.guardSide, cardInset: currentLayout.cardInset, guardTargetWidth: quotaRoleTargetWidth(rolePaintWidth()) } : {}) }); }
+        catch (error) { detach(target, error); return; }
+        if (win !== target || operation !== token) return;
+      }
+    };
+    try {
+      target.setIgnoreMouseEvents(true, { forward: true });
+      fade.hide(target, { animate, onHidden: finish });
+    } catch (error) { detach(target, error); return; }
     if (win !== target || operation !== token) return;
     const afterHide = health(target);
     if (!afterHide.ok) {
@@ -306,7 +315,6 @@ function createQuotaLabelWindow({
       return;
     }
     if (win !== target || operation !== token) return;
-    try { target.setIgnoreMouseEvents(true, { forward: true }); } catch (error) { detach(target, error); }
     if (win === target && operation === token) notifyLayout();
   }
 
@@ -361,7 +369,7 @@ function createQuotaLabelWindow({
     const model = currentModel;
     if (!ready || !confirm(target, token, model)) return;
     if (getSuppressed() || getPresentation()?.quotaGroupHidden === true) {
-      conceal(target, token);
+      conceal(target, token, getPresentation()?.quotaAnimateHide === true);
       return;
     }
     const layout = petLayout();
@@ -392,7 +400,7 @@ function createQuotaLabelWindow({
       else target.setIgnoreMouseEvents(true, { forward: true });
     } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
-    try { target.showInactive(); } catch (error) { detach(target, error); return; }
+    try { fade.show(target, ['peeked', 'tucked'].includes(getPresentation()?.mode)); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) {
       if (win === target && !requestedVisible) conceal(target, operation);
       return;
@@ -566,11 +574,11 @@ function createQuotaLabelWindow({
     Promise.resolve(loading).then(markReady).catch(error => detach(loadingWindow, error));
   }
 
-  function hide() {
+  function hide({ animate = false } = {}) {
     operation += 1;
     requestedVisible = false;
     if (currentModel?.expanded === true) currentModel = { ...currentModel, expanded: false };
-    conceal(win, operation);
+    conceal(win, operation, animate && ['peeked', 'tucked'].includes(getPresentation()?.mode));
   }
 
   function destroy() {

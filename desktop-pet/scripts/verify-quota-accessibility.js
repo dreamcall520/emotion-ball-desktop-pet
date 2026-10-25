@@ -115,7 +115,9 @@ async function main() {
             assert.ok(actual.progressLabels[index].includes(stateText(remaining)), `${name}: accessible progress state words`);
             if (stateText(remaining)) assert.ok([actual.primary,actual.secondary][index].title.includes(stateText(remaining)), `${name}: readable state annotation`);
           });
-          assert.equal(actual.summaryText, `${primaryMinutes === 300 ? '5h' : '周'}${stateText(primary) || '额度'}${primary}%`, `${name}: compact state words`);
+          assert.equal(actual.summaryText, size === 'compact' && !expanded
+            ? `Codex${primaryMinutes === 300 ? '5h' : '周'}${primary}%`
+            : `${primaryMinutes === 300 ? '5h' : '周'}${stateText(primary) || '额度'}${primary}%`, `${name}: compact source and period`);
           for (const element of [actual.primary, actual.secondary, actual.summary, ...actual.labels].filter(e => e.visible)) {
             assert.ok(element.scrollWidth <= element.clientWidth + 1, `${name}: clipped ${element.text}`);
             assert.ok(element.x >= actual.card.x && element.right <= actual.card.right, `${name}: outside card ${element.text}`);

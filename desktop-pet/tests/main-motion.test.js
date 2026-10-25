@@ -1628,7 +1628,7 @@ test('所有 Codex 设置只保留一个顶层入口并完整归入子菜单', a
   assert.equal(JSON.stringify(menu.filter(item => String(item.id || '').startsWith('codex-')).map(item => item.id)),
     JSON.stringify(['codex-menu']));
   assert.equal(JSON.stringify(group.submenu.filter(item => item.id).map(item => item.id)), JSON.stringify([
-    'codex-enabled', 'codex-task-names', 'codex-quota-visible', 'codex-quota-fun', 'codex-quota-settings', 'openai-api-menu', 'codex-status'
+    'codex-enabled', 'codex-task-names', 'codex-quota-visible', 'codex-quota-fun', 'codex-quota-settings', 'openai-api-menu', 'codex-trend-open', 'codex-tasks-open', 'codex-status'
   ]));
   assert.equal(group.submenu.find(item => item.id === 'codex-enabled').label, '启用 Codex 联动');
   assert.equal(group.submenu[1].type, 'separator', '总开关与依赖设置分隔');
@@ -3883,4 +3883,42 @@ test('WorkBuddy source disables and reconnects with a new adapter while retainin
   assert.equal((await f.invoke('pet:chat-send', '重启联动后消息', sender)).accepted, true); await flush();
   assert.equal(f.workbuddyCalls.filter(item => item.operation === 'chat').length, 2);
   assert.deepEqual(f.chat.sends, []);
+});
+
+test('左右贴边唤醒先取得快捷显示权，额度卡没有先闪出的中间帧', async t => {
+  for (const side of ['left', 'right']) {
+    const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true });
+    t.after(() => f.app.emit('before-quit'));
+    const load = f.windowClass.prototype.loadFile;
+    f.windowClass.prototype.loadFile = function(file) { return file.endsWith('/shortcuts.html') ? Promise.resolve() : load.call(this, file); };
+    const controller = f.call('shortcutWindow');
+    f.call(`edgeTuck.dock('${side}')`);
+    const pet = f.pet.getBounds(), point = { x: pet.x + pet.width * (side === 'left' ? .25 : .75), y: pet.y + pet.height / 2 };
+    f.screen.getCursorScreenPoint = () => point;
+    const count = f.quotaLabel.shows.length;
+    f.call(`edgeTuck.sampleCursor(${JSON.stringify(point)})`);
+    assert.equal(edgeSnapshot(f).mode, 'peeked');
+    assert.equal(controller.isPresenting(), true);
+    assert.equal(f.quotaLabel.visible, false);
+    assert.equal(f.quotaLabel.shows.length, count, '任何同步回调都不能抢先显示额度卡');
+    const session = controller.getState().session;
+    f.call('edgeTuck.publish()');
+    assert.equal(controller.getState().session, session, '重复peeked状态不能重开快捷或重启2秒');
+  }
+});
+
+
+test('设置中心Codex摘要只返回可展示状态且额度与任务入口可用', async t => {
+  const f = await fixture({ codexEnabled: true }); t.after(() => f.app.emit('before-quit'));
+  f.connections[0].callbacks.onStatus({ channel: 'tasks', state: 'disconnected' });
+  let state = f.call('globalSettingsSnapshot().codexStatus');
+  assert.equal(state.enabled, true);
+  assert.equal(state.taskActionId, '/codex-menu/codex-tasks-open');
+  assert.equal(state.tasks.active, null, '尚未接通时不能用0冒充任务数');
+  assert.deepEqual(Array.from(state.quota), []);
+  assert.equal(menuItem(f, 'codex-trend-open').label, '额度与趋势');
+  menuItem(f, 'codex-trend-open').click(); assert.equal(f.call('codexDetails.getAction()'), 'trend');
+  f.call('codexDetails.close()');
+  menuItem(f, 'codex-tasks-open').click(); assert.equal(f.call('codexDetails.getAction()'), 'tasks');
+  assert.doesNotMatch(JSON.stringify(state), /token|credential|sk-/i);
 });

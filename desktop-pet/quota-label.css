@@ -896,3 +896,10 @@ body[data-guard-size="compact"] .guard-entry-zombie { top: 11px; }
 #quota-label[data-source="zcode"][data-size="compact"][data-expanded="false"] .summary-period { flex: none; gap: 3px; overflow: visible; }
 #quota-label[data-source="zcode"][data-size="compact"][data-expanded="false"] .summary-badge { min-width: 20px; padding-inline: 3px; }
 #quota-label[data-source="zcode"][data-size="compact"][data-expanded="false"] .summary-period-label { flex: none; min-width: 2em; overflow: visible; text-overflow: clip; }
+
+/* Keep source, period and percentage readable in the 128px Codex card. */
+#quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] #summary { gap: 3px; }
+#quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] .summary-period { flex: none; gap: 3px; overflow: visible; }
+#quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] .summary-period-label { flex: none; overflow: visible; text-overflow: clip; }
+#quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] .summary-badge { padding-inline: 3px; }
+#quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] .summary-value { font-size: 14px; }

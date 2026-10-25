@@ -43,7 +43,7 @@ const { createThoughtWindow } = require('./lib/thought-window');
 const { createSheepOfferingWindow, normalizeState: normalizeSheepOfferingState } = require('./lib/sheep-offering-window');
 const { createWindowMotion } = require('./lib/window-motion');
 const { createCodexCompanion } = require('./lib/codex-companion');
-const { buildCodexMenu, buildCodexResultMenu, resolveCodexAction } = require('./lib/codex-menu');
+const { buildCodexMenu, buildCodexResultMenu, resolveCodexAction, CONNECTION_LABELS } = require('./lib/codex-menu');
 const { buildQuotaLabelModel, buildCodexDetailsModel } = require('./lib/codex-quota-view');
 const { createQuotaHistory } = require('./lib/codex-quota-history');
 const { quotaFreeStackBounds } = require('./lib/quota-label-placement');
@@ -386,7 +386,19 @@ let globalSettingsBusy = false;
 let globalSettingsInitialView = 'common';
 
 function globalSettingsSnapshot() {
-  return { version: app.getVersion(), entries: settingsEntries(menuTemplate()),
+  const current = codexCompanion?.getSnapshot(), quota = current?.quota;
+  const tasks = current?.tasks?.state === 'connected' ? current.tasks.items : null;
+  const fresh = quota?.state === 'connected' && quota.stale !== true;
+  const model = fresh ? quotaLabelModel(current) : null;
+  const codexStatus = { enabled: settings.codexEnabled === true,
+    connection: CONNECTION_LABELS[quota?.state] || '待更新', stale: quota?.stale === true,
+    quota: (model?.items || []).map(item => ({ label: `${item.label || 'Codex'} · ${item.period || (item.windowMinutes % 1440 === 0 ? `${item.windowMinutes / 1440}天` : `${item.windowMinutes / 60}小时`)}`,
+      remaining: item.remaining, resetsAt: item.resetsAt })),
+    updatedAt: quota?.updatedAt ?? null,
+    tasks: { active: tasks ? tasks.filter(item => item.state === 'active').length : null,
+      waiting: tasks ? tasks.filter(item => item.state === 'waiting').length : null },
+    taskActionId: '/codex-menu/codex-tasks-open' };
+  return { codexStatus, version: app.getVersion(), entries: settingsEntries(menuTemplate()),
     shortcuts: shortcutRegistrar?.getConfig(), initialView: globalSettingsInitialView,
     summary: [
       { label: '球球状态', value: edgeTuck?.getPresentation().mode === 'hidden' ? '暂时隐藏' : '陪伴中' },
@@ -902,15 +914,24 @@ function tickEdgeNotice(force = false) {
   });
 }
 
+let lastPresentationMode = 'free', quotaEdgeFadeOut = false;
 function applyPresentation(packet) {
+  const previousMode = lastPresentationMode;
+  lastPresentationMode = packet.mode;
+  if (packet.mode !== 'tucked' || packet.paused || packet.cancelDrag) quotaEdgeFadeOut = false;
+  else if (previousMode === 'peeked') quotaEdgeFadeOut = true;
+  if (previousMode === 'tucked' && packet.mode === 'peeked' && !packet.dragging) {
+    shortcutWindow?.wakeFromEdge(screen.getCursorScreenPoint());
+  }
   sendPresentation(packet);
   if (packet.suppressed) {
     stopMotion();
     dialogue?.dismiss();
     hideBubble();
-    safelyInvokeWindow('收起时额度标签隐藏', () => quotaLabel?.hide());
+    safelyInvokeWindow('收起时额度标签隐藏', () => quotaLabel?.hide({ animate: quotaEdgeFadeOut }));
     safelyInvokeWindow('收起时守护战隐藏', () => quotaGuard?.close());
-    safelyInvokeWindow('收起时 API 卡片隐藏', () => apiUsageLabel?.hide());
+    safelyInvokeWindow('收起时 API 卡片隐藏', () => apiUsageLabel?.hide({ animate: quotaEdgeFadeOut }));
+    zcodeLink?.hide({ animate: quotaEdgeFadeOut });
   } else syncQuotaLabel(codexCompanion?.getSnapshot());
   syncWorkBuddyLabel();
   tickEdgeNotice(true);
@@ -1057,7 +1078,7 @@ function syncApiUsageLabel() {
   const enabled = !isQuitting && settings?.openaiApiAlwaysVisible === true;
   const visible = enabled && !screenLocked && !chatWindow?.isVisible() && !shortcutWindow?.isPresenting() && !workbuddyDetails?.isVisible() && !codexDetails?.isVisible() && !zcodeLink?.isDetailsVisible() && !presentationSuppressed() &&
     petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
-  safelyInvokeWindow('API 卡片同步', () => visible ? apiUsageLabel.show(state) : apiUsageLabel.hide());
+  safelyInvokeWindow('API 卡片同步', () => visible ? apiUsageLabel.show(state) : apiUsageLabel.hide({ animate: quotaEdgeFadeOut && !screenLocked && !isQuitting }));
   if (!enabled || !state.connected) {
     clearTimeout(apiRefreshTimer);
     apiRefreshTimer = null;
@@ -1106,7 +1127,7 @@ function syncWorkBuddyLabel() {
   const eligible = settings?.workbuddyEnabled === true && !isQuitting && !screenLocked && !pomodoroQuiet &&
     !chatWindow?.isVisible() && !shortcutWindow?.isPresenting() && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
   const visible = eligible && !zcodeLink?.isDetailsVisible() && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible() && !quotaGuard?.isVisible();
-  safelyInvokeWindow('WorkBuddy 积分显示', () => visible ? workbuddyLabel.show(workBuddyCardState()) : workbuddyLabel.hide());
+  safelyInvokeWindow('WorkBuddy 积分显示', () => visible ? workbuddyLabel.show(workBuddyCardState()) : workbuddyLabel.hide({ animate: quotaEdgeFadeOut && !screenLocked && !isQuitting }));
   if (!eligible) workbuddyDetails?.close();
 }
 
@@ -1316,7 +1337,7 @@ function syncQuotaLabel(snapshot = null) {
       if (!visible) {
         shown = false;
         safelyInvokeWindow('额度隐藏时守护战隐藏', closeCodexQuotaGuard);
-        try { quotaLabel.hide(); } catch (error) { reportQuotaError('额度标签隐藏', error); }
+        try { quotaLabel.hide({ animate: quotaEdgeFadeOut && !screenLocked && !isQuitting }); } catch (error) { reportQuotaError('额度标签隐藏', error); }
         continue;
       }
       try {
@@ -2070,6 +2091,8 @@ function codexMenu() {
           click: item => { const enabled = item.checked; item.checked = settings.openaiApiAlwaysVisible === true;
             setApiUsageVisible(enabled); } }
       ] },
+      { id: 'codex-trend-open', label: '额度与趋势', enabled: settings.codexEnabled === true, click: () => openCodexDetails('trend') },
+      { id: 'codex-tasks-open', label: '查看任务', enabled: settings.codexEnabled === true, click: () => openCodexDetails('tasks') },
       ...(settings.codexEnabled ? [{ id: 'codex-status', label: 'Codex 状态', submenu: [
         ...(codexNotice ? [{ label: codexNotice.text, enabled: false }, { type: 'separator' }] : []),
         ...bindCodexMenu(buildCodexMenu(codexCompanion?.getSnapshot(), codexNow()))
@@ -3519,7 +3542,7 @@ async function bootstrap() {
       const api = apiUsageLabel?.getWindow();
       return zcodeLink?.getVisibleBounds?.() || (api && !api.isDestroyed() && api.isVisible() ? api.getBounds() : quotaLabel?.getVisibleBounds?.());
     },
-    getPresentation: () => ({ ...edgeTuck?.getPresentation(), quotaGroupHidden: quotaFreeStackPlan()?.hidden?.includes('workbuddy'), quotaGroupLayout: quotaFreeStackPlan()?.cards.workbuddy }),
+    getPresentation: () => ({ ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut, quotaGroupHidden: quotaFreeStackPlan()?.hidden?.includes('workbuddy'), quotaGroupLayout: quotaFreeStackPlan()?.cards.workbuddy }),
     onLayout: syncQuotaFreeStack,
     getGuardEntry: () => settings.codexQuotaFunEnabled !== false && !zcodeLink?.isCardAvailable() && !quotaLabel?.getWindow()?.isVisible() && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible(),
     getObstacles: () => [quotaLabel, apiUsageLabel, zcodeLink, bubble, shortcutWindow, quotaGuard].flatMap(controller => {
@@ -3603,7 +3626,7 @@ async function bootstrap() {
     getGuardEntry: () => settings?.codexQuotaFunEnabled !== false,
     getSuppressed: () => shortcutWindow?.isPresenting() === true || codexDetails?.isVisible() === true || workbuddyDetails?.isVisible() === true || zcodeLink?.isDetailsVisible() === true || quotaGuard?.isVisible() === true,
     getPresentation: () => ({
-      ...edgeTuck?.getPresentation(),
+      ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut,
       shape: settings?.customization?.appearance?.shape,
       quotaStyle: quotaDisplayConfig().style,
       quotaGroupHidden: quotaFreeStackPlan()?.hidden?.includes('codex'), quotaGroupLayout: quotaFreeStackPlan()?.cards.codex,
@@ -3634,7 +3657,7 @@ async function bootstrap() {
     getQuotaWindow: () => quotaLabel?.getWindow(), getObstacleBounds: quotaObstacleBounds,
     getQuotaBounds: () => quotaLabel?.getVisibleBounds(),
     getAppearance: () => settings?.codexQuotaAppearance,
-    getPresentation: () => ({ ...edgeTuck?.getPresentation(), shape: settings?.customization?.appearance?.shape,
+    getPresentation: () => ({ ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut, shape: settings?.customization?.appearance?.shape,
       quotaStyle: quotaDisplayConfig().style, quotaGroupHidden: quotaFreeStackPlan()?.hidden?.includes('api'), quotaGroupLayout: quotaFreeStackPlan()?.cards.api }),
     onOpenDetails: openApiUsage, onLayout: () => { syncQuotaFreeStack(); zcodeLink?.reposition(); workbuddyLabel?.reposition(); }, alwaysOnTop: settings.alwaysOnTop,
     onError: error => writeError('API 常驻卡片', error) });
@@ -3652,7 +3675,7 @@ async function bootstrap() {
     getPetWindow: () => petWindow,
     getObstacles: () => [quotaLabel?.getVisibleBounds(), apiUsageLabel?.getWindow()?.isVisible()
       ? apiUsageLabel.getWindow().getBounds() : null, quotaObstacleBounds()].filter(Boolean),
-    getPresentation: () => ({ ...edgeTuck?.getPresentation(), shape: settings?.customization?.appearance?.shape,
+    getPresentation: () => ({ ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut, shape: settings?.customization?.appearance?.shape,
       quotaBottomAligned: true, quotaStackBelow: zcodeQuotaStackBounds(),
       quotaStyle: quotaDisplayConfig().style, sheepTheme: settings?.customization?.appearance?.sheepTheme,
       quotaGroupHidden: quotaFreeStackPlan()?.hidden?.includes('zcode'), quotaGroupLayout: quotaFreeStackPlan()?.cards.zcode }),

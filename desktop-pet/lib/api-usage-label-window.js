@@ -1,3 +1,4 @@
+const { createNativeWindowFade } = require('./native-window-fade');
 const path = require('node:path');
 const { GAP, quotaLabelBounds, quotaLabelSize } = require('./quota-label-placement');
 const { petVisualBounds } = require('./pet-visual-bounds');
@@ -96,7 +97,9 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
     observedQuota = null;
     quotaListener = null;
   }
+  const fade = createNativeWindowFade({ onError: error => failed(error, win) });
   function safeDestroy(target) {
+    fade.cancel(target);
     try { if (target && !target.isDestroyed()) target.destroy(); } catch (error) { reportError(error); }
   }
   function destroy() {
@@ -116,21 +119,21 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
     destroy();
     reportError(error);
   }
-  function conceal(target, token) {
+  function conceal(target, token, animate = false) {
     if (win !== target || revision !== token || !live(target)) return;
     target.setIgnoreMouseEvents(true, { forward: true });
     if (win === target && revision === token) {
-      target.hide();
+      fade.hide(target, { animate });
       if (win === target && revision === token) notifyLayout();
     }
   }
-  function hide() {
+  function hide({ animate = false } = {}) {
     revision += 1;
     requestedVisible = false;
     expanded = false;
     clearQuotaListeners();
     const target = win;
-    try { conceal(target, revision); } catch (error) { failed(error, target); }
+    try { conceal(target, revision, animate && ['peeked', 'tucked'].includes(getPresentation()?.mode)); } catch (error) { failed(error, target); }
   }
   function active(target, token) {
     return win === target && revision === token && requestedVisible && ready && current && live(target);
@@ -168,7 +171,7 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
         const target = win, token = revision;
         activeTarget = target;
         if (!active(target, token)) return;
-    if (getPresentation()?.quotaGroupHidden === true) { conceal(target, token); return; }
+    if (getPresentation()?.quotaGroupHidden === true) { conceal(target, token, getPresentation()?.quotaAnimateHide === true); return; }
         const pet = getPetWindow();
         if (!active(target, token)) { if (pending) continue; return; }
         if (!pet || pet.isDestroyed() || !pet.isVisible()) { hide(); return; }
@@ -185,7 +188,7 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
           () => target.setBounds(apiLabelBounds(bounds, area, quota, obstacle, expanded, presentation), false),
           () => target.webContents.send(CHANNEL, payload),
           () => target.setIgnoreMouseEvents(false),
-          () => target.showInactive()
+          () => fade.show(target, ['peeked', 'tucked'].includes(presentation?.mode))
         ];
         for (const step of steps) {
           if (!active(target, token)) break;

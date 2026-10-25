@@ -433,3 +433,109 @@ test('加载完成前关闭不会晚到显示；原生销毁清理录制与pin',
   assert.equal(f.win(), null); assert.equal(f.manager.isOpen(), false);
   assert.equal(f.pins.at(-1), false); assert.equal(f.recording.at(-1), false);
 });
+
+test('贴边唤醒立即优先快捷面板，闲置整2秒立即释放pin，停在球球上不反复弹出', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = fixture(); t.after(() => f.manager.dispose());
+  const presentation = { mode: 'peeked', shape: 'blob', side: 'left' };
+  f.presentation(presentation);
+  const visual = petVisualBounds({ x: 300, y: 300, width: 80, height: 80 }, 'blob', presentation);
+  const point = { x: visual.x + visual.width / 2, y: visual.y + visual.height / 2 };
+  f.cursor(point);
+  f.manager.interrupt(); // Docking interrupts the free-mode launcher before a new edge wake.
+  assert.equal(f.manager.wakeFromEdge(point), true);
+  assert.equal(f.manager.isOpen(), true); assert.equal(f.manager.isPresenting(), true);
+  await flush(); assert.equal(f.win().visible, true); assert.equal(f.win().focused, false);
+  t.mock.timers.tick(1999); assert.equal(f.manager.isOpen(), true);
+  assert.equal(f.manager.wakeFromEdge(point), false, 'repeated wake never extends the deadline');
+  t.mock.timers.tick(1);
+  assert.equal(f.manager.isOpen(), false); assert.equal(f.win().visible, false);
+  assert.equal(f.manager.isPresenting(), false); assert.equal(f.pins.at(-1), false);
+  for (let i = 0; i < 3; i++) {
+    f.manager.sampleCursor(point); assert.equal(f.manager.wakeFromEdge(point), false);
+    t.mock.timers.tick(2000); assert.equal(f.manager.isOpen(), false);
+  }
+  f.cursor({ x: 0, y: 0 }); f.manager.sampleCursor({ x: 0, y: 0 });
+  f.cursor(point); assert.equal(f.manager.wakeFromEdge(point), true);
+});
+
+test('贴边自动面板遇到按钮鼠标、键盘或明确手动打开后沿用原交互，不再闲置收起', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const interaction of ['button', 'keyboard', 'focus', 'manual']) {
+    const f = fixture();
+    try {
+      const presentation = { mode: 'peeked', shape: 'blob', side: 'right' };
+      f.presentation(presentation);
+      const r = petVisualBounds({ x: 300, y: 300, width: 80, height: 80 }, 'blob', presentation);
+      const point = { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      f.cursor(point); assert.equal(f.manager.wakeFromEdge(point), true); await flush();
+      t.mock.timers.tick(1000);
+      if (interaction === 'button') {
+        const layout = f.manager.getState().layout, item = layout.items[0];
+        const p = { x: layout.bounds.x + item.x + item.width / 2, y: layout.bounds.y + item.y + item.height / 2 };
+        f.cursor(p); f.manager.sampleCursor(p);
+        assert.equal(f.win().passthrough, false);
+      } else if (interaction === 'keyboard') f.win().webContents.emit('before-input-event', {}, { key: 'ArrowDown' });
+      else if (interaction === 'focus') f.win().emit('focus');
+      else f.manager.open({ focus: false });
+      t.mock.timers.tick(5000); assert.equal(f.manager.isOpen(), true, interaction);
+    } finally { f.manager.dispose(); }
+  }
+});
+
+test('仅启用且可见未受抑制的贴边peeked球体可自动唤醒，手动面板不启动闲置计时', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const presentation of [{ mode: 'free', shape: 'blob' }, { mode: 'tucked', side: 'left', shape: 'blob' },
+    { mode: 'peeked', shape: 'blob' }, { mode: 'peeked', side: 'left', shape: 'blob', dragging: true }]) {
+    const f = fixture(); f.presentation(presentation);
+    assert.equal(f.manager.wakeFromEdge({ x: 340, y: 340 }), false); assert.equal(f.windows.length, 0); f.manager.dispose();
+  }
+  const f = fixture(); t.after(() => f.manager.dispose());
+  const presentation = { mode: 'peeked', side: 'left', shape: 'blob' };
+  f.presentation(presentation);
+  const r = petVisualBounds({ x: 300, y: 300, width: 80, height: 80 }, 'blob', presentation);
+  const p = { x: r.x + r.width / 2, y: r.y + r.height / 2 }; f.cursor(p);
+  assert.equal(f.manager.wakeFromEdge({ x: 0, y: 0 }), false);
+  f.suppress(true); assert.equal(f.manager.wakeFromEdge(p), false); f.suppress(false);
+  f.petVisible(false); assert.equal(f.manager.wakeFromEdge(p), false); f.petVisible(true);
+  f.manager.setSuspended(true); assert.equal(f.manager.wakeFromEdge(p), false); f.manager.setSuspended(false);
+  f.manager.open({ focus: false }); await flush();
+  assert.equal(f.manager.wakeFromEdge(p), false); t.mock.timers.tick(5000); assert.equal(f.manager.isOpen(), true);
+  f.manager.open({ settings: true }); await flush();
+  assert.equal(f.invoke('shortcut:save', { shape: 'floating', enabled: false }).ok, true);
+  f.manager.close({ immediate: true });
+  assert.equal(f.manager.wakeFromEdge(p), false, 'disabled launcher never opens from the edge');
+});
+
+test('贴边闲置计时在close、interrupt、suspend和dispose时清理，旧计时不关闭后续会话', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const stop of [f => f.manager.close({ immediate: true }), f => f.manager.interrupt(),
+    f => { f.manager.setSuspended(true); f.manager.setSuspended(false); }, f => f.manager.dispose()]) {
+    const f = fixture();
+    const presentation = { mode: 'peeked', side: 'left', shape: 'blob' };
+    f.presentation(presentation);
+    const r = petVisualBounds({ x: 300, y: 300, width: 80, height: 80 }, 'blob', presentation);
+    const p = { x: r.x + r.width / 2, y: r.y + r.height / 2 }; f.cursor(p);
+    assert.equal(f.manager.wakeFromEdge(p), true); await flush(); t.mock.timers.tick(1000);
+    stop(f);
+    if (f.manager.open({ focus: false })) {
+      await flush(); t.mock.timers.tick(2000); assert.equal(f.manager.isOpen(), true);
+    } else { t.mock.timers.tick(2000); assert.equal(f.manager.isOpen(), false); }
+    f.manager.dispose();
+  }
+});
+
+
+test('贴边闲置截止时回读真实光标，遗漏的按钮采样不导致正在交互的面板关闭', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = fixture(); t.after(() => f.manager.dispose());
+  const presentation = { mode: 'peeked', shape: 'blob', side: 'left' };
+  f.presentation(presentation);
+  const r = petVisualBounds({ x: 300, y: 300, width: 80, height: 80 }, 'blob', presentation);
+  const point = { x: r.x + r.width / 2, y: r.y + r.height / 2 }; f.cursor(point);
+  assert.equal(f.manager.wakeFromEdge(point), true); await flush();
+  const { layout } = f.manager.getState(), item = layout.items[0];
+  f.cursor({ x: layout.bounds.x + item.x + item.width / 2, y: layout.bounds.y + item.y + item.height / 2 });
+  t.mock.timers.tick(2000); assert.equal(f.manager.isOpen(), true);
+  t.mock.timers.tick(5000); assert.equal(f.manager.isOpen(), true);
+});

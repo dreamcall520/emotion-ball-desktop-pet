@@ -1230,7 +1230,7 @@ test('小巧横条只显示摘要，小巧和标准卡片均可点击展开明�
   assert.equal(label.dataset.expanded, 'false');
   assert.equal(label.dataset.appearance, 'dark');
   assert.equal(root.dataset.appearance, 'dark');
-  assert.equal(summary.children.map(node => node.textContent).join(''), '周额度64%');
+  assert.equal(summary.children.map(node => node.textContent).join(''), 'Codex周64%');
   assert.deepEqual(summary.children.map(node => node.className), ['summary-period', 'summary-value']);
   click();
   assert.equal(toggles, 1);
@@ -1380,7 +1380,7 @@ test('渲染层用固定中文状态、纯文本和合理四舍五入最多展�
     }
   });
   receive({
-    state: 'ready',
+    state: 'ready', expanded: true,
     items: [
       { label: '  <b>Codex</b>\n\u202e ', windowMinutes: 300, remaining: 47.6 },
       { label: 'Spark', windowMinutes: 10080, remaining: 9.4 },
@@ -1868,4 +1868,20 @@ test('ZCode 无周期起点与完整长桶 ID 不丢余额，Codex 仍拒绝空�
   const model={state:'ready',items:[{bucketId,label:'MCP 工具',windowMinutes:null,remaining:80,periodKind:'monthly'}]};
   assert.equal(safeModel(model).items.length,0);
   const item=safeModel(model,'zcode').items[0];assert.equal(item.bucketId,bucketId);assert.equal(item.windowMinutes,null);assert.equal(item.remaining,80);
+});
+
+test('peek card keeps visible renderer through native exit and cancels late hide on reopen', async t => {
+  const f = fixture(() => Promise.resolve(), { presentation: { mode: 'peeked', side: 'left' } });
+  t.after(() => f.label.destroy());
+  f.label.show(readyModel()); await flush(); const win = f.windows[0];
+  win.setOpacity = value => { win.opacity = value; };
+  f.label.hide({ animate: true });
+  assert.equal(win.visible, true); assert.equal(win.sent.at(-1)[1].visible, true);
+  await new Promise(resolve => setTimeout(resolve, 220));
+  assert.equal(win.visible, false); assert.equal(win.sent.at(-1)[1].visible, false);
+  f.label.show(readyModel()); assert.equal(win.opacity, 0);
+  f.label.hide({ animate: true }); f.label.show(readyModel());
+  await new Promise(resolve => setTimeout(resolve, 220));
+  assert.equal(win.visible, true); assert.equal(win.opacity, 1);
+  f.label.hide(); assert.equal(win.visible, false);
 });

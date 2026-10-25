@@ -593,7 +593,8 @@
         row.dataset.role = index === 0 ? 'primary' : 'secondary';
         nameNode.className = 'quota-name';
         nameNode.textContent = model.sourceId === 'zcode' && model.size === 'standard'
-          ? ({ 'GLM-5.3': '5.3', 'GLM-5.3-Flash': '5.3 Flash' }[item.label] || item.label) : item.label;
+          ? ({ 'GLM-5.3': '5.3', 'GLM-5.3-Flash': '5.3 Flash' }[item.label] || item.label)
+          : model.sourceId !== 'zcode' && !model.expanded && model.size === 'standard' ? 'Codex' : item.label;
         if (model.sourceId === 'zcode') nameNode.setAttribute?.('aria-label', item.label);
         if (model.sourceId === 'zcode') nameNode.title = itemTitle(item);
         periodNode.className = 'quota-period period-pill';
@@ -622,8 +623,11 @@
       if (summary.dataset) summary.dataset.severity = label.dataset.status === 'blocked' ? 'urgent'
         : summaryItem ? severityOf(summaryItem.remaining) : 'normal';
       if (summaryItem) {
+        const codexCollapsed = model.sourceId !== 'zcode' && model.size === 'compact' && !model.expanded;
+        const caption = codexCollapsed ? ({ 300: '5h', 10080: '周' }[summaryItem.windowMinutes] || '额度')
+          : model.sourceId === 'zcode' ? '额度' : label.dataset.status === 'blocked' ? '受限' : severityText(summaryItem.remaining) || '额度';
         summary.replaceChildren(...compactReading(summaryItem.windowMinutes, remainingText(summaryItem.remaining, model.sourceId),
-          model.sourceId === 'zcode' ? '额度' : label.dataset.status === 'blocked' ? '受限' : severityText(summaryItem.remaining) || '额度', model.sourceId === 'zcode' ? 'Z' : null));
+          caption, model.sourceId === 'zcode' ? 'Z' : codexCollapsed ? 'Codex' : null));
         if (compactProduct) compactProduct.textContent = model.sourceId === 'zcode' ? 'ZCODE' : 'CODEX';
         if (compactPeriod) compactPeriod.textContent = itemTitle(summaryItem);
       } else {

@@ -43,7 +43,7 @@
   const navigationIcons = {
     '和球球聊聊': ['M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-8l-6 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z', 'M7 9h10M7 13h6'],
     '定制球球': ['M12 4a8 8 0 1 0 8 8', 'm15 4 2-2 5 5-2 2-5-5ZM15 4l-6 6-1 4 4-1 6-6'],
-    'API 费用与用量': ['M4 4v16h16', 'M8 16v-4M13 16V8M18 16V5'],
+    'API': ['M4 4v16h16', 'M8 16v-4M13 16V8M18 16V5'],
 
     '常用设置': ['m12 3 2.6 5.6 6.1.8-4.5 4.3 1.1 6.1-5.3-3-5.3 3 1.1-6.1-4.5-4.3 6.1-.8Z'],
     '番茄钟': ['M9 3h6M12 3v3M18 7l2-2', 'M12 6a8 8 0 1 0 0 16 8 8 0 0 0 0-16M12 10v4l-2 2'],
@@ -53,7 +53,7 @@
     '球球尺寸': ['M9 4H4v5M15 4h5v5M4 15v5h5M20 15v5h-5', 'M9 9h6v6H9Z'],
     '贴边与显示': ['M6 4h12a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Z', 'M8 4v16M17 9l-3 3 3 3M14 12h4'],
     '界面配色': ['M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.4-3.4 1.7 1.7 0 0 1 1.2-2.9H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3Z', 'M7 10h.01M10 7h.01M15 7h.01M18 10h.01'],
-    'Codex 与 API': ['m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16'],
+    'Codex': ['m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16'],
     'ZCode 联动': ['m5 5h14L5 19h14', 'M5 12h14'],
     '常规设置': ['M4 6h7M15 6h5M4 12h2M10 12h10M4 18h10M18 18h2', 'M11 4v4M6 10v4M14 16v4']
   };
@@ -71,7 +71,10 @@
   }
   const externalIds = new Set(['/chat-open', '/customize-open', '/pomodoro-open', '/about-open']);
   function groups() {
-    const categories = snapshot.entries.filter(entry => entry.children);
+    const categories = snapshot.entries.filter(entry => entry.children).map(entry => entry.id === '/codex-menu'
+      ? { ...entry, label: 'Codex', children: entry.children.filter(child => !child.id.endsWith('/openai-api-menu')) } : entry);
+    const apiGroup = snapshot.entries.find(entry => entry.id === '/codex-menu')?.children.find(entry => entry.id.endsWith('/openai-api-menu'));
+    if (apiGroup) categories.push({ ...apiGroup, label: 'API' });
     const workbuddy = snapshot.entries.find(entry => entry.id === '/workbuddy-enabled');
     if (workbuddy) categories.push({ id: 'workbuddy-settings', label: 'WorkBuddy', children: [workbuddy] });
     const general = categories.find(entry => entry.label === '常规设置');
@@ -92,6 +95,33 @@
     if (entry.children) return entry.children.flatMap(child => leaves(child, [...trail, entry.label]));
     return [{ ...entry, trail }];
   }
+  function codexStatus(entry) {
+    const state = snapshot.codexStatus || {}, card = el('div', '', 'codex-status');
+    card.append(el('h4', '连接与状态'));
+    const values = el('dl', '', 'status-values');
+    const add = (label, value) => { values.append(el('dt', label), el('dd', value)); };
+    const connections = { disabled: '已关闭', connecting: '正在连接', connected: '已连接', missing: '未找到 Codex', unauthenticated: '未登录', unsupported: '暂不支持', disconnected: '未连接' };
+    const date = value => Number.isFinite(value) && value >= 0 && value <= 8640000000000000
+      ? new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(value)) : '待更新';
+    add('连接', connections[state.connection] || state.connection || '待更新');
+    const quotas = Array.isArray(state.quota) ? state.quota : [];
+    add('当前额度', quotas.length ? quotas.map(item => `${item.label || '额度'} ${Number.isFinite(item.remaining) && item.remaining >= 0 && item.remaining <= 100 ? `${Number(item.remaining.toFixed(1))}%` : '待更新'}`).join(' · ') : '待更新');
+    add('重置时间', quotas.length ? quotas.map(item => `${item.label || '额度'} ${date(item.resetsAt)}`).join(' · ') : '待更新');
+    add('上次更新', date(state.updatedAt));
+    card.append(values);
+    const tasks = state.tasks || {}, counts = ['active', 'waiting'].map(key => Number.isSafeInteger(tasks[key]) && tasks[key] >= 0 ? tasks[key] : '待更新');
+    card.append(el('p', `本机最近任务 · 处理中 ${counts[0]} · 待确认 ${counts[1]}`, 'status-tasks'));
+    const actions = el('div', '', 'status-actions');
+    const all = snapshot.entries.flatMap(item => leaves(item));
+    const task = all.find(item => item.id === state.taskActionId);
+    const refresh = leaves(entry).find(item => item.id.endsWith('/codex-refresh'));
+    for (const [item, label] of [[task, '打开任务'], [refresh, '刷新状态']]) {
+      if (!item) continue;
+      const button = el('button', label, 'action'); button.dataset.action = item.id;
+      button.disabled = busy || !item.enabled; button.onclick = () => act(item); actions.append(button);
+    }
+    card.append(actions); return card;
+  }
   function render() {
     if (!snapshot) return;
     const focusId = document.activeElement?.dataset?.action;
@@ -99,7 +129,6 @@
     const categories = groups();
     const nav = [{ id: 'common', label: '常用设置' }, ...categories,
       { id: 'shortcuts', label: '快捷键' },
-      ...categories.flatMap(category => category.children.flatMap(item => item.children || [])).filter(item => item.id.endsWith('/openai-api-usage')).map(item => ({ ...item, label: 'API 费用与用量', external: true })),
       ...snapshot.entries.filter(entry => externalIds.has(entry.id)).map(entry => ({ ...entry,
         label: ({ '/chat-open': '和球球聊聊', '/customize-open': '定制球球' })[entry.id] || entry.label, external: true }))];
     if (!nav.some(item => item.id === selected)) selected = 'common';
@@ -112,7 +141,8 @@
       ['', ['常用设置']],
       ['日常陪伴', ['球球与互动', '和球球聊聊', '便签与待办', '番茄钟']],
       ['外观与显示', ['定制球球', '球球尺寸', '贴边与显示', '界面配色']],
-      ['应用与联动', ['Codex 与 API', 'ZCode 联动', 'WorkBuddy', 'API 费用与用量', '快捷键', '常规设置']]
+      ['应用与联动', ['Codex', 'API', 'ZCode 联动', 'WorkBuddy']],
+      ['快捷与常规', ['快捷键', '常规设置']]
     ];
     $('navigation').replaceChildren(...navigationGroups.map(([label, labels]) => {
       const section = el('div', '', 'nav-group');
@@ -159,15 +189,23 @@
       window.renderSettingsShortcuts($('content'), snapshot.shortcuts, api); return;
     }
     const searchable = [...categories, { id: 'shortcuts', label: '快捷键', children: snapshot.entries.filter(entry => entry.id === '/shortcut-settings') }, { id: 'windows', label: '独立功能', children: snapshot.entries.filter(entry => externalIds.has(entry.id)) }];
-    const displayed = query ? searchable : selected === 'common' ? commonGroups : categories;
+    const displayed = (query ? searchable : selected === 'common' ? commonGroups : categories).flatMap(category => {
+      if (!['/codex-menu', '/zcode-menu'].includes(category.id)) return [category];
+      const information = child => /\/(?:codex-status|codex-tasks-open|codex-trend-open|zcode-quota-detail|zcode-trend|zcode-tasks|zcode-refresh)$/.test(child.id);
+      return [
+        { ...category, heading: '额度展示设置', children: category.children.filter(child => !information(child)) },
+        { ...category, heading: '额度与任务', children: category.children.filter(information) }
+      ];
+    });
     for (const category of displayed) {
       if (!query && selected !== category.id) continue;
-      const items = category.children.flatMap(item => leaves(item)).filter(item =>
+      const statusEntry = category.children.find(item => item.id.endsWith('/codex-status'));
+      const items = category.children.filter(item => item !== statusEntry && !item.id.endsWith('/codex-tasks-open')).flatMap(item => leaves(item)).filter(item =>
         !query || [category.label, ...item.trail, item.label, ...(item.choices || []).map(choice => choice.label), descriptions[item.label] || ''].join(' ').toLocaleLowerCase().includes(query));
-      if (!items.length) continue;
-      count += items.length;
+      if (!items.length && !statusEntry) continue;
+      count += items.length + (statusEntry ? 1 : 0);
       const section = el('section', '', 'group');
-      section.append(el('h3', category.label === '便签与待办' ? '打开与创建' : category.label));
+      section.append(el('h3', category.heading || (category.label === '便签与待办' ? '打开与创建' : category.label)));
       if (category.label === '便签与待办') section.classList.add('notes-settings');
       for (const item of items) {
         const row = el('div', '', `row${item.enabled ? '' : ' unavailable'}`);
@@ -191,7 +229,7 @@
           const choice = ['checkbox', 'radio'].includes(item.type);
           const button = el('button', choice ? '' : '打开', choice ? item.type === 'checkbox' ? 'toggle' : 'radio' : 'action');
           if (!choice && (externalIds.has(item.id) || /notes-open|openai-api-usage/.test(item.id))) { button.textContent = '打开'; button.append(externalIcon()); }
-          if (!choice && /恢复|靠左|靠右|离开|隐藏|显示|睡眠|唤醒|表情|检查|刷新/.test(item.label)) button.textContent = /恢复/.test(item.label) ? '恢复位置' : /检查|刷新/.test(item.label) ? '检查更新' : item.label;
+          if (!choice && /恢复|靠左|靠右|离开|隐藏|显示|睡眠|唤醒|表情|检查|刷新/.test(item.label)) button.textContent = /恢复/.test(item.label) ? '恢复位置' : /刷新/.test(item.label) ? '刷新状态' : /检查/.test(item.label) ? '检查更新' : item.label;
           if (item.id.endsWith('/zcode-refresh')) button.textContent = '刷新状态';
           button.setAttribute('aria-label', item.label);
           button.title = choice ? `${item.label}：${item.checked ? '已开启 / 已选择' : '未开启 / 未选择'}` : item.label;
@@ -212,6 +250,7 @@
         }
         section.append(row);
       }
+      if (statusEntry && (!query || 'codex 状态 额度 任务 刷新'.includes(query))) section.append(codexStatus(statusEntry));
       sections.push(section);
     }
     $('content').replaceChildren(...sections);

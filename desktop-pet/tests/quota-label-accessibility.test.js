@@ -79,14 +79,14 @@ test('小巧摘要的颜色和状态只描述实际显示的周期，另一周�
   const { nodes, receive } = renderer();
   receive({ state: 'ready', size: 'compact', items: [item(74, 10080), item(15)] });
   assert.equal(nodes.summary.dataset.severity, 'normal');
-  assert.equal(nodes.summary.textContent, '周额度74%');
+  assert.equal(nodes.summary.textContent, 'Codex周74%');
   assert.equal(nodes['quota-label'].dataset.severity, 'low');
   receive({ state: 'ready', size: 'compact', items: [item(15), item(74, 10080)] });
   assert.equal(nodes.summary.dataset.severity, 'low');
-  assert.equal(nodes.summary.textContent, '5h偏低15%');
+  assert.equal(nodes.summary.textContent, 'Codex5h15%');
   receive({ state: 'ready', size: 'compact', items: [item(0), item(74, 10080)] });
   assert.equal(nodes.summary.dataset.severity, 'urgent');
-  assert.equal(nodes.summary.textContent, '5h已用尽0%');
+  assert.equal(nodes.summary.textContent, 'Codex5h0%');
   receive({ state: 'disconnected', items: [] });
   assert.equal(nodes.summary.dataset.severity, 'normal');
   assert.equal(nodes['secondary-value'].textContent, '');
@@ -114,4 +114,19 @@ test('v20 展开卡保留低额度文字替代及进度朗读，未知任务数�
   all=descendants(nodes['codex-expanded']);
   assert.deepEqual(byClass('v20-count').map(node=>node.textContent),['3','99+']);
   assert.match(all.find(node=>node.dataset.action==='results').attributes['aria-label'],/100 项/);
+});
+
+test('Codex收起卡始终显示来源、周期和百分比；未知周期不截成错误单位', () => {
+  const { nodes, receive } = renderer();
+  for (const [minutes, period] of [[300,'5h'],[10080,'周'],[12345,'额度']]) for(const remaining of [0,100,91.4]) {
+    receive({state:'ready',size:'compact',expanded:false,items:[{label:'上游任意名称',windowMinutes:minutes,remaining}]});
+    assert.equal(nodes.summary.textContent,`Codex${period}${Math.round(remaining)}%`);
+    assert.equal(nodes.summary.children[0].children[0].textContent,'Codex');
+    receive({state:'ready',size:'standard',expanded:false,items:[{label:'上游任意名称',windowMinutes:minutes,remaining}]});
+    assert.equal(nodes.items.children[0].children[0].textContent,'Codex');
+  }
+  receive({state:'ready',size:'compact',expanded:true,items:[item(15)]});
+  assert.equal(nodes.summary.textContent,'5h偏低15%','展开卡保留原有摘要语义');
+  receive({state:'ready',size:'compact',sourceId:'zcode',expanded:false,items:[{label:'GLM',windowMinutes:300,remaining:91.4}]});
+  assert.equal(nodes.summary.textContent,'Z额度91.4%','ZCode收起卡保持原样');
 });
