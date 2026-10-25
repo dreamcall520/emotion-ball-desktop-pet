@@ -20,6 +20,7 @@
     <symbol id="i-settings" viewBox="0 0 24 24"><path d="m9.5 3-.6 2a7 7 0 0 0-1.4.8L5.4 5.3l-2.5 4.3 1.5 1.5a8 8 0 0 0 0 1.8l-1.5 1.5 2.5 4.3 2.1-.5a7 7 0 0 0 1.4.8l.6 2h5l.6-2a7 7 0 0 0 1.4-.8l2.1.5 2.5-4.3-1.5-1.5a8 8 0 0 0 0-1.8l1.5-1.5-2.5-4.3-2.1.5a7 7 0 0 0-1.4-.8l-.6-2z"/><circle cx="12" cy="12" r="3"/></symbol>
     <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M7 16h10"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M10 11v6M14 11v6"/></symbol>
+    <symbol id="i-reset" viewBox="0 0 24 24"><path d="M4 10a8 8 0 1 1 2 8M4 4v6h6"/></symbol>
     <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
     <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M3 6h.01M3 12h.01M3 18h.01"/></symbol>
     <symbol id="i-orbit" viewBox="0 0 24 24"><circle cx="9" cy="12" r="4"/><path d="M16 4h.01M20 8h.01M21 13h.01M18 18h.01M13 21h.01"/></symbol>
@@ -40,7 +41,7 @@
   </section>
 
   <form id="settings" class="panel settings-panel" aria-labelledby="settings-title" hidden>
-    <header class="panel-header"><h1 id="settings-title"><svg><use href="#i-keyboard"/></svg>快捷键设置</h1><button type="button" data-close class="icon-button" aria-label="关闭快捷键设置"><svg><use href="#i-close"/></svg></button></header>
+    <header class="panel-header"><h1 id="settings-title"><svg><use href="#i-keyboard"/></svg>快捷键设置</h1><div class="header-tools"><button id="restore" type="button" class="icon-button" title="恢复默认" aria-label="恢复默认"><svg aria-hidden="true"><use href="#i-reset"/></svg></button><button type="button" data-close class="icon-button" aria-label="关闭快捷键设置"><svg><use href="#i-close"/></svg></button></div></header>
     <div class="settings-body">
       <fieldset class="shape-setting"><legend class="group-label">面板形态</legend><div class="shape-options">
         <label><input type="radio" name="shape" value="list"><span><svg><use href="#i-list"/></svg>列表面板</span></label>
@@ -53,10 +54,9 @@
       </div>
       <h2 class="group-label direct-heading">功能直达</h2>
       <div id="direct-settings"></div>
-      <p id="record-hint" class="record-hint" role="status">按习惯设置，可留空。点击右侧，按下你想使用的组合键。</p>
+      <p id="record-hint" class="record-hint" role="status" hidden></p>
       <p id="error" class="error" role="alert" hidden></p>
     </div>
-    <footer class="settings-footer"><button id="restore" type="button" class="text-button">恢复默认</button><div><button type="button" data-close class="secondary">关闭</button></div></footer>
     <p id="save-status" class="save-status" role="status" aria-live="polite" hidden></p>
   </form>
   <p id="runtime-error" class="runtime-error" role="alert" hidden></p>

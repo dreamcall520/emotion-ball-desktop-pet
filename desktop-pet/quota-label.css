@@ -898,8 +898,16 @@ body[data-guard-size="compact"] .guard-entry-zombie { top: 11px; }
 #quota-label[data-source="zcode"][data-size="compact"][data-expanded="false"] .summary-period-label { flex: none; min-width: 2em; overflow: visible; text-overflow: clip; }
 
 /* Keep source, period and percentage readable in the 128px Codex card. */
-#quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] #summary { gap: 3px; }
-#quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] .summary-period { flex: none; gap: 3px; overflow: visible; }
+#quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] #summary { gap: 2px; }
+#quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] .summary-period { flex: none; gap: 2px; overflow: visible; }
 #quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] .summary-period-label { flex: none; overflow: visible; text-overflow: clip; }
 #quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] .summary-badge { padding-inline: 3px; }
 #quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] .summary-value { font-size: 14px; }
+
+/* Source artwork replaces text badges without changing native card bounds. */
+.source-icon { display: inline-flex; flex: 0 0 16px; width: 16px; height: 16px; align-items: center; justify-content: center; vertical-align: middle; }
+.source-icon img { display: block; width: 16px; height: 16px; object-fit: contain; }
+.source-icon .source-icon-dark { display: none; }
+:root[data-appearance="dark"] .source-icon .source-icon-light { display: none; }
+:root[data-appearance="dark"] .source-icon .source-icon-dark { display: block; }
+#quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] { padding-right: 8px; }

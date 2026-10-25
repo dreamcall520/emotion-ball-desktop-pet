@@ -14,7 +14,8 @@
     clearTimeout(feedbackTimer); $('feedback').textContent = message;
     if (message) feedbackTimer = setTimeout(() => { $('feedback').textContent = ''; }, 3200);
   }
-  let snapshot = null, selected = 'common', busy = false, last = '', request = 0;
+  let snapshot = null, selected = 'common', busy = false, last = '', request = 0, apiSectionRequested = false;
+  const isApiView = view => ['api', 'openai-api', '/codex-menu/openai-api-menu'].includes(view);
   const descriptions = {
     '外观（所有窗口）': '统一设置各功能窗口的浅色或深色外观。',
     '主题色': '调整功能窗口的强调色；球球本身的颜色请到「定制球球」修改。',
@@ -43,7 +44,6 @@
   const navigationIcons = {
     '和球球聊聊': ['M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-8l-6 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z', 'M7 9h10M7 13h6'],
     '定制球球': ['M12 4a8 8 0 1 0 8 8', 'm15 4 2-2 5 5-2 2-5-5ZM15 4l-6 6-1 4 4-1 6-6'],
-    'OpenAI API': ['M4 4v16h16', 'M8 16v-4M13 16V8M18 16V5'],
 
     '常用设置': ['m12 3 2.6 5.6 6.1.8-4.5 4.3 1.1 6.1-5.3-3-5.3 3 1.1-6.1-4.5-4.3 6.1-.8Z'],
     '番茄钟': ['M9 3h6M12 3v3M18 7l2-2', 'M12 6a8 8 0 1 0 0 16 8 8 0 0 0 0-16M12 10v4l-2 2'],
@@ -83,10 +83,10 @@
   }
   const externalIds = new Set(['/chat-open', '/customize-open', '/pomodoro-open', '/about-open']);
   function groups() {
-    const categories = snapshot.entries.filter(entry => entry.children).map(entry => entry.id === '/codex-menu'
-      ? { ...entry, label: 'Codex', children: entry.children.filter(child => !child.id.endsWith('/openai-api-menu')) } : entry);
-    const apiGroup = snapshot.entries.find(entry => entry.id === '/codex-menu')?.children.find(entry => entry.id.endsWith('/openai-api-menu'));
-    if (apiGroup) categories.push({ ...apiGroup, label: 'OpenAI API' });
+    const categories = snapshot.entries.filter(entry => entry.children).map(entry => ({
+      ...entry, ...(entry.id === '/codex-menu' ? { label: 'Codex' } : {}),
+      children: entry.children.filter(child => child.label !== '咩咩互动')
+    }));
     const workbuddy = snapshot.entries.find(entry => entry.id === '/workbuddy-enabled');
     if (workbuddy) categories.push({ id: 'workbuddy-settings', label: 'WorkBuddy', children: snapshot.entries.filter(entry => /^\/workbuddy-(?:enabled|quota-visible|quota-fun)$/.test(entry.id)) });
     const general = categories.find(entry => entry.label === '常规设置');
@@ -153,7 +153,7 @@
       ['', ['常用设置']],
       ['日常陪伴', ['球球与互动', '和球球聊聊', '便签与待办', '番茄钟']],
       ['外观与显示', ['定制球球', '球球尺寸', '贴边与显示', '界面配色']],
-      ['应用与联动', ['Codex', 'OpenAI API', 'ZCode 联动', 'WorkBuddy']],
+      ['应用与联动', ['Codex', 'ZCode 联动', 'WorkBuddy']],
       ['快捷与常规', ['快捷键', '常规设置']]
     ];
     $('navigation').replaceChildren(...navigationGroups.map(([label, labels]) => {
@@ -196,30 +196,27 @@
       { id: 'common', label: '外观与感受', children: allEntries.filter(entry => ['外观（所有窗口）', '主题色', '色弱友好（增强对比度）'].includes(entry.label)).concat(snapshot.entries.filter(entry => entry.label === '球球尺寸')) },
       { id: 'common', label: '应用偏好', children: allEntries.filter(entry => entry.label === '自动提醒新版本') }
     ];
+    const shortcutApi = { ...api, saveShortcuts: async config => {
+      const result = await api.saveShortcuts(config);
+      request++;
+      if (result?.config) { snapshot.shortcuts = result.config; last = JSON.stringify(snapshot); }
+      return result;
+    } };
     if (!query && selected === 'shortcuts') {
       $('empty').hidden = true;
-      window.renderSettingsShortcuts($('content'), snapshot.shortcuts, { ...api, saveShortcuts: async config => {
-        const result = await api.saveShortcuts(config);
-        request++;
-        if (result?.config) { snapshot.shortcuts = result.config; last = JSON.stringify(snapshot); }
-        return result;
-      } }); return;
+      window.renderSettingsShortcuts($('content'), snapshot.shortcuts, shortcutApi); return;
     }
     const searchable = [...categories, { id: 'shortcuts', label: '快捷键', children: snapshot.entries.filter(entry => entry.id === '/shortcut-settings') }, { id: 'windows', label: '独立功能', children: snapshot.entries.filter(entry => externalIds.has(entry.id)) }];
     const displayed = (query ? searchable : selected === 'common' ? commonGroups : categories).flatMap(category => {
-      if (category.id.endsWith('/openai-api-menu')) {
-        const card = category.children.find(child => child.id.endsWith('/openai-api-visible'));
-        return card ? [
-          { ...category, heading: '费用卡显示', children: [card] },
-          { ...category, heading: '连接与费用', children: category.children.filter(child => child !== card) }
-        ] : [category];
-      }
       if (!['/codex-menu', '/zcode-menu', 'workbuddy-settings'].includes(category.id)) return [category];
+      const apiGroup = category.id === '/codex-menu' && category.children.find(child => child.id.endsWith('/openai-api-menu'));
+      const apiSections = apiGroup ? [{ ...category, heading: 'OpenAI API', section: 'openai-api',
+        introduction: 'API 费用独立于 Codex 订阅额度，按使用量单独计费；连接配置需要管理员 Key。', children: apiGroup.children }] : [];
       const enable = category.children.find(child => /\/(?:codex|zcode|workbuddy)-enabled$/.test(child.id));
-      if (!enable) return [];
+      if (!enable) return apiSections;
       const sections = [{ ...category, heading: '启用联动', children: [enable] }];
-      if (enable.checked !== true) return sections;
-      const children = category.children.filter(child => child !== enable);
+      if (enable.checked !== true) return sections.concat(apiSections);
+      const children = category.children.filter(child => child !== enable && child !== apiGroup);
       if (category.id === 'workbuddy-settings') return sections.concat([
         { ...category, heading: '积分卡显示', children: children.filter(child => child.id === '/workbuddy-quota-visible') },
         { ...category, heading: '积分趣味互动', children: children.filter(child => child.id === '/workbuddy-quota-fun') }
@@ -229,17 +226,19 @@
         : /\/(?:codex-status|codex-tasks-open|codex-trend-open|zcode-quota-detail|zcode-trend|zcode-tasks|zcode-refresh)$/.test(child.id) ? '额度与任务信息' : '额度显示';
       return sections.concat(['任务提醒', '额度显示', '额度趣味互动', '额度与任务信息'].map(heading => ({
         ...category, heading, children: children.filter(child => module(child) === heading)
-      })));
+      })), apiSections);
     });
     for (const category of displayed) {
       if (!query && selected !== category.id) continue;
       const statusEntry = category.children.find(item => item.id.endsWith('/codex-status'));
       const items = category.children.filter(item => item !== statusEntry && !item.id.endsWith('/codex-tasks-open')).flatMap(item => leaves(item)).filter(item =>
-        !query || [category.label, ...item.trail, item.label, ...(item.choices || []).map(choice => choice.label), descriptions[item.label] || ''].join(' ').toLocaleLowerCase().includes(query));
+        !query || [category.label, category.heading, ...item.trail, item.label, ...(item.choices || []).map(choice => choice.label), descriptions[item.label] || ''].join(' ').toLocaleLowerCase().includes(query));
       if (!items.length && !statusEntry) continue;
       count += items.length + (statusEntry ? 1 : 0);
       const section = el('section', '', 'group');
+      if (category.section) section.dataset.settingsSection = category.section;
       section.append(el('h3', category.heading || (category.label === '便签与待办' ? '打开与创建' : category.label)));
+      if (category.introduction) section.append(el('p', category.introduction, 'description group-intro'));
       if (category.label === '便签与待办') section.classList.add('notes-settings');
       for (const item of items) {
         const row = el('div', '', `row${item.enabled ? '' : ' unavailable'}`);
@@ -287,8 +286,13 @@
       if (statusEntry && (!query || 'codex 状态 额度 任务 刷新'.includes(query))) section.append(codexStatus(statusEntry));
       sections.push(section);
     }
+    const notes = categories.find(category => category.label === '便签与待办');
+    const behaviors = snapshot.shortcuts && notes && (!query ? selected === notes.id : '便签 待办 启动方式'.includes(query)) ? el('div') : null;
+    if (behaviors) { sections.push(behaviors); count++; }
     $('content').replaceChildren(...sections);
+    if (behaviors) window.renderSettingsShortcuts(behaviors, snapshot.shortcuts, shortcutApi, true);
     $('empty').hidden = count !== 0;
+    if (apiSectionRequested) { document.querySelector('[data-settings-section="openai-api"]')?.scrollIntoView({ block: 'start' }); apiSectionRequested = false; }
     if (focusId) Array.from(document.querySelectorAll('[data-action]')).find(node => node.dataset.action === focusId)?.focus();
   }
   async function act(item) {
@@ -309,7 +313,8 @@
       const value = await api.get();
       if (current !== request || busy || !value) return;
       const serialized = JSON.stringify(value);
-      if (last !== serialized) { if (!snapshot && value.initialView === 'shortcuts') selected = 'shortcuts'; snapshot = value; last = serialized; render(); }
+      if (last !== serialized) { if (!snapshot && value.initialView === 'shortcuts') selected = 'shortcuts';
+        else if (!snapshot && isApiView(value.initialView)) { selected = '/codex-menu'; apiSectionRequested = true; } snapshot = value; last = serialized; render(); }
     } catch (_) { $('feedback').textContent = '暂时无法读取设置，请重新打开窗口。'; }
   }
   function setSearchOpen(open) {
@@ -325,10 +330,11 @@
     if (event.key === 'Escape' && !$('search-panel').hidden) { event.preventDefault(); setSearchOpen(false); }
   });
   api.onNavigate(view => {
-    if (view !== 'shortcuts') return;
-    selected = view; $('search').value = ''; $('search-panel').hidden = true;
+    if (view !== 'shortcuts' && !isApiView(view)) return;
+    apiSectionRequested = isApiView(view);
+    selected = apiSectionRequested ? '/codex-menu' : view; $('search').value = ''; $('search-panel').hidden = true;
     $('search-toggle').setAttribute('aria-expanded', 'false');
-    render(); document.querySelector('main').scrollTop = 0;
+    render(); if (view === 'shortcuts') document.querySelector('main').scrollTop = 0;
   });
   window.addEventListener('focus', refresh);
   const timer = setInterval(refresh, 2000);

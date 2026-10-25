@@ -236,9 +236,9 @@ test('动效原点使用真实球轮廓中心，并随设置窗口拖动更新�
     assert.ok(Math.abs(state.origin.y + state.layout.bounds.y - 337.4) < 0.001);
   };
   checkOrigin();
-  f.win().setBounds({ x: 700, y: 100, width: 416, height: 680 }); f.win().emit('move');
+  f.win().setBounds({ x: 700, y: 100, width: 416, height: 600 }); f.win().emit('move');
   checkOrigin();
-  assert.deepEqual(f.manager.getState().layout.bounds, { x: 700, y: 100, width: 416, height: 680 });
+  assert.deepEqual(f.manager.getState().layout.bounds, { x: 700, y: 100, width: 416, height: 600 });
 });
 
 test('系统裁回半露云的透明gutter后，六入口全局位置、命中与动效原点保持一致', async t => {
@@ -307,7 +307,7 @@ test('原生显示后迟到的move裁回gutter仍修正按钮和命中，稳定s
 test('设置拖动后sync保持用户位置；同一设置session不重新锚定球球', async t => {
   const f = fixture(); t.after(() => f.manager.dispose());
   f.manager.open({ settings: true }); await flush();
-  const moved = { x: 800, y: 120, width: 416, height: 680 };
+  const moved = { x: 800, y: 120, width: 416, height: 600 };
   f.win().setBounds(moved); f.manager.sync();
   const placements = f.win().boundsCalls.length;
   f.petBounds({ x: 50, y: 50, width: 80, height: 80 }); f.manager.sync();
@@ -323,10 +323,10 @@ test('设置跨屏跟随自身所在屏幕并clamp，窄屏缩小窗口，保存
   f.displayMatching(bounds => ({ workArea: bounds.x < 0 ?
     { x: -1000, y: -200, width: 800, height: 700 } : { x: 0, y: 0, width: 1440, height: 900 } }));
   f.manager.open({ settings: true }); await flush();
-  f.win().setBounds({ x: -1100, y: -300, width: 416, height: 680 }); f.manager.sync();
-  assert.deepEqual(f.win().getBounds(), { x: -1000, y: -200, width: 416, height: 680 });
-  f.win().setBounds({ x: -250, y: 300, width: 416, height: 680 }); f.manager.sync();
-  assert.deepEqual(f.win().getBounds(), { x: -616, y: -180, width: 416, height: 680 });
+  f.win().setBounds({ x: -1100, y: -300, width: 416, height: 600 }); f.manager.sync();
+  assert.deepEqual(f.win().getBounds(), { x: -1000, y: -200, width: 416, height: 600 });
+  f.win().setBounds({ x: -250, y: 300, width: 416, height: 600 }); f.manager.sync();
+  assert.deepEqual(f.win().getBounds(), { x: -616, y: -100, width: 416, height: 600 });
   f.displayMatching(() => ({ workArea: { x: -400, y: 20, width: 300, height: 480 } }));
   f.manager.sync();
   assert.deepEqual(f.win().getBounds(), { x: -400, y: 20, width: 300, height: 480 });
@@ -369,7 +369,7 @@ test('原生拖动经过屏幕接缝只回读位置，不在每个move事件中�
     { x: -1000, y: 0, width: 1000, height: 900 } : { x: 0, y: 0, width: 1440, height: 900 } }));
   f.manager.open({ settings: true }); await flush();
   for (const x of [-100, -300, -500]) {
-    const moved = { x, y: 100, width: 416, height: 680 };
+    const moved = { x, y: 100, width: 416, height: 600 };
     f.win().setBounds(moved); const placements = f.win().boundsCalls.length;
     f.win().emit('move');
     assert.deepEqual(f.win().getBounds(), moved);
@@ -538,4 +538,14 @@ test('贴边闲置截止时回读真实光标，遗漏的按钮采样不导致�
   f.cursor({ x: layout.bounds.x + item.x + item.width / 2, y: layout.bounds.y + item.y + item.height / 2 });
   t.mock.timers.tick(2000); assert.equal(f.manager.isOpen(), true);
   t.mock.timers.tick(5000); assert.equal(f.manager.isOpen(), true);
+});
+
+
+test('精简设置窗口默认600高，小工作区按实际高度缩小', async t => {
+  const f = fixture(); t.after(() => f.manager.dispose());
+  f.manager.open({ settings: true }); await flush();
+  assert.equal(f.win().getBounds().height, 600);
+  f.displayMatching(() => ({ workArea: { x:0,y:0,width:320,height:440 } }));
+  f.manager.sync();
+  assert.deepEqual(f.win().getBounds(), {x:0,y:0,width:320,height:440});
 });

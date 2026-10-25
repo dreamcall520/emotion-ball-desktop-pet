@@ -6,7 +6,7 @@ if (process.versions.electron && process.argv.includes('--shortcut-dom-child')) 
   app.whenReady().then(async () => {
     const root = process.env.PET_SHORTCUT_SOURCE_ROOT || path.resolve(__dirname, '../..');
     const read = file => fs.readFileSync(path.join(root, 'desktop-pet', file), 'utf8');
-    const win = new BrowserWindow({ width:416, height:680, show:false, webPreferences:{contextIsolation:false,nodeIntegration:false} });
+    const win = new BrowserWindow({ width:416, height:600, frame:false, useContentSize:true, show:false, webPreferences:{contextIsolation:false,nodeIntegration:false} });
     win.webContents.on('console-message', (_event, _level, message) => process.stderr.write(String(message)+'\n'));
     const html = read('shortcuts.html').replace(/<script\b[^>]*>[\s\S]*?<\/script>/g,'').replace(/<link\b[^>]*>/g,tag=>tag.includes('blue-style')?'<link id="blue-style" rel="stylesheet">':'');
     await win.loadURL('data:text/html,'+encodeURIComponent(html));
@@ -17,6 +17,13 @@ if (process.versions.electron && process.argv.includes('--shortcut-dom-child')) 
     await run('Promise.allSettled(document.getAnimations().filter(animation=>animation.effect.getComputedTiming().iterations!==Infinity).map(animation=>animation.finished))');
     await run('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
     assert.equal(await run("document.getElementById('save')===null && document.getElementById('cancel')===null"),true);
+    assert.equal(await run("document.querySelector('.settings-footer')===null"),true);
+    assert.equal(await run("document.getElementById('record-hint').hidden && document.getElementById('record-hint').getBoundingClientRect().height===0"),true);
+    const headerControls=await run("[...document.querySelectorAll('#settings .panel-header button')].map(n=>({id:n.id,label:n.getAttribute('aria-label'),title:n.title,x:n.getBoundingClientRect().x}))");
+    assert.equal(headerControls[0].id,'restore'); assert.equal(headerControls[0].label,'恢复默认'); assert.equal(headerControls[0].title,'恢复默认');
+    assert.equal(headerControls[1].label,'关闭快捷键设置'); assert(headerControls[0].x<headerControls[1].x);
+    assert.equal(await run("(()=>{const b=document.querySelector('.settings-body');return b.scrollHeight<=b.clientHeight+1})()"),true,'600px window fits normal content');
+
     const positions = await run("[...document.querySelectorAll('#settings [data-clear]')].map(n=>({x:n.getBoundingClientRect().right,width:n.getBoundingClientRect().width,visibility:getComputedStyle(n).visibility,icon:n.querySelector('use').getAttribute('href')}))");
     assert.equal(positions.length,6); assert(positions.every(p=>Math.abs(p.width-28)<.5 && p.icon==='#i-trash'),JSON.stringify(positions));
     assert(positions.every(p=>Math.abs(p.x-positions[0].x)<.5),'删除列全部右边缘对齐'); assert.equal(positions[2].visibility,'hidden');
@@ -52,6 +59,22 @@ if (process.versions.electron && process.argv.includes('--shortcut-dom-child')) 
     const out = process.env.PET_SHORTCUT_ARTIFACT_DIR || '/tmp/qiuqiu-shortcut-settings-preview'; fs.mkdirSync(out,{recursive:true});
     await run('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))'); await new Promise(resolve=>setTimeout(resolve,150));
     fs.writeFileSync(path.join(out,'shortcuts-settings.png'),(await win.webContents.capturePage(undefined,{stayHidden:true})).toPNG());
+
+    await run("document.querySelector('[data-record=custom]').click()");
+    assert.equal(await run("document.getElementById('record-hint').hidden"),false,'recording alone shows guidance');
+    await run("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))");
+    assert.equal(await run("document.getElementById('record-hint').hidden"),true);
+    win.setSize(320,440); await settle();
+    const small=await run("(()=>{const p=document.querySelector('#settings'),b=p.querySelector('.settings-body'),r=n=>n.getBoundingClientRect().toJSON();return {panel:r(p),body:r(b),scroll:b.scrollHeight,client:b.clientHeight,overflow:getComputedStyle(b).overflowY,header:[...p.querySelectorAll('.panel-header button')].map(r),horizontal:b.scrollWidth<=b.clientWidth}})()");
+    assert(small.panel.width<=320 && small.panel.height<=440); assert(small.scroll>small.client && small.overflow==='auto');
+    assert(small.horizontal,'small settings body never overflows horizontally');
+    assert(small.header.every(r=>r.x>=0&&r.y>=0&&r.x+r.width<=320&&r.y+r.height<=440),'header actions stay reachable');
+    await run("document.querySelector('[data-record=pomodoro]').scrollIntoView({block:'end'})");
+    const lastBinding=await run("(()=>{const row=document.querySelector('[data-record=pomodoro]').getBoundingClientRect(),body=document.querySelector('.settings-body').getBoundingClientRect();return {top:row.top,bottom:row.bottom,bodyTop:body.top,bodyBottom:body.bottom}})()");
+    assert(lastBinding.top>=lastBinding.bodyTop&&lastBinding.bottom<=lastBinding.bodyBottom+1,JSON.stringify(lastBinding));
+    fs.writeFileSync(path.join(out,'shortcuts-settings-small.png'),(await win.webContents.capturePage(undefined,{stayHidden:true})).toPNG());
+    await run("document.querySelector('#settings .panel-header [data-close]').click()");
+    assert.equal(await run("calls.at(-1).type"),'close');
     win.destroy(); process.stdout.write('SHORTCUT_SETTINGS_DOM_OK\n'); app.exit(0);
   }).catch(error=>{process.stderr.write(error.stack+'\n');app.exit(1)});
 } else {

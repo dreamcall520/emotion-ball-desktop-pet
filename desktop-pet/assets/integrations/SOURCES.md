@@ -8,3 +8,5 @@
 - `workbuddy.png`：`/Applications/WorkBuddy.app/Contents/Resources/icon.icns`。
 
 仅转换格式并缩至 64×64；未重绘图标。当前为本地独立验收候选。
+
+- `openai.png`: `/Applications/ChatGPT.app/Contents/Resources/icon-chatgpt.png` (OpenAI API source mark).

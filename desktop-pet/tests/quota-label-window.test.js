@@ -1230,7 +1230,7 @@ test('小巧横条只显示摘要，小巧和标准卡片均可点击展开明�
   assert.equal(label.dataset.expanded, 'false');
   assert.equal(label.dataset.appearance, 'dark');
   assert.equal(root.dataset.appearance, 'dark');
-  assert.equal(summary.children.map(node => node.textContent).join(''), 'CX周64%');
+  assert.equal(summary.children.map(node => node.textContent).join(''), '周额度64%');
   assert.deepEqual(summary.children.map(node => node.className), ['summary-period', 'summary-value']);
   click();
   assert.equal(toggles, 1);
@@ -1414,7 +1414,7 @@ test('渲染层用固定中文状态、纯文本和合理四舍五入最多展�
   ], overflow: 0 });
   assert.equal(status.textContent, '额度已过期');
   assert.deepEqual(items.children.map(item => item.children[1].textContent), [
-    '已过期 5小时', '已过期 7天'
+    '已过期 5小时额度', '已过期 周额度'
   ]);
   assert.deepEqual(items.children.map(item => item.children[2].textContent), ['64%', '78%']);
   assert.equal(overflow.textContent, '');
@@ -1423,7 +1423,7 @@ test('渲染层用固定中文状态、纯文本和合理四舍五入最多展�
     { label: '超长恶意标签<script>alert(1)</script>还有更多文字', windowMinutes: 300, remaining: 64 },
     { label: '周额度详情名称也可以很长很长很长', windowMinutes: 10080, remaining: 78 }
   ], overflow: 0 });
-  assert.deepEqual(items.children.map(item => item.children[1].textContent), ['5小时', '7天']);
+  assert.deepEqual(items.children.map(item => item.children[1].textContent), ['5小时额度', '周额度']);
   assert.deepEqual(items.children.map(item => item.children[2].textContent), ['64%', '78%']);
 
   const states = {

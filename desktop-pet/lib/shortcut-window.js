@@ -135,7 +135,7 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
       // position for the rest of this settings session, including other displays.
       const current = settingsPositioned && alive() ? win.getBounds() : null;
       const workArea = current ? screen.getDisplayMatching(current).workArea : area;
-      const size = { width: Math.min(416, workArea.width), height: Math.min(680, workArea.height) };
+      const size = { width: Math.min(416, workArea.width), height: Math.min(600, workArea.height) };
       const placement = current ? {
         x: Math.round(Math.min(Math.max(current.x, workArea.x), workArea.x + workArea.width - size.width)),
         y: Math.round(Math.min(Math.max(current.y, workArea.y), workArea.y + workArea.height - size.height)), ...size

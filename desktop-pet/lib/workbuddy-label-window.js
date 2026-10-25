@@ -10,8 +10,8 @@ function workBuddyLabelBounds(pet, area, obstacles = [], expanded = false, stack
   const { width } = quotaLabelSize(expanded ? 'compactExpanded' : 'compact');
   const height = expanded ? 120 : quotaLabelSize('compact').height;
   if (width > area.width || height > area.height) return null;
-  if (presentation?.mode === 'free' && presentation.quotaGroupHidden) return null;
-  const coordinated = presentation?.mode === 'free' && presentation.quotaGroupLayout;
+  if (['free','peeked'].includes(presentation?.mode) && presentation.quotaGroupHidden) return null;
+  const coordinated = ['free','peeked'].includes(presentation?.mode) && presentation.quotaGroupLayout;
   if (valid(coordinated) && coordinated.width === width && coordinated.height === height &&
     coordinated.x >= area.x && coordinated.y >= area.y && coordinated.x + width <= area.x + area.width && coordinated.y + height <= area.y + area.height) return coordinated;
   const gap = 8;

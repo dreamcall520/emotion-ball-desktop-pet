@@ -13,7 +13,6 @@
   const floatingActions = [...actions, { id: 'settings', name: '设置', icon: 'settings' }];
   const defaults = { shape: 'floating', enabled: true, launcher: 'Ctrl+Alt+Q', chat: '', custom: '', note: '', todo: '', pomodoro: '', noteBehavior: 'panel', todoBehavior: 'panel' };
   const startBehaviors = { note: 'noteBehavior', todo: 'todoBehavior' };
-  const recordHint = '修改后直接生效。便签、待办的启动方式同时用于面板按钮。';
   const bindingIds = ['launcher', ...actions.map(action => action.id)];
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
   const symbols = isMac ? { Ctrl: '⌃', Alt: '⌥', Shift: '⇧', Meta: '⌘', Space: '空格' } : { Ctrl: 'Ctrl', Alt: 'Alt', Shift: 'Shift', Meta: 'Win', Space: '空格' };
@@ -96,7 +95,7 @@
     if (state?.view === 'settings') {
       const control = $('settings').querySelector(`[data-record="${id}"]`)?.parentElement;
       if (control) control.replaceChildren(...bindingControl(id).childNodes);
-      $('record-hint').textContent = recordHint;
+      $('record-hint').textContent = ''; $('record-hint').hidden = true;
       if ((restoreFocus || wasFocused) && id) $('settings').querySelector(`[data-record="${id}"]`)?.focus({ preventScroll: true });
     }
   }
@@ -170,7 +169,8 @@
     }
     $('restore').disabled = busy;
     $('settings').querySelector('[data-close]').disabled = busy;
-    $('record-hint').textContent = recording ? '按 ⌘ / ⌃ / ⌥ 与字母、数字或功能键组合。Esc 取消。' : recordHint;
+    $('record-hint').hidden = !recording;
+    $('record-hint').textContent = recording ? '按 ⌘ / ⌃ / ⌥ 与字母、数字或功能键组合。Esc 取消。' : '';
     if (focusedRecord) $('settings').querySelector(`[data-record="${focusedRecord}"]`)?.focus({ preventScroll: true });
     else if (focusedBehavior) $('settings').querySelector(`[data-start-behavior="${focusedBehavior}"]`)?.focus({ preventScroll: true });
   }

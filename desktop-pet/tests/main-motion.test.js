@@ -1616,7 +1616,11 @@ test('free three-card coordination reflows once per stable size plan and retires
   f.apiLabel.getLayoutMetrics=()=>null;f.call('syncQuotaFreeStack()');assert.equal(f.call('quotaFreeStackPlan()'),null);
   assert.equal(f.call('zcodeLink.moves'),3);f.call('syncQuotaFreeStack()');assert.equal(f.call('zcodeLink.moves'),3);
   f.apiLabel.getLayoutMetrics=()=>metrics;f.call("edgeTuck.dock('left');edgeTuck.sampleCursor({x:petWindow.getBounds().x+10,y:petWindow.getBounds().y+10})");
-  assert.equal(f.call('quotaFreeStackPlan()'),null,'peek keeps the original horizontal layout');
+  const peek = f.call('quotaFreeStackPlan()');
+  assert.deepEqual(Object.keys(peek.cards), ['codex','api','zcode']);
+  const faces = Object.values(peek.cards).map(row => row.face);
+  assert(faces.every(face => face.x === faces[0].x), 'peek consumes one shared column');
+  for (let i=1;i<faces.length;i++) assert.equal(faces[i].y-faces[i-1].y-faces[i-1].height,8);
 });
 
 test('所有 Codex 设置只保留一个顶层入口并完整归入子菜单', async () => {

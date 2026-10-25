@@ -403,9 +403,20 @@
     });
     return button;
   }
+  const codexPeriodCaption = minutes => ({ 300: '5小时额度', 10080: '周额度' }[minutes] || '额度');
+  function sourceIcon(sourceId) {
+    const icon = node('span', 'source-icon');
+    icon.title = sourceId === 'zcode' ? 'ZCode' : 'Codex';
+    icon.setAttribute?.('role', 'img'); icon.setAttribute?.('aria-label', icon.title);
+    const image = (file, className = '') => {
+      const img = node('img', className); img.src = `assets/integrations/${file}.png`; img.alt = ''; img.setAttribute?.('aria-hidden', 'true'); return img;
+    };
+    icon.replaceChildren(...(sourceId === 'zcode' ? [image('zcode')] : [image('codex', 'source-icon-light'), image('codex-dark', 'source-icon-dark')]));
+    return icon;
+  }
   function compactReading(minutes, text, caption, badge = null) {
     const period = node('span', 'summary-period');
-    period.replaceChildren(node('span', 'summary-badge', badge || periodBadgeText(minutes)),
+    period.replaceChildren(badge === 'CX' || badge === 'Z' ? sourceIcon(badge === 'Z' ? 'zcode' : 'codex') : node('span', 'summary-badge', badge || periodBadgeText(minutes)),
       node('span', 'summary-period-label', caption));
     return [period, node('span', 'summary-value', text)];
   }
@@ -595,10 +606,11 @@
         nameNode.textContent = model.sourceId === 'zcode' && model.size === 'standard'
           ? ({ 'GLM-5.3': '5.3', 'GLM-5.3-Flash': '5.3 Flash' }[item.label] || item.label)
           : model.sourceId !== 'zcode' && !model.expanded && model.size === 'standard' ? 'CX' : item.label;
+        if (model.sourceId !== 'zcode' && !model.expanded && model.size === 'standard') nameNode.replaceChildren(sourceIcon('codex'));
         if (model.sourceId === 'zcode') nameNode.setAttribute?.('aria-label', item.label);
         if (model.sourceId === 'zcode') nameNode.title = itemTitle(item);
         periodNode.className = 'quota-period period-pill';
-        periodNode.textContent = `${model.state === 'stale' ? '已过期 ' : ''}${model.sourceId === 'zcode' && item.planName ? shortPlanName(item) : model.sourceId === 'zcode' ? ({one_time:'活动',expiry:'活动',daily:'每日',monthly:'每月',weekly:'每周',rolling:'周期'}[item.periodKind] || '有效期') : periodText(item.windowMinutes)}`;
+        periodNode.textContent = `${model.state === 'stale' ? '已过期 ' : ''}${model.sourceId === 'zcode' && item.planName ? shortPlanName(item) : model.sourceId === 'zcode' ? ({one_time:'活动',expiry:'活动',daily:'每日',monthly:'每月',weekly:'每周',rolling:'周期'}[item.periodKind] || '有效期') : !model.expanded ? codexPeriodCaption(item.windowMinutes) : periodText(item.windowMinutes)}`;
         if (model.sourceId === 'zcode') periodNode.title = item.planName || itemTitle(item);
         valueNode.className = 'quota-value';
         renderValue(valueNode, item.remaining, model.sourceId);
@@ -624,7 +636,7 @@
         : summaryItem ? severityOf(summaryItem.remaining) : 'normal';
       if (summaryItem) {
         const codexCollapsed = model.sourceId !== 'zcode' && model.size === 'compact' && !model.expanded;
-        const caption = codexCollapsed ? ({ 300: '5h', 10080: '周' }[summaryItem.windowMinutes] || '额度')
+        const caption = codexCollapsed ? codexPeriodCaption(summaryItem.windowMinutes)
           : model.sourceId === 'zcode' ? '额度' : label.dataset.status === 'blocked' ? '受限' : severityText(summaryItem.remaining) || '额度';
         summary.replaceChildren(...compactReading(summaryItem.windowMinutes, remainingText(summaryItem.remaining, model.sourceId),
           caption, model.sourceId === 'zcode' ? 'Z' : codexCollapsed ? 'CX' : null));

@@ -166,7 +166,7 @@ test('安装包完整包含快捷打开界面及可加载的原生依赖', t => 
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'qiu-shortcuts-pack-'));
   t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
   const staging = prepareStaging(root, path.join(temporary, 'app'));
-  for (const file of [...['codex.png', 'codex-dark.png', 'zcode.png', 'workbuddy.png', 'SOURCES.md'].map(name => `assets/integrations/${name}`),
+  for (const file of [...['codex.png', 'codex-dark.png', 'zcode.png', 'workbuddy.png', 'openai.png', 'SOURCES.md'].map(name => `assets/integrations/${name}`),
     'shortcuts.html', 'shortcuts.css', 'shortcuts-preload.js', 'shortcuts-renderer.js',
     'lib/shortcuts.js', 'lib/shortcut-layout.js', 'lib/shortcut-window.js', 'scripts/verify-shortcuts-integration.js']) {
     assert.deepEqual(fs.readFileSync(path.join(staging, 'desktop-pet', file)),

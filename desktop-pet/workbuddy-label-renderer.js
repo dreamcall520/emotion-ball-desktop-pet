@@ -75,7 +75,7 @@
     el('results').title = `查看球球内待查看任务；${unread === null ? '待查看数量暂未提供' : `本机已同步记录中待查看 ${unread} 项`}；不是全局任务统计`;
     el('tasks').setAttribute('aria-label', el('tasks').title);
     el('results').setAttribute('aria-label', el('results').title);
-    el('toggle').title = status || '展开 WorkBuddy 积分';
+    el('toggle').title = `WorkBuddy 积分 · ${status || '点击展开'}`;
     el('toggle').setAttribute('aria-label', `WorkBuddy ${r ? `${amount(r.total)} 积分` : '未连接'}${status ? `，${status}` : ''}`);
     el('refresh').disabled = state.busy;
     el('trend').title = '查看官方积分消耗走势与每日消耗';

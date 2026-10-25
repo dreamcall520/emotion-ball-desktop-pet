@@ -975,7 +975,7 @@ async function verifyCodexCompanion({ pet, bubble, monitor, screen, BrowserWindo
     await assertQuotaLabelWindow(quotaLabel, compactResult.win, pet.getBounds(), { size: 'compact' });
     assert.equal(getSettings().codexQuotaLabelSize, 'compact');
     assert.equal(getMenu().getMenuItemById('codex-quota-label-compact').checked, true);
-    assert.deepEqual(compactResult.view.summary, ['CX5h', '100%'],
+    assert.deepEqual(compactResult.view.summary, ['5小时额度', '100%'],
       '小巧横条明确展示Codex来源、主周期和对应剩余额度');
     await captureColorSchemes(compactResult.win,
       { size: 'compact', prefix: 'quota-label-compact' });

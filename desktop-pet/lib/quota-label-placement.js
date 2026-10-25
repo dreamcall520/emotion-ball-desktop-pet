@@ -78,10 +78,13 @@ function bounded(candidate, size, area) {
 
 function quotaRoleTargetWidth(paintWidth) { return [22,24].includes(paintWidth) ? 48 : 64; }
 
-// Visible free-mode cards share direction. Inputs are sizes, never their last positions.
+// Visible free and edge-peek cards share direction. Inputs are sizes, never their last positions.
 function quotaFreeStackBounds(petBounds, workArea, cards, presentation, bubble = null) {
-  if (presentation?.mode !== 'free') return null;
-  const ids = ['codex','api','zcode', ...(cards?.workbuddy ? ['workbuddy'] : [])];
+  const peeked = presentation?.mode === 'peeked' && ['left','right'].includes(presentation.side);
+  if (presentation?.mode !== 'free' && !peeked) return null;
+  const ids = peeked ? ['codex','api','zcode','workbuddy'].filter(id => cards?.[id])
+    : ['codex','api','zcode', ...(cards?.workbuddy ? ['workbuddy'] : [])];
+  if (!ids.length) return null;
   const rows = ids.map(id => ({ id, ...cards?.[id] }));
   if (rows.some(row => !Number.isFinite(row.width) || row.width <= 0 || !Number.isFinite(row.height) || row.height <= 0)) return null;
   const area = safeArea(workArea), nativePet = safePet(petBounds, area);
@@ -95,16 +98,18 @@ function quotaFreeStackBounds(petBounds, workArea, cards, presentation, bubble =
     if(row.faceWidth<=0||row.faceHeight<=0)return null;
     row.gutter=[48,64].includes(row.guardTargetWidth)?row.guardTargetWidth+ROLE_GAP:0;
     row.top=row.gutter?Math.max(row.height,44)+6-row.height:0;
-    row.left=row.gutter>0 && preferredCenter>area.x+area.width/2 && (nativePet.x+nativePet.width>=area.x+area.width-row.gutter || preferredCenter+row.width/2+row.gutter>area.x+area.width);
+    row.left=peeked ? row.gutter>0 && presentation.side==='right' : row.gutter>0 && preferredCenter>area.x+area.width/2 && (nativePet.x+nativePet.width>=area.x+area.width-row.gutter || preferredCenter+row.width/2+row.gutter>area.x+area.width);
   }
   const left=Math.max(...rows.map(r=>r.width/2+(r.left?r.gutter:0))),right=Math.max(...rows.map(r=>r.width/2+(r.left?0:r.gutter)));
   if(left+right>area.width)return fallback();
   const center=Math.round(clamp(preferredCenter,area.x+left,area.x+area.width-right));
+  const ordered = peeked || rows.length === 4;
+  const stackHeight = rows.reduce((sum,row)=>sum+row.faceHeight,0)+GAP*(rows.length-1);
   for(const placement of ['below','above']) {
-    let cursor=placement==='below'?pet.y+pet.height+GAP:pet.y-GAP;
+    let cursor=placement==='below'?pet.y+pet.height+GAP:pet.y-GAP-(ordered?stackHeight:0);
     const result={};let clear=true;
     for(const row of rows) {
-      const face={x:Math.round(center-row.faceWidth/2),y:Math.round(placement==='below'?cursor:cursor-row.faceHeight),width:row.faceWidth,height:row.faceHeight};
+      const face={x:Math.round(peeked ? presentation.side==='left' ? area.x+2 : area.x+area.width-row.faceWidth-2 : center-row.faceWidth/2),y:Math.round(placement==='below'||ordered?cursor:cursor-row.faceHeight),width:row.faceWidth,height:row.faceHeight};
       const x=face.x-row.inset-(row.left?row.gutter:0),y=face.y-row.inset-row.top;
       const native={x,y,width:row.width+row.gutter,height:row.height+row.top,placement,
         ...(row.gutter?{guardSide:row.left?'left':'right',cardInset:{x:row.left?row.gutter:0,y:row.top}}:{}),face};
@@ -112,16 +117,13 @@ function quotaFreeStackBounds(petBounds, workArea, cards, presentation, bubble =
       const ink=row.gutter?{x:face.x-row.inset-(row.left?ROLE_GAP+roleWidth:0),y:face.y-row.inset-(row.inset?1:0),
         width:row.width+ROLE_GAP+roleWidth,height:row.height+(row.inset?1:0)}:face;
       if(!inside(native,native,area)||overlaps(ink,ink,pet)||overlaps(ink,ink,obstacle))clear=false;
-      result[row.id]=native;cursor=placement==='below'?face.y+face.height+GAP:face.y-GAP;
+      result[row.id]=native;cursor=placement==='below'||ordered?face.y+face.height+GAP:face.y-GAP;
     }
     if(clear)return {placement,cards:result};
   }
   return fallback();
   function fallback() {
-    if (!cards?.workbuddy) return null;
-    const three = quotaFreeStackBounds(petBounds, workArea, { ...cards, workbuddy: null }, presentation, bubble);
-    return three ? { ...three, hidden: ['workbuddy'] }
-      : { placement: 'hidden', cards: {}, hidden: ids };
+    return peeked || cards?.workbuddy ? { placement: 'hidden', cards: {}, hidden: ids } : null;
   }
 }
 
@@ -154,7 +156,7 @@ function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName =
   };
   const centerX = pet.x + pet.width / 2;
   const centerY = pet.y + pet.height / 2;
-  const coordinated=presentation?.mode==='free'&&presentation?.quotaGroupLayout;
+  const coordinated=['free','peeked'].includes(presentation?.mode)&&presentation?.quotaGroupLayout;
   if(coordinated && inside(coordinated,coordinated,area) && coordinated.width===size.width+(guardEntry&&!expanded?ROLE_GAP+quotaRoleTargetWidth(presentation?.quotaRoleWidth):0)
     && coordinated.height===(guardEntry&&!expanded?Math.max(size.height,44)+6:size.height)) return coordinated;
   if (presentation?.quotaBottomAligned === true) {

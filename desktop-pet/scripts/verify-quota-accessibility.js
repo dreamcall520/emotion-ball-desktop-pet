@@ -9,6 +9,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { rgb, sampleContrast } = require('./verify-codex-status-v20');
+const sourceRoot = process.env.PET_ACCESSIBILITY_SOURCE_ROOT ? path.join(process.env.PET_ACCESSIBILITY_SOURCE_ROOT, 'desktop-pet') : path.resolve(__dirname, '..');
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'qiuqiu-quota-accessibility-'));
 app.setPath('userData', profile);
 const artifacts = process.env.PET_ACCESSIBILITY_ARTIFACT_DIR || path.resolve(__dirname, '../build/accessibility-light-evidence');
@@ -30,9 +31,9 @@ let win;
 async function main() {
   await app.whenReady();
   win = new BrowserWindow({ width: 196, height: 144, show: false, frame: false, backgroundColor: '#ffffff',
-    webPreferences: { preload: path.resolve(__dirname, '../quota-label-preload.js'), contextIsolation: true,
+    webPreferences: { preload: path.join(sourceRoot, 'quota-label-preload.js'), contextIsolation: true,
       nodeIntegration: false, sandbox: true, backgroundThrottling: false } });
-  await win.loadFile(path.resolve(__dirname, '../quota-label.html'));
+  await win.loadFile(path.join(sourceRoot, 'quota-label.html'));
   win.webContents.debugger.attach('1.3');
   const read = () => win.webContents.executeJavaScript(`(() => {
     const visible = e => e.getClientRects().length > 0 && getComputedStyle(e).display !== 'none';
@@ -116,7 +117,7 @@ async function main() {
             if (stateText(remaining)) assert.ok([actual.primary,actual.secondary][index].title.includes(stateText(remaining)), `${name}: readable state annotation`);
           });
           assert.equal(actual.summaryText, size === 'compact' && !expanded
-            ? `Codex${primaryMinutes === 300 ? '5h' : '周'}${primary}%`
+            ? `${primaryMinutes === 300 ? '5小时额度' : '周额度'}${primary}%`
             : `${primaryMinutes === 300 ? '5h' : '周'}${stateText(primary) || '额度'}${primary}%`, `${name}: compact source and period`);
           for (const element of [actual.primary, actual.secondary, actual.summary, ...actual.labels].filter(e => e.visible)) {
             assert.ok(element.scrollWidth <= element.clientWidth + 1, `${name}: clipped ${element.text}`);
@@ -144,7 +145,7 @@ async function main() {
     const values = cases.flatMap(result => result.contrastSamples.map(sample => sample.ratio));
     return [appearance, { cases: cases.length, contrastMin: Math.min(...values), contrastMax: Math.max(...values) }];
   }));
-  fs.writeFileSync(path.join(artifacts, 'summary.json'), JSON.stringify({ passed: true, cases: results.length,
+  fs.writeFileSync(path.join(artifacts, 'summary.json'), JSON.stringify({ passed: true, sourceRoot, cases: results.length,
     systemTransitions, beamMotionProfiles: [...beamMotionProfiles], byAppearance, scope: 'Synthetic quota only; hidden Electron with real preload IPC; no live app settings or model calls' }, null, 2));
   process.stdout.write(`ACCESSIBLE_TEXT_CONTRAST ${Math.min(...ratios).toFixed(2)}–${Math.max(...ratios).toFixed(2)}\n`);
   process.stdout.write(`PET_QUOTA_ACCESSIBILITY_OK ${results.length} layouts; ${artifacts}\n`);

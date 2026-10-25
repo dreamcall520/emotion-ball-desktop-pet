@@ -28,8 +28,8 @@ test('ZCode collapsed summary uses a short fixed caption and preserves every buc
       planName: index > 1 ? 'Start Plan 体验' : 'ZCode 1024 活动', bucketId: `zcode:bucket-${index}`, windowMinutes: 1440,
       remaining: 100, resetsAt: Date.now() + 86400000, periodKind: index > 1 ? 'daily' : 'one_time' }));
     receive({ sourceId: 'zcode', state: 'ready', size, appearance, expanded: false, items });
-    assert.equal(nodes.summary.textContent, 'Z额度100%');
-    assert.equal(nodes.summary.children[0].children[0].textContent, 'Z');
+    assert.equal(nodes.summary.textContent, '额度100%');
+    assert.equal(nodes.summary.children[0].children[0].attributes['aria-label'], 'ZCode');
     assert.equal(nodes.summary.children[0].children[1].textContent, '额度');
     assert.match(nodes['quota-label'].title, /^ZCode 剩余额度/);
     for (const item of items) {
@@ -42,6 +42,6 @@ test('ZCode collapsed summary uses a short fixed caption and preserves every buc
 test('Codex collapsed caption identifies its source and period', () => {
   const { nodes, receive } = renderFixture();
   receive({ sourceId: 'codex', state: 'ready', size: 'compact', items: [{ label: 'Codex', windowMinutes: 300, remaining: 15 }] });
-  assert.equal(nodes.summary.textContent, 'CX5h15%');
+  assert.equal(nodes.summary.textContent, '5小时额度15%');
   assert.equal(nodes['quota-label'].attributes['aria-label'], 'Codex 剩余额度');
 });

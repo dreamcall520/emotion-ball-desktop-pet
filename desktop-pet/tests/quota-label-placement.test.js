@@ -545,7 +545,7 @@ test('free three-card group chooses one direction from all faces, including guar
   assert.equal(below.placement,'below');
   const bubble={x:530,y:290,width:180,height:140};
   assert.equal(quotaFreeStackBounds(low,area,cards,{mode:'free',shape:'blob'},bubble).placement,'above','a bubble only rejects the intersecting candidate');
-  assert.equal(quotaFreeStackBounds(pet,area,cards,{mode:'peeked',side:'left'}),null);
+  assert.equal(quotaFreeStackBounds(pet,area,cards,{mode:'tucked',side:'left'}),null);
   assert.equal(quotaFreeStackBounds(pet,area,{...cards,api:null},{mode:'free'}),null,'single and dual layouts stay unchanged');
   assert.equal(quotaFreeStackBounds({x:560,y:160,width:80,height:80},{...area,height:300},
     {...cards,zcode:{width:196,height:256,inset:0}},{mode:'free'}),null,'an entire group that fits neither direction uses the existing fallback');
@@ -563,7 +563,7 @@ test('grouped free corners and expanded buckets stay aligned and inside; peek an
     for(const face of faces)assert.equal(face.x+face.width/2,center);
     for(let i=1;i<faces.length;i++)assert.equal(plan.placement==='above'?faces[i-1].y-faces[i].y-faces[i].height:faces[i].y-faces[i-1].y-faces[i-1].height,8);
     assert.equal(JSON.stringify(cards),before);
-    for(const side of['left','right'])assert.equal(quotaFreeStackBounds(pet,area,cards,{mode:'peeked',side}),null);
+    for(const side of['left','right'])assert.equal(quotaFreeStackBounds(pet,area,cards,{mode:'tucked',side}),null);
     assert.equal(quotaFreeStackBounds(pet,area,cards,{mode:'free'},{...area}),null);
   }
 });
@@ -588,9 +588,62 @@ test('four-card free stack shares one direction and hides safely when space runs
     }
   }
   const partial=quotaFreeStackBounds({x:-550,y:30,width:80,height:80},{...area,height:230},cards,{mode:'free'});
-  assert.deepEqual(partial.hidden,['workbuddy']);
-  assert.equal(Object.keys(partial.cards).length,3);
+  assert.deepEqual(partial.hidden,Object.keys(cards));
+  assert.equal(Object.keys(partial.cards).length,0);
   const blocked=quotaFreeStackBounds({x:-550,y:30,width:80,height:80},{...area,height:150},cards,{mode:'free'});
   assert.deepEqual(blocked.hidden,Object.keys(cards));
   assert.deepEqual(blocked.cards,{});
+});
+
+
+test('peeked four-card group uses mirrored edge columns, stable gaps and safe space recovery without moving pet', () => {
+  const { quotaFreeStackBounds } = require('../lib/quota-label-placement');
+  const area={x:-1000,y:20,width:1000,height:880};
+  for(const side of ['left','right']) for(const y of [20,160,420,820]) for(const expanded of ['none','codex','api','zcode','workbuddy']) {
+    const pet={x:side==='left'?area.x:area.x+area.width-80,y,width:80,height:80}, original={...pet};
+    const cards=Object.fromEntries(['codex','api','zcode','workbuddy'].map(id=>[id,{width:id===expanded?196:128,height:id===expanded?(id==='zcode'?256:id==='api'?92:131):32,inset:id===expanded?0:2,...(id==='codex'&&expanded!=='codex'?{guardTargetWidth:48,roleWidth:22}:{})}]));
+    const plan=quotaFreeStackBounds(pet,area,cards,{mode:'peeked',side,shape:'blob'});
+    assert.equal(Object.keys(plan.cards).length,4);assert.deepEqual(pet,original);
+    const rows=Object.values(plan.cards), faces=rows.map(row=>row.face);
+    for(const row of rows) {
+      assertInside(row,area);
+      assert.equal(row.face.x+(side==='right'?row.face.width:0),side==='left'?area.x+2:area.x+area.width-2);
+    }
+    for(let i=1;i<faces.length;i++) assert.equal(faces[i].y-faces[i-1].y-faces[i-1].height,8);
+    for(let i=0;i<faces.length;i++) for(let j=i+1;j<faces.length;j++) assert.ok(faces[i].y+faces[i].height<=faces[j].y||faces[j].y+faces[j].height<=faces[i].y);
+    const hidden=quotaFreeStackBounds({...pet,y:50},{...area,height:150},cards,{mode:'peeked',side});assert.equal(hidden.placement,'hidden');assert.equal(hidden.hidden.length,4);
+    assert.equal(Object.keys(quotaFreeStackBounds(pet,area,cards,{mode:'peeked',side}).cards).length,4);
+    assert.equal(quotaFreeStackBounds(pet,area,cards,{mode:'tucked',side}),null);
+  }
+});
+
+
+test('sheep four-theme shared groups retain mirrored order, painted guard clearance and whole-group recovery', () => {
+  const { quotaFreeStackBounds } = require('../lib/quota-label-placement');
+  const { petVisualBounds } = require('../lib/pet-visual-bounds');
+  const area = { x:-1440, y:32, width:1440, height:1040 };
+  const overlap = (a,b) => a.x<b.x+b.width && a.x+a.width>b.x && a.y<b.y+b.height && a.y+a.height>b.y;
+  for (const sheepTheme of ['none','halloween','christmas','spring-festival']) for (const width of [80,120,260])
+    for (const side of ['left','right']) for (const mode of ['free','peeked']) for (const nearBottom of [false,true]) for (const roleWidth of [22,24,50]) {
+      const pet = { x:side==='left'?area.x:area.x+area.width-width, y:nearBottom?area.y+area.height-width:area.y, width, height:width };
+      const original = {...pet};
+      const presentation = { mode, side, shape:'new-year-sheep', sheepTheme, facing:side==='left'?'right':'left' };
+      const cards = {codex:{width:128,height:32,inset:2,roleWidth,guardTargetWidth:roleWidth===50?64:48},api:{width:128,height:32,inset:2},
+        zcode:{width:196,height:256,inset:0},workbuddy:{width:128,height:32,inset:2}};
+      const plan = quotaFreeStackBounds(pet,area,cards,presentation);
+      assert.equal(Object.keys(plan.cards).length,4,JSON.stringify({presentation,width,nearBottom,plan}));
+      assert.deepEqual(pet,original);
+      const visual=petVisualBounds(pet,presentation.shape,{...presentation,quotaAnchor:true,quotaGuard:true});
+      const rows=Object.values(plan.cards);
+      for (const row of rows) { assertInside(row,area); assert.equal(overlap(row.face,visual),false); }
+      for (let i=1;i<rows.length;i++) assert.equal(rows[i].face.y-rows[i-1].face.y-rows[i-1].face.height,8);
+      const guard=rows[0], art={x:guard.guardSide==='left'?guard.face.x-2-8-roleWidth:guard.face.x-2+128+8,
+        y:guard.face.y-3,width:roleWidth,height:32};
+      assert.equal(overlap(art,visual),false,JSON.stringify({guard,visual,art}));
+      if(mode==='peeked') for(const row of rows) assert.equal(row.face.x+(side==='right'?row.face.width:0),side==='left'?area.x+2:area.x+area.width-2);
+      const small={...area,height:width+40};
+      const hidden=quotaFreeStackBounds({...pet,y:area.y+20},small,cards,presentation);
+      assert.deepEqual(hidden.hidden,Object.keys(cards)); assert.deepEqual(hidden.cards,{});
+      assert.equal(Object.keys(quotaFreeStackBounds(pet,area,cards,presentation).cards).length,4);
+    }
 });

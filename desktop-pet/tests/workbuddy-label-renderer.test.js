@@ -76,3 +76,25 @@ test('card reuses Codex v20 components, with a trend entry and no inline chart o
   assert.match(html, /<button id="expanded-header"[^>]*aria-label="收起 WorkBuddy 积分卡片"/);
   assert.match(html, /<span id="collapse"/);
 });
+
+test('API and WorkBuddy compact cards use local source artwork with explicit accessible names', () => {
+  for(const [file,source,name] of [['api-usage-label','openai','OpenAI API'],['workbuddy-label','workbuddy','WorkBuddy']]) {
+    const html=fs.readFileSync(path.join(__dirname,`../${file}.html`),'utf8');
+    assert.match(html,/img-src 'self'/);assert(html.includes(`src="assets/integrations/${source}.png"`));
+    assert(html.includes(`role="img" aria-label="${name}" title="${name}"`));
+    assert.doesNotMatch(html,/<span class="summary-badge">(?:API|WB)<\/span>/);
+  }
+});
+
+test('API root button always announces the full OpenAI API source, including empty and error states', () => {
+  const nodes=new Map();let receive;
+  const element=()=>({dataset:{},attributes:{},textContent:'',addEventListener(){},setAttribute(key,value){this.attributes[key]=value;},replaceChildren(){},append(){}});
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../api-usage-label-renderer.js'),'utf8'),{
+    document:{documentElement:{dataset:{}},getElementById(id){if(!nodes.has(id))nodes.set(id,element());return nodes.get(id);},createElement:element,createTextNode:text=>({textContent:text})},
+    window:{addEventListener(){},qiuqiuApiUsageLabel:{onState(callback){receive=callback;}}}
+  });
+  for(const state of [{connected:false},{connected:true},{connected:true,busy:true},{connected:true,error:'offline'},{connected:true,expanded:true,report:{month:'2026-10',costs:{month:[{currency:'USD',value:91.4}]}}}]) {
+    receive(state);assert.match(nodes.get('quota-label').attributes['aria-label'],/OpenAI API/);assert.match(nodes.get('quota-label').title,/OpenAI API/);
+  }
+  const wb=fixture();for(const state of [{},{stale:true,report},{error:'offline',report}]){wb.render(state);assert.match(wb.elements.get('toggle').attributes['aria-label'],/WorkBuddy/);assert.match(wb.elements.get('toggle').title,/WorkBuddy/);}
+});

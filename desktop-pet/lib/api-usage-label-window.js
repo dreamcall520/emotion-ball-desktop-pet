@@ -14,7 +14,7 @@ function validBounds(bounds) {
 }
 
 function apiLabelBounds(pet, area, quota, bubble, expanded = false, presentation = null) {
-  const coordinated=presentation?.mode==='free'&&presentation?.quotaGroupLayout;
+  const coordinated=['free','peeked'].includes(presentation?.mode)&&presentation?.quotaGroupLayout;
   if(coordinated && validBounds(coordinated) && coordinated.width===(expanded?196:128) && coordinated.height===(expanded?92:32)) return coordinated;
   const hasQuota = validBounds(pet) && validBounds(quota);
   const anchor = hasQuota ? {

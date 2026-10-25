@@ -72,7 +72,7 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
       const measure = node => ({...rect(node),clientWidth:node.clientWidth,scroll:node.scrollWidth});
       const context = document.createElement('canvas').getContext('2d');
       return {theme:document.documentElement.dataset.uiTheme,appearance:document.documentElement.dataset.appearance,mode:document.documentElement.dataset.colorMode,
-        panel:rect(panel),panelShadow:getComputedStyle(panel).boxShadow,body:rect(body),footer:rect(panel.querySelector('.settings-footer')),scrollHeight:body.scrollHeight,clientHeight:body.clientHeight,
+        panel:rect(panel),panelShadow:getComputedStyle(panel).boxShadow,body:rect(body),header:rect(panel.querySelector('.panel-header')),hintHidden:panel.querySelector('#record-hint').hidden,scrollHeight:body.scrollHeight,clientHeight:body.clientHeight,
         horizontal:[panel,body,...panel.querySelectorAll('h1,.group-label,.shape-options,.shape-options label,.switch-row,.global-binding,.record-hint,.direct-row,.binding-controls')].map(measure),
         rows:[...panel.querySelectorAll('.direct-row')].map(row=>{
           const name=row.querySelector('.direct-name'),select=row.querySelector('[data-start-behavior]'),controls=row.querySelector('.binding-controls'),record=row.querySelector('[data-record]'),clear=row.querySelector('[data-clear]');
@@ -87,7 +87,8 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     assert.equal(surface.rows.length, 5);
     assert.ok(surface.scrollHeight <= surface.clientHeight + 1, 'settings rows and hint fit without scrolling');
     assert.ok(surface.horizontal.every(node => node.scroll <= node.width + 1), 'settings labels and controls do not overflow horizontally');
-    assert.ok(surface.footer.y >= surface.body.bottom - 1, 'settings footer does not cover the body');
+    assert.equal(surface.hintHidden,true,'idle recording guidance occupies no space');
+    assert.ok(surface.header.bottom<=surface.body.y+1,'settings header does not cover the body');
     const names = { chat: '聊天', custom: '定制球球', note: '便签', todo: '待办', pomodoro: '番茄钟' };
     for (const row of surface.rows) {
       assert.equal(row.height, 44, row.id + ' has the shared single-row height');
@@ -314,14 +315,14 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
     await save(win, { ...registrar.getConfig(), enabled: true });
     assert.equal(globalShortcut.isRegistered(registrar.getConfig().launcher), true);
     result.checks.push('master-switch-blocks-hover-and-launcher-settings-remain-accessible');
-    for (const method of ['close', 'footer-close', 'escape']) {
+    for (const method of ['close', 'escape']) {
       controller.open({ settings: true }); await wait(80);
       await page(win, method === 'escape' ? "document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); true"
-        : "document.querySelector(" + JSON.stringify(method === 'close' ? '.settings-panel .panel-header [data-close]' : '.settings-footer [data-close]') + ").click(); true");
+        : "document.querySelector(" + JSON.stringify('.settings-panel .panel-header [data-close]') + ").click(); true");
       await poll(() => controller.isOpen(), value => value === false, method + ' closes settings');
       await poll(() => win.isVisible(), value => value === false, method + ' hides native settings window');
     }
-    result.checks.push('settings-header-footer-close-and-escape');
+    result.checks.push('settings-header-close-and-escape');
 
     cursor = { x: original.x + original.width / 2, y: original.y + original.height / 2 };
     await save(win, { ...registrar.getConfig(), shape: 'floating' });
@@ -416,7 +417,7 @@ async function verifyShortcuts({ pet, controller, registrar, screen, BrowserWind
       const settingsSurface = await compactSettings(win);
       assert.equal(settingsSurface.theme, theme); assert.equal(settingsSurface.appearance, appearance); assert.equal(settingsSurface.mode, accessible ? 'accessible' : 'standard');
       if (accessible) {
-        const borders = await page(win, `(() => {const style=node=>getComputedStyle(node),line=selector=>[...document.querySelectorAll(selector)].map(node=>({color:style(node).borderTopColor,width:style(node).borderTopWidth})).filter(border=>parseFloat(border.width)>0);return {decorations:line('.panel,.global-setting,.global-binding,.settings-footer,.shape-options input:not(:checked)+span,kbd'),rows:[...document.querySelectorAll('.direct-row:not(:last-child)')].map(node=>style(node).borderBottomColor),selected:line('.shape-options input:checked+span'),controls:line('.record-button,.secondary')};})()`);
+        const borders = await page(win, `(() => {const style=node=>getComputedStyle(node),line=selector=>[...document.querySelectorAll(selector)].map(node=>({color:style(node).borderTopColor,width:style(node).borderTopWidth})).filter(border=>parseFloat(border.width)>0);return {decorations:line('.panel,.global-setting,.global-binding,.shape-options input:not(:checked)+span,kbd'),rows:[...document.querySelectorAll('.direct-row:not(:last-child)')].map(node=>style(node).borderBottomColor),selected:line('.shape-options input:checked+span'),controls:line('.record-button,.secondary')};})()`);
         const divider = appearance === 'dark' ? 'rgb(51, 67, 82)' : 'rgb(217, 225, 233)';
         assert.ok(borders.decorations.every(border=>border.color===divider), 'shortcut decorations share notes light dividers');
         assert.ok(borders.rows.every(color=>color===divider), 'shortcut rows have light separators');

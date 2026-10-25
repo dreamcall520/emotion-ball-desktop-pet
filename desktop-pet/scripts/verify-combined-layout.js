@@ -18,6 +18,7 @@ if (!process.versions.electron) {
   const { normalizeSettings } = require(path.join(sourceRoot, 'desktop-pet/lib/settings'));
   const { quotaFreeStackBounds } = require(path.join(sourceRoot, 'desktop-pet/lib/quota-label-placement'));
   const PetFacing = require(path.join(sourceRoot, 'desktop-pet/lib/pet-facing')), SheepTheme = require(path.join(sourceRoot, 'desktop-pet/lib/sheep-theme'));
+  const shape = process.env.PET_LAYOUT_SHAPE || 'blob';
   const out = process.env.PET_SMOKE_ARTIFACT_DIR || fs.mkdtempSync(path.join(os.tmpdir(), 'combined-layout-artifacts-'));
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
   const windows = [], errors = [];
@@ -38,16 +39,17 @@ if (!process.versions.electron) {
   app.setActivationPolicy('accessory'); app.on('window-all-closed', () => {});
   app.whenReady().then(async () => {
     fs.mkdirSync(out, { recursive: true });
-    const report = { passed: false, fixture: true, nativeHostsHidden: true, noNetworkOrChat: true, cases: [] };
+    const report = { passed: false, fixture: true, nativeHostsHidden: true, noNetworkOrChat: true, sourceRoot, shape, cases: [] };
     let codex, api, zcode, workbuddy;
     try {
       session.defaultSession.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (_details, done) => done({ cancel: true }));
       const originalArea = nativeScreen.getPrimaryDisplay().workArea;
-      let area = originalArea, presentation = { mode: 'free', shape: 'blob' }, bubble = null;
+      let area = originalArea, presentation = { mode: 'free', shape }, bubble = null;
       const screen = { getDisplayMatching: () => ({ workArea: area }), getCursorScreenPoint: () => ({ x: -10000, y: -10000 }) };
       const pet = new HiddenWindow({ x: area.x + 400, y: area.y + 100, width: 80, height: 80, frame: false, transparent: true, skipTaskbar: true });
       await pet.loadURL('data:text/html,<body></body>'); pet.logicalVisible = true;
-      const settings = normalizeSettings({ zcodeEnabled: true, zcodeQuotaAlwaysVisible: true, zcodeQuotaLabelSize: 'compact', codexEnabled: true });
+      const settings = normalizeSettings({ zcodeEnabled: true, zcodeQuotaAlwaysVisible: true, zcodeQuotaLabelSize: 'compact', codexEnabled: true, customization: { appearance: { shape } } });
+      assert.equal(settings.customization.appearance.shape, shape, 'fixture shape must be supported, not silently normalized');
       let plan = () => null, sync = () => {}, stack = () => null;
       const presentationFor = id => { const group = plan(); return { ...presentation, quotaGroupLayout: group?.cards[id], quotaGroupHidden: group?.hidden?.includes(id) }; };
       const onError = error => errors.push(String(error?.stack || error));
@@ -73,7 +75,20 @@ if (!process.versions.electron) {
       const controllers = { codex, api, zcode, workbuddy };
       const apiState = { connected: true, report: { month: '2026-10', updatedAt: now, costs: { month: [{ currency: 'USD', value: 1 }], today: [{ currency: 'USD', value: 0.1 }] }, usage: { inputTokens: 120, outputTokens: 30, cachedInputTokens: null, requests: 2 } } };
       const showAll = () => { codex.show({ state: 'ready', items: [{ label: '5小时', remaining: 64, windowMinutes: 300 }] }); api.show(apiState); zcode.sync(); workbuddy.show({ enabled: true, report: { total: 100, basic: 80, reward: 20, purchased: 0 } }); };
-      const settle = async () => { for (let i = 0; i < 4; i++) { sync(); Object.values(controllers).forEach(c => c.reposition()); await wait(60); } };
+      const settle = async () => {
+        const deadline=Date.now()+10000;
+        while(true) {
+          sync(); Object.values(controllers).forEach(c=>c.reposition());
+          const group=plan(), loaded=Object.values(controllers).every(c=>{const win=c.getWindow();return win&&!win.webContents.isLoadingMainFrame();});
+          const placed=loaded && (!group || Object.entries(controllers).every(([id,c])=>{
+            const actual=c.getVisibleBounds(), expected=group.cards[id]?.face;
+            return group.hidden?.includes(id) ? actual===null : !expected || actual&&c.getWindow().getOpacity()===1&&['x','y','width','height'].every(key=>actual[key]===expected[key]);
+          }));
+          if(placed) return;
+          assert(Date.now()<deadline,`layout did not settle: ${JSON.stringify({group,bounds:Object.fromEntries(Object.entries(controllers).map(([id,c])=>[id,c.getVisibleBounds()]))})}`);
+          await wait(25);
+        }
+      };
       const toggle = async id => {
         const win = controllers[id].getWindow(); assert(win?.isVisible(), `cannot toggle hidden ${id}`);
         const before = controllers[id].getLayoutMetrics();
@@ -92,6 +107,10 @@ if (!process.versions.electron) {
           if (bubble) assert(!overlap(b, bubble), `${name}: ${id} overlaps bubble`);
         }
         for (let i = 0; i < visible.length; i++) for (let j = i + 1; j < visible.length; j++) assert(!overlap(visible[i][1], visible[j][1]), `${name}: ${visible[i][0]} overlaps ${visible[j][0]} ${JSON.stringify(bounds)}`);
+        if (visible.length === 4 && plan()?.cards) {
+          const faces = visible.map(([,face])=>face);
+          for (let i=1;i<faces.length;i++) assert.equal(faces[i].y-faces[i-1].y-faces[i-1].height,8,`${name}: group order/gap`);
+        }
         for (const win of windows) if (!win.isDestroyed()) assert.equal(win.nativeVisible(), false, 'native host became visible');
         assert.deepEqual(errors, []);
         report.cases.push({ name, pet: pet.getBounds(), area, bounds, plan: plan() });
@@ -134,23 +153,63 @@ if (!process.versions.electron) {
       area = { ...originalArea, height: 150 }; pet.setBounds({ x: cx, y: area.y + 30, width: 80, height: 80 }, false); await settle();
       assert.equal(check('no-room').length, 0); assert.equal(plan().hidden.length, 4);
       area = originalArea; pet.setBounds({ x: cx, y: area.y + 80, width: 80, height: 80 }, false); await settle(); assert.equal(check('space-restored').length, 4);
-      for (const side of ['left', 'right']) {
-        presentation = { mode: 'peeked', side, shape: 'blob' };
-        pet.setBounds({ x: side === 'left' ? area.x : area.x + area.width - 80, y: area.y + Math.round(area.height / 2), width: 80, height: 80 }, false); await settle();
-        assert.equal(plan(), null); check(`peek-${side}`);
+      const checkPeekColumn = name => {
+        const visible = check(name), group = plan();
+        assert(group, `${name}: missing shared group`);
+        const rows = Object.entries(group.cards).filter(([id]) => controllers[id].getVisibleBounds());
+        const faces = rows.map(([, row]) => row.face);
+        for (const [id, row] of rows) {
+          const face = controllers[id].getVisibleBounds();
+          assert.deepEqual(face, row.face, `${name}: ${id} did not consume shared placement`);
+          assert.equal(face.x + (presentation.side === 'right' ? face.width : 0), presentation.side === 'left' ? area.x + 2 : area.x + area.width - 2);
+        }
+        for (let i = 1; i < faces.length; i++) assert.equal(faces[i].y-faces[i-1].y-faces[i-1].height, 8);
+        return visible;
+      };
+      for (const side of ['left', 'right']) for (const y of [area.y, area.y + Math.round(area.height / 2), area.y + area.height - 80]) {
+        presentation = { mode: 'peeked', side, shape };
+        const anchor = { x: side === 'left' ? area.x : area.x + area.width - 80, y, width: 80, height: 80 };
+        pet.setBounds(anchor, false); showAll(); await settle();
+        assert.equal(checkPeekColumn(`peek-${side}-${y}`).length, 4);
         for (const id of Object.keys(controllers)) {
           if (!controllers[id].getVisibleBounds()) continue;
-          await toggle(id); check(`peek-${side}-${id}-expanded`);
-          if (controllers[id].getVisibleBounds()) { await toggle(id); check(`peek-${side}-${id}-collapsed`); }
+          await toggle(id); checkPeekColumn(`peek-${side}-${y}-${id}-expanded`);
+          if (controllers[id].getVisibleBounds()) { await toggle(id); assert.equal(checkPeekColumn(`peek-${side}-${y}-${id}-collapsed`).length, 4); }
         }
+        assert.deepEqual(pet.getBounds(), anchor, 'peek group must not move the pet');
       }
-      presentation = { mode: 'peeked', side: 'left', shape: 'blob' };
+      for (const side of ['left', 'right']) {
+        presentation = { mode: 'peeked', side, shape };
+        area = { ...originalArea, height: 150 };
+        pet.setBounds({ x: side === 'left' ? area.x : area.x + area.width - 80, y: area.y + 30, width:80, height:80 }, false); await settle();
+        assert.equal(check(`peek-${side}-no-room`).length, 0); assert.equal(plan().hidden.length, 4);
+        area = originalArea; pet.setBounds({ ...pet.getBounds(), y: area.y+80 }, false); await settle();
+        assert.equal(checkPeekColumn(`peek-${side}-room-restored`).length, 4);
+      }
+      area = { x: originalArea.x, y: originalArea.y, width: Math.min(800,originalArea.width), height: Math.min(560,originalArea.height) };
+      for (const side of ['left','right']) for (const offset of [0, Math.round((area.height-80)/2), area.height-80]) {
+        presentation = { mode:'peeked', side, shape };
+        const anchor={x:side==='left'?area.x:area.x+area.width-80,y:area.y+offset,width:80,height:80};
+        pet.setBounds(anchor,false); Object.values(controllers).forEach(c=>c.hide()); showAll(); await settle();
+        assert.equal(checkPeekColumn(`small-${side}-${offset}-collapsed`).length,4);
+        for(const id of Object.keys(controllers)) {
+          await toggle(id);
+          assert([0,4].includes(checkPeekColumn(`small-${side}-${offset}-${id}-expanded`).length),'space fallback must keep or hide the whole group');
+          Object.values(controllers).forEach(c=>c.hide()); showAll(); await settle();
+          assert.equal(checkPeekColumn(`small-${side}-${offset}-${id}-restored`).length,4);
+        }
+        assert.deepEqual(pet.getBounds(),anchor,'small-screen layout moved pet');
+      }
+      area = originalArea;
+      presentation = { mode: 'peeked', side: 'left', shape };
       pet.setBounds({ x: area.x, y: area.y + 100, width: 80, height: 80 }, false); showAll(); await settle();
+      const fadeOrigins = Object.fromEntries(Object.entries(controllers).map(([id,c])=>[id,c.getWindow().getBounds()]));
       presentation = { ...presentation, mode: 'tucked', quotaAnimateHide: true };
       for (const controller of Object.values(controllers)) controller.hide({ animate: true });
       await wait(55);
       for (const [id, controller] of Object.entries(controllers)) {
         const win = controller.getWindow(); assert(win.isVisible(), `${id} exit skipped`);
+        assert.deepEqual(win.getBounds(),fadeOrigins[id],`${id} moved during fade`);
         assert(win.getOpacity() > 0 && win.getOpacity() < 1, `${id} did not interpolate opacity`);
       }
       await wait(170);
@@ -186,7 +245,7 @@ if (!process.versions.electron) {
         + ';scope.apply=applyPresentation;}')(scope);
       report.fadeBounds = [];
       for (const side of ['left', 'right']) for (const expanded of [false, true]) {
-        presentation = { mode: 'peeked', side, shape: 'blob' };
+        presentation = { mode: 'peeked', side, shape };
         pet.setBounds({ x: side === 'left' ? area.x : area.x + area.width - 80, y: area.y + 20, width: 80, height: 80 }, false);
         scope.apply({ ...presentation, suppressed: false }); await settle();
         if (expanded) for (const id of Object.keys(controllers)) await toggle(id);
