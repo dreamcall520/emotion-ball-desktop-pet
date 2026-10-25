@@ -1178,5 +1178,7 @@
       window.__customizerReady = true;
     });
   }
+  $('local-help-open').addEventListener('click', () => $('local-help-dialog').showModal());
+  $('local-help-close').addEventListener('click', () => $('local-help-dialog').close());
   void loadCustomization();
 })();

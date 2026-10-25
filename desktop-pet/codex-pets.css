@@ -103,3 +103,9 @@ html,body{min-width:0;min-height:580px}.studio{max-width:none;margin:0;backgroun
 .local-import:disabled { opacity:.55; cursor:wait; }
 
 .local-pet-help pre { margin:7px 0; font-size:11px; line-height:1.8; white-space:pre-wrap; }
+
+#local-help-open { width:24px; height:24px; vertical-align:middle; color:var(--accent-text); }
+#local-help-dialog { max-width:480px; }
+#local-help-dialog section + section { margin-top:18px; padding-top:16px; border-top:1px solid var(--line); }
+#local-help-dialog p { margin-top:7px; font-size:12px; line-height:1.7; }
+#local-help-dialog pre { margin:10px 0; padding:12px; background:var(--secondary); border-radius:8px; font-size:12px; white-space:pre-wrap; }
