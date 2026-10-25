@@ -1,1 +1,5 @@
 body #quota-guard-entry { left: 0 !important; top: 0 !important; width: 48px; height: 44px; }
+
+body[data-guard-size="compact"] .guard-entry-zombie { top: 6px; }
+#quota-guard-entry:focus-visible { outline: none; }
+:root[data-guard-keyboard="true"] #quota-guard-entry:focus-visible { outline: 2px solid #356bbf; }

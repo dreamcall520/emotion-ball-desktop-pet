@@ -180,6 +180,9 @@
     pet.halo.setAttribute('transform', `translate(0 ${game?.outcome === 'zombie' ? 16 * (1 - ease(phase / .55)) : 0})`); pet.halo.setAttribute('opacity', game?.outcome === 'zombie' ? String(ease((phase - .12) / .3)) : '1');
   }
   function zombieCrown(host) { const group = svg('g', { transform: 'translate(-11 10) scale(.31)' }); group.append(crownImage()); host.append(group); }
+  doc.documentElement.dataset.guardKeyboard = 'false';
+  doc.addEventListener('keydown', event => { if (event.key === 'Tab') doc.documentElement.dataset.guardKeyboard = 'true'; }, true);
+  doc.addEventListener('pointerdown', () => { doc.documentElement.dataset.guardKeyboard = 'false'; }, true);
   const cleanup = [];
   root.addEventListener('beforeunload', () => { destroyed = true; cleanup.forEach(dispose => { if (typeof dispose === 'function') dispose(); }); if (sprites) for (const seq of Object.values(sprites)) for (const frame of seq.frames) frame.bitmap.close(); }, { once: true });
 
@@ -190,7 +193,7 @@
     const moving = () => sprites && visible() && model.visible !== false && !doc.hidden && !reduced.matches;
     function draw() {
       const item = primary(model); if (!item || !sprites) return; const q = model?.practice ? 50 : item.remaining;
-      button.setAttribute('aria-label', model?.practice ? '进入球球守护战，自由练习' : `${periodText(item.windowMinutes)}剩余 ${Math.round(q)}%，进入球球守护战`);
+      button.setAttribute('aria-label', model?.practice ? '进入球球守护战' : `${periodText(item.windowMinutes)}剩余 ${Math.round(q)}%，进入球球守护战`);
       button.dataset.role = q === 100 ? 'full' : q === 0 ? 'empty' : 'roaming';
       renderPet(pet, q === 0 ? 1 : 0, q === 0 ? 'halo' : q === 100 ? 'crown' : 'none', time, !moving());
       drawSprite(zombie.querySelector('canvas'), 'walk', q > 0 && q < 100 ? time * .75 : 0, true);
@@ -225,7 +228,8 @@
     const key = [model?.practice === true, available, game.quota, game.period, game.outcome, game.playerHits, game.active, game.paused, reduced.matches, Boolean(sprites)].join(':');
     if (labelKey === key) return; labelKey = key;
     $('guard-theatre').dataset.available = String(available);
-    $('guard-panel').dataset.outcome = game.outcome || 'playing'; text('guard-period', model?.practice ? '自由练习' : available ? periodText(game.period) : 'Codex 额度'); text('guard-number', model?.practice ? '能量满满' : available ? `${Math.round(game.quota)}%` : '--%');
+    $('guard-panel').dataset.practice = String(model?.practice === true);
+    $('guard-panel').dataset.outcome = game.outcome || 'playing'; text('guard-period', model?.practice ? '' : available ? periodText(game.period) : 'Codex 额度'); text('guard-number', model?.practice ? '' : available ? `${Math.round(game.quota)}%` : '--%');
     const description = model?.practice ? '自由练习能量，与账户积分独立' : available ? `${periodText(game.period)}剩余 ${Math.round(game.quota)}%` : '额度等待更新';
     if ($('guard-number').getAttribute('aria-label') !== description) $('guard-number').setAttribute('aria-label', description);
     $('guard-charge').style.width = `${available ? game.quota : 0}%`;

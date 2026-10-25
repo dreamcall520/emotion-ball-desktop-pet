@@ -7,66 +7,77 @@
     return { busy: value?.busy === true, error: value?.error ? '任务读取失败，请刷新重试' : null,
       report: report?.source === 'local-session-cache' && report.scope === 'current-account' ? {
         observedAt: time(report.observedAt), pendingReview: count(report.pendingReview), total: count(report.total), truncated: report.truncated === true,
-        items: Array.isArray(report.items) ? report.items.slice(0, 100).filter(item => item && typeof item.id === 'string' && /^[A-Za-z0-9_-]{1,200}$/.test(item.id)).map(item => ({
+        items: Array.isArray(report.items) ? report.items.slice(0, 100).filter(item => item && typeof item.id === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(item.id)).map(item => ({
           id: item.id, title: cleanText(item.title, 240) || '未命名任务', status: ['completed', 'terminated', 'running'].includes(item.status) ? item.status : 'unknown',
-          unread: item.unread === true, updatedAt: time(item.updatedAt), transport: ['local', 'remote', 'cloud'].includes(item.transport) ? item.transport : 'unknown'
+          unread: item.unread === true, updatedAt: time(item.updatedAt)
         })).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)) : []
       } : null };
   }
   if (typeof module !== 'undefined') { module.exports = { clean }; return; }
   const doc = root.document, el = id => doc.getElementById(id);
-  const status = { completed: '上次已完成', terminated: '上次已结束', running: '实时状态未同步', unknown: '实时状态未同步' };
+  const api = root.petWorkBuddyDetails;
+  const statuses = { completed: '上次已完成', terminated: '上次已结束', running: '实时状态未同步', unknown: '实时状态未同步' };
   const date = at => at === null ? '时间暂未提供' : new Date(at).toLocaleString('zh-CN', { hour12: false });
   const node = (tag, className, text) => { const value = doc.createElement(tag); if (className) value.className = className; if (text !== undefined) value.textContent = text; return value; };
+  const svgNode = (tag, attrs) => { const value = doc.createElementNS('http://www.w3.org/2000/svg', tag); for (const [key, text] of Object.entries(attrs)) value.setAttribute(key, text); return value; };
   let current = null, mode = 'tasks', resize = () => {};
   const resized = () => { try { resize(); } catch (_) {} };
-  function title(text) { el('details-title').replaceChildren(node('span', '', text), node('small', 'title-product', 'WorkBuddy')); }
+  function title(text, amount) {
+    el('details-title').replaceChildren(node('span', '', text), ...(amount === null ? [] : [node('span', 'activity-count', String(amount))]), node('small', 'title-product', 'WorkBuddy'));
+  }
+  function readAllButton() {
+    let button = el('details-read-all');
+    if (button) return button;
+    button = node('button', '', ''); button.id = 'details-read-all'; button.type = 'button';
+    const icon = svgNode('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.6', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' });
+    icon.appendChild(svgNode('path', { d: 'M10 7V4a2 2 0 0 1 4 0v3M6.5 11.5l-1.6 8Q4.6 21 6.1 21h11.8q1.5 0 1.2-1.5l-1.6-8M10 15l-1 6' }));
+    icon.appendChild(svgNode('rect', { x: '4', y: '7', width: '16', height: '4.5', rx: '2.25' }));
+    button.appendChild(icon); button.appendChild(node('span', '', '全部已查看'));
+    button.title = '清除球球内全部待查看提醒，不修改 WorkBuddy 的未读标记';
+    button.addEventListener('click', () => api?.clearTasks?.());
+    const tools = doc.querySelector('.panel-tools'); tools.parentNode.insertBefore(button, tools);
+    return button;
+  }
   function draw() {
     const state = clean(current.tasks), report = state.report, host = el('task-view');
-    title(mode === 'results' ? '待查看' : '任务');
-    const tabs = node('div', 'trend-tabs'); tabs.setAttribute('role', 'group'); tabs.setAttribute('aria-label', '任务记录');
-    for (const [action, label] of [['tasks', '最近任务'], ['results', `待查看${report?.pendingReview === null || !report ? '' : `（${report.pendingReview}）`}`]]) {
+    const list = mode === 'results' && report ? report.items.filter(item => item.unread) : [];
+    title(mode === 'results' ? '待查看' : '进行中', mode === 'results' ? report?.pendingReview ?? null : null);
+    const clear = readAllButton(); clear.hidden = mode !== 'results' || !list.length; clear.disabled = state.busy;
+    const tabs = node('div', 'trend-tabs'); tabs.setAttribute('role', 'group'); tabs.setAttribute('aria-label', '任务');
+    for (const [action, label] of [['tasks', '进行中'], ['results', `待查看${report?.pendingReview === null || !report ? '' : `（${report.pendingReview}）`}`]]) {
       const tab = node('button', '', label); tab.type = 'button'; tab.id = `task-tab-${action}`;
       tab.setAttribute('aria-pressed', String(mode === action)); tab.addEventListener('click', () => { mode = action; draw(); }); tabs.appendChild(tab);
     }
     const tools = node('div', 'chart-meta'); tools.appendChild(tabs);
     const refresh = node('button', 'reset-link', state.busy ? '读取中…' : '刷新'); refresh.type = 'button'; refresh.id = 'tasks-refresh'; refresh.disabled = state.busy;
-    refresh.addEventListener('click', () => root.petWorkBuddyDetails?.refreshTasks?.()); tools.appendChild(refresh);
-    const scope = node('p', 'panel-note', report?.observedAt === null || !report ? '本机已同步 · 尚未查询' : `本机已同步 · ${new Date(report.observedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })}`);
-    scope.id = 'tasks-scope'; scope.title = report ? `当前账户的本机已同步记录，查询于 ${date(report.observedAt)}；不代表全局任务列表` : '仅查询当前账户的本机任务元数据，不读取任务正文';
-    const info = node('details', 'panel-note'); info.id = 'tasks-info';
-    info.appendChild(node('summary', '', 'ⓘ 实时进行中数量暂未提供'));
-    info.appendChild(node('p', '', '实时运行状态未同步，当前显示本机已同步记录；待查看不代表全局任务统计。'));
-    info.addEventListener('toggle', resized);
-    host.replaceChildren(tools, scope, info);
+    refresh.title = report ? `本机已同步于 ${date(report.observedAt)}；实时运行状态尚未确认` : '读取本机已同步任务，实时运行状态尚未确认';
+    refresh.addEventListener('click', () => api?.refreshTasks?.()); tools.appendChild(refresh);
+    host.replaceChildren(tools);
     if (state.error) { const error = node('p', 'panel-note', state.error); error.id = 'tasks-error'; error.setAttribute('role', 'status'); host.appendChild(error); }
-    const list = report ? report.items.filter(item => mode !== 'results' || item.unread) : [];
     if (!list.length) {
-      const message = state.busy ? '正在读取本机任务元数据…' : !report ? state.error ? '任务记录暂不可用' : '尚未同步任务记录' : mode === 'results' ? '本机已同步记录中暂无待查看任务' : '本机尚未同步到任务记录';
-      const empty = node('p', 'empty-state', message); empty.id = 'tasks-empty'; host.appendChild(empty);
+      const message = state.busy ? '正在读取任务…' : mode === 'tasks' ? '暂无可确认的进行中任务' : !report ? '待查看记录暂未同步' : '暂无待查看任务';
+      const empty = node('p', 'empty-state', message); empty.id = 'tasks-empty';
+      empty.title = mode === 'tasks' ? '本机历史状态不能证明任务仍在运行，暂不展示历史 running 或已完成记录' : '仅包含当前账户在球球内尚未查看的本机已同步记录'; host.appendChild(empty);
     } else {
       const ul = node('ul', 'activity-list'); ul.id = 'tasks-list';
-      for (const [index, item] of list.entries()) {
+      for (const item of list) {
         const li = node('li'), row = node('button', 'activity-item'); row.type = 'button'; row.dataset.taskId = item.id;
-        const icon = node('span', 'activity-icon', '▤'); icon.setAttribute('aria-hidden', 'true');
-        const copy = node('span', 'activity-copy'); copy.appendChild(node('b', '', item.title)); copy.appendChild(node('small', '', `${status[item.status]} · ${date(item.updatedAt)}`));
-        row.appendChild(icon); row.appendChild(copy);
-        if (item.unread) { const marker = node('span', 'unread-marker'); marker.setAttribute('aria-label', '本机已同步的待查看标记'); row.appendChild(marker); }
-        const metadata = node('div', 'panel-note'); metadata.id = `task-metadata-${index}`; metadata.hidden = true;
-        for (const text of [`任务 ID：${item.id}`, `上次同步状态：${status[item.status]}`, `记录时间：${date(item.updatedAt)}`, `记录来源：${({ local: '本机', remote: '远程', cloud: '云端', unknown: '暂未提供' })[item.transport]}`, '仅展示元数据；展开不会读取正文或修改待查看标记。']) metadata.appendChild(node('p', '', text));
-        row.setAttribute('aria-controls', metadata.id); row.setAttribute('aria-expanded', 'false');
-        row.addEventListener('click', () => { metadata.hidden = !metadata.hidden; row.setAttribute('aria-expanded', String(!metadata.hidden)); resized(); });
-        li.appendChild(row); li.appendChild(metadata); ul.appendChild(li);
+        const icon = node('span', 'activity-icon'); icon.setAttribute('aria-hidden', 'true');
+        const art = svgNode('svg', { viewBox: '0 0 20 20' }); art.appendChild(svgNode('path', { d: item.status === 'completed' ? 'M4 10l4 4 8-9' : 'M5 5l10 10M15 5L5 15' })); icon.appendChild(art);
+        const copy = node('span', 'activity-copy'); copy.appendChild(node('b', '', item.title)); copy.appendChild(node('small', '', statuses[item.status]));
+        row.appendChild(icon); row.appendChild(copy); row.appendChild(node('span', 'unread-marker'));
+        row.title = `打开对应 WorkBuddy 会话；本机同步时间 ${date(item.updatedAt)}`;
+        row.addEventListener('click', () => api?.openTask?.(item.id));
+        li.appendChild(row); ul.appendChild(li);
       }
       host.appendChild(ul);
     }
-    if (report?.truncated) host.appendChild(node('p', 'panel-note', '最多显示最近100条本机记录，列表可能不完整。'));
     resized();
   }
   root.workBuddyTasksView = { render(value, onResize) {
     const active = ['tasks', 'results'].includes(value?.action);
     el('quota-view').hidden = active; el('task-view').hidden = !active;
-    if (!active) { current = null; title('积分变化'); return false; }
+    if (!active) { current = null; title('消耗趋势', null); const button = el('details-read-all'); if (button) button.hidden = true; return false; }
     if (current?.action !== value.action) mode = value.action;
     current = value; resize = typeof onResize === 'function' ? onResize : () => {}; draw(); return true;
   } };

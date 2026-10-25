@@ -33,7 +33,7 @@ function createWorkBuddyGuardEntryWindow({ BrowserWindow, onGuard = () => {}, on
   }
   function ensure() {
     if (live(win)) return;
-    const target = new BrowserWindow({ width: 48, height: 44, title: '球球守护战自由练习', show: false, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false, resizable: false,
+    const target = new BrowserWindow({ width: 48, height: 44, title: '球球守护战', show: false, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false, resizable: false,
       fullscreenable: false, minimizable: false, maximizable: false, skipTaskbar: true,
       webPreferences: { preload: path.join(__dirname, '../workbuddy-guard-entry-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, spellcheck: false } });
     win = target; ready = false;

@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
-const { readWorkBuddyTasks } = require('../lib/workbuddy-tasks-reader');
+const { readWorkBuddyTasks, workBuddyTaskLink } = require('../lib/workbuddy-tasks-reader');
 const accountKey = 'a'.repeat(64);
 function fixture(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'workbuddy-task-reader-test-')), file = path.join(dir, 'tasks.db');
@@ -47,4 +47,13 @@ test('title is bounded plain metadata with credential-shaped substrings redacted
   const f = fixture(t); f.add('task-a', 'current', { title: 'Bearer test-token-value sk-abcdefghijklmnop\u0000' + '长'.repeat(200) }); f.db.close();
   const title = readWorkBuddyTasks({ uid: 'current', accountKey, file: f.file }).items[0].title;
   assert(title.length <= 160); assert(!title.includes('test-token-value')); assert(!title.includes('sk-')); assert(!title.includes('\u0000'));
+});
+test('session deep links require exact current-account nondeleted local ID and never mutate unread', t => {
+  const f = fixture(t); f.add('task-current', 'current', { unread: 1 }); f.add('task-other', 'other');
+  f.add('task-cloud', 'current', { transport: 'cloud' }); f.add('task-deleted', 'current', { deleted: 123 }); f.db.close();
+  const options = { uid: 'current', accountKey, file: f.file };
+  assert.deepEqual(workBuddyTaskLink({ ...options, id: 'task-current' }), { accountKey, id: 'task-current', url: 'workbuddy://chat/task-current' });
+  for (const id of ['task-other', 'task-cloud', 'task-deleted']) assert.throws(() => workBuddyTaskLink({ ...options, id }), { code: 'TASK_NOT_FOUND' });
+  assert.throws(() => workBuddyTaskLink({ ...options, id: '../escape' }), { code: 'INVALID_REQUEST' });
+  const db = new DatabaseSync(f.file, { readOnly: true }); assert.equal(db.prepare('SELECT unread FROM sessions WHERE id=?').get('task-current').unread, 1); db.close();
 });

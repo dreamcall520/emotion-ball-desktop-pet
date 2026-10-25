@@ -12,7 +12,7 @@ const MESSAGES = {
   CONTEXT_TOO_LONG: '聊天内容过长，请新建聊天。', TIMEOUT: 'WorkBuddy 请求超时。',
   CONNECTION_FAILED: '无法连接 WorkBuddy，请确认客户端已安装并登录。', INVALID_REQUEST: 'WorkBuddy 请求格式无效。',
   CANCELLED: '已停止 WorkBuddy 请求。', TASK_CACHE_UNAVAILABLE: 'WorkBuddy 本机任务缓存暂不可用。',
-  TASK_CACHE_UNSUPPORTED: '当前 WorkBuddy 任务缓存格式暂不支持。'
+  TASK_CACHE_UNSUPPORTED: '当前 WorkBuddy 任务缓存格式暂不支持。', TASK_NOT_FOUND: '该 WorkBuddy 会话已失效或不属于当前账号。'
 };
 function workBuddyError(code) {
   if (!Object.hasOwn(MESSAGES, code)) code = 'CONNECTION_FAILED';
@@ -23,7 +23,7 @@ function createWorkBuddyRunner({ spawnProcess = spawn, binary = '/Applications/W
   return function runWorkBuddy(operation, payload = {}, { signal, onDelta } = {}) {
     return new Promise((resolve, reject) => {
       if (signal?.aborted) { reject(workBuddyError('CANCELLED')); return; }
-      if (!['quota', 'models', 'chat', 'tasks'].includes(operation)) { reject(workBuddyError('INVALID_REQUEST')); return; }
+      if (!['quota', 'models', 'chat', 'tasks', 'task-open'].includes(operation)) { reject(workBuddyError('INVALID_REQUEST')); return; }
       let input;
       try { input = JSON.stringify({ operation, payload }); } catch (_) { reject(workBuddyError('INVALID_REQUEST')); return; }
       if (input.length > 256000) { reject(workBuddyError('CONTEXT_TOO_LONG')); return; }

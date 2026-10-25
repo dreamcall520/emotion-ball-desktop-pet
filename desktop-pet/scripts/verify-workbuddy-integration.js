@@ -18,14 +18,16 @@ async function capture(win) {
   }
 }
 const accountKey = '9'.repeat(64);
+let smokeTaskRevision = Date.now() - 1000;
 const report = () => ({ total: 7400, basic: 500, reward: 6900, purchased: 0, plan: '体验版',
   nextRefreshAt: Date.now() + 7 * 86400000, expires: [{ amount: 100, at: Date.now() + 3 * 86400000 }], updatedAt: Date.now() });
 function createSmokeWorkBuddyRunner() {
   return async (operation, payload, { signal, onDelta } = {}) => {
     if (operation === 'quota') return { accountKey, report: report() };
     if (operation === 'tasks') return { accountKey, source: 'local-session-cache', scope: 'current-account', observedAt: Date.now(), running: null, pendingReview: 1, total: 2, truncated: false, items: [
-      {id:'smoke-completed',title:'验收任务：整理页面说明',status:'completed',unread:true,updatedAt:Date.now()-1000,transport:'local'},
-      {id:'smoke-terminated',title:'验收任务：检查数据卡',status:'terminated',unread:false,updatedAt:Date.now()-2000,transport:'cloud'}] };
+      {id:'smoke-completed',title:'验收任务：整理页面说明',status:'completed',unread:true,updatedAt:smokeTaskRevision,transport:'local'},
+      {id:'smoke-terminated',title:'验收任务：检查数据卡',status:'terminated',unread:false,updatedAt:smokeTaskRevision-1000,transport:'cloud'}] };
+    if (operation === 'task-open') { assert.equal(payload.expectedAccountKey, accountKey); assert.equal(payload.id, 'smoke-completed'); return {accountKey,id:payload.id,url:`workbuddy://chat/${encodeURIComponent(payload.id)}`}; }
     if (operation === 'models') return { accountKey, models: [{ id: 'glm-5.3-flash', displayName: 'GLM-5.3-Flash' }] };
     assert.equal(operation, 'chat'); assert.equal(payload.expectedAccountKey, accountKey);
     const text = JSON.stringify({ text: '我是球球，今天也陪着你。', action: 'none' });
@@ -38,14 +40,14 @@ async function until(read, label) {
   for (let n = 0; n < 200; n++) { if (await read()) return; await wait(50); }
   throw new Error('等待失败：' + label);
 }
-async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, details, tasks, guard, codexDetails, edge, edgeNotices, chat, chatWindow, consent, openChat, setProvider, setEnabled, getSettings, getCodex, menuTemplate, setSize, outputDir, live = false }) {
+async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, details, tasks, guard, codexDetails, edge, edgeNotices, chat, chatWindow, consent, openChat, setProvider, setEnabled, getSettings, getCodex, menuTemplate, getCompactMenu, setTaskOpener, setSize, outputDir, live = false }) {
   if (outputDir) fs.mkdirSync(outputDir, { recursive: true });
   const codexBefore = JSON.stringify(getCodex());
   const codexSettings = Object.fromEntries(Object.entries(getSettings()).filter(([k]) => k.startsWith('codex')));
   assert.equal(getSettings().workbuddyEnabled, false);
   assert.equal(quota.getState().report, null);
-  const menu = menuTemplate().find(item => item.id === 'workbuddy-menu');
-  assert(menu && menu.submenu.some(item => item.id === 'workbuddy-chat'));
+  const menu = menuTemplate().find(item => item.id === 'workbuddy-enabled');
+  assert(menu && menu.type === 'checkbox');
   if (!live) {
     assert(consent, '隔离验收需要独立 WorkBuddy 授权控制器');
     const enabling = setEnabled(true);
@@ -89,6 +91,17 @@ async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, detai
     if (outputDir) fs.writeFileSync(path.join(outputDir, 'workbuddy-consent-result.json'), JSON.stringify({ isolatedMock: true, cancelledWithoutEnabling: true,
       explicitAcceptance: true, codexVisualStructure: consentStructure, themes: consentThemes }, null, 2));
   } else await setEnabled(true);
+  if (!live && getCompactMenu) {
+    const compact = getCompactMenu();
+    const codexIndex=compact.findIndex(item=>item.id==='codex-enabled'),wbIndex=compact.findIndex(item=>item.id==='workbuddy-enabled');
+    assert.equal(wbIndex,codexIndex+1,'精简菜单Codex/WB并列');assert.equal(compact[wbIndex].type,'checkbox');
+    compact[wbIndex].click({checked:false});await until(()=>getSettings().workbuddyEnabled===false,'精简菜单关闭WB');
+    getCompactMenu().find(item=>item.id==='workbuddy-enabled').click({checked:true});
+    await until(()=>consent.getWindow()?.isVisible(),'精简菜单启用进入明确授权');
+    await until(()=>consent.getWindow().webContents.executeJavaScript("!document.getElementById('consent-accept').disabled"),'菜单启用授权就绪');
+    await consent.getWindow().webContents.executeJavaScript("document.getElementById('consent-accept').click()");
+    await until(()=>getSettings().workbuddyEnabled===true,'精简菜单启用成功');
+  }
   await until(() => quota.getState().report && label.getWindow()?.isVisible(), '独立积分卡');
   if (!live) assert.equal(quota.getState().report.total, 7400);
   const totalText = quota.getState().report.total.toLocaleString('zh-CN', { maximumFractionDigits: 2 });
@@ -138,36 +151,36 @@ async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, detai
   await page("document.getElementById('toggle').click()");
   assert.match(await page("document.getElementById('tasks').title"), /实时进行中数量暂未提供/);
   if (!live && tasks && details) {
+    const opened=[];assert.equal(typeof setTaskOpener,'function');setTaskOpener(async url=>{opened.push(url);});
     await until(() => tasks.getState().report?.pendingReview === 1, '本机任务元数据同步');
     await until(() => page("document.getElementById('running-count').textContent === '—' && document.getElementById('unread-count').textContent === '1'"), '进行中未知与待查看本机计数');
-    for (const action of ['tasks','results']) {
-      if(!(await page("document.getElementById('quota-label').dataset.expanded === 'true'"))) await page("document.getElementById('toggle').click()");
-      await page(`document.getElementById('${action}').click()`);
-      await until(() => details.getWindow()?.isVisible() && details.getAction() === action, '球球内任务入口');
-      const taskWin=details.getWindow(), taskPage=code=>taskWin.webContents.executeJavaScript(code);
-      assert(taskWin.webContents.getURL().endsWith('/workbuddy-details.html'),'任务留在球球内');
-      await until(() => taskPage(`document.getElementById('task-tab-${action}').getAttribute('aria-pressed') === 'true'`),'任务默认tab');
-      await until(() => taskPage("document.querySelectorAll('#tasks-list .activity-item').length > 0"),'任务列表可读');
-      if(action==='tasks') {
-        assert.equal(await taskPage("document.querySelectorAll('#tasks-list .activity-item').length"),2);
-        assert.match(await taskPage("document.getElementById('tasks-scope').textContent"),/本机已同步/);
-        await taskPage("document.querySelector('#tasks-list .activity-item').click()");
-        assert.equal(await taskPage("document.querySelector('#tasks-list .activity-item').getAttribute('aria-expanded')"),'true');
-        assert.match(await taskPage("document.getElementById('task-metadata-0').textContent"),/不会读取正文或修改待查看/);
-        if(outputDir)fs.writeFileSync(path.join(outputDir,'workbuddy-local-task-metadata.png'),(await capture(taskWin)).toPNG());
-        await taskPage("document.getElementById('task-tab-results').click()");
-        assert.equal(await taskPage("document.querySelectorAll('#tasks-list .activity-item').length"),1);
-      } else assert.equal(await taskPage("document.querySelectorAll('#tasks-list .activity-item').length"),1);
-      const observed=tasks.getState().report.observedAt;
-      await wait(5);await taskPage("document.getElementById('tasks-refresh').click()");
-      await until(() => !tasks.getState().busy && tasks.getState().report.observedAt > observed,'任务元数据刷新成功');
-      assert.equal(tasks.getState().report.pendingReview,1,'查看行与刷新不修改未读');
-      assert.equal(tasks.getState().report.items.find(i=>i.id==='smoke-completed').unread,true);
-      if(outputDir)fs.writeFileSync(path.join(outputDir,`workbuddy-local-${action}.png`),(await capture(taskWin)).toPNG());
-      await taskPage("document.getElementById('details-close').click()");
-      await until(() => !details.isVisible() && win.isVisible(),'关闭任务面板恢复卡');
-    }
-    if(!(await page("document.getElementById('quota-label').dataset.expanded === 'true'"))) await page("document.getElementById('toggle').click()");
+    await page("document.getElementById('tasks').click()");
+    await until(()=>details.getWindow()?.isVisible()&&details.getAction()==='tasks','进行中球球内panel');
+    const taskWin=details.getWindow(),taskPage=code=>taskWin.webContents.executeJavaScript(code);
+    await until(()=>taskPage("document.getElementById('tasks-empty')?.textContent === '暂无可确认的进行中任务'"),'不把历史running当实时');
+    assert.equal(await taskPage("document.querySelectorAll('#tasks-list .activity-item').length"),0);
+    await taskPage("document.getElementById('task-tab-results').click()");
+    await until(()=>taskPage("document.querySelectorAll('#tasks-list .activity-item').length === 1"),'待查看仅本机未dismiss记录');
+    if(outputDir)fs.writeFileSync(path.join(outputDir,'workbuddy-review-list.png'),(await capture(taskWin)).toPNG());
+    await taskPage("document.querySelector('#tasks-list .activity-item').click()");
+    await until(()=>opened.length===1&&tasks.getState().report.pendingReview===0,'点击深链mock成功并清球球该条提醒');
+    assert.equal(opened[0],'workbuddy://chat/smoke-completed');
+    await tasks.refresh();assert.equal(tasks.getState().report.pendingReview,0,'同revision刷新不复现');assert.equal(tasks.getState().report.cachedUnreadTotal,1,'WB缓存原始未读未改');
+    smokeTaskRevision+=1;await tasks.refresh();
+    await until(()=>taskPage("document.querySelectorAll('#tasks-list .activity-item').length === 1"),'新revision可再次提醒');
+    await taskPage("document.getElementById('details-read-all').click()");
+    await until(()=>tasks.getState().report.pendingReview===0,'全部已查看清球球提醒');
+    assert.equal(tasks.getState().report.cachedUnreadTotal,1);
+    const {createWorkBuddyTasks}=require('../lib/workbuddy-tasks');
+    const reloaded=createWorkBuddyTasks({run:createSmokeWorkBuddyRunner(),getAccountKey:()=>accountKey,stateFile:path.join(require('electron').app.getPath('userData'),'workbuddy-task-state.json')});
+    reloaded.setEnabled(true);await reloaded.refresh();assert.equal(reloaded.getState().report.pendingReview,0,'重建manager持久保留dismiss');assert.equal(reloaded.getState().report.cachedUnreadTotal,1);reloaded.close();
+    if(outputDir)fs.writeFileSync(path.join(outputDir,'task-review-result.json'),JSON.stringify({opened,persistedDismiss:true,originalCachedUnread:1,localPendingReview:0},null,2));
+    await taskPage("document.getElementById('details-close').click()");await until(()=>!details.isVisible()&&win.isVisible(),'关闭任务panel恢复卡');
+    if(!(await page("document.getElementById('quota-label').dataset.expanded === 'true'")))await page("document.getElementById('toggle').click()");
+    await page("document.getElementById('results').click()");await until(()=>details.getWindow()?.isVisible()&&details.getAction()==='results','待查看直接入口');
+    await until(()=>taskPage("document.getElementById('tasks-empty')?.textContent === '暂无待查看任务'"),'全部查看后的空态');
+    await taskPage("document.getElementById('details-close').click()");await until(()=>win.isVisible(),'任务关闭恢复');
+    if(!(await page("document.getElementById('quota-label').dataset.expanded === 'true'")))await page("document.getElementById('toggle').click()");
   }
   if (codexLabel) {
     codexLabel.show(readyCodex(false));
@@ -222,20 +235,34 @@ async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, detai
     const entry=label.getGuardWindow(),entryPage=code=>entry.webContents.executeJavaScript(code);
     await until(() => entryPage("window.quotaGuardEntry?.state.ready && !document.getElementById('quota-guard-entry').hidden && !document.getElementById('quota-guard-entry').disabled"),'WB僵尸动画入口');
     assert.equal(entry.getBounds().width,48);assert.equal(entry.getBounds().height,44);
-    assert.match(await entryPage("document.getElementById('quota-guard-entry').getAttribute('aria-label')"),/自由练习/);
+    assert.match(await entryPage("document.getElementById('quota-guard-entry').getAttribute('aria-label')"),/^进入球球守护战$/);
+    const entryRect=entry.getBounds(),cardRect=label.getVisibleBounds();
+    const canvasRect=await entryPage("(()=>{const r=document.querySelector('#guard-entry-zombie canvas').getBoundingClientRect();return {y:r.y,height:r.height};})()");
+    const centerDelta=entryRect.y+canvasRect.y+canvasRect.height/2-cardRect.y-cardRect.height/2;
+    assert(Math.abs(centerDelta)<=2,'僵尸canvas与卡面垂直居中');
+    assert.equal(await entryPage("getComputedStyle(document.getElementById('quota-guard-entry')).outlineStyle"),'none','首次入口无默认蓝框');
+
     if(outputDir)fs.writeFileSync(path.join(outputDir,'workbuddy-game-entry.png'),(await capture(entry)).toPNG());
     await entryPage("document.getElementById('quota-guard-entry').click()");
     await until(() => guard.getWindow()?.isVisible(),'从WB打开自由练习');
     const gameWin=guard.getWindow(),gamePage=code=>gameWin.webContents.executeJavaScript(code);
-    await until(() => gamePage("document.getElementById('guard-period').textContent === '自由练习'"),'游戏自由练习文案');
+    await until(() => gamePage("document.getElementById('guard-period').textContent === '' && getComputedStyle(document.querySelector('.fun-stat')).display === 'none'"),'游戏不显示练习标签或模拟积分指标');
     assert.equal(await gamePage("document.getElementById('guard-number').textContent.includes('%')"),false,'不把WB积分当percent');
     await until(() => gamePage("window.quotaGuardView?.state.spritesReady && !document.getElementById('guard-qiuqiu').disabled"),'练习动画加载且可操作');
+    await gamePage("document.getElementById('guard-close').focus()");
+    assert.equal(await gamePage("getComputedStyle(document.getElementById('guard-close')).outlineStyle"),'none','首次打开游戏无默认蓝框');
+    gameWin.webContents.sendInputEvent({type:'keyDown',keyCode:'Tab'});gameWin.webContents.sendInputEvent({type:'keyUp',keyCode:'Tab'});
+    await until(()=>gamePage("document.documentElement.dataset.guardKeyboard === 'true' && getComputedStyle(document.activeElement).outlineStyle !== 'none'"),'键盘Tab仍有焦点可见性');
+    await gamePage("document.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))");
     const shots = await gamePage('window.quotaGuardView.state.clickShots');
     await gamePage("document.getElementById('guard-qiuqiu').click()");
     assert.equal(await gamePage('window.quotaGuardView.state.clickShots'),shots+1,'自由练习发射可交互');
     if(outputDir)fs.writeFileSync(path.join(outputDir,'workbuddy-practice-game.png'),(await capture(gameWin)).toPNG());
     await gamePage("document.getElementById('guard-close').click()");
     await until(() => !guard.isVisible() && win.isVisible(),'关闭游戏恢复卡片');
+    await until(()=>label.getGuardWindow()?.isVisible(),'关闭后入口恢复');
+    assert.equal(await entryPage("getComputedStyle(document.getElementById('quota-guard-entry')).outlineStyle"),'none','关闭游戏后入口无默认蓝框');
+    if(outputDir)fs.writeFileSync(path.join(outputDir,'game-entry-centering.json'),JSON.stringify({entry:entryRect,card:cardRect,canvas:canvasRect,centerDelta},null,2));
   }
   if (codexDetails) {
     codexLabel?.show(readyCodex(false)); label.reposition();
@@ -259,60 +286,34 @@ async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, detai
     await until(() => detailPage("document.getElementById('today').getAttribute('aria-pressed') === 'true'"), '详情默认今日');
     await detailPage("document.getElementById('week').click()");
     assert.equal(await detailPage("document.getElementById('week').getAttribute('aria-pressed')"), 'true');
-    const at = Date.now() - 1000;
-    const trendReport = { total: 7399.91, updatedAt: at };
-    details.update({ report: trendReport, history: [] });
-    await until(() => detailPage("document.getElementById('hint').textContent.includes('暂无查询记录') && !document.querySelector('#chart svg')"), '趋势空态无伪造折线');
-    details.update({ report: trendReport, history: [{ at, total: 7399.91 }] });
-    await until(() => detailPage("document.getElementById('hint').textContent.includes('仅有1次查询') && !document.querySelector('#chart svg')"), '单点只提示等待记录');
-    details.update({report:trendReport,history:[{at:at-300000,total:7399.91},{at,total:7399.91}]});
-    await until(() => detailPage("document.getElementById('hint').textContent.includes('积分未变化') && !document.querySelector('#chart svg')"),'余额不变不用大平线');
-    assert.equal(await detailPage("document.getElementById('change').textContent"),'0');
-    assert.equal(await detailPage("document.getElementById('forecast').textContent"),'还不能估算可用天数');
-    details.update({ report: trendReport, history: [{ at: at - 1800000, total: 7400 }, { at: at - 1500000, total: 7399.95 }, { at, total: 7399.91 }] });
-    await until(() => detailPage("document.querySelectorAll('#chart circle.point').length === 3"), '详情真实采样点');
-    const trendShape = await detailPage(`(() => { const svg=document.querySelector('#chart svg');return {viewBox:svg.getAttribute('viewBox'),solid:Boolean(svg.querySelector('.observed-line')),gap:Boolean(svg.querySelector('.unrecorded-line')),points:[...svg.querySelectorAll('circle.point')].map(p=>({x:Number(p.getAttribute('cx')),y:Number(p.getAttribute('cy')),title:p.querySelector('title').textContent})),timeLabels:[...svg.querySelectorAll('text[y="132"]')].map(n=>n.textContent)}; })()`);
-    assert.equal(await detailPage("document.getElementById('change-label').textContent"),'近7天减少');
-    assert.equal(await detailPage("document.getElementById('forecast').textContent"),'还不能估算可用天数');
+    const expectedBalance = quota.getState().report.total.toLocaleString('zh-CN', { maximumFractionDigits: 2 });
+    const officialEmpty = [];
+    for (const period of ['today','week']) for (const view of ['records','daily']) {
+      await detailPage(`document.getElementById('${period}').click();document.getElementById('view-${view}').click()`);
+      const observed = await detailPage(`({balance:document.getElementById('balance').textContent,consumption:document.getElementById('change').textContent,label:document.getElementById('change-label').textContent,hint:document.getElementById('hint').textContent,note:document.getElementById('unavailable-note').textContent,selected:document.getElementById('view-${view}').getAttribute('aria-selected'),hasInventedData:Boolean(document.querySelector('#chart svg,#events,#forecast'))})`);
+      assert.equal(observed.balance,expectedBalance,'余额保持真实查询值');assert.equal(observed.consumption,'—','官方消费未取得保持未知');
+      assert.equal(observed.label,period==='week'?'近7天消耗':'今日消耗');assert.equal(observed.hint,'消耗统计暂不可用');
+      assert.equal(observed.note,'暂未取得 WorkBuddy 官方消耗记录');assert.equal(observed.selected,'true');assert.equal(observed.hasInventedData,false,'不展示余额曲线或推算消费');
+      officialEmpty.push({period,view,...observed});
+      if(outputDir)fs.writeFileSync(path.join(outputDir,`workbuddy-official-unavailable-${period}-${view}.png`),(await capture(detailWin)).toPNG());
+    }
     await detailPage("document.querySelector('#explanation summary').click()");
     assert.equal(await detailPage("document.getElementById('explanation').open"),true);
-    assert.match(await detailPage("document.getElementById('explanation').textContent"),/不当作消费流水/);
+    assert.match(await detailPage("document.getElementById('explanation').textContent"),/延迟2–3小时/);
+    assert.match(await detailPage("document.getElementById('explanation').textContent"),/不代表没有消费/);
     await detailPage("document.querySelector('#explanation summary').click()");
-    assert.equal(trendShape.viewBox, '0 0 374 144');
-    assert.equal(trendShape.solid, true); assert.equal(trendShape.gap, true);
-    assert.equal(trendShape.points[0].x, 48); assert.equal(trendShape.points.at(-1).x, 352);
-    assert.equal(trendShape.points[0].y, 28); assert.equal(trendShape.points.at(-1).y, 108);
-    assert.match(trendShape.points.at(-1).title, /7,399\.91 积分/);
-    assert.equal(trendShape.timeLabels.length, 2);
-    assert(trendShape.timeLabels.every(text => /\d{2}:\d{2}/.test(text)), '真实时间轴');
     const themeEvidence = {};
-    for (const appearance of ['light', 'dark']) {
-      detailWin.webContents.send('pet:color-mode', 'standard', appearance, 'blue');
-      await until(() => detailPage(`document.documentElement.dataset.resolvedAppearance === ${JSON.stringify(appearance)}`), '详情实际明暗主题');
-      const computed = await detailPage(`(() => { const panel=getComputedStyle(document.getElementById('details-panel'));return {resolved:document.documentElement.dataset.resolvedAppearance,background:panel.backgroundColor,text:getComputedStyle(document.body).color,tab:document.getElementById('week').getAttribute('aria-pressed'),balance:document.getElementById('balance').textContent,points:document.querySelectorAll('#chart circle.point').length}; })()`);
-      assert.equal(computed.resolved, appearance);
-      assert.equal(computed.background, appearance === 'dark' ? 'rgba(26, 34, 45, 0.96)' : 'rgba(244, 249, 255, 0.94)', '详情共享CSS真实背景颜色');
-      assert.equal(computed.text, appearance === 'dark' ? 'rgb(245, 247, 250)' : 'rgb(37, 43, 52)', '详情共享CSS真实文本颜色');
-      assert.equal(computed.tab, 'true'); assert.equal(computed.balance, '7,399.91'); assert.equal(computed.points, 3);
-      themeEvidence[appearance] = computed;
-      if (outputDir) fs.writeFileSync(path.join(outputDir, appearance === 'light' ? 'workbuddy-trend-details.png' : 'workbuddy-trend-details-dark.png'), (await capture(detailWin)).toPNG());
+    for (const appearance of ['light','dark']) {
+      detailWin.webContents.send('pet:color-mode','standard',appearance,'blue');
+      await until(()=>detailPage(`document.documentElement.dataset.resolvedAppearance === ${JSON.stringify(appearance)}`),'消费空态真实明暗主题');
+      const computed=await detailPage(`(()=>{const panel=getComputedStyle(document.getElementById('details-panel'));return {resolved:document.documentElement.dataset.resolvedAppearance,background:panel.backgroundColor,text:getComputedStyle(document.body).color,balance:document.getElementById('balance').textContent,consumption:document.getElementById('change').textContent,hint:document.getElementById('hint').textContent};})()`);
+      assert.equal(computed.background,appearance==='dark'?'rgba(26, 34, 45, 0.96)':'rgba(244, 249, 255, 0.94)');
+      assert.equal(computed.text,appearance==='dark'?'rgb(245, 247, 250)':'rgb(37, 43, 52)');
+      assert.equal(computed.balance,expectedBalance);assert.equal(computed.consumption,'—');
+      themeEvidence[appearance]=computed;
+      if(outputDir)fs.writeFileSync(path.join(outputDir,`workbuddy-consumption-unavailable-${appearance}.png`),(await capture(detailWin)).toPNG());
     }
-    if (outputDir) {
-      fs.writeFileSync(path.join(outputDir, 'trend-shape.json'), JSON.stringify(trendShape, null, 2));
-      fs.writeFileSync(path.join(outputDir, 'trend-theme.json'), JSON.stringify(themeEvidence, null, 2));
-    }
-    const rewardMeta={basic:500,purchased:0,nextRefreshAt:at+30*86400000,expires:[]};
-    details.update({report:{...trendReport,...rewardMeta,total:1100},history:[{...rewardMeta,at:at-300000,total:1000,reward:500},{...rewardMeta,at,total:1100,reward:600}]});
-    await until(() => detailPage("document.getElementById('change').textContent === '+100'"),'奖励增加主指标');
-    assert.match(await detailPage("document.getElementById('change-label').textContent"),/增加/);
-    assert.match(await detailPage("document.getElementById('events').textContent"),/奖励增加100积分/);
-    assert.equal(await detailPage("document.querySelectorAll('#chart .observed-line,#chart .unrecorded-line').length"),0,'奖励发放不画跨点竖线');
-    if(outputDir)fs.writeFileSync(path.join(outputDir,'workbuddy-reward-increase.png'),(await capture(detailWin)).toPNG());
-    await detailPage("document.getElementById('view-daily').click()");
-    assert.match(await detailPage("document.getElementById('events').textContent"),/增加 100 · 减少 0/);
-    assert.equal(await detailPage("document.querySelector('#chart svg') === null"),true);
-    if(outputDir)fs.writeFileSync(path.join(outputDir,'workbuddy-daily-change.png'),(await capture(detailWin)).toPNG());
-    await detailPage("document.getElementById('view-records').click()");
+    if(outputDir){fs.writeFileSync(path.join(outputDir,'official-consumption-unavailable.json'),JSON.stringify(officialEmpty,null,2));fs.writeFileSync(path.join(outputDir,'trend-theme.json'),JSON.stringify(themeEvidence,null,2));}
     details.update(quota.getState());
     await detailPage("document.getElementById('details-close').click()");
     await until(() => !details.isVisible(), '关闭趋势详情');

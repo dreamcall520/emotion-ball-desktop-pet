@@ -1,7 +1,7 @@
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { placeDetails } = require('./codex-details-window');
-function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getAppearance = () => 'system', alwaysOnTop = true, onError = () => {}, onVisibilityChange = () => {}, onRefreshTasks = () => {} }) {
+function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getAppearance = () => 'system', alwaysOnTop = true, onError = () => {}, onVisibilityChange = () => {}, onRefreshTasks = () => {}, onOpenTask = () => {}, onClearTasks = () => {} }) {
   const file = path.join(__dirname, '../workbuddy-details.html'), url = pathToFileURL(file).href;
   let win = null, ready = false, visible = false, state = null, top = Boolean(alwaysOnTop), height = 360, action = 'trend';
   const alive = () => win && !win.isDestroyed();
@@ -38,7 +38,7 @@ function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getApp
   function ensure() {
     if (alive()) return;
     const target = new BrowserWindow({ width: 404, height: 360, show: false, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false,
-      resizable: false, useContentSize: true, fullscreenable: false, minimizable: false, maximizable: false, skipTaskbar: true, title: 'WorkBuddy 余额趋势',
+      resizable: false, useContentSize: true, fullscreenable: false, minimizable: false, maximizable: false, skipTaskbar: true, title: 'WorkBuddy 详情',
       webPreferences: { preload: path.join(__dirname, '../workbuddy-details-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, spellcheck: false } });
     win = target; ready = false; target.setAlwaysOnTop(top, 'floating');
     target.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -46,6 +46,8 @@ function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getApp
     target.webContents.on('ipc-message', (event, channel, value) => {
       if (win !== target || !ready || !visible || event.sender !== target.webContents || event.senderFrame !== target.webContents.mainFrame || event.sender.getURL() !== url) return;
       if (channel === 'pet:workbuddy-details-close') close();
+      if (channel === 'pet:workbuddy-details-open-task' && ['tasks','results'].includes(action) && typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(value)) onOpenTask(value);
+      if (channel === 'pet:workbuddy-details-clear-tasks' && ['tasks','results'].includes(action)) onClearTasks();
       if (channel === 'pet:workbuddy-details-refresh-tasks' && ['tasks','results'].includes(action)) onRefreshTasks();
       if (channel === 'pet:workbuddy-details-resize' && Number.isSafeInteger(value) && value >= 120 && value <= 700) { height = value; reposition(); }
     });

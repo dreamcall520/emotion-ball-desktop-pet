@@ -22,7 +22,7 @@ function readWorkBuddyTasks({ uid, accountKey, file = path.join(os.homedir(), '.
     if (!required.every(name => columns.has(name))) fail('TASK_CACHE_UNSUPPORTED');
     db.exec('BEGIN');
     const summary = db.prepare('SELECT COUNT(*) AS total, SUM(CASE WHEN unread = 1 THEN 1 ELSE 0 END) AS unread FROM sessions WHERE user_id = ? AND deleted_at IS NULL').get(uid);
-    const rows = db.prepare('SELECT id, title, custom_title, status, unread, updated_at, transport FROM sessions WHERE user_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC, id ASC LIMIT 100').all(uid);
+    const rows = db.prepare('SELECT id, title, custom_title, status, unread, updated_at, transport FROM sessions WHERE user_id = ? AND deleted_at IS NULL ORDER BY unread DESC, updated_at DESC, id ASC LIMIT 100').all(uid);
     const items = rows.map(row => {
       if (typeof row.id !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(row.id) || ![0, 1].includes(row.unread) ||
           !Number.isSafeInteger(row.updated_at) || row.updated_at < 0) fail('TASK_CACHE_UNSUPPORTED');
@@ -39,4 +39,21 @@ function readWorkBuddyTasks({ uid, accountKey, file = path.join(os.homedir(), '.
     fail('TASK_CACHE_UNAVAILABLE');
   } finally { try { db?.close(); } catch (_) {} }
 }
-module.exports = { readWorkBuddyTasks, cleanTitle };
+function workBuddyTaskLink({ uid, accountKey, id, file = path.join(os.homedir(), '.workbuddy/workbuddy.db'),
+  Database = require('node:sqlite').DatabaseSync } = {}) {
+  if (typeof uid !== 'string' || !uid || !/^[0-9a-f]{64}$/.test(accountKey || '')) fail('LOGIN_REQUIRED');
+  if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(id)) fail('INVALID_REQUEST');
+  if (!fs.existsSync(file)) fail('TASK_CACHE_UNAVAILABLE');
+  let db;
+  try {
+    db = new Database(file, { readOnly: true });
+    db.exec('PRAGMA query_only = ON; PRAGMA busy_timeout = 1000;');
+    const row = db.prepare('SELECT id, transport FROM sessions WHERE id = ? AND user_id = ? AND deleted_at IS NULL').get(id, uid);
+    if (!row || row.transport !== 'local') fail('TASK_NOT_FOUND');
+    return { accountKey, id: row.id, url: 'workbuddy://chat/' + encodeURIComponent(row.id) };
+  } catch (error) {
+    if (error.code === 'TASK_NOT_FOUND') throw error;
+    fail('TASK_CACHE_UNAVAILABLE');
+  } finally { try { db?.close(); } catch (_) {} }
+}
+module.exports = { readWorkBuddyTasks, workBuddyTaskLink, cleanTitle };

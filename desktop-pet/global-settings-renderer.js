@@ -22,7 +22,7 @@
     '保持清醒': '关闭后，球球会根据系统空闲时间自动休息。',
     '互动气泡': '控制球球的对白与互动提示。',
     '始终置顶': '让球球保持在其他窗口上方。',
-    '启用 WorkBuddy 积分': '只读本机当前 WorkBuddy 登录与积分；聊天仅在你发送消息后消耗积分。',
+    '启用 WorkBuddy 联动': '只读本机当前 WorkBuddy 登录与积分；聊天仅在你发送消息后消耗积分。',
     '启用 Codex 联动': '读取本机 Codex 任务与额度；开启时会说明读取范围并请求确认。',
     '显示 API 本月费用卡': 'API 统计独立于 Codex 订阅额度，需要连接管理员 Key。',
     '自动提醒新版本': '自动检查并提醒，不会自动下载安装。',
@@ -69,6 +69,8 @@
   const externalIds = new Set(['/chat-open', '/customize-open', '/pomodoro-open', '/about-open']);
   function groups() {
     const categories = snapshot.entries.filter(entry => entry.children);
+    const workbuddy = snapshot.entries.find(entry => entry.id === '/workbuddy-enabled');
+    if (workbuddy) categories.push({ id: 'workbuddy-settings', label: 'WorkBuddy', children: [workbuddy] });
     const general = categories.find(entry => entry.label === '常规设置');
     if (general) categories[categories.indexOf(general)] = { ...general, children: [...general.children,
       ...snapshot.entries.filter(entry => entry.id === '/update-check')] };

@@ -210,6 +210,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
         Menu: { buildFromTemplate: value => Object.assign(value, { popup: options => popups.push({ value, options }) }) }, nativeImage: { createFromPath: () => ({ setTemplateImage() {} }) } };
       if (name === './lib/settings') return { ...realRequire(name), loadSettings: () => loadedSettings ? structuredClone(loadedSettings) : ({ size: 'tiny', x: -600, y: 100,
         bubblesEnabled, colorMode, uiTheme, notesDefaultTab, notesAppearance, keepAwake: false, alwaysOnTop: true, codexEnabled, codexTaskNameInAlerts,
+        workbuddyEnabled: false, workbuddyConsentVersion: 0, workbuddyModel: 'auto', chatProvider: 'codex',
         codexQuotaAlwaysVisible, codexQuotaPeriod, codexQuotaLabelSize, codexQuotaAppearance, codexShowExtraCredits,
         customization: realRequire('./lib/customization').normalizeCustomization(),
         startupAppearance: realRequire('./lib/customization').normalizeCustomization().appearance }),
@@ -853,7 +854,7 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   const menu = f.call('menuTemplate()');
   const top = menu.filter(item => item.type !== 'separator');
   assert.deepEqual(Array.from(top, item => item.label), [
-    '设置中心', '和球球聊聊', 'WorkBuddy', '定制球球', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API',
+    '设置中心', '和球球聊聊', '启用 WorkBuddy 联动', '定制球球', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API',
     '贴边与显示', '球球尺寸', '界面配色', '常规设置', '关于球球', '检查更新', '退出球球'
   ]);
   const group = label => top.find(item => item.label === label).submenu.filter(item => item.type !== 'separator');
@@ -3591,6 +3592,9 @@ test('全局设置复用单一窗口、拒绝其他窗口操作并同步现有�
   const read = () => f.invoke('pet:global-settings-get', undefined, win.webContents);
   let state = await read();
   assert.ok(!JSON.stringify(state).includes('global-settings'));
+  const workbuddy = state.entries.find(item => item.id === '/workbuddy-enabled');
+  assert.equal(workbuddy.label, '启用 WorkBuddy 联动'); assert.equal(workbuddy.type, 'checkbox');
+  assert.equal(workbuddy.checked, false);
   const interaction = state.entries.find(item => item.label === '球球与互动');
   const bubbles = interaction.children.find(item => item.label === '互动气泡');
   assert.equal(bubbles.checked, true);
@@ -3642,10 +3646,16 @@ test('原生菜单保留核心联动开关与独立入口，完整偏好仍可�
   const f = await fixture(); t.after(() => f.app.emit('before-quit'));
   const menu = f.call('compactMenuTemplate()');
   assert.deepEqual(Array.from(menu.filter(item => item.type !== 'separator'), item => item.label),
-    ['和球球聊聊', 'WorkBuddy', '来定制球球', '便签与待办', '番茄钟', '启用 Codex 联动', 'API 费用与用量', '设置中心', '关于球球', '检查更新', '退出球球']);
-  assert.ok(menu.filter(item => item.id !== 'workbuddy-menu').every(item => !item.submenu));
+    ['和球球聊聊', '来定制球球', '便签与待办', '番茄钟', '启用 Codex 联动', '启用 WorkBuddy 联动', 'API 费用与用量', '设置中心', '关于球球', '检查更新', '退出球球']);
+  assert.ok(menu.every(item => !item.submenu));
   assert.ok(findMenuItem(menu, 'workbuddy-enabled'));
-  assert.ok(findMenuItem(menu, 'workbuddy-chat'));
+  assert.equal(findMenuItem(menu, 'workbuddy-chat'), null);
+  assert.equal(findMenuItem(menu, 'workbuddy-refresh'), null);
+  assert.equal(findMenuItem(menu, 'workbuddy-menu'), null);
+  const workbuddy = findMenuItem(menu, 'workbuddy-enabled');
+  assert.equal(workbuddy.type, 'checkbox');
+  assert.equal(workbuddy.checked, false);
+  assert.equal(menu.indexOf(workbuddy), menu.indexOf(findMenuItem(menu, 'codex-enabled')) + 1);
   assert.ok(findMenuItem(f.call('menuTemplate()'), 'notes-default-note'));
   assert.ok(findMenuItem(f.call('menuTemplate()'), 'codex-quota-period'));
 });

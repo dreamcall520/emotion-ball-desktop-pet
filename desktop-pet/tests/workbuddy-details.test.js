@@ -4,7 +4,6 @@ const { EventEmitter } = require('node:events');
 const { pathToFileURL } = require('node:url');
 const path = require('node:path');
 const { createWorkBuddyDetailsWindow } = require('../lib/workbuddy-details-window');
-const { observations, analyze, changes, dailyChanges } = require('../workbuddy-details-renderer');
 function fixture() {
   const windows = [];
   class Window extends EventEmitter {
@@ -36,90 +35,39 @@ test('trend window reuses placement, isolates state and only accepts owned main-
   details.open({ history: [] }); assert.equal(windows.length, 1); details.setAlwaysOnTop(false); assert.equal(win.top, false);
   details.destroy(); assert.equal(details.getWindow(), null);
 });
-test('trend filters actual today/week records, sorts and deduplicates without future extensions', () => {
-  const now = new Date(2026, 9, 25, 12).getTime(), hour = 3600000;
-  const records = [{ at: now + 1, total: 8 }, { at: now - hour, total: 10 }, { at: now - hour, total: 9 }, { at: now - 24 * hour, total: 11 }, { at: now - 8 * 24 * hour, total: 12 }];
-  assert.deepEqual(observations(records, 'today', now), [{ at: now - hour, total: 9 }]);
-  assert.deepEqual(observations(records, 'week', now).map(p => p.total), [11, 9]);
-  assert.deepEqual(observations([], 'week', now), []);
-});
-test('renderer plots real samples with gap connector and observed decreases, with explicit single/empty states', () => {
+test('consumption failure never substitutes balance drops, fake zero, curves or forecasts', () => {
   const vm = require('node:vm'), fs = require('node:fs');
-  const elements = new Map();
+  const elements = new Map(), sizes = [];
   class Element {
-    constructor(tag) { this.tag = tag; this.children = []; this.attrs = {}; this.dataset = {}; this.listeners = {}; this.textContent = ''; }
+    constructor() { this.children = []; this.attrs = {}; this.dataset = {}; this.listeners = {}; this.textContent = ''; }
     getBoundingClientRect() { return { top: 10, bottom: 210 }; }
-    setAttribute(key, value) { this.attrs[key] = value; } append(...nodes) { this.children.push(...nodes); }
-    replaceChildren(...nodes) { this.children = nodes; } addEventListener(key, fn) { this.listeners[key] = fn; }
+    setAttribute(key, value) { this.attrs[key] = value; }
+    addEventListener(key, fn) { this.listeners[key] = fn; }
   }
-  const get = id => { if (!elements.has(id)) elements.set(id, new Element('div')); return elements.get(id); };
-  let receive, receiveColor, close = 0; const sizes = [];
+  const get = id => { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); };
+  let receive, receiveColor, close = 0;
   const now = new Date(2026, 9, 25, 12).getTime();
-  const document = { documentElement: new Element('html'), getElementById: get, createElement: tag => new Element(tag), createElementNS: (_, tag) => new Element(tag), addEventListener() {} };
+  const document = { documentElement: new Element(), getElementById: get, addEventListener() {} };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../workbuddy-details-renderer.js'), 'utf8'), {
-    document, window: { getComputedStyle: () => ({ paddingBottom: '13px', borderBottomWidth: '1px' }), requestAnimationFrame: fn => fn(), matchMedia: () => ({ matches: false, addEventListener() {} }), TrendCurve: require('../quota-trend-curve'),
+    document, window: { getComputedStyle: () => ({ paddingBottom: '13px', borderBottomWidth: '1px' }), requestAnimationFrame: fn => fn(), matchMedia: () => ({ matches: false, addEventListener() {} }),
       petWorkBuddyDetails: { resize: height => sizes.push(height), onModel: fn => { receive = fn; }, onColorMode: fn => { receiveColor = fn; }, close: () => close++ } },
     Date: class extends Date { static now() { return now; } }
   });
-  receive({ report: { total: 7000 }, history: [] }); assert.match(get('hint').textContent, /暂无查询/); assert.equal(get('chart').children.length, 0); assert.equal(sizes.at(-1), 214);
-  receive({ report: { total: 7000 }, history: [{ at: now - 1200000, total: 7400 }] }); assert.match(get('hint').textContent, /仅有1次/); assert.equal(sizes.at(-1), 214);
-  receive({ report: { total: 7000 }, history: [{ at: now - 1200000, total: 7400 }, { at: now - 300000, total: 7000 }] });
-  assert.equal(get('change').textContent, '400'); assert.equal(get('balance').textContent, '7,000');
-  const svg = get('chart').children[0]; assert.equal(svg.attrs.viewBox, '0 0 374 144');
-  assert.equal(svg.children.filter(n => n.attrs.class === 'unrecorded-line').length, 1);
-  const dots = svg.children.filter(n => n.tag === 'circle'); assert.equal(dots.length, 2); assert.equal(dots[1].attrs.cx, 352);
-  assert.match(dots[0].children[0].textContent, /7,400 积分/);
-  assert.equal(svg.children.filter(n => n.tag === 'text' && n.attrs.y === 132).length, 2);
-  receiveColor('standard', 'dark', 'blue');
-  assert.equal(document.documentElement.dataset.resolvedAppearance, 'dark');
+  receive({ report: { total: 7399.91, updatedAt: now, nextRefreshAt: now + 7 * 86400000, expires: [{ at: now + 2 * 86400000, amount: 99.91 }] }, history: [{ at: now - 300000, total: 7500 }, { at: now, total: 7399.91 }] });
+  assert.equal(get('balance').textContent, '7,399.91'); assert.equal(get('change').textContent, '—');
+  assert.equal(get('hint').textContent, '消耗统计暂不可用'); assert.equal(get('unavailable-note').textContent, '暂未取得 WorkBuddy 官方消耗记录');
+  assert.match(get('expiry-note').textContent, /99.91积分/); assert.match(get('refresh-note').textContent, /基础积分/);
+  get('view-daily').listeners.click(); get('week').listeners.click();
+  assert.equal(get('change-label').textContent, '近7天消耗'); assert.equal(get('change').textContent, '—');
+  assert.equal(get('hint').textContent, '消耗统计暂不可用'); assert.equal(get('view-daily').attrs['aria-selected'], 'true');
+  receive({ report: { total: 0 }, history: [] }); assert.equal(get('balance').textContent, '0'); assert.equal(get('change').textContent, '—');
+  receiveColor('standard', 'dark', 'blue'); assert.equal(document.documentElement.dataset.resolvedAppearance, 'dark');
   receiveColor('accessible', 'light', 'green'); assert.equal(document.documentElement.dataset.resolvedAppearance, 'light');
-  receive({ appearance: 'dark', report: { total: 7399.91 }, history: [{ at: now - 1200000, total: 14299.82 }, { at: now - 300000, total: 7399.91 }] });
-  assert.equal(document.documentElement.dataset.resolvedAppearance, 'dark');
-  assert.equal(get('balance').textContent, '7,399.91'); assert.equal(get('change').textContent, '6,899.91');
+  assert.equal(sizes.at(-1), 214); get('details-close').listeners.click(); assert.equal(close, 1);
   const html = fs.readFileSync(path.join(__dirname, '../workbuddy-details.html'), 'utf8');
-  assert.match(html, /id="change" class="time-value"/);
-  assert.match(html, /<h1 id="details-title">积分变化<small class="title-product">WorkBuddy/);
-  receive({ report: { total: 600 }, history: [{ at: now - 600000, total: 500, basic: 500, reward: 0, purchased: 0 }, { at: now, total: 600, basic: 500, reward: 100, purchased: 0 }] });
-  assert.equal(get('change-label').textContent, '今日增加'); assert.equal(get('change').textContent, '+100');
-  assert.match(get('events').children[0].children[0].children[0].textContent, /奖励增加100积分/);
-  const rewardSvg = get('chart').children[0];
-  assert.equal(rewardSvg.children.filter(n => n.attrs.class === 'observed-line').length, 0);
-  assert.ok(rewardSvg.children.some(n => n.tag === 'text' && n.textContent === '+100奖励'));
-  get('view-daily').listeners.click(); assert.equal(get('chart').children.length, 0);
-  assert.match(get('events').children[0].children[0].children[1].textContent, /增加 100 · 减少 0 积分/);
-  get('view-records').listeners.click();
-  receive({ report: { total: 7400 }, history: [{ at: now - 600000, total: 7400 }, { at: now, total: 7400 }] });
-  assert.equal(get('chart').children.length, 0); assert.equal(get('hint').textContent, '这段时间积分未变化');
-  assert.equal(get('change').textContent, '0'); assert.match(get('forecast').textContent, /还不能估算/);
-  get('details-close').listeners.click(); assert.equal(close, 1);
-});
-test('rough days require continuous day-long classified observations, exclude grants/expiry/refresh and old total-only history', () => {
-  const now = 2000000000000, interval = 5 * 60000;
-  const points = Array.from({ length: 289 }, (_, i) => ({ at: now - 86400000 + i * interval, total: 1000 - i * 2, basic: 500 - i, reward: 500 - i, purchased: 0, nextRefreshAt: now + 10 * 86400000, expires: [] }));
-  const report = { total: points.at(-1).total, nextRefreshAt: now + 10 * 86400000, expires: [] };
-  const result = analyze(points, report, now);
-  assert.equal(result.decrease, 576); assert.equal(result.daily, 576); assert.ok(result.days > 0 && result.days < 1);
-  assert.equal(analyze(points.map(({ at, total }) => ({ at, total })), report, now).days, null);
-  assert.equal(analyze(points.filter((_, i) => i !== 10 && i !== 11), report, now).days, null);
-  const granted = structuredClone(points); granted[10].reward += 20; granted[10].total += 20;
-  assert.equal(analyze(granted, report, now).days, null);
-  assert.equal(analyze(points, { ...report, expires: [{ at: now + 1000, amount: 100 }] }, now).days, null);
-  assert.equal(analyze(points, { ...report, nextRefreshAt: now + 1000 }, now).days, null);
-  const expired = structuredClone(points); expired[10].expires.push({ at: expired[11].at, amount: 100 });
-  assert.equal(analyze(expired, report, now).days, null);
-});
-test('classifies reward increase and known expiry, keeps unknown reductions honest and aggregates daily directions separately', () => {
-  const at = new Date(2026, 9, 25, 9).getTime();
-  const records = [
-    { at, total: 500, basic: 500, reward: 0, purchased: 0, expires: [] },
-    { at: at + 300000, total: 600, basic: 500, reward: 100, purchased: 0, expires: [{ at: at + 600000, amount: 100 }] },
-    { at: at + 600000, total: 500, basic: 500, reward: 0, purchased: 0, expires: [] },
-    { at: at + 900000, total: 499.91 }
-  ];
-  const events = changes(records);
-  assert.deepEqual(events.map(e => e.kind), ['reward', 'expiry', 'decrease']);
-  assert.equal(events[0].delta, 100); assert.equal(events[2].delta, -.09);
-  assert.deepEqual(dailyChanges(events), [{ date: '2026-10-25', increase: 100, decrease: 100.09, events: 3 }]);
-  assert.deepEqual(changes([{ at, total: 500 }]), []);
-  assert.deepEqual(changes([{ at, total: 500 }, { at: at + 300000, total: 500 }]), []);
+  const renderer = fs.readFileSync(path.join(__dirname, '../workbuddy-details-renderer.js'), 'utf8');
+  assert.equal((html.match(/class="chart-meta"/g) || []).length, 1);
+  assert.match(html, /<h1 id="details-title">消耗趋势/); assert.match(html, /2–3小时/);
+  assert.doesNotMatch(html, /forecast-note|quota-trend-curve|观察减少|400/);
+  assert.doesNotMatch(renderer, /TrendCurve|createElementNS|reductionSeries|analyze\(/);
 });

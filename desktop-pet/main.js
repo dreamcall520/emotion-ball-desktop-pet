@@ -118,6 +118,8 @@ let workbuddyLabel = null;
 let workbuddyDetails = null;
 let workbuddyConsent = null;
 let workbuddyTasks = null;
+let workbuddyRun = runWorkBuddy;
+let workbuddyTaskOpener = url => shell.openExternal(url);
 let workbuddyEnablePending = false;
 let workbuddyEnableToken = 0;
 let chatProviderChanging = false;
@@ -1015,6 +1017,19 @@ function workBuddyCardState() {
 function workBuddyDetailsState(action = workbuddyDetails?.getAction?.() || 'trend') {
   return { ...safeWorkBuddyState(workBuddyCardState()), action, tasks: workbuddyTasks?.getState() };
 }
+async function openWorkBuddyTask(id) {
+  if (!settings?.workbuddyEnabled || screenLocked || isQuitting || typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(id)) return false;
+  const accountKey = workbuddyQuota?.getState().accountKey;
+  if (!accountKey || !workbuddyTasks?.getState().report?.items.some(item => item.id === id)) return false;
+  try {
+    const result = await workbuddyRun('task-open', { expectedAccountKey: accountKey, id });
+    if (!settings.workbuddyEnabled || screenLocked || isQuitting || workbuddyQuota?.getState().accountKey !== accountKey ||
+        result?.accountKey !== accountKey || result?.id !== id || result?.url !== `workbuddy://chat/${encodeURIComponent(id)}`) return false;
+    await workbuddyTaskOpener(result.url);
+    workbuddyTasks.dismiss(id);
+    return true;
+  } catch (_) { return false; }
+}
 function openWorkBuddyTasks(action = 'tasks') {
   if (!['tasks', 'results'].includes(action) || !settings?.workbuddyEnabled || screenLocked || isQuitting) return false;
   codexDetails?.close(); quotaGuard?.close();
@@ -1070,11 +1085,6 @@ async function setChatProvider(provider) {
     return { accepted: true };
   } catch (_) { return { accepted: false, error: '聊天来源未能保存。' }; }
   finally { chatProviderChanging = false; }
-}
-
-async function openWorkBuddyChat() {
-  const result = await setChatProvider('workbuddy');
-  if (result.accepted) openChat();
 }
 
 function setApiUsageVisible(value) {
@@ -1992,12 +2002,8 @@ function menuTemplate() {
     ...(availableUpdate ? [updateEntry, { type: 'separator' }] : []),
     { id: 'global-settings', label: '设置中心', accelerator: 'CommandOrControl+,', click: openGlobalSettings },
     { id: 'chat-open', label: '和球球聊聊', click: openChat },
-    { id: 'workbuddy-menu', label: 'WorkBuddy', submenu: [
-      { id: 'workbuddy-enabled', label: '启用 WorkBuddy 积分', type: 'checkbox', checked: settings.workbuddyEnabled,
-        click: item => { void setWorkBuddyEnabled(item.checked); } },
-      { id: 'workbuddy-refresh', label: '刷新积分', enabled: settings.workbuddyEnabled, click: () => { void workbuddyQuota?.refresh(); } },
-      { id: 'workbuddy-chat', label: '用 WorkBuddy 和球球聊聊', click: () => { void openWorkBuddyChat(); } }
-    ] },
+    { id: 'workbuddy-enabled', label: '启用 WorkBuddy 联动', type: 'checkbox', checked: settings.workbuddyEnabled,
+      click: item => { void setWorkBuddyEnabled(item.checked); } },
     { id: 'customize-open', label: '定制球球', click: openCustomization },
     { label: '便签与待办', submenu: [
       { id: 'notes-open', label: '打开主面板', click: () => notesCompanion?.openPanel() },
@@ -2094,9 +2100,9 @@ function compactMenuTemplate() {
   const codex = items.find(item => item.id === 'codex-menu').submenu;
   const codexEnabled = codex.find(item => item.id === 'codex-enabled');
   const api = codex.find(item => item.id === 'openai-api-menu')?.submenu.find(item => item.id === 'openai-api-usage');
-  return [find('chat-open'), find('workbuddy-menu'), { ...find('customize-open'), label: '来定制球球' },
+  return [find('chat-open'), { ...find('customize-open'), label: '来定制球球' },
     notes && { ...notes, label: '便签与待办' }, find('pomodoro-open'),
-    { type: 'separator' }, codexEnabled, api,
+    { type: 'separator' }, codexEnabled, find('workbuddy-enabled'), api,
     { type: 'separator' }, find('global-settings'), find('about-open'), find('update-check'),
     { type: 'separator' }, items.find(item => item.label === '退出球球')].filter(Boolean);
 }
@@ -2162,7 +2168,8 @@ async function finishSmokeTest() {
 
     if (process.env.PET_SMOKE_WORKBUDDY_ONLY === '1') {
       await require('./scripts/verify-workbuddy-integration').verifyWorkBuddyIntegration({
-        pet: petWindow, quota: workbuddyQuota, label: workbuddyLabel, details: workbuddyDetails, tasks: workbuddyTasks, consent: workbuddyConsent, guard: quotaGuard, codexDetails, edge: edgeTuck, codexLabel: quotaLabel, chat: workbuddyChat, chatWindow,
+        pet: petWindow, quota: workbuddyQuota, label: workbuddyLabel, details: workbuddyDetails, tasks: workbuddyTasks,
+        setTaskOpener: opener => { workbuddyTaskOpener = opener; }, getCompactMenu: compactMenuTemplate, consent: workbuddyConsent, guard: quotaGuard, codexDetails, edge: edgeTuck, codexLabel: quotaLabel, chat: workbuddyChat, chatWindow,
         openChat, setProvider: setChatProvider, setEnabled: setWorkBuddyEnabled, getSettings: () => settings,
         getCodex: () => codexCompanion?.getSnapshot(), menuTemplate, setSize: setPetSize,
         edgeNotices: { tick: (time, state) => { edgeNoticeNow = () => 1000000000 + time; edgeNotice.tick(state); }, getWindow: () => edgeNoticeWindow.getWindow(), reset: () => { activityMonitor.stop(); edgeNoticeNow = () => performance.now(); lastEdgeNoticeTick = -Infinity; edgeNotice.reset(); } },
@@ -3378,7 +3385,7 @@ async function bootstrap() {
     },
     onChange: state => { if (!screenLocked && settings.chatProvider !== 'workbuddy') chatWindow.update(chatSnapshot(state)); },
     onAction: performChatAction });
-  const workbuddyRun = IS_SMOKE_TEST && process.env.PET_SMOKE_WORKBUDDY_ONLY === '1' && process.env.PET_SMOKE_WORKBUDDY_LIVE !== '1'
+  workbuddyRun = IS_SMOKE_TEST && process.env.PET_SMOKE_WORKBUDDY_ONLY === '1' && process.env.PET_SMOKE_WORKBUDDY_LIVE !== '1'
     ? require('./scripts/verify-workbuddy-integration').createSmokeWorkBuddyRunner() : runWorkBuddy;
   workbuddyChat = createWorkBuddyChat({ store: createChatStore(path.join(app.getPath('userData'), 'workbuddy-chat.json')),
     run: workbuddyRun, initialModelSelection: settings.workbuddyModel,
@@ -3388,7 +3395,7 @@ async function bootstrap() {
   workbuddyConsent = createWorkBuddyConsent({ BrowserWindow, ipcMain, positionWindow: positionFunctionWindow,
     getInfo: codexConsentInfo, getAppearance: getNotesAppearance, isPackaged: app.isPackaged,
     canRequest: () => !isQuitting && !screenLocked });
-  workbuddyTasks = createWorkBuddyTasks({ run: workbuddyRun, getAccountKey: () => workbuddyQuota?.getState().accountKey,
+  workbuddyTasks = createWorkBuddyTasks({ run: workbuddyRun, stateFile: path.join(app.getPath('userData'), 'workbuddy-task-state.json'), getAccountKey: () => workbuddyQuota?.getState().accountKey,
     onChange: () => { syncWorkBuddyLabel(); workbuddyDetails?.update(workBuddyDetailsState()); } });
   workbuddyQuota = createWorkBuddyQuota({ run: workbuddyRun, historyFile: path.join(app.getPath('userData'), 'workbuddy-quota-history.json'), onChange: state => {
     workbuddyTasks.setEnabled(state.enabled); syncWorkBuddyLabel(); workbuddyDetails?.update(workBuddyDetailsState());
@@ -3414,6 +3421,8 @@ async function bootstrap() {
     getAnchor: () => { const card = workbuddyLabel?.getWindow(); return card && !card.isDestroyed() && card.isVisible() ? card.getBounds() : petWindow?.getBounds(); },
     getAppearance: () => settings.codexQuotaAppearance, alwaysOnTop: settings.alwaysOnTop,
     onRefreshTasks: () => { void workbuddyTasks?.refresh(); },
+    onOpenTask: id => { void openWorkBuddyTask(id); },
+    onClearTasks: () => { workbuddyTasks?.dismissAll(); },
     onVisibilityChange: () => { syncQuotaLabel(codexCompanion?.getSnapshot()); syncWorkBuddyLabel(); },
     onError: error => writeError('WorkBuddy 趋势窗口', error) });
   app.on('browser-window-created', (_event, win) => {
