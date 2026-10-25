@@ -51,6 +51,7 @@ function bucketFields(item, sourceId) {
   if (sourceId !== 'zcode') return {};
   try { return {
       planName: cleanLabel(item.planName),
+      ...(typeof item.model === 'string' ? { model: cleanLabel(item.model) } : {}),
       bucketId: typeof item.bucketId === 'string' && /^[^\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]{1,400}$/u.test(item.bucketId) ? item.bucketId : '',
       periodKind: ['one_time', 'expiry', 'daily', 'rolling', 'weekly', 'monthly', 'unknown'].includes(item.periodKind) ? item.periodKind : 'unknown',
       periodStart: Number.isSafeInteger(item.periodStart) && item.periodStart > 0 ? item.periodStart : null,
@@ -373,7 +374,6 @@ function createQuotaLabelWindow({
     if (!confirm(target, token, model)) return;
     currentLayout = layout;
     try { target.webContents.send(channel, { ...model, visible: true, guardEntry: guardEntryVisible(),
-      ...(sourceId === 'zcode' && guardEntryVisible() ? { practice: true } : {}),
       ...(layout.guardSide ? { guardSide: layout.guardSide, cardInset: layout.cardInset, guardTargetWidth: quotaRoleTargetWidth(rolePaintWidth()) } : {}) }); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
     try {

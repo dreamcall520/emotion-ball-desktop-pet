@@ -486,3 +486,18 @@ test('ZCode 左右及底边夹紧后完整显示且不盖宠物/另一卡，分�
     }
   }
 });
+
+test('ZCode compact pair stays adjacent to Codex at all four corners before trying a pet fallback', () => {
+  const area = { x: -1440, y: 24, width: 1440, height: 876 };
+  for (const x of [area.x, area.x + area.width - 80]) for (const y of [area.y, area.y + area.height - 80]) {
+    const pet = { x, y, width: 80, height: 80 };
+    const codex = quotaLabelBounds(pet, area, null, 'compact', false, 1, { mode: 'free', quotaRoleWidth: 22 }, false, true);
+    const face = { x: codex.x + codex.cardInset.x + 2, y: codex.y + codex.cardInset.y + 2, width: 124, height: 28 };
+    const zcode = quotaLabelBounds(pet, area, face, 'compact', false, 1,
+      { mode: 'free', quotaSourceId: 'zcode', quotaBottomAligned: true, quotaStackBelow: face, quotaObstacles: [face] });
+    assertInside(zcode, area); assertInside(face, area);
+    assert.equal(zcode.x + zcode.width/2, face.x + face.width/2, JSON.stringify({pet,face,zcode}));
+    assert.ok(zcode.y === face.y + face.height + 8 || zcode.y + zcode.height + 8 === face.y, JSON.stringify({pet,face,zcode}));
+    assert.deepEqual(quotaLabelBounds(pet, area, null, 'compact', false, 1, { mode: 'free', quotaRoleWidth: 22 }, false, true), codex);
+  }
+});

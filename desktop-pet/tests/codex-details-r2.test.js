@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const formatBalance = require('../credit-balance');
 
 class Element {
-  constructor(tag = 'div') { this.tagName = tag; this.className = ''; this.children = []; this.dataset = {}; this.attributes = {}; this.events = {}; this.style = {}; this._text = ''; }
+  constructor(tag = 'div') { this.tagName = tag; this.className = ''; this.children = []; this.dataset = {}; this.attributes = {}; this.events = {}; this.style = {}; this.scrollLeft = 0; this._text = ''; }
   get parentElement() { return this.parent || null; }
   get classList() { return {contains:value => this.className.split(/\s+/).includes(value)}; }
   set textContent(value) { this.replaceChildren(); this._text = String(value); }
@@ -44,6 +44,7 @@ class Element {
   }
   contains(target) { return target === this || this.children.some(child => child.contains(target)); }
   getBoundingClientRect() { return {top:0,bottom:220,height:220}; }
+  scrollIntoView(options) { (this.scrollRequests ||= []).push(options); }
   focus() { if (this.ownerDocument) this.ownerDocument.activeElement = this; }
 }
 function renderer(search = '') {
@@ -279,7 +280,7 @@ test('ZCode 四桶用可直接单击的短按钮，真实全名保留，Codex �
   assert.equal(buttons[0].getAttribute('aria-pressed'),'true');
   assert.equal(c.querySelector('.zcode-bucket-menu'),null);
   buttons[3].events.click();assert.deepEqual(h.calls,[['trend','zcode:3']]);
-  assert.equal(c.querySelector('.zcode-bucket-description').textContent,'ZCode Start Plan · GLM-5.3');
+  assert.equal(c.querySelector('.zcode-bucket-description'),null);assert.equal(buttons[0].title,'ZCode Start Plan · GLM-5.3');assert.equal(buttons[0].getAttribute('aria-label'),'ZCode Start Plan · GLM-5.3');
   h.receive({sourceId:'zcode',action:'trend',bucketId:'zcode:unknown',items:[{...items[0],bucketId:'zcode:unknown',planName:'新权益计划',label:'新模型'}]});
   assert.equal(c.querySelector('.zcode-bucket-button').textContent,'新权益计划 · 新模型');
   h.receive({action:'trend',period:300,items:[item(300),item(10080)]});
@@ -368,4 +369,33 @@ test('ZCode 百分比不隐藏细小消耗，显示精确已用数量，Codex仍
   assert.equal(h.nodes['details-content'].querySelector('.zcode-usage-note'),null);
   h.receive({action:'trend',period:300,items:[{...item(300),remaining:99.8706}]});
   assert.equal(h.nodes['details-content'].querySelector('.trend-stats strong').textContent,'100%');
+});
+
+
+test('ZCode 趋势仅展示同类同排的按钮，完整名称留title/aria，选中与原始桶身份不变', () => {
+  const h=renderer(),items=zcodeItems(),start=Date.now()-3600000;items.forEach(item=>{item.periodStart=start;item.resetsAt=start+86400000;});
+  const mixed=[items[0],items[3],items[2],items[1]],original=mixed.map(item=>item.bucketId);
+  h.receive({sourceId:'zcode',action:'trend',bucketId:items[3].bucketId,items:mixed});
+  const c=h.nodes['details-content'],buttons=c.querySelectorAll('.zcode-bucket-button');
+  assert.deepEqual(buttons.map(b=>b.dataset.bucketOption),[items[0],items[1],items[2],items[3]].map(item=>item.bucketId));
+  assert.deepEqual(buttons.map(b=>b.textContent),['体验·5.3','体验·Flash','活动·5.3','活动·Flash']);
+  assert.equal(buttons[3].getAttribute('aria-pressed'),'true');assert.equal(c.querySelector('.zcode-bucket-description'),null);
+  buttons.forEach((button,index)=>{assert.equal(button.title,`${items[index].planName} · ${items[index].label}`);assert.equal(button.getAttribute('aria-label'),button.title);});
+  buttons[1].events.click();assert.deepEqual(h.calls,[['trend',items[1].bucketId]]);assert.deepEqual(mixed.map(item=>item.bucketId),original);
+  const unknown=mixed.map((item,index)=>({...item,planName:`真实新套餐${index}`,periodKind:'unknown'}));
+  h.receive({sourceId:'zcode',action:'trend',bucketId:unknown[0].bucketId,items:unknown});
+  assert.deepEqual(c.querySelectorAll('.zcode-bucket-button').map(b=>b.dataset.bucketOption),original);
+  assert.ok(c.querySelectorAll('.zcode-bucket-button').every((button,index)=>button.textContent.includes(unknown[index].planName)));
+});
+
+
+test('ZCode 标签键盘目标滚入视野，普通刷新保留横向位置且不强拉回选中项', () => {
+  const h=renderer(),items=zcodeItems(),model={sourceId:'zcode',action:'trend',bucketId:items[0].bucketId,items};h.receive(model);
+  const c=h.nodes['details-content'],key=key=>({key,preventDefault(){},stopPropagation(){}});
+  let buttons=c.querySelectorAll('.zcode-bucket-button');buttons[0].focus();buttons[0].events.keydown(key('End'));
+  assert.equal(buttons[0].ownerDocument.activeElement,buttons[3]);assert.equal(buttons[3].scrollRequests.at(-1).inline,'nearest');
+  c.querySelector('.zcode-bucket-grid').scrollLeft=72;h.receive(model);
+  assert.equal(c.querySelector('.zcode-bucket-grid').scrollLeft,72);
+  buttons=c.querySelectorAll('.zcode-bucket-button');assert.equal(buttons[0].ownerDocument.activeElement,buttons[3]);assert.equal(buttons[3].scrollRequests?.length || 0,0,'ordinary refresh must not reveal or jump rail');
+  buttons[3].events.keydown(key('Home'));assert.equal(buttons[0].ownerDocument.activeElement,buttons[0]);assert.equal(buttons[0].scrollRequests.at(-1).inline,'nearest');
 });

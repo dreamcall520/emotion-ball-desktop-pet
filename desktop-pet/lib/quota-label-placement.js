@@ -117,6 +117,7 @@ function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName =
     const alignedX = (stack ? stack.x + stack.width / 2 : centerX) - size.width / 2;
     const positions = [
       { placement: 'below', x: alignedX, y: stack ? stack.y + stack.height + GAP : pet.y + pet.height + GAP },
+      ...(stack ? [{ placement: 'above', x: alignedX, y: stack.y - size.height - GAP }] : []),
       { placement: 'below', x: centerX - size.width / 2, y: pet.y + pet.height + GAP },
       { placement: 'above', x: centerX - size.width / 2, y: pet.y - size.height - GAP },
       { placement: 'right', x: pet.x + pet.width + GAP, y: centerY - size.height / 2 },
@@ -132,11 +133,21 @@ function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName =
     const gutter = ROLE_GAP + quotaRoleTargetWidth(presentation?.quotaRoleWidth);
     const group = { width: Math.min(size.width + gutter, area.width), height: Math.min(Math.max(size.height, 44) + 6, area.height) };
     const top = Math.max(0, group.height - size.height);
-    const pairs = positions.flatMap(candidate => [false, true].map(left => ({
+    const rightEdge = ['free','peeked'].includes(presentation?.mode) && centerX > area.x + area.width / 2 &&
+      (nativePet.x + nativePet.width >= area.x + area.width - gutter || centerX + size.width / 2 + gutter >= area.x + area.width);
+    const pairs = positions.flatMap(candidate => (rightEdge ? [true, false] : [false, true]).map(left => ({
       ...bounded({ ...candidate, x: candidate.x - (left ? gutter : 0), y: candidate.y - top }, group, area),
       guardSide: left ? 'left' : 'right', cardInset: { x: left ? Math.max(0, group.width - size.width) : 0, y: top }
     })));
-    return pairs.find(candidate => !overlaps(candidate, group, pet) && !obstacles.some(row => overlaps(candidate, group, row))) || pairs[0];
+    const roleWidth = [22,24,50].includes(presentation?.quotaRoleWidth) ? presentation.quotaRoleWidth : ROLE_PAINT_WIDTH;
+    const painted = candidate => ({ x: candidate.x + (candidate.guardSide === 'left' ? gutter - ROLE_GAP - roleWidth : 0),
+      y: candidate.y + candidate.cardInset.y - (sizeName === 'compact' ? 1 : 0),
+      width: Math.min(candidate.width, size.width + ROLE_GAP + roleWidth), height: size.height + (sizeName === 'compact' ? 1 : 0) });
+    return pairs.find(candidate => {
+      // Match Codex's painted pair: the native top/target gutter is transparent.
+      const face = painted(candidate);
+      return !overlaps(face, face, pet) && !obstacles.some(row => overlaps(face, face, row));
+    }) || pairs[0];
   }
   const candidates = [
     { placement: 'below', x: centerX - size.width / 2, y: pet.y + pet.height + GAP },

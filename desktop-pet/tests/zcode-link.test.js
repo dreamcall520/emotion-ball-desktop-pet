@@ -90,7 +90,7 @@ test('disabling while consent is pending cancels it without enabling or saving t
   f.link.close(); assert.equal(cancelled, 2);
 });
 
-test('ZCode practice preference saves independently and opening requires its visible own main frame', async () => {
+test('ZCode guard preference saves independently and opening requires its visible own main frame', async () => {
   const { pathToFileURL } = require('node:url'); const path = require('node:path');
   let opened = 0, entry = true;
   const contents = { mainFrame: {}, getURL: () => pathToFileURL(path.resolve(__dirname, '../quota-label.html')).href };
@@ -109,4 +109,14 @@ test('ZCode practice preference saves independently and opening requires its vis
   assert.equal(f.prefs().zcodeQuotaFunEnabled, true); f.ipcMain.emit('pet:zcode-quota-guard-open', event); assert.equal(opened, 2);
   f.link.setPreference('zcodeQuotaAlwaysVisible', false); f.ipcMain.emit('pet:zcode-quota-guard-open', event); assert.equal(opened, 2);
   f.link.close();
+});
+
+test('ZCode detail anchor stays on the pet while the source card is hidden', () => {
+  const petBounds={x:400,y:120,width:120,height:120};let options,cardVisible=true;
+  const f=fixture({getPetWindow:()=>({isDestroyed:()=>false,isVisible:()=>true,getBounds:()=>petBounds}),
+    createCard:()=>({show(){},hide(){},destroy(){},reposition(){},setAlwaysOnTop(){},getWindow:()=>null,
+      getVisibleBounds:()=>cardVisible?{x:362,y:248,width:196,height:256}:null}),
+    createDetails:value=>{options=value;return{isVisible:()=>false,close(){},destroy(){},setAlwaysOnTop(){}};}});
+  assert.deepEqual(options.getAnchor(),petBounds);cardVisible=false;
+  assert.deepEqual(options.getAnchor(),petBounds,'source card visibility cannot move the detail anchor');f.link.close();
 });

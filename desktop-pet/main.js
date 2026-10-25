@@ -1333,7 +1333,7 @@ function closeCodexQuotaGuard() { if (quotaGuardSource === 'codex') quotaGuard?.
 function syncZcodeQuotaGuard() {
   if (quotaGuardSource !== 'zcode' || !quotaGuard?.isVisible()) return;
   if (!canShowQuotaGuard()) quotaGuard.close();
-  else quotaGuard.update({ sourceId: 'zcode', practice: true, state: 'ready', items: [] });
+  else quotaGuard.update(buildZcodeQuotaLabelModel(zcodeLink.getSnapshot(), { size: settings.zcodeQuotaLabelSize }));
 }
 
 function openQuotaGuard(source = 'codex') {
@@ -1342,7 +1342,7 @@ function openQuotaGuard(source = 'codex') {
   quotaGuardSource = source === 'zcode' ? 'zcode' : 'codex';
   if (!canShowQuotaGuard() || !quotaGuard) { quotaGuardSource = previous; return false; }
   const opened = quotaGuard.open(quotaGuardSource === 'zcode'
-    ? { sourceId: 'zcode', practice: true, state: 'ready', items: [] } : quotaLabelModel());
+    ? buildZcodeQuotaLabelModel(zcodeLink.getSnapshot(), { size: settings.zcodeQuotaLabelSize }) : quotaLabelModel());
   if (!opened) quotaGuardSource = previous;
   return opened;
 }
@@ -2112,7 +2112,7 @@ async function finishSmokeTest() {
     if (process.env.PET_SMOKE_ZCODE_STYLE_ONLY === '1') {
       await require('./scripts/verify-zcode-style').verifyZcodeStyle({ pet: petWindow, zcodeLink, zcodeConsent,
         codex: { request: requestCodexConsent, getWindow: () => codexConsentWindow },
-        getMenu: () => Menu.buildFromTemplate(menuTemplate()), getSettings: () => settings, powerMonitor, BrowserWindow });
+        getMenu: () => Menu.buildFromTemplate(menuTemplate()), getSettings: () => settings, powerMonitor, BrowserWindow, stopMotion });
       app.quit(); return;
     }
 

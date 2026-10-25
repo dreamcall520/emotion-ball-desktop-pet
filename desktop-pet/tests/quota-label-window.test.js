@@ -1846,15 +1846,16 @@ test('实际controller区分22/24/50角色，普通48px与大角色64px同源传
     document:{documentElement:new Element(),getElementById:id=>nodes[id],createElement:()=>new Element()},
     window:{addEventListener() {},petQuotaLabel:{onModel(callback){receive=callback;},openDetail(...args){calls.push(args);},toggleExpanded(){}}}
   });
-  receive({sourceId:'zcode',state:'ready',expanded:true,items:Array.from({length:4},(_,i)=>({label:'GLM-5.3',planName:i%2?'Start Plan 体验':'1024 活动',bucketId:`bucket-${i}`,windowMinutes:1440,remaining:70,resetsAt:Date.now()+86400000,periodKind:i%2?'daily':'expiry'}))});
+  const deadline = Date.now()+86400000;
+  receive({sourceId:'zcode',state:'ready',expanded:true,items:Array.from({length:4},(_,i)=>({label:'GLM-5.3',planName:i%2?'Start Plan 体验':'1024 活动',bucketId:`bucket-${i}`,windowMinutes:1440,remaining:70,resetsAt:deadline,periodKind:i%2?'daily':'expiry'}))});
   const expanded=nodes['codex-expanded'];
   assert.equal(nodes['quota-label'].dataset.source,'zcode');
   assert.equal(expanded.children[1].children.length,4);
   assert.equal(nodes.items.children[0].children[0].textContent,'5.3');
   assert.equal(nodes.items.children[0].children[1].textContent,'1024活动');
-  assert.equal(nodes.items.children[1].children[1].textContent,'每日体验');
+  assert.equal(nodes.items.children[2].children[1].textContent,'每日体验');
   assert.match(expanded.textContent,/ZCODE/); assert.match(expanded.textContent,/体验/); assert.match(expanded.textContent,/1024/);
-  assert.match(expanded.children[1].children[1].title,/Start Plan 体验/);
+  assert.match(expanded.children[1].children[2].title,/Start Plan 体验/);
   assert.match(expanded.children[1].children[0].title,/1024 活动/); assert.match(expanded.textContent,/到期/);
   assert.doesNotMatch(expanded.textContent,/重置机会/);
   expanded.children[2].children[0].children[0].events.click({stopPropagation(){}});

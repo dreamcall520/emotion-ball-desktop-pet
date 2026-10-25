@@ -18,7 +18,7 @@ if (!process.versions.electron) {
   const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   const page=(win,code)=>win.webContents.executeJavaScript(code,true);
   async function poll(read,accept,label){for(let i=0;i<100;i++){const value=await read();if(accept(value))return value;await wait(30);}throw new Error(label);}
-  async function pointer(win,selector){const p=await page(win,`(()=>{const n=document.querySelector(${JSON.stringify(selector)});if(!n)throw new Error('missing target');const r=n.getBoundingClientRect();return{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};})()`);win.focus();for(const type of ['mouseMove','mouseDown','mouseUp'])win.webContents.sendInputEvent({type,...p,...(type==='mouseMove'?{}:{button:'left',clickCount:1})});await wait(50);}
+  async function pointer(win,selector){const p=await page(win,`(()=>{const n=document.querySelector(${JSON.stringify(selector)});if(!n)throw new Error('missing target');n.scrollIntoView({block:'nearest',inline:'nearest'});const r=n.getBoundingClientRect();return{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};})()`);win.focus();for(const type of ['mouseMove','mouseDown','mouseUp'])win.webContents.sendInputEvent({type,...p,...(type==='mouseMove'?{}:{button:'left',clickCount:1})});await wait(50);}
   async function key(win,keyCode){win.webContents.sendInputEvent({type:'keyDown',keyCode});win.webContents.sendInputEvent({type:'keyUp',keyCode});await wait(50);}
   app.whenReady().then(async()=>{
     fs.mkdirSync(output,{recursive:true});const report={ok:false,fixtureOnly:true,actualModelCalls:0,scenarios:[],screenshots:[]};
@@ -32,7 +32,7 @@ if (!process.versions.electron) {
         let selected=source==='zcode'?items[0].id:300,closed=0,action='trend',estimated=false,monthWindow=false,paceCase=null,tinyDecline=false;const calls=[];
         const model=()=>{
           if(source!=='zcode')return {sourceId:source,action:'trend',items,period:selected,appearance,state:'ready',quotaUpdatedAt:now,trend:{windowMinutes:1440,resetsAt:now+82800000,samples:[{at:now-120000,remaining:90},{at:now-60000,remaining:87},{at:now,remaining:84}]}};
-          const windows=zitems.map(item=>({...item,remaining:estimated?97:item.remaining,remainingUnits:estimated?item.total*.97:item.remainingUnits,...(monthWindow ? {periodStart:now-30*86400000,windowMinutes:31*1440} : {}),...(paceCase ? paceCase==='unknown' ? {periodStart:null,windowMinutes:null} : {periodStart:now-43200000,resetsAt:now+43200000,windowMinutes:1440,remaining:{fast:30,balanced:50,slow:90}[paceCase],remainingUnits:2000000*({fast:30,balanced:50,slow:90}[paceCase])} : {})}));
+          const windows=[zitems[0],zitems[3],zitems[2],zitems[1]].map(item=>({...item,remaining:estimated?97:item.remaining,remainingUnits:estimated?item.total*.97:item.remainingUnits,...(monthWindow ? {periodStart:now-30*86400000,windowMinutes:31*1440} : {}),...(paceCase ? paceCase==='unknown' ? {periodStart:null,windowMinutes:null} : {periodStart:now-43200000,resetsAt:now+43200000,windowMinutes:1440,remaining:{fast:30,balanced:50,slow:90}[paceCase],remainingUnits:2000000*({fast:30,balanced:50,slow:90}[paceCase])} : {})}));
           const snapshot={enabled:true,quota:{state:'connected',stale:false,updatedAt:now,windows},history:{available:true,windows:windows.filter(item=>item.periodStart!==null).map(item=>({id:item.id,periodStart:item.periodStart,resetsAt:item.resetsAt,samples:(monthWindow ? [-1,0] : [-12,-8,-4,0]).map((minute,i)=>({at:now+minute*60000,remaining:estimated?100-i:tinyDecline?(i===3?item.remaining:100-(100-item.remaining)*i/3):item.remaining}))}))}};
           return buildZcodeDetailsModel(snapshot,{action,bucketId:selected,appearance},now);
         };
@@ -44,18 +44,19 @@ if (!process.versions.electron) {
         try {
           await win.loadFile(path.resolve(__dirname,'../codex-details.html'));win.webContents.send(prefix,model());win.showInactive();
           await poll(()=>page(win,"document.querySelector('.title-product')?.textContent"),value=>value===source.toUpperCase(),'initial renderer');await wait(100);
-          const geometry=await page(win,`(()=>{const r=s=>document.querySelector(s)?.getBoundingClientRect().toJSON();return{width:innerWidth,scrollWidth:document.body.scrollWidth,header:r('.panel-header'),close:r('#details-close'),selector:r('.zcode-bucket-selector'),grid:r('.zcode-bucket-grid'),description:r('.zcode-bucket-description'),headerTabs:document.querySelectorAll('.panel-header .trend-tabs').length};})()`);
+          const geometry=await page(win,`(()=>{const r=s=>document.querySelector(s)?.getBoundingClientRect().toJSON();return{width:innerWidth,scrollWidth:document.body.scrollWidth,header:r('.panel-header'),close:r('#details-close'),selector:r('.zcode-bucket-selector'),grid:r('.zcode-bucket-grid'),descriptionCount:document.querySelectorAll('.zcode-bucket-description').length,headerTabs:document.querySelectorAll('.panel-header .trend-tabs').length};})()`);
           assert.equal(geometry.width,width);assert.ok(geometry.scrollWidth<=width);assert.ok(geometry.close.right<=width&&geometry.close.left>=0);
           const scenario={source,width,appearance,geometry};report.scenarios.push(scenario);
           const capture=async suffix=>{await wait(80);const file=path.join(output,`${source}-${width}-${appearance}-${suffix}.png`);const image=await win.webContents.capturePage();assert.ok(!image.isEmpty());fs.writeFileSync(file,image.toPNG());report.screenshots.push(file);};
           if(source==='zcode'){
-            assert.equal(geometry.headerTabs,0);assert.ok(geometry.selector.top>=geometry.header.bottom);assert.ok(geometry.grid.right<=width-12&&geometry.description.right<=width-12);
+            assert.equal(geometry.headerTabs,0);assert.ok(geometry.selector.top>=geometry.header.bottom);assert.ok(geometry.grid.right<=width-12);assert.equal(geometry.descriptionCount,0);
             scenario.initialForecast=model().trend.forecast;
             assert.equal(scenario.initialForecast.reason,'no-decline');
-            scenario.buttons=await page(win,`[...document.querySelectorAll('.zcode-bucket-button')].map(n=>({text:n.textContent,selected:n.getAttribute('aria-pressed'),font:parseFloat(getComputedStyle(n).fontSize),rect:n.getBoundingClientRect().toJSON(),scrollWidth:n.scrollWidth,clientWidth:n.clientWidth}))`);
+            scenario.buttons=await page(win,`[...document.querySelectorAll('.zcode-bucket-button')].map(n=>({text:n.textContent,id:n.dataset.bucketOption,title:n.title,aria:n.getAttribute('aria-label'),selected:n.getAttribute('aria-pressed'),font:parseFloat(getComputedStyle(n).fontSize),rect:n.getBoundingClientRect().toJSON(),scrollWidth:n.scrollWidth,clientWidth:n.clientWidth}))`);
             assert.deepEqual(scenario.buttons.map(b=>b.text),['体验·5.3','体验·Flash','活动·5.3','活动·Flash']);
-            assert.ok(scenario.buttons.every(b=>b.font>=12&&b.scrollWidth<=b.clientWidth&&b.rect.right<=width-12));
-            assert.equal(scenario.buttons[0].rect.top,scenario.buttons[1].rect.top);assert.equal(scenario.buttons[2].rect.top,scenario.buttons[3].rect.top);assert.ok(scenario.buttons[2].rect.top>scenario.buttons[0].rect.top);
+            assert.ok(scenario.buttons.every(b=>{const item=zitems.find(item=>item.id===b.id);return b.title===`${item.planName} · ${item.label}`&&b.aria===b.title;}));
+            assert.ok(scenario.buttons.every(b=>b.font>=12&&b.scrollWidth<=b.clientWidth));
+            assert.equal(new Set(scenario.buttons.map(b=>b.rect.top)).size,1,'all source chips stay on one row');
             assert.equal(await page(win,"document.querySelector('.forecast-badge')===null"),true);
             assert.match(await page(win,"document.querySelector('.forecast-copy').textContent"),/近期未观察到额度消耗.*真实额度变化后/);
             assert.equal(await page(win,"document.querySelectorAll('.zcode-sample-info,.zcode-chart-caption').length"),0);
@@ -65,12 +66,26 @@ if (!process.versions.electron) {
             assert.equal(scenario.flatCurve.blue,0,'100% real samples must remain flat');assert.ok(scenario.flatCurve.timeReference>0,'time baseline changes independently');
             assert.match(await page(win,"document.querySelector('.zcode-countdown').textContent"),/小时/);
             await capture('flat-real-backend');
+            const railState=()=>page(win,`(()=>{const n=document.querySelector('.zcode-bucket-grid'),r=n.getBoundingClientRect(),last=n.lastElementChild.getBoundingClientRect(),active=document.activeElement?.getBoundingClientRect();return{left:n.scrollLeft,scroll:n.scrollWidth,client:n.clientWidth,rect:r.toJSON(),last:last.toJSON(),active:active?.toJSON()};})()`);
+            scenario.railInitial=await railState();
+            if(width===320)assert.ok(scenario.railInitial.scroll>scenario.railInitial.client,'narrow rail must accept horizontal scrolling');
+            else assert.ok(scenario.railInitial.scroll<=scenario.railInitial.client+1,'wide rail fits natural chip widths without forcing extra space');
+            await page(win,"document.querySelector('.zcode-bucket-grid').scrollLeft=document.querySelector('.zcode-bucket-grid').scrollWidth");
+            await wait(30);scenario.railScrolled=await railState();
+            if(width===320)assert.ok(scenario.railScrolled.left>0);
+            win.webContents.send(prefix,model());await wait(80);scenario.railRefresh=await railState();assert.equal(scenario.railRefresh.left,scenario.railScrolled.left,'background refresh preserves manually scrolled position');
+            assert.ok(scenario.railRefresh.last.right<=scenario.railRefresh.rect.right,'last chip becomes pointer reachable');
             await pointer(win,'.zcode-bucket-button[data-bucket-option="zcode:fixture-3"]');
             await poll(()=>selected,value=>value===zitems[3].id,'one click bucket IPC');assert.equal(calls.length,1);
-            await poll(()=>page(win,"document.querySelector('.zcode-bucket-description').textContent"),value=>value===`${zitems[3].planName} · ${zitems[3].label}`,'selected description');
+            await poll(()=>page(win,"document.querySelector('.zcode-bucket-button[aria-pressed=true]')?.title"),value=>value===`${zitems[3].planName} · ${zitems[3].label}`,'selected full title');
             assert.match(await page(win,"document.querySelector('.panel-bottom').textContent"),/使用截止/);assert.match(await page(win,"document.querySelector('.panel-bottom p').title"),/到期后剩余额度失效/);
             await key(win,'Home');await key(win,'Enter');await poll(()=>selected,value=>value===zitems[0].id,'keyboard bucket IPC');assert.equal(calls.length,2);
             assert.equal(await page(win,"document.activeElement.dataset.bucketOption"),zitems[0].id);
+            scenario.railHome=await railState();assert.ok(scenario.railHome.active.left>=scenario.railHome.rect.left,'Home focuses a visible chip');
+            await key(win,'End');scenario.railEnd=await railState();assert.ok(scenario.railEnd.active.right<=scenario.railEnd.rect.right,'End automatically reveals the last chip');
+            await key(win,'Enter');await poll(()=>selected,value=>value===zitems[3].id,'End Enter selects the same last bucket');
+            const selectedScroll=(await railState()).left;win.webContents.send(prefix,model());await wait(80);assert.equal((await railState()).left,selectedScroll,'selected refresh retains scroll position');
+            await capture('rail-last-visible');await key(win,'Home');await key(win,'Enter');await poll(()=>selected,value=>value===zitems[0].id,'Home Enter returns to first bucket');
             estimated=true;win.webContents.send(prefix,model());await poll(()=>page(win,"document.querySelector('.forecast-badge').textContent"),value=>value==='可能提前用完','backend estimate');
             scenario.estimateForecast=model().trend.forecast;assert.equal(scenario.estimateForecast.reason,'estimate');
             assert.match(await page(win,"document.querySelector('.forecast-note').title"),/近期连续/);

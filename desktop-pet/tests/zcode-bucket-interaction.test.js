@@ -137,3 +137,41 @@ test('套餐别名仅限已知名称和周期，未知企业1024套餐和非dail
   const h=fixture({sourceId:'zcode',state:'ready',expanded:true,items:plans.map((plan,i)=>({...items(4)[i],...plan}))});
   assert.deepEqual(h.cells.map(cell=>cell.children[0].children[0].textContent),['企业1024点套餐','ZCode Start Plan','每日体验','1024活动']);
 });
+
+
+test('ZCode 仅展示按已知来源分组、每组GLM5.3再Flash，标准收起与展开同序且bucket IPC不变', () => {
+  const base=items(4), now=Date.now();
+  const rows=[{...base[0],bucketId:'trial-glm',planName:'ZCode Start Plan',periodKind:'daily',label:'GLM-5.3',resetsAt:now+3600000},
+    {...base[1],bucketId:'event-flash',planName:'ZCode 1024 Dev Day',periodKind:'one_time',label:'GLM-5.3-Flash',resetsAt:now+7200000},
+    {...base[2],bucketId:'event-glm',planName:'ZCode 1024 Dev Day',periodKind:'one_time',label:'GLM-5.3',resetsAt:now+7200000},
+    {...base[3],bucketId:'trial-flash',planName:'ZCode Start Plan',periodKind:'daily',label:'GLM-5.3-Flash',resetsAt:now+3600000}];
+  const original=rows.map(row=>row.bucketId); const h=fixture({sourceId:'zcode',state:'ready',size:'standard',expanded:true,items:rows});
+  assert.deepEqual(h.cells.map(cell=>cell.dataset.period),['trial-glm','trial-flash','event-glm','event-flash']);
+  assert.deepEqual(h.nodes.items.children.map(row=>row.children[1].textContent),['每日体验','每日体验','1024活动','1024活动']);
+  assert.deepEqual(h.nodes.items.children.map(row=>row.children[0].textContent),['5.3','5.3 Flash','5.3','5.3 Flash']);
+  h.cells[1].click(); h.cells[3].click(); assert.deepEqual(h.calls,[['detail','trend','trial-flash'],['detail','trend','event-flash']]);
+  assert.deepEqual(rows.map(row=>row.bucketId),original,'input order and source first are unchanged');
+  const codex=fixture({state:'ready',expanded:true,items:rows.slice(0,2)});
+  assert.equal(codex.cells[1].attributes['aria-label'].startsWith('1天'),true);
+});
+
+test('未知来源保留原序，同名已知plan的不同真实周期不合并', () => {
+  const now=Date.now(); const rows=[
+    {...items(1)[0],bucketId:'unknown-flash',planName:'企业套餐',periodKind:'unknown',label:'GLM-5.3-Flash'},
+    {...items(1)[0],bucketId:'period-a-flash',planName:'ZCode Start Plan',periodKind:'daily',label:'GLM-5.3-Flash',resetsAt:now+3600000},
+    {...items(1)[0],bucketId:'unknown-glm',planName:'企业套餐',periodKind:'unknown',label:'GLM-5.3'},
+    {...items(1)[0],bucketId:'period-b-glm',planName:'ZCode Start Plan',periodKind:'daily',label:'GLM-5.3',resetsAt:now+7200000},
+    {...items(1)[0],bucketId:'period-a-glm',planName:'ZCode Start Plan',periodKind:'daily',label:'GLM-5.3',resetsAt:now+3600000}];
+  const h=fixture({sourceId:'zcode',state:'ready',expanded:true,items:rows});
+  assert.deepEqual(h.cells.map(cell=>cell.dataset.period),['unknown-flash','period-a-glm','period-a-flash','unknown-glm','period-b-glm']);
+});
+
+
+test('相同已知名称/周期但不同官方plan ID保持分组独立', () => {
+  const end=Date.now()+3600000,base={...items(1)[0],planName:'ZCode Start Plan',periodKind:'daily',resetsAt:end};
+  const rows=[{...base,bucketId:'zcode:plan-a:flash:user-a',label:'GLM-5.3-Flash'},
+    {...base,bucketId:'zcode:plan-b:glm:user-b',label:'GLM-5.3'},
+    {...base,bucketId:'zcode:plan-a:glm:user-a',label:'GLM-5.3'}];
+  const h=fixture({sourceId:'zcode',state:'ready',expanded:true,items:rows});
+  assert.deepEqual(h.cells.map(cell=>cell.dataset.period),['zcode:plan-a:glm:user-a','zcode:plan-a:flash:user-a','zcode:plan-b:glm:user-b']);
+});

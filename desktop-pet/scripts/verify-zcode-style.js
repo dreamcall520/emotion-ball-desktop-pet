@@ -9,7 +9,7 @@ async function poll(read, accept, label, milliseconds = 20000) {
   do { const value = await read(); if (accept(value)) return value; await wait(80); } while (Date.now() < until);
   throw new Error(`${label}超时`);
 }
-async function verifyZcodeStyle({ pet, zcodeLink, zcodeConsent, codex, getMenu, getSettings, powerMonitor, BrowserWindow }) {
+async function verifyZcodeStyle({ pet, zcodeLink, zcodeConsent, codex, getMenu, getSettings, powerMonitor, BrowserWindow, stopMotion }) {
   assert.equal(process.env.PET_SMOKE_TEST, '1'); assert.equal(process.env.PET_SMOKE_ZCODE_STYLE_ONLY, '1');
   assert.equal(require('electron').app.isPackaged, true);
   const out = process.env.PET_SMOKE_ARTIFACT_DIR; assert.ok(out && path.isAbsolute(out)); fs.mkdirSync(out, { recursive: true });
@@ -57,26 +57,34 @@ async function verifyZcodeStyle({ pet, zcodeLink, zcodeConsent, codex, getMenu, 
     await poll(() => zcodeLink.getSnapshot(), value => value.enabled && value.quota.state === 'connected', '确认后真实额度', 45000);
     assert.equal(getSettings().zcodeEnabled, true);
     zcodeLink.setPreference('zcodeQuotaLabelSize', 'compact'); zcodeLink.setPreference('zcodeQuotaAlwaysVisible', true);
+    stopMotion();
+    const area = require('electron').screen.getDisplayMatching(pet.getBounds()).workArea;
+    pet.setPosition(area.x + Math.floor(area.width / 2), area.y + Math.floor(area.height / 3));
     const card = await poll(zcodeLink.getWindow, visible, '简短额度卡');
     await poll(() => page(card, "document.querySelector('#quota-label').dataset.hasItems"), value => value === 'true', '额度卡渲染');
     assert.match(await page(card, "document.querySelector('#summary .summary-period-label').textContent"), /额度/);
     await poll(() => page(card, "Boolean(document.querySelector('#quota-guard-entry') && !document.querySelector('#quota-guard-entry').disabled && !document.querySelector('#quota-guard-entry').hidden)"), Boolean, '仅ZCode小游戏入口');
+    report.defaultPlacement = await poll(() => (report.lastPlacement = { pet: pet.getBounds(), face: zcodeLink.getVisibleBounds(), appearance:getSettings().customization?.appearance, style:getSettings().codexQuotaStyle }), value => value.face && value.face.y > value.pet.y + value.pet.height / 2 && Math.abs(value.face.x + value.face.width / 2 - value.pet.x - value.pet.width / 2) <= 1, '默认卡面居中位于球球下方');
     await capture(card, 'compact-quota');
     await pointerClick(card, '#quota-guard-entry');
-    const game = await poll(() => BrowserWindow.getAllWindows().find(win => visible(win) && win.webContents.getURL().endsWith('/quota-guard.html')), visible, '实际主进程打开自由练习');
+    const expected = require('../lib/zcode-quota-view').buildZcodeQuotaLabelModel(zcodeLink.getSnapshot()).items[0];
+    assert.ok(expected);
+    const game = await poll(() => BrowserWindow.getAllWindows().find(win => visible(win) && win.webContents.getURL().endsWith('/quota-guard.html')), visible, '实际主进程打开ZCode守护战');
     await poll(() => page(game, "window.quotaGuardView?.state"), value => value?.ready && value.spritesReady, '游戏角色就绪');
-    assert.equal(await page(game, "window.quotaGuardView.state.period"), null, '自由练习不冒用额度周期');
-    assert.match(await page(game, "document.querySelector('#guard-title').textContent"), /自由练习/);
-    assert.match(await page(game, "document.querySelector('#guard-instruction').textContent"), /不消耗账户额度/);
+    assert.equal(await page(game, "window.quotaGuardView.state.quota"), expected.remaining, '游戏使用真实首桶余额');
+    assert.equal(await page(game, "window.quotaGuardView.state.period"), expected.windowMinutes, '保留真实周期，不伪造Codex周期');
+    assert.equal(await page(game, "document.querySelector('#guard-title').textContent"), '球球守护战');
+    assert.match(await page(game, "document.querySelector('#guard-period').textContent"), /ZCode/);
+    assert.doesNotMatch(await page(game, "document.body.innerText"), /自由练习|能量满满/);
     await poll(() => card.isVisible(), value => value === false, '游戏显示时隐藏额度卡');
     const shots = await page(game, "window.quotaGuardView.state.clickShots");
     await pointerClick(game, '#guard-qiuqiu');
     await wait(160); await pointerClick(game, '#guard-qiuqiu');
-    await poll(() => page(game, "window.quotaGuardView.state.clickShots"), value => value > shots, '自由练习实际射击');
-    await capture(game, 'zcode-only-practice');
+    await poll(() => page(game, "window.quotaGuardView.state.clickShots"), value => value > shots, 'ZCode守护战实际射击');
+    await capture(game, 'zcode-only-guard');
     await pointerClick(game, '#guard-close');
     await poll(() => card.isVisible(), Boolean, '退出游戏恢复额度卡');
-    report.checks.push('仅ZCode实际入口打开自由练习、原生射击、关闭恢复卡片，未伪造账户周期');
+    report.checks.push('仅ZCode真实首桶额度驱动守护战、原生射击、关闭恢复卡片，保留真实周期');
     await pointerClick(card, '#quota-label');
     await poll(() => page(card, "document.querySelector('#quota-label').dataset.expanded"), value => value === 'true', '展开额度卡');
     await capture(card, 'expanded-quota');
@@ -91,6 +99,7 @@ async function verifyZcodeStyle({ pet, zcodeLink, zcodeConsent, codex, getMenu, 
     await poll(() => page(details, "document.querySelectorAll('.zcode-bucket-button').length"), value => value > 0, '额度选择器');
     const buckets = await page(details, "Array.from(document.querySelectorAll('.zcode-bucket-button'), button=>({id:button.dataset.bucketOption,text:button.textContent}))");
     for (let index = 0; index < buckets.length; index++) {
+      await page(details, `document.querySelector('.zcode-bucket-button:nth-child(${index + 1})').scrollIntoView({block:'nearest',inline:'nearest'})`);
       await pointerClick(details, `.zcode-bucket-button:nth-child(${index + 1})`);
       await poll(() => page(details, "document.querySelector('.zcode-bucket-button[aria-pressed=true]')?.dataset.bucketOption"), value => value === buckets[index].id, '一次点击实际换桶IPC');
       const copy = await page(details, "({countdown:document.querySelector('.zcode-countdown')?.textContent,bottom:document.querySelector('.panel-bottom')?.textContent,help:document.querySelector('.chart-help-body')?.textContent,repeatedLines:document.querySelectorAll('.zcode-chart-caption,.zcode-sample-info').length,reason:document.querySelector('.forecast-note')?.dataset.reason,badge:document.querySelector('.forecast-badge')?.textContent,forecast:document.querySelector('.forecast-copy')?.textContent})");

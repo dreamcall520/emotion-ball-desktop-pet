@@ -40,6 +40,7 @@ function bucketFields(item, sourceId) {
   if (sourceId !== 'zcode') return {};
   try { return {
       planName: cleanLabel(item.planName),
+      ...(typeof item.model === 'string' ? { model: cleanLabel(item.model) } : {}),
       bucketId: typeof item.bucketId === 'string' && /^[^\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]{1,400}$/u.test(item.bucketId) ? item.bucketId : '',
       periodKind: ['one_time', 'expiry', 'daily', 'rolling', 'weekly', 'monthly', 'unknown'].includes(item.periodKind) ? item.periodKind : 'unknown',
       periodStart: Number.isSafeInteger(item.periodStart) && item.periodStart > 0 ? item.periodStart : null,
@@ -211,7 +212,6 @@ contextBridge.exposeInMainWorld('petQuotaLabel', {
         if (typeof visible === 'boolean') model.visible = visible;
         const guardEntry = source?.guardEntry;
         if (typeof guardEntry === 'boolean') model.guardEntry = guardEntry;
-        if (sourceId === 'zcode' && source?.practice === true) model.practice = true;
         const targetWidth = source?.guardTargetWidth;
         if ([48,64].includes(targetWidth)) model.guardTargetWidth = targetWidth;
         const side = source?.guardSide;

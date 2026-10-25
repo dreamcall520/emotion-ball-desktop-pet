@@ -34,7 +34,7 @@ function activityFields(value) {
   } catch (_) { return {}; }
 }
 
-function copyItem(value) {
+function copyItem(value, sourceId = 'codex') {
   const item = record(value);
   if (!item) return null;
   let labelValue;
@@ -52,28 +52,33 @@ function copyItem(value) {
     resetLabel = cleanLabel(item.resetLabel);
   } catch (_) { return null; }
   const label = cleanLabel(labelValue);
-  if (!label || !Number.isSafeInteger(windowMinutes) || windowMinutes <= 0 ||
+  const zcode = sourceId === 'zcode';
+  if (!label || (zcode ? windowMinutes !== null && (!Number.isFinite(windowMinutes) || windowMinutes <= 0) : !Number.isSafeInteger(windowMinutes) || windowMinutes <= 0) ||
     typeof remaining !== 'number' || !Number.isFinite(remaining) || remaining < 0 || remaining > 100) return null;
+  if (zcode && (typeof item.bucketId !== 'string' || !/^zcode:[^\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]{1,394}$/u.test(item.bucketId)
+    || !Number.isSafeInteger(resetsAt) || resetsAt <= 0)) return null;
   return {
     label,
     windowMinutes,
     remaining,
+    ...(zcode ? { bucketId: item.bucketId, model: cleanLabel(item.model),
+      periodStart: Number.isSafeInteger(item.periodStart) && item.periodStart > 0 ? item.periodStart : null } : {}),
     ...(Number.isSafeInteger(resetsAt) && resetsAt > 0 ? { resetsAt } : {}),
     ...paceFields(pace),
     ...(resetLabel ? { resetLabel } : {})
   };
 }
 
-function copyItems(value) {
+function copyItems(value, sourceId = 'codex') {
   try { if (!Array.isArray(value)) return []; } catch (_) { return []; }
   let length;
   try { length = value.length; } catch (_) { return []; }
-  const limit = Number.isSafeInteger(length) && length >= 0 ? Math.min(length, 2) : 0;
+  const limit = Number.isSafeInteger(length) && length >= 0 ? Math.min(length, sourceId === 'zcode' ? 1 : 2) : 0;
   const items = [];
   for (let index = 0; index < limit; index += 1) {
     let raw;
     try { raw = value[index]; } catch (_) { continue; }
-    const item = copyItem(raw);
+    const item = copyItem(raw, sourceId);
     if (item) items.push(item);
   }
   return items;
@@ -125,12 +130,12 @@ function safeModel(value) {
   const overflow = Number.isSafeInteger(overflowValue) && overflowValue > 0
     ? Math.min(overflowValue, 99) : 0;
   return {
-    ...(source.sourceId === 'zcode' && source.practice === true ? { sourceId: 'zcode', practice: true } : {}),
+    ...(source.sourceId === 'zcode' ? { sourceId: 'zcode' } : {}),
     state,
     size,
     appearance,
     expanded,
-    items: source.sourceId === 'zcode' && source.practice === true ? [] : copyItems(rawItems),
+    items: copyItems(rawItems, source.sourceId),
     overflow,
     ...extraCreditsFields(source, state),
     ...activityFields(activity),

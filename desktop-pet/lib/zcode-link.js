@@ -31,7 +31,7 @@ function createZcodeLink({ BrowserWindow, screen, ipcMain, getSettings, save, fi
     getPresentation: () => ({ ...getPresentation(), quotaObstacles: getObstacles().filter(Boolean) }), getSuppressed: () => getSuppressed() || getCardSuppressed() || details?.isVisible(),
     alwaysOnTop: getSettings().alwaysOnTop, onLayout, onError: report });
   const details = createDetails({ BrowserWindow, screen, sourceId: 'zcode',
-    getAnchor: () => card.getVisibleBounds() || getPetWindow()?.getBounds?.(),
+    getAnchor: () => getPetWindow()?.getBounds?.(),
     alwaysOnTop: getSettings().alwaysOnTop, onError: report,
     onVisibilityChange: () => { card.reposition(); onLayout(); onChange(); } });
   const service = createCompanion({ filePath, onChange: () => { sync(); onChange(); } });

@@ -114,6 +114,35 @@ if (!process.versions.electron) {
       await waitFor(codex, "document.querySelector('#quota-label').dataset.source === 'codex'", 'independent Codex card');
       const originalCodex = await js(codex, "document.querySelector('#quota-label').outerHTML");
       assert.equal(await js(zcode, "document.querySelector('#quota-label').dataset.source"), 'zcode');
+      if (process.env.PET_ZCODE_SMOKE_COMPACT_ONLY === '1') {
+        size = 'compact'; report.compactMatrix = []; report.visualValueFixturesOnly = true;
+        const measure = () => js(zcode, `(() => { const summary=document.querySelector('#summary'),badge=summary.querySelector('.summary-badge'),label=summary.querySelector('.summary-period-label'),value=summary.querySelector('.summary-value'); return {innerWidth,innerHeight,summary:summary.getBoundingClientRect().toJSON(),badge:{text:badge.textContent,rect:badge.getBoundingClientRect().toJSON()},label:{text:label.textContent,width:label.clientWidth,scrollWidth:label.scrollWidth,font:parseFloat(getComputedStyle(label).fontSize),rect:label.getBoundingClientRect().toJSON()},value:{text:value.textContent,width:value.clientWidth,scrollWidth:value.scrollWidth,font:parseFloat(getComputedStyle(value).fontSize),rect:value.getBoundingClientRect().toJSON()}}; })()`);
+        for(const [remaining,expected] of [[100,'100%'],[99.9,'99.9%'],[99.99,'<100%'],[.01,'<0.1%']]) for(const theme of ['light','dark']) {
+          appearance=theme; nativeTheme.themeSource=theme;
+          const fixture={...snapshot,quota:{...snapshot.quota,windows:snapshot.quota.windows.map((row,i)=>i===0?{...row,remaining}:row)}};
+          zcode.show(buildZcodeQuotaLabelModel(fixture,{},now));
+          await waitFor(zcode,`document.querySelector('#quota-label').dataset.size === 'compact' && document.querySelector('.summary-value').textContent === ${JSON.stringify(expected)} && document.documentElement.dataset.appearance === '${theme}'`,'compact percentage matrix');
+          const value=await measure();
+          assert.equal(value.innerWidth,128); assert.equal(value.label.text,'额度'); assert.equal(value.badge.text,'Z'); assert.equal(value.value.text,expected);
+          assert.ok(value.label.font>=10 && value.value.font>=14,'Keep the label readable and percentage near the established size.');
+          assert.ok(value.label.width>=20 && value.label.scrollWidth<=value.label.width,'Both visible quota-label characters must fit without ellipsis.');
+          assert.ok(value.value.scrollWidth<=value.value.width && value.value.rect.right<=value.summary.right,'Entire percentage must remain inside its native card.');
+          assert.ok(value.badge.rect.right<=value.label.rect.left && value.label.rect.right<=value.value.rect.left,'Badge, quota label and percent must not overlap.');
+          report.compactMatrix.push({remaining,theme,...value}); await capture(zcode,`compact-${String(remaining).replace('.','p')}-${theme}`);
+        }
+        sameAnchor=true;stackEnabled=true;appearance='light';nativeTheme.themeSource='light';
+        anchor.x=area.x+area.width-82;anchor.y=area.y+area.height-82;
+        codex.show(codexModel);codex.reposition();
+        zcode.show(buildZcodeQuotaLabelModel({...snapshot,quota:{...snapshot.quota,windows:snapshot.quota.windows.map((row,i)=>i===0?{...row,remaining:99.9}:row)}},{},now));zcode.reposition(); await delay(100);
+        const z=zcode.getVisibleBounds(),c=codex.getVisibleBounds(),overlap=(a,b)=>a.x<b.x+b.width&&a.x+a.width>b.x&&a.y<b.y+b.height&&a.y+a.height>b.y;
+        assert.ok(z.x>=area.x && z.y>=area.y && z.x+z.width<=area.x+area.width && z.y+z.height<=area.y+area.height);assert.equal(overlap(z,c),false);assert.equal(overlap(z,anchor),false);
+        const corner=await measure();assert.equal(corner.label.width,corner.label.scrollWidth);assert.equal(corner.value.text,'99.9%');
+        report.compactCorner={zcode:z,codex:c,geometry:corner};await capture(zcode,'corner-bottom-right-zcode');
+        assert.deepEqual(errors,[]);assert.deepEqual(report.rendererErrors,[]);report.ok=true;
+        report.checks.push('128px真实窗口×100/99.9/<100/<0.1浅深8组：Z/额度/百分比完整可见、不重叠；右下双卡不遮挡且可见');
+        for(const name of ['failure-zcode.png','failure-details.png']) {try {fs.unlinkSync(path.join(outputDirectory,name));} catch(error) {if(error.code!=='ENOENT') throw error;}}
+        fs.writeFileSync(path.join(outputDirectory,'report.json'),`${JSON.stringify(report,null,2)}\n`);console.log(`PET_ZCODE_UI_SMOKE_OK ${JSON.stringify({checks:report.checks.length,screenshots:report.screenshots.length,report:path.join(outputDirectory,'report.json')})}`);app.quit();return;
+      }
       const collapsedRows = await js(zcode, `Array.from(document.querySelectorAll('#items li'), row => { const name = row.querySelector('.quota-name'), badge = row.querySelector('.quota-period'), value = row.querySelector('.quota-value'); return { name: name.textContent, badge: badge.textContent, nameWidth: name.clientWidth, nameScrollWidth: name.scrollWidth, nameRight: name.getBoundingClientRect().right, badgeLeft: badge.getBoundingClientRect().left, badgeRight: badge.getBoundingClientRect().right, valueLeft: value.getBoundingClientRect().left, valueRight: value.getBoundingClientRect().right, rowRight: row.getBoundingClientRect().right }; })`);
       report.collapsedRows = collapsedRows;
       assert.equal(new Set(collapsedRows.map(row => `${row.badge}:${row.name}`)).size, 4);
@@ -141,15 +170,29 @@ if (!process.versions.electron) {
         (report.timeLabels ||= {})[theme] = rows;
       };
       await checkTimeLabels('light');
-      if (process.env.PET_ZCODE_SMOKE_SOURCE_ONLY === '1') {
+      if (process.env.PET_ZCODE_SMOKE_SOURCE_ONLY === '1' || process.env.PET_ZCODE_SMOKE_GROUP_ONLY === '1') {
         report.sourceMatrix = [];
-        for(const count of [1,2,4]) for(const theme of ['light','dark']) {
+        for(const count of (process.env.PET_ZCODE_SMOKE_GROUP_ONLY === '1' ? [4] : [1,2,4])) for(const theme of ['light','dark']) {
           appearance = theme; nativeTheme.themeSource = theme;
           const buckets = usage.buckets.slice(0,count);
           zcode.show(buildZcodeQuotaLabelModel({...snapshot,quota:{...snapshot.quota,windows:buckets}}, {}, now));
           await waitFor(zcode, `document.querySelector('#quota-label').dataset.itemCount === '${count}' && document.documentElement.dataset.appearance === '${theme}'`, 'source row matrix');
-          const rows = await js(zcode, `[...document.querySelectorAll('.v20-period')].map(el => { const source=el.querySelector('.v20-plan-name'), model=el.querySelector('.v20-cell-label .period-pill'), time=el.querySelector('.v20-reset > span'), value=el.querySelector('.v20-value'), heading=el.querySelector('.v20-cell-label'); return { source:source.textContent, sourceHeight:source.clientHeight, sourceScrollHeight:source.scrollHeight, sourceWidth:source.clientWidth, sourceScrollWidth:source.scrollWidth, sourceRect:source.getBoundingClientRect().toJSON(), sourceLineHeight:parseFloat(getComputedStyle(source).lineHeight), model:model.textContent, modelRect:model.getBoundingClientRect().toJSON(), headingRect:heading.getBoundingClientRect().toJSON(), valueRect:value.getBoundingClientRect().toJSON(), value:value.textContent, valueWidth:value.clientWidth,valueScrollWidth:value.scrollWidth,time:time.textContent,timeWidth:time.clientWidth,timeScrollWidth:time.scrollWidth }; })`);
+          const rows = await js(zcode, `[...document.querySelectorAll('.v20-period')].map(el => { const source=el.querySelector('.v20-plan-name'), model=el.querySelector('.v20-cell-label .period-pill'), time=el.querySelector('.v20-reset > span'), value=el.querySelector('.v20-value'), heading=el.querySelector('.v20-cell-label'); return { bucketId:el.dataset.period, source:source.textContent, sourceHeight:source.clientHeight, sourceScrollHeight:source.scrollHeight, sourceWidth:source.clientWidth, sourceScrollWidth:source.scrollWidth, sourceRect:source.getBoundingClientRect().toJSON(), sourceLineHeight:parseFloat(getComputedStyle(source).lineHeight), model:model.textContent, modelRect:model.getBoundingClientRect().toJSON(), headingRect:heading.getBoundingClientRect().toJSON(), valueRect:value.getBoundingClientRect().toJSON(), value:value.textContent, valueWidth:value.clientWidth,valueScrollWidth:value.scrollWidth,time:time.textContent,timeWidth:time.clientWidth,timeScrollWidth:time.scrollWidth }; })`);
           assert.equal(rows.length,count);
+          if(count === 4) {
+            assert.deepEqual(rows.map(row=>row.source),['每日体验','每日体验','1024活动','1024活动']);
+            assert.deepEqual(rows.map(row=>row.model),['GLM-5.3','GLM-5.3-Flash','GLM-5.3','GLM-5.3-Flash']);
+            assert.deepEqual(report.collapsedRows.map(row=>row.badge),rows.map(row=>row.source),'Collapsed and expanded source groups must match.');
+            for(const index of [1,3]) {
+              const before=report.detailIpc?.length || 0;
+              await pointer(zcode, `.v20-periods > button.v20-period:nth-child(${index+1})`);
+              await waitFor(details, `document.querySelector('.zcode-bucket-button[aria-pressed="true"]')?.dataset.bucketOption === ${JSON.stringify(rows[index].bucketId)}`, 'grouped bucket trend IPC');
+              assert.equal(report.detailIpc.length,before+1,'One pointer click must send exactly one detail IPC.');
+              assert.deepEqual(report.detailIpc.at(-1),{action:'trend',bucketId:rows[index].bucketId});
+              assert.equal(details.getPeriod(),rows[index].bucketId); details.close();
+            }
+          }
+
           for(const row of rows) {
             assert.ok(['每日体验','1024活动'].includes(row.source), 'Known local plans must use complete Chinese source labels.');
             assert.ok(row.sourceScrollHeight <= row.sourceHeight && row.sourceHeight >= row.sourceLineHeight, 'Source line must retain its complete line height.');
@@ -171,7 +214,7 @@ if (!process.versions.electron) {
         }
         assert.equal(await js(codex, "document.querySelector('#quota-label').outerHTML"),originalCodex);
         assert.deepEqual(errors, []); assert.deepEqual(report.rendererErrors, []);
-        report.ok = true; report.sourceOnly = true;
+        report.ok = true; report.sourceOnly = true; report.groupOnly = process.env.PET_ZCODE_SMOKE_GROUP_ONLY === '1';
         for (const name of ['failure-zcode.png','failure-details.png']) {try {fs.unlinkSync(path.join(outputDirectory,name));} catch(error) {if(error.code !== 'ENOENT') throw error;}}
         report.checks.push('1/2/4桶浅深来源行完整、与模型/百分比不重叠；短时间到期/刷新完整；整行查看额度明细真实IPC打开quota；Codex不变');
         fs.writeFileSync(path.join(outputDirectory,'report.json'), `${JSON.stringify(report,null,2)}\n`);

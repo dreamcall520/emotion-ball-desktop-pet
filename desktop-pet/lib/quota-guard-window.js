@@ -7,9 +7,11 @@ const { adjacentBounds } = require('./window-placement');
 const CHANNEL = 'pet:quota-guard-model';
 
 function guardModel(value, size = 'standard', appearance = 'system', visible = false) {
-  const practice = value?.sourceId === 'zcode' && value.practice === true;
-  return { ...safeModel(practice ? { state: value.state, items: [] } : value),
-    ...(practice ? { sourceId: 'zcode', practice: true } : {}), size: size === 'compact' ? 'compact' : 'standard',
+  const sourceId = value?.sourceId === 'zcode' ? 'zcode' : 'codex';
+  const model = safeModel(value, sourceId);
+  return { ...model, ...(sourceId === 'zcode' ? { items: model.items.slice(0, 1).filter(item =>
+    /^zcode:[^\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]{1,394}$/u.test(item.bucketId)
+    && Number.isSafeInteger(item.resetsAt) && item.resetsAt > 0) } : {}), size: size === 'compact' ? 'compact' : 'standard',
     appearance: ['light', 'dark'].includes(appearance) ? appearance : 'system', expanded: false,
     visible: visible === true };
 }
@@ -95,7 +97,7 @@ function createQuotaGuardWindow({ BrowserWindow, screen, getAnchor, getSize = ()
   return {
     open(value) {
       const next = guardModel(value, getSize(), getAppearance(), true);
-      if (!allowed() || next.state !== 'ready' || (!next.items.length && !next.practice)) return false;
+      if (!allowed() || next.state !== 'ready' || !next.items.length) return false;
       model = next;
       try { ensure(); changed(true); present(true); return true; }
       catch (error) { report(error); destroy(); return false; }

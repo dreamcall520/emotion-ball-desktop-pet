@@ -180,8 +180,25 @@
   }
 
   const itemPeriod = (model, item) => model.sourceId === 'zcode' ? item.bucketId : item.windowMinutes;
-  const shortPlanName = item => /^(?:ZCode\s*)?Start\s*Plan(?:$|[\s：:])/i.test(item.planName) && item.periodKind === 'daily' ? '每日体验'
-    : /^(?:ZCode\s*)?1024\s*(?:Dev\s*Day|活动)(?:$|[\s：:])/i.test(item.planName) && ['one_time', 'expiry'].includes(item.periodKind) ? '1024活动' : item.planName;
+  const knownPlanKind = item => /^(?:ZCode\s*)?Start\s*Plan(?:$|[\s：:])/i.test(item.planName) && item.periodKind === 'daily' ? 'trial'
+    : /^(?:ZCode\s*)?1024\s*(?:Dev\s*Day|活动)(?:$|[\s：:])/i.test(item.planName) && ['one_time', 'expiry'].includes(item.periodKind) ? 'event' : '';
+  const shortPlanName = item => ({trial:'每日体验',event:'1024活动'}[knownPlanKind(item)] || item.planName);
+  function displayItems(model) {
+    if (model.sourceId !== 'zcode') return model.items;
+    const groups = [], known = new Map();
+    for (const item of model.items) {
+      const kind = knownPlanKind(item);
+      if (!kind) { groups.push([item]); continue; }
+      // Official balance IDs carry plan and user-plan identity separately from the model entitlement.
+      const identity = /^zcode:([^:]+):[^:]+(?::([^:]+))?$/.exec(item.bucketId);
+      const key = JSON.stringify([kind, item.planName, identity?.[1], identity?.[2], item.periodKind,
+        item.periodStart, item.resetsAt, item.windowMinutes]);
+      if (!known.has(key)) { const group = []; known.set(key, group); groups.push(group); }
+      known.get(key).push(item);
+    }
+    const rank = item => ({'glm-5.3':0,'glm-5.3-flash':1}[item.label.toLowerCase()] ?? 2);
+    return groups.flatMap(group => [...group].sort((a,b) => rank(a)-rank(b)));
+  }
   const itemTitle = item => item.bucketId ? item.planName && !item.label.includes(item.planName) ? `${item.planName} · ${item.label}` : item.label : periodTypeText(item.windowMinutes);
 
   function periodText(minutes) {
@@ -537,6 +554,7 @@
 
   const render = value => {
     const model = safeModel(value);
+    const ordered = displayItems(model);
     try {
       status.textContent = model.sourceId === 'zcode' ? states.get(model.state).replaceAll('Codex', 'ZCode') : states.get(model.state);
       label.dataset.source = model.sourceId || 'codex';
@@ -559,10 +577,10 @@
         : model.state === 'ready' && model.extraCredits && model.items[0]?.remaining === 0 ? 'exhausted' : '';
       if (model.display === 'numbers') { renderNumbers(model); return; }
       quotaNumbers?.replaceChildren();
-      renderExpanded(model);
+      renderExpanded({ ...model, items: ordered });
       const rows = [];
       let overallSeverity = 'normal';
-      for (const [index, item] of model.items.entries()) {
+      for (const [index, item] of ordered.entries()) {
         const row = document.createElement('li');
         const nameNode = document.createElement('span');
         const periodNode = document.createElement('span');

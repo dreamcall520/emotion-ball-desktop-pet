@@ -44,12 +44,29 @@
   const chartViews = new Map();
   let expiryTimer, pendingBucket = null;
   let bucketOptions = [];
-  const planKind = item => /^(?:ZCode\s*)?Start\s*Plan(?:$|[\s：:])/i.test(item.planName) ? 'trial'
-    : /^(?:ZCode\s*)?1024\s*(?:Dev\s*Day|活动)(?:$|[\s：:])/i.test(item.planName) ? 'event' : '';
+  const planKind = item => /^(?:ZCode\s*)?Start\s*Plan(?:$|[\s：:])/i.test(item.planName) && item.periodKind === 'daily' ? 'trial'
+    : /^(?:ZCode\s*)?1024\s*(?:Dev\s*Day|活动)(?:$|[\s：:])/i.test(item.planName) && ['one_time','expiry'].includes(item.periodKind) ? 'event' : '';
+  function displayBuckets(items) {
+    const groups = [], known = new Map();
+    for (const item of items) {
+      const kind = planKind(item);
+      if (!kind) { groups.push([item]); continue; }
+      const identity = /^zcode:([^:]+):[^:]+(?::([^:]+))?$/.exec(item.bucketId);
+      const key = JSON.stringify([kind,item.planName,identity?.[1],identity?.[2],item.periodKind,item.periodStart,item.resetsAt,item.windowMinutes]);
+      if (!known.has(key)) { const group = []; known.set(key,group); groups.push(group); }
+      known.get(key).push(item);
+    }
+    const rank = item => ({'glm-5.3':0,'glm-5.3-flash':1}[item.label.toLowerCase()] ?? 2);
+    return groups.flatMap(group=>[...group].sort((a,b)=>rank(a)-rank(b)));
+  }
   function bucketLabel(item) {
     const plan = {trial:'体验',event:'活动'}[planKind(item)];
     const model = item.label === 'GLM-5.3' ? '5.3' : item.label === 'GLM-5.3-Flash' ? 'Flash' : item.label;
     return plan ? `${plan}·${model}` : bucketTitle(item);
+  }
+  function focusBucket(option) {
+    option?.focus({preventScroll:true});
+    option?.scrollIntoView?.({block:'nearest',inline:'nearest'});
   }
   function selectBucket(id) {
     if (id !== lastModel?.bucketId) { pendingBucket = id; invoke('openDetail','trend',id); }
@@ -57,7 +74,7 @@
   function bucketSelector(model, item) {
     const selector = node('section','zcode-bucket-selector'), grid = node('div','zcode-bucket-grid');
     grid.setAttribute('role','group'); grid.setAttribute('aria-label','选择额度');
-    bucketOptions = model.items.map(value=>{
+    bucketOptions = displayBuckets(model.items).map(value=>{
       const option = button(bucketLabel(value),'zcode-bucket-button',()=>selectBucket(value.bucketId));
       option.dataset.bucketOption = value.bucketId; option.title = bucketTitle(value);
       option.setAttribute('aria-label',bucketTitle(value)); option.setAttribute('aria-pressed',String(value.bucketId === item.bucketId));
@@ -65,15 +82,14 @@
         if (!['ArrowDown','ArrowUp','ArrowLeft','ArrowRight','Home','End','Enter',' '].includes(event.key)) return;
         event.preventDefault(); event.stopPropagation();
         if (['Enter',' '].includes(event.key)) { selectBucket(value.bucketId); return; }
-        const index = bucketOptions.indexOf(option), step = event.key === 'ArrowDown' ? 2 : event.key === 'ArrowUp' ? -2 : event.key === 'ArrowLeft' ? -1 : 1;
+        const index = bucketOptions.indexOf(option), step = ['ArrowUp','ArrowLeft'].includes(event.key) ? -1 : 1;
         const next = event.key === 'Home' ? 0 : event.key === 'End' ? bucketOptions.length-1 : (index+step+bucketOptions.length)%bucketOptions.length;
-        bucketOptions[next]?.focus();
+        focusBucket(bucketOptions[next]);
       });
       return option;
     });
     grid.replaceChildren(...bucketOptions);
-    const description = node('p','zcode-bucket-description',bucketTitle(item)); description.title = bucketTitle(item);
-    selector.replaceChildren(grid,description); return selector;
+    selector.replaceChildren(grid); return selector;
   }
   function zcodePercent(value) {
     if (Number.isInteger(value)) return `${value}%`;
@@ -579,6 +595,7 @@
       const model = copyModel(value);
       const change = !lastModel || lastModel.action !== model.action || lastModel.period !== model.period || lastModel.bucketId !== model.bucketId;
       const focusedBucket = !change ? document.activeElement?.dataset?.bucketOption : null;
+      const bucketScroll = !change ? content.querySelector('.zcode-bucket-grid')?.scrollLeft : undefined;
       bucketOptions = [];
       if (model.sourceId !== 'zcode' || model.action !== 'trend') pendingBucket = null;
       const historyOpen = !change && panel.querySelector('.opportunity-history')?.open === true;
@@ -606,8 +623,8 @@
       if (openExpiry) { const event = Array.from(content.querySelectorAll('.reset-event')).find(event=>event.dataset.expiry===openExpiry); if(event)event.open=true; }
       if (helpOpen && content.querySelector('.chart-help')) content.querySelector('.chart-help').open=true;
       if (change) {
-        if (pendingBucket && pendingBucket === model.bucketId) { bucketOptions.find(option=>option.dataset.bucketOption === pendingBucket)?.focus(); pendingBucket = null; }
-        else title.focus();
+        if (pendingBucket && pendingBucket === model.bucketId) { focusBucket(bucketOptions.find(option=>option.dataset.bucketOption === pendingBucket)); pendingBucket = null; }
+        else { title.focus(); bucketOptions.find(option=>option.getAttribute('aria-pressed') === 'true')?.scrollIntoView?.({block:'nearest',inline:'nearest'}); }
       }
       else if (focusedThread) {
         const next = Array.from(content.querySelectorAll('.activity-item')).find(element => element.dataset.threadId === focusedThread);
@@ -623,7 +640,9 @@
       } else if (focusedHelp) {
         content.querySelector('.chart-help summary')?.focus();
       }
-      if (focusedBucket) bucketOptions.find(option=>option.dataset.bucketOption === focusedBucket)?.focus();
+      if (focusedBucket) bucketOptions.find(option=>option.dataset.bucketOption === focusedBucket)?.focus({preventScroll:true});
+      const rail = content.querySelector('.zcode-bucket-grid');
+      if (rail && bucketScroll !== undefined) rail.scrollLeft = bucketScroll;
       scheduleExpiry(model);
       resize();
     } catch (_) { window.clearTimeout?.(expiryTimer); content.replaceChildren(node('p','empty-state','详情暂未提供')); resize(); }
