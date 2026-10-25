@@ -10,7 +10,7 @@ const UPDATE_INSTALLER = { name: 'Qiuqiu-0.3.26-macOS-arm64.dmg',
   url: 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.26/Qiuqiu-0.3.26-macOS-arm64.dmg' };
 
 // 真实 main、动作控制器和对白规则；替代 Electron、系统采样、磁盘设置及聊天服务边界。
-async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
+async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], codexEnabled = false, codexTaskNameInAlerts = false,
   codexQuotaAlwaysVisible = false, codexQuotaPeriod = 'auto', codexQuotaLabelSize = 'standard',
   codexQuotaAppearance = 'system', codexShowExtraCredits = true, bubblesEnabled = true, colorMode = 'standard', uiTheme = 'green',
   consent = async () => ({ response: 1 }), consentReady = true, openExternal = async () => {}, saveError = null,
@@ -216,7 +216,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
           pause: () => { iconPreference.calls.push('pause'); }, close: () => { iconPreference.calls.push('close'); } };
       } };
       if (name === './lib/settings') return { ...realRequire(name), loadSettings: () => loadedSettings ? structuredClone(loadedSettings) : ({ size: 'tiny', x: -600, y: 100,
-        bubblesEnabled, colorMode, uiTheme, notesDefaultTab, notesAppearance, keepAwake: false, alwaysOnTop: true, codexEnabled, codexTaskNameInAlerts,
+        quotaCardPinned, bubblesEnabled, colorMode, uiTheme, notesDefaultTab, notesAppearance, keepAwake: false, alwaysOnTop: true, codexEnabled, codexTaskNameInAlerts,
         workbuddyEnabled: false, workbuddyConsentVersion: 0, workbuddyModel: 'auto', chatProvider: 'codex',
         codexQuotaAlwaysVisible, codexQuotaPeriod, codexQuotaLabelSize, codexQuotaAppearance, codexShowExtraCredits,
         customization: realRequire('./lib/customization').normalizeCustomization(),
@@ -1610,7 +1610,7 @@ test('ZCode follows the lowest visible Codex or API face and API layout changes 
   f.call('zcodeLink = null'); assert.doesNotThrow(() => f.apiLabel.options.onLayout());
 });
 
-test('free three-card coordination reflows once per stable size plan and retires when a participant hides',async()=>{
+test('free three-card coordination reflows once per stable size plan and retains a compact subset when a participant hides',async()=>{
   const f=await fixture();const metrics={width:128,height:32,inset:2};
   f.quotaLabel.getLayoutMetrics=()=>metrics;f.apiLabel.getLayoutMetrics=()=>metrics;
   f.call('zcodeLink={...zcodeLink,moves:0,getLayoutMetrics:()=>({width:128,height:32,inset:2}),reposition(){this.moves++;syncQuotaFreeStack();}}');
@@ -1619,7 +1619,7 @@ test('free three-card coordination reflows once per stable size plan and retires
   assert.equal(f.call('quotaFreeStackPlan().placement'),'below');
   f.pet.bounds.y=500;f.call('syncQuotaFreeStack()');assert.equal(f.call('quotaFreeStackPlan().placement'),'above');
   assert.equal(f.call('zcodeLink.moves'),2);
-  f.apiLabel.getLayoutMetrics=()=>null;f.call('syncQuotaFreeStack()');assert.equal(f.call('quotaFreeStackPlan()'),null);
+  f.apiLabel.getLayoutMetrics=()=>null;f.call('syncQuotaFreeStack()');assert.deepEqual(Object.keys(f.call('quotaFreeStackPlan().cards')),['codex','zcode']);
   assert.equal(f.call('zcodeLink.moves'),3);f.call('syncQuotaFreeStack()');assert.equal(f.call('zcodeLink.moves'),3);
   f.apiLabel.getLayoutMetrics=()=>metrics;f.call("edgeTuck.dock('left');edgeTuck.sampleCursor({x:petWindow.getBounds().x+10,y:petWindow.getBounds().y+10})");
   const peek = f.call('quotaFreeStackPlan()');
@@ -3751,7 +3751,7 @@ test('原生菜单保留核心联动开关与独立入口，完整偏好仍可�
   const f = await fixture(); t.after(() => f.app.emit('before-quit'));
   const menu = f.call('compactMenuTemplate()');
   assert.deepEqual(Array.from(menu.filter(item => item.type !== 'separator'), item => item.label),
-    ['和球球聊聊', '来定制球球', '便签与待办', '番茄钟', '启用 Codex 联动', '启用 ZCode 联动', '启用 WorkBuddy 联动', 'API 费用与用量', '设置中心', '关于球球', '检查更新', '退出球球']);
+    ['和球球聊聊', '来定制球球', '便签与待办', '番茄钟', '启用 Codex 联动', '启用 ZCode 联动', '启用 WorkBuddy 联动', '设置中心', '关于球球', '检查更新', '退出球球']);
   assert.ok(menu.every(item => !item.submenu));
   assert.ok(findMenuItem(menu, 'workbuddy-enabled'));
   assert.equal(findMenuItem(menu, 'workbuddy-chat'), null);
@@ -3763,6 +3763,18 @@ test('原生菜单保留核心联动开关与独立入口，完整偏好仍可�
   assert.equal(menu.indexOf(workbuddy), menu.indexOf(findMenuItem(menu, 'zcode-enabled')) + 1);
   assert.ok(findMenuItem(f.call('menuTemplate()'), 'notes-default-note'));
   assert.ok(findMenuItem(f.call('menuTemplate()'), 'codex-quota-period'));
+  assert.equal(findMenuItem(menu, 'openai-api-usage'), null, '紧凑右键菜单不再单列API入口');
+  assert.ok(findMenuItem(f.call('menuTemplate()'), 'openai-api-usage'), '完整命令目录保留API入口');
+  findMenuItem(menu, 'global-settings').click();
+  const settingsWindow = f.call('globalSettingsWindow');
+  settingsWindow.emit('ready-to-show');
+  const state = await f.invoke('pet:global-settings-get', undefined, settingsWindow.webContents);
+  const codex = state.entries.find(item => item.id === '/codex-menu');
+  const api = codex.children.find(item => item.id === '/codex-menu/openai-api-menu');
+  const usage = api.children.find(item => item.id === '/codex-menu/openai-api-menu/openai-api-usage');
+  assert.ok(usage, '设置中心Codex内保留API入口');
+  await f.invoke('pet:global-settings-action', usage.id, settingsWindow.webContents);
+  assert.ok(f.call('apiUsageWindow'), '设置中心API入口仍能打开费用窗口');
 });
 
 
@@ -4018,4 +4030,35 @@ test('Codex icon preference remains available in settings while Codex integratio
   f.iconPreference.value='app-default';f.iconPreference.options.onChange('app-default');
   assert.equal(f.call('settings.codexEnabled'),false);
   assert.equal(f.call('globalSettingsSnapshot().codexIconPreference'),'app-default');
+});
+
+test('设置中心睡眠标签只使用当前球球主frame回报，不根据睡眠命令推断', async t => {
+  const f=await fixture();t.after(()=>f.app.emit('before-quit'));
+  menuItem(f,'global-settings').click();const win=f.call('globalSettingsWindow');win.emit('ready-to-show');
+  const state=()=>f.call('globalSettingsSnapshot().petSleepState');assert.equal(state(),'unknown');
+  f.call("sendCommand('sleep')");assert.equal(state(),'unknown');
+  f.send('pet:sleep-state','sleep',{});assert.equal(state(),'unknown');
+  f.send('pet:sleep-state','bad');assert.equal(state(),'unknown');
+  f.send('pet:sleep-state','awake');assert.equal(state(),'awake');
+  const before=win.messages.filter(item=>item.channel==='pet:global-settings-sleep-state').length;
+  f.send('pet:sleep-state','awake');assert.equal(win.messages.filter(item=>item.channel==='pet:global-settings-sleep-state').length,before);
+  f.send('pet:sleep-state','sleep');assert.equal(state(),'sleep');assert.equal(win.messages.at(-1).packet,'sleep');
+  f.call("sendCommand('wake')");assert.equal(state(),'sleep','先等renderer实际唤醒反馈');
+  f.send('pet:sleep-state','awake');assert.equal(state(),'awake');
+  f.pet.webContents.emit('did-start-loading');assert.equal(state(),'unknown','重载时旧状态作废');
+});
+
+
+test('quota card collection uses real enable flags, persists pin/order and rejects foreign settings senders',async t=>{
+ const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,quotaCardPinned:[]});t.after(()=>f.app.emit('before-quit'));
+ f.call('settings.openaiApiAlwaysVisible=true;syncQuotaLabel(codexCompanion.getSnapshot())');
+ assert.equal(f.call('quotaCardGroup.getState().bar'),true);assert.equal(f.call("quotaCardCollected('codex')"),true);
+ f.call('quotaCardGroup.activate()');assert.equal(f.call("quotaCardCollected('codex')"),false);
+ f.call('openGlobalSettings()');const win=f.call('globalSettingsWindow');win.emit('ready-to-show');
+ assert.equal((await f.invoke('pet:global-quota-cards-save',{order:['api','codex'],pinned:['api']})).ok,false);
+ const result=await f.invoke('pet:global-quota-cards-save',{order:['api','codex'],pinned:['api']},win.webContents);
+ assert.equal(result.ok,true);assert.deepEqual(Array.from(result.config.order),['api','codex','zcode','workbuddy']);
+ f.call('quotaCardGroup.dismiss()');assert.equal(f.call("quotaCardCollected('codex')"),true);assert.equal(f.call("quotaCardCollected('api')"),false);
+ assert.deepEqual(Array.from(f.saved.at(-1).quotaCardPinned),['api']);
+ f.call('settings.openaiApiAlwaysVisible=false;syncQuotaLabel(codexCompanion.getSnapshot())');assert.equal(f.call('quotaCardGroup.getState().bar'),false);assert.equal(f.call("quotaCardCollected('codex')"),false);
 });

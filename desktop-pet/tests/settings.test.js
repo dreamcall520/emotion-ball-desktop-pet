@@ -108,6 +108,7 @@ test('损坏文件回退且有效设置可回读', t => {
     chatProvider: 'codex', workbuddyEnabled: false, workbuddyQuotaAlwaysVisible: true, workbuddyQuotaFunEnabled: true, workbuddyModel: 'auto',
     notesDefaultTab: 'note', notesAppearance: 'light', shortcutSettings: DEFAULTS.shortcutSettings,
     customization: DEFAULTS.customization,
+    quotaCardOrder: DEFAULTS.quotaCardOrder, quotaCardPinned: [],
     quotaDisplay: DEFAULTS.quotaDisplay,
     startupAppearance: DEFAULTS.startupAppearance,
     appearancePresets: [],
@@ -130,6 +131,7 @@ test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
   assert.deepEqual(normalizeSettings({ size: 'small', x: -102.3, y: 81.8, alwaysOnTop: false }), {
     size: 'small', x: -102, y: 82, alwaysOnTop: false,
     keepAwake: true, bubblesEnabled: true, colorMode: 'standard', uiTheme: 'blue', chatModel: 'auto', chatSource: 'codex', zcodeChatModel: 'auto', zcodeEnabled: false, zcodeQuotaAlwaysVisible: true, zcodeQuotaFunEnabled: true, zcodeQuotaLabelSize: 'compact', chatProvider: 'codex', workbuddyEnabled: false, workbuddyQuotaAlwaysVisible: true, workbuddyQuotaFunEnabled: true, workbuddyModel: 'auto', notesDefaultTab: 'note', notesAppearance: 'light', shortcutSettings: DEFAULTS.shortcutSettings, customization: DEFAULTS.customization,
+    quotaCardOrder: DEFAULTS.quotaCardOrder, quotaCardPinned: [],
     quotaDisplay: DEFAULTS.quotaDisplay,
     startupAppearance: DEFAULTS.startupAppearance,
     appearancePresets: [], codexEnabled: false,
@@ -476,4 +478,22 @@ test('WorkBuddy 显示与趣味偏好独立保存，老配置仅继承旧趣味�
   const file=path.join(dir,'settings.json');const after=saveSettings(file,{codexQuotaAlwaysVisible:true,codexQuotaFunEnabled:true,zcodeQuotaFunEnabled:true,workbuddyEnabled:true,workbuddyQuotaAlwaysVisible:false,workbuddyQuotaFunEnabled:false});
   assert.deepEqual(loadSettings(file),after);assert.equal(after.workbuddyQuotaAlwaysVisible,false);assert.equal(after.workbuddyQuotaFunEnabled,false);
   assert.equal(after.codexQuotaAlwaysVisible,true);assert.equal(after.codexQuotaFunEnabled,true);assert.equal(after.zcodeQuotaFunEnabled,true);
+});
+
+
+test('四卡顺序白名单去重补齐，固定展示独立持久化且不保存外部字段', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emotion-card-config-'));
+  t.after(() => fs.rmSync(dir, { recursive:true, force:true }));
+  const file = path.join(dir, 'settings.json');
+  const input = { quotaCardOrder:['workbuddy','api','api','bad',null], quotaCardPinned:['zcode','zcode','bad','api'], quotaCardExtra:'secret' };
+  const saved = saveSettings(file, input);
+  assert.deepEqual(saved.quotaCardOrder, ['workbuddy','api','codex','zcode']);
+  assert.deepEqual(saved.quotaCardPinned, ['zcode','api']);
+  assert.deepEqual(loadSettings(file), saved);
+  assert.deepEqual(input.quotaCardOrder, ['workbuddy','api','api','bad',null]);
+  assert(!fs.readFileSync(file,'utf8').includes('secret'));
+  for (const value of [undefined,null,{},'codex',false]) {
+    assert.deepEqual(normalizeSettings({quotaCardOrder:value}).quotaCardOrder, DEFAULTS.quotaCardOrder);
+    assert.deepEqual(normalizeSettings({quotaCardPinned:value}).quotaCardPinned, []);
+  }
 });

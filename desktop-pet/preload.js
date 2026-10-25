@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('petDesktop', {
     ipcRenderer.on('pet:color-mode', listener);
     return () => ipcRenderer.removeListener('pet:color-mode', listener);
   },
+  reportSleepState: state => { if (state === 'awake' || state === 'sleep') ipcRenderer.send('pet:sleep-state', state); },
   beginDrag: point => ipcRenderer.send('pet:drag-start', pointPayload(point)),
   dragTo: point => ipcRenderer.send('pet:drag-move', pointPayload(point)),
   endDrag: () => ipcRenderer.send('pet:drag-end'),

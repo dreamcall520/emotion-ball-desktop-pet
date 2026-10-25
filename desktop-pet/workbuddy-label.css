@@ -8,7 +8,7 @@
 #details { width: 100%; min-width: 0; }
 #details[hidden] { display: none; }
 #expanded-header { appearance: none; width: 100%; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-#value-row { margin-top: 4px; }
+#value-row { margin-top: 4px; justify-content: flex-start; gap: 5px; align-items: baseline; }
 #expanded-total { font-size: 22px; line-height: 25px; overflow: hidden; text-overflow: ellipsis; }
 #expanded-total[data-long="true"] { font-size: 16px; }
 #plan { max-width: 54px; overflow: hidden; text-overflow: ellipsis; }
@@ -25,3 +25,5 @@
 :root[data-keyboard="true"] #details :is(button, [tabindex]):focus-visible { outline: 1px solid var(--quota-subtle); outline-offset: -1px; border-radius: 3px; }
 /* Retain the full balance and caption beside the larger source icon. */
 #quota-label[data-size="compact"][data-expanded="false"] { padding-inline: 4px; }
+
+#balance-state { font-size: 9px; line-height: 12px; }

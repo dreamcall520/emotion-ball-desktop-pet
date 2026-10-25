@@ -14,7 +14,8 @@
     clearTimeout(feedbackTimer); $('feedback').textContent = message;
     if (message) feedbackTimer = setTimeout(() => { $('feedback').textContent = ''; }, 3200);
   }
-  let snapshot = null, selected = 'common', busy = false, last = '', request = 0, apiSectionRequested = false;
+  let snapshot = null, selected = 'common', busy = false, last = '', request = 0, apiSectionRequested = false, codexTab = 'codex';
+  let latestSleepState;
   const isApiView = view => ['api', 'openai-api', '/codex-menu/openai-api-menu'].includes(view);
   const descriptions = {
     '外观（所有窗口）': '统一设置各功能窗口的浅色或深色外观。',
@@ -137,6 +138,41 @@
     }
     card.append(actions); return card;
   }
+  function quotaCardSettings() {
+    const section = el('section', '', 'group quota-card-settings');
+    section.dataset.settingsSection = 'quota-cards';
+    section.append(el('h3', '额度卡管理'), el('p', '调整四张卡的显示顺序。固定展示的卡不参与收纳，仍遵循各来源的联动与显示开关。', 'description group-intro'));
+    const names = { codex: 'Codex', api: 'OpenAI API', zcode: 'ZCode', workbuddy: 'WorkBuddy' };
+    const config = snapshot.quotaCards || { order: Object.keys(names), pinned: [] };
+    config.order.forEach((source, index) => {
+      if (!names[source]) return;
+      const row = el('div', '', 'row'); row.dataset.quotaCard = source;
+      row.append(el('div', names[source], 'row-title'));
+      const controls = el('div', '', 'quota-card-controls');
+      for (const [label, offset] of [['上移', -1], ['下移', 1]]) {
+        const button = el('button', label, 'action'); button.setAttribute('aria-label', `${names[source]}${label}`);
+        button.disabled = busy || index + offset < 0 || index + offset >= config.order.length;
+        button.onclick = () => { const order = [...config.order]; [order[index], order[index + offset]] = [order[index + offset], order[index]]; saveQuotaCards({ order, pinned: [...config.pinned] }); };
+        controls.append(button);
+      }
+      const label = el('label', '', 'quota-card-pin'); const checkbox = el('input'); checkbox.type = 'checkbox';
+      checkbox.checked = config.pinned.includes(source); checkbox.disabled = busy; checkbox.setAttribute('aria-label', `${names[source]}固定展示`);
+      checkbox.onchange = () => saveQuotaCards({ order: [...config.order], pinned: checkbox.checked ? [...config.pinned, source] : config.pinned.filter(value => value !== source) });
+      label.append(checkbox, document.createTextNode('固定展示')); controls.append(label); row.append(controls); section.append(row);
+    });
+    return section;
+  }
+  async function saveQuotaCards(config) {
+    if (busy) return;
+    busy = true; request++; feedback(''); render();
+    try {
+      const result = await api.saveQuotaCards(config);
+      if (result?.snapshot) { snapshot = result.snapshot; if (latestSleepState !== undefined) snapshot.petSleepState = latestSleepState; }
+      if (result?.config) snapshot.quotaCards = result.config;
+      last = JSON.stringify(snapshot); feedback(result?.error || (result?.ok ? '额度卡设置已更新' : '保存未完成，已保留原设置。'));
+    } catch (_) { feedback('保存未完成，已保留原设置。'); }
+    finally { busy = false; render(); }
+  }
   function render() {
     if (!snapshot) return;
     const focusId = document.activeElement?.dataset?.action;
@@ -148,7 +184,7 @@
         label: ({ '/chat-open': '和球球聊聊', '/customize-open': '定制球球' })[entry.id] || entry.label, external: true }))];
     if (!nav.some(item => item.id === selected)) selected = 'common';
     const selectView = id => {
-      selected = id; $('search').value = ''; $('search-panel').hidden = true;
+      selected = id; if (id === '/codex-menu') codexTab = 'codex'; $('search').value = ''; $('search-panel').hidden = true;
       $('search-toggle').setAttribute('aria-expanded', 'false'); $('feedback').textContent = '';
       render(); document.querySelector('main').scrollTop = 0;
     };
@@ -213,8 +249,9 @@
     const displayed = (query ? searchable : selected === 'common' ? commonGroups : categories).flatMap(category => {
       if (!['/codex-menu', '/zcode-menu', 'workbuddy-settings'].includes(category.id)) return [category];
       const apiGroup = category.id === '/codex-menu' && category.children.find(child => child.id.endsWith('/openai-api-menu'));
-      const apiSections = apiGroup ? [{ ...category, heading: 'OpenAI API', section: 'openai-api',
+      const apiSections = apiGroup && (query || codexTab === 'api') ? [{ ...category, heading: 'OpenAI API', section: 'openai-api',
         introduction: 'API 费用独立于 Codex 订阅额度，按使用量单独计费；连接配置需要管理员 Key。', children: apiGroup.children }] : [];
+      if (category.id === '/codex-menu' && !query && codexTab === 'api') return apiSections;
       const enable = category.children.find(child => /\/(?:codex|zcode|workbuddy)-enabled$/.test(child.id));
       if (!enable) return apiSections;
       const sections = [{ ...category, heading: '启用联动', children: [enable] }];
@@ -246,6 +283,11 @@
       for (const item of items) {
         const row = el('div', '', `row${item.enabled ? '' : ' unavailable'}`);
         const text = el('div'); text.append(el('div', item.label, 'row-title'));
+        if (item.label === '立即睡眠') {
+          const state = el('span', '', 'pet-sleep-status'); state.dataset.petSleepState = '';
+          state.setAttribute('role', 'status'); state.setAttribute('aria-live', 'polite');
+          state.setAttribute('aria-atomic', 'true'); updateSleepStatus(state); text.querySelector('.row-title').append(state);
+        }
         const provider = item.id.startsWith('/zcode-menu/') ? 'zcode' : item.id.includes('/codex-') ? 'codex' : null;
         const providerOff = provider && snapshot.entries.find(entry => entry.id === `/${provider}-menu`)?.children.find(entry => entry.id.endsWith(`/${provider}-enabled`))?.checked === false;
         const detail = [item.trail.join(' / '), descriptions[item.label], !item.enabled && (providerOff ? `请先开启「启用 ${provider === 'zcode' ? 'ZCode' : 'Codex'} 联动」。` : '当前不可用，请先开启对应功能或满足使用条件。')].filter(Boolean).join(' · ');
@@ -292,6 +334,19 @@
     const notes = categories.find(category => category.label === '便签与待办');
     const behaviors = snapshot.shortcuts && notes && (!query ? selected === notes.id : '便签 待办 启动方式'.includes(query)) ? el('div') : null;
     if (behaviors) { sections.push(behaviors); count++; }
+    if (!query && selected === '/codex-menu') {
+      const tabs = el('div', '', 'integration-tabs'); tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'Codex 与 OpenAI API 设置');
+      for (const [id, label] of [['codex', 'Codex'], ['api', 'OpenAI API']]) {
+        const button = el('button', label); button.type = 'button'; button.id = `codex-tab-${id}`;
+        button.dataset.codexTab = id; button.setAttribute('role', 'tab'); button.setAttribute('aria-selected', String(codexTab === id));
+        button.tabIndex = codexTab === id ? 0 : -1; button.disabled = busy;
+        button.onclick = () => { codexTab = id; render(); document.querySelector('main').scrollTop = 0; document.getElementById(`codex-tab-${id}`)?.focus(); };
+        button.onkeydown = event => { if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return; event.preventDefault(); codexTab = event.key === 'Home' ? 'codex' : event.key === 'End' ? 'api' : codexTab === 'codex' ? 'api' : 'codex'; render(); document.getElementById(`codex-tab-${codexTab}`)?.focus(); };
+        tabs.append(button);
+      }
+      sections.unshift(tabs);
+    }
+    if (!query && nav.find(item => item.id === selected)?.label === '贴边与显示') { sections.push(quotaCardSettings()); count++; }
     $('content').replaceChildren(...sections);
     if (behaviors) window.renderSettingsShortcuts(behaviors, snapshot.shortcuts, shortcutApi, true);
     $('empty').hidden = count !== 0;
@@ -304,7 +359,7 @@
     feedback(''); render();
     try {
       const result = await api.act(item.id, !item.checked);
-      if (result?.snapshot) { snapshot = result.snapshot; last = JSON.stringify(snapshot); }
+      if (result?.snapshot) { snapshot = result.snapshot; if (latestSleepState !== undefined) snapshot.petSleepState = latestSleepState; last = JSON.stringify(snapshot); }
       feedback(result?.error || (['checkbox', 'radio'].includes(item.type) ? '设置已更新' : ''));
     } catch (_) { feedback('操作未完成，请稍后重试。'); }
     finally { busy = false; render(); }
@@ -315,9 +370,10 @@
     try {
       const value = await api.get();
       if (current !== request || busy || !value) return;
+      if (latestSleepState !== undefined) value.petSleepState = latestSleepState;
       const serialized = JSON.stringify(value);
       if (last !== serialized) { if (!snapshot && value.initialView === 'shortcuts') selected = 'shortcuts';
-        else if (!snapshot && isApiView(value.initialView)) { selected = '/codex-menu'; apiSectionRequested = true; } snapshot = value; last = serialized; render(); }
+        else if (!snapshot && isApiView(value.initialView)) { selected = '/codex-menu'; codexTab = 'api'; apiSectionRequested = true; } snapshot = value; last = serialized; render(); }
     } catch (_) { $('feedback').textContent = '暂时无法读取设置，请重新打开窗口。'; }
   }
   function setSearchOpen(open) {
@@ -334,11 +390,25 @@
   });
   api.onNavigate(view => {
     if (view !== 'shortcuts' && !isApiView(view)) return;
-    apiSectionRequested = isApiView(view);
+    apiSectionRequested = isApiView(view); if (apiSectionRequested) codexTab = 'api';
     selected = apiSectionRequested ? '/codex-menu' : view; $('search').value = ''; $('search-panel').hidden = true;
     $('search-toggle').setAttribute('aria-expanded', 'false');
     render(); if (view === 'shortcuts') document.querySelector('main').scrollTop = 0;
   });
+  function updateSleepStatus(badge) {
+    const state = snapshot?.petSleepState;
+    badge.dataset.state = ['awake', 'sleep'].includes(state) ? state : 'unknown';
+    badge.textContent = state === 'sleep' ? '当前：睡眠' : state === 'awake' ? '当前：清醒' : '状态待更新';
+  }
+  const removeSleepState = api.onPetSleepState?.(state => {
+    if (!['awake', 'sleep', 'unknown'].includes(state)) return;
+    latestSleepState = state;
+    if (!snapshot) return;
+    request++;
+    snapshot.petSleepState = state; last = JSON.stringify(snapshot);
+    document.querySelectorAll('[data-pet-sleep-state]').forEach(updateSleepStatus);
+  });
+  window.addEventListener('beforeunload', () => removeSleepState?.(), { once: true });
   window.addEventListener('focus', refresh);
   const timer = setInterval(refresh, 2000);
   window.addEventListener('beforeunload', () => clearInterval(timer), { once: true });

@@ -252,3 +252,14 @@ body { padding-top:38px; }
 .status-actions { display:flex; flex-wrap:wrap; gap:8px; }
 
 @media(max-width:760px) { body { padding-top:38px; } }
+
+.integration-tabs { display: flex; gap: 6px; padding: 4px; border-radius: 12px; background: color-mix(in srgb, currentColor 6%, transparent); margin-bottom: 18px; }
+.integration-tabs [role="tab"] { flex: 1; border: 0; border-radius: 9px; padding: 9px 14px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.integration-tabs [aria-selected="true"] { background: var(--panel, Canvas); box-shadow: 0 1px 4px #0002; font-weight: 600; }
+.integration-tabs [role="tab"]:focus-visible { outline: 2px solid var(--accent, #687b6a); outline-offset: 2px; }
+.pet-sleep-status { display:inline-block; margin-left:9px; padding:2px 8px; border:1px solid var(--line); border-radius:999px; background:var(--raised); color:var(--muted); font-size:11px; line-height:16px; font-weight:500; vertical-align:middle; white-space:nowrap; }
+.pet-sleep-status[data-state="awake"] { color:var(--accent-text); background:var(--selected); }
+
+.quota-card-controls { display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+.quota-card-pin { display:flex; align-items:center; gap:5px; white-space:nowrap; font-size:12px; }
+.quota-card-pin input { accent-color:var(--accent); }

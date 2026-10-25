@@ -39,7 +39,8 @@ if (!process.versions.electron) {
   app.setActivationPolicy('accessory'); app.on('window-all-closed', () => {});
   app.whenReady().then(async () => {
     fs.mkdirSync(out, { recursive: true });
-    const report = { passed: false, fixture: true, nativeHostsHidden: true, noNetworkOrChat: true, sourceRoot, shape, cases: [] };
+    const fixtureCardConfig = { order: ['codex','api','zcode','workbuddy'], pinned: ['codex','api','zcode','workbuddy'] };
+    const report = { quotaCards: fixtureCardConfig, passed: false, fixture: true, nativeHostsHidden: true, noNetworkOrChat: true, sourceRoot, shape, cases: [] };
     let codex, api, zcode, workbuddy;
     try {
       session.defaultSession.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (_details, done) => done({ cancel: true }));
@@ -48,7 +49,7 @@ if (!process.versions.electron) {
       const screen = { getDisplayMatching: () => ({ workArea: area }), getCursorScreenPoint: () => ({ x: -10000, y: -10000 }) };
       const pet = new HiddenWindow({ x: area.x + 400, y: area.y + 100, width: 80, height: 80, frame: false, transparent: true, skipTaskbar: true });
       await pet.loadURL('data:text/html,<body></body>'); pet.logicalVisible = true;
-      const settings = normalizeSettings({ zcodeEnabled: true, zcodeQuotaAlwaysVisible: true, zcodeQuotaLabelSize: 'compact', codexEnabled: true, customization: { appearance: { shape } } });
+      const settings = normalizeSettings({ quotaCardOrder: fixtureCardConfig.order, quotaCardPinned: fixtureCardConfig.pinned, zcodeEnabled: true, zcodeQuotaAlwaysVisible: true, zcodeQuotaLabelSize: 'compact', codexEnabled: true, customization: { appearance: { shape } } });
       assert.equal(settings.customization.appearance.shape, shape, 'fixture shape must be supported, not silently normalized');
       let plan = () => null, sync = () => {}, stack = () => null;
       const presentationFor = id => { const group = plan(); return { ...presentation, quotaGroupLayout: group?.cards[id], quotaGroupHidden: group?.hidden?.includes(id) }; };
@@ -69,6 +70,7 @@ if (!process.versions.electron) {
       // Execute the owning main helper so a fixture cannot silently use a different plan.
       const main = fs.readFileSync(path.join(sourceRoot, 'desktop-pet/main.js'), 'utf8');
       const scope = { quotaLabel: codex, apiUsageLabel: api, zcodeLink: zcode, workbuddyLabel: workbuddy, petWindow: pet, screen, settings, SheepTheme, PetFacing,
+        quotaCardConfig: () => fixtureCardConfig, quotaCardCollected: () => false, quotaCardGroupWindow: null,
         sheepQuotaInk: null, quotaFreeStackBounds, edgeTuck: { getPresentation: () => presentation }, quotaDisplayConfig: () => ({ style: 'card' }), quotaObstacleBounds: () => bubble, safelyInvokeWindow: (_name, fn) => fn() };
       Function('scope', 'with(scope){' + main.slice(main.indexOf('let quotaFreeStackKey ='), main.indexOf('\nfunction reportQuotaError')) + ';scope.plan=quotaFreeStackPlan;scope.sync=syncQuotaFreeStack;scope.stack=zcodeQuotaStackBounds;}')(scope);
       plan = scope.plan; sync = scope.sync; stack = scope.stack;

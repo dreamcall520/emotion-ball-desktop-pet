@@ -62,6 +62,7 @@
   let lastWorkAttempt = 0;
   let lastSample = null;
   let currentState = { mode: 'awake', emotionId: '50', gaze: null };
+  let lastSleepState = null, rendererUnloading = false;
   let activeMotion = null;
   let nextMotionToken = 0;
   let lastDoubleMotion = null;
@@ -179,10 +180,16 @@
     }
   }
 
+  function reportSleepState() {
+    if (rendererUnloading) return;
+    const state = companion.manualSleep || sheepAutoNap || currentState.mode === 'sleep' || lastSample?.locked ? 'sleep' : 'awake';
+    if (state !== lastSleepState) { lastSleepState = state; desktop.reportSleepState?.(state); }
+  }
+
   function observe(callback) {
     return (...args) => {
       try { return callback(...args); }
-      finally { syncCodexWorking(); reportCodexAvailability(); sheepOffering?.update(); }
+      finally { syncCodexWorking(); reportCodexAvailability(); sheepOffering?.update(); reportSleepState(); }
     };
   }
   const onPet = (name, callback) => petElement.addEventListener(name, observe(callback));
@@ -1094,6 +1101,7 @@
   });
 
   onWindow('beforeunload', () => {
+    rendererUnloading = true;
     clearSheepAutoNap(); sheepLastNapAt = null; sheepAutomaticWakeUntil = 0;
     sheepOffering?.destroy();
     quotaEffects?.destroy();
@@ -1182,4 +1190,5 @@
     else if (changed || !wasActive) startCodexThinkingCadence();
   })));
   window.__petReady = true;
+  reportSleepState();
 })();

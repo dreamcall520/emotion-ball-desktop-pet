@@ -82,16 +82,17 @@ function quotaRoleTargetWidth(paintWidth) { return [22,24].includes(paintWidth) 
 function quotaFreeStackBounds(petBounds, workArea, cards, presentation, bubble = null) {
   const peeked = presentation?.mode === 'peeked' && ['left','right'].includes(presentation.side);
   if (presentation?.mode !== 'free' && !peeked) return null;
-  const ids = peeked ? ['codex','api','zcode','workbuddy'].filter(id => cards?.[id])
-    : ['codex','api','zcode', ...(cards?.workbuddy ? ['workbuddy'] : [])];
+  const allowed = ['codex','api','zcode','workbuddy'];
+  const requested = Array.isArray(presentation.quotaCardOrder) ? presentation.quotaCardOrder : [];
+  const ids = [...new Set([...requested.filter(id => allowed.includes(id)), ...allowed])].filter(id => cards?.[id]);
   if (!ids.length) return null;
   const rows = ids.map(id => ({ id, ...cards?.[id] }));
   if (rows.some(row => !Number.isFinite(row.width) || row.width <= 0 || !Number.isFinite(row.height) || row.height <= 0)) return null;
   const area = safeArea(workArea), nativePet = safePet(petBounds, area);
-  const visual = petVisualBounds(nativePet,presentation.shape,{...presentation,quotaAnchor:true,quotaGuard:rows[0].guardTargetWidth>0});
+  const visual = petVisualBounds(nativePet,presentation.shape,{...presentation,quotaAnchor:true,quotaGuard:rows.some(row=>row.guardTargetWidth>0)});
   const pet = ['ring','duo','split','stages'].includes(presentation.quotaStyle)
     ? presentation.shape === 'new-year-sheep' ? nativePet : {...visual,y:nativePet.y,height:nativePet.height} : visual;
-  const preferredCenter=pet.x+pet.width/2, obstacle=safeObstacle(bubble);
+  const preferredCenter=pet.x+pet.width/2, obstacle=safeObstacle(bubble), bar=safeObstacle(presentation.quotaCardBarBounds);
   for(const row of rows) {
     row.inset=row.inset===2?2:0;
     row.faceWidth=row.width-row.inset*2;row.faceHeight=row.height-row.inset*2;
@@ -103,27 +104,30 @@ function quotaFreeStackBounds(petBounds, workArea, cards, presentation, bubble =
   const left=Math.max(...rows.map(r=>r.width/2+(r.left?r.gutter:0))),right=Math.max(...rows.map(r=>r.width/2+(r.left?0:r.gutter)));
   if(left+right>area.width)return fallback();
   const center=Math.round(clamp(preferredCenter,area.x+left,area.x+area.width-right));
-  const ordered = peeked || rows.length === 4;
   const stackHeight = rows.reduce((sum,row)=>sum+row.faceHeight,0)+GAP*(rows.length-1);
+  const columnLeft=peeked ? presentation.side==='left'?area.x+2:area.x+area.width-Math.max(...rows.map(row=>row.faceWidth))-2 : center-Math.max(...rows.map(row=>row.faceWidth))/2;
+  const columnRight=columnLeft+Math.max(...rows.map(row=>row.faceWidth));
+  const barInColumn=bar && bar.x<columnRight && bar.x+bar.width>columnLeft;
   for(const placement of ['below','above']) {
-    let cursor=placement==='below'?pet.y+pet.height+GAP:pet.y-GAP-(ordered?stackHeight:0);
+    let cursor=placement==='below'?Math.max(pet.y+pet.height,barInColumn?bar.y+bar.height:-Infinity)+GAP
+      :Math.min(pet.y,barInColumn?bar.y:Infinity)-GAP-stackHeight;
     const result={};let clear=true;
     for(const row of rows) {
-      const face={x:Math.round(peeked ? presentation.side==='left' ? area.x+2 : area.x+area.width-row.faceWidth-2 : center-row.faceWidth/2),y:Math.round(placement==='below'||ordered?cursor:cursor-row.faceHeight),width:row.faceWidth,height:row.faceHeight};
+      const face={x:Math.round(peeked ? presentation.side==='left' ? area.x+2 : area.x+area.width-row.faceWidth-2 : center-row.faceWidth/2),y:Math.round(cursor),width:row.faceWidth,height:row.faceHeight};
       const x=face.x-row.inset-(row.left?row.gutter:0),y=face.y-row.inset-row.top;
       const native={x,y,width:row.width+row.gutter,height:row.height+row.top,placement,
         ...(row.gutter?{guardSide:row.left?'left':'right',cardInset:{x:row.left?row.gutter:0,y:row.top}}:{}),face};
       const roleWidth=[22,24,50].includes(row.roleWidth)?row.roleWidth:ROLE_PAINT_WIDTH;
       const ink=row.gutter?{x:face.x-row.inset-(row.left?ROLE_GAP+roleWidth:0),y:face.y-row.inset-(row.inset?1:0),
         width:row.width+ROLE_GAP+roleWidth,height:row.height+(row.inset?1:0)}:face;
-      if(!inside(native,native,area)||overlaps(ink,ink,pet)||overlaps(ink,ink,obstacle))clear=false;
-      result[row.id]=native;cursor=placement==='below'||ordered?face.y+face.height+GAP:face.y-GAP;
+      if(!inside(native,native,area)||overlaps(ink,ink,pet)||overlaps(ink,ink,obstacle)||overlaps(ink,ink,bar))clear=false;
+      result[row.id]=native;cursor=face.y+face.height+GAP;
     }
     if(clear)return {placement,cards:result};
   }
   return fallback();
   function fallback() {
-    return peeked || cards?.workbuddy ? { placement: 'hidden', cards: {}, hidden: ids } : null;
+    return { placement: 'hidden', cards: {}, hidden: ids };
   }
 }
 

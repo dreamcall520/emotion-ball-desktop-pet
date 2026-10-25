@@ -5,7 +5,16 @@ const { normalizeAppearance, normalizeCustomization, appearanceContentKey } = re
 const { DEFAULT_SHORTCUT_SETTINGS, normalizeShortcutSettings, validateShortcutSettings } = require('./shortcuts');
 const { normalize: normalizeQuotaDisplay } = require('./quota-display');
 
+const QUOTA_CARD_SOURCES = Object.freeze(['codex', 'api', 'zcode', 'workbuddy']);
+function normalizeQuotaCardList(raw, complete = false) {
+  const values = Array.isArray(raw) ? raw : [];
+  const result = [...new Set(values.filter(value => QUOTA_CARD_SOURCES.includes(value)))];
+  return complete ? result.concat(QUOTA_CARD_SOURCES.filter(value => !result.includes(value))) : result;
+}
+
 const DEFAULTS = Object.freeze({
+  quotaCardOrder: QUOTA_CARD_SOURCES,
+  quotaCardPinned: Object.freeze([]),
   size: 'tiny',
   x: null,
   y: null,
@@ -75,6 +84,8 @@ function findDuplicateAppearancePreset(raw, appearance) {
 function normalizeSettings(raw = {}) {
   const customization = normalizeCustomization(raw.customization);
   return {
+    quotaCardOrder: normalizeQuotaCardList(raw.quotaCardOrder, true),
+    quotaCardPinned: normalizeQuotaCardList(raw.quotaCardPinned),
     size: ['micro', 'tiny', 'compact', 'small', 'medium', 'large'].includes(raw.size)
       ? raw.size
       : DEFAULTS.size,

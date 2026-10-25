@@ -20,7 +20,7 @@ function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = nul
   const systemAppearance = { matches: false,
     addEventListener(_name, listener) { systemListeners.add(listener); },
     removeEventListener(_name, listener) { systemListeners.delete(listener); } };
-  const host = { dragEnds: 0, dragMoves: [], bounces: 0, stops: 0, scenes: [], motions: [], frames: [], positions: [], codexAcks: [], availability: [], thoughts: [] };
+  const host = { dragEnds: 0, dragMoves: [], bounces: 0, stops: 0, scenes: [], motions: [], frames: [], positions: [], codexAcks: [], availability: [], thoughts: [], sleepStates: [] };
   const bounds = { x: 100, y: 100, width: 80, height: 80 };
   let windowController;
   const nativeWindow = { isDestroyed: () => false, isVisible: () => true,
@@ -93,6 +93,7 @@ function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = nul
         windowController.start(request);
       },
       say(scene) { host.scenes.push(scene); },
+      reportSleepState(state) { host.sleepStates.push(state); },
       thought(packet) { host.thoughts.push({ ...packet }); },
       codexMotionReady(request) { host.codexAcks.push(request); },
       codexAvailability(packet) { host.availability.push(packet); },
@@ -1400,4 +1401,15 @@ test('番茄免打扰清思考展示与闲聊，手动互动仍可用，结束�
   r.advanceTo(100000);
   r.settings({ focusQuiet: false, keepAwake: true });
   assert.equal(r.pet.dataset.focusQuiet, 'false');
+});
+
+test('真实睡眠状态覆盖手动、自然休息与外部唤醒，仅状态改变时上报', () => {
+  const r=createRenderer();assert.equal(r.host.sleepStates.at(-1),'awake');
+  const count=r.host.sleepStates.length;r.activity();assert.equal(r.host.sleepStates.length,count);
+  r.command('sleep');assert.equal(r.host.sleepStates.at(-1),'sleep');
+  r.command('wake');assert.equal(r.host.sleepStates.at(-1),'awake');
+  r.settings({keepAwake:false});r.advanceTo(1000000);r.activity(false,{idleSeconds:10000});assert.equal(r.host.sleepStates.at(-1),'sleep');
+  r.activity(false,{idleSeconds:0});assert.equal(r.host.sleepStates.at(-1),'awake');
+  r.activity(true);assert.equal(r.host.sleepStates.at(-1),'sleep');
+  r.activity(false,{idleSeconds:0});assert.equal(r.host.sleepStates.at(-1),'awake');
 });
