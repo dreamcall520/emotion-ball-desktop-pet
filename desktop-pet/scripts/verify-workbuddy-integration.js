@@ -264,6 +264,8 @@ async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, detai
     const shots = await gamePage('window.quotaGuardView.state.clickShots');
     await gamePage("document.getElementById('guard-qiuqiu').click()");
     assert.equal(await gamePage('window.quotaGuardView.state.clickShots'),shots+1,'自由练习发射可交互');
+    const footerSpace = await gamePage("innerHeight - document.querySelector('.fun-footer').getBoundingClientRect().bottom");
+    assert(footerSpace >= 8 && footerSpace <= 32, `游戏底部边距 ${footerSpace}`);
     if(outputDir)fs.writeFileSync(path.join(outputDir,'workbuddy-practice-game.png'),(await capture(gameWin)).toPNG());
     await gamePage("document.getElementById('guard-close').click()");
     await until(() => !guard.isVisible() && win.isVisible(),'关闭游戏恢复卡片');

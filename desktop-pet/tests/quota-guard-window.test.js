@@ -262,5 +262,6 @@ test('只有明确自由练习可以在没有账户百分比时打开守护战',
  assert.equal(f.guard.open({state:'ready',items:[],practice:true}),true);
  const w=f.guard.getWindow();w.webContents.emit('did-finish-load');await flush();
  assert.equal(w.isVisible(),true);assert.equal(w.sent.at(-1)[1].practice,true);
- assert.equal(w.sent.at(-1)[1].items.length,0);f.guard.destroy();
+ assert.equal(w.sent.at(-1)[1].items.length,0);assert.equal(w.getBounds().height,310);
+ f.guard.open(model()); assert.equal(w.getBounds().height,410);f.guard.destroy();
 });

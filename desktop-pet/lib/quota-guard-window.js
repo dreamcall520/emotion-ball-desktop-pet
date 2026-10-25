@@ -36,7 +36,7 @@ function createQuotaGuardWindow({ BrowserWindow, screen, getAnchor, getSize = ()
   function bounds() {
     const anchor = getAnchor?.() || screen.getPrimaryDisplay().workArea;
     const area = screen.getDisplayMatching(anchor).workArea;
-    const size = { width: Math.min(420, area.width), height: Math.min(410, area.height) };
+    const size = { width: Math.min(420, area.width), height: Math.min(model?.practice === true ? 310 : 410, area.height) };
     const placed = placeDetails(anchor, area, size), obstacles = getObstacles();
     const intersects = obstacle => obstacle && placed.x < obstacle.x + obstacle.width && placed.x + placed.width > obstacle.x &&
       placed.y < obstacle.y + obstacle.height && placed.y + placed.height > obstacle.y;
