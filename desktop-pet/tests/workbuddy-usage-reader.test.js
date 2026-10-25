@@ -31,6 +31,7 @@ test('official personal usage uses bounded v1 pagination and produces exact cont
   assert.deepEqual(usageRange(now), { startDate: '2026-10-19', endDate: '2026-10-25' });
   assert.equal(u.days.length, 7); assert.equal(u.todayCredits, 1.09999999); assert.equal(u.totalCredits, 1.18999999);
   assert.equal(u.days[0].credits, 0); assert.equal(u.requestCount, 101); assert.equal(u.complete, true); assert.equal(u.delayHours, 3);
+  assert.deepEqual(u.todayRecords, [{ at: Date.parse('2026-10-25T00:00:00+08:00'), credits: 1.09999999 }]);
   const pages = f.calls.filter(value => value.path.endsWith('get-user-request-usage'));
   assert.deepEqual(pages.map(value => JSON.parse(value.options.body).pageNum), [1, 2]);
   assert(pages.every(value => !JSON.parse(value.options.body).version && !value.options.headers.Authorization));
@@ -47,6 +48,7 @@ test('aggregation never accesses prompt getters and rejects negative, truncated,
 test('zero is official only after completed pagination; incomplete or changing totals fail rather than fabricate zero', async () => {
   const empty = await readWorkBuddyUsage({ auth, fetchImpl: transport([]).fetchImpl, now: () => now });
   assert.equal(empty.usage.totalCredits, 0); assert.equal(empty.usage.days.length, 7); assert.equal(empty.usage.requestCount, 0);
+  assert.deepEqual(empty.usage.todayRecords, []);
   const rows = [{ requestTime: '2026-10-25 10:00:00', credit: 1 }];
   await assert.rejects(readWorkBuddyUsage({ auth, fetchImpl: transport(rows, page => { page.total = 2; }).fetchImpl, now: () => now }), { code: 'INVALID_USAGE_RESPONSE' });
 });
@@ -63,4 +65,20 @@ test('cookie jar respects domains and paths and ignores overbroad domains', () =
   assert.equal(jar.header(new URL('https://www.workbuddy.cn/billing/meter/test')), 'a=secret');
   assert.equal(jar.header(new URL('https://www.workbuddy.cn/billing-other')), '');
   assert.equal(jar.header(new URL('https://www.codebuddy.cn/billing/test')), '');
+});
+test('today records preserve real Shanghai event times, merge equal timestamps and match the daily total', () => {
+  const range = usageRange(now), row = (time, credit, requestId) => ({ requestTime: time, credit, requestId });
+  const rows = [row('2026-10-25 14:00:00', 0.74999999, 'r1'), row('2026-10-24 23:59:59', 5, 'r2'),
+    row('2026-10-25 00:00:00', 0, 'r3'), row('2026-10-25 08:30:00', 0.09, 'r4'), row('2026-10-25 14:00:00', 0.35, 'r5')];
+  for (const row of rows) for (const key of ['input', 'inputTrunc']) Object.defineProperty(row, key, { get() { throw Error('prompt accessed'); } });
+  const usage = aggregateUsage([rows], range, now);
+  assert.deepEqual(usage.todayRecords, [
+    { at: Date.parse('2026-10-25T00:00:00+08:00'), credits: 0 },
+    { at: Date.parse('2026-10-25T08:30:00+08:00'), credits: 0.09 },
+    { at: Date.parse('2026-10-25T14:00:00+08:00'), credits: 1.09999999 }
+  ]);
+  assert.equal(usage.todayRecords.reduce((sum, value) => sum + Math.round(value.credits * 1e8), 0), Math.round(usage.todayCredits * 1e8));
+  assert.equal(usage.totalCredits, 6.18999999);
+  assert(usage.todayRecords.every(value => Object.keys(value).sort().join(',') === 'at,credits' && value.at <= usage.updatedAt));
+  assert.throws(() => aggregateUsage([[row('2026-10-25 15:00:01', 1)]], range, now), { code: 'INVALID_USAGE_RESPONSE' });
 });

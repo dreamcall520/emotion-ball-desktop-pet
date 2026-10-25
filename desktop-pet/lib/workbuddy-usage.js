@@ -14,8 +14,18 @@ function validUsage(value) {
   }
   if (days[0].date !== value.startDate || days.at(-1).date !== value.endDate || Math.abs(sum - value.totalCredits) > .000001 ||
       Math.abs(days.at(-1).credits - value.todayCredits) > .000001) return null;
+  if (!Array.isArray(value.todayRecords) || value.todayRecords.length > 10000) return null;
+  const start = Date.parse(value.endDate + 'T00:00:00+08:00'), records = [];
+  let units = 0;
+  for (const record of value.todayRecords) {
+    if (!Number.isSafeInteger(record?.at) || record.at < start || record.at >= start + 86400000 || record.at > value.updatedAt ||
+        !Number.isFinite(record.credits) || record.credits < 0 || !Number.isSafeInteger(Math.round(record.credits * 1e8)) ||
+        records.length && record.at <= records.at(-1).at) return null;
+    units += Math.round(record.credits * 1e8); records.push({ at: record.at, credits: record.credits });
+  }
+  if (!Number.isSafeInteger(units) || units !== Math.round(value.todayCredits * 1e8)) return null;
   return { source: value.source, timezone: value.timezone, startDate: value.startDate, endDate: value.endDate, days,
-    todayCredits: value.todayCredits, totalCredits: value.totalCredits, requestCount: value.requestCount, updatedAt: value.updatedAt, delayHours: 3, complete: true };
+    todayRecords: records, todayCredits: value.todayCredits, totalCredits: value.totalCredits, requestCount: value.requestCount, updatedAt: value.updatedAt, delayHours: 3, complete: true };
 }
 function safeUsageState(value) {
   return { busy: value?.busy === true, error: value?.error ? '消耗统计暂不可用，请稍后重试。' : null, report: validUsage(value?.report) };

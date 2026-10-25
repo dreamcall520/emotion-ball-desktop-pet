@@ -50,9 +50,9 @@ test('card delegates trend and refresh actions, keeps keyboard focus distinct an
   assert.equal(document.documentElement.dataset.uiTheme, 'blue');
   assert.equal(document.documentElement.dataset.accessibleAppearance, 'dark');
   render({ report, history: [{ at: 1, total: 7400 }], expanded: true });
-  assert.match(e.get('trend').title, /1 次实际采样/);
+  assert.match(e.get('trend').title, /官方积分消耗/);
   render({ report, historyError: '趋势记录暂未保存' });
-  assert.equal(e.get('trend').title, '趋势记录暂未保存');
+  assert.equal(e.get('trend').title, '查看官方积分消耗走势与每日消耗');
   render({report,activity:{runningCount:null,unreadCount:0}});
   assert.equal(e.get('running-count').textContent,'—');
   assert.equal(e.get('unread-count').textContent,'0');

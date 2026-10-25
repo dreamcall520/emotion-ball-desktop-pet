@@ -64,7 +64,7 @@ async function loginWebsite({ auth, authHeaders, fetchImpl, signal }) {
   fail('USAGE_UNAVAILABLE');
 }
 function aggregateUsage(pages, { startDate, endDate }, updatedAt) {
-  const units = new Map(), ids = new Set(); let requestCount = 0;
+  const units = new Map(), todayUnits = new Map(), ids = new Set(); let requestCount = 0;
   for (const rows of pages) for (const row of rows) {
     // Read only billing metadata; input and inputTrunc are deliberately never accessed.
     const time = row?.requestTime, credit = row?.credit;
@@ -73,17 +73,24 @@ function aggregateUsage(pages, { startDate, endDate }, updatedAt) {
     check(Number.isFinite(timestamp) && dayAt(timestamp) === date && date >= startDate && date <= endDate);
     check((typeof credit === 'number' || typeof credit === 'string' && credit.trim() !== '') && Number.isFinite(Number(credit)) && Number(credit) >= 0);
     const value = Math.round(Number(credit) * 1e8); check(Number.isSafeInteger(value));
+    if (date === endDate) {
+      check(timestamp <= updatedAt);
+      const atTotal = (todayUnits.get(timestamp) || 0) + value; check(Number.isSafeInteger(atTotal));
+      todayUnits.set(timestamp, atTotal);
+    }
     const id = row.requestId;
     if (typeof id === 'string' && id) { check(!ids.has(id)); ids.add(id); }
     const total = (units.get(date) || 0) + value; check(Number.isSafeInteger(total)); units.set(date, total); requestCount++;
+    check(requestCount <= 10000);
   }
   const days = [];
   for (let time = Date.parse(startDate + 'T00:00:00+08:00'); dayAt(time) <= endDate; time += 86400000) {
     const date = dayAt(time); days.push({ date, credits: (units.get(date) || 0) / 1e8 });
   }
   const total = [...units.values()].reduce((sum, value) => sum + value, 0); check(Number.isSafeInteger(total));
+  const todayRecords = [...todayUnits].sort(([a], [b]) => a - b).map(([at, value]) => ({ at, credits: value / 1e8 }));
   return { source: 'official-request-usage', timezone: 'Asia/Shanghai', startDate, endDate, days,
-    todayCredits: days.at(-1).credits, totalCredits: total / 1e8, requestCount, updatedAt, delayHours: 3, complete: true };
+    todayRecords, todayCredits: days.at(-1).credits, totalCredits: total / 1e8, requestCount, updatedAt, delayHours: 3, complete: true };
 }
 async function readWorkBuddyUsage({ auth, authHeaders, fetchImpl = fetch, signal, now = Date.now }) {
   const startedAt = now(), range = usageRange(startedAt), cookies = await loginWebsite({ auth, authHeaders, fetchImpl, signal });

@@ -78,7 +78,6 @@
     el('toggle').title = status || '展开 WorkBuddy 积分';
     el('toggle').setAttribute('aria-label', `WorkBuddy ${r ? `${amount(r.total)} 积分` : '未连接'}${status ? `，${status}` : ''}`);
     el('refresh').disabled = state.busy;
-    const samples = state.history?.length || 0;
-    el('trend').title = state.historyError || (samples ? `查看余额趋势，已有 ${samples} 次实际采样` : '查看余额趋势，等待采样记录');
+    el('trend').title = '查看官方积分消耗走势与每日消耗';
   });
 })();

@@ -24,7 +24,9 @@ function smokeUsageReport() {
   const endDate = new Date(Date.now() + 8 * 3600000).toISOString().slice(0,10), end = Date.parse(endDate + 'T00:00:00Z');
   const values = smokeUsageMode === 'zero' ? [0,0,0,0,0,0,0] : [0.2,0.3,0,1.5,0.1,0.05,0.74999999];
   const days=values.map((credits,index)=>({date:new Date(end-(6-index)*86400000).toISOString().slice(0,10),credits}));
-  return {source:'official-request-usage',timezone:'Asia/Shanghai',startDate:days[0].date,endDate,days,todayCredits:values.at(-1),totalCredits:Number(values.reduce((sum,value)=>sum+value,0).toFixed(8)),requestCount:smokeUsageMode==='zero'?0:10,updatedAt:Date.now(),delayHours:3,complete:true};
+  const updatedAt=Date.now(),start=end-8*3600000,step=Math.floor((updatedAt-start)/8);
+  const todayRecords=smokeUsageMode==='zero'?[]:step>0?[{at:start+step,credits:0.2},{at:start+step*3,credits:0.24999999},{at:start+step*7,credits:0.3}]:[{at:updatedAt,credits:0.74999999}];
+  return {source:'official-request-usage',timezone:'Asia/Shanghai',startDate:days[0].date,endDate,days,todayRecords,todayCredits:values.at(-1),totalCredits:Number(values.reduce((sum,value)=>sum+value,0).toFixed(8)),requestCount:smokeUsageMode==='zero'?0:10,updatedAt,delayHours:3,complete:true};
 }
 const report = () => ({ total: 7400, basic: 500, reward: 6900, purchased: 0, plan: '体验版',
   nextRefreshAt: Date.now() + 7 * 86400000, expires: [{ amount: 100, at: Date.now() + 3 * 86400000 }], updatedAt: Date.now() });
@@ -327,17 +329,35 @@ async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, detai
     await until(()=>usage.getState().report && !usage.getState().busy,'官方7天消耗同步');
     const expectedBalance=quota.getState().report.total.toLocaleString('zh-CN',{maximumFractionDigits:2});
     const official=usage.getState().report,officialViews=[];
-    for(const period of ['today','week'])for(const view of ['records','daily']){
-      await detailPage(`document.getElementById('${period}').click();document.getElementById('view-${view}').click()`);
+    const scenarios=[{period:'today',view:'records'},{period:'week',view:'records'},{period:'week',view:'daily'}];
+    for(const {period,view} of scenarios){
+      if(view==='daily')await detailPage("document.getElementById('view-records').click();document.getElementById('today').click();document.getElementById('view-daily').click()");
+      else await detailPage(`document.getElementById('view-records').click();document.getElementById('${period}').click()`);
       const expected=Number((period==='week'?official.totalCredits:official.todayCredits).toFixed(2));
-      const observed=await detailPage(`(()=>{const svg=document.querySelector('#usage-plot svg');return {balance:document.getElementById('balance').textContent,consumption:document.getElementById('change').textContent,label:document.getElementById('change-label').textContent,empty:document.getElementById('usage-empty').hidden,selected:document.getElementById('view-${view}').getAttribute('aria-selected'),caption:document.getElementById('usage-caption').textContent,aria:svg?.getAttribute('aria-label'),bars:[...document.querySelectorAll('#usage-plot rect.daily-bar')].map(n=>({height:Number(n.getAttribute('height')),title:n.querySelector('title').textContent})),points:[...document.querySelectorAll('#usage-plot circle.point')].map(n=>({x:Number(n.getAttribute('cx')),y:Number(n.getAttribute('cy')),title:n.querySelector('title').textContent})),axis:[...document.querySelectorAll('#usage-plot text[y="132"]')].map(n=>n.textContent),hasLine:Boolean(document.querySelector('#usage-plot .observed-line'))};})()`);
+      const observed=await detailPage(`(()=>{const svg=document.querySelector('#usage-plot svg');return {balance:document.getElementById('balance').textContent,consumption:document.getElementById('change').textContent,label:document.getElementById('change-label').textContent,empty:document.getElementById('usage-empty').hidden,selected:document.getElementById('view-${view}').getAttribute('aria-selected'),periodHidden:document.getElementById('period-switch').hidden,weekSelected:document.getElementById('week').getAttribute('aria-pressed'),hasCaption:Boolean(document.getElementById('usage-caption')),aria:svg?.getAttribute('aria-label'),bars:[...document.querySelectorAll('#usage-plot rect.daily-bar')].map(n=>({height:Number(n.getAttribute('height')),title:n.querySelector('title').textContent})),points:[...document.querySelectorAll('#usage-plot circle.point')].map(n=>({x:Number(n.getAttribute('cx')),y:Number(n.getAttribute('cy')),title:n.querySelector('title').textContent})),axis:[...document.querySelectorAll('#usage-plot text[y="132"]')].map(n=>n.textContent),line:document.querySelector('#usage-plot .observed-line')?.getAttribute('d')||null};})()`);
       assert.equal(observed.balance,expectedBalance);assert.equal(Number(observed.consumption.replaceAll(',','')),expected,'官方积分按2位展示');assert.equal(observed.label,period==='week'?'近7天消耗':'今日消耗');
-      assert.equal(observed.empty,true);assert.equal(observed.selected,'true');assert.match(observed.caption,/官方用量可能延迟2–3小时/);assert.match(observed.aria,/官方/);
-      const expectedCount=period==='week'?7:1;assert.equal(observed.points.length,expectedCount);assert.equal(observed.axis.length,expectedCount);
-      assert(observed.points.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)&&p.x>=48&&p.x<=352&&p.y>=28&&p.y<=108),'消费坐标有限且在图内');
-      if(view==='daily'){assert.equal(observed.bars.length,expectedCount);assert(observed.bars.every(p=>Number.isFinite(p.height)&&p.height>=0));}else{assert.equal(observed.bars.length,0);assert.equal(observed.hasLine,period==='week','今日仅一个日点，不造日内走势');}
+      assert.equal(observed.empty,true);assert.equal(observed.selected,'true');assert.equal(observed.hasCaption,false,'图下不重复解释');assert.match(observed.aria,/官方/);
+      assert(observed.points.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)&&p.x>=62&&p.x<=338&&p.y>=28&&p.y<=108),'消费坐标有限且在图内');
+      if(view==='daily'){
+        assert.equal(observed.periodHidden,true,'每日固定7天隐藏日期开关');assert.equal(observed.weekSelected,'true');assert.equal(observed.bars.length,7);assert.equal(observed.points.length,7);assert.equal(observed.axis.length,7);assert(observed.bars.every(p=>Number.isFinite(p.height)&&p.height>=0));
+      }else{
+        assert.equal(observed.periodHidden,false);assert.equal(observed.bars.length,0);
+        if(period==='today'){
+          assert.equal(observed.points.length,official.todayRecords.length+1);assert.equal(observed.points[0].x,62);assert.equal(observed.points[0].y,108);assert.equal(observed.axis[0],'00:00');
+          const midnight=Date.parse(official.endDate+'T00:00:00+08:00'),last=official.todayRecords.at(-1);let cumulative=0;
+          for(const [index,record] of official.todayRecords.entries()){
+            cumulative+=record.credits;const point=observed.points[index+1],expectedX=62+(record.at-midnight)/(last.at-midnight)*276;
+            assert(Math.abs(point.x-expectedX)<0.0001,'横轴按真实时间间隔');assert(Math.abs(point.y-(108-cumulative/official.todayCredits*80))<0.0001,'纵轴按实际请求累计');
+            const clock=new Date(record.at).toLocaleTimeString('zh-CN',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',hour12:false});assert(point.title.startsWith(clock));
+          }
+          if(last){assert.equal(observed.points.at(-1).x,338);assert.equal(observed.axis.at(-1),new Date(last.at).toLocaleTimeString('zh-CN',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',hour12:false}));assert.match(observed.line,/^M.*L/);assert.doesNotMatch(observed.line,/C/,'今日不平滑编造中间请求');}
+        }else{assert.equal(observed.points.length,7);assert.equal(observed.axis.length,7);assert(observed.line);}
+      }
       officialViews.push({period,view,...observed});if(outputDir)fs.writeFileSync(path.join(outputDir,`workbuddy-official-${period}-${view}.png`),(await capture(detailWin)).toPNG());
     }
+    await detailPage("document.getElementById('view-records').click()");
+    assert.equal(await detailPage("document.getElementById('today').getAttribute('aria-pressed')"),'true','回走势保留先前今日范围');
+    await detailPage("document.getElementById('view-daily').click()");
     const themeEvidence={};
     for(const appearance of ['light','dark']){
       detailWin.webContents.send('pet:color-mode','standard',appearance,'blue');await until(()=>detailPage(`document.documentElement.dataset.resolvedAppearance === ${JSON.stringify(appearance)}`),'官方消费明暗主题');
@@ -348,13 +368,18 @@ async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, detai
     if(!live){
       smokeUsageMode='zero';await usage.refresh(true);await until(()=>detailPage("document.getElementById('change').textContent === '0' && document.getElementById('usage-empty').hidden"),'官方成功0与未知区分');
       const zeroHeights=await detailPage("[...document.querySelectorAll('#usage-plot rect.daily-bar')].map(n=>Number(n.getAttribute('height')))");assert.equal(zeroHeights.length,7);assert(zeroHeights.every(n=>n===0),'真实0不画伪造正柱');
-      if(outputDir)fs.writeFileSync(path.join(outputDir,'workbuddy-official-zero.png'),(await capture(detailWin)).toPNG());
+      if(outputDir)fs.writeFileSync(path.join(outputDir,'workbuddy-official-zero-daily.png'),(await capture(detailWin)).toPNG());
+      await detailPage("document.getElementById('view-records').click();document.getElementById('today').click()");
+      const zeroToday=await detailPage("[...document.querySelectorAll('#usage-plot circle.point')].map(n=>({x:Number(n.getAttribute('cx')),y:Number(n.getAttribute('cy'))}))");
+      assert.deepEqual(zeroToday,[{x:62,y:108}],'无请求仅零点，不延伸到未来');assert.equal(await detailPage("document.querySelector('#usage-plot .observed-line') === null"),true);
+      if(outputDir)fs.writeFileSync(path.join(outputDir,'workbuddy-official-zero-today.png'),(await capture(detailWin)).toPNG());
       smokeUsageMode='error';await usage.refresh(true);await until(()=>usage.getState().error && !usage.getState().busy,'官方查询失败状态');
       await until(()=>detailPage("document.getElementById('change').textContent === '—' && !document.querySelector('#usage-plot svg') && document.getElementById('hint').textContent === '消耗统计暂不可用'"),'失败不复用0或补造0');
       if(outputDir)fs.writeFileSync(path.join(outputDir,'workbuddy-official-failure.png'),(await capture(detailWin)).toPNG());
       smokeUsageMode='success';await usage.refresh(true);await until(()=>usage.getState().report&&!usage.getState().error,'恢复官方消费查询');
     }
-    await detailPage("document.querySelector('#explanation summary').click()");assert.equal(await detailPage("document.getElementById('explanation').open"),true);assert.match(await detailPage("document.getElementById('explanation').textContent"),/官方逐请求积分记录/);await detailPage("document.querySelector('#explanation summary').click()");
+    await detailPage("document.querySelector('#explanation summary').click()");assert.equal(await detailPage("document.getElementById('explanation').open"),true);assert.match(await detailPage("document.getElementById('explanation').textContent"),/官方逐请求积分/);
+    const infoList=await detailPage("[...document.querySelectorAll('#explanation .chart-help-body > ul > li')].filter(n=>!n.hidden).map(n=>n.textContent)");assert(infoList.length>=3,'i说明分点列表');assert(infoList.every(text=>text.length<=60),'说明短句易读');await detailPage("document.querySelector('#explanation summary').click()");
     if(outputDir){fs.writeFileSync(path.join(outputDir,'official-usage-views.json'),JSON.stringify({mode:live?'live':'isolated-mock',source:official.source,views:officialViews},null,2));fs.writeFileSync(path.join(outputDir,'trend-theme.json'),JSON.stringify(themeEvidence,null,2));}
     await detailPage("document.getElementById('details-close').click()");
     await until(() => !details.isVisible(), '关闭趋势详情');
