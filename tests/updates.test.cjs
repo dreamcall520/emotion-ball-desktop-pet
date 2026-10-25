@@ -20,7 +20,7 @@ test('logs replace 0.4.06 with 0.4.08 and preserve all seventeen historical reco
   assert.match(articles[0], /<h4>7\.【优化】已知问题<\/h4><\/div>/);
   assert.doesNotMatch(articles[0], /主题记忆|靠边位置|卡面|小角色/);
   assert.equal(articles.length,18);
-  assert.doesNotMatch(articles[0], /release-download/);
+  assert.match(articles[0], /href="https:\/\/github\.com\/dreamcall520\/emotion-ball-desktop-pet\/releases\/download\/v0\.4\.8\/Qiuqiu-0\.4\.08-macOS-arm64\.dmg"/);
   assert.doesNotMatch(html, /0\.4\.06/);
   assert.match(html, /0\.4\.08 Apple 芯片版 · 大版本更新<\/option>/);
 });
@@ -63,14 +63,14 @@ test('0.4.05 and sixteen earlier historical blocks retain their content with num
 });
 
 test('each architecture offers DMG; the ZIP-only hotfix and website event stay accurate', () => {
-  assert.equal(downloads.length, 18);
-  assert.equal(new Set(downloads).size, 18);
+  assert.equal(downloads.length, 19);
+  assert.equal(new Set(downloads).size, 19);
   assert.doesNotMatch(html, /release-source|查看 GitHub Release/);
   assert.ok(downloads.every(url => /^https:\/\/github\.com\/dreamcall520\/emotion-ball-desktop-pet\/releases\/download\/v[\d.]+\/.+\.(?:zip|dmg)$/.test(url)));
   for (const article of articles) {
     const title = article.match(/<h3[^>]*>(.*?)<\/h3>/)[1];
     const urls = [...article.matchAll(/class="release-download [^"]+" href="([^"]+)"/g)].map(m => m[1]);
-    if (title === '公开官网上线' || title === '0.4.08 Apple 芯片版') { assert.equal(urls.length, 0); continue; }
+    if (title === '公开官网上线') { assert.equal(urls.length, 0); continue; }
     assert.ok(urls.length > 0, title);
     const version = title.match(/^[\d.]+/)[0];
     const tag = `v${version.split('.').map(Number).join('.')}`;

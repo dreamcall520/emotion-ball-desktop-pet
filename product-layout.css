@@ -181,8 +181,8 @@ html[data-theme="dark"] .product-redesign {
 .product-redesign .download-card > p { font-size: 14px; line-height: 1.8; }
 .product-redesign .download-card .button { border-radius: 999px; }
 .product-redesign .button[hidden] { display: none; }
-.product-redesign .download-card-primary .download-actions { display: grid; grid-template-columns: minmax(0, 1fr) 124px; gap: 12px; }
-.product-redesign .download-card-primary .download-actions .button { min-width: 0; }
+.product-redesign .download-card-primary .download-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.product-redesign .download-card-primary .download-actions .button { flex: 1 1 max-content; min-width: max-content; }
 .product-redesign .download-card-primary .domestic-download { padding-inline: 12px; font-size: 14px; font-weight: 500; white-space: nowrap; }
 
 .product-redesign .install-section { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; }
@@ -282,10 +282,8 @@ html[data-theme="dark"] .product-redesign {
 }
 
 @media (max-width: 760px) {
-  .product-redesign .download-card-primary .download-actions { grid-template-columns: minmax(0, 1fr) 112px; gap: 10px; }
   .product-redesign .download-card-primary .download-actions .button { font-size: 13px; padding-inline: 10px; }
 }
 @media (max-width: 400px) {
-  .product-redesign .download-card-primary .download-actions { grid-template-columns: 1fr; }
   .product-redesign .download-card-primary .domestic-download { min-height: 44px; }
 }

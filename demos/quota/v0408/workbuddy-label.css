@@ -1,0 +1,29 @@
+/* The expanded card uses the existing Codex v20 components without a chart. */
+#toggle { display: block; width: 100%; min-width: 0; flex: none; border: 0; background: transparent; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; outline: none; }
+#summary { min-height: 24px; gap: 4px; }
+.summary-period { gap: 4px; font-size: 9px; }
+.summary-value { font-size: 14px; }
+.summary-value[data-long="true"] { font-size: 11px; letter-spacing: -.03em; }
+#quota-label[data-expanded="true"] #toggle { display: none; }
+#details { width: 100%; min-width: 0; }
+#details[hidden] { display: none; }
+#expanded-header { appearance: none; width: 100%; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+#value-row { margin-top: 4px; justify-content: flex-start; gap: 5px; align-items: baseline; }
+#expanded-total { font-size: 22px; line-height: 25px; overflow: hidden; text-overflow: ellipsis; }
+#expanded-total[data-long="true"] { font-size: 16px; }
+#plan { max-width: 54px; overflow: hidden; text-overflow: ellipsis; }
+#dates { font-size: 7px; line-height: 11px; }
+#balances { gap: 3px; }
+#balances > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#tasks, #results { min-height: 18px; }
+#refresh[hidden] { display: none; }
+#trend { min-height: 18px; }
+#refresh:disabled { opacity: .6; cursor: default; }
+#quota-label[data-query-state="error"] #period, #quota-label[data-query-state="error"] #balance-state { color: var(--quota-urgent-text); }
+#details :is(button, [tabindex]) { outline: none; }
+:root[data-keyboard="true"] #quota-label:has(#toggle:focus-visible) { outline: 1px solid var(--quota-subtle); outline-offset: -3px; }
+:root[data-keyboard="true"] #details :is(button, [tabindex]):focus-visible { outline: 1px solid var(--quota-subtle); outline-offset: -1px; border-radius: 3px; }
+/* Retain the full balance and caption beside the larger source icon. */
+#quota-label[data-size="compact"][data-expanded="false"] { padding-inline: 4px; }
+
+#balance-state { font-size: 9px; line-height: 12px; }

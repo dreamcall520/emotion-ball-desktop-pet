@@ -7,7 +7,7 @@
       "source": "desktop-pet/quota-label.html",
       "target": "quota-label.html",
       "sha256": "4853b4f04a6f6427dd84de1ad80cfef290b9a34e01a0c29a05e4c35aac4692bf",
-      "embeddedSha256": "20fa45260bf6a1860ee490ec15a024882e45f75d304808b71cd118ec9117abed"
+      "embeddedSha256": "689a1ea14f6e178f862cd5a3f862798b4045fdca0f9cf3f49b00eefd03ec7a86"
     },
     {
       "source": "desktop-pet/quota-label.css",
@@ -25,7 +25,7 @@
       "source": "desktop-pet/codex-details.html",
       "target": "codex-details.html",
       "sha256": "d248e0881bde2011aa3df988acea33723a4aa5229fad83d858bda04eb4d4e0e3",
-      "embeddedSha256": "0d4712c9b8431270d85b8bdfce6dc463f95a033b0c6bd3303bc1bbf8d67cba83"
+      "embeddedSha256": "15d7ae7f97e3547ed5a9c7e337580546c171af91bbdc4cd1345934f39573d70a"
     },
     {
       "source": "desktop-pet/codex-details.css",
@@ -61,7 +61,7 @@
       "source": "desktop-pet/api-usage-label.html",
       "target": "api-usage-label.html",
       "sha256": "198b4bb27e2c69387daa8a4d3ba5154624ad043044bf3e7e8e7d339fef330121",
-      "embeddedSha256": "38bc2719ff37e8b449d560d67e4cbfb94c786b0fa1b79cae156ce04246607ef2"
+      "embeddedSha256": "ff78f62242ce10fc28b67e2ee7c97a61371bf3b7edae4ac712e737dee8e4d1fb"
     },
     {
       "source": "desktop-pet/api-usage-label.css",
@@ -79,7 +79,7 @@
       "source": "desktop-pet/api-usage.html",
       "target": "api-usage.html",
       "sha256": "f6bc61fe8de96e5e17d58993e8a56fc62055168a5c4f90249c665889b0840f80",
-      "embeddedSha256": "78d2e291bb1cb0f7071d474a3a962765ed98c517820ec9276308d3b9f5430c53"
+      "embeddedSha256": "e97b2c79728ed263a113151e96532976831348ea95a8ac3cb6e989c8a89ab2c2"
     },
     {
       "source": "desktop-pet/api-usage.css",
@@ -117,7 +117,7 @@
   "adapters": [
     {
       "target": "README.md",
-      "sha256": "c66d7cbc42231705a5df0f85a86e68ed2738e486c525caaea36322847cb8c0cf"
+      "sha256": "25a7efd51a8ad710f523487042c3628495f6b2c4a3cc123559159fec598e8957"
     },
     {
       "target": "check.browser.cjs",
@@ -129,20 +129,156 @@
     },
     {
       "target": "demo-bridge.js",
-      "sha256": "6936a316985ab82ea7b91a6ec3c091476b617f43ab8b50359a560303f37c0b0a"
+      "sha256": "f4c76b10904f3368048da90c69e3c90c59d64fc58b943074333eef772a6cb0c3"
     },
     {
       "target": "demo.css",
-      "sha256": "fc3195e1ba3542c0e8bd54fd4c6004d11f86ea5a1c3b66177450b2e27821c38f"
+      "sha256": "4b213f0787064a311ccdf0ceab936d1c5f2bf07d435af4f0c76b81a38dbc7a63"
     },
     {
       "target": "demo.js",
-      "sha256": "97292ab548a417866964946c609be32aee497f36200b8ac49cf7f0bd51abc995"
+      "sha256": "bb59d30ff36885fe0ae3a33a224bf736a74d0b0321fde4053efbc1932cb1cdea"
     },
     {
       "target": "index.html",
-      "sha256": "3bb7a4f5ac36488e5f4a3782a4e4422329d2e68bd05e05f8b5814ebc9ed1564b"
+      "sha256": "f02e1b0e66acb563d5727c9e620ae09180b3db04a924ead1a602fd7fb6e773fb"
+    },
+    {
+      "target": "integrations-models.js",
+      "sha256": "22efd3c7829e87799578496fd21b67850cb8531123fe6c82b457b6315d6d8e20"
     }
   ],
-  "packageAsarSha256": "8a4062ae6c907eea4417ebcadbb8f2f5127e8fe0ff3d21b66ca41c2f5ee151c8"
+  "packageAsarSha256": "8a4062ae6c907eea4417ebcadbb8f2f5127e8fe0ff3d21b66ca41c2f5ee151c8",
+  "integrations": {
+    "commit": "6528e5a5ec0e9dafabb4e87e1283c659ae29ad1a",
+    "version": "0.4.08",
+    "files": [
+      {
+        "source": "desktop-pet/assets/integrations/workbuddy.png",
+        "target": "v0408/assets/integrations/workbuddy.png",
+        "sha256": "668416265827232a6090cf08af50e8bb94e24c772b3268d101e7638720c8e90f",
+        "embeddedSha256": "668416265827232a6090cf08af50e8bb94e24c772b3268d101e7638720c8e90f"
+      },
+      {
+        "source": "desktop-pet/assets/integrations/zcode.png",
+        "target": "v0408/assets/integrations/zcode.png",
+        "sha256": "a23529b32ade3293f09257511686cbc64e5d3ca08591b657fdcf0a4ac8380138",
+        "embeddedSha256": "a23529b32ade3293f09257511686cbc64e5d3ca08591b657fdcf0a4ac8380138"
+      },
+      {
+        "source": "desktop-pet/codex-details-renderer.js",
+        "target": "v0408/codex-details-renderer.js",
+        "sha256": "15b155f1228d2fe41b27f9d3789e63020ed96cdc63dd818b47a314e87c6345e5",
+        "embeddedSha256": "15b155f1228d2fe41b27f9d3789e63020ed96cdc63dd818b47a314e87c6345e5"
+      },
+      {
+        "source": "desktop-pet/codex-details.css",
+        "target": "v0408/codex-details.css",
+        "sha256": "37908b3ec16cca311cf8aa8fc45e82e294b634ea76d524dda15bc63e9f015c18",
+        "embeddedSha256": "37908b3ec16cca311cf8aa8fc45e82e294b634ea76d524dda15bc63e9f015c18"
+      },
+      {
+        "source": "desktop-pet/codex-details.html",
+        "target": "v0408/codex-details.html",
+        "sha256": "d248e0881bde2011aa3df988acea33723a4aa5229fad83d858bda04eb4d4e0e3",
+        "embeddedSha256": "b40692b54697d50b9357655da2a67240c4801c9e51a7d7df4b4a71fef97946c6"
+      },
+      {
+        "source": "desktop-pet/color-mode.css",
+        "target": "v0408/color-mode.css",
+        "sha256": "11aee590ecd86642c15b4562ad611f59983ed267610eef71de69c7f75100ad42",
+        "embeddedSha256": "11aee590ecd86642c15b4562ad611f59983ed267610eef71de69c7f75100ad42"
+      },
+      {
+        "source": "desktop-pet/color-mode.js",
+        "target": "v0408/color-mode.js",
+        "sha256": "d0d8c0d9f99dc0b4c9c98e998d6b83222e113ffbfe9716436c36599fe543c4c3",
+        "embeddedSha256": "d0d8c0d9f99dc0b4c9c98e998d6b83222e113ffbfe9716436c36599fe543c4c3"
+      },
+      {
+        "source": "desktop-pet/credit-balance.js",
+        "target": "v0408/credit-balance.js",
+        "sha256": "b23436d3f1b7ec978012ce865061a2e0524df1579650ce07bfb72cb99e32799a",
+        "embeddedSha256": "b23436d3f1b7ec978012ce865061a2e0524df1579650ce07bfb72cb99e32799a"
+      },
+      {
+        "source": "desktop-pet/quota-daily-model.js",
+        "target": "v0408/quota-daily-model.js",
+        "sha256": "8ea98781c62c345da024855acee23dde01e5b5293e7c52140ebee494f7246222",
+        "embeddedSha256": "8ea98781c62c345da024855acee23dde01e5b5293e7c52140ebee494f7246222"
+      },
+      {
+        "source": "desktop-pet/quota-label-renderer.js",
+        "target": "v0408/quota-label-renderer.js",
+        "sha256": "ab123b5a73cd7926bb7443094227b483bcc7c959244821455ee2b0e598efebc1",
+        "embeddedSha256": "ab123b5a73cd7926bb7443094227b483bcc7c959244821455ee2b0e598efebc1"
+      },
+      {
+        "source": "desktop-pet/quota-label.css",
+        "target": "v0408/quota-label.css",
+        "sha256": "0a2c55b2790b062f3ab9f12324d888729be7ae93535a2e6e8fbaf593061ff4cd",
+        "embeddedSha256": "0a2c55b2790b062f3ab9f12324d888729be7ae93535a2e6e8fbaf593061ff4cd"
+      },
+      {
+        "source": "desktop-pet/quota-label.html",
+        "target": "v0408/quota-label.html",
+        "sha256": "7b61a9bd4f25cda5960691438badf59e53e7d8ef8ae82f4b3caee9abf908de6a",
+        "embeddedSha256": "f3c286205e9dbbff2f61540f8f8205dd46db2d0cc13989f4c744e5838f88c9ee"
+      },
+      {
+        "source": "desktop-pet/quota-trend-curve.js",
+        "target": "v0408/quota-trend-curve.js",
+        "sha256": "3d1cb9278faa391477ab448447507eee639cc3a3d7d237b67da47008c733f543",
+        "embeddedSha256": "3d1cb9278faa391477ab448447507eee639cc3a3d7d237b67da47008c733f543"
+      },
+      {
+        "source": "desktop-pet/workbuddy-details-renderer.js",
+        "target": "v0408/workbuddy-details-renderer.js",
+        "sha256": "883943ad36bf6864098f7b9da5224718353df3b3a1b4e275b84ad76d3b096c3a",
+        "embeddedSha256": "883943ad36bf6864098f7b9da5224718353df3b3a1b4e275b84ad76d3b096c3a"
+      },
+      {
+        "source": "desktop-pet/workbuddy-details.css",
+        "target": "v0408/workbuddy-details.css",
+        "sha256": "df0a4a2abe54668dca34efe4dce30bdb03ed013be5e2d7920d9035674b730091",
+        "embeddedSha256": "df0a4a2abe54668dca34efe4dce30bdb03ed013be5e2d7920d9035674b730091"
+      },
+      {
+        "source": "desktop-pet/workbuddy-details.html",
+        "target": "v0408/workbuddy-details.html",
+        "sha256": "1ab025a85156d628acf71ceb6f50f0ba1ee5c218eb9e3fa70d1ce877f66912a5",
+        "embeddedSha256": "93bf3cf5b5aa618d6eecc1d9cc2aa77e30aa29418a2413c1707a53827ba12cec"
+      },
+      {
+        "source": "desktop-pet/workbuddy-label-renderer.js",
+        "target": "v0408/workbuddy-label-renderer.js",
+        "sha256": "789172dc96f76097a8aa62644240b3014b47dc9e226f404b337821b877b0e765",
+        "embeddedSha256": "789172dc96f76097a8aa62644240b3014b47dc9e226f404b337821b877b0e765"
+      },
+      {
+        "source": "desktop-pet/workbuddy-label.css",
+        "target": "v0408/workbuddy-label.css",
+        "sha256": "6db88cf2707eb86b9413805488f97e920b714d6f8219100ac776878e7a2ce4ab",
+        "embeddedSha256": "6db88cf2707eb86b9413805488f97e920b714d6f8219100ac776878e7a2ce4ab"
+      },
+      {
+        "source": "desktop-pet/workbuddy-label.html",
+        "target": "v0408/workbuddy-label.html",
+        "sha256": "d1beca5439683b93c0e914aced844f0fd68e9b0bf2e912bc207a75c0c7e7e149",
+        "embeddedSha256": "694d3763691c31e13a8f5c4177786a14eed7f4a25a5e629dba44997594a3101e"
+      },
+      {
+        "source": "desktop-pet/workbuddy-tasks-renderer.js",
+        "target": "v0408/workbuddy-tasks-renderer.js",
+        "sha256": "cbb708e7cdfd23338095827747f0e594a2007b633e08ff7cbf4f27f571a7427d",
+        "embeddedSha256": "cbb708e7cdfd23338095827747f0e594a2007b633e08ff7cbf4f27f571a7427d"
+      }
+    ],
+    "adaptations": [
+      "Website bridge supplies synthetic models only; source selector swaps the same native card/detail frames and unloads unused API frames.",
+      "HTML inserts same-origin theme/focus/bridge adapters and search noindex; native ZCode/WorkBuddy renderer and CSS bytes are unchanged.",
+      "ZCode HTML labels replace the shared template Codex labels; unused guard/game and Electron window-motion scripts are omitted.",
+      "Source toolbar labels data as examples; close/reopen uses an in-memory parent action. No credentials, real-account requests, or persistent changes."
+    ]
+  }
 }

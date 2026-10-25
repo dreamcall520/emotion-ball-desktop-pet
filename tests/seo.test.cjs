@@ -76,5 +76,5 @@ test('complete demo pages stay out of standalone search results and the sitemap'
     for (const directive of ['noindex', 'follow', 'indexifembedded']) assert.ok(directives?.includes(directive), `${file}: ${directive}`);
     assert.ok(!sitemap.includes(`/demos/${file}`), `${file}: excluded from sitemap`);
   }
-  assert.equal(count, 10);
+  assert.equal(count, 14);
 });

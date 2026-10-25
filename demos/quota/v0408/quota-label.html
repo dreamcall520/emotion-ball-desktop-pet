@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head><meta name="robots" content="noindex, follow, indexifembedded"><script src="../../../site-protection.js?v=20261008-content"></script>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'none'; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+    <title>ZCode 剩余额度</title>
+    <link rel="stylesheet" href="quota-label.css">
+    <link rel="stylesheet" href="color-mode.css">
+  <script src="../demo-bridge.js?v=20261026-integrations-final"></script><link rel="stylesheet" href="../demo-adapter.css?v=20261026-integrations-final"><link rel="stylesheet" href="../../ui-theme-blue.css?v=20261007-v0404"><script src="../../ui-theme.js?v=20261007-v0404"></script><script src="../../../demo-focus.js?v=20261007-v0404"></script></head>
+  <body>
+    <div id="quota-beam">
+      <section id="quota-label" data-state="disconnected" data-size="standard" data-expanded="false" data-severity="normal" data-has-items="false" data-item-count="0" aria-label="ZCode 剩余额度">
+        <p id="status" role="status" aria-live="polite">ZCode 未连接</p>
+        <p id="summary" aria-hidden="true"></p>
+        <div id="compact-header" aria-hidden="true">
+          <div class="compact-product">
+            <span id="compact-product">ZCODE</span>
+            <span id="compact-period" class="period-pill">周额度</span>
+          </div>
+          <span class="compact-collapse">⌃</span>
+        </div>
+        <ul id="items"></ul>
+        <div id="quota-details" aria-label="额度重置详情">
+          <p id="reset-time"></p>
+          <p id="reset-credits"></p>
+        </div>
+        <div id="secondary-quota" aria-label="另一周期额度">
+          <div class="secondary-heading">
+            <span id="secondary-period" class="period-pill">周额度</span>
+            <span id="secondary-value">--%</span>
+          </div>
+          <progress id="secondary-progress" max="100" value="0"></progress>
+          <p id="secondary-reset"></p>
+        </div>
+        <div id="extra-credits" aria-label="Pro 额外点数余额">
+          <span class="credits-label">额外点数</span>
+          <span class="credits-value"><span id="credits-balance"></span><span id="credits-unit">点</span></span>
+        </div>
+      <p id="overflow"></p>
+      <div id="codex-expanded" aria-label="ZCode 额度与状态"></div>
+      <div id="quota-numbers" aria-label="剩余额度"></div>
+      </section>
+    </div>
+    <button id="quota-guard-entry" type="button" aria-label="进入球球守护战" title="球球守护战" hidden>
+      <span id="guard-entry-pet" class="guard-entry-pet" aria-hidden="true"></span>
+      <span id="guard-entry-zombie" class="guard-entry-zombie" aria-hidden="true"><canvas width="87" height="124"></canvas><svg viewBox="0 0 87 94"></svg></span>
+    </button>
+    <script src="color-mode.js"></script>
+    <script src="credit-balance.js"></script>
+
+    <script src="quota-label-renderer.js"></script>
+
+
+
+
+  </body>
+</html>
