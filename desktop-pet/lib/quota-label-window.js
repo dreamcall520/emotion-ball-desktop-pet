@@ -368,8 +368,11 @@ function createQuotaLabelWindow({
     const token = operation;
     const model = currentModel;
     if (!ready || !confirm(target, token, model)) return;
-    if (getSuppressed() || getPresentation()?.quotaGroupHidden === true) {
-      conceal(target, token, getPresentation()?.quotaAnimateHide === true);
+    const presentation = getPresentation();
+    // Tuck notifications can reflow siblings before their explicit hide call.
+    if (getSuppressed() || presentation?.quotaGroupHidden === true ||
+        presentation?.mode === 'tucked' && presentation.quotaAnimateHide === true) {
+      conceal(target, token, presentation?.quotaAnimateHide === true);
       return;
     }
     const layout = petLayout();

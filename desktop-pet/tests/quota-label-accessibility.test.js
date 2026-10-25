@@ -79,14 +79,14 @@ test('小巧摘要的颜色和状态只描述实际显示的周期，另一周�
   const { nodes, receive } = renderer();
   receive({ state: 'ready', size: 'compact', items: [item(74, 10080), item(15)] });
   assert.equal(nodes.summary.dataset.severity, 'normal');
-  assert.equal(nodes.summary.textContent, 'Codex周74%');
+  assert.equal(nodes.summary.textContent, 'CX周74%');
   assert.equal(nodes['quota-label'].dataset.severity, 'low');
   receive({ state: 'ready', size: 'compact', items: [item(15), item(74, 10080)] });
   assert.equal(nodes.summary.dataset.severity, 'low');
-  assert.equal(nodes.summary.textContent, 'Codex5h15%');
+  assert.equal(nodes.summary.textContent, 'CX5h15%');
   receive({ state: 'ready', size: 'compact', items: [item(0), item(74, 10080)] });
   assert.equal(nodes.summary.dataset.severity, 'urgent');
-  assert.equal(nodes.summary.textContent, 'Codex5h0%');
+  assert.equal(nodes.summary.textContent, 'CX5h0%');
   receive({ state: 'disconnected', items: [] });
   assert.equal(nodes.summary.dataset.severity, 'normal');
   assert.equal(nodes['secondary-value'].textContent, '');
@@ -120,10 +120,11 @@ test('Codex收起卡始终显示来源、周期和百分比；未知周期不截
   const { nodes, receive } = renderer();
   for (const [minutes, period] of [[300,'5h'],[10080,'周'],[12345,'额度']]) for(const remaining of [0,100,91.4]) {
     receive({state:'ready',size:'compact',expanded:false,items:[{label:'上游任意名称',windowMinutes:minutes,remaining}]});
-    assert.equal(nodes.summary.textContent,`Codex${period}${Math.round(remaining)}%`);
-    assert.equal(nodes.summary.children[0].children[0].textContent,'Codex');
+    assert.equal(nodes.summary.textContent,`CX${period}${Math.round(remaining)}%`);
+    assert.equal(nodes.summary.children[0].children[0].textContent,'CX');
+    assert.equal(nodes['quota-label'].title,'Codex 剩余额度');
     receive({state:'ready',size:'standard',expanded:false,items:[{label:'上游任意名称',windowMinutes:minutes,remaining}]});
-    assert.equal(nodes.items.children[0].children[0].textContent,'Codex');
+    assert.equal(nodes.items.children[0].children[0].textContent,'CX');
   }
   receive({state:'ready',size:'compact',expanded:true,items:[item(15)]});
   assert.equal(nodes.summary.textContent,'5h偏低15%','展开卡保留原有摘要语义');

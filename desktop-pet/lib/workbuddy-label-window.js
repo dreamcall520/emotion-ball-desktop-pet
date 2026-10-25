@@ -79,10 +79,13 @@ function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getOb
   function reposition() {
     if (!ready || !visible || !live(win)) return;
     try {
+      const presentation = getPresentation();
+      // Stop before reading a disappearing stack anchor during the edge exit.
+      if (presentation?.mode === 'tucked' && presentation.quotaAnimateHide === true) { hide({ animate: true }); return; }
       const pet = getPetWindow();
       if (!pet || pet.isDestroyed() || !pet.isVisible()) { fade.hide(win); guard.hide(); return; }
       const p = pet.getBounds(), area = screen.getDisplayMatching(p).workArea, obstacles = getObstacles() || [];
-      const stackAnchor = getStackAnchor(), presentation = getPresentation(), bubbleBounds = getBubbleBounds();
+      const stackAnchor = getStackAnchor(), bubbleBounds = getBubbleBounds();
       let bounds = workBuddyLabelBounds(p, area, obstacles, expanded, stackAnchor, presentation, bubbleBounds), spaceError = false;
       if (!bounds && expanded) { expanded = false; spaceError = true; notifyLayout(); bounds = workBuddyLabelBounds(p, area, obstacles, false, stackAnchor, presentation, bubbleBounds); }
       if (!bounds) { fade.hide(win); guard.hide(); return; }
@@ -91,7 +94,7 @@ function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getOb
       win.webContents.send(CHANNEL, { ...current, expanded, spaceError, appearance: ['light', 'dark'].includes(appearance) ? appearance : 'system' });
       win.setIgnoreMouseEvents?.(false);
       fade.show(win, ['peeked', 'tucked'].includes(presentation?.mode));
-      if (!expanded && !valid(stackAnchor) && getGuardEntry() === true) guard.show(bounds, area, [p, ...obstacles], presentation?.side);
+      if (!expanded && getGuardEntry() === true) guard.show(bounds, area, [p, ...obstacles], presentation?.side);
       else guard.hide();
     } catch (e) { guard.hide(); if (live(win)) fade.hide(win); error(e); }
   }

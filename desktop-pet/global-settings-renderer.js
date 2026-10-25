@@ -43,7 +43,7 @@
   const navigationIcons = {
     '和球球聊聊': ['M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-8l-6 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z', 'M7 9h10M7 13h6'],
     '定制球球': ['M12 4a8 8 0 1 0 8 8', 'm15 4 2-2 5 5-2 2-5-5ZM15 4l-6 6-1 4 4-1 6-6'],
-    'API': ['M4 4v16h16', 'M8 16v-4M13 16V8M18 16V5'],
+    'OpenAI API': ['M4 4v16h16', 'M8 16v-4M13 16V8M18 16V5'],
 
     '常用设置': ['m12 3 2.6 5.6 6.1.8-4.5 4.3 1.1 6.1-5.3-3-5.3 3 1.1-6.1-4.5-4.3 6.1-.8Z'],
     '番茄钟': ['M9 3h6M12 3v3M18 7l2-2', 'M12 6a8 8 0 1 0 0 16 8 8 0 0 0 0-16M12 10v4l-2 2'],
@@ -58,6 +58,18 @@
     '常规设置': ['M4 6h7M15 6h5M4 12h2M10 12h10M4 18h10M18 18h2', 'M11 4v4M6 10v4M14 16v4']
   };
   function navigationIcon(label) {
+    const integration = { Codex: 'codex', 'ZCode 联动': 'zcode', WorkBuddy: 'workbuddy' }[label];
+    if (integration) {
+      const image = file => {
+        const icon = el('img', '', 'nav-icon'); icon.src = `assets/integrations/${file}.png`;
+        icon.alt = ''; icon.setAttribute('aria-hidden', 'true'); return icon;
+      };
+      if (integration !== 'codex') return image(integration);
+      const icon = el('span', '', 'nav-icon nav-app-icon'); icon.setAttribute('aria-hidden', 'true');
+      const light = image('codex'), dark = image('codex-dark');
+      light.classList.add('codex-light-icon'); dark.classList.add('codex-dark-icon');
+      icon.append(light, dark); return icon;
+    }
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', '0 0 24 24');
     svg.setAttribute('class', 'nav-icon');
@@ -74,9 +86,9 @@
     const categories = snapshot.entries.filter(entry => entry.children).map(entry => entry.id === '/codex-menu'
       ? { ...entry, label: 'Codex', children: entry.children.filter(child => !child.id.endsWith('/openai-api-menu')) } : entry);
     const apiGroup = snapshot.entries.find(entry => entry.id === '/codex-menu')?.children.find(entry => entry.id.endsWith('/openai-api-menu'));
-    if (apiGroup) categories.push({ ...apiGroup, label: 'API' });
+    if (apiGroup) categories.push({ ...apiGroup, label: 'OpenAI API' });
     const workbuddy = snapshot.entries.find(entry => entry.id === '/workbuddy-enabled');
-    if (workbuddy) categories.push({ id: 'workbuddy-settings', label: 'WorkBuddy', children: [workbuddy] });
+    if (workbuddy) categories.push({ id: 'workbuddy-settings', label: 'WorkBuddy', children: snapshot.entries.filter(entry => /^\/workbuddy-(?:enabled|quota-visible|quota-fun)$/.test(entry.id)) });
     const general = categories.find(entry => entry.label === '常规设置');
     if (general) categories[categories.indexOf(general)] = { ...general, children: [...general.children,
       ...snapshot.entries.filter(entry => entry.id === '/update-check')] };
@@ -141,7 +153,7 @@
       ['', ['常用设置']],
       ['日常陪伴', ['球球与互动', '和球球聊聊', '便签与待办', '番茄钟']],
       ['外观与显示', ['定制球球', '球球尺寸', '贴边与显示', '界面配色']],
-      ['应用与联动', ['Codex', 'API', 'ZCode 联动', 'WorkBuddy']],
+      ['应用与联动', ['Codex', 'OpenAI API', 'ZCode 联动', 'WorkBuddy']],
       ['快捷与常规', ['快捷键', '常规设置']]
     ];
     $('navigation').replaceChildren(...navigationGroups.map(([label, labels]) => {
@@ -186,16 +198,38 @@
     ];
     if (!query && selected === 'shortcuts') {
       $('empty').hidden = true;
-      window.renderSettingsShortcuts($('content'), snapshot.shortcuts, api); return;
+      window.renderSettingsShortcuts($('content'), snapshot.shortcuts, { ...api, saveShortcuts: async config => {
+        const result = await api.saveShortcuts(config);
+        request++;
+        if (result?.config) { snapshot.shortcuts = result.config; last = JSON.stringify(snapshot); }
+        return result;
+      } }); return;
     }
     const searchable = [...categories, { id: 'shortcuts', label: '快捷键', children: snapshot.entries.filter(entry => entry.id === '/shortcut-settings') }, { id: 'windows', label: '独立功能', children: snapshot.entries.filter(entry => externalIds.has(entry.id)) }];
     const displayed = (query ? searchable : selected === 'common' ? commonGroups : categories).flatMap(category => {
-      if (!['/codex-menu', '/zcode-menu'].includes(category.id)) return [category];
-      const information = child => /\/(?:codex-status|codex-tasks-open|codex-trend-open|zcode-quota-detail|zcode-trend|zcode-tasks|zcode-refresh)$/.test(child.id);
-      return [
-        { ...category, heading: '额度展示设置', children: category.children.filter(child => !information(child)) },
-        { ...category, heading: '额度与任务', children: category.children.filter(information) }
-      ];
+      if (category.id.endsWith('/openai-api-menu')) {
+        const card = category.children.find(child => child.id.endsWith('/openai-api-visible'));
+        return card ? [
+          { ...category, heading: '费用卡显示', children: [card] },
+          { ...category, heading: '连接与费用', children: category.children.filter(child => child !== card) }
+        ] : [category];
+      }
+      if (!['/codex-menu', '/zcode-menu', 'workbuddy-settings'].includes(category.id)) return [category];
+      const enable = category.children.find(child => /\/(?:codex|zcode|workbuddy)-enabled$/.test(child.id));
+      if (!enable) return [];
+      const sections = [{ ...category, heading: '启用联动', children: [enable] }];
+      if (enable.checked !== true) return sections;
+      const children = category.children.filter(child => child !== enable);
+      if (category.id === 'workbuddy-settings') return sections.concat([
+        { ...category, heading: '积分卡显示', children: children.filter(child => child.id === '/workbuddy-quota-visible') },
+        { ...category, heading: '积分趣味互动', children: children.filter(child => child.id === '/workbuddy-quota-fun') }
+      ]);
+      const module = child => /\/codex-task-names$/.test(child.id) ? '任务提醒'
+        : /\/(?:codex|zcode)-quota-fun$/.test(child.id) ? '额度趣味互动'
+        : /\/(?:codex-status|codex-tasks-open|codex-trend-open|zcode-quota-detail|zcode-trend|zcode-tasks|zcode-refresh)$/.test(child.id) ? '额度与任务信息' : '额度显示';
+      return sections.concat(['任务提醒', '额度显示', '额度趣味互动', '额度与任务信息'].map(heading => ({
+        ...category, heading, children: children.filter(child => module(child) === heading)
+      })));
     });
     for (const category of displayed) {
       if (!query && selected !== category.id) continue;

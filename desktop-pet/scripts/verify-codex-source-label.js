@@ -22,7 +22,7 @@ app.whenReady().then(async()=>{
   const actual=await w.webContents.executeJavaScript(`new Promise(resolve=>requestAnimationFrame(()=>{const card=document.querySelector('#quota-label'),compact=card.dataset.size==='compact'; const elements=[...document.querySelectorAll(compact?'#summary,.summary-period,.summary-badge,.summary-period-label,.summary-value':'#items,.quota-name,.quota-period,.quota-value')];resolve({summary:document.querySelector('#summary').textContent,elements:elements.map(e=>{const r=e.getBoundingClientRect();return{text:e.textContent,client:e.clientWidth,scroll:e.scrollWidth,x:r.x,right:r.right,width:r.width}}),card:card.getBoundingClientRect().toJSON()});}))`);
   const name=JSON.stringify({appearance,scheme,colorMode,size,minutes,remaining});
   for(const e of actual.elements){assert(e.scroll<=e.client+1,`${name}: clipped ${JSON.stringify(e)}`);assert(e.x>=actual.card.x&&e.right<=actual.card.right,`${name}: outside ${JSON.stringify(e)}`)}
-  if(size==='compact')assert.equal(actual.summary,`Codex${minutes===300?'5h':minutes===10080?'周':'额度'}${Math.round(remaining)}%`);
+  if(size==='compact')assert.equal(actual.summary,`CX${minutes===300?'5h':minutes===10080?'周':'额度'}${Math.round(remaining)}%`);
   assert.equal(w.isVisible(),false);results.push({name,...actual});
  }
  const out=path.join(process.env.PET_SMOKE_ARTIFACT_DIR || path.resolve(__dirname,'../build'),'codex-source-dom-evidence.json');fs.mkdirSync(path.dirname(out),{recursive:true});fs.writeFileSync(out,JSON.stringify({passed:true,cases:results.length,results},null,2));console.log(JSON.stringify({passed:true,cases:results.length,out}));passed=true;

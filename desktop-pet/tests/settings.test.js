@@ -105,7 +105,7 @@ test('损坏文件回退且有效设置可回读', t => {
     uiTheme: 'blue',
     chatModel: 'auto',
     chatSource: 'codex', zcodeChatModel: 'auto', zcodeEnabled: false, zcodeQuotaAlwaysVisible: true, zcodeQuotaFunEnabled: true, zcodeQuotaLabelSize: 'compact',
-    chatProvider: 'codex', workbuddyEnabled: false, workbuddyModel: 'auto',
+    chatProvider: 'codex', workbuddyEnabled: false, workbuddyQuotaAlwaysVisible: true, workbuddyQuotaFunEnabled: true, workbuddyModel: 'auto',
     notesDefaultTab: 'note', notesAppearance: 'light', shortcutSettings: DEFAULTS.shortcutSettings,
     customization: DEFAULTS.customization,
     quotaDisplay: DEFAULTS.quotaDisplay,
@@ -129,7 +129,7 @@ test('损坏文件回退且有效设置可回读', t => {
 test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
   assert.deepEqual(normalizeSettings({ size: 'small', x: -102.3, y: 81.8, alwaysOnTop: false }), {
     size: 'small', x: -102, y: 82, alwaysOnTop: false,
-    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', uiTheme: 'blue', chatModel: 'auto', chatSource: 'codex', zcodeChatModel: 'auto', zcodeEnabled: false, zcodeQuotaAlwaysVisible: true, zcodeQuotaFunEnabled: true, zcodeQuotaLabelSize: 'compact', chatProvider: 'codex', workbuddyEnabled: false, workbuddyModel: 'auto', notesDefaultTab: 'note', notesAppearance: 'light', shortcutSettings: DEFAULTS.shortcutSettings, customization: DEFAULTS.customization,
+    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', uiTheme: 'blue', chatModel: 'auto', chatSource: 'codex', zcodeChatModel: 'auto', zcodeEnabled: false, zcodeQuotaAlwaysVisible: true, zcodeQuotaFunEnabled: true, zcodeQuotaLabelSize: 'compact', chatProvider: 'codex', workbuddyEnabled: false, workbuddyQuotaAlwaysVisible: true, workbuddyQuotaFunEnabled: true, workbuddyModel: 'auto', notesDefaultTab: 'note', notesAppearance: 'light', shortcutSettings: DEFAULTS.shortcutSettings, customization: DEFAULTS.customization,
     quotaDisplay: DEFAULTS.quotaDisplay,
     startupAppearance: DEFAULTS.startupAppearance,
     appearancePresets: [], codexEnabled: false,
@@ -460,4 +460,20 @@ test('WorkBuddy 设置独立保存，保留 Codex 额度偏好与原聊天模型
   assert.equal(after.chatProvider, 'workbuddy');
   assert.equal(normalizeSettings({ chatProvider: 'other', workbuddyEnabled: 'true', workbuddyModel: 'bad\nmodel' }).chatProvider, 'codex');
   assert.equal(normalizeSettings({ workbuddyEnabled: 'true' }).workbuddyEnabled, false);
+});
+
+test('WorkBuddy 显示与趣味偏好独立保存，老配置仅继承旧趣味行为', t => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'qiuqiu-workbuddy-prefs-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  assert.equal(DEFAULTS.workbuddyQuotaAlwaysVisible,true);assert.equal(DEFAULTS.workbuddyQuotaFunEnabled,true);
+  for(const codexFun of [undefined,true,false]) {
+    const old=normalizeSettings({codexQuotaFunEnabled:codexFun});
+    assert.equal(old.workbuddyQuotaAlwaysVisible,true);assert.equal(old.workbuddyQuotaFunEnabled,codexFun!==false);
+  }
+  assert.equal(normalizeSettings({codexQuotaFunEnabled:false,workbuddyQuotaFunEnabled:true}).workbuddyQuotaFunEnabled,true);
+  assert.equal(normalizeSettings({codexQuotaFunEnabled:true,workbuddyQuotaFunEnabled:false}).workbuddyQuotaFunEnabled,false);
+  assert.equal(normalizeSettings({workbuddyQuotaAlwaysVisible:'false',workbuddyQuotaFunEnabled:'false'}).workbuddyQuotaAlwaysVisible,true);
+  assert.equal(normalizeSettings({workbuddyQuotaFunEnabled:'false',codexQuotaFunEnabled:false}).workbuddyQuotaFunEnabled,false);
+  const file=path.join(dir,'settings.json');const after=saveSettings(file,{codexQuotaAlwaysVisible:true,codexQuotaFunEnabled:true,zcodeQuotaFunEnabled:true,workbuddyEnabled:true,workbuddyQuotaAlwaysVisible:false,workbuddyQuotaFunEnabled:false});
+  assert.deepEqual(loadSettings(file),after);assert.equal(after.workbuddyQuotaAlwaysVisible,false);assert.equal(after.workbuddyQuotaFunEnabled,false);
+  assert.equal(after.codexQuotaAlwaysVisible,true);assert.equal(after.codexQuotaFunEnabled,true);assert.equal(after.zcodeQuotaFunEnabled,true);
 });

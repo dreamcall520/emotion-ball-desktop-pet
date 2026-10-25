@@ -165,6 +165,7 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/lib/chat-companion.js',
     'desktop-pet/lib/chat-models.js',
     'desktop-pet/lib/codex-chat-rpc.js',
+    ...['codex.png', 'codex-dark.png', 'zcode.png', 'workbuddy.png', 'SOURCES.md'].map(file => `desktop-pet/assets/integrations/${file}`),
     'desktop-pet/assets/tray-iconTemplate.png',
     'desktop-pet/assets/tray-iconTemplate@2x.png',
     'desktop-pet/assets/aurora-six-lobe-body.png',

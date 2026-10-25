@@ -171,7 +171,11 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
         const target = win, token = revision;
         activeTarget = target;
         if (!active(target, token)) return;
-    if (getPresentation()?.quotaGroupHidden === true) { conceal(target, token, getPresentation()?.quotaAnimateHide === true); return; }
+        const presentation = getPresentation();
+        // Preserve the visible origin while predecessor hide callbacks re-enter layout.
+        if (presentation?.quotaGroupHidden === true || presentation?.mode === 'tucked' && presentation.quotaAnimateHide === true) {
+          conceal(target, token, presentation?.quotaAnimateHide === true); return;
+        }
         const pet = getPetWindow();
         if (!active(target, token)) { if (pending) continue; return; }
         if (!pet || pet.isDestroyed() || !pet.isVisible()) { hide(); return; }
@@ -179,7 +183,6 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
         const area = screen.getDisplayMatching(bounds).workArea;
         const quota = watchQuota();
         const obstacle = getObstacleBounds();
-        const presentation = getPresentation();
         const appearanceValue = getAppearance();
         const appearance = ['light', 'dark'].includes(appearanceValue) ? appearanceValue : 'system';
         if (!active(target, token)) { if (pending) continue; return; }

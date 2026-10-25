@@ -7,8 +7,10 @@ if (!process.versions.electron) {
   const child = require('node:child_process').spawn(require('electron'), [__filename], { env, stdio: 'inherit' });
   child.on('exit', code => { fs.rmSync(data, { recursive: true, force: true }); process.exitCode = code ?? 1; });
 } else {
-  const sourceRoot = process.env.PET_LAYOUT_SOURCE_ROOT || path.resolve(__dirname, '../..');
+  const sourceRoot = path.resolve(process.env.PET_LAYOUT_SOURCE_ROOT || path.resolve(__dirname, '../..'));
   const { app, BrowserWindow: NativeWindow, screen: nativeScreen, ipcMain, session } = require('electron');
+  process.on('uncaughtException', error => { console.error(error.stack); app.exit(1); });
+  process.on('unhandledRejection', error => { console.error(error.stack); app.exit(1); });
   const { createQuotaLabelWindow } = require(path.join(sourceRoot, 'desktop-pet/lib/quota-label-window'));
   const { createApiUsageLabelWindow } = require(path.join(sourceRoot, 'desktop-pet/lib/api-usage-label-window'));
   const { createZcodeLink } = require(path.join(sourceRoot, 'desktop-pet/lib/zcode-link'));
@@ -96,8 +98,21 @@ if (!process.versions.electron) {
         return visible;
       };
       showAll();
-      for (let i = 0; i < 100 && !Object.values(controllers).every(c => c.getWindow()?.webContents.getURL()); i++) await wait(30);
-      await wait(200); await settle();
+      const readyDeadline = Date.now() + 30000;
+      let initialReady;
+      for (;;) {
+        sync(); Object.values(controllers).forEach(controller => controller.reposition());
+        initialReady = Object.fromEntries(Object.entries(controllers).map(([id, controller]) => {
+          const win = controller.getWindow();
+          return [id, { loaded: Boolean(win && !win.webContents.isLoadingMainFrame()), visible: Boolean(win?.isVisible()), bounds: controller.getVisibleBounds() }];
+        }));
+        assert.deepEqual(errors, [], 'initial controller loading failed');
+        if (Object.values(initialReady).every(state => state.loaded && state.visible && state.bounds)) break;
+        assert(Date.now() < readyDeadline, `four native controllers were not ready: ${JSON.stringify(initialReady)}`);
+        await wait(25);
+      }
+      report.initialReady = initialReady;
+      for (const controller of Object.values(controllers)) assert.equal(await controller.getWindow().webContents.executeJavaScript('document.readyState'), 'complete');
       const cx = area.x + Math.round(area.width / 2) - 40;
       for (const [name, x, y] of [['center', cx, area.y + 80], ['bottom', cx, area.y + area.height - 100], ['top-left', area.x, area.y], ['top-right', area.x + area.width - 80, area.y], ['bottom-left', area.x, area.y + area.height - 80], ['bottom-right', area.x + area.width - 80, area.y + area.height - 80]]) {
         pet.setBounds({ x, y, width: 80, height: 80 }, false); await settle(); assert.equal(check(name).length, 4);
@@ -153,6 +168,53 @@ if (!process.versions.electron) {
       presentation = { ...presentation, mode: 'tucked', quotaAnimateHide: false };
       for (const controller of Object.values(controllers)) controller.hide();
       for (const controller of Object.values(controllers)) assert.equal(controller.getWindow().isVisible(), false, 'safety hide was delayed');
+      Object.assign(scope, {
+        sendPresentation() {}, stopMotion() {}, dialogue: { dismiss() {} }, bubble: { hide() {} },
+        quotaGuard: { close() {}, reposition() {} }, workbuddyDetails: null,
+        syncQuotaLabel: showAll, codexCompanion: { getSnapshot() {} },
+        syncWorkBuddyLabel: () => presentation.mode === 'tucked'
+          ? workbuddy.hide({ animate: presentation.quotaAnimateHide === true })
+          : workbuddy.show({ enabled: true, report: { total: 100, basic: 80, reward: 20, purchased: 0 } }),
+        tickEdgeNotice() {}, pomodoroWindows: { sync() {} }, shortcutWindow: { sync() {}, wakeFromEdge() {} }, refreshTrayMenu() {},
+        reportQuotaError: (_name, error) => onError(error)
+      });
+      const functionSource = (start, end) => main.slice(main.indexOf(start), main.indexOf(end, main.indexOf(start)));
+      Function('scope', 'with(scope){'
+        + functionSource("let lastPresentationMode =", '\nfunction edgeRetentionBounds')
+        + functionSource('function hideBubble()', '\nfunction repositionBubble')
+        + functionSource('function repositionQuotaLabel()', '\nfunction syncApiUsageLabel')
+        + ';scope.apply=applyPresentation;}')(scope);
+      report.fadeBounds = [];
+      for (const side of ['left', 'right']) for (const expanded of [false, true]) {
+        presentation = { mode: 'peeked', side, shape: 'blob' };
+        pet.setBounds({ x: side === 'left' ? area.x : area.x + area.width - 80, y: area.y + 20, width: 80, height: 80 }, false);
+        scope.apply({ ...presentation, suppressed: false }); await settle();
+        if (expanded) for (const id of Object.keys(controllers)) await toggle(id);
+        assert.equal(check(`fade-origin-${side}-${expanded}`).length, 4);
+        const frozen = Object.fromEntries(Object.entries(controllers).map(([id, controller]) => [id, controller.getWindow().getBounds()]));
+        presentation = { ...presentation, mode: 'tucked', quotaAnimateHide: true };
+        const previousPet = pet.getBounds();
+        pet.setBounds({ ...previousPet, x: previousPet.x + (side === 'left' ? 12 : -12), y: previousPet.y + 18 }, false);
+        const samples = [];
+        const unchanged = stage => {
+          for (const [id, controller] of Object.entries(controllers)) {
+            const win = controller.getWindow();
+            assert.deepEqual(win.getBounds(), frozen[id], `${side}/${expanded}/${stage}: ${id} moved before exit finished`);
+            assert.equal(win.nativeVisible(), false);
+          }
+        };
+        // Bubble dismissal and predecessor hide notifications can re-enter every controller
+        // before the later cards receive their explicit hide call in main.
+        scope.apply({ ...presentation, suppressed: true }); unchanged('main-apply-hideBubble-cascade');
+        for (const [id, controller] of Object.entries(controllers)) { controller.reposition(); unchanged(`reposition-${id}`); }
+        for (const [id, controller] of Object.entries(controllers)) { controller.hide({ animate: true }); sync(); unchanged(`hide-${id}`); }
+        for (let frame = 0; frame < 14; frame++) {
+          await wait(16); unchanged(`frame-${frame}`);
+          samples.push(Object.fromEntries(Object.entries(controllers).map(([id, controller]) => [id, { bounds: controller.getWindow().getBounds(), visible: controller.getWindow().isVisible(), opacity: controller.getWindow().getOpacity() }])));
+        }
+        for (const controller of Object.values(controllers)) assert.equal(controller.getWindow().isVisible(), false);
+        report.fadeBounds.push({ side, expanded, before: frozen, movedPet: pet.getBounds(), samples });
+      }
       report.opacityTransition = { duration: 180, nativeInterpolation: true, realExit: true, rapidReopen: true, immediateSafetyHide: true };
       report.passed = true;
       console.log('COMBINED_LAYOUT_NATIVE_OK', JSON.stringify({ cases: report.cases.length, out }));

@@ -562,7 +562,7 @@
       if (model.sourceId === 'zcode') {
         label.title = `ZCode 剩余额度${model.items.length ? '：' + model.items.map(item => `${itemTitle(item)}，剩余 ${remainingText(item.remaining, model.sourceId)}`).join('；') : ''}`;
         label.setAttribute?.('aria-label', label.title);
-      } else label.setAttribute?.('aria-label', 'Codex 剩余额度');
+      } else { label.title = 'Codex 剩余额度'; label.setAttribute?.('aria-label', label.title); }
       expandedCard?.setAttribute?.('aria-label', model.sourceId === 'zcode' ? 'ZCode 额度与状态' : 'Codex 额度与状态');
       label.dataset.state = model.state;
       label.dataset.display = model.display === 'numbers' ? 'numbers' : 'card';
@@ -594,7 +594,7 @@
         nameNode.className = 'quota-name';
         nameNode.textContent = model.sourceId === 'zcode' && model.size === 'standard'
           ? ({ 'GLM-5.3': '5.3', 'GLM-5.3-Flash': '5.3 Flash' }[item.label] || item.label)
-          : model.sourceId !== 'zcode' && !model.expanded && model.size === 'standard' ? 'Codex' : item.label;
+          : model.sourceId !== 'zcode' && !model.expanded && model.size === 'standard' ? 'CX' : item.label;
         if (model.sourceId === 'zcode') nameNode.setAttribute?.('aria-label', item.label);
         if (model.sourceId === 'zcode') nameNode.title = itemTitle(item);
         periodNode.className = 'quota-period period-pill';
@@ -627,7 +627,7 @@
         const caption = codexCollapsed ? ({ 300: '5h', 10080: '周' }[summaryItem.windowMinutes] || '额度')
           : model.sourceId === 'zcode' ? '额度' : label.dataset.status === 'blocked' ? '受限' : severityText(summaryItem.remaining) || '额度';
         summary.replaceChildren(...compactReading(summaryItem.windowMinutes, remainingText(summaryItem.remaining, model.sourceId),
-          caption, model.sourceId === 'zcode' ? 'Z' : codexCollapsed ? 'Codex' : null));
+          caption, model.sourceId === 'zcode' ? 'Z' : codexCollapsed ? 'CX' : null));
         if (compactProduct) compactProduct.textContent = model.sourceId === 'zcode' ? 'ZCODE' : 'CODEX';
         if (compactPeriod) compactPeriod.textContent = itemTitle(summaryItem);
       } else {

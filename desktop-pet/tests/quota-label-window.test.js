@@ -1230,7 +1230,7 @@ test('小巧横条只显示摘要，小巧和标准卡片均可点击展开明�
   assert.equal(label.dataset.expanded, 'false');
   assert.equal(label.dataset.appearance, 'dark');
   assert.equal(root.dataset.appearance, 'dark');
-  assert.equal(summary.children.map(node => node.textContent).join(''), 'Codex周64%');
+  assert.equal(summary.children.map(node => node.textContent).join(''), 'CX周64%');
   assert.deepEqual(summary.children.map(node => node.className), ['summary-period', 'summary-value']);
   click();
   assert.equal(toggles, 1);
@@ -1883,5 +1883,19 @@ test('peek card keeps visible renderer through native exit and cancels late hide
   f.label.hide({ animate: true }); f.label.show(readyModel());
   await new Promise(resolve => setTimeout(resolve, 220));
   assert.equal(win.visible, true); assert.equal(win.opacity, 1);
+  f.label.hide(); assert.equal(win.visible, false);
+});
+
+for (const sourceId of ['codex', 'zcode']) test(`${sourceId} tucked exit freezes native bounds before reentrant layout callbacks`, async t => {
+  const f = fixture(() => Promise.resolve(), { sourceId, presentation: { mode: 'peeked', side: 'right' } });
+  t.after(() => f.label.destroy());
+  f.label.show(readyModel()); await flush(); const win = f.windows[0]; win.setOpacity = value => { win.opacity = value; };
+  const before = win.getBounds();
+  f.presentation = { mode: 'tucked', side: 'right', quotaAnimateHide: true }; f.pet.bounds.y += 160;
+  f.label.reposition(); assert.deepEqual(win.getBounds(), before);
+  f.label.show(readyModel()); assert.deepEqual(win.getBounds(), before, 'late refresh stays frozen');
+  await new Promise(resolve => setTimeout(resolve, 220)); assert.equal(win.visible, false);
+  f.presentation = { mode: 'peeked', side: 'right' }; f.label.show(readyModel());
+  assert.equal(win.visible, true); assert.notDeepEqual(win.getBounds(), before);
   f.label.hide(); assert.equal(win.visible, false);
 });

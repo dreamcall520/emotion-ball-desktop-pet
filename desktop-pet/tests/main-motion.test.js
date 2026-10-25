@@ -261,8 +261,8 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
       } };
       if (name === './lib/workbuddy-consent-window') return { createWorkBuddyConsent: () => ({request: async () => workbuddyConsentAnswer, cancel() {}, close() {}, isPending:()=>false, getWindow:()=>null}) };
       if (name === './lib/workbuddy-client') return { runWorkBuddy };
-      if (name === './lib/workbuddy-label-window') return { ...realRequire(name), createWorkBuddyLabelWindow: () => ({
-        show() {}, hide() {}, reposition() {}, setAlwaysOnTop() {}, destroy() {}, getWindow: () => null
+      if (name === './lib/workbuddy-label-window') return { ...realRequire(name), createWorkBuddyLabelWindow: options => ({
+        options, show(state) { this.visible = true; this.state = state; }, hide() { this.visible = false; }, reposition() {}, setAlwaysOnTop() {}, destroy() {}, getWindow: () => null
       }) };
       if (name === './lib/chat-companion') return { createChatCompanion: options => { chat.options = options; return chat; } };
       if (name === './lib/notes-companion') return { createNotesCompanion: options => { notes.options = options; return notes; } };
@@ -878,12 +878,12 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   const menu = f.call('menuTemplate()');
   const top = menu.filter(item => item.type !== 'separator');
   assert.deepEqual(Array.from(top, item => item.label), [
-    '设置中心', '和球球聊聊', '启用 WorkBuddy 联动', '定制球球', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API', 'ZCode 联动',
+    '设置中心', '和球球聊聊', '启用 WorkBuddy 联动', '显示 WorkBuddy 积分卡', 'WorkBuddy 趣味游戏', '定制球球', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API', 'ZCode 联动',
     '贴边与显示', '球球尺寸', '界面配色', '常规设置', '关于球球', '检查更新', '退出球球'
   ]);
   const group = label => top.find(item => item.label === label).submenu.filter(item => item.type !== 'separator');
   assert.equal(top.find(item => item.id === 'chat-open').submenu, undefined);
-  assert.equal(top[3].id, 'customize-open');
+  assert.equal(top[5].id, 'customize-open');
   assert.equal(top[1].submenu, undefined);
   assert.deepEqual(Array.from(group('便签与待办'), item => item.id), ['notes-open', 'notes-new', 'notes-todo-new', 'notes-default-tab']);
   assert.deepEqual(Array.from(group('便签与待办'), item => item.label), ['打开主面板', '新建便签', '添加待办', '默认打开']);
@@ -3921,4 +3921,61 @@ test('设置中心Codex摘要只返回可展示状态且额度与任务入口可
   f.call('codexDetails.close()');
   menuItem(f, 'codex-tasks-open').click(); assert.equal(f.call('codexDetails.getAction()'), 'tasks');
   assert.doesNotMatch(JSON.stringify(state), /token|credential|sk-/i);
+});
+
+test('WorkBuddy 独立显示开关同步菜单和布局，隐藏不停止联动数据与任务', async t => {
+  const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true});t.after(()=>f.app.emit('before-quit'));
+  assert.equal(menuItem(f,'workbuddy-quota-visible').enabled,false);assert.equal(menuItem(f,'workbuddy-quota-fun').enabled,false);
+  assert.equal(f.call("setWorkBuddyPreference('workbuddyQuotaAlwaysVisible',false)"),false);
+  assert.equal(await f.call('setWorkBuddyEnabled(true)'),true);await flush();
+  const before=f.call('JSON.stringify({codex:settings.codexEnabled,visible:settings.codexQuotaAlwaysVisible,fun:settings.codexQuotaFunEnabled})');
+  const report=f.call('JSON.stringify(workbuddyQuota.getState().report)');
+  assert.equal(f.call('workbuddyLabel.visible'),true);
+  menuItem(f,'global-settings').click();const settingsWindow=f.call('globalSettingsWindow');settingsWindow.emit('ready-to-show');
+  const changed=await f.invoke('pet:global-settings-action','/workbuddy-quota-visible',settingsWindow.webContents,false);
+  assert.equal(changed.error,undefined);assert.equal(changed.snapshot.entries.find(item=>item.id==='/workbuddy-quota-visible').checked,false);
+  assert.equal(f.call('workbuddyLabel.visible'),false);assert.equal(f.call('settings.workbuddyEnabled'),true);
+  assert.equal(f.call('workbuddyQuota.getState().enabled'),true);assert.equal(f.call('JSON.stringify(workbuddyQuota.getState().report)'),report);
+  assert.equal(menuItem(f,'workbuddy-quota-visible').checked,false);assert.equal(f.saved.at(-1).workbuddyQuotaAlwaysVisible,false);
+  const queried=f.workbuddyCalls.length;await f.call('workbuddyQuota.refresh()');await f.call('workbuddyTasks.refresh(true)');await f.call('workbuddyUsage.refresh(true)');await flush();
+  const operations=f.workbuddyCalls.slice(queried).map(item=>item.operation);for(const operation of ['quota','tasks','usage'])assert(operations.includes(operation));
+  assert.equal(f.call('JSON.stringify({codex:settings.codexEnabled,visible:settings.codexQuotaAlwaysVisible,fun:settings.codexQuotaFunEnabled})'),before);
+  menuItem(f,'workbuddy-quota-visible').click({checked:true});assert.equal(f.call('workbuddyLabel.visible'),true);
+  assert.equal(menuItem(f,'workbuddy-quota-visible').checked,true);
+  f.call('globalThis.noticeState=null;edgeNotice={...edgeNotice,tick(state){globalThis.noticeState=state;}};settings.workbuddyQuotaAlwaysVisible=false;tickEdgeNotice(true)');
+  assert.equal(f.call('noticeState.workbuddyEnabled'),false);
+  f.call('settings.workbuddyQuotaAlwaysVisible=true;tickEdgeNotice(true)');assert.equal(f.call('noticeState.workbuddyEnabled'),true);
+});
+
+test('WorkBuddy 趣味开关不依赖 Codex，独立入口与进行中的游戏即时更新', async t => {
+  const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true});t.after(()=>f.app.emit('before-quit'));
+  await f.call('setWorkBuddyEnabled(true)');await flush();
+  f.call("settings.codexQuotaFunEnabled=false;settings.workbuddyQuotaFunEnabled=true;quotaLabel.isGuardEntryVisible=()=>false;zcodeLink={...zcodeLink,isCardAvailable:()=>true,isDetailsVisible:()=>false};settings.zcodeQuotaFunEnabled=false;quotaGuard={visible:false,closes:0,isVisible(){return this.visible;},close(){this.closes++;this.visible=false;},open(){this.visible=true;return true;}}");
+  assert.equal(f.call('workbuddyLabel.options.getGuardEntry()'),true,'关闭其它来源趣味不应挡住 WorkBuddy 入口');
+  f.call('quotaLabel.isGuardEntryVisible=()=>true');assert.equal(f.call('workbuddyLabel.options.getGuardEntry()'),false,'Codex 实际入口优先，避免重复');
+  f.call('quotaLabel.isGuardEntryVisible=()=>false;settings.zcodeQuotaFunEnabled=true');assert.equal(f.call('workbuddyLabel.options.getGuardEntry()'),false,'ZCode 趣味入口有效时继续优先');
+  f.call('settings.zcodeQuotaFunEnabled=false');
+  assert.equal(f.call("openQuotaGuard('workbuddy')"),true);
+  menuItem(f,'workbuddy-quota-fun').click({checked:false});assert.equal(f.call('quotaGuard.visible'),false);assert.equal(f.call('quotaGuard.closes'),1);
+  assert.equal(f.call('settings.workbuddyEnabled'),true);assert.equal(f.call('workbuddyLabel.options.getGuardEntry()'),false);assert.equal(f.call("openQuotaGuard('workbuddy')"),false);
+  assert.equal(f.call('settings.codexQuotaFunEnabled'),false);assert.equal(f.call('settings.zcodeQuotaFunEnabled'),false);
+  menuItem(f,'workbuddy-quota-fun').click({checked:true});assert.equal(f.call('workbuddyLabel.options.getGuardEntry()'),true);
+  f.call("quotaGuardSource='codex';quotaGuard.visible=true");const closes=f.call('quotaGuard.closes');
+  menuItem(f,'workbuddy-quota-fun').click({checked:false});assert.equal(f.call('quotaGuard.closes'),closes,'不能关闭 Codex 的游戏');assert.equal(f.call('quotaGuard.visible'),true);
+  f.call("quotaGuardSource='workbuddy';quotaGuard.visible=true");menuItem(f,'workbuddy-quota-visible').click({checked:false});assert.equal(f.call('quotaGuard.visible'),false);
+  assert.equal(f.call("openQuotaGuard('workbuddy')"),false);
+  f.call('zcodeLink=null');
+});
+
+test('WorkBuddy 偏好保存失败保留真实状态，设置中心不误报成功', async t => {
+  const {normalizeSettings}=require('../lib/settings');
+  const f=await fixture({loadedSettings:normalizeSettings({workbuddyEnabled:true}),saveError:new Error('settings blocked')});t.after(()=>f.app.emit('before-quit'));await flush();
+  f.call('globalThis.closes=0;quotaGuard={close(){globalThis.closes++;},isVisible:()=>false};quotaGuardSource="workbuddy"');
+  assert.equal(f.call("setWorkBuddyPreference('workbuddyQuotaFunEnabled',false)"),false);
+  assert.equal(f.call('settings.workbuddyQuotaFunEnabled'),true);assert.equal(f.call('closes'),0);assert.equal(menuItem(f,'workbuddy-quota-fun').checked,true);
+  menuItem(f,'global-settings').click();const win=f.call('globalSettingsWindow');win.emit('ready-to-show');
+  const result=await f.invoke('pet:global-settings-action','/workbuddy-quota-visible',win.webContents,false);
+  assert.ok(result.error);assert.equal(f.call('settings.workbuddyQuotaAlwaysVisible'),true);assert.equal(f.call('workbuddyLabel.visible'),true);
+  assert.equal(result.snapshot.entries.find(item=>item.id==='/workbuddy-quota-visible').checked,true);
+  assert.equal(f.call("setWorkBuddyPreference('codexQuotaFunEnabled',false)"),false);assert.equal(f.call("setWorkBuddyPreference('workbuddyQuotaFunEnabled','false')"),false);
 });

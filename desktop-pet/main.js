@@ -904,7 +904,7 @@ function tickEdgeNotice(force = false) {
     && settings.zcodeQuotaAlwaysVisible === true && !shortcutWindow?.isPresenting();
   edgeNotice?.tick({ presentation, visible, locked: screenLocked,
     bubblesEnabled: settings?.bubblesEnabled === true, quotaEnabled, zcodeQuotaEnabled,
-    workbuddyEnabled: settings?.workbuddyEnabled === true, workbuddyState: workbuddyQuota?.getState(),
+    workbuddyEnabled: settings?.workbuddyEnabled === true && settings.workbuddyQuotaAlwaysVisible !== false, workbuddyState: workbuddyQuota?.getState(),
     appearance: settings?.codexQuotaAppearance,
     quotaModel: visible && quotaEnabled && presentation?.mode === 'tucked'
       ? buildQuotaLabelModel(codexCompanion?.getSnapshot(), { period: settings.codexQuotaPeriod, size: 'compact',
@@ -1126,9 +1126,22 @@ function syncWorkBuddyLabel() {
   if (!workbuddyLabel || !workbuddyQuota) return;
   const eligible = settings?.workbuddyEnabled === true && !isQuitting && !screenLocked && !pomodoroQuiet &&
     !chatWindow?.isVisible() && !shortcutWindow?.isPresenting() && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
-  const visible = eligible && !zcodeLink?.isDetailsVisible() && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible() && !quotaGuard?.isVisible();
+  const visible = eligible && settings.workbuddyQuotaAlwaysVisible !== false && !zcodeLink?.isDetailsVisible() && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible() && !quotaGuard?.isVisible();
   safelyInvokeWindow('WorkBuddy 积分显示', () => visible ? workbuddyLabel.show(workBuddyCardState()) : workbuddyLabel.hide({ animate: quotaEdgeFadeOut && !screenLocked && !isQuitting }));
   if (!eligible) workbuddyDetails?.close();
+}
+
+function setWorkBuddyPreference(name, value) {
+  if (!settings?.workbuddyEnabled || isQuitting || typeof value !== 'boolean' ||
+      !['workbuddyQuotaAlwaysVisible', 'workbuddyQuotaFunEnabled'].includes(name) || settings[name] === value) return false;
+  try { settings = saveSettings(settingsFile, { ...settings, [name]: value }); }
+  catch (_) { refreshTrayMenu(); return false; }
+  if (!value && quotaGuardSource === 'workbuddy') quotaGuard?.close();
+  syncWorkBuddyLabel();
+  syncQuotaFreeStack();
+  tickEdgeNotice(true);
+  refreshTrayMenu();
+  return true;
 }
 
 async function setWorkBuddyEnabled(value) {
@@ -1476,7 +1489,7 @@ function canShowQuotaGuard() {
     && settings?.zcodeEnabled === true && settings.zcodeQuotaAlwaysVisible === true && settings.zcodeQuotaFunEnabled !== false
     && !chatWindow?.isVisible() && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible() && !presentationSuppressed()
     && zcodeLink?.isEnabled() && zcodeLink.isCardAvailable());
-  if (quotaGuardSource === 'workbuddy') return Boolean(!isQuitting && !screenLocked && !shortcutWindow?.isPresenting() && settings?.workbuddyEnabled && settings.codexQuotaFunEnabled !== false && !chatWindow?.isVisible() && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible() && !presentationSuppressed() && petWindow?.isVisible());
+  if (quotaGuardSource === 'workbuddy') return Boolean(!isQuitting && !screenLocked && !shortcutWindow?.isPresenting() && settings?.workbuddyEnabled && settings.workbuddyQuotaAlwaysVisible !== false && settings.workbuddyQuotaFunEnabled !== false && !chatWindow?.isVisible() && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible() && !presentationSuppressed() && petWindow?.isVisible());
   return Boolean(!isQuitting && !screenLocked && !shortcutWindow?.isPresenting() && settings?.codexEnabled === true &&
     settings.codexQuotaAlwaysVisible === true && settings.codexQuotaFunEnabled !== false &&
     !chatWindow?.isVisible() && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible() && !zcodeLink?.isDetailsVisible() &&
@@ -2111,6 +2124,10 @@ function menuTemplate() {
     { id: 'chat-open', label: '和球球聊聊', click: openChat },
     { id: 'workbuddy-enabled', label: '启用 WorkBuddy 联动', type: 'checkbox', checked: settings.workbuddyEnabled,
       click: item => { void setWorkBuddyEnabled(item.checked); } },
+    { id: 'workbuddy-quota-visible', label: '显示 WorkBuddy 积分卡', type: 'checkbox', enabled: settings.workbuddyEnabled === true, checked: settings.workbuddyQuotaAlwaysVisible !== false,
+      click: item => { const enabled = item.checked; item.checked = settings.workbuddyQuotaAlwaysVisible !== false; setWorkBuddyPreference('workbuddyQuotaAlwaysVisible', enabled); } },
+    { id: 'workbuddy-quota-fun', label: 'WorkBuddy 趣味游戏', type: 'checkbox', enabled: settings.workbuddyEnabled === true, checked: settings.workbuddyQuotaFunEnabled !== false,
+      click: item => { const enabled = item.checked; item.checked = settings.workbuddyQuotaFunEnabled !== false; setWorkBuddyPreference('workbuddyQuotaFunEnabled', enabled); } },
     { id: 'customize-open', label: '定制球球', click: openCustomization },
     { label: '便签与待办', submenu: [
       { id: 'notes-open', label: '打开主面板', click: () => notesCompanion?.openPanel() },
@@ -3544,7 +3561,8 @@ async function bootstrap() {
     },
     getPresentation: () => ({ ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut, quotaGroupHidden: quotaFreeStackPlan()?.hidden?.includes('workbuddy'), quotaGroupLayout: quotaFreeStackPlan()?.cards.workbuddy }),
     onLayout: syncQuotaFreeStack,
-    getGuardEntry: () => settings.codexQuotaFunEnabled !== false && !zcodeLink?.isCardAvailable() && !quotaLabel?.getWindow()?.isVisible() && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible(),
+    getGuardEntry: () => settings.workbuddyEnabled === true && settings.workbuddyQuotaAlwaysVisible !== false && settings.workbuddyQuotaFunEnabled !== false
+      && !(settings.zcodeQuotaFunEnabled !== false && zcodeLink?.isCardAvailable()) && !quotaLabel?.isGuardEntryVisible?.() && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible(),
     getObstacles: () => [quotaLabel, apiUsageLabel, zcodeLink, bubble, shortcutWindow, quotaGuard].flatMap(controller => {
       if (controller === quotaLabel) { const card = quotaLabel?.getVisibleBounds?.(); return card ? [card] : []; }
       const win = controller?.getWindow();

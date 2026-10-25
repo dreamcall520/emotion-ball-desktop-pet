@@ -13,13 +13,13 @@
   const floatingActions = [...actions, { id: 'settings', name: '设置', icon: 'settings' }];
   const defaults = { shape: 'floating', enabled: true, launcher: 'Ctrl+Alt+Q', chat: '', custom: '', note: '', todo: '', pomodoro: '', noteBehavior: 'panel', todoBehavior: 'panel' };
   const startBehaviors = { note: 'noteBehavior', todo: 'todoBehavior' };
-  const recordHint = '快捷键可留空。便签、待办的启动方式同时用于面板按钮。';
+  const recordHint = '修改后直接生效。便签、待办的启动方式同时用于面板按钮。';
   const bindingIds = ['launcher', ...actions.map(action => action.id)];
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
   const symbols = isMac ? { Ctrl: '⌃', Alt: '⌥', Shift: '⇧', Meta: '⌘', Space: '空格' } : { Ctrl: 'Ctrl', Alt: 'Alt', Shift: 'Shift', Meta: 'Win', Space: '空格' };
   let state = null, draft = { ...defaults }, recording = null, selected = -1, busy = false, pointerFrame = null;
   let appearance = 'system', motionKey = '', motions = [];
-  let saveNoticeTimer = null;
+  let saveNoticeTimer = null, saveGeneration = 0, confirmedConfig = { ...defaults };
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
   const system = window.matchMedia?.('(prefers-color-scheme: dark)');
   const currentActions = () => state?.view === 'list' ? actions : floatingActions;
@@ -116,13 +116,15 @@
     else button.textContent = '点击设置';
     button.disabled = busy;
     wrap.append(button);
-    if (draft[id]) {
+    {
       const clear = document.createElement('button');
       clear.type = 'button';
       clear.className = 'clear-binding';
       clear.dataset.clear = id;
       clear.setAttribute('aria-label', `清除${name}快捷键`);
-      clear.innerHTML = icon('close');
+      clear.innerHTML = icon('trash');
+      clear.style.visibility = draft[id] ? 'visible' : 'hidden';
+      clear.tabIndex = draft[id] ? 0 : -1;
       clear.disabled = busy;
       wrap.append(clear);
     }
@@ -166,11 +168,8 @@
       row.append(bindingControl(action.id));
       $('direct-settings').append(row);
     }
-    $('save').disabled = busy || (draft.enabled && !draft.launcher);
     $('restore').disabled = busy;
-    $('cancel').disabled = busy;
     $('settings').querySelector('[data-close]').disabled = busy;
-    $('save').textContent = busy ? '保存中…' : '保存';
     $('record-hint').textContent = recording ? '按 ⌘ / ⌃ / ⌥ 与字母、数字或功能键组合。Esc 取消。' : recordHint;
     if (focusedRecord) $('settings').querySelector(`[data-record="${focusedRecord}"]`)?.focus({ preventScroll: true });
     else if (focusedBehavior) $('settings').querySelector(`[data-start-behavior="${focusedBehavior}"]`)?.focus({ preventScroll: true });
@@ -211,7 +210,7 @@
     if (!next || !['floating', 'list', 'settings'].includes(next.view)) return;
     const enteringSettings = next.view === 'settings' && (state?.view !== 'settings' || state?.session !== next.session);
     if (next.view !== 'settings' && (state?.view !== next.view || state?.session !== next.session)) {
-      selected = -1;
+      saveGeneration++; busy = false; selected = -1;
       if (document.activeElement?.matches('[data-action]')) document.activeElement.blur();
     }
     if (next.view !== 'settings' && recording) setRecording(null);
@@ -221,11 +220,14 @@
     for (const view of ['floating', 'list', 'settings']) $(view).hidden = view !== state.view;
     $('runtime-error').hidden = true;
     if (state.view === 'settings') {
+      if (!enteringSettings) confirmedConfig = configCopy(state.config);
       if (enteringSettings) {
-        clearSaveNotice();
-        draft = configCopy(state.config); setRecording(null); busy = false;
+        saveGeneration++; clearSaveNotice();
+        draft = configCopy(state.config); confirmedConfig = { ...draft }; setRecording(null); busy = false;
         renderSettings();
         showError(registrationMessage(state.registrationErrors));
+      } else if (!busy) {
+        draft = configCopy(state.config); confirmedConfig = { ...draft }; renderSettings();
       }
       animateState();
       if (state.focus === true && enteringSettings) requestAnimationFrame(() => $('settings').querySelector('[name="shape"]:checked')?.focus({ preventScroll: true }));
@@ -280,7 +282,6 @@
   }
 
   document.querySelectorAll('[data-close]').forEach(button => { button.onclick = close; });
-  $('cancel').onclick = close;
   $('settings-open').onclick = () => choose('settings');
   $('switch-floating').onclick = async () => {
     try {
@@ -303,6 +304,7 @@
       draft[field] = event.target.value;
       showError();
     }
+    void saveDraft();
   });
   $('settings').addEventListener('click', event => {
     const record = event.target.closest('[data-record]'), clear = event.target.closest('[data-clear]');
@@ -311,6 +313,7 @@
       clearSaveNotice();
       setRecording(null); draft[clear.dataset.clear] = ''; showError(); renderSettings();
       $('settings').querySelector(`[data-record="${clear.dataset.clear}"]`)?.focus({ preventScroll: true });
+      void saveDraft();
     } else if (record) {
       clearSaveNotice();
       setRecording(recording === record.dataset.record ? null : record.dataset.record);
@@ -318,7 +321,7 @@
       $('settings').querySelector(`[data-record="${record.dataset.record}"]`)?.focus({ preventScroll: true });
     } else if (recording) stopRecording();
   });
-  $('restore').onclick = () => { clearSaveNotice(); setRecording(null); draft = { ...defaults }; showError(); renderSettings(); $('restore').focus({ preventScroll: true }); };
+  $('restore').onclick = () => { clearSaveNotice(); setRecording(null); draft = { ...defaults }; showError(); renderSettings(); $('restore').focus({ preventScroll: true }); void saveDraft(); };
 
   function validate(config) {
     if (config.enabled && !config.launcher) return '请设置唤起快捷键，或关闭快捷面板。';
@@ -334,29 +337,33 @@
     return '';
   }
 
-  $('settings').onsubmit = async event => {
-    event.preventDefault();
+  async function saveDraft() {
     if (busy) return;
-    clearSaveNotice();
-    setRecording(null);
+    clearSaveNotice(); setRecording(null);
     const invalid = validate(draft);
-    if (invalid) { showError(invalid); renderSettings(); return; }
+    if (invalid) { draft = configCopy(confirmedConfig); showError(invalid); renderSettings(); return; }
+    const submitted = { ...draft }, token = ++saveGeneration, session = state?.session;
     busy = true; showError(); renderSettings();
     try {
-      const result = await api.save({ ...draft });
-      if (result?.ok !== true) throw new Error(result?.error || registrationMessage(result?.registrationErrors) || '快捷键保存失败，请重试。');
-      busy = false;
+      const result = await api.save(submitted);
+      if (token !== saveGeneration || state?.session !== session || state?.view !== 'settings') return;
+      if (result?.ok !== true) {
+        if (result?.state?.config) { confirmedConfig = configCopy(result.state.config); state = { ...state, config: { ...confirmedConfig } }; }
+        throw new Error(result?.error || registrationMessage(result?.registrationErrors) || '快捷键保存失败，请重试。');
+      }
       if (result?.state) applyState(result.state);
-      draft = configCopy(result?.state?.config || draft);
-      renderSettings();
-      $('save-status').textContent = '快捷键设置已保存';
-      $('save-status').hidden = false;
-      saveNoticeTimer = setTimeout(clearSaveNotice, 6000);
+      draft = configCopy(result?.state?.config || submitted);
+      confirmedConfig = { ...draft }; state = { ...state, config: { ...draft } };
+      $('save-status').textContent = '设置已生效'; $('save-status').hidden = false;
+      saveNoticeTimer = setTimeout(clearSaveNotice, 3200);
     } catch (error) {
-      busy = false; showError(error.message || '快捷键保存失败，请重试。'); renderSettings();
-      $('save').focus({ preventScroll: true });
+      if (token !== saveGeneration || state?.session !== session || state?.view !== 'settings') return;
+      draft = configCopy(confirmedConfig); showError(error.message || '快捷键保存失败，请重试。');
+    } finally {
+      if (token === saveGeneration && state?.session === session && state?.view === 'settings') { busy = false; renderSettings(); }
     }
-  };
+  }
+  $('settings').onsubmit = event => event.preventDefault();
 
   function combo(event) {
     const key = /^Key[A-Z]$/.test(event.code) ? event.code.slice(3) : /^Digit[0-9]$/.test(event.code) ? event.code.slice(5) : /^(Space|F(?:[1-9]|1[0-2]))$/.test(event.code) ? event.code : null;
@@ -370,7 +377,7 @@
       if (event.key === 'Tab') { stopRecording(); return; }
       event.preventDefault();
       if (event.key === 'Escape') { showError(); stopRecording(true); return; }
-      if (event.key === 'Backspace' || event.key === 'Delete') { clearSaveNotice(); draft[recording] = ''; showError(); stopRecording(true); return; }
+      if (event.key === 'Backspace' || event.key === 'Delete') { clearSaveNotice(); draft[recording] = ''; showError(); stopRecording(true); void saveDraft(); return; }
       if (['Control', 'Alt', 'Shift', 'Meta'].includes(event.key)) return;
       const value = combo(event);
       if (!value) { showError('请使用 ⌘ / ⌃ / ⌥ 与字母、数字或功能键组合。'); return; }
@@ -379,7 +386,7 @@
         const name = duplicate === 'launcher' ? '快捷面板' : actions.find(action => action.id === duplicate).name;
         showError(`与「${name}」的快捷键重复，请换一个组合。`); return;
       }
-      clearSaveNotice(); draft[recording] = value; showError(); stopRecording(true); return;
+      clearSaveNotice(); draft[recording] = value; showError(); stopRecording(true); void saveDraft(); return;
     }
     if (event.key === 'Escape') { event.preventDefault(); close(); return; }
     if (!state || state.view === 'settings') return;

@@ -166,3 +166,44 @@ test('WorkBuddy consumes a coordinated group rectangle and honors hidden overflo
   assert.deepEqual(workBuddyLabelBounds(pet,area,[],false,null,{mode:'free',quotaGroupLayout:group}),group);
   assert.equal(workBuddyLabelBounds(pet,area,[],false,null,{mode:'free',quotaGroupHidden:true}),null);
 });
+
+test('WorkBuddy freezes its expanded native bounds when the tucked anchor disappears', async t => {
+  let presentation={mode:'peeked',side:'left'},bounds={x:300,y:100,width:80,height:80},anchor={x:276,y:188,width:128,height:32};
+  class Window extends EventEmitter {
+    constructor(){super();this.visible=false;this.dead=false;this.webContents=Object.assign(new EventEmitter(),{mainFrame:{},isDestroyed:()=>false,setWindowOpenHandler(){},send(){}});}
+    isDestroyed(){return this.dead;} isVisible(){return this.visible;} setAlwaysOnTop(){} setVisibleOnAllWorkspaces(){} setHiddenInMissionControl(){}
+    setOpacity(value){this.opacity=value;} setIgnoreMouseEvents(value){this.ignored=value;} setBounds(value){this.bounds={...value};} getBounds(){return {...this.bounds};}
+    showInactive(){this.visible=true;} hide(){this.visible=false;} destroy(){this.dead=true;this.emit('closed');} loadFile(){return Promise.resolve();}
+  }
+  const controller=createWorkBuddyLabelWindow({BrowserWindow:Window,screen:{getDisplayMatching:()=>({workArea:{x:0,y:0,width:1200,height:900}})},
+    getPetWindow:()=>({isDestroyed:()=>false,isVisible:()=>true,getBounds:()=>bounds}),getPresentation:()=>presentation,getStackAnchor:()=>anchor});
+  t.after(()=>controller.destroy());controller.show({enabled:true});await Promise.resolve();const win=controller.getWindow();
+  win.webContents.emit('ipc-message',{sender:win.webContents,senderFrame:win.webContents.mainFrame},'pet:workbuddy-label-toggle');
+  const before=win.getBounds();assert.equal(before.height,120);
+  presentation={mode:'tucked',side:'left',quotaAnimateHide:true};anchor=null;bounds={...bounds,x:700};controller.reposition();
+  assert.deepEqual(win.getBounds(),before);assert.equal(win.ignored,true);
+  controller.show({enabled:true});assert.deepEqual(win.getBounds(),before,'late refresh cannot choose a new pet anchor');
+  await new Promise(resolve=>setTimeout(resolve,220));assert.equal(win.visible,false);
+  presentation={mode:'peeked',side:'left'};controller.show({enabled:true});assert.equal(win.visible,true);assert.notDeepEqual(win.getBounds(),before);
+  controller.hide();assert.equal(win.visible,false);
+});
+
+test('WorkBuddy stacked card exposes its own allowed game entry and hides it immediately when disabled', async t => {
+  let allowed=true,opened=0;
+  class Window extends EventEmitter {
+    constructor(options){super();this.bounds={x:0,y:0,width:options.width,height:options.height};this.visible=false;this.dead=false;this.webContents=Object.assign(new EventEmitter(),{mainFrame:{},isDestroyed:()=>false,setWindowOpenHandler(){},send(){},getURL:()=>require('node:url').pathToFileURL(this.file).href});}
+    isDestroyed(){return this.dead;}isVisible(){return this.visible;}setAlwaysOnTop(){}setVisibleOnAllWorkspaces(){}setHiddenInMissionControl(){}
+    setBounds(value){this.bounds={...value};}getBounds(){return {...this.bounds};}showInactive(){this.visible=true;}hide(){this.visible=false;}
+    destroy(){this.dead=true;this.emit('closed');}loadFile(file){this.file=file;return Promise.resolve();}
+  }
+  const pet={x:300,y:100,width:80,height:80},anchor={x:276,y:188,width:128,height:32};
+  const controller=createWorkBuddyLabelWindow({BrowserWindow:Window,screen:{getDisplayMatching:()=>({workArea:{x:0,y:0,width:1200,height:900}})},
+    getPetWindow:()=>({isDestroyed:()=>false,isVisible:()=>true,getBounds:()=>pet}),getStackAnchor:()=>anchor,getObstacles:()=>[anchor],getGuardEntry:()=>allowed,onGuard:()=>opened++});
+  t.after(()=>controller.destroy());controller.show({enabled:true});await new Promise(resolve=>setImmediate(resolve));
+  const card=controller.getWindow().getBounds(),entry=controller.getGuardWindow();
+  assert.equal(card.y,anchor.y+anchor.height+8);assert(entry?.isVisible(),'a predecessor card must not suppress the independent WorkBuddy game entry');
+  for(const obstacle of [card,anchor,pet])assert.equal(intersects(entry.getBounds(),obstacle),false);
+  const event={sender:entry.webContents,senderFrame:entry.webContents.mainFrame};entry.webContents.emit('ipc-message',event,'pet:workbuddy-guard-entry-open');assert.equal(opened,1);
+  allowed=false;controller.reposition();assert.equal(entry.isVisible(),false);entry.webContents.emit('ipc-message',event,'pet:workbuddy-guard-entry-open');assert.equal(opened,1);
+  allowed=true;controller.reposition();assert.equal(entry.isVisible(),true);
+});

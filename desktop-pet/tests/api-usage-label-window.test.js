@@ -323,3 +323,20 @@ test('API native peek fade has real exit and default hide remains immediate', as
   f.controller.show(STATE); assert.equal(win.opacity, 0);
   f.controller.hide(); assert.equal(win.visible, false); assert.equal(win.opacity, 1);
 });
+
+test('tucked exit freezes API bounds before predecessor disappearance can reflow it', async t => {
+  const f = fixture(); t.after(() => f.controller.destroy());
+  f.state.presentation = { mode: 'peeked', side: 'left' };
+  f.state.quota = nativeObstacle({ x: 20, y: 100, width: 124, height: 28 });
+  f.controller.show(STATE); const win = await f.ready(); win.setOpacity = value => { win.opacity = value; };
+  const before = win.getBounds();
+  f.state.presentation = { mode: 'tucked', side: 'left', quotaAnimateHide: true };
+  f.pet.bounds.x += 200; f.state.quota = null;
+  f.controller.reposition();
+  assert.deepEqual(win.getBounds(), before); assert.equal(win.visible, true); assert.equal(win.ignoresMouse, true);
+  f.controller.show({ ...STATE, busy: true }); assert.deepEqual(win.getBounds(), before, 'late refresh cannot move a fading card');
+  await new Promise(resolve => setTimeout(resolve, 220)); assert.equal(win.visible, false);
+  f.state.presentation = { mode: 'peeked', side: 'left' }; f.controller.show(STATE);
+  assert.equal(win.visible, true); assert.notDeepEqual(win.getBounds(), before, 'next entry uses the current geometry');
+  f.controller.hide(); assert.equal(win.visible, false);
+});
