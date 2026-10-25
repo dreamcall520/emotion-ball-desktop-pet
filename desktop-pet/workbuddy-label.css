@@ -1,36 +1,24 @@
-/* Reuse the quota card face, beam, badge and theme tokens unchanged. */
+/* The expanded card uses the existing Codex v20 components without a chart. */
 #toggle { display: block; width: 100%; min-width: 0; flex: none; border: 0; background: transparent; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; outline: none; }
-#summary { min-height: 24px; }
-#quota-label[data-expanded="true"] #summary { display: none; }
-#quota-label[data-expanded="true"] #compact-header { width: 100%; }
-#details { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; margin-top: 3px; }
-#api-month-cost { min-height: 29px; max-height: 29px; flex: none; line-height: 29px; overflow: hidden; white-space: nowrap; }
+#summary { min-height: 24px; gap: 4px; }
+.summary-period { gap: 4px; font-size: 9px; }
+.summary-value { font-size: 14px; }
+.summary-value[data-long="true"] { font-size: 11px; letter-spacing: -.03em; }
+#quota-label[data-expanded="true"] #toggle { display: none; }
+#details { width: 100%; min-width: 0; }
 #details[hidden] { display: none; }
-#balances { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 4px; color: var(--quota-subtle); font-size: 8px; line-height: 10px; }
-#balances > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-#balances strong { color: var(--quota-value-normal); font-size: 11px; line-height: 14px; font-weight: 650; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#details p { margin: 1px 0 0; color: var(--quota-subtle); font-size: 8px; line-height: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#dates { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 5px; }
-#dates p { font-size: 7px; line-height: 11px; }
-#dates p:last-child { text-align: right; }
-#api-footer { margin-top: auto; padding-top: 5px; }
-#api-footer #status { min-width: 0; margin: 0; color: var(--quota-subtle); font-size: 7px; line-height: 12px; }
+#value-row { margin-top: 4px; }
+#expanded-total { font-size: 22px; line-height: 25px; overflow: hidden; text-overflow: ellipsis; }
+#expanded-total[data-long="true"] { font-size: 16px; }
+#plan { max-width: 54px; overflow: hidden; text-overflow: ellipsis; }
+#dates { font-size: 7px; line-height: 11px; }
+#balances { gap: 3px; }
+#balances > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#status { min-width: 0; flex: 1; padding-left: 5px; text-align: left; font-size: 7px; }
+#refresh { min-width: 28px; min-height: 18px; font-size: 7px; }
+#trend { min-height: 18px; }
+#refresh:disabled { opacity: .6; cursor: default; }
 #quota-label[data-query-state="error"] #period, #quota-label[data-query-state="error"] #status { color: var(--quota-urgent-text); }
-.actions { display: flex; justify-content: space-between; gap: 8px; flex: none; }
-.actions button { min-height: 15px; border: 0; background: transparent; padding: 0; color: var(--quota-subtle); font: inherit; font-size: 7px; line-height: 12px; font-weight: 600; cursor: pointer; }
-.actions button:hover { color: var(--quota-value-normal); }
-.actions button:disabled { opacity: .6; cursor: default; }
-.actions button, #dates p { outline: none; }
+#details :is(button, [tabindex]) { outline: none; }
 :root[data-keyboard="true"] #quota-label:has(#toggle:focus-visible) { outline: 1px solid var(--quota-subtle); outline-offset: -3px; }
-:root[data-keyboard="true"] .actions button:focus-visible, :root[data-keyboard="true"] #dates p:focus-visible { outline: 1px solid var(--quota-subtle); outline-offset: -1px; border-radius: 3px; }
-:root[data-color-mode="accessible"] .actions button { color: var(--accessible-blue); }
-
-/* Match the Codex observed-line / unrecorded-line chart vocabulary. */
-#trend { margin-top: 4px; min-height: 42px; }
-.trend-heading { display: flex; justify-content: space-between; color: var(--quota-subtle); font-size: 7px; line-height: 11px; }
-.trend-chart { display: block; width: 100%; height: 30px; overflow: visible; }
-.trend-chart .axis { fill: none; stroke: var(--quota-line); stroke-width: 1; }
-.trend-chart .observed-line { fill: none; stroke: var(--quota-action-blue); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-.trend-chart .unrecorded-line { fill: none; stroke: var(--quota-action-blue); stroke-width: 1; stroke-dasharray: 3 3.5; opacity: .7; }
-.trend-chart .point { fill: var(--quota-action-blue); }
-:root[data-color-mode="accessible"] .trend-chart { --quota-action-blue: var(--accessible-blue); }
+:root[data-keyboard="true"] #details :is(button, [tabindex]):focus-visible { outline: 1px solid var(--quota-subtle); outline-offset: -1px; border-radius: 3px; }

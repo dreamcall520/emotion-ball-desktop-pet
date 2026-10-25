@@ -60,7 +60,8 @@ const { createChatWindow } = require('./lib/chat-window');
 const { runWorkBuddy } = require('./lib/workbuddy-client');
 const { createWorkBuddyQuota } = require('./lib/workbuddy-quota');
 const { createWorkBuddyChat } = require('./lib/workbuddy-chat');
-const { createWorkBuddyLabelWindow } = require('./lib/workbuddy-label-window');
+const { createWorkBuddyLabelWindow, safeState: safeWorkBuddyState } = require('./lib/workbuddy-label-window');
+const { createWorkBuddyDetailsWindow } = require('./lib/workbuddy-details-window');
 const { createNotesCompanion } = require('./lib/notes-companion');
 const { createNotesOrganizer } = require('./lib/notes-organizer');
 const { createPomodoro } = require('./lib/pomodoro');
@@ -111,6 +112,7 @@ let chat = null;
 let workbuddyChat = null;
 let workbuddyQuota = null;
 let workbuddyLabel = null;
+let workbuddyDetails = null;
 let chatProviderChanging = false;
 let chatWindow = null;
 let notesCompanion = null;
@@ -816,6 +818,7 @@ function openChat() {
   quotaLabel?.hide();
   apiUsageLabel?.hide();
   workbuddyLabel?.hide();
+  workbuddyDetails?.close();
   edgeNoticeWindow?.hide();
   chatWindow.show(chatSnapshot());
   pomodoroWindows?.sync();
@@ -971,6 +974,7 @@ function repositionQuotaLabel() {
   try { quotaLabel?.reposition(); } catch (error) { reportQuotaError('额度标签重排', error); }
   safelyInvokeWindow('API 卡片重排', () => apiUsageLabel?.reposition());
   safelyInvokeWindow('WorkBuddy 卡片重排', () => workbuddyLabel?.reposition());
+  safelyInvokeWindow('WorkBuddy 趋势重排', () => workbuddyDetails?.reposition());
 }
 
 function syncApiUsageLabel() {
@@ -1000,6 +1004,7 @@ function syncWorkBuddyLabel() {
   const visible = settings?.workbuddyEnabled === true && !isQuitting && !screenLocked && !pomodoroQuiet &&
     !chatWindow?.isVisible() && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
   safelyInvokeWindow('WorkBuddy 积分显示', () => visible ? workbuddyLabel.show(workbuddyQuota.getState()) : workbuddyLabel.hide());
+  if (!visible) workbuddyDetails?.close();
 }
 
 async function setWorkBuddyEnabled(value) {
@@ -1803,6 +1808,7 @@ function setAlwaysOnTop(enabled) {
   safelyInvokeWindow('Codex 详情置顶', () => codexDetails?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('API 卡片置顶', () => apiUsageLabel?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('WorkBuddy 卡片置顶', () => workbuddyLabel?.setAlwaysOnTop(settings.alwaysOnTop));
+  safelyInvokeWindow('WorkBuddy 趋势置顶', () => workbuddyDetails?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('边缘提示置顶', () => edgeNoticeWindow?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('聊天面板置顶', () => chatWindow?.setAlwaysOnTop(settings.alwaysOnTop));
   thoughts?.setAlwaysOnTop(settings.alwaysOnTop);
@@ -2118,7 +2124,7 @@ async function finishSmokeTest() {
 
     if (process.env.PET_SMOKE_WORKBUDDY_ONLY === '1') {
       await require('./scripts/verify-workbuddy-integration').verifyWorkBuddyIntegration({
-        pet: petWindow, quota: workbuddyQuota, label: workbuddyLabel, codexLabel: quotaLabel, chat: workbuddyChat, chatWindow,
+        pet: petWindow, quota: workbuddyQuota, label: workbuddyLabel, details: workbuddyDetails, codexLabel: quotaLabel, chat: workbuddyChat, chatWindow,
         openChat, setProvider: setChatProvider, setEnabled: setWorkBuddyEnabled, getSettings: () => settings,
         getCodex: () => codexCompanion?.getSnapshot(), menuTemplate, setSize: setPetSize,
         outputDir: process.env.PET_SMOKE_WORKBUDDY_OUTPUT, live: process.env.PET_SMOKE_WORKBUDDY_LIVE === '1' });
@@ -3340,7 +3346,7 @@ async function bootstrap() {
     onModelSelection: workbuddyModel => { settings = saveSettings(settingsFile, { ...settings, workbuddyModel }); },
     onChange: state => { if (!screenLocked && settings.chatProvider === 'workbuddy') chatWindow.update(chatSnapshot(state)); },
     onAction: performChatAction });
-  workbuddyQuota = createWorkBuddyQuota({ run: workbuddyRun, historyFile: path.join(app.getPath('userData'), 'workbuddy-quota-history.json'), onChange: () => syncWorkBuddyLabel() });
+  workbuddyQuota = createWorkBuddyQuota({ run: workbuddyRun, historyFile: path.join(app.getPath('userData'), 'workbuddy-quota-history.json'), onChange: state => { syncWorkBuddyLabel(); workbuddyDetails?.update(safeWorkBuddyState(state)); } });
   workbuddyLabel = createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
     getObstacles: () => [quotaLabel, apiUsageLabel, bubble, shortcutWindow, quotaGuard].flatMap(controller => {
       const win = controller?.getWindow();
@@ -3349,7 +3355,12 @@ async function bootstrap() {
     getAppearance: () => settings.codexQuotaAppearance,
     alwaysOnTop: settings.alwaysOnTop,
     onRefresh: () => { void workbuddyQuota.refresh(); },
+    onTrend: () => { workbuddyDetails?.open(safeWorkBuddyState(workbuddyQuota.getState())); },
     onError: () => {} });
+  workbuddyDetails = createWorkBuddyDetailsWindow({ BrowserWindow, screen,
+    getAnchor: () => { const card = workbuddyLabel?.getWindow(); return card && !card.isDestroyed() && card.isVisible() ? card.getBounds() : petWindow?.getBounds(); },
+    getAppearance: () => settings.codexQuotaAppearance, alwaysOnTop: settings.alwaysOnTop,
+    onError: error => writeError('WorkBuddy 趋势窗口', error) });
   app.on('browser-window-created', (_event, win) => {
     for (const event of ['move', 'resize', 'show', 'hide', 'closed']) win.on(event, () => {
       if (win !== workbuddyLabel?.getWindow()) syncWorkBuddyLabel();
@@ -3456,6 +3467,7 @@ async function bootstrap() {
     void chat?.stop();
     void workbuddyChat?.stop();
     workbuddyLabel?.hide();
+    workbuddyDetails?.close();
     dragState = null;
     safelyInvokeWindow('锁屏时停止动作', stopMotion);
     edgeTuck?.suspend();
@@ -3537,6 +3549,7 @@ if (!hasSingleInstanceLock) {
     apiUsage?.close();
     workbuddyQuota?.close();
     workbuddyLabel?.destroy();
+    workbuddyDetails?.destroy();
     safelyInvokeWindow('退出时快捷入口清理', () => { shortcutWindow?.dispose(); shortcutRegistrar?.dispose(); });
     safelyInvokeWindow('退出时番茄钟窗口销毁', () => pomodoroWindows?.close());
     safelyInvokeWindow('退出时全局设置销毁', () => globalSettingsWindow?.destroy());

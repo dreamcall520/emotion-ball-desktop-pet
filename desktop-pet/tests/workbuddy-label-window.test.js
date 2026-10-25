@@ -25,13 +25,13 @@ test('state whitelist preserves zero and old reports, strips credentials and raw
   assert.equal(safeState({report:{total:0}}).report,null);
 });
 test('constructor is lazy; IPC verifies sender and frame; expansion falls back; navigation denied',async()=> {
-  const windows=[]; let refresh=0;
+  const windows=[]; let refresh=0,trend=0;
   class Window extends EventEmitter {
     constructor(options){super();this.options=options;this.visible=false;this.dead=false;this.sent=[];this.webContents=Object.assign(new EventEmitter(),{mainFrame:{},isDestroyed:()=>false,setWindowOpenHandler:h=>{this.open=h;},send:(_c,s)=>this.sent.push(s)});windows.push(this);}
     isDestroyed(){return this.dead;} isVisible(){return this.visible;} setAlwaysOnTop(){} setVisibleOnAllWorkspaces(){} setHiddenInMissionControl(){} setBounds(b){this.bounds=b;} showInactive(){this.visible=true;} hide(){this.visible=false;} destroy(){this.dead=true;this.emit('closed');} loadFile(){return Promise.resolve();}
   }
   const pet={isDestroyed:()=>false,isVisible:()=>true,getBounds:()=>({x:100,y:100,width:80,height:80})};
-  const controller=createWorkBuddyLabelWindow({BrowserWindow:Window,screen:{getDisplayMatching:()=>({workArea:{x:0,y:0,width:220,height:200}})},getPetWindow:()=>pet,onRefresh:()=>refresh++});
+  const controller=createWorkBuddyLabelWindow({BrowserWindow:Window,screen:{getDisplayMatching:()=>({workArea:{x:0,y:0,width:220,height:200}})},getPetWindow:()=>pet,onRefresh:()=>refresh++,onTrend:()=>trend++});
   assert.equal(windows.length,0);controller.show({enabled:false});assert.equal(windows.length,0);
   controller.show({enabled:true}); await Promise.resolve(); const w=windows[0];
   assert.equal(w.options.width,128);assert.equal(w.options.height,32);
@@ -41,8 +41,11 @@ test('constructor is lazy; IPC verifies sender and frame; expansion falls back; 
   w.webContents.emit('ipc-message',{sender:{},senderFrame:event.senderFrame},'pet:workbuddy-label-refresh');assert.equal(refresh,0);
   w.webContents.emit('ipc-message',{sender:w.webContents,senderFrame:{}},'pet:workbuddy-label-refresh');assert.equal(refresh,0);
   w.webContents.emit('ipc-message',event,'pet:workbuddy-label-refresh');assert.equal(refresh,1);
+  w.webContents.emit('ipc-message',{sender:{},senderFrame:event.senderFrame},'pet:workbuddy-label-trend');assert.equal(trend,0);
+  w.webContents.emit('ipc-message',event,'pet:workbuddy-label-trend');assert.equal(trend,1);
   w.webContents.emit('ipc-message',event,'pet:workbuddy-label-toggle');assert.equal(w.sent.at(-1).expanded,false);assert.equal(w.sent.at(-1).spaceError,true);
   controller.hide();w.webContents.emit('ipc-message',event,'pet:workbuddy-label-refresh');assert.equal(refresh,1);
+  w.webContents.emit('ipc-message',event,'pet:workbuddy-label-trend');assert.equal(trend,1);
   controller.destroy();assert.equal(controller.getWindow(),null);
 });
 
@@ -52,7 +55,7 @@ test('WorkBuddy card follows the pet horizontal center before avoiding obstacles
   for (const expanded of [false,true]) {
     const first = workBuddyLabelBounds(pet,area,[],expanded);
     assert.equal(first.x + first.width / 2, pet.x + pet.width / 2);
-    assert.equal(first.height, expanded ? 174 : 32);
+    assert.equal(first.height, expanded ? 120 : 32);
     const moved = workBuddyLabelBounds({...pet,x:500},area,[],expanded);
     assert.equal(moved.x-first.x,100);
     const avoided = workBuddyLabelBounds(pet,area,[first],expanded);

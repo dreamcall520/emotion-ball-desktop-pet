@@ -6,7 +6,7 @@ const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b
 function workBuddyLabelBounds(pet, area, obstacles = [], expanded = false) {
   if (!valid(pet) || !valid(area)) return null;
   const { width } = quotaLabelSize(expanded ? 'compactExpanded' : 'compact');
-  const height = expanded ? 174 : quotaLabelSize('compact').height;
+  const height = expanded ? 120 : quotaLabelSize('compact').height;
   const gap = 8;
   const blocked = [pet, ...obstacles.filter(valid)];
   const centerX = pet.x + (pet.width - width) / 2;
@@ -39,7 +39,7 @@ function safeState(state) {
   return { enabled: state?.enabled === true, busy: state?.busy === true,
     error: state?.error ? '更新失败，请稍后重试' : null, stale: state?.stale === true, report, history, historyError: state?.historyError ? '趋势记录暂未保存' : null };
 }
-function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getObstacles = () => [], getAppearance = () => 'system', alwaysOnTop = true, onRefresh = () => {}, onError = () => {} }) {
+function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getObstacles = () => [], getAppearance = () => 'system', alwaysOnTop = true, onRefresh = () => {}, onTrend = () => {}, onError = () => {} }) {
   let win = null, ready = false, visible = false, expanded = false, current = null, top = Boolean(alwaysOnTop);
   const error = e => { try { onError(e); } catch (_) {} };
   const live = w => w && !w.isDestroyed() && !w.webContents.isDestroyed?.();
@@ -75,6 +75,7 @@ function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getOb
       try {
         if (channel === `${CHANNEL}-toggle`) { expanded = !expanded; reposition(); }
         if (channel === `${CHANNEL}-refresh` && !current.busy) onRefresh();
+        if (channel === `${CHANNEL}-trend`) onTrend();
       } catch (err) { error(err); }
     });
     target.on('closed', () => { if (win === target) { win = null; ready = false; } });

@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('qiuqiuWorkBuddyLabel', {
   toggle: () => ipcRenderer.send('pet:workbuddy-label-toggle'),
   refresh: () => ipcRenderer.send('pet:workbuddy-label-refresh'),
+  trend: () => ipcRenderer.send('pet:workbuddy-label-trend'),
   onColorMode(callback) {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, value, appearance, theme) => callback(value === 'accessible' ? 'accessible' : 'standard',

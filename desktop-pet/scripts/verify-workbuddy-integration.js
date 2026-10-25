@@ -24,7 +24,7 @@ async function until(read, label) {
   for (let n = 0; n < 200; n++) { if (await read()) return; await wait(50); }
   throw new Error('等待失败：' + label);
 }
-async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, chat, chatWindow, openChat, setProvider, setEnabled, getSettings, getCodex, menuTemplate, setSize, outputDir, live = false }) {
+async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, details, chat, chatWindow, openChat, setProvider, setEnabled, getSettings, getCodex, menuTemplate, setSize, outputDir, live = false }) {
   if (outputDir) fs.mkdirSync(outputDir, { recursive: true });
   const codexBefore = JSON.stringify(getCodex());
   const codexSettings = Object.fromEntries(Object.entries(getSettings()).filter(([k]) => k.startsWith('codex')));
@@ -58,10 +58,10 @@ async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, chat,
   await page("document.querySelector('button').click()");
   await wait(100);
   { const a=win.getBounds(),b=pet.getBounds(); assert(Math.abs(a.x+a.width/2-b.x-b.width/2)<=1, '展开卡居中'); }
-  const cardFit = await page(`(() => { const ids = ['toggle','api-month-cost','balances','refresh-date','expiry','trend','status','refresh']; return ids.every(id => { const e = document.getElementById(id); if (!e || getComputedStyle(e).display === 'none') return true; const r=e.getBoundingClientRect(); return r.x >= 0 && r.y >= 0 && r.right <= innerWidth && r.bottom <= innerHeight; }); })()`);
-  if (!cardFit) process.stdout.write('WB_CARD_LAYOUT ' + JSON.stringify(await page(`Object.fromEntries(['toggle','api-month-cost','balances','dates','trend','api-footer','refresh'].map(id=>{const r=document.getElementById(id).getBoundingClientRect();return [id,{y:r.y,bottom:r.bottom,height:r.height,window:innerHeight}]}))`)) + '\n');
+  const cardFit = await page(`(() => { const ids = ['expanded-header','expanded-total','balances','refresh-date','expiry','trend','status','refresh']; return ids.every(id => { const e = document.getElementById(id); if (!e || getComputedStyle(e).display === 'none') return true; const r=e.getBoundingClientRect(); return r.x >= 0 && r.y >= 0 && r.right <= innerWidth && r.bottom <= innerHeight; }); })()`);
+  if (!cardFit) process.stdout.write('WB_CARD_LAYOUT ' + JSON.stringify(await page(`Object.fromEntries(['expanded-header','value-row','dates','auxiliary','refresh'].map(id=>{const r=document.getElementById(id).getBoundingClientRect();return [id,{y:r.y,bottom:r.bottom,height:r.height,window:innerHeight}]}))`)) + '\n');
   assert.equal(cardFit, true, '展开信息和操作完整显示');
-  const layout = await page(`(() => { const rect=id=>{const r=document.getElementById(id).getBoundingClientRect();return {top:r.top,bottom:r.bottom};};return {rows:['toggle','api-month-cost','balances','dates','trend','api-footer'].map(rect),toggleOutline:getComputedStyle(document.getElementById('toggle')).outlineStyle,cardOutline:getComputedStyle(document.getElementById('quota-label')).outlineStyle}; })()`);
+  const layout = await page(`(() => { const rect=id=>{const r=document.getElementById(id).getBoundingClientRect();return {top:r.top,bottom:r.bottom};};return {rows:['expanded-header','value-row','dates','auxiliary'].map(rect),toggleOutline:getComputedStyle(document.getElementById('toggle')).outlineStyle,cardOutline:getComputedStyle(document.getElementById('quota-label')).outlineStyle}; })()`);
   for (let i=1;i<layout.rows.length;i++) assert(layout.rows[i].top >= layout.rows[i-1].bottom - 0.5, '展开信息行互不覆盖');
   assert.equal(layout.toggleOutline, 'none', '鼠标展开按钮无默认选中框');
   assert.equal(layout.cardOutline, 'none', '鼠标展开卡片无默认选中框');
@@ -74,7 +74,7 @@ async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, chat,
     if (outputDir) fs.writeFileSync(path.join(outputDir, `quota-${mode}-${appearance}.png`), (await capture(win)).toPNG());
   }
   win.webContents.send('pet:color-mode', 'standard', 'system', 'blue');
-  assert.equal(await page("!document.getElementById('chat') && document.getElementById('trend-chart').getAttribute('role') === 'img'"), true);
+  assert.equal(await page("!document.getElementById('chat') && !document.getElementById('trend-chart') && document.getElementById('trend').tagName === 'BUTTON'"), true);
   if (codexLabel) {
     codexLabel.show({ state: 'ready', items: [{ id: 'smoke-codex', label: 'Codex', windowMinutes: 300, remaining: 47.6, resetsAt: Date.now() + 3600000 }], overflow: 0, resetCreditsAvailable: 1 });
     await until(() => codexLabel.getWindow()?.isVisible(), 'Codex卡与WB同时显示');
@@ -85,6 +85,40 @@ async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, chat,
     assert(Math.abs(wbBounds.x + wbBounds.width / 2 - petBounds.x - petBounds.width / 2) <= 1, '双卡并存时WB仍居中');
     if (outputDir) fs.writeFileSync(path.join(outputDir, 'dual-cards-bounds.json'), JSON.stringify({ codex: codexBounds, workbuddy: wbBounds, pet: petBounds }, null, 2));
     codexLabel.hide(); label.reposition();
+  }
+
+
+  if (details) {
+    await page("document.getElementById('trend').click()");
+    await until(() => details.getWindow()?.isVisible(), '卡片趋势入口打开详情');
+    const detailWin = details.getWindow(), detailPage = code => detailWin.webContents.executeJavaScript(code);
+    await until(() => detailPage("document.getElementById('today').getAttribute('aria-pressed') === 'true'"), '详情默认今日');
+    await detailPage("document.getElementById('week').click()");
+    assert.equal(await detailPage("document.getElementById('week').getAttribute('aria-pressed')"), 'true');
+    const at = Date.now() - 1000;
+    const trendReport = { total: 7399.91, updatedAt: at };
+    details.update({ report: trendReport, history: [] });
+    await until(() => detailPage("document.getElementById('hint').textContent.includes('暂无真实查询记录') && !document.querySelector('#chart svg')"), '趋势空态无伪造折线');
+    details.update({ report: trendReport, history: [{ at, total: 7399.91 }] });
+    await until(() => detailPage("document.getElementById('hint').textContent.includes('仅有1次真实查询') && !document.querySelector('#chart svg')"), '单点只提示等待记录');
+    details.update({ report: trendReport, history: [{ at: at - 1800000, total: 7400 }, { at: at - 1500000, total: 7399.95 }, { at, total: 7399.91 }] });
+    await until(() => detailPage("document.querySelectorAll('#chart circle.point').length === 3"), '详情真实采样点');
+    const trendShape = await detailPage(`(() => { const svg=document.querySelector('#chart svg');return {viewBox:svg.getAttribute('viewBox'),solid:Boolean(svg.querySelector('.observed-line')),gap:Boolean(svg.querySelector('.unrecorded-line')),points:[...svg.querySelectorAll('circle.point')].map(p=>({x:Number(p.getAttribute('cx')),y:Number(p.getAttribute('cy')),title:p.querySelector('title').textContent})),timeLabels:[...svg.querySelectorAll('text[y="132"]')].map(n=>n.textContent)}; })()`);
+    assert.equal(trendShape.viewBox, '0 0 374 144');
+    assert.equal(trendShape.solid, true); assert.equal(trendShape.gap, true);
+    assert.equal(trendShape.points[0].x, 48); assert.equal(trendShape.points.at(-1).x, 352);
+    assert.equal(trendShape.points[0].y, 28); assert.equal(trendShape.points.at(-1).y, 108);
+    assert.match(trendShape.points.at(-1).title, /7,399\.91 积分/);
+    assert.equal(trendShape.timeLabels.length, 2);
+    assert(trendShape.timeLabels.every(text => /\d{2}:\d{2}/.test(text)), '真实时间轴');
+    if (outputDir) {
+      fs.writeFileSync(path.join(outputDir, 'workbuddy-trend-details.png'), (await capture(detailWin)).toPNG());
+      fs.writeFileSync(path.join(outputDir, 'trend-shape.json'), JSON.stringify(trendShape, null, 2));
+    }
+    await detailPage("document.getElementById('details-close').click()");
+    await until(() => !details.isVisible(), '关闭趋势详情');
+    assert.equal(win.isVisible(), true, '关闭详情后积分卡仍在');
+    details.update(quota.getState());
   }
 
   await setProvider('workbuddy'); openChat();

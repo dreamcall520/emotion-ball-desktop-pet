@@ -256,7 +256,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
           write() { throw new Error('chat disk access is forbidden in main fixture'); } };
       } };
       if (name === './lib/workbuddy-client') return { runWorkBuddy };
-      if (name === './lib/workbuddy-label-window') return { createWorkBuddyLabelWindow: () => ({
+      if (name === './lib/workbuddy-label-window') return { ...realRequire(name), createWorkBuddyLabelWindow: () => ({
         show() {}, hide() {}, reposition() {}, setAlwaysOnTop() {}, destroy() {}, getWindow: () => null
       }) };
       if (name === './lib/chat-companion') return { createChatCompanion: options => { chat.options = options; return chat; } };
