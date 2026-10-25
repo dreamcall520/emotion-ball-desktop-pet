@@ -867,8 +867,8 @@ body[data-guard-size="compact"] .guard-entry-zombie { top: 11px; }
 #quota-label[data-source="zcode"] .v20-cell-label .period-pill { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 9px; line-height: 14px; }
 #quota-label[data-source="zcode"] .v20-periods.dual { row-gap: 9px; }
 #quota-label[data-source="zcode"] .v20-periods.dual .v20-period:nth-child(odd) { padding-left: 0; border-left: 0; }
-#quota-label[data-source="zcode"] .v20-cell-label { height: 27px; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; }
-#quota-label[data-source="zcode"] .v20-plan-name { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--quota-subtle); font-size: 9px; line-height: 12px; }
+#quota-label[data-source="zcode"] .v20-cell-label { height: 33px; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; }
+#quota-label[data-source="zcode"] .v20-plan-name { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--quota-subtle); font-size: 10.5px; line-height: 14px; flex: none; }
 #quota-label[data-source="zcode"] .v20-brand { min-width: 0; }
 #quota-label[data-source="zcode"] .v20-brand .period-pill { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -883,3 +883,10 @@ body[data-guard-size="compact"] .guard-entry-zombie { top: 11px; }
 #quota-label[data-source="zcode"] .v20-pace { font-size: 9px; line-height: 14px; }
 #quota-label[data-source="zcode"] .v20-shared { min-height: 19px; font-size: 9px; line-height: 16px; }
 #quota-label[data-source="zcode"] .v20-links { min-height: 21px; font-size: 10px; line-height: 20px; }
+
+#quota-label[data-source="zcode"] .v20-periods:not(.dual) .v20-cell-label { height: 18px; flex-direction: row; gap: 6px; }
+#quota-label[data-source="zcode"] .v20-shared { padding: 0; }
+#quota-label[data-source="zcode"] .v20-quota-entry { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 19px; box-sizing: border-box; padding: 1px 6px; color: var(--quota-action-blue); text-align: left; }
+#quota-label[data-source="zcode"] .v20-entry-arrow { font-size: 14px; line-height: 16px; font-weight: 400; }
+#quota-label[data-source="zcode"][data-expanded="false"] #items li { column-gap: 3px; }
+#quota-label[data-source="zcode"][data-expanded="false"] .quota-period { padding-inline: 2px; font-size: 7.5px; }

@@ -75,6 +75,16 @@
     const description = node('p','zcode-bucket-description',bucketTitle(item)); description.title = bucketTitle(item);
     selector.replaceChildren(grid,description); return selector;
   }
+  function zcodePercent(value) {
+    if (Number.isInteger(value)) return `${value}%`;
+    if (value > 0 && value < 0.05) return '<0.1%';
+    if (value >= 99.95 && value < 100) return '<100%';
+    return `${Number(value.toFixed(1))}%`;
+  }
+  const decimalPlaces = value => {
+    const [coefficient, exponent = '0'] = String(value).toLowerCase().split('e');
+    return Math.max(0,(coefficient.split('.')[1] || '').length-Number(exponent));
+  };
   const exactNumber = value => value === null ? '暂未提供' : value.toLocaleString('en-US',{maximumFractionDigits:20});
   function shortNumber(value) {
     if (value === null) return '暂未提供';
@@ -416,7 +426,7 @@
     const pace = node('span',`trend-pace ${item.pace.state}`,({fast:'用量偏快',balanced:'节奏均衡',slow:'用量较慢',unknown:'待记录'}[item.pace.state]));
     if (zcode) {
       stats.className += item.resetsAt ? ' zcode-stats' : ' zcode-stats no-deadline';
-      stats.replaceChildren(stat(`${Math.round(item.remaining)}%`,'剩余额度',''),...(item.resetsAt ? [stat(countdown(item.resetsAt),deadlineCopy(item).count,'time-value zcode-countdown')] : []),pace);
+      stats.replaceChildren(stat(zcodePercent(item.remaining),'剩余额度',''),...(item.resetsAt ? [stat(countdown(item.resetsAt),deadlineCopy(item).count,'time-value zcode-countdown')] : []),pace);
     } else stats.replaceChildren(stat(`${Math.round(item.remaining)}%`,'剩余额度',''),stat(time === null ? '—' : `${Math.round(time)}%`,'剩余时间','time-value'),pace);
     const meta = node('div','chart-meta');
     const trendChart = chart(model,item);
@@ -426,15 +436,19 @@
     updated.title = latest ? `已记录至 ${dateLabel(latest)}；实线为连续采样${hasUnrecorded ? '，蓝色虚线区间无记录' : ''}，后续暂无记录。` : '尚未提供趋势记录';
     const forecast = node('div',`forecast-note ${model.trend.forecast.status}`), copy = node('div','forecast-copy');
     const known = model.trend.forecast.state === 'estimate';
-    copy.replaceChildren(node('b','',model.trend.forecast.summary || (known ? '预估结果暂未提供' : '暂无法预估额度用完时间')),node('p','',model.trend.forecast.detail || (known ? '按近期用量估算，会随实际用量变化' : '连续用量记录不足，稍后再查看')));
+    const noDecline = zcode && !known && model.trend.forecast.reason === 'no-decline';
+    if (zcode) forecast.dataset.reason = model.trend.forecast.reason;
+    copy.replaceChildren(node('b','',noDecline ? '近期未观察到额度消耗' : model.trend.forecast.summary || (known ? '预估结果暂未提供' : '暂无法预估额度用完时间')),node('p','',noDecline ? '观察到真实额度变化后，再预估用完时间。' : model.trend.forecast.detail || (known ? '按近期用量估算，会随实际用量变化' : '连续用量记录不足，稍后再查看')));
     forecast.title = zcode ? '按近期连续用量粗估，会随实际用量变化' : model.trend.forecast.reference ? '按本周期已记录的余额变化与实际经过时间粗估，会随实际用量变化'
       : '根据连续用量记录，估算当前周期额度何时用完、能否够用到重置';
-    const forecastBadge = !known ? zcode ? ({'no-decline':'余额未下降',stale:'待更新','missing-period':'周期待补充',discontinuity:'记录不连续','value-mismatch':'待新记录','insufficient-records':'记录中'}[model.trend.forecast.reason] || '记录中') : '待预估' : model.trend.forecast.preliminary ? '初步预估' : model.trend.forecast.reference ? '参考预估' : '预估';
-    forecast.replaceChildren(node('span','forecast-symbol',known ? ({risk:'⚠️',tight:'⏳',safe:'🌿'}[model.trend.forecast.status] || '⏳') : '🔎'),copy,node('span','forecast-badge',forecastBadge));
+    const forecastBadge = zcode ? known ? ({risk:'可能提前用完',tight:'接近用完',safe:'预计够用'}[model.trend.forecast.status] || '参考预估') : ''
+      : !known ? '待预估' : model.trend.forecast.preliminary ? '初步预估' : model.trend.forecast.reference ? '参考预估' : '预估';
+    forecast.replaceChildren(node('span','forecast-symbol',known ? ({risk:'⚠️',tight:'⏳',safe:'🌿'}[model.trend.forecast.status] || '⏳') : '🔎'),copy,...(forecastBadge ? [node('span','forecast-badge',forecastBadge)] : []));
     const bottom = node('div','panel-bottom'), reset = node('p','');
     if (zcode) {
       const deadline = deadlineCopy(item);
-      reset.replaceChildren(node('span','',deadline.label),node('b','',deadlineLabel(item.resetsAt)),...(deadline.detail && item.resetsAt ? [node('small','zcode-deadline-note',deadline.detail)] : []));
+      reset.replaceChildren(node('span','',deadline.label),node('b','',deadlineLabel(item.resetsAt)));
+      reset.title = `${deadline.label}：${dateLabel(item.resetsAt)}${deadline.detail ? `；${deadline.detail}` : ''}`;
     } else reset.replaceChildren(node('span','','本周期重置'),node('b','',model.trend.resetLabel || item.resetLabel || dateLabel(model.trend.resetsAt || item.resetsAt)));
     const opportunities = button('','reset-link',() => invoke('openDetail','opportunities',model.period));
     opportunities.dataset.action = 'opportunities';
@@ -448,6 +462,9 @@
     bottom.replaceChildren(reset, zcode ? button('额度明细','reset-link',() => invoke('openDetail','quota',selected)) : opportunities);
     const graph=node('div','chart-block'),switcher=node('div','chart-view-switch');
     switcher.setAttribute('role','tablist');switcher.setAttribute('aria-label','图表视图');
+    const zcodeSamples = zcode ? model.trend.samples.filter(sample=>!item.periodStart || sample.at >= item.periodStart).filter(sample=>!item.resetsAt || sample.at <= item.resetsAt) : [];
+    const sampleDescription = zcodeSamples.length ? `${zcodeSamples.length} 次采样 · ${dateLabel(zcodeSamples[0].at)} — ${dateLabel(zcodeSamples.at(-1).at)}` : '尚无本周期采样';
+    if (zcode) updated.title += `；${sampleDescription}；蓝线为实测余额，灰虚线为时间基准，不是用量预测。`;
     const lineTitle=updated.title,help=node('details','chart-help'),summary=node('summary','','ⓘ'),helpBody=node('div','chart-help-body');
     summary.setAttribute('aria-label','图表说明');summary.dataset.help='chart';help.replaceChildren(summary,helpBody);
     help.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();help.open=false;summary.focus();}});
@@ -467,17 +484,16 @@
       addResetMarkers(graph,selectedChart,model,item);
       graph.dataset.view=kind;
       const daily=kind==='daily';
-      if (zcode && graph._caption) graph._caption.textContent = daily ? '近7日 · 蓝线：已记录时段内的余额减少，非全天总用量' : `蓝线：实测余额${trendChart.querySelector('.time-path') ? ' · 灰虚线：时间基准' : ''}`;
       status.textContent=daily?'仅供参考':'';
-      updated.title=daily?'历史记录不完整，图中数值不能当作全天总用量。':lineTitle;
+      updated.title=daily?`历史记录不完整，图中数值不能当作全天总用量。${zcode ? `近7日；${sampleDescription}` : ''}`:lineTitle;
       const meanings=node('dl','chart-meanings');
       const rows=daily?[
         ['仅 1 次记录','无法计算用量'],
         ['仅部分时段','不代表全天用量'],
         ['剩余额度增加','余额曾增加，仅供参考']
-      ]:[['蓝色实线','有连续记录'],['蓝色虚线','中间没有记录'],['灰色虚线',zcode ? '时间基准，非用量预测' : '剩余时间参考']];
+      ]:[['蓝色实线',zcode ? '实测余额' : '有连续记录'],['蓝色虚线','中间没有记录'],['灰色虚线',zcode ? '时间基准，非用量预测' : '剩余时间参考']];
       rows.forEach(([label,meaning])=>meanings.append(node('dt','',label),node('dd','',meaning)));
-      helpBody.replaceChildren(meanings,node('p','chart-help-foot',daily?'— 无记录 · 虚线只连接参考值':'额度增加或重置时，走势分段显示'));
+      helpBody.replaceChildren(meanings,node('p','chart-help-foot',daily?`${zcode ? '近7日 · ' : ''}— 无记录 · 虚线只连接参考值`:'额度增加或重置时，走势分段显示'),...(zcode ? [node('p','chart-help-foot',sampleDescription)] : []));
       help.open=false;
       for(const b of switcher.children){const active=b.dataset.view===kind;b.setAttribute('aria-selected',String(active));b.tabIndex=active?0:-1;}
       resize();
@@ -490,19 +506,14 @@
     });
     const zcodeNotes = [];
     if (zcode) {
-      const caption = node('p','zcode-chart-caption');
-      const sampleInfo = node('p','zcode-sample-info');
-      const samples = model.trend.samples.filter(sample=>!item.periodStart || sample.at >= item.periodStart).filter(sample=>!item.resetsAt || sample.at <= item.resetsAt);
-      sampleInfo.textContent = samples.length ? `${samples.length} 次采样 · ${dateLabel(samples[0].at)} — ${dateLabel(samples.at(-1).at)}` : '尚无本周期采样';
-      zcodeNotes.push(caption,sampleInfo);
       if (item.total !== null && item.remainingUnits !== null && item.total > item.remainingUnits) {
         const used = item.total-item.remainingUnits;
-        const usage = node('p','zcode-usage-note',`接口余额折算已用约 ${shortNumber(used)} ${item.unit}`);
+        const usedText = used.toLocaleString('en-US',{maximumFractionDigits:Math.min(20,Math.max(decimalPlaces(item.total),decimalPlaces(item.remainingUnits)))});
+        const usage = node('p','zcode-usage-note',`本周期已用 ${usedText} ${item.unit}`);
         usage.title = `总额 ${exactNumber(item.total)}；剩余 ${exactNumber(item.remainingUnits)} ${item.unit}`;
         zcodeNotes.push(usage);
       }
       graph.dataset.source = 'zcode';
-      graph._caption = caption;
     }
     content.replaceChildren(...(zcode ? [bucketSelector(model,item)] : []),stats,meta,graph,...zcodeNotes,forecast,bottom);
     selectView(chartViews.get(selected)||'line');
@@ -526,7 +537,7 @@
         row.dataset.bucketId = item.bucketId; row.title = `${bucketTitle(item)} · ${exact} · ${deadlineCopy(item).label}：${deadlineLabel(item.resetsAt)}`;
         row.setAttribute('aria-label',`${bucketTitle(item)}，${item.remaining}%，${exact}，${deadlineCopy(item).label}：${deadlineLabel(item.resetsAt)}，查看趋势`);
         const heading = node('span','zcode-quota-heading');
-        heading.replaceChildren(node('b','',item.label || '额度'),node('strong','',`${Math.round(item.remaining)}%`),node('span','reset-chevron','›'));
+        heading.replaceChildren(node('b','',item.label || '额度'),node('strong','',zcodePercent(item.remaining)),node('span','reset-chevron','›'));
         const progress = node('span','zcode-quota-progress'), fill = node('span',''); fill.style.width = `${item.remaining}%`; progress.appendChild(fill); progress.setAttribute('aria-hidden','true');
         const values = node('span','zcode-quota-values',`剩余 ${shortNumber(item.remainingUnits)} / ${shortNumber(item.total)} ${item.unit}`); values.title = exact;
         const separateDeadline = items.some(value=>value.resetsAt !== item.resetsAt);

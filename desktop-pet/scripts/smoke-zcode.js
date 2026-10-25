@@ -99,7 +99,7 @@ if (!process.versions.electron) {
         getAppearance: () => 'light', getSize: () => size, onError: error => errors.push(error.message), alwaysOnTop: true });
       details = createCodexDetailsWindow({ BrowserWindow, screen, sourceId: 'zcode', getAnchor: () => ({ ...anchor, x: anchor.x + 260 }),
         onError: error => errors.push(error.message) });
-      on('pet:zcode-quota-label-detail', (event, action, bucketId) => { assert.equal(ownsLabel(event), true); openDetails(action, bucketId); });
+      on('pet:zcode-quota-label-detail', (event, action, bucketId) => { assert.equal(ownsLabel(event), true); (report.detailIpc ||= []).push({action,bucketId}); openDetails(action, bucketId); });
       on('pet:zcode-details-open', (event, action, bucketId) => { assert.equal(details.owns(event), true); openDetails(action, bucketId); });
       on('pet:zcode-details-resize', (event, height) => { assert.equal(details.owns(event), true); details.resize(height); });
       on('pet:zcode-details-close', event => { assert.equal(details.owns(event), true); details.close(); });
@@ -141,6 +141,43 @@ if (!process.versions.electron) {
         (report.timeLabels ||= {})[theme] = rows;
       };
       await checkTimeLabels('light');
+      if (process.env.PET_ZCODE_SMOKE_SOURCE_ONLY === '1') {
+        report.sourceMatrix = [];
+        for(const count of [1,2,4]) for(const theme of ['light','dark']) {
+          appearance = theme; nativeTheme.themeSource = theme;
+          const buckets = usage.buckets.slice(0,count);
+          zcode.show(buildZcodeQuotaLabelModel({...snapshot,quota:{...snapshot.quota,windows:buckets}}, {}, now));
+          await waitFor(zcode, `document.querySelector('#quota-label').dataset.itemCount === '${count}' && document.documentElement.dataset.appearance === '${theme}'`, 'source row matrix');
+          const rows = await js(zcode, `[...document.querySelectorAll('.v20-period')].map(el => { const source=el.querySelector('.v20-plan-name'), model=el.querySelector('.v20-cell-label .period-pill'), time=el.querySelector('.v20-reset > span'), value=el.querySelector('.v20-value'), heading=el.querySelector('.v20-cell-label'); return { source:source.textContent, sourceHeight:source.clientHeight, sourceScrollHeight:source.scrollHeight, sourceWidth:source.clientWidth, sourceScrollWidth:source.scrollWidth, sourceRect:source.getBoundingClientRect().toJSON(), sourceLineHeight:parseFloat(getComputedStyle(source).lineHeight), model:model.textContent, modelRect:model.getBoundingClientRect().toJSON(), headingRect:heading.getBoundingClientRect().toJSON(), valueRect:value.getBoundingClientRect().toJSON(), value:value.textContent, valueWidth:value.clientWidth,valueScrollWidth:value.scrollWidth,time:time.textContent,timeWidth:time.clientWidth,timeScrollWidth:time.scrollWidth }; })`);
+          assert.equal(rows.length,count);
+          for(const row of rows) {
+            assert.ok(['每日体验','1024活动'].includes(row.source), 'Known local plans must use complete Chinese source labels.');
+            assert.ok(row.sourceScrollHeight <= row.sourceHeight && row.sourceHeight >= row.sourceLineHeight, 'Source line must retain its complete line height.');
+            assert.ok(row.sourceScrollWidth <= row.sourceWidth, 'Source label must not ellipsize.');
+            assert.ok(count === 1 ? row.sourceRect.right <= row.modelRect.left : row.sourceRect.bottom <= row.modelRect.top, 'Source and model labels must not overlap.');
+            assert.ok(row.headingRect.bottom <= row.valueRect.top, 'Heading must not collide with the percentage.');
+            assert.ok(row.timeScrollWidth <= row.timeWidth && /(?:到期|刷新)$/.test(row.time), 'Deadline remains complete.');
+            assert.ok(row.valueScrollWidth <= row.valueWidth, 'Percentage must remain complete.');
+          }
+          const footer = await js(zcode, `(() => {const entry=document.querySelector('.v20-quota-entry'),shared=document.querySelector('.v20-shared'),links=document.querySelector('.v20-links');return {text:entry.textContent,entry:entry.getBoundingClientRect().toJSON(),shared:shared.getBoundingClientRect().toJSON(),links:links.getBoundingClientRect().toJSON(),height:innerHeight};})()`);
+          assert.equal(footer.text,'查看额度明细›'); assert.ok(footer.entry.width >= footer.shared.width-1);
+          assert.ok(footer.links.bottom < footer.height, 'Independent footer actions stay inside the card.');
+          await capture(zcode, `card-${count}-${theme}`);
+          await pointer(zcode,'.v20-quota-entry');
+          await waitFor(details, `document.querySelectorAll('button.zcode-quota-row').length === ${usage.buckets.length}`, 'quota entry IPC');
+          assert.equal(details.getAction(),'quota'); assert.deepEqual(report.detailIpc.at(-1),{action:'quota',bucketId:buckets[0].bucketId});
+          assert.equal(await js(zcode, "document.querySelector('#quota-label').dataset.expanded"),'true'); details.close();
+          report.sourceMatrix.push({count,theme,rows,footer,quotaIpc:true});
+        }
+        assert.equal(await js(codex, "document.querySelector('#quota-label').outerHTML"),originalCodex);
+        assert.deepEqual(errors, []); assert.deepEqual(report.rendererErrors, []);
+        report.ok = true; report.sourceOnly = true;
+        for (const name of ['failure-zcode.png','failure-details.png']) {try {fs.unlinkSync(path.join(outputDirectory,name));} catch(error) {if(error.code !== 'ENOENT') throw error;}}
+        report.checks.push('1/2/4桶浅深来源行完整、与模型/百分比不重叠；短时间到期/刷新完整；整行查看额度明细真实IPC打开quota；Codex不变');
+        fs.writeFileSync(path.join(outputDirectory,'report.json'), `${JSON.stringify(report,null,2)}\n`);
+        console.log(`PET_ZCODE_UI_SMOKE_OK ${JSON.stringify({checks:report.checks.length,screenshots:report.screenshots.length,report:path.join(outputDirectory,'report.json')})}`);
+        app.quit(); return;
+      }
       if (process.env.PET_ZCODE_SMOKE_TIME_ONLY === '1') {
         appearance = 'dark'; nativeTheme.themeSource = 'dark';
         zcode.show(buildZcodeQuotaLabelModel(snapshot, {}, now));
@@ -164,9 +201,9 @@ if (!process.versions.electron) {
       const single = { ...usage.buckets[1], planName: `${usage.buckets[1].planName} · 超长套餐名称验收夹具`.repeat(3) };
       zcode.show(buildZcodeQuotaLabelModel({ ...snapshot, quota: { ...snapshot.quota, windows: [single] } }, {}, now));
       await waitFor(zcode, "document.querySelector('#quota-label').dataset.itemCount === '1' && document.querySelector('#quota-label').dataset.expanded === 'true'", 'single bucket long title fixture');
-      const singleBounds = await js(zcode, `(() => { const brand = document.querySelector('.v20-brand').getBoundingClientRect(), pill = document.querySelector('.v20-brand .period-pill').getBoundingClientRect(), tools = document.querySelector('.v20-header-tools').getBoundingClientRect(), footer = document.querySelector('.v20-links').getBoundingClientRect(); return { innerWidth, innerHeight, brand: brand.toJSON(), pill: pill.toJSON(), tools: tools.toJSON(), footer: footer.toJSON() }; })()`);
+      const singleBounds = await js(zcode, `(() => { const brand = document.querySelector('.v20-brand').getBoundingClientRect(), pill = document.querySelector('.v20-cell-label .period-pill').getBoundingClientRect(), tools = document.querySelector('.v20-header-tools').getBoundingClientRect(), footer = document.querySelector('.v20-links').getBoundingClientRect(); return { innerWidth, innerHeight, brand: brand.toJSON(), pill: pill.toJSON(), tools: tools.toJSON(), footer: footer.toJSON() }; })()`);
       report.singleBucketFixtureBounds = singleBounds;
-      assert.ok(singleBounds.pill.right <= singleBounds.tools.left, 'Single-bucket plan pill must shrink inside its header.');
+      assert.ok(singleBounds.pill.right <= singleBounds.innerWidth - 12, 'Single-bucket model pill must remain inside its own row.');
       assert.ok(singleBounds.brand.right <= singleBounds.tools.left, 'Single-bucket plan header must not overlap controls.');
       assert.ok(singleBounds.tools.right <= singleBounds.innerWidth && singleBounds.footer.bottom < singleBounds.innerHeight, 'Single-bucket header and footer must remain inside native bounds.');
       await capture(zcode, '10-zcode-single-long-title-fixture-light');

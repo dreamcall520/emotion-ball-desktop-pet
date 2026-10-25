@@ -180,7 +180,8 @@
   }
 
   const itemPeriod = (model, item) => model.sourceId === 'zcode' ? item.bucketId : item.windowMinutes;
-  const shortPlanName = item => /start\s*plan|体验/i.test(item.planName) ? '体验' : /1024/.test(item.planName) ? '1024' : /coding\s*plan/i.test(item.planName) ? '套餐' : Array.from(item.planName.replace(/^ZCode\s*/i, '')).slice(0, 4).join('');
+  const shortPlanName = item => /^(?:ZCode\s*)?Start\s*Plan(?:$|[\s：:])/i.test(item.planName) && item.periodKind === 'daily' ? '每日体验'
+    : /^(?:ZCode\s*)?1024\s*(?:Dev\s*Day|活动)(?:$|[\s：:])/i.test(item.planName) && ['one_time', 'expiry'].includes(item.periodKind) ? '1024活动' : item.planName;
   const itemTitle = item => item.bucketId ? item.planName && !item.label.includes(item.planName) ? `${item.planName} · ${item.label}` : item.label : periodTypeText(item.windowMinutes);
 
   function periodText(minutes) {
@@ -213,9 +214,16 @@
     return severity === 'urgent' ? '紧张' : severity === 'low' ? '偏低' : '';
   }
 
-  function renderValue(node, remaining) {
+  function remainingText(remaining, sourceId = 'codex') {
+    if (sourceId !== 'zcode') return `${Math.round(remaining)}%`;
+    if (remaining > 0 && remaining < .05) return '<0.1%';
+    if (remaining >= 99.95 && remaining < 100) return '<100%';
+    return `${Number.isInteger(remaining) ? remaining : Number(remaining.toFixed(1))}%`;
+  }
+
+  function renderValue(node, remaining, sourceId = 'codex') {
     if (!node) return;
-    const percentage = `${Math.round(remaining)}%`;
+    const percentage = remainingText(remaining, sourceId);
     const state = severityText(remaining);
     if (!state || typeof node.replaceChildren !== 'function') {
       node.textContent = `${percentage}${state}`;
@@ -230,11 +238,11 @@
     node.replaceChildren(number, status);
   }
 
-  function labelProgress(node, item) {
+  function labelProgress(node, item, sourceId = 'codex') {
     if (!node || typeof node.setAttribute !== 'function') return;
     const state = severityText(item.remaining);
     node.setAttribute('aria-label', `${itemTitle(item)}剩余额度`);
-    node.setAttribute('aria-valuetext', `${Math.round(item.remaining)}%${state ? `，${state}` : ''}`);
+    node.setAttribute('aria-valuetext', `${remainingText(item.remaining, sourceId)}${state ? `，${state}` : ''}`);
   }
 
   function resetTimeText(model, item = model.items[0]) {
@@ -393,7 +401,7 @@
     const readings = periods.map(period => {
       const minutes = period === 'weekly' ? 10080 : 300;
       const item = model.state === 'ready' ? model.items.find(item => item.windowMinutes === minutes) : null;
-      const text = item ? `${Math.round(item.remaining)}%` : '—';
+      const text = item ? remainingText(item.remaining, model.sourceId) : '—';
       const button = detailButton('', 'trend', minutes, 'quota-reading');
       button.setAttribute?.('aria-label', `${periodTypeText(minutes)}${item ? `剩余 ${text}` : '额度暂不可用'}，查看详情`);
       button.title = model.state === 'stale' ? '额度已过期，等待更新' : `查看${periodTypeText(minutes)}详情`;
@@ -411,9 +419,10 @@
     if (!expandedCard?.replaceChildren) return;
     if (!model.items.length) { expandedCard.replaceChildren(); return; }
     const dual = model.items.length > 1;
+    const showHeading = dual || model.sourceId === 'zcode';
     const header = node('div', 'v20-header');
     const brand = node('span', 'v20-brand');
-    brand.replaceChildren(node('b', '', model.sourceId === 'zcode' ? 'ZCODE' : 'CODEX'), ...(!dual ? [node('span', 'period-pill', itemTitle(model.items[0]))] : []));
+    brand.replaceChildren(node('b', '', model.sourceId === 'zcode' ? 'ZCODE' : 'CODEX'), ...(!dual && model.sourceId !== 'zcode' ? [node('span', 'period-pill', itemTitle(model.items[0]))] : []));
     if (model.sourceId === 'zcode') brand.title = itemTitle(model.items[0]);
     const headerTools = node('div', 'v20-header-tools');
     const collapse = node('button', 'v20-collapse', '⌃');
@@ -438,23 +447,23 @@
         ? detailButton('', 'trend', item.bucketId, 'v20-period') : node('section', 'v20-period');
       if (model.sourceId === 'zcode') cell.title = `查看 ${itemTitle(item)} 的额度趋势`;
       cell.dataset.severity = severityOf(item.remaining);
-      cell.setAttribute?.('aria-label', `${itemTitle(item)}，本周期剩余 ${Math.round(item.remaining)}%${model.sourceId === 'zcode' ? '，查看该额度趋势' : ''}`);
+      cell.setAttribute?.('aria-label', `${itemTitle(item)}，本周期剩余 ${remainingText(item.remaining, model.sourceId)}${model.sourceId === 'zcode' ? '，查看该额度趋势' : ''}`);
       const valueRow = node('div', 'v20-value-row');
       const pace = node('span', `v20-pace ${item.pace.state}`, model.state === 'stale' ? '待更新'
         : ({ fast: dual ? '偏快' : '用量偏快', balanced: dual ? '均衡' : '节奏均衡', slow: dual ? '较慢' : '用量较慢', unknown: '待记录' }[item.pace.state]));
       pace.title = model.state === 'stale' ? '额度数据已过期' : item.pace.state === 'unknown' ? '记录不足，暂无法比较用量节奏' : '对比本周期剩余额度与剩余时间';
-      const value = node('strong', 'v20-value', `${Math.round(item.remaining)}%`);
+      const value = node('strong', 'v20-value', remainingText(item.remaining, model.sourceId));
       value.title = severityText(item.remaining);
-      valueRow.replaceChildren(value, ...(model.sourceId === 'zcode' && model.state !== 'stale' && item.pace.state === 'unknown' ? [] : [pace]));
+      valueRow.replaceChildren(value, ...(model.sourceId === 'zcode' && model.state !== 'stale' ? [] : [pace]));
       const progress = node('progress', 'v20-progress');
-      progress.max = 100; progress.value = item.remaining; labelProgress(progress, item);
+      progress.max = 100; progress.value = item.remaining; labelProgress(progress, item, model.sourceId);
       const reset = node('p', 'v20-reset');
       const parts = resetTimeText(model, item).split(' · ');
       const zcodeTime = model.sourceId === 'zcode' ? zcodeExpandedTime(model, item, dual) : null;
       reset.title = zcodeTime ? zcodeTime.title : resetTimeText(model, item);
       reset.replaceChildren(node('span', '', zcodeTime ? zcodeTime.text : parts[0]), ...(!zcodeTime && !dual && parts[1] ? [node('span', 'v20-date', parts[1])] : []));
-      cell.replaceChildren(...(dual ? [node('div', 'v20-cell-label', '')] : []), valueRow, progress, reset);
-      if (dual) {
+      cell.replaceChildren(...(showHeading ? [node('div', 'v20-cell-label', '')] : []), valueRow, progress, reset);
+      if (showHeading) {
         const heading = cell.children[0];
         heading.title = itemTitle(item);
         heading.replaceChildren(...(model.sourceId === 'zcode' && item.planName ? [node('span', 'v20-plan-name', shortPlanName(item))] : []),
@@ -483,8 +492,14 @@
       hands.setAttribute('d', 'M8 4.5V8L10.5 9.5');
       clock.appendChild(outline); clock.appendChild(hands); reset.appendChild(clock);
     }
-    shared.replaceChildren(model.sourceId === 'zcode'
-      ? detailButton('额度明细', 'quota', model.items[0].bucketId, 'v20-opportunities') : reset);
+    if (model.sourceId === 'zcode') {
+      const quotaEntry = detailButton('', 'quota', model.items[0].bucketId, 'v20-quota-entry');
+      quotaEntry.title = '查看各套餐与模型的额度明细';
+      quotaEntry.setAttribute?.('aria-label', quotaEntry.title);
+      const arrow = node('span', 'v20-entry-arrow', '›'); arrow.setAttribute?.('aria-hidden', 'true');
+      quotaEntry.replaceChildren(node('span', '', '查看额度明细'), arrow);
+      shared.replaceChildren(quotaEntry);
+    } else shared.replaceChildren(reset);
     if (model.extraCredits) {
       const credit = model.extraCredits;
       const text = credit.state === 'balance' ? creditBalanceText(credit.balance) : credit.state === 'none' ? '暂无' : credit.state === 'unlimited' ? '不限额' : '暂未提供';
@@ -527,7 +542,7 @@
       label.dataset.source = model.sourceId || 'codex';
       document.title = model.sourceId === 'zcode' ? 'ZCode 剩余额度' : 'Codex 剩余额度';
       if (model.sourceId === 'zcode') {
-        label.title = `ZCode 剩余额度${model.items.length ? '：' + model.items.map(item => `${itemTitle(item)}，剩余 ${Math.round(item.remaining)}%`).join('；') : ''}`;
+        label.title = `ZCode 剩余额度${model.items.length ? '：' + model.items.map(item => `${itemTitle(item)}，剩余 ${remainingText(item.remaining, model.sourceId)}`).join('；') : ''}`;
         label.setAttribute?.('aria-label', label.title);
       } else label.setAttribute?.('aria-label', 'Codex 剩余额度');
       expandedCard?.setAttribute?.('aria-label', model.sourceId === 'zcode' ? 'ZCode 额度与状态' : 'Codex 额度与状态');
@@ -559,20 +574,22 @@
         row.dataset.severity = severity;
         row.dataset.role = index === 0 ? 'primary' : 'secondary';
         nameNode.className = 'quota-name';
-        nameNode.textContent = item.label;
+        nameNode.textContent = model.sourceId === 'zcode' && model.size === 'standard'
+          ? ({ 'GLM-5.3': '5.3', 'GLM-5.3-Flash': '5.3 Flash' }[item.label] || item.label) : item.label;
+        if (model.sourceId === 'zcode') nameNode.setAttribute?.('aria-label', item.label);
         if (model.sourceId === 'zcode') nameNode.title = itemTitle(item);
         periodNode.className = 'quota-period period-pill';
         periodNode.textContent = `${model.state === 'stale' ? '已过期 ' : ''}${model.sourceId === 'zcode' && item.planName ? shortPlanName(item) : model.sourceId === 'zcode' ? ({one_time:'活动',expiry:'活动',daily:'每日',monthly:'每月',weekly:'每周',rolling:'周期'}[item.periodKind] || '有效期') : periodText(item.windowMinutes)}`;
         if (model.sourceId === 'zcode') periodNode.title = item.planName || itemTitle(item);
         valueNode.className = 'quota-value';
-        renderValue(valueNode, item.remaining);
+        renderValue(valueNode, item.remaining, model.sourceId);
         progressNode.className = 'quota-progress';
         progressNode.max = 100;
         progressNode.value = item.remaining;
-        labelProgress(progressNode, item);
+        labelProgress(progressNode, item, model.sourceId);
         row.replaceChildren(nameNode, periodNode, valueNode, progressNode);
         if (model.extraCredits && index === 0) {
-          valueNode.textContent = `${Math.round(item.remaining)}%`;
+          valueNode.textContent = remainingText(item.remaining, model.sourceId);
           const description = document.createElement('span');
           description.className = 'quota-description';
           description.textContent = label.dataset.status === 'blocked' ? '已达花费限制'
@@ -587,7 +604,7 @@
       if (summary.dataset) summary.dataset.severity = label.dataset.status === 'blocked' ? 'urgent'
         : summaryItem ? severityOf(summaryItem.remaining) : 'normal';
       if (summaryItem) {
-        summary.replaceChildren(...compactReading(summaryItem.windowMinutes, `${Math.round(summaryItem.remaining)}%`,
+        summary.replaceChildren(...compactReading(summaryItem.windowMinutes, remainingText(summaryItem.remaining, model.sourceId),
           model.sourceId === 'zcode' ? '额度' : label.dataset.status === 'blocked' ? '受限' : severityText(summaryItem.remaining) || '额度', model.sourceId === 'zcode' ? 'Z' : null));
         if (compactProduct) compactProduct.textContent = model.sourceId === 'zcode' ? 'ZCODE' : 'CODEX';
         if (compactPeriod) compactPeriod.textContent = itemTitle(summaryItem);
@@ -607,12 +624,12 @@
         ? severityOf(secondaryItem.remaining) : 'normal';
       if (secondaryItem && secondaryPeriod) secondaryPeriod.textContent = periodTypeText(secondaryItem.windowMinutes);
       else if (secondaryPeriod) secondaryPeriod.textContent = '';
-      if (secondaryItem) renderValue(secondaryValue, secondaryItem.remaining);
+      if (secondaryItem) renderValue(secondaryValue, secondaryItem.remaining, model.sourceId);
       else if (secondaryValue) secondaryValue.textContent = '';
       if (secondaryProgress) {
         secondaryProgress.max = 100;
         secondaryProgress.value = secondaryItem ? secondaryItem.remaining : 0;
-        if (secondaryItem) labelProgress(secondaryProgress, secondaryItem);
+        if (secondaryItem) labelProgress(secondaryProgress, secondaryItem, model.sourceId);
       }
       if (secondaryItem && secondaryReset) secondaryReset.textContent = resetTimeText(model, secondaryItem);
       else if (secondaryReset) secondaryReset.textContent = '';

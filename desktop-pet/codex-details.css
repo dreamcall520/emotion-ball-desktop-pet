@@ -184,12 +184,18 @@ html[data-resolved-appearance=dark] .reset-event-popup{background:#1a222d}
 .zcode-stats { grid-template-columns: 1fr 1.3fr auto; gap: 8px; }
 .zcode-stats.no-deadline { grid-template-columns: 1fr auto; }
 .zcode-stats .zcode-countdown { font-size: 18px; line-height: 30px; letter-spacing: -.02em; white-space: nowrap; }
-.zcode-chart-caption,.zcode-sample-info,.zcode-usage-note { margin: 3px 0 0; color: var(--detail-subtle); font-size: 11px; line-height: 16px; overflow-wrap: anywhere; }
-.zcode-chart-caption { color: var(--detail-muted); }
-.zcode-deadline-note { display: block; margin-top: 3px; color: var(--detail-subtle); font-size: 11px; line-height: 16px; }
+.zcode-usage-note { margin: 3px 0 0; color: var(--detail-subtle); font-size: 11px; line-height: 16px; overflow-wrap: anywhere; }
 #details-panel[data-source="zcode"] .forecast-badge { white-space: normal; max-width: 55px; text-align: center; }
 #details-panel[data-source="zcode"] .forecast-copy { min-width: 0; }
-#details-panel[data-source="zcode"] .panel-bottom { align-items: center; }
+#details-panel[data-source="zcode"] .panel-bottom { align-items: baseline; gap: 7px; }
+#details-panel[data-source="zcode"] .panel-bottom > p { display: flex; gap: 5px; align-items: baseline; min-width: 0; white-space: nowrap; }
+#details-panel[data-source="zcode"] .panel-bottom b { display: inline; margin: 0; }
+#details-panel[data-source="zcode"] .panel-bottom .reset-link { flex: none; }
+#details-panel[data-source="zcode"] .trend-pace.fast { color: var(--detail-warning); }
+#details-panel[data-source="zcode"] .trend-pace.balanced { color: var(--detail-blue); }
+#details-panel[data-source="zcode"] .trend-pace.slow { color: #287b50; }
+#details-panel[data-source="zcode"] .trend-pace.unknown { color: var(--detail-subtle); }
+html[data-resolved-appearance="dark"] #details-panel[data-source="zcode"] .trend-pace.slow { color: #87cba2; }
 .zcode-quota-group { margin-top: 15px; }
 .zcode-quota-group-title { margin: 0 0 6px; color: var(--detail-muted); font-size: 12px; line-height: 18px; font-weight: 600; overflow-wrap: anywhere; }
 .zcode-quota-list { list-style: none; padding: 0; margin: 0; border: 1px solid var(--detail-line); border-radius: 9px; overflow: hidden; }

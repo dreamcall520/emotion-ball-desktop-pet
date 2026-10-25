@@ -9,13 +9,28 @@ const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
 function fixture({ reduced = false, hidden = false, answer = async () => true, info = null } = {}) {
   const nodes = new Map(), documentEvents = new Map(), windowEvents = new Map(), calls = [], portraits = [], active = [];
   let receive, mediaChange, unsubscribed = 0, destroyed = 0;
+  const element = (tagName, id = '', textContent = '') => ({
+    tagName: tagName.toUpperCase(), id, className: '', textContent, disabled: false, listeners: new Map(), focusCalls: 0,
+    children: [], parentElement: null,
+    addEventListener(name, fn) { this.listeners.set(name, fn); }, focus() { this.focusCalls++; },
+    appendChild(child) { child.parentElement = this; this.children.push(child); return child; },
+    replaceWith(next) {
+      const parent = this.parentElement; assert.ok(parent, 'replaced disclosure is attached');
+      const index = parent.children.indexOf(this); assert.ok(index >= 0);
+      parent.children[index] = next; next.parentElement = parent; this.parentElement = null;
+      const register = value => { if(value.id) nodes.set(value.id,value); value.children.forEach(register); }; register(next);
+    }
+  });
   const node = id => {
-    if (!nodes.has(id)) nodes.set(id, { disabled: false, textContent: new RegExp(`<[^>]+id="${id}"[^>]*>([^<]*)`).exec(read('codex-consent.html'))?.[1] || '', listeners: new Map(), focusCalls: 0,
-      addEventListener(name, fn) { this.listeners.set(name, fn); }, focus() { this.focusCalls++; } });
+    if (!nodes.has(id)) {
+      const match = new RegExp(`<([^\\s>]+)[^>]*id="${id}"[^>]*>([^<]*)`).exec(read('codex-consent.html'));
+      const value = element(match?.[1] || 'div',id,match?.[2] || '');
+      element('section').appendChild(value); nodes.set(id,value);
+    }
     return nodes.get(id);
   };
   const media = { matches: reduced, addEventListener(_name, fn) { mediaChange = fn; }, removeEventListener() { mediaChange = null; } };
-  const document = { hidden, title: '开启 Codex 联动', documentElement: { dataset: {} }, getElementById: node,
+  const document = { hidden, title: '开启 Codex 联动', documentElement: { dataset: {} }, getElementById: node, createElement: tagName => element(tagName),
     addEventListener(name, fn) { documentEvents.set(name, fn); } };
   const context = vm.createContext({ document, matchMedia: () => media, Promise,
     addEventListener(name, fn) { windowEvents.set(name, fn); },
@@ -154,4 +169,22 @@ test('ZCode 形象信息刷新不会覆盖提交失败反馈', async () => {
   f.receive({ sourceId: 'zcode', appearance: { shape: 'aurora-cloud' } });
   assert.equal(f.node('consent-status').textContent, error);
   assert.equal(f.portraits.length, 2);
+});
+
+
+test('ZCode 本机状态和由你掌控复用隐私列表样式，保留原ID且重复更新不嵌套，Codex仍是p', async () => {
+  const f=fixture();f.receive({appearance:{shape:'blob'}});
+  for(const id of ['consent-state-body','consent-control-body']) assert.equal(f.node(id).tagName,'P');
+  f.receive({sourceId:'zcode',appearance:{shape:'blob'}});
+  const bodies=['consent-state-body','consent-control-body'].map(id=>f.node(id));
+  bodies.forEach((body,index)=>{
+    assert.equal(body.tagName,'LI');assert.equal(body.id,['consent-state-body','consent-control-body'][index]);
+    assert.equal(body.parentElement.tagName,'UL');assert.equal(body.parentElement.className,'consent-privacy');
+    assert.equal(body.parentElement.children.length,1);assert.equal(body.parentElement.parentElement.tagName,'SECTION');
+  });
+  f.receive({sourceId:'zcode',appearance:{shape:'aurora-cloud'}});
+  bodies.forEach(body=>assert.equal(f.node(body.id),body,'appearance updates keep the same disclosure list item'));
+  assert.match(f.node('consent-state-body').textContent,/套餐、额度与任务状态/);
+  assert.match(f.node('consent-control-body').textContent,/不监听键盘/);
+  assert.deepEqual(f.calls,[],'formatting does not grant consent');
 });

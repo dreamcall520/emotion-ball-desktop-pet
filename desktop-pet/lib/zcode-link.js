@@ -5,7 +5,7 @@ function createZcodeLink({ BrowserWindow, screen, ipcMain, getSettings, save, fi
   getPetWindow, getObstacles = () => [], getPresentation = () => null,
   getSuppressed = () => false, onChange = () => {}, onEnabledChanged = () => {},
   onLayout = () => {}, onError = () => {}, requestConsent = async () => true, cancelConsent = () => {},
-  openTask = async () => false,
+  openTask = async () => false, getGuardEntry = () => false, getCardSuppressed = () => false, onOpenGuard = () => {},
   createCompanion = require('./zcode-companion').createZcodeCompanion,
   createCard = require('./quota-label-window').createQuotaLabelWindow,
   createDetails = require('./codex-details-window').createCodexDetailsWindow,
@@ -27,12 +27,13 @@ function createZcodeLink({ BrowserWindow, screen, ipcMain, getSettings, save, fi
   const card = createCard({ BrowserWindow, screen, sourceId: 'zcode', getPetWindow,
     getObstacle: obstacle, getSize: () => getSettings().zcodeQuotaLabelSize,
     getAppearance: () => getSettings().codexQuotaAppearance,
-    getPresentation: () => ({ ...getPresentation(), quotaObstacles: getObstacles().filter(Boolean) }), getSuppressed: () => getSuppressed() || details?.isVisible(),
+    getGuardEntry: () => getSettings().zcodeQuotaFunEnabled !== false && getGuardEntry(),
+    getPresentation: () => ({ ...getPresentation(), quotaObstacles: getObstacles().filter(Boolean) }), getSuppressed: () => getSuppressed() || getCardSuppressed() || details?.isVisible(),
     alwaysOnTop: getSettings().alwaysOnTop, onLayout, onError: report });
   const details = createDetails({ BrowserWindow, screen, sourceId: 'zcode',
     getAnchor: () => card.getVisibleBounds() || getPetWindow()?.getBounds?.(),
     alwaysOnTop: getSettings().alwaysOnTop, onError: report,
-    onVisibilityChange: () => { card.reposition(); onLayout(); } });
+    onVisibilityChange: () => { card.reposition(); onLayout(); onChange(); } });
   const service = createCompanion({ filePath, onChange: () => { sync(); onChange(); } });
   function model(action, bucketId) {
     const prefs = getSettings();
@@ -81,7 +82,7 @@ function createZcodeLink({ BrowserWindow, screen, ipcMain, getSettings, save, fi
     finally { enabling = false; }
   }
   function setPreference(key, value) {
-    if (closed || !enabled || !['zcodeQuotaAlwaysVisible', 'zcodeQuotaLabelSize'].includes(key)) return false;
+    if (closed || !enabled || !['zcodeQuotaAlwaysVisible', 'zcodeQuotaLabelSize', 'zcodeQuotaFunEnabled'].includes(key)) return false;
     const next = key === 'zcodeQuotaLabelSize' ? ['compact', 'standard'].includes(value) ? value : null : typeof value === 'boolean' ? value : null;
     if (next === null) return false;
     try { save({ [key]: next }); sync(); onChange(); return true; }
@@ -101,6 +102,11 @@ function createZcodeLink({ BrowserWindow, screen, ipcMain, getSettings, save, fi
     handlers.push([channel, fn, invoke]);
   }
   listen('pet:zcode-quota-label-detail', (event, action, bucketId) => { if (ownsCard(event)) openDetails(action, bucketId); });
+  listen('pet:zcode-quota-guard-open', event => {
+    if (!closed && enabled && getSettings().zcodeQuotaAlwaysVisible && getSettings().zcodeQuotaFunEnabled !== false
+      && !getSuppressed() && !details.isVisible() && getGuardEntry() && ownsCard(event)
+      && card.isGuardEntryVisible?.() === true) onOpenGuard();
+  });
   listen('pet:zcode-details-open', (event, action, bucketId) => { if (details.owns(event)) openDetails(action, bucketId); });
   listen('pet:zcode-details-close', event => { if (details.owns(event)) details.close(); });
   listen('pet:zcode-details-resize', (event, height) => { if (details.owns(event)) details.resize(height); });
@@ -129,6 +135,9 @@ function createZcodeLink({ BrowserWindow, screen, ipcMain, getSettings, save, fi
         submenu: [['standard', '标准'], ['compact', '小巧']].map(([value, label]) => ({
           id: `zcode-size-${value}`, label, type: 'radio', checked: prefs.zcodeQuotaLabelSize === value,
           click: () => setPreference('zcodeQuotaLabelSize', value) })) },
+      { id: 'zcode-quota-fun', label: '额度趣味互动', type: 'checkbox', enabled,
+        checked: prefs.zcodeQuotaFunEnabled !== false,
+        click: item => { const value = item.checked; item.checked = prefs.zcodeQuotaFunEnabled !== false; setPreference('zcodeQuotaFunEnabled', value); } },
       { id: 'zcode-quota-detail', label: '额度明细', enabled, click: () => openDetails('quota') },
       { id: 'zcode-trend', label: '额度趋势', enabled, click: () => openDetails('trend') },
       { id: 'zcode-tasks', label: '进行中任务', enabled, click: () => openDetails('tasks') },
@@ -138,6 +147,13 @@ function createZcodeLink({ BrowserWindow, screen, ipcMain, getSettings, save, fi
   return { menu, sync, setEnabled, setPreference, openDetails, getSnapshot: service.getSnapshot,
     start: () => enabled ? service.setEnabled(true) : undefined,
     isEnabled: () => enabled && !closed,
+    isDetailsVisible: () => details.isVisible(),
+    isCardAvailable() {
+      const pet = getPetWindow();
+      return Boolean(!closed && enabled && getSettings().zcodeQuotaAlwaysVisible && !getSuppressed()
+        && !details.isVisible() && pet && !pet.isDestroyed() && pet.isVisible()
+        && buildCard(service.getSnapshot(), { size: getSettings().zcodeQuotaLabelSize }).state === 'ready');
+    },
     getWindow: card.getWindow, getVisibleBounds: card.getVisibleBounds,
     reposition() { card.reposition(); sync(); },
     hide() { card.hide(); details.close(); },

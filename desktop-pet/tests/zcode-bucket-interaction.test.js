@@ -32,7 +32,7 @@ function fixture(model) {
 }
 const items = count => Array.from({ length: count }, (_unused, id) => ({ label: id % 2 ? 'GLM-5.3-Flash' : 'GLM-5.3',
   planName: id < 2 ? '1024 活动' : 'Start Plan 体验', bucketId: `bucket-${id}`, windowMinutes: 1440,
-  remaining: 70, resetsAt: Date.now() + 86400000, periodKind: 'daily' }));
+  remaining: 70, resetsAt: Date.now() + 86400000, periodKind: id < 2 ? 'one_time' : 'daily' }));
 
 test('ZCode 1/2/4 桶、标准/小巧、浅/深：整格按钮直接打开对应桶趋势且阻止收起冒泡', () => {
   for (const count of [1, 2, 4]) for (const size of ['standard', 'compact']) for (const appearance of ['light', 'dark']) {
@@ -64,7 +64,7 @@ test('ZCode 成功获取额度时不把记录不足误写成待记录；真实�
   const ready = fixture({ sourceId: 'zcode', state: 'ready', expanded: true, items: items(4) });
   assert.doesNotMatch(ready.nodes['codex-expanded'].textContent, /待记录/);
   assert.match(ready.cells[0].children[0].title, /1024 活动/);
-  assert.equal(ready.cells[0].children[0].children[0].textContent, '1024');
+  assert.equal(ready.cells[0].children[0].children[0].textContent, '1024活动');
   const stale = fixture({ sourceId: 'zcode', state: 'stale', expanded: true, items: items(1) });
   assert.match(stale.nodes['codex-expanded'].textContent, /待更新/);
   const codex = fixture({ state: 'ready', expanded: true, items: items(1) });
@@ -84,4 +84,56 @@ test('ZCode 展开使用今天/明天或月日短时间且明确到期/刷新，
   assert.match(times[3].title,/^\d{4}\/\d{2}\/\d{2} 09:00 到期（本机时间）$/);
   const codex = fixture({state:'ready',expanded:true,items:[{...rows[1],windowMinutes:300}]});
   assert.match(codex.cells[0].children.at(-1).textContent,/后重置/);
+});
+
+
+test('已知来源用完整中文，每桶保留原模型，底部明细是独立整行入口', () => {
+  const h = fixture({sourceId:'zcode',state:'ready',expanded:true,items:items(4)});
+  assert.deepEqual(h.cells.map(cell=>cell.children[0].children[0].textContent),['1024活动','1024活动','每日体验','每日体验']);
+  assert.deepEqual(h.cells.map(cell=>cell.children[0].children[1].textContent),items(4).map(item=>item.label));
+  const entry=h.nodes['codex-expanded'].children[2].children[0].children[0];
+  assert.equal(entry.tagName,'button'); assert.equal(entry.textContent,'查看额度明细›');
+  entry.click(); assert.deepEqual(h.calls,[['detail','quota','bucket-0']]);
+  assert.equal(h.nodes['codex-expanded'].children[2].children[1].tagName,'nav');
+  const single=fixture({sourceId:'zcode',state:'ready',expanded:true,items:items(1)});
+  assert.equal(single.cells[0].children[0].children[0].textContent,'1024活动');
+  assert.equal(single.cells[0].children[0].children[1].textContent,'GLM-5.3');
+});
+
+
+test('ZCode 真余量保留1位精度，接近满额/用尽不误显示100或0，收起/展开/aria一致，Codex不改', () => {
+  for(const [remaining,expected] of [[99.8706,'99.9%'],[99.99,'<100%'],[99.95,'<100%'],[.01,'<0.1%'],[100,'100%'],[0,'0%'],[50,'50%']]) {
+    const h=fixture({sourceId:'zcode',state:'ready',expanded:true,items:[{...items(1)[0],remaining}]});
+    assert.equal(h.cells[0].children[1].children[0].textContent,expected);
+    assert.ok(h.cells[0].attributes['aria-label'].includes(expected));
+    assert.ok(h.cells[0].children[2].attributes['aria-valuetext'].startsWith(expected));
+    assert.ok(h.nodes.items.children[0].children[2].textContent.startsWith(expected));
+    assert.ok(h.nodes.items.children[0].children[3].attributes['aria-valuetext'].startsWith(expected));
+    assert.ok(h.nodes.summary.textContent.includes(expected));
+  }
+  const codex=fixture({state:'ready',expanded:true,items:[{...items(1)[0],remaining:99.8706}]});
+  assert.equal(codex.cells[0].children[0].children[0].textContent,'100%');
+});
+
+
+test('ZCode 标准收起行短显示已知模型，完整型号保留title与aria；展开和未知模型保留原名', () => {
+  const rows=items(4); const h=fixture({sourceId:'zcode',state:'ready',size:'standard',items:rows});
+  assert.deepEqual(h.nodes.items.children.map(row=>row.children[0].textContent),['5.3','5.3 Flash','5.3','5.3 Flash']);
+  assert.ok(h.nodes.items.children[1].children[0].title.includes('GLM-5.3-Flash'));
+  assert.equal(h.nodes.items.children[1].children[0].attributes['aria-label'],'GLM-5.3-Flash');
+  assert.equal(h.cells[1].children[0].children[1].textContent,'GLM-5.3-Flash');
+  const unknown=fixture({sourceId:'zcode',state:'ready',items:[{...rows[0],label:'Custom Official Model'}]});
+  assert.equal(unknown.nodes.items.children[0].children[0].textContent,'Custom Official Model');
+});
+
+
+test('套餐别名仅限已知名称和周期，未知企业1024套餐和非daily StartPlan保留真实名称', () => {
+  const plans=[
+    {planName:'企业1024点套餐',periodKind:'unknown'},
+    {planName:'ZCode Start Plan',periodKind:'one_time'},
+    {planName:'ZCode Start Plan',periodKind:'daily'},
+    {planName:'ZCode 1024 Dev Day',periodKind:'one_time'}
+  ];
+  const h=fixture({sourceId:'zcode',state:'ready',expanded:true,items:plans.map((plan,i)=>({...items(4)[i],...plan}))});
+  assert.deepEqual(h.cells.map(cell=>cell.children[0].children[0].textContent),['企业1024点套餐','ZCode Start Plan','每日体验','1024活动']);
 });

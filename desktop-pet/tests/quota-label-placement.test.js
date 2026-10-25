@@ -469,8 +469,9 @@ test('ZCode 独立可读尺寸不改变 Codex，单开与 Codex 下方锚点一�
     assertInside(stacked,area);
   }
   assert.deepEqual(quotaLabelSize('standard',true,2),{width:196,height:144});
-  assert.deepEqual(quotaLabelSize('standard',true,2,false,false,null,'zcode'),{width:196,height:154});
-  assert.deepEqual(quotaLabelSize('standard',true,4,false,false,null,'zcode'),{width:196,height:244});
+  assert.deepEqual(quotaLabelSize('standard',true,1,false,false,null,'zcode'),{width:196,height:154});
+  assert.deepEqual(quotaLabelSize('standard',true,2,false,false,null,'zcode'),{width:196,height:166});
+  assert.deepEqual(quotaLabelSize('standard',true,4,false,false,null,'zcode'),{width:196,height:256});
 });
 
 test('ZCode 左右及底边夹紧后完整显示且不盖宠物/另一卡，分离障碍物不误占空白', () => {

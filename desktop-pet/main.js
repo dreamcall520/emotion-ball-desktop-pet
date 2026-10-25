@@ -106,6 +106,7 @@ let sheepQuotaInk = null;
 let bubbleVisibilityBinding = null;
 let quotaLabel = null;
 let quotaGuard = null;
+let quotaGuardSource = 'codex';
 let codexDetails = null;
 let codexDetailReturn = null;
 let codexThreadOpener = url => shell.openExternal(url);
@@ -1179,19 +1180,19 @@ function syncQuotaLabel(snapshot = null) {
       if (display.style !== 'card' && !display.showNumbers) visible = false;
       if (!visible) {
         shown = false;
-        safelyInvokeWindow('额度隐藏时守护战隐藏', () => quotaGuard?.close());
+        safelyInvokeWindow('额度隐藏时守护战隐藏', closeCodexQuotaGuard);
         try { quotaLabel.hide(); } catch (error) { reportQuotaError('额度标签隐藏', error); }
         continue;
       }
       try {
         const labelModel = quotaLabelModel(current);
         quotaLabel.show(labelModel);
-        quotaGuard?.update(labelModel);
+        if (quotaGuardSource === 'codex') quotaGuard?.update(labelModel);
         shown = true;
       } catch (error) {
         shown = false;
         reportQuotaError('额度标签同步', error);
-        safelyInvokeWindow('额度同步失败时守护战隐藏', () => quotaGuard?.close());
+        safelyInvokeWindow('额度同步失败时守护战隐藏', closeCodexQuotaGuard);
         try { quotaLabel.hide(); } catch (_) {}
       }
     }
@@ -1201,13 +1202,14 @@ function syncQuotaLabel(snapshot = null) {
       shown = false;
       try { quotaLabel.hide(); } catch (_) {}
       reportQuotaError('额度标签同步', new Error('额度标签状态持续重入'));
-      safelyInvokeWindow('额度同步重入时守护战隐藏', () => quotaGuard?.close());
+      safelyInvokeWindow('额度同步重入时守护战隐藏', closeCodexQuotaGuard);
     }
     return shown;
   } finally {
     quotaSyncing = false;
     syncApiUsageLabel();
     zcodeLink?.sync();
+    syncZcodeQuotaGuard();
   }
 }
 
@@ -1312,15 +1314,37 @@ function fromQuotaLabel(event) {
 }
 
 function canShowQuotaGuard() {
+  if (quotaGuardSource === 'zcode') return Boolean(!isQuitting && !screenLocked && !shortcutWindow?.isPresenting()
+    && settings?.zcodeEnabled === true && settings.zcodeQuotaAlwaysVisible === true && settings.zcodeQuotaFunEnabled !== false
+    && !chatWindow?.isVisible() && !codexDetails?.isVisible() && !presentationSuppressed()
+    && zcodeLink?.isEnabled() && zcodeLink.isCardAvailable());
   return Boolean(!isQuitting && !screenLocked && !shortcutWindow?.isPresenting() && settings?.codexEnabled === true &&
     settings.codexQuotaAlwaysVisible === true && settings.codexQuotaFunEnabled !== false &&
     !chatWindow?.isVisible() && !codexDetails?.isVisible() &&
     !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible());
 }
 
-function openQuotaGuard() {
-  if (!canShowQuotaGuard() || !quotaGuard) return false;
-  return quotaGuard.open(quotaLabelModel());
+function zcodeGuardEntryAvailable() {
+  return Boolean(!quotaLabel?.isGuardEntryVisible?.() && !(quotaGuard?.isVisible() && quotaGuardSource === 'codex'));
+}
+
+function closeCodexQuotaGuard() { if (quotaGuardSource === 'codex') quotaGuard?.close(); }
+
+function syncZcodeQuotaGuard() {
+  if (quotaGuardSource !== 'zcode' || !quotaGuard?.isVisible()) return;
+  if (!canShowQuotaGuard()) quotaGuard.close();
+  else quotaGuard.update({ sourceId: 'zcode', practice: true, state: 'ready', items: [] });
+}
+
+function openQuotaGuard(source = 'codex') {
+  if (source === 'zcode' && !zcodeGuardEntryAvailable()) return false;
+  const previous = quotaGuardSource;
+  quotaGuardSource = source === 'zcode' ? 'zcode' : 'codex';
+  if (!canShowQuotaGuard() || !quotaGuard) { quotaGuardSource = previous; return false; }
+  const opened = quotaGuard.open(quotaGuardSource === 'zcode'
+    ? { sourceId: 'zcode', practice: true, state: 'ready', items: [] } : quotaLabelModel());
+  if (!opened) quotaGuardSource = previous;
+  return opened;
 }
 
 async function openCodexDetailThread(id, turnId) {
@@ -1391,7 +1415,7 @@ async function setCodexEnabled(enabled) {
     settings.codexEnabled = false;
     if (changed) {
       try { quotaLabel?.destroy(); } catch (error) { reportQuotaError('额度标签销毁', error); }
-      quotaGuard?.close();
+      closeCodexQuotaGuard();
       codexDetails?.close();
     }
     // 停止读取不依赖磁盘写入成功；保存失败也必须先释放连接和计时器。
@@ -3381,13 +3405,13 @@ async function bootstrap() {
   quotaGuard = createQuotaGuardWindow({ BrowserWindow, screen,
     getAnchor: () => petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null,
     getObstacles: () => { const panel = pomodoroWindows?.getPanelBounds(); return panel ? [panel] : []; },
-    getSize: () => settings?.codexQuotaLabelSize,
+    getSize: () => quotaGuardSource === 'zcode' ? settings?.zcodeQuotaLabelSize : settings?.codexQuotaLabelSize,
     getAppearance: () => settings?.codexQuotaAppearance,
     canShow: canShowQuotaGuard,
     onLayout: () => pomodoroWindows?.sync(),
     onVisibilityChange: visible => {
       if (visible) shortcutWindow?.interrupt();
-      safelyInvokeWindow('守护战显隐时额度卡重排', () => quotaLabel?.reposition());
+      safelyInvokeWindow('守护战显隐时额度卡重排', () => { quotaLabel?.reposition(); zcodeLink?.reposition(); });
       pomodoroWindows?.sync();
     },
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('守护战窗口', error) });
@@ -3417,7 +3441,10 @@ async function bootstrap() {
       quotaBottomAligned: true, quotaStackBelow: quotaLabel?.getVisibleBounds(),
       quotaStyle: quotaDisplayConfig().style, sheepTheme: settings?.customization?.appearance?.sheepTheme }),
     getSuppressed: () => isQuitting || screenLocked || chatWindow?.isVisible() || shortcutWindow?.isPresenting() || presentationSuppressed(),
-    onChange: () => { refreshTrayMenu(); tickEdgeNotice(true); },
+    onChange: () => { refreshTrayMenu(); tickEdgeNotice(true); syncZcodeQuotaGuard(); },
+    getGuardEntry: zcodeGuardEntryAvailable,
+    getCardSuppressed: () => quotaGuard?.isVisible() === true,
+    onOpenGuard: () => openQuotaGuard('zcode'),
     onLayout: () => pomodoroWindows?.sync(),
     onEnabledChanged: async enabled => {
       if (!enabled) await chat?.zcodeDisabled();

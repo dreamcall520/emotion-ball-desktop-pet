@@ -190,8 +190,7 @@ contextBridge.exposeInMainWorld('petQuotaLabel', {
     try { ipcRenderer.send(sourceId === 'zcode' ? 'pet:zcode-quota-label-pointer' : 'pet:quota-label-pointer', value); } catch (_) {}
   },
   openGuard() {
-    if (sourceId !== 'codex') return;
-    try { ipcRenderer.send('pet:quota-guard-open'); } catch (_) {}
+    try { ipcRenderer.send(sourceId === 'zcode' ? 'pet:zcode-quota-guard-open' : 'pet:quota-guard-open'); } catch (_) {}
   },
   openDetail(action, period) {
     if (sourceId === 'zcode') {
@@ -212,6 +211,7 @@ contextBridge.exposeInMainWorld('petQuotaLabel', {
         if (typeof visible === 'boolean') model.visible = visible;
         const guardEntry = source?.guardEntry;
         if (typeof guardEntry === 'boolean') model.guardEntry = guardEntry;
+        if (sourceId === 'zcode' && source?.practice === true) model.practice = true;
         const targetWidth = source?.guardTargetWidth;
         if ([48,64].includes(targetWidth)) model.guardTargetWidth = targetWidth;
         const side = source?.guardSide;

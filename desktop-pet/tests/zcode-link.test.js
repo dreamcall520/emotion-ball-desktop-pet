@@ -89,3 +89,24 @@ test('disabling while consent is pending cancels it without enabling or saving t
   assert.equal(f.calls.some(row => row[0] === 'enabled' && row[1] === true), false);
   f.link.close(); assert.equal(cancelled, 2);
 });
+
+test('ZCode practice preference saves independently and opening requires its visible own main frame', async () => {
+  const { pathToFileURL } = require('node:url'); const path = require('node:path');
+  let opened = 0, entry = true;
+  const contents = { mainFrame: {}, getURL: () => pathToFileURL(path.resolve(__dirname, '../quota-label.html')).href };
+  const f = fixture({ getGuardEntry: () => true, onOpenGuard: () => { opened++; },
+    createCard: () => ({ show() {}, hide() {}, destroy() {}, reposition() {}, setAlwaysOnTop() {}, getVisibleBounds: () => null,
+      getWindow: () => ({ webContents: contents }), isGuardEntryVisible: () => entry }) });
+  await f.link.setEnabled(true);
+  const event = { sender: contents, senderFrame: contents.mainFrame };
+  f.ipcMain.emit('pet:zcode-quota-guard-open', event); assert.equal(opened, 1);
+  f.ipcMain.emit('pet:zcode-quota-guard-open', { ...event, senderFrame: {} });
+  f.ipcMain.emit('pet:zcode-quota-guard-open', { ...event, sender: {} }); assert.equal(opened, 1);
+  entry = false; f.ipcMain.emit('pet:zcode-quota-guard-open', event); assert.equal(opened, 1); entry = true;
+  assert.equal(f.link.setPreference('zcodeQuotaFunEnabled', false), true);
+  assert.equal(f.prefs().zcodeQuotaFunEnabled, false); f.ipcMain.emit('pet:zcode-quota-guard-open', event); assert.equal(opened, 1);
+  f.link.menu().submenu.find(row => row.id === 'zcode-quota-fun').click({ checked: true });
+  assert.equal(f.prefs().zcodeQuotaFunEnabled, true); f.ipcMain.emit('pet:zcode-quota-guard-open', event); assert.equal(opened, 2);
+  f.link.setPreference('zcodeQuotaAlwaysVisible', false); f.ipcMain.emit('pet:zcode-quota-guard-open', event); assert.equal(opened, 2);
+  f.link.close();
+});

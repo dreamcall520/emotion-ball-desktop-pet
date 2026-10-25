@@ -35,6 +35,10 @@ async function verifyZcodeStyle({ pet, zcodeLink, zcodeConsent, codex, getMenu, 
       toggle(true); const win = await poll(zcodeConsent.getWindow, visible, 'ZCode 共享授权');
       const current = await consentSurface(win);
       assert.equal(current.title, '让球球陪你关注 ZCode'); assert.equal(current.subtitle, reference.subtitle);
+      current.bullets = await page(win, `Array.from(document.querySelectorAll('.consent-disclosure li'),node=>{const style=getComputedStyle(node),section=node.closest('section');return {id:node.id,parent:node.parentElement.tagName,font:style.fontSize,lineHeight:style.lineHeight,indent:node.getBoundingClientRect().left-section.getBoundingClientRect().left};})`);
+      assert.equal(current.bullets.length,4,'三段说明统一为圆点列表');
+      for(const item of current.bullets){assert.equal(item.parent,'UL');assert.equal(item.font,current.bullets[0].font);assert.equal(item.lineHeight,current.bullets[0].lineHeight);assert.equal(item.indent,current.bullets[0].indent);}
+      assert.ok(current.bullets.some(item=>item.id==='consent-state-body')&&current.bullets.some(item=>item.id==='consent-control-body'));
       for (const key of ['avatar', 'accept', 'cancel']) assert.deepEqual(current[key], reference[key], `${key} 对齐 Codex`);
       await capture(win, `consent-zcode-${mode}`); report.surfaces.push({ mode, reference, current });
       await pointerClick(win, '#consent-cancel'); await poll(() => zcodeConsent.getWindow(), value => value === null, '取消关闭授权');
@@ -56,9 +60,26 @@ async function verifyZcodeStyle({ pet, zcodeLink, zcodeConsent, codex, getMenu, 
     const card = await poll(zcodeLink.getWindow, visible, '简短额度卡');
     await poll(() => page(card, "document.querySelector('#quota-label').dataset.hasItems"), value => value === 'true', '额度卡渲染');
     assert.match(await page(card, "document.querySelector('#summary .summary-period-label').textContent"), /额度/);
+    await poll(() => page(card, "Boolean(document.querySelector('#quota-guard-entry') && !document.querySelector('#quota-guard-entry').disabled && !document.querySelector('#quota-guard-entry').hidden)"), Boolean, '仅ZCode小游戏入口');
     await capture(card, 'compact-quota');
+    await pointerClick(card, '#quota-guard-entry');
+    const game = await poll(() => BrowserWindow.getAllWindows().find(win => visible(win) && win.webContents.getURL().endsWith('/quota-guard.html')), visible, '实际主进程打开自由练习');
+    await poll(() => page(game, "window.quotaGuardView?.state"), value => value?.ready && value.spritesReady, '游戏角色就绪');
+    assert.equal(await page(game, "window.quotaGuardView.state.period"), null, '自由练习不冒用额度周期');
+    assert.match(await page(game, "document.querySelector('#guard-title').textContent"), /自由练习/);
+    assert.match(await page(game, "document.querySelector('#guard-instruction').textContent"), /不消耗账户额度/);
+    await poll(() => card.isVisible(), value => value === false, '游戏显示时隐藏额度卡');
+    const shots = await page(game, "window.quotaGuardView.state.clickShots");
+    await pointerClick(game, '#guard-qiuqiu');
+    await wait(160); await pointerClick(game, '#guard-qiuqiu');
+    await poll(() => page(game, "window.quotaGuardView.state.clickShots"), value => value > shots, '自由练习实际射击');
+    await capture(game, 'zcode-only-practice');
+    await pointerClick(game, '#guard-close');
+    await poll(() => card.isVisible(), Boolean, '退出游戏恢复额度卡');
+    report.checks.push('仅ZCode实际入口打开自由练习、原生射击、关闭恢复卡片，未伪造账户周期');
     await pointerClick(card, '#quota-label');
     await poll(() => page(card, "document.querySelector('#quota-label').dataset.expanded"), value => value === 'true', '展开额度卡');
+    await capture(card, 'expanded-quota');
     await pointerClick(card, '[data-action="trend"]');
     const findDetails = async () => {
       for (const win of BrowserWindow.getAllWindows().filter(win => visible(win) && win.webContents.getURL().endsWith('/codex-details.html'))) {
@@ -72,10 +93,12 @@ async function verifyZcodeStyle({ pet, zcodeLink, zcodeConsent, codex, getMenu, 
     for (let index = 0; index < buckets.length; index++) {
       await pointerClick(details, `.zcode-bucket-button:nth-child(${index + 1})`);
       await poll(() => page(details, "document.querySelector('.zcode-bucket-button[aria-pressed=true]')?.dataset.bucketOption"), value => value === buckets[index].id, '一次点击实际换桶IPC');
-      const copy = await page(details, "({countdown:document.querySelector('.zcode-countdown')?.textContent,bottom:document.querySelector('.panel-bottom')?.textContent,caption:document.querySelector('.zcode-chart-caption')?.textContent})");
+      const copy = await page(details, "({countdown:document.querySelector('.zcode-countdown')?.textContent,bottom:document.querySelector('.panel-bottom')?.textContent,help:document.querySelector('.chart-help-body')?.textContent,repeatedLines:document.querySelectorAll('.zcode-chart-caption,.zcode-sample-info').length,reason:document.querySelector('.forecast-note')?.dataset.reason,badge:document.querySelector('.forecast-badge')?.textContent,forecast:document.querySelector('.forecast-copy')?.textContent})");
       assert.ok(copy.countdown && !copy.countdown.includes('—'), '真实结束时间有倒计时');
-      assert.match(copy.caption, /实测|余额|蓝线/);
+      assert.equal(copy.repeatedLines,0,'图下不重复展示说明与采样日期');
+      assert.match(copy.help,/实测余额/,'实测与基准说明保留在现有图表帮助');
       assert.match(copy.bottom, /下次刷新|使用截止|下次重置|有效至/);
+      if(copy.reason==='no-decline'){assert.equal(copy.badge,undefined);assert.match(copy.forecast,/近期未观察到额度消耗.*真实额度变化后/);}
       report.checks.push({ bucket: buckets[index].text, countdown: copy.countdown, boundary: copy.bottom });
     }
     await capture(details, 'trend-bucket-picker'); await pointerClick(details, '#details-close');

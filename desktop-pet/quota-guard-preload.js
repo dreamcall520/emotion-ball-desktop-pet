@@ -125,11 +125,12 @@ function safeModel(value) {
   const overflow = Number.isSafeInteger(overflowValue) && overflowValue > 0
     ? Math.min(overflowValue, 99) : 0;
   return {
+    ...(source.sourceId === 'zcode' && source.practice === true ? { sourceId: 'zcode', practice: true } : {}),
     state,
     size,
     appearance,
     expanded,
-    items: copyItems(rawItems),
+    items: source.sourceId === 'zcode' && source.practice === true ? [] : copyItems(rawItems),
     overflow,
     ...extraCreditsFields(source, state),
     ...activityFields(activity),

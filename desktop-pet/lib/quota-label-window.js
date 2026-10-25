@@ -373,6 +373,7 @@ function createQuotaLabelWindow({
     if (!confirm(target, token, model)) return;
     currentLayout = layout;
     try { target.webContents.send(channel, { ...model, visible: true, guardEntry: guardEntryVisible(),
+      ...(sourceId === 'zcode' && guardEntryVisible() ? { practice: true } : {}),
       ...(layout.guardSide ? { guardSide: layout.guardSide, cardInset: layout.cardInset, guardTargetWidth: quotaRoleTargetWidth(rolePaintWidth()) } : {}) }); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
     try {
@@ -639,6 +640,7 @@ function createQuotaLabelWindow({
       try { syncTopmost(target); }
       catch (error) { if (win === target) detach(target, error); else report(error); }
     },
+    isGuardEntryVisible() { return Boolean(win && !win.isDestroyed() && win.isVisible() && guardEntryVisible()); },
     destroy
   };
 }

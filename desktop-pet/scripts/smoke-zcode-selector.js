@@ -11,7 +11,7 @@ if (!process.versions.electron) {
   const env = {...process.env,PET_ZCODE_SELECTOR_PROFILE:profile,PET_ZCODE_SELECTOR_OUT:output}; delete env.ELECTRON_RUN_AS_NODE;
   const child = spawn(require('electron'),[`--user-data-dir=${profile}`,__filename],{env,stdio:'inherit'});
   const deadline = setTimeout(()=>child.kill('SIGTERM'),60000);
-  child.once('close',code=>{clearTimeout(deadline);fs.rmSync(profile,{recursive:true,force:true});process.exitCode=code || 0;});
+  child.once('close',code=>{clearTimeout(deadline);fs.rmSync(profile,{recursive:true,force:true});process.exitCode=code === 0 ? 0 : 1;});
 } else {
   const {app,BrowserWindow,ipcMain,nativeTheme,screen}=require('electron');
   assert.ok(process.env.PET_ZCODE_SELECTOR_PROFILE);app.setPath('userData',process.env.PET_ZCODE_SELECTOR_PROFILE);app.setActivationPolicy('accessory');app.on('window-all-closed',()=>{});
@@ -24,16 +24,16 @@ if (!process.versions.electron) {
     fs.mkdirSync(output,{recursive:true});const report={ok:false,fixtureOnly:true,actualModelCalls:0,scenarios:[],screenshots:[]};
     const { buildZcodeDetailsModel } = require('../lib/zcode-quota-view');
     const now=Date.now(),plans=['ZCode Start Plan 体验额度：每天重新计算，不同模型分别计量','ZCode Start Plan 体验额度：每天重新计算，不同模型分别计量','ZCode 1024 Dev Day 活动套餐：四个很长的来源名称也不能覆盖关闭按钮','ZCode 1024 Dev Day 活动套餐：四个很长的来源名称也不能覆盖关闭按钮'];
-    const zitems=plans.map((planName,i)=>({id:`zcode:fixture-${i}`,label:i%2?'GLM-5.3-Flash':'GLM-5.3',planName,windowMinutes:i<2?1440:43200,periodStart:now-3600000,resetsAt:now+82800000,remaining:100,remainingUnits:199999123.456789,total:200000000,unit:'tokens',periodKind:i<2?'daily':'one_time'}));
+    const zitems=plans.map((planName,i)=>({id:`zcode:fixture-${i}`,label:i%2?'GLM-5.3-Flash':'GLM-5.3',planName,windowMinutes:i<2?1440:43200,periodStart:now-3600000,resetsAt:now+82800000,remaining:i===1?99.8706:100,remainingUnits:i===1?4993530:200000000,total:i===1?5000000:200000000,unit:'token',periodKind:i<2?'daily':'one_time'}));
     try {
       for(const source of ['zcode','codex'])for(const width of [320,404])for(const appearance of ['light','dark']){
         nativeTheme.themeSource=appearance;const prefix=`pet:${source}-details`,items=source==='zcode'?zitems:[{windowMinutes:300,remaining:64,resetsAt:now+7200000},{windowMinutes:10080,remaining:77,resetsAt:now+604800000}];
         const win=new BrowserWindow({width,height:520,show:false,frame:false,transparent:true,useContentSize:true,webPreferences:{preload:path.resolve(__dirname,'../codex-details-preload.js'),contextIsolation:true,nodeIntegration:false,sandbox:true,...(source==='zcode'?{additionalArguments:['--pet-source=zcode']}: {})}});
-        let selected=source==='zcode'?items[0].id:300,closed=0,action='trend',estimated=false,monthWindow=false;const calls=[];
+        let selected=source==='zcode'?items[0].id:300,closed=0,action='trend',estimated=false,monthWindow=false,paceCase=null,tinyDecline=false;const calls=[];
         const model=()=>{
           if(source!=='zcode')return {sourceId:source,action:'trend',items,period:selected,appearance,state:'ready',quotaUpdatedAt:now,trend:{windowMinutes:1440,resetsAt:now+82800000,samples:[{at:now-120000,remaining:90},{at:now-60000,remaining:87},{at:now,remaining:84}]}};
-          const windows=zitems.map(item=>({...item,remaining:estimated?97:100,...(monthWindow ? {periodStart:now-30*86400000,windowMinutes:31*1440} : {})}));
-          const snapshot={enabled:true,quota:{state:'connected',stale:false,updatedAt:now,windows},history:{available:true,windows:windows.map(item=>({id:item.id,periodStart:item.periodStart,resetsAt:item.resetsAt,samples:(monthWindow ? [-1,0] : [-12,-8,-4,0]).map((minute,i)=>({at:now+minute*60000,remaining:estimated?100-i:100}))}))}};
+          const windows=zitems.map(item=>({...item,remaining:estimated?97:item.remaining,remainingUnits:estimated?item.total*.97:item.remainingUnits,...(monthWindow ? {periodStart:now-30*86400000,windowMinutes:31*1440} : {}),...(paceCase ? paceCase==='unknown' ? {periodStart:null,windowMinutes:null} : {periodStart:now-43200000,resetsAt:now+43200000,windowMinutes:1440,remaining:{fast:30,balanced:50,slow:90}[paceCase],remainingUnits:2000000*({fast:30,balanced:50,slow:90}[paceCase])} : {})}));
+          const snapshot={enabled:true,quota:{state:'connected',stale:false,updatedAt:now,windows},history:{available:true,windows:windows.filter(item=>item.periodStart!==null).map(item=>({id:item.id,periodStart:item.periodStart,resetsAt:item.resetsAt,samples:(monthWindow ? [-1,0] : [-12,-8,-4,0]).map((minute,i)=>({at:now+minute*60000,remaining:estimated?100-i:tinyDecline?(i===3?item.remaining:100-(100-item.remaining)*i/3):item.remaining}))}))}};
           return buildZcodeDetailsModel(snapshot,{action,bucketId:selected,appearance},now);
         };
         const owns=e=>e.sender===win.webContents&&e.senderFrame===e.sender.mainFrame&&e.sender.getURL()===pathToFileURL(path.resolve(__dirname,'../codex-details.html')).href;
@@ -56,39 +56,61 @@ if (!process.versions.electron) {
             assert.deepEqual(scenario.buttons.map(b=>b.text),['体验·5.3','体验·Flash','活动·5.3','活动·Flash']);
             assert.ok(scenario.buttons.every(b=>b.font>=12&&b.scrollWidth<=b.clientWidth&&b.rect.right<=width-12));
             assert.equal(scenario.buttons[0].rect.top,scenario.buttons[1].rect.top);assert.equal(scenario.buttons[2].rect.top,scenario.buttons[3].rect.top);assert.ok(scenario.buttons[2].rect.top>scenario.buttons[0].rect.top);
-            assert.equal(await page(win,"document.querySelector('.forecast-badge').textContent"),'余额未下降');
-            assert.match(await page(win,"document.querySelector('.zcode-sample-info').textContent"),/4 次采样/);
-            assert.match(await page(win,"document.querySelector('.zcode-chart-caption').textContent"),/蓝线：实测余额.*灰虚线：时间基准/);
+            assert.equal(await page(win,"document.querySelector('.forecast-badge')===null"),true);
+            assert.match(await page(win,"document.querySelector('.forecast-copy').textContent"),/近期未观察到额度消耗.*真实额度变化后/);
+            assert.equal(await page(win,"document.querySelectorAll('.zcode-sample-info,.zcode-chart-caption').length"),0);
+            assert.match(await page(win,"document.querySelector('.chart-help-body').textContent"),/实测余额.*时间基准.*4 次采样/);
+            scenario.flatCurve=await page(win,"({blue:document.querySelector('.observed-line').getBBox().height,timeReference:document.querySelector('.time-path').getBBox().height})");
+            assert.equal(await page(win,"document.querySelector('.zcode-usage-note')===null"),true,'exact 100% model has no invented used amount');
+            assert.equal(scenario.flatCurve.blue,0,'100% real samples must remain flat');assert.ok(scenario.flatCurve.timeReference>0,'time baseline changes independently');
             assert.match(await page(win,"document.querySelector('.zcode-countdown').textContent"),/小时/);
             await capture('flat-real-backend');
             await pointer(win,'.zcode-bucket-button[data-bucket-option="zcode:fixture-3"]');
             await poll(()=>selected,value=>value===zitems[3].id,'one click bucket IPC');assert.equal(calls.length,1);
             await poll(()=>page(win,"document.querySelector('.zcode-bucket-description').textContent"),value=>value===`${zitems[3].planName} · ${zitems[3].label}`,'selected description');
-            assert.match(await page(win,"document.querySelector('.panel-bottom').textContent"),/使用截止.*到期后剩余额度失效/);
+            assert.match(await page(win,"document.querySelector('.panel-bottom').textContent"),/使用截止/);assert.match(await page(win,"document.querySelector('.panel-bottom p').title"),/到期后剩余额度失效/);
             await key(win,'Home');await key(win,'Enter');await poll(()=>selected,value=>value===zitems[0].id,'keyboard bucket IPC');assert.equal(calls.length,2);
             assert.equal(await page(win,"document.activeElement.dataset.bucketOption"),zitems[0].id);
-            estimated=true;win.webContents.send(prefix,model());await poll(()=>page(win,"document.querySelector('.forecast-badge').textContent"),value=>value==='参考预估','backend estimate');
+            estimated=true;win.webContents.send(prefix,model());await poll(()=>page(win,"document.querySelector('.forecast-badge').textContent"),value=>value==='可能提前用完','backend estimate');
             scenario.estimateForecast=model().trend.forecast;assert.equal(scenario.estimateForecast.reason,'estimate');
-            assert.match(await page(win,"document.querySelector('.forecast-note').title"),/近期连续/);await capture('estimate-real-backend');
-            estimated=false;win.webContents.send(prefix,model());await poll(()=>page(win,"document.querySelector('.forecast-badge').textContent"),value=>value==='余额未下降','restore exact usage fixture');
+            assert.match(await page(win,"document.querySelector('.forecast-note').title"),/近期连续/);
+            scenario.declineCurve=await page(win,"document.querySelector('.observed-line').getBBox().height");assert.ok(Math.abs(scenario.declineCurve-2.4)<0.01,'blue curve follows 100% to 97% actual quota samples');
+            await capture('estimate-real-backend');
+            estimated=false;win.webContents.send(prefix,model());await poll(()=>page(win,"document.querySelector('.forecast-note').dataset.reason"),value=>value==='no-decline','restore exact usage fixture');
             await pointer(win,'.panel-bottom .reset-link');await poll(()=>page(win,"document.querySelector('#details-panel').dataset.action"),value=>value==='quota','quota IPC');
             scenario.quota=await page(win,`({groups:[...document.querySelectorAll('.zcode-quota-group-title')].map(n=>n.textContent),rows:[...document.querySelectorAll('.zcode-quota-row')].map(n=>({aria:n.getAttribute('aria-label'),rect:n.getBoundingClientRect().toJSON(),scrollWidth:n.scrollWidth,clientWidth:n.clientWidth})),width:innerWidth,scrollWidth:document.body.scrollWidth,contentWidth:document.querySelector('#details-content').scrollWidth,panelWidth:document.querySelector('#details-panel').clientWidth})`);
             assert.deepEqual(scenario.quota.groups,['每日体验','限时活动']);assert.equal(scenario.quota.rows.length,4);
             assert.ok(scenario.quota.rows.every(row=>row.rect.right<=width-12&&row.scrollWidth<=row.clientWidth));
             assert.ok(scenario.quota.scrollWidth<=width&&scenario.quota.contentWidth<=scenario.quota.panelWidth);
-            assert.match(scenario.quota.rows[0].aria,/199,999,123.456789 \/ 200,000,000 tokens/);await capture('quota');
+            assert.match(scenario.quota.rows[1].aria,/4,993,530 \/ 5,000,000 token/);await capture('quota');
             await pointer(win,'.zcode-quota-row[data-bucket-id="zcode:fixture-2"]');await poll(()=>selected,value=>value===zitems[2].id,'whole row opens bucket trend');
             assert.equal(calls.at(-1).action,'trend');scenario.actualBucketChanges=calls.filter(call=>call.action==='trend').length;
             monthWindow=true;win.webContents.send(prefix,model());await pointer(win,'[data-view="daily"]');
             await poll(()=>page(win,"document.querySelector('.chart-block').dataset.view"),value=>value==='daily','month activity daily view');
-            scenario.monthDaily=await page(win,`({dates:[...document.querySelectorAll('.daily-chart text')].filter(n=>/^\\d\\d\\/\\d\\d$/.test(n.textContent)).map(n=>({text:n.textContent,rect:n.getBoundingClientRect().toJSON()})),emptyDays:document.querySelectorAll('.daily-empty').length,points:[...document.querySelectorAll('.daily-point')].map(n=>({day:n.getAttribute('data-day'),amount:n.getAttribute('data-amount')})),caption:document.querySelector('.zcode-chart-caption').textContent})`);
+            scenario.monthDaily=await page(win,`({dates:[...document.querySelectorAll('.daily-chart text')].filter(n=>/^\\d\\d\\/\\d\\d$/.test(n.textContent)).map(n=>({text:n.textContent,rect:n.getBoundingClientRect().toJSON()})),emptyDays:document.querySelectorAll('.daily-empty').length,points:[...document.querySelectorAll('.daily-point')].map(n=>({day:n.getAttribute('data-day'),amount:n.getAttribute('data-amount')})),help:document.querySelector('.chart-help-body').textContent,viewLabel:document.querySelector('[data-view="daily"]').textContent})`);
             assert.equal(scenario.monthDaily.dates.length,7);assert.equal(scenario.monthDaily.emptyDays,6);assert.equal(scenario.monthDaily.points.length,1);assert.equal(scenario.monthDaily.points[0].amount,'0');
-            assert.match(scenario.monthDaily.caption,/近7日.*非全天/);
+            assert.match(scenario.monthDaily.viewLabel,/近7日/);assert.match(scenario.monthDaily.help,/不代表全天/);
             scenario.monthDaily.dates.forEach((date,index,dates)=>{if(index)assert.ok(dates[index-1].rect.right<date.rect.left,'month dates must not overlap');});
             await capture('month-near7-daily');await pointer(win,'[data-view="line"]');
             scenario.monthLineStart=await page(win,"document.querySelector('.trend-chart text[text-anchor=\"start\"]').textContent");
             const expectedStart=new Date(now-30*86400000);assert.equal(scenario.monthLineStart,`${String(expectedStart.getMonth()+1).padStart(2,'0')}/${String(expectedStart.getDate()).padStart(2,'0')}`,'line view retains the full cycle start');
             assert.equal(model().items.find(item=>item.bucketId===selected).periodStart,now-30*86400000,'full cycle model remains intact');
+            monthWindow=false;scenario.paces=[];
+            for(const state of ['fast','slow','balanced','unknown']){
+              paceCase=state;win.webContents.send(prefix,model());
+              await poll(()=>page(win,"document.querySelector('.trend-pace').className"),value=>value===`trend-pace ${state}`,'actual backend pace');
+              const pace=await page(win,`(()=>{const n=document.querySelector('.trend-pace'),p=document.querySelector('.panel-bottom p'),link=document.querySelector('.panel-bottom .reset-link'),r=p.getBoundingClientRect(),v=p.querySelector('b').getBoundingClientRect();return{state:n.className,color:getComputedStyle(n).color,base:getComputedStyle(document.documentElement).getPropertyValue('--detail-surface'),footer:{rect:r.toJSON(),label:p.querySelector('span').getBoundingClientRect().toJSON(),value:v.toJSON(),link:link.getBoundingClientRect().toJSON(),scroll:p.scrollWidth,client:p.clientWidth},width:innerWidth,scrollWidth:document.body.scrollWidth};})()`);
+              const rgb=text=>text.match(/[\d.]+/g).slice(0,3).map(Number),luminance=rgb=>rgb.map(v=>{v/=255;return v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4;}).reduce((sum,v,i)=>sum+v*[0.2126,0.7152,0.0722][i],0);
+              const foreground=luminance(rgb(pace.color)),background=luminance(rgb(pace.base));pace.contrast=(Math.max(foreground,background)+0.05)/(Math.min(foreground,background)+0.05);
+              assert.ok(pace.contrast>=4.5,'small pace text has readable contrast');assert.ok(pace.scrollWidth<=width);
+              assert.ok(Math.abs(pace.footer.label.top-pace.footer.value.top)<1,'footer date stays on the label line');assert.ok(pace.footer.rect.right<pace.footer.link.left,'footer does not cover details action');assert.ok(pace.footer.scroll<=pace.footer.client);
+              scenario.paces.push(pace);await capture(`pace-${state}`);
+            }
+            assert.equal(new Set(scenario.paces.map(p=>p.color)).size,4,'each pace state has a distinct color');
+            paceCase=null;tinyDecline=true;win.webContents.send(prefix,model());await pointer(win,'.zcode-bucket-button[data-bucket-option="zcode:fixture-1"]');
+            await poll(()=>page(win,"document.querySelector('.trend-stats strong').textContent"),value=>value==='99.9%','real Flash daily percentage');
+            scenario.tinyUsage=await page(win,"({percentage:document.querySelector('.trend-stats strong').textContent,amount:document.querySelector('.zcode-usage-note').textContent,blueHeight:document.querySelector('.observed-line').getBBox().height})");
+            assert.equal(scenario.tinyUsage.amount,'本周期已用 6,470 token');assert.ok(Math.abs(scenario.tinyUsage.blueHeight-0.10352)<0.0001,'tiny observed decline is not exaggerated');await capture('flash-daily-actual-usage');
           } else {assert.equal(geometry.headerTabs,1);assert.equal(await page(win,"document.querySelectorAll('.trend-tabs button').length"),2);assert.equal(await page(win,"document.querySelectorAll('.zcode-bucket-selector').length"),0);await capture('unchanged');}
           await pointer(win,'#details-close');assert.equal(closed,1,'close remains reachable');
         } finally {ipcMain.removeListener(`${prefix}-open`,open);ipcMain.removeListener(`${prefix}-close`,close);ipcMain.removeListener(`${prefix}-resize`,resize);win.destroy();}

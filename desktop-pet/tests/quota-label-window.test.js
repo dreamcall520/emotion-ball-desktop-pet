@@ -1662,8 +1662,8 @@ test('168×58 标准档内两条额度的文字和进度条不裁切', () => {
 test('168 像素宽内只允许名称和周期省略，64% 和 78% 核心比例完整', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../quota-label.css'), 'utf8');
   const renderer = fs.readFileSync(path.resolve(__dirname, '../quota-label-renderer.js'), 'utf8');
-  assert.match(renderer, /renderValue\(valueNode, item\.remaining\)/);
-  assert.match(renderer, /const percentage\s*=\s*`\$\{Math\.round\(remaining\)\}%`/);
+  assert.match(renderer, /renderValue\(valueNode, item\.remaining, model\.sourceId\)/);
+  assert.match(renderer, /const percentage\s*=\s*remainingText\(remaining, sourceId\)/);
   assert.match(renderer, /periodNode\.textContent\s*=\s*`\$\{model\.state\s*===\s*'stale'\s*\?\s*'已过期 '\s*:\s*''\}/);
   assert.doesNotMatch(renderer, /row\.textContent\s*=\s*`\$\{item\.label\}/);
   assert.match(css, /grid-template-columns:\s*minmax\(0, auto\)\s+minmax\(0, 1fr\)\s+auto/);
@@ -1824,10 +1824,10 @@ test('实际controller区分22/24/50角色，普通48px与大角色64px同源传
   api.onModel(value => {model = value;});
   handlers.get('pet:zcode-quota-label')({}, {sourceId:'codex',state:'ready',items:Array.from({length:4}, (_,i) => ({label:`GLM-${i}`,planName:'1024 活动',bucketId:`bucket-${i}`,windowMinutes:18.5,remaining:70}))});
   assert.equal(model.sourceId,'zcode'); assert.equal(model.items[0].planName,'1024 活动'); assert.equal(model.items.length,4); assert.equal(model.items[0].windowMinutes,18.5);
-  api.openDetail('trend',300); api.openDetail('opportunities','bucket-0'); api.openGuard();
+  api.openDetail('trend',300); api.openDetail('opportunities','bucket-0');
   assert.equal(sent.length,0);
-  api.openDetail('quota','bucket-0'); api.toggleExpanded(); api.setPointerInteractive(true);
-  assert.deepEqual(sent,[['pet:zcode-quota-label-detail','quota','bucket-0'],['pet:zcode-quota-label-toggle'],['pet:zcode-quota-label-pointer',true]]);
+  api.openGuard(); api.openDetail('quota','bucket-0'); api.toggleExpanded(); api.setPointerInteractive(true);
+  assert.deepEqual(sent,[['pet:zcode-quota-guard-open'],['pet:zcode-quota-label-detail','quota','bucket-0'],['pet:zcode-quota-label-toggle'],['pet:zcode-quota-label-pointer',true]]);
 });
 
  test('ZCode 四桶展开显示真实模型/到期且详情入口不串入 Codex 重置机会', () => {
@@ -1846,13 +1846,13 @@ test('实际controller区分22/24/50角色，普通48px与大角色64px同源传
     document:{documentElement:new Element(),getElementById:id=>nodes[id],createElement:()=>new Element()},
     window:{addEventListener() {},petQuotaLabel:{onModel(callback){receive=callback;},openDetail(...args){calls.push(args);},toggleExpanded(){}}}
   });
-  receive({sourceId:'zcode',state:'ready',expanded:true,items:Array.from({length:4},(_,i)=>({label:'GLM-5.3',planName:i%2?'Start Plan 体验':'1024 活动',bucketId:`bucket-${i}`,windowMinutes:1440,remaining:70,resetsAt:Date.now()+86400000,periodKind:'expiry'}))});
+  receive({sourceId:'zcode',state:'ready',expanded:true,items:Array.from({length:4},(_,i)=>({label:'GLM-5.3',planName:i%2?'Start Plan 体验':'1024 活动',bucketId:`bucket-${i}`,windowMinutes:1440,remaining:70,resetsAt:Date.now()+86400000,periodKind:i%2?'daily':'expiry'}))});
   const expanded=nodes['codex-expanded'];
   assert.equal(nodes['quota-label'].dataset.source,'zcode');
   assert.equal(expanded.children[1].children.length,4);
-  assert.equal(nodes.items.children[0].children[0].textContent,'GLM-5.3');
-  assert.equal(nodes.items.children[0].children[1].textContent,'1024');
-  assert.equal(nodes.items.children[1].children[1].textContent,'体验');
+  assert.equal(nodes.items.children[0].children[0].textContent,'5.3');
+  assert.equal(nodes.items.children[0].children[1].textContent,'1024活动');
+  assert.equal(nodes.items.children[1].children[1].textContent,'每日体验');
   assert.match(expanded.textContent,/ZCODE/); assert.match(expanded.textContent,/体验/); assert.match(expanded.textContent,/1024/);
   assert.match(expanded.children[1].children[1].title,/Start Plan 体验/);
   assert.match(expanded.children[1].children[0].title,/1024 活动/); assert.match(expanded.textContent,/到期/);

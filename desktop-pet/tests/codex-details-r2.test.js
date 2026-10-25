@@ -302,10 +302,10 @@ test('ZCode 显示事实倒计时、实测图例、采样与真实用量，不�
   const model={sourceId:'zcode',action:'trend',bucketId:'zcode:0',items,trend:{samples:[{at:now-60000,remaining:100},{at:now,remaining:100}],forecast:{state:'unknown',reason:'no-decline',summary:'余额未下降',detail:'已记录时段内额度未下降，暂不预估用完时间'}}};
   h.receive(model);let c=h.nodes['details-content'];
   assert.match(c.querySelector('.trend-stats').textContent,/距刷新/);assert.doesNotMatch(c.querySelector('.trend-stats').textContent,/剩余时间|64%/);
-  assert.match(c.querySelector('.zcode-chart-caption').textContent,/蓝线：实测余额.*灰虚线：时间基准/);
-  assert.match(c.querySelector('.zcode-sample-info').textContent,/2 次采样/);assert.match(c.querySelector('.zcode-usage-note').textContent,/已用/);
-  assert.equal(c.querySelector('.forecast-badge').textContent,'余额未下降');assert.match(c.querySelector('.panel-bottom').textContent,/下次刷新.*每天重新计算额度/);
-  h.receive({...model,bucketId:'zcode:2'});assert.match(c.querySelector('.panel-bottom').textContent,/使用截止.*到期后剩余额度失效/);
+  assert.equal(c.querySelector('.zcode-chart-caption'),null);assert.match(c.querySelector('.chart-help-body').textContent,/实测余额.*时间基准/);
+  assert.equal(c.querySelector('.zcode-sample-info'),null);assert.match(c.querySelector('.chart-help-body').textContent,/2 次采样/);assert.match(c.querySelector('.zcode-usage-note').textContent,/已用/);
+  assert.equal(c.querySelector('.forecast-badge'),null);assert.match(c.querySelector('.forecast-copy').textContent,/近期未观察到额度消耗.*真实额度变化后/);assert.doesNotMatch(c.querySelector('.panel-bottom').textContent,/每天重新计算额度/);assert.match(c.querySelector('.panel-bottom p').title,/每天重新计算额度/);
+  h.receive({...model,bucketId:'zcode:2'});assert.match(c.querySelector('.panel-bottom').textContent,/使用截止/);assert.match(c.querySelector('.panel-bottom p').title,/到期后剩余额度失效/);
   h.receive({...model,items:[{...items[0],resetsAt:null,periodStart:null,windowMinutes:null,periodKind:'unknown'}]});
   assert.doesNotMatch(c.querySelector('.trend-stats').textContent,/距|—/);assert.equal(c.querySelector('.time-path'),null);
 });
@@ -328,12 +328,44 @@ test('ZCode 月活动每日消耗仅显示今日及前六个本地自然日，�
   c.querySelector('[data-view="daily"]').events.click();
   const daily=c.querySelector('.daily-chart'),dates=daily.querySelectorAll('text').map(n=>n.textContent).filter(s=>/^\d\d\/\d\d$/.test(s));
   assert.equal(dates.length,7);assert.equal(daily.querySelectorAll('.daily-point').length,1);
-  assert.equal(daily.querySelectorAll('.daily-empty').length,6);assert.match(c.querySelector('.zcode-chart-caption').textContent,/近7日.*非全天/);
+  assert.equal(daily.querySelectorAll('.daily-empty').length,6);assert.match(c.querySelector('[data-view="daily"]').textContent,/近7日/);assert.match(c.querySelector('.chart-help-body').textContent,/不代表全天/);
   const localStart=new Date(now);localStart.setHours(0,0,0,0);localStart.setDate(localStart.getDate()-6);
   assert.equal(dates[0],`${String(localStart.getMonth()+1).padStart(2,'0')}/${String(localStart.getDate()).padStart(2,'0')}`);
   c.querySelector('[data-view="line"]').events.click();assert.equal(c.querySelector('.trend-chart'),line);
-  assert.equal(c.querySelector('.zcode-sample-info').textContent.includes('2 次采样'),true);
+  assert.equal(c.querySelector('.chart-help-body').textContent.includes('2 次采样'),true);
   h.receive({sourceId:'zcode',action:'trend',bucketId:items[0].bucketId,items,trend:{samples:samples.map(sample=>({...sample,at:sample.at-86400000}))}});
   c.querySelector('[data-view="daily"]').events.click();
   assert.equal(c.querySelector('.daily-chart').querySelectorAll('text').filter(n=>/^\d\d\/\d\d$/.test(n.textContent)).length,7,'today remains an unknown day when latest samples were yesterday');
+});
+
+
+test('ZCode 仅有效预估保留直白风险等级，Codex未知预估徽标不变', () => {
+  const h=renderer(),items=zcodeItems(),base={sourceId:'zcode',action:'trend',bucketId:items[0].bucketId,items};
+  ['missing-period','stale','insufficient-records','discontinuity','value-mismatch','no-decline'].forEach(reason=>{
+    h.receive({...base,trend:{forecast:{state:'unknown',reason,summary:'真实原因',detail:'真实说明'}}});
+    assert.equal(h.nodes['details-content'].querySelector('.forecast-badge'),null);
+  });
+  [['risk','可能提前用完'],['tight','接近用完'],['safe','预计够用']].forEach(([status,label])=>{
+    h.receive({...base,trend:{forecast:{state:'estimate',reason:'estimate',status,summary:'后端预测',detail:'后端说明',reference:true}}});
+    assert.equal(h.nodes['details-content'].querySelector('.forecast-badge').textContent,label);
+  });
+  h.receive({action:'trend',period:300,items:[item(300)]});
+  assert.equal(h.nodes['details-content'].querySelector('.forecast-badge').textContent,'待预估');
+});
+
+test('ZCode 百分比不隐藏细小消耗，显示精确已用数量，Codex仍取整', () => {
+  const h=renderer(),base=zcodeItems()[0];
+  [[100,'100%'],[0,'0%'],[99.8706,'99.9%'],[99.99,'<100%'],[99.95,'<100%'],[0.01,'<0.1%'],[0.05,'0.1%'],[30.333,'30.3%']].forEach(([remaining,text])=>{
+    const bucket={...base,remaining,total:5000000,remainingUnits:remaining/100*5000000,unit:'token'};
+    h.receive({sourceId:'zcode',action:'trend',bucketId:base.bucketId,items:[bucket]});
+    assert.equal(h.nodes['details-content'].querySelector('.trend-stats strong').textContent,text);
+    h.receive({sourceId:'zcode',action:'quota',items:[bucket]});
+    assert.equal(h.nodes['details-content'].querySelector('.zcode-quota-heading strong').textContent,text);
+  });
+  h.receive({sourceId:'zcode',action:'trend',bucketId:base.bucketId,items:[{...base,remaining:99.8706,total:5000000,remainingUnits:4993530,unit:'token'}]});
+  assert.equal(h.nodes['details-content'].querySelector('.zcode-usage-note').textContent,'本周期已用 6,470 token');
+  h.receive({sourceId:'zcode',action:'trend',bucketId:base.bucketId,items:[{...base,remaining:100,total:5000000,remainingUnits:5000000,unit:'token'}]});
+  assert.equal(h.nodes['details-content'].querySelector('.zcode-usage-note'),null);
+  h.receive({action:'trend',period:300,items:[{...item(300),remaining:99.8706}]});
+  assert.equal(h.nodes['details-content'].querySelector('.trend-stats strong').textContent,'100%');
 });

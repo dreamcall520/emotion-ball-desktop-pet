@@ -28,6 +28,12 @@
         'consent-status': '可随时在「ZCode 联动」中关闭。'
       };
       for (const [id, text] of Object.entries(copy)) $(id).textContent = text;
+      for (const id of ['consent-state-body', 'consent-control-body']) {
+        const body = $(id), list = document.createElement('ul'), item = document.createElement('li');
+        list.className = 'consent-privacy';
+        item.id = id; item.textContent = body.textContent;
+        list.appendChild(item); body.replaceWith(list);
+      }
       zcodeCopyApplied = true;
     }
     avatar.update(info.appearance, null, info.codexPet);

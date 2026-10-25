@@ -79,7 +79,7 @@ function bounded(candidate, size, area) {
 function quotaRoleTargetWidth(paintWidth) { return [22,24].includes(paintWidth) ? 48 : 64; }
 
 function quotaLabelSize(value, expanded = false, itemCount = 1, extraCredits = false, guardEntry = false, rolePaintWidth = null, sourceId = 'codex') {
-  if (sourceId === 'zcode' && expanded === true && itemCount > 1) return { width: 196, height: 154 + (Math.ceil(Math.min(itemCount, 32) / 2) - 1) * 90 };
+  if (sourceId === 'zcode' && expanded === true && itemCount > 0) return { width: 196, height: itemCount === 1 ? 154 : 166 + (Math.ceil(Math.min(itemCount, 32) / 2) - 1) * 90 };
   if (expanded === true && itemCount > 2) return { width: 196, height: 144 + (Math.ceil(Math.min(itemCount, 32) / 2) - 1) * 84 };
   if (expanded === true && itemCount > 1 && value === 'standard') return LABEL_SIZES.standardExpandedDual;
   if (expanded === true && itemCount > 1 && value === 'compact') return LABEL_SIZES.compactExpandedDual;
@@ -128,7 +128,15 @@ function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName =
       ])
     ].map(candidate => bounded(candidate, size, area));
     const clear = candidate => !overlaps(candidate, size, pet) && !obstacles.some(row => overlaps(candidate, size, row));
-    return positions.find(clear) || positions[0];
+    if (!guardEntry || expanded) return positions.find(clear) || positions[0];
+    const gutter = ROLE_GAP + quotaRoleTargetWidth(presentation?.quotaRoleWidth);
+    const group = { width: Math.min(size.width + gutter, area.width), height: Math.min(Math.max(size.height, 44) + 6, area.height) };
+    const top = Math.max(0, group.height - size.height);
+    const pairs = positions.flatMap(candidate => [false, true].map(left => ({
+      ...bounded({ ...candidate, x: candidate.x - (left ? gutter : 0), y: candidate.y - top }, group, area),
+      guardSide: left ? 'left' : 'right', cardInset: { x: left ? Math.max(0, group.width - size.width) : 0, y: top }
+    })));
+    return pairs.find(candidate => !overlaps(candidate, group, pet) && !obstacles.some(row => overlaps(candidate, group, row))) || pairs[0];
   }
   const candidates = [
     { placement: 'below', x: centerX - size.width / 2, y: pet.y + pet.height + GAP },
