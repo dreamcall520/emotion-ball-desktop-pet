@@ -36,6 +36,8 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/lib/workbuddy-client.js',
     'desktop-pet/lib/workbuddy-tasks-reader.js',
     'desktop-pet/lib/workbuddy-tasks.js',
+    'desktop-pet/lib/workbuddy-usage.js',
+    'desktop-pet/lib/workbuddy-usage-reader.js',
     'desktop-pet/workbuddy-tasks-renderer.js',
     'desktop-pet/lib/workbuddy-quota.js',
     'desktop-pet/lib/workbuddy-chat.js',

@@ -19,6 +19,13 @@ async function capture(win) {
 }
 const accountKey = '9'.repeat(64);
 let smokeTaskRevision = Date.now() - 1000;
+let smokeUsageMode = 'success';
+function smokeUsageReport() {
+  const endDate = new Date(Date.now() + 8 * 3600000).toISOString().slice(0,10), end = Date.parse(endDate + 'T00:00:00Z');
+  const values = smokeUsageMode === 'zero' ? [0,0,0,0,0,0,0] : [0.2,0.3,0,1.5,0.1,0.05,0.74999999];
+  const days=values.map((credits,index)=>({date:new Date(end-(6-index)*86400000).toISOString().slice(0,10),credits}));
+  return {source:'official-request-usage',timezone:'Asia/Shanghai',startDate:days[0].date,endDate,days,todayCredits:values.at(-1),totalCredits:Number(values.reduce((sum,value)=>sum+value,0).toFixed(8)),requestCount:smokeUsageMode==='zero'?0:10,updatedAt:Date.now(),delayHours:3,complete:true};
+}
 const report = () => ({ total: 7400, basic: 500, reward: 6900, purchased: 0, plan: '体验版',
   nextRefreshAt: Date.now() + 7 * 86400000, expires: [{ amount: 100, at: Date.now() + 3 * 86400000 }], updatedAt: Date.now() });
 function createSmokeWorkBuddyRunner() {
@@ -28,6 +35,7 @@ function createSmokeWorkBuddyRunner() {
       {id:'smoke-completed',title:'验收任务：整理页面说明',status:'completed',unread:true,updatedAt:smokeTaskRevision,transport:'local'},
       {id:'smoke-terminated',title:'验收任务：检查数据卡',status:'terminated',unread:false,updatedAt:smokeTaskRevision-1000,transport:'cloud'}] };
     if (operation === 'task-open') { assert.equal(payload.expectedAccountKey, accountKey); assert.equal(payload.id, 'smoke-completed'); return {accountKey,id:payload.id,url:`workbuddy://chat/${encodeURIComponent(payload.id)}`}; }
+    if (operation === 'usage') { assert.equal(payload.expectedAccountKey,accountKey); if(smokeUsageMode==='error') throw new Error('ISOLATED_USAGE_UNAVAILABLE'); return {accountKey,usage:smokeUsageReport()}; }
     if (operation === 'models') return { accountKey, models: [{ id: 'glm-5.3-flash', displayName: 'GLM-5.3-Flash' }] };
     assert.equal(operation, 'chat'); assert.equal(payload.expectedAccountKey, accountKey);
     const text = JSON.stringify({ text: '我是球球，今天也陪着你。', action: 'none' });
@@ -40,7 +48,7 @@ async function until(read, label) {
   for (let n = 0; n < 200; n++) { if (await read()) return; await wait(50); }
   throw new Error('等待失败：' + label);
 }
-async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, details, tasks, guard, codexDetails, edge, edgeNotices, chat, chatWindow, consent, openChat, setProvider, setEnabled, getSettings, getCodex, menuTemplate, getCompactMenu, setTaskOpener, apiLabel, setApiVisible, shortcuts, openShortcuts, setSize, outputDir, live = false }) {
+async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, details, usage, tasks, guard, codexDetails, edge, edgeNotices, chat, chatWindow, consent, openChat, setProvider, setEnabled, getSettings, getCodex, menuTemplate, getCompactMenu, setTaskOpener, apiLabel, setApiVisible, shortcuts, openShortcuts, setSize, outputDir, live = false }) {
   if (outputDir) fs.mkdirSync(outputDir, { recursive: true });
   const codexBefore = JSON.stringify(getCodex());
   const codexSettings = Object.fromEntries(Object.entries(getSettings()).filter(([k]) => k.startsWith('codex')));
@@ -290,13 +298,16 @@ async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, detai
     if(outputDir)fs.writeFileSync(path.join(outputDir,'game-entry-centering.json'),JSON.stringify({entry:entryRect,card:cardRect,canvas:canvasRect,centerDelta},null,2));
   }
   if (codexDetails) {
+    if(apiLabel&&setApiVisible){setApiVisible(true);await until(()=>apiLabel.getWindow()?.isVisible(),'详情前API卡共显');}
     codexLabel?.show(readyCodex(false)); label.reposition();
     await until(() => win.isVisible() && codexLabel?.getWindow()?.isVisible(), '打开详情前双卡均显示');
     codexDetails.open({action:'credits',extraCredits:{state:'balance',balance:'10.00'}});
     await until(() => codexDetails.getWindow()?.isVisible(),'打开Codex详情');
     await until(() => !win.isVisible() && !(codexLabel?.getWindow()?.isVisible()),'Codex详情打开隐藏双卡');
+    if(apiLabel&&setApiVisible)await until(()=>!apiLabel.getWindow()?.isVisible(),'Codex详情打开隐藏API小卡');
     codexDetails.close();
     await until(() => win.isVisible(),'关闭Codex详情恢复WB卡');
+    if(apiLabel&&setApiVisible)await until(()=>apiLabel.getWindow()?.isVisible(),'关闭Codex详情恢复API卡');
   }
 
 
@@ -307,42 +318,48 @@ async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, detai
     await page("document.getElementById('trend').click()");
     await until(() => details.getWindow()?.isVisible(), '卡片趋势入口打开详情');
     await until(() => !win.isVisible() && !(codexLabel?.getWindow()?.isVisible()), 'WB详情打开隐藏双卡');
+    if(apiLabel&&setApiVisible)await until(()=>!apiLabel.getWindow()?.isVisible(),'WB详情打开隐藏API小卡');
     const detailWin = details.getWindow(), detailPage = code => detailWin.webContents.executeJavaScript(code);
     await until(() => detailPage("document.getElementById('today').getAttribute('aria-pressed') === 'true'"), '详情默认今日');
     await detailPage("document.getElementById('week').click()");
     assert.equal(await detailPage("document.getElementById('week').getAttribute('aria-pressed')"), 'true');
-    const expectedBalance = quota.getState().report.total.toLocaleString('zh-CN', { maximumFractionDigits: 2 });
-    const officialEmpty = [];
-    for (const period of ['today','week']) for (const view of ['records','daily']) {
+    assert(usage,'需要独立官方消耗controller');
+    await until(()=>usage.getState().report && !usage.getState().busy,'官方7天消耗同步');
+    const expectedBalance=quota.getState().report.total.toLocaleString('zh-CN',{maximumFractionDigits:2});
+    const official=usage.getState().report,officialViews=[];
+    for(const period of ['today','week'])for(const view of ['records','daily']){
       await detailPage(`document.getElementById('${period}').click();document.getElementById('view-${view}').click()`);
-      const observed = await detailPage(`({balance:document.getElementById('balance').textContent,consumption:document.getElementById('change').textContent,label:document.getElementById('change-label').textContent,hint:document.getElementById('hint').textContent,note:document.getElementById('unavailable-note').textContent,selected:document.getElementById('view-${view}').getAttribute('aria-selected'),hasInventedData:Boolean(document.querySelector('#chart svg,#events,#forecast'))})`);
-      assert.equal(observed.balance,expectedBalance,'余额保持真实查询值');assert.equal(observed.consumption,'—','官方消费未取得保持未知');
-      assert.equal(observed.label,period==='week'?'近7天消耗':'今日消耗');assert.equal(observed.hint,'个人账户消耗暂未接入');
-      assert.equal(observed.note,'当前仅同步积分余额，尚不能统计实际消耗。');assert.equal(observed.selected,'true');assert.equal(observed.hasInventedData,false,'不展示余额曲线或推算消费');
-      officialEmpty.push({period,view,...observed});
-      if(outputDir)fs.writeFileSync(path.join(outputDir,`workbuddy-official-unavailable-${period}-${view}.png`),(await capture(detailWin)).toPNG());
+      const expected=Number((period==='week'?official.totalCredits:official.todayCredits).toFixed(2));
+      const observed=await detailPage(`(()=>{const svg=document.querySelector('#usage-plot svg');return {balance:document.getElementById('balance').textContent,consumption:document.getElementById('change').textContent,label:document.getElementById('change-label').textContent,empty:document.getElementById('usage-empty').hidden,selected:document.getElementById('view-${view}').getAttribute('aria-selected'),caption:document.getElementById('usage-caption').textContent,aria:svg?.getAttribute('aria-label'),bars:[...document.querySelectorAll('#usage-plot rect.daily-bar')].map(n=>({height:Number(n.getAttribute('height')),title:n.querySelector('title').textContent})),points:[...document.querySelectorAll('#usage-plot circle.point')].map(n=>({x:Number(n.getAttribute('cx')),y:Number(n.getAttribute('cy')),title:n.querySelector('title').textContent})),axis:[...document.querySelectorAll('#usage-plot text[y="132"]')].map(n=>n.textContent),hasLine:Boolean(document.querySelector('#usage-plot .observed-line'))};})()`);
+      assert.equal(observed.balance,expectedBalance);assert.equal(Number(observed.consumption.replaceAll(',','')),expected,'官方积分按2位展示');assert.equal(observed.label,period==='week'?'近7天消耗':'今日消耗');
+      assert.equal(observed.empty,true);assert.equal(observed.selected,'true');assert.match(observed.caption,/官方用量可能延迟2–3小时/);assert.match(observed.aria,/官方/);
+      const expectedCount=period==='week'?7:1;assert.equal(observed.points.length,expectedCount);assert.equal(observed.axis.length,expectedCount);
+      assert(observed.points.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)&&p.x>=48&&p.x<=352&&p.y>=28&&p.y<=108),'消费坐标有限且在图内');
+      if(view==='daily'){assert.equal(observed.bars.length,expectedCount);assert(observed.bars.every(p=>Number.isFinite(p.height)&&p.height>=0));}else{assert.equal(observed.bars.length,0);assert.equal(observed.hasLine,period==='week','今日仅一个日点，不造日内走势');}
+      officialViews.push({period,view,...observed});if(outputDir)fs.writeFileSync(path.join(outputDir,`workbuddy-official-${period}-${view}.png`),(await capture(detailWin)).toPNG());
     }
-    await detailPage("document.querySelector('#explanation summary').click()");
-    assert.equal(await detailPage("document.getElementById('explanation').open"),true);
-    assert.match(await detailPage("document.getElementById('explanation').textContent"),/延迟2–3小时/);
-    assert.match(await detailPage("document.getElementById('explanation').textContent"),/不代表没有消费/);
-    await detailPage("document.querySelector('#explanation summary').click()");
-    const themeEvidence = {};
-    for (const appearance of ['light','dark']) {
-      detailWin.webContents.send('pet:color-mode','standard',appearance,'blue');
-      await until(()=>detailPage(`document.documentElement.dataset.resolvedAppearance === ${JSON.stringify(appearance)}`),'消费空态真实明暗主题');
-      const computed=await detailPage(`(()=>{const panel=getComputedStyle(document.getElementById('details-panel'));return {resolved:document.documentElement.dataset.resolvedAppearance,background:panel.backgroundColor,text:getComputedStyle(document.body).color,balance:document.getElementById('balance').textContent,consumption:document.getElementById('change').textContent,hint:document.getElementById('hint').textContent};})()`);
-      assert.equal(computed.background,appearance==='dark'?'rgba(26, 34, 45, 0.96)':'rgba(244, 249, 255, 0.94)');
-      assert.equal(computed.text,appearance==='dark'?'rgb(245, 247, 250)':'rgb(37, 43, 52)');
-      assert.equal(computed.balance,expectedBalance);assert.equal(computed.consumption,'—');
-      themeEvidence[appearance]=computed;
-      if(outputDir)fs.writeFileSync(path.join(outputDir,`workbuddy-consumption-unavailable-${appearance}.png`),(await capture(detailWin)).toPNG());
+    const themeEvidence={};
+    for(const appearance of ['light','dark']){
+      detailWin.webContents.send('pet:color-mode','standard',appearance,'blue');await until(()=>detailPage(`document.documentElement.dataset.resolvedAppearance === ${JSON.stringify(appearance)}`),'官方消费明暗主题');
+      const computed=await detailPage(`(()=>{const p=getComputedStyle(document.getElementById('details-panel'));return {background:p.backgroundColor,text:getComputedStyle(document.body).color,balance:document.getElementById('balance').textContent,consumption:document.getElementById('change').textContent};})()`);
+      assert.equal(computed.background,appearance==='dark'?'rgba(26, 34, 45, 0.96)':'rgba(244, 249, 255, 0.94)');assert.equal(computed.text,appearance==='dark'?'rgb(245, 247, 250)':'rgb(37, 43, 52)');assert.equal(computed.balance,expectedBalance);
+      themeEvidence[appearance]=computed;if(outputDir)fs.writeFileSync(path.join(outputDir,`workbuddy-official-usage-${appearance}.png`),(await capture(detailWin)).toPNG());
     }
-    if(outputDir){fs.writeFileSync(path.join(outputDir,'official-consumption-unavailable.json'),JSON.stringify(officialEmpty,null,2));fs.writeFileSync(path.join(outputDir,'trend-theme.json'),JSON.stringify(themeEvidence,null,2));}
-    details.update(quota.getState());
+    if(!live){
+      smokeUsageMode='zero';await usage.refresh(true);await until(()=>detailPage("document.getElementById('change').textContent === '0' && document.getElementById('usage-empty').hidden"),'官方成功0与未知区分');
+      const zeroHeights=await detailPage("[...document.querySelectorAll('#usage-plot rect.daily-bar')].map(n=>Number(n.getAttribute('height')))");assert.equal(zeroHeights.length,7);assert(zeroHeights.every(n=>n===0),'真实0不画伪造正柱');
+      if(outputDir)fs.writeFileSync(path.join(outputDir,'workbuddy-official-zero.png'),(await capture(detailWin)).toPNG());
+      smokeUsageMode='error';await usage.refresh(true);await until(()=>usage.getState().error && !usage.getState().busy,'官方查询失败状态');
+      await until(()=>detailPage("document.getElementById('change').textContent === '—' && !document.querySelector('#usage-plot svg') && document.getElementById('hint').textContent === '消耗统计暂不可用'"),'失败不复用0或补造0');
+      if(outputDir)fs.writeFileSync(path.join(outputDir,'workbuddy-official-failure.png'),(await capture(detailWin)).toPNG());
+      smokeUsageMode='success';await usage.refresh(true);await until(()=>usage.getState().report&&!usage.getState().error,'恢复官方消费查询');
+    }
+    await detailPage("document.querySelector('#explanation summary').click()");assert.equal(await detailPage("document.getElementById('explanation').open"),true);assert.match(await detailPage("document.getElementById('explanation').textContent"),/官方逐请求积分记录/);await detailPage("document.querySelector('#explanation summary').click()");
+    if(outputDir){fs.writeFileSync(path.join(outputDir,'official-usage-views.json'),JSON.stringify({mode:live?'live':'isolated-mock',source:official.source,views:officialViews},null,2));fs.writeFileSync(path.join(outputDir,'trend-theme.json'),JSON.stringify(themeEvidence,null,2));}
     await detailPage("document.getElementById('details-close').click()");
     await until(() => !details.isVisible(), '关闭趋势详情');
     await until(() => win.isVisible(), '关闭详情后积分卡恢复');
+    if(apiLabel&&setApiVisible){await until(()=>apiLabel.getWindow()?.isVisible(),'关闭WB详情恢复API小卡');setApiVisible(false);}
     details.update(quota.getState());
   }
 

@@ -24,6 +24,33 @@
     };
     if (window.requestAnimationFrame) window.requestAnimationFrame(measure); else measure();
   }
+  function svgNode(tag, attrs = {}, text) {
+    const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value);
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+  function drawUsage(usage) {
+    const records = period === 'today' ? usage.days.slice(-1) : usage.days;
+    let cumulative = 0;
+    const points = records.map(day => ({ date: day.date, credits: day.credits, value: view === 'daily' ? day.credits : cumulative += day.credits }));
+    const maximum = Math.max(...points.map(point => point.value)), y = value => maximum ? 108 - value / maximum * 80 : 108;
+    const x = index => points.length === 1 ? 200 : 62 + index / (points.length - 1) * 276;
+    const svg = svgNode('svg', { viewBox: '0 0 374 144', class: `trend-chart${view === 'daily' ? ' daily-chart' : ''}`, role: 'img', 'aria-label': view === 'daily' ? '官方每日实际消耗积分' : '官方按日累计消耗积分' });
+    for (const value of maximum ? [0, maximum / 2, maximum] : [0]) svg.append(svgNode('path', { class: 'axis', d: `M48 ${y(value)}H352` }), svgNode('text', { x: 43, y: y(value) + 3, 'text-anchor': 'end' }, amount(value)));
+    if (view === 'daily') {
+      for (const [index, point] of points.entries()) { const bar = svgNode('rect', { class: 'daily-bar', x: x(index) - 9, y: y(point.value), width: 18, height: 108 - y(point.value), rx: 3, fill: 'var(--detail-blue)' }); bar.append(svgNode('title', {}, `${point.date} · ${amount(point.credits)}积分`)); svg.append(bar); }
+    } else if (points.length > 1) {
+      const path = window.TrendCurve.path(points.map((point, index) => [x(index), y(point.value)]));
+      svg.append(svgNode('path', { class: 'observed-area', d: `${path}L${x(points.length - 1)} 108L${x(0)} 108Z` }), svgNode('path', { class: 'observed-line', d: path }));
+    }
+    for (const [index, point] of points.entries()) {
+      const dot = svgNode('circle', { class: 'point endpoint', cx: x(index), cy: y(point.value), r: 2 });
+      dot.append(svgNode('title', {}, `${point.date} · ${view === 'daily' ? '当日' : '累计'}消耗${amount(point.value)}积分`)); svg.append(dot);
+      svg.append(svgNode('text', { class: 'daily-value', x: x(index), y: y(point.value) - 8, 'text-anchor': 'middle' }, amount(point.value)), svgNode('text', { x: x(index), y: 132, 'text-anchor': 'middle' }, point.date.slice(5).replace('-', '/')));
+    }
+    el('usage-plot').append(svg);
+  }
   function render() {
     el('today').setAttribute('aria-pressed', String(period === 'today'));
     el('week').setAttribute('aria-pressed', String(period === 'week'));
@@ -31,11 +58,17 @@
     el('view-daily').setAttribute('aria-selected', String(view === 'daily'));
     el('balance').textContent = Number.isFinite(state.report?.total) ? amount(state.report.total) : '—';
     el('change-label').textContent = period === 'week' ? '近7天消耗' : '今日消耗';
-    el('change').textContent = '—';
-    el('updated').textContent = Number.isFinite(state.report?.updatedAt) ? new Date(state.report.updatedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
-    el('updated').title = '余额上次成功查询时间';
-    el('hint').textContent = '个人账户消耗暂未接入';
-    el('unavailable-note').textContent = '当前仅同步积分余额，尚不能统计实际消耗。';
+    const usageState = state.usage || {}, usage = usageState.report;
+    const available = usage?.source === 'official-request-usage' && usage.complete === true && usage.timezone === 'Asia/Shanghai' && Array.isArray(usage.days) && usage.days.length === 7;
+    el('change').textContent = available ? amount(period === 'week' ? usage.totalCredits : usage.todayCredits) : '—';
+    el('usage-plot').replaceChildren(); el('usage-empty').hidden = available;
+    if (available) drawUsage(usage);
+    el('updated').textContent = Number.isFinite(available ? usage.updatedAt : state.report?.updatedAt) ? new Date(available ? usage.updatedAt : state.report.updatedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+    el('updated').title = available ? '官方消耗上次成功查询时间' : '余额上次成功查询时间';
+    el('hint').textContent = usageState.busy ? '正在同步消耗记录…' : '消耗统计暂不可用';
+    el('unavailable-note').textContent = usageState.busy ? '正在读取 WorkBuddy 官方积分记录' : '暂未取得 WorkBuddy 官方消耗记录';
+    el('usage-caption').textContent = available ? `${view === 'daily' ? '每日实际消耗' : '按日累计消耗'} · 官方用量可能延迟2–3小时` : '';
+    el('usage-caption').hidden = !available;
     const upcoming = Array.isArray(state.report?.expires) ? state.report.expires.filter(e => e.at > Date.now() && e.amount > 0).sort((a, b) => a.at - b.at) : [];
     const expiration = upcoming[0], date = at => new Date(at).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
     const expiring = expiration ? upcoming.filter(e => e.at === expiration.at).reduce((total, e) => total + e.amount, 0) : 0;

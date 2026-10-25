@@ -1,6 +1,7 @@
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { placeDetails } = require('./codex-details-window');
+const { safeUsageState } = require('./workbuddy-usage');
 function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getAppearance = () => 'system', alwaysOnTop = true, onError = () => {}, onVisibilityChange = () => {}, onRefreshTasks = () => {}, onOpenTask = () => {}, onClearTasks = () => {} }) {
   const file = path.join(__dirname, '../workbuddy-details.html'), url = pathToFileURL(file).href;
   let win = null, ready = false, visible = false, state = null, top = Boolean(alwaysOnTop), height = 360, action = 'trend';
@@ -17,7 +18,7 @@ function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getApp
           title:typeof i.title==='string'?i.title.slice(0,160):'未命名任务', status:typeof i.status==='string'?i.status.slice(0,40):'unknown',
           unread:i.unread===true, updatedAt:Number.isFinite(i.updatedAt)?i.updatedAt:null,
           transport:['local','remote','cloud'].includes(i.transport)?i.transport:'unknown' })) } : null };
-    return { action, tasks, report: Number.isFinite(value?.report?.total) && value.report.total >= 0 ? { total: value.report.total, updatedAt: Number.isFinite(value.report.updatedAt) ? value.report.updatedAt : null, nextRefreshAt: value.report.nextRefreshAt, basic: value.report.basic, expires: Array.isArray(value.report.expires) ? value.report.expires.map(e => ({ at: e.at, amount: e.amount })) : [] } : null,
+    return { action, tasks, usage: safeUsageState(value?.usage), report: Number.isFinite(value?.report?.total) && value.report.total >= 0 ? { total: value.report.total, updatedAt: Number.isFinite(value.report.updatedAt) ? value.report.updatedAt : null, nextRefreshAt: value.report.nextRefreshAt, basic: value.report.basic, expires: Array.isArray(value.report.expires) ? value.report.expires.map(e => ({ at: e.at, amount: e.amount })) : [] } : null,
       history: Array.isArray(value?.history) ? value.history.filter(p => p && Number.isSafeInteger(p.at) && Number.isFinite(p.total) && p.total >= 0).map(p => ({ at: p.at, total: p.total, basic: p.basic, reward: p.reward, purchased: p.purchased, nextRefreshAt: p.nextRefreshAt, expires: Array.isArray(p.expires) ? p.expires.map(e => ({ at: e.at, amount: e.amount })) : undefined })) : [],
       historyError: value?.historyError ? '积分趋势暂时无法保存。' : null,
       stale: value?.stale === true || Boolean(value?.error) };

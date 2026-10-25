@@ -63,6 +63,7 @@ const { createWorkBuddyChat } = require('./lib/workbuddy-chat');
 const { createWorkBuddyLabelWindow, safeState: safeWorkBuddyState } = require('./lib/workbuddy-label-window');
 const { createWorkBuddyDetailsWindow } = require('./lib/workbuddy-details-window');
 const { createWorkBuddyConsent } = require('./lib/workbuddy-consent-window');
+const { createWorkBuddyUsage } = require('./lib/workbuddy-usage');
 const { createWorkBuddyTasks } = require('./lib/workbuddy-tasks');
 const { createNotesCompanion } = require('./lib/notes-companion');
 const { createNotesOrganizer } = require('./lib/notes-organizer');
@@ -118,6 +119,7 @@ let workbuddyLabel = null;
 let workbuddyDetails = null;
 let workbuddyConsent = null;
 let workbuddyTasks = null;
+let workbuddyUsage = null;
 let workbuddyRun = runWorkBuddy;
 let workbuddyTaskOpener = url => shell.openExternal(url);
 let workbuddyEnablePending = false;
@@ -992,7 +994,7 @@ function syncApiUsageLabel() {
   if (!apiUsage || !apiUsageLabel) return;
   const state = apiUsage.getState();
   const enabled = !isQuitting && settings?.openaiApiAlwaysVisible === true;
-  const visible = enabled && !screenLocked && !chatWindow?.isVisible() && !presentationSuppressed() &&
+  const visible = enabled && !screenLocked && !chatWindow?.isVisible() && !workbuddyDetails?.isVisible() && !codexDetails?.isVisible() && !presentationSuppressed() &&
     petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
   safelyInvokeWindow('API 卡片同步', () => visible ? apiUsageLabel.show(state) : apiUsageLabel.hide());
   if (!enabled || !state.connected) {
@@ -1015,7 +1017,7 @@ function workBuddyCardState() {
   return { ...state, activity: { runningCount: null, unreadCount: tasks?.report?.pendingReview ?? null } };
 }
 function workBuddyDetailsState(action = workbuddyDetails?.getAction?.() || 'trend') {
-  return { ...safeWorkBuddyState(workBuddyCardState()), action, tasks: workbuddyTasks?.getState() };
+  return { ...safeWorkBuddyState(workBuddyCardState()), action, usage: workbuddyUsage?.getState(), tasks: workbuddyTasks?.getState() };
 }
 async function openWorkBuddyTask(id) {
   if (!settings?.workbuddyEnabled || screenLocked || isQuitting || typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(id)) return false;
@@ -1064,6 +1066,7 @@ async function setWorkBuddyEnabled(value) {
   } catch (_) { return false; }
   if (!enabled) { await workbuddyChat?.stop(); if (quotaGuardPractice) quotaGuard?.close(); }
   workbuddyTasks?.setEnabled(enabled);
+  workbuddyUsage?.setEnabled(enabled);
   workbuddyQuota?.setEnabled(enabled);
   syncWorkBuddyLabel();
   chatWindow?.update(chatSnapshot());
@@ -1244,7 +1247,7 @@ function syncQuotaLabel(snapshot = null) {
       let visible = false;
       try {
         visible = !isQuitting && settings?.codexEnabled === true && settings.codexQuotaAlwaysVisible === true &&
-          !screenLocked && !chatWindow?.isVisible() && !workbuddyDetails?.isVisible() && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
+          !screenLocked && !chatWindow?.isVisible() && !workbuddyDetails?.isVisible() && !codexDetails?.isVisible() && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
       } catch (error) {
         reportQuotaError('额度标签状态', error);
       }
@@ -2168,7 +2171,7 @@ async function finishSmokeTest() {
 
     if (process.env.PET_SMOKE_WORKBUDDY_ONLY === '1') {
       await require('./scripts/verify-workbuddy-integration').verifyWorkBuddyIntegration({
-        pet: petWindow, quota: workbuddyQuota, label: workbuddyLabel, details: workbuddyDetails, tasks: workbuddyTasks,
+        pet: petWindow, quota: workbuddyQuota, label: workbuddyLabel, details: workbuddyDetails, tasks: workbuddyTasks, usage: workbuddyUsage,
         setTaskOpener: opener => { workbuddyTaskOpener = opener; }, getCompactMenu: compactMenuTemplate, apiLabel: apiUsageLabel, setApiVisible: setApiUsageVisible, shortcuts: shortcutWindow, openShortcuts, consent: workbuddyConsent, guard: quotaGuard, codexDetails, edge: edgeTuck, codexLabel: quotaLabel, chat: workbuddyChat, chatWindow,
         openChat, setProvider: setChatProvider, setEnabled: setWorkBuddyEnabled, getSettings: () => settings,
         getCodex: () => codexCompanion?.getSnapshot(), menuTemplate, setSize: setPetSize,
@@ -3395,11 +3398,13 @@ async function bootstrap() {
   workbuddyConsent = createWorkBuddyConsent({ BrowserWindow, ipcMain, positionWindow: positionFunctionWindow,
     getInfo: codexConsentInfo, getAppearance: getNotesAppearance, isPackaged: app.isPackaged,
     canRequest: () => !isQuitting && !screenLocked });
+  workbuddyUsage = createWorkBuddyUsage({ run: workbuddyRun, getAccountKey: () => workbuddyQuota?.getState().accountKey,
+    onChange: () => workbuddyDetails?.update(workBuddyDetailsState()) });
   workbuddyTasks = createWorkBuddyTasks({ run: workbuddyRun, stateFile: path.join(app.getPath('userData'), 'workbuddy-task-state.json'), getAccountKey: () => workbuddyQuota?.getState().accountKey,
     onChange: () => { syncWorkBuddyLabel(); workbuddyDetails?.update(workBuddyDetailsState()); } });
   workbuddyQuota = createWorkBuddyQuota({ run: workbuddyRun, historyFile: path.join(app.getPath('userData'), 'workbuddy-quota-history.json'), onChange: state => {
-    workbuddyTasks.setEnabled(state.enabled); syncWorkBuddyLabel(); workbuddyDetails?.update(workBuddyDetailsState());
-    if (state.enabled && !state.busy && !state.error && state.report) void workbuddyTasks.refresh(false);
+    workbuddyTasks.setEnabled(state.enabled); workbuddyUsage.setEnabled(state.enabled); syncWorkBuddyLabel(); workbuddyDetails?.update(workBuddyDetailsState());
+    if (state.enabled && !state.busy && !state.error && state.report) { void workbuddyTasks.refresh(false); void workbuddyUsage.refresh(false); }
   } });
   workbuddyLabel = createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow: () => petWindow, getBubbleBounds: quotaObstacleBounds,
     getStackAnchor: () => {
@@ -3416,7 +3421,7 @@ async function bootstrap() {
     getAppearance: () => settings.codexQuotaAppearance,
     alwaysOnTop: settings.alwaysOnTop,
     onRefresh: () => { void workbuddyQuota.refresh(); },
-    onTrend: () => { codexDetails?.close(); quotaGuard?.close(); workbuddyDetails?.open(workBuddyDetailsState('trend')); },
+    onTrend: () => { codexDetails?.close(); quotaGuard?.close(); workbuddyDetails?.open(workBuddyDetailsState('trend')); void workbuddyUsage?.refresh(false); },
     onGuard: () => { openQuotaGuard(true); },
     onTasks: openWorkBuddyTasks,
     onError: () => {} });
@@ -3426,7 +3431,7 @@ async function bootstrap() {
     onRefreshTasks: () => { void workbuddyTasks?.refresh(); },
     onOpenTask: id => { void openWorkBuddyTask(id); },
     onClearTasks: () => { workbuddyTasks?.dismissAll(); },
-    onVisibilityChange: () => { syncQuotaLabel(codexCompanion?.getSnapshot()); syncWorkBuddyLabel(); },
+    onVisibilityChange: () => { syncQuotaLabel(codexCompanion?.getSnapshot()); syncApiUsageLabel(); syncWorkBuddyLabel(); },
     onError: error => writeError('WorkBuddy 趋势窗口', error) });
   app.on('browser-window-created', (_event, win) => {
     for (const event of ['move', 'resize', 'show', 'hide', 'closed']) win.on(event, () => {
@@ -3503,7 +3508,7 @@ async function bootstrap() {
     onError: error => writeError('API 常驻卡片', error) });
   codexDetails = createCodexDetailsWindow({ BrowserWindow, screen,
     getAnchor: () => petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null,
-    onVisibilityChange: () => { safelyInvokeWindow('Codex 详情显隐时额度卡重排', () => quotaLabel?.reposition()); syncWorkBuddyLabel(); },
+    onVisibilityChange: () => { safelyInvokeWindow('Codex 详情显隐时额度卡重排', () => quotaLabel?.reposition()); syncApiUsageLabel(); syncWorkBuddyLabel(); },
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('Codex 详情窗口', error) });
   edgeNoticeWindow = createEdgeNoticeWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('边缘提示窗口', error) });
@@ -3619,6 +3624,7 @@ if (!hasSingleInstanceLock) {
     apiUsage?.close();
     workbuddyEnableToken++; workbuddyConsent?.close();
     workbuddyTasks?.close();
+    workbuddyUsage?.close();
     workbuddyQuota?.close();
     workbuddyLabel?.destroy();
     workbuddyDetails?.destroy();

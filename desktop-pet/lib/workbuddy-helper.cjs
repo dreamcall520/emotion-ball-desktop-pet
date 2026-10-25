@@ -31,7 +31,7 @@ function decryptToken(field, key, id) {
   check(token.length > 20, 'LOGIN_REQUIRED');
   return token;
 }
-function readAuth() {
+function readAuth(includeRefresh = false) {
   check(process.platform === 'darwin', 'UNSUPPORTED_PLATFORM');
   const file = path.join(os.homedir(), 'Library/Application Support/CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info');
   check(fs.existsSync(file) && !fs.existsSync(file + '.logged-out'), 'LOGIN_REQUIRED');
@@ -46,6 +46,7 @@ function readAuth() {
   try {
     const keyId = crypto.createHash('sha256').update(key).digest('hex').slice(0, 16);
     return { token: decryptToken(session.auth.accessToken, key, keyId), uid: session.account.uid, domain: session.auth.domain,
+      ...(includeRefresh ? { refreshToken: decryptToken(session.auth.refreshToken, key, keyId) } : {}),
       accountKey: crypto.createHash('sha256').update('workbuddy:' + session.auth.domain + ':personal:' + session.account.uid).digest('hex') };
   } finally { key.fill(0); }
 }
@@ -191,8 +192,8 @@ async function readSse(body, onDelta) {
   return text;
 }
 async function execute(operation, payload, onDelta = () => {}) {
-  check(['quota', 'models', 'chat', 'tasks', 'task-open'].includes(operation), 'INVALID_REQUEST');
-  const auth = readAuth();
+  check(['quota', 'models', 'chat', 'tasks', 'task-open', 'usage'].includes(operation), 'INVALID_REQUEST');
+  const auth = readAuth(operation === 'usage');
   try {
   if (payload.expectedAccountKey !== undefined) check(payload.expectedAccountKey === auth.accountKey, 'ACCOUNT_CHANGED');
   if (operation === 'tasks') return require('./workbuddy-tasks-reader').readWorkBuddyTasks({ uid: auth.uid, accountKey: auth.accountKey });
@@ -203,6 +204,7 @@ async function execute(operation, payload, onDelta = () => {}) {
   const signal = AbortSignal.timeout(operation === 'chat' ? 180000 : 55000);
   if (operation === 'quota') return await quota(auth, signal);
   if (operation === 'models') return await models(auth, signal);
+  if (operation === 'usage') return await require('./workbuddy-usage-reader').readWorkBuddyUsage({ auth, authHeaders: headers(auth), signal });
   check(typeof payload.expectedAccountKey === 'string', 'ACCOUNT_CHANGED');
   check(typeof payload.model === 'string' && /^[a-zA-Z0-9._-]{1,100}$/.test(payload.model), 'INVALID_REQUEST');
   check(typeof payload.conversationId === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(payload.conversationId), 'INVALID_REQUEST');
@@ -219,7 +221,8 @@ async function execute(operation, payload, onDelta = () => {}) {
 }
 const SAFE_ERRORS = new Set(['INVALID_RESPONSE', 'LOGIN_REQUIRED', 'UNSUPPORTED_AUTH', 'UNSUPPORTED_PLATFORM', 'UNSUPPORTED_ACCOUNT',
   'RATE_LIMITED', 'INSUFFICIENT_CREDITS', 'ACCOUNT_RESTRICTED', 'MODEL_UNAVAILABLE', 'SERVICE_UNAVAILABLE', 'ACCOUNT_CHANGED',
-  'TOOLS_UNSUPPORTED', 'TRUNCATED_RESPONSE', 'RESPONSE_TOO_LONG', 'INVALID_REQUEST', 'CONTEXT_TOO_LONG', 'TASK_CACHE_UNAVAILABLE', 'TASK_CACHE_UNSUPPORTED', 'TASK_NOT_FOUND']);
+  'TOOLS_UNSUPPORTED', 'TRUNCATED_RESPONSE', 'RESPONSE_TOO_LONG', 'INVALID_REQUEST', 'CONTEXT_TOO_LONG', 'TASK_CACHE_UNAVAILABLE', 'TASK_CACHE_UNSUPPORTED', 'TASK_NOT_FOUND',
+  'INVALID_USAGE_RESPONSE', 'USAGE_UNAVAILABLE', 'USAGE_INCOMPLETE']);
 if (require.main === module) {
   let input = '';
   process.stdin.setEncoding('utf8');

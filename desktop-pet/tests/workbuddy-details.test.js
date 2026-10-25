@@ -39,28 +39,44 @@ test('consumption failure never substitutes balance drops, fake zero, curves or 
   const vm = require('node:vm'), fs = require('node:fs');
   const elements = new Map(), sizes = [];
   class Element {
-    constructor() { this.children = []; this.attrs = {}; this.dataset = {}; this.listeners = {}; this.textContent = ''; }
+    constructor(tag) { this.tag = tag; this.children = []; this.attrs = {}; this.dataset = {}; this.listeners = {}; this.textContent = ''; }
     getBoundingClientRect() { return { top: 10, bottom: 210 }; }
     setAttribute(key, value) { this.attrs[key] = value; }
     addEventListener(key, fn) { this.listeners[key] = fn; }
+    append(...nodes) { this.children.push(...nodes); }
+    replaceChildren(...nodes) { this.children = nodes; }
   }
   const get = id => { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); };
   let receive, receiveColor, close = 0;
   const now = new Date(2026, 9, 25, 12).getTime();
-  const document = { documentElement: new Element(), getElementById: get, addEventListener() {} };
+  const document = { documentElement: new Element(), getElementById: get, createElementNS: (_, tag) => new Element(tag), addEventListener() {} };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../workbuddy-details-renderer.js'), 'utf8'), {
-    document, window: { getComputedStyle: () => ({ paddingBottom: '13px', borderBottomWidth: '1px' }), requestAnimationFrame: fn => fn(), matchMedia: () => ({ matches: false, addEventListener() {} }),
+    document, window: { TrendCurve: require('../quota-trend-curve'), getComputedStyle: () => ({ paddingBottom: '13px', borderBottomWidth: '1px' }), requestAnimationFrame: fn => fn(), matchMedia: () => ({ matches: false, addEventListener() {} }),
       petWorkBuddyDetails: { resize: height => sizes.push(height), onModel: fn => { receive = fn; }, onColorMode: fn => { receiveColor = fn; }, close: () => close++ } },
     Date: class extends Date { static now() { return now; } }
   });
   receive({ report: { total: 7399.91, updatedAt: now, nextRefreshAt: now + 7 * 86400000, expires: [{ at: now + 2 * 86400000, amount: 99.91 }] }, history: [{ at: now - 300000, total: 7500 }, { at: now, total: 7399.91 }] });
   assert.equal(get('balance').textContent, '7,399.91'); assert.equal(get('change').textContent, '—');
-  assert.equal(get('hint').textContent, '个人账户消耗暂未接入'); assert.equal(get('unavailable-note').textContent, '当前仅同步积分余额，尚不能统计实际消耗。');
+  assert.equal(get('hint').textContent, '消耗统计暂不可用'); assert.equal(get('unavailable-note').textContent, '暂未取得 WorkBuddy 官方消耗记录');
   assert.match(get('expiry-note').textContent, /99.91积分/); assert.match(get('refresh-note').textContent, /基础积分/);
   get('view-daily').listeners.click(); get('week').listeners.click();
   assert.equal(get('change-label').textContent, '近7天消耗'); assert.equal(get('change').textContent, '—');
-  assert.equal(get('hint').textContent, '个人账户消耗暂未接入'); assert.equal(get('view-daily').attrs['aria-selected'], 'true');
+  assert.equal(get('hint').textContent, '消耗统计暂不可用'); assert.equal(get('view-daily').attrs['aria-selected'], 'true');
   receive({ report: { total: 0 }, history: [] }); assert.equal(get('balance').textContent, '0'); assert.equal(get('change').textContent, '—');
+  receive({ usage: { busy: true, report: null } }); assert.equal(get('hint').textContent, '正在同步消耗记录…');
+  const usage = { source: 'official-request-usage', timezone: 'Asia/Shanghai', complete: true, days: Array.from({ length: 7 }, (_, i) => ({ date: `2026-10-${19 + i}`, credits: i === 6 ? .09 : 0 })), totalCredits: .09, todayCredits: .09, updatedAt: now };
+  get('today').listeners.click(); get('view-records').listeners.click();
+  receive({ usage: { report: usage } }); assert.equal(get('change').textContent, '0.09'); assert.equal(get('usage-empty').hidden, true);
+  assert.match(get('usage-plot').children[0].attrs['aria-label'], /累计消耗/);
+  get('week').listeners.click(); assert.equal(get('usage-plot').children[0].children.filter(n => n.tag === 'circle').length, 7);
+  get('view-daily').listeners.click();
+  assert.equal(get('usage-plot').children[0].children.filter(n => n.tag === 'rect').length, 7);
+  assert.match(get('usage-caption').textContent, /每日实际消耗/);
+  const zero = { ...usage, days: usage.days.map(d => ({ ...d, credits: 0 })), totalCredits: 0, todayCredits: 0 };
+  receive({ usage: { report: zero } }); assert.equal(get('change').textContent, '0'); assert.equal(get('usage-empty').hidden, true);
+  const axes = get('usage-plot').children[0].children.filter(n => n.attrs.class === 'axis'); assert.equal(axes.length, 1);
+  receive({ usage: { error: 'failed', report: null } }); assert.equal(get('change').textContent, '—'); assert.equal(get('usage-plot').children.length, 0);
+  assert.equal(get('usage-empty').hidden, false); assert.equal(get('hint').textContent, '消耗统计暂不可用');
   receiveColor('standard', 'dark', 'blue'); assert.equal(document.documentElement.dataset.resolvedAppearance, 'dark');
   receiveColor('accessible', 'light', 'green'); assert.equal(document.documentElement.dataset.resolvedAppearance, 'light');
   assert.equal(sizes.at(-1), 214); get('details-close').listeners.click(); assert.equal(close, 1);
@@ -68,6 +84,6 @@ test('consumption failure never substitutes balance drops, fake zero, curves or 
   const renderer = fs.readFileSync(path.join(__dirname, '../workbuddy-details-renderer.js'), 'utf8');
   assert.equal((html.match(/class="chart-meta"/g) || []).length, 1);
   assert.match(html, /<h1 id="details-title">消耗趋势/); assert.match(html, /2–3小时/);
-  assert.doesNotMatch(html, /forecast-note|quota-trend-curve|观察减少|400/);
-  assert.doesNotMatch(renderer, /TrendCurve|createElementNS|reductionSeries|analyze\(/);
+  assert.doesNotMatch(html, /forecast-note|观察减少|400/);
+  assert.doesNotMatch(renderer, /reductionSeries|analyze\(/);
 });
