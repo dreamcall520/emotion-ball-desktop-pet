@@ -12,15 +12,17 @@ const articleBlocks = html.match(/<article[^>]*data-release-panel[^>]*>[\s\S]*?<
 
 const oldArticles = articles.slice(1), oldBlocks = articleBlocks.slice(1);
 
-test('logs add 0.4.06 and preserve all seventeen historical records', () => {
-  assert.match(articleBlocks[0], /id="v0\.4\.06-apple"/);
-  assert.match(articles[0], /datetime="2026-10-24"/);
-  assert.deepEqual([...articles[0].matchAll(/<h4>(.*?)<\/h4>/g)].map(m=>m[1]), ['【升级】设置中心', '【新增】咩咩主题', '【焕新】应用图标', '【优化】已知问题']);
-  assert.equal((articles[0].match(/<li>/g) || []).length, 2);
+test('logs replace 0.4.06 with 0.4.08 and preserve all seventeen historical records', () => {
+  assert.match(articleBlocks[0], /id="v0\.4\.08-apple"/);
+  assert.match(articles[0], /datetime="2026-10-26"/);
+  assert.deepEqual([...articles[0].matchAll(/<h4>(.*?)<\/h4>/g)].map(m=>m[1]), ['【新增】咩咩四季主题', '【新增】ZCode 与 WorkBuddy 联动', '【新增】联动样式管理', '【新增】更多桌面伙伴', '【升级】统一设置中心', '【焕新】应用图标与聊天界面', '【优化】已知问题']);
+  assert.equal((articles[0].match(/<li>/g) || []).length, 11);
   assert.match(articles[0], /<h4>【优化】已知问题<\/h4><\/div>/);
   assert.doesNotMatch(articles[0], /主题记忆|靠边位置|卡面|小角色/);
   assert.equal(articles.length,18);
-  assert.match(articles[0], /v0\.4\.6\/Qiuqiu-0\.4\.06-macOS-arm64\.dmg/);
+  assert.doesNotMatch(articles[0], /release-download/);
+  assert.doesNotMatch(html, /0\.4\.06/);
+  assert.match(html, /0\.4\.08 Apple 芯片版 · 大版本更新<\/option>/);
 });
 
 test('0.4.05 and sixteen earlier historical blocks remain unchanged, omitting 0.4.03', () => {
@@ -53,7 +55,7 @@ test('0.4.05 and sixteen earlier historical blocks remain unchanged, omitting 0.
   assert.equal(createHash('sha256').update(wording).digest('hex'), '42478fe782a63a870ed225cc63134af1892b0e0d594809ce3ca0bb25c17da7bf');
   for (const title of ['1.【新增】便签与待办', '2.【新增】来定制球球', '3.【新增】自动更新提醒', '4.【升级】额度卡片 2.0', '5.【升级】全局 UI 升级', '6.【修复】已知体验问题']) assert.ok(articles[4].includes(`<h4>${title}</h4>`));
   assert.match(articles[4], /<h4>6.【修复】已知体验问题<\/h4><\/div>/);
-  assert.equal((html.match(/class="release-milestone"/g) || []).length, 2);
+  assert.equal((html.match(/class="release-milestone"/g) || []).length, 4);
   assert.match(html, /0\.4\.00 Apple 芯片版 · 大版本更新<\/option>/);
   for (const version of ['0.3.25', '0.3.24', '0.3.23', '0.3.17', '0.3.14', '0.3.13', '0.3.12', '0.3.11', '0.3.10']) assert.ok(articles.slice(5).some(a => a.includes(version)));
   assert.doesNotMatch(html, /0\.3\.(?:27|28|29|30|31|32)|幻彩云|iframe/);
@@ -61,14 +63,14 @@ test('0.4.05 and sixteen earlier historical blocks remain unchanged, omitting 0.
 });
 
 test('each architecture offers DMG; the ZIP-only hotfix and website event stay accurate', () => {
-  assert.equal(downloads.length, 19);
-  assert.equal(new Set(downloads).size, 19);
+  assert.equal(downloads.length, 18);
+  assert.equal(new Set(downloads).size, 18);
   assert.doesNotMatch(html, /release-source|查看 GitHub Release/);
   assert.ok(downloads.every(url => /^https:\/\/github\.com\/dreamcall520\/emotion-ball-desktop-pet\/releases\/download\/v[\d.]+\/.+\.(?:zip|dmg)$/.test(url)));
   for (const article of articles) {
     const title = article.match(/<h3[^>]*>(.*?)<\/h3>/)[1];
     const urls = [...article.matchAll(/class="release-download [^"]+" href="([^"]+)"/g)].map(m => m[1]);
-    if (title === '公开官网上线') { assert.equal(urls.length, 0); continue; }
+    if (title === '公开官网上线' || title === '0.4.08 Apple 芯片版') { assert.equal(urls.length, 0); continue; }
     assert.ok(urls.length > 0, title);
     const version = title.match(/^[\d.]+/)[0];
     const tag = `v${version.split('.').map(Number).join('.')}`;

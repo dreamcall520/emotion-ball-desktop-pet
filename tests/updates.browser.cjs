@@ -23,7 +23,7 @@ fs.mkdirSync(out, { recursive: true });
     assert.equal(await page.title(), '球球桌宠 · 更新日志');
     assert.equal(await page.locator('[data-release-panel]:visible').count(), 1);
     assert.equal(await page.locator('[data-release-panel]').count(), 18);
-    assert.equal(await page.locator('.release-download').count(), 19);
+    assert.equal(await page.locator('.release-download').count(), 18);
     assert.equal(await page.getByRole('link', { name:/GitHub Release/ }).count(), 0);
     const entries = await page.locator('[data-release-link]').evaluateAll(links => links.map(link => ({ hash: link.hash, title: link.querySelector('span').textContent })));
     for (const entry of entries) {
@@ -50,9 +50,9 @@ fs.mkdirSync(out, { recursive: true });
     for (const theme of ['light', 'dark']) {
       for (const [width, height] of [[1440,900], [1080,800], [390,844], [320,568]]) {
         await page.setViewportSize({ width, height });
-        await page.evaluate(theme => { localStorage.setItem('emotion-ball-site-theme', theme); location.hash = 'v0.4.06-apple'; }, theme);
+        await page.evaluate(theme => { localStorage.setItem('emotion-ball-site-theme', theme); location.hash = 'v0.4.08-apple'; }, theme);
         await page.reload();
-        await page.waitForFunction(() => document.querySelector('[data-release-panel]:not([hidden])').id === 'v0.4.06-apple');
+        await page.waitForFunction(() => document.querySelector('[data-release-panel]:not([hidden])').id === 'v0.4.08-apple');
         const metrics = await page.evaluate(() => {
           const panel = document.querySelector('[data-release-panel]:not([hidden])');
           const headerBottom = document.querySelector('.site-header').getBoundingClientRect().bottom;
@@ -68,7 +68,7 @@ fs.mkdirSync(out, { recursive: true });
           await page.locator('[data-release-select]').selectOption('v0.3.10-hotfix');
           assert.equal(await page.locator('[data-release-panel]:visible h3').innerText(), '0.3.10 Apple 热修复');
           assert.equal(await page.locator('[data-release-panel]:visible .release-download').count(), 1);
-          await page.locator('[data-release-select]').selectOption('v0.4.06-apple');
+          await page.locator('[data-release-select]').selectOption('v0.4.08-apple');
         }
         await page.screenshot({ path:path.join(out, `updates-${width}x${height}-${theme}.png`), fullPage:true });
         report.layouts.push({ theme, width, height, ...metrics });
@@ -103,9 +103,9 @@ fs.mkdirSync(out, { recursive: true });
     const staticPage = await noJS.newPage();
     await staticPage.goto(base);
     assert.equal(await staticPage.locator('[data-release-panel]:visible').count(), 18);
-    assert.equal(await staticPage.locator('.release-download').count(), 19);
+    assert.equal(await staticPage.locator('.release-download').count(), 18);
     assert.equal(await staticPage.locator('[data-release-select]').isVisible(), false);
-    report.checks.push('without JavaScript, 18 records and 19 downloads remain readable');
+    report.checks.push('without JavaScript, 18 records and 18 downloads remain readable');
     await noJS.close();
     assert.deepEqual(errors, []);
     assert.deepEqual(failed, []);
