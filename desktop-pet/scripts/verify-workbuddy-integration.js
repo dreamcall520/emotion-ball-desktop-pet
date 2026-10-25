@@ -40,7 +40,7 @@ async function until(read, label) {
   for (let n = 0; n < 200; n++) { if (await read()) return; await wait(50); }
   throw new Error('等待失败：' + label);
 }
-async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, details, tasks, guard, codexDetails, edge, edgeNotices, chat, chatWindow, consent, openChat, setProvider, setEnabled, getSettings, getCodex, menuTemplate, getCompactMenu, setTaskOpener, shortcuts, openShortcuts, setSize, outputDir, live = false }) {
+async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, details, tasks, guard, codexDetails, edge, edgeNotices, chat, chatWindow, consent, openChat, setProvider, setEnabled, getSettings, getCodex, menuTemplate, getCompactMenu, setTaskOpener, apiLabel, setApiVisible, shortcuts, openShortcuts, setSize, outputDir, live = false }) {
   if (outputDir) fs.mkdirSync(outputDir, { recursive: true });
   const codexBefore = JSON.stringify(getCodex());
   const codexSettings = Object.fromEntries(Object.entries(getSettings()).filter(([k]) => k.startsWith('codex')));
@@ -225,6 +225,22 @@ async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, detai
     }
     pet.setBounds(centeredPet);label.reposition();
     if(outputDir)fs.writeFileSync(path.join(outputDir,'edge-dual-cards.json'),JSON.stringify(edgeEvidence,null,2));
+  }
+  if (apiLabel && setApiVisible) {
+    setApiVisible(true);
+    await until(() => apiLabel.getWindow()?.isVisible(), 'API卡显示');
+    await until(() => win.isVisible(), 'API卡与WB共显');
+    const checkCards = () => {
+      const a = apiLabel.getWindow().getBounds(), w = win.getBounds();
+      return w.y >= a.y + a.height || w.y + w.height <= a.y || w.x >= a.x + a.width || w.x + w.width <= a.x;
+    };
+    await until(checkCards, 'API卡与WB互不覆盖');
+    const apiPage = code => apiLabel.getWindow().webContents.executeJavaScript(code);
+    await apiPage("document.querySelector('button').click()");
+    await wait(150); await until(() => win.isVisible() && checkCards(), 'API展开后WB避让');
+    if (outputDir) fs.writeFileSync(path.join(outputDir, 'api-workbuddy-cards.png'), (await capture(win)).toPNG());
+    setApiVisible(false);
+    await until(() => !apiLabel.getWindow().isVisible() && win.isVisible(), 'API关闭WB恢复');
   }
   if (shortcuts && openShortcuts) {
     openShortcuts();

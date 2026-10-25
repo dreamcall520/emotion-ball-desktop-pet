@@ -2169,7 +2169,7 @@ async function finishSmokeTest() {
     if (process.env.PET_SMOKE_WORKBUDDY_ONLY === '1') {
       await require('./scripts/verify-workbuddy-integration').verifyWorkBuddyIntegration({
         pet: petWindow, quota: workbuddyQuota, label: workbuddyLabel, details: workbuddyDetails, tasks: workbuddyTasks,
-        setTaskOpener: opener => { workbuddyTaskOpener = opener; }, getCompactMenu: compactMenuTemplate, shortcuts: shortcutWindow, openShortcuts, consent: workbuddyConsent, guard: quotaGuard, codexDetails, edge: edgeTuck, codexLabel: quotaLabel, chat: workbuddyChat, chatWindow,
+        setTaskOpener: opener => { workbuddyTaskOpener = opener; }, getCompactMenu: compactMenuTemplate, apiLabel: apiUsageLabel, setApiVisible: setApiUsageVisible, shortcuts: shortcutWindow, openShortcuts, consent: workbuddyConsent, guard: quotaGuard, codexDetails, edge: edgeTuck, codexLabel: quotaLabel, chat: workbuddyChat, chatWindow,
         openChat, setProvider: setChatProvider, setEnabled: setWorkBuddyEnabled, getSettings: () => settings,
         getCodex: () => codexCompanion?.getSnapshot(), menuTemplate, setSize: setPetSize,
         edgeNotices: { tick: (time, state) => { edgeNoticeNow = () => 1000000000 + time; edgeNotice.tick(state); }, getWindow: () => edgeNoticeWindow.getWindow(), reset: () => { activityMonitor.stop(); edgeNoticeNow = () => performance.now(); lastEdgeNoticeTick = -Infinity; edgeNotice.reset(); } },
@@ -3402,7 +3402,10 @@ async function bootstrap() {
     if (state.enabled && !state.busy && !state.error && state.report) void workbuddyTasks.refresh(false);
   } });
   workbuddyLabel = createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow: () => petWindow, getBubbleBounds: quotaObstacleBounds,
-    getStackAnchor: () => quotaLabel?.getVisibleBounds?.(),
+    getStackAnchor: () => {
+      const api = apiUsageLabel?.getWindow();
+      return api && !api.isDestroyed() && api.isVisible() ? api.getBounds() : quotaLabel?.getVisibleBounds?.();
+    },
     getPresentation: () => edgeTuck?.getPresentation(),
     getGuardEntry: () => settings.codexQuotaFunEnabled !== false && !quotaLabel?.getWindow()?.isVisible() && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible(),
     getObstacles: () => [quotaLabel, apiUsageLabel, bubble, shortcutWindow, quotaGuard].flatMap(controller => {
