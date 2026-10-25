@@ -4116,7 +4116,7 @@ test('local import rejects a hidden or reloading customization session while ima
 test('pinned native cards detach from both dock edges during drag and reflow at release for blob and sheep',async t=>{
  for(const shape of ['blob','new-year-sheep'])for(const side of ['left','right']){
   const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,nativeQuotaLabel:true});t.after(()=>f.app.emit('before-quit'));
-  f.call(`settings.customization.appearance.shape='${shape}';settings.quotaCardPinned=['codex'];settings.openaiApiAlwaysVisible=true;shortcutWindow.wakeFromEdge=()=>false;sheepBarInk={ink:{x:.1,y:.2,width:.8,height:.6}}`);
+  f.call(`settings.customization.appearance.shape='${shape}';settings.quotaCardPinned=['codex'];settings.openaiApiAlwaysVisible=true;shortcutWindow.wakeFromEdge=()=>false;sheepBarInk={key:sheepCapsuleContext()?.key,ink:{x:.1,y:.2,width:.8,height:.6}}`);
   f.connections[0].callbacks.onQuota({updatedAt:1800000000000,windows:[{id:'codex:primary',label:'Codex',windowMinutes:300,remaining:74,resetsAt:1800018000000}]});
   const card=f.call('quotaLabel.getWindow()');card.webContents.emit('did-finish-load');
   f.call(`edgeTuck.dock('${side}');edgeTuck.sampleCursor({x:petWindow.getBounds().x+40,y:petWindow.getBounds().y+40})`);
@@ -4154,4 +4154,24 @@ test('drag cancellation of an already-closing overlay still resets details while
  f.call('settings.openaiApiAlwaysVisible=true;syncQuotaLabel();quotaCardGroup.activate({keyboard:false});quotaCardGroupTransition.finish();quotaCardGroup.dismiss()');assert.equal(resets,0);assert.equal(f.groupTransition.current.expanded,false);
  const pet=f.pet.getBounds();f.send('pet:drag-start',{x:pet.x+40,y:pet.y+40});assert.equal(f.groupTransition.active,false);assert.equal(resets,1,'closing context invalidation must leave a pending compact reset');
  f.send('pet:drag-end');f.call('quotaCardGroup.activate({keyboard:false})');const before=resets;f.groupTransition.options.onSettled({expanded:false,canceled:true,contextKey:'old-closing-context'});assert.equal(resets,before,'late closing cancellation cannot reset a reopened group');
+});
+
+test('capsule accepts current sleep ink and rejects old theme caches through Christmas/daily and Halloween/spring round trips',async t=>{
+ const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,quotaCardPinned:[]});t.after(()=>f.app.emit('before-quit'));f.call("settings.openaiApiAlwaysVisible=true;settings.customization.appearance.shape='new-year-sheep'");
+ for(const theme of ['christmas','none','halloween','spring-festival','christmas','none']){
+  f.call(`saveCustomization({...settings.customization,appearance:{...settings.customization.appearance,sheepTheme:'${theme}'}})`);assert.equal(f.call('currentSheepCapsuleInk()'),null);
+  const facing=f.call('sheepCapsuleContext().facing'),ink={x:.2,y:.38,width:.6,height:.52};f.send('pet:offering-state',{theme,facing,settled:false,eligible:false,ink});assert.equal(f.call('currentSheepCapsuleInk().ink.y'),.38,'sleep pose is not discarded for being non-idle');
+  const oldTheme=theme==='christmas'?'none':'christmas';f.send('pet:offering-state',{theme:oldTheme,facing,settled:true,eligible:false,ink:{x:.01,y:.01,width:.9,height:.9}});assert.equal(f.call('currentSheepCapsuleInk().ink.x'),.2);assert.equal(f.call('sheepBarInk'),null,'old settled packet cannot repopulate fallback');
+ }
+ f.call('quotaCardGroup.activate({keyboard:false})');const original=f.call('JSON.stringify(currentSheepCapsuleInk())'),cancels=f.groupTransition.cancels;const facing=f.call('sheepCapsuleContext().facing');f.send('pet:offering-state',{theme:'none',facing,settled:true,ink:{x:.4,y:.5,width:.4,height:.4}});assert.equal(f.call('JSON.stringify(currentSheepCapsuleInk())'),original);assert.equal(f.groupTransition.cancels,cancels,'ink updates do not cancel active overlay');assert.equal(f.call('sheepBarInk'),null);
+});
+test('late canvas ink is rejected after a theme returns to the same name',async t=>{
+ const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,quotaCardPinned:[]});t.after(()=>f.app.emit('before-quit'));let complete;f.pet.webContents.executeJavaScriptInIsolatedWorld=()=>new Promise(resolve=>complete=resolve);
+ f.call("settings.openaiApiAlwaysVisible=true;settings.customization.appearance.shape='new-year-sheep';settings.customization.appearance.sheepTheme='none';sheepCapsuleReadAt=0;refreshSheepCapsuleInk()");const facing=f.call('sheepCapsuleContext().facing');
+ f.call("saveCustomization({...settings.customization,appearance:{...settings.customization.appearance,sheepTheme:'christmas'}});saveCustomization({...settings.customization,appearance:{...settings.customization.appearance,sheepTheme:'none'}})");complete({theme:'none',facing,ink:{x:.1,y:.1,width:.8,height:.8}});await flush();assert.equal(f.call('currentSheepCapsuleInk()'),null,'same name is insufficient across a theme epoch');
+});
+test('collapsed bar and pinned subset predict the full eligible stack direction rather than the tiny capsule height',async t=>{
+ const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,quotaCardPinned:['codex']});t.after(()=>f.app.emit('before-quit'));
+ f.call("settings.openaiApiAlwaysVisible=true;settings.zcodeEnabled=true;settings.zcodeQuotaAlwaysVisible=true;settings.workbuddyEnabled=true;settings.workbuddyQuotaAlwaysVisible=true;quotaLabel.getLayoutMetrics=()=>({width:128,height:32,inset:2})");
+ f.pet.setPosition(-440,430,false);f.call('syncQuotaLabel()');assert.equal(f.call('quotaExpandedStackPlan().placement'),'above');assert.equal(f.call('quotaFreeStackPlan().placement'),'above');const b=f.call('quotaCardGroupWindow.getBounds()');assert(Math.abs(f.pet.getBounds().y-(b.y+13.5)-7)<=.51,'capsule paint follows the full group above although its own 20px would fit below');
 });

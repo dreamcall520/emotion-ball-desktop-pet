@@ -119,7 +119,7 @@ let dialogue = null;
 let bubble = null;
 let thoughts = null;
 let sheepOfferingWindow = null;
-let sheepQuotaInk = null, sheepBarInk = null;
+let sheepQuotaInk = null, sheepBarInk = null, sheepCapsuleInk = null, sheepCapsuleRead = null, sheepCapsuleReadAt = 0, sheepCapsuleRevision = 0, sheepCapsuleReadKey = null, sheepCapsuleReadCount = 0;
 let bubbleVisibilityBinding = null;
 let quotaLabel = null;
 let quotaGuard = null;
@@ -868,7 +868,7 @@ function saveCustomization(value, setAsStartupDefault = true, quotaDisplay) {
     writeError('保存球球定制', error);
     return false;
   }
-  if(customization.appearance.shape!=='new-year-sheep'||previous.customization?.appearance?.shape!==customization.appearance.shape){sheepBarInk=null;sheepQuotaInk=null;}
+  if(customization.appearance.shape!==previous.customization?.appearance?.shape||customization.appearance.sheepTheme!==previous.customization?.appearance?.sheepTheme){sheepCapsuleInk=null;sheepCapsuleReadAt=0;sheepCapsuleRevision++;sheepBarInk=null;sheepQuotaInk=null;}
   sendCompanionSettings();
   chatWindow?.syncAppearance();
   repositionQuotaLabel();
@@ -1048,6 +1048,39 @@ function quotaObstacleBounds() {
   }
 }
 
+function sheepCapsuleContext() {
+  if(settings?.customization?.appearance?.shape!=='new-year-sheep'||!petWindow||petWindow.isDestroyed())return null;
+  const pet=petWindow.getBounds(),theme=SheepTheme.resolveTheme(settings.customization.appearance.sheepTheme,new Date()),facing=PetFacing.resolve(pet,screen.getDisplayMatching(pet).workArea);
+  return {theme,facing,key:JSON.stringify([theme,facing,pet.width,pet.height,codexPageEpoch,sheepCapsuleRevision])};
+}
+function currentSheepSettledInk() { const c=sheepCapsuleContext();return c&&sheepBarInk?.key===c.key?sheepBarInk:null; }
+function currentSheepCapsuleInk() { const c=sheepCapsuleContext();return c&&sheepCapsuleInk?.key===c.key?sheepCapsuleInk:null; }
+function acceptSheepCapsuleInk(value,context=sheepCapsuleContext()) {
+  const b=value?.ink;
+  if(!context||value.theme!==context.theme||value.facing!==context.facing||!b||![b.x,b.y,b.width,b.height].every(Number.isFinite)||b.x<0||b.y<0||b.width<=0||b.height<=0||b.x+b.width>1.001||b.y+b.height>1.001)return false;
+  const old=currentSheepCapsuleInk(),size=petWindow.getBounds();
+  if(old&&['x','y','width','height'].every(k=>Math.abs(old.ink[k]-b[k])*(k==='x'||k==='width'?size.width:size.height)<2))return true;
+  sheepCapsuleInk={key:context.key,theme:context.theme,facing:context.facing,ink:{x:b.x,y:b.y,width:b.width,height:b.height}};return true;
+}
+function refreshSheepCapsuleInk() {
+  const context=sheepCapsuleContext(),state=quotaCardGroup?.getState();
+  if(!context||currentSheepCapsuleInk()||sheepCapsuleRead||!state?.bar||state.expanded||quotaCardGroupTransition?.isActive()||Date.now()-sheepCapsuleReadAt<600)return;
+  if(sheepCapsuleReadKey!==context.key){sheepCapsuleReadKey=context.key;sheepCapsuleReadCount=0;}if(sheepCapsuleReadCount>=8)return;sheepCapsuleReadCount++;
+  const owner=petWindow;if(typeof owner.webContents.executeJavaScriptInIsolatedWorld!=='function')return;
+  sheepCapsuleReadAt=Date.now();
+  const code=`(()=>{const host=document.getElementById('pet'),c=host?.querySelector('canvas.sheep-skin');if(!c||c.dataset.ready!=='true'||c.dataset.transition)return null;const h=host.getBoundingClientRect(),r=c.getBoundingClientRect(),s=Math.min(r.width,r.height);if(!h.width||!h.height||!s)return null;const d=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let x0=c.width,y0=c.height,x1=-1,y1=-1;for(let y=0;y<c.height;y++)for(let x=0;x<c.width;x++)if(d[(y*c.width+x)*4+3]>24){x0=Math.min(x0,x);y0=Math.min(y0,y);x1=Math.max(x1,x);y1=Math.max(y1,y)}if(x1<0)return null;return {theme:c.dataset.theme,facing:c.dataset.facing,ink:{x:(r.left+(r.width-s)/2-h.left+x0/c.width*s)/h.width,y:(r.top+(r.height-s)/2-h.top+y0/c.height*s)/h.height,width:(x1+1-x0)/c.width*s/h.width,height:(y1+1-y0)/c.height*s/h.height}}})()`;
+  sheepCapsuleRead=Promise.resolve(owner.webContents.executeJavaScriptInIsolatedWorld(1006,[{code}])).then(value=>{
+    if(owner===petWindow&&!owner.isDestroyed()&&sheepCapsuleContext()?.key===context.key&&!quotaCardGroupTransition?.isActive()&&!quotaCardGroup?.getState().expanded&&acceptSheepCapsuleInk(value,context))syncQuotaCardGroup();
+  }).catch(()=>{}).finally(()=>{sheepCapsuleRead=null;});
+}
+function quotaExpandedStackPlan() {
+  const pet=petWindow&&!petWindow.isDestroyed()&&petWindow.isVisible()?petWindow.getBounds():null;if(!pet)return null;
+  const input=quotaCardGroupInput(),controllers=quotaCardControllers(),metrics={};
+  for(const id of input.eligible){const standard=id==='codex'?settings.codexQuotaLabelSize!=='compact':id==='zcode'&&settings.zcodeQuotaLabelSize!=='compact';metrics[id]=controllers[id]?.getLayoutMetrics?.()||{width:standard?168:128,height:standard?58:32,inset:standard?0:2};}
+  const area=screen.getDisplayMatching(pet).workArea;
+  return quotaFreeStackBounds(pet,area,metrics,{...quotaLayoutPresentation(),quotaCardOrder:input.config.order,shape:settings.customization.appearance.shape,quotaStyle:quotaDisplayConfig().style,
+    quotaCardVisualInk:currentSheepCapsuleInk()||currentSheepSettledInk(),sheepInk:sheepQuotaInk,sheepTheme:SheepTheme.resolveTheme(settings.customization.appearance.sheepTheme,new Date()),facing:PetFacing.resolve(pet,area)},quotaObstacleBounds());
+}
 function quotaLayoutPresentation() { const p=edgeTuck?.getPresentation(); return p?.dragging||dragState?.moved ? {...p,mode:'free',side:null}:p; }
 function quotaCardConfig() { return normalizeQuotaCards({order:settings?.quotaCardOrder,pinned:settings?.quotaCardPinned}); }
 function quotaCardGroupInput() {
@@ -1073,6 +1106,7 @@ function quotaGroupTransitionContext() {
 function resetQuotaCardDetails() { for(const c of Object.values(quotaCardControllers()))c?.resetExpanded?.(); }
 function showQuotaCardBar(state,keepBounds=quotaCardGroupTransition?.isActive()) { quotaCardGroupWindow?.show({...state,keepBounds}); }
 function syncQuotaCardGroup() {
+  refreshSheepCapsuleInk();
   if(quotaCardGroupTransition?.isActive()&&quotaGroupTransitionContext()!==quotaTransitionContext)quotaCardGroupTransition.cancel();
   const state=quotaCardGroup?.sync();if(state?.bar)showQuotaCardBar(state);else quotaCardGroupWindow?.hide();
 }
@@ -1103,7 +1137,7 @@ function quotaFreeStackPlan() {
   const area=screen.getDisplayMatching(pet).workArea,style=quotaDisplayConfig().style;
   return quotaFreeStackBounds(pet,area,
     {codex:quotaCardCollected('codex')?null:quotaLabel?.getLayoutMetrics?.(),api:quotaCardCollected('api')?null:apiUsageLabel?.getLayoutMetrics?.(),zcode:quotaCardCollected('zcode')?null:zcodeLink?.getLayoutMetrics?.(),workbuddy:quotaCardCollected('workbuddy')?null:workbuddyLabel?.getLayoutMetrics?.()},
-    {...quotaLayoutPresentation(),quotaCardOrder:quotaCardConfig().order,quotaCardBarBounds:null,quotaCardVisualInk:settings?.customization?.appearance?.shape==='new-year-sheep'?sheepBarInk:null,shape:settings?.customization?.appearance?.shape,quotaStyle:style,
+    {...quotaLayoutPresentation(),quotaCardOrder:quotaCardConfig().order,quotaCardBarBounds:null,quotaPreferredPlacement:quotaExpandedStackPlan()?.placement,quotaCardVisualInk:settings?.customization?.appearance?.shape==='new-year-sheep'?(currentSheepCapsuleInk()||currentSheepSettledInk()):null,shape:settings?.customization?.appearance?.shape,quotaStyle:style,
       facing:PetFacing.resolve(pet,area),sheepInk:sheepQuotaInk?.quotaStyle===style?sheepQuotaInk:null,
       sheepTheme:SheepTheme.resolveTheme(settings?.customization?.appearance?.sheepTheme,new Date())},quotaObstacleBounds());
 }
@@ -1473,6 +1507,7 @@ function invalidateCodexPage() {
   edgeNotice?.reset();
   thoughts?.hide();
   codexPageEpoch++;
+  sheepCapsuleInk=null;sheepBarInk=null;sheepCapsuleReadAt=0;sheepCapsuleRevision++;
   codexPageReady = false;
   quotaCardGroupTransition?.cancel();
   codexRenderer = null;
@@ -1579,7 +1614,7 @@ function canShowQuotaGuard() {
 }
 
 function zcodeGuardEntryAvailable() {
-  return Boolean(!quotaLabel?.isGuardEntryVisible?.() && !(quotaGuard?.isVisible() && quotaGuardSource === 'codex'));
+  return Boolean(!quotaLabel?.isGuardEntryVisible?.({includeStaged:true}) && !(quotaGuard?.isVisible() && quotaGuardSource === 'codex'));
 }
 
 function closeCodexQuotaGuard() { if (quotaGuardSource === 'codex') quotaGuard?.close(); }
@@ -3339,9 +3374,14 @@ function registerIpc() {
   });
   ipcMain.on('pet:offering-state', (event, state) => {
     if (!fromPetWindow(event)) return;
-    const ink=state?.ink;
-    if(settings?.customization?.appearance?.shape==='new-year-sheep'&&state?.settled===true&&ink&&[ink.x,ink.y,ink.width,ink.height].every(Number.isFinite)&&ink.x>=0&&ink.y>=0&&ink.width>0&&ink.height>0&&ink.x+ink.width<=1.001&&ink.y+ink.height<=1.001) {
-      sheepBarInk={ink:{x:ink.x,y:ink.y,width:ink.width,height:ink.height}};syncQuotaCardGroup();
+    const ink=state?.ink,context=sheepCapsuleContext();
+    const current=event.senderFrame===event.sender.mainFrame&&context&&state?.theme===context.theme&&state?.facing===context.facing;
+    if(current&&!quotaCardGroupTransition?.isActive()&&!quotaCardGroup?.getState().expanded){
+      if(acceptSheepCapsuleInk(state,context))syncQuotaCardGroup();
+      else if(!ink&&state?.settled!==true){sheepCapsuleInk=null;sheepCapsuleReadAt=0;sheepCapsuleReadCount=0;refreshSheepCapsuleInk();}
+    }
+    if(current&&!quotaCardGroupTransition?.isActive()&&!quotaCardGroup?.getState().expanded&&state?.settled===true&&ink&&[ink.x,ink.y,ink.width,ink.height].every(Number.isFinite)&&ink.x>=0&&ink.y>=0&&ink.width>0&&ink.height>0&&ink.x+ink.width<=1.001&&ink.y+ink.height<=1.001) {
+      sheepBarInk={key:context.key,theme:context.theme,facing:context.facing,ink:{x:ink.x,y:ink.y,width:ink.width,height:ink.height}};syncQuotaCardGroup();
     }
     sheepOfferingWindow?.update(state);
     const next = normalizeSheepOfferingState(state);
@@ -3701,7 +3741,7 @@ async function bootstrap() {
     getPresentation: () => ({ ...edgeTuck?.getPresentation(), quotaAnimateHide: quotaEdgeFadeOut || quotaCardGroupAnimate('workbuddy'), quotaGroupAnimate: quotaCardGroupAnimate('workbuddy'), quotaGroupIndex: quotaCardConfig().order.indexOf('workbuddy'), quotaReducedMotion: quotaReducedMotion(), quotaGroupHidden: quotaCardCollected('workbuddy') || quotaFreeStackPlan()?.hidden?.includes('workbuddy'), quotaGroupLayout: quotaFreeStackPlan()?.cards.workbuddy }),
     onLayout: syncQuotaFreeStack,
     getGuardEntry: () => settings.workbuddyEnabled === true && settings.workbuddyQuotaAlwaysVisible !== false && settings.workbuddyQuotaFunEnabled !== false
-      && !(settings.zcodeQuotaFunEnabled !== false && zcodeLink?.isCardAvailable()) && !quotaLabel?.isGuardEntryVisible?.() && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible(),
+      && !(settings.zcodeQuotaFunEnabled !== false && zcodeLink?.isCardAvailable()) && !quotaLabel?.isGuardEntryVisible?.({includeStaged:true}) && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible(),
     getObstacles: () => [quotaLabel, apiUsageLabel, zcodeLink, bubble, shortcutWindow, quotaGuard].flatMap(controller => {
       if (controller === quotaLabel) { const card = quotaLabel?.getVisibleBounds?.(); return card ? [card] : []; }
       const win = controller?.getWindow();
@@ -3866,7 +3906,7 @@ async function bootstrap() {
   quotaCardGroupWindow = createQuotaCardGroupWindow({BrowserWindow,screen,ipcMain,onLayout:()=>syncQuotaFreeStack(),getAlwaysOnTop:()=>settings.alwaysOnTop,getPetWindow:()=>petWindow,getPresentation:()=>{
       const pet=petWindow?.getBounds(),area=pet&&screen.getDisplayMatching(pet).workArea;
       const controllers={codex:quotaLabel,api:apiUsageLabel,zcode:zcodeLink,workbuddy:workbuddyLabel};
-      return {...quotaLayoutPresentation(),shape:settings?.customization?.appearance?.shape,sheepInk:settings?.customization?.appearance?.shape==='new-year-sheep'?(sheepBarInk||sheepQuotaInk):null,
+      return {...quotaLayoutPresentation(),shape:settings?.customization?.appearance?.shape,quotaPreferredPlacement:quotaExpandedStackPlan()?.placement,sheepInk:settings?.customization?.appearance?.shape==='new-year-sheep'?(currentSheepCapsuleInk()||currentSheepSettledInk()):null,
         sheepTheme:SheepTheme.resolveTheme(settings?.customization?.appearance?.sheepTheme,new Date()),facing:pet&&area?PetFacing.resolve(pet,area):'left',
         cardStackBounds:quotaCardConfig().pinned.map(id=>controllers[id]?.getVisibleBounds?.()).filter(Boolean)};
     },
@@ -3876,7 +3916,7 @@ async function bootstrap() {
     onSettled:({expanded,canceled})=>{if(canceled){if(!expanded&&!quotaCardGroup?.getState().expanded)resetQuotaCardDetails();void Promise.resolve().then(()=>{if(!quotaCardGroupTransition?.isActive())edgeTuck?.pin(quotaCardGroup?.getState().expanded===true,'quota-card-group');});return;}if(!expanded)resetQuotaCardDetails();prepareQuotaCardGroup();},
     onError:error=>reportQuotaError('额度区整体过渡',error)});
   void quotaCardGroupTransition.warm?.();
-  quotaCardGroup = createQuotaCardGroup({schedule:setTimeout,cancel:clearTimeout,now:()=>Date.now(),getState:quotaCardGroupInput,getCursor:()=>screen.getCursorScreenPoint(),
+  quotaCardGroup = createQuotaCardGroup({schedule:setTimeout,cancel:clearTimeout,now:()=>Date.now(),getState:quotaCardGroupInput,getCursor:()=>{refreshSheepCapsuleInk();return screen.getCursorScreenPoint();},
     getBounds:expanded=>[quotaCardGroupWindow?.getBounds(),...quotaCardGroupTransition.getRetentionBounds(),...(expanded?[quotaLabel?.getVisibleBounds(),apiUsageLabel?.getVisibleBounds(),zcodeLink?.getVisibleBounds(),workbuddyLabel?.getVisibleBounds()]:[])].filter(Boolean),
     onChange:quotaCardGroupChanged});
   quotaCardGroup.start();

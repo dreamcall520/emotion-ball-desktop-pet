@@ -111,7 +111,7 @@ function quotaFreeStackBounds(petBounds, workArea, cards, presentation, bubble =
   const columnLeft=peeked ? presentation.side==='left'?area.x+2:area.x+area.width-Math.max(...rows.map(row=>row.faceWidth))-2 : center-Math.max(...rows.map(row=>row.faceWidth))/2;
   const columnRight=columnLeft+Math.max(...rows.map(row=>row.faceWidth));
   const barInColumn=bar && bar.x<columnRight && bar.x+bar.width>columnLeft;
-  for(const placement of ['below','above']) {
+  for(const placement of presentation.quotaPreferredPlacement==='above'?['above','below']:['below','above']) {
     let cursor=placement==='below'?Math.max(pet.y+pet.height,barInColumn?bar.y+bar.height:-Infinity)+GAP
       :Math.min(pet.y,barInColumn?bar.y:Infinity)-GAP-stackHeight;
     const result={};let clear=true;

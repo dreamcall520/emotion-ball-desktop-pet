@@ -12,7 +12,8 @@ function quotaCardBarBounds(pet,area,presentation={}) {
   // The painted 7px capsule starts 6.5px inside its 20px native hit target.
   const below=anchor.y+anchor.height+.5, above=Math.min(anchor.y,visual.y)-height-.5;
   const stackAbove=cards.length>0&&anchor.y+anchor.height<=visual.y;
-  const y=!stackAbove&&below+height<=area.y+area.height?below:above;
+  const preferAbove=presentation.quotaPreferredPlacement==='above';
+  const y=!preferAbove&&!stackAbove&&below+height<=area.y+area.height?below:above;
 
   return {x:Math.round(Math.max(area.x,Math.min(x,area.x+area.width-width))),y:Math.round(Math.max(area.y,Math.min(y,area.y+area.height-height))),width,height};
 }

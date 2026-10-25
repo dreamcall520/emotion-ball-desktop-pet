@@ -71,7 +71,7 @@ if (!process.versions.electron) {
       const main = fs.readFileSync(path.join(sourceRoot, 'desktop-pet/main.js'), 'utf8');
       const scope = { quotaLabel: codex, apiUsageLabel: api, zcodeLink: zcode, workbuddyLabel: workbuddy, petWindow: pet, screen, settings, SheepTheme, PetFacing,
         quotaCardGroup:{getState:()=>({eligible:['codex','api','zcode','workbuddy']})},quotaCardConfig: () => fixtureCardConfig, quotaCardCollected: () => false, quotaCardGroupWindow: null,
-        showQuotaCardBar:()=>{},quotaLayoutPresentation:()=>presentation,sheepBarInk:null,sheepQuotaInk: null, quotaFreeStackBounds, edgeTuck: { getPresentation: () => presentation }, quotaDisplayConfig: () => ({ style: 'card' }), quotaObstacleBounds: () => bubble, safelyInvokeWindow: (_name, fn) => fn() };
+        showQuotaCardBar:()=>{},quotaExpandedStackPlan:()=>null,currentSheepSettledInk:()=>null,currentSheepCapsuleInk:()=>null,quotaLayoutPresentation:()=>presentation,sheepBarInk:null,sheepQuotaInk: null, quotaFreeStackBounds, edgeTuck: { getPresentation: () => presentation }, quotaDisplayConfig: () => ({ style: 'card' }), quotaObstacleBounds: () => bubble, safelyInvokeWindow: (_name, fn) => fn() };
       Function('scope', 'with(scope){' + main.slice(main.indexOf('let quotaFreeStackKey ='), main.indexOf('\nfunction reportQuotaError')) + ';scope.plan=quotaFreeStackPlan;scope.sync=syncQuotaFreeStack;scope.stack=zcodeQuotaStackBounds;}')(scope);
       plan = scope.plan; sync = scope.sync; stack = scope.stack;
       const controllers = { codex, api, zcode, workbuddy };

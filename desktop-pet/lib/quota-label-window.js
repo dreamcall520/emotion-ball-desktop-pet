@@ -688,7 +688,10 @@ function createQuotaLabelWindow({
       try { syncTopmost(target); }
       catch (error) { if (win === target) detach(target, error); else report(error); }
     },
-    isGuardEntryVisible() { return Boolean(win && !win.isDestroyed() && win.isVisible() && guardEntryVisible()); },
+    isGuardEntryVisible({ includeStaged = false } = {}) {
+      // Layout priority includes staged paint; IPC callers keep actual visibility.
+      return Boolean(win && !win.isDestroyed() && (win.isVisible() || (includeStaged && groupTransitionMode === 'stage')) && guardEntryVisible());
+    },
     destroy
   };
 }

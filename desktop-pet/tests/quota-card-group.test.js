@@ -39,3 +39,8 @@ test('pointer click opens without a hold, while keyboard hold and Escape remain 
  const f=fixture();f.group.start();f.group.activate({keyboard:false});assert.equal(f.group.getState().expanded,true);f.tick(1);f.tick(220);assert.equal(f.group.getState().expanded,false,'pointer activation closes after leaving group');
  f.group.activate({keyboard:true});f.tick(1000);assert.equal(f.group.getState().expanded,true);f.group.dismiss();f.move({x:10,y:10});assert.equal(f.group.getState().expanded,false,'Escape blocks immediate hover reopen');f.move({x:500,y:500});f.move({x:10,y:10});assert.equal(f.group.getState().expanded,true);f.group.close();
 });
+
+test('predicted upper stack places an otherwise fitting capsule above the live sheep head',()=>{
+ const pet={x:400,y:650,width:80,height:80},area={x:0,y:0,width:1000,height:900},ink={x:.2,y:.3,width:.6,height:.6};
+ const b=quotaCardBarBounds(pet,area,{shape:'new-year-sheep',sheepInk:{ink},quotaPreferredPlacement:'above'});assert(Math.abs((pet.y+pet.height*ink.y)-(b.y+13.5)-7)<=.51);
+});

@@ -9,14 +9,13 @@ const sameBounds=(a,b)=>['x','y','width','height'].every(key=>a[key]===b[key]);
 async function captureQuotaGroupFrames({ getTargets, isReady, isCurrent }) {
   const deadline=Date.now()+2000;
   while(!isReady()) { if(!isCurrent()||Date.now()>=deadline)throw new Error('Quota group page is not ready');await pause(16); }
-  const frames=[];
   const records=getTargets().filter(Boolean).map(target=>{
     const contents=target.webContents, page=contents.mainFrame, routing=page?.routingId, process=page?.processId, url=contents.getURL?.(), bounds={...target.getBounds()};
     const valid=()=>isCurrent()&&isReady()&&!target.isDestroyed()&&!contents.isDestroyed?.()&&target.webContents===contents&&contents.mainFrame===page&&page?.routingId===routing&&page?.processId===process&&!contents.isLoading?.()&&contents.getURL?.()===url&&sameBounds(bounds,target.getBounds());
     return {target,contents,bounds,valid};
   });
   const validations=records.map(record=>record.valid);
-  for(const {contents,bounds,valid} of records) {
+  const results=await Promise.allSettled(records.map(async ({contents,bounds,valid}) => {
     let restoreThrottling=null;
     try {
       if(typeof contents.setBackgroundThrottling==='function') {
@@ -40,10 +39,12 @@ async function captureQuotaGroupFrames({ getTargets, isReady, isCurrent }) {
     }
     const png=image.toPNG();
     if(!Buffer.isBuffer(png)||!png.length)throw new Error('Quota group capture is empty');
-    frames.push({bounds,png});
+    return {bounds,png};
     } finally {if(restoreThrottling&&!contents.isDestroyed?.())try{restoreThrottling();}catch(_){}}
-  }
+  }));
+  const failed=results.find(result=>result.status==='rejected');
+  if(failed)throw failed.reason;
   if(!isCurrent()||!validations.every(check=>check()))throw new Error('Quota group capture became stale');
-  return frames;
+  return results.map(result=>result.value);
 }
 module.exports={captureQuotaGroupFrames};

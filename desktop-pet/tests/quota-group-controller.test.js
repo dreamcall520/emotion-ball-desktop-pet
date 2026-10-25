@@ -48,3 +48,16 @@ for(const source of ['codex','api','workbuddy'])test(`${source}: hidden stage la
  assert((await c.captureGroupTransitionFrames()).length>0,'hidden group flag is normal during exit hold');
  c.setGroupTransitionMode('stage');c.reposition();await assert.rejects(c.captureGroupTransitionFrames(),/stage has no visible layout/);c.destroy();
 });
+
+test('staged Codex guard owns layout priority without becoming an interactive visible entry',async()=>{
+ const f=fixture('codex'),c=f.controller;c.show(f.state);await flush();assert.equal(c.isGuardEntryVisible(),true);
+ c.setGroupTransitionMode('stage');assert.equal(c.isGuardEntryVisible(),false);assert.equal(c.isGuardEntryVisible({includeStaged:true}),true);
+ c.setGroupTransitionMode('masked');assert.equal(c.isGuardEntryVisible({includeStaged:true}),false);c.hide();assert.equal(c.isGuardEntryVisible({includeStaged:true}),false);c.destroy();
+});
+test('multi-host paint readiness runs concurrently and preserves target order',async()=>{
+ const f=fixture('workbuddy');f.controller.show(f.state);await flush();f.controller.setGroupTransitionMode('hold');
+ const hosts=[f.controller.getWindow(),f.controller.getGuardWindow()],releases=[];
+ hosts.forEach(w=>{w.webContents.executeJavaScript=()=>new Promise(resolve=>releases.push(resolve));});
+ const pending=f.controller.captureGroupTransitionFrames();await flush();assert.equal(releases.length,2,'both paints start before either completes');
+ releases.forEach(resolve=>resolve(true));const frames=await pending;assert.deepEqual(frames.map(frame=>frame.bounds),hosts.map(w=>w.getBounds()));f.controller.destroy();
+});
