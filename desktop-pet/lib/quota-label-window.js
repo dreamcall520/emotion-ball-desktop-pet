@@ -143,13 +143,18 @@ function numberFields(source) {
   } catch (_) { return {}; }
 }
 
+function iconPreferenceFields(source) {
+  try { const value = source.codexIconPreference; return ['app-default', 'codex-system', 'space-system'].includes(value) ? { codexIconPreference: value, ...(typeof source.codexIconDark === 'boolean' ? { codexIconDark: source.codexIconDark } : {}) } : {}; }
+  catch (_) { return {}; }
+}
+
 function safeModel(value, sourceId = 'codex') {
   const source = record(value);
   if (!source) return { state: EMPTY_MODEL.state, items: [], overflow: 0 };
   let stateValue;
   try { stateValue = source.state; } catch (_) { return { state: EMPTY_MODEL.state, items: [], overflow: 0 }; }
   const state = STATES.has(stateValue) ? stateValue : 'disconnected';
-  const identity = sourceId === 'zcode' ? { sourceId: 'zcode' } : {};
+  const identity = sourceId === 'zcode' ? { sourceId: 'zcode' } : iconPreferenceFields(source);
   const numbers = numberFields(source);
   if (!['ready', 'stale'].includes(state)) return { ...identity, state, items: [], overflow: 0, ...numbers };
   let rawItems;

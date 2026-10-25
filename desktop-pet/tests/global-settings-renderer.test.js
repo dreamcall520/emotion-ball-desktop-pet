@@ -43,13 +43,25 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run(`Promise.all([...document.querySelectorAll('#navigation img.nav-icon')].map(img=>img.complete?Promise.resolve():new Promise((resolve,reject)=>{img.onload=()=>resolve();img.onerror=()=>reject(Error(img.src));})))`);
     const integrationIcons = await run(`[...document.querySelectorAll('#navigation img.nav-icon')].map(img=>({file:img.getAttribute('src'),complete:img.complete,width:img.naturalWidth,alt:img.alt,decorative:img.getAttribute('aria-hidden')}))`);
     assert.deepEqual(integrationIcons.map(icon=>icon.file),['assets/integrations/codex.png','assets/integrations/codex-dark.png','assets/integrations/zcode.png','assets/integrations/workbuddy.png']);
-    assert(integrationIcons.every(icon=>icon.complete&&icon.width===64&&icon.alt===''&&icon.decorative==='true'),JSON.stringify(integrationIcons));
+    assert(integrationIcons.every(icon=>icon.complete&&icon.width===256&&icon.alt===''&&icon.decorative==='true'),JSON.stringify(integrationIcons));
     for (const appearance of ['light','dark','light']) {
       await run(`document.documentElement.dataset.appearance=${JSON.stringify(appearance)}`);
       assert.equal(await run("getComputedStyle(document.querySelector('.codex-light-icon')).display==='none'"),appearance==='dark');
       assert.equal(await run("getComputedStyle(document.querySelector('.codex-dark-icon')).display==='none'"),appearance!=='dark');
       assert.equal(await run("[...document.querySelectorAll('#navigation img.nav-icon')].filter(img=>getComputedStyle(img).display!=='none').every(img=>img.getBoundingClientRect().width===18&&img.getBoundingClientRect().height===18&&getComputedStyle(img).objectFit==='contain')"),true);
     }
+
+    for (const [preference,light,dark] of [['app-default','codex-default','codex-default'],['codex-system','codex','codex-dark'],['space-system','codex-space','codex-space-dark']])
+      for(const systemDark of [false,true]) for(const appearance of ['light','dark']) {
+        await run(`snapshot.codexIconPreference=${JSON.stringify(preference)};snapshot.codexIconDark=${systemDark};document.documentElement.dataset.appearance=${JSON.stringify(appearance)};window.dispatchEvent(new Event('focus'))`);
+        await run('new Promise(resolve=>setTimeout(resolve,10))');
+        const icons=await run("[...document.querySelectorAll('#navigation button[data-view=\"/codex-menu\"] img')].map(img=>img.getAttribute('src'))");
+        assert.deepEqual(icons,Array(2).fill(`assets/integrations/${systemDark?dark:light}.png`),'Codex actual icon remains independent of Qiuqiu theme');
+      }
+    await run("snapshot.codexIconPreference='https://example.com/secret.png';snapshot.codexIconDark=false;window.dispatchEvent(new Event('focus'))");
+    await run('new Promise(resolve=>setTimeout(resolve,10))');
+    assert.equal(await run("document.querySelector('.codex-light-icon').getAttribute('src')"),'assets/integrations/codex.png');
+    await run("snapshot.codexIconPreference='app-default';window.dispatchEvent(new Event('focus'))");await run('new Promise(resolve=>setTimeout(resolve,10))');
     assert.equal(await run("document.getElementById('section-title').textContent"),'Codex','legacy API initialView maps to Codex');
     assert.equal(await run("document.querySelector('[data-settings-section=\"openai-api\"]')!==null"),true);
 

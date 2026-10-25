@@ -1899,3 +1899,24 @@ for (const sourceId of ['codex', 'zcode']) test(`${sourceId} tucked exit freezes
   assert.equal(win.visible, true); assert.notDeepEqual(win.getBounds(), before);
   f.label.hide(); assert.equal(win.visible, false);
 });
+
+
+test('Codex icon enums and explicit system colors survive window and preload boundaries, unknown paths do not', () => {
+  const {safeModel}=require('../lib/quota-label-window');
+  let api,listener,received;
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../quota-label-preload.js'),'utf8'),{
+    require:()=>({contextBridge:{exposeInMainWorld(_name,value){api=value;}},ipcRenderer:{on(_name,fn){listener=fn;},removeListener(){}}})
+  }); api.onModel(value=>{received=value;});
+  for(const codexIconPreference of ['app-default','codex-system','space-system']) for(const codexIconDark of [false,true]) {
+    const packet=safeModel({...readyModel(),codexIconPreference,codexIconDark});listener({},packet);
+    assert.equal(received.codexIconPreference,codexIconPreference);assert.equal(received.codexIconDark,codexIconDark);
+    assert.equal(safeModel({...readyModel(),codexIconPreference},'zcode').codexIconPreference,undefined);
+  }
+  for(const codexIconPreference of ['../secret','https://example.com/a.png',{},null]) {
+    listener({},safeModel({...readyModel(),codexIconPreference,codexIconDark:true}));assert.equal(received.codexIconPreference,undefined);
+    listener({},{...readyModel(),codexIconPreference,codexIconDark:true});assert.equal(received.codexIconPreference,undefined);
+  }
+  listener({},{...readyModel(),codexIconPreference:'app-default',codexIconDark:'true'});assert.equal(received.codexIconDark,undefined);
+  const throwing={...readyModel()};Object.defineProperty(throwing,'codexIconPreference',{get(){throw Error('untrusted getter');}});
+  assert.doesNotThrow(()=>safeModel(throwing));assert.doesNotThrow(()=>listener({},throwing));
+});

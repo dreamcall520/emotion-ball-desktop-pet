@@ -1,3 +1,4 @@
+const { createCodexIconPreference } = require('./lib/codex-icon-preference');
 const { settingsEntries, findSettingsAction } = require('./lib/global-settings');
 const fs = require('node:fs');
 const { randomUUID } = require('node:crypto');
@@ -166,6 +167,7 @@ const API_REFRESH_MS = 5 * 60 * 1000;
 let smokeCustomizationSaveFailure = false;
 let screenLocked = false;
 let codexCompanion = null;
+let codexIconPreference = null;
 let codexNow = Date.now;
 let codexConsentFlight = null;
 let codexConsentToken = 0;
@@ -385,6 +387,9 @@ let globalSettingsWindow = null;
 let globalSettingsBusy = false;
 let globalSettingsInitialView = 'common';
 
+function codexIconSystemDark() { return codexIconPreference?.getSystemDark() === true; }
+function refreshCodexIcon() { if (!screenLocked && !isQuitting) syncQuotaLabel(codexCompanion?.getSnapshot()); }
+
 function globalSettingsSnapshot() {
   const current = codexCompanion?.getSnapshot(), quota = current?.quota;
   const tasks = current?.tasks?.state === 'connected' ? current.tasks.items : null;
@@ -398,7 +403,7 @@ function globalSettingsSnapshot() {
     tasks: { active: tasks ? tasks.filter(item => item.state === 'active').length : null,
       waiting: tasks ? tasks.filter(item => item.state === 'waiting').length : null },
     taskActionId: '/codex-menu/codex-tasks-open' };
-  return { codexStatus, version: app.getVersion(), entries: settingsEntries(menuTemplate()),
+  return { codexIconPreference: codexIconPreference?.getPreference() || 'codex-system', codexIconDark: codexIconSystemDark(), codexStatus, version: app.getVersion(), entries: settingsEntries(menuTemplate()),
     shortcuts: shortcutRegistrar?.getConfig(), initialView: globalSettingsInitialView,
     summary: [
       { label: '球球状态', value: edgeTuck?.getPresentation().mode === 'hidden' ? '暂时隐藏' : '陪伴中' },
@@ -1310,6 +1315,8 @@ function quotaLabelModel(snapshot = codexCompanion?.getSnapshot()) {
     size: display.style === 'card' ? settings.codexQuotaLabelSize : 'compact',
     showExtraCredits: display.style === 'card' && settings.codexShowExtraCredits
   }, codexNow());
+  model.codexIconPreference = codexIconPreference?.getPreference() || 'codex-system';
+  model.codexIconDark = codexIconSystemDark();
   const numberPeriods = QuotaDisplay.periods(display, model);
   return display.style === 'card' || numberPeriods.length === 0 ? model : { ...model, display: 'numbers',
     items: model.items.filter(item => numberPeriods.includes(item.windowMinutes === 300 ? 'fiveHour' : 'weekly')),
@@ -3725,6 +3732,9 @@ async function bootstrap() {
     safelyInvokeWindow('边缘提示', () => payload ? edgeNoticeWindow.show(payload) : edgeNoticeWindow.hide());
   } });
   initializeShortcuts();
+  codexIconPreference = createCodexIconPreference({ onChange: refreshCodexIcon,
+    ...(IS_SMOKE_TEST ? { read: async () => 'codex-system', readDark: async () => false } : {}) });
+  void codexIconPreference.start();
   activityMonitor = createActivityMonitor({
     screen, powerMonitor, getWindow: () => petWindow,
     onSample: packet => {
@@ -3736,6 +3746,7 @@ async function bootstrap() {
   });
   const pause = () => {
     screenLocked = true;
+    codexIconPreference?.pause();
     workbuddyEnableToken++; workbuddyConsent?.cancel();
     shortcutWindow?.interrupt();
     codexConsentToken++;
@@ -3767,7 +3778,7 @@ async function bootstrap() {
     safelyInvokeWindow('锁屏时 ZCode 窗口隐藏', () => zcodeLink?.hide());
     safelyInvokeWindow('锁屏时对白清理', () => dialogue.dismiss());
   };
-  const resume = () => { screenLocked = false; notesCompanion?.resume(); edgeTuck?.resume(); activityMonitor.resume(); syncQuotaLabel(codexCompanion?.getSnapshot()); syncPomodoro(); scheduleUpdateCheck(); };
+  const resume = () => { screenLocked = false; void codexIconPreference?.start(); notesCompanion?.resume(); edgeTuck?.resume(); activityMonitor.resume(); syncQuotaLabel(codexCompanion?.getSnapshot()); syncPomodoro(); scheduleUpdateCheck(); };
   const powerGuard = createPowerGuard({ pause, resume });
   powerMonitor.on('lock-screen', () => powerGuard.setLocked(true));
   powerMonitor.on('suspend', () => powerGuard.setSuspended(true));
@@ -3829,6 +3840,7 @@ if (!hasSingleInstanceLock) {
       return;
     }
     quitCleanupStarted = true;
+    codexIconPreference?.close();
     if (!notesQuitReady) void notesCompanion?.close();
     clearTimeout(updateTimer);
     updateTimer = null;

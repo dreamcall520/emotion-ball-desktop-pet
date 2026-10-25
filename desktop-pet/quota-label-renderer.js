@@ -132,6 +132,11 @@
     } catch (_) { return {}; }
   }
 
+  function iconPreferenceFields(source) {
+    try { const value = source.codexIconPreference; return ['app-default', 'codex-system', 'space-system'].includes(value) ? { codexIconPreference: value, ...(typeof source.codexIconDark === 'boolean' ? { codexIconDark: source.codexIconDark } : {}) } : {}; }
+    catch (_) { return {}; }
+  }
+
   function safeModel(value) {
     const source = record(value);
     if (!source) return { state: 'disconnected', items: [], overflow: 0, size: 'standard', appearance: 'system', expanded: false };
@@ -147,7 +152,7 @@
     } catch (_) { return { state: 'disconnected', items: [], overflow: 0, size: 'standard', appearance: 'system', expanded: false }; }
     const sourceId = source.sourceId === 'zcode' ? 'zcode' : 'codex';
     const state = states.has(stateValue) ? stateValue : 'disconnected';
-    const identity = sourceId === 'zcode' ? { sourceId: 'zcode' } : {};
+    const identity = sourceId === 'zcode' ? { sourceId: 'zcode' } : iconPreferenceFields(source);
     const size = sizeValue === 'compact' ? 'compact' : 'standard';
     const appearance = ['light', 'dark'].includes(appearanceValue) ? appearanceValue : 'system';
     const numbers = numberFields(source);
@@ -404,19 +409,21 @@
     return button;
   }
   const codexPeriodCaption = minutes => ({ 300: '5小时额度', 10080: '周额度' }[minutes] || '额度');
-  function sourceIcon(sourceId) {
+  function sourceIcon(sourceId, preference, systemDark) {
     const icon = node('span', 'source-icon');
     icon.title = sourceId === 'zcode' ? 'ZCode' : 'Codex';
     icon.setAttribute?.('role', 'img'); icon.setAttribute?.('aria-label', icon.title);
     const image = (file, className = '') => {
       const img = node('img', className); img.src = `assets/integrations/${file}.png`; img.alt = ''; img.setAttribute?.('aria-hidden', 'true'); return img;
     };
-    icon.replaceChildren(...(sourceId === 'zcode' ? [image('zcode')] : [image('codex', 'source-icon-light'), image('codex-dark', 'source-icon-dark')]));
+    let [light, dark] = preference === 'app-default' ? ['codex-default', 'codex-default'] : preference === 'space-system' ? ['codex-space', 'codex-space-dark'] : ['codex', 'codex-dark'];
+    if (typeof systemDark === 'boolean') light = dark = systemDark ? dark : light;
+    icon.replaceChildren(...(sourceId === 'zcode' ? [image('zcode')] : [image(light, 'source-icon-light'), image(dark, 'source-icon-dark')]));
     return icon;
   }
-  function compactReading(minutes, text, caption, badge = null) {
+  function compactReading(minutes, text, caption, badge = null, preference, systemDark) {
     const period = node('span', 'summary-period');
-    period.replaceChildren(badge === 'CX' || badge === 'Z' ? sourceIcon(badge === 'Z' ? 'zcode' : 'codex') : node('span', 'summary-badge', badge || periodBadgeText(minutes)),
+    period.replaceChildren(badge === 'CX' || badge === 'Z' ? sourceIcon(badge === 'Z' ? 'zcode' : 'codex', preference, systemDark) : node('span', 'summary-badge', badge || periodBadgeText(minutes)),
       node('span', 'summary-period-label', caption));
     return [period, node('span', 'summary-value', text)];
   }
@@ -606,7 +613,7 @@
         nameNode.textContent = model.sourceId === 'zcode' && model.size === 'standard'
           ? ({ 'GLM-5.3': '5.3', 'GLM-5.3-Flash': '5.3 Flash' }[item.label] || item.label)
           : model.sourceId !== 'zcode' && !model.expanded && model.size === 'standard' ? 'CX' : item.label;
-        if (model.sourceId !== 'zcode' && !model.expanded && model.size === 'standard') nameNode.replaceChildren(sourceIcon('codex'));
+        if (model.sourceId !== 'zcode' && !model.expanded && model.size === 'standard') nameNode.replaceChildren(sourceIcon('codex', model.codexIconPreference, model.codexIconDark));
         if (model.sourceId === 'zcode') nameNode.setAttribute?.('aria-label', item.label);
         if (model.sourceId === 'zcode') nameNode.title = itemTitle(item);
         periodNode.className = 'quota-period period-pill';
@@ -639,7 +646,7 @@
         const caption = codexCollapsed ? codexPeriodCaption(summaryItem.windowMinutes)
           : model.sourceId === 'zcode' ? '额度' : label.dataset.status === 'blocked' ? '受限' : severityText(summaryItem.remaining) || '额度';
         summary.replaceChildren(...compactReading(summaryItem.windowMinutes, remainingText(summaryItem.remaining, model.sourceId),
-          caption, model.sourceId === 'zcode' ? 'Z' : codexCollapsed ? 'CX' : null));
+          caption, model.sourceId === 'zcode' ? 'Z' : codexCollapsed ? 'CX' : null, model.codexIconPreference, model.codexIconDark));
         if (compactProduct) compactProduct.textContent = model.sourceId === 'zcode' ? 'ZCODE' : 'CODEX';
         if (compactPeriod) compactPeriod.textContent = itemTitle(summaryItem);
       } else {

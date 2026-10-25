@@ -66,7 +66,10 @@
       };
       if (integration !== 'codex') return image(integration);
       const icon = el('span', '', 'nav-icon nav-app-icon'); icon.setAttribute('aria-hidden', 'true');
-      const light = image('codex'), dark = image('codex-dark');
+      let [lightFile, darkFile] = snapshot?.codexIconPreference === 'app-default' ? ['codex-default', 'codex-default']
+        : snapshot?.codexIconPreference === 'space-system' ? ['codex-space', 'codex-space-dark'] : ['codex', 'codex-dark'];
+      if (typeof snapshot?.codexIconDark === 'boolean') lightFile = darkFile = snapshot.codexIconDark ? darkFile : lightFile;
+      const light = image(lightFile), dark = image(darkFile);
       light.classList.add('codex-light-icon'); dark.classList.add('codex-dark-icon');
       icon.append(light, dark); return icon;
     }

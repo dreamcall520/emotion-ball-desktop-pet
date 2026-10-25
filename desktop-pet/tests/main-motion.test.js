@@ -30,6 +30,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   const commands = [];
   const connections = [];
   const preferences = [];
+  const iconPreference = { value: 'codex-system', dark: false, calls: [] };
   const dialogs = [];
   const external = [];
   const popups = [];
@@ -209,6 +210,11 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
         dialog: { showMessageBox: (...args) => { dialogs.push(args); return consent(...args); } },
         shell: { openExternal: url => { external.push(url); return openExternal(url); }, showItemInFolder: file => revealed.push(file) },
         Menu: { buildFromTemplate: value => Object.assign(value, { popup: options => popups.push({ value, options }) }) }, nativeImage: { createFromPath: () => ({ setTemplateImage() {} }) } };
+      if (name === './lib/codex-icon-preference') return { createCodexIconPreference: options => {
+        iconPreference.options = options;
+        return { getPreference: () => iconPreference.value, getSystemDark: () => iconPreference.dark, start: () => { iconPreference.calls.push('start'); },
+          pause: () => { iconPreference.calls.push('pause'); }, close: () => { iconPreference.calls.push('close'); } };
+      } };
       if (name === './lib/settings') return { ...realRequire(name), loadSettings: () => loadedSettings ? structuredClone(loadedSettings) : ({ size: 'tiny', x: -600, y: 100,
         bubblesEnabled, colorMode, uiTheme, notesDefaultTab, notesAppearance, keepAwake: false, alwaysOnTop: true, codexEnabled, codexTaskNameInAlerts,
         workbuddyEnabled: false, workbuddyConsentVersion: 0, workbuddyModel: 'auto', chatProvider: 'codex',
@@ -279,7 +285,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   pet.emit('ready-to-show');
   pet.webContents.emit('did-finish-load');
   return { pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, downloads, revealed, consents, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
-    workbuddyCalls, workbuddyRecords, notes, pomodoro, pomodoroWindows, nativeTheme, call: expression => vm.runInContext(expression, context),
+    iconPreference, workbuddyCalls, workbuddyRecords, notes, pomodoro, pomodoroWindows, nativeTheme, call: expression => vm.runInContext(expression, context),
     pressShortcut(accelerator) { if (!shortcutsSuspended) shortcutCallbacks.get(accelerator)?.(); },
     invoke(channel, packet, sender = pet.webContents, ...args) {
       assert.ok(ipcHandlers.has(channel), `${channel} handler must be registered`);
@@ -3982,4 +3988,34 @@ test('WorkBuddy 偏好保存失败保留真实状态，设置中心不误报成�
   assert.ok(result.error);assert.equal(f.call('settings.workbuddyQuotaAlwaysVisible'),true);assert.equal(f.call('workbuddyLabel.visible'),true);
   assert.equal(result.snapshot.entries.find(item=>item.id==='/workbuddy-quota-visible').checked,true);
   assert.equal(f.call("setWorkBuddyPreference('codexQuotaFunEnabled',false)"),false);assert.equal(f.call("setWorkBuddyPreference('workbuddyQuotaFunEnabled','false')"),false);
+});
+
+
+test('Codex icon preference updates card and settings together, follows integrated system colors and stops on lock/quit', async t => {
+  const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true}); t.after(()=>f.app.emit('before-quit'));
+  assert.deepEqual(f.iconPreference.calls,['start']);
+  f.iconPreference.value='app-default'; f.iconPreference.options.onChange('app-default');
+  assert.equal(f.quotaLabel.shows.at(-1).codexIconPreference,'app-default');
+  assert.equal(f.call('globalSettingsSnapshot().codexIconPreference'),'app-default');
+  const saved=f.saved.length;
+  f.iconPreference.dark=true;
+  f.nativeTheme.shouldUseDarkColors=false; f.iconPreference.options.onChange('app-default',true);
+  assert.equal(f.quotaLabel.shows.at(-1).codexIconDark,true);
+  assert.equal(f.call('globalSettingsSnapshot().codexIconDark'),true);
+  f.iconPreference.dark=false; f.nativeTheme.shouldUseDarkColors=true; f.iconPreference.options.onChange('app-default',false);
+  assert.equal(f.quotaLabel.shows.at(-1).codexIconDark,false,'Qiuqiu forced dark does not replace Codex system light');
+  assert.equal(f.saved.length,saved,'external icon changes never write Qiuqiu or Codex settings');
+  f.powerMonitor.emit('lock-screen'); assert.equal(f.iconPreference.calls.at(-1),'pause');
+  f.powerMonitor.emit('unlock-screen'); assert.equal(f.iconPreference.calls.at(-1),'start');
+  f.iconPreference.value='space-system'; f.iconPreference.options.onChange('space-system');
+  assert.equal(f.quotaLabel.shows.at(-1).codexIconPreference,'space-system');
+  f.app.emit('before-quit'); assert.equal(f.iconPreference.calls.at(-1),'close');
+  assert.equal(f.nativeTheme.listeners('updated').includes(f.call('refreshCodexIcon')),false);
+});
+
+test('Codex icon preference remains available in settings while Codex integration is disabled', async t => {
+  const f=await fixture();t.after(()=>f.app.emit('before-quit'));
+  f.iconPreference.value='app-default';f.iconPreference.options.onChange('app-default');
+  assert.equal(f.call('settings.codexEnabled'),false);
+  assert.equal(f.call('globalSettingsSnapshot().codexIconPreference'),'app-default');
 });

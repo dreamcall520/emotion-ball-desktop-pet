@@ -133,3 +133,17 @@ test('Codex收起卡始终显示来源、周期和百分比；未知周期不截
   assert.equal(nodes.summary.textContent,'额度91.4%','ZCode保留精确余额');
   assert.equal(nodes.summary.children[0].children[0].children[0].src,'assets/integrations/zcode.png');
 });
+
+
+test('Codex card icons choose only fixed assets and keep the actual Codex system variant across Qiuqiu themes', () => {
+ const f=renderer();
+ for(const [codexIconPreference,light,dark] of [['app-default','codex-default','codex-default'],['codex-system','codex','codex-dark'],['space-system','codex-space','codex-space-dark']])
+  for(const codexIconDark of [false,true]) for(const size of ['compact','standard']) {
+   f.receive({state:'ready',size,items:[item(100)],codexIconPreference,codexIconDark});
+   const all=descendants(size==='compact'?f.nodes.summary:f.nodes.items).filter(node=>node.src);
+   assert.equal(all.length,2);assert(all.every(node=>node.src===`assets/integrations/${codexIconDark?dark:light}.png`));
+   assert.equal(f.nodes['quota-label'].attributes['aria-label'],'Codex 剩余额度');
+  }
+ f.receive({state:'ready',size:'compact',items:[item(70)],codexIconPreference:'https://example.com/x.png'});
+ assert.deepEqual(descendants(f.nodes.summary).filter(node=>node.src).map(node=>node.src),['assets/integrations/codex.png','assets/integrations/codex-dark.png']);
+});

@@ -905,9 +905,13 @@ body[data-guard-size="compact"] .guard-entry-zombie { top: 11px; }
 #quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] .summary-value { font-size: 14px; }
 
 /* Source artwork replaces text badges without changing native card bounds. */
-.source-icon { display: inline-flex; flex: 0 0 16px; width: 16px; height: 16px; align-items: center; justify-content: center; vertical-align: middle; }
-.source-icon img { display: block; width: 16px; height: 16px; object-fit: contain; }
+.source-icon { display: inline-flex; flex: 0 0 20px; width: 20px; height: 20px; align-items: center; justify-content: center; vertical-align: middle; }
+.source-icon img { display: block; width: 20px; height: 20px; object-fit: contain; }
 .source-icon .source-icon-dark { display: none; }
 :root[data-appearance="dark"] .source-icon .source-icon-light { display: none; }
 :root[data-appearance="dark"] .source-icon .source-icon-dark { display: block; }
-#quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] { padding-right: 8px; }
+#quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] { padding-inline: 4px; }
+/* Standard rows reserve the full icon height, including both quota periods. */
+#quota-label[data-source="codex"][data-size="standard"][data-expanded="false"] { padding-block: 2px; }
+#quota-label[data-source="codex"][data-size="standard"][data-expanded="false"] #items li { grid-template-rows: 20px 3px; }
+#quota-label[data-source="codex"][data-size="standard"][data-expanded="false"] .quota-name { display: flex; align-items: center; }

@@ -166,13 +166,14 @@ test('安装包完整包含快捷打开界面及可加载的原生依赖', t => 
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'qiu-shortcuts-pack-'));
   t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
   const staging = prepareStaging(root, path.join(temporary, 'app'));
-  for (const file of [...['codex.png', 'codex-dark.png', 'zcode.png', 'workbuddy.png', 'openai.png', 'SOURCES.md'].map(name => `assets/integrations/${name}`),
-    'shortcuts.html', 'shortcuts.css', 'shortcuts-preload.js', 'shortcuts-renderer.js',
+  for (const file of [...['codex.png', 'codex-dark.png', 'codex-default.png', 'codex-space.png', 'codex-space-dark.png', 'zcode.png', 'workbuddy.png', 'openai.png', 'SOURCES.md'].map(name => `assets/integrations/${name}`),
+    'lib/codex-icon-preference.js', 'shortcuts.html', 'shortcuts.css', 'shortcuts-preload.js', 'shortcuts-renderer.js',
     'lib/shortcuts.js', 'lib/shortcut-layout.js', 'lib/shortcut-window.js', 'scripts/verify-shortcuts-integration.js']) {
     assert.deepEqual(fs.readFileSync(path.join(staging, 'desktop-pet', file)),
       fs.readFileSync(path.join(root, 'desktop-pet', file)), `${file} 必须完整进入安装包`);
   }
   const stagedRequire = file => require(path.join(staging, 'desktop-pet', file));
+  assert.equal(typeof stagedRequire('lib/codex-icon-preference.js').createCodexIconPreference, 'function');
   assert.equal(typeof stagedRequire('lib/shortcuts.js').createShortcutRegistrar, 'function');
   assert.equal(typeof stagedRequire('lib/shortcut-window.js').createShortcutWindow, 'function');
   assert.equal(typeof stagedRequire('lib/shortcut-layout.js').layoutShortcuts, 'function');
@@ -299,4 +300,13 @@ test('真实动作验收助手进入显式打包清单且可以加载', () => {
   assert.ok(fs.existsSync(path.join(staging, codexHelper)), '安装包缺少显式模拟 Codex 原生验收助手');
   assert.equal(fs.readFileSync(path.join(staging, codexHelper), 'utf8'), fs.readFileSync(path.join(root, codexHelper), 'utf8'));
   assert.equal(typeof require(path.join(staging, codexHelper)).verifyCodexCompanion, 'function');
+});
+
+test('integration source art is exported at 256px from native app resources', () => {
+  const names=['codex','codex-dark','codex-default','codex-space','codex-space-dark','openai','zcode','workbuddy'];
+  for(const name of names) {
+    const bytes=fs.readFileSync(path.resolve(__dirname,`../assets/integrations/${name}.png`));
+    assert.equal(bytes.subarray(1,4).toString(),'PNG',name);
+    assert.equal(bytes.readUInt32BE(16),256,name+' width');assert.equal(bytes.readUInt32BE(20),256,name+' height');
+  }
 });

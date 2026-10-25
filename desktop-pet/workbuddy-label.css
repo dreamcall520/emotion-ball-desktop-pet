@@ -23,3 +23,5 @@
 #details :is(button, [tabindex]) { outline: none; }
 :root[data-keyboard="true"] #quota-label:has(#toggle:focus-visible) { outline: 1px solid var(--quota-subtle); outline-offset: -3px; }
 :root[data-keyboard="true"] #details :is(button, [tabindex]):focus-visible { outline: 1px solid var(--quota-subtle); outline-offset: -1px; border-radius: 3px; }
+/* Retain the full balance and caption beside the larger source icon. */
+#quota-label[data-size="compact"][data-expanded="false"] { padding-inline: 4px; }
