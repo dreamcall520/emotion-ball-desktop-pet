@@ -57,3 +57,12 @@ test('legacy or unknown state values do not fabricate a low-balance label from r
     assert.equal(nodes.text.textContent, '5 小时 · 剩余 0%');
   }
 });
+
+test('WorkBuddy capsules show branded exact credits or expiry without Codex percentages and status', () => {
+  const { receive, nodes, document, animations } = renderer();
+  receive({ id: 1, kind: 'workbuddy', side: 'right', appearance: 'dark', text: '还剩7,399.91积分', total: 7399.91 });
+  assert.equal(nodes.brand.textContent, 'WorkBuddy'); assert.equal(nodes.text.textContent, '还剩7,399.91积分');
+  assert.equal(document.body.dataset.kind, 'workbuddy'); assert.equal(document.body.dataset.side, 'right');
+  receive({ id: 1, kind: 'workbuddy', text: '99.91积分将于10/28到期', remaining: 0, statusLabel: '已用尽' });
+  assert.equal(nodes.text.textContent, '99.91积分将于10/28到期'); assert.equal(animations.length, 2);
+});

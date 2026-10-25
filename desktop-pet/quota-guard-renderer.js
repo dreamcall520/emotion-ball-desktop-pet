@@ -9,6 +9,7 @@
   const accessory = (quota, defeated) => quota === null ? 'none' : defeated ? 'halo' : quota > 10 ? 'crown' : 'none';
   function primary(value) {
     try {
+      if (value?.practice === true && value.state === 'ready') return { remaining: 100, windowMinutes: 300 };
       const item = value?.state === 'ready' && Array.isArray(value.items) ? value.items[0] : null;
       return item && Number.isFinite(item.remaining) && item.remaining >= 0 && item.remaining <= 100 &&
         Number.isSafeInteger(item.windowMinutes) && item.windowMinutes > 0
@@ -42,7 +43,7 @@
       const item = primary(value), reopened = this.modelVisible === false && value?.visible !== false;
       this.available = Boolean(item); this.visible = this.modelVisible = value?.visible !== false;
       if (item) {
-        const signature = `${item.windowMinutes}:${item.remaining}`;
+        const signature = `${value?.practice === true}:${item.windowMinutes}:${item.remaining}`;
         const restart = reopened && this.ended && item.remaining > 0;
         if (signature !== this.signature || restart) {
           if (restart) this.paused = false;
@@ -188,8 +189,8 @@
     const visible = () => Boolean(primary(model)) && model.expanded !== true && model.guardEntry !== false;
     const moving = () => sprites && visible() && model.visible !== false && !doc.hidden && !reduced.matches;
     function draw() {
-      const item = primary(model); if (!item || !sprites) return; const q = item.remaining;
-      button.setAttribute('aria-label', `${periodText(item.windowMinutes)}剩余 ${Math.round(q)}%，进入球球守护战`);
+      const item = primary(model); if (!item || !sprites) return; const q = model?.practice ? 50 : item.remaining;
+      button.setAttribute('aria-label', model?.practice ? '进入球球守护战，自由练习' : `${periodText(item.windowMinutes)}剩余 ${Math.round(q)}%，进入球球守护战`);
       button.dataset.role = q === 100 ? 'full' : q === 0 ? 'empty' : 'roaming';
       renderPet(pet, q === 0 ? 1 : 0, q === 0 ? 'halo' : q === 100 ? 'crown' : 'none', time, !moving());
       drawSprite(zombie.querySelector('canvas'), 'walk', q > 0 && q < 100 ? time * .75 : 0, true);
@@ -221,11 +222,11 @@
   const text = (id, value) => { if ($(id).textContent !== value) $(id).textContent = value; };
   function labels() {
     const available = game.available, dead = game.outcome === 'zombie', win = game.outcome === 'qiuqiu';
-    const key = [available, game.quota, game.period, game.outcome, game.playerHits, game.active, game.paused, reduced.matches, Boolean(sprites)].join(':');
+    const key = [model?.practice === true, available, game.quota, game.period, game.outcome, game.playerHits, game.active, game.paused, reduced.matches, Boolean(sprites)].join(':');
     if (labelKey === key) return; labelKey = key;
     $('guard-theatre').dataset.available = String(available);
-    $('guard-panel').dataset.outcome = game.outcome || 'playing'; text('guard-period', available ? periodText(game.period) : 'Codex 额度'); text('guard-number', available ? `${Math.round(game.quota)}%` : '--%');
-    const description = available ? `${periodText(game.period)}剩余 ${Math.round(game.quota)}%` : '额度等待更新';
+    $('guard-panel').dataset.outcome = game.outcome || 'playing'; text('guard-period', model?.practice ? '自由练习' : available ? periodText(game.period) : 'Codex 额度'); text('guard-number', model?.practice ? '能量满满' : available ? `${Math.round(game.quota)}%` : '--%');
+    const description = model?.practice ? '自由练习能量，与账户积分独立' : available ? `${periodText(game.period)}剩余 ${Math.round(game.quota)}%` : '额度等待更新';
     if ($('guard-number').getAttribute('aria-label') !== description) $('guard-number').setAttribute('aria-label', description);
     $('guard-charge').style.width = `${available ? game.quota : 0}%`;
     text('guard-status', !available ? '等待额度更新' : dead ? '这局，僵尸赢了' : win ? '球球赢了，能量守住了' : '球球正在守护能量');

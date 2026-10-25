@@ -70,3 +70,11 @@ test('自动命中不计胜利；连点提高发射速度和击退，29次手动
   assert(game.recoil === 0); assert.equal(game.flight.length, 0);
   game.reset(); assert.equal(game.playerHits, 0); assert.equal(game.quota, 64); assert.equal(game.outcome, null);
 });
+
+test('自由练习使用独立游戏能量，不把WorkBuddy积分当成百分比', () => {
+ const game=new GuardGame();game.setModel({state:'ready',practice:true,items:[],visible:true});
+ assert.equal(game.available,true);assert.equal(game.quota,100);assert.equal(game.shoot(),true);
+ elapse(game,1000);assert(game.shots>0);
+ game.setModel(model(100));assert.equal(game.round,2);
+ assert.equal(primary({state:'disconnected',practice:true,items:[]}),null);
+});

@@ -58,3 +58,11 @@ test('atomic save failure preserves balance and retries persistence on next succ
   await q.refresh();
   assert.equal(q.getState().historyError, null); assert.ok(fs.existsSync(options.historyFile));
 });
+test('enriches new samples with balance categories and expiry, while restoring old total-only samples', async t => {
+  const f = fixture(t); fs.writeFileSync(f.options.historyFile, JSON.stringify({ version: 1, accounts: { [a]: [{ at: 1999999700000, total: 7400 }] } }));
+  const report = { total: 7399, basic: 500, reward: 6899, purchased: 0, nextRefreshAt: 2000100000000, expires: [{ at: 2000050000000, amount: 99 }] };
+  f.outcome({ accountKey: a, report });
+  const q = createWorkBuddyQuota(f.options); t.after(() => q.close()); q.setEnabled(true); await tick();
+  assert.deepEqual(q.getState().history, [{ at: 1999999700000, total: 7400 }, { at: 2000000000000, ...report }]);
+  const stored = JSON.parse(fs.readFileSync(f.options.historyFile)); assert.equal(stored.accounts[a][1].reward, 6899);
+});

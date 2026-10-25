@@ -9,12 +9,12 @@
 <body><div id="quota-beam"><section id="quota-label" data-size="compact" data-expanded="false" data-severity="normal" data-has-items="true" data-item-count="1">
   <button id="toggle" type="button" aria-expanded="false"><span id="summary"><span class="summary-period"><span class="summary-badge">WB</span><span id="period" class="summary-period-label">积分</span></span><strong id="total" class="summary-value">—</strong></span></button>
   <div id="details" hidden>
-    <header id="expanded-header" class="v20-header"><span class="v20-brand"><b>WorkBuddy</b><span id="plan" class="period-pill">积分</span></span><span class="v20-header-tools"><span class="v20-caption">剩余积分</span><button id="collapse" class="v20-collapse" type="button" aria-label="收起积分卡片"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 10.5L8 5.5L13 10.5"></path></svg></button></span></header>
-    <div id="value-row" class="v20-value-row"><strong id="expanded-total" class="v20-value">—</strong><span id="balance-state" class="v20-pace">积分</span></div>
+    <button id="expanded-header" class="v20-header" type="button" aria-label="收起 WorkBuddy 积分卡片" aria-expanded="true"><span class="v20-brand"><b>WorkBuddy</b><span id="plan" class="period-pill">积分</span></span><span class="v20-header-tools"><span class="v20-caption">剩余积分</span><span id="collapse" class="v20-collapse" aria-hidden="true"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 10.5L8 5.5L13 10.5"></path></svg></span></span></button>
+    <div id="value-row" class="v20-value-row"><strong id="expanded-total" class="v20-value">—</strong><span id="balance-state" class="v20-pace" role="status" aria-live="polite">积分</span></div>
     <p id="dates" class="v20-reset"><span id="refresh-date" tabindex="0"></span><span id="expiry" tabindex="0"></span></p>
     <div id="auxiliary" class="v20-auxiliary">
       <div id="balances" class="v20-shared"><span>基础 <b id="basic">—</b></span><span>奖励 <b id="reward">—</b></span><span>购买 <b id="purchased">—</b></span></div>
-      <nav id="links" class="v20-links" aria-label="WorkBuddy 积分操作"><span id="status" role="status" aria-live="polite"></span><button id="refresh" type="button">刷新</button><button id="trend" class="v20-trend" type="button"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2V14H14M4 10L7 7L10 9L14 4"></path></svg><span>趋势</span></button></nav>
+      <nav id="links" class="v20-links" aria-label="WorkBuddy 积分操作"><button id="tasks" type="button" title="在 WorkBuddy 客户端查看任务，完整统计暂未提供">任务 ↗</button><button id="refresh" type="button">刷新</button><button id="trend" class="v20-trend" type="button"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2V14H14M4 10L7 7L10 9L14 4"></path></svg><span>趋势</span></button></nav>
     </div>
   </div>
 </section></div><script src="workbuddy-label-renderer.js"></script></body></html>

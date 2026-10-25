@@ -62,6 +62,7 @@ const { createWorkBuddyQuota } = require('./lib/workbuddy-quota');
 const { createWorkBuddyChat } = require('./lib/workbuddy-chat');
 const { createWorkBuddyLabelWindow, safeState: safeWorkBuddyState } = require('./lib/workbuddy-label-window');
 const { createWorkBuddyDetailsWindow } = require('./lib/workbuddy-details-window');
+const { createWorkBuddyConsent } = require('./lib/workbuddy-consent-window');
 const { createNotesCompanion } = require('./lib/notes-companion');
 const { createNotesOrganizer } = require('./lib/notes-organizer');
 const { createPomodoro } = require('./lib/pomodoro');
@@ -105,6 +106,7 @@ let sheepQuotaInk = null;
 let bubbleVisibilityBinding = null;
 let quotaLabel = null;
 let quotaGuard = null;
+let quotaGuardPractice = false;
 let codexDetails = null;
 let codexDetailReturn = null;
 let codexThreadOpener = url => shell.openExternal(url);
@@ -113,6 +115,9 @@ let workbuddyChat = null;
 let workbuddyQuota = null;
 let workbuddyLabel = null;
 let workbuddyDetails = null;
+let workbuddyConsent = null;
+let workbuddyEnablePending = false;
+let workbuddyEnableToken = 0;
 let chatProviderChanging = false;
 let chatWindow = null;
 let notesCompanion = null;
@@ -852,6 +857,7 @@ function tickEdgeNotice(force = false) {
   const quotaEnabled = settings?.codexEnabled === true && settings.codexQuotaAlwaysVisible === true && !shortcutWindow?.isPresenting();
   edgeNotice?.tick({ presentation, visible, locked: screenLocked,
     bubblesEnabled: settings?.bubblesEnabled === true, quotaEnabled,
+    workbuddyEnabled: settings?.workbuddyEnabled === true, workbuddyState: workbuddyQuota?.getState(),
     appearance: settings?.codexQuotaAppearance,
     quotaModel: visible && quotaEnabled && presentation?.mode === 'tucked'
       ? buildQuotaLabelModel(codexCompanion?.getSnapshot(), { period: settings.codexQuotaPeriod, size: 'compact',
@@ -869,6 +875,7 @@ function applyPresentation(packet) {
     safelyInvokeWindow('收起时守护战隐藏', () => quotaGuard?.close());
     safelyInvokeWindow('收起时 API 卡片隐藏', () => apiUsageLabel?.hide());
   } else syncQuotaLabel(codexCompanion?.getSnapshot());
+  syncWorkBuddyLabel();
   tickEdgeNotice(true);
   pomodoroWindows?.sync();
   shortcutWindow?.sync();
@@ -876,7 +883,7 @@ function applyPresentation(packet) {
 }
 
 function edgeRetentionBounds() {
-  return [bubble, quotaLabel, apiUsageLabel, chatWindow, shortcutWindow, quotaGuard].flatMap(controller => {
+  return [bubble, quotaLabel, apiUsageLabel, workbuddyLabel, { getWindow: () => workbuddyLabel?.getGuardWindow?.() }, chatWindow, shortcutWindow, quotaGuard].flatMap(controller => {
     try {
       const win = controller?.getWindow();
       return win && !win.isDestroyed() && win.isVisible() ? [win.getBounds()] : [];
@@ -1001,19 +1008,29 @@ function syncApiUsageLabel() {
 
 function syncWorkBuddyLabel() {
   if (!workbuddyLabel || !workbuddyQuota) return;
-  const visible = settings?.workbuddyEnabled === true && !isQuitting && !screenLocked && !pomodoroQuiet &&
+  const eligible = settings?.workbuddyEnabled === true && !isQuitting && !screenLocked && !pomodoroQuiet &&
     !chatWindow?.isVisible() && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
+  const visible = eligible && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible() && !quotaGuard?.isVisible();
   safelyInvokeWindow('WorkBuddy 积分显示', () => visible ? workbuddyLabel.show(workbuddyQuota.getState()) : workbuddyLabel.hide());
-  if (!visible) workbuddyDetails?.close();
+  if (!eligible) workbuddyDetails?.close();
 }
 
 async function setWorkBuddyEnabled(value) {
   const enabled = value === true;
+  if (!enabled) { workbuddyEnableToken++; workbuddyConsent?.cancel(); }
+  if (enabled && settings.workbuddyEnabled !== true) {
+    if (workbuddyEnablePending || isQuitting || screenLocked) return false;
+    const token = ++workbuddyEnableToken;
+    workbuddyEnablePending = true;
+    try {
+      if (!await workbuddyConsent?.request() || token !== workbuddyEnableToken || isQuitting || screenLocked) return false;
+    } finally { workbuddyEnablePending = false; }
+  }
   try {
     settings = saveSettings(settingsFile, { ...settings, workbuddyEnabled: enabled,
       ...(!enabled && settings.chatProvider === 'workbuddy' ? { chatProvider: 'codex' } : {}) });
   } catch (_) { return false; }
-  if (!enabled) await workbuddyChat?.stop();
+  if (!enabled) { await workbuddyChat?.stop(); if (quotaGuardPractice) quotaGuard?.close(); }
   workbuddyQuota?.setEnabled(enabled);
   syncWorkBuddyLabel();
   chatWindow?.update(chatSnapshot());
@@ -1199,7 +1216,7 @@ function syncQuotaLabel(snapshot = null) {
       let visible = false;
       try {
         visible = !isQuitting && settings?.codexEnabled === true && settings.codexQuotaAlwaysVisible === true &&
-          !screenLocked && !chatWindow?.isVisible() && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
+          !screenLocked && !chatWindow?.isVisible() && !workbuddyDetails?.isVisible() && !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
       } catch (error) {
         reportQuotaError('额度标签状态', error);
       }
@@ -1210,14 +1227,14 @@ function syncQuotaLabel(snapshot = null) {
       if (display.style !== 'card' && !display.showNumbers) visible = false;
       if (!visible) {
         shown = false;
-        safelyInvokeWindow('额度隐藏时守护战隐藏', () => quotaGuard?.close());
+        if (!quotaGuardPractice) safelyInvokeWindow('额度隐藏时守护战隐藏', () => quotaGuard?.close());
         try { quotaLabel.hide(); } catch (error) { reportQuotaError('额度标签隐藏', error); }
         continue;
       }
       try {
         const labelModel = quotaLabelModel(current);
         quotaLabel.show(labelModel);
-        quotaGuard?.update(labelModel);
+        if (!quotaGuardPractice) quotaGuard?.update(labelModel);
         shown = true;
       } catch (error) {
         shown = false;
@@ -1329,6 +1346,7 @@ function syncCodexDetails(snapshot = codexCompanion?.getSnapshot()) {
 
 function openCodexDetails(action, period) {
   if (!CODEX_DETAIL_ACTIONS.has(action) || isQuitting || screenLocked || settings?.codexEnabled !== true || !codexDetails) return false;
+  workbuddyDetails?.close();
   quotaGuard?.close();
   if (action === 'opportunities' && codexDetails.getAction() === 'trend' && codexDetails.isVisible()) {
     codexDetailReturn = { period: codexDetails.getPeriod() };
@@ -1343,15 +1361,17 @@ function fromQuotaLabel(event) {
 }
 
 function canShowQuotaGuard() {
+  if (quotaGuardPractice) return Boolean(!isQuitting && !screenLocked && !shortcutWindow?.isPresenting() && settings?.workbuddyEnabled && settings.codexQuotaFunEnabled !== false && !chatWindow?.isVisible() && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible() && !presentationSuppressed() && petWindow?.isVisible());
   return Boolean(!isQuitting && !screenLocked && !shortcutWindow?.isPresenting() && settings?.codexEnabled === true &&
     settings.codexQuotaAlwaysVisible === true && settings.codexQuotaFunEnabled !== false &&
     !chatWindow?.isVisible() && !codexDetails?.isVisible() &&
     !presentationSuppressed() && petWindow && !petWindow.isDestroyed() && petWindow.isVisible());
 }
 
-function openQuotaGuard() {
-  if (!canShowQuotaGuard() || !quotaGuard) return false;
-  return quotaGuard.open(quotaLabelModel());
+function openQuotaGuard(practice = false) {
+  quotaGuardPractice = practice === true;
+  if (!canShowQuotaGuard() || !quotaGuard) { quotaGuardPractice = false; return false; }
+  return quotaGuard.open(practice ? { state: 'ready', items: [], practice: true } : quotaLabelModel());
 }
 
 async function openCodexDetailThread(id, turnId) {
@@ -2124,9 +2144,10 @@ async function finishSmokeTest() {
 
     if (process.env.PET_SMOKE_WORKBUDDY_ONLY === '1') {
       await require('./scripts/verify-workbuddy-integration').verifyWorkBuddyIntegration({
-        pet: petWindow, quota: workbuddyQuota, label: workbuddyLabel, details: workbuddyDetails, codexLabel: quotaLabel, chat: workbuddyChat, chatWindow,
+        pet: petWindow, quota: workbuddyQuota, label: workbuddyLabel, details: workbuddyDetails, consent: workbuddyConsent, guard: quotaGuard, codexDetails, edge: edgeTuck, codexLabel: quotaLabel, chat: workbuddyChat, chatWindow,
         openChat, setProvider: setChatProvider, setEnabled: setWorkBuddyEnabled, getSettings: () => settings,
         getCodex: () => codexCompanion?.getSnapshot(), menuTemplate, setSize: setPetSize,
+        edgeNotices: { tick: (time, state) => { edgeNoticeNow = () => 1000000000 + time; edgeNotice.tick(state); }, getWindow: () => edgeNoticeWindow.getWindow(), reset: () => { activityMonitor.stop(); edgeNoticeNow = () => performance.now(); lastEdgeNoticeTick = -Infinity; edgeNotice.reset(); } },
         outputDir: process.env.PET_SMOKE_WORKBUDDY_OUTPUT, live: process.env.PET_SMOKE_WORKBUDDY_LIVE === '1' });
       app.exit(0); return;
     }
@@ -3346,20 +3367,30 @@ async function bootstrap() {
     onModelSelection: workbuddyModel => { settings = saveSettings(settingsFile, { ...settings, workbuddyModel }); },
     onChange: state => { if (!screenLocked && settings.chatProvider === 'workbuddy') chatWindow.update(chatSnapshot(state)); },
     onAction: performChatAction });
+  workbuddyConsent = createWorkBuddyConsent({ BrowserWindow, ipcMain, positionWindow: positionFunctionWindow,
+    getInfo: codexConsentInfo, getAppearance: getNotesAppearance, isPackaged: app.isPackaged,
+    canRequest: () => !isQuitting && !screenLocked });
   workbuddyQuota = createWorkBuddyQuota({ run: workbuddyRun, historyFile: path.join(app.getPath('userData'), 'workbuddy-quota-history.json'), onChange: state => { syncWorkBuddyLabel(); workbuddyDetails?.update(safeWorkBuddyState(state)); } });
   workbuddyLabel = createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
+    getStackAnchor: () => quotaLabel?.getVisibleBounds?.(),
+    getPresentation: () => edgeTuck?.getPresentation(),
+    getGuardEntry: () => settings.codexQuotaFunEnabled !== false && !quotaLabel?.getWindow()?.isVisible() && !codexDetails?.isVisible() && !workbuddyDetails?.isVisible(),
     getObstacles: () => [quotaLabel, apiUsageLabel, bubble, shortcutWindow, quotaGuard].flatMap(controller => {
+      if (controller === quotaLabel) { const card = quotaLabel?.getVisibleBounds?.(); return card ? [card] : []; }
       const win = controller?.getWindow();
       return win && !win.isDestroyed() && win.isVisible() ? [win.getBounds()] : [];
     }),
     getAppearance: () => settings.codexQuotaAppearance,
     alwaysOnTop: settings.alwaysOnTop,
     onRefresh: () => { void workbuddyQuota.refresh(); },
-    onTrend: () => { workbuddyDetails?.open(safeWorkBuddyState(workbuddyQuota.getState())); },
+    onTrend: () => { codexDetails?.close(); quotaGuard?.close(); workbuddyDetails?.open(safeWorkBuddyState(workbuddyQuota.getState())); },
+    onGuard: () => { openQuotaGuard(true); },
+    onTasks: () => { void shell.openPath('/Applications/WorkBuddy.app'); },
     onError: () => {} });
   workbuddyDetails = createWorkBuddyDetailsWindow({ BrowserWindow, screen,
     getAnchor: () => { const card = workbuddyLabel?.getWindow(); return card && !card.isDestroyed() && card.isVisible() ? card.getBounds() : petWindow?.getBounds(); },
     getAppearance: () => settings.codexQuotaAppearance, alwaysOnTop: settings.alwaysOnTop,
+    onVisibilityChange: () => { syncQuotaLabel(codexCompanion?.getSnapshot()); syncWorkBuddyLabel(); },
     onError: error => writeError('WorkBuddy 趋势窗口', error) });
   app.on('browser-window-created', (_event, win) => {
     for (const event of ['move', 'resize', 'show', 'hide', 'closed']) win.on(event, () => {
@@ -3419,6 +3450,8 @@ async function bootstrap() {
     canShow: canShowQuotaGuard,
     onLayout: () => pomodoroWindows?.sync(),
     onVisibilityChange: visible => {
+      if (!visible) quotaGuardPractice = false;
+      syncWorkBuddyLabel();
       if (visible) shortcutWindow?.interrupt();
       safelyInvokeWindow('守护战显隐时额度卡重排', () => quotaLabel?.reposition());
       pomodoroWindows?.sync();
@@ -3434,11 +3467,11 @@ async function bootstrap() {
     onError: error => writeError('API 常驻卡片', error) });
   codexDetails = createCodexDetailsWindow({ BrowserWindow, screen,
     getAnchor: () => petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null,
-    onVisibilityChange: () => safelyInvokeWindow('Codex 详情显隐时额度卡重排', () => quotaLabel?.reposition()),
+    onVisibilityChange: () => { safelyInvokeWindow('Codex 详情显隐时额度卡重排', () => quotaLabel?.reposition()); syncWorkBuddyLabel(); },
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('Codex 详情窗口', error) });
   edgeNoticeWindow = createEdgeNoticeWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('边缘提示窗口', error) });
-  edgeNotice = createEdgeNotice({ now: () => edgeNoticeNow(), onChange: payload => {
+  edgeNotice = createEdgeNotice({ now: () => edgeNoticeNow(), ...(IS_SMOKE_TEST && process.env.PET_SMOKE_WORKBUDDY_ONLY === '1' ? { random: () => 0 } : {}), onChange: payload => {
     safelyInvokeWindow('边缘提示', () => payload ? edgeNoticeWindow.show(payload) : edgeNoticeWindow.hide());
   } });
   initializeShortcuts();
@@ -3453,6 +3486,7 @@ async function bootstrap() {
   });
   const pause = () => {
     screenLocked = true;
+    workbuddyEnableToken++; workbuddyConsent?.cancel();
     shortcutWindow?.interrupt();
     codexConsentToken++;
     finishCodexConsent(false);
@@ -3547,6 +3581,7 @@ if (!hasSingleInstanceLock) {
     clearTimeout(apiRefreshTimer);
     apiRefreshTimer = null;
     apiUsage?.close();
+    workbuddyEnableToken++; workbuddyConsent?.close();
     workbuddyQuota?.close();
     workbuddyLabel?.destroy();
     workbuddyDetails?.destroy();

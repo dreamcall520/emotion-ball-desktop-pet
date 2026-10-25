@@ -1,30 +1,39 @@
 const path = require('node:path');
 const { quotaLabelSize } = require('./quota-label-placement');
+const { createWorkBuddyGuardEntryWindow } = require('./workbuddy-guard-entry-window');
 const CHANNEL = 'pet:workbuddy-label';
 const valid = b => b && ['x', 'y', 'width', 'height'].every(k => Number.isFinite(b[k])) && b.width > 0 && b.height > 0;
 const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
-function workBuddyLabelBounds(pet, area, obstacles = [], expanded = false) {
+function workBuddyLabelBounds(pet, area, obstacles = [], expanded = false, stackAnchor = null, presentation = null) {
   if (!valid(pet) || !valid(area)) return null;
   const { width } = quotaLabelSize(expanded ? 'compactExpanded' : 'compact');
   const height = expanded ? 120 : quotaLabelSize('compact').height;
+  if (width > area.width || height > area.height) return null;
   const gap = 8;
-  const blocked = [pet, ...obstacles.filter(valid)];
-  const centerX = pet.x + (pet.width - width) / 2;
-  const xs = [centerX, pet.x, pet.x + pet.width - width, area.x, area.x + area.width - width];
-  const ys = [pet.y + pet.height + gap, pet.y - height - gap, area.y, area.y + area.height - height];
-  for (const b of blocked) { xs.push(b.x - width - gap, b.x + b.width + gap); ys.push(b.y - height - gap, b.y + b.height + gap); }
-  const below = { x: centerX, y: ys[0], width, height };
-  const stack = obstacles.filter(valid).filter(b => overlaps(below, b)).map(b => b.y + b.height + gap).sort((a, b) => a - b);
-  const candidates = [...[ys[0], ...stack, ys[1]].map(y => ({ x: centerX, y })), ...ys.flatMap(y => xs.map(x => ({ x, y })))];
-  for (const { x, y } of candidates) {
-    const b = { x: Math.round(x), y: Math.round(y), width, height };
-    if (b.x >= area.x && b.y >= area.y && b.x + width <= area.x + area.width && b.y + height <= area.y + area.height && !blocked.some(o => overlaps(b, o))) return b;
+  const anchor = valid(stackAnchor) ? stackAnchor : pet;
+  const blocked = [pet, ...obstacles.filter(valid), ...(valid(stackAnchor) ? [stackAnchor] : [])];
+  const clampX = x => Math.max(area.x, Math.min(x, area.x + area.width - width));
+  const centerX = clampX(anchor.x + (anchor.width - width) / 2);
+  const preferredX = valid(stackAnchor) && presentation?.side === 'left' ? clampX(anchor.x)
+    : valid(stackAnchor) && presentation?.side === 'right' ? clampX(anchor.x + anchor.width - width) : centerX;
+  // Keep both cards in the anchor column; never search the far screen edge.
+  const xs = valid(stackAnchor) ? [preferredX] : [centerX, clampX(pet.x - width - gap), clampX(pet.x + pet.width + gap)];
+  for (const x of xs) {
+    const ys = [anchor.y + anchor.height + gap, anchor.y - height - gap];
+    const column = { x, y: area.y, width, height: area.height };
+    const nearby = blocked.filter(b => overlaps(column, b));
+    ys.push(...nearby.flatMap(b => [b.y + b.height + gap, b.y - height - gap])
+      .sort((a, b) => Math.abs(a - ys[0]) - Math.abs(b - ys[0])));
+    for (const y of ys) {
+      const b = { x: Math.round(x), y: Math.round(y), width, height };
+      if (b.x >= area.x && b.y >= area.y && b.x + width <= area.x + area.width && b.y + height <= area.y + area.height && !blocked.some(o => overlaps(b, o))) return b;
+    }
   }
   return null;
 }
 function safeState(state) {
   const number = n => Number.isFinite(n) && n >= 0;
-  const date = n => Number.isFinite(n) && n >= 0 ? n : null;
+  const date = n => Number.isFinite(n) && n >= 0 && n <= 8640000000000000 ? n : null;
   const r = state?.report;
   const report = r && ['total', 'basic', 'reward', 'purchased'].every(k => number(r[k])) ? {
     total: r.total, basic: r.basic, reward: r.reward, purchased: r.purchased,
@@ -34,31 +43,43 @@ function safeState(state) {
   } : null;
   const history = Array.isArray(state?.history) ? [...new Map(state.history.filter(sample =>
     sample && Number.isSafeInteger(sample.at) && sample.at >= 0 && sample.at <= 8640000000000000 && number(sample.total))
-    .map(sample => [sample.at, { at: sample.at, total: sample.total }])).values()].sort((a, b) => a.at - b.at).slice(-6000) : [];
+    .map(sample => {
+      const clean = { at: sample.at, total: sample.total };
+      for (const key of ['basic', 'reward', 'purchased']) if (number(sample[key])) clean[key] = sample[key];
+      if (sample.nextRefreshAt === null || date(sample.nextRefreshAt) !== null) clean.nextRefreshAt = sample.nextRefreshAt;
+      if (Array.isArray(sample.expires) && sample.expires.every(e => e && number(e.amount) && date(e.at) !== null)) {
+        clean.expires = sample.expires.map(e => ({ amount: e.amount, at: e.at }));
+      }
+      return [sample.at, clean];
+    })).values()].sort((a, b) => a.at - b.at).slice(-6000) : [];
   // Only fixed status text crosses IPC; upstream errors can contain credentials.
   return { enabled: state?.enabled === true, busy: state?.busy === true,
     error: state?.error ? '更新失败，请稍后重试' : null, stale: state?.stale === true, report, history, historyError: state?.historyError ? '趋势记录暂未保存' : null };
 }
-function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getObstacles = () => [], getAppearance = () => 'system', alwaysOnTop = true, onRefresh = () => {}, onTrend = () => {}, onError = () => {} }) {
+function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getObstacles = () => [], getStackAnchor = () => null, getPresentation = () => null, getGuardEntry = () => false, onGuard = () => {}, getAppearance = () => 'system', alwaysOnTop = true, onRefresh = () => {}, onTrend = () => {}, onTasks = () => {}, onError = () => {} }) {
   let win = null, ready = false, visible = false, expanded = false, current = null, top = Boolean(alwaysOnTop);
   const error = e => { try { onError(e); } catch (_) {} };
+  const guard = createWorkBuddyGuardEntryWindow({ BrowserWindow, alwaysOnTop, onGuard, onError });
   const live = w => w && !w.isDestroyed() && !w.webContents.isDestroyed?.();
-  function hide() { visible = false; expanded = false; if (live(win)) win.hide(); }
-  function destroy() { const old = win; win = null; ready = visible = expanded = false; if (live(old)) old.destroy(); }
+  function hide() { visible = false; expanded = false; guard.hide(); if (live(win)) win.hide(); }
+  function destroy() { guard.destroy(); const old = win; win = null; ready = visible = expanded = false; if (live(old)) old.destroy(); }
   function reposition() {
     if (!ready || !visible || !live(win)) return;
     try {
       const pet = getPetWindow();
-      if (!pet || pet.isDestroyed() || !pet.isVisible()) { win.hide(); return; }
+      if (!pet || pet.isDestroyed() || !pet.isVisible()) { win.hide(); guard.hide(); return; }
       const p = pet.getBounds(), area = screen.getDisplayMatching(p).workArea, obstacles = getObstacles() || [];
-      let bounds = workBuddyLabelBounds(p, area, obstacles, expanded), spaceError = false;
-      if (!bounds && expanded) { expanded = false; spaceError = true; bounds = workBuddyLabelBounds(p, area, obstacles); }
-      if (!bounds) { win.hide(); return; }
+      const stackAnchor = getStackAnchor(), presentation = getPresentation();
+      let bounds = workBuddyLabelBounds(p, area, obstacles, expanded, stackAnchor, presentation), spaceError = false;
+      if (!bounds && expanded) { expanded = false; spaceError = true; bounds = workBuddyLabelBounds(p, area, obstacles, false, stackAnchor, presentation); }
+      if (!bounds) { win.hide(); guard.hide(); return; }
       const appearance = getAppearance();
       win.setBounds(bounds, false);
       win.webContents.send(CHANNEL, { ...current, expanded, spaceError, appearance: ['light', 'dark'].includes(appearance) ? appearance : 'system' });
       win.showInactive();
-    } catch (e) { if (live(win)) win.hide(); error(e); }
+      if (!expanded && !valid(stackAnchor) && getGuardEntry() === true) guard.show(bounds, area, [p, ...obstacles], presentation?.side);
+      else guard.hide();
+    } catch (e) { guard.hide(); if (live(win)) win.hide(); error(e); }
   }
   function ensure() {
     if (live(win)) return;
@@ -76,9 +97,10 @@ function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getOb
         if (channel === `${CHANNEL}-toggle`) { expanded = !expanded; reposition(); }
         if (channel === `${CHANNEL}-refresh` && !current.busy) onRefresh();
         if (channel === `${CHANNEL}-trend`) onTrend();
+        if (channel === `${CHANNEL}-tasks`) onTasks();
       } catch (err) { error(err); }
     });
-    target.on('closed', () => { if (win === target) { win = null; ready = false; } });
+    target.on('closed', () => { if (win === target) { guard.hide(); win = null; ready = false; } });
     target.webContents.on('render-process-gone', () => { if (win === target) { destroy(); error(new Error('WorkBuddy 积分窗口已退出')); } });
     const loaded = () => { if (win === target && !ready && live(target)) { ready = true; reposition(); } };
     target.webContents.on('did-finish-load', loaded);
@@ -86,6 +108,8 @@ function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getOb
   }
   return { show(state) { current = safeState(state); if (!current.enabled) { hide(); return; } visible = true; try { ensure(); reposition(); } catch (e) { destroy(); error(e); } }, hide, destroy, reposition,
     getWindow: () => live(win) ? win : null,
-    setAlwaysOnTop(value) { top = Boolean(value); try { if (live(win)) win.setAlwaysOnTop(top, 'floating'); } catch (e) { error(e); } } };
+    getGuardWindow: () => guard.getWindow(),
+    getVisibleBounds() { if (!live(win) || !win.isVisible()) return null; const bounds = win.getBounds(), inset = expanded ? 0 : 2; return { x: bounds.x + inset, y: bounds.y + inset, width: bounds.width - inset * 2, height: bounds.height - inset * 2 }; },
+    setAlwaysOnTop(value) { guard.setAlwaysOnTop(value); top = Boolean(value); try { if (live(win)) win.setAlwaysOnTop(top, 'floating'); } catch (e) { error(e); } } };
 }
 module.exports = { createWorkBuddyLabelWindow, workBuddyLabelBounds, safeState };

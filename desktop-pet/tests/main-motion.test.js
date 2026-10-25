@@ -18,7 +18,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     onProgress({ state: 'downloading', percent: 100 });
     return { state: 'completed', path: '/fixture/Qiuqiu.dmg' };
   },
-  workbuddyRun = null, loadedSettings = null, notesDefaultTab = 'note', notesAppearance = 'light', nativeQuotaLabel = false, argv = [], updateFetch = async currentVersion => ({ currentVersion,
+  workbuddyConsentAnswer = true, workbuddyRun = null, loadedSettings = null, notesDefaultTab = 'note', notesAppearance = 'light', nativeQuotaLabel = false, argv = [], updateFetch = async currentVersion => ({ currentVersion,
     latestVersion: '0.3.26', hasUpdate: true,
     url: 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.26',
     installer: UPDATE_INSTALLER, downloadMessage: '' }) } = {}) {
@@ -255,6 +255,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
         return { read() { throw new Error('chat disk access is forbidden in main fixture'); },
           write() { throw new Error('chat disk access is forbidden in main fixture'); } };
       } };
+      if (name === './lib/workbuddy-consent-window') return { createWorkBuddyConsent: () => ({request: async () => workbuddyConsentAnswer, cancel() {}, close() {}, isPending:()=>false, getWindow:()=>null}) };
       if (name === './lib/workbuddy-client') return { runWorkBuddy };
       if (name === './lib/workbuddy-label-window') return { ...realRequire(name), createWorkBuddyLabelWindow: () => ({
         show() {}, hide() {}, reposition() {}, setAlwaysOnTop() {}, destroy() {}, getWindow: () => null
@@ -3734,4 +3735,10 @@ test('WorkBuddy provider 忙碌锁拒绝切换，禁用会停止独立请求并�
   assert.equal(f.chat.stops, 0);
   await f.invoke('pet:chat-send', '原有聊天继续', sender);
   assert.deepEqual(f.chat.sends, ['原有聊天继续']);
+});
+
+test('WorkBuddy取消授权不会保存开启或进行积分请求', async t => {
+ const f=await fixture({workbuddyConsentAnswer:false});t.after(()=>f.app.emit('before-quit'));
+ assert.equal(await f.call('setWorkBuddyEnabled(true)'),false);
+ assert.notEqual(f.call('settings.workbuddyEnabled'),true);assert.equal(f.workbuddyCalls.length,0);
 });

@@ -3,6 +3,13 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { runWorkBuddy } = require('./workbuddy-client');
 
+function historyPoint(value) {
+  const point = { at: value.at, total: value.total };
+  for (const key of ['basic', 'reward', 'purchased', 'nextRefreshAt']) if (Number.isFinite(value[key]) && value[key] >= 0) point[key] = value[key];
+  if (Array.isArray(value.expires)) point.expires = value.expires.filter(e => e && Number.isFinite(e.at) && e.at >= 0 && Number.isFinite(e.amount) && e.amount >= 0).map(e => ({ at: e.at, amount: e.amount }));
+  return point;
+}
+
 function createWorkBuddyQuota({ run = runWorkBuddy, onChange = () => {}, now = Date.now,
   schedule = setTimeout, cancel = clearTimeout, historyFile } = {}) {
   const week = 7 * 24 * 3600000, limit = 2016;
@@ -11,21 +18,21 @@ function createWorkBuddyQuota({ run = runWorkBuddy, onChange = () => {}, now = D
   if (historyFile) {
     try {
       const stat = fs.lstatSync(historyFile);
-      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1024 * 1024) throw Error();
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 16 * 1024 * 1024) throw Error();
       const stored = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
       if (stored?.version !== 1 || !stored.accounts || typeof stored.accounts !== 'object' || Array.isArray(stored.accounts)) throw Error();
       for (const [key, points] of Object.entries(stored.accounts)) {
         if (!/^[a-f0-9]{64}$/.test(key) || !Array.isArray(points) || points.length > limit || points.some((p, i) =>
           !p || !Number.isSafeInteger(p.at) || p.at < 0 || !Number.isFinite(p.total) || p.total < 0 || (i && points[i - 1].at >= p.at))) throw Error();
-        histories[key] = prune(points).map(p => ({ at: p.at, total: p.total }));
+        histories[key] = prune(points).map(historyPoint);
       }
     } catch (error) { if (!['ENOENT', 'ENOTDIR'].includes(error.code)) { histories = {}; historyProblem = historyBlocked = true; } }
   }
-  function appendHistory(key, total) {
-    const at = now(), points = prune(histories[key] || []);
+  function appendHistory(key, report) {
+    const point = historyPoint({ ...report, at: now() }), at = point.at, points = prune(histories[key] || []);
     if (Number.isSafeInteger(at) && at >= 0) {
-      if (points.at(-1)?.at === at) points[points.length - 1] = { at, total };
-      else points.push({ at, total });
+      if (points.at(-1)?.at === at) points[points.length - 1] = point;
+      else points.push(point);
     }
     histories[key] = points.slice(-limit);
     for (const account of Object.keys(histories)) { histories[account] = prune(histories[account]); if (!histories[account].length) delete histories[account]; }
@@ -33,7 +40,7 @@ function createWorkBuddyQuota({ run = runWorkBuddy, onChange = () => {}, now = D
       const temporary = `${historyFile}.${randomUUID()}.tmp`;
       try {
         const content = JSON.stringify({ version: 1, accounts: histories });
-        if (Buffer.byteLength(content) > 1024 * 1024) throw Error();
+        if (Buffer.byteLength(content) > 16 * 1024 * 1024) throw Error();
         fs.mkdirSync(path.dirname(historyFile), { recursive: true, mode: 0o700 });
         fs.writeFileSync(temporary, content, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
         fs.renameSync(temporary, historyFile); historyProblem = false;
@@ -65,7 +72,7 @@ function createWorkBuddyQuota({ run = runWorkBuddy, onChange = () => {}, now = D
         throw Object.assign(new Error('WorkBuddy 返回格式异常。'), { code: 'INVALID_RESPONSE' });
       }
       failures = 0;
-      const history = appendHistory(result.accountKey, result.report.total);
+      const history = appendHistory(result.accountKey, result.report);
       state = { ...state, busy: false, error: null, report: result.report, accountKey: result.accountKey, stale: false, history,
         historyError: historyProblem ? '积分趋势暂时无法保存，本次余额已更新。' : null };
     } catch (error) {

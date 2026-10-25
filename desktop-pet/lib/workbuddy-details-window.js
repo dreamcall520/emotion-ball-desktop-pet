@@ -1,20 +1,21 @@
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { placeDetails } = require('./codex-details-window');
-function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getAppearance = () => 'system', alwaysOnTop = true, onError = () => {} }) {
+function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getAppearance = () => 'system', alwaysOnTop = true, onError = () => {}, onVisibilityChange = () => {} }) {
   const file = path.join(__dirname, '../workbuddy-details.html'), url = pathToFileURL(file).href;
   let win = null, ready = false, visible = false, state = null, top = Boolean(alwaysOnTop), height = 360;
   const alive = () => win && !win.isDestroyed();
   const report = error => { try { onError(error); } catch (_) {} };
   function clean(value) {
-    return { report: Number.isFinite(value?.report?.total) && value.report.total >= 0 ? { total: value.report.total, updatedAt: Number.isFinite(value.report.updatedAt) ? value.report.updatedAt : null } : null,
-      history: Array.isArray(value?.history) ? value.history.filter(p => p && Number.isSafeInteger(p.at) && Number.isFinite(p.total) && p.total >= 0).map(p => ({ at: p.at, total: p.total })) : [],
+    return { report: Number.isFinite(value?.report?.total) && value.report.total >= 0 ? { total: value.report.total, updatedAt: Number.isFinite(value.report.updatedAt) ? value.report.updatedAt : null, nextRefreshAt: value.report.nextRefreshAt, basic: value.report.basic, expires: Array.isArray(value.report.expires) ? value.report.expires.map(e => ({ at: e.at, amount: e.amount })) : [] } : null,
+      history: Array.isArray(value?.history) ? value.history.filter(p => p && Number.isSafeInteger(p.at) && Number.isFinite(p.total) && p.total >= 0).map(p => ({ at: p.at, total: p.total, basic: p.basic, reward: p.reward, purchased: p.purchased, nextRefreshAt: p.nextRefreshAt, expires: Array.isArray(p.expires) ? p.expires.map(e => ({ at: e.at, amount: e.amount })) : undefined })) : [],
       historyError: value?.historyError ? '积分趋势暂时无法保存。' : null,
       stale: value?.stale === true || Boolean(value?.error) };
   }
   function send() { if (alive() && ready) win.webContents.send('pet:workbuddy-details', { ...state, appearance: getAppearance() }); }
-  function close() { visible = false; if (alive()) win.hide(); }
-  function destroy() { const old = win; win = null; ready = visible = false; if (old && !old.isDestroyed()) old.destroy(); }
+  function changed(value) { if (visible === value) return; visible = value; try { onVisibilityChange(value); } catch (error) { report(error); } }
+  function close() { changed(false); if (alive()) win.hide(); }
+  function destroy() { const old = win; win = null; ready = false; changed(false); if (old && !old.isDestroyed()) old.destroy(); }
   function reposition() {
     if (!alive() || !visible) return;
     try {
@@ -39,10 +40,10 @@ function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getApp
     });
     target.webContents.on('did-finish-load', () => { if (win !== target) return; ready = true; send(); if (visible) target.show(); });
     target.webContents.on('render-process-gone', () => { if (win === target) destroy(); });
-    target.on('closed', () => { if (win === target) { win = null; ready = visible = false; } });
+    target.on('closed', () => { if (win === target) { win = null; ready = false; changed(false); } });
     Promise.resolve(target.loadFile(file)).catch(error => { report(error); if (win === target) destroy(); });
   }
-  return { open(value) { state = clean(value); visible = true; try { ensure(); reposition(); send(); if (ready && visible) win.show(); return visible; } catch (error) { report(error); destroy(); return false; } },
+  return { open(value) { state = clean(value); changed(true); try { ensure(); reposition(); send(); if (ready && visible) win.show(); return visible; } catch (error) { report(error); destroy(); return false; } },
     update(value) { state = clean(value); if (visible) { try { send(); } catch (error) { report(error); } } },
     close, destroy, reposition, setAlwaysOnTop(value) { top = Boolean(value); if (alive()) win.setAlwaysOnTop(top, 'floating'); },
     isVisible: () => visible && Boolean(alive()), getWindow: () => alive() ? win : null };

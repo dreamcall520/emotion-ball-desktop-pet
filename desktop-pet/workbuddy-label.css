@@ -7,6 +7,7 @@
 #quota-label[data-expanded="true"] #toggle { display: none; }
 #details { width: 100%; min-width: 0; }
 #details[hidden] { display: none; }
+#expanded-header { appearance: none; width: 100%; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 #value-row { margin-top: 4px; }
 #expanded-total { font-size: 22px; line-height: 25px; overflow: hidden; text-overflow: ellipsis; }
 #expanded-total[data-long="true"] { font-size: 16px; }
@@ -14,11 +15,11 @@
 #dates { font-size: 7px; line-height: 11px; }
 #balances { gap: 3px; }
 #balances > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#status { min-width: 0; flex: 1; padding-left: 5px; text-align: left; font-size: 7px; }
+#tasks { min-width: 0; flex: 1; min-height: 18px; padding-left: 5px; text-align: left; font-size: 8px; }
 #refresh { min-width: 28px; min-height: 18px; font-size: 7px; }
 #trend { min-height: 18px; }
 #refresh:disabled { opacity: .6; cursor: default; }
-#quota-label[data-query-state="error"] #period, #quota-label[data-query-state="error"] #status { color: var(--quota-urgent-text); }
+#quota-label[data-query-state="error"] #period, #quota-label[data-query-state="error"] #balance-state { color: var(--quota-urgent-text); }
 #details :is(button, [tabindex]) { outline: none; }
 :root[data-keyboard="true"] #quota-label:has(#toggle:focus-visible) { outline: 1px solid var(--quota-subtle); outline-offset: -3px; }
 :root[data-keyboard="true"] #details :is(button, [tabindex]):focus-visible { outline: 1px solid var(--quota-subtle); outline-offset: -1px; border-radius: 3px; }

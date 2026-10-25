@@ -125,6 +125,7 @@ function safeModel(value) {
   const overflow = Number.isSafeInteger(overflowValue) && overflowValue > 0
     ? Math.min(overflowValue, 99) : 0;
   return {
+    ...(source.practice === true ? { practice: true } : {}),
     state,
     size,
     appearance,

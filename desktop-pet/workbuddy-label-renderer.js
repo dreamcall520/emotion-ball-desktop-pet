@@ -23,7 +23,8 @@
   system?.addEventListener('change', applyAppearance);
   el('toggle').addEventListener('click', () => api.toggle());
   el('refresh').addEventListener('click', () => api.refresh());
-  el('collapse').addEventListener('click', () => api.toggle());
+  el('expanded-header').addEventListener('click', () => api.toggle());
+  el('tasks').addEventListener('click', () => api.tasks());
   el('trend').addEventListener('click', () => api.trend());
   api.onState(state => {
     appearance = ['light', 'dark'].includes(state.appearance) ? state.appearance : 'system';
@@ -33,6 +34,7 @@
     document.body.dataset.expanded = String(state.expanded);
     document.body.dataset.invalid = String(Boolean(state.error || state.stale));
     el('toggle').setAttribute('aria-expanded', String(state.expanded));
+    el('expanded-header').setAttribute('aria-expanded', String(state.expanded));
     el('details').hidden = !state.expanded;
     const r = state.report, invalid = Boolean(r && (state.error || state.stale));
     el('period').textContent = invalid ? '失效' : state.busy ? '查询中' : r ? '积分' : '未连接';
@@ -57,10 +59,10 @@
     el('expiry').title = first ? `最近到期：${amount(expiring)} 积分 · ${exactDate(first.at)}` : '最近到期：暂无数据';
     el('expiry').setAttribute('aria-label', el('expiry').title);
     const status = state.spaceError ? '空间不足，保持收起；可移动球球后重试' : state.error || (state.stale ? '旧数据已失效，请刷新' : state.busy ? '正在更新…' : '');
-    const updated = r?.updatedAt === null || !r ? '尚未更新' : `更新 ${new Date(r.updatedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
-    el('status').textContent = state.spaceError ? '空间不足' : state.busy ? '查询中…' : !r ? 'WorkBuddy 未连接' : state.error ? '更新失败' : state.stale ? '旧数据失效' : updated;
-    el('status').title = `${status || updated}${r ? `；上次成功查询：${exactDate(r.updatedAt)}` : ''}`;
-    el('status').setAttribute('aria-label', el('status').title);
+    const updated = r ? `上次成功查询：${exactDate(r.updatedAt)}` : '尚未成功查询';
+    el('balance-state').title = `${r ? status || '可用积分' : `WorkBuddy 未连接${status ? `；${status}` : ''}`}；${updated}`;
+    el('balance-state').setAttribute('aria-label', el('balance-state').title);
+    el('refresh').title = `刷新 WorkBuddy 积分；${updated}`;
     el('toggle').title = status || '展开 WorkBuddy 积分';
     el('toggle').setAttribute('aria-label', `WorkBuddy ${r ? `${amount(r.total)} 积分` : '未连接'}${status ? `，${status}` : ''}`);
     el('refresh').disabled = state.busy;

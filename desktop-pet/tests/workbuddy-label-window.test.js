@@ -25,13 +25,13 @@ test('state whitelist preserves zero and old reports, strips credentials and raw
   assert.equal(safeState({report:{total:0}}).report,null);
 });
 test('constructor is lazy; IPC verifies sender and frame; expansion falls back; navigation denied',async()=> {
-  const windows=[]; let refresh=0,trend=0;
+  const windows=[]; let refresh=0,trend=0,tasks=0;
   class Window extends EventEmitter {
     constructor(options){super();this.options=options;this.visible=false;this.dead=false;this.sent=[];this.webContents=Object.assign(new EventEmitter(),{mainFrame:{},isDestroyed:()=>false,setWindowOpenHandler:h=>{this.open=h;},send:(_c,s)=>this.sent.push(s)});windows.push(this);}
     isDestroyed(){return this.dead;} isVisible(){return this.visible;} setAlwaysOnTop(){} setVisibleOnAllWorkspaces(){} setHiddenInMissionControl(){} setBounds(b){this.bounds=b;} showInactive(){this.visible=true;} hide(){this.visible=false;} destroy(){this.dead=true;this.emit('closed');} loadFile(){return Promise.resolve();}
   }
   const pet={isDestroyed:()=>false,isVisible:()=>true,getBounds:()=>({x:100,y:100,width:80,height:80})};
-  const controller=createWorkBuddyLabelWindow({BrowserWindow:Window,screen:{getDisplayMatching:()=>({workArea:{x:0,y:0,width:220,height:200}})},getPetWindow:()=>pet,onRefresh:()=>refresh++,onTrend:()=>trend++});
+  const controller=createWorkBuddyLabelWindow({BrowserWindow:Window,screen:{getDisplayMatching:()=>({workArea:{x:0,y:0,width:220,height:200}})},getPetWindow:()=>pet,onRefresh:()=>refresh++,onTrend:()=>trend++,onTasks:()=>tasks++});
   assert.equal(windows.length,0);controller.show({enabled:false});assert.equal(windows.length,0);
   controller.show({enabled:true}); await Promise.resolve(); const w=windows[0];
   assert.equal(w.options.width,128);assert.equal(w.options.height,32);
@@ -46,6 +46,10 @@ test('constructor is lazy; IPC verifies sender and frame; expansion falls back; 
   w.webContents.emit('ipc-message',event,'pet:workbuddy-label-toggle');assert.equal(w.sent.at(-1).expanded,false);assert.equal(w.sent.at(-1).spaceError,true);
   controller.hide();w.webContents.emit('ipc-message',event,'pet:workbuddy-label-refresh');assert.equal(refresh,1);
   w.webContents.emit('ipc-message',event,'pet:workbuddy-label-trend');assert.equal(trend,1);
+  w.webContents.emit('ipc-message',event,'pet:workbuddy-label-tasks');assert.equal(tasks,0);
+  controller.show({enabled:true});
+  w.webContents.emit('ipc-message',{...event,senderFrame:{}},'pet:workbuddy-label-tasks');assert.equal(tasks,0);
+  w.webContents.emit('ipc-message',event,'pet:workbuddy-label-tasks');assert.equal(tasks,1);
   controller.destroy();assert.equal(controller.getWindow(),null);
 });
 
@@ -68,7 +72,7 @@ test('WorkBuddy stacks below the Codex card and stays centered without changing 
   const pet={x:400,y:300,width:80,height:80},area={x:0,y:0,width:1000,height:900};
   for(const height of [32,58,131,144]) for(const expanded of [false,true]) {
     const codex={x:342,y:388,width:196,height};
-    const before={...codex},card=workBuddyLabelBounds(pet,area,[codex],expanded);
+    const before={...codex},card=workBuddyLabelBounds(pet,area,[codex],expanded,codex);
     assert(card);assert.equal(card.x+card.width/2,440);assert.equal(card.y,codex.y+height+8);
     assert.equal(intersects(card,codex),false);assert.deepEqual(codex,before);
   }
@@ -79,4 +83,34 @@ test('history IPC whitelists samples, deduplicates and sorts; history errors sta
   assert.deepEqual(state.history,[{at:10,total:7400},{at:30,total:7399.8}]);
   assert.equal(state.historyError,'趋势记录暂未保存');
   assert.equal(JSON.stringify(state).includes('secret'),false);
+});
+
+test('edge-tucked cards share a near-edge column across compact and expanded states', () => {
+  const area={x:-1000,y:0,width:1000,height:800};
+  for (const side of ['left','right']) for (const expanded of [false,true]) for (const y of [50,400,740]) {
+    const pet={x:side==='left'?-1050:-30,y:Math.min(y,720),width:80,height:80};
+    const codex={x:side==='left'?-998:-186,y,width:184,height:50};
+    const before={...codex};
+    const card=workBuddyLabelBounds(pet,area,[codex],expanded,codex,{side,mode:'peeked'});
+    assert(card);
+    assert.equal(intersects(card,codex),false);assert.equal(intersects(card,pet),false);
+    if(side==='left') assert.equal(card.x,codex.x);
+    else assert.equal(card.x+card.width,codex.x+codex.width);
+    assert.deepEqual(codex,before);
+  }
+});
+test('blocked anchor column never jumps to the opposite screen edge', () => {
+  const area={x:0,y:0,width:1200,height:800};
+  const pet={x:-50,y:300,width:80,height:80}, codex={x:0,y:400,width:184,height:50};
+  const wall={x:0,y:0,width:220,height:800};
+  assert.equal(workBuddyLabelBounds(pet,area,[codex,wall],true,codex,{side:'left'}),null);
+  const alone=workBuddyLabelBounds({x:1180,y:300,width:80,height:80},area,[],true);
+  assert(alone.x>900);
+});
+
+test('history metadata stays optional and only validated balance/expiry fields cross IPC', () => {
+  const state=safeState({history:[{at:1,total:10},{at:2,total:9,basic:2,reward:7,purchased:0,nextRefreshAt:30,expires:[{amount:1,at:20,token:'secret'}]},{at:3,total:8,basic:NaN,reward:-1,nextRefreshAt:Infinity,expires:[{amount:1,at:Infinity}]}]});
+  assert.deepEqual(state.history[0],{at:1,total:10});
+  assert.deepEqual(state.history[1],{at:2,total:9,basic:2,reward:7,purchased:0,nextRefreshAt:30,expires:[{amount:1,at:20}]});
+  assert.deepEqual(state.history[2],{at:3,total:8});
 });
