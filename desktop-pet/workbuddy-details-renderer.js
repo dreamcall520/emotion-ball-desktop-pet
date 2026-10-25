@@ -34,8 +34,8 @@
     el('change').textContent = '—';
     el('updated').textContent = Number.isFinite(state.report?.updatedAt) ? new Date(state.report.updatedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
     el('updated').title = '余额上次成功查询时间';
-    el('hint').textContent = '消耗统计暂不可用';
-    el('unavailable-note').textContent = '暂未取得 WorkBuddy 官方消耗记录';
+    el('hint').textContent = '个人账户消耗暂未接入';
+    el('unavailable-note').textContent = '当前仅同步积分余额，尚不能统计实际消耗。';
     const upcoming = Array.isArray(state.report?.expires) ? state.report.expires.filter(e => e.at > Date.now() && e.amount > 0).sort((a, b) => a.at - b.at) : [];
     const expiration = upcoming[0], date = at => new Date(at).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
     const expiring = expiration ? upcoming.filter(e => e.at === expiration.at).reduce((total, e) => total + e.amount, 0) : 0;

@@ -301,8 +301,8 @@ async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, detai
       await detailPage(`document.getElementById('${period}').click();document.getElementById('view-${view}').click()`);
       const observed = await detailPage(`({balance:document.getElementById('balance').textContent,consumption:document.getElementById('change').textContent,label:document.getElementById('change-label').textContent,hint:document.getElementById('hint').textContent,note:document.getElementById('unavailable-note').textContent,selected:document.getElementById('view-${view}').getAttribute('aria-selected'),hasInventedData:Boolean(document.querySelector('#chart svg,#events,#forecast'))})`);
       assert.equal(observed.balance,expectedBalance,'余额保持真实查询值');assert.equal(observed.consumption,'—','官方消费未取得保持未知');
-      assert.equal(observed.label,period==='week'?'近7天消耗':'今日消耗');assert.equal(observed.hint,'消耗统计暂不可用');
-      assert.equal(observed.note,'暂未取得 WorkBuddy 官方消耗记录');assert.equal(observed.selected,'true');assert.equal(observed.hasInventedData,false,'不展示余额曲线或推算消费');
+      assert.equal(observed.label,period==='week'?'近7天消耗':'今日消耗');assert.equal(observed.hint,'个人账户消耗暂未接入');
+      assert.equal(observed.note,'当前仅同步积分余额，尚不能统计实际消耗。');assert.equal(observed.selected,'true');assert.equal(observed.hasInventedData,false,'不展示余额曲线或推算消费');
       officialEmpty.push({period,view,...observed});
       if(outputDir)fs.writeFileSync(path.join(outputDir,`workbuddy-official-unavailable-${period}-${view}.png`),(await capture(detailWin)).toPNG());
     }

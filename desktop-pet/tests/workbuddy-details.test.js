@@ -55,11 +55,11 @@ test('consumption failure never substitutes balance drops, fake zero, curves or 
   });
   receive({ report: { total: 7399.91, updatedAt: now, nextRefreshAt: now + 7 * 86400000, expires: [{ at: now + 2 * 86400000, amount: 99.91 }] }, history: [{ at: now - 300000, total: 7500 }, { at: now, total: 7399.91 }] });
   assert.equal(get('balance').textContent, '7,399.91'); assert.equal(get('change').textContent, '—');
-  assert.equal(get('hint').textContent, '消耗统计暂不可用'); assert.equal(get('unavailable-note').textContent, '暂未取得 WorkBuddy 官方消耗记录');
+  assert.equal(get('hint').textContent, '个人账户消耗暂未接入'); assert.equal(get('unavailable-note').textContent, '当前仅同步积分余额，尚不能统计实际消耗。');
   assert.match(get('expiry-note').textContent, /99.91积分/); assert.match(get('refresh-note').textContent, /基础积分/);
   get('view-daily').listeners.click(); get('week').listeners.click();
   assert.equal(get('change-label').textContent, '近7天消耗'); assert.equal(get('change').textContent, '—');
-  assert.equal(get('hint').textContent, '消耗统计暂不可用'); assert.equal(get('view-daily').attrs['aria-selected'], 'true');
+  assert.equal(get('hint').textContent, '个人账户消耗暂未接入'); assert.equal(get('view-daily').attrs['aria-selected'], 'true');
   receive({ report: { total: 0 }, history: [] }); assert.equal(get('balance').textContent, '0'); assert.equal(get('change').textContent, '—');
   receiveColor('standard', 'dark', 'blue'); assert.equal(document.documentElement.dataset.resolvedAppearance, 'dark');
   receiveColor('accessible', 'light', 'green'); assert.equal(document.documentElement.dataset.resolvedAppearance, 'light');
