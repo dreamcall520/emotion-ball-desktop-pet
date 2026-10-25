@@ -4175,3 +4175,27 @@ test('collapsed bar and pinned subset predict the full eligible stack direction 
  f.call("settings.openaiApiAlwaysVisible=true;settings.zcodeEnabled=true;settings.zcodeQuotaAlwaysVisible=true;settings.workbuddyEnabled=true;settings.workbuddyQuotaAlwaysVisible=true;quotaLabel.getLayoutMetrics=()=>({width:128,height:32,inset:2})");
  f.pet.setPosition(-440,430,false);f.call('syncQuotaLabel()');assert.equal(f.call('quotaExpandedStackPlan().placement'),'above');assert.equal(f.call('quotaFreeStackPlan().placement'),'above');const b=f.call('quotaCardGroupWindow.getBounds()');assert(Math.abs(f.pet.getBounds().y-(b.y+13.5)-7)<=.51,'capsule paint follows the full group above although its own 20px would fit below');
 });
+
+
+test('real sleep IPC invalidates standing capsule and late offering ink cannot restore it; wake permits fresh upright ink',async t=>{
+ const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,quotaCardPinned:[]});t.after(()=>f.app.emit('before-quit'));
+ f.call("settings.openaiApiAlwaysVisible=true;settings.customization.appearance.shape='new-year-sheep';settings.customization.appearance.sheepTheme='none';petWindow.webContents.executeJavaScriptInIsolatedWorld=async()=>null;setPetSleepState('awake')");
+ const facing=f.call('sheepCapsuleContext().facing');f.send('pet:offering-state',{theme:'none',facing,settled:true,ink:{x:.1,y:.15,width:.8,height:.8}});const old=f.call('sheepCapsuleContext().key');assert(f.call('currentSheepCapsuleInk()'));
+ f.send('pet:sleep-state','sleep');assert.notEqual(f.call('sheepCapsuleContext().key'),old);assert.equal(f.call('currentSheepCapsuleInk()'),null);assert.equal(f.call('currentSheepSettledInk()'),null);
+ f.send('pet:offering-state',{theme:'none',facing,settled:true,ink:{x:.1,y:.15,width:.8,height:.8}});assert.equal(f.call('currentSheepCapsuleInk()'),null,'offering lacks sleep action identity and cannot republish standing ink');assert.equal(f.call('currentSheepSettledInk()'),null,'legacy fallback cannot restore standing ink during sleep');
+ f.call(`acceptSheepCapsuleInk({theme:'none',facing:${JSON.stringify(facing)},action:'sleep',ink:{x:.12,y:.38,width:.76,height:.55}})`);assert.equal(f.call('currentSheepCapsuleInk().ink.y'),.38);
+ f.send('pet:sleep-state','awake');assert.equal(f.call('currentSheepCapsuleInk()'),null);f.send('pet:offering-state',{theme:'none',facing,settled:true,ink:{x:.1,y:.15,width:.8,height:.8}});assert.equal(f.call('currentSheepCapsuleInk().ink.y'),.15);
+});
+
+test('an awake canvas read finishing after trusted sleep IPC cannot restore standing capsule',async t=>{
+ const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,quotaCardPinned:[]});t.after(()=>f.app.emit('before-quit'));let finish;f.pet.webContents.executeJavaScriptInIsolatedWorld=()=>new Promise(resolve=>finish=resolve);
+ f.call("settings.openaiApiAlwaysVisible=true;settings.customization.appearance.shape='new-year-sheep';settings.customization.appearance.sheepTheme='none';petSleepState='awake';sheepCapsuleReadAt=0;refreshSheepCapsuleInk()");const facing=f.call('sheepCapsuleContext().facing');f.send('pet:sleep-state','sleep');finish({theme:'none',facing,action:'idle',ink:{x:.1,y:.1,width:.8,height:.8}});await flush();assert.equal(f.call('currentSheepCapsuleInk()'),null);assert.equal(f.call('currentSheepSettledInk()'),null);
+});
+
+test('real group hover timer retries a not-yet-painted sleep canvas without another offering IPC',async t=>{
+ const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,quotaCardPinned:[]});t.after(()=>f.app.emit('before-quit'));let reads=0;
+ f.call("settings.openaiApiAlwaysVisible=true;settings.customization.appearance.shape='new-year-sheep';settings.customization.appearance.sheepTheme='none';petSleepState='awake'");const facing=f.call('sheepCapsuleContext().facing');
+ f.pet.webContents.executeJavaScriptInIsolatedWorld=async()=>++reads===1?null:{theme:'none',facing,action:'sleep',ink:{x:.12,y:.38,width:.76,height:.55}};
+ f.send('pet:sleep-state','sleep');await flush();assert.equal(reads,1);assert.equal(f.call('currentSheepCapsuleInk()'),null);
+ f.advanceTo(599);await flush();assert.equal(reads,1,'600ms minimum protects frame reads');f.advanceTo(720);await flush();assert.equal(reads,2);assert.equal(f.call('currentSheepCapsuleInk().ink.y'),.38,'actual scheduled group tick recovers when sleep paint is ready');
+});

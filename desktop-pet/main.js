@@ -399,6 +399,7 @@ let petSleepState = 'unknown';
 function setPetSleepState(state) {
   if (petSleepState === state) return;
   petSleepState = state;
+  if(settings?.customization?.appearance?.shape==='new-year-sheep'){sheepCapsuleInk=null;sheepBarInk=null;sheepCapsuleReadAt=0;sheepCapsuleRevision++;syncQuotaCardGroup();}
   if (globalSettingsWindow && !globalSettingsWindow.isDestroyed()) {
     try { globalSettingsWindow.webContents.send('pet:global-settings-sleep-state', state); } catch (_) {}
   }
@@ -1051,13 +1052,14 @@ function quotaObstacleBounds() {
 function sheepCapsuleContext() {
   if(settings?.customization?.appearance?.shape!=='new-year-sheep'||!petWindow||petWindow.isDestroyed())return null;
   const pet=petWindow.getBounds(),theme=SheepTheme.resolveTheme(settings.customization.appearance.sheepTheme,new Date()),facing=PetFacing.resolve(pet,screen.getDisplayMatching(pet).workArea);
-  return {theme,facing,key:JSON.stringify([theme,facing,pet.width,pet.height,codexPageEpoch,sheepCapsuleRevision])};
+  const pose=petSleepState==='sleep'?'sleep':'awake';
+  return {theme,facing,pose,key:JSON.stringify([theme,facing,pose,pet.width,pet.height,codexPageEpoch,sheepCapsuleRevision])};
 }
 function currentSheepSettledInk() { const c=sheepCapsuleContext();return c&&sheepBarInk?.key===c.key?sheepBarInk:null; }
 function currentSheepCapsuleInk() { const c=sheepCapsuleContext();return c&&sheepCapsuleInk?.key===c.key?sheepCapsuleInk:null; }
 function acceptSheepCapsuleInk(value,context=sheepCapsuleContext()) {
   const b=value?.ink;
-  if(!context||value.theme!==context.theme||value.facing!==context.facing||!b||![b.x,b.y,b.width,b.height].every(Number.isFinite)||b.x<0||b.y<0||b.width<=0||b.height<=0||b.x+b.width>1.001||b.y+b.height>1.001)return false;
+  if(!context||(context.pose==='sleep'&&value?.action!=='sleep')||value.theme!==context.theme||value.facing!==context.facing||!b||![b.x,b.y,b.width,b.height].every(Number.isFinite)||b.x<0||b.y<0||b.width<=0||b.height<=0||b.x+b.width>1.001||b.y+b.height>1.001)return false;
   const old=currentSheepCapsuleInk(),size=petWindow.getBounds();
   if(old&&['x','y','width','height'].every(k=>Math.abs(old.ink[k]-b[k])*(k==='x'||k==='width'?size.width:size.height)<2))return true;
   sheepCapsuleInk={key:context.key,theme:context.theme,facing:context.facing,ink:{x:b.x,y:b.y,width:b.width,height:b.height}};return true;
@@ -1068,7 +1070,7 @@ function refreshSheepCapsuleInk() {
   if(sheepCapsuleReadKey!==context.key){sheepCapsuleReadKey=context.key;sheepCapsuleReadCount=0;}if(sheepCapsuleReadCount>=8)return;sheepCapsuleReadCount++;
   const owner=petWindow;if(typeof owner.webContents.executeJavaScriptInIsolatedWorld!=='function')return;
   sheepCapsuleReadAt=Date.now();
-  const code=`(()=>{const host=document.getElementById('pet'),c=host?.querySelector('canvas.sheep-skin');if(!c||c.dataset.ready!=='true'||c.dataset.transition)return null;const h=host.getBoundingClientRect(),r=c.getBoundingClientRect(),s=Math.min(r.width,r.height);if(!h.width||!h.height||!s)return null;const d=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let x0=c.width,y0=c.height,x1=-1,y1=-1;for(let y=0;y<c.height;y++)for(let x=0;x<c.width;x++)if(d[(y*c.width+x)*4+3]>24){x0=Math.min(x0,x);y0=Math.min(y0,y);x1=Math.max(x1,x);y1=Math.max(y1,y)}if(x1<0)return null;return {theme:c.dataset.theme,facing:c.dataset.facing,ink:{x:(r.left+(r.width-s)/2-h.left+x0/c.width*s)/h.width,y:(r.top+(r.height-s)/2-h.top+y0/c.height*s)/h.height,width:(x1+1-x0)/c.width*s/h.width,height:(y1+1-y0)/c.height*s/h.height}}})()`;
+  const code=`(()=>{const host=document.getElementById('pet'),c=host?.querySelector('canvas.sheep-skin');if(!c||c.dataset.ready!=='true'||c.dataset.transition||(${JSON.stringify(context.pose)}==='sleep'?c.dataset.action!=='sleep':c.dataset.action==='sleep'))return null;const h=host.getBoundingClientRect(),r=c.getBoundingClientRect(),s=Math.min(r.width,r.height);if(!h.width||!h.height||!s)return null;const d=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let x0=c.width,y0=c.height,x1=-1,y1=-1;for(let y=0;y<c.height;y++)for(let x=0;x<c.width;x++)if(d[(y*c.width+x)*4+3]>24){x0=Math.min(x0,x);y0=Math.min(y0,y);x1=Math.max(x1,x);y1=Math.max(y1,y)}if(x1<0)return null;if(c.dataset.action==='sleep'){const seen=new Uint8Array(c.width*c.height);let best=[];for(let i=0;i<seen.length;i++){if(seen[i]||d[i*4+3]<=24)continue;const q=[i];seen[i]=1;for(let j=0;j<q.length;j++){const p=q[j],x=p%c.width,y=Math.floor(p/c.width);for(const n of [x? p-1:-1,x+1<c.width?p+1:-1,y?p-c.width:-1,y+1<c.height?p+c.width:-1])if(n>=0&&!seen[n]&&d[n*4+3]>24){seen[n]=1;q.push(n)}}if(q.length>best.length)best=q}x0=c.width;y0=c.height;x1=y1=-1;for(const p of best){const x=p%c.width,y=Math.floor(p/c.width);x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y)}}return {action:c.dataset.action,theme:c.dataset.theme,facing:c.dataset.facing,ink:{x:(r.left+(r.width-s)/2-h.left+x0/c.width*s)/h.width,y:(r.top+(r.height-s)/2-h.top+y0/c.height*s)/h.height,width:(x1+1-x0)/c.width*s/h.width,height:(y1+1-y0)/c.height*s/h.height}}})()`;
   sheepCapsuleRead=Promise.resolve(owner.webContents.executeJavaScriptInIsolatedWorld(1006,[{code}])).then(value=>{
     if(owner===petWindow&&!owner.isDestroyed()&&sheepCapsuleContext()?.key===context.key&&!quotaCardGroupTransition?.isActive()&&!quotaCardGroup?.getState().expanded&&acceptSheepCapsuleInk(value,context))syncQuotaCardGroup();
   }).catch(()=>{}).finally(()=>{sheepCapsuleRead=null;});
@@ -3380,7 +3382,7 @@ function registerIpc() {
       if(acceptSheepCapsuleInk(state,context))syncQuotaCardGroup();
       else if(!ink&&state?.settled!==true){sheepCapsuleInk=null;sheepCapsuleReadAt=0;sheepCapsuleReadCount=0;refreshSheepCapsuleInk();}
     }
-    if(current&&!quotaCardGroupTransition?.isActive()&&!quotaCardGroup?.getState().expanded&&state?.settled===true&&ink&&[ink.x,ink.y,ink.width,ink.height].every(Number.isFinite)&&ink.x>=0&&ink.y>=0&&ink.width>0&&ink.height>0&&ink.x+ink.width<=1.001&&ink.y+ink.height<=1.001) {
+    if(current&&context.pose!=='sleep'&&!quotaCardGroupTransition?.isActive()&&!quotaCardGroup?.getState().expanded&&state?.settled===true&&ink&&[ink.x,ink.y,ink.width,ink.height].every(Number.isFinite)&&ink.x>=0&&ink.y>=0&&ink.width>0&&ink.height>0&&ink.x+ink.width<=1.001&&ink.y+ink.height<=1.001) {
       sheepBarInk={key:context.key,theme:context.theme,facing:context.facing,ink:{x:ink.x,y:ink.y,width:ink.width,height:ink.height}};syncQuotaCardGroup();
     }
     sheepOfferingWindow?.update(state);
