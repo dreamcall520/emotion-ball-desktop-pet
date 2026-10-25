@@ -24,7 +24,7 @@ async function until(read, label) {
   for (let n = 0; n < 200; n++) { if (await read()) return; await wait(50); }
   throw new Error('等待失败：' + label);
 }
-async function verifyWorkBuddyIntegration({ pet, quota, label, chat, chatWindow, openChat, setProvider, setEnabled, getSettings, getCodex, menuTemplate, setSize, outputDir, live = false }) {
+async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, chat, chatWindow, openChat, setProvider, setEnabled, getSettings, getCodex, menuTemplate, setSize, outputDir, live = false }) {
   if (outputDir) fs.mkdirSync(outputDir, { recursive: true });
   const codexBefore = JSON.stringify(getCodex());
   const codexSettings = Object.fromEntries(Object.entries(getSettings()).filter(([k]) => k.startsWith('codex')));
@@ -46,20 +46,46 @@ async function verifyWorkBuddyIntegration({ pet, quota, label, chat, chatWindow,
     assert(!(a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y));
   }
   setSize('tiny');
+  const area = require('electron').screen.getDisplayMatching(pet.getBounds()).workArea;
+  const centeredPet = pet.getBounds();
+  centeredPet.y = Math.round(area.y + (area.height - centeredPet.height) / 2);
+  for (const offset of [-40, 40]) {
+    centeredPet.x = Math.round(area.x + (area.width - centeredPet.width) / 2 + offset);
+    pet.setBounds(centeredPet); label.reposition();
+    await until(() => { const a=win.getBounds(),b=pet.getBounds(); return Math.abs(a.x+a.width/2-b.x-b.width/2)<=1; }, '收起卡随球球居中移动');
+  }
   if (outputDir) fs.writeFileSync(path.join(outputDir, 'quota-compact.png'), (await capture(win)).toPNG());
   await page("document.querySelector('button').click()");
   await wait(100);
-  const cardFit = await page(`(() => { const ids = ['toggle','api-month-cost','balances','refresh-date','expiry','status','refresh','chat']; return ids.every(id => { const e = document.getElementById(id); if (!e || getComputedStyle(e).display === 'none') return true; const r=e.getBoundingClientRect(); return r.x >= 0 && r.y >= 0 && r.right <= innerWidth && r.bottom <= innerHeight; }); })()`);
+  { const a=win.getBounds(),b=pet.getBounds(); assert(Math.abs(a.x+a.width/2-b.x-b.width/2)<=1, '展开卡居中'); }
+  const cardFit = await page(`(() => { const ids = ['toggle','api-month-cost','balances','refresh-date','expiry','trend','status','refresh']; return ids.every(id => { const e = document.getElementById(id); if (!e || getComputedStyle(e).display === 'none') return true; const r=e.getBoundingClientRect(); return r.x >= 0 && r.y >= 0 && r.right <= innerWidth && r.bottom <= innerHeight; }); })()`);
+  if (!cardFit) process.stdout.write('WB_CARD_LAYOUT ' + JSON.stringify(await page(`Object.fromEntries(['toggle','api-month-cost','balances','dates','trend','api-footer','refresh'].map(id=>{const r=document.getElementById(id).getBoundingClientRect();return [id,{y:r.y,bottom:r.bottom,height:r.height,window:innerHeight}]}))`)) + '\n');
   assert.equal(cardFit, true, '展开信息和操作完整显示');
+  const layout = await page(`(() => { const rect=id=>{const r=document.getElementById(id).getBoundingClientRect();return {top:r.top,bottom:r.bottom};};return {rows:['toggle','api-month-cost','balances','dates','trend','api-footer'].map(rect),toggleOutline:getComputedStyle(document.getElementById('toggle')).outlineStyle,cardOutline:getComputedStyle(document.getElementById('quota-label')).outlineStyle}; })()`);
+  for (let i=1;i<layout.rows.length;i++) assert(layout.rows[i].top >= layout.rows[i-1].bottom - 0.5, '展开信息行互不覆盖');
+  assert.equal(layout.toggleOutline, 'none', '鼠标展开按钮无默认选中框');
+  assert.equal(layout.cardOutline, 'none', '鼠标展开卡片无默认选中框');
   if (outputDir) fs.writeFileSync(path.join(outputDir, 'quota-expanded.png'), (await capture(win)).toPNG());
   for (const [mode, appearance] of [['standard','dark'],['accessible','light'],['accessible','dark']]) {
     win.webContents.send('pet:color-mode', mode, appearance, 'blue');
     await until(() => page(`document.documentElement.dataset.colorMode === ${JSON.stringify(mode)} && document.documentElement.dataset.appearance === ${JSON.stringify(appearance)}`), '额度卡主题');
     await page('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
-    assert.equal(await page("document.getElementById('chat').getBoundingClientRect().bottom <= innerHeight"), true);
+    assert.equal(await page("document.getElementById('refresh').getBoundingClientRect().bottom <= innerHeight && !document.getElementById('chat')"), true);
     if (outputDir) fs.writeFileSync(path.join(outputDir, `quota-${mode}-${appearance}.png`), (await capture(win)).toPNG());
   }
   win.webContents.send('pet:color-mode', 'standard', 'system', 'blue');
+  assert.equal(await page("!document.getElementById('chat') && document.getElementById('trend-chart').getAttribute('role') === 'img'"), true);
+  if (codexLabel) {
+    codexLabel.show({ state: 'ready', items: [{ id: 'smoke-codex', label: 'Codex', windowMinutes: 300, remaining: 47.6, resetsAt: Date.now() + 3600000 }], overflow: 0, resetCreditsAvailable: 1 });
+    await until(() => codexLabel.getWindow()?.isVisible(), 'Codex卡与WB同时显示');
+    label.reposition();
+    const codexBounds = codexLabel.getWindow().getBounds(), wbBounds = win.getBounds(), petBounds = pet.getBounds();
+    assert.equal(win.isVisible(), true);
+    assert(!(wbBounds.x < codexBounds.x + codexBounds.width && wbBounds.x + wbBounds.width > codexBounds.x && wbBounds.y < codexBounds.y + codexBounds.height && wbBounds.y + wbBounds.height > codexBounds.y), '双额度卡不重叠');
+    assert(Math.abs(wbBounds.x + wbBounds.width / 2 - petBounds.x - petBounds.width / 2) <= 1, '双卡并存时WB仍居中');
+    if (outputDir) fs.writeFileSync(path.join(outputDir, 'dual-cards-bounds.json'), JSON.stringify({ codex: codexBounds, workbuddy: wbBounds, pet: petBounds }, null, 2));
+    codexLabel.hide(); label.reposition();
+  }
 
   await setProvider('workbuddy'); openChat();
   await until(() => chat.getState().modelsStatus === 'ready' && chatWindow.isVisible(), '聊天连接');

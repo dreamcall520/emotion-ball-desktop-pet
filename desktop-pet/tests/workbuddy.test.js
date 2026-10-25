@@ -39,6 +39,21 @@ test('quota uses remaining balances, matches all detail batches, separates base 
   const zero = quotaReport({ IsPaidUser: false, Packages: [] }, [], now); assert.equal(zero.total, 0);
 });
 async function* chunks(text, size = 1) { const bytes = Buffer.from(text); for (let index = 0; index < bytes.length; index += size) yield bytes.subarray(index, index + size); }
+test('quota preserves precise fractional balances after chat usage and still rejects inconsistent details', () => {
+  const now = Date.parse('2026-10-25T00:00:00+08:00');
+  const at = Date.parse('2026-10-28T12:05:57+08:00');
+  const summary = { IsPaidUser: false, Packages: [{ PackageCode: rewardCode, CycleTotalCapacity: '100',
+    CycleUsedCapacity: '0.09', CycleRemainCapacity: '99.91' }] };
+  const accounts = [{ PackageCode: rewardCode, CycleCapacityRemain: 99, CycleCapacityRemainPrecise: '99.91', DeductionEndTime: at }];
+  const report = quotaReport(summary, accounts, now);
+  assert.equal(report.reward, 99.91); assert.equal(report.total, 99.91); assert.equal(report.expires[0].amount, 99.91);
+  const tiny = { IsPaidUser: false, Packages: [{ PackageCode: rewardCode, CycleRemainCapacity: '0.09' }] };
+  const tinyReport = quotaReport(tiny, [{ ...accounts[0], CycleCapacityRemain: 0, CycleCapacityRemainPrecise: '0.09' }], now);
+  assert.equal(tinyReport.expires[0].amount, 0.09);
+  assert.throws(() => quotaReport(summary, [{ ...accounts[0], CycleCapacityRemainPrecise: '99.90' }], now), { code: 'INVALID_RESPONSE' });
+  assert.throws(() => quotaReport(summary, [{ ...accounts[0], CycleCapacityRemainPrecise: 'invalid' }], now), { code: 'INVALID_RESPONSE' });
+  assert.throws(() => quotaReport(summary, [{ ...accounts[0], CycleCapacityRemainPrecise: '' }], now), { code: 'INVALID_RESPONSE' });
+});
 test('SSE handles split UTF8 and CRLF, requires terminal and rejects tool calls/truncation', async () => {
   const stream = 'data: {"choices":[{"delta":{"content":"你好","tool_calls":[],"function_call":{"name":"","arguments":""}}}]}\r\n\r\ndata: {"choices":[{"delta":{"content":"","tool_calls":[],"function_call":{"name":null,"arguments":null}},"finish_reason":"stop"}]}\r\n\r\ndata: [DONE]\r\n\r\n';
   const deltas = []; assert.equal(await readSse(chunks(stream), value => deltas.push(value)), '你好'); assert.deepEqual(deltas, ['你好']);

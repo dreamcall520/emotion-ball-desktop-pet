@@ -5,11 +5,18 @@ const path = require('node:path');
 const vm = require('node:vm');
 test('renderer distinguishes zero/stale/no data and only sums matching expiry times', () => {
   const elements = new Map(); let render, colorMode;
-  const document = { documentElement:{dataset:{}},body:{dataset:{}},getElementById(id) {
-    if (!elements.has(id)) elements.set(id,{textContent:'',dataset:{},addEventListener(){},setAttribute(){}});
+  const events = {};
+  const node = () => ({textContent:'',dataset:{},attributes:{},children:[],addEventListener(){},setAttribute(key,value){this.attributes[key]=value;},appendChild(child){this.children.push(child);return child;},replaceChildren(){this.children=[];}});
+  const document = { addEventListener(name, handler) { events[name] = handler; }, createElementNS(){return node();}, documentElement:{dataset:{}},body:{dataset:{}},getElementById(id) {
+    if (!elements.has(id)) elements.set(id,node());
     return elements.get(id);
   }};
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../workbuddy-label-renderer.js'),'utf8'),{document,window:{qiuqiuWorkBuddyLabel:{onState(cb){render=cb;},onColorMode(cb){colorMode=cb;}}}});
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../workbuddy-label-renderer.js'),'utf8'),{document,window:{TrendCurve:require('../quota-trend-curve'),qiuqiuWorkBuddyLabel:{onState(cb){render=cb;},onColorMode(cb){colorMode=cb;}}}});
+  assert.notEqual(document.documentElement.dataset.keyboard,'true');
+  events.keydown({key:'Tab'});
+  assert.equal(document.documentElement.dataset.keyboard,'true');
+  events.pointerdown();
+  assert.equal(document.documentElement.dataset.keyboard,'false');
   colorMode('accessible','dark','blue');
   assert.equal(document.documentElement.dataset.colorMode,'accessible');
   assert.equal(document.documentElement.dataset.uiTheme,'blue');
@@ -28,11 +35,24 @@ test('renderer distinguishes zero/stale/no data and only sums matching expiry ti
   assert.match(elements.get('status').textContent,/失效/);
   assert.equal(elements.get('period').textContent,'失效');
   assert.match(elements.get('api-month-cost').title,/旧数据已失效/);
+  render({report:null,error:'更新失败',expanded:true});
+  assert.equal(elements.get('period').textContent,'未连接');
+  assert.equal(elements.get('status').textContent,'WorkBuddy 未连接');
   render({report:null,expanded:false,spaceError:true});
   assert.equal(elements.get('total').textContent,'—');
   assert.equal(elements.get('expanded-total').textContent,'—');
   assert.equal(elements.get('api-month-cost').dataset.empty,'true');
   assert.match(elements.get('toggle').title,/空间不足/);
+  const chart=elements.get('trend-chart');
+  render({report,history:[],expanded:true});
+  assert.equal(elements.get('trend-note').textContent,'等待记录');
+  render({report,history:[{at:0,total:7400}],expanded:true});
+  assert.equal(elements.get('trend-note').textContent,'已记录 1 次');
+  assert.equal(chart.children.some(n=>n.attributes.class==='observed-line'),false);
+  render({report,history:[{at:0,total:7400},{at:300000,total:7399.91},{at:1500000,total:7000}],expanded:true});
+  assert.equal(chart.children.some(n=>n.attributes.class==='observed-line'),true);
+  assert.equal(chart.children.some(n=>n.attributes.class==='unrecorded-line'),true);
+  assert.match(chart.attributes['aria-label'],/3 次实际采样/);
 });
 
 test('card reuses quota/API visual styles and shared accessibility tokens', () => {
@@ -41,5 +61,7 @@ test('card reuses quota/API visual styles and shared accessibility tokens', () =
   for (const sheet of ['quota-label.css','api-usage-label.css','color-mode.css']) assert.ok(html.includes(sheet));
   for (const name of ['quota-beam','quota-label','summary-badge','summary-value','compact-header','period-pill']) assert.ok(html.includes(name));
   assert.match(css,/var\(--quota-subtle\)/);
+  assert.ok(html.includes('quota-trend-curve.js'));
+  assert.equal(html.includes('id="chat"'),false);
   assert.doesNotMatch(css,/#[0-9a-f]{3,8}\b/i);
 });

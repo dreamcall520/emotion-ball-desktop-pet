@@ -103,19 +103,21 @@ const FREE = [code('001', 'PqouKr6QWV'), BASIC, code('035', 'ArVxJcGDsm'), code(
 function quotaReport(summary, accounts, now = Date.now()) {
   check(summary.IsPaidUser === false && Array.isArray(summary.Packages), 'UNSUPPORTED_ACCOUNT');
   check(summary.Packages.every(p => p.PackageCode === BASIC || p.PackageCode === REWARD), 'UNSUPPORTED_ACCOUNT');
-  const remaining = p => p.CycleCapacityRemain === undefined ? amount(p.CycleTotalCapacity) - amount(p.CycleUsedCapacity) : amount(p.CycleCapacityRemain);
+  const remaining = p => p.CycleRemainCapacity === undefined ? amount(p.CycleTotalCapacity) - amount(p.CycleUsedCapacity) : amount(p.CycleRemainCapacity);
+  const detailRemaining = p => amount(p.CycleCapacityRemainPrecise == null || p.CycleCapacityRemainPrecise === ''
+    ? p.CycleCapacityRemain : p.CycleCapacityRemainPrecise);
   const sum = packageCode => summary.Packages.filter(p => p.PackageCode === packageCode).reduce((total, p) => total + remaining(p), 0);
   const basic = sum(BASIC), reward = sum(REWARD); check(basic >= 0 && reward >= 0);
   for (const packageCode of [BASIC, REWARD]) {
-    const detail = accounts.filter(p => p.PackageCode === packageCode).reduce((total, p) => total + amount(p.CycleCapacityRemain), 0);
+    const detail = accounts.filter(p => p.PackageCode === packageCode).reduce((total, p) => total + detailRemaining(p), 0);
     check(Math.abs(detail - sum(packageCode)) < 0.000001);
   }
   const basicAccounts = accounts.filter(p => p.PackageCode === BASIC);
   check(basicAccounts.length <= 1);
   const nextRefreshAt = basicAccounts.length ? timestamp(basicAccounts[0].CycleEndTime) + 1000 : null;
-  const expires = accounts.filter(p => p.PackageCode === REWARD && amount(p.CycleCapacityRemain) > 0).map(p => {
+  const expires = accounts.filter(p => p.PackageCode === REWARD && detailRemaining(p) > 0).map(p => {
     const at = Number(p.DeductionEndTime); check(Number.isFinite(at) && at > now);
-    return { amount: amount(p.CycleCapacityRemain), at };
+    return { amount: detailRemaining(p), at };
   }).sort((a, b) => a.at - b.at);
   return { total: basic + reward, basic, reward, purchased: 0, plan: '体验版', nextRefreshAt, expires, updatedAt: now };
 }

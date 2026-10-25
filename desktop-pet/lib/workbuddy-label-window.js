@@ -6,13 +6,17 @@ const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b
 function workBuddyLabelBounds(pet, area, obstacles = [], expanded = false) {
   if (!valid(pet) || !valid(area)) return null;
   const { width } = quotaLabelSize(expanded ? 'compactExpanded' : 'compact');
-  const height = expanded ? 108 : quotaLabelSize('compact').height;
+  const height = expanded ? 174 : quotaLabelSize('compact').height;
   const gap = 8;
   const blocked = [pet, ...obstacles.filter(valid)];
-  const xs = [pet.x, pet.x + pet.width - width, area.x, area.x + area.width - width];
+  const centerX = pet.x + (pet.width - width) / 2;
+  const xs = [centerX, pet.x, pet.x + pet.width - width, area.x, area.x + area.width - width];
   const ys = [pet.y + pet.height + gap, pet.y - height - gap, area.y, area.y + area.height - height];
   for (const b of blocked) { xs.push(b.x - width - gap, b.x + b.width + gap); ys.push(b.y - height - gap, b.y + b.height + gap); }
-  for (const y of ys) for (const x of xs) {
+  const below = { x: centerX, y: ys[0], width, height };
+  const stack = obstacles.filter(valid).filter(b => overlaps(below, b)).map(b => b.y + b.height + gap).sort((a, b) => a - b);
+  const candidates = [...[ys[0], ...stack, ys[1]].map(y => ({ x: centerX, y })), ...ys.flatMap(y => xs.map(x => ({ x, y })))];
+  for (const { x, y } of candidates) {
     const b = { x: Math.round(x), y: Math.round(y), width, height };
     if (b.x >= area.x && b.y >= area.y && b.x + width <= area.x + area.width && b.y + height <= area.y + area.height && !blocked.some(o => overlaps(b, o))) return b;
   }
@@ -28,11 +32,14 @@ function safeState(state) {
     nextRefreshAt: date(r.nextRefreshAt), updatedAt: date(r.updatedAt),
     expires: Array.isArray(r.expires) ? r.expires.filter(e => e && number(e.amount) && date(e.at) !== null).map(e => ({ amount: e.amount, at: e.at })) : []
   } : null;
+  const history = Array.isArray(state?.history) ? [...new Map(state.history.filter(sample =>
+    sample && Number.isSafeInteger(sample.at) && sample.at >= 0 && sample.at <= 8640000000000000 && number(sample.total))
+    .map(sample => [sample.at, { at: sample.at, total: sample.total }])).values()].sort((a, b) => a.at - b.at).slice(-6000) : [];
   // Only fixed status text crosses IPC; upstream errors can contain credentials.
   return { enabled: state?.enabled === true, busy: state?.busy === true,
-    error: state?.error ? '更新失败，请检查 WorkBuddy 登录状态' : null, stale: state?.stale === true, report };
+    error: state?.error ? '更新失败，请稍后重试' : null, stale: state?.stale === true, report, history, historyError: state?.historyError ? '趋势记录暂未保存' : null };
 }
-function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getObstacles = () => [], getAppearance = () => 'system', alwaysOnTop = true, onRefresh = () => {}, onChat = () => {}, onError = () => {} }) {
+function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getObstacles = () => [], getAppearance = () => 'system', alwaysOnTop = true, onRefresh = () => {}, onError = () => {} }) {
   let win = null, ready = false, visible = false, expanded = false, current = null, top = Boolean(alwaysOnTop);
   const error = e => { try { onError(e); } catch (_) {} };
   const live = w => w && !w.isDestroyed() && !w.webContents.isDestroyed?.();
@@ -68,7 +75,6 @@ function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getOb
       try {
         if (channel === `${CHANNEL}-toggle`) { expanded = !expanded; reposition(); }
         if (channel === `${CHANNEL}-refresh` && !current.busy) onRefresh();
-        if (channel === `${CHANNEL}-chat`) onChat();
       } catch (err) { error(err); }
     });
     target.on('closed', () => { if (win === target) { win = null; ready = false; } });

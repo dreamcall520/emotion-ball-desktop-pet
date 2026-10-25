@@ -2118,7 +2118,7 @@ async function finishSmokeTest() {
 
     if (process.env.PET_SMOKE_WORKBUDDY_ONLY === '1') {
       await require('./scripts/verify-workbuddy-integration').verifyWorkBuddyIntegration({
-        pet: petWindow, quota: workbuddyQuota, label: workbuddyLabel, chat: workbuddyChat, chatWindow,
+        pet: petWindow, quota: workbuddyQuota, label: workbuddyLabel, codexLabel: quotaLabel, chat: workbuddyChat, chatWindow,
         openChat, setProvider: setChatProvider, setEnabled: setWorkBuddyEnabled, getSettings: () => settings,
         getCodex: () => codexCompanion?.getSnapshot(), menuTemplate, setSize: setPetSize,
         outputDir: process.env.PET_SMOKE_WORKBUDDY_OUTPUT, live: process.env.PET_SMOKE_WORKBUDDY_LIVE === '1' });
@@ -3340,7 +3340,7 @@ async function bootstrap() {
     onModelSelection: workbuddyModel => { settings = saveSettings(settingsFile, { ...settings, workbuddyModel }); },
     onChange: state => { if (!screenLocked && settings.chatProvider === 'workbuddy') chatWindow.update(chatSnapshot(state)); },
     onAction: performChatAction });
-  workbuddyQuota = createWorkBuddyQuota({ run: workbuddyRun, onChange: () => syncWorkBuddyLabel() });
+  workbuddyQuota = createWorkBuddyQuota({ run: workbuddyRun, historyFile: path.join(app.getPath('userData'), 'workbuddy-quota-history.json'), onChange: () => syncWorkBuddyLabel() });
   workbuddyLabel = createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
     getObstacles: () => [quotaLabel, apiUsageLabel, bubble, shortcutWindow, quotaGuard].flatMap(controller => {
       const win = controller?.getWindow();
@@ -3348,7 +3348,7 @@ async function bootstrap() {
     }),
     getAppearance: () => settings.codexQuotaAppearance,
     alwaysOnTop: settings.alwaysOnTop,
-    onRefresh: () => { void workbuddyQuota.refresh(); }, onChat: () => { void openWorkBuddyChat(); },
+    onRefresh: () => { void workbuddyQuota.refresh(); },
     onError: () => {} });
   app.on('browser-window-created', (_event, win) => {
     for (const event of ['move', 'resize', 'show', 'hide', 'closed']) win.on(event, () => {
@@ -3397,7 +3397,7 @@ async function bootstrap() {
       sheepInk: sheepQuotaInk?.quotaStyle === quotaDisplayConfig().style ? sheepQuotaInk : null
     }),
     alwaysOnTop: settings.alwaysOnTop,
-    onLayout: () => pomodoroWindows?.sync(),
+    onLayout: () => { pomodoroWindows?.sync(); workbuddyLabel?.reposition(); },
     onError: error => writeError('额度标签窗口', error)
   });
   quotaGuard = createQuotaGuardWindow({ BrowserWindow, screen,
