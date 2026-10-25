@@ -23,6 +23,8 @@
     '互动气泡': '控制球球的对白与互动提示。',
     '始终置顶': '让球球保持在其他窗口上方。',
     '启用 Codex 联动': '读取本机 Codex 任务与额度；开启时会说明读取范围并请求确认。',
+    '启用 ZCode 联动': '读取本机 ZCode 套餐、额度与任务；开启时会说明读取范围并请求确认，可在聊天中选择 ZCode。',
+    '显示 ZCode 额度': '独立显示 ZCode 额度卡；隐藏卡片不关闭 ZCode 联动。',
     '显示 API 本月费用卡': 'API 统计独立于 Codex 订阅额度，需要连接管理员 Key。',
     '自动提醒新版本': '自动检查并提醒，不会自动下载安装。',
     '定制球球': '形象、配色、透明度、启动外观与额度展示样式。',
@@ -51,6 +53,7 @@
     '贴边与显示': ['M6 4h12a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Z', 'M8 4v16M17 9l-3 3 3 3M14 12h4'],
     '界面配色': ['M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.4-3.4 1.7 1.7 0 0 1 1.2-2.9H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3Z', 'M7 10h.01M10 7h.01M15 7h.01M18 10h.01'],
     'Codex 与 API': ['m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16'],
+    'ZCode 联动': ['m5 5h14L5 19h14', 'M5 12h14'],
     '常规设置': ['M4 6h7M15 6h5M4 12h2M10 12h10M4 18h10M18 18h2', 'M11 4v4M6 10v4M14 16v4']
   };
   function navigationIcon(label) {
@@ -106,7 +109,7 @@
       ['', ['常用设置']],
       ['日常陪伴', ['球球与互动', '和球球聊聊', '便签与待办', '番茄钟']],
       ['外观与显示', ['定制球球', '球球尺寸', '贴边与显示', '界面配色']],
-      ['应用与联动', ['Codex 与 API', 'API 费用与用量', '快捷键', '常规设置']]
+      ['应用与联动', ['Codex 与 API', 'ZCode 联动', 'API 费用与用量', '快捷键', '常规设置']]
     ];
     $('navigation').replaceChildren(...navigationGroups.map(([label, labels]) => {
       const section = el('div', '', 'nav-group');
@@ -166,7 +169,9 @@
       for (const item of items) {
         const row = el('div', '', `row${item.enabled ? '' : ' unavailable'}`);
         const text = el('div'); text.append(el('div', item.label, 'row-title'));
-        const detail = [item.trail.join(' / '), descriptions[item.label], !item.enabled && (item.id.includes('/codex-') && snapshot.entries.find(entry => entry.id === '/codex-menu')?.children.find(entry => entry.id.endsWith('/codex-enabled'))?.checked === false ? '请先开启「启用 Codex 联动」。' : '当前不可用，请先开启对应功能或满足使用条件。')].filter(Boolean).join(' · ');
+        const provider = item.id.startsWith('/zcode-menu/') ? 'zcode' : item.id.includes('/codex-') ? 'codex' : null;
+        const providerOff = provider && snapshot.entries.find(entry => entry.id === `/${provider}-menu`)?.children.find(entry => entry.id.endsWith(`/${provider}-enabled`))?.checked === false;
+        const detail = [item.trail.join(' / '), descriptions[item.label], !item.enabled && (providerOff ? `请先开启「启用 ${provider === 'zcode' ? 'ZCode' : 'Codex'} 联动」。` : '当前不可用，请先开启对应功能或满足使用条件。')].filter(Boolean).join(' · ');
         if (detail) text.append(el('p', detail, 'description'));
         row.append(text);
         if (item.type === 'select') {
@@ -184,6 +189,7 @@
           const button = el('button', choice ? '' : '打开', choice ? item.type === 'checkbox' ? 'toggle' : 'radio' : 'action');
           if (!choice && (externalIds.has(item.id) || /notes-open|openai-api-usage/.test(item.id))) { button.textContent = '打开'; button.append(externalIcon()); }
           if (!choice && /恢复|靠左|靠右|离开|隐藏|显示|睡眠|唤醒|表情|检查|刷新/.test(item.label)) button.textContent = /恢复/.test(item.label) ? '恢复位置' : /检查|刷新/.test(item.label) ? '检查更新' : item.label;
+          if (item.id.endsWith('/zcode-refresh')) button.textContent = '刷新状态';
           button.setAttribute('aria-label', item.label);
           button.title = choice ? `${item.label}：${item.checked ? '已开启 / 已选择' : '未开启 / 未选择'}` : item.label;
           if (choice) { button.setAttribute('role', item.type === 'checkbox' ? 'switch' : 'radio'); button.setAttribute('aria-checked', String(item.checked)); }

@@ -368,6 +368,7 @@ function globalSettingsSnapshot() {
     summary: [
       { label: '球球状态', value: edgeTuck?.getPresentation().mode === 'hidden' ? '暂时隐藏' : '陪伴中' },
       { label: 'Codex 联动', value: settings.codexEnabled ? '已启用' : '未启用' },
+      { label: 'ZCode 联动', value: zcodeLink?.isEnabled() ? '已启用' : '未启用' },
       { label: 'API 统计', value: apiUsage?.getState().connected ? '已连接' : '未连接' },
       { label: '界面外观', value: { system: '跟随系统', light: '浅色', dark: '深色' }[settings.codexQuotaAppearance] }
     ] };
@@ -2869,6 +2870,7 @@ function registerIpc() {
     try {
       // Await consent instead of reporting success while its window is still open.
       if (item.id === 'codex-enabled') await setCodexEnabled(checked);
+      else if (item.id === 'zcode-enabled') await zcodeLink?.setEnabled(checked);
       else await item.click({ ...item, checked: item.type === 'checkbox' ? checked : true });
       const current = findSettingsAction(menuTemplate(), id);
       const mismatch = current && (item.type === 'checkbox' && current.checked !== checked || item.type === 'radio' && !current.checked);

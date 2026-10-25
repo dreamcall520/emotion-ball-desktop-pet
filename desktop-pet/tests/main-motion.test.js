@@ -18,7 +18,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
     onProgress({ state: 'downloading', percent: 100 });
     return { state: 'completed', path: '/fixture/Qiuqiu.dmg' };
   },
-  loadedSettings = null, notesDefaultTab = 'note', notesAppearance = 'light', nativeQuotaLabel = false, argv = [], updateFetch = async currentVersion => ({ currentVersion,
+  loadedSettings = null, notesDefaultTab = 'note', notesAppearance = 'light', nativeQuotaLabel = false, zcodeLinkFactory = null, argv = [], updateFetch = async currentVersion => ({ currentVersion,
     latestVersion: '0.3.26', hasUpdate: true,
     url: 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/v0.3.26',
     installer: UPDATE_INSTALLER, downloadMessage: '' }) } = {}) {
@@ -235,6 +235,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
         }
       };
       if (name === './lib/api-usage-label-window') return { createApiUsageLabelWindow: options => { apiLabel.options = options; return apiLabel; } };
+      if (name === './lib/zcode-link' && zcodeLinkFactory) return { createZcodeLink: zcodeLinkFactory };
       if (name === './lib/api-usage') return { createApiUsage: options => { apiUsage.options = options; return apiUsage; } };
       if (name === './lib/edge-notice-window') return { createEdgeNoticeWindow: () => edgeNoticeWindow };
       if (name === './lib/chat-window') return { createChatWindow: options => { chatWindow.options = options; return chatWindow; } };
@@ -3618,6 +3619,43 @@ test('全局设置启用 Codex 必须完成原有授权，取消后保持关闭'
   assert.equal(f.consents.length, 1);
   assert.equal(f.call('settings.codexEnabled'), false);
   assert.ok(result.error);
+});
+
+test('settings ZCode activation awaits its existing consent and preferences remain isolated from Codex', async t => {
+  const { createZcodeLink } = require('../lib/zcode-link');
+  let answer, asks = 0, link; const enabled = [], layouts = [];
+  const f = await fixture({ zcodeLinkFactory: options => {
+    link = createZcodeLink({ ...options, requestConsent: () => { asks++; return new Promise(resolve => { answer = resolve; }); },
+      onEnabledChanged: async () => {},
+      createCompanion: () => ({ getSnapshot: () => ({ enabled: false }), setEnabled: async value => enabled.push(value), close() {} }),
+      createCard: () => ({ show() { layouts.push('show'); }, hide() { layouts.push('hide'); }, destroy() { layouts.push('destroy'); }, getWindow: () => null,
+        getVisibleBounds: () => null, reposition() {}, setAlwaysOnTop() {} }),
+      createDetails: () => ({ isVisible: () => false, close() {}, destroy() {}, setAlwaysOnTop() {} }) });
+    return link;
+  } });
+  t.after(() => f.app.emit('before-quit'));
+  f.call('openGlobalSettings()');const win = f.call('globalSettingsWindow');win.emit('ready-to-show');
+  const act = (id,value) => f.invoke('pet:global-settings-action', `/zcode-menu/${id}`, win.webContents, value);
+  const first = act('zcode-enabled',true); let done=false;first.then(()=>{done=true;});await flush();
+  assert.equal(asks,1);assert.equal(done,false,'the settings switch must not report completion while consent is open');
+  assert.notEqual(f.call('settings.zcodeEnabled'),true);
+  answer(false);assert.ok((await first).error);assert.equal(link.isEnabled(),false);
+  assert.equal(enabled.includes(true),false);
+  const accepted=act('zcode-enabled',true);await flush();answer(true);assert.equal((await accepted).error,undefined);
+  assert.equal(link.isEnabled(),true);assert.equal(f.call('settings.zcodeEnabled'),true);
+  const beforeCodex=f.call('JSON.stringify([settings.codexEnabled,settings.codexQuotaAlwaysVisible,settings.codexQuotaLabelSize,settings.codexQuotaFunEnabled])');
+  for(const [id,value]of [['zcode-quota-visible',false],['zcode-quota-fun',false],['zcode-quota-size/zcode-size-standard',true]]) {
+    assert.equal((await act(id,value)).error,undefined);
+  }
+  assert.equal(f.call('settings.zcodeQuotaAlwaysVisible'),false);assert.equal(f.call('settings.zcodeQuotaFunEnabled'),false);assert.equal(f.call('settings.zcodeQuotaLabelSize'),'standard');
+  assert.equal(f.call('JSON.stringify([settings.codexEnabled,settings.codexQuotaAlwaysVisible,settings.codexQuotaLabelSize,settings.codexQuotaFunEnabled])'),beforeCodex);
+  link.menu().submenu.find(item => item.id === 'zcode-quota-visible').click({ checked:true });
+  const refreshed = await f.invoke('pet:global-settings-get', undefined, win.webContents);
+  assert.equal(refreshed.entries.find(item => item.id === '/zcode-menu').children.find(item => item.id.endsWith('/zcode-quota-visible')).checked,true,'the existing snapshot reflects a native menu change');
+  assert.equal((await act('zcode-enabled',false)).error,undefined);assert.equal(link.isEnabled(),false);assert.equal(enabled.at(-1),false);assert.ok(layouts.includes('destroy'));
+  assert.ok((await act('zcode-quota-visible',true)).error,'off preferences keep the existing disabled rule');
+  win.hide();assert.ok((await act('zcode-enabled',true)).error);assert.equal(asks,2);
+  win.show();f.powerMonitor.emit('lock-screen');assert.ok((await act('zcode-enabled',true)).error);assert.equal(asks,2);
 });
 
 
