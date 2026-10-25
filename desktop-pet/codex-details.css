@@ -210,3 +210,5 @@ html[data-resolved-appearance="dark"] #details-panel[data-source="zcode"] .trend
 .zcode-quota-row-deadline { display: block; color: var(--detail-subtle); font-size: 11px; line-height: 17px; }
 .zcode-quota-values { color: var(--detail-subtle); font-size: 11px; line-height: 17px; overflow-wrap: anywhere; }
 .zcode-quota-deadline { margin: 6px 1px 0; color: var(--detail-subtle); font-size: 11px; line-height: 17px; overflow-wrap: anywhere; }
+.chart-help-body ul { margin: 0; padding-left: 16px; }
+.chart-help-body li + li { margin-top: 5px; }

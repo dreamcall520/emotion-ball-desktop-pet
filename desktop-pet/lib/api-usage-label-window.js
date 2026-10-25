@@ -168,6 +168,7 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
         const target = win, token = revision;
         activeTarget = target;
         if (!active(target, token)) return;
+    if (getPresentation()?.quotaGroupHidden === true) { conceal(target, token); return; }
         const pet = getPetWindow();
         if (!active(target, token)) { if (pending) continue; return; }
         if (!pet || pet.isDestroyed() || !pet.isVisible()) { hide(); return; }
@@ -287,7 +288,7 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
         width: bounds.width - inset * 2, height: bounds.height - inset * 2 };
     },
     getLayoutMetrics() {
-      return requestedVisible && live(win) && win.isVisible()
+      return requestedVisible && live(win)
         ? { ...quotaLabelSize(expanded?'apiExpanded':'compact'),inset:expanded?0:2 } : null;
     },
     setAlwaysOnTop(value) {

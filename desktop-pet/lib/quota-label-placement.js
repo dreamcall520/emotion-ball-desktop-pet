@@ -78,10 +78,11 @@ function bounded(candidate, size, area) {
 
 function quotaRoleTargetWidth(paintWidth) { return [22,24].includes(paintWidth) ? 48 : 64; }
 
-// Only the three visible free-mode cards share direction. Inputs are sizes, never their last positions.
+// Visible free-mode cards share direction. Inputs are sizes, never their last positions.
 function quotaFreeStackBounds(petBounds, workArea, cards, presentation, bubble = null) {
   if (presentation?.mode !== 'free') return null;
-  const rows = ['codex','api','zcode'].map(id => ({ id, ...cards?.[id] }));
+  const ids = ['codex','api','zcode', ...(cards?.workbuddy ? ['workbuddy'] : [])];
+  const rows = ids.map(id => ({ id, ...cards?.[id] }));
   if (rows.some(row => !Number.isFinite(row.width) || row.width <= 0 || !Number.isFinite(row.height) || row.height <= 0)) return null;
   const area = safeArea(workArea), nativePet = safePet(petBounds, area);
   const visual = petVisualBounds(nativePet,presentation.shape,{...presentation,quotaAnchor:true,quotaGuard:rows[0].guardTargetWidth>0});
@@ -97,7 +98,7 @@ function quotaFreeStackBounds(petBounds, workArea, cards, presentation, bubble =
     row.left=row.gutter>0 && preferredCenter>area.x+area.width/2 && (nativePet.x+nativePet.width>=area.x+area.width-row.gutter || preferredCenter+row.width/2+row.gutter>area.x+area.width);
   }
   const left=Math.max(...rows.map(r=>r.width/2+(r.left?r.gutter:0))),right=Math.max(...rows.map(r=>r.width/2+(r.left?0:r.gutter)));
-  if(left+right>area.width)return null;
+  if(left+right>area.width)return fallback();
   const center=Math.round(clamp(preferredCenter,area.x+left,area.x+area.width-right));
   for(const placement of ['below','above']) {
     let cursor=placement==='below'?pet.y+pet.height+GAP:pet.y-GAP;
@@ -115,7 +116,13 @@ function quotaFreeStackBounds(petBounds, workArea, cards, presentation, bubble =
     }
     if(clear)return {placement,cards:result};
   }
-  return null;
+  return fallback();
+  function fallback() {
+    if (!cards?.workbuddy) return null;
+    const three = quotaFreeStackBounds(petBounds, workArea, { ...cards, workbuddy: null }, presentation, bubble);
+    return three ? { ...three, hidden: ['workbuddy'] }
+      : { placement: 'hidden', cards: {}, hidden: ids };
+  }
 }
 
 function quotaLabelSize(value, expanded = false, itemCount = 1, extraCredits = false, guardEntry = false, rolePaintWidth = null, sourceId = 'codex') {

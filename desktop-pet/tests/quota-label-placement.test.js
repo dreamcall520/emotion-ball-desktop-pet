@@ -567,3 +567,30 @@ test('grouped free corners and expanded buckets stay aligned and inside; peek an
     assert.equal(quotaFreeStackBounds(pet,area,cards,{mode:'free'},{...area}),null);
   }
 });
+
+test('four-card free stack shares one direction and hides safely when space runs out', () => {
+  const { quotaFreeStackBounds } = require('../lib/quota-label-placement');
+  const cards = Object.fromEntries(['codex','api','zcode','workbuddy'].map(id => [id,{width:128,height:32,inset:2}]));
+  const area={x:-1000,y:0,width:1000,height:800};
+  for(const y of [100,650]) {
+    const pet={x:-550,y,width:80,height:80};
+    const plan=quotaFreeStackBounds(pet,area,cards,{mode:'free'});
+    assert.equal(Object.keys(plan.cards).length,4);
+    assert.equal(plan.placement,y===100?'below':'above');
+    const rows=Object.values(plan.cards);
+    for(const row of rows) {
+      assert.equal(row.face.x+row.face.width/2,pet.x+pet.width/2);
+      assert.ok(row.y>=area.y && row.y+row.height<=area.height);
+    }
+    for(let i=0;i<rows.length;i++) for(let j=i+1;j<rows.length;j++) {
+      const a=rows[i].face,b=rows[j].face;
+      assert.ok(a.y+a.height<=b.y||b.y+b.height<=a.y);
+    }
+  }
+  const partial=quotaFreeStackBounds({x:-550,y:30,width:80,height:80},{...area,height:230},cards,{mode:'free'});
+  assert.deepEqual(partial.hidden,['workbuddy']);
+  assert.equal(Object.keys(partial.cards).length,3);
+  const blocked=quotaFreeStackBounds({x:-550,y:30,width:80,height:80},{...area,height:150},cards,{mode:'free'});
+  assert.deepEqual(blocked.hidden,Object.keys(cards));
+  assert.deepEqual(blocked.cards,{});
+});

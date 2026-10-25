@@ -1,0 +1,83 @@
+(() => {
+  const api = window.qiuqiuWorkBuddyLabel;
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Tab') document.documentElement.dataset.keyboard = 'true';
+  }, true);
+  document.addEventListener('pointerdown', () => { document.documentElement.dataset.keyboard = 'false'; }, true);
+  const el = id => document.getElementById(id);
+  const amount = n => n.toLocaleString('zh-CN', { maximumFractionDigits: 2 });
+  const shortDate = n => n === null ? '未知' : new Date(n).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
+  const exactDate = n => n === null ? '未知' : new Date(n).toLocaleString('zh-CN', { hour12: false });
+  let appearance = 'system';
+  const system = window.matchMedia?.('(prefers-color-scheme: dark)');
+  const applyAppearance = () => {
+    const resolved = appearance === 'system' ? (system?.matches ? 'dark' : 'light') : appearance;
+    document.documentElement.dataset.appearance = resolved;
+    document.documentElement.dataset.accessibleAppearance = resolved;
+  };
+  api.onColorMode?.((mode, preference, theme) => {
+    document.documentElement.dataset.colorMode = mode;
+    document.documentElement.dataset.uiTheme = theme;
+    appearance = preference; applyAppearance();
+  });
+  system?.addEventListener('change', applyAppearance);
+  el('toggle').addEventListener('click', () => api.toggle());
+  el('refresh').addEventListener('click', () => api.refresh());
+  el('expanded-header').addEventListener('click', () => api.toggle());
+  el('tasks').addEventListener('click', () => api.tasks('tasks'));
+  el('results').addEventListener('click', () => api.tasks('results'));
+  el('expanded-header').addEventListener('contextmenu', event => { event.preventDefault(); api.refresh(); });
+  el('trend').addEventListener('click', () => api.trend());
+  api.onState(state => {
+    appearance = ['light', 'dark'].includes(state.appearance) ? state.appearance : 'system';
+    applyAppearance();
+    el('quota-label').dataset.expanded = String(state.expanded);
+    el('quota-label').dataset.queryState = state.error || state.stale ? 'error' : 'ready';
+    document.body.dataset.expanded = String(state.expanded);
+    document.body.dataset.invalid = String(Boolean(state.error || state.stale));
+    el('toggle').setAttribute('aria-expanded', String(state.expanded));
+    el('expanded-header').setAttribute('aria-expanded', String(state.expanded));
+    el('details').hidden = !state.expanded;
+    const r = state.report, invalid = Boolean(r && (state.error || state.stale));
+    el('period').textContent = invalid ? '失效' : state.busy ? '查询中' : r ? '积分' : '未连接';
+    el('total').textContent = r ? amount(r.total) : '—';
+    el('expanded-total').textContent = r ? amount(r.total) : '—';
+    el('expanded-total').dataset.long = String(el('expanded-total').textContent.length > 13);
+    el('expanded-total').dataset.empty = String(!r);
+    el('expanded-total').title = r ? `${amount(r.total)} 积分余额${invalid ? '（旧数据已失效）' : ''}` : '尚无积分数据';
+    el('balance-state').textContent = invalid ? '待更新' : state.busy ? '查询中' : r ? '积分' : '未连接';
+    el('total').dataset.long = String(el('total').textContent.length >= 7);
+    el('plan').textContent = r?.plan || '尚无积分数据';
+    for (const key of ['basic', 'reward', 'purchased']) {
+      el(key).textContent = r ? amount(r[key]) : '—';
+      el(key).title = r ? `${amount(r[key])} 积分` : '尚无积分数据';
+    }
+    el('refresh-date').textContent = `${r ? shortDate(r.nextRefreshAt) : '—'} 刷新`;
+    el('refresh-date').title = `基础刷新：${r ? exactDate(r.nextRefreshAt) : '未知'}`;
+    el('refresh-date').setAttribute('aria-label', el('refresh-date').title);
+    const first = r?.expires?.slice().sort((a, b) => a.at - b.at)[0];
+    const expiring = first ? r.expires.filter(e => e.at === first.at).reduce((n, e) => n + e.amount, 0) : 0;
+    el('expiry').textContent = first ? `${amount(expiring)} · ${shortDate(first.at)}到期` : '到期 —';
+    el('expiry').title = first ? `最近到期：${amount(expiring)} 积分 · ${exactDate(first.at)}` : '最近到期：暂无数据';
+    el('expiry').setAttribute('aria-label', el('expiry').title);
+    const status = state.spaceError ? '空间不足，保持收起；可移动球球后重试' : state.error || (state.stale ? '旧数据已失效，请刷新' : state.busy ? '正在更新…' : '');
+    const updated = r ? `上次成功查询：${exactDate(r.updatedAt)}` : '尚未成功查询';
+    el('balance-state').title = `${r ? status || '可用积分' : `WorkBuddy 未连接${status ? `；${status}` : ''}`}；${updated}`;
+    el('balance-state').setAttribute('aria-label', el('balance-state').title);
+    el('refresh').title = `刷新 WorkBuddy 积分；${updated}`;
+    el('expanded-header').title = `${updated}；每5分钟自动更新，右键立即刷新积分`;
+    const activity = state.activity || {};
+    const count = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
+    const running = count(activity.runningCount), unread = count(activity.unreadCount);
+    el('running-count').textContent = running === null ? '—' : String(running);
+    el('unread-count').textContent = unread === null ? '—' : String(unread);
+    el('tasks').title = `查看球球内任务；${running === null ? '实时进行中数量暂未提供' : `进行中 ${running} 项`}；范围：本机已同步任务`;
+    el('results').title = `查看球球内待查看任务；${unread === null ? '待查看数量暂未提供' : `本机已同步记录中待查看 ${unread} 项`}；不是全局任务统计`;
+    el('tasks').setAttribute('aria-label', el('tasks').title);
+    el('results').setAttribute('aria-label', el('results').title);
+    el('toggle').title = status || '展开 WorkBuddy 积分';
+    el('toggle').setAttribute('aria-label', `WorkBuddy ${r ? `${amount(r.total)} 积分` : '未连接'}${status ? `，${status}` : ''}`);
+    el('refresh').disabled = state.busy;
+    el('trend').title = '查看官方积分消耗走势与每日消耗';
+  });
+})();

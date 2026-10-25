@@ -131,6 +131,7 @@ function safeModel(value) {
     ? Math.min(overflowValue, 99) : 0;
   return {
     ...(source.sourceId === 'zcode' ? { sourceId: 'zcode' } : {}),
+    ...(source.practice === true ? { practice: true } : {}),
     state,
     size,
     appearance,

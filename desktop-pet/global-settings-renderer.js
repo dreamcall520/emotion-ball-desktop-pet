@@ -22,6 +22,7 @@
     '保持清醒': '关闭后，球球会根据系统空闲时间自动休息。',
     '互动气泡': '控制球球的对白与互动提示。',
     '始终置顶': '让球球保持在其他窗口上方。',
+    '启用 WorkBuddy 联动': '只读本机当前 WorkBuddy 登录与积分；聊天仅在你发送消息后消耗积分。',
     '启用 Codex 联动': '读取本机 Codex 任务与额度；开启时会说明读取范围并请求确认。',
     '启用 ZCode 联动': '读取本机 ZCode 套餐、额度与任务；开启时会说明读取范围并请求确认，可在聊天中选择 ZCode。',
     '显示 ZCode 额度': '独立显示 ZCode 额度卡；隐藏卡片不关闭 ZCode 联动。',
@@ -71,6 +72,8 @@
   const externalIds = new Set(['/chat-open', '/customize-open', '/pomodoro-open', '/about-open']);
   function groups() {
     const categories = snapshot.entries.filter(entry => entry.children);
+    const workbuddy = snapshot.entries.find(entry => entry.id === '/workbuddy-enabled');
+    if (workbuddy) categories.push({ id: 'workbuddy-settings', label: 'WorkBuddy', children: [workbuddy] });
     const general = categories.find(entry => entry.label === '常规设置');
     if (general) categories[categories.indexOf(general)] = { ...general, children: [...general.children,
       ...snapshot.entries.filter(entry => entry.id === '/update-check')] };
@@ -109,7 +112,7 @@
       ['', ['常用设置']],
       ['日常陪伴', ['球球与互动', '和球球聊聊', '便签与待办', '番茄钟']],
       ['外观与显示', ['定制球球', '球球尺寸', '贴边与显示', '界面配色']],
-      ['应用与联动', ['Codex 与 API', 'ZCode 联动', 'API 费用与用量', '快捷键', '常规设置']]
+      ['应用与联动', ['Codex 与 API', 'ZCode 联动', 'WorkBuddy', 'API 费用与用量', '快捷键', '常规设置']]
     ];
     $('navigation').replaceChildren(...navigationGroups.map(([label, labels]) => {
       const section = el('div', '', 'nav-group');

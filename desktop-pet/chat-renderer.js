@@ -53,19 +53,20 @@
     return pending || snapshot.busy || snapshot.connection === 'connecting' || snapshot.sourceChanging === true;
   }
 
-  const sourceId = () => snapshot.source === 'zcode' ? 'zcode' : 'codex';
-  const sourceName = () => sourceId() === 'zcode' ? 'ZCode' : 'Codex';
+  const sourceId = () => ['zcode', 'workbuddy'].includes(snapshot.source) ? snapshot.source : 'codex';
+  const sourceName = () => sourceId() === 'zcode' ? 'ZCode' : sourceId() === 'workbuddy' ? 'WorkBuddy' : 'Codex';
   function availableSources() {
     const seen = new Set();
     return (Array.isArray(snapshot.sources) ? snapshot.sources : []).filter(item => {
-      if (!['codex', 'zcode'].includes(item?.id) || seen.has(item.id)) return false;
+      if (!['codex', 'zcode', 'workbuddy'].includes(item?.id) || seen.has(item.id)) return false;
       seen.add(item.id); return true;
     });
   }
   function renderSources() {
     if (!sourceSelect || !sourceMenu || !sourceBar) return;
     const choices = availableSources();
-    sourceBar.hidden = historyOpen || !choices.some(item => item.id === 'zcode' && item.enabled === true);
+    sourceBar.hidden = historyOpen || !choices.some(item => item.id !== 'codex' && item.enabled === true);
+    sourceSelect.value = sourceId();
     sourceSelect.textContent = sourceName();
     sourceSelect.title = `聊天来源：${sourceName()} · 各自保留聊天记录`;
     sourceSelect.disabled = changeBlocked() || typeof api.setSource !== 'function';
@@ -78,7 +79,7 @@
         option.dataset.source = item.id; option.tabIndex = -1; option.disabled = item.enabled !== true;
         option.setAttribute('role', 'menuitemradio');
         const check = document.createElement('span'); check.className = 'model-option-check'; check.setAttribute('aria-hidden', 'true');
-        const label = document.createElement('span'); label.className = 'model-option-label'; label.textContent = item.id === 'zcode' ? 'ZCode' : 'Codex';
+        const label = document.createElement('span'); label.className = 'model-option-label'; label.textContent = item.id === 'zcode' ? 'ZCode' : item.id === 'workbuddy' ? 'WorkBuddy' : 'Codex';
         option.append(check, label); option.addEventListener('click', () => chooseSource(item.id)); return option;
       });
       sourceMenu.replaceChildren(...sourceOptions);
@@ -172,7 +173,7 @@
         if (choice.id === 'auto') {
           const description = document.createElement('span');
           description.className = 'model-option-description';
-          description.textContent = sourceId() === 'zcode' ? '使用 ZCode 默认可用模型' : '日常用快模型，分析用强模型';
+          description.textContent = sourceId() === 'workbuddy' ? '按 WorkBuddy 可用模型自动选择' : sourceId() === 'zcode' ? '使用 ZCode 默认可用模型' : '日常用快模型，分析用强模型';
           content.appendChild(description);
         }
         option.append(check, content);
@@ -205,7 +206,7 @@
           : modelChanged ? '下条消息起生效 · 继续当前聊天'
             : selected === 'auto' ? active?.automatic && activeName
               ? `${snapshot.busy ? '本次' : '上次'}自动选用 ${activeName}`
-              : sourceId() === 'zcode' ? '使用 ZCode 默认可用模型，可在菜单中手动选择' : '日常优先轻量模型，需要分析时换更强模型'
+              : sourceId() === 'workbuddy' ? '按 WorkBuddy 可用模型自动选择' : sourceId() === 'zcode' ? '使用 ZCode 默认可用模型，可在菜单中手动选择' : '日常优先轻量模型，需要分析时换更强模型'
             : '使用所选模型 · 继续当前聊天');
     hint.title = hint.textContent;
     modelSelect.title = `${selectedLabel}\n${hint.textContent}`;
@@ -361,7 +362,7 @@
       ? '球球正在想…'
       : error ? '连接遇到了一点问题'
         : snapshot.hasConversation ? '接着聊，我还记得这一段' : '想说什么，我在听';
-    byId('privacy-note').textContent = `使用 ${sourceName()} 额度 · 延续同一段聊天`;
+    byId('privacy-note').textContent = `使用 ${sourceName()} ${sourceId() === 'workbuddy' ? '积分' : '额度'} · 延续同一段聊天`;
     const sourceNote = byId('empty-source-note');
     if (sourceNote) {
       const accountNote = `使用本机已登录的 ${sourceName()} 账号。`;
@@ -500,9 +501,10 @@
       refreshControls();
     }
   }
+  sourceSelect?.addEventListener('change', () => chooseSource(sourceSelect.value));
   sourceSelect?.addEventListener('click', () => sourceMenuOpen ? closeSourceMenu() : openSourceMenu());
   sourceSelect?.addEventListener('keydown', event => {
-    if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) { event.preventDefault(); openSourceMenu(event.key === 'ArrowUp' || event.key === 'End' ? 'last' : 'first'); }
+    if (['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter', ' '].includes(event.key)) { event.preventDefault(); openSourceMenu(event.key === 'ArrowUp' || event.key === 'End' ? 'last' : 'first'); }
   });
   sourceMenu?.addEventListener('keydown', event => {
     if (event.key === 'Tab') { closeSourceMenu(); return; }

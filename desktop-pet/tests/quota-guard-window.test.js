@@ -256,3 +256,12 @@ test('守护战让开已固定的番茄钟主面板，不反过来推动主面�
   assert.deepEqual(retainedPanel, original);
   f.guard.destroy();
 });
+
+test('只有明确自由练习可以在没有账户百分比时打开守护战', async () => {
+ const f=fixture();assert.equal(f.guard.open({state:'ready',items:[]}),false);
+ assert.equal(f.guard.open({state:'ready',items:[],practice:true}),true);
+ const w=f.guard.getWindow();w.webContents.emit('did-finish-load');await flush();
+ assert.equal(w.isVisible(),true);assert.equal(w.sent.at(-1)[1].practice,true);
+ assert.equal(w.sent.at(-1)[1].items.length,0);assert.equal(w.getBounds().height,310);
+ f.guard.open(model()); assert.equal(w.getBounds().height,410);f.guard.destroy();
+});

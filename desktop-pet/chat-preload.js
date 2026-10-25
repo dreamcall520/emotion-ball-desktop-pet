@@ -41,7 +41,7 @@ contextBridge.exposeInMainWorld('qiuqiuChat', {
     return ipcRenderer.invoke('pet:chat-model', id);
   },
   setSource(id) {
-    if (!['codex', 'zcode'].includes(id)) return Promise.resolve({ accepted: false, error: '请选择可用的聊天来源。' });
+    if (!['codex', 'zcode', 'workbuddy'].includes(id)) return Promise.resolve({ accepted: false, error: '请选择可用的聊天来源。' });
     return ipcRenderer.invoke('pet:chat-source', id);
   },
   refreshModels: () => ipcRenderer.invoke('pet:chat-models-refresh'),

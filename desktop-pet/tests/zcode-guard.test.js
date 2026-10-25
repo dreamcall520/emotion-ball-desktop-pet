@@ -59,11 +59,11 @@ test('main binds the shared guard to its source: Codex sync cannot close or over
   const functions = source.slice(source.indexOf('function canShowQuotaGuard()'), source.indexOf('\nasync function openCodexDetailThread'));
   let visible = false, available = true, codexEntry = false; const calls = [];
   const context = vm.createContext({ quotaGuardSource: 'codex', isQuitting: false, screenLocked: false,
-    shortcutWindow: null, chatWindow: null, codexDetails: null, presentationSuppressed: () => false,
+    shortcutWindow: null, chatWindow: null, codexDetails: null, workbuddyDetails: null, presentationSuppressed: () => false,
     petWindow: { isDestroyed: () => false, isVisible: () => true },
     settings: { codexEnabled: false, zcodeEnabled: true, zcodeQuotaAlwaysVisible: true, zcodeQuotaFunEnabled: true, codexQuotaAlwaysVisible: true },
     quotaLabel: { isGuardEntryVisible: () => codexEntry }, quotaLabelModel: () => ({ state: 'ready', items: [{ remaining: 64, windowMinutes: 300 }] }), buildZcodeQuotaLabelModel: value => value,
-    zcodeLink: { isEnabled: () => true, isCardAvailable: () => available, getSnapshot: () => quota() },
+    zcodeLink: { isDetailsVisible: () => false, isEnabled: () => true, isCardAvailable: () => available, getSnapshot: () => quota() },
     quotaGuard: { isVisible: () => visible, open: value => { visible = true; calls.push(['open', value]); return true; },
       update: value => calls.push(['update', value]), close: () => { visible = false; calls.push(['close']); } } });
   vm.runInContext(functions, context);
@@ -81,6 +81,17 @@ test('main binds the shared guard to its source: Codex sync cannot close or over
   context.settings.codexEnabled = true; assert.equal(context.openQuotaGuard(), true);
   assert.equal(context.quotaGuardSource, 'codex'); assert.equal(calls.at(-1)[1].sourceId,undefined);
   context.closeCodexQuotaGuard(); assert.equal(visible, false);
+  context.settings.workbuddyEnabled = true;
+  assert.equal(context.openQuotaGuard('workbuddy'), true);
+  assert.equal(context.quotaGuardSource, 'workbuddy');
+  assert.equal(calls.at(-1)[1].practice, true);
+  assert.equal(calls.at(-1)[1].items.length, 0);
+  context.closeCodexQuotaGuard(); assert.equal(visible, true);
+  context.workbuddyDetails = { isVisible: () => true };
+  assert.equal(context.canShowQuotaGuard(), false);
+  context.workbuddyDetails = null; context.settings.workbuddyEnabled = false;
+  assert.equal(context.canShowQuotaGuard(), false);
+  visible = false;
   for (const key of ['screenLocked','isQuitting']) {
     context[key] = true; assert.equal(context.openQuotaGuard('zcode'), false); context[key] = false;
   }

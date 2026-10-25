@@ -180,3 +180,71 @@ test('unavailable providers are skipped while the other keeps its existing sched
     f.tick(36000); assert.equal(f.tick(330000).sourceId, invalid === 'codex' ? 'zcode' : 'codex');
   }
 });
+
+function workBuddyFixture() {
+  let time = 0;
+  const base = Date.parse('2026-10-25T00:00:00+08:00'), changes = [];
+  const state = { visible: true, presentation: { mode: 'tucked', side: 'left' }, workbuddyEnabled: true,
+    bubblesEnabled: false, quotaEnabled: false, workbuddyState: { enabled: true, busy: false, stale: false, error: null,
+      report: { total: 7399.91, updatedAt: base, expires: [{ amount: 99.91, at: Date.parse('2026-10-28T12:05:57+08:00') }] } } };
+  const notice = createEdgeNotice({ now: () => time, wallNow: () => base + time, random: () => 0, onChange: value => changes.push(value) });
+  return { state, changes, notice, tick(value) { time = value; notice.tick(state); return changes.at(-1); },
+    refresh(value) { state.workbuddyState.report.updatedAt = base + value; } };
+}
+test('WorkBuddy uses the quota slot, exact credits and expiry without requiring Codex or a new timer', () => {
+  const f = workBuddyFixture(); f.tick(0);
+  const balance = f.tick(30000); assert.equal(balance.kind, 'workbuddy'); assert.equal(balance.text, '还剩7,399.91积分');
+  assert.equal(balance.remaining, undefined); assert.equal(balance.statusLabel, undefined);
+  assert.equal(f.tick(36000), null); f.refresh(330000);
+  const expiry = f.tick(330000); assert.equal(expiry.kind, 'workbuddy'); assert.equal(expiry.text, '99.91积分将于10/28到期');
+  f.state.workbuddyEnabled = false; assert.equal(f.tick(330001), null);
+});
+test('Codex and WorkBuddy rotate in the existing quota slot and share the text cooldown', () => {
+  const f = workBuddyFixture(); f.state.quotaEnabled = true; f.state.bubblesEnabled = true;
+  f.state.quotaModel = { state: 'ready', items: [{ windowMinutes: 300, remaining: 83 }] };
+  f.tick(0); assert.equal(f.tick(30000).kind, 'quota'); f.tick(36000);
+  assert.equal(f.tick(120000).kind, 'text'); f.tick(124500);
+  assert.equal(f.tick(300000).kind, 'text'); f.tick(304500);
+  f.refresh(390000); assert.equal(f.tick(390000).kind, 'workbuddy'); f.tick(396000);
+  f.state.bubblesEnabled = false; f.refresh(690000); assert.equal(f.tick(690000).kind, 'quota');
+});
+test('WorkBuddy rejects busy, stale, error, missing, future and expired snapshots on every sample', () => {
+  for (const mutate of [s => { s.busy = true; }, s => { s.stale = true; }, s => { s.error = 'failed'; },
+    s => { s.enabled = false; }, s => { s.report = null; }, s => { s.report.total = NaN; },
+    s => { s.report.updatedAt = Date.parse('2027-01-01'); }, s => { s.report.updatedAt -= 11 * 60000; }]) {
+    const f = workBuddyFixture(); f.tick(0); assert.equal(f.tick(30000).kind, 'workbuddy');
+    mutate(f.state.workbuddyState); assert.equal(f.tick(31000), null); assert.equal(f.tick(900000), null);
+  }
+  const f = workBuddyFixture(); f.state.workbuddyState.report.total = 0; f.tick(0);
+  assert.equal(f.tick(30000).text, '还剩0积分');
+});
+test('WorkBuddy wider amount capsules remain inside small and negative-coordinate work areas', () => {
+  for (const area of [{ x: -3008, y: -1692, width: 3008, height: 1692 }, { x: -80, y: -40, width: 200, height: 30 }]) {
+    for (const side of ['left', 'right']) {
+      const result = edgeNoticeBounds({ x: area.x, y: area.y, width: 80, height: 80 }, area, side, 'workbuddy');
+      assert.equal(result.width, Math.min(360, area.width));
+      assert(result.x >= area.x && result.x + result.width <= area.x + area.width);
+      assert(result.y >= area.y && result.y + result.height <= area.y + area.height);
+    }
+  }
+});
+
+test('WorkBuddy同一时刻到期的积分批次合并提醒', () => {
+ const f=workBuddyFixture();const at=f.state.workbuddyState.report.expires[0].at;
+ f.state.workbuddyState.report.expires.push({at,amount:50});f.tick(0);f.tick(30000);f.tick(36000);f.refresh(330000);
+ assert.equal(f.tick(330000).text,'149.91积分将于10/28到期');
+});
+
+
+test('Codex, ZCode and WorkBuddy round-robin one quota slot without increasing frequency', () => {
+  const f = workBuddyFixture(); enableZcode(f);
+  f.state.quotaEnabled = true;
+  f.state.quotaModel = { state: 'ready', items: [{ remaining: 50, windowMinutes: 300 }] };
+  f.tick(0);
+  assert.equal(f.tick(30000).sourceId, 'codex');
+  f.tick(36000); assert.equal(f.tick(120000), null);
+  f.refresh(330000); assert.equal(f.tick(330000).sourceId, 'zcode');
+  f.tick(336000); assert.equal(f.tick(420000), null);
+  f.refresh(630000); assert.equal(f.tick(630000).sourceId, 'workbuddy');
+  f.tick(636000); f.refresh(930000); assert.equal(f.tick(930000).sourceId, 'codex');
+});

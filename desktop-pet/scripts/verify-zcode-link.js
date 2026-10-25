@@ -121,7 +121,7 @@ async function verifyZcodeLink({ pet, chat, chatWindow, zcodeLink, openChat, Bro
     await pointerClick(details, '.zcode-quota-row');
     await poll(() => page(details, "document.querySelector('#details-panel').dataset.action"), value => value === 'trend', '真实趋势入口');
     assert.equal(await page(details, "document.querySelector('.title-product').textContent"), 'ZCODE');
-    const selector = await page(details, "({ description:document.querySelector('.zcode-bucket-description')?.textContent, options:[...document.querySelectorAll('.zcode-bucket-button')].map(node=>({label:node.textContent,selected:node.getAttribute('aria-pressed')==='true'})), headerTabs:document.querySelectorAll('.panel-header .trend-tabs').length })");
+    const selector = await page(details, "({ description:document.querySelector('.zcode-bucket-button[aria-pressed=\"true\"]')?.title, options:[...document.querySelectorAll('.zcode-bucket-button')].map(node=>({label:node.textContent,selected:node.getAttribute('aria-pressed')==='true'})), headerTabs:document.querySelectorAll('.panel-header .trend-tabs').length })");
     assert.equal(selector.headerTabs, 0, 'ZCode 来源选择不能挤占标题与关闭按钮');
     assert.equal(selector.options.length, Math.min(snapshot.quota.windows.length, 32));
     assert.equal(selector.options.filter(option => option.selected).length, 1);
@@ -149,6 +149,10 @@ async function verifyZcodeLink({ pet, chat, chatWindow, zcodeLink, openChat, Bro
     assert.equal(connected.messages.length, 0, '本轮仅在空的球球自有 ZCode 会话发送');
     report.models = connected.models.map(({ id, displayName }) => ({ id, displayName }));
     await capture(chatWin, 'integrated-05-zcode-chat-ready');
+    if (process.env.PET_SMOKE_ZCODE_READ_ONLY === '1') {
+      report.actualModelMessages = 0;
+      report.checks.push('真实来源菜单切换', '真实模型列表', '只读验收：未发送模型消息');
+    } else {
     await page(pet, `(() => { const target=document.querySelector('#pet');if(!target)throw new Error('pet missing');window.__zcodeLinkSmokeActions=[];window.__zcodeLinkSmokeObserver=new MutationObserver(()=>{if(target.dataset.lastAction==='hop')window.__zcodeLinkSmokeActions.push({action:'hop',owner:target.dataset.motionOwner});});window.__zcodeLinkSmokeObserver.observe(target,{attributes:true,attributeFilter:['data-last-action']}); })()`);
     report.phase = 'one-real-message';
     await page(chatWin, `document.querySelector('#message-input').value=${JSON.stringify(PROMPT)};document.querySelector('#message-input').dispatchEvent(new Event('input'))`);
@@ -164,10 +168,13 @@ async function verifyZcodeLink({ pet, chat, chatWindow, zcodeLink, openChat, Bro
     await poll(() => page(pet, 'window.__zcodeLinkSmokeActions || []'), rows => rows.some(row => row.action === 'hop' && row.owner === 'user'), '真实球球跳跃动作');
     report.actualModelMessages = 1;
     report.reply = { text: replies[0].text, status: replies[0].status, model: completed.activeModel?.displayName || null, action: 'hop', actionObservedInPetRenderer: true };
-    const zcodeAfter = archiveSignature(completed);
+
     await capture(chatWin, 'integrated-06-real-reply');
     await capture(pet, 'integrated-07-pet-action');
     report.checks.push('真实来源菜单切换', '真实模型列表', '仅一条真实请求', '流式回复完整结束', 'pet renderer 真实 hop 动作');
+
+    }
+    const zcodeAfter = archiveSignature(chat.getState());
 
     report.phase = 'source-isolation';
     await selectSource('codex');

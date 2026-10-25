@@ -360,7 +360,7 @@ function createQuotaLabelWindow({
     const token = operation;
     const model = currentModel;
     if (!ready || !confirm(target, token, model)) return;
-    if (getSuppressed()) {
+    if (getSuppressed() || getPresentation()?.quotaGroupHidden === true) {
       conceal(target, token);
       return;
     }
@@ -621,7 +621,7 @@ function createQuotaLabelWindow({
     getWindow,
     getLayoutMetrics() {
       const target=getWindow();
-      if (!requestedVisible || !target || !target.isVisible() || !currentModel?.items.length || currentModel.display === 'numbers') return null;
+      if (!requestedVisible || !target || getSuppressed() || !currentModel?.items.length || currentModel.display === 'numbers') return null;
       return { ...quotaLabelSize(currentModel.size,currentModel.expanded,currentModel.items.length,Boolean(currentModel.extraCredits),false,null,sourceId),
         inset: currentModel.size==='compact'&&!currentModel.expanded?2:0,
         guardTargetWidth: guardEntryVisible()?quotaRoleTargetWidth(rolePaintWidth()):0, roleWidth:rolePaintWidth() };

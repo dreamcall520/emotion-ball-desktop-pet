@@ -794,7 +794,7 @@ test('聊天来源在回复、连接或切换期间禁用，Escape 和键盘导�
   f.receive(dualSourceState('zcode',{...withModels(),connection:'connecting'}));assert.match(f.get('connection-status').textContent,/ZCode/);
 });
 
-test('聊天来源切换失败保留当前来源与草稿，来源 preload 只接受固定两个值', async () => {
+test('聊天来源切换失败保留当前来源与草稿，来源 preload 只接受固定三个值', async () => {
   const f=fixture({async setSource(){return {accepted:false,error:'ZCode 尚未登录'};}});await flush();
   f.receive(dualSourceState());f.get('message-input').value='保留这个草稿';
   f.get('chat-source').dispatch('click');await f.get('source-menu').children[1].dispatch('click');
@@ -804,7 +804,7 @@ test('聊天来源切换失败保留当前来源与草稿，来源 preload 只�
     require:()=>({contextBridge:{exposeInMainWorld(_name,value){api=value;}},ipcRenderer:{invoke(...args){calls.push(args);return Promise.resolve({accepted:true});}}})
   });
   for(const invalid of [null,'ZCode','zcode ','other',{},123])assert.equal((await api.setSource(invalid)).accepted,false);
-  await api.setSource('codex');await api.setSource('zcode');assert.deepEqual(calls,[['pet:chat-source','codex'],['pet:chat-source','zcode']]);
+  await api.setSource('codex');await api.setSource('zcode');await api.setSource('workbuddy');assert.deepEqual(calls,[['pet:chat-source','codex'],['pet:chat-source','zcode'],['pet:chat-source','workbuddy']]);
 });
 
 test('ZCode 自动模型说明不承诺按问题自动升级，Codex 原说明保留', async () => {
@@ -814,4 +814,71 @@ test('ZCode 自动模型说明不承诺按问题自动升级，Codex 原说明�
   assert.doesNotMatch(f.get('model-hint').textContent,/更强模型/);
   f.receive(dualSourceState('codex'));
   assert.equal(f.options().find(option=>option.value==='auto').children[1].children[1].textContent,'日常用快模型，分析用强模型');
+});
+
+test('聊天来源使用现有模型按钮和菜单样式，没有原生 select 黑边', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../chat.html'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../chat.css'), 'utf8');
+  assert.match(html, /id="source-bar" class="model-choice"/);
+  assert.match(html, /<button id="chat-source"[^>]*aria-controls="source-menu"/);
+  assert.match(html, /id="source-menu" class="model-menu" role="menu"/);
+  assert.doesNotMatch(html, /<select[^>]*id="chat-source"/);
+  assert.doesNotMatch(css, /\.source-choice select/);
+});
+
+test('来源菜单键盘选择、勾选、边界定位与模型菜单互斥', async () => {
+  const calls = [];
+  const f = fixture({ setSource: async value => { calls.push(value); f.receive({...withModels(),source:value,sources:[{id:'codex',enabled:true},{id:'workbuddy',enabled:true}]}); return { accepted: true }; } }); await flush();
+  f.receive(withModels({ ...stored(), source: 'codex', sources: [{id:'codex',enabled:true},{id:'workbuddy',enabled:true}] }));
+  const button = f.get('chat-source'), menu = f.get('source-menu');
+  assert.equal(button.textContent, 'Codex'); assert.equal(menu.children[0].attributes.get('aria-checked'), 'true');
+  f.get('chat-model').dispatch('click'); assert.equal(f.get('model-menu').hidden, false);
+  button.dispatch('keydown', { key: 'ArrowDown' }); assert.equal(menu.hidden, false); assert.equal(f.get('model-menu').hidden, true);
+  assert.equal(f.document.activeElement, menu.children[0]); assert.equal(menu.style.width, '180px');
+  menu.dispatch('keydown', { key: 'ArrowUp' }); assert.equal(f.document.activeElement, menu.children[1]);
+  menu.dispatch('keydown', { key: 'Home' }); assert.equal(f.document.activeElement, menu.children[0]);
+  menu.dispatch('keydown', { key: 'End' }); assert.equal(f.document.activeElement, menu.children[1]);
+  menu.dispatch('keydown', { key: ' ' }); await flush();
+  assert.deepEqual(calls, ['workbuddy']); assert.equal(button.textContent, 'WorkBuddy');
+  assert.equal(menu.children[1].attributes.get('aria-checked'), 'true'); assert.equal(menu.hidden, true);
+  button.dispatch('keydown', { key: 'Enter' }); assert.equal(menu.hidden, false);
+  menu.dispatch('keydown', { key: 'Escape' }); assert.equal(menu.hidden, true); assert.equal(f.document.activeElement, button);
+  button.dispatch('click'); f.get('chat-model').dispatch('click'); assert.equal(menu.hidden, true);
+});
+
+test('来源菜单支持 Tab、外部点击、失焦与忙碌关闭，失败切换保留草稿和原来源', async () => {
+  const f = fixture({ setSource: async () => ({ accepted: false, error: '保存失败' }) }); await flush();
+  f.receive(withModels({ ...stored(), source: 'codex', sources: [{id:'codex',enabled:true},{id:'workbuddy',enabled:true}] }));
+  const button = f.get('chat-source'), menu = f.get('source-menu');
+  f.get('message-input').value = '不能丢的草稿';
+  button.dispatch('click'); menu.children[1].dispatch('click'); await flush();
+  assert.equal(f.get('message-input').value, '不能丢的草稿'); assert.equal(button.value, 'codex');
+  button.dispatch('click'); menu.dispatch('keydown', { key: 'Tab' }); assert.equal(menu.hidden, true);
+  button.dispatch('click'); f.document.dispatch('pointerdown', { target: f.document.body }); assert.equal(menu.hidden, true);
+  button.dispatch('click'); f.window.dispatch('resize'); assert.equal(menu.style.width, '180px');
+  f.window.dispatch('blur'); assert.equal(menu.hidden, true);
+  button.dispatch('click'); f.receive(withModels({ ...stored(), busy: true })); assert.equal(menu.hidden, true); assert.equal(button.disabled, true);
+  button.dispatch('click'); assert.equal(menu.hidden, true);
+});
+
+test('来源按钮保留 value/change 自动化契约，切换待确认时阻止模型及消息操作', async () => {
+  let complete; const calls = [];
+  const f = fixture({ setSource: value => { calls.push(value); return new Promise(resolve => { complete = resolve; }); } }); await flush();
+  f.receive(withModels({ ...stored(), source: 'codex', sources: [{id:'codex',enabled:true},{id:'workbuddy',enabled:true}] }));
+  const button = f.get('chat-source'); button.value = 'workbuddy';
+  const pending = button.dispatch('change');
+  assert.equal(button.disabled, true); assert.equal(f.get('chat-model').disabled, true);
+  f.get('message-input').value = '待切换'; f.get('send-message').dispatch('click');
+  assert.deepEqual(f.sent, []); assert.deepEqual(calls, ['workbuddy']);
+  complete({ accepted: true }); await pending; await flush();
+  assert.equal(button.value, 'codex'); assert.equal(f.get('message-input').value, '待切换');
+});
+
+
+test('WorkBuddy 自动模型说明不套用Codex规则且只有一个自动选项', async () => {
+  const f = fixture(); await flush();
+  f.receive({ ...withModels(), source: 'workbuddy', models: [{ id: 'auto', displayName: 'Auto' }, { id: 'glm-5.3-flash', displayName: 'GLM-5.3-Flash' }] });
+  assert.equal(f.options().filter(option => option.value === 'auto').length, 1);
+  assert.match(f.options()[0].children[1].children[1].textContent, /WorkBuddy/);
+  assert.match(f.get('model-hint').textContent, /WorkBuddy/);
 });

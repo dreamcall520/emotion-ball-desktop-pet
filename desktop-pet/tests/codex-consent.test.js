@@ -56,7 +56,7 @@ test('确认页保持完整披露与默认取消，复用关于页及真实球�
     '账户令牌仅用于官方查询，不保存、不发送给其他服务', '状态包可能附带已加载的聊天内容',
     '正文立即丢弃，不保存、不上传', '不监听键盘', '不会代你创建、发送、审批或中断任务', '随时关闭即可停止读取']) assert.ok(html.includes(text), text);
   assert.match(html, /id="consent-cancel"[^>]*autofocus/);
-  assert.equal([...html.matchAll(/<li(?:\s|>)/g)].length, 2, '隐私披露分为令牌和聊天正文两条');
+  assert.equal([...html.matchAll(/<li(?:\s|>)/g)].length, 4, '四条披露统一圆点列表');
   assert.match(html, /<li[^>]*>账户令牌仅用于官方查询，不保存、不发送给其他服务。<\/li>/);
   assert.match(html, /<li[^>]*>状态包可能附带已加载的聊天内容；球球只提取进展，正文立即丢弃，不保存、不上传。<\/li>/);
   assert.match(html, /id="consent-accept"[^>]*disabled/);
@@ -172,9 +172,9 @@ test('ZCode 形象信息刷新不会覆盖提交失败反馈', async () => {
 });
 
 
-test('ZCode 本机状态和由你掌控复用隐私列表样式，保留原ID且重复更新不嵌套，Codex仍是p', async () => {
+test('ZCode 本机状态和由你掌控复用隐私列表样式，保留原ID且重复更新不嵌套，Codex同样使用圆点', async () => {
   const f=fixture();f.receive({appearance:{shape:'blob'}});
-  for(const id of ['consent-state-body','consent-control-body']) assert.equal(f.node(id).tagName,'P');
+  for(const id of ['consent-state-body','consent-control-body']) assert.equal(f.node(id).tagName,'LI');
   f.receive({sourceId:'zcode',appearance:{shape:'blob'}});
   const bodies=['consent-state-body','consent-control-body'].map(id=>f.node(id));
   bodies.forEach((body,index)=>{

@@ -11,7 +11,7 @@ test('main gates ZCode edge balances by its independent enabled/card preferences
   let snapshotReads = 0, packet;
   const settings = { codexEnabled: false, zcodeEnabled: true, zcodeQuotaAlwaysVisible: true };
   const state = { linkEnabled: true, visible: true, mode: 'tucked' };
-  const context = vm.createContext({ settings, lastEdgeNoticeTick: -Infinity, edgeNoticeNow: () => 0,
+  const context = vm.createContext({ settings, workbuddyQuota: null, lastEdgeNoticeTick: -Infinity, edgeNoticeNow: () => 0,
     edgeTuck: { getPresentation: () => ({ mode: state.mode, side: 'left' }) },
     pomodoroQuiet: false, shortcutWindow: null, isQuitting: false, chatWindow: null, codexPageReady: true,
     screenLocked: false, petWindow: { isDestroyed: () => false, isVisible: () => state.visible },

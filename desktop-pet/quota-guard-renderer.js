@@ -16,6 +16,7 @@
   const zcodeModelName = item => (item?.model || item?.label || '额度').replace(/^glm-/i, 'GLM-').replace(/-flash$/i, '-Flash');
   function primary(value) {
     try {
+      if (value?.practice === true && value.state === 'ready') return { remaining: 100, windowMinutes: 300 };
       const item = value?.state === 'ready' && Array.isArray(value.items) ? value.items[0] : null;
       if (value?.sourceId === 'zcode') return item && typeof item.bucketId === 'string'
         && /^zcode:[^\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]{1,394}$/u.test(item.bucketId)
@@ -56,7 +57,7 @@
       const item = primary(value), reopened = this.modelVisible === false && value?.visible !== false;
       this.available = Boolean(item); this.visible = this.modelVisible = value?.visible !== false;
       if (item) {
-        const signature = (value?.sourceId === 'zcode' ? `zcode:${item.bucketId}:${item.periodStart}:${item.resetsAt}:` : '') + `${item.windowMinutes}:${item.remaining}`;
+        const signature = `${value?.practice === true}:` + (value?.sourceId === 'zcode' ? `zcode:${item.bucketId}:${item.periodStart}:${item.resetsAt}:` : '') + `${item.windowMinutes}:${item.remaining}`;
         const restart = reopened && this.ended && item.remaining > 0;
         if (signature !== this.signature || restart) {
           if (restart) this.paused = false;
@@ -193,6 +194,9 @@
     pet.halo.setAttribute('transform', `translate(0 ${game?.outcome === 'zombie' ? 16 * (1 - ease(phase / .55)) : 0})`); pet.halo.setAttribute('opacity', game?.outcome === 'zombie' ? String(ease((phase - .12) / .3)) : '1');
   }
   function zombieCrown(host) { const group = svg('g', { transform: 'translate(-11 10) scale(.31)' }); group.append(crownImage()); host.append(group); }
+  doc.documentElement.dataset.guardKeyboard = 'false';
+  doc.addEventListener('keydown', event => { if (event.key === 'Tab') doc.documentElement.dataset.guardKeyboard = 'true'; }, true);
+  doc.addEventListener('pointerdown', () => { doc.documentElement.dataset.guardKeyboard = 'false'; }, true);
   const cleanup = [];
   root.addEventListener('beforeunload', () => { destroyed = true; cleanup.forEach(dispose => { if (typeof dispose === 'function') dispose(); }); if (sprites) for (const seq of Object.values(sprites)) for (const frame of seq.frames) frame.bitmap.close(); }, { once: true });
 
@@ -202,9 +206,9 @@
     const visible = () => Boolean(primary(model)) && model.expanded !== true && model.guardEntry !== false;
     const moving = () => sprites && visible() && model.visible !== false && !doc.hidden && !reduced.matches;
     function draw() {
-      const item = primary(model); if (!item || !sprites) return; const q = item.remaining;
+      const item = primary(model); if (!item || !sprites) return; const q = model?.practice ? 50 : item.remaining;
       const source = model?.sourceId === 'zcode' ? `ZCode · ${zcodeModelName(model.items[0])}` : periodText(item.windowMinutes);
-      button.setAttribute('aria-label', `${source}剩余 ${remainingText(q, model?.sourceId)}，进入球球守护战`);
+      button.setAttribute('aria-label', model?.practice ? '进入球球守护战' : `${source}剩余 ${remainingText(q, model?.sourceId)}，进入球球守护战`);
       button.dataset.role = q === 100 ? 'full' : q === 0 ? 'empty' : 'roaming';
       renderPet(pet, q === 0 ? 1 : 0, q === 0 ? 'halo' : q === 100 ? 'crown' : 'none', time, !moving());
       drawSprite(zombie.querySelector('canvas'), 'walk', q > 0 && q < 100 ? time * .75 : 0, true);
@@ -237,12 +241,13 @@
   function labels() {
     const available = game.available, dead = game.outcome === 'zombie', win = game.outcome === 'qiuqiu';
     const source = model?.sourceId === 'zcode' ? `ZCode · ${zcodeModelName(model.items[0])}` : available ? periodText(game.period) : 'Codex 额度';
-    const key = [source, available, game.quota, game.period, game.outcome, game.playerHits, game.active, game.paused, reduced.matches, Boolean(sprites)].join(':');
+    const key = [model?.practice === true, source, available, game.quota, game.period, game.outcome, game.playerHits, game.active, game.paused, reduced.matches, Boolean(sprites)].join(':');
     if (labelKey === key) return; labelKey = key;
     $('guard-theatre').dataset.available = String(available);
+    $('guard-panel').dataset.practice = String(model?.practice === true);
     $('guard-panel').dataset.outcome = game.outcome || 'playing';
-    text('guard-period', source); text('guard-number', available ? remainingText(game.quota, model?.sourceId) : '--%');
-    const description = available ? `${source}剩余 ${remainingText(game.quota, model?.sourceId)}` : '额度等待更新';
+    text('guard-period', model?.practice ? '' : source); text('guard-number', model?.practice ? '' : available ? remainingText(game.quota, model?.sourceId) : '--%');
+    const description = model?.practice ? '自由练习能量，与账户积分独立' : available ? `${source}剩余 ${remainingText(game.quota, model?.sourceId)}` : '额度等待更新';
     if ($('guard-number').getAttribute('aria-label') !== description) $('guard-number').setAttribute('aria-label', description);
     $('guard-charge').style.width = `${available ? game.quota : 0}%`;
     text('guard-status', !available ? '等待额度更新' : dead ? '这局，僵尸赢了' : win ? '球球赢了，能量守住了' : '球球正在守护能量');

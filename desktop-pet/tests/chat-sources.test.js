@@ -15,7 +15,7 @@ function fixture() {
     newChat: async () => ({ accepted: true })
   });
   const codex = make('codex');
-  const router = createChatSources({ codex, createZcode: () => make('zcode'),
+  const router = createChatSources({ codex, createZcode: () => make('zcode'), createWorkbuddy: () => make('workbuddy'), isWorkbuddyEnabled: () => enabled,
     isZcodeEnabled: () => enabled, onSelect: source => saved.push(source), onChange: state => states.push(state) });
   return { router, calls, saved, states, codex, disable: () => { enabled = false; } };
 }
@@ -83,4 +83,22 @@ test('disabling a draining ZCode publishes the source change before accepting an
   release(); await closing;
   assert.equal(router.getState().sourceChanging, false);
   await router.close();
+});
+
+ test('WorkBuddy uses the shared source router with independent history and disable lifecycle', async () => {
+ const f = fixture();
+ await f.router.selectSource('workbuddy');
+ assert.equal(f.router.getState().source, 'workbuddy');
+ assert.equal(f.router.getState().messages[0].text, 'workbuddy');
+ f.router.send('hello');
+ assert.deepEqual(f.calls.filter(row => row[1] === 'send'), [['workbuddy', 'send', 'hello']]);
+ await f.router.selectSource('zcode');
+ assert.equal(f.router.getState().messages[0].text, 'zcode');
+ await f.router.selectSource('workbuddy'); f.disable();
+ assert.equal((await f.router.send('disabled')).accepted, false);
+ await f.router.workbuddyDisabled();
+ assert.equal(f.router.getState().source, 'codex');
+ assert.equal(f.calls.filter(row => row[0] === 'workbuddy' && row[1] === 'close').length, 1);
+ assert.equal((await f.router.selectSource('workbuddy')).accepted, false);
+ await f.router.close();
 });

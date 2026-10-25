@@ -67,3 +67,12 @@ test('ZCode quota keeps its own brand and real short model without credit termin
   receive({ id: 2, kind: 'quota', sourceId: 'codex', period: '周额度', remaining: 79, statusLabel: '' });
   assert.equal(nodes.brand.textContent, 'Codex'); assert.equal(nodes.text.textContent, '周额度 · 剩余 79%');
 });
+
+test('WorkBuddy capsules show branded exact credits or expiry without Codex percentages and status', () => {
+  const { receive, nodes, document, animations } = renderer();
+  receive({ id: 1, kind: 'workbuddy', side: 'right', appearance: 'dark', text: '还剩7,399.91积分', total: 7399.91 });
+  assert.equal(nodes.brand.textContent, 'WorkBuddy'); assert.equal(nodes.text.textContent, '还剩7,399.91积分');
+  assert.equal(document.body.dataset.kind, 'workbuddy'); assert.equal(document.body.dataset.side, 'right');
+  receive({ id: 1, kind: 'workbuddy', text: '99.91积分将于10/28到期', remaining: 0, statusLabel: '已用尽' });
+  assert.equal(nodes.text.textContent, '99.91积分将于10/28到期'); assert.equal(animations.length, 2);
+});
