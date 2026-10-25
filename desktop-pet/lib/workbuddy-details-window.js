@@ -3,7 +3,7 @@ const { pathToFileURL } = require('node:url');
 const { placeDetails } = require('./codex-details-window');
 function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getAppearance = () => 'system', alwaysOnTop = true, onError = () => {} }) {
   const file = path.join(__dirname, '../workbuddy-details.html'), url = pathToFileURL(file).href;
-  let win = null, ready = false, visible = false, state = null, top = Boolean(alwaysOnTop);
+  let win = null, ready = false, visible = false, state = null, top = Boolean(alwaysOnTop), height = 360;
   const alive = () => win && !win.isDestroyed();
   const report = error => { try { onError(error); } catch (_) {} };
   function clean(value) {
@@ -20,8 +20,8 @@ function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getApp
     try {
       const area = screen.getDisplayMatching(getAnchor() || screen.getPrimaryDisplay().workArea).workArea;
       const anchor = getAnchor() || { x: area.x + area.width / 2, y: area.y + area.height / 2, width: 1, height: 1 };
-      const { x, y, width, height } = placeDetails(anchor, area, { width: 404, height: 360 });
-      win.setBounds({ x, y, width, height }, false);
+      const bounds = placeDetails(anchor, area, { width: 404, height });
+      win.setBounds({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }, false);
     } catch (error) { report(error); close(); }
   }
   function ensure() {
@@ -32,9 +32,10 @@ function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getApp
     win = target; ready = false; target.setAlwaysOnTop(top, 'floating');
     target.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     for (const event of ['will-navigate', 'will-attach-webview']) target.webContents.on(event, e => e.preventDefault());
-    target.webContents.on('ipc-message', (event, channel) => {
+    target.webContents.on('ipc-message', (event, channel, value) => {
       if (win !== target || !ready || !visible || event.sender !== target.webContents || event.senderFrame !== target.webContents.mainFrame || event.sender.getURL() !== url) return;
       if (channel === 'pet:workbuddy-details-close') close();
+      if (channel === 'pet:workbuddy-details-resize' && Number.isSafeInteger(value) && value >= 120 && value <= 700) { height = value; reposition(); }
     });
     target.webContents.on('did-finish-load', () => { if (win !== target) return; ready = true; send(); if (visible) target.show(); });
     target.webContents.on('render-process-gone', () => { if (win === target) destroy(); });

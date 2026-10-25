@@ -28,6 +28,10 @@ test('trend window reuses placement, isolates state and only accepts owned main-
   const own = { sender: win.webContents, senderFrame: win.webContents.mainFrame };
   win.webContents.emit('ipc-message', { ...own, senderFrame: {} }, 'pet:workbuddy-details-close'); assert.equal(details.isVisible(), true);
   win.webContents.emit('ipc-message', { sender: {}, senderFrame: {} }, 'pet:workbuddy-details-close'); assert.equal(details.isVisible(), true);
+  for (const value of [119, 701, 200.5, '220']) win.webContents.emit('ipc-message', own, 'pet:workbuddy-details-resize', value);
+  assert.equal(win.bounds.height, 360);
+  win.webContents.emit('ipc-message', { ...own, senderFrame: {} }, 'pet:workbuddy-details-resize', 220); assert.equal(win.bounds.height, 360);
+  win.webContents.emit('ipc-message', own, 'pet:workbuddy-details-resize', 220); assert.equal(win.bounds.height, 220);
   win.webContents.emit('ipc-message', own, 'pet:workbuddy-details-close'); assert.equal(details.isVisible(), false);
   details.open({ history: [] }); assert.equal(windows.length, 1); details.setAlwaysOnTop(false); assert.equal(win.top, false);
   details.destroy(); assert.equal(details.getWindow(), null);
@@ -44,20 +48,21 @@ test('renderer plots real samples with gap connector and signed net change, with
   const elements = new Map();
   class Element {
     constructor(tag) { this.tag = tag; this.children = []; this.attrs = {}; this.dataset = {}; this.listeners = {}; this.textContent = ''; }
+    getBoundingClientRect() { return { top: 10, bottom: 210 }; }
     setAttribute(key, value) { this.attrs[key] = value; } append(...nodes) { this.children.push(...nodes); }
     replaceChildren(...nodes) { this.children = nodes; } addEventListener(key, fn) { this.listeners[key] = fn; }
   }
   const get = id => { if (!elements.has(id)) elements.set(id, new Element('div')); return elements.get(id); };
-  let receive, receiveColor, close = 0;
+  let receive, receiveColor, close = 0; const sizes = [];
   const now = new Date(2026, 9, 25, 12).getTime();
   const document = { documentElement: new Element('html'), getElementById: get, createElementNS: (_, tag) => new Element(tag), addEventListener() {} };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../workbuddy-details-renderer.js'), 'utf8'), {
-    document, window: { matchMedia: () => ({ matches: false, addEventListener() {} }), TrendCurve: require('../quota-trend-curve'),
-      petWorkBuddyDetails: { onModel: fn => { receive = fn; }, onColorMode: fn => { receiveColor = fn; }, close: () => close++ } },
+    document, window: { getComputedStyle: () => ({ paddingBottom: '13px', borderBottomWidth: '1px' }), requestAnimationFrame: fn => fn(), matchMedia: () => ({ matches: false, addEventListener() {} }), TrendCurve: require('../quota-trend-curve'),
+      petWorkBuddyDetails: { resize: height => sizes.push(height), onModel: fn => { receive = fn; }, onColorMode: fn => { receiveColor = fn; }, close: () => close++ } },
     Date: class extends Date { static now() { return now; } }
   });
-  receive({ report: { total: 7000 }, history: [] }); assert.match(get('hint').textContent, /暂无真实/); assert.equal(get('chart').children.length, 0);
-  receive({ report: { total: 7000 }, history: [{ at: now - 1200000, total: 7400 }] }); assert.match(get('hint').textContent, /仅有1次/);
+  receive({ report: { total: 7000 }, history: [] }); assert.match(get('hint').textContent, /暂无真实/); assert.equal(get('chart').children.length, 0); assert.equal(sizes.at(-1), 214);
+  receive({ report: { total: 7000 }, history: [{ at: now - 1200000, total: 7400 }] }); assert.match(get('hint').textContent, /仅有1次/); assert.equal(sizes.at(-1), 214);
   receive({ report: { total: 7000 }, history: [{ at: now - 1200000, total: 7400 }, { at: now - 300000, total: 7000 }] });
   assert.equal(get('change').textContent, '-400'); assert.equal(get('balance').textContent, '7,000');
   const svg = get('chart').children[0]; assert.equal(svg.attrs.viewBox, '0 0 374 144');

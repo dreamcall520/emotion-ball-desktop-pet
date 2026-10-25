@@ -4,6 +4,10 @@ const path = require('node:path');
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function capture(win) {
   await win.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+  // rAF runs before paint; IPC DOM updates still need a compositor commit on macOS.
+  await wait(120);
+  await win.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true });
+  await wait(50);
   return win.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true });
 }
 const accountKey = '9'.repeat(64);
@@ -111,9 +115,21 @@ async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, detai
     assert.match(trendShape.points.at(-1).title, /7,399\.91 积分/);
     assert.equal(trendShape.timeLabels.length, 2);
     assert(trendShape.timeLabels.every(text => /\d{2}:\d{2}/.test(text)), '真实时间轴');
+    const themeEvidence = {};
+    for (const appearance of ['light', 'dark']) {
+      detailWin.webContents.send('pet:color-mode', 'standard', appearance, 'blue');
+      await until(() => detailPage(`document.documentElement.dataset.resolvedAppearance === ${JSON.stringify(appearance)}`), '详情实际明暗主题');
+      const computed = await detailPage(`(() => { const panel=getComputedStyle(document.getElementById('details-panel'));return {resolved:document.documentElement.dataset.resolvedAppearance,background:panel.backgroundColor,text:getComputedStyle(document.body).color,tab:document.getElementById('week').getAttribute('aria-pressed'),balance:document.getElementById('balance').textContent,points:document.querySelectorAll('#chart circle.point').length}; })()`);
+      assert.equal(computed.resolved, appearance);
+      assert.equal(computed.background, appearance === 'dark' ? 'rgba(26, 34, 45, 0.96)' : 'rgba(244, 249, 255, 0.94)', '详情共享CSS真实背景颜色');
+      assert.equal(computed.text, appearance === 'dark' ? 'rgb(245, 247, 250)' : 'rgb(37, 43, 52)', '详情共享CSS真实文本颜色');
+      assert.equal(computed.tab, 'true'); assert.equal(computed.balance, '7,399.91'); assert.equal(computed.points, 3);
+      themeEvidence[appearance] = computed;
+      if (outputDir) fs.writeFileSync(path.join(outputDir, appearance === 'light' ? 'workbuddy-trend-details.png' : 'workbuddy-trend-details-dark.png'), (await capture(detailWin)).toPNG());
+    }
     if (outputDir) {
-      fs.writeFileSync(path.join(outputDir, 'workbuddy-trend-details.png'), (await capture(detailWin)).toPNG());
       fs.writeFileSync(path.join(outputDir, 'trend-shape.json'), JSON.stringify(trendShape, null, 2));
+      fs.writeFileSync(path.join(outputDir, 'trend-theme.json'), JSON.stringify(themeEvidence, null, 2));
     }
     await detailPage("document.getElementById('details-close').click()");
     await until(() => !details.isVisible(), '关闭趋势详情');
