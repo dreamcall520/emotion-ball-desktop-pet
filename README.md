@@ -20,7 +20,7 @@
 
 - 球球桌宠保持免费下载，不售卖 App 或上游球形角色的授权。新增春野原创作品与周边展示、微信联系及自愿支持入口，不提供站内订单、结算或支付状态；周边仅使用春野形象，原 App 的许可与署名保持。
 - Apple 芯片与 Intel x64 下载信息分开维护，不用另一架构冒充。
-- 主下载使用公开 GitHub Release DMG 直链，同步版本和发布日期；文件大小、SHA-256 保留在本维护文档。国内备用仅指向已核验的 Apple 0.4.05 微云分享 https://share.weiyun.com/OJvZzed5 ，Intel 和历史版本不复用该入口。
+- 主下载使用公开 GitHub Release DMG 直链，同步版本和发布日期；文件大小、SHA-256 保留在本维护文档。国内备用指向 Apple 0.4.06 微云分享 https://share.weiyun.com/rXnnLRhI （分享页已核对，完整下载 SHA-256 待核验，核验通过后发布），Intel 和历史版本不复用该入口。
 - Intel 构建候选在真实 Intel Mac 验收前，必须保留明显说明。
 - `LICENSE`、`NOTICE.md` 和原作者 `sam70361/emotion-ball` 署名不得删除。
 - 官网不使用远程字体；意见反馈仅在用户主动提交时上传填写内容和所选截图。Umami 不使用 Cookie，GA4 使用第一方 Cookie，访问统计范围见下文。
@@ -66,7 +66,7 @@ Umami Cloud 网站“球球官网”，website ID 为 `fe855bb0-9000-49aa-820b-b
 GA4 媒体资源“球球官网”，网站数据流“球球官网 Web”，衡量 ID `G-4SKBHMHFLJ`、数据流 ID `16143253967`，报告时区为中国时间、币种 CNY。与既有 Umami 并行，覆盖 sitemap 中的 12 个正式页面；演示、测试和 Google 验证文件不加载统计。各页 `analytics.js` 的 `data-ga4-id` 配置同一个真实衡量 ID，空值时不加载 Google 脚本。GA4 使用第一方 Cookie 区分浏览器与会话，不代表真实人数或登录身份；不启用 Google Signals、广告个性化和增强型衡量。
 
 - 手动发送每页一次 `page_view`，只包含正式页面路径、固定官网标题和外部来源 origin。已知 `utm_source`/`utm_medium` 组合可以归因微信、小红书等渠道，其它查询参数、hash、来源路径及任意营销字段不上传。来源缺失时可能记为直接访问。
-- `download_click` 统计带现有标记的 GitHub 当前下载入口及官网现有微云入口，参数为 `architecture`、`position`、`download_source`、`version`；历史日志下载不计。微云仍对应 Apple 0.4.05 旧版，未同步 0.4.06。点击不等于下载完成或安装成功。
+- `download_click` 统计带现有标记的 GitHub 当前下载入口及官网现有微云入口，参数为 `architecture`、`position`、`download_source`、`version`；历史日志下载不计。微云入口对应 Apple 0.4.06，版本参数与实际分享文件一致。点击不等于下载完成或安装成功。
 - 原 Umami 四页 PV 汇总与 GitHub 下载事件保持，不扩大旧口径；两平台覆盖页数、来源和下载范围不同，不直接相加或强求一致。
 - 仅在正式 HTTPS 域名加载，尊重 DNT、旧 `umami.disabled` 及统一 `localStorage['qiuqiu.analytics.disabled']='1'`；退出后重新加载页面生效。统计不发送聊天、便签、反馈文本、截图、邮箱或桌宠本机资料，失败不阻断下载或页面使用。
 - GA4 从接入后开始累计，历史访问不能补回；来源看“流量获取”，点击看 `download_click` 事件。必须以真实事件送达和后台实时回读验收，安装提示或前端请求成功不能单独证明后台已收数。
@@ -89,7 +89,7 @@ GA4 媒体资源“球球官网”，网站数据流“球球官网 Web”，衡
 
 Apple 芯片版 **0.4.06**，发布日期 **2026-10-24**，GitHub 兼容标签 `v0.4.6`。正式 Release 已公开；DMG/ZIP 已通过无登录完整 GET，大小与 SHA-256 和冻结正式附件一致。
 
-本次升级设置中心，新增四主题咩咩、主题互动与春节烟花，焕新应用图标，并优化已知问题。Intel 仍为 0.3.13 候选；国内微云保持实际 0.4.05 旧版，尚未上传新版。既有网页演示与商城图片保持原版本，不冒充新版运行界面。
+本次升级设置中心，新增四主题咩咩、主题互动与春节烟花，焕新应用图标，并优化已知问题。Intel 仍为 0.3.13 候选；国内微云已上传同名 0.4.06 DMG 并确认分享页唯一文件，完整下载 SHA-256 待核验，官网修改尚未发布。既有网页演示与商城图片保持原版本，不冒充新版运行界面。
 
 | 文件 | 精确大小（bytes） | SHA-256 |
 | --- | ---: | --- |
@@ -97,6 +97,10 @@ Apple 芯片版 **0.4.06**，发布日期 **2026-10-24**，GitHub 兼容标签 `
 | [Qiuqiu-0.4.06-macOS-arm64-share.zip](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.6/Qiuqiu-0.4.06-macOS-arm64-share.zip) | 169428505 | `6942a47a7bee1495c4549f3f10114d41a7b65040048dc577ad2efb399056f1a9` |
 
 大小与 SHA-256 来自主线冻结的正式附件元数据，并经公开完整下载核验一致。公开 Release 为 `v0.4.6`，源码提交 `03b7aac`；回读证据位于项目 `验收记录/v0.4.06-release-20261024/github-public-readback.json`。页面主下载及日志只提供 DMG，ZIP 作为维护记录保留。
+
+### 国内微云 0.4.06 同步（2026-10-25，待完整下载核验）
+
+分享：[Qiuqiu-0.4.06-macOS-arm64.dmg](https://share.weiyun.com/rXnnLRhI)。分享页唯一文件同名，显示 175.58 MB。正在进行一次普通下载，尚未完成；预期大小 **184112825 bytes**、SHA-256 `d260895779d076f40f002a9b590229a0ea02e0b74207f46cae626a6775fe55fc` 来自正式公包，不能代替本次微云实下载核验。核验通过前不推送官网修改。旧 0.4.05 分享记录作为历史保留，Intel 候选及 GitHub 主下载不变。
 
 ### 0.4.05 下载记录（保留）
 

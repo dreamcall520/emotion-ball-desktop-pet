@@ -37,10 +37,11 @@ for (const ref of html.matchAll(/(?:src|href)="([^"#][^"]+)"/g)) {
 console.log('Functionality page: retained demos, moved history, release downloads and local resources passed');
 
 for (const page of [html,home]) {
-  const domestic=[...page.matchAll(/<a[^>]*href="https:\/\/share\.weiyun\.com\/OJvZzed5"[^>]*>([\s\S]*?)<\/a>/g)];
-  assert.ok(domestic.length>0);
-  assert.ok(domestic.every(m=>m[1].includes('0.4.05')&&m[1].includes('旧版')));
-  assert.ok(domestic.every(m=>!m[1].includes('0.4.06')));
+  const domestic=[...page.matchAll(/<a[^>]*href="https:\/\/share\.weiyun\.com\/rXnnLRhI"[^>]*>([\s\S]*?)<\/a>/g)];
+  assert.equal(domestic.length,3);
+  assert.ok(domestic.every(m=>m[1].includes('0.4.06')&&!m[1].includes('旧版')));
+  assert.doesNotMatch(page,/share\.weiyun\.com\/OJvZzed5/);
+  assert.match(page,/analytics\.js\?v=20261025-domestic/);
 }
 assert.match(html,/Intel 构建候选/);
 assert.match(html,/尚未在真实 Intel Mac 上验收/);

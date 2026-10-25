@@ -133,10 +133,10 @@
         gaTrack('event', 'download_click', { ...page, send_to: ga4Id, architecture, position,
           download_source: 'github', version: match[2] });
       }
-    } else if (link.href === 'https://share.weiyun.com/OJvZzed5') {
+    } else if (link.href === 'https://share.weiyun.com/rXnnLRhI') {
       const position = link.closest?.('nav') ? 'navigation' : link.closest?.('.hero-actions') ? 'hero' : 'download';
       gaTrack('event', 'download_click', { ...page, send_to: ga4Id, architecture: 'arm64', position,
-        download_source: 'weiyun', version: '0.4.05' });
+        download_source: 'weiyun', version: '0.4.06' });
     }
   };
   document.addEventListener('click', downloadClick, { capture: true });
