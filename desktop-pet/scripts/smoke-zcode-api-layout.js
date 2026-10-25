@@ -1,9 +1,9 @@
 // Isolated native controllers with fixture balances; no account, API or model access.
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const assert = require('node:assert/strict');
+// This fixture opens synthetic cards; never run it on the user's active desktop by default.
+assert.equal(process.env.PET_LAYOUT_VISIBLE_FIXTURE, '1', 'Visible layout fixtures require an isolated test desktop');
 if (!process.versions.electron) {
-  // This fixture opens synthetic cards; never run it on the user's active desktop by default.
-  assert.equal(process.env.PET_LAYOUT_VISIBLE_FIXTURE, '1', 'Visible layout fixtures require an isolated test desktop');
   const data = fs.mkdtempSync(path.join(os.tmpdir(), 'zcode-api-layout-'));
   const env = { ...process.env, PET_LAYOUT_USER_DATA: data }; delete env.ELECTRON_RUN_AS_NODE;
   const child = require('node:child_process').spawn(require('electron'), [__filename], { env, stdio:'inherit' });
