@@ -15,9 +15,9 @@ const oldArticles = articles.slice(1), oldBlocks = articleBlocks.slice(1);
 test('logs replace 0.4.06 with 0.4.08 and preserve all seventeen historical records', () => {
   assert.match(articleBlocks[0], /id="v0\.4\.08-apple"/);
   assert.match(articles[0], /datetime="2026-10-26"/);
-  assert.deepEqual([...articles[0].matchAll(/<h4>(.*?)<\/h4>/g)].map(m=>m[1]), ['【新增】咩咩四季主题', '【新增】ZCode 与 WorkBuddy 联动', '【新增】联动样式管理', '【新增】更多桌面伙伴', '【升级】统一设置中心', '【焕新】应用图标与聊天界面', '【优化】已知问题']);
+  assert.deepEqual([...articles[0].matchAll(/<h4>(.*?)<\/h4>/g)].map(m=>m[1].replace(/^\d+\.\s*/, '')), ['【新增】咩咩四季主题', '【新增】ZCode 与 WorkBuddy 联动', '【新增】联动样式管理', '【新增】更多桌面伙伴', '【升级】统一设置中心', '【焕新】应用图标与聊天界面', '【优化】已知问题']);
   assert.equal((articles[0].match(/<li>/g) || []).length, 11);
-  assert.match(articles[0], /<h4>【优化】已知问题<\/h4><\/div>/);
+  assert.match(articles[0], /<h4>7\.【优化】已知问题<\/h4><\/div>/);
   assert.doesNotMatch(articles[0], /主题记忆|靠边位置|卡面|小角色/);
   assert.equal(articles.length,18);
   assert.doesNotMatch(articles[0], /release-download/);
@@ -25,7 +25,7 @@ test('logs replace 0.4.06 with 0.4.08 and preserve all seventeen historical reco
   assert.match(html, /0\.4\.08 Apple 芯片版 · 大版本更新<\/option>/);
 });
 
-test('0.4.05 and sixteen earlier historical blocks remain unchanged, omitting 0.4.03', () => {
+test('0.4.05 and sixteen earlier historical blocks retain their content with numbered headings, omitting 0.4.03', () => {
   const articles = oldArticles, articleBlocks = oldBlocks;
   assert.match(html, /<title>球球桌宠 · 更新日志<\/title>/);
   assert.match(html, /rel="canonical" href="https:\/\/qiuqiu.pet\/updates\/"/);
@@ -34,17 +34,17 @@ test('0.4.05 and sixteen earlier historical blocks remain unchanged, omitting 0.
   assert.equal((html.match(/<option /g) || []).length, 18);
   assert.doesNotMatch(html, /v0\.4\.03-apple|本次更新仅适用于 Apple 芯片；Intel x64 最新公开构建/);
   assert.match(articleBlocks[0], /id="v0\.4\.05-apple"/);
-  assert.deepEqual([...articles[0].matchAll(/<h4>(.*?)<\/h4>/g)].map(m => m[1]), ['【新增】悬浮快捷面板', '【新增】番茄钟', '【新增】额度展示定制', '【新增】球球守护战', '【优化】额度预估', '【优化】使用体验']);
+  assert.deepEqual([...articles[0].matchAll(/<h4>(.*?)<\/h4>/g)].map(m => m[1].replace(/^\d+\.\s*/, '')), ['【新增】悬浮快捷面板', '【新增】番茄钟', '【新增】额度展示定制', '【新增】球球守护战', '【优化】额度预估', '【优化】使用体验']);
   for (const text of ['悬浮快捷面板', '番茄钟', '六种展示样式', '额度预估参考', '球球守护战', '色弱模式']) assert.ok(articles[0].includes(text));
-  assert.equal(createHash('sha256').update(articleBlocks.slice(1).join('\n')).digest('hex'), '280656136c6fbcf27302d48ec4f8992b0c050d44263578c74cabf419896bb064', 'all sixteen historical release blocks remain byte-identical');
+  assert.equal(createHash('sha256').update(articleBlocks.slice(1).join('\n')).digest('hex'), '601fd16d3279c29bdcf0909e61b18272c8222cdf55f38fdb1a0642e56f72d26d', 'all sixteen historical release blocks preserve the numbered baseline');
   assert.match(articleBlocks[1], /id="v0\.4\.04-apple"/);
-  assert.deepEqual([...articles[1].matchAll(/<h4>(.*?)<\/h4>/g)].map(m => m[1]), ['【升级】Codex 额度趋势', '【新增】清除未看', '【优化】已知体验问题']);
+  assert.deepEqual([...articles[1].matchAll(/<h4>(.*?)<\/h4>/g)].map(m => m[1].replace(/^\d+\.\s*/, '')), ['【升级】Codex 额度趋势', '【新增】清除未看', '【优化】已知体验问题']);
   assert.equal((articles[1].match(/<li>/g) || []).length, 7);
   for (const text of ['「趋势」与「每日消耗」', '可用重置机会的到期提醒', '清除未看标记，保留会话和任务记录', '跟随球球所在屏幕', '跟随面板所在屏幕', '色弱模式边框与文字显示', '聊天头像恢复原版节奏']) assert.ok(articles[1].includes(text));
   assert.match(articleBlocks[2], /id="v0\.4\.02-apple"/);
   for (const text of ['薄荷绿', '晴空蓝', '状态与分类筛选', '色弱模式下便签窗口四角边框缺口', '重启或短时断档不再清空已有记录', '有记录的部分历史']) assert.ok(articles[2].includes(text));
   assert.match(articleBlocks[3], /id="v0\.4\.01-apple"/);
-  assert.ok(articles[3].includes('<h4>【新增】Codex 宠物导入</h4>'));
+  assert.ok(articles[3].includes('<h4>1.【新增】Codex 宠物导入</h4>'));
   assert.match(articles[3], /本机 Codex 自定义宠物/);
   assert.match(articles[3], /无需上传文件/);
   assert.match(articles[3], /预览原有动画后保存/);
@@ -52,7 +52,7 @@ test('0.4.05 and sixteen earlier historical blocks remain unchanged, omitting 0.
   // Freeze the retained wording, excluding download links, the removed note and the new badge.
   const wording = articleBlocks.slice(2).join('\n').replace(/<a class="release-download [^"]+"[^>]*>.*?<\/a>/g, '')
     .replace(/ <small class="release-milestone">大版本更新<\/small>/g, '').replace(/[ \t]+$/gm, '');
-  assert.equal(createHash('sha256').update(wording).digest('hex'), '42478fe782a63a870ed225cc63134af1892b0e0d594809ce3ca0bb25c17da7bf');
+  assert.equal(createHash('sha256').update(wording).digest('hex'), 'f6566a805defa743ecb3eb8a041c4fee7c661b921a30c5090de41072aab3f093');
   for (const title of ['1.【新增】便签与待办', '2.【新增】来定制球球', '3.【新增】自动更新提醒', '4.【升级】额度卡片 2.0', '5.【升级】全局 UI 升级', '6.【修复】已知体验问题']) assert.ok(articles[4].includes(`<h4>${title}</h4>`));
   assert.match(articles[4], /<h4>6.【修复】已知体验问题<\/h4><\/div>/);
   assert.equal((html.match(/class="release-milestone"/g) || []).length, 4);
