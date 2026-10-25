@@ -24,7 +24,9 @@
   el('toggle').addEventListener('click', () => api.toggle());
   el('refresh').addEventListener('click', () => api.refresh());
   el('expanded-header').addEventListener('click', () => api.toggle());
-  el('tasks').addEventListener('click', () => api.tasks());
+  el('tasks').addEventListener('click', () => api.tasks('tasks'));
+  el('results').addEventListener('click', () => api.tasks('results'));
+  el('expanded-header').addEventListener('contextmenu', event => { event.preventDefault(); api.refresh(); });
   el('trend').addEventListener('click', () => api.trend());
   api.onState(state => {
     appearance = ['light', 'dark'].includes(state.appearance) ? state.appearance : 'system';
@@ -63,6 +65,16 @@
     el('balance-state').title = `${r ? status || '可用积分' : `WorkBuddy 未连接${status ? `；${status}` : ''}`}；${updated}`;
     el('balance-state').setAttribute('aria-label', el('balance-state').title);
     el('refresh').title = `刷新 WorkBuddy 积分；${updated}`;
+    el('expanded-header').title = `${updated}；每5分钟自动更新，右键立即刷新积分`;
+    const activity = state.activity || {};
+    const count = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
+    const running = count(activity.runningCount), unread = count(activity.unreadCount);
+    el('running-count').textContent = running === null ? '—' : String(running);
+    el('unread-count').textContent = unread === null ? '—' : String(unread);
+    el('tasks').title = `查看球球内任务；${running === null ? '实时进行中数量暂未提供' : `进行中 ${running} 项`}；范围：本机已同步任务`;
+    el('results').title = `查看球球内待查看任务；${unread === null ? '待查看数量暂未提供' : `本机已同步记录中待查看 ${unread} 项`}；不是全局任务统计`;
+    el('tasks').setAttribute('aria-label', el('tasks').title);
+    el('results').setAttribute('aria-label', el('results').title);
     el('toggle').title = status || '展开 WorkBuddy 积分';
     el('toggle').setAttribute('aria-label', `WorkBuddy ${r ? `${amount(r.total)} 积分` : '未连接'}${status ? `，${status}` : ''}`);
     el('refresh').disabled = state.busy;

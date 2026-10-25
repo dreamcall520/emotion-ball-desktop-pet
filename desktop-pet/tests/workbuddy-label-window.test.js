@@ -46,10 +46,12 @@ test('constructor is lazy; IPC verifies sender and frame; expansion falls back; 
   w.webContents.emit('ipc-message',event,'pet:workbuddy-label-toggle');assert.equal(w.sent.at(-1).expanded,false);assert.equal(w.sent.at(-1).spaceError,true);
   controller.hide();w.webContents.emit('ipc-message',event,'pet:workbuddy-label-refresh');assert.equal(refresh,1);
   w.webContents.emit('ipc-message',event,'pet:workbuddy-label-trend');assert.equal(trend,1);
-  w.webContents.emit('ipc-message',event,'pet:workbuddy-label-tasks');assert.equal(tasks,0);
+  w.webContents.emit('ipc-message',event,'pet:workbuddy-label-tasks','tasks');assert.equal(tasks,0);
   controller.show({enabled:true});
-  w.webContents.emit('ipc-message',{...event,senderFrame:{}},'pet:workbuddy-label-tasks');assert.equal(tasks,0);
-  w.webContents.emit('ipc-message',event,'pet:workbuddy-label-tasks');assert.equal(tasks,1);
+  w.webContents.emit('ipc-message',{...event,senderFrame:{}},'pet:workbuddy-label-tasks','tasks');assert.equal(tasks,0);
+  w.webContents.emit('ipc-message',event,'pet:workbuddy-label-tasks','unknown');assert.equal(tasks,0);
+  w.webContents.emit('ipc-message',event,'pet:workbuddy-label-tasks','tasks');assert.equal(tasks,1);
+  w.webContents.emit('ipc-message',event,'pet:workbuddy-label-tasks','results');assert.equal(tasks,2);
   controller.destroy();assert.equal(controller.getWindow(),null);
 });
 
@@ -113,4 +115,9 @@ test('history metadata stays optional and only validated balance/expiry fields c
   assert.deepEqual(state.history[0],{at:1,total:10});
   assert.deepEqual(state.history[1],{at:2,total:9,basic:2,reward:7,purchased:0,nextRefreshAt:30,expires:[{amount:1,at:20}]});
   assert.deepEqual(state.history[2],{at:3,total:8});
+});
+
+test('activity count whitelist preserves unknown running instead of inventing global zero', () => {
+  assert.deepEqual(safeState({activity:{runningCount:null,unreadCount:0,token:'secret'}}).activity,{runningCount:null,unreadCount:0,scope:'本机已同步任务'});
+  assert.deepEqual(safeState({activity:{runningCount:-1,unreadCount:'3'}}).activity,{runningCount:null,unreadCount:null,scope:'本机已同步任务'});
 });

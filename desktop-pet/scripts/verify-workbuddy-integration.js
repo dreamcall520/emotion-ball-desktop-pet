@@ -23,6 +23,9 @@ const report = () => ({ total: 7400, basic: 500, reward: 6900, purchased: 0, pla
 function createSmokeWorkBuddyRunner() {
   return async (operation, payload, { signal, onDelta } = {}) => {
     if (operation === 'quota') return { accountKey, report: report() };
+    if (operation === 'tasks') return { accountKey, source: 'local-session-cache', scope: 'current-account', observedAt: Date.now(), running: null, pendingReview: 1, total: 2, truncated: false, items: [
+      {id:'smoke-completed',title:'验收任务：整理页面说明',status:'completed',unread:true,updatedAt:Date.now()-1000,transport:'local'},
+      {id:'smoke-terminated',title:'验收任务：检查数据卡',status:'terminated',unread:false,updatedAt:Date.now()-2000,transport:'cloud'}] };
     if (operation === 'models') return { accountKey, models: [{ id: 'glm-5.3-flash', displayName: 'GLM-5.3-Flash' }] };
     assert.equal(operation, 'chat'); assert.equal(payload.expectedAccountKey, accountKey);
     const text = JSON.stringify({ text: '我是球球，今天也陪着你。', action: 'none' });
@@ -35,7 +38,7 @@ async function until(read, label) {
   for (let n = 0; n < 200; n++) { if (await read()) return; await wait(50); }
   throw new Error('等待失败：' + label);
 }
-async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, details, guard, codexDetails, edge, edgeNotices, chat, chatWindow, consent, openChat, setProvider, setEnabled, getSettings, getCodex, menuTemplate, setSize, outputDir, live = false }) {
+async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, details, tasks, guard, codexDetails, edge, edgeNotices, chat, chatWindow, consent, openChat, setProvider, setEnabled, getSettings, getCodex, menuTemplate, setSize, outputDir, live = false }) {
   if (outputDir) fs.mkdirSync(outputDir, { recursive: true });
   const codexBefore = JSON.stringify(getCodex());
   const codexSettings = Object.fromEntries(Object.entries(getSettings()).filter(([k]) => k.startsWith('codex')));
@@ -133,7 +136,39 @@ async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, detai
   await page("document.getElementById('expanded-header').click()");
   await until(() => page("document.getElementById('quota-label').dataset.expanded === 'false'"), '整个标题行点击收起');
   await page("document.getElementById('toggle').click()");
-  assert.match(await page("document.getElementById('tasks').title"), /完整统计暂未提供/);
+  assert.match(await page("document.getElementById('tasks').title"), /实时进行中数量暂未提供/);
+  if (!live && tasks && details) {
+    await until(() => tasks.getState().report?.pendingReview === 1, '本机任务元数据同步');
+    await until(() => page("document.getElementById('running-count').textContent === '—' && document.getElementById('unread-count').textContent === '1'"), '进行中未知与待查看本机计数');
+    for (const action of ['tasks','results']) {
+      if(!(await page("document.getElementById('quota-label').dataset.expanded === 'true'"))) await page("document.getElementById('toggle').click()");
+      await page(`document.getElementById('${action}').click()`);
+      await until(() => details.getWindow()?.isVisible() && details.getAction() === action, '球球内任务入口');
+      const taskWin=details.getWindow(), taskPage=code=>taskWin.webContents.executeJavaScript(code);
+      assert(taskWin.webContents.getURL().endsWith('/workbuddy-details.html'),'任务留在球球内');
+      await until(() => taskPage(`document.getElementById('task-tab-${action}').getAttribute('aria-pressed') === 'true'`),'任务默认tab');
+      await until(() => taskPage("document.querySelectorAll('#tasks-list .activity-item').length > 0"),'任务列表可读');
+      if(action==='tasks') {
+        assert.equal(await taskPage("document.querySelectorAll('#tasks-list .activity-item').length"),2);
+        assert.match(await taskPage("document.getElementById('tasks-scope').textContent"),/本机已同步/);
+        await taskPage("document.querySelector('#tasks-list .activity-item').click()");
+        assert.equal(await taskPage("document.querySelector('#tasks-list .activity-item').getAttribute('aria-expanded')"),'true');
+        assert.match(await taskPage("document.getElementById('task-metadata-0').textContent"),/不会读取正文或修改待查看/);
+        if(outputDir)fs.writeFileSync(path.join(outputDir,'workbuddy-local-task-metadata.png'),(await capture(taskWin)).toPNG());
+        await taskPage("document.getElementById('task-tab-results').click()");
+        assert.equal(await taskPage("document.querySelectorAll('#tasks-list .activity-item').length"),1);
+      } else assert.equal(await taskPage("document.querySelectorAll('#tasks-list .activity-item').length"),1);
+      const observed=tasks.getState().report.observedAt;
+      await wait(5);await taskPage("document.getElementById('tasks-refresh').click()");
+      await until(() => !tasks.getState().busy && tasks.getState().report.observedAt > observed,'任务元数据刷新成功');
+      assert.equal(tasks.getState().report.pendingReview,1,'查看行与刷新不修改未读');
+      assert.equal(tasks.getState().report.items.find(i=>i.id==='smoke-completed').unread,true);
+      if(outputDir)fs.writeFileSync(path.join(outputDir,`workbuddy-local-${action}.png`),(await capture(taskWin)).toPNG());
+      await taskPage("document.getElementById('details-close').click()");
+      await until(() => !details.isVisible() && win.isVisible(),'关闭任务面板恢复卡');
+    }
+    if(!(await page("document.getElementById('quota-label').dataset.expanded === 'true'"))) await page("document.getElementById('toggle').click()");
+  }
   if (codexLabel) {
     codexLabel.show(readyCodex(false));
     await until(() => codexLabel.getWindow()?.isVisible(), 'Codex卡与WB同时显示');
@@ -241,7 +276,7 @@ async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, detai
     assert.equal(await detailPage("document.getElementById('forecast').textContent"),'还不能估算可用天数');
     await detailPage("document.querySelector('#explanation summary').click()");
     assert.equal(await detailPage("document.getElementById('explanation').open"),true);
-    assert.match(await detailPage("document.getElementById('explanation').textContent"),/不是消费流水/);
+    assert.match(await detailPage("document.getElementById('explanation').textContent"),/不当作消费流水/);
     await detailPage("document.querySelector('#explanation summary').click()");
     assert.equal(trendShape.viewBox, '0 0 374 144');
     assert.equal(trendShape.solid, true); assert.equal(trendShape.gap, true);
@@ -266,6 +301,19 @@ async function verifyWorkBuddyIntegration({ pet, quota, label, codexLabel, detai
       fs.writeFileSync(path.join(outputDir, 'trend-shape.json'), JSON.stringify(trendShape, null, 2));
       fs.writeFileSync(path.join(outputDir, 'trend-theme.json'), JSON.stringify(themeEvidence, null, 2));
     }
+    const rewardMeta={basic:500,purchased:0,nextRefreshAt:at+30*86400000,expires:[]};
+    details.update({report:{...trendReport,...rewardMeta,total:1100},history:[{...rewardMeta,at:at-300000,total:1000,reward:500},{...rewardMeta,at,total:1100,reward:600}]});
+    await until(() => detailPage("document.getElementById('change').textContent === '+100'"),'奖励增加主指标');
+    assert.match(await detailPage("document.getElementById('change-label').textContent"),/增加/);
+    assert.match(await detailPage("document.getElementById('events').textContent"),/奖励增加100积分/);
+    assert.equal(await detailPage("document.querySelectorAll('#chart .observed-line,#chart .unrecorded-line').length"),0,'奖励发放不画跨点竖线');
+    if(outputDir)fs.writeFileSync(path.join(outputDir,'workbuddy-reward-increase.png'),(await capture(detailWin)).toPNG());
+    await detailPage("document.getElementById('view-daily').click()");
+    assert.match(await detailPage("document.getElementById('events').textContent"),/增加 100 · 减少 0/);
+    assert.equal(await detailPage("document.querySelector('#chart svg') === null"),true);
+    if(outputDir)fs.writeFileSync(path.join(outputDir,'workbuddy-daily-change.png'),(await capture(detailWin)).toPNG());
+    await detailPage("document.getElementById('view-records').click()");
+    details.update(quota.getState());
     await detailPage("document.getElementById('details-close').click()");
     await until(() => !details.isVisible(), '关闭趋势详情');
     await until(() => win.isVisible(), '关闭详情后积分卡恢复');

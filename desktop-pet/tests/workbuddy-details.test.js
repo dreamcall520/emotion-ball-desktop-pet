@@ -4,7 +4,7 @@ const { EventEmitter } = require('node:events');
 const { pathToFileURL } = require('node:url');
 const path = require('node:path');
 const { createWorkBuddyDetailsWindow } = require('../lib/workbuddy-details-window');
-const { observations, analyze } = require('../workbuddy-details-renderer');
+const { observations, analyze, changes, dailyChanges } = require('../workbuddy-details-renderer');
 function fixture() {
   const windows = [];
   class Window extends EventEmitter {
@@ -55,7 +55,7 @@ test('renderer plots real samples with gap connector and observed decreases, wit
   const get = id => { if (!elements.has(id)) elements.set(id, new Element('div')); return elements.get(id); };
   let receive, receiveColor, close = 0; const sizes = [];
   const now = new Date(2026, 9, 25, 12).getTime();
-  const document = { documentElement: new Element('html'), getElementById: get, createElementNS: (_, tag) => new Element(tag), addEventListener() {} };
+  const document = { documentElement: new Element('html'), getElementById: get, createElement: tag => new Element(tag), createElementNS: (_, tag) => new Element(tag), addEventListener() {} };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../workbuddy-details-renderer.js'), 'utf8'), {
     document, window: { getComputedStyle: () => ({ paddingBottom: '13px', borderBottomWidth: '1px' }), requestAnimationFrame: fn => fn(), matchMedia: () => ({ matches: false, addEventListener() {} }), TrendCurve: require('../quota-trend-curve'),
       petWorkBuddyDetails: { resize: height => sizes.push(height), onModel: fn => { receive = fn; }, onColorMode: fn => { receiveColor = fn; }, close: () => close++ } },
@@ -78,7 +78,16 @@ test('renderer plots real samples with gap connector and observed decreases, wit
   assert.equal(get('balance').textContent, '7,399.91'); assert.equal(get('change').textContent, '6,899.91');
   const html = fs.readFileSync(path.join(__dirname, '../workbuddy-details.html'), 'utf8');
   assert.match(html, /id="change" class="time-value"/);
-  assert.match(html, /<h1>余额趋势<small class="title-product">WorkBuddy/);
+  assert.match(html, /<h1 id="details-title">积分变化<small class="title-product">WorkBuddy/);
+  receive({ report: { total: 600 }, history: [{ at: now - 600000, total: 500, basic: 500, reward: 0, purchased: 0 }, { at: now, total: 600, basic: 500, reward: 100, purchased: 0 }] });
+  assert.equal(get('change-label').textContent, '今日增加'); assert.equal(get('change').textContent, '+100');
+  assert.match(get('events').children[0].children[0].children[0].textContent, /奖励增加100积分/);
+  const rewardSvg = get('chart').children[0];
+  assert.equal(rewardSvg.children.filter(n => n.attrs.class === 'observed-line').length, 0);
+  assert.ok(rewardSvg.children.some(n => n.tag === 'text' && n.textContent === '+100奖励'));
+  get('view-daily').listeners.click(); assert.equal(get('chart').children.length, 0);
+  assert.match(get('events').children[0].children[0].children[1].textContent, /增加 100 · 减少 0 积分/);
+  get('view-records').listeners.click();
   receive({ report: { total: 7400 }, history: [{ at: now - 600000, total: 7400 }, { at: now, total: 7400 }] });
   assert.equal(get('chart').children.length, 0); assert.equal(get('hint').textContent, '这段时间积分未变化');
   assert.equal(get('change').textContent, '0'); assert.match(get('forecast').textContent, /还不能估算/);
@@ -98,4 +107,19 @@ test('rough days require continuous day-long classified observations, exclude gr
   assert.equal(analyze(points, { ...report, nextRefreshAt: now + 1000 }, now).days, null);
   const expired = structuredClone(points); expired[10].expires.push({ at: expired[11].at, amount: 100 });
   assert.equal(analyze(expired, report, now).days, null);
+});
+test('classifies reward increase and known expiry, keeps unknown reductions honest and aggregates daily directions separately', () => {
+  const at = new Date(2026, 9, 25, 9).getTime();
+  const records = [
+    { at, total: 500, basic: 500, reward: 0, purchased: 0, expires: [] },
+    { at: at + 300000, total: 600, basic: 500, reward: 100, purchased: 0, expires: [{ at: at + 600000, amount: 100 }] },
+    { at: at + 600000, total: 500, basic: 500, reward: 0, purchased: 0, expires: [] },
+    { at: at + 900000, total: 499.91 }
+  ];
+  const events = changes(records);
+  assert.deepEqual(events.map(e => e.kind), ['reward', 'expiry', 'decrease']);
+  assert.equal(events[0].delta, 100); assert.equal(events[2].delta, -.09);
+  assert.deepEqual(dailyChanges(events), [{ date: '2026-10-25', increase: 100, decrease: 100.09, events: 3 }]);
+  assert.deepEqual(changes([{ at, total: 500 }]), []);
+  assert.deepEqual(changes([{ at, total: 500 }, { at: at + 300000, total: 500 }]), []);
 });

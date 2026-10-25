@@ -178,6 +178,7 @@ async function fixture({ codexEnabled = false, codexTaskNameInAlerts = false,
   const workbuddyCalls = [], workbuddyRecords = new Map();
   const runWorkBuddy = async (operation, payload = {}, control = {}) => {
     workbuddyCalls.push({ operation, payload, control });
+    if (operation === 'tasks') return {accountKey:'a'.repeat(64),source:'local-session-cache',observedAt:Date.now(),pendingReview:0,total:0,truncated:false,items:[]};
     if (workbuddyRun) return workbuddyRun(operation, payload, control);
     if (operation === 'quota') return { accountKey: 'a'.repeat(64), report: { total: 7400 } };
     if (operation === 'models') return { accountKey: 'a'.repeat(64), models: [{ id: 'auto', displayName: '自动' }] };
@@ -3680,7 +3681,7 @@ test('WorkBuddy 默认关闭且开启积分查询不改变 Codex 状态或原有
   const before = f.call('JSON.stringify(codexCompanion.getSnapshot())');
   const original = f.call('JSON.stringify({codexEnabled:settings.codexEnabled,chatModel:settings.chatModel,codexQuotaPeriod:settings.codexQuotaPeriod})');
   assert.equal(await f.call('setWorkBuddyEnabled(true)'), true); await flush();
-  assert.deepEqual(f.workbuddyCalls.map(item => item.operation), ['quota']);
+  assert.deepEqual(f.workbuddyCalls.map(item => item.operation), ['quota','tasks']);
   assert.equal(f.call('workbuddyQuota.getState().report.total'), 7400);
   assert.equal(f.call('JSON.stringify(codexCompanion.getSnapshot())'), before);
   assert.equal(f.call('JSON.stringify({codexEnabled:settings.codexEnabled,chatModel:settings.chatModel,codexQuotaPeriod:settings.codexQuotaPeriod})'), original);

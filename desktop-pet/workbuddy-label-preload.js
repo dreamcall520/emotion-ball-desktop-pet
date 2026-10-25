@@ -2,7 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('qiuqiuWorkBuddyLabel', {
   toggle: () => ipcRenderer.send('pet:workbuddy-label-toggle'),
   refresh: () => ipcRenderer.send('pet:workbuddy-label-refresh'),
-  tasks: () => ipcRenderer.send('pet:workbuddy-label-tasks'),
+  tasks: (kind = 'tasks') => { if (['tasks', 'results'].includes(kind)) ipcRenderer.send('pet:workbuddy-label-tasks', kind); },
   trend: () => ipcRenderer.send('pet:workbuddy-label-trend'),
   onColorMode(callback) {
     if (typeof callback !== 'function') return () => {};

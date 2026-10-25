@@ -15,8 +15,8 @@
 #dates { font-size: 7px; line-height: 11px; }
 #balances { gap: 3px; }
 #balances > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#tasks { min-width: 0; flex: 1; min-height: 18px; padding-left: 5px; text-align: left; font-size: 8px; }
-#refresh { min-width: 28px; min-height: 18px; font-size: 7px; }
+#tasks, #results { min-height: 18px; }
+#refresh[hidden] { display: none; }
 #trend { min-height: 18px; }
 #refresh:disabled { opacity: .6; cursor: default; }
 #quota-label[data-query-state="error"] #period, #quota-label[data-query-state="error"] #balance-state { color: var(--quota-urgent-text); }

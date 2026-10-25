@@ -54,7 +54,9 @@ function safeState(state) {
     })).values()].sort((a, b) => a.at - b.at).slice(-6000) : [];
   // Only fixed status text crosses IPC; upstream errors can contain credentials.
   return { enabled: state?.enabled === true, busy: state?.busy === true,
-    error: state?.error ? '更新失败，请稍后重试' : null, stale: state?.stale === true, report, history, historyError: state?.historyError ? '趋势记录暂未保存' : null };
+    error: state?.error ? '更新失败，请稍后重试' : null, stale: state?.stale === true, report, history, historyError: state?.historyError ? '趋势记录暂未保存' : null,
+    activity: { runningCount: Number.isSafeInteger(state?.activity?.runningCount) && state.activity.runningCount >= 0 ? state.activity.runningCount : null,
+      unreadCount: Number.isSafeInteger(state?.activity?.unreadCount) && state.activity.unreadCount >= 0 ? state.activity.unreadCount : null, scope: '本机已同步任务' } };
 }
 function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getObstacles = () => [], getStackAnchor = () => null, getPresentation = () => null, getGuardEntry = () => false, onGuard = () => {}, getAppearance = () => 'system', alwaysOnTop = true, onRefresh = () => {}, onTrend = () => {}, onTasks = () => {}, onError = () => {} }) {
   let win = null, ready = false, visible = false, expanded = false, current = null, top = Boolean(alwaysOnTop);
@@ -91,13 +93,13 @@ function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getOb
     target.setHiddenInMissionControl(true);
     target.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     for (const event of ['will-navigate', 'will-attach-webview']) target.webContents.on(event, e => e.preventDefault());
-    target.webContents.on('ipc-message', (e, channel) => {
+    target.webContents.on('ipc-message', (e, channel, kind) => {
       if (win !== target || !ready || !visible || !live(target) || !target.isVisible() || e.sender !== target.webContents || e.senderFrame !== target.webContents.mainFrame) return;
       try {
         if (channel === `${CHANNEL}-toggle`) { expanded = !expanded; reposition(); }
         if (channel === `${CHANNEL}-refresh` && !current.busy) onRefresh();
         if (channel === `${CHANNEL}-trend`) onTrend();
-        if (channel === `${CHANNEL}-tasks`) onTasks();
+        if (channel === `${CHANNEL}-tasks` && ['tasks', 'results'].includes(kind)) onTasks(kind);
       } catch (err) { error(err); }
     });
     target.on('closed', () => { if (win === target) { guard.hide(); win = null; ready = false; } });

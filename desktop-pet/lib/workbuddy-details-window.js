@@ -1,13 +1,23 @@
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { placeDetails } = require('./codex-details-window');
-function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getAppearance = () => 'system', alwaysOnTop = true, onError = () => {}, onVisibilityChange = () => {} }) {
+function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getAppearance = () => 'system', alwaysOnTop = true, onError = () => {}, onVisibilityChange = () => {}, onRefreshTasks = () => {} }) {
   const file = path.join(__dirname, '../workbuddy-details.html'), url = pathToFileURL(file).href;
-  let win = null, ready = false, visible = false, state = null, top = Boolean(alwaysOnTop), height = 360;
+  let win = null, ready = false, visible = false, state = null, top = Boolean(alwaysOnTop), height = 360, action = 'trend';
   const alive = () => win && !win.isDestroyed();
   const report = error => { try { onError(error); } catch (_) {} };
   function clean(value) {
-    return { report: Number.isFinite(value?.report?.total) && value.report.total >= 0 ? { total: value.report.total, updatedAt: Number.isFinite(value.report.updatedAt) ? value.report.updatedAt : null, nextRefreshAt: value.report.nextRefreshAt, basic: value.report.basic, expires: Array.isArray(value.report.expires) ? value.report.expires.map(e => ({ at: e.at, amount: e.amount })) : [] } : null,
+    const t = value?.tasks, r = t?.report;
+    const tasks = { busy: t?.busy === true, error: t?.error ? '本机任务记录暂时无法读取，请重试。' : null,
+      report: r?.source === 'local-session-cache' && Array.isArray(r.items) ? {
+        source: r.source, scope: 'current-account', observedAt: Number.isFinite(r.observedAt) ? r.observedAt : null,
+        running: null, pendingReview: Number.isSafeInteger(r.pendingReview) && r.pendingReview >= 0 ? r.pendingReview : null,
+        total: Number.isSafeInteger(r.total) && r.total >= 0 ? r.total : null, truncated: r.truncated === true,
+        items: r.items.slice(0,100).filter(i=>i && typeof i.id==='string').map(i=>({ id:i.id.slice(0,100),
+          title:typeof i.title==='string'?i.title.slice(0,160):'未命名任务', status:typeof i.status==='string'?i.status.slice(0,40):'unknown',
+          unread:i.unread===true, updatedAt:Number.isFinite(i.updatedAt)?i.updatedAt:null,
+          transport:['local','remote','cloud'].includes(i.transport)?i.transport:'unknown' })) } : null };
+    return { action, tasks, report: Number.isFinite(value?.report?.total) && value.report.total >= 0 ? { total: value.report.total, updatedAt: Number.isFinite(value.report.updatedAt) ? value.report.updatedAt : null, nextRefreshAt: value.report.nextRefreshAt, basic: value.report.basic, expires: Array.isArray(value.report.expires) ? value.report.expires.map(e => ({ at: e.at, amount: e.amount })) : [] } : null,
       history: Array.isArray(value?.history) ? value.history.filter(p => p && Number.isSafeInteger(p.at) && Number.isFinite(p.total) && p.total >= 0).map(p => ({ at: p.at, total: p.total, basic: p.basic, reward: p.reward, purchased: p.purchased, nextRefreshAt: p.nextRefreshAt, expires: Array.isArray(p.expires) ? p.expires.map(e => ({ at: e.at, amount: e.amount })) : undefined })) : [],
       historyError: value?.historyError ? '积分趋势暂时无法保存。' : null,
       stale: value?.stale === true || Boolean(value?.error) };
@@ -36,6 +46,7 @@ function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getApp
     target.webContents.on('ipc-message', (event, channel, value) => {
       if (win !== target || !ready || !visible || event.sender !== target.webContents || event.senderFrame !== target.webContents.mainFrame || event.sender.getURL() !== url) return;
       if (channel === 'pet:workbuddy-details-close') close();
+      if (channel === 'pet:workbuddy-details-refresh-tasks' && ['tasks','results'].includes(action)) onRefreshTasks();
       if (channel === 'pet:workbuddy-details-resize' && Number.isSafeInteger(value) && value >= 120 && value <= 700) { height = value; reposition(); }
     });
     target.webContents.on('did-finish-load', () => { if (win !== target) return; ready = true; send(); if (visible) target.show(); });
@@ -43,9 +54,10 @@ function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getApp
     target.on('closed', () => { if (win === target) { win = null; ready = false; changed(false); } });
     Promise.resolve(target.loadFile(file)).catch(error => { report(error); if (win === target) destroy(); });
   }
-  return { open(value) { state = clean(value); changed(true); try { ensure(); reposition(); send(); if (ready && visible) win.show(); return visible; } catch (error) { report(error); destroy(); return false; } },
+  return { open(value) { action = ['tasks','results'].includes(value?.action) ? value.action : 'trend'; state = clean(value); changed(true); try { ensure(); reposition(); send(); if (ready && visible) win.show(); return visible; } catch (error) { report(error); destroy(); return false; } },
     update(value) { state = clean(value); if (visible) { try { send(); } catch (error) { report(error); } } },
     close, destroy, reposition, setAlwaysOnTop(value) { top = Boolean(value); if (alive()) win.setAlwaysOnTop(top, 'floating'); },
+    getAction: () => action,
     isVisible: () => visible && Boolean(alive()), getWindow: () => alive() ? win : null };
 }
 module.exports = { createWorkBuddyDetailsWindow };
