@@ -206,11 +206,11 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     assert.equal(await run("document.querySelectorAll('#content [data-action]').length"),1,'random expression stays searchable');
     await run("document.querySelector('#content [data-action]').click()"); await run('new Promise(resolve=>setTimeout(resolve,10))');
     assert.equal(await run('calls.at(-1).id'),`/${encodeURIComponent('球球与互动')}/${encodeURIComponent('随机表情')}`);
-    await run("[...document.querySelectorAll('#navigation button')].find(e=>e.textContent==='贴边与显示').click()");
+    await run("[...document.querySelectorAll('#navigation button')].find(e=>e.textContent==='联动样式管理').click()");
     assert.deepEqual(await run("[...document.querySelectorAll('[data-quota-card]')].map(e=>e.dataset.quotaCard)"),['codex','api','zcode','workbuddy']);
     assert.equal(await run("document.querySelector('#content > section').dataset.settingsSection"),'quota-cards','card management is the first section');
     await run("document.querySelector('main').scrollTop=500;navigate('quota-cards')");
-    assert.equal(await run("document.querySelector('#navigation [aria-current=page]').textContent"),'贴边与显示');
+    assert.equal(await run("document.querySelector('#navigation [aria-current=page]').textContent"),'联动样式管理');
     assert.equal(await run("document.querySelector('main').scrollTop"),0,'right-click navigation opens card management at the top');
     await run("findEntry('/workbuddy-quota-visible').enabled=false;navigate('quota-cards')");
     assert.equal(await run("document.querySelector('[aria-label=WorkBuddy显示额度卡]').disabled"),true,'visibility keeps source action eligibility');
@@ -256,7 +256,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("window.snapshot.initialView='quota-cards';window.snapshot.version='initial-alias-test'");
     await run(fs.readFileSync(path.join(sourceRoot, 'desktop-pet/global-settings-renderer.js'), 'utf8'));
     await run('new Promise(resolve=>setTimeout(resolve,20))');
-    assert.equal(await run("document.querySelector('#navigation [aria-current=page]').textContent"),'贴边与显示','initialView alias opens the real edge category');
+    assert.equal(await run("document.querySelector('#navigation [aria-current=page]').textContent"),'联动样式管理','initialView alias opens the real edge category');
     assert.equal(await run("document.querySelector('#content > section').dataset.settingsSection"),'quota-cards');
     win.destroy(); process.stdout.write('SETTINGS_DOM_OK\n'); app.exit(0);
   }).catch(error => { process.stderr.write(error.stack + '\n'); app.exit(1); });

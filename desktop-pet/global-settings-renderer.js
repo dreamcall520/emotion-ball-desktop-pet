@@ -16,7 +16,7 @@
   }
   let snapshot = null, selected = 'common', busy = false, last = '', request = 0, apiSectionRequested = false, codexTab = 'codex';
   let latestSleepState, quotaSectionRequested = false;
-  const quotaCardsView = value => value?.entries?.find(entry => entry.label === '贴边与显示' && entry.children)?.id || 'common';
+  const quotaCardsView = () => 'quota-cards';
   const isApiView = view => ['api', 'openai-api', '/codex-menu/openai-api-menu'].includes(view);
   const descriptions = {
     '外观（所有窗口）': '统一设置各功能窗口的浅色或深色外观。',
@@ -142,7 +142,7 @@
   function quotaCardSettings() {
     const section = el('section', '', 'group quota-card-settings');
     section.dataset.settingsSection = 'quota-cards';
-    section.append(el('h3', '额度卡管理'), el('p', '调整四张卡的显示顺序。固定展示的卡不参与收纳，仍遵循各来源的联动与显示开关。', 'description group-intro'));
+    section.append(el('h3', '联动样式管理'), el('p', '调整四张卡的显示顺序。固定展示的卡不参与收纳，仍遵循各来源的联动与显示开关。', 'description group-intro'));
     const names = { codex: 'Codex', api: 'OpenAI API', zcode: 'ZCode', workbuddy: 'WorkBuddy' };
     const config = snapshot.quotaCards || { order: Object.keys(names), pinned: [] };
     const displayIds = { codex: '/codex-menu/codex-quota-visible', api: '/codex-menu/openai-api-menu/openai-api-visible', zcode: '/zcode-menu/zcode-quota-visible', workbuddy: '/workbuddy-quota-visible' };
@@ -211,7 +211,7 @@
     $('version').textContent = `球球 v${snapshot.version} · 本地设置`;
     const categories = groups();
     const nav = [{ id: 'common', label: '常用设置' }, ...categories,
-      { id: 'shortcuts', label: '快捷键' },
+      { id: 'shortcuts', label: '快捷键' }, { id: 'quota-cards', label: '联动样式管理' },
       ...snapshot.entries.filter(entry => externalIds.has(entry.id)).map(entry => ({ ...entry,
         label: ({ '/chat-open': '和球球聊聊', '/customize-open': '定制球球' })[entry.id] || entry.label, external: true }))];
     if (!nav.some(item => item.id === selected)) selected = 'common';
@@ -224,7 +224,7 @@
       ['', ['常用设置']],
       ['日常陪伴', ['球球与互动', '和球球聊聊', '便签与待办', '番茄钟']],
       ['外观与显示', ['定制球球', '球球尺寸', '贴边与显示', '界面配色']],
-      ['应用与联动', ['Codex', 'ZCode 联动', 'WorkBuddy']],
+      ['应用与联动', ['Codex', 'ZCode 联动', 'WorkBuddy', '联动样式管理']],
       ['快捷与常规', ['快捷键', '常规设置']]
     ];
     $('navigation').replaceChildren(...navigationGroups.map(([label, labels]) => {
@@ -378,7 +378,7 @@
       }
       sections.unshift(tabs);
     }
-    if (!query && nav.find(item => item.id === selected)?.label === '贴边与显示') { sections.unshift(quotaCardSettings()); count++; }
+    if (!query && selected === 'quota-cards') { sections.unshift(quotaCardSettings()); count++; }
     $('content').replaceChildren(...sections);
     if (behaviors) window.renderSettingsShortcuts(behaviors, snapshot.shortcuts, shortcutApi, true);
     $('empty').hidden = count !== 0;
