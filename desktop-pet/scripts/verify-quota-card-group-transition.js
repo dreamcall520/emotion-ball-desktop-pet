@@ -126,6 +126,25 @@ if (!process.versions.electron) {
         assert(cards.every(row=>!row.controller.getWindow().isVisible()));if(pinned)assert(controllers[pinned].getWindow().isVisible());
         report.cases.push({mode,side,bottom,pinned,realMainExpandedPlan:true,realMainContextStable:true,oneCanvas:true,realCardsCaptured:true,noPrematureHide:true,reverse:true});
       }
+      // Reproduce the recorded inline ZCode resize using its real renderer IPC and real main planner.
+      const {createQuotaCardGroup}=require(path.join(sourceRoot,'desktop-pet/lib/quota-card-group'));
+      let cursor={x:-10000,y:-10000},clock=0,tick;
+      config={order:['codex','api','zcode','workbuddy'],pinned:[]};presentation={mode:'free',shape};
+      quotaWindows.splice(1);for(let i=1;i<4;i++)quotaWindows.push({...quotaWindows[0],id:'zcode:fixture:'+i,model:'Model '+i});
+      const group=createQuotaCardGroup({getState:()=>scope.quotaCardGroupInput(),getCursor:()=>cursor,getBounds:expanded=>expanded?Object.values(controllers).map(c=>c.getVisibleBounds()).filter(Boolean):[],onChange:state=>{groupState=state;update()},schedule:fn=>(tick=fn,1),cancel(){tick=null},now:()=>clock});
+      scope.quotaCardGroup=group;group.start();group.activate({keyboard:false});showAll();update();
+      const zw=zcode.getWindow(),toggle=()=>zw.webContents.executeJavaScript('petQuotaLabel.toggleExpanded()');
+      await toggle();await until(()=>zcode.getLayoutMetrics()?.height>60,'real four-bucket expanded ZCode');const expandedHeight=zcode.getLayoutMetrics().height;
+      await toggle();await until(()=>zcode.getLayoutMetrics()?.height===32,'compact ZCode');
+      const compactHeight=4*28+3*8,fullHeight=expandedHeight+3*28+3*8;
+      const belowSpace=(compactHeight+fullHeight)/2,py=area.y+area.height-80-8-belowSpace;
+      pet.setBounds({x:area.x+area.width/2-40,y:Math.round(py),width:80,height:80});update();assert.equal(plan().placement,'below');
+      const old=plan().cards.zcode.face;cursor={x:old.x+old.width/2,y:old.y+old.height/2};
+      await toggle();await until(()=>zcode.getLayoutMetrics()?.height===expandedHeight,'inline ZCode toggled');update();assert.equal(plan().placement,'above');
+      for(let i=0;i<8;i++){clock+=80;tick();}assert.equal(group.getState().expanded,true,'original video click survives 640ms after flip');
+      const next=plan().cards.zcode.face;cursor={x:next.x+next.width/2,y:next.y+next.height/2};clock+=80;tick();assert(group.getState().expanded);
+      cursor={x:old.x+old.width/2,y:old.y+old.height/2};for(let i=0;i<5;i++){clock+=80;tick();}assert.equal(group.getState().expanded,false,'after reaching real card the old empty area no longer retains hover');
+      group.close();report.inlineResize={source:'zcode',realRendererToggle:true,buckets:4,expandedHeight,from:'below',to:'above',stationaryMs:640,oldEmptyAreaReleased:true};
       assert(settled.length>=48,'entry/reverse/exit all settle');assert(settled.every(result=>result.canceled===false),'actual main context never cancels a completed animation');report.settled=settled;assert.deepEqual(errors,[]);assert(windows.every(w=>w.isDestroyed()||!w.nativeVisible()),'all native hosts remain hidden');report.passed=true;
       fs.writeFileSync(path.join(out,'group-transition-report.json'),JSON.stringify(report,null,2));console.log('GROUP_TRANSITION_NATIVE_OK',JSON.stringify({cases:report.cases.length,out}));
     }catch(error){console.error(error.stack);}

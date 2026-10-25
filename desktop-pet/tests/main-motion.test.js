@@ -4199,3 +4199,13 @@ test('real group hover timer retries a not-yet-painted sleep canvas without anot
  f.send('pet:sleep-state','sleep');await flush();assert.equal(reads,1);assert.equal(f.call('currentSheepCapsuleInk()'),null);
  f.advanceTo(599);await flush();assert.equal(reads,1,'600ms minimum protects frame reads');f.advanceTo(720);await flush();assert.equal(reads,2);assert.equal(f.call('currentSheepCapsuleInk().ink.y'),.38,'actual scheduled group tick recovers when sleep paint is ready');
 });
+
+test('main shared layout keeps an inline-expanded source alive after the whole stack flips above the original click',async t=>{
+ for(const id of ['codex','api','zcode','workbuddy']){
+  const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,quotaCardPinned:[]});t.after(()=>f.app.emit('before-quit'));
+  f.call("settings.openaiApiAlwaysVisible=true;settings.zcodeEnabled=true;settings.zcodeQuotaAlwaysVisible=true;settings.workbuddyEnabled=true;settings.workbuddyQuotaAlwaysVisible=true;globalThis.inlineExpandedId=null;for(const [id,c] of Object.entries(quotaCardControllers())){c.getLayoutMetrics=()=>id===inlineExpandedId?{width:220,height:180,inset:0}:{width:128,height:32,inset:2};c.getVisibleBounds=()=>quotaFreeStackPlan()?.cards[id]?.face||null;c.reposition=()=>{};}petWindow.setBounds({x:-440,y:300,width:80,height:80});quotaCardGroup.activate({keyboard:false});quotaCardGroupTransition.finish();syncQuotaFreeStack()");
+  assert.equal(f.call('quotaFreeStackPlan().placement'),'below');const old=f.call(`quotaFreeStackPlan().cards.${id}.face`);let cursor={x:old.x+10,y:old.y+10};f.screen.getCursorScreenPoint=()=>cursor;
+  f.call(`inlineExpandedId='${id}';syncQuotaFreeStack()`);assert.equal(f.call('quotaFreeStackPlan().placement'),'above');f.advanceTo(720);assert.equal(f.call('quotaCardGroup.getState().expanded'),true,'old click survives more than 220ms');
+  const next=f.call(`quotaFreeStackPlan().cards.${id}.face`);cursor={x:next.x+10,y:next.y+10};f.advanceTo(1040);assert.equal(f.call('quotaCardGroup.getState().expanded'),true,'user reaches resized card');cursor={x:-799,y:599};f.advanceTo(1440);assert.equal(f.call('quotaCardGroup.getState().expanded'),false,'leaving bridge and real cards retains ordinary auto collection');
+ }
+});

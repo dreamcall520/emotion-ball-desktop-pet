@@ -14,7 +14,7 @@ function normalizeQuotaCardList(raw, complete = false) {
 
 const DEFAULTS = Object.freeze({
   quotaCardOrder: QUOTA_CARD_SOURCES,
-  quotaCardPinned: Object.freeze([]),
+  quotaCardPinned: Object.freeze(['codex']),
   size: 'tiny',
   x: null,
   y: null,
@@ -85,7 +85,9 @@ function normalizeSettings(raw = {}) {
   const customization = normalizeCustomization(raw.customization);
   return {
     quotaCardOrder: normalizeQuotaCardList(raw.quotaCardOrder, true),
-    quotaCardPinned: normalizeQuotaCardList(raw.quotaCardPinned),
+    quotaCardPinned: raw.quotaCardPinned === undefined
+      ? [normalizeQuotaCardList(raw.quotaCardOrder, true)[0]]
+      : normalizeQuotaCardList(raw.quotaCardPinned),
     size: ['micro', 'tiny', 'compact', 'small', 'medium', 'large'].includes(raw.size)
       ? raw.size
       : DEFAULTS.size,
