@@ -365,9 +365,7 @@
     byId('privacy-note').textContent = `使用 ${sourceName()} ${sourceId() === 'workbuddy' ? '积分' : '额度'} · 延续同一段聊天`;
     const sourceNote = byId('empty-source-note');
     if (sourceNote) {
-      const accountNote = `使用本机已登录的 ${sourceName()} 账号。`;
-      if (typeof document.createTextNode === 'function') sourceNote.replaceChildren(document.createTextNode(accountNote), document.createElement('br'), document.createTextNode('首次发送才创建聊天，之后接着聊。'));
-      else sourceNote.textContent = `${accountNote}首次发送才创建聊天，之后接着聊。`;
+      sourceNote.textContent = `通过本机 ${sourceName()} 账号聊天`;
     }
     refreshHistory();
     renderSources();
