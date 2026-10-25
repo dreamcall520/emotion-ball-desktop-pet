@@ -1542,6 +1542,25 @@ test('API 常驻独立于套餐，失败刷新有间隔，隐藏与关闭清理'
   assert.equal(f.apiLabel.destroys, 1);
 });
 
+test('ZCode follows the lowest visible Codex or API face and API layout changes trigger its reflow', async () => {
+  const f = await fixture();
+  f.call('zcodeLink = { moves: 0, reposition() { this.moves++; } }');
+  f.apiLabel.options.onLayout();
+  assert.equal(f.call('zcodeLink.moves'), 1);
+  const codex = { x: 400, y: 300, width: 124, height: 28 };
+  const api = { x: 400, y: 336, width: 124, height: 28 };
+  f.quotaLabel.getVisibleBounds = () => codex;
+  f.apiLabel.getVisibleBounds = () => api;
+  assert.deepEqual(f.call('zcodeQuotaStackBounds()'), api);
+  f.apiLabel.getVisibleBounds = () => null;
+  assert.deepEqual(f.call('zcodeQuotaStackBounds()'), codex, 'API off restores the gap immediately below Codex');
+  f.apiLabel.getVisibleBounds = () => ({ ...api, y: 240 });
+  assert.deepEqual(f.call('zcodeQuotaStackBounds()'), codex, 'an API fallback above Codex does not move ZCode above the column');
+  f.quotaLabel.getVisibleBounds = () => null;
+  assert.equal(f.call('zcodeQuotaStackBounds().y'), 240, 'an independently visible API card also anchors ZCode');
+  f.call('zcodeLink = null'); assert.doesNotThrow(() => f.apiLabel.options.onLayout());
+});
+
 test('所有 Codex 设置只保留一个顶层入口并完整归入子菜单', async () => {
   const f = await fixture({ codexEnabled: true });
   const menu = f.call('menuTemplate()');

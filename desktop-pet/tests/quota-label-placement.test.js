@@ -501,3 +501,29 @@ test('ZCode compact pair stays adjacent to Codex at all four corners before tryi
     assert.deepEqual(quotaLabelBounds(pet, area, null, 'compact', false, 1, { mode: 'free', quotaRoleWidth: 22 }, false, true), codex);
   }
 });
+
+test('three cards prefer Codex → API → ZCode below in free space and avoid both cards at every corner', () => {
+  const { apiLabelBounds } = require('../lib/api-usage-label-window');
+  const area = { x: -1440, y: 24, width: 1440, height: 876 };
+  const overlap = (a,b) => a.x < b.x+b.width && a.x+a.width > b.x && a.y < b.y+b.height && a.y+a.height > b.y;
+  for (const [name,x,y] of [['center', -760, 200], ['top-left', -1440, 24], ['top-right', -80, 24],
+    ['bottom-left', -1440, 820], ['bottom-right', -80, 820]]) {
+    const pet = { x, y, width: 80, height: 80 };
+    const codex = quotaLabelBounds(pet, area, null, 'compact', false, 1, { mode:'free',quotaRoleWidth:22 }, false, true);
+    const face = { x:codex.x+codex.cardInset.x+2, y:codex.y+codex.cardInset.y+2, width:124,height:28 };
+    for (const apiExpanded of [false,true]) for (const expanded of [false,true]) {
+      const api = apiLabelBounds(pet,area,face,null,apiExpanded,{mode:'free'}), inset=apiExpanded?0:2;
+      const apiFace={x:api.x+inset,y:api.y+inset,width:api.width-inset*2,height:api.height-inset*2};
+      const stack = [face,apiFace].sort((a,b)=>b.y+b.height-a.y-a.height)[0];
+      const z = quotaLabelBounds(pet,area,null,'compact',expanded,4,{mode:'free',quotaSourceId:'zcode',quotaBottomAligned:true,
+        quotaStackBelow:stack,quotaObstacles:[face,api]});
+      assertInside(z,area);
+      for(const obstacle of [pet,face,api]) assert.equal(overlap(z,obstacle),false,JSON.stringify({name,expanded,apiExpanded,z,obstacle}));
+      if(name==='center') {
+        assert.equal(z.y,apiFace.y+apiFace.height+8);
+        assert.equal(z.x+z.width/2,face.x+face.width/2);
+      }
+      assert.deepEqual(quotaLabelBounds(pet,area,null,'compact',false,1,{mode:'free',quotaRoleWidth:22},false,true),codex);
+    }
+  }
+});

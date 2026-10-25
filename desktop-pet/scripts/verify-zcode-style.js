@@ -107,7 +107,7 @@ async function verifyZcodeStyle({ pet, zcodeLink, zcodeConsent, codex, getMenu, 
       assert.equal(copy.repeatedLines,0,'图下不重复展示说明与采样日期');
       assert.match(copy.help,/实测余额/,'实测与基准说明保留在现有图表帮助');
       assert.match(copy.bottom, /下次刷新|使用截止|下次重置|有效至/);
-      if(copy.reason==='no-decline'){assert.equal(copy.badge,undefined);assert.match(copy.forecast,/近期未观察到额度消耗.*真实额度变化后/);}
+      if(copy.reason==='no-decline'){assert.equal(copy.badge,undefined);assert.match(copy.forecast,/当前记录尚无消耗.*记录到消耗后/);}
       report.checks.push({ bucket: buckets[index].text, countdown: copy.countdown, boundary: copy.bottom });
     }
     await capture(details, 'trend-bucket-picker'); await pointerClick(details, '#details-close');

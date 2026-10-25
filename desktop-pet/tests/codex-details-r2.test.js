@@ -304,8 +304,8 @@ test('ZCode 显示事实倒计时、实测图例、采样与真实用量，不�
   h.receive(model);let c=h.nodes['details-content'];
   assert.match(c.querySelector('.trend-stats').textContent,/距刷新/);assert.doesNotMatch(c.querySelector('.trend-stats').textContent,/剩余时间|64%/);
   assert.equal(c.querySelector('.zcode-chart-caption'),null);assert.match(c.querySelector('.chart-help-body').textContent,/实测余额.*时间基准/);
-  assert.equal(c.querySelector('.zcode-sample-info'),null);assert.match(c.querySelector('.chart-help-body').textContent,/2 次采样/);assert.match(c.querySelector('.zcode-usage-note').textContent,/已用/);
-  assert.equal(c.querySelector('.forecast-badge'),null);assert.match(c.querySelector('.forecast-copy').textContent,/近期未观察到额度消耗.*真实额度变化后/);assert.doesNotMatch(c.querySelector('.panel-bottom').textContent,/每天重新计算额度/);assert.match(c.querySelector('.panel-bottom p').title,/每天重新计算额度/);
+  assert.equal(c.querySelector('.zcode-sample-info'),null);assert.doesNotMatch(c.querySelector('.chart-help-body').textContent,/\d+\s*次采样|\d{2}\/\d{2}/);assert.match(c.querySelector('.zcode-usage-note').textContent,/已用/);
+  assert.equal(c.querySelector('.forecast-badge'),null);assert.match(c.querySelector('.forecast-copy').textContent,/当前记录尚无消耗.*记录到消耗后/);assert.doesNotMatch(c.querySelector('.panel-bottom').textContent,/每天重新计算额度/);assert.match(c.querySelector('.panel-bottom p').title,/每天重新计算额度/);
   h.receive({...model,bucketId:'zcode:2'});assert.match(c.querySelector('.panel-bottom').textContent,/使用截止/);assert.match(c.querySelector('.panel-bottom p').title,/到期后剩余额度失效/);
   h.receive({...model,items:[{...items[0],resetsAt:null,periodStart:null,windowMinutes:null,periodKind:'unknown'}]});
   assert.doesNotMatch(c.querySelector('.trend-stats').textContent,/距|—/);assert.equal(c.querySelector('.time-path'),null);
@@ -333,7 +333,7 @@ test('ZCode 月活动每日消耗仅显示今日及前六个本地自然日，�
   const localStart=new Date(now);localStart.setHours(0,0,0,0);localStart.setDate(localStart.getDate()-6);
   assert.equal(dates[0],`${String(localStart.getMonth()+1).padStart(2,'0')}/${String(localStart.getDate()).padStart(2,'0')}`);
   c.querySelector('[data-view="line"]').events.click();assert.equal(c.querySelector('.trend-chart'),line);
-  assert.equal(c.querySelector('.chart-help-body').textContent.includes('2 次采样'),true);
+  assert.doesNotMatch(c.querySelector('.chart-help-body').textContent,/次采样|\d{2}\/\d{2}/);
   h.receive({sourceId:'zcode',action:'trend',bucketId:items[0].bucketId,items,trend:{samples:samples.map(sample=>({...sample,at:sample.at-86400000}))}});
   c.querySelector('[data-view="daily"]').events.click();
   assert.equal(c.querySelector('.daily-chart').querySelectorAll('text').filter(n=>/^\d\d\/\d\d$/.test(n.textContent)).length,7,'today remains an unknown day when latest samples were yesterday');
@@ -398,4 +398,19 @@ test('ZCode 标签键盘目标滚入视野，普通刷新保留横向位置且�
   assert.equal(c.querySelector('.zcode-bucket-grid').scrollLeft,72);
   buttons=c.querySelectorAll('.zcode-bucket-button');assert.equal(buttons[0].ownerDocument.activeElement,buttons[3]);assert.equal(buttons[3].scrollRequests?.length || 0,0,'ordinary refresh must not reveal or jump rail');
   buttons[3].events.keydown(key('Home'));assert.equal(buttons[0].ownerDocument.activeElement,buttons[0]);assert.equal(buttons[0].scrollRequests.at(-1).inline,'nearest');
+});
+
+
+test('ZCode 图表帮助只留线型与分段短说明，不重复采样次数或起止串，Codex保持原说明', () => {
+  const h=renderer(),items=zcodeItems(),now=Date.now(),samples=Array.from({length:180},(_,i)=>({at:now-(179-i)*60000,remaining:100}));
+  h.receive({sourceId:'zcode',action:'trend',bucketId:items[0].bucketId,items,trend:{samples}});
+  const c=h.nodes['details-content'];let help=c.querySelector('.chart-help-body');
+  assert.match(help.textContent,/实测余额.*时间基准.*额度增加或重置时/);
+  assert.equal(help.querySelectorAll('.chart-help-foot').length,1);
+  assert.doesNotMatch(help.textContent,/次采样|\d{2}\/\d{2}|尚无本周期采样/);
+  assert.doesNotMatch(c.querySelector('.chart-updated').title,/次采样|\d{2}\/\d{2}| — /);
+  c.querySelector('[data-view="daily"]').events.click();help=c.querySelector('.chart-help-body');
+  assert.equal(help.querySelectorAll('.chart-help-foot').length,1);assert.match(help.textContent,/近7日/);assert.doesNotMatch(help.textContent,/次采样|\d{2}\/\d{2}/);
+  h.receive({action:'trend',period:300,items:[item(300)],trend:{samples}});
+  assert.match(c.querySelector('.chart-updated').title,/已记录至/);assert.match(c.querySelector('.chart-help-body').textContent,/剩余时间参考/);
 });

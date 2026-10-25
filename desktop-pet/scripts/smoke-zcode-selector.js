@@ -58,9 +58,10 @@ if (!process.versions.electron) {
             assert.ok(scenario.buttons.every(b=>b.font>=12&&b.scrollWidth<=b.clientWidth));
             assert.equal(new Set(scenario.buttons.map(b=>b.rect.top)).size,1,'all source chips stay on one row');
             assert.equal(await page(win,"document.querySelector('.forecast-badge')===null"),true);
-            assert.match(await page(win,"document.querySelector('.forecast-copy').textContent"),/近期未观察到额度消耗.*真实额度变化后/);
+            assert.match(await page(win,"document.querySelector('.forecast-copy').textContent"),/当前记录尚无消耗.*记录到消耗后/);
             assert.equal(await page(win,"document.querySelectorAll('.zcode-sample-info,.zcode-chart-caption').length"),0);
-            assert.match(await page(win,"document.querySelector('.chart-help-body').textContent"),/实测余额.*时间基准.*4 次采样/);
+            assert.match(await page(win,"document.querySelector('.chart-help-body').textContent"),/实测余额.*时间基准/);
+            assert.doesNotMatch(await page(win,"document.querySelector('.chart-help-body').textContent"),/次采样|\d{2}\/\d{2}/);
             scenario.flatCurve=await page(win,"({blue:document.querySelector('.observed-line').getBBox().height,timeReference:document.querySelector('.time-path').getBBox().height})");
             assert.equal(await page(win,"document.querySelector('.zcode-usage-note')===null"),true,'exact 100% model has no invented used amount');
             assert.equal(scenario.flatCurve.blue,0,'100% real samples must remain flat');assert.ok(scenario.flatCurve.timeReference>0,'time baseline changes independently');

@@ -47,6 +47,7 @@ function fixture(options = {}) {
     hide() { this.visible = false; }
     showInactive() { this.onShow?.(); this.visible = true; }
     setBounds(value) { this.bounds = { ...value }; this.onBounds?.(); }
+    getBounds() { return { ...this.bounds }; }
     setIgnoreMouseEvents(value) { this.ignoresMouse = value; }
     setAlwaysOnTop(...args) { this.topmost = args; }
     setVisibleOnAllWorkspaces(...args) { this.workspaces = args; }
@@ -181,6 +182,32 @@ test('trusted visible IPC toggles report while open and empty report lead to det
   f.ipc(win, 'pet:api-usage-label-toggle'); assert.equal(f.opened.length, 2);
   f.controller.show({ connected: false });
   f.ipc(win, 'pet:api-usage-label-toggle'); assert.equal(f.opened.length, 3);
+});
+
+test('dependent cards are notified after API visibility and size settle, including an unconnected card', async () => {
+  const layouts = [];
+  const f = fixture({ onLayout: () => {
+    const win = f.controller.getWindow();
+    layouts.push(win?.isVisible() ? { ...win.bounds } : null);
+  } });
+  f.controller.show(STATE);
+  assert.deepEqual(layouts, [], 'loading is not yet a visible obstacle');
+  const win = await f.ready();
+  assert.equal(layouts.at(-1)?.height, 32, 'native show publishes its settled bounds');
+  assert.deepEqual(f.controller.getVisibleBounds(), { x: win.bounds.x + 2, y: win.bounds.y + 2, width: 124, height: 28 });
+  f.ipc(win, 'pet:api-usage-label-toggle');
+  assert.equal(layouts.at(-1)?.height, 92, 'expansion lets the dependent card avoid the larger obstacle');
+  assert.deepEqual(f.controller.getVisibleBounds(), { x: win.bounds.x, y: win.bounds.y, width: 196, height: 92 });
+  f.ipc(win, 'pet:api-usage-label-toggle');
+  assert.equal(layouts.at(-1)?.height, 32);
+  f.controller.hide(); assert.equal(layouts.at(-1), null);
+  assert.equal(f.controller.getVisibleBounds(), null);
+  f.controller.show({ connected: false });
+  assert.equal(layouts.at(-1)?.height, 32, 'the connection prompt is still a visible obstacle');
+  f.controller.destroy(); assert.equal(layouts.at(-1), null);
+  f.controller.show(STATE); const replacement = await f.ready();
+  replacement.destroy(); assert.equal(layouts.at(-1), null, 'native close retracts its obstacle');
+  assert.equal(f.errors.length, 0);
 });
 
 test('late load cannot restore a hidden, disposed or pet-hidden card; hide resets expansion', async () => {

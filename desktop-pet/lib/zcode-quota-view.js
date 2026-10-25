@@ -41,10 +41,22 @@ function buildForecast(selected, samples, state, now) {
     return unknown(interrupted ? 'discontinuity' : 'insufficient-records', interrupted
       ? '记录中断或额度校正后，连续记录不足 10 分钟' : '连续用量记录不足，需至少 3 次新鲜采样并覆盖 10 分钟');
   }
-  const first = recent[0], last = recent.at(-1);
+  let first = recent[0];
+  const last = recent.at(-1);
   if (last.remaining !== selected.remaining) return unknown('value-mismatch', '额度刚有变化，等待采样同步');
+  let recorded = false;
+  if (first.remaining <= last.remaining) {
+    let start = samples.length - 1;
+    while (start > 0) {
+      const previous = samples[start - 1], current = samples[start];
+      if (current.at - previous.at >= 300000 || current.remaining > previous.remaining
+        || previous.remaining - current.remaining >= 25) break;
+      start--;
+    }
+    if (samples[start]?.remaining > last.remaining) { first = samples[start]; recorded = true; }
+    else return unknown('no-decline', '当前连续记录中未见额度下降，有消耗后自动更新预估');
+  }
   const consumed = first.remaining - last.remaining;
-  if (consumed <= 0) return unknown('no-decline', '已记录时段内额度未下降，暂不预估用完时间');
   const rate = consumed / (last.at - first.at);
   const remainingAtEnd = selected.remaining - rate * (selected.resetsAt - now);
   const status = remainingAtEnd < 0 ? 'risk' : remainingAtEnd < 10 ? 'tight' : 'safe';
@@ -57,7 +69,7 @@ function buildForecast(selected, samples, state, now) {
   return { state: 'estimate', status, reason: 'estimate', reference: true, exhaustsAt: projectedAt, label,
     summary: status === 'risk' ? selected.remaining <= 0 ? '额度已用完' : `预计约 ${label} 用完`
       : status === 'tight' ? `预计够用到${boundary}` : '额度充裕',
-    detail: `按近期连续用量粗估，${status === 'risk' ? `早于 ${formatQuotaDate(selected.resetsAt, selected.windowMinutes, now)} ${boundary}`
+    detail: `按${recorded ? '本周期已记录' : '近期连续'}用量粗估，${status === 'risk' ? `早于 ${formatQuotaDate(selected.resetsAt, selected.windowMinutes, now)} ${boundary}`
       : status === 'tight' ? `刚够用到${boundary}，留意用量` : `预计够用到${boundary}`}` };
 }
 function safeTasks(snapshot) {

@@ -969,6 +969,11 @@ function quotaObstacleBounds() {
   }
 }
 
+function zcodeQuotaStackBounds() {
+  return [quotaLabel?.getVisibleBounds(), apiUsageLabel?.getVisibleBounds?.()]
+    .filter(Boolean).sort((a, b) => b.y + b.height - a.y - a.height)[0] || null;
+}
+
 function reportQuotaError(scope, error) {
   try { writeError(scope, error); } catch (_) { /* 关闭期间错误记录不得影响生命周期。 */ }
 }
@@ -3421,7 +3426,7 @@ async function bootstrap() {
     getAppearance: () => settings?.codexQuotaAppearance,
     getPresentation: () => ({ ...edgeTuck?.getPresentation(), shape: settings?.customization?.appearance?.shape,
       quotaStyle: quotaDisplayConfig().style }),
-    onOpenDetails: openApiUsage, alwaysOnTop: settings.alwaysOnTop,
+    onOpenDetails: openApiUsage, onLayout: () => zcodeLink?.reposition(), alwaysOnTop: settings.alwaysOnTop,
     onError: error => writeError('API 常驻卡片', error) });
   codexDetails = createCodexDetailsWindow({ BrowserWindow, screen,
     getAnchor: () => petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null,
@@ -3438,7 +3443,7 @@ async function bootstrap() {
     getObstacles: () => [quotaLabel?.getVisibleBounds(), apiUsageLabel?.getWindow()?.isVisible()
       ? apiUsageLabel.getWindow().getBounds() : null, quotaObstacleBounds()].filter(Boolean),
     getPresentation: () => ({ ...edgeTuck?.getPresentation(), shape: settings?.customization?.appearance?.shape,
-      quotaBottomAligned: true, quotaStackBelow: quotaLabel?.getVisibleBounds(),
+      quotaBottomAligned: true, quotaStackBelow: zcodeQuotaStackBounds(),
       quotaStyle: quotaDisplayConfig().style, sheepTheme: settings?.customization?.appearance?.sheepTheme }),
     getSuppressed: () => isQuitting || screenLocked || chatWindow?.isVisible() || shortcutWindow?.isPresenting() || presentationSuppressed(),
     onChange: () => { refreshTrayMenu(); tickEdgeNotice(true); syncZcodeQuotaGuard(); },

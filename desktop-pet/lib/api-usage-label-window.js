@@ -76,12 +76,13 @@ function safeState(state) {
 
 function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuotaWindow = () => null, getQuotaBounds = null,
   getObstacleBounds = () => null, getAppearance = () => 'system', getPresentation = () => null,
-  onOpenDetails = () => {}, alwaysOnTop = true, onError = () => {} }) {
+  onOpenDetails = () => {}, onLayout = () => {}, alwaysOnTop = true, onError = () => {} }) {
   let win = null, ready = false, requestedVisible = false, current = null, expanded = false;
   let topmost = Boolean(alwaysOnTop), revision = 0, presenting = false, pending = false;
   let observedQuota = null, quotaListener = null;
 
   function reportError(error) { try { onError(error); } catch (_) {} }
+  function notifyLayout() { try { onLayout(); } catch (error) { reportError(error); } }
   function live(target) {
     return Boolean(target && !target.isDestroyed() && target.webContents &&
       !target.webContents.isDestroyed?.());
@@ -106,6 +107,7 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
     expanded = false;
     clearQuotaListeners();
     safeDestroy(previous);
+    if (previous) notifyLayout();
   }
   function failed(error, target) {
     if (target && win !== target) return;
@@ -115,7 +117,10 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
   function conceal(target, token) {
     if (win !== target || revision !== token || !live(target)) return;
     target.setIgnoreMouseEvents(true, { forward: true });
-    if (win === target && revision === token) target.hide();
+    if (win === target && revision === token) {
+      target.hide();
+      if (win === target && revision === token) notifyLayout();
+    }
   }
   function hide() {
     revision += 1;
@@ -184,6 +189,7 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
           step();
         }
         if (win === target && !requestedVisible) conceal(target, revision);
+        if (active(target, token) && target.isVisible()) notifyLayout();
         if (!pending) return;
       }
       failed(new Error('API 费用标签定位持续重入'), win);
@@ -246,6 +252,7 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
         expanded = false;
         revision += 1;
         clearQuotaListeners();
+        notifyLayout();
       });
       const markReady = () => {
         if (win !== target || ready) return;
@@ -270,6 +277,12 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
     getWindow() {
       if (win && !live(win)) { failed(new Error('API 费用标签窗口不可用'), win); }
       return win;
+    },
+    getVisibleBounds() {
+      if (!requestedVisible || !live(win) || !win.isVisible()) return null;
+      const bounds = win.getBounds(), inset = expanded ? 0 : 2;
+      return { x: bounds.x + inset, y: bounds.y + inset,
+        width: bounds.width - inset * 2, height: bounds.height - inset * 2 };
     },
     setAlwaysOnTop(value) {
       topmost = Boolean(value);

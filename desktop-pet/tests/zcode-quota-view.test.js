@@ -100,7 +100,7 @@ test('unusable ZCode observations explain why they cannot estimate without inven
   }
   const unchanged = forecastModel(forecastFixture({ remaining: 100, decline: 0 })).trend.forecast;
   assert.equal(unchanged.state, 'unknown'); assert.equal(unchanged.reason, 'no-decline');
-  assert.equal(unchanged.detail, '已记录时段内额度未下降，暂不预估用完时间');
+  assert.match(unchanged.detail, /当前连续记录中未见额度下降/);
   const noPeriod = forecastFixture(); Object.assign(noPeriod.quota.windows[0], { periodStart: null, windowMinutes: null });
   const missing = forecastModel(noPeriod);
   assert.equal(missing.trend.forecast.reason, 'missing-period'); assert.equal(missing.items[0].pace.remainingTimePercent, null);
@@ -112,4 +112,56 @@ test('a sufficient fresh segment after correction may estimate without using old
   cycle.samples.push({ at: now + 1, remaining: 1 });
   assert.equal(forecastModel(source).trend.forecast.state, 'estimate');
   assert.equal(forecastModel(source).trend.forecast.exhaustsAt, now + 2400000);
+});
+
+
+test('quiet recent usage falls back only to the current continuous recorded segment', () => {
+  const source = forecastFixture({ remaining: 80, decline: 0 });
+  const samples = Array.from({ length: 31 }, (_, i) => ({ at: now - (30-i)*120000,
+    remaining: i < 10 ? 90-i : 80 }));
+  source.history.windows[0].samples = samples;
+  let forecast = forecastModel(source).trend.forecast;
+  assert.equal(forecast.state, 'estimate');
+  assert.match(forecast.detail, /按本周期已记录用量粗估/);
+  assert.equal(forecast.exhaustsAt, now + 80 / (10/3600000));
+  // A new real decline takes precedence over the longer recorded average.
+  samples.at(-1).remaining = 79; source.quota.windows[0].remaining = 79;
+  forecast = forecastModel(source).trend.forecast;
+  assert.match(forecast.detail, /按近期连续用量粗估/);
+  assert.equal(forecast.exhaustsAt, now + 79 * 1800000);
+});
+
+test('recorded fallback never crosses gaps, increases, corrections or identity boundaries', () => {
+  for (const boundary of ['gap','increase','large-drop','other-bucket','other-period']) {
+    const source = forecastFixture({ remaining: 80, decline: 0 });
+    const older = Array.from({ length: 6 }, (_, i) => ({ at: now-(25-i)*120000, remaining: 90-i*2 }));
+    const flat = Array.from({ length: 20 }, (_, i) => ({ at: now-(19-i)*120000, remaining: 80 }));
+    if (boundary === 'gap') older.forEach(sample => sample.at -= 300000);
+    if (boundary === 'increase') older.at(-1).remaining = 79;
+    if (boundary === 'large-drop') { older.at(-1).remaining = 100; flat.forEach(sample=>{sample.remaining=75;}); source.quota.windows[0].remaining=75; }
+    if (boundary === 'other-bucket' || boundary === 'other-period') {
+      source.history.windows.push({ ...source.history.windows[0],
+        ...(boundary === 'other-bucket' ? {id:'zcode:other:bucket'} : {periodStart:now-7200000}), samples:older });
+      source.history.windows[0].samples = flat;
+    } else source.history.windows[0].samples = [...older,...flat];
+    const forecast = forecastModel(source).trend.forecast;
+    assert.equal(forecast.state, 'unknown', boundary); assert.equal(forecast.reason, 'no-decline', boundary);
+  }
+  for (const change of [source=>{source.quota.stale=true;},source=>{source.quota.windows[0].remaining=79;},source=>{source.history.windows[0].samples=source.history.windows[0].samples.slice(-2);}]) {
+    const source=forecastFixture({remaining:80,decline:0});
+    source.history.windows[0].samples.unshift({at:now-1800000,remaining:90});change(source);
+    assert.equal(forecastModel(source).trend.forecast.state,'unknown');
+  }
+});
+
+
+test('recorded fallback uses only retained observations and keeps extreme projections valid', () => {
+  for (const [remaining, earlier, state] of [[0,10,'estimate'],[80,80+1e-10,'unknown']]) {
+    const source=forecastFixture({remaining,decline:0});
+    source.history.windows[0].samples=Array.from({length:31},(_,i)=>({at:now-(30-i)*120000,remaining:i===0?earlier:remaining}));
+    const forecast=forecastModel(source).trend.forecast;
+    assert.equal(forecast.state,state);
+    if(remaining===0)assert.equal(forecast.exhaustsAt,now);
+    else assert.equal(forecast.exhaustsAt,null);
+  }
 });
