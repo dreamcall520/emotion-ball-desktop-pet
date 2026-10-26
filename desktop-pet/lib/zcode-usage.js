@@ -1,17 +1,21 @@
-const OFFICIAL_HOSTS = new Set(['zcode.z.ai', 'api.z.ai', 'open.bigmodel.cn']);
+const { createZcodeTeamAuth, teamContext, isTeam } = require('./zcode-team-auth');
+const OFFICIAL_HOSTS = new Set(['zcode.z.ai', 'api.z.ai', 'open.bigmodel.cn', 'bigmodel.cn']);
 const MAX_BYTES = 2 * 1024 * 1024;
 const text = (value, max = 160) => typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f]/g, '').slice(0, max) : '';
 const validUnits = value => typeof value === 'number' && Number.isFinite(value) && value >= 0;
 const time = value => typeof value === 'number' && Number.isFinite(value) && value > 0
   && value <= 8640000000000000 ? value < 1e12 ? Math.round(value * 1000) : Math.round(value) : null;
 const fail = code => Object.assign(new Error(code), { code });
-async function requestOfficialJson(url, { headers = {}, fetch: fetchImpl = globalThis.fetch, signal } = {}) {
+async function requestOfficialJson(url, { headers = {}, fetch: fetchImpl = globalThis.fetch, signal, method = 'GET', body: requestBody } = {}) {
   let endpoint; try { endpoint = new URL(url); } catch (_error) { throw fail('ZCODE_UNTRUSTED_ENDPOINT'); }
   if (endpoint.protocol !== 'https:' || !OFFICIAL_HOSTS.has(endpoint.hostname) || endpoint.username || endpoint.password || endpoint.port) {
     throw fail('ZCODE_UNTRUSTED_ENDPOINT');
   }
+  if (method !== 'GET' && !(method === 'POST' && ['bigmodel.cn', 'api.z.ai'].includes(endpoint.hostname) &&
+    /^\/api\/biz\/v1\/organization\/[^/]+\/projects\/[^/]+\/api_keys\/[^/]+\/access_tokens$/.test(endpoint.pathname) &&
+    !endpoint.search && !endpoint.hash)) throw fail('ZCODE_UNTRUSTED_ENDPOINT');
   let response;
-  try { response = await fetchImpl(endpoint.href, { method: 'GET', headers, redirect: 'error',
+  try { response = await fetchImpl(endpoint.href, { method, ...(method === 'POST' ? { body: requestBody } : {}), headers, redirect: 'error',
     signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000) }); }
   catch (_error) { throw fail('ZCODE_NETWORK_ERROR'); }
   if (!response?.ok || response.status !== 200) throw fail([401, 403].includes(response?.status) ? 'ZCODE_LOGIN_REQUIRED' : 'ZCODE_HTTP_ERROR');
@@ -33,6 +37,7 @@ async function requestOfficialJson(url, { headers = {}, fetch: fetchImpl = globa
     return JSON.parse(body);
   } catch (error) { throw fail(error.code === 'ZCODE_RESPONSE_TOO_LARGE' ? error.code : 'ZCODE_INVALID_RESPONSE'); }
 }
+const resolveZcodeTeamAccount = createZcodeTeamAuth(requestOfficialJson);
 function normalizeZcodeBalance(payload, now = Date.now()) {
   const data = payload?.data || payload;
   const plans = Array.isArray(data?.plans) ? data.plans.slice(0, 64) : [];
@@ -86,8 +91,10 @@ function normalizeCodingPlanQuota(payload, now = Date.now()) {
 }
 async function fetchZcodeUsage(account, options = {}) {
   const now = typeof options.now === 'function' ? options.now() : options.now ?? Date.now();
+  const team = isTeam(account);
+  if (team) account = await (options.resolveTeamAccount || resolveZcodeTeamAccount)(account, options);
   const buckets = []; let balanceState = 'unavailable'; let paidState = 'unavailable'; let firstError = null;
-  if (account?.jwtToken && account?.deviceMid) {
+  if (!team && account?.jwtToken && account?.deviceMid) {
     try {
       const payload = await requestOfficialJson('https://zcode.z.ai/api/v1/zcode-plan/billing/balance?app_version=3.16.3',
         { ...options, headers: { Authorization: `Bearer ${account.jwtToken}`, 'x-device-mid': account.deviceMid } });
@@ -98,15 +105,21 @@ async function fetchZcodeUsage(account, options = {}) {
     } catch (error) { firstError = error; balanceState = 'error'; }
   }
   if (account?.codingPlanApiKey && ['zai', 'bigmodel'].includes(account.family)) {
-    const base = account.family === 'zai' ? 'https://api.z.ai' : 'https://open.bigmodel.cn';
+    const context = team ? teamContext(account) : null;
+    const base = context?.origin || (account.family === 'zai' ? 'https://api.z.ai' : 'https://open.bigmodel.cn');
     try {
-      const team = account.selection?.scope === 'team' && account.selection.organizationId && account.selection.projectId;
       const payload = await requestOfficialJson(`${base}/api/monitor/usage/quota/limit${team ? '?type=2' : ''}`,
-        { ...options, headers: { Authorization: `Bearer ${account.codingPlanApiKey}`,
-          ...(team ? { 'Bigmodel-Organization': account.selection.organizationId, 'Bigmodel-Project': account.selection.projectId } : {}) } });
+        { ...options, headers: { Authorization: team ? account.codingPlanApiKey : `Bearer ${account.codingPlanApiKey}`,
+          ...context?.headers } });
+      if ([401, 403, '401', '403'].includes(payload.code)) throw fail('ZCODE_LOGIN_REQUIRED');
       if (payload.success !== true || payload.code !== 200 || !Array.isArray(payload.data?.limits)) throw fail('ZCODE_INVALID_RESPONSE');
-      const paid = normalizeCodingPlanQuota(payload, now); buckets.push(...paid); paidState = paid.length ? 'connected' : 'empty';
-    } catch (error) { firstError ||= error; paidState = 'error'; }
+      const paid = normalizeCodingPlanQuota(payload, now);
+      if (team) for (const row of paid) row.planName = `${row.planName} · 团队`;
+      buckets.push(...paid); paidState = paid.length ? 'connected' : 'empty';
+    } catch (error) {
+      if (team && error.code === 'ZCODE_LOGIN_REQUIRED') (options.resolveTeamAccount || resolveZcodeTeamAccount).invalidate?.(account);
+      firstError ||= error; paidState = 'error';
+    }
   }
   if (![balanceState, paidState].some(state => ['connected', 'empty'].includes(state))) throw firstError || fail('ZCODE_USAGE_UNAVAILABLE');
   const models = new Map();
@@ -116,4 +129,4 @@ async function fetchZcodeUsage(account, options = {}) {
   }
   return { state: 'connected', buckets, windows: buckets, modelIds: [...models.values()], updatedAt: now, balanceState, paidState };
 }
-module.exports = { normalizeZcodeBalance, normalizeCodingPlanQuota, fetchZcodeUsage, requestOfficialJson };
+module.exports = { normalizeZcodeBalance, normalizeCodingPlanQuota, fetchZcodeUsage, requestOfficialJson, resolveZcodeTeamAccount };

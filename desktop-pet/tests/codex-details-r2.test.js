@@ -67,6 +67,32 @@ function renderer(search = '') {
 }
 const item = windowMinutes => ({windowMinutes,remaining:62,resetsAt:Date.now()+10000000,pace:{state:'balanced',remainingTimePercent:64}});
 
+test('ZCode team quota and trend empty states retain actionable reasons without changing Codex', () => {
+  const h = renderer(), content = h.nodes['details-content'];
+  for (const [code, reason] of [
+    ['ZCODE_TEAM_SELECTION_REQUIRED', /选择完整的团队、项目和套餐/],
+    ['ZCODE_TEAM_KEY_MISSING', /尚未配置可用 API Key/],
+    ['ZCODE_TEAM_ACCESS_DENIED', /检查成员和席位权限/]
+  ]) for (const action of ['quota', 'trend']) {
+    h.receive({ sourceId: 'zcode', state: 'disconnected', statusCode: code, action, items: [] });
+    assert.match(content.textContent, reason); assert.match(content.textContent, /刷新 ZCode 状态/);
+    assert.equal(content.querySelectorAll('.empty-state').length, 1); assert.doesNotMatch(content.textContent, /0%/);
+  }
+  h.receive({ sourceId: 'zcode', state: 'connected', action: 'quota', items: [] });
+  assert.equal(content.textContent, '暂未提供额度明细');
+  h.receive({ sourceId: 'codex', state: 'disconnected', statusCode: 'ZCODE_TEAM_KEY_MISSING', action: 'trend', items: [] });
+  assert.equal(content.textContent, '暂无周期额度');
+});
+
+test('ZCode retained quota is visibly pending update in quota and trend details', () => {
+  const h = renderer(), content = h.nodes['details-content'];
+  const model = { sourceId: 'zcode', state: 'stale', items: [{ ...item(300), bucketId: 'zcode:paid:1',
+    label: 'Coding Plan', planName: '团队套餐', periodKind: 'rolling', pace: { state: 'unknown' } }] };
+  h.receive({ ...model, action: 'quota' }); assert.match(content.querySelector('.zcode-quota-deadline').textContent, /^待更新/);
+  h.receive({ ...model, action: 'trend' }); assert.equal(content.querySelector('.trend-pace').textContent, '待更新');
+  h.receive({ ...model, state: 'ready', action: 'quota' }); assert.doesNotMatch(content.textContent, /待更新/);
+});
+
 test('R2 单周标题与指标顺序按认可稿，双周期仍提供切换',() => {
   const h = renderer();
   h.receive({action:'trend',period:10080,items:[item(10080)]});

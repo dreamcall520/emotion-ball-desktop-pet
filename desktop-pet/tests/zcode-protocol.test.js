@@ -27,6 +27,37 @@ test('unsupported server tools fail closed without exposing arguments', async ()
   assert.equal(h.sent[0].error.code, -32601); assert.equal(JSON.stringify(h.sent).includes('private'), false);
   await assert.rejects(h.rpc.request('session/send', {}), { code: 'TOOL_BLOCKED' });
 });
+
+test('runtime authentication preserves explicit team and login errors without leaking provider responses', async () => {
+  for (const code of ['ZCODE_TEAM_SELECTION_REQUIRED', 'ZCODE_TEAM_KEY_MISSING', 'ZCODE_TEAM_ACCESS_DENIED', 'ZCODE_LOGIN_REQUIRED']) {
+    const disconnected = [];
+    const h = harness({ onRequest: () => { throw Object.assign(new Error('PRIVATE_AUTH_RESPONSE'), { code }); },
+      onDisconnect: value => disconnected.push(value) });
+    await h.rpc.start();
+    h.receive({ id: 'auth', method: 'interaction/requestProviderRuntimeHeaders', params: {} });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(disconnected, [code]);
+    await assert.rejects(h.rpc.request('session/send', {}), { code });
+    assert.equal(JSON.stringify(h.sent).includes('PRIVATE_AUTH_RESPONSE'), false);
+  }
+  const blocked = harness({ onRequest: () => { throw Object.assign(new Error('PRIVATE'), { code: 'ZCODE_TEAM_ACCESS_DENIED' }); } });
+  await blocked.rpc.start(); blocked.receive({ id: 'tool', method: 'interaction/requestPermission', params: {} });
+  await new Promise(resolve => setImmediate(resolve));
+  await assert.rejects(blocked.rpc.request('session/send', {}), { code: 'TOOL_BLOCKED' });
+});
+
+test('transient runtime authentication failures are disconnected, while tool interception remains blocked', async () => {
+  for (const code of ['ZCODE_NETWORK_ERROR', 'ZCODE_HTTP_ERROR', 'ZCODE_INVALID_RESPONSE']) {
+    const disconnected = [];
+    const h = harness({ onRequest: () => { throw Object.assign(new Error('PRIVATE_AUTH_RESPONSE'), { code }); },
+      onDisconnect: value => disconnected.push(value) });
+    await h.rpc.start(); h.receive({ id: 'auth', method: 'interaction/requestProviderRuntimeHeaders', params: {} });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(disconnected, ['DISCONNECTED']);
+    await assert.rejects(h.rpc.request('session/send', {}), { code: 'DISCONNECTED' });
+    assert.equal(JSON.stringify(h.sent).includes('PRIVATE_AUTH_RESPONSE'), false);
+  }
+});
 test('oversized frames and timed out mutation close the owned connection', async () => {
   const h = harness({ maxFrameBytes: 30 }); await h.rpc.start(); h.child.stdout.write('x'.repeat(31));
   await assert.rejects(h.rpc.request('session/send', {}), { code: 'INVALID_FRAME' });

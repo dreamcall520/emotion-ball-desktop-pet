@@ -3,8 +3,50 @@ const fs = require('node:fs'); const os = require('node:os'); const path = requi
 const { createZcodeQuotaHistory } = require('../lib/zcode-quota-history');
 const { createZcodeCompanion } = require('../lib/zcode-companion');
 const { normalizeZcodeBalance } = require('../lib/zcode-usage');
+const { buildZcodeQuotaLabelModel } = require('../lib/zcode-quota-view');
 const fixture = require('./fixtures/zcode-balance.json');
 const initialNow = fixture.server_time * 1000;
+
+test('team configuration failures preserve history without presenting previous quota as current, then recover', async t => {
+  let now = initialNow, failure = null;
+  const buckets = normalizeZcodeBalance(fixture, now);
+  const companion = createZcodeCompanion({ now: () => now, readAccount: () => ({ accountKey: 'team-account' }),
+    fetchUsage: async () => { if (failure) throw Object.assign(new Error('PRIVATE'), { code: failure }); return { buckets }; },
+    readTasks: async () => ({ state: 'unknown', items: [], results: [] }) });
+  t.after(() => companion.close());
+  await companion.setEnabled(true);
+  const history = companion.getSnapshot().history.windows;
+  for (const code of ['ZCODE_TEAM_SELECTION_REQUIRED', 'ZCODE_TEAM_KEY_MISSING', 'ZCODE_TEAM_ACCESS_DENIED']) {
+    now += 1000; failure = code; await companion.refresh();
+    const snapshot = companion.getSnapshot(), model = buildZcodeQuotaLabelModel(snapshot, {}, now);
+    assert.equal(snapshot.quota.state, 'disconnected'); assert.equal(snapshot.quota.code, code);
+    assert.equal(snapshot.quota.stale, true); assert.equal(snapshot.quota.updatedAt, initialNow);
+    assert.deepEqual(snapshot.history.windows, history);
+    assert.equal(model.state, 'disconnected'); assert.equal(model.statusCode, code); assert.deepEqual(model.items, []);
+  }
+  failure = null; now += 120000; await companion.refresh();
+  const snapshot = companion.getSnapshot(), model = buildZcodeQuotaLabelModel(snapshot, {}, now);
+  assert.equal(snapshot.quota.code, null); assert.equal(snapshot.quota.stale, false); assert.equal(snapshot.quota.updatedAt, now);
+  assert.equal(model.state, 'ready'); assert.equal(model.statusCode, undefined); assert.equal(model.items.length, buckets.length);
+});
+
+test('a temporary quota request failure immediately marks retained values stale and adds no successful sample', async t => {
+  let now = initialNow, offline = false;
+  const buckets = normalizeZcodeBalance(fixture, now);
+  const companion = createZcodeCompanion({ now: () => now, readAccount: () => ({ accountKey: 'team-account' }),
+    fetchUsage: async () => { if (offline) throw Object.assign(new Error('offline'), { code: 'ZCODE_NETWORK_ERROR' }); return { buckets }; },
+    readTasks: async () => ({ state: 'unknown', items: [], results: [] }) });
+  t.after(() => companion.close());
+  await companion.setEnabled(true); const history = companion.getSnapshot().history.windows;
+  now += 1000; offline = true; await companion.refresh();
+  const snapshot = companion.getSnapshot(), model = buildZcodeQuotaLabelModel(snapshot, {}, now);
+  assert.equal(snapshot.quota.state, 'connected'); assert.equal(snapshot.quota.stale, true);
+  assert.equal(snapshot.quota.updatedAt, initialNow); assert.deepEqual(snapshot.history.windows, history);
+  assert.equal(model.state, 'stale'); assert.deepEqual(model.items.map(row => row.remaining), buckets.map(row => row.remaining));
+  offline = false; await companion.refresh();
+  assert.equal(companion.getSnapshot().quota.stale, false); assert.equal(companion.getSnapshot().quota.code, null);
+});
+
 test('history separates account, bucket and period, bounds storage and never fabricates samples', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'zcode-history-')); const filePath = path.join(dir, 'zcode.json');
   let now = initialNow; const store = createZcodeQuotaHistory({ filePath, now: () => now });

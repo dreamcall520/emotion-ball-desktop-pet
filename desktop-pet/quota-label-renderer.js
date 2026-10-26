@@ -16,6 +16,11 @@
     ['unsupported', '当前 Codex 暂不支持额度读取'],
     ['disconnected', 'Codex 未连接']
   ]);
+  const zcodeStatuses = new Map([
+    ['ZCODE_TEAM_SELECTION_REQUIRED', ['请选择团队', '请先在 ZCode 中选择完整的团队、项目和套餐，再刷新 ZCode 状态。']],
+    ['ZCODE_TEAM_KEY_MISSING', ['团队待配置', '当前团队尚未配置可用 API Key，请在 ZCode 中完成团队配置，再刷新 ZCode 状态。']],
+    ['ZCODE_TEAM_ACCESS_DENIED', ['团队权限不足', '当前账号无权使用所选团队或项目，请在 ZCode 中检查成员和席位权限，再刷新 ZCode 状态。']]
+  ]);
   const directionAndControl = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/gu;
 
   function record(value) {
@@ -152,7 +157,9 @@
     } catch (_) { return { state: 'disconnected', items: [], overflow: 0, size: 'standard', appearance: 'system', expanded: false }; }
     const sourceId = source.sourceId === 'zcode' ? 'zcode' : 'codex';
     const state = states.has(stateValue) ? stateValue : 'disconnected';
-    const identity = sourceId === 'zcode' ? { sourceId: 'zcode' } : iconPreferenceFields(source);
+    let statusCode;
+    try { if (sourceId === 'zcode') { const code = source.statusCode; if (zcodeStatuses.has(code)) statusCode = code; } } catch (_) {}
+    const identity = sourceId === 'zcode' ? { sourceId: 'zcode', ...(statusCode ? { statusCode } : {}) } : iconPreferenceFields(source);
     const size = sizeValue === 'compact' ? 'compact' : 'standard';
     const appearance = ['light', 'dark'].includes(appearanceValue) ? appearanceValue : 'system';
     const numbers = numberFields(source);
@@ -574,11 +581,13 @@
     const model = safeModel(value);
     const ordered = displayItems(model);
     try {
-      status.textContent = model.sourceId === 'zcode' ? states.get(model.state).replaceAll('Codex', 'ZCode') : states.get(model.state);
+      const zcodeStatus = model.sourceId === 'zcode' ? zcodeStatuses.get(model.statusCode) : null;
+      status.textContent = zcodeStatus ? zcodeStatus[0] : model.sourceId === 'zcode' ? states.get(model.state).replaceAll('Codex', 'ZCode') : states.get(model.state);
+      status.title = zcodeStatus?.[1] || '';
       label.dataset.source = model.sourceId || 'codex';
       document.title = model.sourceId === 'zcode' ? 'ZCode 剩余额度' : 'Codex 剩余额度';
       if (model.sourceId === 'zcode') {
-        label.title = `ZCode 剩余额度${model.items.length ? '：' + model.items.map(item => `${itemTitle(item)}，剩余 ${remainingText(item.remaining, model.sourceId)}`).join('；') : ''}`;
+        label.title = zcodeStatus ? `ZCode：${zcodeStatus[1]}` : `ZCode 剩余额度${model.items.length ? '：' + model.items.map(item => `${itemTitle(item)}，剩余 ${remainingText(item.remaining, model.sourceId)}`).join('；') : ''}`;
         label.setAttribute?.('aria-label', label.title);
       } else { label.title = 'Codex 剩余额度'; label.setAttribute?.('aria-label', label.title); }
       expandedCard?.setAttribute?.('aria-label', model.sourceId === 'zcode' ? 'ZCode 额度与状态' : 'Codex 额度与状态');

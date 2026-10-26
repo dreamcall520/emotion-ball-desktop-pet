@@ -104,9 +104,10 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
         if (closed || rpc !== client || !verified || accountKey !== operation.account) return;
         if (!Array.isArray(available) || !available.length) throw fault('MODELS_UNAVAILABLE');
         models = available; modelsClient = client; modelsAccount = operation.account; modelsStatus = 'ready';
-      } catch (_) {
+      } catch (cause) {
         if (closed || rpc !== client || !verified || accountKey !== operation.account) return;
-        models = []; modelsClient = null; modelsAccount = null; modelsStatus = 'error'; modelsError = errors.MODELS_UNAVAILABLE;
+        models = []; modelsClient = null; modelsAccount = null; modelsStatus = 'error';
+        modelsError = Object.hasOwn(providerErrors, cause?.code) ? providerErrors[cause.code] : errors.MODELS_UNAVAILABLE;
       } finally {
         if (modelLoad === operation) modelLoad = null;
         if (rpc === client) emit();

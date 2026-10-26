@@ -11,6 +11,11 @@
   if (!bridge?.onModel || !panel || !title || !content || !close || !back) return;
   const actions = ['tasks', 'results', 'trend', 'opportunities', 'credits', 'quota'];
   const taskStates = { active: '进行中', waiting: '等待中', completed: '已完成', failed: '执行失败', interrupted: '已中断', idle: '空闲', unknown: '状态未提供' };
+  const zcodeStatuses = new Map([
+    ['ZCODE_TEAM_SELECTION_REQUIRED', '请先在 ZCode 中选择完整的团队、项目和套餐，再刷新 ZCode 状态。'],
+    ['ZCODE_TEAM_KEY_MISSING', '当前团队尚未配置可用 API Key，请在 ZCode 中完成团队配置，再刷新 ZCode 状态。'],
+    ['ZCODE_TEAM_ACCESS_DENIED', '当前账号无权使用所选团队或项目，请在 ZCode 中检查成员和席位权限，再刷新 ZCode 状态。']
+  ]);
   const clean = (value, limit = 140) => typeof value === 'string'
     ? Array.from(value.replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/gu, ' ').replace(/\s+/gu, ' ').trim()).slice(0, limit).join('') : '';
   const object = value => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -162,7 +167,8 @@
     const accountHistory = object(source.accountResetHistory);
     const samples = array(trend.samples,6000).map(raw => { const sample = object(raw); return { at: timestamp(sample.at), remaining: percent(sample.remaining) }; }).filter(sample => sample.at !== null && sample.remaining !== null).sort((a,b) => a.at - b.at).filter((sample,index,list) => !index || sample.at > list[index-1].at);
     return { sourceId: zcode ? 'zcode' : 'codex', bucketId: bucketKey(source.bucketId), planName: clean(source.planName,100), action: actions.includes(source.action) ? source.action : 'tasks', appearance: ['light','dark'].includes(source.appearance) ? source.appearance : 'system',
-      state: source.state, observedAt: timestamp(source.observedAt), quotaUpdatedAt: timestamp(source.quotaUpdatedAt),
+      state: source.state, ...(zcode && zcodeStatuses.has(source.statusCode) ? { statusCode: source.statusCode } : {}),
+      observedAt: timestamp(source.observedAt), quotaUpdatedAt: timestamp(source.quotaUpdatedAt),
       colorMode: ['standard','accessible'].includes(source.colorMode) ? source.colorMode : null, generation: count(source.generation), items,
       period: items.some(item => item.windowMinutes === source.period) ? source.period : items[0]?.windowMinutes || 300,
       activity: { runningCount: count(activity.runningCount), unreadCount: count(activity.unreadCount) }, tasks: tasks('tasks'), results: tasks('results'),
@@ -426,7 +432,7 @@
     const selected = zcode ? item?.bucketId : model.period;
     setTitle(zcode || model.items.length > 1 ? '额度趋势' : model.period === 10080 ? '周额度趋势' : `${periodName(model.period)}趋势`);
     title.appendChild(node('small','title-product',zcode ? 'ZCODE' : 'CODEX'));
-    if (!item) { content.replaceChildren(node('p','empty-state','暂无周期额度')); return; }
+    if (!item) { content.replaceChildren(node('p','empty-state',zcode && zcodeStatuses.get(model.statusCode) || '暂无周期额度')); return; }
     if (!zcode && model.items.length > 1) {
       const tabs = node('div','trend-tabs');
       tabs.replaceChildren(...model.items.map(period => {
@@ -439,7 +445,8 @@
     const stats = node('div','trend-stats');
     const stat = (text,label,className) => { const p = node('p',''); p.replaceChildren(node('span','',label),node('strong',className,text)); return p; };
     const time = item.pace.remainingTimePercent;
-    const pace = node('span',`trend-pace ${item.pace.state}`,({fast:'用量偏快',balanced:'节奏均衡',slow:'用量较慢',unknown:'待记录'}[item.pace.state]));
+    const pace = node('span',`trend-pace ${item.pace.state}`,zcode && model.state === 'stale' ? '待更新'
+      : ({fast:'用量偏快',balanced:'节奏均衡',slow:'用量较慢',unknown:'待记录'}[item.pace.state]));
     if (zcode) {
       stats.className += item.resetsAt ? ' zcode-stats' : ' zcode-stats no-deadline';
       stats.replaceChildren(stat(zcodePercent(item.remaining),'剩余额度',''),...(item.resetsAt ? [stat(countdown(item.resetsAt),deadlineCopy(item).count,'time-value zcode-countdown')] : []),pace);
@@ -562,9 +569,10 @@
       }));
       const deadline = deadlineCopy(items[0]), endings = [...new Set(items.map(item=>item.resetsAt))];
       const foot = node('p','zcode-quota-deadline',endings.length === 1 ? `${deadline.label}：${deadlineLabel(items[0].resetsAt)}${items[0].resetsAt && deadline.detail ? ` · ${deadline.detail}` : ''}` : '各额度有效期限分别统计');
+      if (model.state === 'stale') foot.textContent = `待更新 · ${foot.textContent}`;
       group.replaceChildren(node('h2','zcode-quota-group-title',groupName),list,foot); return group;
     });
-    content.replaceChildren(...(sections.length ? sections : [node('p','empty-state','暂未提供额度明细')]));
+    content.replaceChildren(...(sections.length ? sections : [node('p','empty-state',zcodeStatuses.get(model.statusCode) || '暂未提供额度明细')]));
   }
 
   function renderCredits(model) {

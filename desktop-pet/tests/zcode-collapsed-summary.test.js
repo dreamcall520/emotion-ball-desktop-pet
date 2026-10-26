@@ -45,3 +45,25 @@ test('Codex collapsed caption identifies its source and period', () => {
   assert.equal(nodes.summary.textContent, '5小时额度15%');
   assert.equal(nodes['quota-label'].attributes['aria-label'], 'Codex 剩余额度');
 });
+
+test('ZCode team errors use compact text and complete hover guidance, then clear on recovery', () => {
+  const { nodes, receive } = renderFixture();
+  for (const [code, short, reason] of [
+    ['ZCODE_TEAM_SELECTION_REQUIRED', '请选择团队', /选择完整的团队、项目和套餐/],
+    ['ZCODE_TEAM_KEY_MISSING', '团队待配置', /尚未配置可用 API Key/],
+    ['ZCODE_TEAM_ACCESS_DENIED', '团队权限不足', /检查成员和席位权限/]
+  ]) {
+    receive({ sourceId: 'zcode', state: 'disconnected', statusCode: code, items: [] });
+    assert.equal(nodes.status.textContent, short); assert.match(nodes.status.title, reason);
+    assert.match(nodes['quota-label'].title, reason);
+    assert.equal(nodes['quota-label'].attributes['aria-label'], nodes['quota-label'].title);
+    assert.doesNotMatch(nodes.summary.textContent + nodes.items.textContent, /0%/);
+  }
+  receive({ sourceId: 'zcode', state: 'ready', items: [{ label: 'Coding Plan', bucketId: 'zcode:paid:1', windowMinutes: 300, remaining: 75 }] });
+  assert.equal(nodes.status.textContent, 'ZCode 剩余额度'); assert.equal(nodes.status.title, '');
+  assert.doesNotMatch(nodes['quota-label'].title, /权限|配置|选择完整/);
+  receive({ sourceId: 'codex', state: 'disconnected', statusCode: 'ZCODE_TEAM_KEY_MISSING', items: [] });
+  assert.equal(nodes.status.textContent, 'Codex 未连接'); assert.equal(nodes.status.title, '');
+  receive({ sourceId: 'zcode', state: 'disconnected', statusCode: 'PRIVATE_RESPONSE', items: [] });
+  assert.equal(nodes.status.textContent, 'ZCode 未连接'); assert.equal(nodes.status.title, '');
+});

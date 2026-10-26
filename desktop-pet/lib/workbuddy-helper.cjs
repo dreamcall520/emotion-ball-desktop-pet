@@ -31,23 +31,56 @@ function decryptToken(field, key, id) {
   check(token.length > 20, 'LOGIN_REQUIRED');
   return token;
 }
+const ENTERPRISE_DOMAINS = new Set(['www.workbuddy.cn', 'www.codebuddy.cn', 'copilot.tencent.com']);
+function sessionIdentity(session) {
+  const account = session.account, domain = session.auth?.domain;
+  check(account && typeof account.uid === 'string' && account.uid.length > 0, 'LOGIN_REQUIRED');
+  const enterpriseId = account.enterpriseId?.trim?.() || '';
+  if (!enterpriseId) {
+    check(account.type === 'personal' && account.isCurrentOneIdEnterprise !== true && domain === 'www.workbuddy.cn', 'UNSUPPORTED_ACCOUNT');
+    return { uid: account.uid, domain, scope: 'personal',
+      accountKey: crypto.createHash('sha256').update('workbuddy:' + domain + ':personal:' + account.uid).digest('hex') };
+  }
+  check(/^[\x21-\x7e]{1,256}$/.test(account.uid), 'UNSUPPORTED_ACCOUNT');
+  check(ENTERPRISE_DOMAINS.has(domain) && account.type !== 'exclusive' &&
+    (!session.deploymentType || session.deploymentType === 'SaaS') &&
+    (!session.networkEnvironment || session.networkEnvironment === 'internal'), 'UNSUPPORTED_ACCOUNT');
+  check(/^[A-Za-z0-9._:-]{1,128}$/.test(enterpriseId) && typeof account.type === 'string' &&
+    /^[A-Za-z0-9_-]{1,64}$/.test(account.type), 'UNSUPPORTED_ACCOUNT');
+  const departmentId = account.departmentId ?? account.department_id ?? '';
+  const department = account.departmentFullName ?? '';
+  check(typeof departmentId === 'string' && departmentId.length <= 256 && !/[\r\n]/.test(departmentId), 'UNSUPPORTED_ACCOUNT');
+  // Official desktop quota/gateway headers omit this optional field. Keep its opaque
+  // authority identity in the scope only; do not invent a wire encoding for Chinese.
+  let departmentScope;
+  if (typeof department === 'string') {
+    check(department.length <= 2048 && !/[\r\n]/.test(department), 'UNSUPPORTED_ACCOUNT');
+    departmentScope = department;
+  } else {
+    check(department && department.$wbEncrypted === 1 &&
+      Object.keys(department).sort().join(',') === '$wbEncrypted,envelope' &&
+      typeof department.envelope === 'string' && department.envelope.length <= 16384, 'UNSUPPORTED_AUTH');
+    base64(department.envelope);
+    departmentScope = JSON.stringify(department);
+  }
+  const scope = ['workbuddy', domain, 'enterprise', account.uid, account.type, enterpriseId, departmentId, departmentScope];
+  return { uid: account.uid, domain, scope: 'enterprise', enterpriseId, departmentId,
+    accountKey: crypto.createHash('sha256').update(JSON.stringify(scope)).digest('hex') };
+}
 function readAuth(includeRefresh = false) {
   check(process.platform === 'darwin', 'UNSUPPORTED_PLATFORM');
   const file = path.join(os.homedir(), 'Library/Application Support/CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info');
   check(fs.existsSync(file) && !fs.existsSync(file + '.logged-out'), 'LOGIN_REQUIRED');
   const session = JSON.parse(fs.readFileSync(file, 'utf8'));
-  check(session.account?.type === 'personal' && session.account.isCurrentOneIdEnterprise !== true &&
-    session.auth?.domain === 'www.workbuddy.cn', 'UNSUPPORTED_ACCOUNT');
-  check(typeof session.account.uid === 'string' && session.account.uid.length > 0, 'LOGIN_REQUIRED');
+  const identity = sessionIdentity(session);
   const payload = JSON.parse(process._linkedBinding('electron_browser_workbuddy_storage').loggerGet());
   check(payload.version === 1, 'UNSUPPORTED_AUTH');
   base64(payload.atRestSecretKey, 32);
   const key = crypto.createHash('sha256').update(payload.atRestSecretKey, 'utf8').digest();
   try {
     const keyId = crypto.createHash('sha256').update(key).digest('hex').slice(0, 16);
-    return { token: decryptToken(session.auth.accessToken, key, keyId), uid: session.account.uid, domain: session.auth.domain,
-      ...(includeRefresh ? { refreshToken: decryptToken(session.auth.refreshToken, key, keyId) } : {}),
-      accountKey: crypto.createHash('sha256').update('workbuddy:' + session.auth.domain + ':personal:' + session.account.uid).digest('hex') };
+    return { token: decryptToken(session.auth.accessToken, key, keyId), ...identity,
+      ...(includeRefresh && identity.scope === 'personal' ? { refreshToken: decryptToken(session.auth.refreshToken, key, keyId) } : {}) };
   } finally { key.fill(0); }
 }
 function headers(auth, conversationId) {
@@ -55,6 +88,9 @@ function headers(auth, conversationId) {
     'X-User-Id': auth.uid, 'X-Domain': auth.domain, 'X-Product': 'SaaS', 'X-IDE-Type': 'WorkBuddy',
     'X-IDE-Name': 'WorkBuddy', 'X-IDE-Version': '5.8.3', 'User-Agent': 'CLI/5.8.3 WorkBuddy/5.8.3',
     'X-Requested-With': 'XMLHttpRequest' };
+  if (auth.scope === 'enterprise') Object.assign(values, {
+    'X-Enterprise-Id': auth.enterpriseId, 'X-Tenant-Id': auth.enterpriseId
+  });
   if (conversationId) Object.assign(values, { 'X-Agent-Intent': 'craft', 'X-Agent-Purpose': 'conversation',
     'X-Conversation-ID': conversationId, 'X-Conversation-Request-ID': crypto.randomUUID(),
     'X-Conversation-Message-ID': crypto.randomUUID() });
@@ -62,8 +98,11 @@ function headers(auth, conversationId) {
   return values;
 }
 async function request(auth, route, body, signal, conversationId) {
-  const response = await fetch(ORIGIN + route, { method: body === undefined ? 'GET' : 'POST', headers: headers(auth, conversationId),
+  auth.verifyCurrent?.();
+  const origin = auth.scope === 'enterprise' && route.startsWith('/v2/billing/') ? 'https://www.workbuddy.cn' : ORIGIN;
+  const response = await fetch(origin + route, { method: body === undefined ? 'GET' : 'POST', headers: headers(auth, conversationId),
     body: body === undefined ? undefined : JSON.stringify(body), signal, redirect: 'error' });
+  auth.verifyCurrent?.();
   if (!response.ok) {
     if (response.status === 401) fail('LOGIN_REQUIRED');
     if (response.status === 429) fail('RATE_LIMITED');
@@ -80,6 +119,7 @@ async function jsonRequest(auth, route, body, signal) {
   const parts = []; let size = 0;
   for await (const part of response.body) { size += part.length; check(size <= 4 * 1024 * 1024); parts.push(part); }
   const raw = Buffer.concat(parts).toString('utf8');
+  auth.verifyCurrent?.();
   const envelope = JSON.parse(raw);
   if (Number(envelope.code)) fail(Number(envelope.code) === 14018 ? 'INSUFFICIENT_CREDITS' : 'SERVICE_UNAVAILABLE');
   check(envelope.data && typeof envelope.data === 'object');
@@ -122,7 +162,28 @@ function quotaReport(summary, accounts, now = Date.now()) {
   }).sort((a, b) => a.at - b.at);
   return { total: basic + reward, basic, reward, purchased: 0, plan: '体验版', nextRefreshAt, expires, updatedAt: now };
 }
+function enterpriseQuotaReport(value, now = Date.now()) {
+  check(value && typeof value === 'object');
+  const limit = value.limitNum, used = value.credit;
+  check(typeof limit === 'number' && Number.isFinite(limit) && (limit === -1 || limit >= 0));
+  check(typeof used === 'number' && Number.isFinite(used) && used >= 0);
+  let nextRefreshAt = null;
+  if (value.cycleResetTime != null && value.cycleResetTime !== '') {
+    check(typeof value.cycleResetTime === 'string');
+    nextRefreshAt = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value.cycleResetTime)
+      ? timestamp(value.cycleResetTime) : Date.parse(value.cycleResetTime);
+    check(Number.isFinite(nextRefreshAt));
+  }
+  return { scope: 'enterprise', unlimited: limit === -1,
+    total: limit === -1 ? null : Math.max(0, limit - used), limit: limit === -1 ? null : limit, used,
+    basic: null, reward: null, purchased: null, plan: '企业版', nextRefreshAt, expires: [], updatedAt: now };
+}
 async function quota(auth, signal) {
+  if (auth.scope === 'enterprise') {
+    const raw = await jsonRequest(auth, '/v2/billing/meter/get-enterprise-user-usage', {}, signal);
+    const value = typeof raw.limitNum === 'number' ? raw : raw.data;
+    return { accountKey: auth.accountKey, report: enterpriseQuotaReport(value) };
+  }
   const summary = await jsonRequest(auth, '/billing/meter/get-user-resource-summary', {}, signal);
   const day = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
   const accounts = [];
@@ -144,12 +205,13 @@ async function models(auth, signal) {
   const config = await jsonRequest(auth, '/v3/config', undefined, signal);
   check(Array.isArray(config.agents) && Array.isArray(config.models));
   const ids = config.agents.filter(agent => agent.name === 'cli').flatMap(agent => agent.models || []);
-  const result = config.models.filter(model => ids.includes(model.id)).map(model => {
+  const result = config.models.filter(model => ids.includes(model.id) && model.disabled !== true).map(model => {
     check(typeof model.id === 'string' && /^[a-zA-Z0-9._-]{1,100}$/.test(model.id));
     check(typeof model.name === 'string' && model.name.length <= 200);
     return { id: model.id, displayName: model.name };
   });
-  check(result.length > 0 && result.length <= 200);
+  check(result.length > 0, auth.scope === 'enterprise' ? 'MODEL_UNAVAILABLE' : 'INVALID_RESPONSE');
+  check(result.length <= 200);
   return { accountKey: auth.accountKey, models: result };
 }
 async function readSse(body, onDelta) {
@@ -191,11 +253,16 @@ async function readSse(body, onDelta) {
   check(terminal && text.trim().length > 0, 'TRUNCATED_RESPONSE');
   return text;
 }
-async function execute(operation, payload, onDelta = () => {}) {
+async function execute(operation, payload, onDelta = () => {}, { authReader = readAuth } = {}) {
   check(['quota', 'models', 'chat', 'tasks', 'task-open', 'usage'].includes(operation), 'INVALID_REQUEST');
-  const auth = readAuth(operation === 'usage');
+  const auth = authReader(operation === 'usage');
+  if (auth.scope === 'enterprise') auth.verifyCurrent = () => {
+    const current = authReader(false);
+    check(current.accountKey === auth.accountKey, 'ACCOUNT_CHANGED');
+  };
   try {
   if (payload.expectedAccountKey !== undefined) check(payload.expectedAccountKey === auth.accountKey, 'ACCOUNT_CHANGED');
+  if (auth.scope === 'enterprise' && ['tasks', 'task-open'].includes(operation)) fail('TASK_CACHE_UNSUPPORTED');
   if (operation === 'tasks') return require('./workbuddy-tasks-reader').readWorkBuddyTasks({ uid: auth.uid, accountKey: auth.accountKey });
   if (operation === 'task-open') {
     check(typeof payload.expectedAccountKey === 'string', 'ACCOUNT_CHANGED');
@@ -216,7 +283,9 @@ async function execute(operation, payload, onDelta = () => {}) {
   const response = await request(auth, '/v2/chat/completions', { model: payload.model, messages: payload.messages,
     stream: true, stream_options: { include_usage: true }, max_tokens: 1024 }, signal, payload.conversationId);
   check((response.headers.get('content-type') || '').includes('text/event-stream'));
-  return { accountKey: auth.accountKey, text: await readSse(response.body, onDelta) };
+  const text = await readSse(response.body, delta => { auth.verifyCurrent?.(); onDelta(delta); });
+  auth.verifyCurrent?.();
+  return { accountKey: auth.accountKey, text };
   } catch (error) { error.accountKey = auth.accountKey; throw error; }
 }
 const SAFE_ERRORS = new Set(['INVALID_RESPONSE', 'LOGIN_REQUIRED', 'UNSUPPORTED_AUTH', 'UNSUPPORTED_PLATFORM', 'UNSUPPORTED_ACCOUNT',
@@ -240,4 +309,4 @@ if (require.main === module) {
     }
   });
 }
-module.exports = { aad, decryptToken, quotaReport, readSse, execute };
+module.exports = { aad, decryptToken, quotaReport, enterpriseQuotaReport, sessionIdentity, readSse, execute };

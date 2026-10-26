@@ -150,13 +150,18 @@ function iconPreferenceFields(source) {
   catch (_) { return {}; }
 }
 
+function zcodeStatusFields(source) {
+  try { const code = source.statusCode; return ['ZCODE_TEAM_SELECTION_REQUIRED', 'ZCODE_TEAM_KEY_MISSING', 'ZCODE_TEAM_ACCESS_DENIED'].includes(code)
+    ? { statusCode: code } : {}; } catch (_) { return {}; }
+}
+
 function safeModel(value, sourceId = 'codex') {
   const source = record(value);
   if (!source) return { state: EMPTY_MODEL.state, items: [], overflow: 0 };
   let stateValue;
   try { stateValue = source.state; } catch (_) { return { state: EMPTY_MODEL.state, items: [], overflow: 0 }; }
   const state = STATES.has(stateValue) ? stateValue : 'disconnected';
-  const identity = sourceId === 'zcode' ? { sourceId: 'zcode' } : iconPreferenceFields(source);
+  const identity = sourceId === 'zcode' ? { sourceId: 'zcode', ...zcodeStatusFields(source) } : iconPreferenceFields(source);
   const numbers = numberFields(source);
   if (!['ready', 'stale'].includes(state)) return { ...identity, state, items: [], overflow: 0, ...numbers };
   let rawItems;

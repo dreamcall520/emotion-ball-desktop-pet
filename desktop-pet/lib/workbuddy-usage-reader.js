@@ -93,6 +93,7 @@ function aggregateUsage(pages, { startDate, endDate }, updatedAt) {
     todayRecords, todayCredits: days.at(-1).credits, totalCredits: total / 1e8, requestCount, updatedAt, delayHours: 3, complete: true };
 }
 async function readWorkBuddyUsage({ auth, authHeaders, fetchImpl = fetch, signal, now = Date.now }) {
+  if(auth?.scope==='enterprise'||auth?.enterpriseId)fail('USAGE_UNAVAILABLE');
   const startedAt = now(), range = usageRange(startedAt), cookies = await loginWebsite({ auth, authHeaders, fetchImpl, signal });
   const url = new URL('/billing/meter/get-user-request-usage', WEBSITE), pages = [];
   let total = null, received = 0;

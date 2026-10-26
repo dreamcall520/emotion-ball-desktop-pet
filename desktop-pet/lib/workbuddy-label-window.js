@@ -5,6 +5,7 @@ const path = require('node:path');
 const { quotaLabelSize } = require('./quota-label-placement');
 const { createWorkBuddyGuardEntryWindow } = require('./workbuddy-guard-entry-window');
 const { errorCode, errorMessage } = require('./workbuddy-quota-status');
+const { safeEnterpriseReport } = require('./workbuddy-quota');
 const CHANNEL = 'pet:workbuddy-label';
 const valid = b => b && ['x', 'y', 'width', 'height'].every(k => Number.isFinite(b[k])) && b.width > 0 && b.height > 0;
 const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
@@ -47,7 +48,7 @@ function safeState(state) {
   const number = n => Number.isFinite(n) && n >= 0;
   const date = n => Number.isFinite(n) && n >= 0 && n <= 8640000000000000 ? n : null;
   const r = state?.report;
-  const report = r && ['total', 'basic', 'reward', 'purchased'].every(k => number(r[k])) ? {
+  const report = r?.scope === 'enterprise' ? safeEnterpriseReport(r) : r && ['total', 'basic', 'reward', 'purchased'].every(k => number(r[k])) ? {
     total: r.total, basic: r.basic, reward: r.reward, purchased: r.purchased,
     plan: typeof r.plan === 'string' ? r.plan.slice(0, 60) : '未知套餐',
     nextRefreshAt: date(r.nextRefreshAt), updatedAt: date(r.updatedAt),

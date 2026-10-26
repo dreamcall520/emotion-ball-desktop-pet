@@ -2,10 +2,11 @@ const { readZcodeAccount } = require('./zcode-account');
 const { fetchZcodeUsage } = require('./zcode-usage');
 const { createZcodeQuotaHistory } = require('./zcode-quota-history');
 const POLL_MS = Object.freeze({ quota: 120000, tasks: 15000 });
+const TEAM_ERRORS = new Set(['ZCODE_TEAM_SELECTION_REQUIRED', 'ZCODE_TEAM_KEY_MISSING', 'ZCODE_TEAM_ACCESS_DENIED']);
 const clone = value => JSON.parse(JSON.stringify(value));
 const codeFor = error => ['ZCODE_ACCOUNT_MISSING', 'ZCODE_CREDENTIAL_DECRYPT_FAILED', 'ZCODE_PROVIDER_UNSUPPORTED',
   'ZCODE_LOGIN_REQUIRED', 'ZCODE_NETWORK_ERROR', 'ZCODE_HTTP_ERROR', 'ZCODE_BILLING_ERROR', 'ZCODE_USAGE_UNAVAILABLE',
-  'ZCODE_INVALID_RESPONSE', 'ZCODE_INVALID_ACCOUNT_FILE'].includes(error?.code) ? error.code : 'ZCODE_UNAVAILABLE';
+  'ZCODE_INVALID_RESPONSE', 'ZCODE_INVALID_ACCOUNT_FILE'].includes(error?.code) || TEAM_ERRORS.has(error?.code) ? error.code : 'ZCODE_UNAVAILABLE';
 function createZcodeCompanion({ filePath, onChange = () => {}, now = Date.now, readAccount = readZcodeAccount,
   fetchUsage = fetchZcodeUsage, readTasks = options => require('./zcode-tasks').readZcodeTasks(options),
   schedule = setTimeout, cancel = clearTimeout } = {}) {
@@ -13,7 +14,7 @@ function createZcodeCompanion({ filePath, onChange = () => {}, now = Date.now, r
   let quota = { state: 'disabled', windows: [], updatedAt: null, code: null };
   let tasks = { state: 'disabled', items: [], results: [], updatedAt: null, code: null };
   const history = createZcodeQuotaHistory({ filePath, now }); const timers = new Map(); const flights = {}; const observedLive = new Set();
-  const stale = () => quota.updatedAt === null || now() < quota.updatedAt || now() - quota.updatedAt >= 300000;
+  const stale = () => Boolean(quota.code) || quota.updatedAt === null || now() < quota.updatedAt || now() - quota.updatedAt >= 300000;
   function getSnapshot() {
     const stored = history.getState(); const known = ['connected', 'active', 'idle'].includes(tasks.state);
     return clone({ sourceId: 'zcode', enabled, generation, state: quota.state, accountKey, family,
@@ -105,7 +106,8 @@ function createZcodeCompanion({ filePath, onChange = () => {}, now = Date.now, r
       } catch (error) {
         if (!enabled || closed || generation !== currentGeneration || key !== accountKey) return;
         const code = codeFor(error);
-        if (kind === 'quota') quota = { ...quota, state: code === 'ZCODE_LOGIN_REQUIRED' ? 'unauthenticated' : quota.updatedAt === null ? 'disconnected' : 'connected', code };
+        if (kind === 'quota') quota = { ...quota, state: code === 'ZCODE_LOGIN_REQUIRED' ? 'unauthenticated'
+          : TEAM_ERRORS.has(code) || quota.updatedAt === null ? 'disconnected' : 'connected', code };
         else tasks = { ...tasks, state: 'unknown', items: [], results: [], code };
         notify();
       } finally {

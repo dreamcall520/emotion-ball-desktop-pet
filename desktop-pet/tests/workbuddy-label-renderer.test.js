@@ -39,6 +39,33 @@ test('card preserves precise balance, zero, no connection and stale report state
   render({ report: null, spaceError: true });
   assert.match(e.get('toggle').title, /空间不足/);
 });
+test('enterprise card renders real remaining, zero and unlimited then restores personal labels', () => {
+  const { elements: e, render } = fixture();
+  const enterprise = { scope: 'enterprise', unlimited: false, total: 7.25, limit: 100, used: 30, plan: '企业版', basic: null, reward: null, purchased: null, nextRefreshAt: null, expires: [], updatedAt: 10 };
+  render({ report: enterprise, expanded: true });
+  assert.equal(e.get('expanded-total').textContent, '7.25'); assert.equal(e.get('balance-caption').textContent, '剩余额度');
+  assert.equal(e.get('basic-label').textContent, '已用'); assert.equal(e.get('basic').textContent, '30');
+  assert.equal(e.get('reward-label').textContent, '限额'); assert.equal(e.get('reward').textContent, '100');
+  assert.equal(e.get('purchased-item').hidden, true); assert.equal(e.get('basic-item').hidden, false); assert.equal(e.get('reward-item').hidden, false); assert.match(e.get('refresh-date').title, /企业周期/);
+  render({ report: { ...enterprise, total: 0 } }); assert.equal(e.get('total').textContent, '0');
+  const unlimited = { ...enterprise, unlimited: true, total: null, limit: null };
+  render({ report: unlimited });
+  assert.equal(e.get('total').textContent, '30'); assert.equal(e.get('expanded-total').textContent, '30');
+  assert.equal(e.get('period').textContent, '已用'); assert.equal(e.get('balance-state').textContent, '积分');
+  assert.equal(e.get('basic-item').hidden, true); assert.equal(e.get('reward-item').hidden, false); assert.equal(e.get('reward').textContent, '未设上限');
+  assert.equal(e.get('balance-caption').textContent, '本期已用');
+  assert.match(e.get('expanded-total').title, /本期已用 30 积分/); assert.doesNotMatch(e.get('expanded-total').title, /余额|剩余|∞/);
+  assert.match(e.get('toggle').attributes['aria-label'], /本期已用 30 积分/);
+  render({ report: { ...unlimited, used: 0 } }); assert.equal(e.get('total').textContent, '0');
+  render({ report: unlimited, busy: true, stale: true }); assert.equal(e.get('period').textContent, '查询中'); assert.equal(e.get('balance-state').textContent, '查询中');
+  render({ report: unlimited, stale: true });
+  assert.equal(e.get('period').textContent, '待更新'); assert.match(e.get('expanded-total').title, /上次成功查询/);
+  assert.match(e.get('toggle').attributes['aria-label'], /企业额度未设上限/);
+  render({ report });
+  assert.equal(e.get('basic-label').textContent, '基础'); assert.equal(e.get('reward-label').textContent, '奖励');
+  assert.equal(e.get('purchased-item').hidden, false); assert.equal(e.get('purchased').textContent, '0'); assert.equal(e.get('basic-item').hidden, false); assert.equal(e.get('reward-item').hidden, false);
+  assert.equal(e.get('balance-caption').textContent, '剩余积分'); assert.match(e.get('refresh-date').title, /基础刷新/);
+});
 test('busy takes priority over stale data, while login errors and retry time stay explicit', () => {
   const { elements: e, document, render } = fixture();
   render({ report, stale: true, busy: true, error: '暂未更新', nextRetryAt: 20000 });

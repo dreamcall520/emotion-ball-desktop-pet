@@ -15,6 +15,7 @@
 #dates { font-size: 7px; line-height: 11px; }
 #balances { gap: 3px; }
 #balances > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#basic-item[hidden], #reward-item[hidden], #purchased-item[hidden] { display: none; }
 #tasks, #results { min-height: 18px; }
 #refresh[hidden] { display: none; }
 #trend { min-height: 18px; }

@@ -66,7 +66,11 @@
     el('week').setAttribute('aria-pressed', String(view === 'daily' || period === 'week'));
     el('view-records').setAttribute('aria-selected', String(view === 'records'));
     el('view-daily').setAttribute('aria-selected', String(view === 'daily'));
-    el('balance').textContent = Number.isFinite(state.report?.total) ? amount(state.report.total) : '—';
+    const enterprise = state.report?.scope === 'enterprise', unlimited = enterprise && state.report.unlimited === true;
+    const value = unlimited ? state.report.used : state.report?.total;
+    el('balance').textContent = Number.isFinite(value) ? amount(value) : '—';
+    el('balance').setAttribute('aria-label', unlimited ? `本期已用 ${el('balance').textContent} 积分，企业额度未设上限` : el('balance').textContent);
+    el('balance-label').textContent = unlimited ? '本期已用' : enterprise ? '剩余额度' : '可用积分';
     el('period-switch').hidden = view === 'daily';
     el('change-label').textContent = (view === 'daily' || period === 'week') ? '近7天消耗' : '今日消耗';
     const usageState = state.usage || {}, usage = usageState.report;
@@ -75,16 +79,16 @@
     el('usage-plot').replaceChildren(); el('usage-empty').hidden = available;
     if (available) drawUsage(usage);
     el('updated').textContent = Number.isFinite(available ? usage.updatedAt : state.report?.updatedAt) ? new Date(available ? usage.updatedAt : state.report.updatedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
-    el('updated').title = available ? '官方消耗上次成功查询时间' : '余额上次成功查询时间';
+    el('updated').title = available ? '官方消耗上次成功查询时间' : unlimited ? '本期已用积分上次成功查询时间' : '余额上次成功查询时间';
     el('hint').textContent = usageState.busy ? '正在同步消耗记录…' : '消耗统计暂不可用';
     el('unavailable-note').textContent = usageState.busy ? '正在读取 WorkBuddy 官方积分记录' : '暂未取得 WorkBuddy 官方消耗记录';
     const upcoming = Array.isArray(state.report?.expires) ? state.report.expires.filter(e => e.at > Date.now() && e.amount > 0).sort((a, b) => a.at - b.at) : [];
     const expiration = upcoming[0], date = at => new Date(at).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
     const expiring = expiration ? upcoming.filter(e => e.at === expiration.at).reduce((total, e) => total + e.amount, 0) : 0;
     el('expiry-block').dataset.warning = String(Boolean(expiration));
-    el('expiry-note').textContent = expiration ? `${amount(expiring)} 积分 ${date(expiration.at)} 到期` : state.report ? '暂无已知即将到期积分' : '暂未取得积分余额';
-    el('refresh-note').textContent = Number.isFinite(state.report?.nextRefreshAt) ? `基础积分 ${date(state.report.nextRefreshAt)} 刷新` : '刷新时间暂未知';
-    el('balance-note').textContent = state.stale ? '余额为上次查询结果，请刷新。' : '';
+    el('expiry-note').textContent = unlimited ? '企业额度未设上限' : enterprise ? `本周期已用 ${amount(state.report.used)} 积分` : expiration ? `${amount(expiring)} 积分 ${date(expiration.at)} 到期` : state.report ? '暂无已知即将到期积分' : '暂未取得积分余额';
+    el('refresh-note').textContent = Number.isFinite(state.report?.nextRefreshAt) ? `${enterprise ? '企业周期' : '基础积分'} ${date(state.report.nextRefreshAt)} 刷新` : enterprise ? '企业周期刷新时间暂未知' : '刷新时间暂未知';
+    el('balance-note').textContent = state.stale ? `${unlimited ? '已用积分' : '余额'}为上次查询结果，请刷新。` : '';
     el('balance-note').hidden = !state.stale;
     resize();
   }

@@ -1810,6 +1810,29 @@ test('实际controller区分22/24/50角色，普通48px与大角色64px同源传
   assert.equal(w.sent.at(-1)[1].items.length, 4);
 });
 
+test('团队原因只通过 ZCode 原生窗口和 preload 白名单，未知码和 Codex 保持原行为', () => {
+  const { safeModel } = require('../lib/quota-label-window');
+  for (const source of ['zcode', 'codex']) {
+    let api, listener, received;
+    vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../quota-label-preload.js'), 'utf8'), {
+      process: { argv: source === 'zcode' ? ['electron', '--pet-source=zcode'] : ['electron'] },
+      require: () => ({ contextBridge: { exposeInMainWorld(_name, value) { api = value; } },
+        ipcRenderer: { on(_channel, callback) { listener = callback; }, removeListener() {}, send() {} } })
+    });
+    api.onModel(value => { received = value; });
+    for (const code of ['ZCODE_TEAM_SELECTION_REQUIRED', 'ZCODE_TEAM_KEY_MISSING', 'ZCODE_TEAM_ACCESS_DENIED', 'PRIVATE_RESPONSE']) {
+      const input = { sourceId: 'zcode', state: 'disconnected', statusCode: code, items: [] };
+      const packet = safeModel(input, source), expected = source === 'zcode' && code !== 'PRIVATE_RESPONSE' ? code : undefined;
+      assert.equal(packet.statusCode, expected); listener({}, packet); assert.equal(received.statusCode, expected);
+      assert.equal(received.items.length, 0);
+      listener({}, input); assert.equal(received.statusCode, expected, 'preload independently validates the source and code');
+    }
+    const throwing = { state: 'disconnected', get statusCode() { throw new Error('PRIVATE'); } };
+    assert.doesNotThrow(() => safeModel(throwing, source)); assert.doesNotThrow(() => listener({}, throwing));
+    assert.equal(received.statusCode, undefined);
+  }
+});
+
  test('ZCode preload 固定来源，拒绝数字周期和跨来源操作，保留小数周期与四桶', () => {
   const handlers = new Map(), sent = [];
   let api;

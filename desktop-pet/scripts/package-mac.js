@@ -223,6 +223,7 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/lib/codex-companion.js',
     'desktop-pet/lib/chat-sources.js',
     'desktop-pet/lib/zcode-account.js',
+    'desktop-pet/lib/zcode-team-auth.js',
     'desktop-pet/lib/zcode-usage.js',
     'desktop-pet/lib/zcode-companion.js',
     'desktop-pet/lib/zcode-quota-history.js',

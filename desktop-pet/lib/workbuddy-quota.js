@@ -5,6 +5,17 @@ const { runWorkBuddy } = require('./workbuddy-client');
 const { watchWorkBuddyAuth } = require('./workbuddy-auth-watch');
 const { errorCode, errorMessage, clearsAccount, retryDelay } = require('./workbuddy-quota-status');
 
+function safeEnterpriseReport(value) {
+  const number = n => Number.isFinite(n) && n >= 0;
+  const date = n => number(n) && n <= 8640000000000000 ? n : null;
+  if (value?.scope !== 'enterprise' || typeof value.unlimited !== 'boolean' || !number(value.used)) return null;
+  if (value.unlimited ? value.total !== null || value.limit !== null : !number(value.total) || !number(value.limit)) return null;
+  if (!value.unlimited && value.total !== Math.max(value.limit - value.used, 0)) return null;
+  return { scope: 'enterprise', unlimited: value.unlimited, total: value.total, limit: value.limit, used: value.used,
+    basic: null, reward: null, purchased: null, plan: '企业版',
+    nextRefreshAt: date(value.nextRefreshAt), expires: [], updatedAt: date(value.updatedAt) };
+}
+
 function historyPoint(value) {
   const point = { at: value.at, total: value.total };
   for (const key of ['basic', 'reward', 'purchased', 'nextRefreshAt']) if (Number.isFinite(value[key]) && value[key] >= 0) point[key] = value[key];
@@ -31,6 +42,8 @@ function createWorkBuddyQuota({ run = runWorkBuddy, onChange = () => {}, now = D
     } catch (error) { if (!['ENOENT', 'ENOTDIR'].includes(error.code)) { histories = {}; historyProblem = historyBlocked = true; } }
   }
   function appendHistory(key, report) {
+    // An unlimited allowance has no remaining-balance observation to record.
+    if (!Number.isFinite(report.total)) return prune(histories[key] || []);
     const point = historyPoint({ ...report, at: now() }), at = point.at, points = prune(histories[key] || []);
     if (Number.isSafeInteger(at) && at >= 0) {
       if (points.at(-1)?.at === at) points[points.length - 1] = point;
@@ -94,12 +107,13 @@ function createWorkBuddyQuota({ run = runWorkBuddy, onChange = () => {}, now = D
     try {
       const result = await run('quota', {}, { signal: controller.signal });
       if (current !== generation) return getState();
-      if (!/^[a-f0-9]{64}$/.test(result?.accountKey || '') || !result.report || !Number.isFinite(result.report.total) || result.report.total < 0) {
+      const report = result?.report?.scope === 'enterprise' ? safeEnterpriseReport(result.report) : result?.report;
+      if (!/^[a-f0-9]{64}$/.test(result?.accountKey || '') || !report || (report.scope !== 'enterprise' && (!Number.isFinite(report.total) || report.total < 0))) {
         throw Object.assign(new Error('WorkBuddy 返回格式异常。'), { code: 'INVALID_RESPONSE' });
       }
       failures = 0;
-      const history = appendHistory(result.accountKey, result.report);
-      state = { ...state, busy: false, error: null, errorCode: null, report: result.report, accountKey: result.accountKey, stale: false, history,
+      const history = appendHistory(result.accountKey, report);
+      state = { ...state, busy: false, error: null, errorCode: null, report, accountKey: result.accountKey, stale: false, history,
         historyError: historyProblem ? '积分趋势暂时无法保存，本次余额已更新。' : null };
     } catch (error) {
       if (current !== generation) return getState();
@@ -131,4 +145,4 @@ function createWorkBuddyQuota({ run = runWorkBuddy, onChange = () => {}, now = D
   function close() { stop(); closed = true; state = emptyState(false); }
   return { setEnabled, refresh, recover, getState, close };
 }
-module.exports = { createWorkBuddyQuota };
+module.exports = { createWorkBuddyQuota, safeEnterpriseReport };

@@ -46,6 +46,19 @@ test('first visibility notification observes an owned live details window before
   details.close();
   assert.deepEqual(observed.map(({ visible, isVisible }) => ({ visible, isVisible })), [{ visible: true, isVisible: true }, { visible: false, isVisible: false }]);
 });
+test('details IPC preserves enterprise unlimited values and strips tenant metadata across account switches', () => {
+  const { details, windows } = fixture();
+  const enterprise = { scope: 'enterprise', unlimited: true, total: null, limit: null, used: 30, updatedAt: 10, nextRefreshAt: 20, tenantToken: 'secret', enterpriseId: 'secret' };
+  details.open({ report: enterprise, accountKey: 'secret', history: [{ at: 10, total: null }] });
+  const win = windows[0]; win.webContents.emit('did-finish-load');
+  assert.equal(win.messages.at(-1).value.report.unlimited, true); assert.equal(win.messages.at(-1).value.report.total, null);
+  assert.deepEqual(win.messages.at(-1).value.history, []); assert.doesNotMatch(JSON.stringify(win.messages), /secret|tenantToken|enterpriseId/);
+  details.update({ report: { ...enterprise, unlimited: false, total: 0, limit: 30 } });
+  assert.equal(win.messages.at(-1).value.report.total, 0);
+  details.update({ report: { total: 500, basic: 500 } });
+  assert.equal(win.messages.at(-1).value.report.total, 500); assert.equal(win.messages.at(-1).value.report.scope, undefined);
+  details.destroy();
+});
 test('consumption failure never substitutes balance drops, fake zero, curves or forecasts', () => {
   const vm = require('node:vm'), fs = require('node:fs');
   const elements = new Map(), sizes = [];
@@ -74,6 +87,16 @@ test('consumption failure never substitutes balance drops, fake zero, curves or 
   assert.match(get('expiry-note').textContent, /99.91 积分/); assert.match(get('refresh-note').textContent, /刷新/);
   receive({report:null});assert.equal(get('expiry-block').dataset.warning,'false');assert.equal(get('expiry-note').textContent,'暂未取得积分余额');assert.equal(get('refresh-note').textContent,'刷新时间暂未知');
   receive({report:{total:0,expires:[]}});assert.equal(get('expiry-note').textContent,'暂无已知即将到期积分');assert.equal(get('refresh-note').textContent,'刷新时间暂未知');
+  receive({ stale: true, report: { scope: 'enterprise', unlimited: true, total: null, limit: null, used: 30, expires: [], nextRefreshAt: now + 86400000 } });
+  assert.equal(get('balance').textContent, '30'); assert.equal(get('balance-label').textContent, '本期已用');
+  assert.equal(get('balance').attrs['aria-label'], '本期已用 30 积分，企业额度未设上限');
+  assert.match(get('updated').title, /本期已用/); assert.match(get('balance-note').textContent, /已用积分为上次查询结果/);
+  assert.equal(get('change').textContent, '—'); assert.equal(get('hint').textContent, '消耗统计暂不可用');
+  assert.equal(get('expiry-note').textContent, '企业额度未设上限'); assert.match(get('refresh-note').textContent, /企业周期/);
+  receive({ report: { scope: 'enterprise', unlimited: false, total: 0, limit: 30, used: 30, expires: [], nextRefreshAt: null } });
+  assert.equal(get('balance').textContent, '0'); assert.equal(get('balance-label').textContent, '剩余额度');
+  assert.equal(get('refresh-note').textContent, '企业周期刷新时间暂未知');
+  receive({report:{total:500,expires:[]}}); assert.equal(get('balance-label').textContent,'可用积分'); assert.equal(get('expiry-note').textContent,'暂无已知即将到期积分');
   get('view-daily').listeners.click(); get('week').listeners.click();
   assert.equal(get('change-label').textContent, '近7天消耗'); assert.equal(get('change').textContent, '—');
   assert.equal(get('hint').textContent, '消耗统计暂不可用'); assert.equal(get('view-daily').attrs['aria-selected'], 'true');

@@ -125,6 +125,7 @@ test('安装包完整包含聊天窗口、持久对话和独立 Codex 通道，�
     'desktop-pet/lib/chat-companion.js',
     'desktop-pet/lib/chat-models.js',
     'desktop-pet/lib/codex-chat-rpc.js',
+    'desktop-pet/lib/zcode-team-auth.js',
     'desktop-pet/scripts/verify-chat-integration.js'
   ]) {
     assert.equal(fs.readFileSync(path.join(staging, relativePath), 'utf8'),
@@ -133,6 +134,8 @@ test('安装包完整包含聊天窗口、持久对话和独立 Codex 通道，�
   const stagedRequire = relative => require(path.join(staging, 'desktop-pet', relative));
   assert.equal(typeof stagedRequire('lib/chat-window.js').createChatWindow, 'function');
   assert.equal(typeof stagedRequire('lib/codex-chat-rpc.js').createCodexChatRpc, 'function');
+  assert.equal(typeof stagedRequire('lib/zcode-chat-rpc.js').createZcodeChatRpc, 'function');
+  assert.equal(typeof stagedRequire('lib/zcode-team-auth.js').createZcodeTeamAuth, 'function');
   const verifier = stagedRequire('scripts/verify-chat-integration.js');
   assert.equal(typeof verifier.verifyChatIntegration, 'function');
   assert.equal(typeof verifier.createSmokeChatRpc, 'function');
