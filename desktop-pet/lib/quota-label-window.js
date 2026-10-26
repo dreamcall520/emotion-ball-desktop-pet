@@ -667,14 +667,14 @@ function createQuotaLabelWindow({
     resetExpanded() { resetExpandedPending=true; },
     getLayoutMetrics() {
       const target=getWindow();
-      if (!requestedVisible || !target || getSuppressed() || !currentModel?.items.length || currentModel.display === 'numbers') return null;
+      if (!requestedVisible || !target || getSuppressed() || !currentModel || currentModel.display === 'numbers') return null;
       return { ...quotaLabelSize(currentModel.size,!resetExpandedPending&&currentModel.expanded,currentModel.items.length,Boolean(currentModel.extraCredits),false,null,sourceId),
         inset: currentModel.size==='compact'&&(resetExpandedPending||!currentModel.expanded)?2:0,
         guardTargetWidth: guardEntryVisible()?quotaRoleTargetWidth(rolePaintWidth()):0, roleWidth:rolePaintWidth() };
     },
     getVisibleBounds() {
       const target = getWindow();
-      if (!target || !requestedVisible || !currentModel?.items.length || !target.isVisible() && groupTransitionMode !== 'stage') return null;
+      if (!target || !requestedVisible || !currentModel || !currentModel.items.length && currentModel.display === 'numbers' || !target.isVisible() && groupTransitionMode !== 'stage') return null;
       const bounds = target.getBounds();
       const card = quotaLabelSize(currentModel.size, currentModel.expanded, currentModel.items.length,
         Boolean(currentModel.extraCredits), false, null, sourceId);
