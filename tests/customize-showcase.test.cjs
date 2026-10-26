@@ -7,8 +7,10 @@ assert.doesNotMatch(html, /download-checks|app-capture|data-showcase-try/);
 assert.doesNotMatch(html, /<section[^>]+id="updates"|class="updates-history"|class="milestone-update"/);
 assert.ok(html.includes('href="../updates/" target="_blank" rel="noopener">更新日志'));
 const arm64 = [...html.matchAll(/data-download-arch="arm64"[^>]*href="([^"]+)"/g)];
-assert.equal(arm64.length, 3);
-assert.ok(arm64.every(m => /\/v0\.4\.8\/Qiuqiu-0\.4\.08-macOS-arm64\.dmg$/.test(m[1])));
+assert.equal(arm64.length, 6);
+const githubArm64 = arm64.filter(m => m[1].startsWith('https://github.com/'));
+assert.equal(githubArm64.length, 3);
+assert.ok(githubArm64.every(m => /\/v0\.4\.8\/Qiuqiu-0\.4\.08-macOS-arm64\.dmg$/.test(m[1])));
 assert.match(html, /<dt>版本<\/dt><dd>0\.4\.08<\/dd>/);
 assert.ok(html.includes('<dt>发布日期</dt><dd>2026-10-26</dd>'));
 assert.match(html, /直接选择本机 Codex 自定义宠物/);
@@ -40,9 +42,19 @@ console.log('Functionality page: retained demos, moved history, release download
 for (const page of [html,home]) {
   const domestic=[...page.matchAll(/<a[^>]*href="https:\/\/share\.weiyun\.com\/ZdAiD7rR"[^>]*>([\s\S]*?)<\/a>/g)];
   assert.equal(domestic.length,3);
-  assert.ok(domestic.every(m=>m[1].includes('0.4.08')&&!m[1].includes('旧版')));
+  assert.ok(domestic.every(m=>m[0].includes('0.4.08')&&m[0].includes('微云分享页')&&!m[1].includes('旧版')));
+  assert.ok(domestic.every(m=>m[0].includes('target="_blank"')&&m[0].includes('rel="noopener"')));
   assert.doesNotMatch(page,/share\.weiyun\.com\/(?:OJvZzed5|rXnnLRhI)/);
   assert.match(page,/analytics\.js\?v=20261026-release/);
 }
 assert.match(html,/Intel 构建候选/);
 assert.match(html,/尚未在真实 Intel Mac 上验收/);
+
+// Primary Apple downloads use the explicit domestic share page; GitHub remains an opt-in fallback.
+for (const page of [html, home]) {
+  const primary = [...page.matchAll(/<a[^>]*class="[^"]*(?:button-primary|download-button)[^"]*"[^>]*data-download-arch="arm64"[^>]*>/g)];
+  assert.equal(primary.length, page === html ? 3 : 1);
+  assert.ok(primary.every(m => m[0].includes('href="https://share.weiyun.com/ZdAiD7rR"')));
+  assert.match(page, /GitHub 备用/);
+  assert.doesNotMatch(page, /自动加速|免登录下载|不限速/);
+}

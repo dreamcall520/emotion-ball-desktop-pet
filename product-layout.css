@@ -91,7 +91,7 @@ html[data-theme="dark"] .product-redesign {
 .product-redesign .hero-copy > .hero-lead { margin: 0 0 28px; font-size: 18px; line-height: 1.8; }
 .product-redesign .hero-actions { justify-content: center; }
 .product-redesign .hero-actions .button { border-radius: 999px; }
-/* Native split download: GitHub primary, domestic option in the disclosure. */
+/* Native split download: domestic sharing page first, GitHub in the disclosure. */
 .product-redesign .download-split { position: relative; display: flex; align-items: stretch; min-height: 52px; border: 1px solid #6da8ff80; border-radius: 999px; background: linear-gradient(115deg, #1756e8, #0066ff); color: #fff; box-shadow: 0 8px 24px #0066ff30; }
 .product-redesign .download-split a.button-primary[data-download-arch] { flex: 1; min-width: 0; border: 0; background: transparent; box-shadow: none; transform: none; }
 .product-redesign .download-split details { position: static; display: flex; flex: none; }
