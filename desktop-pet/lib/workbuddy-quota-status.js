@@ -3,7 +3,8 @@ const MESSAGES = Object.freeze({
   ACCOUNT_CHANGED: 'WorkBuddy 账号已变化，正在重新连接',
   UNSUPPORTED_PLATFORM: '当前仅支持 macOS WorkBuddy',
   UNSUPPORTED_AUTH: '当前 WorkBuddy 登录格式暂不支持，请更新球球',
-  UNSUPPORTED_ACCOUNT: '当前 WorkBuddy 套餐暂不支持',
+  UNSUPPORTED_ACCOUNT: '当前 WorkBuddy 登录身份暂无法识别',
+  UNSUPPORTED_QUOTA: '当前 WorkBuddy 积分格式暂无法识别，请更新球球',
   RATE_LIMITED: 'WorkBuddy 请求较多，稍后自动重试',
   TIMEOUT: '查询超时，稍后自动重试',
   CONNECTION_FAILED: '连接暂未恢复，稍后自动重试',
@@ -15,7 +16,7 @@ const MESSAGES = Object.freeze({
 const errorCode = code => typeof code === 'string' && Object.hasOwn(MESSAGES, code) ? code : 'UPDATE_FAILED';
 const errorMessage = code => MESSAGES[errorCode(code)];
 const clearsAccount = code => ['ACCOUNT_CHANGED', 'LOGIN_REQUIRED', 'UNSUPPORTED_ACCOUNT', 'UNSUPPORTED_AUTH'].includes(code);
-const waitsForUser = code => ['LOGIN_REQUIRED', 'UNSUPPORTED_ACCOUNT', 'UNSUPPORTED_AUTH', 'UNSUPPORTED_PLATFORM', 'ACCOUNT_RESTRICTED'].includes(code);
+const waitsForUser = code => ['LOGIN_REQUIRED', 'UNSUPPORTED_ACCOUNT', 'UNSUPPORTED_AUTH', 'UNSUPPORTED_PLATFORM', 'UNSUPPORTED_QUOTA', 'ACCOUNT_RESTRICTED'].includes(code);
 const transient = code => ['TIMEOUT', 'CONNECTION_FAILED', 'SERVICE_UNAVAILABLE', 'ACCOUNT_CHANGED'].includes(code);
 function retryDelay(code, failures) {
   if (waitsForUser(code)) return null;

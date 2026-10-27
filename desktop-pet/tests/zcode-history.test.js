@@ -20,6 +20,7 @@ test('team configuration failures preserve history without presenting previous q
     now += 1000; failure = code; await companion.refresh();
     const snapshot = companion.getSnapshot(), model = buildZcodeQuotaLabelModel(snapshot, {}, now);
     assert.equal(snapshot.quota.state, 'disconnected'); assert.equal(snapshot.quota.code, code);
+    assert.equal(snapshot.quota.queryFailed, false);
     assert.equal(snapshot.quota.stale, true); assert.equal(snapshot.quota.updatedAt, initialNow);
     assert.deepEqual(snapshot.history.windows, history);
     assert.equal(model.state, 'disconnected'); assert.equal(model.statusCode, code); assert.deepEqual(model.items, []);
@@ -43,6 +44,7 @@ test('a temporary quota request failure immediately marks retained values stale 
   assert.equal(snapshot.quota.state, 'connected'); assert.equal(snapshot.quota.stale, true);
   assert.equal(snapshot.quota.updatedAt, initialNow); assert.deepEqual(snapshot.history.windows, history);
   assert.equal(model.state, 'stale'); assert.deepEqual(model.items.map(row => row.remaining), buckets.map(row => row.remaining));
+  assert.equal(model.statusCode, 'ZCODE_QUOTA_UPDATE_FAILED');
   offline = false; await companion.refresh();
   assert.equal(companion.getSnapshot().quota.stale, false); assert.equal(companion.getSnapshot().quota.code, null);
 });

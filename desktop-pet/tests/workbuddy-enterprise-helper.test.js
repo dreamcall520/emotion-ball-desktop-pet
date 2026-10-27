@@ -18,6 +18,12 @@ test('enterprise credits preserve finite used/limit and unlimited without fake p
  const infinite=enterpriseQuotaReport({limitNum:-1,credit:12},123);assert.equal(infinite.unlimited,true);assert.equal(infinite.total,null);assert.equal(infinite.limit,null);assert.equal(infinite.used,12);assert.equal(infinite.nextRefreshAt,null);
  for(const value of [{limitNum:10},{limitNum:-2,credit:0},{limitNum:10,credit:-1},{limitNum:Infinity,credit:0},{limitNum:10,credit:0,cycleResetTime:'broken'},{limit_num:10,used_num:0}])assert.throws(()=>enterpriseQuotaReport(value),{code:'INVALID_RESPONSE'});
 });
+test('personal identity accepts domestic Pro and normalized personal type without changing account history scope',()=>{
+ const expected=sessionIdentity(personal).accountKey;
+ for(const type of ['pro','Personal',' personal ',' Pro '])assert.equal(sessionIdentity({...personal,account:{...personal.account,type}}).accountKey,expected);
+ for(const extra of [{type:'ultimate'},{type:'exclusive'},{type:undefined},{isCurrentOneIdEnterprise:true},{uid:'bad\r\nuid'}])assert.throws(()=>sessionIdentity({...personal,account:{...personal.account,...extra}}),{code:'UNSUPPORTED_ACCOUNT'});
+ for(const extra of [{deploymentType:'Self-Hosted'},{networkEnvironment:'cloudhosted'},{auth:{domain:'www.codebuddy.ai'}}])assert.throws(()=>sessionIdentity({...personal,...extra}),{code:'UNSUPPORTED_ACCOUNT'});
+});
 test('enterprise quota uses official desktop v2 and tenant headers without personal resource calls',async t=>{
  const a=auth(session('enterprise-a',{departmentFullName:'department-name'}));const calls=[];withFetch(t,async(url,options)=>{calls.push({url,options});return response({limitNum:100,credit:20});});
  const result=await execute('quota',{},()=>{},{authReader:()=>({...a})});assert.equal(result.report.total,80);assert.equal(calls.length,1);assert.equal(calls[0].url,'https://www.workbuddy.cn/v2/billing/meter/get-enterprise-user-usage');assert.equal(calls[0].options.body,'{}');

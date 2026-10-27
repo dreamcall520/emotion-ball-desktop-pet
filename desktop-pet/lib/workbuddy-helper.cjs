@@ -35,13 +35,17 @@ const ENTERPRISE_DOMAINS = new Set(['www.workbuddy.cn', 'www.codebuddy.cn', 'cop
 function sessionIdentity(session) {
   const account = session.account, domain = session.auth?.domain;
   check(account && typeof account.uid === 'string' && account.uid.length > 0, 'LOGIN_REQUIRED');
+  check(/^[\x21-\x7e]{1,256}$/.test(account.uid), 'UNSUPPORTED_ACCOUNT');
+  check(account.enterpriseId == null || typeof account.enterpriseId === 'string', 'UNSUPPORTED_ACCOUNT');
   const enterpriseId = account.enterpriseId?.trim?.() || '';
   if (!enterpriseId) {
-    check(account.type === 'personal' && account.isCurrentOneIdEnterprise !== true && domain === 'www.workbuddy.cn', 'UNSUPPORTED_ACCOUNT');
+    const type = typeof account.type === 'string' ? account.type.trim().toLowerCase() : '';
+    check(['personal', 'pro'].includes(type) && account.isCurrentOneIdEnterprise !== true && domain === 'www.workbuddy.cn' &&
+      (!session.deploymentType || session.deploymentType === 'SaaS') &&
+      (!session.networkEnvironment || session.networkEnvironment === 'internal'), 'UNSUPPORTED_ACCOUNT');
     return { uid: account.uid, domain, scope: 'personal',
       accountKey: crypto.createHash('sha256').update('workbuddy:' + domain + ':personal:' + account.uid).digest('hex') };
   }
-  check(/^[\x21-\x7e]{1,256}$/.test(account.uid), 'UNSUPPORTED_ACCOUNT');
   check(ENTERPRISE_DOMAINS.has(domain) && account.type !== 'exclusive' &&
     (!session.deploymentType || session.deploymentType === 'SaaS') &&
     (!session.networkEnvironment || session.networkEnvironment === 'internal'), 'UNSUPPORTED_ACCOUNT');
@@ -130,37 +134,81 @@ function amount(value) {
   const number = Number(value); check(Number.isFinite(number) && number >= 0); return number;
 }
 function timestamp(value) {
-  check(typeof value === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value));
-  const ms = Date.parse(value.replace(' ', 'T') + '+08:00'); check(Number.isFinite(ms)); return ms;
+  let ms;
+  if (typeof value === 'number' || typeof value === 'string' && /^\d+$/.test(value)) ms = Number(value);
+  else {
+    check(typeof value === 'string');
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)) value = value.replace(' ', 'T') + '+08:00';
+    check(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(value));
+    ms = Date.parse(value);
+  }
+  check(Number.isSafeInteger(ms) && ms > 0 && ms <= 8640000000000000); return ms;
 }
 const code = (id, suffix) => `TCACA_code_${id}_${suffix}`;
 const BASIC = code('008', 'cfWoLwvjU4');
 const REWARD = code('007', 'nzdH5h4Nl0');
-const PAID = [code('002', 'AkiJS3ZHF5'), code('005', 'maRGyrHhw1'), code('003', 'FAnt7lcmRT'), code('023', '4xbGhMrE6q'),
-  code('026', 'BaESVICNoi'), code('027', '0FCGVA6vSa'), code('009', '0XmEQc2xOf'), code('038', 'OhvqZtiPKr'), code('036', 'lupO5WgNdG')];
-const FREE = [code('001', 'PqouKr6QWV'), BASIC, code('035', 'ArVxJcGDsm'), code('006', 'DbXS0lrypC'), code('039', 'KRcQj7wUat'),
-  code('040', 'mi9rCYg46x'), REWARD, code('028', 'NtpWi0jzXs'), code('037', 'WxOD3MpI2o'), code('029', '6wCGEWquYy'), code('030', 'BjSt89qTvr')];
-// shortcut: only the verified domestic personal experience plan, add paid classification after real-account verification.
+const PAID_BASE = [code('002', 'AkiJS3ZHF5'), code('005', 'maRGyrHhw1'), code('003', 'FAnt7lcmRT'), code('023', '4xbGhMrE6q'),
+  code('026', 'BaESVICNoi'), code('027', '0FCGVA6vSa')];
+const ADDON = [code('009', '0XmEQc2xOf'), code('038', 'OhvqZtiPKr'), code('036', 'lupO5WgNdG')];
+const FREE_BASE = [BASIC, code('035', 'ArVxJcGDsm'), code('039', 'KRcQj7wUat'), code('040', 'mi9rCYg46x')];
+const PLAN_BONUS = [code('028', 'NtpWi0jzXs'), code('037', 'WxOD3MpI2o')];
+const BENEFIT = [REWARD, code('029', '6wCGEWquYy'), code('030', 'BjSt89qTvr')];
+const PAID = [...PAID_BASE, ...ADDON];
+const FREE = [code('001', 'PqouKr6QWV'), code('006', 'DbXS0lrypC'), ...FREE_BASE, ...PLAN_BONUS, ...BENEFIT];
+const CREDIT_GROUPS = new Map([
+  ...[...PAID_BASE, ...FREE_BASE].map(code => [code, 'basic']),
+  ...[...PLAN_BONUS, ...BENEFIT].map(code => [code, 'reward']), ...ADDON.map(code => [code, 'purchased'])
+]);
 function quotaReport(summary, accounts, now = Date.now()) {
-  check(summary.IsPaidUser === false && Array.isArray(summary.Packages), 'UNSUPPORTED_ACCOUNT');
-  check(summary.Packages.every(p => p.PackageCode === BASIC || p.PackageCode === REWARD), 'UNSUPPORTED_ACCOUNT');
-  const remaining = p => p.CycleRemainCapacity === undefined ? amount(p.CycleTotalCapacity) - amount(p.CycleUsedCapacity) : amount(p.CycleRemainCapacity);
-  const detailRemaining = p => amount(p.CycleCapacityRemainPrecise == null || p.CycleCapacityRemainPrecise === ''
-    ? p.CycleCapacityRemain : p.CycleCapacityRemainPrecise);
-  const sum = packageCode => summary.Packages.filter(p => p.PackageCode === packageCode).reduce((total, p) => total + remaining(p), 0);
-  const basic = sum(BASIC), reward = sum(REWARD); check(basic >= 0 && reward >= 0);
-  for (const packageCode of [BASIC, REWARD]) {
-    const detail = accounts.filter(p => p.PackageCode === packageCode).reduce((total, p) => total + detailRemaining(p), 0);
-    check(Math.abs(detail - sum(packageCode)) < 0.000001);
+  check(summary && typeof summary.IsPaidUser === 'boolean' && Array.isArray(summary.Packages) && Array.isArray(accounts));
+  const remaining = p => amount(p.CycleRemainCapacity === undefined
+    ? amount(p.CycleTotalCapacity) - amount(p.CycleUsedCapacity) : p.CycleRemainCapacity);
+  const detailRemaining = p => {
+    check(p.SlicePeriodUsageDetails == null || Array.isArray(p.SlicePeriodUsageDetails));
+    const slice = Number(p.CapacityType) === 4 && p.SlicePeriodUsageDetails?.[0];
+    return amount(slice ? slice.SlicePeriodCapacityRemainPrecise : p.CycleCapacityRemainPrecise == null || p.CycleCapacityRemainPrecise === ''
+      ? p.CycleCapacityRemain : p.CycleCapacityRemainPrecise);
+  };
+  const totals = new Map(), details = new Map(), resources = new Map(), unique = [];
+  const add = (map, p, left) => {
+    check(p && typeof p.PackageCode === 'string');
+    // Legacy count-based packages must never be reported as credits.
+    check(CREDIT_GROUPS.has(p.PackageCode) || left === 0, 'UNSUPPORTED_QUOTA');
+    map.set(p.PackageCode, amount((map.get(p.PackageCode) || 0) + left));
+  };
+  for (const p of summary.Packages) { check(p && typeof p === 'object'); add(totals, p, remaining(p)); }
+  for (const p of accounts) {
+    check(p && typeof p === 'object');
+    const left = detailRemaining(p), id = p.ResourceId;
+    if (id != null && id !== '') {
+      check(typeof id === 'string' || Number.isSafeInteger(id));
+      const previous = resources.get(String(id));
+      if (previous) {
+        check(previous.PackageCode === p.PackageCode && detailRemaining(previous) === left &&
+          previous.CycleEndTime === p.CycleEndTime && previous.DeductionEndTime === p.DeductionEndTime);
+        continue;
+      }
+      resources.set(String(id), p);
+    }
+    add(details, p, left); unique.push(p);
   }
-  const basicAccounts = accounts.filter(p => p.PackageCode === BASIC);
-  check(basicAccounts.length <= 1);
-  const nextRefreshAt = basicAccounts.length ? timestamp(basicAccounts[0].CycleEndTime) + 1000 : null;
-  const expires = accounts.filter(p => p.PackageCode === REWARD && detailRemaining(p) > 0).map(p => {
-    const at = Number(p.DeductionEndTime); check(Number.isFinite(at) && at > now);
+  const balances = { basic: 0, reward: 0, purchased: 0 };
+  for (const packageCode of new Set([...totals.keys(), ...details.keys()])) {
+    const left = totals.get(packageCode) || 0;
+    check(Math.abs(left - (details.get(packageCode) || 0)) < 0.000001);
+    const group = CREDIT_GROUPS.get(packageCode);
+    if (group) balances[group] = amount(balances[group] + left);
+  }
+  const bases = [...totals.keys()].filter(code => CREDIT_GROUPS.get(code) === 'basic');
+  const refreshCode = bases.includes(summary.SubscriptionPackageCode) ? summary.SubscriptionPackageCode : bases.length === 1 ? bases[0] : null;
+  const refreshes = unique.filter(p => p.PackageCode === refreshCode && p.CycleEndTime)
+    .map(p => timestamp(p.CycleEndTime) + 1000).filter(at => at > now);
+  const expires = unique.filter(p => [...ADDON, ...BENEFIT].includes(p.PackageCode) && detailRemaining(p) > 0).map(p => {
+    const at = timestamp(p.DeductionEndTime); check(at > now);
     return { amount: detailRemaining(p), at };
   }).sort((a, b) => a.at - b.at);
-  return { total: basic + reward, basic, reward, purchased: 0, plan: '体验版', nextRefreshAt, expires, updatedAt: now };
+  return { total: amount(balances.basic + balances.reward + balances.purchased), ...balances,
+    plan: summary.IsPaidUser ? '个人付费版' : '体验版', nextRefreshAt: refreshes.length ? Math.min(...refreshes) : null, expires, updatedAt: now };
 }
 function enterpriseQuotaReport(value, now = Date.now()) {
   check(value && typeof value === 'object');
@@ -288,7 +336,7 @@ async function execute(operation, payload, onDelta = () => {}, { authReader = re
   return { accountKey: auth.accountKey, text };
   } catch (error) { error.accountKey = auth.accountKey; throw error; }
 }
-const SAFE_ERRORS = new Set(['INVALID_RESPONSE', 'LOGIN_REQUIRED', 'UNSUPPORTED_AUTH', 'UNSUPPORTED_PLATFORM', 'UNSUPPORTED_ACCOUNT',
+const SAFE_ERRORS = new Set(['INVALID_RESPONSE', 'LOGIN_REQUIRED', 'UNSUPPORTED_AUTH', 'UNSUPPORTED_PLATFORM', 'UNSUPPORTED_ACCOUNT', 'UNSUPPORTED_QUOTA',
   'RATE_LIMITED', 'INSUFFICIENT_CREDITS', 'ACCOUNT_RESTRICTED', 'MODEL_UNAVAILABLE', 'SERVICE_UNAVAILABLE', 'ACCOUNT_CHANGED',
   'TOOLS_UNSUPPORTED', 'TRUNCATED_RESPONSE', 'RESPONSE_TOO_LONG', 'INVALID_REQUEST', 'CONTEXT_TOO_LONG', 'TASK_CACHE_UNAVAILABLE', 'TASK_CACHE_UNSUPPORTED', 'TASK_NOT_FOUND',
   'INVALID_USAGE_RESPONSE', 'USAGE_UNAVAILABLE', 'USAGE_INCOMPLETE']);

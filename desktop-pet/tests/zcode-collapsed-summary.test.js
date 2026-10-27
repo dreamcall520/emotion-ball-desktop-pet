@@ -3,6 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { createZcodeCompanion } = require('../lib/zcode-companion');
+const { buildZcodeQuotaLabelModel } = require('../lib/zcode-quota-view');
 class Element {
   constructor() { this.dataset = {}; this.children = []; this.attributes = {}; this._text = ''; }
   set textContent(value) { this._text = String(value); this.children = []; }
@@ -66,4 +68,45 @@ test('ZCode team errors use compact text and complete hover guidance, then clear
   assert.equal(nodes.status.textContent, 'Codex 未连接'); assert.equal(nodes.status.title, '');
   receive({ sourceId: 'zcode', state: 'disconnected', statusCode: 'PRIVATE_RESPONSE', items: [] });
   assert.equal(nodes.status.textContent, 'ZCode 未连接'); assert.equal(nodes.status.title, '');
+});
+
+test('quota request failures render as query status while recovery, login loss and account switches remain distinct', async t => {
+  const { nodes, receive } = renderFixture();
+  const now = 1800000000000;
+  let accountKey = 'fixture-team-a', failure = 'ZCODE_NETWORK_ERROR', accountFailure = null;
+  const buckets = [{ id: 'zcode:paid:fixture', label: 'Coding Plan', planName: '团队套餐', remaining: 75,
+    periodKind: 'rolling', windowMinutes: 300, periodStart: now - 60000, resetsAt: now + 299 * 60000 }];
+  const service = createZcodeCompanion({ now: () => now,
+    readAccount: () => { if (accountFailure) throw Object.assign(new Error('private-account-error'), { code: accountFailure });
+      return { accountKey, family: 'bigmodel' }; },
+    fetchUsage: async () => { if (failure) throw Object.assign(new Error('private-response'), { code: failure }); return { buckets }; },
+    readTasks: async () => ({ state: 'unknown', items: [], results: [] }) });
+  t.after(() => service.close());
+  const render = () => { const model = buildZcodeQuotaLabelModel(service.getSnapshot(), {}, now); receive(model); return model; };
+  await service.setEnabled(true);
+  for (const code of ['ZCODE_NETWORK_ERROR', 'ZCODE_HTTP_ERROR', 'ZCODE_BILLING_ERROR', 'ZCODE_USAGE_UNAVAILABLE', 'ZCODE_INVALID_RESPONSE', 'PRIVATE_CODE']) {
+    failure = code; await service.refresh(); const model = render();
+    assert.equal(nodes.status.textContent, '额度查询失败'); assert.match(nodes.status.title, /稍后刷新/);
+    assert.equal(model.statusCode, 'ZCODE_QUOTA_QUERY_FAILED'); assert.deepEqual(model.items, []);
+    assert.doesNotMatch(nodes.status.textContent + nodes['quota-label'].title, /未连接|private|PRIVATE|0%/);
+  }
+  failure = null; await service.refresh(); const ready = render();
+  assert.equal(ready.state, 'ready'); assert.equal(ready.statusCode, undefined);
+  assert.equal(nodes.status.textContent, 'ZCode 剩余额度'); assert.equal(nodes.status.title, '');
+  const history = service.getSnapshot().history.windows;
+  failure = 'ZCODE_HTTP_ERROR'; await service.refresh(); const stale = render();
+  assert.equal(stale.state, 'stale'); assert.equal(stale.statusCode, 'ZCODE_QUOTA_UPDATE_FAILED');
+  assert.equal(nodes.status.textContent, '额度待更新'); assert.match(nodes.status.title, /保留上次成功结果/);
+  assert.deepEqual(stale.items.map(row => row.remaining), [75]); assert.deepEqual(service.getSnapshot().history.windows, history);
+  failure = 'ZCODE_LOGIN_REQUIRED'; await service.refresh(); const unauthenticated = render();
+  assert.equal(unauthenticated.state, 'unauthenticated'); assert.equal(unauthenticated.statusCode, undefined);
+  assert.equal(nodes.status.textContent, 'ZCode 尚未登录'); assert.equal(nodes.status.title, '');
+  accountKey = 'fixture-team-b'; failure = 'ZCODE_NETWORK_ERROR'; await service.refresh(); const switched = render();
+  assert.equal(switched.statusCode, 'ZCODE_QUOTA_QUERY_FAILED'); assert.deepEqual(switched.items, []);
+  assert.equal(service.getSnapshot().quota.updatedAt, null); assert.doesNotMatch(nodes.status.title, /保留上次/);
+  accountFailure = 'ZCODE_ACCOUNT_MISSING'; await service.refresh(); const missing = render();
+  assert.equal(missing.state, 'missing'); assert.equal(missing.statusCode, undefined);
+  assert.equal(nodes.status.textContent, '未找到 ZCode'); assert.equal(nodes.status.title, '');
+  await service.setEnabled(false); const disabled = render();
+  assert.equal(disabled.state, 'disabled'); assert.equal(disabled.statusCode, undefined);
 });

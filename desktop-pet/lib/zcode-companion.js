@@ -107,7 +107,8 @@ function createZcodeCompanion({ filePath, onChange = () => {}, now = Date.now, r
         if (!enabled || closed || generation !== currentGeneration || key !== accountKey) return;
         const code = codeFor(error);
         if (kind === 'quota') quota = { ...quota, state: code === 'ZCODE_LOGIN_REQUIRED' ? 'unauthenticated'
-          : TEAM_ERRORS.has(code) || quota.updatedAt === null ? 'disconnected' : 'connected', code };
+          : TEAM_ERRORS.has(code) || quota.updatedAt === null ? 'disconnected' : 'connected', code,
+          queryFailed: code !== 'ZCODE_LOGIN_REQUIRED' && !TEAM_ERRORS.has(code) };
         else tasks = { ...tasks, state: 'unknown', items: [], results: [], code };
         notify();
       } finally {

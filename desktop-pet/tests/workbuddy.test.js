@@ -35,7 +35,7 @@ test('quota uses remaining balances, matches all detail batches, separates base 
   assert.equal(report.purchased, 0); assert.equal(report.nextRefreshAt, Date.parse('2026-11-01T00:00:00+08:00'));
   assert.deepEqual(report.expires[0], { amount: 100, at: expiry });
   assert.throws(() => quotaReport(summary, accounts.slice(0, 2), now), { code: 'INVALID_RESPONSE' });
-  assert.throws(() => quotaReport({ ...summary, IsPaidUser: true }, accounts, now), { code: 'UNSUPPORTED_ACCOUNT' });
+  assert.equal(quotaReport({ ...summary, IsPaidUser: true }, accounts, now).total, 7400);
   const zero = quotaReport({ IsPaidUser: false, Packages: [] }, [], now); assert.equal(zero.total, 0);
 });
 async function* chunks(text, size = 1) { const bytes = Buffer.from(text); for (let index = 0; index < bytes.length; index += size) yield bytes.subarray(index, index + size); }
