@@ -18,6 +18,7 @@ if (!process.versions.electron) {
   const file = name => path.join(root, 'desktop-pet', name);
   const report = { passed: false, root, fixturesOnly: true, realAccountCalls: 0, windowsHidden: true, cases: [], errors: [] };
   let win;
+  const actions = [];
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
   const page = code => win.webContents.executeJavaScript(code);
   async function load(name, width, height, zcode = false) {
@@ -26,6 +27,9 @@ if (!process.versions.electron) {
       webPreferences: { preload: file(`${name}-preload.js`), contextIsolation: true, nodeIntegration: false, sandbox: true,
         backgroundThrottling: false, additionalArguments: zcode ? ['--pet-source=zcode'] : [] } });
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    win.webContents.on('ipc-message', (_event, channel, ...args) => {
+      if (channel.startsWith('pet:workbuddy-label-')) actions.push({ channel, args });
+    });
     win.webContents.on('console-message', (_event, details) => { if (details.level === 'error') report.errors.push(details.message); });
     await win.loadFile(file(`${name}.html`));
   }
@@ -36,8 +40,19 @@ if (!process.versions.electron) {
     for (const value of expected) assert(text.includes(value), `${name} missing ${value}`);
     assert.equal(win.isVisible(), false);
     await wait(50);
-    const geometry = await page(`(()=>{const ids=['status','total','expanded-total','plan','basic','reward','balance'];return Object.fromEntries(ids.flatMap(id=>{const e=document.getElementById(id);if(!e||!e.getBoundingClientRect().width)return [];return [[id,{text:e.textContent,width:e.clientWidth,scroll:e.scrollWidth}]]}))})()`);
-    for (const [id, value] of Object.entries(geometry)) if (['status', 'total', 'expanded-total', 'plan'].includes(id)) assert(value.scroll <= value.width + 1, `${name} ${id} clips`);
+    const geometry = await page(`(()=>{const ids=['status','total','expanded-total','limit-value','metric-label','limit-label','refresh-date','expiry','links','plan','basic','reward','balance'];return Object.fromEntries(ids.flatMap(id=>{const e=document.getElementById(id),r=e?.getBoundingClientRect();if(!r?.width)return [];const s=getComputedStyle(e);return [[id,{text:e.textContent,title:e.title,width:e.clientWidth,scroll:e.scrollWidth,left:r.left,right:r.right,top:r.top,bottom:r.bottom,font:s.fontSize,overflow:s.textOverflow}]]}))})()`);
+    for (const [id, item] of Object.entries(geometry)) if (['status', 'total', 'expanded-total', 'limit-value', 'plan'].includes(id)) {
+      assert(item.scroll <= item.width + 1, `${name} ${id} clips`);
+    }
+    if (value.report?.scope === 'enterprise' && value.expanded) {
+      assert(Math.abs(geometry['metric-label'].top - geometry['limit-label'].top) <= 1, `${name} labels align`);
+      assert(geometry['expanded-total'].right < geometry['limit-value'].left, `${name} columns do not overlap`);
+      assert(geometry['limit-value'].right <= 186, `${name} limit stays inside the card: ${JSON.stringify(geometry['limit-value'])}`);
+      assert(geometry['refresh-date'].bottom <= geometry.links.top, `${name} refresh stays above footer`);
+      assert(geometry.links.bottom <= 120, `${name} footer stays inside window`);
+      if (value.report.unlimited) assert.equal(geometry['limit-value'].font, '14px');
+      else assert.equal(geometry['expanded-total'].font, geometry['limit-value'].font, `${name} numeric columns use one font size`);
+    }
     const image = await win.webContents.capturePage(); assert(!image.isEmpty());
     fs.writeFileSync(path.join(out, `${name}.png`), image.toPNG());
     report.cases.push({ name, expected, geometry });
@@ -62,18 +77,39 @@ if (!process.versions.electron) {
         const value = safeState({ enabled: true, report: raw }); assert(value.report);
         await load('workbuddy-label', 196, 120);
         await expect('pet:workbuddy-label', { ...value, expanded: true, appearance: 'light' },
-          ['企业版', '100', ...(unlimited ? ['本期已用', '未设上限'] : ['900', '1,000'])], `workbuddy-${unlimited ? 'unlimited' : 'limited'}`);
+          ['企业版', '100', '额度上限', ...(unlimited ? ['本期已用', '不限额'] : ['剩余额度', '900', '1,000'])], `workbuddy-${unlimited ? 'unlimited' : 'limited'}`);
         const visible = await page('document.body.innerText'); assert(!visible.includes('奖励')); assert(!visible.includes('购买'));
+        assert(!visible.includes('到期'), 'enterprise has no fictitious personal expiry row');
         await load('workbuddy-label', 128, 32);
         await expect('pet:workbuddy-label', { ...value, expanded: false, appearance: 'light' },
           unlimited ? ['已用', '100'] : ['900'], `workbuddy-${unlimited ? 'unlimited' : 'limited'}-compact`);
         if (unlimited) {
           await load('workbuddy-label', 196, 120);
           await expect('pet:workbuddy-label', { ...value, expanded: true, appearance: 'dark' },
-            ['本期已用', '企业版', '未设上限', '100'], 'workbuddy-unlimited-dark');
+            ['本期已用', '企业版', '不限额', '100'], 'workbuddy-unlimited-dark');
         }
       }
-      await load('workbuddy-label', 196, 120);
+      await page(`document.getElementById('expanded-header').click();document.getElementById('tasks').click();document.getElementById('results').click();document.getElementById('trend').click();document.getElementById('expanded-header').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}));`);
+      await wait(50);
+      assert.deepEqual(actions, [
+        { channel: 'pet:workbuddy-label-toggle', args: [] },
+        { channel: 'pet:workbuddy-label-tasks', args: ['tasks'] },
+        { channel: 'pet:workbuddy-label-tasks', args: ['results'] },
+        { channel: 'pet:workbuddy-label-trend', args: [] },
+        { channel: 'pet:workbuddy-label-refresh', args: [] }
+      ]);
+      report.actions = actions;
+      const enterprise = (report, extra = {}) => ({ ...safeState({ enabled: true, report, ...extra }), expanded: true, appearance: 'light' });
+      await expect('pet:workbuddy-label', enterprise({ ...base, total: 0, used: 1000 }), ['剩余额度', '0', '1,000'], 'workbuddy-enterprise-zero');
+      await expect('pet:workbuddy-label', enterprise({ ...base, unlimited: true, total: null, limit: null, used: 0 }), ['本期已用', '0', '不限额'], 'workbuddy-unlimited-zero');
+      await expect('pet:workbuddy-label', enterprise({ ...base, unlimited: true, total: null, limit: null }, { stale: true }), ['待更新', '不限额'], 'workbuddy-unlimited-stale');
+      await expect('pet:workbuddy-label', enterprise({ ...base, unlimited: true, total: null, limit: null }, { busy: true }), ['查询中', '不限额'], 'workbuddy-unlimited-busy');
+      const limit = 1234567.89, used = 2345.67;
+      const large = { ...base, total: limit - used, limit, used };
+      await expect('pet:workbuddy-label', enterprise(large), ['额度上限', '1,232,222.22', '1,234,567.89'], 'workbuddy-enterprise-large');
+      await expect('pet:workbuddy-label', enterprise(large, { busy: true }), ['查询中', '1,232,222.22', '1,234,567.89'], 'workbuddy-enterprise-large-busy');
+      await expect('pet:workbuddy-label', enterprise(base), ['剩余额度', '900', '1,000'], 'workbuddy-enterprise-small-restored');
+      assert.equal(await page("getComputedStyle(document.getElementById('expanded-total')).fontSize"), '22px');
       await expect('pet:workbuddy-label', { ...safeState({ enabled: true, report: { total: 7598.01, basic: 500,
         reward: 7098.01, purchased: 0, plan: '体验版', expires: [], updatedAt: now } }), expanded: true, appearance: 'dark' },
         ['体验版', '7,598.01', '基础', '奖励', '购买'], 'workbuddy-personal');

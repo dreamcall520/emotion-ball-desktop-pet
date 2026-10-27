@@ -9,8 +9,11 @@
 <body><div id="quota-beam"><section id="quota-label" data-size="compact" data-expanded="false" data-severity="normal" data-has-items="true" data-item-count="1">
   <button id="toggle" type="button" aria-expanded="false"><span id="summary"><span class="summary-period"><span class="source-icon" role="img" aria-label="WorkBuddy" title="WorkBuddy"><img src="assets/integrations/workbuddy.png" alt="" aria-hidden="true"></span><span id="period" class="summary-period-label">积分</span></span><strong id="total" class="summary-value">—</strong></span></button>
   <div id="details" hidden>
-    <button id="expanded-header" class="v20-header" type="button" aria-label="收起 WorkBuddy 积分卡片" aria-expanded="true"><span class="v20-brand"><b>WorkBuddy</b><span id="plan" class="period-pill">积分</span></span><span class="v20-header-tools"><span id="balance-caption" class="v20-caption">剩余积分</span><span id="collapse" class="v20-collapse" aria-hidden="true"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 10.5L8 5.5L13 10.5"></path></svg></span></span></button>
-    <div id="value-row" class="v20-value-row"><strong id="expanded-total" class="v20-value">—</strong><span id="balance-state" class="v20-pace" role="status" aria-live="polite">积分</span></div>
+    <button id="expanded-header" class="v20-header" type="button" aria-label="收起 WorkBuddy 积分卡片" aria-expanded="true"><span class="v20-brand"><b>WorkBuddy</b><span id="plan" class="period-pill">积分</span></span><span class="v20-header-tools"><span id="balance-caption" class="v20-caption" role="status" aria-live="polite">剩余积分</span><span id="collapse" class="v20-collapse" aria-hidden="true"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 10.5L8 5.5L13 10.5"></path></svg></span></span></button>
+    <div id="metrics">
+      <section class="v20-period"><div id="metric-label" class="v20-cell-label" hidden></div><div id="value-row" class="v20-value-row"><strong id="expanded-total" class="v20-value">—</strong><span id="balance-state" class="v20-pace" role="status" aria-live="polite">积分</span></div></section>
+      <section id="limit-cell" class="v20-period" hidden><div id="limit-label" class="v20-cell-label">额度上限</div><div id="limit-row" class="v20-value-row"><strong id="limit-value" class="v20-value">—</strong></div></section>
+    </div>
     <p id="dates" class="v20-reset"><span id="refresh-date" tabindex="0"></span><span id="expiry" tabindex="0"></span></p>
     <div id="auxiliary" class="v20-auxiliary">
       <div id="balances" class="v20-shared"><span id="basic-item"><span id="basic-label">基础</span> <b id="basic">—</b></span><span id="reward-item"><span id="reward-label">奖励</span> <b id="reward">—</b></span><span id="purchased-item">购买 <b id="purchased">—</b></span></div>
