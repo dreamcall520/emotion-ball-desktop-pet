@@ -1,6 +1,8 @@
 const { createHash } = require('node:crypto');
 const fail = code => Object.assign(new Error(code), { code });
 const valid = value => typeof value === 'string' && value.trim() === value && /^[^\x00-\x20\x7f]{1,4096}$/.test(value);
+const fingerprint = value => createHash('sha256').update(value).digest('hex');
+const validFingerprint = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const isTeam = account => account?.selection?.kind === 'team-coding-plan' || account?.selection?.scope === 'team';
 function teamContext(account) {
   const selection = account?.selection || {};
@@ -15,28 +17,60 @@ function dataOf(payload) {
   if (![0, 200, '0', '200'].includes(payload?.code) || !payload.data) throw fail('ZCODE_INVALID_RESPONSE');
   return payload.data;
 }
+function teamAccountScope(account) {
+  teamContext(account);
+  const oauth = typeof account.accessToken === 'string' ? account.accessToken.replace(/^Bearer\s+/i, '') : '';
+  if (!valid(oauth) || !valid(account.accountId) || account.jwtToken != null && typeof account.jwtToken !== 'string') throw fail('ZCODE_LOGIN_REQUIRED');
+  const { organizationId, projectId, productId } = account.selection;
+  // Match ZCode's host accountScope; this is deliberately separate from the stable quota-history accountKey.
+  return fingerprint(JSON.stringify([account.family, 'team-coding-plan', [organizationId, projectId, productId],
+    account.accessToken.trim(), account.jwtToken?.trim() ?? null]));
+}
+function waitForFlight(flight, signal) {
+  if (!signal) return flight;
+  return new Promise((resolve, reject) => {
+    const abort = () => { signal.removeEventListener('abort', abort); reject(fail('DISCONNECTED')); };
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) abort();
+    flight.then(value => { signal.removeEventListener('abort', abort); resolve(value); },
+      error => { signal.removeEventListener('abort', abort); reject(error); });
+  });
+}
 // Reuse an existing ZCode team key ID; only its short-lived project token is minted, never a new API key.
 function createZcodeTeamAuth(requestJson, { now = Date.now } = {}) {
   let cached;
-  const scopeKey = account => JSON.stringify([account.family, account.accountId, account.selection.productId,
-    account.selection.organizationId, account.selection.projectId,
-    createHash('sha256').update(account.accessToken.replace(/^Bearer\s+/i, '')).digest('hex')]);
+  const scopeKey = account => JSON.stringify([account.accountId, teamAccountScope(account)]);
   async function resolveTeamAccount(account, options = {}) {
     if (!isTeam(account)) return account;
     const { origin, headers } = teamContext(account), selection = account.selection;
-    const oauth = typeof account.accessToken === 'string' ? account.accessToken.replace(/^Bearer\s+/i, '') : '';
-    if (!valid(oauth) || !valid(account.accountId)) throw fail('ZCODE_LOGIN_REQUIRED');
-    const scope = scopeKey(account);
+    const accountScope = teamAccountScope(account), scope = scopeKey(account);
+    const { expectedAccountScope, rejectedProjectTokenFingerprint, ...requestOptions } = options;
+    if (expectedAccountScope !== undefined && (!validFingerprint(expectedAccountScope) || expectedAccountScope !== accountScope) ||
+      rejectedProjectTokenFingerprint !== undefined && (!validFingerprint(rejectedProjectTokenFingerprint) || expectedAccountScope === undefined)) {
+      throw fail('ZCODE_LOGIN_REQUIRED');
+    }
+    if (options.signal?.aborted) throw fail('DISCONNECTED');
+    const oauth = account.accessToken.replace(/^Bearer\s+/i, '');
     if (cached?.scope !== scope) { cached?.controller?.abort(); cached = { scope }; }
     const entry = cached;
-    const material = () => ({ ...account, codingPlanApiKey: entry.token, codingPlanProjectToken: true });
+    if (entry.token && rejectedProjectTokenFingerprint === fingerprint(entry.token)) {
+      entry.token = null; entry.apiKeyId = null; entry.expiresAt = 0; entry.checkedAt = 0;
+    }
+    const material = () => {
+      if (cached !== entry) throw fail('ZCODE_LOGIN_REQUIRED');
+      if (options.signal?.aborted) throw fail('DISCONNECTED');
+      if (!entry.token || !entry.apiKeyId) throw fail('ZCODE_LOGIN_REQUIRED');
+      return { ...account, codingPlanApiKey: entry.token, codingPlanApiKeyId: entry.apiKeyId,
+        codingPlanAccountScope: accountScope, codingPlanProjectToken: true };
+    };
     if (entry.token && entry.expiresAt > now() + 120000 && entry.checkedAt > now() - 120000) return material();
-    if (entry.flight) { await entry.flight; return material(); }
+    if (entry.flight) { await waitForFlight(entry.flight, options.signal); return material(); }
     entry.controller = new AbortController();
     const signal = options.signal ? AbortSignal.any([options.signal, entry.controller.signal]) : entry.controller.signal;
     const request = async (url, init = {}) => {
-      const result = await requestJson(url, { ...options, ...init, signal });
+      const result = await requestJson(url, { ...requestOptions, ...init, signal });
       if (cached !== entry) throw fail('ZCODE_LOGIN_REQUIRED');
+      if (signal.aborted) throw fail('DISCONNECTED');
       return dataOf(result);
     };
     entry.flight = (async () => {
@@ -69,19 +103,19 @@ function createZcodeTeamAuth(requestJson, { now = Date.now } = {}) {
         const expiresAt = Math.min(token.expiresAt * 1000, started + token.expiresIn * 1000);
         if (!valid(token.accessToken) || token.tokenType !== 'Bearer' || !Number.isFinite(token.expiresIn) || token.expiresIn <= 0 ||
           !Number.isFinite(token.expiresAt) || !Number.isSafeInteger(expiresAt) || expiresAt <= now()) throw fail('ZCODE_INVALID_RESPONSE');
-        entry.token = token.accessToken; entry.expiresAt = expiresAt;
+        entry.token = token.accessToken; entry.apiKeyId = key.apiKey; entry.expiresAt = expiresAt;
       }
       entry.checkedAt = now();
-    })().catch(error => { entry.token = null; throw error; }).finally(() => { entry.flight = null; });
-    await entry.flight;
+    })().catch(error => { entry.token = null; entry.apiKeyId = null; throw error; }).finally(() => { entry.flight = null; });
+    await waitForFlight(entry.flight, options.signal);
     return material();
   }
   resolveTeamAccount.invalidate = account => {
-    if (typeof account?.accessToken === 'string' && cached?.scope === scopeKey(account) &&
+    if (isTeam(account) && typeof account?.accessToken === 'string' && cached?.scope === scopeKey(account) &&
       account.codingPlanApiKey && account.codingPlanApiKey === cached.token) {
       cached.controller?.abort(); cached = null;
     }
   };
   return resolveTeamAccount;
 }
-module.exports = { createZcodeTeamAuth, teamContext, isTeam };
+module.exports = { createZcodeTeamAuth, teamContext, teamAccountScope, isTeam };

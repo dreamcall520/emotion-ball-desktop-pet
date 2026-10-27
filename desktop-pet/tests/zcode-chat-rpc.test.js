@@ -1,5 +1,7 @@
 const test = require('node:test'); const assert = require('node:assert/strict');
 const { resolveZcodeChatModel, projectZcodeModels, requiresVerification, createZcodeChatRpc } = require('../lib/zcode-chat-rpc');
+const { teamAccountScope } = require('../lib/zcode-team-auth');
+const teamMaterial = account => ({ ...account, codingPlanApiKey: 'project-token', codingPlanApiKeyId: 'team-key-id', codingPlanAccountScope: teamAccountScope(account) });
 const release = { revision: 4, config: { providerConfigRules: { providerRules: [
   { providerId: 'account:zai-start-plan', config: { access: { type: 'zhipu-account', mode: 'start-plan' }, builtinModelIds: ['GLM-5.3', 'GLM-5.3-Flash'] } }
 ] } } };
@@ -65,7 +67,7 @@ function teamHarness(overrides = {}) {
   ] } } };
   const rpc = createZcodeChatRpc({ workspaceDir: '/chat', readAccount: () => current,
     prepareRuntime: async () => ({ binary: '/zcode.cjs', env: {}, release: teamRelease, builtinPath: '/builtin.json', appVersion: '3.16.3' }),
-    resolveTeamAccount: async account => ({ ...account, codingPlanApiKey: 'project-token' }),
+    resolveTeamAccount: async account => teamMaterial(account),
     fetchUsage: async account => { assert.equal(account.codingPlanApiKey, 'project-token');
       return { paidState: 'connected', buckets: [{ source: 'zcode-plan', remaining: 100 }, { source: 'coding-plan', remaining: 0 }] }; },
     createProtocol: options => { protocolOptions = options; return { start: async () => {}, close: async () => {}, request: async (method, params) => {
@@ -74,7 +76,8 @@ function teamHarness(overrides = {}) {
       if (method === 'session/create') return { session: { sessionId: 'sess_team', workspace: { workspacePath: '/chat' } }, runtime: { eventSeq: 0 }, settings: { permission: { mode: 'guarded' } } };
       return {};
     } }; }, ...overrides });
-  return { rpc, requests, auth: providerId => protocolOptions.onRequest('interaction/requestProviderRuntimeHeaders', { sessionId: 'sess_team', providerId }),
+  return { rpc, requests, account: () => current,
+    auth: (providerId, params = {}) => protocolOptions.onRequest('interaction/requestProviderRuntimeHeaders', { sessionId: 'sess_team', providerId, ...params }),
     switch: patch => { current = { ...current, ...patch }; } };
 }
 test('team models and runtime auth follow the team provider even when personal trial balance exists', async () => {
@@ -86,6 +89,7 @@ test('team models and runtime auth follow the team provider even when personal t
   await h.rpc.startThread();
   const auth = await h.auth('account:bigmodel-team-coding-plan');
   assert.equal(auth.requestAuth.apiKey, 'project-token');
+  assert.equal(auth.requestAuth.apiKeyId, 'team-key-id'); assert.equal(auth.requestAuth.accountScope, teamAccountScope(h.account()));
   assert.equal(auth.requestAuth.headers['Bigmodel-Organization'], 'org');
   assert.equal(auth.requestAuth.headers['Bigmodel-Project'], 'project');
   await assert.rejects(h.auth('account:bigmodel-individual-coding-plan'), { code: 'UNAUTHENTICATED' });
@@ -124,4 +128,40 @@ test('personal runtime auth cannot return another account token after the config
   await assert.rejects(h.rpc.readAccount(), { code: 'UNAUTHENTICATED' });
   releaseConfig({ code: 0, data: { configs: { captcha: { enabled: false } } } });
   await rejected; await h.rpc.close();
+});
+test('team runtime forwards official rejection fields and rejects stale scope before resolving credentials', async () => {
+  const calls = []; const h = teamHarness({ resolveTeamAccount: async (account, options) => { calls.push(options); return teamMaterial(account); } });
+  await h.rpc.start(); await h.rpc.listModels(); await h.rpc.startThread();
+  const params = { expectedAccountScope: teamAccountScope(h.account()), rejectedProjectTokenFingerprint: 'a'.repeat(64) };
+  const result = await h.auth('account:bigmodel-team-coding-plan', params);
+  assert.equal(result.requestAuth.accountScope, params.expectedAccountScope);
+  assert.deepEqual(calls.at(-1), { appVersion: '3.16.3', ...params });
+  const count = calls.length;
+  for (const invalid of [{ expectedAccountScope: 'f'.repeat(64) }, { expectedAccountScope: null },
+    { rejectedProjectTokenFingerprint: 'a'.repeat(64) }, { ...params, rejectedProjectTokenFingerprint: 'INVALID' }]) {
+    await assert.rejects(h.auth('account:bigmodel-team-coding-plan', invalid), { code: 'UNAUTHENTICATED' });
+  }
+  assert.equal(calls.length, count); await h.rpc.close();
+});
+test('team runtime cannot return token material after close or an identity change during auth', async () => {
+  for (const change of ['close', 'account', 'project', 'organization', 'product', 'oauth', 'jwt']) {
+    let release, started, pause = false;
+    const gate = new Promise(resolve => { release = resolve; }); const entered = new Promise(resolve => { started = resolve; });
+    const h = teamHarness({ resolveTeamAccount: async account => { const material = teamMaterial(account); if (pause) { started(); await gate; } return material; } });
+    await h.rpc.start(); await h.rpc.listModels(); await h.rpc.startThread(); pause = true;
+    const pending = h.auth('account:bigmodel-team-coding-plan');
+    const rejected = assert.rejects(pending, { code: change === 'close' ? 'CLOSED' : 'UNAUTHENTICATED' }); await entered;
+    if (change === 'close') await h.rpc.close();
+    else if (change === 'account') h.switch({ accountKey: 'next-account' });
+    else if (change === 'oauth') h.switch({ accessToken: 'next-oauth' });
+    else if (change === 'jwt') h.switch({ jwtToken: 'next-jwt' });
+    else h.switch({ selection: { ...h.account().selection, [`${change}Id`]: 'next' } });
+    release(); await rejected; await h.rpc.close();
+  }
+});
+test('a JWT change while team model configuration is pending cannot publish its old catalog', async () => {
+  const h = teamHarness({ onProtocolRequest: async method => {
+    if (method === 'provider/updateAccountConfig') h.switch({ jwtToken: 'next-jwt' });
+  } });
+  await h.rpc.start(); await assert.rejects(h.rpc.listModels(), { code: 'UNAUTHENTICATED' }); await h.rpc.close();
 });

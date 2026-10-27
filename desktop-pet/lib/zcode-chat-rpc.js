@@ -5,7 +5,7 @@ const { randomUUID, createHash } = require('node:crypto');
 const { createZcodeProtocol } = require('./zcode-protocol');
 const { readZcodeAccount } = require('./zcode-account');
 const { requestOfficialJson, fetchZcodeUsage, resolveZcodeTeamAccount } = require('./zcode-usage');
-const { teamContext, isTeam } = require('./zcode-team-auth');
+const { teamContext, teamAccountScope, isTeam } = require('./zcode-team-auth');
 const { isModelId } = require('./chat-models');
 const fail = code => Object.assign(new Error(code), { code });
 const validId = value => typeof value === 'string' && /^[a-zA-Z0-9_-]{1,160}$/.test(value);
@@ -126,11 +126,24 @@ function createZcodeChatRpc({ workspaceDir, env = process.env, home = os.homedir
     if (account && latest.accountKey !== account.accountKey) { account = latest; catalog = []; emit('account/updated', {}); throw fail('UNAUTHENTICATED'); }
     account = latest; return account;
   }
-  async function runtimeAccount() {
+  function sameRuntimeAccount(before, latest, scope = isTeam(before) ? teamAccountScope(before) : null) {
+    return before.accountKey === latest.accountKey && before.accountId === latest.accountId && before.accessToken === latest.accessToken && before.jwtToken === latest.jwtToken &&
+      (scope === null ? !isTeam(latest) : isTeam(latest) && scope === teamAccountScope(latest));
+  }
+  async function runtimeAccount(params = {}) {
+    if (closed) throw fail('CLOSED');
     const before = await currentAccount();
-    const resolved = await resolveTeamAccount(before, { appVersion: runtime.appVersion });
+    const scope = isTeam(before) ? teamAccountScope(before) : null;
+    const { expectedAccountScope, rejectedProjectTokenFingerprint } = params;
+    if (scope !== null && (expectedAccountScope !== undefined && expectedAccountScope !== scope ||
+      rejectedProjectTokenFingerprint !== undefined && (expectedAccountScope === undefined ||
+        typeof rejectedProjectTokenFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(rejectedProjectTokenFingerprint)))) throw fail('UNAUTHENTICATED');
+    if (closed) throw fail('CLOSED');
+    const resolved = await resolveTeamAccount(before, { appVersion: runtime.appVersion,
+      ...(scope !== null ? { expectedAccountScope, rejectedProjectTokenFingerprint } : {}) });
     const latest = await currentAccount();
-    if (before.accountKey !== latest.accountKey || before.accessToken !== latest.accessToken || before.jwtToken !== latest.jwtToken) throw fail('UNAUTHENTICATED');
+    if (closed) throw fail('CLOSED');
+    if (!sameRuntimeAccount(before, latest, scope) || scope !== null && resolved.codingPlanAccountScope !== scope) throw fail('UNAUTHENTICATED');
     return resolved;
   }
   async function serverRequest(method, params) {
@@ -139,7 +152,7 @@ function createZcodeChatRpc({ workspaceDir, env = process.env, home = os.homedir
     if (method !== 'interaction/requestProviderRuntimeHeaders' || params?.sessionId !== threadId) return undefined;
     const model = catalog.find(row => row.providerId === params.providerId);
     if (!model) throw fail('UNAUTHENTICATED');
-    const selected = await runtimeAccount();
+    const selected = await runtimeAccount(params);
     const headers = { 'HTTP-Referer': 'https://zcode.z.ai', 'User-Agent': `ZCode/${runtime.appVersion}`,
       'X-ZCode-App-Version': runtime.appVersion, 'X-Title': 'Z Code@electron', 'X-Platform': `${process.platform}-${process.arch}`,
       'X-Client-Language': 'zh-CN', 'X-Client-Timezone': Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -152,8 +165,12 @@ function createZcodeChatRpc({ workspaceDir, env = process.env, home = os.homedir
       return { headersApplied: true, requestAuth: { apiKey: selected.jwtToken, headers } };
     }
     if (!selected.codingPlanApiKey) throw fail('UNAUTHENTICATED');
-    if (isTeam(selected)) Object.assign(headers, teamContext(selected).headers);
-    return { headersApplied: true, requestAuth: { apiKey: selected.codingPlanApiKey, headers } };
+    const requestAuth = { apiKey: selected.codingPlanApiKey, headers };
+    if (isTeam(selected)) {
+      Object.assign(headers, teamContext(selected).headers);
+      Object.assign(requestAuth, { apiKeyId: selected.codingPlanApiKeyId, accountScope: selected.codingPlanAccountScope });
+    }
+    return { headersApplied: true, requestAuth };
   }
   async function start() {
     if (closed) throw fail('CLOSED');
@@ -179,7 +196,8 @@ function createZcodeChatRpc({ workspaceDir, env = process.env, home = os.homedir
     const selected = await runtimeAccount();
     const usage = await fetchUsage(selected);
     await currentAccount();
-    if (selected.accountKey !== account.accountKey || selected.accessToken !== account.accessToken) throw fail('UNAUTHENTICATED');
+    if (closed) throw fail('CLOSED');
+    if (!sameRuntimeAccount(selected, account)) throw fail('UNAUTHENTICATED');
     const hasBalance = usage.buckets?.some(row => row.source !== 'coding-plan' && row.remaining > 0);
     const kind = isTeam(selected) ? selected.codingPlanApiKey && ['connected', 'empty'].includes(usage.paidState) ? 'team-coding-plan' : null
       : hasBalance ? 'start-plan' : selected.codingPlanApiKey && usage.paidState === 'connected' ? 'individual-coding-plan' : null;
@@ -193,7 +211,7 @@ function createZcodeChatRpc({ workspaceDir, env = process.env, home = os.homedir
         ...(kind === 'start-plan' ? { builtinModelIds: catalog.map(row => row.modelId) } : {}) } },
       states: { [providerId]: { availability: 'available', entitled: true, current: true } } });
     await currentAccount();
-    if (closed || selected.accountKey !== account.accountKey || selected.accessToken !== account.accessToken) {
+    if (closed || !sameRuntimeAccount(selected, account)) {
       catalog = []; throw fail(closed ? 'CLOSED' : 'UNAUTHENTICATED');
     }
     return catalog.map(({ providerId: _provider, modelId: _model, ...row }) => row);
