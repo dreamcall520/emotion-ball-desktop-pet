@@ -1,4 +1,4 @@
-const { readZcodeAccount } = require('./zcode-account');
+const { readZcodeConnection } = require('./zcode-account');
 const { fetchZcodeUsage } = require('./zcode-usage');
 const { createZcodeQuotaHistory } = require('./zcode-quota-history');
 const POLL_MS = Object.freeze({ quota: 120000, tasks: 15000 });
@@ -7,17 +7,18 @@ const clone = value => JSON.parse(JSON.stringify(value));
 const codeFor = error => ['ZCODE_ACCOUNT_MISSING', 'ZCODE_CREDENTIAL_DECRYPT_FAILED', 'ZCODE_PROVIDER_UNSUPPORTED',
   'ZCODE_LOGIN_REQUIRED', 'ZCODE_NETWORK_ERROR', 'ZCODE_HTTP_ERROR', 'ZCODE_BILLING_ERROR', 'ZCODE_USAGE_UNAVAILABLE',
   'ZCODE_INVALID_RESPONSE', 'ZCODE_INVALID_ACCOUNT_FILE'].includes(error?.code) || TEAM_ERRORS.has(error?.code) ? error.code : 'ZCODE_UNAVAILABLE';
-function createZcodeCompanion({ filePath, onChange = () => {}, now = Date.now, readAccount = readZcodeAccount,
+function createZcodeCompanion({ filePath, onChange = () => {}, now = Date.now, readAccount = readZcodeConnection,
   fetchUsage = fetchZcodeUsage, readTasks = options => require('./zcode-tasks').readZcodeTasks(options),
   schedule = setTimeout, cancel = clearTimeout } = {}) {
   let enabled = false; let closed = false; let generation = 0; let lifecycle = 0; let accountKey = null; let family = null;
+  let hasCustomProviders = false;
   let quota = { state: 'disabled', windows: [], updatedAt: null, code: null };
   let tasks = { state: 'disabled', items: [], results: [], updatedAt: null, code: null };
   const history = createZcodeQuotaHistory({ filePath, now }); const timers = new Map(); const flights = {}; const observedLive = new Set();
   const stale = () => Boolean(quota.code) || quota.updatedAt === null || now() < quota.updatedAt || now() - quota.updatedAt >= 300000;
   function getSnapshot() {
     const stored = history.getState(); const known = ['connected', 'active', 'idle'].includes(tasks.state);
-    return clone({ sourceId: 'zcode', enabled, generation, state: quota.state, accountKey, family,
+    return clone({ sourceId: 'zcode', enabled, generation, state: quota.state, accountKey, family, hasCustomProviders,
       quotaUpdatedAt: quota.updatedAt, buckets: quota.windows,
       quota: { ...quota, buckets: quota.windows, stale: stale() }, tasks, history: stored,
       activity: { runningCount: enabled && known ? tasks.items.filter(row => ['active', 'waiting'].includes(row.state)).length : null,
@@ -49,13 +50,14 @@ function createZcodeCompanion({ filePath, onChange = () => {}, now = Date.now, r
     handle?.unref?.(); timers.set(name, handle);
   }
   function switchAccount(account) {
+    hasCustomProviders = account.personal?.hasConfigured === true;
     if (accountKey === account.accountKey) return;
     generation++; abortFlights(); observedLive.clear(); accountKey = account.accountKey; family = account.family || null; history.setAccount(accountKey);
     quota = { state: 'connecting', windows: [], updatedAt: null, code: null };
     tasks = { state: 'connecting', items: [], results: [], updatedAt: null, code: null }; notify();
   }
   function accountFailure(error) {
-    generation++; abortFlights(); observedLive.clear(); accountKey = null; family = null; history.setAccount(null);
+    generation++; abortFlights(); observedLive.clear(); accountKey = null; family = null; hasCustomProviders = false; history.setAccount(null);
     const code = codeFor(error); const state = code === 'ZCODE_ACCOUNT_MISSING' ? 'missing'
       : ['ZCODE_CREDENTIAL_DECRYPT_FAILED', 'ZCODE_LOGIN_REQUIRED'].includes(code) ? 'unauthenticated' : 'disconnected';
     quota = { state, windows: [], updatedAt: null, code }; tasks = { state, items: [], results: [], updatedAt: null, code }; notify();
@@ -69,6 +71,11 @@ function createZcodeCompanion({ filePath, onChange = () => {}, now = Date.now, r
     if (!enabled || closed || startLifecycle !== lifecycle || startGeneration !== generation && accountKey !== account?.accountKey) return;
     if (!account?.accountKey) { accountFailure({ code: 'ZCODE_LOGIN_REQUIRED' }); arm(kind, POLL_MS[kind], () => poll(kind)); return; }
     switchAccount(account);
+    if (account.family === 'custom') {
+      quota = { state: 'unsupported', windows: [], updatedAt: null, code: null };
+      tasks = { state: 'unknown', items: [], results: [], updatedAt: null, code: null };
+      notify(); arm(kind, POLL_MS[kind], () => poll(kind)); return;
+    }
     const currentGeneration = generation; const key = accountKey;
     if (flights[kind]?.generation === currentGeneration) return flights[kind].promise;
     const flight = { generation: currentGeneration, controller: new AbortController() };
@@ -83,6 +90,7 @@ function createZcodeCompanion({ filePath, onChange = () => {}, now = Date.now, r
         }
         if (!enabled || closed || generation !== currentGeneration) return;
         if (latest.accountKey !== key) { switchAccount(latest); arm('account-change', 0, () => refresh()); return; }
+        hasCustomProviders = latest.personal?.hasConfigured === true;
         if (kind === 'quota') {
           const windows = Array.isArray(result?.buckets) ? result.buckets : Array.isArray(result?.windows) ? result.windows : [];
           quota = { state: 'connected', windows: windows.slice(0, 64), updatedAt: now(), code: null,
@@ -123,14 +131,14 @@ function createZcodeCompanion({ filePath, onChange = () => {}, now = Date.now, r
     if (closed || enabled === (value === true)) return getSnapshot();
     enabled = value === true; lifecycle++; generation++; clearTimers(); abortFlights(); observedLive.clear();
     if (!enabled) {
-      accountKey = null; family = null; history.setAccount(null);
+      accountKey = null; family = null; hasCustomProviders = false; history.setAccount(null);
       quota = { state: 'disabled', windows: [], updatedAt: null, code: null };
       tasks = { state: 'disabled', items: [], results: [], updatedAt: null, code: null }; notify(); return getSnapshot();
     }
     quota.state = 'connecting'; tasks.state = 'connecting'; notify(); return refresh();
   }
   function markAllRead() { const changed = history.markAllRead(); if (changed) notify(); return changed; }
-  function close() { closed = true; enabled = false; lifecycle++; generation++; clearTimers(); abortFlights(); observedLive.clear(); history.close(); accountKey = null; }
+  function close() { closed = true; enabled = false; lifecycle++; generation++; clearTimers(); abortFlights(); observedLive.clear(); history.close(); accountKey = null; hasCustomProviders = false; }
   return { setEnabled, refresh, getSnapshot, close, markAllRead };
 }
 module.exports = { createZcodeCompanion, POLL_MS };

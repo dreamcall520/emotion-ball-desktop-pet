@@ -98,7 +98,9 @@ function activity(snapshot) {
 function buildZcodeQuotaLabelModel(snapshot, options = {}, now = Date.now()) {
   const source = snapshot && typeof snapshot === 'object' ? snapshot : {};
   const state = source.enabled === false ? 'disabled' : STATES.has(source.quota?.state) ? source.quota.state : 'disconnected';
-  const statusCode = TEAM_STATUS_CODES.has(source.quota?.code) ? source.quota.code
+  const customWithoutQuota = source.hasCustomProviders === true && !validTime(source.quota?.updatedAt) &&
+    (state === 'unsupported' || ['disconnected', 'unauthenticated'].includes(state) && source.quota?.code);
+  const statusCode = customWithoutQuota ? 'ZCODE_CUSTOM_QUOTA_UNAVAILABLE' : TEAM_STATUS_CODES.has(source.quota?.code) ? source.quota.code
     : source.quota?.queryFailed === true && source.quota.code && ['connected', 'disconnected'].includes(state)
       ? validTime(source.quota.updatedAt) ? 'ZCODE_QUOTA_UPDATE_FAILED' : 'ZCODE_QUOTA_QUERY_FAILED' : null;
   const empty = { sourceId: 'zcode', state, items: [], overflow: 0, activity: activity(snapshot), planName: 'ZCode',

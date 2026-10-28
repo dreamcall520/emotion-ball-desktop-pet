@@ -3794,6 +3794,7 @@ async function bootstrap() {
       providerName: 'ZCode', resolveModel: resolveZcodeChatModel,
       providerErrors: { UNSUPPORTED: '当前 ZCode 版本或登录方式暂不支持球球聊天，请更新 ZCode 或更换可用账号后重试。',
         ZCODE_TEAM_SELECTION_REQUIRED: '请先在 ZCode 中选择完整的团队、项目和套餐，再重试模型列表。',
+        ZCODE_PERSONAL_CONFIG_INVALID: 'ZCode 自定义供应商配置暂时无法读取，请在 ZCode 中检查后重试。',
         ZCODE_TEAM_KEY_MISSING: '当前团队尚未配置可用 API Key，请在 ZCode 中完成团队配置，再重试模型列表。',
         ZCODE_TEAM_ACCESS_DENIED: '当前账号无权使用所选团队或项目，请在 ZCode 中检查成员和席位权限，再重试模型列表。',
         ZCODE_LOGIN_REQUIRED: 'ZCode 登录已失效，请先在 ZCode 中重新登录，再重试模型列表。',

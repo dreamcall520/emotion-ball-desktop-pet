@@ -21,7 +21,8 @@
     ['ZCODE_TEAM_KEY_MISSING', ['团队待配置', '当前团队尚未配置可用 API Key，请在 ZCode 中完成团队配置，再刷新 ZCode 状态。']],
     ['ZCODE_TEAM_ACCESS_DENIED', ['团队权限不足', '当前账号无权使用所选团队或项目，请在 ZCode 中检查成员和席位权限，再刷新 ZCode 状态。']],
     ['ZCODE_QUOTA_QUERY_FAILED', ['额度查询失败', '暂时无法获取 ZCode 额度，请稍后刷新 ZCode 状态。']],
-    ['ZCODE_QUOTA_UPDATE_FAILED', ['额度待更新', '本次额度查询失败，保留上次成功结果。请稍后刷新 ZCode 状态。']]
+    ['ZCODE_QUOTA_UPDATE_FAILED', ['额度待更新', '本次额度查询失败，保留上次成功结果。请稍后刷新 ZCode 状态。']],
+    ['ZCODE_CUSTOM_QUOTA_UNAVAILABLE', ['暂无额度数据', '已识别自定义供应商，可在聊天中查看模型；暂无可读取的额度数据。']]
   ]);
   const directionAndControl = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/gu;
 

@@ -81,4 +81,14 @@ function readZcodeAccount({ home = os.homedir(), env = process.env, fs = nativeF
   return { accountKey, accountId, family, credentialsPath, jwtToken, accessToken, deviceMid,
     selection, codingPlanApiKey, baseDir: base };
 }
-module.exports = { readZcodeAccount, decryptCredential };
+function readZcodeConnection(options = {}) {
+  let account, accountError;
+  try { account = readZcodeAccount(options); } catch (error) { accountError = error; }
+  let personal;
+  try { personal = require('./zcode-personal-providers').readZcodePersonalProviders(options); }
+  catch (error) { if (!account) throw error; }
+  if (account) return personal?.hasConfigured ? { ...account, personal } : account;
+  if (!personal?.hasConfigured) throw accountError;
+  return { accountKey: personal.scope, family: 'custom', baseDir: personal.baseDir, personal };
+}
+module.exports = { readZcodeAccount, readZcodeConnection, decryptCredential };

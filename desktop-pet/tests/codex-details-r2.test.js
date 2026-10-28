@@ -84,6 +84,54 @@ test('ZCode team quota and trend empty states retain actionable reasons without 
   assert.equal(content.textContent, '暂无周期额度');
 });
 
+test('ZCode custom and failed quota states survive model, window, preload and details rendering', () => {
+  const { EventEmitter } = require('node:events');
+  const { buildZcodeDetailsModel } = require('../lib/zcode-quota-view');
+  const { createCodexDetailsWindow } = require('../lib/codex-details-window');
+  const h = renderer(), handlers = new Map(), errors = []; let api;
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../codex-details-preload.js'), 'utf8'), {
+    process: { argv: ['electron', '--pet-source=zcode'] },
+    require: () => ({ contextBridge: { exposeInMainWorld(_name, value) { api = value; } },
+      ipcRenderer: { on(channel, callback) { handlers.set(channel, callback); }, removeListener() {}, send() {} } })
+  });
+  api.onModel(h.receive);
+  class Window extends EventEmitter {
+    constructor(options) {
+      super(); this.bounds = options; this.webContents = new EventEmitter();
+      this.webContents.setWindowOpenHandler = () => {};
+      this.webContents.send = (channel, model) => handlers.get(channel)?.({}, model);
+    }
+    getBounds() { return this.bounds; }
+    setBounds(value) { this.bounds = value; }
+    isDestroyed() { return false; }
+    setAlwaysOnTop() {}
+    loadFile() { return Promise.resolve(); }
+    show() {}
+    hide() {}
+    destroy() { this.emit('closed'); }
+  }
+  const details = createCodexDetailsWindow({ BrowserWindow: Window, sourceId: 'zcode',
+    screen: { getDisplayMatching: () => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } }) },
+    getAnchor: () => ({ x: 500, y: 350, width: 80, height: 80 }), onError: error => errors.push(error) });
+  const now = Date.now(), cases = [
+    [{ enabled: true, hasCustomProviders: true, quota: { state: 'unsupported', updatedAt: null } },
+      'ZCODE_CUSTOM_QUOTA_UNAVAILABLE', /已识别自定义供应商.*暂无可读取的额度数据/],
+    [{ enabled: true, quota: { state: 'disconnected', updatedAt: null, code: 'ZCODE_NETWORK_ERROR', queryFailed: true } },
+      'ZCODE_QUOTA_QUERY_FAILED', /暂时无法获取 ZCode 额度.*刷新 ZCode 状态/],
+    [{ enabled: true, quota: { state: 'connected', updatedAt: now - 1000, windows: [], code: 'ZCODE_NETWORK_ERROR', queryFailed: true } },
+      'ZCODE_QUOTA_UPDATE_FAILED', /本次额度查询失败.*保留上次成功结果/]
+  ];
+  for (const [snapshot, code, expected] of cases) for (const action of ['quota', 'trend']) {
+    const model = buildZcodeDetailsModel(snapshot, { action }, now);
+    assert.equal(model.statusCode, code);
+    assert.equal(details.open(model), true);
+    details.getWindow().webContents.emit('did-finish-load');
+    assert.match(h.nodes['details-content'].textContent, expected);
+    assert.doesNotMatch(h.nodes['details-content'].textContent, /0%|0 元|未连接|不支持|填写|添加供应商/);
+  }
+  details.destroy(); assert.deepEqual(errors, []);
+});
+
 test('ZCode retained quota is visibly pending update in quota and trend details', () => {
   const h = renderer(), content = h.nodes['details-content'];
   const model = { sourceId: 'zcode', state: 'stale', items: [{ ...item(300), bucketId: 'zcode:paid:1',

@@ -1810,7 +1810,7 @@ test('实际controller区分22/24/50角色，普通48px与大角色64px同源传
   assert.equal(w.sent.at(-1)[1].items.length, 4);
 });
 
-test('团队原因只通过 ZCode 原生窗口和 preload 白名单，未知码和 Codex 保持原行为', () => {
+test('团队和额度查询原因通过 ZCode 原生窗口和 preload 白名单，未知码和 Codex 保持原行为', () => {
   const { safeModel } = require('../lib/quota-label-window');
   for (const source of ['zcode', 'codex']) {
     let api, listener, received;
@@ -1820,8 +1820,9 @@ test('团队原因只通过 ZCode 原生窗口和 preload 白名单，未知码�
         ipcRenderer: { on(_channel, callback) { listener = callback; }, removeListener() {}, send() {} } })
     });
     api.onModel(value => { received = value; });
-    for (const code of ['ZCODE_TEAM_SELECTION_REQUIRED', 'ZCODE_TEAM_KEY_MISSING', 'ZCODE_TEAM_ACCESS_DENIED', 'PRIVATE_RESPONSE']) {
-      const input = { sourceId: 'zcode', state: 'disconnected', statusCode: code, items: [] };
+    for (const code of ['ZCODE_TEAM_SELECTION_REQUIRED', 'ZCODE_TEAM_KEY_MISSING', 'ZCODE_TEAM_ACCESS_DENIED',
+      'ZCODE_QUOTA_QUERY_FAILED', 'ZCODE_QUOTA_UPDATE_FAILED', 'ZCODE_CUSTOM_QUOTA_UNAVAILABLE', 'PRIVATE_RESPONSE']) {
+      const input = { sourceId: 'zcode', state: code === 'ZCODE_QUOTA_UPDATE_FAILED' ? 'stale' : code === 'ZCODE_CUSTOM_QUOTA_UNAVAILABLE' ? 'unsupported' : 'disconnected', statusCode: code, items: [] };
       const packet = safeModel(input, source), expected = source === 'zcode' && code !== 'PRIVATE_RESPONSE' ? code : undefined;
       assert.equal(packet.statusCode, expected); listener({}, packet); assert.equal(received.statusCode, expected);
       assert.equal(received.items.length, 0);

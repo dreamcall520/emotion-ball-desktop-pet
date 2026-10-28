@@ -151,7 +151,8 @@ function iconPreferenceFields(source) {
 }
 
 function zcodeStatusFields(source) {
-  try { const code = source.statusCode; return ['ZCODE_TEAM_SELECTION_REQUIRED', 'ZCODE_TEAM_KEY_MISSING', 'ZCODE_TEAM_ACCESS_DENIED'].includes(code)
+  try { const code = source.statusCode; return ['ZCODE_TEAM_SELECTION_REQUIRED', 'ZCODE_TEAM_KEY_MISSING', 'ZCODE_TEAM_ACCESS_DENIED',
+    'ZCODE_QUOTA_QUERY_FAILED', 'ZCODE_QUOTA_UPDATE_FAILED', 'ZCODE_CUSTOM_QUOTA_UNAVAILABLE'].includes(code)
     ? { statusCode: code } : {}; } catch (_) { return {}; }
 }
 

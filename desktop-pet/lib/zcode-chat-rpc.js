@@ -3,7 +3,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { randomUUID, createHash } = require('node:crypto');
 const { createZcodeProtocol } = require('./zcode-protocol');
-const { readZcodeAccount } = require('./zcode-account');
+const { readZcodeConnection } = require('./zcode-account');
 const { requestOfficialJson, fetchZcodeUsage, resolveZcodeTeamAccount } = require('./zcode-usage');
 const { teamContext, teamAccountScope, isTeam } = require('./zcode-team-auth');
 const { isModelId } = require('./chat-models');
@@ -63,7 +63,7 @@ async function prepareZcodeRuntime({ workspaceDir, account, env = process.env, h
     ZCODE_BUILTIN_PROVIDER_CONFIG_FILE: builtinPath, ZCODE_PERSONAL_PROVIDER_CONFIG_FILE: personalPath,
     ZCODE_DYNAMIC_WORKFLOW_MODE: 'disabled', ZCODE_DESKTOP_CONTEXT_PROMPT_ENABLED: 'false',
     ZCODE_TELEMETRY_DEVICE_MID: account.deviceMid || '', ZCODE_APP_VERSION: appVersion });
-  return { binary, release, builtinPath, appVersion, env: childEnv };
+  return { binary, release, builtinPath, personalPath, appVersion, env: childEnv };
 }
 function projectZcodeModels(release, { family, kind, modelIds }) {
   const providerId = `account:${family}-${kind}`;
@@ -92,12 +92,17 @@ function resolveZcodeChatModel(models, selection) {
   return { model: model.id, effort: model.defaultReasoningEffort || 'none', displayName: model.displayName, automatic, reason: automatic ? 'chat' : 'manual' };
 }
 function requiresVerification(config) { return !config || config.enabled !== false && config.skip_model_request !== true; }
-function createZcodeChatRpc({ workspaceDir, env = process.env, home = os.homedir(), readAccount = readZcodeAccount,
+function createZcodeChatRpc({ workspaceDir, env = process.env, home = os.homedir(), readAccount = readZcodeConnection,
   prepareRuntime = prepareZcodeRuntime, createProtocol = createZcodeProtocol, requestJson = requestOfficialJson,
   fetchUsage = fetchZcodeUsage, resolveTeamAccount = resolveZcodeTeamAccount,
   onNotification = () => {}, onDisconnect = () => {}, ...transportOptions } = {}) {
   if (typeof workspaceDir !== 'string' || !path.isAbsolute(workspaceDir)) throw fail('INVALID_INPUT');
   let protocol, starting, account, runtime, catalog = [], threadId, activeTurn, revision = 0, closed = false;
+  function clearPersonalConfig() {
+    const file = runtime?.personalPath || path.join(workspaceDir, '.zcode/provider-config.json');
+    for (const dir of [workspaceDir, path.dirname(file)]) if (fs.existsSync(dir) && fs.lstatSync(dir).isSymbolicLink()) throw fail('UNSAFE_CONFIG');
+    fs.rmSync(file, { force: true });
+  }
   function emit(method, params) { onNotification({ method, params: { threadId, ...params } }); }
   function notification(packet) {
     if (packet.method !== 'session/event' || packet.params?.sessionId !== threadId || !activeTurn) return;
@@ -121,9 +126,18 @@ function createZcodeChatRpc({ workspaceDir, env = process.env, home = os.homedir
     }
   }
   async function currentAccount() {
-    const latest = await readAccount({ home, env });
-    if (!latest?.accountKey || !(isTeam(latest) ? latest.accessToken : latest.jwtToken)) throw fail('UNAUTHENTICATED');
-    if (account && latest.accountKey !== account.accountKey) { account = latest; catalog = []; emit('account/updated', {}); throw fail('UNAUTHENTICATED'); }
+    let latest;
+    try {
+      latest = await readAccount({ home, env, release: runtime?.release });
+      if (!latest?.accountKey || !(latest.personal?.hasConfigured || (isTeam(latest) ? latest.accessToken : latest.jwtToken))) throw fail('UNAUTHENTICATED');
+    } catch (error) {
+      clearPersonalConfig(); catalog = [];
+      if (account) { account = null; emit('account/updated', {}); }
+      throw error;
+    }
+    if (latest.personal?.hasConfigured) latest = { ...latest,
+      accountKey: createHash('sha256').update(JSON.stringify([latest.accountKey, latest.personal.scope])).digest('hex') };
+    if (account && latest.accountKey !== account.accountKey) { clearPersonalConfig(); account = latest; catalog = []; emit('account/updated', {}); throw fail('UNAUTHENTICATED'); }
     account = latest; return account;
   }
   function sameRuntimeAccount(before, latest, scope = isTeam(before) ? teamAccountScope(before) : null) {
@@ -151,7 +165,8 @@ function createZcodeChatRpc({ workspaceDir, env = process.env, home = os.homedir
       toolSearchMode: 'off', subagentRuntimeConfigEnabled: false, memoryEnabled: false, askUserQuestionAutoResolutionEnabled: false };
     if (method !== 'interaction/requestProviderRuntimeHeaders' || params?.sessionId !== threadId) return undefined;
     const model = catalog.find(row => row.providerId === params.providerId);
-    if (!model) throw fail('UNAUTHENTICATED');
+    if (!model || activeTurn && activeTurn.providerId !== model.providerId) throw fail('UNAUTHENTICATED');
+    if (model.personal) throw fail('UNAUTHENTICATED');
     const selected = await runtimeAccount(params);
     const headers = { 'HTTP-Referer': 'https://zcode.z.ai', 'User-Agent': `ZCode/${runtime.appVersion}`,
       'X-ZCode-App-Version': runtime.appVersion, 'X-Title': 'Z Code@electron', 'X-Platform': `${process.platform}-${process.arch}`,
@@ -176,13 +191,15 @@ function createZcodeChatRpc({ workspaceDir, env = process.env, home = os.homedir
     if (closed) throw fail('CLOSED');
     if (starting) return starting;
     const operation = (async () => {
+      clearPersonalConfig();
       await currentAccount(); runtime = await prepareRuntime({ workspaceDir, account, env, home });
       if (closed) throw fail('CLOSED');
       protocol = createProtocol({ ...transportOptions, binary: runtime.binary, cwd: workspaceDir, env: runtime.env,
-        onRequest: serverRequest, onNotification: notification, onDisconnect });
+        onRequest: serverRequest, onNotification: notification, onDisconnect: code => { clearPersonalConfig(); onDisconnect(code); } });
       await protocol.start(); await protocol.request('runtime/capabilities', {});
     })().catch(async error => {
       await protocol?.close(); protocol = null;
+      clearPersonalConfig();
       if (starting === operation) starting = null;
       throw fail(error?.code || 'DISCONNECTED');
     });
@@ -190,31 +207,60 @@ function createZcodeChatRpc({ workspaceDir, env = process.env, home = os.homedir
     return operation;
   }
   async function listModels() {
-    await currentAccount();
+    const connection = await currentAccount();
     if (!runtime) throw fail('DISCONNECTED');
     catalog = [];
-    const selected = await runtimeAccount();
-    const usage = await fetchUsage(selected);
+    const personal = connection.personal?.catalog || [];
+    if (connection.personal?.hasConfigured) {
+      if (!runtime.personalPath) throw fail('UNSAFE_CONFIG');
+      const config = JSON.parse(JSON.stringify(connection.personal.runtimeConfig));
+      for (const provider of config.config.providerConfigRules.providerRules) {
+        const auth = connection.personal.getRequestAuth(provider.providerId);
+        if (!auth) throw fail('UNAUTHENTICATED');
+        provider.config.access.apiKey = auth.apiKey; provider.config.api.headers = auth.headers;
+      }
+      // ZCode's API-key providers read credentials from their private config, not the account callback.
+      fs.writeFileSync(runtime.personalPath, JSON.stringify(config), { mode: 0o600 });
+      fs.chmodSync(runtime.personalPath, 0o600);
+      await protocol.request('provider/refreshRegistry', { reason: 'qiuqiu-personal-provider-config-updated' });
+    }
+    let official = [];
+    try {
+      if (connection.family === 'custom') throw fail('MODELS_UNAVAILABLE');
+      const selected = await runtimeAccount();
+      const usage = await fetchUsage(selected);
+      await currentAccount();
+      if (closed) throw fail('CLOSED');
+      if (!sameRuntimeAccount(selected, account)) throw fail('UNAUTHENTICATED');
+      const hasBalance = usage.buckets?.some(row => row.source !== 'coding-plan' && row.remaining > 0);
+      const kind = isTeam(selected) ? selected.codingPlanApiKey && ['connected', 'empty'].includes(usage.paidState) ? 'team-coding-plan' : null
+        : hasBalance ? 'start-plan' : selected.codingPlanApiKey && usage.paidState === 'connected' ? 'individual-coding-plan' : null;
+      if (!kind) throw fail('MODELS_UNAVAILABLE');
+      official = projectZcodeModels(runtime.release, { family: account.family, kind, ...(kind === 'start-plan' ? { modelIds: usage.modelIds } : {}) });
+      const providerId = official[0]?.providerId;
+      if (!providerId) throw fail('MODELS_UNAVAILABLE');
+      const basedOnZCodeBuiltinRevision = `zcode-builtin:${runtime.release.revision}:${createHash('sha256').update(path.resolve(runtime.builtinPath)).digest('hex')}`;
+      await protocol.request('provider/updateAccountConfig', { revision: `qiuqiu:${account.accountKey}:${++revision}`, basedOnZCodeBuiltinRevision,
+        providers: { [providerId]: { access: { type: 'zhipu-account', entitled: true },
+          ...(kind === 'start-plan' ? { builtinModelIds: official.map(row => row.modelId) } : {}) } },
+        states: { [providerId]: { availability: 'available', entitled: true, current: true } } });
+    } catch (error) {
+      if (!personal.length || ['UNAUTHENTICATED', 'CLOSED'].includes(error.code)) throw error;
+      official = [];
+    }
     await currentAccount();
-    if (closed) throw fail('CLOSED');
-    if (!sameRuntimeAccount(selected, account)) throw fail('UNAUTHENTICATED');
-    const hasBalance = usage.buckets?.some(row => row.source !== 'coding-plan' && row.remaining > 0);
-    const kind = isTeam(selected) ? selected.codingPlanApiKey && ['connected', 'empty'].includes(usage.paidState) ? 'team-coding-plan' : null
-      : hasBalance ? 'start-plan' : selected.codingPlanApiKey && usage.paidState === 'connected' ? 'individual-coding-plan' : null;
-    if (!kind) throw fail('MODELS_UNAVAILABLE');
-    catalog = projectZcodeModels(runtime.release, { family: account.family, kind, ...(kind === 'start-plan' ? { modelIds: usage.modelIds } : {}) });
-    const providerId = catalog[0]?.providerId;
-    if (!providerId) throw fail('MODELS_UNAVAILABLE');
-    const basedOnZCodeBuiltinRevision = `zcode-builtin:${runtime.release.revision}:${createHash('sha256').update(path.resolve(runtime.builtinPath)).digest('hex')}`;
-    await protocol.request('provider/updateAccountConfig', { revision: `qiuqiu:${account.accountKey}:${++revision}`, basedOnZCodeBuiltinRevision,
-      providers: { [providerId]: { access: { type: 'zhipu-account', entitled: true },
-        ...(kind === 'start-plan' ? { builtinModelIds: catalog.map(row => row.modelId) } : {}) } },
-      states: { [providerId]: { availability: 'available', entitled: true, current: true } } });
-    await currentAccount();
-    if (closed || !sameRuntimeAccount(selected, account)) {
+    if (closed || !sameRuntimeAccount(connection, account)) {
       catalog = []; throw fail(closed ? 'CLOSED' : 'UNAUTHENTICATED');
     }
-    return catalog.map(({ providerId: _provider, modelId: _model, ...row }) => row);
+    catalog = [...personal.map(row => ({ ...row, personal: true })), ...official];
+    if (!catalog.length) throw fail('MODELS_UNAVAILABLE');
+    const preferred = connection.personal?.defaultModelSelection;
+    const preferredModel = preferred && catalog.find(row => row.providerId === preferred.providerId && row.modelId === preferred.modelId);
+    if (preferredModel) {
+      for (const row of catalog) row.isDefault = row === preferredModel;
+      if (preferredModel.supportedReasoningEfforts.includes(preferred.options?.reasoningLevel)) preferredModel.defaultReasoningEffort = preferred.options.reasoningLevel;
+    }
+    return catalog.map(({ providerId: _provider, modelId: _model, personal: _personal, ...row }) => row);
   }
   async function loadThread(id) {
     await currentAccount();
@@ -236,7 +282,7 @@ function createZcodeChatRpc({ workspaceDir, env = process.env, home = os.homedir
     if (activeTurn) throw fail('BUSY');
     const model = catalog.find(row => row.id === selection?.model);
     if (!model || !model.supportedReasoningEfforts.includes(selection.effort)) throw fail('MODEL_UNAVAILABLE');
-    const turn = { id: `turn_${randomUUID()}`, status: 'inProgress' }; activeTurn = turn;
+    const turn = { id: `turn_${randomUUID()}`, status: 'inProgress' }; activeTurn = { ...turn, providerId: model.providerId };
     try {
       await protocol.request('session/send', { sessionId: threadId, inputId: turn.id, queryId: turn.id,
         content: `${CHAT_INSTRUCTIONS}\n\n用户本次消息：\n${text}`,
@@ -250,6 +296,6 @@ function createZcodeChatRpc({ workspaceDir, env = process.env, home = os.homedir
     interruptTurn: async (id, turnId) => {
       if (id !== threadId || !activeTurn || turnId !== activeTurn.id) throw fail('INVALID_INPUT');
       await protocol.request('session/stop', { sessionId: threadId });
-    }, close: async () => { closed = true; await protocol?.close(); } };
+    }, close: async () => { closed = true; try { await protocol?.close(); } finally { clearPersonalConfig(); } } };
 }
 module.exports = { createZcodeChatRpc, resolveZcodeChatModel, projectZcodeModels, requiresVerification, prepareZcodeRuntime, SAFE_CONFIG };

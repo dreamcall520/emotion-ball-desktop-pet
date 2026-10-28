@@ -110,3 +110,62 @@ test('quota request failures render as query status while recovery, login loss a
   await service.setEnabled(false); const disabled = render();
   assert.equal(disabled.state, 'disabled'); assert.equal(disabled.statusCode, undefined);
 });
+
+test('custom-only models show unavailable quota without official quota or task requests and clear on removal', async t => {
+  const { nodes, receive } = renderFixture();
+  let removed = false, quotaCalls = 0, taskCalls = 0;
+  const service = createZcodeCompanion({
+    readAccount: () => {
+      if (removed) throw Object.assign(new Error('private-file'), { code: 'ZCODE_ACCOUNT_MISSING' });
+      return { family: 'custom', accountKey: 'custom-scope', personal: { hasConfigured: true,
+        scope: 'private-scope', providers: [{ apiKey: 'secret-key', baseURL: 'https://private.invalid' }] } };
+    },
+    fetchUsage: async () => { quotaCalls++; throw new Error('must not request official quota'); },
+    readTasks: async () => { taskCalls++; throw new Error('must not request official tasks'); }
+  });
+  t.after(() => service.close());
+  const render = () => { const model = buildZcodeQuotaLabelModel(service.getSnapshot()); receive(model); return model; };
+  await service.setEnabled(true); await service.refresh();
+  const custom = render(), snapshot = service.getSnapshot();
+  assert.equal(custom.statusCode, 'ZCODE_CUSTOM_QUOTA_UNAVAILABLE');
+  assert.equal(nodes.status.textContent, '暂无额度数据'); assert.match(nodes.status.title, /已识别自定义供应商，可在聊天中查看模型/);
+  assert.deepEqual(custom.items, []); assert.deepEqual(snapshot.history.windows, []);
+  assert.equal(snapshot.activity.runningCount, null); assert.equal(snapshot.hasCustomProviders, true);
+  assert.equal(quotaCalls, 0); assert.equal(taskCalls, 0);
+  assert.doesNotMatch(JSON.stringify(snapshot) + JSON.stringify(custom) + nodes['quota-label'].title, /secret|private|未连接|0%/);
+  removed = true; await service.refresh();
+  assert.equal(render().statusCode, undefined); assert.equal(service.getSnapshot().hasCustomProviders, false);
+  assert.equal(nodes.status.textContent, '未找到 ZCode');
+  removed = false; await service.refresh(); assert.equal(render().statusCode, 'ZCODE_CUSTOM_QUOTA_UNAVAILABLE');
+  await service.setEnabled(false); assert.equal(render().statusCode, undefined); assert.equal(service.getSnapshot().hasCustomProviders, false);
+  await service.setEnabled(true); service.close(); assert.equal(service.getSnapshot().hasCustomProviders, false);
+});
+
+test('custom models remain identified when official quota fails, without replacing successful official balances', async t => {
+  const { nodes, receive } = renderFixture(), now = 1800000000000;
+  let configured = true, accountKey = 'official-a', failure = 'ZCODE_HTTP_ERROR';
+  const buckets = [{ id: 'zcode:paid:fixture', label: 'Coding Plan', planName: '团队套餐', remaining: 75,
+    periodKind: 'rolling', windowMinutes: 300, periodStart: now - 60000, resetsAt: now + 299 * 60000 }];
+  const service = createZcodeCompanion({ now: () => now,
+    readAccount: () => ({ family: 'bigmodel', accountKey, personal: { hasConfigured: configured } }),
+    fetchUsage: async () => { if (failure) throw Object.assign(new Error('private-response'), { code: failure }); return { buckets }; },
+    readTasks: async () => ({ state: 'unknown', items: [], results: [] }) });
+  t.after(() => service.close());
+  const render = () => { const model = buildZcodeQuotaLabelModel(service.getSnapshot(), {}, now); receive(model); return model; };
+  await service.setEnabled(true);
+  for (const code of ['ZCODE_HTTP_ERROR', 'ZCODE_TEAM_ACCESS_DENIED', 'ZCODE_LOGIN_REQUIRED']) {
+    failure = code; await service.refresh();
+    assert.equal(render().statusCode, 'ZCODE_CUSTOM_QUOTA_UNAVAILABLE'); assert.equal(nodes.status.textContent, '暂无额度数据');
+  }
+  configured = false; failure = 'ZCODE_HTTP_ERROR'; await service.refresh();
+  assert.equal(render().statusCode, 'ZCODE_QUOTA_QUERY_FAILED'); assert.equal(service.getSnapshot().hasCustomProviders, false);
+  configured = true; failure = null; await service.refresh();
+  const ready = render(); assert.equal(ready.state, 'ready'); assert.equal(ready.statusCode, undefined); assert.equal(ready.items[0].remaining, 75);
+  const history = service.getSnapshot().history.windows;
+  failure = 'ZCODE_HTTP_ERROR'; await service.refresh();
+  const stale = render(); assert.equal(stale.statusCode, 'ZCODE_QUOTA_UPDATE_FAILED'); assert.equal(stale.items[0].remaining, 75);
+  assert.deepEqual(service.getSnapshot().history.windows, history);
+  accountKey = 'official-b'; configured = false; await service.refresh();
+  assert.equal(render().statusCode, 'ZCODE_QUOTA_QUERY_FAILED'); assert.equal(service.getSnapshot().hasCustomProviders, false);
+  assert.deepEqual(render().items, []);
+});
