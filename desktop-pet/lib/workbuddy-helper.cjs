@@ -108,6 +108,7 @@ async function request(auth, route, body, signal, conversationId) {
     body: body === undefined ? undefined : JSON.stringify(body), signal, redirect: 'error' });
   auth.verifyCurrent?.();
   if (!response.ok) {
+    if ([404, 405].includes(response.status)) throw Object.assign(new Error('SERVICE_UNAVAILABLE'), { code: 'SERVICE_UNAVAILABLE', httpStatus: response.status });
     if (response.status === 401) fail('LOGIN_REQUIRED');
     if (response.status === 429) fail('RATE_LIMITED');
     let code;
@@ -148,7 +149,7 @@ const code = (id, suffix) => `TCACA_code_${id}_${suffix}`;
 const BASIC = code('008', 'cfWoLwvjU4');
 const REWARD = code('007', 'nzdH5h4Nl0');
 const PAID_BASE = [code('002', 'AkiJS3ZHF5'), code('005', 'maRGyrHhw1'), code('003', 'FAnt7lcmRT'), code('023', '4xbGhMrE6q'),
-  code('026', 'BaESVICNoi'), code('027', '0FCGVA6vSa')];
+  code('026', 'BaESVICNoi'), code('027', '0FCGVA6vSa'), code('043', '6oIkxT7Z0S')];
 const ADDON = [code('009', '0XmEQc2xOf'), code('038', 'OhvqZtiPKr'), code('036', 'lupO5WgNdG')];
 const FREE_BASE = [BASIC, code('035', 'ArVxJcGDsm'), code('039', 'KRcQj7wUat'), code('040', 'mi9rCYg46x')];
 const PLAN_BONUS = [code('028', 'NtpWi0jzXs'), code('037', 'WxOD3MpI2o')];
@@ -226,13 +227,7 @@ function enterpriseQuotaReport(value, now = Date.now()) {
     total: limit === -1 ? null : Math.max(0, limit - used), limit: limit === -1 ? null : limit, used,
     basic: null, reward: null, purchased: null, plan: '企业版', nextRefreshAt, expires: [], updatedAt: now };
 }
-async function quota(auth, signal) {
-  if (auth.scope === 'enterprise') {
-    const raw = await jsonRequest(auth, '/v2/billing/meter/get-enterprise-user-usage', {}, signal);
-    const value = typeof raw.limitNum === 'number' ? raw : raw.data;
-    return { accountKey: auth.accountKey, report: enterpriseQuotaReport(value) };
-  }
-  const summary = await jsonRequest(auth, '/billing/meter/get-user-resource-summary', {}, signal);
+async function legacyPersonalAccounts(auth, signal) {
   const day = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
   const accounts = [];
   for (const [kind, extra] of [['paid', { PackageCodes: PAID, NeedRenewInfo: true }], ['free', { PackageCodes: FREE,
@@ -247,7 +242,78 @@ async function quota(auth, signal) {
       check(result.Accounts.length === 200 && page < 10);
     }
   }
-  return { accountKey: auth.accountKey, report: quotaReport(summary, accounts) };
+  return accounts;
+}
+async function unifiedPersonalAccounts(auth, signal) {
+  const now = Date.now();
+  const format = ms => new Date(ms + 8 * 3600000).toISOString().slice(0, 19).replace('T', ' ');
+  // Resource discovery follows token-monitor's product-scoped query; unlike its
+  // single-page reader, consume every page before publishing a balance.
+  const query = { ProductCode: 'p_tcaca', Status: [0, 3], PageSize: 100,
+    PackageEndTimeRangeBegin: format(now), PackageEndTimeRangeEnd: format(now + 101 * 365 * 86400000) };
+  const accounts = []; let total;
+  for (let page = 1; page <= 20; page++) {
+    const raw = await jsonRequest(auth, '/v2/billing/meter/get-user-resource', { ...query, PageNumber: page }, signal);
+    const value = raw.Response?.Data ?? raw.data?.Response?.Data ?? raw.data ?? raw;
+    check(value && Array.isArray(value.Accounts) && Number.isSafeInteger(value.TotalCount) && value.TotalCount >= 0 && value.TotalCount <= 2000);
+    if (total === undefined) total = value.TotalCount;
+    check(value.TotalCount === total && value.Accounts.length <= query.PageSize);
+    accounts.push(...value.Accounts);
+    if (accounts.length === total) return accounts;
+    check(accounts.length < total && value.Accounts.length === query.PageSize && page < 20);
+  }
+}
+function unifiedQuotaReport(summary, accounts) {
+  check(summary && Array.isArray(summary.Packages));
+  const credits = [], nonCredits = new Set(), creditCodes = new Set();
+  for (const p of accounts) {
+    check(p && typeof p === 'object' && p.ProductCode === 'p_tcaca' && typeof p.PackageCode === 'string');
+    check([0, 1, 2, 3].includes(p.Status));
+    // Official Status: valid / refund / expired / usedUp. Only valid rows can
+    // contribute. A precise field alone does not establish its billing unit.
+    // A spent base plan still tells the user when their allowance refreshes.
+    if (p.Status !== 0 && !(p.Status === 3 && CREDIT_GROUPS.get(p.PackageCode) === 'basic')) continue;
+    check(typeof p.CapacityUnit === 'string' && p.CapacityUnit.length > 0, 'UNSUPPORTED_QUOTA');
+    if (p.CapacityUnit !== 'credits') {
+      check(!CREDIT_GROUPS.has(p.PackageCode), 'UNSUPPORTED_QUOTA');
+      nonCredits.add(p.PackageCode); continue;
+    }
+    check(typeof p.ResourceId === 'string' && p.ResourceId.length > 0 || Number.isSafeInteger(p.ResourceId));
+    check(p.CycleCapacityRemainPrecise != null && p.CycleCapacityRemainPrecise !== '');
+    const left = amount(p.CycleCapacityRemainPrecise);
+    if (p.Status === 3) {
+      check(left === 0);
+      if (Number(p.CapacityType) === 4 && p.SlicePeriodUsageDetails?.length) {
+        check(amount(p.SlicePeriodUsageDetails[0]?.SlicePeriodCapacityRemainPrecise) === 0);
+      }
+    }
+    creditCodes.add(p.PackageCode); credits.push(p);
+  }
+  check(![...nonCredits].some(code => creditCodes.has(code)));
+  return quotaReport({ ...summary, Packages: summary.Packages.filter(p => !nonCredits.has(p?.PackageCode)) }, credits);
+}
+async function quota(auth, signal) {
+  if (auth.scope === 'enterprise') {
+    const raw = await jsonRequest(auth, '/v2/billing/meter/get-enterprise-user-usage', {}, signal);
+    const value = typeof raw.limitNum === 'number' ? raw : raw.data;
+    return { accountKey: auth.accountKey, report: enterpriseQuotaReport(value) };
+  }
+  const summary = await jsonRequest(auth, '/billing/meter/get-user-resource-summary', {}, signal);
+  let accounts;
+  try { accounts = await unifiedPersonalAccounts(auth, signal); }
+  catch (error) {
+    if (![404, 405].includes(error.httpStatus)) throw error;
+    return { accountKey: auth.accountKey, report: quotaReport(summary, await legacyPersonalAccounts(auth, signal)) };
+  }
+  let report;
+  try { report = unifiedQuotaReport(summary, accounts); }
+  catch (error) {
+    // A daily plan can return a full-cycle amount from the generic endpoint.
+    // Only after a failed reconciliation, use the official daily-slice reader.
+    if (error.code !== 'INVALID_RESPONSE' || !accounts.some(p => p?.Status === 0 && Number(p.CapacityType) === 4 && !p.SlicePeriodUsageDetails?.length)) throw error;
+    report = quotaReport(summary, await legacyPersonalAccounts(auth, signal));
+  }
+  return { accountKey: auth.accountKey, report };
 }
 async function models(auth, signal) {
   const config = await jsonRequest(auth, '/v3/config', undefined, signal);
@@ -304,7 +370,7 @@ async function readSse(body, onDelta) {
 async function execute(operation, payload, onDelta = () => {}, { authReader = readAuth } = {}) {
   check(['quota', 'models', 'chat', 'tasks', 'task-open', 'usage'].includes(operation), 'INVALID_REQUEST');
   const auth = authReader(operation === 'usage');
-  if (auth.scope === 'enterprise') auth.verifyCurrent = () => {
+  if (auth.scope === 'enterprise' || operation === 'quota') auth.verifyCurrent = () => {
     const current = authReader(false);
     check(current.accountKey === auth.accountKey, 'ACCOUNT_CHANGED');
   };

@@ -75,17 +75,17 @@ test('official billing timestamps accept milliseconds and explicit dates without
     assert.throws(() => quotaReport(f.summary, f.accounts, now), { code: 'INVALID_RESPONSE' });
   }
 });
-test('personal Pro executes all billing sources with a scope-safe format error and no model request', async t => {
+test('personal Pro reconciles summary and unified resources with a scope-safe format error and no model request', async t => {
   const f = fixture([[pro, 1500], [addon, 20]], true), calls = [];
   const auth = { ...sessionIdentity({ account: { type: 'pro', uid: 'fixture-user' }, auth: { domain: 'www.workbuddy.cn' } }), token: 'fixture-not-a-real-token' };
   const previous = global.fetch; t.after(() => { global.fetch = previous; });
   global.fetch = async (url, options) => {
     calls.push(url); assert.equal(options.headers['X-Enterprise-Id'], undefined);
-    const data = url.endsWith('summary') ? f.summary : { Accounts: url.endsWith('paid-packages') ? f.accounts : [], TotalCount: url.endsWith('paid-packages') ? f.accounts.length : 0 };
+    const data = url.endsWith('summary') ? f.summary : { Response: { Data: { Accounts: f.accounts.map(p => ({ ...p, ProductCode: 'p_tcaca', CapacityUnit: 'credits', Status: 0 })), TotalCount: f.accounts.length } } };
     return new Response(JSON.stringify({ code: 0, data }));
   };
   assert.equal((await execute('quota', {}, () => {}, { authReader: () => auth })).report.total, 1520);
-  assert.equal(calls.length, 3); assert(calls.every(url => url.includes('/billing/meter/get-user-resource-')));
+  assert.equal(calls.length, 2); assert(calls.every(url => url.includes('/billing/meter/get-user-resource')));
   f.summary.Packages.push({ PackageCode: 'unknown', CycleRemainCapacity: '1' });
   await assert.rejects(execute('quota', {}, () => {}, { authReader: () => auth }), error => error.code === 'UNSUPPORTED_QUOTA' && error.accountKey === auth.accountKey);
 });
