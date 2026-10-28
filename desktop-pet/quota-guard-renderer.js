@@ -212,7 +212,7 @@
       button.dataset.role = q === 100 ? 'full' : q === 0 ? 'empty' : 'roaming';
       renderPet(pet, q === 0 ? 1 : 0, q === 0 ? 'halo' : q === 100 ? 'crown' : 'none', time, !moving());
       drawSprite(zombie.querySelector('canvas'), 'walk', q > 0 && q < 100 ? time * .75 : 0, true);
-      const faceRight = model?.guardSide === 'left';
+      const faceRight = q !== 0 && model?.guardSide === 'left';
       zombie.dataset.facing = faceRight ? 'right' : 'left';
       zombie.style.transform = `rotate(${q === 0 && moving() ? Math.sin(time / 520) * 2 : 0}deg) scaleX(${faceRight ? -1 : 1})`;
       zombie.querySelector('svg').setAttribute('visibility', q === 0 ? 'visible' : 'hidden');
