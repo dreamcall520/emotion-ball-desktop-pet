@@ -187,6 +187,14 @@ Apple 芯片版 **0.4.01**，发布日期 **2026-10-07**，GitHub 兼容标签 `
 
 ### Intel 下载记录
 
+2026-10-29：官网 Intel 当前入口更新为 **0.4.09 构建候选**（`v0.4.9-intel`），基于正式源码 `d0871ea`，要求 macOS 12.0+。国内入口为 https://share.weiyun.com/6WH6LkRl ，只包含本版 Intel DMG，无提取码。上传完成及分享页文件名/180.8 MB 回读已确认；当前登录态普通下载已触发，完整下载哈希核验仍在进行，下表哈希来自本地正式包。GitHub 独立预发布待附件上传完成后再补，不改变 Apple 稳定版或其草稿。401 个业务文件、54 项天气测试、x86_64 架构/签名、DMG/ZIP 完整性检查通过；Rosetta 定位组件加载通过。真实 Intel Mac 未验收，Codex 额度标签检查超时、定制四种形态就绪检查未通过；页面保留明显说明。临时签名，未公证。
+
+| 文件 | bytes | SHA-256 |
+| --- | ---: | --- |
+| [Intel 0.4.09 DMG](https://share.weiyun.com/6WH6LkRl) | 189580803 | `399d1d12c816e1f67cdac294d1f87ee127a43eb2e9884d96cd42e1af40ea8dbf` |
+
+以下为旧版历史记录：
+
 Intel 0.3.13 构建候选仍未在真实 Intel Mac 验收。下表为 2026-10-07 GitHub 资产 API 返回的大小与 SHA-256 digest，HEAD 大小匹配；本轮未重新完整下载安装包。
 
 | 文件 | 精确大小（bytes） | SHA-256 |
@@ -224,7 +232,7 @@ Apple 芯片版 **0.4.00**，发布日期 **2026-10-05**，GitHub 兼容标签 `
 | [Qiuqiu-0.3.30-macOS-arm64-share.zip](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.30/Qiuqiu-0.3.30-macOS-arm64-share.zip) | 123480684 | `78c474ec18e9b22990385bcad526b987a35ccffe8581edcdd3dc89829c264c85` |
 | [Qiuqiu-0.3.30-macOS-arm64.dmg](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.3.30/Qiuqiu-0.3.30-macOS-arm64.dmg) | 137808229 | `2b38f31bf64698fc839c62965127fcbdca87f8135534fb57fe1acb2be7c78552` |
 
-官网默认提供 DMG：打开磁盘镜像，将“球球桌宠.app”拖入 Applications，完成后可推出镜像。GitHub Release 保留 ZIP 归档；历史记录仅在没有对应 DMG 时显示 ZIP。Intel x64 下载仍为已公开的 0.3.13 构建候选，尚未在真实 Intel Mac 上验收；本次更新仅适用于 Apple 芯片版。应用采用本机临时签名，未进行 Apple Developer ID 签名或公证。
+官网默认提供 DMG：打开磁盘镜像，将“球球桌宠.app”拖入 Applications，完成后可推出镜像。GitHub Release 保留 ZIP 归档；历史记录仅在没有对应 DMG 时显示 ZIP。Intel x64 当前下载为 0.4.09 构建候选（macOS 12+），尚未在真实 Intel Mac 上验收；已知验证限制见上方 Intel 下载记录。应用采用本机临时签名，未进行 Apple Developer ID 签名或公证。
 
 额外点数不限定 Pro；符合条件的 Plus/Pro 账号可购买点数，支持灵活计费的团队可使用工作区点数。球球仅在账号支持点数且 Codex 返回点数状态时展示，不并入套餐比例或重置机会，也不与 API 费用合并。依据：[官方点数说明](https://learn.chatgpt.com/docs/pricing)。
 

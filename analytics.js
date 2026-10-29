@@ -125,7 +125,7 @@
     const link = event.target.closest?.('a[href]');
     if (!link) return;
     const { downloadArch: architecture, downloadPosition: position } = link.dataset;
-    const release = /^https:\/\/github\.com\/dreamcall520\/emotion-ball-desktop-pet\/releases\/download\/v([\d.]+)\/Qiuqiu-([\d.]+)-macOS-(arm64|x64)(?:-share\.zip|\.dmg)$/;
+    const release = /^https:\/\/github\.com\/dreamcall520\/emotion-ball-desktop-pet\/releases\/download\/v([\d.]+)(?:-intel)?\/Qiuqiu-([\d.]+)-macOS-(arm64|x64)(?:-share\.zip|\.dmg)$/;
     const match = release.exec(link.href);
     if (match?.[3] === architecture && ['hero', 'download'].includes(position)) {
       track('download', { architecture, position });
@@ -133,6 +133,10 @@
         gaTrack('event', 'download_click', { ...page, send_to: ga4Id, architecture, position,
           download_source: 'github', version: match[2] });
       }
+    } else if (link.href === 'https://share.weiyun.com/6WH6LkRl' && architecture === 'x64' && position === 'download') {
+      track('download', { architecture, position });
+      gaTrack('event', 'download_click', { ...page, send_to: ga4Id, architecture, position,
+        download_source: 'weiyun', version: '0.4.09' });
     } else if (link.href === 'https://share.weiyun.com/ZdAiD7rR') {
       const position = link.closest?.('nav') ? 'navigation' : link.closest?.('.hero-actions') ? 'hero' : 'download';
       gaTrack('event', 'download_click', { ...page, send_to: ga4Id, architecture: 'arm64', position,

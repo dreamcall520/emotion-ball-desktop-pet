@@ -141,6 +141,14 @@ test('only real release links are counted, middle clicks count once and right cl
     state.listeners.click(event);
   }
   assert.equal(state.calls.length, 3);
+  link.href = 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.9-intel/Qiuqiu-0.4.09-macOS-x64.dmg';
+  state.listeners.click(event);
+  assert.equal(state.calls.length, 4);
+  assert.equal(state.calls[3][1].architecture, 'x64');
+  link.href = 'https://share.weiyun.com/6WH6LkRl';
+  state.listeners.click(event);
+  assert.equal(state.calls.length, 5);
+  assert.equal(state.calls[4][1].architecture, 'x64');
 });
 
 test('GA4 works independently; production, DNT, both opt-out keys and page allowlist gate both providers', () => {

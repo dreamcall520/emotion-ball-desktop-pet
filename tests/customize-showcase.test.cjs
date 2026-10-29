@@ -26,7 +26,7 @@ const homeDownloads = [...home.matchAll(/href="(https:\/\/github\.com\/dreamcall
 assert.equal(homeDownloads.length, 2);
 assert.ok(homeDownloads.every(m => /\/v0\.4\.8\/Qiuqiu-0\.4\.08-macOS-arm64\.dmg$/.test(m[1])));
 assert.match(home, /0\.4\.08 · Apple 芯片/);
-assert.match(html, /v0\.3\.13\/Qiuqiu-0\.3\.13-macOS-x64\.dmg/);
+assert.match(html, /https:\/\/share\.weiyun\.com\/6WH6LkRl/);
 assert.match(html, /下载并打开 DMG/);
 assert.match(html, /双击挂载磁盘镜像/);
 assert.doesNotMatch(html + home, /-share\.zip|下载 ZIP/);
@@ -45,7 +45,7 @@ for (const page of [html,home]) {
   assert.ok(domestic.every(m=>m[0].includes('0.4.08')&&m[0].includes('微云分享页')&&!m[1].includes('旧版')));
   assert.ok(domestic.every(m=>m[0].includes('target="_blank"')&&m[0].includes('rel="noopener"')));
   assert.doesNotMatch(page,/share\.weiyun\.com\/(?:OJvZzed5|rXnnLRhI)/);
-  assert.match(page,/analytics\.js\?v=20261026-release/);
+  assert.match(page,/analytics\.js\?v=20261029-intel/);
 }
 assert.match(html,/Intel 构建候选/);
 assert.match(html,/尚未在真实 Intel Mac 上验收/);
