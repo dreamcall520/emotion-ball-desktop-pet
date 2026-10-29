@@ -213,7 +213,7 @@ test('GA4 sends one sanitized page view and only a known source/medium pair, eve
 
 test('current downloads reach GA4 without changing Umami; history, arbitrary links and failures never block navigation', async () => {
   const state = page({ configure(c) { c.document.currentScript.dataset.ga4Id = ga4Id; } });
-  const link = { href: 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.8/Qiuqiu-0.4.08-macOS-arm64.dmg',
+  const link = { href: 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.9/Qiuqiu-0.4.09-macOS-arm64.dmg',
     dataset: { downloadArch: 'arm64', downloadPosition: 'hero', email: 'private@example.test' }, closest: () => null };
   let prevented = false;
   const event = { type: 'click', button: 0, target: { closest: () => link }, preventDefault: () => { prevented = true; } };
@@ -222,18 +222,18 @@ test('current downloads reach GA4 without changing Umami; history, arbitrary lin
   assert.equal(state.calls.length, 1);
   assert.equal(downloads().length, 1);
   assert.equal(downloads()[0][2].architecture, 'arm64');
-  assert.equal(downloads()[0][2].version, '0.4.08');
+  assert.equal(downloads()[0][2].version, '0.4.09');
   assert.equal(downloads()[0][2].download_source, 'github');
   assert.doesNotMatch(JSON.stringify(downloads()), /private|github\.com|\.dmg/);
   link.dataset = {}; // Historical release links have no current-download markers.
   state.listeners.click(event);
   assert.equal(downloads().length, 1);
-  link.href = 'https://share.weiyun.com/ZdAiD7rR';
+  link.href = 'https://share.weiyun.com/EYLnV2WY';
   for (const [ancestor, position] of [['nav', 'navigation'], ['.hero-actions', 'hero'], ['', 'download']]) {
     link.closest = selector => selector === ancestor ? {} : null;
     state.listeners.click(event);
     assert.equal(downloads().at(-1)[2].position, position);
-    assert.equal(downloads().at(-1)[2].version, '0.4.08');
+    assert.equal(downloads().at(-1)[2].version, '0.4.09');
     assert.equal(downloads().at(-1)[2].download_source, 'weiyun');
   }
   assert.equal(state.calls.length, 1, 'domestic links do not extend the legacy Umami metric');
@@ -243,7 +243,7 @@ test('current downloads reach GA4 without changing Umami; history, arbitrary lin
   assert.equal(downloads().length, 5);
   link.href = 'https://unrelated.example/file.dmg'; state.listeners.auxclick(event);
   assert.equal(downloads().length, 5);
-  link.href = 'https://share.weiyun.com/ZdAiD7rR';
+  link.href = 'https://share.weiyun.com/EYLnV2WY';
   for (const gtag of [undefined, () => { throw Error('blocked'); }, () => Promise.reject(Error('offline'))]) {
     state.window.gtag = gtag;
     assert.doesNotThrow(() => state.listeners.auxclick(event));

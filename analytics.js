@@ -137,10 +137,10 @@
       track('download', { architecture, position });
       gaTrack('event', 'download_click', { ...page, send_to: ga4Id, architecture, position,
         download_source: 'weiyun', version: '0.4.09' });
-    } else if (link.href === 'https://share.weiyun.com/ZdAiD7rR') {
+    } else if (link.href === 'https://share.weiyun.com/EYLnV2WY') {
       const position = link.closest?.('nav') ? 'navigation' : link.closest?.('.hero-actions') ? 'hero' : 'download';
       gaTrack('event', 'download_click', { ...page, send_to: ga4Id, architecture: 'arm64', position,
-        download_source: 'weiyun', version: '0.4.08' });
+        download_source: 'weiyun', version: '0.4.09' });
     }
   };
   document.addEventListener('click', downloadClick, { capture: true });
