@@ -140,8 +140,11 @@ function createZcodeChatRpc({ workspaceDir, env = process.env, home = os.homedir
     if (account && latest.accountKey !== account.accountKey) { clearPersonalConfig(); account = latest; catalog = []; emit('account/updated', {}); throw fail('UNAUTHENTICATED'); }
     account = latest; return account;
   }
+  function sameAccountSnapshot(before, latest) {
+    return before.accountKey === latest.accountKey && before.accountId === latest.accountId && before.accessToken === latest.accessToken && before.jwtToken === latest.jwtToken;
+  }
   function sameRuntimeAccount(before, latest, scope = isTeam(before) ? teamAccountScope(before) : null) {
-    return before.accountKey === latest.accountKey && before.accountId === latest.accountId && before.accessToken === latest.accessToken && before.jwtToken === latest.jwtToken &&
+    return sameAccountSnapshot(before, latest) &&
       (scope === null ? !isTeam(latest) : isTeam(latest) && scope === teamAccountScope(latest));
   }
   async function runtimeAccount(params = {}) {
@@ -249,7 +252,8 @@ function createZcodeChatRpc({ workspaceDir, env = process.env, home = os.homedir
       official = [];
     }
     await currentAccount();
-    if (closed || !sameRuntimeAccount(connection, account)) {
+    // Custom providers remain usable when the official Team selection is incomplete.
+    if (closed || !sameAccountSnapshot(connection, account)) {
       catalog = []; throw fail(closed ? 'CLOSED' : 'UNAUTHENTICATED');
     }
     catalog = [...personal.map(row => ({ ...row, personal: true })), ...official];

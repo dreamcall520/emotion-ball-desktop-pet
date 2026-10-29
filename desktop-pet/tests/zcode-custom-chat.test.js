@@ -32,7 +32,7 @@ function setup(t, official = false) {
       return {};
     } }; } });
   t.after(() => rpc.close());
-  return { rpc, calls, notifications, config, document, save, home, personalPath,
+  return { rpc, calls, notifications, config, document, save, home, personalPath, team,
     auth: providerId => options.onRequest('interaction/requestProviderRuntimeHeaders', { sessionId: 'fixture_session', providerId }) };
 }
 test('custom providers work without official login and same model names stay distinct', async t => {
@@ -62,6 +62,15 @@ test('unavailable official Team quota does not block configured custom model cha
   await f.rpc.startTurn('fixture_session', '测试', resolveZcodeChatModel(models, models[0].id));
   assert.equal(JSON.parse(fs.readFileSync(f.personalPath, 'utf8')).config.providerConfigRules.providerRules[0].config.access.apiKey, 'fixture-key-0');
   assert(!f.calls.some(row => row.method === 'provider/updateAccountConfig'));
+});
+test('incomplete official Team selection does not block configured custom model chat', async t => {
+  const f = setup(t, true); f.team.selection = { kind: 'team-coding-plan' };
+  await f.rpc.start(); const models = await f.rpc.listModels();
+  assert.equal(models.length, 3); await f.rpc.startThread();
+  await f.rpc.startTurn('fixture_session', '测试', resolveZcodeChatModel(models, models[0].id));
+  assert.equal(f.calls.find(row => row.method === 'session/send').params.modelSelection.providerId, 'custom:fixture-0');
+  assert(!f.calls.some(row => row.method === 'provider/updateAccountConfig'));
+  await assert.rejects(f.auth('custom:fixture-0'), { code: 'UNAUTHENTICATED' });
 });
 test('changing a custom key or disabling its provider invalidates the old chat scope and credentials', async t => {
   const f = setup(t); await f.rpc.start(); await f.rpc.listModels(); await f.rpc.startThread();
