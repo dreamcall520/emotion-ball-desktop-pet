@@ -100,4 +100,3 @@ test('exhausted daily plan rejects contradictory spendable slice credits',async 
     SlicePeriodUsageDetails:[{SlicePeriodCapacityRemainPrecise:'50'}]})]});
   await assert.rejects(h.run(),{code:'INVALID_RESPONSE'});assert.equal(h.calls.length,2);
 });
-
