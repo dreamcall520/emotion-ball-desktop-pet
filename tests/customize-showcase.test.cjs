@@ -58,3 +58,11 @@ for (const page of [html, home]) {
   assert.match(page, /GitHub 备用/);
   assert.doesNotMatch(page, /自动加速|免登录下载|不限速/);
 }
+
+// GitHub fallback is a native DMG download, not a new-page link.
+for (const page of [home, html]) {
+  const fallback = [...page.matchAll(/<a[^>]*href="https:\/\/github\.com\/dreamcall520\/emotion-ball-desktop-pet\/releases\/download\/[^" ]+arm64\.dmg"[^>]*>[\s\S]*?<\/a>/g)];
+  assert.equal(fallback.length, page === home ? 2 : 3);
+  assert.ok(fallback.every(m => !m[0].includes('target="_blank"') && !m[0].includes('↗')));
+  assert.doesNotMatch(page, /<span>[^<]*微云分享页/);
+}
