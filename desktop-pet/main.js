@@ -1267,7 +1267,7 @@ function syncWorkBuddyLabel() {
 function syncApiBalanceLabel() {
   if (!apiBalance || !apiBalanceLabel) return;
   if (!settings?.apiBalanceEnabled || settings.apiBalanceAlwaysVisible === false || isQuitting || screenLocked || pomodoroQuiet ||
-      chatWindow?.isVisible() || shortcutWindow?.isPresenting() || presentationSuppressed() || !petWindow?.isVisible()) apiBalanceDetails?.close();
+      chatWindow?.isVisible() || shortcutWindow?.isPresenting() || presentationSuppressed() || !petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) apiBalanceDetails?.close();
   const input = quotaCardGroupInput();
   const visible = input.eligible.includes('balance') && !input.suppressed;
   safelyInvokeWindow('API 余额卡同步', () => visible ? apiBalanceLabel.show(apiBalance.getState())
@@ -1275,7 +1275,7 @@ function syncApiBalanceLabel() {
 }
 function openApiBalanceDetails() {
   if (!settings?.apiBalanceEnabled || settings.apiBalanceAlwaysVisible === false || isQuitting || screenLocked || pomodoroQuiet ||
-      chatWindow?.isVisible() || shortcutWindow?.isPresenting() || presentationSuppressed() || !petWindow?.isVisible()) return false;
+      chatWindow?.isVisible() || shortcutWindow?.isPresenting() || presentationSuppressed() || !petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return false;
   codexDetails?.close(); workbuddyDetails?.close(); zcodeLink?.hide(); quotaGuard?.close();
   return apiBalanceDetails?.open(apiBalance.getState()) === true;
 }

@@ -4336,6 +4336,17 @@ test('main shared layout keeps an inline-expanded source alive after the whole s
 });
 
 
+test('启用API余额后销毁主窗口不读取已销毁对象，并拒绝打开趋势', async t => {
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));
+ f.call("setApiBalancePreference('apiBalanceEnabled',true)");
+ const isVisible=f.pet.isVisible.bind(f.pet);
+ f.pet.isVisible=()=>{if(f.pet.isDestroyed())throw Error('Object has been destroyed');return isVisible();};
+ f.pet.prependListener('closed',()=>assert.equal(f.call('openApiBalanceDetails()'),false));
+ assert.doesNotThrow(()=>f.pet.destroy());
+ assert.equal(f.call('petWindow'),null);
+ assert.equal(f.call('apiBalanceDetails.isVisible()'),false);
+});
+
 test('API余额趋势通过主卡打开，切账户同步，关闭恢复卡组且锁屏和禁用取消未完成打开', async t => {
  const ids=['a'.repeat(64),'b'.repeat(64)];
  const accounts=ids.map((id,index)=>({id,name:index?'工作账户':'个人账户',provider:'moonshot',currency:'CNY',supported:true,status:'ready'}));
