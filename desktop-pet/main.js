@@ -3544,6 +3544,10 @@ function registerIpc() {
     if (!fromPetWindow(event) || screenLocked || !petWindow.isVisible()) return;
     const point = validPoint(rawPoint);
     if (!point) return;
+    for (const card of Object.values(quotaCardControllers())) safelyInvokeWindow('额度卡焦点重置', () => {
+      const win = card?.getWindow?.();
+      if (win && !win.isDestroyed() && !win.webContents.isDestroyed?.()) win.webContents.send('pet:quota-card-pointer-reset');
+    });
     shortcutWindow?.cancelHover();
     // 页面已在 pointerdown 清理待执行互动；不发送全局 stop，避免迟到后误杀新双击。
     stopMotion({ notifyRenderer: false });

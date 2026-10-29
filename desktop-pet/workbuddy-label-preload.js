@@ -1,5 +1,11 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('qiuqiuWorkBuddyLabel', {
+  onPointerReset(callback) {
+    if (typeof callback !== 'function') return () => {};
+    const listener = () => callback();
+    ipcRenderer.on('pet:quota-card-pointer-reset', listener);
+    return () => ipcRenderer.removeListener('pet:quota-card-pointer-reset', listener);
+  },
   onMotion(callback) {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, value) => {

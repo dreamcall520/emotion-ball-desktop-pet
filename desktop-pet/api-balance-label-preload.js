@@ -7,6 +7,10 @@ function subscribe(channel, callback) {
   return () => ipcRenderer.removeListener(channel, listener);
 }
 contextBridge.exposeInMainWorld('qiuqiuApiBalanceLabel', {
+  onPointerReset(callback) {
+    if (typeof callback !== 'function') return () => {};
+    return subscribe('pet:quota-card-pointer-reset', () => callback());
+  },
   toggle: () => ipcRenderer.send(`${CHANNEL}-toggle`),
   trend: () => ipcRenderer.send(`${CHANNEL}-trend`),
   refresh: () => ipcRenderer.send(`${CHANNEL}-refresh`),

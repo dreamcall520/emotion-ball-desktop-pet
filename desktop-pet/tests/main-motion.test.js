@@ -3019,6 +3019,29 @@ test('拖动在建立锚点前复原，旧动作不会拉回新位置且与单�
   assert.equal(f.pet.messages.filter(item => item.channel === 'pet:motion-frame').at(-1).packet.frame.done, true);
 });
 
+test('从球球开始指针操作时所有存活额度卡退出键盘高亮，拒绝其它来源与无效坐标', async () => {
+  const f = await fixture();
+  const cards = f.call(`Object.values(quotaCardControllers()).filter(Boolean).map(card => {
+    const messages = [], webContents = { isDestroyed: () => false, send: (...args) => messages.push(args) };
+    const win = { isDestroyed: () => false, webContents };
+    card.getWindow = () => win;
+    return { messages, win };
+  })`);
+  assert.equal(cards.length,5);
+  f.send('pet:drag-start',{x:20,y:20},{});
+  f.send('pet:drag-start',{x:NaN,y:20});
+  assert(cards.every(card => card.messages.length === 0));
+  cards[1].win.isDestroyed = () => true;
+  cards[2].win.webContents.isDestroyed = () => true;
+  f.send('pet:drag-start',{x:20,y:20});
+  for (const [index,card] of cards.entries()) {
+    const resets = card.messages.filter(message => message[0] === 'pet:quota-card-pointer-reset');
+    assert.equal(resets.length,[1,2].includes(index) ? 0 : 1);
+    if(resets.length)assert.equal(resets[0].length,1,'reset has no account or motion payload');
+  }
+  assert.equal(f.call('dragState.moved'),false);
+});
+
 test('双击的迟到 drag-end 不能截断已经开始的新动作', async () => {
   const f = await fixture();
   f.send('pet:drag-start', { x: 20, y: 20 });

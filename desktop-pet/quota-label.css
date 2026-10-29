@@ -48,6 +48,13 @@ html, body {
   user-select: none;
 }
 
+/* Only deliberate keyboard navigation paints focus. Keep enough specificity
+   to suppress the accessible theme's later !important native focus outline. */
+:root:not([data-keyboard="true"]) #quota-beam #quota-label:focus,
+:root:not([data-keyboard="true"]) #quota-beam #quota-label :focus {
+  outline: none !important;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", sans-serif;
   -webkit-font-smoothing: antialiased;
