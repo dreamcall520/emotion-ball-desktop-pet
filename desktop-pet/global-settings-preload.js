@@ -1,5 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('qiuqiuSettings', {
+  submitFeedback: value => ipcRenderer.invoke('pet:feedback-submit', value),
+  setAutoReport: value => ipcRenderer.invoke('pet:feedback-auto-report', value),
   saveQuotaCards: config => ipcRenderer.invoke('pet:global-quota-cards-save', config),
   saveShortcuts: config => ipcRenderer.invoke('pet:global-shortcuts-save', config),
   recordShortcuts: value => ipcRenderer.send('pet:global-shortcuts-record', value),

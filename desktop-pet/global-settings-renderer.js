@@ -54,6 +54,7 @@
     '和球球聊聊': ['M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-8l-6 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z', 'M7 9h10M7 13h6'],
     '定制球球': ['M12 4a8 8 0 1 0 8 8', 'm15 4 2-2 5 5-2 2-5-5ZM15 4l-6 6-1 4 4-1 6-6'],
 
+    '意见反馈': ['M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-8l-6 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z', 'M8 9h8M8 13h5'],
     '天气': ['M5 16a4 4 0 0 1 1-7.9A6 6 0 0 1 18 10a3 3 0 0 1 0 6H5Z', 'M18 3v2M22 7h-2M14 3l1 2'],
     '常用设置': ['m12 3 2.6 5.6 6.1.8-4.5 4.3 1.1 6.1-5.3-3-5.3 3 1.1-6.1-4.5-4.3 6.1-.8Z'],
     '番茄钟': ['M9 3h6M12 3v3M18 7l2-2', 'M12 6a8 8 0 1 0 0 16 8 8 0 0 0 0-16M12 10v4l-2 2'],
@@ -106,7 +107,7 @@
     if (weather.length) categories.push({ id: 'weather-settings', label: '天气', children: weather });
     const general = categories.find(entry => entry.label === '常规设置');
     if (general) categories[categories.indexOf(general)] = { ...general, children: [...general.children,
-      ...snapshot.entries.filter(entry => entry.id === '/update-check')] };
+      ...snapshot.entries.filter(entry => ['/update-check', '/feedback-open'].includes(entry.id))] };
     return categories;
   }
   function externalIcon() {
@@ -222,7 +223,7 @@
     $('version').textContent = `球球 v${snapshot.version} · 本地设置`;
     const categories = groups();
     const nav = [{ id: 'common', label: '常用设置' }, ...categories,
-      { id: 'shortcuts', label: '快捷键' }, { id: 'quota-cards', label: '联动样式管理' },
+      { id: 'shortcuts', label: '快捷键' }, { id: 'quota-cards', label: '联动样式管理' }, { id: 'feedback', label: '意见反馈' },
       ...snapshot.entries.filter(entry => externalIds.has(entry.id)).map(entry => ({ ...entry,
         label: ({ '/chat-open': '和球球聊聊', '/customize-open': '定制球球' })[entry.id] || entry.label, external: true }))];
     if (!nav.some(item => item.id === selected)) selected = 'common';
@@ -236,7 +237,7 @@
       ['日常陪伴', ['球球与互动', '和球球聊聊', '便签与待办', '番茄钟']],
       ['外观与显示', ['定制球球', '球球尺寸', '贴边与显示', '界面配色', '天气']],
       ['应用与联动', ['Codex', 'ZCode 联动', 'WorkBuddy', 'API 余额', '联动样式管理']],
-      ['快捷与常规', ['快捷键', '常规设置']]
+      ['快捷与常规', ['快捷键', '常规设置', '意见反馈']]
     ];
     $('navigation').replaceChildren(...navigationGroups.map(([label, labels]) => {
       const section = el('div', '', 'nav-group');
@@ -284,6 +285,10 @@
       if (result?.config) { snapshot.shortcuts = result.config; last = JSON.stringify(snapshot); }
       return result;
     } };
+    if (!query && selected === 'feedback') {
+      $('empty').hidden = true;
+      window.renderSettingsFeedback($('content'), snapshot.feedback, api); return;
+    }
     if (!query && selected === 'shortcuts') {
       $('empty').hidden = true;
       window.renderSettingsShortcuts($('content'), snapshot.shortcuts, shortcutApi); return;
@@ -417,6 +422,7 @@
       if (latestSleepState !== undefined) value.petSleepState = latestSleepState;
       const serialized = JSON.stringify(value);
       if (last !== serialized) { if (!snapshot && value.initialView === 'quota-cards') { selected = quotaCardsView(value); quotaSectionRequested = true; }
+        else if (!snapshot && value.initialView === 'feedback') selected = 'feedback';
         else if (!snapshot && value.initialView === 'shortcuts') selected = 'shortcuts';
         else if (!snapshot && value.initialView === '/api-balance-menu') selected = '/api-balance-menu';
         else if (!snapshot && isApiView(value.initialView)) { selected = '/codex-menu'; codexTab = 'api'; apiSectionRequested = true; } snapshot = value; last = serialized; render(); }
@@ -437,7 +443,7 @@
   api.onNavigate(view => {
     if (view === 'quota-cards') { selected = quotaCardsView(snapshot); quotaSectionRequested = true; apiSectionRequested = false; $('search').value = ''; $('search-panel').hidden = true; $('search-toggle').setAttribute('aria-expanded', 'false'); render(); return; }
     if (view === '/api-balance-menu') { selected = view; apiSectionRequested = false; quotaSectionRequested = false; $('search').value = ''; $('search-panel').hidden = true; $('search-toggle').setAttribute('aria-expanded', 'false'); render(); document.querySelector('main').scrollTop = 0; return; }
-    if (view !== 'shortcuts' && !isApiView(view)) return;
+    if (view !== 'shortcuts' && view !== 'feedback' && !isApiView(view)) return;
     apiSectionRequested = isApiView(view); if (apiSectionRequested) codexTab = 'api';
     selected = apiSectionRequested ? '/codex-menu' : view; $('search').value = ''; $('search-panel').hidden = true;
     $('search-toggle').setAttribute('aria-expanded', 'false');

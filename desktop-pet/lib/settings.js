@@ -51,6 +51,7 @@ const DEFAULTS = Object.freeze({
   codexQuotaFunEnabled: true,
   openaiApiAlwaysVisible: false,
   autoUpdateCheck: true,
+  autoReportErrors: false,
   lastUpdateNotifiedVersion: '',
   codexQuotaPeriod: 'auto',
   codexQuotaLabelSize: 'compact',
@@ -143,6 +144,7 @@ function normalizeSettings(raw = {}) {
       ? raw.codexQuotaFunEnabled : DEFAULTS.codexQuotaFunEnabled,
     openaiApiAlwaysVisible: typeof raw.openaiApiAlwaysVisible === 'boolean'
       ? raw.openaiApiAlwaysVisible : DEFAULTS.openaiApiAlwaysVisible,
+    autoReportErrors: raw.autoReportErrors === true,
     autoUpdateCheck: typeof raw.autoUpdateCheck === 'boolean' ? raw.autoUpdateCheck : DEFAULTS.autoUpdateCheck,
     lastUpdateNotifiedVersion: typeof raw.lastUpdateNotifiedVersion === 'string' &&
       /^\d{1,8}\.\d{1,8}\.\d{1,8}$/.test(raw.lastUpdateNotifiedVersion) ? raw.lastUpdateNotifiedVersion : '',

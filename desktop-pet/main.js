@@ -1,5 +1,6 @@
 const { createCodexIconPreference } = require('./lib/codex-icon-preference');
 const { settingsEntries, findSettingsAction } = require('./lib/global-settings');
+const { createFeedbackReporting } = require('./lib/feedback-reporting');
 const fs = require('node:fs');
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
@@ -107,8 +108,8 @@ function weatherDialogue(event) {
 let weatherWindow = null;
 const APP_NAME = '球球桌宠';
 const ACCEPTANCE_KIND = require('../package.json').qiuqiuAcceptance;
-const IS_ACCEPTANCE = ['zcode', 'combined', 'weather'].includes(ACCEPTANCE_KIND);
-const ACCEPTANCE_NAME = ACCEPTANCE_KIND === 'weather' ? '球球桌宠-天气验收' : ACCEPTANCE_KIND === 'combined' ? '球球桌宠-联动整合验收' : '球球桌宠-ZCode验收';
+const IS_ACCEPTANCE = ['zcode', 'combined', 'weather', 'feedback'].includes(ACCEPTANCE_KIND);
+const ACCEPTANCE_NAME = ACCEPTANCE_KIND === 'feedback' ? '球球桌宠-反馈验收' : ACCEPTANCE_KIND === 'weather' ? '球球桌宠-天气验收' : ACCEPTANCE_KIND === 'combined' ? '球球桌宠-联动整合验收' : '球球桌宠-ZCode验收';
 const APP_WEBSITE = 'https://qiuqiu.pet/';
 const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const IS_SMOKE_TEST = process.env.PET_SMOKE_TEST === '1';
@@ -125,6 +126,7 @@ let petMenuToken = 0;
 let tray = null;
 let settings = null;
 let settingsFile = null;
+let feedbackReporting = null;
 let codexPets = null, localPetStore = null, localPetImportBusy = false, localPetImportSession = null;
 let dragState = null;
 let bounceState = null;
@@ -231,12 +233,32 @@ if (IS_ACCEPTANCE && !IS_SMOKE_TEST) {
 }
 const colorModes = createColorModeManager({ getMode: () => settings?.colorMode,
   getAppearance: () => settings?.codexQuotaAppearance, getTheme: () => settings?.uiTheme });
-app.on('browser-window-created', (_event, win) => colorModes.track(win));
+app.on('browser-window-created', (_event, win) => {
+  colorModes.track(win);
+  const capture = (scope, code) => {
+    if (!isQuitting) { try { feedbackReporting?.capture(scope, { code }); } catch (_) {} }
+  };
+  win.on('unresponsive', () => capture('窗口无响应', 'WINDOW_UNRESPONSIVE'));
+  win.webContents.on('render-process-gone', (_event, details) => {
+    if (['crashed', 'oom', 'abnormal-exit', 'integrity-failure'].includes(details?.reason)) capture('窗口崩溃', 'RENDER_PROCESS_GONE');
+  });
+  win.webContents.on('did-fail-load', (_event, code, _description, _url, isMainFrame) => {
+    if (isMainFrame && code !== -3) capture('页面加载失败', 'PAGE_LOAD_FAILED');
+  });
+  // Console contents can contain chat text or keys; report only a fixed error category.
+  win.webContents.on('console-message', event => {
+    if (event.level === 'error') capture('页面脚本错误', 'RENDERER_ERROR');
+  });
+});
+process.on('uncaughtExceptionMonitor', (error, origin) => {
+  try { feedbackReporting?.capture(origin === 'unhandledRejection' ? '未处理异步错误' : '主进程异常', error); } catch (_) {}
+});
 
 function writeError(scope, error) {
   const message = error instanceof Error ? error.stack || error.message : String(error);
   const line = `[${new Date().toISOString()}] ${scope}: ${message}\n`;
   process.stderr.write(line);
+  if (!isQuitting) { try { feedbackReporting?.capture(scope, error); } catch (_) {} }
   try {
     const logFile = path.join(app.getPath('userData'), 'errors.log');
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
@@ -440,7 +462,7 @@ function globalSettingsSnapshot() {
     tasks: { active: tasks ? tasks.filter(item => item.state === 'active').length : null,
       waiting: tasks ? tasks.filter(item => item.state === 'waiting').length : null },
     taskActionId: '/codex-menu/codex-tasks-open' };
-  return { quotaCards: quotaCardConfig(), petSleepState: petWindow && !petWindow.isDestroyed() ? petSleepState : 'unknown', codexIconPreference: codexIconPreference?.getPreference() || 'codex-system', codexIconDark: codexIconSystemDark(), codexStatus, version: app.getVersion(), entries: settingsEntries(settingsCommandTemplate()),
+  return { feedback: feedbackReporting ? { ...feedbackReporting.getState(), context: feedbackReporting.context() } : null, quotaCards: quotaCardConfig(), petSleepState: petWindow && !petWindow.isDestroyed() ? petSleepState : 'unknown', codexIconPreference: codexIconPreference?.getPreference() || 'codex-system', codexIconDark: codexIconSystemDark(), codexStatus, version: app.getVersion(), entries: settingsEntries(settingsCommandTemplate()),
     shortcuts: shortcutRegistrar?.getConfig(), initialView: globalSettingsInitialView,
     summary: [
       { label: '球球状态', value: edgeTuck?.getPresentation().mode === 'hidden' ? '暂时隐藏' : '陪伴中' },
@@ -458,7 +480,7 @@ function fromGlobalSettings(event, requireVisible = true) {
 }
 
 function openGlobalSettings(view) {
-  const target = ['shortcuts', 'quota-cards', '/api-balance-menu'].includes(view) ? view : null;
+  const target = ['shortcuts', 'quota-cards', '/api-balance-menu', 'feedback'].includes(view) ? view : null;
   if (isQuitting || screenLocked) return;
   if (globalSettingsWindow && !globalSettingsWindow.isDestroyed()) {
     globalSettingsWindow.show(); globalSettingsWindow.focus();
@@ -472,6 +494,15 @@ function openGlobalSettings(view) {
       contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false }
   });
   globalSettingsWindow = win;
+  let confirmingClose = false;
+  win.webContents.on('will-prevent-unload', () => {
+    if (confirmingClose || isQuitting || win.isDestroyed()) return;
+    confirmingClose = true;
+    void dialog.showMessageBox(win, { type: 'question', title: '关闭设置中心？', message: '反馈还未确认提交',
+      detail: '关闭会丢失本次填写的内容。', buttons: ['继续编辑', '放弃并关闭'], defaultId: 0, cancelId: 0 })
+      .then(({ response }) => { if (response === 1 && !win.isDestroyed()) win.destroy(); })
+      .catch(() => {}).finally(() => { confirmingClose = false; });
+  });
   win.on('blur', () => shortcutRegistrar?.setRecording(false));
   win.on('hide', () => shortcutRegistrar?.setRecording(false));
   win.webContents.on('render-process-gone', () => shortcutRegistrar?.setRecording(false));
@@ -2343,6 +2374,7 @@ function menuTemplate() {
   return [
     ...(availableUpdate ? [updateEntry, { type: 'separator' }] : []),
     { id: 'global-settings', label: '设置中心', accelerator: 'CommandOrControl+,', click: openGlobalSettings },
+    { id: 'feedback-open', label: '意见反馈', click: () => openGlobalSettings('feedback') },
     { id: 'chat-open', label: '和球球聊聊', click: openChat },
     { id: 'workbuddy-enabled', label: '启用 WorkBuddy 联动', type: 'checkbox', checked: settings.workbuddyEnabled,
       click: item => { void setWorkBuddyEnabled(item.checked); } },
@@ -2458,7 +2490,7 @@ function compactMenuTemplate() {
     notes && { ...notes, label: '便签与待办' }, find('pomodoro-open'),
     { type: 'separator' }, codexEnabled, zcodeLink?.menu().submenu[0], find('workbuddy-enabled'),
     { id: 'quota-cards-settings', label: '联动样式管理', click: () => openGlobalSettings('quota-cards') },
-    { type: 'separator' }, find('global-settings'), find('about-open'), find('update-check'),
+    { type: 'separator' }, find('global-settings'), find('feedback-open'), find('about-open'), find('update-check'),
     { type: 'separator' }, items.find(item => item.label === '退出球球')].filter(Boolean);
 }
 
@@ -3273,6 +3305,23 @@ function createPetWindow() {
 }
 
 function registerIpc() {
+  ipcMain.handle('pet:feedback-submit', async (event, value) => {
+    if (!fromGlobalSettings(event) || !feedbackReporting) return { error: '请重新打开意见反馈后再试。' };
+    try { return await feedbackReporting.submit(value); }
+    catch (error) { return { error: error.message || '提交未完成，请稍后重试。' }; }
+  });
+  ipcMain.handle('pet:feedback-auto-report', (event, value) => {
+    if (!fromGlobalSettings(event) || typeof value !== 'boolean' || !feedbackReporting) return { ok: false };
+    try {
+      settings = saveSettings(settingsFile, { ...settings, autoReportErrors: value });
+      feedbackReporting.setEnabled(value);
+      if (feedbackReporting.getState().enabled !== value) {
+        settings = saveSettings(settingsFile, { ...settings, autoReportErrors: false });
+        return { ok: false };
+      }
+      return { ok: true, state: { ...feedbackReporting.getState(), context: feedbackReporting.context() } };
+    } catch (_) { return { ok: false }; }
+  });
   ipcMain.handle('pet:global-quota-cards-save',(event,value)=>{
     if(!fromGlobalSettings(event))return {ok:false};
     const config=normalizeQuotaCards(value);
@@ -3782,6 +3831,9 @@ async function bootstrap() {
     }
   });
   settings = loadSettings(settingsFile);
+  feedbackReporting = createFeedbackReporting({ directory: path.join(app.getPath('userData'), 'diagnostics'),
+    version: app.getVersion(), enabled: !IS_SMOKE_TEST && settings.autoReportErrors === true,
+    fetch: (...args) => net.fetch(...args) });
   if (ACCEPTANCE_KIND === 'weather' && !fs.existsSync(settingsFile)) {
     const cloud = normalizeAppearance({ ...settings.customization.appearance, shape: 'cloud', bodyColor: '#5B3BC7', eyeColor: '#FFFFFF' });
     settings.customization.appearance = cloud; settings.startupAppearance = cloud;
@@ -4231,6 +4283,7 @@ if (!hasSingleInstanceLock) {
     workbuddyDetails?.destroy();
     safelyInvokeWindow('退出时快捷入口清理', () => { shortcutWindow?.dispose(); shortcutRegistrar?.dispose(); });
     safelyInvokeWindow('退出时番茄钟窗口销毁', () => pomodoroWindows?.close());
+    feedbackReporting?.dispose();
     safelyInvokeWindow('退出时全局设置销毁', () => globalSettingsWindow?.destroy());
     safelyInvokeWindow('退出时关于窗口销毁', () => aboutWindow?.destroy());
     let chatClosing;

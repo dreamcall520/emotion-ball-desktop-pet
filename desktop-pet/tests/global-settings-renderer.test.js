@@ -80,7 +80,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("document.querySelector('[data-codex-tab=codex]').dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true}))");
     assert.equal(await run("document.activeElement.dataset.codexTab"),'api');
 
-    assert.equal(await run("[...document.querySelectorAll('.nav-group')].find(n=>n.textContent.includes('快捷与常规')).querySelectorAll('button').length"), 2);
+    assert.equal(await run("[...document.querySelectorAll('.nav-group')].find(n=>n.textContent.includes('快捷与常规')).querySelectorAll('button').length"), 3);
     await run("[...document.querySelectorAll('#navigation button')].find(n=>n.textContent==='Codex').click()");
     assert.deepEqual(await run("[...document.querySelectorAll('#content > section > h3')].map(n=>n.textContent)"), ['启用联动', '任务提醒', '额度显示', '额度趣味互动', '额度与任务信息']);
     assert.equal(await run(`document.querySelectorAll('[data-action="${taskId}"]').length`), 1);
