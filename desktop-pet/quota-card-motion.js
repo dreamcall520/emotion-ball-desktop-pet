@@ -42,7 +42,23 @@
   const bridge=window.petQuotaLabel||window.qiuqiuApiUsageLabel||window.qiuqiuWorkBuddyLabel||window.qiuqiuApiBalanceLabel;
   const element=document.getElementById('quota-beam');
   if(!element||!bridge?.onMotion)return;
+  // Native focus restoration is not keyboard navigation. A drag starts in the
+  // separate, non-focusable pet window, so its pointer reset must reach every card.
+  const pointerMode=()=>{document.documentElement.dataset.keyboard='false';};
+  const keyboardMode=event=>{
+    if(['Tab','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End','Enter','Escape',' '].includes(event.key))document.documentElement.dataset.keyboard='true';
+  };
+  pointerMode();
+  document.addEventListener('keydown',keyboardMode,true);
+  document.addEventListener('pointerdown',pointerMode,true);
+  window.addEventListener('blur',pointerMode);
+  const removePointer=bridge.onPointerReset?.(pointerMode);
   const motion=createQuotaCardMotion(element,window.matchMedia?.('(prefers-reduced-motion: reduce)'));
   const remove=bridge.onMotion(motion.update);
-  window.addEventListener('beforeunload',()=>{remove?.();motion.destroy();},{once:true});
+  window.addEventListener('beforeunload',()=>{
+    remove?.();removePointer?.();motion.destroy();
+    document.removeEventListener('keydown',keyboardMode,true);
+    document.removeEventListener('pointerdown',pointerMode,true);
+    window.removeEventListener('blur',pointerMode);
+  },{once:true});
 })();
