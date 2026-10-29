@@ -17,7 +17,7 @@ function fixture() {
 }
 const report = { total: 7399.91, basic: 500, reward: 6899.91, purchased: 0, plan: '体验版', nextRefreshAt: 20, updatedAt: 10,
   expires: [{ amount: 100, at: 30 }, { amount: 20, at: 30 }, { amount: 6000, at: 40 }] };
-test('card preserves precise balance, zero, no connection and expired report states', () => {
+test('card preserves precise balance, zero, no connection and stale report states', () => {
   const { elements: e, render } = fixture();
   render({ report, expanded: true, appearance: 'dark' });
   assert.equal(e.get('expanded-total').textContent, '7,399.91');
@@ -29,8 +29,8 @@ test('card preserves precise balance, zero, no connection and expired report sta
   assert.doesNotMatch(e.get('expiry').title, /6,120/);
   render({ report: { ...report, total: 0 }, stale: true, expanded: true });
   assert.equal(e.get('expanded-total').textContent, '0');
-  assert.equal(e.get('period').textContent, '失效');
-  assert.match(e.get('expanded-total').title, /旧数据已失效/);
+  assert.equal(e.get('period').textContent, '待更新');
+  assert.match(e.get('expanded-total').title, /上次成功查询/);
   render({ report: null, error: '更新失败', expanded: true });
   assert.equal(e.get('period').textContent, '未连接');
   assert.equal(e.get('balance-state').textContent, '未连接');
@@ -38,6 +38,19 @@ test('card preserves precise balance, zero, no connection and expired report sta
   assert.equal(e.get('expanded-total').textContent, '—');
   render({ report: null, spaceError: true });
   assert.match(e.get('toggle').title, /空间不足/);
+});
+test('busy takes priority over stale data, while login errors and retry time stay explicit', () => {
+  const { elements: e, document, render } = fixture();
+  render({ report, stale: true, busy: true, error: '暂未更新', nextRetryAt: 20000 });
+  assert.equal(e.get('period').textContent, '查询中'); assert.equal(e.get('balance-state').textContent, '查询中');
+  assert.equal(document.body.dataset.invalid, 'false'); assert.equal(e.get('refresh').disabled, true);
+  assert.match(e.get('toggle').title, /正在更新/);
+  render({ report, stale: true, error: '连接暂未恢复', errorCode: 'TIMEOUT', nextRetryAt: 20000 });
+  assert.equal(e.get('period').textContent, '待更新'); assert.match(e.get('expanded-header').title, /下次重试/);
+  assert.doesNotMatch(e.get('expanded-header').title, /每5分钟/);
+  render({ report: null, error: '请在 WorkBuddy 中重新登录', errorCode: 'LOGIN_REQUIRED' });
+  assert.equal(e.get('period').textContent, '需登录'); assert.equal(e.get('balance-state').textContent, '需登录');
+  assert.match(e.get('toggle').title, /重新登录/);
 });
 test('card delegates trend and refresh actions, keeps keyboard focus distinct and follows theme', () => {
   const { elements: e, events, calls, document, render, colorMode } = fixture();

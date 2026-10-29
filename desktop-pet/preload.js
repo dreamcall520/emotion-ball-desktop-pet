@@ -1,4 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
+// Chromium's online event is only a recovery hint; the quota request verifies actual service access.
+if (typeof window !== 'undefined') window.addEventListener('online', () => ipcRenderer.send('pet:network-online'));
 // sandbox 预加载不加载本地模块，只暴露固定的动作名称与数据字段。
 const motionIds = new Set(['hop', 'jelly', 'sway', 'peek', 'bow', 'spin']);
 const auroraClickIds = new Set(['dizzy', 'turn']);

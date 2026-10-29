@@ -13,7 +13,7 @@ const UPDATE_INSTALLER = { name: 'Qiuqiu-0.3.26-macOS-arm64.dmg',
 async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], codexEnabled = false, codexTaskNameInAlerts = false,
   codexQuotaAlwaysVisible = false, codexQuotaPeriod = 'auto', codexQuotaLabelSize = 'standard',
   codexQuotaAppearance = 'system', codexShowExtraCredits = true, bubblesEnabled = true, colorMode = 'standard', uiTheme = 'green',
-  consent = async () => ({ response: 1 }), consentReady = true, openExternal = async () => {}, saveError = null,
+  consent = async () => ({ response: 1 }), consentReady = true, openExternal = async () => {}, saveError = null, networkOnline = true,
   download = async (_contents, _installer, { onProgress }) => {
     onProgress({ state: 'downloading', percent: 100 });
     return { state: 'completed', path: '/fixture/Qiuqiu.dmg' };
@@ -38,6 +38,10 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
   const trayMenus = [];
   const updateChecks = [];
   const downloads = [], revealed = [], consents = [];
+  const workbuddyRecoveries = [];
+  const scheduleService = (callback, delay) => { const id = ++serial; timers.set(id, { callback, at: now + delay }); return id; };
+  const cancelService = id => timers.delete(id);
+  const net = { isOnline: () => networkOnline };
   const app = Object.assign(new EventEmitter(), { quitCalls: 0, setName() {}, getPath: () => '/fixture',
     requestSingleInstanceLock: () => true, whenReady: () => Promise.resolve(), setActivationPolicy() {}, getVersion: () => '0.3.25',
     quit() { this.quitCalls++; }, exit(code) { throw new Error(`unexpected exit ${code}`); } });
@@ -207,7 +211,7 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
     setTimeout(callback, delay) { timers.set(++serial, { callback, at: now + delay }); return serial; },
     clearTimeout(id) { timers.delete(id); },
     require(name) {
-      if (name === 'electron') return { app, ipcMain, powerMonitor, nativeTheme, screen, globalShortcut, BrowserWindow: NativeWindow, Tray,
+      if (name === 'electron') return { app, ipcMain, powerMonitor, nativeTheme, screen, globalShortcut, BrowserWindow: NativeWindow, Tray, net,
         dialog: { showMessageBox: (...args) => { dialogs.push(args); return consent(...args); } },
         shell: { openExternal: url => { external.push(url); return openExternal(url); }, showItemInFolder: file => revealed.push(file) },
         Menu: { buildFromTemplate: value => Object.assign(value, { popup: options => popups.push({ value, options }) }) }, nativeImage: { createFromPath: () => ({ setTemplateImage() {} }) } };
@@ -274,6 +278,13 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
       } };
       if (name === './lib/workbuddy-consent-window') return { createWorkBuddyConsent: () => ({request: async () => workbuddyConsentAnswer, cancel() {}, close() {}, isPending:()=>false, getWindow:()=>null}) };
       if (name === './lib/workbuddy-client') return { runWorkBuddy };
+      if (name === './lib/workbuddy-quota') return { createWorkBuddyQuota: options => {
+        const service = realRequire(name).createWorkBuddyQuota({ ...options, historyFile: undefined, watchAuth: () => () => {},
+          now: () => 1800000000000 + now, schedule: scheduleService, cancel: cancelService });
+        const recover = service.recover;
+        service.recover = reason => { workbuddyRecoveries.push(reason); return recover(reason); };
+        return service;
+      } };
       if (name === './lib/workbuddy-label-window') return { ...realRequire(name), createWorkBuddyLabelWindow: options => ({
         options, show(state) { this.visible = true; this.state = state; }, hide() { this.visible = false; }, reposition() {}, setAlwaysOnTop() {}, destroy() {}, getWindow: () => null
       }) };
@@ -292,7 +303,8 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
   pet.emit('ready-to-show');
   pet.webContents.emit('did-finish-load');
   return { groupTransition, pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, downloads, revealed, consents, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
-    iconPreference, workbuddyCalls, workbuddyRecords, notes, pomodoro, pomodoroWindows, nativeTheme, call: expression => vm.runInContext(expression, context),
+    iconPreference, workbuddyCalls, workbuddyRecords, workbuddyRecoveries, setOnline(value) { networkOnline = value; },
+    notes, pomodoro, pomodoroWindows, nativeTheme, call: expression => vm.runInContext(expression, context),
     pressShortcut(accelerator) { if (!shortcutsSuspended) shortcutCallbacks.get(accelerator)?.(); },
     invoke(channel, packet, sender = pet.webContents, ...args) {
       assert.ok(ipcHandlers.has(channel), `${channel} handler must be registered`);
@@ -4208,4 +4220,23 @@ test('main shared layout keeps an inline-expanded source alive after the whole s
   f.call(`inlineExpandedId='${id}';syncQuotaFreeStack()`);assert.equal(f.call('quotaFreeStackPlan().placement'),'above');f.advanceTo(720);assert.equal(f.call('quotaCardGroup.getState().expanded'),true,'old click survives more than 220ms');
   const next=f.call(`quotaFreeStackPlan().cards.${id}.face`);cursor={x:next.x+10,y:next.y+10};f.advanceTo(1040);assert.equal(f.call('quotaCardGroup.getState().expanded'),true,'user reaches resized card');cursor={x:-799,y:599};f.advanceTo(1440);assert.equal(f.call('quotaCardGroup.getState().expanded'),false,'leaving bridge and real cards retains ordinary auto collection');
  }
+});
+
+test('网络恢复只接受主宠物可信事件，WorkBuddy合并重复online并在resume后刷新',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));
+ await f.call('setWorkBuddyEnabled(true)');await flush();
+ const quotaCount=()=>f.workbuddyCalls.filter(row=>row.operation==='quota').length;
+ assert.equal(quotaCount(),1);
+ f.call("ipcMain.emit('pet:network-online',{sender:{},senderFrame:{}});ipcMain.emit('pet:network-online',{sender:petWindow.webContents,senderFrame:{}})");
+ assert.deepEqual(f.workbuddyRecoveries,[]);
+ f.setOnline(false);f.send('pet:network-online');assert.deepEqual(f.workbuddyRecoveries,[]);
+ f.setOnline(true);f.send('pet:network-online');f.send('pet:network-online');
+ assert.deepEqual(f.workbuddyRecoveries,['online','online']);
+ f.advanceTo(499);await flush();assert.equal(quotaCount(),1);
+ f.advanceTo(500);await flush();assert.equal(quotaCount(),2);
+ f.powerMonitor.emit('suspend');f.powerMonitor.emit('resume');assert.equal(f.workbuddyRecoveries.at(-1),'resume');
+ f.advanceTo(2500);await flush();assert.equal(quotaCount(),3);
+ await f.call('setWorkBuddyEnabled(false)');
+ f.send('pet:network-online');f.powerMonitor.emit('resume');f.advanceTo(10000);await flush();
+ assert.equal(quotaCount(),3);
 });

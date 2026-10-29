@@ -4,6 +4,7 @@ const { createNativeWindowFade } = require('./native-window-fade');
 const path = require('node:path');
 const { quotaLabelSize } = require('./quota-label-placement');
 const { createWorkBuddyGuardEntryWindow } = require('./workbuddy-guard-entry-window');
+const { errorCode, errorMessage } = require('./workbuddy-quota-status');
 const CHANNEL = 'pet:workbuddy-label';
 const valid = b => b && ['x', 'y', 'width', 'height'].every(k => Number.isFinite(b[k])) && b.width > 0 && b.height > 0;
 const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
@@ -64,8 +65,10 @@ function safeState(state) {
       return [sample.at, clean];
     })).values()].sort((a, b) => a.at - b.at).slice(-6000) : [];
   // Only fixed status text crosses IPC; upstream errors can contain credentials.
+  const code = state?.error ? errorCode(state.errorCode) : null;
   return { enabled: state?.enabled === true, busy: state?.busy === true,
-    error: state?.error ? '更新失败，请稍后重试' : null, stale: state?.stale === true, report, history, historyError: state?.historyError ? '趋势记录暂未保存' : null,
+    error: code ? errorMessage(code) : null, errorCode: code, nextRetryAt: code ? date(state.nextRetryAt) : null,
+    stale: state?.stale === true, report, history, historyError: state?.historyError ? '趋势记录暂未保存' : null,
     activity: { runningCount: Number.isSafeInteger(state?.activity?.runningCount) && state.activity.runningCount >= 0 ? state.activity.runningCount : null,
       unreadCount: Number.isSafeInteger(state?.activity?.unreadCount) && state.activity.unreadCount >= 0 ? state.activity.unreadCount : null, scope: '本机已同步任务' } };
 }

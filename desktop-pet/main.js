@@ -14,6 +14,7 @@ const {
   Menu,
   nativeImage,
   nativeTheme,
+  net,
   systemPreferences,
   powerMonitor,
   safeStorage,
@@ -130,6 +131,7 @@ let codexThreadOpener = url => shell.openExternal(url);
 let chat = null;
 let workbuddyChat = null;
 let workbuddyQuota = null;
+let workbuddyDiagnosticKey = '';
 let workbuddyLabel = null;
 let workbuddyDetails = null;
 let workbuddyConsent = null;
@@ -3373,6 +3375,11 @@ function registerIpc() {
     return setChatProvider(source);
   });
   ipcMain.on('pet:chat-close', event => { if (fromChatWindow(event)) chatWindow.hide(); });
+  ipcMain.on('pet:network-online', event => {
+    if (!isQuitting && fromPetWindow(event) && event.senderFrame === event.sender.mainFrame && net.isOnline()) {
+      workbuddyQuota?.recover('online');
+    }
+  });
   ipcMain.on('pet:sleep-state', (event, state) => {
     if (fromPetWindow(event) && event.senderFrame === event.sender.mainFrame && (state === 'awake' || state === 'sleep')) setPetSleepState(state);
   });
@@ -3734,6 +3741,9 @@ async function bootstrap() {
   workbuddyTasks = createWorkBuddyTasks({ run: workbuddyRun, stateFile: path.join(app.getPath('userData'), 'workbuddy-task-state.json'), getAccountKey: () => workbuddyQuota?.getState().accountKey,
     onChange: () => { syncWorkBuddyLabel(); workbuddyDetails?.update(workBuddyDetailsState()); } });
   workbuddyQuota = createWorkBuddyQuota({ run: workbuddyRun, historyFile: path.join(app.getPath('userData'), 'workbuddy-quota-history.json'), onChange: state => {
+    const diagnostic = state.errorCode ? JSON.stringify({ code: require('./lib/workbuddy-quota-status').errorCode(state.errorCode), nextRetryAt: Number.isSafeInteger(state.nextRetryAt) ? state.nextRetryAt : null }) : '';
+    if (diagnostic && diagnostic !== workbuddyDiagnosticKey) writeError('WorkBuddy 积分查询', diagnostic);
+    workbuddyDiagnosticKey = diagnostic;
     workbuddyTasks.setEnabled(state.enabled); workbuddyUsage.setEnabled(state.enabled); syncWorkBuddyLabel(); workbuddyDetails?.update(workBuddyDetailsState());
     if (state.enabled && !state.busy && !state.error && state.report) { void workbuddyTasks.refresh(false); void workbuddyUsage.refresh(false); }
   } });
@@ -3978,7 +3988,7 @@ async function bootstrap() {
   powerMonitor.on('lock-screen', () => powerGuard.setLocked(true));
   powerMonitor.on('suspend', () => powerGuard.setSuspended(true));
   powerMonitor.on('unlock-screen', () => powerGuard.setLocked(false));
-  powerMonitor.on('resume', () => powerGuard.setSuspended(false));
+  powerMonitor.on('resume', () => { powerGuard.setSuspended(false); workbuddyQuota?.recover('resume'); });
   registerIpc();
   registerDisplayRecovery();
   initializeCodexCompanion();

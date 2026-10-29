@@ -110,7 +110,7 @@ test('quota retains stale results only for transient errors and clears on login/
     schedule: (fn, delay) => { timers.push(delay); return fn; }, cancel: () => {} });
   quota.setEnabled(true); await tick(); outcome = Object.assign(new Error('private diagnostic'), { code: 'CONNECTION_FAILED' });
   await quota.refresh(); assert.equal(quota.getState().stale, true); assert.equal(quota.getState().report.total, 7400); assert(!quota.getState().error.includes('private'));
-  await quota.refresh(); assert.equal(timers.at(-1), 600000);
+  await quota.refresh(); assert.equal(timers.at(-1), 45000);
   outcome = Object.assign(new Error(), { code: 'CONNECTION_FAILED', accountKey: 'b'.repeat(64) });
   await quota.refresh(); assert.equal(quota.getState().report, null); assert.equal(quota.getState().accountKey, null);
   outcome = Object.assign(new Error(), { code: 'ACCOUNT_CHANGED' }); await quota.refresh(); assert.equal(quota.getState().report, null); quota.close();
