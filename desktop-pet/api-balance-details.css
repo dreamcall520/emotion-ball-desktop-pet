@@ -1,0 +1,22 @@
+#details-panel { height: auto; min-height: 363px; }
+.trend-stats { grid-template-columns: 1fr 1fr; }
+.trend-stats p { min-width: 0; }
+.trend-stats strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trend-stats strong[data-long="true"] { font-size: 23px; }
+.trend-stats .time-value[data-long="true"] { font-size: 19px; }
+.chart-meta { gap: 6px; }
+.chart-actions { gap: 5px; height: 22px; }
+.chart-updated { white-space: nowrap; }
+.chart-wrap { position: relative; }
+#balance-chart { height: 144px; -webkit-app-region: no-drag; touch-action: none; outline: 0; }
+:root[data-input-mode="keyboard"] #balance-chart:focus { outline: 1px solid var(--detail-blue); outline-offset: 1px; border-radius: 4px; }
+#balance-chart .point { opacity: 1; }
+#balance-chart .value { fill: var(--detail-ink); font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; }
+#balance-chart .observed-line { stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+#empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+#record { height: 13px; margin: 0; text-align: right; font-size: 10px; line-height: 13px; color: var(--detail-subtle); font-variant-numeric: tabular-nums; }
+.panel-bottom { margin-top: 10px; padding-top: 9px; font-size: 10px; white-space: nowrap; }
+#account { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.chart-help-body { box-sizing: border-box; width: 260px; max-width: calc(100vw - 44px); color: var(--detail-ink); font-size: 12px; line-height: 1.6; }
+.chart-help-body li + li { margin-top: 6px; }
+@media (max-width: 350px) { .chart-actions { gap: 3px; } .chart-updated,.chart-status,.trend-tabs button { font-size: 10px; } .trend-tabs button { padding-inline: 5px; } }

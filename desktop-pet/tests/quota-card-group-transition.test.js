@@ -51,6 +51,17 @@ test('destroy invalidates pending work and releases only its own windows',async(
 test('union includes the bar endpoint and rejects invalid or unbounded geometry',()=>{
  assert.deepEqual(unionBounds([{x:20,y:40,width:128,height:150},{x:70,y:12.5,width:26,height:7}]),{x:20,y:12,width:128,height:178});assert.throws(()=>unionBounds([{x:0,y:0,width:9000,height:10}]));
 });
+test('第五张余额卡参加同一次进出动画，固定余额卡不被捕获或遮罩',async()=>{
+ for(const pinned of [false,true]) {
+  const f=fixture(),modes=[];let captures=0;
+  f.cards.push({id:'balance',pinned,controller:{setGroupTransitionMode:mode=>modes.push(mode),async captureGroupTransitionFrames(){captures++;return[{bounds:{x:10,y:110,width:196,height:194},png}]}}});
+  const entry=f.request();await flush();assert.equal(f.overlay.prepares[0].layers.length,pinned?2:3);
+  assert.equal(captures,pinned?0:1);if(!pinned)assert.equal(modes.at(-1),'masked');else assert.deepEqual(modes,[]);
+  f.overlay.finish();assert.equal((await entry).ok,true);if(!pinned)assert.equal(modes.at(-1),null);
+  const exit=f.request({expanded:false});await flush();f.overlay.finish();assert.equal((await exit).ok,true);
+  assert.equal(captures,pinned?0:2);if(pinned)assert.deepEqual(modes,[]);else assert.equal(modes.at(-1),null);f.controller.destroy();
+ }
+});
 test('context changes after animation started release overlay and all masks',async()=>{
  const f=fixture(),work=f.request();await flush();f.setActive(false);f.overlay.finish();await work;assert.equal(f.controller.isActive(),false);assert.equal(f.cards[0].controller.modes.at(-1),null);assert.equal(f.settled.at(-1).canceled,true);
 });
@@ -66,4 +77,74 @@ test('synchronous safety cancellation from a controller mode cannot latch remain
  const f=fixture();let interrupted=false;const original=f.cards[0].controller.setGroupTransitionMode;
  f.cards[0].controller.setGroupTransitionMode=function(mode){original.call(this,mode);if(mode==='stage'&&!interrupted){interrupted=true;f.controller.cancel()}};
  assert.equal((await f.request()).ok,false);assert.equal(f.controller.isActive(),false);assert.equal(f.overlay.prepares.length,0);assert(f.cards.every(row=>row.controller.modes.at(-1)===null));
+});
+
+function fixedCard(id,trace=[]){
+ return {id,controller:{modes:[],setGroupTransitionMode(mode){this.modes.push(mode);trace.push(`${id}:${mode}`)},captureGroupTransitionFrames(){throw Error('fixed cards must not be captured')}}};
+}
+test('fixed cards keep their old layout through delayed capture and preparation, then move only after the overlay is visible',async()=>{
+ const f=fixture(),pin=fixedCard('balance',f.trace),capture=deferred(),prepared=deferred();let painted='collapsed',desired=painted;
+ const setMode=pin.controller.setGroupTransitionMode;
+ pin.controller.setGroupTransitionMode=function(mode){setMode.call(this,mode);if(mode===null)painted=desired;};
+ f.cards[0].controller.captureGroupTransitionFrames=()=>capture.promise;
+ const prepare=f.overlay.prepare;f.overlay.prepare=async value=>{await prepared.promise;await prepare(value)};
+ const work=f.request({pinnedCards:[pin],prepare(){desired='expanded';if(pin.controller.modes.at(-1)!=='hold')painted=desired;f.trace.push('sync')}});
+ assert.equal(painted,'collapsed');assert.equal(pin.controller.modes.at(-1),'hold');
+ assert(f.trace.indexOf('balance:hold')<f.trace.indexOf('sync'));
+ capture.resolve([{bounds:{x:10,y:30,width:128,height:32},png}]);await flush();
+ assert.equal(painted,'collapsed');assert(!f.trace.includes('overlay-show'));
+ prepared.resolve();await flush();
+ assert.equal(painted,'expanded');assert(f.trace.indexOf('overlay-show')<f.trace.indexOf('balance:null'));
+ assert.equal(f.overlay.prepares[0].layers.length,2);assert.deepEqual(pin.controller.modes,['hold',null]);
+ f.overlay.finish();assert.equal((await work).ok,true);assert.deepEqual(pin.controller.modes,['hold',null]);
+});
+test('fixed cards remain held throughout exit so they cannot move into outgoing snapshots',async()=>{
+ const f=fixture(),pin=fixedCard('balance',f.trace);
+ const work=f.request({expanded:false,pinnedCards:[pin]});await flush();
+ assert(f.trace.includes('overlay-show'));assert.deepEqual(pin.controller.modes,['hold']);
+ f.overlay.finish();assert.equal((await work).ok,true);assert.deepEqual(pin.controller.modes,['hold',null]);
+ assert(f.trace.indexOf('balance:null')<f.trace.lastIndexOf('overlay-hide'));
+});
+test('rapid reversal reuses snapshots while fixed-card holds follow the latest direction only',async()=>{
+ const f=fixture(),pin=fixedCard('balance');
+ const entry=f.request({pinnedCards:[pin]});await flush();assert.equal(pin.controller.modes.at(-1),null);
+ const exit=f.request({expanded:false,pinnedCards:[pin]});await flush();assert.equal(pin.controller.modes.at(-1),'hold');
+ const reopening=f.request({pinnedCards:[pin]});await flush();assert.equal(pin.controller.modes.at(-1),null);
+ const modes=[...pin.controller.modes];assert.equal((await f.request({pinnedCards:[pin]})).pending,true);assert.deepEqual(pin.controller.modes,modes);
+ assert.equal(f.overlay.prepares.length,1);assert.deepEqual(f.cards.map(row=>row.controller.captures),[1,1]);
+ f.overlay.finish();await Promise.all([entry,exit,reopening]);
+ assert.equal(f.settled.length,1);assert.equal(f.settled[0].expanded,true);assert.equal(pin.controller.modes.at(-1),null);
+});
+test('capture failure, preparation failure and cancellation all release held fixed cards',async()=>{
+ for(const failure of ['capture','prepare','cancel']){
+  const f=fixture(),pin=fixedCard('balance'),capture=deferred();
+  if(failure==='capture')f.cards[0].controller.captureGroupTransitionFrames=async()=>{throw Error('capture failed')};
+  if(failure==='prepare')f.overlay.prepare=async()=>{throw Error('prepare failed')};
+  if(failure==='cancel')f.cards[0].controller.captureGroupTransitionFrames=()=>capture.promise;
+  const work=f.request({pinnedCards:[pin]});
+  if(failure==='cancel'){f.controller.cancel();capture.resolve([{bounds:{x:10,y:30,width:128,height:32},png}]);}
+  assert.equal((await work).ok,false,failure);assert.equal(f.controller.isActive(),false);
+  assert.deepEqual(pin.controller.modes,['hold',null],failure);assert(!f.trace.includes('overlay-show'));
+ }
+});
+test('reversing during capture and reduced motion never leave fixed cards held',async()=>{
+ const f=fixture(),pin=fixedCard('balance'),capture=deferred();f.cards[0].controller.captureGroupTransitionFrames=()=>capture.promise;
+ const entry=f.request({pinnedCards:[pin]});
+ assert.equal((await f.request({expanded:false,pinnedCards:[pin]})).immediate,true);assert.deepEqual(pin.controller.modes,['hold',null]);
+ capture.resolve([{bounds:{x:10,y:30,width:128,height:32},png}]);await entry;assert.equal(f.overlay.prepares.length,0);
+ const reduced=fixture(),fixed=fixedCard('balance');
+ assert.equal((await reduced.request({reducedMotion:true,pinnedCards:[fixed]})).immediate,true);assert.deepEqual(fixed.controller.modes,[]);
+});
+test('cancel cleanup releases old fixed cards without releasing a replacement generation started synchronously',async()=>{
+ const f=fixture(),balance=fixedCard('balance'),workbuddy=fixedCard('workbuddy'),capture=deferred();
+ f.cards[0].controller.captureGroupTransitionFrames=()=>capture.promise;
+ let replace=false,replacement;const setMode=f.cards[0].controller.setGroupTransitionMode;
+ f.cards[0].controller.setGroupTransitionMode=function(mode){setMode.call(this,mode);if(mode===null&&replace){replace=false;replacement=f.request({cards:[f.cards[0]],pinnedCards:[balance]});}};
+ const original=f.request({pinnedCards:[balance,workbuddy]});replace=true;f.controller.cancel();
+ assert.equal(f.controller.isActive(),true);assert.equal(balance.controller.modes.at(-1),'hold');assert.equal(workbuddy.controller.modes.at(-1),null);
+ assert.equal(f.cards[0].controller.modes.at(-1),'stage');assert.equal(f.cards[1].controller.modes.at(-1),null);
+ capture.resolve([{bounds:{x:10,y:30,width:128,height:32},png}]);await flush();
+ assert.equal(balance.controller.modes.at(-1),null);assert.equal(f.cards[0].controller.modes.at(-1),'masked');
+ f.overlay.finish();await Promise.all([original,replacement]);assert.equal(f.controller.isActive(),false);
+ assert.equal(f.cards[0].controller.modes.at(-1),null);assert.equal(f.settled.length,1);
 });

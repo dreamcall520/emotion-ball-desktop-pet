@@ -1,8 +1,8 @@
-const IDS = ['codex', 'api', 'zcode', 'workbuddy'];
+const IDS = ['codex', 'api', 'zcode', 'workbuddy', 'balance'];
 function normalizeQuotaCards(value = {}) {
   if (!value || typeof value !== 'object') value = {};
   const order = [...new Set((Array.isArray(value.order) ? value.order : []).filter(id => IDS.includes(id)))];
-  return { order: order.concat(IDS.filter(id => !order.includes(id))), pinned: IDS.filter(id => Array.isArray(value.pinned) && value.pinned.includes(id)) };
+  return { order: order.concat(IDS.filter(id => !order.includes(id))), pinned: [...new Set((Array.isArray(value.pinned) ? value.pinned : []).filter(id => IDS.includes(id)))] };
 }
 function createQuotaCardGroup({ getState, getCursor, getBounds, onChange, schedule = setTimeout, cancel = clearTimeout, now = Date.now }) {
   let expanded = false, keyboard = false, blocked = false, outsideAt = null, timer = null, stopped = false, previous = '', interactionBridge = null, interactionTargets = [], layoutContext = null;

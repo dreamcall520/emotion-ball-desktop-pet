@@ -82,7 +82,7 @@ function quotaRoleTargetWidth(paintWidth) { return [22,24].includes(paintWidth) 
 function quotaFreeStackBounds(petBounds, workArea, cards, presentation, bubble = null) {
   const peeked = presentation?.mode === 'peeked' && ['left','right'].includes(presentation.side);
   if (presentation?.mode !== 'free' && !peeked) return null;
-  const allowed = ['codex','api','zcode','workbuddy'];
+  const allowed = ['codex','api','zcode','workbuddy','balance'];
   const requested = Array.isArray(presentation.quotaCardOrder) ? presentation.quotaCardOrder : [];
   const ids = [...new Set([...requested.filter(id => allowed.includes(id)), ...allowed])].filter(id => cards?.[id]);
   if (!ids.length) return null;

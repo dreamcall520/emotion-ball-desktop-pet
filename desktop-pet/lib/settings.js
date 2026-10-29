@@ -5,7 +5,7 @@ const { normalizeAppearance, normalizeCustomization, appearanceContentKey } = re
 const { DEFAULT_SHORTCUT_SETTINGS, normalizeShortcutSettings, validateShortcutSettings } = require('./shortcuts');
 const { normalize: normalizeQuotaDisplay } = require('./quota-display');
 
-const QUOTA_CARD_SOURCES = Object.freeze(['codex', 'api', 'zcode', 'workbuddy']);
+const QUOTA_CARD_SOURCES = Object.freeze(['codex', 'api', 'zcode', 'workbuddy', 'balance']);
 function normalizeQuotaCardList(raw, complete = false) {
   const values = Array.isArray(raw) ? raw : [];
   const result = [...new Set(values.filter(value => QUOTA_CARD_SOURCES.includes(value)))];
@@ -35,6 +35,9 @@ const DEFAULTS = Object.freeze({
   workbuddyQuotaAlwaysVisible: true,
   workbuddyQuotaFunEnabled: true,
   workbuddyModel: 'auto',
+  apiBalanceEnabled: false,
+  apiBalanceAlwaysVisible: true,
+  apiBalanceSelectedAccountId: '',
   notesDefaultTab: 'note',
   notesAppearance: 'light',
   shortcutSettings: DEFAULT_SHORTCUT_SETTINGS,
@@ -113,6 +116,9 @@ function normalizeSettings(raw = {}) {
     workbuddyQuotaAlwaysVisible: typeof raw.workbuddyQuotaAlwaysVisible === 'boolean' ? raw.workbuddyQuotaAlwaysVisible : true,
     workbuddyQuotaFunEnabled: typeof raw.workbuddyQuotaFunEnabled === 'boolean' ? raw.workbuddyQuotaFunEnabled : raw.codexQuotaFunEnabled !== false,
     workbuddyModel: normalizeModelSelection(raw.workbuddyModel),
+    apiBalanceEnabled: raw.apiBalanceEnabled === true,
+    apiBalanceAlwaysVisible: raw.apiBalanceAlwaysVisible !== false,
+    apiBalanceSelectedAccountId: typeof raw.apiBalanceSelectedAccountId === 'string' && /^[a-f0-9]{64}$/.test(raw.apiBalanceSelectedAccountId) ? raw.apiBalanceSelectedAccountId : '',
     notesDefaultTab: ['note', 'todo'].includes(raw.notesDefaultTab) ? raw.notesDefaultTab : DEFAULTS.notesDefaultTab,
     notesAppearance: ['system', 'light', 'dark'].includes(raw.notesAppearance) ? raw.notesAppearance : DEFAULTS.notesAppearance,
     shortcutSettings: normalizeShortcutSettings(raw.shortcutSettings),

@@ -13,3 +13,5 @@
 | `workbuddy.png` | `/Applications/WorkBuddy.app/Contents/Resources/icon.icns`，经 `iconutil -c iconset` 取原生 `icon_512x512.png` | 512×512 |
 
 转换使用 macOS `sips -z 256 256`。`codex-default.png` 是 Codex 应用默认样式，`openai.png` 是 API 来源标识，两者按当前官方原资源导出，不代表共享账号、数据或额度。
+
+2026-10-26：`kimi.png` 直接取自已安装 ZCode 的 `app.asar/out/renderer/assets/model-provider-moonshot-kimi-k9BDmLI_.png`（80×80），不放大、不重绘；仅作 API 供应商识别，权利归原权利方。

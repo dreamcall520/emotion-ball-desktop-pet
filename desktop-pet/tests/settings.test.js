@@ -106,6 +106,7 @@ test('损坏文件回退且有效设置可回读', t => {
     chatModel: 'auto',
     chatSource: 'codex', zcodeChatModel: 'auto', zcodeEnabled: false, zcodeQuotaAlwaysVisible: true, zcodeQuotaFunEnabled: true, zcodeQuotaLabelSize: 'compact',
     chatProvider: 'codex', workbuddyEnabled: false, workbuddyQuotaAlwaysVisible: true, workbuddyQuotaFunEnabled: true, workbuddyModel: 'auto',
+    apiBalanceEnabled: false, apiBalanceAlwaysVisible: true, apiBalanceSelectedAccountId: '',
     notesDefaultTab: 'note', notesAppearance: 'light', shortcutSettings: DEFAULTS.shortcutSettings,
     customization: DEFAULTS.customization,
     quotaCardOrder: DEFAULTS.quotaCardOrder, quotaCardPinned: DEFAULTS.quotaCardPinned,
@@ -130,7 +131,7 @@ test('损坏文件回退且有效设置可回读', t => {
 test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
   assert.deepEqual(normalizeSettings({ size: 'small', x: -102.3, y: 81.8, alwaysOnTop: false }), {
     size: 'small', x: -102, y: 82, alwaysOnTop: false,
-    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', uiTheme: 'blue', chatModel: 'auto', chatSource: 'codex', zcodeChatModel: 'auto', zcodeEnabled: false, zcodeQuotaAlwaysVisible: true, zcodeQuotaFunEnabled: true, zcodeQuotaLabelSize: 'compact', chatProvider: 'codex', workbuddyEnabled: false, workbuddyQuotaAlwaysVisible: true, workbuddyQuotaFunEnabled: true, workbuddyModel: 'auto', notesDefaultTab: 'note', notesAppearance: 'light', shortcutSettings: DEFAULTS.shortcutSettings, customization: DEFAULTS.customization,
+    keepAwake: true, bubblesEnabled: true, colorMode: 'standard', uiTheme: 'blue', chatModel: 'auto', chatSource: 'codex', zcodeChatModel: 'auto', zcodeEnabled: false, zcodeQuotaAlwaysVisible: true, zcodeQuotaFunEnabled: true, zcodeQuotaLabelSize: 'compact', chatProvider: 'codex', workbuddyEnabled: false, workbuddyQuotaAlwaysVisible: true, workbuddyQuotaFunEnabled: true, workbuddyModel: 'auto', apiBalanceEnabled: false, apiBalanceAlwaysVisible: true, apiBalanceSelectedAccountId: '', notesDefaultTab: 'note', notesAppearance: 'light', shortcutSettings: DEFAULTS.shortcutSettings, customization: DEFAULTS.customization,
     quotaCardOrder: DEFAULTS.quotaCardOrder, quotaCardPinned: DEFAULTS.quotaCardPinned,
     quotaDisplay: DEFAULTS.quotaDisplay,
     startupAppearance: DEFAULTS.startupAppearance,
@@ -481,13 +482,13 @@ test('WorkBuddy 显示与趣味偏好独立保存，老配置仅继承旧趣味�
 });
 
 
-test('四卡顺序白名单去重补齐，固定展示独立持久化且不保存外部字段', t => {
+test('五卡顺序白名单去重补齐，固定展示独立持久化且不保存外部字段', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'emotion-card-config-'));
   t.after(() => fs.rmSync(dir, { recursive:true, force:true }));
   const file = path.join(dir, 'settings.json');
   const input = { quotaCardOrder:['workbuddy','api','api','bad',null], quotaCardPinned:['zcode','zcode','bad','api'], quotaCardExtra:'secret' };
   const saved = saveSettings(file, input);
-  assert.deepEqual(saved.quotaCardOrder, ['workbuddy','api','codex','zcode']);
+  assert.deepEqual(saved.quotaCardOrder, ['workbuddy','api','codex','zcode','balance']);
   assert.deepEqual(saved.quotaCardPinned, ['zcode','api']);
   assert.deepEqual(loadSettings(file), saved);
   assert.deepEqual(input.quotaCardOrder, ['workbuddy','api','api','bad',null]);
@@ -508,4 +509,19 @@ test('new quota preferences pin the first card, while saved empty or chosen pins
     saveSettings(file, {quotaCardOrder:['api','codex'], quotaCardPinned:pinned});
     assert.deepEqual(loadSettings(file).quotaCardPinned, pinned);
   }
+});
+test('API余额默认关闭，旧排序和固定项原序及其他偏好在启用保存后保持', t => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'qiuqiu-balance-settings-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const file=path.join(dir,'settings.json'),selected='a'.repeat(64);
+  const legacy={quotaCardOrder:['workbuddy','api','zcode','codex'],quotaCardPinned:['workbuddy','api'],size:'small',x:-333,y:222,
+    alwaysOnTop:false,keepAwake:false,colorMode:'accessible',uiTheme:'green',workbuddyEnabled:true,codexEnabled:true,
+    notesDefaultTab:'todo',chatSource:'workbuddy',startupAppearance:DEFAULTS.startupAppearance,customization:DEFAULTS.customization};
+  fs.writeFileSync(file,JSON.stringify(legacy));const before=loadSettings(file);
+  assert.equal(before.apiBalanceEnabled,false);assert.equal(before.apiBalanceAlwaysVisible,true);assert.equal(before.apiBalanceSelectedAccountId,'');
+  assert.deepEqual(before.quotaCardOrder,[...legacy.quotaCardOrder,'balance']);assert.deepEqual(before.quotaCardPinned,legacy.quotaCardPinned);
+  const saved=saveSettings(file,{...before,apiBalanceEnabled:true,apiBalanceAlwaysVisible:false,apiBalanceSelectedAccountId:selected});
+  assert.deepEqual(loadSettings(file),saved);assert.equal(saved.apiBalanceSelectedAccountId,selected);
+  for(const [key,value] of Object.entries(before))if(!key.startsWith('apiBalance'))assert.deepEqual(saved[key],value,key);
+  const invalid=normalizeSettings({apiBalanceEnabled:'true',apiBalanceAlwaysVisible:'false',apiBalanceSelectedAccountId:'secret-token'});
+  assert.equal(invalid.apiBalanceEnabled,false);assert.equal(invalid.apiBalanceAlwaysVisible,true);assert.equal(invalid.apiBalanceSelectedAccountId,'');
 });

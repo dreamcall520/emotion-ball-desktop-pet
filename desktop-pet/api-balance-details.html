@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN" data-appearance="system">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>余额趋势</title>
+  <link rel="stylesheet" href="codex-details.css"><link rel="stylesheet" href="api-balance-details.css"><link rel="stylesheet" href="color-mode.css">
+</head>
+<body>
+  <main id="details-panel">
+    <header class="panel-header"><h1 tabindex="-1">余额趋势 <span class="title-product" id="product">Kimi API</span></h1><div class="panel-tools"><button id="details-close" type="button" aria-label="关闭余额趋势">×</button></div></header>
+    <div class="trend-stats"><p><span>可用余额</span><strong id="balance">—</strong></p><p><span id="net-label">近7天净变化</span><strong class="time-value" id="net">—</strong></p></div>
+    <div class="chart-meta"><span class="chart-updated" id="unit">余额 · 元</span><div class="chart-actions"><div class="trend-tabs" aria-label="趋势时间范围"><button type="button" id="today" aria-pressed="false">今日</button><button type="button" id="week" aria-pressed="true">近7天</button></div><span class="chart-status" id="updated">—</span><details class="chart-help" id="chart-help"><summary aria-label="余额变化说明">ⓘ</summary><div class="chart-help-body">
+      <ul>
+        <li>净变化包含消费、充值和赠金影响，不等于消费金额。</li>
+        <li>仅展示本机查到的余额；无记录时留空。</li>
+      </ul>
+    </div></details></div></div>
+    <div class="chart-wrap"><svg class="trend-chart" id="balance-chart" viewBox="0 0 366 144" role="img" aria-label="余额记录积累中" tabindex="0"></svg><p id="empty" class="empty-state">余额记录积累中</p></div>
+    <p id="record" aria-live="polite"></p>
+    <footer class="panel-bottom"><span id="account">API 账户</span></footer>
+  </main>
+  <script src="quota-trend-curve.js"></script><script src="api-balance-trend.js"></script><script src="api-balance-details-renderer.js"></script>
+</body>
+</html>

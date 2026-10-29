@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN" data-appearance="system">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>API 账户余额</title>
+  <link rel="stylesheet" href="quota-label.css">
+  <link rel="stylesheet" href="api-balance-label.css">
+  <link rel="stylesheet" href="color-mode.css">
+</head>
+<body>
+  <div id="quota-beam">
+    <section id="quota-label" data-size="compact" data-expanded="false" data-severity="normal" data-has-items="true" data-state="empty">
+      <button id="summary" type="button" aria-expanded="false" aria-label="展开 API 账户余额">
+        <span class="summary-period"><span class="source-icon" id="source-icon" role="img" aria-label="API"><img id="source-image" src="assets/integrations/kimi.png" alt="" hidden><span id="source-fallback" aria-hidden="true">API</span></span><span id="mini-label">未连接</span></span>
+        <strong class="summary-value" id="mini-amount">—</strong>
+      </button>
+      <div id="full">
+        <div class="v20-header" id="header">
+          <button class="v20-brand" id="account-toggle" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="account-list" title="切换 API 账户"><b id="provider-name">API</b><span class="account-chevron" id="account-chevron" aria-hidden="true">⌄</span><span class="period-pill">API</span></button>
+          <span class="v20-header-tools"><span class="v20-caption" id="selected-name">账户余额</span><button class="v20-collapse" id="collapse" type="button" aria-label="收起 API 账户余额"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 10.5L8 5.5L13 10.5"/></svg></button></span>
+        </div>
+        <div class="balance-caption"><span>可用余额</span><span class="health" id="health" role="status" aria-live="polite">待连接</span></div>
+        <div class="balance-line"><span class="money"><span class="currency" id="currency"></span><strong id="amount">—</strong></span><span id="update">请连接 API 账户</span></div>
+        <div class="breakdown"><span>现金 <b id="cash">—</b></span><span>赠金 <b id="voucher">—</b></span></div>
+        <div class="footer">
+          <button id="trend" type="button"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 14V10M6 14V8M10 14V6M14 14V3M1 7L5 3L9 5L15 0"/></svg>趋势</button>
+          <button id="refresh" type="button"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M14 5A6 6 0 0 0 3 3L1 5M1 1V5H5M2 11A6 6 0 0 0 11 13L15 9M11 9H15V13"/></svg>刷新</button>
+          <button id="settings" type="button" hidden>连接设置</button>
+        </div>
+      </div>
+      <div id="account-menu" hidden>
+        <div id="account-list" role="listbox" aria-label="选择 API 账户"></div>
+        <p id="accounts-empty" hidden>暂无可用账户</p>
+        <button id="account-settings" type="button">连接设置 <span aria-hidden="true">↗</span></button>
+      </div>
+    </section>
+  </div>
+  <script src="quota-card-motion.js"></script>
+  <script src="api-balance-label-renderer.js"></script>
+</body>
+</html>

@@ -682,6 +682,42 @@ test('card ordering ignores invalid ids and duplicates and appends omitted white
   assert.equal(quotaFreeStackBounds({}, {}, {rogue:cards.rogue},{mode:'free'}),null);
 });
 
+test('五卡含194px余额展开在上下角和左右贴边共用一列，四张邻卡不重叠且旧顺序保留', () => {
+  const { quotaFreeStackBounds } = require('../lib/quota-label-placement');
+  const ids=['codex','api','zcode','workbuddy','balance'],area={x:-1200,y:20,width:1200,height:1000};
+  const overlap=(a,b)=>a.x<b.x+b.width&&a.x+a.width>b.x&&a.y<b.y+b.height&&a.y+a.height>b.y;
+  for(const order of [['workbuddy','api','codex','zcode'],['balance','zcode','workbuddy','api','codex']])
+    for(const mode of ['free','peeked']) for(const side of ['left','right']) for(const y of [20,420,940]) for(const expanded of [false,true]) {
+      const pet={x:side==='left'?area.x:area.x+area.width-80,y,width:80,height:80},before=JSON.stringify(pet);
+      const cards=Object.fromEntries(ids.map(id=>[id,{width:id==='balance'&&expanded?196:128,height:id==='balance'&&expanded?194:32,inset:id==='balance'&&expanded?0:2}]));
+      const plan=quotaFreeStackBounds(pet,area,cards,{mode,side,quotaCardOrder:order,shape:'blob'});
+      const expected=[...order,...ids.filter(id=>!order.includes(id))],rows=expected.map(id=>plan.cards[id]);
+      assert.notEqual(plan.placement,'hidden',JSON.stringify({mode,side,y,expanded,order}));assert.deepEqual(Object.keys(plan.cards),expected);
+      if(y===20)assert.equal(plan.placement,'below');if(y===940)assert.equal(plan.placement,'above');
+      for(const row of rows) {assertInside(row,area);assert.equal(overlap(row.face,pet),false);}
+      for(let i=0;i<rows.length;i++)for(let j=i+1;j<rows.length;j++)assert.equal(overlap(rows[i].face,rows[j].face),false);
+      for(let i=1;i<rows.length;i++)assert.equal(rows[i].face.y-rows[i-1].face.y-rows[i-1].face.height,8);
+      if(mode==='peeked')for(const row of rows)assert.equal(side==='left'?row.face.x:row.face.x+row.face.width,side==='left'?area.x+2:area.x+area.width-2);
+      else for(const row of rows)assert.equal(row.face.x+row.face.width/2,rows[0].face.x+rows[0].face.width/2);
+      assert.equal(plan.cards.balance.height,expanded?194:32);assert.equal(JSON.stringify(pet),before);
+    }
+});
+
+test('五卡展开空间不足时整组隐藏，收起和屏幕恢复后按原顺序重现且不移动球球',()=>{
+  const { quotaFreeStackBounds }=require('../lib/quota-label-placement');
+  const ids=['workbuddy','api','codex','zcode','balance'],area={x:-800,y:20,width:800,height:400};
+  const cards=Object.fromEntries(ids.map(id=>[id,{width:128,height:32,inset:2}]));
+  for(const mode of ['free','peeked'])for(const side of ['left','right']) {
+    const pet={x:side==='left'?-800:-80,y:204,width:80,height:80},original={...pet},presentation={mode,side,quotaCardOrder:ids};
+    assert.deepEqual(Object.keys(quotaFreeStackBounds(pet,area,cards,presentation).cards),ids);
+    const expanded={...cards,balance:{width:196,height:194,inset:0}},hidden=quotaFreeStackBounds(pet,area,expanded,presentation);
+    assert.equal(hidden.placement,'hidden');assert.deepEqual(hidden.cards,{});assert.deepEqual(hidden.hidden,ids);
+    assert.deepEqual(Object.keys(quotaFreeStackBounds(pet,{...area,height:1000},expanded,presentation).cards),ids);
+    assert.deepEqual(Object.keys(quotaFreeStackBounds(pet,area,cards,presentation).cards),ids);assert.deepEqual(pet,original);
+    const without=quotaFreeStackBounds(pet,area,{...cards,balance:null},presentation);assert.deepEqual(Object.keys(without.cards),ids.slice(0,-1));
+  }
+});
+
 
 test('all nonempty visibility subsets pack without holes, including single and dual cards', () => {
   const { quotaFreeStackBounds } = require('../lib/quota-label-placement');

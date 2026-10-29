@@ -31,6 +31,8 @@ function fixture({ reduced = false, random = .4, hidden = false } = {}) {
   const get = id => { if (!nodes.has(id)) nodes.set(id, new Node('span')); return nodes.get(id); };
   const bridge = { getInfo: async () => ({ version: '0.3.32' }),
     checkUpdates: () => { calls.push('checkUpdates'); }, downloadUpdate: () => { calls.push('downloadUpdate'); },
+    openBrowserDownload: async () => { calls.push('openBrowserDownload'); return { ok: true }; },
+    openDomesticDownload: async () => { calls.push('openDomesticDownload'); return { ok: true }; },
     openWebsite: () => { calls.push('openWebsite'); }, close: () => { calls.push('close'); },
     onUpdate(fn) { receive = fn; return () => { unsubscribed++; }; } };
   const media = { matches: reduced, addEventListener: (_name, fn) => { mediaChange = fn; }, removeEventListener: () => { mediaChange = null; } };
@@ -75,7 +77,7 @@ function fixture({ reduced = false, random = .4, hidden = false } = {}) {
     auroras.push(instance); return instance;
   } };
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../about-renderer.js'), 'utf8'), context);
-  return { get, rendered, auroras, calls, timers, clock, document, media,
+  return { bridge, get, rendered, auroras, calls, timers, clock, document, media,
     setRandom(value) { randomValue = value; }, get engine() { return rendered.at(-1).engine; },
     tick(duration) { for (let end = time + duration; time < end;) { time = Math.min(end, time + 16); this.engine._tick(time); } },
     receive: value => receive(value), changeMotion(value) { media.matches = value; mediaChange?.(); },
@@ -214,12 +216,13 @@ test('新版直接下载按钮显示进度，失败或取消可重试，缺本�
   const ready = { state: 'ready', hasUpdate: true, latestVersion: '0.4.05', downloadAvailable: true };
   for (const [download, text] of [
     [{ state: 'starting' }, '正在准备安装包…'], [{ state: 'downloading', percent: 42 }, '正在下载 42%'],
+    [{ state: 'retrying', attempt: 2 }, '连接中断，正在恢复下载（2/2）…'],
     [{ state: 'completed' }, '安装包已下载，可从保存位置打开。'],
     [{ state: 'cancelled', message: '已取消下载' }, '已取消下载'],
     [{ state: 'error', message: '网络中断，请重试' }, '网络中断，请重试']
   ]) {
     f.receive({ ...ready, download }); assert.equal(f.get('about-status').textContent, text);
-    assert.equal(f.get('about-open-release').disabled, ['starting', 'downloading'].includes(download.state));
+    assert.equal(f.get('about-open-release').disabled, ['starting', 'downloading', 'retrying'].includes(download.state));
     assert.equal(f.get('about-open-release').hidden, false);
   }
   f.receive({ ...ready, downloadAvailable: false, downloadMessage: '暂无 Intel Mac 安装包' });
@@ -227,6 +230,57 @@ test('新版直接下载按钮显示进度，失败或取消可重试，缺本�
   assert.equal(f.get('about-check-updates').hidden, false, '缺匹配安装包时仍可重新检查');
   const html = fs.readFileSync(path.join(__dirname, '../about.html'), 'utf8');
   assert.match(html, /开发者 春野/); assert.match(html, />下载安装包<\/button>/);
+});
+
+test('具体下载终态不会被 IPC false 或拒绝覆盖，用户取消不当成失败', async () => {
+  const ready = { state: 'ready', hasUpdate: true, latestVersion: '0.4.08', downloadAvailable: true };
+  for (const download of [
+    { state: 'error', code: 'START_TIMEOUT', message: '下载启动超时，可选择浏览器下载。' },
+    { state: 'cancelled', code: 'CANCELLED', message: '已取消下载，可以重新下载。' },
+    { state: 'error', code: 'DOWNLOAD_FAILED', message: '下载失败，请检查网络和保存位置后重试。' }
+  ]) for (const response of ['structured', 'false', 'reject']) {
+    const f = fixture(); await flush(); f.receive(ready);
+    f.bridge.downloadUpdate = async () => {
+      f.receive({ ...ready, download });
+      if (response === 'reject') throw Error('private diagnostic');
+      return response === 'structured' ? download : false;
+    };
+    await f.get('about-open-release').dispatch('click');
+    assert.equal(f.get('about-status').textContent, download.message, `${download.code}/${response}`);
+    assert.equal(f.get('about-open-release').disabled, false);
+    assert.equal(f.get('about-check-updates').hidden, false, '失败或取消后允许刷新版本信息');
+  }
+});
+
+test('结构化返回无需进度事件也能显示失败，新一次 IPC 异常不能复用上次取消', async () => {
+  const f = fixture(); await flush();
+  const ready = { state: 'ready', hasUpdate: true, latestVersion: '0.4.08', downloadAvailable: true };
+  f.receive(ready);
+  f.bridge.downloadUpdate = async () => ({ state: 'cancelled', code: 'CANCELLED', message: '已取消下载，可以重新下载。' });
+  await f.get('about-open-release').dispatch('click'); assert.match(f.get('about-status').textContent, /已取消/);
+  f.bridge.downloadUpdate = async () => { throw Error('secret diagnostic'); };
+  await f.get('about-open-release').dispatch('click');
+  assert.equal(f.get('about-status').textContent, '暂时无法下载安装包，请稍后重试。');
+  assert.equal(f.get('about-check-updates').hidden, false);
+});
+
+test('下载备用入口只按主进程可用性显示，恢复中禁用，打开浏览器不声称下载完成', async () => {
+  const f = fixture(); await flush();
+  const ready = { state: 'ready', hasUpdate: true, latestVersion: '0.4.08', downloadAvailable: true,
+    browserDownloadAvailable: true, domesticDownloadAvailable: true };
+  f.receive(ready);
+  for (const id of ['about-browser-download', 'about-domestic-download']) {
+    assert.equal(f.get(id).hidden, false); assert.equal(f.get(id).disabled, false);
+    await f.get(id).dispatch('click'); assert.equal(f.get('about-status').textContent, '已在浏览器打开下载页面。');
+  }
+  assert.deepEqual(f.calls, ['openBrowserDownload', 'openDomesticDownload']);
+  f.receive({ ...ready, download: { state: 'retrying', attempt: 1 } });
+  assert.equal(f.get('about-browser-download').disabled, true); assert.equal(f.get('about-domestic-download').disabled, true);
+  f.receive({ ...ready, domesticDownloadAvailable: false });
+  assert.equal(f.get('about-domestic-download').hidden, true); assert.equal(f.get('about-browser-download').hidden, false);
+  f.receive({ ...ready, browserDownloadAvailable: false, domesticDownloadAvailable: false });
+  assert.equal(f.get('about-download-alternatives').hidden, true);
+  f.receive({ state: 'ready', hasUpdate: false }); assert.equal(f.get('about-download-alternatives').hidden, true);
 });
 
 test('关于页载入既有真实视觉模块，保留满铺与渐变名，背景8秒可见并尊重辅助模式', () => {
