@@ -12,6 +12,7 @@ function fixture(t, { area = { x: 0, y: 0, width: 1000, height: 800 }, petBounds
   if (saved) fs.writeFileSync(filePath, JSON.stringify(saved));
   if (cached) fs.writeFileSync(filePath + '.cache', JSON.stringify(cached));
   const handlers = new Map(), windows = [], changes = [], requests = [], module = { exports: {} };
+  let groupHidden = false;
   let suppressed = false, persistFails = false;
   const service = { searchCities: async () => [], getWeather(city) { const d = deferred(); requests.push({ city, ...d }); return d.promise; } };
   const mockedFs = Object.create(fs); mockedFs.renameSync = (...args) => { if (persistFails) throw Object.assign(Error('fixture storage unavailable'), { code: 'EACCES' }); return fs.renameSync(...args); };
@@ -28,12 +29,12 @@ function fixture(t, { area = { x: 0, y: 0, width: 1000, height: 800 }, petBounds
     require: name => name === 'node:fs' ? mockedFs : name === './weather-service' ? { createWeatherService: () => service } : require(name.startsWith('.') ? path.resolve(path.dirname(sourcePath), name) : name) }, { filename: sourcePath });
   const controller = module.exports.createWeatherWindow({ BrowserWindow: Window, ipcMain: { handle: (name, fn) => handlers.set(name, fn), removeHandler: name => handlers.delete(name) },
     locationBridge, screen: { getDisplayMatching: () => ({ workArea: area }) }, filePath, getPetWindow: () => ({ isDestroyed: () => false, isVisible: () => true, getBounds: () => petBounds }),
-    getStackAnchor: () => stackAnchor, getBubbleBounds: () => bubbleBounds, getPresentation: () => ({ mode: 'free' }), getSuppressed: () => suppressed, onChange: state => changes.push(state) });
+    getStackAnchor: () => stackAnchor, getBubbleBounds: () => bubbleBounds, getPresentation: () => ({ mode: 'free', quotaGroupHidden: groupHidden }), getSuppressed: () => suppressed, onChange: state => changes.push(state) });
   t.after(() => { controller.destroy(); fs.rmSync(dir, { recursive: true, force: true }); });
   controller.setEnabled(true);
   const event = () => ({ sender: controller.getWindow().webContents, senderFrame: controller.getWindow().webContents.mainFrame });
   return { controller, handlers, windows, changes, requests, filePath, event,
-    invoke: (name, value, e) => handlers.get('weather:' + name)(e || event(), value), suppress: value => { suppressed = value; }, failPersist: () => { persistFails = true; } };
+    invoke: (name, value, e) => handlers.get('weather:' + name)(e || event(), value), suppress: value => { suppressed = value; }, groupHidden: value => { groupHidden = value; }, failPersist: () => { persistFails = true; } };
 }
 test('weather IPC denies other windows, child frames and unexpected document URLs', t => {
   const f = fixture(t), trusted = f.event();
@@ -200,4 +201,18 @@ test('successful native location returns immediately while weather fetch remains
  const f=fixture(t,{locationBridge:{locate:async()=>({latitude:39.9,longitude:116.4,accuracy:100,name:'北京市',locationLabel:'北京市 · 朝阳区'})}});
  const result=await Promise.race([f.invoke('location'),new Promise((_,reject)=>setTimeout(()=>reject(Error('location waited for weather')),100))]);
  assert.equal(result.city.displayName,'北京市 · 朝阳区');assert.equal(result.status,'loading');assert.equal(f.requests.length,1);
+});
+
+test('weather collection captures held card after group hides, but rejects hidden staging', async t => {
+  const f = fixture(t), win = f.controller.getWindow();
+  win.webContents.emit('did-finish-load');
+  win.webContents.capturePage = async () => ({ isEmpty: () => false, toPNG: () => Buffer.from('snapshot') });
+  f.controller.setGroupTransitionMode('hold');
+  f.groupHidden(true);
+  f.controller.reposition();
+  assert.equal(win.isVisible(), true, 'hold keeps original card painted until overlay is ready');
+  const frames = await f.controller.captureGroupTransitionFrames();
+  assert.equal(frames.length, 1);
+  f.controller.setGroupTransitionMode('stage');
+  await assert.rejects(f.controller.captureGroupTransitionFrames(), /visible layout|stale/);
 });
