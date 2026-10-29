@@ -1,0 +1,10 @@
+✔ local partner import reuses real customizer DOM and player without applying until save (718.079625ms)
+✔ local partner backend decodes real PNG/WebP in hidden Chromium before publishing independent copies (5458.021667ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5518.794625

@@ -141,6 +141,23 @@ test('ZCode retained quota is visibly pending update in quota and trend details'
   h.receive({ ...model, state: 'ready', action: 'quota' }); assert.doesNotMatch(content.textContent, /待更新/);
 });
 
+test('ZCode 团队卡的额度明细保留套餐、团队身份、独立周期和真实单位', () => {
+  const h = renderer(), content = h.nodes['details-content'];
+  const rows = [300,10080].map((windowMinutes,index) => ({...item(windowMinutes),
+    bucketId:`zcode:paid:CREDIT_LIMIT:${index ? '6:1' : '3:5'}`, label:'Coding Plan 积分', planName:'Coding Plan · 团队',
+    periodKind:'rolling', total:1000, remainingUnits:index ? 780 : 700, remaining:index ? 78 : 70,
+    resetsAt:Date.now()+windowMinutes*60000, unit:'credits'}));
+  h.receive({sourceId:'zcode',state:'ready',action:'quota',items:rows});
+  assert.equal(content.querySelector('.zcode-quota-group-title').textContent,'Coding Plan · 团队');
+  assert.deepEqual(content.querySelectorAll('.zcode-quota-values').map(node=>node.textContent),['剩余 700 / 1,000 credits','剩余 780 / 1,000 credits']);
+  const buttons = content.querySelectorAll('.zcode-quota-row');
+  assert.equal(buttons.length,2);
+  buttons.forEach((button,index)=>{
+    assert.match(button.attributes['aria-label'],/Coding Plan · 团队/);
+    button.events.click({stopPropagation(){}}); assert.deepEqual(h.calls.at(-1),['trend',rows[index].bucketId]);
+  });
+});
+
 test('R2 单周标题与指标顺序按认可稿，双周期仍提供切换',() => {
   const h = renderer();
   h.receive({action:'trend',period:10080,items:[item(10080)]});

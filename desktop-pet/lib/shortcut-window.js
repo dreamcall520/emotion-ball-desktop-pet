@@ -230,7 +230,6 @@ function createShortcutWindow({ BrowserWindow, ipcMain, screen, getPetWindow,
   function action(id) {
     if (!ACTIONS.has(id)) return;
     cancelEdgeIdle();
-    if (id === 'settings') { open({ settings: true }); return; }
     close(); onAction(id);
   }
   function apply(config) {

@@ -1,0 +1,269 @@
+{
+  "source": "https://github.com/basmilius/meteocons",
+  "license": "MIT",
+  "downloaded": "2026-10-28",
+  "packages": [
+    {
+      "name": "@meteocons/svg",
+      "version": "0.1.0",
+      "tarball": "https://registry.npmjs.org/@meteocons/svg/-/svg-0.1.0.tgz",
+      "integrity": "sha512-Z/40RR6YzIjdN8qLUzRcZDaEYHfekU5rnHTH45EDVZQF1NyldIRpiFprcUKduIv4VK0kd6Uy+OOya4NWwuc2Bg=="
+    },
+    {
+      "name": "@meteocons/svg-static",
+      "version": "0.1.0",
+      "tarball": "https://registry.npmjs.org/@meteocons/svg-static/-/svg-static-0.1.0.tgz",
+      "integrity": "sha512-dnuXOkt1W5q+XZbyj54dzjuBcKmsC0eLv51IVaW9kzzvzwnhwv9KgNXHKgpvmdN6cX2stMo+k95iMFbcyM4x5Q=="
+    }
+  ],
+  "files": [
+    {
+      "path": "animated/not-available.svg",
+      "sha256": "c7cf03ab8e06a5ee1e7c4a394a779070b2297518f2cb61dbc981a059f43adc37"
+    },
+    {
+      "path": "animated/clear-day.svg",
+      "sha256": "02d430b9c4c8377e6294012ce51ab8486272d425a84d8a5a9b39a3ad2ae71335"
+    },
+    {
+      "path": "animated/clear-night.svg",
+      "sha256": "9a1211fb25de464ec4ffdecb7b87c6436241bb4f266b52d2aab1b58fa70073cc",
+      "upstreamSha256": "e17bb7507931a54e222580af66c490ddb8aac95a0f8870aab13648a5b43213d4",
+      "adaptation": "moon-warm-beige"
+    },
+    {
+      "path": "animated/partly-cloudy-day.svg",
+      "sha256": "e0445741bfdbbb138e301536d9393cfb02a3716d5f329b7e779aa8d0dd5681f4"
+    },
+    {
+      "path": "animated/partly-cloudy-night.svg",
+      "sha256": "864cb40881d59ffb9fcac3962ad7511cfed420ce6ea0530aad3747a6cd7f1b39",
+      "upstreamSha256": "c382e45c6dbf391d4b0d1da497a14039c47a0f864bae250712f67c81189da67b",
+      "adaptation": "moon-warm-beige"
+    },
+    {
+      "path": "animated/overcast-day.svg",
+      "sha256": "08e4f96f851020ad022dc4fb72e38a2e59943dcd6f23eaf116cf3d66f301846d"
+    },
+    {
+      "path": "animated/overcast-night.svg",
+      "sha256": "84dc7e5d6b683301b7f191977f916519eae2baad3f933d47c0769ec11c61fa78",
+      "upstreamSha256": "725f6a8ab6be10dc01ae9afb99227fcedfdb0d0421ccdde9fbce2a830c1c63d0",
+      "adaptation": "moon-warm-beige"
+    },
+    {
+      "path": "animated/fog-day.svg",
+      "sha256": "55ce0323f049348f6e67899645b1bd0df32df68e9f9abdf7a81077245632b568"
+    },
+    {
+      "path": "animated/fog-night.svg",
+      "sha256": "25ab090cb34f222db62db85ef307bad27fb19d2f1252b30f96a5d005d22aeb74",
+      "upstreamSha256": "5e1599d6e028c7fae9e8027bb397d5365fba306bf20aa47626770ea9465d7310",
+      "adaptation": "moon-warm-beige"
+    },
+    {
+      "path": "animated/overcast-day-drizzle.svg",
+      "sha256": "d49e70f9445727efd2ade2d26517e640d68f3a164302c2db4586b902b743ac4f"
+    },
+    {
+      "path": "animated/overcast-night-drizzle.svg",
+      "sha256": "5d26a4cd50cd1c580e12b4ec9738027b8c46eb67a1066c0a641098bed2785982",
+      "upstreamSha256": "a013cab2b31b53d0e19479fd8d8641e56bd9992f5221587c696fcd151661f69b",
+      "adaptation": "moon-warm-beige"
+    },
+    {
+      "path": "animated/overcast-day-rain.svg",
+      "sha256": "6e0679ca61aa01be9050e2fb5c42713c120edf029f23689f3aac81d6c5c89cbf"
+    },
+    {
+      "path": "animated/overcast-night-rain.svg",
+      "sha256": "4c5b3c07627096c665070b512689473ce5d5047441a6ad08dff8c6899e8ea715",
+      "upstreamSha256": "f176ee13220970d154ea8b0f3be27ae5933b340ef1ac09d2b285de36a4d07067",
+      "adaptation": "moon-warm-beige"
+    },
+    {
+      "path": "animated/overcast-day-sleet.svg",
+      "sha256": "5eeeedcfef241ee014ed77847388e7e04cd274527cbd1a96956189d81a300819"
+    },
+    {
+      "path": "animated/overcast-night-sleet.svg",
+      "sha256": "6b359dc0b7e43c6fdd8081e2a9e329e9b88d270cfb90fc639148118bb5df12f2",
+      "upstreamSha256": "203fadbba6f844c244c3c72d016b439cb891276969b7be2a64c48bdf422a82d8",
+      "adaptation": "moon-warm-beige"
+    },
+    {
+      "path": "animated/overcast-day-snow.svg",
+      "sha256": "7215d15ab00c3739b4030315856176324a2117fbd0052156933593aeabb31985"
+    },
+    {
+      "path": "animated/overcast-night-snow.svg",
+      "sha256": "a85c6293bf50524162b07830268882ede3e169223e6f241a119f836dd200749f",
+      "upstreamSha256": "54231eb0248ab5330ac32b807cf95f0c780cc59aee27a7d6033d00932cfd6083",
+      "adaptation": "moon-warm-beige"
+    },
+    {
+      "path": "animated/partly-cloudy-day-rain.svg",
+      "sha256": "3483f812459438af2661dbb098b3ffc2d66aa99bd43124d4ac7ff35690aa47c8"
+    },
+    {
+      "path": "animated/partly-cloudy-night-rain.svg",
+      "sha256": "1340f62aa998927ac61141d29dd388c2af1e412b8a587c25c21d3f3832c262da",
+      "upstreamSha256": "84542055e2ed61867e6f9e25ce6f9d0f85b4e2d95e14d6928e4376e44c8406f2",
+      "adaptation": "moon-warm-beige"
+    },
+    {
+      "path": "animated/thunderstorms-day-rain.svg",
+      "sha256": "2d66a143fc23375279f82d6c5ef1dbeef7d2479ea0dd39ce3549965631dbd34a"
+    },
+    {
+      "path": "animated/thunderstorms-night-rain.svg",
+      "sha256": "f0d9161901af8e7ee0d74025a75ff5f8bf862b142f416ee3cd879bb87892fc9b",
+      "upstreamSha256": "1a81c3a39e16ed9233ce1c162504658d5dd923b7fd7935e9c8662c2cddf02e23",
+      "adaptation": "moon-warm-beige"
+    },
+    {
+      "path": "animated/thunderstorms-day-hail.svg",
+      "sha256": "2c713a96741654d85892fffcf26d2d78c754b3816306197fdae82eeabe7dfe5f"
+    },
+    {
+      "path": "animated/thunderstorms-night-hail.svg",
+      "sha256": "e1e0001971317c6f30d412efad329976b8fb5cef525b0348559ef97c5eb94ee2",
+      "upstreamSha256": "33f83e12ed1f01a57f04391ebe52750a9374d09a4cf3f5a7aec44fea3081d746",
+      "adaptation": "moon-warm-beige"
+    },
+    {
+      "path": "static/not-available.svg",
+      "sha256": "c7cf03ab8e06a5ee1e7c4a394a779070b2297518f2cb61dbc981a059f43adc37"
+    },
+    {
+      "path": "static/clear-day.svg",
+      "sha256": "48743c29f18f37a844737cddafceb2d6d194090cc59f70c2733d10a70a96218a"
+    },
+    {
+      "path": "static/clear-night.svg",
+      "sha256": "1f60f65998fd3ed0ce6e8ca5d4a17e88b5d6e4fb1af40dc2906d7a64c768fba5",
+      "upstreamSha256": "de9cbec8f7ef5611b693435396be57eb5ea3ea7889c40ca2cf47bfd4577e060a",
+      "adaptation": "moon-warm-beige"
+    },
+    {
+      "path": "static/partly-cloudy-day.svg",
+      "sha256": "630e0fe6e488a53745d5de6b8dc709e665edd1443488ac3782445bdd1376ee9a"
+    },
+    {
+      "path": "static/partly-cloudy-night.svg",
+      "sha256": "2531e2dfb9f06ad34c55c5f59d88e0425a009bfe5ed65f08ae445657fc532f1c",
+      "upstreamSha256": "5037008b15f5fb95245dc02cb60e03b5ee8da71497f16f56ec9c0d63c19021b1",
+      "adaptation": "moon-warm-beige"
+    },
+    {
+      "path": "static/overcast-day.svg",
+      "sha256": "7d4e36846275b71e4f2cebf9468b3329c827fdb3b41d7741337e8e5f8bd7d4c9"
+    },
+    {
+      "path": "static/overcast-night.svg",
+      "sha256": "5fa50fb238c3ffb88e978ee41fe2bead51c5cf26c5111cac3c50933ce21e369c",
+      "upstreamSha256": "62e9347bdce8384ad58611e2b76202ae8f61c9888b4fe3173b5ab3e0207018d4",
+      "adaptation": "moon-warm-beige"
+    },
+    {
+      "path": "static/fog-day.svg",
+      "sha256": "1f56e71767fe913d8720c00803c8c587b63e286b026c3af111520f13a8807b4f"
+    },
+    {
+      "path": "static/fog-night.svg",
+      "sha256": "c75ad4df22e3e8f2e3fa4f2943411e41a8cea36f799ef81d8f17d96310d4a49c",
+      "upstreamSha256": "60dca27ee1ba13c5aca803eea55f5a205009cb686de3765b459ebc71bee9a191",
+      "adaptation": "moon-warm-beige"
+    },
+    {
+      "path": "static/overcast-day-drizzle.svg",
+      "sha256": "efff79ee97f402f0df9749e3e056844d98d0854f47dc2d53f83493f3ceb3126a"
+    },
+    {
+      "path": "static/overcast-night-drizzle.svg",
+      "sha256": "2c940ddc00a966b789548d77ce368f16d6c8b2166d53fb77d4f9a234c4becf2a",
+      "upstreamSha256": "765ad05d4baf370d7a9fa8d2679d07d9d626ec5e0cc8ec018f83b81efff7927a",
+      "adaptation": "moon-warm-beige"
+    },
+    {
+      "path": "static/overcast-day-rain.svg",
+      "sha256": "71f3644527befc79310df18b4cade0aba9288aeb4c2615c75797e9e26a72e4bb"
+    },
+    {
+      "path": "static/overcast-night-rain.svg",
+      "sha256": "15e47de6ebf1bf6e7b53886661b30fa906703f425737d0863e7f0e47c88e21d3",
+      "upstreamSha256": "26bf9f1dec965321b8559545e32a764a0f476bca6c5c8537188330bbbc1860f6",
+      "adaptation": "moon-warm-beige"
+    },
+    {
+      "path": "static/overcast-day-sleet.svg",
+      "sha256": "0b6da894e1eeb3d634a5bd15995d2d2e41c6a62f760026850ff514e15c9d422c"
+    },
+    {
+      "path": "static/overcast-night-sleet.svg",
+      "sha256": "146020d2605120000d171cf2de3195bf0384a57dddc113819d099a6265c74c0b",
+      "upstreamSha256": "a7b403c653aaa1c802722767918aeff581075a2337c3992981f9c6049e26bd7a",
+      "adaptation": "moon-warm-beige"
+    },
+    {
+      "path": "static/overcast-day-snow.svg",
+      "sha256": "d29158f29f9b572bd25999838b45255f956910faac203366801a50ecf71a63d6"
+    },
+    {
+      "path": "static/overcast-night-snow.svg",
+      "sha256": "96017be8fc4293390f2387cb492248746139ff34c098ace266b0fa112a71a35f",
+      "upstreamSha256": "ae8e7194f97402eb0902322a5f45402c3bd4c619de7c7ffe24b0ea9ad811a54f",
+      "adaptation": "moon-warm-beige"
+    },
+    {
+      "path": "static/partly-cloudy-day-rain.svg",
+      "sha256": "dffaab61b1db98bc542233367ce9017fb617966559c263e79cbf9481d114be4c"
+    },
+    {
+      "path": "static/partly-cloudy-night-rain.svg",
+      "sha256": "d471512e89a60a17e6e5eff568029f3fe181db581a05c4656b127e9a4c242557",
+      "upstreamSha256": "5af77f9faff4975227417f547e71f1b8b5224cbab300d00416e6740c06529149",
+      "adaptation": "moon-warm-beige"
+    },
+    {
+      "path": "static/thunderstorms-day-rain.svg",
+      "sha256": "901ece625b9530e3b2cd5afb159505769a8b083319f6f7b23598b4c0628760b1"
+    },
+    {
+      "path": "static/thunderstorms-night-rain.svg",
+      "sha256": "f4bb1d4c7d45c374818a99d3ce5bc226b4c9a5da3553b8d8462567b4d714dd38",
+      "upstreamSha256": "1339422eff27329204fada17caa0b394ac3b851db0542e74eaea585a06c13dcd",
+      "adaptation": "moon-warm-beige"
+    },
+    {
+      "path": "static/thunderstorms-day-hail.svg",
+      "sha256": "94c3d46bfdf82aacab026148f9f1420dfd01af45d45adfa8b693089adef0a83e"
+    },
+    {
+      "path": "static/thunderstorms-night-hail.svg",
+      "sha256": "8b6b2c62b4e59342e5894e451ab2f609e298f714c3830f134279e1ea041bbebd",
+      "upstreamSha256": "5e7038ad8dbc0c938a2b319da7825755cec44c523b1fd5c9b9d9812d467e648c",
+      "adaptation": "moon-warm-beige"
+    },
+    {
+      "path": "static/overcast.svg",
+      "sha256": "b6db5c2b7ab6e49dd1661e009f6096c78655b93594c39816f15c09b03ab722c4"
+    },
+    {
+      "path": "animated/overcast.svg",
+      "sha256": "de88a3aad96663df6383285e6d77fe4fb9955a0ea727805d437b4fbed793d5bb"
+    }
+  ],
+  "adaptations": [
+    {
+      "id": "moon-warm-beige",
+      "scope": "Moon group blue stroke/fill and its exclusively referenced linearGradient stops in night SVGs only",
+      "colors": {
+        "#86C3DB": "#F4E5BD",
+        "#72B9D5": "#DCC48A"
+      },
+      "files": 22,
+      "notes": "Clouds, precipitation, geometry, animation and MIT license unchanged. upstreamSha256 records each original file; sha256 records the locally adapted file."
+    }
+  ]
+}

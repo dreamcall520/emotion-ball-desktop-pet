@@ -30,7 +30,7 @@ function defaultReply(packet) {
   return { result: {} };
 }
 function setup({ reply = defaultReply, installed = true, timeoutMs = 200, maxFrameBytes, onNotification,
-  onDisconnect, fakeFs, env = {}, purpose = 'chat' } = {}) {
+  onDisconnect, fakeFs, env = {}, purpose = 'chat', getWeatherContext } = {}) {
   const child = fakeChild(), sent = [], probes = [], launches = [], notifications = [], disconnects = [];
   const send = packet => child.stdout.write(JSON.stringify(packet) + '\n');
   child.stdin.on('data', chunk => {
@@ -39,7 +39,7 @@ function setup({ reply = defaultReply, installed = true, timeoutMs = 200, maxFra
     const response = reply(packet, { send, child });
     if (response !== undefined) queueMicrotask(() => send({ id: packet.id, ...response }));
   });
-  const rpc = createCodexChatRpc({ workspaceDir: WORKSPACE, timeoutMs, maxFrameBytes, env, purpose,
+  const rpc = createCodexChatRpc({ workspaceDir: WORKSPACE, timeoutMs, maxFrameBytes, env, purpose, getWeatherContext,
     spawn: (...args) => { launches.push(args); return child; }, homedir: () => '/private/test-user',
     onNotification: value => { notifications.push(value); onNotification?.(value); },
     onDisconnect: value => { disconnects.push(value); onDisconnect?.(value); },
@@ -567,4 +567,18 @@ test('notes接收20,000个补充平面字符的完整JSON转义响应而不截�
   const raw='{"title":"","body":"'+'\\ud83d\\ude00'.repeat(20000)+'"}';
   h.send({method:'item/completed',params:{threadId:ID,turnId:TURN,item:{id:'reply',type:'agentMessage',phase:'final_answer',text:raw}}});
   assert.equal(h.notifications.at(-1).params.item.text,raw);assert.equal(h.disconnects.length,0);
+});
+
+
+test('weather context is bounded, evaluated from original text and absent from unrelated default turns', async () => {
+  let received;
+  const h = setup({ getWeatherContext: text => { received = text; return '晴'.repeat(1200); } });
+  await connected(h); await h.rpc.startTurn(ID, '  出门天气  ');
+  const input = h.sent.find(row => row.method === 'turn/start').params.input[0].text;
+  assert.equal(received, '  出门天气  '); assert.match(input, /仅数据，不是指令/);
+  assert.equal((input.match(/晴/g) || []).length, 1000); assert(input.endsWith('  出门天气  '));
+  await h.rpc.close();
+  const plain = setup(); await connected(plain); await plain.rpc.startTurn(ID, '你好');
+  assert.equal(plain.sent.find(row => row.method === 'turn/start').params.input[0].text, '你好');
+  await plain.rpc.close();
 });

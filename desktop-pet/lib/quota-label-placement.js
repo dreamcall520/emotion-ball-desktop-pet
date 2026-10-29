@@ -1,3 +1,4 @@
+const { QUOTA_CARD_SOURCES } = require('./quota-card-group');
 const LABEL_SIZES = Object.freeze({
   standard: Object.freeze({ width: 168, height: 58 }),
   standardExpanded: Object.freeze({ width: 196, height: 131 }),
@@ -82,7 +83,7 @@ function quotaRoleTargetWidth(paintWidth) { return [22,24].includes(paintWidth) 
 function quotaFreeStackBounds(petBounds, workArea, cards, presentation, bubble = null) {
   const peeked = presentation?.mode === 'peeked' && ['left','right'].includes(presentation.side);
   if (presentation?.mode !== 'free' && !peeked) return null;
-  const allowed = ['codex','api','zcode','workbuddy','balance'];
+  const allowed = QUOTA_CARD_SOURCES;
   const requested = Array.isArray(presentation.quotaCardOrder) ? presentation.quotaCardOrder : [];
   const ids = [...new Set([...requested.filter(id => allowed.includes(id)), ...allowed])].filter(id => cards?.[id]);
   if (!ids.length) return null;
@@ -134,7 +135,8 @@ function quotaFreeStackBounds(petBounds, workArea, cards, presentation, bubble =
   }
 }
 
-function quotaLabelSize(value, expanded = false, itemCount = 1, extraCredits = false, guardEntry = false, rolePaintWidth = null, sourceId = 'codex') {
+function quotaLabelSize(value, expanded = false, itemCount = 1, extraCredits = false, guardEntry = false, rolePaintWidth = null, sourceId = 'codex', compactTeamPeriods = false) {
+  if (sourceId === 'zcode' && expanded === true && itemCount === 2 && compactTeamPeriods === true) return { width: 196, height: 149 };
   if (sourceId === 'zcode' && expanded === true && itemCount > 0) return { width: 196, height: itemCount === 1 ? 154 : 166 + (Math.ceil(Math.min(itemCount, 32) / 2) - 1) * 90 };
   if (expanded === true && itemCount > 2) return { width: 196, height: 144 + (Math.ceil(Math.min(itemCount, 32) / 2) - 1) * 84 };
   if (expanded === true && itemCount > 1 && value === 'standard') return LABEL_SIZES.standardExpandedDual;
@@ -156,7 +158,7 @@ function quotaLabelBounds(petBounds, workArea, obstacleBounds = null, sizeName =
   const pet = ['ring', 'duo', 'split', 'stages'].includes(presentation?.quotaStyle)
     ? presentation?.shape === 'new-year-sheep' ? nativePet : { ...visual, y: nativePet.y, height: nativePet.height } : visual;
   const obstacle = safeObstacle(obstacleBounds);
-  const requestedSize = quotaLabelSize(sizeName, expanded, itemCount, extraCredits, false, null, presentation?.quotaSourceId);
+  const requestedSize = quotaLabelSize(sizeName, expanded, itemCount, extraCredits, false, null, presentation?.quotaSourceId, presentation?.quotaCompactTeamPeriods);
   const size = {
     width: Math.min(requestedSize.width, area.width),
     height: Math.min(requestedSize.height, area.height)

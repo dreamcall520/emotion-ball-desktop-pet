@@ -1,6 +1,7 @@
 const { captureQuotaGroupFrames } = require('./quota-group-capture');
 const { sendQuotaCardMotion } = require('./quota-card-motion');
 const { createNativeWindowFade } = require('./native-window-fade');
+const { createQuotaCardResize } = require('./quota-card-resize');
 const path = require('node:path');
 const { quotaLabelSize } = require('./quota-label-placement');
 const { createWorkBuddyGuardEntryWindow } = require('./workbuddy-guard-entry-window');
@@ -80,9 +81,11 @@ function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getOb
   const guard = createWorkBuddyGuardEntryWindow({ BrowserWindow, alwaysOnTop, onGuard, onError });
   const live = w => w && !w.isDestroyed() && !w.webContents.isDestroyed?.();
   const fade = createNativeWindowFade({ onError: error });
+  const resize = createQuotaCardResize({ onError, onSettled: notifyLayout });
+  let toggleResizePending = false;
   function notifyLayout() { try { onLayout(); } catch (e) { error(e); } }
-  function hide({ animate = false } = {}) { groupTransitionMode=null;groupTransitionEpoch++;const changed = visible || expanded; visible = false; expanded = false; guard.hide({safety:true}); if (live(win)) { win.setIgnoreMouseEvents?.(true, { forward: true }); fade.hide(win, { animate: sendQuotaCardMotion(win, false, getPresentation(), animate && ['peeked', 'tucked'].includes(getPresentation()?.mode)) }); } if (changed) notifyLayout(); }
-  function destroy() { groupTransitionMode=null;groupTransitionEpoch++;fade.cancel(win); guard.destroy(); const old = win; win = null; ready = visible = expanded = false; if (live(old)) old.destroy(); }
+  function hide({ animate = false } = {}) { toggleResizePending=false;groupTransitionMode=null;groupTransitionEpoch++;const changed = visible || expanded; visible = false; expanded = false; guard.hide({safety:true}); if (live(win)) { win.setIgnoreMouseEvents?.(true, { forward: true }); fade.hide(win, { animate: sendQuotaCardMotion(win, false, getPresentation(), animate && ['peeked', 'tucked'].includes(getPresentation()?.mode)) }); } if (changed) notifyLayout(); }
+  function destroy() { groupTransitionMode=null;groupTransitionEpoch++;fade.cancel(win); guard.destroy(); const old = win; resize.forget(old);toggleResizePending=false;win = null; ready = visible = expanded = false; if (live(old)) old.destroy(); }
   function reposition() {
     if(groupTransitionMode==='hold'||groupTransitionMode==='masked')return;
     if (!ready || !visible || !live(win)) return;
@@ -100,8 +103,11 @@ function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getOb
       if (!bounds && expanded) { expanded = false; spaceError = true; notifyLayout(); bounds = workBuddyLabelBounds(p, area, obstacles, false, stackAnchor, presentation, bubbleBounds); }
       if (!bounds) { fade.hide(win); guard.hide(); return; }
       const appearance = getAppearance();
-      win.setBounds(bounds, false);
       win.webContents.send(CHANNEL, { ...current, expanded, spaceError, appearance: ['light', 'dark'].includes(appearance) ? appearance : 'system' });
+      if (!live(win) || !visible) return;
+      resize.apply(win, bounds, { animate: toggleResizePending, reducedMotion: presentation?.quotaReducedMotion === true,
+        immediate: groupTransitionMode !== null || groupResumeImmediate });
+      toggleResizePending = false;
       win.setIgnoreMouseEvents?.(groupTransitionMode==='stage',{forward:true});
       if(groupTransitionMode==='stage'){fade.cancel(win);sendQuotaCardMotion(win,true,{...presentation,quotaGroupAnimate:false},false);win.hide();}
       else fade.show(win, sendQuotaCardMotion(win, true, presentation, !groupResumeImmediate && (presentation?.quotaGroupAnimate === true || ['peeked', 'tucked'].includes(presentation?.mode))));
@@ -123,13 +129,13 @@ function createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow, getOb
     target.webContents.on('ipc-message', (e, channel, kind) => {
       if (groupTransitionMode || win !== target || !ready || !visible || !live(target) || !target.isVisible() || e.sender !== target.webContents || e.senderFrame !== target.webContents.mainFrame) return;
       try {
-        if (channel === `${CHANNEL}-toggle`) { expanded = !expanded; notifyLayout(); reposition(); }
+        if (channel === `${CHANNEL}-toggle`) { toggleResizePending = true; expanded = !expanded; notifyLayout(); reposition(); }
         if (channel === `${CHANNEL}-refresh` && !current.busy) onRefresh();
         if (channel === `${CHANNEL}-trend`) onTrend();
         if (channel === `${CHANNEL}-tasks` && ['tasks', 'results'].includes(kind)) onTasks(kind);
       } catch (err) { error(err); }
     });
-    target.on('closed', () => { if (win === target) { guard.hide(); win = null; ready = false; } });
+    target.on('closed', () => { resize.forget(target); if (win === target) { guard.hide(); win = null; ready = false; } });
     target.webContents.on('render-process-gone', () => { if (win === target) { destroy(); error(new Error('WorkBuddy 积分窗口已退出')); } });
     const loaded = () => { if (win === target && !ready && live(target)) { ready = true; notifyLayout(); reposition(); } };
     target.webContents.on('did-finish-load', loaded);

@@ -88,5 +88,6 @@ contextBridge.exposeInMainWorld('petDesktop', {
   onActivity: callback => subscribe('pet:activity', callback),
   onSettings: callback => subscribe('pet:settings', callback),
   onQuota: callback => subscribe('pet:quota-display', callback),
+  onWeather: callback => subscribe('pet:weather', callback),
   onCodexSettings: callback => subscribe('pet:codex-settings', callback)
 });

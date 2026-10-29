@@ -101,11 +101,13 @@ test('额度标签 ready 折叠才为角色扩窗，stale/unknown 还原原卡�
     getSize: () => 'compact', getGuardEntry: () => true });
   label.show(model()); await flush();
   const win = f.windows[0];
-  assert.equal(win.bounds.width, 184); assert.equal(win.bounds.height, 50);
+  const carrier={...win.bounds};assert(carrier.width>=196);assert(carrier.height>=131);
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
-  assert.equal(win.bounds.width, 196); assert.equal(win.bounds.height, 131);
+  await new Promise(resolve => setTimeout(resolve, 230));
+  assert.deepEqual(win.bounds,carrier);assert.equal(label.getVisibleBounds().width,196);assert.equal(label.getVisibleBounds().height,131);
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
-  assert.equal(win.bounds.width, 184);
+  await new Promise(resolve => setTimeout(resolve, 230));
+  assert.deepEqual(win.bounds,carrier,'guard carrier stays fixed after glass animation');assert.equal(label.getVisibleBounds().width,124);
   label.show({ ...model(), state: 'stale' });
   assert.equal(win.bounds.width, 128); assert.equal(win.bounds.height, 32);
   label.show({ state: 'reset-wait', items: [] });

@@ -59,6 +59,37 @@ test('Codex 额度格仍是 section，保留原卡片点击收起而不新增桶
   h.cells[0].children[0].click(); assert.deepEqual(h.calls, [['toggle']]);
 });
 
+test('ZCode 团队双周期主卡仅显示周期标签，真实套餐留在辅助说明和明细入口', () => {
+  const rows = [300,10080].map((windowMinutes,index) => ({
+    label:'Coding Plan 积分', planName:'Coding Plan · 团队',
+    bucketId:`zcode:paid:CREDIT_LIMIT:${index ? '6:1' : '3:5'}`, windowMinutes,
+    remaining:index ? 78 : 70, resetsAt:Date.now()+windowMinutes*60000, periodKind:'rolling'
+  }));
+  for (const size of ['standard','compact']) for (const appearance of ['light','dark']) for (const state of ['ready','stale']) {
+    const h = fixture({sourceId:'zcode',state,expanded:true,size,appearance,items:rows});
+    assert.deepEqual(h.cells.map(cell=>cell.children[0].textContent),['5小时额度','周额度']);
+    assert.ok(h.cells.every(cell=>cell.children[0].className.includes('v20-team-period-label')));
+    assert.doesNotMatch(h.nodes['codex-expanded'].textContent,/Coding Plan|团队/);
+    assert.equal(h.nodes.summary.children[0].children[1].textContent,'额度');
+    h.cells.forEach((cell,index)=>{
+      assert.equal(cell.children[0].children[0].className,'period-pill');
+      assert.match(cell.children[0].title,/Coding Plan · 团队/);
+      assert.equal(cell.children[1].children[0].textContent,`${rows[index].remaining}%`);
+      assert.equal(cell.children[2].value,rows[index].remaining);
+      assert.match(cell.children[3].textContent,state === 'stale' ? /待更新/ : /重置/);
+      cell.children[0].click(); assert.deepEqual(h.calls.at(-1),['detail','trend',rows[index].bucketId]);
+    });
+    const entry = h.nodes['codex-expanded'].children[2].children[0].children[0];
+    entry.click(); assert.deepEqual(h.calls.at(-1),['detail','quota',rows[0].bucketId]);
+  }
+  for (const overrides of [{planName:'Coding Plan'},{bucketId:'zcode:custom:credits'}, {windowMinutes:60}]) {
+    const row = {...rows[0],...overrides};
+    const h = fixture({sourceId:'zcode',state:'ready',expanded:true,items:[row]});
+    assert.deepEqual(h.cells[0].children[0].children.map(child=>child.textContent),[row.planName,row.label]);
+    assert.doesNotMatch(h.cells[0].children[0].className,/v20-team-period-label/);
+  }
+});
+
 
 test('ZCode 成功获取额度时不把记录不足误写成待记录；真实节奏与过期状态仍保留', () => {
   const ready = fixture({ sourceId: 'zcode', state: 'ready', expanded: true, items: items(4) });

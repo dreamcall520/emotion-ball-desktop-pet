@@ -34,6 +34,7 @@ if (!process.versions.electron) {
     await win.loadFile(file(`${name}.html`));
   }
   async function expect(channel, value, expected, name) {
+    win.webContents.send('pet:color-mode', 'standard', value.appearance || 'light');
     win.webContents.send(channel, value);
     let text = '';
     for (let i = 0; i < 100; i++) { text = await page('document.body.innerText'); if (expected.every(value => text.includes(value))) break; await wait(20); }
@@ -70,6 +71,32 @@ if (!process.versions.electron) {
         assert((await page("document.getElementById('status').title")).includes('ZCode'));
       }
       const now = Date.now();
+      const { quotaLabelSize } = require(file('lib/quota-label-placement'));
+      const teamRows=[300,10080].map((windowMinutes,index)=>({id:`zcode:paid:CREDIT_LIMIT:${index?'6:1':'3:5'}`,
+        label:'Coding Plan 积分',planName:'Coding Plan · 团队',windowMinutes,remaining:index?78:70,
+        periodStart:now-60000,resetsAt:now+(windowMinutes-1)*60000,periodKind:'rolling',total:1000,remainingUnits:index?780:700,unit:'credits'}));
+      const teamModel=buildZcodeQuotaLabelModel({enabled:true,quota:{state:'connected',stale:false,updatedAt:now,windows:teamRows}}, {}, now);
+      const teamSize=quotaLabelSize('compact',true,2,false,false,null,'zcode',true);
+      assert.deepEqual(teamSize,{width:196,height:149});
+      for(const appearance of ['light','dark'])for(const state of ['ready','stale']){
+        await load('quota-label',teamSize.width,teamSize.height,true);
+        await expect('pet:zcode-quota-label',{...teamModel,state,appearance,size:'compact',expanded:true},
+          ['5小时额度','周额度','70%','78%','查看额度明细',...(state==='stale'?['待更新']:[])],`zcode-team-${appearance}-${state}`);
+        const geometry=await page(`(()=>{const root=document.querySelector('#quota-label'),card=document.querySelector('#codex-expanded'),footer=document.querySelector('.v20-links'),r=card.getBoundingClientRect();return{width:innerWidth,height:innerHeight,appearance:document.documentElement.dataset.appearance,text:card.innerText,labels:[...card.querySelectorAll('.v20-cell-label')].map(n=>({text:n.textContent,width:n.clientWidth,scroll:n.scrollWidth,height:n.clientHeight})),footerBottom:footer.getBoundingClientRect().bottom,bottomGap:innerHeight-r.bottom,scroll:root.scrollHeight,client:root.clientHeight}})()`);
+        assert.equal(geometry.appearance,appearance);assert.equal(geometry.height,149);
+        assert(!/Coding Plan|团队/.test(geometry.text),'team identity belongs to quota details');
+        assert.deepEqual(geometry.labels.map(item=>item.text),['5小时额度','周额度']);
+        assert(geometry.labels.every(item=>item.height===16&&item.scroll<=item.width+1));
+        assert(geometry.footerBottom<=149&&geometry.bottomGap<=14&&geometry.bottomGap>=7,'card ends close to footer without clipping');
+        assert(geometry.scroll<=geometry.client+1);report.cases.at(-1).teamGeometry=geometry;
+      }
+      await load('quota-label',128,32,true);
+      await expect('pet:zcode-quota-label',{...teamModel,appearance:'light',size:'compact',expanded:false},['额度','70%'],'zcode-team-compact');
+      assert.equal(await page("document.querySelector('.summary-period-label').textContent"),'额度');
+      await load('quota-label',196,166,true);
+      await expect('pet:zcode-quota-label',{...teamModel,items:teamModel.items.map(item=>({...item,planName:'Coding Plan'})),appearance:'light',size:'compact',expanded:true},
+        ['Coding Plan','Coding Plan 积分','70%','78%'],'zcode-personal-unchanged');
+      assert.equal(await page("document.querySelectorAll('.v20-plan-name').length"),2);
       const base = { scope: 'enterprise', unlimited: false, total: 900, used: 100, limit: 1000, basic: null, reward: null,
         purchased: null, plan: '企业版', nextRefreshAt: now + 86400000, expires: [], updatedAt: now };
       for (const unlimited of [false, true]) {

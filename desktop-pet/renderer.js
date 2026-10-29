@@ -82,6 +82,15 @@
   const CODEX_THINKING_BURST_MS = 6000;
   const thinkingRestMs = () => 25000 + Math.floor(Math.random() * 10001);
   const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+  const weatherEffects = window.WeatherPetEffects?.create(petElement, () => ({
+    shape: customization.appearance.shape,
+    opacity: 1 - customization.appearance.auroraTransparency / 100,
+    visible: !presentationSuppressed && presentationMode !== 'hidden' && !lastSample?.locked,
+    sleeping: companion.manualSleep || currentState.mode === 'sleep',
+    busy: Boolean(focusQuiet || currentState.mode === 'focus' || dragState?.dragged || activeMotion || performance.now() < actionUntil),
+    atEdge: presentationMode === 'tucked' || presentationMode === 'peeked',
+    reducedMotion: reducedMotion()
+  }));
 
   function visualFacing() {
     if (!facing) return 'right';
@@ -1105,6 +1114,7 @@
     clearSheepAutoNap(); sheepLastNapAt = null; sheepAutomaticWakeUntil = 0;
     sheepOffering?.destroy();
     quotaEffects?.destroy();
+    weatherEffects?.destroy();
     codexEnabled = false;
     stopCodexThinkingCadence();
     cancelPendingInteraction();
@@ -1132,6 +1142,7 @@
   petElement.dataset.codexActiveTasks = '0';
   petElement.dataset.codexThoughtSide = 'right';
   if (desktop.onPresentation) listeners.push(desktop.onPresentation(observe(updatePresentation)));
+  if (desktop.onWeather) listeners.push(desktop.onWeather(packet => weatherEffects?.update(packet)));
   if (desktop.onQuota) listeners.push(desktop.onQuota(observe(packet => {
     quotaPacket = packet || { visible: false };
     syncQuotaEffects();

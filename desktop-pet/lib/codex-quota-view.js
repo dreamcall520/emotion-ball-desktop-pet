@@ -241,6 +241,20 @@ function buildQuotaLabelModel(snapshot, options = {}, now = Date.now()) {
   return model;
 }
 
+function briefWeeklyRebound(samples, index) {
+  const previous = samples[index - 1], current = samples[index];
+  // Integer quota reports can briefly return an older percentage. Only a real,
+  // bounded return to the prior balance confirms this; do not guess a recovery.
+  if (!Number.isInteger(previous.remaining) || !Number.isInteger(current.remaining)
+    || current.remaining - previous.remaining !== 1) return false;
+  for (let next = index + 1; next < samples.length; next++) {
+    const sample = samples[next];
+    if (sample.at - current.at > 300000 || sample.remaining > current.remaining) return false;
+    if (sample.remaining <= previous.remaining) return true;
+  }
+  return false;
+}
+
 function buildTrend(snapshot, window, now, resetOpportunities = null, accountResetHistory = null) {
   const unknown = { state: 'unknown', status: 'unknown', exhaustsAt: null, label: '',
     summary: '暂无法预估额度用完时间', detail: '连续用量记录不足，稍后再查看' };
@@ -250,7 +264,7 @@ function buildTrend(snapshot, window, now, resetOpportunities = null, accountRes
     samples: [], forecast: unknown };
   if (!window || snapshot?.enabled !== true || snapshot.history?.available !== true) return base;
   const weekly = window.windowMinutes === 10080;
-  if (weekly) base.forecast.detail = '本周期有效记录不足 1 小时，积累后提供初步预估';
+  if (weekly) base.forecast.detail = '本周期记录较少，暂无法预估';
   const maximum = weekly ? 6000 : 192;
   const byTime = new Map();
   for (const cycle of Array.isArray(snapshot.history.windows) ? snapshot.history.windows.slice(-8) : []) {
@@ -271,12 +285,18 @@ function buildTrend(snapshot, window, now, resetOpportunities = null, accountRes
     .filter(event => event.kind === 'redeemed' && event.occurredAt <= now).map(event => event.occurredAt)) : 0;
   let recent = weekly ? base.samples.filter(sample => !lastRedeemed || sample.at > lastRedeemed)
     : base.samples.filter(sample => sample.at >= now - 30 * 60000);
+  let sampleScope = weekly && recent.length < base.samples.length ? '重置后' : '本周期';
+  if (weekly) base.forecast.detail = `${sampleScope}记录较少，暂无法预估`;
   if (recent.length < 3 || now - recent.at(-1).at >= 300000) return base;
   for (let index = recent.length - 1; index > 0; index--) {
     const previous = recent[index - 1]; const current = recent[index];
-    if ((!weekly && current.at - previous.at >= 300000) || current.remaining > previous.remaining
+    const rebound = current.remaining > previous.remaining
+      && !(weekly && briefWeeklyRebound(recent, index));
+    if ((!weekly && current.at - previous.at >= 300000) || rebound
       || previous.remaining - current.remaining >= 25) {
-      recent = recent.slice(index); break;
+      recent = recent.slice(index);
+      if (weekly) { sampleScope = '额度校正后'; base.forecast.detail = `${sampleScope}记录较少，暂无法预估`; }
+      break;
     }
   }
   if (recent.length < 3) return base;
@@ -286,7 +306,10 @@ function buildTrend(snapshot, window, now, resetOpportunities = null, accountRes
     if (weekly) base.forecast.detail = '额度刚有变化，等待采样同步';
     return base;
   }
-  if (last.at - first.at < minimumSpan) return base;
+  if (last.at - first.at < minimumSpan) {
+    if (weekly) base.forecast.detail = `${sampleScope}有效记录不足 1 小时，稍后再看`;
+    return base;
+  }
   const consumed = first.remaining - last.remaining;
   if (weekly && consumed <= 0) {
     base.forecast.detail = '已记录时段内额度暂无下降，暂不推算用完时间'; return base;

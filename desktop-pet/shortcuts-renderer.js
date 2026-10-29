@@ -16,7 +16,7 @@
   const bindingIds = ['launcher', ...actions.map(action => action.id)];
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
   const symbols = isMac ? { Ctrl: '⌃', Alt: '⌥', Shift: '⇧', Meta: '⌘', Space: '空格' } : { Ctrl: 'Ctrl', Alt: 'Alt', Shift: 'Shift', Meta: 'Win', Space: '空格' };
-  let state = null, draft = { ...defaults }, recording = null, selected = -1, busy = false, pointerFrame = null;
+  let state = null, draft = { ...defaults }, recording = null, selected = -1, busy = false, pointerFrame = null, pointerPosition = null;
   let appearance = 'system', motionKey = '', motions = [];
   let saveNoticeTimer = null, saveGeneration = 0, confirmedConfig = { ...defaults };
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
@@ -59,6 +59,16 @@
       if (focus && current && button.getClientRects().length) button.focus({ preventScroll: true });
     });
   }
+
+  function resetActionSelection() {
+    select(-1);
+    if (document.activeElement?.matches('[data-action], .icon-button')) document.activeElement.blur();
+  }
+  function pointerInput() {
+    document.documentElement.dataset.inputMode = 'pointer';
+    if (selected >= 0) resetActionSelection();
+  }
+  document.documentElement.dataset.inputMode = 'pointer';
 
   function showError(message = '') {
     $('error').textContent = message;
@@ -210,10 +220,14 @@
     if (!next || !['floating', 'list', 'settings'].includes(next.view)) return;
     const enteringSettings = next.view === 'settings' && (state?.view !== 'settings' || state?.session !== next.session);
     if (next.view !== 'settings' && (state?.view !== next.view || state?.session !== next.session)) {
-      saveGeneration++; busy = false; selected = -1;
-      if (document.activeElement?.matches('[data-action]')) document.activeElement.blur();
+      saveGeneration++; busy = false;
+      document.documentElement.dataset.inputMode = 'pointer'; pointerPosition = null;
+      resetActionSelection();
     }
     if (next.view !== 'settings' && recording) setRecording(null);
+    if (next.view !== 'settings' && next.animation?.phase === 'closing') {
+      document.documentElement.dataset.inputMode = 'pointer'; pointerPosition = null; resetActionSelection();
+    }
     state = { ...next, config: configCopy(next.config) };
     document.body.dataset.session = String(state.session);
     document.body.dataset.view = state.view;
@@ -262,11 +276,13 @@
     draft = configCopy(state?.config);
     showError();
     clearSaveNotice();
+    resetActionSelection();
     api?.close();
   }
 
   function choose(id) {
-    if (id === 'settings') { setRecording(null); api?.openSettings(); }
+    resetActionSelection();
+    if (id === 'settings') { setRecording(null); api?.openAction('settings'); }
     else if (actions.some(action => action.id === id)) api?.openAction(id);
   }
 
@@ -275,7 +291,8 @@
       const button = event.target.closest('[data-action]');
       if (button) choose(button.dataset.action);
     });
-    for (const eventName of ['pointermove', 'focusin']) $(id).addEventListener(eventName, event => {
+    $(id).addEventListener('focusin', event => {
+      if (document.documentElement.dataset.inputMode !== 'keyboard') return;
       const button = event.target.closest('[data-action]');
       if (button) select(currentActions().findIndex(action => action.id === button.dataset.action));
     });
@@ -371,6 +388,18 @@
     return [event.ctrlKey && 'Ctrl', event.altKey && 'Alt', event.shiftKey && 'Shift', event.metaKey && 'Meta', key].filter(Boolean).join('+');
   }
 
+  document.addEventListener('pointerdown', () => pointerInput(), true);
+  document.addEventListener('pointermove', event => {
+    // Native show/motion may emit pointermove while the screen position stays unchanged.
+    const point = event.screenX || event.screenY ? { x: event.screenX, y: event.screenY } : { x: event.clientX, y: event.clientY };
+    if (pointerPosition && (point.x !== pointerPosition.x || point.y !== pointerPosition.y)) pointerInput();
+    pointerPosition = point;
+  }, true);
+  document.addEventListener('keydown', event => {
+    if (!event.isComposing && !['Control', 'Alt', 'Shift', 'Meta'].includes(event.key)) {
+      document.documentElement.dataset.inputMode = 'keyboard';
+    }
+  }, true);
   document.addEventListener('keydown', event => {
     if (event.isComposing || event.keyCode === 229 || event.repeat) return;
     if (recording) {
@@ -390,7 +419,15 @@
     }
     if (event.key === 'Escape') { event.preventDefault(); close(); return; }
     if (!state || state.view === 'settings') return;
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+    if (event.key === 'Tab') {
+      const controls = [...$(state.view).querySelectorAll('button')].filter(button => !button.disabled && button.getClientRects().length);
+      if (!controls.length) return;
+      event.preventDefault();
+      const current = controls.indexOf(document.activeElement), step = event.shiftKey ? -1 : 1;
+      const target = controls[current < 0 ? (event.shiftKey ? controls.length - 1 : 0) : (current + step + controls.length) % controls.length];
+      const index = currentActions().findIndex(action => action.id === target.dataset.action);
+      select(index); target.focus({ preventScroll: true });
+    } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
       event.preventDefault();
       const forward = ['ArrowDown', 'ArrowRight'].includes(event.key);
       const count = currentActions().length;
@@ -422,7 +459,11 @@
     if (pointerFrame !== null) return;
     pointerFrame = requestAnimationFrame(() => { pointerFrame = null; api?.pointer(); });
   });
-  window.addEventListener('blur', () => { if (recording) stopRecording(); });
+  window.addEventListener('focus', () => {
+    if (state?.view === 'settings') return;
+    requestAnimationFrame(() => { if (state?.view !== 'settings' && document.documentElement.dataset.inputMode === 'pointer' && selected < 0) resetActionSelection(); });
+  });
+  window.addEventListener('blur', () => { if (recording) stopRecording(); if (state?.view !== 'settings') { pointerPosition = null; pointerInput(); resetActionSelection(); } });
   const unsubscribeState = api?.onState(applyState);
   const unsubscribeColor = api?.onColorMode(applyColorMode);
   window.addEventListener('beforeunload', () => {

@@ -13,3 +13,14 @@ body[data-side="right"] { justify-content: flex-end; }
 .appear { animation: appear 220ms ease-out; }
 @keyframes appear { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .appear { animation: none; } }
+#weather-icon[hidden],#dot[hidden]{display:none}
+/* Weather keeps the existing edge capsule and only adds a quiet local icon and temperature. */
+body[data-weather="true"] #notice{gap:6px;padding:4px 10px;min-height:32px;max-height:36px;border-color:rgba(131,159,188,.24);background:linear-gradient(145deg,rgba(255,255,255,.54),rgba(231,242,253,.18)),var(--surface);box-shadow:inset 0 1px 0 rgba(255,255,255,.72),0 2px 5px rgba(24,47,70,.07);backdrop-filter:blur(18px) saturate(140%);-webkit-backdrop-filter:blur(18px) saturate(140%)}
+body[data-weather="true"] #weather-icon{display:block;width:22px;height:22px;flex:0 0 22px;object-fit:contain;transform:scale(1.16);pointer-events:none}
+body[data-weather="true"] #brand{flex:none;color:#527ba5;font-size:10px;font-weight:600;line-height:14px;font-variant-numeric:tabular-nums}
+body[data-weather="true"] #text{min-width:0;flex:0 1 auto;line-height:16px;font-size:12px;overflow:visible}
+:root[data-appearance="dark"] body[data-weather="true"] #notice{border-color:rgba(158,190,222,.24);background:linear-gradient(145deg,rgba(255,255,255,.07),rgba(109,158,201,.025)),var(--surface);box-shadow:inset 0 1px 0 rgba(205,227,249,.1),0 2px 5px rgba(0,0,0,.1)}
+:root[data-appearance="dark"] body[data-weather="true"] #brand{color:#a9c9e7}
+@media(prefers-color-scheme:dark){:root:not([data-appearance="light"]) body[data-weather="true"] #notice{border-color:rgba(158,190,222,.24);background:linear-gradient(145deg,rgba(255,255,255,.07),rgba(109,158,201,.025)),var(--surface);box-shadow:inset 0 1px 0 rgba(205,227,249,.1),0 2px 5px rgba(0,0,0,.1)}:root:not([data-appearance="light"]) body[data-weather="true"] #brand{color:#a9c9e7}}
+@media(prefers-reduced-transparency:reduce){body[data-weather="true"] #notice{backdrop-filter:none;-webkit-backdrop-filter:none;background:var(--surface)}}
+:root[data-color-mode="accessible"] body[data-weather="true"] #brand{color:var(--accessible-muted)}

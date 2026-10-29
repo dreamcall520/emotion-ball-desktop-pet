@@ -57,7 +57,18 @@ if (process.versions.electron && process.argv.includes('--balance-label-child'))
       let value;
       await render({ ...base, accounts: [account] }); assert.equal((await snapshot()).chevronHidden, true);
       await run("document.getElementById('trend').click()"); assert.equal(await run('calls.at(-1)'), 'trend');
+      for (const selector of ['#header','#selected-name','#collapse svg','#collapse','#provider-name']) {
+        const before=await run("calls.filter(x=>x==='toggle').length");
+        await run(`document.querySelector(${JSON.stringify(selector)}).dispatchEvent(new MouseEvent('click',{bubbles:true}))`);
+        assert.equal(await run("calls.filter(x=>x==='toggle').length"),before+1,selector+' collapses exactly once');
+        assert.equal(await run("document.getElementById('account-menu').hidden"),true,'single account keeps menu closed');
+      }
+      assert.equal(await run("document.querySelectorAll('#header button button').length"),0,'header has no nested buttons');
+      assert.deepEqual(await run("(()=>{const b=document.getElementById('collapse');return {tag:b.tagName,type:b.type,tabIndex:b.tabIndex,label:b.getAttribute('aria-label')}})()"),{tag:'BUTTON',type:'button',tabIndex:0,label:'收起 API 账户余额'},'collapse keeps native keyboard button semantics');
+      await render(base);
+      const beforeMenu=await run("calls.filter(x=>x==='toggle').length");
       await run("document.getElementById('account-toggle').click()"); assert.equal(await run("document.getElementById('account-menu').hidden"), false);
+      assert.equal(await run("calls.filter(x=>x==='toggle').length"),beforeMenu,'multiple-account menu does not collapse');
       await run("document.getElementById('account-settings').click()"); assert.equal(await run('calls.at(-1)'), 'settings');
       await render({ ...base, stale: true, status: 'stale', error: 'private raw error', errorCode: 'TIMEOUT', nextRetryAt: now + 15000 });
       value = await snapshot(); assert.equal(value.amount, '44.24'); assert.equal(value.health, '待更新'); assert.match(value.tooltip, /下次重试/); assert.doesNotMatch(value.tooltip, /private/);

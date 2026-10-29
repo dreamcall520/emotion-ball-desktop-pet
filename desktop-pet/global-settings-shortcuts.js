@@ -50,7 +50,7 @@
     if (!behaviorsOnly) row('启用快捷面板', enabled);
     if (!behaviorsOnly) choice('面板形态', 'shape', [['floating', '悬浮按钮'], ['list', '列表面板']]);
     let active = null;
-    const labels = { launcher: '唤起快捷面板', chat: '和球球聊聊', custom: '定制球球', note: '便签', todo: '待办', pomodoro: '番茄钟' };
+    const labels = { launcher: '唤起快捷面板', chat: '和球球聊聊', custom: '定制球球', note: '便签', todo: '待办', pomodoro: '番茄钟', weather: '天气' };
     const buttons = {}, clears = {};
     function paint(field) {
       const button = buttons[field]; button.replaceChildren();

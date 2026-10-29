@@ -5,7 +5,7 @@ const { normalizeAppearance, normalizeCustomization, appearanceContentKey } = re
 const { DEFAULT_SHORTCUT_SETTINGS, normalizeShortcutSettings, validateShortcutSettings } = require('./shortcuts');
 const { normalize: normalizeQuotaDisplay } = require('./quota-display');
 
-const QUOTA_CARD_SOURCES = Object.freeze(['codex', 'api', 'zcode', 'workbuddy', 'balance']);
+const { QUOTA_CARD_SOURCES } = require('./quota-card-group');
 function normalizeQuotaCardList(raw, complete = false) {
   const values = Array.isArray(raw) ? raw : [];
   const result = [...new Set(values.filter(value => QUOTA_CARD_SOURCES.includes(value)))];

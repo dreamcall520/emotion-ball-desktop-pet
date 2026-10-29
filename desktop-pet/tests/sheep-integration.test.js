@@ -39,7 +39,7 @@ function fixture({ realClick = false } = {}) {
   }
   const appearance = Customization.normalizeAppearance({shape:'new-year-sheep',sheepTheme:'christmas'});
   const context = vm.createContext({
-    ball:null, sheepOffering:null, sheepActionBall:null, actionTimer:null, actionUntil:0,
+    ball:null, weatherEffects:null, sheepOffering:null, sheepActionBall:null, actionTimer:null, actionUntil:0,
     customization:{appearance}, companion:{manualSleep:false,
       update:()=>({mode:'sleep',emotionId:'00',gaze:null}), setKeepAwake(){}, setManualSleep(value){this.manualSleep=Boolean(value);}},
     presentationSuppressed:false, presentationMode:'free', presentationPaused:false, presentationFrozen:false,
@@ -168,7 +168,7 @@ test('主进程真实showDialogue按本地日期解析auto，手动配置保持�
   const offered=[];
   const appearance={shape:'new-year-sheep',sheepTheme:'auto'};
   const context=vm.createContext({Date:LocalDate,SheepTheme,performance:{now:()=>0},
-    pomodoroQuiet:false,shortcutDialogueSuppressed:()=>false,screenLocked:false,chatWindow:null,presentationSuppressed:()=>false,
+    weatherDialogue:()=>'',pomodoroQuiet:false,shortcutDialogueSuppressed:()=>false,screenLocked:false,chatWindow:null,presentationSuppressed:()=>false,
     petWindow:{isDestroyed:()=>false,isVisible:()=>true},settings:{customization:{appearance}},effectiveCustomization:value=>value,
     dialogue:{offer(event,now,details){offered.push(details);return {id:1};},hasBubble:()=>false},
     dismissCodexPresentation(){},showBubble(){},hideBubble(){}});

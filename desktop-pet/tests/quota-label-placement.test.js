@@ -4,6 +4,20 @@ const { quotaLabelBounds, quotaLabelSize } = require('../lib/quota-label-placeme
 
 const AREA = Object.freeze({ x: 0, y: 0, width: 1440, height: 900 });
 
+test('紧凑团队双周期尺寸只作用于已识别的 ZCode 展开双栏', () => {
+  for (const size of ['compact','standard']) {
+    assert.deepEqual(quotaLabelSize(size,true,2,false,false,null,'zcode',true),{width:196,height:149});
+    assert.deepEqual(quotaLabelSize(size,true,2,false,false,null,'zcode'),{width:196,height:166});
+    assert.deepEqual(quotaLabelSize(size,true,2,false,false,null,'codex',true),quotaLabelSize(size,true,2));
+    assert.deepEqual(quotaLabelSize(size,false,2,false,false,null,'zcode',true),quotaLabelSize(size,false,2));
+    for (const count of [1,4]) assert.deepEqual(quotaLabelSize(size,true,count,false,false,null,'zcode',true),quotaLabelSize(size,true,count,false,false,null,'zcode'));
+    for (const y of [0,820]) {
+      const result=quotaLabelBounds({x:400,y,width:80,height:80},AREA,null,size,true,2,{mode:'free',quotaSourceId:'zcode',quotaCompactTeamPeriods:true});
+      assert.equal(result.height,149);assertInside(result,AREA);
+    }
+  }
+});
+
 test('余额复用辅助行，显示与隐藏均保持同一展开高度，折叠尺寸保持原样', () => {
   assert.deepEqual(quotaLabelSize('compact', false, 1, true), { width: 128, height: 32 });
   for (const size of ['compact', 'standard']) {
@@ -757,4 +771,20 @@ test('live sheep ink puts the collected group first face 8px from painted feet o
   if(plan.placement==='below')assert.equal(faces[0].y-(pet.y+80*.8),8);
   else assert.equal(pet.y+80*.2-(faces.at(-1).y+faces.at(-1).height),8);
  }
+});
+
+test('weather uses the same six-source order, 8px face spacing and dock alignment without changing five-card fallback', () => {
+  const { quotaFreeStackBounds } = require('../lib/quota-label-placement');
+  const area = { x: -1000, y: 0, width: 1000, height: 1000 }, ids = ['codex','api','zcode','workbuddy','balance','weather'];
+  const cards = Object.fromEntries(ids.map(id => [id, { width: 128, height: 32, inset: 2 }]));
+  for (const mode of ['free','peeked']) for (const side of ['left','right']) for (const y of [10,900]) {
+    const pet = {x:side==='left'?-1000:-80,y,width:80,height:80}, presentation = {mode,side,shape:'cloud',quotaCardOrder:['weather',...ids.filter(id=>id!=='weather')]};
+    const plan = quotaFreeStackBounds(pet,area,cards,presentation);
+    assert.notEqual(plan.placement,'hidden'); assert.equal(Object.keys(plan.cards)[0],'weather');
+    const rows = Object.values(plan.cards); rows.forEach(row=>assertInside(row,area));
+    for(let i=1;i<rows.length;i++)assert.equal(rows[i].face.y-rows[i-1].face.y-rows[i-1].face.height,8);
+    if(mode==='peeked')for(const row of rows)assert.equal(side==='left'?row.face.x:row.face.x+row.face.width,side==='left'?area.x+2:-2);
+    const without = quotaFreeStackBounds(pet,area,{...cards,weather:null},presentation);
+    assert.deepEqual(Object.keys(without.cards),ids.filter(id=>id!=='weather'));
+  }
 });

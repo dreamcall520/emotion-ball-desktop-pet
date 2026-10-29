@@ -79,6 +79,14 @@ test('synchronous safety cancellation from a controller mode cannot latch remain
  assert.equal((await f.request()).ok,false);assert.equal(f.controller.isActive(),false);assert.equal(f.overlay.prepares.length,0);assert(f.cards.every(row=>row.controller.modes.at(-1)===null));
 });
 
+test('weather takes part in the same capture/mask animation and pinned weather is excluded',async()=>{
+ for(const pinned of [false,true]){
+  const f=fixture(),modes=[];let captures=0;
+  f.cards.push({id:'weather',pinned,controller:{setGroupTransitionMode:mode=>modes.push(mode),async captureGroupTransitionFrames(){captures++;return[{bounds:{x:10,y:110,width:128,height:32},png}]}}});
+  const work=f.request();await flush();assert.equal(f.overlay.prepares[0].layers.length,pinned?2:3);assert.equal(captures,pinned?0:1);
+  f.overlay.finish();assert.equal((await work).ok,true);if(pinned)assert.deepEqual(modes,[]);else assert.deepEqual(modes,['stage','masked',null]);f.controller.destroy();
+ }
+});
 function fixedCard(id,trace=[]){
  return {id,controller:{modes:[],setGroupTransitionMode(mode){this.modes.push(mode);trace.push(`${id}:${mode}`)},captureGroupTransitionFrames(){throw Error('fixed cards must not be captured')}}};
 }

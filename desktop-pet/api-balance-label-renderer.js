@@ -42,10 +42,18 @@
   }
   function select(id) { api.selectAccount(id); closeMenu(true); }
   el('summary').addEventListener('click', () => api.toggle());
-  el('collapse').addEventListener('click', () => { closeMenu(); api.toggle(); });
-  el('account-toggle').addEventListener('click', () => menuOpen ? closeMenu(true) : openMenu());
+  const collapse = () => { closeMenu(); api.toggle(); };
+  const multipleAccounts = () => Array.isArray(current?.accounts) && current.accounts.length > 1;
+  el('collapse').addEventListener('click', collapse);
+  el('header').addEventListener('click', event => {
+    if (!event.target.closest('button')) collapse();
+  });
+  el('account-toggle').addEventListener('click', () => {
+    if (!multipleAccounts()) collapse();
+    else if (menuOpen) closeMenu(true); else openMenu();
+  });
   el('account-toggle').addEventListener('keydown', event => {
-    if (event.key === 'ArrowDown') { event.preventDefault(); openMenu(); }
+    if (event.key === 'ArrowDown' && multipleAccounts()) { event.preventDefault(); openMenu(); }
   });
   el('account-list').addEventListener('keydown', event => {
     const options = [...el('account-list').children], index = options.indexOf(document.activeElement);
@@ -106,7 +114,8 @@
     el('source-image').hidden = selected?.provider !== 'moonshot'; el('source-fallback').hidden = selected?.provider === 'moonshot';
     el('source-icon').setAttribute('aria-label', name); el('source-icon').title = name;
     el('account-chevron').hidden = accounts.length <= 1;
-    const accountAction = accounts.length > 1 ? '切换账户与连接设置' : '账户信息与连接设置';
+    const accountAction = accounts.length > 1 ? '切换账户与连接设置' : '收起余额卡';
+    el('account-toggle').setAttribute('aria-haspopup', accounts.length > 1 ? 'listbox' : 'false');
     el('account-toggle').title = `${fullName}；${accountAction}`; el('account-toggle').setAttribute('aria-label', `${fullName}，${accountAction}`);
     el('currency').textContent = report ? symbol(report.currency) : ''; el('amount').textContent = report ? amount(report.available) : '—';
     el('amount').dataset.long = String(el('amount').textContent.length > 10); el('amount').title = report ? `${money(report)} ${report.currency}；${stale ? '上次成功查询的数据' : '账户可用余额'}` : '尚无余额数据';

@@ -325,7 +325,7 @@ body {
 #quota-label[data-size="compact"][data-expanded="false"] {
   inset: 2px;
   border-radius: 11px;
-  padding: 0 10px 0 7px;
+  padding: 0 4px;
   font-size: 12px;
   line-height: 16px;
 }
@@ -892,21 +892,21 @@ body[data-guard-size="compact"] .guard-entry-zombie { top: 11px; }
 #quota-label[data-source="zcode"] .v20-links { min-height: 21px; font-size: 10px; line-height: 20px; }
 
 #quota-label[data-source="zcode"] .v20-periods:not(.dual) .v20-cell-label { height: 18px; flex-direction: row; gap: 6px; }
+#quota-label[data-source="zcode"] .v20-periods .v20-team-period-label { height: 16px; flex-direction: row; align-items: center; justify-content: flex-start; }
 #quota-label[data-source="zcode"] .v20-shared { padding: 0; }
 #quota-label[data-source="zcode"] .v20-quota-entry { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 19px; box-sizing: border-box; padding: 1px 6px; color: var(--quota-action-blue); text-align: left; }
 #quota-label[data-source="zcode"] .v20-entry-arrow { font-size: 14px; line-height: 16px; font-weight: 400; }
 #quota-label[data-source="zcode"][data-expanded="false"] #items li { column-gap: 3px; }
 #quota-label[data-source="zcode"][data-expanded="false"] .quota-period { padding-inline: 2px; font-size: 7.5px; }
 
-/* Reserve both characters in the 128px ZCode summary, including decimal quotas. */
-#quota-label[data-source="zcode"][data-size="compact"][data-expanded="false"] #summary { gap: 4px; }
-#quota-label[data-source="zcode"][data-size="compact"][data-expanded="false"] .summary-period { flex: none; gap: 3px; overflow: visible; }
+/* All 128px summaries share the same caption and icon alignment. */
+#quota-label[data-size="compact"][data-expanded="false"] #summary { gap: 4px; }
+#quota-label[data-size="compact"][data-expanded="false"] .summary-period { flex: none; gap: 4px; overflow: visible; font-size: 10px; font-weight: 600; line-height: 14px; }
+#quota-label[data-size="compact"][data-expanded="false"] .summary-value { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 #quota-label[data-source="zcode"][data-size="compact"][data-expanded="false"] .summary-badge { min-width: 20px; padding-inline: 3px; }
 #quota-label[data-source="zcode"][data-size="compact"][data-expanded="false"] .summary-period-label { flex: none; min-width: 2em; overflow: visible; text-overflow: clip; }
 
 /* Keep source, period and percentage readable in the 128px Codex card. */
-#quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] #summary { gap: 2px; }
-#quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] .summary-period { flex: none; gap: 2px; overflow: visible; }
 #quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] .summary-period-label { flex: none; overflow: visible; text-overflow: clip; }
 #quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] .summary-badge { padding-inline: 3px; }
 #quota-label:is([data-source="codex"], [data-source="zcode"])[data-size="compact"][data-expanded="false"] .summary-value { font-size: 14px; }
@@ -917,7 +917,6 @@ body[data-guard-size="compact"] .guard-entry-zombie { top: 11px; }
 .source-icon .source-icon-dark { display: none; }
 :root[data-appearance="dark"] .source-icon .source-icon-light { display: none; }
 :root[data-appearance="dark"] .source-icon .source-icon-dark { display: block; }
-#quota-label[data-source="codex"][data-size="compact"][data-expanded="false"] { padding-inline: 4px; }
 /* Standard rows reserve the full icon height, including both quota periods. */
 #quota-label[data-source="codex"][data-size="standard"][data-expanded="false"] { padding-block: 2px; }
 #quota-label[data-source="codex"][data-size="standard"][data-expanded="false"] #items li { grid-template-rows: 20px 3px; }
@@ -925,3 +924,16 @@ body[data-guard-size="compact"] .guard-entry-zombie { top: 11px; }
 
 /* Group motion changes painted content only; host bounds and hit geometry stay fixed. */
 #quota-beam { transform-origin: center top; }
+
+/* Native resize reveals the final 196px card; keep its contents from reflowing at intermediate widths. */
+#quota-label[data-expanded="true"] > :is(#codex-expanded, #compact-header, #api-details, #details, #full) {
+  width: 174px;
+  min-width: 174px;
+}
+
+/* Keep the source identifiable when no quota reading is available. */
+#quota-label[data-has-items="false"] #status { display: grid; justify-items: center; gap: 1px; width: 100%; line-height: 12px; }
+.empty-source { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; line-height: 12px; }
+.empty-source .source-icon { flex-basis: 12px; }
+.empty-source .source-icon, .empty-source .source-icon img { width: 12px; height: 12px; }
+.empty-status-text { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-size: 10px; line-height: 12px; }

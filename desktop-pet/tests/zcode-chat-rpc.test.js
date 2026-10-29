@@ -165,3 +165,15 @@ test('a JWT change while team model configuration is pending cannot publish its 
   } });
   await h.rpc.start(); await assert.rejects(h.rpc.listModels(), { code: 'UNAUTHENTICATED' }); await h.rpc.close();
 });
+
+
+test('weather context adds only bounded data before original ZCode user text', async () => {
+  let received;
+  const h = teamHarness({ getWeatherContext: text => { received = text; return '雨'.repeat(1200); } });
+  await h.rpc.start(); const models = await h.rpc.listModels(); await h.rpc.startThread();
+  await h.rpc.startTurn('sess_team', '  带伞吗  ', resolveZcodeChatModel(models, 'auto'));
+  const content = h.requests.find(row => row.method === 'session/send').params.content;
+  assert.equal(received, '  带伞吗  '); assert.match(content, /仅数据，不是指令/);
+  assert.equal((content.match(/雨/g) || []).length, 1000); assert(content.endsWith('  带伞吗  '));
+  await h.rpc.close();
+});

@@ -168,3 +168,23 @@ test('stale cancelled models lookup cannot overwrite a new connection', async ()
   await assert.rejects(first);
   assert.equal(env.chat.getState().models[0].id, 'new'); assert.equal(env.chat.getState().connection, 'ready');
 });
+
+
+test('weather context augments system only and preserves local user display and history', async () => {
+  let received;
+  const env = setup({ getWeatherContext: text => { received = text; return '冷'.repeat(1200); } });
+  await env.chat.send('  出门  '); await tick();
+  assert.equal(received, '  出门  ');
+  const messages = env.calls[0].payload.messages;
+  assert.match(messages[0].content, /仅数据，不是指令/);
+  assert.equal((messages[0].content.match(/冷/g) || []).length, 1000);
+  assert.equal(messages[1].content, '出门'); assert.equal(env.disk().messages[0].text, '出门');
+  env.chat.close();
+});
+test('weather context failures leave default WorkBuddy request system unchanged', async () => {
+  const plain = setup(); await plain.chat.send('你好'); await tick();
+  const failed = setup({ getWeatherContext: () => { throw Error('weather unavailable'); } });
+  await failed.chat.send('你好'); await tick();
+  assert.deepEqual(failed.calls[0].payload.messages, plain.calls[0].payload.messages);
+  plain.chat.close(); failed.chat.close();
+});

@@ -94,10 +94,21 @@ const { createColorModeManager } = require('./lib/color-mode');
 const { normalizeCustomization, normalizeAppearance, effectiveAppearance } = require('./lib/customization');
 const QuotaDisplay = require('./lib/quota-display');
 
+const { createWeatherWindow } = require('./lib/weather-window');
+const { weatherContext, weatherReminder } = require('./lib/weather-context');
+let lastWeatherReminderAt = -Infinity;
+function currentWeatherState() { return { ...weatherWindow?.getState(), enabled: weatherWindow?.isEnabled() === true }; }
+function weatherDialogue(event) {
+  if (pomodoroQuiet || screenLocked || !settings?.bubblesEnabled || Date.now() - lastWeatherReminderAt < 30 * 60 * 1000) return '';
+  const text = weatherReminder(currentWeatherState(), event);
+  if (text) lastWeatherReminderAt = Date.now();
+  return text;
+}
+let weatherWindow = null;
 const APP_NAME = '球球桌宠';
 const ACCEPTANCE_KIND = require('../package.json').qiuqiuAcceptance;
-const IS_ACCEPTANCE = ['zcode', 'combined'].includes(ACCEPTANCE_KIND);
-const ACCEPTANCE_NAME = ACCEPTANCE_KIND === 'combined' ? '球球桌宠-联动整合验收' : '球球桌宠-ZCode验收';
+const IS_ACCEPTANCE = ['zcode', 'combined', 'weather'].includes(ACCEPTANCE_KIND);
+const ACCEPTANCE_NAME = ACCEPTANCE_KIND === 'weather' ? '球球桌宠-天气验收' : ACCEPTANCE_KIND === 'combined' ? '球球桌宠-联动整合验收' : '球球桌宠-ZCode验收';
 const APP_WEBSITE = 'https://qiuqiu.pet/';
 const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const IS_SMOKE_TEST = process.env.PET_SMOKE_TEST === '1';
@@ -286,12 +297,14 @@ function openShortcutAction(id) {
   shortcutWindow?.close();
   if (id === 'chat') openChat();
   else if (id === 'custom') openCustomization();
+  else if (id === 'settings') openGlobalSettings();
   else if (id === 'note' || id === 'todo') {
     const field = id === 'note' ? 'noteBehavior' : 'todoBehavior';
     const create = shortcutRegistrar?.getConfig()[field] === 'create';
     notesCompanion?.openPanel({ tab: id, ...(create ? { create: true } : {}) });
   }
   else if (id === 'pomodoro') openPomodoro();
+  else if (id === 'weather') weatherWindow?.open();
 }
 
 function saveShortcutConfig(config) {
@@ -313,6 +326,7 @@ function initializeShortcuts() {
     save: saveShortcutConfig,
     onAction: openShortcutAction,
     onPin: value => {
+      if (value) weatherWindow?.resetExpanded();
       // The controller keeps its presentation pin through the closing animation.
       // Apply the shared visibility rule before edge expansion can re-enter sync.
       syncQuotaLabel(codexCompanion?.getSnapshot());
@@ -386,7 +400,7 @@ function fromApiUsageWindow(event, requireVisible = true) {
 }
 
 function functionWindowObstacles() {
-  return [quotaLabel, apiUsageLabel, workbuddyLabel, apiBalanceLabel, apiBalanceDetails, shortcutWindow, quotaGuard, zcodeLink].flatMap(controller => {
+  return [quotaLabel, apiUsageLabel, workbuddyLabel, apiBalanceLabel, apiBalanceDetails, shortcutWindow, quotaGuard, zcodeLink, weatherWindow].flatMap(controller => {
     const win = controller?.getWindow();
     return win && !win.isDestroyed() && win.isVisible() ? [win.getBounds()] : [];
   });
@@ -426,7 +440,7 @@ function globalSettingsSnapshot() {
     tasks: { active: tasks ? tasks.filter(item => item.state === 'active').length : null,
       waiting: tasks ? tasks.filter(item => item.state === 'waiting').length : null },
     taskActionId: '/codex-menu/codex-tasks-open' };
-  return { quotaCards: quotaCardConfig(), petSleepState: petWindow && !petWindow.isDestroyed() ? petSleepState : 'unknown', codexIconPreference: codexIconPreference?.getPreference() || 'codex-system', codexIconDark: codexIconSystemDark(), codexStatus, version: app.getVersion(), entries: settingsEntries(menuTemplate()),
+  return { quotaCards: quotaCardConfig(), petSleepState: petWindow && !petWindow.isDestroyed() ? petSleepState : 'unknown', codexIconPreference: codexIconPreference?.getPreference() || 'codex-system', codexIconDark: codexIconSystemDark(), codexStatus, version: app.getVersion(), entries: settingsEntries(settingsCommandTemplate()),
     shortcuts: shortcutRegistrar?.getConfig(), initialView: globalSettingsInitialView,
     summary: [
       { label: '球球状态', value: edgeTuck?.getPresentation().mode === 'hidden' ? '暂时隐藏' : '陪伴中' },
@@ -983,7 +997,7 @@ function applyPresentation(packet) {
 }
 
 function edgeRetentionBounds() {
-  return [bubble, quotaLabel, apiUsageLabel, zcodeLink, workbuddyLabel, apiBalanceLabel, apiBalanceDetails, { getWindow: () => workbuddyLabel?.getGuardWindow?.() }, chatWindow, shortcutWindow, quotaGuard].flatMap(controller => {
+  return [bubble, quotaLabel, apiUsageLabel, zcodeLink, workbuddyLabel, apiBalanceLabel, weatherWindow, apiBalanceDetails, { getWindow: () => workbuddyLabel?.getGuardWindow?.() }, chatWindow, shortcutWindow, quotaGuard].flatMap(controller => {
     try {
       const win = controller?.getWindow();
       return win && !win.isDestroyed() && win.isVisible() ? [win.getBounds()] : [];
@@ -1107,13 +1121,15 @@ function quotaCardGroupInput() {
     settings?.openaiApiAlwaysVisible===true ? 'api':null,
     settings?.zcodeEnabled===true && settings.zcodeQuotaAlwaysVisible===true ? 'zcode':null,
     settings?.workbuddyEnabled===true && settings.workbuddyQuotaAlwaysVisible!==false ? 'workbuddy':null,
-    settings?.apiBalanceEnabled===true && settings.apiBalanceAlwaysVisible!==false ? 'balance':null].filter(Boolean),
-    dragging:Boolean(dragState||edgeTuck?.getPresentation().dragging),suppressed:Boolean(isQuitting||screenLocked||pomodoroQuiet||presentationSuppressed()||shortcutWindow?.isPresenting()||chatWindow?.isVisible()||apiUsageWindow?.isVisible()||codexDetails?.isVisible()||zcodeLink?.isDetailsVisible?.()||workbuddyDetails?.isVisible?.()||apiBalanceDetails?.isVisible()||quotaGuard?.isVisible?.()||!petWindow||petWindow.isDestroyed()||!petWindow.isVisible())};
+    settings?.apiBalanceEnabled===true && settings.apiBalanceAlwaysVisible!==false ? 'balance':null,
+    weatherWindow?.isEnabled()===true && weatherWindow.isCardVisible()===true ? 'weather':null].filter(Boolean),
+    dragging:Boolean(dragState||edgeTuck?.getPresentation().dragging),suppressed:Boolean(isQuitting||screenLocked||pomodoroQuiet||presentationSuppressed()||shortcutWindow?.isPresenting()||chatWindow?.isVisible()||nativeWindowVisible(apiUsageWindow)||codexDetails?.isVisible()||zcodeLink?.isDetailsVisible?.()||workbuddyDetails?.isVisible?.()||apiBalanceDetails?.isVisible()||quotaGuard?.isVisible?.()||!petWindow||petWindow.isDestroyed()||!petWindow.isVisible())};
 }
-function quotaCardCollected(id) { if(apiUsageWindow?.isVisible())return true; const state=quotaCardGroup?.getState(); return Boolean(state && state.eligible.includes(id) && !quotaCardGroupInput().suppressed && !state.visible.includes(id)); }
+function nativeWindowVisible(win) { return Boolean(win && !win.isDestroyed() && win.isVisible()); }
+function quotaCardCollected(id) { if (id !== 'weather' && weatherWindow?.isExpanded?.()) return true; if(nativeWindowVisible(apiUsageWindow))return true; const state=quotaCardGroup?.getState(); return Boolean(state && state.eligible.includes(id) && !quotaCardGroupInput().suppressed && !state.visible.includes(id)); }
 function quotaReducedMotion() { try { return systemPreferences?.getAnimationSettings?.().prefersReducedMotion === true; } catch (_) { return false; } }
 function quotaCardGroupAnimate() { return false; }
-function quotaCardControllers() { return {codex:quotaLabel,api:apiUsageLabel,zcode:zcodeLink,workbuddy:workbuddyLabel,balance:apiBalanceLabel}; }
+function quotaCardControllers() { return {codex:quotaLabel,api:apiUsageLabel,zcode:zcodeLink,workbuddy:workbuddyLabel,balance:apiBalanceLabel,weather:weatherWindow}; }
 function quotaGroupTransitionContext() {
   const input=quotaCardGroupInput();
   if(input.suppressed||input.dragging)return null;
@@ -1122,7 +1138,7 @@ function quotaGroupTransitionContext() {
     config:input.config,eligible:input.eligible,metrics:input.eligible.map(id=>{const m=quotaCardControllers()[id]?.getLayoutMetrics?.();return [id,m?{width:m.width,height:m.height,inset:m.inset}:null]}),reduced:quotaReducedMotion()});
 }
 function resetQuotaCardDetails() { for(const c of Object.values(quotaCardControllers()))c?.resetExpanded?.(); }
-function showQuotaCardBar(state,keepBounds=quotaCardGroupTransition?.isActive(),transitioning=quotaCardBarTransitioning||quotaCardGroupTransition?.isActive()) { quotaCardGroupWindow?.show({...state,keepBounds,transitioning:transitioning===true}); }
+function showQuotaCardBar(state,keepBounds=quotaCardGroupTransition?.isActive(),transitioning=quotaCardBarTransitioning||quotaCardGroupTransition?.isActive()) { if (weatherWindow?.isExpanded?.()) { quotaCardGroupWindow?.hide(); return; } quotaCardGroupWindow?.show({...state,keepBounds,transitioning:transitioning===true}); }
 function syncQuotaCardGroup() {
   refreshSheepCapsuleInk();
   if(quotaCardGroupTransition?.isActive()&&quotaGroupTransitionContext()!==quotaTransitionContext)quotaCardGroupTransition.cancel();
@@ -1155,7 +1171,7 @@ function quotaFreeStackPlan() {
   if (!pet) return null;
   const area=screen.getDisplayMatching(pet).workArea,style=quotaDisplayConfig().style;
   return quotaFreeStackBounds(pet,area,
-    {codex:quotaCardCollected('codex')?null:quotaLabel?.getLayoutMetrics?.(),api:quotaCardCollected('api')?null:apiUsageLabel?.getLayoutMetrics?.(),zcode:quotaCardCollected('zcode')?null:zcodeLink?.getLayoutMetrics?.(),workbuddy:quotaCardCollected('workbuddy')?null:workbuddyLabel?.getLayoutMetrics?.(),balance:quotaCardCollected('balance')?null:apiBalanceLabel?.getLayoutMetrics?.()},
+    {codex:quotaCardCollected('codex')?null:quotaLabel?.getLayoutMetrics?.(),api:quotaCardCollected('api')?null:apiUsageLabel?.getLayoutMetrics?.(),zcode:quotaCardCollected('zcode')?null:zcodeLink?.getLayoutMetrics?.(),workbuddy:quotaCardCollected('workbuddy')?null:workbuddyLabel?.getLayoutMetrics?.(),balance:quotaCardCollected('balance')?null:apiBalanceLabel?.getLayoutMetrics?.(),weather:weatherWindow?.isEnabled()===true&&weatherWindow.isCardVisible()===true&&!quotaCardCollected('weather')?weatherWindow.getLayoutMetrics?.():null},
     {...quotaLayoutPresentation(),quotaCardOrder:quotaCardConfig().order,quotaCardBarBounds:null,quotaPreferredPlacement:quotaExpandedStackPlan()?.placement,quotaCardVisualInk:settings?.customization?.appearance?.shape==='new-year-sheep'?(currentSheepCapsuleInk()||currentSheepSettledInk()):null,shape:settings?.customization?.appearance?.shape,quotaStyle:style,
       facing:PetFacing.resolve(pet,area),sheepInk:sheepQuotaInk?.quotaStyle===style?sheepQuotaInk:null,
       sheepTheme:SheepTheme.resolveTheme(settings?.customization?.appearance?.sheepTheme,new Date())},quotaObstacleBounds());
@@ -1169,7 +1185,7 @@ function syncQuotaFreeStack() {
       quotaCardGroup?.retainLayout?.(JSON.parse(quotaFreeStackKey),JSON.parse(key),JSON.stringify([petWindow&&!petWindow.isDestroyed()?petWindow.getBounds():null,petWindow&&!petWindow.isDestroyed()?screen.getDisplayMatching(petWindow.getBounds()).workArea:null,settings?.customization?.appearance,settings?.codexQuotaLabelSize,settings?.zcodeQuotaLabelSize,quotaCardConfig(),quotaCardGroup?.getState().eligible,quotaLayoutPresentation()]));
       if (key===quotaFreeStackKey) break;
       quotaFreeStackKey=key;
-      safelyInvokeWindow('额度卡整组重排',()=>{quotaLabel?.reposition();apiUsageLabel?.reposition();zcodeLink?.reposition();workbuddyLabel?.reposition();apiBalanceLabel?.reposition();});
+      safelyInvokeWindow('额度卡整组重排',()=>{quotaLabel?.reposition();apiUsageLabel?.reposition();zcodeLink?.reposition();workbuddyLabel?.reposition();apiBalanceLabel?.reposition();weatherWindow?.reposition();});
     }
   } finally { quotaFreeStackApplying=false; if(quotaCardGroup?.getState().bar)showQuotaCardBar(quotaCardGroup.getState()); }
 }
@@ -1201,6 +1217,7 @@ function repositionQuotaLabel() {
   safelyInvokeWindow('API 余额卡重排', () => apiBalanceLabel?.reposition());
   safelyInvokeWindow('WorkBuddy 趋势重排', () => workbuddyDetails?.reposition());
   safelyInvokeWindow('API 余额趋势重排', () => apiBalanceDetails?.reposition());
+  safelyInvokeWindow('天气卡重排', () => weatherWindow?.reposition());
 }
 
 function syncApiUsageLabel() {
@@ -1441,7 +1458,7 @@ function shortcutDialogueSuppressed() {
 }
 
 function showBubble(payload) {
-  if (!payload || pomodoroQuiet || shortcutDialogueSuppressed() ||
+  if (!payload || pomodoroQuiet || weatherWindow?.isExpanded?.() || shortcutDialogueSuppressed() ||
     presentationSuppressed() || chatWindow?.isVisible()) return false;
   const shown = safelyInvokeWindow('气泡显示', () => bubble?.show(payload));
   if (shown) bindBubbleVisibilityEvents();
@@ -1532,7 +1549,7 @@ function syncQuotaLabel(snapshot = null) {
       const current = requestedSnapshot || codexCompanion?.getSnapshot();
       const display = quotaDisplayConfig();
       publishQuotaDisplay(current, Boolean(visible));
-      if (shortcutWindow?.isPresenting()) visible = false;
+      if (shortcutWindow?.isPresenting() || weatherWindow?.isExpanded?.()) visible = false;
       if (display.style !== 'card' && !display.showNumbers) visible = false;
       if (!visible) {
         shown = false;
@@ -2116,7 +2133,7 @@ function showDialogue(event, sheepAction) {
   const appearance = effectiveCustomization(settings.customization).appearance;
   const payload = dialogue.offer(event, performance.now(), { shape: appearance.shape,
     sheepTheme: SheepTheme.resolveTheme(appearance.sheepTheme, new Date()), sheepAction });
-  if (payload) dismissCodexPresentation();
+  if (payload) { const weatherText = weatherDialogue(typeof event === 'string' ? event : event?.event); if (weatherText) payload.text = weatherText; dismissCodexPresentation(); }
   if (payload) showBubble(payload);
   else if (!dialogue.hasBubble(performance.now())) hideBubble();
   return payload;
@@ -2163,6 +2180,7 @@ function setAlwaysOnTop(enabled) {
   safelyInvokeWindow('守护战置顶', () => quotaGuard?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('Codex 详情置顶', () => codexDetails?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('API 卡片置顶', () => apiUsageLabel?.setAlwaysOnTop(settings.alwaysOnTop));
+  weatherWindow?.setAlwaysOnTop(settings.alwaysOnTop);
   safelyInvokeWindow('WorkBuddy 卡片置顶', () => workbuddyLabel?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('API 余额卡置顶', () => apiBalanceLabel?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('API 余额趋势置顶', () => apiBalanceDetails?.setAlwaysOnTop(settings.alwaysOnTop));
@@ -2306,6 +2324,16 @@ function codexMenu() {
       ] }] : [])
     ]
   };
+}
+
+function settingsCommandTemplate() {
+  return [...menuTemplate(),
+    { id: 'weather-enabled', label: '启用天气', type: 'checkbox', checked: weatherWindow?.isEnabled() === true,
+      click: item => { weatherWindow?.setEnabled(item.checked); syncQuotaCardGroup(); syncQuotaFreeStack(); } },
+    { id: 'weather-visible', label: '显示天气卡', type: 'checkbox', checked: weatherWindow?.isCardVisible() !== false, enabled: weatherWindow?.isEnabled() === true,
+      click: item => { weatherWindow?.setCardVisible(item.checked); syncQuotaCardGroup(); syncQuotaFreeStack(); } },
+    { id: 'weather-open', label: '天气与城市设置', click: () => weatherWindow?.openCity() }
+  ];
 }
 
 function menuTemplate() {
@@ -3265,7 +3293,7 @@ function registerIpc() {
   ipcMain.handle('pet:global-settings-get', event => fromGlobalSettings(event, false) ? globalSettingsSnapshot() : null);
   ipcMain.handle('pet:global-settings-action', async (event, id, checked) => {
     if (!fromGlobalSettings(event) || globalSettingsBusy || typeof id !== 'string') return { error: '当前无法修改，请稍后重试。' };
-    const item = findSettingsAction(menuTemplate(), id);
+    const item = findSettingsAction(settingsCommandTemplate(), id);
     if (!item || (item.type === 'checkbox' && typeof checked !== 'boolean')) return { error: '该选项暂不可用，请刷新后重试。' };
     globalSettingsBusy = true;
     try {
@@ -3274,7 +3302,7 @@ function registerIpc() {
       else if (item.id === 'zcode-enabled') await zcodeLink?.setEnabled(checked);
       else if (item.id === 'workbuddy-enabled') await setWorkBuddyEnabled(checked);
       else await item.click({ ...item, checked: item.type === 'checkbox' ? checked : true });
-      const current = findSettingsAction(menuTemplate(), id);
+      const current = findSettingsAction(settingsCommandTemplate(), id);
       const mismatch = current && (item.type === 'checkbox' && current.checked !== checked || item.type === 'radio' && !current.checked);
       return { snapshot: globalSettingsSnapshot(), ...(mismatch ? { error: '设置未更改，请确认授权或稍后重试。' } : {}) };
     } catch (_) { return { error: '操作未完成，请重试。', snapshot: globalSettingsSnapshot() }; }
@@ -3564,6 +3592,7 @@ function registerIpc() {
     if (!point) return;
     if (!dragState.moved && Math.hypot(point.x - dragState.pointer.x, point.y - dragState.pointer.y) > 6) {
       dragState.moved = true; shortcutWindow?.interrupt();
+      if (weatherWindow?.isExpanded?.()) weatherWindow.resetExpanded(); hideBubble(); weatherWindow?.reposition();
     }
     petWindow.setPosition(
       dragState.window.x + point.x - dragState.pointer.x,
@@ -3595,7 +3624,7 @@ function registerIpc() {
         persistWindowPosition();
       }
       if (edgeTuck?.getPresentation().dragging) edgeTuck.endDrag(false);
-      syncQuotaFreeStack();syncQuotaCardGroup();
+      syncQuotaFreeStack();syncQuotaCardGroup();weatherWindow?.reposition();
     }
   });
 
@@ -3753,6 +3782,10 @@ async function bootstrap() {
     }
   });
   settings = loadSettings(settingsFile);
+  if (ACCEPTANCE_KIND === 'weather' && !fs.existsSync(settingsFile)) {
+    const cloud = normalizeAppearance({ ...settings.customization.appearance, shape: 'cloud', bodyColor: '#5B3BC7', eyeColor: '#FFFFFF' });
+    settings.customization.appearance = cloud; settings.startupAppearance = cloud;
+  }
   // The existing saved appearance wins over per-page legacy preferences.
   if (nativeTheme) nativeTheme.themeSource = settings.codexQuotaAppearance;
   // Theme choice survives restarts independently of the startup shape snapshot.
@@ -3822,7 +3855,7 @@ async function bootstrap() {
     createRpc: options => {
       if (IS_SMOKE_TEST && (process.env.PET_SMOKE_CHAT_ONLY === '1' || process.env.PET_SMOKE_WORKBUDDY_ONLY === '1' || process.env.PET_SMOKE_CODEX_PETS_ONLY === '1' || process.env.PET_SMOKE_SHORTCUT_ONLY === '1')) return require('./scripts/verify-chat-integration').createSmokeChatRpc(options);
       fs.mkdirSync(options.workspaceDir, { recursive: true, mode: 0o700 });
-      return createCodexChatRpc(options);
+      return createCodexChatRpc({ ...options, getWeatherContext: text => weatherContext(currentWeatherState(), text) });
     },
     onChange: state => {
       if (chat?.sourceChanged) chat.sourceChanged('codex');
@@ -3831,7 +3864,7 @@ async function bootstrap() {
     onAction: performChatAction });
   workbuddyRun = IS_SMOKE_TEST && process.env.PET_SMOKE_WORKBUDDY_ONLY === '1' && process.env.PET_SMOKE_WORKBUDDY_LIVE !== '1'
     ? require('./scripts/verify-workbuddy-integration').createSmokeWorkBuddyRunner() : runWorkBuddy;
-  const makeWorkbuddyChat = () => (workbuddyChat = createWorkBuddyChat({ store: createChatStore(path.join(app.getPath('userData'), 'workbuddy-chat.json')),
+  const makeWorkbuddyChat = () => (workbuddyChat = createWorkBuddyChat({ getWeatherContext: text => weatherContext(currentWeatherState(), text), store: createChatStore(path.join(app.getPath('userData'), 'workbuddy-chat.json')),
     run: workbuddyRun, initialModelSelection: settings.workbuddyModel,
     onModelSelection: workbuddyModel => { settings = saveSettings(settingsFile, { ...settings, workbuddyModel }); },
     onChange: () => chat?.sourceChanged?.('workbuddy'),
@@ -3907,7 +3940,7 @@ async function bootstrap() {
       onModelSelection: zcodeChatModel => { settings = saveSettings(settingsFile, { ...settings, zcodeChatModel }); },
       createRpc: options => {
         fs.mkdirSync(options.workspaceDir, { recursive: true, mode: 0o700 });
-        return createZcodeChatRpc(options);
+        return createZcodeChatRpc({ ...options, getWeatherContext: text => weatherContext(currentWeatherState(), text) });
       },
       onChange: () => chat?.sourceChanged('zcode'), onAction: performChatAction
     }) });
@@ -4023,12 +4056,16 @@ async function bootstrap() {
   edgeNoticeWindow = createEdgeNoticeWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('边缘提示窗口', error) });
   edgeNotice = createEdgeNotice({ now: () => edgeNoticeNow(), ...(IS_SMOKE_TEST && process.env.PET_SMOKE_WORKBUDDY_ONLY === '1' ? { random: () => 0 } : {}), onChange: payload => {
+    if (payload?.kind === 'text') {
+      const text = weatherDialogue('edge');
+      if (text) { const current = currentWeatherState().current; payload.text = text; payload.weather = { code: current.weatherCode, isDay: current.isDay !== false && current.isDay !== 0, temperature: current.temperature }; }
+    }
     safelyInvokeWindow('边缘提示', () => payload ? edgeNoticeWindow.show(payload) : edgeNoticeWindow.hide());
   } });
   initializeApiBalance();
   quotaCardGroupWindow = createQuotaCardGroupWindow({BrowserWindow,screen,ipcMain,onLayout:()=>syncQuotaFreeStack(),getAlwaysOnTop:()=>settings.alwaysOnTop,getPetWindow:()=>petWindow,getPresentation:()=>{
       const pet=petWindow?.getBounds(),area=pet&&screen.getDisplayMatching(pet).workArea;
-      const controllers={codex:quotaLabel,api:apiUsageLabel,zcode:zcodeLink,workbuddy:workbuddyLabel,balance:apiBalanceLabel};
+      const controllers={codex:quotaLabel,api:apiUsageLabel,zcode:zcodeLink,workbuddy:workbuddyLabel,balance:apiBalanceLabel,weather:weatherWindow};
       return {...quotaLayoutPresentation(),shape:settings?.customization?.appearance?.shape,quotaPreferredPlacement:quotaExpandedStackPlan()?.placement,sheepInk:settings?.customization?.appearance?.shape==='new-year-sheep'?(currentSheepCapsuleInk()||currentSheepSettledInk()):null,
         sheepTheme:SheepTheme.resolveTheme(settings?.customization?.appearance?.sheepTheme,new Date()),facing:pet&&area?PetFacing.resolve(pet,area):'left',
         cardStackBounds:quotaCardConfig().pinned.map(id=>controllers[id]?.getVisibleBounds?.()).filter(Boolean)};
@@ -4040,7 +4077,7 @@ async function bootstrap() {
     onError:error=>reportQuotaError('额度区整体过渡',error)});
   void quotaCardGroupTransition.warm?.();
   quotaCardGroup = createQuotaCardGroup({schedule:setTimeout,cancel:clearTimeout,now:()=>Date.now(),getState:quotaCardGroupInput,getCursor:()=>{refreshSheepCapsuleInk();return screen.getCursorScreenPoint();},
-    getBounds:expanded=>[quotaCardGroupWindow?.getBounds(),...quotaCardGroupTransition.getRetentionBounds(),...(expanded?[quotaLabel?.getVisibleBounds(),apiUsageLabel?.getVisibleBounds(),zcodeLink?.getVisibleBounds(),workbuddyLabel?.getVisibleBounds(),apiBalanceLabel?.getVisibleBounds()]:[])].filter(Boolean),
+    getBounds:expanded=>[quotaCardGroupWindow?.getBounds(),...quotaCardGroupTransition.getRetentionBounds(),...(expanded?[quotaLabel?.getVisibleBounds(),apiUsageLabel?.getVisibleBounds(),zcodeLink?.getVisibleBounds(),workbuddyLabel?.getVisibleBounds(),apiBalanceLabel?.getVisibleBounds(),weatherWindow?.getVisibleBounds?.()]:[])].filter(Boolean),
     onChange:quotaCardGroupChanged});
   quotaCardGroup.start();
   initializeShortcuts();
@@ -4056,7 +4093,7 @@ async function bootstrap() {
     },
     onError: error => writeError('活动状态检测', error)
   });
-  const pause = () => {
+  const pause = () => { weatherWindow?.pause();
     if(localPetImportSession)localPetImportSession.invalid=true;
     screenLocked = true;
     quotaCardGroupTransition?.cancel();
@@ -4094,7 +4131,7 @@ async function bootstrap() {
     safelyInvokeWindow('锁屏时 ZCode 窗口隐藏', () => zcodeLink?.hide());
     safelyInvokeWindow('锁屏时对白清理', () => dialogue.dismiss());
   };
-  const resume = () => { screenLocked = false; void codexIconPreference?.start(); notesCompanion?.resume(); edgeTuck?.resume(); activityMonitor.resume(); syncQuotaLabel(codexCompanion?.getSnapshot()); syncPomodoro(); scheduleUpdateCheck(); };
+  const resume = () => { screenLocked = false; weatherWindow?.resume(); void codexIconPreference?.start(); notesCompanion?.resume(); edgeTuck?.resume(); activityMonitor.resume(); syncQuotaLabel(codexCompanion?.getSnapshot()); syncPomodoro(); scheduleUpdateCheck(); };
   const powerGuard = createPowerGuard({ pause, resume });
   powerMonitor.on('lock-screen', () => powerGuard.setLocked(true));
   powerMonitor.on('suspend', () => powerGuard.setSuspended(true));
@@ -4105,6 +4142,25 @@ async function bootstrap() {
   registerDisplayRecovery();
   initializeCodexCompanion();
   createPetWindow();
+  weatherWindow = createWeatherWindow({ BrowserWindow, ipcMain, screen, getReducedMotion: quotaReducedMotion, fetch: (...args) => net.fetch(...args),
+    alwaysOnTop: settings.alwaysOnTop, filePath: path.join(app.getPath('userData'), 'weather.json'), getPetWindow: () => petWindow,
+    getStackAnchor: () => [quotaLabel?.getVisibleBounds?.(), apiUsageLabel?.getVisibleBounds?.(), zcodeLink?.getVisibleBounds?.(), workbuddyLabel?.getVisibleBounds?.(), apiBalanceLabel?.getVisibleBounds?.(), quotaCardGroupWindow?.getBounds?.()].filter(Boolean).sort((a,b) => b.y+b.height-a.y-a.height)[0] || null,
+    getBubbleBounds: quotaObstacleBounds, getPresentation: () => ({ ...quotaLayoutPresentation(), quotaGroupHidden: Boolean(quotaCardCollected('weather') || quotaFreeStackPlan()?.hidden?.includes('weather')), quotaGroupLayout: quotaFreeStackPlan()?.cards.weather }),
+    getObstacles: () => [quotaLabel?.getVisibleBounds?.(), apiUsageLabel?.getVisibleBounds?.(), zcodeLink?.getVisibleBounds?.(), workbuddyLabel?.getVisibleBounds?.(), apiBalanceLabel?.getVisibleBounds?.(), quotaCardGroupWindow?.getBounds?.()].filter(Boolean),
+    getSuppressed: () => quotaCardGroupInput().suppressed,
+    getAppearance: () => settings.codexQuotaAppearance,
+    onLayout: () => { syncQuotaLabel(codexCompanion?.getSnapshot()); syncApiBalanceLabel(); syncQuotaFreeStack(); },
+    onChange: packet => { syncQuotaCardGroup(); syncQuotaFreeStack(); if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send('pet:weather', packet); },
+    onError: error => writeError('天气', error) });
+  petWindow.on('move', () => weatherWindow?.reposition());
+  petWindow.on('show', () => weatherWindow?.reposition());
+  petWindow.on('hide', () => weatherWindow?.reposition());
+  petWindow.webContents.on('did-finish-load', () => { if (weatherWindow) petWindow.webContents.send('pet:weather', { ...weatherWindow.getState(), enabled: weatherWindow.isEnabled() }); });
+  const trackWeatherObstacle = win => { if (win === weatherWindow?.getWindow()) return; for (const event of ['move','resize','show','hide','closed']) win.on(event, () => { if (!isQuitting && win !== weatherWindow?.getWindow()) safelyInvokeWindow('天气避让重排', () => weatherWindow?.reposition()); }); };
+  BrowserWindow.getAllWindows().forEach(trackWeatherObstacle);
+  app.on('browser-window-created', (_event, win) => trackWeatherObstacle(win));
+  weatherWindow.start();
+  if (ACCEPTANCE_KIND === 'weather' || process.argv.includes('--weather-preview')) weatherWindow.open();
   createTray();
   if (process.argv.includes('--shortcuts-preview')) openShortcuts();
   if (process.argv.includes('--shortcut-settings-preview')) openShortcuts(true);
@@ -4146,7 +4202,7 @@ if (!hasSingleInstanceLock) {
       }).catch(error => { notesQuitFlight = null; writeError('便签保存后退出', error); });
       return;
     }
-    isQuitting = true;
+    isQuitting = true; weatherWindow?.destroy();
     if (!quitCleanupStarted && !savePomodoroForQuit()) {
       isQuitting = false;
       event?.preventDefault?.();

@@ -100,8 +100,11 @@ if (process.versions.electron && process.argv.includes('--shortcut-settings-dom-
     assert.equal(await run("control('待办启动方式').value"),'panel','new notes DOM paints the saved result');
     await capture('notes-startup-behaviors.png');
     await run("navigate('shortcuts')");await settle();
+    await run("control('天气快捷键').click();key('w','KeyW',{ctrlKey:true,altKey:true})");await settle();
+    assert.equal(await run('config.weather'),'Ctrl+Alt+W');
+    await run("control('删除天气快捷键').click()");await settle();assert.equal(await run('config.weather'),'');
     const geometry = await run(`[...document.querySelectorAll('.binding-clear')].map(n=>({x:n.getBoundingClientRect().x,width:n.getBoundingClientRect().width,visibility:getComputedStyle(n).visibility}))`);
-    assert(geometry.length === 6 && geometry.every(r => r.width === 28 && Math.abs(r.x - geometry[0].x) < 1), JSON.stringify(geometry));
+    assert(geometry.length === 7 && geometry.every(r => r.width === 28 && Math.abs(r.x - geometry[0].x) < 1), JSON.stringify(geometry));
     assert(geometry.some(r => r.visibility === 'visible') && geometry.some(r => r.visibility === 'hidden'));
     const out = process.env.PET_SMOKE_ARTIFACT_DIR;
     if (out) {

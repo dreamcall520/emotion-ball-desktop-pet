@@ -50,7 +50,7 @@ function fixture(load = () => Promise.resolve(), options = {}) {
       this.destroyed = false;
       this.visible = false;
       this.ignoreCalls = [];
-      this.boundsCalls = [];
+      this.boundsCalls = [];this.boundsAnimations=[];
       this.sent = [];
       this.topmostCalls = [];
       this.openHandler = null;
@@ -66,7 +66,7 @@ function fixture(load = () => Promise.resolve(), options = {}) {
     setAlwaysOnTop(...args) { maybeThrow('setAlwaysOnTop', this); this.topmostCalls.push(args); }
     setVisibleOnAllWorkspaces() { maybeThrow('setVisibleOnAllWorkspaces', this); }
     setHiddenInMissionControl() { maybeThrow('setHiddenInMissionControl', this); }
-    setBounds(bounds) { maybeThrow('setBounds', this); this.boundsCalls.push({ ...bounds }); this.bounds = { ...bounds }; }
+    setBounds(bounds,animate) { this.boundsAnimations.push(animate);maybeThrow('setBounds', this); this.boundsCalls.push({ ...bounds }); this.bounds = { ...bounds }; }
     setIgnoreMouseEvents(...args) { maybeThrow('setIgnoreMouseEvents', this); this.ignoreCalls.push(args); }
     loadFile(file) { maybeThrow('loadFile', this); this.loadedFile = file; return load(windows.length, this); }
     showInactive() { maybeThrow('showInactive', this); this.visible = true; this.showInactiveCalls = (this.showInactiveCalls || 0) + 1; }
@@ -130,6 +130,7 @@ test('可见额度边界随加载、展开、移动和隐藏同步，状态卡�
   const compact = f.label.getVisibleBounds();
   const beforeExpand = changes;
   f.windows[0].webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  if (f.label.getLayoutMetrics()?.height < 100) await new Promise(resolve => setTimeout(resolve, 230));
   assert.ok(changes > beforeExpand);
   assert.ok(f.label.getVisibleBounds().height > compact.height);
   f.pet.bounds.x += 100;
@@ -146,6 +147,33 @@ test('可见额度边界随加载、展开、移动和隐藏同步，状态卡�
   assert.ok(changes > beforeHide);
   f.label.show(readyModel()); f.label.destroy();
   assert.equal(f.label.getVisibleBounds(), null);
+});
+
+test('ZCode 团队双周期紧凑展开尺寸同步原生窗口、可见区域和整组布局，个人版与 Codex 不变', async t => {
+  const { quotaFreeStackBounds } = require('../lib/quota-label-placement');
+  const { pathToFileURL } = require('node:url');
+  const rows = [300,10080].map((windowMinutes,index)=>({label:'Coding Plan 积分',planName:'Coding Plan · 团队',
+    bucketId:`zcode:paid:CREDIT_LIMIT:${index ? '6:1' : '3:5'}`,windowMinutes,remaining:70,resetsAt:2000000000000}));
+  for (const size of ['compact','standard']) for (const sourceId of ['zcode','codex']) {
+    const f=fixture(()=>Promise.resolve(),{sourceId,labelSize:size});t.after(()=>f.label.destroy());
+    f.label.show({sourceId,state:'ready',items:rows});await flush();
+    const win=f.windows[0], sender=win.webContents, senderFrame={};
+    sender.mainFrame=senderFrame;sender.getURL=()=>pathToFileURL(path.resolve(__dirname,'../quota-label.html')).href;
+    const toggle=()=>sender.emit('ipc-message',{sender,senderFrame},sourceId==='zcode'?'pet:zcode-quota-label-toggle':'pet:quota-label-toggle');
+    toggle();
+    const height=sourceId==='zcode'?149:144;
+    assert.equal(win.getBounds().height,height);assert.equal(f.label.getVisibleBounds().height,height);
+    assert.equal(f.label.getLayoutMetrics().height,height);
+    const presentation={mode:'free',shape:'blob'};
+    const plan=quotaFreeStackBounds(f.pet.bounds,AREA,{codex:{width:128,height:32,inset:2},api:{width:128,height:32,inset:2},zcode:f.label.getLayoutMetrics()},presentation);
+    f.presentation={...presentation,quotaGroupLayout:plan.cards.zcode};f.label.reposition();
+    assert.deepEqual(f.label.getVisibleBounds(),plan.cards.zcode.face);
+    assert.equal(plan.cards.zcode.face.y-plan.cards.api.face.y-plan.cards.api.face.height,8);
+    f.presentation=null;toggle();await new Promise(resolve=>setTimeout(resolve,230));assert.equal(win.getBounds().height,size==='compact'?32:58);
+    f.label.show({sourceId,state:'ready',items:rows.map(row=>({...row,planName:'Coding Plan'}))});toggle();
+    assert.equal(win.getBounds().height,sourceId==='zcode'?166:144);
+    assert.deepEqual(f.errors,[]);
+  }
 });
 
 test('无额度的状态卡参与整组布局，胶囊始终位于固定卡片外侧', async t => {
@@ -192,17 +220,19 @@ test('标准与小巧锚点读取实际卡面，守护角色只扩大原生避�
       guard = enabled;
       f.label.show({ ...readyModel(), state }); await flush();
       const native = f.label.getWindow().getBounds(), roleVisible = enabled && state === 'ready';
-      assert.equal(native.width, width + (roleVisible ? 56 : 0));
-      assert.equal(native.height, height + (roleVisible ? gutter : 0));
-      assert.deepEqual(f.label.getVisibleBounds(), { x: native.x + inset,
-        y: native.y + (roleVisible ? gutter : 0) + inset,
+      if(roleVisible){assert(native.width>=width+56);assert(native.height>=131);}else{assert.equal(native.width,width);assert.equal(native.height,height);}
+      const viewport=f.windows[0].sent.findLast(row=>row[0]==='pet:quota-label')[1].cardViewport;
+      assert.deepEqual(f.label.getVisibleBounds(), { x: native.x + (viewport?.face.left||0) + inset,
+        y: native.y + (viewport?.face.top||0) + inset,
         width: width - inset * 2, height: height - inset * 2 });
       assert.deepEqual(f.label.getWindow().getBounds(), native, '读取卡面不改变完整原生避让边界');
       f.windows[0].webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
-      assert.deepEqual(f.label.getVisibleBounds(), f.label.getWindow().getBounds(), '展开卡无角色区域或小巧留白');
+  await new Promise(resolve => setTimeout(resolve, 230));
+      if(roleVisible)assert.deepEqual(f.label.getWindow().getBounds(),native,'toggle keeps carrier fixed');else assert.deepEqual(f.label.getVisibleBounds(),f.label.getWindow().getBounds());
       assert.equal(f.label.getVisibleBounds().width, 196);
       assert.equal(f.label.getVisibleBounds().height, 131);
       f.windows[0].webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  await new Promise(resolve => setTimeout(resolve, 230));
       f.label.hide();
       assert.equal(f.label.getVisibleBounds(), null);
     }
@@ -210,7 +240,8 @@ test('标准与小巧锚点读取实际卡面，守护角色只扩大原生避�
     dual.items.push({ label: 'Codex 周额度', windowMinutes: 10080, remaining: 82 });
     f.label.show(dual); await flush();
     f.windows[0].webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
-    assert.deepEqual(f.label.getVisibleBounds(), f.label.getWindow().getBounds());
+  await new Promise(resolve => setTimeout(resolve, 230));
+    assert.equal(f.label.getVisibleBounds().width,196);
     assert.equal(f.label.getVisibleBounds().height, 144, '双周期展开使用完整卡面高度');
     assert.deepEqual(f.errors, []);
   }
@@ -234,8 +265,10 @@ test('角色透明顶沿首次显示和重显均穿透，仅可信主页面可�
   cursor = { x: 300, y: 400 }; pointer(true);
   assert.deepEqual(win.ignoreCalls.at(-1), [false, { forward: true }]);
   contents.emit('ipc-message', {}, 'pet:quota-label-toggle');
-  assert.equal(win.bounds.height, 131, '恢复命中后保留正常卡点击展开');
+  await new Promise(resolve => setTimeout(resolve, 230));
+  assert.equal(f.label.getVisibleBounds().height, 131, '恢复命中后保留正常卡点击展开');
   contents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  await new Promise(resolve => setTimeout(resolve, 230));
   pointer(false); assert.deepEqual(win.ignoreCalls.at(-1), [true, { forward: true }]);
   f.label.hide(); const hiddenCalls = win.ignoreCalls.length;
   pointer(true); assert.equal(win.ignoreCalls.length, hiddenCalls, '隐藏态不能被迟到 mouse move 重新拦截');
@@ -253,6 +286,7 @@ test('详情打开期间暂时隐藏额度卡，刷新与重排不抬升，关�
   await flush();
   const win = f.windows[0];
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  if (f.label.getLayoutMetrics()?.height < 100) await new Promise(resolve => setTimeout(resolve, 230));
   assert.equal(win.sent.at(-1)[1].expanded, true);
   suppressed = true;
   f.label.reposition();
@@ -321,6 +355,7 @@ test('原生显隐显式广播 visible，隐藏前暂停入口且暂时避让不
   const win = f.windows[0];
   assert.equal(win.sent.at(-1)[1].visible, true);
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  if (f.label.getLayoutMetrics()?.height < 100) await new Promise(resolve => setTimeout(resolve, 230));
   suppressed = true; f.label.reposition();
   assert.equal(win.sent.at(-1)[1].visible, false);
   assert.equal(win.sent.at(-1)[1].expanded, true);
@@ -354,7 +389,7 @@ test('额度 preload 仅保留明确 visible/guardEntry 布尔，不接受字符
   listener({}, { ...readyModel(), guardSide: 'left', cardInset: { x: 72, y: 18 } });
   assert.equal(received.guardSide, 'left');
   assert.equal(JSON.stringify(received.cardInset), JSON.stringify({ x: 72, y: 18 }));
-  for (const cardInset of [{ x: Infinity, y: 0 }, { x: 73, y: 0 }, { x: 0, y: -1 }, { x: '72', y: 18 }]) {
+  for (const cardInset of [{ x: Infinity, y: 0 }, { x: 513, y: 0 }, { x: 0, y: -1 }, { x: '72', y: 18 }]) {
     listener({}, { ...readyModel(), guardSide: 'invalid', cardInset });
     assert.equal('guardSide' in received, false); assert.equal('cardInset' in received, false);
   }
@@ -374,11 +409,13 @@ test('小巧档创建可点击的 128×32 横条，点击展开和收起时复�
   assert.deepEqual(win.ignoreCalls.at(-1), [false]);
 
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  if (f.label.getLayoutMetrics()?.height < 100) await new Promise(resolve => setTimeout(resolve, 230));
   assert.equal(f.windows.length, 1);
   assert.deepEqual(win.bounds, { x: 242, y: 388, width: 196, height: 131 });
   assert.equal(win.sent.at(-1)[1].expanded, true);
 
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  if (f.label.getLayoutMetrics()?.height < 100) await new Promise(resolve => setTimeout(resolve, 230));
   assert.deepEqual(win.bounds, { x: 276, y: 388, width: 128, height: 32 });
   assert.equal(win.sent.at(-1)[1].expanded, false);
 });
@@ -395,6 +432,7 @@ test('具体数字复用经典摘要徽标，单项左右排布且不补缺失�
   assert.equal(win.bounds.width, 128); assert.equal(win.bounds.height, 32);
   assert.equal(JSON.stringify(packet).includes('SECRET'), false);
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  if (f.label.getLayoutMetrics()?.height < 100) await new Promise(resolve => setTimeout(resolve, 230));
   assert.equal(win.sent.at(-1)[1].expanded, false);
   let api, listener, receive, received, toggles = 0;
   const sent = [];
@@ -450,6 +488,7 @@ test('具体数字复用经典摘要徽标，单项左右排布且不补缺失�
   listener({}, unknown); receive(received); assert.equal(readings.textContent, '周额度—');
   f.label.show(readyModel());
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  if (f.label.getLayoutMetrics()?.height < 100) await new Promise(resolve => setTimeout(resolve, 230));
   assert.equal(win.sent.at(-1)[1].expanded, true, '切回经典额度卡恢复原展开行为');
 });
 
@@ -461,6 +500,7 @@ test('余额通过原生窗口与 preload 白名单，显示与隐藏复用辅�
   const win = f.windows[0];
   assert.equal(win.bounds.height, 32);
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  if (f.label.getLayoutMetrics()?.height < 100) await new Promise(resolve => setTimeout(resolve, 230));
   assert.equal(win.bounds.width, 196); assert.equal(win.bounds.height, 131);
   assert.deepEqual(win.sent.at(-1)[1].extraCredits, { state: 'balance', balance: '62485.1547310000' });
   assert.equal(win.sent.at(-1)[1].resetCreditsAvailable, 1);
@@ -507,11 +547,13 @@ test('双周期小巧档点击后展开为 196×144，收起仍回到 128×32', 
   await flush();
   const win = f.windows[0];
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  if (f.label.getLayoutMetrics()?.height < 100) await new Promise(resolve => setTimeout(resolve, 230));
   assert.deepEqual(win.bounds, { x: 242, y: 388, width: 196, height: 144 });
   assert.equal(win.sent.at(-1)[1].expanded, true);
   assert.equal(win.sent.at(-1)[1].items.length, 2);
 
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  if (f.label.getLayoutMetrics()?.height < 100) await new Promise(resolve => setTimeout(resolve, 230));
   assert.deepEqual(win.bounds, { x: 276, y: 388, width: 128, height: 32 });
 });
 
@@ -524,11 +566,13 @@ test('标准档同样可点击展开和收起，并复用同一窗口', async t 
   assert.deepEqual(win.ignoreCalls.at(-1), [false]);
 
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  if (f.label.getLayoutMetrics()?.height < 100) await new Promise(resolve => setTimeout(resolve, 230));
   assert.equal(f.windows.length, 1);
   assert.deepEqual(win.bounds, { x: 242, y: 388, width: 196, height: 131 });
   assert.equal(win.sent.at(-1)[1].expanded, true);
 
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  if (f.label.getLayoutMetrics()?.height < 100) await new Promise(resolve => setTimeout(resolve, 230));
   assert.deepEqual(win.bounds, { x: 256, y: 388, width: 168, height: 58 });
   assert.equal(win.sent.at(-1)[1].expanded, false);
 });
@@ -619,6 +663,7 @@ test('外观只接受跟随系统、浅色和深色，切换时保留窗口和�
   const win = f.windows[0];
   assert.equal(win.sent.at(-1)[1].appearance, 'light');
   win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+  if (f.label.getLayoutMetrics()?.height < 100) await new Promise(resolve => setTimeout(resolve, 230));
   assert.equal(win.sent.at(-1)[1].expanded, true);
 
   options.appearance = 'dark';
@@ -1793,7 +1838,7 @@ test('侧卡透明尾跨进羊或气泡时仍穿透，普通48px入口有效区�
   contents.mainFrame = frame;
   contents.getURL = () => require('node:url').pathToFileURL(win.loadedFile).href;
   const pointer = () => contents.emit('ipc-message', { sender: contents, senderFrame: frame }, 'pet:quota-label-pointer', true);
-  assert.equal(win.bounds.width, 184, '普通角色48px目标继续存在');
+  assert.equal(win.sent.findLast(row=>row[0]==='pet:quota-label')[1].guardTargetWidth,48,'普通角色48px目标继续存在');
   assert.equal(win.bounds.x + win.bounds.width > f.pet.bounds.x + 3.2, true, '真实复现透明尾与羊轮廓相交');
   assert.equal(win.ignoreCalls.at(-1)[0], true, '首次显示不能抢羊hover');
   pointer(); assert.equal(win.ignoreCalls.at(-1)[0], true, '迟到renderer命中不能抢羊点击');
@@ -1818,8 +1863,8 @@ test('实际controller区分22/24/50角色，普通48px与大角色64px同源传
     const m=readyModel();m.items[0].remaining=remaining;f.label.show(m);await flush();
     const b=f.label.getWindow().getBounds();
     const packet=f.windows[0].sent.at(-1)[1];assert.equal(packet.guardSide,'left');
-    assert.equal(packet.cardInset.x,remaining===0?72:56);assert.equal(b.x+packet.cardInset.x+128,AREA.width);
-    assert.equal(b.width,remaining===0?200:184);assert.equal(f.windows[0].sent.at(-1)[1].guardTargetWidth,remaining===0?64:48);assert.deepEqual(f.errors,[]);
+    assert.equal(b.x+packet.cardInset.x+128,AREA.width);assert.equal(packet.cardViewport.face.left,packet.cardInset.x);
+    assert(b.width>=(remaining===0?200:184));assert.equal(f.windows[0].sent.at(-1)[1].guardTargetWidth,remaining===0?64:48);assert.deepEqual(f.errors,[]);
   }
 });
 
@@ -1976,4 +2021,72 @@ test('Codex icon enums and explicit system colors survive window and preload bou
   listener({},{...readyModel(),codexIconPreference:'app-default',codexIconDark:'true'});assert.equal(received.codexIconDark,undefined);
   const throwing={...readyModel()};Object.defineProperty(throwing,'codexIconPreference',{get(){throw Error('untrusted getter');}});
   assert.doesNotThrow(()=>safeModel(throwing));assert.doesNotThrow(()=>listener({},throwing));
+});
+
+
+for(const sourceId of ['codex','zcode']) test(`${sourceId} card resizes immediately once, keeps movement immediate and respects reduced motion and group stage`,async t=>{
+ const f=fixture(()=>Promise.resolve(),{sourceId,labelSize:'compact'});t.after(()=>f.label.destroy());
+ f.label.show({...readyModel(),sourceId});await flush();const win=f.windows[0],sender=win.webContents;
+ sender.mainFrame={};sender.getURL=()=>require('node:url').pathToFileURL(path.resolve(__dirname,'../quota-label.html')).href;
+ const toggle=()=>sender.emit('ipc-message',{sender,senderFrame:sender.mainFrame},sourceId==='zcode'?'pet:zcode-quota-label-toggle':'pet:quota-label-toggle');
+ assert.equal(win.boundsAnimations[0],false,'first hidden placement stays immediate');
+ toggle();assert.equal(win.boundsAnimations.at(-1),false,'expand never scales the native window');const count=win.boundsCalls.length;
+ f.label.reposition();f.label.reposition();assert.equal(win.boundsCalls.length,count,'identical requested bounds do not restart animation');
+ toggle();await new Promise(resolve=>setTimeout(resolve,230));assert.equal(win.boundsAnimations.at(-1),false,'collapse never scales the native window');
+ f.pet.bounds.x+=20;f.label.reposition();assert.equal(win.boundsAnimations.at(-1),false,'same-size movement stays immediate');
+ f.presentation={mode:'free',quotaReducedMotion:true};toggle();assert.equal(win.boundsAnimations.at(-1),false,'reduced motion disables resize animation');
+ f.presentation={mode:'free'};f.label.setGroupTransitionMode('stage');f.pet.bounds.x+=20;f.label.reposition();assert.equal(win.boundsAnimations.at(-1),false,'group stage remains immediate');
+});
+
+test('resize reentry with an intermediate native frame does not restart the same requested bounds',async t=>{
+ let f,armed=false,reentered=0;
+ f=fixture(()=>Promise.resolve(),{labelSize:'compact',onCall(name){if(name==='setBounds'&&armed&&reentered++===0)f.label.reposition();}});
+ t.after(()=>f.label.destroy());f.label.show(readyModel());await flush();const win=f.windows[0],old=win.getBounds();
+ win.getBounds=()=>({...old});armed=true;const before=win.boundsCalls.length;
+ win.webContents.emit('ipc-message',{},'pet:quota-label-toggle');
+ assert.equal(reentered,1,'only the outer setBounds runs');assert.equal(win.boundsCalls.length,before+1);assert.equal(win.boundsAnimations.at(-1),false);assert.equal(f.errors.length,0);
+});
+
+test('empty Codex and ZCode cards retain real source icons and names across unavailable states',()=>{
+ class Element{constructor(){this.dataset={};this.children=[];this._text='';}set textContent(v){this._text=String(v);this.children=[];}get textContent(){return this._text+this.children.map(c=>c.textContent).join('');}replaceChildren(...c){this._text='';this.children=c;}appendChild(c){this.children.push(c);}setAttribute(){}addEventListener(){}}
+ const nodes=Object.fromEntries(['quota-label','status','summary','items','overflow','codex-expanded','compact-product','compact-period','quota-numbers'].map(id=>[id,new Element()]));let receive;
+ vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../quota-label-renderer.js'),'utf8'),{document:{documentElement:new Element(),getElementById:id=>nodes[id],createElement:()=>new Element()},window:{addEventListener(){},petQuotaLabel:{onModel(fn){receive=fn;}}}});
+ for(const sourceId of ['codex','zcode'])for(const state of ['empty','unknown','error','unsupported','disconnected','loading']){
+  receive({sourceId,state,size:'compact',items:[]});
+  const identity=nodes.status.children[0];assert(identity,`${sourceId}/${state}`);assert.equal(identity.children[1].textContent,sourceId==='zcode'?'ZCode':'Codex');
+  const icon=identity.children[0];assert(icon.children.length>0);assert(icon.children.every(img=>String(img.src).includes(sourceId==='zcode'?'zcode':'codex')));
+  assert(nodes.status.children[1].textContent.length>0);assert.equal(nodes.summary.children.length,0,'no quota number is invented');assert.equal(nodes['quota-label'].dataset.source,sourceId);
+ }
+});
+
+test('guard toggles publish unscaled face coordinates inside the union host, except reduced motion or group staging',async t=>{
+ for(const left of [false,true]){
+ const f=fixture(()=>Promise.resolve(),{labelSize:'compact',getGuardEntry:()=>true});t.after(()=>f.label.destroy());
+ if(left)f.pet.bounds.x=1360;
+ f.label.show(readyModel());await flush();const win=f.windows[0],initial=win.getBounds(),initialPacket=win.sent.findLast(row=>row[0]==='pet:quota-label')[1];
+ const toggle=()=>win.webContents.emit('ipc-message',{},'pet:quota-label-toggle');toggle();
+ const expandedPacket=win.sent.findLast(row=>row[0]==='pet:quota-label')[1],motion=expandedPacket.cardTransition;assert(motion);assert.equal(motion.duration,180);
+ assert.equal(motion.from.width,128);assert.equal(motion.from.height,32);assert.equal(motion.to.width,196);assert.equal(motion.to.height,131);
+ const unionX=initial.x+initialPacket.cardInset.x-motion.from.left,unionY=initial.y+initialPacket.cardInset.y-motion.from.top;
+ assert.equal(unionX,Math.min(initial.x,f.label.getVisibleBounds().x));assert.equal(unionY,Math.min(initial.y,f.label.getVisibleBounds().y));
+ await new Promise(resolve=>setTimeout(resolve,230));toggle();const collapsed=win.sent.findLast(row=>row[0]==='pet:quota-label')[1].cardTransition;
+ assert(collapsed);assert.equal(collapsed.from.width,196);assert.equal(collapsed.to.width,128);assert.equal(collapsed.to.height,32);
+ await new Promise(resolve=>setTimeout(resolve,230));
+ f.presentation={mode:'free',quotaReducedMotion:true};toggle();assert.equal(win.sent.findLast(row=>row[0]==='pet:quota-label')[1].cardTransition,undefined);
+ f.presentation={mode:'free'};f.label.setGroupTransitionMode('stage');toggle();assert.equal(win.sent.findLast(row=>row[0]==='pet:quota-label')[1].cardTransition,undefined);
+ }
+});
+
+test('guard-capable carrier is allocated while hidden and never moves or resizes on ordinary toggles',async t=>{
+ for(const labelSize of ['compact','standard']){
+ let guard=true;const f=fixture(()=>Promise.resolve(),{labelSize,getGuardEntry:()=>guard});t.after(()=>f.label.destroy());f.label.show(readyModel());await flush();
+ const win=f.windows[0],host=win.getBounds(),writes=win.boundsCalls.length;
+ const packet=()=>win.sent.findLast(row=>row[0]==='pet:quota-label')[1];assert(packet().cardViewport);assert.deepEqual(packet().cardViewport.host,{width:host.width,height:host.height});
+ for(let i=0;i<4;i++){
+  win.webContents.emit('ipc-message',{},'pet:quota-label-toggle');assert.deepEqual(win.getBounds(),host);assert.equal(win.boundsCalls.length,writes);assert(packet().cardViewport);assert(packet().cardTransition);
+  const face=packet().cardViewport.face;assert(face.left>=0&&face.top>=0&&face.left+face.width<=host.width&&face.top+face.height<=host.height);
+  await new Promise(resolve=>setTimeout(resolve,210));assert.deepEqual(win.getBounds(),host);assert.equal(win.boundsCalls.length,writes);
+ }
+ guard=false;f.label.show(readyModel());assert.equal(packet().cardViewport,undefined);assert.equal(win.getBounds().width,labelSize==='compact'?128:168);
+ }
 });
