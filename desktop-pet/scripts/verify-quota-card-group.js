@@ -19,6 +19,7 @@ if (!process.versions.electron) {
   const { quotaFreeStackBounds } = require(path.join(sourceRoot, 'desktop-pet/lib/quota-label-placement'));
   const PetFacing = require(path.join(sourceRoot, 'desktop-pet/lib/pet-facing')), SheepTheme = require(path.join(sourceRoot, 'desktop-pet/lib/sheep-theme'));
   const shape = process.env.PET_LAYOUT_SHAPE || 'blob';
+  const disconnectedOnly = process.env.PET_QUOTA_GROUP_DISCONNECTED_ONLY === '1';
   const out = process.env.PET_SMOKE_ARTIFACT_DIR || fs.mkdtempSync(path.join(os.tmpdir(), 'combined-layout-artifacts-'));
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
   const windows = [], errors = [];
@@ -40,7 +41,7 @@ if (!process.versions.electron) {
   app.whenReady().then(async () => {
     fs.mkdirSync(out, { recursive: true });
     const fixtureCardConfig = { order: ['codex','api','zcode','workbuddy'], pinned: ['codex','api','zcode','workbuddy'] };
-    const report = { quotaCards: fixtureCardConfig, passed: false, fixture: true, nativeHostsHidden: true, noNetworkOrChat: true, sourceRoot, shape, cases: [] };
+    const report = { quotaCards: fixtureCardConfig, passed: false, fixture: true, nativeHostsHidden: true, noNetworkOrChat: true, sourceRoot, shape, scope:disconnectedOnly?'disconnected-pin-only':'all', cases: [] };
     let codex, api, zcode, workbuddy, group,bar; let groupState={visible:['codex','api','zcode','workbuddy']};
     try {
       session.defaultSession.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (_details, done) => done({ cancel: true }));
@@ -80,7 +81,7 @@ if (!process.versions.electron) {
       const {createQuotaCardGroup}=require(path.join(sourceRoot,'desktop-pet/lib/quota-card-group'));
       const {createQuotaCardGroupWindow}=require(path.join(sourceRoot,'desktop-pet/lib/quota-card-group-window'));
       let cursor={x:-10000,y:-10000},clock=0,job,suppressed=false;
-      const fullyShown=async()=>{const deadline=Date.now()+10000;while(!Object.values(controllers).every(c=>c.getWindow()?.isVisible()&&c.getWindow().getOpacity()===1)){if(Date.now()>deadline)throw Error('group did not finish entry');await wait(16);}};
+      const fullyShown=async()=>{const deadline=Date.now()+10000;while(!Object.values(controllers).every(c=>c.getWindow()?.isVisible()&&c.getWindow().getOpacity()===1)){if(Date.now()>deadline)throw Error('group did not finish entry: '+JSON.stringify({plan:plan(),cards:Object.fromEntries(Object.entries(controllers).map(([id,c])=>[id,{visible:c.getWindow()?.isVisible(),opacity:c.getWindow()?.getOpacity(),metrics:c.getLayoutMetrics()}]))}));await wait(16);}};
       const update=()=>{for(const c of Object.values(controllers))c.reposition();sync();};
       bar=createQuotaCardGroupWindow({BrowserWindow:HiddenWindow,screen,getPetWindow:()=>pet,getPresentation:()=>({...presentation,cardStackBounds:config.pinned.map(id=>controllers[id].getVisibleBounds()).filter(Boolean)}),ipcMain,onActivate:()=>group.activate(),onDismiss:()=>group.dismiss()});
       group=createQuotaCardGroup({getState:()=>({config,eligible:['codex','api','zcode','workbuddy'],suppressed}),getCursor:()=>cursor,getBounds:expanded=>[bar.getBounds(),...(expanded?Object.values(controllers).map(c=>c.getVisibleBounds()):[])].filter(Boolean),now:()=>clock,schedule:fn=>(job=fn,1),cancel(){job=null;},onChange:state=>{if(groupState.expanded&&!state.expanded)for(const c of Object.values(controllers))c.resetExpanded?.();groupState=state;if(state.bar)bar.show(state);else bar.hide();update();}});
@@ -89,7 +90,8 @@ if (!process.versions.electron) {
         presentation={mode,side,shape};pet.setBounds({x:side==='left'?area.x:area.x+area.width-80,y:bottom?area.y+area.height-80:area.y,width:80,height:80});
         config={order:['workbuddy','api','codex','zcode'],pinned:[]};group.dismiss();group.sync();bar.show(groupState);update();{const deadline=Date.now()+10000;while(!bar.getBounds()){if(Date.now()>deadline)throw Error('bar not ready');await wait(16);}}await wait(250);
         assert(Object.values(controllers).every(c=>!c.getVisibleBounds()),'default four cards collected');assert(bar.getBounds(),'bar visible');
-        const b=bar.getBounds();cursor={x:b.x+10,y:b.y+10};clock+=80;job();await fullyShown();update();
+        if(!disconnectedOnly){
+        const b=bar.getBounds();cursor={x:-10000,y:-10000};clock+=80;job();cursor={x:b.x+10,y:b.y+10};clock+=80;job();await fullyShown();update();
         assert(Object.values(controllers).every(c=>c.getVisibleBounds()),'hover expands actual native cards');
         const faces=config.order.map(id=>controllers[id].getVisibleBounds());for(let i=1;i<faces.length;i++)assert(faces[i].y>=faces[i-1].y+faces[i-1].height,'configured top-to-bottom order');
         cursor={x:faces[2].x+10,y:faces[2].y+10};clock+=500;job();assert(groupState.expanded,'card hover retains entire group');
@@ -100,13 +102,24 @@ if (!process.versions.electron) {
         cursor={x:b.x+10,y:b.y+10};clock+=80;job();await fullyShown();assert(Object.values(controllers).every(c=>c.getVisibleBounds()),'rapid hover cancels pending exit');
         for(const [id,c]of Object.entries(controllers)){const channel=id==='codex'?'pet:quota-label-toggle':id==='zcode'?'pet:zcode-quota-label-toggle':id==='api'?'pet:api-usage-label-toggle':'pet:workbuddy-label-toggle';ipcMain.emit(channel,{sender:c.getWindow().webContents});}await fullyShown();
         const expandedOrigins=Object.fromEntries(Object.entries(controllers).map(([id,c])=>[id,c.getWindow().getBounds()]));
-        group.dismiss();await wait(40);for(const [id,c]of Object.entries(controllers))assert.deepEqual(c.getWindow().getBounds(),expandedOrigins[id],id+' expanded exit paint stays fixed');await wait(210);group.activate();await fullyShown();for(const c of Object.values(controllers))assert.equal(c.getLayoutMetrics().height,32,'group reentry resets each individual detail');group.dismiss();await wait(250);cursor={x:b.x+10,y:b.y+10};clock+=80;job();await fullyShown();
+        group.dismiss();await wait(40);for(const [id,c]of Object.entries(controllers))assert.deepEqual(c.getWindow().getBounds(),expandedOrigins[id],id+' expanded exit paint stays fixed');await wait(210);group.activate();await fullyShown();for(const c of Object.values(controllers))assert.equal(c.getLayoutMetrics().height,32,'group reentry resets each individual detail');group.dismiss();await wait(250);cursor={x:-10000,y:-10000};clock+=80;job();cursor={x:b.x+10,y:b.y+10};clock+=80;job();await fullyShown();
         cursor={x:-10000,y:-10000};clock+=80;job();clock+=220;job();await wait(250);assert(Object.values(controllers).every(c=>!c.getWindow().isVisible()),'leave completes native fade');
         config.pinned=['api'];group.sync();update();await wait(250);assert(api.getVisibleBounds());assert(!codex.getVisibleBounds());bar.show(groupState);const pb=bar.getBounds(),pf=api.getVisibleBounds();assert(pb.y+6.5>=pf.y+pf.height+6||pb.y+20<=pf.y,'bar outside pinned stack');
         group.activate();await fullyShown();assert(groupState.expanded);group.dismiss();await wait(50);assert.equal(api.getWindow().getOpacity(),1,'pinned API never fades on group collection');await wait(160);group.activate();await fullyShown();suppressed=true;group.sync();bar.hide();for(const c of Object.values(controllers))c.hide();assert(Object.values(controllers).every(c=>!c.getWindow().isVisible()),'external safety hide is immediate');await wait(250);assert(!bar.getBounds());assert(Object.values(controllers).every(c=>!c.getVisibleBounds()));
         suppressed=false;showAll();group.sync();update();await wait(250);assert(api.getVisibleBounds(),'pin restores after external suppression');
-        report.cases.push({mode,side,bottom,passed:true,fade:{duration:220,originPreserved:true,rapidReentry:true,pinNotFaded:true,safetyHideImmediate:true}});
+        }
+        config.pinned=['codex'];group.sync();codex.show({state:'disconnected',items:[]});update();await wait(250);bar.show(groupState);
+        const assertPinnedOutside=()=>{const face=codex.getVisibleBounds(),b=bar.getBounds();assert(face&&codex.getLayoutMetrics(),'disconnected fixed card participates in layout');assert(b&&(b.y+6.5>=face.y+face.height+6||b.y+20<=face.y),'capsule stays outside fixed status card');return face;};
+        const disconnectedFace=assertPinnedOutside();
+        assert.equal(await codex.getWindow().webContents.executeJavaScript("document.getElementById('status').textContent"),'Codex 未连接');
+        group.activate();await fullyShown();update();
+        const disconnectedStack=config.order.map(id=>controllers[id].getVisibleBounds());for(let i=1;i<disconnectedStack.length;i++)assert(disconnectedStack[i].y>=disconnectedStack[i-1].y+disconnectedStack[i-1].height,'disconnected card participates in expanded non-overlapping stack');
+        group.dismiss();await wait(250);update();bar.show(groupState);assertPinnedOutside();
+        assert.equal(codex.getWindow().getOpacity(),1,'fixed disconnected card does not fade during collection');assert(['api','zcode','workbuddy'].every(id=>!controllers[id].getVisibleBounds()),'only fixed disconnected card remains after collection');
+        codex.show({state:'ready',items:[{label:'5小时',remaining:64,windowMinutes:300}]});update();await wait(250);bar.show(groupState);const reconnectedFace=assertPinnedOutside();
+        report.cases.push({mode,side,bottom,passed:true,disconnectedPin:{face:disconnectedFace,reconnectedFace,expandedNoOverlap:true,collapseKeepsPin:true,capsuleOutside:true},...(!disconnectedOnly?{fade:{duration:220,originPreserved:true,rapidReentry:true,pinNotFaded:true,safetyHideImmediate:true}}:{})});
       }
+      if(!disconnectedOnly){
       group.activate();await fullyShown();report.collapseFrames={};
       for(const [id,c]of Object.entries(controllers)){
         const win=c.getWindow(),origin=win.getBounds();await win.webContents.executeJavaScript(`Promise.all(document.getAnimations().filter(a=>Number.isFinite(a.effect.getTiming().iterations)).map(a=>a.finished.catch(()=>{}))).then(()=>true)`);win.webContents.send('pet:quota-card-motion',{visible:false,animate:true,index:0});
@@ -126,6 +139,7 @@ if (!process.versions.electron) {
         }
         assert(report.collapseFrames[id].at(-1).width<report.collapseFrames[id][0].width*.25,id+' actual glass visibly narrows');
         win.webContents.send('pet:quota-card-motion',{visible:true,animate:false,index:0});
+      }
       }
       group.close();bar.destroy();report.passed=true;
       assert(windows.every(w=>w.isDestroyed()||!w.nativeVisible()),'all native hosts remain hidden');assert.deepEqual(errors,[]);

@@ -43,7 +43,10 @@ function createZcodeProtocol({ binary, cwd, env = process.env, executable = proc
         let result;
         try { result = await onRequest(packet.method, packet.params); } catch (error) {
           write({ id: packet.id, error: { code: -32601, message: 'Unavailable in companion chat' } });
-          shutdown(['VERIFICATION_REQUIRED', 'UNAUTHENTICATED', 'TIMEOUT', 'DISCONNECTED'].includes(error?.code) ? error.code : 'TOOL_BLOCKED'); return;
+          const code = error?.code, authRequest = packet.method === 'interaction/requestProviderRuntimeHeaders';
+          shutdown(authRequest && ['ZCODE_TEAM_SELECTION_REQUIRED', 'ZCODE_TEAM_KEY_MISSING', 'ZCODE_TEAM_ACCESS_DENIED', 'ZCODE_LOGIN_REQUIRED'].includes(code) ? code
+            : authRequest && ['ZCODE_NETWORK_ERROR', 'ZCODE_HTTP_ERROR', 'ZCODE_INVALID_RESPONSE'].includes(code) ? 'DISCONNECTED'
+              : ['VERIFICATION_REQUIRED', 'UNAUTHENTICATED', 'TIMEOUT', 'DISCONNECTED'].includes(code) ? code : 'TOOL_BLOCKED'); return;
         }
         if (result === undefined) {
           write({ id: packet.id, error: { code: -32601, message: 'Companion tools are disabled' } });

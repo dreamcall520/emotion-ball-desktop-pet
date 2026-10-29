@@ -24,6 +24,16 @@ test('state whitelist preserves zero and old reports, strips credentials and raw
   assert.deepEqual(state.report.expires,[{amount:2,at:30}]);
   assert.equal(safeState({report:{total:0}}).report,null);
 });
+test('enterprise card IPC preserves zero and unlimited scope while stripping tenant credentials', () => {
+  const report = { scope: 'enterprise', unlimited: false, total: 0, used: 100, limit: 100, updatedAt: 10, nextRefreshAt: 20, tenantToken: 'secret', enterpriseId: 'secret', plan: 'secret', expires: [{ at: 30, amount: 10, token: 'secret' }] };
+  const limited = safeState({ report });
+  assert.equal(limited.report.total, 0); assert.equal(limited.report.used, 100); assert.equal(limited.report.plan, '企业版');
+  const unlimited = safeState({ report: { ...report, unlimited: true, total: null, limit: null }, history: [{ at: 10, total: null }, { at: 20, total: 0, tenantToken: 'secret' }] });
+  assert.equal(unlimited.report.scope, 'enterprise'); assert.equal(unlimited.report.total, null); assert.equal(unlimited.report.limit, null);
+  assert.deepEqual(unlimited.history, [{ at: 20, total: 0 }]);
+  assert.doesNotMatch(JSON.stringify([limited, unlimited]), /secret|tenantToken|enterpriseId/);
+  assert.equal(safeState({ report: { ...report, total: null } }).report, null);
+});
 test('constructor is lazy; IPC verifies sender and frame; expansion falls back; navigation denied',async()=> {
   const windows=[]; let refresh=0,trend=0,tasks=0,layouts=0;
   class Window extends EventEmitter {

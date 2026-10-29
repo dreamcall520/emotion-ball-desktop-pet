@@ -219,3 +219,30 @@ test('import cannot publish after its owning window session becomes invalid duri
  const local=createCodexPetStore({namespace:'local',sourceRoot:root,importRoot:root,validateImport:()=>new Promise(resolve=>finish=resolve),canPublishImport:()=>active});
  const pending=local.importDirectory(folder);active=false;finish(true);await assert.rejects(pending,{code:'INVALID_PET'});assert.equal(fs.existsSync(root),false);
 });
+
+test('imports native 1x/2x/3x nine- and eleven-row atlases without changing manifest or image bytes', async t => {
+  const f = fixture(t), localRoot = path.join(f.root, 'hd-local');
+  const local = createCodexPetStore({ importRoot: localRoot, namespace: 'local',
+    validateImport: (pet, bytes) => pet.spriteScale === bytes.readUInt32BE(16) / 1536 });
+  for (const version of [1, 2]) for (const scale of [3, 2, 1]) {
+    const rows = version === 1 ? 9 : 11;
+    const image = png(1536 * scale, rows * 208 * scale);
+    const folder = f.add(`native-${version}-${scale}`, { spriteVersionNumber: version }, image);
+    const pet = await local.importDirectory(folder);
+    assert.equal(pet.spriteScale, scale); assert.equal(pet.rows, rows);
+    assert(fs.readFileSync(pet.spritesheetPath).equals(image));
+    assert.deepEqual(local.getImported(pet.id), pet);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(path.dirname(pet.spritesheetPath), 'pet.json'))).spriteScale, undefined);
+  }
+  assert.equal(local.listImported().pets.length, 6);
+});
+
+test('rejects fractional, excessive and inconsistent atlas scaling before invoking an image decoder', t => {
+  let decoded = 0;
+  const f = fixture(t, (_bytes, _ext, size) => { decoded++; return size; });
+  for (const [width, height] of [[2304, 2808], [6144, 7488], [4608, 1872], [1536, 5616], [4608, 5615]]) {
+    const folder = f.add(`invalid-${width}-${height}`, {}, png(width, height));
+    assert.throws(() => f.store.importDirectory(folder), { code: 'INVALID_PET' });
+  }
+  assert.equal(decoded, 0);
+});

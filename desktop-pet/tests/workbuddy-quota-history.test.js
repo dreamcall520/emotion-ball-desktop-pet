@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { createWorkBuddyQuota } = require('../lib/workbuddy-quota');
+const { createWorkBuddyQuota, safeEnterpriseReport } = require('../lib/workbuddy-quota');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const a = 'a'.repeat(64), b = 'b'.repeat(64), week = 7 * 86400000;
 function fixture(t, historyFile) {
@@ -65,4 +65,38 @@ test('enriches new samples with balance categories and expiry, while restoring o
   const q = createWorkBuddyQuota(f.options); t.after(() => q.close()); q.setEnabled(true); await tick();
   assert.deepEqual(q.getState().history, [{ at: 1999999700000, total: 7400 }, { at: 2000000000000, ...report }]);
   const stored = JSON.parse(fs.readFileSync(f.options.historyFile)); assert.equal(stored.accounts[a][1].reward, 6899);
+});
+
+test('enterprise quota preserves actual remaining and zero; unlimited never adds a balance sample', async t => {
+  const f = fixture(t);
+  const report = { scope: 'enterprise', unlimited: false, total: 7.25, limit: 100, used: 92.75,
+    basic: null, reward: null, purchased: null, plan: '企业版', nextRefreshAt: null, expires: [], updatedAt: 2000000000000 };
+  f.outcome({ accountKey: a, report: { ...report, tenantToken: 'secret' } });
+  f.quota.setEnabled(true); await tick();
+  assert.deepEqual(f.quota.getState().report, report);
+  assert.equal(f.quota.getState().history.at(-1).total, 7.25);
+  assert.doesNotMatch(fs.readFileSync(f.options.historyFile, 'utf8'), /secret|tenantToken/);
+  f.time(2000000300000); f.outcome({ accountKey: a, report: { ...report, total: 0, used: 100 } }); await f.quota.refresh();
+  assert.equal(f.quota.getState().report.total, 0);
+  const saved = fs.readFileSync(f.options.historyFile, 'utf8');
+  f.time(2000000600000); f.outcome({ accountKey: a, report: { ...report, unlimited: true, total: null, limit: null } }); await f.quota.refresh();
+  assert.equal(f.quota.getState().error, null); assert.equal(f.quota.getState().report.total, null);
+  assert.deepEqual(f.quota.getState().history.map(p => p.total), [7.25, 0]);
+  assert.equal(fs.readFileSync(f.options.historyFile, 'utf8'), saved);
+  f.outcome({ accountKey: b, report: { ...report, unlimited: true, total: null, limit: null } }); await f.quota.refresh();
+  assert.deepEqual(f.quota.getState().history, []);
+  f.outcome({ accountKey: a, report: { total: 500 } }); await f.quota.refresh();
+  assert.deepEqual(f.quota.getState().report, { total: 500 });
+});
+
+test('enterprise report rejects missing balances and inconsistent unlimited values without inventing zero', () => {
+  const report = { scope: 'enterprise', unlimited: false, total: 0, limit: 0, used: 0 };
+  assert.equal(safeEnterpriseReport(report).total, 0);
+  assert.equal(safeEnterpriseReport({ ...report, limit: 10, used: 12 }).total, 0);
+  for (const changed of [{ total: null }, { limit: undefined }, { used: -1 }, { used: Infinity }, { total: 1 }, { unlimited: 'true' }, { unlimited: true }, { unlimited: true, total: null, limit: 0 }]) {
+    assert.equal(safeEnterpriseReport({ ...report, ...changed }), null);
+  }
+  const clean = safeEnterpriseReport({ ...report, unlimited: true, total: null, limit: null, tenantToken: 'secret', expires: [{ token: 'secret' }] });
+  assert.equal(clean.total, null); assert.equal(clean.limit, null); assert.deepEqual(clean.expires, []);
+  assert.doesNotMatch(JSON.stringify(clean), /secret|tenantToken/);
 });

@@ -115,10 +115,12 @@ function createCodexPetStore({ sourceRoot = path.join(process.env.CODEX_HOME || 
     const extension = path.extname(raw.spritesheetPath).toLowerCase();
     const size = imageSize(image.buffer, extension);
     const rows = version === 1 ? 9 : 11;
-    if (size.width !== 1536 || size.height !== rows * 208) throw fail('宠物精灵图尺寸不合法');
+    const spriteScale = size.width / 1536;
+    if (!Number.isInteger(spriteScale) || spriteScale < 1 || spriteScale > 3 ||
+        size.height !== rows * 208 * spriteScale) throw fail('宠物精灵图尺寸不合法');
     const decoded = readImageSize ? readImageSize(image.buffer, extension, { ...size }) : size;
     if (!decoded || decoded.width !== size.width || decoded.height !== size.height) throw fail('宠物图片解码结果不合法');
-    return { descriptor: { id, importedId: namespace ? digest(Buffer.from('qiuqiu-local-pet-v1\0'),manifest.buffer,image.buffer) : digest(manifest.buffer, image.buffer), name: raw.displayName.trim(), description: raw.description || '', version, rows, spritesheetPath: image.file }, manifest, image, raw };
+    return { descriptor: { id, importedId: namespace ? digest(Buffer.from('qiuqiu-local-pet-v1\0'),manifest.buffer,image.buffer) : digest(manifest.buffer, image.buffer), name: raw.displayName.trim(), description: raw.description || '', version, rows, spriteScale, spritesheetPath: image.file }, manifest, image, raw };
   }
 
   function entries(root) {

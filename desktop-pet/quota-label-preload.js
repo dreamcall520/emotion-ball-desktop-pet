@@ -131,6 +131,12 @@ function iconPreferenceFields(source) {
   catch (_) { return {}; }
 }
 
+function zcodeStatusFields(source) {
+  try { const code = source.statusCode; return ['ZCODE_TEAM_SELECTION_REQUIRED', 'ZCODE_TEAM_KEY_MISSING', 'ZCODE_TEAM_ACCESS_DENIED',
+    'ZCODE_QUOTA_QUERY_FAILED', 'ZCODE_QUOTA_UPDATE_FAILED', 'ZCODE_CUSTOM_QUOTA_UNAVAILABLE'].includes(code)
+    ? { statusCode: code } : {}; } catch (_) { return {}; }
+}
+
 function safeModel(value) {
   const source = record(value);
   if (!source) return { state: 'disconnected', size: 'standard', appearance: 'system', expanded: false, items: [], overflow: 0 };
@@ -147,7 +153,7 @@ function safeModel(value) {
     return { state: 'disconnected', size: 'standard', appearance: 'system', expanded: false, items: [], overflow: 0 };
   }
   const state = STATES.has(stateValue) ? stateValue : 'disconnected';
-  const identity = sourceId === 'zcode' ? { sourceId: 'zcode' } : iconPreferenceFields(source);
+  const identity = sourceId === 'zcode' ? { sourceId: 'zcode', ...zcodeStatusFields(source) } : iconPreferenceFields(source);
   const size = sizeValue === 'compact' ? 'compact' : 'standard';
   const appearance = ['light', 'dark'].includes(appearanceValue) ? appearanceValue : 'system';
   const numbers = numberFields(source);

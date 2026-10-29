@@ -14,6 +14,7 @@ const {
   Menu,
   nativeImage,
   nativeTheme,
+  net,
   systemPreferences,
   powerMonitor,
   safeStorage,
@@ -130,6 +131,7 @@ let codexThreadOpener = url => shell.openExternal(url);
 let chat = null;
 let workbuddyChat = null;
 let workbuddyQuota = null;
+let workbuddyDiagnosticKey = '';
 let workbuddyLabel = null;
 let workbuddyDetails = null;
 let workbuddyConsent = null;
@@ -774,7 +776,7 @@ function codexPetDescriptor(appearance) {
   if (appearance?.shape !== 'codex-pet' || !codexPets) return null;
   let pet;
   try { pet = importedPet(appearance.codexPetId); } catch (_) { return null; }
-  return { id: pet.id, name: pet.name, version: pet.version, rows: pet.rows, origin:pet.origin,
+  return { id: pet.id, name: pet.name, version: pet.version, rows: pet.rows, spriteScale:pet.spriteScale||1, origin:pet.origin,
     imageURL: pathToFileURL(pet.spritesheetPath).href };
 }
 
@@ -800,7 +802,8 @@ async function prepareCodexAppearance(appearance) {
     image.onerror = () => { clearTimeout(timer); resolve(null); };
     image.src = ${JSON.stringify(descriptor.imageURL)};
   })` }]);
-  if (dimensions?.width !== 1536 || dimensions?.height !== descriptor.rows * 208) throw new Error('宠物图片无法解码');
+  if (dimensions?.width !== 1536 * descriptor.spriteScale ||
+      dimensions?.height !== descriptor.rows * 208 * descriptor.spriteScale) throw new Error('宠物图片无法解码');
   return copied;
 }
 
@@ -3372,6 +3375,11 @@ function registerIpc() {
     return setChatProvider(source);
   });
   ipcMain.on('pet:chat-close', event => { if (fromChatWindow(event)) chatWindow.hide(); });
+  ipcMain.on('pet:network-online', event => {
+    if (!isQuitting && fromPetWindow(event) && event.senderFrame === event.sender.mainFrame && net.isOnline()) {
+      workbuddyQuota?.recover('online');
+    }
+  });
   ipcMain.on('pet:sleep-state', (event, state) => {
     if (fromPetWindow(event) && event.senderFrame === event.sender.mainFrame && (state === 'awake' || state === 'sleep')) setPetSleepState(state);
   });
@@ -3629,7 +3637,7 @@ async function bootstrap() {
       const owner=customizationWindow;if(!localPetImportIsCurrent())return false;
       const mime=path.extname(pet.spritesheetPath).toLowerCase()==='.webp'?'image/webp':'image/png';
       const dimensions=await owner.webContents.executeJavaScriptInIsolatedWorld(1004,[{code:`new Promise(resolve=>{const image=new Image();const timer=setTimeout(()=>resolve(null),5000);image.onload=async()=>{try{await image.decode();const bitmap=await createImageBitmap(image);bitmap.close();const canvas=document.createElement('canvas');canvas.width=canvas.height=1;canvas.getContext('2d').drawImage(image,0,0,1,1);clearTimeout(timer);resolve({width:image.naturalWidth,height:image.naturalHeight})}catch(_){clearTimeout(timer);resolve(null)}};image.onerror=()=>{clearTimeout(timer);resolve(null)};image.src=${JSON.stringify(`data:${mime};base64,${buffer.toString('base64')}`)}})`}]);
-      return localPetImportIsCurrent()&&dimensions?.width===1536&&dimensions?.height===pet.rows*208;
+      return localPetImportIsCurrent()&&dimensions?.width===1536*pet.spriteScale&&dimensions?.height===pet.rows*208*pet.spriteScale;
     }});
   apiUsage = createApiUsage({ filePath: path.join(app.getPath('userData'), 'openai-api-usage.enc'), safeStorage,
     ...(IS_SMOKE_TEST && process.env.PET_SMOKE_API_USAGE_ONLY === '1'
@@ -3733,6 +3741,9 @@ async function bootstrap() {
   workbuddyTasks = createWorkBuddyTasks({ run: workbuddyRun, stateFile: path.join(app.getPath('userData'), 'workbuddy-task-state.json'), getAccountKey: () => workbuddyQuota?.getState().accountKey,
     onChange: () => { syncWorkBuddyLabel(); workbuddyDetails?.update(workBuddyDetailsState()); } });
   workbuddyQuota = createWorkBuddyQuota({ run: workbuddyRun, historyFile: path.join(app.getPath('userData'), 'workbuddy-quota-history.json'), onChange: state => {
+    const diagnostic = state.errorCode ? JSON.stringify({ code: require('./lib/workbuddy-quota-status').errorCode(state.errorCode), nextRetryAt: Number.isSafeInteger(state.nextRetryAt) ? state.nextRetryAt : null }) : '';
+    if (diagnostic && diagnostic !== workbuddyDiagnosticKey) writeError('WorkBuddy 积分查询', diagnostic);
+    workbuddyDiagnosticKey = diagnostic;
     workbuddyTasks.setEnabled(state.enabled); workbuddyUsage.setEnabled(state.enabled); syncWorkBuddyLabel(); workbuddyDetails?.update(workBuddyDetailsState());
     if (state.enabled && !state.busy && !state.error && state.report) { void workbuddyTasks.refresh(false); void workbuddyUsage.refresh(false); }
   } });
@@ -3782,6 +3793,11 @@ async function bootstrap() {
       workspaceDir: path.join(app.getPath('userData'), 'zcode-chat-workspace'),
       providerName: 'ZCode', resolveModel: resolveZcodeChatModel,
       providerErrors: { UNSUPPORTED: '当前 ZCode 版本或登录方式暂不支持球球聊天，请更新 ZCode 或更换可用账号后重试。',
+        ZCODE_TEAM_SELECTION_REQUIRED: '请先在 ZCode 中选择完整的团队、项目和套餐，再重试模型列表。',
+        ZCODE_PERSONAL_CONFIG_INVALID: 'ZCode 自定义供应商配置暂时无法读取，请在 ZCode 中检查后重试。',
+        ZCODE_TEAM_KEY_MISSING: '当前团队尚未配置可用 API Key，请在 ZCode 中完成团队配置，再重试模型列表。',
+        ZCODE_TEAM_ACCESS_DENIED: '当前账号无权使用所选团队或项目，请在 ZCode 中检查成员和席位权限，再重试模型列表。',
+        ZCODE_LOGIN_REQUIRED: 'ZCode 登录已失效，请先在 ZCode 中重新登录，再重试模型列表。',
         VERIFICATION_REQUIRED: '请先在 ZCode 中完成安全验证后重试。',
         UNSAFE_CONFIG: '当前 ZCode 无法以仅聊天方式连接，请检查设置或更新 ZCode 后重试。' },
       initialModelSelection: settings.zcodeChatModel,
@@ -3977,7 +3993,7 @@ async function bootstrap() {
   powerMonitor.on('lock-screen', () => powerGuard.setLocked(true));
   powerMonitor.on('suspend', () => powerGuard.setSuspended(true));
   powerMonitor.on('unlock-screen', () => powerGuard.setLocked(false));
-  powerMonitor.on('resume', () => powerGuard.setSuspended(false));
+  powerMonitor.on('resume', () => { powerGuard.setSuspended(false); workbuddyQuota?.recover('resume'); });
   registerIpc();
   registerDisplayRecovery();
   initializeCodexCompanion();

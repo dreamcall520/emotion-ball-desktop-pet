@@ -14,6 +14,18 @@ test('label and details preserve independent buckets, deadlines and actual units
   assert.equal(details.bucketId, buckets[2].id); assert.equal(details.buckets.length, 4); assert.equal(details.quotaUpdatedAt, now);
   assert.equal(details.activity.runningCount, null); assert.equal(details.trend.samples.length, 0); assert.equal(details.trend.forecast.state, 'unknown');
 });
+
+test('team failure reasons reach quota and detail views without zero placeholders or stale reasons after recovery', () => {
+  for (const code of ['ZCODE_TEAM_SELECTION_REQUIRED', 'ZCODE_TEAM_KEY_MISSING', 'ZCODE_TEAM_ACCESS_DENIED']) {
+    const failed = { ...snapshot, quota: { ...snapshot.quota, state: 'disconnected', code } };
+    const label = buildZcodeQuotaLabelModel(failed, {}, now), details = buildZcodeDetailsModel(failed, { action: 'quota' }, now);
+    assert.equal(label.statusCode, code); assert.equal(details.statusCode, code);
+    assert.deepEqual(label.items, []); assert.deepEqual(details.items, []);
+    assert.equal(buildZcodeQuotaLabelModel({ ...failed, enabled: false }, {}, now).statusCode, undefined);
+  }
+  assert.equal(buildZcodeQuotaLabelModel(snapshot, {}, now).statusCode, undefined);
+  assert.equal(buildZcodeQuotaLabelModel({ ...snapshot, quota: { ...snapshot.quota, code: 'PRIVATE_RESPONSE' } }, {}, now).statusCode, undefined);
+});
 test('trend never merges other bucket or another cycle, stale samples cannot become fresh estimates', () => {
   const window = buckets[0];
   const history = { available: true, results: [], windows: [

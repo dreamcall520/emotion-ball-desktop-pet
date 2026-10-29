@@ -3,7 +3,8 @@ const path = require('node:path');
 
 const MESSAGES = {
   LOGIN_REQUIRED: '请在 WorkBuddy 中重新登录。', UNSUPPORTED_PLATFORM: '当前仅支持 macOS WorkBuddy。',
-  UNSUPPORTED_AUTH: '当前 WorkBuddy 登录格式暂不支持，请更新球球。', UNSUPPORTED_ACCOUNT: '当前仅支持已验证的国内个人体验版套餐。',
+  UNSUPPORTED_AUTH: '当前 WorkBuddy 登录格式暂不支持，请更新球球。', UNSUPPORTED_ACCOUNT: '当前 WorkBuddy 登录身份暂无法识别。',
+  UNSUPPORTED_QUOTA: '当前 WorkBuddy 积分格式暂无法识别，请更新球球。',
   ACCOUNT_CHANGED: 'WorkBuddy 账号已变化，请新建聊天。', RATE_LIMITED: 'WorkBuddy 请求过于频繁，请稍后重试。',
   INSUFFICIENT_CREDITS: 'WorkBuddy 积分不足。', ACCOUNT_RESTRICTED: 'WorkBuddy 账号当前受限。',
   MODEL_UNAVAILABLE: '当前 WorkBuddy 模型不可用，请重新选择。', SERVICE_UNAVAILABLE: 'WorkBuddy 服务暂不可用。',

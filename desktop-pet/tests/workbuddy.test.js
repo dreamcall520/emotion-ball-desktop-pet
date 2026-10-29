@@ -35,7 +35,7 @@ test('quota uses remaining balances, matches all detail batches, separates base 
   assert.equal(report.purchased, 0); assert.equal(report.nextRefreshAt, Date.parse('2026-11-01T00:00:00+08:00'));
   assert.deepEqual(report.expires[0], { amount: 100, at: expiry });
   assert.throws(() => quotaReport(summary, accounts.slice(0, 2), now), { code: 'INVALID_RESPONSE' });
-  assert.throws(() => quotaReport({ ...summary, IsPaidUser: true }, accounts, now), { code: 'UNSUPPORTED_ACCOUNT' });
+  assert.equal(quotaReport({ ...summary, IsPaidUser: true }, accounts, now).total, 7400);
   const zero = quotaReport({ IsPaidUser: false, Packages: [] }, [], now); assert.equal(zero.total, 0);
 });
 async function* chunks(text, size = 1) { const bytes = Buffer.from(text); for (let index = 0; index < bytes.length; index += size) yield bytes.subarray(index, index + size); }
@@ -110,7 +110,7 @@ test('quota retains stale results only for transient errors and clears on login/
     schedule: (fn, delay) => { timers.push(delay); return fn; }, cancel: () => {} });
   quota.setEnabled(true); await tick(); outcome = Object.assign(new Error('private diagnostic'), { code: 'CONNECTION_FAILED' });
   await quota.refresh(); assert.equal(quota.getState().stale, true); assert.equal(quota.getState().report.total, 7400); assert(!quota.getState().error.includes('private'));
-  await quota.refresh(); assert.equal(timers.at(-1), 600000);
+  await quota.refresh(); assert.equal(timers.at(-1), 45000);
   outcome = Object.assign(new Error(), { code: 'CONNECTION_FAILED', accountKey: 'b'.repeat(64) });
   await quota.refresh(); assert.equal(quota.getState().report, null); assert.equal(quota.getState().accountKey, null);
   outcome = Object.assign(new Error(), { code: 'ACCOUNT_CHANGED' }); await quota.refresh(); assert.equal(quota.getState().report, null); quota.close();

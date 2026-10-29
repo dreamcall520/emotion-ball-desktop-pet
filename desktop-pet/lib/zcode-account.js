@@ -39,24 +39,27 @@ function readZcodeAccount({ home = os.homedir(), env = process.env, fs = nativeF
   const secret = env.ZCODE_CREDENTIAL_SECRET?.trim() || `zcode-credential-fallback:${os.platform()}:${os.homedir()}:${username}`;
   const raw = readJson(fs, credentialsPath);
   const load = key => decryptCredential(raw[key], secret);
-  const family = load('oauth:active_provider');
+  const settings = readJson(fs, path.join(dir, 'setting.json'), true);
+  const activeFamily = load('oauth:active_provider');
+  const family = ['zai', 'bigmodel'].includes(settings.providerFamilyDomain) ? settings.providerFamilyDomain : activeFamily;
   if (!['zai', 'bigmodel'].includes(family)) throw fail('ZCODE_PROVIDER_UNSUPPORTED');
-  const jwtToken = load('zcodejwttoken'); const accessToken = load(`oauth:${family}:access_token`);
+  const jwtToken = family === activeFamily ? load('zcodejwttoken') : null;
+  const accessToken = load(`oauth:${family}:access_token`);
   if (!jwtToken && !accessToken) throw fail('ZCODE_LOGIN_REQUIRED');
   let user = {}; try { user = JSON.parse(load(`oauth:${family}:user_info`) || '{}'); } catch (_ignored) {}
   const accountId = String(user.user_id || user.id || user.sub || '');
-  const settings = readJson(fs, path.join(dir, 'setting.json'), true);
   const storedSelection = settings.providerFamilyConnectionSelections?.[family];
   const kind = ['start-plan', 'individual-coding-plan', 'team-coding-plan', 'api-key'].includes(storedSelection?.kind)
     ? storedSelection.kind : null;
   const providerId = kind ? `account:${family}-${kind}` : null;
-  const selection = { family, providerId, scope: kind === 'team-coding-plan' ? 'team' : 'personal',
-    ...(storedSelection && typeof storedSelection === 'object' ? storedSelection : {}), kind,
+  const selection = { ...(storedSelection && typeof storedSelection === 'object' ? storedSelection : {}),
+    family, providerId, scope: kind === 'team-coding-plan' ? 'team' : 'personal', kind,
     mode: settings.modelProviderFamilyModes?.[family] || null,
     selectedKey: settings.modelProviderFamilySelectedKeys?.[family] || null,
     providerFamilyDomain: settings.providerFamilyDomain || null };
   const accountKey = createHash('sha256').update(JSON.stringify([family, accountId || jwtToken || accessToken,
-    kind, storedSelection?.organizationId || null, storedSelection?.projectId || null])).digest('hex');
+    kind, storedSelection?.organizationId || null, storedSelection?.projectId || null,
+    ...(kind === 'team-coding-plan' ? [storedSelection?.productId || null] : [])])).digest('hex');
   const telemetry = readJson(fs, path.join(dir, 'telemetry-state.json'), true);
   const deviceMid = typeof telemetry.deviceMid === 'string' && /^[^\r\n]{1,256}$/.test(telemetry.deviceMid) ? telemetry.deviceMid : null;
   // Only use an actual configured Coding Plan key. OAuth/project key IDs are not API keys.
@@ -78,4 +81,14 @@ function readZcodeAccount({ home = os.homedir(), env = process.env, fs = nativeF
   return { accountKey, accountId, family, credentialsPath, jwtToken, accessToken, deviceMid,
     selection, codingPlanApiKey, baseDir: base };
 }
-module.exports = { readZcodeAccount, decryptCredential };
+function readZcodeConnection(options = {}) {
+  let account, accountError;
+  try { account = readZcodeAccount(options); } catch (error) { accountError = error; }
+  let personal;
+  try { personal = require('./zcode-personal-providers').readZcodePersonalProviders(options); }
+  catch (error) { if (!account) throw error; }
+  if (account) return personal?.hasConfigured ? { ...account, personal } : account;
+  if (!personal?.hasConfigured) throw accountError;
+  return { accountKey: personal.scope, family: 'custom', baseDir: personal.baseDir, personal };
+}
+module.exports = { readZcodeAccount, readZcodeConnection, decryptCredential };

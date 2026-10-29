@@ -123,9 +123,9 @@ test('ZCode 信息复用相同头像与控件，仅用文本替换完整授权�
   assert.equal(f.document.title, '开启 ZCode 联动');
   assert.equal(f.node('consent-title').textContent, '让球球陪你关注 ZCode');
   assert.equal(f.node('consent-subtitle').textContent, '提醒额度余量，也留意任务进展。');
-  assert.match(f.node('consent-state-body').textContent, /本机 ZCode 当前登录账号的套餐、额度与任务状态/);
-  assert.match(f.node('consent-privacy-credentials').textContent, /凭据.*官方服务.*不保存/);
-  assert.match(f.node('consent-privacy-messages').textContent, /你主动发送.*对应模型与额度.*球球自身的聊天会话/);
+  assert.match(f.node('consent-state-body').textContent, /本机 ZCode.*已启用的自定义供应商和模型/);
+  assert.match(f.node('consent-privacy-credentials').textContent, /密钥仅用于对应供应商.*本机私有运行配置.*关闭后清除/);
+  assert.match(f.node('consent-privacy-messages').textContent, /你主动发送.*所选供应商和模型.*球球自身的聊天会话/);
   assert.match(f.node('consent-control-body').textContent, /其他 ZCode 任务/);
   assert.equal(f.node('consent-status').textContent, '可随时在「ZCode 联动」中关闭。');
   assert.equal(f.portraits[0].args[0], info.appearance); assert.equal(f.node('consent-cancel').focusCalls, 1);
@@ -184,7 +184,7 @@ test('ZCode 本机状态和由你掌控复用隐私列表样式，保留原ID且
   });
   f.receive({sourceId:'zcode',appearance:{shape:'aurora-cloud'}});
   bodies.forEach(body=>assert.equal(f.node(body.id),body,'appearance updates keep the same disclosure list item'));
-  assert.match(f.node('consent-state-body').textContent,/套餐、额度与任务状态/);
+  assert.match(f.node('consent-state-body').textContent,/账号、额度、任务及已启用的自定义供应商和模型/);
   assert.match(f.node('consent-control-body').textContent,/不监听键盘/);
   assert.deepEqual(f.calls,[],'formatting does not grant consent');
 });

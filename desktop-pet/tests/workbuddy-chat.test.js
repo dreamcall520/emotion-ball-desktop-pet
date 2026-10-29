@@ -135,7 +135,7 @@ test('late cancelled auth failure cannot invalidate the next successful chat', a
 test('client login error hides verified history, and specific errors have useful messages', async () => {
   const { workBuddyError } = require('../lib/workbuddy-client');
   for (const [code, expected] of Object.entries({
-    LOGIN_REQUIRED: /重新登录/, UNSUPPORTED_ACCOUNT: /体验版/, UNSUPPORTED_AUTH: /登录格式/,
+    LOGIN_REQUIRED: /重新登录/, UNSUPPORTED_ACCOUNT: /登录身份/, UNSUPPORTED_AUTH: /登录格式/,
     INSUFFICIENT_CREDITS: /积分不足/, TOOLS_UNSUPPORTED: /工具调用/, TRUNCATED_RESPONSE: /完整结束/,
     RESPONSE_TOO_LONG: /回复超出/, CONTEXT_TOO_LONG: /新聊天/, ACCOUNT_RESTRICTED: /受限/
   })) {

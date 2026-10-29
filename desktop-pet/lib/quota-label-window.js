@@ -150,13 +150,19 @@ function iconPreferenceFields(source) {
   catch (_) { return {}; }
 }
 
+function zcodeStatusFields(source) {
+  try { const code = source.statusCode; return ['ZCODE_TEAM_SELECTION_REQUIRED', 'ZCODE_TEAM_KEY_MISSING', 'ZCODE_TEAM_ACCESS_DENIED',
+    'ZCODE_QUOTA_QUERY_FAILED', 'ZCODE_QUOTA_UPDATE_FAILED', 'ZCODE_CUSTOM_QUOTA_UNAVAILABLE'].includes(code)
+    ? { statusCode: code } : {}; } catch (_) { return {}; }
+}
+
 function safeModel(value, sourceId = 'codex') {
   const source = record(value);
   if (!source) return { state: EMPTY_MODEL.state, items: [], overflow: 0 };
   let stateValue;
   try { stateValue = source.state; } catch (_) { return { state: EMPTY_MODEL.state, items: [], overflow: 0 }; }
   const state = STATES.has(stateValue) ? stateValue : 'disconnected';
-  const identity = sourceId === 'zcode' ? { sourceId: 'zcode' } : iconPreferenceFields(source);
+  const identity = sourceId === 'zcode' ? { sourceId: 'zcode', ...zcodeStatusFields(source) } : iconPreferenceFields(source);
   const numbers = numberFields(source);
   if (!['ready', 'stale'].includes(state)) return { ...identity, state, items: [], overflow: 0, ...numbers };
   let rawItems;
@@ -661,14 +667,14 @@ function createQuotaLabelWindow({
     resetExpanded() { resetExpandedPending=true; },
     getLayoutMetrics() {
       const target=getWindow();
-      if (!requestedVisible || !target || getSuppressed() || !currentModel?.items.length || currentModel.display === 'numbers') return null;
+      if (!requestedVisible || !target || getSuppressed() || !currentModel || currentModel.display === 'numbers') return null;
       return { ...quotaLabelSize(currentModel.size,!resetExpandedPending&&currentModel.expanded,currentModel.items.length,Boolean(currentModel.extraCredits),false,null,sourceId),
         inset: currentModel.size==='compact'&&(resetExpandedPending||!currentModel.expanded)?2:0,
         guardTargetWidth: guardEntryVisible()?quotaRoleTargetWidth(rolePaintWidth()):0, roleWidth:rolePaintWidth() };
     },
     getVisibleBounds() {
       const target = getWindow();
-      if (!target || !requestedVisible || !currentModel?.items.length || !target.isVisible() && groupTransitionMode !== 'stage') return null;
+      if (!target || !requestedVisible || !currentModel || !currentModel.items.length && currentModel.display === 'numbers' || !target.isVisible() && groupTransitionMode !== 'stage') return null;
       const bounds = target.getBounds();
       const card = quotaLabelSize(currentModel.size, currentModel.expanded, currentModel.items.length,
         Boolean(currentModel.extraCredits), false, null, sourceId);

@@ -31,23 +31,60 @@ function decryptToken(field, key, id) {
   check(token.length > 20, 'LOGIN_REQUIRED');
   return token;
 }
+const ENTERPRISE_DOMAINS = new Set(['www.workbuddy.cn', 'www.codebuddy.cn', 'copilot.tencent.com']);
+function sessionIdentity(session) {
+  const account = session.account, domain = session.auth?.domain;
+  check(account && typeof account.uid === 'string' && account.uid.length > 0, 'LOGIN_REQUIRED');
+  check(/^[\x21-\x7e]{1,256}$/.test(account.uid), 'UNSUPPORTED_ACCOUNT');
+  check(account.enterpriseId == null || typeof account.enterpriseId === 'string', 'UNSUPPORTED_ACCOUNT');
+  const enterpriseId = account.enterpriseId?.trim?.() || '';
+  if (!enterpriseId) {
+    const type = typeof account.type === 'string' ? account.type.trim().toLowerCase() : '';
+    check(['personal', 'pro'].includes(type) && account.isCurrentOneIdEnterprise !== true && domain === 'www.workbuddy.cn' &&
+      (!session.deploymentType || session.deploymentType === 'SaaS') &&
+      (!session.networkEnvironment || session.networkEnvironment === 'internal'), 'UNSUPPORTED_ACCOUNT');
+    return { uid: account.uid, domain, scope: 'personal',
+      accountKey: crypto.createHash('sha256').update('workbuddy:' + domain + ':personal:' + account.uid).digest('hex') };
+  }
+  check(ENTERPRISE_DOMAINS.has(domain) && account.type !== 'exclusive' &&
+    (!session.deploymentType || session.deploymentType === 'SaaS') &&
+    (!session.networkEnvironment || session.networkEnvironment === 'internal'), 'UNSUPPORTED_ACCOUNT');
+  check(/^[A-Za-z0-9._:-]{1,128}$/.test(enterpriseId) && typeof account.type === 'string' &&
+    /^[A-Za-z0-9_-]{1,64}$/.test(account.type), 'UNSUPPORTED_ACCOUNT');
+  const departmentId = account.departmentId ?? account.department_id ?? '';
+  const department = account.departmentFullName ?? '';
+  check(typeof departmentId === 'string' && departmentId.length <= 256 && !/[\r\n]/.test(departmentId), 'UNSUPPORTED_ACCOUNT');
+  // Official desktop quota/gateway headers omit this optional field. Keep its opaque
+  // authority identity in the scope only; do not invent a wire encoding for Chinese.
+  let departmentScope;
+  if (typeof department === 'string') {
+    check(department.length <= 2048 && !/[\r\n]/.test(department), 'UNSUPPORTED_ACCOUNT');
+    departmentScope = department;
+  } else {
+    check(department && department.$wbEncrypted === 1 &&
+      Object.keys(department).sort().join(',') === '$wbEncrypted,envelope' &&
+      typeof department.envelope === 'string' && department.envelope.length <= 16384, 'UNSUPPORTED_AUTH');
+    base64(department.envelope);
+    departmentScope = JSON.stringify(department);
+  }
+  const scope = ['workbuddy', domain, 'enterprise', account.uid, account.type, enterpriseId, departmentId, departmentScope];
+  return { uid: account.uid, domain, scope: 'enterprise', enterpriseId, departmentId,
+    accountKey: crypto.createHash('sha256').update(JSON.stringify(scope)).digest('hex') };
+}
 function readAuth(includeRefresh = false) {
   check(process.platform === 'darwin', 'UNSUPPORTED_PLATFORM');
   const file = path.join(os.homedir(), 'Library/Application Support/CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info');
   check(fs.existsSync(file) && !fs.existsSync(file + '.logged-out'), 'LOGIN_REQUIRED');
   const session = JSON.parse(fs.readFileSync(file, 'utf8'));
-  check(session.account?.type === 'personal' && session.account.isCurrentOneIdEnterprise !== true &&
-    session.auth?.domain === 'www.workbuddy.cn', 'UNSUPPORTED_ACCOUNT');
-  check(typeof session.account.uid === 'string' && session.account.uid.length > 0, 'LOGIN_REQUIRED');
+  const identity = sessionIdentity(session);
   const payload = JSON.parse(process._linkedBinding('electron_browser_workbuddy_storage').loggerGet());
   check(payload.version === 1, 'UNSUPPORTED_AUTH');
   base64(payload.atRestSecretKey, 32);
   const key = crypto.createHash('sha256').update(payload.atRestSecretKey, 'utf8').digest();
   try {
     const keyId = crypto.createHash('sha256').update(key).digest('hex').slice(0, 16);
-    return { token: decryptToken(session.auth.accessToken, key, keyId), uid: session.account.uid, domain: session.auth.domain,
-      ...(includeRefresh ? { refreshToken: decryptToken(session.auth.refreshToken, key, keyId) } : {}),
-      accountKey: crypto.createHash('sha256').update('workbuddy:' + session.auth.domain + ':personal:' + session.account.uid).digest('hex') };
+    return { token: decryptToken(session.auth.accessToken, key, keyId), ...identity,
+      ...(includeRefresh && identity.scope === 'personal' ? { refreshToken: decryptToken(session.auth.refreshToken, key, keyId) } : {}) };
   } finally { key.fill(0); }
 }
 function headers(auth, conversationId) {
@@ -55,6 +92,9 @@ function headers(auth, conversationId) {
     'X-User-Id': auth.uid, 'X-Domain': auth.domain, 'X-Product': 'SaaS', 'X-IDE-Type': 'WorkBuddy',
     'X-IDE-Name': 'WorkBuddy', 'X-IDE-Version': '5.8.3', 'User-Agent': 'CLI/5.8.3 WorkBuddy/5.8.3',
     'X-Requested-With': 'XMLHttpRequest' };
+  if (auth.scope === 'enterprise') Object.assign(values, {
+    'X-Enterprise-Id': auth.enterpriseId, 'X-Tenant-Id': auth.enterpriseId
+  });
   if (conversationId) Object.assign(values, { 'X-Agent-Intent': 'craft', 'X-Agent-Purpose': 'conversation',
     'X-Conversation-ID': conversationId, 'X-Conversation-Request-ID': crypto.randomUUID(),
     'X-Conversation-Message-ID': crypto.randomUUID() });
@@ -62,9 +102,13 @@ function headers(auth, conversationId) {
   return values;
 }
 async function request(auth, route, body, signal, conversationId) {
-  const response = await fetch(ORIGIN + route, { method: body === undefined ? 'GET' : 'POST', headers: headers(auth, conversationId),
+  auth.verifyCurrent?.();
+  const origin = auth.scope === 'enterprise' && route.startsWith('/v2/billing/') ? 'https://www.workbuddy.cn' : ORIGIN;
+  const response = await fetch(origin + route, { method: body === undefined ? 'GET' : 'POST', headers: headers(auth, conversationId),
     body: body === undefined ? undefined : JSON.stringify(body), signal, redirect: 'error' });
+  auth.verifyCurrent?.();
   if (!response.ok) {
+    if ([404, 405].includes(response.status)) throw Object.assign(new Error('SERVICE_UNAVAILABLE'), { code: 'SERVICE_UNAVAILABLE', httpStatus: response.status });
     if (response.status === 401) fail('LOGIN_REQUIRED');
     if (response.status === 429) fail('RATE_LIMITED');
     let code;
@@ -80,6 +124,7 @@ async function jsonRequest(auth, route, body, signal) {
   const parts = []; let size = 0;
   for await (const part of response.body) { size += part.length; check(size <= 4 * 1024 * 1024); parts.push(part); }
   const raw = Buffer.concat(parts).toString('utf8');
+  auth.verifyCurrent?.();
   const envelope = JSON.parse(raw);
   if (Number(envelope.code)) fail(Number(envelope.code) === 14018 ? 'INSUFFICIENT_CREDITS' : 'SERVICE_UNAVAILABLE');
   check(envelope.data && typeof envelope.data === 'object');
@@ -90,40 +135,99 @@ function amount(value) {
   const number = Number(value); check(Number.isFinite(number) && number >= 0); return number;
 }
 function timestamp(value) {
-  check(typeof value === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value));
-  const ms = Date.parse(value.replace(' ', 'T') + '+08:00'); check(Number.isFinite(ms)); return ms;
+  let ms;
+  if (typeof value === 'number' || typeof value === 'string' && /^\d+$/.test(value)) ms = Number(value);
+  else {
+    check(typeof value === 'string');
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)) value = value.replace(' ', 'T') + '+08:00';
+    check(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(value));
+    ms = Date.parse(value);
+  }
+  check(Number.isSafeInteger(ms) && ms > 0 && ms <= 8640000000000000); return ms;
 }
 const code = (id, suffix) => `TCACA_code_${id}_${suffix}`;
 const BASIC = code('008', 'cfWoLwvjU4');
 const REWARD = code('007', 'nzdH5h4Nl0');
-const PAID = [code('002', 'AkiJS3ZHF5'), code('005', 'maRGyrHhw1'), code('003', 'FAnt7lcmRT'), code('023', '4xbGhMrE6q'),
-  code('026', 'BaESVICNoi'), code('027', '0FCGVA6vSa'), code('009', '0XmEQc2xOf'), code('038', 'OhvqZtiPKr'), code('036', 'lupO5WgNdG')];
-const FREE = [code('001', 'PqouKr6QWV'), BASIC, code('035', 'ArVxJcGDsm'), code('006', 'DbXS0lrypC'), code('039', 'KRcQj7wUat'),
-  code('040', 'mi9rCYg46x'), REWARD, code('028', 'NtpWi0jzXs'), code('037', 'WxOD3MpI2o'), code('029', '6wCGEWquYy'), code('030', 'BjSt89qTvr')];
-// shortcut: only the verified domestic personal experience plan, add paid classification after real-account verification.
+const PAID_BASE = [code('002', 'AkiJS3ZHF5'), code('005', 'maRGyrHhw1'), code('003', 'FAnt7lcmRT'), code('023', '4xbGhMrE6q'),
+  code('026', 'BaESVICNoi'), code('027', '0FCGVA6vSa'), code('043', '6oIkxT7Z0S')];
+const ADDON = [code('009', '0XmEQc2xOf'), code('038', 'OhvqZtiPKr'), code('036', 'lupO5WgNdG')];
+const FREE_BASE = [BASIC, code('035', 'ArVxJcGDsm'), code('039', 'KRcQj7wUat'), code('040', 'mi9rCYg46x')];
+const PLAN_BONUS = [code('028', 'NtpWi0jzXs'), code('037', 'WxOD3MpI2o')];
+const BENEFIT = [REWARD, code('029', '6wCGEWquYy'), code('030', 'BjSt89qTvr')];
+const PAID = [...PAID_BASE, ...ADDON];
+const FREE = [code('001', 'PqouKr6QWV'), code('006', 'DbXS0lrypC'), ...FREE_BASE, ...PLAN_BONUS, ...BENEFIT];
+const CREDIT_GROUPS = new Map([
+  ...[...PAID_BASE, ...FREE_BASE].map(code => [code, 'basic']),
+  ...[...PLAN_BONUS, ...BENEFIT].map(code => [code, 'reward']), ...ADDON.map(code => [code, 'purchased'])
+]);
 function quotaReport(summary, accounts, now = Date.now()) {
-  check(summary.IsPaidUser === false && Array.isArray(summary.Packages), 'UNSUPPORTED_ACCOUNT');
-  check(summary.Packages.every(p => p.PackageCode === BASIC || p.PackageCode === REWARD), 'UNSUPPORTED_ACCOUNT');
-  const remaining = p => p.CycleRemainCapacity === undefined ? amount(p.CycleTotalCapacity) - amount(p.CycleUsedCapacity) : amount(p.CycleRemainCapacity);
-  const detailRemaining = p => amount(p.CycleCapacityRemainPrecise == null || p.CycleCapacityRemainPrecise === ''
-    ? p.CycleCapacityRemain : p.CycleCapacityRemainPrecise);
-  const sum = packageCode => summary.Packages.filter(p => p.PackageCode === packageCode).reduce((total, p) => total + remaining(p), 0);
-  const basic = sum(BASIC), reward = sum(REWARD); check(basic >= 0 && reward >= 0);
-  for (const packageCode of [BASIC, REWARD]) {
-    const detail = accounts.filter(p => p.PackageCode === packageCode).reduce((total, p) => total + detailRemaining(p), 0);
-    check(Math.abs(detail - sum(packageCode)) < 0.000001);
+  check(summary && typeof summary.IsPaidUser === 'boolean' && Array.isArray(summary.Packages) && Array.isArray(accounts));
+  const remaining = p => amount(p.CycleRemainCapacity === undefined
+    ? amount(p.CycleTotalCapacity) - amount(p.CycleUsedCapacity) : p.CycleRemainCapacity);
+  const detailRemaining = p => {
+    check(p.SlicePeriodUsageDetails == null || Array.isArray(p.SlicePeriodUsageDetails));
+    const slice = Number(p.CapacityType) === 4 && p.SlicePeriodUsageDetails?.[0];
+    return amount(slice ? slice.SlicePeriodCapacityRemainPrecise : p.CycleCapacityRemainPrecise == null || p.CycleCapacityRemainPrecise === ''
+      ? p.CycleCapacityRemain : p.CycleCapacityRemainPrecise);
+  };
+  const totals = new Map(), details = new Map(), resources = new Map(), unique = [];
+  const add = (map, p, left) => {
+    check(p && typeof p.PackageCode === 'string');
+    // Legacy count-based packages must never be reported as credits.
+    check(CREDIT_GROUPS.has(p.PackageCode) || left === 0, 'UNSUPPORTED_QUOTA');
+    map.set(p.PackageCode, amount((map.get(p.PackageCode) || 0) + left));
+  };
+  for (const p of summary.Packages) { check(p && typeof p === 'object'); add(totals, p, remaining(p)); }
+  for (const p of accounts) {
+    check(p && typeof p === 'object');
+    const left = detailRemaining(p), id = p.ResourceId;
+    if (id != null && id !== '') {
+      check(typeof id === 'string' || Number.isSafeInteger(id));
+      const previous = resources.get(String(id));
+      if (previous) {
+        check(previous.PackageCode === p.PackageCode && detailRemaining(previous) === left &&
+          previous.CycleEndTime === p.CycleEndTime && previous.DeductionEndTime === p.DeductionEndTime);
+        continue;
+      }
+      resources.set(String(id), p);
+    }
+    add(details, p, left); unique.push(p);
   }
-  const basicAccounts = accounts.filter(p => p.PackageCode === BASIC);
-  check(basicAccounts.length <= 1);
-  const nextRefreshAt = basicAccounts.length ? timestamp(basicAccounts[0].CycleEndTime) + 1000 : null;
-  const expires = accounts.filter(p => p.PackageCode === REWARD && detailRemaining(p) > 0).map(p => {
-    const at = Number(p.DeductionEndTime); check(Number.isFinite(at) && at > now);
+  const balances = { basic: 0, reward: 0, purchased: 0 };
+  for (const packageCode of new Set([...totals.keys(), ...details.keys()])) {
+    const left = totals.get(packageCode) || 0;
+    check(Math.abs(left - (details.get(packageCode) || 0)) < 0.000001);
+    const group = CREDIT_GROUPS.get(packageCode);
+    if (group) balances[group] = amount(balances[group] + left);
+  }
+  const bases = [...totals.keys()].filter(code => CREDIT_GROUPS.get(code) === 'basic');
+  const refreshCode = bases.includes(summary.SubscriptionPackageCode) ? summary.SubscriptionPackageCode : bases.length === 1 ? bases[0] : null;
+  const refreshes = unique.filter(p => p.PackageCode === refreshCode && p.CycleEndTime)
+    .map(p => timestamp(p.CycleEndTime) + 1000).filter(at => at > now);
+  const expires = unique.filter(p => [...ADDON, ...BENEFIT].includes(p.PackageCode) && detailRemaining(p) > 0).map(p => {
+    const at = timestamp(p.DeductionEndTime); check(at > now);
     return { amount: detailRemaining(p), at };
   }).sort((a, b) => a.at - b.at);
-  return { total: basic + reward, basic, reward, purchased: 0, plan: '体验版', nextRefreshAt, expires, updatedAt: now };
+  return { total: amount(balances.basic + balances.reward + balances.purchased), ...balances,
+    plan: summary.IsPaidUser ? '个人付费版' : '体验版', nextRefreshAt: refreshes.length ? Math.min(...refreshes) : null, expires, updatedAt: now };
 }
-async function quota(auth, signal) {
-  const summary = await jsonRequest(auth, '/billing/meter/get-user-resource-summary', {}, signal);
+function enterpriseQuotaReport(value, now = Date.now()) {
+  check(value && typeof value === 'object');
+  const limit = value.limitNum, used = value.credit;
+  check(typeof limit === 'number' && Number.isFinite(limit) && (limit === -1 || limit >= 0));
+  check(typeof used === 'number' && Number.isFinite(used) && used >= 0);
+  let nextRefreshAt = null;
+  if (value.cycleResetTime != null && value.cycleResetTime !== '') {
+    check(typeof value.cycleResetTime === 'string');
+    nextRefreshAt = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value.cycleResetTime)
+      ? timestamp(value.cycleResetTime) : Date.parse(value.cycleResetTime);
+    check(Number.isFinite(nextRefreshAt));
+  }
+  return { scope: 'enterprise', unlimited: limit === -1,
+    total: limit === -1 ? null : Math.max(0, limit - used), limit: limit === -1 ? null : limit, used,
+    basic: null, reward: null, purchased: null, plan: '企业版', nextRefreshAt, expires: [], updatedAt: now };
+}
+async function legacyPersonalAccounts(auth, signal) {
   const day = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
   const accounts = [];
   for (const [kind, extra] of [['paid', { PackageCodes: PAID, NeedRenewInfo: true }], ['free', { PackageCodes: FREE,
@@ -138,18 +242,90 @@ async function quota(auth, signal) {
       check(result.Accounts.length === 200 && page < 10);
     }
   }
-  return { accountKey: auth.accountKey, report: quotaReport(summary, accounts) };
+  return accounts;
+}
+async function unifiedPersonalAccounts(auth, signal) {
+  const now = Date.now();
+  const format = ms => new Date(ms + 8 * 3600000).toISOString().slice(0, 19).replace('T', ' ');
+  // Resource discovery follows token-monitor's product-scoped query; unlike its
+  // single-page reader, consume every page before publishing a balance.
+  const query = { ProductCode: 'p_tcaca', Status: [0, 3], PageSize: 100,
+    PackageEndTimeRangeBegin: format(now), PackageEndTimeRangeEnd: format(now + 101 * 365 * 86400000) };
+  const accounts = []; let total;
+  for (let page = 1; page <= 20; page++) {
+    const raw = await jsonRequest(auth, '/v2/billing/meter/get-user-resource', { ...query, PageNumber: page }, signal);
+    const value = raw.Response?.Data ?? raw.data?.Response?.Data ?? raw.data ?? raw;
+    check(value && Array.isArray(value.Accounts) && Number.isSafeInteger(value.TotalCount) && value.TotalCount >= 0 && value.TotalCount <= 2000);
+    if (total === undefined) total = value.TotalCount;
+    check(value.TotalCount === total && value.Accounts.length <= query.PageSize);
+    accounts.push(...value.Accounts);
+    if (accounts.length === total) return accounts;
+    check(accounts.length < total && value.Accounts.length === query.PageSize && page < 20);
+  }
+}
+function unifiedQuotaReport(summary, accounts) {
+  check(summary && Array.isArray(summary.Packages));
+  const credits = [], nonCredits = new Set(), creditCodes = new Set();
+  for (const p of accounts) {
+    check(p && typeof p === 'object' && p.ProductCode === 'p_tcaca' && typeof p.PackageCode === 'string');
+    check([0, 1, 2, 3].includes(p.Status));
+    // Official Status: valid / refund / expired / usedUp. Only valid rows can
+    // contribute. A precise field alone does not establish its billing unit.
+    // A spent base plan still tells the user when their allowance refreshes.
+    if (p.Status !== 0 && !(p.Status === 3 && CREDIT_GROUPS.get(p.PackageCode) === 'basic')) continue;
+    check(typeof p.CapacityUnit === 'string' && p.CapacityUnit.length > 0, 'UNSUPPORTED_QUOTA');
+    if (p.CapacityUnit !== 'credits') {
+      check(!CREDIT_GROUPS.has(p.PackageCode), 'UNSUPPORTED_QUOTA');
+      nonCredits.add(p.PackageCode); continue;
+    }
+    check(typeof p.ResourceId === 'string' && p.ResourceId.length > 0 || Number.isSafeInteger(p.ResourceId));
+    check(p.CycleCapacityRemainPrecise != null && p.CycleCapacityRemainPrecise !== '');
+    const left = amount(p.CycleCapacityRemainPrecise);
+    if (p.Status === 3) {
+      check(left === 0);
+      if (Number(p.CapacityType) === 4 && p.SlicePeriodUsageDetails?.length) {
+        check(amount(p.SlicePeriodUsageDetails[0]?.SlicePeriodCapacityRemainPrecise) === 0);
+      }
+    }
+    creditCodes.add(p.PackageCode); credits.push(p);
+  }
+  check(![...nonCredits].some(code => creditCodes.has(code)));
+  return quotaReport({ ...summary, Packages: summary.Packages.filter(p => !nonCredits.has(p?.PackageCode)) }, credits);
+}
+async function quota(auth, signal) {
+  if (auth.scope === 'enterprise') {
+    const raw = await jsonRequest(auth, '/v2/billing/meter/get-enterprise-user-usage', {}, signal);
+    const value = typeof raw.limitNum === 'number' ? raw : raw.data;
+    return { accountKey: auth.accountKey, report: enterpriseQuotaReport(value) };
+  }
+  const summary = await jsonRequest(auth, '/billing/meter/get-user-resource-summary', {}, signal);
+  let accounts;
+  try { accounts = await unifiedPersonalAccounts(auth, signal); }
+  catch (error) {
+    if (![404, 405].includes(error.httpStatus)) throw error;
+    return { accountKey: auth.accountKey, report: quotaReport(summary, await legacyPersonalAccounts(auth, signal)) };
+  }
+  let report;
+  try { report = unifiedQuotaReport(summary, accounts); }
+  catch (error) {
+    // A daily plan can return a full-cycle amount from the generic endpoint.
+    // Only after a failed reconciliation, use the official daily-slice reader.
+    if (error.code !== 'INVALID_RESPONSE' || !accounts.some(p => p?.Status === 0 && Number(p.CapacityType) === 4 && !p.SlicePeriodUsageDetails?.length)) throw error;
+    report = quotaReport(summary, await legacyPersonalAccounts(auth, signal));
+  }
+  return { accountKey: auth.accountKey, report };
 }
 async function models(auth, signal) {
   const config = await jsonRequest(auth, '/v3/config', undefined, signal);
   check(Array.isArray(config.agents) && Array.isArray(config.models));
   const ids = config.agents.filter(agent => agent.name === 'cli').flatMap(agent => agent.models || []);
-  const result = config.models.filter(model => ids.includes(model.id)).map(model => {
+  const result = config.models.filter(model => ids.includes(model.id) && model.disabled !== true).map(model => {
     check(typeof model.id === 'string' && /^[a-zA-Z0-9._-]{1,100}$/.test(model.id));
     check(typeof model.name === 'string' && model.name.length <= 200);
     return { id: model.id, displayName: model.name };
   });
-  check(result.length > 0 && result.length <= 200);
+  check(result.length > 0, auth.scope === 'enterprise' ? 'MODEL_UNAVAILABLE' : 'INVALID_RESPONSE');
+  check(result.length <= 200);
   return { accountKey: auth.accountKey, models: result };
 }
 async function readSse(body, onDelta) {
@@ -191,11 +367,16 @@ async function readSse(body, onDelta) {
   check(terminal && text.trim().length > 0, 'TRUNCATED_RESPONSE');
   return text;
 }
-async function execute(operation, payload, onDelta = () => {}) {
+async function execute(operation, payload, onDelta = () => {}, { authReader = readAuth } = {}) {
   check(['quota', 'models', 'chat', 'tasks', 'task-open', 'usage'].includes(operation), 'INVALID_REQUEST');
-  const auth = readAuth(operation === 'usage');
+  const auth = authReader(operation === 'usage');
+  if (auth.scope === 'enterprise' || operation === 'quota') auth.verifyCurrent = () => {
+    const current = authReader(false);
+    check(current.accountKey === auth.accountKey, 'ACCOUNT_CHANGED');
+  };
   try {
   if (payload.expectedAccountKey !== undefined) check(payload.expectedAccountKey === auth.accountKey, 'ACCOUNT_CHANGED');
+  if (auth.scope === 'enterprise' && ['tasks', 'task-open'].includes(operation)) fail('TASK_CACHE_UNSUPPORTED');
   if (operation === 'tasks') return require('./workbuddy-tasks-reader').readWorkBuddyTasks({ uid: auth.uid, accountKey: auth.accountKey });
   if (operation === 'task-open') {
     check(typeof payload.expectedAccountKey === 'string', 'ACCOUNT_CHANGED');
@@ -216,10 +397,12 @@ async function execute(operation, payload, onDelta = () => {}) {
   const response = await request(auth, '/v2/chat/completions', { model: payload.model, messages: payload.messages,
     stream: true, stream_options: { include_usage: true }, max_tokens: 1024 }, signal, payload.conversationId);
   check((response.headers.get('content-type') || '').includes('text/event-stream'));
-  return { accountKey: auth.accountKey, text: await readSse(response.body, onDelta) };
+  const text = await readSse(response.body, delta => { auth.verifyCurrent?.(); onDelta(delta); });
+  auth.verifyCurrent?.();
+  return { accountKey: auth.accountKey, text };
   } catch (error) { error.accountKey = auth.accountKey; throw error; }
 }
-const SAFE_ERRORS = new Set(['INVALID_RESPONSE', 'LOGIN_REQUIRED', 'UNSUPPORTED_AUTH', 'UNSUPPORTED_PLATFORM', 'UNSUPPORTED_ACCOUNT',
+const SAFE_ERRORS = new Set(['INVALID_RESPONSE', 'LOGIN_REQUIRED', 'UNSUPPORTED_AUTH', 'UNSUPPORTED_PLATFORM', 'UNSUPPORTED_ACCOUNT', 'UNSUPPORTED_QUOTA',
   'RATE_LIMITED', 'INSUFFICIENT_CREDITS', 'ACCOUNT_RESTRICTED', 'MODEL_UNAVAILABLE', 'SERVICE_UNAVAILABLE', 'ACCOUNT_CHANGED',
   'TOOLS_UNSUPPORTED', 'TRUNCATED_RESPONSE', 'RESPONSE_TOO_LONG', 'INVALID_REQUEST', 'CONTEXT_TOO_LONG', 'TASK_CACHE_UNAVAILABLE', 'TASK_CACHE_UNSUPPORTED', 'TASK_NOT_FOUND',
   'INVALID_USAGE_RESPONSE', 'USAGE_UNAVAILABLE', 'USAGE_INCOMPLETE']);
@@ -240,4 +423,4 @@ if (require.main === module) {
     }
   });
 }
-module.exports = { aad, decryptToken, quotaReport, readSse, execute };
+module.exports = { aad, decryptToken, quotaReport, enterpriseQuotaReport, sessionIdentity, readSse, execute };

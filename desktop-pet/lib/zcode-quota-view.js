@@ -1,5 +1,6 @@
 const { formatQuotaDate } = require('./codex-quota-view');
 const STATES = new Set(['disabled', 'connecting', 'connected', 'missing', 'unauthenticated', 'unsupported', 'disconnected', 'empty']);
+const TEAM_STATUS_CODES = new Set(['ZCODE_TEAM_SELECTION_REQUIRED', 'ZCODE_TEAM_KEY_MISSING', 'ZCODE_TEAM_ACCESS_DENIED']);
 const text = value => typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 160) : '';
 const validTime = value => Number.isSafeInteger(value) && value >= 0 && value <= 8640000000000000;
 const validBucket = row => typeof row?.id === 'string' && row.id.startsWith('zcode:') && row.id.length <= 400
@@ -97,7 +98,13 @@ function activity(snapshot) {
 function buildZcodeQuotaLabelModel(snapshot, options = {}, now = Date.now()) {
   const source = snapshot && typeof snapshot === 'object' ? snapshot : {};
   const state = source.enabled === false ? 'disabled' : STATES.has(source.quota?.state) ? source.quota.state : 'disconnected';
-  const empty = { sourceId: 'zcode', state, items: [], overflow: 0, activity: activity(snapshot), planName: 'ZCode' };
+  const customWithoutQuota = source.hasCustomProviders === true && !validTime(source.quota?.updatedAt) &&
+    (state === 'unsupported' || ['disconnected', 'unauthenticated'].includes(state) && source.quota?.code);
+  const statusCode = customWithoutQuota ? 'ZCODE_CUSTOM_QUOTA_UNAVAILABLE' : TEAM_STATUS_CODES.has(source.quota?.code) ? source.quota.code
+    : source.quota?.queryFailed === true && source.quota.code && ['connected', 'disconnected'].includes(state)
+      ? validTime(source.quota.updatedAt) ? 'ZCODE_QUOTA_UPDATE_FAILED' : 'ZCODE_QUOTA_QUERY_FAILED' : null;
+  const empty = { sourceId: 'zcode', state, items: [], overflow: 0, activity: activity(snapshot), planName: 'ZCode',
+    ...(source.enabled === true && statusCode ? { statusCode } : {}) };
   if (source.enabled !== true || state !== 'connected' || !validTime(now)) return empty;
   const stale = source.quota.stale !== false || !validTime(source.quota.updatedAt) || source.quota.updatedAt > now || now - source.quota.updatedAt >= 300000;
   const windows = Array.isArray(source.quota?.windows) ? source.quota.windows : Array.isArray(source.buckets) ? source.buckets : [];

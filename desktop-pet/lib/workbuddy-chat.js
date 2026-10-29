@@ -10,7 +10,7 @@ const ERRORS = {
   LOGIN_REQUIRED: '请在 WorkBuddy 中重新登录，再继续聊天。',
   UNSUPPORTED_PLATFORM: '当前仅支持 macOS WorkBuddy。',
   UNSUPPORTED_AUTH: '当前 WorkBuddy 登录格式暂不支持，请更新球球。',
-  UNSUPPORTED_ACCOUNT: '当前仅支持已验证的 WorkBuddy 国内个人体验版套餐。',
+  UNSUPPORTED_ACCOUNT: '当前 WorkBuddy 登录身份暂无法识别。',
   INSUFFICIENT_CREDITS: 'WorkBuddy 积分不足，请检查客户端余额。',
   ACCOUNT_RESTRICTED: 'WorkBuddy 账号当前受限，请在客户端检查账号状态。',
   SERVICE_UNAVAILABLE: 'WorkBuddy 服务暂不可用，请稍后重试。',

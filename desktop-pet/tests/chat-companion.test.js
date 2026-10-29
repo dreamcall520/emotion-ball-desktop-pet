@@ -49,6 +49,7 @@ function fixture(t, options = {}) {
     turnTimeoutMs: options.turnTimeoutMs || 180000,
     initialModelSelection: options.initialModelSelection,
     onModelSelection: options.onModelSelection,
+    providerName: options.providerName, providerErrors: options.providerErrors,
     onChange: state => changes.push(state), onAction: action => actions.push(action),
     createRpc(callbacks) {
       const rpc = {
@@ -182,6 +183,36 @@ test('重试模型列表只读取一次，成功后不发起多余刷新', async
   assert.equal((await f.companion.refreshModels()).accepted, true);
   assert.equal(reads, 2);
   assert.equal(f.companion.getState().modelsStatus, 'ready');
+});
+
+test('ZCode 模型列表保留明确的团队或登录引导，重试成功清除原因且不自动发送', async t => {
+  for (const code of ['ZCODE_TEAM_SELECTION_REQUIRED', 'ZCODE_TEAM_KEY_MISSING', 'ZCODE_TEAM_ACCESS_DENIED', 'ZCODE_LOGIN_REQUIRED']) {
+    const guide = `已配置的安全引导：${code}`;
+    let failure = true;
+    const f = fixture(t, { providerName: 'ZCode', providerErrors: { [code]: guide }, listModels() {
+      if (failure) throw Object.assign(new Error('PRIVATE_AUTH_RESPONSE'), { code });
+      return copy(MODELS);
+    } });
+    await f.companion.connect();
+    assert.equal(f.companion.getState().modelsStatus, 'error');
+    assert.equal(f.companion.getState().modelsError, guide);
+    assert.deepEqual(await f.companion.refreshModels(), { accepted: false, error: guide });
+    failure = false;
+    assert.deepEqual(await f.companion.refreshModels(), { accepted: true });
+    assert.equal(f.companion.getState().modelsStatus, 'ready');
+    assert.equal(f.companion.getState().modelsError, null);
+    assert.equal(f.companion.getState().error, null);
+    assert.equal(f.count('startThread'), 0); assert.equal(f.count('startTurn'), 0);
+    assert.equal(JSON.stringify(f.changes).includes('PRIVATE_AUTH_RESPONSE'), false);
+  }
+});
+
+test('模型错误未被当前来源显式映射时仍显示原通用提示', async t => {
+  for (const options of [{}, { providerName: 'ZCode', providerErrors: { ZCODE_TEAM_KEY_MISSING: '团队待配置' } }]) {
+    const f = fixture(t, { ...options, listModels() { throw Object.assign(new Error('PRIVATE'), { code: 'ZCODE_TEAM_ACCESS_DENIED' }); } });
+    await f.companion.connect();
+    assert.equal(f.companion.getState().modelsError, ERRORS.MODELS_UNAVAILABLE);
+  }
 });
 
 test('原连接结束前不恢复对话，释放writer后才在新连接发送', async t => {

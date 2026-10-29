@@ -2,6 +2,19 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { runWorkBuddy } = require('./workbuddy-client');
+const { watchWorkBuddyAuth } = require('./workbuddy-auth-watch');
+const { errorCode, errorMessage, clearsAccount, retryDelay } = require('./workbuddy-quota-status');
+
+function safeEnterpriseReport(value) {
+  const number = n => Number.isFinite(n) && n >= 0;
+  const date = n => number(n) && n <= 8640000000000000 ? n : null;
+  if (value?.scope !== 'enterprise' || typeof value.unlimited !== 'boolean' || !number(value.used)) return null;
+  if (value.unlimited ? value.total !== null || value.limit !== null : !number(value.total) || !number(value.limit)) return null;
+  if (!value.unlimited && value.total !== Math.max(value.limit - value.used, 0)) return null;
+  return { scope: 'enterprise', unlimited: value.unlimited, total: value.total, limit: value.limit, used: value.used,
+    basic: null, reward: null, purchased: null, plan: '企业版',
+    nextRefreshAt: date(value.nextRefreshAt), expires: [], updatedAt: date(value.updatedAt) };
+}
 
 function historyPoint(value) {
   const point = { at: value.at, total: value.total };
@@ -11,7 +24,7 @@ function historyPoint(value) {
 }
 
 function createWorkBuddyQuota({ run = runWorkBuddy, onChange = () => {}, now = Date.now,
-  schedule = setTimeout, cancel = clearTimeout, historyFile } = {}) {
+  schedule = setTimeout, cancel = clearTimeout, historyFile, watchAuth = watchWorkBuddyAuth } = {}) {
   const week = 7 * 24 * 3600000, limit = 2016;
   let histories = {}, historyProblem = false, historyBlocked = false;
   const prune = points => points.filter(p => p.at >= now() - week && p.at <= now()).slice(-limit);
@@ -29,6 +42,8 @@ function createWorkBuddyQuota({ run = runWorkBuddy, onChange = () => {}, now = D
     } catch (error) { if (!['ENOENT', 'ENOTDIR'].includes(error.code)) { histories = {}; historyProblem = historyBlocked = true; } }
   }
   function appendHistory(key, report) {
+    // An unlimited allowance has no remaining-balance observation to record.
+    if (!Number.isFinite(report.total)) return prune(histories[key] || []);
     const point = historyPoint({ ...report, at: now() }), at = point.at, points = prune(histories[key] || []);
     if (Number.isSafeInteger(at) && at >= 0) {
       if (points.at(-1)?.at === at) points[points.length - 1] = point;
@@ -48,8 +63,11 @@ function createWorkBuddyQuota({ run = runWorkBuddy, onChange = () => {}, now = D
     }
     return histories[key] || [];
   }
-  let state = { enabled: false, busy: false, error: null, report: null, accountKey: null, stale: false, history: [], historyError: null };
+  const emptyState = enabled => ({ enabled, busy: false, error: null, errorCode: null, nextRetryAt: null,
+    report: null, accountKey: null, stale: false, history: [], historyError: null });
+  let state = emptyState(false);
   let timer = null, controller = null, generation = 0, closed = false, failures = 0;
+  let unwatch = null, pendingRecovery = false, lastRecoveryAt = -Infinity;
   const getState = () => structuredClone(state);
   const notify = () => onChange(getState());
   function stop() {
@@ -57,6 +75,27 @@ function createWorkBuddyQuota({ run = runWorkBuddy, onChange = () => {}, now = D
     if (timer !== null) cancel(timer);
     timer = null;
     controller?.abort(); controller = null;
+    pendingRecovery = false;
+    unwatch?.(); unwatch = null;
+  }
+  function scheduleRefresh(delay, recovery = false) {
+    if (timer !== null) cancel(timer);
+    timer = null;
+    state.nextRetryAt = delay !== null && state.error ? now() + delay : null;
+    if (delay === null) return;
+    timer = schedule(() => { timer = null; if (recovery) lastRecoveryAt = now(); void refresh(); }, delay);
+    timer?.unref?.();
+  }
+  function queueRecovery() {
+    // Restoring connectivity must not bypass an upstream rate limit.
+    if (state.errorCode === 'RATE_LIMITED' && state.nextRetryAt > now()) return;
+    scheduleRefresh(Math.max(500, lastRecoveryAt + 2000 - now()), true);
+  }
+  function recover(reason) {
+    if (closed || !state.enabled || !['auth', 'resume', 'online'].includes(reason)) return;
+    if (state.busy) { pendingRecovery = true; return; }
+    queueRecovery();
+    notify();
   }
   async function refresh() {
     if (closed || !state.enabled || state.busy) return getState();
@@ -64,40 +103,46 @@ function createWorkBuddyQuota({ run = runWorkBuddy, onChange = () => {}, now = D
     timer = null;
     const current = ++generation;
     controller = new AbortController();
-    state.busy = true; state.error = null; notify();
+    state.busy = true; state.error = null; state.errorCode = null; state.nextRetryAt = null; notify();
     try {
       const result = await run('quota', {}, { signal: controller.signal });
       if (current !== generation) return getState();
-      if (!/^[a-f0-9]{64}$/.test(result?.accountKey || '') || !result.report || !Number.isFinite(result.report.total) || result.report.total < 0) {
+      const report = result?.report?.scope === 'enterprise' ? safeEnterpriseReport(result.report) : result?.report;
+      if (!/^[a-f0-9]{64}$/.test(result?.accountKey || '') || !report || (report.scope !== 'enterprise' && (!Number.isFinite(report.total) || report.total < 0))) {
         throw Object.assign(new Error('WorkBuddy 返回格式异常。'), { code: 'INVALID_RESPONSE' });
       }
       failures = 0;
-      const history = appendHistory(result.accountKey, result.report);
-      state = { ...state, busy: false, error: null, report: result.report, accountKey: result.accountKey, stale: false, history,
+      const history = appendHistory(result.accountKey, report);
+      state = { ...state, busy: false, error: null, errorCode: null, report, accountKey: result.accountKey, stale: false, history,
         historyError: historyProblem ? '积分趋势暂时无法保存，本次余额已更新。' : null };
     } catch (error) {
       if (current !== generation) return getState();
       failures++;
-      const clear = ['ACCOUNT_CHANGED', 'LOGIN_REQUIRED', 'UNSUPPORTED_ACCOUNT', 'UNSUPPORTED_AUTH'].includes(error.code) ||
-        Boolean(error.accountKey && error.accountKey !== state.accountKey);
-      state = { ...state, busy: false, error: error.publicMessage || 'WorkBuddy 积分更新失败，请稍后重试。',
+      const code = errorCode(error?.code);
+      const clear = clearsAccount(code) || Boolean(error?.accountKey && error.accountKey !== state.accountKey);
+      state = { ...state, busy: false, error: errorMessage(code), errorCode: code,
         history: clear ? [] : state.history, historyError: clear ? null : state.historyError,
         report: clear ? null : state.report, accountKey: clear ? null : state.accountKey, stale: clear ? false : Boolean(state.report) };
     }
     if (current === generation) {
-      controller = null; notify();
-      const delay = failures ? Math.min(30 * 60000, 5 * 60000 * 2 ** (failures - 1)) : 5 * 60000;
-      timer = schedule(() => { timer = null; refresh(); }, delay); timer?.unref?.();
+      controller = null;
+      scheduleRefresh(failures ? retryDelay(state.errorCode, failures) : 5 * 60000);
+      if (pendingRecovery) { pendingRecovery = false; queueRecovery(); }
+      notify();
     }
     return getState();
   }
   function setEnabled(enabled) {
     if (closed || state.enabled === Boolean(enabled)) return;
-    stop(); failures = 0;
-    state = { enabled: Boolean(enabled), busy: false, error: null, report: null, accountKey: null, stale: false, history: [], historyError: null };
-    notify(); if (state.enabled) refresh();
+    stop(); failures = 0; lastRecoveryAt = -Infinity;
+    state = emptyState(Boolean(enabled));
+    notify();
+    if (state.enabled) {
+      try { unwatch = watchAuth(() => recover('auth')); } catch (_) { /* Queries still work if OS file watching is unavailable. */ }
+      void refresh();
+    }
   }
-  function close() { stop(); closed = true; state = { enabled: false, busy: false, error: null, report: null, accountKey: null, stale: false, history: [], historyError: null }; }
-  return { setEnabled, refresh, getState, close };
+  function close() { stop(); closed = true; state = emptyState(false); }
+  return { setEnabled, refresh, recover, getState, close };
 }
-module.exports = { createWorkBuddyQuota };
+module.exports = { createWorkBuddyQuota, safeEnterpriseReport };

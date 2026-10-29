@@ -116,7 +116,7 @@ function fixture(load = () => Promise.resolve(), options = {}) {
   };
 }
 
-test('可见额度边界随加载、展开、移动和隐藏同步，空卡不能作为锚点', async t => {
+test('可见额度边界随加载、展开、移动和隐藏同步，状态卡也作为锚点', async t => {
   const loading = deferred();
   let changes = 0;
   const f = fixture(() => loading.promise, { onLayout: () => changes++ });
@@ -138,7 +138,7 @@ test('可见额度边界随加载、展开、移动和隐藏同步，空卡不�
   assert.ok(changes > beforeMove);
   assert.notEqual(f.label.getVisibleBounds().x, compact.x);
   f.label.show({ state: 'empty', items: [] });
-  assert.equal(f.label.getVisibleBounds(), null);
+  assert.deepEqual(f.label.getVisibleBounds(), f.windows[0].getBounds());
   f.label.show(readyModel());
   const beforeHide = changes;
   f.label.hide();
@@ -146,6 +146,39 @@ test('可见额度边界随加载、展开、移动和隐藏同步，空卡不�
   assert.ok(changes > beforeHide);
   f.label.show(readyModel()); f.label.destroy();
   assert.equal(f.label.getVisibleBounds(), null);
+});
+
+test('无额度的状态卡参与整组布局，胶囊始终位于固定卡片外侧', async t => {
+  const { quotaCardBarBounds } = require('../lib/quota-card-group-window');
+  const { quotaFreeStackBounds } = require('../lib/quota-label-placement');
+  for (const sourceId of ['codex', 'zcode']) for (const size of ['standard', 'compact']) {
+    const f = fixture(() => Promise.resolve(), { sourceId, labelSize: size });
+    t.after(() => f.label.destroy());
+    for (const y of [300, 800]) for (const state of ['disconnected', 'connecting', 'unauthenticated', 'empty', 'ready']) {
+      f.pet.bounds.y = y;
+      const presentation = { mode: 'free', shape: 'new-year-sheep', sheepTheme: 'halloween' };
+      f.presentation = presentation;
+      f.label.show(state === 'ready' ? readyModel() : { state, items: [] });
+      await flush();
+      const metrics = f.label.getLayoutMetrics();
+      assert.ok(metrics, `${sourceId}/${size}/${state}: 可见状态卡有布局尺寸`);
+      const plan = quotaFreeStackBounds(f.pet.bounds, AREA, { [sourceId]: metrics }, presentation);
+      f.presentation = { ...presentation, quotaGroupLayout: plan.cards[sourceId] };
+      f.label.reposition();
+      const face = f.label.getVisibleBounds();
+      assert.deepEqual(face, plan.cards[sourceId].face);
+      const bar = quotaCardBarBounds(f.pet.bounds, AREA, { ...presentation,
+        quotaPreferredPlacement: plan.placement, cardStackBounds: [face] });
+      const gap = plan.placement === 'below' ? bar.y + 6.5 - (face.y + face.height) : face.y - (bar.y + 13.5);
+      assert.ok(gap >= 6 && gap <= 8, `${sourceId}/${size}/${state}/${plan.placement}: 胶囊与卡面间距 ${gap}`);
+    }
+    f.label.hide();
+    assert.equal(f.label.getLayoutMetrics(), null);
+    assert.equal(f.label.getVisibleBounds(), null);
+    f.label.show({ state: 'disconnected', items: [], display: 'numbers' });
+    assert.equal(f.label.getLayoutMetrics(), null, '纯数字仍不参与卡片队列');
+    assert.equal(f.label.getVisibleBounds(), null, '未连接纯数字不当作完整卡片');
+  }
 });
 
 test('标准与小巧锚点读取实际卡面，守护角色只扩大原生避让窗口', async t => {
@@ -1808,6 +1841,30 @@ test('实际controller区分22/24/50角色，普通48px与大角色64px同源传
   assert.deepEqual(w.options.webPreferences.additionalArguments, ['--pet-source=zcode']);
   assert.equal(w.sent.at(-1)[0], 'pet:zcode-quota-label');
   assert.equal(w.sent.at(-1)[1].items.length, 4);
+});
+
+test('团队和额度查询原因通过 ZCode 原生窗口和 preload 白名单，未知码和 Codex 保持原行为', () => {
+  const { safeModel } = require('../lib/quota-label-window');
+  for (const source of ['zcode', 'codex']) {
+    let api, listener, received;
+    vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../quota-label-preload.js'), 'utf8'), {
+      process: { argv: source === 'zcode' ? ['electron', '--pet-source=zcode'] : ['electron'] },
+      require: () => ({ contextBridge: { exposeInMainWorld(_name, value) { api = value; } },
+        ipcRenderer: { on(_channel, callback) { listener = callback; }, removeListener() {}, send() {} } })
+    });
+    api.onModel(value => { received = value; });
+    for (const code of ['ZCODE_TEAM_SELECTION_REQUIRED', 'ZCODE_TEAM_KEY_MISSING', 'ZCODE_TEAM_ACCESS_DENIED',
+      'ZCODE_QUOTA_QUERY_FAILED', 'ZCODE_QUOTA_UPDATE_FAILED', 'ZCODE_CUSTOM_QUOTA_UNAVAILABLE', 'PRIVATE_RESPONSE']) {
+      const input = { sourceId: 'zcode', state: code === 'ZCODE_QUOTA_UPDATE_FAILED' ? 'stale' : code === 'ZCODE_CUSTOM_QUOTA_UNAVAILABLE' ? 'unsupported' : 'disconnected', statusCode: code, items: [] };
+      const packet = safeModel(input, source), expected = source === 'zcode' && code !== 'PRIVATE_RESPONSE' ? code : undefined;
+      assert.equal(packet.statusCode, expected); listener({}, packet); assert.equal(received.statusCode, expected);
+      assert.equal(received.items.length, 0);
+      listener({}, input); assert.equal(received.statusCode, expected, 'preload independently validates the source and code');
+    }
+    const throwing = { state: 'disconnected', get statusCode() { throw new Error('PRIVATE'); } };
+    assert.doesNotThrow(() => safeModel(throwing, source)); assert.doesNotThrow(() => listener({}, throwing));
+    assert.equal(received.statusCode, undefined);
+  }
 });
 
  test('ZCode preload 固定来源，拒绝数字周期和跨来源操作，保留小数周期与四桶', () => {
