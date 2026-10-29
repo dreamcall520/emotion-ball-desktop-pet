@@ -13,7 +13,8 @@ const UPDATE_INSTALLER = { name: 'Qiuqiu-0.3.26-macOS-arm64.dmg',
 async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], codexEnabled = false, codexTaskNameInAlerts = false,
   codexQuotaAlwaysVisible = false, codexQuotaPeriod = 'auto', codexQuotaLabelSize = 'standard',
   codexQuotaAppearance = 'system', codexShowExtraCredits = true, bubblesEnabled = true, colorMode = 'standard', uiTheme = 'green',
-  consent = async () => ({ response: 1 }), consentReady = true, openExternal = async () => {}, saveError = null, networkOnline = true,
+  consent = async () => ({ response: 1 }), consentReady = true, openExternal = async () => {}, saveError = null, updateArch = 'arm64',
+  apiBalanceAccounts = [], apiBalanceFetch = null, networkOnline = true,
   download = async (_contents, _installer, { onProgress }) => {
     onProgress({ state: 'downloading', percent: 100 });
     return { state: 'completed', path: '/fixture/Qiuqiu.dmg' };
@@ -38,7 +39,8 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
   const trayMenus = [];
   const updateChecks = [];
   const downloads = [], revealed = [], consents = [];
-  const workbuddyRecoveries = [];
+  const balanceCalls = [], balanceWatches = [], balanceRecoveries = [], workbuddyRecoveries = [];
+  let balanceReads = 0, balanceUnwatches = 0;
   const scheduleService = (callback, delay) => { const id = ++serial; timers.set(id, { callback, at: now + delay }); return id; };
   const cancelService = id => timers.delete(id);
   const net = { isOnline: () => networkOnline };
@@ -229,6 +231,7 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
       if (name === './lib/settings') return { ...realRequire(name), loadSettings: () => loadedSettings ? structuredClone(loadedSettings) : ({ size: 'tiny', x: -600, y: 100,
         quotaCardPinned, bubblesEnabled, colorMode, uiTheme, notesDefaultTab, notesAppearance, keepAwake: false, alwaysOnTop: true, codexEnabled, codexTaskNameInAlerts,
         workbuddyEnabled: false, workbuddyConsentVersion: 0, workbuddyModel: 'auto', chatProvider: 'codex',
+        apiBalanceEnabled: false, apiBalanceAlwaysVisible: true, apiBalanceSelectedAccountId: '',
         codexQuotaAlwaysVisible, codexQuotaPeriod, codexQuotaLabelSize, codexQuotaAppearance, codexShowExtraCredits,
         customization: realRequire('./lib/customization').normalizeCustomization(),
         startupAppearance: realRequire('./lib/customization').normalizeCustomization().appearance }),
@@ -255,6 +258,7 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
       } };
       if (name === './lib/app-update') return {
         checkLatestRelease: version => { updateChecks.push(version); return updateFetch(version); },
+        getDownloadFallbacks: release => realRequire(name).getDownloadFallbacks(release, { platform: 'darwin', arch: updateArch }),
         downloadInstaller: (contents, installer, options) => {
           downloads.push({ contents, installer, options }); options.onProgress({ state: 'starting' });
           return Promise.resolve(download(contents, installer, options)).then(result => {
@@ -285,6 +289,17 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
         service.recover = reason => { workbuddyRecoveries.push(reason); return recover(reason); };
         return service;
       } };
+      if (name === './lib/api-balance') return { createApiBalance: options => {
+        const service = realRequire(name).createApiBalance({ ...options, historyFile: undefined,
+          readAccounts: () => { balanceReads++; return typeof apiBalanceAccounts === 'function' ? apiBalanceAccounts() : apiBalanceAccounts; },
+          fetchBalance: async (entry, control) => { balanceCalls.push({ entry, control });
+            return apiBalanceFetch ? apiBalanceFetch(entry, control) : { available: 44.24, cash: 40, voucher: 4.24, currency: 'CNY' }; },
+          watchAccounts: callback => { balanceWatches.push(callback); return () => { balanceUnwatches++; }; },
+          now: () => 1800000000000 + now, schedule: scheduleService, cancel: cancelService });
+        const recover = service.recover;
+        service.recover = reason => { balanceRecoveries.push(reason); return recover(reason); };
+        return service;
+      } };
       if (name === './lib/workbuddy-label-window') return { ...realRequire(name), createWorkBuddyLabelWindow: options => ({
         options, show(state) { this.visible = true; this.state = state; }, hide() { this.visible = false; }, reposition() {}, setAlwaysOnTop() {}, destroy() {}, getWindow: () => null
       }) };
@@ -303,7 +318,8 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
   pet.emit('ready-to-show');
   pet.webContents.emit('did-finish-load');
   return { groupTransition, pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, downloads, revealed, consents, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
-    iconPreference, workbuddyCalls, workbuddyRecords, workbuddyRecoveries, setOnline(value) { networkOnline = value; },
+    iconPreference, workbuddyCalls, workbuddyRecords, balanceCalls, balanceWatches, balanceRecoveries, workbuddyRecoveries,
+    get balanceReads() { return balanceReads; }, get balanceUnwatches() { return balanceUnwatches; }, setOnline(value) { networkOnline = value; },
     notes, pomodoro, pomodoroWindows, nativeTheme, call: expression => vm.runInContext(expression, context),
     pressShortcut(accelerator) { if (!shortcutsSuspended) shortcutCallbacks.get(accelerator)?.(); },
     invoke(channel, packet, sender = pet.webContents, ...args) {
@@ -903,12 +919,12 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   const menu = f.call('menuTemplate()');
   const top = menu.filter(item => item.type !== 'separator');
   assert.deepEqual(Array.from(top, item => item.label), [
-    '设置中心', '和球球聊聊', '启用 WorkBuddy 联动', '显示 WorkBuddy 积分卡', 'WorkBuddy 趣味游戏', '定制球球', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API', 'ZCode 联动',
+    '设置中心', '和球球聊聊', '启用 WorkBuddy 联动', '显示 WorkBuddy 积分卡', 'WorkBuddy 趣味游戏', 'API 余额', '定制球球', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API', 'ZCode 联动',
     '贴边与显示', '球球尺寸', '界面配色', '常规设置', '关于球球', '检查更新', '退出球球'
   ]);
   const group = label => top.find(item => item.label === label).submenu.filter(item => item.type !== 'separator');
   assert.equal(top.find(item => item.id === 'chat-open').submenu, undefined);
-  assert.equal(top[5].id, 'customize-open');
+  assert.equal(top[6].id, 'customize-open');
   assert.equal(top[1].submenu, undefined);
   assert.deepEqual(Array.from(group('便签与待办'), item => item.id), ['notes-open', 'notes-new', 'notes-todo-new', 'notes-default-tab']);
   assert.deepEqual(Array.from(group('便签与待办'), item => item.label), ['打开主面板', '新建便签', '添加待办', '默认打开']);
@@ -1286,7 +1302,7 @@ test('关于窗口复用、安全读取版本与固定官网；锁屏、外来�
   await f.invoke('pet:about-update', null, win.webContents);
   assert.deepEqual(f.updateChecks, ['0.3.25']);
   assert.equal(f.dialogs.length, 0, '版本检查在关于页展示，不再弹原生对话框');
-  assert.equal(await f.invoke('pet:about-release', 'https://untrusted.invalid/', win.webContents), true);
+  assert.equal((await f.invoke('pet:about-release', 'https://untrusted.invalid/', win.webContents)).state, 'completed');
   assert.equal(f.downloads.length, 1);
   assert.deepEqual(f.downloads[0].installer, UPDATE_INSTALLER, '忽略页面传入地址，只下载已校验的官方资产');
   assert.equal(f.downloads[0].contents, win.webContents);
@@ -1379,13 +1395,14 @@ test('直接下载复用同一任务，进度不被检查更新覆盖，完成�
   assert.equal(f.call('aboutUpdateState.download.state'), 'starting');
   report({ state: 'downloading', percent: 42 });
   assert.equal(f.call('aboutUpdateState.download.percent'), 42);
-  assert.equal(await f.invoke('pet:about-release', null, about.webContents), false, '下载中重复点击不会创建另一个任务');
+  assert.equal((await f.invoke('pet:about-release', null, about.webContents)).code, 'DOWNLOAD_BUSY', '下载中重复点击不会创建另一个任务');
   const checking = f.call('checkForUpdates(true)');
   assert.equal(f.call('aboutUpdateState.download.percent'), 42);
   assert.equal(f.downloads.length, 1); assert.equal(f.updateChecks.length, 1);
   finish({ state: 'completed', path: '/fixture/downloaded.dmg' });
-  assert.equal(await first, true); await checking;
+  const completed = await first; assert.equal(completed.state, 'completed'); assert.equal(completed.path, undefined); await checking;
   assert.equal(f.call('aboutUpdateState.download.state'), 'completed');
+  assert.equal(f.call('aboutUpdateState.download.path'), undefined, '保存路径只交给访达，不发送给关于页');
   assert.deepEqual(f.revealed, ['/fixture/downloaded.dmg']);
   assert.equal(f.call('downloadFlight'), null);
 });
@@ -1395,8 +1412,8 @@ test('直接下载取消与失败后可重试，缺本机包和陈旧版本拒�
     { state: 'completed', path: '/fixture/retry.dmg' }];
   const f = await fixture({ download: async () => results.shift() });
   await f.call('checkForUpdates(true)'); const about = f.call('aboutWindow');
-  for (const [state, accepted] of [['cancelled', false], ['error', false], ['completed', true]]) {
-    assert.equal(await f.invoke('pet:about-release', null, about.webContents), accepted);
+  for (const state of ['cancelled', 'error', 'completed']) {
+    assert.equal((await f.invoke('pet:about-release', null, about.webContents)).state, state);
     assert.equal(f.call('aboutUpdateState.download.state'), state); assert.equal(f.call('downloadFlight'), null);
   }
   assert.equal(f.downloads.length, 3); assert.deepEqual(f.revealed, ['/fixture/retry.dmg']);
@@ -1404,15 +1421,56 @@ test('直接下载取消与失败后可重试，缺本机包和陈旧版本拒�
   f.powerMonitor.emit('lock-screen'); assert.equal(await f.invoke('pet:about-release', null, about.webContents), false);
   f.powerMonitor.emit('unlock-screen');
   f.call('aboutUpdateState.latestVersion = "0.3.99"');
-  assert.equal(await f.invoke('pet:about-release', null, about.webContents), false);
+  assert.equal((await f.invoke('pet:about-release', null, about.webContents)).code, 'VERSION_CHANGED');
   assert.equal(f.downloads.length, 3);
   const missing = await fixture({ updateFetch: async currentVersion => ({ currentVersion, latestVersion: '0.3.26', hasUpdate: true,
     installer: null, downloadMessage: '暂无 Intel Mac 安装包' }) });
   await missing.call('checkForUpdates(true)');
   assert.equal(missing.call('aboutUpdateState.downloadAvailable'), false);
-  assert.equal(await missing.invoke('pet:about-release', null, missing.call('aboutWindow.webContents')), false);
+  assert.equal((await missing.invoke('pet:about-release', null, missing.call('aboutWindow.webContents'))).code, 'NO_MATCHING_INSTALLER');
   assert.equal(missing.call('aboutUpdateState.download.message'), '暂无 Intel Mac 安装包');
   assert.equal(missing.downloads.length, 0); assert.equal(missing.external.length, 0);
+});
+
+test('备用下载 IPC 只打开已校验官方地址，国内入口严格匹配版本和架构', async () => {
+  const release = (version = '0.4.08', arch = 'arm64') => ({ latestVersion: version, hasUpdate: true,
+    installer: { name: `Qiuqiu-${version}-macOS-${arch}.dmg`,
+      url: `https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v${version}/Qiuqiu-${version}-macOS-${arch}.dmg` } });
+  const current = release();
+  const f = await fixture({ updateFetch: async () => current }); await f.call('checkForUpdates(true)');
+  const about = f.call('aboutWindow');
+  assert.equal(f.call('aboutUpdateState.browserDownloadAvailable'), true); assert.equal(f.call('aboutUpdateState.domesticDownloadAvailable'), true);
+  assert.equal(await f.invoke('pet:about-download-alternative', 'browser'), false);
+  assert.equal(await f.invoke('pet:about-download-alternative', 'https://evil.example/', about.webContents), false);
+  assert.equal((await f.invoke('pet:about-download-alternative', 'browser', about.webContents)).ok, true);
+  assert.equal((await f.invoke('pet:about-download-alternative', 'domestic', about.webContents)).ok, true);
+  assert.deepEqual(f.external, [current.installer.url, 'https://share.weiyun.com/ZdAiD7rR']);
+  about.hide(); assert.equal(await f.invoke('pet:about-download-alternative', 'browser', about.webContents), false); about.show();
+  f.powerMonitor.emit('lock-screen'); assert.equal(await f.invoke('pet:about-download-alternative', 'browser', about.webContents), false);
+  f.powerMonitor.emit('unlock-screen'); f.call('aboutUpdateState.latestVersion = "0.4.09"');
+  assert.equal((await f.invoke('pet:about-download-alternative', 'browser', about.webContents)).ok, false); assert.equal(f.external.length, 2);
+  for (const [version, arch] of [['0.4.08', 'x64'], ['0.3.13', 'x64'], ['0.4.09', 'arm64']]) {
+    const other = await fixture({ updateArch: arch, updateFetch: async () => release(version, arch) });
+    await other.call('checkForUpdates(true)');
+    assert.equal(other.call('aboutUpdateState.browserDownloadAvailable'), true);
+    assert.equal(other.call('aboutUpdateState.domesticDownloadAvailable'), false);
+    assert.equal((await other.invoke('pet:about-download-alternative', 'domestic', other.call('aboutWindow.webContents'))).ok, false);
+    assert.deepEqual(other.external, []);
+  }
+});
+
+test('下载过程中不启动浏览器替代下载，外部打开失败返回安全提示', async () => {
+  let finish;
+  const f = await fixture({ download: () => new Promise(resolve => { finish = resolve; }), openExternal: async () => { throw Error('private?token=secret'); } });
+  await f.call('checkForUpdates(true)'); const about = f.call('aboutWindow');
+  const first = f.invoke('pet:about-release', null, about.webContents);
+  assert.equal((await f.invoke('pet:about-download-alternative', 'browser', about.webContents)).ok, false); assert.deepEqual(f.external, []);
+  finish({ state: 'cancelled', code: 'CANCELLED', stage: 'cancel', message: '已取消下载，可以重新下载。' });
+  const result = await first; assert.equal(result.state, 'cancelled'); assert.equal(result.code, 'CANCELLED');
+  f.call('globalThis.downloadErrors=[];writeError=(scope,error)=>downloadErrors.push(scope+": "+String(error))');
+  const fallback = await f.invoke('pet:about-download-alternative', 'browser', about.webContents);
+  assert.equal(fallback.ok, false); assert.match(fallback.message, /无法打开/); assert.doesNotMatch(JSON.stringify(fallback), /private|secret|token/);
+  assert.match(f.call('JSON.stringify(downloadErrors)'), /BROWSER_OPEN_FAILED/); assert.doesNotMatch(f.call('JSON.stringify(downloadErrors)'), /private|secret|token/);
 });
 
 test('下载安装包的迟到完成不在锁屏或退出后打开访达', async () => {
@@ -4079,11 +4137,55 @@ test('quota card collection uses real enable flags, persists pin/order and rejec
  f.call('openGlobalSettings()');const win=f.call('globalSettingsWindow');win.emit('ready-to-show');
  assert.equal((await f.invoke('pet:global-quota-cards-save',{order:['api','codex'],pinned:['api']})).ok,false);
  const result=await f.invoke('pet:global-quota-cards-save',{order:['api','codex'],pinned:['api']},win.webContents);
- assert.equal(result.ok,true);assert.deepEqual(Array.from(result.config.order),['api','codex','zcode','workbuddy']);
+ assert.equal(result.ok,true);assert.deepEqual(Array.from(result.config.order),['api','codex','zcode','workbuddy','balance']);
  f.call('quotaCardGroup.dismiss()');assert.equal(f.call("quotaCardCollected('codex')"),true);assert.equal(f.call("quotaCardCollected('api')"),false);
  assert.deepEqual(Array.from(f.saved.at(-1).quotaCardPinned),['api']);
  assert.equal(f.call("quotaCardGroupAnimate('api')"),false);assert.equal(f.call("quotaCardGroupAnimate('codex')"),false,'single-card fades are replaced by one group overlay');
  f.call('settings.openaiApiAlwaysVisible=false;syncQuotaLabel(codexCompanion.getSnapshot())');assert.equal(f.call('quotaCardGroup.getState().bar'),false);assert.equal(f.call("quotaCardCollected('codex')"),false);
+});
+
+test('API余额默认关闭无配置或网络I/O，启用后真实服务与120px卡片联动且保留其他设置',async t=>{
+ const first='a'.repeat(64),second='b'.repeat(64),accounts=[first,second].map((id,index)=>({id,name:index?'Kimi B':'Kimi A',provider:'moonshot',currency:'CNY',supported:true,status:'ready',errorCode:null}));
+ const f=await fixture({apiBalanceAccounts:accounts});t.after(()=>f.app.emit('before-quit'));
+ assert.equal(f.balanceReads,0);assert.deepEqual(f.balanceCalls,[]);assert.deepEqual(f.balanceWatches,[]);
+ assert.equal(f.call('apiBalance.getState().enabled'),false);assert.equal(f.call('apiBalanceLabel.getWindow()'),null);
+ assert.equal(f.call('settings.apiBalanceEnabled'),false);assert.equal(menuItem(f,'api-balance-visible').enabled,false);
+ const before=JSON.parse(f.call('JSON.stringify(settings)'));
+ assert.equal(f.call("setApiBalancePreference('apiBalanceEnabled',true)"),true);await flush();await flush();
+ assert.equal(f.balanceCalls.length,1);assert.equal(f.balanceWatches.length,1);assert.equal(f.call('apiBalance.getState().report.available'),44.24);
+ assert.equal(f.call('settings.apiBalanceSelectedAccountId'),first);assert.equal(f.call('apiBalanceLabel.getWindow().isVisible()'),true);
+ assert.equal(f.call('apiBalanceLabel.getLayoutMetrics().height'),32);
+ const win=f.call('apiBalanceLabel.getWindow()');win.webContents.mainFrame={};
+ win.webContents.emit('ipc-message',{sender:win.webContents,senderFrame:win.webContents.mainFrame},'pet:api-balance-label-toggle');
+ assert.equal(f.call('apiBalanceLabel.getLayoutMetrics().height'),120);
+ assert.equal(f.call(`apiBalance.selectAccount('${second}')`),true);await flush();
+ assert.equal(f.call('settings.apiBalanceSelectedAccountId'),second);assert.equal(f.saved.at(-1).apiBalanceSelectedAccountId,second);
+ const after=JSON.parse(f.call('JSON.stringify(settings)'));
+ for(const [key,value] of Object.entries(before))if(!key.startsWith('apiBalance'))assert.deepEqual(after[key],value,key);
+ assert.equal(f.call("setApiBalancePreference('apiBalanceAlwaysVisible',false)"),true);assert.equal(win.isVisible(),false);
+ assert.equal(f.call('apiBalance.getState().enabled'),true,'隐藏卡片不关闭监控');
+ assert.equal(f.call("setApiBalancePreference('apiBalanceEnabled',false)"),true);assert.equal(f.call('apiBalance.getState().enabled'),false);
+ assert.equal(f.balanceUnwatches,1);const count=f.balanceCalls.length;f.advanceTo(600000);await flush();assert.equal(f.balanceCalls.length,count);
+});
+
+test('网络恢复只接受主宠物可信事件，API余额与WorkBuddy合并重复online并在resume后刷新',async t=>{
+ const account={id:'a'.repeat(64),name:'Kimi',provider:'moonshot',currency:'CNY',supported:true,status:'ready',errorCode:null};
+ const f=await fixture({apiBalanceAccounts:[account]});t.after(()=>f.app.emit('before-quit'));
+ f.call("setApiBalancePreference('apiBalanceEnabled',true)");await f.call('setWorkBuddyEnabled(true)');await flush();
+ const quotaCount=()=>f.workbuddyCalls.filter(row=>row.operation==='quota').length;
+ assert.equal(f.balanceCalls.length,1);assert.equal(quotaCount(),1);
+ f.call("ipcMain.emit('pet:network-online',{sender:{},senderFrame:{}});ipcMain.emit('pet:network-online',{sender:petWindow.webContents,senderFrame:{}})");
+ assert.deepEqual(f.balanceRecoveries,[]);assert.deepEqual(f.workbuddyRecoveries,[]);
+ f.setOnline(false);f.send('pet:network-online');assert.deepEqual(f.balanceRecoveries,[]);
+ f.setOnline(true);f.send('pet:network-online');f.send('pet:network-online');
+ assert.deepEqual(f.balanceRecoveries,['online','online']);assert.deepEqual(f.workbuddyRecoveries,['online','online']);
+ f.advanceTo(499);await flush();assert.equal(f.balanceCalls.length,1);assert.equal(quotaCount(),1);
+ f.advanceTo(500);await flush();assert.equal(f.balanceCalls.length,2);assert.equal(quotaCount(),2);
+ f.powerMonitor.emit('suspend');f.powerMonitor.emit('resume');assert.equal(f.balanceRecoveries.at(-1),'resume');assert.equal(f.workbuddyRecoveries.at(-1),'resume');
+ f.advanceTo(2500);await flush();assert.equal(f.balanceCalls.length,3);assert.equal(quotaCount(),3);
+ f.call("setApiBalancePreference('apiBalanceEnabled',false)");await f.call('setWorkBuddyEnabled(false)');
+ const reads=f.balanceReads;f.send('pet:network-online');f.powerMonitor.emit('resume');f.advanceTo(10000);await flush();
+ assert.equal(f.balanceReads,reads);assert.equal(f.balanceCalls.length,3);assert.equal(quotaCount(),3);
 });
 
 
@@ -4093,6 +4195,17 @@ test('compact integration style management opens quota cards directly and naviga
  item.click();const win=f.call('globalSettingsWindow');win.emit('ready-to-show');
  assert.equal((await f.invoke('pet:global-settings-get',undefined,win.webContents)).initialView,'quota-cards');
  item.click();assert.equal(f.call('globalSettingsWindow'),win);assert.deepEqual(win.messages.at(-1),{channel:'pet:global-settings-navigate',packet:'quota-cards'});
+});
+test('API余额设置入口保留独立初始页和复开导航，菜单设置走已有可信保存链路',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));
+ f.call("openGlobalSettings('/api-balance-menu')");const win=f.call('globalSettingsWindow');win.emit('ready-to-show');
+ assert.equal((await f.invoke('pet:global-settings-get',undefined,win.webContents)).initialView,'/api-balance-menu');
+ f.call("openGlobalSettings('quota-cards');openGlobalSettings('/api-balance-menu')");
+ assert.deepEqual(win.messages.at(-1),{channel:'pet:global-settings-navigate',packet:'/api-balance-menu'});
+ assert.equal(f.call('globalSettingsWindow'),win);assert.equal(f.balanceReads,0);
+ const result=await f.invoke('pet:global-settings-action','/api-balance-menu/api-balance-enabled',win.webContents,true);await flush();
+ assert.equal(result.error,undefined);assert.equal(f.call('settings.apiBalanceEnabled'),true);assert.equal(f.call('apiBalance.getState().enabled'),true);
+ assert.equal(f.saved.at(-1).apiBalanceEnabled,true);
 });
 
 test('local partner import takes a native directory choice only, keeps current appearance and resolves the independent copy on save',async t=>{
@@ -4152,12 +4265,12 @@ test('group overlay owns unpinned cards, excludes pins and resets card details o
  f.call('quotaCardGroup.activate({keyboard:false})');const cancels=f.groupTransition.cancels;f.powerMonitor.emit('lock-screen');assert(f.groupTransition.cancels>cancels);assert.equal(f.groupTransition.active,false);
 });
 
-test('real menu preferences map through the settings snapshot to four checked management DOM controls',async t=>{
+test('real menu preferences map through the settings snapshot to five checked management DOM controls',async t=>{
  const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true});t.after(()=>f.app.emit('before-quit'));
- f.call('settings.zcodeEnabled=true;settings.zcodeQuotaAlwaysVisible=true;settings.openaiApiAlwaysVisible=true;settings.workbuddyEnabled=true;settings.workbuddyQuotaAlwaysVisible=true;openGlobalSettings("quota-cards")');
+ f.call('settings.zcodeEnabled=true;settings.zcodeQuotaAlwaysVisible=true;settings.openaiApiAlwaysVisible=true;settings.workbuddyEnabled=true;settings.workbuddyQuotaAlwaysVisible=true;settings.apiBalanceEnabled=true;settings.apiBalanceAlwaysVisible=true;openGlobalSettings("quota-cards")');
  const win=f.call('globalSettingsWindow');win.emit('ready-to-show');const snapshot=await f.invoke('pet:global-settings-get',undefined,win.webContents);
  const leaves=entries=>entries.flatMap(entry=>[entry,...(entry.children?leaves(entry.children):[])]);
- for(const id of ['/codex-menu/codex-quota-visible','/zcode-menu/zcode-quota-visible','/codex-menu/openai-api-menu/openai-api-visible','/workbuddy-quota-visible'])assert.equal(leaves(snapshot.entries).find(e=>e.id===id).checked,true,id);
+ for(const id of ['/codex-menu/codex-quota-visible','/zcode-menu/zcode-quota-visible','/codex-menu/openai-api-menu/openai-api-visible','/workbuddy-quota-visible','/api-balance-menu/api-balance-visible'])assert.equal(leaves(snapshot.entries).find(e=>e.id===id).checked,true,id);
  await require('./helpers/verify-quota-card-snapshot-dom')(snapshot);
 });
 
@@ -4213,30 +4326,50 @@ test('real group hover timer retries a not-yet-painted sleep canvas without anot
 });
 
 test('main shared layout keeps an inline-expanded source alive after the whole stack flips above the original click',async t=>{
- for(const id of ['codex','api','zcode','workbuddy']){
+ for(const id of ['codex','api','zcode','workbuddy','balance']){
   const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,quotaCardPinned:[]});t.after(()=>f.app.emit('before-quit'));
-  f.call("settings.openaiApiAlwaysVisible=true;settings.zcodeEnabled=true;settings.zcodeQuotaAlwaysVisible=true;settings.workbuddyEnabled=true;settings.workbuddyQuotaAlwaysVisible=true;globalThis.inlineExpandedId=null;for(const [id,c] of Object.entries(quotaCardControllers())){c.getLayoutMetrics=()=>id===inlineExpandedId?{width:220,height:180,inset:0}:{width:128,height:32,inset:2};c.getVisibleBounds=()=>quotaFreeStackPlan()?.cards[id]?.face||null;c.reposition=()=>{};}petWindow.setBounds({x:-440,y:300,width:80,height:80});quotaCardGroup.activate({keyboard:false});quotaCardGroupTransition.finish();syncQuotaFreeStack()");
+  f.call("settings.openaiApiAlwaysVisible=true;settings.zcodeEnabled=true;settings.zcodeQuotaAlwaysVisible=true;settings.workbuddyEnabled=true;settings.workbuddyQuotaAlwaysVisible=true;settings.apiBalanceEnabled=true;apiBalance.setEnabled(true);screen.getPrimaryDisplay().bounds.height=700;screen.getPrimaryDisplay().workArea.height=700;globalThis.inlineExpandedId=null;for(const [id,c] of Object.entries(quotaCardControllers())){c.getLayoutMetrics=()=>id===inlineExpandedId?{width:id==='balance'?196:220,height:id==='balance'?194:180,inset:0}:{width:128,height:32,inset:2};c.getVisibleBounds=()=>quotaFreeStackPlan()?.cards[id]?.face||null;c.reposition=()=>{};}petWindow.setBounds({x:-440,y:380,width:80,height:80});quotaCardGroup.activate({keyboard:false});quotaCardGroupTransition.finish();syncQuotaFreeStack()");
   assert.equal(f.call('quotaFreeStackPlan().placement'),'below');const old=f.call(`quotaFreeStackPlan().cards.${id}.face`);let cursor={x:old.x+10,y:old.y+10};f.screen.getCursorScreenPoint=()=>cursor;
   f.call(`inlineExpandedId='${id}';syncQuotaFreeStack()`);assert.equal(f.call('quotaFreeStackPlan().placement'),'above');f.advanceTo(720);assert.equal(f.call('quotaCardGroup.getState().expanded'),true,'old click survives more than 220ms');
-  const next=f.call(`quotaFreeStackPlan().cards.${id}.face`);cursor={x:next.x+10,y:next.y+10};f.advanceTo(1040);assert.equal(f.call('quotaCardGroup.getState().expanded'),true,'user reaches resized card');cursor={x:-799,y:599};f.advanceTo(1440);assert.equal(f.call('quotaCardGroup.getState().expanded'),false,'leaving bridge and real cards retains ordinary auto collection');
+  const next=f.call(`quotaFreeStackPlan().cards.${id}.face`);cursor={x:next.x+10,y:next.y+10};f.advanceTo(1040);assert.equal(f.call('quotaCardGroup.getState().expanded'),true,'user reaches resized card');cursor={x:-799,y:699};f.advanceTo(1440);assert.equal(f.call('quotaCardGroup.getState().expanded'),false,'leaving bridge and real cards retains ordinary auto collection');
  }
 });
 
-test('网络恢复只接受主宠物可信事件，WorkBuddy合并重复online并在resume后刷新',async t=>{
- const f=await fixture();t.after(()=>f.app.emit('before-quit'));
- await f.call('setWorkBuddyEnabled(true)');await flush();
- const quotaCount=()=>f.workbuddyCalls.filter(row=>row.operation==='quota').length;
- assert.equal(quotaCount(),1);
- f.call("ipcMain.emit('pet:network-online',{sender:{},senderFrame:{}});ipcMain.emit('pet:network-online',{sender:petWindow.webContents,senderFrame:{}})");
- assert.deepEqual(f.workbuddyRecoveries,[]);
- f.setOnline(false);f.send('pet:network-online');assert.deepEqual(f.workbuddyRecoveries,[]);
- f.setOnline(true);f.send('pet:network-online');f.send('pet:network-online');
- assert.deepEqual(f.workbuddyRecoveries,['online','online']);
- f.advanceTo(499);await flush();assert.equal(quotaCount(),1);
- f.advanceTo(500);await flush();assert.equal(quotaCount(),2);
- f.powerMonitor.emit('suspend');f.powerMonitor.emit('resume');assert.equal(f.workbuddyRecoveries.at(-1),'resume');
- f.advanceTo(2500);await flush();assert.equal(quotaCount(),3);
- await f.call('setWorkBuddyEnabled(false)');
- f.send('pet:network-online');f.powerMonitor.emit('resume');f.advanceTo(10000);await flush();
- assert.equal(quotaCount(),3);
+
+test('API余额趋势通过主卡打开，切账户同步，关闭恢复卡组且锁屏和禁用取消未完成打开', async t => {
+ const ids=['a'.repeat(64),'b'.repeat(64)];
+ const accounts=ids.map((id,index)=>({id,name:index?'工作账户':'个人账户',provider:'moonshot',currency:'CNY',supported:true,status:'ready'}));
+ const f=await fixture({apiBalanceAccounts:accounts,apiBalanceFetch:async entry=>({available:entry.id===ids[0]?44.24:8.42,cash:8,voucher:0.42,currency:'CNY'})});
+ t.after(()=>f.app.emit('before-quit'));
+ assert.equal(f.call('apiBalanceDetails.getWindow()'),null);
+ f.call("setApiBalancePreference('apiBalanceEnabled',true)");await flush();await flush();
+ const label=f.call('apiBalanceLabel.getWindow()');label.webContents.mainFrame={};
+ const labelEvent={sender:label.webContents,senderFrame:label.webContents.mainFrame};
+ label.webContents.emit('ipc-message',labelEvent,'pet:api-balance-label-trend');
+ const details=f.call('apiBalanceDetails.getWindow()');assert(details);
+ details.webContents.mainFrame={};
+ details.webContents.getURL=()=>require('node:url').pathToFileURL(path.resolve(__dirname,'../api-balance-details.html')).href;
+ details.webContents.emit('did-finish-load');
+ assert.equal(f.call('apiBalanceDetails.isVisible()'),true);
+ assert.equal(f.call('quotaCardGroupInput().suppressed'),true);assert.equal(label.isVisible(),false);
+ assert.equal(f.balanceCalls.length,1,'opening history must not request balance or consume a model');
+ assert(f.call('edgeRetentionBounds()').some(bounds=>JSON.stringify(bounds)===JSON.stringify(details.getBounds())),'trend pointer region keeps an edge pet revealed');
+ assert(f.call('functionWindowObstacles()').some(bounds=>JSON.stringify(bounds)===JSON.stringify(details.getBounds())),'function windows avoid the open trend');
+ assert.equal(details.messages.at(-1).packet.report.available,44.24);
+ f.call(`apiBalance.selectAccount('${ids[1]}')`);await flush();
+ assert.equal(details.messages.at(-1).packet.selectedAccountId,ids[1]);
+ assert.equal(details.messages.at(-1).packet.report.available,8.42);
+ assert.equal(details.messages.at(-1).packet.history.length,1,'account history is isolated');
+ const close=()=>details.webContents.emit('ipc-message',{sender:details.webContents,senderFrame:details.webContents.mainFrame},'pet:api-balance-details-close');
+ close();assert.equal(f.call('apiBalanceDetails.isVisible()'),false);assert.equal(label.isVisible(),true);
+ f.call('openApiBalanceDetails()');assert.equal(f.call('apiBalanceDetails.isVisible()'),true);
+ f.powerMonitor.emit('lock-screen');assert.equal(f.call('apiBalanceDetails.isVisible()'),false);
+ assert.equal(f.call('openApiBalanceDetails()'),false);
+ f.powerMonitor.emit('unlock-screen');f.call('openApiBalanceDetails()');
+ f.call("setApiBalancePreference('apiBalanceAlwaysVisible',false)");assert.equal(f.call('apiBalanceDetails.isVisible()'),false);
+ f.call("setApiBalancePreference('apiBalanceAlwaysVisible',true);openApiBalanceDetails();hidePet()");assert.equal(f.call('apiBalanceDetails.isVisible()'),false);
+ f.call('restorePet();apiBalanceDetails.destroy();openApiBalanceDetails()');
+ const pending=f.call('apiBalanceDetails.getWindow()');
+ f.call("setApiBalancePreference('apiBalanceEnabled',false)");pending.webContents.emit('did-finish-load');
+ assert.equal(pending.isVisible(),false,'late renderer readiness cannot reopen after disable');
 });

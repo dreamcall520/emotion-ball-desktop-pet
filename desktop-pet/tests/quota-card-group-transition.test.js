@@ -51,6 +51,17 @@ test('destroy invalidates pending work and releases only its own windows',async(
 test('union includes the bar endpoint and rejects invalid or unbounded geometry',()=>{
  assert.deepEqual(unionBounds([{x:20,y:40,width:128,height:150},{x:70,y:12.5,width:26,height:7}]),{x:20,y:12,width:128,height:178});assert.throws(()=>unionBounds([{x:0,y:0,width:9000,height:10}]));
 });
+test('第五张余额卡参加同一次进出动画，固定余额卡不被捕获或遮罩',async()=>{
+ for(const pinned of [false,true]) {
+  const f=fixture(),modes=[];let captures=0;
+  f.cards.push({id:'balance',pinned,controller:{setGroupTransitionMode:mode=>modes.push(mode),async captureGroupTransitionFrames(){captures++;return[{bounds:{x:10,y:110,width:196,height:194},png}]}}});
+  const entry=f.request();await flush();assert.equal(f.overlay.prepares[0].layers.length,pinned?2:3);
+  assert.equal(captures,pinned?0:1);if(!pinned)assert.equal(modes.at(-1),'masked');else assert.deepEqual(modes,[]);
+  f.overlay.finish();assert.equal((await entry).ok,true);if(!pinned)assert.equal(modes.at(-1),null);
+  const exit=f.request({expanded:false});await flush();f.overlay.finish();assert.equal((await exit).ok,true);
+  assert.equal(captures,pinned?0:2);if(pinned)assert.deepEqual(modes,[]);else assert.equal(modes.at(-1),null);f.controller.destroy();
+ }
+});
 test('context changes after animation started release overlay and all masks',async()=>{
  const f=fixture(),work=f.request();await flush();f.setActive(false);f.overlay.finish();await work;assert.equal(f.controller.isActive(),false);assert.equal(f.cards[0].controller.modes.at(-1),null);assert.equal(f.settled.at(-1).canceled,true);
 });

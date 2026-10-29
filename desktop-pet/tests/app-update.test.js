@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const https = require('node:https');
 const { EventEmitter } = require('node:events');
-const { checkLatestRelease, downloadInstaller } = require('../lib/app-update');
+const { checkLatestRelease, downloadInstaller, getDownloadFallbacks } = require('../lib/app-update');
 
 const ENDPOINT = 'https://api.github.com/repos/dreamcall520/emotion-ball-desktop-pet/releases/latest';
 const RELEASE_PAGE = 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/tag/';
@@ -65,7 +65,7 @@ test('原生下载跟踪正确的官方安装包、保存位置和进度，取�
     return item;
   };
   const pending = downloadInstaller(wc, installer, { downloadsPath: '/downloads', onProgress: value => progress.push(value) });
-  assert.deepEqual(calls, [installer.url]); assert.deepEqual(progress, [{ state: 'starting' }]);
+  assert.deepEqual(calls, [installer.url]); assert.deepEqual(progress, [{ state: 'starting', stage: 'start' }]);
   const unrelated = createItem('https://unrelated.example/app.dmg');
   session.emit('will-download', {}, unrelated, wc); assert.equal(unrelated.dialogOptions, undefined);
   const otherWindow = createItem(); session.emit('will-download', {}, otherWindow, new EventEmitter());
@@ -73,9 +73,9 @@ test('原生下载跟踪正确的官方安装包、保存位置和进度，取�
   const item = createItem(); session.emit('will-download', {}, item, wc);
   assert.equal(item.dialogOptions.defaultPath, '/downloads/' + installer.name);
   assert.deepEqual(item.dialogOptions.filters, [{ name: 'macOS 安装包', extensions: ['dmg'] }]);
-  item.emit('updated', {}, 'progressing'); assert.deepEqual(progress.at(-1), { state: 'downloading', percent: 30 });
+  item.emit('updated', {}, 'progressing'); assert.deepEqual(progress.at(-1), { state: 'downloading', stage: 'transfer', percent: 30 });
   wc.emit('destroyed'); assert.equal(item.listenerCount('done'), 1, '下载开始后关闭关于页仍能下载完');
-  item.emit('done', {}, 'completed'); assert.deepEqual(await pending, { state: 'completed', path: '/downloads/球球.dmg' });
+  item.emit('done', {}, 'completed'); assert.deepEqual(await pending, { state: 'completed', code: 'DOWNLOAD_COMPLETED', stage: 'complete', path: '/downloads/球球.dmg' });
   assert.equal(session.listenerCount('will-download'), 0); assert.equal(item.listenerCount('updated'), 0);
   for (const state of ['cancelled', 'interrupted']) {
     const retry = downloadInstaller(wc, installer), next = createItem(); session.emit('will-download', {}, next, wc);
@@ -86,7 +86,12 @@ test('原生下载跟踪正确的官方安装包、保存位置和进度，取�
   session.emit('will-download', {}, interruptedItem, wc); interruptedItem.emit('updated', {}, 'interrupted');
   assert.match((await interrupted).message, /下载中断/); assert.equal(interruptedItem.cancelled, true);
   const timeout = downloadInstaller(wc, installer); t.mock.timers.tick(30000);
-  assert.match((await timeout).message, /超时/); assert.equal(session.listenerCount('will-download'), 0);
+  assert.match((await timeout).message, /超时/); assert.equal(session.listenerCount('will-download'), 1);
+  const beforeRetry = calls.length;
+  assert.equal((await downloadInstaller(wc, installer)).code, 'START_PENDING'); assert.equal(calls.length, beforeRetry);
+  let prevented = false;
+  const late = createItem(); session.emit('will-download', { preventDefault() { prevented = true; } }, late, wc);
+  assert.equal(prevented, true); assert.equal(late.dialogOptions, undefined); assert.equal(session.listenerCount('will-download'), 0);
   const closed = downloadInstaller(wc, installer); wc.emit('destroyed'); assert.match((await closed).message, /重新打开/);
   const count = calls.length;
   for (const invalid of [{ ...installer, url: 'https://evil.example/app.dmg' },
@@ -97,6 +102,106 @@ test('原生下载跟踪正确的官方安装包、保存位置和进度，取�
   wc.downloadURL = () => { throw new Error('private diagnostic'); };
   assert.match((await downloadInstaller(wc, installer)).message, /无法开始下载/);
   assert.equal(session.listenerCount('will-download'), 0); assert.equal(wc.listenerCount('destroyed'), 0);
+});
+
+test('下载恢复最多两次，同一中断不重复排队，终态不能恢复，日志不含路径或签名 URL', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const installer = { name: 'Qiuqiu-0.4.08-macOS-arm64.dmg', url: `${RELEASE_PAGE.replace('/tag/', '/download/')}v0.4.8/Qiuqiu-0.4.08-macOS-arm64.dmg` };
+  const session = new EventEmitter(), wc = new EventEmitter(), states = [], diagnostics = [];
+  let starts = 0, resumes = 0;
+  wc.session = session; wc.isDestroyed = () => false; wc.downloadURL = () => { starts++; };
+  const item = new EventEmitter();
+  Object.assign(item, { getURLChain: () => [installer.url, 'https://release-assets.githubusercontent.com/private?token=secret'],
+    setSaveDialogOptions() {}, canResume: () => true, resume() { resumes++; }, cancel() { item.cancelled = true; },
+    getTotalBytes: () => 100, getReceivedBytes: () => 20, getSavePath: () => '/Users/private/download.dmg' });
+  const pending = downloadInstaller(wc, installer, { onProgress: state => states.push(state), onDiagnostic: d => diagnostics.push(d) });
+  session.emit('will-download', {}, item, wc);
+  assert.equal((await downloadInstaller(wc, installer)).code, 'DOWNLOAD_BUSY'); assert.equal(starts, 1);
+  item.emit('updated', {}, 'interrupted'); item.emit('updated', {}, 'interrupted');
+  assert.equal(states.at(-1).state, 'retrying'); t.mock.timers.tick(1000); assert.equal(resumes, 1);
+  item.emit('updated', {}, 'progressing');
+  item.emit('updated', {}, 'interrupted'); t.mock.timers.tick(3000); assert.equal(resumes, 2);
+  item.emit('updated', {}, 'interrupted');
+  assert.equal((await pending).code, 'TRANSFER_INTERRUPTED'); assert.equal(item.cancelled, true);
+  t.mock.timers.tick(60000); assert.equal(resumes, 2); assert.equal(starts, 1);
+  assert.deepEqual(diagnostics, [{ code: 'RESUME_ATTEMPT', stage: 'transfer', attempt: 1 },
+    { code: 'RESUME_ATTEMPT', stage: 'transfer', attempt: 2 }, { code: 'TRANSFER_INTERRUPTED', stage: 'transfer' }]);
+  assert.doesNotMatch(JSON.stringify(diagnostics), /token|secret|Users|https/);
+  assert.equal(item.listenerCount('updated'), 0); assert.equal(item.listenerCount('done'), 0);
+});
+
+test('恢复成功或取消会清理重试计时器，没有进展的恢复也有次数上限', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const installer = { name: 'Qiuqiu-0.4.08-macOS-arm64.dmg', url: `${RELEASE_PAGE.replace('/tag/', '/download/')}v0.4.8/Qiuqiu-0.4.08-macOS-arm64.dmg` };
+  for (const terminal of ['completed', 'cancelled', 'interrupted', 'watchdog']) {
+    const session = new EventEmitter(), wc = new EventEmitter(), item = new EventEmitter();
+    let resumes = 0;
+    Object.assign(wc, { session, isDestroyed: () => false, downloadURL() {} });
+    Object.assign(item, { getURLChain: () => [installer.url], setSaveDialogOptions() {}, canResume: () => true,
+      resume() { resumes++; }, cancel() {}, getSavePath: () => '/downloads/test.dmg' });
+    const pending = downloadInstaller(wc, installer); session.emit('will-download', {}, item, wc);
+    item.emit('updated', {}, 'interrupted');
+    if (terminal === 'watchdog') {
+      for (const delay of [1000, 15000, 3000, 15000]) t.mock.timers.tick(delay);
+      assert.equal((await pending).code, 'TRANSFER_INTERRUPTED'); assert.equal(resumes, 2);
+    } else {
+      item.emit('done', {}, terminal); const result = await pending;
+      assert.equal(result.state, terminal === 'interrupted' ? 'error' : terminal);
+      t.mock.timers.tick(60000); assert.equal(resumes, 0);
+    }
+    assert.equal(session.listenerCount('will-download'), 0); assert.equal(item.listenerCount('done'), 0);
+  }
+});
+
+test('启动超时守卫随窗口销毁清理，保存窗口异常返回可见终态', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const installer = { name: 'Qiuqiu-0.4.08-macOS-arm64.dmg', url: `${RELEASE_PAGE.replace('/tag/', '/download/')}v0.4.8/Qiuqiu-0.4.08-macOS-arm64.dmg` };
+  const session = new EventEmitter(), wc = new EventEmitter();
+  Object.assign(wc, { session, isDestroyed: () => false, downloadURL() {} });
+  const first = downloadInstaller(wc, installer); t.mock.timers.tick(30000); assert.equal((await first).code, 'START_TIMEOUT');
+  wc.emit('destroyed'); assert.equal(session.listenerCount('will-download'), 0); assert.equal(wc.listenerCount('destroyed'), 0);
+  const item = new EventEmitter();
+  Object.assign(item, { getURLChain: () => [installer.url], setSaveDialogOptions() { throw Error('private/path'); }, cancel() { item.cancelled = true; } });
+  const second = downloadInstaller(wc, installer); assert.doesNotThrow(() => session.emit('will-download', {}, item, wc));
+  assert.equal((await second).code, 'SAVE_DIALOG_FAILED'); assert.equal(item.cancelled, true);
+  assert.equal(session.listenerCount('will-download'), 0);
+});
+
+test('旧窗口迟到下载只取消自己的请求，不阻挡新窗口或覆盖其进度', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const installer = { name: 'Qiuqiu-0.4.08-macOS-arm64.dmg', url: `${RELEASE_PAGE.replace('/tag/', '/download/')}v0.4.8/Qiuqiu-0.4.08-macOS-arm64.dmg` };
+  const session = new EventEmitter(), oldWindow = new EventEmitter(), newWindow = new EventEmitter();
+  for (const wc of [oldWindow, newWindow]) Object.assign(wc, { session, isDestroyed: () => false, downloadURL() {} });
+  const oldStates = [], newStates = [];
+  const first = downloadInstaller(oldWindow, installer, { onProgress: state => oldStates.push(state) });
+  t.mock.timers.tick(30000); assert.equal((await first).code, 'START_TIMEOUT');
+  const second = downloadInstaller(newWindow, installer, { onProgress: state => newStates.push(state) });
+  const current = new EventEmitter();
+  Object.assign(current, { getURLChain: () => [installer.url], setSaveDialogOptions() {}, getSavePath: () => '/downloads/new.dmg',
+    getTotalBytes: () => 100, getReceivedBytes: () => 55 });
+  session.emit('will-download', {}, current, newWindow); current.emit('updated', {}, 'progressing');
+  const oldCount = oldStates.length, newCount = newStates.length;
+  let cancelled = false;
+  session.emit('will-download', { preventDefault() { cancelled = true; } }, { getURLChain: () => [installer.url] }, oldWindow);
+  assert.equal(cancelled, true); assert.equal(oldStates.length, oldCount); assert.equal(newStates.length, newCount);
+  assert.equal(newStates.at(-1).percent, 55); assert.equal(session.listenerCount('will-download'), 0);
+  current.emit('done', {}, 'completed'); assert.equal((await second).state, 'completed');
+});
+
+test('浏览器入口仅使用已校验同版本同架构资产，微云仅启用已核验 0.4.08 Apple 包', () => {
+  const metadata = (version = '0.4.08', arch = 'arm64') => ({ latestVersion: version,
+    installer: { name: `Qiuqiu-${version}-macOS-${arch}.dmg`, url: `${RELEASE_PAGE.replace('/tag/', '/download/')}v${version}/Qiuqiu-${version}-macOS-${arch}.dmg` } });
+  const apple = { platform: 'darwin', arch: 'arm64' }, intel = { platform: 'darwin', arch: 'x64' };
+  const current = metadata();
+  assert.deepEqual(getDownloadFallbacks(current, apple), { browser: current.installer.url, domestic: 'https://share.weiyun.com/ZdAiD7rR' });
+  for (const version of ['0.4.07', '0.4.09']) assert.equal(getDownloadFallbacks(metadata(version), apple).domestic, null);
+  assert.equal(getDownloadFallbacks(metadata('0.4.08', 'x64'), intel).domestic, null);
+  assert.equal(getDownloadFallbacks(metadata('0.3.13', 'x64'), intel).domestic, null);
+  for (const options of [intel, { platform: 'win32', arch: 'arm64' }]) assert.deepEqual(getDownloadFallbacks(current, options), { browser: null, domestic: null });
+  for (const bad of [{ ...current, latestVersion: '0.4.09' }, { ...current, installer: { ...current.installer, url: current.installer.url + '?token=secret' } },
+    { ...current, installer: { ...current.installer, url: 'https://share.weiyun.com/ZdAiD7rR' } }, { latestVersion: '0.4.08', installer: null }]) {
+    assert.deepEqual(getDownloadFallbacks(bad, apple), { browser: null, domestic: null });
+  }
 });
 
 test('invalid, unsafe and nonstable metadata is rejected without exposing diagnostics or fetching invalid current versions', async () => {

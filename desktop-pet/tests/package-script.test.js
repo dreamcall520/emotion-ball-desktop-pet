@@ -31,7 +31,9 @@ test('联动确认窗口及全部本地视觉依赖进入安装包', () => {
   try {
     prepareStaging(root, staging);
     for (const file of ['codex-consent.html', 'codex-consent.css', 'codex-consent-preload.js', 'codex-consent-renderer.js',
-      'about.css', 'color-mode.js', 'color-mode.css', 'lib/chat-avatar.js', 'lib/customization.js', 'lib/codex-pet-player.js', 'lib/aurora-rive.js']) {
+      'about.css', 'color-mode.js', 'color-mode.css', 'lib/chat-avatar.js', 'lib/customization.js', 'lib/codex-pet-player.js', 'lib/aurora-rive.js',
+      'api-balance-details.html', 'api-balance-details.css', 'api-balance-details-preload.js', 'api-balance-details-renderer.js',
+      'api-balance-trend.js', 'lib/api-balance-details-window.js']) {
       const relative = path.join('desktop-pet', file);
       assert.deepEqual(fs.readFileSync(path.join(staging, relative)), fs.readFileSync(path.join(root, relative)), file);
     }

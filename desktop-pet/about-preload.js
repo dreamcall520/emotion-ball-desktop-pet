@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('qiuqiuAbout', {
   openWebsite: () => ipcRenderer.invoke('pet:about-website'),
   checkUpdates: () => ipcRenderer.invoke('pet:about-update'),
   downloadUpdate: () => ipcRenderer.invoke('pet:about-release'),
+  openBrowserDownload: () => ipcRenderer.invoke('pet:about-download-alternative', 'browser'),
+  openDomesticDownload: () => ipcRenderer.invoke('pet:about-download-alternative', 'domestic'),
   close: () => ipcRenderer.send('pet:about-close'),
   onUpdate(callback) {
     if (typeof callback !== 'function') return () => {};

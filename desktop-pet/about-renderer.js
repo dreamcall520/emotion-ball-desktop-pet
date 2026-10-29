@@ -119,13 +119,19 @@
 
   function refreshControls() {
     const checking = update.state === 'checking';
-    const downloading = ['starting', 'downloading'].includes(update.download?.state);
+    const downloading = ['starting', 'downloading', 'retrying'].includes(update.download?.state);
+    const failed = ['error', 'cancelled'].includes(update.download?.state);
     $('about-website').disabled = busy || typeof bridge?.openWebsite !== 'function';
-    $('about-check-updates').hidden = releaseAvailable && update.downloadAvailable !== false;
+    $('about-check-updates').hidden = releaseAvailable && update.downloadAvailable !== false && !failed;
     $('about-check-updates').disabled = busy || checking || typeof bridge?.checkUpdates !== 'function';
     $('about-open-release').disabled = busy || checking || downloading || update.downloadAvailable === false || typeof bridge?.downloadUpdate !== 'function';
     $('about-open-release').hidden = !releaseAvailable;
     $('about-open-release').textContent = downloading ? '正在下载…' : update.download?.state === 'completed' ? '重新下载安装包' : '下载安装包';
+    $('about-browser-download').hidden = !releaseAvailable || update.browserDownloadAvailable !== true;
+    $('about-browser-download').disabled = busy || checking || downloading || typeof bridge?.openBrowserDownload !== 'function';
+    $('about-domestic-download').hidden = !releaseAvailable || update.domesticDownloadAvailable !== true;
+    $('about-domestic-download').disabled = busy || checking || downloading || typeof bridge?.openDomesticDownload !== 'function';
+    $('about-download-alternatives').hidden = $('about-browser-download').hidden && $('about-domestic-download').hidden;
   }
 
   function renderUpdate(value) {
@@ -144,6 +150,7 @@
       if (download?.state === 'starting') status.textContent = '正在准备安装包…';
       else if (download?.state === 'downloading') status.textContent = Number.isFinite(download.percent)
         ? `正在下载 ${Math.max(0, Math.min(100, Math.floor(download.percent)))}%` : '请选择安装包保存位置…';
+      else if (download?.state === 'retrying') status.textContent = `连接中断，正在恢复下载（${download.attempt === 2 ? 2 : 1}/2）…`;
       else if (download?.state === 'completed') status.textContent = '安装包已下载，可从保存位置打开。';
       else if (['error', 'cancelled'].includes(download?.state)) status.textContent = download.message || '下载未完成，请重试。';
       else if (value.downloadAvailable === false) status.textContent = value.downloadMessage || '暂无适合当前设备的新版安装包。';
@@ -161,17 +168,28 @@
   async function perform(method, pending, failure) {
     if (busy || typeof bridge?.[method] !== 'function') return;
     busy = true;
+    if (method === 'downloadUpdate') update = { ...update, download: { state: 'starting' } };
     refreshControls();
     if (pending) { status.textContent = pending; status.title = pending; }
     try {
       const result = await bridge[method]();
       if (method !== 'checkUpdates') {
-        if (result === false) { status.textContent = failure; status.title = failure; }
+        if (method === 'downloadUpdate') {
+          if (result && ['completed', 'cancelled', 'error'].includes(result.state)) renderUpdate({ ...update, download: result });
+          else if (['completed', 'cancelled', 'error'].includes(update.download?.state)) renderUpdate(update);
+          else if (result === false) renderUpdate({ ...update, download: { state: 'error', code: 'DOWNLOAD_UNAVAILABLE', message: failure } });
+          else renderUpdate(update);
+        } else if (['openBrowserDownload', 'openDomesticDownload'].includes(method)) {
+          status.textContent = result?.ok === true ? '已在浏览器打开下载页面。' : result?.message || failure;
+          status.title = status.textContent;
+        } else if (result === false) { status.textContent = failure; status.title = failure; }
         else renderUpdate(update);
       }
     }
     catch (_) {
       if (method === 'checkUpdates') renderUpdate({ state: 'error', message: failure });
+      else if (method === 'downloadUpdate') renderUpdate({ ...update, download:
+        ['completed', 'cancelled', 'error'].includes(update.download?.state) ? update.download : { state: 'error', code: 'IPC_FAILED', message: failure } });
       else { status.textContent = failure; status.title = failure; }
     }
     finally {
@@ -183,6 +201,8 @@
   $('about-website').addEventListener('click', () => perform('openWebsite', '', '暂时无法打开官网，请稍后重试。'));
   $('about-check-updates').addEventListener('click', () => perform('checkUpdates', '正在检查更新…', '暂时无法检查更新，请稍后重试。'));
   $('about-open-release').addEventListener('click', () => perform('downloadUpdate', '正在准备安装包…', '暂时无法下载安装包，请稍后重试。'));
+  $('about-browser-download').addEventListener('click', () => perform('openBrowserDownload', '', '暂时无法打开浏览器下载，请稍后重试。'));
+  $('about-domestic-download').addEventListener('click', () => perform('openDomesticDownload', '', '暂时无法打开国内下载页面，请稍后重试。'));
   document.addEventListener('keydown', event => {
     if (event.key !== 'Escape') return;
     event.preventDefault();

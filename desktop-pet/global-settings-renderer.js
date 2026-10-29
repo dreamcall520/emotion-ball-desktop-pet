@@ -29,6 +29,10 @@
     '启用 Codex 联动': '读取本机 Codex 任务与额度；开启时会说明读取范围并请求确认。',
     '启用 ZCode 联动': '读取本机 ZCode 套餐、额度与任务；开启时会说明读取范围并请求确认，可在聊天中选择 ZCode。',
     '显示 ZCode 额度': '独立显示 ZCode 额度卡；隐藏卡片不关闭 ZCode 联动。',
+    '启用 API 余额监控': '从 ZCode 已配置的 API 读取账户余额；目前支持 Kimi。只查询余额，不调用模型，也不保存密钥。',
+    '管理 API 账户': '打开 ZCode，在其 API 设置中新增或修改账户；球球会自动发现配置变化。',
+    '显示 API 余额卡': '在一张卡内切换多个账户，分别保留余额与趋势。',
+    '刷新 API 余额': '更新当前选中账户；其他已支持账户在后台定期更新。',
     '显示 API 本月费用卡': 'API 统计独立于 Codex 订阅额度，需要连接管理员 Key。',
     '自动提醒新版本': '自动检查并提醒，不会自动下载安装。',
     '定制球球': '形象、配色、透明度、启动外观与额度展示样式。',
@@ -142,10 +146,10 @@
   function quotaCardSettings() {
     const section = el('section', '', 'group quota-card-settings');
     section.dataset.settingsSection = 'quota-cards';
-    section.append(el('h3', '联动样式管理'), el('p', '调整四张卡的显示顺序。固定展示的卡不参与收纳，仍遵循各来源的联动与显示开关。', 'description group-intro'));
-    const names = { codex: 'Codex', api: 'OpenAI API', zcode: 'ZCode', workbuddy: 'WorkBuddy' };
+    section.append(el('h3', '联动样式管理'), el('p', '调整各张卡的显示顺序。固定展示的卡不参与收纳，仍遵循各来源的联动与显示开关。', 'description group-intro'));
+    const names = { codex: 'Codex', api: 'OpenAI API', zcode: 'ZCode', workbuddy: 'WorkBuddy', balance: 'API 余额' };
     const config = snapshot.quotaCards || { order: Object.keys(names), pinned: [] };
-    const displayIds = { codex: '/codex-menu/codex-quota-visible', api: '/codex-menu/openai-api-menu/openai-api-visible', zcode: '/zcode-menu/zcode-quota-visible', workbuddy: '/workbuddy-quota-visible' };
+    const displayIds = { codex: '/codex-menu/codex-quota-visible', api: '/codex-menu/openai-api-menu/openai-api-visible', zcode: '/zcode-menu/zcode-quota-visible', workbuddy: '/workbuddy-quota-visible', balance: '/api-balance-menu/api-balance-visible' };
     const displayActions = snapshot.entries.flatMap(entry => leaves(entry));
     config.order.forEach((source, index) => {
       if (!names[source]) return;
@@ -224,7 +228,7 @@
       ['', ['常用设置']],
       ['日常陪伴', ['球球与互动', '和球球聊聊', '便签与待办', '番茄钟']],
       ['外观与显示', ['定制球球', '球球尺寸', '贴边与显示', '界面配色']],
-      ['应用与联动', ['Codex', 'ZCode 联动', 'WorkBuddy', '联动样式管理']],
+      ['应用与联动', ['Codex', 'ZCode 联动', 'WorkBuddy', 'API 余额', '联动样式管理']],
       ['快捷与常规', ['快捷键', '常规设置']]
     ];
     $('navigation').replaceChildren(...navigationGroups.map(([label, labels]) => {
@@ -407,6 +411,7 @@
       const serialized = JSON.stringify(value);
       if (last !== serialized) { if (!snapshot && value.initialView === 'quota-cards') { selected = quotaCardsView(value); quotaSectionRequested = true; }
         else if (!snapshot && value.initialView === 'shortcuts') selected = 'shortcuts';
+        else if (!snapshot && value.initialView === '/api-balance-menu') selected = '/api-balance-menu';
         else if (!snapshot && isApiView(value.initialView)) { selected = '/codex-menu'; codexTab = 'api'; apiSectionRequested = true; } snapshot = value; last = serialized; render(); }
     } catch (_) { $('feedback').textContent = '暂时无法读取设置，请重新打开窗口。'; }
   }
@@ -424,6 +429,7 @@
   });
   api.onNavigate(view => {
     if (view === 'quota-cards') { selected = quotaCardsView(snapshot); quotaSectionRequested = true; apiSectionRequested = false; $('search').value = ''; $('search-panel').hidden = true; $('search-toggle').setAttribute('aria-expanded', 'false'); render(); return; }
+    if (view === '/api-balance-menu') { selected = view; apiSectionRequested = false; quotaSectionRequested = false; $('search').value = ''; $('search-panel').hidden = true; $('search-toggle').setAttribute('aria-expanded', 'false'); render(); document.querySelector('main').scrollTop = 0; return; }
     if (view !== 'shortcuts' && !isApiView(view)) return;
     apiSectionRequested = isApiView(view); if (apiSectionRequested) codexTab = 'api';
     selected = apiSectionRequested ? '/codex-menu' : view; $('search').value = ''; $('search-panel').hidden = true;

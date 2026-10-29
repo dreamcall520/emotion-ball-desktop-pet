@@ -1,5 +1,5 @@
 const {createQuotaCardTransitionWindow}=require('./quota-card-transition-window');
-const IDS=['codex','api','zcode','workbuddy'];
+const IDS=['codex','api','zcode','workbuddy','balance'];
 const rect=b=>b&&[b.x,b.y,b.width,b.height].every(Number.isFinite)&&b.width>0&&b.height>0&&b.width<=8192&&b.height<=8192;
 function unionBounds(rows){const x=Math.floor(Math.min(...rows.map(r=>r.x))),y=Math.floor(Math.min(...rows.map(r=>r.y))),right=Math.ceil(Math.max(...rows.map(r=>r.x+r.width))),bottom=Math.ceil(Math.max(...rows.map(r=>r.y+r.height)));const b={x,y,width:right-x,height:bottom-y};if(!rect(b)||b.width*b.height>8*1024*1024)throw Error('额度区过渡范围过大');return b;}
 function createQuotaCardGroupTransition(options){

@@ -59,7 +59,7 @@ test('main binds the shared guard to its source: Codex sync cannot close or over
   const functions = source.slice(source.indexOf('function canShowQuotaGuard()'), source.indexOf('\nasync function openCodexDetailThread'));
   let visible = false, available = true, codexEntry = false; const calls = [];
   const context = vm.createContext({ quotaGuardSource: 'codex', isQuitting: false, screenLocked: false,
-    shortcutWindow: null, chatWindow: null, codexDetails: null, workbuddyDetails: null, presentationSuppressed: () => false,
+    shortcutWindow: null, chatWindow: null, codexDetails: null, workbuddyDetails: null, apiBalanceDetails: null, presentationSuppressed: () => false,
     petWindow: { isDestroyed: () => false, isVisible: () => true },
     settings: { codexEnabled: false, zcodeEnabled: true, zcodeQuotaAlwaysVisible: true, zcodeQuotaFunEnabled: true, codexQuotaAlwaysVisible: true },
     quotaLabel: { isGuardEntryVisible: () => codexEntry }, quotaLabelModel: () => ({ state: 'ready', items: [{ remaining: 64, windowMinutes: 300 }] }), buildZcodeQuotaLabelModel: value => value,
@@ -89,7 +89,10 @@ test('main binds the shared guard to its source: Codex sync cannot close or over
   context.closeCodexQuotaGuard(); assert.equal(visible, true);
   context.workbuddyDetails = { isVisible: () => true };
   assert.equal(context.canShowQuotaGuard(), false);
-  context.workbuddyDetails = null; context.settings.workbuddyEnabled = false;
+  context.workbuddyDetails = null;
+  context.apiBalanceDetails = { isVisible: () => true };
+  assert.equal(context.canShowQuotaGuard(), false);
+  context.apiBalanceDetails = null; context.settings.workbuddyEnabled = false;
   assert.equal(context.canShowQuotaGuard(), false);
   visible = false;
   for (const key of ['screenLocked','isQuitting']) {

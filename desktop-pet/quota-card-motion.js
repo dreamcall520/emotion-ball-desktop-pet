@@ -39,7 +39,7 @@
   }
   if(typeof module!=='undefined' && module.exports) module.exports={createQuotaCardMotion};
   if(typeof window==='undefined')return;
-  const bridge=window.petQuotaLabel||window.qiuqiuApiUsageLabel||window.qiuqiuWorkBuddyLabel;
+  const bridge=window.petQuotaLabel||window.qiuqiuApiUsageLabel||window.qiuqiuWorkBuddyLabel||window.qiuqiuApiBalanceLabel;
   const element=document.getElementById('quota-beam');
   if(!element||!bridge?.onMotion)return;
   const motion=createQuotaCardMotion(element,window.matchMedia?.('(prefers-reduced-motion: reduce)'));

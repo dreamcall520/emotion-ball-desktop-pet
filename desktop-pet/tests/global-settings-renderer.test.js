@@ -4,7 +4,7 @@ const path = require('node:path');
 const toggle = { id: '/codex-menu/codex-enabled', label: '启用 Codex 联动', type: 'checkbox', checked: true, enabled: true, actionable: true };
 const taskId = '/codex-menu/codex-tasks-open';
 const refreshId = '/codex-menu/codex-status/codex-refresh';
-const snapshot = { quotaCards:{order:['codex','api','zcode','workbuddy'],pinned:[]}, version: 'test', initialView:'openai-api', codexStatus: { enabled: true, connection: 'connected', quota: [{ label: '5小时', remaining: 47.6, resetsAt: 1800000000000 }], updatedAt: 1790000000000, tasks: { active: 2, waiting: 1 }, taskActionId: taskId }, entries: [
+const snapshot = { quotaCards:{order:['codex','api','zcode','workbuddy','balance'],pinned:[]}, version: 'test', initialView:'openai-api', codexStatus: { enabled: true, connection: 'connected', quota: [{ label: '5小时', remaining: 47.6, resetsAt: 1800000000000 }], updatedAt: 1790000000000, tasks: { active: 2, waiting: 1 }, taskActionId: taskId }, entries: [
   { id: `/${encodeURIComponent('球球与互动')}`, label: '球球与互动', children: [
     ...['随机表情','立即睡眠','立即唤醒'].map(label=>({id:`/${encodeURIComponent('球球与互动')}/${encodeURIComponent(label)}`,label,enabled:true,actionable:true})),
     {id:`/${encodeURIComponent('球球与互动')}/${encodeURIComponent('咩咩互动')}`,label:'咩咩互动',children:['咩咩问好','开心回应','迈迈小蹄','暖暖打盹','揉揉耳朵','抱住小铃铛','慢半拍伸懒腰'].map(label=>({id:`/sheep/${encodeURIComponent(label)}`,label,enabled:true,actionable:true}))}
@@ -24,7 +24,12 @@ const snapshot = { quotaCards:{order:['codex','api','zcode','workbuddy'],pinned:
     ] }
   ] }, { id: '/zcode-menu', label: 'ZCode 联动', children: ['enabled','quota-visible','quota-size','quota-fun','quota-detail','trend','tasks','refresh'].map(kind => ({ id: `/zcode-menu/zcode-${kind}`, label: ({enabled:'启用 ZCode 联动','quota-visible':'显示 ZCode 额度','quota-size':'额度卡片大小','quota-fun':'额度趣味互动','quota-detail':'额度明细',trend:'额度趋势',tasks:'进行中任务',refresh:'刷新 ZCode 状态'})[kind], enabled: true, actionable: true, checked:true, type: ['enabled','quota-visible','quota-fun'].includes(kind) ? 'checkbox' : 'normal', ...(kind === 'quota-size' ? {children:['standard','compact'].map(size=>({id:`/zcode-menu/zcode-quota-size/zcode-size-${size}`,label:size==='standard'?'标准':'小巧',enabled:true,actionable:true,type:'radio',checked:size==='compact'}))} : {}) })) }, { id: '/general', label: '常规设置', children: [] }, { id: '/workbuddy-enabled', label: '启用 WorkBuddy 联动', checked:false, enabled: true, actionable: true, type: 'checkbox' },
   {id:'/workbuddy-quota-visible',label:'显示 WorkBuddy 积分卡',enabled:true,actionable:true,type:'checkbox',checked:true},
-  {id:'/workbuddy-quota-fun',label:'WorkBuddy 积分趣味游戏',enabled:true,actionable:true,type:'checkbox',checked:true}
+  {id:'/workbuddy-quota-fun',label:'WorkBuddy 积分趣味游戏',enabled:true,actionable:true,type:'checkbox',checked:true},
+  {id:'/api-balance-menu',label:'API 余额',children:[
+    {id:'/api-balance-menu/api-balance-enabled',label:'启用 API 余额监控',enabled:true,actionable:true,type:'checkbox',checked:false},
+    {id:'/api-balance-menu/api-balance-visible',label:'显示 API 余额卡',enabled:false,actionable:true,type:'checkbox',checked:true},
+    {id:'/api-balance-menu/api-balance-refresh',label:'刷新 API 余额',enabled:false,actionable:true,type:'normal'}
+  ]}
 ] };
 
 if (process.versions.electron && process.argv.includes('--settings-dom-child')) {
@@ -39,7 +44,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run(fs.readFileSync(path.join(sourceRoot, 'desktop-pet/global-settings-renderer.js'), 'utf8'));
     await run('new Promise(resolve=>setTimeout(resolve,20))');
     const nav = await run("[...document.querySelectorAll('#navigation button')].map(n=>n.textContent)");
-    for (const name of ['Codex','WorkBuddy','快捷键','常规设置']) assert(nav.includes(name), name);
+    for (const name of ['Codex','WorkBuddy','API 余额','快捷键','常规设置']) assert(nav.includes(name), name);
     assert(!nav.includes('OpenAI API')); assert(!nav.includes('API 费用与用量')); assert(!nav.includes('Codex 与 API'));
     await run(`Promise.all([...document.querySelectorAll('#navigation img.nav-icon')].map(img=>img.complete?Promise.resolve():new Promise((resolve,reject)=>{img.onload=()=>resolve();img.onerror=()=>reject(Error(img.src));})))`);
     const integrationIcons = await run(`[...document.querySelectorAll('#navigation img.nav-icon')].map(img=>({file:img.getAttribute('src'),complete:img.complete,width:img.naturalWidth,alt:img.alt,decorative:img.getAttribute('aria-hidden')}))`);
@@ -207,15 +212,16 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("document.querySelector('#content [data-action]').click()"); await run('new Promise(resolve=>setTimeout(resolve,10))');
     assert.equal(await run('calls.at(-1).id'),`/${encodeURIComponent('球球与互动')}/${encodeURIComponent('随机表情')}`);
     await run("[...document.querySelectorAll('#navigation button')].find(e=>e.textContent==='联动样式管理').click()");
-    assert.deepEqual(await run("[...document.querySelectorAll('[data-quota-card]')].map(e=>e.dataset.quotaCard)"),['codex','api','zcode','workbuddy']);
+    assert.deepEqual(await run("[...document.querySelectorAll('[data-quota-card]')].map(e=>e.dataset.quotaCard)"),['codex','api','zcode','workbuddy','balance']);
     assert.equal(await run("document.querySelector('#content > section').dataset.settingsSection"),'quota-cards','card management is the first section');
     await run("document.querySelector('main').scrollTop=500;navigate('quota-cards')");
     assert.equal(await run("document.querySelector('#navigation [aria-current=page]').textContent"),'联动样式管理');
     assert.equal(await run("document.querySelector('main').scrollTop"),0,'right-click navigation opens card management at the top');
     await run("findEntry('/workbuddy-quota-visible').enabled=false;navigate('quota-cards')");
     assert.equal(await run("document.querySelector('[aria-label=WorkBuddy显示额度卡]').disabled"),true,'visibility keeps source action eligibility');
+    assert.equal(await run("document.querySelector('[aria-label=\"API 余额显示额度卡\"]').disabled"),true,'余额监控关闭时不能从卡片设置绕过启用');
     assert.match(await run("document.querySelector('[aria-label=WorkBuddy显示额度卡]').parentElement.title"),/先开启/);
-    for (const [name,id] of [['Codex','/codex-menu/codex-quota-visible'],['OpenAI API','/codex-menu/openai-api-menu/openai-api-visible'],['ZCode','/zcode-menu/zcode-quota-visible'],['WorkBuddy','/workbuddy-quota-visible']]) {
+    for (const [name,id] of [['Codex','/codex-menu/codex-quota-visible'],['OpenAI API','/codex-menu/openai-api-menu/openai-api-visible'],['ZCode','/zcode-menu/zcode-quota-visible'],['WorkBuddy','/workbuddy-quota-visible'],['API 余额','/api-balance-menu/api-balance-visible']]) {
       const control=await run(`(()=>{const e=[...document.querySelectorAll('.quota-card-settings input')].find(e=>e.getAttribute('aria-label')===${JSON.stringify(name+'显示额度卡')});return {id:e.dataset.action,checked:e.checked}})()`);
       assert.equal(control.id,id);assert.equal(control.checked,await run(`findEntry(${JSON.stringify(id)}).checked`));
     }
@@ -232,7 +238,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
 
     assert.equal(await run("document.querySelector('[aria-label=Codex上移]').disabled"),true);
     await run("document.querySelector('[aria-label=Codex下移]').click()"); await run('new Promise(resolve=>setTimeout(resolve,10))');
-    assert.deepEqual(await run('cardCalls.at(-1).order'),['api','codex','zcode','workbuddy']);
+    assert.deepEqual(await run('cardCalls.at(-1).order'),['api','codex','zcode','workbuddy','balance']);
     await run("document.querySelector('[aria-label=WorkBuddy固定展示]').click()"); await run('new Promise(resolve=>setTimeout(resolve,10))');
     assert.deepEqual(await run('cardCalls.at(-1).pinned'),['workbuddy']);
     assert.equal(await run("document.querySelector('[aria-label=WorkBuddy固定展示]').checked"),true);
@@ -240,10 +246,15 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     assert.equal(await run("document.querySelector('[aria-label=WorkBuddy固定展示]').checked"),true,'failed save restores real config');
     assert.match(await run("document.getElementById('feedback').textContent"),/保存失败/);
     await run("window.dragCard=(source,target)=>{const from=document.querySelector('[data-quota-card='+source+']'),to=document.querySelector('[data-quota-card='+target+']'),dataTransfer=new DataTransfer();from.querySelector('.quota-card-drag-handle').dispatchEvent(new DragEvent('dragstart',{bubbles:true,cancelable:true,dataTransfer}));to.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer}));to.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer}));};window.cardFail=false;dragCard('workbuddy','api');void 0"); await run('new Promise(resolve=>setTimeout(resolve,10))');
-    assert.deepEqual(await run("[...document.querySelectorAll('[data-quota-card]')].map(e=>e.dataset.quotaCard)"),['workbuddy','api','codex','zcode'],'drag updates persisted order');
+    assert.deepEqual(await run("[...document.querySelectorAll('[data-quota-card]')].map(e=>e.dataset.quotaCard)"),['workbuddy','api','codex','zcode','balance'],'drag updates persisted order');
     assert.deepEqual(await run('cardCalls.at(-1).pinned'),['workbuddy'],'drag keeps pinned config');
     await run("window.cardFail=true;dragCard('workbuddy','zcode')"); await run('new Promise(resolve=>setTimeout(resolve,10))');
-    assert.deepEqual(await run("[...document.querySelectorAll('[data-quota-card]')].map(e=>e.dataset.quotaCard)"),['workbuddy','api','codex','zcode'],'failed drag save restores order');
+    assert.deepEqual(await run("[...document.querySelectorAll('[data-quota-card]')].map(e=>e.dataset.quotaCard)"),['workbuddy','api','codex','zcode','balance'],'failed drag save restores order');
+    await run("window.cardFail=false;dragCard('balance','api')");await run('new Promise(resolve=>setTimeout(resolve,10))');
+    assert.deepEqual(await run("[...document.querySelectorAll('[data-quota-card]')].map(e=>e.dataset.quotaCard)"),['workbuddy','balance','api','codex','zcode']);
+    await run("document.querySelector('[aria-label=\"API 余额固定展示\"]').click()");await run('new Promise(resolve=>setTimeout(resolve,10))');
+    assert.deepEqual(await run('cardCalls.at(-1).pinned'),['workbuddy','balance'],'追加固定余额卡不重排原有固定项');
+    assert.equal(await run("findEntry('/api-balance-menu/api-balance-enabled').checked"),false,'固定不隐式启用监控');
     assert.equal(await run("(()=>{const event=new DragEvent('dragstart',{bubbles:true,cancelable:true,dataTransfer:new DataTransfer()});document.querySelector('[data-quota-card=api] button').dispatchEvent(event);return event.defaultPrevented})()"),true,'buttons do not begin row dragging');
     assert.equal(await run("(()=>{const event=new DragEvent('dragstart',{bubbles:true,cancelable:true,dataTransfer:new DataTransfer()});document.querySelector('[data-quota-card=api] input').dispatchEvent(event);return event.defaultPrevented})()"),true,'pin checkbox does not begin dragging');
     assert.equal(await run("(()=>{const row=document.querySelector('[data-quota-card=api]');row.querySelector('input').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));const event=new DragEvent('dragstart',{bubbles:true,cancelable:true,dataTransfer:new DataTransfer()});row.dispatchEvent(event);return event.defaultPrevented})()"),true,'native ancestor dragstart cannot bypass an interactive pointer origin');
@@ -258,6 +269,13 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run('new Promise(resolve=>setTimeout(resolve,20))');
     assert.equal(await run("document.querySelector('#navigation [aria-current=page]').textContent"),'联动样式管理','initialView alias opens the real edge category');
     assert.equal(await run("document.querySelector('#content > section').dataset.settingsSection"),'quota-cards');
+    await run("navigate('/api-balance-menu')");
+    assert.equal(await run("document.querySelector('#navigation [aria-current=page]').textContent"),'API 余额');
+    assert.equal(await run("document.querySelector('[data-action=\"/api-balance-menu/api-balance-enabled\"]')!==null"),true);
+    await run("window.snapshot.initialView='/api-balance-menu';window.snapshot.version='balance-initial-view'");
+    await run(fs.readFileSync(path.join(sourceRoot,'desktop-pet/global-settings-renderer.js'),'utf8'));
+    await run('new Promise(resolve=>setTimeout(resolve,20))');
+    assert.equal(await run("document.querySelector('#navigation [aria-current=page]').textContent"),'API 余额');
     win.destroy(); process.stdout.write('SETTINGS_DOM_OK\n'); app.exit(0);
   }).catch(error => { process.stderr.write(error.stack + '\n'); app.exit(1); });
 } else {
