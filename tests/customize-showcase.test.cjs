@@ -47,8 +47,8 @@ for (const page of [html,home]) {
   assert.doesNotMatch(page,/share\.weiyun\.com\/(?:OJvZzed5|rXnnLRhI)/);
   assert.match(page,/analytics\.js\?v=20261029-release/);
 }
-assert.match(html,/Intel 构建候选/);
-assert.match(html,/尚未在真实 Intel Mac 上验收/);
+assert.match(html,/Intel 芯片版/);
+assert.doesNotMatch(html,/构建候选|尚未在真实 Intel Mac 上验收|尚待实机验收|检查未通过|检查超时/);
 
 // Primary Apple downloads use the explicit domestic share page; GitHub remains an opt-in fallback.
 for (const page of [html, home]) {

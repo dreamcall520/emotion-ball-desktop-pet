@@ -20,6 +20,10 @@ test('0.4.09 adds weather and card improvements while retaining 0.4.08', () => {
   assert.match(globalArticles[0], /云朵感知天气/);
   assert.match(globalArticles[0], /高低温折线和温度区间视图/);
   assert.match(globalArticles[0], /v0\.4\.9\/Qiuqiu-0\.4\.09-macOS-arm64\.dmg/);
+  assert.doesNotMatch(globalArticles[0], /天气随身看|优化城市搜索|重复定位提示|天气获取失败时的展示/);
+  const groups = [...globalArticles[0].matchAll(/<div class="update-group">([\s\S]*?)<\/div>/g)].map(m => m[1]);
+  assert.deepEqual(groups.map(group => (group.match(/<li>/g) || []).length), [3, 2, 3, 1]);
+  assert.match(groups[3], /<li>修复部分窗口关闭后的报错。<\/li>/);
   const articles = globalArticles.slice(1), articleBlocks = globalBlocks.slice(1);
   assert.match(articleBlocks[0], /id="v0\.4\.08-apple"/);
   assert.match(articles[0], /datetime="2026-10-26"/);
