@@ -28,7 +28,7 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
   }
   function publish() { const packet = { ...state, enabled, cardVisible, appearance: getAppearance() }; if (win && !win.isDestroyed()) win.webContents.send('weather:state', packet); onChange(packet); return packet; }
   function reposition(animate = false) {
-    if (!win || win.isDestroyed()) return;
+    if (!win || win.isDestroyed() || groupTransitionMode === 'hold') return;
     const pet = getPetWindow();
     if (!enabled || (!cardVisible && !explicitOpen) || suspended || ['hold','masked'].includes(groupTransitionMode) || (!explicitOpen && getPresentation()?.quotaGroupHidden) || getSuppressed() || !pet || pet.isDestroyed() || !pet.isVisible()) { win.hide(); return; }
     const bounds = pet.getBounds(), area = screen.getDisplayMatching(bounds).workArea;
@@ -114,8 +114,8 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
     getVisibleBounds: () => win && !win.isDestroyed() && (win.isVisible() || groupTransitionMode === 'stage') ? win.getBounds() : null,
     getLayoutMetrics: () => enabled && cardVisible ? { width: 128, height: 32, inset: 2 } : null,
     resetExpanded() { explicitOpen = false; cityRequested = false; size = { width: 128, height: 32 }; expandedAnchor = null; win?.webContents.send('weather:collapse'); },
-    setGroupTransitionMode(mode) { if (![null,'hold','stage','masked'].includes(mode) || mode === groupTransitionMode) return; groupTransitionMode = mode; groupEpoch++; if (mode) win?.hide(); reposition(); },
-    captureGroupTransitionFrames() { const target = win, epoch = groupEpoch; return captureQuotaGroupFrames({ getTargets: () => [target], isReady: () => ready && enabled && cardVisible && win === target && !target.isDestroyed(), isCurrent: () => epoch === groupEpoch && win === target && !getPresentation()?.quotaGroupHidden }); },
+    setGroupTransitionMode(mode) { if (![null,'hold','stage','masked'].includes(mode) || mode === groupTransitionMode) return; groupTransitionMode = mode; groupEpoch++; if (mode === 'stage' || mode === 'masked') win?.hide(); reposition(); },
+    captureGroupTransitionFrames() { const target = win, epoch = groupEpoch; return captureQuotaGroupFrames({ getTargets: () => [target], isReady: () => ready && enabled && cardVisible && win === target && !target.isDestroyed(), isCurrent: () => epoch === groupEpoch && win === target && (groupTransitionMode !== 'stage' || !getPresentation()?.quotaGroupHidden) }); },
     setAlwaysOnTop(value) { topmost = Boolean(value); win?.setAlwaysOnTop(topmost, 'floating'); },
     openCity() { if (!enabled) setEnabled(true); explicitOpen = true; size = { width: 390, height: 210 }; const target = ensureWindow(); if (ready) { target.webContents.send('weather:choose-city'); target.show(); target.focus?.(); } else cityRequested = true; reposition(); onLayout(); },
     open() { if (!enabled) setEnabled(true); ensureWindow(); reposition(); publish(); }, reposition,
