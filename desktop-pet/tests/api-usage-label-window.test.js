@@ -46,7 +46,7 @@ function fixture(options = {}) {
     destroy() { this.destroyed = true; this.visible = false; this.emit('closed'); }
     hide() { this.visible = false; }
     showInactive() { this.onShow?.(); this.visible = true; }
-    setBounds(value) { this.bounds = { ...value }; this.onBounds?.(); }
+    setBounds(value, animate) { this.lastAnimate = animate; this.bounds = { ...value }; this.onBounds?.(); }
     getBounds() { return { ...this.bounds }; }
     setIgnoreMouseEvents(value) { this.ignoresMouse = value; }
     setAlwaysOnTop(...args) { this.topmost = args; }
@@ -201,6 +201,7 @@ test('dependent cards are notified after API visibility and size settle, includi
   assert.deepEqual(f.controller.getVisibleBounds(), { x: win.bounds.x, y: win.bounds.y, width: 196, height: 92 });
   assert.deepEqual(f.controller.getLayoutMetrics(), { width:196,height:92,inset:0 });
   f.ipc(win, 'pet:api-usage-label-toggle');
+  await new Promise(resolve=>setTimeout(resolve,230));
   assert.equal(layouts.at(-1)?.height, 32);
   f.controller.hide(); assert.equal(layouts.at(-1), null);
   assert.equal(f.controller.getVisibleBounds(), null);
@@ -339,4 +340,11 @@ test('tucked exit freezes API bounds before predecessor disappearance can reflow
   f.state.presentation = { mode: 'peeked', side: 'left' }; f.controller.show(STATE);
   assert.equal(win.visible, true); assert.notDeepEqual(win.getBounds(), before, 'next entry uses the current geometry');
   f.controller.hide(); assert.equal(win.visible, false);
+});
+
+test('API capsule keeps user resize immediate and does not restart at repeated placement', async t => {
+ const f=fixture();t.after(()=>f.controller.destroy());f.controller.show(STATE);await f.ready();const win=f.windows[0];
+ let writes=0;win.onBounds=()=>writes++;
+ assert.equal(win.lastAnimate,false);f.ipc(win,'pet:api-usage-label-toggle');assert.equal(win.lastAnimate,false);assert.equal(writes,1);
+ f.controller.reposition();assert.equal(writes,1,'same requested bounds stay deduplicated');assert.equal(win.lastAnimate,false);f.ipc(win,'pet:api-usage-label-toggle');assert.equal(win.lastAnimate,false);assert.equal(writes,1,'native shrink waits for renderer');await new Promise(resolve=>setTimeout(resolve,230));assert.equal(writes,2);
 });

@@ -14,7 +14,8 @@ test('只打包 Apple Silicon 本地应用并启用 asar', () => {
   const options = buildPackagerOptions('/repo', '/repo/desktop-pet/build/app.icns');
   assert.equal(options.platform, 'darwin');
   assert.equal(options.arch, 'arm64');
-  assert.equal(options.asar, true);
+  assert.deepEqual(options.asar, { unpack: '**/*.node' });
+  assert.match(options.extendInfo.NSLocationWhenInUseUsageDescription, /手动/);
   assert.equal(options.appBundleId, 'local.xiaokun.emotionball.pet');
   assert.equal(options.name, '球球桌宠');
   assert.equal(options.out, '/repo/dist');

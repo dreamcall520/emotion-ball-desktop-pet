@@ -1,4 +1,4 @@
-const IDS = ['codex', 'api', 'zcode', 'workbuddy', 'balance'];
+const IDS = Object.freeze(['codex', 'api', 'zcode', 'workbuddy', 'balance', 'weather']);
 function normalizeQuotaCards(value = {}) {
   if (!value || typeof value !== 'object') value = {};
   const order = [...new Set((Array.isArray(value.order) ? value.order : []).filter(id => IDS.includes(id)))];
@@ -36,4 +36,4 @@ function createQuotaCardGroup({ getState, getCursor, getBounds, onChange, schedu
     dismiss(){keyboard=false;expanded=false;blocked=true;outsideAt=null;sync();}, start(){if(stopped)return;if(timer===null)tick();},
     close(){stopped=true;cancel(timer);timer=null;expanded=false;keyboard=false;interactionBridge=null;} };
 }
-module.exports={normalizeQuotaCards,createQuotaCardGroup};
+module.exports={QUOTA_CARD_SOURCES:IDS,normalizeQuotaCards,createQuotaCardGroup};

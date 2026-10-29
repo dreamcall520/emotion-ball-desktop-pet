@@ -38,6 +38,9 @@
     '定制球球': '形象、配色、透明度、启动外观与额度展示样式。',
     '快捷键设置': '查看快捷键、修改组合键和快捷入口行为。',
     '番茄钟': '设置专注与休息时长、钟面和提醒。',
+    '启用天气': '查询所选城市的天气预报与空气质量，关闭后停止后台刷新。',
+    '显示天气卡': '与现有卡片一起排列，可排序、固定展示或收纳。',
+    '天气与城市设置': '选择当前位置或固定城市，查看今天与未来7天预报。',
     '和球球聊聊': '打开聊天面板，选择模型、查看记录或继续聊天。'
   };
   const el = (tag, text, className) => {
@@ -51,6 +54,7 @@
     '和球球聊聊': ['M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-8l-6 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z', 'M7 9h10M7 13h6'],
     '定制球球': ['M12 4a8 8 0 1 0 8 8', 'm15 4 2-2 5 5-2 2-5-5ZM15 4l-6 6-1 4 4-1 6-6'],
 
+    '天气': ['M5 16a4 4 0 0 1 1-7.9A6 6 0 0 1 18 10a3 3 0 0 1 0 6H5Z', 'M18 3v2M22 7h-2M14 3l1 2'],
     '常用设置': ['m12 3 2.6 5.6 6.1.8-4.5 4.3 1.1 6.1-5.3-3-5.3 3 1.1-6.1-4.5-4.3 6.1-.8Z'],
     '番茄钟': ['M9 3h6M12 3v3M18 7l2-2', 'M12 6a8 8 0 1 0 0 16 8 8 0 0 0 0-16M12 10v4l-2 2'],
     '快捷键': ['M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z', 'M7 9h.01M12 9h.01M17 9h.01M7 12h.01M12 12h.01M17 12h.01M8 16h8'],
@@ -98,6 +102,8 @@
     }));
     const workbuddy = snapshot.entries.find(entry => entry.id === '/workbuddy-enabled');
     if (workbuddy) categories.push({ id: 'workbuddy-settings', label: 'WorkBuddy', children: snapshot.entries.filter(entry => /^\/workbuddy-(?:enabled|quota-visible|quota-fun)$/.test(entry.id)) });
+    const weather = snapshot.entries.filter(entry => ['/weather-enabled', '/weather-open'].includes(entry.id));
+    if (weather.length) categories.push({ id: 'weather-settings', label: '天气', children: weather });
     const general = categories.find(entry => entry.label === '常规设置');
     if (general) categories[categories.indexOf(general)] = { ...general, children: [...general.children,
       ...snapshot.entries.filter(entry => entry.id === '/update-check')] };
@@ -147,9 +153,9 @@
     const section = el('section', '', 'group quota-card-settings');
     section.dataset.settingsSection = 'quota-cards';
     section.append(el('h3', '联动样式管理'), el('p', '调整各张卡的显示顺序。固定展示的卡不参与收纳，仍遵循各来源的联动与显示开关。', 'description group-intro'));
-    const names = { codex: 'Codex', api: 'OpenAI API', zcode: 'ZCode', workbuddy: 'WorkBuddy', balance: 'API 余额' };
+    const names = { codex: 'Codex', api: 'OpenAI API', zcode: 'ZCode', workbuddy: 'WorkBuddy', balance: 'API 余额', weather: '天气' };
     const config = snapshot.quotaCards || { order: Object.keys(names), pinned: [] };
-    const displayIds = { codex: '/codex-menu/codex-quota-visible', api: '/codex-menu/openai-api-menu/openai-api-visible', zcode: '/zcode-menu/zcode-quota-visible', workbuddy: '/workbuddy-quota-visible', balance: '/api-balance-menu/api-balance-visible' };
+    const displayIds = { codex: '/codex-menu/codex-quota-visible', api: '/codex-menu/openai-api-menu/openai-api-visible', zcode: '/zcode-menu/zcode-quota-visible', workbuddy: '/workbuddy-quota-visible', balance: '/api-balance-menu/api-balance-visible', weather: '/weather-visible' };
     const displayActions = snapshot.entries.flatMap(entry => leaves(entry));
     config.order.forEach((source, index) => {
       if (!names[source]) return;
@@ -186,11 +192,12 @@
       const visibility = displayActions.find(item => item.id === displayIds[source]);
       const displayLabel = el('label', '', 'quota-card-pin'); const displayCheckbox = el('input'); displayCheckbox.type = 'checkbox';
       displayCheckbox.checked = visibility?.checked === true; displayCheckbox.disabled = busy || !visibility?.enabled;
-      displayCheckbox.setAttribute('aria-label', `${names[source]}显示额度卡`);
+      const displayText = source === 'weather' ? '显示天气卡' : '显示额度卡';
+      displayCheckbox.setAttribute('aria-label', source === 'weather' ? displayText : `${names[source]}${displayText}`);
       if (visibility) displayCheckbox.dataset.action = visibility.id;
       if (!visibility?.enabled) displayLabel.title = visibility ? '请先开启该来源的联动。' : '当前来源设置暂不可用。';
       displayCheckbox.onchange = () => { if (visibility?.enabled) act(visibility); };
-      displayLabel.append(displayCheckbox, document.createTextNode('显示额度卡')); controls.append(displayLabel);
+      displayLabel.append(displayCheckbox, document.createTextNode(displayText)); controls.append(displayLabel);
       const label = el('label', '', 'quota-card-pin'); const checkbox = el('input'); checkbox.type = 'checkbox';
       checkbox.checked = config.pinned.includes(source); checkbox.disabled = busy; checkbox.setAttribute('aria-label', `${names[source]}固定展示`);
       checkbox.onchange = () => saveQuotaCards({ order: [...config.order], pinned: checkbox.checked ? [...config.pinned, source] : config.pinned.filter(value => value !== source) });
@@ -227,7 +234,7 @@
     const navigationGroups = [
       ['', ['常用设置']],
       ['日常陪伴', ['球球与互动', '和球球聊聊', '便签与待办', '番茄钟']],
-      ['外观与显示', ['定制球球', '球球尺寸', '贴边与显示', '界面配色']],
+      ['外观与显示', ['定制球球', '球球尺寸', '贴边与显示', '界面配色', '天气']],
       ['应用与联动', ['Codex', 'ZCode 联动', 'WorkBuddy', 'API 余额', '联动样式管理']],
       ['快捷与常规', ['快捷键', '常规设置']]
     ];

@@ -4,7 +4,10 @@ const path = require('node:path');
 const toggle = { id: '/codex-menu/codex-enabled', label: '启用 Codex 联动', type: 'checkbox', checked: true, enabled: true, actionable: true };
 const taskId = '/codex-menu/codex-tasks-open';
 const refreshId = '/codex-menu/codex-status/codex-refresh';
-const snapshot = { quotaCards:{order:['codex','api','zcode','workbuddy','balance'],pinned:[]}, version: 'test', initialView:'openai-api', codexStatus: { enabled: true, connection: 'connected', quota: [{ label: '5小时', remaining: 47.6, resetsAt: 1800000000000 }], updatedAt: 1790000000000, tasks: { active: 2, waiting: 1 }, taskActionId: taskId }, entries: [
+const snapshot = { quotaCards:{order:['codex','api','zcode','workbuddy','balance','weather'],pinned:[]}, version: 'test', initialView:'openai-api', codexStatus: { enabled: true, connection: 'connected', quota: [{ label: '5小时', remaining: 47.6, resetsAt: 1800000000000 }], updatedAt: 1790000000000, tasks: { active: 2, waiting: 1 }, taskActionId: taskId }, entries: [
+  {id:'/weather-enabled',label:'启用天气',enabled:true,actionable:true,type:'checkbox',checked:false},
+  {id:'/weather-visible',label:'显示天气卡',enabled:true,actionable:true,type:'checkbox',checked:true},
+  {id:'/weather-open',label:'天气与城市设置',enabled:true,actionable:true,type:'normal'},
   { id: `/${encodeURIComponent('球球与互动')}`, label: '球球与互动', children: [
     ...['随机表情','立即睡眠','立即唤醒'].map(label=>({id:`/${encodeURIComponent('球球与互动')}/${encodeURIComponent(label)}`,label,enabled:true,actionable:true})),
     {id:`/${encodeURIComponent('球球与互动')}/${encodeURIComponent('咩咩互动')}`,label:'咩咩互动',children:['咩咩问好','开心回应','迈迈小蹄','暖暖打盹','揉揉耳朵','抱住小铃铛','慢半拍伸懒腰'].map(label=>({id:`/sheep/${encodeURIComponent(label)}`,label,enabled:true,actionable:true}))}
@@ -212,7 +215,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("document.querySelector('#content [data-action]').click()"); await run('new Promise(resolve=>setTimeout(resolve,10))');
     assert.equal(await run('calls.at(-1).id'),`/${encodeURIComponent('球球与互动')}/${encodeURIComponent('随机表情')}`);
     await run("[...document.querySelectorAll('#navigation button')].find(e=>e.textContent==='联动样式管理').click()");
-    assert.deepEqual(await run("[...document.querySelectorAll('[data-quota-card]')].map(e=>e.dataset.quotaCard)"),['codex','api','zcode','workbuddy','balance']);
+    assert.deepEqual(await run("[...document.querySelectorAll('[data-quota-card]')].map(e=>e.dataset.quotaCard)"),['codex','api','zcode','workbuddy','balance','weather']);
     assert.equal(await run("document.querySelector('#content > section').dataset.settingsSection"),'quota-cards','card management is the first section');
     await run("document.querySelector('main').scrollTop=500;navigate('quota-cards')");
     assert.equal(await run("document.querySelector('#navigation [aria-current=page]').textContent"),'联动样式管理');
@@ -238,7 +241,7 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
 
     assert.equal(await run("document.querySelector('[aria-label=Codex上移]').disabled"),true);
     await run("document.querySelector('[aria-label=Codex下移]').click()"); await run('new Promise(resolve=>setTimeout(resolve,10))');
-    assert.deepEqual(await run('cardCalls.at(-1).order'),['api','codex','zcode','workbuddy','balance']);
+    assert.deepEqual(await run('cardCalls.at(-1).order'),['api','codex','zcode','workbuddy','balance','weather']);
     await run("document.querySelector('[aria-label=WorkBuddy固定展示]').click()"); await run('new Promise(resolve=>setTimeout(resolve,10))');
     assert.deepEqual(await run('cardCalls.at(-1).pinned'),['workbuddy']);
     assert.equal(await run("document.querySelector('[aria-label=WorkBuddy固定展示]').checked"),true);
@@ -246,12 +249,12 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     assert.equal(await run("document.querySelector('[aria-label=WorkBuddy固定展示]').checked"),true,'failed save restores real config');
     assert.match(await run("document.getElementById('feedback').textContent"),/保存失败/);
     await run("window.dragCard=(source,target)=>{const from=document.querySelector('[data-quota-card='+source+']'),to=document.querySelector('[data-quota-card='+target+']'),dataTransfer=new DataTransfer();from.querySelector('.quota-card-drag-handle').dispatchEvent(new DragEvent('dragstart',{bubbles:true,cancelable:true,dataTransfer}));to.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer}));to.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer}));};window.cardFail=false;dragCard('workbuddy','api');void 0"); await run('new Promise(resolve=>setTimeout(resolve,10))');
-    assert.deepEqual(await run("[...document.querySelectorAll('[data-quota-card]')].map(e=>e.dataset.quotaCard)"),['workbuddy','api','codex','zcode','balance'],'drag updates persisted order');
+    assert.deepEqual(await run("[...document.querySelectorAll('[data-quota-card]')].map(e=>e.dataset.quotaCard)"),['workbuddy','api','codex','zcode','balance','weather'],'drag updates persisted order');
     assert.deepEqual(await run('cardCalls.at(-1).pinned'),['workbuddy'],'drag keeps pinned config');
     await run("window.cardFail=true;dragCard('workbuddy','zcode')"); await run('new Promise(resolve=>setTimeout(resolve,10))');
-    assert.deepEqual(await run("[...document.querySelectorAll('[data-quota-card]')].map(e=>e.dataset.quotaCard)"),['workbuddy','api','codex','zcode','balance'],'failed drag save restores order');
+    assert.deepEqual(await run("[...document.querySelectorAll('[data-quota-card]')].map(e=>e.dataset.quotaCard)"),['workbuddy','api','codex','zcode','balance','weather'],'failed drag save restores order');
     await run("window.cardFail=false;dragCard('balance','api')");await run('new Promise(resolve=>setTimeout(resolve,10))');
-    assert.deepEqual(await run("[...document.querySelectorAll('[data-quota-card]')].map(e=>e.dataset.quotaCard)"),['workbuddy','balance','api','codex','zcode']);
+    assert.deepEqual(await run("[...document.querySelectorAll('[data-quota-card]')].map(e=>e.dataset.quotaCard)"),['workbuddy','balance','api','codex','zcode','weather']);
     await run("document.querySelector('[aria-label=\"API 余额固定展示\"]').click()");await run('new Promise(resolve=>setTimeout(resolve,10))');
     assert.deepEqual(await run('cardCalls.at(-1).pinned'),['workbuddy','balance'],'追加固定余额卡不重排原有固定项');
     assert.equal(await run("findEntry('/api-balance-menu/api-balance-enabled').checked"),false,'固定不隐式启用监控');
@@ -276,6 +279,25 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run(fs.readFileSync(path.join(sourceRoot,'desktop-pet/global-settings-renderer.js'),'utf8'));
     await run('new Promise(resolve=>setTimeout(resolve,20))');
     assert.equal(await run("document.querySelector('#navigation [aria-current=page]').textContent"),'API 余额');
+    await run("navigate('quota-cards');window.actMode='apply'");
+    assert.equal(await run("document.querySelector('[data-quota-card=weather] [aria-label=显示天气卡]').checked"),true);
+    assert.equal(await run("document.querySelector('[data-quota-card=weather] [aria-label=启用天气]')"),null);
+    assert.equal(await run("document.querySelector('[data-quota-card=weather] [aria-label=天气与城市设置]')"),null);
+    assert.equal(await run("document.querySelectorAll('[data-quota-card=weather] input').length"),2,'weather card management contains display and pin only');
+    assert.equal(await run("document.querySelector('#navigation [data-view=weather-settings]').closest('[role=group]').getAttribute('aria-label')"),'外观与显示');
+    await run("document.querySelector('#navigation [data-view=weather-settings]').click()");
+    assert.equal(await run("document.querySelector('#navigation [aria-current=page]').textContent"),'天气');
+    assert.equal(await run("document.querySelector('[aria-label=启用天气]').getAttribute('role')"),'switch');
+    await run("document.querySelector('[aria-label=启用天气]').click()");await run('new Promise(resolve=>setTimeout(resolve,10))');
+    assert.equal(await run("findEntry('/weather-enabled').checked"),true);
+    await run("document.querySelector('[aria-label=天气与城市设置]').click()");await run('new Promise(resolve=>setTimeout(resolve,10))');
+    assert.equal(await run("calls.at(-1).id"),'/weather-open');
+    await run("navigate('quota-cards')");
+    await run("document.querySelector('[data-quota-card=weather] [aria-label=显示天气卡]').click()");await run('new Promise(resolve=>setTimeout(resolve,10))');
+    assert.equal(await run("findEntry('/weather-visible').checked"),false);
+    await run("document.querySelector('[data-quota-card=weather] [aria-label=天气固定展示]').click()");await run('new Promise(resolve=>setTimeout(resolve,10))');
+    assert.equal(await run("snapshot.quotaCards.pinned.includes('weather')"),true);
+    assert.equal(await run("findEntry('/weather-visible').checked"),false,'pin weather cannot implicitly enable visibility');
     win.destroy(); process.stdout.write('SETTINGS_DOM_OK\n'); app.exit(0);
   }).catch(error => { process.stderr.write(error.stack + '\n'); app.exit(1); });
 } else {

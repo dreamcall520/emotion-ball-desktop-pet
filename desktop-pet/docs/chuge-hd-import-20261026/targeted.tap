@@ -1,0 +1,28 @@
+✔ nine original actions crop their real rows, skip unused columns, and retain per-frame timing (1.974375ms)
+✔ HD atlases retain native backing pixels through all display sizes and Retina changes (1.510333ms)
+✔ HD load rejects inconsistent or unsupported grids and resets backing dimensions for old pets (0.285042ms)
+✔ Codex idle takes 6.6 seconds while the wave retains its 700ms cycle (0.152125ms)
+✔ pause, hidden, reduced motion and destroy cancel scheduling without restarting paused frames (0.242666ms)
+✔ descriptor and dimensions reject remote images, inconsistent versions and wrong grids; v2 reload works (0.612ms)
+✔ 读取两版精灵图，导入原子副本可重读且不依赖 Codex 来源 (47.52625ms)
+✔ 坏元数据、未知版本、尺寸不符和越界资源逐项跳过 (8.938208ms)
+✔ 拒绝目录、元数据和图片的符号链接及非正规文件 (21.410375ms)
+✔ 资源大小限额、解码失败和导入副本篡改不会被接受 (19.196791ms)
+✔ WebP 支持 VP8L、VP8 和 VP8X 尺寸头，损坏块与动画拒绝 (8.42975ms)
+✔ 遵守 CODEX_HOME，根目录缺失为空但权限错误可以重试 (2.271167ms)
+✔ 副本库逐项验证内容编号，坏副本跳过且权限错误保留重试 (16.179833ms)
+✔ local directory import copies only validated data into an independent content-addressed store (12.510458ms)
+✔ local import rejects symlink, escapes, malformed and oversized resources before writing copies (5.207834ms)
+✔ local image decoder validates captured immutable bytes before atomic publish, failures leave no partial imports (13.886667ms)
+✔ local content namespace keeps identical Codex/local artwork separate without changing existing Codex ids (25.251542ms)
+✔ import cannot publish after its owning window session becomes invalid during decode (3.112459ms)
+✔ imports native 1x/2x/3x nine- and eleven-row atlases without changing manifest or image bytes (934.941666ms)
+✔ rejects fractional, excessive and inconsistent atlas scaling before invoking an image decoder (895.915625ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 20
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2152.959875

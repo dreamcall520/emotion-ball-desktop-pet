@@ -549,3 +549,12 @@ test('精简设置窗口默认600高，小工作区按实际高度缩小', async
   f.manager.sync();
   assert.deepEqual(f.win().getBounds(), {x:0,y:0,width:320,height:440});
 });
+
+test('settings tile closes launcher and delegates to global settings; explicit settings IPC retains keyboard editor', async t => {
+ t.mock.timers.enable({apis:['setTimeout']});const f=fixture();t.after(()=>f.manager.dispose());
+ f.manager.open();await flush();f.send('shortcut:action','settings');
+ assert.deepEqual(f.actions,['settings']);assert.equal(f.manager.isOpen(),false);
+ t.mock.timers.tick(180);assert.equal(f.win().isVisible(),false);
+ f.manager.open();await flush();f.send('shortcut:settings');await flush();
+ assert.equal(f.manager.isOpen(),true);assert.equal(f.manager.getState().view,'settings');assert.deepEqual(f.actions,['settings']);
+});

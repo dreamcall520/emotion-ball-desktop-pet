@@ -8,12 +8,12 @@ test('collects multiple eligible cards while preserving pinned order and one-car
 test('hover bar expands every unpinned card, whole group hover maintains it and bridge delay closes',()=>{const f=fixture();f.group.start();f.move({x:10,y:10});assert.deepEqual(f.group.getState().visible,['workbuddy','codex','api','zcode']);f.move({x:20,y:80},300);assert.equal(f.group.getState().expanded,true);f.move({x:500,y:500});f.tick(219);assert.equal(f.group.getState().expanded,true);f.tick(1);assert.equal(f.group.getState().expanded,false);f.group.close();});
 test('click keyboard hold is dismissible and external suppression overrides pinned/expanded',()=>{const f=fixture();f.group.start();f.group.activate();f.tick(1000);assert.equal(f.group.getState().expanded,true);f.input.suppressed=true;f.group.sync();assert.deepEqual(f.group.getState().visible,[]);assert.equal(f.group.getState().bar,false);f.input.suppressed=false;f.group.sync();assert.deepEqual(f.group.getState().visible,['codex']);f.group.activate();f.group.dismiss();assert.equal(f.group.getState().expanded,false);f.input.config.pinned=f.input.eligible;assert.equal(f.group.sync().bar,false);f.group.close();});
 test('bar remains in each display corner with left/right peek alignment',()=>{const area={x:-1000,y:20,width:1000,height:700};for(const x of [-1000,-80])for(const y of [20,640])for(const side of ['left','right']){const b=quotaCardBarBounds({x,y,width:80,height:80},area,{mode:'peeked',side});assert(b.x>=area.x&&b.x+b.width<=0&&b.y>=20&&b.y+b.height<=720);assert.equal(b.x,Math.round(Math.max(area.x,Math.min(x+16,area.x+area.width-48))));}});
-test('invalid ordering and pin ids cannot become arbitrary paths or actions',()=>{assert.deepEqual(normalizeQuotaCards({order:['api','api','url'],pinned:['api','url']}),{order:['api','codex','zcode','workbuddy','balance'],pinned:['api']});});
+test('invalid ordering and pin ids cannot become arbitrary paths or actions',()=>{assert.deepEqual(normalizeQuotaCards({order:['api','api','url'],pinned:['api','url']}),{order:['api','codex','zcode','workbuddy','balance','weather'],pinned:['api']});});
 
-test('null primitive and array IPC payloads normalize to a fixed safe config',()=>{for(const input of [null,1,'bad',[],undefined])assert.deepEqual(normalizeQuotaCards(input),{order:['codex','api','zcode','workbuddy','balance'],pinned:[]});});
+test('null primitive and array IPC payloads normalize to a fixed safe config',()=>{for(const input of [null,1,'bad',[],undefined])assert.deepEqual(normalizeQuotaCards(input),{order:['codex','api','zcode','workbuddy','balance','weather'],pinned:[]});});
 test('第五张余额卡追加到旧顺序，旧固定项原序保留，展开与收起仍按用户选择',()=>{
  const legacy={order:['workbuddy','api','codex','zcode'],pinned:['workbuddy','api']},original=JSON.stringify(legacy);
- assert.deepEqual(normalizeQuotaCards(legacy),{order:['workbuddy','api','codex','zcode','balance'],pinned:['workbuddy','api']});
+ assert.deepEqual(normalizeQuotaCards(legacy),{order:['workbuddy','api','codex','zcode','balance','weather'],pinned:['workbuddy','api']});
  assert.equal(JSON.stringify(legacy),original);
  const f=fixture();f.input.config=legacy;f.input.eligible=['codex','api','zcode','workbuddy','balance'];f.group.start();
  assert.deepEqual(f.group.getState().visible,['workbuddy','api']);f.group.activate();
@@ -72,4 +72,12 @@ test('ordinary movement cannot create a bridge and changed layout context or dra
  f.group.retainLayout(a,a,'pet-a');f.group.retainLayout(a,{cards:{zcode:{x:300,y:28,width:128,height:32}}},'pet-a');f.move({x:350,y:40});f.tick(220);assert.equal(f.group.getState().expanded,false,'ordinary movement does not retain empty old area');f.group.activate({keyboard:false});
  f.group.retainLayout(a,b,'pet-a');f.group.retainLayout(b,b,'pet-b');f.move({x:100,y:-100});f.tick(220);assert.equal(f.group.getState().expanded,false,'pet context change clears old interactive region');f.group.activate({keyboard:false});
  f.group.retainLayout(a,b,'pet-b');f.input.dragging=true;f.group.sync();f.input.dragging=false;f.group.activate({keyboard:false});f.group.retainLayout(a,b,'pet-b');f.input.suppressed=true;f.group.sync();f.group.close();
+});
+
+test('weather joins the same order/pin group only when eligible and leaves existing defaults unchanged',()=>{
+ const f=fixture();f.group.start();const before=f.group.getState();
+ assert.deepEqual(before.eligible,['workbuddy','codex','api','zcode']);assert.deepEqual(before.visible,['codex']);
+ f.input.config={order:['weather','codex','api','zcode','workbuddy','balance'],pinned:['weather']};f.input.eligible.push('weather');
+ assert.deepEqual(f.group.sync().visible,['weather']);f.group.activate();assert.deepEqual(f.group.getState().visible,['weather','codex','api','zcode','workbuddy']);
+ f.input.eligible=f.input.eligible.filter(id=>id!=='weather');assert(!f.group.sync().visible.includes('weather'));f.group.close();
 });

@@ -488,7 +488,7 @@ test('五卡顺序白名单去重补齐，固定展示独立持久化且不保�
   const file = path.join(dir, 'settings.json');
   const input = { quotaCardOrder:['workbuddy','api','api','bad',null], quotaCardPinned:['zcode','zcode','bad','api'], quotaCardExtra:'secret' };
   const saved = saveSettings(file, input);
-  assert.deepEqual(saved.quotaCardOrder, ['workbuddy','api','codex','zcode','balance']);
+  assert.deepEqual(saved.quotaCardOrder, ['workbuddy','api','codex','zcode','balance','weather']);
   assert.deepEqual(saved.quotaCardPinned, ['zcode','api']);
   assert.deepEqual(loadSettings(file), saved);
   assert.deepEqual(input.quotaCardOrder, ['workbuddy','api','api','bad',null]);
@@ -518,10 +518,22 @@ test('API余额默认关闭，旧排序和固定项原序及其他偏好在启�
     notesDefaultTab:'todo',chatSource:'workbuddy',startupAppearance:DEFAULTS.startupAppearance,customization:DEFAULTS.customization};
   fs.writeFileSync(file,JSON.stringify(legacy));const before=loadSettings(file);
   assert.equal(before.apiBalanceEnabled,false);assert.equal(before.apiBalanceAlwaysVisible,true);assert.equal(before.apiBalanceSelectedAccountId,'');
-  assert.deepEqual(before.quotaCardOrder,[...legacy.quotaCardOrder,'balance']);assert.deepEqual(before.quotaCardPinned,legacy.quotaCardPinned);
+  assert.deepEqual(before.quotaCardOrder,[...legacy.quotaCardOrder,'balance','weather']);assert.deepEqual(before.quotaCardPinned,legacy.quotaCardPinned);
   const saved=saveSettings(file,{...before,apiBalanceEnabled:true,apiBalanceAlwaysVisible:false,apiBalanceSelectedAccountId:selected});
   assert.deepEqual(loadSettings(file),saved);assert.equal(saved.apiBalanceSelectedAccountId,selected);
   for(const [key,value] of Object.entries(before))if(!key.startsWith('apiBalance'))assert.deepEqual(saved[key],value,key);
   const invalid=normalizeSettings({apiBalanceEnabled:'true',apiBalanceAlwaysVisible:'false',apiBalanceSelectedAccountId:'secret-token'});
   assert.equal(invalid.apiBalanceEnabled,false);assert.equal(invalid.apiBalanceAlwaysVisible,true);assert.equal(invalid.apiBalanceSelectedAccountId,'');
+});
+
+test('weather card shares order/pin persistence without enabling other integrations or replacing their display preferences', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qiuqiu-weather-card-settings-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'settings.json'), before = normalizeSettings({ codexQuotaAlwaysVisible: false, workbuddyQuotaAlwaysVisible: false });
+  saveSettings(file, { ...before, quotaCardOrder: ['weather', 'codex', 'api', 'zcode', 'workbuddy', 'balance'], quotaCardPinned: ['weather', 'codex'] });
+  const saved = loadSettings(file);
+  assert.deepEqual(saved.quotaCardOrder, ['weather', 'codex', 'api', 'zcode', 'workbuddy', 'balance']);
+  assert.deepEqual(saved.quotaCardPinned, ['weather', 'codex']);
+  assert.equal(saved.codexQuotaAlwaysVisible, false); assert.equal(saved.workbuddyQuotaAlwaysVisible, false);
+  assert.equal(saved.codexEnabled, before.codexEnabled); assert.equal(saved.workbuddyEnabled, before.workbuddyEnabled);
 });

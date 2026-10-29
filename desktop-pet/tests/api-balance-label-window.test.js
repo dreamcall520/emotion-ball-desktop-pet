@@ -18,7 +18,7 @@ function fixture(overrides = {}) {
         getURL: () => 'file:///api-balance-label.html', capturePage: async () => ({ isEmpty: () => false, toPNG: () => Buffer.from('fixture png') }) }); windows.push(this);
     }
     isDestroyed() { return this.dead; } isVisible() { return this.visible; } setAlwaysOnTop() {} setVisibleOnAllWorkspaces() {} setHiddenInMissionControl() {}
-    setIgnoreMouseEvents(value) { this.ignored = value; } setBounds(value) { this.bounds = { ...value }; } getBounds() { return { ...this.bounds }; }
+    setIgnoreMouseEvents(value) { this.ignored = value; } setBounds(value, animate) { (this.boundsCalls ||= []).push({ bounds: { ...value }, animate }); this.bounds = { ...value }; } getBounds() { return { ...this.bounds }; }
     showInactive() { this.visible = true; } hide() { this.visible = false; } destroy() { this.dead = true; this.emit('closed'); } loadFile() { return Promise.resolve(); }
   }
   const controller = createApiBalanceLabelWindow({ BrowserWindow: Window, screen: { getDisplayMatching: () => ({ workArea: { x: 0, y: 0, width: 1000, height: 900 } }) },
@@ -96,4 +96,26 @@ test('balance preload only emits validated account IDs and does not expose crede
   assert.deepEqual(sent, [['pet:api-balance-label-select', id]]); assert.equal(bridge.send, undefined); assert.equal(bridge.readFile, undefined);
   let state; const remove = bridge.onState(value => { state = value; }); listeners.get('pet:api-balance-label')({}, { enabled: true }); assert.equal(state.enabled, true);
   remove(); assert.equal(listeners.has('pet:api-balance-label'), false);
+});
+
+
+test('balance card avoids native scaling for user size toggles, deduplicates refreshes and honors reduced/group transitions', async t => {
+  const f = fixture(); t.after(() => f.controller.destroy());
+  f.controller.show(source); await Promise.resolve();
+  const win = f.controller.getWindow();
+  assert.equal(win.boundsCalls.at(-1).animate, false);
+  const initial = win.boundsCalls.length;
+  f.controller.reposition(); f.controller.show(source); f.controller.reposition();
+  assert.equal(win.boundsCalls.length, initial, 'identical refreshes must not restart a native resize');
+  f.send('toggle'); assert.equal(win.boundsCalls.at(-1).animate, false); assert.equal(win.boundsCalls.at(-1).bounds.height, 120);
+  const expanded = win.boundsCalls.length; f.controller.reposition(); assert.equal(win.boundsCalls.length, expanded);
+  f.send('toggle'); await new Promise(resolve=>setTimeout(resolve,230)); assert.equal(win.boundsCalls.at(-1).animate, false); assert.equal(win.boundsCalls.at(-1).bounds.height, 32);
+  f.presentation({ mode: 'free', quotaReducedMotion: true });
+  f.send('toggle'); assert.equal(win.boundsCalls.at(-1).animate, false);
+  f.presentation({ mode: 'free' });
+  f.controller.setGroupTransitionMode('hold'); f.controller.resetExpanded();
+  const held = win.boundsCalls.length; f.controller.reposition(); assert.equal(win.boundsCalls.length, held);
+  f.controller.setGroupTransitionMode('stage'); assert.equal(win.boundsCalls.at(-1).animate, false); assert.equal(win.boundsCalls.at(-1).bounds.height, 32);
+  f.controller.setGroupTransitionMode('masked'); f.controller.reposition(); assert.equal(win.boundsCalls.at(-1).animate, false);
+  f.controller.setGroupTransitionMode(null); assert.equal(win.boundsCalls.at(-1).animate, false);
 });

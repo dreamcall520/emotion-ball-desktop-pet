@@ -1,0 +1,28 @@
+✖ 可信定制入口完整解码副本后保存内容ID，源与副本引用都可收藏且不持久化URL (58.389292ms)
+✔ 副本解码失败或尺寸不符时拒绝保存与新增收藏，原设置和广播均保持 (16.930792ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 148.967083
+
+✖ failing tests:
+
+test at desktop-pet/tests/main-motion.test.js:3508:1
+✖ 可信定制入口完整解码副本后保存内容ID，源与副本引用都可收藏且不持久化URL (58.389292ms)
+  Error: [2026-10-26T08:08:10.358Z] 校验 Codex 宠物: Error: 宠物图片无法解码
+      at prepareCodexAppearance (evalmachine.<anonymous>:811:89)
+      at async evalmachine.<anonymous>:3408:45
+      at async TestContext.<anonymous> (<workspace>/desktop-pet/tests/main-motion.test.js:3527:18)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+  
+      at Object.write (<workspace>/desktop-pet/tests/main-motion.test.js:211:64)
+      at writeError (evalmachine.<anonymous>:226:18)
+      at evalmachine.<anonymous>:3409:23
+      at async TestContext.<anonymous> (<workspace>/desktop-pet/tests/main-motion.test.js:3527:18)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)

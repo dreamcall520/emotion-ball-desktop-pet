@@ -5,6 +5,7 @@ const { spawnSync } = require('node:child_process');
 process.env.ELECTRON_GET_USE_PROXY ||= '1';
 const { packager } = require('@electron/packager');
 const { makeIcon } = require('./make-icon');
+const { buildWeatherLocation } = require('./build-weather-location');
 
 const ELECTRON_ZIP = 'electron-v43.4.1-darwin-arm64.zip';
 
@@ -15,7 +16,7 @@ function copyFile(root, staging, relativePath) {
   fs.copyFileSync(source, destination);
 }
 
-function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/staging')) {
+function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/staging'), { weatherNative = true } = {}) {
   const rootPackage = JSON.parse(
     fs.readFileSync(path.join(root, 'package.json'), 'utf8')
   );
@@ -24,8 +25,18 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
 
   const sheepManifest = require('../lib/sheep-skin').validateManifest(JSON.parse(
     fs.readFileSync(path.join(root, 'desktop-pet/assets/sheep/manifest.json'), 'utf8')));
+  const weatherIconRoot = 'desktop-pet/assets/weather/meteocons';
+  const weatherManifest = JSON.parse(fs.readFileSync(path.join(root, weatherIconRoot, 'SOURCE.json'), 'utf8'));
+  const weatherIconFiles = weatherManifest.files.map(entry => {
+    if (!/^(animated|static)\/[a-z-]+\.svg$/.test(entry.path)) throw new Error('Invalid weather icon manifest path');
+    return `${weatherIconRoot}/${entry.path}`;
+  });
   const files = [
+    ...weatherIconFiles,
+    ...['LICENSE', 'SOURCE.json', 'README.md'].map(file => `${weatherIconRoot}/${file}`),
+    ...(weatherNative ? ['desktop-pet/native/weather-location.node'] : []),
     'desktop-pet/main.js',
+    ...['weather.html','weather.css','weather-preload.js','weather-renderer.js','lib/weather-service.js','lib/weather-window.js','lib/weather-pet-effects.js','lib/weather-context.js','lib/weather-location.js'].map(file => `desktop-pet/${file}`),
     'desktop-pet/scripts/verify-workbuddy-integration.js',
     'desktop-pet/lib/workbuddy-helper.cjs',
     'desktop-pet/lib/workbuddy-consent-window.js',
@@ -191,6 +202,7 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/lib/settings.js',
     'desktop-pet/lib/native-window-fade.js',
     'desktop-pet/lib/quota-card-motion.js',
+    'desktop-pet/lib/quota-card-resize.js',
     'desktop-pet/lib/quota-card-group-transition.js',
     'desktop-pet/lib/quota-group-capture.js',
     'desktop-pet/lib/quota-card-transition-window.js',
@@ -350,7 +362,8 @@ function buildPackagerOptions(root, icon, electronZipDir = null) {
     appBundleId: 'local.xiaokun.emotionball.pet',
     appCategoryType: 'public.app-category.entertainment',
     icon,
-    asar: true,
+    asar: { unpack: '**/*.node' },
+    extendInfo: { NSLocationWhenInUseUsageDescription: '用于显示当前位置天气；也可以不授权并手动选择城市。', NSLocationUsageDescription: '用于获取当前位置天气。' },
     overwrite: true,
     prune: true,
     quiet: true
@@ -380,7 +393,15 @@ function adhocSign(appPath) {
   runTool('codesign', ['--verify', '--deep', '--strict', appPath]);
 }
 
+function signWeatherApp(appPath) {
+  const nativePath = path.join(appPath, 'Contents/Resources/app.asar.unpacked/desktop-pet/native/weather-location.node');
+  if (!fs.existsSync(nativePath)) throw new Error('天气定位组件未解包');
+  adhocSign(nativePath);
+  adhocSign(appPath);
+}
+
 async function packageMac(root = path.resolve(__dirname, '../..'), { website = false, nativeIcon = false } = {}) {
+  buildWeatherLocation(root);
   const icon = makeIcon(root);
   const staging = prepareStaging(root, website ? path.join(root, 'desktop-pet/build/website-staging') : undefined);
   const electronZipDir = findElectronZipDir();
@@ -388,14 +409,14 @@ async function packageMac(root = path.resolve(__dirname, '../..'), { website = f
   options.dir = staging;
   if (nativeIcon) {
     options.extraResource = [path.join(root, 'desktop-pet/assets/app-icon-native/Assets.car')];
-    options.extendInfo = { CFBundleIconName: 'QiuqiuA1' };
+    options.extendInfo = { ...options.extendInfo, CFBundleIconName: 'QiuqiuA1' };
   }
   if (website) options.out = path.join(root, 'dist/website');
   const paths = await packager(options);
   if (!paths.length) throw new Error('未生成 macOS 应用');
   const appPath = path.join(paths[0], '球球桌宠.app');
   if (!fs.existsSync(appPath)) throw new Error(`找不到打包后的应用: ${appPath}`);
-  adhocSign(appPath);
+  signWeatherApp(appPath);
   process.stdout.write(`${appPath}\n`);
   return appPath;
 }
@@ -409,6 +430,7 @@ if (require.main === module) {
 
 module.exports = {
   buildPackagerOptions,
+  signWeatherApp,
   adhocSign,
   findElectronZipDir,
   prepareStaging,

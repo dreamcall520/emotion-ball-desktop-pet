@@ -33,6 +33,14 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
   const connections = [];
   const preferences = [];
   const groupTransition={requests:[],cancels:0,active:false,options:null,current:null};
+  const weather = { enabled: false, cardVisible: true, options: null, opens: 0, cityOpens: 0, repositions: 0, expanded: false,
+    isEnabled() { return this.enabled; }, isExpanded() { return this.enabled && this.cardVisible && this.expanded; }, isCardVisible() { return this.cardVisible; }, getState: () => ({status:'unconfigured'}),
+    setEnabled(value) { this.enabled = value === true; this.options.onChange({enabled:this.enabled}); },
+    setCardVisible(value) { this.cardVisible = value === true; this.options.onLayout(); }, open() { this.opens++; }, openCity() { this.cityOpens++; }, start() {},
+    getWindow: () => null, getBounds: () => null, getVisibleBounds: () => null,
+    getLayoutMetrics() { return this.enabled && this.cardVisible ? {width:128,height:32,inset:2}:null; },
+    reposition() { this.repositions++; }, resetExpanded() { this.expanded=false; },setGroupTransitionMode() {},captureGroupTransitionFrames:async()=>[],
+    setAlwaysOnTop(){},pause(){},resume(){},destroy(){} };
   const iconPreference = { value: 'codex-system', dark: false, calls: [] };
   const dialogs = [];
   const external = [];
@@ -73,6 +81,7 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
   const screen = Object.assign(new EventEmitter(), { getPrimaryDisplay: () => display, getAllDisplays: () => [display], getDisplayMatching: () => display,
     getCursorScreenPoint: () => ({ x: -900, y: -100 }) });
   class NativeWindow extends EventEmitter {
+    static getAllWindows() { return windows.filter(win => !win.destroyed); }
     constructor(options) {
       super(); this.bounds = { x: options.x, y: options.y, width: options.width, height: options.height };
       this.options = options;
@@ -214,6 +223,7 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
     setTimeout(callback, delay) { timers.set(++serial, { callback, at: now + delay }); return serial; },
     clearTimeout(id) { timers.delete(id); },
     require(name) {
+      if (name === './lib/weather-window') return {createWeatherWindow:options=>{weather.options=options;return weather;}};
       if (name === 'electron') return { app, ipcMain, powerMonitor, nativeTheme, screen, globalShortcut, BrowserWindow: NativeWindow, Tray, net,
         dialog: { showMessageBox: (...args) => { dialogs.push(args); return consent(...args); } },
         shell: { openExternal: url => { external.push(url); return openExternal(url); }, showItemInFolder: file => revealed.push(file) },
@@ -350,7 +360,7 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
   const pet = windows[0];
   pet.emit('ready-to-show');
   pet.webContents.emit('did-finish-load');
-  return { groupTransition, pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, downloads, revealed, consents, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
+  return { weather, groupTransition, pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, downloads, revealed, consents, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
     iconPreference, workbuddyCalls, workbuddyRecords, balanceCalls, balanceWatches, balanceRecoveries, workbuddyRecoveries,
     get balanceReads() { return balanceReads; }, get balanceUnwatches() { return balanceUnwatches; }, setOnline(value) { networkOnline = value; },
     notes, pomodoro, pomodoroWindows, nativeTheme, call: expression => vm.runInContext(expression, context),
@@ -959,6 +969,8 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   assert.equal(top.find(item => item.id === 'chat-open').submenu, undefined);
   assert.equal(top[6].id, 'customize-open');
   assert.equal(top[1].submenu, undefined);
+  assert.equal(findMenuItem(menu, 'weather'), null);
+  assert.equal(findMenuItem(menu, 'weather-open'), null);
   assert.deepEqual(Array.from(group('便签与待办'), item => item.id), ['notes-open', 'notes-new', 'notes-todo-new', 'notes-default-tab']);
   assert.deepEqual(Array.from(group('便签与待办'), item => item.label), ['打开主面板', '新建便签', '添加待办', '默认打开']);
   assert.deepEqual(Array.from(menuItem(f, 'notes-default-tab').submenu, item => [item.id, item.label, item.type, item.checked]),
@@ -3027,7 +3039,7 @@ test('从球球开始指针操作时所有存活额度卡退出键盘高亮，�
     card.getWindow = () => win;
     return { messages, win };
   })`);
-  assert.equal(cards.length,5);
+  assert.equal(cards.length,6);
   f.send('pet:drag-start',{x:20,y:20},{});
   f.send('pet:drag-start',{x:NaN,y:20});
   assert(cards.every(card => card.messages.length === 0));
@@ -3127,7 +3139,7 @@ test('hop开始100ms后真实拖起与落地链路会隐藏专属旧泡，旧按
   f.send('pet:drag-move', { x: 70, y: 70 });
   f.send('pet:say', 'drag');
   assert.equal(f.bubble.shows.length, 1, '拖起新文案仍遵守冷却');
-  assert.equal(f.bubble.hides, hides + 1, '旧hop文案必须同步隐藏');
+  assert.equal(f.bubble.hides, hides + 2, '动作取消和真实拖动各自隐藏气泡，旧hop文案必须同步隐藏');
   const replies = f.commands.length;
   f.send('pet:bubble-reply', { id: first.id, action: 'again' }, f.bubble);
   assert.equal(f.commands.length, replies, '旧气泡不能发出重播命令');
@@ -4193,7 +4205,7 @@ test('quota card collection uses real enable flags, persists pin/order and rejec
  f.call('openGlobalSettings()');const win=f.call('globalSettingsWindow');win.emit('ready-to-show');
  assert.equal((await f.invoke('pet:global-quota-cards-save',{order:['api','codex'],pinned:['api']})).ok,false);
  const result=await f.invoke('pet:global-quota-cards-save',{order:['api','codex'],pinned:['api']},win.webContents);
- assert.equal(result.ok,true);assert.deepEqual(Array.from(result.config.order),['api','codex','zcode','workbuddy','balance']);
+ assert.equal(result.ok,true);assert.deepEqual(Array.from(result.config.order),['api','codex','zcode','workbuddy','balance','weather']);
  f.call('quotaCardGroup.dismiss()');assert.equal(f.call("quotaCardCollected('codex')"),true);assert.equal(f.call("quotaCardCollected('api')"),false);
  assert.deepEqual(Array.from(f.saved.at(-1).quotaCardPinned),['api']);
  assert.equal(f.call("quotaCardGroupAnimate('api')"),false);assert.equal(f.call("quotaCardGroupAnimate('codex')"),false,'single-card fades are replaced by one group overlay');
@@ -4302,8 +4314,8 @@ test('pinned native cards detach from both dock edges during drag and reflow at 
   const card=f.call('quotaLabel.getWindow()');card.webContents.emit('did-finish-load');
   f.call(`edgeTuck.dock('${side}');edgeTuck.sampleCursor({x:petWindow.getBounds().x+40,y:petWindow.getBounds().y+40})`);
   const initial=f.pet.getBounds();f.send('pet:drag-start',{x:initial.x+40,y:initial.y+40});f.send('pet:drag-move',{x:-380,y:240});
-  const during=f.call('quotaFreeStackPlan()');assert.equal(f.call('quotaLayoutPresentation().mode'),'free');assert.equal(card.getBounds().x,during.cards.codex.x);assert(during.cards.codex.face.x>-650&&during.cards.codex.face.x<-100,'card follows the moved pet instead of old screen edge');
-  f.send('pet:drag-end');assert.equal(f.call('edgeTuck.getPresentation().mode'),'free');assert.equal(card.getBounds().x,f.call('quotaFreeStackPlan().cards.codex.x'));
+  const during=f.call('quotaFreeStackPlan()');assert.equal(f.call('quotaLayoutPresentation().mode'),'free');assert.deepEqual(f.call('quotaLabel.getVisibleBounds()'),during.cards.codex.face,'drag reflows the actual card face independently of its stable carrier');assert(during.cards.codex.face.x>-650&&during.cards.codex.face.x<-100,'card follows the moved pet instead of old screen edge');
+  f.send('pet:drag-end');assert.equal(f.call('edgeTuck.getPresentation().mode'),'free');assert.deepEqual(f.call('quotaLabel.getVisibleBounds()'),f.call('quotaFreeStackPlan().cards.codex.face'),'release keeps the card face aligned to the shared stack');
   f.pet.setPosition(-440,520,false);const above=f.call('quotaFreeStackPlan()');assert.equal(above.placement,'above');const paintedTop=shape==='blob'?520:536;assert.equal(paintedTop-(above.cards.codex.face.y+above.cards.codex.face.height),8);
   const bar=f.call('quotaCardGroupWindow.getBounds()');assert(bar.y+13.5<=above.cards.codex.face.y-6,'bar stays above upper stack without touching blob');
  }
@@ -4579,4 +4591,100 @@ test('API余额趋势通过主卡打开，切账户同步，关闭恢复卡组�
  const pending=f.call('apiBalanceDetails.getWindow()');
  f.call("setApiBalancePreference('apiBalanceEnabled',false)");pending.webContents.emit('did-finish-load');
  assert.equal(pending.isVisible(),false,'late renderer readiness cannot reopen after disable');
+});
+
+test('weather settings are settings-only commands and never appear in either right-click menu', async t => {
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));
+ for(const menu of [f.call('menuTemplate()'),f.call('compactMenuTemplate()')]) for(const id of ['weather','weather-enabled','weather-visible','weather-open']) assert.equal(findMenuItem(menu,id),null);
+ f.call("openGlobalSettings('quota-cards')");const win=f.call('globalSettingsWindow');win.emit('ready-to-show');
+ const snapshot=await f.invoke('pet:global-settings-get',undefined,win.webContents);
+ assert(snapshot.entries.some(item=>item.id==='/weather-enabled'));assert(snapshot.entries.some(item=>item.id==='/weather-visible'));assert(snapshot.entries.some(item=>item.id==='/weather-open'));
+ assert.equal((await f.invoke('pet:global-settings-action','/weather-enabled',win.webContents,true)).error,undefined);
+ assert.equal(f.weather.enabled,true);assert(f.call('quotaCardGroupInput().eligible').includes('weather'));
+ assert.equal((await f.invoke('pet:global-settings-action','/weather-visible',win.webContents,false)).error,undefined);
+ assert.equal(f.weather.cardVisible,false);assert(!f.call('quotaCardGroupInput().eligible').includes('weather'));
+ await f.invoke('pet:global-settings-action','/weather-open',win.webContents);assert.equal(f.weather.cityOpens,1);assert.equal(f.weather.opens,0,'settings opens the explicit city picker, not only a folded card');
+});
+test('weather participates in shared order, pins, collected state, presentation and shortcut routing',async t=>{
+ const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,quotaCardPinned:['codex']});t.after(()=>f.app.emit('before-quit'));
+ const before=Array.from(f.call('quotaCardGroupInput().eligible'));f.weather.setEnabled(true);
+ assert.deepEqual(Array.from(f.call('quotaCardGroupInput().eligible')),before.concat('weather'));
+ assert.equal(f.call('quotaCardControllers().weather'),f.weather);
+ f.call("settings.quotaCardOrder=['weather','codex','api','zcode','workbuddy','balance'];settings.quotaCardPinned=['weather'];syncQuotaCardGroup();syncQuotaFreeStack()");
+ assert.deepEqual(Array.from(f.call('quotaCardGroup.getState().visible')),['weather']);
+ assert.equal(f.weather.options.getPresentation().quotaGroupHidden,false);
+ assert(f.call('quotaFreeStackPlan().cards.weather'));
+ f.call("settings.quotaCardPinned=['codex'];syncQuotaCardGroup();syncQuotaFreeStack()");
+ assert.equal(f.weather.options.getPresentation().quotaGroupHidden,true);
+ f.call("openShortcutAction('weather')");assert.equal(f.weather.opens,1);
+ f.weather.setEnabled(false);assert.deepEqual(Array.from(f.call('quotaCardGroupInput().eligible')),before);
+});
+
+test('expanded weather exclusively owns the card area, hides collection bar and closes Codex guard until collapse',async t=>{
+ const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,quotaCardPinned:['codex','weather']});t.after(()=>f.app.emit('before-quit'));
+ f.call("settings.openaiApiAlwaysVisible=true;syncApiUsageLabel()");f.weather.setEnabled(true);f.call('quotaCardGroup.activate({keyboard:false});quotaCardGroupTransition.finish()');
+ f.connections[0].callbacks.onQuota({updatedAt:1800000000000,windows:[{id:'codex:primary',label:'Codex',windowMinutes:300,remaining:42,resetsAt:1800003600000}]});
+ f.call("globalThis.guardClosed=0;quotaGuardSource='codex';quotaGuard={close(){guardClosed++},update(){},reposition(){},isVisible:()=>false,getWindow:()=>null};syncQuotaLabel()");
+ const bar=f.windows.find(win=>win.options.webPreferences?.preload?.endsWith('quota-card-group-preload.js'));assert(bar);
+ assert.equal(f.quotaLabel.visible,true);f.weather.expanded=true;f.weather.options.onLayout();
+ for(const id of ['codex','api','zcode','workbuddy','balance'])assert.equal(f.call(`quotaCardCollected('${id}')`),true,id);
+ assert.equal(f.quotaLabel.visible,false);assert.equal(f.call('guardClosed')>0,true);
+ assert.equal(bar.isVisible(),false);
+ assert.equal(f.apiLabel.options.getPresentation().quotaGroupHidden,true);
+ assert.equal(f.weather.options.getPresentation().quotaGroupHidden,false,'weather does not suppress itself');
+ f.weather.expanded=false;f.weather.options.onLayout();
+ assert.equal(f.quotaLabel.visible,true);assert.equal(bar.isVisible(),true);
+ assert.equal(f.call("quotaCardCollected('api')"),false);assert.equal(Boolean(f.apiLabel.options.getPresentation().quotaGroupHidden),false);
+});
+
+
+test('weather expansion survives a click and real drag preserves the compact card; expanded weather rejects bubbles', async t => {
+ const f=await fixture({quotaCardPinned:['weather']});t.after(()=>f.app.emit('before-quit'));
+ f.weather.setEnabled(true);f.weather.expanded=true;
+ let resets=0;const reset=f.weather.resetExpanded.bind(f.weather);f.weather.resetExpanded=()=>{resets++;reset();};
+ const shows=f.bubble.shows.length;
+ assert.equal(f.call("showBubble({id:'weather-covered',text:'普通互动'})"),false);
+ assert.equal(f.bubble.shows.length,shows,'expanded weather does not create a covering bubble');
+ f.send('pet:drag-start',{x:20,y:20});f.send('pet:drag-move',{x:23,y:24});f.send('pet:drag-end');
+ assert.equal(resets,0,'movement within 6px remains a click');assert.equal(f.weather.expanded,true);
+ assert.equal(Boolean(f.weather.options.getSuppressed()),false);
+ f.send('pet:drag-start',{x:20,y:20});const hides=f.bubble.hides,repositions=f.weather.repositions;
+ f.send('pet:drag-move',{x:40,y:40});
+ assert.equal(resets,1);assert.equal(f.weather.expanded,false);assert.equal(Boolean(f.weather.options.getSuppressed()),false,'compact weather follows during dragging');
+ assert.equal(f.bubble.hides,hides+1,'real drag hides any previous bubble');assert(f.weather.repositions>repositions);
+ f.send('pet:drag-move',{x:45,y:45});assert.equal(resets,1,'continuing the same drag does not reset repeatedly');
+ f.send('pet:drag-end');assert.equal(Boolean(f.weather.options.getSuppressed()),false);assert.equal(f.weather.expanded,false,'drop restores compact state');
+});
+
+test('shortcut settings tile opens global settings while explicit shortcut settings keeps keyboard editor',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));
+ const load=f.windowClass.prototype.loadFile;f.windowClass.prototype.loadFile=function(file){const result=load.call(this,file);return file.endsWith('/shortcuts.html')?Promise.resolve():result;};
+ f.call('openShortcuts()');await flush();const win=f.call('shortcutWindow.getWindow()');win.webContents.getURL=()=>require('node:url').pathToFileURL(path.resolve(__dirname,'../shortcuts.html')).href;
+ f.send('shortcut:action','settings',win.webContents);await flush();
+ assert.equal(f.call('shortcutWindow.isOpen()'),false);
+ assert.ok(f.call('globalSettingsWindow'));assert.equal(f.call('globalSettingsInitialView'),'common');
+ f.call('openShortcuts()');await flush();f.send('shortcut:settings',undefined,win.webContents);await flush();
+ assert.equal(f.call('shortcutWindow.getState().view'),'settings');assert.equal(f.call('shortcutWindow.isOpen()'),true);
+});
+
+test('destroyed API usage references cannot crash weather placement or repeated native close events',async t=>{
+ const f=await fixture({quotaCardPinned:['weather']});t.after(()=>f.app.emit('before-quit'));
+ f.weather.setEnabled(true);f.call('openApiUsage()');const win=f.call('apiUsageWindow');
+ const originalReposition=f.weather.reposition.bind(f.weather);let checked=0;
+ f.weather.reposition=()=>{originalReposition();f.weather.options.getPresentation();f.weather.options.getSuppressed();f.weather.options.getStackAnchor();f.weather.options.getObstacles();checked++;};
+ win.destroyed=true;win.isVisible=()=>{throw Error('Object has been destroyed');};
+ assert.doesNotThrow(()=>f.call("quotaCardCollected('weather')"));
+ assert.doesNotThrow(()=>f.weather.reposition());const dialogs=f.dialogs.length;
+ for(const event of ['hide','closed','resize','move','closed'])assert.doesNotThrow(()=>win.emit(event),event);
+ assert.equal(f.call('apiUsageWindow'),null,'closed clears the owner before layout callbacks');
+ assert(checked>=6,'real weather obstacle callbacks run for each native event');
+ assert.equal(f.dialogs.length,dialogs,'repeated close events do not create error dialogs');
+});
+
+for(const [open,variable] of [['openGlobalSettings','globalSettingsWindow'],['openAbout','aboutWindow']])test(`${variable} replaces destroyed owners and ignores late close from the previous window`,async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call(`${open}()`);const old=f.call(variable);
+ old.destroyed=true;old.isVisible=()=>{throw Error('Object has been destroyed');};
+ assert.doesNotThrow(()=>f.call(`${open}()`));const fresh=f.call(variable);assert.notEqual(fresh,old);
+ assert.doesNotThrow(()=>old.emit('closed'));assert.doesNotThrow(()=>old.emit('closed'));assert.equal(f.call(variable),fresh);
+ fresh.emit('ready-to-show');assert.equal(fresh.isVisible(),true);
 });

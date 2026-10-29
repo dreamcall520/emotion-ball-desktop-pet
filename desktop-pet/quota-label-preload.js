@@ -244,9 +244,26 @@ contextBridge.exposeInMainWorld('petQuotaLabel', {
         if ([48,64].includes(targetWidth)) model.guardTargetWidth = targetWidth;
         const side = source?.guardSide;
         if (['left', 'right'].includes(side)) model.guardSide = side;
+        const transition = record(source?.cardTransition);
+        const host = record(transition?.host), from = record(transition?.from), to = record(transition?.to);
+        const dimension = value => Number.isFinite(value) && value > 0 && value <= 2048;
+        const frame = value => value && dimension(value.width) && dimension(value.height) &&
+          Number.isFinite(value.left) && value.left >= 0 && value.left + value.width <= host.width + 1 &&
+          Number.isFinite(value.top) && value.top >= 0 && value.top + value.height <= host.height + 1;
+        if (host && dimension(host.width) && dimension(host.height) && transition.duration === 180 && frame(from) && frame(to)) {
+          const copy = value => ({left:value.left,top:value.top,width:value.width,height:value.height});
+          model.cardTransition = {from:copy(from),to:copy(to),host:{width:host.width,height:host.height},duration:180};
+        }
+        const viewport = record(source?.cardViewport), viewportHost = record(viewport?.host), viewportFace = record(viewport?.face);
+        if (viewportHost && viewportFace && dimension(viewportHost.width) && dimension(viewportHost.height) &&
+            dimension(viewportFace.width) && dimension(viewportFace.height) &&
+            Number.isFinite(viewportFace.left) && viewportFace.left >= 0 && viewportFace.left + viewportFace.width <= viewportHost.width + 1 &&
+            Number.isFinite(viewportFace.top) && viewportFace.top >= 0 && viewportFace.top + viewportFace.height <= viewportHost.height + 1) {
+          model.cardViewport = {host:{width:viewportHost.width,height:viewportHost.height},face:{left:viewportFace.left,top:viewportFace.top,width:viewportFace.width,height:viewportFace.height}};
+        }
         const inset = record(source?.cardInset);
         const x = inset?.x, y = inset?.y;
-        if (Number.isFinite(x) && x >= 0 && x <= 72 && Number.isFinite(y) && y >= 0 && y <= 18) model.cardInset = { x, y };
+        if (Number.isFinite(x) && x >= 0 && x <= 512 && Number.isFinite(y) && y >= 0 && y <= 512) model.cardInset = { x, y };
       } catch (_) {}
       try { callback(model); } catch (_) {}
     };

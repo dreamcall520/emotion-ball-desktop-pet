@@ -1,0 +1,88 @@
+✔ nine original actions crop their real rows, skip unused columns, and retain per-frame timing (2.374834ms)
+✖ HD atlases retain native backing pixels through all display sizes and Retina changes (0.889417ms)
+✖ HD load rejects inconsistent or unsupported grids and resets backing dimensions for old pets (0.198125ms)
+✔ Codex idle takes 6.6 seconds while the wave retains its 700ms cycle (0.132625ms)
+✔ pause, hidden, reduced motion and destroy cancel scheduling without restarting paused frames (0.148916ms)
+✔ descriptor and dimensions reject remote images, inconsistent versions and wrong grids; v2 reload works (0.528125ms)
+✔ 读取两版精灵图，导入原子副本可重读且不依赖 Codex 来源 (49.161ms)
+✔ 坏元数据、未知版本、尺寸不符和越界资源逐项跳过 (8.601958ms)
+✔ 拒绝目录、元数据和图片的符号链接及非正规文件 (20.702666ms)
+✔ 资源大小限额、解码失败和导入副本篡改不会被接受 (18.812958ms)
+✔ WebP 支持 VP8L、VP8 和 VP8X 尺寸头，损坏块与动画拒绝 (8.782333ms)
+✔ 遵守 CODEX_HOME，根目录缺失为空但权限错误可以重试 (2.385083ms)
+✔ 副本库逐项验证内容编号，坏副本跳过且权限错误保留重试 (16.032542ms)
+✔ local directory import copies only validated data into an independent content-addressed store (14.578ms)
+✔ local import rejects symlink, escapes, malformed and oversized resources before writing copies (5.02625ms)
+✔ local image decoder validates captured immutable bytes before atomic publish, failures leave no partial imports (14.944292ms)
+✔ local content namespace keeps identical Codex/local artwork separate without changing existing Codex ids (30.344167ms)
+✔ import cannot publish after its owning window session becomes invalid during decode (1.836459ms)
+✖ imports native 1x/2x/3x nine- and eleven-row atlases without changing manifest or image bytes (255.288958ms)
+✔ rejects fractional, excessive and inconsistent atlas scaling before invoking an image decoder (908.607083ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 17
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1493.547333
+
+✖ failing tests:
+
+test at desktop-pet/tests/codex-pet-player.test.js:57:1
+✖ HD atlases retain native backing pixels through all display sizes and Retina changes (0.889417ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  'error' !== 'ready'
+  
+      at TestContext.<anonymous> (<workspace>/desktop-pet/tests/codex-pet-player.test.js:63:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)
+      at Test.postRun (node:internal/test_runner/test:1537:19)
+      at Test.run (node:internal/test_runner/test:1462:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'error',
+    expected: 'ready',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at desktop-pet/tests/codex-pet-player.test.js:82:1
+✖ HD load rejects inconsistent or unsupported grids and resets backing dimensions for old pets (0.198125ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  208 !== 624
+  
+      at TestContext.<anonymous> (<workspace>/desktop-pet/tests/codex-pet-player.test.js:92:10)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)
+      at Test.postRun (node:internal/test_runner/test:1537:19)
+      at Test.run (node:internal/test_runner/test:1462:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 208,
+    expected: 624,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at desktop-pet/tests/codex-pets.test.js:223:1
+✖ imports native 1x/2x/3x nine- and eleven-row atlases without changing manifest or image bytes (255.288958ms)
+  Error: 宠物精灵图尺寸不合法
+      at fail (<workspace>/desktop-pet/lib/codex-pets.js:9:63)
+      at readPet (<workspace>/desktop-pet/lib/codex-pets.js:118:66)
+      at Object.importDirectory (<workspace>/desktop-pet/lib/codex-pets.js:201:19)
+      at TestContext.<anonymous> (<workspace>/desktop-pet/tests/codex-pets.test.js:231:29)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)
+      at Test.postRun (node:internal/test_runner/test:1537:19)
+      at Test.run (node:internal/test_runner/test:1462:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    code: 'INVALID_PET'
+  }

@@ -1,0 +1,25 @@
+✖ local partner backend decodes real PNG/WebP in hidden Chromium before publishing independent copies (564.829833ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 631.109
+
+✖ failing tests:
+
+test at desktop-pet/tests/local-pets-native.test.js:27:7
+✖ local partner backend decodes real PNG/WebP in hidden Chromium before publishing independent copies (564.829833ms)
+  Error: Error: 宠物精灵图尺寸不合法
+      at fail (<repository>/desktop-pet/lib/codex-pets.js:9:63)
+      at readPet (<repository>/desktop-pet/lib/codex-pets.js:118:66)
+      at Object.importDirectory (<repository>/desktop-pet/lib/codex-pets.js:201:19)
+      at <workspace>/desktop-pet/tests/local-pets-native.test.js:18:40 {
+    code: 'INVALID_PET'
+  }
+  
+      at ChildProcess.<anonymous> (<workspace>/desktop-pet/tests/local-pets-native.test.js:28:452)
+      at ChildProcess.emit (node:events:514:20)
+      at ChildProcess._handle.onexit (node:internal/child_process:294:12)

@@ -67,3 +67,8 @@ button:disabled { cursor: default; opacity: .65; }
 :root[data-color-mode="accessible"] #quota-label { --balance-chart: var(--accessible-blue); --balance-menu-surface: var(--accessible-panel); }
 :root[data-color-mode="accessible"] .footer button, :root[data-color-mode="accessible"] #account-settings { color: var(--accessible-blue); }
 :root[data-color-mode="accessible"] #account-menu { box-shadow: none; }
+
+/* Both native buttons cover the full header without nesting interactive roles. */
+#header { gap: 0; cursor: pointer; }
+#header #collapse { flex: 1; width: auto; justify-content: flex-end; gap: 4px; align-self: stretch; min-width: 0; }
+#header #collapse svg { flex: none; }

@@ -14,6 +14,11 @@ class Element {
   setAttribute(key, value) { this.attributes[key] = String(value); }
   addEventListener() {}
 }
+function statusMessage(nodes) {
+  const status=nodes.status;
+  if(status.children.length){const source=nodes['quota-label'].dataset.source;assert.equal(status.children[0].children[1].textContent,source==='zcode'?'ZCode':'Codex');assert(status.children[0].children[0].children.length>0,'unavailable quota keeps a real source icon');return status.children[1].textContent;}
+  return status.textContent;
+}
 function renderFixture() {
   const nodes = Object.fromEntries(['quota-label', 'status', 'summary', 'items', 'overflow', 'codex-expanded'].map(id => [id, new Element()]));
   let receive;
@@ -56,18 +61,18 @@ test('ZCode team errors use compact text and complete hover guidance, then clear
     ['ZCODE_TEAM_ACCESS_DENIED', '团队权限不足', /检查成员和席位权限/]
   ]) {
     receive({ sourceId: 'zcode', state: 'disconnected', statusCode: code, items: [] });
-    assert.equal(nodes.status.textContent, short); assert.match(nodes.status.title, reason);
+    assert.equal(statusMessage(nodes), short); assert.match(nodes.status.title, reason);
     assert.match(nodes['quota-label'].title, reason);
     assert.equal(nodes['quota-label'].attributes['aria-label'], nodes['quota-label'].title);
     assert.doesNotMatch(nodes.summary.textContent + nodes.items.textContent, /0%/);
   }
   receive({ sourceId: 'zcode', state: 'ready', items: [{ label: 'Coding Plan', bucketId: 'zcode:paid:1', windowMinutes: 300, remaining: 75 }] });
-  assert.equal(nodes.status.textContent, 'ZCode 剩余额度'); assert.equal(nodes.status.title, '');
+  assert.equal(statusMessage(nodes), 'ZCode 剩余额度'); assert.equal(nodes.status.title, statusMessage(nodes));
   assert.doesNotMatch(nodes['quota-label'].title, /权限|配置|选择完整/);
   receive({ sourceId: 'codex', state: 'disconnected', statusCode: 'ZCODE_TEAM_KEY_MISSING', items: [] });
-  assert.equal(nodes.status.textContent, 'Codex 未连接'); assert.equal(nodes.status.title, '');
+  assert.equal(statusMessage(nodes), 'Codex 未连接'); assert.equal(nodes.status.title, statusMessage(nodes));
   receive({ sourceId: 'zcode', state: 'disconnected', statusCode: 'PRIVATE_RESPONSE', items: [] });
-  assert.equal(nodes.status.textContent, 'ZCode 未连接'); assert.equal(nodes.status.title, '');
+  assert.equal(statusMessage(nodes), 'ZCode 未连接'); assert.equal(nodes.status.title, statusMessage(nodes));
 });
 
 test('quota request failures render as query status while recovery, login loss and account switches remain distinct', async t => {
@@ -86,27 +91,27 @@ test('quota request failures render as query status while recovery, login loss a
   await service.setEnabled(true);
   for (const code of ['ZCODE_NETWORK_ERROR', 'ZCODE_HTTP_ERROR', 'ZCODE_BILLING_ERROR', 'ZCODE_USAGE_UNAVAILABLE', 'ZCODE_INVALID_RESPONSE', 'PRIVATE_CODE']) {
     failure = code; await service.refresh(); const model = render();
-    assert.equal(nodes.status.textContent, '额度查询失败'); assert.match(nodes.status.title, /稍后刷新/);
+    assert.equal(statusMessage(nodes), '额度查询失败'); assert.match(nodes.status.title, /稍后刷新/);
     assert.equal(model.statusCode, 'ZCODE_QUOTA_QUERY_FAILED'); assert.deepEqual(model.items, []);
     assert.doesNotMatch(nodes.status.textContent + nodes['quota-label'].title, /未连接|private|PRIVATE|0%/);
   }
   failure = null; await service.refresh(); const ready = render();
   assert.equal(ready.state, 'ready'); assert.equal(ready.statusCode, undefined);
-  assert.equal(nodes.status.textContent, 'ZCode 剩余额度'); assert.equal(nodes.status.title, '');
+  assert.equal(statusMessage(nodes), 'ZCode 剩余额度'); assert.equal(nodes.status.title, statusMessage(nodes));
   const history = service.getSnapshot().history.windows;
   failure = 'ZCODE_HTTP_ERROR'; await service.refresh(); const stale = render();
   assert.equal(stale.state, 'stale'); assert.equal(stale.statusCode, 'ZCODE_QUOTA_UPDATE_FAILED');
-  assert.equal(nodes.status.textContent, '额度待更新'); assert.match(nodes.status.title, /保留上次成功结果/);
+  assert.equal(statusMessage(nodes), '额度待更新'); assert.match(nodes.status.title, /保留上次成功结果/);
   assert.deepEqual(stale.items.map(row => row.remaining), [75]); assert.deepEqual(service.getSnapshot().history.windows, history);
   failure = 'ZCODE_LOGIN_REQUIRED'; await service.refresh(); const unauthenticated = render();
   assert.equal(unauthenticated.state, 'unauthenticated'); assert.equal(unauthenticated.statusCode, undefined);
-  assert.equal(nodes.status.textContent, 'ZCode 尚未登录'); assert.equal(nodes.status.title, '');
+  assert.equal(statusMessage(nodes), 'ZCode 尚未登录'); assert.equal(nodes.status.title, statusMessage(nodes));
   accountKey = 'fixture-team-b'; failure = 'ZCODE_NETWORK_ERROR'; await service.refresh(); const switched = render();
   assert.equal(switched.statusCode, 'ZCODE_QUOTA_QUERY_FAILED'); assert.deepEqual(switched.items, []);
   assert.equal(service.getSnapshot().quota.updatedAt, null); assert.doesNotMatch(nodes.status.title, /保留上次/);
   accountFailure = 'ZCODE_ACCOUNT_MISSING'; await service.refresh(); const missing = render();
   assert.equal(missing.state, 'missing'); assert.equal(missing.statusCode, undefined);
-  assert.equal(nodes.status.textContent, '未找到 ZCode'); assert.equal(nodes.status.title, '');
+  assert.equal(statusMessage(nodes), '未找到 ZCode'); assert.equal(nodes.status.title, statusMessage(nodes));
   await service.setEnabled(false); const disabled = render();
   assert.equal(disabled.state, 'disabled'); assert.equal(disabled.statusCode, undefined);
 });
@@ -128,14 +133,14 @@ test('custom-only models show unavailable quota without official quota or task r
   await service.setEnabled(true); await service.refresh();
   const custom = render(), snapshot = service.getSnapshot();
   assert.equal(custom.statusCode, 'ZCODE_CUSTOM_QUOTA_UNAVAILABLE');
-  assert.equal(nodes.status.textContent, '暂无额度数据'); assert.match(nodes.status.title, /已识别自定义供应商，可在聊天中查看模型/);
+  assert.equal(statusMessage(nodes), '暂无额度数据'); assert.match(nodes.status.title, /已识别自定义供应商，可在聊天中查看模型/);
   assert.deepEqual(custom.items, []); assert.deepEqual(snapshot.history.windows, []);
   assert.equal(snapshot.activity.runningCount, null); assert.equal(snapshot.hasCustomProviders, true);
   assert.equal(quotaCalls, 0); assert.equal(taskCalls, 0);
   assert.doesNotMatch(JSON.stringify(snapshot) + JSON.stringify(custom) + nodes['quota-label'].title, /secret|private|未连接|0%/);
   removed = true; await service.refresh();
   assert.equal(render().statusCode, undefined); assert.equal(service.getSnapshot().hasCustomProviders, false);
-  assert.equal(nodes.status.textContent, '未找到 ZCode');
+  assert.equal(statusMessage(nodes), '未找到 ZCode');
   removed = false; await service.refresh(); assert.equal(render().statusCode, 'ZCODE_CUSTOM_QUOTA_UNAVAILABLE');
   await service.setEnabled(false); assert.equal(render().statusCode, undefined); assert.equal(service.getSnapshot().hasCustomProviders, false);
   await service.setEnabled(true); service.close(); assert.equal(service.getSnapshot().hasCustomProviders, false);
@@ -155,7 +160,7 @@ test('custom models remain identified when official quota fails, without replaci
   await service.setEnabled(true);
   for (const code of ['ZCODE_HTTP_ERROR', 'ZCODE_TEAM_ACCESS_DENIED', 'ZCODE_LOGIN_REQUIRED']) {
     failure = code; await service.refresh();
-    assert.equal(render().statusCode, 'ZCODE_CUSTOM_QUOTA_UNAVAILABLE'); assert.equal(nodes.status.textContent, '暂无额度数据');
+    assert.equal(render().statusCode, 'ZCODE_CUSTOM_QUOTA_UNAVAILABLE'); assert.equal(statusMessage(nodes), '暂无额度数据');
   }
   configured = false; failure = 'ZCODE_HTTP_ERROR'; await service.refresh();
   assert.equal(render().statusCode, 'ZCODE_QUOTA_QUERY_FAILED'); assert.equal(service.getSnapshot().hasCustomProviders, false);

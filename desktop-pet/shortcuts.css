@@ -37,3 +37,7 @@ body[data-phase=closing] :is(.panel,.floating){pointer-events:none}
 .clear-binding svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; opacity:.75; }
 .clear-binding:hover svg { opacity:1; }
 .direct-row .binding-controls { margin-right:13px; }
+
+/* Pointer-opened launchers never inherit the previous action's keyboard outline. */
+:root:not([data-input-mode="keyboard"]) :is(.action,.list-panel .icon-button):focus,:root:not([data-input-mode="keyboard"]) :is(.action,.list-panel .icon-button):focus-visible{outline:none!important}
+:root[data-input-mode="keyboard"] .action:focus{outline:2px solid var(--accent);outline-offset:3px}

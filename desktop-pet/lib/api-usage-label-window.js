@@ -1,3 +1,4 @@
+const { createQuotaCardResize } = require('./quota-card-resize');
 const { captureQuotaGroupFrames } = require('./quota-group-capture');
 const { sendQuotaCardMotion } = require('./quota-card-motion');
 const { createNativeWindowFade } = require('./native-window-fade');
@@ -82,6 +83,8 @@ function safeState(state) {
 function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuotaWindow = () => null, getQuotaBounds = null,
   getObstacleBounds = () => null, getAppearance = () => 'system', getPresentation = () => null,
   onOpenDetails = () => {}, onLayout = () => {}, alwaysOnTop = true, onError = () => {} }) {
+  const resizeMotion = createQuotaCardResize({ onError, onSettled: notifyLayout });
+  let pendingToggleResize = false;
   let groupTransitionMode = null, groupTransitionEpoch = 0, groupResumeImmediate = false;
   let win = null, ready = false, requestedVisible = false, current = null, expanded = false, resetExpandedPending = false;
   let topmost = Boolean(alwaysOnTop), revision = 0, presenting = false, pending = false;
@@ -196,8 +199,8 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
         const payload = { ...current, expanded, appearance };
         let motionAnimate=false;
         const steps = [
-          () => target.setBounds(apiLabelBounds(bounds, area, quota, obstacle, expanded, presentation), false),
           () => target.webContents.send(CHANNEL, payload),
+          () => { const animate = pendingToggleResize; pendingToggleResize = false; resizeMotion.apply(target, apiLabelBounds(bounds, area, quota, obstacle, expanded, presentation), { animate, reducedMotion: presentation?.quotaReducedMotion === true, immediate: groupTransitionMode !== null || groupResumeImmediate }); },
           () => target.setIgnoreMouseEvents(groupTransitionMode==='stage', {forward:true}),
           () => { if(groupTransitionMode==='stage'){sendQuotaCardMotion(target,true,{...presentation,quotaGroupAnimate:false},false);return;} motionAnimate=sendQuotaCardMotion(target, true, presentation, !groupResumeImmediate && (presentation?.quotaGroupAnimate === true || ['peeked', 'tucked'].includes(presentation?.mode))); },
           () => {if(groupTransitionMode==='stage'){fade.cancel(target);target.hide();}else fade.show(target,motionAnimate);}
@@ -258,11 +261,11 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
         if (!active(target, token)) return;
         if (channel === OPEN_CHANNEL || !current?.report) {
           try { onOpenDetails(); } catch (error) { reportError(error); }
-        } else { expanded = !expanded; reposition(); }
+        } else { pendingToggleResize = true; expanded = !expanded; reposition(); }
       });
       target.webContents.on('render-process-gone', (_event, details) =>
         failed(new Error(`API 费用标签渲染退出：${details?.reason || 'unknown'}`), target));
-      target.on('closed', () => {
+      target.on('closed', () => { resizeMotion.forget(target);
         if (win !== target) return;
         win = null;
         ready = false;

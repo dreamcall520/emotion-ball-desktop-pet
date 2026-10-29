@@ -1,0 +1,29 @@
+{
+  "base": "1dcdbf8",
+  "app": "<workspace>/dist/球球桌宠-darwin-arm64/球球桌宠.app",
+  "archive": "<workspace>/dist/球球桌宠-darwin-arm64/球球桌宠.app/Contents/Resources/app.asar",
+  "archiveSha256": "f8e9cebb4011cbd11fbcf55e644d2845a5d816476e2511b132382066d02ffe6e",
+  "comparedStagingFiles": 333,
+  "production": [
+    {
+      "file": "desktop-pet/main.js",
+      "sha256": "fb5ee8421304931817bdb999c47e3cfc582c11be46524f8cdf17ec7afe8f8ea0"
+    },
+    {
+      "file": "desktop-pet/customize.html",
+      "sha256": "6721084bc342bb4eaf333f6d0e75e2a0bda66f274561359fa5316ddc13fa0705"
+    },
+    {
+      "file": "desktop-pet/lib/codex-pets.js",
+      "sha256": "dd3a3b85079a3118182196358b68cfd30bfad6a53716d94bfae4e681d341553c"
+    },
+    {
+      "file": "desktop-pet/lib/codex-pet-player.js",
+      "sha256": "2d54214b6b13b984a82061ee8e22f7f44501b7e4e28e21b9b69343c008c46f7b"
+    }
+  ],
+  "codesign": "adhoc deep strict verify passed",
+  "installed": false,
+  "launchedNormally": false,
+  "installedProfileChanged": false
+}

@@ -217,3 +217,44 @@ test('WorkBuddy stacked card exposes its own allowed game entry and hides it imm
   allowed=false;controller.reposition();assert.equal(entry.isVisible(),false);entry.webContents.emit('ipc-message',event,'pet:workbuddy-guard-entry-open');assert.equal(opened,1);
   allowed=true;controller.reposition();assert.equal(entry.isVisible(),true);
 });
+
+test('WorkBuddy user toggles resize without native scaling or repeated refresh and group staging', async t => {
+  let presentation = { mode: 'free' };
+  const petBounds = { x: 400, y: 300, width: 80, height: 80 };
+  class Window extends EventEmitter {
+    constructor(options) {
+      super(); this.options = options; this.visible = this.dead = false; this.boundsCalls = [];
+      this.webContents = Object.assign(new EventEmitter(), { mainFrame: {}, isDestroyed: () => false,
+        setWindowOpenHandler() {}, send() {} });
+    }
+    isDestroyed() { return this.dead; } isVisible() { return this.visible; }
+    setAlwaysOnTop() {} setVisibleOnAllWorkspaces() {} setHiddenInMissionControl() {} setIgnoreMouseEvents() {}
+    setBounds(bounds, animate) { this.boundsCalls.push({ bounds: { ...bounds }, animate }); this.bounds = { ...bounds }; }
+    getBounds() { return { ...this.bounds }; }
+    showInactive() { this.visible = true; } hide() { this.visible = false; }
+    destroy() { this.dead = true; this.emit('closed'); } loadFile() { return Promise.resolve(); }
+  }
+  const controller = createWorkBuddyLabelWindow({ BrowserWindow: Window,
+    screen: { getDisplayMatching: () => ({ workArea: { x: 0, y: 0, width: 1100, height: 900 } }) },
+    getPetWindow: () => ({ isDestroyed: () => false, isVisible: () => true, getBounds: () => petBounds }),
+    getPresentation: () => presentation });
+  t.after(() => controller.destroy()); controller.show({ enabled: true }); await Promise.resolve();
+  const win = controller.getWindow();
+  const toggle = () => win.webContents.emit('ipc-message', { sender: win.webContents, senderFrame: win.webContents.mainFrame }, 'pet:workbuddy-label-toggle');
+  assert.equal(win.boundsCalls.at(-1).animate, false);
+  const initial = win.boundsCalls.length;
+  controller.reposition(); controller.show({ enabled: true }); controller.reposition();
+  assert.equal(win.boundsCalls.length, initial);
+  toggle(); assert.equal(win.boundsCalls.at(-1).animate, false); assert.equal(win.boundsCalls.at(-1).bounds.height, 120);
+  const expanded = win.boundsCalls.length; controller.reposition(); assert.equal(win.boundsCalls.length, expanded);
+  toggle(); await new Promise(resolve=>setTimeout(resolve,230)); assert.equal(win.boundsCalls.at(-1).animate, false); assert.equal(win.boundsCalls.at(-1).bounds.height, 32);
+  presentation = { mode: 'free', quotaReducedMotion: true };
+  toggle(); assert.equal(win.boundsCalls.at(-1).animate, false);
+  presentation = { mode: 'free' };
+  controller.setGroupTransitionMode('hold'); controller.resetExpanded();
+  const held = win.boundsCalls.length; controller.reposition(); assert.equal(win.boundsCalls.length, held);
+  controller.setGroupTransitionMode('stage'); assert.equal(win.boundsCalls.at(-1).animate, false); assert.equal(win.boundsCalls.at(-1).bounds.height, 32);
+  controller.setGroupTransitionMode('masked'); controller.reposition(); assert.equal(win.boundsCalls.at(-1).animate, false);
+  controller.setGroupTransitionMode(null); assert.equal(win.boundsCalls.at(-1).animate, false);
+  petBounds.x += 20; controller.reposition(); assert.equal(win.boundsCalls.at(-1).animate, false, 'following the pet is not a toggle animation');
+});

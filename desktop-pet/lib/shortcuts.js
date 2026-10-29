@@ -1,8 +1,8 @@
-const DIRECT_ACTIONS = Object.freeze(['chat', 'custom', 'note', 'todo', 'pomodoro']);
+const DIRECT_ACTIONS = Object.freeze(['chat', 'custom', 'note', 'todo', 'pomodoro', 'weather']);
 const SHORTCUT_ACTIONS = Object.freeze(['launcher', ...DIRECT_ACTIONS]);
 const DEFAULT_SHORTCUT_SETTINGS = Object.freeze({
   shape: 'floating', enabled: true, launcher: 'Ctrl+Alt+Q',
-  chat: '', custom: '', note: '', todo: '', pomodoro: '',
+  chat: '', custom: '', note: '', todo: '', pomodoro: '', weather: '',
   noteBehavior: 'panel', todoBehavior: 'panel'
 });
 const MODIFIERS = Object.freeze({ ctrl: 'Ctrl', alt: 'Alt', shift: 'Shift', meta: 'Meta' });

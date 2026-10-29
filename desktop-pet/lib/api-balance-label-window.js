@@ -2,6 +2,7 @@ const path = require('node:path');
 const { captureQuotaGroupFrames } = require('./quota-group-capture');
 const { sendQuotaCardMotion } = require('./quota-card-motion');
 const { createNativeWindowFade } = require('./native-window-fade');
+const { createQuotaCardResize } = require('./quota-card-resize');
 const CHANNEL = 'pet:api-balance-label';
 const SIZES = Object.freeze({ compact: Object.freeze({ width: 128, height: 32 }), expanded: Object.freeze({ width: 196, height: 120 }) });
 const validId = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
@@ -76,19 +77,22 @@ function createApiBalanceLabelWindow({ BrowserWindow, screen, getPetWindow, getO
   const reportError = error => { try { onError(error); } catch (_) {} };
   const notifyLayout = () => { try { onLayout(); } catch (error) { reportError(error); } };
   const fade = createNativeWindowFade({ onError: reportError });
+  const resize = createQuotaCardResize({ onError, onSettled: notifyLayout });
+  let toggleResizePending = false;
   function setExpanded(value) {
     if (expanded === value) return;
     expanded = value; try { onExpandedChange(value); } catch (error) { reportError(error); }
   }
   function hide({ animate = false } = {}) {
     groupTransitionMode = null; groupTransitionEpoch++;
+    toggleResizePending = false;
     const changed = visible || expanded; visible = false; setExpanded(false);
     if (live(win)) { win.setIgnoreMouseEvents?.(true, { forward: true }); fade.hide(win, { animate: sendQuotaCardMotion(win, false, getPresentation(), animate && ['peeked', 'tucked'].includes(getPresentation()?.mode)) }); }
     if (changed) notifyLayout();
   }
   function destroy() {
     groupTransitionMode = null; groupTransitionEpoch++; fade.cancel(win);
-    const old = win, changed = visible || expanded; win = null; ready = visible = false; current = null; setExpanded(false);
+    const old = win, changed = visible || expanded; resize.forget(old); toggleResizePending = false; win = null; ready = visible = false; current = null; setExpanded(false);
     if (live(old)) old.destroy(); if (changed) notifyLayout();
   }
   function reposition() {
@@ -109,7 +113,11 @@ function createApiBalanceLabelWindow({ BrowserWindow, screen, getPetWindow, getO
       if (!bounds && expanded) { setExpanded(false); spaceError = true; notifyLayout(); bounds = apiBalanceLabelBounds(petBounds, area, obstacles, false, anchor, presentation, bubble); }
       if (!bounds) { fade.hide(win); return; }
       const appearance = getAppearance();
-      win.setBounds(bounds, false); win.webContents.send(CHANNEL, { ...current, expanded, spaceError, appearance: ['light', 'dark'].includes(appearance) ? appearance : 'system' });
+      win.webContents.send(CHANNEL, { ...current, expanded, spaceError, appearance: ['light', 'dark'].includes(appearance) ? appearance : 'system' });
+      if (!live(win) || !visible) return;
+      resize.apply(win, bounds, { animate: toggleResizePending, reducedMotion: presentation?.quotaReducedMotion === true,
+        immediate: groupTransitionMode !== null || groupResumeImmediate });
+      toggleResizePending = false;
       win.setIgnoreMouseEvents?.(groupTransitionMode === 'stage', { forward: true });
       if (groupTransitionMode === 'stage') { fade.cancel(win); sendQuotaCardMotion(win, true, { ...presentation, quotaGroupAnimate: false }, false); win.hide(); }
       else fade.show(win, sendQuotaCardMotion(win, true, presentation, !groupResumeImmediate && (presentation?.quotaGroupAnimate === true || ['peeked', 'tucked'].includes(presentation?.mode))));
@@ -128,14 +136,14 @@ function createApiBalanceLabelWindow({ BrowserWindow, screen, getPetWindow, getO
     target.webContents.on('ipc-message', (event, channel, id) => {
       if (groupTransitionMode || win !== target || !ready || !visible || !live(target) || !target.isVisible() || event.sender !== target.webContents || event.senderFrame !== target.webContents.mainFrame) return;
       try {
-        if (channel === `${CHANNEL}-toggle`) { setExpanded(!expanded); notifyLayout(); reposition(); }
+        if (channel === `${CHANNEL}-toggle`) { toggleResizePending = true; setExpanded(!expanded); notifyLayout(); reposition(); }
         if (channel === `${CHANNEL}-trend` && current.accounts.some(account => account.id === current.selectedAccountId && account.supported) && !['disabled', 'unconfigured', 'unauthenticated'].includes(current.status)) onTrend();
         if (channel === `${CHANNEL}-refresh` && !current.busy && current.accounts.some(account => account.id === current.selectedAccountId && account.supported)) onRefresh();
         if (channel === `${CHANNEL}-settings`) onSettings();
         if (channel === `${CHANNEL}-select` && validId(id) && current.accounts.some(account => account.id === id) && id !== current.selectedAccountId) onSelectAccount(id);
       } catch (error) { reportError(error); }
     });
-    target.on('closed', () => { if (win === target) { win = null; ready = visible = false; setExpanded(false); notifyLayout(); } });
+    target.on('closed', () => { resize.forget(target); if (win === target) { win = null; ready = visible = false; setExpanded(false); notifyLayout(); } });
     target.webContents.on('render-process-gone', () => { if (win === target) { destroy(); reportError(new Error('API 余额窗口已退出')); } });
     const loaded = () => { if (win === target && !ready && live(target)) { ready = true; notifyLayout(); reposition(); } };
     target.webContents.on('did-finish-load', loaded);

@@ -198,6 +198,8 @@
   const knownPlanKind = item => /^(?:ZCode\s*)?Start\s*Plan(?:$|[\s：:])/i.test(item.planName) && item.periodKind === 'daily' ? 'trial'
     : /^(?:ZCode\s*)?1024\s*(?:Dev\s*Day|活动)(?:$|[\s：:])/i.test(item.planName) && ['one_time', 'expiry'].includes(item.periodKind) ? 'event' : '';
   const shortPlanName = item => ({trial:'每日体验',event:'1024活动'}[knownPlanKind(item)] || item.planName);
+  const teamPeriodLabel = item => /^zcode:paid:(?:TOKENS_LIMIT|CREDIT_LIMIT):/.test(item.bucketId) && / · 团队$/.test(item.planName)
+    ? ({300:'5小时额度',10080:'周额度'}[item.windowMinutes] || '') : '';
   function displayItems(model) {
     if (model.sourceId !== 'zcode') return model.items;
     const groups = [], known = new Map();
@@ -510,9 +512,11 @@
       cell.replaceChildren(...(showHeading ? [node('div', 'v20-cell-label', '')] : []), valueRow, progress, reset);
       if (showHeading) {
         const heading = cell.children[0];
+        const teamPeriod = model.sourceId === 'zcode' ? teamPeriodLabel(item) : '';
         heading.title = itemTitle(item);
-        heading.replaceChildren(...(model.sourceId === 'zcode' && item.planName ? [node('span', 'v20-plan-name', shortPlanName(item))] : []),
-          node('span', 'period-pill', model.sourceId === 'zcode' ? item.label : itemTitle(item)));
+        if (teamPeriod) heading.className += ' v20-team-period-label';
+        heading.replaceChildren(...(model.sourceId === 'zcode' && item.planName && !teamPeriod ? [node('span', 'v20-plan-name', shortPlanName(item))] : []),
+          node('span', 'period-pill', teamPeriod || (model.sourceId === 'zcode' ? item.label : itemTitle(item))));
       }
       return cell;
     }));
@@ -585,8 +589,13 @@
     const ordered = displayItems(model);
     try {
       const zcodeStatus = model.sourceId === 'zcode' ? zcodeStatuses.get(model.statusCode) : null;
-      status.textContent = zcodeStatus ? zcodeStatus[0] : model.sourceId === 'zcode' ? states.get(model.state).replaceAll('Codex', 'ZCode') : states.get(model.state);
-      status.title = zcodeStatus?.[1] || '';
+      const statusText = zcodeStatus ? zcodeStatus[0] : model.sourceId === 'zcode' ? states.get(model.state).replaceAll('Codex', 'ZCode') : states.get(model.state);
+      if (!model.items.length && typeof status.replaceChildren === 'function') {
+        const identity = node('span', 'empty-source');
+        identity.replaceChildren(sourceIcon(model.sourceId, model.codexIconPreference, model.codexIconDark), node('span', 'empty-source-name', model.sourceId === 'zcode' ? 'ZCode' : 'Codex'));
+        status.replaceChildren(identity, node('span', 'empty-status-text', statusText));
+      } else status.textContent = statusText;
+      status.title = zcodeStatus?.[1] || statusText;
       label.dataset.source = model.sourceId || 'codex';
       document.title = model.sourceId === 'zcode' ? 'ZCode 剩余额度' : 'Codex 剩余额度';
       if (model.sourceId === 'zcode') {

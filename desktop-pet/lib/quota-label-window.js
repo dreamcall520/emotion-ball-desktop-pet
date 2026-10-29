@@ -1,3 +1,4 @@
+const { createQuotaCardResize } = require('./quota-card-resize');
 const { captureQuotaGroupFrames } = require('./quota-group-capture');
 const { sendQuotaCardMotion } = require('./quota-card-motion');
 const { createNativeWindowFade } = require('./native-window-fade');
@@ -202,12 +203,13 @@ function createQuotaLabelWindow({
   const channel = sourceId === 'zcode' ? 'pet:zcode-quota-label' : CHANNEL;
   const toggleChannel = sourceId === 'zcode' ? 'pet:zcode-quota-label-toggle' : TOGGLE_CHANNEL;
   const pointerChannel = sourceId === 'zcode' ? 'pet:zcode-quota-label-pointer' : POINTER_CHANNEL;
+  const cardResize = createQuotaCardResize({ onError, onSettled: notifyLayout });
   let groupTransitionMode = null, groupTransitionEpoch = 0, groupResumeImmediate = false;
   let win = null;
   let ready = false;
   let requestedVisible = false;
   let currentModel = null, resetExpandedPending = false;
-  let currentLayout = null;
+  let currentLayout = null, carrier = null, carrierKey = null;
   let topmost = Boolean(alwaysOnTop);
   let topmostRevision = 0;
   let operation = 0;
@@ -242,6 +244,7 @@ function createQuotaLabelWindow({
   }
 
   function safeDestroy(target) {
+    cardResize.forget(target);
     fade.cancel(target);
     if (!target) return;
     let destroyed = false;
@@ -339,12 +342,19 @@ function createQuotaLabelWindow({
 
   function visualPresentation(petBounds, area) {
     const value = getPresentation() || {};
-    return { ...value, quotaSourceId: sourceId, sheepTheme: SheepTheme.resolveTheme(value.sheepTheme, new Date()),
+    return { ...value, quotaSourceId: sourceId, quotaCompactTeamPeriods: compactTeamPeriods(), sheepTheme: SheepTheme.resolveTheme(value.sheepTheme, new Date()),
       facing: value.facing || PetFacing.resolve(petBounds, area),
       quotaRoleWidth: rolePaintWidth() };
   }
 
-  function petLayout() {
+  function compactTeamPeriods() {
+    const items = currentModel?.items || [];
+    return sourceId === 'zcode' && items.length === 2 && new Set(items.map(item => item.windowMinutes)).size === 2
+      && items.every(item => /^zcode:paid:(?:TOKENS_LIMIT|CREDIT_LIMIT):/.test(item.bucketId)
+        && / · 团队$/.test(item.planName) && [300,10080].includes(item.windowMinutes));
+  }
+
+  function petLayout(expanded = currentModel?.expanded === true, guard = guardEntryVisible()) {
     try {
       const pet = getPetWindow();
       if (!pet || typeof pet.isDestroyed !== 'function' || pet.isDestroyed() ||
@@ -352,8 +362,8 @@ function createQuotaLabelWindow({
       const petBounds = pet.getBounds();
       const display = screen.getDisplayMatching(petBounds);
       return quotaLabelBounds(petBounds, display && display.workArea, getObstacle(),
-        currentModel?.size, currentModel?.expanded === true, currentModel?.items?.length,
-        visualPresentation(petBounds, display && display.workArea), Boolean(currentModel?.extraCredits), guardEntryVisible(), rolePaintWidth());
+        currentModel?.size, expanded, currentModel?.items?.length,
+        visualPresentation(petBounds, display && display.workArea), Boolean(currentModel?.extraCredits), guard, rolePaintWidth());
     } catch (error) {
       report(error);
       return null;
@@ -377,7 +387,7 @@ function createQuotaLabelWindow({
       Array.isArray(presentation.quotaGroupNeighbors) && presentation.quotaGroupNeighbors.some(contains));
   }
 
-  function present() {
+  function present({ animateResize = false } = {}) {
     const target = win;
     const token = operation;
     const model = currentModel;
@@ -398,17 +408,43 @@ function createQuotaLabelWindow({
       return;
     }
     const { x, y, width, height } = layout;
-    try { target.setBounds({ x, y, width, height }, false); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
+    const previousLayout = currentLayout;
+    const resizeImmediate = groupTransitionMode !== null || groupResumeImmediate;
+    const guardCapable = getGuardEntry() === true && model.state === 'ready' && model.items.length > 0;
+    const face = bounds => {
+      if (!bounds.guardSide) return { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height };
+      const size = quotaLabelSize(model.size, false, model.items.length, Boolean(model.extraCredits), false, null, sourceId, compactTeamPeriods());
+      return { x: bounds.x + bounds.cardInset.x, y: bounds.y + bounds.cardInset.y, width: size.width, height: size.height };
+    };
+    if (guardCapable) {
+      const pet = getPetWindow(), petBounds = pet.getBounds(), area = screen.getDisplayMatching(petBounds)?.workArea;
+      const key = JSON.stringify([petBounds, area, model.size, model.items.length, Boolean(model.extraCredits), presentation?.shape, presentation?.mode, rolePaintWidth(), compactTeamPeriods()]);
+      if (!carrier || carrierKey !== key) {
+        const compact = petLayout(false, true), expanded = petLayout(true, false);
+        if (compact && expanded) {
+          const left = Math.min(compact.x, expanded.x), top = Math.min(compact.y, expanded.y);
+          carrier = { x: left, y: top, width: Math.max(compact.x + compact.width, expanded.x + expanded.width) - left,
+            height: Math.max(compact.y + compact.height, expanded.y + expanded.height) - top };
+          carrierKey = key;
+        }
+      }
+    } else { carrier = null; carrierKey = null; }
+    const host = carrier || { x, y, width, height };
+    const relative = bounds => ({ left: bounds.x - host.x, top: bounds.y - host.y, width: bounds.width, height: bounds.height });
+    const cardViewport = carrier ? { host: { width: host.width, height: host.height }, face: relative(face(layout)) } : null;
+    const cardTransition = carrier && animateResize && previousLayout && presentation?.quotaReducedMotion !== true && !resizeImmediate && target.isVisible()
+      ? { from: relative(face(previousLayout)), to: relative(face(layout)), host: { width: host.width, height: host.height }, duration: 180 } : null;
     currentLayout = layout;
-    try { target.webContents.send(channel, { ...model, visible: true, guardEntry: guardEntryVisible(),
-      ...(layout.guardSide ? { guardSide: layout.guardSide, cardInset: layout.cardInset, guardTargetWidth: quotaRoleTargetWidth(rolePaintWidth()) } : {}) }); } catch (error) { detach(target, error); return; }
+    try { target.webContents.send(channel, { ...model, visible: true, guardEntry: guardEntryVisible(), ...(cardTransition ? { cardTransition } : {}), ...(cardViewport ? { cardViewport } : {}),
+      ...(layout.guardSide ? { guardSide: layout.guardSide, cardInset: { x: layout.x + layout.cardInset.x - host.x, y: layout.y + layout.cardInset.y - host.y }, guardTargetWidth: quotaRoleTargetWidth(rolePaintWidth()) } : {}) }); } catch (error) { detach(target, error); return; }
+    try { cardResize.apply(target, host, { animate: animateResize, reducedMotion: presentation?.quotaReducedMotion === true, immediate: Boolean(carrier) || resizeImmediate }); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
     try {
       if (layout.guardSide && typeof screen.getCursorScreenPoint === 'function') {
-        const cursor = screen.getCursorScreenPoint(), native = target.getBounds();
-        const card = quotaLabelSize(model.size, model.expanded, model.items.length, Boolean(model.extraCredits), false, null, sourceId);
-        const face = { x: native.x + layout.cardInset.x, y: native.y + layout.cardInset.y, ...card };
+        const cursor = screen.getCursorScreenPoint();
+        const card = quotaLabelSize(model.size, model.expanded, model.items.length, Boolean(model.extraCredits), false, null, sourceId, compactTeamPeriods());
+        const face = { x: layout.x + layout.cardInset.x, y: layout.y + layout.cardInset.y, ...card };
         const role = { x: layout.guardSide === 'left' ? face.x - 8 - quotaRoleTargetWidth(rolePaintWidth()) : face.x + card.width + 8,
           y: face.y + card.height - 44, width: quotaRoleTargetWidth(rolePaintWidth()), height: 44 };
         const inside = bounds => cursor.x >= bounds.x && cursor.y >= bounds.y &&
@@ -496,7 +532,7 @@ function createQuotaLabelWindow({
     const expectedWindow = win;
     let loadingWindow = null;
     const initialSize = quotaLabelSize(currentModel?.size, currentModel?.expanded === true,
-      currentModel?.items?.length, Boolean(currentModel?.extraCredits), guardEntryVisible(), rolePaintWidth(), sourceId);
+      currentModel?.items?.length, Boolean(currentModel?.extraCredits), guardEntryVisible(), rolePaintWidth(), sourceId, compactTeamPeriods());
     try { loadingWindow = new BrowserWindow({
       width: initialSize.width,
       height: initialSize.height,
@@ -555,7 +591,7 @@ function createQuotaLabelWindow({
           event.senderFrame !== event.sender.mainFrame || event.sender.getURL() !== pathToFileURL(FILE).href)) return;
         operation += 1;
         currentModel = { ...currentModel, expanded: currentModel.expanded !== true };
-        try { present(); } catch (error) { detach(loadingWindow, error); }
+        try { present({ animateResize: true }); } catch (error) { detach(loadingWindow, error); }
       }),
       () => loadingWindow.webContents.on('render-process-gone', (_event, details) => {
         let reason = 'unknown';
@@ -668,7 +704,7 @@ function createQuotaLabelWindow({
     getLayoutMetrics() {
       const target=getWindow();
       if (!requestedVisible || !target || getSuppressed() || !currentModel || currentModel.display === 'numbers') return null;
-      return { ...quotaLabelSize(currentModel.size,!resetExpandedPending&&currentModel.expanded,currentModel.items.length,Boolean(currentModel.extraCredits),false,null,sourceId),
+      return { ...quotaLabelSize(currentModel.size,!resetExpandedPending&&currentModel.expanded,currentModel.items.length,Boolean(currentModel.extraCredits),false,null,sourceId,compactTeamPeriods()),
         inset: currentModel.size==='compact'&&(resetExpandedPending||!currentModel.expanded)?2:0,
         guardTargetWidth: guardEntryVisible()?quotaRoleTargetWidth(rolePaintWidth()):0, roleWidth:rolePaintWidth() };
     },
@@ -677,12 +713,12 @@ function createQuotaLabelWindow({
       if (!target || !requestedVisible || !currentModel || !currentModel.items.length && currentModel.display === 'numbers' || !target.isVisible() && groupTransitionMode !== 'stage') return null;
       const bounds = target.getBounds();
       const card = quotaLabelSize(currentModel.size, currentModel.expanded, currentModel.items.length,
-        Boolean(currentModel.extraCredits), false, null, sourceId);
+        Boolean(currentModel.extraCredits), false, null, sourceId, compactTeamPeriods());
       // Use the painted card offset independently of its transparent role gutter.
       const inset = currentModel.size === 'compact' && !currentModel.expanded ? 2 : 0;
       const width = Math.min(bounds.width, card.width), height = Math.min(bounds.height, card.height);
-      return { x: bounds.x + (currentLayout?.cardInset?.x || 0) + inset,
-        y: bounds.y + (currentLayout?.cardInset?.y ?? bounds.height - height) + inset,
+      return { x: (currentLayout?.x ?? bounds.x) + (currentLayout?.cardInset?.x || 0) + inset,
+        y: (currentLayout?.y ?? bounds.y) + (currentLayout?.cardInset?.y ?? (currentLayout?.height ?? bounds.height) - height) + inset,
         width: width - inset * 2, height: height - inset * 2 };
     },
     setAlwaysOnTop(enabled) {

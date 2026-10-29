@@ -126,7 +126,7 @@ test('启动有占用时只降级对应快捷键，保留配置和其他可用�
   assert.equal(state.ok, false);
   assert.equal(state.errors[0].field, 'launcher');
   assert.deepEqual(state.config, { ...defaults, note: 'Alt+N' });
-  assert.deepEqual(registrar.getState().active, { launcher: false, chat: false, custom: false, note: true, todo: false, pomodoro: false });
+  assert.deepEqual(registrar.getState().active, { launcher: false, chat: false, custom: false, note: true, todo: false, pomodoro: false, weather: false });
   globalShortcut.fire('Alt+N');
   assert.deepEqual(actions, ['note']);
   globalShortcut.blocked.clear();
@@ -256,4 +256,12 @@ test('非法保存请求不调用系统注册或持久化，返回字段错误�
   assert.equal(globalShortcut.calls.length, count);
   globalShortcut.fire(defaults.launcher);
   assert.deepEqual(actions, ['launcher']);
+});
+
+test('weather shortcut is opt-in, persists independently and routes through the shared registrar',()=>{
+ assert.equal(defaults.weather,'');assert.equal(normalizeShortcutSettings({chat:'Alt+C'}).weather,'');
+ const globalShortcut=fakeGlobalShortcut(), actions=[];
+ const registrar=createShortcutRegistrar({globalShortcut,config:{...defaults,weather:'Meta+W'},onAction:action=>actions.push(action)});
+ registrar.start();globalShortcut.fire('Meta+W');assert.deepEqual(actions,['weather']);
+ assert.equal(registrar.getConfig().weather,'Meta+W');registrar.dispose();
 });

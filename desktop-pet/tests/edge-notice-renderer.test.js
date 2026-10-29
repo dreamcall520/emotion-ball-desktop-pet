@@ -7,7 +7,8 @@ const vm = require('node:vm');
 function renderer() {
   let receive, unload;
   const animations = [];
-  const nodes = Object.fromEntries(['notice', 'brand', 'text'].map(id => [id, { textContent: '' }]));
+  const nodes = Object.fromEntries(['notice', 'brand', 'text', 'dot', 'weather-icon'].map(id => [id, { textContent: '' }]));
+  nodes['weather-icon'].removeAttribute = name => { delete nodes['weather-icon'][name]; };
   nodes.notice.classList = { remove: value => animations.push(['remove', value]), add: value => animations.push(['add', value]) };
   const document = { documentElement: { dataset: {} }, body: { dataset: {} }, getElementById: id => nodes[id] };
   const unsubscribe = () => {};
@@ -75,4 +76,35 @@ test('WorkBuddy capsules show branded exact credits or expiry without Codex perc
   assert.equal(document.body.dataset.kind, 'workbuddy'); assert.equal(document.body.dataset.side, 'right');
   receive({ id: 1, kind: 'workbuddy', text: '99.91积分将于10/28到期', remaining: 0, statusLabel: '已用尽' });
   assert.equal(nodes.text.textContent, '99.91积分将于10/28到期'); assert.equal(animations.length, 2);
+});
+
+
+test('weather edge text uses a static night icon and compact real temperature without changing ordinary text', () => {
+  const { receive, nodes, document } = renderer();
+  receive({ id: 9, kind: 'text', side: 'right', appearance: 'dark', text: '夜里凉，出门加件衣服。', weather: { code: 2, isDay: false, temperature: 9.7 } });
+  assert.equal(document.body.dataset.weather, 'true'); assert.equal(nodes.brand.textContent, '10°');
+  assert.equal(nodes.text.textContent, '夜里凉，出门加件衣服。'); assert.equal(nodes.dot.hidden, true);
+  assert.equal(nodes['weather-icon'].src, 'assets/weather/meteocons/static/partly-cloudy-night.svg');
+  assert.equal(nodes['weather-icon'].hidden, false);
+  receive({ id: 10, kind: 'text', text: '你忙，我在边边陪着。' });
+  assert.equal(document.body.dataset.weather, 'false'); assert.equal(nodes.brand.textContent, '');
+  assert.equal(nodes.dot.hidden, false); assert.equal(nodes['weather-icon'].hidden, true);
+  assert.equal(nodes['weather-icon'].src, undefined);
+});
+
+test('weather projection rejects untrusted values and maps WMO codes only to vendored static icons', () => {
+  const { weatherView } = require('../edge-notice-renderer');
+  const valid = { code: 3, isDay: 1, temperature: 0 }, text = '天凉啦，注意保暖。';
+  assert.equal(weatherView(valid, text).label, '0°');
+  assert.equal(weatherView({ ...valid, temperature: null }, text).label, '天气');
+  assert.equal(weatherView({ ...valid, temperature: -5 }, text).label, '-5°');
+  assert.equal(weatherView(valid, text).icon, 'assets/weather/meteocons/static/overcast.svg');
+  for (const patch of [{ code: '../clear-day' }, { code: 999 }, { code: '3' }, { isDay: 'false' }, { isDay: null }, { temperature: '10' }, { temperature: Infinity }, { temperature: -101 }, { temperature: 71 }]) assert.equal(weatherView({ ...valid, ...patch }, text), null);
+  for (const value of [null, '', '字'.repeat(29), '天气\n变化', {}]) assert.equal(weatherView(valid, value), null);
+  assert.equal(weatherView([], text), null);
+  for (const code of [0, 1, 2, 3, 45, 48, 51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 71, 73, 75, 77, 80, 81, 82, 85, 86, 95, 96, 99]) for (const isDay of [true, false]) {
+    const projection = weatherView({ ...valid, code, isDay }, text);
+    assert(fs.existsSync(path.resolve(__dirname, '..', projection.icon)), projection.icon);
+    assert.match(projection.icon, /^assets\/weather\/meteocons\/static\/[a-z-]+\.svg$/);
+  }
 });
