@@ -774,7 +774,7 @@ function codexPetDescriptor(appearance) {
   if (appearance?.shape !== 'codex-pet' || !codexPets) return null;
   let pet;
   try { pet = importedPet(appearance.codexPetId); } catch (_) { return null; }
-  return { id: pet.id, name: pet.name, version: pet.version, rows: pet.rows, origin:pet.origin,
+  return { id: pet.id, name: pet.name, version: pet.version, rows: pet.rows, spriteScale:pet.spriteScale||1, origin:pet.origin,
     imageURL: pathToFileURL(pet.spritesheetPath).href };
 }
 
@@ -800,7 +800,8 @@ async function prepareCodexAppearance(appearance) {
     image.onerror = () => { clearTimeout(timer); resolve(null); };
     image.src = ${JSON.stringify(descriptor.imageURL)};
   })` }]);
-  if (dimensions?.width !== 1536 || dimensions?.height !== descriptor.rows * 208) throw new Error('宠物图片无法解码');
+  if (dimensions?.width !== 1536 * descriptor.spriteScale ||
+      dimensions?.height !== descriptor.rows * 208 * descriptor.spriteScale) throw new Error('宠物图片无法解码');
   return copied;
 }
 
@@ -3629,7 +3630,7 @@ async function bootstrap() {
       const owner=customizationWindow;if(!localPetImportIsCurrent())return false;
       const mime=path.extname(pet.spritesheetPath).toLowerCase()==='.webp'?'image/webp':'image/png';
       const dimensions=await owner.webContents.executeJavaScriptInIsolatedWorld(1004,[{code:`new Promise(resolve=>{const image=new Image();const timer=setTimeout(()=>resolve(null),5000);image.onload=async()=>{try{await image.decode();const bitmap=await createImageBitmap(image);bitmap.close();const canvas=document.createElement('canvas');canvas.width=canvas.height=1;canvas.getContext('2d').drawImage(image,0,0,1,1);clearTimeout(timer);resolve({width:image.naturalWidth,height:image.naturalHeight})}catch(_){clearTimeout(timer);resolve(null)}};image.onerror=()=>{clearTimeout(timer);resolve(null)};image.src=${JSON.stringify(`data:${mime};base64,${buffer.toString('base64')}`)}})`}]);
-      return localPetImportIsCurrent()&&dimensions?.width===1536&&dimensions?.height===pet.rows*208;
+      return localPetImportIsCurrent()&&dimensions?.width===1536*pet.spriteScale&&dimensions?.height===pet.rows*208*pet.spriteScale;
     }});
   apiUsage = createApiUsage({ filePath: path.join(app.getPath('userData'), 'openai-api-usage.enc'), safeStorage,
     ...(IS_SMOKE_TEST && process.env.PET_SMOKE_API_USAGE_ONLY === '1'

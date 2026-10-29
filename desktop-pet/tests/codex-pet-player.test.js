@@ -23,7 +23,7 @@ function harness() {
   };
   const container = { ownerDocument: document, children: [], appendChild(child) { this.children.push(child); } };
   return { container, document, media, requests, listeners, changes, images, draws,
-    load(rows = 9) { const image = images.at(-1); image.naturalWidth = 1536; image.naturalHeight = rows * 208; image.onload?.(); },
+    load(rows = 9, scale = 1) { const image = images.at(-1); image.naturalWidth = 1536 * scale; image.naturalHeight = rows * 208 * scale; image.onload?.(); },
     step(ms) { now += ms; const callbacks = [...requests.values()]; requests.clear(); callbacks.forEach(fn => fn(now)); },
     hidden(value) { document.hidden = value; listeners.get('visibilitychange')?.(); },
     reduce(value) { media.matches = value; changes.forEach(fn => fn()); }
@@ -52,6 +52,47 @@ test('nine original actions crop their real rows, skip unused columns, and retai
     }
   }
   player.destroy(); assert.equal(h.requests.size, 0);
+});
+
+test('HD atlases retain native backing pixels through all display sizes and Retina changes', () => {
+  for (const version of [1, 2]) for (const scale of [1, 2, 3]) {
+    const h = harness(), rows = version === 1 ? 9 : 11;
+    h.document.defaultView.devicePixelRatio = 2;
+    const player = Player.create(h.container, { descriptor: { ...descriptor, version, rows }, size: 260 });
+    h.load(rows, scale);
+    assert.equal(player.element.dataset.codexReady, 'ready');
+    assert.deepEqual([player.element.width, player.element.height], [192 * scale, 208 * scale]);
+    for (const size of [60, 80, 108, 120, 180, 260, 300]) {
+      assert.equal(player.setSize(size), true);
+      assert.equal(player.element.style.height, `${size}px`);
+      assert.equal(parseFloat(player.element.style.width), size * 192 / 208);
+      for (const action of Player.ACTIONS) {
+        player.setAction(action.id); h.step(0);
+        assert.deepEqual(h.draws.at(-1).slice(1), [0, action.row * 208 * scale,
+          192 * scale, 208 * scale, 0, 0, 192 * scale, 208 * scale]);
+      }
+    }
+    h.document.defaultView.devicePixelRatio = 3;
+    player.setSize(260);
+    assert.deepEqual([player.element.width, player.element.height], [192 * scale, 208 * scale], 'changing displays must not discard native source pixels');
+    player.destroy();
+  }
+});
+
+test('HD load rejects inconsistent or unsupported grids and resets backing dimensions for old pets', () => {
+  const h = harness(), failures = [];
+  const player = Player.create(h.container, { descriptor, onError: error => failures.push(error) });
+  for (const [width, height] of [[2304, 2808], [6144, 7488], [4608, 1872], [1536, 5616]]) {
+    player.setPet({ ...descriptor, id: `${width}-${height}` });
+    const image = h.images.at(-1); image.naturalWidth = width; image.naturalHeight = height; image.onload();
+    assert.equal(player.element.dataset.codexReady, 'error');
+  }
+  assert.equal(failures.length, 4);
+  player.setPet({ ...descriptor, id: 'hd' }); h.load(9, 3);
+  assert.equal(player.element.height, 624);
+  player.setPet({ ...descriptor, id: 'legacy' }); h.load();
+  assert.equal(player.element.height, 208); assert.equal(player.element.dataset.codexReady, 'ready');
+  player.destroy();
 });
 
 test('Codex idle takes 6.6 seconds while the wave retains its 700ms cycle', () => {

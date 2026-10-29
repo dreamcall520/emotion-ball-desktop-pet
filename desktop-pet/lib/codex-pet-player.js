@@ -43,6 +43,7 @@
     canvas.style.objectFit = 'contain';
     container.appendChild(canvas);
     const context = canvas.getContext('2d');
+    let frameWidth = FRAME_WIDTH, frameHeight = FRAME_HEIGHT;
     const media = view.matchMedia?.('(prefers-reduced-motion: reduce)');
     let image = null, descriptor = null, loaded = false, destroyed = false, paused = false;
     let action = ACTIONS[0], frame = 0, elapsed = 0, previous = null, request = null;
@@ -53,9 +54,9 @@
     }
     function paint() {
       if (destroyed || !loaded) return;
-      context.clearRect(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
-      context.drawImage(image, frame * FRAME_WIDTH, action.row * FRAME_HEIGHT,
-        FRAME_WIDTH, FRAME_HEIGHT, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+      context.clearRect(0, 0, frameWidth, frameHeight);
+      context.drawImage(image, frame * frameWidth, action.row * frameHeight,
+        frameWidth, frameHeight, 0, 0, frameWidth, frameHeight);
       canvas.dataset.codexAction = action.id;
       canvas.dataset.codexFrame = String(frame);
       options.onFrame?.(action.id, frame);
@@ -88,7 +89,7 @@
       stop();
       if (image) image.onload = image.onerror = null;
       descriptor = { ...next }; loaded = false; frame = elapsed = 0;
-      context.clearRect(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+      context.clearRect(0, 0, canvas.width, canvas.height);
       canvas.dataset.codexPetId = descriptor.id;
       canvas.dataset.codexReady = 'loading';
       canvas.setAttribute('aria-label', descriptor.name);
@@ -102,8 +103,13 @@
       nextImage.onerror = failed;
       nextImage.onload = function () {
         if (destroyed || image !== nextImage) return;
-        if (nextImage.naturalWidth !== FRAME_WIDTH * COLUMNS ||
-            nextImage.naturalHeight !== FRAME_HEIGHT * descriptor.rows) { failed(); return; }
+        const scale = nextImage.naturalWidth / (FRAME_WIDTH * COLUMNS);
+        if (!Number.isInteger(scale) || scale < 1 || scale > 3 ||
+            nextImage.naturalHeight !== FRAME_HEIGHT * descriptor.rows * scale) { failed(); return; }
+        // Preserve the native frame pixels on every display. CSS controls the
+        // logical size; a Retina screen never receives a downsampled 192px frame.
+        frameWidth = canvas.width = FRAME_WIDTH * scale;
+        frameHeight = canvas.height = FRAME_HEIGHT * scale;
         loaded = true; canvas.dataset.codexReady = 'ready'; paint(); syncPlayback();
       };
       nextImage.src = descriptor.imageURL;

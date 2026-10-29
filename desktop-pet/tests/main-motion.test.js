@@ -3437,20 +3437,20 @@ test('主题保存失败时回滚且不广播，菜单保持之前的选择', as
 
 test('可信定制入口完整解码副本后保存内容ID，源与副本引用都可收藏且不持久化URL', async () => {
   const sourceId = `codex-${'a'.repeat(64)}`, copiedId = `codex-${'b'.repeat(64)}`;
-  for (const version of [1, 2]) {
+  for (const version of [1, 2]) for (const scale of [3, 2, 1]) {
     const rows = version === 1 ? 9 : 11, f = await fixture();
     f.call('openCustomization()');
     const editor = f.call('customizationWindow'), decodes = [];
     f.call(`codexPets = {
       getImported(id) { if(id!==${JSON.stringify(copiedId)}) throw Error('not imported');
-        return {id,name:'测试形象',version:${version},rows:${rows},spritesheetPath:'/fixture/copied.webp'}; },
+        return {id,name:'测试形象',version:${version},rows:${rows},spriteScale:${scale},spritesheetPath:'/fixture/copied.webp'}; },
       importPet(id) { if(id!==${JSON.stringify(sourceId)}) throw Error('unknown source');
         return this.getImported(${JSON.stringify(copiedId)}); },
       resolve(id) { if(id!==${JSON.stringify(sourceId)}) throw Error('unknown source');
         return {...this.getImported(${JSON.stringify(copiedId)}),id,spritesheetPath:'/fixture/source.webp'}; }
     }`);
     editor.webContents.executeJavaScriptInIsolatedWorld = async (world, scripts) => {
-      decodes.push({ world, code: scripts[0].code }); return { width: 1536, height: rows * 208 };
+      decodes.push({ world, code: scripts[0].code }); return { width: 1536 * scale, height: rows * 208 * scale };
     };
     const appearance = { shape: 'codex-pet', codexPetId: sourceId, auroraTransparency: 20,
       imageURL: 'file:///untrusted.webp', codexPet: { id: sourceId, imageURL: 'file:///untrusted.webp' } };
@@ -3474,7 +3474,7 @@ test('可信定制入口完整解码副本后保存内容ID，源与副本引用
 
 test('副本解码失败或尺寸不符时拒绝保存与新增收藏，原设置和广播均保持', async () => {
   const sourceId = `codex-${'c'.repeat(64)}`, copiedId = `codex-${'d'.repeat(64)}`;
-  for (const dimensions of [null, { width: 1536, height: 1872 }]) {
+  for (const dimensions of [null, { width: 1536, height: 1872 }, { width: 2304, height: 3432 }, { width: 6144, height: 9152 }, { width: 4608, height: 2288 }]) {
     const f = await fixture(); f.call('writeError=()=>{};openCustomization()');
     f.call(`settings.startupAppearance=normalizeAppearance({shape:'cloud'});
       settings.appearancePresets=[{id:'00000000-0000-4000-8000-000000000001',name:'既有收藏',appearance:normalizeAppearance({shape:'square'})}];`);

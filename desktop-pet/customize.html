@@ -175,7 +175,7 @@
   <script src="quota-effects.js"></script>
   <script src="quota-customizer.js"></script>
 
-<dialog id="local-help-dialog" aria-labelledby="local-help-title"><div class="dialog-header"><h2 id="local-help-title">素材制作说明</h2><button id="local-help-close" class="icon-button" type="button" aria-label="关闭素材制作说明">×</button></div><section><h3>制作要求</h3><p>使用完整的动画宠物素材，包含 pet.json 和配套动作图。</p><p>图片格式：PNG 或 WebP。</p><p>图片尺寸：1536 × 1872 或 1536 × 2288 像素。</p></section><section><h3>文件夹示例</h3><pre>我的小伙伴/
+<dialog id="local-help-dialog" aria-labelledby="local-help-title"><div class="dialog-header"><h2 id="local-help-title">素材制作说明</h2><button id="local-help-close" class="icon-button" type="button" aria-label="关闭素材制作说明">×</button></div><section><h3>制作要求</h3><p>使用完整的动画宠物素材，包含 pet.json 和配套动作图。</p><p>图片格式：PNG 或 WebP。</p><p>基础图片尺寸：1536 × 1872 或 1536 × 2288 像素，均为 8 列动作格。</p><p>支持整张等比例 2 倍或 3 倍高清图集。3 倍尺寸为 4608 × 5616（9 行）或 4608 × 6864（11 行）像素，单格 576 × 624 像素。</p><p>每张图最大 16 MiB。请用原生高清动作帧制作；把小图放大不会增加细节。</p></section><section><h3>文件夹示例</h3><pre>我的小伙伴/
 ├── pet.json   宠物名称和动作说明
 └── pet.png    配套动作图片</pre><p>导入时选择「我的小伙伴」整个文件夹。图片名称应与 pet.json 中填写的名称一致，也可以使用 WebP 图片。</p><p class="muted">普通照片、GIF 或仅修改文件名，不能直接作为动画宠物使用。</p></section></dialog><script src="customize-renderer.js"></script></body>
 </html>
