@@ -5,19 +5,23 @@ function unionBounds(rows){const x=Math.floor(Math.min(...rows.map(r=>r.x))),y=M
 function createQuotaCardGroupTransition(options){
   const {isContextCurrent=()=>true,onSettled=()=>{},onError=()=>{}}=options;
   const overlay=options.createOverlay?options.createOverlay():createQuotaCardTransitionWindow(options);
+  const modeOwners=new Map();
   let generation=0,current=null,destroyed=false;
   const valid=s=>!destroyed&&current===s&&s.token===generation&&isContextCurrent(s.contextKey)!==false;
   function report(error){try{onError(error);}catch(_){}}
   function fallback(s,error){report(error);let canceled=true;try{canceled=isContextCurrent(s.contextKey)===false;}catch(_){}release(s,canceled);}
-  function mode(cards,value){const expected=generation;let failure;for(const row of cards){if(generation!==expected){if(value!==null)throw Error('额度区过渡已替换');return;}try{row.controller.setGroupTransitionMode(value);}catch(error){report(error);if(value!==null)failure ||= error;}}if(value!==null&&generation!==expected)throw Error('额度区过渡已替换');if(failure)throw failure;}
+  function mode(cards,value,token){let failure;for(const row of cards){if(value!==null&&generation!==token)throw Error('额度区过渡已替换');if(value===null){if(modeOwners.get(row.controller)!==token)continue;modeOwners.delete(row.controller);}else modeOwners.set(row.controller,token);try{row.controller.setGroupTransitionMode(value);}catch(error){report(error);if(value!==null)failure ||= error;}}if(value!==null&&generation!==token)throw Error('额度区过渡已替换');if(failure)throw failure;}
+  // Claim the whole set before a controller callback can synchronously replace it.
+  function claimModes(s){for(const row of [...s.cards,...s.pinnedCards])modeOwners.set(row.controller,s.token);}
+  function releaseModes(s){mode(s.cards,null,s.token);mode(s.pinnedCards,null,s.token);}
   function release(s,canceled){
     if(current!==s)return;
-    const finishToken=generation;current=null;mode(s.cards,null);if(generation!==finishToken)return;
+    const finishToken=generation;current=null;releaseModes(s);if(generation!==finishToken)return;
     try{onSettled({expanded:s.expanded,contextKey:s.contextKey,canceled});}catch(error){report(error);}
     // Reveal staged real windows before removing the full-size entry snapshot.
     if(current===null&&generation===finishToken)overlay.hide();
   }
-  function cancel(){const canceledGeneration=++generation;const s=current;current=null;overlay.hide();if(s&&generation===canceledGeneration){mode(s.cards,null);if(generation===canceledGeneration)try{onSettled({expanded:s.expanded,contextKey:s.contextKey,canceled:true});}catch(error){report(error);}}return canceledGeneration;}
+  function cancel(){const canceledGeneration=++generation;const s=current;current=null;overlay.hide();if(s){releaseModes(s);if(generation===canceledGeneration)try{onSettled({expanded:s.expanded,contextKey:s.contextKey,canceled:true});}catch(error){report(error);}}return canceledGeneration;}
   async function animate(s){
     await overlay.animate({token:s.token,expanded:s.expanded});
     if(valid(s))release(s,false);else if(current===s)release(s,true);
@@ -25,21 +29,27 @@ function createQuotaCardGroupTransition(options){
   async function request(input){
     if(destroyed)return {ok:false,canceled:true};
     const cards=(Array.isArray(input.cards)?input.cards:[]).filter((row,index,all)=>IDS.includes(row?.id)&&!row.pinned&&row.controller&&all.findIndex(other=>other.id===row.id)===index);
+    const pinnedCards=(Array.isArray(input.pinnedCards)?input.pinnedCards:[]).filter((row,index,all)=>IDS.includes(row?.id)&&row.controller&&!cards.some(card=>card.id===row.id||card.controller===row.controller)&&all.findIndex(other=>other.id===row.id||other.controller===row.controller)===index);
+    const sameRows=(a,b)=>a.length===b.length&&a.every((row,i)=>row.id===b[i].id&&row.controller===b[i].controller);
     const expanded=input.expanded===true;
     const previous=current;
-    if(previous&&previous.expanded===expanded&&previous.contextKey===input.contextKey&&cards.length===previous.cards.length&&cards.every((row,i)=>row.id===previous.cards[i].id&&row.controller===previous.cards[i].controller)&&JSON.stringify(input.anchor)===JSON.stringify(previous.anchor)&&!input.reducedMotion)return {ok:true,pending:true};
-    if(previous?.phase==='animating'&&previous.contextKey===input.contextKey&&cards.length===previous.cards.length&&cards.every((row,i)=>row.id===previous.cards[i].id&&row.controller===previous.cards[i].controller)&&rect(input.anchor)&&JSON.stringify(input.anchor)===JSON.stringify(previous.anchor)&&!input.reducedMotion){
+    if(previous&&previous.expanded===expanded&&previous.contextKey===input.contextKey&&sameRows(cards,previous.cards)&&sameRows(pinnedCards,previous.pinnedCards)&&JSON.stringify(input.anchor)===JSON.stringify(previous.anchor)&&!input.reducedMotion)return {ok:true,pending:true};
+    if(previous?.phase==='animating'&&previous.contextKey===input.contextKey&&sameRows(cards,previous.cards)&&sameRows(pinnedCards,previous.pinnedCards)&&rect(input.anchor)&&JSON.stringify(input.anchor)===JSON.stringify(previous.anchor)&&!input.reducedMotion){
       const s={...previous,token:++generation,expanded};current=s;
-      try{mode(cards,'masked');input.prepare?.();await animate(s);return {ok:valid(s)||current===null};}catch(error){if(current===s)fallback(s,error);return {ok:false,canceled:true};}
+      try{claimModes(s);mode(pinnedCards,'hold',s.token);mode(cards,'masked',s.token);input.prepare?.();if(!valid(s)){if(current===s)release(s,true);return {ok:false,canceled:true};}if(expanded)mode(pinnedCards,null,s.token);await animate(s);return {ok:valid(s)||current===null};}catch(error){if(current===s)fallback(s,error);return {ok:false,canceled:true};}
     }
     const canceledGeneration=cancel();if(destroyed||generation!==canceledGeneration)return {ok:false,canceled:true};
-    const s={token:++generation,expanded,cards,contextKey:input.contextKey,anchor:input.anchor,phase:'capturing',bounds:null};current=s;
+    const s={token:++generation,expanded,cards,pinnedCards,contextKey:input.contextKey,anchor:input.anchor,phase:'capturing',bounds:null};current=s;
     try{
       if(!isContextCurrent(s.contextKey))throw Error('额度区场景已变化');
       if(previous?.phase==='capturing'&&previous.expanded!==expanded&&previous.contextKey===input.contextKey){input.prepare?.();release(s,false);return {ok:true,immediate:true};}
       if(input.reducedMotion||!cards.length){input.prepare?.();release(s,false);return {ok:true,immediate:true};}
       if(!rect(input.anchor))throw Error('额度区收纳锚点无效');
-      mode(cards,expanded?'stage':'hold');
+      // Fixed cards stay painted at their old bounds while hidden cards are captured
+      // at the final layout. Otherwise a fixed card below them exposes a blank gap.
+      claimModes(s);
+      mode(pinnedCards,'hold',s.token);
+      mode(cards,expanded?'stage':'hold',s.token);
       input.prepare?.();
       let timer;
       const layers=await Promise.race([Promise.all(cards.map(row=>row.controller.captureGroupTransitionFrames())).then(rows=>rows.flat()),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('额度区快照超时')),700);})]).finally(()=>clearTimeout(timer));
@@ -50,7 +60,7 @@ function createQuotaCardGroupTransition(options){
       s.bounds=unionBounds([...checked.map(layer=>layer.bounds),input.anchor]);
       await overlay.prepare({token:s.token,bounds:s.bounds,layers:checked,anchor:input.anchor,expanded,scale:options.screen?.getDisplayMatching(s.bounds)?.scaleFactor||1});
       if(!valid(s)){if(current===s)release(s,true);return {ok:false,canceled:true};}
-      overlay.show();mode(cards,'masked');s.phase='animating';
+      overlay.show();if(expanded)mode(pinnedCards,null,s.token);mode(cards,'masked',s.token);s.phase='animating';
       await animate(s);return {ok:true};
     }catch(error){if(current===s)fallback(s,error);return {ok:false,canceled:true};}
   }

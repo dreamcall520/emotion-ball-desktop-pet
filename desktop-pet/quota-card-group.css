@@ -7,4 +7,4 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 @media (prefers-color-scheme: dark) { .capsule { border-color: rgba(255,255,255,.24); background: linear-gradient(180deg,rgba(255,255,255,.54),rgba(255,255,255,.46)); box-shadow: inset 0 .5px 0 rgba(255,255,255,.18),0 .5px 1px rgba(0,0,0,.08); } }
 @media (prefers-reduced-motion: reduce) { .capsule { transition: none; } }
 
-#toggle[aria-expanded="true"] .capsule { visibility: hidden; }
+#toggle[aria-expanded="true"] .capsule, #toggle[data-transitioning="true"] .capsule { visibility: hidden; }

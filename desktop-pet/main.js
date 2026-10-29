@@ -53,7 +53,7 @@ const { quotaFreeStackBounds } = require('./lib/quota-label-placement');
 const { createQuotaCardGroup, normalizeQuotaCards } = require('./lib/quota-card-group');
 const { createQuotaCardGroupWindow } = require('./lib/quota-card-group-window');
 const { createQuotaCardGroupTransition } = require('./lib/quota-card-group-transition');
-let quotaCardGroup = null, quotaCardGroupWindow = null, quotaGroupLastActive = false, quotaGroupWasExpanded = false, quotaCardGroupTransition = null, quotaTransitionContext = null;
+let quotaCardGroup = null, quotaCardGroupWindow = null, quotaGroupLastActive = false, quotaGroupWasExpanded = false, quotaCardGroupTransition = null, quotaTransitionContext = null, quotaCardBarTransitioning = false;
 const { createCodexDetailsWindow, ACTIONS: CODEX_DETAIL_ACTIONS } = require('./lib/codex-details-window');
 const { isTaskId } = require('./lib/codex-state');
 const { createQuotaLabelWindow } = require('./lib/quota-label-window');
@@ -1122,7 +1122,7 @@ function quotaGroupTransitionContext() {
     config:input.config,eligible:input.eligible,metrics:input.eligible.map(id=>{const m=quotaCardControllers()[id]?.getLayoutMetrics?.();return [id,m?{width:m.width,height:m.height,inset:m.inset}:null]}),reduced:quotaReducedMotion()});
 }
 function resetQuotaCardDetails() { for(const c of Object.values(quotaCardControllers()))c?.resetExpanded?.(); }
-function showQuotaCardBar(state,keepBounds=quotaCardGroupTransition?.isActive()) { quotaCardGroupWindow?.show({...state,keepBounds}); }
+function showQuotaCardBar(state,keepBounds=quotaCardGroupTransition?.isActive(),transitioning=quotaCardBarTransitioning||quotaCardGroupTransition?.isActive()) { quotaCardGroupWindow?.show({...state,keepBounds,transitioning:transitioning===true}); }
 function syncQuotaCardGroup() {
   refreshSheepCapsuleInk();
   if(quotaCardGroupTransition?.isActive()&&quotaGroupTransitionContext()!==quotaTransitionContext)quotaCardGroupTransition.cancel();
@@ -1132,13 +1132,14 @@ function prepareQuotaCardGroup() { edgeTuck?.pin(quotaCardGroup?.getState().expa
 function quotaCardGroupChanged(state) {
   const previousExpanded=quotaGroupWasExpanded,changedCollection=state.bar||quotaGroupLastActive;
   quotaGroupWasExpanded=state.expanded;quotaGroupLastActive=state.bar;
-  if(state.bar)showQuotaCardBar(state,previousExpanded||quotaCardGroupTransition?.isActive());else quotaCardGroupWindow?.hide();
+  if(state.bar)showQuotaCardBar(state,previousExpanded||quotaCardGroupTransition?.isActive(),quotaCardBarTransitioning||previousExpanded!==state.expanded||quotaCardGroupTransition?.isActive());else quotaCardGroupWindow?.hide();
   const context=quotaGroupTransitionContext(),bounds=quotaCardGroupWindow?.getBounds();
   if(previousExpanded!==state.expanded&&state.bar&&context&&bounds&&quotaCardGroupTransition){
-    quotaTransitionContext=context;
+    quotaTransitionContext=context;quotaCardBarTransitioning=true;
     const controllers=quotaCardControllers(),config=quotaCardConfig();
     void quotaCardGroupTransition.request({expanded:state.expanded,contextKey:context,
       cards:config.order.filter(id=>state.eligible.includes(id)&&!config.pinned.includes(id)).map(id=>({id,controller:controllers[id]})),
+      pinnedCards:config.order.filter(id=>state.eligible.includes(id)&&config.pinned.includes(id)).map(id=>({id,controller:controllers[id]})),
       anchor:{x:bounds.x+11,y:bounds.y+6.5,width:26,height:7},reducedMotion:quotaReducedMotion(),prepare:prepareQuotaCardGroup});
     return;
   }
@@ -4031,7 +4032,7 @@ async function bootstrap() {
     onActivate:keyboard=>quotaCardGroup?.activate({keyboard}),onDismiss:()=>quotaCardGroup?.dismiss()});
   quotaCardGroupTransition=createQuotaCardGroupTransition({BrowserWindow,screen,ipcMain,getAlwaysOnTop:()=>settings.alwaysOnTop,
     isContextCurrent:key=>quotaGroupTransitionContext()===key,
-    onSettled:({expanded,canceled})=>{if(canceled){if(!expanded&&!quotaCardGroup?.getState().expanded)resetQuotaCardDetails();void Promise.resolve().then(()=>{if(!quotaCardGroupTransition?.isActive())edgeTuck?.pin(quotaCardGroup?.getState().expanded===true,'quota-card-group');});return;}if(!expanded)resetQuotaCardDetails();prepareQuotaCardGroup();},
+    onSettled:({expanded,canceled})=>{if(canceled){if(!expanded&&!quotaCardGroup?.getState().expanded)resetQuotaCardDetails();void Promise.resolve().then(()=>{if(!quotaCardGroupTransition?.isActive()){quotaCardBarTransitioning=false;edgeTuck?.pin(quotaCardGroup?.getState().expanded===true,'quota-card-group');syncQuotaCardGroup();}});return;}quotaCardBarTransitioning=false;if(!expanded)resetQuotaCardDetails();prepareQuotaCardGroup();},
     onError:error=>reportQuotaError('额度区整体过渡',error)});
   void quotaCardGroupTransition.warm?.();
   quotaCardGroup = createQuotaCardGroup({schedule:setTimeout,cancel:clearTimeout,now:()=>Date.now(),getState:quotaCardGroupInput,getCursor:()=>{refreshSheepCapsuleInk();return screen.getCursorScreenPoint();},

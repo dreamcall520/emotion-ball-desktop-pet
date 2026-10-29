@@ -15,6 +15,7 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
   codexQuotaAppearance = 'system', codexShowExtraCredits = true, bubblesEnabled = true, colorMode = 'standard', uiTheme = 'green',
   consent = async () => ({ response: 1 }), consentReady = true, openExternal = async () => {}, saveError = null, updateArch = 'arm64',
   apiBalanceAccounts = [], apiBalanceFetch = null, networkOnline = true,
+  realQuotaGroupTransition = false, nativeWorkBuddyLabel = false,
   download = async (_contents, _installer, { onProgress }) => {
     onProgress({ state: 'downloading', percent: 100 });
     return { state: 'completed', path: '/fixture/Qiuqiu.dmg' };
@@ -222,6 +223,38 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
         return { getPreference: () => iconPreference.value, getSystemDark: () => iconPreference.dark, start: () => { iconPreference.calls.push('start'); },
           pause: () => { iconPreference.calls.push('pause'); }, close: () => { iconPreference.calls.push('close'); } };
       } };
+      if (name === './lib/quota-card-group-transition' && realQuotaGroupTransition) return { createQuotaCardGroupTransition: options => {
+        groupTransition.options = options;
+        groupTransition.errors = [];
+        const overlay = groupTransition.overlay = {
+          visible: false, prepared: [], events: [], pending: null,
+          async warm() {},
+          async prepare(value) { this.prepared.push(value); this.events.push('prepare'); },
+          show() { this.visible = true; this.events.push('show'); this.onShow?.(); },
+          animate(value) {
+            this.events.push('animate');
+            return new Promise((resolve, reject) => { this.pending = { value, resolve, reject }; });
+          },
+          hide() {
+            this.visible = false; this.events.push('hide');
+            const pending = this.pending; this.pending = null;
+            pending?.reject(new Error('fixture overlay canceled'));
+          },
+          destroy() { this.hide(); }
+        };
+        const controller = realRequire(name).createQuotaCardGroupTransition({ ...options,
+          createOverlay: () => overlay,
+          onError: error => { groupTransition.errors.push(error); options.onError?.(error); } });
+        groupTransition.finish = () => {
+          const pending = overlay.pending;
+          assert.ok(pending, 'the real transition must reach its animation before completion');
+          overlay.pending = null; pending.resolve();
+        };
+        return { ...controller,
+          request(input) { groupTransition.requests.push(input); groupTransition.current = input; return controller.request(input); },
+          cancel() { groupTransition.cancels++; return controller.cancel(); }
+        };
+      } };
       if(name==='./lib/quota-card-group-transition')return {createQuotaCardGroupTransition:options=>{groupTransition.options=options;return {
         request(input){groupTransition.requests.push(input);groupTransition.current=input;groupTransition.active=true;input.prepare();return Promise.resolve({ok:true});},
         cancel(){groupTransition.cancels++;if(groupTransition.active){const input=groupTransition.current;groupTransition.active=false;options.onSettled({expanded:input.expanded,contextKey:input.contextKey,canceled:true});}},
@@ -300,7 +333,7 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
         service.recover = reason => { balanceRecoveries.push(reason); return recover(reason); };
         return service;
       } };
-      if (name === './lib/workbuddy-label-window') return { ...realRequire(name), createWorkBuddyLabelWindow: options => ({
+      if (name === './lib/workbuddy-label-window' && !nativeWorkBuddyLabel) return { ...realRequire(name), createWorkBuddyLabelWindow: options => ({
         options, show(state) { this.visible = true; this.state = state; }, hide() { this.visible = false; }, reposition() {}, setAlwaysOnTop() {}, destroy() {}, getWindow: () => null
       }) };
       if (name === './lib/chat-companion') return { createChatCompanion: options => { chat.options = options; return chat; } };
@@ -4263,6 +4296,146 @@ test('group overlay owns unpinned cards, excludes pins and resets card details o
  assert.equal(f.groupTransition.requests.at(-1).expanded,true);assert.deepEqual(Array.from(f.groupTransition.requests.at(-1).cards,row=>row.id),['codex']);assert.equal(f.groupTransition.requests.at(-1).anchor.width,26);
  f.call('quotaCardGroupTransition.finish();quotaCardGroup.dismiss()');assert.equal(f.groupTransition.requests.at(-1).expanded,false);assert.equal(resets,0,'exit capture keeps original detail dimensions');f.call('quotaCardGroupTransition.finish()');assert.equal(resets,1);
  f.call('quotaCardGroup.activate({keyboard:false})');const cancels=f.groupTransition.cancels;f.powerMonitor.emit('lock-screen');assert(f.groupTransition.cancels>cancels);assert.equal(f.groupTransition.active,false);
+});
+
+async function realQuotaTransitionFixture(t) {
+  const { normalizeSettings } = require('../lib/settings');
+  const { createZcodeLink } = require('../lib/zcode-link');
+  const loadedSettings = normalizeSettings({ size: 'tiny', x: -600, y: 100,
+    codexEnabled: true, codexQuotaAlwaysVisible: true, codexQuotaLabelSize: 'compact',
+    zcodeEnabled: true, zcodeQuotaAlwaysVisible: true, zcodeQuotaLabelSize: 'compact',
+    workbuddyEnabled: true, workbuddyQuotaAlwaysVisible: true,
+    apiBalanceEnabled: true, apiBalanceAlwaysVisible: true, openaiApiAlwaysVisible: false,
+    quotaCardPinned: ['codex', 'balance'], quotaCardOrder: ['codex', 'workbuddy', 'zcode', 'api', 'balance'] });
+  const f = await fixture({ loadedSettings, nativeQuotaLabel: true, nativeWorkBuddyLabel: true, realQuotaGroupTransition: true,
+    apiBalanceAccounts: [{ id: 'a'.repeat(64), name: '余额验收账户', provider: 'moonshot', supported: true, status: 'ready', currency: 'CNY' }],
+    zcodeLinkFactory: options => createZcodeLink({ ...options, createCompanion: () => ({
+      getSnapshot: () => ({ enabled: true, quota: { state: 'connected', updatedAt: Date.now(), stale: false, windows: [] } }),
+      async setEnabled() {}, async refresh() {}, close() {}
+    }) }) });
+  const pendingCaptures = [], modes = {}, modeProbe = { after: null };
+  const completeCaptures = error => {
+    const pending = pendingCaptures.splice(0);
+    assert.ok(pending.length > 0, 'capture must still be pending');
+    pending.forEach((capture, index) => error && index === 0 ? capture.reject(error) : capture.resolve([{
+      bounds: capture.bounds, png: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1])
+    }]));
+  };
+  t.after(() => {
+    f.app.emit('before-quit');
+    if (pendingCaptures.length) completeCaptures();
+  });
+  await flush();
+  f.connections[0].callbacks.onQuota({ updatedAt: 1800000000000,
+    windows: [{ id: 'codex:primary', label: 'Codex', windowMinutes: 300, remaining: 55, resetsAt: 1800018000000 }] });
+  await flush();
+  for (const [id, controller] of Object.entries(f.call('quotaCardControllers()'))) {
+    if (!['codex', 'workbuddy', 'zcode', 'balance'].includes(id)) continue;
+    modes[id] = [];
+    const setMode = controller.setGroupTransitionMode.bind(controller);
+    controller.setGroupTransitionMode = mode => { modes[id].push(mode); setMode(mode); modeProbe.after?.({ id, mode }); };
+    if (['workbuddy', 'zcode'].includes(id)) controller.captureGroupTransitionFrames = () => new Promise((resolve, reject) => {
+      pendingCaptures.push({ id, bounds: controller.getWindow().getBounds(), resolve, reject });
+    });
+  }
+  const bar = f.windows.find(win => win.options.webPreferences?.preload?.endsWith('/quota-card-group-preload.js'));
+  assert.ok(bar, 'real group capsule window exists');
+  const barPackets = () => bar.messages.filter(message => message.channel === 'pet:quota-card-group-state').map(message => message.packet);
+  const face = id => f.call(`quotaCardControllers().${id}.getVisibleBounds()`);
+  const pinnedGap = () => { const first = face('codex'), last = face('balance'); return last.y - first.y - first.height; };
+  const assertReleased = () => {
+    for (const id of ['codex', 'workbuddy', 'zcode', 'balance']) assert.equal(modes[id].at(-1), null, `${id} released its transition hold/mask`);
+    assert.equal(f.call('quotaCardGroupTransition.isActive()'), false);
+    assert.equal(barPackets().at(-1).transitioning, false, 'capsule recovers after transition cleanup');
+  };
+  const openAndSettle = async () => {
+    f.call('quotaCardGroup.activate({keyboard:false})'); completeCaptures(); await flush();
+    f.groupTransition.finish(); await flush();
+  };
+  return { ...f, pendingCaptures, modes, modeProbe, completeCaptures, barPackets, face, pinnedGap, assertReleased, openAndSettle };
+}
+
+test('真实收纳过渡：展开截图等待时固定卡间距保持8，画面就绪后才让出中间两行', async t => {
+  const f = await realQuotaTransitionFixture(t);
+  assert.equal(f.pinnedGap(), 8);
+  let gapAtOverlayShow = null;
+  f.groupTransition.overlay.onShow = () => { gapAtOverlayShow = f.pinnedGap(); };
+  f.call('quotaCardGroup.activate({keyboard:false})');
+  assert.equal(f.pendingCaptures.length, 2);
+  assert.equal(f.pinnedGap(), 8, 'unpainted WorkBuddy and empty ZCode rows must not create an 80px blank gap');
+  assert.equal(f.modes.codex.at(-1), 'hold');
+  assert.equal(f.modes.balance.at(-1), 'hold');
+  assert.equal(f.call('zcodeLink.getWindow().isVisible()'), false, 'empty ZCode stays staged until entry snapshot is ready');
+  f.completeCaptures(); await flush();
+  assert.equal(gapAtOverlayShow, 8, 'fixed cards keep the old layout until overlay.show');
+  assert.equal(f.groupTransition.overlay.visible, true);
+  assert.equal(f.pinnedGap(), 80, 'once snapshots are visible both compact rows occupy the opened gap');
+  assert.deepEqual(f.face('balance'), f.call('quotaFreeStackPlan().cards.balance.face'));
+  assert.equal(f.modes.balance.at(-1), null, 'entry releases fixed cards after the overlay is shown');
+  f.groupTransition.finish(); await flush();
+  f.assertReleased();
+  assert.equal(f.call('zcodeLink.getWindow().isVisible()'), true);
+  assert.deepEqual(f.face('zcode'), f.call('quotaFreeStackPlan().cards.zcode.face'));
+});
+
+test('真实收纳过渡：收起截图与动画期间隐藏胶囊，结束后同时恢复固定卡布局', async t => {
+  const f = await realQuotaTransitionFixture(t);
+  await f.openAndSettle();
+  const expandedBalance = f.face('balance'), messageStart = f.barPackets().length;
+  f.call('quotaCardGroup.dismiss()');
+  assert.equal(f.pendingCaptures.length, 2);
+  assert.equal(f.pinnedGap(), 80, 'fixed Kimi remains in the expanded stack during exit capture');
+  assert.deepEqual(f.face('balance'), expandedBalance);
+  assert.equal(f.call('zcodeLink.getWindow().isVisible()'), true, 'capture still owns the original empty ZCode card');
+  assert.equal(f.barPackets().at(-1).expanded, false);
+  assert.ok(f.barPackets().slice(messageStart).every(packet => packet.transitioning === true), 'capsule is suppressed from the first collapsed packet');
+  f.completeCaptures(); await flush();
+  assert.equal(f.groupTransition.overlay.visible, true);
+  assert.equal(f.pinnedGap(), 80, 'fixed Kimi stays held until exit animation settles');
+  assert.equal(f.modes.balance.at(-1), 'hold');
+  assert.ok(f.barPackets().slice(messageStart).every(packet => packet.transitioning === true), 'capsule remains suppressed throughout exit animation');
+  const releasePackets = [];
+  f.modeProbe.after = ({ id, mode }) => { if (mode === null) releasePackets.push({ id, transitioning: f.barPackets().at(-1).transitioning }); };
+  f.groupTransition.finish(); await flush();
+  assert.deepEqual(releasePackets.map(packet => packet.id).sort(), ['balance', 'codex', 'workbuddy', 'zcode']);
+  assert.ok(releasePackets.every(packet => packet.transitioning === true), 'controller layout callbacks cannot reveal capsule before every hold and mask is released');
+  f.assertReleased();
+  assert.equal(f.pinnedGap(), 8);
+  assert.equal(f.call('zcodeLink.getWindow().isVisible()'), false, 'unpinned empty state is collected after exit');
+  assert.equal(f.face('zcode'), null);
+  const bounds = f.call('quotaCardGroupWindow.getBounds()'), balance = f.face('balance');
+  assert.ok(bounds.y + 6.5 - (balance.y + balance.height) >= 6, 'recovered capsule sits outside the fixed stack');
+});
+
+test('真实收纳过渡：展开和收起截图失败都释放固定卡并恢复胶囊', async t => {
+  for (const expanded of [true, false]) await t.test(expanded ? '展开失败' : '收起失败', async t => {
+    const f = await realQuotaTransitionFixture(t);
+    if (!expanded) await f.openAndSettle();
+    f.call(expanded ? 'quotaCardGroup.activate({keyboard:false})' : 'quotaCardGroup.dismiss()');
+    f.completeCaptures(new Error('fixture capture failed')); await flush();
+    assert.ok(f.groupTransition.errors.some(error => error.message === 'fixture capture failed'));
+    f.assertReleased();
+    assert.equal(f.groupTransition.overlay.visible, false);
+    assert.equal(f.pinnedGap(), expanded ? 80 : 8);
+    assert.equal(f.call('zcodeLink.getWindow().isVisible()'), expanded);
+  });
+});
+
+test('真实收纳过渡：取消截图或动画释放固定卡，迟到结果不再显示旧画面', async t => {
+  for (const phase of ['capturing', 'animating']) for (const expanded of [true, false]) await t.test(`${expanded ? '展开' : '收起'} ${phase}`, async t => {
+    const f = await realQuotaTransitionFixture(t);
+    if (!expanded) await f.openAndSettle();
+    f.call(expanded ? 'quotaCardGroup.activate({keyboard:false})' : 'quotaCardGroup.dismiss()');
+    if (phase === 'animating') { f.completeCaptures(); await flush(); }
+    f.call('quotaCardGroupTransition.cancel()'); await flush();
+    f.assertReleased();
+    assert.equal(f.pinnedGap(), expanded ? 80 : 8);
+    assert.equal(f.call('zcodeLink.getWindow().isVisible()'), expanded);
+    assert.equal(f.groupTransition.overlay.visible, false);
+    if (phase === 'capturing') { f.completeCaptures(); await flush(); }
+    assert.equal(f.groupTransition.overlay.visible, false, 'late captures cannot show an obsolete overlay');
+    assert.equal(f.call('quotaCardGroupTransition.isActive()'), false);
+  });
 });
 
 test('real menu preferences map through the settings snapshot to five checked management DOM controls',async t=>{
