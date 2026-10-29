@@ -39,7 +39,7 @@
             </div></div>
             <label class="report-field"><span class="report-label">标题</span><input name="title" id="report-title" maxlength="100" required placeholder="一句话描述问题或建议"></label>
             <label class="report-field"><span class="report-label">说明</span><textarea name="detail" id="report-detail" rows="4" maxlength="4000" required placeholder="补充操作步骤或具体想法"></textarea></label>
-            <div class="report-field"><span class="report-label">截图</span><div><div class="report-upload"><button id="report-choose" class="action" type="button">添加截图</button><span class="description">最多 3 张 · 每张 1 MB</span><input id="report-attachments" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden aria-label="添加截图"></div><ul id="report-files" aria-label="已选截图"></ul></div></div>
+            <div class="report-field"><span class="report-label">截图</span><div id="report-dropzone" class="report-dropzone" tabindex="0" aria-label="截图，可拖拽或粘贴图片"><div class="report-upload"><button id="report-choose" class="action" type="button">添加截图</button><span class="description">拖拽或粘贴 · 最多 3 张，每张 1 MB</span><input id="report-attachments" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden aria-label="添加截图"></div><ul id="report-files" aria-label="已选截图"></ul></div></div>
             <label class="report-field"><span class="report-label">联系方式</span><input name="contact" id="report-contact" maxlength="200" autocomplete="off" placeholder="选填"></label>
             <div class="report-actions"><label class="report-diagnostics"><input id="report-diagnostics" type="checkbox" checked>附带运行环境</label><button id="report-submit" class="action report-submit" type="submit">提交反馈</button></div>
             <details class="report-preview"><summary>查看运行环境</summary><pre id="report-diagnostic-preview"></pre></details>
@@ -63,17 +63,46 @@
       finally { changing = false; updateState(); }
     };
     find('report-choose').onclick = () => find('report-attachments').click();
-    find('report-attachments').onchange = event => {
+    function addFiles(incoming) {
+      if (sending || find('report-form').hidden) return;
       message('');
-      for (const file of event.target.files) {
+      for (const file of incoming) {
         if (files.length >= 3) { message('最多选择 3 张截图。'); break; }
         if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type) || !file.size || file.size > 1024 * 1024) {
           message('请选择 PNG、JPG、GIF 或 WebP 图片，每张不超过 1 MB。'); continue;
         }
         files.push({ file, url: URL.createObjectURL(file) });
       }
-      event.target.value = ''; renderFiles();
+      renderFiles();
+    }
+    find('report-attachments').onchange = event => {
+      addFiles(event.target.files); event.target.value = '';
     };
+    const dropzone = find('report-dropzone');
+    root.addEventListener('dragover', event => {
+      if (event.dataTransfer?.types.includes('Files')) event.preventDefault();
+    });
+    root.addEventListener('drop', event => {
+      if (event.dataTransfer?.types.includes('Files')) event.preventDefault();
+    });
+    dropzone.ondragover = event => {
+      if (!event.dataTransfer?.types.includes('Files')) return;
+      event.preventDefault(); event.dataTransfer.dropEffect = sending ? 'none' : 'copy';
+      if (!sending) dropzone.classList.add('is-dragging');
+    };
+    dropzone.ondragleave = event => {
+      if (!dropzone.contains(event.relatedTarget)) dropzone.classList.remove('is-dragging');
+    };
+    dropzone.ondrop = event => {
+      event.preventDefault(); dropzone.classList.remove('is-dragging');
+      addFiles(event.dataTransfer?.files || []);
+    };
+    root.addEventListener('paste', event => {
+      if (sending || find('report-form').hidden) return;
+      const images = Array.from(event.clipboardData?.files || []).filter(file => file.type.startsWith('image/'));
+      if (!images.length) return;
+      event.preventDefault(); addFiles(images);
+    });
     const readFile = file => new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve({ name: file.name, type: file.type, data: String(reader.result).split(',')[1] });

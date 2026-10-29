@@ -290,6 +290,9 @@ body { padding-top:38px; }
 .report-types span { display:block; padding:5px 14px; border:1px solid transparent; border-radius:7px; font-size:11px; white-space:nowrap; color:var(--muted); }
 .report-types input:checked + span { background:var(--control-selected); border-color:var(--control-selected-edge); color:var(--accent-text); }
 .report-types input:focus-visible + span { outline:2px solid var(--accent); outline-offset:2px; }
+.report-dropzone { min-width:0; padding:10px 12px; border:1px dashed var(--control-edge); border-radius:9px; }
+.report-dropzone.is-dragging { border-color:var(--accent); background:var(--selected); }
+.report-dropzone:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .report-upload { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding-top:2px; }
 .report-upload .description { margin:0; }
 .report-actions { display:flex; justify-content:space-between; align-items:center; gap:12px; margin:4px 0 0 76px; }
