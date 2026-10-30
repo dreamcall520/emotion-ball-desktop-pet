@@ -66,3 +66,7 @@ for (const page of [home, html]) {
   assert.ok(fallback.every(m => !m[0].includes('target="_blank"') && !m[0].includes('↗')));
   assert.doesNotMatch(page, /<span>[^<]*微云分享页/);
 }
+
+assert.match(html, /Windows 试用版安装/);
+assert.match(html, /Windows 10\/11 x64/);
+assert.match(html, /WorkBuddy 联动及 ZCode 聊天、任务实时状态暂不支持/);

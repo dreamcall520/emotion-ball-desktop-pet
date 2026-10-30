@@ -20,6 +20,7 @@ test('0.4.09 adds weather and card improvements while retaining 0.4.08', () => {
   assert.match(globalArticles[0], /云朵感知天气/);
   assert.match(globalArticles[0], /高低温折线和温度区间视图/);
   assert.match(globalArticles[0], /v0\.4\.9\/Qiuqiu-0\.4\.09-macOS-arm64\.dmg/);
+  assert.match(globalArticles[0], /<h3[^>]*>0\.4\.09<\/h3>/);
   assert.doesNotMatch(globalArticles[0], /天气随身看|优化城市搜索|重复定位提示|天气获取失败时的展示/);
   const groups = [...globalArticles[0].matchAll(/<div class="update-group">([\s\S]*?)<\/div>/g)].map(m => m[1]);
   assert.deepEqual(groups.map(group => (group.match(/<li>/g) || []).length), [3, 2, 3, 1]);
@@ -74,15 +75,25 @@ test('0.4.05 and sixteen earlier historical blocks retain their content with num
   assert.doesNotMatch(html, /data-release-panel[^>]*\bhidden/);
 });
 
-test('each architecture offers DMG; the ZIP-only hotfix and website event stay accurate', () => {
-  assert.equal(downloads.length, 20);
-  assert.equal(new Set(downloads).size, 20);
+test('platform installer links and historical downloads stay accurate', () => {
+  assert.equal(downloads.length, 22);
+  assert.equal(new Set(downloads).size, 22);
   assert.doesNotMatch(html, /release-source|查看 GitHub Release/);
-  assert.ok(downloads.every(url => /^https:\/\/github\.com\/dreamcall520\/emotion-ball-desktop-pet\/releases\/download\/v[\d.]+\/.+\.(?:zip|dmg)$/.test(url)));
+  assert.ok(downloads.every(url => ['https://share.weiyun.com/6WH6LkRl', 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.9-windows/Qiuqiu-0.4.09-Windows-x64-Setup.exe'].includes(url) || /^https:\/\/github\.com\/dreamcall520\/emotion-ball-desktop-pet\/releases\/download\/v[\d.]+\/.+\.(?:zip|dmg)$/.test(url)));
   for (const article of articles) {
     const title = article.match(/<h3[^>]*>(.*?)<\/h3>/)[1];
     const urls = [...article.matchAll(/class="release-download [^"]+" href="([^"]+)"/g)].map(m => m[1]);
     if (title === '公开官网上线') { assert.equal(urls.length, 0); continue; }
+    if (title === '0.4.09') {
+      assert.deepEqual(urls, ['https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.9/Qiuqiu-0.4.09-macOS-arm64.dmg', 'https://share.weiyun.com/6WH6LkRl', 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.9-windows/Qiuqiu-0.4.09-Windows-x64-Setup.exe']);
+      assert.match(article, /Intel 芯片 · DMG/);
+      assert.match(article, /Windows · EXE/);
+      assert.match(article, /Windows 试用版 · Windows 10\/11 x64/);
+      assert.match(article, /天气需手动选城/);
+      const windowsButton = article.match(/<a[^>]*href="https:\/\/github\.com\/dreamcall520\/emotion-ball-desktop-pet\/releases\/download\/v0\.4\.9-windows\/[^"]+\.exe"[^>]*>/)[0];
+      assert.doesNotMatch(windowsButton, /target="_blank"/);
+      continue;
+    }
     assert.ok(urls.length > 0, title);
     const version = title.match(/^[\d.]+/)[0];
     const tag = `v${version.split('.').map(Number).join('.')}`;

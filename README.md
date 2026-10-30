@@ -8,7 +8,7 @@
 
 首页采用确认后的整屏银白/夜景玻璃主视觉，品牌语「球球-陪你自在一点」。`home.js` 复用原生 WebGL 实现自动柔光、曲面折射与鼠标水波；眼睛以2～4秒随机间隔自然眨动，约四分之一概率快速连眨两次，闭眼以像素宽度的抗锯齿圆弧收合并沿用原眼睛颜色；暂停、减少动态、页面隐藏及静态回退保持可用。主下载按钮为「国内下载 · 微云」并使用内联 Apple 标识，下方注明版本与 Apple 芯片，并提供 GitHub 备用入口；Intel 保留顶部独立说明入口。首页顶部导航叠加半透明渐变、柔和高光与背景模糊；浅深色分别处理，并支持减少透明度与无模糊能力的静态回退。
 
-原官网功能和演示保留在 `product/index.html`，地址为 `https://qiuqiu.pet/product/`。导航的功能介绍、安装指南与更新日志在新页签打开；旧首页功能锚点通过 `location.replace` 跳转到对应功能分区。旧 `product.html` 仅保留兼容跳转，并携带原查询参数和锚点。产品正文和演示、许可及署名保持。各版本日志的小标题统一按 `1.`、`2.` 顺序编号，每个版本重新从 1 开始。日志位于 `updates/index.html`（`https://qiuqiu.pet/updates/`），按用户要求移除 0.4.03 条目，本次以 0.4.08 替换 0.4.06 日志，保留其余 17 条记录；0.4.08 与 0.4.00 在侧栏、正文及手机选择器标为「大版本更新」。0.4.09 新增天气与额度卡交互更新日志，保留 0.4.08 及更早历史。各版本下载每种架构只保留 DMG，共 20 个入口（19 个 DMG 与唯一无 DMG 的 0.3.10 热修复 ZIP）；重复的 Apple／Intel 版本提示已删。桌面侧栏、手机选择器、hash 直链与历史返回保持，无 JavaScript 时显示全部记录。旧 `/product/#updates` 及 `product.html#updates` 转到独立日志页。首页、功能介绍、更新日志保留独立 canonical 和分享封面；隐私说明独立位于 `https://qiuqiu.pet/privacy/`，四页均已加入 sitemap。
+原官网功能和演示保留在 `product/index.html`，地址为 `https://qiuqiu.pet/product/`。导航的功能介绍、安装指南与更新日志在新页签打开；旧首页功能锚点通过 `location.replace` 跳转到对应功能分区。旧 `product.html` 仅保留兼容跳转，并携带原查询参数和锚点。产品正文和演示、许可及署名保持。各版本日志的小标题统一按 `1.`、`2.` 顺序编号，每个版本重新从 1 开始。日志位于 `updates/index.html`（`https://qiuqiu.pet/updates/`），按用户要求移除 0.4.03 条目，本次以 0.4.08 替换 0.4.06 日志，保留其余 17 条记录；0.4.08 与 0.4.00 在侧栏、正文及手机选择器标为「大版本更新」。0.4.09 新增天气与额度卡交互更新日志，保留 0.4.08 及更早历史。macOS 各版本下载每种架构只保留 DMG，Windows 提供 EXE，共 22 个入口（20 个 DMG、1 个 Windows EXE 与唯一无 DMG 的 0.3.10 热修复 ZIP）；重复的 Apple／Intel 版本提示已删。桌面侧栏、手机选择器、hash 直链与历史返回保持，无 JavaScript 时显示全部记录。旧 `/product/#updates` 及 `product.html#updates` 转到独立日志页。首页、功能介绍、更新日志保留独立 canonical 和分享封面；隐私说明独立位于 `https://qiuqiu.pet/privacy/`，四页均已加入 sitemap。
 
 首页「免费、非商业 · 署名与许可」使用原生小弹窗，分行展示使用范围、原作者 GitHub 项目与再次分发说明，可通过关闭按钮、Esc 或点击背景关闭；不再跳转功能介绍。原作者旧项目地址已重定向为 `sam70361/aora-bot`，弹窗链接使用 GitHub API 回读的现地址。首页新页签入口统一为细线圆角新窗口图标。更新日志只展示对应版本下载，不附加 GitHub Release 页面入口。
 
@@ -98,7 +98,7 @@ Apple 芯片版 **0.4.09**，发布日期 **2026-10-29**，GitHub 兼容标签 `
 | [Qiuqiu-0.4.09-macOS-arm64.dmg](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.9/Qiuqiu-0.4.09-macOS-arm64.dmg) | 184736236 | `947e5a438914e6421959f66563e8c25105080c3db21e6a3e88ceb314e1316189` |
 | [Qiuqiu-0.4.09-macOS-arm64.zip](https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.9/Qiuqiu-0.4.09-macOS-arm64.zip) | 170027184 | `c28e83bd577e3f612eb3f42c76cf4310d31efce48b19ca7eff192ba1268042f8` |
 
-正式源码为 `main@d0871ea4e2fbfe4799f7263f0576b06bd98747c3`。页面主下载及日志提供 DMG，ZIP 作为发布附件保留。
+正式源码为 `main@d0871ea4e2fbfe4799f7263f0576b06bd98747c3`。页面主下载及日志提供 DMG，ZIP 作为发布附件保留。 0.4.09 日志的同一下载区域提供 Apple 芯片 DMG、Intel 芯片 DMG 和 Windows x64 试用 EXE。Intel 指向已核验的国内分享 https://share.weiyun.com/6WH6LkRl ，Windows 使用独立 GitHub 试用 Release 的 EXE 直链 https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.9-windows/Qiuqiu-0.4.09-Windows-x64-Setup.exe ，不改变 Apple 稳定版 Latest。Windows 按试用版展示，保留 Windows 10/11 x64 系统要求及天气手动选城、WorkBuddy 联动与部分聊天能力边界，不冒称与 macOS 全部功能相同。 安装包为 `Qiuqiu-0.4.09-Windows-x64-Setup.exe`，199492598 bytes，SHA-256 `63ad5827055918e5b50f46805793483da1ea443a6de5aec731d79fb27ac17971`；附件 API 的大小与 digest 已核对，匿名完整 GET 的大小与 SHA-256 也与原始 EXE 一致，证据位于项目 `验收记录/官网-多平台下载入口-20261030/windows-github-download.json`。原微云 `2ib9DR95` 两次普通下载未触发实际文件，因此未作为上线入口。
 
 国内微云：[Qiuqiu-0.4.09-macOS-arm64.dmg](https://share.weiyun.com/EYLnV2WY)，无提取码。普通下载实测 **184736236 bytes**、SHA-256 `947e5a438914e6421959f66563e8c25105080c3db21e6a3e88ceb314e1316189`，与正式 DMG 一致。旧分享保留，不再作为当前下载入口；未承诺匿名、关闭 VPN 或所有国内网络均可用。天气隐私说明同步区分系统定位及地名解析、Open-Meteo 查询与本机缓存。
 
