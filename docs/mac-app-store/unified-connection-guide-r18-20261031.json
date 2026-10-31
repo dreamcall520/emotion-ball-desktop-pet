@@ -10,7 +10,7 @@
   "helperDigestsVerified": true,
   "asarSha256": "03e1ca7166802e5964b591dc8147ca7d88a0acb473db2328077ce733f8414903",
   "nativeFinalVerified": true,
-  "zcodePluginInstallation": "awaiting-user-consent",
+  "zcodePluginInstallation": "installed-enabled-native-verified",
   "zcodeOfficialChatVerified": false,
   "actualElectronMasVerified": false,
   "validSigningIdentities": 0,
@@ -29,5 +29,6 @@
     "zcodeGuideShowsCompletedChatAndDataThenUnapprovedTaskStep": true,
     "newModelMessagesSent": 0
   },
-  "oldSettingsEntry": "focuses-tool-card-before-guide"
+  "oldSettingsEntry": "focuses-tool-card-before-guide",
+  "zcodePluginLiveReceipt": "zcode-desktop-live-20261031.json"
 }

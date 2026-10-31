@@ -1,0 +1,34 @@
+{
+  "date": "2026-10-31",
+  "candidate": "R18",
+  "appVersion": "ZCode 3.16.3",
+  "explicitUserConsent": true,
+  "plugin": "qiuqiu-zcode-task-events",
+  "installedBy": "official-native-plugin-marketplace-local-source",
+  "nativeInstalledEnabledVerified": true,
+  "syntheticMessagesSent": 1,
+  "syntheticInstruction": "no-tools-no-file-read-no-file-modification-no-subtasks",
+  "nativeReply": "球球 ZCode 插件连接成功",
+  "nativeElapsedSeconds": 11,
+  "receiverUIObserved": [
+    "原工具已提交输入 · 不确认最终完成",
+    "原工具观察到停止，最终完成未确认 · 不确认最终完成"
+  ],
+  "mainReplyFinalVerifiedByHook": false,
+  "overallTaskFinalVerified": false,
+  "installationObservationPrivateMode": "0600",
+  "restartRestore": {
+    "authenticatedReceiverRestored": true,
+    "preparedCapabilityUnchanged": true,
+    "installationObservationRetained": true,
+    "newEventSentByProbe": false,
+    "probeMethod": "authenticated GET rejected 405 without publishing event"
+  },
+  "originalChatBodiesExported": false,
+  "originalCredentialsRead": false,
+  "officialPlanChatVerified": false,
+  "actualElectronMasVerified": false,
+  "formalAppReplaced": false,
+  "pushed": false,
+  "submitted": false
+}
