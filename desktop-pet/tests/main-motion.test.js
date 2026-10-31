@@ -4842,3 +4842,12 @@ test('weather click expansion is not canceled when the old quota collection hove
  const load=f.windowClass.prototype.loadFile;f.windowClass.prototype.loadFile=function(file){const result=load.call(this,file);return file.endsWith('/shortcuts.html')?Promise.resolve():result;};
  f.call('openShortcuts()');await flush();assert.equal(f.weather.expanded,false,'explicitly opening shortcuts still dismisses weather');
 });
+
+
+test('weather continuous collapse keeps ownership through group reset but explicit shortcuts can cancel', async t => {
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));
+ let resets=0;f.weather.isClosing=()=>true;f.weather.resetExpanded=()=>{resets++;};
+ f.call('resetQuotaCardDetails()');assert.equal(resets,0);
+ const load=f.windowClass.prototype.loadFile;f.windowClass.prototype.loadFile=function(file){const result=load.call(this,file);return file.endsWith('/shortcuts.html')?Promise.resolve():result;};
+ f.call('openShortcuts()');await flush();assert.equal(resets,1);
+});

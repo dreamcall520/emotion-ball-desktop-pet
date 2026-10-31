@@ -1324,7 +1324,7 @@ function quotaGroupTransitionContext() {
   return JSON.stringify({pet,area,mode:p?.mode,side:p?.side,page:codexPageEpoch,appearance:settings.customization.appearance,
     config:input.config,eligible:input.eligible,metrics:input.eligible.map(id=>{const m=quotaCardControllers()[id]?.getLayoutMetrics?.();return [id,m?{width:m.width,height:m.height,inset:m.inset}:null]}),reduced:quotaReducedMotion()});
 }
-function resetQuotaCardDetails() { for(const [id,c] of Object.entries(quotaCardControllers())) { if(id==='weather'&&c?.isExpanded?.())continue; c?.resetExpanded?.(); } }
+function resetQuotaCardDetails() { for(const [id,c] of Object.entries(quotaCardControllers())) { if(id==='weather'&&(c?.isExpanded?.()||c?.isClosing?.()))continue; c?.resetExpanded?.(); } }
 function showQuotaCardBar(state,keepBounds=quotaCardGroupTransition?.isActive(),transitioning=quotaCardBarTransitioning||quotaCardGroupTransition?.isActive()) { if (weatherWindow?.isExpanded?.()) { quotaCardGroupWindow?.hide(); return; } quotaCardGroupWindow?.show({...state,keepBounds,transitioning:transitioning===true}); }
 function syncQuotaCardGroup() {
   refreshSheepCapsuleInk();
@@ -4485,6 +4485,7 @@ async function bootstrap() {
   initializeCodexCompanion();
   createPetWindow();
   weatherWindow = createWeatherWindow({ BrowserWindow, ipcMain, screen, getReducedMotion: quotaReducedMotion, fetch: (...args) => net.fetch(...args),
+    getCollectionWindow: () => quotaCardGroupWindow?.getWindow?.(),
     alwaysOnTop: settings.alwaysOnTop, filePath: path.join(app.getPath('userData'), 'weather.json'), getPetWindow: () => petWindow,
     getStackAnchor: () => [quotaLabel?.getVisibleBounds?.(), apiUsageLabel?.getVisibleBounds?.(), zcodeLink?.getVisibleBounds?.(), workbuddyLabel?.getVisibleBounds?.(), apiBalanceLabel?.getVisibleBounds?.(), quotaCardGroupWindow?.getBounds?.()].filter(Boolean).sort((a,b) => b.y+b.height-a.y-a.height)[0] || null,
     getBubbleBounds: quotaObstacleBounds, getPresentation: () => ({ ...quotaLayoutPresentation(), quotaGroupHidden: Boolean(quotaCardCollected('weather') || quotaFreeStackPlan()?.hidden?.includes('weather')), quotaGroupLayout: quotaFreeStackPlan()?.cards.weather }),

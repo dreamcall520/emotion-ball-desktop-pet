@@ -135,24 +135,24 @@
     if (!expanded && document.documentElement.dataset.inputMode === 'keyboard') el('folded').focus();
   }
   function setExpanded(value, animateCollapse = false) {
-    if (value || !animateCollapse || reducedMotion.matches || !expanded) { cancelCollapse(); applyExpanded(value); return; }
+    if (value || !animateCollapse || reducedMotion.matches || !expanded || typeof api.collapse !== 'function') { if (value && collapseAnimation) resizeKey = ''; cancelCollapse(); applyExpanded(value); return; }
     if (collapseAnimation) return;
     contentAnimation?.cancel();
-    const token = ++collapseToken, label = el('quota-label');
-    const animation = label.animate?.([{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(.97)' }],
-      { duration: 90, easing: 'ease-out', fill: 'forwards' });
-    if (!animation) { applyExpanded(false); return; }
-    collapseAnimation = animation; label.dataset.collapsing = 'true';
-    // Keep one fixed native host during the compositor fade. Then shrink once,
-    // without macOS animating live layout and restored quota cards together.
-    animation.finished.catch(() => {}).then(() => {
-      if (collapseAnimation !== animation || token !== collapseToken) return;
-      collapseAnimation = null; animation.cancel(); delete label.dataset.collapsing;
-      applyExpanded(false); fadeContent(el('folded'), 80);
+    const token = ++collapseToken, label = el('quota-label'), request = { cancel() {} };
+    collapseAnimation = request; label.dataset.collapsing = 'true';
+    // Main owns the source/compact snapshots and one fixed transparent union
+    // host; no native window changes size while its surface is interpolating.
+    api.collapse({ reducedMotion: false }).then(result => {
+      if (collapseAnimation !== request || token !== collapseToken) return;
+      collapseAnimation = null; delete label.dataset.collapsing;
+      if (!result?.canceled) applyExpanded(false);
+    }).catch(() => {
+      if (collapseAnimation !== request || token !== collapseToken) return;
+      collapseAnimation = null; delete label.dataset.collapsing; applyExpanded(false);
     });
   }
   reducedMotion.addEventListener('change', () => {
-    if (reducedMotion.matches) { contentAnimation?.cancel(); if (collapseAnimation) setExpanded(false); }
+    if (reducedMotion.matches) { contentAnimation?.cancel(); if (collapseAnimation) { void api.collapse?.({ reducedMotion: true }).catch(() => {}); setExpanded(false); } }
     updateHero();
   });
   function showPicker(value) {
