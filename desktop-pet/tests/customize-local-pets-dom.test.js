@@ -50,6 +50,17 @@ assert.equal(await run("(()=>{const p=document.getElementById('local-panel'),r=p
 await run("document.querySelector('#local-pet-grid .pet-card').click();window.deleteCalls=[];window.deleteMode='cancel';petCustomizer.deleteLocalPet=async id=>{deleteCalls.push(id);if(deleteMode==='cancel')return{ok:false,canceled:true};if(deleteMode==='fail')return{ok:false,error:'该皮肤已设为启动默认，请先更换启动外观'};if(deleteMode==='pending')return new Promise(r=>window.finishDelete=r);localPets=[];return{ok:true,id}};void 0;");
 assert.equal(await run("document.querySelector('#local-pet-grid .pet-card').getAttribute('aria-pressed')"),'true');
 await until("previews.at(-1).codexPetId==='codex-'+ 'a'.repeat(64)",'selected local preview has rendered');
+// Multiple imported rows must keep names intact, including in a shorter window.
+await run("document.getElementById('message').hidden=true;window.localPets=Array.from({length:7},(_,i)=>({...localPet,id:'codex-'+(i+1).toString(16).repeat(64),importedId:'codex-'+(i+1).toString(16).repeat(64),name:i===0?'楚哥':'伙伴 '+(i+1)}));document.getElementById('refresh-local-pets').click()");
+await until("document.querySelectorAll('#local-pet-grid .pet-card').length===7",'multiple rows loaded');
+for(const size of [[800,580],[860,700],[1080,820]]){
+ win.setSize(...size);
+ for(let i=0;i<7;i++){
+  const g=await run(`(()=>{const n=document.querySelectorAll('#local-pet-grid .pet-name')[${i}],c=n.closest('.pet-card'),item=c.parentElement;n.scrollIntoView({block:'nearest'});const r=n.getBoundingClientRect(),b=c.getBoundingClientRect(),row=item.getBoundingClientRect();return{rect:{x:r.x,y:r.y,height:r.height},hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.outerHTML.slice(0,180),grid:{height:document.getElementById('local-pet-grid').clientHeight,scroll:document.getElementById('local-pet-grid').scrollTop},height:r.height,contained:r.top>=b.top&&r.bottom<=b.bottom&&b.bottom<=row.bottom+1,visible:n.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}})()`);
+  assert(g.height>=18&&g.contained&&g.visible,'every name has its own visible line at '+size.join('x')+' row '+i+' '+JSON.stringify(g));
+ }
+}
+await run("window.localPets=[localPet];document.getElementById('refresh-local-pets').click()");await until("document.querySelectorAll('#local-pet-grid .pet-card').length===1",'restore single local pet');
 if(process.env.PET_LOCAL_DELETE_SCREENSHOT){
  await run("const captureStyle=document.createElement('style');captureStyle.textContent='*{transition:none!important}';document.head.append(captureStyle);void 0;");
  const target=process.env.PET_LOCAL_DELETE_SCREENSHOT;fs.mkdirSync(path.dirname(target),{recursive:true});
