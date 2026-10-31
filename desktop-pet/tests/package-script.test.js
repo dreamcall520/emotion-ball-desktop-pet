@@ -115,10 +115,6 @@ test('安装包完整包含聊天窗口、持久对话和独立 Codex 通道，�
   const root = path.resolve(__dirname, '../..');
   const staging = prepareStaging(root);
   for (const relativePath of [
-    'desktop-pet/bubble-details.html',
-    'desktop-pet/bubble-details.css',
-    'desktop-pet/bubble-details-preload.js',
-    'desktop-pet/bubble-details.js',
     'desktop-pet/chat.html',
     'desktop-pet/chat.css',
     'desktop-pet/chat-preload.js',
