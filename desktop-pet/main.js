@@ -4125,7 +4125,7 @@ async function bootstrap() {
       const controllers={codex:quotaLabel,api:apiUsageLabel,zcode:zcodeLink,workbuddy:workbuddyLabel,balance:apiBalanceLabel,weather:weatherWindow};
       return {...quotaLayoutPresentation(),shape:settings?.customization?.appearance?.shape,quotaPreferredPlacement:quotaExpandedStackPlan()?.placement,sheepInk:settings?.customization?.appearance?.shape==='new-year-sheep'?(currentSheepCapsuleInk()||currentSheepSettledInk()):null,
         sheepTheme:SheepTheme.resolveTheme(settings?.customization?.appearance?.sheepTheme,new Date()),facing:pet&&area?PetFacing.resolve(pet,area):'left',
-        cardStackBounds:quotaCardConfig().pinned.map(id=>controllers[id]?.getVisibleBounds?.()).filter(Boolean)};
+        bubbleBounds:quotaObstacleBounds(),cardStackBounds:quotaCardConfig().pinned.map(id=>controllers[id]?.getVisibleBounds?.()).filter(Boolean)};
     },
     onActivate:keyboard=>quotaCardGroup?.activate({keyboard}),onDismiss:()=>quotaCardGroup?.dismiss()});
   quotaCardGroupTransition=createQuotaCardGroupTransition({BrowserWindow,screen,ipcMain,getAlwaysOnTop:()=>settings.alwaysOnTop,
