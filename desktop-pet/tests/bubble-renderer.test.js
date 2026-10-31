@@ -82,7 +82,10 @@ if (process.versions.electron && process.argv.includes('--bubble-dom-child')) {
         assert.equal(value.buttons.length, expectedButtons, name);
         assert.equal(value.font, '14px', name + ': font remains readable');
         assert(inside(value.bubble) && inside(value.message), name + ': bubble/message outside native window ' + JSON.stringify(value));
-        assert(value.message.scroll <= value.message.client + (value.message.scrollH > value.message.clientH ? 3 : 1), name + ': horizontal text/ellipsis exceeds its box ');
+        // Chromium counts centered clamp-ellipsis paint in scrollWidth. Its visible
+        // boundary is the measured box; unclamped text must still fit without clipping.
+        if (value.message.scrollH <= value.message.clientH) assert(value.message.scroll <= value.message.client + 1, name + ': horizontal text exceeds its box ' + JSON.stringify(value.message));
+        else assert.equal(await run("getComputedStyle(document.getElementById('message')).overflowX"), 'hidden', name + ': truncated text must not paint beyond its measured box');
         if (!allowScroll) assert(value.message.scrollH <= value.message.clientH + 1 || value.message.height <= 60, name + ': text exceeds the three-line summary');
         assert.equal(await run("getComputedStyle(document.getElementById('message')).webkitLineClamp"), '3', name + ': uniform three-line limit');
         assert.equal(await run("getComputedStyle(document.getElementById('message')).overflowY"), 'hidden', name + ': no text scrollbar');
@@ -93,6 +96,16 @@ if (process.versions.electron && process.argv.includes('--bubble-dom-child')) {
         checks.push({ name, width: value.width, height: value.height, placement: value.placement, buttons: value.buttons.length });
         return value;
       }
+      const textLines = () => run(`(() => {
+        const m=document.getElementById('message'),r=m.getBoundingClientRect(),t=m.firstChild,lines=[];
+        for(let i=0;i<t.length;i++) {const range=document.createRange();range.setStart(t,i);range.setEnd(t,i+1);const b=range.getBoundingClientRect();
+          if(b.top>=r.top+r.height||b.bottom<=r.top)continue;
+          let line=lines.find(l=>Math.abs(l.y-b.top)<1);
+          if(!line){line={y:b.top,left:b.left,right:b.right};lines.push(line);}
+          line.left=Math.min(line.left,b.left);line.right=Math.max(line.right,b.right);
+        }
+        return {left:r.left,right:r.right,width:r.width,lines};
+      })()`);
       const createDirector = () => new DialogueDirector({ now: 0, random: () => 0 });
       const events = Object.keys(PHRASES);
       await show(createDirector().offer('hello', 10000));
@@ -196,6 +209,7 @@ if (process.versions.electron && process.argv.includes('--bubble-dom-child')) {
           await show({ text: '忙了一会儿，要不要休息一下？', actions: allowed.slice(0, count) });
           const result = await layout(`width-${width}-actions-${count}`, count);
           assert.equal(result.width, width);
+          if(count===2)assert.ok(Math.abs(result.buttons[0].y-result.buttons[1].y)<1,'two ordinary buttons stay on one row');
         }
         await show({ text: '长文案测试：' + '这段内容需要完整换行，按钮仍然清晰可见。'.repeat(8), actions: allowed.slice(0, 2).map(action => ({ ...action, label: action.label + '，稍后继续陪着你' })) });
         await layout(`width-${width}-long-text-and-labels`, 2);
@@ -211,10 +225,20 @@ if (process.versions.electron && process.argv.includes('--bubble-dom-child')) {
         const payload = await show({text:'布局参考·示例内容：'+ '较长说明统一展示最多三行，原有按钮保持可见。'.repeat(15),actions:allowed.slice(0,2)});
         const result = await layout(`summary-${theme}-${appearance}-${mode}-${width}`,2,true);
         assert(result.message.height <= 60 && result.message.scrollH > result.message.clientH,'long text is visibly limited to three lines');
+        assert.ok(Math.abs(result.buttons[0].y-result.buttons[1].y)<1,'both buttons stay horizontal across themes');
+        const justified=await textLines();assert.equal(justified.lines.length,3);
+        for(const line of justified.lines)assert.ok(Math.abs(line.left-justified.left)<1&&Math.abs(line.right-justified.right)<1,'three clamped lines fill both edges');
+
         await run("window.summaryAction=document.querySelector('#actions button');void 0");
         controller.show({...payload,text:'短消息。'});await frame();await wait(25);await frame();
         assert.equal(await run("document.querySelector('#actions button')===summaryAction"),true,'same-id short update preserves original button');
         assert.equal(await run("document.getElementById('message').clientHeight"),20,'short text takes only one line');
+        const short=await textLines();assert.ok(Math.abs((short.lines[0].left+short.lines[0].right)-(short.left+short.right))<1,'single short sentence remains centered');
+        controller.show({...payload,text:'这是一段用于检查末行居中的说明。'});await frame();await wait(25);await frame();
+        const natural=await textLines();assert.equal(natural.lines.length,2,'natural two-line fixture');
+        const last=natural.lines.at(-1);assert.ok(last.right-last.left<natural.width-20,'natural last line is not stretched');
+        assert.ok(Math.abs((last.left+last.right)-(natural.left+natural.right))<1,'natural last line stays centered');
+
       }
       area = { x: 0, y: 0, width: 1440, height: 900 };
       for (const x of [0, 1360]) for (const y of [0, 800]) {
