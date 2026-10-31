@@ -110,8 +110,8 @@ let weatherWindow = null;
 const SoftOrbModel = require('./lib/soft-orb-model');
 const APP_NAME = '球球桌宠';
 const ACCEPTANCE_KIND = require('../package.json').qiuqiuAcceptance;
-const IS_ACCEPTANCE = ['zcode', 'combined', 'weather','soft-orb','edge-peek'].includes(ACCEPTANCE_KIND);
-const ACCEPTANCE_NAME = ACCEPTANCE_KIND === 'edge-peek' ? '球球桌宠-贴边候选' : ACCEPTANCE_KIND === 'soft-orb' ? '球球桌宠-柔光团候选' : ACCEPTANCE_KIND === 'weather' ? '球球桌宠-天气验收' : ACCEPTANCE_KIND === 'combined' ? '球球桌宠-联动整合验收' : '球球桌宠-ZCode验收';
+const IS_ACCEPTANCE = ['zcode', 'combined', 'weather','soft-orb','edge-peek','bubble'].includes(ACCEPTANCE_KIND);
+const ACCEPTANCE_NAME = ACCEPTANCE_KIND === 'edge-peek' ? '球球桌宠-贴边候选' : ACCEPTANCE_KIND === 'bubble' ? '球球桌宠-气泡验收' : ACCEPTANCE_KIND === 'soft-orb' ? '球球桌宠-柔光团候选' : ACCEPTANCE_KIND === 'weather' ? '球球桌宠-天气验收' : ACCEPTANCE_KIND === 'combined' ? '球球桌宠-联动整合验收' : '球球桌宠-ZCode验收';
 const APP_WEBSITE = 'https://qiuqiu.pet/';
 const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const IS_SMOKE_TEST = process.env.PET_SMOKE_TEST === '1';
@@ -1914,7 +1914,7 @@ function setColorMode(value) {
 }
 
 function setUiTheme(value) {
-  if (!settings || isQuitting || !['green', 'blue'].includes(value) || settings.uiTheme === value) return false;
+  if (!settings || isQuitting || !['green', 'blue', 'purple'].includes(value) || settings.uiTheme === value) return false;
   const previous = settings.uiTheme;
   settings.uiTheme = value;
   try { persistSettings(); }
@@ -2436,7 +2436,7 @@ function menuTemplate() {
             click: () => setInterfaceAppearance(value)
           })) },
         { type: 'separator' },
-        { id: 'ui-theme', label: '主题色', submenu: [['green', '薄荷绿'], ['blue', '晴空蓝']].map(([value, label]) => ({
+        { id: 'ui-theme', label: '主题色', submenu: [['green', '薄荷绿'], ['blue', '晴空蓝'], ['purple', '暮光紫']].map(([value, label]) => ({
           id: `ui-theme-${value}`, label, type: 'radio', checked: settings.uiTheme === value,
           click: () => setUiTheme(value)
         })) },

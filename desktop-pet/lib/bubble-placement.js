@@ -27,7 +27,7 @@ function bubbleBounds(petBounds, workArea, interactive = false, preferredHeight 
     ({ x, y } = adjacentBounds(petBounds, { x: minX, y: minY, width: areaWidth - paddingX * 2, height: areaHeight - paddingY * 2 }, { width, height }, occupied));
     placement = y + height / 2 < petBounds.y + petBounds.height / 2 ? 'above' : 'below';
   }
-  // Native inset 10 + corner radius 17 + rotated arrow half-width 6.4.
+  // Keep both cloud dots clear of the rounded corners within the native inset.
   const anchorInset = Math.min(35, width / 2);
   return { x, y, width, height, placement, anchorX: clamp(centerX - x, anchorInset, width - anchorInset) };
 }

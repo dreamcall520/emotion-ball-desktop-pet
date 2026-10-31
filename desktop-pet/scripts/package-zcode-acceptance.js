@@ -1,12 +1,12 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { packager } = require('@electron/packager');
-const { prepareStaging, buildPackagerOptions, findElectronZipDir, adhocSign } = require('./package-mac');
+const { prepareStaging, buildPackagerOptions, findElectronZipDir, adhocSign, signWeatherApp } = require('./package-mac');
 const { makeIcon } = require('./make-icon');
 
 function acceptanceOptions(root, icon, kind = 'zcode') {
-  const combined = kind === 'combined', name = combined ? '球球桌宠-联动整合验收' : '球球桌宠-ZCode验收';
-  const key = combined ? 'combined' : 'zcode';
+  const key = ['combined', 'bubble'].includes(kind) ? kind : 'zcode';
+  const name = key === 'bubble' ? '球球桌宠-气泡验收' : key === 'combined' ? '球球桌宠-联动整合验收' : '球球桌宠-ZCode验收';
   return { ...buildPackagerOptions(root, icon, findElectronZipDir()),
     dir: path.join(root, `desktop-pet/build/${key}-acceptance-staging`),
     out: path.join(root, `dist/${key}-acceptance`), name,
@@ -21,7 +21,8 @@ async function packageAcceptance(root = path.resolve(__dirname, '../..'), kind =
   fs.writeFileSync(file, JSON.stringify({ ...pkg, productName: options.name, qiuqiuAcceptance: kind }, null, 2));
   const outputs = await packager(options);
   const appPath = path.join(outputs[0], `${options.name}.app`);
-  adhocSign(appPath);
+  if (kind === 'bubble') signWeatherApp(appPath);
+  else adhocSign(appPath);
   return appPath;
 }
 

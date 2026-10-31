@@ -8,7 +8,7 @@
     root.dataset.accessibleAppearance = resolved;
   };
   const apply = (value, preference, theme) => {
-    root.dataset.uiTheme = theme === 'blue' ? 'blue' : 'green';
+    root.dataset.uiTheme = ['blue', 'purple'].includes(theme) ? theme : 'green';
     const blueStyle = document.getElementById?.('blue-style');
     if (blueStyle) blueStyle.disabled = root.dataset.uiTheme !== 'blue';
     root.dataset.colorMode = value === 'accessible' ? 'accessible' : 'standard';

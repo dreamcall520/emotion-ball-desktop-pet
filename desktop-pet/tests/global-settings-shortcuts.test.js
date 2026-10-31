@@ -11,7 +11,7 @@ if (process.versions.electron && process.argv.includes('--shortcut-settings-dom-
     const run = code => win.webContents.executeJavaScript(code);
     await run(`window.calls=[];window.recordings=[];window.saveMode='ok';window.getMode='ok';
       window.config={enabled:true,shape:'floating',launcher:'Ctrl+Alt+Q',chat:'',custom:'',note:'',todo:'',pomodoro:'',noteBehavior:'panel',todoBehavior:'panel'};
-      window.notesTab='notes';window.actionCalls=[];window.serverSnapshot=()=>({version:'test',initialView:'shortcuts',entries:[{id:'/notes',label:'便签与待办',children:[...['notes-open','notes-new','todo-new'].map((id,index)=>({id:'/notes/'+id,label:['打开主面板','新建便签','添加待办'][index],enabled:true,actionable:true})),{id:'/notes/default-tab',label:'主面板默认显示',enabled:true,children:['notes','todos'].map(id=>({id:'/notes/default-tab/'+id,label:id==='notes'?'便签':'待办',type:'radio',enabled:true,actionable:true,checked:notesTab===id}))}]}],shortcuts:{...config}});
+      window.notesTab='notes';window.actionCalls=[];window.serverSnapshot=()=>({version:'test',initialView:'shortcuts',entries:[{id:'/interaction',label:'球球与互动',children:[]},{id:'/notes',label:'便签与待办',children:[...['notes-open','notes-new','todo-new'].map((id,index)=>({id:'/notes/'+id,label:['打开主面板','新建便签','添加待办'][index],enabled:true,actionable:true})),{id:'/notes/default-tab',label:'主面板默认显示',enabled:true,children:['notes','todos'].map(id=>({id:'/notes/default-tab/'+id,label:id==='notes'?'便签':'待办',type:'radio',enabled:true,actionable:true,checked:notesTab===id}))}]}],shortcuts:{...config}});
       window.EmotionBall={config:{get:()=>({raw:{}}),register(){}},create:()=>({destroy(){}})};
       window.qiuqiuSettings={get:async()=>{const value=serverSnapshot();if(getMode==='defer'){getMode='ok';return new Promise(resolve=>window.resolveRefresh=()=>resolve(value));}return value;},
         act:async id=>{actionCalls.push(id);if(id.startsWith('/notes/default-tab/'))notesTab=id.split('/').at(-1);return {snapshot:serverSnapshot()};},onNavigate:fn=>window.navigate=fn,recordShortcuts:value=>recordings.push(value),
@@ -35,13 +35,16 @@ if (process.versions.electron && process.argv.includes('--shortcut-settings-dom-
       window.key=(key,code,extra={})=>document.dispatchEvent(new KeyboardEvent('keydown',{key,code,bubbles:true,cancelable:true,...extra}));true;`);
     assert.equal(await run("document.querySelectorAll('.shortcut-footer,.shortcut-save-controls').length"), 0);
     assert.equal(await run("document.getElementById('content').textContent.includes('保存更改')"), false);
+    assert.equal(await run("control('启用快捷面板')===null&&control('面板形态')===null"),true,'shortcut page contains bindings only');
+    await run("window.interactions=()=>[...document.querySelectorAll('#navigation button')].find(n=>n.textContent==='球球与互动').click();interactions()");
+    assert.equal(await run("document.querySelectorAll('.binding-button').length"),0,'interaction page contains panel preferences only');
     await run("control('启用快捷面板').click()"); await settle();
     assert.equal(await run('config.enabled'), false);
     for (const [label, field, value] of [['面板形态','shape','list']]) {
       await run(`change(${JSON.stringify(label)},${JSON.stringify(value)})`); await settle();
       assert.equal(await run(`config.${field}`), value);
     }
-    assert.equal(await run("control('便签启动方式')===null && control('待办启动方式')===null"),true,'shortcuts page owns only panel and bindings');
+    assert.equal(await run("control('便签启动方式')===null && control('待办启动方式')===null"),true,'interaction page excludes notes behavior');
     await run("[...document.querySelectorAll('#navigation button')].find(n=>n.textContent==='便签与待办').click()");
     assert.equal(await run("document.querySelectorAll('.binding-button').length"),0,'notes page does not duplicate key bindings');
     for(const [label,field] of [['便签启动方式','noteBehavior'],['待办启动方式','todoBehavior']]) {
@@ -70,7 +73,7 @@ if (process.versions.electron && process.argv.includes('--shortcut-settings-dom-
     assert.equal(await run('config.chat'), '');
     assert.match(await run("document.querySelector('.shortcut-settings-group [role=status]').textContent"), /Meta\+K.*占用/);
     assert.equal(await run("control('和球球聊聊快捷键').textContent"), '设置快捷键');
-    await run("saveMode='throw';change('面板形态','floating')"); await settle();
+    await run("interactions();saveMode='throw';change('面板形态','floating')"); await settle();
     assert.equal(await run("control('面板形态').value"), 'list');
     assert.match(await run("document.querySelector('.shortcut-settings-group [role=status]').textContent"), /恢复原设置/);
     await run("saveMode='ok';change('面板形态','floating')"); await settle(); assert.equal(await run('config.shape'), 'floating');
@@ -83,7 +86,7 @@ if (process.versions.electron && process.argv.includes('--shortcut-settings-dom-
     // to this page during an outstanding save paints the actual result on its new DOM.
     await run(`saveMode='defer';change('面板形态','floating');window.oldSection=document.querySelector('.shortcut-settings-group');
       control('启用快捷面板').onclick();control('面板形态').value='list';control('面板形态').onchange();
-      document.getElementById('content').replaceChildren();navigate('shortcuts');true;`);
+      document.getElementById('content').replaceChildren();interactions();true;`);
     assert.equal(await run("control('启用快捷面板').disabled"), true);
     const pendingCount = await run('calls.length');
     await run("resolveSave();saveMode='ok'"); await settle();
@@ -92,13 +95,25 @@ if (process.versions.electron && process.argv.includes('--shortcut-settings-dom-
     assert.equal(await run("control('面板形态').value"), 'floating');
     assert.equal(await run('config.noteBehavior'), 'panel');
     assert.equal(await run("control('启用快捷面板').disabled"), false);
-    await run("[...document.querySelectorAll('#navigation button')].find(n=>n.textContent==='便签与待办').click();saveMode='defer';change('待办启动方式','panel');navigate('shortcuts')");await settle();
+    await run("saveMode='defer';change('面板形态','list');navigate('shortcuts')");await settle();
+    assert.equal(await run("control('唤起快捷面板快捷键').disabled"),true,'panel-to-shortcuts pending save guards bindings');
+    assert.equal(await run("control('面板形态')===null"),true,'shortcut page never duplicates panel preferences during save');
+    await run("resolveSave();saveMode='ok'");await settle();
+    assert.equal(await run("control('唤起快捷面板快捷键').disabled"),false);
+    await run("interactions()");await settle();
+    assert.equal(await run("control('面板形态').value"),'list','returning to panel paints cross-page save result');
+    await run("[...document.querySelectorAll('#navigation button')].find(n=>n.textContent==='便签与待办').click();saveMode='defer';change('待办启动方式','panel');interactions()");await settle();
     assert.equal(await run("control('启用快捷面板').disabled"),true,'cross-page pending save blocks stale edits');
     await run("resolveSave();saveMode='ok'");await settle();
     assert.equal(await run('config.todoBehavior'),'panel');assert.equal(await run("control('便签启动方式')===null"),true);
     await run("[...document.querySelectorAll('#navigation button')].find(n=>n.textContent==='便签与待办').click()");await settle();
     assert.equal(await run("control('待办启动方式').value"),'panel','new notes DOM paints the saved result');
     await capture('notes-startup-behaviors.png');
+    for (const query of ['快捷面板','面板形态','启用快捷面板']) {
+      await run(`document.getElementById('search').value=${JSON.stringify(query)};document.getElementById('search').dispatchEvent(new Event('input'))`);await settle();
+      await run("document.querySelector('[data-action=\"/shortcut-panel-settings\"]').click()");await settle();
+      assert.equal(await run("!!control('面板形态')&&!!control('启用快捷面板')"),true,query+' search reaches interaction panel controls');
+    }
     await run("navigate('shortcuts')");await settle();
     await run("control('天气快捷键').click();key('w','KeyW',{ctrlKey:true,altKey:true})");await settle();
     assert.equal(await run('config.weather'),'Ctrl+Alt+W');
