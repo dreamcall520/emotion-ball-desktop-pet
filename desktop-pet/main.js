@@ -109,6 +109,9 @@ let weatherWindow = null;
 const SoftOrbModel = require('./lib/soft-orb-model');
 const APP_NAME = '球球桌宠';
 const ACCEPTANCE_KIND = require('../package.json').qiuqiuAcceptance;
+const REVIEW_LONG_TASKS = ACCEPTANCE_KIND === 'bubble' && require('../package.json').qiuqiuBubbleTaskReview === true;
+let longTaskReviewShown = false;
+let longTaskReviewPending = false;
 const IS_ACCEPTANCE = ['zcode', 'combined', 'weather','soft-orb', 'bubble'].includes(ACCEPTANCE_KIND);
 const ACCEPTANCE_NAME = ACCEPTANCE_KIND === 'bubble' ? '球球桌宠-气泡验收' : ACCEPTANCE_KIND === 'soft-orb' ? '球球桌宠-柔光团候选' : ACCEPTANCE_KIND === 'weather' ? '球球桌宠-天气验收' : ACCEPTANCE_KIND === 'combined' ? '球球桌宠-联动整合验收' : '球球桌宠-ZCode验收';
 const APP_WEBSITE = 'https://qiuqiu.pet/';
@@ -1664,6 +1667,25 @@ function presentCodexAlert(alert) {
   sendCodexCommand({ command: 'codex', alertId: current.id, generation: current.generation, pageEpoch: codexPageEpoch, motion: current.motion, kind: current.kind });
 }
 
+// Acceptance-only display of existing task metadata, never a fabricated task event.
+function reviewExistingLongTasks(snapshot) {
+  if (!REVIEW_LONG_TASKS || IS_SMOKE_TEST || longTaskReviewShown || longTaskReviewPending ||
+    !snapshot?.enabled || !settings?.codexTaskNameInAlerts || !settings?.bubblesEnabled || !bubble || screenLocked) return;
+  const names = { active: '进行中', waiting: '等待确认', completed: '已完成', failed: '执行失败', interrupted: '已中断', idle: '空闲', unknown: '状态未提供' };
+  const tasks = (snapshot?.tasks?.items || []).filter(task => !task.unavailable && names[task.state] && typeof task.title === 'string' && task.title.trim())
+    .sort((a, b) => b.title.length - a.title.length).slice(0, 3);
+  const rows = tasks.map(task => `${names[task.state]} · ${task.title.slice(0, 140).replace(/[\u0000-\u001f\u007f]/g, ' ').trim()}`);
+  if (rows.join('').length < 80) return;
+  longTaskReviewPending = true;
+  setTimeout(() => {
+    longTaskReviewPending = false;
+    if (isQuitting || screenLocked || !settings.codexEnabled || !settings.codexTaskNameInAlerts || !petWindow?.isVisible()) return;
+    if (dialogue?.hasBubble(performance.now())) { setTimeout(() => reviewExistingLongTasks(codexCompanion.getSnapshot()), 4000); return; }
+    longTaskReviewShown = showBubble({ id: Number.MAX_SAFE_INTEGER, text: `任务记录展示\n${rows.join('\n\n')}`,
+      actions: [], durationMs: 60000 });
+  }, 1000);
+}
+
 function initializeCodexCompanion(options = {}) {
   codexCompanion?.close();
   codexThreadOpener = IS_SMOKE_TEST && typeof options.openThread === 'function' ? options.openThread : url => shell.openExternal(url);
@@ -1681,7 +1703,7 @@ function initializeCodexCompanion(options = {}) {
       if (payload) showBubble(payload);
     },
     onClear: clearCodexPresentation,
-    onChange: snapshot => { syncCodexSettings(snapshot); syncQuotaLabel(snapshot); syncCodexDetails(snapshot); refreshTrayMenu(); }
+    onChange: snapshot => { syncCodexSettings(snapshot); syncQuotaLabel(snapshot); syncCodexDetails(snapshot); refreshTrayMenu(); reviewExistingLongTasks(snapshot); }
   });
   codexCompanion.setPreferences({
     taskNameInAlerts: settings?.codexTaskNameInAlerts === true,

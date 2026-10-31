@@ -13,12 +13,13 @@ function acceptanceOptions(root, icon, kind = 'zcode') {
     appBundleId: `local.xiaokun.emotionball.pet.${key}-acceptance` };
 }
 
-async function packageAcceptance(root = path.resolve(__dirname, '../..'), kind = 'zcode') {
+async function packageAcceptance(root = path.resolve(__dirname, '../..'), kind = 'zcode', { reviewLongTasks = false } = {}) {
   const options = acceptanceOptions(root, makeIcon(root), kind);
   prepareStaging(root, options.dir);
   const file = path.join(options.dir, 'package.json');
   const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
-  fs.writeFileSync(file, JSON.stringify({ ...pkg, productName: options.name, qiuqiuAcceptance: kind }, null, 2));
+  fs.writeFileSync(file, JSON.stringify({ ...pkg, productName: options.name, qiuqiuAcceptance: kind,
+    ...(kind === 'bubble' && reviewLongTasks ? { qiuqiuBubbleTaskReview: true } : {}) }, null, 2));
   const outputs = await packager(options);
   const appPath = path.join(outputs[0], `${options.name}.app`);
   if (kind === 'bubble') signWeatherApp(appPath);

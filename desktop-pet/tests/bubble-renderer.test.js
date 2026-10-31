@@ -82,8 +82,11 @@ if (process.versions.electron && process.argv.includes('--bubble-dom-child')) {
         assert.equal(value.buttons.length, expectedButtons, name);
         assert.equal(value.font, '14px', name + ': font remains readable');
         assert(inside(value.bubble) && inside(value.message), name + ': bubble/message outside native window ' + JSON.stringify(value));
-        assert(value.message.scroll <= value.message.client + 1, name + ': horizontal message clipping');
-        if (!allowScroll) assert(value.message.scrollH <= value.message.clientH + 1, name + ': vertical message clipping');
+        assert(value.message.scroll <= value.message.client + (value.message.scrollH > value.message.clientH ? 3 : 1), name + ': horizontal text/ellipsis exceeds its box ');
+        if (!allowScroll) assert(value.message.scrollH <= value.message.clientH + 1 || value.message.height <= 60, name + ': text exceeds the three-line summary');
+        assert.equal(await run("getComputedStyle(document.getElementById('message')).webkitLineClamp"), '3', name + ': uniform three-line limit');
+        assert.equal(await run("getComputedStyle(document.getElementById('message')).overflowY"), 'hidden', name + ': no text scrollbar');
+        assert.equal(await run("!!document.getElementById('bubble-details')"), false, name + ': no detail entry');
         for (const button of value.buttons) assert(inside(button) && button.scroll <= button.client + 1 && button.scrollH <= button.clientH + 1, name + ': button clipping ' + JSON.stringify(value));
         for (const dot of value.dots) assert(dot.content !== 'none' && dot.width > 0 && inside(dot), name + ': clipped cloud dot ' + JSON.stringify(value));
         assert(value.dots.every(dot => dot.lighting.includes('radial-gradient') && dot.shadow !== 'none'), name + ': both connecting dots retain dimensional lighting');
@@ -199,9 +202,20 @@ if (process.versions.electron && process.argv.includes('--bubble-dom-child')) {
       }
       area = { x: 0, y: 0, width: 208, height: 200 };
       pet = { x: 70, y: 100, width: 80, height: 80 };
-      await show({ text: '狭小工作区仍可滚动查看完整正文。'.repeat(15), actions: allowed.slice(0, 2) });
-      const compact = await layout('short-work-area-scrolls-text-and-keeps-actions', 2, true);
-      assert(compact.message.scrollH > compact.message.clientH, 'long message scrolls instead of hiding actions');
+      await show({ text: '示例：长文统一最多三行，操作按钮保持可见。'.repeat(15), actions: allowed.slice(0, 2) });
+      const compact = await layout('short-work-area-clamps-text-and-keeps-actions', 2, true);
+      assert(compact.message.scrollH > compact.message.clientH, 'long message is truncated instead of hiding actions');
+      for (const theme of ['green','blue','purple']) for (const appearance of ['light','dark']) for (const mode of ['standard','accessible']) for (const width of [224,192]) {
+        area = {x:0,y:0,width:width+16,height:900};
+        await configure(mode,appearance,theme);
+        const payload = await show({text:'布局参考·示例内容：'+ '较长说明统一展示最多三行，原有按钮保持可见。'.repeat(15),actions:allowed.slice(0,2)});
+        const result = await layout(`summary-${theme}-${appearance}-${mode}-${width}`,2,true);
+        assert(result.message.height <= 60 && result.message.scrollH > result.message.clientH,'long text is visibly limited to three lines');
+        await run("window.summaryAction=document.querySelector('#actions button');void 0");
+        controller.show({...payload,text:'短消息。'});await frame();await wait(25);await frame();
+        assert.equal(await run("document.querySelector('#actions button')===summaryAction"),true,'same-id short update preserves original button');
+        assert.equal(await run("document.getElementById('message').clientHeight"),20,'short text takes only one line');
+      }
       area = { x: 0, y: 0, width: 1440, height: 900 };
       for (const x of [0, 1360]) for (const y of [0, 800]) {
         pet = { x, y, width: 80, height: 80 };
