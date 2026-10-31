@@ -11,7 +11,7 @@ function fixture(t, { area = { x: 0, y: 0, width: 1000, height: 800 }, petBounds
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qiuqiu-weather-window-')), filePath = path.join(dir, 'weather.json');
   if (saved) fs.writeFileSync(filePath, JSON.stringify(saved));
   if (cached) fs.writeFileSync(filePath + '.cache', JSON.stringify(cached));
-  const handlers = new Map(), windows = [], changes = [], requests = [], module = { exports: {} };
+  const handlers = new Map(), windows = [], changes = [], requests = [], layouts = [], module = { exports: {} };
   let groupHidden = false;
   let suppressed = false, persistFails = false;
   const service = { searchCities: async () => [], getWeather(city) { const d = deferred(); requests.push({ city, ...d }); return d.promise; } };
@@ -21,7 +21,7 @@ function fixture(t, { area = { x: 0, y: 0, width: 1000, height: 800 }, petBounds
       this.webContents = Object.assign(new EventEmitter(), { mainFrame: { url: pathToFileURL(path.join(__dirname, '../weather.html')).href },
         send: (channel, state) => this.sent.push({ channel, state }), setWindowOpenHandler: fn => { this.openHandler = fn; } }); windows.push(this); }
     isDestroyed() { return this.dead; } isVisible() { return this.visible; } setVisibleOnAllWorkspaces() {}
-    setBounds(bounds, animate) { this.lastAnimate = animate; this.bounds = { ...bounds }; } getBounds() { return { ...this.bounds }; } setSize(width, height) { this.bounds = { ...this.bounds, width, height }; }
+    setBounds(bounds, animate) { this.lastAnimate = animate; (this.boundsCalls ||= []).push({ bounds: { ...bounds }, animate }); this.bounds = { ...bounds }; } getBounds() { return { ...this.bounds }; } setSize(width, height) { this.bounds = { ...this.bounds, width, height }; }
     show() { this.visible = true; } focus() {} showInactive() { this.visible = true; } hide() { this.visible = false; } loadFile() { return Promise.resolve(); }
     destroy() { this.dead = true; this.visible = false; this.emit('closed'); }
   }
@@ -29,11 +29,11 @@ function fixture(t, { area = { x: 0, y: 0, width: 1000, height: 800 }, petBounds
     require: name => name === 'node:fs' ? mockedFs : name === './weather-service' ? { createWeatherService: () => service } : require(name.startsWith('.') ? path.resolve(path.dirname(sourcePath), name) : name) }, { filename: sourcePath });
   const controller = module.exports.createWeatherWindow({ BrowserWindow: Window, ipcMain: { handle: (name, fn) => handlers.set(name, fn), removeHandler: name => handlers.delete(name) },
     locationBridge, screen: { getDisplayMatching: () => ({ workArea: area }) }, filePath, getPetWindow: () => ({ isDestroyed: () => false, isVisible: () => true, getBounds: () => petBounds }),
-    getStackAnchor: () => stackAnchor, getBubbleBounds: () => bubbleBounds, getPresentation: () => ({ mode: 'free', quotaGroupHidden: groupHidden }), getSuppressed: () => suppressed, onChange: state => changes.push(state) });
+    getStackAnchor: () => stackAnchor, getBubbleBounds: () => bubbleBounds, getPresentation: () => ({ mode: 'free', quotaGroupHidden: groupHidden }), getSuppressed: () => suppressed, onLayout: () => layouts.push(true), onChange: state => changes.push(state) });
   t.after(() => { controller.destroy(); fs.rmSync(dir, { recursive: true, force: true }); });
   controller.setEnabled(true);
   const event = () => ({ sender: controller.getWindow().webContents, senderFrame: controller.getWindow().webContents.mainFrame });
-  return { controller, handlers, windows, changes, requests, filePath, event,
+  return { controller, handlers, windows, changes, requests, layouts, filePath, event,
     invoke: (name, value, e) => handlers.get('weather:' + name)(e || event(), value), suppress: value => { suppressed = value; }, groupHidden: value => { groupHidden = value; }, failPersist: () => { persistFails = true; } };
 }
 test('weather IPC denies other windows, child frames and unexpected document URLs', t => {
@@ -168,7 +168,7 @@ test('native location denial returns a short structured error and preserves sele
   assert.equal(result.locationError.code,'LOCATION_DENIED');
   assert.equal(f.controller.getState().city.name,'北京');
 });
-test('native geometry animation is requested only when expanding or collapsing', t => {
+test('only expansion animates native geometry; collapse commits once after renderer fade', t => {
   const f=fixture(t,{area:{x:0,y:0,width:1000,height:1200}}), win=f.controller.getWindow();
   f.invoke('resize',{expanded:true,height:500});
   assert.equal(win.lastAnimate,true);
@@ -176,6 +176,8 @@ test('native geometry animation is requested only when expanding or collapsing',
   assert.equal(win.lastAnimate,true);
   f.invoke('resize',{expanded:true,height:550});
   assert.equal(win.lastAnimate,false);
+  f.invoke('resize',{expanded:false});
+  assert.equal(win.lastAnimate,false,'restored quota cards cannot compete with a native shrink animation');
 });
 
 test('native reverse-geocoded city and district persist without replacing them with a placeholder', async t => {
@@ -272,4 +274,20 @@ test('near-top weather chooses below or beside the pet instead of clamping a tal
   const dx=Math.max(petBounds.x-b.x-b.width,b.x-petBounds.x-petBounds.width,0),dy=Math.max(petBounds.y-b.y-b.height,b.y-petBounds.y-petBounds.height,0);
   assert.equal(Math.hypot(dx,dy),8);assert.ok(b.x>=area.x&&b.y>=area.y&&b.x+b.width<=area.x+area.width&&b.y+b.height<=area.y+area.height);
  }
+});
+
+
+test('repeated weather ResizeObserver packets neither touch native bounds nor re-enter quota layout', t => {
+ const f=fixture(t),win=f.controller.getWindow(),initialLayouts=f.layouts.length;
+ f.invoke('resize',{expanded:true,height:500});
+ const calls=win.boundsCalls.length;
+ assert.equal(f.layouts.length,initialLayouts+1);
+ for(let i=0;i<20;i++)f.invoke('resize',{expanded:true,height:500});
+ assert.equal(win.boundsCalls.length,calls);assert.equal(f.layouts.length,initialLayouts+1);
+ f.invoke('resize',{expanded:true,height:550});
+ assert.equal(win.boundsCalls.length,calls+1);assert.equal(f.layouts.length,initialLayouts+1,'content height does not change quota collection');
+ f.invoke('resize',{expanded:false});const compactCalls=win.boundsCalls.length;
+ assert.equal(win.lastAnimate,false);assert.equal(f.layouts.length,initialLayouts+2);
+ for(let i=0;i<20;i++)f.invoke('resize',{expanded:false});
+ assert.equal(win.boundsCalls.length,compactCalls);assert.equal(f.layouts.length,initialLayouts+2);
 });

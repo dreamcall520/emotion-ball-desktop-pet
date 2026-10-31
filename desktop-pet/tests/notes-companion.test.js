@@ -650,3 +650,48 @@ test('其他功能退出保存失败时，便签尚未拆除，可继续使用�
   assert.equal(await f.controller.close({ beforeCommit: () => true }), true);
   assert.equal(panel.isDestroyed(), true);
 });
+
+test('fresh note/panel/reminder creation stays on the pet display at a negative-origin mixed-DPR seam', async t => {
+  const f = fixture(t), primary = { id: 1, scaleFactor: 2, workArea: { x: 0, y: 32, width: 1512, height: 893 } },
+    external = { id: 2, scaleFactor: 1, workArea: { x: -1920, y: -300, width: 1920, height: 1080 } };
+  f.screen.getPrimaryDisplay = () => primary;
+  f.screen.getDisplayMatching = bounds => bounds.x < 0 ? external : primary;
+  f.pet.bounds = { x: -80, y: 400, width: 80, height: 80 };
+  const inside = bounds => assert.ok(bounds.x >= external.workArea.x && bounds.y >= external.workArea.y &&
+    bounds.x + bounds.width <= 0 && bounds.y + bounds.height <= 780, JSON.stringify(bounds));
+  // The old right-side candidate x=12 falls on primary before any ready callback.
+  const panel = f.controller.openPanel(); inside(panel.options); inside(panel.getBounds()); f.ready(panel); inside(panel.getBounds());
+  const store = f.controller.getStore(), note = M.newNote('new at seam', '', f.now()), todo = M.newTodo('due at seam', f.now());
+  Object.assign(todo, { reminderAt: f.now() - 1, reminderState: 'pending' });
+  store.update(state => { state.notes.push(note); state.todos.push(todo); return state; });
+  assert.equal(f.controller.openNote(note.id).ok, true);
+  const desktop = f.controller.getWindows().notes[0], reminder = f.controller.getWindows().reminder;
+  inside(desktop.options); inside(desktop.getBounds()); inside(reminder.options); inside(reminder.getBounds());
+  f.ready(desktop); f.ready(reminder); inside(desktop.getBounds()); inside(reminder.getBounds());
+  assert.deepEqual([desktop.getBounds().width, desktop.getBounds().height], [300, 220], 'DIP dimensions are not multiplied by display scale');
+  assert.deepEqual([reminder.getBounds().width, reminder.getBounds().height], [360, 190]);
+});
+
+test('notes preserve saved/user positions while a panel-origin open uses that panel display despite the pet living elsewhere', async t => {
+  const f = fixture(t), primary = { id: 1, scaleFactor: 2, workArea: { x: 0, y: 32, width: 1512, height: 893 } },
+    external = { id: 2, scaleFactor: 1, workArea: { x: -1920, y: -300, width: 1920, height: 1080 } };
+  f.screen.getPrimaryDisplay = () => primary; f.screen.getDisplayMatching = bounds => bounds.x < 0 ? external : primary;
+  const store = f.controller.getStore(), saved = { x: 250, y: 180, width: 330, height: 260 },
+    old = { ...M.newNote('saved on primary', '', f.now()), desktopOpen: true, windowBounds: saved };
+  store.update(state => { state.notes.push(old); return state; });
+  const desktop = f.ready(f.controller.getWindows().notes[0]);
+  f.pet.bounds = { x: -80, y: 400, width: 80, height: 80 };
+  f.controller.openNote(old.id); assert.deepEqual(desktop.getBounds(), saved, 'existing desktop note does not follow a moved pet');
+  desktop.setBounds({ ...saved, x: 450, y: 300 });
+  const dragged = desktop.getBounds(); f.controller.openNote(old.id); assert.deepEqual(desktop.getBounds(), dragged, 'same note retains an active user drag position');
+  const panel = f.ready(f.controller.openPanel());
+  panel.setBounds({ x: 100, y: 200, width: 380, height: 520 });
+  const fresh = M.newNote('from primary panel while pet is external', '', f.now());
+  store.update(state => { state.notes.push(fresh); return state; });
+  assert.equal((await f.call(panel, 'notes:open-note', fresh.id)).ok, true);
+  const created = f.ready(f.controller.getWindows().notes.at(-1)), bounds = created.getBounds();
+  assert.equal(f.screen.getDisplayMatching(bounds).id, primary.id);
+  assert.ok(bounds.x >= 0 && bounds.y >= 32 && bounds.x + bounds.width <= 1512 && bounds.y + bounds.height <= 925);
+  f.screen.emit('display-metrics-changed');
+  assert.deepEqual(desktop.getBounds(), dragged, 'display refresh clamps its own existing display, not the pet display');
+});

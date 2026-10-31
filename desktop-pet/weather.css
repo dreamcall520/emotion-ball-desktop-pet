@@ -62,3 +62,6 @@ footer{justify-content:space-between}.footer-meta{flex:none}.footer-actions{flex
 :root:not([data-input-mode="keyboard"]) #quota-label button:focus,:root:not([data-input-mode="keyboard"]) #quota-label button:focus-visible,:root:not([data-input-mode="keyboard"]) #quota-label input:focus,:root:not([data-input-mode="keyboard"]) #quota-label input:focus-visible{outline:none!important}
 :root[data-input-mode="keyboard"] #quota-label button:focus,:root[data-input-mode="keyboard"] #quota-label input:focus{outline:1px solid var(--detail-blue,#3978ca)!important;outline-offset:2px}
 :root[data-color-mode="accessible"][data-input-mode="keyboard"] #quota-label button:focus,:root[data-color-mode="accessible"][data-input-mode="keyboard"] #quota-label input:focus{outline:2px solid var(--accessible-yellow,#f5ce4f)!important}
+
+/* Collapse paints inside a fixed native host, then commits compact bounds once. */
+#quota-label[data-collapsing=true]{pointer-events:none;will-change:opacity,transform}

@@ -389,16 +389,19 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
 
 const TASK_ID = '11111111-1111-4111-8111-111111111111';
 
-test('定制、API 费用和关于窗口首次及复开均跟随当前球球，加载期间移动也生效', async () => {
+test('设置、定制、API 费用和关于窗口首次及复开均跟随当前球球，加载期间移动也生效', async () => {
   const f = await fixture();
   const primary = { x: 0, y: 24, width: 1440, height: 876 }, external = { x: 1440, y: 24, width: 1920, height: 1016 },
     left = { x: -1920, y: -300, width: 1920, height: 1040 };
-  f.screen.getDisplayMatching = rect => ({ workArea: rect.x < 0 ? left : rect.x >= 1440 ? external : primary });
+  f.screen.getPrimaryDisplay = () => ({ id: 1, scaleFactor: 2, workArea: primary });
+  f.screen.getDisplayMatching = rect => ({ id: rect.x < 0 ? 3 : rect.x >= 1440 ? 2 : 1,
+    scaleFactor: rect.x < 0 ? 1.25 : rect.x >= 1440 ? 1 : 2,
+    workArea: rect.x < 0 ? left : rect.x >= 1440 ? external : primary });
   const inside = (win, area) => {
     const b = win.getBounds();
     assert.ok(b.x >= area.x && b.y >= area.y && b.x + b.width <= area.x + area.width && b.y + b.height <= area.y + area.height);
   };
-  for (const [open, variable] of [['openCustomization', 'customizationWindow'], ['openApiUsage', 'apiUsageWindow'], ['openAbout', 'aboutWindow']]) {
+  for (const [open, variable] of [['openGlobalSettings', 'globalSettingsWindow'], ['openCustomization', 'customizationWindow'], ['openApiUsage', 'apiUsageWindow'], ['openAbout', 'aboutWindow']]) {
     f.pet.bounds = { x: 3260, y: 900, width: 80, height: 80 };
     f.call(`${open}()`);
     const win = f.call(variable); inside(win, external);
@@ -419,6 +422,28 @@ test('定制、API 费用和关于窗口首次及复开均跟随当前球球，�
     if (open === 'openAbout') assert.deepEqual(win.getBounds(), { ...openedBounds, x: 100, y: 32 }, '可见关于窗口保留用户摆放位置');
     else assert.notDeepEqual(win.getBounds(), { ...openedBounds, x: 100, y: 32 }, '同屏再次打开也随球球重新定位');
   }
+});
+
+test('番茄钟保存失败和 ZCode 任务提示归属当前球球窗口，不创建无主系统对话框', async t => {
+  const { createZcodeLink } = require('../lib/zcode-link');
+  let zcodeOptions;
+  const f = await fixture({ zcodeLinkFactory: options => {
+    zcodeOptions = options; return createZcodeLink(options);
+  }, consent: async () => ({ response: 1 }) });
+  t.after(() => f.app.emit('before-quit'));
+  f.pet.bounds = { x: -1800, y: -200, width: 80, height: 80 };
+  f.pomodoro.close = () => ({ ok: false });
+  assert.equal(f.call('savePomodoroForQuit()'), false);
+  assert.equal(f.dialogs.at(-1)[0], f.pet);
+  assert.equal(f.dialogs.at(-1)[1].title, '番茄钟尚未保存');
+  f.pomodoro.close = () => ({ ok: true });
+  // Keep the task fallback deterministic and never launch an external application.
+  f.call(`globalThis.originalRequire = require; require = name => name === './lib/zcode-tasks'
+    ? { openZcodeTask: async () => ({ opened: false }) } : originalRequire(name)`);
+  await zcodeOptions.openTask('fixture-task');
+  assert.equal(f.dialogs.at(-1)[0], f.pet);
+  assert.equal(f.dialogs.at(-1)[1].title, 'ZCode 任务');
+  assert.equal(f.external.length, 0);
 });
 
 test('定制页原生显隐通知覆盖锁屏缺失 hide 事件、最小化及加载期间锁屏', async () => {
@@ -3768,7 +3793,8 @@ test('番茄退出保存失败保留应用和后台资源，成功重试才清�
   assert.equal(f.call('isQuitting'), false);
   assert.equal(f.call('quitCleanupStarted'), false);
   assert.equal(f.connections[0].closed, false);
-  assert.equal(f.dialogs.at(-1)[0].title, '番茄钟尚未保存');
+  assert.equal(f.dialogs.at(-1)[0], f.pet);
+  assert.equal(f.dialogs.at(-1)[1].title, '番茄钟尚未保存');
   f.pomodoro.close = () => ({ ok: true });
   f.app.emit('before-quit', { preventDefault() { prevented++; } });
   assert.equal(f.call('quitCleanupStarted'), true);
@@ -4160,7 +4186,7 @@ test('WorkBuddy 趣味开关不依赖 Codex，独立入口与进行中的游戏�
 test('WorkBuddy 偏好保存失败保留真实状态，设置中心不误报成功', async t => {
   const {normalizeSettings}=require('../lib/settings');
   const f=await fixture({loadedSettings:normalizeSettings({workbuddyEnabled:true}),saveError:new Error('settings blocked')});t.after(()=>f.app.emit('before-quit'));await flush();
-  f.call('globalThis.closes=0;quotaGuard={close(){globalThis.closes++;},isVisible:()=>false};quotaGuardSource="workbuddy"');
+  f.call('globalThis.closes=0;quotaGuard={close(){globalThis.closes++;},isVisible:()=>false,getWindow:()=>null};quotaGuardSource="workbuddy"');
   assert.equal(f.call("setWorkBuddyPreference('workbuddyQuotaFunEnabled',false)"),false);
   assert.equal(f.call('settings.workbuddyQuotaFunEnabled'),true);assert.equal(f.call('closes'),0);assert.equal(menuItem(f,'workbuddy-quota-fun').checked,true);
   menuItem(f,'global-settings').click();const win=f.call('globalSettingsWindow');win.emit('ready-to-show');

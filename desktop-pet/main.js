@@ -408,7 +408,7 @@ function savePomodoroForQuit() {
   isQuitting = true;
   const saved = pomodoro?.close().ok !== false;
   isQuitting = previous;
-  if (!saved) void dialog.showMessageBox({ type: 'error', title: '番茄钟尚未保存',
+  if (!saved) void showPetMessageBox({ type: 'error', title: '番茄钟尚未保存',
     message: '番茄钟暂时无法保存，请检查本机存储后再退出。', buttons: ['知道了'] });
   return saved;
 }
@@ -433,6 +433,10 @@ function functionWindowObstacles() {
     const win = controller?.getWindow();
     return win && !win.isDestroyed() && win.isVisible() ? [win.getBounds()] : [];
   });
+}
+
+function showPetMessageBox(options) {
+  return petWindow && !petWindow.isDestroyed() ? dialog.showMessageBox(petWindow, options) : dialog.showMessageBox(options);
 }
 
 function positionFunctionWindow(win) {
@@ -564,6 +568,7 @@ function openGlobalSettings(view) {
   const target = ['shortcuts', 'quota-cards', '/api-balance-menu', 'feedback'].includes(view) ? view : null;
   if (isQuitting || screenLocked) return;
   if (globalSettingsWindow && !globalSettingsWindow.isDestroyed()) {
+    positionFunctionWindow(globalSettingsWindow);
     globalSettingsWindow.show(); globalSettingsWindow.focus();
     if (target) globalSettingsWindow.webContents.send('pet:global-settings-navigate', target);
     return;
@@ -575,6 +580,7 @@ function openGlobalSettings(view) {
       contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false }
   });
   globalSettingsWindow = win;
+  positionFunctionWindow(win);
   let confirmingClose = false;
   win.webContents.on('will-prevent-unload', () => {
     if (confirmingClose || isQuitting || win.isDestroyed()) return;
@@ -592,7 +598,7 @@ function openGlobalSettings(view) {
   win.webContents.on('will-navigate', event => event.preventDefault());
   win.webContents.on('will-attach-webview', event => event.preventDefault());
   win.on('closed', () => { if (globalSettingsWindow === win) globalSettingsWindow = null; });
-  win.once('ready-to-show', () => { if (!isQuitting && !screenLocked && !win.isDestroyed()) win.show(); });
+  win.once('ready-to-show', () => { if (!isQuitting && !screenLocked && !win.isDestroyed()) { positionFunctionWindow(win); win.show(); } });
   void win.loadFile(path.join(__dirname, 'global-settings.html')).catch(error => {
     writeError('全局设置', error); if (!win.isDestroyed()) win.destroy();
   });
@@ -4382,7 +4388,7 @@ async function bootstrap() {
     openTask: async id => {
       const result = await require('./lib/zcode-tasks').openZcodeTask(id);
       if (result?.opened || screenLocked || isQuitting) return;
-      const choice = await dialog.showMessageBox({ type: 'info', title: 'ZCode 任务',
+      const choice = await showPetMessageBox({ type: 'info', title: 'ZCode 任务',
         message: '当前 ZCode 版本暂不支持直接定位单个任务。', detail: '可以在 ZCode 中按任务名称查看。',
         buttons: ['打开 ZCode', '关闭'], defaultId: 0, cancelId: 1, noLink: true });
       if (choice.response === 0 && !screenLocked && !isQuitting) await shell.openPath('/Applications/ZCode.app');

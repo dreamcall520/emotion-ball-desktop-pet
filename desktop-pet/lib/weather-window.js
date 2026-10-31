@@ -127,7 +127,18 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
         return await select({ ...coordinates, name: coordinates.name || '当前位置', displayName: coordinates.locationLabel || coordinates.name }, 'current', false);
       } catch (error) { return { locationError: { code: error.code || 'LOCATION_UNAVAILABLE', message: error.message } }; }
     },
-    'weather:resize': value => { const wasExpanded = size.width === 390; const expanded = value === true || value?.expanded === true; if (!expanded) explicitOpen = false; size = { width: expanded ? 390 : 128, height: expanded ? Math.max(210, Math.min(720, Math.round(Number.isFinite(value?.height) ? value.height : 620))) : 32 }; if (win) reposition(wasExpanded !== expanded); onLayout(); return size; }
+    'weather:resize': value => {
+      const wasExpanded = size.width === 390, expanded = value === true || value?.expanded === true;
+      if (!expanded) explicitOpen = false;
+      const next = { width: expanded ? 390 : 128, height: expanded ? Math.max(210, Math.min(720, Math.round(Number.isFinite(value?.height) ? value.height : 620))) : 32 };
+      if (next.width === size.width && next.height === size.height) return size;
+      size = next;
+      // Collapse already faded in the renderer. A native shrink animation races
+      // viewport resize and the quota cards that reappear in onLayout.
+      if (win) reposition(expanded && !wasExpanded);
+      if (wasExpanded !== expanded) onLayout();
+      return size;
+    }
   })) ipcMain.handle(channel, (event, value) => { if (!trusted(event)) return null; return handler(value); });
   function setEnabled(value) { const previous = enabled; enabled = value === true; try { persist(); } catch (error) { enabled = previous; throw error; } revision++; clearInterval(timer); timer = null; if (enabled) { ensureWindow(); timer = setInterval(() => { if (!suspended) void refresh(); }, 30 * 60 * 1000); timer.unref?.(); void refresh(); } else win?.hide(); publish(); reposition(); onLayout(); }
   return { start() { if (enabled) setEnabled(true); }, setEnabled, isEnabled: () => enabled, getState: () => state, getWindow: () => win, isExpanded: () => enabled && (cardVisible || explicitOpen) && size.width === 390, isCardVisible: () => cardVisible,
