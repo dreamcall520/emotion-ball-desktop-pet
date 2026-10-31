@@ -1,0 +1,6 @@
+{
+  "name": "qiuqiu-workbuddy-bundled-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": { "@tencent-ai/codebuddy-code": "2.179.0" }
+}

@@ -14,7 +14,8 @@ const ERROR_CODES = Object.freeze(['MISSING', 'UNAUTHENTICATED', 'UNSUPPORTED', 
 const MAX_FRAME_BYTES = 4 * 1024 * 1024;
 const MAX_TEXT_LENGTH = 128 * 1024;
 const METHODS = new Set(['initialize', 'config/read', 'account/read', 'thread/start', 'thread/resume',
-  'thread/name/set', 'thread/read', 'turn/start', 'turn/interrupt', 'model/list']);
+  'thread/name/set', 'thread/read', 'turn/start', 'turn/interrupt', 'model/list',
+  'account/login/start', 'account/login/cancel']);
 const MODEL_PAGE_SIZE = 50, MAX_MODEL_PAGES = 10, MAX_MODELS = 200;
 const isEffort = value => typeof value === 'string' && /^[a-z][a-z0-9_-]{0,31}$/.test(value);
 const DISABLED_FEATURES = Object.freeze(['shell_tool', 'shell_snapshot', 'apps', 'plugins', 'hooks',
@@ -85,10 +86,12 @@ function finishNativeClose(target) {
 }
 
 function createCodexChatRpc({ workspaceDir, fs = nodeFs, spawn = nodeSpawn, homedir = os.homedir, env = process.env,
-  webSocket = null, hostHome,
+  webSocket = null, hostHome, binaryPath,
   timeoutMs = 15000, maxFrameBytes = MAX_FRAME_BYTES, purpose = 'chat', getWeatherContext = () => '', onNotification = () => {}, onDisconnect = () => {} } = {}) {
   if (typeof workspaceDir !== 'string' || !path.isAbsolute(workspaceDir) || workspaceDir.includes('\0')) throw chatError('INVALID_INPUT');
   if (!['chat', 'notes'].includes(purpose)) throw chatError('INVALID_INPUT');
+  if (binaryPath !== undefined && (typeof binaryPath !== 'string' || !path.isAbsolute(binaryPath) ||
+    binaryPath.includes('\0') || webSocket !== null)) throw chatError('INVALID_INPUT');
   if (webSocket !== null && (!webSocket || typeof webSocket !== 'object' || Array.isArray(webSocket) ||
     typeof hostHome !== 'string' || !path.isAbsolute(hostHome) || hostHome.includes('\0'))) throw chatError('INVALID_INPUT');
   if (hostHome !== undefined && (webSocket === null || typeof hostHome !== 'string' || !path.isAbsolute(hostHome) || hostHome.includes('\0'))) throw chatError('INVALID_INPUT');
@@ -110,6 +113,8 @@ function createCodexChatRpc({ workspaceDir, fs = nodeFs, spawn = nodeSpawn, home
   let accountObserved = false;
   let modelCatalog = null, modelCatalogAccount = null, listingModels = null;
   let threadId = null, threadRequest = false;
+  let ownedLoginId = null;
+  let loginStarting = false;
   let closing = null;
   let activeTurnId = null, turnPending = false, threadStatus = 'idle', mcpNames = [];
   const completedBeforeReply = new Set();
@@ -171,6 +176,12 @@ function createCodexChatRpc({ workspaceDir, fs = nodeFs, spawn = nodeSpawn, home
   }
 
   function notification(method, params) {
+    if (method === 'account/login/completed') {
+      if (!ownedLoginId || params?.loginId !== ownedLoginId) return;
+      ownedLoginId = null;
+      emit({ method, params: { success: params.success === true } });
+      return;
+    }
     if (method === 'account/updated') {
       accountKey = null; accountRevision++; modelCatalog = null;
       // Initial account/read can itself announce the loaded login. There is no
@@ -261,6 +272,14 @@ function createCodexChatRpc({ workspaceDir, fs = nodeFs, spawn = nodeSpawn, home
     });
   }
   async function discover() {
+    if (binaryPath !== undefined) {
+      try {
+        const stat = await fs.promises.lstat(binaryPath); ensureOpen();
+        if (!stat.isFile() || stat.isSymbolicLink()) throw chatError('UNSAFE_CONFIG');
+        await fs.promises.access(binaryPath, nodeFs.constants.X_OK); ensureOpen();
+        return binaryPath;
+      } catch (error) { throw chatError(error?.code === 'UNSAFE_CONFIG' ? 'UNSAFE_CONFIG' : 'MISSING'); }
+    }
     const home = homedir();
     const apps = ['/Applications/Codex.app', '/Applications/ChatGPT.app',
       path.join(home, 'Applications/Codex.app'), path.join(home, 'Applications/ChatGPT.app')];
@@ -470,6 +489,25 @@ function createCodexChatRpc({ workspaceDir, fs = nodeFs, spawn = nodeSpawn, home
   }
 
   return { start,
+    startLogin: async () => {
+      if (ownedLoginId || loginStarting) throw chatError('BUSY');
+      loginStarting = true;
+      try { return await request('account/login/start', { type: 'chatgpt', useHostedLoginSuccessPage: true }, raw => {
+        let url;
+        try { url = new URL(raw?.authUrl); } catch (_) { throw chatError('INVALID_FRAME'); }
+        if (raw?.type !== 'chatgpt' || !isId(raw.loginId) || raw.authUrl.length > 16384 ||
+          url.protocol !== 'https:' || !['auth.openai.com', 'chatgpt.com'].includes(url.hostname) ||
+          url.port || url.username || url.password || url.hash) throw chatError('INVALID_FRAME');
+        ownedLoginId = raw.loginId;
+        // Auth URL goes to the main process browser opener only, never a persisted snapshot.
+        return { authUrl: raw.authUrl };
+      }); } finally { loginStarting = false; }
+    },
+    cancelLogin: async () => {
+      if (!ownedLoginId) return;
+      const loginId = ownedLoginId; ownedLoginId = null;
+      await request('account/login/cancel', { loginId });
+    },
     readAccount: async () => {
       accountKey = null;
       for (let attempt = 0; attempt < 2; attempt++) {

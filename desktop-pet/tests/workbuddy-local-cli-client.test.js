@@ -1,5 +1,6 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
+const {createHash}=require('node:crypto');
 const {createWorkBuddyLocalCliClient}=require('../lib/workbuddy-local-cli-client');
 const BASE='http://127.0.0.1:48711',PASSWORD='synthetic-local-gateway-password',SESSION_TOKEN='synthetic-private-acp-token';
 const WORKSPACE='/private/qiuqiu-cli-workspace',SESSION='owned-cli-session',CONNECTION='owned-acp-connection';
@@ -40,6 +41,79 @@ function harness(options={}){
 }
 async function chat(h){await h.client.connect();return h.client.createSession();}
 function noSecrets(value){const raw=JSON.stringify(value);assert.equal(raw.includes(PASSWORD),false);assert.equal(raw.includes(SESSION_TOKEN),false);}
+
+test('vendor身份查询只投影是否登录，不泄露原始token或用户信息，不自动触发登录',async()=>{
+ for(const userInfo of [undefined,{userId:'private-user',userName:'PRIVATE_NAME',token:'PRIVATE_TOKEN',accessToken:'PRIVATE_TOKEN'}]){
+  const h=harness({reply:c=>c.packet?.method==='_codebuddy.ai/getUserInfo'?sse([rpc(c.packet.id,{userInfo})]):undefined});
+  await h.client.connect();
+  assert.deepEqual(await h.client.getVendorAccount(),{authenticated:!!userInfo,...(userInfo?{accountKey:createHash('sha256').update('codebuddy:'+userInfo.userId).digest('hex')}:{}),liveEntitlementVerified:false});
+  assert.equal(h.calls.some(x=>x.packet?.method==='authenticate'),false);
+  assert.deepEqual(h.events,[]);await h.client.close();
+ }
+});
+
+test('只恢复App明确记录且实际cwd匹配的旧session，检查loadSession能力和dontAsk模式，不重放到UI',async()=>{
+ const h=harness({client:{restorableSessionIds:[SESSION]},reply:c=>{
+  if(c.packet?.method==='initialize')return sse([rpc(c.packet.id,{protocolVersion:1,agentCapabilities:{loadSession:true}})]);
+  if(c.url.includes('/sessions?'))return Response.json({data:{sessions:[{id:SESSION,cwd:WORKSPACE}]}});
+  if(c.packet?.method==='session/load')return sse([update('agent_message_chunk',{content:{type:'text',text:'old own message'}}),rpc(c.packet.id,{modes:{currentModeId:'dontAsk'},models:{currentModelId:'cli-default-model'}})]);
+ }});
+ await h.client.connect();
+ assert.deepEqual(await h.client.loadSession({sessionId:SESSION}),{sessionId:SESSION,restored:true,modelSource:'cli-default',currentModelId:'cli-default-model'});
+ assert.deepEqual(h.events,[]);
+ assert.deepEqual(h.calls.find(x=>x.packet?.method==='session/load').packet.params,{sessionId:SESSION,cwd:WORKSPACE,mcpServers:[]});
+ assert.equal(h.calls.some(x=>x.packet?.method==='session/new'),false);
+ assert.equal((await h.client.sendMessage({sessionId:SESSION,content:'new message'})).completion,'complete');
+ await h.client.close();
+});
+test('拒绝未记录session、不支持load、不在专用cwd索引或显式不匹配cwd，失败不偷偷新建会话',async()=>{
+ for(const kind of ['unrecorded','unsupported','missing','foreign']){
+  const h=harness({client:{restorableSessionIds:kind==='unrecorded'?[]:[SESSION]},reply:c=>{
+   if(c.packet?.method==='initialize')return sse([rpc(c.packet.id,{protocolVersion:1,agentCapabilities:{loadSession:kind!=='unsupported'}})]);
+   if(c.url.includes('/sessions?'))return Response.json({data:{sessions:kind==='missing'?[]:[{id:SESSION,...(kind==='missing-cwd'?{}:{cwd:kind==='foreign'?'/private/foreign':WORKSPACE})}]}});
+  }});
+  await h.client.connect();await assert.rejects(h.client.loadSession({sessionId:SESSION}),{code:kind==='unsupported'?'UNSUPPORTED_API':'UNSAFE_SCOPE'});
+  assert.equal(h.calls.some(x=>x.packet?.method==='session/load'||x.packet?.method==='session/new'),false);await h.client.close();
+ }
+});
+test('恢复返回不安全模式则断开，不能给旧session发送新消息',async()=>{
+ const h=harness({client:{restorableSessionIds:[SESSION]},reply:c=>{
+  if(c.packet?.method==='initialize')return sse([rpc(c.packet.id,{protocolVersion:1,agentCapabilities:{loadSession:true}})]);
+  if(c.url.includes('/sessions?'))return Response.json({data:{sessions:[{id:SESSION,cwd:WORKSPACE}]}});
+  if(c.packet?.method==='session/load')return sse([rpc(c.packet.id,{modes:{currentModeId:'bypassPermissions'}})]);
+ }});
+ await h.client.connect();await assert.rejects(h.client.loadSession({sessionId:SESSION}),{code:'UNSAFE_CONFIG'});
+ await assert.rejects(h.client.sendMessage({sessionId:SESSION,content:'should not send'}),{code:'CLOSED'});await h.client.close();
+});
+test('官方单项目索引可省略cwd字段，但始终只查询固定专用workspace且要求own id存在',async()=>{
+ const h=harness({client:{restorableSessionIds:[SESSION]},reply:c=>{
+  if(c.packet?.method==='initialize')return sse([rpc(c.packet.id,{protocolVersion:1,agentCapabilities:{loadSession:true}})]);
+  if(c.url.includes('/sessions?'))return Response.json({data:{sessions:[{id:SESSION}]}});
+  if(c.packet?.method==='session/load')return sse([rpc(c.packet.id,{modes:{currentModeId:'dontAsk'}})]);
+ }});
+ await h.client.connect();assert.equal((await h.client.loadSession({sessionId:SESSION})).restored,true);
+ assert.equal(h.calls.find(x=>x.url.includes('/sessions?')).url,BASE+'/api/v1/sessions?cwd='+encodeURIComponent(WORKSPACE));
+ assert.equal(h.calls.some(x=>x.url.includes('cwd=*')),false);await h.client.close();
+});
+test('显式官方登录URL只交主进程回调，成功必须userinfo身份回执且不进入聊天事件',async()=>{
+ const authUrl='https://copilot.tencent.com/login?state=PRIVATE_STATE',urls=[];
+ const h=harness({reply:c=>c.packet?.method==='authenticate'?sse([
+  {jsonrpc:'2.0',method:'_codebuddy.ai/authUrl',params:{authUrl}},
+  rpc(c.packet.id,{_meta:{'codebuddy.ai/userinfo':{userId:'PRIVATE_USER',token:'PRIVATE_TOKEN'}}})]):undefined});
+ await h.client.connect();
+ assert.deepEqual(await h.client.authenticate({onAuthUrl:url=>urls.push(url)}),{authenticated:true});
+ assert.deepEqual(urls,[authUrl]);assert.deepEqual(h.events,[]);
+ assert.deepEqual(h.calls.find(c=>c.packet?.method==='authenticate').packet.params,{methodId:'internal'});
+ await h.client.close();
+});
+test('登录拒绝非官方域名URL以及缺少用户身份的伪成功',async()=>{
+ for(const raw of ['http://copilot.tencent.com/login','https://evil.example/login','https://user@copilot.tencent.com/login','https://copilot.tencent.com:8443/login']){
+  const h=harness({reply:c=>c.packet?.method==='authenticate'?sse([{jsonrpc:'2.0',method:'_codebuddy.ai/authUrl',params:{authUrl:raw}},rpc(c.packet.id,{})]):undefined});
+  await h.client.connect();await assert.rejects(h.client.authenticate({onAuthUrl:()=>assert.fail('invalid URL opened')}),{code:'UNSAFE_CONFIG'});await h.client.close();
+ }
+ const h=harness({reply:c=>c.packet?.method==='authenticate'?sse([rpc(c.packet.id,{})]):undefined});
+ await h.client.connect();await assert.rejects(h.client.authenticate({onAuthUrl:()=>{}}),{code:'UNAUTHENTICATED'});await h.client.close();
+});
 
 test('only literal loopback origins and password headers, never remote/password URLs',()=>{
  for(const baseUrl of ['http://example.com:1234','http://localhost:1234','http://user:secret@127.0.0.1:1234','http://127.0.0.1:1234?password=x','http://127.0.0.1:1234/prefix','http://127.0.0.1'])

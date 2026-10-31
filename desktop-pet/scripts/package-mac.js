@@ -182,6 +182,10 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/lib/mas-codex-connection.js',
     'desktop-pet/lib/mas-codex-tasks.js',
     'desktop-pet/lib/mas-provider-runtime.js',
+    'desktop-pet/lib/mas-enable-flow.js',
+    'desktop-pet/lib/mas-bundled-codex.js',
+    'desktop-pet/lib/mas-bundled-workbuddy.js',
+    'desktop-pet/lib/zcode-direct-chat-rpc.js',
     'desktop-pet/lib/mas-zcode-provider.js',
     'desktop-pet/lib/mas-workbuddy-provider.js',
     'desktop-pet/lib/workbuddy-relay-client.js',
@@ -455,9 +459,14 @@ async function packageMac(root = path.resolve(__dirname, '../..'), { website = f
     fs.writeFileSync(packageFile, JSON.stringify(candidate, null, 2) + '\n');
     options.name = '球球桌宠-商店联调候选'; options.appBundleId = 'local.xiaokun.emotionball.pet.mascandidate';
     options.out = path.join(root, 'dist/mas-candidate');
+    const helper=path.join(root,'desktop-pet/build/qiuqiu-codex');
+    if(!fs.existsSync(path.join(helper,'darwin-arm64/manifest.json')))throw new Error('请在构建阶段准备固定版本官方Codex组件；运行时不下载。');
+    const workbuddy=path.join(root,'desktop-pet/build/qiuqiu-workbuddy');
+    if(!fs.existsSync(path.join(workbuddy,'manifest.json')))throw new Error('构建阶段缺少官方WorkBuddy组件。');
+    options.extraResource=[helper,workbuddy];
   }
   if (nativeIcon) {
-    options.extraResource = [path.join(root, 'desktop-pet/assets/app-icon-native/Assets.car')];
+    options.extraResource = [...(options.extraResource||[]),path.join(root, 'desktop-pet/assets/app-icon-native/Assets.car')];
     options.extendInfo = { ...options.extendInfo, CFBundleIconName: 'QiuqiuA1' };
   }
   if (website) options.out = path.join(root, 'dist/website');
@@ -465,7 +474,24 @@ async function packageMac(root = path.resolve(__dirname, '../..'), { website = f
   if (!paths.length) throw new Error('未生成 macOS 应用');
   const appPath = path.join(paths[0], options.name+'.app');
   if (!fs.existsSync(appPath)) throw new Error(`找不到打包后的应用: ${appPath}`);
+  if(masCandidate){
+    const dir=path.join(appPath,'Contents/Resources/qiuqiu-codex/darwin-arm64');
+    adhocSign(path.join(dir,'codex'));
+    const manifest=JSON.parse(fs.readFileSync(path.join(dir,'manifest.json'),'utf8'));
+    manifest.binarySha256=require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(dir,'codex'))).digest('hex');
+    fs.writeFileSync(path.join(dir,'manifest.json'),JSON.stringify(manifest,null,2)+'\n');
+  }
   signWeatherApp(appPath);
+  if(masCandidate){
+    const resources=path.join(appPath,'Contents/Resources'),hash=file=>require('node:crypto').createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+    const codexDir=path.join(resources,'qiuqiu-codex/darwin-arm64'),codexManifest=path.join(codexDir,'manifest.json'),cm=JSON.parse(fs.readFileSync(codexManifest,'utf8'));
+    cm.binarySha256=hash(path.join(codexDir,'codex'));fs.writeFileSync(codexManifest,JSON.stringify(cm,null,2)+'\n');
+    const wbDir=path.join(resources,'qiuqiu-workbuddy'),wbManifest=path.join(wbDir,'manifest.json'),wm=JSON.parse(fs.readFileSync(wbManifest,'utf8'));
+    for(const rel of Object.keys(wm.files))wm.files[rel]=hash(path.join(wbDir,rel));
+    fs.writeFileSync(wbManifest,JSON.stringify(wm,null,2)+'\n');
+    runTool('codesign',['--force','--sign','-','--timestamp=none',appPath]);
+    runTool('codesign',['--verify','--deep','--strict',appPath]);
+  }
   process.stdout.write(`${appPath}\n`);
   return appPath;
 }

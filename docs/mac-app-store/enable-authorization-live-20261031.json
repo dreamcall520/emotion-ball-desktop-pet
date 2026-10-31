@@ -1,0 +1,62 @@
+{
+  "date": "2026-10-31",
+  "candidate": "R12 darwin-arm64 diagnostic, not App Sandbox",
+  "codex": {
+    "officialBundledVersion": "0.166.0",
+    "transport": "stdio",
+    "userCompletedOfficialLogin": true,
+    "automaticConnectAfterLogin": true,
+    "actualReply": "免配置连接成功",
+    "loginRecoveredAcrossRestart": true,
+    "chatRecordsRecovered": true,
+    "originalCredentialsCopied": false
+  },
+  "workbuddy": {
+    "officialBundledVersion": "2.179.0",
+    "runtime": "Electron utilityProcess with bundled JS",
+    "userConfiguredTerminalOrService": false,
+    "userCompletedOfficialLogin": true,
+    "vendorIdentityVerified": true,
+    "gatewayReadinessNotUsedAsVendorProof": true,
+    "actualReply": "WorkBuddy 免配置连接成功",
+    "restartLoginRecoveredWithoutBrowser": true,
+    "ownSessionRestored": true,
+    "continuityBeforeRestart": "球球晴天",
+    "continuityAfterRestart": "球球晴天",
+    "accountScopedConversationFilesMode": "0600",
+    "desktopRealtimeVerified": false,
+    "originalDesktopMessagesRead": false,
+    "websiteCreditsLoginOptional": true
+  },
+  "zcode": {
+    "officialQuotaQueryAvailable": true,
+    "officialPlansEmpty": true,
+    "automaticFallback": false,
+    "serviceFreeDirectAdapter": "configured-custom only, complete permitted general API configuration required",
+    "existingMoonshotTemplateDirectReady": false
+  },
+  "ux": {
+    "oneEnableEntryPerProvider": true,
+    "systemPermissionsAndOfficialLoginByUser": true,
+    "noTerminalPortOrPairingFileConfiguration": true,
+    "threeChatSourcesVisible": true
+  },
+  "validation": {
+    "fullTests": 2950,
+    "fullPassed": 2950,
+    "postFullFocused": 36,
+    "postFullFocusedPassed": 36,
+    "strictLocalSignature": true,
+    "package": {
+      "sourceFiles": 448,
+      "mismatches": [],
+      "asarSha256": "c5880f5e64089e1cbaff56d71d2aac612fef84f117f6f146783bc07f3ab805e3"
+    }
+  },
+  "release": {
+    "pushed": false,
+    "merged": false,
+    "submitted": false,
+    "trueMasRuntimeVerified": false
+  }
+}

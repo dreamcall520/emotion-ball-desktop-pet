@@ -144,7 +144,7 @@ test('撤销诊断codex授权不会影响zcode，下次访问不回落到home', 
   assert.equal(dialogs.length, 0);
 });
 
-async function runtimeChatFixture(t) {
+async function runtimeChatFixture(t, overrides={}) {
   const { once } = require('node:events');
   const { WebSocketServer } = require('ws');
   const { createMasProviderRuntime } = require('../lib/mas-provider-runtime');
@@ -159,7 +159,7 @@ async function runtimeChatFixture(t) {
     } }, BrowserWindow: function() { throw new Error('Must not open website'); },
     session: { fromPartition: () => ({ getUserAgent: () => 'Synthetic runtime test', fetch: async () => { throw new Error('Must not request websites'); } }) },
     shell: { openExternal: async () => { throw new Error('Must not open external tools'); } },
-    fetch: async () => { throw new Error('Must not query real quota'); }, diagnostic: true });
+    fetch: async () => { throw new Error('Must not query real quota'); }, diagnostic: true,...overrides });
   t.after(async () => { await runtime.close(); for (const server of servers) { for (const client of server.clients) client.terminate(); await new Promise(resolve => server.close(resolve)); } });
   selections.push({ canceled: false, filePaths: [f.codex] });
   await runtime.authorize('codex');
@@ -422,4 +422,41 @@ test('CLI配对文件符号链接拒绝，取消保持已有状态',async t=>{
  const f=await runtimeChatFixture(t),directory=path.join(f.temp,'link-cli-pairing');fs.mkdirSync(directory);const outside=path.join(f.temp,'outside-cli.json');fs.writeFileSync(outside,'{}');fs.symlinkSync(outside,path.join(directory,'connection.json'));
  f.selections.push({canceled:false,filePaths:[directory]});await assert.rejects(f.runtime.importWorkbuddyCliService(),{code:'INVALID_PAIRING_FILE'});
  f.selections.push({canceled:true});assert.deepEqual(await f.runtime.importWorkbuddyCliService(),{status:'cancelled'});assert.equal((await f.runtime.getState()).workbuddyCli.configured,false);
+});
+
+test('启用恢复先验证已有授权，取消不读数据，失效授权非交互不弹框',async t=>{
+ const f=await runtimeChatFixture(t);
+ assert.deepEqual(await f.runtime.ensureDirectory('codex',{interactive:false}),{status:'stored'});
+ await f.runtime.revoke('codex');
+ assert.deepEqual(await f.runtime.ensureDirectory('codex',{interactive:false}),{status:'needs-authorization'});
+ f.selections.push({canceled:true});assert.deepEqual(await f.runtime.ensureDirectory('codex'),{status:'cancelled'});
+});
+test('聊天来源显式选择保存独立偏好，官方不回落到上次自定义来源',async t=>{
+ const f=await runtimeChatFixture(t);
+ await f.runtime.setZcodeAccountSource('configured-custom');
+ assert.equal((await f.runtime.getState()).zcode.accountSource,'configured-custom');
+ await f.runtime.setZcodeAccountSource('official');
+ assert.equal((await f.runtime.getState()).zcode.accountSource,'official');
+ const result=await f.runtime.prepareChat('zcode',{interactive:false});
+ assert.equal(result.status,'unavailable');
+ assert.equal((await f.runtime.getState()).zcode.accountSource,'official');
+ await assert.rejects(f.runtime.setZcodeAccountSource('unknown'),{code:'INVALID_INPUT'});
+});
+
+test('受管理WorkBuddy重启只查已有身份，后台不发登录也不打开浏览器',async t=>{
+ let starts=0,auth=0;const f=await runtimeChatFixture(t,{startWorkbuddyHost:async()=>{starts++;return{endpoint:'http://127.0.0.1:45678',gatewayPassword:'syntheticGatewayPassword'.repeat(2),workspaceDir:'/synthetic/workspace',cliVersion:'2.179.0',stop:async()=>{}};},createWorkbuddyAuthClient:()=>({connect:async()=>{},getVendorAccount:async()=>({authenticated:false}),authenticate:async()=>{auth++;},close:async()=>{}})});
+ const result=await f.runtime.prepareWorkbuddyChat({interactive:false});assert.equal(result.status,'needs-login');assert.equal(auth,0);assert.equal(starts,1);
+});
+test('已登录托管WorkBuddy只恢复身份，不强制登出再登录；旧host退出不清新连接',async t=>{
+ const exits=[];let starts=0,auth=0;const f=await runtimeChatFixture(t,{startWorkbuddyHost:async options=>{starts++;exits.push(options.onExit);return{endpoint:'http://127.0.0.1:45678',gatewayPassword:'syntheticGatewayPassword'.repeat(2),workspaceDir:'/synthetic/workspace',cliVersion:'2.179.0',stop:async()=>{}};},createWorkbuddyAuthClient:()=>({connect:async()=>{},getVendorAccount:async()=>({authenticated:true}),authenticate:async()=>auth++,close:async()=>{}})});
+ assert.equal((await f.runtime.prepareWorkbuddyChat({interactive:false})).status,'ready');assert.equal(auth,0);
+ await f.runtime.disconnectWorkbuddyChat();assert.equal((await f.runtime.prepareWorkbuddyChat({interactive:false})).status,'ready');exits[0]();assert.equal((await f.runtime.getState()).workbuddyCli.configured,true);assert.equal(starts,2);
+ exits[1]();assert.equal((await f.runtime.getState()).workbuddyCli.configured,false);
+});
+test('撤销期间迟到的WorkBuddy官方登录成功不能自动恢复或打开新页面',async t=>{
+ let finishAuth,authenticated=false,opened=0,recovered=0;
+ const f=await runtimeChatFixture(t,{onManagedReady:()=>recovered++,shell:{openExternal:async()=>{opened++;}},startWorkbuddyHost:async()=>({endpoint:'http://127.0.0.1:45678',gatewayPassword:'syntheticGatewayPassword'.repeat(2),workspaceDir:'/synthetic/workspace',cliVersion:'2.179.0',stop:async()=>{}}),createWorkbuddyAuthClient:()=>({connect:async()=>{},getVendorAccount:async()=>({authenticated}),authenticate:async({onAuthUrl})=>{await onAuthUrl('https://copilot.tencent.com/synthetic-login');await new Promise(r=>finishAuth=r);authenticated=true;},close:async()=>{finishAuth?.();}})});
+ assert.equal((await f.runtime.prepareWorkbuddyChat({interactive:true})).status,'needs-login');
+ await f.runtime.disconnectWorkbuddyChat();await new Promise(r=>setImmediate(r));
+ assert.equal(opened,1);assert.equal(recovered,0);assert.equal((await f.runtime.getState()).workbuddyCli.configured,false);
 });

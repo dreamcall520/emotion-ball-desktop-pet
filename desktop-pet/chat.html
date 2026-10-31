@@ -63,7 +63,7 @@
       <div id="empty-state" class="empty-state">
         <span class="empty-dot" aria-hidden="true"><i></i><i></i><i></i></span>
         <h2>我在，想聊点什么？</h2>
-        <p id="empty-source-note">通过本机 Codex 账号聊天</p>
+        <p id="empty-source-note">选择已授权的工具，开始聊天</p>
       </div>
       <div id="messages" class="messages" role="log" aria-live="polite" aria-relevant="additions text"></div>
     </section>
@@ -112,6 +112,7 @@
       </div>
       <div id="source-menu" class="model-menu" role="menu" aria-label="选择聊天来源" hidden></div>
       <div id="model-menu" class="model-menu" role="menu" aria-label="选择聊天模型" hidden></div>
+      <button id="enable-chat-source" class="text-button" type="button" hidden>启用授权</button>
       <div id="model-feedback" class="sr-only">
         <p id="model-hint" role="status">正在读取可用模型…</p>
         <button id="refresh-models" class="text-button" type="button" hidden>重试</button>

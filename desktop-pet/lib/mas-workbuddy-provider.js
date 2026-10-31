@@ -51,7 +51,7 @@ function sensitiveExternalURL(url) {
 // website Session owns cookies; no Chrome import, desktop auth/keychain read,
 // secret handling, automatic OAuth application registration or model request.
 function createMasWorkBuddyProvider({ BrowserWindow, session, shell, onChange = () => {},
-  createQuota = createWorkBuddyWebQuota, quotaOptions = {} } = {}) {
+  createQuota = createWorkBuddyWebQuota, quotaOptions = {}, onLoginComplete = () => {} } = {}) {
   if (typeof BrowserWindow !== 'function' || typeof session?.fromPartition !== 'function' ||
       typeof shell?.openExternal !== 'function' || typeof createQuota !== 'function') {
     throw new TypeError('BrowserWindow, session.fromPartition and shell.openExternal are required');
@@ -76,7 +76,7 @@ function createMasWorkBuddyProvider({ BrowserWindow, session, shell, onChange = 
   const quota = createQuota({ ...quotaOptions, session: websiteSession });
   if (typeof quota?.readSummary !== 'function') throw new TypeError('A quota reader is required');
   const windows = new Set();
-  let loginWindow = null, closed = false, generation = 0, flight = null;
+  let loginWindow = null, closed = false, generation = 0, flight = null, loginCheckTimer=null;
   let state = { status: 'needs-login', busy: false, loginVisible: false, summary: null, stale: false,
     errorCode: null, errorMessage: null, loadErrorCode: null };
   function getState() {
@@ -130,6 +130,14 @@ function createMasWorkBuddyProvider({ BrowserWindow, session, shell, onChange = 
     };
     // A provider-side navigation can be account switching. No previous account's
     // summary survives it; the page finishing still does not prove login.
+    win.webContents.on('did-finish-load',()=>{
+      clearTimeout(loginCheckTimer);
+      if(closed||win!==loginWindow)return;
+      loginCheckTimer=setTimeout(()=>{
+        if(closed||win!==loginWindow||win.isDestroyed())return;
+        void readSummary().then(()=>{if(!closed&&win===loginWindow){onLoginComplete();win.close();}}).catch(()=>{});
+      },1000);loginCheckTimer.unref?.();
+    });
     win.webContents.on('did-navigate', navigated);
     win.webContents.on('did-navigate-in-page', navigated);
     win.webContents.on('will-navigate', guard);
@@ -227,7 +235,7 @@ function createMasWorkBuddyProvider({ BrowserWindow, session, shell, onChange = 
   }
   function close() {
     if (closed) return;
-    closed = true; generation++;
+    closed = true; generation++; clearTimeout(loginCheckTimer);
     flight?.controller.abort(); flight = null;
     for (const win of [...windows]) { try { if (!win.isDestroyed()) win.destroy(); } catch (_) {} }
     windows.clear(); loginWindow = null;

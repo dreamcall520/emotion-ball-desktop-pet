@@ -44,6 +44,10 @@ contextBridge.exposeInMainWorld('qiuqiuChat', {
     if (!['codex', 'zcode', 'workbuddy'].includes(id)) return Promise.resolve({ accepted: false, error: '请选择可用的聊天来源。' });
     return ipcRenderer.invoke('pet:chat-source', id);
   },
+  openConnections(id) {
+    if (!['codex', 'zcode', 'workbuddy'].includes(id)) return Promise.resolve({ accepted: false, error: '请选择可用的工具。' });
+    return ipcRenderer.invoke('pet:chat-open-connections', id);
+  },
   refreshModels: () => ipcRenderer.invoke('pet:chat-models-refresh'),
   openUpdate: () => ipcRenderer.invoke('pet:chat-open-update'),
   newChat: () => ipcRenderer.invoke('pet:chat-new'),

@@ -4,11 +4,17 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 
 const PROVIDERS = new Set(['codex', 'zcode', 'workbuddy']);
-const TITLES = { codex: '选择 Codex 数据目录', zcode: '选择 ZCode 数据目录', workbuddy: '选择 WorkBuddy 数据目录' };
+const TITLES = { codex: '允许球球连接 Codex', zcode: '允许球球连接 ZCode', workbuddy: '允许球球连接 WorkBuddy' };
+const MESSAGES = {
+  codex: '球球将读取账号额度和任务日志。不会自动发送消息或执行任务。请直接允许连接。',
+  zcode: '球球将读取账号套餐、历史任务和已有模型配置。不会自动发送消息；聊天沿用所选来源的计费方式。请直接允许连接。',
+  workbuddy: '球球只读取原 WorkBuddy 的任务标题、历史状态和未读标记，不读取聊天正文或登录凭据。请直接允许连接。'
+};
 function accessError(code, reason) {
   const messages = {
     INVALID_PROVIDER: '不支持的工具。',
-    DIRECTORY_ACCESS_REQUIRED: '请重新选择并授权工具数据目录。',
+    DIRECTORY_ACCESS_REQUIRED: '请重新允许球球连接该工具。',
+    INVALID_DIRECTORY: '选择的目录与该工具不匹配，请保留系统预选的位置后允许连接。',
     DIRECTORY_STORAGE_FAILED: '目录授权未能保存，请重试。'
   };
   return Object.assign(new Error(messages[code]), { code, reason });
@@ -21,7 +27,7 @@ function validGrant(grant) {
     typeof grant.bookmark === 'string' && grant.bookmark.length > 0;
 }
 
-// This module is deliberately not wired to the App. It never scans a home directory,
+// Directory grants are explicit system selections. This module never scans home,
 // opens provider data or exposes bookmarks through its public status results.
 // storage must persist each save/remove atomically; a rejection is never a success.
 // Dependency-injected tests cannot establish native bookmark validity or MAS approval.
@@ -73,7 +79,8 @@ function createMasDirectoryAccess({ app, dialog, storage, validateDirectory = as
     checkProvider(provider);
     return mutation(provider, async () => {
       const selection = await dialog.showOpenDialog({
-        title: TITLES[provider], buttonLabel: '授权此目录',
+        title: TITLES[provider], buttonLabel: '允许连接',
+        defaultPath: path.join(app.getPath('home'), '.' + provider), message: MESSAGES[provider],
         properties: ['openDirectory', 'showHiddenFiles'], securityScopedBookmarks: true
       });
       if (selection?.canceled) return { status: 'cancelled' };
@@ -81,6 +88,10 @@ function createMasDirectoryAccess({ app, dialog, storage, validateDirectory = as
         throw accessError('DIRECTORY_ACCESS_REQUIRED', 'missing-bookmark');
       }
       const grant = { directory: selection.filePaths[0], bookmark: selection.bookmarks[0] };
+      // Reject a wrong selection before opening its scope or replacing an older grant.
+      if (typeof grant.directory !== 'string' || path.basename(grant.directory) !== '.' + provider) {
+        throw accessError('INVALID_DIRECTORY', 'provider-directory-mismatch');
+      }
       // Verify the selected grant under its security scope before committing it.
       const verification = await openLease(grant);
       verification.release();

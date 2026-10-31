@@ -6,7 +6,7 @@ const { createMasWorkBuddyProvider } = require('../lib/mas-workbuddy-provider');
 const summary = () => ({ scope: 'website-summary', credits: { total: 500, remaining: 450, used: 50, reserved: 2 },
   planNames: ['体验版'], updatedAt: 1000 });
 const flush = () => new Promise(resolve => setImmediate(resolve));
-function harness({ readSummary, fetch, loadURL, constructError, externalError, userAgent = 'IsolatedWebsite/123' } = {}) {
+function harness({ readSummary, fetch, loadURL, constructError, externalError, onLoginComplete, userAgent = 'IsolatedWebsite/123' } = {}) {
   const windows = [], partitions = [], changes = [], external = [], quotaCalls = [], fetchCalls = [];
   const websiteSession = {
     getUserAgent: () => userAgent,
@@ -34,12 +34,13 @@ function harness({ readSummary, fetch, loadURL, constructError, externalError, u
     isDestroyed() { return this.destroyed; }
     show() { this.shown = true; }
     focus() { this.focused = true; }
+    close() { this.destroy(); }
     destroy() { this.destroyed = true; this.emit('closed'); }
   }
   const options = {
     BrowserWindow: Window, session: { fromPartition(...args) { partitions.push(args); return websiteSession; } },
     shell: { async openExternal(url) { external.push(url); if (externalError) throw externalError; } },
-    onChange: state => changes.push(state)
+    onChange: state => changes.push(state),onLoginComplete
   };
   if (readSummary) options.createQuota = options => {
     quotaCalls.push(options);
@@ -281,4 +282,11 @@ test('登录失败仅保留ERR纯码或数值errno，不透传原始message/URL�
  await h.provider.openLogin();await h.provider.readSummary();
  const ua=h.websiteSession.getUserAgent();assert.equal(ua,'Mozilla/5.0 (Macintosh) Chrome/142.0.0.0 Electron/39.0.0 Safari/537.36');
  assert.equal(h.windows[0].loadOptions.userAgent,ua);assert.equal(h.fetchCalls[0][1].headers['User-Agent'],ua);h.provider.close();
+});
+
+test('本人登录页完成后自动核验积分并回调，无需手动刷新',async()=>{
+ let finished=0,reads=0;const h=harness({readSummary:async()=>{reads++;return summary();},onLoginComplete:()=>finished++});
+ await h.provider.openLogin();h.windows[0].webContents.emit('did-finish-load');
+ await new Promise(r=>setTimeout(r,1100));
+ assert.equal(reads,1);assert.equal(finished,1);assert.equal(h.provider.getState().status,'connected');assert.equal(h.windows[0].destroyed,true);h.provider.close();
 });

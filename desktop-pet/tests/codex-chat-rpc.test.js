@@ -32,7 +32,7 @@ function defaultReply(packet) {
 // Ordinary protocol fixtures must not race unrelated CPU load; timeout-specific
 // cases below still pass their explicit 10/25ms budgets.
 function setup({ reply = defaultReply, installed = true, timeoutMs = 2000, maxFrameBytes, onNotification,
-  onDisconnect, fakeFs, env = {}, purpose = 'chat', getWeatherContext } = {}) {
+  onDisconnect, fakeFs, env = {}, purpose = 'chat', getWeatherContext, binaryPath } = {}) {
   const child = fakeChild(), sent = [], probes = [], launches = [], notifications = [], disconnects = [];
   const send = packet => child.stdout.write(JSON.stringify(packet) + '\n');
   child.stdin.on('data', chunk => {
@@ -41,7 +41,7 @@ function setup({ reply = defaultReply, installed = true, timeoutMs = 2000, maxFr
     const response = reply(packet, { send, child });
     if (response !== undefined) queueMicrotask(() => send({ id: packet.id, ...response }));
   });
-  const rpc = createCodexChatRpc({ workspaceDir: WORKSPACE, timeoutMs, maxFrameBytes, env, purpose, getWeatherContext,
+  const rpc = createCodexChatRpc({ workspaceDir: WORKSPACE, timeoutMs, maxFrameBytes, env, purpose, getWeatherContext, binaryPath,
     spawn: (...args) => { launches.push(args); return child; }, homedir: () => '/private/test-user',
     onNotification: value => { notifications.push(value); onNotification?.(value); },
     onDisconnect: value => { disconnects.push(value); onDisconnect?.(value); },
@@ -56,6 +56,40 @@ async function connected(h, resume = false) {
   await h.rpc.start(); await h.rpc.readAccount();
   return resume ? h.rpc.resumeThread(ID) : h.rpc.startThread();
 }
+
+test('显式包内binary只探测固定路径，不回退外部App，失败时不启动', async () => {
+  const binaryPath = '/Applications/Qiuqiu.app/Contents/Resources/qiuqiu-codex/darwin-arm64/codex';
+  const h = setup({ binaryPath });
+  await h.rpc.start(); assert.deepEqual(h.probes, [binaryPath]);
+  assert.equal(h.launches[0][0], binaryPath); await h.rpc.close();
+  const missing = setup({ binaryPath, installed: false });
+  await assert.rejects(missing.rpc.start(), { code: 'MISSING' });
+  assert.deepEqual(missing.probes, [binaryPath]); assert.equal(missing.launches.length, 0);
+});
+
+test('官方浏览器登录只返回允许域名URL，完成通知脱敏并取消仅自有登录', async () => {
+  const authUrl = 'https://auth.openai.com/oauth/authorize?state=PRIVATE_STATE';
+  const h = setup({ reply: p => p.method === 'account/login/start'
+    ? { result: { type: 'chatgpt', loginId: ID, authUrl, accessToken: 'SECRET' } } : defaultReply(p) });
+  await h.rpc.start(); assert.deepEqual(await h.rpc.startLogin(), { authUrl });
+  assert.deepEqual(h.sent.find(p=>p.method==='account/login/start').params, { type: 'chatgpt', useHostedLoginSuccessPage: true });
+  await assert.rejects(h.rpc.startLogin(), { code: 'BUSY' });
+  h.send({ method: 'account/login/completed', params: { loginId: 'foreign', success: true } });
+  assert.equal(h.notifications.length, 0);
+  h.send({ method: 'account/login/completed', params: { loginId: ID, success: true, error: 'SECRET' } });
+  assert.deepEqual(h.notifications.at(-1), { method: 'account/login/completed', params: { success: true } });
+  await h.rpc.startLogin(); await h.rpc.cancelLogin();
+  assert.deepEqual(h.sent.find(p=>p.method==='account/login/cancel').params,{loginId:ID});
+  await h.rpc.close();
+});
+
+test('登录拒绝非官方URL及用户信息/端口/fragment，不转发原始错误', async () => {
+  for (const authUrl of ['http://auth.openai.com/x','https://evil.example/x','https://auth.openai.com:443/x#x','https://user@auth.openai.com/x']) {
+    const h = setup({ reply: p => p.method === 'account/login/start'
+      ? { result: { type: 'chatgpt', loginId: ID, authUrl } } : defaultReply(p) });
+    await h.rpc.start(); await assert.rejects(h.rpc.startLogin(), {code:'INVALID_FRAME'}); await h.rpc.close();
+  }
+});
 
 test('构造无探测，固定正式 App 的两种 Codex 路径，不搜索PATH或运行shell', async () => {
   const h = setup({ installed: false });

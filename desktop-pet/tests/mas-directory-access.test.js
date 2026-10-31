@@ -2,8 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createMasDirectoryAccess } = require('../lib/mas-directory-access');
 
-const oldGrant = { directory: '/synthetic/codex', bookmark: 'b2xk' };
-const newGrant = { directory: '/synthetic/selected', bookmark: 'bmV3' };
+const oldGrant = { directory: '/synthetic/old/.codex', bookmark: 'b2xk' };
+const newGrant = { directory: '/synthetic/new/.codex', bookmark: 'bmV3' };
 function harness(overrides = {}) {
   const saved = new Map([['codex', { ...oldGrant }]]), calls = [];
   const storage = {
@@ -13,7 +13,7 @@ function harness(overrides = {}) {
     ...overrides.storage
   };
   const deps = {
-    app: { startAccessingSecurityScopedResource: bookmark => {
+    app: { getPath: name => { assert.equal(name, 'home'); return '/synthetic/home'; }, startAccessingSecurityScopedResource: bookmark => {
       calls.push(['start', bookmark]); return () => calls.push('stop');
     }, ...overrides.app },
     dialog: { showOpenDialog: async options => {
@@ -33,7 +33,9 @@ test('显式系统目录选择，验证作用域后仅持久化路径与书签�
   const options = calls[0][1];
   assert.equal(options.securityScopedBookmarks, true);
   assert.deepEqual(options.properties, ['openDirectory', 'showHiddenFiles']);
-  assert.equal(Object.hasOwn(options, 'defaultPath'), false);
+  assert.equal(options.defaultPath, '/synthetic/home/.codex');
+  assert.equal(options.buttonLabel, '允许连接');
+  assert.match(options.message, /账号额度.*任务日志.*不会自动发送/);
   assert.deepEqual(calls.slice(1), [['start', newGrant.bookmark], ['validate', newGrant.directory], 'stop', 'save']);
   assert.deepEqual(saved.get('codex'), newGrant);
   assert.deepEqual(await access.getStatus('codex'), { status: 'stored', directory: newGrant.directory });
@@ -200,7 +202,7 @@ test('不同工具的租约独立，重新选择只影响之后的访问', async
   const { access, saved } = harness({ app: { startAccessingSecurityScopedResource: bookmark => {
     const id = starts.push(bookmark); return () => stops.push(id);
   } } });
-  saved.set('zcode', { directory: '/synthetic/zcode', bookmark: 'emNvZGU=' });
+  saved.set('zcode', { directory: '/synthetic/.zcode', bookmark: 'emNvZGU=' });
   const codex = await access.acquire('codex'), zcode = await access.acquire('zcode');
   await access.authorize('codex');
   // authorize's verification scope is released, existing scopes remain live.
@@ -210,4 +212,29 @@ test('不同工具的租约独立，重新选择只影响之后的访问', async
   assert.equal(replacement.directory, newGrant.directory);
   zcode.release(); replacement.release(); codex.release();
   assert.deepEqual(stops, [3, 2, 4, 1]);
+});
+
+
+test('三家授权均预定位对应目录并清楚说明读取范围', async () => {
+  for (const provider of ['codex', 'zcode', 'workbuddy']) {
+    let shown;
+    const { access, saved } = harness({ dialog: { showOpenDialog: async options => {
+      shown = options;
+      return { canceled: false, filePaths: ['/synthetic/.' + provider], bookmarks: ['synthetic-bookmark'] };
+    } } });
+    assert.equal((await access.authorize(provider)).status, 'stored');
+    assert.equal(shown.defaultPath, '/synthetic/home/.' + provider);
+    assert.equal(shown.buttonLabel, '允许连接');
+    if (provider === 'workbuddy') assert.match(shown.message, /只读取.*任务标题.*历史状态.*未读标记.*不读取聊天正文或登录凭据/);
+    assert.equal(saved.get(provider).directory, '/synthetic/.' + provider);
+  }
+});
+
+test('选错工具或上级目录先拒绝，不访问、不保存且保留旧授权', async () => {
+  for (const directory of ['/synthetic/.zcode', '/synthetic/home', '/synthetic/.codex-extra']) {
+    const { access, calls, saved } = harness({ dialog: { showOpenDialog: async () => ({ canceled: false, filePaths: [directory], bookmarks: ['wrong-bookmark'] }) } });
+    await assert.rejects(access.authorize('codex'), { code: 'INVALID_DIRECTORY', reason: 'provider-directory-mismatch' });
+    assert.deepEqual(saved.get('codex'), oldGrant);
+    assert.deepEqual(calls, [], 'wrong selection cannot open a security scope or save');
+  }
 });

@@ -90,10 +90,10 @@ function createWorkBuddyOfficialConnection({ createClient=createWorkBuddyRelayCl
   function close(){closed=true;generation++;client?.close();}
   return{configure,beginAuthorization,refresh,refreshMessages,send,disconnect,confirmUnknownReviewed,getState,close};
 }
-function createWorkBuddyIntentStore(file){
+function createWorkBuddyIntentStore(file,{maxBytes=16384}={}){
   if(typeof file!=='string'||!path.isAbsolute(file))throw failure('INVALID_REQUEST');
   return{
-    read(){let fd;try{fd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);const stat=fs.fstatSync(fd);if(!stat.isFile()||stat.size>16384)throw failure('STORAGE');return JSON.parse(fs.readFileSync(fd,'utf8'));}catch(e){if(e.code==='ENOENT')return null;throw failure('STORAGE');}finally{if(fd!==undefined)fs.closeSync(fd);}},
+    read(){let fd;try{fd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);const stat=fs.fstatSync(fd);if(!stat.isFile()||stat.size>maxBytes)throw failure('STORAGE');return JSON.parse(fs.readFileSync(fd,'utf8'));}catch(e){if(e.code==='ENOENT')return null;throw failure('STORAGE');}finally{if(fd!==undefined)fs.closeSync(fd);}},
     write(value){fs.mkdirSync(path.dirname(file),{recursive:true,mode:0o700});const temporary=file+'.'+randomUUID()+'.tmp';try{fs.writeFileSync(temporary,JSON.stringify(value),{flag:'wx',mode:0o600});fs.renameSync(temporary,file);}finally{try{fs.unlinkSync(temporary);}catch(_){}}}
   };
 }

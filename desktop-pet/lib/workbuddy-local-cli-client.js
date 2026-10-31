@@ -1,6 +1,7 @@
 'use strict';
 const path = require('node:path');
 const { TextDecoder } = require('node:util');
+const { createHash } = require('node:crypto');
 const SOURCE = 'workbuddy-local-cli';
 const MAX_JSON_BYTES = 1024 * 1024, MAX_FRAME_BYTES = 256 * 1024, MAX_STREAM_BYTES = 8 * 1024 * 1024;
 const JOB_STATES = new Set(['working', 'blocked', 'done', 'failed', 'stopped']);
@@ -31,15 +32,18 @@ function rpcCode(error) {
 // JSON-RPC POST streams and optional GET notifications. This never launches/logs in
 // the CLI, reads desktop credentials, loads another project's chat or approves tools.
 function createWorkBuddyLocalCliClient({ baseUrl, gatewayPassword, workspaceDir, fetch:request=globalThis.fetch,
-  requestTimeoutMs=10000, promptTimeoutMs=180000, onEvent=()=>{} }={}) {
+  requestTimeoutMs=10000, promptTimeoutMs=180000, onEvent=()=>{}, restorableSessionIds=[] }={}) {
   const origin = loopbackOrigin(baseUrl);
   if (typeof gatewayPassword !== 'string' || !/^[A-Za-z0-9._~+\/-]{16,8192}={0,2}$/.test(gatewayPassword) ||
       typeof workspaceDir !== 'string' || !path.isAbsolute(workspaceDir) || workspaceDir.includes('\0') ||
       typeof request !== 'function' || !Number.isSafeInteger(requestTimeoutMs) || requestTimeoutMs < 1 || requestTimeoutMs > 30000 ||
-      !Number.isSafeInteger(promptTimeoutMs) || promptTimeoutMs < 1 || promptTimeoutMs > 300000) throw fail('INVALID_INPUT');
+      !Number.isSafeInteger(promptTimeoutMs) || promptTimeoutMs < 1 || promptTimeoutMs > 300000 ||
+      !Array.isArray(restorableSessionIds)||restorableSessionIds.length>128||restorableSessionIds.some(id=>!validId(id))) throw fail('INVALID_INPUT');
   workspaceDir = path.resolve(workspaceDir);
   const controllers = new Set(), ownedSessions = new Set();
-  let credentials=null, connecting=null, ready=false, closed=false, closing=null, busy=false, observing=false, nextId=0, blocked=false, blockCode='TOOL_BLOCKED', blockFlight=null;
+  const restorableSessions=new Set(restorableSessionIds);
+  let loadSessionSupported=false;
+  let credentials=null, connecting=null, ready=false, closed=false, closing=null, busy=false, observing=false, nextId=0, blocked=false, blockCode='TOOL_BLOCKED', blockFlight=null, authUrlCallback=null, authenticating=false, deliveredAuthUrl=null;
   const emit = event => { if (!closed) { try { onEvent(event); } catch (_) {} } };
   const safeText = (value, max=200) => typeof value === 'string'
     ? value.slice(0,max).split(gatewayPassword || '\0').join('[redacted]').split(credentials?.sessionToken || '\0').join('[redacted]') : null;
@@ -141,6 +145,17 @@ function createWorkBuddyLocalCliClient({ baseUrl, gatewayPassword, workspaceDir,
       void block(validId(sessionId)&&ownedSessions.has(sessionId)?sessionId:null);
       throw fail('TOOL_BLOCKED');
     }
+    if(packet.method==='_codebuddy.ai/authUrl'){
+      if(!authenticating||!authUrlCallback)return;
+      const raw=packet.params?.authUrl;let url;try{url=new URL(raw);}catch(_){throw fail('INVALID_RESPONSE');}
+      if(typeof raw!=='string'||raw.length>16384||url.protocol!=='https:'||url.username||url.password||url.port||url.hash||
+        !['www.codebuddy.cn','codebuddy.cn','www.workbuddy.cn','workbuddy.cn','copilot.tencent.com','www.codebuddy.ai','codebuddy.ai'].includes(url.hostname))throw fail('UNSAFE_CONFIG');
+      if(deliveredAuthUrl===raw)return;
+      if(deliveredAuthUrl!==null)throw fail('UNSAFE_CONFIG');
+      deliveredAuthUrl=raw;
+      // Ephemeral main-process callback only; never emit URL into public chat state.
+      await authUrlCallback(raw);return;
+    }
     if(packet.method!=='session/update')return;
     const params=packet.params,update=params?.update;
     if(!object(params)||!validId(params.sessionId)||!object(update))throw fail('INVALID_RESPONSE');
@@ -194,6 +209,7 @@ function createWorkBuddyLocalCliClient({ baseUrl, gatewayPassword, workspaceDir,
       const result=await rpc('initialize',{protocolVersion:1,clientInfo:{name:'qiuqiu-local-cli',version:'1.0.0'},
         clientCapabilities:{fs:{readTextFile:false,writeTextFile:false},terminal:false}},{signal,initializing:true});
       if(!object(result)||![1,'1'].includes(result.protocolVersion)||result.connectionId!==undefined&&result.connectionId!==credentials.connectionId)throw fail('INVALID_RESPONSE');
+      loadSessionSupported=result.agentCapabilities?.loadSession===true;
       ready=true;return{connected:true,protocolVersion:1};
     })().catch(async error=>{await close();throw error;});
     try{return await connecting;}finally{connecting=null;}
@@ -207,6 +223,30 @@ function createWorkBuddyLocalCliClient({ baseUrl, gatewayPassword, workspaceDir,
     if(result.modes?.currentModeId!=='dontAsk'){await close();throw fail('UNSAFE_CONFIG');}
     ownedSessions.add(result.sessionId);
     return{sessionId:result.sessionId,modelSource:'cli-default',currentModelId:validId(result.models?.currentModelId)?result.models.currentModelId:null};
+  }
+  async function loadSession({sessionId,signal}={}){
+    connected();if(busy||observing||authenticating)throw fail('BUSY');
+    if(!validId(sessionId)||!ownedSessions.has(sessionId)&&!restorableSessions.has(sessionId))throw fail('UNSAFE_SCOPE');
+    if(!loadSessionSupported)throw fail('UNSUPPORTED_API');
+    busy=true;
+    try{
+      // The caller may restore only its own durable session ID. Independently
+      // verify membership through the official cwd-scoped session index before
+      // loading/replaying anything. 2.179.0 omits cwd in single-project rows;
+      // when supplied, it must still match exactly (never use cwd=*).
+      const scoped=await rest('/api/v1/sessions?cwd='+encodeURIComponent(workspaceDir),{signal});
+      if(!object(scoped)||!Array.isArray(scoped.sessions)||scoped.sessions.length>2000)throw fail('INVALID_RESPONSE');
+      const matches=scoped.sessions.filter(row=>row?.id===sessionId);
+      if(matches.length!==1||matches[0].cwd!==undefined&&matches[0].cwd!==workspaceDir)throw fail('UNSAFE_SCOPE');
+      // Replay stays outside UI deltas. Only after mode validation does this
+      // connection obtain permission to prompt/cancel this persisted session.
+      ownedSessions.delete(sessionId);
+      const result=await rpc('session/load',{sessionId,cwd:workspaceDir,mcpServers:[]},{signal,uncertain:true});
+      if(!object(result)||result.sessionId!==undefined&&result.sessionId!==sessionId)throw fail('INVALID_RESPONSE');
+      if(result.modes?.currentModeId!=='dontAsk'){await close();throw fail('UNSAFE_CONFIG');}
+      ownedSessions.add(sessionId);
+      return {sessionId,restored:true,modelSource:'cli-default',currentModelId:validId(result.models?.currentModelId)?result.models.currentModelId:null};
+    }finally{busy=false;}
   }
   async function sendMessage({sessionId,content,signal}={}){
     assertOwned(sessionId);if(busy||observing)throw fail('BUSY');
@@ -262,7 +302,28 @@ function createWorkBuddyLocalCliClient({ baseUrl, gatewayPassword, workspaceDir,
     },
     getDaemonStatus:async({signal}={})=>{const data=await rest('/api/v1/daemon/status',{signal});if(!object(data))throw fail('INVALID_RESPONSE');
       return{source:SOURCE,scope:'cli-daemon',reachable:true,statusSchemaVerified:false,running:null};},
-    connect,createSession,sendMessage,subscribeNotifications,
+    connect,createSession,loadSession,sendMessage,subscribeNotifications,
+    async getVendorAccount({signal}={}){
+      connected();
+      const result=await rpc('_codebuddy.ai/getUserInfo',{},{signal});
+      if(!object(result))throw fail('INVALID_RESPONSE');
+      const info=result.userInfo;
+      if(info!==undefined&&!object(info))throw fail('INVALID_RESPONSE');
+      // This SDK response also contains accessToken/token; never retain or expose it.
+      const authenticated=object(info)&&['string','number'].includes(typeof info.userId)&&!!String(info.userId);
+      return {authenticated,...(authenticated?{accountKey:createHash('sha256').update('codebuddy:'+String(info.userId)).digest('hex')} : {}),liveEntitlementVerified:false};
+    },
+    async authenticate({methodId='internal',signal,onAuthUrl}={}){
+      connected();if(busy||observing||authenticating)throw fail('BUSY');
+      if(!['internal','external'].includes(methodId)||typeof onAuthUrl!=='function')throw fail('INVALID_INPUT');
+      authenticating=true;authUrlCallback=onAuthUrl;
+      try{
+        const result=await rpc('authenticate',{methodId},{signal,timeoutMs:180000});
+        const info=result?._meta?.['codebuddy.ai/userinfo'];
+        if(!object(info)||!['string','number'].includes(typeof info.userId)||!String(info.userId))throw fail('UNAUTHENTICATED');
+        return {authenticated:true};
+      }finally{authenticating=false;authUrlCallback=null;deliveredAuthUrl=null;}
+    },
     async cancel({sessionId}={}){assertOwned(sessionId);await rawCancel(sessionId);return{requested:true,completion:'not-confirmed'};},close
   };
 }

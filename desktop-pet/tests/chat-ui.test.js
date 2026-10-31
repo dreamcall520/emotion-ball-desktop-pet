@@ -882,3 +882,58 @@ test('WorkBuddy 自动模型说明不套用Codex规则且只有一个自动选�
   assert.match(f.options()[0].children[1].children[1].textContent, /WorkBuddy/);
   assert.match(f.get('model-hint').textContent, /WorkBuddy/);
 });
+
+test('三家聊天来源始终可见，未授权项打开授权页而不伪装切换或发送', async () => {
+  const opened = [], changed = [];
+  const f = fixture({
+    openConnections: async provider => { opened.push(provider); return { accepted: true }; },
+    setSource: async provider => { changed.push(provider); return { accepted: true }; }
+  });
+  await flush();
+  const state = { ...withModels(), source: 'codex', sources: [
+    { id: 'codex', enabled: true }, { id: 'zcode', enabled: false }, { id: 'workbuddy', enabled: false }
+  ] };
+  f.receive(state);
+  f.get('message-input').value = '保留我的草稿';
+  assert.equal(f.get('source-bar').hidden, false);
+  f.get('chat-source').dispatch('click');
+  const options = f.get('source-menu').children;
+  assert.equal(options.length, 3);
+  assert.equal(options[1].disabled, false);
+  assert.match(options[1].children[1].textContent, /ZCode.*启用授权/);
+  await options[1].dispatch('click');
+  assert.deepEqual(opened, ['zcode']); assert.deepEqual(changed, []); assert.deepEqual(f.sent, []);
+  assert.equal(f.get('chat-source').textContent, 'Codex');
+  assert.equal(f.get('message-input').value, '保留我的草稿');
+  f.get('chat-source').dispatch('click'); await f.get('source-menu').children[2].dispatch('click');
+  assert.deepEqual(opened, ['zcode', 'workbuddy']);
+  f.receive({ ...state, source: 'workbuddy' });
+  assert.equal(f.get('enable-chat-source').hidden, false);
+  assert.match(f.get('connection-status').textContent, /先启用 WorkBuddy 授权/);
+  assert.equal(f.get('send-message').disabled, true);
+  await f.get('composer').dispatch('submit');
+  assert.deepEqual(f.sent, [], 'unready source cannot dispatch through submit or keyboard');
+  await f.get('enable-chat-source').dispatch('click');
+  assert.deepEqual(opened, ['zcode', 'workbuddy', 'workbuddy']);
+  f.receive({ ...state, sources: state.sources.map(item => ({ ...item, enabled: false })) });
+  assert.equal(f.get('source-bar').hidden, false, 'all unready tools still have an authorization entry');
+});
+
+test('WorkBuddy跳转专用聊天不改当前来源，授权入口preload只传固定provider', async () => {
+  const changed = [];
+  const f = fixture({ setSource: async provider => { changed.push(provider); return { accepted: true, external: true }; } });
+  await flush();
+  f.receive({ ...withModels(), source: 'codex', sources: [{ id: 'codex', enabled: true }, { id: 'workbuddy', enabled: true }] });
+  f.get('message-input').value = 'Codex 草稿';
+  f.get('chat-source').dispatch('click'); await f.get('source-menu').children[1].dispatch('click');
+  assert.deepEqual(changed, ['workbuddy']);
+  assert.equal(f.get('chat-source').textContent, 'Codex');
+  assert.equal(f.get('message-input').value, 'Codex 草稿'); assert.deepEqual(f.sent, []);
+  const calls = []; let api;
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../chat-preload.js'), 'utf8'), {
+    require: () => ({ contextBridge: { exposeInMainWorld(_name, value) { api = value; } }, ipcRenderer: { invoke(...args) { calls.push(args); return Promise.resolve({ accepted: true }); } } })
+  });
+  for (const invalid of [null, {}, 'other', '../codex', 'Codex']) assert.equal((await api.openConnections(invalid)).accepted, false);
+  for (const provider of ['codex', 'zcode', 'workbuddy']) await api.openConnections(provider);
+  assert.deepEqual(calls, [['pet:chat-open-connections', 'codex'], ['pet:chat-open-connections', 'zcode'], ['pet:chat-open-connections', 'workbuddy']]);
+});

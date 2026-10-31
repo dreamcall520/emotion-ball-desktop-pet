@@ -16,6 +16,7 @@
   const sourceSelect = byId('chat-source');
   const sourceMenu = byId('source-menu');
   const sourceBar = byId('source-bar');
+  const enableSource = byId('enable-chat-source');
   const avatar = byId('chat-avatar');
   let snapshot = { messages: [], history: [], activeChatId: null, busy: false, connection: 'idle', error: null, hasConversation: false };
   let pending = false;
@@ -62,24 +63,37 @@
       seen.add(item.id); return true;
     });
   }
+  function sourceNeedsAuthorization() {
+    return availableSources().some(item => item.id === sourceId() && item.enabled !== true);
+  }
+  async function openConnections(id) {
+    if (changeBlocked() || typeof api.openConnections !== 'function') return;
+    closeSourceMenu(); pending = true; localError = ''; refreshControls();
+    try {
+      const result = await api.openConnections(id);
+      if (result?.accepted === false) localError = result.error || '授权页面暂时无法打开，请重试。';
+    } catch (error) { localError = errorMessage(error); }
+    finally { pending = false; refreshControls(); }
+  }
   function renderSources() {
     if (!sourceSelect || !sourceMenu || !sourceBar) return;
     const choices = availableSources();
-    sourceBar.hidden = historyOpen || !choices.some(item => item.id !== 'codex' && item.enabled === true);
+    sourceBar.hidden = historyOpen || choices.length < 2;
     sourceSelect.value = sourceId();
     sourceSelect.textContent = sourceName();
     sourceSelect.title = `聊天来源：${sourceName()} · 各自保留聊天记录`;
     sourceSelect.disabled = changeBlocked() || typeof api.setSource !== 'function';
-    const key = JSON.stringify(choices.map(item => [item.id, item.enabled === true]));
+    const key = JSON.stringify(choices.map(item => [item.id, item.enabled === true, item.message || '']));
     if (key !== sourceOptionsKey) {
       closeSourceMenu(false); sourceOptionsKey = key;
       sourceOptions = choices.map(item => {
         const option = document.createElement('button');
         option.type = 'button'; option.className = 'model-option'; option.value = item.id;
-        option.dataset.source = item.id; option.tabIndex = -1; option.disabled = item.enabled !== true;
+        option.dataset.source = item.id; option.tabIndex = -1; option.disabled = item.enabled !== true && typeof api.openConnections !== 'function';
         option.setAttribute('role', 'menuitemradio');
         const check = document.createElement('span'); check.className = 'model-option-check'; check.setAttribute('aria-hidden', 'true');
         const label = document.createElement('span'); label.className = 'model-option-label'; label.textContent = item.id === 'zcode' ? 'ZCode' : item.id === 'workbuddy' ? 'WorkBuddy' : 'Codex';
+        if (item.enabled !== true) { label.textContent += ' · 启用授权'; option.title = item.message || '完成授权后连接该工具'; }
         option.append(check, label); option.addEventListener('click', () => chooseSource(item.id)); return option;
       });
       sourceMenu.replaceChildren(...sourceOptions);
@@ -112,13 +126,16 @@
     target?.focus(); target?.scrollIntoView({ block: 'nearest' });
   }
   async function chooseSource(id) {
-    if (changeBlocked() || historyOpen || sourceBar?.hidden || typeof api.setSource !== 'function' || !availableSources().some(item => item.id === id && item.enabled === true)) return;
+    if (changeBlocked() || historyOpen || sourceBar?.hidden || typeof api.setSource !== 'function') return;
+    const choice = availableSources().find(item => item.id === id);
+    if (!choice) return;
+    if (choice.enabled !== true) { await openConnections(id); return; }
     closeSourceMenu(); if (id === sourceId()) return;
     pending = true; localError = ''; refreshControls();
     try {
       const result = await api.setSource(id);
       if (!result?.accepted) localError = result?.error || '聊天来源没有切换，请重试。';
-      else { failedDraft = ''; modelChanged = false; modelError = ''; }
+      else if (!result.external) { failedDraft = ''; modelChanged = false; modelError = ''; }
     } catch (error) { localError = errorMessage(error); }
     finally { pending = false; refreshControls(); }
   }
@@ -345,7 +362,7 @@
   function refreshControls() {
     const busy = Boolean(snapshot.busy);
     sendButton.hidden = busy;
-    sendButton.disabled = changeBlocked() || !input.value.trim() || input.value.length > 2000;
+    sendButton.disabled = changeBlocked() || sourceNeedsAuthorization() || !input.value.trim() || input.value.length > 2000;
     stopButton.hidden = !busy;
     stopButton.disabled = stopping;
     byId('stop-message-label').textContent = stopping ? '正在停止…' : '停止';
@@ -357,15 +374,17 @@
     count.hidden = input.value.length < 1800;
     count.textContent = `${input.value.length} / 2000`;
     byId('input-hint').hidden = !count.hidden;
+    if (enableSource) { enableSource.hidden = historyOpen || !sourceNeedsAuthorization() || typeof api.openConnections !== 'function'; enableSource.disabled = changeBlocked(); }
     const status = byId('connection-status');
     status.textContent = snapshot.sourceChanging ? `正在切换到 ${sourceName()}…` : snapshot.connection === 'connecting' ? `正在连接 ${sourceName()}…` : busy
       ? '球球正在想…'
-      : error ? '连接遇到了一点问题'
+      : sourceNeedsAuthorization() ? `先启用 ${sourceName()} 授权，再开始聊天`
+        : error ? '连接遇到了一点问题'
         : snapshot.hasConversation ? '接着聊，我还记得这一段' : '想说什么，我在听';
-    byId('privacy-note').textContent = snapshot.billingLabel || `使用 ${sourceName()} ${sourceId() === 'workbuddy' ? '积分' : '额度'} · 延续同一段聊天`;
+    byId('privacy-note').textContent = sourceNeedsAuthorization() ? '完成授权连接后才可发送消息；不会自动发送。' : snapshot.billingLabel || `使用 ${sourceName()} ${sourceId() === 'workbuddy' ? '积分' : '额度'} · 延续同一段聊天`;
     const sourceNote = byId('empty-source-note');
     if (sourceNote) {
-      sourceNote.textContent = `通过本机 ${sourceName()} 账号聊天`;
+      sourceNote.textContent = snapshot.sourceNote || (sourceNeedsAuthorization() ? `选择已授权的工具，或启用 ${sourceName()} 授权` : `通过 ${sourceName()} 聊天`);
     }
     refreshHistory();
     renderSources();
@@ -441,7 +460,7 @@
   }
 
   async function send() {
-    if (changeBlocked() || composing || historyOpen) return;
+    if (changeBlocked() || sourceNeedsAuthorization() || composing || historyOpen) return;
     const draft = input.value;
     const text = draft.trim();
     if (!text || draft.length > 2000) return;
@@ -499,6 +518,7 @@
       refreshControls();
     }
   }
+  enableSource?.addEventListener('click', () => openConnections(sourceId()));
   sourceSelect?.addEventListener('change', () => chooseSource(sourceSelect.value));
   sourceSelect?.addEventListener('click', () => sourceMenuOpen ? closeSourceMenu() : openSourceMenu());
   sourceSelect?.addEventListener('keydown', event => {
