@@ -82,7 +82,10 @@ if (process.versions.electron && process.argv.includes('--bubble-dom-child')) {
         assert.equal(value.buttons.length, expectedButtons, name);
         assert.equal(value.font, '14px', name + ': font remains readable');
         assert(inside(value.bubble) && inside(value.message), name + ': bubble/message outside native window ' + JSON.stringify(value));
-        assert(value.message.scroll <= value.message.client + (value.message.scrollH > value.message.clientH ? 3 : 1), name + ': horizontal text/ellipsis exceeds its box ');
+        // Chromium counts centered clamp-ellipsis paint in scrollWidth. Its visible
+        // boundary is the measured box; unclamped text must still fit without clipping.
+        if (value.message.scrollH <= value.message.clientH) assert(value.message.scroll <= value.message.client + 1, name + ': horizontal text exceeds its box ' + JSON.stringify(value.message));
+        else assert.equal(await run("getComputedStyle(document.getElementById('message')).overflowX"), 'hidden', name + ': truncated text must not paint beyond its measured box');
         if (!allowScroll) assert(value.message.scrollH <= value.message.clientH + 1 || value.message.height <= 60, name + ': text exceeds the three-line summary');
         assert.equal(await run("getComputedStyle(document.getElementById('message')).webkitLineClamp"), '3', name + ': uniform three-line limit');
         assert.equal(await run("getComputedStyle(document.getElementById('message')).overflowY"), 'hidden', name + ': no text scrollbar');

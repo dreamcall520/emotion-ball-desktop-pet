@@ -96,7 +96,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif
 #bubble[data-placement="below"]::before { top: -13px; bottom: auto; }
 #bubble[data-tone="strong"] { border-color: var(--bubble-strong); color: var(--bubble-strong); }
 #bubble[data-tone="urgent"] { border-color: var(--bubble-urgent); color: var(--bubble-urgent); }
-#message { margin: 0; min-height: 0; max-width: 100%; font-size: 14px; font-weight: 500; line-height: 20px; text-align: center; text-wrap: balance; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+#message { margin: 0 -6px; min-height: 0; width: calc(100% + 12px); max-width: calc(100% + 12px); font-size: 14px; font-weight: 500; line-height: 20px; text-align: center; text-wrap: wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
 #actions { display: flex; flex-wrap: wrap; flex-shrink: 0; justify-content: center; max-width: 100%; align-items: center; gap: 7px; }
 #actions:empty { display: none; }
 button {
