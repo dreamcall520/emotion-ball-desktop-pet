@@ -1,6 +1,14 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('petCustomizer', {
+  onPromotionOpen: callback => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, value) => { if (typeof value === 'string') callback(value); };
+    ipcRenderer.on('pet:promotion-open', listener);
+    return () => ipcRenderer.removeListener('pet:promotion-open', listener);
+  },
+  promotionReady: token => { if (typeof token === 'string') ipcRenderer.send('pet:promotion-ready', token); },
+  promotionContact: action => ipcRenderer.invoke('pet:promotion-contact', action),
   onVisibility: callback => {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, visible) => callback(visible === true);

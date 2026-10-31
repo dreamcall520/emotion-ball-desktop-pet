@@ -9,7 +9,11 @@ test('定制页唯一保存位于固定底栏，恢复位于顶部，沿用全�
   const html = fs.readFileSync(path.join(__dirname, '../customize.html'), 'utf8');
   assert.equal((html.match(/id="save"/g) || []).length, 1);
   assert.doesNotMatch(html, /save-bottom|runtime\/|(?<!sheep-)theme\.js|foundation\.css|设计稿/);
-  assert.match(html, /<header class="studio-header">[\s\S]*?id="reset-appearance"[\s\S]*?<\/header>/);
+  const header=html.match(/<header class="[^"]*\bstudio-header\b[^"]*">([\s\S]*?)<\/header>/);
+  assert.ok(header, '顶部标题区保留studio-header语义，不限制其他局部组件类');
+  assert.match(header[1], /id="reset-appearance"[^>]*type="button"[^>]*title="恢复当前所选形态的默认外观"/);
+  assert.equal((html.match(/id="reset-appearance"/g)||[]).length,1,'恢复默认入口唯一且仍位于顶部');
+  assert.match(header[1], /id="skin-promo-banner"/,'宣传横幅与原恢复入口同在标题区，不挤占表单内容区');
   assert.match(html, /<footer class="studio-footer">[\s\S]*?id="startup-default"[\s\S]*?id="save"[\s\S]*?<\/footer>/);
   assert.match(html, /id="manual-toggle"[^>]*type="button"[^>]*aria-controls="manual-controls"[^>]*aria-expanded="false"/);
   assert.match(html, /<section class="controls"/);

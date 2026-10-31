@@ -182,6 +182,9 @@ let pomodoroNow = Date.now;
 let notesQuitReady = false;
 let notesQuitFlight = null;
 let customizationWindow = null;
+let customizationPromotion = null, customizationSession = 0;
+const customizationNativeReady = new WeakSet();
+const customizationPromotionOnly = new WeakSet();
 let apiUsage = null;
 let apiUsageWindow = null;
 let apiUsageLabel = null;
@@ -865,9 +868,30 @@ function syncCustomizationVisibility() {
   win.webContents.send('pet:customization-visible', !screenLocked && win.isVisible() && !win.isMinimized());
 }
 
-function openCustomization() {
+function cancelCustomizationPromotion() { customizationPromotion = null; }
+function showCustomizationPromotion(win) {
+  const request = customizationPromotion;
+  if (!request || request.owner !== win || !request.ready || !customizationNativeReady.has(win) ||
+      win.isDestroyed() || screenLocked || isQuitting) return;
+  positionFunctionWindow(win); win.show(); win.focus(); syncCustomizationVisibility();
+}
+function requestCustomizationPromotion(win, created = false) {
+  if (!customizationNativeReady.has(win)) customizationPromotionOnly.add(win);
+  const request = { owner: win, token: randomUUID(), ready: false, created };
+  customizationPromotion = request;
+  return request;
+}
+function openCustomization(options = {}) {
   if (isQuitting || screenLocked) return;
   if (customizationWindow && !customizationWindow.isDestroyed()) {
+    if (options?.promotion === true) {
+      const win = customizationWindow, request = requestCustomizationPromotion(win);
+      const send = () => { if (customizationPromotion === request && !win.isDestroyed() && !screenLocked && !isQuitting) win.webContents.send('pet:promotion-open', request.token); };
+      if (win.webContents.isLoading?.()) win.webContents.once('did-finish-load', send); else send();
+      return;
+    }
+    cancelCustomizationPromotion();
+    customizationPromotionOnly.delete(customizationWindow);
     positionFunctionWindow(customizationWindow);
     customizationWindow.show();
     customizationWindow.focus();
@@ -889,20 +913,40 @@ function openCustomization() {
   const [contentWidth, contentHeight] = win.getContentSize();
   win.setMinimumSize(760 + outerWidth - contentWidth, 580 + outerHeight - contentHeight);
   customizationWindow = win;
+  const promotion = options?.promotion === true ? requestCustomizationPromotion(win, true) : null;
   for (const event of ['show', 'hide', 'minimize', 'restore']) win.on(event, syncCustomizationVisibility);
+  for (const event of ['show', 'hide', 'minimize', 'restore']) win.on(event, () => {
+    customizationSession++;
+    if (event === 'hide' || event === 'minimize') cancelCustomizationPromotion();
+  });
   positionFunctionWindow(win);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', event => event.preventDefault());
   win.webContents.on('did-fail-load', (_event, code, description) => writeError('定制面板加载', `${code} ${description}`));
   win.on('closed', () => {
     if (customizationWindow !== win) return;
+    cancelCustomizationPromotion(); customizationSession++;
     customizationWindow = null;
   });
   win.once('ready-to-show', () => {
-    if (!isQuitting && !win.isDestroyed() && !screenLocked) { positionFunctionWindow(win); win.show(); }
+    customizationNativeReady.add(win);
+    if (customizationPromotion?.owner === win) showCustomizationPromotion(win);
+    else if (!customizationPromotionOnly.has(win) && !isQuitting && !win.isDestroyed() && !screenLocked) { positionFunctionWindow(win); win.show(); }
     syncCustomizationVisibility();
   });
-  void win.loadFile(path.join(__dirname, 'customize.html')).catch(error => writeError('定制面板', error));
+  if (promotion) win.webContents.once('did-finish-load', () => {
+    if (customizationPromotion !== promotion || typeof win.webContents.executeJavaScript !== 'function') return;
+    void win.webContents.executeJavaScript("Boolean(document.getElementById('skin-promotion')?.open)").then(open => {
+      if (customizationPromotion !== promotion || win.isDestroyed()) return;
+      if (open) { promotion.ready = true; showCustomizationPromotion(win); }
+      else { cancelCustomizationPromotion(); win.destroy(); writeError('宣传详情', new Error('宣传详情未能打开')); }
+    }).catch(error => { if (customizationPromotion === promotion) { cancelCustomizationPromotion(); if (!win.isDestroyed()) win.destroy(); writeError('宣传详情', error); } });
+  });
+  win.webContents.on('render-process-gone', () => { if (customizationPromotion?.owner === win) { cancelCustomizationPromotion(); if (!win.isDestroyed()) win.destroy(); } });
+  void win.loadFile(path.join(__dirname, 'customize.html'), promotion ? { query: { promotion: '1', request: promotion.token } } : undefined).catch(error => {
+    if (customizationPromotion?.owner === win) { cancelCustomizationPromotion(); if (!win.isDestroyed()) win.destroy(); }
+    writeError('定制面板', error);
+  });
 }
 
 function effectiveCustomization(value) {
@@ -1161,6 +1205,7 @@ function restorePet() {
 }
 
 function hidePet() {
+  cancelCustomizationPromotion();
   quotaPopups.cancelPending();
   if (!petWindow || petWindow.isDestroyed()) return;
   chatWindow?.hide();
@@ -2596,6 +2641,7 @@ function menuTemplate() {
       { id: 'api-balance-config-open', label: '管理 API 账户', click: () => { void shell.openPath('/Applications/ZCode.app').catch(() => {}); } }
     ] },
     { id: 'customize-open', label: '定制球球', click: openCustomization },
+    { id: 'custom-skin-promotion', label: '专属皮肤定制', click: () => openCustomization({promotion:true}) },
     { label: '便签与待办', submenu: [
       { id: 'notes-open', label: '打开主面板', click: () => notesCompanion?.openPanel() },
       { id: 'notes-new', label: '新建便签', click: () => notesCompanion?.openPanel({ tab: 'note', create: true }) },
@@ -2691,7 +2737,7 @@ function compactMenuTemplate() {
   const notes = items.find(item => item.label === '便签与待办')?.submenu.find(item => item.id === 'notes-open');
   const codex = items.find(item => item.id === 'codex-menu').submenu;
   const codexEnabled = codex.find(item => item.id === 'codex-enabled');
-  return [find('chat-open'), { ...find('customize-open'), label: '来定制球球' },
+  return [find('chat-open'), { ...find('customize-open'), label: '来定制球球' }, find('custom-skin-promotion'),
     notes && { ...notes, label: '便签与待办' }, find('pomodoro-open'),
     { type: 'separator' }, codexEnabled, zcodeLink?.menu().submenu[0], find('workbuddy-enabled'),
     { id: 'quota-cards-settings', label: '联动样式管理', click: () => openGlobalSettings('quota-cards') },
@@ -3676,6 +3722,27 @@ function registerIpc() {
     return shell.openExternal('https://platform.openai.com/settings/organization/admin-keys')
       .then(() => true, () => false);
   });
+  ipcMain.on('pet:promotion-ready', (event, token) => {
+    const request = customizationPromotion, win = customizationWindow;
+    if (!request || request.owner !== win || !fromCustomizationWindow(event) || !event.senderFrame ||
+        event.senderFrame !== win.webContents.mainFrame || token !== request.token || screenLocked || isQuitting) return;
+    request.ready = true; showCustomizationPromotion(win);
+  });
+  ipcMain.handle('pet:promotion-contact', async (event, action) => {
+    const owner = customizationWindow, frame = event.senderFrame, session = customizationSession;
+    const current = () => Boolean(owner && owner === customizationWindow && !owner.isDestroyed() && owner.isVisible() &&
+      frame && frame === owner.webContents.mainFrame && event.sender === owner.webContents &&
+      owner.webContents.getURL?.().split('?')[0] === pathToFileURL(path.join(__dirname,'customize.html')).href &&
+      !screenLocked && !isQuitting && session === customizationSession);
+    if (!current() || !['copy', 'save-qr'].includes(action)) return {ok:false,error:'请在定制页打开微信咨询后重试'};
+    try {
+      if (action === 'copy') { clipboard.writeText('ooOJBKoo'); return {ok:true}; }
+      const result = await dialog.showSaveDialog(owner, {title:'保存微信二维码',defaultPath:'春野-微信二维码.jpg',filters:[{name:'JPEG 图片',extensions:['jpg']}]});
+      if (!current() || result.canceled || typeof result.filePath !== 'string' || !path.isAbsolute(result.filePath)) return {ok:false,canceled:true};
+      fs.copyFileSync(path.join(__dirname,'assets/promotion/wechat-contact-original.jpg'),result.filePath);
+      return {ok:true};
+    } catch (_) { return {ok:false,error:'操作未完成，请重试'}; }
+  });
   ipcMain.handle('pet:customization-get', event => fromCustomizationWindow(event) && !screenLocked
     ? { customization: effectiveCustomization(settings.customization),
       appearancePresets: normalizeAppearancePresets(settings.appearancePresets).map(item => ({
@@ -4479,7 +4546,7 @@ async function bootstrap() {
     },
     onError: error => writeError('活动状态检测', error)
   });
-  const pause = () => { quotaPopups.cancelPending(); weatherWindow?.pause();
+  const pause = () => { cancelCustomizationPromotion(); quotaPopups.cancelPending(); weatherWindow?.pause();
     if(localPetImportSession)localPetImportSession.invalid=true;
     screenLocked = true;pauseDogDreamCycle();
     quotaCardGroupTransition?.cancel();

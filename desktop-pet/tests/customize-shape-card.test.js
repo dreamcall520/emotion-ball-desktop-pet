@@ -214,7 +214,9 @@ test('咩咩主题沿用幻彩卡片，键盘与鼠标同步单选、预览和�
   assert.match(html, /<select id="sheep-theme" hidden aria-hidden="true" tabindex="-1"/);
   assert.match(html, /<details id="sheep-theme-dates"[^>]*hidden><summary>/);
   assert.match(html, /<p id="sheep-theme-hint" hidden><\/p>/);
-  assert.doesNotMatch(html, /aria-describedby="sheep-theme-hint"|手动选择会一直保留|✦/);
+  const sheepSection=html.match(/<div id="sheep-theme-field"[\s\S]*?(?=<section id="preset-section")/)[0];
+  assert.doesNotMatch(sheepSection, /aria-describedby="sheep-theme-hint"|手动选择会一直保留|✦/);
+  assert.match(html, /id="skin-promo-badge"[^>]*>✦ 定制<\/button>/, '宣传角标允许独立装饰，不影响咩咩主题选项');
   assert.match(html, /class="sheep-auto-swatch" aria-hidden="true"><svg class="icon"/);
   const css = fs.readFileSync(path.join(f.root, 'desktop-pet/customize.css'), 'utf8');
   const autoIcon = css.match(/\.sheep-auto-swatch\{([^}]+)\}/)[1];
