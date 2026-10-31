@@ -45,6 +45,18 @@
       "path": "chuge/walk.webp",
       "sha256": "7f92146a5614f34a38d877c4c76251f75de7963564bb15e04d74be1d8b2ca882",
       "bytes": 4021948
+    },
+    {
+      "path": "banner-sheep.png",
+      "sha256": "8e32e5fb480a8cf2bdb58a6463c47b773650b23f05880632908a172e5da7a915",
+      "bytes": 112350,
+      "source": "设计稿/专属皮肤宣传-20261031/assets/sheep.png"
+    },
+    {
+      "path": "banner-xiaoyu.png",
+      "sha256": "6bf755818561947bb2f87c0d68e5f39e45b9bcdff390207c23d55f4bfeaf70b4",
+      "bytes": 124947,
+      "source": "设计稿/专属皮肤宣传-20261031/assets/xiaoyu.png"
     }
   ]
 }

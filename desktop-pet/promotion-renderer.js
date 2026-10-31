@@ -14,7 +14,7 @@
   function choose(id){
     const next=cases.find(c=>c.id===id);if(!next||next===selected)return;ghosts();let ghost;
     if(!reduced.matches&&canvas.width>0){ghost=document.createElement('canvas');ghost.width=canvas.width;ghost.height=canvas.height;ghost.getContext('2d').drawImage(canvas,0,0);ghost.className='skin-promo-ghost';ghost.setAttribute('aria-hidden','true');stage.append(ghost);}
-    selected=next;action='idle';render();
+    selected=next;if(!selected.clips[action])action='idle';render();
     if(ghost)pendingGhost=ghost;
   }
   function openPromotion(token){
@@ -28,11 +28,11 @@
   document.querySelectorAll('[data-promotion-case]').forEach(b=>b.addEventListener('click',()=>choose(b.dataset.promotionCase)));
   $('skin-promo-action').addEventListener('change',event=>{ghosts();action=event.target.value;render();});
   $('skin-promo-toggle').addEventListener('click',()=>{paused=!paused;player.setPaused(paused);$('skin-promo-toggle').textContent=paused?'播放动画':'暂停动画';$('skin-promo-toggle').setAttribute('aria-pressed',String(paused));});
-  $('skin-promo-contact-open').addEventListener('click',()=>{$('skin-promo-contact-status').textContent='';contact.showModal();player.stop();ghosts();});
-  $('skin-promo-contact-close').addEventListener('click',()=>contact.close());contact.addEventListener('close',()=>{if(detail.open){render();$('skin-promo-contact-open').focus();}});
+  $('skin-promo-contact-open').addEventListener('click',()=>{$('skin-promo-contact-status').textContent='';contact.showModal();});
+  $('skin-promo-contact-close').addEventListener('click',()=>contact.close());contact.addEventListener('close',()=>{if(detail.open)$('skin-promo-contact-open').focus();});
   async function contactAction(action){const button=$(action==='copy'?'skin-promo-copy':'skin-promo-save');button.disabled=true;try{const result=await api.promotionContact(action);$('skin-promo-contact-status').textContent=result?.ok?(action==='copy'?'微信号已复制':'二维码已保存'):result?.canceled?'已取消保存':result?.error||'操作未完成，请重试';}catch(_){$('skin-promo-contact-status').textContent='操作未完成，请重试';}finally{button.disabled=false;}}
   $('skin-promo-copy').addEventListener('click',()=>contactAction('copy'));$('skin-promo-save').addEventListener('click',()=>contactAction('save-qr'));
-  api.onPromotionOpen(token=>openPromotion(token));api.onVisibility(visible=>{if(!visible){player.stop();ghosts();}else if(detail.open&&!contact.open)render();});
+  api.onPromotionOpen(token=>openPromotion(token));api.onVisibility(visible=>{if(!visible){player.stop();ghosts();}else if(detail.open)render();});
   reduced.addEventListener('change',event=>{if(event.matches){paused=true;player.setPaused(true);ghosts();$('skin-promo-toggle').textContent='播放动画';$('skin-promo-toggle').setAttribute('aria-pressed','true');}});
   window.addEventListener('beforeunload',()=>{player.stop();ghosts();});
   // The shell is opened before customize-renderer starts its async data loading.

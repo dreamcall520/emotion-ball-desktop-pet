@@ -697,13 +697,15 @@ test('快捷设置与面板只收起外置额度卡，保留所有球体额度�
   assert.equal(effect().visible, false, 'lock still removes quota effects');
 });
 
-test('设置首次异步加载期间API卡即隐藏，跨窗切换和后台同步保持隐藏而且不改球体展示',async t=>{
- const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true});t.after(()=>f.app.emit('before-quit'));
+test('设置与装扮保留额度卡实时预览，后台刷新与设置内调序立即生效',async t=>{
+ const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,quotaCardPinned:['codex','api']});t.after(()=>f.app.emit('before-quit'));
  f.call('settings.openaiApiAlwaysVisible=true;syncApiUsageLabel()');assert.equal(f.apiLabel.visible,true);
- f.call('openGlobalSettings()');assert.equal(f.apiLabel.visible,false,'opening intent blocks before native ready-to-show');
- f.apiUsage.change({connected:false,busy:false,report:null,config:{}});f.call('syncQuotaLabel()');assert.equal(f.apiLabel.visible,false,'background refresh cannot resurrect cards');assert.equal(f.pet.isVisible(),true);
- f.call('globalSettingsWindow.hide();openCustomization()');await flush();assert.equal(f.apiLabel.visible,false,'pending destination keeps handoff blocked');
- f.call('settings.openaiApiAlwaysVisible=false;customizationWindow.hide()');await new Promise(r=>setTimeout(r,5));assert.equal(f.apiLabel.visible,false,'restore reads latest settings');
+ f.call('openGlobalSettings()');const win=f.call('globalSettingsWindow');win.emit('ready-to-show');assert.equal(f.apiLabel.visible,true,'settings opening must preserve preview');
+ f.apiUsage.change({connected:false,busy:false,report:null,config:{}});f.call('syncQuotaLabel()');assert.equal(f.apiLabel.visible,true,'refresh preserves the card while settings is open');assert.equal(f.pet.isVisible(),true);
+ const result=await f.invoke('pet:global-quota-cards-save',{order:['api','codex','weather','zcode','workbuddy','balance'],pinned:['api','codex']},win.webContents);
+ assert.equal(result.ok,true);assert.equal(result.config.order[0],'api');assert.equal(f.call('quotaCardGroup.getState().visible[0]'),'api','real settings IPC immediately updates presentation order');assert.equal(f.apiLabel.visible,true);
+ f.call('globalSettingsWindow.hide();openCustomization()');await flush();assert.equal(f.apiLabel.visible,true,'outfit window also permits preview');
+ f.call('settings.openaiApiAlwaysVisible=false;syncApiUsageLabel();customizationWindow.hide()');await new Promise(r=>setTimeout(r,5));assert.equal(f.apiLabel.visible,false,'disabled card remains disabled after the window closes');
 });
 
 test('关于首次加载被屏锁放弃显示后不会永久占有额度阻塞，解锁按当前配置恢复',async t=>{
@@ -3299,7 +3301,7 @@ test('聊天首次可见立即同步上传动作门禁，不等待静止活动�
 
 test('宣传菜单相邻且首次显示等待同窗口当前请求详情就绪，旧请求不能打开表单',async t=>{
  const f=await fixture();t.after(()=>f.app.emit('before-quit'));
- for(const menu of [f.call('menuTemplate()'),f.call('compactMenuTemplate()')]){const at=menu.findIndex(item=>item.id==='customize-open');assert.equal(menu[at+1]?.id,'custom-skin-promotion');assert.equal(menu[at+1].label,'专属皮肤定制');}
+ for(const menu of [f.call('menuTemplate()'),f.call('compactMenuTemplate()')]){const at=menu.findIndex(item=>item.id==='customize-open');assert.equal(menu[at+1]?.id,'custom-skin-promotion');assert.equal(menu[at+1].label,'专属皮肤  ✦ 定制');}
  f.call('openCustomization({promotion:true})');const win=f.call('customizationWindow');win.webContents.mainFrame={};win.emit('ready-to-show');assert.equal(win.isVisible(),false,'never flash the ordinary form before detail readiness');
  const token=f.call('customizationPromotion.token');f.call("ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},'stale')");assert.equal(win.isVisible(),false);f.call("ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},customizationPromotion.token)");assert.equal(win.isVisible(),true);
  const windows=f.windows.length;f.call('openCustomization({promotion:true})');assert.equal(f.windows.length,windows,'existing form is reused without reload or lost edits');assert.equal(win.messages.at(-1).channel,'pet:promotion-open');

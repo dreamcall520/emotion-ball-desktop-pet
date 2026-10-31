@@ -1991,10 +1991,15 @@ function openQuotaGuard(source = 'codex') {
   const previous = quotaGuardSource;
   quotaGuardSource = source === true || source === 'workbuddy' ? 'workbuddy' : source === 'zcode' ? 'zcode' : 'codex';
   if (!canShowQuotaGuard() || !quotaGuard) { quotaGuardSource = previous; return false; }
-  const opened = quotaGuard.open(quotaGuardSource === 'workbuddy' ? { state: 'ready', items: [], practice: true } : quotaGuardSource === 'zcode'
-    ? buildZcodeQuotaLabelModel(zcodeLink.getSnapshot(), { size: settings.zcodeQuotaLabelSize }) : quotaLabelModel());
-  if (!opened) quotaGuardSource = previous;
-  return opened;
+  // Reused game windows have no loading/pending blocker. Suppress cards before
+  // open's synchronous visibility callbacks can restore or rearrange siblings.
+  const release = quotaPopups.acquire();
+  try {
+    const opened = quotaGuard.open(quotaGuardSource === 'workbuddy' ? { state: 'ready', items: [], practice: true } : quotaGuardSource === 'zcode'
+      ? buildZcodeQuotaLabelModel(zcodeLink.getSnapshot(), { size: settings.zcodeQuotaLabelSize }) : quotaLabelModel());
+    if (!opened) quotaGuardSource = previous;
+    return opened;
+  } finally { release(); }
 }
 
 async function openCodexDetailThread(id, turnId) {
@@ -2641,7 +2646,7 @@ function menuTemplate() {
       { id: 'api-balance-config-open', label: '管理 API 账户', click: () => { void shell.openPath('/Applications/ZCode.app').catch(() => {}); } }
     ] },
     { id: 'customize-open', label: '定制球球', click: openCustomization },
-    { id: 'custom-skin-promotion', label: '专属皮肤定制', click: () => openCustomization({promotion:true}) },
+    { id: 'custom-skin-promotion', label: '专属皮肤  ✦ 定制', click: () => openCustomization({promotion:true}) },
     { label: '便签与待办', submenu: [
       { id: 'notes-open', label: '打开主面板', click: () => notesCompanion?.openPanel() },
       { id: 'notes-new', label: '新建便签', click: () => notesCompanion?.openPanel({ tab: 'note', create: true }) },

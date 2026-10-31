@@ -2099,3 +2099,57 @@ test('a guarded carrier still contains the painted card when the coordinated col
  expanded=true;f.presentation={mode:'free',shape:'blob',quotaGroupLayout:plan().cards.codex};win.webContents.emit('ipc-message',{},'pet:quota-label-toggle');const packet=win.sent.findLast(row=>row[0]==='pet:quota-label')[1],face=packet.cardViewport.face,host=packet.cardViewport.host;
  assert(face.top>=0,'new face must not rise above a cached compact carrier');assert(face.top+face.height<=host.height+1);assert(face.left>=0);assert(face.left+face.width<=host.width+1);assert.equal(win.getBounds().y+face.top,plan().cards.codex.face.y);assert.notDeepEqual(win.getBounds(),before,'a changed coordinated stack may require moving its transparent carrier');
 });
+
+test('guarded hide preserves the last painted carrier coordinates instead of shifting the final surface', async t => {
+  for (const labelSize of ['compact', 'standard']) {
+    const f = fixture(() => Promise.resolve(), { labelSize, getGuardEntry: () => true });
+    t.after(() => f.label.destroy());
+    f.label.show(readyModel()); await flush();
+    const win = f.windows[0], last = () => win.sent.findLast(row => row[0] === 'pet:quota-label')[1];
+    const painted = last();
+    assert(painted.cardViewport);
+    assert(painted.cardInset.x > 0, 'expanded carrier leaves a real inset around the compact card');
+    f.label.hide();
+    assert.equal(last().visible, false);
+    assert.deepEqual(last().cardInset, painted.cardInset, 'hidden packet must retain host-relative inset');
+    assert.deepEqual(last().cardViewport, painted.cardViewport, 'hidden packet must not clear the painted viewport');
+    assert.equal(last().cardTransition, undefined, 'hide must not replay an old resize animation');
+    f.label.show(readyModel());
+    assert.equal(last().visible, true);
+    win.webContents.emit('ipc-message', {}, 'pet:quota-label-toggle');
+    const expanded = last();
+    f.label.hide();
+    assert.equal(last().expanded, false, 'explicit hide keeps the existing collapsed model contract');
+    assert.deepEqual(last().cardViewport, expanded.cardViewport);
+    assert.equal(last().cardTransition, undefined);
+  }
+});
+
+test('hidden carrier geometry is window-owned across guarded role widths and destroy/recreate', async t => {
+  for (const sourceId of ['codex', 'zcode']) {
+    let guard = true;
+    const f = fixture(() => Promise.resolve(), { sourceId, labelSize: 'compact', getGuardEntry: () => guard });
+    t.after(() => f.label.destroy());
+    const model = remaining => ({ ...readyModel(), items: [{ ...readyModel().items[0], remaining }] });
+    for (const remaining of [0, 47, 100]) {
+      f.label.show(model(remaining)); await flush();
+      const win = f.label.getWindow(), packet = () => win.sent.at(-1)[1], painted = packet(), paintedX = win.getBounds().x + painted.cardViewport.face.left;
+      f.label.hide();
+      assert.deepEqual(packet().cardViewport, painted.cardViewport);
+      assert.deepEqual(packet().cardInset, painted.cardInset);
+      f.pet.bounds = { ...f.pet.bounds, x: f.pet.bounds.x + 30 };
+      f.label.show(model(remaining));
+      assert.equal(packet().visible, true);
+      assert.equal(win.getBounds().x + packet().cardViewport.face.left,
+        paintedX + 30, 'reopen recomputes geometry from the current pet position');
+    }
+    const old = f.label.getWindow();
+    f.label.destroy(); guard = false;
+    f.label.show(model(47)); await flush();
+    const replacement = f.label.getWindow();
+    assert.notEqual(replacement, old);
+    f.label.hide();
+    assert.equal(replacement.sent.at(-1)[1].cardViewport, undefined, 'a new unguarded window cannot inherit the old carrier');
+    assert.equal(replacement.sent.at(-1)[1].cardInset, undefined);
+  }
+});

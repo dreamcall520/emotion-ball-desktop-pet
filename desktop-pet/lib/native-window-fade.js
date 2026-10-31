@@ -23,8 +23,8 @@ function createNativeWindowFade({ onError = () => {}, duration = 180 } = {}) {
       if (states.get(target) !== state || target.isDestroyed()) return;
       if (showing) target.setOpacity?.(1);
       else {
-        target.hide();
-        if (states.get(target) === state && !target.isDestroyed()) target.setOpacity?.(1);
+        if (target.isVisible()) target.hide();
+        if (states.get(target) === state && !target.isDestroyed() && target.getOpacity?.() !== 1) target.setOpacity?.(1);
       }
       state.opacity = showing ? 1 : 0; state.timer = null;
     };
