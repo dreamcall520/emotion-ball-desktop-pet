@@ -11,6 +11,17 @@ const VERTICAL_INSETS = Object.freeze({
 });
 
 function petVisualBounds(bounds, shape, presentation = null) {
+  // The approved orb is drawn in a transparent square canvas. Measured from
+  // its 512px idle render, alpha>=32: [85,95,427,417]. Use the actual body,
+  // not the classic SVG's extra 6% spacing compensation or the effect shadow.
+  // Its horizontal envelope is symmetric, so mirroring keeps this anchor.
+  if (shape === 'soft-orb') {
+    return { ...bounds,
+      x: bounds.x + bounds.width * 85 / 512,
+      y: bounds.y + bounds.height * 95 / 512,
+      width: bounds.width * 342 / 512,
+      height: bounds.height * 322 / 512 };
+  }
   // Preserve the existing quota anchor for the cloud's peeked presentation.
   if (shape === 'aurora-cloud' && presentation?.mode === 'peeked' &&
       ['left', 'right'].includes(presentation.side)) {

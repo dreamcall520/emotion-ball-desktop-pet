@@ -990,6 +990,30 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   assert.equal(menu.filter(item => item.id === 'update-check').length, 1);
 });
 
+test('小宇互动进入实际托盘和右键精简菜单，动作命令可达且不改变其他形态菜单', async () => {
+  const f = await fixture();
+  const original = Array.from(f.call('compactMenuTemplate()'), item => item.label || item.type);
+  assert.equal(f.call('compactMenuTemplate().some(item => item.label === "小宇互动")'), false);
+  f.call("settings.customization.appearance.shape = 'soft-orb'");
+  const menu = f.call('compactMenuTemplate()');
+  const group = menu.find(item => item.label === '小宇互动');
+  assert.ok(group, '真实精简菜单必须包含小宇互动，不能只放在未展示的完整目录');
+  assert.equal(menu.filter(item => item.label === '小宇互动').length, 1);
+  assert.deepEqual(Array.from(menu.filter(item => item !== group), item => item.label || item.type), original);
+  assert.deepEqual(Array.from(group.submenu, item => item.label),
+    ['发现你', '摸摸回应', '失重晃动', '星际扫描', '引力光束', '触电', '飞走', '飞船收纳', '怦然心动', '庆祝一下']);
+  group.submenu.find(item => item.label === '飞船收纳').click();
+  assert.deepEqual(JSON.parse(JSON.stringify(f.commands.at(-1))), { command: 'soft-orb-action', action: 'ship' });
+  f.call('refreshTrayMenu()');
+  assert.ok(f.trayMenus.at(-1).some(item => item.label === '小宇互动'));
+  f.call('showPetContextMenu()');
+  assert.ok(f.popups.at(-1).value.some(item => item.label === '小宇互动'));
+  for (const shape of ['blob', 'aurora-cloud', 'new-year-sheep', 'codex-pet']) {
+    f.call(`settings.customization.appearance.shape = '${shape}'`);
+    assert.deepEqual(Array.from(f.call('compactMenuTemplate()'), item => item.label || item.type), original);
+  }
+});
+
 test('便签待办默认页保存后下次打开生效，失败恢复当前和重建菜单的单选', async () => {
   const f = await fixture({ notesDefaultTab: 'todo' }), opens = f.notes.opens.length;
   const note = menuItem(f, 'notes-default-note'); note.checked = true; note.click(note);
@@ -4687,4 +4711,23 @@ for(const [open,variable] of [['openGlobalSettings','globalSettingsWindow'],['op
  assert.doesNotThrow(()=>f.call(`${open}()`));const fresh=f.call(variable);assert.notEqual(fresh,old);
  assert.doesNotThrow(()=>old.emit('closed'));assert.doesNotThrow(()=>old.emit('closed'));assert.equal(f.call(variable),fresh);
  fresh.emit('ready-to-show');assert.equal(fresh.isVisible(),true);
+});
+
+test('uploaded pets retain original generic settings without a partner action menu or dedicated commands',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));
+ f.call("codexPetDescriptor=()=>({version:3,frameMap:{wave:{},tail:{},groom:{}}})");
+ assert.equal(findMenuItem(f.call('compactMenuTemplate()'),'imported-pet-actions'),null);
+ const entries=f.call('settingsEntries(settingsCommandTemplate())');
+ const interactions=entries.find(item=>item.label==='球球与互动');
+ assert(interactions.children.some(item=>item.label==='随机表情'));assert(interactions.children.some(item=>item.label==='立即睡眠'));assert(interactions.children.some(item=>item.label==='立即唤醒'));
+ assert(!interactions.children.some(item=>item.id.includes('pet-action-')));
+ const before=f.pet.messages.length;f.call("sendCommand({command:'pet-action',action:'tail'})");assert.equal(f.pet.messages.length,before);
+});
+
+test('the original settings wake action recalls a tucked pet before dispatching wake',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));menuItem(f,'global-settings').click();const win=f.call('globalSettingsWindow');win.emit('ready-to-show');
+ const entries=f.call('settingsEntries(settingsCommandTemplate())'),wake=entries.find(item=>item.label==='球球与互动').children.find(item=>item.label==='立即唤醒');
+ f.call("dockPet('left')");assert.equal(f.call('edgeTuck.getPresentation().mode'),'tucked');
+ const result=await f.invoke('pet:global-settings-action',wake.id,win.webContents);assert.equal(result.error,undefined);assert.equal(f.call('edgeTuck.getPresentation().mode'),'free');assert.equal(f.pet.messages.filter(item=>item.channel==='pet:command').at(-1).packet,'wake');
+ f.call('hidePet()');assert.equal(f.pet.isVisible(),false);await f.invoke('pet:global-settings-action',wake.id,win.webContents);assert.equal(f.pet.isVisible(),true);assert.equal(f.call('edgeTuck.getPresentation().mode'),'free');
 });

@@ -4,26 +4,29 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 
-function fixture(width, height, dpr, webgl = false) {
+function fixture(width, height, dpr, webgl = false,kind='sheep-skin') {
   const surfaces = [], images = [], transforms = [], glCalls = [];
   const gradient = () => ({ addColorStop() {} });
   function canvas() {
     const c = { width: 340, height: 340, dataset: {}, style: {}, setAttribute() {}, remove() { this.parentNode = null; } };
     const ctx = new Proxy({ canvas: c,
       setTransform(...args) { transforms.push({ canvas: c, args }); },
-      drawImage(...args) { images.push({ canvas: c, args }); },
+      drawImage(...args) { c.lastSource=args[0];images.push({ canvas: c, args }); },
+      createImageData:(w,h)=>({data:new Uint8ClampedArray(w*h*4)}),putImageData(image){c.lastPutImage=image;},
       createRadialGradient: gradient, createConicGradient: gradient, createLinearGradient: gradient,
-      getImageData: () => ({ data: new Uint8ClampedArray(340 * 340 * 4) })
+      getImageData: () => ({ data:c.fakePixels?c.fakePixels(c.lastSource):new Uint8ClampedArray(340 * 340 * 4) })
     }, { get(obj,key) { return key in obj ? obj[key] : () => {}; } });
     const gl=new Proxy({getShaderParameter:()=>true,getProgramParameter:()=>true,getAttribLocation:()=>0,getUniformLocation:(_p,name)=>name,getExtension:()=>({loseContext(){}}),uniform1f:(name,value)=>glCalls.push([name,value]),viewport:(...args)=>glCalls.push(['viewport',...args])},{get(obj,key){if(key in obj)return obj[key];return ()=>({});}});
     c.getContext = kind => kind === 'webgl' ? (webgl?gl:null) : ctx;
     surfaces.push(c); return c;
   }
   const doc = { createElement: canvas, addEventListener() {}, removeEventListener() {} };
-  const source = { width: 320, height: 320, clientWidth: width, clientHeight: height, offsetLeft: 0, offsetTop: 0, dataset:{theme:'none'},style: { scale: '', translate:'', opacity: '' }, classList: { contains: name => name === 'sheep-skin' } };
-  const host = { ownerDocument: doc, querySelector: selector => selector.includes('sheep-skin') ? source : null,
+  const source = { width: 320, height: 320, clientWidth: width, clientHeight: height, offsetLeft: 0, offsetTop: 0, dataset:{theme:'none',ready:'true',facing:'left'},style: { scale: '', translate:'', opacity: '' }, classList: { contains: name => name === kind } };
+  const host = { ownerDocument: doc, querySelector: selector => selector.includes(kind) ? source : null,
     getBoundingClientRect: () => ({ width, height, left: 0, top: 0 }), appendChild(c) { c.parentNode = this; } };
-  const root = { devicePixelRatio: dpr, matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
+  if(kind==='soft-orb-canvas')source.softOrbQuota={setMode(value){source.quotaMode=value;},setScale(value){source.fit=value;source.style.scale=String((source.dataset.facing==='right'?-1:1)*value)+' '+value;}};
+  class Matrix {constructor(){this.a=this.d=1;this.b=this.c=this.e=this.f=0;}translate(x,y){const m=new Matrix();Object.assign(m,this);m.e+=x;m.f+=y;return m;}scale(x,y){const m=new Matrix();Object.assign(m,this);m.a*=x;m.d*=y;return m;}scaleSelf(x,y){this.a*=x;this.d*=y;return this;}multiplySelf(){return this;}translateSelf(x,y){this.e+=this.a*x;this.f+=this.d*y;return this;}transformPoint(p){return{x:this.a*p.x+this.e,y:this.d*p.y+this.f};}}
+  const root = { DOMMatrix:Matrix,getComputedStyle:()=>({scale:source.style.scale||'none',translate:source.style.translate||'none',transform:'none',transformOrigin:width/2+'px '+height/2+'px'}),devicePixelRatio: dpr, matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
     addEventListener() {}, removeEventListener() {}, cancelAnimationFrame() {}, performance: { now: () => 0 } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../quota-effects.js'), 'utf8'), { window: root });
   return { effect: root.QuotaEffects.create(host), source, host, root, surfaces, images, transforms, glCalls,
@@ -117,3 +120,31 @@ test('H/C无垂直补偿；N/S resize、换主题、低动态仍保持H参照而
  h.source.dataset.theme='none';h.effect.update(input);assert.ok(parseFloat(h.source.style.translate.split(' ')[1])<0);
  h.effect.update({...input,visible:false});assert.equal(h.source.style.translate,'');h.effect.destroy();
 });
+
+ test('柔光团四种额度环按真实包络适配，保留左右镜像并在回卡片时恢复',()=>{
+  for(const facing of ['left','right'])for(const style of ['ring','duo','split','stages'])for(const [w,h]of [[180,180],[320,436],[436,320]]){
+    const f=fixture(w,h,2,false,'soft-orb-canvas');f.source.dataset.facing=facing;
+    const input={appearance:{shape:'soft-orb'},quotas:{fiveHour:74,weekly:38},config:{style},reducedMotion:true};
+    f.effect.update(input);assert.equal(f.source.quotaMode,style);assert.ok(f.source.fit>0&&f.source.fit<=1);
+    assert.equal(parseFloat(f.source.style.scale)<0,facing==='right');
+    assert.equal(f.effect.canvas.style.width,f.effect.canvas.style.height);
+    const outer=style==='duo'?163:style==='ring'?168:153;assert.ok(parseFloat(f.effect.canvas.style.width)*outer/170<=Math.min(w,h)+1);
+    f.source.dataset.facing=facing==='left'?'right':'left';f.effect.update(input);
+    assert.equal(parseFloat(f.source.style.scale)<0,f.source.dataset.facing==='right');
+    f.effect.update({...input,config:{style:'card'}});assert.equal(f.source.fit,1);assert.equal(f.source.quotaMode,'card');
+    assert.equal(parseFloat(f.source.style.scale)<0,f.source.dataset.facing==='right');f.effect.destroy();
+  }
+ });
+
+ test('柔光团液面采样真实动态canvas与单独眼睛，不把身体高光当眼睛，回卡片恢复透明度',()=>{
+  const f=fixture(180,180,2,false,'soft-orb-canvas'),face={width:320,height:320},bodyPixels=new Uint8ClampedArray(340*340*4),eyePixels=new Uint8ClampedArray(340*340*4);
+  for(let y=20;y<320;y++)for(let x=20;x<320;x++){const i=(y*340+x)*4;bodyPixels[i]=bodyPixels[i+1]=bodyPixels[i+2]=255;bodyPixels[i+3]=255;}
+  for(let y=170;y<210;y++)for(let x=110;x<150;x++){const i=(y*340+x)*4;eyePixels[i]=140;eyePixels[i+1]=60;eyePixels[i+2]=200;eyePixels[i+3]=255;}
+  let samples=0;f.source.softOrbQuota.getFaceCanvas=()=>{samples++;return face;};
+  const mainIndex=f.surfaces.indexOf(f.effect.canvas);f.surfaces[mainIndex+1].fakePixels=input=>input===face?eyePixels:bodyPixels;
+  const input={appearance:{shape:'soft-orb'},quotas:{weekly:38},config:{style:'pool'},reducedMotion:true};
+  f.effect.update(input);assert.equal(f.source.quotaMode,'pool');assert.equal(f.source.style.opacity,'0');assert.equal(f.effect.canvas.dataset.liquidSurfaces,'1');
+  assert.deepEqual(f.surfaces[mainIndex+3].lastPutImage.data,eyePixels,'face mask excludes bright body pixels');assert.equal(samples,1);
+  f.source.dataset.facing='right';f.effect.update(input);assert.equal(samples,2,'refresh resamples the current face pose');
+  f.effect.update({...input,config:{style:'card'}});assert.equal(f.source.style.opacity,'');f.effect.destroy();
+ });

@@ -11,14 +11,16 @@
     eyeSpacing: 1, eyeHeight: 0, auroraTransparency: 0, auroraStyle: 'dimensional', auroraContour: 'original',
     shapeTuning: DEFAULT_SHAPE_TUNING, idleEyes: 'original', sheepTheme: 'auto'
   });
+  const ORB_MATERIALS = Object.freeze(['pearl', 'glass', 'onyx', 'layered', 'felt', 'pixel', 'plush', 'synth']);
   const SHEEP_THEMES = Object.freeze(['none', 'halloween', 'christmas', 'spring-festival', 'auto']);
   const EYE_PRESETS = Object.freeze({ original: null, happy: 2, curious: 3, sleepy: 4, puzzled: 14 });
-  const SHAPES = Object.freeze(['blob', 'dumpling', 'cloud', 'aurora-cloud', 'egg', 'square', 'wedge', 'gem', 'new-year-sheep']);
+  const SHAPES = Object.freeze(['blob', 'dumpling', 'cloud', 'aurora-cloud', 'egg', 'square', 'wedge', 'gem', 'new-year-sheep', 'soft-orb']);
   const SHAPE_RECOMMENDED_COLORS = Object.freeze({
     blob: Object.freeze({ bodyColor: '#EEEBE4', eyeColor: '#1A1A1A' }),
     cloud: Object.freeze({ bodyColor: '#5B3BC7', eyeColor: '#FFFFFF' }),
     'aurora-cloud': Object.freeze({ bodyColor: '#5B3BC7', eyeColor: '#FFFFFF',
       glowPinkColor: '#D05ED6', glowGoldColor: '#D0AD8A' }),
+    'soft-orb': Object.freeze({ bodyColor: '#F9F8FF', eyeColor: '#FDFDFD', orbMaterial: 'pearl', orbSecondaryColor: '#B7A7EC' }),
     square: Object.freeze({ bodyColor: '#EEEBE4', eyeColor: '#1A1A1A' }),
     'new-year-sheep': Object.freeze({ bodyColor: '#FFF4E5', eyeColor: '#4E322A' })
   });
@@ -50,6 +52,16 @@
     const shape = SHAPES.includes(value.shape) ? value.shape : DEFAULT_APPEARANCE.shape;
     if (shape === 'new-year-sheep') return { ...DEFAULT_APPEARANCE, ...SHAPE_RECOMMENDED_COLORS[shape], shape, sheepTheme,
       shapeTuning: { ...DEFAULT_SHAPE_TUNING }, auroraTransparency: bounded(value.auroraTransparency, 0, 60, 0, 0) };
+    if (shape === 'soft-orb') {
+      const recommended = SHAPE_RECOMMENDED_COLORS[shape];
+      return { ...DEFAULT_APPEARANCE, shape, sheepTheme,
+        bodyColor: color(value.bodyColor, recommended.bodyColor),
+        eyeColor: color(value.eyeColor, recommended.eyeColor),
+        orbMaterial: ORB_MATERIALS.includes(value.orbMaterial) ? value.orbMaterial : 'pearl',
+        orbSecondaryColor: color(value.orbSecondaryColor, recommended.orbSecondaryColor),
+        shapeTuning: { ...DEFAULT_SHAPE_TUNING },
+        auroraTransparency: bounded(value.auroraTransparency, 0, 60, 0, 0) };
+    }
     return {
       shape, sheepTheme,
       bodyColor: color(value.bodyColor, DEFAULT_APPEARANCE.bodyColor),
@@ -96,7 +108,7 @@
     const colors = SHAPE_RECOMMENDED_COLORS[shape];
     return { ...appearance, shape, ...colors,
       auroraContour: shape === 'aurora-cloud' ? 'six-lobe' : 'original',
-      ...(shape === 'aurora-cloud' ? { idleEyes: 'original', eyeScale: 1, eyeSpacing: 1,
+      ...(['aurora-cloud', 'soft-orb'].includes(shape) ? { idleEyes: 'original', eyeScale: 1, eyeSpacing: 1,
         eyeHeight: 0, shapeTuning: { ...DEFAULT_SHAPE_TUNING } } : {}) };
   }
 
@@ -154,6 +166,6 @@
   }
 
   return Object.freeze({ DEFAULT_APPEARANCE, DEFAULT_SHAPE_TUNING, DEFAULT_SEQUENCE, EYE_PRESETS, SHAPES, ACTIONS, SHEEP_THEMES,
-    SHAPE_RECOMMENDED_COLORS, applyShapeRecommendation,
+    SHAPE_RECOMMENDED_COLORS, ORB_MATERIALS, applyShapeRecommendation,
     normalizeAppearance, appearanceContentKey, effectiveAppearance, normalizeSequence, normalizeCustomization, auroraReferenceTexture, auroraTurnRing });
 }));

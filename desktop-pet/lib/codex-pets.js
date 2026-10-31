@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { createHash, randomUUID } = require('node:crypto');
+const { normalizeFrameMap } = require('./codex-pet-player');
 
 const MAX_MANIFEST_BYTES = 64 * 1024;
 const MAX_IMAGE_BYTES = 16 * 1024 * 1024;
@@ -110,17 +111,39 @@ function createCodexPetStore({ sourceRoot = path.join(process.env.CODEX_HOME || 
         !raw.displayName.trim() || raw.displayName.length > 120 ||
         (raw.description !== undefined && (typeof raw.description !== 'string' || raw.description.length > 4000))) throw fail('宠物名称或描述不合法');
     const version = raw.spriteVersionNumber === undefined ? 1 : raw.spriteVersionNumber;
+    if(version===3){
+      const sheets=raw.sheets;
+      let frameMap;try{frameMap=normalizeFrameMap(raw.frameMap,0,sheets)}catch(_){throw fail('宠物动作映射不合法')}
+      if(!frameMap || !sheets || Object.values(sheets).some(sheet=>Object.keys(sheet).some(key=>!['path','rows'].includes(key))))throw fail('宠物资源不合法');
+      const resources=[],normalized={},seen=new Set();let total=0,scale;
+      for(const [key,sheet] of Object.entries(sheets)){
+        if(typeof sheet.path!=='string'||sheet.path.normalize('NFC').toLowerCase()==='pet.json')throw fail('宠物资源路径不合法');
+        const alias=sheet.path.normalize('NFC').toLowerCase();if(seen.has(alias))throw fail('宠物资源重复');seen.add(alias);
+        const image=readFile(root,sheet.path,MAX_IMAGE_BYTES),extension=path.extname(sheet.path).toLowerCase(),size=imageSize(image.buffer,extension);
+        const stat=fs.statSync(image.file),identity=`inode:${stat.dev}:${stat.ino}`;if(seen.has(identity))throw fail('宠物资源重复');seen.add(identity);
+        total+=image.buffer.length;if(total>64*1024*1024)throw fail('宠物资源总量过大');
+        const currentScale=size.width/1536;
+        if(!Number.isInteger(currentScale)||currentScale<1||currentScale>3||size.height!==sheet.rows*208*currentScale||(scale&&scale!==currentScale))throw fail('宠物精灵图尺寸不合法');
+        scale=currentScale;const decoded=readImageSize?readImageSize(image.buffer,extension,{...size}):size;
+        if(!decoded||decoded.width!==size.width||decoded.height!==size.height)throw fail('宠物图片解码结果不合法');
+        resources.push({file:sheet.path,image,rows:sheet.rows});normalized[key]={path:image.file,rows:sheet.rows};
+      }
+      const base=resources.find(item=>item.file===sheets.base.path),buffers=resources.map(item=>item.image.buffer);
+      return {descriptor:{id,importedId:namespace?digest(Buffer.from('qiuqiu-local-pet-v1\0'),manifest.buffer,...buffers):digest(manifest.buffer,...buffers),name:raw.displayName.trim(),description:raw.description||'',version,rows:sheets.base.rows,spriteScale:scale,frameMap,sheets:normalized,spritesheetPath:base.image.file},manifest,image:base.image,resources,raw};
+    }
     if (version !== 1 && version !== 2) throw fail('宠物精灵图版本暂不支持');
     const image = readFile(root, raw.spritesheetPath, MAX_IMAGE_BYTES);
     const extension = path.extname(raw.spritesheetPath).toLowerCase();
     const size = imageSize(image.buffer, extension);
     const rows = version === 1 ? 9 : 11;
+    let frameMap;
+    try { frameMap = normalizeFrameMap(raw.frameMap, rows); } catch (_) { throw fail('宠物动作映射不合法'); }
     const spriteScale = size.width / 1536;
     if (!Number.isInteger(spriteScale) || spriteScale < 1 || spriteScale > 3 ||
         size.height !== rows * 208 * spriteScale) throw fail('宠物精灵图尺寸不合法');
     const decoded = readImageSize ? readImageSize(image.buffer, extension, { ...size }) : size;
     if (!decoded || decoded.width !== size.width || decoded.height !== size.height) throw fail('宠物图片解码结果不合法');
-    return { descriptor: { id, importedId: namespace ? digest(Buffer.from('qiuqiu-local-pet-v1\0'),manifest.buffer,image.buffer) : digest(manifest.buffer, image.buffer), name: raw.displayName.trim(), description: raw.description || '', version, rows, spriteScale, spritesheetPath: image.file }, manifest, image, raw };
+    return { descriptor: { id, importedId: namespace ? digest(Buffer.from('qiuqiu-local-pet-v1\0'),manifest.buffer,image.buffer) : digest(manifest.buffer, image.buffer), name: raw.displayName.trim(), description: raw.description || '', version, rows, spriteScale, ...(frameMap ? { frameMap } : {}), spritesheetPath: image.file }, manifest, image, raw };
   }
 
   function entries(root) {
@@ -158,9 +181,9 @@ function createCodexPetStore({ sourceRoot = path.join(process.env.CODEX_HOME || 
     const temporary = path.join(importRoot, `.import-${randomUUID()}`);
     fs.mkdirSync(temporary, { mode: 0o700 });
     try {
-      const imageFile = path.join(temporary, pet.raw.spritesheetPath);
-      fs.mkdirSync(path.dirname(imageFile), { recursive: true, mode: 0o700 });
-      for (const [file, buffer] of [[path.join(temporary, 'pet.json'), pet.manifest.buffer], [imageFile, pet.image.buffer]]) {
+      const resources=pet.resources||[{file:pet.raw.spritesheetPath,image:pet.image}];
+      for (const [file, buffer] of [[path.join(temporary, 'pet.json'), pet.manifest.buffer], ...resources.map(item=>[path.join(temporary,item.file),item.image.buffer])]) {
+        fs.mkdirSync(path.dirname(file),{recursive:true,mode:0o700});
         const fd = fs.openSync(file, 'wx', 0o600);
         try { fs.writeFileSync(fd, buffer); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
       }
@@ -203,7 +226,7 @@ function createCodexPetStore({ sourceRoot = path.join(process.env.CODEX_HOME || 
       const pet = readPet(directory(folder), null);
       const publish = () => { if(canPublishImport && canPublishImport()!==true)throw fail('导入操作已取消');return copyImported(pet); };
       if (!validateImport) return publish();
-      return Promise.resolve(validateImport({ ...pet.descriptor }, pet.image.buffer)).then(valid => {
+      return (async()=>{for(const item of pet.resources||[{image:pet.image,rows:pet.descriptor.rows}]){const valid=await validateImport({...pet.descriptor,spritesheetPath:item.image.file,rows:item.rows},item.image.buffer);if(valid!==true)return false;}return true})().then(valid => {
         if (valid !== true) throw fail('宠物图片无法解码');
         return publish();
       });

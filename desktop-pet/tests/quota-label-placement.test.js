@@ -602,9 +602,9 @@ test('four-card free stack shares one direction and hides safely when space runs
     }
   }
   const partial=quotaFreeStackBounds({x:-550,y:30,width:80,height:80},{...area,height:230},cards,{mode:'free'});
-  assert.deepEqual(partial.hidden,Object.keys(cards));
-  assert.equal(Object.keys(partial.cards).length,0);
-  const blocked=quotaFreeStackBounds({x:-550,y:30,width:80,height:80},{...area,height:150},cards,{mode:'free'});
+  assert.ok(['left','right'].includes(partial.placement));
+  assert.deepEqual(Object.keys(partial.cards),Object.keys(cards));
+  const blocked=quotaFreeStackBounds({x:-550,y:30,width:80,height:80},{...area,height:130},cards,{mode:'free'});
   assert.deepEqual(blocked.hidden,Object.keys(cards));
   assert.deepEqual(blocked.cards,{});
 });
@@ -681,7 +681,7 @@ test('user card order stays top to bottom across corners and both peek edges, wi
         assert.equal(rows[i].face.y-rows[i-1].face.y-rows[i-1].face.height,8);
         assert.equal(rows[i].face.x,rows[0].face.x);
       }
-      const hidden=quotaFreeStackBounds({...pet,y:80},{...area,height:150},cards,presentation);
+      const hidden=quotaFreeStackBounds({...pet,y:80},{...area,height:80},cards,presentation);
       assert.equal(hidden.placement,'hidden');assert.deepEqual(hidden.hidden,expected);
       assert.deepEqual(Object.keys(quotaFreeStackBounds(pet,area,cards,presentation).cards),expected,'restored work area restores every card');
     }
@@ -717,14 +717,17 @@ test('五卡含194px余额展开在上下角和左右贴边共用一列，四张
     }
 });
 
-test('五卡展开空间不足时整组隐藏，收起和屏幕恢复后按原顺序重现且不移动球球',()=>{
+test('五卡展开优先侧移，整屏空间不足才隐藏，收起和屏幕恢复后按原顺序重现且不移动球球',()=>{
   const { quotaFreeStackBounds }=require('../lib/quota-label-placement');
   const ids=['workbuddy','api','codex','zcode','balance'],area={x:-800,y:20,width:800,height:400};
   const cards=Object.fromEntries(ids.map(id=>[id,{width:128,height:32,inset:2}]));
   for(const mode of ['free','peeked'])for(const side of ['left','right']) {
     const pet={x:side==='left'?-800:-80,y:204,width:80,height:80},original={...pet},presentation={mode,side,quotaCardOrder:ids};
     assert.deepEqual(Object.keys(quotaFreeStackBounds(pet,area,cards,presentation).cards),ids);
-    const expanded={...cards,balance:{width:196,height:194,inset:0}},hidden=quotaFreeStackBounds(pet,area,expanded,presentation);
+    const expanded={...cards,balance:{width:196,height:194,inset:0}};
+    const sidePlan=quotaFreeStackBounds(pet,area,expanded,presentation);
+    assert.deepEqual(Object.keys(sidePlan.cards),ids);
+    const hidden=quotaFreeStackBounds(pet,{...area,height:300},expanded,presentation);
     assert.equal(hidden.placement,'hidden');assert.deepEqual(hidden.cards,{});assert.deepEqual(hidden.hidden,ids);
     assert.deepEqual(Object.keys(quotaFreeStackBounds(pet,{...area,height:1000},expanded,presentation).cards),ids);
     assert.deepEqual(Object.keys(quotaFreeStackBounds(pet,area,cards,presentation).cards),ids);assert.deepEqual(pet,original);
@@ -787,4 +790,33 @@ test('weather uses the same six-source order, 8px face spacing and dock alignmen
     const without = quotaFreeStackBounds(pet,area,{...cards,weather:null},presentation);
     assert.deepEqual(Object.keys(without.cards),ids.filter(id=>id!=='weather'));
   }
+});
+
+test('five expanded cards use a side column when neither vertical gap fits', () => {
+ const {quotaFreeStackBounds}=require('../lib/quota-label-placement');
+ const ids=['weather','codex','workbuddy','zcode','balance'];
+ const cards={weather:{width:128,height:32,inset:2},codex:{width:196,height:131},workbuddy:{width:196,height:120},zcode:{width:128,height:32,inset:2},balance:{width:196,height:120}};
+ const area={x:0,y:25,width:1512,height:900},pet={x:720,y:420,width:80,height:80};
+ const plan=quotaFreeStackBounds(pet,area,cards,{mode:'free',quotaCardOrder:ids});
+ assert.ok(['left','right'].includes(plan.placement));assert.deepEqual(Object.keys(plan.cards),ids);
+ const rows=Object.values(plan.cards);
+ rows.forEach(row=>{assert.ok(row.x>=area.x&&row.y>=area.y&&row.x+row.width<=1512&&row.y+row.height<=925);assert.ok(row.x>=800||row.x+row.width<=720);});
+ for(let i=1;i<rows.length;i++)assert.equal(rows[i].face.y-rows[i-1].face.y-rows[i-1].face.height,8);
+ });
+
+test('side fallback includes guard envelopes and tries the other side around obstacles',()=>{
+ const {quotaFreeStackBounds}=require('../lib/quota-label-placement');
+ const area={x:-300,y:20,width:1500,height:900},pet={x:400,y:420,width:80,height:80};
+ const ids=['weather','codex','workbuddy','zcode','balance'];
+ const cards=Object.fromEntries(ids.map(id=>[id,{width:196,height:120,guardTargetWidth:64,roleWidth:50}]));
+ const presentation={mode:'free',quotaCardOrder:ids};
+ const first=quotaFreeStackBounds(pet,area,cards,presentation);assert.equal(first.placement,'right');
+ const obstruction={x:490,y:20,width:350,height:900};
+ const second=quotaFreeStackBounds(pet,area,cards,presentation,obstruction);assert.equal(second.placement,'left');
+ for(const plan of [first,second]){
+   assert.deepEqual(Object.keys(plan.cards),ids);
+   for(const row of Object.values(plan.cards))assertInside(row,area);
+ }
+ const impossible=quotaFreeStackBounds(pet,{...area,height:400},cards,presentation);
+ assert.equal(impossible.placement,'hidden');
 });

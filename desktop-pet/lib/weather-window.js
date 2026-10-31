@@ -42,8 +42,11 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
       if (!compact) { win.hide(); return; }
       if (size.width === 390) {
         const width = Math.min(size.width, area.width), x = Math.max(area.x, Math.min(compact.x + (compact.width - width) / 2, area.x + area.width - width));
-        const height = Math.min(size.height, area.y + area.height - compact.y);
-        next = { x: Math.round(x), y: compact.y, width, height };
+        // Reserve the supported expanded envelope once so switching between
+        // city search and forecasts keeps a stable origin without clipping.
+        const y = Math.max(area.y, Math.min(compact.y, area.y + area.height - Math.min(720, area.height)));
+        const height = Math.min(size.height, area.height);
+        next = { x: Math.round(x), y, width, height };
         expandedAnchor = { key: layoutKey, x: next.x, y: next.y };
       } else next = compact;
     }

@@ -65,6 +65,7 @@ function createWindowMotion({ getWindow, getWorkArea, getDisplayId = () => null,
         ? request.durationMs : getMotion(request.action).durationMs;
       const state = { window, bounds, workArea, durationMs, displayId: getDisplayId(bounds), startedAt,
         lastFrameAt: startedAt, visualElapsed: 0, side: request.side === 'left' ? 'left' : 'right',
+        visualOnly: request.visualOnly === true,
         reducedMotion: request.reducedMotion === true && Boolean(CompanionMotion.getMotion(request.action)),
         token: request.token, action: request.action, timer: null, offset: { x: 0, y: 0 } };
       current = state;
@@ -82,14 +83,16 @@ function createWindowMotion({ getWindow, getWorkArea, getDisplayId = () => null,
             elapsed = state.visualElapsed;
           }
           state.lastFrameAt = frameAt;
-          const frame = state.reducedMotion
+          const frame = state.visualOnly
+            ? {...CompanionMotion.neutralFrame(),done:elapsed>=state.durationMs,durationMs:state.durationMs}
+            : state.reducedMotion
             ? { ...CompanionMotion.neutralFrame(), done: elapsed >= getMotion(state.action).durationMs,
               durationMs: getMotion(state.action).durationMs }
             : sampleMotion(state.action, elapsed * getMotion(state.action).durationMs / state.durationMs, state.side);
           if (frame.done) { stop(); return; }
           const position = positionForMotion(state.bounds, state.workArea, frame.window);
           state.offset = { ...frame.window };
-          window.setPosition(position.x, position.y, false);
+          if(!state.visualOnly)window.setPosition(position.x, position.y, false);
           sendFrame({ token: state.token, action: state.action, side: state.side, frame });
           if (current === state) state.timer = schedule(next, 16);
         } catch (_) {

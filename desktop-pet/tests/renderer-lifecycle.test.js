@@ -15,8 +15,8 @@ function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = nul
   const events = {};
   const subscriptions = {};
   const windowEvents = {};
-  const quotaFrames = [], systemListeners = new Set();
-  const root = { dataset: { appearance: 'light' } };
+  const quotaFrames = [], images = [], systemListeners = new Set();
+  const root = { dataset: { appearance: 'light' } }, reducedMedia={matches:false};
   const systemAppearance = { matches: false,
     addEventListener(_name, listener) { systemListeners.add(listener); },
     removeEventListener(_name, listener) { systemListeners.delete(listener); } };
@@ -56,6 +56,7 @@ function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = nul
     subscriptions[name] = callback;
     return () => { delete subscriptions[name]; };
   };
+  const dream=node('div');
   const context = vm.createContext({
     console,
     Math: Object.assign(Object.create(Math), { random: () => randomValue }),
@@ -68,10 +69,10 @@ function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = nul
     clearTimeout(id) { timers.delete(id); },
     clearInterval() {},
     requestAnimationFrame(callback) { if (quotaUpdates) quotaFrames.push(callback); return 1; }, cancelAnimationFrame() {},
-    document: { documentElement: root, getElementById: () => pet, createElementNS: (_ns, tag) => node(tag), createElement: node,
+    document: { documentElement: root, getElementById: id => id === 'pet-dream' ? dream : pet, createElementNS: (_ns, tag) => node(tag), createElement: node,
       addEventListener() {}, removeEventListener() {} },
     QuotaEffects: quotaUpdates ? { create: () => ({ update: value => quotaUpdates.push(value), destroy() {} }) } : undefined,
-    matchMedia: query => query === '(prefers-color-scheme: dark)' ? systemAppearance : { matches: false },
+    matchMedia: query => query === '(prefers-color-scheme: dark)' ? systemAppearance : reducedMedia,
     AuroraRive: auroraRive,
     innerWidth: 80,
     addEventListener(name, callback) { windowEvents[name] = callback; },
@@ -110,8 +111,8 @@ function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = nul
   context.document.defaultView = context;
   pet.ownerDocument = context.document;
   context.Image = class {
-    constructor() { this.naturalWidth = 1536; this.naturalHeight = 1872; }
-    set src(_value) { context.setTimeout(() => this.onload?.(), 0); }
+    constructor() { images.push(this); this.naturalWidth = 1536; this.naturalHeight = 1872; }
+    set src(_value) { if(!_value)return;if(_value.includes('v2-base'))this.naturalHeight=2288;if(_value.includes('v3-base'))this.naturalHeight=208;context.setTimeout(() => this.onload?.(), 0); }
   };
   const run = file => vm.runInContext(
     fs.readFileSync(path.resolve(__dirname, '../..', file), 'utf8'),
@@ -140,9 +141,10 @@ function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = nul
   }
   activity();
   return {
-    host, pet, root, systemAppearance, systemListeners, quotaFrames, subscriptions,
+    host, pet, dream, root, images, systemAppearance, systemListeners, quotaFrames, subscriptions,
     get engine() { return engine; }, get lastBallOptions() { return lastBallOptions; },
     activity, bounds, events, windowEvents, timers,
+    reduceMotion(value){reducedMedia.matches=value;},
     frame: packet => subscriptions.motion(packet),
     stopHost: () => windowController?.stop(),
     resize(width) { context.innerWidth = width; windowEvents.resize(); },
@@ -1363,7 +1365,7 @@ test('Codex failure and thinking use original sprite rows; sleep, lock and hidde
   r.command('sleep'); assert.equal(canvas.dataset.codexAction, 'waiting');
   const count = r.host.motions.length;
   r.command(codexCommand({ alertId: 2 })); assert.equal(r.host.motions.length, count);
-  r.command('wake'); assert.equal(canvas.dataset.codexAction, 'jump');
+  r.command('wake'); assert.equal(canvas.dataset.codexAction, 'running');
   r.activity(true); assert.equal(r.pet.dataset.motionOwner, 'none');
   r.command(codexCommand({ alertId: 2 })); assert.equal(r.host.codexAcks.length, 1);
   r.activity(false); r.present({ mode: 'hidden', suppressed: true });
@@ -1412,4 +1414,83 @@ test('真实睡眠状态覆盖手动、自然休息与外部唤醒，仅状态�
   r.activity(false,{idleSeconds:0});assert.equal(r.host.sleepStates.at(-1),'awake');
   r.activity(true);assert.equal(r.host.sleepStates.at(-1),'sleep');
   r.activity(false,{idleSeconds:0});assert.equal(r.host.sleepStates.at(-1),'awake');
+});
+
+test('mapped imported cats use real sleep and wakeup actions while legacy pets keep their existing rows', () => {
+  const r = createRenderer(0.5,null,[]), frameMap = {
+    sleep: { start: 40, count: 8, durations: Array(8).fill(100) },
+    wakeup: { start: 48, count: 8, durations: Array(8).fill(75), loop: false } };
+  r.settings({ keepAwake: true, codexPet: { ...testCodexDescriptor, frameMap },
+    customization: { appearance: { shape: 'codex-pet', codexPetId: testCodexPetId } } }); r.advanceTo(0);
+  const canvas = r.pet.children.find(child => child.tag === 'canvas');
+  r.command('sleep'); assert.equal(canvas.dataset.codexAction, 'sleep');
+  r.command('wake'); assert.equal(canvas.dataset.codexAction, 'wakeup');
+  for(const cb of r.quotaFrames.splice(0))cb(0);r.advanceTo(2500);for(const cb of r.quotaFrames.splice(0))cb(2500);assert.equal(canvas.dataset.codexAction, 'idle');
+  r.windowEvents.beforeunload();
+});
+
+function createMappedInteractionFixture(){
+ const r=createRenderer(0,null,[]),ids=['idle','run-right','run-left','wave','jump','fail','checking','waiting','running','sleep','wakeup','tail','groom'];
+ const frameMap=Object.fromEntries(ids.map(id=>[id,{sheet:'base',start:0,count:1,durations:[200],loop:['idle','sleep','run-right','run-left'].includes(id)}]));
+ for(const [i,id] of ['wave','tail','groom'].entries())frameMap[id]={sheet:'base',start:i+1,count:1,durations:[200],loop:false};
+ r.settings({keepAwake:true,codexPet:{...testCodexDescriptor,version:3,rows:1,imageURL:'file:///v3-base-interactions.webp',sheets:{base:{rows:1,imageURL:'file:///v3-base-interactions.webp'}},frameMap},customization:{appearance:{shape:'codex-pet',codexPetId:testCodexPetId}}});r.advanceTo(10000);r.activity(false,{idleSeconds:20});
+ return{r,canvas:r.pet.children.find(c=>c.tag==='canvas'),pump(now){for(const cb of r.quotaFrames.splice(0))cb(now);r.advanceTo(now+250);for(const cb of r.quotaFrames.splice(0))cb(now+250)}};
+}
+test('mapped random wakes sleep and selects real nonrepeating one-shot actions instead of legacy idle mappings',()=>{
+ const {r,canvas,pump}=createMappedInteractionFixture();r.command('sleep');assert.equal(canvas.dataset.codexAction,'sleep');const actions=[];
+ for(let i=0;i<4;i++){r.command('random');actions.push(canvas.dataset.codexAction);assert(['wave','tail','groom'].includes(actions.at(-1)));if(i)assert.notEqual(actions[i],actions[i-1]);assert.equal(r.host.sleepStates.at(-1),'awake');pump(10000+i*1000);}
+ r.windowEvents.beforeunload();
+});
+test('mapped body single clicks rotate real clips and a sleeping body click wakes instead of silently returning',()=>{
+ const {r,canvas,pump}=createMappedInteractionFixture(),actions=[];let now=10000;
+ for(let i=0;i<4;i++){r.click();r.advanceTo(now+=300);actions.push(canvas.dataset.codexAction);assert(['wave','tail','groom'].includes(actions.at(-1)));if(i)assert.notEqual(actions[i],actions[i-1]);pump(now);now+=250;}
+ r.command('sleep');r.click();r.advanceTo(now+=300);assert.equal(r.host.sleepStates.at(-1),'awake');assert.equal(canvas.dataset.codexAction,'wakeup');r.windowEvents.beforeunload();
+});
+test('mapped explicit wake clears a one-shot owner and completes its own wake clip without generic host stretch',()=>{
+ const {r,canvas,pump}=createMappedInteractionFixture();r.command('random');r.command('sleep');r.command('wake');assert.equal(r.host.sleepStates.at(-1),'awake');assert.equal(canvas.dataset.codexAction,'wakeup');assert.equal(r.host.motions.length,0);pump(10000);assert.equal(canvas.dataset.codexAction,'idle');r.windowEvents.beforeunload();
+});
+
+test('v1 and v2 uploaded skins use their existing action rows for random, body clicks, sleep and wake',()=>{
+ for(const version of [1,2]){
+  const r=createRenderer(0,null,[]),d={...testCodexDescriptor,version,rows:version===1?9:11,imageURL:version===1?testCodexDescriptor.imageURL:'file:///v2-base.webp'};
+  r.settings({keepAwake:true,codexPet:d,customization:{appearance:{shape:'codex-pet',codexPetId:testCodexPetId}}});r.advanceTo(10000);r.activity(false,{idleSeconds:20});const canvas=r.pet.children.find(c=>c.tag==='canvas'),actions=[];let now=10000;
+  for(const trigger of ['random','click','random','click']){if(trigger==='random')r.command('random');else{r.click();r.advanceTo(now+=300)}actions.push(canvas.dataset.codexAction);assert(['wave','jump','fail','checking'].includes(actions.at(-1)));if(actions.length>1)assert.notEqual(actions.at(-1),actions.at(-2));for(const cb of r.quotaFrames.splice(0))cb(now);r.advanceTo(now+=3000);for(const cb of r.quotaFrames.splice(0))cb(now);assert.equal(canvas.dataset.codexAction,'idle');}
+  r.command('sleep');assert.equal(canvas.dataset.codexAction,'waiting');r.command('wake');assert.equal(canvas.dataset.codexAction,'idle');assert.equal(r.host.sleepStates.at(-1),'awake');r.windowEvents.beforeunload();
+ }
+});
+
+test('an uploaded action decode error releases its one-shot owner before restoring the fallback pet',()=>{
+ const {r}=createMappedInteractionFixture();r.command('random');r.images.at(-1).onerror();assert.equal(r.pet.dataset.engine,'emotion-ball');r.settings({keepAwake:false});r.advanceTo(1010000);r.activity(false,{idleSeconds:10000});assert.equal(r.engine.emotionId,'00','a failed uploaded clip cannot leave an infinite action guard on fallback');r.windowEvents.beforeunload();
+});
+
+test('turning reduced motion on during an uploaded clip releases it and sleep/wake returns idle',()=>{
+ const {r,canvas}=createMappedInteractionFixture();r.command('random');assert.equal(canvas.dataset.codexAction,'wave');r.reduceMotion(true);r.activity();assert.equal(canvas.dataset.codexAction,'idle');r.command('sleep');assert.equal(canvas.dataset.codexAction,'sleep');r.command('wake');assert.equal(canvas.dataset.codexAction,'idle');assert.equal(r.host.sleepStates.at(-1),'awake');r.reduceMotion(false);r.command('random');assert.equal(canvas.dataset.codexAction,'tail','the prior one-shot guard was released');r.windowEvents.beforeunload();
+});
+
+for (const trigger of ['activity', 'task-settings']) test(`任务思考步态在重复${trigger}采样后保持当前帧并走完整周期`, () => {
+  const r = createRenderer(0.5, null, []);
+  const frameMap = { running: { start: 8, count: 24,
+    durations: Array.from({length:24}, (_, i) => i % 2 ? 62 : 63), loop: true } };
+  r.settings({ keepAwake:true, codexPet:{...testCodexDescriptor,version:2,rows:11,imageURL:'file:///v2-base-working.webp',frameMap},
+    customization:{appearance:{shape:'codex-pet',codexPetId:testCodexPetId}} });
+  r.advanceTo(10000); r.activity(false,{idleSeconds:20});
+  r.codexSettings({enabled:true,generation:1,activeTaskCount:1});
+  const canvas=r.pet.children.find(child=>child.tag==='canvas'), seen=new Set();
+  const pump=now=>r.quotaFrames.splice(0).forEach(callback=>callback(now));
+  pump(10000);
+  for(let step=1;step<=192;step++){
+    const now=10000+step*16;r.advanceTo(now);pump(now);
+    seen.add(Number(canvas.dataset.codexFrame));
+    if(step%8===0){
+      const before=canvas.dataset.codexFrame;
+      if(trigger==='activity')r.activity(false,{idleSeconds:20});
+      else r.codexSettings({enabled:true,generation:1,activeTaskCount:1});
+      assert.equal(canvas.dataset.codexAction,'running');
+      assert.equal(canvas.dataset.codexFrame,before,'状态采样不能先恢复待机再重启任务步态');
+    }
+  }
+  assert.equal(seen.size,24,'连续任务应覆盖完整24帧');
+  r.advanceTo(16000);assert.equal(canvas.dataset.codexAction,'idle','6秒思考展示结束仍须休息');
+  r.codexSettings({enabled:true,generation:1,activeTaskCount:0});assert.equal(canvas.dataset.codexAction,'idle');
+  r.windowEvents.beforeunload();
 });

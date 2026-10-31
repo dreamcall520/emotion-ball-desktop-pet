@@ -115,9 +115,28 @@ function quotaFreeStackBounds(petBounds, workArea, cards, presentation, bubble =
   for(const placement of presentation.quotaPreferredPlacement==='above'?['above','below']:['below','above']) {
     let cursor=placement==='below'?Math.max(pet.y+pet.height,barInColumn?bar.y+bar.height:-Infinity)+GAP
       :Math.min(pet.y,barInColumn?bar.y:Infinity)-GAP-stackHeight;
+    const found=column(placement,center,cursor,peeked);
+    if(found)return found;
+  }
+  // If the full column fits the work area but not above/below the pet,
+  // keep its order and spacing beside the pet instead of hiding every card.
+  let offset=0,minTop=Infinity,maxBottom=-Infinity;
+  for(const row of rows){minTop=Math.min(minTop,offset-row.inset-row.top);maxBottom=Math.max(maxBottom,offset+row.faceHeight+row.inset);offset+=row.faceHeight+GAP;}
+  const minY=area.y-minTop,maxY=area.y+area.height-maxBottom;
+  if(minY<=maxY){
+    const initial=clamp(pet.y+pet.height/2-stackHeight/2,minY,maxY);
+    const candidates=[initial,minY,maxY];
+    for(const item of [obstacle,bar])if(item)candidates.push(clamp(item.y-maxBottom-GAP,minY,maxY),clamp(item.y+item.height-minTop+GAP,minY,maxY));
+    for(const placement of ['right','left']){
+      const sideCenter=placement==='right'?pet.x+pet.width+GAP+left:pet.x-GAP-right;
+      for(const cursor of new Set(candidates.map(Math.round))){const found=column(placement,sideCenter,cursor,false);if(found)return found;}
+    }
+  }
+  return fallback();
+  function column(placement,columnCenter,cursor,atEdge){
     const result={};let clear=true;
     for(const row of rows) {
-      const face={x:Math.round(peeked ? presentation.side==='left' ? area.x+2 : area.x+area.width-row.faceWidth-2 : center-row.faceWidth/2),y:Math.round(cursor),width:row.faceWidth,height:row.faceHeight};
+      const face={x:Math.round(atEdge ? presentation.side==='left' ? area.x+2 : area.x+area.width-row.faceWidth-2 : columnCenter-row.faceWidth/2),y:Math.round(cursor),width:row.faceWidth,height:row.faceHeight};
       const x=face.x-row.inset-(row.left?row.gutter:0),y=face.y-row.inset-row.top;
       const native={x,y,width:row.width+row.gutter,height:row.height+row.top,placement,
         ...(row.gutter?{guardSide:row.left?'left':'right',cardInset:{x:row.left?row.gutter:0,y:row.top}}:{}),face};
@@ -127,9 +146,8 @@ function quotaFreeStackBounds(petBounds, workArea, cards, presentation, bubble =
       if(!inside(native,native,area)||overlaps(ink,ink,pet)||overlaps(ink,ink,obstacle)||overlaps(ink,ink,bar))clear=false;
       result[row.id]=native;cursor=face.y+face.height+GAP;
     }
-    if(clear)return {placement,cards:result};
+    return clear?{placement,cards:result}:null;
   }
-  return fallback();
   function fallback() {
     return { placement: 'hidden', cards: {}, hidden: ids };
   }

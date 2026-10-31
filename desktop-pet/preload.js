@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('petDesktop', {
     ipcRenderer.on('pet:color-mode', listener);
     return () => ipcRenderer.removeListener('pet:color-mode', listener);
   },
+  spriteEdgeInk: packet=>{if(packet===null){ipcRenderer.send('pet:sprite-edge-ink',null);return;}if(packet&&typeof packet.id==='string'&&packet.columns===64&&Array.isArray(packet.rows)&&packet.rows.length===64&&packet.rows.every(row=>typeof row==='string'&&/^[a-f0-9]{16}$/.test(row)))ipcRenderer.send('pet:sprite-edge-ink',{id:packet.id,columns:64,rows:packet.rows});},
   reportSleepState: state => { if (state === 'awake' || state === 'sleep') ipcRenderer.send('pet:sleep-state', state); },
   beginDrag: point => ipcRenderer.send('pet:drag-start', pointPayload(point)),
   dragTo: point => ipcRenderer.send('pet:drag-move', pointPayload(point)),

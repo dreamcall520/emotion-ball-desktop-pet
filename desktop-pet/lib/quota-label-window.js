@@ -420,12 +420,17 @@ function createQuotaLabelWindow({
     if (guardCapable) {
       const pet = getPetWindow(), petBounds = pet.getBounds(), area = screen.getDisplayMatching(petBounds)?.workArea;
       const key = JSON.stringify([petBounds, area, model.size, model.items.length, Boolean(model.extraCredits), presentation?.shape, presentation?.mode, rolePaintWidth(), compactTeamPeriods()]);
-      if (!carrier || carrierKey !== key) {
+      const containsLayout = carrier && x >= carrier.x && y >= carrier.y && x + width <= carrier.x + carrier.width && y + height <= carrier.y + carrier.height;
+      if (!carrier || carrierKey !== key || !containsLayout) {
         const compact = petLayout(false, true), expanded = petLayout(true, false);
         if (compact && expanded) {
-          const left = Math.min(compact.x, expanded.x), top = Math.min(compact.y, expanded.y);
-          carrier = { x: left, y: top, width: Math.max(compact.x + compact.width, expanded.x + expanded.width) - left,
-            height: Math.max(compact.y + compact.height, expanded.y + expanded.height) - top };
+          // Coordinated siblings can move the real card outside the cached
+          // compact/expanded host. Keep its current face (and animation origin)
+          // inside the host so the preload can accept the viewport unchanged.
+          const rows = [compact, expanded, layout, ...(animateResize && previousLayout ? [previousLayout] : [])];
+          const left = Math.min(...rows.map(row => row.x)), top = Math.min(...rows.map(row => row.y));
+          carrier = { x: left, y: top, width: Math.max(...rows.map(row => row.x + row.width)) - left,
+            height: Math.max(...rows.map(row => row.y + row.height)) - top };
           carrierKey = key;
         }
       }

@@ -39,14 +39,14 @@ function fixture({ realClick = false } = {}) {
   }
   const appearance = Customization.normalizeAppearance({shape:'new-year-sheep',sheepTheme:'christmas'});
   const context = vm.createContext({
-    ball:null, weatherEffects:null, sheepOffering:null, sheepActionBall:null, actionTimer:null, actionUntil:0,
+    uploadedAction:null, ball:null, weatherEffects:null, sheepOffering:null, sheepActionBall:null, actionTimer:null, actionUntil:0,
     customization:{appearance}, companion:{manualSleep:false,
       update:()=>({mode:'sleep',emotionId:'00',gaze:null}), setKeepAwake(){}, setManualSleep(value){this.manualSleep=Boolean(value);}},
     presentationSuppressed:false, presentationMode:'free', presentationPaused:false, presentationFrozen:false,
     lastSample:{locked:false}, currentState:{mode:'awake',emotionId:'50',gaze:null},
     activeMotion:null, dragState:null, facing:null, focusQuiet:false, codexEnabled:false,
     lastSheepClick:null,lastAuroraClick:null,nextSheepAmbientAt:0,lastSheepAmbient:null,sheepAutoNap:false,sheepLastInteractionAt:0,sheepLastNapAt:null,sheepAutomaticWakeUntil:0,lastWorkAttempt:0,singleClickTimer:null,helloTimer:null,petHovered:false,wakeOnDoubleClick:false,Math:Object.assign(Object.create(Math),{random:()=>0.01}),
-    codexActiveTaskCount:0, codexThinkingTimer:null, quotaEffects:null, quotaPacket:{config:{}},
+    codexActiveTaskCount:0, codexThinking:false, codexThinkingVisible:false, codexThinkingTimer:null, quotaEffects:null, quotaPacket:{config:{}},
     compactMode:null, officialAurora:null, clickVisual:null, codexPet:null, listeners:[],
     petElement:{dataset:{},querySelector:()=>null,replaceChildren(){},setAttribute(){}},
     petting:{reset:()=>calls.push(['petting-reset'])},
@@ -151,8 +151,8 @@ test('普通指令沿用原路径，rest与stop不会残留主题占用', () => 
 
 test('主进程真实发送入口拒绝非字符串动作，保留合法专属动作及普通命令', () => {
   const sent=[];
-  const context=vm.createContext({SheepSkin,SheepTheme,effectiveCustomization:value=>value,settings:{customization:{appearance:{shape:'new-year-sheep'}}},
-    petWindow:{isDestroyed:()=>false,webContents:{send:(channel,value)=>sent.push([channel,value])}},
+  const context=vm.createContext({screenLocked:false,isQuitting:false,edgeTuck:{getPresentation:()=>({mode:'free'})},SheepSkin,SheepTheme,effectiveCustomization:value=>value,settings:{customization:{appearance:{shape:'new-year-sheep'}}},
+    petWindow:{isDestroyed:()=>false,isVisible:()=>true,webContents:{send:(channel,value)=>sent.push([channel,value])}},
     getMotion:require('../lib/interaction-motion').getMotion,stopMotion(){}});
   vm.runInContext(declaration(main,'sendCommand'),context);
   for(const action of Object.keys(SheepSkin.ACTIONS)) context.sendCommand({command:'sheep-action',action});
@@ -206,7 +206,7 @@ test('主进程动作和实际菜单按自动主题的当前日期限制春节�
   const sent=[], spoken=[], appearance={shape:'new-year-sheep',sheepTheme:'auto'};
   const context=vm.createContext({Date:LocalDate,SheepSkin,SheepTheme,effectiveCustomization:value=>value,
     settings:{customization:{appearance}},
-    petWindow:{isDestroyed:()=>false,webContents:{send:(channel,value)=>sent.push(value)}},
+    petWindow:{isDestroyed:()=>false,isVisible:()=>true,webContents:{send:(channel,value)=>sent.push(value)}},
     showDialogue:(...args)=>spoken.push(args),getMotion:require('../lib/interaction-motion').getMotion,stopMotion(){}});
   vm.runInContext(declaration(main,'sendCommand'),context);
   const start=main.indexOf("{ label: '咩咩互动'"), end=main.indexOf('] : []),',start);
@@ -475,7 +475,7 @@ test('真实鼠标问好等待不隐藏送物入口，靠近入口取消问好�
 });
 test('原生咩咩菜单以同一送物命令接收，圣诞与给用户礼物分开且不发桌面气泡',()=>{
   const sent=[],spoken=[],appearance={shape:'new-year-sheep',sheepTheme:'halloween'};
-  const c=vm.createContext({SheepSkin,SheepTheme,effectiveCustomization:v=>v,settings:{customization:{appearance}},petWindow:{isDestroyed:()=>false,webContents:{send:(_ch,v)=>sent.push(v)}},showDialogue:(...v)=>spoken.push(v),getMotion:()=>null,stopMotion(){}});
+  const c=vm.createContext({SheepSkin,SheepTheme,effectiveCustomization:v=>v,settings:{customization:{appearance}},petWindow:{isDestroyed:()=>false,isVisible:()=>true,webContents:{send:(_ch,v)=>sent.push(v)}},showDialogue:(...v)=>spoken.push(v),getMotion:()=>null,stopMotion(){}});
   vm.runInContext(declaration(main,'sendCommand'),c);const start=main.indexOf("{ label: '咩咩互动'"),end=main.indexOf('] : []),',start);const menu=()=>vm.runInContext(`(${main.slice(start,end)})`,c).submenu;
   menu().find(v=>v.label==='送咩咩一颗糖').click();assert.equal(sent.at(-1).command,'sheep-offer');assert.equal(sent.at(-1).kind,'candy');
   appearance.sheepTheme='christmas';menu().find(v=>v.label==='送咩咩一份礼物').click();assert.equal(sent.at(-1).kind,'gift');assert.ok(menu().find(v=>v.label==='咩咩递一份礼物'));

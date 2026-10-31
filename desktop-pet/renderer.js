@@ -50,6 +50,7 @@
   let helloTimer = null;
   let petHovered = false;
   let actionTimer = null;
+  let softOrbActionEpoch=0;
   let actionUntil = 0;
   let sheepActionBall = null;
   let lastSheepClick = null;
@@ -82,6 +83,21 @@
   const CODEX_THINKING_BURST_MS = 6000;
   const thinkingRestMs = () => 25000 + Math.floor(Math.random() * 10001);
   const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+  let uploadedAction = null, lastUploadedAction = null;
+  let lastSpriteInkSignature='';
+  function reportSpriteEdgeInk() {
+    if(!desktop.spriteEdgeInk)return;
+    if(customization.appearance.shape!=='codex-pet'||!codexPet?.frameMap){if(lastSpriteInkSignature)desktop.spriteEdgeInk(null);lastSpriteInkSignature='';return;}
+    if(!['tucked','peeked'].includes(presentationMode))return;
+    const canvas=ball?.getSpriteCanvas?.();if(!canvas||canvas.dataset.codexReady!=='ready')return;
+    const signature=[codexPet.id,canvas.dataset.codexAction,canvas.dataset.codexFrame,canvas.width,canvas.height].join(':');if(signature===lastSpriteInkSignature)return;
+    try{
+      const sample=document.createElement('canvas');sample.width=sample.height=64;const context=sample.getContext('2d',{willReadFrequently:true});context.drawImage(canvas,0,0,64,64);
+      const pixels=context.getImageData(0,0,64,64).data,rows=[];
+      for(let y=0;y<64;y++){let row='';for(let x=0;x<64;x+=4){let nibble=0;for(let bit=0;bit<4;bit++)if(pixels[(y*64+x+bit)*4+3]>24)nibble|=1<<(3-bit);row+=nibble.toString(16);}rows.push(row);}
+      desktop.spriteEdgeInk({id:codexPet.id,columns:64,rows});lastSpriteInkSignature=signature;
+    }catch(_){lastSpriteInkSignature='';}
+  }
   const weatherEffects = window.WeatherPetEffects?.create(petElement, () => ({
     shape: customization.appearance.shape,
     opacity: 1 - customization.appearance.auroraTransparency / 100,
@@ -198,7 +214,7 @@
   function observe(callback) {
     return (...args) => {
       try { return callback(...args); }
-      finally { syncCodexWorking(); reportCodexAvailability(); sheepOffering?.update(); reportSleepState(); }
+      finally { syncCodexWorking(); reportCodexAvailability(); sheepOffering?.update(); reportSleepState(); reportSpriteEdgeInk(); }
     };
   }
   const onPet = (name, callback) => petElement.addEventListener(name, observe(callback));
@@ -221,21 +237,22 @@
       alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch };
     petElement.dataset.motionOwner = 'codex';
     if (customization.appearance.shape !== 'new-year-sheep') ball.setEmotion(motion.emotion);
-    ball.setMotionAction?.(motion.id, 'codex');
+    if(customization.appearance.shape==='soft-orb')ball.setMotionAction?.(motion.id,'codex',request.kind);
+    else ball.setMotionAction?.(motion.id,'codex');
     ball.setMotionFrame(InteractionMotion.sampleMotion(motion.id, 0));
     petElement.dataset.lastAction = motion.id;
     const preparedBall = ball, preparedMotion = activeMotion;
     const acknowledge = ready => {
       if (activeMotion !== preparedMotion || ball !== preparedBall) return;
       if (ready === false || !canShowCodex(preparedMotion)) { cancelCodex(request); return; }
-      const durationMs = customization.appearance.shape === 'new-year-sheep'
-        ? preparedBall.getActionDuration?.(motion.id, 'codex') : undefined;
+      const durationMs = ['new-year-sheep','soft-orb'].includes(customization.appearance.shape)
+        ? (customization.appearance.shape==='soft-orb'?preparedBall.getActionDuration?.(motion.id,'codex',request.kind):preparedBall.getActionDuration?.(motion.id,'codex')) : undefined;
       desktop.codexMotionReady({ token: preparedMotion.token, action: motion.id,
         alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch,
         ...(Number.isInteger(durationMs) && durationMs >= 10 && durationMs <= 60000 ? { durationMs } : {}) });
     };
     // 完整原画先就绪，宿主再开始同长计时，首播慢加载也不会截断动作。
-    if (customization.appearance.shape === 'new-year-sheep' && ball.whenMotionReady) ball.whenMotionReady().then(acknowledge);
+    if (['new-year-sheep','soft-orb'].includes(customization.appearance.shape) && ball.whenMotionReady) ball.whenMotionReady().then(acknowledge);
     else acknowledge(true);
   }
 
@@ -285,8 +302,9 @@
   // drag and Codex ownership rules, while drawing the pet's original frames.
   function createCodexBall(emotionId) {
     let active = true, motion = null, direction = facing || 'right';
+    const hasMapped = id => Boolean(codexPet.frameMap?.[id]);
     const emotionAction = id => id === '51' ? 'running' :
-      ['00', '56'].includes(id) ? 'waiting' : ['03', '10', '52'].includes(id) ? 'wave' :
+      ['00', '56'].includes(id) ? (hasMapped('sleep') ? 'sleep' : 'waiting') : ['03', '10', '52'].includes(id) ? 'wave' :
       id === '53' ? 'jump' : id === '54' ? 'checking' : id === '13' ? `run-${direction}` : 'idle';
     const motionAction = (id, owner) => {
       if (owner === 'codex') return { jelly: 'fail', peek: 'waiting', sway: 'running', hop: 'jump', bow: 'checking' }[id] || 'wave';
@@ -298,25 +316,35 @@
       descriptor: codexPet, size: Math.min(window.innerWidth, window.innerHeight || window.innerWidth),
       opacity: 1 - customization.appearance.auroraTransparency / 100,
       onFrame(action, frame) {
-        petElement.dataset.codexAction = action; petElement.dataset.codexFrame = String(frame);
+        petElement.dataset.codexAction = action; petElement.dataset.codexFrame = String(frame);reportSpriteEdgeInk();
+      },
+      onActionComplete(action) {
+        if (uploadedAction === action) { uploadedAction=null;clearAction();player.setAction('idle');restoreState(); }
+        if (action === 'wakeup' && !['00', '56'].includes(adapter.emotionId)) player.setAction(emotionAction(adapter.emotionId));
       },
       onError() {
         if (ball !== adapter) return;
+        clearAction();
         codexPet = null;
         petElement.dataset.codexPetError = 'load';
         createBall(adapter.emotionId);
         restoreState();
       }
     });
-    const syncActive = () => player.pause(!active || ['00', '56'].includes(adapter.emotionId));
+    const syncActive = () => player.pause(!active || (['00', '56'].includes(adapter.emotionId) && !hasMapped('sleep')));
     const adapter = {
       emotionId: emotionId || '50',
+      cancelMappedAction() { uploadedAction=null; },
+      getInteractionActions() { return CodexPetPlayer.getInteractionActions(codexPet); },
+      playUploadedAction(id) { return player.setAction(id, { once: true }); },
       setEmotion(id) {
+        uploadedAction=null;
+        const waking = ['00', '56'].includes(this.emotionId) && !['00', '56'].includes(id);
         this.emotionId = id; motion = null;
         petElement.dataset.emotion = id;
-        player.setAction(emotionAction(id)); syncActive(); return this;
+        player.setAction(waking && hasMapped('wakeup') && !reducedMotion() ? 'wakeup' : emotionAction(id)); syncActive(); return this;
       },
-      setMotionAction(id, owner) { motion = id; player.setAction(motionAction(id, owner)); return this; },
+      setMotionAction(id, owner, scene) { motion = id; player.setAction(scene === 'wake' && hasMapped('wakeup') ? 'wakeup' : motionAction(id, owner)); return this; },
       setFacing(side) {
         direction = side === 'left' ? 'left' : 'right';
         if (!motion && this.emotionId === '13') player.setAction(`run-${direction}`);
@@ -331,9 +359,11 @@
       setMotionFrame() { return this; }, setGaze() { return this; }, clearGaze() { return this; },
       spin() { player.setAction('wave'); return this; },
       bounce() { if (!presentationSuppressed) desktop.bounce(); return this; },
+      getSpriteCanvas() {return player.element;},
       resize, destroy() { player.destroy(); }
     };
     petElement.dataset.engine = 'codex-pet';
+    petElement.dataset.spriteEdgeMirror = String(Boolean(codexPet.frameMap));
     petElement.dataset.codexPetId = codexPet.id;
     petElement.setAttribute('aria-label', `可拖动和互动的${codexPet.name}`);
     adapter.setEmotion(adapter.emotionId);
@@ -364,6 +394,15 @@
         window.CodexPetPlayer?.validDescriptor(codexPet)) {
       delete petElement.dataset.codexPetError;
       ball = createCodexBall(emotionId);
+      return;
+    }
+    if(customization.appearance.shape==='soft-orb'&&window.SoftOrb){
+      ball=window.SoftOrb.create(petElement,{appearance:customization.appearance,label:'小宇桌面宠物'});
+      petElement.dataset.engine='soft-orb';
+      delete petElement.dataset.codexPetId;delete petElement.dataset.codexAction;delete petElement.dataset.codexFrame;
+      petElement.setAttribute('aria-label','可拖动和互动的小宇');
+      ball.setEmotion(emotionId||'50');
+      ball.setActive(!presentationPaused&&presentationMode!=='hidden'&&!lastSample?.locked);
       return;
     }
     petElement.dataset.engine = 'emotion-ball';
@@ -460,6 +499,8 @@
   }
 
   function clearAction() {
+    if(customization.appearance.shape==='soft-orb')softOrbActionEpoch++;
+    ball?.cancelMappedAction?.();
     sheepOffering?.cancel(false);
     clearTimeout(actionTimer);
     actionTimer = null;
@@ -487,6 +528,12 @@
   function restoreState() {
     if (presentationSuppressed) { syncSuppressedAnimation(); return; }
     if (activeMotion || dragState?.dragged || performance.now() < actionUntil) return;
+    // Activity/task snapshots must not briefly restore idle while thinking
+    // owns the display: observe() would then restart the mapped running clip.
+    if (codexThinking && codexThinkingVisible && codexActiveTaskCount > 0 && canShowCodex()) {
+      showEmotion('51');
+      return;
+    }
     showEmotion(companion.manualSleep || sheepAutoNap ? '00' : currentState.emotionId);
   }
 
@@ -636,6 +683,21 @@
     return true;
   }
 
+  function playUploadedInteraction() {
+    if (customization.appearance.shape !== 'codex-pet' || !ball.getInteractionActions || reducedMotion() ||
+        presentationSuppressed || presentationPaused || presentationMode !== 'free' || lastSample?.locked || lastSample?.chatVisible ||
+        companion.manualSleep || dragState || focusQuiet || codexActiveTaskCount || activeMotion?.owner === 'codex') return false;
+    const available = ball.getInteractionActions();
+    const choices = available.filter(id => id !== lastUploadedAction);
+    const pool = choices.length ? choices : available;
+    if (!pool.length) return false;
+    cancelPendingInteraction(); clearAction(); stopMotion();
+    const id = pool[Math.min(pool.length - 1, Math.floor(Math.random() * pool.length))];
+    uploadedAction = id; actionUntil = Number.POSITIVE_INFINITY;
+    if (!ball.playUploadedAction(id)) { clearAction(); return false; }
+    lastUploadedAction = id; return true;
+  }
+
   function updateActivity(sample) {
     const previouslyLocked = lastSample?.locked === true;
     lastSample = sample;
@@ -643,6 +705,7 @@
     const now = performance.now();
     const previousMode = currentState.mode;
     currentState = companion.update(sample, now);
+    if (uploadedAction && (reducedMotion() || sample.locked || sample.chatVisible || presentationSuppressed || presentationPaused || focusQuiet || companion.manualSleep || currentState.mode === 'sleep')) { clearAction(); ball.stopMotion(); }
     if (sample.locked || presentationSuppressed || presentationPaused || focusQuiet || codexActiveTaskCount > 0) clearSheepAutoNap();
     if (sheepAutoNap && companion.keepAwake && !companion.manualSleep &&
         Number.isFinite(sample.idleSeconds) && sample.idleSeconds >= 0 && sample.idleSeconds <= 2) wakeSheepAutomaticSleep();
@@ -716,7 +779,8 @@
     companion.setManualSleep(false, performance.now());
     currentState = { ...currentState, mode: 'awake', emotionId: '50' };
     petElement.dataset.mode = 'awake';
-    playCompanionReaction('stretch', 'wake');
+    if (customization.appearance.shape === 'codex-pet' && ball.getInteractionActions) { ball.setActive(true); ball.setEmotion('50'); }
+    else playCompanionReaction('stretch', 'wake');
   }
 
   function sleep() {
@@ -753,6 +817,7 @@
   function playReaction(action, speak = true, withinSequence = false) {
     const motion = InteractionMotion.getMotion(action);
     if (!motion || presentationSuppressed || lastSample?.locked || companion.manualSleep) return;
+    if(customization.appearance.shape==='soft-orb'){startSoftOrbInteraction(window.SoftOrbModel.actionForMotion(action,'user'));if(speak)desktop.say({event:'play',motion:action});return;}
     cancelPendingInteraction();
     clearAction();
     stopMotion(!withinSequence, true);
@@ -776,6 +841,7 @@
     if (customization.appearance.shape === 'new-year-sheep' && scene === 'wake') { wakeSheep(false); return; }
     const motion = CompanionMotion.getMotion(action);
     if (!motion || presentationSuppressed || lastSample?.locked || companion.manualSleep) return;
+    if(customization.appearance.shape==='soft-orb'){startSoftOrbInteraction(window.SoftOrbModel.actionForMotion(action,'user'));if(scene)desktop.say(scene);return;}
     cancelPendingInteraction();
     clearAction();
     stopMotion(true, true);
@@ -784,7 +850,7 @@
     petElement.dataset.motionOwner = 'user';
     petElement.dataset.lastAction = action;
     if (customization.appearance.shape !== 'new-year-sheep') ball.setEmotion(reducedMotion() ? '50' : motion.emotion);
-    if (!reducedMotion()) ball.setMotionAction?.(action, 'user');
+    if (!reducedMotion()) ball.setMotionAction?.(action, 'user', scene);
     ball.setMotionFrame(reducedMotion() ? CompanionMotion.neutralFrame() : CompanionMotion.sample(action, 0, activeMotion.side));
     desktop.playMotion({ ...activeMotion, reducedMotion: reducedMotion() });
     if (scene) desktop.say(scene);
@@ -823,6 +889,7 @@
   function runSingleClickAction(speak = true) {
     if (presentationSuppressed || lastSample?.locked) return;
     if (wakeSheepAutomaticSleep() || (customization.appearance.shape === 'new-year-sheep' && performance.now() < sheepAutomaticWakeUntil)) return;
+    if (customization.appearance.shape === 'codex-pet' && ball.getInteractionActions && (companion.manualSleep || currentState.mode === 'sleep')) { wake(); return; }
     if (companion.manualSleep) return;
     if (activeMotion) stopMotion(true, true);
     noteInteraction();
@@ -845,6 +912,8 @@
       if (speak) desktop.say({ event: 'play', sheepAction: action });
       return;
     }
+    if(customization.appearance.shape==='soft-orb'){startSoftOrbInteraction('fan');return;}
+    if (customization.appearance.shape === 'codex-pet' && ball.getInteractionActions) { if (playUploadedInteraction() && speak) desktop.say('play'); return; }
     if (officialAurora?.click()) {
       petElement.dataset.lastAction = 'official';
       return;
@@ -884,6 +953,12 @@
     cancelPendingInteraction();
     stopMotion();
     companion.setManualSleep(false, performance.now());
+    if(customization.appearance.shape==='soft-orb'){const actions=['draw','fan','flip','scan','beam','shock','flight','ship','love'];startSoftOrbInteraction(actions[Math.floor(Math.random()*actions.length)]);return;}
+    if (customization.appearance.shape === 'codex-pet' && ball.getInteractionActions) {
+      clearAction(); currentState = { ...currentState, mode: 'awake', emotionId: '50', welcome: false };
+      petElement.dataset.mode = 'awake'; ball.setActive(true); ball.setEmotion('50');
+      playUploadedInteraction(); return;
+    }
     const definitions = EmotionBall.config.list().filter(definition => !['55', '56'].includes(definition.id));
     const selected = definitions[Math.floor(Math.random() * definitions.length)];
     if (selected) playEmotion(selected.id, 5000);
@@ -906,6 +981,22 @@
     return true;
   }
 
+  function startSoftOrbInteraction(action){
+    const duration=window.SoftOrbModel?.duration(action);
+    if(customization.appearance.shape!=='soft-orb'||!duration||presentationSuppressed||lastSample?.locked||companion.manualSleep)return false;
+    cancelPendingInteraction();clearAction();stopMotion();noteInteraction();
+    const receiver=ball,epoch=++softOrbActionEpoch;
+    actionUntil=Number.POSITIVE_INFINITY;petElement.dataset.lastAction=action;
+    receiver.whenMotionReady().then(ready=>{
+      if(receiver!==ball||epoch!==softOrbActionEpoch)return;
+      if(!ready||presentationSuppressed||lastSample?.locked||companion.manualSleep){clearAction();restoreState();return;}
+      actionUntil=performance.now()+duration;receiver.playAction(action);
+      actionTimer=setTimeout(observe(()=>{actionUntil=0;receiver.stopMotion();restoreState();}),duration);
+      syncCodexWorking();reportCodexAvailability();
+    });
+    return true;
+  }
+
   function runCommand(command) {
     if (command?.command === 'codex-cancel') { cancelCodex(command); return; }
     if (command?.command === 'codex') { startCodex(command); return; }
@@ -917,6 +1008,7 @@
       return;
     }
     if (presentationSuppressed || lastSample?.locked) return;
+    if (command?.command === 'soft-orb-action') { startSoftOrbInteraction(command.action); return; }
     if (command?.command === 'sheep-offer') { sheepOffering?.offer(command.kind); return; }
     if (command?.command === 'sheep-action') { startSheepInteraction(command.action, command.ambient === true); return; }
     if (command?.command === 'again') playReaction(command.motion, false);

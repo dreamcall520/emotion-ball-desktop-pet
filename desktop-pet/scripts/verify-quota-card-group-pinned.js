@@ -85,7 +85,7 @@ if (!process.versions.electron) {
         zcodeEnabled: true, zcodeQuotaAlwaysVisible: true, zcodeQuotaLabelSize: 'compact', workbuddyEnabled: true, workbuddyQuotaAlwaysVisible: true,
         apiBalanceEnabled: true, apiBalanceAlwaysVisible: true, customization: { appearance: { shape: 'blob' } } });
       scope = { settings, petWindow: pet, screen, BrowserWindow: HiddenWindow, ipcMain, normalizeQuotaCards, quotaFreeStackBounds, SheepTheme, PetFacing,
-        quotaLabel: null, apiUsageLabel: null, zcodeLink: null, workbuddyLabel: null, apiBalanceLabel: null,
+        quotaLabel: null, apiUsageLabel: null, zcodeLink: null, workbuddyLabel: null, apiBalanceLabel: null, weatherWindow: null,
         quotaCardGroup: null, quotaCardGroupWindow: null, quotaCardGroupTransition: null, quotaGroupLastActive: false, quotaGroupWasExpanded: false, quotaTransitionContext: null, quotaCardBarTransitioning: false,
         dragState: null, isQuitting: false, screenLocked: false, pomodoroQuiet: false, shortcutWindow: null, chatWindow: null, apiUsageWindow: null, codexDetails: null, workbuddyDetails: null, apiBalanceDetails: null, quotaGuard: null,
         codexPageEpoch: 0, sheepQuotaInk: null, systemPreferences: { getAnimationSettings: () => ({ prefersReducedMotion: false }) },
