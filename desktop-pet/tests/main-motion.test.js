@@ -42,6 +42,7 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
     reposition() { this.repositions++; }, resetExpanded() { this.expanded=false; },setGroupTransitionMode() {},captureGroupTransitionFrames:async()=>[],
     setAlwaysOnTop(){},pause(){},resume(){},destroy(){} };
   const iconPreference = { value: 'codex-system', dark: false, calls: [] };
+  const clipboard={writes:[],writeText(text){this.writes.push(text)}};
   const dialogs = [];
   const external = [];
   const popups = [];
@@ -227,7 +228,7 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
       if (name === './lib/feedback-reporting') return { createFeedbackReporting: () => ({ context: () => ({diagnostic:{}}), getState: () => ({enabled:false,pending:0}), capture() {}, setEnabled() {}, dispose() {}, submit: async () => ({}) }) };
       if (name === './lib/weather-window') return {createWeatherWindow:options=>{weather.options=options;return weather;}};
       if (name === 'electron') return { app, ipcMain, powerMonitor, nativeTheme, screen, globalShortcut, BrowserWindow: NativeWindow, Tray, net,
-        dialog: { showMessageBox: (...args) => { dialogs.push(args); return consent(...args); } },
+        clipboard, dialog: { showMessageBox: (...args) => { dialogs.push(args); return consent(...args); } },
         shell: { openExternal: url => { external.push(url); return openExternal(url); }, showItemInFolder: file => revealed.push(file) },
         Menu: { buildFromTemplate: value => Object.assign(value, { popup: options => popups.push({ value, options }) }) }, nativeImage: { createFromPath: () => ({ setTemplateImage() {} }) } };
       if (name === './lib/codex-icon-preference') return { createCodexIconPreference: options => {
@@ -362,7 +363,7 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
   const pet = windows[0];
   pet.emit('ready-to-show');
   pet.webContents.emit('did-finish-load');
-  return { weather, groupTransition, pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, downloads, revealed, consents, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
+  return { clipboard, weather, groupTransition, pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, downloads, revealed, consents, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
     iconPreference, workbuddyCalls, workbuddyRecords, balanceCalls, balanceWatches, balanceRecoveries, workbuddyRecoveries,
     get balanceReads() { return balanceReads; }, get balanceUnwatches() { return balanceUnwatches; }, setOnline(value) { networkOnline = value; },
     notes, pomodoro, pomodoroWindows, nativeTheme, call: expression => vm.runInContext(expression, context),
@@ -1042,7 +1043,7 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   const menu = f.call('menuTemplate()');
   const top = menu.filter(item => item.type !== 'separator');
   assert.deepEqual(Array.from(top, item => item.label), [
-    '设置中心', '意见反馈', '和球球聊聊', '启用 WorkBuddy 联动', '显示 WorkBuddy 积分卡', 'WorkBuddy 趣味游戏', 'API 余额', '定制球球', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API', 'ZCode 联动',
+    '设置中心', '意见反馈', '和球球聊聊', '启用 WorkBuddy 联动', '显示 WorkBuddy 积分卡', 'WorkBuddy 趣味游戏', 'API 余额', '定制球球', '专属皮肤定制', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API', 'ZCode 联动',
     '贴边与显示', '球球尺寸', '界面配色', '常规设置', '关于球球', '检查更新', '退出球球'
   ]);
   const group = label => top.find(item => item.label === label).submenu.filter(item => item.type !== 'separator');
@@ -3296,6 +3297,37 @@ test('聊天首次可见立即同步上传动作门禁，不等待静止活动�
   assert.equal(f.pet.messages.filter(row => row.channel === 'pet:activity').at(-1).packet.chatVisible, false);
 });
 
+test('宣传菜单相邻且首次显示等待同窗口当前请求详情就绪，旧请求不能打开表单',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));
+ for(const menu of [f.call('menuTemplate()'),f.call('compactMenuTemplate()')]){const at=menu.findIndex(item=>item.id==='customize-open');assert.equal(menu[at+1]?.id,'custom-skin-promotion');assert.equal(menu[at+1].label,'专属皮肤定制');}
+ f.call('openCustomization({promotion:true})');const win=f.call('customizationWindow');win.webContents.mainFrame={};win.emit('ready-to-show');assert.equal(win.isVisible(),false,'never flash the ordinary form before detail readiness');
+ const token=f.call('customizationPromotion.token');f.call("ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},'stale')");assert.equal(win.isVisible(),false);f.call("ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},customizationPromotion.token)");assert.equal(win.isVisible(),true);
+ const windows=f.windows.length;f.call('openCustomization({promotion:true})');assert.equal(f.windows.length,windows,'existing form is reused without reload or lost edits');assert.equal(win.messages.at(-1).channel,'pet:promotion-open');
+ const latest=f.call('customizationPromotion.token');f.powerMonitor.emit('lock-screen');f.call("ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},'canceled')");assert.equal(f.call('customizationPromotion'),null,'screen lock cancels pending presentation');
+});
+
+test('普通装扮首次加载被宣传请求接管时native ready不提前露表单，ACK只认当前请求',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization()');const win=f.call('customizationWindow');win.webContents.mainFrame={};win.webContents.isLoading=()=>true;
+ f.call('openCustomization({promotion:true})');const old=f.call('customizationPromotion.token');f.call('openCustomization({promotion:true})');win.emit('ready-to-show');assert.equal(win.isVisible(),false);
+ f.call(`ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},${JSON.stringify(old)})`);assert.equal(win.isVisible(),false);
+ f.call("ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},customizationPromotion.token)");assert.equal(win.isVisible(),true);
+});
+
+test('宣传首次加载被锁屏取消后，解锁后的迟到ready与旧ACK均不能自动露出原表单',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization({promotion:true})');const win=f.call('customizationWindow');win.webContents.mainFrame={};
+ const old=f.call('customizationPromotion.token');f.powerMonitor.emit('lock-screen');f.powerMonitor.emit('unlock-screen');win.emit('ready-to-show');
+ f.call(`ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},${JSON.stringify(old)})`);assert.equal(win.isVisible(),false);await flush();assert.equal(f.call('quotaPopups.isBlocked()'),false);
+});
+
+test('宣传联系仅当前可见主frame固定微信及原JPEG，保存后重验会话和授权选择',async t=>{
+ const os=require('node:os'),dir=fs.mkdtempSync(path.join(os.tmpdir(),'qiuqiu-promotion-contact-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization()');const win=f.call('customizationWindow');win.webContents.mainFrame={};win.webContents.getURL=()=>require('node:url').pathToFileURL(path.resolve(__dirname,'../customize.html')).href;win.emit('ready-to-show');
+ assert.equal((await f.invoke('pet:promotion-contact','copy')).ok,false);assert.equal((await f.invoke('pet:promotion-contact',{action:'copy',text:'injected'},win.webContents)).ok,false);
+ assert.equal((await f.invoke('pet:promotion-contact','copy',win.webContents)).ok,true);assert.deepEqual(f.clipboard.writes,['ooOJBKoo']);
+ const output=path.join(dir,'contact.jpg');f.call(`dialog.showSaveDialog=async()=>({canceled:false,filePath:${JSON.stringify(output)}})`);assert.equal((await f.invoke('pet:promotion-contact','save-qr',win.webContents)).ok,true);assert.deepEqual(fs.readFileSync(output),fs.readFileSync(path.resolve(__dirname,'../assets/promotion/wechat-contact-original.jpg')));
+ fs.unlinkSync(output);f.call('dialog.showSaveDialog=()=>new Promise(resolve=>globalThis.finishPromotionSave=resolve)');const pending=f.invoke('pet:promotion-contact','save-qr',win.webContents);win.hide();win.show();f.call(`finishPromotionSave({canceled:false,filePath:${JSON.stringify(output)}})`);assert.equal((await pending).canceled,true);assert.equal(fs.existsSync(output),false);
+ win.hide();assert.equal((await f.invoke('pet:promotion-contact','copy',win.webContents)).ok,false);
+});
+
 test('快速隐藏再恢复后，迟到的原生hide不关闭新打开的聊天', async () => {
   const f = await fixture();
   f.call('openChat()');
@@ -4024,7 +4056,7 @@ test('原生菜单保留核心联动开关与独立入口，完整偏好仍可�
   const f = await fixture(); t.after(() => f.app.emit('before-quit'));
   const menu = f.call('compactMenuTemplate()');
   assert.deepEqual(Array.from(menu.filter(item => item.type !== 'separator'), item => item.label),
-    ['和球球聊聊', '来定制球球', '便签与待办', '番茄钟', '启用 Codex 联动', '启用 ZCode 联动', '启用 WorkBuddy 联动', '联动样式管理', '设置中心', '意见反馈', '关于球球', '检查更新', '退出球球']);
+    ['和球球聊聊', '来定制球球', '专属皮肤定制', '便签与待办', '番茄钟', '启用 Codex 联动', '启用 ZCode 联动', '启用 WorkBuddy 联动', '联动样式管理', '设置中心', '意见反馈', '关于球球', '检查更新', '退出球球']);
   assert.ok(menu.every(item => !item.submenu));
   assert.ok(findMenuItem(menu, 'workbuddy-enabled'));
   assert.equal(findMenuItem(menu, 'workbuddy-chat'), null);

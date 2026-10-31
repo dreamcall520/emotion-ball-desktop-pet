@@ -1,0 +1,50 @@
+{
+  "source": "确认设计20261031；楚哥最终通用ZIP；原生sheep及xiaobai素材直接引用，不导入用户库",
+  "files": [
+    {
+      "path": "spring-festival.png",
+      "sha256": "3303839eb7bc8d0f06ca7e8022f5e4c4ba09f917c3b50107e74f46436794245c",
+      "bytes": 98557
+    },
+    {
+      "path": "chunye.png",
+      "sha256": "c97210e852c525775c5d9c374760407a57d84ae367bf82d030c7bf77579b2bfa",
+      "bytes": 1178269
+    },
+    {
+      "path": "xiaobai.png",
+      "sha256": "0bfc84d41a3943ad894c4df9e653b7212ebe1aa5d977ec1bc776842d833807e5",
+      "bytes": 138184
+    },
+    {
+      "path": "wechat-contact-original.jpg",
+      "sha256": "eda1979f40d61a8a86c25d0abd163def55f1b63611af0ef1ef954fe7ae628a25",
+      "bytes": 110628
+    },
+    {
+      "path": "chuge.png",
+      "sha256": "d7fcc17eef9a855d7558a17bd692a089fc034b86f8d40a6114948b7a3d2ad87b",
+      "bytes": 296842
+    },
+    {
+      "path": "chuge/base.webp",
+      "sha256": "e2d91c8314905d4c4b28640ad93e02381819f2fd531eb18f22764b4732dfb4e9",
+      "bytes": 240344
+    },
+    {
+      "path": "chuge/wave.webp",
+      "sha256": "1a563e5f16b31a6679e068757487bab2112edddf33835440f40420bb452d06c3",
+      "bytes": 6325216
+    },
+    {
+      "path": "chuge/sleep.webp",
+      "sha256": "472edbbd43f3490c19eefb0cd1bb763f43c1653e5c14921beb544c4ed5a71875",
+      "bytes": 1943532
+    },
+    {
+      "path": "chuge/walk.webp",
+      "sha256": "7f92146a5614f34a38d877c4c76251f75de7963564bb15e04d74be1d8b2ca882",
+      "bytes": 4021948
+    }
+  ]
+}
