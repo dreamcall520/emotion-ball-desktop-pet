@@ -11,10 +11,10 @@ if (process.versions.electron && process.argv.includes('--feedback-dom-child')) 
     const run = async source => { try { return await win.webContents.executeJavaScript(source); } catch (error) { throw new Error(source.slice(0,160)+' :: '+error.message); } };
     const snapshotFile = process.env.PET_SMOKE_ARTIFACT_DIR && path.join(process.env.PET_SMOKE_ARTIFACT_DIR, 'settings-snapshot.json');
     const previewSnapshot = snapshotFile && fs.existsSync(snapshotFile) ? JSON.parse(fs.readFileSync(snapshotFile,'utf8')) : {entries:[]};
-    Object.assign(previewSnapshot,{version:'0.4.09',initialView:'feedback',feedback:{enabled:true,pending:0,lastSentAt:null,lastError:'',context:{diagnostic:{appVersion:'0.4.09',platform:'darwin',systemRelease:'25.0.0',architecture:'arm64',electron:'43.4.1',node:'24'}}}});
+    Object.assign(previewSnapshot,{version:'0.4.09',initialView:'feedback',feedback:{enabled:true,pending:0,lastSentAt:null,lastError:'',history:[],historyWarning:'',context:{diagnostic:{appVersion:'0.4.09',platform:'darwin',systemRelease:'25.0.0',architecture:'arm64',electron:'43.4.1',node:'24'}}}});
     await run(`document.querySelector('#brand-pet').replaceChildren();window.submissions=[];window.autoChanges=[];window.snapshot=${JSON.stringify(previewSnapshot)};
-      window.qiuqiuSettings={get:async()=>snapshot,act:async()=>({}),onNavigate:fn=>window.navigate=fn,
-        submitFeedback:async value=>{submissions.push(value);if(window.holdSubmit)return new Promise(resolve=>window.finishSubmit=()=>resolve({id:value.submissionId}));if(window.failSubmit)throw Error('提交失败，内容已保留，请稍后重试。');return {id:value.submissionId}},
+      window.receipt=value=>{const record={id:value.submissionId,type:value.type,title:value.title,detail:value.detail,submittedAt:Date.now(),attachmentCount:value.attachments.length,version:'0.4.09'};snapshot.feedback.history=[record,...snapshot.feedback.history.filter(item=>item.id!==record.id)];return{id:value.submissionId,record}};window.qiuqiuSettings={get:async()=>snapshot,act:async()=>({}),onNavigate:fn=>window.navigate=fn,
+        submitFeedback:async value=>{submissions.push(value);if(window.holdSubmit)return new Promise(resolve=>window.finishSubmit=()=>resolve(receipt(value)));if(window.failSubmit)throw Error('提交失败，内容已保留，请稍后重试。');return receipt(value)},
         setAutoReport:async enabled=>{autoChanges.push(enabled);snapshot.feedback.enabled=enabled;return {ok:true,state:snapshot.feedback}}};void 0;`);
     await run(fs.readFileSync(path.join(__dirname,'../global-settings-renderer.js'),'utf8'));
     const settle = () => run('new Promise(resolve=>setTimeout(resolve,40))'); await settle();
@@ -25,6 +25,14 @@ if (process.versions.electron && process.argv.includes('--feedback-dom-child')) 
     assert.equal(await run("document.querySelector('#report-title').value"),'草稿');
     await run("document.querySelector('[data-view=common]').click();document.querySelector('[data-view=feedback]').click()");
     assert.equal(await run("document.querySelector('#report-title').value"),'草稿','tab navigation preserves draft');
+    await run("document.querySelector('#report-tab-history').click()");
+    assert.equal(await run("document.querySelector('#report-history-panel').hidden"),false);
+    assert.match(await run("document.querySelector('#report-history-list').textContent"),/还没有已提交记录/);
+    assert.equal(await run("document.querySelector('#report-compose-panel').hidden"),true);
+    await run("document.querySelector('#report-tab-history').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true,cancelable:true}))");
+    assert.equal(await run("document.querySelector('#report-tab-compose').getAttribute('aria-selected')"),'true');
+    assert.equal(await run("document.querySelector('#report-title').value"),'草稿','feedback subtabs preserve draft');
+
     await run("window.dispatchEvent(new Event('beforeunload',{cancelable:true}));snapshot.feedback.pending=7;void 0");
     await run('new Promise(resolve=>setTimeout(resolve,2300))');
     assert.match(await run("document.querySelector('#report-auto-status').textContent"),/7 条待补报/,'cancelled closing must keep automatic report status refreshing');
@@ -42,6 +50,7 @@ if (process.versions.electron && process.argv.includes('--feedback-dom-child')) 
       await run('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
       assert.equal(await run('document.querySelector("main").scrollWidth<=document.querySelector("main").clientWidth'),true,`${theme} ${appearance} ${width} no overflow`);
       assert.equal(await run(`new Set(['report-type','report-title','report-detail','report-dropzone','report-contact'].map(id=>Math.round(document.getElementById(id).getBoundingClientRect().left))).size`),1,'all form controls align');
+      assert.equal(await run(`(()=>{const button=document.querySelector('#report-submit').getBoundingClientRect(),field=document.querySelector('#report-title').getBoundingClientRect(),environment=document.querySelector('.report-environment').getBoundingClientRect();return Math.abs(button.left-field.left)<1&&button.top>=environment.bottom+15})()`),true,'submit is in its own footer aligned with inputs');
       assert.equal(await run('getComputedStyle(document.querySelector("#report-detail")).color'),await run('getComputedStyle(document.documentElement).getPropertyValue("--text").trim()').then(color=>run(`(()=>{const e=document.createElement('span');e.style.color=${JSON.stringify(color)};document.body.append(e);const c=getComputedStyle(e).color;e.remove();return c})()`)));
       if(output) {
         fs.writeFileSync(path.join(output,`feedback-${theme}-${appearance}-${width}.png`),(await win.webContents.capturePage(undefined,{stayHidden:true})).toPNG());
@@ -83,16 +92,28 @@ if (process.versions.electron && process.argv.includes('--feedback-dom-child')) 
     assert.equal(await run('submissions[0].attachments[0].name'),'sample.png');
     assert.equal(await run("document.querySelector('#report-title').value"),'草稿');
     assert.equal(await run("document.querySelector('#report-files').children.length"),1);
+    assert.equal(await run('snapshot.feedback.history.length'),0,'failed submission never enters history');
     await run("window.failSubmit=false;document.querySelector('#report-form').requestSubmit()");await settle();
     assert.equal(await run('submissions[0].submissionId===submissions[1].submissionId'),true);
     assert.equal(await run("document.querySelector('#report-success').hidden"),false);
     assert.match(await run("document.querySelector('#report-receipt').textContent"),/反馈编号/);
+    await run("document.querySelector('#report-view-history').click()");
+    assert.equal(await run("document.querySelector('#report-history-panel').hidden"),false);
+    assert.equal(await run("document.querySelectorAll('.report-history-item').length"),1);
+    assert.equal(await run("document.querySelector('.report-history-heading h4').textContent"),'草稿');
+    assert.match(await run("document.querySelector('.report-history-receipt').textContent"),/1 张截图/);
+    await run("document.querySelector('.report-history-content summary').click();window.dispatchEvent(new Event('focus'))");await settle();
+    assert.equal(await run("document.querySelector('.report-history-content').open"),true,'snapshot refresh does not collapse history detail');
+    if(output)for(const appearance of ['light','dark']){await run(`document.documentElement.dataset.appearance='${appearance}'`);await run('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');fs.writeFileSync(path.join(output,`feedback-history-${appearance}.png`),(await win.webContents.capturePage(undefined,{stayHidden:true})).toPNG());await run("document.querySelector('.report-history-content').open=false");fs.writeFileSync(path.join(output,`feedback-history-${appearance}-collapsed.png`),(await win.webContents.capturePage(undefined,{stayHidden:true})).toPNG());await run("document.querySelector('.report-history-content').open=true");}
+    await run("document.querySelector('#report-tab-compose').click()");
+
     await run("document.querySelector('#report-again').click()");
     assert.equal(await run("document.querySelector('#report-title').value"),'');
     assert.equal(await run("document.querySelector('#report-files').children.length"),0);
     await run("document.querySelector('#report-title').value='<img src=x onerror=alert(1)>';document.querySelector('#report-detail').value='test';document.querySelector('#report-form').requestSubmit()");await settle();
     assert.equal(await run('submissions.at(-1).title'),'<img src=x onerror=alert(1)>');
     assert.equal(await run("document.querySelector('#report-title img')"),null);
+    assert.equal(await run("document.querySelectorAll('.report-history-item img').length"),0,'history titles are text, not HTML');
     await run("document.querySelector('#report-again').click();document.querySelector('#report-title').value='提交中';document.querySelector('#report-detail').value='测试';window.holdSubmit=true;document.querySelector('#report-form').requestSubmit()");await settle();
     await run("document.querySelector('#report-dropzone').dispatchEvent(new DragEvent('drop',{dataTransfer:dropData,bubbles:true,cancelable:true}));document.querySelector('#report-detail').dispatchEvent(new ClipboardEvent('paste',{clipboardData:pasteData,bubbles:true,cancelable:true}))");
     assert.equal(await run("document.querySelector('#report-files').children.length"),0,'sending freezes attachments for both paste and drop');

@@ -1274,7 +1274,11 @@
     if (codexPlayer) codexPlayer.setOpacity(1 - state.appearance.auroraTransparency / 100);
     else schedulePreview();
   });
-  $('pet-action').addEventListener('change', () => codexPlayer?.setAction($('pet-action').value));
+  const previewActionSelect = $('pet-action');
+  previewActionSelect.addEventListener('pointerdown', () => { previewActionSelect.dataset.pointerFocus = 'true'; });
+  previewActionSelect.addEventListener('keydown', () => { delete previewActionSelect.dataset.pointerFocus; });
+  previewActionSelect.addEventListener('blur', () => { delete previewActionSelect.dataset.pointerFocus; });
+  previewActionSelect.addEventListener('change', () => codexPlayer?.setAction(previewActionSelect.value));
   $('pet-play').addEventListener('click', () => {
     petPaused = !petPaused; codexPlayer?.pause(petPaused);
     $('pet-play').setAttribute('aria-label', petPaused ? '播放动画' : '暂停动画');

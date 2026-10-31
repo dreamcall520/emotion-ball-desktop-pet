@@ -7,38 +7,39 @@ const sourcePath = path.join(__dirname, '../lib/weather-window.js');
 const cityA = { name: '北京', latitude: 39.9, longitude: 116.4 }, cityB = { name: '上海', latitude: 31.2, longitude: 121.5 };
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
 const report = city => ({ status: 'ready', updatedAt: Date.now(), data: { location: city, timezone: 'Asia/Shanghai', current: { temperature: 15 } } });
-function fixture(t, { area = { x: 0, y: 0, width: 1000, height: 800 }, petBounds = { x: 460, y: 350, width: 80, height: 80 }, saved, cached, bubbleBounds = null, stackAnchor = null, locationBridge = { locate: async () => { throw Object.assign(Error('denied'), {code:'LOCATION_DENIED'}); } } } = {}) {
+function fixture(t, { area = { x: 0, y: 0, width: 1000, height: 800 }, petBounds = { x: 460, y: 350, width: 80, height: 80 }, saved, cached, bubbleBounds = null, stackAnchor = null, morph = null, collection = null, locationBridge = { locate: async () => { throw Object.assign(Error('denied'), {code:'LOCATION_DENIED'}); } } } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qiuqiu-weather-window-')), filePath = path.join(dir, 'weather.json');
   if (saved) fs.writeFileSync(filePath, JSON.stringify(saved));
   if (cached) fs.writeFileSync(filePath + '.cache', JSON.stringify(cached));
-  const handlers = new Map(), windows = [], changes = [], requests = [], module = { exports: {} };
-  let groupHidden = false;
+  const handlers = new Map(), windows = [], changes = [], requests = [], layouts = [], module = { exports: {} };
+  let groupHidden = false, petVisible = true, layoutHook = () => {};
   let suppressed = false, persistFails = false;
   const service = { searchCities: async () => [], getWeather(city) { const d = deferred(); requests.push({ city, ...d }); return d.promise; } };
   const mockedFs = Object.create(fs); mockedFs.renameSync = (...args) => { if (persistFails) throw Object.assign(Error('fixture storage unavailable'), { code: 'EACCES' }); return fs.renameSync(...args); };
   class Window extends EventEmitter {
-    constructor(options) { super(); this.options = options; this.visible = false; this.dead = false; this.sent = [];
-      this.webContents = Object.assign(new EventEmitter(), { mainFrame: { url: pathToFileURL(path.join(__dirname, '../weather.html')).href },
+    constructor(options) { super(); this.options = options; this.visible = false; this.dead = false; this.sent = []; this.opacity = 1;
+      this.webContents = Object.assign(new EventEmitter(), { ...(morph ? { executeJavaScript: async () => morph.hangDom ? new Promise(() => {}) : true, capturePage: async () => { (morph.nativeCaptures ||= []).push(this.getBounds()); return { toPNG: () => Buffer.from([137,80,78,71,13,10,26,10]), getBitmap: () => Buffer.from([0,0,0,255]) }; } } : {}), mainFrame: { url: pathToFileURL(path.join(__dirname, '../weather.html')).href },
         send: (channel, state) => this.sent.push({ channel, state }), setWindowOpenHandler: fn => { this.openHandler = fn; } }); windows.push(this); }
     isDestroyed() { return this.dead; } isVisible() { return this.visible; } setVisibleOnAllWorkspaces() {}
-    setBounds(bounds, animate) { this.lastAnimate = animate; this.bounds = { ...bounds }; } getBounds() { return { ...this.bounds }; } setSize(width, height) { this.bounds = { ...this.bounds, width, height }; }
+    setBounds(bounds, animate) { this.lastAnimate = animate; (this.boundsCalls ||= []).push({ bounds: { ...bounds }, animate }); this.bounds = { ...bounds }; } getBounds() { return { ...this.bounds }; } setSize(width, height) { this.bounds = { ...this.bounds, width, height }; }
+    setOpacity(value) { this.opacity = value; } getOpacity() { return this.opacity; }
     show() { this.visible = true; } focus() {} showInactive() { this.visible = true; } hide() { this.visible = false; } loadFile() { return Promise.resolve(); }
     destroy() { this.dead = true; this.visible = false; this.emit('closed'); }
   }
-  vm.runInNewContext(fs.readFileSync(sourcePath, 'utf8'), { module, __dirname: path.dirname(sourcePath), setInterval, clearInterval,
-    require: name => name === 'node:fs' ? mockedFs : name === './weather-service' ? { createWeatherService: () => service } : require(name.startsWith('.') ? path.resolve(path.dirname(sourcePath), name) : name) }, { filename: sourcePath });
+  vm.runInNewContext(fs.readFileSync(sourcePath, 'utf8'), { module, __dirname: path.dirname(sourcePath), setInterval, clearInterval, setTimeout, clearTimeout,
+    require: name => name === './quota-card-transition-window' && morph ? { createQuotaCardTransitionWindow: () => morph.overlay } : name === './quota-group-capture' && morph ? { captureQuotaGroupFrames: async options => { morph.captures ||= []; const targets = options.getTargets(); morph.captures.push(targets.map(w => w.getBounds())); if (morph.captureGate && morph.captures.length === 1) await morph.captureGate.promise; return targets.map(w => ({ bounds: w.getBounds(), png: Buffer.from([137,80,78,71,13,10,26,10]) })); } } : name === 'node:fs' ? mockedFs : name === './weather-service' ? { createWeatherService: () => service } : require(name.startsWith('.') ? path.resolve(path.dirname(sourcePath), name) : name) }, { filename: sourcePath });
   const controller = module.exports.createWeatherWindow({ BrowserWindow: Window, ipcMain: { handle: (name, fn) => handlers.set(name, fn), removeHandler: name => handlers.delete(name) },
-    locationBridge, screen: { getDisplayMatching: () => ({ workArea: area }) }, filePath, getPetWindow: () => ({ isDestroyed: () => false, isVisible: () => true, getBounds: () => petBounds }),
-    getStackAnchor: () => stackAnchor, getBubbleBounds: () => bubbleBounds, getPresentation: () => ({ mode: 'free', quotaGroupHidden: groupHidden }), getSuppressed: () => suppressed, onChange: state => changes.push(state) });
+    locationBridge, screen: { getDisplayMatching: () => ({ workArea: area }) }, filePath, getPetWindow: () => ({ isDestroyed: () => false, isVisible: () => petVisible, getBounds: () => petBounds }),
+    getStackAnchor: () => stackAnchor, getCollectionWindow: () => collection, getBubbleBounds: () => bubbleBounds, getPresentation: () => ({ mode: 'free', quotaGroupHidden: groupHidden }), getSuppressed: () => suppressed, onLayout: () => { layouts.push(true); layoutHook(); }, onChange: state => changes.push(state) });
   t.after(() => { controller.destroy(); fs.rmSync(dir, { recursive: true, force: true }); });
   controller.setEnabled(true);
   const event = () => ({ sender: controller.getWindow().webContents, senderFrame: controller.getWindow().webContents.mainFrame });
-  return { controller, handlers, windows, changes, requests, filePath, event,
+  return { controller, handlers, windows, changes, requests, layouts, filePath, event, setPetVisible: value => { petVisible = value; }, setLayoutHook: value => { layoutHook = value; },
     invoke: (name, value, e) => handlers.get('weather:' + name)(e || event(), value), suppress: value => { suppressed = value; }, groupHidden: value => { groupHidden = value; }, failPersist: () => { persistFails = true; } };
 }
 test('weather IPC denies other windows, child frames and unexpected document URLs', t => {
   const f = fixture(t), trusted = f.event();
-  for (const channel of ['get', 'refresh', 'search', 'city', 'location', 'resize']) {
+  for (const channel of ['get', 'refresh', 'search', 'city', 'location', 'resize', 'collapse']) {
     assert.equal(f.invoke(channel, cityA, { ...trusted, sender: {} }), null);
     assert.equal(f.invoke(channel, cityA, { ...trusted, senderFrame: { url: trusted.senderFrame.url } }), null);
   }
@@ -122,15 +123,17 @@ test('malformed expanded resize height falls back to finite dimensions without w
   assert.equal(f.invoke('resize', { expanded: true, height: 10000 }).height, 720);
 });
 
-test('switching expanded weather content keeps top-left fixed instead of flipping around the pet', t => {
-  const f = fixture(t, { area: { x: 0, y: 0, width: 1000, height: 800 }, petBounds: { x: 460, y: 200, width: 80, height: 80 } });
-  f.invoke('resize', { expanded: true, height: 400 });
-  const initial = f.controller.getWindow().getBounds();
-  for (const height of [680, 450, 620, 400]) {
-    f.invoke('resize', { expanded: true, height }); f.controller.reposition();
-    const next = f.controller.getWindow().getBounds();
-    assert.equal(next.x, initial.x); assert.equal(next.y, initial.y);
-    assert(next.y + next.height <= 800);
+test('changing weather content keeps a nearby legal side and repeated layout does not move it', t => {
+  const petBounds = { x: 460, y: 200, width: 80, height: 80 };
+  const f = fixture(t, { area: { x: 0, y: 0, width: 1000, height: 800 }, petBounds });
+  for (const height of [400, 680, 450, 620, 400]) {
+    f.invoke('resize', { expanded: true, height });
+    const next = f.controller.getWindow().getBounds(); f.controller.reposition();
+    assert.deepEqual(f.controller.getWindow().getBounds(), next);
+    assert(next.y >= 0 && next.y + next.height <= 800);
+    const dx = Math.max(petBounds.x - next.x - next.width, next.x - petBounds.x - petBounds.width, 0);
+    const dy = Math.max(petBounds.y - next.y - next.height, next.y - petBounds.y - petBounds.height, 0);
+    assert.equal(Math.hypot(dx, dy), 8, 'current content stays eight pixels from the pet rather than reserving 720px');
   }
 });
 
@@ -166,7 +169,7 @@ test('native location denial returns a short structured error and preserves sele
   assert.equal(result.locationError.code,'LOCATION_DENIED');
   assert.equal(f.controller.getState().city.name,'北京');
 });
-test('native geometry animation is requested only when expanding or collapsing', t => {
+test('only expansion animates native geometry; compact commit never runs a native shrink animation', t => {
   const f=fixture(t,{area:{x:0,y:0,width:1000,height:1200}}), win=f.controller.getWindow();
   f.invoke('resize',{expanded:true,height:500});
   assert.equal(win.lastAnimate,true);
@@ -174,6 +177,8 @@ test('native geometry animation is requested only when expanding or collapsing',
   assert.equal(win.lastAnimate,true);
   f.invoke('resize',{expanded:true,height:550});
   assert.equal(win.lastAnimate,false);
+  f.invoke('resize',{expanded:false});
+  assert.equal(win.lastAnimate,false,'restored quota cards cannot compete with a native shrink animation');
 });
 
 test('native reverse-geocoded city and district persist without replacing them with a placeholder', async t => {
@@ -227,7 +232,9 @@ test('weather details and city search retain full requested height at all four c
    assert.equal(anchor.height,620,JSON.stringify({x,y,anchor}));
    for(const height of [210,450,680,720,620]){
      f.invoke('resize',{expanded:true,height});const b=f.controller.getWindow().getBounds();
-     assert.equal(b.height,height);assert.equal(b.x,anchor.x);assert.equal(b.y,anchor.y);
+     assert.equal(b.height,height);
+     const pet={x,y,width:80,height:80},dx=Math.max(pet.x-b.x-b.width,b.x-pet.x-pet.width,0),dy=Math.max(pet.y-b.y-b.height,b.y-pet.y-pet.height,0);
+     assert.equal(Math.hypot(dx,dy),8,'visible panel stays next to the pet without covering it');
      assert.ok(b.x>=area.x&&b.x+b.width<=area.x+area.width&&b.y>=area.y&&b.y+b.height<=area.y+area.height);
    }
    f.invoke('resize',{expanded:false});assert.deepEqual(f.controller.getWindow().getBounds(),compact);
@@ -242,3 +249,101 @@ test('weather details and city search retain full requested height at all four c
  f.controller.reposition();const b=f.controller.getWindow().getBounds();
  assert.equal(b.height,620);assert.ok(b.x>=area.x&&b.y>=area.y&&b.x+b.width<=0&&b.y+b.height<=800);
  });
+
+test('clicked weather remains visible after the old collection hides, and explicit collapse returns to collected state', t => {
+ const f=fixture(t);f.groupHidden(true);
+ f.invoke('resize',{expanded:true,height:400});
+ assert.equal(f.controller.isExpanded(),true);assert.equal(f.controller.getWindow().isVisible(),true);
+ f.controller.reposition();assert.equal(f.controller.getWindow().isVisible(),true);
+ f.invoke('resize',{expanded:false});assert.equal(f.controller.isExpanded(),false);assert.equal(f.controller.getWindow().isVisible(),false);
+});
+
+test('expanded weather ignores old quota-stack slots and stays eight pixels above a low pet', t => {
+ const petBounds={x:700,y:800,width:80,height:80},area={x:0,y:25,width:1512,height:1100};
+ const stackAnchor={x:680,y:360,width:196,height:280},f=fixture(t,{area,petBounds,stackAnchor});
+ f.invoke('resize',{expanded:true,height:400});const win=f.controller.getWindow(),bounds=win.getBounds();
+ assert.equal(bounds.y+bounds.height,petBounds.y-8,'uses current panel height rather than a 720px empty envelope');
+ Object.assign(stackAnchor,{x:100,y:100,width:224,height:144});f.controller.reposition();
+ assert.deepEqual(win.getBounds(),bounds,'hidden quota-card movement cannot become a weather anchor');
+ f.invoke('resize',{expanded:true,height:210});assert.equal(win.getBounds().y+210,petBounds.y-8);
+});
+
+test('near-top weather chooses below or beside the pet instead of clamping a tall panel over it', t => {
+ const area={x:-524,y:-1692,width:3008,height:1692};
+ for(const petBounds of [{x:1400,y:-1692,width:80,height:80},{x:2200,y:-1692,width:180,height:180},{x:-524,y:-1680,width:80,height:80}]){
+  const f=fixture(t,{area,petBounds});f.invoke('resize',{expanded:true,height:620});const b=f.controller.getWindow().getBounds();
+  const dx=Math.max(petBounds.x-b.x-b.width,b.x-petBounds.x-petBounds.width,0),dy=Math.max(petBounds.y-b.y-b.height,b.y-petBounds.y-petBounds.height,0);
+  assert.equal(Math.hypot(dx,dy),8);assert.ok(b.x>=area.x&&b.y>=area.y&&b.x+b.width<=area.x+area.width&&b.y+b.height<=area.y+area.height);
+ }
+});
+
+
+test('repeated weather ResizeObserver packets neither touch native bounds nor re-enter quota layout', t => {
+ const f=fixture(t),win=f.controller.getWindow(),initialLayouts=f.layouts.length;
+ f.invoke('resize',{expanded:true,height:500});
+ const calls=win.boundsCalls.length;
+ assert.equal(f.layouts.length,initialLayouts+1);
+ for(let i=0;i<20;i++)f.invoke('resize',{expanded:true,height:500});
+ assert.equal(win.boundsCalls.length,calls);assert.equal(f.layouts.length,initialLayouts+1);
+ f.invoke('resize',{expanded:true,height:550});
+ assert.equal(win.boundsCalls.length,calls+1);assert.equal(f.layouts.length,initialLayouts+1,'content height does not change quota collection');
+ f.invoke('resize',{expanded:false});const compactCalls=win.boundsCalls.length;
+ assert.equal(win.lastAnimate,false);assert.equal(f.layouts.length,initialLayouts+2);
+ for(let i=0;i<20;i++)f.invoke('resize',{expanded:false});
+ assert.equal(win.boundsCalls.length,compactCalls);assert.equal(f.layouts.length,initialLayouts+2);
+});
+
+function morphFixture() {
+ const events=[],gate=deferred(),model={};
+ const overlay={warm:async()=>{},prepare:async value=>{events.push({kind:'prepare',value});model.last=value;},show(){events.push({kind:'show'});},hide(){events.push({kind:'hide'});},animate:async value=>{events.push({kind:'animate',value});await gate.promise;},getWindow:()=>null,destroy(){events.push({kind:'destroy'});}};
+ return {overlay,events,gate,model};
+}
+const flushMorph=()=>new Promise(resolve=>setImmediate(resolve));
+test('weather geometry morph keeps source visible until overlay owns it, captures restored compact target, and restores opaque real card before hiding overlay', async t=>{
+ const morph=morphFixture(),anchor={x:400,y:600,width:128,height:32},f=fixture(t,{morph,stackAnchor:anchor});
+ f.invoke('resize',{expanded:true,height:400});const w=f.controller.getWindow(),source=w.getBounds();
+ const visibility=[],show=w.showInactive.bind(w),hide=w.hide.bind(w),opacity=w.setOpacity.bind(w);w.setOpacity=value=>{visibility.push('real-opacity-'+value);opacity(value)};w.showInactive=()=>{visibility.push('real-show');show()};w.hide=()=>{visibility.push('real-hide');hide()};const showOverlay=morph.overlay.show.bind(morph.overlay),hideOverlay=morph.overlay.hide.bind(morph.overlay);morph.overlay.show=()=>{visibility.push('overlay-show');showOverlay()};morph.overlay.hide=()=>{visibility.push('overlay-hide');hideOverlay()};
+ f.setLayoutHook(()=>{anchor.x=600;anchor.y=580;});
+ const pending=f.invoke('collapse');await flushMorph();
+ assert.equal(f.controller.isClosing(),true);assert.equal(f.controller.isExpanded(),false,'quota layout restores before target is selected');
+ assert.equal(visibility.indexOf('overlay-show')<visibility.indexOf('real-opacity-0'),true);
+ const frames=morph.events.filter(e=>e.kind==='prepare');assert.equal(frames.length,2);const plan=frames[1].value;
+ assert.deepEqual(JSON.parse(JSON.stringify(plan.weatherMorph.source)),JSON.parse(JSON.stringify(source)));
+ assert.equal(plan.weatherMorph.target.x,anchor.x);assert.equal(plan.weatherMorph.target.y,anchor.y+anchor.height+8);
+ assert.deepEqual(morph.nativeCaptures[0],w.getBounds());assert.equal(w.isVisible(),true,'zero-opacity native host remains active for macOS painting');assert.equal(w.getOpacity(),0,'compact cannot flash before overlay geometry reaches it');
+ morph.gate.resolve();await pending;assert.equal(f.controller.isClosing(),false);assert.equal(w.isVisible(),true);
+ assert.equal(w.getOpacity(),1);assert.equal(visibility.at(-2),'real-opacity-1');assert.equal(visibility.at(-1),'overlay-hide');assert.equal(w.lastAnimate,false);
+});
+test('reopen, forced reset, reduced motion, hiding the pet and display changes cancel only their own pending weather morph',async t=>{
+ for(const action of ['reopen','reset','reduced','hidden','display']){
+  const morph=morphFixture(),petBounds={x:460,y:350,width:80,height:80},f=fixture(t,{morph,petBounds});f.invoke('resize',{expanded:true,height:400});
+  const pending=f.invoke('collapse');await flushMorph();assert.equal(f.controller.isClosing(),true);
+  if(action==='reopen')f.controller.openCity();
+  if(action==='reset'){f.controller.resetExpanded();f.controller.reposition();}
+  if(action==='reduced')await f.invoke('collapse',{reducedMotion:true});
+  if(action==='hidden'){f.setPetVisible(false);f.controller.reposition();}
+  if(action==='display')petBounds.x=10;
+  morph.gate.resolve();await pending;assert.equal(f.controller.isClosing(),false,action);assert.equal(f.controller.getWindow().getOpacity(),1,'native opacity restored after '+action);
+  if(action==='reopen')assert.equal(f.controller.isExpanded(),true,'old completion cannot shrink new picker');
+  if(action==='hidden')assert.equal(f.controller.getWindow().isVisible(),false,'old completion cannot show a hidden pet companion');
+  if(action==='display')assert.equal(f.controller.getWindow().getBounds().width,128,'stale morph settles on the new pet display');
+ }
+});
+
+test('collected weather morphs into the real collection bar rather than showing a disappearing compact card',async t=>{
+ const morph=morphFixture(),barBounds={x:420,y:650,width:48,height:20},collection={isDestroyed:()=>false,isVisible:()=>true,getBounds:()=>barBounds,webContents:{executeJavaScript:async()=>true,capturePage:async()=>({toPNG:()=>Buffer.from([137,80,78,71,13,10,26,10]),getBitmap:()=>Buffer.from([0,0,0,255])})}};
+ const area={x:0,y:0,width:1000,height:800},petBounds={x:900,y:700,width:80,height:80},stackAnchor={...area};
+ // A collected plan has no weather slot, and the real compact bounds helper
+ // cannot place a standalone card around this occupied anchor. Bar morphing
+ // must use the actual collection target without inventing a compact slot.
+ assert.equal(require('../lib/api-balance-label-window').apiBalanceLabelBounds(petBounds,area,[],false,stackAnchor,{mode:'free',quotaGroupHidden:false}),null);
+ const f=fixture(t,{morph,collection,area,petBounds,stackAnchor});f.groupHidden(true);f.invoke('resize',{expanded:true,height:400});const originalBounds=f.controller.getWindow().getBounds(),nativeCalls=f.controller.getWindow().boundsCalls.length;
+ const pending=f.invoke('collapse');await flushMorph();const plan=morph.events.filter(e=>e.kind==='prepare').at(-1).value;
+ assert.equal(plan.weatherMorph.targetKind,'bar');assert.deepEqual(JSON.parse(JSON.stringify(plan.weatherMorph.target)),barBounds);
+ assert.deepEqual(f.controller.getWindow().getBounds(),originalBounds,'bar endpoint does not resize real weather into a nonexistent compact slot');assert.equal(f.controller.getWindow().boundsCalls.length,nativeCalls);
+ morph.gate.resolve();await pending;assert.equal(f.controller.getWindow().isVisible(),false);assert.equal(collection.isVisible(),true,'opaque actual bar owns the animation endpoint');
+});
+test('an endpoint collection change cancels a stale morph and a hidden renderer timeout cannot leave closing stuck',async t=>{
+ const morph=morphFixture(),f=fixture(t,{morph});f.invoke('resize',{expanded:true,height:400});const pending=f.invoke('collapse');await flushMorph();f.groupHidden(true);morph.gate.resolve();await pending;assert.equal(f.controller.isClosing(),false);assert.equal(f.controller.getWindow().isVisible(),false);
+ const hanging=morphFixture();hanging.hangDom=true;const timed=fixture(t,{morph:hanging});timed.invoke('resize',{expanded:true,height:400});const result=await timed.invoke('collapse');assert.equal(result.animated,false);assert.equal(timed.controller.isClosing(),false);assert.equal(timed.controller.getWindow().isVisible(),true,'bounded fallback restores a painted real compact card');
+});

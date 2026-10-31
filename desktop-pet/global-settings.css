@@ -308,13 +308,14 @@ body { padding-top:38px; }
 .report-dropzone:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .report-upload { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding-top:2px; }
 .report-upload .description { margin:0; }
-.report-actions { display:flex; justify-content:space-between; align-items:center; gap:12px; margin:4px 0 0 76px; }
+.report-actions { display:flex; justify-content:flex-start; align-items:center; gap:12px; margin:18px 0 0 76px; padding-top:16px; border-top:1px solid var(--line); }
+.report-environment { margin-left:76px; }
 .report-diagnostics { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--muted); }
 .feedback-settings input[type=checkbox] { accent-color:var(--accent); margin:0; }
-.report-preview { font-size:11px; color:var(--muted); margin:10px 0 0 76px; }
+.report-preview { font-size:11px; color:var(--muted); margin:10px 0 0; }
 .report-preview summary { cursor:pointer; width:fit-content; }
 .report-preview pre { padding:10px 12px; border-radius:9px; background:var(--control); white-space:pre-wrap; overflow-wrap:anywhere; font-size:11px; }
-.feedback-settings .report-submit { color:var(--accent-text); background:var(--selected); border-color:var(--selected-line); padding:8px 18px; }
+.feedback-settings .report-submit { color:var(--accent-text); background:var(--selected); border-color:var(--selected-line); padding:9px 24px; min-width:126px; }
 #report-status,#report-receipt { overflow-wrap:anywhere; }
 #report-status:empty,#report-auto-status:empty { display:none; }
 #report-success { padding:20px 0 0; }
@@ -328,5 +329,31 @@ body { padding-top:38px; }
 @media(max-width:700px) {
   .report-field { grid-template-columns:50px minmax(0,1fr); gap:12px; }
   .report-types span { padding:5px 8px; }
-  .report-actions,.report-preview { margin-left:62px; }
+  .report-actions,.report-environment { margin-left:62px; }
 }
+
+.feedback-tabs { width:fit-content; margin-bottom:18px; }
+.feedback-tabs button { min-width:98px; height:32px; }
+.feedback-tabs button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.report-success-actions { display:flex; gap:10px; flex-wrap:wrap; }
+.report-history-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.report-history-header h3 { flex:1; }
+.report-history-header .description { margin:0; flex-shrink:0; font-size:11px; }
+.report-history-note { margin-top:12px; font-size:11px; }
+.report-history-list { margin-top:8px; min-width:0; }
+.report-history-item { border-bottom:1px solid var(--line); min-width:0; }
+.report-history-item:last-child { border-bottom:0; }
+.report-history-summary { display:flex; align-items:center; gap:14px; cursor:pointer; list-style:none; padding:16px 0; border-radius:6px; }
+.report-history-summary::-webkit-details-marker { display:none; }
+.report-history-summary::after { content:''; width:6px; height:6px; margin:0 4px 0 8px; border-right:1.5px solid var(--muted); border-bottom:1.5px solid var(--muted); transform:rotate(45deg); flex-shrink:0; }
+.report-history-item[open]>.report-history-summary::after { transform:rotate(225deg); }
+.report-history-summary:hover .report-history-heading h4 { color:var(--accent-text); }
+.report-history-summary:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+.report-history-lead { min-width:0; flex:1; }
+.report-history-heading h4 { margin:0; font-size:13px; font-weight:600; line-height:1.6; overflow-wrap:anywhere; }
+.report-history-meta { display:flex; align-items:center; flex-wrap:wrap; gap:4px 14px; margin-top:5px; font-size:10px; line-height:1.6; color:var(--muted); }
+.report-history-body { padding:0 0 16px; font-size:12px; line-height:1.8; }
+.report-history-body>p { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; }
+.report-history-body .report-history-receipt { margin:12px 0 0; color:var(--muted); font-size:10px; overflow-wrap:anywhere; }
+.report-history-empty { color:var(--muted); text-align:center; padding:36px 8px; font-size:12px; }
+#report-history-warning:empty { display:none; }

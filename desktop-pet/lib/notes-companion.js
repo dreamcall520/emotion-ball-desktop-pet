@@ -7,8 +7,8 @@ const { petVisualBounds } = require('./pet-visual-bounds');
 const { adjacentBounds, positionWindowNearPet } = require('./window-placement');
 
 // Pet placement's fallback is a square pet; notes keep their own rectangular size.
-function visibleBounds(bounds, screen) {
-  const display = screen.getDisplayMatching(bounds) || screen.getPrimaryDisplay();
+function visibleBounds(bounds, screen, targetDisplay = null) {
+  const display = targetDisplay || screen.getDisplayMatching(bounds) || screen.getPrimaryDisplay();
   const area = display.workArea;
   const width = Math.min(Math.max(240, Math.round(bounds.width)), area.width);
   const height = Math.min(Math.max(160, Math.round(bounds.height)), area.height);
@@ -80,7 +80,8 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
   }
   function anchor(width, height) {
     const pet = getPetBounds?.() || screen.getPrimaryDisplay().workArea;
-    return visibleBounds({ x: pet.x + (pet.width || 0) + 12, y: pet.y, width, height }, screen);
+    const display = screen.getDisplayMatching(pet) || screen.getPrimaryDisplay();
+    return visibleBounds({ x: pet.x + (pet.width || 0) + 12, y: pet.y, width, height }, screen, display);
   }
   function placeReminder(allowHidden = false) {
     try {

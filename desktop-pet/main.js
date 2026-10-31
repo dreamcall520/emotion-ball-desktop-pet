@@ -408,7 +408,7 @@ function savePomodoroForQuit() {
   isQuitting = true;
   const saved = pomodoro?.close().ok !== false;
   isQuitting = previous;
-  if (!saved) void dialog.showMessageBox({ type: 'error', title: '番茄钟尚未保存',
+  if (!saved) void showPetMessageBox({ type: 'error', title: '番茄钟尚未保存',
     message: '番茄钟暂时无法保存，请检查本机存储后再退出。', buttons: ['知道了'] });
   return saved;
 }
@@ -433,6 +433,10 @@ function functionWindowObstacles() {
     const win = controller?.getWindow();
     return win && !win.isDestroyed() && win.isVisible() ? [win.getBounds()] : [];
   });
+}
+
+function showPetMessageBox(options) {
+  return petWindow && !petWindow.isDestroyed() ? dialog.showMessageBox(petWindow, options) : dialog.showMessageBox(options);
 }
 
 function positionFunctionWindow(win) {
@@ -564,6 +568,7 @@ function openGlobalSettings(view) {
   const target = ['shortcuts', 'quota-cards', '/api-balance-menu', 'feedback'].includes(view) ? view : null;
   if (isQuitting || screenLocked) return;
   if (globalSettingsWindow && !globalSettingsWindow.isDestroyed()) {
+    positionFunctionWindow(globalSettingsWindow);
     globalSettingsWindow.show(); globalSettingsWindow.focus();
     if (target) globalSettingsWindow.webContents.send('pet:global-settings-navigate', target);
     return;
@@ -575,6 +580,7 @@ function openGlobalSettings(view) {
       contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false }
   });
   globalSettingsWindow = win;
+  positionFunctionWindow(win);
   let confirmingClose = false;
   win.webContents.on('will-prevent-unload', () => {
     if (confirmingClose || isQuitting || win.isDestroyed()) return;
@@ -592,7 +598,7 @@ function openGlobalSettings(view) {
   win.webContents.on('will-navigate', event => event.preventDefault());
   win.webContents.on('will-attach-webview', event => event.preventDefault());
   win.on('closed', () => { if (globalSettingsWindow === win) globalSettingsWindow = null; });
-  win.once('ready-to-show', () => { if (!isQuitting && !screenLocked && !win.isDestroyed()) win.show(); });
+  win.once('ready-to-show', () => { if (!isQuitting && !screenLocked && !win.isDestroyed()) { positionFunctionWindow(win); win.show(); } });
   void win.loadFile(path.join(__dirname, 'global-settings.html')).catch(error => {
     writeError('全局设置', error); if (!win.isDestroyed()) win.destroy();
   });
@@ -1318,7 +1324,7 @@ function quotaGroupTransitionContext() {
   return JSON.stringify({pet,area,mode:p?.mode,side:p?.side,page:codexPageEpoch,appearance:settings.customization.appearance,
     config:input.config,eligible:input.eligible,metrics:input.eligible.map(id=>{const m=quotaCardControllers()[id]?.getLayoutMetrics?.();return [id,m?{width:m.width,height:m.height,inset:m.inset}:null]}),reduced:quotaReducedMotion()});
 }
-function resetQuotaCardDetails() { for(const c of Object.values(quotaCardControllers()))c?.resetExpanded?.(); }
+function resetQuotaCardDetails() { for(const [id,c] of Object.entries(quotaCardControllers())) { if(id==='weather'&&(c?.isExpanded?.()||c?.isClosing?.()))continue; c?.resetExpanded?.(); } }
 function showQuotaCardBar(state,keepBounds=quotaCardGroupTransition?.isActive(),transitioning=quotaCardBarTransitioning||quotaCardGroupTransition?.isActive()) { if (weatherWindow?.isExpanded?.()) { quotaCardGroupWindow?.hide(); return; } quotaCardGroupWindow?.show({...state,keepBounds,transitioning:transitioning===true}); }
 function syncQuotaCardGroup() {
   refreshSheepCapsuleInk();
@@ -4177,7 +4183,12 @@ async function bootstrap() {
     alwaysOnTop: settings.alwaysOnTop,
     onFollowStart: () => { if (edgeTuck?.getPresentation().side) edgeTuck.restore(); },
     onMoveEnd: persistWindowPosition,
-    onVisibilityChange: () => syncQuotaLabel(codexCompanion?.getSnapshot()),
+    onVisibilityChange: visible => {
+      // Native visibility must reach the uploaded-action gate before the next
+      // command; an unchanged cursor can otherwise defer activity for 1 second.
+      if (visible) activityMonitor?.sampleNow(true);
+      syncQuotaLabel(codexCompanion?.getSnapshot());
+    },
     onError: error => writeError('聊天面板', error) });
   chat = createChatCompanion({ store: createChatStore(path.join(app.getPath('userData'), 'chat.json')),
     workspaceDir: path.join(app.getPath('userData'), 'chat-workspace'),
@@ -4382,7 +4393,7 @@ async function bootstrap() {
     openTask: async id => {
       const result = await require('./lib/zcode-tasks').openZcodeTask(id);
       if (result?.opened || screenLocked || isQuitting) return;
-      const choice = await dialog.showMessageBox({ type: 'info', title: 'ZCode 任务',
+      const choice = await showPetMessageBox({ type: 'info', title: 'ZCode 任务',
         message: '当前 ZCode 版本暂不支持直接定位单个任务。', detail: '可以在 ZCode 中按任务名称查看。',
         buttons: ['打开 ZCode', '关闭'], defaultId: 0, cancelId: 1, noLink: true });
       if (choice.response === 0 && !screenLocked && !isQuitting) await shell.openPath('/Applications/ZCode.app');
@@ -4479,6 +4490,7 @@ async function bootstrap() {
   initializeCodexCompanion();
   createPetWindow();
   weatherWindow = createWeatherWindow({ BrowserWindow, ipcMain, screen, getReducedMotion: quotaReducedMotion, fetch: (...args) => net.fetch(...args),
+    getCollectionWindow: () => quotaCardGroupWindow?.getWindow?.(),
     alwaysOnTop: settings.alwaysOnTop, filePath: path.join(app.getPath('userData'), 'weather.json'), getPetWindow: () => petWindow,
     getStackAnchor: () => [quotaLabel?.getVisibleBounds?.(), apiUsageLabel?.getVisibleBounds?.(), zcodeLink?.getVisibleBounds?.(), workbuddyLabel?.getVisibleBounds?.(), apiBalanceLabel?.getVisibleBounds?.(), quotaCardGroupWindow?.getBounds?.()].filter(Boolean).sort((a,b) => b.y+b.height-a.y-a.height)[0] || null,
     getBubbleBounds: quotaObstacleBounds, getPresentation: () => ({ ...quotaLayoutPresentation(), quotaGroupHidden: Boolean(quotaCardCollected('weather') || quotaFreeStackPlan()?.hidden?.includes('weather')), quotaGroupLayout: quotaFreeStackPlan()?.cards.weather }),
