@@ -3323,6 +3323,31 @@ test('宣传已就绪后快速关闭不会被迟到首载检查误判，真正�
  }
 });
 
+test('隐藏窗新宣传请求不被旧hide或minimize事件取消，可见窗真正隐藏仍取消',async t=>{
+ for(const lateEvent of ['hide','minimize']){
+  const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization({promotion:true})');const win=f.call('customizationWindow');win.webContents.mainFrame={};win.emit('ready-to-show');
+  const ack=token=>f.call(`ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},${JSON.stringify(token)})`);
+  ack(f.call('customizationPromotion.token'));win.hide();f.call('openCustomization({promotion:true})');const next=f.call('customizationPromotion.token');
+  win.emit(lateEvent);assert.equal(f.call('customizationPromotion?.token'),next,'late '+lateEvent+' belongs to the previous hidden presentation');
+  ack(next);assert.equal(win.isVisible(),true,'new pending request can complete after the old native notification');
+  f.call('openCustomization({promotion:true})');const visibleRequest=f.call('customizationPromotion.token');win.hide();assert.equal(f.call('customizationPromotion'),null,'a genuine hide after a request from a visible window still cancels');ack(visibleRequest);assert.equal(win.isVisible(),false);
+ }
+});
+
+test('隐藏待就绪宣传请求仍尊重明确隐藏球球、锁屏与关闭，旧ACK不复显',async t=>{
+ for(const action of ['hidePet()','powerMonitor.emit("lock-screen")','customizationWindow.close()']){
+  const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization({promotion:true})');const win=f.call('customizationWindow');win.webContents.mainFrame={};win.emit('ready-to-show');const token=f.call('customizationPromotion.token');f.call('globalThis.oldPromotionSender=customizationWindow.webContents');
+  f.call(action);assert.equal(f.call('customizationPromotion'),null,action);
+  f.call(`ipcMain.emit('pet:promotion-ready',{sender:oldPromotionSender,senderFrame:oldPromotionSender.mainFrame},${JSON.stringify(token)})`);assert.equal(win.isDestroyed()||!win.isVisible(),true,'canceled intent cannot be revived by an old ACK');
+ }
+});
+
+test('旧装扮窗口迟到显隐通知不能取消替代窗口的宣传请求',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization({promotion:true})');const old=f.call('customizationWindow');old.destroy();f.call('openCustomization({promotion:true})');const current=f.call('customizationWindow'),token=f.call('customizationPromotion.token'),session=f.call('customizationSession');
+ for(const event of ['show','hide','minimize','restore'])old.emit(event);
+ assert.equal(f.call('customizationPromotion?.token'),token);assert.equal(f.call('customizationSession'),session);assert.equal(f.call('customizationWindow'),current);
+});
+
 test('普通装扮首次加载被宣传请求接管时native ready不提前露表单，ACK只认当前请求',async t=>{
  const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization()');const win=f.call('customizationWindow');win.webContents.mainFrame={};win.webContents.isLoading=()=>true;
  f.call('openCustomization({promotion:true})');const old=f.call('customizationPromotion.token');f.call('openCustomization({promotion:true})');win.emit('ready-to-show');assert.equal(win.isVisible(),false);

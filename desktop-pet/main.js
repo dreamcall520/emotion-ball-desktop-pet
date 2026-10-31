@@ -877,7 +877,8 @@ function showCustomizationPromotion(win) {
 }
 function requestCustomizationPromotion(win, created = false) {
   if (!customizationNativeReady.has(win)) customizationPromotionOnly.add(win);
-  const request = { owner: win, token: randomUUID(), ready: false, created };
+  const request = { owner: win, token: randomUUID(), ready: false, created,
+    hiddenWhenRequested: !win.isVisible() || win.isMinimized() };
   customizationPromotion = request;
   return request;
 }
@@ -914,10 +915,18 @@ function openCustomization(options = {}) {
   win.setMinimumSize(760 + outerWidth - contentWidth, 580 + outerHeight - contentHeight);
   customizationWindow = win;
   const promotion = options?.promotion === true ? requestCustomizationPromotion(win, true) : null;
-  for (const event of ['show', 'hide', 'minimize', 'restore']) win.on(event, syncCustomizationVisibility);
   for (const event of ['show', 'hide', 'minimize', 'restore']) win.on(event, () => {
+    if (customizationWindow === win && !win.isDestroyed()) syncCustomizationVisibility();
+  });
+  for (const event of ['show', 'hide', 'minimize', 'restore']) win.on(event, () => {
+    if (customizationWindow !== win || win.isDestroyed()) return;
     customizationSession++;
-    if (event === 'hide' || event === 'minimize') cancelCustomizationPromotion();
+    if (event === 'hide' || event === 'minimize') {
+      const request = customizationPromotion;
+      // macOS may deliver the previous hide after a new request has already
+      // started from a hidden window. That notification cannot cancel the new ACK.
+      if (request?.owner === win && !(request.hiddenWhenRequested && !request.ready)) cancelCustomizationPromotion();
+    }
   });
   positionFunctionWindow(win);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
