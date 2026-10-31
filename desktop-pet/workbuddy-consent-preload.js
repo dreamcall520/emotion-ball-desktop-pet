@@ -12,7 +12,7 @@ contextBridge.exposeInMainWorld('qiuqiuConsent', {
   onColorMode: callback => {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, mode, appearance, theme) => callback(mode === 'accessible' ? 'accessible' : 'standard',
-      ['light', 'dark'].includes(appearance) ? appearance : 'system', theme === 'blue' ? 'blue' : 'green');
+      ['light', 'dark'].includes(appearance) ? appearance : 'system', ['blue', 'purple'].includes(theme) ? theme : 'green');
     ipcRenderer.on('pet:color-mode', listener);
     return () => ipcRenderer.removeListener('pet:color-mode', listener);
   }

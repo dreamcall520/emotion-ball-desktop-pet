@@ -240,6 +240,19 @@ body { padding-top:38px; }
 /* Give navigation labels enough contrast against the pastel canvas. */
 :root { --nav-text:#536780; --nav-caption:#65768d; }
 :root[data-appearance=dark] { --nav-text:#bac9dc; --nav-caption:#a1b1c8; }
+/* Mint uses its own canvas and title palette, not the default blue/pink wash. */
+:root[data-ui-theme=green][data-color-mode=standard] {
+  --canvas:radial-gradient(ellipse at 0 16%,#d9f3e8 0,transparent 59%),radial-gradient(ellipse at 95% 70%,#e6f3de 0,transparent 62%),radial-gradient(ellipse at 35% 102%,#f5faf1 0,transparent 60%),#eff6f2;
+  --title-wash:linear-gradient(110deg,#4a8876 15%,#6ba58f 50%,#84a18a 88%);
+  --text:#33413e; --muted:#71807b; --line:#d4e3dc; --nav-text:#536f65; --nav-caption:#657d72;
+  --module-shadow:0 5px 18px #65887909; --module-line:#d4e3dc80;
+}
+:root[data-ui-theme=green][data-color-mode=standard][data-appearance=dark] {
+  --canvas:radial-gradient(ellipse at 0 16%,#213e35 0,transparent 59%),radial-gradient(ellipse at 95% 70%,#344633 0,transparent 62%),radial-gradient(ellipse at 35% 102%,#293d35 0,transparent 60%),#202b28;
+  --title-wash:linear-gradient(110deg,#9edac1 15%,#b5dcbc 50%,#c5deb0 88%);
+  --text:#edf5f0; --muted:#b1c5ba; --line:#45675a; --nav-text:#bad7c8; --nav-caption:#a2c0b0;
+  --sheet:#202b2825; --module:#2b3c34c9; --module-edge:#769a833d; --module-line:#779c8645;
+}
 :root[data-color-mode=accessible] { --nav-text:var(--text); --nav-caption:var(--text); }
 #navigation button { color:var(--nav-text); }
 #navigation button[aria-current=page],#navigation button:hover { color:var(--accent-text); }
