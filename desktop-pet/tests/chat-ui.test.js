@@ -937,3 +937,15 @@ test('WorkBuddy跳转专用聊天不改当前来源，授权入口preload只传�
   for (const provider of ['codex', 'zcode', 'workbuddy']) await api.openConnections(provider);
   assert.deepEqual(calls, [['pet:chat-open-connections', 'codex'], ['pet:chat-open-connections', 'zcode'], ['pet:chat-open-connections', 'workbuddy']]);
 });
+test('工具管理模型的聊天隐藏模型选择，禁用不支持的新聊天但保留发送',async()=>{
+ let news=0,models=0;const f=fixture({newChat:async()=>news++,setModel:async()=>models++});await flush();
+ f.receive({...stored(),source:'workbuddy',sources:[{id:'codex',enabled:true},{id:'workbuddy',enabled:true}],connection:'ready',models:[],modelsStatus:'provider-managed',modelSelectionMode:'provider-managed',canStartNewChat:false,capabilities:{modelSelection:false,newChat:false,historySelection:false}});
+ assert.equal(f.get('model-bar').hidden,true);assert.equal(f.get('chat-model').disabled,true);assert.equal(f.get('new-chat').disabled,true);assert.equal(f.get('chat-history').disabled,true);
+ f.get('new-chat').dispatch('click');f.get('confirm-new-chat').dispatch('click');assert.equal(news,0);assert.equal(models,0);
+ f.get('message-input').value='hello';f.get('message-input').dispatch('input');assert.equal(f.get('send-message').disabled,false);f.get('composer').dispatch('submit');await flush();assert.deepEqual(f.sent,['hello']);
+ f.receive(withModels());assert.equal(f.get('model-bar').hidden,false);
+});
+
+test('账号或连接身份变更时保留新聊天入口，但不能直接发送旧会话',async()=>{
+ const f=fixture();await flush();f.receive({...stored(),source:'zcode',sources:[{id:'zcode',enabled:true}],accountMismatch:true,canStartNewChat:true,connection:'error'});f.get('message-input').value='不得发到旧会话';f.get('message-input').dispatch('input');assert.equal(f.get('send-message').disabled,true);assert.equal(f.get('new-chat').disabled,false);await f.get('composer').dispatch('submit');assert.deepEqual(f.sent,[]);
+});

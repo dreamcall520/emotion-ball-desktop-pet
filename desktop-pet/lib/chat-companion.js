@@ -79,7 +79,7 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
   const ownedThreads = new Set([record, ...record.history].map(chat => chat.threadId).filter(Boolean));
 
   function snapshot() {
-    return { messages: verified ? record.messages.map(message => ({ ...message })) : [],
+    return { ...(record.accountKey&&accountKey&&record.accountKey!==accountKey?{accountMismatch:true}:{}),messages: verified ? record.messages.map(message => ({ ...message })) : [],
       busy: Boolean(active), connection, error, hasConversation: Boolean(record.threadId),
       canStartNewChat: hasChat(record) || Boolean(accountKey && record.accountKey && record.accountKey !== accountKey),
       modelSelection, models: verified ? models.map(model => ({ ...model, supportedReasoningEfforts: [...model.supportedReasoningEfforts] })) : [],

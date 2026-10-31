@@ -186,6 +186,11 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/lib/mas-bundled-codex.js',
     'desktop-pet/lib/mas-bundled-workbuddy.js',
     'desktop-pet/lib/zcode-direct-chat-rpc.js',
+    'desktop-pet/lib/zcode-public-templates.js',
+    'desktop-pet/lib/workbuddy-live-task.js',
+    'desktop-pet/lib/workbuddy-desktop-event-bridge.js',
+    'desktop-pet/lib/workbuddy-desktop-integration.js',
+    'desktop-pet/lib/workbuddy-cli-chat-companion.js',
     'desktop-pet/lib/mas-zcode-provider.js',
     'desktop-pet/lib/mas-workbuddy-provider.js',
     'desktop-pet/lib/workbuddy-relay-client.js',
@@ -355,6 +360,7 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'NOTICE.md'
   ];
   files.forEach(relativePath => copyFile(root, staging, relativePath));
+  for(const rel of require('../lib/workbuddy-desktop-integration').FILES)copyFile(root,staging,'desktop-pet/assets/workbuddy-desktop-hook/'+rel);
 
   fs.cpSync(path.join(root, 'node_modules/ws'), path.join(staging, 'node_modules/ws'), { recursive: true });
 

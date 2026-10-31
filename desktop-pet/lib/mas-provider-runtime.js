@@ -77,6 +77,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
   const quotaPorts = new Set();
   const chatServices = Object.fromEntries([...PROVIDERS].map(provider => [provider, { service: null, generation: 0, clients: new Set() }]));
   const chatPreferences=createDirectoryStorage(path.join(app.getPath('userData'),'store-chat-preferences'));
+  const chatEnabled={codex:false,zcode:false,workbuddy:false};
   const storage = createDirectoryStorage(path.join(app.getPath('userData'), 'store-directory-grants'));
   const access = diagnostic ? createDiagnosticDirectoryAccess({ dialog, storage, home:app.getPath('home') }) : createMasDirectoryAccess({ app, dialog, storage });
   const workbuddy = createMasWorkBuddyProvider({ BrowserWindow, session, shell, onLoginComplete:()=>{if(!closed)onManagedReady('workbuddy');}, onChange: () => { if (!closed) { for (const notify of quotaPorts) notify(); onChange(); } } });
@@ -84,6 +85,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
   const workbuddyOfficial=createWorkBuddyOfficialConnection({diagnostic,store:createWorkBuddyIntentStore(path.join(app.getPath('userData'),'workbuddy-official-send-intent.json')),openAuthorizationUrl:url=>shell.openExternal(url),onChange:()=>{if(!closed)onChange();}});
   const workbuddyCli=createWorkBuddyCliConnection({createClient:createWorkBuddyLocalCliClient,store:createWorkBuddyIntentStore(path.join(app.getPath('userData'),'workbuddy-cli-send-intent.json')),conversationStore:createWorkbuddyConversationStore(path.join(app.getPath('userData'),'workbuddy-cli-conversations')),onChange:()=>{if(!closed)onChange();}});
   const desktopTasks=createMasWorkBuddyTasks({directoryAccess:access});
+  const desktopIntegration=require('./workbuddy-desktop-integration').createWorkBuddyDesktopIntegration({root:path.join(app.getPath('userData'),'workbuddy-desktop-events'),assetRoot:path.join(__dirname,'../assets/workbuddy-desktop-hook'),onChange:()=>{if(!closed)onChange();}});
   let desktopCache={partitions:[],probe:null,report:null,error:null,accountAttributionVerified:false};
   async function probeWorkbuddyDesktop(){try{const probe=await desktopTasks.probe(),groups=await desktopTasks.listPartitions();desktopCache={...desktopCache,probe,partitions:groups.partitions,report:null,error:null};}catch(e){desktopCache={...desktopCache,report:null,error:['DIRECTORY_ACCESS_REQUIRED'].includes(e.code)?'请先授权原WorkBuddy任务目录。':'桌面任务缓存暂不能读取，或数据库格式未支持。'};}onChange();return desktopCache;}
   async function readWorkbuddyDesktop(partitionId){try{desktopCache={...desktopCache,report:await desktopTasks.read({partitionId}),error:null};}catch(e){desktopCache={...desktopCache,report:null,error:'所选缓存范围暂不能读取，请重新检查授权。'};}onChange();return desktopCache;}
@@ -121,7 +123,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
       zcode: { directory: zcodeDirectory.status, capabilities: zcode.getCapabilities(),
         serviceConfigured: Boolean(zcodeService), endpoint: zcodeService?.endpoint || null, accountSource:zcodeService?.accountSource || zcodeAccountSource,
         chat: zcodeService ? 'experimental-configured-unverified' : 'needs-experimental-local-service',
-        publicApiContractVerified: false }, workbuddy: workbuddy.getState(),workbuddyOfficial:workbuddyOfficial.getState(),workbuddyCli:workbuddyCli.getState(),workbuddyDesktop:{...structuredClone(desktopCache),directory:(await access.getStatus('workbuddy')).status} };
+        publicApiContractVerified: false }, workbuddy: workbuddy.getState(),workbuddyOfficial:workbuddyOfficial.getState(),workbuddyCli:workbuddyCli.getState(),workbuddyDesktopEvents:desktopIntegration.getState(),workbuddyDesktop:{...structuredClone(desktopCache),directory:(await access.getStatus('workbuddy')).status} };
   }
   async function importLocalService(provider) {
     if (!PROVIDERS.has(provider)) throw failure('INVALID_PROVIDER');
@@ -259,6 +261,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
     if(provider==='zcode'){
       const saved=await chatPreferences.load('zcode');if(saved?.accountSource==='configured-custom')zcodeAccountSource='configured-custom';
       if(zcodeAccountSource==='configured-custom'){
+        if((await access.getStatus('zcode')).status!=='stored')return{status:'needs-data-authorization',message:'读取已有模型配置需要你允许访问ZCode目录；无需填写地址或密钥。'};
         let rpc;try{rpc=require('./zcode-direct-chat-rpc').createZcodeDirectChatRpc({directoryAccess:access,workspaceDir:path.join(app.getPath('userData'),'zcode-chat-workspace'),accountSource:zcodeAccountSource,fetch});await rpc.start();await rpc.listModels();directZcodeEnabled=true;return{status:'ready',message:'使用已有自定义模型，按原API计费。'};}catch(e){directZcodeEnabled=false;return{status:'unavailable',message:e.code==='CODING_PLAN_SCOPE_UNSUPPORTED'?'此通道限定编程用途，尚不能用于球球聊天；不会切换到其他计费来源。':'已有模型配置不包含可直接连接的信息；不会改用其他账号或计费来源。'};}finally{await rpc?.close();}
       }
     }
@@ -323,7 +326,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
   function close() {
     if (closed) return runtimeClosing;
     closed = true; workbuddyEpoch++; managedAbort.abort();managedEpoch++; void managedLogin?.close();managedLogin=null;managedLoginUrl=null; workbuddy.close();workbuddyOfficial.close();desktopTasks.close(); quotaPorts.clear();
-    const closing = [workbuddyCli.close(),workbuddyAuthClient?.close(),managedWorkbuddy?.stop()];
+    const closing = [desktopIntegration.close(),workbuddyCli.close(),workbuddyAuthClient?.close(),managedWorkbuddy?.stop()];
     for (const slot of Object.values(chatServices)) {
       slot.service = null; slot.generation++;
       closing.push(...[...slot.clients].map(client => client.close()));
@@ -331,8 +334,11 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
     runtimeClosing = Promise.all(closing).then(() => undefined);
     return runtimeClosing;
   }
-  return { access, authorize, getState,prepareChat,prepareWorkbuddyChat,async disconnectWorkbuddyChat(){externalWorkbuddyService=false;workbuddyEpoch++;workbuddyAuthenticated=false;workbuddyAuthFlight=null;await workbuddyAuthClient?.close();workbuddyAuthClient=null;await workbuddyCli.disconnect();const handle=managedWorkbuddy;managedWorkbuddy=null;await handle?.stop();},getZcodeAccountSource:()=>chatServices.zcode.service?.accountSource||zcodeAccountSource,
-    async setZcodeAccountSource(source){if(!['official','configured-custom'].includes(source))throw failure('INVALID_INPUT');await chatPreferences.save('zcode',{accountSource:source});if(source===zcodeAccountSource)return;zcodeAccountSource=source;directZcodeEnabled=false;const slot=chatServices.zcode;slot.service=null;slot.generation++;await Promise.all([...slot.clients].map(client=>client.invalidate()));onChange();},
+  return { access, authorize, getState,prepareChat,prepareWorkbuddyChat,desktopIntegration,
+    async restoreChatPreferences(fallback={}){for(const provider of PROVIDERS){let saved;try{saved=await chatPreferences.load(provider);}catch(_){saved=null;}chatEnabled[provider]=typeof saved?.enabled==='boolean'?saved.enabled:fallback[provider]===true;}return{...chatEnabled};},
+    isChatEnabled:provider=>PROVIDERS.has(provider)&&chatEnabled[provider]===true,
+    async setChatEnabled(provider,enabled){if(!PROVIDERS.has(provider))throw failure('INVALID_PROVIDER');const old=await chatPreferences.load(provider);await chatPreferences.save(provider,{...(old||{}),enabled:enabled===true});chatEnabled[provider]=enabled===true;onChange();},async disconnectWorkbuddyChat(){externalWorkbuddyService=false;workbuddyEpoch++;workbuddyAuthenticated=false;workbuddyAuthFlight=null;await workbuddyAuthClient?.close();workbuddyAuthClient=null;await workbuddyCli.disconnect();const handle=managedWorkbuddy;managedWorkbuddy=null;await handle?.stop();},getZcodeAccountSource:()=>chatServices.zcode.service?.accountSource||zcodeAccountSource,
+    async setZcodeAccountSource(source){if(!['official','configured-custom'].includes(source))throw failure('INVALID_INPUT');const preference=await chatPreferences.load('zcode');await chatPreferences.save('zcode',{...(preference||{}),accountSource:source});if(source===zcodeAccountSource)return;zcodeAccountSource=source;directZcodeEnabled=false;const slot=chatServices.zcode;slot.service=null;slot.generation++;await Promise.all([...slot.clients].map(client=>client.invalidate()));onChange();},
     importCodexService: () => importLocalService('codex'), importZcodeService: () => importLocalService('zcode'),
     createCodexChatRpc: options => localChat('codex', options), createZcodeChatRpc: options => localChat('zcode', options),
     async ensureDirectory(provider,{interactive=true}={}) {

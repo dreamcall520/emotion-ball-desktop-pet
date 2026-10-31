@@ -1,0 +1,7 @@
+{
+  "name": "qiuqiu-local-review",
+  "owner": {"name": "Qiuqiu"},
+  "plugins": [
+    {"name": "qiuqiu-task-events", "source": "./plugins/qiuqiu-task-events", "description": "本机元数据联动审查草稿，尚未安装或启用"}
+  ]
+}

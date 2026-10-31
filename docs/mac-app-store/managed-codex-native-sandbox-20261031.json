@@ -1,0 +1,52 @@
+{
+  "diagnostic": "native App Sandbox inherited official Codex helper; not Electron MAS acceptance",
+  "baseline": {
+    "accountReply": true,
+    "authenticated": false,
+    "bundledHelperLaunched": true,
+    "helperExitCode": 0,
+    "initializeReply": true,
+    "invalidOutput": false,
+    "launchError": 0,
+    "loopbackBindAllowed": true,
+    "loopbackBindErrno": 0,
+    "modelRequests": 0,
+    "originalCredentialsRead": false,
+    "syntheticExternalFileReadable": true,
+    "timedOut": false
+  },
+  "withoutNetworkServer": {
+    "accountReply": true,
+    "authenticated": false,
+    "bundledHelperLaunched": true,
+    "helperExitCode": 0,
+    "initializeReply": true,
+    "invalidOutput": false,
+    "launchError": 0,
+    "loopbackBindAllowed": false,
+    "loopbackBindErrno": 1,
+    "modelRequests": 0,
+    "originalCredentialsRead": false,
+    "syntheticExternalFileReadable": false,
+    "timedOut": false
+  },
+  "withNetworkServer": {
+    "accountReply": true,
+    "authenticated": false,
+    "bundledHelperLaunched": true,
+    "helperExitCode": 0,
+    "initializeReply": true,
+    "invalidOutput": false,
+    "launchError": 0,
+    "loopbackBindAllowed": true,
+    "loopbackBindErrno": 0,
+    "modelRequests": 0,
+    "originalCredentialsRead": false,
+    "syntheticExternalFileReadable": false,
+    "timedOut": false
+  },
+  "originalHelperUnchanged": true,
+  "modelRequests": 0,
+  "originalCredentialsRead": false,
+  "expectedBoundaryObserved": true
+}

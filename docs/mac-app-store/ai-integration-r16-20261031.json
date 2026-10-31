@@ -1,0 +1,54 @@
+{
+  "date": "2026-10-31",
+  "candidate": "R16",
+  "branch": "feature/mac-app-store",
+  "runtime": "darwin-arm64",
+  "appSandbox": false,
+  "tests": {
+    "passed": 3006,
+    "failed": 0
+  },
+  "package": {
+    "sourceFilesVerified": 484,
+    "helperDigestsVerified": true,
+    "strictAdhocSignatureVerified": true
+  },
+  "zcode": {
+    "route": "configured-custom-direct-anthropic",
+    "model": "kimi-k3",
+    "initialReply": "ZCode 免配置连接成功",
+    "restartFollowupReply": "ZCode 免配置连接成功",
+    "externalServiceRequired": false,
+    "officialPlanAvailable": false,
+    "officialAccountChatValidated": false
+  },
+  "workbuddy": {
+    "unifiedDedicatedChatReply": "WorkBuddy 实时联动成功",
+    "plugin": "qiuqiu-task-events",
+    "pluginVersion": "0.2.0",
+    "originalDesktopInstallVerifiedByNativeUI": true,
+    "enabledVerifiedByDisableMenu": true,
+    "originalDesktopSyntheticMessagesSent": 1,
+    "originalDesktopSyntheticReply": "球球插件连接成功",
+    "originalDesktopUIResult": "已完成 13s",
+    "receiverNativeUI": "会话已打开；主回复已完成（不代表后台任务全部结束）",
+    "mainReplyTerminalVerified": true,
+    "overallBackgroundTaskCompletionVerified": false,
+    "originalChatBodiesExported": false,
+    "pluginFirstInstallStillManual": true
+  },
+  "apple": {
+    "userReportsPaidMembership": true,
+    "lastPortalObservation": "pending",
+    "xcodeCurrentTeam": "Personal Team",
+    "validSigningIdentities": 0,
+    "actualElectronMasRuntimeValidated": false,
+    "uploaded": false
+  },
+  "release": {
+    "formalAppReplaced": false,
+    "pushed": false,
+    "merged": false,
+    "submitted": false
+  }
+}

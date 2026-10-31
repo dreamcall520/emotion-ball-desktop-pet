@@ -151,9 +151,17 @@ if (process.versions.electron && process.argv.includes('--store-renderer-child')
       assert.equal(await run(`fixtureCalls.findLast(call => call.action === 'enable-provider' && call.payload.provider === 'zcode').payload.accountSource`), 'configured-custom');
       assert.equal(await calls('send-workbuddy-cli'), beforeReview, 'enabling a provider never submits chat');
       await set({ onboarding: { codex: { status: 'partial', message: '额度已连接', chat: { status: 'unavailable', message: '聊天能力待接入，无需配置服务。' } } }, codex: { ...base.codex, serviceConfigured: false } });
-      assert.equal(await run('document.getElementById("codex-status").textContent'), '部分已连接');
+      assert.equal(await run('document.getElementById("codex-status").textContent'), '聊天未就绪');
       assert.match(await run('document.getElementById("codex-detail").textContent'), /额度已连接.*聊天能力待接入/);
       assert.equal(await run(`document.querySelector('button[data-action="open-provider-chat"][data-provider="codex"]').disabled`), true);
+      assert.equal(await run(`document.querySelectorAll('button[data-action="enable-provider-data"]').length`), 3);
+      await set({onboarding:{codex:{status:'ready',message:'聊天已连接',chat:{status:'ready'},data:{status:'needs-authorization',message:'任务与额度可选授权'}}}});
+      assert.equal(await run('document.getElementById("codex-status").textContent'),'聊天已连接');
+      assert.equal(await run('document.getElementById("codex-data-state").textContent'),'任务与额度可选授权');
+      await run(`document.querySelector('button[data-action="enable-provider-data"][data-provider="codex"]').click()`); await settle();
+      assert.deepEqual(await run(`fixtureCalls.filter(call=>call.action==='enable-provider-data').at(-1)`),{action:'enable-provider-data',payload:{provider:'codex'}});
+      await set({onboarding:{zcode:{status:'partial',chat:{status:'needs-data-authorization'},data:{status:'needs-authorization',message:'需要读取已有配置'}}}});
+      assert.equal(await run(`document.querySelector('button[data-action="enable-provider-data"][data-provider="zcode"]').textContent`),'读取已有模型配置');
       await set({ onboarding: { codex: { status: 'working', message: '等待系统授权', chat: { status: 'unavailable' } } } });
       assert.equal(await run(`document.querySelector('button[data-action="enable-provider"][data-provider="codex"]').disabled`), true);
       assert.equal(await run(`document.querySelector('button[data-action="enable-provider"][data-provider="codex"]').textContent`), '正在连接…');
@@ -165,6 +173,23 @@ if (process.versions.electron && process.argv.includes('--store-renderer-child')
       await run(`fixtureFocus('../codex')`);
       assert.equal(await run('document.activeElement.dataset.provider'), 'workbuddy');
       assert.equal(await calls('enable-provider'), beforeFocus, 'focus never triggers authorization');
+      for(const [live,expected] of [
+        [{state:'active',phase:'starting'},'本次回复正在开始'],
+        [{state:'active',phase:'running'},'本次回复正在进行'],
+        [{state:'active',phase:'cancelling'},'已请求停止，等待确认'],
+        [{state:'completed',phase:'terminal'},'本次回复已完成'],
+        [{state:'interrupted',phase:'terminal'},'本次回复已中断'],
+        [{state:'failed',phase:'terminal'},'本次请求失败'],
+        [{state:'unknown',phase:'unknown'},'本次回复状态未知，未确认结束']]){
+        await set({workbuddyCli:{...base.workbuddyCli,configured:true,connected:true,liveTask:live,tasks:[{name:'old historical entry',state:'pending'}]}});
+        assert.equal((await run("document.getElementById('workbuddy-cli-live-task').textContent")).startsWith(expected),true);
+        assert.equal((await run("document.getElementById('workbuddy-cli-tasks').textContent")).includes('历史记录：pending'),true);
+      }
+      assert.equal((await run("document.getElementById('workbuddy-cli-tasks').closest('details').querySelector('summary').textContent")).includes('非当前回复状态'),true);
+      await set({workbuddyDesktopEvents:{enabled:true,observations:[{state:'completed',phase:'final-stop-observed',terminalConfirmed:true,terminalKind:'main-reply',realtime:true}]}});
+      assert.equal((await run("document.getElementById('workbuddy-desktop-events-state').textContent")).includes('主回复已完成（不代表后台任务全部结束）'),true);
+      await set({workbuddyDesktopEvents:{enabled:true,observations:[{state:'unknown',phase:'final-stop-observed',terminalConfirmed:false,realtime:true}]}});
+      assert.equal((await run("document.getElementById('workbuddy-desktop-events-state').textContent")).includes('本轮终态尚未确认'),true);
       assert.equal(window.isVisible(), false);
       console.log('PASS 7 real Chromium store connection scenarios; synthetic state/commands only');
       window.destroy(); app.exit(0);

@@ -164,9 +164,10 @@ test('权限模板仅包含所需主权限，child为sandbox+inherit，没有临
   const permissionRoot = path.join(__dirname, '../packaging/mas');
   const main = plist.parse(fs.readFileSync(path.join(permissionRoot, 'main.entitlements.plist'), 'utf8'));
   const child = plist.parse(fs.readFileSync(path.join(permissionRoot, 'child.entitlements.plist'), 'utf8'));
-  assert.deepEqual(Object.keys(main).sort(), ['com.apple.security.app-sandbox', 'com.apple.security.files.bookmarks.app-scope', 'com.apple.security.files.user-selected.read-write', 'com.apple.security.network.client', 'com.apple.security.personal-information.location'].sort());
+  assert.deepEqual(Object.keys(main).sort(), ['com.apple.security.app-sandbox', 'com.apple.security.files.bookmarks.app-scope', 'com.apple.security.files.user-selected.read-write', 'com.apple.security.network.client', 'com.apple.security.network.server', 'com.apple.security.personal-information.location'].sort());
   assert.deepEqual(child, { 'com.apple.security.app-sandbox': true, 'com.apple.security.inherit': true });
-  assert.equal(Object.keys(main).some(key => /temporary|camera|microphone|network.server|disable-library-validation/.test(key)), false);
+  assert.equal(main['com.apple.security.network.server'],true,'required for fixed-loopback bundled service and official login callback; native probe verifies denial without it');
+  assert.equal(Object.keys(main).some(key => /temporary|camera|microphone|disable-library-validation/.test(key)), false);
 });
 
 test('x64参数在匹配的Intel构建host上进入同一MAS链路，不降级Darwin', async t => {

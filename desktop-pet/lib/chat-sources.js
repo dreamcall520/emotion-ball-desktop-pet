@@ -3,7 +3,8 @@ function createChatSources({ codex, createZcode, isZcodeEnabled = () => false,
   const enabled = id => id === 'codex' || (id === 'zcode' ? isZcodeEnabled() : id === 'workbuddy' && isWorkbuddyEnabled());
   let source = ['zcode', 'workbuddy'].includes(initialSource) && enabled(initialSource) ? initialSource : 'codex';
   let zcode = null, workbuddy = null, closed = false, switching = false, transition = 0;
-  const current = () => source === 'zcode' ? (zcode ||= createZcode()) : source === 'workbuddy' ? (workbuddy ||= createWorkbuddy()) : codex;
+  const companion = id => id === 'zcode' ? (zcode ||= createZcode()) : id === 'workbuddy' ? (workbuddy ||= createWorkbuddy()) : codex;
+  const current=()=>companion(source);
   const sources = () => [{ id: 'codex', label: 'Codex', enabled: true },
     { id: 'zcode', label: 'ZCode', enabled: isZcodeEnabled() },
     { id: 'workbuddy', label: 'WorkBuddy', enabled: isWorkbuddyEnabled() }];
@@ -39,7 +40,9 @@ function createChatSources({ codex, createZcode, isZcodeEnabled = () => false,
     try { await previous?.close(); }
     finally { if (transition === token) { switching = false; sourceChanged(source); } }
   }
-  const result = { getState, sourceChanged, selectSource, zcodeDisabled: () => sourceDisabled('zcode'), workbuddyDisabled: () => sourceDisabled('workbuddy'),
+  const result = { getState, sourceChanged, selectSource,
+    async connectSource(id){if(closed||!['codex','zcode','workbuddy'].includes(id)||!enabled(id))return{accepted:false};await companion(id).connect();return{accepted:true};},
+    getSourceState:id=>['codex','zcode','workbuddy'].includes(id)?companion(id).getState():null, zcodeDisabled: () => sourceDisabled('zcode'), workbuddyDisabled: () => sourceDisabled('workbuddy'),
     ownsThread: id => codex.ownsThread(id),
     close() {
       closed = true; transition++;

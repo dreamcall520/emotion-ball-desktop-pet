@@ -1,0 +1,30 @@
+{
+  "checkedAt": "2026-10-31",
+  "installedDesktopVersion": "5.9.3",
+  "readScope": "public packaged program resources only; no user profile/messages/credentials",
+  "uiInstalled": false,
+  "pluginEnabled": false,
+  "receiverConfigured": false,
+  "checks": [
+    {
+      "file": "package.json",
+      "sha256": "e2538c1e91d5db78bf21337ea9b4d24eb591a995ae629d2d65876c221027de61"
+    },
+    {
+      "file": "renderer/assets/src-H1vEVvKJ.js",
+      "sha256": "8e634c5d012d0df6f8e7431421e0a390ea2da67aa3c7416174e531ec11f1cc0c"
+    },
+    {
+      "file": "renderer/assets/plugins-DRJALwSU.js",
+      "sha256": "ba78be78e802c3e0fe44eef3dacf0b10c6b0e8b8de5d13511a9cb993a8ddcae9"
+    },
+    {
+      "file": "main/server.js",
+      "sha256": "a471fc017f34ac8d18b7cdea7e0072232e476543b4244c9649556c690be07bba"
+    },
+    {
+      "file": "cli/dist/codebuddy-lite-wb.mjs",
+      "sha256": "5cebda9a075c17a5eefa302342a5b2e1c236455cee05b09fac11244600f91465"
+    }
+  ]
+}

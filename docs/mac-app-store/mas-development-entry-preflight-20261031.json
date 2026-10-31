@@ -1,0 +1,47 @@
+{
+  "date": "2026-10-31",
+  "plan": {
+    "mode": "plan",
+    "platform": "mas",
+    "purpose": "development-sandbox-validation",
+    "arch": "arm64",
+    "version": "0.4.9",
+    "electronVersion": "43.4.1",
+    "configured": {
+      "MAS_DEV_BUNDLE_ID": false,
+      "MAS_DEV_TEAM_ID": false,
+      "MAS_DEV_PROFILE": false,
+      "MAS_DEV_SIGN_IDENTITY": false,
+      "MAS_DEV_BUILD_VERSION": false,
+      "MAS_DEV_ELECTRON_ZIP_DIR": false
+    },
+    "missingConfiguration": [
+      "MAS_DEV_BUNDLE_ID",
+      "MAS_DEV_TEAM_ID",
+      "MAS_DEV_PROFILE",
+      "MAS_DEV_SIGN_IDENTITY",
+      "MAS_DEV_BUILD_VERSION",
+      "MAS_DEV_ELECTRON_ZIP_DIR"
+    ],
+    "configurationErrors": [],
+    "configurationReady": false,
+    "identityValidated": false,
+    "profileValidated": false,
+    "currentDeviceRegistered": false,
+    "cachedMasRuntimeValidated": false,
+    "runtimeSandboxValidated": false,
+    "submissionReady": false,
+    "note": "Plan only. No keychain/profile/device/cache read, runtime download, signing, certificate creation or upload."
+  },
+  "missingConfigurationBuild": {
+    "exitCode": 2,
+    "error": "MAS_DEV_CONFIGURATION_REQUIRED",
+    "nativeSigningCommandsRun": false,
+    "realPackageProduced": false
+  },
+  "tests": {
+    "syntheticPassed": 9,
+    "actualCertificateOrProfileValidationPerformed": false,
+    "actualMasRuntimeValidationPerformed": false
+  }
+}

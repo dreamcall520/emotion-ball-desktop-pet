@@ -1,0 +1,9 @@
+{
+  "name": "qiuqiu-task-events",
+  "version": "0.2.0",
+  "description": "球球本机元数据联动候选：只导出会话标识与Hook阶段；FinalStop按白名单原因确认主回复终态，不代表全部后台任务结束。",
+  "author": {
+    "name": "Qiuqiu"
+  },
+  "hooks": "./hooks/hooks.json"
+}

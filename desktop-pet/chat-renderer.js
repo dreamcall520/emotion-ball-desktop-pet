@@ -155,7 +155,9 @@
 
   function renderModels() {
     const bar = byId('model-bar');
-    bar.hidden = historyOpen;
+    bar.hidden = historyOpen || snapshot.modelSelectionMode==='provider-managed' || snapshot.capabilities?.modelSelection===false;
+    byId('model-feedback').hidden=bar.hidden;
+    if(bar.hidden){closeModelMenu(false);modelSelect.disabled=true;return;}
     const models = availableModels();
     const selected = modelSaving || modelSelection();
     const status = snapshot.modelsStatus || 'idle';
@@ -277,7 +279,7 @@
     byId('composer').hidden = historyOpen;
     byId('privacy-note').hidden = historyOpen;
     historyButton.setAttribute('aria-expanded', String(historyOpen));
-    historyButton.disabled = pending;
+    historyButton.disabled = pending || snapshot.capabilities?.historySelection===false;
     byId('history-back').disabled = pending;
     byId('history-browse').hidden = confirmingNew;
     byId('new-chat-confirmation').hidden = !confirmingNew;
@@ -285,8 +287,8 @@
     byId('confirm-new-chat').disabled = changeBlocked() || !hasCurrentChat();
     // Keep the action before History even when this is already an empty draft.
     newButton.hidden = false;
-    newButton.disabled = changeBlocked() || !hasCurrentChat() || confirmingNew;
-    newButton.title = !hasCurrentChat() ? '当前已是新聊天，直接发送第一句话即可。'
+    newButton.disabled = snapshot.capabilities?.newChat===false || changeBlocked() || !hasCurrentChat() || confirmingNew;
+    newButton.title = snapshot.capabilities?.newChat===false ? '当前仅支持继续这段专用聊天，已有记录已保留。' : !hasCurrentChat() ? '当前已是新聊天，直接发送第一句话即可。'
       : snapshot.busy || snapshot.connection === 'connecting' ? '等当前回复或连接完成后，再开始新聊天。'
         : '新聊天';
     byId('history-hint').textContent = snapshot.busy || snapshot.connection === 'connecting'
@@ -362,7 +364,7 @@
   function refreshControls() {
     const busy = Boolean(snapshot.busy);
     sendButton.hidden = busy;
-    sendButton.disabled = changeBlocked() || sourceNeedsAuthorization() || !input.value.trim() || input.value.length > 2000;
+    sendButton.disabled = changeBlocked() || snapshot.accountMismatch===true || sourceNeedsAuthorization() || !input.value.trim() || input.value.length > 2000;
     stopButton.hidden = !busy;
     stopButton.disabled = stopping;
     byId('stop-message-label').textContent = stopping ? '正在停止…' : '停止';
@@ -460,7 +462,7 @@
   }
 
   async function send() {
-    if (changeBlocked() || sourceNeedsAuthorization() || composing || historyOpen) return;
+    if (changeBlocked() || snapshot.accountMismatch===true || sourceNeedsAuthorization() || composing || historyOpen) return;
     const draft = input.value;
     const text = draft.trim();
     if (!text || draft.length > 2000) return;
@@ -657,7 +659,7 @@
     await changeChat(() => api.selectChat(id), '暂时无法打开这段聊天，请稍后再试。');
   }
   historyButton.addEventListener('click', () => {
-    if (pending) return;
+    if (pending || snapshot.capabilities?.historySelection===false) return;
     if (historyOpen) closeHistory();
     else {
       historyOpen = true;
@@ -667,7 +669,7 @@
   });
   byId('history-back').addEventListener('click', closeHistory);
   newButton.addEventListener('click', () => {
-    if (changeBlocked() || !hasCurrentChat() || confirmingNew) return;
+    if (snapshot.capabilities?.newChat===false || changeBlocked() || !hasCurrentChat() || confirmingNew) return;
     newChatFromHistory = historyOpen;
     historyOpen = true;
     confirmingNew = true;
@@ -677,7 +679,7 @@
   });
   byId('cancel-new-chat').addEventListener('click', cancelNewChat);
   byId('confirm-new-chat').addEventListener('click', () => {
-    if (!confirmingNew || !historyOpen || !hasCurrentChat()) return;
+    if (snapshot.capabilities?.newChat===false || !confirmingNew || !historyOpen || !hasCurrentChat()) return;
     return changeChat(() => api.newChat(), '暂时无法开始新聊天，请稍后再试。');
   });
   retryButton.addEventListener('click', () => {

@@ -1,0 +1,22 @@
+{
+  "date": "2026-10-31",
+  "repository": "https://github.com/zai-org/ZCode",
+  "commit": "a60ba6a7e5a06742270ca605f5d2cc2766afa7e1",
+  "version": "3.17.1",
+  "license": "Apache-2.0",
+  "sourceCache": "/tmp/qiuqiu-zcode-official-source-20261031",
+  "buildCommand": "pnpm --filter '@zcode/cli...' build",
+  "buildSucceeded": true,
+  "hostNode": "26.7.0",
+  "upstreamSpecifiedNode": "24.14.0",
+  "target": "node22",
+  "cliBytes": 30472168,
+  "cliSha256": "2e4e7743111a79463440aacd1ba8c5df03a30608b977cb91ba2da048adc3e29f",
+  "isolatedHelpProbe": {
+    "status": 0,
+    "helpAvailable": true,
+    "loginCommand": true,
+    "modelCalls": 0
+  },
+  "productionOrSandboxVerified": false
+}

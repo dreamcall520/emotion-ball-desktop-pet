@@ -21,9 +21,11 @@
     for(const provider of ['codex','zcode','workbuddy']){
       const onboarding=lastState?.onboarding?.[provider];
       const open=document.querySelector('button[data-action="open-provider-chat"][data-provider="'+provider+'"]');
-      if(open)open.disabled=!(onboarding?['ready','needs-model'].includes(onboarding.chat?.status):lastState?.[provider]?.serviceConfigured);
+      if(open)open.disabled=!(onboarding?['ready','needs-model','needs-new-chat'].includes(onboarding.chat?.status):lastState?.[provider]?.serviceConfigured);
       const enable=document.querySelector('button[data-action="enable-provider"][data-provider="'+provider+'"]');
       if(enable)enable.disabled=onboarding?.status==='working';
+      const data=document.querySelector('button[data-action="enable-provider-data"][data-provider="'+provider+'"]');
+      if(data)data.disabled=onboarding?.data?.status==='working';
     }
     for(const [action,value]of Object.entries(enabled)){const button=document.querySelector('button[data-action="'+action+'"]');if(button)button.disabled=!value;}
   }
@@ -57,9 +59,19 @@
     const cli=state.workbuddyCli;
     if(cli){
       el('workbuddy-cli-state').textContent=(cli.connected?'球球专用聊天已连接':cli.gatewayReachable?'正在核对聊天连接':cli.configured?'聊天尚未连接':'聊天尚未就绪，请点击启用授权')+' · 不包含原 WorkBuddy 桌面任务'+(cli.error?' · '+cli.error:'')+(cli.sendOutcome==='complete'?' · 本次回复已完成':'');
-      el('workbuddy-cli-tasks').replaceChildren(...[...cli.tasks.map(t=>(t.name||'专用会话任务')+' · '+t.state),...cli.sessions.map(t=>(t.name||'专用会话')+' · '+(t.state||'未知'))].map(text=>{const li=document.createElement('li');li.textContent=text;return li;}));
+      const live=cli.liveTask;
+      const liveLabels={completed:'本次回复已完成',interrupted:'本次回复已中断',refused:'本次请求被拒绝',failed:'本次请求失败',unknown:'本次回复状态未知，未确认结束'};
+      const activeLabels={starting:'本次回复正在开始',running:'本次回复正在进行',cancelling:'已请求停止，等待确认'};
+      el('workbuddy-cli-live-task').textContent=live?(live.state==='active'?(activeLabels[live.phase]||'本次回复正在进行'):liveLabels[live.state]||'本次回复状态未知')+' · 仅球球专用会话，非原桌面任务':'尚无本次回复状态';
+      el('workbuddy-cli-tasks').replaceChildren(...[...cli.tasks.map(t=>(t.name||'专用会话任务')+' · 历史记录：'+t.state),...cli.sessions.map(t=>(t.name||'专用会话')+' · 历史记录：'+(t.state||'未知'))].map(text=>{const li=document.createElement('li');li.textContent=text;return li;}));
       el('workbuddy-cli-messages').replaceChildren(...cli.messages.map(m=>{const p=document.createElement('p');p.textContent=(m.role==='user'?'你：':'WorkBuddy：')+m.text;return p;}));
       el('workbuddy-cli-review').hidden=cli.sendOutcome!=='unknown';
+    }
+    const desktopEvents=state.workbuddyDesktopEvents;if(desktopEvents){
+      const phases={'submitted':'已提交输入','session-opened':'会话已打开','stop-observed':'观察到停止候选，最终状态待确认','final-stop-observed':'观察到最终停止，原因或轮次待确认','failure-observed':'观察到失败事件','session-ended':'会话结束事件'};
+      const terminals={completed:'主回复已完成（不代表后台任务全部结束）',interrupted:'主回复已中断',failed:'主回复失败'};
+      const describe=row=>row.terminalConfirmed&&row.terminalKind==='main-reply'?(row.realtime===false?'上次':'')+(terminals[row.state]||'主回复终态待确认'):row.state==='unknown'?(row.realtime===false?'状态已过期，待新事件':'本轮终态尚未确认'):phases[row.phase]||'观察到事件';
+      el('workbuddy-desktop-events-state').textContent=desktopEvents.error||(desktopEvents.enabled?desktopEvents.observations?.length?desktopEvents.observations.map(describe).join('；'):'接收已开启，等待本人启用插件后的元数据事件。':'尚未启用，不接收原桌面事件。');
     }
     const o=state.workbuddyOfficial;
     if(o){
@@ -77,10 +89,13 @@
       const button=document.querySelector('button[data-action="enable-provider"][data-provider="'+provider+'"]');
       if(button)button.textContent=onboarding?.status==='working'?'正在连接…':onboarding?.status==='ready'?'重新连接':['partial','cancelled','error'].includes(onboarding?.status)?'继续连接':'启用授权';
       if(onboarding){
-        const statusLabels={idle:'未连接',working:'正在连接',partial:'部分已连接',ready:'已连接',cancelled:'连接未完成',error:'连接未完成'};
+        const statusLabels={idle:'未连接',working:'正在连接',partial:'聊天未就绪',ready:'聊天已连接',cancelled:'连接未完成',error:'连接未完成'};
         el(provider+'-status').textContent=statusLabels[onboarding.status]||'未连接';
         const messages=[onboarding.message,onboarding.chat?.message].filter(Boolean);
         if(messages.length)el(provider+'-detail').textContent+=' · '+[...new Set(messages)].join(' · ');
+        const dataButton=document.querySelector('button[data-action="enable-provider-data"][data-provider="'+provider+'"]');
+        if(dataButton)dataButton.textContent=onboarding.chat?.status==='needs-data-authorization'?'读取已有模型配置':onboarding.data?.status==='working'?'正在连接原工具数据…':onboarding.data?.status==='ready'?'刷新原工具任务与额度':'连接原工具任务与额度（可选）';
+        el(provider+'-data-state').textContent=onboarding.data?.message||'原工具任务与额度尚未授权，不影响聊天。';
       }
     }
     availability();

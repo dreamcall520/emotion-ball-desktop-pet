@@ -6,33 +6,33 @@
 <title>球球 · 工具连接</title><link rel="stylesheet" href="store-connections.css">
 </head>
 <body><main>
-<header><span class="eyebrow">球球 · 工具连接</span><h1>点一下，连接你的 AI 工具</h1><p>球球自动检测和连接；首次使用时，只需按提示完成官方登录或系统授权。</p><p id="mode"></p></header>
+<header><span class="eyebrow">球球 · 工具连接</span><h1>点一下，连接你的 AI 工具</h1><p>聊天只需完成官方登录；想看原工具的任务与额度时，再按需授权。</p><p id="mode"></p></header>
 <section>
 <div class="heading"><h2>Codex</h2><span id="codex-status" class="badge">未连接</span></div>
-<p>查看原工具额度与任务；聊天在球球内完成一次官方登录。</p>
+<p>在球球内完成一次官方登录即可聊天，无需先安装或授权原工具目录。</p>
 <div class="buttons"><button data-action="enable-provider" data-provider="codex" class="primary">启用授权</button><button data-action="open-provider-chat" data-provider="codex" class="secondary">和 Codex 聊聊</button></div>
-<p id="codex-detail" class="detail"></p>
+<p id="codex-detail" class="detail"></p><div class="optional-data"><button data-action="enable-provider-data" data-provider="codex" class="secondary">连接原工具任务与额度（可选）</button><p id="codex-data-state" class="detail">尚未授权，不影响聊天</p></div>
 <details class="connection-details"><summary>连接说明与授权管理</summary><small>额度与任务来自你授权的工具目录；聊天使用球球内官方登录的账号，可能与原工具不同。缺少明确运行证据的历史任务会显示为未知。</small><div class="buttons"><button data-action="revoke-provider" data-provider="codex" class="secondary">解除授权</button></div></details>
 </section>
 <section>
 <div class="heading"><h2>ZCode</h2><span id="zcode-status" class="badge">未连接</span></div>
-<p>查看账号套餐和任务信息，连接你选择的聊天模型。</p>
+<p>使用你选择的账号和模型聊天；读取已有模型配置时才申请相应目录权限。</p>
 <label for="zcode-account-source">聊天方式</label><select id="zcode-account-source"><option value="official">官方套餐</option><option value="configured-custom">已有自定义模型（原 API 计费）</option></select>
 <div class="buttons"><button data-action="enable-provider" data-provider="zcode" class="primary">启用授权</button><button data-action="open-provider-chat" data-provider="zcode" class="secondary">和 ZCode 聊聊</button></div>
-<p id="zcode-detail" class="detail"></p>
+<p id="zcode-detail" class="detail"></p><div class="optional-data"><button data-action="enable-provider-data" data-provider="zcode" class="secondary">连接原工具任务与额度（可选）</button><p id="zcode-data-state" class="detail">尚未授权，不影响聊天</p></div>
 <details class="connection-details"><summary>计费说明与授权管理</summary><small>官方套餐和已有自定义模型分别接入，失败不会自动切换。自定义模型按原 API 计费；连接成功后，发送消息才会产生相应使用量。</small><div class="buttons"><button data-action="revoke-provider" data-provider="zcode" class="secondary">解除授权</button></div></details>
 </section>
 <section>
 <div class="heading"><h2>WorkBuddy</h2><span id="workbuddy-status" class="badge">未连接</span></div>
-<p>查看积分与历史任务，连接球球专用聊天。</p>
-<div class="buttons"><button data-action="enable-provider" data-provider="workbuddy" class="primary">启用授权</button></div>
-<p id="workbuddy-detail" class="detail"></p><button id="workbuddy-quota-login" data-action="workbuddy-login" class="secondary">授权官网积分（可选）</button>
-<div class="official-assistant"><h3>和 WorkBuddy 聊聊</h3><p id="workbuddy-cli-state" class="detail">聊天尚未连接</p><small>这里是球球专用会话，不接管已有 WorkBuddy 桌面聊天；需要工具审批时，请本人处理。</small><ul id="workbuddy-cli-tasks"></ul>
+<p>完成官方登录即可开始专用聊天；积分和原桌面历史任务可选授权。</p>
+<div class="buttons"><button data-action="enable-provider" data-provider="workbuddy" class="primary">启用授权</button><button data-action="open-provider-chat" data-provider="workbuddy" class="secondary">和 WorkBuddy 聊聊</button></div>
+<p id="workbuddy-detail" class="detail"></p><div class="optional-data"><button data-action="enable-provider-data" data-provider="workbuddy" class="secondary">连接原工具任务与额度（可选）</button><p id="workbuddy-data-state" class="detail">尚未授权，不影响聊天</p></div><button id="workbuddy-quota-login" data-action="workbuddy-login" class="secondary">授权官网积分（可选）</button>
+<div class="official-assistant"><h3>和 WorkBuddy 聊聊</h3><p id="workbuddy-cli-state" class="detail">聊天尚未连接</p><small>这里是球球专用会话，不接管已有 WorkBuddy 桌面聊天；需要工具审批时，请本人处理。</small><p id="workbuddy-cli-live-task" class="detail" aria-live="polite">尚无本次回复状态</p><details class="connection-details"><summary>专用会话历史记录（非当前回复状态）</summary><small>以下由服务返回的历史条目不代表当前回复是否仍在进行；当前回复以实时状态为准。</small><ul id="workbuddy-cli-tasks"></ul></details>
 <label for="workbuddy-cli-text">消息</label><textarea id="workbuddy-cli-text" maxlength="8000" rows="3" placeholder="连接完成后，输入你想聊的内容"></textarea>
 <div class="buttons"><button data-action="send-workbuddy-cli">发送</button><button data-action="cancel-workbuddy-cli" class="secondary">停止本次回复</button><button id="workbuddy-cli-review" data-action="review-workbuddy-cli-unknown" hidden>我已核对本次会话结果</button></div><div id="workbuddy-cli-messages" aria-live="polite"></div></div>
 <details class="connection-details"><summary>查看原桌面历史任务</summary><p id="workbuddy-desktop-state" class="detail">尚未读取历史任务</p><small>只读取任务标题、历史状态和未读标记，不读取聊天正文或登录凭据。账号归属与实时状态尚未核实。</small><label for="workbuddy-desktop-partition">选择设备历史缓存范围</label><select id="workbuddy-desktop-partition"><option value="">请选择缓存账户范围</option></select><div class="buttons"><button data-action="read-workbuddy-desktop">查看所选范围</button></div><ul id="workbuddy-desktop-items"></ul></details>
 <details class="connection-details"><summary>连接说明与授权管理</summary><small>个人账号聊天使用官方 CodeBuddy 会话，与 WorkBuddy 共享账号积分。原桌面实时任务接入仍待完成；当前个人主体无法申请企业开放平台能力。</small><div class="buttons"><button data-action="revoke-provider" data-provider="workbuddy" class="secondary">解除授权</button></div></details>
-<details class="connection-details"><summary>企业开放平台状态</summary><p id="workbuddy-official-state" class="detail"></p><ul id="workbuddy-official-tasks"></ul><div id="workbuddy-enterprise-chat" hidden><label for="workbuddy-assistant-text">发给 WorkBuddy 本机助理的消息</label><textarea id="workbuddy-assistant-text" maxlength="8000" rows="3" placeholder="消息可能触发共享助理执行工具，请确认后发送"></textarea><div class="buttons"><button data-action="send-workbuddy-assistant">发送到本机助理</button><button data-action="read-workbuddy-assistant">读取本次回复</button><button id="workbuddy-review-unknown" data-action="review-workbuddy-unknown" class="secondary" hidden>我已到原 WorkBuddy 核对发送结果</button></div></div><p id="workbuddy-send-state" class="detail"></p><div id="workbuddy-official-messages" aria-live="polite"></div></details>
+<details class="connection-details"><summary>原 WorkBuddy 实时事件（需插件授权）</summary><p id="workbuddy-desktop-events-state">尚未启用</p><small>插件只传会话标识和事件阶段，不传正文。Stop只表示停止候选；FinalStop按原因确认主回复终态，不代表所有后台任务结束。停止接收不会自动卸载原工具插件。</small><div class="buttons"><button data-action="prepare-workbuddy-desktop-events">准备并授权元数据插件</button><button data-action="show-workbuddy-plugin" class="secondary">显示安装文件</button><button data-action="stop-workbuddy-desktop-events" class="secondary">停止接收事件</button></div></details><details class="connection-details"><summary>企业开放平台状态</summary><p id="workbuddy-official-state" class="detail"></p><ul id="workbuddy-official-tasks"></ul><div id="workbuddy-enterprise-chat" hidden><label for="workbuddy-assistant-text">发给 WorkBuddy 本机助理的消息</label><textarea id="workbuddy-assistant-text" maxlength="8000" rows="3" placeholder="消息可能触发共享助理执行工具，请确认后发送"></textarea><div class="buttons"><button data-action="send-workbuddy-assistant">发送到本机助理</button><button data-action="read-workbuddy-assistant">读取本次回复</button><button id="workbuddy-review-unknown" data-action="review-workbuddy-unknown" class="secondary" hidden>我已到原 WorkBuddy 核对发送结果</button></div></div><p id="workbuddy-send-state" class="detail"></p><div id="workbuddy-official-messages" aria-live="polite"></div></details>
 </section>
 <p id="message" role="status" aria-live="polite"></p><footer><button data-action="refresh-status" class="secondary">刷新状态</button><span>授权可随时解除。连接完成不自动发送消息或执行任务。</span></footer>
 </main><script src="store-connections-renderer.js"></script></body></html>

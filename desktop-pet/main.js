@@ -568,7 +568,9 @@ function openAbout() {
 
 async function storeConnectionState() {
   const state = await storeRuntime.getState();
-  return { ...state, onboarding:storeEnableFlow?.getState(), codexSnapshot: codexCompanion?.getSnapshot(), zcodeSnapshot: zcodeLink?.getSnapshot?.(),
+  const onboarding=storeEnableFlow?.getState();
+  if(onboarding)for(const provider of ['codex','zcode','workbuddy'])if(onboarding[provider].status!=='working'&&storeChatReady(provider)){onboarding[provider]={...onboarding[provider],status:'ready',chat:{status:'ready',message:'聊天已连接。'}};}
+  return { ...state, onboarding, codexSnapshot: codexCompanion?.getSnapshot(), zcodeSnapshot: zcodeLink?.getSnapshot?.(),
     chat: chat ? { source: chat.getState().source, connection: chat.getState().connection, modelsStatus: chat.getState().modelsStatus, modelsError: chat.getState().modelsError, busy: chat.getState().busy, error: chat.getState().error } : null };
 }
 function notifyStoreConnections() {
@@ -597,13 +599,18 @@ function registerStoreConnections() {
       let message = '连接状态已更新';
       if (action === 'enable-provider') {
         if(payload?.provider==='zcode'&&payload?.accountSource){if(chat?.getState().busy)return{ok:false,message:'请先等待或停止当前回复。'};await storeRuntime.setZcodeAccountSource(payload.accountSource);}
+        await storeRuntime.setChatEnabled(payload?.provider,true);
         await storeEnableFlow.enable(payload?.provider);
         message=storeEnableFlow.getState()[payload?.provider]?.message||'已检查连接。';
+      } else if(action==='enable-provider-data'){
+        await storeEnableFlow.enableData(payload?.provider);
+        if(payload?.provider==='zcode'&&storeEnableFlow.getState().zcode.chat.status==='needs-data-authorization')await storeEnableFlow.enable('zcode');
+        message='原工具数据授权已按实际结果更新，聊天登录保持。';
       } else if(action==='revoke-provider'){
         await storeEnableFlow.disable(payload?.provider);message='已停用并撤销本地数据授权。';
       } else if(action==='open-provider-chat'){
-        if(!['codex','zcode'].includes(payload?.provider))return{ok:false};
-        if(storeEnableFlow.getState()[payload.provider]?.chat.status!=='ready')return{ok:false,message:'请先启用授权并完成连接。'};
+        if(!['codex','zcode','workbuddy'].includes(payload?.provider))return{ok:false};
+        if(!['ready','needs-new-chat'].includes(storeEnableFlow.getState()[payload.provider]?.chat.status))return{ok:false,message:'请先启用授权并完成连接。'};
         await chat.selectSource(payload.provider);openChat();
       } else if (action === 'authorize-codex') {
         const result = await storeRuntime.authorize('codex');
@@ -638,6 +645,13 @@ function registerStoreConnections() {
       } else if (action === 'open-chat') openChat();
       else if (action === 'workbuddy-login') { await setWorkBuddyEnabled(true); if (storeRuntime.workbuddy.getState().loginVisible !== true) await storeRuntime.workbuddy.openLogin(); message = '请在官网窗口本人完成登录，再刷新积分。'; }
       else if (action === 'refresh-workbuddy') { await workbuddyQuota.refresh(); message = storeRuntime.workbuddy.getState().status === 'connected' ? '网站积分汇总已读取；未提供的分类保持未知。' : '尚未读取积分，请检查官网登录状态。'; }
+      else if(action==='prepare-workbuddy-desktop-events'){
+        const consent=await dialog.showMessageBox(storeConnectionsWindow,{type:'question',title:'启用原 WorkBuddy 元数据事件',message:'允许本机 WorkBuddy 插件临时过滤 Hook 输入吗？',detail:'输入可能包含提示词和上次回复。已审查的过滤脚本仅在本机有限内存提取会话标识和阶段，不保存或发送正文、路径或凭据。球球只接收元数据；Stop 不等于任务最终完成。还需在 WorkBuddy 官方插件页面安装启用。',buttons:['暂不开启','同意，仅传元数据'],defaultId:0,cancelId:0});
+        if(consent.response!==1)return{ok:true,message:'未启用原桌面事件。',state:await storeConnectionState()};
+        await storeRuntime.desktopIntegration.prepare();message='本机元数据接收器与插件包已准备，请在WorkBuddy插件页审阅安装。';
+      }
+      else if(action==='stop-workbuddy-desktop-events'){await storeRuntime.desktopIntegration.revoke();message='已停止接收并撤销本机连接。要停止源端过滤，请在WorkBuddy中停用或卸载球球插件。';}
+      else if(action==='show-workbuddy-plugin'){shell.showItemInFolder(storeRuntime.desktopIntegration.getMarketplaceDirectory());message='已定位本机插件市场目录。';}
       else if (action === 'authorize-workbuddy-desktop') {const existing=await storeRuntime.access.getStatus('workbuddy');const result=existing.status==='stored'?existing:await storeRuntime.authorize('workbuddy');if(result.status==='stored')await storeRuntime.probeWorkbuddyDesktop();message='仅核对桌面缓存分区；选择范围后才读取标题，账号归属与实时状态仍未核实。';}
       else if (action === 'read-workbuddy-desktop') {await storeRuntime.readWorkbuddyDesktop(payload?.partitionId);message='已按所选历史缓存范围读取最近记录，不表示当前账号的实时任务。';}
       else if (action === 'revoke-workbuddy-desktop') {await storeRuntime.revoke('workbuddy');message='已撤销桌面任务缓存目录授权，网站与CLI连接保留。';}
@@ -745,12 +759,13 @@ function aboutReleaseState(result) {
 
 function activeChat() { return chat; }
 
+function storeChatReady(provider){const state=chat?.getSourceState?.(provider);return Boolean(state?.connection==='ready'&&!state.accountMismatch&&['ready','provider-managed'].includes(state.modelsStatus));}
 function chatSnapshot(state = activeChat()?.getState()) {
   const storeInfo=IS_STORE_BUILD ? {
     sources:['codex','zcode','workbuddy'].map(id=>({id,label:id==='codex'?'Codex':id==='zcode'?'ZCode':'WorkBuddy',
-      enabled:id==='workbuddy'?storeRuntime?.workbuddyCli.getState().connected===true:
-        storeEnableFlow?.getState()[id]?.chat.status==='ready'||state?.source===id&&state?.connection==='ready'&&state?.modelsStatus==='ready'})),
-    sourceNote:state?.source==='codex'?'聊天使用球球内的独立 Codex 登录；原工具额度和任务来自授权目录。':null,
+      enabled:storeChatReady(id)|| (id==='workbuddy'?storeRuntime?.workbuddyCli.getState().connected===true:
+        ['ready','needs-new-chat'].includes(storeEnableFlow?.getState()[id]?.chat.status)||state?.source===id&&state?.connection==='ready'&&state?.modelsStatus==='ready')})),
+    sourceNote:state?.source==='codex'?'聊天使用球球内的独立 Codex 登录；原工具额度和任务来自授权目录。':state?.sourceNote||null,
     billingLabel:state?.source==='zcode'&&storeRuntime?.getZcodeAccountSource()==='configured-custom'?'使用 ZCode 已有自定义模型 · 按原 API 计费':null
   }:{};
   return {...state,...storeInfo,provider:state?.source||'codex',appUpdate:availableUpdate?{latestVersion:availableUpdate.latestVersion}:null};
@@ -1494,13 +1509,12 @@ async function setWorkBuddyEnabled(value) {
 }
 
 async function setChatProvider(provider) {
-  if (IS_STORE_BUILD && provider === 'workbuddy') { openStoreConnections(); return { accepted: false, error: `WorkBuddy 请通过工具连接中的“任务与本机助理”使用；它是共享本机助理，不是球球独立聊天。` }; }
   if (!['codex', 'zcode', 'workbuddy'].includes(provider) || isQuitting || screenLocked || chatProviderChanging) return { accepted: false };
   const state = chat?.getState();
   if (state?.busy || state?.connection === 'connecting' || state?.sourceChanging) return { accepted: false, error: '请先等待当前回复或连接完成。' };
   chatProviderChanging = true;
   try {
-    if (provider === 'workbuddy' && !settings.workbuddyEnabled && !await setWorkBuddyEnabled(true)) return { accepted: false, error: 'WorkBuddy 设置未能保存。' };
+    if (!IS_STORE_BUILD && provider === 'workbuddy' && !settings.workbuddyEnabled && !await setWorkBuddyEnabled(true)) return { accepted: false, error: 'WorkBuddy 设置未能保存。' };
     if (isQuitting || screenLocked) return { accepted: false };
     return await chat.selectSource(provider);
   } finally { chatProviderChanging = false; }
@@ -3695,8 +3709,7 @@ function registerIpc() {
     if (!fromChatWindow(event) || event.senderFrame !== event.sender.mainFrame || screenLocked || !chatWindow.isVisible()) {
       return { accepted: false, error: '请打开聊天面板后再操作。' };
     }
-    if(IS_STORE_BUILD && source==='workbuddy'){openStoreConnections('workbuddy');return{accepted:true,external:true};}
-    if(IS_STORE_BUILD && !chatSnapshot().sources.find(item=>item.id===source)?.enabled){openStoreConnections(source);return{accepted:false,error:'请先启用该工具的聊天授权。'};}
+        if(IS_STORE_BUILD && !chatSnapshot().sources.find(item=>item.id===source)?.enabled){openStoreConnections(source);return{accepted:false,error:'请先启用该工具的聊天授权。'};}
     return setChatProvider(source);
   });
   ipcMain.handle('pet:chat-open-connections',(event,provider)=>{
@@ -3974,7 +3987,7 @@ async function bootstrap() {
   settingsFile = path.join(app.getPath('userData'), 'settings.json');
   if (IS_STORE_BUILD) storeRuntime = require('./lib/mas-provider-runtime').createMasProviderRuntime({
     app, dialog: {showOpenDialog: options => storeConnectionsWindow && !storeConnectionsWindow.isDestroyed() ? dialog.showOpenDialog(storeConnectionsWindow,options) : dialog.showOpenDialog(options)}, BrowserWindow, session, shell, fetch: (url, options) => net.fetch(url, options), diagnostic: process.mas !== true,
-    onChange: () => { notifyStoreConnections(); if (settings) syncWorkBuddyLabel(); },
+    onChange: () => { notifyStoreConnections(); chat?.sourceChanged?.('workbuddy'); if (settings) syncWorkBuddyLabel(); },
     onManagedReady:provider=>{void storeEnableFlow?.restore(provider).catch(()=>{});} });
   codexPets = createCodexPetStore({
     ...(IS_STORE_BUILD ? { sourceRoot: path.join(app.getPath('userData'), 'codex-pets') } : {}),
@@ -4001,6 +4014,8 @@ async function bootstrap() {
     }
   });
   settings = loadSettings(settingsFile);
+  if(IS_STORE_BUILD)void storeRuntime.desktopIntegration.restore().catch(()=>{});
+  if(IS_STORE_BUILD)await storeRuntime.restoreChatPreferences({codex:settings.codexEnabled,zcode:settings.zcodeEnabled,workbuddy:settings.workbuddyEnabled});
   if(ACCEPTANCE_KIND==='soft-orb'&&!fs.existsSync(settingsFile)){
     const orb=normalizeAppearance({shape:'soft-orb',orbMaterial:'pearl',orbSecondaryColor:'#B7A7EC',bodyColor:'#F9F8FF',eyeColor:'#FDFDFD'});
     settings.customization.appearance=orb;settings.startupAppearance=orb;settings.size='medium';
@@ -4098,7 +4113,7 @@ async function bootstrap() {
     canRequest: () => !isQuitting && !screenLocked });
   workbuddyUsage = IS_STORE_BUILD ? storeRuntime.unavailableObservation('WorkBuddy 商店用量明细尚未配置开放平台接入。') : createWorkBuddyUsage({ run: workbuddyRun, getAccountKey: () => workbuddyQuota?.getState().accountKey,
     onChange: () => workbuddyDetails?.update(workBuddyDetailsState()) });
-  workbuddyTasks = IS_STORE_BUILD ? storeRuntime.unavailableObservation('WorkBuddy 任务请在工具连接的开放平台区域查看，仅包含云端范围。') : createWorkBuddyTasks({ run: workbuddyRun, stateFile: path.join(app.getPath('userData'), 'workbuddy-task-state.json'), getAccountKey: () => workbuddyQuota?.getState().accountKey,
+  workbuddyTasks = IS_STORE_BUILD ? storeRuntime.unavailableObservation('原桌面实时任务尚未接入；球球专用回复状态在聊天页实时显示。') : createWorkBuddyTasks({ run: workbuddyRun, stateFile: path.join(app.getPath('userData'), 'workbuddy-task-state.json'), getAccountKey: () => workbuddyQuota?.getState().accountKey,
     onChange: () => { syncWorkBuddyLabel(); workbuddyDetails?.update(workBuddyDetailsState()); } });
   workbuddyQuota = (IS_STORE_BUILD ? storeRuntime.createWorkBuddyQuotaPort : createWorkBuddyQuota)({ run: workbuddyRun, historyFile: path.join(app.getPath('userData'), 'workbuddy-quota-history.json'), onChange: state => {
     const diagnostic = state.errorCode ? JSON.stringify({ code: require('./lib/workbuddy-quota-status').errorCode(state.errorCode), nextRetryAt: Number.isSafeInteger(state.nextRetryAt) ? state.nextRetryAt : null }) : '';
@@ -4142,10 +4157,10 @@ async function bootstrap() {
     });
   });
   workbuddyQuota.setEnabled(settings.workbuddyEnabled);
-  chat = createChatSources({ codex: chat, createWorkbuddy: makeWorkbuddyChat,
-    isWorkbuddyEnabled: () => !IS_STORE_BUILD && settings.workbuddyEnabled === true,
+  chat = createChatSources({ codex: chat, createWorkbuddy: IS_STORE_BUILD ? ()=>require('./lib/workbuddy-cli-chat-companion').createWorkBuddyCliChatCompanion({connection:storeRuntime.workbuddyCli,prepare:options=>storeRuntime.prepareWorkbuddyChat(options),onChange:()=>chat?.sourceChanged('workbuddy')}) : makeWorkbuddyChat,
+    isWorkbuddyEnabled: () => IS_STORE_BUILD ? storeRuntime.isChatEnabled('workbuddy') : settings.workbuddyEnabled === true,
     initialSource: settings.chatSource,
-    isZcodeEnabled: () => (zcodeLink ? zcodeLink.isEnabled() : settings.zcodeEnabled === true),
+    isZcodeEnabled: () => IS_STORE_BUILD?storeRuntime.isChatEnabled('zcode'):(zcodeLink ? zcodeLink.isEnabled() : settings.zcodeEnabled === true),
     onSelect: chatSource => { settings = saveSettings(settingsFile, { ...settings, chatSource, chatProvider: chatSource === 'workbuddy' ? 'workbuddy' : 'codex' }); },
     onChange: state => { notifyStoreConnections(); if (!screenLocked) chatWindow.update(chatSnapshot(state)); },
     createZcode: () => createChatCompanion({
@@ -4190,18 +4205,19 @@ async function bootstrap() {
         }
         const available=await storeRuntime.prepareChat(provider,{interactive});
         if(available.status!=='ready')return available;
-        await chat.selectSource(provider);await chat.connect();const state=chat.getState();
+        try{if(interactive){await chat.selectSource(provider);await chat.connect();}else await chat.connectSource(provider);}catch(error){if(error.code==='ACCOUNT_CHANGED')return{status:'needs-new-chat',message:'请打开聊天并开始一段新对话，旧记录会保留。'};throw error;}const state=chat.getSourceState(provider);
         return{status:state.connection==='ready'&&state.modelsStatus==='ready'?'ready':'unavailable',message:state.connection==='ready'&&state.modelsStatus==='ready'?'聊天已连接。':state.error||'聊天尚未就绪，请稍后重试。'};
       },
       revoke:async provider=>{
+        await storeRuntime.setChatEnabled(provider,false);
         if(provider==='codex')await setCodexEnabled(false);
         else if(provider==='zcode')await zcodeLink.setEnabled(false);
-        else {await setWorkBuddyEnabled(false);await storeRuntime.disconnectWorkbuddyChat();}
+        else {await setWorkBuddyEnabled(false);await storeRuntime.disconnectWorkbuddyChat();await storeRuntime.desktopIntegration.revoke();}
         await storeRuntime.revoke(provider);
       },onChange:notifyStoreConnections
     });
     // Restore only already-enabled providers. No picker, login or account change.
-    void (async()=>{for(const provider of ['codex','zcode','workbuddy']){if(settings[provider+'Enabled'])await storeEnableFlow.enable(provider,{interactive:false});}})().catch(()=>{});
+    void (async()=>{for(const provider of ['codex','zcode','workbuddy']){if(storeRuntime.isChatEnabled(provider))await storeEnableFlow.enable(provider,{interactive:false});}})().catch(()=>{});
   }
   dialogue = new DialogueDirector({ now: performance.now(), enabled: settings.bubblesEnabled });
   sheepOfferingWindow = createSheepOfferingWindow({BrowserWindow,screen,getPetWindow:()=>petWindow,

@@ -353,6 +353,7 @@ test('切换拒绝未知编号、未验证账号及其他账号，标题和内�
   assert.equal((await f.companion.selectChat('unrelated-codex-thread')).accepted, false);
   f.account = { authenticated: true, accountKey: ACCOUNT_B };
   await assert.rejects(f.companion.connect(), { code: 'ACCOUNT_CHANGED' });
+  assert.equal(f.companion.getState().accountMismatch,true);
   assert.deepEqual(f.companion.getState().history, []);
   assert.equal((await f.companion.selectChat(id)).accepted, false);
   await f.companion.newChat(); await f.companion.send('另一个账号'); f.complete();
