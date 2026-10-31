@@ -238,3 +238,21 @@ test('same-action synchronization does not reset variation, while pause/hide/red
  if(mode==='pause')p.pause(true);if(mode==='hidden')h.hidden(true);if(mode==='reduce')h.reduce(true);assert.equal(p.element.dataset.codexVariant,'base');assert.equal(h.requests.size,0);
  if(mode==='pause')p.pause(false);if(mode==='hidden')h.hidden(false);if(mode==='reduce')h.reduce(false);h.step(0);h.step(999);assert.equal(p.element.dataset.codexVariant,'base');h.step(1);assert.equal(p.element.dataset.codexVariant,'1');p.destroy();}
 });
+
+test('preview keeps unique clips and both walking directions, excluding timing-only aliases',()=>{
+ const map=Object.fromEntries([...Player.ACTIONS.map(a=>a.id),'sleep','wakeup'].map(id=>[id,{sheet:'base',start:0,count:2,durations:[100,100],loop:true}]));
+ map.fail={...map.idle,durations:[30,30],loop:false};
+ map.wave={sheet:'motion',start:0,count:3,durations:[100,100,100],loop:false};
+ map.tail={...map.wave,start:3,count:2,durations:[100,100]};map.groom={...map.tail,start:5};
+ map['run-right']={sheet:'walk',start:0,count:3,durations:[100,100,100],loop:true};map['run-left']={...map['run-right'],flipX:true};map.running={...map['run-right']};
+ map.sleep={...map.idle,variation:{initialDelayMs:[1000,2000],intervalMs:[1000,2000],clips:[{start:3,count:2,durations:[100,100]}]}};
+ const d={...descriptor,version:3,rows:1,sheets:{base:{rows:1},motion:{rows:1},walk:{rows:1}},frameMap:map};
+ assert.deepEqual(Player.getPreviewActions(d).map(a=>a.id),['idle','wave','tail','groom','run-right','run-left','sleep']);
+ assert.deepEqual(Player.getPreviewActions(d).filter(a=>['tail','groom'].includes(a.id)).map(a=>a.name),['摇尾','舔爪']);
+ assert.equal(Player.getActions(d).length,13,'runtime action routing stays available');
+});
+
+test('legacy sheets retain all nine distinct preview rows',()=>{
+ assert.equal(Player.getPreviewActions(descriptor).length,9);
+ assert.deepEqual(new Set(Player.getPreviewActions(descriptor).map(a=>a.id)),new Set(Player.ACTIONS.map(a=>a.id)));
+});

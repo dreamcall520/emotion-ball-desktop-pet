@@ -289,3 +289,22 @@ test('generic variation survives independent imports while malformed nested data
  for(const version of [1,2]){const dir=f.add('var-'+version,{spriteVersionNumber:version,frameMap:{sleep:{start:0,count:8,durations:Array(8).fill(400),variation}}});const pet=f.store.importDirectory(dir);assert.deepEqual(pet.frameMap.sleep.variation,variation);assert.deepEqual(f.store.getImported(pet.id).frameMap.sleep.variation,variation);const raw=JSON.parse(fs.readFileSync(path.join(dir,'pet.json')));raw.frameMap.sleep.variation.clips[0].path='../escape';fs.writeFileSync(path.join(dir,'pet.json'),JSON.stringify(raw));assert.throws(()=>f.store.importDirectory(dir),{code:'INVALID_PET'})}
  const dir=path.join(f.sourceRoot,'var-3');fs.mkdirSync(dir);fs.writeFileSync(path.join(dir,'base.png'),png(1536,832));const frameMap=Object.fromEntries(['idle','run-right','run-left','wave','jump','fail','checking','waiting','running','sleep','wakeup'].map(id=>[id,{sheet:'base',start:0,count:8,durations:Array(8).fill(400)}]));frameMap.sleep.variation=variation;const raw={displayName:'generic',spriteVersionNumber:3,sheets:{base:{path:'base.png',rows:4}},frameMap};fs.writeFileSync(path.join(dir,'pet.json'),JSON.stringify(raw));const pet=f.store.importDirectory(dir);assert.deepEqual(pet.frameMap.sleep.variation,variation);raw.frameMap.sleep.variation.clips[2].start=32;fs.writeFileSync(path.join(dir,'pet.json'),JSON.stringify(raw));assert.throws(()=>f.store.importDirectory(dir),{code:'INVALID_PET'});
 });
+
+test('local deletion trashes only a verified imported copy and retains original source', async t=>{
+ const f=fixture(t),root=path.join(f.root,'local-pets'),source=f.add('delete-safe');
+ const store=createCodexPetStore({namespace:'local',sourceRoot:root,importRoot:root});
+ const pet=await store.importDirectory(source),calls=[];
+ const trash=path.join(f.root,'trash');fs.mkdirSync(trash);
+ assert.deepEqual(await store.trashImported(pet.id,async target=>{calls.push(target);fs.renameSync(target,path.join(trash,pet.id));}),{id:pet.id});
+ assert.deepEqual(calls,[path.join(fs.realpathSync(root),pet.id)]);assert(fs.existsSync(path.join(source,'pet.json')));assert.equal(store.listImported().pets.length,0);
+ assert(fs.existsSync(path.join(trash,pet.id,'pet.json')));
+});
+
+test('local deletion rejects path input, foreign namespace, symlink roots and failed trash preserves copy',async t=>{
+ const f=fixture(t),root=path.join(f.root,'local-pets'),source=f.add('delete-check');
+ const store=createCodexPetStore({namespace:'local',sourceRoot:root,importRoot:root});const pet=store.importDirectory(source);let calls=0;
+ for(const id of ['../pets',source,'codex-'+ 'f'.repeat(64),null]) await assert.rejects(store.trashImported(id,async()=>calls++));
+ await assert.rejects(f.store.trashImported(pet.id,async()=>calls++));assert.equal(calls,0);
+ await assert.rejects(store.trashImported(pet.id,async()=>{throw Error('trash unavailable')}));assert.equal(store.getImported(pet.id).id,pet.id);
+ const target=path.join(root,pet.id),moved=path.join(f.root,'moved');fs.renameSync(target,moved);fs.symlinkSync(moved,target);await assert.rejects(store.trashImported(pet.id,async()=>calls++));assert.equal(calls,0);assert(fs.existsSync(path.join(moved,'pet.json')));
+});

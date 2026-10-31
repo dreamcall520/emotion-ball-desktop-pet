@@ -221,6 +221,15 @@ function createCodexPetStore({ sourceRoot = path.join(process.env.CODEX_HOME || 
     },
     resolve,
     getImported,
+    async trashImported(id, trashItem) {
+      if (namespace !== 'local' || typeof trashItem !== 'function') throw fail('只能删除本地导入的皮肤');
+      getImported(id);
+      const canonicalRoot = directory(importRoot);
+      const target = directory(path.join(importRoot, id));
+      if (path.dirname(target) !== canonicalRoot || path.basename(target) !== id) throw fail('宠物目录不合法');
+      await trashItem(target);
+      return { id };
+    },
     importPet(sourceId) { return copyImported(readSource(sourceId)); },
     importDirectory(folder) {
       const pet = readPet(directory(folder), null);

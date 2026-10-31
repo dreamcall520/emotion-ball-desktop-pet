@@ -70,6 +70,24 @@
       durationMs: map[action.id].durations.reduce((sum, ms) => sum + ms, 0) }) : action));
   }
 
+  function getPreviewActions(descriptor) {
+    const actions = getActions(descriptor);
+    const order = ['idle','wave','tail','groom','stretch','jump','run-right','run-left','running','waiting','checking','fail','sleep','wakeup'];
+    const seen = new Set();
+    return Object.freeze(order.flatMap(id => {
+      const action = actions.find(item => item.id === id);
+      if (!action) return [];
+      // Timing and looping alone do not make another visual animation.
+      const resource = action.sheet ? descriptor.sheets?.[action.sheet]?.imageURL || action.sheet : descriptor.imageURL || 'single';
+      const key = JSON.stringify([resource, action.start ?? action.row * COLUMNS,
+        action.frameDurations.length, Boolean(action.flipX),
+        action.variation?.clips.map(clip => [clip.start, clip.count]) || []]);
+      if (seen.has(key)) return [];
+      seen.add(key);
+      return [Object.freeze({...action, name: ({tail:'摇尾',groom:'舔爪'})[id] || action.name})];
+    }));
+  }
+
   // Existing interaction commands choose real uploaded clips, not unrelated emotion IDs.
   function getInteractionActions(descriptor) {
     const actions = getActions(descriptor);
@@ -294,5 +312,5 @@
     return { element: canvas, setPet, setAction, setSize, setOpacity, pause, destroy };
   }
 
-  return Object.freeze({ ACTIONS, FRAME_WIDTH, FRAME_HEIGHT, COLUMNS, normalizeFrameMap, getActions, getInteractionActions, validDescriptor, create });
+  return Object.freeze({ ACTIONS, FRAME_WIDTH, FRAME_HEIGHT, COLUMNS, normalizeFrameMap, getActions, getPreviewActions, getInteractionActions, validDescriptor, create });
 }));

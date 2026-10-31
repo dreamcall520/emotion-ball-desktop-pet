@@ -687,8 +687,8 @@
       const descriptor = codexDescriptors.get(state.appearance.codexPetId);
       if (!descriptor) { target.textContent = '宠物暂不可用，请重新读取或选择其他形象'; return; }
       const actionSelect = $('pet-action'), selectedAction = actionSelect.value;
-      actionSelect.querySelectorAll('option[data-mapped-action]').forEach(option => option.remove());
-      for (const action of CodexPetPlayer.getActions(descriptor).filter(action => ['sleep', 'wakeup'].includes(action.id))) {
+      actionSelect.replaceChildren();
+      for (const action of CodexPetPlayer.getPreviewActions(descriptor)) {
         const option = document.createElement('option'); option.value = action.id; option.textContent = action.name;
         option.dataset.mappedAction = 'true'; actionSelect.append(option);
       }
@@ -1047,7 +1047,7 @@
     $('pet-opacity').value = state.appearance.auroraTransparency;
     $('pet-opacity-value').textContent = state.appearance.auroraTransparency + '%';
     paintRange('pet-opacity', [0, 60]);
-    for (const card of [...$('pet-grid').children, ...($('local-pet-grid')?.children || [])]) card.setAttribute('aria-pressed', String(codex &&
+    for (const card of [...$('pet-grid').children, ...($('local-pet-grid')?.querySelectorAll('.pet-card') || [])]) card.setAttribute('aria-pressed', String(codex &&
       (card.dataset.petId === state.appearance.codexPetId || card.dataset.importedId === state.appearance.codexPetId)));
   }
   function choosePet(pet) {
@@ -1069,12 +1069,53 @@
       if (pet.frameMap?.idle) { sprite.style.setProperty('--row', Math.floor(pet.frameMap.idle.start / 8)); sprite.style.setProperty('--frame', pet.frameMap.idle.start % 8); }
       const name = document.createElement('span'); name.className = 'pet-name'; name.textContent = pet.name;
       const mark = document.createElement('span'); mark.className = 'selection-mark'; mark.textContent = '✓'; mark.setAttribute('aria-hidden', 'true');
-      card.append(sprite, name, mark); card.addEventListener('click', () => choosePet(pet)); grid.append(card);
+      card.append(sprite, name, mark); card.addEventListener('click', () => choosePet(pet));
+      const item = document.createElement('div'); item.className = 'local-pet-item';
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'local-pet-delete';
+      const trash = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      trash.setAttribute('viewBox', '0 0 24 24'); trash.setAttribute('aria-hidden', 'true');
+      const trashPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      trashPath.setAttribute('d', 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5M14 11v5'); trash.append(trashPath);
+      remove.append(trash); remove.title = '删除 ' + pet.name;
+      remove.setAttribute('aria-label', '删除 ' + pet.name); remove.disabled = localBusy;
+      remove.addEventListener('click', () => deleteLocalPet(pet));
+      item.append(card, remove); grid.append(item);
     }
     $('local-read-status').textContent = '本地导入 · ' + localPets.length;
     grid.hidden = !localPets.length;
     if (activePetSource === 'local') $('pet-settings').hidden = !localPets.length;
     syncCandidate();
+  }
+  async function deleteLocalPet(pet) {
+    if (localBusy || !canSave || disposed) return;
+    localBusy = true; localReadFlight++; canSave = false;
+    $('save').disabled = true; $('import-local-pet').disabled = true; $('refresh-local-pets').disabled = true;
+    for (const button of $('local-pet-grid').querySelectorAll('button')) button.disabled = true;
+    try {
+      const result = await bridge.deleteLocalPet?.(pet.importedId || pet.id);
+      if (disposed || result?.canceled) return;
+      if (!result?.ok) throw new Error(result?.error || '删除未完成，请稍后重试');
+      localPets = localPets.filter(value => value.id !== pet.id); codexDescriptors.delete(pet.id);
+      codexDescriptors.delete(pet.importedId || pet.id);
+      if (state.appearance.shape === 'codex-pet' && [pet.id, pet.importedId].includes(state.appearance.codexPetId)) {
+        let current = null;
+        try { current = await bridge.load(); } catch (_) { /* 删除已经完成，仍须清除失效预览。 */ }
+        state.appearance = PetCustomization.normalizeAppearance(current?.customization?.appearance || lastBallAppearance);
+        if (current?.codexPet) codexDescriptors.set(current.codexPet.id, current.codexPet);
+        renderAuroraVisibility(); schedulePreview();
+      }
+      renderLocalPets(); $('local-read-state').hidden = localPets.length > 0;
+      $('local-read-state').textContent = '还没有导入伙伴。导入后可预览，保存设置后才应用到桌面。';
+      announce('已移到废纸篓，原始素材文件夹保留');
+    } catch (error) { if (!disposed) announce(error.message || '删除未完成，请稍后重试'); }
+    finally {
+      localBusy = false;
+      if (!disposed) {
+        canSave = true; $('save').disabled = false; $('import-local-pet').disabled = false; $('refresh-local-pets').disabled = false;
+        for (const button of $('local-pet-grid').querySelectorAll('button')) button.disabled = false;
+        syncCandidate();
+      }
+    }
   }
   async function refreshLocalPets() {
     if (localBusy) return;
@@ -1108,7 +1149,7 @@
       codexDescriptors.set(pet.id, pet); renderLocalPets(); $('local-read-state').hidden = true;
       choosePet(pet); announce('已导入并选中预览，保存设置后应用到桌面');
     } catch (error) { if (!disposed) announce(error.message || '导入未完成，请重试'); }
-    finally { localBusy = false; if (!disposed) { $('import-local-pet').disabled = false; $('refresh-local-pets').disabled = false; } }
+    finally { localBusy = false; if (!disposed) { $('import-local-pet').disabled = false; $('refresh-local-pets').disabled = false; for (const button of $('local-pet-grid').querySelectorAll('button')) button.disabled = false; } }
   }
   function renderPets() {
     $('pet-grid').replaceChildren();
@@ -1202,7 +1243,8 @@
   $('pet-play').addEventListener('click', () => {
     petPaused = !petPaused; codexPlayer?.pause(petPaused);
     $('pet-play').setAttribute('aria-label', petPaused ? '播放动画' : '暂停动画');
-    $('pet-play').textContent = petPaused ? '▷' : 'Ⅱ';
+    $('pet-play').dataset.paused = String(petPaused);
+    $('pet-play').title = petPaused ? '播放动画' : '暂停动画';
   });
   setSource('ball'); void refreshPets();
 

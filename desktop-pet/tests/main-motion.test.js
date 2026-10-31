@@ -4731,3 +4731,24 @@ test('the original settings wake action recalls a tucked pet before dispatching 
  const result=await f.invoke('pet:global-settings-action',wake.id,win.webContents);assert.equal(result.error,undefined);assert.equal(f.call('edgeTuck.getPresentation().mode'),'free');assert.equal(f.pet.messages.filter(item=>item.channel==='pet:command').at(-1).packet,'wake');
  f.call('hidePet()');assert.equal(f.pet.isVisible(),false);await f.invoke('pet:global-settings-action',wake.id,win.webContents);assert.equal(f.pet.isVisible(),true);assert.equal(f.call('edgeTuck.getPresentation().mode'),'free');
 });
+
+test('local skin deletion requires trusted owner, confirmation and no current/default/favorite references',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization()');const editor=f.call('customizationWindow');editor.emit('ready-to-show');
+ const id='codex-'+ 'e'.repeat(64);f.call(`globalThis.deleteId=${JSON.stringify(id)};localPetStore={calls:[],getImported(id){if(id!==deleteId)throw Error('missing');return {id,name:'待删除皮肤'}},async trashImported(id,trash){await trash('/fixture/local-pets/'+id);this.calls.push(id)}};shell.trashItem=async target=>{shell.trashed=target};dialog.showMessageBox=async(owner,options)=>{if(owner!==customizationWindow||options.cancelId!==0||options.buttons[1]!=='删除皮肤')throw Error('bad confirm');return {response:0}}`);
+ assert.equal((await f.invoke('pet:local-pets-delete',id)).ok,false);assert.equal((await f.invoke('pet:local-pets-delete','../outside',editor.webContents)).ok,false);
+ assert.equal((await f.invoke('pet:local-pets-delete',id,editor.webContents)).canceled,true);assert.equal(f.call('localPetStore.calls.length'),0);
+ for(const [field,error] of [['settings.customization.appearance','桌面使用'],['settings.startupAppearance','启动默认']]){
+  const original=f.call(`JSON.stringify(${field})`);f.call(`${field}={shape:'codex-pet',codexPetId:deleteId}`);
+  assert.match((await f.invoke('pet:local-pets-delete',id,editor.webContents)).error,new RegExp(error));f.call(`${field}=${original}`);
+ }
+ f.call("settings.appearancePresets=[{appearance:{shape:'codex-pet',codexPetId:deleteId}}]");assert.match((await f.invoke('pet:local-pets-delete',id,editor.webContents)).error,/收藏/);f.call('settings.appearancePresets=[]');
+ const before=f.call('JSON.stringify(settings)');f.call('dialog.showMessageBox=async()=>({response:1})');const result=await f.invoke('pet:local-pets-delete',id,editor.webContents);assert.equal(result.ok,true);assert.equal(result.id,id);assert.equal(f.call('shell.trashed'),'/fixture/local-pets/'+id);assert.equal(f.call('JSON.stringify(settings)'),before);
+});
+
+test('local deletion rechecks confirmation session and references, and blocks saving while trash is pending',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization()');const editor=f.call('customizationWindow');editor.emit('ready-to-show');const id='codex-'+ 'e'.repeat(64);
+ f.call(`globalThis.deleteId=${JSON.stringify(id)};localPetStore={calls:0,getImported(id){return {id,name:'待删除'}},trashImported(){this.calls++;return new Promise(resolve=>this.finish=resolve)}};dialog.showMessageBox=()=>new Promise(resolve=>dialog.finishDelete=resolve)`);
+ let pending=f.invoke('pet:local-pets-delete',id,editor.webContents);assert.equal((await f.invoke('pet:local-pets-import',undefined,editor.webContents)).ok,false);editor.hide();editor.show();f.call('dialog.finishDelete({response:1})');assert.equal((await pending).ok,false);assert.equal(f.call('localPetStore.calls'),0);
+ pending=f.invoke('pet:local-pets-delete',id,editor.webContents);f.call("settings.startupAppearance={shape:'codex-pet',codexPetId:deleteId};dialog.finishDelete({response:1})");assert.match((await pending).error,/启动默认/);assert.equal(f.call('localPetStore.calls'),0);f.call("settings.startupAppearance={shape:'blob'}");
+ pending=f.invoke('pet:local-pets-delete',id,editor.webContents);f.call('dialog.finishDelete({response:1})');await flush();assert.equal(f.call('localPetStore.calls'),1);assert.equal(f.call("saveCustomization({appearance:{shape:'codex-pet',codexPetId:deleteId}})"),false);assert.equal(f.call("changeAppearancePreset('add',{name:'Race',appearance:{shape:'codex-pet',codexPetId:deleteId}}).ok"),false);f.call('localPetStore.finish()');assert.equal((await pending).ok,true);assert.equal(f.call('localPetImportBusy'),false);assert.equal(f.call('localPetDeletingId'),null);
+});
