@@ -74,7 +74,7 @@ if (process.versions.electron && process.argv.includes('--bubble-dom-child')) {
           const dots=['::before','::after'].map(pseudo=>{const s=getComputedStyle(bubble,pseudo),r=bubble.getBoundingClientRect(),b=getComputedStyle(bubble);
             const w=parseFloat(s.width)+parseFloat(s.borderLeftWidth)+parseFloat(s.borderRightWidth),h=parseFloat(s.height)+parseFloat(s.borderTopWidth)+parseFloat(s.borderBottomWidth);
             const x=r.x+parseFloat(b.borderLeftWidth)+parseFloat(s.left),y=s.top==='auto'?r.bottom-parseFloat(b.borderBottomWidth)-parseFloat(s.bottom)-h:r.y+parseFloat(b.borderTopWidth)+parseFloat(s.top);
-            return {pseudo,content:s.content,x,y,right:x+w,bottom:y+h,width:w,height:h,background:s.backgroundColor};});
+            return {pseudo,content:s.content,x,y,right:x+w,bottom:y+h,width:w,height:h,background:s.backgroundColor,lighting:s.backgroundImage,shadow:s.boxShadow};});
           return {width:innerWidth,height:innerHeight,bubble:rect(bubble),message:rect(message),font:getComputedStyle(message).fontSize,text:message.textContent,
             buttons:[...document.querySelectorAll('#actions button')].map(rect),dots,placement:bubble.dataset.placement};
         })()`);
@@ -86,6 +86,7 @@ if (process.versions.electron && process.argv.includes('--bubble-dom-child')) {
         if (!allowScroll) assert(value.message.scrollH <= value.message.clientH + 1, name + ': vertical message clipping');
         for (const button of value.buttons) assert(inside(button) && button.scroll <= button.client + 1 && button.scrollH <= button.clientH + 1, name + ': button clipping ' + JSON.stringify(value));
         for (const dot of value.dots) assert(dot.content !== 'none' && dot.width > 0 && inside(dot), name + ': clipped cloud dot ' + JSON.stringify(value));
+        assert(value.dots.every(dot => dot.lighting.includes('radial-gradient') && dot.shadow !== 'none'), name + ': both connecting dots retain dimensional lighting');
         checks.push({ name, width: value.width, height: value.height, placement: value.placement, buttons: value.buttons.length });
         return value;
       }

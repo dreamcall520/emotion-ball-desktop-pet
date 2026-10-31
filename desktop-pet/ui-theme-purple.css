@@ -59,3 +59,7 @@
 :root[data-ui-theme=purple][data-color-mode=standard] .menu-divider { background:var(--line); }
 :root[data-ui-theme=purple][data-color-mode=standard] :is(.category-rename,.field input,.field select,.field textarea,.category-form input) { background:var(--input); border-color:var(--selected-line); color:var(--text); }
 :root[data-ui-theme=purple][data-color-mode=standard] #progress-text .completed-count { color:var(--accent-text); }
+
+/* The compact timer needs stronger functional text than decorative captions. */
+:root[data-ui-window=pomodoro][data-ui-theme=purple][data-color-mode=standard]{--muted:#61596c}
+:root[data-ui-window=pomodoro][data-ui-theme=purple][data-color-mode=standard][data-appearance=dark]{--muted:#c5bbd0}

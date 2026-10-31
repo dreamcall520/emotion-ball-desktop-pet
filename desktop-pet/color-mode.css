@@ -144,7 +144,7 @@
 
 :root[data-color-mode="accessible"] #bubble::before,
 :root[data-color-mode="accessible"] #bubble::after {
-  background: var(--accessible-panel) !important;
+  background-color: var(--accessible-panel) !important;
   border-color: var(--accessible-line) !important;
 }
 

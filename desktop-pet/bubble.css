@@ -85,10 +85,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif
   position: absolute;
   border-radius: 50%;
   background: var(--bubble-dot);
+  background-image: radial-gradient(circle at 28% 22%, #ffffff 0 12%, #ffffff00 42%), linear-gradient(140deg, #ffffff80, #ffffff00 45%, #50607845);
+  box-shadow: inset .5px .5px .75px #ffffffb3, inset -.5px -1px 1px #34445b45, 0 .5px .75px #33445b45;
   pointer-events: none;
 }
-#bubble::after { left: calc(var(--anchor-x, 112px) - 12.5px); bottom: -8px; width: 5px; height: 5px; }
-#bubble::before { left: calc(var(--anchor-x, 112px) - 17px); bottom: -13px; width: 3px; height: 3px; }
+#bubble::after { left: calc(var(--anchor-x, 112px) - 13.5px); bottom: -8px; width: 7px; height: 7px; }
+#bubble::before { left: calc(var(--anchor-x, 112px) - 17px); bottom: -13px; width: 4px; height: 4px; }
 #bubble[data-placement="below"] { inset: 14px 10px 8px; }
 #bubble[data-placement="below"]::after { top: -8px; bottom: auto; }
 #bubble[data-placement="below"]::before { top: -13px; bottom: auto; }

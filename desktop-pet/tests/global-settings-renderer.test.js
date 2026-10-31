@@ -46,6 +46,34 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("document.getElementById('brand-pet').replaceChildren();window.findEntry=id=>{const walk=items=>items.flatMap(item=>[item,...(item.children?walk(item.children):[])]);return walk(snapshot.entries).find(item=>item.id===id)};true");
     await run(fs.readFileSync(path.join(sourceRoot, 'desktop-pet/global-settings-renderer.js'), 'utf8'));
     await run('new Promise(resolve=>setTimeout(resolve,20))');
+    const originalPalette = await run('({...document.documentElement.dataset})');
+    const palettes = {};
+    for (const mode of ['standard','accessible']) for (const appearance of ['light','dark']) for (const theme of ['green','blue','purple']) {
+      palettes[`${mode}-${appearance}-${theme}`] = await run(`(async () => {
+        Object.assign(document.documentElement.dataset, {colorMode:${JSON.stringify(mode)},appearance:${JSON.stringify(appearance)},uiTheme:${JSON.stringify(theme)}});
+        await Promise.allSettled(document.getAnimations().filter(a=>a.effect.getComputedTiming().iterations!==Infinity).map(a=>a.finished));
+        const style = selector => getComputedStyle(document.querySelector(selector));
+        return {canvas:style('body').backgroundImage,title:style('h1').backgroundImage,brand:style('.brand strong').backgroundImage,
+          nav:style('#navigation button').color,caption:style('.nav-group-title').color,
+          petFilter:style('#brand-pet').filter,bodyFilter:style('body').filter};
+      })()`);
+    }
+    assert(palettes['standard-light-green'].canvas.includes('rgb(217, 243, 232)'), 'mint light canvas uses mint wash');
+    assert(palettes['standard-dark-green'].canvas.includes('rgb(33, 62, 53)'), 'mint dark canvas uses green wash');
+    assert(palettes['standard-light-blue'].canvas.includes('rgb(213, 240, 255)'), 'blue canvas keeps its existing wash');
+    assert(palettes['standard-dark-blue'].canvas.includes('rgb(36, 64, 84)'), 'blue dark canvas stays unchanged');
+    assert(palettes['standard-light-purple'].canvas.includes('rgb(232, 220, 245)'), 'purple light canvas stays unchanged');
+    assert(palettes['standard-dark-purple'].canvas.includes('rgb(59, 48, 78)'), 'purple dark canvas stays unchanged');
+    for (const appearance of ['light','dark']) {
+      const mint = palettes[`standard-${appearance}-green`], blue = palettes[`standard-${appearance}-blue`];
+      for (const part of ['canvas','title','nav','caption']) assert.notEqual(mint[part],blue[part], `${appearance}: mint ${part} changes with theme`);
+      assert.equal(mint.title,mint.brand,'page and brand titles share the mint palette');
+      const accessible = palettes[`accessible-${appearance}-green`];
+      for (const theme of ['blue','purple']) assert.deepEqual(accessible,palettes[`accessible-${appearance}-${theme}`], 'accessible visual priority is unchanged by theme');
+      assert.equal(accessible.title,'none','accessible titles do not use a decorative gradient');
+    }
+    assert(Object.values(palettes).every(p=>p.bodyFilter==='none'&&p.petFilter===palettes['standard-light-blue'].petFilter),'theme never recolors the pet with a filter');
+    await run(`Object.assign(document.documentElement.dataset,${JSON.stringify(originalPalette)});void 0`);
     const nav = await run("[...document.querySelectorAll('#navigation button')].map(n=>n.textContent)");
     for (const name of ['Codex','WorkBuddy','API 余额','快捷键','常规设置']) assert(nav.includes(name), name);
     assert(!nav.includes('OpenAI API')); assert(!nav.includes('API 费用与用量')); assert(!nav.includes('Codex 与 API'));
