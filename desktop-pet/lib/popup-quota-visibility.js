@@ -63,8 +63,8 @@ function createPopupQuotaVisibility({root,ipcMain,onChange=()=>{},onError=()=>{}
     });
     wrap('hide',(native,args)=>{r.visible=false;r.pending=false;r.loadToken++;update();return native(...args);});
     win.on('show',()=>{if(r.role==='card'&&blocked&&win.getOpacity?.()!==0){r.nativeHide?.();return;}r.visible=true;r.pending=false;r.minimized=false;update();});
-    win.on('hide',()=>{r.visible=false;r.pending=false;update();});
-    win.on('minimize',()=>{r.minimized=true;r.pending=false;update();});
+    win.on('hide',()=>{if(win.isVisible?.()===true)return;r.visible=false;r.pending=false;update();});
+    win.on('minimize',()=>{if(win.isMinimized?.()===false)return;r.minimized=true;r.pending=false;update();});
     win.on('restore',()=>{if(r.role==='card'&&blocked){r.nativeHide?.();return;}r.minimized=false;r.visible=true;update();});
     win.once('closed',()=>{r.ended=true;windows.delete(win);update();});
     contents.on('did-fail-load',(_event,code,_description,url,isMainFrame)=>{if(isMainFrame&&code!==-3&&url===r.url){r.pending=false;update();}});

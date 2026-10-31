@@ -85,3 +85,20 @@ test('popup blocking skips native hide only for an actually hidden card and stil
  assert.equal(unknown.hides,1,'missing visibility introspection remains conservative');
  release();f.flush();assert.equal(f.registry.isBlocked(),false);
 });
+for(const file of ['customize.html','chat.html'])test(`${file} ignores contradictory late hide/minimize but releases genuine native state`,async()=>{
+ const f=fixture(),w=f.win(file);await w.loadFile(path.join(root,file));w.show();
+ if(file==='customize.html'){const e={sender:w.webContents,senderFrame:w.webContents.mainFrame};f.ipc.emit('pet:quota-modal',e,true);assert.equal(e.returnValue,true)}
+ assert.equal(f.registry.isBlocked(),true);
+ w.emit('hide');f.flush();assert.equal(f.registry.isBlocked(),true,'late hide must not release an actually visible modal or popup');
+ w.emit('minimize');f.flush();assert.equal(f.registry.isBlocked(),true,'late minimize must not release a native non-minimized owner');assert.deepEqual(f.events,[true]);
+ w.hide();f.flush();assert.equal(f.registry.isBlocked(),false,'actual hide releases ownership');
+ w.show();assert.equal(f.registry.isBlocked(),true,'reshow retains the modal lease without a new modal IPC');
+ w.minimized=true;w.emit('minimize');f.flush();assert.equal(f.registry.isBlocked(),false,'genuine native minimize releases ownership');
+ w.minimized=false;w.emit('restore');assert.equal(f.registry.isBlocked(),true);
+ w.close();f.flush();assert.equal(f.registry.isBlocked(),false);
+});
+test('hide/minimize events without native introspection retain conservative release behavior',async()=>{
+ const f=fixture(),w=f.win('customize.html');await w.loadFile(path.join(root,'customize.html'));w.show();f.ipc.emit('pet:quota-modal',{sender:w.webContents,senderFrame:w.webContents.mainFrame},true);
+ w.isVisible=undefined;w.emit('hide');f.flush();assert.equal(f.registry.isBlocked(),false);
+ w.show();assert.equal(f.registry.isBlocked(),true);w.isMinimized=undefined;w.emit('minimize');f.flush();assert.equal(f.registry.isBlocked(),false);
+});
