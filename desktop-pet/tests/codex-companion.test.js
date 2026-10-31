@@ -1806,3 +1806,68 @@ test('真实连接组合：账号切换后即使connected状态去重，后续�
   f.companion.close();
   assert.equal(f.timers.size, 0);
 });
+
+
+test('真实任务元数据的完整长标题仅在名称开关开启时进入详情，关闭立即清除且不延长', async t => {
+  const { plainText } = require('../lib/codex-text');
+  for (const state of ['completed', 'waiting', 'failed']) {
+    const f = fixture(); t.after(() => f.companion.close());
+    await f.companion.setEnabled(true);
+    const title = '\u202e  真实任务元数据\n' + '需要保留完整标题以核对气泡长文兼容'.repeat(9);
+    const expected = plainText(title.slice(0, 140), 140);
+    f.task(1, 'active', { baseline: true, title });
+    f.task(1, state, { title, body: 'SECRET_CHAT_BODY' });
+    await f.tick(5000);
+    const original = f.companion.getSnapshot().currentAlert;
+    assert.equal(Object.hasOwn(original, 'detailText'), false, state + ': 默认不附带任务名称');
+    f.companion.setPreferences({ taskNameInAlerts: true });
+    const named = f.alertUpdates.at(-1);
+    assert.ok(named.detailText.includes('《' + expected + '》'), state + ': 详情保留已有140字范围的完整清理标题');
+    assert.match(named.detailText, state === 'completed' ? /有结果/ : state === 'waiting' ? /等你确认/ : /遇到问题/);
+    assert.equal(Array.from(named.text).length <= 48, true, '通知摘要仍不超过48字符');
+    assert.equal(named.detailText.includes('SECRET_CHAT_BODY'), false);
+    assert.doesNotMatch(named.detailText, /\u202e/);
+    assert.equal(named.id, original.id);
+    assert.equal(named.expiresAt, original.expiresAt);
+    await f.tick(500);
+    f.companion.setPreferences({ taskNameInAlerts: false });
+    const hidden = f.alertUpdates.at(-1);
+    assert.equal(Object.hasOwn(hidden, 'detailText'), false);
+    assert.equal(hidden.text, original.text);
+    assert.equal(hidden.expiresAt, original.expiresAt);
+    assert.equal(hidden.id, original.id);
+  }
+});
+
+test('名称开启的多任务详情保留每个仍有效标题且遵守现有64项140字范围', async t => {
+  const f = fixture(); t.after(() => f.companion.close());
+  f.companion.setPreferences({ taskNameInAlerts: true });
+  await f.companion.setEnabled(true);
+  for (let n = 1; n <= 64; n++) {
+    const title = String(n).padStart(2, '0') + '完整任务标题'.repeat(23);
+    f.task(n, 'active', { baseline: true, title });
+    f.task(n, 'completed', { title });
+  }
+  await f.tick(5000);
+  const alert = f.alerts[0];
+  assert.equal(alert.taskIds.length, 64);
+  assert.equal(alert.detailText.split('\n').length, 66);
+  assert.equal(alert.detailText.length <= 10000, true);
+  assert.equal(Array.from(alert.text).length <= 48, true);
+  for (const task of f.companion.getSnapshot().tasks.items) assert.ok(alert.detailText.includes('《' + task.title + '》'));
+  f.task(64, 'unknown', { title: '此任务已失效' });
+  const updated = f.alertUpdates.at(-1);
+  assert.equal(updated.taskIds.length, 63);
+  assert.equal(updated.detailText.includes('《64'), false, '失效任务不保留在原详情');
+});
+
+test('短完成标题和缺少可靠标题维持原气泡文案，不额外制造详情', async t => {
+  for (const title of ['短任务', '', '未命名任务', '\u200d']) {
+    const f = fixture(); t.after(() => f.companion.close());
+    f.companion.setPreferences({ taskNameInAlerts: true });
+    await f.companion.setEnabled(true);
+    f.task(1, 'active', { baseline: true, title }); f.task(1, 'completed', { title });
+    await f.tick(5000);
+    assert.equal(Object.hasOwn(f.alerts[0], 'detailText'), false);
+  }
+});

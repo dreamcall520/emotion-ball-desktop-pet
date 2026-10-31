@@ -195,13 +195,13 @@ if (process.versions.electron && process.argv.includes('--bubble-dom-child')) {
           assert.equal(result.width, width);
         }
         await show({ text: '长文案测试：' + '这段内容需要完整换行，按钮仍然清晰可见。'.repeat(8), actions: allowed.slice(0, 2).map(action => ({ ...action, label: action.label + '，稍后继续陪着你' })) });
-        await layout(`width-${width}-long-text-and-labels`, 2);
+        await layout(`width-${width}-long-text-and-labels`, 2, true);
       }
       area = { x: 0, y: 0, width: 208, height: 200 };
       pet = { x: 70, y: 100, width: 80, height: 80 };
       await show({ text: '狭小工作区仍可滚动查看完整正文。'.repeat(15), actions: allowed.slice(0, 2) });
       const compact = await layout('short-work-area-scrolls-text-and-keeps-actions', 2, true);
-      assert(compact.message.scrollH > compact.message.clientH, 'long message scrolls instead of hiding actions');
+      assert(compact.message.scrollH > compact.message.clientH, 'long message is summarized instead of hiding actions');
       area = { x: 0, y: 0, width: 1440, height: 900 };
       for (const x of [0, 1360]) for (const y of [0, 800]) {
         pet = { x, y, width: 80, height: 80 };

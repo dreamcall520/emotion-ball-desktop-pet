@@ -167,6 +167,12 @@ function validCodexText(text) {
   return lines.length <= 2 && lines.every(line => line.trim());
 }
 
+function validCodexDetail(alert) {
+  const text = alert.detailText;
+  return text === undefined || (['waiting', 'completed', 'failed'].includes(alert.kind) && typeof text === 'string' &&
+    text.length <= 10000 && text.trim().length > 0 && !/[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/.test(text));
+}
+
 class DialogueDirector {
   constructor({ random = Math.random, now = 0, enabled = true } = {}) {
     this.enabled = Boolean(enabled);
@@ -224,7 +230,7 @@ class DialogueDirector {
     if (!this.enabled || !Number.isFinite(nowMs) || !Number.isFinite(durationMs) || durationMs <= 0 ||
       !Number.isSafeInteger(alert?.id) || !Number.isSafeInteger(alert.generation) ||
       !['waiting', 'completed', 'failed', 'quota'].includes(alert.kind) ||
-      !validCodexText(alert.text) || !Array.isArray(alert.taskIds)) return null;
+      !validCodexText(alert.text) || !validCodexDetail(alert) || !Array.isArray(alert.taskIds)) return null;
     this._expire(nowMs);
     if (this._current) return null;
     const actions = [];
@@ -245,19 +251,19 @@ class DialogueDirector {
     this._current = { id, event: 'codex', sourceAlertId: alert.id, sourceGeneration: alert.generation,
       priority: -1, tone, actions, descriptors, expiresAt: nowMs + durationMs };
     this._lastBubbleAt = nowMs;
-    return { id, text: alert.text, tone, actions: actions.map(action => ({ ...action })), durationMs };
+    return { id, text: alert.detailText ?? alert.text, tone, actions: actions.map(action => ({ ...action })), durationMs };
   }
 
   updateCodex(alert, nowMs) {
     if (!Number.isFinite(nowMs)) return null;
     this._expire(nowMs);
     if (this._current?.event !== 'codex' || this._current.sourceAlertId !== alert?.id ||
-      this._current.sourceGeneration !== alert?.generation || !validCodexText(alert?.text)) return null;
+      this._current.sourceGeneration !== alert?.generation || !validCodexText(alert?.text) || !validCodexDetail(alert)) return null;
     const tone = codexTone(alert.severity);
     this._current.tone = tone;
     return {
       id: this._current.id,
-      text: alert.text,
+      text: alert.detailText ?? alert.text,
       tone,
       actions: this._current.actions.map(action => ({ ...action })),
       durationMs: this._current.expiresAt - nowMs

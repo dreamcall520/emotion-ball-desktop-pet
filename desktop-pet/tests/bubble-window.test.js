@@ -14,7 +14,8 @@ function fixture(load, getObstacles = () => []) {
       this.visible = false;
       this.webContents = new EventEmitter();
       this.webContents.setWindowOpenHandler = () => {};
-      this.webContents.send = () => {};
+      this.sent = [];
+      this.webContents.send = (...args) => this.sent.push(args);
       windows.push(this);
     }
     setAlwaysOnTop() {}
@@ -24,8 +25,10 @@ function fixture(load, getObstacles = () => []) {
     setIgnoreMouseEvents(value) { this.ignored = value; }
     loadFile() { return load(windows.length); }
     showInactive() { this.visible = true; }
+    show() { this.visible = true; }
     hide() { this.visible = false; }
     isDestroyed() { return this.destroyed; }
+    isVisible() { return this.visible; }
     destroy() { this.destroyed = true; this.visible = false; this.emit('closed'); }
   }
   const bubble = createBubbleWindow({
@@ -50,6 +53,31 @@ test('气泡加载失败会销毁坏窗口，下次互动能重新加载', async
   assert.equal(f.windows.length, 2);
   assert.equal(f.windows[1].visible, true);
   assert.equal(f.errors.length, 1);
+});
+
+test('长气泡详情仅接受当前可见摘要，过期后仍可阅读，隐藏或换文立即关闭', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = fixture(() => Promise.resolve()); t.after(() => f.bubble.destroy());
+  const text = '真实任务标题'.repeat(20);
+  f.bubble.show({ id: 1, text, actions: [], durationMs: 4000 }); await flush();
+  assert.equal(f.bubble.showDetails(1), false, '短气泡不能绕过摘要状态打开详情');
+  f.bubble.resize({ id: 1, height: 180, truncated: true });
+  assert.equal(f.windows[0].ignored, false, '无原始动作的长气泡也可点击详情');
+  assert.equal(f.bubble.showDetails(0), false);
+  assert.equal(f.bubble.showDetails(1), true); await flush();
+  const detail = f.bubble.getDetailsWindow();
+  assert.equal(detail.visible, true);
+  assert.deepEqual(detail.sent.at(-1), ['pet:bubble-details-content', { id: 1, text }]);
+  t.mock.timers.tick(4000);
+  assert.equal(f.windows[0].visible, false);
+  assert.equal(detail.visible, true, '阅读详情不受气泡短倒计时打断');
+  assert.equal(f.bubble.showDetails(1), false, '过期气泡不可重新打开详情');
+  f.bubble.hide(); assert.equal(detail.destroyed, true, '锁屏等显式隐藏同时关闭详情');
+  f.bubble.show({ id: 2, text, actions: [], durationMs: 4000 }); await flush();
+  f.bubble.resize({ id: 2, height: 180, truncated: true });
+  f.bubble.showDetails(2); await flush(); const second = f.bubble.getDetailsWindow();
+  f.bubble.show({ id: 2, text: '任务名称已隐藏', actions: [], durationMs: 4000 });
+  assert.equal(second.destroyed, true, '同一提醒关闭任务名称时不能留下旧详情');
 });
 
 test('气泡渲染崩溃后可在下一次互动恢复', async t => {
