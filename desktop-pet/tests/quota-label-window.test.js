@@ -1828,7 +1828,7 @@ test('浅色卡片在深色壁纸上的次级文字和深色 urgent 对比度均
 
 
 test('侧卡透明尾跨进羊或气泡时仍穿透，普通48px入口有效区域保持', async t => {
-  let cursor = { x: 1372, y: 440 };
+  let cursor = { x: 1390, y: 440 };
   const f = fixture(() => Promise.resolve(), { labelSize: 'compact', getGuardEntry: () => true,
     presentation: { shape: 'new-year-sheep', mode: 'peeked', side: 'right' }, getCursorScreenPoint: () => cursor });
   t.after(() => f.label.destroy());
@@ -2089,4 +2089,13 @@ test('guard-capable carrier is allocated while hidden and never moves or resizes
  }
  guard=false;f.label.show(readyModel());assert.equal(packet().cardViewport,undefined);assert.equal(win.getBounds().width,labelSize==='compact'?128:168);
  }
+});
+
+test('a guarded carrier still contains the painted card when the coordinated column moves on corner expansion',async t=>{
+ const f=fixture(()=>Promise.resolve(),{labelSize:'compact',getGuardEntry:()=>true});t.after(()=>f.label.destroy());f.pet.bounds={x:1340,y:810,width:80,height:80};
+ const {quotaFreeStackBounds}=require('../lib/quota-label-placement');const metrics={width:128,height:32,inset:2};let expanded=false;
+ const plan=()=>quotaFreeStackBounds(f.pet.bounds,AREA,{weather:metrics,codex:expanded?{width:196,height:131,inset:0,guardTargetWidth:0}:{...metrics,guardTargetWidth:48,roleWidth:22},balance:metrics},{mode:'free',shape:'blob',quotaStyle:'card',quotaCardOrder:['weather','codex','balance']});
+ f.presentation={mode:'free',shape:'blob',quotaGroupLayout:plan().cards.codex};f.label.show(readyModel());await flush();const win=f.windows[0],before=win.getBounds();
+ expanded=true;f.presentation={mode:'free',shape:'blob',quotaGroupLayout:plan().cards.codex};win.webContents.emit('ipc-message',{},'pet:quota-label-toggle');const packet=win.sent.findLast(row=>row[0]==='pet:quota-label')[1],face=packet.cardViewport.face,host=packet.cardViewport.host;
+ assert(face.top>=0,'new face must not rise above a cached compact carrier');assert(face.top+face.height<=host.height+1);assert(face.left>=0);assert(face.left+face.width<=host.width+1);assert.equal(win.getBounds().y+face.top,plan().cards.codex.face.y);assert.notDeepEqual(win.getBounds(),before,'a changed coordinated stack may require moving its transparent carrier');
 });

@@ -293,7 +293,8 @@
       $('empty').hidden = true;
       window.renderSettingsShortcuts($('content'), snapshot.shortcuts, shortcutApi); return;
     }
-    const searchable = [...categories, { id: 'shortcuts', label: '快捷键', children: snapshot.entries.filter(entry => entry.id === '/shortcut-settings') }, { id: 'windows', label: '独立功能', children: snapshot.entries.filter(entry => externalIds.has(entry.id)) }];
+    const interaction = categories.find(category => category.label === '球球与互动');
+    const searchable = [...categories.map(category => category === interaction ? { ...category, children: [...category.children, {id:'/shortcut-panel-settings',label:'启用快捷面板与面板形态',enabled:true,actionable:true}] } : category), { id: 'shortcuts', label: '快捷键', children: snapshot.entries.filter(entry => entry.id === '/shortcut-settings') }, { id: 'windows', label: '独立功能', children: snapshot.entries.filter(entry => externalIds.has(entry.id)) }];
     const displayed = (query ? searchable : selected === 'common' ? commonGroups : categories).flatMap(category => {
       if (!['/codex-menu', '/zcode-menu', 'workbuddy-settings'].includes(category.id)) return [category];
       const apiGroup = category.id === '/codex-menu' && category.children.find(child => child.id.endsWith('/openai-api-menu'));
@@ -362,7 +363,7 @@
           if (choice) { button.setAttribute('role', item.type === 'checkbox' ? 'switch' : 'radio'); button.setAttribute('aria-checked', String(item.checked)); }
           button.dataset.action = item.id;
           button.disabled = !item.enabled || busy;
-          button.onclick = () => item.id === '/shortcut-settings' ? selectView('shortcuts') : act(item);
+          button.onclick = () => item.id === '/shortcut-settings' ? selectView('shortcuts') : item.id === '/shortcut-panel-settings' ? selectView(interaction.id) : act(item);
           row.append(button);
         }
         if (category.label === '便签与待办') {
@@ -379,6 +380,8 @@
       if (statusEntry && (!query || 'codex 状态 额度 任务 刷新'.includes(query))) section.append(codexStatus(statusEntry));
       sections.push(section);
     }
+    const panel = snapshot.shortcuts && interaction && !query && selected === interaction.id ? el('div') : null;
+    if (panel) { sections.push(panel); count++; }
     const notes = categories.find(category => category.label === '便签与待办');
     const behaviors = snapshot.shortcuts && notes && (!query ? selected === notes.id : '便签 待办 启动方式'.includes(query)) ? el('div') : null;
     if (behaviors) { sections.push(behaviors); count++; }
@@ -396,6 +399,7 @@
     }
     if (!query && selected === 'quota-cards') { sections.unshift(quotaCardSettings()); count++; }
     $('content').replaceChildren(...sections);
+    if (panel) window.renderSettingsShortcuts(panel, snapshot.shortcuts, shortcutApi, 'panel');
     if (behaviors) window.renderSettingsShortcuts(behaviors, snapshot.shortcuts, shortcutApi, true);
     $('empty').hidden = count !== 0;
     if (quotaSectionRequested) { document.querySelector('main').scrollTop = 0; quotaSectionRequested = false; }

@@ -280,3 +280,15 @@ test('原画动作可按受限时长延展宿主时间线，结束归位且不�
     assert.equal(other.frames.at(-1).frame.done,true,String(durationMs));
   }
 });
+
+test('柔光团视觉动作使用完整独立时钟，不叠加原跳跃窗口轨迹或单轴身体缩放',()=>{
+  const f=fixture();
+  assert.equal(f.controller.start({token:81,action:'hop',durationMs:4000,visualOnly:true}),true);
+  f.at(1900);
+  assert.equal(f.frames.at(-1).frame.done,false);
+  assert.deepEqual(f.frames.at(-1).frame.window,{x:0,y:0});
+  assert.equal(f.moves.length,0);
+  f.at(3999);assert.equal(f.frames.at(-1).frame.done,false);
+  f.at(4000);assert.equal(f.frames.at(-1).frame.done,true);assert.equal(f.timers.size,0);
+  assert.deepEqual(f.bounds,f.origin);
+});

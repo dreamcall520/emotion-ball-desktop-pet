@@ -69,6 +69,11 @@
   -webkit-backdrop-filter: none !important;
 }
 
+/* 普通气泡外框仅作装饰，控制与提醒仍保留清晰边界。 */
+:root[data-color-mode="accessible"] #bubble[data-tone="normal"] {
+  border-color: var(--accessible-divider) !important;
+}
+
 :root[data-color-mode="accessible"] #quota-label::before,
 :root[data-color-mode="accessible"] #quota-label::after {
   background: none !important;
@@ -137,8 +142,9 @@
   background: var(--accessible-yellow) !important;
 }
 
+:root[data-color-mode="accessible"] #bubble::before,
 :root[data-color-mode="accessible"] #bubble::after {
-  background: var(--accessible-panel) !important;
+  background-color: var(--accessible-panel) !important;
   border-color: var(--accessible-line) !important;
 }
 
@@ -149,14 +155,15 @@
 :root[data-color-mode="accessible"] #bubble #actions button {
   color: var(--accessible-on-accent) !important;
   background: var(--accessible-blue) !important;
-  box-shadow: inset 0 0 0 1px var(--accessible-blue);
+  border-color: transparent;
+  box-shadow: none;
 }
 
-:root[data-color-mode="accessible"] #bubble #actions button:last-child,
-:root[data-color-mode="accessible"] #bubble #actions button:hover {
+:root[data-color-mode="accessible"] #bubble #actions button + button {
   color: var(--accessible-text) !important;
   background: var(--accessible-raised) !important;
-  box-shadow: inset 0 0 0 1px var(--accessible-line);
+  border-color: var(--accessible-line);
+  box-shadow: none;
 }
 
 :root[data-color-mode="accessible"] .chat-panel {
@@ -171,6 +178,11 @@
   color: var(--accessible-muted) !important;
   background: var(--accessible-disabled) !important;
   box-shadow: inset 0 0 0 1px var(--accessible-line) !important;
+}
+
+:root[data-color-mode="accessible"] #bubble #actions button:disabled {
+  border-color: var(--accessible-line);
+  box-shadow: none !important;
 }
 
 :root[data-color-mode="accessible"] button:focus-visible,

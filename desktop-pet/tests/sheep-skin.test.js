@@ -115,9 +115,9 @@ test('主进程实际 sendCommand 只向羊年皮肤发送合法专属动作并�
   assert.ok(declaration, '应提取实际的 sendCommand 函数');
   const sent = [], stops = [];
   const settings = { customization: { appearance: { shape: 'new-year-sheep' } } };
-  const context = vm.createContext({ settings, SheepSkin: { supportsAction }, SheepTheme: require('../lib/sheep-theme'), effectiveCustomization:value=>value,
+  const context = vm.createContext({ screenLocked:false,isQuitting:false,edgeTuck:{getPresentation:()=>({mode:'free'})}, settings, SheepSkin: { supportsAction }, SheepTheme: require('../lib/sheep-theme'), effectiveCustomization:value=>value,
     getMotion: require('../lib/interaction-motion').getMotion,
-    petWindow: { isDestroyed: () => false, webContents: {
+    petWindow: { isDestroyed: () => false, isVisible:()=>true, webContents: {
       send(channel, payload) { sent.push([channel, JSON.parse(JSON.stringify(payload))]); }
     } },
     stopMotion(options) { stops.push(JSON.parse(JSON.stringify(options))); }
@@ -171,7 +171,7 @@ test('实际 setColorControlsEnabled 在保存或重载后保持羊年颜色锁�
   const palettes = ['body-swatches', 'eye-swatches', 'glow-pink-swatches', 'glow-gold-swatches', 'color-picker-presets'];
   const context = vm.createContext({ $, state, colorBindings: bindings,
     rangeLimits: { 'shape-width': [75, 125], 'eye-scale': [40, 125], 'aurora-transparency': [0, 60] },
-    setPresetControlsEnabled() {}, closeColorPicker() {}
+    setPresetControlsEnabled() {}, closeColorPicker() {},renderOrbOptions() {}
   });
   vm.runInContext(themeDeclaration + '\n' + declaration, context);
   const assertColorsDisabled = expected => {

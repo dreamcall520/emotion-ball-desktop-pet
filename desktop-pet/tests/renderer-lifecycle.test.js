@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 // 运行真实 renderer、状态规则和动画引擎；仅替代 DOM、宿主通信及时间。
-function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = null) {
+function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = null, edgePeek = false) {
   let now = 0;
   let nextTimer = 1;
   let engine;
@@ -15,8 +15,8 @@ function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = nul
   const events = {};
   const subscriptions = {};
   const windowEvents = {};
-  const quotaFrames = [], systemListeners = new Set();
-  const root = { dataset: { appearance: 'light' } };
+  const quotaFrames = [], images = [], systemListeners = new Set();
+  const root = { dataset: { appearance: 'light' } }, reducedMedia={matches:false};
   const systemAppearance = { matches: false,
     addEventListener(_name, listener) { systemListeners.add(listener); },
     removeEventListener(_name, listener) { systemListeners.delete(listener); } };
@@ -56,6 +56,7 @@ function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = nul
     subscriptions[name] = callback;
     return () => { delete subscriptions[name]; };
   };
+  const dream=node('div');
   const context = vm.createContext({
     console,
     Math: Object.assign(Object.create(Math), { random: () => randomValue }),
@@ -68,10 +69,10 @@ function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = nul
     clearTimeout(id) { timers.delete(id); },
     clearInterval() {},
     requestAnimationFrame(callback) { if (quotaUpdates) quotaFrames.push(callback); return 1; }, cancelAnimationFrame() {},
-    document: { documentElement: root, getElementById: () => pet, createElementNS: (_ns, tag) => node(tag), createElement: node,
+    document: { documentElement: root, getElementById: id => id === 'pet-dream' ? dream : pet, createElementNS: (_ns, tag) => node(tag), createElement: node,
       addEventListener() {}, removeEventListener() {} },
     QuotaEffects: quotaUpdates ? { create: () => ({ update: value => quotaUpdates.push(value), destroy() {} }) } : undefined,
-    matchMedia: query => query === '(prefers-color-scheme: dark)' ? systemAppearance : { matches: false },
+    matchMedia: query => query === '(prefers-color-scheme: dark)' ? systemAppearance : reducedMedia,
     AuroraRive: auroraRive,
     innerWidth: 80,
     addEventListener(name, callback) { windowEvents[name] = callback; },
@@ -107,11 +108,12 @@ function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = nul
     }
   });
   context.window = context;
+  if (edgePeek) context.EdgePeek = require('../lib/edge-peek');
   context.document.defaultView = context;
   pet.ownerDocument = context.document;
   context.Image = class {
-    constructor() { this.naturalWidth = 1536; this.naturalHeight = 1872; }
-    set src(_value) { context.setTimeout(() => this.onload?.(), 0); }
+    constructor() { images.push(this); this.naturalWidth = 1536; this.naturalHeight = 1872; }
+    set src(_value) { if(!_value)return;if(_value.includes('v2-base'))this.naturalHeight=2288;if(_value.includes('v3-base'))this.naturalHeight=208;context.setTimeout(() => this.onload?.(), 0); }
   };
   const run = file => vm.runInContext(
     fs.readFileSync(path.resolve(__dirname, '../..', file), 'utf8'),
@@ -140,12 +142,14 @@ function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = nul
   }
   activity();
   return {
-    host, pet, root, systemAppearance, systemListeners, quotaFrames, subscriptions,
+    host, pet, dream, root, images, systemAppearance, systemListeners, quotaFrames, subscriptions,
     get engine() { return engine; }, get lastBallOptions() { return lastBallOptions; },
     activity, bounds, events, windowEvents, timers,
+    reduceMotion(value){reducedMedia.matches=value;},
     frame: packet => subscriptions.motion(packet),
     stopHost: () => windowController?.stop(),
     resize(width) { context.innerWidth = width; windowEvents.resize(); },
+    viewport(width, height) { context.innerWidth = width; context.innerHeight = height; },
     emotions: context.EmotionBall.config.list(),
     command: value => subscriptions.command(value),
     settings: value => subscriptions.settings(value),
@@ -1363,7 +1367,7 @@ test('Codex failure and thinking use original sprite rows; sleep, lock and hidde
   r.command('sleep'); assert.equal(canvas.dataset.codexAction, 'waiting');
   const count = r.host.motions.length;
   r.command(codexCommand({ alertId: 2 })); assert.equal(r.host.motions.length, count);
-  r.command('wake'); assert.equal(canvas.dataset.codexAction, 'jump');
+  r.command('wake'); assert.equal(canvas.dataset.codexAction, 'running');
   r.activity(true); assert.equal(r.pet.dataset.motionOwner, 'none');
   r.command(codexCommand({ alertId: 2 })); assert.equal(r.host.codexAcks.length, 1);
   r.activity(false); r.present({ mode: 'hidden', suppressed: true });
@@ -1412,4 +1416,164 @@ test('真实睡眠状态覆盖手动、自然休息与外部唤醒，仅状态�
   r.activity(false,{idleSeconds:0});assert.equal(r.host.sleepStates.at(-1),'awake');
   r.activity(true);assert.equal(r.host.sleepStates.at(-1),'sleep');
   r.activity(false,{idleSeconds:0});assert.equal(r.host.sleepStates.at(-1),'awake');
+});
+
+test('mapped imported cats use real sleep and wakeup actions while legacy pets keep their existing rows', () => {
+  const r = createRenderer(0.5,null,[]), frameMap = {
+    sleep: { start: 40, count: 8, durations: Array(8).fill(100) },
+    wakeup: { start: 48, count: 8, durations: Array(8).fill(75), loop: false } };
+  r.settings({ keepAwake: true, codexPet: { ...testCodexDescriptor, frameMap },
+    customization: { appearance: { shape: 'codex-pet', codexPetId: testCodexPetId } } }); r.advanceTo(0);
+  const canvas = r.pet.children.find(child => child.tag === 'canvas');
+  r.command('sleep'); assert.equal(canvas.dataset.codexAction, 'sleep');
+  r.command('wake'); assert.equal(canvas.dataset.codexAction, 'wakeup');
+  for(const cb of r.quotaFrames.splice(0))cb(0);r.advanceTo(2500);for(const cb of r.quotaFrames.splice(0))cb(2500);assert.equal(canvas.dataset.codexAction, 'idle');
+  r.windowEvents.beforeunload();
+});
+
+function createMappedInteractionFixture(extra = {}){
+ const r=createRenderer(0,null,[]),ids=['idle','run-right','run-left','wave','jump','fail','checking','waiting','running','sleep','wakeup','tail','groom'];
+ const frameMap=Object.fromEntries(ids.map(id=>[id,{sheet:'base',start:0,count:1,durations:[200],loop:['idle','sleep','run-right','run-left'].includes(id)}]));
+ for(const [i,id] of ['wave','tail','groom'].entries())frameMap[id]={sheet:'base',start:i+1,count:1,durations:[200],loop:false};
+ r.settings({keepAwake:true,codexPet:{...testCodexDescriptor,...extra,version:3,rows:1,imageURL:'file:///v3-base-interactions.webp',sheets:{base:{rows:1,imageURL:'file:///v3-base-interactions.webp'}},frameMap},customization:{appearance:{shape:'codex-pet',codexPetId:testCodexPetId}}});r.advanceTo(10000);r.activity(false,{idleSeconds:20});
+ return{r,canvas:r.pet.children.find(c=>c.tag==='canvas'),pump(now){for(const cb of r.quotaFrames.splice(0))cb(now);r.advanceTo(now+250);for(const cb of r.quotaFrames.splice(0))cb(now+250)}};
+}
+test('mapped random wakes sleep and selects real nonrepeating one-shot actions instead of legacy idle mappings',()=>{
+ const {r,canvas,pump}=createMappedInteractionFixture();r.command('sleep');assert.equal(canvas.dataset.codexAction,'sleep');const actions=[];
+ for(let i=0;i<4;i++){r.command('random');actions.push(canvas.dataset.codexAction);assert(['wave','tail','groom'].includes(actions.at(-1)));if(i)assert.notEqual(actions[i],actions[i-1]);assert.equal(r.host.sleepStates.at(-1),'awake');pump(10000+i*1000);}
+ r.windowEvents.beforeunload();
+});
+test('mapped body single clicks rotate real clips and a sleeping body click wakes instead of silently returning',()=>{
+ const {r,canvas,pump}=createMappedInteractionFixture(),actions=[];let now=10000;
+ for(let i=0;i<4;i++){r.click();r.advanceTo(now+=300);actions.push(canvas.dataset.codexAction);assert(['wave','tail','groom'].includes(actions.at(-1)));if(i)assert.notEqual(actions[i],actions[i-1]);pump(now);now+=250;}
+ r.command('sleep');r.click();r.advanceTo(now+=300);assert.equal(r.host.sleepStates.at(-1),'awake');assert.equal(canvas.dataset.codexAction,'wakeup');r.windowEvents.beforeunload();
+});
+test('mapped explicit wake clears a one-shot owner and completes its own wake clip without generic host stretch',()=>{
+ const {r,canvas,pump}=createMappedInteractionFixture();r.command('random');r.command('sleep');r.command('wake');assert.equal(r.host.sleepStates.at(-1),'awake');assert.equal(canvas.dataset.codexAction,'wakeup');assert.equal(r.host.motions.length,0);pump(10000);assert.equal(canvas.dataset.codexAction,'idle');r.windowEvents.beforeunload();
+});
+
+test('v1 and v2 uploaded skins use their existing action rows for random, body clicks, sleep and wake',()=>{
+ for(const version of [1,2]){
+  const r=createRenderer(0,null,[]),d={...testCodexDescriptor,version,rows:version===1?9:11,imageURL:version===1?testCodexDescriptor.imageURL:'file:///v2-base.webp'};
+  r.settings({keepAwake:true,codexPet:d,customization:{appearance:{shape:'codex-pet',codexPetId:testCodexPetId}}});r.advanceTo(10000);r.activity(false,{idleSeconds:20});const canvas=r.pet.children.find(c=>c.tag==='canvas'),actions=[];let now=10000;
+  for(const trigger of ['random','click','random','click']){if(trigger==='random')r.command('random');else{r.click();r.advanceTo(now+=300)}actions.push(canvas.dataset.codexAction);assert(['wave','jump','fail','checking'].includes(actions.at(-1)));if(actions.length>1)assert.notEqual(actions.at(-1),actions.at(-2));for(const cb of r.quotaFrames.splice(0))cb(now);r.advanceTo(now+=3000);for(const cb of r.quotaFrames.splice(0))cb(now);assert.equal(canvas.dataset.codexAction,'idle');}
+  r.command('sleep');assert.equal(canvas.dataset.codexAction,'waiting');r.command('wake');assert.equal(canvas.dataset.codexAction,'idle');assert.equal(r.host.sleepStates.at(-1),'awake');r.windowEvents.beforeunload();
+ }
+});
+
+test('an uploaded action decode error releases its one-shot owner before restoring the fallback pet',()=>{
+ const {r}=createMappedInteractionFixture();r.command('random');r.images.at(-1).onerror();assert.equal(r.pet.dataset.engine,'emotion-ball');r.settings({keepAwake:false});r.advanceTo(1010000);r.activity(false,{idleSeconds:10000});assert.equal(r.engine.emotionId,'00','a failed uploaded clip cannot leave an infinite action guard on fallback');r.windowEvents.beforeunload();
+});
+
+test('turning reduced motion on during an uploaded clip releases it and sleep/wake returns idle',()=>{
+ const {r,canvas}=createMappedInteractionFixture();r.command('random');assert.equal(canvas.dataset.codexAction,'wave');r.reduceMotion(true);r.activity();assert.equal(canvas.dataset.codexAction,'idle');r.command('sleep');assert.equal(canvas.dataset.codexAction,'sleep');r.command('wake');assert.equal(canvas.dataset.codexAction,'idle');assert.equal(r.host.sleepStates.at(-1),'awake');r.reduceMotion(false);r.command('random');assert.equal(canvas.dataset.codexAction,'tail','the prior one-shot guard was released');r.windowEvents.beforeunload();
+});
+
+for (const trigger of ['activity', 'task-settings']) test(`任务思考步态在重复${trigger}采样后保持当前帧并走完整周期`, () => {
+  const r = createRenderer(0.5, null, []);
+  const frameMap = { running: { start: 8, count: 24,
+    durations: Array.from({length:24}, (_, i) => i % 2 ? 62 : 63), loop: true } };
+  r.settings({ keepAwake:true, codexPet:{...testCodexDescriptor,version:2,rows:11,imageURL:'file:///v2-base-working.webp',frameMap},
+    customization:{appearance:{shape:'codex-pet',codexPetId:testCodexPetId}} });
+  r.advanceTo(10000); r.activity(false,{idleSeconds:20});
+  r.codexSettings({enabled:true,generation:1,activeTaskCount:1});
+  const canvas=r.pet.children.find(child=>child.tag==='canvas'), seen=new Set();
+  const pump=now=>r.quotaFrames.splice(0).forEach(callback=>callback(now));
+  pump(10000);
+  for(let step=1;step<=192;step++){
+    const now=10000+step*16;r.advanceTo(now);pump(now);
+    seen.add(Number(canvas.dataset.codexFrame));
+    if(step%8===0){
+      const before=canvas.dataset.codexFrame;
+      if(trigger==='activity')r.activity(false,{idleSeconds:20});
+      else r.codexSettings({enabled:true,generation:1,activeTaskCount:1});
+      assert.equal(canvas.dataset.codexAction,'running');
+      assert.equal(canvas.dataset.codexFrame,before,'状态采样不能先恢复待机再重启任务步态');
+    }
+  }
+  assert.equal(seen.size,24,'连续任务应覆盖完整24帧');
+  r.advanceTo(16000);assert.equal(canvas.dataset.codexAction,'idle','6秒思考展示结束仍须休息');
+  r.codexSettings({enabled:true,generation:1,activeTaskCount:0});assert.equal(canvas.dataset.codexAction,'idle');
+  r.windowEvents.beforeunload();
+});
+
+test('classic edge slide holds the painted pose and cancels delayed work on hide',()=>{
+ const r=createRenderer(.5,null,null,true);
+ r.present({mode:'tucked',side:'left',suppressed:true});
+ r.present({mode:'peeked',side:'left',suppressed:false});
+ const pose=JSON.stringify(r.engine._lastPose);
+ r.advanceTo(250);r.activity();
+ assert.equal(JSON.stringify(r.engine._lastPose),pose);
+ assert.equal(r.engine._active,false);
+ r.advanceTo(501);assert.equal(r.engine._active,true);
+ r.present({mode:'tucked',side:'left',suppressed:true});
+ r.advanceTo(650);r.present({mode:'hidden',suppressed:true});
+ r.advanceTo(1100);assert.equal(r.pet.dataset.presentation,'hidden');assert.equal(r.engine._active,false);
+});
+
+
+test('小白延长点击仲裁并保留pointerdown素材，普通同名导入皮肤保持原260ms和停止规则', async () => {
+  for (const xiaobai of [false, true]) {
+    const { r, canvas } = createMappedInteractionFixture({ name: '小白', ...(xiaobai ? { characterId: 'xiaobai' } : {}) });
+    for (let i = 0; i < 4; i++) await Promise.resolve();
+    r.click();
+    r.advanceTo(10270);
+    assert.equal(canvas.dataset.codexAction, xiaobai ? 'idle' : 'wave');
+    r.advanceTo(10510);
+    assert.equal(canvas.dataset.codexAction, 'wave');
+    const stops = r.host.stops;
+    r.events.pointerdown({ button: 0, pointerId: 2, screenX: 140, screenY: 140 });
+    assert.equal(r.host.stops, stops + (xiaobai ? 0 : 1));
+    assert.equal(r.pet.dataset.characterId, xiaobai ? 'xiaobai' : '');
+    r.windowEvents.beforeunload();
+  }
+});
+
+
+async function createDedicatedCelebrationFixture(xiaobai = true) {
+  const r = createRenderer(0, null, []);
+  r.viewport(80, 80);
+  const ids = ['idle', 'run-right', 'run-left', 'wave', 'jump', 'fail', 'checking', 'waiting', 'running', 'sleep', 'wakeup'];
+  const frameMap = Object.fromEntries(ids.map(id => [id,
+    { sheet: 'base', start: 0, count: 1, durations: [100], loop: true }]));
+  const sheets = Object.fromEntries(['base', 'jump', 'happy', 'spin'].map(id =>
+    [id, { rows: 1, imageURL: `file:///v3-base-${id}.webp` }]));
+  for (const id of ['jump', 'happy', 'spin']) {
+    frameMap[id] = { sheet: id, start: 0, count: 2, durations: [100, 100], loop: false };
+  }
+  r.settings({ keepAwake: true, codexPet: { ...testCodexDescriptor, name: '小白',
+    ...(xiaobai ? { characterId: 'xiaobai' } : {}), version: 3,
+    rows: 1, imageURL: sheets.base.imageURL, sheets, frameMap },
+    customization: { appearance: { shape: 'codex-pet', codexPetId: testCodexPetId } } });
+  for (let i = 0; i < 12; i++) { r.advanceTo(i); await Promise.resolve(); }
+  return { r, canvas: r.pet.children.find(child => child.tag === 'canvas') };
+}
+
+test('真实jump/happy/spin专用sheet且各count=2：聊天可见时小白及普通同名皮肤显式hop/spin/bow均执行原hostAction', async () => {
+  for (const xiaobai of [false, true]) for (const motion of ['hop', 'spin', 'bow']) {
+    const { r } = await createDedicatedCelebrationFixture(xiaobai);
+    r.activity(false, { chatVisible: true });
+    r.command({ command: 'again', motion });
+    assert.equal(r.host.motions.at(-1)?.action, motion);
+    assert.equal(r.pet.dataset.motionOwner, 'user');
+    r.windowEvents.beforeunload();
+  }
+});
+
+test('小白任务完成三分支继续选择专用真实素材并等待就绪ACK，不走用户宿主动作', async () => {
+  for (const [motion, action] of [['hop', 'jump'], ['spin', 'happy'], ['bow', 'spin']]) {
+    const { r, canvas } = await createDedicatedCelebrationFixture();
+    r.codexSettings({ enabled: true, generation: 1 });
+    r.command(codexCommand({ motion }));
+    for (let i = 0; i < 4; i++) await Promise.resolve();
+    assert.equal(canvas.dataset.codexAction, action);
+    assert.equal(r.host.codexAcks.at(-1).durationMs, 200);
+    assert.equal(r.host.codexAcks.at(-1).action, motion);
+    assert.equal(r.host.motions.length, 0);
+    assert.equal(r.pet.dataset.motionOwner, 'codex');
+    r.frame({ ...r.host.codexAcks.at(-1), frame: { done: true } });
+    assert.equal(canvas.dataset.codexAction, 'idle');
+    assert.equal(r.pet.dataset.motionOwner, 'none');
+    r.windowEvents.beforeunload();
+  }
 });

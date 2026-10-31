@@ -3,6 +3,8 @@
   const signature = value => JSON.stringify(value);
   window.addEventListener('beforeunload', () => cancelRecording());
   window.renderSettingsShortcuts = (container, config, api, behaviorsOnly = false) => {
+    const panelOnly = behaviorsOnly === 'panel';
+    const bindingsOnly = !behaviorsOnly;
     const incoming = signature(config);
     // Background refreshes and theme changes must not discard an unfinished edit.
     if (mounted?.isConnected && mountedMode === behaviorsOnly && (saving || incoming === baseline)) return;
@@ -18,7 +20,8 @@
       if (description) group.append(node('p', description, 'description group-intro'));
       section.append(group);
     }
-    if (!behaviorsOnly) startGroup('快捷面板', '鼠标悬停球球时出现的功能入口，也可以用快捷键唤起。');
+    if (panelOnly) startGroup('快捷面板', '鼠标悬停球球时出现的功能入口，也可以用快捷键唤起。');
+    if (bindingsOnly) startGroup('唤起面板快捷键', '使用组合键唤起快捷面板。');
     const notice = node('p', '点击组合键后，按下想使用的快捷键。Esc 取消，退格清除。', 'description');
     notice.setAttribute('role', 'status');
     function feedback(message) {
@@ -47,8 +50,8 @@
     }
     const enabled = node('button', '', 'toggle'); enabled.type = 'button'; enabled.setAttribute('role', 'switch'); enabled.setAttribute('aria-label', '启用快捷面板'); enabled.setAttribute('aria-checked', String(draft.enabled));
     enabled.onclick = () => { if (saving) return; draft.enabled = !draft.enabled; void persist(); };
-    if (!behaviorsOnly) row('启用快捷面板', enabled);
-    if (!behaviorsOnly) choice('面板形态', 'shape', [['floating', '悬浮按钮'], ['list', '列表面板']]);
+    if (panelOnly) row('启用快捷面板', enabled);
+    if (panelOnly) choice('面板形态', 'shape', [['floating', '悬浮按钮'], ['list', '列表面板']]);
     let active = null;
     const labels = { launcher: '唤起快捷面板', chat: '和球球聊聊', custom: '定制球球', note: '便签', todo: '待办', pomodoro: '番茄钟', weather: '天气' };
     const buttons = {}, clears = {};
@@ -61,7 +64,7 @@
       clears[field].setAttribute('aria-hidden', String(!draft[field]));
     }
     const finish = () => { if (active) paint(active); active = null; api.recordShortcuts(false); };
-    for (const [field, label] of Object.entries(behaviorsOnly ? {} : labels)) {
+    for (const [field, label] of Object.entries(bindingsOnly ? labels : {})) {
       if (field === 'chat') startGroup('功能快捷键', '直接打开对应功能，无需先唤起快捷面板。');
       const button = node('button', '', 'binding-button'); button.type = 'button';
       button.setAttribute('aria-label', `${label}快捷键`); buttons[field] = button;
@@ -76,7 +79,7 @@
       button.onclick = () => { if (saving) return; finish(); active = field; button.textContent = '请按组合键…'; button.classList.add('recording'); notice.textContent = `正在设置「${label}」：按下组合键，Esc 取消。`; api.recordShortcuts(true); };
       paint(field); controls.append(button, clear); row(label, controls);
     }
-    if (behaviorsOnly) {
+    if (behaviorsOnly === true) {
       startGroup('便签与待办的启动方式', '同时用于快捷面板按钮和功能快捷键。');
       choice('便签启动方式', 'noteBehavior', [['panel', '打开主面板'], ['create', '新建便签']]);
       choice('待办启动方式', 'todoBehavior', [['panel', '打开主面板'], ['create', '添加待办']]);

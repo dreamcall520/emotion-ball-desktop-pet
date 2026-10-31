@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="ui-theme-blue.css">
   <link rel="stylesheet" href="quota-customizer.css">
   <script defer src="color-mode.js"></script>
+  <link rel="stylesheet" href="ui-theme-purple.css">
 </head>
 <body>
   <main class="studio panel">
@@ -27,10 +28,15 @@
         <div id="stage" class="stage" data-preview-mode="large"><div id="preview-ball" aria-label="球球外观预览"></div><div class="segmented preview-mode" role="group" aria-label="预览尺寸">
           <button id="preview-large" type="button" aria-pressed="true">放大</button>
           <button id="preview-desktop" type="button" aria-pressed="false" title="按当前桌面球球的实际尺寸展示">桌面效果</button>
-        </div></div>
+        </div>
+
+        </div>
         <div class="preview-foot"><span id="preview-size-label">大图预览</span><span id="preview-status" role="status" aria-live="polite">眨眼与呼吸动效保留</span></div>
         <p class="preview-note">颜色与细节实时更新，满意后再保存。</p>
-        <div id="preview-animation" class="preview-animation" hidden><label for="pet-action">动作</label><div class="preview-animation-actions"><select id="pet-action" aria-label="预览宠物动作"><option value="idle">待机</option><option value="wave">挥手</option><option value="jump">跳跃</option><option value="running">处理中</option><option value="waiting">等待</option><option value="checking">检查</option><option value="fail">失败</option><option value="run-right">向右跑</option><option value="run-left">向左跑</option></select><button id="pet-play" class="icon-button" type="button" aria-label="暂停动画">Ⅱ</button></div></div>
+        <div id="preview-animation" class="preview-animation" hidden><div class="preview-animation-actions"><select id="pet-action" aria-label="预览宠物动作"></select><button id="pet-play" class="icon-button" type="button" aria-label="暂停动画" title="暂停动画" data-paused="false"><svg class="pause-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6v12M15 6v12"/></svg><svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 10 7-10 7Z"/></svg></button></div></div>
+        <div id="orb-preview-actions" class="orb-preview-actions" role="group" aria-label="小宇互动预览" hidden>
+          <button type="button" data-orb-action="complete">任务完成</button><button type="button" data-orb-action="love">怦然心动</button><button type="button" data-orb-action="ship">飞船收纳</button>
+        </div>
         <div id="quota-demo-tools" hidden>
           <div class="quota-demo-head"><div class="segmented" role="group" aria-label="预览数据"><button data-quota-source="demo" aria-pressed="true">演示</button><button data-quota-source="current" aria-pressed="false">当前额度</button></div><button id="quota-consume" class="text-button">▷ 播放消耗</button></div>
           <div id="quota-demo-controls">
@@ -43,6 +49,10 @@
         <div id="ball-options" role="tabpanel" aria-labelledby="source-ball">
         <div class="group-heading"><h3>形态</h3><span id="shape-hint" hidden></span></div>
         <div id="shape-options" class="shape-options" role="group" aria-label="球球形态"></div>
+        <div id="orb-material-field" class="form-section" hidden>
+          <div class="group-heading"><h3>小宇皮肤</h3></div>
+          <div id="orb-material-options" class="orb-material-options" role="group" aria-label="小宇皮肤材质"></div>
+        </div>
         <div id="sheep-theme-field" class="form-section" hidden>
           <div class="group-heading"><h3 id="sheep-theme-title">咩咩主题</h3></div>
           <select id="sheep-theme" hidden aria-hidden="true" tabindex="-1" disabled><option value="none">咩咩（无主题）</option><option value="halloween">万圣咩咩</option><option value="christmas">圣诞咩咩</option><option value="spring-festival">春节咩咩</option><option value="auto">跟随节日自动切换</option></select>
@@ -83,6 +93,10 @@
           <div class="color-editor">
             <div class="color-editor-head"><label for="eye-color">眼睛</label><div class="color-row"><button id="eye-color" class="color-trigger" type="button" aria-label="选取眼睛颜色" aria-haspopup="dialog" aria-controls="color-picker" aria-expanded="false" disabled><span class="color-chip" aria-hidden="true"></span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"></path></svg></button><input id="eye-hex" class="hex-input" type="text" inputmode="text" maxlength="7" spellcheck="false" aria-label="眼睛 HEX 色值"></div></div>
             <div id="eye-swatches" class="swatches" aria-label="眼睛颜色建议"></div>
+          </div>
+          <div id="orb-secondary-field" class="color-editor" hidden>
+            <div class="color-editor-head"><label for="orb-secondary-color">辅色</label><div class="color-row"><button id="orb-secondary-color" class="color-trigger" type="button" aria-label="选取小宇辅色" aria-haspopup="dialog" aria-controls="color-picker" aria-expanded="false" disabled><span class="color-chip" aria-hidden="true"></span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"></path></svg></button><input id="orb-secondary-hex" class="hex-input" type="text" inputmode="text" maxlength="7" spellcheck="false" aria-label="小宇辅色 HEX 色值"></div></div>
+            <div id="orb-secondary-swatches" class="swatches" aria-label="小宇辅色建议"></div>
           </div>
           <div id="aurora-colors" class="aurora-colors" hidden>
             <div class="group-heading"><h3>幻彩光斑</h3><button id="aurora-reference" class="text-button" type="button">参考配色</button></div>
@@ -177,5 +191,9 @@
 
 <dialog id="local-help-dialog" aria-labelledby="local-help-title"><div class="dialog-header"><h2 id="local-help-title">素材制作说明</h2><button id="local-help-close" class="icon-button" type="button" aria-label="关闭素材制作说明">×</button></div><section><h3>制作要求</h3><p>使用完整的动画宠物素材，包含 pet.json 和配套动作图。</p><p>图片格式：PNG 或 WebP。</p><p>基础图片尺寸：1536 × 1872 或 1536 × 2288 像素，均为 8 列动作格。</p><p>支持整张等比例 2 倍或 3 倍高清图集。3 倍尺寸为 4608 × 5616（9 行）或 4608 × 6864（11 行）像素，单格 576 × 624 像素。</p><p>每张图最大 16 MiB。请用原生高清动作帧制作；把小图放大不会增加细节。</p></section><section><h3>文件夹示例</h3><pre>我的小伙伴/
 ├── pet.json   宠物名称和动作说明
-└── pet.png    配套动作图片</pre><p>导入时选择「我的小伙伴」整个文件夹。图片名称应与 pet.json 中填写的名称一致，也可以使用 WebP 图片。</p><p class="muted">普通照片、GIF 或仅修改文件名，不能直接作为动画宠物使用。</p></section></dialog><script src="customize-renderer.js"></script></body>
+└── pet.png    配套动作图片</pre><p>导入时选择「我的小伙伴」整个文件夹。图片名称应与 pet.json 中填写的名称一致，也可以使用 WebP 图片。</p><p class="muted">普通照片、GIF 或仅修改文件名，不能直接作为动画宠物使用。</p></section></dialog>  <script src="lib/soft-orb-model.js"></script>
+  <script src="lib/soft-orb-motion.js"></script>
+  <script src="lib/soft-orb-renderer.js"></script>
+  <script src="lib/soft-orb.js"></script>
+<script src="customize-renderer.js"></script></body>
 </html>

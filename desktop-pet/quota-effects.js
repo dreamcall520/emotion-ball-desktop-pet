@@ -451,7 +451,7 @@ function drawStageDividers(ctx,dark){
     const contourContext = contour.getContext('2d', { willReadFrequently: true });
     let current = model(), options = {}, frame = 0, sampleRetry = 0, sampleAttempts = 0, previousFrame = -Infinity, orb = null;
     let pool = null, rawCanvas = null, rawOpacity = '', scaled = [];
-    let geometry = { x: 0, y: 0, width: 0, height: 0 }, destroyed = false, nativeFit = null;
+    let geometry = { x: 0, y: 0, width: 0, height: 0 }, destroyed = false, nativeFit = null, softQuotaSource=null;
     const sheepIdleCenters = new WeakMap();
     // Current Halloween primary-idle alpha>24 spans y=[23,304) in the 320px cell.
     const sheepRingCenter = 163.5 / 320;
@@ -494,7 +494,8 @@ function drawStageDividers(ctx,dark){
     const originalScale = element => scaled.find(item => item.element === element)?.scale ?? element.style.scale;
     function restoreScale() {
       for (const item of scaled) {
-        item.element.style.scale = item.scale;
+        if(item.element.softOrbQuota)item.element.softOrbQuota.setScale(1);
+        else item.element.style.scale = item.scale;
         if(item.translate!==undefined)item.element.style.translate=item.translate;
       }
       scaled = [];
@@ -520,7 +521,7 @@ function drawStageDividers(ctx,dark){
       const bounds=host.getBoundingClientRect(),width=source.clientWidth,height=source.clientHeight;
       if(!(bounds.width>0&&bounds.height>0&&width>0&&height>0))return false;
       const style=root.getComputedStyle(source),saved=scaled.find(item=>item.element===source);
-      const baseScale=saved?.computedScale??style.scale,original=baseScale&&baseScale!=='none'?baseScale.split(' ').map(Number):[1,1];
+      const baseScale=saved?.computedScale??style.scale,original=source.softOrbQuota?[source.dataset.facing==='right'?-1:1,1]:baseScale&&baseScale!=='none'?baseScale.split(' ').map(Number):[1,1];
       const baseTranslate=saved?.computedTranslate??style.translate,translation=baseTranslate&&baseTranslate!=='none'?baseTranslate.split(' '):['0','0'];
       const tx=parseFloat(translation[0])*(translation[0].includes('%')?width/100:1),ty=parseFloat(translation[1]||'0')*((translation[1]||'0').includes('%')?height/100:1);
       const [ox,oy]=style.transformOrigin.split(' ').map(parseFloat),px=source.offsetLeft+ox+tx,py=source.offsetTop+oy+ty;
@@ -528,7 +529,10 @@ function drawStageDividers(ctx,dark){
       if(style.transform!=='none')matrix.multiplySelf(new root.DOMMatrix(style.transform));
       matrix.translateSelf(-ox,-oy);
       let points;
-      if(sprite){
+      if(source.softOrbQuota){
+        // Stable body envelope: exclude transient hearts, fireworks, ship and floor shadow.
+        points=Array.from({length:48},(_,i)=>{const a=i*Math.PI*2/48;return [width*(.5+342/1024*Math.cos(a)),height*(.5+322/1024*Math.sin(a))];});
+      }else if(sprite){
         // Every animation frame shares this complete rectangle; fitting ink alone would make sprites jump.
         points=[[0,0],[width,0],[0,height],[width,height]];
       }else{
@@ -547,7 +551,7 @@ function drawStageDividers(ctx,dark){
       for(const [x,y] of points){
         const point=matrix.transformPoint({x,y});
         // Rive can breathe between samples. Reserve 8% of its real outline instead of the hidden SVG proxy.
-        const distance=Math.hypot(point.x-cx,point.y-cy)*(sprite?1:1.08);
+        const distance=Math.hypot(point.x-cx,point.y-cy)*(sprite||source.softOrbQuota?1:1.08);
         if(distance>0)factor=Math.min(factor,radius/distance);
       }
       const key=[bounds.width,bounds.height,width,height,source.offsetLeft,source.offsetTop,outer].join(':');
@@ -556,7 +560,8 @@ function drawStageDividers(ctx,dark){
       nativeFit.factor=Math.min(nativeFit.factor,clamp(factor,.001,1));factor=nativeFit.factor;
       if(!saved)scaled.push({element:source,scale:source.style.scale,computedScale:baseScale,
         translate:source.style.translate,computedTranslate:baseTranslate});
-      source.style.scale=String(original[0]*factor)+' '+String((original[1]??original[0])*factor);
+      if(source.softOrbQuota)source.softOrbQuota.setScale(factor);
+      else source.style.scale=String(original[0]*factor)+' '+String((original[1]??original[0])*factor);
       // Rive rotates around 50% 58%. Compensate that pivot only for the added scale,
       // keeping its existing pose/eye transform while centring the fitted body in the housing.
       source.style.translate=(tx+(cx-px)*(1-factor))+'px '+(ty+(cy-py)*(1-factor))+'px';
@@ -591,7 +596,7 @@ function drawStageDividers(ctx,dark){
         canvas.dataset.bodyShiftY=String(shift);
         return;
       }
-      const native=host.querySelector(':scope > canvas.eb-rive-aurora.ready,:scope > canvas.codex-pet-sprite');
+      const native=host.querySelector(':scope > canvas.eb-rive-aurora.ready,:scope > canvas.codex-pet-sprite,:scope > canvas.soft-orb-canvas[data-ready="true"]');
       if(native)return positionNativeRing(native,native.classList.contains('codex-pet-sprite'));
       const bounds = host.getBoundingClientRect(), svg = host.querySelector(':scope > svg');
       const head = svg?.querySelector('.eb-head');
@@ -717,6 +722,8 @@ function drawStageDividers(ctx,dark){
       }
     }
     function drawCanvasPool(source, q, t, sheep=false) {
+      const quotaLayers=source.softOrbQuota?.getPoolCanvases?.();
+      const bodySource=quotaLayers?.body||source;
       if (rawCanvas !== source) {
         restorePool(); rawCanvas=source; rawOpacity=source.style.opacity;
       }
@@ -734,11 +741,11 @@ function drawStageDividers(ctx,dark){
       const left=Math.min(...corners.map(p=>p.x)),right=Math.max(...corners.map(p=>p.x));
       const top=Math.min(...corners.map(p=>p.y)),bottom=Math.max(...corners.map(p=>p.y)),side=Math.max(right-left,bottom-top);
       const full={x:(left+right-side)/2,y:(top+bottom-side)/2,width:side};
-      const capture=box=>{
+      const capture=(box,input=bodySource)=>{
         sampleContext.clearRect(0,0,SIZE,SIZE);sampleContext.save();
         const scale=SIZE/box.width;sampleContext.scale(scale,scale);sampleContext.translate(-box.x,-box.y);
         sampleContext.transform(matrix.a,matrix.b,matrix.c,matrix.d,matrix.e,matrix.f);
-        sampleContext.drawImage(source,0,0,width,height);sampleContext.restore();
+        sampleContext.drawImage(input,0,0,width,height);sampleContext.restore();
       };
       // The native large preview overflows its host. First locate its whole painted footprint,
       // then resample that footprint at full resolution instead of clipping at the host edges.
@@ -755,14 +762,15 @@ function drawStageDividers(ctx,dark){
         y:full.y+(minY+maxY+1)*side/SIZE/2-paintedSide/2-padding,width:paintedSide+2*padding};
       capture(box);
       const image=sampleContext.getImageData(0,0,SIZE,SIZE), eyePixels=eyeContext.createImageData(SIZE,SIZE), rows=new Float64Array(SIZE);
+      const exactFace=quotaLayers?.face||source.softOrbQuota?.getFaceCanvas();if(exactFace){capture(box,exactFace);eyePixels.data.set(sampleContext.getImageData(0,0,SIZE,SIZE).data);capture(box);}
       let total=0;
       // Preserve face ink while the painted body becomes a liquid volume.
       // shortcut: retain dark raster face ink until separate face layers are available.
       for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++){
         const i=(y*SIZE+x)*4, alpha=image.data[i+3];
         rows[y]+=alpha;total+=alpha;
-        if(sheep?y>SIZE*.24&&y<SIZE*.56&&x>SIZE*.25&&x<SIZE*.75&&image.data[i]<120&&image.data[i+1]<90&&image.data[i+2]<75:
-          y<SIZE*.8&&16*(image.data[i]+image.data[i+1]+image.data[i+2])/255-47>0){
+        if(!exactFace&&(sheep?y>SIZE*.24&&y<SIZE*.56&&x>SIZE*.25&&x<SIZE*.75&&image.data[i]<120&&image.data[i+1]<90&&image.data[i+2]<75:
+          y<SIZE*.8&&16*(image.data[i]+image.data[i+1]+image.data[i+2])/255-47>0)){
           for(let component=0;component<4;component++)eyePixels.data[i+component]=image.data[i+component];
         }
       }
@@ -835,14 +843,14 @@ function drawStageDividers(ctx,dark){
       if(current.style==='pool'){
         const value=current.values[current.period];
         if(value===null){ctx.clearRect(0,0,SIZE,SIZE);restorePool();return;}
-        const source=host.querySelector(':scope > canvas.eb-rive-aurora.ready,:scope > canvas.sheep-skin');
+        const source=host.querySelector(':scope > canvas.eb-rive-aurora.ready,:scope > canvas.sheep-skin,:scope > canvas.soft-orb-canvas[data-ready="true"]');
         if(source){
           if(!drawCanvasPool(source,value/100,seconds,source.classList.contains('sheep-skin'))&&current.still&&sampleAttempts++<60&&!sampleRetry){
             sampleRetry=root.requestAnimationFrame(()=>{sampleRetry=0;paint(seconds);});
           }
         }else{ctx.clearRect(0,0,SIZE,SIZE);drawSvgPool(value/100,seconds);}
       }else{
-        const native=host.querySelector(':scope > canvas.eb-rive-aurora.ready,:scope > canvas.codex-pet-sprite');
+        const native=host.querySelector(':scope > canvas.eb-rive-aurora.ready,:scope > canvas.codex-pet-sprite,:scope > canvas.soft-orb-canvas[data-ready="true"]');
         if(native&&!positionNativeRing(native,native.classList.contains('codex-pet-sprite'))){
           ctx.clearRect(0,0,SIZE,SIZE);
           if(current.still&&sampleAttempts++<60&&!sampleRetry)sampleRetry=root.requestAnimationFrame(()=>{sampleRetry=0;paint(seconds);});
@@ -874,6 +882,9 @@ function drawStageDividers(ctx,dark){
       if (destroyed) return;
       options=input;current=model(input);current.still ||= Boolean(motionPreference?.matches);
       sheepIdleCenter(host.querySelector(':scope > canvas.sheep-skin'));
+      const soft=host.querySelector(':scope > canvas.soft-orb-canvas');
+      if(softQuotaSource!==soft){softQuotaSource?.softOrbQuota?.setMode?.('card');softQuotaSource=soft;}
+      softQuotaSource?.softOrbQuota?.setMode?.(current.visible&&current.available?current.style:'card');
       root.cancelAnimationFrame(frame);root.cancelAnimationFrame(sampleRetry);frame=sampleRetry=sampleAttempts=0;restorePool();restoreScale();
       Object.assign(canvas.style,{display:'',filter:'none',opacity:'1'});
       for(const key of ['liquidY','liquidSurfaces','bodyScale','bodyShiftY'])delete canvas.dataset[key];
@@ -898,11 +909,12 @@ function drawStageDividers(ctx,dark){
     resizeObserver?.observe(host);
     const nativeObserver=typeof root.MutationObserver==='function'?new root.MutationObserver(records=>{
       if(records.some(record=>record.type==='attributes'
-        ?record.target.matches?.('.eb-rive-aurora,.codex-pet-sprite,.sheep-skin')
-        :record.target===host&&[...record.addedNodes].some(element=>element!==canvas&&element.matches?.('svg,.eb-rive-aurora,.codex-pet-sprite,.sheep-skin'))))refresh();
+        ?record.target.matches?.('.eb-rive-aurora,.codex-pet-sprite,.sheep-skin,.soft-orb-canvas')
+        :record.target===host&&[...record.addedNodes].some(element=>element!==canvas&&element.matches?.('svg,.eb-rive-aurora,.codex-pet-sprite,.sheep-skin,.soft-orb-canvas'))))refresh();
     }):null;
     nativeObserver?.observe(host,{childList:true,subtree:true,attributes:true,attributeFilter:['class','data-ready','data-facing']});
     function destroy(){
+      softQuotaSource?.softOrbQuota?.setMode?.('card');softQuotaSource=null;
       destroyed=true;root.cancelAnimationFrame(frame);root.cancelAnimationFrame(sampleRetry);restorePool();restoreScale();canvas.remove();orb?.destroy();resizeObserver?.disconnect();nativeObserver?.disconnect();
       root.removeEventListener('resize',refresh);document.removeEventListener('visibilitychange',refresh);motionPreference?.removeEventListener('change',refresh);
     }

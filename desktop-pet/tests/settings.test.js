@@ -39,7 +39,7 @@ test('无主题设置默认晴空蓝，保留已选主题及形象外观偏好',
   fs.writeFileSync(file, JSON.stringify(legacy));
   const original = loadSettings(file), before = JSON.stringify(original);
   assert.equal(original.uiTheme, 'blue', '没有保存主题选择时使用晴空蓝');
-  for (const uiTheme of ['green', 'blue']) for (const colorMode of ['standard', 'accessible']) for (const codexQuotaAppearance of ['system', 'light', 'dark']) {
+  for (const uiTheme of ['green', 'blue', 'purple']) for (const colorMode of ['standard', 'accessible']) for (const codexQuotaAppearance of ['system', 'light', 'dark']) {
     const saved = saveSettings(file, { ...original, uiTheme, colorMode, codexQuotaAppearance });
     const loaded = loadSettings(file);
     assert.deepEqual(loaded, saved);

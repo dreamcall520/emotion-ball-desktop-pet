@@ -71,7 +71,7 @@ if (!process.versions.electron) {
         getObstacles: () => [codex.getVisibleBounds(), api.getVisibleBounds(), zcode.getVisibleBounds(), bubble].filter(Boolean), onLayout: () => sync(), onError });
       // Execute the owning main helper so a fixture cannot silently use a different plan.
       const main = fs.readFileSync(path.join(sourceRoot, 'desktop-pet/main.js'), 'utf8');
-      const scope = { quotaLabel: codex, apiUsageLabel: api, zcodeLink: zcode, workbuddyLabel: workbuddy, petWindow: pet, screen, settings, SheepTheme, PetFacing,
+      const scope = { weatherWindow: null, apiBalanceLabel: null, quotaLabel: codex, apiUsageLabel: api, zcodeLink: zcode, workbuddyLabel: workbuddy, petWindow: pet, screen, settings, SheepTheme, PetFacing,
         currentSheepSettledInk:()=>null,currentSheepCapsuleInk:()=>shape==='new-year-sheep'?{theme:'none',facing:PetFacing.resolve(pet.getBounds(),area),ink:{x:.1,y:.2,width:.8,height:.6}}:null,quotaReducedMotion:()=>false,codexPageEpoch:1,quotaCardGroup:{getState:()=>({eligible:['codex','api','zcode','workbuddy']})},quotaCardConfig:()=>({order:config.order,pinned:config.pinned}),quotaCardCollected:id=>!groupState.visible.includes(id),quotaCardGroupWindow:null,showQuotaCardBar:()=>{},quotaLayoutPresentation:()=>presentation,sheepBarInk:null,sheepQuotaInk: null, quotaFreeStackBounds, edgeTuck: { getPresentation: () => presentation }, quotaDisplayConfig: () => ({ style: 'card' }), quotaObstacleBounds: () => bubble, safelyInvokeWindow: (_name, fn) => fn() };
       scope.quotaCardControllers=()=>({codex,api,zcode,workbuddy});
       scope.quotaCardGroupInput=()=>({config,eligible:['codex','api','zcode','workbuddy'],suppressed,dragging:false});
@@ -147,7 +147,16 @@ if (!process.versions.electron) {
       group.close();report.inlineResize={source:'zcode',realRendererToggle:true,buckets:4,expandedHeight,from:'below',to:'above',stationaryMs:640,oldEmptyAreaReleased:true};
       assert(settled.length>=48,'entry/reverse/exit all settle');assert(settled.every(result=>result.canceled===false),'actual main context never cancels a completed animation');report.settled=settled;assert.deepEqual(errors,[]);assert(windows.every(w=>w.isDestroyed()||!w.nativeVisible()),'all native hosts remain hidden');report.passed=true;
       fs.writeFileSync(path.join(out,'group-transition-report.json'),JSON.stringify(report,null,2));console.log('GROUP_TRANSITION_NATIVE_OK',JSON.stringify({cases:report.cases.length,out}));
-    }catch(error){console.error(error.stack);}
+    } catch (error) {
+      report.error = error.stack;
+      report.controllerErrors = errors;
+      report.windows = windows.map(w => ({ destroyed: w.isDestroyed(), ...(w.isDestroyed() ? {} : {
+        logicalVisible: w.isVisible(), nativeVisible: w.nativeVisible(), loading: w.webContents.isLoading(),
+        opacity: w.getOpacity(), url: w.webContents.getURL()
+      }) }));
+      fs.writeFileSync(path.join(out, 'group-transition-report.json'), JSON.stringify(report, null, 2));
+      console.error(error.stack); console.error(JSON.stringify(report.controllerErrors));
+    }
     finally{transition?.destroy();zcode?.close();api?.destroy();codex?.destroy();workbuddy?.destroy();for(const win of windows)if(!win.isDestroyed())win.destroy();app.exit(report.passed?0:1);}
   });
 }

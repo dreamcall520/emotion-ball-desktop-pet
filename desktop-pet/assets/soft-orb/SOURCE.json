@@ -1,0 +1,15 @@
+{
+  "skin": "soft-orb",
+  "candidate": "preview-r26",
+  "reference": "https://www.xiaohongshu.com/discovery/item/6accf718000000001a020004",
+  "referenceAuthor": "吴neinei",
+  "geometry": "measured reference contour, smoothed distance field; shared by all materials",
+  "assets": {
+    "shape.png": "reference contour distance field",
+    "pearl.png": "generated no-eyes material refined from user reference",
+    "plush.png": "generated no-eyes blue material from user reference",
+    "craft.png": "generated matching pearlescent craft",
+    "swatches": "captured preview material thumbnails",
+    "fallback-*": "actual transparent SoftOrb canvas capture, 512px, static fallback only"
+  }
+}

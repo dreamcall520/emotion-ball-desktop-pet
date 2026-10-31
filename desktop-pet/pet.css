@@ -37,6 +37,7 @@ body {
 
 #pet[data-shape="codex-pet"] { display: grid; place-items: center; }
 #pet .codex-pet-sprite { filter: drop-shadow(0 4px 5px rgba(66, 60, 52, 0.08)); }
+#pet[data-character-id="xiaobai"] .codex-pet-sprite { filter: none; }
 #pet.dragging .codex-pet-sprite { transform: rotate(var(--drag-tilt, 0deg)); }
 
 #pet svg {
@@ -67,6 +68,14 @@ body {
 #pet { transition: transform 180ms ease-out; }
 #pet[data-presentation="tucked"][data-edge="left"] { transform: translateX(-50%); }
 #pet[data-presentation="tucked"][data-edge="right"] { transform: translateX(50%); }
+/* Keep other mapped partners at their existing edge exposure. */
+#pet[data-shape="codex-pet"][data-sprite-edge-mirror="true"][data-presentation="tucked"][data-edge="left"] { transform:translateX(-67.2%); }
+#pet[data-shape="codex-pet"][data-sprite-edge-mirror="true"][data-presentation="tucked"][data-edge="right"] { transform:translateX(67.2%); }
+#pet[data-shape="codex-pet"][data-sprite-edge-mirror="true"][data-character-id="xiaobai"][data-presentation="tucked"][data-edge="left"] { transform: translateX(-53.3538461538%); }
+#pet[data-shape="codex-pet"][data-sprite-edge-mirror="true"][data-character-id="xiaobai"][data-presentation="tucked"][data-edge="right"] { transform: translateX(53.3538461538%); }
+/* Mapped artwork can be asymmetric. Reveal the same inward-facing half on
+ * either edge; dragging keeps its own frame-map facing and tilt unchanged. */
+#pet[data-shape="codex-pet"][data-sprite-edge-mirror="true"][data-edge="right"]:not(.dragging):is([data-presentation="tucked"],[data-presentation="peeked"]) .codex-pet-sprite { transform: scaleX(-1); }
 /* The aurora cloud is a five-lobed reference image rather than the classic
  * round head. Leave a rounded outer lobe visible at rest; on hover show the
  * face while keeping the native window anchored inside the work area. */
@@ -118,10 +127,10 @@ body {
 }
 /* 经典头部收起时使用靠边小脑袋；两种云保持各自的完整云轮廓。
  * 曲线在身体中心轴闭合，随原有微呼吸一起运动；展开即回到原始路径。 */
-#pet:not([data-shape="aurora-cloud"]):not([data-shape="cloud"])[data-presentation="tucked"][data-edge="left"] .eb-head {
+#pet:not([data-edge-peek="true"]):not([data-shape="aurora-cloud"]):not([data-shape="cloud"])[data-presentation="tucked"][data-edge="left"] .eb-head {
   d: path("M 114.27 58 C 114.27 39 125 32 139 34 C 183 39 217 71 217 114.27 C 217 156 183 190 139 195 C 125 197 114.27 190 114.27 171 Z");
 }
-#pet:not([data-shape="aurora-cloud"]):not([data-shape="cloud"])[data-presentation="tucked"][data-edge="right"] .eb-head {
+#pet:not([data-edge-peek="true"]):not([data-shape="aurora-cloud"]):not([data-shape="cloud"])[data-presentation="tucked"][data-edge="right"] .eb-head {
   d: path("M 114.27 58 C 114.27 39 103.54 32 89.54 34 C 45.54 39 11.54 71 11.54 114.27 C 11.54 156 45.54 190 89.54 195 C 103.54 197 114.27 190 114.27 171 Z");
 }
 #pet[data-presentation="tucked"] svg { filter: drop-shadow(0 1px 2px rgba(66, 60, 52, 0.06)); }
@@ -192,3 +201,21 @@ body {
 [data-weather="night"] .weather-cloud-ornament i:nth-child(4) { display: none; }
 [data-static="true"] .weather-cloud-ornament { display: none; }
 @media (prefers-reduced-motion: reduce) { .weather-cloud-ornament { display: none; } }
+
+#pet[data-shape="soft-orb"] .soft-orb-canvas{position:absolute;inset:0;pointer-events:none;}
+#pet[data-shape="soft-orb"].dragging .soft-orb-canvas{transform:rotate(var(--drag-tilt,0deg));}
+
+/* Original face at rest; the existing artwork only translates, never morphs. */
+#pet[data-edge-peek="true"] { transition:transform 480ms cubic-bezier(.22,1,.36,1); }
+#pet[data-edge-peek="true"][data-presentation="tucked"][data-edge="left"] { transform:translateX(calc(-1 * var(--edge-tuck))); }
+#pet[data-edge-peek="true"][data-presentation="tucked"][data-edge="right"] { transform:translateX(var(--edge-tuck)); }
+#pet[data-edge-peek="true"][data-presentation="peeked"][data-edge="left"] { transform:translateX(calc(-1 * var(--edge-peek))); }
+#pet[data-edge-peek="true"][data-presentation="peeked"][data-edge="right"] { transform:translateX(var(--edge-peek)); }
+#pet[data-edge-peek="true"].dragging,#pet[data-edge-peek="true"][data-dragging="true"] { transition:none; }
+@media(prefers-reduced-motion:reduce){#pet[data-edge-peek="true"]{transition:none;}}
+
+
+
+/* Keep the shadow unchanged while the body travels into the edge. */
+#pet[data-edge-peek="true"][data-shape="blob"] { will-change:transform; }
+#pet[data-edge-peek="true"][data-shape="blob"] svg { filter:drop-shadow(0 4px 5px rgba(66,60,52,.08)); }

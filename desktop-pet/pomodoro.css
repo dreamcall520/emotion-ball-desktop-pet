@@ -77,3 +77,9 @@ body[data-view=mini] #mini{position:absolute;left:6px;top:6px;margin:0}.mini-ent
 .settings .choice-card{gap:6px;font-size:12px;font-weight:500}.settings .choice-sample{width:40px;font-weight:500}.settings .sample-timeline{font-size:12px;letter-spacing:-.3px}.settings .sample-modules i{font-size:12px;letter-spacing:-.3px}.settings .sample-minutes{font-size:21px}.settings .sample-minutes small{font-size:11px;letter-spacing:-.2px}
 .settings .duration-fields label{font-size:12px;font-weight:500;line-height:18px}.settings .duration-input{margin-top:6px}.settings .duration-fields input{font-size:20px;padding-right:30px}.settings .duration-unit{font-size:11px;font-weight:500;line-height:16px}
 .settings .encouragement-option{font-size:12px;line-height:18px}.settings .encouragement-option input{width:14px;height:14px}.settings .settings-note{font-size:11px;line-height:17px}.settings .settings-body{padding-bottom:2px}.settings .settings-actions :is(.primary,.secondary){font-size:12px;font-weight:500}
+
+/* Functional controls stay readable without making the timer surface heavier. */
+#focus-panel .modes button{font-size:12px;line-height:14px;padding-block:7px;font-weight:500;color:var(--muted)}
+#focus-panel .modes button.active{font-weight:600;color:var(--accent-text)}
+#focus-panel .intention input{font-size:11px}
+#focus-panel .panel-footer .reset{font-size:11px;font-weight:500}

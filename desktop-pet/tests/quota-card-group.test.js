@@ -81,3 +81,17 @@ test('weather joins the same order/pin group only when eligible and leaves exist
  assert.deepEqual(f.group.sync().visible,['weather']);f.group.activate();assert.deepEqual(f.group.getState().visible,['weather','codex','api','zcode','workbuddy']);
  f.input.eligible=f.input.eligible.filter(id=>id!=='weather');assert(!f.group.sync().visible.includes('weather'));f.group.close();
 });
+
+test('dialogue side stack capsule follows its horizontal center and avoids the dialogue',()=>{
+ const {quotaFreeStackBounds}=require('../lib/quota-label-placement');
+ for(const height of [875,900]){
+  const area={x:0,y:25,width:1440,height},pet={x:24,y:800,width:80,height:80},bubble={x:8,y:706,width:224,height:86};
+  const metrics={weather:{width:128,height:32,inset:2},codex:{width:128,height:32,inset:2,guardTargetWidth:48,roleWidth:22},balance:{width:128,height:32,inset:2}};
+  const plan=quotaFreeStackBounds(pet,area,metrics,{mode:'free'},bubble),cards=Object.values(plan.cards).map(r=>r.face);
+  const bar=quotaCardBarBounds(pet,area,{cardStackBounds:cards,bubbleBounds:bubble});
+  const overlap=(a,b)=>a.x<b.x+b.width&&a.x+a.width>b.x&&a.y<b.y+b.height&&a.y+a.height>b.y;
+  assert(!overlap(bar,bubble));assert(!overlap(bar,pet));assert(cards.every(c=>!overlap(bar,c)));
+  assert(bar.y>650,'capsule remains in the bottom neighborhood');
+  assert(Math.abs(bar.x+bar.width/2-(cards[0].x+cards[0].width/2))<200,'capsule stays with the stack');
+ }
+});

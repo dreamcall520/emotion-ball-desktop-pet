@@ -6,7 +6,7 @@ const os = require('node:os');
 const { deflateSync } = require('node:zlib');
 const { createCodexPetStore, MAX_MANIFEST_BYTES, MAX_IMAGE_BYTES } = require('../lib/codex-pets');
 
-function png(width, height) {
+function png(width, height, color = 0) {
   const chunk = (name, bytes) => {
     const type = Buffer.from(name), data = Buffer.concat([type, bytes]);
     let crc = 0xffffffff;
@@ -21,7 +21,7 @@ function png(width, height) {
   const header = Buffer.alloc(13);
   header.writeUInt32BE(width); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 6;
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', header),
-    chunk('IDAT', deflateSync(Buffer.alloc((width * 4 + 1) * height))), chunk('IEND', Buffer.alloc(0))]);
+    chunk('IDAT', deflateSync((()=>{const pixels=Buffer.alloc((width*4+1)*height,color);for(let y=0;y<height;y++)pixels[y*(width*4+1)]=0;return pixels})())), chunk('IEND', Buffer.alloc(0))]);
 }
 
 const images = { 1: png(1536, 1872), 2: png(1536, 2288) };
@@ -245,4 +245,66 @@ test('rejects fractional, excessive and inconsistent atlas scaling before invoki
     assert.throws(() => f.store.importDirectory(folder), { code: 'INVALID_PET' });
   }
   assert.equal(decoded, 0);
+});
+
+test('native frame maps survive independent imports and reject unsafe or inconsistent ranges before copying', t => {
+  const f = fixture(t), frameMap = { idle: { start: 0, count: 8, durations: Array(8).fill(150) },
+    'run-right': { start: 8, count: 16, durations: Array(16).fill(75) },
+    sleep: { start: 56, count: 16, durations: Array(16).fill(100) },
+    wakeup: { start: 72, count: 8, durations: Array(8).fill(75), loop: false } };
+  const folder = f.add('楚哥动作', { spriteVersionNumber: 2, frameMap });
+  const pet = f.store.importDirectory(folder);
+  assert.deepEqual(pet.frameMap['run-right'], { ...frameMap['run-right'], loop: true, flipX: false });
+  assert.equal(pet.frameMap.wakeup.loop, false); assert.deepEqual(f.store.getImported(pet.id), pet);
+  for (const entry of [{ ...frameMap.sleep, start: 80 }, { ...frameMap.sleep, durations: [100] }]) {
+    const invalid = f.add(`bad-${entry.start}-${entry.durations.length}`, { spriteVersionNumber: 2, frameMap: { sleep: entry } });
+    assert.throws(() => f.store.importDirectory(invalid), { code: 'INVALID_PET' });
+  }
+});
+
+test('v3 bounded multi-sheet import validates every resource and preserves all animation frames', async t => {
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'pet-v3-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const folder=path.join(root,'source');fs.mkdirSync(folder);
+  const entry=(sheet,start,count)=>({sheet,start,count,durations:Array(count).fill(100),loop:false});
+  const frameMap=Object.fromEntries(['idle','run-right','run-left','wave','jump','fail','checking','waiting','running','sleep','wakeup'].map(id=>[id,entry('base',0,1)]));
+  frameMap.wave=entry('motion',0,33);frameMap.tail=entry('motion',33,7);
+  const raw={displayName:'楚哥',spriteVersionNumber:3,sheets:{base:{path:'base.png',rows:1},motion:{path:'motion.png',rows:5}},frameMap};
+  fs.writeFileSync(path.join(folder,'base.png'),png(1536,208));fs.writeFileSync(path.join(folder,'motion.png'),png(1536,1040));
+  const write=()=>fs.writeFileSync(path.join(folder,'pet.json'),JSON.stringify(raw));write();
+  let decoded=0;const store=createCodexPetStore({namespace:'local',sourceRoot:folder,importRoot:path.join(root,'imports'),validateImport:()=>{decoded++;return true}});
+  const pet=await store.importDirectory(folder);assert.equal(decoded,2);assert.equal(pet.version,3);assert.equal(pet.frameMap.wave.count,33);assert.equal(Object.keys(pet.sheets).length,2);
+  assert(fs.existsSync(pet.sheets.motion.path));assert.equal(store.getImported(pet.id).frameMap.tail.count,7);
+  fs.writeFileSync(path.join(folder,'motion.png'),png(1536,1040,1));
+  const changedPet=await store.importDirectory(folder);assert.notEqual(changedPet.id,pet.id,'every resource contributes to imported identity');
+  raw.sheets.motion.path='BASE.png';write();await assert.rejects(async()=>store.importDirectory(folder));
+  raw.sheets.motion.path='pet.json';write();await assert.rejects(async()=>store.importDirectory(folder));
+  raw.sheets.motion.path='motion.png';
+  raw.sheets.motion.rows=6;write();await assert.rejects(async()=>store.importDirectory(folder));
+  raw.sheets.motion.rows=5;raw.frameMap.tail.count=8;raw.frameMap.tail.durations=Array(8).fill(100);write();await assert.rejects(async()=>store.importDirectory(folder));
+  raw.frameMap.tail.count=7;raw.frameMap.tail.durations=Array(7).fill(100);raw.sheets.motion.path='../escape.png';write();await assert.rejects(async()=>store.importDirectory(folder));
+});
+
+test('generic variation survives independent imports while malformed nested data is rejected for every supported format',t=>{
+ const f=fixture(t),variation={initialDelayMs:[1000,3000],intervalMs:[45000,75000],clips:[{start:8,count:8,durations:Array(8).fill(375)},{start:16,count:8,durations:Array(8).fill(375)},{start:24,count:8,durations:Array(8).fill(375)}]};
+ for(const version of [1,2]){const dir=f.add('var-'+version,{spriteVersionNumber:version,frameMap:{sleep:{start:0,count:8,durations:Array(8).fill(400),variation}}});const pet=f.store.importDirectory(dir);assert.deepEqual(pet.frameMap.sleep.variation,variation);assert.deepEqual(f.store.getImported(pet.id).frameMap.sleep.variation,variation);const raw=JSON.parse(fs.readFileSync(path.join(dir,'pet.json')));raw.frameMap.sleep.variation.clips[0].path='../escape';fs.writeFileSync(path.join(dir,'pet.json'),JSON.stringify(raw));assert.throws(()=>f.store.importDirectory(dir),{code:'INVALID_PET'})}
+ const dir=path.join(f.sourceRoot,'var-3');fs.mkdirSync(dir);fs.writeFileSync(path.join(dir,'base.png'),png(1536,832));const frameMap=Object.fromEntries(['idle','run-right','run-left','wave','jump','fail','checking','waiting','running','sleep','wakeup'].map(id=>[id,{sheet:'base',start:0,count:8,durations:Array(8).fill(400)}]));frameMap.sleep.variation=variation;const raw={displayName:'generic',spriteVersionNumber:3,sheets:{base:{path:'base.png',rows:4}},frameMap};fs.writeFileSync(path.join(dir,'pet.json'),JSON.stringify(raw));const pet=f.store.importDirectory(dir);assert.deepEqual(pet.frameMap.sleep.variation,variation);raw.frameMap.sleep.variation.clips[2].start=32;fs.writeFileSync(path.join(dir,'pet.json'),JSON.stringify(raw));assert.throws(()=>f.store.importDirectory(dir),{code:'INVALID_PET'});
+});
+
+test('local deletion trashes only a verified imported copy and retains original source', async t=>{
+ const f=fixture(t),root=path.join(f.root,'local-pets'),source=f.add('delete-safe');
+ const store=createCodexPetStore({namespace:'local',sourceRoot:root,importRoot:root});
+ const pet=await store.importDirectory(source),calls=[];
+ const trash=path.join(f.root,'trash');fs.mkdirSync(trash);
+ assert.deepEqual(await store.trashImported(pet.id,async target=>{calls.push(target);fs.renameSync(target,path.join(trash,pet.id));}),{id:pet.id});
+ assert.deepEqual(calls,[path.join(fs.realpathSync(root),pet.id)]);assert(fs.existsSync(path.join(source,'pet.json')));assert.equal(store.listImported().pets.length,0);
+ assert(fs.existsSync(path.join(trash,pet.id,'pet.json')));
+});
+
+test('local deletion rejects path input, foreign namespace, symlink roots and failed trash preserves copy',async t=>{
+ const f=fixture(t),root=path.join(f.root,'local-pets'),source=f.add('delete-check');
+ const store=createCodexPetStore({namespace:'local',sourceRoot:root,importRoot:root});const pet=store.importDirectory(source);let calls=0;
+ for(const id of ['../pets',source,'codex-'+ 'f'.repeat(64),null]) await assert.rejects(store.trashImported(id,async()=>calls++));
+ await assert.rejects(f.store.trashImported(pet.id,async()=>calls++));assert.equal(calls,0);
+ await assert.rejects(store.trashImported(pet.id,async()=>{throw Error('trash unavailable')}));assert.equal(store.getImported(pet.id).id,pet.id);
+ const target=path.join(root,pet.id),moved=path.join(f.root,'moved');fs.renameSync(target,moved);fs.symlinkSync(moved,target);await assert.rejects(store.trashImported(pet.id,async()=>calls++));assert.equal(calls,0);assert(fs.existsSync(path.join(moved,'pet.json')));
 });

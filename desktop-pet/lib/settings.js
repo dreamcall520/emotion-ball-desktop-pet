@@ -104,7 +104,7 @@ function normalizeSettings(raw = {}) {
     bubblesEnabled:
       typeof raw.bubblesEnabled === 'boolean' ? raw.bubblesEnabled : DEFAULTS.bubblesEnabled,
     colorMode: ['standard', 'accessible'].includes(raw.colorMode) ? raw.colorMode : DEFAULTS.colorMode,
-    uiTheme: ['green', 'blue'].includes(raw.uiTheme) ? raw.uiTheme : DEFAULTS.uiTheme,
+    uiTheme: ['green', 'blue', 'purple'].includes(raw.uiTheme) ? raw.uiTheme : DEFAULTS.uiTheme,
     chatModel: normalizeModelSelection(raw.chatModel),
     chatSource: ['codex', 'zcode', 'workbuddy'].includes(raw.chatSource) ? raw.chatSource : raw.chatProvider === 'workbuddy' ? 'workbuddy' : 'codex',
     zcodeChatModel: normalizeModelSelection(raw.zcodeChatModel),

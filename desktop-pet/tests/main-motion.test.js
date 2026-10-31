@@ -991,6 +991,22 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   assert.equal(menu.filter(item => item.id === 'update-check').length, 1);
 });
 
+test('小宇不单独列互动入口，设置中心沿用随机表情触发动作', async () => {
+  const f = await fixture();
+  const original = Array.from(f.call('compactMenuTemplate()'), item => item.label || item.type);
+  f.call("settings.customization.appearance.shape = 'soft-orb'");
+  const menu=f.call('compactMenuTemplate()');
+  assert.deepEqual(Array.from(menu,item=>item.label||item.type),original);
+  const interactions=f.call('menuTemplate()').find(item=>item.label==='球球与互动');
+  assert.equal(interactions.submenu.some(item=>item.label==='小宇互动'),false);
+  interactions.submenu.find(item=>item.label==='随机表情').click();
+  assert.equal(f.commands.at(-1),'random');
+  f.call('refreshTrayMenu()');
+  assert.equal(f.trayMenus.at(-1).some(item=>item.label==='小宇互动'),false);
+  f.call('showPetContextMenu()');
+  assert.equal(f.popups.at(-1).value.some(item=>item.label==='小宇互动'),false);
+});
+
 test('便签待办默认页保存后下次打开生效，失败恢复当前和重建菜单的单选', async () => {
   const f = await fixture({ notesDefaultTab: 'todo' }), opens = f.notes.opens.length;
   const note = menuItem(f, 'notes-default-note'); note.checked = true; note.click(note);
@@ -1744,7 +1760,7 @@ test('free three-card coordination reflows once per stable size plan and retains
   assert.equal(f.call('zcodeLink.moves'),2);
   f.apiLabel.getLayoutMetrics=()=>null;f.call('syncQuotaFreeStack()');assert.deepEqual(Object.keys(f.call('quotaFreeStackPlan().cards')),['codex','zcode']);
   assert.equal(f.call('zcodeLink.moves'),3);f.call('syncQuotaFreeStack()');assert.equal(f.call('zcodeLink.moves'),3);
-  f.apiLabel.getLayoutMetrics=()=>metrics;f.call("edgeTuck.dock('left');edgeTuck.sampleCursor({x:petWindow.getBounds().x+10,y:petWindow.getBounds().y+10})");
+  f.apiLabel.getLayoutMetrics=()=>metrics;f.call("edgeTuck.dock('left');edgeTuck.sampleCursor({x:petWindow.getBounds().x+10,y:petWindow.getBounds().y+petWindow.getBounds().height/2})");
   const peek = f.call('quotaFreeStackPlan()');
   assert.deepEqual(Object.keys(peek.cards), ['codex','api','zcode']);
   const faces = Object.values(peek.cards).map(row => row.face);
@@ -3336,7 +3352,7 @@ test('桌面右键菜单以第一项为锚点，保留完整菜单及关闭回�
   assert.equal(typeof options.callback, 'function');
 });
 
-test('边缘展开时任务结果菜单保持展示，移出半球超过650ms仍能打开当前任务', async () => {
+test('边缘展开时任务结果菜单保持展示，移出半球超过900ms仍能打开当前任务', async () => {
   const f = await fixture({ codexEnabled: true });
   menuItem(f, 'edge-left').click();
   f.activity.sample({ cursor: { x: -780, y: 140 }, petBounds: f.pet.getBounds(), locked: false });
@@ -3349,10 +3365,10 @@ test('边缘展开时任务结果菜单保持展示，移出半球超过650ms仍
   await f.popups[0].value[0].click();
   assert.deepEqual(f.external, [`codex://threads/${TASK_ID}`]);
   f.popups[0].options.callback();
-  f.advanceTo(6449);
+  f.advanceTo(6699);
   assert.equal(edgeSnapshot(f).mode, 'peeked');
-  f.advanceTo(6450);
-  assert.equal(edgeSnapshot(f).mode, 'tucked', '结果菜单关闭后恢复650ms收起');
+  f.advanceTo(6700);
+  assert.equal(edgeSnapshot(f).mode, 'tucked', '结果菜单关闭后恢复900ms收起');
 });
 
 for (const replacement of ['menu', 'window']) {
@@ -3377,7 +3393,7 @@ for (const replacement of ['menu', 'window']) {
     f.advanceTo(800);
     assert.equal(f.call('edgeTuck.getPresentation().mode'), 'peeked');
     f.popups[1].options.callback();
-    f.advanceTo(1450);
+    f.advanceTo(1700);
     assert.equal(f.call('edgeTuck.getPresentation().mode'), 'tucked');
   });
 }
@@ -3389,7 +3405,7 @@ test('原生菜单打开失败会释放展开保护，不留下永久展开状�
   f.activity.sample({ cursor: { x: -500, y: 40 }, petBounds: f.pet.getBounds(), locked: false });
   f.call("Menu.buildFromTemplate = () => ({ popup() { throw new Error('popup failed'); } })");
   assert.throws(() => f.call('showPetContextMenu()'), /popup failed/);
-  f.advanceTo(650);
+  f.advanceTo(900);
   assert.equal(edgeSnapshot(f).mode, 'tucked');
 });
 
@@ -3541,11 +3557,11 @@ test('收藏名称20项上限与同名改名拒绝，不接受客户端伪造ID�
 });
 
 
-test('主题菜单独立保存薄荷绿与晴空蓝，不覆盖浅深外观、色弱或球球形象，重启保留', async () => {
+test('三种主题菜单独立保存，不覆盖浅深外观、色弱或球球形象，重启保留', async () => {
   const f = await fixture({ colorMode: 'accessible', codexQuotaAppearance: 'dark' });
   const before = f.call('JSON.stringify({customization:settings.customization,startup:settings.startupAppearance})');
   const themes = findMenuItem(f.call('menuTemplate()'), 'ui-theme');
-  assert.deepEqual(Array.from(themes.submenu, item => item.label), ['薄荷绿', '晴空蓝']);
+  assert.deepEqual(Array.from(themes.submenu, item => item.label), ['薄荷绿', '晴空蓝', '暮光紫']);
   assert.equal(findMenuItem(themes.submenu, 'ui-theme-green').checked, true);
   findMenuItem(themes.submenu, 'ui-theme-blue').click();
   assert.equal(f.saved.at(-1).uiTheme, 'blue');
@@ -3554,13 +3570,19 @@ test('主题菜单独立保存薄荷绿与晴空蓝，不覆盖浅深外观、�
   assert.equal(f.pet.uiTheme, 'blue');
   assert.equal(f.pet.colorAppearance, 'dark');
   assert.equal(f.call('JSON.stringify({customization:settings.customization,startup:settings.startupAppearance})'), before);
+  findMenuItem(themes.submenu, 'ui-theme-purple').click();
+  assert.equal(f.saved.at(-1).uiTheme, 'purple');
+  assert.equal(f.pet.uiTheme, 'purple');
+  assert.equal(f.saved.at(-1).colorMode, 'accessible');
+  assert.equal(f.saved.at(-1).codexQuotaAppearance, 'dark');
+  assert.equal(f.call('JSON.stringify({customization:settings.customization,startup:settings.startupAppearance})'), before);
   const restarted = await fixture({ loadedSettings: f.saved.at(-1) });
-  assert.equal(findMenuItem(restarted.call('menuTemplate()'), 'ui-theme-blue').checked, true);
+  assert.equal(findMenuItem(restarted.call('menuTemplate()'), 'ui-theme-purple').checked, true);
   restarted.pet.webContents.emit('did-finish-load');
-  assert.equal(restarted.pet.uiTheme, 'blue');
+  assert.equal(restarted.pet.uiTheme, 'purple');
   const writes = f.saved.length;
+  assert.equal(f.call("setUiTheme('invalid')"), false);
   assert.equal(f.call("setUiTheme('purple')"), false);
-  assert.equal(f.call("setUiTheme('blue')"), false);
   assert.equal(f.saved.length, writes);
 });
 
@@ -4737,4 +4759,44 @@ test('所有窗口只上报固定故障类别，正常销毁和被取消加载�
   win.webContents.emit('console-message',{level:'warning'});
   assert.equal(f.call('feedbackReporting.captured.length'),4);
   f.call('isQuitting=true');win.emit('unresponsive');assert.equal(f.call('feedbackReporting.captured.length'),4);
+});
+
+test('uploaded pets retain original generic settings without a partner action menu or dedicated commands',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));
+ f.call("codexPetDescriptor=()=>({version:3,frameMap:{wave:{},tail:{},groom:{}}})");
+ assert.equal(findMenuItem(f.call('compactMenuTemplate()'),'imported-pet-actions'),null);
+ const entries=f.call('settingsEntries(settingsCommandTemplate())');
+ const interactions=entries.find(item=>item.label==='球球与互动');
+ assert(interactions.children.some(item=>item.label==='随机表情'));assert(interactions.children.some(item=>item.label==='立即睡眠'));assert(interactions.children.some(item=>item.label==='立即唤醒'));
+ assert(!interactions.children.some(item=>item.id.includes('pet-action-')));
+ const before=f.pet.messages.length;f.call("sendCommand({command:'pet-action',action:'tail'})");assert.equal(f.pet.messages.length,before);
+});
+
+test('the original settings wake action recalls a tucked pet before dispatching wake',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));menuItem(f,'global-settings').click();const win=f.call('globalSettingsWindow');win.emit('ready-to-show');
+ const entries=f.call('settingsEntries(settingsCommandTemplate())'),wake=entries.find(item=>item.label==='球球与互动').children.find(item=>item.label==='立即唤醒');
+ f.call("dockPet('left')");assert.equal(f.call('edgeTuck.getPresentation().mode'),'tucked');
+ const result=await f.invoke('pet:global-settings-action',wake.id,win.webContents);assert.equal(result.error,undefined);assert.equal(f.call('edgeTuck.getPresentation().mode'),'free');assert.equal(f.pet.messages.filter(item=>item.channel==='pet:command').at(-1).packet,'wake');
+ f.call('hidePet()');assert.equal(f.pet.isVisible(),false);await f.invoke('pet:global-settings-action',wake.id,win.webContents);assert.equal(f.pet.isVisible(),true);assert.equal(f.call('edgeTuck.getPresentation().mode'),'free');
+});
+
+test('local skin deletion requires trusted owner, confirmation and no current/default/favorite references',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization()');const editor=f.call('customizationWindow');editor.emit('ready-to-show');
+ const id='codex-'+ 'e'.repeat(64);f.call(`globalThis.deleteId=${JSON.stringify(id)};localPetStore={calls:[],getImported(id){if(id!==deleteId)throw Error('missing');return {id,name:'待删除皮肤'}},async trashImported(id,trash){await trash('/fixture/local-pets/'+id);this.calls.push(id)}};shell.trashItem=async target=>{shell.trashed=target};dialog.showMessageBox=async(owner,options)=>{if(owner!==customizationWindow||options.cancelId!==0||options.buttons[1]!=='删除皮肤')throw Error('bad confirm');return {response:0}}`);
+ assert.equal((await f.invoke('pet:local-pets-delete',id)).ok,false);assert.equal((await f.invoke('pet:local-pets-delete','../outside',editor.webContents)).ok,false);
+ assert.equal((await f.invoke('pet:local-pets-delete',id,editor.webContents)).canceled,true);assert.equal(f.call('localPetStore.calls.length'),0);
+ for(const [field,error] of [['settings.customization.appearance','桌面使用'],['settings.startupAppearance','启动默认']]){
+  const original=f.call(`JSON.stringify(${field})`);f.call(`${field}={shape:'codex-pet',codexPetId:deleteId}`);
+  assert.match((await f.invoke('pet:local-pets-delete',id,editor.webContents)).error,new RegExp(error));f.call(`${field}=${original}`);
+ }
+ f.call("settings.appearancePresets=[{appearance:{shape:'codex-pet',codexPetId:deleteId}}]");assert.match((await f.invoke('pet:local-pets-delete',id,editor.webContents)).error,/收藏/);f.call('settings.appearancePresets=[]');
+ const before=f.call('JSON.stringify(settings)');f.call('dialog.showMessageBox=async()=>({response:1})');const result=await f.invoke('pet:local-pets-delete',id,editor.webContents);assert.equal(result.ok,true);assert.equal(result.id,id);assert.equal(f.call('shell.trashed'),'/fixture/local-pets/'+id);assert.equal(f.call('JSON.stringify(settings)'),before);
+});
+
+test('local deletion rechecks confirmation session and references, and blocks saving while trash is pending',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization()');const editor=f.call('customizationWindow');editor.emit('ready-to-show');const id='codex-'+ 'e'.repeat(64);
+ f.call(`globalThis.deleteId=${JSON.stringify(id)};localPetStore={calls:0,getImported(id){return {id,name:'待删除'}},trashImported(){this.calls++;return new Promise(resolve=>this.finish=resolve)}};dialog.showMessageBox=()=>new Promise(resolve=>dialog.finishDelete=resolve)`);
+ let pending=f.invoke('pet:local-pets-delete',id,editor.webContents);assert.equal((await f.invoke('pet:local-pets-import',undefined,editor.webContents)).ok,false);editor.hide();editor.show();f.call('dialog.finishDelete({response:1})');assert.equal((await pending).ok,false);assert.equal(f.call('localPetStore.calls'),0);
+ pending=f.invoke('pet:local-pets-delete',id,editor.webContents);f.call("settings.startupAppearance={shape:'codex-pet',codexPetId:deleteId};dialog.finishDelete({response:1})");assert.match((await pending).error,/启动默认/);assert.equal(f.call('localPetStore.calls'),0);f.call("settings.startupAppearance={shape:'blob'}");
+ pending=f.invoke('pet:local-pets-delete',id,editor.webContents);f.call('dialog.finishDelete({response:1})');await flush();assert.equal(f.call('localPetStore.calls'),1);assert.equal(f.call("saveCustomization({appearance:{shape:'codex-pet',codexPetId:deleteId}})"),false);assert.equal(f.call("changeAppearancePreset('add',{name:'Race',appearance:{shape:'codex-pet',codexPetId:deleteId}}).ok"),false);f.call('localPetStore.finish()');assert.equal((await pending).ok,true);assert.equal(f.call('localPetImportBusy'),false);assert.equal(f.call('localPetDeletingId'),null);
 });

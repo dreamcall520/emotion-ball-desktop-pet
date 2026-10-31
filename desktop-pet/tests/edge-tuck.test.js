@@ -23,7 +23,7 @@ test('两种云贴边保留云轮廓，幻彩云露出侧瓣与部分眼睛', ()
   assert.doesNotMatch(css, /#pet\[data-shape="aurora-cloud"\]\[data-presentation="tucked"\]\s+\.eb-eye\s*\{[^}]*opacity:\s*0/);
 });
 
-function fixture({ size = 80, x = -600, side = null } = {}) {
+function fixture({ size = 80, x = -600, side = null, delay = 650 } = {}) {
   assert.equal(typeof api.createEdgeTuck, 'function', '提供可独立验证的边缘状态控制器');
   let bounds = { x, y: 100, width: size, height: size };
   let area = { x: -800, y: 0, width: 800, height: 600 };
@@ -34,7 +34,7 @@ function fixture({ size = 80, x = -600, side = null } = {}) {
     setPosition(x, y) { bounds.x = x; bounds.y = y; },
     setIgnoreMouseEvents(value) { ignores.push(value); } };
   const controller = api.createEdgeTuck({ getWindow: () => win, getWorkArea: () => area,
-    getRetentionBounds: () => retention, onChange: packet => packets.push(packet),
+    getRetentionBounds: () => retention, getTuckDelay: () => delay, onChange: packet => packets.push(packet),
     schedule(callback, delay) { timers.set(++serial, { callback, at: now + delay }); return serial; },
     cancel(id) { timers.delete(id); } });
   if (side) controller.dock(side);
@@ -187,3 +187,5 @@ test('快捷面板与右键菜单分别保留展开，关闭一个不解除另�
   f.controller.pin(false, 'shortcuts'); f.advance(2650);
   assert.equal(f.controller.getPresentation().mode, 'tucked');
 });
+
+ test('单眼探头离开保留900ms，重新进入仍取消旧退回回调',()=>{const f=fixture({side:'left',delay:900});f.sample(-780);assert.equal(f.controller.getPresentation().mode,'peeked');f.sample(-500);f.advance(899);assert.equal(f.controller.getPresentation().mode,'peeked');f.advance(900);assert.equal(f.controller.getPresentation().mode,'tucked');f.sample(-780);f.sample(-500);f.advance(1500);f.sample(-780);f.advance(1800);assert.equal(f.controller.getPresentation().mode,'peeked');});

@@ -5,11 +5,12 @@
   const $ = id => document.getElementById(id);
   const shapeNames = [
     ['blob', '经典'], ['aurora-cloud', '幻彩', 'six-lobe'],
-    ['cloud', '云朵'], ['square', '方糖'], ['new-year-sheep', '咩咩']
+    ['cloud', '云朵'], ['square', '方糖'], ['new-year-sheep', '咩咩'], ['soft-orb', '小宇']
   ];
   const bodyColors = ['#EEEBE4', '#1B1C20', '#F5D9C5', '#DCE8DD', '#D9E5F2', '#8B72D8', '#5B3BC7'];
   const eyeColors = ['#1A1A1A', '#FFFFFF', '#1A3444', '#3B2B32'];
   const glowPinkColors = ['#D05ED6', '#EE83D8', '#A460EC'];
+  const orbSecondaryColors = ['#B7A7EC', '#54C6B2', '#3D54BC', '#17223D', '#0B1025'];
   const glowGoldColors = ['#D0AD8A', '#EDC77C', '#F2D6AF'];
   const auroraReference = PetCustomization.SHAPE_RECOMMENDED_COLORS['aurora-cloud'];
   const petPixels = Object.freeze({ micro: 60, tiny: 80, compact: 108, small: 120, medium: 180, large: 260 });
@@ -45,7 +46,8 @@
     ['body-color', 'body-hex', 'bodyColor', '球体'],
     ['eye-color', 'eye-hex', 'eyeColor', '眼睛'],
     ['glow-pink-color', 'glow-pink-hex', 'glowPinkColor', '粉光'],
-    ['glow-gold-color', 'glow-gold-hex', 'glowGoldColor', '金光']
+    ['glow-gold-color', 'glow-gold-hex', 'glowGoldColor', '金光'],
+    ['orb-secondary-color', 'orb-secondary-hex', 'orbSecondaryColor', '辅色']
   ];
   let pickerBinding = null;
   let pickerAnchor = null;
@@ -87,6 +89,9 @@
   function shapeIcon(shape, contour) {
     const target = document.createElement('span');
     target.className = 'shape-art';
+    if (shape === 'soft-orb') {
+      const icon = document.createElement('img'); icon.src = 'assets/soft-orb/icon.png'; icon.alt = ''; target.appendChild(icon); return target;
+    }
     if (shape === 'aurora-cloud') {
       const icon = document.createElement('img');
       icon.src = 'assets/aurora-six-lobe-icon.png';
@@ -138,6 +143,37 @@
       });
       target.appendChild(button);
     }
+    const dogs = [...localPets, ...codexDescriptors.values()].filter(pet => pet.characterId === 'xiaobai');
+    const dog = dogs.find(pet => pet.id === state.appearance.codexPetId) || dogs[0];
+    if (dog) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'shape-option';
+      button.dataset.shape = 'codex-pet';
+      button.dataset.petId = dog.id;
+      button.setAttribute('aria-label', '选择小白形态');
+      button.setAttribute('aria-pressed', String(state.appearance.shape === 'codex-pet' && state.appearance.codexPetId === dog.id));
+      const art = document.createElement('span');
+      art.className = 'shape-art';
+      const icon = document.createElement('canvas');
+      icon.width = 192;
+      icon.height = 208;
+      icon.style.width = icon.style.height = '100%';
+      icon.setAttribute('aria-hidden', 'true');
+      art.append(icon);
+      const image = new Image();
+      image.onload = () => {
+        const width = image.naturalWidth / 8, height = 208 * (width / 192);
+        icon.getContext('2d').drawImage(image, 0, 0, width, height, 0, 0, 192, 208);
+      };
+      image.src = dog.imageURL;
+      button.append(art, document.createTextNode('小白'));
+      button.addEventListener('click', () => { choosePet(dog); renderShapeOptions(); });
+      const sheep = target.querySelector('[data-shape="new-year-sheep"]');
+      if (sheep?.after) sheep.after(button);
+      else target.appendChild(button);
+      target.style.setProperty('--shape-count', shapeNames.length + 1);
+    }
   }
 
   function renderSwatches(containerId, values, key) {
@@ -167,17 +203,45 @@
 
   function renderColors(keepPickerHsv = false) {
     for (const [pickerId, hexId, key] of colorBindings) {
-      $(pickerId).value = state.appearance[key];
-      $(pickerId).style.setProperty('--color', state.appearance[key]);
-      $(hexId).value = state.appearance[key];
+      const value = state.appearance[key] || '#B7A7EC';
+      $(pickerId).value = value;
+      $(pickerId).style.setProperty('--color', value);
+      $(hexId).value = value;
       $(hexId).classList.remove('invalid');
     }
     renderSwatches('body-swatches', bodyColors, 'bodyColor');
     renderSwatches('eye-swatches', eyeColors, 'eyeColor');
     renderSwatches('glow-pink-swatches', glowPinkColors, 'glowPinkColor');
     renderSwatches('glow-gold-swatches', glowGoldColors, 'glowGoldColor');
+    renderSwatches('orb-secondary-swatches', orbSecondaryColors, 'orbSecondaryColor');
+    renderOrbOptions();
     syncColorPicker(keepPickerHsv);
     markPresetSelection();
+  }
+
+  function renderOrbOptions(enabled = canSave) {
+    const visible = state.appearance.shape === 'soft-orb';
+    $('orb-material-field').hidden = !visible;
+    $('orb-secondary-field').hidden = !visible;
+    $('orb-preview-actions').hidden = !visible;
+    const target = $('orb-material-options');
+    if (!target.children.length) for (const [id, preset] of Object.entries(window.SoftOrb?.PRESETS || {})) {
+      const button = document.createElement('button'); button.type = 'button'; button.dataset.orbMaterial = id;
+      const icon = document.createElement('img'); icon.src = 'assets/soft-orb/fallback-' + id + '.png'; icon.alt = '';
+      const label = document.createElement('span'); label.textContent = preset.name; button.append(icon, label);
+      button.addEventListener('click', () => {
+        if (!canSave || disposed || state.appearance.shape !== 'soft-orb') return;
+        state.appearance = PetCustomization.normalizeAppearance({ ...state.appearance, orbMaterial: id,
+          bodyColor: preset.colors[0], orbSecondaryColor: preset.colors[1], eyeColor: preset.colors[2] });
+        renderColors(); schedulePreview();
+      });
+      target.appendChild(button);
+    }
+    for (const button of target.children) {
+      button.disabled = !enabled || !visible;
+      button.setAttribute('aria-pressed', String(button.dataset.orbMaterial === state.appearance.orbMaterial));
+    }
+    for (const button of $('orb-preview-actions').children) button.disabled = !enabled || !visible || Boolean(motionPreference?.matches);
   }
 
   function renderSheepTheme(enabled = canSave) {
@@ -197,11 +261,13 @@
 
   function renderAuroraVisibility() {
     renderSheepTheme();
+    renderOrbOptions();
+    const orb = state.appearance.shape === 'soft-orb';
     const visible = state.appearance.shape === 'aurora-cloud';
     const sheep = state.appearance.shape === 'new-year-sheep';
     $('appearance-colors-field').hidden = sheep;
-    $('manual-section').hidden = sheep;
-    const codex = state.appearance.shape === 'codex-pet' || sheep;
+    $('manual-section').hidden = sheep || orb;
+    const codex = state.appearance.shape === 'codex-pet' || sheep || orb;
     if (sheep && pickerBinding) closeColorPicker(false);
     $('manual-toggle').disabled = visible || codex;
     $('manual-hint').textContent = sheep ? '咩咩保留原画配色和比例，可选择主题、调整透明度' : codex ? '选择球球形态后，可调整轮廓与五官' : visible
@@ -218,6 +284,7 @@
       $('aurora-style-' + style).setAttribute('aria-pressed', String(state.appearance.auroraStyle === style));
     }
     $('aurora-colors').hidden = !visible || state.appearance.auroraStyle === 'simple';
+    if (pickerBinding?.[2] === 'orbSecondaryColor' && !orb) closeColorPicker(false);
     if (pickerBinding?.[2].startsWith('glow') && $('aurora-colors').hidden) closeColorPicker(false);
   }
 
@@ -263,7 +330,7 @@
 
   function syncColorPicker(keepHsv = false) {
     if (!pickerBinding) return;
-    const hex = state.appearance[pickerBinding[2]];
+    const hex = state.appearance[pickerBinding[2]] || '#B7A7EC';
     if (!keepHsv) pickerHsv = hexToHsv(hex);
     $('color-picker-sample').style.backgroundColor = hex;
     $('color-picker-hex').value = hex;
@@ -281,7 +348,7 @@
     sv.style.setProperty('--sv-y', (100 - pickerHsv.v) + '%');
     sv.setAttribute('aria-valuenow', String(Math.round(pickerHsv.s)));
     sv.setAttribute('aria-valuetext', `饱和度 ${Math.round(pickerHsv.s)}%，明度 ${Math.round(pickerHsv.v)}%`);
-    const colors = { bodyColor: bodyColors, eyeColor: eyeColors, glowPinkColor: glowPinkColors, glowGoldColor: glowGoldColors };
+    const colors = { bodyColor: bodyColors, eyeColor: eyeColors, glowPinkColor: glowPinkColors, glowGoldColor: glowGoldColors, orbSecondaryColor: orbSecondaryColors };
     renderSwatches('color-picker-presets', colors[pickerBinding[2]], pickerBinding[2]);
   }
 
@@ -324,16 +391,17 @@
 
   function setColorControlsEnabled(enabled) {
     renderSheepTheme(enabled);
+    renderOrbOptions(enabled);
     const colorsEnabled = enabled && state.appearance.shape !== 'new-year-sheep';
     for (const [id] of colorBindings) $(id).disabled = !colorsEnabled;
     for (const id of ['color-hue', 'color-picker-hex', 'color-red', 'color-green', 'color-blue']) $(id).disabled = !colorsEnabled;
     $('color-sv').setAttribute('aria-disabled', String(!colorsEnabled));
     $('color-sv').tabIndex = colorsEnabled ? 0 : -1;
-    for (const id of ['body-swatches', 'eye-swatches', 'glow-pink-swatches', 'glow-gold-swatches', 'color-picker-presets']) {
+    for (const id of ['body-swatches', 'eye-swatches', 'glow-pink-swatches', 'glow-gold-swatches', 'orb-secondary-swatches', 'color-picker-presets']) {
       for (const button of $(id).children) button.disabled = !colorsEnabled;
     }
     for (const [, id] of colorBindings) $(id).disabled = !colorsEnabled;
-    for (const id of Object.keys(rangeLimits)) $(id).disabled = !enabled || (id !== 'aurora-transparency' && ['aurora-cloud', 'codex-pet', 'new-year-sheep'].includes(state.appearance.shape));
+    for (const id of Object.keys(rangeLimits)) $(id).disabled = !enabled || (id !== 'aurora-transparency' && ['aurora-cloud', 'codex-pet', 'new-year-sheep', 'soft-orb'].includes(state.appearance.shape));
     for (const button of $('shape-options').children) button.disabled = !enabled;
     for (const id of ['reset-appearance', 'aurora-style-dimensional', 'aurora-style-simple', 'aurora-reference', 'reset-manual']) $(id).disabled = !enabled;
     $('startup-default').disabled = !enabled;
@@ -441,6 +509,12 @@
       return;
     }
     if (record.controller) return;
+    if (record.appearance.shape === 'soft-orb') {
+      record.controller = window.SoftOrb.create(record.target, { appearance: record.appearance, autostart: false, lite: true });
+      record.controller.renderStatic?.();
+      record.target.dataset.avatarAppearance = JSON.stringify(record.appearance);
+      return;
+    }
     record.controller = window.PetChatAvatar.create(record.target);
     record.controller.setActive(false);
     record.controller.update(record.appearance, null, codexDescriptors.get(record.appearance.codexPetId));
@@ -545,6 +619,7 @@
   function validateDraftColors() {
     if (state.appearance.shape === 'codex-pet') return true;
     const colorFields = [['body-hex', 'bodyColor'], ['eye-hex', 'eyeColor']];
+    if (state.appearance.shape === 'soft-orb') colorFields.push(['orb-secondary-hex', 'orbSecondaryColor']);
     if (state.appearance.shape === 'aurora-cloud' && state.appearance.auroraStyle === 'dimensional') colorFields.push(
       ['glow-pink-hex', 'glowPinkColor'], ['glow-gold-hex', 'glowGoldColor']);
     for (const [id, key] of colorFields) {
@@ -642,11 +717,30 @@
       ball = null;
       const descriptor = codexDescriptors.get(state.appearance.codexPetId);
       if (!descriptor) { target.textContent = '宠物暂不可用，请重新读取或选择其他形象'; return; }
+      const actionSelect = $('pet-action'), selectedAction = actionSelect.value;
+      actionSelect.replaceChildren();
+      for (const action of CodexPetPlayer.getPreviewActions(descriptor)) {
+        const option = document.createElement('option'); option.value = action.id; option.textContent = action.name;
+        option.dataset.mappedAction = 'true'; actionSelect.append(option);
+      }
+      actionSelect.value = [...actionSelect.options].some(option => option.value === selectedAction) ? selectedAction : 'idle';
       codexPlayer = CodexPetPlayer.create(target, { descriptor, size: pixels,
         opacity: 1 - state.appearance.auroraTransparency / 100,
         onFrame: () => { target.dataset.renderedAppearance = appearanceKey; },
         onError: () => announce('宠物图片暂不可用，请重新读取后再试') });
       codexPlayer.setAction($('pet-action').value); codexPlayer.pause(petPaused);
+      return;
+    }
+    if (state.appearance.shape === 'soft-orb') {
+      auroraPreview?.destroy(); displayedAurora?.destroy(); auroraPreview = displayedAurora = null;
+      try {
+        ball = window.SoftOrb.create(target, { appearance: state.appearance, autostart: !motionPreference?.matches,
+          lite: previewMode === 'desktop', label: '小宇实时预览' });
+        $('preview-status').textContent = motionPreference?.matches ? '减少动态已开启' : '小宇实时预览';
+        const controller = ball;
+        const markReady = ready => { if (ball === controller && ready !== false) target.dataset.renderedAppearance = appearanceKey; };
+        if (ball.whenReady) ball.whenReady().then(markReady); else markReady(true);
+      } catch (_) { target.textContent = '小宇暂未加载，请重新打开预览'; }
       return;
     }
     registerIdle();
@@ -736,9 +830,10 @@
   }
 
   function showManual(enabled) {
-    const active = enabled && state.appearance.shape !== 'aurora-cloud';
+    const locked = ['aurora-cloud', 'soft-orb'].includes(state.appearance.shape);
+    const active = enabled && !locked;
     $('manual-toggle').setAttribute('aria-expanded', String(active));
-    $('manual-toggle-label').textContent = state.appearance.shape === 'aurora-cloud' ? '暂不可用' : (active ? '收起' : '展开');
+    $('manual-toggle-label').textContent = locked ? '暂不可用' : (active ? '收起' : '展开');
     $('manual-controls').hidden = !active;
   }
 
@@ -791,6 +886,11 @@
       announce('请输入 3 位或 6 位 HEX 色值');
     });
   }
+
+  for (const button of $('orb-preview-actions').children) button.addEventListener('click', () => {
+    if (!canSave || disposed || state.appearance.shape !== 'soft-orb' || motionPreference?.matches) return;
+    ball?.playAction?.(button.dataset.orbAction);
+  });
 
   function chooseSheepTheme(value) {
     if (!canSave || disposed || state.appearance.shape !== 'new-year-sheep') return;
@@ -978,7 +1078,7 @@
     $('pet-opacity').value = state.appearance.auroraTransparency;
     $('pet-opacity-value').textContent = state.appearance.auroraTransparency + '%';
     paintRange('pet-opacity', [0, 60]);
-    for (const card of [...$('pet-grid').children, ...($('local-pet-grid')?.children || [])]) card.setAttribute('aria-pressed', String(codex &&
+    for (const card of [...$('pet-grid').children, ...($('local-pet-grid')?.querySelectorAll('.pet-card') || [])]) card.setAttribute('aria-pressed', String(codex &&
       (card.dataset.petId === state.appearance.codexPetId || card.dataset.importedId === state.appearance.codexPetId)));
   }
   function choosePet(pet) {
@@ -997,19 +1097,63 @@
       card.title = pet.name + ' · 本地导入'; card.setAttribute('aria-label', '选择 ' + pet.name);
       const sprite = document.createElement('span'); sprite.className = 'pet-sprite'; sprite.setAttribute('aria-hidden', 'true');
       sprite.style.setProperty('--sprite', 'url(' + JSON.stringify(pet.imageURL) + ')'); sprite.style.setProperty('--rows', pet.rows);
+      if (pet.frameMap?.idle) { sprite.style.setProperty('--row', Math.floor(pet.frameMap.idle.start / 8)); sprite.style.setProperty('--frame', pet.frameMap.idle.start % 8); }
       const name = document.createElement('span'); name.className = 'pet-name'; name.textContent = pet.name;
       const mark = document.createElement('span'); mark.className = 'selection-mark'; mark.textContent = '✓'; mark.setAttribute('aria-hidden', 'true');
-      card.append(sprite, name, mark); card.addEventListener('click', () => choosePet(pet)); grid.append(card);
+      card.append(sprite, name, mark); card.addEventListener('click', () => choosePet(pet));
+      const item = document.createElement('div'); item.className = 'local-pet-item';
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'local-pet-delete';
+      const trash = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      trash.setAttribute('viewBox', '0 0 24 24'); trash.setAttribute('aria-hidden', 'true');
+      const trashPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      trashPath.setAttribute('d', 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5M14 11v5'); trash.append(trashPath);
+      remove.append(trash); remove.title = '删除 ' + pet.name;
+      remove.setAttribute('aria-label', '删除 ' + pet.name); remove.disabled = localBusy;
+      remove.addEventListener('click', () => deleteLocalPet(pet));
+      item.append(card, remove); grid.append(item);
     }
+    renderShapeOptions();
     $('local-read-status').textContent = '本地导入 · ' + localPets.length;
     grid.hidden = !localPets.length;
     if (activePetSource === 'local') $('pet-settings').hidden = !localPets.length;
     syncCandidate();
   }
+  async function deleteLocalPet(pet) {
+    if (localBusy || !canSave || disposed) return;
+    localBusy = true; localReadFlight++; canSave = false;
+    $('save').disabled = true; $('import-local-pet').disabled = true; $('refresh-local-pets').disabled = true;
+    for (const button of $('local-pet-grid').querySelectorAll('button')) button.disabled = true;
+    try {
+      const result = await bridge.deleteLocalPet?.(pet.importedId || pet.id);
+      if (disposed || result?.canceled) return;
+      if (!result?.ok) throw new Error(result?.error || '删除未完成，请稍后重试');
+      localPets = localPets.filter(value => value.id !== pet.id); codexDescriptors.delete(pet.id);
+      codexDescriptors.delete(pet.importedId || pet.id);
+      if (state.appearance.shape === 'codex-pet' && [pet.id, pet.importedId].includes(state.appearance.codexPetId)) {
+        let current = null;
+        try { current = await bridge.load(); } catch (_) { /* 删除已经完成，仍须清除失效预览。 */ }
+        state.appearance = PetCustomization.normalizeAppearance(current?.customization?.appearance || lastBallAppearance);
+        if (current?.codexPet) codexDescriptors.set(current.codexPet.id, current.codexPet);
+        renderAuroraVisibility(); schedulePreview();
+      }
+      renderLocalPets(); $('local-read-state').hidden = localPets.length > 0;
+      $('local-read-state').textContent = '还没有导入伙伴。导入后可预览，保存设置后才应用到桌面。';
+      announce('已移到废纸篓，原始素材文件夹保留');
+    } catch (error) { if (!disposed) announce(error.message || '删除未完成，请稍后重试'); }
+    finally {
+      localBusy = false;
+      if (!disposed) {
+        canSave = true; $('save').disabled = false; $('import-local-pet').disabled = false; $('refresh-local-pets').disabled = false;
+        for (const button of $('local-pet-grid').querySelectorAll('button')) button.disabled = false;
+        syncCandidate();
+      }
+    }
+  }
   async function refreshLocalPets() {
     if (localBusy) return;
     const revision = ++localReadFlight;
     $('refresh-local-pets').disabled = true;
+    renderShapeOptions();
     $('local-read-status').textContent = '正在读取本地伙伴…';
     try {
       const result = await bridge.listLocalPets?.();
@@ -1022,7 +1166,8 @@
       $('local-read-status').title = result.skipped ? '已忽略 ' + result.skipped + ' 个暂不支持的伙伴' : '';
     } catch (_) {
       if (disposed || revision !== localReadFlight) return;
-      $('local-read-status').textContent = '读取暂未完成'; $('local-read-state').hidden = false;
+      renderShapeOptions();
+    $('local-read-status').textContent = '读取暂未完成'; $('local-read-state').hidden = false;
       $('local-read-state').textContent = '暂时无法读取伙伴，请点击刷新重试。';
     } finally { if (!disposed && revision === localReadFlight) $('refresh-local-pets').disabled = false; }
   }
@@ -1038,7 +1183,7 @@
       codexDescriptors.set(pet.id, pet); renderLocalPets(); $('local-read-state').hidden = true;
       choosePet(pet); announce('已导入并选中预览，保存设置后应用到桌面');
     } catch (error) { if (!disposed) announce(error.message || '导入未完成，请重试'); }
-    finally { localBusy = false; if (!disposed) { $('import-local-pet').disabled = false; $('refresh-local-pets').disabled = false; } }
+    finally { localBusy = false; if (!disposed) { $('import-local-pet').disabled = false; $('refresh-local-pets').disabled = false; for (const button of $('local-pet-grid').querySelectorAll('button')) button.disabled = false; } }
   }
   function renderPets() {
     $('pet-grid').replaceChildren();
@@ -1054,6 +1199,7 @@
       card.title = pet.name + (pet.imported ? ' · 已导入' : ''); card.setAttribute('aria-label', '选择 ' + pet.name);
       const sprite = document.createElement('span'); sprite.className = 'pet-sprite'; sprite.setAttribute('aria-hidden', 'true');
       sprite.style.setProperty('--sprite', 'url(' + JSON.stringify(pet.imageURL) + ')'); sprite.style.setProperty('--rows', pet.rows);
+      if (pet.frameMap?.idle) { sprite.style.setProperty('--row', Math.floor(pet.frameMap.idle.start / 8)); sprite.style.setProperty('--frame', pet.frameMap.idle.start % 8); }
       const name = document.createElement('span'); name.className = 'pet-name'; name.textContent = pet.name;
       const mark = document.createElement('span'); mark.className = 'selection-mark'; mark.textContent = '✓'; mark.setAttribute('aria-hidden', 'true');
       card.append(sprite, name, mark); card.addEventListener('click', () => choosePet(pet));
@@ -1131,7 +1277,8 @@
   $('pet-play').addEventListener('click', () => {
     petPaused = !petPaused; codexPlayer?.pause(petPaused);
     $('pet-play').setAttribute('aria-label', petPaused ? '播放动画' : '暂停动画');
-    $('pet-play').textContent = petPaused ? '▷' : 'Ⅱ';
+    $('pet-play').dataset.paused = String(petPaused);
+    $('pet-play').title = petPaused ? '播放动画' : '暂停动画';
   });
   setSource('ball'); void refreshPets();
 

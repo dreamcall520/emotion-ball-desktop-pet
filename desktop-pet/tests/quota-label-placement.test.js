@@ -366,17 +366,19 @@ test('右下角气泡只压住角色5px时向下滑14px，不能整组跳到气�
   assert.equal(result.y + result.cardInset.y - 1 - (bubble.y + bubble.height), 8);
 });
 
-test('260px羊半露与外露侧边角色净距约减半，入口200px原生窗不缩水', () => {
+test('260px羊自由与单眼探头均按可见身体保留角色净距，入口200px原生窗不缩水', () => {
   const area = { x: 0, y: 0, width: 1440, height: 300 };
   const pet = { x: 1180, y: 20, width: 260, height: 260 };
   for (const mode of ['free', 'peeked']) {
     const result = quotaLabelBounds(pet, area, null, 'compact', false, 1,
       { shape: 'new-year-sheep', side: 'right', mode }, false, true);
-    assert.equal(result.x, 1000); assert.equal(result.width, 200);
+    if(mode==='free')assert.equal(result.x,1000);
+    else assert.ok(result.x>1000,'探头后卡片随实际身体靠边，不能仍锚定旧半露位置');
+    assert.equal(result.width, 200);
     assert.equal(result.placement, 'left');
-    const paintedPetLeft = pet.x + pet.width * .04;
+    const paintedPetLeft = require('../lib/pet-visual-bounds').petVisualBounds(pet,'new-year-sheep',{side:'right',mode,quotaAnchor:true}).x;
     const roleRight = result.x + 128 + 8 + 22;
-    assert.ok(Math.abs(paintedPetLeft - roleRight - 32.4) < .01, '旧60.4px→32.4px，减少46%');
+    assert.ok(Math.abs(paintedPetLeft - roleRight - 32.4) < 1, '角色与实际身体净距保持，允许像素取整');
     assertInside(result, area);
   }
 });
@@ -602,9 +604,9 @@ test('four-card free stack shares one direction and hides safely when space runs
     }
   }
   const partial=quotaFreeStackBounds({x:-550,y:30,width:80,height:80},{...area,height:230},cards,{mode:'free'});
-  assert.deepEqual(partial.hidden,Object.keys(cards));
-  assert.equal(Object.keys(partial.cards).length,0);
-  const blocked=quotaFreeStackBounds({x:-550,y:30,width:80,height:80},{...area,height:150},cards,{mode:'free'});
+  assert.ok(['left','right'].includes(partial.placement));
+  assert.deepEqual(Object.keys(partial.cards),Object.keys(cards));
+  const blocked=quotaFreeStackBounds({x:-550,y:30,width:80,height:80},{...area,height:130},cards,{mode:'free'});
   assert.deepEqual(blocked.hidden,Object.keys(cards));
   assert.deepEqual(blocked.cards,{});
 });
@@ -681,7 +683,7 @@ test('user card order stays top to bottom across corners and both peek edges, wi
         assert.equal(rows[i].face.y-rows[i-1].face.y-rows[i-1].face.height,8);
         assert.equal(rows[i].face.x,rows[0].face.x);
       }
-      const hidden=quotaFreeStackBounds({...pet,y:80},{...area,height:150},cards,presentation);
+      const hidden=quotaFreeStackBounds({...pet,y:80},{...area,height:80},cards,presentation);
       assert.equal(hidden.placement,'hidden');assert.deepEqual(hidden.hidden,expected);
       assert.deepEqual(Object.keys(quotaFreeStackBounds(pet,area,cards,presentation).cards),expected,'restored work area restores every card');
     }
@@ -717,14 +719,17 @@ test('五卡含194px余额展开在上下角和左右贴边共用一列，四张
     }
 });
 
-test('五卡展开空间不足时整组隐藏，收起和屏幕恢复后按原顺序重现且不移动球球',()=>{
+test('五卡展开优先侧移，整屏空间不足才隐藏，收起和屏幕恢复后按原顺序重现且不移动球球',()=>{
   const { quotaFreeStackBounds }=require('../lib/quota-label-placement');
   const ids=['workbuddy','api','codex','zcode','balance'],area={x:-800,y:20,width:800,height:400};
   const cards=Object.fromEntries(ids.map(id=>[id,{width:128,height:32,inset:2}]));
   for(const mode of ['free','peeked'])for(const side of ['left','right']) {
     const pet={x:side==='left'?-800:-80,y:204,width:80,height:80},original={...pet},presentation={mode,side,quotaCardOrder:ids};
     assert.deepEqual(Object.keys(quotaFreeStackBounds(pet,area,cards,presentation).cards),ids);
-    const expanded={...cards,balance:{width:196,height:194,inset:0}},hidden=quotaFreeStackBounds(pet,area,expanded,presentation);
+    const expanded={...cards,balance:{width:196,height:194,inset:0}};
+    const sidePlan=quotaFreeStackBounds(pet,area,expanded,presentation);
+    assert.deepEqual(Object.keys(sidePlan.cards),ids);
+    const hidden=quotaFreeStackBounds(pet,{...area,height:300},expanded,presentation);
     assert.equal(hidden.placement,'hidden');assert.deepEqual(hidden.cards,{});assert.deepEqual(hidden.hidden,ids);
     assert.deepEqual(Object.keys(quotaFreeStackBounds(pet,{...area,height:1000},expanded,presentation).cards),ids);
     assert.deepEqual(Object.keys(quotaFreeStackBounds(pet,area,cards,presentation).cards),ids);assert.deepEqual(pet,original);
@@ -787,4 +792,43 @@ test('weather uses the same six-source order, 8px face spacing and dock alignmen
     const without = quotaFreeStackBounds(pet,area,{...cards,weather:null},presentation);
     assert.deepEqual(Object.keys(without.cards),ids.filter(id=>id!=='weather'));
   }
+});
+
+test('five expanded cards use a side column when neither vertical gap fits', () => {
+ const {quotaFreeStackBounds}=require('../lib/quota-label-placement');
+ const ids=['weather','codex','workbuddy','zcode','balance'];
+ const cards={weather:{width:128,height:32,inset:2},codex:{width:196,height:131},workbuddy:{width:196,height:120},zcode:{width:128,height:32,inset:2},balance:{width:196,height:120}};
+ const area={x:0,y:25,width:1512,height:900},pet={x:720,y:420,width:80,height:80};
+ const plan=quotaFreeStackBounds(pet,area,cards,{mode:'free',quotaCardOrder:ids});
+ assert.ok(['left','right'].includes(plan.placement));assert.deepEqual(Object.keys(plan.cards),ids);
+ const rows=Object.values(plan.cards);
+ rows.forEach(row=>{assert.ok(row.x>=area.x&&row.y>=area.y&&row.x+row.width<=1512&&row.y+row.height<=925);assert.ok(row.x>=800||row.x+row.width<=720);});
+ for(let i=1;i<rows.length;i++)assert.equal(rows[i].face.y-rows[i-1].face.y-rows[i-1].face.height,8);
+ });
+
+test('side fallback includes guard envelopes and tries the other side around obstacles',()=>{
+ const {quotaFreeStackBounds}=require('../lib/quota-label-placement');
+ const area={x:-300,y:20,width:1500,height:900},pet={x:400,y:420,width:80,height:80};
+ const ids=['weather','codex','workbuddy','zcode','balance'];
+ const cards=Object.fromEntries(ids.map(id=>[id,{width:196,height:120,guardTargetWidth:64,roleWidth:50}]));
+ const presentation={mode:'free',quotaCardOrder:ids};
+ const first=quotaFreeStackBounds(pet,area,cards,presentation);assert.equal(first.placement,'right');
+ const obstruction={x:490,y:20,width:350,height:900};
+ const second=quotaFreeStackBounds(pet,area,cards,presentation,obstruction);assert.equal(second.placement,'left');
+ for(const plan of [first,second]){
+   assert.deepEqual(Object.keys(plan.cards),ids);
+   for(const row of Object.values(plan.cards))assertInside(row,area);
+ }
+ const impossible=quotaFreeStackBounds(pet,{...area,height:400},cards,presentation);
+ assert.equal(impossible.placement,'hidden');
+});
+
+test('corner dialogue keeps the side stack near the pet instead of jumping to the display top',()=>{
+ const {quotaFreeStackBounds}=require('../lib/quota-label-placement');
+ const area={x:0,y:25,width:1512,height:900};
+ const cards={weather:{width:128,height:32,inset:2},codex:{width:128,height:32,inset:2,guardTargetWidth:48,roleWidth:22},balance:{width:128,height:32,inset:2}};
+ const pet={x:24,y:800,width:80,height:80},bubble={x:8,y:706,width:224,height:86};
+ const p=quotaFreeStackBounds(pet,area,cards,{mode:'free',quotaCardOrder:Object.keys(cards)},bubble);
+ assert.notEqual(p.placement,'hidden');
+ for(const row of Object.values(p.cards)){assertInside(row,area);assert(row.face.y>=bubble.y,'cards stay near the bottom corner');}
 });

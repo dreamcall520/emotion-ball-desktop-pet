@@ -10,13 +10,14 @@ contextBridge.exposeInMainWorld('petCustomizer', {
   onColorMode: callback => {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, value, appearance, theme) => callback(value === 'accessible' ? 'accessible' : 'standard',
-      ['light', 'dark'].includes(appearance) ? appearance : 'system', theme === 'blue' ? 'blue' : 'green');
+      ['light', 'dark'].includes(appearance) ? appearance : 'system', ['blue', 'purple'].includes(theme) ? theme : 'green');
     ipcRenderer.on('pet:color-mode', listener);
     return () => ipcRenderer.removeListener('pet:color-mode', listener);
   },
   load: () => ipcRenderer.invoke('pet:customization-get'),
   listLocalPets: () => ipcRenderer.invoke('pet:local-pets-list'),
   importLocalPet: () => ipcRenderer.invoke('pet:local-pets-import'),
+  deleteLocalPet: id => ipcRenderer.invoke('pet:local-pets-delete', id),
   listCodexPets: () => ipcRenderer.invoke('pet:codex-pets-list'),
   setSize: size => ipcRenderer.invoke('pet:customization-size', size),
   onSize: callback => {

@@ -52,7 +52,15 @@ async function customizerFixture({ appearance, bridge = {} } = {}) {
     createTextNode: text => new Node(`text:${text}`),
     querySelector: selector => selector === '.preview-mode' ? document.getElementById('preview-mode') : null
   };
+  const orbCalls = [];
   const window = { petCustomizer: { load: async () => ({ customization: appearance ? { appearance } : null, size: 'tiny' }), ...bridge }, addEventListener() {} };
+  window.SoftOrb = { PRESETS: Object.fromEntries(['pearl','glass','onyx','layered','felt','pixel','plush','synth'].map(id => [id, { name: id, colors: id === 'layered' ? ['#7df3be','#54c6b2','#ffffff'] : ['#f9f8ff','#b7a7ec','#fdfdfd'] }])),
+    create(target, options) {
+      const call = { options, actions: [] }; orbCalls.push(call); target.appendChild(new Node('canvas'));
+      return { destroy() { call.destroyed = true; }, playAction(id) { call.actions.push(id); }, renderStatic() {}, setActive() {} };
+    }
+  };
+  for (const id of ['complete','love','ship']) { const button = new Node('button'); button.dataset.orbAction = id; document.getElementById('orb-preview-actions').appendChild(button); }
   document.getElementById('source-tabs').append(document.getElementById('source-ball'), document.getElementById('source-codex'));
   document.getElementById('controls').append(document.getElementById('source-tabs'),
     document.getElementById('ball-options'), document.getElementById('codex-panel'));
@@ -76,10 +84,10 @@ async function customizerFixture({ appearance, bridge = {} } = {}) {
     vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), context, { filename: file });
   }
   await Promise.resolve();
-  return { window, nodes, renderCalls, root, flushPreview() { const callbacks = [...frames.values()]; frames.clear(); callbacks.forEach(callback => callback()); } };
+  return { window, nodes, renderCalls, orbCalls, root, flushPreview() { const callbacks = [...frames.values()]; frames.clear(); callbacks.forEach(callback => callback()); } };
 }
 
-test('五种形态卡使用实际图标，幻彩保持六瓣', async () => {
+test('六种形态卡使用实际图标，幻彩保持六瓣，柔光团使用静态素材', async () => {
   const { window, nodes, renderCalls, root } = await customizerFixture();
   assert.equal(window.__customizerReady, true);
   const cards = nodes.get('shape-options').children;
@@ -114,8 +122,9 @@ test('五种形态卡使用实际图标，幻彩保持六瓣', async () => {
   assert.equal(sixLobe.findAll('img')[0].src, 'assets/aurora-six-lobe-icon.png');
   assert.equal(card.dataset.auroraContour, 'six-lobe');
   assert.equal(cards.filter(node => node.dataset.shape === 'aurora-cloud').length, 1);
-  assert.equal(cards.length, 5);
-  assert.deepEqual(cards.map(card => card.dataset.shape), ['blob', 'aurora-cloud', 'cloud', 'square', 'new-year-sheep']);
+  assert.equal(cards.length, 6);
+  assert.deepEqual(cards.map(card => card.dataset.shape), ['blob', 'aurora-cloud', 'cloud', 'square', 'new-year-sheep', 'soft-orb']);
+  assert.equal(cards.at(-1).findAll('img')[0].src, 'assets/soft-orb/icon.png');
 });
 
 test('小羊主题仅小羊可选，保存启停与切换其他形态不会丢掉已选主题', async () => {
@@ -236,4 +245,34 @@ test('首次选择咩咩默认自动换装，两种预览朝左，手动选择�
     const reopened = await customizerFixture({ appearance: { shape: 'new-year-sheep', sheepTheme: theme } });
     assert.equal(reopened.nodes.get('sheep-theme').value, theme);
   }
+});
+
+
+test('柔光团实际预览、材质三色与辅色自定义经现有保存契约持久化，禁止形变控件', async () => {
+  let saved;
+  const f = await customizerFixture({ appearance: { shape: 'soft-orb' }, bridge: { save(value) { saved = JSON.parse(JSON.stringify(value)); return Promise.resolve(true); } } });
+  const $ = id => f.nodes.get(id);
+  f.flushPreview();
+  assert.equal($('orb-material-field').hidden, false);
+  assert.equal($('orb-secondary-field').hidden, false);
+  assert.equal($('manual-section').hidden, true);
+  assert.equal($('shape-width').disabled, true);
+  assert.equal($('eye-scale').disabled, true);
+  assert.equal($('orb-material-options').children.length, 8);
+  assert.equal(f.orbCalls.at(-1).options.appearance.shape, 'soft-orb');
+  assert.equal(f.orbCalls.at(-1).options.appearance.orbMaterial, 'pearl');
+  $('orb-material-options').children.find(b => b.dataset.orbMaterial === 'layered').dispatch('click'); f.flushPreview();
+  const mint = f.orbCalls.at(-1).options.appearance;
+  assert.deepEqual([mint.bodyColor, mint.orbSecondaryColor, mint.eyeColor], ['#7DF3BE','#54C6B2','#FFFFFF']);
+  $('orb-secondary-hex').value = '#abc123'; $('orb-secondary-hex').dispatch('input'); f.flushPreview();
+  assert.equal(f.orbCalls.at(-1).options.appearance.orbSecondaryColor, '#ABC123');
+  $('orb-preview-actions').children.find(b => b.dataset.orbAction === 'love').dispatch('click');
+  assert.deepEqual(f.orbCalls.at(-1).actions, ['love']);
+  await $('save').dispatch('click');
+  assert.equal(saved.appearance.orbMaterial, 'layered');
+  assert.equal(saved.appearance.orbSecondaryColor, '#ABC123');
+  $('shape-options').children.find(b => b.dataset.shape === 'blob').dispatch('click'); f.flushPreview();
+  assert.equal($('orb-material-field').hidden, true);
+  assert.equal($('orb-preview-actions').hidden, true);
+  assert.equal($('manual-section').hidden, false);
 });
