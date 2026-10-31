@@ -1243,7 +1243,8 @@
   $('pet-play').addEventListener('click', () => {
     petPaused = !petPaused; codexPlayer?.pause(petPaused);
     $('pet-play').setAttribute('aria-label', petPaused ? '播放动画' : '暂停动画');
-    $('pet-play').textContent = petPaused ? '▷' : 'Ⅱ';
+    $('pet-play').dataset.paused = String(petPaused);
+    $('pet-play').title = petPaused ? '播放动画' : '暂停动画';
   });
   setSource('ball'); void refreshPets();
 
