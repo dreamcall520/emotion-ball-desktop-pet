@@ -2438,7 +2438,6 @@ function menuTemplate() {
     { type: 'separator' },
     { label: '球球与互动', submenu: [
       { label: '随机表情', click: () => sendCommand('random') },
-      ...(settings.customization.appearance.shape==='soft-orb'?[{label:'小宇互动',submenu:[['draw','发现你'],['fan','摸摸回应'],['flip','失重晃动'],['scan','星际扫描'],['beam','引力光束'],['shock','触电'],['flight','飞走'],['ship','飞船收纳'],['love','怦然心动'],['complete','庆祝一下']].map(([action,label])=>({label,click:()=>sendCommand({command:'soft-orb-action',action})}))}]:[]),
       ...(settings.customization.appearance.shape === 'new-year-sheep' ? [{ label: '咩咩互动', submenu: [
         ['greet', SheepTheme.resolveTheme(effectiveCustomization(settings.customization).appearance.sheepTheme, new Date()) === 'spring-festival' ? '拱手拜年' : '咩咩问好', 'hello'], ['joy', '开心回应', 'play'],
         ['walk', '迈迈小蹄', 'play'], ['sleep', '暖暖打盹', 'sleep'],
@@ -2519,12 +2518,9 @@ function compactMenuTemplate() {
   const notes = items.find(item => item.label === '便签与待办')?.submenu.find(item => item.id === 'notes-open');
   const codex = items.find(item => item.id === 'codex-menu').submenu;
   const codexEnabled = codex.find(item => item.id === 'codex-enabled');
-  const xiaoyuInteraction = settings.customization.appearance.shape === 'soft-orb'
-    ? items.find(item => item.label === '球球与互动')?.submenu.find(item => item.label === '小宇互动') : null;
   return [find('chat-open'), { ...find('customize-open'), label: '来定制球球' },
     notes && { ...notes, label: '便签与待办' }, find('pomodoro-open'),
     { type: 'separator' }, codexEnabled, zcodeLink?.menu().submenu[0], find('workbuddy-enabled'),
-    ...(xiaoyuInteraction ? [xiaoyuInteraction] : []),
     { id: 'quota-cards-settings', label: '联动样式管理', click: () => openGlobalSettings('quota-cards') },
     { type: 'separator' }, find('global-settings'), find('about-open'), find('update-check'),
     { type: 'separator' }, items.find(item => item.label === '退出球球')].filter(Boolean);

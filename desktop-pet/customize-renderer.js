@@ -196,7 +196,7 @@
     const target = $('orb-material-options');
     if (!target.children.length) for (const [id, preset] of Object.entries(window.SoftOrb?.PRESETS || {})) {
       const button = document.createElement('button'); button.type = 'button'; button.dataset.orbMaterial = id;
-      const icon = document.createElement('img'); icon.src = 'assets/soft-orb/swatches/' + id + '.png'; icon.alt = '';
+      const icon = document.createElement('img'); icon.src = 'assets/soft-orb/fallback-' + id + '.png'; icon.alt = '';
       const label = document.createElement('span'); label.textContent = preset.name; button.append(icon, label);
       button.addEventListener('click', () => {
         if (!canSave || disposed || state.appearance.shape !== 'soft-orb') return;
