@@ -1,0 +1,56 @@
+{
+  "checkedAt": "2026-10-31",
+  "repository": "https://github.com/zai-org/ZCode",
+  "sourceCommit": "a60ba6a7e5a06742270ca605f5d2cc2766afa7e1",
+  "version": "3.17.1",
+  "readScope": "public official source only; no original user settings/messages/credentials",
+  "installed": false,
+  "enabled": false,
+  "realDesktopEventValidated": false,
+  "supportedExportEvents": [
+    "SessionStart",
+    "UserPromptSubmit",
+    "Stop"
+  ],
+  "unsupportedEventsNotExported": [
+    "SessionEnd",
+    "FinalStop",
+    "StopFailure"
+  ],
+  "terminalStateVerified": false,
+  "overallTaskVerified": false,
+  "checks": [
+    {
+      "file": "docs/plugin-hooks-compat.md",
+      "sha256": "b775aed338ed8b5a8460099e167fe2adf0685feb59ed2be24e5d28ac8df21f99",
+      "url": "https://github.com/zai-org/ZCode/blob/a60ba6a7e5a06742270ca605f5d2cc2766afa7e1/docs/plugin-hooks-compat.md"
+    },
+    {
+      "file": "apps/zcode-cli/packages/contracts/src/hooks/index.ts",
+      "sha256": "6d1ee171642ec2e33c66cba99d2365d0d1620e5022ab4a427cd4af9c8b3f0b28",
+      "url": "https://github.com/zai-org/ZCode/blob/a60ba6a7e5a06742270ca605f5d2cc2766afa7e1/apps/zcode-cli/packages/contracts/src/hooks/index.ts"
+    },
+    {
+      "file": "apps/zcode-cli/packages/core/src/hooks/configured-runner-input.ts",
+      "sha256": "9004e5c185a0e38e4b42d0fa73769e251a08785859a29aa78bfa181912927432",
+      "url": "https://github.com/zai-org/ZCode/blob/a60ba6a7e5a06742270ca605f5d2cc2766afa7e1/apps/zcode-cli/packages/core/src/hooks/configured-runner-input.ts"
+    },
+    {
+      "file": "apps/zcode-cli/packages/core/src/runtime/methods/turn-stop.ts",
+      "sha256": "4a222b0e526837cdad12da2d8eee1884450dc1f53b19112686513ed31ca4e9f7",
+      "url": "https://github.com/zai-org/ZCode/blob/a60ba6a7e5a06742270ca605f5d2cc2766afa7e1/apps/zcode-cli/packages/core/src/runtime/methods/turn-stop.ts"
+    },
+    {
+      "file": "apps/zcode-cli/packages/plugin-creator-plugin/skills/plugin-creator/references/plugin-json-spec.md",
+      "sha256": "f60d9e945bf58f073fdfb1d4ff7df34a4d3e73f98977123ff6ec51b19b8fdfe2",
+      "url": "https://github.com/zai-org/ZCode/blob/a60ba6a7e5a06742270ca605f5d2cc2766afa7e1/apps/zcode-cli/packages/plugin-creator-plugin/skills/plugin-creator/references/plugin-json-spec.md"
+    }
+  ],
+  "installedPublicRuntimeCorroboration": {
+    "version": "3.16.3",
+    "file": "/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs",
+    "sha256": "97490d0f06a7a225d54d47817acf4b4859cdb268b59f2490caaeda982bef063a",
+    "checkedBy": "remaining_provider_routes agent; public packaged resources only",
+    "sameReviewedContract": true
+  }
+}

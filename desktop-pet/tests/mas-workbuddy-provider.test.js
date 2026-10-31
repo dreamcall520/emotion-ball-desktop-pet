@@ -290,3 +290,4 @@ test('本人登录页完成后自动核验积分并回调，无需手动刷新',
  await new Promise(r=>setTimeout(r,1100));
  assert.equal(reads,1);assert.equal(finished,1);assert.equal(h.provider.getState().status,'connected');assert.equal(h.windows[0].destroyed,true);h.provider.close();
 });
+test('停用会失效官网汇总并关闭自有登录窗口，重连仍可复用原session',async()=>{const f=harness({readSummary:async()=>summary()});await f.provider.readSummary();assert.equal(f.provider.getState().status,'connected');await f.provider.openLogin();await f.provider.readSummary();f.provider.revoke();assert.equal(f.provider.getState().summary,null);assert.equal(f.provider.getState().loginVisible,false);assert.equal(f.windows.every(win=>win.destroyed),true);await f.provider.openLogin();await f.provider.readSummary();assert.equal(f.provider.getState().status,'connected');f.provider.close();});

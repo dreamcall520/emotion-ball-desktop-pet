@@ -1,0 +1,38 @@
+{
+  "description": "Bounded source-side metadata filtering; no transcript reads or raw body export.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${ZCODE_PLUGIN_ROOT}/scripts/emit-metadata.sh\"",
+            "timeout": 2
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${ZCODE_PLUGIN_ROOT}/scripts/emit-metadata.sh\"",
+            "timeout": 2
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${ZCODE_PLUGIN_ROOT}/scripts/emit-metadata.sh\"",
+            "timeout": 2
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -127,7 +127,7 @@ if (process.versions.electron && process.argv.includes('--store-renderer-child')
 
       // The selected ZCode API channel is explicit; its readiness is never assigned to Codex.
       assert.match(await run('document.getElementById("zcode-detail").textContent'), /已有自定义模型.*原\s*API\s*计费/);
-      assert.equal(await run('document.getElementById("codex-status").textContent'), '目录已授权');
+      assert.equal(await run('document.getElementById("codex-capability-chat").dataset.status')==='ready', false);
       assert.doesNotMatch(await run('document.getElementById("codex-status").textContent'), /聊天已连接/);
       assert.match(await run('document.getElementById("mode").textContent'), /未启用.*App Sandbox/);
       // Channel choice is explicit and survives unrelated status refreshes until submitted.
@@ -137,31 +137,50 @@ if (process.versions.electron && process.argv.includes('--store-renderer-child')
       await notify();
       assert.equal(await run('document.getElementById("zcode-account-source").value'), 'official');
       assert.equal(await calls('enable-provider'), beforeSourceChoice, 'selecting a source does not connect or fall back');
-      // One primary action per provider; internal connection details are not user configuration.
+      // One visible entry opens the guide; no account or permission action is automatic.
       assert.equal(await run(`document.querySelectorAll('button[data-action="enable-provider"]').length`), 3);
+      assert.equal(await run(`document.querySelectorAll('[data-provider-card] .capabilities dd').length`), 9);
+      assert.equal(await run(`document.querySelectorAll('[data-provider-card] > .tool-advanced[open]').length`), 0);
       assert.equal(await run(`document.querySelectorAll('button[data-action^="import-"], button[data-action^="configure-"], input[type="url"]').length`), 0);
+      const beforeGuide=await calls('enable-provider');
       await run(`document.querySelector('button[data-action="enable-provider"][data-provider="codex"]').click()`); await settle();
+      assert.equal(await run('document.getElementById("connection-guide").hidden'),false);
+      assert.match(await run('document.getElementById("guide-title").textContent'),/Codex/);
+      assert.equal(await calls('enable-provider'),beforeGuide,'opening a guide never authenticates');
+      await run(`document.querySelector('[data-action="guide-run"][data-step="chat"]').click()`);await settle();
       assert.deepEqual(await run(`fixtureCalls.filter(call => call.action === 'enable-provider').at(-1)`), { action: 'enable-provider', payload: { provider: 'codex' } });
-      for (const provider of ['zcode', 'workbuddy']) {
+      assert.equal(await calls('enable-provider-data'),0,'one click never chains further system permissions');
+      for (const provider of ['zcode','workbuddy']) {
         await run(`document.querySelector('button[data-action="enable-provider"][data-provider="${provider}"]').click()`); await settle();
+        await run(`document.querySelector('[data-action="guide-run"][data-step="chat"]').click()`);await settle();
         assert.equal(await run(`fixtureCalls.filter(call => call.action === 'enable-provider').at(-1).payload.provider`), provider);
       }
       assert.equal(await run(`fixtureCalls.findLast(call => call.action === 'enable-provider' && call.payload.provider === 'zcode').payload.accountSource`), 'official');
-      await run(`(() => { const select = document.getElementById('zcode-account-source'); select.value = 'configured-custom'; select.dispatchEvent(new Event('change')); document.querySelector('button[data-action="enable-provider"][data-provider="zcode"]').click(); })()`); await settle();
+      await run(`document.querySelector('button[data-action="enable-provider"][data-provider="zcode"]').click()`);await settle();
+      await run(`(() => { const select = document.getElementById('zcode-account-source'); select.value = 'configured-custom'; select.dispatchEvent(new Event('change')); })()`);await settle();
+      await run(`document.querySelector('[data-action="guide-run"][data-step="chat"]').click()`);await settle();
       assert.equal(await run(`fixtureCalls.findLast(call => call.action === 'enable-provider' && call.payload.provider === 'zcode').payload.accountSource`), 'configured-custom');
       assert.equal(await calls('send-workbuddy-cli'), beforeReview, 'enabling a provider never submits chat');
       await set({ onboarding: { codex: { status: 'partial', message: '额度已连接', chat: { status: 'unavailable', message: '聊天能力待接入，无需配置服务。' } } }, codex: { ...base.codex, serviceConfigured: false } });
-      assert.equal(await run('document.getElementById("codex-status").textContent'), '聊天未就绪');
+      assert.equal(await run('document.getElementById("codex-capability-chat").dataset.status'),'unavailable');
       assert.match(await run('document.getElementById("codex-detail").textContent'), /额度已连接.*聊天能力待接入/);
       assert.equal(await run(`document.querySelector('button[data-action="open-provider-chat"][data-provider="codex"]').disabled`), true);
-      assert.equal(await run(`document.querySelectorAll('button[data-action="enable-provider-data"]').length`), 3);
-      await set({onboarding:{codex:{status:'ready',message:'聊天已连接',chat:{status:'ready'},data:{status:'needs-authorization',message:'任务与额度可选授权'}}}});
-      assert.equal(await run('document.getElementById("codex-status").textContent'),'聊天已连接');
-      assert.equal(await run('document.getElementById("codex-data-state").textContent'),'任务与额度可选授权');
-      await run(`document.querySelector('button[data-action="enable-provider-data"][data-provider="codex"]').click()`); await settle();
+      await set({onboarding:{codex:{status:'ready',message:'聊天已连接',chat:{status:'ready'},data:{status:'cancelled',message:'已取消数据授权'}}},codex:{directory:'missing',serviceConfigured:true}});
+      assert.equal(await run('document.getElementById("codex-status").textContent'),'部分已连接');
+      assert.equal(await run('document.getElementById("codex-capability-chat").dataset.status'),'ready','cancelled data does not lose chat');
+      await run(`document.querySelector('button[data-action="enable-provider"][data-provider="codex"]').click()`);await settle();
+      assert.equal(await run(`document.querySelector('#guide-steps [data-step="chat"]').dataset.status`),'ready');
+      assert.match(await run('document.getElementById("guide-next").textContent'),/允许读取/);
+      const beforeData=await calls('enable-provider-data');await click('guide-skip');
+      assert.equal(await calls('enable-provider-data'),beforeData,'skip does not authorize');
+      assert.equal(await run('document.getElementById("codex-capability-chat").dataset.status'),'ready');
+      await click('guide-close');
+      assert.equal(await run('document.getElementById("connection-guide").hidden'),true);
+      await run(`document.querySelector('button[data-action="enable-provider"][data-provider="codex"]').click()`);await settle();
+      assert.match(await run('document.getElementById("guide-next").textContent'),/允许读取/,'reopening resumes missing grant, not prior skipped memory');
+      await click('guide-next');
       assert.deepEqual(await run(`fixtureCalls.filter(call=>call.action==='enable-provider-data').at(-1)`),{action:'enable-provider-data',payload:{provider:'codex'}});
-      await set({onboarding:{zcode:{status:'partial',chat:{status:'needs-data-authorization'},data:{status:'needs-authorization',message:'需要读取已有配置'}}}});
-      assert.equal(await run(`document.querySelector('button[data-action="enable-provider-data"][data-provider="zcode"]').textContent`),'读取已有模型配置');
+      assert.equal(await calls('enable-provider-data'),beforeData+1,'only the requested step runs');
       await set({ onboarding: { codex: { status: 'working', message: '等待系统授权', chat: { status: 'unavailable' } } } });
       assert.equal(await run(`document.querySelector('button[data-action="enable-provider"][data-provider="codex"]').disabled`), true);
       assert.equal(await run(`document.querySelector('button[data-action="enable-provider"][data-provider="codex"]').textContent`), '正在连接…');
@@ -190,8 +209,52 @@ if (process.versions.electron && process.argv.includes('--store-renderer-child')
       assert.equal((await run("document.getElementById('workbuddy-desktop-events-state').textContent")).includes('主回复已完成（不代表后台任务全部结束）'),true);
       await set({workbuddyDesktopEvents:{enabled:true,observations:[{state:'unknown',phase:'final-stop-observed',terminalConfirmed:false,realtime:true}]}});
       assert.equal((await run("document.getElementById('workbuddy-desktop-events-state').textContent")).includes('本轮终态尚未确认'),true);
+      await set({onboarding:{zcode:{status:'partial',chat:{status:'needs-model'}}}});
+      assert.equal(await run(`document.querySelector('button[data-action="open-provider-chat"][data-provider="zcode"]').disabled`),false,'model selection remains reachable');
+      await set({onboarding:{zcode:{status:'partial',chat:{status:'needs-new-chat'}}}});
+      assert.equal(await run(`document.querySelector('button[data-action="open-provider-chat"][data-provider="zcode"]').disabled`),false,'account-change new-chat recovery remains reachable');
+      window.setSize(520,800);
+      await run(`document.querySelector('button[data-action="enable-provider"][data-provider="workbuddy"]').click()`);await settle();
+      assert.equal(await run('document.documentElement.scrollWidth <= document.documentElement.clientWidth'),true,'cards and open guide fit a narrow window');
+      // The same card exposes task records and keeps data-account boundaries visible.
+      for(const provider of ['codex','zcode','workbuddy']){
+        assert.equal(await run(`document.getElementById('${provider}-task-list').closest('[data-provider-card]').dataset.providerCard`),provider);
+      }
+      assert.match(await run(`document.querySelector('[data-provider-card="codex"] .account-scope').textContent`),/独立登录.*账号归属尚未核对/);
+      assert.match(await run(`document.querySelector('[data-provider-card="zcode"] .account-scope').textContent`),/官方套餐.*自定义 API.*分别计费/);
+      assert.match(await run(`document.querySelector('[data-provider-card="workbuddy"] .account-scope').textContent`),/账号归属.*核/);
+      const codexTask={title:'合成任务A',state:'active'};
+      await set({codex:{...base.codex},codexSnapshot:{...base.codexSnapshot,tasks:{state:'connected',stale:false,items:[codexTask]}}});
+      assert.equal(await run('document.getElementById("codex-task-list").textContent'),'合成任务A · 进行中');
+      for(const taskChannel of [{state:'error',stale:false},{state:'disconnected',stale:false},{state:'connected',stale:true}]){
+        await set({codexSnapshot:{...base.codexSnapshot,tasks:{...taskChannel,items:[codexTask]}}});
+        assert.match(await run('document.getElementById("codex-task-list").textContent'),/合成任务A.*上次记录：进行中.*当前待核实/,'retained items cannot present a current state after failure or staleness');
+        assert.equal(await run('document.getElementById("codex-capability-tasks").dataset.status'),'unknown');
+      }
+      await set({zcodeSnapshot:{...base.zcodeSnapshot,tasks:{state:'connected',items:[{title:'合成ZCode历史任务',state:'active'}]}}});
+      assert.match(await run('document.getElementById("zcode-task-list").textContent'),/历史缓存，实时状态待核实/);
+      assert.doesNotMatch(await run('document.getElementById("zcode-task-list").textContent'),/进行中/);
+      // A remembered plugin installation is a ready connection while its live task state waits for new events.
+      await set({workbuddy:{...base.workbuddy,status:'connected',summary:{credits:{remaining:321},updatedAt:1234}},workbuddyDesktop:{directory:'stored',partitions:[],probe:null,report:null},workbuddyDesktopEvents:{enabled:true,pluginInstallationVerified:true,observations:[]},workbuddyCli:{...base.workbuddyCli,configured:true,connected:true},onboarding:{workbuddy:{status:'ready',chat:{status:'ready'},data:{status:'ready'}}}});
+      assert.equal(await run('document.getElementById("workbuddy-status").textContent'),'已连接');
+      assert.equal(await run('document.getElementById("workbuddy-capability-tasks").dataset.status'),'unknown');
+      assert.match(await run('document.getElementById("workbuddy-capability-tasks").textContent'),/等待.*事件/);
+      assert.equal(await run(`document.querySelector('button[data-action="enable-provider"][data-provider="workbuddy"]').textContent`),'管理连接');
+      const beforeReinstall=await calls('prepare-workbuddy-desktop-events'),beforeWebsiteLogin=await calls('workbuddy-login');
+      await run(`document.querySelector('button[data-action="enable-provider"][data-provider="workbuddy"]').click()`);await settle();
+      assert.equal(await run(`document.querySelector('#guide-steps [data-step="tasks"]').dataset.status`),'ready');
+      assert.match(await run(`document.querySelector('#guide-steps [data-step="tasks"] p').textContent`),/已确认插件安装/);
+      assert.equal(await run('document.getElementById("guide-next").textContent'),'返回工具卡');
+      await click('guide-next');
+      assert.equal(await calls('prepare-workbuddy-desktop-events'),beforeReinstall,'returning from a restored guide never asks to reinstall');
+      assert.equal(await calls('workbuddy-login'),beforeWebsiteLogin,'restored ready guide never requests another website login');
+      await set({workbuddy:{...base.workbuddy,status:'error',stale:true,summary:{credits:{remaining:321},updatedAt:1234}}});
+      await run(`document.querySelector('button[data-action="enable-provider"][data-provider="workbuddy"]').click()`);await settle();
+      await run(`document.querySelector('[data-action="guide-run"][data-step="quota"]').click()`);await settle();
+      assert.equal(await calls('workbuddy-login'),beforeWebsiteLogin,'temporary quota error refreshes the existing session');
+      assert.equal(await calls('refresh-workbuddy'),1);
       assert.equal(window.isVisible(), false);
-      console.log('PASS 7 real Chromium store connection scenarios; synthetic state/commands only');
+      console.log('PASS real Chromium unified cards, guided authorization, source isolation and stale-task boundaries; synthetic state/commands only');
       window.destroy(); app.exit(0);
     } catch (error) {
       console.error(error.stack); window?.destroy(); app.exit(1);

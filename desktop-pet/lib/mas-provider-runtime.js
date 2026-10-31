@@ -86,6 +86,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
   const workbuddyCli=createWorkBuddyCliConnection({createClient:createWorkBuddyLocalCliClient,store:createWorkBuddyIntentStore(path.join(app.getPath('userData'),'workbuddy-cli-send-intent.json')),conversationStore:createWorkbuddyConversationStore(path.join(app.getPath('userData'),'workbuddy-cli-conversations')),onChange:()=>{if(!closed)onChange();}});
   const desktopTasks=createMasWorkBuddyTasks({directoryAccess:access});
   const desktopIntegration=require('./workbuddy-desktop-integration').createWorkBuddyDesktopIntegration({root:path.join(app.getPath('userData'),'workbuddy-desktop-events'),assetRoot:path.join(__dirname,'../assets/workbuddy-desktop-hook'),onChange:()=>{if(!closed)onChange();}});
+  const zcodeDesktopIntegration=require('./zcode-desktop-integration').createZcodeDesktopIntegration({root:path.join(app.getPath('userData'),'zcode-desktop-events'),assetRoot:path.join(__dirname,'../assets/zcode-desktop-hook'),onChange:()=>{if(!closed)onChange();}});
   let desktopCache={partitions:[],probe:null,report:null,error:null,accountAttributionVerified:false};
   async function probeWorkbuddyDesktop(){try{const probe=await desktopTasks.probe(),groups=await desktopTasks.listPartitions();desktopCache={...desktopCache,probe,partitions:groups.partitions,report:null,error:null};}catch(e){desktopCache={...desktopCache,report:null,error:['DIRECTORY_ACCESS_REQUIRED'].includes(e.code)?'请先授权原WorkBuddy任务目录。':'桌面任务缓存暂不能读取，或数据库格式未支持。'};}onChange();return desktopCache;}
   async function readWorkbuddyDesktop(partitionId){try{desktopCache={...desktopCache,report:await desktopTasks.read({partitionId}),error:null};}catch(e){desktopCache={...desktopCache,report:null,error:'所选缓存范围暂不能读取，请重新检查授权。'};}onChange();return desktopCache;}
@@ -123,7 +124,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
       zcode: { directory: zcodeDirectory.status, capabilities: zcode.getCapabilities(),
         serviceConfigured: Boolean(zcodeService), endpoint: zcodeService?.endpoint || null, accountSource:zcodeService?.accountSource || zcodeAccountSource,
         chat: zcodeService ? 'experimental-configured-unverified' : 'needs-experimental-local-service',
-        publicApiContractVerified: false }, workbuddy: workbuddy.getState(),workbuddyOfficial:workbuddyOfficial.getState(),workbuddyCli:workbuddyCli.getState(),workbuddyDesktopEvents:desktopIntegration.getState(),workbuddyDesktop:{...structuredClone(desktopCache),directory:(await access.getStatus('workbuddy')).status} };
+        publicApiContractVerified: false }, workbuddy: workbuddy.getState(),workbuddyOfficial:workbuddyOfficial.getState(),workbuddyCli:workbuddyCli.getState(),workbuddyDesktopEvents:desktopIntegration.getState(),zcodeDesktopEvents:zcodeDesktopIntegration.getState(),workbuddyDesktop:{...structuredClone(desktopCache),directory:(await access.getStatus('workbuddy')).status} };
   }
   async function importLocalService(provider) {
     if (!PROVIDERS.has(provider)) throw failure('INVALID_PROVIDER');
@@ -326,7 +327,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
   function close() {
     if (closed) return runtimeClosing;
     closed = true; workbuddyEpoch++; managedAbort.abort();managedEpoch++; void managedLogin?.close();managedLogin=null;managedLoginUrl=null; workbuddy.close();workbuddyOfficial.close();desktopTasks.close(); quotaPorts.clear();
-    const closing = [desktopIntegration.close(),workbuddyCli.close(),workbuddyAuthClient?.close(),managedWorkbuddy?.stop()];
+    const closing = [desktopIntegration.close(),zcodeDesktopIntegration.close(),workbuddyCli.close(),workbuddyAuthClient?.close(),managedWorkbuddy?.stop()];
     for (const slot of Object.values(chatServices)) {
       slot.service = null; slot.generation++;
       closing.push(...[...slot.clients].map(client => client.close()));
@@ -334,7 +335,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
     runtimeClosing = Promise.all(closing).then(() => undefined);
     return runtimeClosing;
   }
-  return { access, authorize, getState,prepareChat,prepareWorkbuddyChat,desktopIntegration,
+  return { access, authorize, getState,prepareChat,prepareWorkbuddyChat,desktopIntegration,zcodeDesktopIntegration,
     async restoreChatPreferences(fallback={}){for(const provider of PROVIDERS){let saved;try{saved=await chatPreferences.load(provider);}catch(_){saved=null;}chatEnabled[provider]=typeof saved?.enabled==='boolean'?saved.enabled:fallback[provider]===true;}return{...chatEnabled};},
     isChatEnabled:provider=>PROVIDERS.has(provider)&&chatEnabled[provider]===true,
     async setChatEnabled(provider,enabled){if(!PROVIDERS.has(provider))throw failure('INVALID_PROVIDER');const old=await chatPreferences.load(provider);await chatPreferences.save(provider,{...(old||{}),enabled:enabled===true});chatEnabled[provider]=enabled===true;onChange();},async disconnectWorkbuddyChat(){externalWorkbuddyService=false;workbuddyEpoch++;workbuddyAuthenticated=false;workbuddyAuthFlight=null;await workbuddyAuthClient?.close();workbuddyAuthClient=null;await workbuddyCli.disconnect();const handle=managedWorkbuddy;managedWorkbuddy=null;await handle?.stop();},getZcodeAccountSource:()=>chatServices.zcode.service?.accountSource||zcodeAccountSource,
@@ -352,7 +353,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
       if(provider==='zcode')directZcodeEnabled=false;
       if(provider==='codex'){bundledEnabled=false;managedEpoch++;await managedLogin?.close();managedLogin=null;managedLoginUrl=null;}
       await access.revoke(provider);
-      if(provider==='workbuddy')desktopCache={partitions:[],probe:null,report:null,error:null,accountAttributionVerified:false};
+      if(provider==='workbuddy'){workbuddy.revoke();desktopCache={partitions:[],probe:null,report:null,error:null,accountAttributionVerified:false};}
       const slot = chatServices[provider];
       if (slot) { slot.service = null; slot.generation++; await Promise.all([...slot.clients].map(client => client.invalidate())); }
       onChange();

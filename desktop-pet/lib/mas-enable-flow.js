@@ -31,12 +31,14 @@ function createMasEnableFlow({ ensureDirectory, refreshData, connectChat, revoke
     }).finally(()=>{if(dataFlights.get(provider)===promise)dataFlights.delete(provider);});
     dataFlights.set(provider,promise);return promise;
   }
-  function enable(provider,{interactive=true}={}){
+  function enable(provider,{interactive=true,beforeConnect}={}){
     try{check(provider);}catch(error){return Promise.reject(error);}
-    if(flight)return flight.provider===provider&&flight.kind==='chat'?flight.promise:Promise.reject(failure('BUSY'));
+    if(flight)return typeof beforeConnect!=='function'&&flight.provider===provider&&flight.kind==='chat'?flight.promise:Promise.reject(failure('BUSY'));
     const epoch=revisions[provider];
     const promise=Promise.resolve().then(async()=>{
       update(provider,{status:'working',step:'chat',message:interactive?'正在连接聊天…':'正在恢复聊天…'},epoch);
+      if(typeof beforeConnect==='function'){try{await beforeConnect();}catch(error){update(provider,{status:'partial',step:null,message:'连接准备未完成，已有能力保持。'},epoch);throw error;}}
+      if(!valid(provider,epoch))return;
       let chat;
       try{chat=await connectChat(provider,{interactive});}
       catch(_){chat={status:'unavailable',message:'聊天暂未连接，请稍后重试。'};}

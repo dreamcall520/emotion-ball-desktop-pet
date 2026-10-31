@@ -243,6 +243,7 @@ function createMasWorkBuddyProvider({ BrowserWindow, session, shell, onChange = 
     notify();
     // close never clears persistent cookies or logs the user out without asking.
   }
-  return { getState, openLogin, readSummary, close };
+  function revoke(){clearTimeout(loginCheckTimer);invalidateForLogin();for(const win of [...windows]){try{if(!win.isDestroyed())win.destroy();}catch{}}windows.clear();loginWindow=null;update({status:'needs-login',loginVisible:false});}
+  return { getState, openLogin, readSummary, revoke, close };
 }
 module.exports = { createMasWorkBuddyProvider };

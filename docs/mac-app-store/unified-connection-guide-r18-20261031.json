@@ -1,0 +1,33 @@
+{
+  "candidate": "R18",
+  "runtime": "darwin-arm64",
+  "appSandbox": false,
+  "tests": {
+    "pass": 3052,
+    "fail": 0
+  },
+  "sourceFilesVerified": 491,
+  "helperDigestsVerified": true,
+  "asarSha256": "03e1ca7166802e5964b591dc8147ca7d88a0acb473db2328077ce733f8414903",
+  "nativeFinalVerified": true,
+  "zcodePluginInstallation": "awaiting-user-consent",
+  "zcodeOfficialChatVerified": false,
+  "actualElectronMasVerified": false,
+  "validSigningIdentities": 0,
+  "pushed": false,
+  "merged": false,
+  "submitted": false,
+  "formalAppReplaced": false,
+  "strictAdhocSignatureVerified": true,
+  "nativeChecks": {
+    "threeCards": true,
+    "existingChatAndDirectoryAuthorizationRestored": true,
+    "workbuddyInstalledPluginWaitingDoesNotAskReinstall": true,
+    "codexCardOpensCodexChat": true,
+    "zcodeCardOpensZcodeChat": true,
+    "workbuddyCardOpensWorkbuddyChat": true,
+    "zcodeGuideShowsCompletedChatAndDataThenUnapprovedTaskStep": true,
+    "newModelMessagesSent": 0
+  },
+  "oldSettingsEntry": "focuses-tool-card-before-guide"
+}

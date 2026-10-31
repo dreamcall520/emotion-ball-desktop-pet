@@ -1,0 +1,8 @@
+{
+  "name": "qiuqiu-zcode-task-events",
+  "version": "0.1.0",
+  "description": "球球本机元数据联动候选，仅导出会话/轮次标识、事件与阶段，不导出正文。",
+  "author": {
+    "name": "Qiuqiu"
+  }
+}

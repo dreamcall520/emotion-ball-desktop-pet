@@ -569,8 +569,9 @@ function openAbout() {
 async function storeConnectionState() {
   const state = await storeRuntime.getState();
   const onboarding=storeEnableFlow?.getState();
+  const providerChats=Object.fromEntries(['codex','zcode','workbuddy'].map(provider=>{const source=chat?.getSourceState?.(provider);return[provider,source?{connection:source.connection,modelsStatus:source.modelsStatus,accountMismatch:source.accountMismatch===true,busy:source.busy===true,error:source.error,modelsError:source.modelsError}:null];}));
   if(onboarding)for(const provider of ['codex','zcode','workbuddy'])if(onboarding[provider].status!=='working'&&storeChatReady(provider)){onboarding[provider]={...onboarding[provider],status:'ready',chat:{status:'ready',message:'聊天已连接。'}};}
-  return { ...state, onboarding, codexSnapshot: codexCompanion?.getSnapshot(), zcodeSnapshot: zcodeLink?.getSnapshot?.(),
+  return { ...state, onboarding, providerChats, codexSnapshot: codexCompanion?.getSnapshot(), zcodeSnapshot: zcodeLink?.getSnapshot?.(),
     chat: chat ? { source: chat.getState().source, connection: chat.getState().connection, modelsStatus: chat.getState().modelsStatus, modelsError: chat.getState().modelsError, busy: chat.getState().busy, error: chat.getState().error } : null };
 }
 function notifyStoreConnections() {
@@ -598,9 +599,7 @@ function registerStoreConnections() {
     try {
       let message = '连接状态已更新';
       if (action === 'enable-provider') {
-        if(payload?.provider==='zcode'&&payload?.accountSource){if(chat?.getState().busy)return{ok:false,message:'请先等待或停止当前回复。'};await storeRuntime.setZcodeAccountSource(payload.accountSource);}
-        await storeRuntime.setChatEnabled(payload?.provider,true);
-        await storeEnableFlow.enable(payload?.provider);
+        await storeEnableFlow.enable(payload?.provider,{beforeConnect:async()=>{if(chat?.getState().busy)throw Object.assign(new Error('BUSY'),{code:'BUSY'});if(payload?.provider==='zcode'&&payload?.accountSource)await storeRuntime.setZcodeAccountSource(payload.accountSource);await storeRuntime.setChatEnabled(payload?.provider,true);}});
         message=storeEnableFlow.getState()[payload?.provider]?.message||'已检查连接。';
       } else if(action==='enable-provider-data'){
         await storeEnableFlow.enableData(payload?.provider);
@@ -610,8 +609,8 @@ function registerStoreConnections() {
         await storeEnableFlow.disable(payload?.provider);message='已停用并撤销本地数据授权。';
       } else if(action==='open-provider-chat'){
         if(!['codex','zcode','workbuddy'].includes(payload?.provider))return{ok:false};
-        if(!['ready','needs-new-chat'].includes(storeEnableFlow.getState()[payload.provider]?.chat.status))return{ok:false,message:'请先启用授权并完成连接。'};
-        await chat.selectSource(payload.provider);openChat();
+        if(!storeChatReady(payload.provider)&&!['ready','needs-model','needs-new-chat'].includes(storeEnableFlow.getState()[payload.provider]?.chat.status))return{ok:false,message:'请先启用授权并完成连接。'};
+        const selected=await chat.selectSource(payload.provider);if(selected?.accepted===false)return{ok:false,message:selected.error||'请先等待当前回复结束，再切换聊天工具。',state:await storeConnectionState()};openChat();
       } else if (action === 'authorize-codex') {
         const result = await storeRuntime.authorize('codex');
         if (result.status !== 'stored') return { ok: true, message: '已取消，原授权保持。', state: await storeConnectionState() };
@@ -643,13 +642,22 @@ function registerStoreConnections() {
         await chat.selectSource('codex'); await chat.connect();
         message = chat.getState().connection === 'ready' && chat.getState().modelsStatus === 'ready' ? 'Codex 聊天已连接，模型列表已读取。' : '聊天尚未连接，请查看错误信息。';
       } else if (action === 'open-chat') openChat();
-      else if (action === 'workbuddy-login') { await setWorkBuddyEnabled(true); if (storeRuntime.workbuddy.getState().loginVisible !== true) await storeRuntime.workbuddy.openLogin(); message = '请在官网窗口本人完成登录，再刷新积分。'; }
+      else if (action === 'workbuddy-login') { await setWorkBuddyEnabled(true,{openLogin:false}); if (storeRuntime.workbuddy.getState().loginVisible !== true) await storeRuntime.workbuddy.openLogin(); message = '请在官网窗口本人完成登录，再刷新积分。'; }
       else if (action === 'refresh-workbuddy') { await workbuddyQuota.refresh(); message = storeRuntime.workbuddy.getState().status === 'connected' ? '网站积分汇总已读取；未提供的分类保持未知。' : '尚未读取积分，请检查官网登录状态。'; }
       else if(action==='prepare-workbuddy-desktop-events'){
+        if(storeRuntime.desktopIntegration.getState().enabled)return{ok:true,message:'本机任务同步已授权。首次安装请继续在WorkBuddy确认；已安装无需重复操作。',state:await storeConnectionState()};
         const consent=await dialog.showMessageBox(storeConnectionsWindow,{type:'question',title:'启用原 WorkBuddy 元数据事件',message:'允许本机 WorkBuddy 插件临时过滤 Hook 输入吗？',detail:'输入可能包含提示词和上次回复。已审查的过滤脚本仅在本机有限内存提取会话标识和阶段，不保存或发送正文、路径或凭据。球球只接收元数据；Stop 不等于任务最终完成。还需在 WorkBuddy 官方插件页面安装启用。',buttons:['暂不开启','同意，仅传元数据'],defaultId:0,cancelId:0});
         if(consent.response!==1)return{ok:true,message:'未启用原桌面事件。',state:await storeConnectionState()};
         await storeRuntime.desktopIntegration.prepare();message='本机元数据接收器与插件包已准备，请在WorkBuddy插件页审阅安装。';
       }
+      else if(action==='prepare-zcode-desktop-events'){
+        if(storeRuntime.zcodeDesktopIntegration.getState().enabled)return{ok:true,message:'ZCode任务事件已授权；已安装无需重复安装，状态等待新事件。',state:await storeConnectionState()};
+        const consent=await dialog.showMessageBox(storeConnectionsWindow,{type:'question',title:'启用原 ZCode 任务事件',message:'允许本机 ZCode 插件过滤任务事件吗？',detail:'插件临时接触可能包含提示词的Hook输入，仅在有限本机内存提取会话标识、轮次和阶段，不保存或发送正文、路径或凭据。ZCode官方Hook机制本身可能生成临时对话文件；球球插件不读取这些文件。停止事件不能确认任务成功。还需在ZCode内安装启用插件。',buttons:['暂不开启','同意，仅传元数据'],defaultId:0,cancelId:0});
+        if(consent.response!==1)return{ok:true,message:'未启用ZCode任务事件，其他能力保持。',state:await storeConnectionState()};
+        await storeRuntime.zcodeDesktopIntegration.prepare();message='ZCode任务事件接收与安装文件已准备，请继续在ZCode确认安装。';
+      }
+      else if(action==='show-zcode-plugin'){shell.showItemInFolder(storeRuntime.zcodeDesktopIntegration.getMarketplaceDirectory());message='已定位ZCode本机插件安装目录。';}
+      else if(action==='stop-zcode-desktop-events'){await storeRuntime.zcodeDesktopIntegration.revoke();message='已停止接收ZCode事件；原工具内可停用或卸载球球插件。';}
       else if(action==='stop-workbuddy-desktop-events'){await storeRuntime.desktopIntegration.revoke();message='已停止接收并撤销本机连接。要停止源端过滤，请在WorkBuddy中停用或卸载球球插件。';}
       else if(action==='show-workbuddy-plugin'){shell.showItemInFolder(storeRuntime.desktopIntegration.getMarketplaceDirectory());message='已定位本机插件市场目录。';}
       else if (action === 'authorize-workbuddy-desktop') {const existing=await storeRuntime.access.getStatus('workbuddy');const result=existing.status==='stored'?existing:await storeRuntime.authorize('workbuddy');if(result.status==='stored')await storeRuntime.probeWorkbuddyDesktop();message='仅核对桌面缓存分区；选择范围后才读取标题，账号归属与实时状态仍未核实。';}
@@ -1482,7 +1490,7 @@ function setWorkBuddyPreference(name, value) {
   return true;
 }
 
-async function setWorkBuddyEnabled(value) {
+async function setWorkBuddyEnabled(value,{openLogin=true}={}) {
   const enabled = value === true;
   if (!enabled) { workbuddyEnableToken++; workbuddyConsent?.cancel(); }
   if (enabled && settings.workbuddyEnabled !== true) {
@@ -1490,7 +1498,7 @@ async function setWorkBuddyEnabled(value) {
     const token = ++workbuddyEnableToken;
     workbuddyEnablePending = true;
     try {
-      if (IS_STORE_BUILD) await storeRuntime.workbuddy.openLogin();
+      if (IS_STORE_BUILD) {if(openLogin)await storeRuntime.workbuddy.openLogin();}
       else if (!await workbuddyConsent?.request() || token !== workbuddyEnableToken || isQuitting || screenLocked) return false;
     } finally { workbuddyEnablePending = false; }
   }
@@ -2607,7 +2615,7 @@ function compactMenuTemplate() {
     ? items.find(item => item.label === '球球与互动')?.submenu.find(item => item.label === '小宇互动') : null;
   return [...(IS_STORE_BUILD ? [find('store-connections')] : []), find('chat-open'), { ...find('customize-open'), label: '来定制球球' },
     notes && { ...notes, label: '便签与待办' }, find('pomodoro-open'),
-    { type: 'separator' }, codexEnabled, zcodeLink?.menu().submenu[0], find('workbuddy-enabled'),
+    ...(IS_STORE_BUILD?[]:[{ type: 'separator' }, codexEnabled, zcodeLink?.menu().submenu[0], find('workbuddy-enabled')]),
     ...(xiaoyuInteraction ? [xiaoyuInteraction] : []),
     { id: 'quota-cards-settings', label: '联动样式管理', click: () => openGlobalSettings('quota-cards') },
     { type: 'separator' }, find('global-settings'), find('about-open'), find('update-check'),
@@ -3469,6 +3477,7 @@ function registerIpc() {
     if (!item || (item.type === 'checkbox' && typeof checked !== 'boolean')) return { error: '该选项暂不可用，请刷新后重试。' };
     globalSettingsBusy = true;
     try {
+      if(IS_STORE_BUILD&&['codex-enabled','zcode-enabled','workbuddy-enabled'].includes(item.id)){openStoreConnections(item.id.replace('-enabled',''));return{snapshot:globalSettingsSnapshot(),message:'请在统一连接引导中管理该工具的授权。'};}
       // Await consent instead of reporting success while its window is still open.
       if (item.id === 'codex-enabled') await setCodexEnabled(checked);
       else if (item.id === 'zcode-enabled') await zcodeLink?.setEnabled(checked);
@@ -4014,7 +4023,7 @@ async function bootstrap() {
     }
   });
   settings = loadSettings(settingsFile);
-  if(IS_STORE_BUILD)void storeRuntime.desktopIntegration.restore().catch(()=>{});
+  if(IS_STORE_BUILD){void storeRuntime.desktopIntegration.restore().catch(()=>{});void storeRuntime.zcodeDesktopIntegration.restore().catch(()=>{});}
   if(IS_STORE_BUILD)await storeRuntime.restoreChatPreferences({codex:settings.codexEnabled,zcode:settings.zcodeEnabled,workbuddy:settings.workbuddyEnabled});
   if(ACCEPTANCE_KIND==='soft-orb'&&!fs.existsSync(settingsFile)){
     const orb=normalizeAppearance({shape:'soft-orb',orbMaterial:'pearl',orbSecondaryColor:'#B7A7EC',bodyColor:'#F9F8FF',eyeColor:'#FDFDFD'});
@@ -4191,7 +4200,7 @@ async function bootstrap() {
         if(provider==='codex') {if(!settings.codexEnabled)await setCodexEnabled(true);else await codexCompanion.refresh();const snap=codexCompanion.getSnapshot();return{available:!snap.error,message:'Codex 已授权，额度和任务以实际读取结果为准。'};}
         if(provider==='zcode'){if(!zcodeLink.isEnabled())await zcodeLink.setEnabled(true);else await zcodeLink.refresh?.();return{available:true,message:'ZCode 已授权；显示已有套餐信息和历史任务，空套餐不代表聊天可用。'};}
         await storeRuntime.probeWorkbuddyDesktop();
-        if(!settings.workbuddyEnabled)await setWorkBuddyEnabled(true);
+        if(!settings.workbuddyEnabled)await setWorkBuddyEnabled(true,{openLogin:false});
         await workbuddyQuota.refresh();
         const state=storeRuntime.workbuddy.getState();
         return{available:state.status==='connected',message:state.status==='connected'?'网站积分已读取；桌面历史任务需选择缓存账户范围。':state.status==='needs-login'?'任务目录已授权；官网积分查询可另行授权，不影响聊天。':'任务目录已授权，积分暂未读取成功。'};
@@ -4211,7 +4220,7 @@ async function bootstrap() {
       revoke:async provider=>{
         await storeRuntime.setChatEnabled(provider,false);
         if(provider==='codex')await setCodexEnabled(false);
-        else if(provider==='zcode')await zcodeLink.setEnabled(false);
+        else if(provider==='zcode'){await zcodeLink.setEnabled(false);await storeRuntime.zcodeDesktopIntegration.revoke();}
         else {await setWorkBuddyEnabled(false);await storeRuntime.disconnectWorkbuddyChat();await storeRuntime.desktopIntegration.revoke();}
         await storeRuntime.revoke(provider);
       },onChange:notifyStoreConnections

@@ -1,0 +1,13 @@
+{
+  "name": "qiuqiu-zcode-local-review",
+  "plugins": [
+    {
+      "name": "qiuqiu-zcode-task-events",
+      "source": "./plugins/qiuqiu-zcode-task-events",
+      "version": "0.1.0",
+      "description": "球球本机任务事件候选，仅传会话标识和阶段；Stop不代表最终完成。",
+      "displayName": "球球任务同步",
+      "category": "productivity"
+    }
+  ]
+}
