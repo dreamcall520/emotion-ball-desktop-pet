@@ -4183,7 +4183,12 @@ async function bootstrap() {
     alwaysOnTop: settings.alwaysOnTop,
     onFollowStart: () => { if (edgeTuck?.getPresentation().side) edgeTuck.restore(); },
     onMoveEnd: persistWindowPosition,
-    onVisibilityChange: () => syncQuotaLabel(codexCompanion?.getSnapshot()),
+    onVisibilityChange: visible => {
+      // Native visibility must reach the uploaded-action gate before the next
+      // command; an unchanged cursor can otherwise defer activity for 1 second.
+      if (visible) activityMonitor?.sampleNow(true);
+      syncQuotaLabel(codexCompanion?.getSnapshot());
+    },
     onError: error => writeError('聊天面板', error) });
   chat = createChatCompanion({ store: createChatStore(path.join(app.getPath('userData'), 'chat.json')),
     workspaceDir: path.join(app.getPath('userData'), 'chat-workspace'),

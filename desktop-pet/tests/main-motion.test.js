@@ -161,6 +161,7 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
     show(payload) { this.shows.push(payload); this.visible = true; }, hide() { this.visible = false; },
     destroy() { this.visible = false; }, reposition() {}, setAlwaysOnTop() {}, getWindow: () => null };
   const activity = { starts: 0, stops: 0, pauses: 0, resumes: 0,
+    sampleNow() { this.sample({ locked: false, cursor: screen.getCursorScreenPoint(), idleSeconds: 0 }); },
     start() { this.starts++; }, stop() { this.stops++; }, pause() { this.pauses++; }, resume() { this.resumes++; } };
   let chatNativeWindow = null;
   const chatWindow = { options: null, creations: 0, shows: [], updates: [], hides: 0, destroys: 0, moves: 0,
@@ -3215,6 +3216,31 @@ test('渲染进程关闭后，主进程停止与退出不因发送通知而抛�
   assert.doesNotThrow(() => f.app.emit('before-quit'));
   assert.equal(f.timers.size, 0);
   assert.equal(f.pet.bounds.y, 100);
+});
+
+test('聊天首次可见立即同步上传动作门禁，不等待静止活动采样并保留显式聊天动作', async t => {
+  const f = await fixture(); t.after(() => f.app.emit('before-quit'));
+  const samples = [];
+  f.activity.sampleNow = force => {
+    samples.push(force);
+    f.activity.sample({ locked: false, cursor: { x: -900, y: -100 }, idleSeconds: 0 });
+  };
+  f.activity.sampleNow(true);
+  assert.equal(f.pet.messages.filter(row => row.channel === 'pet:activity').at(-1).packet.chatVisible, false);
+  samples.length = 0;
+  f.call('openChat()');
+  assert.equal(f.chatWindow.isVisible(), true);
+  assert.deepEqual(samples, [true], 'native visible event forces a fresh packet without advancing the sampling clock');
+  assert.equal(f.pet.messages.filter(row => row.channel === 'pet:activity').at(-1).packet.chatVisible, true);
+  for (const motion of ['hop', 'spin', 'bow']) {
+    f.call(`performChatAction('${motion}')`);
+    assert.equal(f.commands.at(-1).command, 'again');
+    assert.equal(f.commands.at(-1).motion, motion);
+  }
+  f.chatWindow.hide();
+  assert.equal(samples.length, 1, 'closing keeps its existing sampling lifecycle');
+  f.activity.sampleNow(true);
+  assert.equal(f.pet.messages.filter(row => row.channel === 'pet:activity').at(-1).packet.chatVisible, false);
 });
 
 test('快速隐藏再恢复后，迟到的原生hide不关闭新打开的聊天', async () => {
