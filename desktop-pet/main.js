@@ -1426,7 +1426,7 @@ function syncApiUsageLabel() {
   if (!apiUsage || !apiUsageLabel) return;
   const state = apiUsage.getState();
   const enabled = !isQuitting && settings?.openaiApiAlwaysVisible === true;
-  const visible = enabled && !screenLocked && !chatWindow?.isVisible() && !shortcutWindow?.isPresenting() && !workbuddyDetails?.isVisible() && !apiBalanceDetails?.isVisible() && !codexDetails?.isVisible() && !zcodeLink?.isDetailsVisible() && !presentationSuppressed() &&
+  const visible = enabled && !screenLocked && !chatWindow?.isVisible() && !shortcutWindow?.isPresenting() && !workbuddyDetails?.isVisible() && !apiBalanceDetails?.isVisible() && !codexDetails?.isVisible() && !zcodeLink?.isDetailsVisible() && !quotaGuard?.isVisible() && !presentationSuppressed() &&
     petWindow && !petWindow.isDestroyed() && petWindow.isVisible();
   safelyInvokeWindow('API 卡片同步', () => visible ? apiUsageLabel.show(state) : apiUsageLabel.hide({ animate: quotaEdgeFadeOut && !screenLocked && !isQuitting }));
   if (!enabled || !state.connected) {
@@ -4360,8 +4360,9 @@ async function bootstrap() {
     onVisibilityChange: visible => {
       if (!visible) quotaGuardSource = 'codex';
       syncWorkBuddyLabel();
+      syncApiUsageLabel();
       if (visible) shortcutWindow?.interrupt();
-      safelyInvokeWindow('守护战显隐时额度卡重排', () => { quotaLabel?.reposition(); zcodeLink?.reposition(); });
+      safelyInvokeWindow('守护战显隐时额度卡重排', () => { quotaLabel?.reposition(); zcodeLink?.reposition(); weatherWindow?.reposition(); });
       pomodoroWindows?.sync();
     },
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('守护战窗口', error) });
