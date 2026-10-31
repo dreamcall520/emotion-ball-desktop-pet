@@ -953,7 +953,7 @@
     cancelPendingInteraction();
     stopMotion();
     companion.setManualSleep(false, performance.now());
-    if(customization.appearance.shape==='soft-orb'){const actions=['draw','fan','flip','scan','beam','shock','flight','ship','love'];startSoftOrbInteraction(actions[Math.floor(Math.random()*actions.length)]);return;}
+    if(customization.appearance.shape==='soft-orb'){const actions=['draw','fan','flip','scan','beam','shock','flight','ship','love','complete'];startSoftOrbInteraction(actions[Math.floor(Math.random()*actions.length)]);return;}
     if (customization.appearance.shape === 'codex-pet' && ball.getInteractionActions) {
       clearAction(); currentState = { ...currentState, mode: 'awake', emotionId: '50', welcome: false };
       petElement.dataset.mode = 'awake'; ball.setActive(true); ball.setEmotion('50');

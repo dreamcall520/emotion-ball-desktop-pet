@@ -990,28 +990,20 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   assert.equal(menu.filter(item => item.id === 'update-check').length, 1);
 });
 
-test('小宇互动进入实际托盘和右键精简菜单，动作命令可达且不改变其他形态菜单', async () => {
+test('小宇不单独列互动入口，设置中心沿用随机表情触发动作', async () => {
   const f = await fixture();
   const original = Array.from(f.call('compactMenuTemplate()'), item => item.label || item.type);
-  assert.equal(f.call('compactMenuTemplate().some(item => item.label === "小宇互动")'), false);
   f.call("settings.customization.appearance.shape = 'soft-orb'");
-  const menu = f.call('compactMenuTemplate()');
-  const group = menu.find(item => item.label === '小宇互动');
-  assert.ok(group, '真实精简菜单必须包含小宇互动，不能只放在未展示的完整目录');
-  assert.equal(menu.filter(item => item.label === '小宇互动').length, 1);
-  assert.deepEqual(Array.from(menu.filter(item => item !== group), item => item.label || item.type), original);
-  assert.deepEqual(Array.from(group.submenu, item => item.label),
-    ['发现你', '摸摸回应', '失重晃动', '星际扫描', '引力光束', '触电', '飞走', '飞船收纳', '怦然心动', '庆祝一下']);
-  group.submenu.find(item => item.label === '飞船收纳').click();
-  assert.deepEqual(JSON.parse(JSON.stringify(f.commands.at(-1))), { command: 'soft-orb-action', action: 'ship' });
+  const menu=f.call('compactMenuTemplate()');
+  assert.deepEqual(Array.from(menu,item=>item.label||item.type),original);
+  const interactions=f.call('menuTemplate()').find(item=>item.label==='球球与互动');
+  assert.equal(interactions.submenu.some(item=>item.label==='小宇互动'),false);
+  interactions.submenu.find(item=>item.label==='随机表情').click();
+  assert.equal(f.commands.at(-1),'random');
   f.call('refreshTrayMenu()');
-  assert.ok(f.trayMenus.at(-1).some(item => item.label === '小宇互动'));
+  assert.equal(f.trayMenus.at(-1).some(item=>item.label==='小宇互动'),false);
   f.call('showPetContextMenu()');
-  assert.ok(f.popups.at(-1).value.some(item => item.label === '小宇互动'));
-  for (const shape of ['blob', 'aurora-cloud', 'new-year-sheep', 'codex-pet']) {
-    f.call(`settings.customization.appearance.shape = '${shape}'`);
-    assert.deepEqual(Array.from(f.call('compactMenuTemplate()'), item => item.label || item.type), original);
-  }
+  assert.equal(f.popups.at(-1).value.some(item=>item.label==='小宇互动'),false);
 });
 
 test('便签待办默认页保存后下次打开生效，失败恢复当前和重建菜单的单选', async () => {
