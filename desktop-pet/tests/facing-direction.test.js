@@ -115,8 +115,7 @@ test('默认朝右保持旧外观，切到左侧只镜像眼睛与 Zzz 位置', 
     assert.equal(leftEyes[index].path, rightEyes[index].path, '眼环数据不应被破坏');
   }
 
-  const { engine: sleeping, tick: sleepTick } = createEngine({ lite: true, emotion: '00' });
-  sleepTick(1500); // Inspect the visible part of the intermittent sleep cycle.
+  const { engine: sleeping } = createEngine({ lite: true, emotion: '00' });
   const rightZzz = zzzNodes(sleeping).map(firstTranslateX);
   sleeping.setFacing('left');
   const leftZzz = zzzNodes(sleeping).map(firstTranslateX);

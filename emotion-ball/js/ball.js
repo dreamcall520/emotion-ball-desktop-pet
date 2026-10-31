@@ -620,7 +620,6 @@
 
     /* ---- zzz 睡眠粒子：三枚字母沿右上方向循环漂浮 ---- */
     var zzzNodes = [];
-    var sleepZzzStartedAt = null;
     for (var zi = 0; zi < 3; zi++) {
       var zn = el('text', {
         class: 'eb-sleep-z',
@@ -1102,14 +1101,7 @@
 
     /* ---- zzz 睡眠粒子：轻量模式也保留，极小尺寸使用更醒目的字号 ---- */
     function renderZzz(now, amount) {
-      if (amount > 0) {
-        if (sleepZzzStartedAt === null) sleepZzzStartedAt = now;
-      } else sleepZzzStartedAt = null;
-      // A short dream, then quiet sleep. Each new sleep starts its own cycle.
-      var elapsed = sleepZzzStartedAt === null ? 0 : Math.max(0, now - sleepZzzStartedAt);
-      var phase = elapsed % 30000;
-      var envelope = Math.min(1, phase / 450, Math.max(0, (6000 - phase) / 600));
-      var zOn = amount > 0 && envelope > 0;
+      var zOn = amount > 0;
       for (var z = 0; z < zzzNodes.length; z++) {
         var znode = zzzNodes[z];
         if (!zOn) {
@@ -1118,7 +1110,7 @@
         }
         var zp = (now * 0.00033 + z / 3) % 1;
         var maxOpacity = lite ? 0.92 : 0.8;
-        var zo = (zp < 0.18 ? zp / 0.18 : 1 - (zp - 0.18) / 0.82) * maxOpacity * amount * envelope;
+        var zo = (zp < 0.18 ? zp / 0.18 : 1 - (zp - 0.18) / 0.82) * maxOpacity * amount;
         var fontSize = lite ? 16 + zp * 10 : 12 + zp * 11;
         var x = lite ? 172 + zp * 32 + 4 * Math.sin(zp * 9) : 180 + zp * 34 + 4 * Math.sin(zp * 9);
         if (facing < 0) x = HEAD_C * 2 - x;
