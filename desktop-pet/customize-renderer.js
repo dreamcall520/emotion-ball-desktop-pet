@@ -1071,8 +1071,13 @@
       const mark = document.createElement('span'); mark.className = 'selection-mark'; mark.textContent = '✓'; mark.setAttribute('aria-hidden', 'true');
       card.append(sprite, name, mark); card.addEventListener('click', () => choosePet(pet));
       const item = document.createElement('div'); item.className = 'local-pet-item';
-      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'text-button local-pet-delete';
-      remove.textContent = '删除'; remove.setAttribute('aria-label', '删除 ' + pet.name); remove.disabled = localBusy;
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'local-pet-delete';
+      const trash = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      trash.setAttribute('viewBox', '0 0 24 24'); trash.setAttribute('aria-hidden', 'true');
+      const trashPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      trashPath.setAttribute('d', 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5M14 11v5'); trash.append(trashPath);
+      const deleteLabel = document.createElement('span'); deleteLabel.textContent = '删除'; remove.append(trash, deleteLabel);
+      remove.setAttribute('aria-label', '删除 ' + pet.name); remove.disabled = localBusy;
       remove.addEventListener('click', () => deleteLocalPet(pet));
       item.append(card, remove); grid.append(item);
     }

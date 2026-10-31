@@ -50,7 +50,20 @@ assert.equal(await run("(()=>{const p=document.getElementById('local-panel'),r=p
 await run("document.querySelector('#local-pet-grid .pet-card').click();window.deleteCalls=[];window.deleteMode='cancel';petCustomizer.deleteLocalPet=async id=>{deleteCalls.push(id);if(deleteMode==='cancel')return{ok:false,canceled:true};if(deleteMode==='fail')return{ok:false,error:'该皮肤已设为启动默认，请先更换启动外观'};if(deleteMode==='pending')return new Promise(r=>window.finishDelete=r);localPets=[];return{ok:true,id}};void 0;");
 assert.equal(await run("document.querySelector('#local-pet-grid .pet-card').getAttribute('aria-pressed')"),'true');
 await until("previews.at(-1).codexPetId==='codex-'+ 'a'.repeat(64)",'selected local preview has rendered');
-if(process.env.PET_LOCAL_DELETE_SCREENSHOT){fs.mkdirSync(path.dirname(process.env.PET_LOCAL_DELETE_SCREENSHOT),{recursive:true});fs.writeFileSync(process.env.PET_LOCAL_DELETE_SCREENSHOT,(await win.webContents.capturePage()).toPNG());}
+if(process.env.PET_LOCAL_DELETE_SCREENSHOT){
+ await run("const captureStyle=document.createElement('style');captureStyle.textContent='*{transition:none!important}';document.head.append(captureStyle);void 0;");
+ const target=process.env.PET_LOCAL_DELETE_SCREENSHOT;fs.mkdirSync(path.dirname(target),{recursive:true});
+ if(process.env.PET_LOCAL_VISUAL_SPRITE){const url='data:image/webp;base64,'+fs.readFileSync(process.env.PET_LOCAL_VISUAL_SPRITE).toString('base64');await run(`document.querySelector('#local-pet-grid .pet-sprite').style.setProperty('--sprite','url('+JSON.stringify(${JSON.stringify(url)})+')');document.querySelector('#local-pet-grid .pet-sprite').style.setProperty('--rows','1');void 0;`);}
+ for(const width of [860,1080])for(const theme of ['light','dark']){
+  win.setSize(width,820);await run(`document.documentElement.dataset.theme=${JSON.stringify(theme)};new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))`);
+  await new Promise(r=>setTimeout(r,240));
+  const geometry=await run("(()=>{const b=document.querySelector('.local-pet-delete'),r=b.getBoundingClientRect(),card=b.previousElementSibling.getBoundingClientRect(),sprite=document.querySelector('#local-pet-grid .pet-sprite').getBoundingClientRect(),p=document.getElementById('local-panel').getBoundingClientRect();return {theme:document.documentElement.dataset.theme,background:getComputedStyle(b).backgroundColor,color:getComputedStyle(b).color,clickable:b.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)),inside:r.x>=card.x&&r.right<=card.right&&r.y>=card.y&&r.bottom<=sprite.top+1,clip:{x:Math.floor(p.x),y:Math.floor(p.y),width:Math.ceil(p.width),height:Math.min(440,Math.ceil(p.height))}}})()");
+  console.log(JSON.stringify({width,theme,geometry}));
+  assert(geometry.clickable&&geometry.inside,'delete remains visible, clickable and clear of the sprite');
+  fs.writeFileSync(target.replace(/\.png$/,'-'+width+'-'+theme+'.png'),(await win.webContents.capturePage(geometry.clip,{stayAwake:true})).toPNG());
+ }
+ win.setSize(1080,820);
+}
 await run("document.querySelector('.local-pet-delete').click()");await until("!document.getElementById('save').disabled",'cancel deletion');
 assert.equal(await run("document.querySelectorAll('#local-pet-grid .pet-card').length"),1);
 await run("deleteMode='fail';document.querySelector('.local-pet-delete').click()");await until("!document.getElementById('save').disabled",'blocked deletion');assert.match(await run("document.getElementById('message').textContent"),/启动默认/);
