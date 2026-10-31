@@ -687,8 +687,8 @@
       const descriptor = codexDescriptors.get(state.appearance.codexPetId);
       if (!descriptor) { target.textContent = '宠物暂不可用，请重新读取或选择其他形象'; return; }
       const actionSelect = $('pet-action'), selectedAction = actionSelect.value;
-      actionSelect.querySelectorAll('option[data-mapped-action]').forEach(option => option.remove());
-      for (const action of CodexPetPlayer.getActions(descriptor).filter(action => ['sleep', 'wakeup'].includes(action.id))) {
+      actionSelect.replaceChildren();
+      for (const action of CodexPetPlayer.getPreviewActions(descriptor)) {
         const option = document.createElement('option'); option.value = action.id; option.textContent = action.name;
         option.dataset.mappedAction = 'true'; actionSelect.append(option);
       }
