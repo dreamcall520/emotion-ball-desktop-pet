@@ -696,6 +696,43 @@ test('快捷设置与面板只收起外置额度卡，保留所有球体额度�
   assert.equal(effect().visible, false, 'lock still removes quota effects');
 });
 
+test('三来源守护战立即隐藏API所有连接态及天气，刷新不复显并按偏好恢复', async t => {
+  for (const source of ['codex', 'zcode', 'workbuddy']) {
+    const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true});t.after(()=>f.app.emit('before-quit'));
+    f.connections[0].callbacks.onQuota({updatedAt:1800000000000,windows:[{id:'codex:primary',label:'Codex',windowMinutes:300,remaining:42,resetsAt:1800003600000}]});await flush();
+    const zcodeNow=Date.now();
+    f.call(`settings.openaiApiAlwaysVisible=true;settings.workbuddyEnabled=true;settings.workbuddyQuotaAlwaysVisible=true;settings.zcodeEnabled=true;settings.zcodeQuotaAlwaysVisible=true;
+      zcodeLink.isEnabled=()=>true;zcodeLink.isCardAvailable=()=>true;zcodeLink.getSnapshot=()=>({enabled:true,quota:{state:'connected',stale:false,updatedAt:${zcodeNow},windows:[{id:'zcode:test',label:'ZCode',remaining:80,windowMinutes:300,periodStart:${zcodeNow-1000},resetsAt:${zcodeNow+300000}}]}});`);
+    f.weather.setEnabled(true);
+    const reposition=f.weather.reposition.bind(f.weather);
+    f.weather.reposition=()=>{reposition();f.weather.visible=f.weather.enabled&&f.weather.cardVisible&&!f.weather.options.getSuppressed();};
+    for(const apiState of [{connected:false,busy:false,report:null},{connected:true,busy:true,report:null},{connected:true,busy:false,report:{updatedAt:1800000000000}}]) {
+      f.apiUsage.change({...apiState,config:{}});f.weather.reposition();assert.equal(f.apiLabel.visible,true,source+' API visible before game');assert.equal(f.weather.visible,true);
+      const layouts=f.weather.repositions;
+      assert.equal(f.call(`openQuotaGuard('${source}')`),true,source+' opens actual guard controller');
+      assert.equal(f.call('quotaGuard.isVisible()'),true,'synchronizing cards cannot close the game');
+      assert.equal(f.apiLabel.visible,false,source+' hides even unconnected API immediately');
+      assert(f.weather.repositions>layouts,'guard visibility immediately repositions weather');assert.equal(f.weather.visible,false);
+      for(let i=0;i<3;i++){f.apiUsage.change({...apiState,config:{}});f.call('syncApiUsageLabel()');f.weather.reposition();assert.equal(f.apiLabel.visible,false,'poll/update must not reshow API');assert.equal(f.weather.visible,false);assert.equal(f.call('quotaGuard.isVisible()'),true);}
+      assert.equal(f.quotaLabel.options.getSuppressed(),true,'Codex remains suppressed by the same guard');
+      f.call('quotaGuard.close()');assert.equal(f.apiLabel.visible,true,'configured API restored on close');assert.equal(f.weather.visible,true,'configured weather restored on close');
+    }
+    assert.equal(f.call(`openQuotaGuard('${source}')`),true);f.call('settings.openaiApiAlwaysVisible=false');f.weather.setCardVisible(false);f.call('quotaGuard.close()');
+    assert.equal(f.apiLabel.visible,false,'disabled API stays hidden after close');assert.equal(f.weather.visible,false,'hidden weather stays hidden after close');
+  }
+});
+
+test('守护战单独天气卡不依赖收纳条变化也即时重排且关闭恢复', async t=>{
+  const f=await fixture({quotaCardPinned:['weather']});t.after(()=>f.app.emit('before-quit'));
+  f.call("settings.codexEnabled=true;settings.codexQuotaAlwaysVisible=true;settings.quotaDisplay={style:'ring',showNumbers:false};settings.openaiApiAlwaysVisible=false;settings.apiBalanceEnabled=false;settings.zcodeEnabled=false;settings.workbuddyEnabled=false");f.weather.setEnabled(true);
+  const reposition=f.weather.reposition.bind(f.weather);f.weather.reposition=()=>{reposition();f.weather.visible=f.weather.enabled&&f.weather.cardVisible&&!f.weather.options.getSuppressed();};f.weather.reposition();
+  assert.deepEqual(Array.from(f.call('quotaCardGroupInput().eligible')),['weather']);assert.equal(f.call('quotaCardGroup.getState().bar'),false);assert.equal(f.weather.visible,true);
+  // A body-only quota style contributes no floating quota card. Exercise the
+  // real visibility callback with an in-memory game model and only weather eligible.
+  assert.equal(f.call("quotaGuard.open({state:'ready',items:[],practice:true})"),true);assert.equal(f.weather.visible,false);
+  f.call('quotaGuard.close()');assert.equal(f.weather.visible,true);assert.equal(f.call('quotaCardGroup.getState().bar'),false);
+});
+
 test('守护战转快捷面板不短暂重显原生额度卡，打开被拒时恢复原显示规则', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true, nativeQuotaLabel: true });
