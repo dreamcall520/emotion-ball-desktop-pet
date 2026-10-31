@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 // 运行真实 renderer、状态规则和动画引擎；仅替代 DOM、宿主通信及时间。
-function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = null, edgePeek = false) {
+function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = null, edgePeek = false, softOrb = null) {
   let now = 0;
   let nextTimer = 1;
   let engine;
@@ -74,6 +74,7 @@ function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = nul
     QuotaEffects: quotaUpdates ? { create: () => ({ update: value => quotaUpdates.push(value), destroy() {} }) } : undefined,
     matchMedia: query => query === '(prefers-color-scheme: dark)' ? systemAppearance : reducedMedia,
     AuroraRive: auroraRive,
+    SoftOrb: softOrb,
     innerWidth: 80,
     addEventListener(name, callback) { windowEvents[name] = callback; },
     petDesktop: {
@@ -1330,6 +1331,47 @@ test('Codex sprite shares the desktop size and opacity; switching back restores 
   assert.equal(r.pet.dataset.codexPetId, undefined);
   assert.equal(r.pet.children.length, 1);
   assert.equal(r.pet.children[0].tag, 'svg');
+});
+
+test('小宇跨120px尺寸档复用画布与渲染上下文，SVG形态仍按档位重建', () => {
+  const instances = [];
+  const softOrb = { create(target) {
+    const context = {}, canvas = { tag: 'canvas', getContext: () => context };
+    target.appendChild(canvas);
+    const instance = { canvas, context, resizes: 0, destroyed: false };
+    instances.push(instance);
+    return {
+      emotionId: '50',
+      setEmotion(id) { this.emotionId = id; },
+      setFacing() {}, setActive() {}, setGaze() {}, clearGaze() {},
+      stopMotion() {}, renderStatic() {},
+      resize() { instance.resizes++; },
+      destroy() { instance.destroyed = true; target.removeChild(canvas); }
+    };
+  } };
+  const r = createRenderer(0.5, null, null, false, softOrb);
+  r.resize(180);
+  r.settings({ keepAwake: true, customization: { appearance: { shape: 'soft-orb' } } });
+  const original = instances[0];
+  assert.ok(original, '真实renderer选择小宇适配器');
+  for (const width of [60, 180, 108, 260, 120, 121, 80, 180]) {
+    r.resize(width);
+    assert.equal(instances.length, 1, `${width}px不重建WebGL渲染器`);
+    assert.equal(r.pet.children[0], original.canvas, '跨档位保持同一画布');
+    assert.equal(r.pet.children[0].getContext('webgl2'), original.context, '跨档位保持同一上下文');
+    assert.equal(original.destroyed, false);
+  }
+  assert.equal(original.resizes, 8, '所有尺寸变化都交给已有resize能力');
+  r.settings({ customization: { appearance: { shape: 'blob' } } });
+  assert.equal(original.destroyed, true, '真正切换皮肤仍销毁旧小宇实例');
+  const large = r.engine;
+  r.resize(60);
+  assert.notEqual(r.engine, large, 'SVG进入小尺寸档仍重建');
+  assert.equal(r.lastBallOptions.lite, true);
+  const compact = r.engine;
+  r.resize(260);
+  assert.notEqual(r.engine, compact, 'SVG回到大尺寸档仍重建');
+  assert.equal(r.lastBallOptions.lite, false);
 });
 
 test('Codex pet uses existing drag/click/motion ownership and ignores late frames after cancellation', () => {
