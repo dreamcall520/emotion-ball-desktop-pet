@@ -42,7 +42,7 @@ function fixture({ realClick = false } = {}) {
     uploadedAction:null, ball:null, weatherEffects:null, sheepOffering:null, sheepActionBall:null, actionTimer:null, actionUntil:0,
     customization:{appearance}, companion:{manualSleep:false,
       update:()=>({mode:'sleep',emotionId:'00',gaze:null}), setKeepAwake(){}, setManualSleep(value){this.manualSleep=Boolean(value);}},
-    presentationSuppressed:false, presentationMode:'free', presentationPaused:false, presentationFrozen:false,
+    edgeSlidePacket:null, edgeSlideTimer:null, presentationSuppressed:false, presentationMode:'free', presentationPaused:false, presentationFrozen:false,
     lastSample:{locked:false}, currentState:{mode:'awake',emotionId:'50',gaze:null},
     activeMotion:null, dragState:null, facing:null, focusQuiet:false, codexEnabled:false,
     lastSheepClick:null,lastAuroraClick:null,nextSheepAmbientAt:0,lastSheepAmbient:null,sheepAutoNap:false,sheepLastInteractionAt:0,sheepLastNapAt:null,sheepAutomaticWakeUntil:0,lastWorkAttempt:0,singleClickTimer:null,helloTimer:null,petHovered:false,wakeOnDoubleClick:false,Math:Object.assign(Object.create(Math),{random:()=>0.01}),

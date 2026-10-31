@@ -41,6 +41,7 @@
   }
   let presentationSuppressed = false;
   let presentationMode = 'free';
+  let edgeSlideTimer = null, edgeSlidePacket = null;
   let presentationPaused = false;
   let presentationFrozen = false;
   let compactMode = null;
@@ -127,6 +128,7 @@
   }
 
   function syncFacing() {
+    if (edgeSlidePacket) return;
     if (dragState || activeMotion || presentationSuppressed || lastSample?.locked) return;
     // The approved aurora artwork bakes its eyes into the right-facing image.
     // Its left-edge presentation mirrors the whole SVG, so both edges keep
@@ -189,6 +191,7 @@
   }
 
   function syncCodexWorking() {
+    if (edgeSlidePacket) return;
     const eligible = !focusQuiet && !presentationSuppressed && codexEnabled && codexActiveTaskCount > 0 && Boolean(lastSample) && !lastSample.locked &&
       !companion.manualSleep && currentState.mode !== 'sleep' && !dragState && !sheepOffering?.isDragging() && !singleClickTimer && !helloTimer &&
       performance.now() >= actionUntil && !activeMotion;
@@ -550,6 +553,7 @@
   }
 
   function syncSuppressedAnimation(refresh = false) {
+    if (edgeSlidePacket) return;
     const quiet = presentationMode === 'tucked' && !presentationPaused && !lastSample?.locked;
     if (!quiet && presentationFrozen && !refresh) return;
     const sleeping = companion.manualSleep || currentState.mode === 'sleep' || lastSample?.locked;
@@ -582,6 +586,12 @@
 
   function updatePresentation(packet) {
     if (!packet || !['free', 'tucked', 'peeked', 'hidden'].includes(packet.mode)) return;
+    const previousPresentation = presentationMode;
+    const sliding = edgeSlidePacket !== null;
+    const originalBodySlide = Boolean(window.EdgePeek?.specFor(customization.appearance.shape)) && customization.appearance.shape === 'blob' && !packet.paused && !packet.dragging && !reducedMotion() &&
+      ['left','right'].includes(packet.side) && ['tucked','peeked'].includes(previousPresentation) && ['tucked','peeked'].includes(packet.mode);
+    if (sliding && originalBodySlide && packet.mode === previousPresentation) { edgeSlidePacket = packet; return; }
+    clearTimeout(edgeSlideTimer); edgeSlideTimer = null; edgeSlidePacket = null;
     const wasSuppressed = presentationSuppressed;
     presentationMode = packet.mode;
     presentationPaused = packet.paused === true;
@@ -590,6 +600,18 @@
     petElement.dataset.presentation = packet.mode;
     petElement.dataset.edge = packet.side === 'left' || packet.side === 'right' ? packet.side : 'none';
     petElement.dataset.dragging = packet.dragging ? 'true' : 'false';
+    if (originalBodySlide && previousPresentation !== packet.mode) {
+      // Preserve the currently painted pose throughout the compositor slide.
+      // renderStatic/stopMotion would otherwise reset the contour mid-flight.
+      edgeSlidePacket = packet;
+      ball.setActive(false);
+      edgeSlideTimer = setTimeout(() => {
+        const latest = edgeSlidePacket;
+        edgeSlidePacket = null; edgeSlideTimer = null;
+        if (latest) updatePresentation(latest);
+      }, 500);
+      return;
+    }
     // 吸边先改宿主位置，活动采样可能尚未到达；由吸附侧直接确定朝向。
     // 仅在朝向实际改变时更新，隐藏/暂停后的重复报文不能重画冻结帧。
     if (['tucked','peeked'].includes(packet.mode) && ['left', 'right'].includes(packet.side)) {
@@ -714,6 +736,8 @@
   function updateActivity(sample) {
     const previouslyLocked = lastSample?.locked === true;
     lastSample = sample;
+    if (edgeSlidePacket && !sample.locked) return;
+    if (edgeSlidePacket) { clearTimeout(edgeSlideTimer); edgeSlidePacket = null; edgeSlideTimer = null; }
     syncFacing();
     const now = performance.now();
     const previousMode = currentState.mode;

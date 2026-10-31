@@ -26,15 +26,6 @@
     if(!specFor(shape)||!['tucked','peeked'].includes(mode)||!['left','right'].includes(side))return null;
     if(!bounds||!point||![bounds.x,bounds.y,bounds.width,bounds.height,point.x,point.y].every(Number.isFinite)||bounds.width<=0||bounds.height<=0)return false;
     if(point.x<bounds.x||point.x>=bounds.x+bounds.width||point.y<bounds.y||point.y>=bounds.y+bounds.height)return false;
-    // Match the stationary rounded join mask; transparent trimmed corners
-    // must not wake the pet. Mirroring changes only the horizontal coordinate.
-    if(shape==='blob'&&mode==='tucked'){
-      const x=side==='left'?(point.x-bounds.x)/bounds.width:1-(point.x-bounds.x)/bounds.width;
-      const y=(point.y-bounds.y)/bounds.height;
-      let top=.0985;
-      if(x<.18){let lo=0,hi=1;for(let i=0;i<20;i++){const t=(lo+hi)/2,px=.24*t*t*(1-t)+.18*t*t*t;if(px<x)lo=t;else hi=t;}const t=(lo+hi)/2,u=1-t;top=.18*u*u*u+3*.06*u*u*t+3*.0537*u*t*t+.0985*t*t*t;}
-      if(y<top||y>1-top)return false;
-    }
     const [x0,y0,x1,y1]=BODY[shape];
     const hit=state=>{const offset=edgeOffset(shape,{side,mode:state},bounds.width),cx=bounds.x+bounds.width*(x0+x1)/2+offset,cy=bounds.y+bounds.height*(y0+y1)/2;
       return ((point.x-cx)/(bounds.width*(x1-x0)/2))**2+((point.y-cy)/(bounds.height*(y1-y0)/2))**2<=1;};
