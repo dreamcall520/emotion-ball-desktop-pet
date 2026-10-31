@@ -27,6 +27,7 @@ const {
 const { isXiaobaiPet } = require('./lib/codex-pet-player');
 const { loadSettings, saveSettings, normalizePresetName, normalizeAppearancePresets, findDuplicateAppearancePreset } = require('./lib/settings');
 const { createCodexPetStore } = require('./lib/codex-pets');
+const { XIAOBAI_ID, getBuiltinPet } = require('./lib/builtin-pets');
 const { normalizeSpriteEdgeInk, containsSpriteEdgeInk, XIAOBAI_TUCK_FRACTION } = require('./lib/sprite-edge-ink');
 const EdgePeek = require('./lib/edge-peek');
 const {
@@ -899,6 +900,8 @@ function effectiveCustomization(value) {
 }
 
 function importedPet(id) {
+  const builtin = getBuiltinPet(id);
+  if (builtin) return builtin;
   try { return {...codexPets.getImported(id),origin:'codex'}; } catch (_) {}
   try { return {...localPetStore.getImported(id),origin:'local'}; } catch (_) {}
   return {...codexPets.resolve(id),origin:'codex'};
@@ -918,6 +921,7 @@ function codexPetDescriptor(appearance) {
 function importCodexAppearance(appearance) {
   if (localPetDeletingId && appearance?.codexPetId === localPetDeletingId) throw new Error('该皮肤正在删除，请选择其他皮肤');
   if (appearance.shape !== 'codex-pet') return appearance;
+  if (getBuiltinPet(appearance.codexPetId)) return appearance;
   let pet;
   try { pet = codexPets.getImported(appearance.codexPetId); }
   catch (_) { try { pet=localPetStore.getImported(appearance.codexPetId); } catch (_) { pet = codexPets.importPet(appearance.codexPetId); } }
@@ -939,7 +943,7 @@ async function prepareCodexAppearance(appearance) {
     image.onerror = () => { clearTimeout(timer); resolve(null); };
     image.src = ${JSON.stringify(sheet.imageURL)};
   })` }]);
-  if (dimensions?.width !== 1536 * descriptor.spriteScale ||
+  if (dimensions?.width !== (sheet.frameWidth || 192) * 8 * descriptor.spriteScale ||
       dimensions?.height !== sheet.rows * 208 * descriptor.spriteScale) throw new Error('宠物图片无法解码');
   }
   return copied;
@@ -3635,6 +3639,7 @@ function registerIpc() {
         ...item, appearance: effectiveCustomization({ appearance: item.appearance }).appearance,
         codexPet: codexPetDescriptor(item.appearance) })),
       startupAppearance: effectiveAppearance(settings.startupAppearance),
+      builtinPets: [codexPetDescriptor({ shape: 'codex-pet', codexPetId: XIAOBAI_ID })],
       codexPet: codexPetDescriptor(settings.customization.appearance), size: settings.size,
       quotaDisplay: quotaDisplayConfig({ fallback: false }), quotaModel: quotaDisplayModel() } : null);
   ipcMain.handle('pet:local-pets-list', event => {
