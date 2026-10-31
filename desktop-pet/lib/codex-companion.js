@@ -1,7 +1,7 @@
 const { createCodexConnection, CONNECTION_STATES, ERROR_CODES } = require('./codex-connection');
 const { isTaskId, quotaCreditDetails, quotaResetDetails, accountResetHistoryDetails } = require('./codex-state');
 const { createQuotaHistory } = require('./codex-quota-history');
-const { plainText, alertTaskTitle, completionText, COMPLETION_VARIANT_COUNT } = require('./codex-text');
+const { completionText, COMPLETION_VARIANT_COUNT } = require('./codex-text');
 const { selectPrimaryQuotaWindows } = require('./codex-quota-view');
 const { createQuotaAlertTracker, mergeQuotaAlerts } = require('./codex-quota-alerts');
 
@@ -176,16 +176,11 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     return count > 1 ? `有 ${count} 个任务\n遇到问题了` : '这一步遇到问题了';
   }
   function publicAlertForRefs(event, refs) {
-    const text = event.kind === 'completed'
-      ? completionText(refs.map(ref => ref.title), refs.length, preferences.taskNameInAlerts, event.completionVariant)
-      : eventText(event, refs);
-    const titles = preferences.taskNameInAlerts && event.kind !== 'quota'
-      ? refs.filter(ref => alertTaskTitle(ref.title)).map(ref => plainText(ref.title, 140)) : [];
-    const detailText = titles.length && !titles.every(title => text.includes(title))
-      ? `${event.kind === 'completed' ? completionText([], refs.length, false, event.completionVariant) : eventText(event, refs)}\n${titles.map(title => `《${title}》`).join('\n')}` : null;
     return { id: event.id, generation: event.generation, kind: event.kind,
       motion: eventMotion(event, refs), severity: eventSeverity(event, refs), durationMs: eventDuration(event, refs),
-      text, ...(detailText ? { detailText } : {}),
+      text: event.kind === 'completed'
+        ? completionText(refs.map(ref => ref.title), refs.length, preferences.taskNameInAlerts, event.completionVariant)
+        : eventText(event, refs),
       taskIds: event.kind === 'quota' ? [] : refs.map(ref => ref.id),
       createdAt: event.createdAt, expiresAt: event.expiresAt };
   }
@@ -193,7 +188,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     return publicAlertForRefs(event, validRefs(event));
   }
   function publicModelSignature(alert) {
-    return JSON.stringify([alert.motion, alert.severity, alert.durationMs, alert.text, alert.detailText, alert.taskIds]);
+    return JSON.stringify([alert.motion, alert.severity, alert.durationMs, alert.text, alert.taskIds]);
   }
   function setPreferences(next = {}) {
     let values;

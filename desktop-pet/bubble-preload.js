@@ -19,10 +19,9 @@ contextBridge.exposeInMainWorld('petBubble', {
       ipcRenderer.send('pet:bubble-reply', { id, action });
     }
   },
-  details: id => { if (Number.isInteger(id)) ipcRenderer.send('pet:bubble-details', { id }); },
-  resize: (id, height, truncated) => {
+  resize: (id, height) => {
     if (Number.isInteger(id) && Number.isFinite(height) && height > 0 && height <= 1000) {
-      ipcRenderer.send('pet:bubble-resize', { id, height: Math.ceil(height), truncated: truncated === true });
+      ipcRenderer.send('pet:bubble-resize', { id, height: Math.ceil(height) });
     }
   }
 });

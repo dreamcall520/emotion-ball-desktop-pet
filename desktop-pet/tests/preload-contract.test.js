@@ -52,7 +52,7 @@ test('气泡只允许当前普通或 Codex 固定按钮动作', () => {
 test('气泡同ID先更新文字，动作不变时保留按钮、变化时才重建', () => {
   let receive;
   const replies = [];
-  const bubble = { dataset: {}, style: { setProperty() {} }, insertBefore(node, reference) { assert.equal(reference, actions); this.details = node; } };
+  const bubble = { dataset: {}, style: { setProperty() {} } };
   const message = {};
   const actions = { children: [], replaceChildren() { this.children = []; }, appendChild(node) { this.children.push(node); } };
   vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../bubble-renderer.js'), 'utf8'), {
@@ -87,7 +87,6 @@ test('气泡自适应高度必须在主进程回传尺寸后收敛，不能持�
   const bubble = {
     dataset: {},
     style: { bottom: '', height: '', setProperty() {} },
-    insertBefore(node, reference) { assert.equal(reference, actions); this.details = node; },
     // 真实页面的箭头会让 scrollHeight 比可见卡片多出几像素；旧算法因此每轮继续增长。
     get scrollHeight() { return windowHeight - 17; },
     getBoundingClientRect() {
@@ -95,13 +94,7 @@ test('气泡自适应高度必须在主进程回传尺寸后收敛，不能持�
         ? 96 : windowHeight - 22 };
     }
   };
-  const classes = new Set();
-  const message = {
-    style: { setProperty() {}, removeProperty() {} },
-    classList: { add(name) { classes.add(name); }, remove(name) { classes.delete(name); } },
-    scrollHeight: 20,
-    getBoundingClientRect() { return { height: 20 }; }
-  };
+  const message = {};
   const actions = {
     children: [], replaceChildren() { this.children = []; },
     appendChild(node) { this.children.push(node); }
@@ -111,9 +104,8 @@ test('气泡自适应高度必须在主进程回传尺寸后收敛，不能持�
   vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../bubble-renderer.js'), 'utf8'), {
     document: {
       getElementById: id => ({ bubble, message, actions })[id],
-      createElement: () => ({ dataset: {}, hidden: false, addEventListener() {}, getBoundingClientRect() { return { height: 22 }; } })
+      createElement: () => ({ dataset: {}, addEventListener() {} })
     },
-    getComputedStyle: node => node === message ? { lineHeight: '20px' } : { rowGap: '9px' },
     requestAnimationFrame(callback) { frames.push(callback); return ++frameId; },
     cancelAnimationFrame() {},
     window: {
@@ -135,9 +127,6 @@ test('气泡自适应高度必须在主进程回传尺寸后收敛，不能持�
   for (let index = 0; index < 6 && frames.length; index++) frames.shift()();
   assert.deepEqual(requestedHeights, [118]);
   assert.equal(windowHeight, 118);
-  assert.equal(frames.length, 0, 'measurement must not queue a resize loop');
-  assert.equal(bubble.details.hidden, true, 'short text never allocates a details row');
-  assert.equal(classes.has('message-summary'), false);
 });
 
 test('强额度提醒只强化气泡边框和文字，不闪烁不改球球颜色', () => {

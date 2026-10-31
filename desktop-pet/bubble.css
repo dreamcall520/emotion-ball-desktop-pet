@@ -117,8 +117,3 @@ button:hover { filter: brightness(.97); }
 button:active { transform: translateY(1px); }
 button:disabled { opacity: .5; pointer-events: none; }
 button:focus-visible { outline: 2px solid var(--bubble-button-text); outline-offset: 2px; }
-
-#message.message-summary { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--summary-lines, 5); overflow: hidden; flex-shrink: 0; }
-#bubble-details { flex-shrink: 0; padding: 2px 8px; background: transparent; color: var(--bubble-text); border-color: transparent; box-shadow: none; text-decoration: underline; text-underline-offset: 3px; }
-#bubble-details[hidden] { display: none; }
-#bubble[data-compact=true] { padding-top: 6px; padding-bottom: 6px; gap: 5px; }

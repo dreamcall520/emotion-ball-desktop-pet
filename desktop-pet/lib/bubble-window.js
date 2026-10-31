@@ -7,16 +7,8 @@ function createBubbleWindow({ BrowserWindow, screen, getPetWindow, getShape = ()
   let current = null;
   let timer = null;
   let topmost = alwaysOnTop;
-  let details = null;
 
-  function closeDetails() {
-    const previous = details;
-    details = null;
-    if (previous && !previous.isDestroyed()) previous.destroy();
-  }
-
-  function hide({ keepDetails = false } = {}) {
-    if (!keepDetails) closeDetails();
+  function hide() {
     clearTimeout(timer);
     timer = null;
     current = null;
@@ -38,25 +30,24 @@ function createBubbleWindow({ BrowserWindow, screen, getPetWindow, getShape = ()
     const pet = getPetWindow();
     if (!current || !ready || !win || win.isDestroyed() || !pet || pet.isDestroyed()) return;
     const petBounds = pet.getBounds();
-    const workArea = screen.getDisplayMatching(petBounds).workArea;
     const layout = bubbleBounds(
       petBounds,
-      workArea,
-      current.actions.length > 0 || current.truncated,
+      screen.getDisplayMatching(petBounds).workArea,
+      current.actions.length > 0,
       current.preferredHeight,
       getShape(),
       getObstacles()
     );
     const { x, y, width, height, placement, anchorX } = layout;
     win.setBounds({ x, y, width, height }, false);
-    win.webContents.send('pet:bubble', { ...current, placement, anchorX, maxHeight: Math.min(1000, Math.max(1, workArea.height - 16)) });
+    win.webContents.send('pet:bubble', { ...current, placement, anchorX });
   }
 
   function present() {
     const pet = getPetWindow();
     if (!current || !ready || !win || win.isDestroyed() || !pet || pet.isDestroyed() || !pet.isVisible()) return;
     reposition();
-    win.setIgnoreMouseEvents(current.actions.length === 0 && !current.truncated, { forward: true });
+    win.setIgnoreMouseEvents(current.actions.length === 0, { forward: true });
     win.showInactive();
   }
 
@@ -108,53 +99,26 @@ function createBubbleWindow({ BrowserWindow, screen, getPetWindow, getShape = ()
 
   return {
     show(payload) {
-      if (current?.id !== payload.id || current?.text !== payload.text) closeDetails();
-      current = { ...payload, preferredHeight: null, truncated: false };
+      current = { ...payload, preferredHeight: null };
       clearTimeout(timer);
       ensureWindow();
       present();
-      timer = setTimeout(() => hide({ keepDetails: true }), payload.durationMs);
+      timer = setTimeout(hide, payload.durationMs);
     },
     resize(payload) {
       if (!current || payload?.id !== current.id || !Number.isFinite(payload.height) || payload.height <= 0) return false;
       const height = Math.ceil(payload.height);
-      const truncated = payload.truncated === true;
-      if (height === current.preferredHeight && truncated === current.truncated) return true;
+      if (height === current.preferredHeight) return true;
       current.preferredHeight = height;
-      current.truncated = truncated;
-      win.setIgnoreMouseEvents(current.actions.length === 0 && !truncated, { forward: true });
       reposition();
-      return true;
-    },
-    showDetails(id) {
-      if (!current || current.id !== id || !current.truncated || !win || win.isDestroyed() || !win.isVisible()) return false;
-      if (details && !details.isDestroyed()) { details.show(); return true; }
-      const source = { id: current.id, text: current.text };
-      const area = screen.getDisplayMatching(getPetWindow().getBounds()).workArea;
-      const created = new BrowserWindow({ title: '球球 · 消息详情', width: Math.min(520, area.width), height: Math.min(560, area.height),
-        show: false, autoHideMenuBar: true, backgroundColor: '#f7f8fb',
-        webPreferences: { preload: path.join(__dirname, '../bubble-details-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false } });
-      details = created;
-      created.setAlwaysOnTop(topmost, 'floating');
-      created.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-      created.webContents.on('will-navigate', event => event.preventDefault());
-      created.on('closed', () => { if (details === created) details = null; });
-      created.loadFile(path.join(__dirname, '../bubble-details.html')).then(() => {
-        if (details !== created || created.isDestroyed()) return;
-        created.webContents.send('pet:bubble-details-content', source);
-        created.show();
-      }).catch(error => { if (details === created) closeDetails(); onError(error); });
       return true;
     },
     hide,
     reposition,
     getWindow: () => win,
-    getDetailsWindow: () => details,
-    closeDetails,
     setAlwaysOnTop(enabled) {
       topmost = enabled;
       if (win && !win.isDestroyed()) win.setAlwaysOnTop(enabled, 'floating');
-      if (details && !details.isDestroyed()) details.setAlwaysOnTop(enabled, 'floating');
     },
     destroy
   };
