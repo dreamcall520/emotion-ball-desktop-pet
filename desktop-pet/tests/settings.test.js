@@ -119,7 +119,7 @@ test('损坏文件回退且有效设置可回读', t => {
     codexShowExtraCredits: true,
     codexQuotaFunEnabled: true,
     openaiApiAlwaysVisible: false,
-    autoUpdateCheck: true,
+    autoUpdateCheck: true, autoReportErrors: true,
     lastUpdateNotifiedVersion: '',
     codexQuotaPeriod: 'auto',
     codexQuotaLabelSize: 'compact',
@@ -140,7 +140,7 @@ test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
     codexShowExtraCredits: true,
     codexQuotaFunEnabled: true,
     openaiApiAlwaysVisible: false,
-    autoUpdateCheck: true, lastUpdateNotifiedVersion: '',
+    autoUpdateCheck: true, autoReportErrors: true, lastUpdateNotifiedVersion: '',
     codexQuotaPeriod: 'auto', codexQuotaLabelSize: 'compact', codexQuotaAppearance: 'system'
   });
 });
@@ -536,4 +536,19 @@ test('weather card shares order/pin persistence without enabling other integrati
   assert.deepEqual(saved.quotaCardPinned, ['weather', 'codex']);
   assert.equal(saved.codexQuotaAlwaysVisible, false); assert.equal(saved.workbuddyQuotaAlwaysVisible, false);
   assert.equal(saved.codexEnabled, before.codexEnabled); assert.equal(saved.workbuddyEnabled, before.workbuddyEnabled);
+});
+
+
+test('自动异常上报默认开启，旧配置补齐并保留手动关闭', t => {
+  assert.equal(DEFAULTS.autoReportErrors, true);
+  for (const value of [undefined, null, 1, 'true', {}]) assert.equal(normalizeSettings({autoReportErrors:value}).autoReportErrors, true);
+  assert.equal(normalizeSettings({autoReportErrors:false}).autoReportErrors, false);
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'qiuqiu-report-default-'));
+  t.after(() => fs.rmSync(directory, {recursive:true, force:true}));
+  const file = path.join(directory, 'settings.json');
+  fs.writeFileSync(file, JSON.stringify({size:'small'}));
+  assert.equal(loadSettings(file).autoReportErrors, true);
+  saveSettings(file, {...loadSettings(file),autoReportErrors:false});
+  assert.equal(loadSettings(file).autoReportErrors, false);
+  assert.equal(loadSettings(file).size, 'small');
 });

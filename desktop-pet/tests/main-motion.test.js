@@ -218,11 +218,12 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
   const pomodoroWindows = { opens: 0, sync() {}, reposition() {}, hide() {}, close() {}, getPanelBounds() { return null; },
     open() { this.opens++; } };
   const context = vm.createContext({ __dirname: path.resolve(__dirname, '..'), console,
-    process: { env: {}, argv, stderr: { write(message) { throw new Error(message); } } }, performance: { now: () => now },
+    process: { on() {}, env: {}, argv, stderr: { write(message) { throw new Error(message); } } }, performance: { now: () => now },
     Date: class extends Date { static now() { return 1800000000000 + now; } },
     setTimeout(callback, delay) { timers.set(++serial, { callback, at: now + delay }); return serial; },
     clearTimeout(id) { timers.delete(id); },
     require(name) {
+      if (name === './lib/feedback-reporting') return { createFeedbackReporting: () => ({ context: () => ({diagnostic:{}}), getState: () => ({enabled:false,pending:0}), capture() {}, setEnabled() {}, dispose() {}, submit: async () => ({}) }) };
       if (name === './lib/weather-window') return {createWeatherWindow:options=>{weather.options=options;return weather;}};
       if (name === 'electron') return { app, ipcMain, powerMonitor, nativeTheme, screen, globalShortcut, BrowserWindow: NativeWindow, Tray, net,
         dialog: { showMessageBox: (...args) => { dialogs.push(args); return consent(...args); } },
@@ -962,13 +963,13 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   const menu = f.call('menuTemplate()');
   const top = menu.filter(item => item.type !== 'separator');
   assert.deepEqual(Array.from(top, item => item.label), [
-    '设置中心', '和球球聊聊', '启用 WorkBuddy 联动', '显示 WorkBuddy 积分卡', 'WorkBuddy 趣味游戏', 'API 余额', '定制球球', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API', 'ZCode 联动',
+    '设置中心', '意见反馈', '和球球聊聊', '启用 WorkBuddy 联动', '显示 WorkBuddy 积分卡', 'WorkBuddy 趣味游戏', 'API 余额', '定制球球', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API', 'ZCode 联动',
     '贴边与显示', '球球尺寸', '界面配色', '常规设置', '关于球球', '检查更新', '退出球球'
   ]);
   const group = label => top.find(item => item.label === label).submenu.filter(item => item.type !== 'separator');
   assert.equal(top.find(item => item.id === 'chat-open').submenu, undefined);
-  assert.equal(top[6].id, 'customize-open');
-  assert.equal(top[1].submenu, undefined);
+  assert.equal(top[7].id, 'customize-open');
+  assert.equal(top.find(item=>item.id==='chat-open').submenu, undefined);
   assert.equal(findMenuItem(menu, 'weather'), null);
   assert.equal(findMenuItem(menu, 'weather-open'), null);
   assert.deepEqual(Array.from(group('便签与待办'), item => item.id), ['notes-open', 'notes-new', 'notes-todo-new', 'notes-default-tab']);
@@ -3918,7 +3919,7 @@ test('原生菜单保留核心联动开关与独立入口，完整偏好仍可�
   const f = await fixture(); t.after(() => f.app.emit('before-quit'));
   const menu = f.call('compactMenuTemplate()');
   assert.deepEqual(Array.from(menu.filter(item => item.type !== 'separator'), item => item.label),
-    ['和球球聊聊', '来定制球球', '便签与待办', '番茄钟', '启用 Codex 联动', '启用 ZCode 联动', '启用 WorkBuddy 联动', '联动样式管理', '设置中心', '关于球球', '检查更新', '退出球球']);
+    ['和球球聊聊', '来定制球球', '便签与待办', '番茄钟', '启用 Codex 联动', '启用 ZCode 联动', '启用 WorkBuddy 联动', '联动样式管理', '设置中心', '意见反馈', '关于球球', '检查更新', '退出球球']);
   assert.ok(menu.every(item => !item.submenu));
   assert.ok(findMenuItem(menu, 'workbuddy-enabled'));
   assert.equal(findMenuItem(menu, 'workbuddy-chat'), null);
@@ -4709,6 +4710,55 @@ for(const [open,variable] of [['openGlobalSettings','globalSettingsWindow'],['op
  assert.doesNotThrow(()=>f.call(`${open}()`));const fresh=f.call(variable);assert.notEqual(fresh,old);
  assert.doesNotThrow(()=>old.emit('closed'));assert.doesNotThrow(()=>old.emit('closed'));assert.equal(f.call(variable),fresh);
  fresh.emit('ready-to-show');assert.equal(fresh.isVisible(),true);
+});
+
+test('帮助反馈仅接受当前设置主框架，开关保存失败保留原同意状态', async t => {
+  const f = await fixture(); t.after(() => f.app.emit('before-quit'));
+  menuItem(f, 'feedback-open').click();
+  const win = f.call('globalSettingsWindow'); win.emit('ready-to-show');
+  assert.equal(f.call('globalSettingsInitialView'), 'feedback');
+  if (process.env.PET_SMOKE_ARTIFACT_DIR) {
+    fs.mkdirSync(process.env.PET_SMOKE_ARTIFACT_DIR, {recursive:true});
+    fs.writeFileSync(path.join(process.env.PET_SMOKE_ARTIFACT_DIR,'settings-snapshot.json'),f.call('JSON.stringify(globalSettingsSnapshot())'));
+  }
+  f.call(`feedbackReporting.submissions=[];feedbackReporting.submit=async value=>{feedbackReporting.submissions.push(value);return {id:value.submissionId}};
+    feedbackReporting.enabled=false;feedbackReporting.setEnabled=value=>{feedbackReporting.enabled=value};
+    feedbackReporting.getState=()=>({enabled:feedbackReporting.enabled,pending:0});`);
+  assert.equal((await f.invoke('pet:feedback-auto-report', true)).ok, false);
+  assert.equal((await f.invoke('pet:feedback-auto-report', 'true', win.webContents)).ok, false);
+  const enabled = await f.invoke('pet:feedback-auto-report', true, win.webContents);
+  assert.equal(enabled.ok, true); assert.equal(enabled.state.enabled, true);
+  assert.equal(f.saved.at(-1).autoReportErrors, true);
+  assert.equal((await f.invoke('pet:feedback-auto-report', false, win.webContents)).state.enabled, false);
+  const value = { submissionId:TASK_ID };
+  assert.equal((await f.invoke('pet:feedback-submit', value, win.webContents)).id, TASK_ID);
+  assert.match((await f.invoke('pet:feedback-submit', value)).error, /重新打开/);
+  win.hide(); assert.match((await f.invoke('pet:feedback-submit', value, win.webContents)).error, /重新打开/);
+  win.show(); f.powerMonitor.emit('lock-screen');
+  assert.equal((await f.invoke('pet:feedback-auto-report', true, win.webContents)).ok, false);
+  const failure = await fixture({saveError:Error('disk unavailable')}); t.after(() => failure.app.emit('before-quit'));
+  failure.call("openGlobalSettings('feedback')"); const failedWin=failure.call('globalSettingsWindow');failedWin.emit('ready-to-show');
+  assert.equal((await failure.invoke('pet:feedback-auto-report',true,failedWin.webContents)).ok,false);
+  assert.notEqual(failure.call('settings.autoReportErrors'),true);
+});
+
+test('所有窗口只上报固定故障类别，正常销毁和被取消加载不计异常', async t => {
+  const f=await fixture(); t.after(()=>f.app.emit('before-quit'));
+  f.call('feedbackReporting.captured=[];feedbackReporting.capture=(scope,error)=>feedbackReporting.captured.push({scope,code:error?.code})');
+  f.call("openGlobalSettings('feedback')");const win=f.call('globalSettingsWindow');
+  win.emit('unresponsive');
+  win.webContents.emit('render-process-gone',{}, {reason:'crashed',secret:'PRIVATE'});
+  win.webContents.emit('did-fail-load',{}, -105,'sk-secret','https://private',true);
+  win.webContents.emit('console-message',{level:'error',message:'PRIVATE_CHAT sk-secret',sourceId:'/Users/private'});
+  const captured=JSON.parse(f.call('JSON.stringify(feedbackReporting.captured)'));
+  assert.deepEqual(captured.map(item=>item.scope),['窗口无响应','窗口崩溃','页面加载失败','页面脚本错误']);
+  assert.doesNotMatch(JSON.stringify(captured),/PRIVATE|secret|private/);
+  win.webContents.emit('render-process-gone',{}, {reason:'clean-exit'});
+  win.webContents.emit('render-process-gone',{}, {reason:'killed'});
+  win.webContents.emit('did-fail-load',{}, -3,'cancelled','',true);
+  win.webContents.emit('console-message',{level:'warning'});
+  assert.equal(f.call('feedbackReporting.captured.length'),4);
+  f.call('isQuitting=true');win.emit('unresponsive');assert.equal(f.call('feedbackReporting.captured.length'),4);
 });
 
 test('uploaded pets retain original generic settings without a partner action menu or dedicated commands',async t=>{

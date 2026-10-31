@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; base-uri 'none'; form-action 'none'">
   <title>球球 · 设置中心</title>
   <link rel="stylesheet" href="global-settings.css">
   <script defer src="color-mode.js"></script>
@@ -12,6 +12,7 @@
   <script defer src="../emotion-ball/js/ball.js"></script>
   <script defer src="../emotion-ball/js/engine.js"></script>
   <script defer src="global-settings-shortcuts.js"></script>
+  <script defer src="global-settings-feedback.js"></script>
   <script defer src="global-settings-renderer.js"></script>
   <link rel="stylesheet" href="ui-theme-purple.css">
 </head>
