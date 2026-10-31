@@ -108,7 +108,7 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/promotion-renderer.js',
     'desktop-pet/promotion-clips.js',
     'desktop-pet/lib/promotion-player.js',
-    ...['SOURCE.json','chuge.png','spring-festival.png','xiaobai.png','chunye.png','wechat-contact-original.jpg','chuge/base.webp','chuge/wave.webp','chuge/walk.webp','chuge/sleep.webp'].map(file=>'desktop-pet/assets/promotion/'+file),
+    ...['SOURCE.json','chuge.png','spring-festival.png','xiaobai.png','chunye.png','wechat-contact-original.jpg','banner-sheep.png','banner-xiaoyu.png','chuge/base.webp','chuge/wave.webp','chuge/walk.webp','chuge/sleep.webp'].map(file=>'desktop-pet/assets/promotion/'+file),
     'desktop-pet/customize-blue.css',
     'desktop-pet/codex-pets.css',
     'desktop-pet/lib/codex-pets.js',

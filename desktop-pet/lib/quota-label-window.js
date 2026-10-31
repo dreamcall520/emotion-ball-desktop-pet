@@ -216,6 +216,7 @@ function createQuotaLabelWindow({
   let reporting = false;
   let silentWindow = null;
   const topmostSyncing = new Set();
+  const paintedGeometry = new WeakMap();
 
   function guardEntryVisible() {
     try { return getGuardEntry() === true && currentModel?.state === 'ready' &&
@@ -315,8 +316,11 @@ function createQuotaLabelWindow({
     const finish = () => {
       if (win !== target || operation !== token) return;
       if (ready && currentModel) {
-        try { target.webContents.send(channel, { ...currentModel, visible: false, guardEntry: guardEntryVisible(),
-          ...(currentLayout?.guardSide ? { guardSide: currentLayout.guardSide, cardInset: currentLayout.cardInset, guardTargetWidth: quotaRoleTargetWidth(rolePaintWidth()) } : {}) }); }
+        // Native hide and the final compositor frame are asynchronous on macOS.
+        // Keep the last painted carrier coordinates until the surface is gone;
+        // layout-local insets would visibly move the card inside its fixed host.
+        const geometry = paintedGeometry.get(target) || {};
+        try { target.webContents.send(channel, { ...currentModel, visible: false, guardEntry: guardEntryVisible(), ...geometry }); }
         catch (error) { detach(target, error); return; }
         if (win !== target || operation !== token) return;
       }
@@ -441,8 +445,11 @@ function createQuotaLabelWindow({
     const cardTransition = carrier && animateResize && previousLayout && presentation?.quotaReducedMotion !== true && !resizeImmediate && target.isVisible()
       ? { from: relative(face(previousLayout)), to: relative(face(layout)), host: { width: host.width, height: host.height }, duration: 180 } : null;
     currentLayout = layout;
-    try { target.webContents.send(channel, { ...model, visible: true, guardEntry: guardEntryVisible(), ...(cardTransition ? { cardTransition } : {}), ...(cardViewport ? { cardViewport } : {}),
-      ...(layout.guardSide ? { guardSide: layout.guardSide, cardInset: { x: layout.x + layout.cardInset.x - host.x, y: layout.y + layout.cardInset.y - host.y }, guardTargetWidth: quotaRoleTargetWidth(rolePaintWidth()) } : {}) }); } catch (error) { detach(target, error); return; }
+    const painted = { ...model, visible: true, guardEntry: guardEntryVisible(), ...(cardTransition ? { cardTransition } : {}), ...(cardViewport ? { cardViewport } : {}),
+      ...(layout.guardSide ? { guardSide: layout.guardSide, cardInset: { x: layout.x + layout.cardInset.x - host.x, y: layout.y + layout.cardInset.y - host.y }, guardTargetWidth: quotaRoleTargetWidth(rolePaintWidth()) } : {}) };
+    paintedGeometry.set(target, { ...(cardViewport ? { cardViewport } : {}),
+      ...(layout.guardSide ? { guardSide: painted.guardSide, cardInset: painted.cardInset, guardTargetWidth: painted.guardTargetWidth } : {}) });
+    try { target.webContents.send(channel, painted); } catch (error) { detach(target, error); return; }
     try { cardResize.apply(target, host, { animate: animateResize, reducedMotion: presentation?.quotaReducedMotion === true, immediate: Boolean(carrier) || resizeImmediate }); } catch (error) { detach(target, error); return; }
     if (!confirm(target, token, model)) return;
     try {

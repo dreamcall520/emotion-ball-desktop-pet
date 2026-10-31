@@ -1348,7 +1348,7 @@
     clearAction();
     stopMotion();
     const shouldBeCompact = window.innerWidth <= 120;
-    if (shouldBeCompact !== compactMode && customization.appearance.shape !== 'codex-pet') createBall(ball.emotionId);
+    if (shouldBeCompact !== compactMode && !['codex-pet', 'soft-orb'].includes(customization.appearance.shape)) createBall(ball.emotionId);
     else { compactMode = shouldBeCompact; ball.resize?.(); }
     restoreState();
     if (presentationSuppressed) syncSuppressedAnimation(true);

@@ -697,13 +697,15 @@ test('快捷设置与面板只收起外置额度卡，保留所有球体额度�
   assert.equal(effect().visible, false, 'lock still removes quota effects');
 });
 
-test('设置首次异步加载期间API卡即隐藏，跨窗切换和后台同步保持隐藏而且不改球体展示',async t=>{
- const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true});t.after(()=>f.app.emit('before-quit'));
+test('设置与装扮保留额度卡实时预览，后台刷新与设置内调序立即生效',async t=>{
+ const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,quotaCardPinned:['codex','api']});t.after(()=>f.app.emit('before-quit'));
  f.call('settings.openaiApiAlwaysVisible=true;syncApiUsageLabel()');assert.equal(f.apiLabel.visible,true);
- f.call('openGlobalSettings()');assert.equal(f.apiLabel.visible,false,'opening intent blocks before native ready-to-show');
- f.apiUsage.change({connected:false,busy:false,report:null,config:{}});f.call('syncQuotaLabel()');assert.equal(f.apiLabel.visible,false,'background refresh cannot resurrect cards');assert.equal(f.pet.isVisible(),true);
- f.call('globalSettingsWindow.hide();openCustomization()');await flush();assert.equal(f.apiLabel.visible,false,'pending destination keeps handoff blocked');
- f.call('settings.openaiApiAlwaysVisible=false;customizationWindow.hide()');await new Promise(r=>setTimeout(r,5));assert.equal(f.apiLabel.visible,false,'restore reads latest settings');
+ f.call('openGlobalSettings()');const win=f.call('globalSettingsWindow');win.emit('ready-to-show');assert.equal(f.apiLabel.visible,true,'settings opening must preserve preview');
+ f.apiUsage.change({connected:false,busy:false,report:null,config:{}});f.call('syncQuotaLabel()');assert.equal(f.apiLabel.visible,true,'refresh preserves the card while settings is open');assert.equal(f.pet.isVisible(),true);
+ const result=await f.invoke('pet:global-quota-cards-save',{order:['api','codex','weather','zcode','workbuddy','balance'],pinned:['api','codex']},win.webContents);
+ assert.equal(result.ok,true);assert.equal(result.config.order[0],'api');assert.equal(f.call('quotaCardGroup.getState().visible[0]'),'api','real settings IPC immediately updates presentation order');assert.equal(f.apiLabel.visible,true);
+ f.call('globalSettingsWindow.hide();openCustomization()');await flush();assert.equal(f.apiLabel.visible,true,'outfit window also permits preview');
+ f.call('settings.openaiApiAlwaysVisible=false;syncApiUsageLabel();customizationWindow.hide()');await new Promise(r=>setTimeout(r,5));assert.equal(f.apiLabel.visible,false,'disabled card remains disabled after the window closes');
 });
 
 test('关于首次加载被屏锁放弃显示后不会永久占有额度阻塞，解锁按当前配置恢复',async t=>{
@@ -1043,7 +1045,7 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   const menu = f.call('menuTemplate()');
   const top = menu.filter(item => item.type !== 'separator');
   assert.deepEqual(Array.from(top, item => item.label), [
-    '设置中心', '意见反馈', '和球球聊聊', '启用 WorkBuddy 联动', '显示 WorkBuddy 积分卡', 'WorkBuddy 趣味游戏', 'API 余额', '定制球球', '专属皮肤定制', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API', 'ZCode 联动',
+    '设置中心', '意见反馈', '和球球聊聊', '启用 WorkBuddy 联动', '显示 WorkBuddy 积分卡', 'WorkBuddy 趣味游戏', 'API 余额', '定制球球', '专属皮肤  ✦ 定制', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API', 'ZCode 联动',
     '贴边与显示', '球球尺寸', '界面配色', '常规设置', '关于球球', '检查更新', '退出球球'
   ]);
   const group = label => top.find(item => item.label === label).submenu.filter(item => item.type !== 'separator');
@@ -3299,11 +3301,62 @@ test('聊天首次可见立即同步上传动作门禁，不等待静止活动�
 
 test('宣传菜单相邻且首次显示等待同窗口当前请求详情就绪，旧请求不能打开表单',async t=>{
  const f=await fixture();t.after(()=>f.app.emit('before-quit'));
- for(const menu of [f.call('menuTemplate()'),f.call('compactMenuTemplate()')]){const at=menu.findIndex(item=>item.id==='customize-open');assert.equal(menu[at+1]?.id,'custom-skin-promotion');assert.equal(menu[at+1].label,'专属皮肤定制');}
+ for(const menu of [f.call('menuTemplate()'),f.call('compactMenuTemplate()')]){const at=menu.findIndex(item=>item.id==='customize-open');assert.equal(menu[at+1]?.id,'custom-skin-promotion');assert.equal(menu[at+1].label,'专属皮肤  ✦ 定制');}
  f.call('openCustomization({promotion:true})');const win=f.call('customizationWindow');win.webContents.mainFrame={};win.emit('ready-to-show');assert.equal(win.isVisible(),false,'never flash the ordinary form before detail readiness');
  const token=f.call('customizationPromotion.token');f.call("ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},'stale')");assert.equal(win.isVisible(),false);f.call("ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},customizationPromotion.token)");assert.equal(win.isVisible(),true);
  const windows=f.windows.length;f.call('openCustomization({promotion:true})');assert.equal(f.windows.length,windows,'existing form is reused without reload or lost edits');assert.equal(win.messages.at(-1).channel,'pet:promotion-open');
  const latest=f.call('customizationPromotion.token');f.powerMonitor.emit('lock-screen');f.call("ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},'canceled')");assert.equal(f.call('customizationPromotion'),null,'screen lock cancels pending presentation');
+});
+
+test('宣传已就绪后快速关闭不会被迟到首载检查误判，真正未打开仍会收口',async t=>{
+ for(const phase of ['before-check','false-after-ack','reject-after-ack','genuine-failure']){
+  const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization({promotion:true})');const win=f.call('customizationWindow');win.webContents.mainFrame={};win.emit('ready-to-show');let checks=0,resolveCheck,rejectCheck;
+  win.webContents.executeJavaScript=()=>{checks++;return new Promise((resolve,reject)=>{resolveCheck=resolve;rejectCheck=reject;});};
+  const ack=()=>f.call("ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},customizationPromotion.token)");
+  if(phase==='before-check')ack();
+  win.webContents.emit('did-finish-load');
+  if(phase==='before-check'){assert.equal(checks,0,'a successful renderer ACK completes the first-load fallback');assert.equal(win.isDestroyed(),false);continue;}
+  assert.equal(checks,1);if(phase!=='genuine-failure')ack();
+  if(phase==='reject-after-ack')rejectCheck(Error('dialog was already closed'));else resolveCheck(false);
+  await flush();assert.equal(win.isDestroyed(),phase==='genuine-failure',phase);
+  if(phase!=='genuine-failure')assert.equal(f.call('customizationWindow'),win,'keep the form and its unsaved state after intentional modal close');
+ }
+});
+
+test('隐藏窗新宣传请求不被旧hide或minimize事件取消，可见窗真正隐藏仍取消',async t=>{
+ for(const lateEvent of ['hide','minimize']){
+  const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization({promotion:true})');const win=f.call('customizationWindow');win.webContents.mainFrame={};win.emit('ready-to-show');
+  const ack=token=>f.call(`ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},${JSON.stringify(token)})`);
+  ack(f.call('customizationPromotion.token'));win.hide();f.call('openCustomization({promotion:true})');const next=f.call('customizationPromotion.token');
+  win.emit(lateEvent);assert.equal(f.call('customizationPromotion?.token'),next,'late '+lateEvent+' belongs to the previous hidden presentation');
+  ack(next);assert.equal(win.isVisible(),true,'new pending request can complete after the old native notification');
+  f.call('openCustomization({promotion:true})');const visibleRequest=f.call('customizationPromotion.token');win.hide();assert.equal(f.call('customizationPromotion'),null,'a genuine hide after a request from a visible window still cancels');ack(visibleRequest);assert.equal(win.isVisible(),false);
+ }
+});
+
+test('新宣传ACK后的矛盾旧隐藏通知不重置播放或会话，真实隐藏最小化仍取消',async t=>{
+ for(const event of ['hide','minimize']){
+  const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization({promotion:true})');const win=f.call('customizationWindow');win.webContents.mainFrame={};win.emit('ready-to-show');
+  f.call("ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},customizationPromotion.token)");
+  const token=f.call('customizationPromotion.token'),session=f.call('customizationSession'),broadcasts=win.messages.filter(m=>m.channel==='pet:customization-visible').length;
+  win.emit(event);assert.equal(f.call('customizationPromotion?.token'),token);assert.equal(f.call('customizationSession'),session);assert.equal(win.messages.filter(m=>m.channel==='pet:customization-visible').length,broadcasts,'stale event cannot restart the renderer timeline');
+  if(event==='hide')win.hide();else{win.isMinimized=()=>true;win.emit('minimize');}
+  assert.equal(f.call('customizationPromotion'),null,'actual native '+event+' still cancels the presented request');
+ }
+});
+
+test('隐藏待就绪宣传请求仍尊重明确隐藏球球、锁屏与关闭，旧ACK不复显',async t=>{
+ for(const action of ['hidePet()','powerMonitor.emit("lock-screen")','customizationWindow.close()']){
+  const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization({promotion:true})');const win=f.call('customizationWindow');win.webContents.mainFrame={};win.emit('ready-to-show');const token=f.call('customizationPromotion.token');f.call('globalThis.oldPromotionSender=customizationWindow.webContents');
+  f.call(action);assert.equal(f.call('customizationPromotion'),null,action);
+  f.call(`ipcMain.emit('pet:promotion-ready',{sender:oldPromotionSender,senderFrame:oldPromotionSender.mainFrame},${JSON.stringify(token)})`);assert.equal(win.isDestroyed()||!win.isVisible(),true,'canceled intent cannot be revived by an old ACK');
+ }
+});
+
+test('旧装扮窗口迟到显隐通知不能取消替代窗口的宣传请求',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization({promotion:true})');const old=f.call('customizationWindow');old.destroy();f.call('openCustomization({promotion:true})');const current=f.call('customizationWindow'),token=f.call('customizationPromotion.token'),session=f.call('customizationSession');
+ for(const event of ['show','hide','minimize','restore'])old.emit(event);
+ assert.equal(f.call('customizationPromotion?.token'),token);assert.equal(f.call('customizationSession'),session);assert.equal(f.call('customizationWindow'),current);
 });
 
 test('普通装扮首次加载被宣传请求接管时native ready不提前露表单，ACK只认当前请求',async t=>{
@@ -4056,7 +4109,7 @@ test('原生菜单保留核心联动开关与独立入口，完整偏好仍可�
   const f = await fixture(); t.after(() => f.app.emit('before-quit'));
   const menu = f.call('compactMenuTemplate()');
   assert.deepEqual(Array.from(menu.filter(item => item.type !== 'separator'), item => item.label),
-    ['和球球聊聊', '来定制球球', '专属皮肤定制', '便签与待办', '番茄钟', '启用 Codex 联动', '启用 ZCode 联动', '启用 WorkBuddy 联动', '联动样式管理', '设置中心', '意见反馈', '关于球球', '检查更新', '退出球球']);
+    ['和球球聊聊', '来定制球球', '专属皮肤  ✦ 定制', '便签与待办', '番茄钟', '启用 Codex 联动', '启用 ZCode 联动', '启用 WorkBuddy 联动', '联动样式管理', '设置中心', '意见反馈', '关于球球', '检查更新', '退出球球']);
   assert.ok(menu.every(item => !item.submenu));
   assert.ok(findMenuItem(menu, 'workbuddy-enabled'));
   assert.equal(findMenuItem(menu, 'workbuddy-chat'), null);
@@ -4267,7 +4320,7 @@ test('WorkBuddy 独立显示开关同步菜单和布局，隐藏不停止联动�
   const queried=f.workbuddyCalls.length;await f.call('workbuddyQuota.refresh()');await f.call('workbuddyTasks.refresh(true)');await f.call('workbuddyUsage.refresh(true)');await flush();
   const operations=f.workbuddyCalls.slice(queried).map(item=>item.operation);for(const operation of ['quota','tasks','usage'])assert(operations.includes(operation));
   assert.equal(f.call('JSON.stringify({codex:settings.codexEnabled,visible:settings.codexQuotaAlwaysVisible,fun:settings.codexQuotaFunEnabled})'),before);
-  menuItem(f,'workbuddy-quota-visible').click({checked:true});assert.equal(f.call('workbuddyLabel.visible'),false,'settings remains a card blocker');settingsWindow.hide();await flush();assert.equal(f.call('workbuddyLabel.visible'),true);
+  menuItem(f,'workbuddy-quota-visible').click({checked:true});assert.equal(f.call('workbuddyLabel.visible'),true,'settings keeps the enabled card visible for preview');settingsWindow.hide();await flush();assert.equal(f.call('workbuddyLabel.visible'),true);
   assert.equal(menuItem(f,'workbuddy-quota-visible').checked,true);
   f.call('globalThis.noticeState=null;edgeNotice={...edgeNotice,tick(state){globalThis.noticeState=state;}};settings.workbuddyQuotaAlwaysVisible=false;tickEdgeNotice(true)');
   assert.equal(f.call('noticeState.workbuddyEnabled'),false);
@@ -4302,7 +4355,7 @@ test('WorkBuddy 偏好保存失败保留真实状态，设置中心不误报成�
   assert.equal(f.call('settings.workbuddyQuotaFunEnabled'),true);assert.equal(f.call('closes'),0);assert.equal(menuItem(f,'workbuddy-quota-fun').checked,true);
   menuItem(f,'global-settings').click();const win=f.call('globalSettingsWindow');win.emit('ready-to-show');
   const result=await f.invoke('pet:global-settings-action','/workbuddy-quota-visible',win.webContents,false);
-  assert.ok(result.error);assert.equal(f.call('settings.workbuddyQuotaAlwaysVisible'),true);assert.equal(f.call('workbuddyLabel.visible'),false,'failed save does not remove the settings popup blocker');win.hide();await flush();assert.equal(f.call('workbuddyLabel.visible'),true);
+  assert.ok(result.error);assert.equal(f.call('settings.workbuddyQuotaAlwaysVisible'),true);assert.equal(f.call('workbuddyLabel.visible'),true,'failed save keeps the previous visible card available for preview');win.hide();await flush();assert.equal(f.call('workbuddyLabel.visible'),true);
   assert.equal(result.snapshot.entries.find(item=>item.id==='/workbuddy-quota-visible').checked,true);
   assert.equal(f.call("setWorkBuddyPreference('codexQuotaFunEnabled',false)"),false);assert.equal(f.call("setWorkBuddyPreference('workbuddyQuotaFunEnabled','false')"),false);
 });

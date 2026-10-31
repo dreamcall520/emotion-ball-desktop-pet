@@ -877,7 +877,8 @@ function showCustomizationPromotion(win) {
 }
 function requestCustomizationPromotion(win, created = false) {
   if (!customizationNativeReady.has(win)) customizationPromotionOnly.add(win);
-  const request = { owner: win, token: randomUUID(), ready: false, created };
+  const request = { owner: win, token: randomUUID(), ready: false, created,
+    hiddenWhenRequested: !win.isVisible() || win.isMinimized() };
   customizationPromotion = request;
   return request;
 }
@@ -914,10 +915,20 @@ function openCustomization(options = {}) {
   win.setMinimumSize(760 + outerWidth - contentWidth, 580 + outerHeight - contentHeight);
   customizationWindow = win;
   const promotion = options?.promotion === true ? requestCustomizationPromotion(win, true) : null;
-  for (const event of ['show', 'hide', 'minimize', 'restore']) win.on(event, syncCustomizationVisibility);
+  const currentVisibilityNotification = event => customizationWindow === win && !win.isDestroyed() &&
+    !(event === 'hide' && win.isVisible()) && !(event === 'minimize' && !win.isMinimized());
   for (const event of ['show', 'hide', 'minimize', 'restore']) win.on(event, () => {
+    if (currentVisibilityNotification(event)) syncCustomizationVisibility();
+  });
+  for (const event of ['show', 'hide', 'minimize', 'restore']) win.on(event, () => {
+    if (!currentVisibilityNotification(event)) return;
     customizationSession++;
-    if (event === 'hide' || event === 'minimize') cancelCustomizationPromotion();
+    if (event === 'hide' || event === 'minimize') {
+      const request = customizationPromotion;
+      // macOS may deliver the previous hide after a new request has already
+      // started from a hidden window. That notification cannot cancel the new ACK.
+      if (request?.owner === win && !(request.hiddenWhenRequested && !request.ready)) cancelCustomizationPromotion();
+    }
   });
   positionFunctionWindow(win);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -935,12 +946,12 @@ function openCustomization(options = {}) {
     syncCustomizationVisibility();
   });
   if (promotion) win.webContents.once('did-finish-load', () => {
-    if (customizationPromotion !== promotion || typeof win.webContents.executeJavaScript !== 'function') return;
+    if (customizationPromotion !== promotion || promotion.ready || typeof win.webContents.executeJavaScript !== 'function') return;
     void win.webContents.executeJavaScript("Boolean(document.getElementById('skin-promotion')?.open)").then(open => {
-      if (customizationPromotion !== promotion || win.isDestroyed()) return;
+      if (customizationPromotion !== promotion || promotion.ready || win.isDestroyed()) return;
       if (open) { promotion.ready = true; showCustomizationPromotion(win); }
       else { cancelCustomizationPromotion(); win.destroy(); writeError('宣传详情', new Error('宣传详情未能打开')); }
-    }).catch(error => { if (customizationPromotion === promotion) { cancelCustomizationPromotion(); if (!win.isDestroyed()) win.destroy(); writeError('宣传详情', error); } });
+    }).catch(error => { if (customizationPromotion === promotion && !promotion.ready) { cancelCustomizationPromotion(); if (!win.isDestroyed()) win.destroy(); writeError('宣传详情', error); } });
   });
   win.webContents.on('render-process-gone', () => { if (customizationPromotion?.owner === win) { cancelCustomizationPromotion(); if (!win.isDestroyed()) win.destroy(); } });
   void win.loadFile(path.join(__dirname, 'customize.html'), promotion ? { query: { promotion: '1', request: promotion.token } } : undefined).catch(error => {
@@ -1991,10 +2002,15 @@ function openQuotaGuard(source = 'codex') {
   const previous = quotaGuardSource;
   quotaGuardSource = source === true || source === 'workbuddy' ? 'workbuddy' : source === 'zcode' ? 'zcode' : 'codex';
   if (!canShowQuotaGuard() || !quotaGuard) { quotaGuardSource = previous; return false; }
-  const opened = quotaGuard.open(quotaGuardSource === 'workbuddy' ? { state: 'ready', items: [], practice: true } : quotaGuardSource === 'zcode'
-    ? buildZcodeQuotaLabelModel(zcodeLink.getSnapshot(), { size: settings.zcodeQuotaLabelSize }) : quotaLabelModel());
-  if (!opened) quotaGuardSource = previous;
-  return opened;
+  // Reused game windows have no loading/pending blocker. Suppress cards before
+  // open's synchronous visibility callbacks can restore or rearrange siblings.
+  const release = quotaPopups.acquire();
+  try {
+    const opened = quotaGuard.open(quotaGuardSource === 'workbuddy' ? { state: 'ready', items: [], practice: true } : quotaGuardSource === 'zcode'
+      ? buildZcodeQuotaLabelModel(zcodeLink.getSnapshot(), { size: settings.zcodeQuotaLabelSize }) : quotaLabelModel());
+    if (!opened) quotaGuardSource = previous;
+    return opened;
+  } finally { release(); }
 }
 
 async function openCodexDetailThread(id, turnId) {
@@ -2641,7 +2657,7 @@ function menuTemplate() {
       { id: 'api-balance-config-open', label: '管理 API 账户', click: () => { void shell.openPath('/Applications/ZCode.app').catch(() => {}); } }
     ] },
     { id: 'customize-open', label: '定制球球', click: openCustomization },
-    { id: 'custom-skin-promotion', label: '专属皮肤定制', click: () => openCustomization({promotion:true}) },
+    { id: 'custom-skin-promotion', label: '专属皮肤  ✦ 定制', click: () => openCustomization({promotion:true}) },
     { label: '便签与待办', submenu: [
       { id: 'notes-open', label: '打开主面板', click: () => notesCompanion?.openPanel() },
       { id: 'notes-new', label: '新建便签', click: () => notesCompanion?.openPanel({ tab: 'note', create: true }) },

@@ -1,6 +1,8 @@
 const path=require('node:path');
 const {fileURLToPath,pathToFileURL}=require('node:url');
-const POPUPS=new Set(['global-settings','customize','chat','api-usage','about','codex-consent','workbuddy-consent','codex-details','workbuddy-details','api-balance-details','quota-guard']);
+const POPUPS=new Set(['chat','api-usage','about','codex-consent','workbuddy-consent','codex-details','workbuddy-details','api-balance-details','quota-guard']);
+// Persistent editing panels keep quota cards visible for live layout previews.
+const PASSIVE=new Set(['global-settings','customize']);
 const CARDS=new Set(['quota-label','api-usage-label','workbuddy-label','api-balance-label','workbuddy-guard-entry','quota-card-group','quota-card-transition','weather']);
 function createPopupQuotaVisibility({root,ipcMain,onChange=()=>{},onError=()=>{},schedule=fn=>setImmediate(fn),cancel=clearImmediate}){
   root=path.resolve(root);
@@ -13,14 +15,15 @@ function createPopupQuotaVisibility({root,ipcMain,onChange=()=>{},onError=()=>{}
       if(preload&&path.resolve(preload)!==expected)return null;
       if(CARDS.has(name))return 'card';
       if(POPUPS.has(name))return 'popup';
+      if(PASSIVE.has(name))return 'passive';
       if(name==='shortcuts')return 'shortcut';
-      if(name==='notes')return parsed.searchParams.get('mode')==='panel'?'popup':['note','reminder'].includes(parsed.searchParams.get('mode'))?'passive':null;
-      if(name==='pomodoro')return parsed.searchParams.get('view')==='panel'?'popup':['mini','message'].includes(parsed.searchParams.get('view'))?'passive':null;
+      if(name==='notes')return ['panel','note','reminder'].includes(parsed.searchParams.get('mode'))?'passive':null;
+      if(name==='pomodoro')return ['panel','mini','message'].includes(parsed.searchParams.get('view'))?'passive':null;
     }catch(_){}
     return null;
   }
   const hasBlockers=()=>leases.size>0||[...windows.values()].some(r=>!r.ended&&!r.minimized&&(r.role==='popup'&&(r.pending||r.visible)||r.modal&&r.visible));
-  function hideCards(){for(const r of windows.values())if(r.role==='card'&&!r.ended&&!r.win.isDestroyed()){try{r.nativeHide?.();}catch(error){onError(error);}}}
+  function hideCards(){for(const r of windows.values())if(r.role==='card'&&!r.ended&&!r.win.isDestroyed()){try{if(typeof r.win.isVisible!=='function'||r.win.isVisible()!==false)r.nativeHide?.();}catch(error){onError(error);}}}
   function update(){
     if(hasBlockers()){
       if(releaseTimer!==null){cancel(releaseTimer);releaseTimer=null;}
@@ -60,8 +63,8 @@ function createPopupQuotaVisibility({root,ipcMain,onChange=()=>{},onError=()=>{}
     });
     wrap('hide',(native,args)=>{r.visible=false;r.pending=false;r.loadToken++;update();return native(...args);});
     win.on('show',()=>{if(r.role==='card'&&blocked&&win.getOpacity?.()!==0){r.nativeHide?.();return;}r.visible=true;r.pending=false;r.minimized=false;update();});
-    win.on('hide',()=>{r.visible=false;r.pending=false;update();});
-    win.on('minimize',()=>{r.minimized=true;r.pending=false;update();});
+    win.on('hide',()=>{if(r.ended||win.isDestroyed()||win.isVisible?.()===true)return;r.visible=false;r.pending=false;update();});
+    win.on('minimize',()=>{if(r.ended||win.isDestroyed()||win.isMinimized?.()===false)return;r.minimized=true;r.pending=false;update();});
     win.on('restore',()=>{if(r.role==='card'&&blocked){r.nativeHide?.();return;}r.minimized=false;r.visible=true;update();});
     win.once('closed',()=>{r.ended=true;windows.delete(win);update();});
     contents.on('did-fail-load',(_event,code,_description,url,isMainFrame)=>{if(isMainFrame&&code!==-3&&url===r.url){r.pending=false;update();}});

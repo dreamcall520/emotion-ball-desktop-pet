@@ -57,11 +57,12 @@ test('ZCode bottom-aligned collapsed card reserves a bounded adjacent guard targ
 test('main binds the shared guard to its source: Codex sync cannot close or overwrite ZCode real quota', () => {
   const source = fs.readFileSync(path.join(__dirname, '../main.js'), 'utf8');
   const functions = source.slice(source.indexOf('function canShowQuotaGuard()'), source.indexOf('\nasync function openCodexDetailThread'));
-  let visible = false, available = true, codexEntry = false; const calls = [];
+  let visible = false, available = true, codexEntry = false, leases = 0; const calls = [];
   const context = vm.createContext({ quotaGuardSource: 'codex', isQuitting: false, screenLocked: false,
     shortcutWindow: null, chatWindow: null, codexDetails: null, workbuddyDetails: null, apiBalanceDetails: null, presentationSuppressed: () => false,
     petWindow: { isDestroyed: () => false, isVisible: () => true },
     settings: { codexEnabled: false, zcodeEnabled: true, zcodeQuotaAlwaysVisible: true, zcodeQuotaFunEnabled: true, codexQuotaAlwaysVisible: true },
+    quotaPopups: { acquire: () => { leases++; return () => { leases--; }; } },
     quotaLabel: { isGuardEntryVisible: () => codexEntry }, quotaLabelModel: () => ({ state: 'ready', items: [{ remaining: 64, windowMinutes: 300 }] }), buildZcodeQuotaLabelModel: value => value,
     zcodeLink: { isDetailsVisible: () => false, isEnabled: () => true, isCardAvailable: () => available, getSnapshot: () => quota() },
     quotaGuard: { isVisible: () => visible, open: value => { visible = true; calls.push(['open', value]); return true; },
@@ -98,6 +99,7 @@ test('main binds the shared guard to its source: Codex sync cannot close or over
   for (const key of ['screenLocked','isQuitting']) {
     context[key] = true; assert.equal(context.openQuotaGuard('zcode'), false); context[key] = false;
   }
+  assert.equal(leases, 0, 'every attempted source releases its own opening lease');
 });
 
 test('ZCode guard ignores transparent top gutter when choosing the default below anchor', () => {
