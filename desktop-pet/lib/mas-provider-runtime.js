@@ -37,7 +37,7 @@ function createDirectoryStorage(root) {
     async remove(provider) { try { fs.unlinkSync(filename(provider)); } catch (error) { if (error.code !== 'ENOENT') throw error; } }
   };
 }
-function createDiagnosticDirectoryAccess({ dialog, storage, home }) {
+function createDiagnosticDirectoryAccess({ dialog, storage, home, purpose='read-data' }) {
   const grant = async provider => {
     const stored = await storage.load(provider);
     if (!stored?.directory || stored.kind !== 'diagnostic-user-selected') throw failure('DIRECTORY_ACCESS_REQUIRED');
@@ -47,8 +47,8 @@ function createDiagnosticDirectoryAccess({ dialog, storage, home }) {
   return {
     async authorize(provider) {
       if (!PROVIDERS.has(provider)) throw failure('INVALID_PROVIDER');
-      const selected = await dialog.showOpenDialog({ title: `选择 ${provider === 'codex' ? 'Codex 的 .codex' : provider==='zcode'?'ZCode 的 .zcode':'WorkBuddy 的 .workbuddy（仅任务缓存）'} 数据目录`,
-        buttonLabel:'允许连接', ...(home ? {defaultPath:path.join(home,'.'+provider)} : {}), message: provider==='workbuddy'?'只读取任务标题、历史状态和未读标记，不读聊天正文或登录凭据。此诊断候选不等同系统沙盒验收。':'读取额度和任务信息；聊天使用球球独立登录，不改原工具设置。此诊断候选不等同系统沙盒验收。', properties: ['openDirectory', 'showHiddenFiles'] });
+      const selected = await dialog.showOpenDialog({ title: purpose==='plugin-installation'?'允许球球安装任务同步插件':`选择 ${provider === 'codex' ? 'Codex 的 .codex' : provider==='zcode'?'ZCode 的 .zcode':'WorkBuddy 的 .workbuddy（仅任务缓存）'} 数据目录`,
+        buttonLabel:purpose==='plugin-installation'?'允许安装插件':'允许连接', ...(home ? {defaultPath:path.join(home,'.'+provider)} : {}), message: purpose==='plugin-installation'?'允许球球安装自己的任务同步插件，并仅更新插件记录和启用设置。其他配置原样保留，不读取聊天记录或独立登录凭据文件，不发送模型消息。':provider==='workbuddy'?'只读取任务标题、历史状态和未读标记，不读聊天正文或登录凭据。此诊断候选不等同系统沙盒验收。':'读取额度和任务信息；聊天使用球球独立登录，不改原工具设置。此诊断候选不等同系统沙盒验收。', properties: ['openDirectory', 'showHiddenFiles'] });
       if (selected.canceled) return { status: 'cancelled' };
       const directory = selected.filePaths?.[0];
       if (!directory || !path.isAbsolute(directory) || path.basename(directory) !== '.' + provider) throw failure('DIRECTORY_ACCESS_REQUIRED');
@@ -69,7 +69,7 @@ function createWorkbuddyConversationStore(root){
 }
 function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, fetch,
   diagnostic = false, onChange = () => {}, onManagedReady = () => {}, resourcesPath = process.resourcesPath,
-  startWorkbuddyHost=options=>require('./mas-bundled-workbuddy').startBundledWorkBuddy(options), createWorkbuddyAuthClient=createWorkBuddyLocalCliClient } = {}) {
+  startWorkbuddyHost=options=>require('./mas-bundled-workbuddy').startBundledWorkBuddy(options), createWorkbuddyAuthClient=createWorkBuddyLocalCliClient,createPluginInstaller=options=>require('./managed-plugin-installer').createManagedPluginInstaller(options),createPluginHost=()=>require('./plugin-host').createPluginHost() } = {}) {
   let closed = false, runtimeClosing = null, managedLogin = null, managedLoginUrl=null, managedEpoch=0, bundledEnabled=false, directZcodeEnabled=false, zcodeAccountSource='official', managedWorkbuddy=null, workbuddyAuthClient=null, workbuddyAuthFlight=null, workbuddyAuthenticated=false, workbuddyEpoch=0, externalWorkbuddyService=false;
   const managedAbort=new AbortController();
   const managedProfile=path.join(app.getPath('userData'),'store-codex-profile');
@@ -80,6 +80,10 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
   const chatEnabled={codex:false,zcode:false,workbuddy:false};
   const storage = createDirectoryStorage(path.join(app.getPath('userData'), 'store-directory-grants'));
   const access = diagnostic ? createDiagnosticDirectoryAccess({ dialog, storage, home:app.getPath('home') }) : createMasDirectoryAccess({ app, dialog, storage });
+  const pluginStorage=createDirectoryStorage(path.join(app.getPath('userData'),'store-plugin-directory-grants'));
+  const pluginAccess=diagnostic?createDiagnosticDirectoryAccess({dialog,storage:pluginStorage,home:app.getPath('home'),purpose:'plugin-installation'}):createMasDirectoryAccess({app,dialog,storage:pluginStorage,purpose:'plugin-installation'});
+  const pluginInstallationPolicy={allowed:diagnostic===true,status:diagnostic?'isolated-candidate':'store-review-pending',message:diagnostic?'自动安装为隔离联调候选，尚不代表商店审核通过。':'商店版的自动插件安装仍待沙盒与审核边界确认，当前不写入原工具插件目录。'};
+  const pluginFlights=new Map(),pluginAborts=new Map(),pluginWaitStates=new Map();const pluginHost=createPluginHost();
   const workbuddy = createMasWorkBuddyProvider({ BrowserWindow, session, shell, onLoginComplete:()=>{if(!closed)onManagedReady('workbuddy');}, onChange: () => { if (!closed) { for (const notify of quotaPorts) notify(); onChange(); } } });
   const zcode = createMasZcodeProvider({ directoryAccess: access, fetch });
   const workbuddyOfficial=createWorkBuddyOfficialConnection({diagnostic,store:createWorkBuddyIntentStore(path.join(app.getPath('userData'),'workbuddy-official-send-intent.json')),openAuthorizationUrl:url=>shell.openExternal(url),onChange:()=>{if(!closed)onChange();}});
@@ -87,6 +91,36 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
   const desktopTasks=createMasWorkBuddyTasks({directoryAccess:access});
   const desktopIntegration=require('./workbuddy-desktop-integration').createWorkBuddyDesktopIntegration({root:path.join(app.getPath('userData'),'workbuddy-desktop-events'),assetRoot:path.join(__dirname,'../assets/workbuddy-desktop-hook'),onChange:()=>{if(!closed)onChange();}});
   const zcodeDesktopIntegration=require('./zcode-desktop-integration').createZcodeDesktopIntegration({root:path.join(app.getPath('userData'),'zcode-desktop-events'),assetRoot:path.join(__dirname,'../assets/zcode-desktop-hook'),onChange:()=>{if(!closed)onChange();}});
+  const pluginInstallers=Object.fromEntries(['zcode','workbuddy'].map(provider=>[provider,createPluginInstaller({provider,directoryAccess:pluginAccess,assertHostStopped:()=>pluginHost.isStopped(provider),getMarketplaceDirectory:()=>provider==='zcode'?zcodeDesktopIntegration.getMarketplaceDirectory():desktopIntegration.getMarketplaceDirectory(),onChange:()=>{if(!closed)onChange();}})]));
+  function pluginInstallationState(provider){if(pluginWaitStates.has(provider))return{provider,...pluginWaitStates.get(provider)};const raw=pluginInstallers[provider].getState();const phases={idle:'idle',checking:'checking',working:'installing',staged:'installing',committing:'installing','installed-configured':'installed','not-installed':'idle','needs-authorization':'idle',cancelled:'idle',unavailable:'blocked'};return{...raw,phase:raw.status,status:phases[raw.status]||raw.status};}
+  async function ensurePluginAccess(provider,signal){
+    const check=()=>{if(closed||signal?.aborted)throw failure('CANCELLED');};check();
+    try{const lease=await pluginAccess.acquire(provider);lease.release();check();return{status:'stored'};}catch(e){if(!['DIRECTORY_ACCESS_REQUIRED','ENOENT'].includes(e.code))throw e;}check();
+    // New-purpose consent precedes adoption of an existing technical RW bookmark.
+    try{const lease=await access.acquire(provider);lease.release();check();const grant=await storage.load(provider);check();await pluginStorage.save(provider,grant);if(closed||signal?.aborted){await pluginAccess.revoke(provider);throw failure('CANCELLED');}return{status:'stored'};}catch(e){if(!['DIRECTORY_ACCESS_REQUIRED','ENOENT'].includes(e.code))throw e;}check();
+    const selected=await pluginAccess.authorize(provider);if(closed||signal?.aborted){if(selected.status==='stored')await pluginAccess.revoke(provider);throw failure('CANCELLED');}return selected;
+  }
+  function installProviderPlugin(provider,{approved=false}={}){
+    if(!['zcode','workbuddy'].includes(provider))return Promise.reject(failure('INVALID_PROVIDER'));
+    if(!approved)return Promise.reject(failure('CONSENT_REQUIRED'));
+    if(!pluginInstallationPolicy.allowed)return Promise.reject(failure('AUTO_INSTALL_STORE_REVIEW_REQUIRED'));
+    if(closed)return Promise.reject(failure('CLOSED'));
+    if(pluginFlights.has(provider))return pluginFlights.get(provider);
+    const abort=new AbortController();pluginAborts.set(provider,abort);
+    let reopen=false,completed=false;const flight=Promise.resolve().then(async()=>{
+      if(closed||abort.signal.aborted)throw failure('CANCELLED');
+      const granted=await ensurePluginAccess(provider,abort.signal);if(granted.status!=='stored')return{status:'cancelled'};
+      if(closed||abort.signal.aborted)throw failure('CANCELLED');
+      const host=await pluginHost.getStatus(provider);if(!host?.known)throw failure('HOST_STATUS_UNAVAILABLE');if(!host.installed)throw failure('HOST_NOT_INSTALLED');
+      if(host.running){pluginWaitStates.set(provider,{status:'installing',phase:'waiting-host',enabled:false,message:'请完成当前任务，切到 '+(provider==='zcode'?'ZCode':'WorkBuddy')+' 按⌘Q退出；球球会自动继续安装，不会强制结束任务。'});onChange();await pluginHost.waitUntilStopped(provider,{signal:abort.signal});reopen=true;pluginWaitStates.delete(provider);}
+      if(closed||abort.signal.aborted)throw failure('CANCELLED');
+      await(provider==='zcode'?zcodeDesktopIntegration:desktopIntegration).prepare();
+      if(closed||abort.signal.aborted)throw failure('CANCELLED');
+      await pluginInstallers[provider].install({approved:true,signal:abort.signal});completed=true;return pluginInstallationState(provider);
+    }).finally(async()=>{pluginWaitStates.delete(provider);if(reopen&&completed&&!closed&&!abort.signal.aborted){try{await pluginHost.launch(provider);}catch{/* Installed files remain; the original tool can be reopened normally. */}}pluginFlights.delete(provider);pluginAborts.delete(provider);if(!closed)onChange();});pluginFlights.set(provider,flight);return flight;
+  }
+  async function restorePluginInstallations(){for(const provider of ['zcode','workbuddy']){if(closed)return;const granted=await pluginAccess.getStatus(provider);if(granted.status!=='stored')continue;if(closed)return;const integration=provider==='zcode'?zcodeDesktopIntegration:desktopIntegration;await integration.restore();if(closed)return;await pluginInstallers[provider].inspect();}}
+  async function cancelPluginInstallation(provider){pluginAborts.get(provider)?.abort();await pluginFlights.get(provider)?.catch(()=>{});}
   let desktopCache={partitions:[],probe:null,report:null,error:null,accountAttributionVerified:false};
   async function probeWorkbuddyDesktop(){try{const probe=await desktopTasks.probe(),groups=await desktopTasks.listPartitions();desktopCache={...desktopCache,probe,partitions:groups.partitions,report:null,error:null};}catch(e){desktopCache={...desktopCache,report:null,error:['DIRECTORY_ACCESS_REQUIRED'].includes(e.code)?'请先授权原WorkBuddy任务目录。':'桌面任务缓存暂不能读取，或数据库格式未支持。'};}onChange();return desktopCache;}
   async function readWorkbuddyDesktop(partitionId){try{desktopCache={...desktopCache,report:await desktopTasks.read({partitionId}),error:null};}catch(e){desktopCache={...desktopCache,report:null,error:'所选缓存范围暂不能读取，请重新检查授权。'};}onChange();return desktopCache;}
@@ -118,7 +152,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
   async function getState() {
     const [codex, zcodeDirectory] = await Promise.all(['codex', 'zcode'].map(p => access.getStatus(p)));
     const service = chatServices.codex.service, zcodeService = chatServices.zcode.service;
-    return { mode: diagnostic ? 'diagnostic-unsandboxed' : 'mas-sandbox',
+    return { pluginInstallationPolicy:{...pluginInstallationPolicy},pluginInstallations:Object.fromEntries(Object.keys(pluginInstallers).map(provider=>[provider,pluginInstallationState(provider)])),mode: diagnostic ? 'diagnostic-unsandboxed' : 'mas-sandbox',
       codex: { directory: codex.status, serviceConfigured: Boolean(service), endpoint: service?.endpoint || null,
         tasks: 'authorized-session-logs', chat: service ? 'configured-unverified' : 'managed-bundled-runtime' },
       zcode: { directory: zcodeDirectory.status, capabilities: zcode.getCapabilities(),
@@ -327,7 +361,8 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
   function close() {
     if (closed) return runtimeClosing;
     closed = true; workbuddyEpoch++; managedAbort.abort();managedEpoch++; void managedLogin?.close();managedLogin=null;managedLoginUrl=null; workbuddy.close();workbuddyOfficial.close();desktopTasks.close(); quotaPorts.clear();
-    const closing = [desktopIntegration.close(),zcodeDesktopIntegration.close(),workbuddyCli.close(),workbuddyAuthClient?.close(),managedWorkbuddy?.stop()];
+    for(const abort of pluginAborts.values())abort.abort();
+    const closing = [...[...pluginFlights.values()].map(flight=>flight.catch(()=>{})),desktopIntegration.close(),zcodeDesktopIntegration.close(),workbuddyCli.close(),workbuddyAuthClient?.close(),managedWorkbuddy?.stop()];
     for (const slot of Object.values(chatServices)) {
       slot.service = null; slot.generation++;
       closing.push(...[...slot.clients].map(client => client.close()));
@@ -335,7 +370,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
     runtimeClosing = Promise.all(closing).then(() => undefined);
     return runtimeClosing;
   }
-  return { access, authorize, getState,prepareChat,prepareWorkbuddyChat,desktopIntegration,zcodeDesktopIntegration,
+  return { access, authorize, getState,installProviderPlugin,cancelPluginInstallation,restorePluginInstallations,getPluginInstallationPolicy:()=>({...pluginInstallationPolicy}),async getPluginAuthorizationStatus(provider){if(!['zcode','workbuddy'].includes(provider))throw failure('INVALID_PROVIDER');return{status:(await pluginAccess.getStatus(provider)).status};},prepareChat,prepareWorkbuddyChat,desktopIntegration,zcodeDesktopIntegration,
     async restoreChatPreferences(fallback={}){for(const provider of PROVIDERS){let saved;try{saved=await chatPreferences.load(provider);}catch(_){saved=null;}chatEnabled[provider]=typeof saved?.enabled==='boolean'?saved.enabled:fallback[provider]===true;}return{...chatEnabled};},
     isChatEnabled:provider=>PROVIDERS.has(provider)&&chatEnabled[provider]===true,
     async setChatEnabled(provider,enabled){if(!PROVIDERS.has(provider))throw failure('INVALID_PROVIDER');const old=await chatPreferences.load(provider);await chatPreferences.save(provider,{...(old||{}),enabled:enabled===true});chatEnabled[provider]=enabled===true;onChange();},async disconnectWorkbuddyChat(){externalWorkbuddyService=false;workbuddyEpoch++;workbuddyAuthenticated=false;workbuddyAuthFlight=null;await workbuddyAuthClient?.close();workbuddyAuthClient=null;await workbuddyCli.disconnect();const handle=managedWorkbuddy;managedWorkbuddy=null;await handle?.stop();},getZcodeAccountSource:()=>chatServices.zcode.service?.accountSource||zcodeAccountSource,
@@ -350,6 +385,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
     async ensureAuthorized(provider) { try {const lease=await access.acquire(provider);lease.release();return true;} catch(e) {if(!['DIRECTORY_ACCESS_REQUIRED','ENOENT'].includes(e.code))throw e;} return (await authorize(provider)).status === 'stored'; },
     createCodexConnection: options => createMasCodexConnection({ ...options, directoryAccess: access, fetch }), zcode, workbuddy,workbuddyOfficial,workbuddyCli,importWorkbuddyCliService,probeWorkbuddyDesktop,readWorkbuddyDesktop, createWorkBuddyQuotaPort, unavailableObservation,
     async revoke(provider) {
+      await cancelPluginInstallation(provider);if(['zcode','workbuddy'].includes(provider))await pluginAccess.revoke(provider);
       if(provider==='zcode')directZcodeEnabled=false;
       if(provider==='codex'){bundledEnabled=false;managedEpoch++;await managedLogin?.close();managedLogin=null;managedLoginUrl=null;}
       await access.revoke(provider);

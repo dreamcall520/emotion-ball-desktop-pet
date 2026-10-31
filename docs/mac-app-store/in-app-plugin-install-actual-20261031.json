@@ -1,0 +1,29 @@
+{
+  "date": "2026-10-31",
+  "candidate": "R20",
+  "explicitUserWritePurposeApproval": true,
+  "providers": [
+    {
+      "provider": "zcode",
+      "status": "installed-configured",
+      "enabled": true,
+      "installedConfigured": true,
+      "eventVerified": false
+    },
+    {
+      "provider": "workbuddy",
+      "status": "installed-configured",
+      "enabled": true,
+      "installedConfigured": true,
+      "eventVerified": false
+    }
+  ],
+  "modelMessagesSent": 0,
+  "originalAppsForceTerminated": false,
+  "userQuitBothApps": true,
+  "waitingAttemptsTimedOut": true,
+  "retriesReusedExistingPermission": true,
+  "automaticRelaunchExercisedOnActualApps": false,
+  "note": "Both first waiting attempts timed out. Explicit retries after user quit installed without repeated native permission. Reopen behavior is covered by isolated/synthetic checks; no new model task was sent.",
+  "actualElectronMasVerified": false
+}

@@ -1,0 +1,52 @@
+{
+  "date": "2026-10-31",
+  "module": "desktop-pet/lib/managed-plugin-installer.js",
+  "fixedPlugins": {
+    "workbuddy": {
+      "id": "qiuqiu-task-events@qiuqiu-local-review",
+      "version": "0.2.0",
+      "hostInventorySchema": 2
+    },
+    "zcode": {
+      "id": "qiuqiu-zcode-task-events@qiuqiu-zcode-local-review",
+      "version": "0.1.0",
+      "hostInventorySchema": 1
+    }
+  },
+  "unitTests": {
+    "passed": 23,
+    "failed": 0
+  },
+  "officialCompatibility": {
+    "codebuddyCli": "2.179.0",
+    "zcodeCliBuiltFromSource": "a60ba6a7e5a06742270ca605f5d2cc2766afa7e1",
+    "providersVerified": [
+      "workbuddy",
+      "zcode"
+    ],
+    "manualOfficialInstallThenManagedMigration": true,
+    "officialLoaderListsEnabledPlugin": true,
+    "officialMarketplaceCatalogVisible": true,
+    "externalNetworkDenied": true,
+    "originalUserDirectoriesAndKeychainDenied": true,
+    "onlySyntheticHomeAndHostModified": true
+  },
+  "productionInstaller": {
+    "executesCli": false,
+    "network": false,
+    "models": false,
+    "fixedAssetDigests": true,
+    "usesIndependentDirectoryAccess": true,
+    "installedIsNotEventVerified": true,
+    "settingsUnknownFieldsPreservedAsRawJson": true,
+    "hostFileCasAndRollback": true,
+    "arbitraryPluginSupport": false,
+    "realUserInstallPerformedByThisAgent": false,
+    "actualElectronMasVerified": false,
+    "requiresHostStoppedGuard": true,
+    "hostCheckedBeforeMetadataAndEveryCommit": true,
+    "darwinExclusiveNoFollowNonblockingLock": true,
+    "crashReleasesLockAutomatically": true,
+    "nonDarwinWritesFailClosed": true
+  }
+}

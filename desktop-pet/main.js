@@ -587,7 +587,7 @@ function openStoreConnections(provider) {
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', event => event.preventDefault());
   win.once('ready-to-show', () => { if (!win.isDestroyed()) { win.show(); win.focus(); if(['codex','zcode','workbuddy'].includes(provider))win.webContents.send('pet:store-focus-provider',provider); } });
-  win.on('closed', () => { if (storeConnectionsWindow === win) storeConnectionsWindow = null; });
+  win.on('closed', () => { if (storeConnectionsWindow === win){storeConnectionsWindow = null;for(const provider of ['zcode','workbuddy'])void storeRuntime.cancelPluginInstallation(provider);} });
   void win.loadFile(path.join(__dirname, 'store-connections.html'));
   return win;
 }
@@ -650,6 +650,19 @@ function registerStoreConnections() {
         if(consent.response!==1)return{ok:true,message:'未启用原桌面事件。',state:await storeConnectionState()};
         await storeRuntime.desktopIntegration.prepare();message='本机元数据接收器与插件包已准备，请在WorkBuddy插件页审阅安装。';
       }
+      else if(action==='cancel-provider-plugin'){if(!['zcode','workbuddy'].includes(payload?.provider))return{ok:false};await storeRuntime.cancelPluginInstallation(payload?.provider);message='已取消本次安装，原有其他连接保持。';}
+      else if(action==='install-provider-plugin'){
+        const provider=payload?.provider;if(!['zcode','workbuddy'].includes(provider))return{ok:false,message:'该工具不需要安装任务插件。'};const policy=storeRuntime.getPluginInstallationPolicy?.();if(policy?.allowed===false)return{ok:false,message:policy.message,state:await storeConnectionState()};
+        const origin=storeConnectionsWindow;const active=()=>!isQuitting&&!screenLocked&&origin===storeConnectionsWindow&&!origin.isDestroyed()&&event.sender===origin.webContents&&event.senderFrame===event.sender.mainFrame&&event.sender.getURL()===pathToFileURL(path.join(__dirname,'store-connections.html')).href;
+        const permission=await storeRuntime.getPluginAuthorizationStatus(provider);if(!active())return{ok:false,message:'安装窗口已关闭，未开始安装。'};
+        if(permission.status!=='stored'){
+          const consent=await dialog.showMessageBox(storeConnectionsWindow,{type:'question',title:'安装球球任务同步插件',message:'允许球球为 '+(provider==='zcode'?'ZCode':'WorkBuddy')+' 安装并启用任务同步插件吗？',detail:'球球会在你授权的原工具目录安装自己的插件，更新相应市场记录、安装记录和插件启用设置。其他配置原样保留；不读取独立登录凭据文件，不上传配置，不发送模型消息。插件临时过滤Hook输入，只向球球发送会话标识和阶段，不传正文。'+(provider==='zcode'?'ZCode官方Hook本身可能生成临时对话文件，球球插件不读取；停止事件不能证明最终完成。':'主回复结束不代表后台任务全部完成。')+'已有目录授权会在你确认新用途后复用；没有授权时仅需在预定位的系统窗口点允许安装。如果原软件正在运行，请先完成任务，再切到原软件按⌘Q退出；球球会自动等待，安装成功后请求重新打开；不会强行退出原软件。',buttons:['暂不安装','同意，自动安装'],defaultId:0,cancelId:0});
+          if(!active())return{ok:false,message:'安装窗口已关闭，未开始安装。'};
+          if(consent.response!==1)return{ok:true,message:'未安装插件，已可用的聊天和额度保持。',state:await storeConnectionState()};
+        }
+        if(!active())return{ok:false,message:'安装窗口已关闭，未开始安装。'};
+        const result=await storeRuntime.installProviderPlugin(provider,{approved:true});message=result?.status==='cancelled'?'已取消目录授权，其他能力保持。':result?.message||'插件安装结果已更新；下一次在原工具正常使用时自动确认事件，不需要操作终端。';
+      }
       else if(action==='prepare-zcode-desktop-events'){
         if(storeRuntime.zcodeDesktopIntegration.getState().enabled)return{ok:true,message:'ZCode任务事件已授权；已安装无需重复安装，状态等待新事件。',state:await storeConnectionState()};
         const consent=await dialog.showMessageBox(storeConnectionsWindow,{type:'question',title:'启用原 ZCode 任务事件',message:'允许本机 ZCode 插件过滤任务事件吗？',detail:'插件临时接触可能包含提示词的Hook输入，仅在有限本机内存提取会话标识、轮次和阶段，不保存或发送正文、路径或凭据。ZCode官方Hook机制本身可能生成临时对话文件；球球插件不读取这些文件。停止事件不能确认任务成功。还需在ZCode内安装启用插件。',buttons:['暂不开启','同意，仅传元数据'],defaultId:0,cancelId:0});
@@ -680,6 +693,7 @@ function registerStoreConnections() {
       else if (!['status','refresh-status'].includes(action)) return { ok: false };
       return { ok: true, message, state: await storeConnectionState() };
     } catch (error) {
+      if(action==='install-provider-plugin'&&['zcode','workbuddy'].includes(payload?.provider)){const state=await storeConnectionState().catch(()=>null);return{ok:false,state,message:error?.code==='HOST_NOT_INSTALLED'?'请先安装对应的原AI工具；球球聊天不受影响。':error?.code==='HOST_STATUS_UNAVAILABLE'?'暂时无法确认原工具是否退出，尚未安装插件。':error?.code==='HOST_WAIT_TIMEOUT'?'等待原工具退出已超时，退出后可继续安装。':error?.code==='CANCELLED'?'已取消插件安装，其他连接保持。':state?.pluginInstallations?.[payload.provider]?.message||'插件安装未完成，已有聊天和额度保持。'};}
       const text = { DIRECTORY_ACCESS_REQUIRED: '请先选择并授权工具的数据目录。', INVALID_PAIRING_FILE: '连接文件无效，请选择当前本机服务生成的配对文件。',
         INVALID_ENDPOINT: '仅支持本机服务连接。', MISSING: '请先导入已运行的 Codex 本机服务连接。', UNSAFE_CONFIG: '当前本机服务未满足只聊天配置，请使用球球专用服务配置。',
         LOGIN_REQUIRED: '登录已失效，请在对应工具中重新登录。', UNAUTHENTICATED: 'Codex 登录尚不可用。', TIMEOUT: '连接超时，请稍后重试启用。', BUSY:'正在处理连接，请稍候。', INVALID_PROVIDER:'不支持该工具。' }[error?.code] || '本次连接未完成，请检查授权与本机服务状态。';
@@ -4023,7 +4037,7 @@ async function bootstrap() {
     }
   });
   settings = loadSettings(settingsFile);
-  if(IS_STORE_BUILD){void storeRuntime.desktopIntegration.restore().catch(()=>{});void storeRuntime.zcodeDesktopIntegration.restore().catch(()=>{});}
+  if(IS_STORE_BUILD){void storeRuntime.desktopIntegration.restore().catch(()=>{});void storeRuntime.zcodeDesktopIntegration.restore().catch(()=>{});void storeRuntime.restorePluginInstallations().catch(()=>{});}
   if(IS_STORE_BUILD)await storeRuntime.restoreChatPreferences({codex:settings.codexEnabled,zcode:settings.zcodeEnabled,workbuddy:settings.workbuddyEnabled});
   if(ACCEPTANCE_KIND==='soft-orb'&&!fs.existsSync(settingsFile)){
     const orb=normalizeAppearance({shape:'soft-orb',orbMaterial:'pearl',orbSecondaryColor:'#B7A7EC',bodyColor:'#F9F8FF',eyeColor:'#FDFDFD'});
@@ -4218,6 +4232,7 @@ async function bootstrap() {
         return{status:state.connection==='ready'&&state.modelsStatus==='ready'?'ready':'unavailable',message:state.connection==='ready'&&state.modelsStatus==='ready'?'聊天已连接。':state.error||'聊天尚未就绪，请稍后重试。'};
       },
       revoke:async provider=>{
+        await storeRuntime.cancelPluginInstallation(provider);
         await storeRuntime.setChatEnabled(provider,false);
         if(provider==='codex')await setCodexEnabled(false);
         else if(provider==='zcode'){await zcodeLink.setEnabled(false);await storeRuntime.zcodeDesktopIntegration.revoke();}

@@ -1,0 +1,116 @@
+{
+  "diagnostic": "native ad-hoc App Sandbox synthetic program write plus unsandboxed synthetic-host execution; not Electron MAS or App Review",
+  "withoutExecutable": {
+    "executableEntitlement": false,
+    "authorization": {
+      "bookmarkSaved": true,
+      "inheritedHelper": {
+        "exitCode": 0,
+        "result": {
+          "chmod700": true,
+          "dataWritten": true,
+          "mode": 448
+        }
+      },
+      "modelRequests": 0,
+      "parentScript": {
+        "chmod700": true,
+        "dataWritten": true,
+        "mode": 448
+      },
+      "phase": "authorize",
+      "providerDataRead": false,
+      "scopeActivated": true
+    },
+    "nonSandboxHostExecutions": {
+      "parent": {
+        "mode": 448,
+        "quarantine": "0082;6ae5ccbe;probe;",
+        "executed": true,
+        "outputMatched": true,
+        "errorCode": null
+      },
+      "helper": {
+        "mode": 448,
+        "quarantine": "0082;6ae5ccbe;probe;",
+        "executed": true,
+        "outputMatched": true,
+        "errorCode": null
+      }
+    },
+    "revoke": {
+      "bookmarkRemoved": true,
+      "modelRequests": 0,
+      "parentScript": {
+        "chmod700": false,
+        "dataWritten": false,
+        "writeErrorCode": 513
+      },
+      "phase": "revoke",
+      "providerDataRead": false
+    }
+  },
+  "withExecutable": {
+    "executableEntitlement": true,
+    "authorization": {
+      "bookmarkSaved": true,
+      "inheritedHelper": {
+        "exitCode": 0,
+        "result": {
+          "chmod700": true,
+          "dataWritten": true,
+          "mode": 448
+        }
+      },
+      "modelRequests": 0,
+      "parentScript": {
+        "chmod700": true,
+        "dataWritten": true,
+        "mode": 448
+      },
+      "phase": "authorize",
+      "providerDataRead": false,
+      "scopeActivated": true
+    },
+    "nonSandboxHostExecutions": {
+      "parent": {
+        "mode": 448,
+        "quarantine": "absent",
+        "executed": true,
+        "outputMatched": true,
+        "errorCode": null
+      },
+      "helper": {
+        "mode": 448,
+        "quarantine": "absent",
+        "executed": true,
+        "outputMatched": true,
+        "errorCode": null
+      }
+    },
+    "revoke": {
+      "bookmarkRemoved": true,
+      "modelRequests": 0,
+      "parentScript": {
+        "chmod700": false,
+        "dataWritten": false,
+        "writeErrorCode": 513
+      },
+      "phase": "revoke",
+      "providerDataRead": false
+    }
+  },
+  "productionEntitlementsChanged": false,
+  "realToolsTouched": false,
+  "providerCredentialsRead": false,
+  "modelRequests": 0,
+  "scratchRetainedForEvidence": true,
+  "date": "2026-10-31",
+  "sources": {
+    "PluginExecutableWriteProbe.swift": "bddafbc576d7a9b9f9252252a57d27a9b31c57a97cb892d53f89e21082d21cff",
+    "run-plugin-executable-write-probe.js": "e49985fb58abe437e209fe75815076cd94cd3b6e97b0b0e26b008afb547cf581"
+  },
+  "officialReference": "https://developer.apple.com/documentation/security/accessing-files-from-the-macos-app-sandbox",
+  "writeAPI": "Foundation Data.write atomic then POSIX chmod 0700",
+  "officialDocumentationRequiresExecutableEntitlementForProgramWrites": true
+}

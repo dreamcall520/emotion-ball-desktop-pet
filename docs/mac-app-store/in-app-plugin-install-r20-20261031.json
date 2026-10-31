@@ -1,0 +1,66 @@
+{
+  "candidate": "R20",
+  "runtime": "darwin-arm64",
+  "appSandbox": false,
+  "tests": {
+    "passed": 3104,
+    "failed": 0
+  },
+  "sourceFilesVerified": 493,
+  "helperDigestsVerified": true,
+  "nativeHostBindingLoaded": true,
+  "nativeHostReadOnlyProbe": {
+    "zcode": {
+      "known": true,
+      "installed": true,
+      "running": true
+    },
+    "workbuddy": {
+      "known": true,
+      "installed": true,
+      "running": true
+    }
+  },
+  "asarSha256": "ceaf45158cb69fb9397386f8a81c19a51ac59cb3f0b5d9e8a38c55796f038ec0",
+  "actualProviderPluginWrites": {
+    "zcode": true,
+    "workbuddy": true
+  },
+  "actualProviderPluginMigrationVerified": {
+    "zcode": true,
+    "workbuddy": true
+  },
+  "actualProviderAppsTerminated": false,
+  "actualProviderAppsLaunched": false,
+  "newModelMessagesSent": 0,
+  "automaticInstallAllowedInCandidate": true,
+  "automaticInstallAllowedInNonDiagnosticMas": false,
+  "masAutoInstallReviewStatus": "pending-executable-entitlement-and-review-boundary",
+  "mainEntitlementsExpanded": false,
+  "actualElectronMasVerified": false,
+  "formalAppReplaced": false,
+  "pushed": false,
+  "merged": false,
+  "submitted": false,
+  "userConfirmedBothProviderInstallWritePurpose": true,
+  "zcodeActualInstallResult": {
+    "uiMessage": "球球任务插件已安装启用，请在原工具新建任务；收到事件后确认联动。",
+    "readOnlyInspectorStatus": "installed-configured",
+    "enabled": true,
+    "installedConfigured": true,
+    "eventVerifiedByThisNewInstall": false,
+    "userQuitObserved": true,
+    "originalAppAutoRelaunched": false,
+    "note": "First waiting attempt timed out; after user quit, explicit retry reused installation permission and installed without another authorization."
+  },
+  "workbuddyActualInstallResult": {
+    "uiMessage": "球球任务插件已安装启用，请在原工具新建任务；收到事件后确认联动。",
+    "readOnlyInspectorStatus": "installed-configured",
+    "enabled": true,
+    "installedConfigured": true,
+    "eventVerifiedByThisNewInstall": false,
+    "userQuitObserved": true,
+    "originalAppAutoRelaunched": false,
+    "note": "First wait timed out; retry after user quit reused approved installation permission. No model message or new event validation."
+  }
+}

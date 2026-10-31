@@ -36,10 +36,21 @@ if (process.versions.electron && process.argv.includes('--store-renderer-child')
         window.fixtureChange = null;
         window.fixtureFocus = null;
         window.fixtureSendResolve = null;
+        window.fixtureInstallResolve = null;
         window.storeConnections = {
           async command(action, payload) {
             fixtureCalls.push({ action, payload });
             if (action === 'status') return { ok: true, state: structuredClone(fixtureState) };
+            if (action === 'install-provider-plugin') {
+              fixtureState.pluginInstallations = { ...fixtureState.pluginInstallations, [payload.provider]: {status:'installing'} };
+              return new Promise(resolve => { fixtureInstallResolve = resolve; });
+            }
+            if (action === 'cancel-provider-plugin') {
+              fixtureState.pluginInstallations = { ...fixtureState.pluginInstallations, [payload.provider]: {status:'idle',phase:'cancelled',enabled:false,message:'已取消等待原工具退出，其他连接保持'} };
+              const finish=fixtureInstallResolve;fixtureInstallResolve=null;
+              finish?.({ok:false,state:structuredClone(fixtureState),message:'已取消本次插件安装'});
+              return {ok:true,state:structuredClone(fixtureState),message:'已取消本次插件安装'};
+            }
             if (action === 'send-workbuddy-cli') {
               fixtureState.workbuddyCli.busy = true;
               return new Promise(resolve => { fixtureSendResolve = resolve; });
@@ -186,11 +197,11 @@ if (process.versions.electron && process.argv.includes('--store-renderer-child')
       assert.equal(await run(`document.querySelector('button[data-action="enable-provider"][data-provider="codex"]').textContent`), '正在连接…');
       const beforeFocus = await calls('enable-provider');
       await run(`fixtureFocus('zcode')`);
-      assert.equal(await run('document.activeElement.dataset.provider'), 'zcode');
+      assert.equal(await run('document.activeElement.id'), 'connection-guide');assert.match(await run('document.getElementById("guide-title").textContent'), /ZCode/);
       await run(`fixtureFocus('workbuddy')`);
-      assert.equal(await run('document.activeElement.dataset.provider'), 'workbuddy');
+      assert.equal(await run('document.activeElement.id'), 'connection-guide');assert.match(await run('document.getElementById("guide-title").textContent'), /WorkBuddy/);
       await run(`fixtureFocus('../codex')`);
-      assert.equal(await run('document.activeElement.dataset.provider'), 'workbuddy');
+      assert.equal(await run('document.activeElement.id'), 'connection-guide');assert.match(await run('document.getElementById("guide-title").textContent'), /WorkBuddy/);
       assert.equal(await calls('enable-provider'), beforeFocus, 'focus never triggers authorization');
       for(const [live,expected] of [
         [{state:'active',phase:'starting'},'本次回复正在开始'],
@@ -253,6 +264,75 @@ if (process.versions.electron && process.argv.includes('--store-renderer-child')
       await run(`document.querySelector('[data-action="guide-run"][data-step="quota"]').click()`);await settle();
       assert.equal(await calls('workbuddy-login'),beforeWebsiteLogin,'temporary quota error refreshes the existing session');
       assert.equal(await calls('refresh-workbuddy'),1);
+      // Automatic installer is invoked only by the explicit task step; rendering
+      // and focusing the provider never install software or send a model message.
+      const beforePluginInstall=await calls('install-provider-plugin');
+      const beforeAutoModel=await calls('send-workbuddy-cli');
+      for(const provider of ['workbuddy','zcode']){
+        await set({workbuddy:{...base.workbuddy,status:'connected',summary:{credits:{remaining:321},updatedAt:1234}},onboarding:{[provider]:{status:'ready',chat:{status:'ready'},data:{status:'ready'}}},pluginInstallations:{[provider]:{status:'idle'}},[provider+'DesktopEvents']:{enabled:false,observations:[]}});
+        const beforeOpen=await calls('install-provider-plugin');
+        await run(`fixtureFocus(${JSON.stringify(provider)})`);await settle();
+        assert.match(await run('document.getElementById("guide-title").textContent'),new RegExp(provider==='zcode'?'ZCode':'WorkBuddy'));
+        assert.equal(await calls('install-provider-plugin'),beforeOpen,'focus opens the guide without auto-installing');
+        assert.match(await run(`document.querySelector('#guide-steps [data-step="tasks"] p').textContent`),/写入许可.*插件.*设置/);
+        assert.equal(await run(`document.querySelector('#guide-steps [data-step="tasks"] button').textContent`),'安装并启用');
+        await run(`document.querySelector('#guide-steps [data-step="tasks"] button').click()`);await settle();
+        assert.deepEqual(await run(`fixtureCalls.filter(call=>call.action==='install-provider-plugin').at(-1)`),{action:'install-provider-plugin',payload:{provider}});
+        await notify();
+        assert.equal(await run(`document.querySelector('#guide-steps [data-step="tasks"] button').disabled`),true,'pending install cannot be duplicated');
+        assert.equal(await run(`document.getElementById('${provider}-capability-chat').dataset.status`),'ready','install progress does not disable a ready chat connection');
+        await run(`fixtureState.pluginInstallations[${JSON.stringify(provider)}]={status:'installed',enabled:true,installedVersion:'1.0.0'};fixtureState[${JSON.stringify(provider+'DesktopEvents')}]={enabled:true,observations:[]};fixtureInstallResolve({ok:true,state:structuredClone(fixtureState),message:'插件已安装启用'});void 0;`);await settle();await settle();
+        assert.equal(await run(`document.querySelector('#guide-steps [data-step="tasks"]').dataset.status`),'ready');
+        assert.equal(await run(`document.querySelector('#guide-steps [data-step="tasks"] button')===null`),true,'installed step has no repeat-install action');
+        assert.equal(await run(`document.querySelector('#guide-steps [data-step="task-verification"]').dataset.status`),'unknown','installation alone is not genuine event verification');
+        assert.equal(await run(`document.querySelector('#guide-steps [data-step="task-verification"] button')===null`),true,'event verification never sends a test model request');
+        assert.equal(await run(`document.getElementById('${provider}-capability-tasks').dataset.status`),'unknown');
+        assert.match(await run('document.getElementById("guide-result").textContent'),/安装启用.*正常使用.*无需重复安装/);
+        await notify();assert.equal(await calls('install-provider-plugin'),beforeOpen+1,'installed state refresh never reinstalls');
+        for(const status of ['blocked','error']){
+          await set({pluginInstallations:{[provider]:{status,message:'当前版本或现有插件冲突，请保留已有连接'}}});
+          assert.match(await run(`document.querySelector('#guide-steps [data-step="tasks"] p').textContent`),/当前版本.*冲突/);
+          assert.equal(await run(`document.getElementById('${provider}-capability-chat').dataset.status`),'ready');
+        }
+        await set({[provider+'DesktopEvents']:{enabled:true,pluginInstallationVerified:true,observations:[]},pluginInstallations:{[provider]:{status:'idle'}}});
+        assert.equal(await run(`document.querySelector('#guide-steps [data-step="tasks"] button')===null`),true,'previous genuine event proof skips installation after restart');
+        assert.equal(await run(`document.querySelector('#guide-steps [data-step="task-verification"]').dataset.status`),'ready');
+      }
+      assert.equal(await calls('install-provider-plugin'),beforePluginInstall+2);
+      assert.equal(await calls('send-workbuddy-cli'),beforeAutoModel,'plugin rendering/install never submits model messages');
+      // While the backend waits for the user to quit a running host, cancellation
+      // remains usable although the install promise and every ordinary action are locked.
+      for(const provider of ['zcode','workbuddy']){
+        await set({workbuddy:{...base.workbuddy,status:'connected',summary:{credits:{remaining:321},updatedAt:1234}},onboarding:{[provider]:{status:'ready',chat:{status:'ready'},data:{status:'ready'}}},pluginInstallations:{[provider]:{status:'idle'}},[provider+'DesktopEvents']:{enabled:false,observations:[]}});
+        await run(`fixtureFocus(${JSON.stringify(provider)})`);await settle();
+        const beforeInstall=await calls('install-provider-plugin'),beforeCancel=await calls('cancel-provider-plugin'),beforeMessage=await calls('send-workbuddy-cli');
+        await run(`document.querySelector('#guide-steps [data-step="tasks"] button').click()`);await settle();
+        await set({pluginInstallations:{[provider]:{status:'installing',phase:'waiting-host',enabled:false,message:'请完成当前任务并退出原工具；球球会自动继续安装'}}});
+        assert.equal(await run('document.getElementById("guide-cancel-install").hidden'),false,'waiting-host exposes cancellation');
+        assert.equal(await run('document.getElementById("guide-cancel-install").disabled'),false,'cancellation stays enabled while install is pending');
+        for(const id of ['guide-next','guide-skip','guide-chat'])assert.equal(await run(`document.getElementById('${id}').disabled`),true,'ordinary guide action '+id+' stays locked');
+        assert.equal(await run(`document.querySelector('#guide-steps [data-step="tasks"] button').disabled`),true,'cannot submit another installation while waiting');
+        assert.equal(await run(`document.querySelector('button[data-action="open-provider-chat"][data-provider="${provider}"]').disabled`),true,'ordinary chat navigation remains locked while command is pending');
+        assert.equal(await run(`document.getElementById('${provider}-capability-chat').dataset.status`),'ready','pending installation does not revoke chat readiness');
+        await click('cancel-provider-plugin');await settle();await settle();
+        assert.deepEqual(await run(`fixtureCalls.filter(call=>call.action==='cancel-provider-plugin').at(-1)`),{action:'cancel-provider-plugin',payload:{provider}});
+        assert.equal(await calls('cancel-provider-plugin'),beforeCancel+1,'one cancel click is sent exactly once');
+        assert.equal(await calls('install-provider-plugin'),beforeInstall+1,'cancel does not submit a second install');
+        assert.equal(await calls('send-workbuddy-cli'),beforeMessage,'cancel does not submit any model message');
+        assert.equal(await run(`document.getElementById('${provider}-capability-chat').dataset.status`),'ready','cancel preserves existing chat authorization');
+        assert.equal(await run(`fixtureState.pluginInstallations[${JSON.stringify(provider)}].phase`),'cancelled');
+        assert.equal(await run('document.getElementById("guide-cancel-install").hidden'),true);
+        assert.equal(await run('document.getElementById("guide-cancel-install").disabled'),true);
+        await click('cancel-provider-plugin');assert.equal(await calls('cancel-provider-plugin'),beforeCancel+1,'completed cancellation cannot repeat');
+      }
+      await click('guide-close');
+      await set({onboarding:{zcode:{status:'ready',chat:{status:'ready'},data:{status:'ready'}}},pluginInstallations:{zcode:{status:'idle'}},zcodeDesktopEvents:{enabled:true,pluginInstallationVerified:true,observations:[]}});
+      await run(`document.querySelector('[data-provider-card="zcode"] > details.tool-advanced').open=true;document.querySelector('button[data-action="install-provider-plugin"][data-provider="zcode"]').click()`);await settle();
+      assert.equal(await run('document.getElementById("connection-guide").hidden'),false,'advanced update must reveal guide before its asynchronous operation');
+      await set({pluginInstallations:{zcode:{status:'installing',phase:'waiting-host',message:'请退出ZCode，自动继续'}}});
+      assert.equal(await run('document.getElementById("guide-cancel-install").hidden'),false,'advanced update must expose the same cancellation path');
+      assert.match(await run(`document.querySelector('#guide-steps [data-step="tasks"] p').textContent`),/退出ZCode/);
+      await click('cancel-provider-plugin');await settle();await settle();
       assert.equal(window.isVisible(), false);
       console.log('PASS real Chromium unified cards, guided authorization, source isolation and stale-task boundaries; synthetic state/commands only');
       window.destroy(); app.exit(0);

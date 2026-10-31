@@ -16,7 +16,7 @@ function copyFile(root, staging, relativePath) {
   fs.copyFileSync(source, destination);
 }
 
-function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/staging'), { weatherNative = true } = {}) {
+function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/staging'), { weatherNative = true, pluginNative = false } = {}) {
   const rootPackage = JSON.parse(
     fs.readFileSync(path.join(root, 'package.json'), 'utf8')
   );
@@ -35,6 +35,7 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     ...weatherIconFiles,
     ...['LICENSE', 'SOURCE.json', 'README.md'].map(file => `${weatherIconRoot}/${file}`),
     ...(weatherNative ? ['desktop-pet/native/weather-location.node'] : []),
+    ...(pluginNative ? ['desktop-pet/native/plugin-host.node'] : []),
     'desktop-pet/main.js',
     ...['weather.html','weather.css','weather-preload.js','weather-renderer.js','lib/weather-service.js','lib/weather-window.js','lib/weather-pet-effects.js','lib/weather-context.js','lib/weather-location.js'].map(file => `desktop-pet/${file}`),
     'desktop-pet/scripts/verify-workbuddy-integration.js',
@@ -184,6 +185,8 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/lib/mas-provider-runtime.js',
     'desktop-pet/lib/mas-enable-flow.js',
     'desktop-pet/lib/provider-connection-guide.js',
+    'desktop-pet/lib/managed-plugin-installer.js',
+    'desktop-pet/lib/plugin-host.js',
     'desktop-pet/lib/zcode-desktop-integration.js',
     'desktop-pet/lib/zcode-desktop-event-bridge.js',
     'desktop-pet/lib/mas-bundled-codex.js',
@@ -449,8 +452,9 @@ function signWeatherApp(appPath) {
 
 async function packageMac(root = path.resolve(__dirname, '../..'), { website = false, nativeIcon = false, softOrb = false, masCandidate = false, candidateBundleId = null } = {}) {
   buildWeatherLocation(root);
+  if(masCandidate)require('./build-plugin-host').buildPluginHost(root);
   const icon = makeIcon(root);
-  const staging = prepareStaging(root, website ? path.join(root, 'desktop-pet/build/website-staging') : undefined);
+  const staging = prepareStaging(root, website ? path.join(root, 'desktop-pet/build/website-staging') : undefined,{pluginNative:masCandidate});
   const electronZipDir = findElectronZipDir();
   const options = buildPackagerOptions(root, icon, electronZipDir);
   if(candidateBundleId!==null){if(!/^local\.xiaokun\.emotionball\.pet\.chuge\.v[0-9]+$/.test(candidateBundleId))throw new TypeError('Invalid isolated candidate bundle identity');options.appBundleId=candidateBundleId;}

@@ -46,7 +46,31 @@
     if(q.state==='unsupported')return part('unavailable','当前来源未提供可读取额度',q.updatedAt);
     return part(q.state==='connecting'?'working':'unknown',q.state==='connecting'?'正在查询额度':'额度暂未读取成功',q.updatedAt);
   }
+  function pluginState(state,provider){
+    const events=state[provider+'DesktopEvents']||{},installation=state.pluginInstallations?.[provider]||{};
+    const eventVerified=events.enabled===true&&(events.pluginInstallationVerified===true||rows(events.observations).length>0);
+    const installed=events.enabled===true&&installation.status==='installed'&&installation.enabled===true;
+    return{events,installation,eventVerified,installed};
+  }
+  function pluginSteps(state,provider){
+    const {events,installation,eventVerified,installed}=pluginState(state,provider);
+    if(state.pluginInstallationPolicy?.allowed===false&&!eventVerified)return[{id:'tasks',title:'原工具任务插件',status:'blocked',description:state.pluginInstallationPolicy.message||'自动安装尚未完成商店验证。请使用原工具官方安装入口。'}];
+    const working=['checking','installing'].includes(installation.status);
+    const status=working?'working':['blocked','error'].includes(installation.status)?installation.status:eventVerified||installed?'ready':'needs-authorization';
+    const supplied=typeof installation.message==='string'?installation.message.slice(0,500):'';
+    const description=working?(supplied||(installation.status==='checking'?'正在检查已有插件，不重复安装':'正在安装并启用球球任务插件，请稍候')):['blocked','error'].includes(installation.status)?supplied||'安装尚未完成，已可用聊天保持':eventVerified?'已确认插件安装及事件接入；正常重启无需重复安装':installed?'插件已安装启用，下一次在原工具正常使用时自动确认事件，无需反复安装':working?(installation.status==='checking'?'正在检查已有插件，不重复安装':'正在安装并启用球球任务插件，请稍候'):supplied||'球球将申请对应工具目录的写入许可，仅写入球球插件和必要插件设置；确认后自动安装，无需在原软件找入口';
+    return[{id:'tasks',title:'安装并启用任务插件',status,description,...(status==='ready'?{}:{action:'install-provider-plugin',payload:{provider},actionLabel:working?'正在处理…':installation.status==='installed'&&!events.enabled?'恢复任务同步':'安装并启用'})},
+      {id:'task-verification',title:'确认原工具事件接入',status:eventVerified?'ready':'unknown',description:eventVerified?'已收到原工具真实事件；当前任务阶段以工具卡的新事件为准':installed?'安装已完成。下一次在原工具正常使用时，球球会自动确认连接；现在无需额外测试或重复安装':'安装完成后，等待原工具正常使用产生事件；不会自动发送模型消息'}];
+  }
   function taskPart(state,provider){
+    if(['zcode','workbuddy'].includes(provider)){
+      const {events,installation,eventVerified,installed}=pluginState(state,provider);
+      if(!eventVerified&&!rows(events.observations).length){
+        if(['checking','installing'].includes(installation.status))return part('working',installation.phase==='waiting-host'&&typeof installation.message==='string'?installation.message:installation.status==='checking'?'正在检查任务插件':'正在安装任务插件');
+        if(installed)return part('unknown','任务插件已安装启用，等待原工具正常使用产生新事件');
+        if(['blocked','error'].includes(installation.status))return part('unknown',typeof installation.message==='string'?installation.message.slice(0,500):'任务插件尚未安装完成，可继续处理；聊天不受影响');
+      }
+    }
     if(provider==='workbuddy'){
       const events=state.workbuddyDesktopEvents||{},observations=rows(events.observations),latest=observations.at(-1);
       const own=state.workbuddyCli?.liveTask;
@@ -87,16 +111,12 @@
     const data={id:'data',title:provider==='zcode'&&state.zcode?.accountSource==='configured-custom'?'允许读取模型、额度和任务':'允许读取工具信息',status:dataStatus,description:dataStatus==='ready'?'已记住目录授权，无需重新选择':'系统将打开对应工具目录，请点“打开”；取消后可继续完成',action:'enable-provider-data',payload:{provider},actionLabel:'允许读取'};
     const steps=provider==='zcode'&&state.zcode?.accountSource==='configured-custom'&&dataStatus!=='ready'?[data,chat]:[chat,data];
     if(provider==='workbuddy'){
-      const events=state.workbuddyDesktopEvents||{},received=rows(events.observations).length>0,installed=received||events.pluginInstallationVerified===true;
       steps.push({id:'quota',title:'连接官网积分',status:card.quota.status,description:card.quota.text,action:state.workbuddy?.summary&&state.workbuddy?.status!=='needs-login'?'refresh-workbuddy':'workbuddy-login',actionLabel:state.workbuddy?.summary&&state.workbuddy?.status!=='needs-login'?'刷新积分':'登录查看积分'});
-      steps.push({id:'tasks',title:'开启原工具任务同步',status:events.enabled&&installed?'ready':events.enabled?'unknown':'needs-authorization',description:events.enabled&&installed?'已确认插件安装；当前任务状态以新事件为准，主回复结束与后台任务整体结束分别显示':events.enabled?'接收已准备，请在原工具安装或更新球球插件连接；未收到事件前不确认同步成功':'确认后准备本机元数据插件，仅同步事件，不传聊天正文',action:events.enabled?'show-workbuddy-plugin':'prepare-workbuddy-desktop-events',actionLabel:events.enabled?'查看插件安装文件':'准备任务同步'});
+
     }else{
       steps.push({id:'capabilities',title:'检查额度和任务',status:card.quota.status==='ready'&&card.tasks.status==='ready'?'ready':card.quota.status==='unavailable'?'unavailable':'unknown',description:card.quota.text+'；'+card.tasks.text,...(directory==='stored'&&card.quota.status!=='unavailable'?{action:'enable-provider-data',payload:{provider},actionLabel:'重新检查'}:{})});
     }
-    if(provider==='zcode'){
-      const events=state.zcodeDesktopEvents||{},installed=rows(events.observations).length>0||events.pluginInstallationVerified===true;
-      steps.push({id:'tasks',title:'开启原工具任务同步',status:events.enabled&&installed?'ready':events.enabled?'unknown':'needs-authorization',description:events.enabled&&installed?'已确认插件安装，等待新事件；ZCode停止事件不能证明最终完成':events.enabled?'接收已准备，请在ZCode确认安装或更新球球插件连接；尚未收到事件':'仅同步会话与任务阶段，不传正文；停止不作为最终完成',action:events.enabled?'show-zcode-plugin':'prepare-zcode-desktop-events',actionLabel:events.enabled?'查看插件安装文件':'准备任务同步'});
-    }
+    if(['zcode','workbuddy'].includes(provider))steps.push(...pluginSteps(state,provider));
     const complete=steps.every(s=>s.status==='ready');
     // Do not keep relaunching a permission already granted or loop on a vendor
     // capability limitation. Retry remains available on the individual step.

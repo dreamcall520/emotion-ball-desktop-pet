@@ -1,0 +1,48 @@
+{
+  "diagnostic": "native ad-hoc sandbox plus inherited helper; only fixed self-created synthetic App lifecycle; not Electron MAS acceptance",
+  "baseline": {
+    "inheritedHelper": {
+      "exitCode": 0,
+      "result": {
+        "launchCallbackObserved": true,
+        "matchedOnlyFixedFixtureBundle": true,
+        "normalTerminateAccepted": true,
+        "normalTerminateObserved": true,
+        "relaunchedObserved": true,
+        "runningBeforeCount": 1
+      }
+    },
+    "parentObservedCount": 1
+  },
+  "sandbox": {
+    "inheritedHelper": {
+      "exitCode": 0,
+      "result": {
+        "matchedOnlyFixedFixtureBundle": true,
+        "normalTerminateAccepted": false,
+        "normalTerminateObserved": false,
+        "runningBeforeCount": 1
+      }
+    },
+    "parentObservedCount": 1
+  },
+  "sandboxLaunchOnly": {
+    "inheritedHelper": {
+      "exitCode": 0,
+      "result": {
+        "launchCallbackObserved": true,
+        "relaunchedObserved": true
+      }
+    },
+    "parentObservedCount": 0
+  },
+  "realToolsTouched": false,
+  "automationEntitlement": false,
+  "accessibilityPermission": false,
+  "scratchRetainedForEvidence": true,
+  "date": "2026-10-31",
+  "sources": {
+    "PluginInstallerAppLifecycleProbe.swift": "6a9863bfc77bd8408c3df5551855b1ddf1bc841d2a8a3d0ba741fad5e03fe607",
+    "run-plugin-app-lifecycle-probe.js": "f1e09cac832288f5152bbb742e862e16c78e13b3a8df406d62857a4c8609624d"
+  }
+}

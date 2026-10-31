@@ -12,11 +12,12 @@
   function openGuide(provider){if(!providers.includes(provider))return;guideProvider=provider;skippedSteps.set(provider,new Set());el('connection-guide').hidden=false;paintGuide();el('connection-guide').scrollIntoView({block:'start',behavior:'smooth'});el('connection-guide').focus({preventScroll:true});}
   function paintGuide(){
     if(!guideProvider||!lastState)return;const guide=currentGuide(),skipped=skippedSteps.get(guideProvider)||new Set(),next=nextGuideStep(guide);
+    const installing=['checking','installing'].includes(lastState.pluginInstallations?.[guideProvider]?.status);el('guide-cancel-install').hidden=!installing;el('guide-cancel-install').disabled=!installing;el('guide-cancel-install').dataset.provider=guideProvider;
     el('guide-title').textContent=guide.title;el('guide-zcode-source').hidden=guideProvider!=='zcode';
-    const labels={ready:'已完成',working:'处理中','needs-authorization':'需要确认',unavailable:'尚未完成',unknown:'待核实',cancelled:'已取消',error:'需要处理'};
+    const labels={ready:'已完成',working:'处理中','needs-authorization':'需要确认',unavailable:'尚未完成',unknown:'待核实',cancelled:'已取消',error:'需要处理',blocked:'需要处理'};
     el('guide-steps').replaceChildren(...guide.steps.map(step=>{const li=document.createElement('li');li.dataset.step=step.id;li.dataset.status=step.status;const heading=document.createElement('div'),title=document.createElement('strong'),badge=document.createElement('span'),description=document.createElement('p');title.textContent=step.title;badge.className='step-badge';badge.textContent=skipped.has(step.id)&&step.status!=='ready'?'稍后完成':labels[step.status]||'待完成';heading.append(title,badge);description.textContent=step.description||'';li.append(heading,description);if(step.action){const action=document.createElement('button');action.className='secondary';action.dataset.action='guide-run';action.dataset.step=step.id;action.textContent=step.actionLabel||(step.status==='ready'?'查看或刷新':'完成这一步');action.disabled=busy||step.status==='working';li.append(action);}return li;}));
     el('guide-next').textContent=next?'继续：'+next.title:'返回工具卡';el('guide-next').disabled=busy||next?.status==='working';el('guide-skip').hidden=!next;el('guide-skip').disabled=busy;el('guide-chat').hidden=guideModel.buildToolCard(lastState,guideProvider).chat.status!=='ready';el('guide-chat').disabled=busy;
-    el('guide-result').textContent=guide.complete?'连接已完成，可以返回工具卡使用。':!next?'已保留当前连接。未完成的能力可稍后继续。':guide.partial?'已有能力可以使用，继续完成剩余连接。':'按顺序完成必要确认。不会自动发送聊天消息。';
+    el('guide-result').textContent=guide.complete?'连接已完成，可以返回工具卡使用。':!next&&guide.steps.some(step=>step.id==='task-verification'&&step.status!=='ready')&&guide.steps.some(step=>step.id==='tasks'&&step.status==='ready')?'插件已安装启用，等待原工具正常使用产生事件，无需重复安装。':!next?'已保留当前连接。未完成的能力可稍后继续。':guide.partial?'已有能力可以使用，继续完成剩余连接。':'按顺序完成必要确认。不会自动发送聊天消息。';
   }
   function paintCards(state){
     for(const provider of providers){const card=guideModel.buildToolCard(state,provider);el(provider+'-status').textContent=card.statusLabel;for(const capability of ['quota','tasks','chat']){const node=el(provider+'-capability-'+capability);node.textContent=card[capability].text;node.dataset.status=card[capability].status;}
@@ -28,7 +29,7 @@
     }paintGuide();
   }
   function availability(){
-    if(busy){const cancel=document.querySelector('button[data-action="cancel-workbuddy-cli"]');if(cancel)cancel.disabled=!lastState?.workbuddyCli?.busy;return;}
+    if(busy){const cancel=document.querySelector('button[data-action="cancel-workbuddy-cli"]');if(cancel)cancel.disabled=!lastState?.workbuddyCli?.busy;const pluginCancel=el('guide-cancel-install');if(pluginCancel)pluginCancel.disabled=!['checking','installing'].includes(lastState?.pluginInstallations?.[guideProvider]?.status);return;}
     const o=lastState?.workbuddyOfficial||{};
     const c=lastState?.workbuddyCli||{};
     const enabled={
@@ -128,8 +129,9 @@
   }
   async function refresh() { try { const r = await api.command('status'); if (r.ok) paint(r.state); } catch (_) {} }
   document.addEventListener('click', async event => {
-    const button = event.target.closest('button[data-action]'); if (!button || busy && button.dataset.action!=='cancel-workbuddy-cli') return;
+    const button = event.target.closest('button[data-action]'); if (!button || busy && !['cancel-workbuddy-cli','cancel-provider-plugin'].includes(button.dataset.action)) return;
     let action=button.dataset.action,guideStep=null;
+    if(action==='install-provider-plugin'&&providers.includes(button.dataset.provider))openGuide(button.dataset.provider);
     if(action==='enable-provider'){openGuide(button.dataset.provider);return;}
     if(action==='guide-close'){el('connection-guide').hidden=true;guideProvider=null;return;}
     if(action==='guide-skip'){const next=nextGuideStep(currentGuide());if(next){const skipped=skippedSteps.get(guideProvider)||new Set();skipped.add(next.id);skippedSteps.set(guideProvider,skipped);}paintGuide();return;}
@@ -146,6 +148,7 @@
     const button=document.querySelector('button[data-action="enable-provider"][data-provider="'+provider+'"]');
     button?.closest('section')?.scrollIntoView({block:'start'});
     button?.focus({preventScroll:true});
+    openGuide(provider);
   });
   el('zcode-account-source').addEventListener('change',()=>{zcodeSourceDraft=el('zcode-account-source').value;skippedSteps.delete('zcode');paintGuide();});
   el('workbuddy-desktop-partition').addEventListener('change',availability); el('workbuddy-cli-text').addEventListener('input',availability); el('workbuddy-assistant-text').addEventListener('input',availability); api.onChange(refresh); refresh();

@@ -1,0 +1,27 @@
+{
+  "candidate": "R21",
+  "tests": {
+    "passed": 3104,
+    "failed": 0,
+    "concurrency": 4
+  },
+  "priorDefaultConcurrencyRun": {
+    "failed": 1,
+    "reason": "Quota group paint is not ready",
+    "targetedRerunPassed": true
+  },
+  "sourceFilesVerified": 466,
+  "sourceVerificationExcludesSignedNativeBinaries": true,
+  "helperDigestsVerified": true,
+  "strictSignatureVerifiedByPackager": true,
+  "asarSha256": "2a3b1475e7616bb4c5c9295ff1b654d509c28e6ef237e4666ab7c852e614a7b5",
+  "nativeHostPresent": true,
+  "waitTimeoutMs": 900000,
+  "actualInstallReceipt": "in-app-plugin-install-actual-20261031.json",
+  "actualElectronMasVerified": false,
+  "automaticInstallAllowedInNonDiagnosticMas": false,
+  "finalPackageNativeUiReopened": false,
+  "formalAppReplaced": false,
+  "pushed": false,
+  "submitted": false
+}

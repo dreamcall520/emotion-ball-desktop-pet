@@ -107,7 +107,8 @@ async function buildMasDevelopment({root=ROOT,env=process.env,arch}={},deps={}){
  run('xcodebuild',['-version']);
  const mac=deps.mac||require('./package-mac'),makeIcon=deps.makeIcon||require('./make-icon').makeIcon;
  (deps.buildWeatherLocation||require('./build-weather-location').buildWeatherLocation)(root);
- const icon=makeIcon(root),staging=mac.prepareStaging(root,path.join(root,'desktop-pet/build/mas-development-staging',config.arch));
+ (deps.buildPluginHost||require('./build-plugin-host').buildPluginHost)(root);
+ const icon=makeIcon(root),staging=mac.prepareStaging(root,path.join(root,'desktop-pet/build/mas-development-staging',config.arch),{pluginNative:true});
  const staged=JSON.parse(io.readFileSync(path.join(staging,'package.json'),'utf8'));Object.assign(staged,{version:config.version,qiuqiuAcceptance:'mas',qiuqiuDistribution:'mas-development',main:'mas-development-entry.js'});
  io.writeFileSync(path.join(staging,'package.json'),JSON.stringify(staged,null,2)+'\n');io.writeFileSync(path.join(staging,'mas-development-entry.js'),probeEntry(config.bundleId));
  const options=packagerOptions(root,config,staging,icon,mac.buildPackagerOptions(root,icon));

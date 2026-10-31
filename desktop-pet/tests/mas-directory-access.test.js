@@ -238,3 +238,5 @@ test('选错工具或上级目录先拒绝，不访问、不保存且保留旧�
     assert.deepEqual(calls, [], 'wrong selection cannot open a security scope or save');
   }
 });
+
+test('安装用途独立明确写入范围，不复用只读文案',async()=>{const f=harness({extra:{purpose:'plugin-installation'},dialog:{showOpenDialog:async()=>({canceled:true})}});await f.access.authorize('workbuddy');const options=f.calls.find(c=>Array.isArray(c)&&c[0]==='dialog');assert.equal(options,undefined);const seen=[];const second=harness({extra:{purpose:'plugin-installation'},dialog:{showOpenDialog:async options=>{seen.push(options);return{canceled:true};}}});await second.access.authorize('zcode');assert.equal(seen[0].buttonLabel,'允许安装插件');assert.match(seen[0].message,/安装.*插件.*启用设置/);assert.match(seen[0].title,/安装 ZCode/);assert.equal(second.calls.includes('save'),false);});

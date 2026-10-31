@@ -35,7 +35,7 @@ function validGrant(grant) {
 // Watchers must close their native observer before releasing that lease. withAccess()
 // is for bounded operations and always releases in finally. revoke forgets the local
 // grant; it does not terminate existing leases or change another App's permissions.
-function createMasDirectoryAccess({ app, dialog, storage, validateDirectory = async directory => {
+function createMasDirectoryAccess({ app, dialog, storage, purpose='read-data', validateDirectory = async directory => {
   if (!(await fs.stat(directory)).isDirectory()) throw new Error('Not a directory');
 } } = {}) {
   if (!app || typeof app.startAccessingSecurityScopedResource !== 'function' ||
@@ -43,6 +43,7 @@ function createMasDirectoryAccess({ app, dialog, storage, validateDirectory = as
       !['load', 'save', 'remove'].every(name => typeof storage[name] === 'function')) {
     throw new TypeError('app, dialog and atomic storage load/save/remove are required');
   }
+  if(!['read-data','plugin-installation'].includes(purpose))throw new TypeError('Invalid directory authorization purpose');
   const pending = new Map();
   function mutation(provider, operation, recoverPreviousFailure = true) {
     const previous = pending.get(provider) || Promise.resolve();
@@ -79,8 +80,8 @@ function createMasDirectoryAccess({ app, dialog, storage, validateDirectory = as
     checkProvider(provider);
     return mutation(provider, async () => {
       const selection = await dialog.showOpenDialog({
-        title: TITLES[provider], buttonLabel: '允许连接',
-        defaultPath: path.join(app.getPath('home'), '.' + provider), message: MESSAGES[provider],
+        title: purpose==='plugin-installation'?'允许球球安装 '+(provider==='zcode'?'ZCode':'WorkBuddy')+' 任务插件':TITLES[provider], buttonLabel: purpose==='plugin-installation'?'允许安装插件':'允许连接',
+        defaultPath: path.join(app.getPath('home'), '.' + provider), message: purpose==='plugin-installation'?'球球只安装自己的任务同步插件，并更新相应插件记录与启用设置。其他设置原样保留，不读取聊天记录或独立登录凭据文件，不发送模型消息。':MESSAGES[provider],
         properties: ['openDirectory', 'showHiddenFiles'], securityScopedBookmarks: true
       });
       if (selection?.canceled) return { status: 'cancelled' };

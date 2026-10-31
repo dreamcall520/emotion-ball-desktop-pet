@@ -1,0 +1,109 @@
+{
+  "diagnostic": "native ad-hoc App Sandbox synthetic selected write scope; not Electron MAS acceptance",
+  "baseline": {
+    "readback": true,
+    "written": true
+  },
+  "inspect": {
+    "before": {
+      "errorCode": 513,
+      "written": false
+    },
+    "inheritedHelperWrite": {
+      "exitCode": 0,
+      "launched": true,
+      "result": {
+        "errorCode": 513,
+        "written": false
+      }
+    },
+    "modelRequests": 0,
+    "parentWrite": {
+      "errorCode": 513,
+      "written": false
+    },
+    "phase": "inspect",
+    "providerDataRead": false
+  },
+  "authorize": {
+    "before": {
+      "errorCode": 513,
+      "written": false
+    },
+    "bookmarkSaved": true,
+    "inheritedHelperWrite": {
+      "exitCode": 0,
+      "launched": true,
+      "result": {
+        "readback": true,
+        "written": true
+      }
+    },
+    "modelRequests": 0,
+    "parentWrite": {
+      "readback": true,
+      "written": true
+    },
+    "phase": "authorize",
+    "providerDataRead": false,
+    "scopeActivated": true
+  },
+  "resume": {
+    "before": {
+      "errorCode": 513,
+      "written": false
+    },
+    "bookmarkStale": false,
+    "inheritedHelperWrite": {
+      "exitCode": 0,
+      "launched": true,
+      "result": {
+        "readback": true,
+        "written": true
+      }
+    },
+    "modelRequests": 0,
+    "parentWrite": {
+      "readback": true,
+      "written": true
+    },
+    "phase": "resume",
+    "providerDataRead": false,
+    "scopeActivated": true
+  },
+  "revoke": {
+    "before": {
+      "errorCode": 513,
+      "written": false
+    },
+    "bookmarkRemoved": true,
+    "inheritedHelperWrite": {
+      "exitCode": 0,
+      "launched": true,
+      "result": {
+        "errorCode": 513,
+        "written": false
+      }
+    },
+    "modelRequests": 0,
+    "parentWrite": {
+      "errorCode": 513,
+      "written": false
+    },
+    "phase": "revoke",
+    "providerDataRead": false
+  },
+  "sourceBeforeAnyProviderAccess": true,
+  "providerCredentialsRead": false,
+  "modelRequests": 0,
+  "parentWriteLifecycleObserved": true,
+  "inheritedHelperWriteLifecycleObserved": true,
+  "scratchRetainedForEvidence": true,
+  "date": "2026-10-31",
+  "sourceCommit": "c6ec31b5c245f6eede5048c8e9b09a62e19a200a",
+  "sources": {
+    "PluginInstallWriteProbe.swift": "2f011ed62a7002ff68ed84a7c2d9dac1b924391c141a810d47951543f4f849bf",
+    "run-plugin-write-probe.js": "b7cc91d9ba00863ea81c3726fa5096171f430b16e7126a00073c9e431138b704"
+  },
+  "electronBookmarkSource": "https://github.com/electron/electron/blob/v43.4.1/shell/browser/ui/file_dialog_mac.mm#L252-L300"
+}
