@@ -88,6 +88,7 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/ui-theme-blue.css',
     'desktop-pet/ui-theme-purple.css',
     'desktop-pet/color-mode.js',
+    'desktop-pet/theme-preload.js',
     'desktop-pet/lib/color-mode.js',
     'desktop-pet/preload.js',
     'desktop-pet/index.html',

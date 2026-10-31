@@ -8,15 +8,16 @@
     root.dataset.accessibleAppearance = resolved;
   };
   const apply = (value, preference, theme) => {
-    root.dataset.uiTheme = ['blue', 'purple'].includes(theme) ? theme : 'green';
+    root.dataset.uiTheme = ['green', 'blue', 'purple'].includes(theme) ? theme : 'blue';
     const blueStyle = document.getElementById?.('blue-style');
     if (blueStyle) blueStyle.disabled = root.dataset.uiTheme !== 'blue';
     root.dataset.colorMode = value === 'accessible' ? 'accessible' : 'standard';
     appearance = ['light', 'dark'].includes(preference) ? preference : 'system';
     refreshAppearance();
   };
-  apply('standard');
-  const api = [window.qiuqiuSettings, window.qiuqiuWeather, window.petDesktop, window.petQuotaLabel, window.qiuqiuChat, window.qiuqiuAbout, window.qiuqiuConsent, window.qiuqiuApiUsage, window.qiuqiuApiUsageLabel,
+  const initial = window.qiuqiuColorMode?.initial;
+  apply(initial?.mode, initial?.appearance, initial?.theme);
+  const api = [window.qiuqiuColorMode, window.qiuqiuSettings, window.qiuqiuWeather, window.petDesktop, window.petQuotaLabel, window.qiuqiuChat, window.qiuqiuAbout, window.qiuqiuConsent, window.qiuqiuApiUsage, window.qiuqiuApiUsageLabel,
     window.petBubble, window.edgeNotice, window.petThought, window.qiuNotes, window.qiuPomodoro, window.petCustomizer, window.petCodexDetails].find(candidate => candidate?.onColorMode);
   if (!api) return;
   const unsubscribe = api.onColorMode(apply);

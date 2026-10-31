@@ -4877,3 +4877,21 @@ test('weather continuous collapse keeps ownership through group reset but explic
  const load=f.windowClass.prototype.loadFile;f.windowClass.prototype.loadFile=function(file){const result=load.call(this,file);return file.endsWith('/shortcuts.html')?Promise.resolve():result;};
  f.call('openShortcuts()');await flush();assert.equal(resets,1);
 });
+
+test('shortcut close refreshes collection cards once, preserving single/all-fixed and failed-probe fallbacks', async t => {
+  t.mock.timers.enable({apis:['setTimeout']});
+  for(const mode of ['collection','single','all-fixed','probe-failure']) {
+    const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,bubblesEnabled:false,quotaCardPinned:mode==='all-fixed'?['codex','api']:['codex']});
+    const load=f.windowClass.prototype.loadFile;
+    f.windowClass.prototype.loadFile=function(file){return file.endsWith('/shortcuts.html')?Promise.resolve():load.call(this,file)};
+    if(mode!=='single')f.call('settings.openaiApiAlwaysVisible=true;syncApiUsageLabel()');
+    f.call('openShortcuts()');await flush();
+    f.call('globalThis.shortcutRestoreSyncs=0;globalThis.originalRestoreSync=syncQuotaLabel;syncQuotaLabel=(...args)=>{shortcutRestoreSyncs++;return originalRestoreSync(...args)}');
+    if(mode==='probe-failure')f.call('globalThis.originalGroupProbe=syncQuotaCardGroup;globalThis.failGroupProbe=true;syncQuotaCardGroup=()=>{if(failGroupProbe){failGroupProbe=false;throw Error("synthetic group probe failure")}return originalGroupProbe()}');
+    f.call('shortcutWindow.close()');t.mock.timers.tick(180);await flush();
+    assert.equal(f.call('shortcutRestoreSyncs'),mode==='probe-failure'?2:1,mode+' refresh count');
+    assert.equal(f.quotaLabel.visible,true,mode+' restores Codex');
+    if(mode!=='single')assert.equal(f.call("quotaCardGroup.getState().visible.includes('api')"),mode==='all-fixed',mode+' preserves collection rules');
+    f.app.emit('before-quit');
+  }
+});

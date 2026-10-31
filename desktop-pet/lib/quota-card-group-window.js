@@ -28,10 +28,45 @@ function quotaCardBarBounds(pet,area,presentation={}) {
   return candidates.find(b=>![visual,bubble,...cards].some(o=>overlaps(b,o)))||preferred;
 }
 function createQuotaCardGroupWindow({BrowserWindow,screen,getPetWindow,getPresentation,onActivate,onDismiss,ipcMain,getAlwaysOnTop=()=>true,onLayout=()=>{}}) {
-  let win=null,shown=false,currentState=null,lastBounds=null;
+  let win=null,shown=false,currentState=null,lastBounds=null,topmost=null,ignoring=null;
+  let layoutBatchDepth=0,pendingNative=false;
   const live=()=>win&&!win.isDestroyed();
+  function applyNativeLayout(loaded=false){
+    if(!live()||!shown||!lastBounds)return;
+    const actual=win.getBounds();
+    if(['x','y','width','height'].some(key=>actual?.[key]!==lastBounds[key]))win.setBounds(lastBounds,false);
+    // Native move callbacks may synchronously hide or replace this presentation.
+    if(live()&&shown&&(loaded||!win.webContents.isLoading?.())&&!win.isVisible())win.showInactive();
+  }
   ipcMain.on('pet:quota-card-group-action',(event,action)=>{if(!live()||event.sender!==win.webContents||!win.isVisible())return;if(action==='dismiss')onDismiss();else if(['activate','keyboard','pointer'].includes(action))onActivate(action!=='pointer');});
-  function ensure(){if(live())return;win=new BrowserWindow({width:48,height:20,show:false,frame:false,transparent:true,resizable:false,skipTaskbar:true,alwaysOnTop:getAlwaysOnTop(),hasShadow:false,webPreferences:{preload:path.join(__dirname,'../quota-card-group-preload.js'),contextIsolation:true,sandbox:true,nodeIntegration:false}});win.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true});win.loadFile(path.join(__dirname,'../quota-card-group.html'));win.on('closed',()=>{win=null;});win.webContents.on('did-finish-load',()=>{if(shown){win.webContents.send('pet:quota-card-group-state',currentState);win.showInactive();onLayout();}});}
-  return {show(state){currentState={expanded:state.expanded,count:state.eligible.length,transitioning:state.transitioning===true};shown=true;ensure();win.setAlwaysOnTop(getAlwaysOnTop(),'floating');win.setIgnoreMouseEvents?.(state.expanded===true||state.transitioning===true,{forward:true});const pet=getPetWindow();if(!pet||pet.isDestroyed())return;if((!state.expanded&&!state.keepBounds)||!lastBounds)lastBounds=quotaCardBarBounds(pet.getBounds(),screen.getDisplayMatching(pet.getBounds()).workArea,getPresentation());win.setBounds(lastBounds,false);win.webContents.send('pet:quota-card-group-state',currentState);if(!win.webContents.isLoading?.())win.showInactive();},hide(){shown=false;if(live())win.hide();},getBounds(){return shown&&live()&&win.isVisible()?win.getBounds():null;},getWindow(){return live()?win:null;},destroy(){shown=false;if(live())win.destroy();win=null;}};
+  function ensure(){if(live())return;topmost=null;ignoring=null;win=new BrowserWindow({width:48,height:20,show:false,frame:false,transparent:true,resizable:false,skipTaskbar:true,alwaysOnTop:getAlwaysOnTop(),hasShadow:false,webPreferences:{preload:path.join(__dirname,'../quota-card-group-preload.js'),contextIsolation:true,sandbox:true,nodeIntegration:false}});win.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true});win.loadFile(path.join(__dirname,'../quota-card-group.html'));win.on('closed',()=>{win=null;pendingNative=false;});win.webContents.on('did-finish-load',()=>{if(shown){win.webContents.send('pet:quota-card-group-state',currentState);if(!layoutBatchDepth){applyNativeLayout(true);onLayout();}}});}
+  return {
+    show(state){
+      currentState={expanded:state.expanded,count:state.eligible.length,transitioning:state.transitioning===true};shown=true;ensure();
+      const top=getAlwaysOnTop(),ignore=state.expanded===true||state.transitioning===true;
+      if(top!==topmost){win.setAlwaysOnTop(top,'floating');topmost=top;}
+      if(ignore!==ignoring){win.setIgnoreMouseEvents?.(ignore,{forward:true});ignoring=ignore;}
+      const pet=getPetWindow();if(!pet||pet.isDestroyed())return;
+      if((!state.expanded&&!state.keepBounds)||!lastBounds)lastBounds=quotaCardBarBounds(pet.getBounds(),screen.getDisplayMatching(pet.getBounds()).workArea,getPresentation());
+      win.webContents.send('pet:quota-card-group-state',currentState);
+      if(layoutBatchDepth&&!state.expanded){pendingNative=true;return;}
+      pendingNative=false;applyNativeLayout();
+    },
+    // Shortcut restoration synchronously settles several cards. Plan against
+    // the requested anchor, then commit only the final collapsed bar position.
+    batchCollapsedLayout(callback){
+      layoutBatchDepth++;let failed=false;
+      try{return callback();}
+      catch(error){failed=true;throw error;}
+      finally{
+        layoutBatchDepth--;
+        if(!layoutBatchDepth){const apply=pendingNative;pendingNative=false;if(apply&&shown&&!failed)applyNativeLayout();}
+      }
+    },
+    hide(){shown=false;pendingNative=false;if(live()&&win.isVisible())win.hide();},
+    getBounds(){return shown&&live()?(layoutBatchDepth&&pendingNative?{...lastBounds}:win.isVisible()?win.getBounds():null):null;},
+    getWindow(){return live()?win:null;},
+    destroy(){shown=false;pendingNative=false;if(live())win.destroy();win=null;}
+  };
 }
 module.exports={quotaCardBarBounds,createQuotaCardGroupWindow};

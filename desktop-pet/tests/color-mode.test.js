@@ -60,7 +60,7 @@ test('全局配色覆盖已打开、延迟创建和重载窗口，关闭窗口�
   assert.equal(first.webContents.listenerCount('did-finish-load'), 0);
   assert.deepEqual(late.sent.at(-1), ['pet:color-mode', 'accessible', 'dark', 'green']);
   theme = {}; mode = 'invalid'; appearance = 'invalid'; manager.sync();
-  assert.deepEqual(late.sent.at(-1), ['pet:color-mode', 'standard', 'system', 'green']);
+  assert.deepEqual(late.sent.at(-1), ['pet:color-mode', 'standard', 'system', 'blue']);
   assert.equal(first.sent.length, count);
 });
 
@@ -126,7 +126,7 @@ for (const apiName of ['petBubble', 'qiuNotes', 'petCustomizer', 'petCodexDetail
       addEventListener: (name, callback) => { assert.equal(name, 'beforeunload'); unload = callback; } };
     const document = { documentElement: root, getElementById: id => { assert.equal(id, 'blue-style'); return blueStyle; } };
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../color-mode.js'), 'utf8'), { window, document });
-    assert.equal(root.dataset.uiTheme, 'green'); assert.equal(blueStyle.disabled, true);
+    assert.equal(root.dataset.uiTheme, 'blue'); assert.equal(blueStyle.disabled, false);
     update('accessible', 'dark', 'blue');
     assert.equal(root.dataset.colorMode, 'accessible'); assert.equal(root.dataset.appearance, 'dark');
     assert.equal(root.dataset.uiTheme, 'blue'); assert.equal(blueStyle.disabled, false);
@@ -140,8 +140,8 @@ for (const apiName of ['petBubble', 'qiuNotes', 'petCustomizer', 'petCodexDetail
     update('standard', 'dark', 'purple');
     assert.equal(root.dataset.uiTheme, 'purple'); assert.equal(blueStyle.disabled, true, '紫色不启用蓝色专用样式');
     update('standard', 'light', 'invalid');
-    assert.equal(root.dataset.uiTheme, 'green'); assert.equal(blueStyle.disabled, true);
-    update('accessible', 'dark'); assert.equal(root.dataset.uiTheme, 'green', '旧两参数事件默认薄荷绿');
+    assert.equal(root.dataset.uiTheme, 'blue'); assert.equal(blueStyle.disabled, false);
+    update('accessible', 'dark'); assert.equal(root.dataset.uiTheme, 'blue', '旧两参数事件默认晴空蓝');
     assert.equal(root.dataset.owner, 'existing-user-data');
     unload(); assert.equal(closed, 1);
   });
@@ -154,9 +154,9 @@ test('配色同时携带浅深外观，新窗口与即时切换读取同一已�
   const sent=[];win.webContents=Object.assign(new EventEmitter(),{send:(...args)=>sent.push(args)});
   const manager=createColorModeManager({getMode:()=> 'accessible',getAppearance:()=>appearance});
   manager.track(win);win.webContents.emit('did-finish-load');
-  assert.deepEqual(sent.at(-1),['pet:color-mode','accessible','light','green']);
-  appearance='dark';manager.sync();assert.deepEqual(sent.at(-1),['pet:color-mode','accessible','dark','green']);
-  appearance={};manager.sync();assert.deepEqual(sent.at(-1),['pet:color-mode','accessible','system','green']);
+  assert.deepEqual(sent.at(-1),['pet:color-mode','accessible','light','blue']);
+  appearance='dark';manager.sync();assert.deepEqual(sent.at(-1),['pet:color-mode','accessible','dark','blue']);
+  appearance={};manager.sync();assert.deepEqual(sent.at(-1),['pet:color-mode','accessible','system','blue']);
 });
 
 test('色弱友好浅深色及系统变化立即生效，销毁时取消系统外观监听', () => {
@@ -175,3 +175,48 @@ test('色弱友好浅深色及系统变化立即生效，销毁时取消系统�
   assert.equal(root.dataset.appearance,'light');assert.equal(root.dataset.uiTheme,'blue');assert.equal(root.dataset.colorMode,'standard');
   unload();assert.equal(removes,1);
 });
+
+
+test('session bootstrap registers before load once per partition and sync snapshot rejects other frames', () => {
+  const { createColorModeManager } = require('../lib/color-mode');
+  const ipcMain = new EventEmitter(), registrations = [];
+  const session = { registerPreloadScript: value => registrations.push(value) };
+  let theme = 'purple';
+  const manager = createColorModeManager({ ipcMain, getMode: () => 'accessible', getAppearance: () => 'dark', getTheme: () => theme });
+  const make = ses => { const win = new EventEmitter(); win.isDestroyed = () => false;
+    win.webContents = Object.assign(new EventEmitter(), { session: ses, mainFrame: { url: 'file:///app/settings.html' }, send() {} });
+    manager.track(win); return win; };
+  const win = make(session); make(session);
+  assert.equal(registrations.length, 1); assert.equal(registrations[0].type, 'frame');
+  assert.equal(path.basename(registrations[0].filePath), 'theme-preload.js');
+  const ask = (sender = win.webContents, senderFrame = win.webContents.mainFrame) => {
+    let returned, replies = 0; const event = { sender, senderFrame, set returnValue(value) { replies++; returned = value; } }; ipcMain.emit('pet:initial-color-mode', event); assert.equal(replies, 1, 'sync IPC replies exactly once'); return returned; };
+  assert.deepEqual(ask(), { mode: 'accessible', appearance: 'dark', theme: 'purple' });
+  theme = 'green'; assert.equal(ask().theme, 'green');
+  assert.equal(ask({}, win.webContents.mainFrame), null);
+  assert.equal(ask(win.webContents, { url: 'file:///app/settings.html' }), null);
+  win.webContents.mainFrame.url = 'https://example.com'; assert.equal(ask(), null);
+  make({ registerPreloadScript: value => registrations.push(value) }); assert.equal(registrations.length, 2);
+});
+
+for (const theme of ['blue', 'green', 'purple']) for (const appearance of ['light', 'dark']) {
+  test(`shared bootstrap establishes ${theme}/${appearance} before page preload and catches parser-created blue style`, () => {
+    const root = { dataset: {} }, style = { disabled: true }, ipc = new EventEmitter();
+    let api, mutation, loaded, hasRoot = false, hasStyle = false, disconnected = false;
+    ipc.sendSync = channel => { assert.equal(channel, 'pet:initial-color-mode'); return { theme, appearance, mode: 'accessible' }; };
+    const document = { get documentElement() { return hasRoot ? root : null; }, getElementById: () => hasStyle ? style : null,
+      addEventListener: (name, callback) => { assert.equal(name, 'DOMContentLoaded'); loaded = callback; } };
+    vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../theme-preload.js'), 'utf8'), {
+      require: () => ({ ipcRenderer: ipc, contextBridge: { exposeInMainWorld(name, value) { assert.equal(name, 'qiuqiuColorMode'); api = value; } } }),
+      process: { isMainFrame: true }, location: { protocol: 'file:' }, document,
+      MutationObserver: class { constructor(callback) { mutation = callback; } observe() {} disconnect() { disconnected = true; } }
+    });
+    hasRoot = true; mutation(); assert.equal(root.dataset.uiTheme, theme); assert.equal(root.dataset.appearance, appearance);
+    hasStyle = true; mutation(); assert.equal(style.disabled, theme !== 'blue');
+    loaded(); assert.equal(disconnected, true);
+    const seen = []; api.onColorMode((...value) => seen.push(value));
+    assert.deepEqual(seen[0], ['accessible', appearance, theme]);
+    ipc.emit('pet:color-mode', {}, 'standard', 'light', 'blue');
+    assert.equal(root.dataset.uiTheme, 'blue'); assert.equal(style.disabled, false); assert.equal(seen.length, 2);
+  });
+}

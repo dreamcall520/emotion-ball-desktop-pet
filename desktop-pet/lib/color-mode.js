@@ -1,12 +1,22 @@
-function createColorModeManager({ getMode, getAppearance = () => 'system', getTheme = () => 'green' }) {
-  const windows = new Set();
+const path = require('node:path');
+function createColorModeManager({ getMode, getAppearance = () => 'system', getTheme = () => 'blue', ipcMain }) {
+  const windows = new Set(), sessions = new WeakSet();
+  const snapshot = () => ({ mode: getMode() === 'accessible' ? 'accessible' : 'standard',
+    appearance: ['light', 'dark'].includes(getAppearance()) ? getAppearance() : 'system',
+    theme: ['green', 'blue', 'purple'].includes(getTheme()) ? getTheme() : 'blue' });
+  ipcMain?.on('pet:initial-color-mode', event => {
+    let value = null;
+    for (const win of windows) {
+      if (!win.isDestroyed() && event.sender === win.webContents && event.senderFrame === win.webContents.mainFrame &&
+          event.senderFrame?.url?.startsWith('file:')) { value = snapshot(); break; }
+    }
+    event.returnValue = value;
+  });
   const send = win => {
     if (win.isDestroyed()) return;
     try {
-      const appearance = getAppearance();
-      const theme = getTheme();
-      win.webContents.send('pet:color-mode', getMode() === 'accessible' ? 'accessible' : 'standard',
-        ['light', 'dark'].includes(appearance) ? appearance : 'system', ['blue', 'purple'].includes(theme) ? theme : 'green');
+      const { mode, appearance, theme } = snapshot();
+      win.webContents.send('pet:color-mode', mode, appearance, theme);
     } catch (_) {
       // A satellite window can close between the liveness check and send.
     }
@@ -14,6 +24,11 @@ function createColorModeManager({ getMode, getAppearance = () => 'system', getTh
   return {
     track(win) {
       if (windows.has(win) || win.isDestroyed()) return;
+      const session = win.webContents.session;
+      if (session && !sessions.has(session)) {
+        session.registerPreloadScript({ type: 'frame', filePath: path.join(__dirname, '../theme-preload.js') });
+        sessions.add(session);
+      }
       windows.add(win);
       const contents = win.webContents;
       const loaded = () => send(win);
