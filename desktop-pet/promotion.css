@@ -115,3 +115,5 @@ dialog.skin-promo-contact{width:min(440px,calc(100vw - 44px));padding:22px 25px}
 #skin-promo-contact-open{font-weight:600}
 #skin-promotion{border-radius:20px}
 #skin-promotion .skin-promo-controls select:focus:not(:focus-visible){outline:none;box-shadow:none}
+
+#skin-promotion #skin-promo-action[data-pointer-focus=true]:focus-visible{outline:none;box-shadow:none}

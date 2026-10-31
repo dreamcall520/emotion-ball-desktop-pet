@@ -26,6 +26,10 @@
   $('skin-promo-close').addEventListener('click',()=>detail.close());
   detail.addEventListener('close',()=>{player.stop();ghosts();if(returnFocus?.isConnected)returnFocus.focus();});
   document.querySelectorAll('[data-promotion-case]').forEach(b=>b.addEventListener('click',()=>choose(b.dataset.promotionCase)));
+  const promotionActionSelect = $('skin-promo-action');
+  promotionActionSelect.addEventListener('pointerdown', () => { promotionActionSelect.dataset.pointerFocus = 'true'; });
+  promotionActionSelect.addEventListener('keydown', () => { delete promotionActionSelect.dataset.pointerFocus; });
+  promotionActionSelect.addEventListener('blur', () => { delete promotionActionSelect.dataset.pointerFocus; });
   $('skin-promo-action').addEventListener('change',event=>{ghosts();action=event.target.value;render();});
   $('skin-promo-toggle').addEventListener('click',()=>{paused=!paused;player.setPaused(paused);$('skin-promo-toggle').textContent=paused?'播放动画':'暂停动画';$('skin-promo-toggle').setAttribute('aria-pressed',String(paused));});
   $('skin-promo-contact-open').addEventListener('click',()=>{$('skin-promo-contact-status').textContent='';contact.showModal();});
