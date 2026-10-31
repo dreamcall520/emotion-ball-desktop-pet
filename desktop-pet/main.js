@@ -935,12 +935,12 @@ function openCustomization(options = {}) {
     syncCustomizationVisibility();
   });
   if (promotion) win.webContents.once('did-finish-load', () => {
-    if (customizationPromotion !== promotion || typeof win.webContents.executeJavaScript !== 'function') return;
+    if (customizationPromotion !== promotion || promotion.ready || typeof win.webContents.executeJavaScript !== 'function') return;
     void win.webContents.executeJavaScript("Boolean(document.getElementById('skin-promotion')?.open)").then(open => {
-      if (customizationPromotion !== promotion || win.isDestroyed()) return;
+      if (customizationPromotion !== promotion || promotion.ready || win.isDestroyed()) return;
       if (open) { promotion.ready = true; showCustomizationPromotion(win); }
       else { cancelCustomizationPromotion(); win.destroy(); writeError('宣传详情', new Error('宣传详情未能打开')); }
-    }).catch(error => { if (customizationPromotion === promotion) { cancelCustomizationPromotion(); if (!win.isDestroyed()) win.destroy(); writeError('宣传详情', error); } });
+    }).catch(error => { if (customizationPromotion === promotion && !promotion.ready) { cancelCustomizationPromotion(); if (!win.isDestroyed()) win.destroy(); writeError('宣传详情', error); } });
   });
   win.webContents.on('render-process-gone', () => { if (customizationPromotion?.owner === win) { cancelCustomizationPromotion(); if (!win.isDestroyed()) win.destroy(); } });
   void win.loadFile(path.join(__dirname, 'customize.html'), promotion ? { query: { promotion: '1', request: promotion.token } } : undefined).catch(error => {

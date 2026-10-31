@@ -3308,6 +3308,21 @@ test('宣传菜单相邻且首次显示等待同窗口当前请求详情就绪�
  const latest=f.call('customizationPromotion.token');f.powerMonitor.emit('lock-screen');f.call("ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},'canceled')");assert.equal(f.call('customizationPromotion'),null,'screen lock cancels pending presentation');
 });
 
+test('宣传已就绪后快速关闭不会被迟到首载检查误判，真正未打开仍会收口',async t=>{
+ for(const phase of ['before-check','false-after-ack','reject-after-ack','genuine-failure']){
+  const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization({promotion:true})');const win=f.call('customizationWindow');win.webContents.mainFrame={};win.emit('ready-to-show');let checks=0,resolveCheck,rejectCheck;
+  win.webContents.executeJavaScript=()=>{checks++;return new Promise((resolve,reject)=>{resolveCheck=resolve;rejectCheck=reject;});};
+  const ack=()=>f.call("ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},customizationPromotion.token)");
+  if(phase==='before-check')ack();
+  win.webContents.emit('did-finish-load');
+  if(phase==='before-check'){assert.equal(checks,0,'a successful renderer ACK completes the first-load fallback');assert.equal(win.isDestroyed(),false);continue;}
+  assert.equal(checks,1);if(phase!=='genuine-failure')ack();
+  if(phase==='reject-after-ack')rejectCheck(Error('dialog was already closed'));else resolveCheck(false);
+  await flush();assert.equal(win.isDestroyed(),phase==='genuine-failure',phase);
+  if(phase!=='genuine-failure')assert.equal(f.call('customizationWindow'),win,'keep the form and its unsaved state after intentional modal close');
+ }
+});
+
 test('普通装扮首次加载被宣传请求接管时native ready不提前露表单，ACK只认当前请求',async t=>{
  const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization()');const win=f.call('customizationWindow');win.webContents.mainFrame={};win.webContents.isLoading=()=>true;
  f.call('openCustomization({promotion:true})');const old=f.call('customizationPromotion.token');f.call('openCustomization({promotion:true})');win.emit('ready-to-show');assert.equal(win.isVisible(),false);
