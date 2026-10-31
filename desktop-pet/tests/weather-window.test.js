@@ -122,15 +122,17 @@ test('malformed expanded resize height falls back to finite dimensions without w
   assert.equal(f.invoke('resize', { expanded: true, height: 10000 }).height, 720);
 });
 
-test('switching expanded weather content keeps top-left fixed instead of flipping around the pet', t => {
-  const f = fixture(t, { area: { x: 0, y: 0, width: 1000, height: 800 }, petBounds: { x: 460, y: 200, width: 80, height: 80 } });
-  f.invoke('resize', { expanded: true, height: 400 });
-  const initial = f.controller.getWindow().getBounds();
-  for (const height of [680, 450, 620, 400]) {
-    f.invoke('resize', { expanded: true, height }); f.controller.reposition();
-    const next = f.controller.getWindow().getBounds();
-    assert.equal(next.x, initial.x); assert.equal(next.y, initial.y);
-    assert(next.y + next.height <= 800);
+test('changing weather content keeps a nearby legal side and repeated layout does not move it', t => {
+  const petBounds = { x: 460, y: 200, width: 80, height: 80 };
+  const f = fixture(t, { area: { x: 0, y: 0, width: 1000, height: 800 }, petBounds });
+  for (const height of [400, 680, 450, 620, 400]) {
+    f.invoke('resize', { expanded: true, height });
+    const next = f.controller.getWindow().getBounds(); f.controller.reposition();
+    assert.deepEqual(f.controller.getWindow().getBounds(), next);
+    assert(next.y >= 0 && next.y + next.height <= 800);
+    const dx = Math.max(petBounds.x - next.x - next.width, next.x - petBounds.x - petBounds.width, 0);
+    const dy = Math.max(petBounds.y - next.y - next.height, next.y - petBounds.y - petBounds.height, 0);
+    assert.equal(Math.hypot(dx, dy), 8, 'current content stays eight pixels from the pet rather than reserving 720px');
   }
 });
 
@@ -227,7 +229,9 @@ test('weather details and city search retain full requested height at all four c
    assert.equal(anchor.height,620,JSON.stringify({x,y,anchor}));
    for(const height of [210,450,680,720,620]){
      f.invoke('resize',{expanded:true,height});const b=f.controller.getWindow().getBounds();
-     assert.equal(b.height,height);assert.equal(b.x,anchor.x);assert.equal(b.y,anchor.y);
+     assert.equal(b.height,height);
+     const pet={x,y,width:80,height:80},dx=Math.max(pet.x-b.x-b.width,b.x-pet.x-pet.width,0),dy=Math.max(pet.y-b.y-b.height,b.y-pet.y-pet.height,0);
+     assert.equal(Math.hypot(dx,dy),8,'visible panel stays next to the pet without covering it');
      assert.ok(b.x>=area.x&&b.x+b.width<=area.x+area.width&&b.y>=area.y&&b.y+b.height<=area.y+area.height);
    }
    f.invoke('resize',{expanded:false});assert.deepEqual(f.controller.getWindow().getBounds(),compact);
@@ -242,3 +246,30 @@ test('weather details and city search retain full requested height at all four c
  f.controller.reposition();const b=f.controller.getWindow().getBounds();
  assert.equal(b.height,620);assert.ok(b.x>=area.x&&b.y>=area.y&&b.x+b.width<=0&&b.y+b.height<=800);
  });
+
+test('clicked weather remains visible after the old collection hides, and explicit collapse returns to collected state', t => {
+ const f=fixture(t);f.groupHidden(true);
+ f.invoke('resize',{expanded:true,height:400});
+ assert.equal(f.controller.isExpanded(),true);assert.equal(f.controller.getWindow().isVisible(),true);
+ f.controller.reposition();assert.equal(f.controller.getWindow().isVisible(),true);
+ f.invoke('resize',{expanded:false});assert.equal(f.controller.isExpanded(),false);assert.equal(f.controller.getWindow().isVisible(),false);
+});
+
+test('expanded weather ignores old quota-stack slots and stays eight pixels above a low pet', t => {
+ const petBounds={x:700,y:800,width:80,height:80},area={x:0,y:25,width:1512,height:1100};
+ const stackAnchor={x:680,y:360,width:196,height:280},f=fixture(t,{area,petBounds,stackAnchor});
+ f.invoke('resize',{expanded:true,height:400});const win=f.controller.getWindow(),bounds=win.getBounds();
+ assert.equal(bounds.y+bounds.height,petBounds.y-8,'uses current panel height rather than a 720px empty envelope');
+ Object.assign(stackAnchor,{x:100,y:100,width:224,height:144});f.controller.reposition();
+ assert.deepEqual(win.getBounds(),bounds,'hidden quota-card movement cannot become a weather anchor');
+ f.invoke('resize',{expanded:true,height:210});assert.equal(win.getBounds().y+210,petBounds.y-8);
+});
+
+test('near-top weather chooses below or beside the pet instead of clamping a tall panel over it', t => {
+ const area={x:-524,y:-1692,width:3008,height:1692};
+ for(const petBounds of [{x:1400,y:-1692,width:80,height:80},{x:2200,y:-1692,width:180,height:180},{x:-524,y:-1680,width:80,height:80}]){
+  const f=fixture(t,{area,petBounds});f.invoke('resize',{expanded:true,height:620});const b=f.controller.getWindow().getBounds();
+  const dx=Math.max(petBounds.x-b.x-b.width,b.x-petBounds.x-petBounds.width,0),dy=Math.max(petBounds.y-b.y-b.height,b.y-petBounds.y-petBounds.height,0);
+  assert.equal(Math.hypot(dx,dy),8);assert.ok(b.x>=area.x&&b.y>=area.y&&b.x+b.width<=area.x+area.width&&b.y+b.height<=area.y+area.height);
+ }
+});

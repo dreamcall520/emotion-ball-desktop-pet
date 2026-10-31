@@ -4800,3 +4800,19 @@ test('local deletion rechecks confirmation session and references, and blocks sa
  pending=f.invoke('pet:local-pets-delete',id,editor.webContents);f.call("settings.startupAppearance={shape:'codex-pet',codexPetId:deleteId};dialog.finishDelete({response:1})");assert.match((await pending).error,/启动默认/);assert.equal(f.call('localPetStore.calls'),0);f.call("settings.startupAppearance={shape:'blob'}");
  pending=f.invoke('pet:local-pets-delete',id,editor.webContents);f.call('dialog.finishDelete({response:1})');await flush();assert.equal(f.call('localPetStore.calls'),1);assert.equal(f.call("saveCustomization({appearance:{shape:'codex-pet',codexPetId:deleteId}})"),false);assert.equal(f.call("changeAppearancePreset('add',{name:'Race',appearance:{shape:'codex-pet',codexPetId:deleteId}}).ok"),false);f.call('localPetStore.finish()');assert.equal((await pending).ok,true);assert.equal(f.call('localPetImportBusy'),false);assert.equal(f.call('localPetDeletingId'),null);
 });
+
+test('weather click expansion is not canceled when the old quota collection hover times out', async t => {
+ const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,quotaCardPinned:['codex'],nativeWorkBuddyLabel:true});t.after(()=>f.app.emit('before-quit'));
+ f.call('settings.workbuddyEnabled=true;settings.workbuddyQuotaAlwaysVisible=true');f.weather.setEnabled(true);
+ f.call('quotaCardGroup.activate({keyboard:false});quotaCardGroupTransition.finish()');
+ assert.equal(f.call('quotaCardGroup.getState().expanded'),true);
+ f.weather.expanded=true;f.weather.options.onLayout();
+ // Expanding weather hides the old cards/bar, so their hover region is gone.
+ // The group may legitimately finish collecting them; it must not undo weather.
+ f.advanceTo(600);await flush();
+ if(f.groupTransition.active)f.call('quotaCardGroupTransition.finish()');
+ assert.equal(f.call('quotaCardGroup.getState().expanded'),false);
+ assert.equal(f.weather.expanded,true,'a stale quota-group collapse cannot reset the separately clicked weather panel');
+ const load=f.windowClass.prototype.loadFile;f.windowClass.prototype.loadFile=function(file){const result=load.call(this,file);return file.endsWith('/shortcuts.html')?Promise.resolve():result;};
+ f.call('openShortcuts()');await flush();assert.equal(f.weather.expanded,false,'explicitly opening shortcuts still dismisses weather');
+});

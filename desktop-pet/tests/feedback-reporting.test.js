@@ -29,13 +29,13 @@ test('disabled by default: no directory, disk write, timer or network and no cap
   await f.service.flush();
   assert.equal(fs.existsSync(f.directory), false);
   assert.equal(f.calls.length, 0); assert.equal(f.timers.size, 0);
-  assert.deepEqual(f.service.getState(), { enabled: false, pending: 0, lastSentAt: null, lastError: '' });
+  assert.deepEqual(f.service.getState(), { enabled: false, pending: 0, lastSentAt: null, lastError: '', history: [], historyWarning: '' });
 });
 
 test('manual feedback works without automatic consent and takes authoritative environment only when requested', async t => {
   const f = fixture(t);
   const value = payload({ version: 'forged', os: 'secret-machine-name', source: 'website', log: 'secret-log' });
-  assert.deepEqual(await f.service.submit(value), { id: value.submissionId });
+  assert.equal((await f.service.submit(value)).id, value.submissionId);
   assert.equal(f.calls[0].body.version, ''); assert.equal(f.calls[0].body.os, '');
   assert.equal(f.calls[0].body.source, 'app');
   const included = payload({ includeDiagnostics: true, version: 'forged', os: 'secret-machine-name' });
@@ -44,7 +44,8 @@ test('manual feedback works without automatic consent and takes authoritative en
   assert.match(f.calls[1].body.detail, /【使用环境】/);
   assert.match(f.calls[1].body.detail, /"architecture"/);
   assert.doesNotMatch(JSON.stringify(f.calls), /forged|secret-machine|secret-log/);
-  assert.equal(fs.existsSync(f.directory), false);
+  assert.equal(fs.existsSync(path.join(f.directory, 'feedback-history.json')), true);
+  assert.equal(fs.existsSync(f.file), false, 'manual history does not enable automatic reporting');
 });
 
 test('manual input validates all trust boundaries and strips extra fields', async t => {
@@ -189,4 +190,92 @@ test('disable and immediate re-enable detach old flight without allowing its com
   requests[1].resolve(); await current;
   assert.equal(f.service.getState().pending, 0);
   assert.equal(JSON.parse(JSON.parse(requests[1].body).detail).errorCode, 'RENDER_PROCESS_GONE');
+});
+
+test('confirmed manual history survives restart, contains only receipt fields and keeps original timestamp on retry', async t => {
+  const f = fixture(t), data = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).toString('base64');
+  const value = payload({ includeDiagnostics: true, contact: 'private@example.invalid', attachments: [{ name: 'screen.png', type: 'image/png', data }] });
+  const first = await f.service.submit(value), at = f.now();
+  assert.deepEqual(first.record, { id: value.submissionId, type: value.type, title: value.title, detail: value.detail,
+    submittedAt: at, attachmentCount: 1, version: '0.4.09' });
+  f.setTime(at + 5000);
+  const retry = await f.service.submit(value);
+  assert.equal(retry.record.submittedAt, at); assert.equal(f.service.getState().history.length, 1);
+  const historyFile = path.join(f.directory, 'feedback-history.json'), stored = fs.readFileSync(historyFile, 'utf8');
+  assert.equal(fs.statSync(historyFile).mode & 0o777, 0o600);
+  assert.doesNotMatch(stored, /private@example|screen\.png|【使用环境】|architecture|"data"/);
+  assert.equal(stored.includes(data), false);
+  f.service.getState().history[0].title = 'modified outside';
+  assert.equal(f.service.getState().history[0].title, value.title);
+  f.service.dispose();
+  const next = createFeedbackReporting(f.config); t.after(() => next.dispose());
+  assert.deepEqual(next.getState().history, [first.record]);
+  assert.equal(next.getState().enabled, false, 'manual history is independent from automatic reporting');
+});
+
+test('failed or unconfirmed manual requests never enter submitted history', async t => {
+  for (const fetch of [async () => ({ ok: false, status: 503 }), async () => ({ ok: true, json: async () => ({ id: randomUUID() }) })]) {
+    const f = fixture(t, { fetch }); await assert.rejects(f.service.submit(payload()));
+    assert.deepEqual(f.service.getState().history, []);
+    assert.equal(fs.existsSync(path.join(f.directory, 'feedback-history.json')), false);
+  }
+});
+
+test('submitted history is newest-first and bounded to 100 distinct receipts', async t => {
+  const f = fixture(t), values = [];
+  for (let i = 0; i < 102; i++) {
+    f.setTime(f.now() + 1); const value = payload({ title: '反馈 ' + i }); values.push(value);
+    await f.service.submit(value);
+  }
+  const history = f.service.getState().history;
+  assert.equal(history.length, 100); assert.equal(history[0].id, values[101].submissionId);
+  assert.equal(history.at(-1).id, values[2].submissionId);
+  f.service.dispose();
+  const next = createFeedbackReporting(f.config); t.after(() => next.dispose());
+  assert.deepEqual(next.getState().history, history);
+});
+
+test('automatic delivery and consent toggles do not enter or remove manual submitted history', async t => {
+  const f = fixture(t); await f.service.submit(payload()); const history = f.service.getState().history;
+  f.service.setEnabled(true); f.service.capture('天气', new Error('private')); await f.advance(2000);
+  assert.equal(f.calls.length, 2); assert.match(f.calls[1].body.title, /^\[自动异常\]/);
+  assert.deepEqual(f.service.getState().history, history);
+  f.service.setEnabled(false); assert.deepEqual(f.service.getState().history, history);
+  assert.equal(fs.existsSync(path.join(f.directory, 'feedback-history.json')), true);
+});
+
+test('a server-confirmed submission remains successful when local history cannot be written, and retry can persist it', async t => {
+  const f = fixture(t), value = payload(); fs.writeFileSync(f.directory, 'not-a-directory');
+  const first = await f.service.submit(value);
+  assert.equal(first.id, value.submissionId); assert.match(first.historyWarning, /已提交.*保存失败/);
+  assert.equal(f.service.getState().history[0].id, value.submissionId);
+  assert.equal(f.service.getState().lastError, '', 'manual history failure must not become automatic reporting failure');
+  fs.unlinkSync(f.directory); f.setTime(f.now() + 5000);
+  const retry = await f.service.submit(value);
+  assert.equal(retry.record.submittedAt, first.record.submittedAt); assert.equal(retry.historyWarning, undefined);
+  assert.equal(f.service.getState().historyWarning, '');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(f.directory, 'feedback-history.json'))).records.length, 1);
+});
+
+test('history load strips extra fields, validates corrupt/oversized files and refuses symlink overwrite', async t => {
+  const f = fixture(t), result = await f.service.submit(payload()), file = path.join(f.directory, 'feedback-history.json');
+  const stored = { schema: 1, records: [{ ...result.record, contact: 'not-needed', attachments: ['private-image'], path: '/private' }] };
+  fs.writeFileSync(file, JSON.stringify(stored));
+  const loaded = createFeedbackReporting(f.config); t.after(() => loaded.dispose());
+  assert.deepEqual(loaded.getState().history, [result.record]);
+  for (const invalid of [{ schema: 1, records: [{ ...result.record, attachmentCount: 4 }] },
+    { schema: 1, records: [{ ...result.record, submittedAt: Number.MAX_SAFE_INTEGER }] },
+    { schema: 1, records: [{ ...result.record, detail: 'x'.repeat(5001) }] }]) {
+    fs.writeFileSync(file, JSON.stringify(invalid)); const service = createFeedbackReporting(f.config);
+    assert.deepEqual(service.getState().history, []); assert.match(service.getState().historyWarning, /无法读取/); service.dispose();
+  }
+  fs.writeFileSync(file, 'x'.repeat(2 * 1024 * 1024 + 1));
+  const oversized = createFeedbackReporting(f.config); t.after(() => oversized.dispose());
+  assert.deepEqual(oversized.getState().history, []); assert.match(oversized.getState().historyWarning, /无法读取/);
+  const target = path.join(path.dirname(f.directory), 'outside.json'); fs.writeFileSync(target, 'must remain');
+  fs.unlinkSync(file); fs.symlinkSync(target, file);
+  const linked = createFeedbackReporting(f.config); t.after(() => linked.dispose());
+  assert.deepEqual(linked.getState().history, []); assert.match(linked.getState().historyWarning, /无法读取/);
+  const saved = await linked.submit(payload()); assert.match(saved.historyWarning, /已提交.*保存失败/);
+  assert.equal(fs.readFileSync(target, 'utf8'), 'must remain'); assert.equal(fs.lstatSync(file).isSymbolicLink(), true);
 });

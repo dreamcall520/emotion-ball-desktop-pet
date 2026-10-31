@@ -5,7 +5,7 @@ const { randomUUID, createHash } = require('node:crypto');
 
 const ENDPOINT = 'https://qiuqiu-feedback-entry.pages.dev/api/feedback';
 const UUID = /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i;
-const MAX_IMAGE = 1024 * 1024, MAX_QUEUE = 20, COOLDOWN = 60 * 60 * 1000;
+const MAX_IMAGE = 1024 * 1024, MAX_QUEUE = 20, MAX_HISTORY = 100, COOLDOWN = 60 * 60 * 1000;
 const SCOPES = new Set(['应用运行', '窗口崩溃', '窗口无响应', '页面加载失败', '页面脚本错误', '未处理异步错误', '主进程异常',
   '快捷面板', '全局设置', 'API 费用面板', '关于球球', '保存更新提醒', '定制面板加载', '定制面板', '保存我的形象',
   '导入 Codex 宠物', '保存球球定制', 'API 余额账户', 'API 余额卡', 'API 余额趋势', '保存 API 常驻显示', 'Codex 趋势记录',
@@ -61,17 +61,58 @@ function automaticPayload(entry) {
 function createFeedbackReporting({ directory, version, fetch = globalThis.fetch, enabled = false, now = Date.now,
   schedule = setTimeout, cancel = clearTimeout, onChange = () => {} } = {}) {
   if (typeof directory !== 'string' || !directory) throw new TypeError('Feedback directory required');
-  const file = path.join(directory, 'feedback-outbox.json');
+  const file = path.join(directory, 'feedback-outbox.json'), historyFile = path.join(directory, 'feedback-history.json');
   const diagnostic = Object.freeze({ appVersion: /^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(version) ? version : 'unknown',
     platform: process.platform, systemRelease: os.release(), architecture: process.arch,
     electron: process.versions.electron || '', node: process.versions.node });
   const environment = { version: diagnostic.appVersion, os: `${diagnostic.platform} ${diagnostic.systemRelease} ${diagnostic.architecture}`, source: 'app' };
   let active = enabled === true, disposed = false, queue = [], recent = [], timer = null, flight = null, controller = null;
-  let lastSentAt = null, lastError = '', epoch = 0;
-  const getState = () => ({ enabled: active, pending: queue.length, lastSentAt, lastError });
+  let lastSentAt = null, lastError = '', epoch = 0, history = [], historyWarning = '';
+  const getState = () => ({ enabled: active, pending: queue.length, lastSentAt, lastError,
+    history: history.map(item => ({ ...item })), historyWarning });
   const notify = () => { try { onChange(getState()); } catch {} };
   const context = () => ({ ...environment, diagnostic: { ...diagnostic } });
   function stopTimer() { if (timer !== null) cancel(timer); timer = null; }
+  function loadHistory() {
+    try {
+      const stat = fs.lstatSync(historyFile);
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 2 * 1024 * 1024) throw failure('invalid');
+      const stored = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
+      if (stored.schema !== 1 || !Array.isArray(stored.records) || stored.records.length > MAX_HISTORY) throw failure('invalid');
+      const ids = new Set();
+      history = stored.records.map(item => {
+        if (!item || typeof item.id !== 'string' || !UUID.test(item.id) ||
+          !['problem', 'suggestion', 'feature'].includes(item.type) || !number(item.submittedAt) || item.submittedAt > 8640000000000000 ||
+          !number(item.attachmentCount) || item.attachmentCount > 3 || typeof item.version !== 'string' ||
+          !/^(?:\d+\.\d+\.\d+(?:[-+][\w.-]+)?|unknown)$/.test(item.version)) throw failure('invalid');
+        return { id: item.id.toLowerCase(), type: item.type, title: field(item.title, '标题', 100, true),
+          detail: field(item.detail, '详细说明', 5000, true), submittedAt: item.submittedAt,
+          attachmentCount: item.attachmentCount, version: item.version };
+      }).filter(item => { if (ids.has(item.id)) return false; ids.add(item.id); return true; })
+        .sort((a, b) => b.submittedAt - a.submittedAt);
+    } catch (error) {
+      history = [];
+      if (error.code !== 'ENOENT') historyWarning = '本机提交记录无法读取，暂时只显示本次提交。';
+    }
+  }
+  function persistHistory() {
+    const temporary = `${historyFile}.${randomUUID()}.tmp`;
+    let created = false, fd;
+    try {
+      fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+      try { const stat = fs.lstatSync(historyFile); if (!stat.isFile() || stat.isSymbolicLink()) throw failure('invalid'); }
+      catch (error) { if (error.code !== 'ENOENT') throw error; }
+      fd = fs.openSync(temporary, 'wx', 0o600); created = true;
+      fs.writeFileSync(fd, JSON.stringify({ schema: 1, records: history }));
+      fs.closeSync(fd); fd = undefined;
+      fs.renameSync(temporary, historyFile); created = false; historyWarning = '';
+    } catch {
+      historyWarning = '反馈已提交，但本机记录保存失败；请保留反馈编号。';
+    } finally {
+      if (fd !== undefined) { try { fs.closeSync(fd); } catch {} }
+      if (created) { try { fs.unlinkSync(temporary); } catch {} }
+    }
+  }
   function persist() {
     try {
       fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -123,7 +164,15 @@ function createFeedbackReporting({ directory, version, fetch = globalThis.fetch,
       contact: field(value.contact, '联系方式', 200), version: include ? environment.version : '', os: include ? environment.os : '',
       source: 'app', attachments: attachments(value.attachments) };
     if (Buffer.byteLength(JSON.stringify(payload)) > 5 * 1024 * 1024) throw failure('提交内容过大，请减少截图后重试。');
-    return post(payload, AbortSignal.timeout(30000));
+    const result = await post(payload, AbortSignal.timeout(30000));
+    let record = history.find(item => item.id === result.id);
+    if (!record) {
+      record = { id: result.id, type: payload.type, title: payload.title, detail,
+        submittedAt: now(), attachmentCount: payload.attachments.length, version: environment.version };
+      history = [record, ...history].sort((a, b) => b.submittedAt - a.submittedAt).slice(0, MAX_HISTORY);
+    }
+    persistHistory(); notify();
+    return { ...result, record: { ...record }, ...(historyWarning ? { historyWarning } : {}) };
   }
   function arm(delay) {
     stopTimer();
@@ -202,6 +251,7 @@ function createFeedbackReporting({ directory, version, fetch = globalThis.fetch,
     notify(); return getState();
   }
   function dispose() { disposed = true; epoch++; stopTimer(); controller?.abort(); controller = null; flight = null; }
+  loadHistory();
   if (active) { load(); if (queue.length) arm(Math.min(...queue.map(item => item.nextAttemptAt)) - now()); }
   return { context, submit, capture, setEnabled, getState, flush, dispose };
 }

@@ -10,6 +10,31 @@ function validCity(value) {
   return value && Number.isFinite(value.latitude) && Math.abs(value.latitude) <= 90 &&
     Number.isFinite(value.longitude) && Math.abs(value.longitude) <= 180 && typeof value.name === 'string' && value.name.trim().length > 0 && value.name.length <= 100;
 }
+function weatherExpandedBounds(pet, area, size, obstacles = [], previous = null) {
+  const gap = 8, width = Math.min(size.width, area.width), height = Math.min(size.height, area.height);
+  const clampX = x => Math.max(area.x, Math.min(x, area.x + area.width - width));
+  const clampY = y => Math.max(area.y, Math.min(y, area.y + area.height - height));
+  const valid = b => b && ['x', 'y', 'width', 'height'].every(key => Number.isFinite(b[key])) && b.width > 0 && b.height > 0;
+  const blocked = [pet, ...obstacles.filter(valid)];
+  const intersection = (a, b) => Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)) *
+    Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
+  const padded = blocked.map(b => ({ x: b.x - gap, y: b.y - gap, width: b.width + gap * 2, height: b.height + gap * 2 }));
+  const centerX = pet.x + (pet.width - width) / 2, centerY = pet.y + (pet.height - height) / 2;
+  const xs = [...new Set([centerX, pet.x - width - gap, pet.x + pet.width + gap, area.x, area.x + area.width - width,
+    ...blocked.slice(1).flatMap(b => [b.x - width - gap, b.x + b.width + gap])].map(x => Math.round(clampX(x))))];
+  const ys = [...new Set([pet.y - height - gap, pet.y + pet.height + gap, centerY, area.y, area.y + area.height - height,
+    ...blocked.slice(1).flatMap(b => [b.y - height - gap, b.y + b.height + gap])].map(y => Math.round(clampY(y))))];
+  const candidates = xs.flatMap(x => ys.map(y => {
+    const bounds = { x, y, width, height };
+    const dx = Math.max(pet.x - x - width, x - pet.x - pet.width, 0), dy = Math.max(pet.y - y - height, y - pet.y - pet.height, 0);
+    return { bounds, overlap: padded.reduce((sum, b) => sum + intersection(bounds, b), 0),
+      distance: dx * dx + dy * dy, movement: previous ? Math.abs(x - previous.x) + Math.abs(y - previous.y) : 0 };
+  }));
+  // Keep a nearby legal side while content changes. Only a genuinely cramped
+  // screen falls back to the in-bounds candidate with the least overlap.
+  candidates.sort((a, b) => a.overlap - b.overlap || a.distance - b.distance || a.movement - b.movement);
+  return candidates[0].bounds;
+}
 function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, getPetWindow, getObstacles = () => [], getStackAnchor = () => null, getBubbleBounds = () => null, getPresentation = () => null, getSuppressed = () => false, getAppearance = () => 'system', getReducedMotion = () => false, locationBridge = createLocationBridge(), onLayout = () => {}, onChange = () => {}, onError = () => {}, alwaysOnTop = true }) {
   const service = createWeatherService({ fetch });
   let win = null, enabled = false, timer = null, revision = 0, city = null, state = { status: 'unconfigured', city: null }, suspended = false;
@@ -30,25 +55,19 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
   function reposition(animate = false) {
     if (!win || win.isDestroyed() || groupTransitionMode === 'hold') return;
     const pet = getPetWindow();
-    if (!enabled || (!cardVisible && !explicitOpen) || suspended || ['hold','masked'].includes(groupTransitionMode) || (!explicitOpen && getPresentation()?.quotaGroupHidden) || getSuppressed() || !pet || pet.isDestroyed() || !pet.isVisible()) { win.hide(); return; }
+    if (!enabled || (!cardVisible && !explicitOpen) || suspended || ['hold','masked'].includes(groupTransitionMode) || (!explicitOpen && size.width !== 390 && getPresentation()?.quotaGroupHidden) || getSuppressed() || !pet || pet.isDestroyed() || !pet.isVisible()) { win.hide(); return; }
     const bounds = pet.getBounds(), area = screen.getDisplayMatching(bounds).workArea;
     const layoutKey = JSON.stringify([bounds, area]);
     if (size.width !== 390) expandedAnchor = null;
     let next;
-    if (expandedAnchor?.key === layoutKey) {
-      next = { x: expandedAnchor.x, y: expandedAnchor.y, width: Math.min(size.width, area.width), height: Math.min(size.height, area.y + area.height - expandedAnchor.y) };
+    if (size.width === 390) {
+      // Expanded weather owns the card area. Other quota cards are hidden by
+      // onLayout, so their old stack/transparent carriers are not obstacles.
+      next = weatherExpandedBounds(bounds, area, size, [getBubbleBounds()], expandedAnchor?.key === layoutKey ? expandedAnchor : null);
+      expandedAnchor = { key: layoutKey, x: next.x, y: next.y };
     } else {
-      const compact = apiBalanceLabelBounds(bounds, area, getObstacles(), false, getStackAnchor(), explicitOpen ? { ...getPresentation(), quotaGroupHidden: false } : getPresentation(), getBubbleBounds());
-      if (!compact) { win.hide(); return; }
-      if (size.width === 390) {
-        const width = Math.min(size.width, area.width), x = Math.max(area.x, Math.min(compact.x + (compact.width - width) / 2, area.x + area.width - width));
-        // Reserve the supported expanded envelope once so switching between
-        // city search and forecasts keeps a stable origin without clipping.
-        const y = Math.max(area.y, Math.min(compact.y, area.y + area.height - Math.min(720, area.height)));
-        const height = Math.min(size.height, area.height);
-        next = { x: Math.round(x), y, width, height };
-        expandedAnchor = { key: layoutKey, x: next.x, y: next.y };
-      } else next = compact;
+      next = apiBalanceLabelBounds(bounds, area, getObstacles(), false, getStackAnchor(), explicitOpen ? { ...getPresentation(), quotaGroupHidden: false } : getPresentation(), getBubbleBounds());
+      if (!next) { win.hide(); return; }
     }
     const current = requestedBounds || win.getBounds?.();
     if (!current || ['x','y','width','height'].some(key => current[key] !== next[key])) { requestedBounds = { ...next }; win.setBounds(next, animate && !getReducedMotion()); }
@@ -125,4 +144,4 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
     pause() { suspended = true; revision++; win?.hide(); }, resume() { suspended = false; reposition(); if (enabled) void refresh(); },
     destroy() { revision++; clearInterval(timer); win?.destroy(); win = null; for (const name of ['get','refresh','search','city','location','resize']) ipcMain.removeHandler('weather:' + name); } };
 }
-module.exports = { createWeatherWindow, validCity };
+module.exports = { createWeatherWindow, validCity, weatherExpandedBounds };

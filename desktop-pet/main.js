@@ -1318,7 +1318,7 @@ function quotaGroupTransitionContext() {
   return JSON.stringify({pet,area,mode:p?.mode,side:p?.side,page:codexPageEpoch,appearance:settings.customization.appearance,
     config:input.config,eligible:input.eligible,metrics:input.eligible.map(id=>{const m=quotaCardControllers()[id]?.getLayoutMetrics?.();return [id,m?{width:m.width,height:m.height,inset:m.inset}:null]}),reduced:quotaReducedMotion()});
 }
-function resetQuotaCardDetails() { for(const c of Object.values(quotaCardControllers()))c?.resetExpanded?.(); }
+function resetQuotaCardDetails() { for(const [id,c] of Object.entries(quotaCardControllers())) { if(id==='weather'&&c?.isExpanded?.())continue; c?.resetExpanded?.(); } }
 function showQuotaCardBar(state,keepBounds=quotaCardGroupTransition?.isActive(),transitioning=quotaCardBarTransitioning||quotaCardGroupTransition?.isActive()) { if (weatherWindow?.isExpanded?.()) { quotaCardGroupWindow?.hide(); return; } quotaCardGroupWindow?.show({...state,keepBounds,transitioning:transitioning===true}); }
 function syncQuotaCardGroup() {
   refreshSheepCapsuleInk();

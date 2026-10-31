@@ -33,6 +33,12 @@ await until("previews.at(-1).codexPetId==='codex-'+ 'a'.repeat(64)",'selected lo
 assert.equal(await run("document.getElementById('pet-settings').parentElement.id"),'local-panel');
 assert.equal(await run("Boolean(document.querySelector('#pet-action option[value=sleep]'))"),true);await run("document.getElementById('pet-action').value='sleep';document.getElementById('pet-action').dispatchEvent(new Event('change'))");assert.equal(await run("document.querySelector('.codex-pet-sprite').dataset.codexAction"),'sleep');
 await run("document.getElementById('pet-action').value='wave';document.getElementById('pet-action').dispatchEvent(new Event('change'))");assert.equal(await run("document.querySelector('.codex-pet-sprite').dataset.codexAction"),'wave');
+await run("(()=>{const s=document.getElementById('pet-action');s.dispatchEvent(new PointerEvent('pointerdown',{pointerType:'mouse'}));s.focus();s.value='sleep';s.dispatchEvent(new Event('change'))})()");
+assert.equal(await run("getComputedStyle(document.getElementById('pet-action')).outlineStyle"),'none','pointer-selected preview action has no selection outline');
+await run("document.getElementById('pet-action').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}))");
+assert.notEqual(await run("getComputedStyle(document.getElementById('pet-action')).outlineStyle"),'none','keyboard action selection keeps focus indication');
+await run("document.getElementById('pet-action').blur()");
+
 await run("document.getElementById('pet-play').click()");assert.equal(await run("document.getElementById('pet-play').getAttribute('aria-label')"),'播放动画');
 await run("document.getElementById('source-codex').click()");assert.equal(await run("document.querySelectorAll('#pet-grid .pet-card').length"),1);assert.equal(await run("document.querySelector('#pet-grid .pet-name').textContent"),'既有Codex副本');
 assert.equal(await run("document.getElementById('pet-settings').parentElement.id"),'codex-panel');assert.equal(await run('previews.at(-1).codexPetId'),'codex-'+'a'.repeat(64),'switching tabs does not select another pet');
