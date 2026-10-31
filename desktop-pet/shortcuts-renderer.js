@@ -5,7 +5,7 @@
   const $ = id => document.getElementById(id);
   const actions = [
     { id: 'chat', name: '聊天', icon: 'chat' },
-    { id: 'custom', name: '定制球球', icon: 'custom' },
+    { id: 'custom', name: '装扮', icon: 'custom' },
     { id: 'note', name: '便签', icon: 'note' },
     { id: 'todo', name: '待办', icon: 'todo' },
     { id: 'pomodoro', name: '番茄钟', icon: 'clock' }
@@ -448,12 +448,13 @@
   }
   function applyColorMode(mode, preference, theme) {
     document.documentElement.dataset.colorMode = mode === 'accessible' ? 'accessible' : 'standard';
-    document.documentElement.dataset.uiTheme = ['blue', 'purple'].includes(theme) ? theme : 'green';
+    document.documentElement.dataset.uiTheme = ['green', 'blue', 'purple'].includes(theme) ? theme : 'blue';
     $('blue-style').disabled = theme !== 'blue';
     appearance = ['light', 'dark'].includes(preference) ? preference : 'system';
     refreshAppearance();
   }
-  applyColorMode('standard', 'system', 'green');
+  const initialColor = window.qiuqiuColorMode?.initial;
+  applyColorMode(initialColor?.mode, initialColor?.appearance, initialColor?.theme);
   system?.addEventListener('change', refreshAppearance);
   window.addEventListener('pointermove', () => {
     if (pointerFrame !== null) return;

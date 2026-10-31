@@ -239,7 +239,7 @@ if (IS_ACCEPTANCE && !IS_SMOKE_TEST) {
   app.setPath('userData', acceptanceData);
 }
 const colorModes = createColorModeManager({ getMode: () => settings?.colorMode,
-  getAppearance: () => settings?.codexQuotaAppearance, getTheme: () => settings?.uiTheme });
+  getAppearance: () => settings?.codexQuotaAppearance, getTheme: () => settings?.uiTheme, ipcMain });
 app.on('browser-window-created', (_event, win) => {
   colorModes.track(win);
   const capture = (scope, code) => {
@@ -358,7 +358,21 @@ function initializeShortcuts() {
       if (value) weatherWindow?.resetExpanded();
       // The controller keeps its presentation pin through the closing animation.
       // Apply the shared visibility rule before edge expansion can re-enter sync.
-      syncQuotaLabel(codexCompanion?.getSnapshot());
+      const refreshCards = () => {
+        let restoredByCollection = false;
+        if (!value) {
+          const wasCollectionActive = quotaGroupLastActive;
+          try {
+            syncQuotaCardGroup();
+            // Restoring a collected group already calls prepareQuotaCardGroup,
+            // which synchronously refreshes every card. Avoid repeating that pass.
+            restoredByCollection = !wasCollectionActive && quotaGroupLastActive;
+          } catch (error) { reportQuotaError('快捷恢复时额度区同步', error); }
+        }
+        if (!restoredByCollection) syncQuotaLabel(codexCompanion?.getSnapshot());
+      };
+      if (!value && quotaCardGroupWindow?.batchCollapsedLayout) quotaCardGroupWindow.batchCollapsedLayout(refreshCards);
+      else refreshCards();
       if (value) {
         dialogue?.dismiss(); hideBubble();
         dismissCodexPresentation();
