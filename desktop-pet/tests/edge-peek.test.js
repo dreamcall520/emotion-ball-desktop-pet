@@ -21,3 +21,5 @@ for(const shape of ['blob','new-year-sheep','soft-orb'])for(const size of [60,80
 }
 
 test('贴边水平身体包络按原生像素保守取整，不引入沿行避障的小数重叠',()=>{const b={x:1360,y:400,width:80,height:80};const v=petVisualBounds(b,'blob',{side:'right',mode:'peeked'});assert.equal(v.x,1366);assert.equal(v.x+v.width,1440);assert(Number.isInteger(v.x));assert(Number.isInteger(v.width));});
+
+test('classic trimmed edge corners do not trigger peeking',()=>{for(const side of ['left','right']){const bounds={x:0,y:0,width:180,height:180};const point={x:side==='left'?1:179,y:18};assert.equal(EdgePeek.containsVisibleBody('blob',{bounds,side,mode:'tucked',point}),false);}});

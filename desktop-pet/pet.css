@@ -212,3 +212,14 @@ body {
 @media(prefers-reduced-motion:reduce){#pet[data-edge-peek="true"]{transition:none;}}
 
 
+
+/* Round only the screen-side intersections, in the stationary host window.
+ * The original body and eyes keep their geometry throughout edge travel. */
+body:has(#pet[data-edge-peek="true"][data-shape="blob"][data-edge="left"][data-presentation="tucked"]) {
+  clip-path: url(#edge-join-left);
+}
+body:has(#pet[data-edge-peek="true"][data-shape="blob"][data-edge="right"][data-presentation="tucked"]) {
+  clip-path: url(#edge-join-right);
+}
+
+.edge-clip-defs { position:absolute; width:0; height:0; pointer-events:none; }
