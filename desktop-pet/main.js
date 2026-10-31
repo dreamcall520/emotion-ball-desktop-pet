@@ -128,7 +128,7 @@ let petMenuToken = 0;
 let tray = null;
 let settings = null;
 let settingsFile = null;
-let codexPets = null, localPetStore = null, localPetImportBusy = false, localPetImportSession = null;
+let codexPets = null, localPetStore = null, localPetImportBusy = false, localPetImportSession = null, localPetDeletingId = null;
 let dragState = null;
 let bounceState = null;
 let isQuitting = false;
@@ -808,6 +808,7 @@ function codexPetDescriptor(appearance) {
 }
 
 function importCodexAppearance(appearance) {
+  if (localPetDeletingId && appearance?.codexPetId === localPetDeletingId) throw new Error('该皮肤正在删除，请选择其他皮肤');
   if (appearance.shape !== 'codex-pet') return appearance;
   let pet;
   try { pet = codexPets.getImported(appearance.codexPetId); }
@@ -877,6 +878,7 @@ function changeAppearancePreset(action, value) {
 }
 
 function saveCustomization(value, setAsStartupDefault = true, quotaDisplay) {
+  if (localPetDeletingId && value?.appearance?.codexPetId === localPetDeletingId) return false;
   if (IS_SMOKE_TEST && smokeCustomizationSaveFailure) return false;
   if (!settings || isQuitting) return false;
   const previous = settings;
@@ -3466,6 +3468,41 @@ function registerIpc() {
       for(const type of ['hide','closed'])owner.removeListener(type,invalidate);
       for(const type of ['did-start-loading','render-process-gone'])owner.webContents.removeListener(type,invalidate);
       localPetImportBusy=false;localPetImportSession=null;
+    }
+  });
+  ipcMain.handle('pet:local-pets-delete', async (event, id) => {
+    if (!fromLocalPetWindow(event) || screenLocked || localPetImportBusy || isQuitting) return {ok:false,error:'当前无法删除，请稍后重试'};
+    if (typeof id !== 'string' || !/^codex-[a-f0-9]{64}$/.test(id)) return {ok:false,error:'皮肤编号无效，请刷新后重试'};
+    const referenced = () => {
+      const uses = appearance => appearance?.shape === 'codex-pet' && appearance.codexPetId === id;
+      if (uses(settings?.customization?.appearance)) return '该皮肤正在桌面使用，请先切换其他皮肤并保存';
+      if (uses(settings?.startupAppearance)) return '该皮肤是启动默认形象，请先更换启动默认形象';
+      if ((settings?.appearancePresets || []).some(preset => uses(preset.appearance))) return '该皮肤已被「我的形象」收藏，请先删除对应收藏';
+      return null;
+    };
+    const reason = referenced(); if (reason) return {ok:false,error:reason};
+    localPetImportBusy = true;
+    const owner = customizationWindow, session = {owner,frame:event.senderFrame,invalid:false};
+    localPetImportSession = session;
+    const invalidate = () => { session.invalid = true; };
+    for (const type of ['hide','closed']) owner.on(type,invalidate);
+    for (const type of ['did-start-loading','render-process-gone']) owner.webContents.on(type,invalidate);
+    try {
+      const pet = localPetStore.getImported(id);
+      const result = await dialog.showMessageBox(owner, {type:'warning',title:'删除导入皮肤',
+        message:'删除“' + pet.name + '”？',detail:'将球球保存的这份皮肤移入废纸篓，原始素材文件夹不受影响。',
+        buttons:['取消','删除皮肤'],defaultId:0,cancelId:0,noLink:true});
+      if (result.response !== 1) return {ok:false,canceled:true};
+      if (!localPetImportIsCurrent()) return {ok:false,error:'请重新打开定制页后操作'};
+      const currentReason = referenced(); if (currentReason) return {ok:false,error:currentReason};
+      localPetDeletingId = id;
+      await localPetStore.trashImported(id, target => shell.trashItem(target));
+      return {ok:true,id};
+    } catch (_) { return {ok:false,error:'删除未完成，请刷新后重试；原始素材不会被删除'}; }
+    finally {
+      for (const type of ['hide','closed']) owner.removeListener(type,invalidate);
+      for (const type of ['did-start-loading','render-process-gone']) owner.webContents.removeListener(type,invalidate);
+      localPetImportBusy = false; localPetImportSession = null; localPetDeletingId = null;
     }
   });
   ipcMain.handle('pet:codex-pets-list', event => {
