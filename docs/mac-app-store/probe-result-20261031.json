@@ -1,0 +1,42 @@
+{
+  "checkedAt": "2026-10-31T04:26:17.158Z",
+  "sourceCommit": "8d70d4c51830f36b34ed5965c3045b992ac55fb2",
+  "diagnostic": "native App Sandbox with ad-hoc signing; not Electron MAS acceptance",
+  "expectedBoundaryObserved": true,
+  "baseline": {
+    "kind": "native-adhoc-sandbox-diagnostic-not-MAS-acceptance",
+    "providerCredentialsRead": false,
+    "providerNetworkCalls": false,
+    "syntheticExternalFileReadable": true,
+    "syntheticExternalHelper": {
+      "exitCode": 0,
+      "launched": true
+    },
+    "systemTrue": {
+      "exitCode": 0,
+      "launched": true
+    }
+  },
+  "sandbox": {
+    "kind": "native-adhoc-sandbox-diagnostic-not-MAS-acceptance",
+    "providerCredentialsRead": false,
+    "providerNetworkCalls": false,
+    "syntheticExternalFileReadable": false,
+    "syntheticExternalHelper": {
+      "errorCode": 4,
+      "launched": false
+    },
+    "systemTrue": {
+      "exitCode": 0,
+      "launched": true
+    }
+  },
+  "notTested": [
+    "user-selected security-scoped bookmarks",
+    "provider sockets",
+    "provider CLI execution",
+    "provider authentication and live data",
+    "Electron MAS runtime",
+    "App Review eligibility"
+  ]
+}
