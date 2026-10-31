@@ -81,7 +81,7 @@ function safeState(state) {
 }
 
 function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuotaWindow = () => null, getQuotaBounds = null,
-  getObstacleBounds = () => null, getAppearance = () => 'system', getPresentation = () => null,
+  getObstacleBounds = () => null, getAppearance = () => 'system', getPresentation = () => null, getSuppressed = () => false,
   onOpenDetails = () => {}, onLayout = () => {}, alwaysOnTop = true, onError = () => {} }) {
   const resizeMotion = createQuotaCardResize({ onError, onSettled: notifyLayout });
   let pendingToggleResize = false;
@@ -182,7 +182,7 @@ function createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow, getQuo
         if (!active(target, token)) return;
         const presentation = getPresentation();
         // Preserve the visible origin while predecessor hide callbacks re-enter layout.
-        if (presentation?.quotaGroupHidden === true || presentation?.mode === 'tucked' && presentation.quotaAnimateHide === true) {
+        if (getSuppressed() || presentation?.quotaGroupHidden === true || presentation?.mode === 'tucked' && presentation.quotaAnimateHide === true) {
           conceal(target, token, presentation?.quotaAnimateHide === true); return;
         }
         if(resetExpandedPending){expanded=false;resetExpandedPending=false;}

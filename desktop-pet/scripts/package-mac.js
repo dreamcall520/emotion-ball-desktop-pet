@@ -90,6 +90,7 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/color-mode.js',
     'desktop-pet/theme-preload.js',
     'desktop-pet/lib/color-mode.js',
+    'desktop-pet/lib/popup-quota-visibility.js',
     'desktop-pet/preload.js',
     'desktop-pet/index.html',
     'desktop-pet/pet.css',
