@@ -2,7 +2,7 @@
 'use strict';
 // Local MAS development build only. Never creates identities, profiles or uploads.
 const fs=require('node:fs'),path=require('node:path');
-const {createHash}=require('node:crypto');
+const {createHash,X509Certificate}=require('node:crypto');
 const {execFileSync}=require('node:child_process');
 const {marketingVersion,identities,argumentsFor}=require('./package-mas');
 const ROOT=path.resolve(__dirname,'../..'),NAME='球球桌宠-商店沙盒开发候选';
@@ -17,7 +17,7 @@ function configFor(pkg,env={},arch=env.MAS_DEV_ARCH||process.arch){
  if(config.bundleId&&!/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.masdevelopment$/.test(config.bundleId))errors.push('MAS_DEV_ISOLATED_BUNDLE_ID_REQUIRED');
  if(config.teamId&&!/^[A-Z0-9]{10}$/.test(config.teamId))errors.push('MAS_DEV_TEAM_ID_INVALID');
  for(const [key,code] of [['profile','MAS_DEV_PROFILE_PATH_INVALID'],['zipDir','MAS_DEV_ZIP_DIR_INVALID']])if(config[key]&&!path.isAbsolute(config[key]))errors.push(code);
- if(config.identity&&(!config.identity.startsWith('Apple Development: ')||!config.identity.endsWith(` (${config.teamId})`)))errors.push('MAS_DEV_APPLE_DEVELOPMENT_IDENTITY_REQUIRED');
+ if(config.identity&&!/^Apple Development: [^\r\n\0]{1,200}$/.test(config.identity))errors.push('MAS_DEV_APPLE_DEVELOPMENT_IDENTITY_REQUIRED');
  if(config.buildVersion&&(!/^[1-9]\d*$/.test(config.buildVersion)||!Number.isSafeInteger(Number(config.buildVersion))))errors.push('MAS_DEV_BUILD_VERSION_INVALID');
  return{config,missing,errors};
 }
@@ -36,10 +36,21 @@ function validateDevelopmentProfile(profile,config,fingerprint,deviceId,now=Date
  if(!Array.isArray(profile.Platform)||!profile.Platform.some(value=>['OSX','macOS'].includes(value)))throw fail('MAS_DEV_PROFILE_PLATFORM_MISMATCH');
  if(!Array.isArray(profile.TeamIdentifier)||!profile.TeamIdentifier.includes(config.teamId)||e['com.apple.developer.team-identifier']!==config.teamId)throw fail('MAS_DEV_PROFILE_TEAM_MISMATCH');
  if((e['com.apple.application-identifier']||e['application-identifier'])!==`${config.teamId}.${config.bundleId}`)throw fail('MAS_DEV_PROFILE_APP_ID_MISMATCH');
- if(e['get-task-allow']!==true&&e['com.apple.security.get-task-allow']!==true||profile.ProvisionsAllDevices===true)throw fail('MAS_DEV_DEVELOPMENT_PROFILE_REQUIRED');
+ const taskAllow=[e['get-task-allow'],e['com.apple.security.get-task-allow']];
+ // macOS App Development profiles may omit both task-allow keys. Explicit false
+ // or malformed values still reject; device binding and the matched public
+ // Apple Development certificate below establish the development-only boundary.
+ if(profile.ProvisionsAllDevices===true||taskAllow.some(value=>value!==undefined&&value!==true))throw fail('MAS_DEV_DEVELOPMENT_PROFILE_REQUIRED');
  if(typeof deviceId!=='string'||!deviceId||deviceId.length>128||!/^[A-Za-z0-9-]+$/.test(deviceId))throw fail('MAS_DEV_DEVICE_ID_UNAVAILABLE');
  if(!Array.isArray(profile.ProvisionedDevices)||!profile.ProvisionedDevices.includes(deviceId))throw fail('MAS_DEV_CURRENT_DEVICE_NOT_REGISTERED');
- if(!Array.isArray(profile.DeveloperCertificates)||!profile.DeveloperCertificates.some(cert=>(Buffer.isBuffer(cert)||cert instanceof Uint8Array)&&createHash('sha1').update(cert).digest('hex').toUpperCase()===fingerprint))throw fail('MAS_DEV_PROFILE_CERTIFICATE_MISMATCH');
+ const certificate=Array.isArray(profile.DeveloperCertificates)&&profile.DeveloperCertificates.find(cert=>(Buffer.isBuffer(cert)||cert instanceof Uint8Array)&&createHash('sha1').update(cert).digest('hex').toUpperCase()===fingerprint);
+ if(!certificate)throw fail('MAS_DEV_PROFILE_CERTIFICATE_MISMATCH');
+ // The identity CN's parenthesized suffix is a person/certificate identifier,
+ // not the Team ID. Verify the matched public certificate's OU instead.
+ let certificateSubject;try{certificateSubject=new X509Certificate(certificate).toLegacyObject().subject;}catch{throw fail('MAS_DEV_PROFILE_CERTIFICATE_INVALID');}
+ if(typeof certificateSubject?.OU!=='string'||certificateSubject.OU!==config.teamId)throw fail('MAS_DEV_CERTIFICATE_TEAM_MISMATCH');
+ if(typeof certificateSubject.CN!=='string'||!/^Apple Development: [^\r\n\0]{1,200}$/.test(certificateSubject.CN))throw fail('MAS_DEV_DEVELOPMENT_CERTIFICATE_REQUIRED');
+ if(certificateSubject.CN!==config.identity)throw fail('MAS_DEV_CERTIFICATE_IDENTITY_MISMATCH');
  const groups=e['com.apple.security.application-groups'];
  if(!Array.isArray(groups)||!groups.includes(`${config.teamId}.${config.bundleId}`)&&!groups.includes(`${config.teamId}.*`))throw fail('MAS_DEV_PROFILE_APP_GROUP_MISMATCH');
  return{profileValidated:true,currentDeviceRegistered:true};
@@ -86,7 +97,22 @@ function refreshBundledManifests(appPath,io=fs,arch=process.arch){
  io.writeFileSync(codexFile,JSON.stringify(cm,null,2)+'\n');io.writeFileSync(wbFile,JSON.stringify(wm,null,2)+'\n');
  return{codexFiles:1,workbuddyFiles:Object.keys(wm.files).length};
 }
-function probeEntry(bundleId){return `'use strict';\nif(process.mas!==true){process.stderr.write('MAS_RUNTIME_REQUIRED\\n');process.exit(2);}\nif(process.argv.includes('--qiuqiu-mas-runtime-probe')){const {app}=require('electron');app.whenReady().then(()=>{const ownContainer=app.getPath('userData').includes('/Library/Containers/${bundleId}/Data/');process.stdout.write(JSON.stringify({mas:true,ownContainer})+'\\n');app.exit(ownContainer?0:2);}).catch(()=>app.exit(2));}else require('./desktop-pet/main.js');\n`;}
+function probeEntry(bundleId){return `'use strict';
+if(process.mas!==true){process.stderr.write('MAS_RUNTIME_REQUIRED\\n');process.exit(2);}
+const runtimeProbe=process.argv.includes('--qiuqiu-mas-runtime-probe');
+const helperProbe=process.argv.includes('--qiuqiu-mas-helper-probe');
+if(runtimeProbe||helperProbe){const {app}=require('electron');app.whenReady().then(async()=>{
+ const ownContainer=app.getPath('userData').includes('/Library/Containers/${bundleId}/Data/');
+ if(!ownContainer){process.stdout.write(JSON.stringify({mas:true,ownContainer:false})+'\\n');app.exit(2);return;}
+ if(runtimeProbe){process.stdout.write(JSON.stringify({mas:true,ownContainer:true})+'\\n');app.exit(0);return;}
+ const {probeManagedHelpers}=require('./desktop-pet/lib/mas-helper-probe');
+ const {createBundledCodexChatRpc}=require('./desktop-pet/lib/mas-bundled-codex');
+ const {startBundledWorkBuddy}=require('./desktop-pet/lib/mas-bundled-workbuddy');
+ const helper=await probeManagedHelpers({userData:app.getPath('userData'),resourcesPath:process.resourcesPath,createCodexRpc:createBundledCodexChatRpc,startWorkbuddyHost:startBundledWorkBuddy});
+ process.stdout.write(JSON.stringify({mas:true,ownContainer:true,helper})+'\\n');app.exit(helper.passed?0:2);
+}).catch(()=>{process.stdout.write(JSON.stringify({errorCode:'MAS_HELPER_PROBE_ENTRY_FAILED'})+'\\n');app.exit(2);});}else require('./desktop-pet/main.js');
+`;}
+
 async function buildMasDevelopment({root=ROOT,env=process.env,arch}={},deps={}){
  const io=deps.fs||fs,pkg=JSON.parse(io.readFileSync(path.join(root,'package.json'),'utf8')),{config,missing,errors}=configFor(pkg,env,arch);
  if(missing.length||errors.length)throw fail('MAS_DEV_CONFIGURATION_REQUIRED');
@@ -120,9 +146,9 @@ async function buildMasDevelopment({root=ROOT,env=process.env,arch}={},deps={}){
  io.copyFileSync(config.profile,path.join(appPath,'Contents/embedded.provisionprofile'));
  const signing=deps.signing||await import('@electron/osx-sign'),sign=signing.signAsync||signing.sign;
  if(typeof sign!=='function')throw fail('MAS_DEV_SIGN_API_UNAVAILABLE');
- await sign({app:appPath,platform:'mas',type:'development',identity:identity.fingerprint,identityValidation:true,provisioningProfile:config.profile,preEmbedProvisioningProfile:true,preAutoEntitlements:false,strictVerify:true,
+ await sign({app:appPath,platform:'mas',type:'development',batchCodesignCalls:true,identity:identity.fingerprint,identityValidation:true,provisioningProfile:config.profile,preEmbedProvisioningProfile:true,preAutoEntitlements:false,strictVerify:true,
   binaries:[path.join(appPath,'Contents/Resources/qiuqiu-codex',`darwin-${config.arch}`,'codex')],
-  optionsForFile:file=>({entitlements:file===appPath?mainFile:childFile,hardenedRuntime:false})});
+  optionsForFile:file=>({entitlements:file===appPath?mainFile:childFile,hardenedRuntime:false,timestamp:'none'})});
  const resources=refreshBundledManifests(appPath,io,config.arch);
  // Updating a resource invalidates only the outer seal. Preserve nested helper
  // signatures and entitlements: never deep-resign after refreshing the digests.
@@ -133,8 +159,10 @@ async function buildMasDevelopment({root=ROOT,env=process.env,arch}={},deps={}){
  for(const child of [path.join(appPath,'Contents/Resources/qiuqiu-codex',`darwin-${config.arch}`,'codex'),path.join(appPath,'Contents/Frameworks',NAME+' Helper.app')]){let e;try{e=parse(run('codesign',['--display','--entitlements',':-',child]));}catch{throw fail('MAS_DEV_CHILD_ENTITLEMENTS_UNVERIFIED');}if(e['com.apple.security.app-sandbox']!==true||e['com.apple.security.inherit']!==true)throw fail('MAS_DEV_CHILD_ENTITLEMENTS_UNVERIFIED');}
  let probe;try{const text=run(path.join(appPath,'Contents/MacOS',NAME),['--qiuqiu-mas-runtime-probe']);probe=JSON.parse(text.trim());}catch{throw fail('MAS_DEV_RUNTIME_PROBE_FAILED');}
  if(probe?.mas!==true||probe.ownContainer!==true)throw fail('MAS_DEV_RUNTIME_PROBE_FAILED');
+ let helperProbe;try{const text=run(path.join(appPath,'Contents/MacOS',NAME),['--qiuqiu-mas-helper-probe'],{timeout:90000});helperProbe=JSON.parse(text.trim());}catch{throw fail('MAS_DEV_HELPER_PROBE_FAILED');}
+ if(helperProbe?.mas!==true||helperProbe.ownContainer!==true||helperProbe.helper?.passed!==true||helperProbe.helper?.metadataTransport?.passed!==true||helperProbe.helper?.modelRequestsSent!==false||helperProbe.helper?.originalCredentialsRead!==false||helperProbe.helper?.workbuddy?.vendorAccountVerified!==false)throw fail('MAS_DEV_HELPER_PROBE_FAILED');
  return{platform:'mas',purpose:'development-sandbox-validation',arch:config.arch,appPath,signedDevelopmentApp:true,identityValidated:true,profileValidated:true,currentDeviceRegistered:true,
-  bundledManifestRefresh:resources,masRuntimeAndContainerProbePassed:true,chatAndDirectoryAcceptancePassed:false,submissionReady:false,
+  bundledManifestRefresh:resources,masRuntimeAndContainerProbePassed:true,managedHelperInitializationProbe:helperProbe.helper,chatAndDirectoryAcceptancePassed:false,submissionReady:false,
   note:'Local development build only. Genuine MAS runtime/container initialization is separate from login/chat/task/directory acceptance and App Store review.'};
 }
 if(require.main===module){(async()=>{const {mode,arch}=argumentsFor(process.argv.slice(2));const value=mode==='plan'?planFor(JSON.parse(fs.readFileSync(path.join(ROOT,'package.json'),'utf8')),process.env,arch):await buildMasDevelopment({arch});process.stdout.write(JSON.stringify(value,null,2)+'\n');})().catch(e=>{process.stderr.write((e.code?.startsWith('MAS_DEV_')?e.code:'MAS_DEV_BUILD_FAILED')+'\n');process.exitCode=2;});}

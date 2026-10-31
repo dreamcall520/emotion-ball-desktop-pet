@@ -1,0 +1,195 @@
+{
+  "platform": "mas",
+  "purpose": "development-sandbox-validation",
+  "arch": "arm64",
+  "appPath": "/Users/allan/Documents/个人创作/emotion-ball-desktop-pet/.worktrees/mac-app-store/dist/mas-development/arm64/球球桌宠-商店沙盒开发候选-mas-arm64/球球桌宠-商店沙盒开发候选.app",
+  "signedDevelopmentApp": true,
+  "identityValidated": true,
+  "profileValidated": true,
+  "currentDeviceRegistered": true,
+  "bundledManifestRefresh": {
+    "codexFiles": 1,
+    "workbuddyFiles": 2506
+  },
+  "masRuntimeAndContainerProbePassed": true,
+  "managedHelperInitializationProbe": {
+    "isolatedProfileCreated": true,
+    "isolatedProfileRemoved": true,
+    "codex": {
+      "initialized": true,
+      "unauthenticatedAccountConfirmed": true,
+      "closed": true,
+      "errorCode": null
+    },
+    "workbuddy": {
+      "gatewayAuthenticated": true,
+      "vendorAccountVerified": false,
+      "vendorAccountAuthenticationTested": false,
+      "stopCompleted": true,
+      "processExitVerified": false,
+      "errorCode": null
+    },
+    "metadataTransport": {
+      "workbuddy": {
+        "started": true,
+        "unauthenticatedRejected": true,
+        "authenticatedEventReceived": true,
+        "stopNotFinal": true,
+        "finalStopMainReplyOnly": true,
+        "revoked": true,
+        "receiverClosed": true,
+        "errorCode": null
+      },
+      "zcode": {
+        "started": true,
+        "unauthenticatedRejected": true,
+        "authenticatedEventReceived": true,
+        "stopNotFinal": true,
+        "revoked": true,
+        "receiverClosed": true,
+        "errorCode": null
+      },
+      "syntheticMetadataOnly": true,
+      "originalPluginConfigurationChanged": false,
+      "passed": true,
+      "errorCode": null
+    },
+    "modelRequestsSent": false,
+    "originalCredentialsRead": false,
+    "passed": true,
+    "errorCode": null
+  },
+  "chatAndDirectoryAcceptancePassed": true,
+  "submissionReady": false,
+  "note": "Local development build only. Genuine MAS runtime/container initialization is separate from login/chat/task/directory acceptance and App Store review.",
+  "candidate": "R23",
+  "tests": {
+    "full": {
+      "passed": 3140,
+      "failed": 0,
+      "concurrency": 2
+    },
+    "finalCopyAndRuntimeChecks": {
+      "passed": 36,
+      "failed": 0
+    },
+    "metadataProbeAndBuildChecks": {
+      "passed": 36,
+      "failed": 0
+    }
+  },
+  "sourceFilesVerified": 468,
+  "sourceVerificationExcludesSignedNativeBinaries": true,
+  "asarSha256": "cc506d5ec1d8369b20bd0d2d2e158b2b1fbfab3253a945c2abda6cd7d214ee74",
+  "helperDigestsVerified": true,
+  "strictSignatureVerified": true,
+  "identityCreatedWithExplicitApproval": true,
+  "deviceAndAppIdAndProfileCreatedWithExplicitApproval": true,
+  "officialAppleG3IntermediateImportedWithoutTrustOverride": true,
+  "officialMasArchiveSha256": "84e562785040616029df3d562f3193c8b3953948a095d8b8611c990b45a69b98",
+  "nativeUi": {
+    "openedInTrueMas": true,
+    "selectionRememberedAcrossRestart": true,
+    "fixtureDirectoryBookmarkGranted": true,
+    "fixtureDirectoryBookmarkRestoredAcrossRestart": true,
+    "fixtureDirectoryRevoked": true,
+    "revocationSurvivesRestart": true,
+    "initialChatEntryPreservedAfterDataGrant": true,
+    "menuBarToolsEntryVerified": true,
+    "usesSyntheticEmptyDirectoryOnly": false,
+    "originalAccountDirectoriesGranted": true,
+    "finalPackageOpened": true,
+    "unsupportedPluginShownUnavailableWithoutAction": true,
+    "fixtureOnlyForLifecycleTest": true
+  },
+  "newModelMessagesSent": 3,
+  "originalTaskPluginWrittenThisTurn": false,
+  "automaticPluginInstallAllowedInNonDiagnosticMas": false,
+  "originalVendorTaskEventsVerifiedInThisMasBuild": false,
+  "formalAppReplaced": false,
+  "pushed": false,
+  "submitted": false,
+  "remaining": [
+    "ZCode official plan unavailable and official account chat unverified",
+    "WorkBuddy optional website remaining credits login/API route",
+    "original vendor live task events in MAS and plugin installation entitlement/App Review route",
+    "distribution signing and App Store Connect review"
+  ],
+  "codexRealMasLogin": {
+    "officialBrowserLoginCompleted": true,
+    "chatConnectionAndModelListReady": true,
+    "rawCredentialsCopied": false,
+    "syntheticMessageSentOnce": true,
+    "replyVerified": true,
+    "reply": "球球沙盒已连接。",
+    "model": "GPT-6-Luna"
+  },
+  "workbuddyRealMasLogin": {
+    "officialBrowserLoginCompleted": true,
+    "chatConnectionReady": true,
+    "rawCredentialsCopied": false,
+    "syntheticMessageSentOnce": true,
+    "replyVerified": true,
+    "reply": "球球沙盒已连接。",
+    "dedicatedReplyCompletedInToolCard": true
+  },
+  "originalDirectoryAuthorization": {
+    "explicitUserApproval": true,
+    "workbuddyGranted": true,
+    "codexGranted": true,
+    "zcodeGranted": true,
+    "originalFilesModified": false,
+    "allThreeGrantedWithExplicitUserApproval": true
+  },
+  "zcodeRealMasChat": {
+    "source": "configured-custom",
+    "officialPlanEmpty": true,
+    "officialAccountChatValidated": false,
+    "modelListCountObserved": 8,
+    "model": "kimi-k3",
+    "syntheticMessageSentOnce": true,
+    "replyVerified": true,
+    "reply": "球球沙盒已连接。",
+    "originalApiBilling": true,
+    "originalConfigurationModified": false
+  },
+  "codexQuotaAndTasks": {
+    "weekRemainingPercent": 18,
+    "partialLogTasksObserved": 11,
+    "originalTaskRealtimeFullyVerified": false
+  },
+  "workbuddyCache": {
+    "recordsObserved": 52,
+    "anonymousPartitions": 1,
+    "accountOwnershipVerified": false,
+    "liveOriginalDesktopStateVerified": false,
+    "selectedHistoryRecordListVerified": false
+  },
+  "normalQuitAfterLiveTests": {
+    "ownedMasProcessesRemaining": 0
+  },
+  "chatAndDirectoryAcceptanceScope": "Three real dedicated chat replies, explicit original directory grants, Codex quota/partial log tasks, ZCode empty-plan/custom-model metadata, WorkBuddy cache counts; not original desktop live task hooks or website credits",
+  "providerChatAuthorizationVerified": {
+    "codexOfficialLogin": true,
+    "workbuddyOfficialLogin": true,
+    "zcodeConfiguredCustom": true,
+    "zcodeOfficialChat": false
+  },
+  "restartAcceptance": {
+    "allThreeChatsRestoredWithoutLoginPrompt": true,
+    "allThreeDirectoryGrantsRestored": true,
+    "noNewMessageAfterRestart": true,
+    "workbuddyOldReplyNotRestoredAsLiveTask": true
+  },
+  "remainingCandidateProcesses": {
+    "diagnosticMain": 0,
+    "realMasMain": 1,
+    "formalApplicationMain": 0
+  },
+  "workbuddyCreditsInvestigation": {
+    "version": "2.179.0",
+    "publicSupportedRemainingBalanceApiFound": false,
+    "sessionUsageNotAccountBalance": true,
+    "optionalWebsiteLoginStillRequired": true
+  }
+}

@@ -48,3 +48,18 @@ test('账号变化需要处理，动作进入新聊天而非重新登录所有�
  const s=base('codex');s.providerChats={codex:{connection:'ready',modelsStatus:'ready',accountMismatch:true}};const g=guide(s,'codex');assert.equal(card(s,'codex').needsAttention,true);assert.equal(g.nextStepId,'chat');assert.equal(g.steps.find(x=>x.id==='chat').action,'open-provider-chat');assert.equal(g.complete,false);
  s.providerChats.codex={connection:'ready',modelsStatus:'ready'};s.onboarding.codex.status='error';assert.equal(card(s,'codex').needsAttention,true);assert.equal(card(s,'codex').chat.status,'ready');
 });
+
+
+test('未启动登录与正在等待本人登录分开，空套餐和真正不支持仍不循环授权',()=>{
+ const s={codex:{directory:'stored'},onboarding:{codex:{status:'partial',chat:{status:'needs-login',loginPending:false}}},providerChats:{codex:{connection:'disconnected'}}};
+ assert.equal(card(s,'codex').chat.status,'needs-authorization');assert.equal(guide(s,'codex').nextStepId,'chat');
+ s.onboarding.codex.chat.loginPending=true;assert.equal(card(s,'codex').chat.status,'working');assert.equal(guide(s,'codex').steps.find(x=>x.id==='chat').status,'working');assert.equal(guide(s,'codex').nextStepId,null);
+ const z=base('zcode');z.zcode.accountSource='official';z.zcodeSnapshot.quota={balanceState:'empty'};z.onboarding.zcode.chat={status:'needs-login',loginPending:false};assert.equal(card(z,'zcode').chat.status,'unavailable');assert.equal(guide(z,'zcode').steps.find(x=>x.id==='chat').action,undefined);
+ s.onboarding.codex.chat={status:'unavailable',message:'此工具尚未提供聊天接口'};assert.equal(card(s,'codex').chat.status,'unavailable');assert.equal(guide(s,'codex').steps.find(x=>x.id==='chat').action,undefined);
+});
+
+
+test('实时登录状态明确false覆盖旧pending，失败后不永久卡在等待本人登录',()=>{
+ const s={codex:{directory:'stored'},providerLoginPending:{codex:false},onboarding:{codex:{status:'partial',chat:{status:'needs-login',loginPending:true}}}};
+ assert.equal(card(s,'codex').chat.status,'needs-authorization');assert.equal(guide(s,'codex').nextStepId,'chat');s.providerLoginPending.codex=true;assert.equal(card(s,'codex').chat.status,'working');
+});

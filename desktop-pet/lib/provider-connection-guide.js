@@ -15,6 +15,10 @@
     const selected=actual||(state.chat?.source===provider?state.chat:null);
     if(selected?.accountMismatch||selected?.errorCode==='ACCOUNT_CHANGED')return part('unknown','账号已变化，请确认后开始新聊天');
     if(actual?.connection==='ready'&&(actual.modelsStatus==='ready'||provider==='workbuddy'&&actual.modelsStatus==='provider-managed')&&chat?.status!=='unavailable')return part('ready',provider==='zcode'?(state.zcode?.accountSource==='configured-custom'?'使用已有自定义模型 · 原 API 计费':'使用官方套餐聊天'):'聊天已连接 · 使用球球专用会话');
+    const loginPending=typeof state.providerLoginPending?.[provider]==='boolean'?state.providerLoginPending[provider]:chat?.loginPending===true;
+    if(chat?.status==='needs-login'&&loginPending)return part('working',chat.message||'等待本人完成官方登录');
+    if(provider==='zcode'&&state.zcode?.accountSource==='official'&&state.zcodeSnapshot?.quota?.balanceState==='empty')return part('unavailable','官方套餐为空，官方账号聊天尚未验证');
+    if(chat?.status==='needs-login')return part('needs-authorization',chat.message||'尚未连接聊天');
     if(actual&&chat?.status!=='unavailable'){if(actual.connection!=='ready')return part(actual.connection==='connecting'?'working':'unknown','聊天连接待恢复');return part(actual.modelsStatus==='loading'?'working':'needs-authorization',actual.modelsStatus==='loading'?'正在读取聊天模型':'请选择聊天模型');}
     if(['needs-new-chat'].includes(chat?.status))return part('unknown','账号或聊天范围已变化，请开始新聊天');
     if(chat?.status==='needs-model')return part('needs-authorization','请选择聊天模型');
@@ -24,7 +28,6 @@
     // A configured endpoint is not evidence of a successful account connection.
     if(chat?.status!=='unavailable'&&selected?.connection==='ready'&&selected.modelsStatus==='ready')return part('ready','聊天已连接');
     if(!actual&&chat?.status!=='unavailable'&&provider==='workbuddy'&&state.workbuddyCli?.connected===true&&state.workbuddyCli?.sendOutcome!=='unknown')return part('ready','聊天已连接 · 使用球球专用会话');
-    if(provider==='zcode'&&state.zcode?.accountSource==='official'&&state.zcodeSnapshot?.quota?.balanceState==='empty')return part('unavailable','官方套餐为空，官方账号聊天尚未验证');
     if(chat?.status==='unavailable'&&onboarding?.status==='partial')return part('unavailable','聊天暂未就绪，可继续连接');
     return part('needs-authorization',onboarding?.status==='cancelled'?'连接已取消，可继续完成':'尚未连接聊天');
   }

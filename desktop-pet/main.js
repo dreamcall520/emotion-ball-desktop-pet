@@ -12,6 +12,7 @@ const {
   globalShortcut,
   ipcMain,
   Menu,
+  MenuItem,
   nativeImage,
   nativeTheme,
   net,
@@ -4007,6 +4008,7 @@ async function bootstrap() {
   }
   app.setActivationPolicy('accessory');
   if (app.dock) app.dock.hide();
+  if(IS_STORE_BUILD){const applicationMenu=Menu.getApplicationMenu()||Menu.buildFromTemplate([{role:'appMenu'},{role:'editMenu'},{role:'windowMenu'}]);if(!applicationMenu.items.some(item=>item.id==='qiuqiu-store-tools'))applicationMenu.insert(1,new MenuItem({id:'qiuqiu-store-tools',label:'球球工具',submenu:[{label:'工具连接',accelerator:'CommandOrControl+Shift+K',click:()=>openStoreConnections()}]}));Menu.setApplicationMenu(applicationMenu);}
   settingsFile = path.join(app.getPath('userData'), 'settings.json');
   if (IS_STORE_BUILD) storeRuntime = require('./lib/mas-provider-runtime').createMasProviderRuntime({
     app, dialog: {showOpenDialog: options => storeConnectionsWindow && !storeConnectionsWindow.isDestroyed() ? dialog.showOpenDialog(storeConnectionsWindow,options) : dialog.showOpenDialog(options)}, BrowserWindow, session, shell, fetch: (url, options) => net.fetch(url, options), diagnostic: process.mas !== true,

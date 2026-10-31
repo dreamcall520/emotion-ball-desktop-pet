@@ -15,7 +15,7 @@
         for(const provider of selected){
           if(deferred.has(provider))continue;
           const guide=buildGuide(state,provider);
-          if(guide.steps.some(s=>s.status==='working'))return {provider,waiting:true};
+          if(guide.steps.some(s=>s.status==='working'&&!s.optional&&!s.informational))return {provider,waiting:true};
           const step=guide.steps.find(s=>s.status==='needs-authorization'&&s.action&&!s.optional&&!attempted.has(provider+':'+s.id));
           if(step)return {provider,step};
         }

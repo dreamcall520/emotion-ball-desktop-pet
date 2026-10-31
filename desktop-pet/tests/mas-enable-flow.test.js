@@ -18,3 +18,15 @@ test('停止联动失败可重试，不遗留正在撤销状态',async()=>{
  let failing=true;const{flow}=fixture({revoke:async()=>{if(failing)throw Error('synthetic failure');}});await assert.rejects(flow.disable('codex'));assert.equal(flow.getState().codex.status,'error');failing=false;await flow.disable('codex');assert.equal(flow.getState().codex.status,'idle');
 });
 test('来源和启用偏好只在取得独占连接后修改，占用失败不执行准备',async()=>{let finish,changed=0;const{flow}=fixture({connectChat:()=>new Promise(r=>finish=r)});const pending=flow.enable('codex',{interactive:false});await Promise.resolve();await assert.rejects(flow.enable('zcode',{beforeConnect:async()=>changed++}),{code:'BUSY'});await assert.rejects(flow.enable('codex',{beforeConnect:async()=>changed++}),{code:'BUSY'});assert.equal(changed,0);finish({status:'ready'});await pending;let observed=false;const f=fixture({connectChat:async()=>{assert.equal(observed,true);return{status:'ready'};}});await f.flow.enable('zcode',{beforeConnect:async()=>{observed=true;}});assert.equal(f.flow.getState().zcode.chat.status,'ready');});
+
+
+test('仅允许读取空工具目录不会把未登录聊天误判为厂商不支持，仍能启用聊天',async()=>{
+ const {flow}=fixture();assert.equal(flow.getState().codex.chat.status,'needs-login');assert.equal(flow.getState().codex.chat.loginPending,false);
+ await flow.enableData('codex');const state=flow.getState();assert.equal(state.codex.status,'partial');assert.equal(state.codex.chat.status,'needs-login');
+ const {buildProviderGuide}=require('../lib/provider-connection-guide');const guide=buildProviderGuide({codex:{directory:'stored'},onboarding:state},'codex');assert.equal(guide.nextStepId,'chat');assert.equal(guide.steps.find(x=>x.id==='chat').action,'enable-provider');
+ await flow.enable('codex');assert.equal(flow.getState().codex.chat.status,'ready');
+});
+test('活跃OAuth等待保留明确标记，恢复时尚未发起登录不冒充等待中',async()=>{
+ const {flow}=fixture({connectChat:async(p,{interactive})=>({status:'needs-login',loginPending:interactive,message:interactive?'请本人完成登录':'尚未登录'})});
+ await flow.restore('codex');assert.equal(flow.getState().codex.chat.loginPending,false);await flow.enable('codex');assert.equal(flow.getState().codex.chat.loginPending,true);
+});

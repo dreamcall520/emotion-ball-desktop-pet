@@ -350,6 +350,9 @@ if (process.versions.electron && process.argv.includes('--store-renderer-child')
       // never converts an unsupported capability into another login prompt.
       await click('guide-close');
       await set({codex:{directory:'none'},zcode:{directory:'none',accountSource:'official'},workbuddyDesktop:{directory:'none',partitions:[],report:null},providerChats:{},chat:null,pluginInstallationPolicy:{allowed:false},pluginInstallations:{},zcodeDesktopEvents:{enabled:false,observations:[]},workbuddyDesktopEvents:{enabled:false,observations:[]},onboarding:Object.fromEntries(['codex','zcode','workbuddy'].map(provider=>[provider,{status:'ready',chat:{status:'ready'},data:{status:'idle'}}]))});
+      await run(`document.querySelector('button[data-action="enable-provider"][data-provider="workbuddy"]').click()`);await settle();
+      assert.equal(await run(`document.querySelector('#guide-steps [data-step="tasks"] .step-badge').textContent`),'暂不可用','platform installation limitation does not ask user to fix it');
+      assert.equal(await run(`document.querySelector('#guide-steps [data-step="tasks"] button')===null`),true);await click('guide-close');
       await run(`window.fixtureFlowMode='success';fixtureCalls=[];document.querySelectorAll('input[name=authorization-provider]').forEach(input=>{input.checked=input.value==='codex';input.dispatchEvent(new Event('change'))});void 0`);
       await click('authorize-selected');for(let i=0;i<10;i++)await settle();
       assert.deepEqual(await run(`fixtureCalls.filter(c=>c.action!=='status').map(c=>[c.action,c.payload?.provider])`),[['enable-provider-data','codex']]);

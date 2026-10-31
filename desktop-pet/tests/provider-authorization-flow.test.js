@@ -15,3 +15,22 @@ test('cancelled provider defers its remaining steps while other selected tool ma
 test('unsupported, empty and waiting for first event never trigger automatic action',()=>{
  const f=createFlow(guide);f.start(['zcode']);assert.equal(f.next({zcode:[{id:'chat',status:'unavailable',action:'enable-provider'},{id:'tasks',status:'ready'},{id:'task-verification',status:'unknown'}]}),null);
 });
+
+test('optional quota refresh and informational reads cannot block required task authorization',()=>{const f=createFlow(guide);f.start(['workbuddy']);const n=f.next({workbuddy:[{id:'quota',status:'working',optional:true},{id:'read',status:'working',informational:true},auth('tasks')]});assert.equal(n.step.id,'tasks');});
+
+
+test('OAuth已启动且等待本人时不弹下一家登录，完成后才继续且stop阻止迟到续接',()=>{
+ const {buildProviderGuide}=require('../lib/provider-connection-guide');const f=createFlow(buildProviderGuide);
+ const state={codex:{directory:'stored'},workbuddyDesktop:{directory:'stored'},onboarding:{codex:{status:'partial',chat:{status:'needs-login',loginPending:false}},workbuddy:{status:'idle',chat:{status:'needs-login',loginPending:false}}}};
+ f.start(['codex','workbuddy']);let n=f.next(state);assert.equal(n.provider,'codex');assert.equal(n.step.id,'chat');f.attempted(n.provider,n.step);
+ state.onboarding.codex.chat.loginPending=true;assert.deepEqual(f.next(state),{provider:'codex',waiting:true});assert.deepEqual(f.next(state),{provider:'codex',waiting:true});
+ state.onboarding.codex.chat={status:'ready'};n=f.next(state);assert.equal(n.provider,'workbuddy');assert.equal(n.step.id,'chat');f.stop();state.onboarding.workbuddy.chat={status:'needs-login',loginPending:true};assert.equal(f.next(state),null);
+});
+
+
+test('OAuth失败后的实时false不会卡住队列，也不在同轮重开已经尝试的登录',()=>{
+ const {buildProviderGuide}=require('../lib/provider-connection-guide');const f=createFlow(buildProviderGuide);
+ const state={codex:{directory:'stored'},workbuddyDesktop:{directory:'stored'},providerLoginPending:{codex:false},onboarding:{codex:{chat:{status:'needs-login',loginPending:false}},workbuddy:{chat:{status:'needs-login',loginPending:false}}}};
+ f.start(['codex','workbuddy']);let n=f.next(state);f.attempted(n.provider,n.step);state.onboarding.codex.chat.loginPending=true;state.providerLoginPending.codex=true;assert.equal(f.next(state).waiting,true);
+ state.providerLoginPending.codex=false;n=f.next(state);assert.equal(n.provider,'workbuddy');assert.equal(n.step.id,'chat');
+});
