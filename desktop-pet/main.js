@@ -3115,6 +3115,7 @@ function createPetWindow() {
   const candidatePetWindow = new BrowserWindow({
     ...currentBounds(),
     title: APP_NAME,
+    roundedCorners: false,
     transparent: true,
     focusable: false,
     frame: false,
