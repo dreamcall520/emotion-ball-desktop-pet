@@ -137,6 +137,7 @@
   background: var(--accessible-yellow) !important;
 }
 
+:root[data-color-mode="accessible"] #bubble::before,
 :root[data-color-mode="accessible"] #bubble::after {
   background: var(--accessible-panel) !important;
   border-color: var(--accessible-line) !important;
@@ -152,7 +153,7 @@
   box-shadow: inset 0 0 0 1px var(--accessible-blue);
 }
 
-:root[data-color-mode="accessible"] #bubble #actions button:last-child,
+:root[data-color-mode="accessible"] #bubble #actions button + button,
 :root[data-color-mode="accessible"] #bubble #actions button:hover {
   color: var(--accessible-text) !important;
   background: var(--accessible-raised) !important;
