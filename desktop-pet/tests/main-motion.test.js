@@ -1759,7 +1759,7 @@ test('free three-card coordination reflows once per stable size plan and retains
   assert.equal(f.call('zcodeLink.moves'),2);
   f.apiLabel.getLayoutMetrics=()=>null;f.call('syncQuotaFreeStack()');assert.deepEqual(Object.keys(f.call('quotaFreeStackPlan().cards')),['codex','zcode']);
   assert.equal(f.call('zcodeLink.moves'),3);f.call('syncQuotaFreeStack()');assert.equal(f.call('zcodeLink.moves'),3);
-  f.apiLabel.getLayoutMetrics=()=>metrics;f.call("edgeTuck.dock('left');edgeTuck.sampleCursor({x:petWindow.getBounds().x+10,y:petWindow.getBounds().y+10})");
+  f.apiLabel.getLayoutMetrics=()=>metrics;f.call("edgeTuck.dock('left');edgeTuck.sampleCursor({x:petWindow.getBounds().x+10,y:petWindow.getBounds().y+petWindow.getBounds().height/2})");
   const peek = f.call('quotaFreeStackPlan()');
   assert.deepEqual(Object.keys(peek.cards), ['codex','api','zcode']);
   const faces = Object.values(peek.cards).map(row => row.face);
@@ -3351,7 +3351,7 @@ test('桌面右键菜单以第一项为锚点，保留完整菜单及关闭回�
   assert.equal(typeof options.callback, 'function');
 });
 
-test('边缘展开时任务结果菜单保持展示，移出半球超过650ms仍能打开当前任务', async () => {
+test('边缘展开时任务结果菜单保持展示，移出半球超过900ms仍能打开当前任务', async () => {
   const f = await fixture({ codexEnabled: true });
   menuItem(f, 'edge-left').click();
   f.activity.sample({ cursor: { x: -780, y: 140 }, petBounds: f.pet.getBounds(), locked: false });
@@ -3364,10 +3364,10 @@ test('边缘展开时任务结果菜单保持展示，移出半球超过650ms仍
   await f.popups[0].value[0].click();
   assert.deepEqual(f.external, [`codex://threads/${TASK_ID}`]);
   f.popups[0].options.callback();
-  f.advanceTo(6449);
+  f.advanceTo(6699);
   assert.equal(edgeSnapshot(f).mode, 'peeked');
-  f.advanceTo(6450);
-  assert.equal(edgeSnapshot(f).mode, 'tucked', '结果菜单关闭后恢复650ms收起');
+  f.advanceTo(6700);
+  assert.equal(edgeSnapshot(f).mode, 'tucked', '结果菜单关闭后恢复900ms收起');
 });
 
 for (const replacement of ['menu', 'window']) {
@@ -3392,7 +3392,7 @@ for (const replacement of ['menu', 'window']) {
     f.advanceTo(800);
     assert.equal(f.call('edgeTuck.getPresentation().mode'), 'peeked');
     f.popups[1].options.callback();
-    f.advanceTo(1450);
+    f.advanceTo(1700);
     assert.equal(f.call('edgeTuck.getPresentation().mode'), 'tucked');
   });
 }
@@ -3404,7 +3404,7 @@ test('原生菜单打开失败会释放展开保护，不留下永久展开状�
   f.activity.sample({ cursor: { x: -500, y: 40 }, petBounds: f.pet.getBounds(), locked: false });
   f.call("Menu.buildFromTemplate = () => ({ popup() { throw new Error('popup failed'); } })");
   assert.throws(() => f.call('showPetContextMenu()'), /popup failed/);
-  f.advanceTo(650);
+  f.advanceTo(900);
   assert.equal(edgeSnapshot(f).mode, 'tucked');
 });
 

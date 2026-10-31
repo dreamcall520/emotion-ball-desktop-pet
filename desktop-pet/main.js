@@ -25,6 +25,7 @@ const {
 const { loadSettings, saveSettings, normalizePresetName, normalizeAppearancePresets, findDuplicateAppearancePreset } = require('./lib/settings');
 const { createCodexPetStore } = require('./lib/codex-pets');
 const { normalizeSpriteEdgeInk,containsSpriteEdgeInk } = require('./lib/sprite-edge-ink');
+const EdgePeek = require('./lib/edge-peek');
 const {
   SIZES,
   defaultBounds,
@@ -109,8 +110,8 @@ let weatherWindow = null;
 const SoftOrbModel = require('./lib/soft-orb-model');
 const APP_NAME = '球球桌宠';
 const ACCEPTANCE_KIND = require('../package.json').qiuqiuAcceptance;
-const IS_ACCEPTANCE = ['zcode', 'combined', 'weather','soft-orb'].includes(ACCEPTANCE_KIND);
-const ACCEPTANCE_NAME = ACCEPTANCE_KIND === 'soft-orb' ? '球球桌宠-柔光团候选' : ACCEPTANCE_KIND === 'weather' ? '球球桌宠-天气验收' : ACCEPTANCE_KIND === 'combined' ? '球球桌宠-联动整合验收' : '球球桌宠-ZCode验收';
+const IS_ACCEPTANCE = ['zcode', 'combined', 'weather','soft-orb','edge-peek'].includes(ACCEPTANCE_KIND);
+const ACCEPTANCE_NAME = ACCEPTANCE_KIND === 'edge-peek' ? '球球桌宠-贴边候选' : ACCEPTANCE_KIND === 'soft-orb' ? '球球桌宠-柔光团候选' : ACCEPTANCE_KIND === 'weather' ? '球球桌宠-天气验收' : ACCEPTANCE_KIND === 'combined' ? '球球桌宠-联动整合验收' : '球球桌宠-ZCode验收';
 const APP_WEBSITE = 'https://qiuqiu.pet/';
 const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const IS_SMOKE_TEST = process.env.PET_SMOKE_TEST === '1';
@@ -3148,7 +3149,8 @@ function createPetWindow() {
   petWindow = candidatePetWindow;
   spriteEdgeInk=null;spriteEdgeMapped=false;
   edgeTuck = createEdgeTuck({ getWindow: () => petWindow,
-    getVisibleHitTest:geometry=>spriteEdgeMapped?containsSpriteEdgeInk(spriteEdgeInk,geometry):null,
+    getVisibleHitTest:geometry=>spriteEdgeMapped?containsSpriteEdgeInk(spriteEdgeInk,geometry):EdgePeek.containsVisibleBody(settings?.customization?.appearance?.shape,geometry),
+    getTuckDelay:()=>EdgePeek.specFor(settings?.customization?.appearance?.shape)?.delayMs ?? 650,
     getWorkArea: bounds => screen.getDisplayMatching(bounds).workArea,
     getRetentionBounds: edgeRetentionBounds, onChange: applyPresentation,
     schedule: setTimeout, cancel: clearTimeout });

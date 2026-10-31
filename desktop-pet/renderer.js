@@ -108,6 +108,14 @@
     reducedMotion: reducedMotion()
   }));
 
+  function syncEdgePeekStyle() {
+    const spec=window.EdgePeek?.specFor(customization.appearance.shape);
+    petElement.dataset.edgePeek=String(Boolean(spec));
+    if(spec)petElement.style.setProperty('--edge-eye-color',customization.appearance.eyeColor);
+    if(spec){petElement.style.setProperty('--edge-tuck',`${spec.tucked*100}%`);petElement.style.setProperty('--edge-peek',`${spec.peeked*100}%`);}
+    else {petElement.style.removeProperty?.('--edge-tuck');petElement.style.removeProperty?.('--edge-peek');}
+  }
+
   function visualFacing() {
     if (!facing) return 'right';
     // The approved aurora face is drawn on the left side of its artwork, the
@@ -126,7 +134,10 @@
     // the same artwork orientation while the cloud peeks out.
     const auroraAtEdge = customization.appearance.shape === 'aurora-cloud' &&
       presentationMode === 'peeked' && ['left', 'right'].includes(petElement.dataset.edge);
-    facing = auroraAtEdge ? 'right' : PetFacing.resolve(lastSample?.petBounds, lastSample?.workArea, facing);
+    const side=petElement.dataset.edge,naturalEdge=window.EdgePeek?.specFor(customization.appearance.shape);
+    if(naturalEdge&&['tucked','peeked'].includes(presentationMode)&&['left','right'].includes(side)){
+      facing=customization.appearance.shape==='soft-orb'&&presentationMode==='tucked'?(side==='left'?'left':'right'):(side==='left'?'right':'left');
+    }else facing = auroraAtEdge ? 'right' : PetFacing.resolve(lastSample?.petBounds, lastSample?.workArea, facing);
     petElement.dataset.facing = facing;
     ball?.setFacing(visualFacing());
   }
@@ -387,6 +398,7 @@
     if (ball) ball.destroy();
     petElement.replaceChildren();
     petElement.dataset.shape = customization.appearance.shape;
+    syncEdgePeekStyle();
     petElement.dataset.avatarAppearance = JSON.stringify(customization.appearance);
     compactMode = nextCompactMode;
     presentationFrozen = false;
@@ -402,6 +414,7 @@
       delete petElement.dataset.codexPetId;delete petElement.dataset.codexAction;delete petElement.dataset.codexFrame;
       petElement.setAttribute('aria-label','可拖动和互动的小宇');
       ball.setEmotion(emotionId||'50');
+      ball.setFacing(visualFacing());
       ball.setActive(!presentationPaused&&presentationMode!=='hidden'&&!lastSample?.locked);
       return;
     }
@@ -541,7 +554,8 @@
     const quiet = presentationMode === 'tucked' && !presentationPaused && !lastSample?.locked;
     if (!quiet && presentationFrozen && !refresh) return;
     const sleeping = companion.manualSleep || currentState.mode === 'sleep' || lastSample?.locked;
-    const emotion = presentationMode === 'tucked' ? (sleeping ? '56' : '55') :
+    const naturalEdge=Boolean(window.EdgePeek?.specFor(customization.appearance.shape));
+    const emotion = presentationMode === 'tucked' ? (naturalEdge?(sleeping?'00':'50'):(sleeping ? '56' : '55')) :
       (sleeping ? '00' : currentState.emotionId);
     if (!quiet) ball.setActive(false);
     const emotionChanged = ball.emotionId !== emotion;
@@ -579,10 +593,10 @@
     petElement.dataset.dragging = packet.dragging ? 'true' : 'false';
     // 吸边先改宿主位置，活动采样可能尚未到达；由吸附侧直接确定朝向。
     // 仅在朝向实际改变时更新，隐藏/暂停后的重复报文不能重画冻结帧。
-    if (packet.mode === 'tucked' && ['left', 'right'].includes(packet.side)) {
-      const inward = customization.appearance.shape === 'aurora-cloud'
-        ? 'right' : packet.side === 'left' ? 'right' : 'left';
-      if (facing !== inward) {
+    if (['tucked','peeked'].includes(packet.mode) && ['left', 'right'].includes(packet.side)) {
+      const inward = customization.appearance.shape === 'aurora-cloud' ? 'right' :
+        customization.appearance.shape==='soft-orb'&&packet.mode==='tucked' ? (packet.side==='left'?'left':'right') : packet.side === 'left' ? 'right' : 'left';
+      if (facing !== inward || customization.appearance.shape==='soft-orb') {
         facing = inward;
         petElement.dataset.facing = facing;
         ball.setFacing(visualFacing());

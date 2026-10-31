@@ -124,10 +124,10 @@ body {
 }
 /* 经典头部收起时使用靠边小脑袋；两种云保持各自的完整云轮廓。
  * 曲线在身体中心轴闭合，随原有微呼吸一起运动；展开即回到原始路径。 */
-#pet:not([data-shape="aurora-cloud"]):not([data-shape="cloud"])[data-presentation="tucked"][data-edge="left"] .eb-head {
+#pet:not([data-edge-peek="true"]):not([data-shape="aurora-cloud"]):not([data-shape="cloud"])[data-presentation="tucked"][data-edge="left"] .eb-head {
   d: path("M 114.27 58 C 114.27 39 125 32 139 34 C 183 39 217 71 217 114.27 C 217 156 183 190 139 195 C 125 197 114.27 190 114.27 171 Z");
 }
-#pet:not([data-shape="aurora-cloud"]):not([data-shape="cloud"])[data-presentation="tucked"][data-edge="right"] .eb-head {
+#pet:not([data-edge-peek="true"]):not([data-shape="aurora-cloud"]):not([data-shape="cloud"])[data-presentation="tucked"][data-edge="right"] .eb-head {
   d: path("M 114.27 58 C 114.27 39 103.54 32 89.54 34 C 45.54 39 11.54 71 11.54 114.27 C 11.54 156 45.54 190 89.54 195 C 103.54 197 114.27 190 114.27 171 Z");
 }
 #pet[data-presentation="tucked"] svg { filter: drop-shadow(0 1px 2px rgba(66, 60, 52, 0.06)); }
@@ -201,3 +201,21 @@ body {
 
 #pet[data-shape="soft-orb"] .soft-orb-canvas{position:absolute;inset:0;pointer-events:none;}
 #pet[data-shape="soft-orb"].dragging .soft-orb-canvas{transform:rotate(var(--drag-tilt,0deg));}
+
+/* One complete eye at rest; the existing artwork only translates, never morphs. */
+#pet[data-edge-peek="true"] { transition:transform 480ms cubic-bezier(.22,1,.36,1); }
+#pet[data-edge-peek="true"][data-presentation="tucked"][data-edge="left"] { transform:translateX(calc(-1 * var(--edge-tuck))); }
+#pet[data-edge-peek="true"][data-presentation="tucked"][data-edge="right"] { transform:translateX(var(--edge-tuck)); }
+#pet[data-edge-peek="true"][data-presentation="peeked"][data-edge="left"] { transform:translateX(calc(-1 * var(--edge-peek))); }
+#pet[data-edge-peek="true"][data-presentation="peeked"][data-edge="right"] { transform:translateX(var(--edge-peek)); }
+#pet[data-edge-peek="true"].dragging,#pet[data-edge-peek="true"][data-dragging="true"] { transition:none; }
+@media(prefers-reduced-motion:reduce){#pet[data-edge-peek="true"]{transition:none;}}
+
+
+/* Front-facing single eye uses the selected colour, with no perspective squeeze. */
+#pet[data-edge-peek="true"][data-shape="blob"][data-presentation="tucked"]::after{content:"";display:block;position:absolute;left:76%;top:35.5%;width:7.5%;height:19%;border-radius:999px;background:var(--edge-eye-color,#1a1a1a);pointer-events:none;transform-origin:center;animation:edge-peek-blink 4.4s ease-in-out infinite;}
+#pet[data-edge-peek="true"][data-shape="blob"][data-presentation="tucked"][data-edge="right"]::after{left:16.5%;}
+#pet[data-edge-peek="true"][data-shape="blob"][data-presentation="tucked"] .eb-eye{opacity:0;}
+#pet[data-edge-peek="true"][data-shape="blob"][data-presentation="tucked"]:is([data-mode="sleep"],[data-mode="locked"],[data-emotion="00"],[data-emotion="56"])::after{animation:none;transform:scaleY(.08);}
+@keyframes edge-peek-blink{0%,85%,91%,100%{transform:scaleY(1)}88%{transform:scaleY(.06)}}
+@media(prefers-reduced-motion:reduce){#pet[data-edge-peek="true"][data-shape="blob"][data-presentation="tucked"]::after{animation:none;}}
