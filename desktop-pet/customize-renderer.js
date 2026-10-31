@@ -143,6 +143,37 @@
       });
       target.appendChild(button);
     }
+    const dogs = [...localPets, ...codexDescriptors.values()].filter(pet => pet.characterId === 'xiaobai');
+    const dog = dogs.find(pet => pet.id === state.appearance.codexPetId) || dogs[0];
+    if (dog) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'shape-option';
+      button.dataset.shape = 'codex-pet';
+      button.dataset.petId = dog.id;
+      button.setAttribute('aria-label', '选择小白形态');
+      button.setAttribute('aria-pressed', String(state.appearance.shape === 'codex-pet' && state.appearance.codexPetId === dog.id));
+      const art = document.createElement('span');
+      art.className = 'shape-art';
+      const icon = document.createElement('canvas');
+      icon.width = 192;
+      icon.height = 208;
+      icon.style.width = icon.style.height = '100%';
+      icon.setAttribute('aria-hidden', 'true');
+      art.append(icon);
+      const image = new Image();
+      image.onload = () => {
+        const width = image.naturalWidth / 8, height = 208 * (width / 192);
+        icon.getContext('2d').drawImage(image, 0, 0, width, height, 0, 0, 192, 208);
+      };
+      image.src = dog.imageURL;
+      button.append(art, document.createTextNode('小白'));
+      button.addEventListener('click', () => { choosePet(dog); renderShapeOptions(); });
+      const sheep = target.querySelector('[data-shape="new-year-sheep"]');
+      if (sheep?.after) sheep.after(button);
+      else target.appendChild(button);
+      target.style.setProperty('--shape-count', shapeNames.length + 1);
+    }
   }
 
   function renderSwatches(containerId, values, key) {
@@ -1081,6 +1112,7 @@
       remove.addEventListener('click', () => deleteLocalPet(pet));
       item.append(card, remove); grid.append(item);
     }
+    renderShapeOptions();
     $('local-read-status').textContent = '本地导入 · ' + localPets.length;
     grid.hidden = !localPets.length;
     if (activePetSource === 'local') $('pet-settings').hidden = !localPets.length;
@@ -1121,6 +1153,7 @@
     if (localBusy) return;
     const revision = ++localReadFlight;
     $('refresh-local-pets').disabled = true;
+    renderShapeOptions();
     $('local-read-status').textContent = '正在读取本地伙伴…';
     try {
       const result = await bridge.listLocalPets?.();
@@ -1133,7 +1166,8 @@
       $('local-read-status').title = result.skipped ? '已忽略 ' + result.skipped + ' 个暂不支持的伙伴' : '';
     } catch (_) {
       if (disposed || revision !== localReadFlight) return;
-      $('local-read-status').textContent = '读取暂未完成'; $('local-read-state').hidden = false;
+      renderShapeOptions();
+    $('local-read-status').textContent = '读取暂未完成'; $('local-read-state').hidden = false;
       $('local-read-state').textContent = '暂时无法读取伙伴，请点击刷新重试。';
     } finally { if (!disposed && revision === localReadFlight) $('refresh-local-pets').disabled = false; }
   }
