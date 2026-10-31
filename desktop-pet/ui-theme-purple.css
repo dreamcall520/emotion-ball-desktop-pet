@@ -1,0 +1,61 @@
+/* 暮光紫只替换界面色板；宠物、额度语义色与色弱配色保持各自的规则。 */
+:root[data-ui-theme=purple][data-color-mode=standard] {
+  --theme-surface:#fff; --theme-text:#292533; --theme-muted:#7a7285; --theme-line:#e7e1ed;
+  --surface:var(--theme-surface); --panel:var(--theme-surface); --input:var(--theme-surface);
+  --text:var(--theme-text); --muted:var(--theme-muted); --line:var(--theme-line);
+  --bg:#f6f3f9; --raised:#f5f1f8; --accent:#8065a5; --accent-text:#6b518e;
+  --selected:#eee8f7; --selected-line:#d5c8e7; --primary:#eae3f4; --primary-hover:#dfd4ee; --primary-text:#65507f;
+  --secondary:#f3eff7; --disabled:#efecf3; --disabled-text:#9b94a5; --stripe:var(--accent); --completed-fill:#8065a5;
+  --user:var(--selected); --hover:var(--selected); --control:#eee8f4; --control-edge:#cec1df55; --control-hover:#e3d9ef;
+  --control-selected:#fff; --control-selected-edge:#bda8d44d; --nav-active:#ffffff8f;
+  --panel-edge:#e5ddeb; --panel-wash:linear-gradient(180deg,#eee7f7 0,#faf7fd 64px,var(--surface) 130px);
+  --wash:var(--panel-wash); --ui-accent:var(--accent-text); --ui-text:var(--text); --ui-muted:var(--muted);
+  --canvas:radial-gradient(ellipse at 0 16%,#e8dcf5 0,transparent 59%),radial-gradient(ellipse at 95% 70%,#f4e7f2 0,transparent 62%),#f2eef8;
+  --about-wash:radial-gradient(ellipse at 0 16%,#e8dcf5 0,transparent 59%),radial-gradient(ellipse at 95% 70%,#f4e7f2 0,transparent 62%);
+  --title-wash:linear-gradient(110deg,#8065a5 15%,#a18abd 50%,#a478a3 88%);
+  --beam-a:#a68bcd; --beam-b:#c5ace9; --beam-c:#e3d7f3;
+  --detail-blue:var(--accent-text); --detail-count:#8065a51a; --detail-count-ink:var(--accent-text);
+  --detail-surface:#f8f5fdf0; --detail-solid-bg:linear-gradient(145deg,#fff,#faf7fd 48%,#f0e9f8);
+  --detail-bg:var(--detail-solid-bg); --detail-line:var(--theme-line); --detail-edge:#ffffffad;
+  --range-track:#ece5f4; --range-thumb-edge:#d4c5e4;
+}
+:root[data-ui-theme=purple][data-color-mode=standard]:is([data-notes-appearance=dark],[data-theme=dark],[data-appearance=dark]:not([data-notes-appearance=light]):not([data-theme=light]),[data-resolved-appearance=dark]) {
+  color-scheme:dark;
+  --theme-surface:#25222e; --theme-text:#f3eff8; --theme-muted:#b6adbf; --theme-line:#494150;
+  --bg:#1c1923; --raised:#302a3b; --accent:#c8b5e3; --accent-text:#dfd0f2;
+  --selected:#473a57; --selected-line:#7d6894; --primary:#58466c; --primary-hover:#68527e; --primary-text:#f4eaff;
+  --secondary:#342e40; --disabled:#37313f; --disabled-text:#9b91a7;
+  --control:#3b3248; --control-edge:#9b82b635; --control-hover:#4b3e59;
+  --control-selected:#68527e; --control-selected-edge:#b79bce4d; --nav-active:#ffffff0d;
+  --panel-edge:#494150; --panel-wash:linear-gradient(180deg,#3b3048 0,#2e2839 52px,var(--surface) 130px);
+  --canvas:radial-gradient(ellipse at 0 16%,#3b304e 0,transparent 59%),radial-gradient(ellipse at 95% 70%,#473142 0,transparent 62%),#25222e;
+  --about-wash:radial-gradient(ellipse at 0 16%,#3b304e 0,transparent 59%),radial-gradient(ellipse at 95% 70%,#473142 0,transparent 62%);
+  --sheet:#25222e25; --module:#302a3bc9; --module-edge:#9382a53d; --module-line:#9382a545;
+  --title-wash:linear-gradient(110deg,#c8b5e3 15%,#d7c6eb 50%,#deb9d9 88%);
+  --detail-count:#c8b5e31a; --detail-surface:#292330f0; --detail-solid-bg:linear-gradient(145deg,#30293a,#292330 48%,#25202e);
+  --detail-ink:var(--text); --detail-muted:var(--muted); --detail-subtle:var(--muted); --range-thumb-edge:#a88dbf;
+}
+:root[data-ui-theme=purple][data-color-mode=standard] :is(.primary:not(.delete-confirm):not(.danger),.send-button,.primary-button,.consent-primary):enabled { background:var(--primary); color:var(--primary-text); border-color:transparent; }
+:root[data-ui-theme=purple][data-color-mode=standard] :is(.primary:not(.delete-confirm):not(.danger),.send-button,.primary-button,.consent-primary):hover:enabled { background:var(--primary-hover); }
+:root[data-ui-theme=purple][data-color-mode=standard] :is(.primary:not(.delete-confirm):not(.danger),.send-button,.primary-button,.consent-primary):disabled { background:var(--disabled); color:var(--disabled-text); }
+:root[data-ui-theme=purple][data-color-mode=standard] :is(.tabs .active,.filter-trigger[aria-expanded=true],.search-toggle[aria-expanded=true],.filter-popover button[aria-current=true],.move-option:has(input:checked)) { background:var(--selected); border-color:var(--selected-line); color:var(--accent-text); box-shadow:none; }
+:root[data-ui-theme=purple][data-color-mode=standard] :is(.note-identity,.reminder-label,.reminder-count,.note-status.is-open,.category-badge,.category-add,.filter-popover .view-check,.filter-popover .manage-entry,.move-option .current-label,.query-status[data-connected=true],.pin-button[aria-pressed=true],.favorite-button[aria-pressed=true],.note-tools .pinned-icon) { color:var(--accent-text); }
+:root[data-ui-theme=purple][data-color-mode=standard] :is(.note-status.is-open,.toast,.category-badge,.timing-shortcuts button) { background:var(--selected); color:var(--accent-text); }
+:root[data-ui-theme=purple][data-color-mode=standard] :is(.note-status.is-open::before,.note-identity i) { background:var(--accent); }
+:root[data-ui-theme=purple][data-color-mode=standard] :is(.check.done,.check.done::before) { background:var(--completed-fill); border-color:var(--completed-fill); color:#fff; }
+:root[data-ui-theme=purple][data-color-mode=standard] .check.done { background:transparent; }
+:root[data-ui-theme=purple][data-color-mode=standard] :is(input[type=checkbox],input[type=radio]) { accent-color:var(--accent); }
+:root[data-ui-theme=purple][data-color-mode=standard] :is(.panel,.note-toolbar,.reminder-card) { background:var(--panel-wash); border-color:var(--line); }
+:root[data-ui-theme=purple][data-color-mode=standard] body[data-mode=note] { --surface:var(--theme-surface); --text:var(--theme-text); --muted:var(--theme-muted); --line:var(--theme-line); --stripe:var(--accent); }
+:root[data-ui-theme=purple][data-color-mode=standard] :is(.desktop-note,.filter-popover,dialog) { background:var(--surface); border-color:var(--line); color:var(--text); }
+:root[data-ui-theme=purple][data-color-mode=standard] :is(.tabs,.search-box,.quick-add,.group-count) { background:var(--raised); border-color:var(--line); }
+:root[data-ui-theme=purple][data-color-mode=standard] :is(.record,.section-heading,.category-fixed,.category-row,.row-actions,.reminder-card .secondary) { border-color:var(--line); }
+:root[data-ui-theme=purple][data-color-mode=standard] :is(.secondary,.reminder-card .secondary,.row-actions button,.category-dialog .secondary) { background:var(--secondary); color:var(--text); border-color:var(--line); }
+:root[data-ui-theme=purple][data-color-mode=standard] :is(.filter-popover button,.category-fixed,.move-option,.category-name,.delete-copy) { color:var(--text); }
+:root[data-ui-theme=purple][data-color-mode=standard] :is(.menu-label,.view-count,.category-count,.fixed-meta,.note-category,.quick-category,.current-label,.move-note-title,.delete-detail,.icon-button,.filter-trigger,.tabs button) { color:var(--muted); }
+:root[data-ui-theme=purple][data-color-mode=standard] .tabs .active { color:var(--accent-text); }
+:root[data-ui-theme=purple][data-color-mode=standard] :is(.filter-popover button:hover,.move-option:hover,.category-row .icon-button:hover,.collapse-button:hover,.compact-actions .actions-list button:hover,.quick-add .quick-category-picker:hover,.quick-option:hover,.timing-shortcuts button:hover) { background:var(--hover); color:var(--accent-text); }
+:root[data-ui-theme=purple][data-color-mode=standard] .note-meta-left .note-category { background:var(--raised); border-color:var(--line); color:var(--muted); }
+:root[data-ui-theme=purple][data-color-mode=standard] .menu-divider { background:var(--line); }
+:root[data-ui-theme=purple][data-color-mode=standard] :is(.category-rename,.field input,.field select,.field textarea,.category-form input) { background:var(--input); border-color:var(--selected-line); color:var(--text); }
+:root[data-ui-theme=purple][data-color-mode=standard] #progress-text .completed-count { color:var(--accent-text); }

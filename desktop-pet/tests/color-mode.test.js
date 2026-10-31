@@ -47,12 +47,12 @@ test('全局配色覆盖已打开、延迟创建和重载窗口，关闭窗口�
   assert.deepEqual(first.sent.at(-1), ['pet:color-mode', 'standard', 'light', 'green']);
   theme = 'blue'; manager.sync();
   assert.deepEqual(first.sent.at(-1), ['pet:color-mode', 'standard', 'light', 'blue']);
-  appearance = 'dark'; manager.sync();
-  assert.deepEqual(first.sent.at(-1), ['pet:color-mode', 'standard', 'dark', 'blue']);
+  theme = 'purple'; appearance = 'dark'; manager.sync();
+  assert.deepEqual(first.sent.at(-1), ['pet:color-mode', 'standard', 'dark', 'purple']);
   const late = make(); late.webContents.emit('did-finish-load');
-  assert.deepEqual(late.sent.at(-1), ['pet:color-mode', 'standard', 'dark', 'blue']);
+  assert.deepEqual(late.sent.at(-1), ['pet:color-mode', 'standard', 'dark', 'purple']);
   mode = 'accessible'; first.webContents.emit('did-finish-load');
-  assert.deepEqual(first.sent.at(-1), ['pet:color-mode', 'accessible', 'dark', 'blue']);
+  assert.deepEqual(first.sent.at(-1), ['pet:color-mode', 'accessible', 'dark', 'purple']);
   first.destroyed = true; first.emit('closed'); const count = first.sent.length;
   theme = 'green';
   manager.sync(); first.webContents.emit('did-finish-load');
@@ -84,7 +84,11 @@ test('真实窗口closed之后不可再访问webContents，清理使用已捕获
 
 for (const [preload, apiName] of [['preload.js', 'petDesktop'], ['quota-label-preload.js', 'petQuotaLabel'],
   ['chat-preload.js', 'qiuqiuChat'], ['about-preload.js', 'qiuqiuAbout'], ['bubble-preload.js', 'petBubble'], ['edge-notice-preload.js', 'edgeNotice'], ['thought-preload.js', 'petThought'],
-  ['customize-preload.js', 'petCustomizer'], ['notes-preload.js', 'qiuNotes'], ['api-usage-preload.js', 'qiuqiuApiUsage'], ['api-usage-label-preload.js', 'qiuqiuApiUsageLabel'], ['codex-details-preload.js', 'petCodexDetails']]) {
+  ['customize-preload.js', 'petCustomizer'], ['notes-preload.js', 'qiuNotes'], ['api-usage-preload.js', 'qiuqiuApiUsage'], ['api-usage-label-preload.js', 'qiuqiuApiUsageLabel'], ['codex-details-preload.js', 'petCodexDetails'],
+  ['shortcuts-preload.js', 'qiuShortcuts'], ['pomodoro-preload.js', 'qiuPomodoro'], ['workbuddy-details-preload.js', 'petWorkBuddyDetails'],
+  ['workbuddy-label-preload.js', 'qiuqiuWorkBuddyLabel'], ['workbuddy-consent-preload.js', 'qiuqiuConsent'],
+  ['api-balance-details-preload.js', 'petApiBalanceDetails'], ['api-balance-label-preload.js', 'qiuqiuApiBalanceLabel'],
+  ['codex-consent-preload.js', 'qiuqiuConsent'], ['quota-guard-preload.js', 'petQuotaGuard']]) {
   test(`${preload} 过滤三项配色枚举，兼容两参数回调，可注销且没有改变设置权限`, () => {
     const ipc = new EventEmitter(); let api; const sends = [];
     ipc.send = (...args) => sends.push(args);
@@ -96,18 +100,20 @@ for (const [preload, apiName] of [['preload.js', 'petDesktop'], ['quota-label-pr
     const close = api.onColorMode((value, appearance, theme) => seen.push([value, appearance, theme]));
     const closeLegacy = api.onColorMode((value, appearance) => legacy.push([value, appearance]));
     ipc.emit('pet:color-mode', {}, 'accessible', 'dark', 'blue');
+    ipc.emit('pet:color-mode', {}, 'standard', 'light', 'purple');
     for (const theme of [undefined, null, '', 'Blue', 'blue ', { injected: true }, []]) {
       ipc.emit('pet:color-mode', {}, 'accessible', 'light', theme);
     }
     ipc.emit('pet:color-mode', {}, { injected: true }, 'invalid', 'green');
     assert.deepEqual(seen, [
       ['accessible', 'dark', 'blue'],
+      ['standard', 'light', 'purple'],
       ...Array.from({ length: 7 }, () => ['accessible', 'light', 'green']),
       ['standard', 'system', 'green']
     ]);
     assert.deepEqual(legacy, seen.map(([value, appearance]) => [value, appearance]));
     close(); closeLegacy(); ipc.emit('pet:color-mode', {}, 'standard', 'dark', 'blue');
-    assert.equal(seen.length, 9); assert.equal(legacy.length, 9);
+    assert.equal(seen.length, 10); assert.equal(legacy.length, 10);
     assert.equal(ipc.listenerCount('pet:color-mode'), 0); assert.deepEqual(sends, []);
   });
 }
@@ -131,6 +137,8 @@ for (const apiName of ['petBubble', 'qiuNotes', 'petCustomizer', 'petCodexDetail
     assert.equal(root.dataset.appearance, 'light'); assert.equal(blueStyle.disabled, true);
     update('invalid', 'light', 'blue');
     assert.equal(root.dataset.colorMode, 'standard'); assert.equal(root.dataset.uiTheme, 'blue');
+    update('standard', 'dark', 'purple');
+    assert.equal(root.dataset.uiTheme, 'purple'); assert.equal(blueStyle.disabled, true, '紫色不启用蓝色专用样式');
     update('standard', 'light', 'invalid');
     assert.equal(root.dataset.uiTheme, 'green'); assert.equal(blueStyle.disabled, true);
     update('accessible', 'dark'); assert.equal(root.dataset.uiTheme, 'green', '旧两参数事件默认薄荷绿');

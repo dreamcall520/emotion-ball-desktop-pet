@@ -33,6 +33,32 @@
   --bubble-strong: #eed09b;
   --bubble-urgent: #ffbeb6;
 }
+
+:root[data-ui-theme="green"] {
+  --bubble-surface: linear-gradient(135deg, #fffffff2, #eff7f3eb);
+  --bubble-text: #344641; --bubble-dot: #f1f7f3eb;
+  --bubble-button: linear-gradient(#e1f1e9, #d5e9df);
+  --bubble-button-text: #306653; --bubble-secondary-text: #63756c;
+}
+:root[data-ui-theme="green"][data-appearance="dark"] {
+  --bubble-surface: linear-gradient(135deg, #364740f2, #2b3b35eb);
+  --bubble-text: #edf7f1; --bubble-dot: #304039eb;
+  --bubble-button: linear-gradient(#426557, #38594c);
+  --bubble-button-text: #d3efe0; --bubble-secondary-text: #b9cec4;
+}
+:root[data-ui-theme="blue"] {
+  --bubble-surface: linear-gradient(135deg, #fffffff2, #eff4fbeb);
+  --bubble-text: #35455b; --bubble-dot: #f1f5faeb;
+  --bubble-button: linear-gradient(#e4effb, #d8e7f7);
+  --bubble-button-text: #365e8a; --bubble-secondary-text: #67758a;
+}
+:root[data-ui-theme="blue"][data-appearance="dark"] {
+  --bubble-surface: linear-gradient(135deg, #384558f2, #2d394beb);
+  --bubble-text: #eef4fc; --bubble-dot: #323e50eb;
+  --bubble-button: linear-gradient(#456283, #395675);
+  --bubble-button-text: #d7eaff; --bubble-secondary-text: #c1cede;
+}
+
 html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; user-select: none; }
 body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; -webkit-font-smoothing: antialiased; }
 #bubble {

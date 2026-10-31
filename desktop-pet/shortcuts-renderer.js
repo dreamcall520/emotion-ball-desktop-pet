@@ -448,7 +448,7 @@
   }
   function applyColorMode(mode, preference, theme) {
     document.documentElement.dataset.colorMode = mode === 'accessible' ? 'accessible' : 'standard';
-    document.documentElement.dataset.uiTheme = theme === 'blue' ? 'blue' : 'green';
+    document.documentElement.dataset.uiTheme = ['blue', 'purple'].includes(theme) ? theme : 'green';
     $('blue-style').disabled = theme !== 'blue';
     appearance = ['light', 'dark'].includes(preference) ? preference : 'system';
     refreshAppearance();

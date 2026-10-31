@@ -145,6 +145,16 @@ if (process.versions.electron && process.argv.includes('--bubble-dom-child')) {
       await configure('standard', 'light', 'blue'); const light = await signature();
       await configure('standard', 'dark', 'green'); const dark = await signature();
       assert.notEqual(light, dark, 'normal appearance actually changes bubble surface and text');
+      for (const appearance of ['light', 'dark']) {
+        const colors = [];
+        for (const theme of ['green', 'blue', 'purple']) {
+          await configure('standard', appearance, theme);
+          await show({ text: '主题色跟随当前选择。', actions: [{ id: 'again', label: '再来一次' }, { id: 'rest', label: '你歇会儿' }] });
+          colors.push(await run("getComputedStyle(document.querySelector('#actions button')).backgroundImage"));
+          await layout(`theme-${theme}-${appearance}`, 2);
+        }
+        assert.equal(new Set(colors).size, 3, 'all three themes have distinct primary buttons');
+      }
       const wc = controller.getWindow().webContents;
       wc.debugger.attach('1.3');
       wc.send('pet:color-mode', 'standard', 'system', 'green');

@@ -109,8 +109,8 @@ let weatherWindow = null;
 const SoftOrbModel = require('./lib/soft-orb-model');
 const APP_NAME = '球球桌宠';
 const ACCEPTANCE_KIND = require('../package.json').qiuqiuAcceptance;
-const IS_ACCEPTANCE = ['zcode', 'combined', 'weather','soft-orb'].includes(ACCEPTANCE_KIND);
-const ACCEPTANCE_NAME = ACCEPTANCE_KIND === 'soft-orb' ? '球球桌宠-柔光团候选' : ACCEPTANCE_KIND === 'weather' ? '球球桌宠-天气验收' : ACCEPTANCE_KIND === 'combined' ? '球球桌宠-联动整合验收' : '球球桌宠-ZCode验收';
+const IS_ACCEPTANCE = ['zcode', 'combined', 'weather','soft-orb', 'bubble'].includes(ACCEPTANCE_KIND);
+const ACCEPTANCE_NAME = ACCEPTANCE_KIND === 'bubble' ? '球球桌宠-气泡验收' : ACCEPTANCE_KIND === 'soft-orb' ? '球球桌宠-柔光团候选' : ACCEPTANCE_KIND === 'weather' ? '球球桌宠-天气验收' : ACCEPTANCE_KIND === 'combined' ? '球球桌宠-联动整合验收' : '球球桌宠-ZCode验收';
 const APP_WEBSITE = 'https://qiuqiu.pet/';
 const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const IS_SMOKE_TEST = process.env.PET_SMOKE_TEST === '1';
@@ -1416,6 +1416,29 @@ function detachBubbleVisibilityEvents(expected = null) {
   }
 }
 
+// 仅独立验收包取证：记录真实显示的两个浮窗，不构造对白或触发场景。
+async function captureBubbleAcceptance(win) {
+  if (ACCEPTANCE_KIND !== 'bubble' || IS_SMOKE_TEST) return;
+  await new Promise(resolve => setTimeout(resolve, 120));
+  if (isQuitting || win.isDestroyed() || !win.isVisible() || !petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return;
+  try {
+    const folder = path.join(app.getPath('userData'), 'acceptance-screenshots', `${Date.now()}-${randomUUID()}`);
+    fs.mkdirSync(folder, { recursive: true, mode: 0o700 });
+    const frames = [];
+    for (const [name, view] of [['bubble', win], ['pet', petWindow]]) {
+      const bounds = view.getBounds();
+      const image = await view.webContents.capturePage();
+      if (image.isEmpty() || view.isDestroyed() || !view.isVisible()) throw new Error('验收截图窗口已失效');
+      fs.writeFileSync(path.join(folder, `${name}.png`), image.toPNG());
+      frames.push({ name, title: view.getTitle(), bounds, boundsAfter: view.getBounds(), pixels: image.getSize() });
+    }
+    fs.writeFileSync(path.join(folder, 'scene.json'), JSON.stringify({ capturedAt: new Date().toISOString(),
+      uiTheme: settings.uiTheme, appearance: settings.codexQuotaAppearance, colorMode: settings.colorMode,
+      event: dialogue?._current?.event, motion: dialogue?._current?.motion,
+      shape: settings.customization.appearance.shape, frames }, null, 2));
+  } catch (error) { writeError('气泡验收取证', error); }
+}
+
 function bindBubbleVisibilityEvents() {
   let win;
   try {
@@ -1437,6 +1460,7 @@ function bindBubbleVisibilityEvents() {
     }
     repositionQuotaLabel();
     thoughts?.reposition();
+    if (win.isVisible()) void captureBubbleAcceptance(win);
   };
   binding.onClosed = () => {
     if (bubbleVisibilityBinding !== binding) return;
@@ -1911,7 +1935,7 @@ function setColorMode(value) {
 }
 
 function setUiTheme(value) {
-  if (!settings || isQuitting || !['green', 'blue'].includes(value) || settings.uiTheme === value) return false;
+  if (!settings || isQuitting || !['green', 'blue', 'purple'].includes(value) || settings.uiTheme === value) return false;
   const previous = settings.uiTheme;
   settings.uiTheme = value;
   try { persistSettings(); }
@@ -2434,7 +2458,7 @@ function menuTemplate() {
             click: () => setInterfaceAppearance(value)
           })) },
         { type: 'separator' },
-        { id: 'ui-theme', label: '主题色', submenu: [['green', '薄荷绿'], ['blue', '晴空蓝']].map(([value, label]) => ({
+        { id: 'ui-theme', label: '主题色', submenu: [['green', '薄荷绿'], ['blue', '晴空蓝'], ['purple', '暮光紫']].map(([value, label]) => ({
           id: `ui-theme-${value}`, label, type: 'radio', checked: settings.uiTheme === value,
           click: () => setUiTheme(value)
         })) },

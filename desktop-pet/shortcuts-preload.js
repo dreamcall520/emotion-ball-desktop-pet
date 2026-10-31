@@ -22,7 +22,7 @@ contextBridge.exposeInMainWorld('qiuShortcuts', {
     const listener = (_event, mode, appearance, theme) => callback(
       mode === 'accessible' ? 'accessible' : 'standard',
       ['light', 'dark'].includes(appearance) ? appearance : 'system',
-      theme === 'blue' ? 'blue' : 'green');
+      ['blue', 'purple'].includes(theme) ? theme : 'green');
     ipcRenderer.on('pet:color-mode', listener);
     return () => ipcRenderer.removeListener('pet:color-mode', listener);
   }

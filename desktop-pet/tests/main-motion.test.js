@@ -3564,11 +3564,11 @@ test('收藏名称20项上限与同名改名拒绝，不接受客户端伪造ID�
 });
 
 
-test('主题菜单独立保存薄荷绿与晴空蓝，不覆盖浅深外观、色弱或球球形象，重启保留', async () => {
+test('三种主题菜单独立保存，不覆盖浅深外观、色弱或球球形象，重启保留', async () => {
   const f = await fixture({ colorMode: 'accessible', codexQuotaAppearance: 'dark' });
   const before = f.call('JSON.stringify({customization:settings.customization,startup:settings.startupAppearance})');
   const themes = findMenuItem(f.call('menuTemplate()'), 'ui-theme');
-  assert.deepEqual(Array.from(themes.submenu, item => item.label), ['薄荷绿', '晴空蓝']);
+  assert.deepEqual(Array.from(themes.submenu, item => item.label), ['薄荷绿', '晴空蓝', '暮光紫']);
   assert.equal(findMenuItem(themes.submenu, 'ui-theme-green').checked, true);
   findMenuItem(themes.submenu, 'ui-theme-blue').click();
   assert.equal(f.saved.at(-1).uiTheme, 'blue');
@@ -3577,13 +3577,19 @@ test('主题菜单独立保存薄荷绿与晴空蓝，不覆盖浅深外观、�
   assert.equal(f.pet.uiTheme, 'blue');
   assert.equal(f.pet.colorAppearance, 'dark');
   assert.equal(f.call('JSON.stringify({customization:settings.customization,startup:settings.startupAppearance})'), before);
+  findMenuItem(themes.submenu, 'ui-theme-purple').click();
+  assert.equal(f.saved.at(-1).uiTheme, 'purple');
+  assert.equal(f.pet.uiTheme, 'purple');
+  assert.equal(f.saved.at(-1).colorMode, 'accessible');
+  assert.equal(f.saved.at(-1).codexQuotaAppearance, 'dark');
+  assert.equal(f.call('JSON.stringify({customization:settings.customization,startup:settings.startupAppearance})'), before);
   const restarted = await fixture({ loadedSettings: f.saved.at(-1) });
-  assert.equal(findMenuItem(restarted.call('menuTemplate()'), 'ui-theme-blue').checked, true);
+  assert.equal(findMenuItem(restarted.call('menuTemplate()'), 'ui-theme-purple').checked, true);
   restarted.pet.webContents.emit('did-finish-load');
-  assert.equal(restarted.pet.uiTheme, 'blue');
+  assert.equal(restarted.pet.uiTheme, 'purple');
   const writes = f.saved.length;
+  assert.equal(f.call("setUiTheme('invalid')"), false);
   assert.equal(f.call("setUiTheme('purple')"), false);
-  assert.equal(f.call("setUiTheme('blue')"), false);
   assert.equal(f.saved.length, writes);
 });
 
