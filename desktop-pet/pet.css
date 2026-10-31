@@ -202,7 +202,7 @@ body {
 #pet[data-shape="soft-orb"] .soft-orb-canvas{position:absolute;inset:0;pointer-events:none;}
 #pet[data-shape="soft-orb"].dragging .soft-orb-canvas{transform:rotate(var(--drag-tilt,0deg));}
 
-/* One complete eye at rest; the existing artwork only translates, never morphs. */
+/* Original face at rest; the existing artwork only translates, never morphs. */
 #pet[data-edge-peek="true"] { transition:transform 480ms cubic-bezier(.22,1,.36,1); }
 #pet[data-edge-peek="true"][data-presentation="tucked"][data-edge="left"] { transform:translateX(calc(-1 * var(--edge-tuck))); }
 #pet[data-edge-peek="true"][data-presentation="tucked"][data-edge="right"] { transform:translateX(var(--edge-tuck)); }
@@ -212,10 +212,3 @@ body {
 @media(prefers-reduced-motion:reduce){#pet[data-edge-peek="true"]{transition:none;}}
 
 
-/* Front-facing single eye uses the selected colour, with no perspective squeeze. */
-#pet[data-edge-peek="true"][data-shape="blob"][data-presentation="tucked"]::after{content:"";display:block;position:absolute;left:76%;top:35.5%;width:7.5%;height:19%;border-radius:999px;background:var(--edge-eye-color,#1a1a1a);pointer-events:none;transform-origin:center;animation:edge-peek-blink 4.4s ease-in-out infinite;}
-#pet[data-edge-peek="true"][data-shape="blob"][data-presentation="tucked"][data-edge="right"]::after{left:16.5%;}
-#pet[data-edge-peek="true"][data-shape="blob"][data-presentation="tucked"] .eb-eye{opacity:0;}
-#pet[data-edge-peek="true"][data-shape="blob"][data-presentation="tucked"]:is([data-mode="sleep"],[data-mode="locked"],[data-emotion="00"],[data-emotion="56"])::after{animation:none;transform:scaleY(.08);}
-@keyframes edge-peek-blink{0%,85%,91%,100%{transform:scaleY(1)}88%{transform:scaleY(.06)}}
-@media(prefers-reduced-motion:reduce){#pet[data-edge-peek="true"][data-shape="blob"][data-presentation="tucked"]::after{animation:none;}}

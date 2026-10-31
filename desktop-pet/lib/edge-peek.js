@@ -4,12 +4,12 @@
   else root.EdgePeek=api;
 })(typeof window!=='undefined'?window:this,function(){
   'use strict';
-  // Canvas translation fractions calibrated against the approved one-eye poses.
+  // Canvas translation fractions calibrated against the approved body reveals.
   // Artwork, body scale and the native window bounds stay unchanged.
   const SPECS=Object.freeze({
-    blob:Object.freeze({tucked:.676,peeked:.0864,delayMs:900}),
+    blob:Object.freeze({tucked:.588,peeked:.0864,delayMs:900}),
     'new-year-sheep':Object.freeze({tucked:.5275,peeked:.1466,delayMs:900}),
-    'soft-orb':Object.freeze({tucked:.4065,peeked:.1861,delayMs:900})
+    'soft-orb':Object.freeze({tucked:.58015625,peeked:.1861,delayMs:900})
   });
   const BODY=Object.freeze({blob:[.06,.06,.94,.94],'new-year-sheep':[40/320,.08,270/320,.96],'soft-orb':[85/512,95/512,427/512,417/512]});
   function specFor(shape){return SPECS[shape]||null;}

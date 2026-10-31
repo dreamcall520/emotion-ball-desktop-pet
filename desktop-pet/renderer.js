@@ -111,7 +111,6 @@
   function syncEdgePeekStyle() {
     const spec=window.EdgePeek?.specFor(customization.appearance.shape);
     petElement.dataset.edgePeek=String(Boolean(spec));
-    if(spec)petElement.style.setProperty('--edge-eye-color',customization.appearance.eyeColor);
     if(spec){petElement.style.setProperty('--edge-tuck',`${spec.tucked*100}%`);petElement.style.setProperty('--edge-peek',`${spec.peeked*100}%`);}
     else {petElement.style.removeProperty?.('--edge-tuck');petElement.style.removeProperty?.('--edge-peek');}
   }
@@ -136,7 +135,7 @@
       presentationMode === 'peeked' && ['left', 'right'].includes(petElement.dataset.edge);
     const side=petElement.dataset.edge,naturalEdge=window.EdgePeek?.specFor(customization.appearance.shape);
     if(naturalEdge&&['tucked','peeked'].includes(presentationMode)&&['left','right'].includes(side)){
-      facing=customization.appearance.shape==='soft-orb'&&presentationMode==='tucked'?(side==='left'?'left':'right'):(side==='left'?'right':'left');
+      facing=side==='left'?'right':'left';
     }else facing = auroraAtEdge ? 'right' : PetFacing.resolve(lastSample?.petBounds, lastSample?.workArea, facing);
     petElement.dataset.facing = facing;
     ball?.setFacing(visualFacing());
@@ -595,7 +594,7 @@
     // 仅在朝向实际改变时更新，隐藏/暂停后的重复报文不能重画冻结帧。
     if (['tucked','peeked'].includes(packet.mode) && ['left', 'right'].includes(packet.side)) {
       const inward = customization.appearance.shape === 'aurora-cloud' ? 'right' :
-        customization.appearance.shape==='soft-orb'&&packet.mode==='tucked' ? (packet.side==='left'?'left':'right') : packet.side === 'left' ? 'right' : 'left';
+        packet.side === 'left' ? 'right' : 'left';
       if (facing !== inward || customization.appearance.shape==='soft-orb') {
         facing = inward;
         petElement.dataset.facing = facing;
