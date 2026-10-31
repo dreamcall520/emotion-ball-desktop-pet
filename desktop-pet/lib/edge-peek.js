@@ -7,7 +7,7 @@
   // Canvas translation fractions calibrated against the approved body reveals.
   // Artwork, body scale and the native window bounds stay unchanged.
   const SPECS=Object.freeze({
-    blob:Object.freeze({tucked:.588,peeked:.0864,delayMs:900}),
+    blob:Object.freeze({tucked:.5,peeked:.0864,delayMs:900}),
     'new-year-sheep':Object.freeze({tucked:.5275,peeked:.1466,delayMs:900}),
     'soft-orb':Object.freeze({tucked:.58015625,peeked:.1861,delayMs:900})
   });
