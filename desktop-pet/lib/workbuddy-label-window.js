@@ -7,6 +7,7 @@ const { quotaLabelSize } = require('./quota-label-placement');
 const { createWorkBuddyGuardEntryWindow } = require('./workbuddy-guard-entry-window');
 const { errorCode, errorMessage } = require('./workbuddy-quota-status');
 const { safeEnterpriseReport } = require('./workbuddy-quota');
+const { safeWebsiteSummaryReport } = require('./workbuddy-website-summary');
 const CHANNEL = 'pet:workbuddy-label';
 const valid = b => b && ['x', 'y', 'width', 'height'].every(k => Number.isFinite(b[k])) && b.width > 0 && b.height > 0;
 const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
@@ -49,13 +50,14 @@ function safeState(state) {
   const number = n => Number.isFinite(n) && n >= 0;
   const date = n => Number.isFinite(n) && n >= 0 && n <= 8640000000000000 ? n : null;
   const r = state?.report;
-  const report = r?.scope === 'enterprise' ? safeEnterpriseReport(r) : r && ['total', 'basic', 'reward', 'purchased'].every(k => number(r[k])) ? {
+  const website = r?.scope === 'website-summary';
+  const report = website ? safeWebsiteSummaryReport(r) : r?.scope === 'enterprise' ? safeEnterpriseReport(r) : r && ['total', 'basic', 'reward', 'purchased'].every(k => number(r[k])) ? {
     total: r.total, basic: r.basic, reward: r.reward, purchased: r.purchased,
     plan: typeof r.plan === 'string' ? r.plan.slice(0, 60) : '未知套餐',
     nextRefreshAt: date(r.nextRefreshAt), updatedAt: date(r.updatedAt),
     expires: Array.isArray(r.expires) ? r.expires.filter(e => e && number(e.amount) && date(e.at) !== null).map(e => ({ amount: e.amount, at: e.at })) : []
   } : null;
-  const history = Array.isArray(state?.history) ? [...new Map(state.history.filter(sample =>
+  const history = !website && Array.isArray(state?.history) ? [...new Map(state.history.filter(sample =>
     sample && Number.isSafeInteger(sample.at) && sample.at >= 0 && sample.at <= 8640000000000000 && number(sample.total))
     .map(sample => {
       const clean = { at: sample.at, total: sample.total };

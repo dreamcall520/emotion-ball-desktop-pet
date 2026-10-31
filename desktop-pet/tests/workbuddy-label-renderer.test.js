@@ -236,3 +236,27 @@ test('API root button always announces the full OpenAI API source, including emp
   }
   const wb=fixture();for(const state of [{},{stale:true,report},{error:'offline',report}]){wb.render(state);assert.match(wb.elements.get('toggle').attributes['aria-label'],/WorkBuddy/);assert.match(wb.elements.get('toggle').title,/WorkBuddy/);}
 });
+
+test('网站汇总卡明确来源/未分类，不显示假基础奖励、刷新到期或本机任务能力，旧分支可恢复', () => {
+  const { elements: e, render } = fixture();
+  const website = { ...report, scope: 'website-summary', total: 450.25, basic: null, reward: null, purchased: null };
+  render({ report: website, expanded: true });
+  assert.equal(e.get('quota-label').dataset.scope, 'website-summary');
+  assert.equal(e.get('total').textContent, '450.25'); assert.equal(e.get('period').textContent, '网站');
+  assert.equal(e.get('refresh-date').textContent, '网站积分汇总');
+  assert.equal(e.get('expiry').textContent, '未提供分类');
+  assert.match(e.get('refresh-date').title, /未提供周期刷新时间/);
+  assert.match(e.get('expiry').title, /未提供基础、奖励、购买分类或到期信息/);
+  assert.equal(e.get('balances').hidden, true);
+  for (const key of ['basic', 'reward', 'purchased']) assert.equal(e.get(key).textContent, '—');
+  assert.equal(e.get('tasks').disabled, true); assert.equal(e.get('results').disabled, true);
+  assert.match(e.get('toggle').attributes['aria-label'], /网站积分汇总.*未提供分类/);
+  assert.doesNotMatch(e.get('expanded-header').title, /每5分钟自动更新/);
+  render({ report: { ...website, total: 0 }, stale: true });
+  assert.equal(e.get('expanded-total').textContent, '0'); assert.equal(e.get('period').textContent, '待更新');
+  render({ report });
+  assert.equal(e.get('quota-label').dataset.scope, 'personal');
+  assert.equal(e.get('balances').hidden, false); assert.equal(e.get('tasks').disabled, false);
+  assert.equal(e.get('basic').textContent, '500'); assert.equal(e.get('reward').textContent, '6,899.91');
+  assert.match(e.get('expiry').title, /120 积分/);
+});

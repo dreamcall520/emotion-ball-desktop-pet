@@ -1,0 +1,67 @@
+{
+  "distribution": "mas-candidate",
+  "appSandbox": false,
+  "tests": {
+    "passed": 2819,
+    "failed": 0
+  },
+  "codex": {
+    "actualUiChatReplies": [
+      "球球连接成功",
+      "测试球球能否按要求简短回复并保持连通。"
+    ],
+    "actualTaskTransition": [
+      "active",
+      "completed"
+    ],
+    "authorizedQuotaRead": true,
+    "taskLogCoverage": "partial"
+  },
+  "zcode": {
+    "actualQuotaHttpStatus": 200,
+    "balanceState": "empty",
+    "paidState": "unavailable",
+    "chatVerified": false,
+    "taskCachePartial": true,
+    "experimentalHostAuthenticated": true,
+    "actualModelListError": "MODELS_UNAVAILABLE",
+    "candidatePairingAndModelErrorVerified": true,
+    "actualModelMessageSent": false,
+    "vendorAuthorizationVerified": false
+  },
+  "workbuddy": {
+    "officialLoginWindowOpened": true,
+    "userWillCompleteLogin": false,
+    "quotaVerified": true,
+    "openApiAppConfigured": false,
+    "userLoginCompleted": true,
+    "websiteRemaining": 8050,
+    "candidateRemaining": 8050,
+    "restoredRememberedAccountAfterRebuild": true
+  },
+  "package": {
+    "asarSha256": "a7d43d28870b9f0305fa7d382e01931ec0d03c8ebfc1c94af9234944dbb3ceb8",
+    "criticalRuntimeSourceMatches": 10,
+    "wsIncluded": true,
+    "hostLauncherIncluded": false,
+    "strictLocalSignatureVerified": true,
+    "masDistributionSignature": false,
+    "runtimeFilesCompared": 440,
+    "byteMatchedFiles": 439,
+    "nativeMatchesAfterRemovingLocalSignatures": true,
+    "externalHostsIncluded": false
+  },
+  "formalFiles": [
+    {
+      "file": "/Applications/球球桌宠.app/Contents/Resources/app.asar",
+      "sha256Unchanged": true
+    },
+    {
+      "file": "/Users/allan/Library/Application Support/球球桌宠/settings.json",
+      "sha256Unchanged": false
+    }
+  ],
+  "formalSettingsChangeAttribution": "unconfirmed; no restoration attempted",
+  "releaseSubmitted": false,
+  "r4FormalAppAndSettingsUnchanged": true
+}

@@ -174,6 +174,23 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/api-usage-renderer.js',
     'desktop-pet/lib/api-usage.js',
     'desktop-pet/lib/app-update.js',
+    'desktop-pet/lib/codex-account-usage.js',
+    'desktop-pet/lib/codex-ws-transport.js',
+    'desktop-pet/lib/codex-chat-ws-connection.js',
+    'desktop-pet/lib/zcode-chat-ws-rpc.js',
+    'desktop-pet/lib/mas-directory-access.js',
+    'desktop-pet/lib/mas-codex-connection.js',
+    'desktop-pet/lib/mas-codex-tasks.js',
+    'desktop-pet/lib/mas-provider-runtime.js',
+    'desktop-pet/lib/mas-zcode-provider.js',
+    'desktop-pet/lib/mas-workbuddy-provider.js',
+    'desktop-pet/lib/workbuddy-web-quota.js',
+    'desktop-pet/lib/workbuddy-website-summary.js',
+    'desktop-pet/store-connections.html',
+    'desktop-pet/store-connections.css',
+    'desktop-pet/store-connections-preload.js',
+    'desktop-pet/store-connections-renderer.js',
+
     'desktop-pet/lib/api-balance-account.js',
     'desktop-pet/lib/api-balance-client.js',
     'desktop-pet/lib/api-balance.js',
@@ -330,12 +347,15 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
   ];
   files.forEach(relativePath => copyFile(root, staging, relativePath));
 
+  fs.cpSync(path.join(root, 'node_modules/ws'), path.join(staging, 'node_modules/ws'), { recursive: true });
+
   const packageJson = {
     name: 'emotion-ball-desktop-pet',
     productName: '球球桌宠',
     version: rootPackage.version,
     private: true,
-    main: 'desktop-pet/main.js'
+    main: 'desktop-pet/main.js',
+    dependencies: { ws: rootPackage.dependencies.ws }
   };
   fs.writeFileSync(
     path.join(staging, 'package.json'),
@@ -408,7 +428,7 @@ function signWeatherApp(appPath) {
   adhocSign(appPath);
 }
 
-async function packageMac(root = path.resolve(__dirname, '../..'), { website = false, nativeIcon = false, softOrb = false, candidateBundleId = null } = {}) {
+async function packageMac(root = path.resolve(__dirname, '../..'), { website = false, nativeIcon = false, softOrb = false, masCandidate = false, candidateBundleId = null } = {}) {
   buildWeatherLocation(root);
   const icon = makeIcon(root);
   const staging = prepareStaging(root, website ? path.join(root, 'desktop-pet/build/website-staging') : undefined);
@@ -422,6 +442,14 @@ async function packageMac(root = path.resolve(__dirname, '../..'), { website = f
     fs.writeFileSync(packageFile,JSON.stringify(pkg,null,2)+'\n');
     options.name='球球桌宠-柔光团候选';options.appBundleId='local.xiaokun.emotionball.pet.softorb';
     options.out=path.join(root,'dist/soft-orb');
+  }
+  if (masCandidate) {
+    const packageFile = path.join(staging, 'package.json');
+    const candidate = JSON.parse(fs.readFileSync(packageFile, 'utf8'));
+    candidate.qiuqiuAcceptance = 'mas'; candidate.qiuqiuDistribution = 'mas-candidate';
+    fs.writeFileSync(packageFile, JSON.stringify(candidate, null, 2) + '\n');
+    options.name = '球球桌宠-商店联调候选'; options.appBundleId = 'local.xiaokun.emotionball.pet.mascandidate';
+    options.out = path.join(root, 'dist/mas-candidate');
   }
   if (nativeIcon) {
     options.extraResource = [path.join(root, 'desktop-pet/assets/app-icon-native/Assets.car')];
@@ -438,7 +466,7 @@ async function packageMac(root = path.resolve(__dirname, '../..'), { website = f
 }
 
 if (require.main === module) {
-  packageMac(undefined, { website: process.argv.includes('--website'), nativeIcon: process.argv.includes('--local-native-icon'), softOrb:process.argv.includes('--soft-orb') }).catch(error => {
+  packageMac(undefined, { website: process.argv.includes('--website'), nativeIcon: process.argv.includes('--local-native-icon'), softOrb:process.argv.includes('--soft-orb'), masCandidate:process.argv.includes('--mas-candidate') }).catch(error => {
     process.stderr.write(`${error.stack || error.message}\n`);
     process.exitCode = 1;
   });

@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { TextDecoder } = require('node:util');
+const { createHash } = require('node:crypto');
 const ENDPOINT = 'https://chatgpt.com/backend-api/wham/usage';
 const MAX_AUTH_BYTES = 1024 * 1024;
 const MAX_RESPONSE_BYTES = 1024 * 1024;
@@ -109,7 +110,7 @@ async function boundedJson(response, signal, check) {
 // Uses only an explicitly granted Codex root and existing ChatGPT access credentials.
 // No token refresh, API-key fallback, RPC, model request or credential logging.
 async function readCodexAccountUsage({ directoryAccess, io = fs.promises, fetch: fetchImpl = globalThis.fetch,
-  signal, timeoutMs = 10000, now = Date.now } = {}) {
+  signal, timeoutMs = 10000, now = Date.now, includeAccountKey = false } = {}) {
   if (!directoryAccess || typeof directoryAccess.withAccess !== 'function' || typeof fetchImpl !== 'function' ||
       !Number.isFinite(timeoutMs) || timeoutMs < 1 || timeoutMs > 30000) throw new TypeError('Invalid quota reader options');
   const controller = new AbortController();
@@ -135,7 +136,8 @@ async function readCodexAccountUsage({ directoryAccess, io = fs.promises, fetch:
     if (response.status === 429) throw usageError('RATE_LIMITED');
     if (response.status !== 200) throw usageError('HTTP_ERROR');
     const raw = await boundedJson(response, controller.signal, check); check();
-    return normalizeCodexAccountUsage(raw, typeof now === 'function' ? now() : now);
+    const snapshot = normalizeCodexAccountUsage(raw, typeof now === 'function' ? now() : now);
+    return includeAccountKey ? { ...snapshot, accountKey: createHash('sha256').update('codex-web-account:' + credentials.accountId).digest('hex') } : snapshot;
   };
   try {
     return await Promise.race([operation(), aborted]);

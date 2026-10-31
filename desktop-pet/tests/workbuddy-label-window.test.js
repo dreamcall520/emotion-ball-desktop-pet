@@ -258,3 +258,17 @@ test('WorkBuddy user toggles resize without native scaling or repeated refresh a
   controller.setGroupTransitionMode(null); assert.equal(win.boundsCalls.at(-1).animate, false);
   petBounds.x += 20; controller.reposition(); assert.equal(win.boundsCalls.at(-1).animate, false, 'following the pet is not a toggle animation');
 });
+
+test('website-summary卡IPC保留剩余积分，未知分类不变0且剔除假日期/账号/旧消费历史', () => {
+  const input = { scope: 'website-summary', total: 450.25, basic: 0, reward: 20, purchased: 30,
+    updatedAt: 1000, plan: '体验版', nextRefreshAt: 2000, expires: [{ amount: 8, at: 3000 }], accountKey: 'SECRET',
+    coverage: { packages: 'credits-only', basicRewardPurchased: 'not-separated', cycleReset: 'not-queried', enterpriseLimit: 'not-verified', token: 'SECRET' } };
+  const clean = safeState({ enabled: true, report: input, history: [{ at: 1000, total: 9, basic: 8 }] });
+  assert.equal(clean.report.scope, 'website-summary'); assert.equal(clean.report.total, 450.25);
+  for (const key of ['basic', 'reward', 'purchased', 'nextRefreshAt']) assert.equal(clean.report[key], null);
+  assert.deepEqual(clean.report.expires, []); assert.deepEqual(clean.history, []);
+  assert.deepEqual(clean.report.coverage, { packages: 'credits-only', basicRewardPurchased: 'not-separated', cycleReset: 'not-queried', enterpriseLimit: 'not-verified' });
+  assert.ok(!JSON.stringify(clean).includes('SECRET'));
+  assert.equal(safeState({ report: { ...input, total: 0 } }).report.total, 0);
+  for (const total of [null, -1, Infinity, '450']) assert.equal(safeState({ report: { ...input, total } }).report, null);
+});

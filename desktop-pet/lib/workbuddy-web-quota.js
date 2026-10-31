@@ -76,7 +76,7 @@ function createWorkBuddyWebQuota({ session, timeoutMs = 10000, maxResponseBytes 
     let userAgent;
     try { userAgent = session.getUserAgent(); }
     catch (_) { throw quotaError('SESSION_UNAVAILABLE'); }
-    if (typeof userAgent !== 'string' || !userAgent || /[\r\n]/.test(userAgent)) throw quotaError('SESSION_UNAVAILABLE');
+    if (typeof userAgent !== 'string' || !userAgent || /[^\x20-\x7e]/.test(userAgent)) throw quotaError('SESSION_UNAVAILABLE');
     const controller = new AbortController();
     let reader, response, interrupt, timer, abortCode;
     const interrupted = new Promise((_, reject) => { interrupt = reject; });

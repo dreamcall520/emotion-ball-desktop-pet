@@ -5,6 +5,7 @@ const { spawn: nodeSpawn } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const { TextDecoder } = require('node:util');
 const { isModelId } = require('./chat-models');
+const { createCodexChatWsConnection } = require('./codex-chat-ws-connection');
 
 // Keep this connection independent of the existing read-only quota/status RPC.
 const ERROR_CODES = Object.freeze(['MISSING', 'UNAUTHENTICATED', 'UNSUPPORTED', 'DISCONNECTED',
@@ -84,21 +85,27 @@ function finishNativeClose(target) {
 }
 
 function createCodexChatRpc({ workspaceDir, fs = nodeFs, spawn = nodeSpawn, homedir = os.homedir, env = process.env,
+  webSocket = null, hostHome,
   timeoutMs = 15000, maxFrameBytes = MAX_FRAME_BYTES, purpose = 'chat', getWeatherContext = () => '', onNotification = () => {}, onDisconnect = () => {} } = {}) {
   if (typeof workspaceDir !== 'string' || !path.isAbsolute(workspaceDir) || workspaceDir.includes('\0')) throw chatError('INVALID_INPUT');
   if (!['chat', 'notes'].includes(purpose)) throw chatError('INVALID_INPUT');
+  if (webSocket !== null && (!webSocket || typeof webSocket !== 'object' || Array.isArray(webSocket) ||
+    typeof hostHome !== 'string' || !path.isAbsolute(hostHome) || hostHome.includes('\0'))) throw chatError('INVALID_INPUT');
+  if (hostHome !== undefined && (webSocket === null || typeof hostHome !== 'string' || !path.isAbsolute(hostHome) || hostHome.includes('\0'))) throw chatError('INVALID_INPUT');
   const notesPurpose = purpose === 'notes';
   const instructions = notesPurpose ? NOTES_INSTRUCTIONS : CHAT_INSTRUCTIONS;
   const outputSchema = notesPurpose ? NOTES_OUTPUT_SCHEMA : CHAT_OUTPUT_SCHEMA;
   const textLimit = notesPurpose ? NOTES_TEXT_LIMIT : MAX_TEXT_LENGTH;
   const cwd = path.resolve(workspaceDir);
-  const defaultCodexHome = path.join(homedir(), '.codex');
+  // In MAS, homedir() is the sandbox container. Explicit hostHome only validates
+  // server-reported global instruction paths; this branch never scans that home.
+  const defaultCodexHome = path.join(webSocket === null ? homedir() : path.resolve(hostHome), '.codex');
   const globalInstructionPaths = new Set(['AGENTS.md', 'AGENTS.override.md'].map(name => path.join(defaultCodexHome, name)));
   const timeout = Math.max(1, Math.min(30000, Number(timeoutMs) || 15000));
   const frameLimit = Math.max(1, Math.min(MAX_FRAME_BYTES, Number(maxFrameBytes) || MAX_FRAME_BYTES));
   const pending = new Map();
   const decoder = new TextDecoder('utf-8', { fatal: true });
-  let child = null, closed = false, ready = false, safetyReady = false, starting = null, startReject = null, startTimer = null;
+  let child = null, wsConnection = null, closed = false, ready = false, safetyReady = false, starting = null, startReject = null, startTimer = null;
   let nextId = 0, chunks = [], buffered = 0, accountKey = null, threadAccountKey = null, accountRevision = 0;
   let accountObserved = false;
   let modelCatalog = null, modelCatalogAccount = null, listingModels = null;
@@ -116,7 +123,10 @@ function createCodexChatRpc({ workspaceDir, fs = nodeFs, spawn = nodeSpawn, home
     startReject?.(chatError(code)); startReject = null;
     for (const entry of pending.values()) { clearTimeout(entry.timer); entry.reject(chatError(code)); }
     pending.clear(); chunks = []; buffered = 0;
-    if (child) {
+    if (wsConnection) {
+      const connection = wsConnection; wsConnection = null;
+      closing = connection.close();
+    } else if (child) {
       const owned = child; child = null;
       owned.stdout.removeListener('data', onData);
       owned.stdout.removeListener('error', onFailure);
@@ -154,7 +164,10 @@ function createCodexChatRpc({ workspaceDir, fs = nodeFs, spawn = nodeSpawn, home
   }
   function onFailure() { shutdown('DISCONNECTED'); }
   function write(packet) {
-    try { child.stdin.write(JSON.stringify(packet) + '\n'); } catch { shutdown('DISCONNECTED'); }
+    try {
+      if (wsConnection) wsConnection.send(packet);
+      else child.stdin.write(JSON.stringify(packet) + '\n');
+    } catch { shutdown('DISCONNECTED'); }
   }
 
   function notification(method, params) {
@@ -234,7 +247,7 @@ function createCodexChatRpc({ workspaceDir, fs = nodeFs, spawn = nodeSpawn, home
   function request(method, params, project = () => undefined, { fatalTimeout = true } = {}) {
     if (closed) return Promise.reject(chatError('CLOSED'));
     if (!METHODS.has(method)) return Promise.reject(chatError('UNSUPPORTED'));
-    if (!child || (method !== 'initialize' && !ready)) return Promise.reject(chatError('DISCONNECTED'));
+    if ((!child && !wsConnection) || (method !== 'initialize' && !ready)) return Promise.reject(chatError('DISCONNECTED'));
     if (pending.size >= 8) return Promise.reject(chatError('BUSY'));
     const id = ++nextId;
     return new Promise((resolve, reject) => {
@@ -275,15 +288,22 @@ function createCodexChatRpc({ workspaceDir, fs = nodeFs, spawn = nodeSpawn, home
       // preferences provider. Do not silently accept another profile/home.
       if (env.CODEX_HOME !== undefined && (typeof env.CODEX_HOME !== 'string' ||
         !path.isAbsolute(env.CODEX_HOME) || path.resolve(env.CODEX_HOME) !== defaultCodexHome)) throw chatError('UNSAFE_CONFIG');
-      const binary = await discover(); ensureOpen();
       const overrides = [...DISABLED_FEATURES.map(name => `features.${name}=false`),
         'web_search="disabled"', 'project_doc_max_bytes=0', 'skills.include_instructions=false',
         'features.skip_host_skill_discovery=true'];
-      child = spawn(binary, ['app-server', '--stdio', ...overrides.flatMap(value => ['-c', value])],
-        { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
-      child.on('error', onFailure); child.on('exit', onFailure);
-      child.stdout.on('data', onData); child.stdout.on('error', onFailure);
-      child.stdin.on('error', onFailure); child.stderr.on('error', onFailure); child.stderr.resume();
+      if (webSocket !== null) {
+        wsConnection = createCodexChatWsConnection({ ...webSocket, maxFrameBytes: frameLimit, timeoutMs: timeout,
+          onPacket: packet => { if (!closed) { try { receive(packet); } catch (_) { shutdown('INVALID_FRAME'); } } },
+          onFailure: code => { shutdown(ERROR_CODES.includes(code) ? code : 'DISCONNECTED'); } });
+        await wsConnection.connect(); ensureOpen();
+      } else {
+        const binary = await discover(); ensureOpen();
+        child = spawn(binary, ['app-server', '--stdio', ...overrides.flatMap(value => ['-c', value])],
+          { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+        child.on('error', onFailure); child.on('exit', onFailure);
+        child.stdout.on('data', onData); child.stdout.on('error', onFailure);
+        child.stdin.on('error', onFailure); child.stderr.on('error', onFailure); child.stderr.resume();
+      }
       await request('initialize', { clientInfo: { name: notesPurpose ? 'qiuqiu-notes' : 'qiuqiu-chat', version: '1.0.0' },
         capabilities: { experimentalApi: true } }); ensureOpen();
       write({ method: 'initialized', params: {} }); ready = true;

@@ -139,3 +139,48 @@ test('consumption failure never substitutes balance drops, fake zero, curves or 
   assert.match(html, /chart-help-body"><ul><li>/);
   assert.doesNotMatch(renderer, /reductionSeries|analyze\(/);
 });
+
+test('website-summary详情IPC不夹带旧账号分类、期限、消费记录或历史', () => {
+  const { details, windows } = fixture();
+  details.open({ report: { scope: 'website-summary', total: 450.25, basic: 0, reward: 20, purchased: 30,
+    updatedAt: 1000, nextRefreshAt: 2000, expires: [{ amount: 8, at: 3000 }], accountKey: 'SECRET' },
+    history: [{ at: 1000, total: 500 }], usage: { error: 'SECRET' } });
+  const win = windows[0]; win.webContents.emit('did-finish-load');
+  const value = win.messages.at(-1).value;
+  assert.equal(value.report.scope, 'website-summary'); assert.equal(value.report.total, 450.25);
+  for (const key of ['basic', 'reward', 'purchased', 'nextRefreshAt']) assert.equal(value.report[key], null);
+  assert.deepEqual(value.report.expires, []); assert.deepEqual(value.history, []);
+  assert.equal(value.usage.report, null); assert.equal(value.usage.error, null);
+  assert.ok(!JSON.stringify(value).includes('SECRET'));
+  details.update({ report: { total: 500, basic: 500, updatedAt: 10 } });
+  assert.equal(win.messages.at(-1).value.report.total, 500); assert.equal(win.messages.at(-1).value.report.scope, undefined);
+  details.destroy();
+});
+
+test('网站详情显示汇总范围，不伪造消费/刷新/到期；切回个人版恢复原文案', () => {
+  const vm = require('node:vm'), fs = require('node:fs');
+  const elements = new Map(); let receive;
+  const get = id => {
+    if (!elements.has(id)) elements.set(id, { textContent: '', dataset: {}, attrs: {}, hidden: false,
+      setAttribute(k, v) { this.attrs[k] = v; }, addEventListener() {}, replaceChildren() {},
+      getBoundingClientRect() { return { top: 0, bottom: 100 }; } });
+    return elements.get(id);
+  };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../workbuddy-details-renderer.js'), 'utf8'), {
+    document: { documentElement: { dataset: {} }, getElementById: get, addEventListener() {} },
+    window: { matchMedia: () => ({ matches: false, addEventListener() {} }), petWorkBuddyDetails: {
+      onColorMode() {}, onModel(fn) { receive = fn; }, close() {} } }
+  });
+  receive({ report: { scope: 'website-summary', total: 450.25, updatedAt: 1000,
+    nextRefreshAt: 2000, expires: [{ amount: 8, at: Date.now() + 86400000 }] },
+    usage: { busy: true, report: { source: 'official-request-usage', complete: true, timezone: 'Asia/Shanghai', days: Array(7).fill({}), todayRecords: [] } } });
+  assert.equal(get('balance').textContent, '450.25'); assert.equal(get('balance-label').textContent, '网站剩余积分');
+  assert.equal(get('change').textContent, '—'); assert.equal(get('hint').textContent, '此来源未提供消耗记录');
+  assert.match(get('unavailable-note').textContent, /当前仅为网站积分汇总.*未提供基础、奖励、购买分类/);
+  assert.equal(get('refresh-note').textContent, '网站汇总未提供刷新时间');
+  assert.equal(get('expiry-note').textContent, '未提供到期与分类信息');
+  assert.equal(get('expiry-block').dataset.warning, 'false'); assert.equal(get('explanation').hidden, true);
+  receive({ report: { total: 500, expires: [] } });
+  assert.equal(get('balance-label').textContent, '可用积分'); assert.equal(get('expiry-note').textContent, '暂无已知即将到期积分');
+  assert.equal(get('refresh-note').textContent, '刷新时间暂未知'); assert.equal(get('explanation').hidden, false);
+});

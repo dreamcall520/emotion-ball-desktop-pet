@@ -144,7 +144,7 @@ function createZcodeLink({ BrowserWindow, screen, ipcMain, getSettings, save, fi
       { id: 'zcode-refresh', label: '刷新 ZCode 状态', enabled, click: () => { void service.refresh(); } }
     ] };
   }
-  return { menu, sync, setEnabled, setPreference, openDetails, getSnapshot: service.getSnapshot,
+  return { menu, sync, setEnabled, setPreference, openDetails, getSnapshot: service.getSnapshot, refresh: service.refresh,
     start: () => enabled ? service.setEnabled(true) : undefined,
     isEnabled: () => enabled && !closed,
     isDetailsVisible: () => details.isVisible(),

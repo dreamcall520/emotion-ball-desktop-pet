@@ -1,0 +1,18 @@
+{
+  "actualModelRequest": true,
+  "completedNotification": true,
+  "observedStates": [
+    "active",
+    "completed"
+  ],
+  "readerPartial": true,
+  "scope": "dedicated-test-thread",
+  "diagnostics": {
+    "partial": true,
+    "filesRead": 32,
+    "bytesRead": 6870290,
+    "directoriesRead": 64,
+    "entriesRead": 1306,
+    "bounded": true
+  }
+}

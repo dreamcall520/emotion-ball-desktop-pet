@@ -179,3 +179,17 @@ test('超时后迟到的授权读不发网络请求，最终关闭文件作用�
   release(); await new Promise(resolve => setImmediate(resolve));
   assert.equal(callbackDone, true); assert.equal(f.requests.length, 0);
 });
+
+test('history identity is stable across token rotation and changes across accounts without leaking credentials', async t => {
+  const f = await fixture(t);
+  const read = () => readCodexAccountUsage({ ...f.options, includeAccountKey: true });
+  const first = await read();
+  assert.match(first.accountKey, /^[a-f0-9]{64}$/);
+  await fs.writeFile(path.join(f.directory, 'auth.json'), JSON.stringify({ ...auth, tokens: { ...auth.tokens, access_token: 'different-synthetic-token' } }));
+  assert.equal((await read()).accountKey, first.accountKey);
+  await fs.writeFile(path.join(f.directory, 'auth.json'), JSON.stringify({ ...auth, tokens: { ...auth.tokens, account_id: 'another-synthetic-account' } }));
+  const changed = await read();
+  assert.notEqual(changed.accountKey, first.accountKey);
+  noSecrets(first); noSecrets(changed);
+  assert.equal(JSON.stringify(changed).includes('another-synthetic-account'), false);
+});

@@ -162,6 +162,9 @@ test('网站会话UA不可用明确失败；网络错误不透传cookie/token等
   const unavailable = harness({ getUserAgent: () => '' });
   await assert.rejects(unavailable.reader.readSummary(), { code: 'SESSION_UNAVAILABLE' });
   assert.equal(unavailable.calls.length, 0);
+  const unicodeUA = harness({ getUserAgent: () => 'Mozilla/5.0 球球/0.4.9 Chrome/142.0.0.0' });
+  await assert.rejects(unicodeUA.reader.readSummary(), { code: 'SESSION_UNAVAILABLE' });
+  assert.equal(unicodeUA.calls.length, 0, '非法header在发网之前明确失败');
   const { reader } = harness({ fetch: async () => { throw new Error('Cookie=SECRET; access_token=SECRET'); } });
   await assert.rejects(reader.readSummary(), error => error.code === 'CONNECTION_FAILED' && !error.message.includes('SECRET'));
 });

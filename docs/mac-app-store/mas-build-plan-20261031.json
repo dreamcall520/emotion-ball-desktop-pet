@@ -1,0 +1,30 @@
+{
+  "mode": "plan",
+  "platform": "mas",
+  "arch": "arm64",
+  "marketingVersion": "0.4.9",
+  "buildVersion": null,
+  "electronVersion": "43.4.1",
+  "configured": {
+    "MAS_BUNDLE_ID": false,
+    "MAS_TEAM_ID": false,
+    "MAS_PROFILE": false,
+    "MAS_SIGN_IDENTITY": false,
+    "MAS_INSTALLER_IDENTITY": false,
+    "MAS_BUILD_VERSION": false
+  },
+  "missingConfiguration": [
+    "MAS_BUNDLE_ID",
+    "MAS_TEAM_ID",
+    "MAS_PROFILE",
+    "MAS_SIGN_IDENTITY",
+    "MAS_INSTALLER_IDENTITY",
+    "MAS_BUILD_VERSION"
+  ],
+  "configurationErrors": [],
+  "configurationReady": false,
+  "profileValidated": false,
+  "signingIdentitiesValidated": false,
+  "submissionReady": false,
+  "note": "Plan only; no profile/keychain read, runtime download, signing, upload or submission."
+}
