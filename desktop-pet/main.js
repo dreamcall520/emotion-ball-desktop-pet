@@ -915,11 +915,13 @@ function openCustomization(options = {}) {
   win.setMinimumSize(760 + outerWidth - contentWidth, 580 + outerHeight - contentHeight);
   customizationWindow = win;
   const promotion = options?.promotion === true ? requestCustomizationPromotion(win, true) : null;
+  const currentVisibilityNotification = event => customizationWindow === win && !win.isDestroyed() &&
+    !(event === 'hide' && win.isVisible()) && !(event === 'minimize' && !win.isMinimized());
   for (const event of ['show', 'hide', 'minimize', 'restore']) win.on(event, () => {
-    if (customizationWindow === win && !win.isDestroyed()) syncCustomizationVisibility();
+    if (currentVisibilityNotification(event)) syncCustomizationVisibility();
   });
   for (const event of ['show', 'hide', 'minimize', 'restore']) win.on(event, () => {
-    if (customizationWindow !== win || win.isDestroyed()) return;
+    if (!currentVisibilityNotification(event)) return;
     customizationSession++;
     if (event === 'hide' || event === 'minimize') {
       const request = customizationPromotion;

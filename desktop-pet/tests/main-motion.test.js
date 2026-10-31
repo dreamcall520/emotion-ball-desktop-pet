@@ -3334,6 +3334,17 @@ test('隐藏窗新宣传请求不被旧hide或minimize事件取消，可见窗�
  }
 });
 
+test('新宣传ACK后的矛盾旧隐藏通知不重置播放或会话，真实隐藏最小化仍取消',async t=>{
+ for(const event of ['hide','minimize']){
+  const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization({promotion:true})');const win=f.call('customizationWindow');win.webContents.mainFrame={};win.emit('ready-to-show');
+  f.call("ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},customizationPromotion.token)");
+  const token=f.call('customizationPromotion.token'),session=f.call('customizationSession'),broadcasts=win.messages.filter(m=>m.channel==='pet:customization-visible').length;
+  win.emit(event);assert.equal(f.call('customizationPromotion?.token'),token);assert.equal(f.call('customizationSession'),session);assert.equal(win.messages.filter(m=>m.channel==='pet:customization-visible').length,broadcasts,'stale event cannot restart the renderer timeline');
+  if(event==='hide')win.hide();else{win.isMinimized=()=>true;win.emit('minimize');}
+  assert.equal(f.call('customizationPromotion'),null,'actual native '+event+' still cancels the presented request');
+ }
+});
+
 test('隐藏待就绪宣传请求仍尊重明确隐藏球球、锁屏与关闭，旧ACK不复显',async t=>{
  for(const action of ['hidePet()','powerMonitor.emit("lock-screen")','customizationWindow.close()']){
   const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization({promotion:true})');const win=f.call('customizationWindow');win.webContents.mainFrame={};win.emit('ready-to-show');const token=f.call('customizationPromotion.token');f.call('globalThis.oldPromotionSender=customizationWindow.webContents');
