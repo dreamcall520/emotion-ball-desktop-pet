@@ -1,0 +1,32 @@
+{
+  "checkedAt": "2026-10-31T13:40:09.852578+08:00",
+  "sourceCommit": "e46d31d24f5da1184427bd5ed796bb0f8429e7d3",
+  "sourceSha256": "a2d92472a72214ad446ccb98a8d1ac3453607a6cf3ed2512c735ed02e1127869",
+  "binarySha256": "9ed903775d974f83f20cb61c6f1b2aaf49f7aa52effa7577200d6466b9637497",
+  "signatureVerified": true,
+  "appSandbox": true,
+  "distributionSigned": false,
+  "userConsent": "Explicit user permission to read Codex auth only for quota query; no model messages, auth modification or token persistence",
+  "result": {
+    "authModified": false,
+    "httpStatus": 200,
+    "modelCalls": 0,
+    "sandboxedNativeProbeOnly": true,
+    "source": "user-selected Codex auth + native HTTPS",
+    "state": "verified",
+    "tokenPersisted": false,
+    "windows": [
+      {
+        "resetAtUnixSeconds": 1793887690,
+        "usedPercent": 45,
+        "windowSeconds": 604800
+      }
+    ]
+  },
+  "limits": [
+    "Native ad-hoc sandbox diagnostic, not Electron MAS acceptance",
+    "File immutability is by implementation; no before/after auth file hash comparison",
+    "No primary window supplied by service; not filled with zero",
+    "No live chat, provider task control or App Store upload tested"
+  ]
+}
