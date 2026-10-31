@@ -3,29 +3,31 @@
   let busy = false, busyCount=0,lastState=null,cachedPartitions=null,cachedDesktopItems=null,zcodeSourceDraft=null;
   const providers=['codex','zcode','workbuddy'], guideModel=window.ProviderConnectionGuide;
   let guideProvider=null;const skippedSteps=new Map();
+  const flow=window.ProviderAuthorizationFlow.createFlow((state,provider)=>({...guideModel.buildProviderGuide(previewState()||state,provider),steps:guideModel.buildProviderGuide(previewState()||state,provider).steps.filter(step=>!skippedSteps.get(provider)?.has(step.id))}));
+  let flowRunning=false;
   function previewState(){
-    if(guideProvider!=='zcode'||zcodeSourceDraft===null||zcodeSourceDraft===lastState?.zcode?.accountSource)return lastState;
-    return {...lastState,zcode:{...lastState.zcode,accountSource:zcodeSourceDraft},onboarding:{...lastState.onboarding,zcode:{...lastState.onboarding?.zcode,status:'partial',chat:{status:'unavailable',message:'请连接所选聊天方式'}}}};
+    if(zcodeSourceDraft===null||zcodeSourceDraft===lastState?.zcode?.accountSource)return lastState;
+    return {...lastState,zcode:{...lastState.zcode,accountSource:zcodeSourceDraft},zcodeSnapshot:null,providerChats:{...lastState.providerChats,zcode:null},chat:lastState.chat?.source==='zcode'?null:lastState.chat,onboarding:{...lastState.onboarding,zcode:{...lastState.onboarding?.zcode,status:'idle',chat:{status:'idle',message:'请连接所选聊天方式'}}}};
   }
   function currentGuide(){return guideProvider&&lastState?guideModel.buildProviderGuide(previewState(),guideProvider):null;}
-  function nextGuideStep(guide){const skipped=skippedSteps.get(guideProvider)||new Set();return guide?.steps.find(step=>step.id===guide.nextStepId&&!skipped.has(step.id))||guide?.steps.find(step=>step.id!=='capabilities'&&step.status!=='ready'&&!skipped.has(step.id)&&step.action);}
-  function openGuide(provider){if(!providers.includes(provider))return;guideProvider=provider;skippedSteps.set(provider,new Set());el('connection-guide').hidden=false;paintGuide();el('connection-guide').scrollIntoView({block:'start',behavior:'smooth'});el('connection-guide').focus({preventScroll:true});}
+  function nextGuideStep(guide){const skipped=skippedSteps.get(guideProvider)||new Set();return guide?.steps.find(step=>step.id===guide.nextStepId&&!skipped.has(step.id))||guide?.steps.find(step=>step.status==='needs-authorization'&&!step.optional&&!skipped.has(step.id)&&step.action);}
+  function openGuide(provider,preserveSkipped=false){if(!providers.includes(provider))return;guideProvider=provider;if(!preserveSkipped)skippedSteps.set(provider,new Set());el('connection-guide').hidden=false;paintGuide();el('connection-guide').scrollIntoView({block:'start',behavior:'smooth'});el('connection-guide').focus({preventScroll:true});}
   function paintGuide(){
     if(!guideProvider||!lastState)return;const guide=currentGuide(),skipped=skippedSteps.get(guideProvider)||new Set(),next=nextGuideStep(guide);
     const installing=['checking','installing'].includes(lastState.pluginInstallations?.[guideProvider]?.status);el('guide-cancel-install').hidden=!installing;el('guide-cancel-install').disabled=!installing;el('guide-cancel-install').dataset.provider=guideProvider;
     el('guide-title').textContent=guide.title;el('guide-zcode-source').hidden=guideProvider!=='zcode';
-    const labels={ready:'已完成',working:'处理中','needs-authorization':'需要确认',unavailable:'尚未完成',unknown:'待核实',cancelled:'已取消',error:'需要处理',blocked:'需要处理'};
-    el('guide-steps').replaceChildren(...guide.steps.map(step=>{const li=document.createElement('li');li.dataset.step=step.id;li.dataset.status=step.status;const heading=document.createElement('div'),title=document.createElement('strong'),badge=document.createElement('span'),description=document.createElement('p');title.textContent=step.title;badge.className='step-badge';badge.textContent=skipped.has(step.id)&&step.status!=='ready'?'稍后完成':labels[step.status]||'待完成';heading.append(title,badge);description.textContent=step.description||'';li.append(heading,description);if(step.action){const action=document.createElement('button');action.className='secondary';action.dataset.action='guide-run';action.dataset.step=step.id;action.textContent=step.actionLabel||(step.status==='ready'?'查看或刷新':'完成这一步');action.disabled=busy||step.status==='working';li.append(action);}return li;}));
-    el('guide-next').textContent=next?'继续：'+next.title:'返回工具卡';el('guide-next').disabled=busy||next?.status==='working';el('guide-skip').hidden=!next;el('guide-skip').disabled=busy;el('guide-chat').hidden=guideModel.buildToolCard(lastState,guideProvider).chat.status!=='ready';el('guide-chat').disabled=busy;
-    el('guide-result').textContent=guide.complete?'连接已完成，可以返回工具卡使用。':!next&&guide.steps.some(step=>step.id==='task-verification'&&step.status!=='ready')&&guide.steps.some(step=>step.id==='tasks'&&step.status==='ready')?'插件已安装启用，等待原工具正常使用产生事件，无需重复安装。':!next?'已保留当前连接。未完成的能力可稍后继续。':guide.partial?'已有能力可以使用，继续完成剩余连接。':'按顺序完成必要确认。不会自动发送聊天消息。';
+    const labels={ready:'已完成',working:'处理中','needs-authorization':'需要确认',unavailable:'暂不可用',unknown:'待更新',cancelled:'已取消',error:'需要处理',blocked:'需要处理'};
+    el('guide-steps').replaceChildren(...guide.steps.map(step=>{const li=document.createElement('li');li.dataset.step=step.id;li.dataset.status=step.status;const heading=document.createElement('div'),title=document.createElement('strong'),badge=document.createElement('span'),description=document.createElement('p');title.textContent=step.title;badge.className='step-badge';badge.textContent=skipped.has(step.id)&&step.status!=='ready'?'已暂缓':step.optional&&step.status!=='ready'?'可选':step.id==='task-verification'&&step.status!=='ready'?'等待首次任务':labels[step.status]||'待完成';heading.append(title,badge);description.textContent=step.description||'';li.append(heading,description);if(step.action){const action=document.createElement('button');action.className='secondary';action.dataset.action='guide-run';action.dataset.step=step.id;action.textContent=step.actionLabel||(step.status==='ready'?'查看或刷新':'完成这一步');action.disabled=busy||step.status==='working';li.append(action);}return li;}));
+    el('guide-next').textContent=next?'继续：'+next.title:'返回工具卡';el('guide-next').disabled=busy||next?.status==='working';el('guide-skip').hidden=!next;el('guide-skip').disabled=busy;el('guide-chat').hidden=guideModel.buildToolCard(lastState,guideProvider).chat.status!=='ready';el('guide-chat').disabled=false;
+    el('guide-result').textContent=!next&&guide.steps.some(step=>step.id==='task-verification'&&step.status!=='ready')&&guide.steps.some(step=>step.id==='tasks'&&step.status==='ready')?'插件已安装启用，等待原工具正常使用产生事件，无需重复安装。':guide.complete?'连接设置已保存，已可用功能可直接使用。':!next?'当前连接已保留，可用功能现在就能使用；其他项目按需开启。':guide.partial?'可用功能已开放，其他项目按需连接。':'按顺序完成必要确认。不会自动发送聊天消息。';
   }
   function paintCards(state){
     for(const provider of providers){const card=guideModel.buildToolCard(state,provider);el(provider+'-status').textContent=card.statusLabel;for(const capability of ['quota','tasks','chat']){const node=el(provider+'-capability-'+capability);node.textContent=card[capability].text;node.dataset.status=card[capability].status;}
-      const button=document.querySelector('button[data-action="enable-provider"][data-provider="'+provider+'"]');button.textContent=state.onboarding?.[provider]?.status==='working'?'正在连接…':card.status==='ready'?'管理连接':card.status==='needs-authorization'?'启用授权':'继续完成连接';
+      const button=document.querySelector('button[data-action="enable-provider"][data-provider="'+provider+'"]');button.textContent=state.onboarding?.[provider]?.status==='working'?'正在连接…':card.needsAttention?'处理连接':card.status==='ready'?'管理连接':card.status==='needs-authorization'?'启用授权':'查看连接';
       const updated=card.updatedAt?new Date(card.updatedAt):null;el(provider+'-updated').textContent=updated&&Number.isFinite(updated.getTime())?'最近更新：'+updated.toLocaleString('zh-CN'):'各项能力按实际读取结果显示';
       const taskScope=el(provider+'-task-scope'),taskList=el(provider+'-task-list');
       if(taskScope&&taskList){taskScope.textContent=card.tasks.text;const snapshot=provider==='workbuddy'?state.workbuddyDesktop?.report:state[provider+'Snapshot']?.tasks;const records=Array.isArray(snapshot?.items)?snapshot.items.slice(0,20):[];taskList.replaceChildren(...records.map(item=>{const li=document.createElement('li');const title=typeof item.title==='string'?item.title:typeof item.name==='string'?item.name:'未命名任务';const labels={active:'进行中',completed:'已完成',interrupted:'已中断',failed:'失败',unknown:'状态未知','last-completed':'上次已完成','last-interrupted':'上次已中断','last-failed':'上次失败'};li.textContent=title+' · '+(provider==='zcode'?'历史缓存，实时状态待核实':provider==='codex'&&(snapshot?.state!=='connected'||snapshot?.stale===true)?'上次记录：'+(labels[item.state]||'状态未知')+'（当前待核实）':labels[item.state]||'状态未知');return li;}));if(!records.length){const li=document.createElement('li');li.textContent=provider==='workbuddy'?'仅显示已授权的事件阶段；历史标题需在连接详情选择缓存范围。':'当前没有可展示的任务记录。';taskList.append(li);}}
-      const chatButton=document.querySelector('button[data-action="open-provider-chat"][data-provider="'+provider+'"]');chatButton.disabled=busy||!(card.chat.status==='ready'||['needs-model','needs-new-chat'].includes(state.onboarding?.[provider]?.chat?.status));
+      const chatButton=document.querySelector('button[data-action="open-provider-chat"][data-provider="'+provider+'"]');chatButton.disabled=!(card.chat.status==='ready'||['needs-model','needs-new-chat'].includes(state.onboarding?.[provider]?.chat?.status));
     }paintGuide();
   }
   function availability(){
@@ -125,17 +127,59 @@
         el(provider+'-data-state').textContent=onboarding.data?.message||'原工具任务与额度尚未授权，不影响聊天。';
       }
     }
-    availability();paintCards(state);
+    availability();paintCards(state);paintFlow();void pumpFlow();
+  }
+  function selectionChanged(){
+    const selected=[...document.querySelectorAll('input[name=authorization-provider]:checked')].map(input=>input.value);
+    try{localStorage.setItem('qiuqiu-tool-selection',JSON.stringify(selected));}catch(_){}
+    el('authorize-selected').disabled=busy||flow.active||!selected.length;
+  }
+  function paintFlow(){
+    el('authorization-stop').hidden=!flow.active;el('authorization-stop').disabled=false;
+    document.querySelectorAll('input[name=authorization-provider]').forEach(input=>input.disabled=flow.active||busy);
+    selectionChanged();
+  }
+  function startFlow(selected){
+    if(busy||flow.active)return;
+    flow.start(selected);el('authorization-progress').textContent=flow.active?'正在依次连接所选工具；已有授权会跳过，可随时稍后继续。':'请先选择工具。';
+    paintFlow();void pumpFlow();
+  }
+  async function pumpFlow(){
+    if(flowRunning||busy||!flow.active||!lastState)return;
+    const item=flow.next(lastState);
+    if(!item){el('authorization-progress').textContent='本轮连接已处理，可用功能已开放。已跳过、暂不可用或待首次任务的项目不会反复要求授权。';paintFlow();return;}
+    if(item.waiting){el('authorization-progress').textContent='等待 '+({codex:'Codex',zcode:'ZCode',workbuddy:'WorkBuddy'}[item.provider])+' 的当前确认完成；已连接的聊天可直接使用。';return;}
+    flowRunning=true;flow.attempted(item.provider,item.step);openGuide(item.provider,true);
+    el('authorization-progress').textContent='正在连接 '+({codex:'Codex',zcode:'ZCode',workbuddy:'WorkBuddy'}[item.provider])+'：'+item.step.title;
+    busyCount++;busy=true;document.querySelectorAll('button').forEach(b=>b.disabled=true);paintCards(lastState);paintFlow();
+    try{
+      const payload={...item.step.payload,provider:item.provider,...(item.step.action==='enable-provider'&&item.provider==='zcode'?{accountSource:el('zcode-account-source').value}:{})};
+      const r=await api.command(item.step.action,payload);
+      if(r.ok&&item.step.action==='enable-provider'&&item.provider==='zcode')zcodeSourceDraft=null;
+      const after=r.state?guideModel.buildProviderGuide(r.state,item.provider).steps.find(step=>step.id===item.step.id):null;
+      if(!r.ok||after?.status==='needs-authorization'||r.state?.onboarding?.[item.provider]?.data?.status==='cancelled'||r.state?.onboarding?.[item.provider]?.status==='cancelled')flow.defer(item.provider);
+      if(r.state)paint(r.state);
+      el('message').textContent=r.message||(r.ok?'连接状态已更新':'本工具已暂缓，已可用的功能保持。');
+    }catch(_){flow.defer(item.provider);el('message').textContent='本工具连接已暂缓，可稍后从工具卡重试。';}
+    finally{
+      busyCount--;busy=busyCount>0;flowRunning=false;document.querySelectorAll('button').forEach(b=>b.disabled=busy);
+      await refresh();availability();if(lastState)paintCards(lastState);paintFlow();void pumpFlow();
+    }
   }
   async function refresh() { try { const r = await api.command('status'); if (r.ok) paint(r.state); } catch (_) {} }
   document.addEventListener('click', async event => {
-    const button = event.target.closest('button[data-action]'); if (!button || busy && !['cancel-workbuddy-cli','cancel-provider-plugin'].includes(button.dataset.action)) return;
+    const button = event.target.closest('button[data-action]'); if (!button || busy && !['cancel-workbuddy-cli','cancel-provider-plugin','authorization-stop','guide-close','open-provider-chat','guide-chat'].includes(button.dataset.action)) return;
     let action=button.dataset.action,guideStep=null;
+    if(action==='select-all-providers'){document.querySelectorAll('input[name=authorization-provider]').forEach(input=>input.checked=true);selectionChanged();return;}
+    if(action==='authorize-selected'){startFlow([...document.querySelectorAll('input[name=authorization-provider]:checked')].map(input=>input.value));return;}
+    if(action==='authorization-stop'){flow.stop();el('authorization-progress').textContent='已暂缓后续连接。当前确认可自行完成，其他工具不会继续弹出授权；已有功能保持。';paintFlow();return;}
+    if(action==='cancel-provider-plugin'){flow.defer(button.dataset.provider);}
     if(action==='install-provider-plugin'&&providers.includes(button.dataset.provider))openGuide(button.dataset.provider);
     if(action==='enable-provider'){openGuide(button.dataset.provider);return;}
-    if(action==='guide-close'){el('connection-guide').hidden=true;guideProvider=null;return;}
+    if(action==='guide-close'){flow.stop();paintFlow();el('connection-guide').hidden=true;guideProvider=null;return;}
     if(action==='guide-skip'){const next=nextGuideStep(currentGuide());if(next){const skipped=skippedSteps.get(guideProvider)||new Set();skipped.add(next.id);skippedSteps.set(guideProvider,skipped);}paintGuide();return;}
-    if(action==='guide-chat'){action='open-provider-chat';}
+    if(action==='guide-chat'||action==='open-provider-chat'){flow.stop();el('authorization-progress').textContent='可直接使用已连接的聊天，其他授权稍后按需继续。';paintFlow();action='open-provider-chat';}
+    if(action==='guide-next'&&!flow.active&&nextGuideStep(currentGuide())){startFlow([guideProvider]);return;}
     if(action==='guide-next'||action==='guide-run'){const guide=currentGuide();guideStep=action==='guide-next'?nextGuideStep(guide):guide?.steps.find(step=>step.id===button.dataset.step);if(!guideStep){el('connection-guide').hidden=true;guideProvider=null;return;}action=guideStep.action;}
     const provider=guideStep?.payload?.provider||(['guide-chat'].includes(button.dataset.action)?guideProvider:button.dataset.provider);
     busyCount++;busy = true; document.querySelectorAll('button').forEach(b => b.disabled = true); el('message').textContent = '正在处理…';
@@ -150,6 +194,8 @@
     button?.focus({preventScroll:true});
     openGuide(provider);
   });
+  try{const selected=JSON.parse(localStorage.getItem('qiuqiu-tool-selection')||'[]');document.querySelectorAll('input[name=authorization-provider]').forEach(input=>input.checked=Array.isArray(selected)&&selected.includes(input.value));}catch(_){}
+  document.querySelectorAll('input[name=authorization-provider]').forEach(input=>input.addEventListener('change',selectionChanged));selectionChanged();
   el('zcode-account-source').addEventListener('change',()=>{zcodeSourceDraft=el('zcode-account-source').value;skippedSteps.delete('zcode');paintGuide();});
   el('workbuddy-desktop-partition').addEventListener('change',availability); el('workbuddy-cli-text').addEventListener('input',availability); el('workbuddy-assistant-text').addEventListener('input',availability); api.onChange(refresh); refresh();
 })();

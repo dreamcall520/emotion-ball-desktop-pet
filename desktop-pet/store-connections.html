@@ -6,14 +6,20 @@
 <title>球球 · 工具连接</title><link rel="stylesheet" href="store-connections.css">
 </head>
 <body><main>
-<header><span class="eyebrow">球球 · 工具连接</span><h1>点一下，连接你的 AI 工具</h1><p>连接一次，在同一张卡里查看额度、任务，并使用这个工具和球球聊天。</p><p id="mode"></p></header>
+<header><span class="eyebrow">球球 · 工具连接</span><h1>点一下，连接你的 AI 工具</h1><p>选择你使用的工具，已有授权自动跳过。聊天、额度和任务分别显示，能用的先开放。</p><p id="mode"></p></header>
+<section class="connection-guide" aria-labelledby="authorization-selection-title">
+<h2 id="authorization-selection-title">选择要连接的工具</h2>
+<div id="authorization-selection" class="buttons"><label><input type="checkbox" value="codex" name="authorization-provider"> Codex</label><label><input type="checkbox" value="zcode" name="authorization-provider"> ZCode</label><label><input type="checkbox" value="workbuddy" name="authorization-provider"> WorkBuddy</label></div>
+<div class="buttons"><button data-action="select-all-providers" class="secondary">全选</button><button id="authorize-selected" data-action="authorize-selected" class="primary">启用所选授权</button><button id="authorization-stop" data-action="authorization-stop" class="secondary" hidden>稍后继续其他工具</button></div>
+<p id="authorization-progress" role="status" aria-live="polite">可选择一个、多个或全部；不会自动发送消息。官网积分为可选补充。</p>
+</section>
 <section id="connection-guide" class="connection-guide" hidden aria-labelledby="guide-title" tabindex="-1">
 <div class="heading"><div><span class="eyebrow">连接引导</span><h2 id="guide-title">连接你的工具</h2></div><button data-action="guide-close" class="secondary">稍后继续</button></div>
 <p id="guide-intro">已完成的授权会自动跳过。需要任务插件时，球球会带着完成安装；首次只需确认插件和写入范围，不用在原软件找入口。</p>
 <div id="guide-zcode-source" hidden><label for="zcode-account-source">使用哪个账号和球球聊天？</label><select id="zcode-account-source"><option value="official">ZCode 官方套餐</option><option value="configured-custom">已有自定义模型（按原 API 计费）</option></select><small>两种方式分别连接；失败不会自动切换账号或计费来源。</small></div>
 <ol id="guide-steps" class="guide-steps"></ol>
 <p id="guide-result" role="status" aria-live="polite"></p>
-<div class="buttons"><button id="guide-next" data-action="guide-next" class="primary">继续连接</button><button id="guide-skip" data-action="guide-skip" class="secondary">暂时跳过这一步</button><button id="guide-cancel-install" data-action="cancel-provider-plugin" class="secondary" hidden>取消本次安装</button><button id="guide-chat" data-action="guide-chat" class="secondary" hidden>先和球球聊天</button></div>
+<div class="buttons"><button id="guide-next" data-action="guide-next" class="primary">继续连接</button><button id="guide-skip" data-action="guide-skip" class="secondary">稍后连接此项</button><button id="guide-cancel-install" data-action="cancel-provider-plugin" class="secondary" hidden>取消本次安装</button><button id="guide-chat" data-action="guide-chat" class="secondary" hidden>先和球球聊天</button></div>
 <small>取消某项授权不会断开已经可用的能力。以后可从工具卡继续完成。</small>
 </section>
 
@@ -57,4 +63,4 @@
 </details>
 </section>
 <p id="message" role="status" aria-live="polite"></p><footer><button data-action="refresh-status" class="secondary">刷新状态</button><span>授权可随时解除。连接完成不自动发送消息或执行任务。</span></footer>
-</main><script src="lib/provider-connection-guide.js"></script><script src="store-connections-renderer.js"></script></body></html>
+</main><script src="lib/provider-connection-guide.js"></script><script src="lib/provider-authorization-flow.js"></script><script src="store-connections-renderer.js"></script></body></html>

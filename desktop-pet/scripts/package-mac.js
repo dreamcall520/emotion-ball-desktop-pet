@@ -185,6 +185,7 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/lib/mas-provider-runtime.js',
     'desktop-pet/lib/mas-enable-flow.js',
     'desktop-pet/lib/provider-connection-guide.js',
+    'desktop-pet/lib/provider-authorization-flow.js',
     'desktop-pet/lib/managed-plugin-installer.js',
     'desktop-pet/lib/plugin-host.js',
     'desktop-pet/lib/zcode-desktop-integration.js',

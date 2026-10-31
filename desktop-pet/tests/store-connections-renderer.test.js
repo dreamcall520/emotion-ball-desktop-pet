@@ -15,9 +15,10 @@ if (process.versions.electron && process.argv.includes('--store-renderer-child')
       }));
       window = new BrowserWindow({ width: 800, height: 900, show: false,
         webPreferences: { contextIsolation: false, nodeIntegration: false } });
+      window.webContents.on('console-message', (_event, ...args) => console.error('renderer', ...args));
       const root = path.resolve(__dirname, '../..');
       await window.loadFile(path.join(root, 'desktop-pet/store-connections.html'));
-      const run = code => window.webContents.executeJavaScript(code);
+      const run = async code => {try{return await window.webContents.executeJavaScript(code);}catch(error){throw new Error(code.slice(0,300)+'\n'+error.message);}};
       const base = {
         mode: 'diagnostic-unsandboxed', codex: { directory: 'stored', serviceConfigured: true },
         codexSnapshot: { quota: { windows: [] }, tasks: { state: 'unknown', items: [] } },
@@ -41,6 +42,16 @@ if (process.versions.electron && process.argv.includes('--store-renderer-child')
           async command(action, payload) {
             fixtureCalls.push({ action, payload });
             if (action === 'status') return { ok: true, state: structuredClone(fixtureState) };
+            if (window.fixtureFlowMode && ['enable-provider','enable-provider-data'].includes(action)) {
+              if(window.fixtureFlowMode==='pending'&&action==='enable-provider')return new Promise(resolve=>window.fixtureFlowResolve=resolve);
+              if(window.fixtureFlowMode==='failed')return {ok:false,state:structuredClone(fixtureState),message:'合成取消'};
+              if(window.fixtureFlowMode==='cancel-ok')return {ok:true,state:structuredClone(fixtureState),message:'已取消授权'};
+              const provider=payload.provider;
+              fixtureState.onboarding={...fixtureState.onboarding,[provider]:{status:'ready',chat:{status:'ready'},data:{status:'ready'}}};
+              if(provider==='workbuddy')fixtureState.workbuddyDesktop={directory:'stored',partitions:[],report:null};
+              else fixtureState[provider]={...fixtureState[provider],directory:'stored'};
+              return {ok:true,state:structuredClone(fixtureState)};
+            }
             if (action === 'install-provider-plugin') {
               fixtureState.pluginInstallations = { ...fixtureState.pluginInstallations, [payload.provider]: {status:'installing'} };
               return new Promise(resolve => { fixtureInstallResolve = resolve; });
@@ -161,6 +172,7 @@ if (process.versions.electron && process.argv.includes('--store-renderer-child')
       await run(`document.querySelector('[data-action="guide-run"][data-step="chat"]').click()`);await settle();
       assert.deepEqual(await run(`fixtureCalls.filter(call => call.action === 'enable-provider').at(-1)`), { action: 'enable-provider', payload: { provider: 'codex' } });
       assert.equal(await calls('enable-provider-data'),0,'one click never chains further system permissions');
+      await set({workbuddyCli:{...base.workbuddyCli,connected:false}});
       for (const provider of ['zcode','workbuddy']) {
         await run(`document.querySelector('button[data-action="enable-provider"][data-provider="${provider}"]').click()`); await settle();
         await run(`document.querySelector('[data-action="guide-run"][data-step="chat"]').click()`);await settle();
@@ -169,15 +181,14 @@ if (process.versions.electron && process.argv.includes('--store-renderer-child')
       assert.equal(await run(`fixtureCalls.findLast(call => call.action === 'enable-provider' && call.payload.provider === 'zcode').payload.accountSource`), 'official');
       await run(`document.querySelector('button[data-action="enable-provider"][data-provider="zcode"]').click()`);await settle();
       await run(`(() => { const select = document.getElementById('zcode-account-source'); select.value = 'configured-custom'; select.dispatchEvent(new Event('change')); })()`);await settle();
-      await run(`document.querySelector('[data-action="guide-run"][data-step="chat"]').click()`);await settle();
-      assert.equal(await run(`fixtureCalls.findLast(call => call.action === 'enable-provider' && call.payload.provider === 'zcode').payload.accountSource`), 'configured-custom');
+      assert.equal(await run(`document.querySelector('[data-action="guide-run"][data-step="chat"]')===null`),true,'returning to already connected source never repeats authorization');
       assert.equal(await calls('send-workbuddy-cli'), beforeReview, 'enabling a provider never submits chat');
       await set({ onboarding: { codex: { status: 'partial', message: '额度已连接', chat: { status: 'unavailable', message: '聊天能力待接入，无需配置服务。' } } }, codex: { ...base.codex, serviceConfigured: false } });
       assert.equal(await run('document.getElementById("codex-capability-chat").dataset.status'),'unavailable');
       assert.match(await run('document.getElementById("codex-detail").textContent'), /额度已连接.*聊天能力待接入/);
       assert.equal(await run(`document.querySelector('button[data-action="open-provider-chat"][data-provider="codex"]').disabled`), true);
       await set({onboarding:{codex:{status:'ready',message:'聊天已连接',chat:{status:'ready'},data:{status:'cancelled',message:'已取消数据授权'}}},codex:{directory:'missing',serviceConfigured:true}});
-      assert.equal(await run('document.getElementById("codex-status").textContent'),'部分已连接');
+      assert.equal(await run('document.getElementById("codex-status").textContent'),'已可用');
       assert.equal(await run('document.getElementById("codex-capability-chat").dataset.status'),'ready','cancelled data does not lose chat');
       await run(`document.querySelector('button[data-action="enable-provider"][data-provider="codex"]').click()`);await settle();
       assert.equal(await run(`document.querySelector('#guide-steps [data-step="chat"]').dataset.status`),'ready');
@@ -310,10 +321,11 @@ if (process.versions.electron && process.argv.includes('--store-renderer-child')
         await set({pluginInstallations:{[provider]:{status:'installing',phase:'waiting-host',enabled:false,message:'请完成当前任务并退出原工具；球球会自动继续安装'}}});
         assert.equal(await run('document.getElementById("guide-cancel-install").hidden'),false,'waiting-host exposes cancellation');
         assert.equal(await run('document.getElementById("guide-cancel-install").disabled'),false,'cancellation stays enabled while install is pending');
-        for(const id of ['guide-next','guide-skip','guide-chat'])assert.equal(await run(`document.getElementById('${id}').disabled`),true,'ordinary guide action '+id+' stays locked');
+        for(const id of ['guide-next','guide-skip'])assert.equal(await run(`document.getElementById('${id}').disabled`),true,'ordinary guide action '+id+' stays locked');
         assert.equal(await run(`document.querySelector('#guide-steps [data-step="tasks"] button').disabled`),true,'cannot submit another installation while waiting');
-        assert.equal(await run(`document.querySelector('button[data-action="open-provider-chat"][data-provider="${provider}"]').disabled`),true,'ordinary chat navigation remains locked while command is pending');
+        assert.equal(await run(`document.querySelector('button[data-action="open-provider-chat"][data-provider="${provider}"]').disabled`),false,'ready chat navigation remains available while installation is pending');
         assert.equal(await run(`document.getElementById('${provider}-capability-chat').dataset.status`),'ready','pending installation does not revoke chat readiness');
+        assert.equal(await run('document.getElementById("guide-chat").disabled'),false,'ready chat remains usable while installation waits');
         await click('cancel-provider-plugin');await settle();await settle();
         assert.deepEqual(await run(`fixtureCalls.filter(call=>call.action==='cancel-provider-plugin').at(-1)`),{action:'cancel-provider-plugin',payload:{provider}});
         assert.equal(await calls('cancel-provider-plugin'),beforeCancel+1,'one cancel click is sent exactly once');
@@ -333,6 +345,32 @@ if (process.versions.electron && process.argv.includes('--store-renderer-child')
       assert.equal(await run('document.getElementById("guide-cancel-install").hidden'),false,'advanced update must expose the same cancellation path');
       assert.match(await run(`document.querySelector('#guide-steps [data-step="tasks"] p').textContent`),/退出ZCode/);
       await click('cancel-provider-plugin');await settle();await settle();
+      assert.equal(await run(`document.querySelector('#authorization-selection input').getBoundingClientRect().width`),18,'checkbox must not inherit full-width text input styling');
+      // A selected batch authorizes only chosen tools, skips ready grants, and
+      // never converts an unsupported capability into another login prompt.
+      await click('guide-close');
+      await set({codex:{directory:'none'},zcode:{directory:'none',accountSource:'official'},workbuddyDesktop:{directory:'none',partitions:[],report:null},providerChats:{},chat:null,pluginInstallationPolicy:{allowed:false},pluginInstallations:{},zcodeDesktopEvents:{enabled:false,observations:[]},workbuddyDesktopEvents:{enabled:false,observations:[]},onboarding:Object.fromEntries(['codex','zcode','workbuddy'].map(provider=>[provider,{status:'ready',chat:{status:'ready'},data:{status:'idle'}}]))});
+      await run(`window.fixtureFlowMode='success';fixtureCalls=[];document.querySelectorAll('input[name=authorization-provider]').forEach(input=>{input.checked=input.value==='codex';input.dispatchEvent(new Event('change'))});void 0`);
+      await click('authorize-selected');for(let i=0;i<10;i++)await settle();
+      assert.deepEqual(await run(`fixtureCalls.filter(c=>c.action!=='status').map(c=>[c.action,c.payload?.provider])`),[['enable-provider-data','codex']]);
+      assert.equal(await run('document.getElementById("codex-status").textContent'),'已可用');
+      await click('select-all-providers');await click('authorize-selected');for(let i=0;i<15;i++)await settle();
+      assert.deepEqual(await run(`fixtureCalls.filter(c=>c.action==='enable-provider-data').map(c=>c.payload.provider)`),['codex','zcode','workbuddy']);
+      assert.equal(await calls('workbuddy-login'),0,'optional credits never launch automatically');
+      assert.equal(await calls('install-provider-plugin'),0,'store-blocked install cannot be auto-authorized');
+      assert.equal(await run('document.querySelectorAll("input[name=authorization-provider]:checked").length'),3);
+      assert.match(await run('localStorage.getItem("qiuqiu-tool-selection")'),/codex.*zcode.*workbuddy/);
+      await set({codex:{directory:'none'},onboarding:{codex:{status:'idle',chat:{status:'idle'},data:{status:'idle'}}}});
+      await run(`fixtureCalls=[];window.fixtureFlowMode='failed';document.querySelectorAll('input[name=authorization-provider]').forEach(input=>input.checked=input.value==='codex');void 0`);
+      await click('authorize-selected');for(let i=0;i<10;i++)await settle();await notify();
+      assert.equal(await calls('enable-provider'),1,'cancelled login does not loop on state refresh');assert.equal(await calls('enable-provider-data'),0,'cancelled tool defers remaining permission steps');
+      await run(`fixtureCalls=[];window.fixtureFlowMode='cancel-ok';void 0`);await click('authorize-selected');for(let i=0;i<10;i++)await settle();
+      assert.equal(await calls('enable-provider'),1);assert.equal(await calls('enable-provider-data'),0,'successful IPC carrying cancelled authorization cannot trigger the next grant');
+      await run(`fixtureCalls=[];window.fixtureFlowMode='pending';void 0`);await click('authorize-selected');
+      assert.equal(await calls('enable-provider'),1);await click('authorization-stop');
+      await run(`fixtureState.onboarding.codex={status:'ready',chat:{status:'ready'},data:{status:'idle'}};fixtureFlowResolve({ok:true,state:structuredClone(fixtureState)});void 0`);for(let i=0;i<10;i++)await settle();
+      assert.equal(await calls('enable-provider-data'),0,'stopped batch cannot continue after a late login result');
+      assert.equal(await calls('send-workbuddy-cli'),0,'batch never sends a model message');
       assert.equal(window.isVisible(), false);
       console.log('PASS real Chromium unified cards, guided authorization, source isolation and stale-task boundaries; synthetic state/commands only');
       window.destroy(); app.exit(0);

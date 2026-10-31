@@ -603,7 +603,7 @@ function registerStoreConnections() {
         message=storeEnableFlow.getState()[payload?.provider]?.message||'已检查连接。';
       } else if(action==='enable-provider-data'){
         await storeEnableFlow.enableData(payload?.provider);
-        if(payload?.provider==='zcode'&&storeEnableFlow.getState().zcode.chat.status==='needs-data-authorization')await storeEnableFlow.enable('zcode');
+        if(payload?.provider==='zcode'&&storeEnableFlow.getState().zcode.data.status==='ready'&&storeEnableFlow.getState().zcode.chat.status==='needs-data-authorization')await storeEnableFlow.enable('zcode');
         message='原工具数据授权已按实际结果更新，聊天登录保持。';
       } else if(action==='revoke-provider'){
         await storeEnableFlow.disable(payload?.provider);message='已停用并撤销本地数据授权。';

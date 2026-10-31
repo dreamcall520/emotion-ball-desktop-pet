@@ -1,0 +1,46 @@
+{
+  "candidate": "R22",
+  "tests": {
+    "passed": 3113,
+    "failed": 0,
+    "concurrency": 2
+  },
+  "finalChromiumRerun": {
+    "passed": 2,
+    "failed": 0
+  },
+  "priorConcurrency4Run": {
+    "passed": 3112,
+    "failed": 1,
+    "reason": "temporary fixture native auth watcher timeout",
+    "watcherTargetedRerun": {
+      "passed": 8,
+      "failed": 0
+    }
+  },
+  "sourceFilesVerified": 467,
+  "sourceVerificationExcludesSignedNativeBinaries": true,
+  "helperDigestsVerified": true,
+  "strictSignatureVerifiedByPackager": true,
+  "asarSha256": "ef68fe5efcc7df36a7aee3f38bf2d70a6031929f89b9c74aeebca3d234bd3025",
+  "selection": [
+    "single",
+    "multiple",
+    "all"
+  ],
+  "selectionPreferencesRemembered": true,
+  "selectionIsNotGrant": true,
+  "autoStartOnReopen": false,
+  "availableCapabilitiesUnblocked": true,
+  "optionalCreditsNeverAutoLogin": true,
+  "cancelledAuthorizationDefersProvider": true,
+  "lateResultAfterStopCannotContinue": true,
+  "newModelMessages": 0,
+  "newAccountAuthorizations": 0,
+  "actualElectronMasVerified": false,
+  "automaticInstallAllowedInNonDiagnosticMas": false,
+  "finalPackageNativeUiReopened": false,
+  "formalAppReplaced": false,
+  "pushed": false,
+  "submitted": false
+}

@@ -99,9 +99,11 @@
     check(provider);const state=input||{},quota=quotaPart(state,provider),tasks=taskPart(state,provider),chat=chatPart(state,provider),parts=[quota,tasks,chat];
     const ready=parts.filter(p=>p.status==='ready').length;
     const events=state[provider+'DesktopEvents'];const taskConnectionReady=tasks.status==='ready'||Boolean(events?.enabled&&(events.pluginInstallationVerified===true||rows(events.observations).length));const allConnected=quota.status==='ready'&&chat.status==='ready'&&taskConnectionReady;
-    const status=parts.some(p=>p.status==='working')?'working':allConnected?'ready':ready?'partial':parts.every(p=>p.status==='needs-authorization')?'needs-authorization':'unknown';
+    const status=parts.some(p=>p.status==='working')?'working':ready?'ready':parts.every(p=>p.status==='needs-authorization')?'needs-authorization':'unknown';
+    const selected=state.providerChats?.[provider]||(state.chat?.source===provider?state.chat:null),installation=state.pluginInstallations?.[provider];
+    const needsAttention=Boolean(selected?.accountMismatch||selected?.errorCode==='ACCOUNT_CHANGED'||state.onboarding?.[provider]?.chat?.status==='needs-new-chat'||state.onboarding?.[provider]?.status==='error'||installation?.status==='error');
     const timestamps=parts.map(p=>p.updatedAt).filter(Number.isFinite);
-    return{provider,status,statusLabel:({ready:'已连接',partial:'部分已连接',working:'正在连接','needs-authorization':'未连接',unknown:'待确认'})[status],quota,tasks,chat,...(timestamps.length?{updatedAt:Math.max(...timestamps)}:{}),needsAttention:status!=='ready'};
+    return{provider,status,statusLabel:status==='ready'?(allConnected?'已连接':'已可用'):({working:'正在连接','needs-authorization':'未连接',unknown:'暂未可用'})[status],quota,tasks,chat,...(timestamps.length?{updatedAt:Math.max(...timestamps)}:{}),needsAttention,allConnected,usable:ready>0};
   }
   function buildProviderGuide(input,provider){
     check(provider);const state=input||{},card=buildToolCard(state,provider),directory=provider==='workbuddy'?state.workbuddyDesktop?.directory:state[provider]?.directory;
@@ -111,17 +113,26 @@
     const data={id:'data',title:provider==='zcode'&&state.zcode?.accountSource==='configured-custom'?'允许读取模型、额度和任务':'允许读取工具信息',status:dataStatus,description:dataStatus==='ready'?'已记住目录授权，无需重新选择':'系统将打开对应工具目录，请点“打开”；取消后可继续完成',action:'enable-provider-data',payload:{provider},actionLabel:'允许读取'};
     const steps=provider==='zcode'&&state.zcode?.accountSource==='configured-custom'&&dataStatus!=='ready'?[data,chat]:[chat,data];
     if(provider==='workbuddy'){
-      steps.push({id:'quota',title:'连接官网积分',status:card.quota.status,description:card.quota.text,action:state.workbuddy?.summary&&state.workbuddy?.status!=='needs-login'?'refresh-workbuddy':'workbuddy-login',actionLabel:state.workbuddy?.summary&&state.workbuddy?.status!=='needs-login'?'刷新积分':'登录查看积分'});
+      steps.push({id:'quota',title:'连接官网积分',status:card.quota.status,description:card.quota.text,optional:true,action:state.workbuddy?.summary&&state.workbuddy?.status!=='needs-login'?'refresh-workbuddy':'workbuddy-login',actionLabel:state.workbuddy?.summary&&state.workbuddy?.status!=='needs-login'?'刷新积分':'登录查看积分'});
 
     }else{
       steps.push({id:'capabilities',title:'检查额度和任务',status:card.quota.status==='ready'&&card.tasks.status==='ready'?'ready':card.quota.status==='unavailable'?'unavailable':'unknown',description:card.quota.text+'；'+card.tasks.text,...(directory==='stored'&&card.quota.status!=='unavailable'?{action:'enable-provider-data',payload:{provider},actionLabel:'重新检查'}:{})});
     }
     if(['zcode','workbuddy'].includes(provider))steps.push(...pluginSteps(state,provider));
-    const complete=steps.every(s=>s.status==='ready');
-    // Do not keep relaunching a permission already granted or loop on a vendor
-    // capability limitation. Retry remains available on the individual step.
-    const next=steps.find(s=>s.status==='needs-authorization'&&s.action)||steps.find(s=>s.status!=='ready'&&s.status!=='working'&&s.action&&s.id!=='capabilities');
-    return{provider,title:'连接 '+NAMES[provider],steps,complete,partial:!complete&&steps.some(s=>s.status==='ready'),nextStepId:next?.id||null};
+    // Already granted steps are observations, never another authorization prompt.
+    // A vendor limitation and first-event wait are outcomes, not unfinished setup.
+    for(const step of steps){
+      if(step.id==='capabilities'||step.id==='task-verification')step.informational=true;
+      const chatState=state.providerChats?.[provider]||(state.chat?.source===provider?state.chat:null);
+      if(step.id==='chat'&&card.chat.status==='unknown'&&(chatState?.accountMismatch||chatState?.errorCode==='ACCOUNT_CHANGED'||state.onboarding?.[provider]?.chat?.status==='needs-new-chat')){
+        step.status='needs-authorization';step.action='open-provider-chat';step.actionLabel='开始新聊天';
+      }
+      if(step.status==='ready'||step.status==='unavailable'||step.status==='blocked'&&!step.action){delete step.action;delete step.payload;}
+    }
+    const required=steps.filter(step=>!step.optional&&!step.informational);
+    const next=required.find(step=>step.status==='needs-authorization'&&step.action);
+    const complete=!required.some(step=>['needs-authorization','working','error'].includes(step.status));
+    return{provider,title:'连接 '+NAMES[provider],steps,complete,usable:card.usable,needsAttention:card.needsAttention,partial:!complete&&steps.some(s=>s.status==='ready'),nextStepId:next?.id||null};
   }
   return{buildProviderGuide,buildToolCard};
 });
