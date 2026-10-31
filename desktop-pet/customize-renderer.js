@@ -144,15 +144,16 @@
       target.appendChild(button);
     }
     const dogs = [...localPets, ...codexDescriptors.values()].filter(pet => pet.characterId === 'xiaobai');
-    const dog = dogs.find(pet => pet.id === state.appearance.codexPetId) || dogs[0];
+    const dog = dogs.find(pet => pet.origin === 'builtin') || dogs.find(pet => pet.id === state.appearance.codexPetId) || dogs[0];
     if (dog) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'shape-option';
       button.dataset.shape = 'codex-pet';
       button.dataset.petId = dog.id;
+      if (dog.origin === 'builtin') button.dataset.officialPet = 'xiaobai';
       button.setAttribute('aria-label', '选择小白形态');
-      button.setAttribute('aria-pressed', String(state.appearance.shape === 'codex-pet' && state.appearance.codexPetId === dog.id));
+      button.setAttribute('aria-pressed', String(state.appearance.shape === 'codex-pet' && dogs.some(pet => pet.id === state.appearance.codexPetId)));
       const art = document.createElement('span');
       art.className = 'shape-art';
       const icon = document.createElement('canvas');
@@ -1289,6 +1290,7 @@
     return bridge.load().then(value => {
       if (disposed) return;
       if (!value) throw new Error('customization unavailable');
+      for (const pet of value.builtinPets || []) if (CodexPetPlayer.validDescriptor(pet)) codexDescriptors.set(pet.id, pet);
       if (value.codexPet) codexDescriptors.set(value.codexPet.id, value.codexPet);
       for (const item of value.appearancePresets || []) if (item.codexPet) codexDescriptors.set(item.codexPet.id, item.codexPet);
       appearancePresets = Array.isArray(value.appearancePresets) ? value.appearancePresets.map(item => ({ id: item.id, name: item.name, appearance: PetCustomization.normalizeAppearance(item.appearance) })) : [];
