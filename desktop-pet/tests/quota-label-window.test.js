@@ -1828,7 +1828,7 @@ test('浅色卡片在深色壁纸上的次级文字和深色 urgent 对比度均
 
 
 test('侧卡透明尾跨进羊或气泡时仍穿透，普通48px入口有效区域保持', async t => {
-  let cursor = { x: 1372, y: 440 };
+  let cursor = { x: 1390, y: 440 };
   const f = fixture(() => Promise.resolve(), { labelSize: 'compact', getGuardEntry: () => true,
     presentation: { shape: 'new-year-sheep', mode: 'peeked', side: 'right' }, getCursorScreenPoint: () => cursor });
   t.after(() => f.label.destroy());

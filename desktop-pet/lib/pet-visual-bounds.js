@@ -1,3 +1,4 @@
+const EdgePeek = require('./edge-peek');
 // The transparent pet window is larger than its painted body. These fractions
 // were measured from the rendered silhouettes; blob is the existing spacing baseline.
 const VERTICAL_INSETS = Object.freeze({
@@ -11,6 +12,10 @@ const VERTICAL_INSETS = Object.freeze({
 });
 
 function petVisualBounds(bounds, shape, presentation = null) {
+  if (EdgePeek.specFor(shape) && ['tucked','peeked'].includes(presentation?.mode) && ['left','right'].includes(presentation?.side)) {
+    const painted = petVisualBounds(bounds,shape,{...presentation,mode:'free'});
+    return EdgePeek.translatedBounds(bounds,shape,presentation,painted);
+  }
   // The approved orb is drawn in a transparent square canvas. Measured from
   // its 512px idle render, alpha>=32: [85,95,427,417]. Use the actual body,
   // not the classic SVG's extra 6% spacing compensation or the effect shadow.

@@ -97,6 +97,7 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/lib/codex-pets.js',
     'desktop-pet/lib/codex-pet-player.js',
   'desktop-pet/lib/sprite-edge-ink.js',
+  'desktop-pet/lib/edge-peek.js',
     'desktop-pet/customize-preload.js',
     'desktop-pet/customize-renderer.js',
     'desktop-pet/quota-customizer.js',
@@ -409,7 +410,7 @@ function signWeatherApp(appPath) {
   adhocSign(appPath);
 }
 
-async function packageMac(root = path.resolve(__dirname, '../..'), { website = false, nativeIcon = false, softOrb = false, candidateBundleId = null } = {}) {
+async function packageMac(root = path.resolve(__dirname, '../..'), { website = false, nativeIcon = false, softOrb = false, edgePeek = false, candidateBundleId = null } = {}) {
   buildWeatherLocation(root);
   const icon = makeIcon(root);
   const staging = prepareStaging(root, website ? path.join(root, 'desktop-pet/build/website-staging') : undefined);
@@ -423,6 +424,10 @@ async function packageMac(root = path.resolve(__dirname, '../..'), { website = f
     fs.writeFileSync(packageFile,JSON.stringify(pkg,null,2)+'\n');
     options.name='球球桌宠-柔光团候选';options.appBundleId='local.xiaokun.emotionball.pet.softorb';
     options.out=path.join(root,'dist/soft-orb');
+  }
+  if(edgePeek){
+    const file=path.join(staging,'package.json'),pkg=JSON.parse(fs.readFileSync(file,'utf8'));pkg.qiuqiuAcceptance='edge-peek';fs.writeFileSync(file,JSON.stringify(pkg,null,2)+'\n');
+    options.name='球球桌宠-贴边候选';options.appBundleId='local.xiaokun.emotionball.pet.edgepeek';options.out=path.join(root,'dist/edge-peek');
   }
   if (nativeIcon) {
     options.extraResource = [path.join(root, 'desktop-pet/assets/app-icon-native/Assets.car')];
@@ -439,7 +444,7 @@ async function packageMac(root = path.resolve(__dirname, '../..'), { website = f
 }
 
 if (require.main === module) {
-  packageMac(undefined, { website: process.argv.includes('--website'), nativeIcon: process.argv.includes('--local-native-icon'), softOrb:process.argv.includes('--soft-orb') }).catch(error => {
+  packageMac(undefined, { website: process.argv.includes('--website'), nativeIcon: process.argv.includes('--local-native-icon'), softOrb:process.argv.includes('--soft-orb'), edgePeek:process.argv.includes('--edge-peek') }).catch(error => {
     process.stderr.write(`${error.stack || error.message}\n`);
     process.exitCode = 1;
   });

@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 // 运行真实 renderer、状态规则和动画引擎；仅替代 DOM、宿主通信及时间。
-function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = null) {
+function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = null, edgePeek = false) {
   let now = 0;
   let nextTimer = 1;
   let engine;
@@ -108,6 +108,7 @@ function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = nul
     }
   });
   context.window = context;
+  if (edgePeek) context.EdgePeek = require('../lib/edge-peek');
   context.document.defaultView = context;
   pet.ownerDocument = context.document;
   context.Image = class {
@@ -1493,4 +1494,18 @@ for (const trigger of ['activity', 'task-settings']) test(`任务思考步态在
   r.advanceTo(16000);assert.equal(canvas.dataset.codexAction,'idle','6秒思考展示结束仍须休息');
   r.codexSettings({enabled:true,generation:1,activeTaskCount:0});assert.equal(canvas.dataset.codexAction,'idle');
   r.windowEvents.beforeunload();
+});
+
+test('classic edge slide holds the painted pose and cancels delayed work on hide',()=>{
+ const r=createRenderer(.5,null,null,true);
+ r.present({mode:'tucked',side:'left',suppressed:true});
+ r.present({mode:'peeked',side:'left',suppressed:false});
+ const pose=JSON.stringify(r.engine._lastPose);
+ r.advanceTo(250);r.activity();
+ assert.equal(JSON.stringify(r.engine._lastPose),pose);
+ assert.equal(r.engine._active,false);
+ r.advanceTo(501);assert.equal(r.engine._active,true);
+ r.present({mode:'tucked',side:'left',suppressed:true});
+ r.advanceTo(650);r.present({mode:'hidden',suppressed:true});
+ r.advanceTo(1100);assert.equal(r.pet.dataset.presentation,'hidden');assert.equal(r.engine._active,false);
 });
