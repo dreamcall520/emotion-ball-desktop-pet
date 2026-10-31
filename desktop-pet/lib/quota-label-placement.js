@@ -129,7 +129,7 @@ function quotaFreeStackBounds(petBounds, workArea, cards, presentation, bubble =
     for(const item of [obstacle,bar])if(item)candidates.push(clamp(item.y-maxBottom-GAP,minY,maxY),clamp(item.y+item.height-minTop+GAP,minY,maxY));
     for(const placement of ['right','left']){
       const sideCenter=placement==='right'?pet.x+pet.width+GAP+left:pet.x-GAP-right;
-      for(const cursor of new Set(candidates.map(Math.round))){const found=column(placement,sideCenter,cursor,false);if(found)return found;}
+      for(const cursor of new Set(candidates.map(Math.round).sort((a,b)=>Math.abs(a-initial)-Math.abs(b-initial)))){const found=column(placement,sideCenter,cursor,false);if(found)return found;}
     }
   }
   return fallback();

@@ -29,6 +29,7 @@ await run("window.failList=false;document.getElementById('refresh-local-pets').c
 await run("window.importMode='success';document.getElementById('import-local-pet').click()");await until("document.querySelector('.codex-pet-sprite')?.dataset.codexReady==='ready'",'real player imported sprite ready');
 assert.equal(await run('saves.length'),0,'import does not apply desktop appearance');assert.equal(await run('current.customization.appearance.shape'),'new-year-sheep');assert.equal(await run('previews.at(-1).codexPetId'),'codex-'+'a'.repeat(64));
 assert.equal(await run("document.querySelector('#local-pet-grid .pet-card').getAttribute('aria-pressed')"),'true');
+await until("previews.at(-1).codexPetId==='codex-'+ 'a'.repeat(64)",'selected local preview has rendered');
 assert.equal(await run("document.getElementById('pet-settings').parentElement.id"),'local-panel');
 assert.equal(await run("Boolean(document.querySelector('#pet-action option[value=sleep]'))"),true);await run("document.getElementById('pet-action').value='sleep';document.getElementById('pet-action').dispatchEvent(new Event('change'))");assert.equal(await run("document.querySelector('.codex-pet-sprite').dataset.codexAction"),'sleep');
 await run("document.getElementById('pet-action').value='wave';document.getElementById('pet-action').dispatchEvent(new Event('change'))");assert.equal(await run("document.querySelector('.codex-pet-sprite').dataset.codexAction"),'wave');
@@ -45,6 +46,44 @@ assert.equal(await run('current.customization.appearance.codexPetId'),'codex-'+'
 assert.equal(await run("(()=>{const e=document.querySelector('.source-switch');return e.scrollWidth<=e.clientWidth+1})()"),true,'four tabs fit settings column');
 await run("document.getElementById('source-local').click();document.documentElement.dataset.theme='dark'");
 assert.equal(await run("(()=>{const p=document.getElementById('local-panel'),r=p.getBoundingClientRect(),grid=document.getElementById('local-pet-grid');return r.width>0&&p.scrollWidth<=p.clientWidth+1&&grid.scrollWidth<=grid.clientWidth+1})()"),true,'local library fits dark settings panel');
+// Deleting a preview never saves it or changes the active skin; cancel/failure keep it listed.
+await run("document.querySelector('#local-pet-grid .pet-card').click();window.deleteCalls=[];window.deleteMode='cancel';petCustomizer.deleteLocalPet=async id=>{deleteCalls.push(id);if(deleteMode==='cancel')return{ok:false,canceled:true};if(deleteMode==='fail')return{ok:false,error:'该皮肤已设为启动默认，请先更换启动外观'};if(deleteMode==='pending')return new Promise(r=>window.finishDelete=r);localPets=[];return{ok:true,id}};void 0;");
+assert.equal(await run("document.querySelector('#local-pet-grid .pet-card').getAttribute('aria-pressed')"),'true');
+await until("previews.at(-1).codexPetId==='codex-'+ 'a'.repeat(64)",'selected local preview has rendered');
+// Multiple imported rows must keep names intact, including in a shorter window.
+await run("document.getElementById('message').hidden=true;window.localPets=Array.from({length:7},(_,i)=>({...localPet,id:'codex-'+(i+1).toString(16).repeat(64),importedId:'codex-'+(i+1).toString(16).repeat(64),name:i===0?'楚哥':'伙伴 '+(i+1)}));document.getElementById('refresh-local-pets').click()");
+await until("document.querySelectorAll('#local-pet-grid .pet-card').length===7",'multiple rows loaded');
+for(const size of [[800,580],[860,700],[1080,820]]){
+ win.setSize(...size);
+ for(let i=0;i<7;i++){
+  const g=await run(`(()=>{const n=document.querySelectorAll('#local-pet-grid .pet-name')[${i}],c=n.closest('.pet-card'),item=c.parentElement;n.scrollIntoView({block:'nearest'});const r=n.getBoundingClientRect(),b=c.getBoundingClientRect(),row=item.getBoundingClientRect();return{rect:{x:r.x,y:r.y,height:r.height},hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.outerHTML.slice(0,180),grid:{height:document.getElementById('local-pet-grid').clientHeight,scroll:document.getElementById('local-pet-grid').scrollTop},height:r.height,contained:r.top>=b.top&&r.bottom<=b.bottom&&b.bottom<=row.bottom+1,visible:n.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}})()`);
+  assert(g.height>=18&&g.contained&&g.visible,'every name has its own visible line at '+size.join('x')+' row '+i+' '+JSON.stringify(g));
+ }
+}
+await run("window.localPets=[localPet];document.getElementById('refresh-local-pets').click()");await until("document.querySelectorAll('#local-pet-grid .pet-card').length===1",'restore single local pet');
+if(process.env.PET_LOCAL_DELETE_SCREENSHOT){
+ await run("const captureStyle=document.createElement('style');captureStyle.textContent='*{transition:none!important}';document.head.append(captureStyle);void 0;");
+ const target=process.env.PET_LOCAL_DELETE_SCREENSHOT;fs.mkdirSync(path.dirname(target),{recursive:true});
+ if(process.env.PET_LOCAL_VISUAL_SPRITE){const url='data:image/webp;base64,'+fs.readFileSync(process.env.PET_LOCAL_VISUAL_SPRITE).toString('base64');await run(`document.querySelector('#local-pet-grid .pet-sprite').style.setProperty('--sprite','url('+JSON.stringify(${JSON.stringify(url)})+')');document.querySelector('#local-pet-grid .pet-sprite').style.setProperty('--rows','1');void 0;`);}
+ for(const width of [860,1080])for(const theme of ['light','dark']){
+  win.setSize(width,820);await run(`document.documentElement.dataset.theme=${JSON.stringify(theme)};new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))`);
+  await new Promise(r=>setTimeout(r,240));
+  const geometry=await run("(()=>{const b=document.querySelector('.local-pet-delete'),r=b.getBoundingClientRect(),card=b.previousElementSibling.getBoundingClientRect(),sprite=document.querySelector('#local-pet-grid .pet-sprite').getBoundingClientRect(),p=document.getElementById('local-panel').getBoundingClientRect();return {theme:document.documentElement.dataset.theme,background:getComputedStyle(b).backgroundColor,color:getComputedStyle(b).color,clickable:b.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)),inside:r.x>=card.x&&r.right<=card.right&&r.y>=card.y&&r.bottom<=sprite.top+1,clip:{x:Math.floor(p.x),y:Math.floor(p.y),width:Math.ceil(p.width),height:Math.min(440,Math.ceil(p.height))}}})()");
+  console.log(JSON.stringify({width,theme,geometry}));
+  assert(geometry.clickable&&geometry.inside,'delete remains visible, clickable and clear of the sprite');
+  fs.writeFileSync(target.replace(/\.png$/,'-'+width+'-'+theme+'.png'),(await win.webContents.capturePage(geometry.clip,{stayAwake:true})).toPNG());
+ }
+ win.setSize(1080,820);
+}
+await run("document.querySelector('.local-pet-delete').click()");await until("!document.getElementById('save').disabled",'cancel deletion');
+assert.equal(await run("document.querySelectorAll('#local-pet-grid .pet-card').length"),1);
+await run("deleteMode='fail';document.querySelector('.local-pet-delete').click()");await until("!document.getElementById('save').disabled",'blocked deletion');assert.match(await run("document.getElementById('message').textContent"),/启动默认/);
+assert.equal(await run('previews.at(-1).codexPetId'),'codex-'+'a'.repeat(64));
+await run("deleteMode='pending';document.querySelector('.local-pet-delete').click()");await until("!!window.finishDelete",'pending delete');assert.equal(await run("document.getElementById('save').disabled&&document.getElementById('import-local-pet').disabled&&document.querySelector('.local-pet-delete').disabled"),true);
+await run("window.localPets=[];finishDelete({ok:true,id:localPet.id})");await until("!document.getElementById('save').disabled&&document.querySelectorAll('#local-pet-grid .pet-card').length===0",'delete completed');
+await until("previews.at(-1).codexPetId==='codex-'+ 'b'.repeat(64)",'deleted draft restores active preview');
+assert.equal(await run('saves.length'),2,'deleting a draft never writes settings');assert.equal(await run("document.getElementById('local-read-state').hidden"),false);assert.equal(await run("document.querySelectorAll('#pet-grid .pet-card').length"),1,'Codex library untouched');
+await run("importMode='success';document.getElementById('import-local-pet').click()");await until("document.querySelectorAll('#local-pet-grid .pet-card').length===1&&!document.getElementById('import-local-pet').disabled",'reimport after deletion');
 assert.equal(win.isVisible(),false);console.log('PASS local tab / empty retry / cancel failure preserve sheep / real sprite preview action pause / separate Codex copy / save / keyboard');win.destroy();app.exit(0);
 }catch(error){console.error(error.stack);win?.destroy();app.exit(1);}});
 }else require('node:test')('local partner import reuses real customizer DOM and player without applying until save',async()=>{const data=fs.mkdtempSync(path.join(os.tmpdir(),'local-pet-dom-'));try{const env={...process.env,PET_LOCAL_DOM_DATA:data};delete env.ELECTRON_RUN_AS_NODE;await new Promise((resolve,reject)=>{const child=require('node:child_process').spawn(require('electron'),[__filename,'--local-pets-dom-child'],{env});let output='';child.stdout.on('data',v=>output+=v);child.stderr.on('data',v=>output+=v);child.on('exit',code=>code===0?resolve():reject(Error(output)));child.on('error',reject);});}finally{fs.rmSync(data,{recursive:true,force:true});}});

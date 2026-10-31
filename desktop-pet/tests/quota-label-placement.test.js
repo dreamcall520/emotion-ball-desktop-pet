@@ -820,3 +820,13 @@ test('side fallback includes guard envelopes and tries the other side around obs
  const impossible=quotaFreeStackBounds(pet,{...area,height:400},cards,presentation);
  assert.equal(impossible.placement,'hidden');
 });
+
+test('corner dialogue keeps the side stack near the pet instead of jumping to the display top',()=>{
+ const {quotaFreeStackBounds}=require('../lib/quota-label-placement');
+ const area={x:0,y:25,width:1512,height:900};
+ const cards={weather:{width:128,height:32,inset:2},codex:{width:128,height:32,inset:2,guardTargetWidth:48,roleWidth:22},balance:{width:128,height:32,inset:2}};
+ const pet={x:24,y:800,width:80,height:80},bubble={x:8,y:706,width:224,height:86};
+ const p=quotaFreeStackBounds(pet,area,cards,{mode:'free',quotaCardOrder:Object.keys(cards)},bubble);
+ assert.notEqual(p.placement,'hidden');
+ for(const row of Object.values(p.cards)){assertInside(row,area);assert(row.face.y>=bubble.y,'cards stay near the bottom corner');}
+});

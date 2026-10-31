@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('petCustomizer', {
   load: () => ipcRenderer.invoke('pet:customization-get'),
   listLocalPets: () => ipcRenderer.invoke('pet:local-pets-list'),
   importLocalPet: () => ipcRenderer.invoke('pet:local-pets-import'),
+  deleteLocalPet: id => ipcRenderer.invoke('pet:local-pets-delete', id),
   listCodexPets: () => ipcRenderer.invoke('pet:codex-pets-list'),
   setSize: size => ipcRenderer.invoke('pet:customization-size', size),
   onSize: callback => {
