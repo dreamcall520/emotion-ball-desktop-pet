@@ -1,0 +1,71 @@
+{
+  "checkedAt": "2026-10-31T04:33:04.511Z",
+  "sourceCommit": "c17919f324374c30fde8f5f5299fd3f688965a83",
+  "diagnostic": "native ad-hoc sandbox and inherited helper; not Electron MAS acceptance",
+  "expectedBoundaryObserved": true,
+  "baseline": {
+    "jsonReadable": true,
+    "loopbackTCP": {
+      "connected": true,
+      "pong": true
+    },
+    "sqliteReadOnlyRowCount": 2,
+    "unixSocket": {
+      "connected": true,
+      "pong": true
+    }
+  },
+  "sandbox": {
+    "after": {
+      "jsonReadable": false,
+      "loopbackTCP": {
+        "connected": true,
+        "pong": true
+      },
+      "sqliteReadOnlyRowCount": -1,
+      "unixSocket": {
+        "connected": false,
+        "errno": 1
+      }
+    },
+    "before": {
+      "jsonReadable": false,
+      "loopbackTCP": {
+        "connected": true,
+        "pong": true
+      },
+      "sqliteReadOnlyRowCount": -1,
+      "unixSocket": {
+        "connected": false,
+        "errno": 1
+      }
+    },
+    "bundledInheritedHelper": {
+      "exitCode": 0,
+      "launched": true,
+      "result": {
+        "jsonReadable": false,
+        "loopbackTCP": {
+          "connected": true,
+          "pong": true
+        },
+        "sqliteReadOnlyRowCount": -1,
+        "unixSocket": {
+          "connected": false,
+          "errno": 1
+        }
+      }
+    },
+    "phase": "inspect",
+    "providerCredentialsRead": false,
+    "providerNetworkCalls": false
+  },
+  "directoryAuthorization": "not-tested: native UI control timed out in separate interactive attempt",
+  "notTested": [
+    "bookmark persistence/revocation",
+    "provider authentication and APIs",
+    "real provider CLI/socket",
+    "Electron MAS runtime",
+    "App Review"
+  ]
+}

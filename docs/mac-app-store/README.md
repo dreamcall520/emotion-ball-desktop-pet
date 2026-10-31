@@ -22,7 +22,7 @@
 
 ## 已确认目标：必须保留 AI 工具联动
 
-用户已否决暂缓 AI 联动的首发建议。当前任务是验证完整联动可行性；下表中的暂缓建议仅保留为早期审计记录，不能作为实施范围。不得删除 AI 功能后称目标完成。
+用户已否决暂缓 AI 联动的首发建议。当前任务是验证完整联动可行性，不得删除 AI 功能后称目标完成。
 
 ## 保留 AI 联动的可行性核验
 
@@ -91,3 +91,13 @@
 - Apple 会员开通：https://developer.apple.com/help/account/membership/program-enrollment/
 - Electron MAS 构建与签名：https://www.electronjs.org/docs/latest/tutorial/mac-app-store-submission-guide
 - Apple 审核规则（尤其 2.4.5）：https://developer.apple.com/app-store/review/guidelines/
+
+## 第二轮进展（2026-10-31）
+
+详见 [三家官方路线与实测边界](ai-supported-routes-20261031.md) 及 [第二轮诊断结果](authorization-probe-result-20261031.json)。
+
+- 新增 `node desktop-pet/scripts/mas-authorization-probe.js`：无沙盒/沙盒/包内helper对照。合成JSON和SQLite、外部Unix socket均被沙盒拒绝，本地TCP和包内helper成功；仅原生ad-hoc诊断。
+- 原生目录授权窗口控制超时，未确认书签、重启或撤销成功。
+- 新增未接正式App的 `desktop-pet/lib/mas-directory-access.js`，取消保留旧授权、访问期间成对释放、保存失败、失效重授权和并发撤销由13项模拟测试覆盖；不能替代原生验收。
+- 官方路线已找到：Codex实验性WebSocket（本机CLI帮助支持）、WorkBuddy OAuth/Open API、ZCode Hooks。各自尚有权限/能力缺口，尤其WorkBuddy余额查询尚未找到公开契约。
+- 正式App、账号和设置未改；未请求真实厂商授权、未调用模型、未推送发布。
