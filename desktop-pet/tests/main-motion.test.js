@@ -1045,7 +1045,7 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   const menu = f.call('menuTemplate()');
   const top = menu.filter(item => item.type !== 'separator');
   assert.deepEqual(Array.from(top, item => item.label), [
-    '设置中心', '意见反馈', '和球球聊聊', '启用 WorkBuddy 联动', '显示 WorkBuddy 积分卡', 'WorkBuddy 趣味游戏', 'API 余额', '定制球球', '专属皮肤定制', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API', 'ZCode 联动',
+    '设置中心', '意见反馈', '和球球聊聊', '启用 WorkBuddy 联动', '显示 WorkBuddy 积分卡', 'WorkBuddy 趣味游戏', 'API 余额', '定制球球', '专属皮肤  ✦ 定制', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API', 'ZCode 联动',
     '贴边与显示', '球球尺寸', '界面配色', '常规设置', '关于球球', '检查更新', '退出球球'
   ]);
   const group = label => top.find(item => item.label === label).submenu.filter(item => item.type !== 'separator');
@@ -4058,7 +4058,7 @@ test('原生菜单保留核心联动开关与独立入口，完整偏好仍可�
   const f = await fixture(); t.after(() => f.app.emit('before-quit'));
   const menu = f.call('compactMenuTemplate()');
   assert.deepEqual(Array.from(menu.filter(item => item.type !== 'separator'), item => item.label),
-    ['和球球聊聊', '来定制球球', '专属皮肤定制', '便签与待办', '番茄钟', '启用 Codex 联动', '启用 ZCode 联动', '启用 WorkBuddy 联动', '联动样式管理', '设置中心', '意见反馈', '关于球球', '检查更新', '退出球球']);
+    ['和球球聊聊', '来定制球球', '专属皮肤  ✦ 定制', '便签与待办', '番茄钟', '启用 Codex 联动', '启用 ZCode 联动', '启用 WorkBuddy 联动', '联动样式管理', '设置中心', '意见反馈', '关于球球', '检查更新', '退出球球']);
   assert.ok(menu.every(item => !item.submenu));
   assert.ok(findMenuItem(menu, 'workbuddy-enabled'));
   assert.equal(findMenuItem(menu, 'workbuddy-chat'), null);
@@ -4269,7 +4269,7 @@ test('WorkBuddy 独立显示开关同步菜单和布局，隐藏不停止联动�
   const queried=f.workbuddyCalls.length;await f.call('workbuddyQuota.refresh()');await f.call('workbuddyTasks.refresh(true)');await f.call('workbuddyUsage.refresh(true)');await flush();
   const operations=f.workbuddyCalls.slice(queried).map(item=>item.operation);for(const operation of ['quota','tasks','usage'])assert(operations.includes(operation));
   assert.equal(f.call('JSON.stringify({codex:settings.codexEnabled,visible:settings.codexQuotaAlwaysVisible,fun:settings.codexQuotaFunEnabled})'),before);
-  menuItem(f,'workbuddy-quota-visible').click({checked:true});assert.equal(f.call('workbuddyLabel.visible'),false,'settings remains a card blocker');settingsWindow.hide();await flush();assert.equal(f.call('workbuddyLabel.visible'),true);
+  menuItem(f,'workbuddy-quota-visible').click({checked:true});assert.equal(f.call('workbuddyLabel.visible'),true,'settings keeps the enabled card visible for preview');settingsWindow.hide();await flush();assert.equal(f.call('workbuddyLabel.visible'),true);
   assert.equal(menuItem(f,'workbuddy-quota-visible').checked,true);
   f.call('globalThis.noticeState=null;edgeNotice={...edgeNotice,tick(state){globalThis.noticeState=state;}};settings.workbuddyQuotaAlwaysVisible=false;tickEdgeNotice(true)');
   assert.equal(f.call('noticeState.workbuddyEnabled'),false);
@@ -4304,7 +4304,7 @@ test('WorkBuddy 偏好保存失败保留真实状态，设置中心不误报成�
   assert.equal(f.call('settings.workbuddyQuotaFunEnabled'),true);assert.equal(f.call('closes'),0);assert.equal(menuItem(f,'workbuddy-quota-fun').checked,true);
   menuItem(f,'global-settings').click();const win=f.call('globalSettingsWindow');win.emit('ready-to-show');
   const result=await f.invoke('pet:global-settings-action','/workbuddy-quota-visible',win.webContents,false);
-  assert.ok(result.error);assert.equal(f.call('settings.workbuddyQuotaAlwaysVisible'),true);assert.equal(f.call('workbuddyLabel.visible'),false,'failed save does not remove the settings popup blocker');win.hide();await flush();assert.equal(f.call('workbuddyLabel.visible'),true);
+  assert.ok(result.error);assert.equal(f.call('settings.workbuddyQuotaAlwaysVisible'),true);assert.equal(f.call('workbuddyLabel.visible'),true,'failed save keeps the previous visible card available for preview');win.hide();await flush();assert.equal(f.call('workbuddyLabel.visible'),true);
   assert.equal(result.snapshot.entries.find(item=>item.id==='/workbuddy-quota-visible').checked,true);
   assert.equal(f.call("setWorkBuddyPreference('codexQuotaFunEnabled',false)"),false);assert.equal(f.call("setWorkBuddyPreference('workbuddyQuotaFunEnabled','false')"),false);
 });
