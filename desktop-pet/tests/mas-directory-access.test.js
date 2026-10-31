@@ -124,3 +124,90 @@ test('不支持的provider及坏存储明确失败，不能扫描目录', async 
   await assert.rejects(access.withAccess('codex', () => assert.fail('must not run')), { code: 'DIRECTORY_STORAGE_FAILED', reason: 'load-failed' });
   assert.deepEqual(calls, []);
 });
+
+test('显式租约在异步观察期间保持作用域，调用者关闭观察后释放且release幂等', async () => {
+  const { access, calls } = harness();
+  const lease = await access.acquire('codex');
+  assert.equal(lease.directory, oldGrant.directory);
+  assert.equal(Object.hasOwn(lease, 'bookmark'), false);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(calls.includes('stop'), false);
+  let watcherOpen = true;
+  await Promise.resolve().then(() => { assert.equal(watcherOpen, true); assert.equal(calls.includes('stop'), false); });
+  watcherOpen = false;
+  lease.release(); lease.release();
+  assert.equal(calls.filter(call => call === 'stop').length, 1);
+});
+
+test('显式租约的异常清理与withAccess各自只释放一次，不共享释放状态', async () => {
+  const stops = [];
+  let count = 0;
+  const { access } = harness({ app: { startAccessingSecurityScopedResource: () => {
+    const id = ++count; return () => stops.push(id);
+  } } });
+  const first = await access.acquire('codex');
+  const second = await access.acquire('codex');
+  try { throw new Error('synthetic observer error'); }
+  catch (_) { first.release(); }
+  finally { first.release(); }
+  assert.deepEqual(stops, [1]);
+  await assert.rejects(access.withAccess('codex', async () => { throw new Error('synthetic operation error'); }), /synthetic operation error/);
+  assert.deepEqual(stops, [1, 3]);
+  second.release(); second.release();
+  assert.deepEqual(stops, [1, 3, 2]);
+});
+
+test('撤销只忘记本地授权，不提前释放并发观察租约，之后拒绝新访问', async () => {
+  const stops = [];
+  let count = 0;
+  const { access, saved } = harness({ app: { startAccessingSecurityScopedResource: () => {
+    const id = ++count; return () => stops.push(id);
+  } } });
+  const [first, second] = await Promise.all([access.acquire('codex'), access.acquire('codex')]);
+  assert.deepEqual(stops, []);
+  await access.revoke('codex');
+  assert.equal(saved.has('codex'), false);
+  assert.deepEqual(stops, []);
+  await assert.rejects(access.acquire('codex'), { code: 'DIRECTORY_ACCESS_REQUIRED' });
+  second.release(); second.release();
+  assert.deepEqual(stops, [2]);
+  first.release();
+  assert.deepEqual(stops, [2, 1]);
+});
+
+test('获取过程与撤销串行，迟到的目录验证不复活已撤销授权或误关租约', async () => {
+  let finishValidation, validationStarted;
+  const started = new Promise(resolve => { validationStarted = resolve; });
+  const { access, saved, calls } = harness({ extra: {
+    validateDirectory: () => { validationStarted(); return new Promise(resolve => { finishValidation = resolve; }); }
+  } });
+  const acquiring = access.acquire('codex');
+  await started;
+  const revoking = access.revoke('codex');
+  assert.equal(saved.has('codex'), true);
+  finishValidation();
+  const lease = await acquiring;
+  await revoking;
+  assert.equal(saved.has('codex'), false);
+  assert.equal(calls.includes('stop'), false);
+  lease.release(); lease.release();
+  assert.equal(calls.filter(call => call === 'stop').length, 1);
+  await assert.rejects(access.acquire('codex'), { code: 'DIRECTORY_ACCESS_REQUIRED' });
+});
+
+test('不同工具的租约独立，重新选择只影响之后的访问', async () => {
+  const stops = [], starts = [];
+  const { access, saved } = harness({ app: { startAccessingSecurityScopedResource: bookmark => {
+    const id = starts.push(bookmark); return () => stops.push(id);
+  } } });
+  saved.set('zcode', { directory: '/synthetic/zcode', bookmark: 'emNvZGU=' });
+  const codex = await access.acquire('codex'), zcode = await access.acquire('zcode');
+  await access.authorize('codex');
+  // authorize's verification scope is released, existing scopes remain live.
+  assert.deepEqual(stops, [3]);
+  const replacement = await access.acquire('codex');
+  assert.equal(codex.directory, oldGrant.directory);
+  assert.equal(replacement.directory, newGrant.directory);
+  zcode.release(); replacement.release(); codex.release();
+  assert.deepEqual(stops, [3, 2, 4, 1]);
+});

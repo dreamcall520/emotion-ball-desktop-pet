@@ -57,3 +57,11 @@ Remote Control与Bot Channel有各自现成渠道，不等于球球可直接使�
 完整AI联动是否可按现有体验上架仍待验证。现在已证明本地TCP和包内helper有技术入口；尚无证据证明三家全部状态/额度/聊天可完整替换。目录授权基础模块只做能力准备，未接入正式App。
 
 下一步分别核验：目录书签实际授权与重启；Codex鉴权WebSocket协议；ZCode官方事件映射；WorkBuddy应用权限与额度能力缺口。会员/签名、厂商授权、技术可用和Apple审核是独立条件。
+
+## 2026-10-31 后续核验更新
+
+上述“目录授权未实测”已被后续证据更新：`authorization-interactive-result-20261031.json`确认合成目录的原生系统授权、新进程恢复和忘记本地书签后拒绝读取均通过。只读目录授权后，外部Unix socket和外部可执行文件仍拒绝；不把这些结果扩展为真实工具已连通。
+
+同类研究见`similar-apps-research-20261031.md`：AgentDeck、Belay、Tempo有商店与源码证据；CodexBar提供网站会话WorkBuddy额度候选。目录观察租约、Codex鉴权WebSocket、WorkBuddy网站汇总候选均已落地；尚未接主App。
+
+真实Codex只读验证源码在`probe/CodexReadOnlyProbe.swift`，构建命令`node desktop-pet/scripts/build-mas-codex-readonly-probe.js`。仅构建不启动；测试App不保存令牌/书签、不刷新登录态、不发模型消息、拒绝跨域重定向。已向用户请求新App读取敏感目录的当次确认，未获答复前不执行真实目录授权。

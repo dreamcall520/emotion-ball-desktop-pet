@@ -1,0 +1,264 @@
+{
+  "checkedAt": "2026-10-31T04:39:35.336Z",
+  "sourceCommit": "85c6e3a8cba8b3ecf57fc1c82bb5a8cd1da6e9e9",
+  "diagnostic": "native ad-hoc sandbox and inherited helper; not Electron MAS acceptance",
+  "expectedBoundaryObserved": true,
+  "authorizationLifecycleObserved": true,
+  "baseline": {
+    "externalExecutable": {
+      "exitCode": 0,
+      "launched": true
+    },
+    "jsonReadable": true,
+    "loopbackTCP": {
+      "connected": true,
+      "pong": true
+    },
+    "sqliteReadOnlyRowCount": 2,
+    "unixSocket": {
+      "connected": true,
+      "pong": true
+    }
+  },
+  "sandbox": {
+    "after": {
+      "externalExecutable": {
+        "errorCode": 4,
+        "launched": false
+      },
+      "jsonReadable": false,
+      "loopbackTCP": {
+        "connected": true,
+        "pong": true
+      },
+      "sqliteReadOnlyRowCount": -1,
+      "unixSocket": {
+        "connected": false,
+        "errno": 1
+      }
+    },
+    "before": {
+      "externalExecutable": {
+        "errorCode": 4,
+        "launched": false
+      },
+      "jsonReadable": false,
+      "loopbackTCP": {
+        "connected": true,
+        "pong": true
+      },
+      "sqliteReadOnlyRowCount": -1,
+      "unixSocket": {
+        "connected": false,
+        "errno": 1
+      }
+    },
+    "bundledInheritedHelper": {
+      "exitCode": 0,
+      "launched": true,
+      "result": {
+        "externalExecutable": {
+          "errorCode": 4,
+          "launched": false
+        },
+        "jsonReadable": false,
+        "loopbackTCP": {
+          "connected": true,
+          "pong": true
+        },
+        "sqliteReadOnlyRowCount": -1,
+        "unixSocket": {
+          "connected": false,
+          "errno": 1
+        }
+      }
+    },
+    "phase": "inspect",
+    "providerCredentialsRead": false,
+    "providerNetworkCalls": false
+  },
+  "directoryAuthorization": {
+    "authorize": {
+      "after": {
+        "externalExecutable": {
+          "errorCode": 4,
+          "launched": false
+        },
+        "jsonReadable": true,
+        "loopbackTCP": {
+          "connected": true,
+          "pong": true
+        },
+        "sqliteReadOnlyRowCount": 2,
+        "unixSocket": {
+          "connected": false,
+          "errno": 1
+        }
+      },
+      "before": {
+        "externalExecutable": {
+          "errorCode": 4,
+          "launched": false
+        },
+        "jsonReadable": false,
+        "loopbackTCP": {
+          "connected": true,
+          "pong": true
+        },
+        "sqliteReadOnlyRowCount": -1,
+        "unixSocket": {
+          "connected": false,
+          "errno": 1
+        }
+      },
+      "bookmarkSaved": true,
+      "bundledInheritedHelper": {
+        "exitCode": 0,
+        "launched": true,
+        "result": {
+          "externalExecutable": {
+            "errorCode": 4,
+            "launched": false
+          },
+          "jsonReadable": true,
+          "loopbackTCP": {
+            "connected": true,
+            "pong": true
+          },
+          "sqliteReadOnlyRowCount": 2,
+          "unixSocket": {
+            "connected": false,
+            "errno": 1
+          }
+        }
+      },
+      "phase": "authorize",
+      "providerCredentialsRead": false,
+      "providerNetworkCalls": false,
+      "scopeActivated": true
+    },
+    "resume": {
+      "after": {
+        "externalExecutable": {
+          "errorCode": 4,
+          "launched": false
+        },
+        "jsonReadable": true,
+        "loopbackTCP": {
+          "connected": true,
+          "pong": true
+        },
+        "sqliteReadOnlyRowCount": 2,
+        "unixSocket": {
+          "connected": false,
+          "errno": 1
+        }
+      },
+      "before": {
+        "externalExecutable": {
+          "errorCode": 4,
+          "launched": false
+        },
+        "jsonReadable": false,
+        "loopbackTCP": {
+          "connected": true,
+          "pong": true
+        },
+        "sqliteReadOnlyRowCount": -1,
+        "unixSocket": {
+          "connected": false,
+          "errno": 1
+        }
+      },
+      "bookmarkStale": false,
+      "bundledInheritedHelper": {
+        "exitCode": 0,
+        "launched": true,
+        "result": {
+          "externalExecutable": {
+            "errorCode": 4,
+            "launched": false
+          },
+          "jsonReadable": true,
+          "loopbackTCP": {
+            "connected": true,
+            "pong": true
+          },
+          "sqliteReadOnlyRowCount": 2,
+          "unixSocket": {
+            "connected": false,
+            "errno": 1
+          }
+        }
+      },
+      "phase": "resume",
+      "providerCredentialsRead": false,
+      "providerNetworkCalls": false,
+      "scopeActivated": true
+    },
+    "revoke": {
+      "after": {
+        "externalExecutable": {
+          "errorCode": 4,
+          "launched": false
+        },
+        "jsonReadable": false,
+        "loopbackTCP": {
+          "connected": true,
+          "pong": true
+        },
+        "sqliteReadOnlyRowCount": -1,
+        "unixSocket": {
+          "connected": false,
+          "errno": 1
+        }
+      },
+      "before": {
+        "externalExecutable": {
+          "errorCode": 4,
+          "launched": false
+        },
+        "jsonReadable": false,
+        "loopbackTCP": {
+          "connected": true,
+          "pong": true
+        },
+        "sqliteReadOnlyRowCount": -1,
+        "unixSocket": {
+          "connected": false,
+          "errno": 1
+        }
+      },
+      "bookmarkRemoved": true,
+      "bundledInheritedHelper": {
+        "exitCode": 0,
+        "launched": true,
+        "result": {
+          "externalExecutable": {
+            "errorCode": 4,
+            "launched": false
+          },
+          "jsonReadable": false,
+          "loopbackTCP": {
+            "connected": true,
+            "pong": true
+          },
+          "sqliteReadOnlyRowCount": -1,
+          "unixSocket": {
+            "connected": false,
+            "errno": 1
+          }
+        }
+      },
+      "phase": "revoke",
+      "providerCredentialsRead": false,
+      "providerNetworkCalls": false
+    }
+  },
+  "notTested": [
+    "provider authentication and APIs",
+    "real provider CLI/socket",
+    "Electron MAS runtime",
+    "App Review"
+  ]
+}

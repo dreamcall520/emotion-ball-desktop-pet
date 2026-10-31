@@ -49,6 +49,13 @@ func loopbackPing() -> [String: Any] {
     let count = Darwin.read(fd, &buffer, buffer.count)
     return ["connected": true, "pong": count > 0 && String(decoding: buffer.prefix(max(0,count)), as: UTF8.self) == "pong\n"]
 }
+func externalExecutable() -> [String: Any] {
+    let task = Process()
+    task.executableURL = folder.appendingPathComponent("external-tool")
+    task.standardOutput = FileHandle.nullDevice; task.standardError = FileHandle.nullDevice
+    do { try task.run(); task.waitUntilExit(); return ["launched": true, "exitCode": Int(task.terminationStatus)] }
+    catch { return ["launched": false, "errorCode": (error as NSError).code] }
+}
 func inspectFolder() -> [String: Any] {
     var db: OpaquePointer?
     let opened = sqlite3_open_v2(folder.appendingPathComponent("fixture.sqlite").path, &db, SQLITE_OPEN_READONLY, nil)
@@ -62,7 +69,7 @@ func inspectFolder() -> [String: Any] {
         sqlite3_finalize(stmt)
     }
     return ["jsonReadable": (try? Data(contentsOf: folder.appendingPathComponent("fixture.json"))) != nil,
-        "sqliteReadOnlyRowCount": count, "unixSocket": socketPing(folder.appendingPathComponent("ipc.sock").path), "loopbackTCP": loopbackPing()]
+        "sqliteReadOnlyRowCount": count, "unixSocket": socketPing(folder.appendingPathComponent("ipc.sock").path), "loopbackTCP": loopbackPing(), "externalExecutable": externalExecutable()]
 }
 func runHelper(_ name: String) -> [String: Any] {
     let task = Process(), pipe = Pipe()
@@ -90,7 +97,7 @@ var result: [String: Any] = ["phase": phase, "before": inspectFolder(), "provide
 var granted: URL?
 if phase == "authorize" {
     _ = NSApplication.shared
-    NSApp.setActivationPolicy(.regular); NSApp.activate(ignoringOtherApps: true)
+    NSApp.setActivationPolicy(.regular); NSApp.finishLaunching(); NSApp.activate(ignoringOtherApps: true)
     let panel = NSOpenPanel()
     panel.title = "球球上架验证：只授权合成测试目录"
     panel.message = "仅含测试 JSON、SQLite 和本机假通信接口，不选择真实 AI 工具目录。"

@@ -36,6 +36,8 @@ async function main() {
     await fs.mkdir(path.dirname(binary), { recursive: true });
     await fs.mkdir(path.dirname(helper), { recursive: true });
     await fs.writeFile(path.join(fixture, 'fixture.json'), '{"synthetic":true}\n');
+    await fs.copyFile('/usr/bin/true', path.join(fixture, 'external-tool'));
+    await fs.chmod(path.join(fixture, 'external-tool'), 0o700);
     await run('python3', ['-c', 'import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute("create table tasks(id integer)"); c.executemany("insert into tasks values (?)",[(1,),(2,)]); c.commit(); c.close()', path.join(fixture, 'fixture.sqlite')]);
     await fs.writeFile(path.join(contents, 'Info.plist'), '<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>local.xiaokun.emotionball.masauthorizationprobe</string><key>CFBundleName</key><string>QiuqiuAuthorizationProbe</string><key>CFBundleExecutable</key><string>probe</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleVersion</key><string>1</string></dict></plist>');
     await run('xcrun', ['swiftc', path.join(probe, 'AuthorizedProbe.swift'), '-o', binary, '-lsqlite3']);
@@ -48,6 +50,14 @@ async function main() {
     await run('codesign', ['--force', '--sign', '-', '--entitlements', path.join(probe, 'sandbox.entitlements.plist'), bundle]);
     await run('codesign', ['--verify', '--deep', '--strict', bundle]);
     const sandbox = JSON.parse(await run(binary, ['inspect', fixture, port]));
+    let authorization = null;
+    if (process.argv.includes('--interactive')) {
+      process.stderr.write(JSON.stringify({ interactiveProbeBundle: bundle, syntheticDirectory: fixture }) + '\n');
+      authorization = {};
+      for (const phase of ['authorize', 'resume', 'revoke']) {
+        authorization[phase] = JSON.parse(await run(binary, [phase, fixture, port]));
+      }
+    }
     const expectedBoundaryObserved = baseline.jsonReadable && baseline.sqliteReadOnlyRowCount === 2 &&
       baseline.unixSocket.pong && baseline.loopbackTCP.pong &&
       !sandbox.after.jsonReadable && sandbox.after.sqliteReadOnlyRowCount === -1 &&
@@ -56,14 +66,21 @@ async function main() {
       sandbox.bundledInheritedHelper.result.loopbackTCP.pong &&
       !sandbox.bundledInheritedHelper.result.jsonReadable &&
       !sandbox.bundledInheritedHelper.result.unixSocket.connected;
+    const authorizationLifecycleObserved = authorization ? Boolean(
+      authorization.authorize.bookmarkSaved && authorization.authorize.scopeActivated &&
+      authorization.authorize.after.jsonReadable && authorization.authorize.after.sqliteReadOnlyRowCount === 2 &&
+      authorization.resume.scopeActivated && authorization.resume.after.jsonReadable &&
+      authorization.resume.after.sqliteReadOnlyRowCount === 2 &&
+      authorization.revoke.bookmarkRemoved && !authorization.revoke.after.jsonReadable &&
+      authorization.revoke.after.sqliteReadOnlyRowCount === -1) : null;
     const report = { checkedAt: new Date().toISOString(),
       sourceCommit: (await run('git', ['-C', root, 'rev-parse', 'HEAD'])).trim(),
       diagnostic: 'native ad-hoc sandbox and inherited helper; not Electron MAS acceptance',
-      expectedBoundaryObserved: Boolean(expectedBoundaryObserved), baseline, sandbox,
-      directoryAuthorization: 'not-tested: native UI control timed out in separate interactive attempt',
-      notTested: ['bookmark persistence/revocation', 'provider authentication and APIs', 'real provider CLI/socket', 'Electron MAS runtime', 'App Review'] };
+      expectedBoundaryObserved: Boolean(expectedBoundaryObserved), authorizationLifecycleObserved, baseline, sandbox,
+      directoryAuthorization: authorization || 'not-tested: use --interactive for native selection, restart and local bookmark removal',
+      notTested: [...(authorization ? [] : ['bookmark persistence/revocation']), 'provider authentication and APIs', 'real provider CLI/socket', 'Electron MAS runtime', 'App Review'] };
     process.stdout.write(JSON.stringify(report, null, 2) + '\n');
-    if (!expectedBoundaryObserved) process.exitCode = 2;
+    if (!expectedBoundaryObserved || authorizationLifecycleObserved === false) process.exitCode = 2;
   } finally {
     await Promise.all([unix, tcp].map(server => new Promise(resolve => server.close(resolve))));
     await fs.rm(scratch, { recursive: true, force: true });

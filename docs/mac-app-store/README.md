@@ -101,3 +101,11 @@
 - 新增未接正式App的 `desktop-pet/lib/mas-directory-access.js`，取消保留旧授权、访问期间成对释放、保存失败、失效重授权和并发撤销由13项模拟测试覆盖；不能替代原生验收。
 - 官方路线已找到：Codex实验性WebSocket（本机CLI帮助支持）、WorkBuddy OAuth/Open API、ZCode Hooks。各自尚有权限/能力缺口，尤其WorkBuddy余额查询尚未找到公开契约。
 - 正式App、账号和设置未改；未请求真实厂商授权、未调用模型、未推送发布。
+
+## 第三轮：同类上架案例与目录授权突破（2026-10-31）
+
+详见 [同类App与GitHub研究](similar-apps-research-20261031.md)。已核AgentDeck、Belay、Tempo的商店页面与源码；CodexBar还提供不依赖WorkBuddy桌面解密的网站会话路线。没有把其当前源码等同已审核二进制。
+
+原生授权窗口生命周期问题已修，合成目录授权/新进程恢复/忘记本地授权后拒绝访问全部通过；外部Unix socket和可执行文件在只读目录授权后仍被拒绝。报告`authorization-interactive-result-20261031.json`。此前“窗口超时”的记录只代表上一轮状态。
+
+目录观察租约与Codex鉴权WebSocket模块已实现，尚未接正式App与真实账号。Codex真实额度只读原生探针已编译签名准备；需用户当次确认后才能让新App读取真实敏感目录，不能自动选择`.codex`。
