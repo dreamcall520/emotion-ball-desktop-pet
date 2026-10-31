@@ -144,15 +144,19 @@ test('响应content-length与流式累计上限都执行，不以response.json�
 
 test('截止时间覆盖fetch和卡住的响应body，signal被传递并取消读取', async t => {
   const f = await fixture(t);
+  // The deadline includes authorized-file IO. Leave room to reach the fetch/body
+  // phase under the full suite instead of accidentally timing out during fs reads.
+  const deadlineMs = 1000;
   let signal;
-  await assert.rejects(readCodexAccountUsage({ ...f.options, timeoutMs: 20, fetch: async (_url, options) => {
+  await assert.rejects(readCodexAccountUsage({ ...f.options, timeoutMs: deadlineMs, fetch: async (_url, options) => {
     signal = options.signal; return new Promise(() => {});
   } }), { code: 'TIMEOUT' });
   assert.equal(signal.aborted, true);
-  let cancelled = false;
-  const body = new ReadableStream({ start() {}, cancel() { cancelled = true; } });
-  await assert.rejects(readCodexAccountUsage({ ...f.options, timeoutMs: 20, fetch: async () => new Response(body) }), { code: 'TIMEOUT' });
-  await new Promise(resolve => setImmediate(resolve)); assert.equal(cancelled, true);
+  let cancelled = false, bodyReadStarted = false;
+  const body = new ReadableStream({ pull() { bodyReadStarted = true; }, cancel() { cancelled = true; } }, { highWaterMark: 0 });
+  await assert.rejects(readCodexAccountUsage({ ...f.options, timeoutMs: deadlineMs, fetch: async () => new Response(body) }), { code: 'TIMEOUT' });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(bodyReadStarted, true); assert.equal(cancelled, true);
 });
 
 test('调用方取消覆盖读取响应阶段，取消reason中的secret不向外传播', async t => {

@@ -9,7 +9,11 @@ const { createZcodeChatWsRpc } = require('./zcode-chat-ws-rpc');
 const { loopbackEndpoint } = require('./codex-ws-transport');
 const { createMasZcodeProvider } = require('./mas-zcode-provider');
 const { createMasWorkBuddyProvider } = require('./mas-workbuddy-provider');
-const PROVIDERS = new Set(['codex', 'zcode']);
+const {createWorkBuddyOfficialConnection,createWorkBuddyIntentStore}=require('./workbuddy-official-connection');
+const {createWorkBuddyCliConnection}=require('./workbuddy-cli-connection');
+const {createWorkBuddyLocalCliClient}=require('./workbuddy-local-cli-client');
+const {createMasWorkBuddyTasks}=require('./mas-workbuddy-tasks');
+const PROVIDERS = new Set(['codex', 'zcode','workbuddy']);
 const failure = code => Object.assign(new Error(code), { code });
 function createDirectoryStorage(root) {
   fs.mkdirSync(root, { recursive: true, mode: 0o700 });
@@ -43,7 +47,7 @@ function createDiagnosticDirectoryAccess({ dialog, storage }) {
   return {
     async authorize(provider) {
       if (!PROVIDERS.has(provider)) throw failure('INVALID_PROVIDER');
-      const selected = await dialog.showOpenDialog({ title: `选择 ${provider === 'codex' ? 'Codex 的 .codex' : 'ZCode 的 .zcode'} 数据目录`,
+      const selected = await dialog.showOpenDialog({ title: `选择 ${provider === 'codex' ? 'Codex 的 .codex' : provider==='zcode'?'ZCode 的 .zcode':'WorkBuddy 的 .workbuddy（仅任务缓存）'} 数据目录`,
         message: '此为隔离联调候选；本次目录选择不等同系统沙盒验收。', properties: ['openDirectory', 'showHiddenFiles'] });
       if (selected.canceled) return { status: 'cancelled' };
       const directory = selected.filePaths?.[0];
@@ -68,6 +72,29 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
   const access = diagnostic ? createDiagnosticDirectoryAccess({ dialog, storage }) : createMasDirectoryAccess({ app, dialog, storage });
   const workbuddy = createMasWorkBuddyProvider({ BrowserWindow, session, shell, onChange: () => { if (!closed) { for (const notify of quotaPorts) notify(); onChange(); } } });
   const zcode = createMasZcodeProvider({ directoryAccess: access, fetch });
+  const workbuddyOfficial=createWorkBuddyOfficialConnection({diagnostic,store:createWorkBuddyIntentStore(path.join(app.getPath('userData'),'workbuddy-official-send-intent.json')),openAuthorizationUrl:url=>shell.openExternal(url),onChange:()=>{if(!closed)onChange();}});
+  const workbuddyCli=createWorkBuddyCliConnection({createClient:createWorkBuddyLocalCliClient,store:createWorkBuddyIntentStore(path.join(app.getPath('userData'),'workbuddy-cli-send-intent.json')),onChange:()=>{if(!closed)onChange();}});
+  const desktopTasks=createMasWorkBuddyTasks({directoryAccess:access});
+  let desktopCache={partitions:[],probe:null,report:null,error:null,accountAttributionVerified:false};
+  async function probeWorkbuddyDesktop(){try{const probe=await desktopTasks.probe(),groups=await desktopTasks.listPartitions();desktopCache={...desktopCache,probe,partitions:groups.partitions,report:null,error:null};}catch(e){desktopCache={...desktopCache,report:null,error:['DIRECTORY_ACCESS_REQUIRED'].includes(e.code)?'请先授权原WorkBuddy任务目录。':'桌面任务缓存暂不能读取，或数据库格式未支持。'};}onChange();return desktopCache;}
+  async function readWorkbuddyDesktop(partitionId){try{desktopCache={...desktopCache,report:await desktopTasks.read({partitionId}),error:null};}catch(e){desktopCache={...desktopCache,report:null,error:'所选缓存范围暂不能读取，请重新检查授权。'};}onChange();return desktopCache;}
+  async function importWorkbuddyCliService(){
+    if(closed)throw failure('CLOSED');
+    const selected=await dialog.showOpenDialog({title:'选择本人已启动的 WorkBuddy / CodeBuddy CLI 连接目录',message:'仅导入专用本机服务连接，不预览其中的口令文件。CLI会话不等同原WorkBuddy桌面任务。',properties:['openDirectory'],securityScopedBookmarks:true});
+    if(selected.canceled)return{status:'cancelled'};
+    let fd,stop;
+    try{
+      if(closed||!selected.filePaths?.[0]||!path.isAbsolute(selected.filePaths[0]))throw failure('INVALID_PAIRING_FILE');
+      if(!diagnostic){if(!selected.bookmarks?.[0])throw failure('INVALID_PAIRING_FILE');stop=app.startAccessingSecurityScopedResource(selected.bookmarks[0]);}
+      const file=path.join(selected.filePaths[0],'connection.json'),stat=fs.lstatSync(file);
+      if(!stat.isFile()||stat.isSymbolicLink()||stat.size>16384)throw failure('INVALID_PAIRING_FILE');
+      fd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);const opened=fs.fstatSync(fd);
+      if(opened.dev!==stat.dev||opened.ino!==stat.ino||opened.size>16384)throw failure('INVALID_PAIRING_FILE');
+      const raw=JSON.parse(fs.readFileSync(fd,'utf8'));
+      if(raw.version!==1||raw.provider!=='workbuddy-cli'||typeof raw.password!=='string'||!/^[A-Za-z0-9_-]{16,256}$/.test(raw.password)||typeof raw.workspaceDir!=='string'||!path.isAbsolute(raw.workspaceDir)||raw.workspaceDir.includes('\0'))throw failure('INVALID_PAIRING_FILE');
+      if(closed)throw failure('CLOSED');await workbuddyCli.configure(raw);onChange();return{status:'configured'};
+    }catch(e){throw failure(e.code==='CLOSED'?'CLOSED':'INVALID_PAIRING_FILE');}finally{if(fd!==undefined)fs.closeSync(fd);if(typeof stop==='function')stop();}
+  }
   async function authorize(provider) {
     if (!PROVIDERS.has(provider)) throw failure('INVALID_PROVIDER');
     const result = await access.authorize(provider);
@@ -83,9 +110,9 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
       codex: { directory: codex.status, serviceConfigured: Boolean(service), endpoint: service?.endpoint || null,
         tasks: 'authorized-session-logs', chat: service ? 'configured-unverified' : 'needs-local-service' },
       zcode: { directory: zcodeDirectory.status, capabilities: zcode.getCapabilities(),
-        serviceConfigured: Boolean(zcodeService), endpoint: zcodeService?.endpoint || null,
+        serviceConfigured: Boolean(zcodeService), endpoint: zcodeService?.endpoint || null, accountSource:zcodeService?.accountSource || null,
         chat: zcodeService ? 'experimental-configured-unverified' : 'needs-experimental-local-service',
-        publicApiContractVerified: false }, workbuddy: workbuddy.getState() };
+        publicApiContractVerified: false }, workbuddy: workbuddy.getState(),workbuddyOfficial:workbuddyOfficial.getState(),workbuddyCli:workbuddyCli.getState(),workbuddyDesktop:{...structuredClone(desktopCache),directory:(await access.getStatus('workbuddy')).status} };
   }
   async function importLocalService(provider) {
     if (!PROVIDERS.has(provider)) throw failure('INVALID_PROVIDER');
@@ -118,6 +145,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
       if (!providerMatches || raw.version !== 1 || typeof raw.bearerToken !== 'string' || !/^[A-Za-z0-9._~+\/-]{16,8192}={0,2}$/.test(raw.bearerToken) ||
         raw.hostHome !== path.dirname(directory.directory)) throw failure('INVALID_PAIRING_FILE');
       const selectedService = { endpoint: loopbackEndpoint(raw.endpoint), bearerToken: raw.bearerToken, hostHome: raw.hostHome };
+      if(provider==='zcode'){const source=raw.accountSource||'official';if(!['official','configured-custom'].includes(source))throw failure('INVALID_PAIRING_FILE');selectedService.accountSource=source;}
       if (provider === 'zcode' && new URL(selectedService.endpoint).pathname !== '/zcode') throw failure('INVALID_PAIRING_FILE');
       if (closed) throw failure('CLOSED');
       slot.service = selectedService; slot.generation++;
@@ -155,7 +183,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
           target = provider === 'codex'
             ? createCodexChatRpc({ ...options, hostHome: service.hostHome,
               webSocket: { endpoint: service.endpoint, bearerToken: service.bearerToken }, ...callbacks })
-            : createZcodeChatWsRpc({ ...options, endpoint: service.endpoint, bearerToken: service.bearerToken, ...callbacks });
+            : createZcodeChatWsRpc({ ...options, endpoint: service.endpoint, bearerToken: service.bearerToken,accountSource:service.accountSource, ...callbacks });
           epoch = slot.generation;
         }
         return target.start();
@@ -208,8 +236,8 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
   }
   function close() {
     if (closed) return runtimeClosing;
-    closed = true; workbuddy.close(); quotaPorts.clear();
-    const closing = [];
+    closed = true; workbuddy.close();workbuddyOfficial.close();desktopTasks.close(); quotaPorts.clear();
+    const closing = [workbuddyCli.close()];
     for (const slot of Object.values(chatServices)) {
       slot.service = null; slot.generation++;
       closing.push(...[...slot.clients].map(client => client.close()));
@@ -217,13 +245,14 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
     runtimeClosing = Promise.all(closing).then(() => undefined);
     return runtimeClosing;
   }
-  return { access, authorize, getState,
+  return { access, authorize, getState,getZcodeAccountSource:()=>chatServices.zcode.service?.accountSource||null,
     importCodexService: () => importLocalService('codex'), importZcodeService: () => importLocalService('zcode'),
     createCodexChatRpc: options => localChat('codex', options), createZcodeChatRpc: options => localChat('zcode', options),
     async ensureAuthorized(provider) { if ((await access.getStatus(provider)).status === 'stored') return true; return (await authorize(provider)).status === 'stored'; },
-    createCodexConnection: options => createMasCodexConnection({ ...options, directoryAccess: access, fetch }), zcode, workbuddy, createWorkBuddyQuotaPort, unavailableObservation,
+    createCodexConnection: options => createMasCodexConnection({ ...options, directoryAccess: access, fetch }), zcode, workbuddy,workbuddyOfficial,workbuddyCli,importWorkbuddyCliService,probeWorkbuddyDesktop,readWorkbuddyDesktop, createWorkBuddyQuotaPort, unavailableObservation,
     async revoke(provider) {
       await access.revoke(provider);
+      if(provider==='workbuddy')desktopCache={partitions:[],probe:null,report:null,error:null,accountAttributionVerified:false};
       const slot = chatServices[provider];
       if (slot) { slot.service = null; slot.generation++; await Promise.all([...slot.clients].map(client => client.invalidate())); }
       onChange();

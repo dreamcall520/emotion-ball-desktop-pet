@@ -62,7 +62,7 @@ test('provider分别保存，撤销codex不修改zcode，未知provider不能越
   await f.storage.remove('codex');
   assert.equal(await f.storage.load('codex'), null);
   assert.deepEqual(await f.storage.load('zcode'), { directory: f.zcode });
-  for (const provider of ['../outside', 'workbuddy', '', '__proto__']) {
+  for (const provider of ['../outside', 'unsupported-provider', '', '__proto__']) {
     await assert.rejects(f.storage.save(provider, { directory: f.codex }));
     await assert.rejects(f.storage.load(provider)); await assert.rejects(f.storage.remove(provider));
   }
@@ -404,4 +404,22 @@ test('取消ZCode导入保留原连接；runtime关闭释放两家client但不�
   await assert.rejects(c.readAccount(), { code: 'CLOSED' }); await assert.rejects(z.readAccount(), { code: 'CLOSED' });
   assert.equal((await fetch(`http://127.0.0.1:${zcode.port}/readyz`)).status, 200);
   assert.equal(codex.server.address().port > 0, true);
+});
+
+test('个人CLI配对仅接受loopback且不向renderer输出口令或工作区',async t=>{
+ const f=await runtimeChatFixture(t),directory=path.join(f.temp,'workbuddy-cli-pairing');fs.mkdirSync(directory);
+ const raw={version:1,provider:'workbuddy-cli',endpoint:'http://127.0.0.1:45678',password:'syntheticGatewayPassword'.repeat(2),workspaceDir:path.join(f.temp,'isolated-cli'),cliVersion:'2.179.0'};
+ fs.writeFileSync(path.join(directory,'connection.json'),JSON.stringify(raw));f.selections.push({canceled:false,filePaths:[directory]});
+ assert.deepEqual(await f.runtime.importWorkbuddyCliService(),{status:'configured'});const state=await f.runtime.getState();
+ assert.equal(state.workbuddyCli.configured,true);assert.equal(state.workbuddyCli.connected,false);assert.equal(state.workbuddyCli.desktopTasksIncluded,false);
+ assert.equal(JSON.stringify(state).includes(raw.password),false);assert.equal(JSON.stringify(state.workbuddyCli).includes(raw.workspaceDir),false);
+ fs.writeFileSync(path.join(directory,'connection.json'),JSON.stringify({...raw,endpoint:'https://example.com'}));f.selections.push({canceled:false,filePaths:[directory]});
+ await assert.rejects(f.runtime.importWorkbuddyCliService(),{code:'INVALID_PAIRING_FILE'});
+ assert.equal((await f.runtime.getState()).workbuddyCli.configured,true);
+});
+
+test('CLI配对文件符号链接拒绝，取消保持已有状态',async t=>{
+ const f=await runtimeChatFixture(t),directory=path.join(f.temp,'link-cli-pairing');fs.mkdirSync(directory);const outside=path.join(f.temp,'outside-cli.json');fs.writeFileSync(outside,'{}');fs.symlinkSync(outside,path.join(directory,'connection.json'));
+ f.selections.push({canceled:false,filePaths:[directory]});await assert.rejects(f.runtime.importWorkbuddyCliService(),{code:'INVALID_PAIRING_FILE'});
+ f.selections.push({canceled:true});assert.deepEqual(await f.runtime.importWorkbuddyCliService(),{status:'cancelled'});assert.equal((await f.runtime.getState()).workbuddyCli.configured,false);
 });

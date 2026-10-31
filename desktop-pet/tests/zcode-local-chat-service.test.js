@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const WebSocket = require('ws');
-const { startZcodeLocalChatService } = require('../scripts/start-zcode-local-chat-service');
+const { startZcodeLocalChatService, accountReaderForSource, parseCliOptions } = require('../scripts/start-zcode-local-chat-service');
 const { createZcodeChatWsRpc } = require('../lib/zcode-chat-ws-rpc');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 async function fixture(t, options = {}) {
@@ -12,6 +12,7 @@ async function fixture(t, options = {}) {
   t.after(() => fs.rmSync(temporaryRoot, { recursive: true, force: true }));
   const calls = [], statuses = []; let hostOptions, rpcCount = 0, accountKey = 'c'.repeat(64);
   const service = await startZcodeLocalChatService({ temporaryRoot, hostHome: '/synthetic/user',
+    accountSource: options.accountSource || 'official',
     env: { SYNTHETIC_ONLY: '1' }, onStatus: status => statuses.push(status),
     createRpc: context => {
       hostOptions = context; rpcCount++;
@@ -149,4 +150,62 @@ test('host创建的线程绑定原账号，重连后账号变化不能借旧线�
   await assert.rejects(next.interruptTurn('owned-thread', 'owned-turn'), { code: 'UNAUTHENTICATED' });
   assert.equal(f.calls.some(call => call[0] === 'turn'), false);
   assert.equal(f.calls.some(call => call[0] === 'interrupt'), false);
+});
+
+
+test('official默认只读官方账号，完全不访问原自定义模型或在官方失败时回退', async () => {
+  let customReads = 0, officialReads = 0;
+  const options = { home: '/synthetic/home', release: { revision: 1 } };
+  const reader = accountReaderForSource(undefined, {
+    readOfficial: received => { officialReads++; assert.equal(received, options); return {
+      accountKey: 'a'.repeat(64), family: 'zai', jwtToken: 'synthetic-official-jwt',
+      personal: { hasConfigured: true, scope: 'b'.repeat(64) }
+    }; }, readConnection: () => { customReads++; throw new Error('must not read'); }
+  });
+  const account = await reader(options);
+  assert.equal(account.family, 'zai'); assert.equal(account.jwtToken, 'synthetic-official-jwt');
+  assert.equal(Object.hasOwn(account, 'personal'), false);
+  assert.equal(officialReads, 1); assert.equal(customReads, 0);
+  const failing = accountReaderForSource('official', {
+    readOfficial: () => { throw Object.assign(new Error('synthetic'), { code: 'ZCODE_LOGIN_REQUIRED' }); },
+    readConnection: () => { customReads++; return { personal: { hasConfigured: true } }; }
+  });
+  await assert.rejects(failing(options), { code: 'ZCODE_LOGIN_REQUIRED' });
+  assert.equal(customReads, 0);
+});
+
+test('configured-custom显式沿用既有配置，移除官方凭据和套餐scope，绝不反向fallback', async () => {
+  const personal = { hasConfigured: true, scope: 'b'.repeat(64), baseDir: '/synthetic/home', catalog: [{ id: 'existing-custom-model' }] };
+  let calls = 0;
+  const reader = accountReaderForSource('configured-custom', { readConnection: () => {
+    calls++; return { accountKey: 'a'.repeat(64), family: 'zai', jwtToken: 'synthetic-jwt', accessToken: 'synthetic-oauth',
+      codingPlanApiKey: 'synthetic-plan-key', selection: { scope: 'team' }, personal };
+  }, readOfficial: () => assert.fail('must not fall back') });
+  const account = await reader({});
+  assert.deepEqual(Object.keys(account).sort(), ['accountKey', 'baseDir', 'family', 'personal']);
+  assert.equal(account.family, 'custom'); assert.equal(account.accountKey, personal.scope);
+  assert.equal(account.personal, personal); assert.equal(calls, 1);
+  const missing = accountReaderForSource('configured-custom', { readConnection: () => ({
+    accountKey: 'a'.repeat(64), family: 'zai', jwtToken: 'synthetic', personal: { hasConfigured: false }
+  }), readOfficial: () => assert.fail('must not fall back') });
+  await assert.rejects(missing({}), { code: 'MODELS_UNAVAILABLE' });
+});
+
+test('CLI只有明确account-source才启用custom，拼写错误/多参数不默认为custom', () => {
+  assert.deepEqual(parseCliOptions([]), { accountSource: 'official' });
+  assert.deepEqual(parseCliOptions(['--account-source', 'official']), { accountSource: 'official' });
+  assert.deepEqual(parseCliOptions(['--account-source', 'configured-custom']), { accountSource: 'configured-custom' });
+  for (const args of [['configured-custom'], ['--account-source'], ['--account-source', 'auto'],
+    ['--account-source', 'configured-custom', '--extra'], ['--account-source=configured-custom']]) {
+    assert.throws(() => parseCliOptions(args), { code: 'INVALID_INPUT' });
+  }
+});
+
+test('ready与配对记录来源选择，尚未连接时不读账号或调用模型', async t => {
+  const official = await fixture(t), custom = await fixture(t, { accountSource: 'configured-custom' });
+  assert.equal(official.service.accountSource, 'official'); assert.equal(official.pairing.accountSource, 'official');
+  assert.equal(custom.service.accountSource, 'configured-custom'); assert.equal(custom.pairing.accountSource, 'configured-custom');
+  assert.equal(custom.statuses[0].accountSource, 'configured-custom');
+  assert.equal(official.rpcCount(), 0); assert.equal(custom.rpcCount(), 0);
+  assert.deepEqual(custom.calls, []);
 });

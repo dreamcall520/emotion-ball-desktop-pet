@@ -1,0 +1,22 @@
+{
+  "checkedAt": "2026-10-31T07:03:27.149Z",
+  "cliVersion": "2.179.0",
+  "source": "official-loopback-http-api",
+  "scope": "explicit-independent-cli-workspace-not-workbuddy-desktop",
+  "gatewayReachable": true,
+  "priorWorkspaceSessions": 0,
+  "acpInitialize": true,
+  "newSessionCreated": true,
+  "currentPermissionMode": "dontAsk",
+  "toolsListExposed": false,
+  "toolCount": null,
+  "modelPromptsSent": 0,
+  "providerAccountVerifiedByHealth": false,
+  "quotaVerified": false,
+  "runtimeContractCorrection": {
+    "generatedOpenApiProse": "workingDirectory",
+    "actualValidationRequired": "cwd"
+  },
+  "ownAcpConnectionClosed": true,
+  "hostStopped": false
+}

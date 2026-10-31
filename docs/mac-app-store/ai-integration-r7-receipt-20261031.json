@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-31",
+  "candidate": "R7 darwin-arm64 diagnostic; App Sandbox disabled",
+  "workbuddy": {
+    "cliVersion": "2.179.0",
+    "headlessReply": "球球连接成功",
+    "r6UiReply": "球球界面连接成功",
+    "r7DedicatedSessionConnected": true,
+    "desktopCacheRecords": 51,
+    "anonymousPartitions": 1,
+    "cacheGrantSurvivedRestart": true,
+    "messageBodiesRead": false,
+    "accountAttributionVerified": false,
+    "desktopRealtimeVerified": false,
+    "enterpriseOpenApiBlockedForPersonalDeveloper": true
+  },
+  "zcode": {
+    "customModels": 6,
+    "uiReply": "ZCode 界面连接成功",
+    "restartContextReply": "ZCode 界面连接成功",
+    "officialPlans": 0,
+    "automaticSourceFallback": false
+  },
+  "validation": {
+    "fullTestsPassed": 2934,
+    "afterFullTargetedTestsPassed": [
+      35,
+      34
+    ],
+    "package": {
+      "comparedSourceFiles": 444,
+      "mismatches": [],
+      "hostLaunchersIncluded": false,
+      "cloudRelayIncluded": false,
+      "asarSha256": "de1e8c780386abc48fc7e1f067074a8c2b77e437e5c41b5b6c2c1bbd9220d8c4"
+    }
+  },
+  "formalApp": {
+    "binaryUnchanged": true,
+    "settingsChangedDuringParallelRunningApps": true,
+    "settingsChangeAttribution": "unresolved; no rollback"
+  },
+  "release": {
+    "pushed": false,
+    "submitted": false,
+    "trueMasRuntimeVerified": false
+  }
+}

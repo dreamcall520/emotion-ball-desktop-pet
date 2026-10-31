@@ -10,7 +10,7 @@ const http = require('node:http');
 const { randomBytes, createHash, timingSafeEqual } = require('node:crypto');
 const { WebSocketServer } = require('ws');
 const { createZcodeChatRpc } = require('../lib/zcode-chat-rpc');
-const { readZcodeAccount } = require('../lib/zcode-account');
+const { readZcodeAccount, readZcodeConnection } = require('../lib/zcode-account');
 const SAFE_CODES = new Set(['INVALID_INPUT', 'START_FAILED', 'STOPPED', 'CLOSED', 'DISCONNECTED', 'TIMEOUT', 'BUSY',
   'INVALID_FRAME', 'UNSUPPORTED', 'UNAUTHENTICATED', 'THREAD_NOT_OWNED', 'MODELS_UNAVAILABLE', 'MODEL_UNAVAILABLE',
   'UNSAFE_CONFIG', 'TOOL_BLOCKED', 'VERIFICATION_REQUIRED', 'ZCODE_TEAM_SELECTION_REQUIRED', 'ZCODE_TEAM_KEY_MISSING',
@@ -20,9 +20,32 @@ const NOTIFICATIONS = new Set(['account/updated', 'turn/started', 'item/agentMes
 const validId = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,160}$/.test(value);
 const failure = code => Object.assign(new Error(SAFE_CODES.has(code) ? code : 'START_FAILED'), { code: SAFE_CODES.has(code) ? code : 'START_FAILED' });
 
+const ACCOUNT_SOURCES = new Set(['official', 'configured-custom']);
+function accountReaderForSource(accountSource = 'official', { readOfficial = readZcodeAccount, readConnection = readZcodeConnection } = {}) {
+  if (!ACCOUNT_SOURCES.has(accountSource)) throw failure('INVALID_INPUT');
+  return async options => {
+    if (accountSource === 'official') {
+      // Even a future account reader must not make custom API providers an implicit fallback.
+      const { personal: _ignored, ...account } = await readOfficial(options);
+      return account;
+    }
+    const connection = await readConnection(options), personal = connection?.personal;
+    if (personal?.hasConfigured !== true) throw failure('MODELS_UNAVAILABLE');
+    if (typeof personal.scope !== 'string' || !/^[a-f0-9]{64}$/.test(personal.scope)) throw failure('UNAUTHENTICATED');
+    // Custom opt-in is also isolated in the other direction: never fall back to an
+    // official trial/individual/team account if its configured API models fail.
+    return { accountKey: personal.scope, family: 'custom', baseDir: personal.baseDir || connection.baseDir, personal };
+  };
+}
+function parseCliOptions(args) {
+  if (args.length === 0) return { accountSource: 'official' };
+  if (args.length === 2 && args[0] === '--account-source' && ACCOUNT_SOURCES.has(args[1])) return { accountSource: args[1] };
+  throw failure('INVALID_INPUT');
+}
+
 async function startZcodeLocalChatService({ hostHome = os.homedir(), temporaryRoot = os.tmpdir(), env = process.env,
-  createRpc = createZcodeChatRpc, signal, onStatus = () => {} } = {}) {
-  if (typeof hostHome !== 'string' || !path.isAbsolute(hostHome) || hostHome.includes('\0') || typeof createRpc !== 'function') throw failure('INVALID_INPUT');
+  createRpc = createZcodeChatRpc, accountSource = 'official', signal, onStatus = () => {} } = {}) {
+  if (typeof hostHome !== 'string' || !path.isAbsolute(hostHome) || hostHome.includes('\0') || typeof createRpc !== 'function' || !ACCOUNT_SOURCES.has(accountSource)) throw failure('INVALID_INPUT');
   if (signal?.aborted) throw failure('STOPPED');
   const scratch = await fs.promises.mkdtemp(path.join(temporaryRoot, 'qiuqiu-zcode-chat-'));
   await fs.promises.chmod(scratch, 0o700);
@@ -91,14 +114,14 @@ async function startZcodeLocalChatService({ hostHome = os.homedir(), temporaryRo
         if (!initialized) {
           rpc = createRpc({ workspaceDir, home: hostHome, env,
             // Do not silently use separately paid custom API providers from the user's config.
-            readAccount: options => readZcodeAccount(options),
+            readAccount: accountReaderForSource(accountSource),
             onNotification: value => {
               if (!NOTIFICATIONS.has(value?.method) || Object.hasOwn(value, 'id')) { void owned.close(); return; }
               send(value);
             }, onDisconnect: () => { void owned.close(); } });
           await rpc.start(); initialized = true;
         }
-        return { provider: 'zcode', protocolVersion: 1, tools: false };
+        return { provider: 'zcode', protocolVersion: 1, accountSource, tools: false };
       }
       if (!initialized) throw failure('UNAUTHENTICATED');
       if (packet.method === 'zcode/readAccount') return rpc.readAccount();
@@ -169,23 +192,24 @@ async function startZcodeLocalChatService({ hostHome = os.homedir(), temporaryRo
     await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
     if (signal?.aborted || stopping) throw failure('STOPPED');
     const port = server.address().port, endpoint = `ws://127.0.0.1:${port}/zcode`;
-    await fs.promises.writeFile(pairingFile, JSON.stringify({ version: 1, provider: 'zcode', endpoint, bearerToken: token, hostHome }) + '\n',
+    await fs.promises.writeFile(pairingFile, JSON.stringify({ version: 1, provider: 'zcode', accountSource, endpoint, bearerToken: token, hostHome }) + '\n',
       { flag: 'wx', mode: 0o600 });
-    const status = { status: 'ready', provider: 'zcode', pairingDirectory: scratch, port };
+    const status = { status: 'ready', provider: 'zcode', accountSource, pairingDirectory: scratch, port };
     try { onStatus(status); } catch (_) {}
-    return { pairingDirectory: scratch, pairingFile, endpoint, port, stop, closed };
+    return { pairingDirectory: scratch, pairingFile, endpoint, port, accountSource, stop, closed };
   } catch (error) { await stop(); throw failure(error?.code); }
 }
 async function runCli() {
-  if (process.argv.includes('--help')) {
-    process.stdout.write('Usage: node desktop-pet/scripts/start-zcode-local-chat-service.js\nExperimental installed-ZCode account adapter; keep this terminal open. Select the printed pairing directory in the candidate App, never preview pairing.json. Ctrl+C stops only this service.\n'); return;
+  const args = process.argv.slice(2);
+  if (args.length === 1 && args[0] === '--help') {
+    process.stdout.write('Usage: node desktop-pet/scripts/start-zcode-local-chat-service.js [--account-source official|configured-custom]\nDefault: official account only. configured-custom explicitly reuses existing custom models and their original API billing; it never creates keys or silently falls back.\nExperimental installed-ZCode account adapter; keep this terminal open. Select the printed pairing directory in the candidate App, never preview pairing.json. Ctrl+C stops only this service.\n'); return;
   }
-  if (process.argv.length > 2) throw failure('INVALID_INPUT');
+  const options = parseCliOptions(args);
   const controller = new AbortController(); let service;
   const stop = () => { controller.abort(); void service?.stop(); };
   process.once('SIGINT', stop); process.once('SIGTERM', stop);
   try {
-    service = await startZcodeLocalChatService({ signal: controller.signal,
+    service = await startZcodeLocalChatService({ ...options, signal: controller.signal,
       onStatus: value => process.stdout.write(JSON.stringify(value) + '\n') });
     await service.closed;
   } finally { process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop); await service?.stop(); }
@@ -193,4 +217,4 @@ async function runCli() {
 if (require.main === module) runCli().catch(error => {
   process.stderr.write(JSON.stringify({ status: 'error', code: SAFE_CODES.has(error?.code) ? error.code : 'START_FAILED' }) + '\n'); process.exitCode = 1;
 });
-module.exports = { startZcodeLocalChatService };
+module.exports = { startZcodeLocalChatService, accountReaderForSource, parseCliOptions };

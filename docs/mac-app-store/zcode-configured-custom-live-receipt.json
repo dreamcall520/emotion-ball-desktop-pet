@@ -1,0 +1,40 @@
+{
+  "recordedAt": "2026-10-31T06:50:03.642Z",
+  "source": "configured-custom",
+  "scope": "independent-user-started-host-not-MAS-acceptance",
+  "readAccount": "recognized-existing-configuration",
+  "modelCount": 6,
+  "modelNames": [
+    "kimi-k3",
+    "kimi-k2.7-code",
+    "kimi-k2.6",
+    "kimi-k2.7-code-highspeed",
+    "k3",
+    "k3-256k"
+  ],
+  "modelMessageCount": 1,
+  "testModel": "kimi-k3",
+  "selectionReason": "original-list-first-entry-channel-unit-price-not-verified-one-test-only",
+  "turnStatus": "completed",
+  "replyText": "连接成功",
+  "newKeysCreated": false,
+  "newProviderChannelAdded": false,
+  "automaticFallback": false,
+  "longTermDefaultChanged": false,
+  "originalConfiguration": {
+    "filesCompared": [
+      "credentials.json",
+      "setting.json",
+      "config.json",
+      "provider_config.json"
+    ],
+    "comparison": "SHA256-before-after",
+    "unchanged": true
+  },
+  "limitations": [
+    "Only one model inference was verified, not all six.",
+    "The official account channel remains a separate capability and was not changed.",
+    "The configured API channel keeps its original provider billing.",
+    "Not proof of MAS sandbox or Apple review acceptance."
+  ]
+}

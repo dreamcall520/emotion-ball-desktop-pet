@@ -362,7 +362,7 @@
       ? '球球正在想…'
       : error ? '连接遇到了一点问题'
         : snapshot.hasConversation ? '接着聊，我还记得这一段' : '想说什么，我在听';
-    byId('privacy-note').textContent = `使用 ${sourceName()} ${sourceId() === 'workbuddy' ? '积分' : '额度'} · 延续同一段聊天`;
+    byId('privacy-note').textContent = snapshot.billingLabel || `使用 ${sourceName()} ${sourceId() === 'workbuddy' ? '积分' : '额度'} · 延续同一段聊天`;
     const sourceNote = byId('empty-source-note');
     if (sourceNote) {
       sourceNote.textContent = `通过本机 ${sourceName()} 账号聊天`;

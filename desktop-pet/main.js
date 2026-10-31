@@ -589,7 +589,7 @@ function openStoreConnections() {
   return win;
 }
 function registerStoreConnections() {
-  ipcMain.handle('pet:store-connections-command', async (event, action) => {
+  ipcMain.handle('pet:store-connections-command', async (event, action, payload) => {
     if (!IS_STORE_BUILD || !storeRuntime || isQuitting || screenLocked || !storeConnectionsWindow || storeConnectionsWindow.isDestroyed() ||
       event.sender !== storeConnectionsWindow.webContents || event.senderFrame !== event.sender.mainFrame ||
       event.sender.getURL() !== pathToFileURL(path.join(__dirname, 'store-connections.html')).href) return { ok: false };
@@ -628,6 +628,22 @@ function registerStoreConnections() {
       } else if (action === 'open-chat') openChat();
       else if (action === 'workbuddy-login') { await setWorkBuddyEnabled(true); if (storeRuntime.workbuddy.getState().loginVisible !== true) await storeRuntime.workbuddy.openLogin(); message = '请在官网窗口本人完成登录，再刷新积分。'; }
       else if (action === 'refresh-workbuddy') { await workbuddyQuota.refresh(); message = storeRuntime.workbuddy.getState().status === 'connected' ? '网站积分汇总已读取；未提供的分类保持未知。' : '尚未读取积分，请检查官网登录状态。'; }
+      else if (action === 'authorize-workbuddy-desktop') {const existing=await storeRuntime.access.getStatus('workbuddy');const result=existing.status==='stored'?existing:await storeRuntime.authorize('workbuddy');if(result.status==='stored')await storeRuntime.probeWorkbuddyDesktop();message='仅核对桌面缓存分区；选择范围后才读取标题，账号归属与实时状态仍未核实。';}
+      else if (action === 'read-workbuddy-desktop') {await storeRuntime.readWorkbuddyDesktop(payload?.partitionId);message='已按所选历史缓存范围读取最近记录，不表示当前账号的实时任务。';}
+      else if (action === 'revoke-workbuddy-desktop') {await storeRuntime.revoke('workbuddy');message='已撤销桌面任务缓存目录授权，网站与CLI连接保留。';}
+      else if (action === 'import-workbuddy-cli') {const imported=await storeRuntime.importWorkbuddyCliService();message=imported.status==='configured'?'个人账号 CLI 连接已导入，请刷新状态或开始专用聊天。':'已取消。';}
+      else if (action === 'refresh-workbuddy-cli') {await storeRuntime.workbuddyCli.refresh();message='已按实际返回更新专用 CLI 会话与任务；不代表原桌面任务。';}
+      else if (action === 'connect-workbuddy-cli') {await storeRuntime.workbuddyCli.connect();message=storeRuntime.workbuddyCli.getState().connected?'专用 CLI 会话已创建；实际回复待验证。':'CLI 会话尚未连接，请查看具体状态。';}
+      else if (action === 'send-workbuddy-cli') {await storeRuntime.workbuddyCli.send(payload?.content);message=storeRuntime.workbuddyCli.getState().sendOutcome==='complete'?'CLI 已完成本次回复。':'本次回复尚未确认，请查看状态。';}
+      else if (action === 'cancel-workbuddy-cli') {await storeRuntime.workbuddyCli.cancel();message='已请求停止本次 CLI 回复，实际状态以返回为准。';}
+      else if (action === 'review-workbuddy-cli-unknown') {storeRuntime.workbuddyCli.confirmUnknownReviewed();message='已记录你核对本次 CLI 会话，解除发送锁定。';}
+      else if (action === 'configure-workbuddy-official') { storeRuntime.workbuddyOfficial.configure(payload?.baseUrl); message='服务地址已配置，请开始开放平台授权。'; }
+      else if (action === 'authorize-workbuddy-official') { await storeRuntime.workbuddyOfficial.beginAuthorization(); message='请在官方授权页核对应用与权限，完成后刷新任务状态。'; }
+      else if (action === 'refresh-workbuddy-official') { await storeRuntime.workbuddyOfficial.refresh(); message='开放平台连接与云端任务已按实际结果更新。'; }
+      else if (action === 'send-workbuddy-assistant') { await storeRuntime.workbuddyOfficial.send(payload?.content); message=storeRuntime.workbuddyOfficial.getState().sendOutcome==='accepted'?'WorkBuddy 已接收消息；回复与完成状态待核验。':'本次发送未确认，请查看状态。'; }
+      else if (action === 'read-workbuddy-assistant') { await storeRuntime.workbuddyOfficial.refreshMessages(); message='仅查询本次消息之后的共享助理消息，不能保证均属球球。'; }
+      else if (action === 'disconnect-workbuddy-official') { await storeRuntime.workbuddyOfficial.disconnect(); message='已解除本服务连接；不等同平台侧撤销全部授权。'; }
+      else if (action === 'review-workbuddy-unknown') { storeRuntime.workbuddyOfficial.confirmUnknownReviewed(); message='已记录你在原 WorkBuddy 的核对，解除发送锁定。'; }
       else if (action === 'refresh-zcode') { await zcodeLink.refresh?.(); message = '已刷新 ZCode 授权数据。'; }
       else if (!['status','refresh-status'].includes(action)) return { ok: false };
       return { ok: true, message, state: await storeConnectionState() };
@@ -720,7 +736,7 @@ function aboutReleaseState(result) {
 function activeChat() { return chat; }
 
 function chatSnapshot(state = activeChat()?.getState()) {
-  return { ...state, provider: state?.source || 'codex', appUpdate: availableUpdate ? { latestVersion: availableUpdate.latestVersion } : null };
+  return { ...state,billingLabel:IS_STORE_BUILD&&state?.source==='zcode'&&storeRuntime?.getZcodeAccountSource()==='configured-custom'?'使用 ZCode 已有自定义模型 · 按原 API 计费':null, provider: state?.source || 'codex', appUpdate: availableUpdate ? { latestVersion: availableUpdate.latestVersion } : null };
 }
 
 async function showUpdateResult(result) {
@@ -1461,7 +1477,7 @@ async function setWorkBuddyEnabled(value) {
 }
 
 async function setChatProvider(provider) {
-  if (IS_STORE_BUILD && provider === 'workbuddy') { openStoreConnections(); return { accepted: false, error: `${provider === 'zcode' ? 'ZCode' : 'WorkBuddy'} 商店聊天通道尚未完成接入，请在工具连接中查看状态。` }; }
+  if (IS_STORE_BUILD && provider === 'workbuddy') { openStoreConnections(); return { accepted: false, error: `WorkBuddy 请通过工具连接中的“任务与本机助理”使用；它是共享本机助理，不是球球独立聊天。` }; }
   if (!['codex', 'zcode', 'workbuddy'].includes(provider) || isQuitting || screenLocked || chatProviderChanging) return { accepted: false };
   const state = chat?.getState();
   if (state?.busy || state?.connection === 'connecting' || state?.sourceChanging) return { accepted: false, error: '请先等待当前回复或连接完成。' };
@@ -3934,7 +3950,7 @@ async function bootstrap() {
   if (app.dock) app.dock.hide();
   settingsFile = path.join(app.getPath('userData'), 'settings.json');
   if (IS_STORE_BUILD) storeRuntime = require('./lib/mas-provider-runtime').createMasProviderRuntime({
-    app, dialog, BrowserWindow, session, shell, fetch: (url, options) => net.fetch(url, options), diagnostic: process.mas !== true,
+    app, dialog: {showOpenDialog: options => storeConnectionsWindow && !storeConnectionsWindow.isDestroyed() ? dialog.showOpenDialog(storeConnectionsWindow,options) : dialog.showOpenDialog(options)}, BrowserWindow, session, shell, fetch: (url, options) => net.fetch(url, options), diagnostic: process.mas !== true,
     onChange: () => { notifyStoreConnections(); if (settings) syncWorkBuddyLabel(); } });
   codexPets = createCodexPetStore({
     ...(IS_STORE_BUILD ? { sourceRoot: path.join(app.getPath('userData'), 'codex-pets') } : {}),
@@ -4058,7 +4074,7 @@ async function bootstrap() {
     canRequest: () => !isQuitting && !screenLocked });
   workbuddyUsage = IS_STORE_BUILD ? storeRuntime.unavailableObservation('WorkBuddy 商店用量明细尚未配置开放平台接入。') : createWorkBuddyUsage({ run: workbuddyRun, getAccountKey: () => workbuddyQuota?.getState().accountKey,
     onChange: () => workbuddyDetails?.update(workBuddyDetailsState()) });
-  workbuddyTasks = IS_STORE_BUILD ? storeRuntime.unavailableObservation('WorkBuddy 商店任务尚未配置开放平台接入。') : createWorkBuddyTasks({ run: workbuddyRun, stateFile: path.join(app.getPath('userData'), 'workbuddy-task-state.json'), getAccountKey: () => workbuddyQuota?.getState().accountKey,
+  workbuddyTasks = IS_STORE_BUILD ? storeRuntime.unavailableObservation('WorkBuddy 任务请在工具连接的开放平台区域查看，仅包含云端范围。') : createWorkBuddyTasks({ run: workbuddyRun, stateFile: path.join(app.getPath('userData'), 'workbuddy-task-state.json'), getAccountKey: () => workbuddyQuota?.getState().accountKey,
     onChange: () => { syncWorkBuddyLabel(); workbuddyDetails?.update(workBuddyDetailsState()); } });
   workbuddyQuota = (IS_STORE_BUILD ? storeRuntime.createWorkBuddyQuotaPort : createWorkBuddyQuota)({ run: workbuddyRun, historyFile: path.join(app.getPath('userData'), 'workbuddy-quota-history.json'), onChange: state => {
     const diagnostic = state.errorCode ? JSON.stringify({ code: require('./lib/workbuddy-quota-status').errorCode(state.errorCode), nextRetryAt: Number.isSafeInteger(state.nextRetryAt) ? state.nextRetryAt : null }) : '';

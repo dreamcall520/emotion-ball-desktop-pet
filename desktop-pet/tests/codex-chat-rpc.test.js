@@ -29,7 +29,9 @@ function defaultReply(packet) {
   if (packet.method === 'turn/start') return { result: { turn: { id: TURN, status: 'inProgress' } } };
   return { result: {} };
 }
-function setup({ reply = defaultReply, installed = true, timeoutMs = 200, maxFrameBytes, onNotification,
+// Ordinary protocol fixtures must not race unrelated CPU load; timeout-specific
+// cases below still pass their explicit 10/25ms budgets.
+function setup({ reply = defaultReply, installed = true, timeoutMs = 2000, maxFrameBytes, onNotification,
   onDisconnect, fakeFs, env = {}, purpose = 'chat', getWeatherContext } = {}) {
   const child = fakeChild(), sent = [], probes = [], launches = [], notifications = [], disconnects = [];
   const send = packet => child.stdout.write(JSON.stringify(packet) + '\n');

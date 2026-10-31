@@ -1,0 +1,11 @@
+{
+  "provider": "codebuddy-cli-official",
+  "cliVersion": "2.179.0",
+  "actualPromptCount": 1,
+  "completion": "complete",
+  "stopReason": "end_turn",
+  "reply": "球球连接成功",
+  "jobStates": [],
+  "desktopTasksIncluded": false,
+  "toolsActualCount": null
+}

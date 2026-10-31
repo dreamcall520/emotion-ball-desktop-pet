@@ -10,7 +10,7 @@ const NOTIFICATIONS = new Set(['account/updated', 'turn/started', 'item/agentMes
 const failure = code => Object.assign(new Error(SAFE_CODES.has(code) ? code : 'DISCONNECTED'), { code: SAFE_CODES.has(code) ? code : 'DISCONNECTED' });
 
 // Client-side adapter only. No account files, provider processes, API fallback or auto-approval.
-function createZcodeChatWsRpc({ endpoint, bearerToken, createConnection = createCodexChatWsConnection,
+function createZcodeChatWsRpc({ endpoint, bearerToken, accountSource, createConnection = createCodexChatWsConnection,
   createSocket, timeoutMs = 20000, onNotification = () => {}, onDisconnect = () => {} } = {}) {
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 30000) throw failure('INVALID_INPUT');
   let closed = false, ready = false, starting = null, nextId = 0;
@@ -59,7 +59,7 @@ function createZcodeChatWsRpc({ endpoint, bearerToken, createConnection = create
     starting = (async () => {
       await connection.connect();
       const result = await request('initialize', { protocolVersion: 1 }, true);
-      if (closed || result?.provider !== 'zcode' || result?.protocolVersion !== 1) throw failure('INVALID_FRAME');
+      if (closed || result?.provider !== 'zcode' || result?.protocolVersion !== 1 || accountSource && (result.accountSource||'official')!==accountSource) throw failure('INVALID_FRAME');
       ready = true;
     })().catch(error => { failed(error.code); throw failure(error.code); });
     return starting;
