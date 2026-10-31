@@ -84,12 +84,18 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/aurora-click-visual.css',
     'desktop-pet/aurora-rive.css',
     'desktop-pet/renderer.js',
+    ...['model','motion','renderer'].map(name=>`desktop-pet/lib/soft-orb-${name}.js`),
+    'desktop-pet/lib/soft-orb.js',
+    'desktop-pet/scripts/verify-soft-orb-integration.js',
+    ...fs.readdirSync(path.join(root,'desktop-pet/assets/soft-orb')).filter(file=>/^[a-zA-Z0-9.-]+\.(png|json)$/.test(file)).map(file=>`desktop-pet/assets/soft-orb/${file}`),
+    ...fs.readdirSync(path.join(root,'desktop-pet/assets/soft-orb/swatches')).filter(file=>/^[a-z]+\.png$/.test(file)).map(file=>`desktop-pet/assets/soft-orb/swatches/${file}`),
     'desktop-pet/customize.html',
     'desktop-pet/customize.css',
     'desktop-pet/customize-blue.css',
     'desktop-pet/codex-pets.css',
     'desktop-pet/lib/codex-pets.js',
     'desktop-pet/lib/codex-pet-player.js',
+  'desktop-pet/lib/sprite-edge-ink.js',
     'desktop-pet/customize-preload.js',
     'desktop-pet/customize-renderer.js',
     'desktop-pet/quota-customizer.js',
@@ -311,6 +317,8 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/scripts/verify-ui-theme.js',
     'desktop-pet/scripts/verify-function-windows.js',
     'desktop-pet/scripts/verify-codex-pets.js',
+    'desktop-pet/scripts/verify-local-pet-motion.js',
+  'desktop-pet/scripts/verify-small-sprite-edge.js',
     'emotion-ball/js/rings.js',
     'emotion-ball/js/custom-shapes.js',
     'emotion-ball/js/emotions.js',
@@ -400,13 +408,21 @@ function signWeatherApp(appPath) {
   adhocSign(appPath);
 }
 
-async function packageMac(root = path.resolve(__dirname, '../..'), { website = false, nativeIcon = false } = {}) {
+async function packageMac(root = path.resolve(__dirname, '../..'), { website = false, nativeIcon = false, softOrb = false, candidateBundleId = null } = {}) {
   buildWeatherLocation(root);
   const icon = makeIcon(root);
   const staging = prepareStaging(root, website ? path.join(root, 'desktop-pet/build/website-staging') : undefined);
   const electronZipDir = findElectronZipDir();
   const options = buildPackagerOptions(root, icon, electronZipDir);
+  if(candidateBundleId!==null){if(!/^local\.xiaokun\.emotionball\.pet\.chuge\.v[0-9]+$/.test(candidateBundleId))throw new TypeError('Invalid isolated candidate bundle identity');options.appBundleId=candidateBundleId;}
   options.dir = staging;
+  if(softOrb){
+    const packageFile=path.join(staging,'package.json');
+    const pkg=JSON.parse(fs.readFileSync(packageFile,'utf8'));pkg.qiuqiuAcceptance='soft-orb';
+    fs.writeFileSync(packageFile,JSON.stringify(pkg,null,2)+'\n');
+    options.name='球球桌宠-柔光团候选';options.appBundleId='local.xiaokun.emotionball.pet.softorb';
+    options.out=path.join(root,'dist/soft-orb');
+  }
   if (nativeIcon) {
     options.extraResource = [path.join(root, 'desktop-pet/assets/app-icon-native/Assets.car')];
     options.extendInfo = { ...options.extendInfo, CFBundleIconName: 'QiuqiuA1' };
@@ -414,7 +430,7 @@ async function packageMac(root = path.resolve(__dirname, '../..'), { website = f
   if (website) options.out = path.join(root, 'dist/website');
   const paths = await packager(options);
   if (!paths.length) throw new Error('未生成 macOS 应用');
-  const appPath = path.join(paths[0], '球球桌宠.app');
+  const appPath = path.join(paths[0], options.name+'.app');
   if (!fs.existsSync(appPath)) throw new Error(`找不到打包后的应用: ${appPath}`);
   signWeatherApp(appPath);
   process.stdout.write(`${appPath}\n`);
@@ -422,7 +438,7 @@ async function packageMac(root = path.resolve(__dirname, '../..'), { website = f
 }
 
 if (require.main === module) {
-  packageMac(undefined, { website: process.argv.includes('--website'), nativeIcon: process.argv.includes('--local-native-icon') }).catch(error => {
+  packageMac(undefined, { website: process.argv.includes('--website'), nativeIcon: process.argv.includes('--local-native-icon'), softOrb:process.argv.includes('--soft-orb') }).catch(error => {
     process.stderr.write(`${error.stack || error.message}\n`);
     process.exitCode = 1;
   });

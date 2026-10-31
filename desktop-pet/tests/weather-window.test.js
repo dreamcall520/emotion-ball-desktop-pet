@@ -73,6 +73,7 @@ test('failed city persistence retains previous city in memory and on disk', asyn
 test('expanded layout remains inside small/negative-origin screen and suppression/lock hides it', t => {
   const area = { x: -700, y: -80, width: 320, height: 400 }, f = fixture(t, { area, petBounds: { x: -390, y: 290, width: 80, height: 80 } });
   f.invoke('resize', { expanded: true, height: 720 }); const win = f.controller.getWindow(), bounds = win.getBounds();
+  assert.equal(bounds.height,area.height);
   assert(bounds.x >= area.x && bounds.y >= area.y); assert(bounds.x + bounds.width <= area.x + area.width); assert(bounds.y + bounds.height <= area.y + area.height);
   assert.equal(win.visible, true); f.suppress(true); f.controller.reposition(); assert.equal(win.visible, false);
   f.suppress(false); f.controller.reposition(); assert.equal(win.visible, true); f.controller.pause(); assert.equal(win.visible, false);
@@ -216,3 +217,28 @@ test('weather collection captures held card after group hides, but rejects hidde
   f.controller.setGroupTransitionMode('stage');
   await assert.rejects(f.controller.captureGroupTransitionFrames(), /visible layout|stale/);
 });
+
+test('weather details and city search retain full requested height at all four corners', t => {
+ const area={x:0,y:25,width:1512,height:850};
+ for(const x of [0,1432])for(const y of [25,795]){
+   const f=fixture(t,{area,petBounds:{x,y,width:80,height:80}});
+   const compact=f.controller.getWindow().getBounds();
+   f.invoke('resize',{expanded:true,height:620});const anchor=f.controller.getWindow().getBounds();
+   assert.equal(anchor.height,620,JSON.stringify({x,y,anchor}));
+   for(const height of [210,450,680,720,620]){
+     f.invoke('resize',{expanded:true,height});const b=f.controller.getWindow().getBounds();
+     assert.equal(b.height,height);assert.equal(b.x,anchor.x);assert.equal(b.y,anchor.y);
+     assert.ok(b.x>=area.x&&b.x+b.width<=area.x+area.width&&b.y>=area.y&&b.y+b.height<=area.y+area.height);
+   }
+   f.invoke('resize',{expanded:false});assert.deepEqual(f.controller.getWindow().getBounds(),compact);
+   assert.deepEqual({...f.controller.getLayoutMetrics()},{width:128,height:32,inset:2});
+ }
+});
+
+ test('expanded weather recomputes the stable envelope after pet and display movement', t => {
+ const area={x:0,y:25,width:1512,height:850},petBounds={x:1432,y:795,width:80,height:80};
+ const f=fixture(t,{area,petBounds});f.invoke('resize',{expanded:true,height:620});
+ Object.assign(area,{x:-1600,y:-100,width:1600,height:900});Object.assign(petBounds,{x:-1580,y:700});
+ f.controller.reposition();const b=f.controller.getWindow().getBounds();
+ assert.equal(b.height,620);assert.ok(b.x>=area.x&&b.y>=area.y&&b.x+b.width<=0&&b.y+b.height<=800);
+ });

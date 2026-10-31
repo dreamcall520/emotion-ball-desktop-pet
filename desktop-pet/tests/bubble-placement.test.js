@@ -132,3 +132,23 @@ test('快捷卡不挡原位置时气泡布局逐字段保持原样', () => {
   assert.deepEqual(bubbleBounds(pet, workArea, true, 146, 'blob', [{ x: 0, y: 0, width: 24, height: 24 }]),
     bubbleBounds(pet, workArea, true, 146, 'blob'));
 });
+
+
+test('柔光团气泡按实际身体包络定位，不把透明画布或地面影子计入间距', () => {
+  for (const size of [60, 80, 108, 120, 180, 260]) {
+    const pet = Object.freeze({ x: 600, y: 400, width: size, height: size });
+    const ink = petVisualBounds(pet, 'soft-orb');
+    assert.deepEqual(ink, {
+      x: 600 + size * 85 / 512, y: 400 + size * 95 / 512,
+      width: size * 342 / 512, height: size * 322 / 512
+    });
+    const above = bubbleBounds(pet, workArea, false, null, 'soft-orb');
+    assert.equal(above.placement, 'above');
+    assert.ok(Math.abs(ink.y - (above.y + above.height) - 8) <= .5);
+    assert.ok(Math.abs(above.x + above.anchorX - (ink.x + ink.width / 2)) <= .5);
+    const topPet = { ...pet, y: 0 }, topInk = petVisualBounds(topPet, 'soft-orb');
+    const below = bubbleBounds(topPet, workArea, false, null, 'soft-orb');
+    assert.equal(below.placement, 'below');
+    assert.ok(Math.abs(below.y - (topInk.y + topInk.height) - 8) <= .5);
+  }
+});

@@ -171,7 +171,24 @@
     // Another portrait renderer may have replaced this subtree (e.g. Rive).
     if (previous?.key === key && target.firstChild === previous.node) return;
     previous?.sheep?.destroy();
+    previous?.softOrb?.destroy();
     cache.delete(target);
+    delete target.dataset.avatarEngine; delete target.dataset.avatarReady;
+    if (appearance.shape === 'soft-orb') {
+      target.replaceChildren(); target.dataset.shape = appearance.shape;
+      target.dataset.avatarEngine = 'soft-orb'; target.dataset.avatarReady = 'false';
+      let softOrb;
+      try { softOrb = window.SoftOrb?.create(target, { appearance, autostart: false, lite: true, label: '' }); }
+      catch (_) { target.replaceChildren(); return; }
+      if (!softOrb) return;
+      const record = { key, node: target.firstChild, softOrb };
+      cache.set(target, record);
+      softOrb.renderStatic();
+      softOrb.whenReady().then(ready => {
+        if (cache.get(target) === record) target.dataset.avatarReady = String(ready === true);
+      }, () => { if (cache.get(target) === record) target.dataset.avatarReady = 'false'; });
+      return;
+    }
     if (appearance.shape === 'new-year-sheep') {
       target.replaceChildren();
       const sheep = window.SheepSkin.create(target, { autostart: false, portraitRaster: true, sheepTheme: appearance.sheepTheme,
@@ -193,6 +210,7 @@
 
   function create(target) {
     cache.get(target)?.sheep?.destroy();
+    cache.get(target)?.softOrb?.destroy();
     cache.delete(target);
     let key = null, appearance = null, ball = null, rive = null, poster = null, sprite = null;
     let active = true, destroyed = false, revision = 0, displayed = null;
@@ -237,7 +255,7 @@
     }
     function syncActive() {
       sprite?.pause(!active);
-      const useBall = active && !rive;
+      const useBall = active && !rive && (appearance?.shape !== 'soft-orb' || target.dataset.avatarReady === 'true');
       ball?.setActive(useBall);
       rive?.setActive?.(active);
       displayed?.ball?.setActive(active && !displayed.rive);
@@ -264,6 +282,23 @@
             size: target.clientHeight || 32, opacity: 1 - appearance.auroraTransparency / 100,
             onFrame: () => { if (!destroyed) target.dataset.avatarReady = 'true'; },
             onError: () => { target.dataset.avatarReady = 'false'; } });
+        }
+        syncActive(); return;
+      }
+      if (appearance.shape === 'soft-orb') {
+        target.dataset.avatarEngine = 'soft-orb'; target.dataset.avatarReady = 'false';
+        try { ball = window.SoftOrb?.create(target, { appearance, autostart: false, lite: true, label: '' }) || null; }
+        catch (_) { ball = null; target.replaceChildren(); }
+        if (ball) {
+          const current = ball, generation = revision;
+          current.renderStatic();
+          current.whenReady().then(ready => {
+            if (destroyed || generation !== revision || current !== ball) return;
+            target.dataset.avatarReady = String(ready === true);
+            syncActive();
+          }, () => {
+            if (!destroyed && generation === revision && current === ball) target.dataset.avatarReady = 'false';
+          });
         }
         syncActive(); return;
       }

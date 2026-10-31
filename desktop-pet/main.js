@@ -24,6 +24,7 @@ const {
 } = require('electron');
 const { loadSettings, saveSettings, normalizePresetName, normalizeAppearancePresets, findDuplicateAppearancePreset } = require('./lib/settings');
 const { createCodexPetStore } = require('./lib/codex-pets');
+const { normalizeSpriteEdgeInk,containsSpriteEdgeInk } = require('./lib/sprite-edge-ink');
 const {
   SIZES,
   defaultBounds,
@@ -105,10 +106,11 @@ function weatherDialogue(event) {
   return text;
 }
 let weatherWindow = null;
+const SoftOrbModel = require('./lib/soft-orb-model');
 const APP_NAME = '球球桌宠';
 const ACCEPTANCE_KIND = require('../package.json').qiuqiuAcceptance;
-const IS_ACCEPTANCE = ['zcode', 'combined', 'weather'].includes(ACCEPTANCE_KIND);
-const ACCEPTANCE_NAME = ACCEPTANCE_KIND === 'weather' ? '球球桌宠-天气验收' : ACCEPTANCE_KIND === 'combined' ? '球球桌宠-联动整合验收' : '球球桌宠-ZCode验收';
+const IS_ACCEPTANCE = ['zcode', 'combined', 'weather','soft-orb'].includes(ACCEPTANCE_KIND);
+const ACCEPTANCE_NAME = ACCEPTANCE_KIND === 'soft-orb' ? '球球桌宠-柔光团候选' : ACCEPTANCE_KIND === 'weather' ? '球球桌宠-天气验收' : ACCEPTANCE_KIND === 'combined' ? '球球桌宠-联动整合验收' : '球球桌宠-ZCode验收';
 const APP_WEBSITE = 'https://qiuqiu.pet/';
 const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const IS_SMOKE_TEST = process.env.PET_SMOKE_TEST === '1';
@@ -117,6 +119,7 @@ const IS_CODEX_SMOKE_ONLY = IS_SMOKE_TEST && (process.env.PET_SMOKE_CODEX_ONLY =
 
 let petWindow = null;
 let edgeTuck = null;
+let spriteEdgeInk=null,spriteEdgeMapped=false;
 let edgeNotice = null;
 let edgeNoticeWindow = null;
 let edgeNoticeNow = () => performance.now();
@@ -794,12 +797,13 @@ function importedPet(id) {
 }
 function fromLocalPetWindow(event) { return fromCustomizationWindow(event)&&customizationWindow.isVisible()&&event.senderFrame===customizationWindow.webContents.mainFrame; }
 function localPetImportIsCurrent() { const s=localPetImportSession;return Boolean(s&&!s.invalid&&customizationWindow===s.owner&&!s.owner.isDestroyed()&&s.owner.isVisible()&&s.owner.webContents.mainFrame===s.frame&&!screenLocked&&!isQuitting); }
-function localPetDescriptor(pet) { return {id:pet.id,importedId:pet.importedId,name:pet.name,version:pet.version,rows:pet.rows,imageURL:pathToFileURL(pet.spritesheetPath).href,imported:true,origin:'local'}; }
+function petSheetDescriptor(pet){return pet.version===3?{sheets:Object.fromEntries(Object.entries(pet.sheets).map(([id,sheet])=>[id,{rows:sheet.rows,imageURL:pathToFileURL(sheet.path).href}]))}:{};}
+function localPetDescriptor(pet) { return {id:pet.id,importedId:pet.importedId,name:pet.name,version:pet.version,rows:pet.rows,...petSheetDescriptor(pet),...(pet.frameMap?{frameMap:pet.frameMap}:{}),imageURL:pathToFileURL(pet.spritesheetPath).href,imported:true,origin:'local'}; }
 function codexPetDescriptor(appearance) {
   if (appearance?.shape !== 'codex-pet' || !codexPets) return null;
   let pet;
   try { pet = importedPet(appearance.codexPetId); } catch (_) { return null; }
-  return { id: pet.id, name: pet.name, version: pet.version, rows: pet.rows, spriteScale:pet.spriteScale||1, origin:pet.origin,
+  return { id: pet.id, name: pet.name, version: pet.version, rows: pet.rows, spriteScale:pet.spriteScale||1, ...petSheetDescriptor(pet), ...(pet.frameMap?{frameMap:pet.frameMap}:{}), origin:pet.origin,
     imageURL: pathToFileURL(pet.spritesheetPath).href };
 }
 
@@ -818,15 +822,17 @@ async function prepareCodexAppearance(appearance) {
   const descriptor = codexPetDescriptor(copied);
   if (!descriptor || !customizationWindow || customizationWindow.isDestroyed()) throw new Error('宠物暂不可用');
   // nativeImage decodes PNG/JPEG. Chromium also decodes WebP; validate the durable copy before saving its reference.
+  for(const sheet of descriptor.version===3?Object.values(descriptor.sheets):[{imageURL:descriptor.imageURL,rows:descriptor.rows}]){
   const dimensions = await customizationWindow.webContents.executeJavaScriptInIsolatedWorld(1004, [{ code: `new Promise(resolve => {
     const image = new Image();
     const timer = setTimeout(() => resolve(null), 5000);
     image.onload = () => { clearTimeout(timer); resolve({ width: image.naturalWidth, height: image.naturalHeight }); };
     image.onerror = () => { clearTimeout(timer); resolve(null); };
-    image.src = ${JSON.stringify(descriptor.imageURL)};
+    image.src = ${JSON.stringify(sheet.imageURL)};
   })` }]);
   if (dimensions?.width !== 1536 * descriptor.spriteScale ||
-      dimensions?.height !== descriptor.rows * 208 * descriptor.spriteScale) throw new Error('宠物图片无法解码');
+      dimensions?.height !== sheet.rows * 208 * descriptor.spriteScale) throw new Error('宠物图片无法解码');
+  }
   return copied;
 }
 
@@ -930,6 +936,7 @@ function openChat() {
     ? chat.selectSource('zcode') : chat.connect();
   void connection.catch(() => {});
 }
+
 
 function performChatAction(action) {
   if (isQuitting || screenLocked || !petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return;
@@ -1628,7 +1635,7 @@ function presentCodexAlert(alert) {
   const current = codexCompanion?.getSnapshot().currentAlert;
   if (!canPresentCodex() || current?.id !== alert.id || current.generation !== alert.generation) return;
   codexPresentation = { ...current, pageEpoch: codexPageEpoch };
-  sendCodexCommand({ command: 'codex', alertId: current.id, generation: current.generation, pageEpoch: codexPageEpoch, motion: current.motion });
+  sendCodexCommand({ command: 'codex', alertId: current.id, generation: current.generation, pageEpoch: codexPageEpoch, motion: current.motion, kind: current.kind });
 }
 
 function initializeCodexCompanion(options = {}) {
@@ -2079,12 +2086,19 @@ function makeWindowVisible(notifyRenderer = true) {
 
 function sendCommand(command) {
   if (!petWindow || petWindow.isDestroyed()) return;
+  if (command === 'wake') {
+    if (screenLocked || isQuitting) return;
+    if (!petWindow.isVisible() || edgeTuck?.getPresentation().mode !== 'free') restorePet();
+  }
   if (typeof command !== 'string') {
     if (command?.command === 'sheep-offer') {
       const appearance = effectiveCustomization(settings.customization).appearance;
       const theme = SheepTheme.resolveTheme(appearance.sheepTheme, new Date());
       if (appearance.shape !== 'new-year-sheep' || !((theme === 'halloween' && command.kind === 'candy') || (theme === 'christmas' && command.kind === 'gift'))) return;
       command = { command: 'sheep-offer', kind: command.kind };
+    } else if(command?.command==='soft-orb-action'){
+      if(effectiveCustomization(settings.customization).appearance.shape!=='soft-orb'||!Object.hasOwn(SoftOrbModel.ACTIONS,command.action))return;
+      command={command:'soft-orb-action',action:command.action};
     } else if (command?.command === 'sheep-action') {
       const appearance = effectiveCustomization(settings.customization).appearance;
       if (appearance.shape !== 'new-year-sheep' || !SheepSkin.supportsAction(command.action, SheepTheme.resolveTheme(appearance.sheepTheme, new Date()))) return;
@@ -2105,13 +2119,15 @@ function sendCommand(command) {
 
 function sendCompanionSettings() {
   if (!petWindow || petWindow.isDestroyed()) return;
+  const descriptor=codexPetDescriptor(settings.customization.appearance);spriteEdgeMapped=Boolean(descriptor?.frameMap);
+  if(spriteEdgeInk?.id!==descriptor?.id)spriteEdgeInk=null;
   petWindow.webContents.send('pet:settings', {
     keepAwake: settings.keepAwake,
     focusQuiet: pomodoroQuiet,
     bubblesEnabled: settings.bubblesEnabled,
     customization: effectiveCustomization(settings.customization),
     quotaDisplay: quotaDisplayConfig(),
-    size: settings.size, codexPet: codexPetDescriptor(settings.customization.appearance)
+    size: settings.size, codexPet: descriptor
   });
 }
 
@@ -2374,6 +2390,7 @@ function menuTemplate() {
     { type: 'separator' },
     { label: '球球与互动', submenu: [
       { label: '随机表情', click: () => sendCommand('random') },
+      ...(settings.customization.appearance.shape==='soft-orb'?[{label:'小宇互动',submenu:[['draw','发现你'],['fan','摸摸回应'],['flip','失重晃动'],['scan','星际扫描'],['beam','引力光束'],['shock','触电'],['flight','飞走'],['ship','飞船收纳'],['love','怦然心动'],['complete','庆祝一下']].map(([action,label])=>({label,click:()=>sendCommand({command:'soft-orb-action',action})}))}]:[]),
       ...(settings.customization.appearance.shape === 'new-year-sheep' ? [{ label: '咩咩互动', submenu: [
         ['greet', SheepTheme.resolveTheme(effectiveCustomization(settings.customization).appearance.sheepTheme, new Date()) === 'spring-festival' ? '拱手拜年' : '咩咩问好', 'hello'], ['joy', '开心回应', 'play'],
         ['walk', '迈迈小蹄', 'play'], ['sleep', '暖暖打盹', 'sleep'],
@@ -2454,9 +2471,12 @@ function compactMenuTemplate() {
   const notes = items.find(item => item.label === '便签与待办')?.submenu.find(item => item.id === 'notes-open');
   const codex = items.find(item => item.id === 'codex-menu').submenu;
   const codexEnabled = codex.find(item => item.id === 'codex-enabled');
+  const xiaoyuInteraction = settings.customization.appearance.shape === 'soft-orb'
+    ? items.find(item => item.label === '球球与互动')?.submenu.find(item => item.label === '小宇互动') : null;
   return [find('chat-open'), { ...find('customize-open'), label: '来定制球球' },
     notes && { ...notes, label: '便签与待办' }, find('pomodoro-open'),
     { type: 'separator' }, codexEnabled, zcodeLink?.menu().submenu[0], find('workbuddy-enabled'),
+    ...(xiaoyuInteraction ? [xiaoyuInteraction] : []),
     { id: 'quota-cards-settings', label: '联动样式管理', click: () => openGlobalSettings('quota-cards') },
     { type: 'separator' }, find('global-settings'), find('about-open'), find('update-check'),
     { type: 'separator' }, items.find(item => item.label === '退出球球')].filter(Boolean);
@@ -2493,6 +2513,7 @@ function popupPetMenu(items) {
 }
 
 function showPetContextMenu() {
+
   shortcutWindow?.interrupt();
   return popupPetMenu(compactMenuTemplate());
 }
@@ -2520,6 +2541,16 @@ async function finishSmokeTest() {
       "Boolean(window.petDesktop.onActivity && document.getElementById('pet').dataset.mode)"
     );
     if (!companionReady) throw new Error('轻陪伴活动感知尚未接入');
+
+    if(process.env.PET_SMOKE_SOFT_ORB_ONLY==='1'){
+      await require('./scripts/verify-soft-orb-integration').verifySoftOrb({pet:petWindow,monitor:activityMonitor,
+        save:saveCustomization,getSettings:()=>settings,readSettings:()=>loadSettings(settingsFile),command:sendCommand,setSize:setPetSize,
+        openCustomizer:openCustomization,getCustomizer:()=>customizationWindow,prepare:initializeCodexCompanion,
+        setEnabled:async value=>{settings.codexEnabled=value;await codexCompanion.setEnabled(value);},
+        getController:()=>codexCompanion,canPresent:canPresentCodex,getMotionOwner:()=>hostMotion,
+        clearDialogue:()=>{dialogue.dismiss();hideBubble();},dock:dockPet,restore:restorePet,bubble,screen});
+      app.exit(0);return;
+    }
 
     if (process.env.PET_SMOKE_ZCODE_STYLE_ONLY === '1') {
       await require('./scripts/verify-zcode-style').verifyZcodeStyle({ pet: petWindow, zcodeLink, zcodeConsent,
@@ -2624,8 +2655,12 @@ async function finishSmokeTest() {
       return;
     }
     if (process.env.PET_SMOKE_CODEX_PETS_ONLY === '1') {
+      if(process.env.PET_CODEX_PETS_QA_PHASE==='edges'){await require('./scripts/verify-small-sprite-edge').verifySmallSpriteEdge({pet:petWindow,edgeTuck,setSize:setPetSize,screen,getMask:()=>spriteEdgeInk});app.quit();return;}
       openCustomization();
-      await require('./scripts/verify-codex-pets').verifyCodexPets({ pet: petWindow,
+      const verifyPets = process.env.PET_CODEX_PETS_QA_PHASE === 'folder'
+        ? require('./scripts/verify-local-pet-motion').verifyLocalPetMotion
+        : require('./scripts/verify-codex-pets').verifyCodexPets;
+      await verifyPets({ pet: petWindow, localStore: localPetStore, sendCommand, edgeTuck,
         customize: customizationWindow, openCustomization, openChat,
         getChatWindow: () => chatWindow.getWindow(), getSettings: () => settings,
         setSize: setPetSize, store: codexPets, packaged: app.isPackaged,
@@ -3111,8 +3146,11 @@ function createPetWindow() {
     return petWindow;
   }
   edgeTuck?.dispose();
+
   petWindow = candidatePetWindow;
+  spriteEdgeInk=null;spriteEdgeMapped=false;
   edgeTuck = createEdgeTuck({ getWindow: () => petWindow,
+    getVisibleHitTest:geometry=>spriteEdgeMapped?containsSpriteEdgeInk(spriteEdgeInk,geometry):null,
     getWorkArea: bounds => screen.getDisplayMatching(bounds).workArea,
     getRetentionBounds: edgeRetentionBounds, onChange: applyPresentation,
     schedule: setTimeout, cancel: clearTimeout });
@@ -3198,6 +3236,7 @@ function createPetWindow() {
     pomodoroWindows?.sync();
   });
   createdPetWindow.on('hide', () => {
+
     // macOS may deliver hide after a quick hide/show pair. Do not hide a newly
     // reopened chat or re-tuck the pet for an obsolete native notification.
     if (!isCurrentPetWindow() || createdPetWindow.isVisible()) return;
@@ -3230,6 +3269,7 @@ function createPetWindow() {
     shortcutWindow?.interrupt();
     notesCompanion?.repositionReminder?.();
     chatWindow?.hide();
+
     edgeTuck?.dispose();
     edgeNotice?.reset();
     safelyInvokeWindow('关闭时边缘提示销毁', () => edgeNoticeWindow?.destroy());
@@ -3436,7 +3476,8 @@ function registerIpc() {
       for (const pet of imported.pets) library.set(pet.importedId, { ...pet, imported: true });
       return { ok: true, skipped: sources.skipped + imported.skipped,
         pets: [...library.values()].map(pet => ({ id: pet.id, name: pet.name, importedId: pet.importedId,
-          imported: pet.imported === true, version: pet.version, rows: pet.rows,
+          imported: pet.imported === true, version: pet.version, rows: pet.rows, ...petSheetDescriptor(pet),
+          ...(pet.frameMap ? { frameMap: pet.frameMap } : {}),
           imageURL: pathToFileURL(pet.spritesheetPath).href })) };
     } catch (error) { writeError('读取 Codex 宠物', error); return { ok: false, error: '暂时无法读取宠物，请稍后重试' }; }
   });
@@ -3572,6 +3613,7 @@ function registerIpc() {
     if (!fromPetWindow(event) || screenLocked || !petWindow.isVisible()) return;
     const point = validPoint(rawPoint);
     if (!point) return;
+
     for (const card of Object.values(quotaCardControllers())) safelyInvokeWindow('额度卡焦点重置', () => {
       const win = card?.getWindow?.();
       if (win && !win.isDestroyed() && !win.webContents.isDestroyed?.()) win.webContents.send('pet:quota-card-pointer-reset');
@@ -3633,18 +3675,29 @@ function registerIpc() {
     startWindowBounce();
   });
 
+
   ipcMain.on('pet:motion-start', (event, request) => {
     if (!fromPetWindow(event) || screenLocked || presentationSuppressed() || !petWindow.isVisible() || !request ||
       !Number.isSafeInteger(request.token) || request.token <= 0 ||
       (!getMotion(request.action) && !CompanionMotion.getMotion(request.action))) return;
+
     thoughts?.hide();
     dismissCodexPresentation();
     stopWindowBounce();
     hostMotion = { owner: 'user', token: request.token, action: request.action, anchor: petWindow.getBounds() };
     const bounds = petWindow.getBounds();
     const side = PetFacing.resolve(bounds, screen.getDisplayMatching(bounds).workArea, request.side);
+    const softOrb=effectiveCustomization(settings.customization).appearance.shape==='soft-orb';
     if (!windowMotion.start({ token: request.token, action: request.action, side,
+      ...(softOrb?{visualOnly:true,durationMs:SoftOrbModel.duration(SoftOrbModel.actionForMotion(request.action,'user'))}:{}),
       reducedMotion: request.reducedMotion === true })) hostMotion = null;
+  });
+
+  ipcMain.on('pet:sprite-edge-ink',(event,packet)=>{
+    if(!fromPetWindow(event))return;
+    if(packet===null){spriteEdgeInk=null;return;}
+    const mask=normalizeSpriteEdgeInk(packet);if(!mask||!spriteEdgeMapped||mask.id!==settings.customization.appearance.codexPetId)return;
+    spriteEdgeInk=mask;edgeTuck?.publish();
   });
 
   ipcMain.on('pet:codex-availability', (event, packet) => {
@@ -3705,7 +3758,7 @@ function registerIpc() {
     legalDurations.push(...leadingDurations.map(ms => baseDuration + ms - skipFirstHold));
     const durationMs = Number.isInteger(request.durationMs) && legalDurations.includes(request.durationMs)
       ? request.durationMs : baseDuration;
-    if (!windowMotion.start({ token: request.token, action: request.action, durationMs,
+    if (!windowMotion.start({ token: request.token, action: request.action, durationMs:appearance.shape==='soft-orb'?SoftOrbModel.duration(SoftOrbModel.actionForMotion(request.action,'codex',alert.kind)):durationMs,visualOnly:appearance.shape==='soft-orb',
       side: PetFacing.resolve(bounds, screen.getDisplayMatching(bounds).workArea) })) {
       dismissCodexPresentation();
       return;
@@ -3782,6 +3835,10 @@ async function bootstrap() {
     }
   });
   settings = loadSettings(settingsFile);
+  if(ACCEPTANCE_KIND==='soft-orb'&&!fs.existsSync(settingsFile)){
+    const orb=normalizeAppearance({shape:'soft-orb',orbMaterial:'pearl',orbSecondaryColor:'#B7A7EC',bodyColor:'#F9F8FF',eyeColor:'#FDFDFD'});
+    settings.customization.appearance=orb;settings.startupAppearance=orb;settings.size='medium';
+  }
   if (ACCEPTANCE_KIND === 'weather' && !fs.existsSync(settingsFile)) {
     const cloud = normalizeAppearance({ ...settings.customization.appearance, shape: 'cloud', bodyColor: '#5B3BC7', eyeColor: '#FFFFFF' });
     settings.customization.appearance = cloud; settings.startupAppearance = cloud;
@@ -4088,7 +4145,8 @@ async function bootstrap() {
     screen, powerMonitor, getWindow: () => petWindow,
     onSample: packet => {
       if (!packet.locked) { edgeTuck?.sampleCursor(packet.cursor); shortcutWindow?.sampleCursor(packet.cursor); }
-      if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send('pet:activity', packet);
+      if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send('pet:activity', {...packet,chatVisible:chatWindow?.isVisible()===true});
+
       tickEdgeNotice();
     },
     onError: error => writeError('活动状态检测', error)
@@ -4187,6 +4245,7 @@ if (!hasSingleInstanceLock) {
   });
 
   app.on('before-quit', event => {
+
     codexConsentToken++;
     finishCodexConsent(false);
     zcodeConsent?.cancel();
@@ -4243,6 +4302,7 @@ if (!hasSingleInstanceLock) {
         .finally(() => setTimeout(() => { quitReady = true; app.quit(); }, 0));
     } else quitReady = true;
     safelyInvokeWindow('退出时聊天面板销毁', () => chatWindow?.destroy());
+
     edgeTuck?.dispose();
     edgeNotice?.reset();
     safelyInvokeWindow('退出时边缘提示销毁', () => edgeNoticeWindow?.destroy());

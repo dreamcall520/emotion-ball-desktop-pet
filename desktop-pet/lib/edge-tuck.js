@@ -10,7 +10,7 @@ function contains(bounds, point, margin = 0) {
 
 // 原生方窗始终在工作区内；只由页面平移半个球身，不向相邻屏幕泄露内容。
 function createEdgeTuck({ getWindow, getWorkArea, onChange = () => {},
-  getRetentionBounds = () => [], schedule = setTimeout, cancel = clearTimeout }) {
+  getRetentionBounds = () => [], getVisibleHitTest = () => null, schedule = setTimeout, cancel = clearTimeout }) {
   let mode = 'free', side = null, dragging = false, paused = false, disposed = false;
   const pins = new Set();
   let timer = null, revision = 0, ignored = null, lastCursor = null;
@@ -38,9 +38,13 @@ function createEdgeTuck({ getWindow, getWorkArea, onChange = () => {},
     if (!bounds) return null;
     return { ...bounds, x: bounds.x + (side === 'right' ? bounds.width / 2 : 0), width: bounds.width / 2 };
   }
+  function visibleHit(point, currentMode = mode) {
+    const custom=getVisibleHitTest({bounds:window()?.getBounds(),side,mode:currentMode,point});
+    return typeof custom==='boolean'?custom:contains(currentMode==='tucked'?visibleHalf():window()?.getBounds(),point,currentMode==='tucked'?0:HOVER_MARGIN);
+  }
   function publish({ cancelDrag = false } = {}) {
     if (disposed) return;
-    if (mode === 'tucked' && !dragging) setIgnored(!contains(visibleHalf(), lastCursor));
+    if (mode === 'tucked' && !dragging) setIgnored(!visibleHit(lastCursor));
     else setIgnored(false);
     onChange({ ...getPresentation(), ...(cancelDrag ? { cancelDrag: true } : {}) });
   }
@@ -68,12 +72,12 @@ function createEdgeTuck({ getWindow, getWorkArea, onChange = () => {},
     lastCursor = point;
     if (disposed || paused || dragging || !side || mode === 'hidden') return;
     if (mode === 'tucked') {
-      const hovered = contains(visibleHalf(), point);
+      const hovered = visibleHit(point);
       setIgnored(!hovered);
       if (hovered) { cancelTuck(); mode = 'peeked'; publish(); }
       return;
     }
-    const retained = pins.size > 0 || contains(window()?.getBounds(), point, HOVER_MARGIN) ||
+    const retained = pins.size > 0 || visibleHit(point) ||
       getRetentionBounds().some(bounds => contains(bounds, point, HOVER_MARGIN));
     if (retained) { cancelTuck(); return; }
     if (timer !== null) return;

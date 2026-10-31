@@ -67,6 +67,12 @@ body {
 #pet { transition: transform 180ms ease-out; }
 #pet[data-presentation="tucked"][data-edge="left"] { transform: translateX(-50%); }
 #pet[data-presentation="tucked"][data-edge="right"] { transform: translateX(50%); }
+/* Keep mapped partners smaller at the edge; the actual alpha hit mask follows this translation. */
+#pet[data-shape="codex-pet"][data-sprite-edge-mirror="true"][data-presentation="tucked"][data-edge="left"] { transform:translateX(-67.2%); }
+#pet[data-shape="codex-pet"][data-sprite-edge-mirror="true"][data-presentation="tucked"][data-edge="right"] { transform:translateX(67.2%); }
+/* Mapped artwork can be asymmetric. Reveal the same inward-facing half on
+ * either edge; dragging keeps its own frame-map facing and tilt unchanged. */
+#pet[data-shape="codex-pet"][data-sprite-edge-mirror="true"][data-edge="right"]:not(.dragging):is([data-presentation="tucked"],[data-presentation="peeked"]) .codex-pet-sprite { transform: scaleX(-1); }
 /* The aurora cloud is a five-lobed reference image rather than the classic
  * round head. Leave a rounded outer lobe visible at rest; on hover show the
  * face while keeping the native window anchored inside the work area. */
@@ -192,3 +198,6 @@ body {
 [data-weather="night"] .weather-cloud-ornament i:nth-child(4) { display: none; }
 [data-static="true"] .weather-cloud-ornament { display: none; }
 @media (prefers-reduced-motion: reduce) { .weather-cloud-ornament { display: none; } }
+
+#pet[data-shape="soft-orb"] .soft-orb-canvas{position:absolute;inset:0;pointer-events:none;}
+#pet[data-shape="soft-orb"].dragging .soft-orb-canvas{transform:rotate(var(--drag-tilt,0deg));}
