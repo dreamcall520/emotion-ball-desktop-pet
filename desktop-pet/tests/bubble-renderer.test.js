@@ -113,6 +113,24 @@ if (process.versions.electron && process.argv.includes('--bubble-dom-child')) {
           const accessible = await run(`(() => {const s=getComputedStyle(document.getElementById('bubble'));return {background:s.backgroundColor,filter:s.backdropFilter};})()`);
           assert.match(accessible.background, /^rgb\(/, 'accessible bubble must be opaque');
           assert.equal(accessible.filter, 'none', 'accessible disables blur');
+          const edges = await run(`(() => {
+            const bubble = document.getElementById('bubble'), buttons = [...document.querySelectorAll('#actions button')];
+            const style = e => {const s = getComputedStyle(e); return {border:s.borderColor, shadow:s.boxShadow, text:s.color, background:s.backgroundColor};};
+            const contrast = (a,b) => {
+              const luminance = value => value.match(/[\\d.]+/g).slice(0,3).map(Number).map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;}).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
+              const x=luminance(a), y=luminance(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);
+            };
+            const primary=style(buttons[0]),secondary=style(buttons[1]);
+            return {bubble:style(bubble),primary,secondary,textContrast:contrast(primary.text,primary.background),secondaryTextContrast:contrast(secondary.text,secondary.background),controlContrast:contrast(secondary.border,secondary.background)};
+          })()`);
+          assert.equal(edges.primary.shadow, 'none', 'primary has no duplicate inset stroke');
+          assert.equal(edges.primary.border, 'rgba(0, 0, 0, 0)', 'primary fill needs no additional border');
+          assert.equal(edges.secondary.shadow, 'none', 'secondary uses one border, no duplicate inset stroke');
+          assert(edges.textContrast >= 4.5 && edges.secondaryTextContrast >= 4.5, 'accessible button text remains legible');
+          assert(edges.controlContrast >= 3, 'secondary keeps a clear boundary');
+          await show({ text: '普通对白外框轻一点。', actions: [] });
+          assert.notEqual(await run("getComputedStyle(document.getElementById('bubble')).borderColor"), edges.secondary.border, 'decorative bubble border is lighter than the control boundary');
+          await show(createDirector().offerUpdate('123.456.789', 10000));
           const dots = await run("['::before','::after'].map(pseudo=>getComputedStyle(document.getElementById('bubble'),pseudo).backgroundColor)");
           assert(dots.every(color => color === accessible.background), 'both cloud dots follow opaque accessible surface');
           await show({ text: '单按钮也保留主操作层级。', actions: [{ id: 'codex-dismiss', label: '知道啦' }] });
@@ -207,6 +225,8 @@ if (process.versions.electron && process.argv.includes('--bubble-dom-child')) {
       await run("window.originalButton=document.querySelector('#actions button');originalButton.click();originalButton.click();void 0");
       await wait(20);
       assert.deepEqual(replies, [{ id: clickPayload.id, action: 'again' }]);
+      await configure('accessible', 'light');
+      assert.equal(await run("getComputedStyle(document.querySelector('#actions button:disabled')).boxShadow"), 'none', 'disabled buttons do not restore duplicate strokes');
       controller.show({ ...clickPayload, text: '同一提醒更新正文。' });
       await frame(); await wait(25); await frame();
       assert.equal(await run("document.getElementById('message').textContent"), '同一提醒更新正文。');
