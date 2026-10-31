@@ -10,7 +10,8 @@
     "test": "node --test desktop-pet/tests/*.test.js",
     "smoke": "node desktop-pet/scripts/smoke-electron.js",
     "package:mac": "node desktop-pet/scripts/package-mac.js",
-    "postinstall": "ELECTRON_GET_USE_PROXY=1 node node_modules/electron/install.js"
+    "postinstall": "ELECTRON_GET_USE_PROXY=1 node node_modules/electron/install.js",
+    "preflight:mas": "node desktop-pet/scripts/mas-preflight.js"
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",

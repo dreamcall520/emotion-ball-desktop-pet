@@ -1,0 +1,21 @@
+{
+  "checkedAt": "2026-10-31T04:23:23.795Z",
+  "sourceCommit": "b7979aeb85258162c7f8a75ee110692a54734e34",
+  "version": "0.4.09",
+  "electron": "43.4.1",
+  "xcodeAvailable": true,
+  "xcodeVersion": "Xcode 27.1\nBuild version 27A9275",
+  "signingCheckAvailable": true,
+  "validCodeSigningIdentityCount": 0,
+  "developerMembership": "not-verified",
+  "provisioningProfile": "not-verified",
+  "currentPackagerUsesDarwin": true,
+  "currentPackagerUsesAdhocSigning": true,
+  "submissionReady": false,
+  "blockers": [
+    "No valid local code signing identity",
+    "MAS runtime, sandbox, distribution signing and installer pipeline not implemented",
+    "External tool integrations and independent updater require MAS adaptation",
+    "Signed sandbox runtime acceptance and App Store Connect metadata not completed"
+  ]
+}
