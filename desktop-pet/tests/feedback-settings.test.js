@@ -6,7 +6,7 @@ const { spawnSync } = require('node:child_process');
 if (process.versions.electron && process.argv.includes('--feedback-dom-child')) {
   const { app, BrowserWindow } = require('electron');
   app.whenReady().then(async () => {
-    const win = new BrowserWindow({width:980,height:760,show:false,webPreferences:{contextIsolation:false,nodeIntegration:false}});
+    const win = new BrowserWindow({width:980,height:760,show:false,webPreferences:{contextIsolation:false,nodeIntegration:false,backgroundThrottling:false}});
     await win.loadFile(path.join(__dirname,'../global-settings.html'));
     const run = async source => { try { return await win.webContents.executeJavaScript(source); } catch (error) { throw new Error(source.slice(0,160)+' :: '+error.message); } };
     const snapshotFile = process.env.PET_SMOKE_ARTIFACT_DIR && path.join(process.env.PET_SMOKE_ARTIFACT_DIR, 'settings-snapshot.json');
@@ -25,6 +25,10 @@ if (process.versions.electron && process.argv.includes('--feedback-dom-child')) 
     assert.equal(await run("document.querySelector('#report-title').value"),'草稿');
     await run("document.querySelector('[data-view=common]').click();document.querySelector('[data-view=feedback]').click()");
     assert.equal(await run("document.querySelector('#report-title').value"),'草稿','tab navigation preserves draft');
+    await run("window.dispatchEvent(new Event('beforeunload',{cancelable:true}));snapshot.feedback.pending=7;void 0");
+    await run('new Promise(resolve=>setTimeout(resolve,2300))');
+    assert.match(await run("document.querySelector('#report-auto-status').textContent"),/7 条待补报/,'cancelled closing must keep automatic report status refreshing');
+    await run('snapshot.feedback.pending=0;window.dispatchEvent(new Event("focus"));void 0');await settle();
     await run("document.querySelector('#report-auto').click()");await settle();
     assert.equal(await run("document.querySelector('#report-auto').getAttribute('aria-checked')"),'false');
     await run("document.querySelector('#report-auto').click()");await settle();

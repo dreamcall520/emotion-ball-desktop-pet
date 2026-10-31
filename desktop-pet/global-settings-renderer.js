@@ -8,7 +8,7 @@
     emotion: '50', fallbackId: '50', shape: 'blob', color: '#EEEBE4', eyeColor: '#1A1A1A',
     idle: false, autostart: false, lite: false, label: '经典球球'
   });
-  window.addEventListener('beforeunload', () => brandPet.destroy(), { once: true });
+  window.addEventListener('pagehide', () => brandPet.destroy(), { once: true });
   let feedbackTimer;
   function feedback(message) {
     clearTimeout(feedbackTimer); $('feedback').textContent = message;
@@ -462,9 +462,9 @@
     snapshot.petSleepState = state; last = JSON.stringify(snapshot);
     document.querySelectorAll('[data-pet-sleep-state]').forEach(updateSleepStatus);
   });
-  window.addEventListener('beforeunload', () => removeSleepState?.(), { once: true });
+  window.addEventListener('pagehide', () => removeSleepState?.(), { once: true });
   window.addEventListener('focus', refresh);
   const timer = setInterval(refresh, 2000);
-  window.addEventListener('beforeunload', () => clearInterval(timer), { once: true });
+  window.addEventListener('pagehide', () => clearInterval(timer), { once: true });
   refresh();
 })();
