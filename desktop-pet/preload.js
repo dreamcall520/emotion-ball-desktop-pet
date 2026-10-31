@@ -56,6 +56,16 @@ contextBridge.exposeInMainWorld('petDesktop', {
       });
     }
   },
+  codexSpriteComplete: request => {
+    if (request && Number.isSafeInteger(request.token) && request.token > 0 &&
+        ['hop', 'spin', 'bow'].includes(request.action) && ['jump', 'spin', 'happy'].includes(request.spriteAction) &&
+        Number.isSafeInteger(request.alertId) && request.alertId > 0 &&
+        Number.isSafeInteger(request.generation) && request.generation > 0 &&
+        Number.isSafeInteger(request.pageEpoch) && request.pageEpoch > 0) {
+      ipcRenderer.send('pet:codex-sprite-complete', { token: request.token, action: request.action,
+        spriteAction: request.spriteAction, alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch });
+    }
+  },
   codexAvailability: request => {
     if (request && Number.isSafeInteger(request.generation) && request.generation > 0 &&
       Number.isSafeInteger(request.pageEpoch) && request.pageEpoch > 0 && typeof request.available === 'boolean') {
@@ -84,6 +94,7 @@ contextBridge.exposeInMainWorld('petDesktop', {
   },
   onOfferingPointer: callback => subscribe('pet:offering-pointer',callback),
   onPresentation: callback => subscribe('pet:presentation', callback),
+  dogDreamState: payload => { if(payload&&typeof payload.ready==='boolean'&&['sleep','sleep-lying'].includes(payload.pose))ipcRenderer.send('pet:dog-dream-state',payload); },
   onCommand: callback => subscribe('pet:command', callback),
   onMotion: callback => subscribe('pet:motion-frame', callback),
   onActivity: callback => subscribe('pet:activity', callback),

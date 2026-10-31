@@ -22,9 +22,11 @@ const {
   shell,
   Tray
 } = require('electron');
+
+const { isXiaobaiPet } = require('./lib/codex-pet-player');
 const { loadSettings, saveSettings, normalizePresetName, normalizeAppearancePresets, findDuplicateAppearancePreset } = require('./lib/settings');
 const { createCodexPetStore } = require('./lib/codex-pets');
-const { normalizeSpriteEdgeInk,containsSpriteEdgeInk } = require('./lib/sprite-edge-ink');
+const { normalizeSpriteEdgeInk, containsSpriteEdgeInk, XIAOBAI_TUCK_FRACTION } = require('./lib/sprite-edge-ink');
 const EdgePeek = require('./lib/edge-peek');
 const {
   SIZES,
@@ -136,7 +138,7 @@ let isQuitting = false;
 let activityMonitor = null;
 let dialogue = null;
 let bubble = null;
-let thoughts = null;
+let thoughts = null, dogDream = null, dogSleepPose = 'sleep', dogSleepReady = null, dogDreamAvatar = 'chunye', dogDreamPetId = null, dogDreamSkinId = null, dogDreamSkinEnabled = false, dogSpriteDescriptor = null;
 let sheepOfferingWindow = null;
 let sheepQuotaInk = null, sheepBarInk = null, sheepCapsuleInk = null, sheepCapsuleRead = null, sheepCapsuleReadAt = 0, sheepCapsuleRevision = 0, sheepCapsuleReadKey = null, sheepCapsuleReadCount = 0;
 let bubbleVisibilityBinding = null;
@@ -208,7 +210,7 @@ let codexPageEpoch = 0;
 let codexSentSettings = null;
 let codexNotice = null;
 let codexPreferenceWarning = null;
-let hostMotion = null;
+let hostMotion = null, spriteMotionTimer = null, spriteMotionEpoch = 0;
 let quotaSyncing = false;
 let quotaSyncPending = false;
 let quotaSyncSnapshot = null;
@@ -421,14 +423,88 @@ let globalSettingsInitialView = 'common';
 function codexIconSystemDark() { return codexIconPreference?.getSystemDark() === true; }
 function refreshCodexIcon() { if (!screenLocked && !isQuitting) syncQuotaLabel(codexCompanion?.getSnapshot()); }
 
+let dogDreamShowUntil=0,dogDreamNextShowAt=0,dogDreamTimer=null,dogDreamCycleToken=0;
 let petSleepState = 'unknown';
 function setPetSleepState(state) {
   if (petSleepState === state) return;
   petSleepState = state;
+  if(state!=='sleep')dogSleepReady=null;
+  syncDogDream();
   if(settings?.customization?.appearance?.shape==='new-year-sheep'){sheepCapsuleInk=null;sheepBarInk=null;sheepCapsuleReadAt=0;sheepCapsuleRevision++;syncQuotaCardGroup();}
   if (globalSettingsWindow && !globalSettingsWindow.isDestroyed()) {
     try { globalSettingsWindow.webContents.send('pet:global-settings-sleep-state', state); } catch (_) {}
   }
+}
+
+function cancelDogDreamTimer() {
+  clearTimeout(dogDreamTimer);
+  dogDreamTimer = null;
+  dogDreamCycleToken++;
+}
+
+function pauseDogDreamCycle() {
+  cancelDogDreamTimer();
+  dogDream?.hide();
+}
+
+function stopDogDreamCycle() {
+  cancelDogDreamTimer();
+  dogDreamShowUntil = dogDreamNextShowAt = 0;
+  dogDream?.hide();
+}
+
+function armDogDreamCycle(at) {
+  cancelDogDreamTimer();
+  const token = dogDreamCycleToken;
+  dogDreamTimer = setTimeout(() => {
+    if (token === dogDreamCycleToken) syncDogDream();
+  }, Math.max(1, at - Date.now()));
+  dogDreamTimer.unref?.();
+}
+
+function syncDogDream() {
+  if (!dogSleepReady || petSleepState !== 'sleep' || isQuitting) { stopDogDreamCycle(); return; }
+  const appearance = effectiveCustomization(settings?.customization).appearance;
+  if (!dogDreamSkinEnabled || appearance.shape !== 'codex-pet' || appearance.codexPetId !== dogDreamSkinId ||
+      dogDreamPetId !== dogDreamSkinId) {
+    dogSleepReady = null;
+    stopDogDreamCycle();
+    return;
+  }
+  if (screenLocked || dragState || !petWindow?.isVisible()) { pauseDogDreamCycle(); return; }
+  const now = Date.now();
+  if (dogDreamShowUntil && now >= dogDreamShowUntil) {
+    dogDreamShowUntil = 0;
+    dogDreamNextShowAt = now + 200 + 20000 + Math.floor(Math.random() * 15001);
+    dogDream?.hide();
+  }
+  if (dogDreamNextShowAt > now) { armDogDreamCycle(dogDreamNextShowAt); return; }
+  if (!dogDreamShowUntil) {
+    dogDreamAvatar = Math.random() < .5 ? 'chunye' : 'partner';
+    dogDreamShowUntil = now + 6800;
+    dogDreamNextShowAt = 0;
+  }
+  hideBubble();
+  dogDream?.show({ visible: true, side: 'left' });
+  armDogDreamCycle(dogDreamShowUntil);
+}
+
+function dogDreamPlacement(bounds, area) {
+  if (!dogSleepReady) return null;
+  const width = Math.max(64, Math.round(bounds.width * .66)), height = Math.max(60, Math.round(bounds.width * .56));
+  const head = dogSleepReady.head, body = dogSleepReady.body;
+  const hx = bounds.x + head.x * bounds.width, hy = bounds.y + head.y * bounds.height;
+  let x = hx - width / 2, y = hy - height - 4, side = 'center';
+  if (y < area.y) {
+    const left = bounds.x + body.x * bounds.width - width - 4;
+    const right = bounds.x + (body.x + body.width) * bounds.width + 4;
+    side = left >= area.x ? 'left' : 'right';
+    x = side === 'left' ? left : right;
+    y = hy;
+  }
+  x = Math.round(Math.max(area.x, Math.min(area.x + area.width - width, x)));
+  y = Math.round(Math.max(area.y, Math.min(area.y + area.height - height, y)));
+  return { bounds: { x, y, width, height }, viewBox: '0 0 100 100', rotation: 0, side };
 }
 
 function globalSettingsSnapshot() {
@@ -798,13 +874,13 @@ function importedPet(id) {
 }
 function fromLocalPetWindow(event) { return fromCustomizationWindow(event)&&customizationWindow.isVisible()&&event.senderFrame===customizationWindow.webContents.mainFrame; }
 function localPetImportIsCurrent() { const s=localPetImportSession;return Boolean(s&&!s.invalid&&customizationWindow===s.owner&&!s.owner.isDestroyed()&&s.owner.isVisible()&&s.owner.webContents.mainFrame===s.frame&&!screenLocked&&!isQuitting); }
-function petSheetDescriptor(pet){return pet.version===3?{sheets:Object.fromEntries(Object.entries(pet.sheets).map(([id,sheet])=>[id,{rows:sheet.rows,imageURL:pathToFileURL(sheet.path).href}]))}:{};}
-function localPetDescriptor(pet) { return {id:pet.id,importedId:pet.importedId,name:pet.name,version:pet.version,rows:pet.rows,...petSheetDescriptor(pet),...(pet.frameMap?{frameMap:pet.frameMap}:{}),imageURL:pathToFileURL(pet.spritesheetPath).href,imported:true,origin:'local'}; }
+function petSheetDescriptor(pet){return pet.version===3?{sheets:Object.fromEntries(Object.entries(pet.sheets).map(([id,sheet])=>[id,{rows:sheet.rows,...(sheet.frameWidth?{frameWidth:sheet.frameWidth}:{}),imageURL:pathToFileURL(sheet.path).href}]))}:{};}
+function localPetDescriptor(pet) { return {id:pet.id,importedId:pet.importedId,name:pet.name,...(pet.characterId?{characterId:pet.characterId}:{}),version:pet.version,rows:pet.rows,...petSheetDescriptor(pet),...(pet.frameMap?{frameMap:pet.frameMap}:{}),imageURL:pathToFileURL(pet.spritesheetPath).href,imported:true,origin:'local'}; }
 function codexPetDescriptor(appearance) {
   if (appearance?.shape !== 'codex-pet' || !codexPets) return null;
   let pet;
   try { pet = importedPet(appearance.codexPetId); } catch (_) { return null; }
-  return { id: pet.id, name: pet.name, version: pet.version, rows: pet.rows, spriteScale:pet.spriteScale||1, ...petSheetDescriptor(pet), ...(pet.frameMap?{frameMap:pet.frameMap}:{}), origin:pet.origin,
+  return { id: pet.id, name: pet.name, ...(pet.characterId?{characterId:pet.characterId}:{}), version: pet.version, rows: pet.rows, spriteScale:pet.spriteScale||1, ...petSheetDescriptor(pet), ...(pet.frameMap?{frameMap:pet.frameMap}:{}), origin:pet.origin,
     imageURL: pathToFileURL(pet.spritesheetPath).href };
 }
 
@@ -1062,7 +1138,67 @@ function sendCodexCommand(command) {
   try { petWindow.webContents.send('pet:command', command); } catch (_) { /* 关闭期间不再展示。 */ }
 }
 
+let dogSpriteBounds = null, spriteExpectedBounds = null, spriteExpectedWindow = null;
+function restoreDogSpriteBounds() {
+  const previous = dogSpriteBounds;
+  if (!previous) return;
+  dogSpriteBounds = null;
+  if (previous.window === petWindow && petWindow && !petWindow.isDestroyed()) {
+    spriteExpectedBounds = previous.bounds;
+    spriteExpectedWindow = petWindow;
+    petWindow.setBounds(previous.bounds, false);
+  }
+  edgeTuck?.pin(false, 'dog-sprite');
+}
+
+function prepareDogSpriteBounds(clip) {
+  if (clip.frameWidth <= 192 || !petWindow || petWindow.isDestroyed()) return;
+  restoreDogSpriteBounds();
+  const old = petWindow.getBounds(), area = screen.getDisplayMatching(old).workArea;
+  const width = Math.ceil(old.width + old.height * (clip.frameWidth - 192) / 208);
+  const x = Math.max(area.x, Math.min(area.x + area.width - width, Math.round(old.x + (old.width - width) / 2)));
+  dogSpriteBounds = { window: petWindow, bounds: { ...old } };
+  spriteExpectedWindow = petWindow;
+  spriteExpectedBounds = { ...old, x, width };
+  edgeTuck?.pin(true, 'dog-sprite');
+  petWindow.setBounds(spriteExpectedBounds, false);
+}
+
+function clearSpriteMotionTimer() {
+  clearTimeout(spriteMotionTimer);
+  spriteMotionTimer = null;
+  spriteMotionEpoch++;
+}
+
+function dogCodexSpriteClip(action) {
+  const id = { hop: 'jump', spin: 'happy', bow: 'spin' }[action];
+  const pet = dogSpriteDescriptor, appearance = effectiveCustomization(settings?.customization).appearance;
+  const clip = pet?.frameMap?.[id];
+  if (!dogDreamSkinEnabled || appearance.shape !== 'codex-pet' || appearance.codexPetId !== pet?.id ||
+      clip?.sheet !== id || clip.count <= 1) return null;
+  return { id, frameWidth: pet.sheets[clip.sheet].frameWidth || 192,
+    durationMs: clip.durations.reduce((sum, ms) => sum + ms, 0) };
+}
+
+function finishCodexSpriteMotion(request, timedOut = false) {
+  const state = hostMotion, presentation = codexPresentation;
+  if (state?.owner !== 'codex' || !state.spriteAction || state.token !== request.token ||
+      state.action !== request.action || state.spriteAction !== request.spriteAction ||
+      presentation?.token !== request.token || presentation.id !== request.alertId ||
+      presentation.generation !== request.generation || presentation.pageEpoch !== request.pageEpoch) return false;
+  clearSpriteMotionTimer();
+  hostMotion = null;
+  restoreDogSpriteBounds();
+  if (timedOut) writeError('小白任务庆祝', new Error('素材完成回调超时，已释放动作所有权'));
+  if (petWindow && !petWindow.isDestroyed()) {
+    petWindow.webContents.send('pet:motion-frame', { token: state.token, action: state.action, frame: { done: true } });
+  }
+  return true;
+}
+
 function clearCodexPresentation() {
+  clearSpriteMotionTimer();
+  restoreDogSpriteBounds();
   const previous = codexPresentation;
   codexPresentation = null;
   if (hostMotion?.owner === 'codex') {
@@ -1647,6 +1783,7 @@ function initializeCodexCompanion(options = {}) {
   codexNow = options.now || Date.now;
   codexSentSettings = null;
   codexCompanion = createCodexCompanion({ ...options, now: codexNow,
+    completionMotions:()=>dogCodexSpriteClip('bow')?['hop','spin','bow']:['hop','spin'],
     history: options.history || createQuotaHistory({ filePath: path.join(app.getPath('userData'), 'codex-status-history.json'),
       now: codexNow, onError: error => writeError('Codex 趋势记录', error) }), schedule: options.schedule || setTimeout,
     ignoreTask: id => chat?.ownsThread(id) === true,
@@ -2012,6 +2149,7 @@ function stopWindowBounce(restorePosition = true) {
 
 function stopMotion({ restore = true, notify = true, notifyRenderer = true } = {}) {
   thoughts?.hide();
+  clearSpriteMotionTimer();
   dismissCodexPresentation();
   stopWindowBounce(restore);
   windowMotion.stop({ restore, notify });
@@ -2123,6 +2261,7 @@ function sendCommand(command) {
 function sendCompanionSettings() {
   if (!petWindow || petWindow.isDestroyed()) return;
   const descriptor=codexPetDescriptor(settings.customization.appearance);spriteEdgeMapped=Boolean(descriptor?.frameMap);
+  dogDreamSkinId=descriptor?.id||null;dogDreamSkinEnabled=isXiaobaiPet(descriptor);dogSpriteDescriptor=dogDreamSkinEnabled?descriptor:null;syncDogDream();
   if(spriteEdgeInk?.id!==descriptor?.id)spriteEdgeInk=null;
   petWindow.webContents.send('pet:settings', {
     keepAwake: settings.keepAwake,
@@ -2207,7 +2346,7 @@ function setAlwaysOnTop(enabled) {
   safelyInvokeWindow('边缘提示置顶', () => edgeNoticeWindow?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('聊天面板置顶', () => chatWindow?.setAlwaysOnTop(settings.alwaysOnTop));
   safelyInvokeWindow('ZCode 窗口置顶', () => zcodeLink?.setAlwaysOnTop(settings.alwaysOnTop));
-  thoughts?.setAlwaysOnTop(settings.alwaysOnTop);
+  thoughts?.setAlwaysOnTop(settings.alwaysOnTop); dogDream?.setAlwaysOnTop(settings.alwaysOnTop);
   sheepOfferingWindow?.setAlwaysOnTop(settings.alwaysOnTop);
   syncQuotaCardGroup();
   persistSettings();
@@ -3150,13 +3289,18 @@ function createPetWindow() {
   petWindow = candidatePetWindow;
   spriteEdgeInk=null;spriteEdgeMapped=false;
   edgeTuck = createEdgeTuck({ getWindow: () => petWindow,
-    getVisibleHitTest:geometry=>spriteEdgeMapped?containsSpriteEdgeInk(spriteEdgeInk,geometry):EdgePeek.containsVisibleBody(settings?.customization?.appearance?.shape,geometry),
-    getTuckDelay:()=>EdgePeek.specFor(settings?.customization?.appearance?.shape)?.delayMs ?? 650,
+    getVisibleHitTest: geometry => spriteEdgeMapped
+      ? containsSpriteEdgeInk(spriteEdgeInk, { ...geometry, ...(dogDreamSkinEnabled ? { tuckFraction: XIAOBAI_TUCK_FRACTION } : {}) })
+      : EdgePeek.containsVisibleBody(settings?.customization?.appearance?.shape, geometry),
+    getTuckDelay: () => EdgePeek.specFor(settings?.customization?.appearance?.shape)?.delayMs ?? 650,
     getWorkArea: bounds => screen.getDisplayMatching(bounds).workArea,
     getRetentionBounds: edgeRetentionBounds, onChange: applyPresentation,
     schedule: setTimeout, cancel: clearTimeout });
   const createdPetWindow = candidatePetWindow;
   const isCurrentPetWindow = () => petWindow === createdPetWindow;
+  createdPetWindow.on('move',()=>{if(isCurrentPetWindow())dogDream?.reposition();});
+  createdPetWindow.on('hide',()=>{if(isCurrentPetWindow())pauseDogDreamCycle();});
+  createdPetWindow.on('show',()=>{if(isCurrentPetWindow())syncDogDream();});
   let renderRecoveryTimer = null;
 
   createdPetWindow.setAlwaysOnTop(settings.alwaysOnTop, 'floating');
@@ -3222,6 +3366,8 @@ function createPetWindow() {
   });
   createdPetWindow.on('resize', () => {
     if (!isCurrentPetWindow()) return;
+    const actual=createdPetWindow.getBounds();if(spriteExpectedWindow===createdPetWindow&&spriteExpectedBounds&&actual.width===spriteExpectedBounds.width&&actual.height===spriteExpectedBounds.height)return;
+    spriteExpectedBounds=null;
     sheepOfferingWindow?.update({eligible:false});
     dragState = null;
     shortcutWindow?.interrupt();
@@ -3292,7 +3438,7 @@ function createPetWindow() {
     safelyInvokeWindow('关闭时 API 余额趋势销毁', () => apiBalanceDetails?.destroy());
     safelyInvokeWindow('关闭时 API 卡片销毁', () => apiUsageLabel?.destroy());
     safelyInvokeWindow('关闭时 ZCode 窗口隐藏', () => zcodeLink?.hide());
-    thoughts?.destroy();
+    thoughts?.destroy();stopDogDreamCycle();dogDream?.destroy();
     sheepOfferingWindow?.destroy();
     if (!isCurrentPetWindow()) return;
     safelyInvokeWindow('关闭时对白清理', () => dialogue?.dismiss());
@@ -3584,6 +3730,15 @@ function registerIpc() {
       workbuddyQuota?.recover('online'); apiBalance?.recover('online');
     }
   });
+  ipcMain.on('pet:dog-dream-state',(event,payload)=>{
+    if(!fromPetWindow(event)||event.senderFrame!==event.sender.mainFrame||!payload||!['sleep','sleep-lying'].includes(payload.pose)||typeof payload.ready!=='boolean')return;
+    if(!payload.ready){if(payload.pause){pauseDogDreamCycle();return;}dogSleepReady=null;stopDogDreamCycle();return;}
+    if(!dogDreamSkinEnabled||payload.petId!==dogDreamSkinId)return;
+    const point=payload.head,body=payload.body;
+    if(!point||!body||![point.x,point.y,body.x,body.y,body.width,body.height].every(Number.isFinite)||point.x<0||point.x>1||point.y<0||point.y>1||body.x<0||body.y<0||body.width<=0||body.height<=0||body.x+body.width>1.001||body.y+body.height>1.001)return;
+    dogDreamPetId=effectiveCustomization(settings.customization).appearance.codexPetId;
+    dogSleepPose=payload.pose;dogSleepReady={head:point,body};syncDogDream();
+  });
   ipcMain.on('pet:sleep-state', (event, state) => {
     if (fromPetWindow(event) && event.senderFrame === event.sender.mainFrame && (state === 'awake' || state === 'sleep')) setPetSleepState(state);
   });
@@ -3669,7 +3824,7 @@ function registerIpc() {
     const point = validPoint(rawPoint);
     if (!point) return;
     if (!dragState.moved && Math.hypot(point.x - dragState.pointer.x, point.y - dragState.pointer.y) > 6) {
-      dragState.moved = true; shortcutWindow?.interrupt();
+      dragState.moved = true;pauseDogDreamCycle(); shortcutWindow?.interrupt();
       if (weatherWindow?.isExpanded?.()) weatherWindow.resetExpanded(); hideBubble(); weatherWindow?.reposition();
     }
     petWindow.setPosition(
@@ -3683,6 +3838,7 @@ function registerIpc() {
     if (!fromPetWindow(event) || !dragState) return;
     const moved = dragState.moved;
     dragState = null;
+    syncDogDream();
     if (!screenLocked) {
       const anchor = hostMotion?.anchor;
       const visible = anchor && ensureVisibleBounds(anchor, screen.getAllDisplays(), screen.getPrimaryDisplay());
@@ -3743,6 +3899,9 @@ function registerIpc() {
     codexRenderer = { generation: packet.generation, pageEpoch: packet.pageEpoch, available: packet.available };
   });
 
+  ipcMain.on('pet:codex-sprite-complete',(event,request)=>{
+    if(fromPetWindow(event)&&event.senderFrame===event.sender.mainFrame&&request&&['hop','spin','bow'].includes(request.action)&&['jump','spin','happy'].includes(request.spriteAction))finishCodexSpriteMotion(request);
+  });
   ipcMain.on('pet:codex-motion-ready', (event, request) => {
     if (!fromPetWindow(event) || !Number.isSafeInteger(request?.token) || request.token <= 0 ||
       !Number.isSafeInteger(request.alertId) || !Number.isSafeInteger(request.generation) ||
@@ -3760,8 +3919,30 @@ function registerIpc() {
         generation: request.generation, pageEpoch: request.pageEpoch });
       return;
     }
+    const spriteClip = dogCodexSpriteClip(request.action);
+    if (spriteClip && request.durationMs !== spriteClip.durationMs) {
+      sendCodexCommand({ command: 'codex-cancel', token: request.token, alertId: request.alertId,
+        generation: request.generation, pageEpoch: request.pageEpoch });
+      return;
+    }
     codexPresentation.token = request.token;
     thoughts?.hide();
+    if (spriteClip) {
+      codexCompanion.extendCompletedAlert(request.alertId, request.generation, spriteClip.durationMs + 2000);
+      windowMotion.stop({ notify: false });
+      prepareDogSpriteBounds(spriteClip);
+      hostMotion = { owner: 'codex', token: request.token, action: request.action,
+        spriteAction: spriteClip.id, anchor: petWindow.getBounds() };
+      clearSpriteMotionTimer();
+      const epoch = spriteMotionEpoch, completion = { ...request, spriteAction: spriteClip.id };
+      spriteMotionTimer = setTimeout(() => {
+        if (epoch === spriteMotionEpoch) finishCodexSpriteMotion(completion, true);
+      }, spriteClip.durationMs + 2000);
+      spriteMotionTimer.unref?.();
+      const payload = dialogue.offerCodex(alert, performance.now(), alert.expiresAt - codexNow());
+      if (payload) showBubble(payload);
+      return;
+    }
     hostMotion = { owner: 'codex', token: request.token, action: request.action, anchor: petWindow.getBounds() };
     const bounds = petWindow.getBounds();
     const appearance = effectiveCustomization(settings.customization).appearance;
@@ -3858,7 +4039,7 @@ async function bootstrap() {
       const owner=customizationWindow;if(!localPetImportIsCurrent())return false;
       const mime=path.extname(pet.spritesheetPath).toLowerCase()==='.webp'?'image/webp':'image/png';
       const dimensions=await owner.webContents.executeJavaScriptInIsolatedWorld(1004,[{code:`new Promise(resolve=>{const image=new Image();const timer=setTimeout(()=>resolve(null),5000);image.onload=async()=>{try{await image.decode();const bitmap=await createImageBitmap(image);bitmap.close();const canvas=document.createElement('canvas');canvas.width=canvas.height=1;canvas.getContext('2d').drawImage(image,0,0,1,1);clearTimeout(timer);resolve({width:image.naturalWidth,height:image.naturalHeight})}catch(_){clearTimeout(timer);resolve(null)}};image.onerror=()=>{clearTimeout(timer);resolve(null)};image.src=${JSON.stringify(`data:${mime};base64,${buffer.toString('base64')}`)}})`}]);
-      return localPetImportIsCurrent()&&dimensions?.width===1536*pet.spriteScale&&dimensions?.height===pet.rows*208*pet.spriteScale;
+      return localPetImportIsCurrent()&&dimensions?.width===8*(pet.frameWidth||192)*pet.spriteScale&&dimensions?.height===pet.rows*208*pet.spriteScale;
     }});
   apiUsage = createApiUsage({ filePath: path.join(app.getPath('userData'), 'openai-api-usage.enc'), safeStorage,
     ...(IS_SMOKE_TEST && process.env.PET_SMOKE_API_USAGE_ONLY === '1'
@@ -4051,6 +4232,10 @@ async function bootstrap() {
   thoughts = createThoughtWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
     getObstacle: quotaObstacleBounds,
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('思考光迹窗口', error) });
+  dogDream = createThoughtWindow({BrowserWindow,screen,getPetWindow:()=>petWindow,
+    alwaysOnTop:settings.alwaysOnTop,reuseVisible:true,pageFile:'chunye-dream.html',durationMs:null,hideDelayMs:200,onHide:win=>{void win.webContents.executeJavaScript('window.setDreamState?.({visible:false})').catch(()=>{});},getObstacle:quotaObstacleBounds,getPlacement:dogDreamPlacement,
+    onPresent:(win,place)=>{void win.webContents.executeJavaScript(`window.setDreamState?.(${JSON.stringify({visible:true,pose:dogSleepPose,side:place.side||'center',avatarId:dogDreamAvatar})})`).catch(error=>writeError('小狗梦境',error));},
+    onError:error=>writeError('小狗梦境',error)});
   bubble = createBubbleWindow({
     BrowserWindow, screen, getPetWindow: () => petWindow,
     getShape: () => settings?.customization?.appearance?.shape,
@@ -4189,7 +4374,7 @@ async function bootstrap() {
   });
   const pause = () => { weatherWindow?.pause();
     if(localPetImportSession)localPetImportSession.invalid=true;
-    screenLocked = true;
+    screenLocked = true;pauseDogDreamCycle();
     quotaCardGroupTransition?.cancel();
     codexIconPreference?.pause();
     workbuddyEnableToken++; workbuddyConsent?.cancel();
@@ -4225,7 +4410,7 @@ async function bootstrap() {
     safelyInvokeWindow('锁屏时 ZCode 窗口隐藏', () => zcodeLink?.hide());
     safelyInvokeWindow('锁屏时对白清理', () => dialogue.dismiss());
   };
-  const resume = () => { screenLocked = false; weatherWindow?.resume(); void codexIconPreference?.start(); notesCompanion?.resume(); edgeTuck?.resume(); activityMonitor.resume(); syncQuotaLabel(codexCompanion?.getSnapshot()); syncPomodoro(); scheduleUpdateCheck(); };
+  const resume = () => { screenLocked = false; syncDogDream(); weatherWindow?.resume(); void codexIconPreference?.start(); notesCompanion?.resume(); edgeTuck?.resume(); activityMonitor.resume(); syncQuotaLabel(codexCompanion?.getSnapshot()); syncPomodoro(); scheduleUpdateCheck(); };
   const powerGuard = createPowerGuard({ pause, resume });
   powerMonitor.on('lock-screen', () => powerGuard.setLocked(true));
   powerMonitor.on('suspend', () => powerGuard.setSuspended(true));
@@ -4297,7 +4482,7 @@ if (!hasSingleInstanceLock) {
       }).catch(error => { notesQuitFlight = null; writeError('便签保存后退出', error); });
       return;
     }
-    isQuitting = true; weatherWindow?.destroy();
+    isQuitting = true;clearSpriteMotionTimer(); weatherWindow?.destroy();
     if (!quitCleanupStarted && !savePomodoroForQuit()) {
       isQuitting = false;
       event?.preventDefault?.();
@@ -4353,7 +4538,7 @@ if (!hasSingleInstanceLock) {
     safelyInvokeWindow('退出时守护战销毁', () => quotaGuard?.destroy());
     safelyInvokeWindow('退出时 Codex 详情销毁', () => codexDetails?.destroy());
     safelyInvokeWindow('退出时 API 卡片销毁', () => apiUsageLabel?.destroy());
-    thoughts?.destroy();
+    thoughts?.destroy();stopDogDreamCycle();dogDream?.destroy();
     sheepOfferingWindow?.destroy();
     safelyInvokeWindow('退出时对白清理', () => dialogue?.dismiss());
   });

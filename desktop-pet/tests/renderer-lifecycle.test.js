@@ -149,6 +149,7 @@ function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = nul
     frame: packet => subscriptions.motion(packet),
     stopHost: () => windowController?.stop(),
     resize(width) { context.innerWidth = width; windowEvents.resize(); },
+    viewport(width, height) { context.innerWidth = width; context.innerHeight = height; },
     emotions: context.EmotionBall.config.list(),
     command: value => subscriptions.command(value),
     settings: value => subscriptions.settings(value),
@@ -1430,11 +1431,11 @@ test('mapped imported cats use real sleep and wakeup actions while legacy pets k
   r.windowEvents.beforeunload();
 });
 
-function createMappedInteractionFixture(){
+function createMappedInteractionFixture(extra = {}){
  const r=createRenderer(0,null,[]),ids=['idle','run-right','run-left','wave','jump','fail','checking','waiting','running','sleep','wakeup','tail','groom'];
  const frameMap=Object.fromEntries(ids.map(id=>[id,{sheet:'base',start:0,count:1,durations:[200],loop:['idle','sleep','run-right','run-left'].includes(id)}]));
  for(const [i,id] of ['wave','tail','groom'].entries())frameMap[id]={sheet:'base',start:i+1,count:1,durations:[200],loop:false};
- r.settings({keepAwake:true,codexPet:{...testCodexDescriptor,version:3,rows:1,imageURL:'file:///v3-base-interactions.webp',sheets:{base:{rows:1,imageURL:'file:///v3-base-interactions.webp'}},frameMap},customization:{appearance:{shape:'codex-pet',codexPetId:testCodexPetId}}});r.advanceTo(10000);r.activity(false,{idleSeconds:20});
+ r.settings({keepAwake:true,codexPet:{...testCodexDescriptor,...extra,version:3,rows:1,imageURL:'file:///v3-base-interactions.webp',sheets:{base:{rows:1,imageURL:'file:///v3-base-interactions.webp'}},frameMap},customization:{appearance:{shape:'codex-pet',codexPetId:testCodexPetId}}});r.advanceTo(10000);r.activity(false,{idleSeconds:20});
  return{r,canvas:r.pet.children.find(c=>c.tag==='canvas'),pump(now){for(const cb of r.quotaFrames.splice(0))cb(now);r.advanceTo(now+250);for(const cb of r.quotaFrames.splice(0))cb(now+250)}};
 }
 test('mapped random wakes sleep and selects real nonrepeating one-shot actions instead of legacy idle mappings',()=>{
@@ -1508,4 +1509,71 @@ test('classic edge slide holds the painted pose and cancels delayed work on hide
  r.present({mode:'tucked',side:'left',suppressed:true});
  r.advanceTo(650);r.present({mode:'hidden',suppressed:true});
  r.advanceTo(1100);assert.equal(r.pet.dataset.presentation,'hidden');assert.equal(r.engine._active,false);
+});
+
+
+test('小白延长点击仲裁并保留pointerdown素材，普通同名导入皮肤保持原260ms和停止规则', async () => {
+  for (const xiaobai of [false, true]) {
+    const { r, canvas } = createMappedInteractionFixture({ name: '小白', ...(xiaobai ? { characterId: 'xiaobai' } : {}) });
+    for (let i = 0; i < 4; i++) await Promise.resolve();
+    r.click();
+    r.advanceTo(10270);
+    assert.equal(canvas.dataset.codexAction, xiaobai ? 'idle' : 'wave');
+    r.advanceTo(10510);
+    assert.equal(canvas.dataset.codexAction, 'wave');
+    const stops = r.host.stops;
+    r.events.pointerdown({ button: 0, pointerId: 2, screenX: 140, screenY: 140 });
+    assert.equal(r.host.stops, stops + (xiaobai ? 0 : 1));
+    assert.equal(r.pet.dataset.characterId, xiaobai ? 'xiaobai' : '');
+    r.windowEvents.beforeunload();
+  }
+});
+
+
+async function createDedicatedCelebrationFixture(xiaobai = true) {
+  const r = createRenderer(0, null, []);
+  r.viewport(80, 80);
+  const ids = ['idle', 'run-right', 'run-left', 'wave', 'jump', 'fail', 'checking', 'waiting', 'running', 'sleep', 'wakeup'];
+  const frameMap = Object.fromEntries(ids.map(id => [id,
+    { sheet: 'base', start: 0, count: 1, durations: [100], loop: true }]));
+  const sheets = Object.fromEntries(['base', 'jump', 'happy', 'spin'].map(id =>
+    [id, { rows: 1, imageURL: `file:///v3-base-${id}.webp` }]));
+  for (const id of ['jump', 'happy', 'spin']) {
+    frameMap[id] = { sheet: id, start: 0, count: 2, durations: [100, 100], loop: false };
+  }
+  r.settings({ keepAwake: true, codexPet: { ...testCodexDescriptor, name: '小白',
+    ...(xiaobai ? { characterId: 'xiaobai' } : {}), version: 3,
+    rows: 1, imageURL: sheets.base.imageURL, sheets, frameMap },
+    customization: { appearance: { shape: 'codex-pet', codexPetId: testCodexPetId } } });
+  for (let i = 0; i < 12; i++) { r.advanceTo(i); await Promise.resolve(); }
+  return { r, canvas: r.pet.children.find(child => child.tag === 'canvas') };
+}
+
+test('真实jump/happy/spin专用sheet且各count=2：聊天可见时小白及普通同名皮肤显式hop/spin/bow均执行原hostAction', async () => {
+  for (const xiaobai of [false, true]) for (const motion of ['hop', 'spin', 'bow']) {
+    const { r } = await createDedicatedCelebrationFixture(xiaobai);
+    r.activity(false, { chatVisible: true });
+    r.command({ command: 'again', motion });
+    assert.equal(r.host.motions.at(-1)?.action, motion);
+    assert.equal(r.pet.dataset.motionOwner, 'user');
+    r.windowEvents.beforeunload();
+  }
+});
+
+test('小白任务完成三分支继续选择专用真实素材并等待就绪ACK，不走用户宿主动作', async () => {
+  for (const [motion, action] of [['hop', 'jump'], ['spin', 'happy'], ['bow', 'spin']]) {
+    const { r, canvas } = await createDedicatedCelebrationFixture();
+    r.codexSettings({ enabled: true, generation: 1 });
+    r.command(codexCommand({ motion }));
+    for (let i = 0; i < 4; i++) await Promise.resolve();
+    assert.equal(canvas.dataset.codexAction, action);
+    assert.equal(r.host.codexAcks.at(-1).durationMs, 200);
+    assert.equal(r.host.codexAcks.at(-1).action, motion);
+    assert.equal(r.host.motions.length, 0);
+    assert.equal(r.pet.dataset.motionOwner, 'codex');
+    r.frame({ ...r.host.codexAcks.at(-1), frame: { done: true } });
+    assert.equal(canvas.dataset.codexAction, 'idle');
+    assert.equal(r.pet.dataset.motionOwner, 'none');
+    r.windowEvents.beforeunload();
+  }
 });

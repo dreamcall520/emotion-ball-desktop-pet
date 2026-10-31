@@ -256,3 +256,36 @@ test('legacy sheets retain all nine distinct preview rows',()=>{
  assert.equal(Player.getPreviewActions(descriptor).length,9);
  assert.deepEqual(new Set(Player.getPreviewActions(descriptor).map(a=>a.id)),new Set(Player.ACTIONS.map(a=>a.id)));
 });
+
+
+test('只有独立角色标识启用小白预解码，宽sheet保留600×416像素及真实比例', async () => {
+  assert.equal(Player.isXiaobaiPet({ name: '小白' }), false);
+  assert.equal(Player.isXiaobaiPet({ characterId: 'xiaobai', name: '可改名' }), true);
+  const h = harness();
+  const map = Object.fromEntries([...Player.ACTIONS.map(a => a.id), 'sleep', 'wakeup'].map(id =>
+    [id, { sheet: 'base', start: 0, count: 1, durations: [100], loop: true }]));
+  map.spin = { sheet: 'spin', start: 0, count: 40, durations: Array(40).fill(75), loop: false };
+  const sheets = { base: { rows: 1, imageURL: 'file:///base.png' },
+    spin: { rows: 5, frameWidth: 300, imageURL: 'file:///spin.png' } };
+  const p = Player.create(h.container, { descriptor: { ...descriptor, characterId: 'xiaobai', version: 3,
+    rows: 1, sheets, frameMap: map }, size: 120 });
+  h.images[0].naturalWidth = 3072;
+  h.images[0].naturalHeight = 416;
+  await h.images[0].onload();
+  await Promise.resolve();
+  assert.equal(h.images.length, 2, '不等首次转圈才加载宽sheet');
+  h.images[1].naturalWidth = 4800;
+  h.images[1].naturalHeight = 2080;
+  await h.images[1].onload();
+  await Promise.resolve();
+  p.setAction('spin', { once: true });
+  assert.equal(await p.whenReady(), true);
+  assert.deepEqual([p.element.width, p.element.height], [600, 416]);
+  assert.equal(Number.parseFloat(p.element.style.width) / Number.parseFloat(p.element.style.height), 600 / 416);
+  assert.deepEqual(h.draws.at(-1).slice(1), [0, 0, 600, 416, 0, 0, 600, 416]);
+  p.setAction('idle');
+  assert.deepEqual([p.element.width, p.element.height], [384, 416]);
+  assert.equal(p.element.dataset.codexCachedSheets, '2');
+  assert(!Player.getInteractionActions({ ...descriptor, characterId: 'xiaobai', version: 3, rows: 1, sheets, frameMap: map }).includes('spin'));
+  p.destroy();
+});

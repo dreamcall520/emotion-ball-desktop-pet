@@ -23,16 +23,24 @@ function placement(pet, area, side, obstacle = null) {
 }
 
 function createThoughtWindow({ BrowserWindow, screen, getPetWindow, alwaysOnTop = true,
-  getObstacle = () => null, onError = () => {} }) {
-  let win = null, ready = false, current = null, expiry = null;
+  getObstacle = () => null, onError = () => {}, pageFile = 'thought.html', durationMs = 6000, onPresent = () => {}, getPlacement = null, hideDelayMs = 0, onHide = () => {}, reuseVisible = false }) {
+  let win = null, ready = false, current = null, expiry = null, hideTimer = null, visibilityEpoch = 0;
   let top = alwaysOnTop;
   function hide() {
     current = null;
-    clearTimeout(expiry); expiry = null;
-    if (win && !win.isDestroyed()) {
-      if (ready) win.webContents.send('pet:thought-frame', { visible: false });
-      win.hide();
-    }
+    clearTimeout(expiry);
+    expiry = null;
+    clearTimeout(hideTimer);
+    hideTimer = null;
+    const epoch = ++visibilityEpoch, target = win;
+    if (!target || target.isDestroyed()) return;
+    if (ready) target.webContents.send('pet:thought-frame', { visible: false });
+    onHide(target);
+    if (hideDelayMs > 0) {
+      hideTimer = setTimeout(() => {
+        if (epoch === visibilityEpoch && win === target && !target.isDestroyed() && !current) target.hide();
+      }, hideDelayMs);
+    } else target.hide();
   }
   function present() {
     if (!current || !ready || !win || win.isDestroyed()) return;
@@ -41,19 +49,25 @@ function createThoughtWindow({ BrowserWindow, screen, getPetWindow, alwaysOnTop 
     const pet = getPetWindow();
     if (!pet || pet.isDestroyed() || !pet.isVisible()) { hide(); return; }
     const bounds = pet.getBounds();
-    const place = placement(bounds, screen.getDisplayMatching(bounds).workArea, current.side, getObstacle());
+    const area=screen.getDisplayMatching(bounds).workArea;
+    const place = getPlacement ? getPlacement(bounds,area) : placement(bounds, area, current.side, getObstacle());
     if (!place) { hide(); return; }
     win.setBounds(place.bounds, false);
     win.webContents.send('pet:thought-frame', { visible: true, side: current.side,
-      ...place, elapsedMs: 6000 - remainingMs, reducedMotion: current.reducedMotion });
+      ...place, elapsedMs: Date.now() - current.startedAt, reducedMotion: current.reducedMotion });
+    onPresent(win, place);
     win.showInactive();
   }
   function show(payload) {
     if (!payload?.visible) { hide(); return; }
-    hide();
+    if (!reuseVisible) hide();
+    clearTimeout(expiry);
+    clearTimeout(hideTimer);
+    hideTimer = null;
+    visibilityEpoch++;
     current = { side: payload.side === 'left' ? 'left' : 'right',
-      reducedMotion: payload.reducedMotion === true, endsAt: Date.now() + 6000 };
-    expiry = setTimeout(hide, 6000); expiry.unref?.();
+      reducedMotion: payload.reducedMotion === true, startedAt: Date.now(), endsAt: durationMs===null ? Infinity : Date.now() + durationMs };
+    if(durationMs!==null){expiry = setTimeout(hide, durationMs); expiry.unref?.();}
     if (!win || win.isDestroyed()) {
       ready = false;
       const created = new BrowserWindow({ width: 80, height: 60, show: false, frame: false,
@@ -72,10 +86,10 @@ function createThoughtWindow({ BrowserWindow, screen, getPetWindow, alwaysOnTop 
       };
       created.webContents.on('render-process-gone', () => discard(new Error('思考光迹页面退出，下轮重新创建')));
       created.on('closed', () => { if (win === created) { win = null; ready = false; hide(); } });
-      created.loadFile(path.join(__dirname, '../thought.html')).catch(discard);
+      created.loadFile(path.join(__dirname, '..', pageFile)).catch(discard);
     } else present();
   }
-  function destroy() { hide(); const old = win; win = null; ready = false; if (old && !old.isDestroyed()) old.destroy(); }
+  function destroy() { hide();clearTimeout(hideTimer);hideTimer=null;const old = win; win = null; ready = false; if (old && !old.isDestroyed()) old.destroy(); }
   return { show, hide, destroy, reposition: present, getWindow: () => win,
     setAlwaysOnTop(value) { top = value === true; if (win && !win.isDestroyed()) win.setAlwaysOnTop(top); } };
 }

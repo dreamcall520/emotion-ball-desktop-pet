@@ -1,0 +1,147 @@
+html[data-chunye-dream-window], html[data-chunye-dream-window] body, #dream-host {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent !important;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.chunye-dream {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  isolation: isolate;
+  contain: layout paint;
+  color-scheme: light;
+  opacity: 1;
+  transition: opacity 180ms ease-out;
+}
+
+.chunye-dream[hidden] { display: none !important; }
+.chunye-dream[data-phase="leaving"] { opacity: 0; }
+
+.chunye-dream__cloud {
+  position: absolute;
+  left: var(--dream-x);
+  top: var(--dream-y);
+  width: var(--dream-width);
+  height: var(--dream-height);
+  box-sizing: border-box;
+  border: 1px solid rgba(116, 111, 106, .32);
+  border-radius: 46% 52% 45% 49%;
+  background: linear-gradient(155deg, #ffffff 16%, #fffdf9 100%);
+  box-shadow: 0 1px 3px rgba(30, 27, 25, .22), inset 0 1px 0 #fff;
+  animation: chunye-dream-float 6.8s ease-in-out infinite;
+}
+
+.chunye-dream__avatar-frame {
+  position: absolute;
+  width: var(--dream-avatar-size);
+  height: var(--dream-avatar-size);
+  left: calc((var(--dream-width) - var(--dream-avatar-size)) / 2 - 1px);
+  top: calc((var(--dream-height) - var(--dream-avatar-size)) / 2 - 1px);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.chunye-dream[data-avatar="partner"] .chunye-dream__avatar-frame { border-radius: 42%; }
+
+.chunye-dream__avatar {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  left: 0;
+  top: 0;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+
+/* Pixel-preserving viewport of the confirmed 668x828 character reference:
+   x=364, y=0, width=164, height=164. Keeps the original beige hat and face. */
+.chunye-dream[data-avatar="partner"] .chunye-dream__avatar {
+  width: 407.317073%;
+  height: auto;
+  max-width: none;
+  left: -221.951220%;
+  top: 0;
+}
+
+.chunye-dream__heart {
+  position: absolute;
+  right: 6px;
+  bottom: 5px;
+  width: 9px;
+  height: 10px;
+  color: #c88e98;
+  font: 10px/10px -apple-system, BlinkMacSystemFont, sans-serif;
+  opacity: .65;
+  text-align: center;
+}
+
+.chunye-dream__heart[hidden] { display: none; }
+
+.chunye-dream__dot {
+  position: absolute;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: #fffefb;
+  border: 1px solid rgba(116, 111, 106, .28);
+  box-shadow: 0 1px 2px rgba(30, 27, 25, .18);
+}
+
+.chunye-dream__dot--near {
+  left: var(--dream-dot-near-x);
+  top: var(--dream-dot-near-y);
+  width: var(--dream-dot-near-size);
+  height: var(--dream-dot-near-size);
+}
+
+.chunye-dream__dot--far {
+  left: var(--dream-dot-far-x);
+  top: var(--dream-dot-far-y);
+  width: var(--dream-dot-far-size);
+  height: var(--dream-dot-far-size);
+}
+
+/* The lower, smaller dot is nearest the dog's head and appears first. */
+.chunye-dream[data-entering="true"] .chunye-dream__dot--far {
+  animation: chunye-dream-dot-in 240ms ease-out both;
+}
+.chunye-dream[data-entering="true"] .chunye-dream__dot--near {
+  animation: chunye-dream-dot-in 280ms 120ms ease-out both;
+}
+.chunye-dream[data-entering="true"] .chunye-dream__cloud {
+  animation: chunye-dream-cloud-in 540ms 260ms ease-out both;
+}
+.chunye-dream[data-phase="leaving"] .chunye-dream__cloud,
+.chunye-dream[data-phase="leaving"] .chunye-dream__dot { animation-play-state: paused; }
+
+.chunye-dream[data-reduced-motion="true"] { transition: none; }
+.chunye-dream[data-reduced-motion="true"] .chunye-dream__cloud,
+.chunye-dream[data-reduced-motion="true"] .chunye-dream__dot { animation: none; }
+
+@keyframes chunye-dream-dot-in {
+  from { opacity: 0; transform: scale(.75); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes chunye-dream-cloud-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes chunye-dream-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-.75px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chunye-dream { transition: none; }
+  .chunye-dream .chunye-dream__cloud,
+  .chunye-dream .chunye-dream__dot { animation: none; }
+}

@@ -24,7 +24,7 @@ const timestamp = value => Number.isFinite(value) && value >= 0 && value <= 8640
 function createCodexCompanion({ createConnection = createCodexConnection, onChange = () => {},
   onAlert = () => {}, onAlertUpdate = () => {}, onClear = () => {}, canPresent = () => true, ignoreTask = () => false,
   ignoreThread = () => false, history,
-  now = Date.now, random = Math.random, schedule = setTimeout, cancel = clearTimeout } = {}) {
+  now = Date.now, random = Math.random, schedule = setTimeout, cancel = clearTimeout, completionMotions = () => ['hop','spin'] } = {}) {
   let enabled = false;
   let closed = false;
   let quiet = false;
@@ -260,6 +260,15 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     currentAlert = null; clearTimer('alert'); onClear(); notify();
     return true;
   }
+  function extendCompletedAlert(id, expectedGeneration, durationMs) {
+    const event = currentAlert;
+    if (!enabled || closed || event?.kind !== 'completed' || event.id !== id || generation !== expectedGeneration ||
+        event.generation !== expectedGeneration || !eventValid(event) || !Number.isInteger(durationMs) || durationMs < 10 || durationMs > 62000) return false;
+    event.completionReadyUntil = Math.max(event.completionReadyUntil || 0, now() + durationMs);
+    event.expiresAt = Math.max(event.expiresAt, event.completionReadyUntil);
+    armCurrentAlert(event);
+    return true;
+  }
   function clearCurrentAlert(event) {
     if (currentAlert !== event) return false;
     currentAlert = null; clearTimer('alert'); onClear();
@@ -286,7 +295,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     const refs = refreshEventRefs(event, filter);
     if (!refs.length) return clearCurrentAlert(event);
     const durationMs = eventDuration(event, refs);
-    const reasonableExpiry = (event.shownAt ?? event.createdAt) + durationMs;
+    const reasonableExpiry = Math.max((event.shownAt ?? event.createdAt) + durationMs, event.kind === 'completed' ? event.completionReadyUntil || 0 : 0);
     event.expiresAt = Math.min(event.expiresAt, reasonableExpiry);
     if (now() >= event.expiresAt) return clearCurrentAlert(event);
     const nextAlert = publicAlertForRefs(event, refs);
@@ -363,10 +372,14 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
       event = { id: ++nextAlertId, generation, kind, createdAt: now(), refs: new Map() };
       if (kind === 'completed') {
         // 一次完成合并提醒只抽一次；名称刷新、偏好切换和排队重试均沿用。
+        const requestedMotions = completionMotions();
+        const motions = Array.isArray(requestedMotions) && requestedMotions.length === 3 &&
+          new Set(requestedMotions).size === 3 && requestedMotions.every(id => ['hop', 'spin', 'bow'].includes(id))
+          ? requestedMotions : ['hop', 'spin'];
         const value = typeof random === 'function' ? random() : 0;
         const choice = Number.isFinite(value)
-          ? Math.max(0, Math.min(COMPLETION_VARIANT_COUNT * 2 - 1, Math.floor(value * COMPLETION_VARIANT_COUNT * 2))) : 0;
-        event.completionMotion = choice < COMPLETION_VARIANT_COUNT ? 'hop' : 'spin';
+          ? Math.max(0, Math.min(COMPLETION_VARIANT_COUNT * motions.length - 1, Math.floor(value * COMPLETION_VARIANT_COUNT * motions.length))) : 0;
+        event.completionMotion = motions[Math.floor(choice / COMPLETION_VARIANT_COUNT)];
         event.completionVariant = choice % COMPLETION_VARIANT_COUNT;
       }
       if (kind !== 'quota') event.expiresAt = now() + QUEUE_MS;
@@ -652,7 +665,7 @@ function createCodexCompanion({ createConnection = createCodexConnection, onChan
     if (changed) notify();
     return changed;
   }
-  return { setEnabled, setPreferences, setQuietMode, refresh, getSnapshot, dismiss, markRead, markAllRead, close };
+  return { setEnabled, setPreferences, setQuietMode, refresh, getSnapshot, dismiss, extendCompletedAlert, markRead, markAllRead, close };
 }
 
 module.exports = { createCodexCompanion };
