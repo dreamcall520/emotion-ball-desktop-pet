@@ -67,6 +67,7 @@ const MESSAGES = Object.freeze({
   ROLLBACK_INCOMPLETE:
     "安装未完成，部分配置在处理中被其他程序更改，已保留这些更改。",
   INSTALL_IO_FAILED: "插件安装未完成，请检查目录权限后重试。",
+  PAIRING_REQUIRES_INSTALLED_PLUGIN: "仅可重新配对已安装、启用且来自球球托管目录的完整插件；未更改原安装。",
 });
 const fail = (code) => Object.assign(new Error(code), { code });
 const hash = (b) => createHash("sha256").update(b).digest("hex");
@@ -521,6 +522,8 @@ function createManagedPluginInstaller({
     enabled: false,
     eventVerified: false,
     requiresNewSession: true,
+    operation: null,
+    receiverPairingVerified: false,
     code: null,
     message: "尚未检查任务插件安装状态。",
   };
@@ -528,7 +531,9 @@ function createManagedPluginInstaller({
     const message = patch.code
       ? MESSAGES[patch.code] || MESSAGES.INSTALL_IO_FAILED
       : patch.status === "installed-configured"
-        ? "球球任务插件已安装启用，请在原工具新建任务；收到事件后确认联动。"
+        ? (patch.operation || state.operation) === "receiver-repair"
+          ? "现有插件已重新配对到当前球球，未更改插件代码或其他配置；等待原工具新任务事件。"
+          : "球球任务插件已安装启用，请在原工具新建任务；收到事件后确认联动。"
         : patch.status === "not-installed"
           ? "任务插件尚未完成安装，可在球球继续。"
           : ["working", "staged", "committing"].includes(patch.status)
@@ -635,6 +640,26 @@ function createManagedPluginInstaller({
         unchanged(ctx.root, path.join(tree.dir, rel), snapshot);
     }
   }
+  function requireExistingPairing(prepared) {
+    if (!prepared.registered || !prepared.enabled ||
+        prepared.trees.some(tree => !tree.existing) ||
+        prepared.plans.some(plan => !plan.before.bytes?.equals(plan.after)))
+      throw fail("PAIRING_REQUIRES_INSTALLED_PLUGIN");
+  }
+  function pairingUnchanged(ctx, prepared, committed) {
+    const written = new Map(committed.map(file => [file.file, file.after]));
+    for (const tree of prepared.trees) {
+      safePath(ctx.root, tree.dir, { missing: false });
+      if (filesIn(tree.dir).join("\0") !== [...tree.files.keys()].sort().join("\0"))
+        throw fail("CONCURRENT_MODIFICATION");
+      for (const [rel, before] of tree.before) {
+        const file = path.join(tree.dir, rel), expected = written.get(file) || before.bytes;
+        if (read(ctx.root, file, MAX_ASSET).hash !== hash(expected))
+          throw fail("CONCURRENT_MODIFICATION");
+      }
+    }
+    for (const plan of prepared.plans) unchanged(ctx.root, plan.file, plan.before);
+  }
   function configured(prepared) {
     return (
       prepared.registered &&
@@ -693,11 +718,12 @@ function createManagedPluginInstaller({
     "PLUGIN_CONFLICT",
     "CONCURRENT_MODIFICATION",
     "ROLLBACK_INCOMPLETE",
+    "PAIRING_REQUIRES_INSTALLED_PLUGIN",
   ]);
   function safeCode(e) {
     return knownCodes.has(e?.code) ? e.code : "INSTALL_IO_FAILED";
   }
-  function install({ approved = false, signal } = {}) {
+  function transact({ approved = false, signal } = {}, pairOnly = false) {
     if (approved !== true) return Promise.reject(fail("CONSENT_REQUIRED"));
     if (flight) return Promise.reject(fail("INSTALL_BUSY"));
     const run = Promise.resolve()
@@ -710,13 +736,16 @@ function createManagedPluginInstaller({
           abort(signal);
           if (allowed !== true) throw fail("HOST_RUNNING");
         };
-        update({ status: "working", installedConfigured: false, code: null });
+        update({ status: "working", operation: pairOnly ? "receiver-repair" : "installation", receiverPairingVerified: false, installedConfigured: false, code: null });
         return directoryAccess.withAccess(provider, async (root) => {
           abort(signal);
           const ctx = context(root),
             created = [],
             committed = [];
           let stage, lock, lockFd;
+          // Pairing must reject unsupported/disabled/unmanaged installations before
+          // even creating our data lock/stage. Recheck everything after locking.
+          if (pairOnly) { await stopped(); requireExistingPairing(prepare(ctx)); }
           try {
             lock = path.join(
               root,
@@ -743,11 +772,13 @@ function createManagedPluginInstaller({
             sourceUnchanged(ctx);
             safePath(root, root, { missing: false });
             const prepared = prepare(ctx);
+            if (pairOnly) requireExistingPairing(prepared);
             if (configured(prepared)) {
               update({
                 status: "installed-configured",
                 installedConfigured: true,
                 enabled: true,
+                receiverPairingVerified: pairOnly,
                 code: null,
               });
               return getState();
@@ -772,6 +803,7 @@ function createManagedPluginInstaller({
               } else
                 for (const [rel, bytes] of tree.files) {
                   const before = tree.before.get(rel);
+                  if (pairOnly && !rel.endsWith("receiver.json")) continue;
                   if (!before.bytes.equals(bytes))
                     files.push({
                       kind: "file",
@@ -781,14 +813,14 @@ function createManagedPluginInstaller({
                     });
                 }
             }
-            for (const p of prepared.plans)
+            for (const p of pairOnly ? [] : prepared.plans)
               if (!p.before.bytes?.equals(p.after))
                 files.push({ kind: "file", ...p });
             for (const f of files)
               if (f.kind === "file") {
                 f.staged = path.join(stage, "file-" + serial++);
                 fs.writeFileSync(f.staged, f.after, {
-                  mode: f.before.mode || 0o600,
+                  mode: pairOnly ? 0o600 : f.before.mode || 0o600,
                   flag: "wx",
                 });
               }
@@ -803,6 +835,7 @@ function createManagedPluginInstaller({
               abort(signal);
               await stopped();
               sourceUnchanged(ctx);
+              if (pairOnly) pairingUnchanged(ctx, prepared, committed);
               safePath(root, f.file);
               if (f.kind === "tree") {
                 if (fs.existsSync(f.file))
@@ -827,10 +860,12 @@ function createManagedPluginInstaller({
               }
             }
             abort(signal);
+            if (pairOnly) { await stopped(); sourceUnchanged(ctx); pairingUnchanged(ctx, prepared, committed); }
             update({
               status: "installed-configured",
               installedConfigured: true,
               enabled: true,
+              receiverPairingVerified: pairOnly,
               code: null,
               fileIndex: undefined,
             });
@@ -899,6 +934,6 @@ function createManagedPluginInstaller({
     flight = run;
     return run;
   }
-  return { install, inspect, getState };
+  return { install: options => transact(options), rePair: options => transact(options, true), inspect, getState };
 }
 module.exports = { createManagedPluginInstaller };

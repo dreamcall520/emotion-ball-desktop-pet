@@ -12,3 +12,24 @@ test('abort before waiting does not inspect apps; abort in wait cancels promptly
 test('timeout is bounded and retry can later observe user exit',async()=>{const f=fixture([running],{timeoutMs:8});await assert.rejects(f.host.waitUntilStopped('workbuddy'),{code:'HOST_WAIT_TIMEOUT'});const g=fixture([stopped]);assert.deepEqual(await g.host.waitUntilStopped('workbuddy'),stopped);assert.throws(()=>createPluginHost({timeoutMs:900001}),/Invalid/);});
 test('launch has no arbitrary path interface and returns only request acceptance',()=>{const host=createPluginHost({loadNative:()=>({status:()=>stopped,launch:()=>{throw Object.assign(new Error('/private/secret'),{code:'HOST_NOT_INSTALLED'});}})});assert.throws(()=>host.launch('zcode'),{code:'HOST_NOT_INSTALLED'});const bad=createPluginHost({loadNative:()=>({status:()=>stopped,launch:()=>({requested:false})})});assert.throws(()=>bad.launch('zcode'),{code:'HOST_LAUNCH_UNAVAILABLE'});});
 test('native surface uses only two fixed bundle IDs and contains no termination or automation APIs',()=>{const text=fs.readFileSync(path.join(__dirname,'../native/plugin-host.mm'),'utf8');for(const id of ['dev.zcode.app','com.tencent.workbuddy.mac'])assert.ok(text.includes(id));assert.doesNotMatch(text,/forceTerminate|\.terminate|@selector\(terminate|AXUIElement|NSAppleScript|NSAppleEventDescriptor/);assert.match(text,/URLForApplicationWithBundleIdentifier/);assert.match(text,/runningApplicationsWithBundleIdentifier/);});
+
+
+test('sandbox capability query is lazy, fixed without arguments and returns only five booleans',()=>{
+ let loads=0,queries=0;const expected={known:true,sandbox:true,userSelectedReadWrite:true,userSelectedExecutable:false,appScopeBookmarks:true};
+ const host=createPluginHost({loadNative:()=>{loads++;return{status:()=>stopped,launch:()=>({requested:true}),getSandboxCapabilities:()=>{queries++;return{...expected,team:'PRIVATE',entitlements:{private:true},path:'/private'};}};}});
+ assert.equal(loads,0);assert.deepEqual(host.getSandboxCapabilities(),expected);assert.deepEqual(host.getSandboxCapabilities(),expected);assert.equal(loads,1);assert.equal(queries,2);
+ const invalid=createPluginHost({loadNative:()=>{throw Error('must not load for arguments');}});assert.deepEqual(invalid.getSandboxCapabilities('zcode'),{known:false,sandbox:false,userSelectedReadWrite:false,userSelectedExecutable:false,appScopeBookmarks:false});
+});
+test('missing, throwing, unknown or malformed native capability results fail closed without raw data',()=>{
+ const unknown={known:false,sandbox:false,userSelectedReadWrite:false,userSelectedExecutable:false,appScopeBookmarks:false};
+ for(const value of [null,{}, {known:false,sandbox:true,userSelectedReadWrite:true,userSelectedExecutable:true,appScopeBookmarks:true},{known:true,sandbox:1,userSelectedReadWrite:true,userSelectedExecutable:true,appScopeBookmarks:true},{known:true,sandbox:true,userSelectedReadWrite:true,userSelectedExecutable:true},new Error('PRIVATE-IDENTITY')]){
+  const host=createPluginHost({loadNative:()=>({status:()=>stopped,launch:()=>({requested:true}),getSandboxCapabilities:()=>{if(value instanceof Error)throw value;return value;}})});assert.deepEqual(host.getSandboxCapabilities(),unknown);
+ }
+ assert.deepEqual(createPluginHost({loadNative:()=>{throw Error('PRIVATE-PATH');}}).getSandboxCapabilities(),unknown);
+ assert.deepEqual(createPluginHost({loadNative:()=>({status:()=>stopped,launch:()=>({requested:true})})}).getSandboxCapabilities(),unknown);
+});
+test('native signature query is limited to its own signing information and boolean entitlement projection',()=>{
+ const source=fs.readFileSync(path.join(__dirname,'../native/plugin-host.mm'),'utf8'),build=fs.readFileSync(path.join(__dirname,'../scripts/build-plugin-host.js'),'utf8');
+ assert.match(source,/SecCodeCopySelf\(kSecCSDefaultFlags/);assert.match(source,/SecCodeCopySigningInformation\(code, kSecCSSigningInformation/);assert.match(source,/CFBooleanGetTypeID/);assert.match(source,/getSandboxCapabilities/);assert.match(build,/'-framework','Security'/);
+ assert.doesNotMatch(source,/SecCodeCopyGuest|SecStaticCodeCreateWithPath|SecItemCopyMatching|kSecCodeInfoTeamIdentifier/);
+});

@@ -1,0 +1,117 @@
+{
+  "platform": "mas",
+  "purpose": "development-sandbox-validation",
+  "arch": "arm64",
+  "appPath": "/Users/allan/Documents/个人创作/emotion-ball-desktop-pet/.worktrees/mac-app-store/dist/mas-development/arm64/球球桌宠-商店沙盒开发候选-mas-arm64/球球桌宠-商店沙盒开发候选.app",
+  "signedDevelopmentApp": true,
+  "identityValidated": true,
+  "profileValidated": true,
+  "currentDeviceRegistered": true,
+  "bundledManifestRefresh": {
+    "codexFiles": 1,
+    "workbuddyFiles": 2506
+  },
+  "masRuntimeAndContainerProbePassed": true,
+  "sandboxCapabilities": {
+    "known": true,
+    "sandbox": true,
+    "userSelectedReadWrite": true,
+    "userSelectedExecutable": true,
+    "appScopeBookmarks": true
+  },
+  "managedHelperInitializationProbe": {
+    "isolatedProfileCreated": true,
+    "isolatedProfileRemoved": true,
+    "codex": {
+      "initialized": true,
+      "unauthenticatedAccountConfirmed": true,
+      "closed": true,
+      "errorCode": null
+    },
+    "workbuddy": {
+      "gatewayAuthenticated": true,
+      "vendorAccountVerified": false,
+      "vendorAccountAuthenticationTested": false,
+      "stopCompleted": true,
+      "processExitVerified": false,
+      "errorCode": null
+    },
+    "metadataTransport": {
+      "workbuddy": {
+        "started": true,
+        "unauthenticatedRejected": true,
+        "authenticatedEventReceived": true,
+        "stopNotFinal": true,
+        "finalStopMainReplyOnly": true,
+        "revoked": true,
+        "receiverClosed": true,
+        "errorCode": null
+      },
+      "zcode": {
+        "started": true,
+        "unauthenticatedRejected": true,
+        "authenticatedEventReceived": true,
+        "stopNotFinal": true,
+        "revoked": true,
+        "receiverClosed": true,
+        "errorCode": null
+      },
+      "syntheticMetadataOnly": true,
+      "originalPluginConfigurationChanged": false,
+      "passed": true,
+      "errorCode": null
+    },
+    "modelRequestsSent": false,
+    "originalCredentialsRead": false,
+    "passed": true,
+    "errorCode": null
+  },
+  "chatAndDirectoryAcceptancePassed": false,
+  "submissionReady": false,
+  "note": "Local development build only. Genuine MAS runtime/container initialization is separate from login/chat/task/directory acceptance and App Store review.",
+  "candidate": "R24",
+  "acceptedAt": "2026-11-01",
+  "asarSha256": "1b38e90679ee36e7f4ea861fd2af9086fc794a8def6e52b8ed4054700c50f0c6",
+  "originalPluginWritten": false,
+  "originalTaskEventsVerified": false,
+  "reviewApproved": false,
+  "newModelMessagesSent": 0,
+  "originalWritePurposeConsent": "pending",
+  "externalFixtureInstallation": {
+    "mas": true,
+    "selected": true,
+    "installed": {
+      "zcode": true,
+      "workbuddy": true
+    },
+    "idempotent": {
+      "zcode": true,
+      "workbuddy": true
+    },
+    "releasedLeaseGuardRejected": true,
+    "temporaryReceiverRemoved": true,
+    "passed": true,
+    "errorCode": null
+  },
+  "externalFixtureScripts": {
+    "count": 5,
+    "allMode0700": true,
+    "allWithoutQuarantine": true,
+    "xattrRemovedByAgent": false
+  },
+  "sourceFilesVerified": 469,
+  "fullTests": {
+    "passed": 3155,
+    "failed": 0,
+    "concurrency": 2
+  },
+  "permissionPurposeUpgradeProtected": true,
+  "externalFixtureAcceptanceScope": "Same installer/probe bytes tested in prior R24 signed MAS artifact; final artifact adds purpose-isolation guard and paired-directory picker text, source consistency and all build probes verified",
+  "finalCandidateOpened": true,
+  "allThreeChatsRestored": true,
+  "allThreeDataGrantsRestored": true,
+  "earlierValidationFailures": [
+    "Expected entitlement whitelist updated for newly required executable permission",
+    "One temporary watcher timing failure on earlier full run; targeted and final complete rerun passed"
+  ]
+}

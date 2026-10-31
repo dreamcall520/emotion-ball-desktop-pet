@@ -63,3 +63,5 @@ test('实时登录状态明确false覆盖旧pending，失败后不永久卡在�
  const s={codex:{directory:'stored'},providerLoginPending:{codex:false},onboarding:{codex:{status:'partial',chat:{status:'needs-login',loginPending:true}}}};
  assert.equal(card(s,'codex').chat.status,'needs-authorization');assert.equal(guide(s,'codex').nextStepId,'chat');s.providerLoginPending.codex=true;assert.equal(card(s,'codex').chat.status,'working');
 });
+
+test('数据写入权限只给已有插件配对动作，不能伪装首次自动安装',()=>{const s=base('workbuddy');s.pluginInstallationPolicy={allowed:false,pairingAllowed:true};const step=guide(s,'workbuddy').steps.find(s=>s.id==='tasks');assert.equal(step.action,'install-provider-plugin');assert.equal(step.actionLabel,'连接已有插件');assert.match(step.description,/不改插件代码/);});

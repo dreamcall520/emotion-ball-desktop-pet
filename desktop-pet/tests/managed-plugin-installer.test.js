@@ -573,3 +573,58 @@ test("non-Darwin install refuses before acquiring a directory lease", async () =
 });
 
 test('Darwin OS lock survives lockfile leftovers and releases after owner process exits',async t=>{if(process.platform!=='darwin')return t.skip('Darwin-only installer');const {spawn}=require('node:child_process'),{once}=require('node:events');const base=fs.mkdtempSync(path.join(os.tmpdir(),'qiuqiu-lock-crash-')),file=path.join(base,'installer.lock');t.after(()=>fs.rmSync(base,{recursive:true,force:true}));const script="const fs=require('fs');fs.openSync(process.argv[1],fs.constants.O_RDWR|fs.constants.O_CREAT|fs.constants.O_NONBLOCK|fs.constants.O_NOFOLLOW|0x20,0o600);process.stdout.write('locked');setInterval(()=>{},1000);";const child=spawn(process.execPath,['-e',script,file],{stdio:['ignore','pipe','pipe']});t.after(()=>{if(child.exitCode===null)child.kill('SIGKILL');});await once(child.stdout,'data');const flags=fs.constants.O_RDWR|fs.constants.O_CREAT|fs.constants.O_NONBLOCK|fs.constants.O_NOFOLLOW|0x20;assert.throws(()=>fs.openSync(file,flags,0o600),e=>['EAGAIN','EWOULDBLOCK'].includes(e.code));child.kill('SIGKILL');await once(child,'exit');assert.equal(fs.existsSync(file),true);const fd=fs.openSync(file,flags,0o600);fs.closeSync(fd);});
+
+function rotatedReceiver(f) {
+  const value=JSON.parse(fs.readFileSync(f.receiver,'utf8'));
+  value.endpoint='http://127.0.0.1:45679/'+(f.spec===specs.workbuddy?'workbuddy':'zcode')+'/events';
+  value.token='new_synthetic_receiver_pairing_capability_9876543210';
+  fs.writeFileSync(f.receiver,JSON.stringify(value));return Buffer.from(JSON.stringify(value));
+}
+function pairingReceivers(f) {
+  const p=inventory(f),relative=path.join('plugins',f.spec.name,'receiver.json');
+  return [path.join(p.market,relative),...(f.spec===specs.zcode?[path.join(f.storage,'marketplaces',f.spec.market,relative)]:[]),path.join(p.cache,'receiver.json')];
+}
+for(const provider of ['workbuddy','zcode'])test(provider+' rePair changes only existing receiver data, never code/settings/inventory, and new clock causes no writes',async t=>{
+  const f=fixture(t,provider);await f.app.install({approved:true});const desired=rotatedReceiver(f),before=tree(f.root),p=inventory(f);
+  const metadataFiles=[p.known,p.installed,f.config],metadataBefore=metadataFiles.map(file=>({file,bytes:fs.readFileSync(file),mtime:fs.statSync(file).mtimeMs}));
+  const renamed=[],rename=fs.renameSync;fs.renameSync=(from,to)=>{renamed.push(to);return rename(from,to);};
+  let paired;
+  try{paired=await guarded(f,()=>true).rePair({approved:true});}finally{fs.renameSync=rename;}
+  assert.equal(paired.status,'installed-configured');assert.equal(paired.operation,'receiver-repair');assert.equal(paired.receiverPairingVerified,true);assert.equal(paired.eventVerified,false);assert.equal(paired.requiresNewSession,true);
+  assert.deepEqual(renamed.sort(),pairingReceivers(f).sort());
+  const after=tree(f.root),changed=Object.keys(before).filter(file=>before[file]!==after[file]).sort();assert.deepEqual(changed,pairingReceivers(f).map(file=>path.relative(f.root,file)).sort());
+  for(const file of pairingReceivers(f)){assert.ok(fs.readFileSync(file).equals(desired));assert.equal(fs.statSync(file).mode&0o777,0o600);}
+  for(const old of metadataBefore){assert.ok(fs.readFileSync(old.file).equals(old.bytes));assert.equal(fs.statSync(old.file).mtimeMs,old.mtime);}
+  assert.doesNotMatch(JSON.stringify(paired),/45679|new_synthetic|receiver.json|owned-market/);
+  const stable=tree(f.root);await guarded(f,()=>true).rePair({approved:true});assert.deepEqual(tree(f.root),stable);assert.equal(fs.readdirSync(f.root).some(name=>name.startsWith('.qiuqiu-plugin-stage-')),false);
+});
+test('rePair needs explicit consent, directory lease and stopped host; unsupported or nonexisting installation is never installed/enabled',async t=>{
+ const fresh=fixture(t);await assert.rejects(fresh.app.rePair(),{code:'CONSENT_REQUIRED'});assert.equal(fresh.grants(),0);await assert.rejects(fresh.app.rePair({approved:true}),{code:'PAIRING_REQUIRES_INSTALLED_PLUGIN'});assert.deepEqual(fs.readdirSync(fresh.root),[]);
+ for(const kind of ['disabled','legacy-source','schema','tampered-code','extra-file','symlink']){
+  const f=fixture(t);await f.app.install({approved:true});rotatedReceiver(f);const p=inventory(f);
+  if(kind==='disabled')fs.writeFileSync(f.config,fs.readFileSync(f.config,'utf8').replace(JSON.stringify(f.id)+':true',JSON.stringify(f.id)+':false'));
+  if(kind==='legacy-source'){const known=JSON.parse(fs.readFileSync(p.known));known[f.spec.market].source.path=f.source;known[f.spec.market].installLocation=f.source;fs.writeFileSync(p.known,JSON.stringify(known));}
+  if(kind==='schema')fs.writeFileSync(p.installed,'{"version":99,"plugins":{}}');
+  if(kind==='tampered-code')fs.appendFileSync(path.join(p.cache,'scripts/emit-metadata.sh'),'# modified');
+  if(kind==='extra-file')fs.writeFileSync(path.join(p.cache,'unexpected.txt'),'must remain');
+  if(kind==='symlink'){const receiver=path.join(p.cache,'receiver.json');fs.unlinkSync(receiver);fs.symlinkSync(f.receiver,receiver);}
+  fs.unlinkSync(path.join(f.root,'.qiuqiu-workbuddy-plugin-install.lock'));const before=tree(f.root);
+  await assert.rejects(guarded(f,()=>true).rePair({approved:true}));assert.deepEqual(tree(f.root),before,kind);assert.equal(fs.existsSync(path.join(f.root,'.qiuqiu-workbuddy-plugin-install.lock')),false,kind+' refused before lock write');
+ }
+ const f=fixture(t);await f.app.install({approved:true});rotatedReceiver(f);const before=tree(f.root);await assert.rejects(guarded(f,()=>false).rePair({approved:true}),{code:'HOST_RUNNING'});assert.deepEqual(tree(f.root),before);
+ let leases=0;const denied=createManagedPluginInstaller({provider:'workbuddy',getMarketplaceDirectory:()=>f.source,assertHostStopped:()=>true,directoryAccess:{withAccess:async()=>{leases++;throw Object.assign(Error(),{code:'DIRECTORY_ACCESS_REQUIRED'});}}});await assert.rejects(denied.rePair({approved:true}),{code:'DIRECTORY_ACCESS_REQUIRED'});assert.equal(leases,1);
+});
+for(const mode of ['cancel','host-reopened','concurrent-code'])test('rePair rolls back own first receiver on '+mode+' without changing other settings',async t=>{
+ const f=fixture(t);await f.app.install({approved:true});rotatedReceiver(f);const before=tree(f.root),controller=new AbortController();let running=false;
+ const target=path.join(inventory(f).cache,'scripts/emit-metadata.sh');
+ const app=guarded(f,()=>!running,state=>{if(state.status==='committing'&&state.fileIndex===1){if(mode==='cancel')controller.abort();if(mode==='host-reopened')running=true;if(mode==='concurrent-code')fs.appendFileSync(target,'# concurrent keep');}});
+ await assert.rejects(app.rePair({approved:true,signal:controller.signal}),{code:mode==='cancel'?'CANCELLED':mode==='host-reopened'?'HOST_RUNNING':'CONCURRENT_MODIFICATION'});
+ const after=tree(f.root);for(const file of Object.keys(before))if(file!==path.relative(f.root,target)||mode!=='concurrent-code')assert.equal(after[file],before[file],file);
+ if(mode==='concurrent-code')assert.match(fs.readFileSync(target,'utf8'),/concurrent keep/);
+ assert.equal(app.getState().receiverPairingVerified,false);assert.equal(app.getState().installedConfigured,false);
+});
+test('rePair preserves concurrent receiver edits and reports incomplete rollback instead of overwriting them',async t=>{
+ const f=fixture(t);await f.app.install({approved:true});rotatedReceiver(f);const first=pairingReceivers(f)[0],replacement=JSON.stringify({version:1,enabled:true,endpoint:'http://127.0.0.1:45680/workbuddy/events',token:'third_party_synthetic_local_capability_123456789'});
+ const app=guarded(f,()=>true,state=>{if(state.status==='committing'&&state.fileIndex===1)fs.writeFileSync(first,replacement);});
+ await assert.rejects(app.rePair({approved:true}),{code:'ROLLBACK_INCOMPLETE'});assert.equal(fs.readFileSync(first,'utf8'),replacement);assert.equal(app.getState().receiverPairingVerified,false);
+});

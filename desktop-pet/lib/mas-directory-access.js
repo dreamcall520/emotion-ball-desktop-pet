@@ -43,7 +43,7 @@ function createMasDirectoryAccess({ app, dialog, storage, purpose='read-data', v
       !['load', 'save', 'remove'].every(name => typeof storage[name] === 'function')) {
     throw new TypeError('app, dialog and atomic storage load/save/remove are required');
   }
-  if(!['read-data','plugin-installation'].includes(purpose))throw new TypeError('Invalid directory authorization purpose');
+  if(!['read-data','plugin-installation','receiver-pairing'].includes(purpose))throw new TypeError('Invalid directory authorization purpose');
   const pending = new Map();
   function mutation(provider, operation, recoverPreviousFailure = true) {
     const previous = pending.get(provider) || Promise.resolve();
@@ -80,8 +80,8 @@ function createMasDirectoryAccess({ app, dialog, storage, purpose='read-data', v
     checkProvider(provider);
     return mutation(provider, async () => {
       const selection = await dialog.showOpenDialog({
-        title: purpose==='plugin-installation'?'允许球球安装 '+(provider==='zcode'?'ZCode':'WorkBuddy')+' 任务插件':TITLES[provider], buttonLabel: purpose==='plugin-installation'?'允许安装插件':'允许连接',
-        defaultPath: path.join(app.getPath('home'), '.' + provider), message: purpose==='plugin-installation'?'球球只安装自己的任务同步插件，并更新相应插件记录与启用设置。其他设置原样保留，不读取聊天记录或独立登录凭据文件，不发送模型消息。':MESSAGES[provider],
+        title: purpose==='receiver-pairing'?'允许球球连接已有任务插件':purpose==='plugin-installation'?'允许球球安装 '+(provider==='zcode'?'ZCode':'WorkBuddy')+' 任务插件':TITLES[provider], buttonLabel: purpose==='receiver-pairing'?'允许连接插件':purpose==='plugin-installation'?'允许安装插件':'允许连接',
+        defaultPath: path.join(app.getPath('home'), '.' + provider), message: purpose==='receiver-pairing'?'只更新已安装球球插件的本机连接信息，不修改代码、市场、启用设置、聊天记录或账号凭据。':purpose==='plugin-installation'?'球球只安装自己的任务同步插件，并更新相应插件记录与启用设置。其他设置原样保留，不读取聊天记录或独立登录凭据文件，不发送模型消息。':MESSAGES[provider],
         properties: ['openDirectory', 'showHiddenFiles'], securityScopedBookmarks: true
       });
       if (selection?.canceled) return { status: 'cancelled' };

@@ -8,6 +8,11 @@ function createPluginHost({loadNative=()=>require(path.join(__dirname,'../native
  if(typeof loadNative!=='function'||!Number.isSafeInteger(pollMs)||pollMs<1||pollMs>5000||!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>900000)throw new TypeError('Invalid plugin host options');
  let loaded=false,binding;
  function native(){if(!loaded){loaded=true;try{binding=loadNative();}catch{binding=null;}}if(!binding||typeof binding.status!=='function'||typeof binding.launch!=='function')throw failure('HOST_STATUS_UNAVAILABLE');return binding;}
+ function getSandboxCapabilities(...args){
+  const unknown=()=>({known:false,sandbox:false,userSelectedReadWrite:false,userSelectedExecutable:false,appScopeBookmarks:false});
+  if(args.length)return unknown();
+  try{const value=native().getSandboxCapabilities();const fields=['sandbox','userSelectedReadWrite','userSelectedExecutable','appScopeBookmarks'];if(value?.known!==true||fields.some(key=>typeof value[key]!=='boolean'))return unknown();return{known:true,...Object.fromEntries(fields.map(key=>[key,value[key]]))};}catch{return unknown();}
+ }
  function getStatus(provider){check(provider);try{const value=native().status(provider);if(!value||value.known!==true||typeof value.installed!=='boolean'||typeof value.running!=='boolean')throw failure('HOST_STATUS_UNAVAILABLE');return{known:true,installed:value.installed,running:value.running};}catch(error){throw failure(error?.code==='INVALID_PROVIDER'?'INVALID_PROVIDER':'HOST_STATUS_UNAVAILABLE');}}
  function isStopped(provider){const value=getStatus(provider);return value.known===true&&value.installed===true&&value.running===false;}
  function launch(provider){check(provider);try{const value=native().launch(provider);if(value?.requested!==true)throw failure('HOST_LAUNCH_UNAVAILABLE');return{requested:true};}catch(error){throw failure(error?.code==='HOST_NOT_INSTALLED'?'HOST_NOT_INSTALLED':'HOST_LAUNCH_UNAVAILABLE');}}
@@ -15,6 +20,6 @@ function createPluginHost({loadNative=()=>require(path.join(__dirname,'../native
   check(provider);if(signal?.aborted)throw failure('CANCELLED');const started=Date.now();let notified=false;
   for(;;){if(signal?.aborted)throw failure('CANCELLED');const current=getStatus(provider);if(!current.installed)throw failure('HOST_NOT_INSTALLED');if(!current.running)return current;if(!notified){notified=true;try{onWaiting?.({...current});}catch{}}if(signal?.aborted)throw failure('CANCELLED');const remaining=timeoutMs-(Date.now()-started);if(remaining<=0)throw failure('HOST_WAIT_TIMEOUT');await new Promise((resolve,reject)=>{let timer;const cancelled=()=>{clearTimeout(timer);signal?.removeEventListener('abort',cancelled);reject(failure('CANCELLED'));};timer=setTimeout(()=>{signal?.removeEventListener('abort',cancelled);resolve();},Math.min(pollMs,remaining));signal?.addEventListener('abort',cancelled,{once:true});if(signal?.aborted)cancelled();});}
  }
- return{getStatus,isStopped,waitUntilStopped,launch};
+ return{getStatus,isStopped,waitUntilStopped,launch,getSandboxCapabilities};
 }
 module.exports={createPluginHost};

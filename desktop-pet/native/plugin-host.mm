@@ -2,6 +2,7 @@
 // arbitrary URL, termination, Accessibility, or AppleEvents API is exposed.
 #import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
+#import <Security/Security.h>
 #include <node_api.h>
 #include <pthread.h>
 #include <string>
@@ -69,11 +70,47 @@ static napi_value Launch(napi_env env, napi_callback_info info) {
     napi_throw_error(env, "HOST_LAUNCH_UNAVAILABLE", "Plugin host launch is unavailable."); return nullptr;
   }
 }
+// Inspect only this process's sealed signature. No bundle path, identity,
+// certificate, entitlement dictionary or filesystem grant leaves this bridge.
+static napi_value SandboxCapabilities(napi_env env, napi_callback_info info) {
+  size_t argc = 1; napi_value argv[1];
+  napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
+  if (argc != 0) { napi_throw_error(env, "SANDBOX_CAPABILITIES_UNAVAILABLE", "Sandbox capabilities are unavailable."); return nullptr; }
+  SecCodeRef code = nullptr; CFDictionaryRef information = nullptr;
+  const OSStatus selfStatus = SecCodeCopySelf(kSecCSDefaultFlags, &code);
+  const OSStatus infoStatus = selfStatus == errSecSuccess && code
+    ? SecCodeCopySigningInformation(code, kSecCSSigningInformation, &information) : errSecParam;
+  if (code) CFRelease(code);
+  if (infoStatus != errSecSuccess || !information) {
+    if (information) CFRelease(information);
+    napi_throw_error(env, "SANDBOX_CAPABILITIES_UNAVAILABLE", "Sandbox capabilities are unavailable."); return nullptr;
+  }
+  CFTypeRef raw = CFDictionaryGetValue(information, kSecCodeInfoEntitlementsDict);
+  if (raw && CFGetTypeID(raw) != CFDictionaryGetTypeID()) {
+    CFRelease(information);
+    napi_throw_error(env, "SANDBOX_CAPABILITIES_UNAVAILABLE", "Sandbox capabilities are unavailable."); return nullptr;
+  }
+  const CFDictionaryRef rights = raw ? static_cast<CFDictionaryRef>(raw) : nullptr;
+  const auto enabled = [rights](CFStringRef key) -> bool {
+    if (!rights) return false;
+    CFTypeRef value = CFDictionaryGetValue(rights, key);
+    return value && CFGetTypeID(value) == CFBooleanGetTypeID() && CFBooleanGetValue(static_cast<CFBooleanRef>(value));
+  };
+  napi_value result; napi_create_object(env, &result);
+  SetBool(env, result, "known", true);
+  SetBool(env, result, "sandbox", enabled(CFSTR("com.apple.security.app-sandbox")));
+  SetBool(env, result, "userSelectedReadWrite", enabled(CFSTR("com.apple.security.files.user-selected.read-write")));
+  SetBool(env, result, "userSelectedExecutable", enabled(CFSTR("com.apple.security.files.user-selected.executable")));
+  SetBool(env, result, "appScopeBookmarks", enabled(CFSTR("com.apple.security.files.bookmarks.app-scope")));
+  CFRelease(information);
+  return result;
+}
 static napi_value Init(napi_env env, napi_value exports) {
   napi_property_descriptor properties[] = {
     {"status", nullptr, Status, nullptr, nullptr, nullptr, napi_default, nullptr},
-    {"launch", nullptr, Launch, nullptr, nullptr, nullptr, napi_default, nullptr}
+    {"launch", nullptr, Launch, nullptr, nullptr, nullptr, napi_default, nullptr},
+    {"getSandboxCapabilities", nullptr, SandboxCapabilities, nullptr, nullptr, nullptr, napi_default, nullptr}
   };
-  napi_define_properties(env, exports, 2, properties); return exports;
+  napi_define_properties(env, exports, 3, properties); return exports;
 }
 NAPI_MODULE(NODE_GYP_MODULE_NAME, Init)

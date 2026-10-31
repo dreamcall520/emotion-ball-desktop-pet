@@ -82,8 +82,16 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
   const access = diagnostic ? createDiagnosticDirectoryAccess({ dialog, storage, home:app.getPath('home') }) : createMasDirectoryAccess({ app, dialog, storage });
   const pluginStorage=createDirectoryStorage(path.join(app.getPath('userData'),'store-plugin-directory-grants'));
   const pluginAccess=diagnostic?createDiagnosticDirectoryAccess({dialog,storage:pluginStorage,home:app.getPath('home'),purpose:'plugin-installation'}):createMasDirectoryAccess({app,dialog,storage:pluginStorage,purpose:'plugin-installation'});
-  const pluginInstallationPolicy={allowed:diagnostic===true,status:diagnostic?'isolated-candidate':'store-review-pending',message:diagnostic?'自动安装为隔离联调候选，尚不代表商店审核通过。':'任务插件自动安装暂未开放；聊天和额度可单独连接，无需重复授权。'};
+  const pairingAccess=diagnostic?pluginAccess:createMasDirectoryAccess({app,dialog,storage:pluginStorage,purpose:'receiver-pairing'});
   const pluginFlights=new Map(),pluginAborts=new Map(),pluginWaitStates=new Map();const pluginHost=createPluginHost();
+  let sandboxCapabilities={known:false};try{sandboxCapabilities=pluginHost.getSandboxCapabilities?.()||sandboxCapabilities;}catch{}
+  const scopedWrite=sandboxCapabilities.known===true&&sandboxCapabilities.sandbox===true&&sandboxCapabilities.userSelectedReadWrite===true&&sandboxCapabilities.appScopeBookmarks===true;
+  const executableWrite=scopedWrite&&sandboxCapabilities.userSelectedExecutable===true;
+  // Public sandbox capabilities establish technical eligibility, never App Review approval.
+  const pluginInstallationPolicy={allowed:diagnostic===true||executableWrite,pairingAllowed:diagnostic===true||scopedWrite,
+    mode:diagnostic||executableWrite?'bundled-plugin-install':scopedWrite?'existing-plugin-pairing':'unavailable',
+    status:diagnostic?'isolated-candidate':executableWrite?'sandbox-capable-review-pending':scopedWrite?'data-pairing-only':'sandbox-capability-unavailable',
+    reviewApproved:false,message:diagnostic?'自动安装为隔离联调候选，尚不代表商店审核通过。':executableWrite?'使用随球球捆绑的固定任务插件；仅在你授权的目录安装，商店审核尚未完成。':scopedWrite?'可连接已安装的球球任务插件；新安装暂不可用，聊天和额度可直接使用。':'当前构建无法安装或配对任务插件；聊天和额度可单独连接。'};
   const workbuddy = createMasWorkBuddyProvider({ BrowserWindow, session, shell, onLoginComplete:()=>{if(!closed)onManagedReady('workbuddy');}, onChange: () => { if (!closed) { for (const notify of quotaPorts) notify(); onChange(); } } });
   const zcode = createMasZcodeProvider({ directoryAccess: access, fetch });
   const workbuddyOfficial=createWorkBuddyOfficialConnection({diagnostic,store:createWorkBuddyIntentStore(path.join(app.getPath('userData'),'workbuddy-official-send-intent.json')),openAuthorizationUrl:url=>shell.openExternal(url),onChange:()=>{if(!closed)onChange();}});
@@ -93,17 +101,23 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
   const zcodeDesktopIntegration=require('./zcode-desktop-integration').createZcodeDesktopIntegration({root:path.join(app.getPath('userData'),'zcode-desktop-events'),assetRoot:path.join(__dirname,'../assets/zcode-desktop-hook'),onChange:()=>{if(!closed)onChange();}});
   const pluginInstallers=Object.fromEntries(['zcode','workbuddy'].map(provider=>[provider,createPluginInstaller({provider,directoryAccess:pluginAccess,assertHostStopped:()=>pluginHost.isStopped(provider),getMarketplaceDirectory:()=>provider==='zcode'?zcodeDesktopIntegration.getMarketplaceDirectory():desktopIntegration.getMarketplaceDirectory(),onChange:()=>{if(!closed)onChange();}})]));
   function pluginInstallationState(provider){if(pluginWaitStates.has(provider))return{provider,...pluginWaitStates.get(provider)};const raw=pluginInstallers[provider].getState();const phases={idle:'idle',checking:'checking',working:'installing',staged:'installing',committing:'installing','installed-configured':'installed','not-installed':'idle','needs-authorization':'idle',cancelled:'idle',unavailable:'blocked'};return{...raw,phase:raw.status,status:phases[raw.status]||raw.status};}
+  function pluginPurpose(){return pluginInstallationPolicy.allowed?'plugin-installation':'receiver-pairing';}
+  function purposeAllows(grant,purpose){return grant?.permissionPurpose==='plugin-installation'||purpose==='receiver-pairing'&&grant?.permissionPurpose==='receiver-pairing';}
   async function ensurePluginAccess(provider,signal){
-    const check=()=>{if(closed||signal?.aborted)throw failure('CANCELLED');};check();
-    try{const lease=await pluginAccess.acquire(provider);lease.release();check();return{status:'stored'};}catch(e){if(!['DIRECTORY_ACCESS_REQUIRED','ENOENT'].includes(e.code))throw e;}check();
-    // New-purpose consent precedes adoption of an existing technical RW bookmark.
-    try{const lease=await access.acquire(provider);lease.release();check();const grant=await storage.load(provider);check();await pluginStorage.save(provider,grant);if(closed||signal?.aborted){await pluginAccess.revoke(provider);throw failure('CANCELLED');}return{status:'stored'};}catch(e){if(!['DIRECTORY_ACCESS_REQUIRED','ENOENT'].includes(e.code))throw e;}check();
-    const selected=await pluginAccess.authorize(provider);if(closed||signal?.aborted){if(selected.status==='stored')await pluginAccess.revoke(provider);throw failure('CANCELLED');}return selected;
+    const check=()=>{if(closed||signal?.aborted)throw failure('CANCELLED');};check();const purpose=pluginPurpose();
+    const previous=await pluginStorage.load(provider);check();
+    const save=async grant=>{await pluginStorage.save(provider,{...grant,permissionPurpose:purpose});if(closed||signal?.aborted){if(previous)await pluginStorage.save(provider,previous);else await pluginAccess.revoke(provider);throw failure('CANCELLED');}return{status:'stored'};};
+    try{const lease=await pluginAccess.acquire(provider);lease.release();check();if(purposeAllows(previous,purpose))return{status:'stored'};return await save(previous);}catch(e){if(!['DIRECTORY_ACCESS_REQUIRED','ENOENT'].includes(e.code))throw e;}check();
+    // The calling native confirmation approves this exact purpose before reuse.
+    try{const lease=await access.acquire(provider);lease.release();check();const grant=await storage.load(provider);check();return await save(grant);}catch(e){if(!['DIRECTORY_ACCESS_REQUIRED','ENOENT'].includes(e.code))throw e;}check();
+    const selected=await(purpose==='receiver-pairing'?pairingAccess:pluginAccess).authorize(provider);if(closed||signal?.aborted){if(selected.status==='stored'){if(previous)await pluginStorage.save(provider,previous);else await pluginAccess.revoke(provider);}throw failure('CANCELLED');}
+    if(selected.status==='stored')return save(await pluginStorage.load(provider));return selected;
   }
+
   function installProviderPlugin(provider,{approved=false}={}){
     if(!['zcode','workbuddy'].includes(provider))return Promise.reject(failure('INVALID_PROVIDER'));
     if(!approved)return Promise.reject(failure('CONSENT_REQUIRED'));
-    if(!pluginInstallationPolicy.allowed)return Promise.reject(failure('AUTO_INSTALL_STORE_REVIEW_REQUIRED'));
+    if(!pluginInstallationPolicy.allowed&&!pluginInstallationPolicy.pairingAllowed)return Promise.reject(failure('AUTO_INSTALL_STORE_REVIEW_REQUIRED'));
     if(closed)return Promise.reject(failure('CLOSED'));
     if(pluginFlights.has(provider))return pluginFlights.get(provider);
     const abort=new AbortController();pluginAborts.set(provider,abort);
@@ -116,7 +130,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
       if(closed||abort.signal.aborted)throw failure('CANCELLED');
       await(provider==='zcode'?zcodeDesktopIntegration:desktopIntegration).prepare();
       if(closed||abort.signal.aborted)throw failure('CANCELLED');
-      await pluginInstallers[provider].install({approved:true,signal:abort.signal});completed=true;return pluginInstallationState(provider);
+      if(pluginInstallationPolicy.allowed)await pluginInstallers[provider].install({approved:true,signal:abort.signal});else await pluginInstallers[provider].rePair({approved:true,signal:abort.signal});completed=true;return pluginInstallationState(provider);
     }).finally(async()=>{pluginWaitStates.delete(provider);if(reopen&&completed&&!closed&&!abort.signal.aborted){try{await pluginHost.launch(provider);}catch{/* Installed files remain; the original tool can be reopened normally. */}}pluginFlights.delete(provider);pluginAborts.delete(provider);if(!closed)onChange();});pluginFlights.set(provider,flight);return flight;
   }
   async function restorePluginInstallations(){for(const provider of ['zcode','workbuddy']){if(closed)return;const granted=await pluginAccess.getStatus(provider);if(granted.status!=='stored')continue;if(closed)return;const integration=provider==='zcode'?zcodeDesktopIntegration:desktopIntegration;await integration.restore();if(closed)return;await pluginInstallers[provider].inspect();}}
@@ -370,7 +384,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
     runtimeClosing = Promise.all(closing).then(() => undefined);
     return runtimeClosing;
   }
-  return { access, authorize, getState,installProviderPlugin,cancelPluginInstallation,restorePluginInstallations,getPluginInstallationPolicy:()=>({...pluginInstallationPolicy}),async getPluginAuthorizationStatus(provider){if(!['zcode','workbuddy'].includes(provider))throw failure('INVALID_PROVIDER');return{status:(await pluginAccess.getStatus(provider)).status};},prepareChat,prepareWorkbuddyChat,desktopIntegration,zcodeDesktopIntegration,
+  return { access, authorize, getState,installProviderPlugin,cancelPluginInstallation,restorePluginInstallations,getPluginInstallationPolicy:()=>({...pluginInstallationPolicy}),async getPluginAuthorizationStatus(provider){if(!['zcode','workbuddy'].includes(provider))throw failure('INVALID_PROVIDER');const status=(await pluginAccess.getStatus(provider)).status,grant=await pluginStorage.load(provider);return{status:status==='stored'&&purposeAllows(grant,pluginPurpose())?'stored':'needs-authorization'};},prepareChat,prepareWorkbuddyChat,desktopIntegration,zcodeDesktopIntegration,
     async restoreChatPreferences(fallback={}){for(const provider of PROVIDERS){let saved;try{saved=await chatPreferences.load(provider);}catch(_){saved=null;}chatEnabled[provider]=typeof saved?.enabled==='boolean'?saved.enabled:fallback[provider]===true;}return{...chatEnabled};},
     isChatEnabled:provider=>PROVIDERS.has(provider)&&chatEnabled[provider]===true,
     async setChatEnabled(provider,enabled){if(!PROVIDERS.has(provider))throw failure('INVALID_PROVIDER');const old=await chatPreferences.load(provider);await chatPreferences.save(provider,{...(old||{}),enabled:enabled===true});chatEnabled[provider]=enabled===true;onChange();},async disconnectWorkbuddyChat(){externalWorkbuddyService=false;workbuddyEpoch++;workbuddyAuthenticated=false;workbuddyAuthFlight=null;workbuddyLoginPending=false;await workbuddyAuthClient?.close();workbuddyAuthClient=null;await workbuddyCli.disconnect();const handle=managedWorkbuddy;managedWorkbuddy=null;await handle?.stop();},getZcodeAccountSource:()=>chatServices.zcode.service?.accountSource||zcodeAccountSource,

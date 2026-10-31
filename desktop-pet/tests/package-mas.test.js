@@ -164,7 +164,7 @@ test('权限模板仅包含所需主权限，child为sandbox+inherit，没有临
   const permissionRoot = path.join(__dirname, '../packaging/mas');
   const main = plist.parse(fs.readFileSync(path.join(permissionRoot, 'main.entitlements.plist'), 'utf8'));
   const child = plist.parse(fs.readFileSync(path.join(permissionRoot, 'child.entitlements.plist'), 'utf8'));
-  assert.deepEqual(Object.keys(main).sort(), ['com.apple.security.app-sandbox', 'com.apple.security.files.bookmarks.app-scope', 'com.apple.security.files.user-selected.read-write', 'com.apple.security.network.client', 'com.apple.security.network.server', 'com.apple.security.personal-information.location'].sort());
+  assert.deepEqual(Object.keys(main).sort(), ['com.apple.security.app-sandbox', 'com.apple.security.files.bookmarks.app-scope', 'com.apple.security.files.user-selected.read-write', 'com.apple.security.files.user-selected.executable', 'com.apple.security.network.client', 'com.apple.security.network.server', 'com.apple.security.personal-information.location'].sort());
   assert.deepEqual(child, { 'com.apple.security.app-sandbox': true, 'com.apple.security.inherit': true });
   assert.equal(main['com.apple.security.network.server'],true,'required for fixed-loopback bundled service and official login callback; native probe verifies denial without it');
   assert.equal(Object.keys(main).some(key => /temporary|camera|microphone|disable-library-validation/.test(key)), false);

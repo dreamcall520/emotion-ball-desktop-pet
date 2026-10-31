@@ -57,12 +57,13 @@
   }
   function pluginSteps(state,provider){
     const {events,installation,eventVerified,installed}=pluginState(state,provider);
-    if(state.pluginInstallationPolicy?.allowed===false&&!eventVerified)return[{id:'tasks',title:'原工具任务插件',status:'blocked',description:state.pluginInstallationPolicy.message||'自动安装尚未完成商店验证。请使用原工具官方安装入口。'}];
+    if(state.pluginInstallationPolicy?.allowed===false&&state.pluginInstallationPolicy?.pairingAllowed!==true&&!eventVerified)return[{id:'tasks',title:'原工具任务插件',status:'blocked',description:state.pluginInstallationPolicy.message||'自动安装尚未完成商店验证。请使用原工具官方安装入口。'}];
+    const pairingOnly=state.pluginInstallationPolicy?.allowed===false&&state.pluginInstallationPolicy?.pairingAllowed===true;
     const working=['checking','installing'].includes(installation.status);
     const status=working?'working':['blocked','error'].includes(installation.status)?installation.status:eventVerified||installed?'ready':'needs-authorization';
     const supplied=typeof installation.message==='string'?installation.message.slice(0,500):'';
     const description=working?(supplied||(installation.status==='checking'?'正在检查已有插件，不重复安装':'正在安装并启用球球任务插件，请稍候')):['blocked','error'].includes(installation.status)?supplied||'安装尚未完成，已可用聊天保持':eventVerified?'已确认插件安装及事件接入；正常重启无需重复安装':installed?'插件已安装启用，下一次在原工具正常使用时自动确认事件，无需反复安装':working?(installation.status==='checking'?'正在检查已有插件，不重复安装':'正在安装并启用球球任务插件，请稍候'):supplied||'球球将申请对应工具目录的写入许可，仅写入球球插件和必要插件设置；确认后自动安装，无需在原软件找入口';
-    return[{id:'tasks',title:'安装并启用任务插件',status,description,...(status==='ready'?{}:{action:'install-provider-plugin',payload:{provider},actionLabel:working?'正在处理…':installation.status==='installed'&&!events.enabled?'恢复任务同步':'安装并启用'})},
+    return[{id:'tasks',title:pairingOnly?'连接已有任务插件':'安装并启用任务插件',status,description:pairingOnly&&!working&&!eventVerified&&!installed?'仅更新已安装球球插件的本机连接信息，不改插件代码或原工具设置；已有目录授权可复用。':description,...(status==='ready'?{}:{action:'install-provider-plugin',payload:{provider},actionLabel:working?'正在处理…':installation.status==='installed'&&!events.enabled?'恢复任务同步':pairingOnly?'连接已有插件':'安装并启用'})},
       {id:'task-verification',title:'确认原工具事件接入',status:eventVerified?'ready':'unknown',description:eventVerified?'已收到原工具真实事件；当前任务阶段以工具卡的新事件为准':installed?'安装已完成。下一次在原工具正常使用时，球球会自动确认连接；现在无需额外测试或重复安装':'安装完成后，等待原工具正常使用产生事件；不会自动发送模型消息'}];
   }
   function taskPart(state,provider){
