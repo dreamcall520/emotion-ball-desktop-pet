@@ -35,4 +35,16 @@ if (process.isMainFrame && location.protocol === 'file:') {
       return () => listeners.delete(callback);
     }
   });
+  // DOM modal ownership is reported from this shared isolated preload only;
+  // ordinary desktop notes and timer mini/message windows remain companions.
+  let modal = false;
+  const reportModal = () => {
+    const next = Boolean(document.querySelector?.('dialog:modal'));
+    if (next !== modal) { modal = next; ipcRenderer.sendSync('pet:quota-modal', next); }
+  };
+  const modalObserver = new MutationObserver(reportModal);
+  modalObserver.observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['open'] });
+  document.addEventListener('close', reportModal, true);
+  document.addEventListener('cancel', () => queueMicrotask(reportModal), true);
+  reportModal();
 }

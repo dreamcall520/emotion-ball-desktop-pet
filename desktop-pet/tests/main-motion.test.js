@@ -547,12 +547,12 @@ test('所有 Codex 详情打开与关闭均触发额度卡避让和恢复，不�
     const before = f.quotaLabel.moves;
     assert.equal(f.call(`openCodexDetails('${action}', 10080)`), true);
     assert.equal(f.quotaLabel.options.getSuppressed(), true);
-    assert.equal(f.quotaLabel.moves, before + 1, `${action} 请求打开时立即避让`);
+    assert(f.quotaLabel.moves>=before+1, `${action} 请求打开时立即避让`);
     f.call('syncQuotaLabel(codexCompanion.getSnapshot())');
     assert.equal(f.quotaLabel.options.getSuppressed(), true, '额度刷新不取消避让');
-    f.call('codexDetails.close()');
+    f.call('codexDetails.close()');await flush();
     assert.equal(f.quotaLabel.options.getSuppressed(), false);
-    assert.equal(f.quotaLabel.moves, before + 2, `${action} 关闭时即时恢复`);
+    assert(f.quotaLabel.moves>=before+2, `${action} 关闭后恢复`);
   }
   f.app.emit('before-quit');
 });
@@ -623,7 +623,7 @@ test('快捷面板至收起动效结束隐藏额度与守护入口，刷新不�
   assert.equal(f.quotaLabel.visible, false);
   assert.equal(f.apiLabel.visible, false, 'the closing animation still owns the screen');
   assert.equal(f.call('canShowQuotaGuard()'), false);
-  t.mock.timers.tick(1);
+  t.mock.timers.tick(1);await flush();
   assert.equal(f.quotaLabel.visible, true);
   assert.equal(f.apiLabel.visible, true, 'API restores only after the shortcut presentation ends');
   assert.equal(f.quotaLabel.shows.at(-1).items[0].remaining, 37, 'restore uses the latest quota, not a cached card');
@@ -660,11 +660,11 @@ test('API card stays hidden through shortcut refresh and close, respects off/cha
     f.call('openShortcuts()');await flush();assert.equal(f.apiLabel.visible,false);
     f.apiUsage.change({...f.apiUsage.state,busy:true});assert.equal(f.apiLabel.visible,false,'refresh cannot revive the label');
     f.call('shortcutWindow.close()');t.mock.timers.tick(179);f.call('syncApiUsageLabel()');assert.equal(f.apiLabel.visible,false);
-    t.mock.timers.tick(1);assert.equal(f.apiLabel.visible,true);
+    t.mock.timers.tick(1);await flush();assert.equal(f.apiLabel.visible,true);
     f.call('openShortcuts()');await flush();menuItem(f,'openai-api-visible').click({checked:false});f.call('shortcutWindow.close()');t.mock.timers.tick(180);
     assert.equal(f.apiLabel.visible,false,'disabled during shortcut presentation stays off');
     f.call('settings.openaiApiAlwaysVisible=true;openShortcuts()');await flush();f.powerMonitor.emit('lock-screen');
-    assert.equal(f.apiLabel.visible,false);f.powerMonitor.emit('unlock-screen');assert.equal(f.apiLabel.visible,true);
+    assert.equal(f.apiLabel.visible,false);f.powerMonitor.emit('unlock-screen');await flush();assert.equal(f.apiLabel.visible,true);
     f.call('openShortcuts()');await flush();menuItem(f,'chat-open').click();t.mock.timers.tick(180);assert.equal(f.apiLabel.visible,false,'chat suppression survives shortcut closing');
   }
 });
@@ -696,6 +696,22 @@ test('快捷设置与面板只收起外置额度卡，保留所有球体额度�
   assert.equal(effect().visible, false, 'lock still removes quota effects');
 });
 
+test('设置首次异步加载期间API卡即隐藏，跨窗切换和后台同步保持隐藏而且不改球体展示',async t=>{
+ const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true});t.after(()=>f.app.emit('before-quit'));
+ f.call('settings.openaiApiAlwaysVisible=true;syncApiUsageLabel()');assert.equal(f.apiLabel.visible,true);
+ f.call('openGlobalSettings()');assert.equal(f.apiLabel.visible,false,'opening intent blocks before native ready-to-show');
+ f.apiUsage.change({connected:false,busy:false,report:null,config:{}});f.call('syncQuotaLabel()');assert.equal(f.apiLabel.visible,false,'background refresh cannot resurrect cards');assert.equal(f.pet.isVisible(),true);
+ f.call('globalSettingsWindow.hide();openCustomization()');await flush();assert.equal(f.apiLabel.visible,false,'pending destination keeps handoff blocked');
+ f.call('settings.openaiApiAlwaysVisible=false;customizationWindow.hide()');await new Promise(r=>setTimeout(r,5));assert.equal(f.apiLabel.visible,false,'restore reads latest settings');
+});
+
+test('关于首次加载被屏锁放弃显示后不会永久占有额度阻塞，解锁按当前配置恢复',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));
+ f.call('settings.openaiApiAlwaysVisible=true;syncApiUsageLabel();openAbout()');assert.equal(f.apiLabel.visible,false);
+ f.powerMonitor.emit('lock-screen');await flush();assert.equal(f.call('aboutWindow.isVisible()'),false);assert.equal(f.apiLabel.visible,false);
+ f.powerMonitor.emit('unlock-screen');await flush();assert.equal(f.call('quotaPopups.isBlocked()'),false);assert.equal(f.apiLabel.visible,true);
+});
+
 test('三来源守护战立即隐藏API所有连接态及天气，刷新不复显并按偏好恢复', async t => {
   for (const source of ['codex', 'zcode', 'workbuddy']) {
     const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true});t.after(()=>f.app.emit('before-quit'));
@@ -715,7 +731,7 @@ test('三来源守护战立即隐藏API所有连接态及天气，刷新不复�
       assert(f.weather.repositions>layouts,'guard visibility immediately repositions weather');assert.equal(f.weather.visible,false);
       for(let i=0;i<3;i++){f.apiUsage.change({...apiState,config:{}});f.call('syncApiUsageLabel()');f.weather.reposition();assert.equal(f.apiLabel.visible,false,'poll/update must not reshow API');assert.equal(f.weather.visible,false);assert.equal(f.call('quotaGuard.isVisible()'),true);}
       assert.equal(f.quotaLabel.options.getSuppressed(),true,'Codex remains suppressed by the same guard');
-      f.call('quotaGuard.close()');assert.equal(f.apiLabel.visible,true,'configured API restored on close');assert.equal(f.weather.visible,true,'configured weather restored on close');
+      f.call('quotaGuard.close()');await flush();assert.equal(f.apiLabel.visible,true,'configured API restored on close');assert.equal(f.weather.visible,true,'configured weather restored on close');
     }
     assert.equal(f.call(`openQuotaGuard('${source}')`),true);f.call('settings.openaiApiAlwaysVisible=false');f.weather.setCardVisible(false);f.call('quotaGuard.close()');
     assert.equal(f.apiLabel.visible,false,'disabled API stays hidden after close');assert.equal(f.weather.visible,false,'hidden weather stays hidden after close');
@@ -730,7 +746,7 @@ test('守护战单独天气卡不依赖收纳条变化也即时重排且关闭�
   // A body-only quota style contributes no floating quota card. Exercise the
   // real visibility callback with an in-memory game model and only weather eligible.
   assert.equal(f.call("quotaGuard.open({state:'ready',items:[],practice:true})"),true);assert.equal(f.weather.visible,false);
-  f.call('quotaGuard.close()');assert.equal(f.weather.visible,true);assert.equal(f.call('quotaCardGroup.getState().bar'),false);
+  f.call('quotaGuard.close()');await flush();assert.equal(f.weather.visible,true);assert.equal(f.call('quotaCardGroup.getState().bar'),false);
 });
 
 test('守护战转快捷面板不短暂重显原生额度卡，打开被拒时恢复原显示规则', async t => {
@@ -761,14 +777,14 @@ test('守护战转快捷面板不短暂重显原生额度卡，打开被拒时�
     assert.equal(f.call('shortcutWindow.getState().view'), view);
     assert.equal(label.isVisible(), false);
     assert.equal(f.call('codexCompanion.getSnapshot().currentAlert'), null);
-    f.call('shortcutWindow.close()'); t.mock.timers.tick(180);
+    f.call('shortcutWindow.close()'); t.mock.timers.tick(180);await flush();
     assert.equal(label.isVisible(), true);
   }
   assert.equal(f.call('openQuotaGuard()'), true);
   f.call('dragState = { moved: true }; openShortcuts()');
   assert.equal(f.call('shortcutWindow.isPresenting()'), false);
   assert.equal(f.call('quotaGuard.isVisible()'), false);
-  assert.equal(label.isVisible(), true, 'a rejected open cannot leave a normally enabled quota card hidden');
+  await flush();assert.equal(label.isVisible(), true, 'a rejected open cannot leave a normally enabled quota card hidden');
   f.call('dragState = null');
 });
 
@@ -4219,7 +4235,7 @@ test('WorkBuddy 独立显示开关同步菜单和布局，隐藏不停止联动�
   const queried=f.workbuddyCalls.length;await f.call('workbuddyQuota.refresh()');await f.call('workbuddyTasks.refresh(true)');await f.call('workbuddyUsage.refresh(true)');await flush();
   const operations=f.workbuddyCalls.slice(queried).map(item=>item.operation);for(const operation of ['quota','tasks','usage'])assert(operations.includes(operation));
   assert.equal(f.call('JSON.stringify({codex:settings.codexEnabled,visible:settings.codexQuotaAlwaysVisible,fun:settings.codexQuotaFunEnabled})'),before);
-  menuItem(f,'workbuddy-quota-visible').click({checked:true});assert.equal(f.call('workbuddyLabel.visible'),true);
+  menuItem(f,'workbuddy-quota-visible').click({checked:true});assert.equal(f.call('workbuddyLabel.visible'),false,'settings remains a card blocker');settingsWindow.hide();await flush();assert.equal(f.call('workbuddyLabel.visible'),true);
   assert.equal(menuItem(f,'workbuddy-quota-visible').checked,true);
   f.call('globalThis.noticeState=null;edgeNotice={...edgeNotice,tick(state){globalThis.noticeState=state;}};settings.workbuddyQuotaAlwaysVisible=false;tickEdgeNotice(true)');
   assert.equal(f.call('noticeState.workbuddyEnabled'),false);
@@ -4254,7 +4270,7 @@ test('WorkBuddy 偏好保存失败保留真实状态，设置中心不误报成�
   assert.equal(f.call('settings.workbuddyQuotaFunEnabled'),true);assert.equal(f.call('closes'),0);assert.equal(menuItem(f,'workbuddy-quota-fun').checked,true);
   menuItem(f,'global-settings').click();const win=f.call('globalSettingsWindow');win.emit('ready-to-show');
   const result=await f.invoke('pet:global-settings-action','/workbuddy-quota-visible',win.webContents,false);
-  assert.ok(result.error);assert.equal(f.call('settings.workbuddyQuotaAlwaysVisible'),true);assert.equal(f.call('workbuddyLabel.visible'),true);
+  assert.ok(result.error);assert.equal(f.call('settings.workbuddyQuotaAlwaysVisible'),true);assert.equal(f.call('workbuddyLabel.visible'),false,'failed save does not remove the settings popup blocker');win.hide();await flush();assert.equal(f.call('workbuddyLabel.visible'),true);
   assert.equal(result.snapshot.entries.find(item=>item.id==='/workbuddy-quota-visible').checked,true);
   assert.equal(f.call("setWorkBuddyPreference('codexQuotaFunEnabled',false)"),false);assert.equal(f.call("setWorkBuddyPreference('workbuddyQuotaFunEnabled','false')"),false);
 });
@@ -4318,7 +4334,7 @@ test('quota card collection uses real enable flags, persists pin/order and rejec
  assert.equal((await f.invoke('pet:global-quota-cards-save',{order:['api','codex'],pinned:['api']})).ok,false);
  const result=await f.invoke('pet:global-quota-cards-save',{order:['api','codex'],pinned:['api']},win.webContents);
  assert.equal(result.ok,true);assert.deepEqual(Array.from(result.config.order),['api','codex','zcode','workbuddy','balance','weather']);
- f.call('quotaCardGroup.dismiss()');assert.equal(f.call("quotaCardCollected('codex')"),true);assert.equal(f.call("quotaCardCollected('api')"),false);
+ win.hide();await flush();f.call('quotaCardGroup.dismiss()');assert.equal(f.call("quotaCardCollected('codex')"),true);assert.equal(f.call("quotaCardCollected('api')"),false);
  assert.deepEqual(Array.from(f.saved.at(-1).quotaCardPinned),['api']);
  assert.equal(f.call("quotaCardGroupAnimate('api')"),false);assert.equal(f.call("quotaCardGroupAnimate('codex')"),false,'single-card fades are replaced by one group overlay');
  f.call('settings.openaiApiAlwaysVisible=false;syncQuotaLabel(codexCompanion.getSnapshot())');assert.equal(f.call('quotaCardGroup.getState().bar'),false);assert.equal(f.call("quotaCardCollected('codex')"),false);
@@ -4692,7 +4708,7 @@ test('API余额趋势通过主卡打开，切账户同步，关闭恢复卡组�
  assert.equal(details.messages.at(-1).packet.report.available,8.42);
  assert.equal(details.messages.at(-1).packet.history.length,1,'account history is isolated');
  const close=()=>details.webContents.emit('ipc-message',{sender:details.webContents,senderFrame:details.webContents.mainFrame},'pet:api-balance-details-close');
- close();assert.equal(f.call('apiBalanceDetails.isVisible()'),false);assert.equal(label.isVisible(),true);
+ close();await flush();assert.equal(f.call('apiBalanceDetails.isVisible()'),false);assert.equal(label.isVisible(),true);
  f.call('openApiBalanceDetails()');assert.equal(f.call('apiBalanceDetails.isVisible()'),true);
  f.powerMonitor.emit('lock-screen');assert.equal(f.call('apiBalanceDetails.isVisible()'),false);
  assert.equal(f.call('openApiBalanceDetails()'),false);

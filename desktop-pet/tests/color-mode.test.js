@@ -205,11 +205,11 @@ for (const theme of ['blue', 'green', 'purple']) for (const appearance of ['ligh
     let api, mutation, loaded, hasRoot = false, hasStyle = false, disconnected = false;
     ipc.sendSync = channel => { assert.equal(channel, 'pet:initial-color-mode'); return { theme, appearance, mode: 'accessible' }; };
     const document = { get documentElement() { return hasRoot ? root : null; }, getElementById: () => hasStyle ? style : null,
-      addEventListener: (name, callback) => { assert.equal(name, 'DOMContentLoaded'); loaded = callback; } };
+      addEventListener: (name, callback) => { if(name==='DOMContentLoaded')loaded = callback; } };
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../theme-preload.js'), 'utf8'), {
       require: () => ({ ipcRenderer: ipc, contextBridge: { exposeInMainWorld(name, value) { assert.equal(name, 'qiuqiuColorMode'); api = value; } } }),
       process: { isMainFrame: true }, location: { protocol: 'file:' }, document,
-      MutationObserver: class { constructor(callback) { mutation = callback; } observe() {} disconnect() { disconnected = true; } }
+      MutationObserver: class { constructor(callback) { if(!mutation)mutation = callback; } observe() {} disconnect() { disconnected = true; } }
     });
     hasRoot = true; mutation(); assert.equal(root.dataset.uiTheme, theme); assert.equal(root.dataset.appearance, appearance);
     hasStyle = true; mutation(); assert.equal(style.disabled, theme !== 'blue');
@@ -220,3 +220,13 @@ for (const theme of ['blue', 'green', 'purple']) for (const appearance of ['ligh
     assert.equal(root.dataset.uiTheme, 'blue'); assert.equal(style.disabled, false); assert.equal(seen.length, 2);
   });
 }
+
+test('shared preload reports only actual modal changes, keeping nested modal ownership until the last closes',()=>{
+ const ipc=new EventEmitter(),sent=[],observers=[],events={};let modal=false;
+ ipc.sendSync=(channel,value)=>{if(channel==='pet:initial-color-mode')return{theme:'blue',appearance:'light'};sent.push([channel,value]);return true;};
+ const document={documentElement:{dataset:{}},getElementById:()=>null,querySelector:selector=>{assert.equal(selector,'dialog:modal');return modal?{}:null;},addEventListener:(name,callback)=>{events[name]=callback;}};
+ vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../theme-preload.js'),'utf8'),{require:()=>({ipcRenderer:ipc,contextBridge:{exposeInMainWorld(){}}}),process:{isMainFrame:true},location:{protocol:'file:'},document,queueMicrotask:fn=>fn(),MutationObserver:class{constructor(callback){observers.push(callback)}observe(){}disconnect(){}}});
+ assert.deepEqual(sent,[]);modal=true;observers[1]();assert.deepEqual(sent,[['pet:quota-modal',true]]);
+ observers[1]();events.close();assert.equal(sent.length,1,'another modal remains open');modal=false;events.close();assert.deepEqual(sent,[['pet:quota-modal',true],['pet:quota-modal',false]]);
+ events.cancel();assert.equal(sent.length,2,'cancel followed by no actual modal change is not a lease');
+});
