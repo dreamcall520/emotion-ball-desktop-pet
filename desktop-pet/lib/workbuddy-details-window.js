@@ -3,6 +3,7 @@ const { pathToFileURL } = require('node:url');
 const { placeDetails } = require('./codex-details-window');
 const { safeUsageState } = require('./workbuddy-usage');
 const { safeEnterpriseReport } = require('./workbuddy-quota');
+const { safeDeviceTasks, safeWebsiteUsage } = require('./mas-workbuddy-details');
 const { safeWebsiteSummaryReport } = require('./workbuddy-website-summary');
 function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getAppearance = () => 'system', alwaysOnTop = true, onError = () => {}, onVisibilityChange = () => {}, onRefreshTasks = () => {}, onOpenTask = () => {}, onClearTasks = () => {} }) {
   const file = path.join(__dirname, '../workbuddy-details.html'), url = pathToFileURL(file).href;
@@ -11,8 +12,8 @@ function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getApp
   const report = error => { try { onError(error); } catch (_) {} };
   function clean(value) {
     const t = value?.tasks, r = t?.report;
-    const tasks = { busy: t?.busy === true, error: t?.error ? '本机任务记录暂时无法读取，请重试。' : null,
-      report: r?.source === 'local-session-cache' && Array.isArray(r.items) ? {
+    let tasks = { busy: t?.busy === true, error: t?.error ? '本机任务记录暂时无法读取，请重试。' : null,
+      report: r?.source === 'local-session-cache' && r.scope === 'current-account' && Array.isArray(r.items) ? {
         source: r.source, scope: 'current-account', observedAt: Number.isFinite(r.observedAt) ? r.observedAt : null,
         running: null, pendingReview: Number.isSafeInteger(r.pendingReview) && r.pendingReview >= 0 ? r.pendingReview : null,
         total: Number.isSafeInteger(r.total) && r.total >= 0 ? r.total : null, truncated: r.truncated === true,
@@ -20,8 +21,9 @@ function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getApp
           title:typeof i.title==='string'?i.title.slice(0,160):'未命名任务', status:typeof i.status==='string'?i.status.slice(0,40):'unknown',
           unread:i.unread===true, updatedAt:Number.isFinite(i.updatedAt)?i.updatedAt:null,
           transport:['local','remote','cloud'].includes(i.transport)?i.transport:'unknown' })) } : null };
-    const website = value?.report?.scope === 'website-summary';
-    return { action, tasks, usage: safeUsageState(website ? null : value?.usage), report: website ? safeWebsiteSummaryReport(value.report) : value?.report?.scope === 'enterprise' ? safeEnterpriseReport(value.report) : Number.isFinite(value?.report?.total) && value.report.total >= 0 ? { total: value.report.total, updatedAt: Number.isFinite(value.report.updatedAt) ? value.report.updatedAt : null, nextRefreshAt: value.report.nextRefreshAt, basic: value.report.basic, expires: Array.isArray(value.report.expires) ? value.report.expires.map(e => ({ at: e.at, amount: e.amount })) : [] } : null,
+    if (t?.deviceHistory || t?.liveObservations || r?.scope === 'authorized-device-cache') tasks = safeDeviceTasks(t);
+    const website = value?.report?.scope === 'website-summary' || value?.usage?.report?.source === 'website-usage';
+    return { action, tasks, usage: website ? safeWebsiteUsage(value?.usage) : safeUsageState(value?.usage), report: website ? safeWebsiteSummaryReport(value.report) : value?.report?.scope === 'enterprise' ? safeEnterpriseReport(value.report) : Number.isFinite(value?.report?.total) && value.report.total >= 0 ? { total: value.report.total, updatedAt: Number.isFinite(value.report.updatedAt) ? value.report.updatedAt : null, nextRefreshAt: value.report.nextRefreshAt, basic: value.report.basic, expires: Array.isArray(value.report.expires) ? value.report.expires.map(e => ({ at: e.at, amount: e.amount })) : [] } : null,
       history: !website && Array.isArray(value?.history) ? value.history.filter(p => p && Number.isSafeInteger(p.at) && Number.isFinite(p.total) && p.total >= 0).map(p => ({ at: p.at, total: p.total, basic: p.basic, reward: p.reward, purchased: p.purchased, nextRefreshAt: p.nextRefreshAt, expires: Array.isArray(p.expires) ? p.expires.map(e => ({ at: e.at, amount: e.amount })) : undefined })) : [],
       historyError: value?.historyError ? '积分趋势暂时无法保存。' : null,
       stale: value?.stale === true || Boolean(value?.error) };
@@ -50,8 +52,8 @@ function createWorkBuddyDetailsWindow({ BrowserWindow, screen, getAnchor, getApp
     target.webContents.on('ipc-message', (event, channel, value) => {
       if (win !== target || !ready || !visible || event.sender !== target.webContents || event.senderFrame !== target.webContents.mainFrame || event.sender.getURL() !== url) return;
       if (channel === 'pet:workbuddy-details-close') close();
-      if (channel === 'pet:workbuddy-details-open-task' && ['tasks','results'].includes(action) && typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(value)) onOpenTask(value);
-      if (channel === 'pet:workbuddy-details-clear-tasks' && ['tasks','results'].includes(action)) onClearTasks();
+      if (channel === 'pet:workbuddy-details-open-task' && state?.tasks?.report?.scope === 'current-account' && ['tasks','results'].includes(action) && typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(value)) onOpenTask(value);
+      if (channel === 'pet:workbuddy-details-clear-tasks' && state?.tasks?.report?.scope === 'current-account' && ['tasks','results'].includes(action)) onClearTasks();
       if (channel === 'pet:workbuddy-details-refresh-tasks' && ['tasks','results'].includes(action)) onRefreshTasks();
       if (channel === 'pet:workbuddy-details-resize' && Number.isSafeInteger(value) && value >= 120 && value <= 700) { height = value; reposition(); }
     });

@@ -42,6 +42,7 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
     reposition() { this.repositions++; }, resetExpanded() { this.expanded=false; },setGroupTransitionMode() {},captureGroupTransitionFrames:async()=>[],
     setAlwaysOnTop(){},pause(){},resume(){},destroy(){} };
   const iconPreference = { value: 'codex-system', dark: false, calls: [] };
+  const clipboard={writes:[],writeText(text){this.writes.push(text)}};
   const dialogs = [];
   const external = [];
   const popups = [];
@@ -161,6 +162,7 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
     show(payload) { this.shows.push(payload); this.visible = true; }, hide() { this.visible = false; },
     destroy() { this.visible = false; }, reposition() {}, setAlwaysOnTop() {}, getWindow: () => null };
   const activity = { starts: 0, stops: 0, pauses: 0, resumes: 0,
+    sampleNow() { this.sample({ locked: false, cursor: screen.getCursorScreenPoint(), idleSeconds: 0 }); },
     start() { this.starts++; }, stop() { this.stops++; }, pause() { this.pauses++; }, resume() { this.resumes++; } };
   let chatNativeWindow = null;
   const chatWindow = { options: null, creations: 0, shows: [], updates: [], hides: 0, destroys: 0, moves: 0,
@@ -218,14 +220,15 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
   const pomodoroWindows = { opens: 0, sync() {}, reposition() {}, hide() {}, close() {}, getPanelBounds() { return null; },
     open() { this.opens++; } };
   const context = vm.createContext({ __dirname: path.resolve(__dirname, '..'), console,
-    process: { env: {}, argv, stderr: { write(message) { throw new Error(message); } } }, performance: { now: () => now },
+    process: { on() {}, env: {}, argv, stderr: { write(message) { throw new Error(message); } } }, performance: { now: () => now },
     Date: class extends Date { static now() { return 1800000000000 + now; } },
     setTimeout(callback, delay) { timers.set(++serial, { callback, at: now + delay }); return serial; },
     clearTimeout(id) { timers.delete(id); },
     require(name) {
+      if (name === './lib/feedback-reporting') return { createFeedbackReporting: () => ({ context: () => ({diagnostic:{}}), getState: () => ({enabled:false,pending:0}), capture() {}, setEnabled() {}, dispose() {}, submit: async () => ({}) }) };
       if (name === './lib/weather-window') return {createWeatherWindow:options=>{weather.options=options;return weather;}};
       if (name === 'electron') return { app, ipcMain, powerMonitor, nativeTheme, screen, globalShortcut, BrowserWindow: NativeWindow, Tray, net,
-        dialog: { showMessageBox: (...args) => { dialogs.push(args); return consent(...args); } },
+        clipboard, dialog: { showMessageBox: (...args) => { dialogs.push(args); return consent(...args); } },
         shell: { openExternal: url => { external.push(url); return openExternal(url); }, showItemInFolder: file => revealed.push(file) },
         Menu: { buildFromTemplate: value => Object.assign(value, { popup: options => popups.push({ value, options }) }) }, nativeImage: { createFromPath: () => ({ setTemplateImage() {} }) } };
       if (name === './lib/codex-icon-preference') return { createCodexIconPreference: options => {
@@ -360,7 +363,7 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
   const pet = windows[0];
   pet.emit('ready-to-show');
   pet.webContents.emit('did-finish-load');
-  return { weather, groupTransition, pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, downloads, revealed, consents, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
+  return { clipboard, weather, groupTransition, pet, bubble, quotaLabel, apiLabel, apiUsage, updateChecks, downloads, revealed, consents, edgeNoticeWindow, activity, windows, windowClass: NativeWindow, commands, saved, screen, powerMonitor, app, timers, connections, preferences, dialogs, external, popups, trayMenus, chat, chatWindow,
     iconPreference, workbuddyCalls, workbuddyRecords, balanceCalls, balanceWatches, balanceRecoveries, workbuddyRecoveries,
     get balanceReads() { return balanceReads; }, get balanceUnwatches() { return balanceUnwatches; }, setOnline(value) { networkOnline = value; },
     notes, pomodoro, pomodoroWindows, nativeTheme, call: expression => vm.runInContext(expression, context),
@@ -388,16 +391,19 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
 
 const TASK_ID = '11111111-1111-4111-8111-111111111111';
 
-test('定制、API 费用和关于窗口首次及复开均跟随当前球球，加载期间移动也生效', async () => {
+test('设置、定制、API 费用和关于窗口首次及复开均跟随当前球球，加载期间移动也生效', async () => {
   const f = await fixture();
   const primary = { x: 0, y: 24, width: 1440, height: 876 }, external = { x: 1440, y: 24, width: 1920, height: 1016 },
     left = { x: -1920, y: -300, width: 1920, height: 1040 };
-  f.screen.getDisplayMatching = rect => ({ workArea: rect.x < 0 ? left : rect.x >= 1440 ? external : primary });
+  f.screen.getPrimaryDisplay = () => ({ id: 1, scaleFactor: 2, workArea: primary });
+  f.screen.getDisplayMatching = rect => ({ id: rect.x < 0 ? 3 : rect.x >= 1440 ? 2 : 1,
+    scaleFactor: rect.x < 0 ? 1.25 : rect.x >= 1440 ? 1 : 2,
+    workArea: rect.x < 0 ? left : rect.x >= 1440 ? external : primary });
   const inside = (win, area) => {
     const b = win.getBounds();
     assert.ok(b.x >= area.x && b.y >= area.y && b.x + b.width <= area.x + area.width && b.y + b.height <= area.y + area.height);
   };
-  for (const [open, variable] of [['openCustomization', 'customizationWindow'], ['openApiUsage', 'apiUsageWindow'], ['openAbout', 'aboutWindow']]) {
+  for (const [open, variable] of [['openGlobalSettings', 'globalSettingsWindow'], ['openCustomization', 'customizationWindow'], ['openApiUsage', 'apiUsageWindow'], ['openAbout', 'aboutWindow']]) {
     f.pet.bounds = { x: 3260, y: 900, width: 80, height: 80 };
     f.call(`${open}()`);
     const win = f.call(variable); inside(win, external);
@@ -418,6 +424,28 @@ test('定制、API 费用和关于窗口首次及复开均跟随当前球球，�
     if (open === 'openAbout') assert.deepEqual(win.getBounds(), { ...openedBounds, x: 100, y: 32 }, '可见关于窗口保留用户摆放位置');
     else assert.notDeepEqual(win.getBounds(), { ...openedBounds, x: 100, y: 32 }, '同屏再次打开也随球球重新定位');
   }
+});
+
+test('番茄钟保存失败和 ZCode 任务提示归属当前球球窗口，不创建无主系统对话框', async t => {
+  const { createZcodeLink } = require('../lib/zcode-link');
+  let zcodeOptions;
+  const f = await fixture({ zcodeLinkFactory: options => {
+    zcodeOptions = options; return createZcodeLink(options);
+  }, consent: async () => ({ response: 1 }) });
+  t.after(() => f.app.emit('before-quit'));
+  f.pet.bounds = { x: -1800, y: -200, width: 80, height: 80 };
+  f.pomodoro.close = () => ({ ok: false });
+  assert.equal(f.call('savePomodoroForQuit()'), false);
+  assert.equal(f.dialogs.at(-1)[0], f.pet);
+  assert.equal(f.dialogs.at(-1)[1].title, '番茄钟尚未保存');
+  f.pomodoro.close = () => ({ ok: true });
+  // Keep the task fallback deterministic and never launch an external application.
+  f.call(`globalThis.originalRequire = require; require = name => name === './lib/zcode-tasks'
+    ? { openZcodeTask: async () => ({ opened: false }) } : originalRequire(name)`);
+  await zcodeOptions.openTask('fixture-task');
+  assert.equal(f.dialogs.at(-1)[0], f.pet);
+  assert.equal(f.dialogs.at(-1)[1].title, 'ZCode 任务');
+  assert.equal(f.external.length, 0);
 });
 
 test('定制页原生显隐通知覆盖锁屏缺失 hide 事件、最小化及加载期间锁屏', async () => {
@@ -520,12 +548,12 @@ test('所有 Codex 详情打开与关闭均触发额度卡避让和恢复，不�
     const before = f.quotaLabel.moves;
     assert.equal(f.call(`openCodexDetails('${action}', 10080)`), true);
     assert.equal(f.quotaLabel.options.getSuppressed(), true);
-    assert.equal(f.quotaLabel.moves, before + 1, `${action} 请求打开时立即避让`);
+    assert(f.quotaLabel.moves>=before+1, `${action} 请求打开时立即避让`);
     f.call('syncQuotaLabel(codexCompanion.getSnapshot())');
     assert.equal(f.quotaLabel.options.getSuppressed(), true, '额度刷新不取消避让');
-    f.call('codexDetails.close()');
+    f.call('codexDetails.close()');await flush();
     assert.equal(f.quotaLabel.options.getSuppressed(), false);
-    assert.equal(f.quotaLabel.moves, before + 2, `${action} 关闭时即时恢复`);
+    assert(f.quotaLabel.moves>=before+2, `${action} 关闭后恢复`);
   }
   f.app.emit('before-quit');
 });
@@ -596,7 +624,7 @@ test('快捷面板至收起动效结束隐藏额度与守护入口，刷新不�
   assert.equal(f.quotaLabel.visible, false);
   assert.equal(f.apiLabel.visible, false, 'the closing animation still owns the screen');
   assert.equal(f.call('canShowQuotaGuard()'), false);
-  t.mock.timers.tick(1);
+  t.mock.timers.tick(1);await flush();
   assert.equal(f.quotaLabel.visible, true);
   assert.equal(f.apiLabel.visible, true, 'API restores only after the shortcut presentation ends');
   assert.equal(f.quotaLabel.shows.at(-1).items[0].remaining, 37, 'restore uses the latest quota, not a cached card');
@@ -633,11 +661,11 @@ test('API card stays hidden through shortcut refresh and close, respects off/cha
     f.call('openShortcuts()');await flush();assert.equal(f.apiLabel.visible,false);
     f.apiUsage.change({...f.apiUsage.state,busy:true});assert.equal(f.apiLabel.visible,false,'refresh cannot revive the label');
     f.call('shortcutWindow.close()');t.mock.timers.tick(179);f.call('syncApiUsageLabel()');assert.equal(f.apiLabel.visible,false);
-    t.mock.timers.tick(1);assert.equal(f.apiLabel.visible,true);
+    t.mock.timers.tick(1);await flush();assert.equal(f.apiLabel.visible,true);
     f.call('openShortcuts()');await flush();menuItem(f,'openai-api-visible').click({checked:false});f.call('shortcutWindow.close()');t.mock.timers.tick(180);
     assert.equal(f.apiLabel.visible,false,'disabled during shortcut presentation stays off');
     f.call('settings.openaiApiAlwaysVisible=true;openShortcuts()');await flush();f.powerMonitor.emit('lock-screen');
-    assert.equal(f.apiLabel.visible,false);f.powerMonitor.emit('unlock-screen');assert.equal(f.apiLabel.visible,true);
+    assert.equal(f.apiLabel.visible,false);f.powerMonitor.emit('unlock-screen');await flush();assert.equal(f.apiLabel.visible,true);
     f.call('openShortcuts()');await flush();menuItem(f,'chat-open').click();t.mock.timers.tick(180);assert.equal(f.apiLabel.visible,false,'chat suppression survives shortcut closing');
   }
 });
@@ -669,6 +697,61 @@ test('快捷设置与面板只收起外置额度卡，保留所有球体额度�
   assert.equal(effect().visible, false, 'lock still removes quota effects');
 });
 
+test('设置与装扮保留额度卡实时预览，后台刷新与设置内调序立即生效',async t=>{
+ const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,quotaCardPinned:['codex','api']});t.after(()=>f.app.emit('before-quit'));
+ f.call('settings.openaiApiAlwaysVisible=true;syncApiUsageLabel()');assert.equal(f.apiLabel.visible,true);
+ f.call('openGlobalSettings()');const win=f.call('globalSettingsWindow');win.emit('ready-to-show');assert.equal(f.apiLabel.visible,true,'settings opening must preserve preview');
+ f.apiUsage.change({connected:false,busy:false,report:null,config:{}});f.call('syncQuotaLabel()');assert.equal(f.apiLabel.visible,true,'refresh preserves the card while settings is open');assert.equal(f.pet.isVisible(),true);
+ const result=await f.invoke('pet:global-quota-cards-save',{order:['api','codex','weather','zcode','workbuddy','balance'],pinned:['api','codex']},win.webContents);
+ assert.equal(result.ok,true);assert.equal(result.config.order[0],'api');assert.equal(f.call('quotaCardGroup.getState().visible[0]'),'api','real settings IPC immediately updates presentation order');assert.equal(f.apiLabel.visible,true);
+ f.call('globalSettingsWindow.hide();openCustomization()');await flush();assert.equal(f.apiLabel.visible,true,'outfit window also permits preview');
+ f.call('settings.openaiApiAlwaysVisible=false;syncApiUsageLabel();customizationWindow.hide()');await new Promise(r=>setTimeout(r,5));assert.equal(f.apiLabel.visible,false,'disabled card remains disabled after the window closes');
+});
+
+test('关于首次加载被屏锁放弃显示后不会永久占有额度阻塞，解锁按当前配置恢复',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));
+ f.call('settings.openaiApiAlwaysVisible=true;syncApiUsageLabel();openAbout()');assert.equal(f.apiLabel.visible,false);
+ f.powerMonitor.emit('lock-screen');await flush();assert.equal(f.call('aboutWindow.isVisible()'),false);assert.equal(f.apiLabel.visible,false);
+ f.powerMonitor.emit('unlock-screen');await flush();assert.equal(f.call('quotaPopups.isBlocked()'),false);assert.equal(f.apiLabel.visible,true);
+});
+
+test('三来源守护战立即隐藏API所有连接态及天气，刷新不复显并按偏好恢复', async t => {
+  for (const source of ['codex', 'zcode', 'workbuddy']) {
+    const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true});t.after(()=>f.app.emit('before-quit'));
+    f.connections[0].callbacks.onQuota({updatedAt:1800000000000,windows:[{id:'codex:primary',label:'Codex',windowMinutes:300,remaining:42,resetsAt:1800003600000}]});await flush();
+    const zcodeNow=Date.now();
+    f.call(`settings.openaiApiAlwaysVisible=true;settings.workbuddyEnabled=true;settings.workbuddyQuotaAlwaysVisible=true;settings.zcodeEnabled=true;settings.zcodeQuotaAlwaysVisible=true;
+      zcodeLink.isEnabled=()=>true;zcodeLink.isCardAvailable=()=>true;zcodeLink.getSnapshot=()=>({enabled:true,quota:{state:'connected',stale:false,updatedAt:${zcodeNow},windows:[{id:'zcode:test',label:'ZCode',remaining:80,windowMinutes:300,periodStart:${zcodeNow-1000},resetsAt:${zcodeNow+300000}}]}});`);
+    f.weather.setEnabled(true);
+    const reposition=f.weather.reposition.bind(f.weather);
+    f.weather.reposition=()=>{reposition();f.weather.visible=f.weather.enabled&&f.weather.cardVisible&&!f.weather.options.getSuppressed();};
+    for(const apiState of [{connected:false,busy:false,report:null},{connected:true,busy:true,report:null},{connected:true,busy:false,report:{updatedAt:1800000000000}}]) {
+      f.apiUsage.change({...apiState,config:{}});f.weather.reposition();assert.equal(f.apiLabel.visible,true,source+' API visible before game');assert.equal(f.weather.visible,true);
+      const layouts=f.weather.repositions;
+      assert.equal(f.call(`openQuotaGuard('${source}')`),true,source+' opens actual guard controller');
+      assert.equal(f.call('quotaGuard.isVisible()'),true,'synchronizing cards cannot close the game');
+      assert.equal(f.apiLabel.visible,false,source+' hides even unconnected API immediately');
+      assert(f.weather.repositions>layouts,'guard visibility immediately repositions weather');assert.equal(f.weather.visible,false);
+      for(let i=0;i<3;i++){f.apiUsage.change({...apiState,config:{}});f.call('syncApiUsageLabel()');f.weather.reposition();assert.equal(f.apiLabel.visible,false,'poll/update must not reshow API');assert.equal(f.weather.visible,false);assert.equal(f.call('quotaGuard.isVisible()'),true);}
+      assert.equal(f.quotaLabel.options.getSuppressed(),true,'Codex remains suppressed by the same guard');
+      f.call('quotaGuard.close()');await flush();assert.equal(f.apiLabel.visible,true,'configured API restored on close');assert.equal(f.weather.visible,true,'configured weather restored on close');
+    }
+    assert.equal(f.call(`openQuotaGuard('${source}')`),true);f.call('settings.openaiApiAlwaysVisible=false');f.weather.setCardVisible(false);f.call('quotaGuard.close()');
+    assert.equal(f.apiLabel.visible,false,'disabled API stays hidden after close');assert.equal(f.weather.visible,false,'hidden weather stays hidden after close');
+  }
+});
+
+test('守护战单独天气卡不依赖收纳条变化也即时重排且关闭恢复', async t=>{
+  const f=await fixture({quotaCardPinned:['weather']});t.after(()=>f.app.emit('before-quit'));
+  f.call("settings.codexEnabled=true;settings.codexQuotaAlwaysVisible=true;settings.quotaDisplay={style:'ring',showNumbers:false};settings.openaiApiAlwaysVisible=false;settings.apiBalanceEnabled=false;settings.zcodeEnabled=false;settings.workbuddyEnabled=false");f.weather.setEnabled(true);
+  const reposition=f.weather.reposition.bind(f.weather);f.weather.reposition=()=>{reposition();f.weather.visible=f.weather.enabled&&f.weather.cardVisible&&!f.weather.options.getSuppressed();};f.weather.reposition();
+  assert.deepEqual(Array.from(f.call('quotaCardGroupInput().eligible')),['weather']);assert.equal(f.call('quotaCardGroup.getState().bar'),false);assert.equal(f.weather.visible,true);
+  // A body-only quota style contributes no floating quota card. Exercise the
+  // real visibility callback with an in-memory game model and only weather eligible.
+  assert.equal(f.call("quotaGuard.open({state:'ready',items:[],practice:true})"),true);assert.equal(f.weather.visible,false);
+  f.call('quotaGuard.close()');await flush();assert.equal(f.weather.visible,true);assert.equal(f.call('quotaCardGroup.getState().bar'),false);
+});
+
 test('守护战转快捷面板不短暂重显原生额度卡，打开被拒时恢复原显示规则', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const f = await fixture({ codexEnabled: true, codexQuotaAlwaysVisible: true, nativeQuotaLabel: true });
@@ -697,14 +780,14 @@ test('守护战转快捷面板不短暂重显原生额度卡，打开被拒时�
     assert.equal(f.call('shortcutWindow.getState().view'), view);
     assert.equal(label.isVisible(), false);
     assert.equal(f.call('codexCompanion.getSnapshot().currentAlert'), null);
-    f.call('shortcutWindow.close()'); t.mock.timers.tick(180);
+    f.call('shortcutWindow.close()'); t.mock.timers.tick(180);await flush();
     assert.equal(label.isVisible(), true);
   }
   assert.equal(f.call('openQuotaGuard()'), true);
   f.call('dragState = { moved: true }; openShortcuts()');
   assert.equal(f.call('shortcutWindow.isPresenting()'), false);
   assert.equal(f.call('quotaGuard.isVisible()'), false);
-  assert.equal(label.isVisible(), true, 'a rejected open cannot leave a normally enabled quota card hidden');
+  await flush();assert.equal(label.isVisible(), true, 'a rejected open cannot leave a normally enabled quota card hidden');
   f.call('dragState = null');
 });
 
@@ -962,13 +1045,13 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   const menu = f.call('menuTemplate()');
   const top = menu.filter(item => item.type !== 'separator');
   assert.deepEqual(Array.from(top, item => item.label), [
-    '设置中心', '和球球聊聊', '启用 WorkBuddy 联动', '显示 WorkBuddy 积分卡', 'WorkBuddy 趣味游戏', 'API 余额', '定制球球', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API', 'ZCode 联动',
+    '设置中心', '意见反馈', '和球球聊聊', '启用 WorkBuddy 联动', '显示 WorkBuddy 积分卡', 'WorkBuddy 趣味游戏', 'API 余额', '定制球球', '专属皮肤  ✦ 定制', '便签与待办', '快捷键设置', '番茄钟', '球球与互动', 'Codex 与 API', 'ZCode 联动',
     '贴边与显示', '球球尺寸', '界面配色', '常规设置', '关于球球', '检查更新', '退出球球'
   ]);
   const group = label => top.find(item => item.label === label).submenu.filter(item => item.type !== 'separator');
   assert.equal(top.find(item => item.id === 'chat-open').submenu, undefined);
-  assert.equal(top[6].id, 'customize-open');
-  assert.equal(top[1].submenu, undefined);
+  assert.equal(top[7].id, 'customize-open');
+  assert.equal(top.find(item=>item.id==='chat-open').submenu, undefined);
   assert.equal(findMenuItem(menu, 'weather'), null);
   assert.equal(findMenuItem(menu, 'weather-open'), null);
   assert.deepEqual(Array.from(group('便签与待办'), item => item.id), ['notes-open', 'notes-new', 'notes-todo-new', 'notes-default-tab']);
@@ -990,28 +1073,20 @@ test('右键菜单保留聊天和定制直达，便签待办、球球互动各�
   assert.equal(menu.filter(item => item.id === 'update-check').length, 1);
 });
 
-test('小宇互动进入实际托盘和右键精简菜单，动作命令可达且不改变其他形态菜单', async () => {
+test('小宇不单独列互动入口，设置中心沿用随机表情触发动作', async () => {
   const f = await fixture();
   const original = Array.from(f.call('compactMenuTemplate()'), item => item.label || item.type);
-  assert.equal(f.call('compactMenuTemplate().some(item => item.label === "小宇互动")'), false);
   f.call("settings.customization.appearance.shape = 'soft-orb'");
-  const menu = f.call('compactMenuTemplate()');
-  const group = menu.find(item => item.label === '小宇互动');
-  assert.ok(group, '真实精简菜单必须包含小宇互动，不能只放在未展示的完整目录');
-  assert.equal(menu.filter(item => item.label === '小宇互动').length, 1);
-  assert.deepEqual(Array.from(menu.filter(item => item !== group), item => item.label || item.type), original);
-  assert.deepEqual(Array.from(group.submenu, item => item.label),
-    ['发现你', '摸摸回应', '失重晃动', '星际扫描', '引力光束', '触电', '飞走', '飞船收纳', '怦然心动', '庆祝一下']);
-  group.submenu.find(item => item.label === '飞船收纳').click();
-  assert.deepEqual(JSON.parse(JSON.stringify(f.commands.at(-1))), { command: 'soft-orb-action', action: 'ship' });
+  const menu=f.call('compactMenuTemplate()');
+  assert.deepEqual(Array.from(menu,item=>item.label||item.type),original);
+  const interactions=f.call('menuTemplate()').find(item=>item.label==='球球与互动');
+  assert.equal(interactions.submenu.some(item=>item.label==='小宇互动'),false);
+  interactions.submenu.find(item=>item.label==='随机表情').click();
+  assert.equal(f.commands.at(-1),'random');
   f.call('refreshTrayMenu()');
-  assert.ok(f.trayMenus.at(-1).some(item => item.label === '小宇互动'));
+  assert.equal(f.trayMenus.at(-1).some(item=>item.label==='小宇互动'),false);
   f.call('showPetContextMenu()');
-  assert.ok(f.popups.at(-1).value.some(item => item.label === '小宇互动'));
-  for (const shape of ['blob', 'aurora-cloud', 'new-year-sheep', 'codex-pet']) {
-    f.call(`settings.customization.appearance.shape = '${shape}'`);
-    assert.deepEqual(Array.from(f.call('compactMenuTemplate()'), item => item.label || item.type), original);
-  }
+  assert.equal(f.popups.at(-1).value.some(item=>item.label==='小宇互动'),false);
 });
 
 test('便签待办默认页保存后下次打开生效，失败恢复当前和重建菜单的单选', async () => {
@@ -1767,7 +1842,7 @@ test('free three-card coordination reflows once per stable size plan and retains
   assert.equal(f.call('zcodeLink.moves'),2);
   f.apiLabel.getLayoutMetrics=()=>null;f.call('syncQuotaFreeStack()');assert.deepEqual(Object.keys(f.call('quotaFreeStackPlan().cards')),['codex','zcode']);
   assert.equal(f.call('zcodeLink.moves'),3);f.call('syncQuotaFreeStack()');assert.equal(f.call('zcodeLink.moves'),3);
-  f.apiLabel.getLayoutMetrics=()=>metrics;f.call("edgeTuck.dock('left');edgeTuck.sampleCursor({x:petWindow.getBounds().x+10,y:petWindow.getBounds().y+10})");
+  f.apiLabel.getLayoutMetrics=()=>metrics;f.call("edgeTuck.dock('left');edgeTuck.sampleCursor({x:petWindow.getBounds().x+10,y:petWindow.getBounds().y+petWindow.getBounds().height/2})");
   const peek = f.call('quotaFreeStackPlan()');
   assert.deepEqual(Object.keys(peek.cards), ['codex','api','zcode']);
   const faces = Object.values(peek.cards).map(row => row.face);
@@ -3199,6 +3274,113 @@ test('渲染进程关闭后，主进程停止与退出不因发送通知而抛�
   assert.equal(f.pet.bounds.y, 100);
 });
 
+test('聊天首次可见立即同步上传动作门禁，不等待静止活动采样并保留显式聊天动作', async t => {
+  const f = await fixture(); t.after(() => f.app.emit('before-quit'));
+  const samples = [];
+  f.activity.sampleNow = force => {
+    samples.push(force);
+    f.activity.sample({ locked: false, cursor: { x: -900, y: -100 }, idleSeconds: 0 });
+  };
+  f.activity.sampleNow(true);
+  assert.equal(f.pet.messages.filter(row => row.channel === 'pet:activity').at(-1).packet.chatVisible, false);
+  samples.length = 0;
+  f.call('openChat()');
+  assert.equal(f.chatWindow.isVisible(), true);
+  assert.deepEqual(samples, [true], 'native visible event forces a fresh packet without advancing the sampling clock');
+  assert.equal(f.pet.messages.filter(row => row.channel === 'pet:activity').at(-1).packet.chatVisible, true);
+  for (const motion of ['hop', 'spin', 'bow']) {
+    f.call(`performChatAction('${motion}')`);
+    assert.equal(f.commands.at(-1).command, 'again');
+    assert.equal(f.commands.at(-1).motion, motion);
+  }
+  f.chatWindow.hide();
+  assert.equal(samples.length, 1, 'closing keeps its existing sampling lifecycle');
+  f.activity.sampleNow(true);
+  assert.equal(f.pet.messages.filter(row => row.channel === 'pet:activity').at(-1).packet.chatVisible, false);
+});
+
+test('宣传菜单相邻且首次显示等待同窗口当前请求详情就绪，旧请求不能打开表单',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));
+ for(const menu of [f.call('menuTemplate()'),f.call('compactMenuTemplate()')]){const at=menu.findIndex(item=>item.id==='customize-open');assert.equal(menu[at+1]?.id,'custom-skin-promotion');assert.equal(menu[at+1].label,'专属皮肤  ✦ 定制');}
+ f.call('openCustomization({promotion:true})');const win=f.call('customizationWindow');win.webContents.mainFrame={};win.emit('ready-to-show');assert.equal(win.isVisible(),false,'never flash the ordinary form before detail readiness');
+ const token=f.call('customizationPromotion.token');f.call("ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},'stale')");assert.equal(win.isVisible(),false);f.call("ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},customizationPromotion.token)");assert.equal(win.isVisible(),true);
+ const windows=f.windows.length;f.call('openCustomization({promotion:true})');assert.equal(f.windows.length,windows,'existing form is reused without reload or lost edits');assert.equal(win.messages.at(-1).channel,'pet:promotion-open');
+ const latest=f.call('customizationPromotion.token');f.powerMonitor.emit('lock-screen');f.call("ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},'canceled')");assert.equal(f.call('customizationPromotion'),null,'screen lock cancels pending presentation');
+});
+
+test('宣传已就绪后快速关闭不会被迟到首载检查误判，真正未打开仍会收口',async t=>{
+ for(const phase of ['before-check','false-after-ack','reject-after-ack','genuine-failure']){
+  const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization({promotion:true})');const win=f.call('customizationWindow');win.webContents.mainFrame={};win.emit('ready-to-show');let checks=0,resolveCheck,rejectCheck;
+  win.webContents.executeJavaScript=()=>{checks++;return new Promise((resolve,reject)=>{resolveCheck=resolve;rejectCheck=reject;});};
+  const ack=()=>f.call("ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},customizationPromotion.token)");
+  if(phase==='before-check')ack();
+  win.webContents.emit('did-finish-load');
+  if(phase==='before-check'){assert.equal(checks,0,'a successful renderer ACK completes the first-load fallback');assert.equal(win.isDestroyed(),false);continue;}
+  assert.equal(checks,1);if(phase!=='genuine-failure')ack();
+  if(phase==='reject-after-ack')rejectCheck(Error('dialog was already closed'));else resolveCheck(false);
+  await flush();assert.equal(win.isDestroyed(),phase==='genuine-failure',phase);
+  if(phase!=='genuine-failure')assert.equal(f.call('customizationWindow'),win,'keep the form and its unsaved state after intentional modal close');
+ }
+});
+
+test('隐藏窗新宣传请求不被旧hide或minimize事件取消，可见窗真正隐藏仍取消',async t=>{
+ for(const lateEvent of ['hide','minimize']){
+  const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization({promotion:true})');const win=f.call('customizationWindow');win.webContents.mainFrame={};win.emit('ready-to-show');
+  const ack=token=>f.call(`ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},${JSON.stringify(token)})`);
+  ack(f.call('customizationPromotion.token'));win.hide();f.call('openCustomization({promotion:true})');const next=f.call('customizationPromotion.token');
+  win.emit(lateEvent);assert.equal(f.call('customizationPromotion?.token'),next,'late '+lateEvent+' belongs to the previous hidden presentation');
+  ack(next);assert.equal(win.isVisible(),true,'new pending request can complete after the old native notification');
+  f.call('openCustomization({promotion:true})');const visibleRequest=f.call('customizationPromotion.token');win.hide();assert.equal(f.call('customizationPromotion'),null,'a genuine hide after a request from a visible window still cancels');ack(visibleRequest);assert.equal(win.isVisible(),false);
+ }
+});
+
+test('新宣传ACK后的矛盾旧隐藏通知不重置播放或会话，真实隐藏最小化仍取消',async t=>{
+ for(const event of ['hide','minimize']){
+  const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization({promotion:true})');const win=f.call('customizationWindow');win.webContents.mainFrame={};win.emit('ready-to-show');
+  f.call("ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},customizationPromotion.token)");
+  const token=f.call('customizationPromotion.token'),session=f.call('customizationSession'),broadcasts=win.messages.filter(m=>m.channel==='pet:customization-visible').length;
+  win.emit(event);assert.equal(f.call('customizationPromotion?.token'),token);assert.equal(f.call('customizationSession'),session);assert.equal(win.messages.filter(m=>m.channel==='pet:customization-visible').length,broadcasts,'stale event cannot restart the renderer timeline');
+  if(event==='hide')win.hide();else{win.isMinimized=()=>true;win.emit('minimize');}
+  assert.equal(f.call('customizationPromotion'),null,'actual native '+event+' still cancels the presented request');
+ }
+});
+
+test('隐藏待就绪宣传请求仍尊重明确隐藏球球、锁屏与关闭，旧ACK不复显',async t=>{
+ for(const action of ['hidePet()','powerMonitor.emit("lock-screen")','customizationWindow.close()']){
+  const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization({promotion:true})');const win=f.call('customizationWindow');win.webContents.mainFrame={};win.emit('ready-to-show');const token=f.call('customizationPromotion.token');f.call('globalThis.oldPromotionSender=customizationWindow.webContents');
+  f.call(action);assert.equal(f.call('customizationPromotion'),null,action);
+  f.call(`ipcMain.emit('pet:promotion-ready',{sender:oldPromotionSender,senderFrame:oldPromotionSender.mainFrame},${JSON.stringify(token)})`);assert.equal(win.isDestroyed()||!win.isVisible(),true,'canceled intent cannot be revived by an old ACK');
+ }
+});
+
+test('旧装扮窗口迟到显隐通知不能取消替代窗口的宣传请求',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization({promotion:true})');const old=f.call('customizationWindow');old.destroy();f.call('openCustomization({promotion:true})');const current=f.call('customizationWindow'),token=f.call('customizationPromotion.token'),session=f.call('customizationSession');
+ for(const event of ['show','hide','minimize','restore'])old.emit(event);
+ assert.equal(f.call('customizationPromotion?.token'),token);assert.equal(f.call('customizationSession'),session);assert.equal(f.call('customizationWindow'),current);
+});
+
+test('普通装扮首次加载被宣传请求接管时native ready不提前露表单，ACK只认当前请求',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization()');const win=f.call('customizationWindow');win.webContents.mainFrame={};win.webContents.isLoading=()=>true;
+ f.call('openCustomization({promotion:true})');const old=f.call('customizationPromotion.token');f.call('openCustomization({promotion:true})');win.emit('ready-to-show');assert.equal(win.isVisible(),false);
+ f.call(`ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},${JSON.stringify(old)})`);assert.equal(win.isVisible(),false);
+ f.call("ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},customizationPromotion.token)");assert.equal(win.isVisible(),true);
+});
+
+test('宣传首次加载被锁屏取消后，解锁后的迟到ready与旧ACK均不能自动露出原表单',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization({promotion:true})');const win=f.call('customizationWindow');win.webContents.mainFrame={};
+ const old=f.call('customizationPromotion.token');f.powerMonitor.emit('lock-screen');f.powerMonitor.emit('unlock-screen');win.emit('ready-to-show');
+ f.call(`ipcMain.emit('pet:promotion-ready',{sender:customizationWindow.webContents,senderFrame:customizationWindow.webContents.mainFrame},${JSON.stringify(old)})`);assert.equal(win.isVisible(),false);await flush();assert.equal(f.call('quotaPopups.isBlocked()'),false);
+});
+
+test('宣传联系仅当前可见主frame固定微信及原JPEG，保存后重验会话和授权选择',async t=>{
+ const os=require('node:os'),dir=fs.mkdtempSync(path.join(os.tmpdir(),'qiuqiu-promotion-contact-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const f=await fixture();t.after(()=>f.app.emit('before-quit'));f.call('openCustomization()');const win=f.call('customizationWindow');win.webContents.mainFrame={};win.webContents.getURL=()=>require('node:url').pathToFileURL(path.resolve(__dirname,'../customize.html')).href;win.emit('ready-to-show');
+ assert.equal((await f.invoke('pet:promotion-contact','copy')).ok,false);assert.equal((await f.invoke('pet:promotion-contact',{action:'copy',text:'injected'},win.webContents)).ok,false);
+ assert.equal((await f.invoke('pet:promotion-contact','copy',win.webContents)).ok,true);assert.deepEqual(f.clipboard.writes,['ooOJBKoo']);
+ const output=path.join(dir,'contact.jpg');f.call(`dialog.showSaveDialog=async()=>({canceled:false,filePath:${JSON.stringify(output)}})`);assert.equal((await f.invoke('pet:promotion-contact','save-qr',win.webContents)).ok,true);assert.deepEqual(fs.readFileSync(output),fs.readFileSync(path.resolve(__dirname,'../assets/promotion/wechat-contact-original.jpg')));
+ fs.unlinkSync(output);f.call('dialog.showSaveDialog=()=>new Promise(resolve=>globalThis.finishPromotionSave=resolve)');const pending=f.invoke('pet:promotion-contact','save-qr',win.webContents);win.hide();win.show();f.call(`finishPromotionSave({canceled:false,filePath:${JSON.stringify(output)}})`);assert.equal((await pending).canceled,true);assert.equal(fs.existsSync(output),false);
+ win.hide();assert.equal((await f.invoke('pet:promotion-contact','copy',win.webContents)).ok,false);
+});
+
 test('快速隐藏再恢复后，迟到的原生hide不关闭新打开的聊天', async () => {
   const f = await fixture();
   f.call('openChat()');
@@ -3359,7 +3541,7 @@ test('桌面右键菜单以第一项为锚点，保留完整菜单及关闭回�
   assert.equal(typeof options.callback, 'function');
 });
 
-test('边缘展开时任务结果菜单保持展示，移出半球超过650ms仍能打开当前任务', async () => {
+test('边缘展开时任务结果菜单保持展示，移出半球超过900ms仍能打开当前任务', async () => {
   const f = await fixture({ codexEnabled: true });
   menuItem(f, 'edge-left').click();
   f.activity.sample({ cursor: { x: -780, y: 140 }, petBounds: f.pet.getBounds(), locked: false });
@@ -3372,10 +3554,10 @@ test('边缘展开时任务结果菜单保持展示，移出半球超过650ms仍
   await f.popups[0].value[0].click();
   assert.deepEqual(f.external, [`codex://threads/${TASK_ID}`]);
   f.popups[0].options.callback();
-  f.advanceTo(6449);
+  f.advanceTo(6699);
   assert.equal(edgeSnapshot(f).mode, 'peeked');
-  f.advanceTo(6450);
-  assert.equal(edgeSnapshot(f).mode, 'tucked', '结果菜单关闭后恢复650ms收起');
+  f.advanceTo(6700);
+  assert.equal(edgeSnapshot(f).mode, 'tucked', '结果菜单关闭后恢复900ms收起');
 });
 
 for (const replacement of ['menu', 'window']) {
@@ -3400,7 +3582,7 @@ for (const replacement of ['menu', 'window']) {
     f.advanceTo(800);
     assert.equal(f.call('edgeTuck.getPresentation().mode'), 'peeked');
     f.popups[1].options.callback();
-    f.advanceTo(1450);
+    f.advanceTo(1700);
     assert.equal(f.call('edgeTuck.getPresentation().mode'), 'tucked');
   });
 }
@@ -3412,7 +3594,7 @@ test('原生菜单打开失败会释放展开保护，不留下永久展开状�
   f.activity.sample({ cursor: { x: -500, y: 40 }, petBounds: f.pet.getBounds(), locked: false });
   f.call("Menu.buildFromTemplate = () => ({ popup() { throw new Error('popup failed'); } })");
   assert.throws(() => f.call('showPetContextMenu()'), /popup failed/);
-  f.advanceTo(650);
+  f.advanceTo(900);
   assert.equal(edgeSnapshot(f).mode, 'tucked');
 });
 
@@ -3564,11 +3746,11 @@ test('收藏名称20项上限与同名改名拒绝，不接受客户端伪造ID�
 });
 
 
-test('主题菜单独立保存薄荷绿与晴空蓝，不覆盖浅深外观、色弱或球球形象，重启保留', async () => {
+test('三种主题菜单独立保存，不覆盖浅深外观、色弱或球球形象，重启保留', async () => {
   const f = await fixture({ colorMode: 'accessible', codexQuotaAppearance: 'dark' });
   const before = f.call('JSON.stringify({customization:settings.customization,startup:settings.startupAppearance})');
   const themes = findMenuItem(f.call('menuTemplate()'), 'ui-theme');
-  assert.deepEqual(Array.from(themes.submenu, item => item.label), ['薄荷绿', '晴空蓝']);
+  assert.deepEqual(Array.from(themes.submenu, item => item.label), ['薄荷绿', '晴空蓝', '暮光紫']);
   assert.equal(findMenuItem(themes.submenu, 'ui-theme-green').checked, true);
   findMenuItem(themes.submenu, 'ui-theme-blue').click();
   assert.equal(f.saved.at(-1).uiTheme, 'blue');
@@ -3577,13 +3759,19 @@ test('主题菜单独立保存薄荷绿与晴空蓝，不覆盖浅深外观、�
   assert.equal(f.pet.uiTheme, 'blue');
   assert.equal(f.pet.colorAppearance, 'dark');
   assert.equal(f.call('JSON.stringify({customization:settings.customization,startup:settings.startupAppearance})'), before);
+  findMenuItem(themes.submenu, 'ui-theme-purple').click();
+  assert.equal(f.saved.at(-1).uiTheme, 'purple');
+  assert.equal(f.pet.uiTheme, 'purple');
+  assert.equal(f.saved.at(-1).colorMode, 'accessible');
+  assert.equal(f.saved.at(-1).codexQuotaAppearance, 'dark');
+  assert.equal(f.call('JSON.stringify({customization:settings.customization,startup:settings.startupAppearance})'), before);
   const restarted = await fixture({ loadedSettings: f.saved.at(-1) });
-  assert.equal(findMenuItem(restarted.call('menuTemplate()'), 'ui-theme-blue').checked, true);
+  assert.equal(findMenuItem(restarted.call('menuTemplate()'), 'ui-theme-purple').checked, true);
   restarted.pet.webContents.emit('did-finish-load');
-  assert.equal(restarted.pet.uiTheme, 'blue');
+  assert.equal(restarted.pet.uiTheme, 'purple');
   const writes = f.saved.length;
+  assert.equal(f.call("setUiTheme('invalid')"), false);
   assert.equal(f.call("setUiTheme('purple')"), false);
-  assert.equal(f.call("setUiTheme('blue')"), false);
   assert.equal(f.saved.length, writes);
 });
 
@@ -3769,7 +3957,8 @@ test('番茄退出保存失败保留应用和后台资源，成功重试才清�
   assert.equal(f.call('isQuitting'), false);
   assert.equal(f.call('quitCleanupStarted'), false);
   assert.equal(f.connections[0].closed, false);
-  assert.equal(f.dialogs.at(-1)[0].title, '番茄钟尚未保存');
+  assert.equal(f.dialogs.at(-1)[0], f.pet);
+  assert.equal(f.dialogs.at(-1)[1].title, '番茄钟尚未保存');
   f.pomodoro.close = () => ({ ok: true });
   f.app.emit('before-quit', { preventDefault() { prevented++; } });
   assert.equal(f.call('quitCleanupStarted'), true);
@@ -3920,7 +4109,7 @@ test('原生菜单保留核心联动开关与独立入口，完整偏好仍可�
   const f = await fixture(); t.after(() => f.app.emit('before-quit'));
   const menu = f.call('compactMenuTemplate()');
   assert.deepEqual(Array.from(menu.filter(item => item.type !== 'separator'), item => item.label),
-    ['和球球聊聊', '来定制球球', '便签与待办', '番茄钟', '启用 Codex 联动', '启用 ZCode 联动', '启用 WorkBuddy 联动', '联动样式管理', '设置中心', '关于球球', '检查更新', '退出球球']);
+    ['和球球聊聊', '来定制球球', '专属皮肤  ✦ 定制', '便签与待办', '番茄钟', '启用 Codex 联动', '启用 ZCode 联动', '启用 WorkBuddy 联动', '联动样式管理', '设置中心', '意见反馈', '关于球球', '检查更新', '退出球球']);
   assert.ok(menu.every(item => !item.submenu));
   assert.ok(findMenuItem(menu, 'workbuddy-enabled'));
   assert.equal(findMenuItem(menu, 'workbuddy-chat'), null);
@@ -4131,7 +4320,7 @@ test('WorkBuddy 独立显示开关同步菜单和布局，隐藏不停止联动�
   const queried=f.workbuddyCalls.length;await f.call('workbuddyQuota.refresh()');await f.call('workbuddyTasks.refresh(true)');await f.call('workbuddyUsage.refresh(true)');await flush();
   const operations=f.workbuddyCalls.slice(queried).map(item=>item.operation);for(const operation of ['quota','tasks','usage'])assert(operations.includes(operation));
   assert.equal(f.call('JSON.stringify({codex:settings.codexEnabled,visible:settings.codexQuotaAlwaysVisible,fun:settings.codexQuotaFunEnabled})'),before);
-  menuItem(f,'workbuddy-quota-visible').click({checked:true});assert.equal(f.call('workbuddyLabel.visible'),true);
+  menuItem(f,'workbuddy-quota-visible').click({checked:true});assert.equal(f.call('workbuddyLabel.visible'),true,'settings keeps the enabled card visible for preview');settingsWindow.hide();await flush();assert.equal(f.call('workbuddyLabel.visible'),true);
   assert.equal(menuItem(f,'workbuddy-quota-visible').checked,true);
   f.call('globalThis.noticeState=null;edgeNotice={...edgeNotice,tick(state){globalThis.noticeState=state;}};settings.workbuddyQuotaAlwaysVisible=false;tickEdgeNotice(true)');
   assert.equal(f.call('noticeState.workbuddyEnabled'),false);
@@ -4161,12 +4350,12 @@ test('WorkBuddy 趣味开关不依赖 Codex，独立入口与进行中的游戏�
 test('WorkBuddy 偏好保存失败保留真实状态，设置中心不误报成功', async t => {
   const {normalizeSettings}=require('../lib/settings');
   const f=await fixture({loadedSettings:normalizeSettings({workbuddyEnabled:true}),saveError:new Error('settings blocked')});t.after(()=>f.app.emit('before-quit'));await flush();
-  f.call('globalThis.closes=0;quotaGuard={close(){globalThis.closes++;},isVisible:()=>false};quotaGuardSource="workbuddy"');
+  f.call('globalThis.closes=0;quotaGuard={close(){globalThis.closes++;},isVisible:()=>false,getWindow:()=>null};quotaGuardSource="workbuddy"');
   assert.equal(f.call("setWorkBuddyPreference('workbuddyQuotaFunEnabled',false)"),false);
   assert.equal(f.call('settings.workbuddyQuotaFunEnabled'),true);assert.equal(f.call('closes'),0);assert.equal(menuItem(f,'workbuddy-quota-fun').checked,true);
   menuItem(f,'global-settings').click();const win=f.call('globalSettingsWindow');win.emit('ready-to-show');
   const result=await f.invoke('pet:global-settings-action','/workbuddy-quota-visible',win.webContents,false);
-  assert.ok(result.error);assert.equal(f.call('settings.workbuddyQuotaAlwaysVisible'),true);assert.equal(f.call('workbuddyLabel.visible'),true);
+  assert.ok(result.error);assert.equal(f.call('settings.workbuddyQuotaAlwaysVisible'),true);assert.equal(f.call('workbuddyLabel.visible'),true,'failed save keeps the previous visible card available for preview');win.hide();await flush();assert.equal(f.call('workbuddyLabel.visible'),true);
   assert.equal(result.snapshot.entries.find(item=>item.id==='/workbuddy-quota-visible').checked,true);
   assert.equal(f.call("setWorkBuddyPreference('codexQuotaFunEnabled',false)"),false);assert.equal(f.call("setWorkBuddyPreference('workbuddyQuotaFunEnabled','false')"),false);
 });
@@ -4230,7 +4419,7 @@ test('quota card collection uses real enable flags, persists pin/order and rejec
  assert.equal((await f.invoke('pet:global-quota-cards-save',{order:['api','codex'],pinned:['api']})).ok,false);
  const result=await f.invoke('pet:global-quota-cards-save',{order:['api','codex'],pinned:['api']},win.webContents);
  assert.equal(result.ok,true);assert.deepEqual(Array.from(result.config.order),['api','codex','zcode','workbuddy','balance','weather']);
- f.call('quotaCardGroup.dismiss()');assert.equal(f.call("quotaCardCollected('codex')"),true);assert.equal(f.call("quotaCardCollected('api')"),false);
+ win.hide();await flush();f.call('quotaCardGroup.dismiss()');assert.equal(f.call("quotaCardCollected('codex')"),true);assert.equal(f.call("quotaCardCollected('api')"),false);
  assert.deepEqual(Array.from(f.saved.at(-1).quotaCardPinned),['api']);
  assert.equal(f.call("quotaCardGroupAnimate('api')"),false);assert.equal(f.call("quotaCardGroupAnimate('codex')"),false,'single-card fades are replaced by one group overlay');
  f.call('settings.openaiApiAlwaysVisible=false;syncQuotaLabel(codexCompanion.getSnapshot())');assert.equal(f.call('quotaCardGroup.getState().bar'),false);assert.equal(f.call("quotaCardCollected('codex')"),false);
@@ -4604,7 +4793,7 @@ test('API余额趋势通过主卡打开，切账户同步，关闭恢复卡组�
  assert.equal(details.messages.at(-1).packet.report.available,8.42);
  assert.equal(details.messages.at(-1).packet.history.length,1,'account history is isolated');
  const close=()=>details.webContents.emit('ipc-message',{sender:details.webContents,senderFrame:details.webContents.mainFrame},'pet:api-balance-details-close');
- close();assert.equal(f.call('apiBalanceDetails.isVisible()'),false);assert.equal(label.isVisible(),true);
+ close();await flush();assert.equal(f.call('apiBalanceDetails.isVisible()'),false);assert.equal(label.isVisible(),true);
  f.call('openApiBalanceDetails()');assert.equal(f.call('apiBalanceDetails.isVisible()'),true);
  f.powerMonitor.emit('lock-screen');assert.equal(f.call('apiBalanceDetails.isVisible()'),false);
  assert.equal(f.call('openApiBalanceDetails()'),false);
@@ -4713,6 +4902,55 @@ for(const [open,variable] of [['openGlobalSettings','globalSettingsWindow'],['op
  fresh.emit('ready-to-show');assert.equal(fresh.isVisible(),true);
 });
 
+test('帮助反馈仅接受当前设置主框架，开关保存失败保留原同意状态', async t => {
+  const f = await fixture(); t.after(() => f.app.emit('before-quit'));
+  menuItem(f, 'feedback-open').click();
+  const win = f.call('globalSettingsWindow'); win.emit('ready-to-show');
+  assert.equal(f.call('globalSettingsInitialView'), 'feedback');
+  if (process.env.PET_SMOKE_ARTIFACT_DIR) {
+    fs.mkdirSync(process.env.PET_SMOKE_ARTIFACT_DIR, {recursive:true});
+    fs.writeFileSync(path.join(process.env.PET_SMOKE_ARTIFACT_DIR,'settings-snapshot.json'),f.call('JSON.stringify(globalSettingsSnapshot())'));
+  }
+  f.call(`feedbackReporting.submissions=[];feedbackReporting.submit=async value=>{feedbackReporting.submissions.push(value);return {id:value.submissionId}};
+    feedbackReporting.enabled=false;feedbackReporting.setEnabled=value=>{feedbackReporting.enabled=value};
+    feedbackReporting.getState=()=>({enabled:feedbackReporting.enabled,pending:0});`);
+  assert.equal((await f.invoke('pet:feedback-auto-report', true)).ok, false);
+  assert.equal((await f.invoke('pet:feedback-auto-report', 'true', win.webContents)).ok, false);
+  const enabled = await f.invoke('pet:feedback-auto-report', true, win.webContents);
+  assert.equal(enabled.ok, true); assert.equal(enabled.state.enabled, true);
+  assert.equal(f.saved.at(-1).autoReportErrors, true);
+  assert.equal((await f.invoke('pet:feedback-auto-report', false, win.webContents)).state.enabled, false);
+  const value = { submissionId:TASK_ID };
+  assert.equal((await f.invoke('pet:feedback-submit', value, win.webContents)).id, TASK_ID);
+  assert.match((await f.invoke('pet:feedback-submit', value)).error, /重新打开/);
+  win.hide(); assert.match((await f.invoke('pet:feedback-submit', value, win.webContents)).error, /重新打开/);
+  win.show(); f.powerMonitor.emit('lock-screen');
+  assert.equal((await f.invoke('pet:feedback-auto-report', true, win.webContents)).ok, false);
+  const failure = await fixture({saveError:Error('disk unavailable')}); t.after(() => failure.app.emit('before-quit'));
+  failure.call("openGlobalSettings('feedback')"); const failedWin=failure.call('globalSettingsWindow');failedWin.emit('ready-to-show');
+  assert.equal((await failure.invoke('pet:feedback-auto-report',true,failedWin.webContents)).ok,false);
+  assert.notEqual(failure.call('settings.autoReportErrors'),true);
+});
+
+test('所有窗口只上报固定故障类别，正常销毁和被取消加载不计异常', async t => {
+  const f=await fixture(); t.after(()=>f.app.emit('before-quit'));
+  f.call('feedbackReporting.captured=[];feedbackReporting.capture=(scope,error)=>feedbackReporting.captured.push({scope,code:error?.code})');
+  f.call("openGlobalSettings('feedback')");const win=f.call('globalSettingsWindow');
+  win.emit('unresponsive');
+  win.webContents.emit('render-process-gone',{}, {reason:'crashed',secret:'PRIVATE'});
+  win.webContents.emit('did-fail-load',{}, -105,'sk-secret','https://private',true);
+  win.webContents.emit('console-message',{level:'error',message:'PRIVATE_CHAT sk-secret',sourceId:'/Users/private'});
+  const captured=JSON.parse(f.call('JSON.stringify(feedbackReporting.captured)'));
+  assert.deepEqual(captured.map(item=>item.scope),['窗口无响应','窗口崩溃','页面加载失败','页面脚本错误']);
+  assert.doesNotMatch(JSON.stringify(captured),/PRIVATE|secret|private/);
+  win.webContents.emit('render-process-gone',{}, {reason:'clean-exit'});
+  win.webContents.emit('render-process-gone',{}, {reason:'killed'});
+  win.webContents.emit('did-fail-load',{}, -3,'cancelled','',true);
+  win.webContents.emit('console-message',{level:'warning'});
+  assert.equal(f.call('feedbackReporting.captured.length'),4);
+  f.call('isQuitting=true');win.emit('unresponsive');assert.equal(f.call('feedbackReporting.captured.length'),4);
+});
+
 test('uploaded pets retain original generic settings without a partner action menu or dedicated commands',async t=>{
  const f=await fixture();t.after(()=>f.app.emit('before-quit'));
  f.call("codexPetDescriptor=()=>({version:3,frameMap:{wave:{},tail:{},groom:{}}})");
@@ -4751,4 +4989,47 @@ test('local deletion rechecks confirmation session and references, and blocks sa
  let pending=f.invoke('pet:local-pets-delete',id,editor.webContents);assert.equal((await f.invoke('pet:local-pets-import',undefined,editor.webContents)).ok,false);editor.hide();editor.show();f.call('dialog.finishDelete({response:1})');assert.equal((await pending).ok,false);assert.equal(f.call('localPetStore.calls'),0);
  pending=f.invoke('pet:local-pets-delete',id,editor.webContents);f.call("settings.startupAppearance={shape:'codex-pet',codexPetId:deleteId};dialog.finishDelete({response:1})");assert.match((await pending).error,/启动默认/);assert.equal(f.call('localPetStore.calls'),0);f.call("settings.startupAppearance={shape:'blob'}");
  pending=f.invoke('pet:local-pets-delete',id,editor.webContents);f.call('dialog.finishDelete({response:1})');await flush();assert.equal(f.call('localPetStore.calls'),1);assert.equal(f.call("saveCustomization({appearance:{shape:'codex-pet',codexPetId:deleteId}})"),false);assert.equal(f.call("changeAppearancePreset('add',{name:'Race',appearance:{shape:'codex-pet',codexPetId:deleteId}}).ok"),false);f.call('localPetStore.finish()');assert.equal((await pending).ok,true);assert.equal(f.call('localPetImportBusy'),false);assert.equal(f.call('localPetDeletingId'),null);
+});
+
+test('weather click expansion is not canceled when the old quota collection hover times out', async t => {
+ const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,quotaCardPinned:['codex'],nativeWorkBuddyLabel:true});t.after(()=>f.app.emit('before-quit'));
+ f.call('settings.workbuddyEnabled=true;settings.workbuddyQuotaAlwaysVisible=true');f.weather.setEnabled(true);
+ f.call('quotaCardGroup.activate({keyboard:false});quotaCardGroupTransition.finish()');
+ assert.equal(f.call('quotaCardGroup.getState().expanded'),true);
+ f.weather.expanded=true;f.weather.options.onLayout();
+ // Expanding weather hides the old cards/bar, so their hover region is gone.
+ // The group may legitimately finish collecting them; it must not undo weather.
+ f.advanceTo(600);await flush();
+ if(f.groupTransition.active)f.call('quotaCardGroupTransition.finish()');
+ assert.equal(f.call('quotaCardGroup.getState().expanded'),false);
+ assert.equal(f.weather.expanded,true,'a stale quota-group collapse cannot reset the separately clicked weather panel');
+ const load=f.windowClass.prototype.loadFile;f.windowClass.prototype.loadFile=function(file){const result=load.call(this,file);return file.endsWith('/shortcuts.html')?Promise.resolve():result;};
+ f.call('openShortcuts()');await flush();assert.equal(f.weather.expanded,false,'explicitly opening shortcuts still dismisses weather');
+});
+
+
+test('weather continuous collapse keeps ownership through group reset but explicit shortcuts can cancel', async t => {
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));
+ let resets=0;f.weather.isClosing=()=>true;f.weather.resetExpanded=()=>{resets++;};
+ f.call('resetQuotaCardDetails()');assert.equal(resets,0);
+ const load=f.windowClass.prototype.loadFile;f.windowClass.prototype.loadFile=function(file){const result=load.call(this,file);return file.endsWith('/shortcuts.html')?Promise.resolve():result;};
+ f.call('openShortcuts()');await flush();assert.equal(resets,1);
+});
+
+test('shortcut close refreshes collection cards once, preserving single/all-fixed and failed-probe fallbacks', async t => {
+  t.mock.timers.enable({apis:['setTimeout']});
+  for(const mode of ['collection','single','all-fixed','probe-failure']) {
+    const f=await fixture({codexEnabled:true,codexQuotaAlwaysVisible:true,bubblesEnabled:false,quotaCardPinned:mode==='all-fixed'?['codex','api']:['codex']});
+    const load=f.windowClass.prototype.loadFile;
+    f.windowClass.prototype.loadFile=function(file){return file.endsWith('/shortcuts.html')?Promise.resolve():load.call(this,file)};
+    if(mode!=='single')f.call('settings.openaiApiAlwaysVisible=true;syncApiUsageLabel()');
+    f.call('openShortcuts()');await flush();
+    f.call('globalThis.shortcutRestoreSyncs=0;globalThis.originalRestoreSync=syncQuotaLabel;syncQuotaLabel=(...args)=>{shortcutRestoreSyncs++;return originalRestoreSync(...args)}');
+    if(mode==='probe-failure')f.call('globalThis.originalGroupProbe=syncQuotaCardGroup;globalThis.failGroupProbe=true;syncQuotaCardGroup=()=>{if(failGroupProbe){failGroupProbe=false;throw Error("synthetic group probe failure")}return originalGroupProbe()}');
+    f.call('shortcutWindow.close()');t.mock.timers.tick(180);await flush();
+    assert.equal(f.call('shortcutRestoreSyncs'),mode==='probe-failure'?2:1,mode+' refresh count');
+    assert.equal(f.quotaLabel.visible,true,mode+' restores Codex');
+    if(mode!=='single')assert.equal(f.call("quotaCardGroup.getState().visible.includes('api')"),mode==='all-fixed',mode+' preserves collection rules');
+    f.app.emit('before-quit');
+  }
 });

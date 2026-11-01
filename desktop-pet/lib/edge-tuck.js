@@ -10,7 +10,7 @@ function contains(bounds, point, margin = 0) {
 
 // 原生方窗始终在工作区内；只由页面平移半个球身，不向相邻屏幕泄露内容。
 function createEdgeTuck({ getWindow, getWorkArea, onChange = () => {},
-  getRetentionBounds = () => [], getVisibleHitTest = () => null, schedule = setTimeout, cancel = clearTimeout }) {
+  getRetentionBounds = () => [], getVisibleHitTest = () => null, getTuckDelay = () => TUCK_DELAY, schedule = setTimeout, cancel = clearTimeout }) {
   let mode = 'free', side = null, dragging = false, paused = false, disposed = false;
   const pins = new Set();
   let timer = null, revision = 0, ignored = null, lastCursor = null;
@@ -81,11 +81,11 @@ function createEdgeTuck({ getWindow, getWorkArea, onChange = () => {},
       getRetentionBounds().some(bounds => contains(bounds, point, HOVER_MARGIN));
     if (retained) { cancelTuck(); return; }
     if (timer !== null) return;
-    const token = ++revision;
+    const token = ++revision, tuckDelay = getTuckDelay();
     timer = schedule(() => {
       if (token !== revision || disposed || paused || dragging || pins.size > 0 || mode !== 'peeked') return;
       timer = null; mode = 'tucked'; publish();
-    }, TUCK_DELAY);
+    }, Number.isFinite(tuckDelay) ? Math.max(0,tuckDelay) : TUCK_DELAY);
   }
   return {
     getPresentation, publish, dock, restore, sampleCursor,

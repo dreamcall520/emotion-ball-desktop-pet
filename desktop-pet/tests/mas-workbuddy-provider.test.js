@@ -6,7 +6,7 @@ const { createMasWorkBuddyProvider } = require('../lib/mas-workbuddy-provider');
 const summary = () => ({ scope: 'website-summary', credits: { total: 500, remaining: 450, used: 50, reserved: 2 },
   planNames: ['体验版'], updatedAt: 1000 });
 const flush = () => new Promise(resolve => setImmediate(resolve));
-function harness({ readSummary, fetch, loadURL, constructError, externalError, onLoginComplete, userAgent = 'IsolatedWebsite/123' } = {}) {
+function harness({ readSummary, readUsage, fetch, loadURL, constructError, externalError, onLoginComplete, userAgent = 'IsolatedWebsite/123' } = {}) {
   const windows = [], partitions = [], changes = [], external = [], quotaCalls = [], fetchCalls = [];
   const websiteSession = {
     getUserAgent: () => userAgent,
@@ -42,6 +42,7 @@ function harness({ readSummary, fetch, loadURL, constructError, externalError, o
     shell: { async openExternal(url) { external.push(url); if (externalError) throw externalError; } },
     onChange: state => changes.push(state),onLoginComplete
   };
+  if (readUsage) options.createUsage = () => ({ readUsage });
   if (readSummary) options.createQuota = options => {
     quotaCalls.push(options);
     return { readSummary };
@@ -291,3 +292,48 @@ test('本人登录页完成后自动核验积分并回调，无需手动刷新',
  assert.equal(reads,1);assert.equal(finished,1);assert.equal(h.provider.getState().status,'connected');assert.equal(h.windows[0].destroyed,true);h.provider.close();
 });
 test('停用会失效官网汇总并关闭自有登录窗口，重连仍可复用原session',async()=>{const f=harness({readSummary:async()=>summary()});await f.provider.readSummary();assert.equal(f.provider.getState().status,'connected');await f.provider.openLogin();await f.provider.readSummary();f.provider.revoke();assert.equal(f.provider.getState().summary,null);assert.equal(f.provider.getState().loginVisible,false);assert.equal(f.windows.every(win=>win.destroyed),true);await f.provider.openLogin();await f.provider.readSummary();assert.equal(f.provider.getState().status,'connected');f.provider.close();});
+
+
+const usageReport = () => ({source:'website-usage',scope:'website-request-usage',timezone:'Asia/Shanghai',
+ startDate:'2026-10-26',endDate:'2026-11-01',days:Array.from({length:7},(_,i)=>({date:i<6?'2026-10-'+(26+i):'2026-11-01',credits:0})),
+ todayRecords:[],todayCredits:0,totalCredits:0,requestCount:0,updatedAt:1000,complete:true});
+test('website usage exposes independent cloned metadata state; quota remains usable on usage failure',async()=>{
+ let fail=false;const h=harness({readSummary:async()=>summary(),readUsage:async()=>{if(fail)throw Object.assign(new Error('SECRET'),{code:'RATE_LIMITED'});return {...usageReport(),accountId:'SECRET',input:'PRIVATE'};}});
+ await h.provider.readSummary();await h.provider.readUsage();
+ assert.equal(h.provider.getUsageState().report.source,'website-usage');assert.doesNotMatch(JSON.stringify(h.provider.getUsageState()),/SECRET|PRIVATE/);
+ const external=h.provider.getUsageState();external.report.days[0].credits=100;assert.equal(h.provider.getUsageState().report.days[0].credits,0);
+ fail=true;await assert.rejects(h.provider.readUsage(),{code:'RATE_LIMITED'});
+ assert.equal(h.provider.getUsageState().stale,true);assert.equal(h.provider.getState().status,'connected');assert.equal(h.provider.getState().summary.credits.remaining,450);
+ assert.equal(h.windows.length,0);h.provider.close();
+});
+test('usage unavailable login never automatically opens a window',async()=>{
+ const h=harness({readUsage:async()=>{throw Object.assign(new Error('PRIVATE'),{code:'LOGIN_REQUIRED'});}});
+ await assert.rejects(h.provider.readUsage(),{code:'LOGIN_REQUIRED'});assert.equal(h.provider.getUsageState().status,'needs-login');assert.equal(h.windows.length,0);h.provider.close();
+});
+test('revoke, close, login/account navigation reject late usage without restoring prior account',async()=>{
+ for(const action of ['revoke','close','openLogin','navigation']){
+  let resolve;const h=harness({readUsage:()=>new Promise(done=>{resolve=done;})});
+  if(action==='navigation')await h.provider.openLogin();
+  const pending=h.provider.readUsage();
+  if(action==='navigation')navigation(h.windows[0],'did-navigate','https://www.workbuddy.cn/login/');
+  else await h.provider[action]();
+  resolve(usageReport());await assert.rejects(pending,{code:action==='close'?'CLOSED':'CANCELLED'});
+  assert.equal(h.provider.getUsageState().report,null);assert.equal(h.provider.getUsageState().busy,false);h.provider.close();
+ }
+});
+test('summary refresh does not cancel independent usage, but confirmed login loss does',async()=>{
+ let resolve,loginLost=false;const h=harness({readSummary:async()=>{if(loginLost)throw Object.assign(new Error('expired'),{code:'LOGIN_REQUIRED'});return summary();},readUsage:()=>new Promise(done=>resolve=done)});
+ let pending=h.provider.readUsage();await h.provider.readSummary();resolve(usageReport());await pending;
+ pending=h.provider.readUsage();loginLost=true;await assert.rejects(h.provider.readSummary(),{code:'LOGIN_REQUIRED'});resolve(usageReport());await assert.rejects(pending,{code:'CANCELLED'});assert.equal(h.provider.getUsageState().report,null);h.provider.close();
+});
+test('new usage supersedes late old usage and provider rejects wrong scope',async()=>{
+ let first,call=0;const h=harness({readUsage:async()=>++call===1?new Promise(done=>first=done):usageReport()});
+ const pending=h.provider.readUsage();await h.provider.readUsage();first({...usageReport(),totalCredits:999});await assert.rejects(pending,{code:'CANCELLED'});assert.equal(h.provider.getUsageState().report.totalCredits,0);h.provider.close();
+ const invalid=harness({readUsage:async()=>({...usageReport(),scope:'desktop-personal'})});await assert.rejects(invalid.provider.readUsage(),{code:'INVALID_RESPONSE'});invalid.provider.close();
+});
+
+test('usage confirmed login loss clears old quota and rejects its late response',async()=>{
+ let resolve;const h=harness({readSummary:()=>new Promise(done=>resolve=done),readUsage:async()=>{throw Object.assign(new Error('expired'),{code:'LOGIN_REQUIRED'});}});
+ const pending=h.provider.readSummary();await assert.rejects(h.provider.readUsage(),{code:'LOGIN_REQUIRED'});resolve(summary());await assert.rejects(pending,{code:'CANCELLED'});
+ assert.equal(h.provider.getState().summary,null);assert.equal(h.provider.getState().status,'needs-login');h.provider.close();
+});

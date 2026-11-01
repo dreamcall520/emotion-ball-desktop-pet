@@ -288,7 +288,7 @@
   function wake() { cancelAnimationFrame(raf); raf = 0; last = 0; draw(); labels(); if (awake()) raf = requestAnimationFrame(frame); }
   function theme() { const resolved = appearance === 'system' ? darkMedia.matches ? 'dark' : 'light' : appearance; doc.documentElement.dataset.appearance = resolved; doc.documentElement.dataset.accessibleAppearance = resolved; }
   cleanup.push(bridge.onModel(value => { model = value; const round = game.round; game.setModel(value); if (game.round !== round) spriteTime = 0; appearance = ['light', 'dark'].includes(value?.appearance) ? value.appearance : 'system'; theme(); wake(); }));
-  if (bridge.onColorMode) cleanup.push(bridge.onColorMode((mode, preference, uiTheme) => { doc.documentElement.dataset.colorMode = mode === 'accessible' ? 'accessible' : 'standard'; doc.documentElement.dataset.uiTheme = uiTheme === 'blue' ? 'blue' : 'green'; appearance = ['light', 'dark'].includes(preference) ? preference : 'system'; theme(); }));
+  if (bridge.onColorMode) cleanup.push(bridge.onColorMode((mode, preference, uiTheme) => { doc.documentElement.dataset.colorMode = mode === 'accessible' ? 'accessible' : 'standard'; doc.documentElement.dataset.uiTheme = ['blue', 'purple'].includes(uiTheme) ? uiTheme : 'green'; appearance = ['light', 'dark'].includes(preference) ? preference : 'system'; theme(); }));
   $('guard-qiuqiu').addEventListener('click', () => { game.shoot(); wake(); }); $('guard-monster').addEventListener('click', () => { game.advance(); wake(); });
   $('guard-restart').addEventListener('click', () => { if (game.available && game.quota > 0) { game.reset(); spriteTime = 0; wake(); } });
   $('guard-pause').addEventListener('click', () => { game.paused = !game.paused; wake(); });

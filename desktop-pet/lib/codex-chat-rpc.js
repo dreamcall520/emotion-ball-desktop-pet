@@ -15,7 +15,7 @@ const MAX_FRAME_BYTES = 4 * 1024 * 1024;
 const MAX_TEXT_LENGTH = 128 * 1024;
 const METHODS = new Set(['initialize', 'config/read', 'account/read', 'thread/start', 'thread/resume',
   'thread/name/set', 'thread/read', 'turn/start', 'turn/interrupt', 'model/list',
-  'account/login/start', 'account/login/cancel']);
+  'account/login/start', 'account/login/cancel', 'account/rateLimits/read']);
 const MODEL_PAGE_SIZE = 50, MAX_MODEL_PAGES = 10, MAX_MODELS = 200;
 const isEffort = value => typeof value === 'string' && /^[a-z][a-z0-9_-]{0,31}$/.test(value);
 const DISABLED_FEATURES = Object.freeze(['shell_tool', 'shell_snapshot', 'apps', 'plugins', 'hooks',
@@ -111,7 +111,7 @@ function createCodexChatRpc({ workspaceDir, fs = nodeFs, spawn = nodeSpawn, home
   const decoder = new TextDecoder('utf-8', { fatal: true });
   let child = null, wsConnection = null, closed = false, ready = false, safetyReady = false, starting = null, startReject = null, startTimer = null;
   let nextId = 0, chunks = [], buffered = 0, accountKey = null, threadAccountKey = null, accountRevision = 0;
-  let accountObserved = false;
+  let accountObserved = false, billingIdentity = null;
   let modelCatalog = null, modelCatalogAccount = null, listingModels = null;
   let threadId = null, threadRequest = false;
   let ownedLoginId = null;
@@ -184,7 +184,7 @@ function createCodexChatRpc({ workspaceDir, fs = nodeFs, spawn = nodeSpawn, home
       return;
     }
     if (method === 'account/updated') {
-      accountKey = null; accountRevision++; modelCatalog = null;
+      accountKey = null; billingIdentity = null; accountRevision++; modelCatalog = null;
       // Initial account/read can itself announce the loaded login. There is no
       // previously verified identity to invalidate yet; readAccount confirms it
       // again below before authorizing any thread or model request.
@@ -495,6 +495,39 @@ function createCodexChatRpc({ workspaceDir, fs = nodeFs, spawn = nodeSpawn, home
     });
   }
 
+  async function readAccount() {
+    accountKey = null; billingIdentity = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const revision = accountRevision;
+      const projected = await request('account/read', { refreshToken: false }, raw => {
+        if (revision !== accountRevision) return null;
+        const account = projectAccount(raw);
+        // Private comparison only: never expose email, workspace ID/name or raw account data.
+        const scope = raw?.workspaceRouting?.chatgptAccountId;
+        const workspace = typeof scope === 'string' && scope.length <= 200 ? scope : null;
+        const name = typeof raw?.account?.workspaceName === 'string' && raw.account.workspaceName.length <= 200 ? raw.account.workspaceName : null;
+        return { account, billingIdentity: account.authenticated ? createHash('sha256').update(JSON.stringify(['managed-codex-quota', account.accountKey, workspace, name])).digest('hex') : null };
+      });
+      if (!projected || revision !== accountRevision) continue;
+      if (modelCatalogAccount !== projected.account.accountKey) modelCatalog = null;
+      accountObserved = true; accountKey = projected.account.accountKey; billingIdentity = projected.billingIdentity;
+      return projected.account;
+    }
+    throw chatError('UNAUTHENTICATED');
+  }
+  async function readRateLimits({ at = Date.now() } = {}) {
+    if (turnPending || activeTurnId || threadRequest || loginStarting || ownedLoginId) throw chatError('BUSY');
+    const before = await readAccount();
+    if (!before.authenticated || !before.accountKey || !billingIdentity) throw chatError('UNAUTHENTICATED');
+    const revision = accountRevision, identity = billingIdentity;
+    const result = await request('account/rateLimits/read', {}, raw =>
+      require('./managed-codex-quota-reader').projectManagedCodexQuota(raw, at));
+    if (closed || revision !== accountRevision || identity !== billingIdentity) throw chatError('UNAUTHENTICATED');
+    const after = await readAccount();
+    if (closed || revision !== accountRevision || !after.authenticated || before.accountKey !== after.accountKey || identity !== billingIdentity) throw chatError('UNAUTHENTICATED');
+    return { ...result, accountKey: identity, accountAttributionVerified: true };
+  }
+
   return { start,
     startLogin: async () => {
       if (ownedLoginId || loginStarting) throw chatError('BUSY');
@@ -515,19 +548,7 @@ function createCodexChatRpc({ workspaceDir, fs = nodeFs, spawn = nodeSpawn, home
       const loginId = ownedLoginId; ownedLoginId = null;
       await request('account/login/cancel', { loginId });
     },
-    readAccount: async () => {
-      accountKey = null;
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const revision = accountRevision;
-        const projected = await request('account/read', { refreshToken: false }, raw =>
-          revision === accountRevision ? projectAccount(raw) : null);
-        if (!projected || revision !== accountRevision) continue;
-        if (modelCatalogAccount !== projected.accountKey) modelCatalog = null;
-        accountObserved = true; accountKey = projected.accountKey;
-        return projected;
-      }
-      throw chatError('UNAUTHENTICATED');
-    },
+    readAccount, readRateLimits,
     startThread: () => loadThread(), resumeThread: id => loadThread(id), startTurn, listModels,
     nameThread: id => {
       if (!isId(id) || id !== threadId) return Promise.reject(chatError('INVALID_INPUT'));

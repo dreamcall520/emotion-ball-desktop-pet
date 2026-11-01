@@ -8,7 +8,7 @@
     emotion: '50', fallbackId: '50', shape: 'blob', color: '#EEEBE4', eyeColor: '#1A1A1A',
     idle: false, autostart: false, lite: false, label: '经典球球'
   });
-  window.addEventListener('beforeunload', () => brandPet.destroy(), { once: true });
+  window.addEventListener('pagehide', () => brandPet.destroy(), { once: true });
   let feedbackTimer;
   function feedback(message) {
     clearTimeout(feedbackTimer); $('feedback').textContent = message;
@@ -54,6 +54,7 @@
     '和球球聊聊': ['M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-8l-6 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z', 'M7 9h10M7 13h6'],
     '定制球球': ['M12 4a8 8 0 1 0 8 8', 'm15 4 2-2 5 5-2 2-5-5ZM15 4l-6 6-1 4 4-1 6-6'],
 
+    '意见反馈': ['M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-8l-6 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z', 'M8 9h8M8 13h5'],
     '天气': ['M5 16a4 4 0 0 1 1-7.9A6 6 0 0 1 18 10a3 3 0 0 1 0 6H5Z', 'M18 3v2M22 7h-2M14 3l1 2'],
     '常用设置': ['m12 3 2.6 5.6 6.1.8-4.5 4.3 1.1 6.1-5.3-3-5.3 3 1.1-6.1-4.5-4.3 6.1-.8Z'],
     '番茄钟': ['M9 3h6M12 3v3M18 7l2-2', 'M12 6a8 8 0 1 0 0 16 8 8 0 0 0 0-16M12 10v4l-2 2'],
@@ -106,7 +107,7 @@
     if (weather.length) categories.push({ id: 'weather-settings', label: '天气', children: weather });
     const general = categories.find(entry => entry.label === '常规设置');
     if (general) categories[categories.indexOf(general)] = { ...general, children: [...general.children,
-      ...snapshot.entries.filter(entry => entry.id === '/update-check')] };
+      ...snapshot.entries.filter(entry => ['/update-check', '/feedback-open'].includes(entry.id))] };
     return categories;
   }
   function externalIcon() {
@@ -222,7 +223,7 @@
     $('version').textContent = `球球 v${snapshot.version} · 本地设置`;
     const categories = groups();
     const nav = [{ id: 'common', label: '常用设置' }, ...categories,
-      { id: 'shortcuts', label: '快捷键' }, { id: 'quota-cards', label: '联动样式管理' },
+      { id: 'shortcuts', label: '快捷键' }, { id: 'quota-cards', label: '联动样式管理' }, { id: 'feedback', label: '意见反馈' },
       ...snapshot.entries.filter(entry => externalIds.has(entry.id)).map(entry => ({ ...entry,
         label: ({ '/chat-open': '和球球聊聊', '/customize-open': '定制球球' })[entry.id] || entry.label, external: true }))];
     if (!nav.some(item => item.id === selected)) selected = 'common';
@@ -236,7 +237,7 @@
       ['日常陪伴', ['球球与互动', '和球球聊聊', '便签与待办', '番茄钟']],
       ['外观与显示', ['定制球球', '球球尺寸', '贴边与显示', '界面配色', '天气']],
       ['应用与联动', ['Codex', 'ZCode 联动', 'WorkBuddy', 'API 余额', '联动样式管理']],
-      ['快捷与常规', ['快捷键', '常规设置']]
+      ['快捷与常规', ['快捷键', '常规设置', '意见反馈']]
     ];
     $('navigation').replaceChildren(...navigationGroups.map(([label, labels]) => {
       const section = el('div', '', 'nav-group');
@@ -284,11 +285,16 @@
       if (result?.config) { snapshot.shortcuts = result.config; last = JSON.stringify(snapshot); }
       return result;
     } };
+    if (!query && selected === 'feedback') {
+      $('empty').hidden = true;
+      window.renderSettingsFeedback($('content'), snapshot.feedback, api); return;
+    }
     if (!query && selected === 'shortcuts') {
       $('empty').hidden = true;
       window.renderSettingsShortcuts($('content'), snapshot.shortcuts, shortcutApi); return;
     }
-    const searchable = [...categories, { id: 'shortcuts', label: '快捷键', children: snapshot.entries.filter(entry => entry.id === '/shortcut-settings') }, { id: 'windows', label: '独立功能', children: snapshot.entries.filter(entry => externalIds.has(entry.id)) }];
+    const interaction = categories.find(category => category.label === '球球与互动');
+    const searchable = [...categories.map(category => category === interaction ? { ...category, children: [...category.children, {id:'/shortcut-panel-settings',label:'启用快捷面板与面板形态',enabled:true,actionable:true}] } : category), { id: 'shortcuts', label: '快捷键', children: snapshot.entries.filter(entry => entry.id === '/shortcut-settings') }, { id: 'windows', label: '独立功能', children: snapshot.entries.filter(entry => externalIds.has(entry.id)) }];
     const displayed = (query ? searchable : selected === 'common' ? commonGroups : categories).flatMap(category => {
       if (!['/codex-menu', '/zcode-menu', 'workbuddy-settings'].includes(category.id)) return [category];
       const apiGroup = category.id === '/codex-menu' && category.children.find(child => child.id.endsWith('/openai-api-menu'));
@@ -357,7 +363,7 @@
           if (choice) { button.setAttribute('role', item.type === 'checkbox' ? 'switch' : 'radio'); button.setAttribute('aria-checked', String(item.checked)); }
           button.dataset.action = item.id;
           button.disabled = !item.enabled || busy;
-          button.onclick = () => item.id === '/shortcut-settings' ? selectView('shortcuts') : act(item);
+          button.onclick = () => item.id === '/shortcut-settings' ? selectView('shortcuts') : item.id === '/shortcut-panel-settings' ? selectView(interaction.id) : act(item);
           row.append(button);
         }
         if (category.label === '便签与待办') {
@@ -374,6 +380,8 @@
       if (statusEntry && (!query || 'codex 状态 额度 任务 刷新'.includes(query))) section.append(codexStatus(statusEntry));
       sections.push(section);
     }
+    const panel = snapshot.shortcuts && interaction && !query && selected === interaction.id ? el('div') : null;
+    if (panel) { sections.push(panel); count++; }
     const notes = categories.find(category => category.label === '便签与待办');
     const behaviors = snapshot.shortcuts && notes && (!query ? selected === notes.id : '便签 待办 启动方式'.includes(query)) ? el('div') : null;
     if (behaviors) { sections.push(behaviors); count++; }
@@ -391,6 +399,7 @@
     }
     if (!query && selected === 'quota-cards') { sections.unshift(quotaCardSettings()); count++; }
     $('content').replaceChildren(...sections);
+    if (panel) window.renderSettingsShortcuts(panel, snapshot.shortcuts, shortcutApi, 'panel');
     if (behaviors) window.renderSettingsShortcuts(behaviors, snapshot.shortcuts, shortcutApi, true);
     $('empty').hidden = count !== 0;
     if (quotaSectionRequested) { document.querySelector('main').scrollTop = 0; quotaSectionRequested = false; }
@@ -417,6 +426,7 @@
       if (latestSleepState !== undefined) value.petSleepState = latestSleepState;
       const serialized = JSON.stringify(value);
       if (last !== serialized) { if (!snapshot && value.initialView === 'quota-cards') { selected = quotaCardsView(value); quotaSectionRequested = true; }
+        else if (!snapshot && value.initialView === 'feedback') selected = 'feedback';
         else if (!snapshot && value.initialView === 'shortcuts') selected = 'shortcuts';
         else if (!snapshot && value.initialView === '/api-balance-menu') selected = '/api-balance-menu';
         else if (!snapshot && isApiView(value.initialView)) { selected = '/codex-menu'; codexTab = 'api'; apiSectionRequested = true; } snapshot = value; last = serialized; render(); }
@@ -437,7 +447,7 @@
   api.onNavigate(view => {
     if (view === 'quota-cards') { selected = quotaCardsView(snapshot); quotaSectionRequested = true; apiSectionRequested = false; $('search').value = ''; $('search-panel').hidden = true; $('search-toggle').setAttribute('aria-expanded', 'false'); render(); return; }
     if (view === '/api-balance-menu') { selected = view; apiSectionRequested = false; quotaSectionRequested = false; $('search').value = ''; $('search-panel').hidden = true; $('search-toggle').setAttribute('aria-expanded', 'false'); render(); document.querySelector('main').scrollTop = 0; return; }
-    if (view !== 'shortcuts' && !isApiView(view)) return;
+    if (view !== 'shortcuts' && view !== 'feedback' && !isApiView(view)) return;
     apiSectionRequested = isApiView(view); if (apiSectionRequested) codexTab = 'api';
     selected = apiSectionRequested ? '/codex-menu' : view; $('search').value = ''; $('search-panel').hidden = true;
     $('search-toggle').setAttribute('aria-expanded', 'false');
@@ -456,9 +466,9 @@
     snapshot.petSleepState = state; last = JSON.stringify(snapshot);
     document.querySelectorAll('[data-pet-sleep-state]').forEach(updateSleepStatus);
   });
-  window.addEventListener('beforeunload', () => removeSleepState?.(), { once: true });
+  window.addEventListener('pagehide', () => removeSleepState?.(), { once: true });
   window.addEventListener('focus', refresh);
   const timer = setInterval(refresh, 2000);
-  window.addEventListener('beforeunload', () => clearInterval(timer), { once: true });
+  window.addEventListener('pagehide', () => clearInterval(timer), { once: true });
   refresh();
 })();

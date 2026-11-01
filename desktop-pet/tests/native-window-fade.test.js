@@ -44,3 +44,20 @@ test('group collapse keeps native glass visible until shape narrows and retains 
   fade.hide(w,{animate:true,duration:220,easing:'group-collapse'});t.mock.timers.tick(240);assert.equal(w.visible,false);
   fade.show(w);fade.hide(w,{animate:true});t.mock.timers.tick(100);assert(w.opacity<.5,'ordinary edge still uses its original curve');t.mock.timers.tick(100);assert.equal(w.visible,false);
 });
+
+test('already hidden windows avoid native hide/opacity writes while callbacks and actual opacity restoration remain current', () => {
+  const w = windowFixture(), fade = createNativeWindowFade(); let hides = 0, callbacks = 0;
+  w.getOpacity = () => w.opacity;
+  w.hide = () => { hides++; w.visible = false; };
+  for (let i = 0; i < 5; i++) fade.hide(w, { onHidden: () => callbacks++ });
+  assert.equal(callbacks, 5);
+  assert.equal(hides, 0);
+  assert.deepEqual(w.values, []);
+  w.opacity = 0;
+  fade.hide(w, { onHidden: () => callbacks++ });
+  assert.equal(w.opacity, 1, 'read actual opacity after an external capture instead of trusting cached fade state');
+  assert.deepEqual(w.values, [1]);
+  w.visible = true;
+  fade.hide(w);
+  assert.equal(hides, 1, 'external show is observed even though the prior fade was hidden');
+});

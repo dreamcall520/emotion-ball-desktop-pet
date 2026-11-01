@@ -632,3 +632,32 @@ test('随包隐私覆盖未能从有效配置证实时拒绝继续，选项不�
  for(const value of ['true',1,{},null])assert.throws(()=>setup({disableOptionalTelemetry:value}),{code:'INVALID_INPUT'});
  assert.throws(()=>createCodexChatRpc({workspaceDir:WORKSPACE,disableOptionalTelemetry:true,webSocket:{endpoint:'ws://127.0.0.1:1'},hostHome:'/private/fixture'}),{code:'INVALID_INPUT'});
 });
+
+const quotaFixture=()=>({rateLimits:{limitId:'codex',primary:{usedPercent:25,windowDurationMins:300,resetsAt:2000000000}},rateLimitsByLimitId:{
+ codex:{limitId:'codex',primary:{usedPercent:25,windowDurationMins:300,resetsAt:2000000000},secondary:{usedPercent:50,windowDurationMins:10080,resetsAt:2000000100},credits:{hasCredits:true,unlimited:false,balance:'12.5',email:'SECRET'}},
+ spark:{limitId:'spark',primary:{usedPercent:99,windowDurationMins:60,resetsAt:2000000200},email:'SECRET'}},account:{email:'SECRET'},accessToken:'SECRET'});
+test('同聊天profile官方额度前后只读身份核验，独立计费桶不合并且不创建模型会话',async()=>{
+ const h=setup({reply:p=>p.method==='account/rateLimits/read'?{result:quotaFixture()}:defaultReply(p)});await h.rpc.start();const result=await h.rpc.readRateLimits({at:1234});
+ assert.equal(result.source,'managed-codex-chat-account-quota');assert.equal(result.billingScope,'same-chat-login');assert.equal(result.accountAttributionVerified,true);assert.equal(result.updatedAt,1234);assert.equal(result.state,'ready');assert.match(result.accountKey,/^[a-f0-9]{64}$/);
+ assert.deepEqual(result.windows.map(w=>[w.id,w.usedPercent,w.windowMinutes,w.resetsAt]),[['codex:primary',25,300,2000000000000],['codex:secondary',50,10080,2000000100000]]);
+ assert.equal(result.scopes.length,2);assert.equal(result.scopes[1].windows[0].usedPercent,99);assert.equal(JSON.stringify(result).includes('person@example.test'),false);assert.equal(JSON.stringify(result).includes('SECRET'),false);
+ assert.deepEqual(h.sent.filter(p=>p.method.startsWith('account/')).map(p=>p.method),['account/read','account/rateLimits/read','account/read']);assert.equal(h.sent.some(p=>/^thread\/|^turn\//.test(p.method)),false);await h.rpc.close();
+});
+test('同源额度缺窗口/缺字段保持未知，其他scope不能充当Codex主额度',async()=>{
+ for(const [raw,expected]of [[{rateLimits:{primary:{usedPercent:null,windowDurationMins:'300',resetsAt:null}}},'partial'],[{rateLimits:null},'unavailable'],[{rateLimitsByLimitId:{spark:{primary:{usedPercent:0,windowDurationMins:60,resetsAt:2000000000}}},rateLimits:quotaFixture().rateLimits},'unavailable']]){
+  const h=setup({reply:p=>p.method==='account/rateLimits/read'?{result:raw}:defaultReply(p)});await h.rpc.start();const result=await h.rpc.readRateLimits();assert.equal(result.state,expected);if(expected==='partial')assert.deepEqual(result.windows[0],{id:'codex:primary',windowMinutes:null,usedPercent:null,resetsAt:null});else assert.equal(result.windows.length,0);await h.rpc.close();
+ }
+});
+test('额度请求期间账号通知、静默账号变化和同邮箱工作区变化均丢弃结果',async()=>{
+ for(const change of ['notification','account','workspace']){
+  let reads=0;const h=setup({reply:(p,context)=>{
+   if(p.method==='account/read'){reads++;return{result:{account:{type:'chatgpt',email:change==='account'&&reads>1?'other@example.test':'person@example.test'},workspaceRouting:{chatgptAccountId:change==='workspace'&&reads>1?'workspace-b':'workspace-a'}}};}
+   if(p.method==='account/rateLimits/read'){if(change==='notification')context.send({method:'account/updated',params:{email:'SECRET'}});return{result:quotaFixture()};}return defaultReply(p);
+  }});await h.rpc.start();await assert.rejects(h.rpc.readRateLimits(),{code:'UNAUTHENTICATED'});assert.equal(h.sent.some(p=>/^thread\/|^turn\//.test(p.method)),false);await h.rpc.close();
+ }
+});
+test('额度超时或撤销关闭不发表旧数据，未登录不请求额度也不自动登录',async()=>{
+ const timed=setup({timeoutMs:25,reply:p=>p.method==='account/rateLimits/read'?undefined:defaultReply(p)});await timed.rpc.start();await assert.rejects(timed.rpc.readRateLimits(),{code:'TIMEOUT'});await timed.rpc.close();
+ const revoked=setup({reply:p=>p.method==='account/rateLimits/read'?undefined:defaultReply(p)});await revoked.rpc.start();const pending=revoked.rpc.readRateLimits();const rejection=assert.rejects(pending,{code:'CLOSED'});await new Promise(resolve=>setImmediate(resolve));await revoked.rpc.close();await rejection;
+ const loggedOut=setup({reply:p=>p.method==='account/read'?{result:{account:null}}:defaultReply(p)});await loggedOut.rpc.start();await assert.rejects(loggedOut.rpc.readRateLimits(),{code:'UNAUTHENTICATED'});assert.equal(loggedOut.sent.some(p=>p.method==='account/rateLimits/read'||p.method==='account/login/start'||/^thread\/|^turn\//.test(p.method)),false);await loggedOut.rpc.close();
+});

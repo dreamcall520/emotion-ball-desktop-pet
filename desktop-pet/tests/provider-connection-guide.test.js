@@ -65,3 +65,29 @@ test('实时登录状态明确false覆盖旧pending，失败后不永久卡在�
 });
 
 test('数据写入权限只给已有插件配对动作，不能伪装首次自动安装',()=>{const s=base('workbuddy');s.pluginInstallationPolicy={allowed:false,pairingAllowed:true};const step=guide(s,'workbuddy').steps.find(s=>s.id==='tasks');assert.equal(step.action,'install-provider-plugin');assert.equal(step.actionLabel,'连接已有插件');assert.match(step.description,/不改插件代码/);});
+
+test('只聊天不申请原目录或任务插件，自定义模型目录是明确必要依赖',()=>{
+ for(const provider of ['codex','workbuddy']){const s={[provider]:{directory:'missing'},onboarding:{[provider]:{chat:{status:'needs-login'},data:{status:'needs-authorization'}}}};const g=guide(s,provider,{capability:'chat'});assert.deepEqual(g.steps.map(step=>step.id),['chat']);assert.deepEqual(g.steps[0].payload,{provider,capability:'chat'});}
+ const s={zcode:{directory:'missing',accountSource:'configured-custom'},onboarding:{zcode:{chat:{status:'needs-data-authorization'},data:{status:'needs-authorization'}}}};
+ const g=guide(s,'zcode',{capability:'chat'});assert.deepEqual(g.steps.map(step=>step.id),['data','chat']);assert.match(g.steps[0].title,/聊天模型配置/);assert.match(g.steps[0].description,/目录.*不启用额度\/任务或安装插件/);assert.equal(g.steps[0].payload.capability,'chat');
+ s.zcode.directory='stored';assert.equal(guide(s,'zcode',{capability:'chat'}).steps.find(step=>step.id==='data').action,undefined,'valid model directory is reused');
+});
+test('额度与任务模式不连接聊天，模型目录许可不伪装原数据用途已获准',()=>{
+ for(const provider of ['codex','zcode','workbuddy']){
+  const s=base(provider);s.onboarding[provider].data.status='needs-authorization';
+  const g=guide(s,provider,{capability:'data'});assert.equal(g.steps.some(step=>step.id==='chat'),false);assert.equal(g.steps.find(step=>step.id==='data').status,'needs-authorization');
+  assert.ok(g.steps.filter(step=>step.action).every(step=>step.payload.capability==='data'));assert.equal(card(s,provider).chat.status,'ready','intent change cannot hide or revoke existing chat');
+ }
+});
+test('全部仍保留原三类功能与任务插件，未知能力拒绝，旧显式入口不扩大payload',()=>{
+ const s=base('zcode');const full=guide(s,'zcode',{capability:'all'});assert.ok(full.steps.some(step=>step.id==='chat'));assert.ok(full.steps.some(step=>step.id==='data'));assert.ok(full.steps.some(step=>step.id==='tasks'));assert.equal(full.steps.find(step=>step.id==='tasks').payload.capability,'all');
+ assert.equal(guide(s,'zcode').steps.find(step=>step.id==='tasks').payload.capability,undefined);assert.throws(()=>guide(s,'zcode',{capability:'everything'}),/Unknown capability/);
+});
+
+test('Codex主额度只显示球球聊天同账号额度，无原目录也可用且不会回落原账号',()=>{
+ const {buildToolCard}=require('../lib/provider-connection-guide');
+ const state={codex:{directory:'needs-authorization'},managedCodexQuota:{status:'ready',snapshot:{windows:[{windowMinutes:300,usedPercent:25}],updatedAt:100}}};
+ assert.match(buildToolCard(state,'codex').quota.text,/球球聊天账号.*75%/);assert.equal(buildToolCard(state,'codex').quota.status,'ready');
+ state.codex={directory:'stored'};state.codexSnapshot={quota:{windows:[{remaining:99}]}};state.managedCodexQuota={status:'unavailable',snapshot:null};
+ assert.equal(buildToolCard(state,'codex').quota.status,'unknown');assert.doesNotMatch(buildToolCard(state,'codex').quota.text,/99%/);
+});

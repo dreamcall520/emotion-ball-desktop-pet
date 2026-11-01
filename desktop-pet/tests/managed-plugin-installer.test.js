@@ -628,3 +628,27 @@ test('rePair preserves concurrent receiver edits and reports incomplete rollback
  const app=guarded(f,()=>true,state=>{if(state.status==='committing'&&state.fileIndex===1)fs.writeFileSync(first,replacement);});
  await assert.rejects(app.rePair({approved:true}),{code:'ROLLBACK_INCOMPLETE'});assert.equal(fs.readFileSync(first,'utf8'),replacement);assert.equal(app.getState().receiverPairingVerified,false);
 });
+
+
+test('read-only reuse validates both providers completely without a stopped guard or installed-file writes',async t=>{
+ for(const provider of ['workbuddy','zcode']){
+  const f=fixture(t,provider);await f.app.install({approved:true});const before=tree(f.root),mtime=fs.statSync(f.config).mtimeMs;let stoppedChecks=0;
+  const running=guarded(f,()=>{stoppedChecks++;return false;});const ready=await running.inspect({forReuse:true});assert.equal(ready.installedConfigured,true);assert.equal(ready.enabled,true);assert.equal(ready.status,'installed-configured');assert.equal(stoppedChecks,0);assert.deepEqual(tree(f.root),before);assert.equal(fs.statSync(f.config).mtimeMs,mtime);
+  const cache=inventory(f).cache,receiver=path.join(cache,'receiver.json'),old=fs.readFileSync(receiver,'utf8');const changed=JSON.parse(old);changed.token='another_synthetic_receiver_token_012345678901234567890123';fs.writeFileSync(receiver,JSON.stringify(changed));
+  assert.equal((await running.inspect({forReuse:true})).installedConfigured,false,'receiver mismatch cannot reuse even when plugin code and enable flags match');assert.equal(stoppedChecks,0);await assert.rejects(running.install({approved:true}),{code:'HOST_RUNNING'});
+ }
+});
+test('reuse never returns an earlier installed observation during a queued installation',async t=>{
+ const f=fixture(t),app=f.app;await app.install({approved:true});assert.equal(app.getState().installedConfigured,true);const pending=app.install({approved:true});assert.equal(await app.inspect({forReuse:true}),null);await pending;
+});
+
+
+test('missing owner-execute is not a complete installation; only fixed script repairs after the stopped guard',async t=>{
+ for(const provider of ['workbuddy','zcode']){
+  const f=fixture(t,provider);await f.app.install({approved:true});const script=path.join(inventory(f).cache,'scripts/emit-metadata.sh'),original=fs.readFileSync(script);fs.chmodSync(script,0o600);
+  const userFile=path.join(f.root,'user-kept.txt');fs.writeFileSync(userFile,'original user contents',{mode:0o640});const userStat=fs.statSync(userFile),configuration=fs.readFileSync(f.config);
+  const running=guarded(f,()=>false);assert.equal((await running.inspect({forReuse:true})).installedConfigured,false);await assert.rejects(running.install({approved:true}),{code:'HOST_RUNNING'});assert.equal(fs.statSync(script).mode&0o100,0);
+  await assert.rejects(f.app.rePair({approved:true}),{code:'PAIRING_REQUIRES_INSTALLED_PLUGIN'});
+  const fixed=await f.app.install({approved:true});assert.equal(fixed.installedConfigured,true);fs.accessSync(script,fs.constants.X_OK);assert.ok(fs.statSync(script).mode&0o100);assert.deepEqual(fs.readFileSync(script),original);assert.deepEqual(fs.readFileSync(f.config),configuration);assert.equal(fs.readFileSync(userFile,'utf8'),'original user contents');assert.equal(fs.statSync(userFile).mode,userStat.mode);assert.equal(fs.statSync(userFile).ino,userStat.ino);assert.equal(fs.statSync(userFile).mtimeMs,userStat.mtimeMs);assert.equal((await running.inspect({forReuse:true})).installedConfigured,true);
+ }
+});

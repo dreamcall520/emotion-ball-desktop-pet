@@ -32,6 +32,12 @@
     return part('needs-authorization',onboarding?.status==='cancelled'?'连接已取消，可继续完成':'尚未连接聊天');
   }
   function quotaPart(state,provider){
+    if(provider==='codex'&&state.managedCodexQuota){
+      const managed=state.managedCodexQuota,snapshot=managed.snapshot;
+      const windows=rows(snapshot?.windows).filter(w=>Number.isFinite(w.usedPercent)&&w.usedPercent>=0&&w.usedPercent<=100);
+      if(windows.length&&managed.status==='ready')return part('ready','球球聊天账号 · '+windows.map(w=>(w.windowMinutes===10080?'周额度':w.windowMinutes===300?'5小时额度':'额度')+'剩余 '+pct(100-w.usedPercent)).join('；'),snapshot.updatedAt);
+      return part(managed.status==='needs-login'?'needs-authorization':'unknown',managed.status==='needs-login'?'连接球球聊天账号后查看同账号额度，无需原工具目录授权':'球球聊天账号额度暂未读取成功；不会改用原工具账号额度');
+    }
     if(provider==='workbuddy'){
       const wb=state.workbuddy||{},summary=wb.summary;
       if(Number.isFinite(summary?.credits?.remaining))return part(wb.stale===true||wb.status!=='connected'?'unknown':'ready',(wb.stale===true||wb.status!=='connected'?'上次':'')+'网站积分剩余 '+summary.credits.remaining+' · 仅网站汇总',summary.updatedAt);
@@ -109,13 +115,17 @@
     const timestamps=parts.map(p=>p.updatedAt).filter(Number.isFinite);
     return{provider,status,statusLabel:status==='ready'?(allConnected?'已连接':'已可用'):({working:'正在连接','needs-authorization':'未连接',unknown:'暂未可用'})[status],quota,tasks,chat,...(timestamps.length?{updatedAt:Math.max(...timestamps)}:{}),needsAttention,allConnected,usable:ready>0};
   }
-  function buildProviderGuide(input,provider){
+  function buildProviderGuide(input,provider,options={}){
+    const capability=options.capability===undefined?'all':options.capability,explicitCapability=options.capability!==undefined;
+    if(!['chat','data','all'].includes(capability))throw new TypeError('Unknown capability');
     check(provider);const state=input||{},card=buildToolCard(state,provider),directory=provider==='workbuddy'?state.workbuddyDesktop?.directory:state[provider]?.directory;
     const chatStatus=card.chat.status;
     const chat={id:'chat',title:'连接聊天账号',status:chatStatus,description:chatStatus!=='ready'&&state.onboarding?.[provider]?.chat?.message||card.chat.text,action:['needs-model','needs-new-chat'].includes(state.onboarding?.[provider]?.chat?.status)?'open-provider-chat':'enable-provider',payload:{provider},actionLabel:chatStatus==='ready'?'聊天已连接':state.onboarding?.[provider]?.chat?.status==='needs-model'?'选择模型':state.onboarding?.[provider]?.chat?.status==='needs-new-chat'?'开始新聊天':'连接聊天'};
-    const dataStatus=directory==='stored'?'ready':state.onboarding?.[provider]?.data?.status==='working'?'working':'needs-authorization';
+    const originalData=state.onboarding?.[provider]?.data;
+    const modelDependency=capability==='chat'&&provider==='zcode'&&state.zcode?.accountSource==='configured-custom';
+    const dataStatus=modelDependency?(directory==='stored'?'ready':'needs-authorization'):originalData?.status==='working'?'working':directory!=='stored'?'needs-authorization':originalData?(['ready','unavailable'].includes(originalData.status)?'ready':'needs-authorization'):directory==='stored'?'ready':'needs-authorization';
     const data={id:'data',title:provider==='zcode'&&state.zcode?.accountSource==='configured-custom'?'允许读取模型、额度和任务':'允许读取工具信息',status:dataStatus,description:dataStatus==='ready'?'已记住目录授权，无需重新选择':'系统将打开对应工具目录，请点“打开”；取消后可继续完成',action:'enable-provider-data',payload:{provider},actionLabel:'允许读取'};
-    const steps=provider==='zcode'&&state.zcode?.accountSource==='configured-custom'&&dataStatus!=='ready'?[data,chat]:[chat,data];
+    let steps=provider==='zcode'&&state.zcode?.accountSource==='configured-custom'&&dataStatus!=='ready'?[data,chat]:[chat,data];
     if(provider==='workbuddy'){
       steps.push({id:'quota',title:'连接官网积分',status:card.quota.status,description:card.quota.text,optional:true,action:state.workbuddy?.summary&&state.workbuddy?.status!=='needs-login'?'refresh-workbuddy':'workbuddy-login',actionLabel:state.workbuddy?.summary&&state.workbuddy?.status!=='needs-login'?'刷新积分':'登录查看积分'});
 
@@ -123,6 +133,11 @@
       steps.push({id:'capabilities',title:'检查额度和任务',status:card.quota.status==='ready'&&card.tasks.status==='ready'?'ready':card.quota.status==='unavailable'?'unavailable':'unknown',description:card.quota.text+'；'+card.tasks.text,...(directory==='stored'&&card.quota.status!=='unavailable'?{action:'enable-provider-data',payload:{provider},actionLabel:'重新检查'}:{})});
     }
     if(['zcode','workbuddy'].includes(provider))steps.push(...pluginSteps(state,provider));
+    if(capability==='chat'){
+      steps=steps.filter(step=>step.id==='chat'||modelDependency&&step.id==='data');
+      if(modelDependency){const dependency=steps.find(step=>step.id==='data');dependency.title='允许读取聊天模型配置';dependency.description=dataStatus==='ready'?'已记住模型配置所在目录，无需重新选择。':'聊天需要访问已有模型配置所在的 ZCode 目录；本次不启用额度/任务或安装插件。';dependency.actionLabel='允许读取模型配置';}
+    }else if(capability==='data')steps=steps.filter(step=>step.id!=='chat');
+    for(const step of steps)if(step.action&&explicitCapability)step.payload={...step.payload,provider,capability};
     // Already granted steps are observations, never another authorization prompt.
     // A vendor limitation and first-event wait are outcomes, not unfinished setup.
     for(const step of steps){
@@ -136,7 +151,7 @@
     const required=steps.filter(step=>!step.optional&&!step.informational);
     const next=required.find(step=>step.status==='needs-authorization'&&step.action);
     const complete=!required.some(step=>['needs-authorization','working','error'].includes(step.status));
-    return{provider,title:'连接 '+NAMES[provider],steps,complete,usable:card.usable,needsAttention:card.needsAttention,partial:!complete&&steps.some(s=>s.status==='ready'),nextStepId:next?.id||null};
+    return{provider,capability,title:'连接 '+NAMES[provider],steps,complete,usable:card.usable,needsAttention:card.needsAttention,partial:!complete&&steps.some(s=>s.status==='ready'),nextStepId:next?.id||null};
   }
   return{buildProviderGuide,buildToolCard};
 });

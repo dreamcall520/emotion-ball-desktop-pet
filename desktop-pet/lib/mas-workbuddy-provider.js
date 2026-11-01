@@ -1,11 +1,13 @@
 'use strict';
 
 const { createWorkBuddyWebQuota } = require('./workbuddy-web-quota');
+const { createWorkBuddyWebUsage } = require('./workbuddy-web-usage');
 const PARTITION = 'persist:qiuqiu-mas-workbuddy-web';
 const LOGIN_PAGE = 'https://www.workbuddy.cn/login/?platform=website&state=2&redirect_uri=https%3A%2F%2Fwww.workbuddy.cn%2Fprofile%2Fplans-usage&product=workbuddy';
 // Verified from WorkBuddy's public /login page, not guessed Tencent-wide domains.
 const LOGIN_HOSTS = new Set(['www.workbuddy.cn', 'workbuddy.cn', 'open.weixin.qq.com']);
 const ERROR_MESSAGES = Object.freeze({
+  USAGE_INCOMPLETE: 'WorkBuddy 用量分页不完整，本次未更新。',
   CLOSED: 'WorkBuddy 连接已关闭。',
   LOGIN_REQUIRED: '请在球球的 WorkBuddy 官网窗口登录，然后刷新额度。',
   LOGIN_FAILED: 'WorkBuddy 登录页面暂时无法打开，请重试。',
@@ -51,7 +53,7 @@ function sensitiveExternalURL(url) {
 // website Session owns cookies; no Chrome import, desktop auth/keychain read,
 // secret handling, automatic OAuth application registration or model request.
 function createMasWorkBuddyProvider({ BrowserWindow, session, shell, onChange = () => {},
-  createQuota = createWorkBuddyWebQuota, quotaOptions = {}, onLoginComplete = () => {} } = {}) {
+  createQuota = createWorkBuddyWebQuota, quotaOptions = {}, createUsage = createWorkBuddyWebUsage, usageOptions = {}, onLoginComplete = () => {} } = {}) {
   if (typeof BrowserWindow !== 'function' || typeof session?.fromPartition !== 'function' ||
       typeof shell?.openExternal !== 'function' || typeof createQuota !== 'function') {
     throw new TypeError('BrowserWindow, session.fromPartition and shell.openExternal are required');
@@ -75,12 +77,21 @@ function createMasWorkBuddyProvider({ BrowserWindow, session, shell, onChange = 
   websiteSession.setPermissionCheckHandler?.(() => false);
   const quota = createQuota({ ...quotaOptions, session: websiteSession });
   if (typeof quota?.readSummary !== 'function') throw new TypeError('A quota reader is required');
+  const usage = createUsage({ ...usageOptions, session: websiteSession });
+  if (typeof usage?.readUsage !== 'function') throw new TypeError('A usage reader is required');
+  let usageEpoch = 0, usageFlight = null;
+  let usageState = { status: 'idle', busy: false, report: null, stale: false, error: null, errorCode: null };
+  function getUsageState() { return structuredClone(usageState); }
+  function invalidateUsage(status = 'needs-login') {
+    usageEpoch++; usageFlight?.controller.abort(); usageFlight = null;
+    usageState = { status, busy: false, report: null, stale: false, error: null, errorCode: null };
+  }
   const windows = new Set();
   let loginWindow = null, closed = false, generation = 0, flight = null, loginCheckTimer=null;
   let state = { status: 'needs-login', busy: false, loginVisible: false, summary: null, stale: false,
     errorCode: null, errorMessage: null, loadErrorCode: null };
   function getState() {
-    return structuredClone({ ...state, capabilities: {
+    return structuredClone({ ...state, usage: getUsageState(), capabilities: {
       quota: { implemented: true, available: state.status === 'connected', scope: 'website-summary',
         coverage: { packages: 'credits-only', basicRewardPurchased: 'not-separated',
           cycleReset: 'not-queried', enterpriseLimit: 'not-verified' } },
@@ -151,6 +162,7 @@ function createMasWorkBuddyProvider({ BrowserWindow, session, shell, onChange = 
     });
   }
   function invalidateForLogin() {
+    invalidateUsage();
     generation++;
     flight?.controller.abort(); flight = null;
     update({ status: 'needs-login', busy: false, summary: null, stale: false,
@@ -223,6 +235,7 @@ function createMasWorkBuddyProvider({ BrowserWindow, session, shell, onChange = 
         Object.hasOwn(ERROR_MESSAGES, error?.code) ? error.code : 'CONNECTION_FAILED';
       if (!closed && id === generation) {
         const clear = code === 'LOGIN_REQUIRED';
+        if (clear) invalidateUsage();
         update({ status: clear ? 'needs-login' : 'error', busy: false,
           summary: clear ? null : state.summary, stale: !clear && Boolean(state.summary),
           errorCode: code, errorMessage: ERROR_MESSAGES[code] });
@@ -233,9 +246,62 @@ function createMasWorkBuddyProvider({ BrowserWindow, session, shell, onChange = 
       if (flight?.id === id) flight = null;
     }
   }
+  async function readUsage({ signal } = {}) {
+    if (closed) throw providerError('CLOSED');
+    if (signal?.aborted) throw providerError('CANCELLED');
+    const controller = new AbortController(), id = ++usageEpoch;
+    const previous = usageFlight;
+    usageFlight = { controller, id }; previous?.controller.abort();
+    const onAbort = () => controller.abort();
+    signal?.addEventListener('abort', onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+    usageState = { ...usageState, status: 'checking', busy: true, error: null, errorCode: null }; notify();
+    try {
+      const report = await usage.readUsage({ signal: controller.signal });
+      if (closed || id !== usageEpoch || controller.signal.aborted) throw providerError(closed ? 'CLOSED' : 'CANCELLED');
+      if (report?.source !== 'website-usage' || report.scope !== 'website-request-usage' || report.complete !== true ||
+          report.timezone !== 'Asia/Shanghai' || !/^\d{4}-\d{2}-\d{2}$/.test(report.startDate) ||
+          !/^\d{4}-\d{2}-\d{2}$/.test(report.endDate) || !Array.isArray(report.days) || report.days.length !== 7 ||
+          !Array.isArray(report.todayRecords) || report.todayRecords.length > 10000 ||
+          !Number.isSafeInteger(report.requestCount) || report.requestCount < 0 || report.requestCount > 10000 ||
+          !['todayCredits','totalCredits','updatedAt'].every(key => Number.isFinite(report[key]) && report[key] >= 0) ||
+          report.days.some(day => !/^\d{4}-\d{2}-\d{2}$/.test(day?.date) || !Number.isFinite(day.credits) || day.credits < 0) ||
+          report.todayRecords.some(row => !Number.isFinite(row?.at) || row.at < 0 || !Number.isFinite(row.credits) || row.credits < 0)) {
+        throw providerError('INVALID_RESPONSE');
+      }
+      const safe = { source: 'website-usage', scope: 'website-request-usage', timezone: report.timezone,
+        startDate: report.startDate, endDate: report.endDate, complete: true,
+        days: report.days.map(({date,credits}) => ({date,credits})),
+        todayRecords: report.todayRecords.map(({at,credits}) => ({at,credits})),
+        todayCredits: report.todayCredits, totalCredits: report.totalCredits,
+        requestCount: report.requestCount, updatedAt: report.updatedAt };
+      usageState = { status: 'connected', busy: false, report: safe, stale: false, error: null, errorCode: null }; notify();
+      return structuredClone(safe);
+    } catch (error) {
+      const code = closed ? 'CLOSED' : controller.signal.aborted ? 'CANCELLED' :
+        Object.hasOwn(ERROR_MESSAGES, error?.code) ? error.code : 'CONNECTION_FAILED';
+      if (!closed && id === usageEpoch) {
+        const clear = code === 'LOGIN_REQUIRED';
+        if (clear) {
+          // Both readers share one website identity. Confirmed login loss also
+          // invalidates a pending quota response; ordinary usage errors do not.
+          generation++; flight?.controller.abort(); flight = null;
+          state = { ...state, status: 'needs-login', busy: false, summary: null, stale: false,
+            errorCode: code, errorMessage: ERROR_MESSAGES[code] };
+        }
+        usageState = { status: clear ? 'needs-login' : 'error', busy: false,
+          report: clear ? null : usageState.report, stale: !clear && Boolean(usageState.report),
+          error: ERROR_MESSAGES[code], errorCode: code }; notify();
+      }
+      throw providerError(code);
+    } finally {
+      signal?.removeEventListener('abort', onAbort);
+      if (usageFlight?.id === id) usageFlight = null;
+    }
+  }
   function close() {
     if (closed) return;
-    closed = true; generation++; clearTimeout(loginCheckTimer);
+    closed = true; invalidateUsage('closed'); generation++; clearTimeout(loginCheckTimer);
     flight?.controller.abort(); flight = null;
     for (const win of [...windows]) { try { if (!win.isDestroyed()) win.destroy(); } catch (_) {} }
     windows.clear(); loginWindow = null;
@@ -244,6 +310,6 @@ function createMasWorkBuddyProvider({ BrowserWindow, session, shell, onChange = 
     // close never clears persistent cookies or logs the user out without asking.
   }
   function revoke(){clearTimeout(loginCheckTimer);invalidateForLogin();for(const win of [...windows]){try{if(!win.isDestroyed())win.destroy();}catch{}}windows.clear();loginWindow=null;update({status:'needs-login',loginVisible:false});}
-  return { getState, openLogin, readSummary, revoke, close };
+  return { getState, getUsageState, openLogin, readSummary, readUsage, revoke, close };
 }
 module.exports = { createMasWorkBuddyProvider };

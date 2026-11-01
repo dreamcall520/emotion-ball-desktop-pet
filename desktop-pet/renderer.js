@@ -41,6 +41,7 @@
   }
   let presentationSuppressed = false;
   let presentationMode = 'free';
+  let edgeSlideTimer = null, edgeSlidePacket = null;
   let presentationPaused = false;
   let presentationFrozen = false;
   let compactMode = null;
@@ -83,7 +84,7 @@
   const CODEX_THINKING_BURST_MS = 6000;
   const thinkingRestMs = () => 25000 + Math.floor(Math.random() * 10001);
   const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
-  let uploadedAction = null, lastUploadedAction = null;
+  let uploadedAction = null, lastUploadedAction = null, importedSleepAction = 'sleep', queuedSleepPose = null, newImportedSleep = false;
   let lastSpriteInkSignature='';
   function reportSpriteEdgeInk() {
     if(!desktop.spriteEdgeInk)return;
@@ -108,6 +109,13 @@
     reducedMotion: reducedMotion()
   }));
 
+  function syncEdgePeekStyle() {
+    const spec=window.EdgePeek?.specFor(customization.appearance.shape);
+    petElement.dataset.edgePeek=String(Boolean(spec));
+    if(spec){petElement.style.setProperty('--edge-tuck',`${spec.tucked*100}%`);petElement.style.setProperty('--edge-peek',`${spec.peeked*100}%`);}
+    else {petElement.style.removeProperty?.('--edge-tuck');petElement.style.removeProperty?.('--edge-peek');}
+  }
+
   function visualFacing() {
     if (!facing) return 'right';
     // The approved aurora face is drawn on the left side of its artwork, the
@@ -120,13 +128,17 @@
   }
 
   function syncFacing() {
+    if (edgeSlidePacket) return;
     if (dragState || activeMotion || presentationSuppressed || lastSample?.locked) return;
     // The approved aurora artwork bakes its eyes into the right-facing image.
     // Its left-edge presentation mirrors the whole SVG, so both edges keep
     // the same artwork orientation while the cloud peeks out.
     const auroraAtEdge = customization.appearance.shape === 'aurora-cloud' &&
       presentationMode === 'peeked' && ['left', 'right'].includes(petElement.dataset.edge);
-    facing = auroraAtEdge ? 'right' : PetFacing.resolve(lastSample?.petBounds, lastSample?.workArea, facing);
+    const side=petElement.dataset.edge,naturalEdge=window.EdgePeek?.specFor(customization.appearance.shape);
+    if(naturalEdge&&['tucked','peeked'].includes(presentationMode)&&['left','right'].includes(side)){
+      facing=side==='left'?'right':'left';
+    }else facing = auroraAtEdge ? 'right' : PetFacing.resolve(lastSample?.petBounds, lastSample?.workArea, facing);
     petElement.dataset.facing = facing;
     ball?.setFacing(visualFacing());
   }
@@ -179,6 +191,7 @@
   }
 
   function syncCodexWorking() {
+    if (edgeSlidePacket) return;
     const eligible = !focusQuiet && !presentationSuppressed && codexEnabled && codexActiveTaskCount > 0 && Boolean(lastSample) && !lastSample.locked &&
       !companion.manualSleep && currentState.mode !== 'sleep' && !dragState && !sheepOffering?.isDragging() && !singleClickTimer && !helloTimer &&
       performance.now() >= actionUntil && !activeMotion;
@@ -228,31 +241,50 @@
     restoreState();
   }
 
+  let codexSpriteViewport = null;
+  function markSpriteViewportRestore() {
+    if (activeMotion?.spriteAction === 'spin' && codexSpriteViewport) {
+      codexSpriteViewport.until = performance.now() + 1500;
+    }
+  }
+
   function startCodex(request) {
     const motion = InteractionMotion.getMotion(request.motion);
     if (!canShowCodex() || request.generation !== codexGeneration || request.pageEpoch !== codexPageEpoch || !Number.isSafeInteger(request.alertId) ||
       request.alertId <= lastCodexAlertId || !motion) return;
     lastCodexAlertId = request.alertId;
-    activeMotion = { token: ++nextMotionToken, action: motion.id, owner: 'codex',
+    const spriteAction=ball.getCodexSpriteAction?.(motion.id);
+    activeMotion = { token: ++nextMotionToken, action: motion.id, owner: 'codex',...(spriteAction?{spriteAction}:{}),
       alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch };
+    if (spriteAction === 'spin') {
+      const width = innerWidth, height = innerHeight, frameWidth = codexPet.sheets.spin.frameWidth || 192;
+      codexSpriteViewport = { token: activeMotion.token, pageEpoch: codexPageEpoch, baseWidth: width, height,
+        wideWidth: Math.ceil(width + height * (frameWidth - 192) / 208), until: Infinity };
+    }
     petElement.dataset.motionOwner = 'codex';
-    if (customization.appearance.shape !== 'new-year-sheep') ball.setEmotion(motion.emotion);
-    if(customization.appearance.shape==='soft-orb')ball.setMotionAction?.(motion.id,'codex',request.kind);
-    else ball.setMotionAction?.(motion.id,'codex');
+    if (customization.appearance.shape !== 'new-year-sheep' && !spriteAction) ball.setEmotion(motion.emotion);
+    if (customization.appearance.shape === 'soft-orb') ball.setMotionAction?.(motion.id, 'codex', request.kind);
+    else ball.setMotionAction?.(motion.id, 'codex');
+
     ball.setMotionFrame(InteractionMotion.sampleMotion(motion.id, 0));
     petElement.dataset.lastAction = motion.id;
     const preparedBall = ball, preparedMotion = activeMotion;
     const acknowledge = ready => {
       if (activeMotion !== preparedMotion || ball !== preparedBall) return;
       if (ready === false || !canShowCodex(preparedMotion)) { cancelCodex(request); return; }
-      const durationMs = ['new-year-sheep','soft-orb'].includes(customization.appearance.shape)
-        ? (customization.appearance.shape==='soft-orb'?preparedBall.getActionDuration?.(motion.id,'codex',request.kind):preparedBall.getActionDuration?.(motion.id,'codex')) : undefined;
+      const durationMs = ['new-year-sheep', 'soft-orb'].includes(customization.appearance.shape) || spriteAction
+        ? (customization.appearance.shape === 'soft-orb' ? preparedBall.getActionDuration?.(motion.id, 'codex', request.kind)
+          : preparedBall.getActionDuration?.(motion.id, 'codex')) : undefined;
+
       desktop.codexMotionReady({ token: preparedMotion.token, action: motion.id,
         alertId: request.alertId, generation: request.generation, pageEpoch: request.pageEpoch,
         ...(Number.isInteger(durationMs) && durationMs >= 10 && durationMs <= 60000 ? { durationMs } : {}) });
     };
     // 完整原画先就绪，宿主再开始同长计时，首播慢加载也不会截断动作。
-    if (['new-year-sheep','soft-orb'].includes(customization.appearance.shape) && ball.whenMotionReady) ball.whenMotionReady().then(acknowledge);
+    if ((['new-year-sheep', 'soft-orb'].includes(customization.appearance.shape) || spriteAction) && ball.whenMotionReady) {
+      ball.whenMotionReady().then(acknowledge);
+    }
+
     else acknowledge(true);
   }
 
@@ -300,17 +332,31 @@
 
   // Keep one interaction controller: imported sprites use its existing motion,
   // drag and Codex ownership rules, while drawing the pet's original frames.
+  function isXiaobai() {
+    return customization.appearance.shape === 'codex-pet' && codexPet?.characterId === 'xiaobai';
+  }
+
   function createCodexBall(emotionId) {
-    let active = true, motion = null, direction = facing || 'right';
+    let active = true, motion = null, direction = facing || 'right', sleepEpoch = 0, settledSleepAction = null;
     const hasMapped = id => Boolean(codexPet.frameMap?.[id]);
     const emotionAction = id => id === '51' ? 'running' :
-      ['00', '56'].includes(id) ? (hasMapped('sleep') ? 'sleep' : 'waiting') : ['03', '10', '52'].includes(id) ? 'wave' :
+      ['00', '56'].includes(id) ? (isXiaobai() && hasMapped(importedSleepAction) ? importedSleepAction : hasMapped('sleep') ? 'sleep' : 'waiting') : ['03', '10', '52'].includes(id) ? 'wave' :
       id === '53' ? 'jump' : id === '54' ? 'checking' : id === '13' ? `run-${direction}` : 'idle';
     const motionAction = (id, owner) => {
       if (owner === 'codex') return { jelly: 'fail', peek: 'waiting', sway: 'running', hop: 'jump', bow: 'checking' }[id] || 'wave';
       return { hop: 'jump', jelly: 'jump', sway: 'wave', peek: 'waiting', bow: 'checking',
         spin: 'wave', dizzy: 'fail', turn: 'checking', nuzzle: 'wave', land: 'checking', stretch: 'jump' }[id] || 'idle';
     };
+    function codexSpriteAction(id) {
+      const action = { hop: 'jump', spin: 'happy', bow: 'spin' }[id], entry = codexPet.frameMap?.[action];
+      return isXiaobai() && entry?.sheet === action && entry.count > 1 ? action : undefined;
+    }
+    function runDirection(side) {
+      const id = `run-${side === 'left' ? 'left' : 'right'}`, entry = codexPet.frameMap?.[id];
+      if (!isXiaobai()) return player.setAction(id);
+      const clip = entry?.count === 33 ? { start: 18, count: 14 } : undefined;
+      return player.setAction(id, { loop: true, clip, preserveProgress: true });
+    }
     const resize = () => player.setSize(Math.min(window.innerWidth, window.innerHeight || window.innerWidth));
     const player = CodexPetPlayer.create(petElement, {
       descriptor: codexPet, size: Math.min(window.innerWidth, window.innerHeight || window.innerWidth),
@@ -319,11 +365,14 @@
         petElement.dataset.codexAction = action; petElement.dataset.codexFrame = String(frame);reportSpriteEdgeInk();
       },
       onActionComplete(action) {
+        const completed=activeMotion;if(completed?.owner==='codex'&&completed.spriteAction===action)desktop.codexSpriteComplete?.({...completed,spriteAction:action});
+        if(isXiaobai() && ['sleep','sleep-lying'].includes(action)){settledSleepAction=action;scheduleSleepDream(action);}
         if (uploadedAction === action) { uploadedAction=null;clearAction();player.setAction('idle');restoreState(); }
         if (action === 'wakeup' && !['00', '56'].includes(adapter.emotionId)) player.setAction(emotionAction(adapter.emotionId));
       },
       onError() {
         if (ball !== adapter) return;
+        if(activeMotion?.spriteAction){markSpriteViewportRestore();activeMotion=null;petElement.dataset.motionOwner='none';desktop.stopMotion();}
         clearAction();
         codexPet = null;
         petElement.dataset.codexPetError = 'load';
@@ -331,29 +380,98 @@
         restoreState();
       }
     });
+    function scheduleSleepDream(action) {
+      if (!isXiaobai()) return;
+      const epoch = sleepEpoch;
+      setTimeout(() => {
+        if (dragState?.dragged || epoch !== sleepEpoch || ball !== adapter ||
+            !['00', '56'].includes(adapter.emotionId) || player.element.dataset.codexAction !== action) return;
+        const canvas = player.element, width = canvas.width, height = canvas.height;
+        const data = canvas.getContext('2d').getImageData(0, 0, width, height).data;
+        let x0 = width, y0 = height, x1 = -1, y1 = -1;
+        for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+          if (data[(y * width + x) * 4 + 3] > 16) {
+            x0 = Math.min(x0, x); x1 = Math.max(x1, x);
+            y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+          }
+        }
+        if (x1 < 0) return;
+        let hx0 = width, hx1 = -1;
+        for (let y = y0; y <= Math.min(y1, y0 + Math.round((y1 - y0) * .30)); y++) {
+          for (let x = x0; x <= x1; x++) if (data[(y * width + x) * 4 + 3] > 16) {
+            hx0 = Math.min(hx0, x); hx1 = Math.max(hx1, x);
+          }
+        }
+        const rect = canvas.getBoundingClientRect();
+        const body = { x: (rect.x + x0 / width * rect.width) / innerWidth,
+          y: (rect.y + y0 / height * rect.height) / innerHeight,
+          width: (x1 - x0 + 1) / width * rect.width / innerWidth,
+          height: (y1 - y0 + 1) / height * rect.height / innerHeight };
+        desktop.dogDreamState?.({ ready: true, pose: action, petId: codexPet.id,
+          head: { x: (rect.x + (hx0 + hx1) / 2 / width * rect.width) / innerWidth, y: body.y }, body });
+      }, 180);
+    }
     const syncActive = () => player.pause(!active || (['00', '56'].includes(adapter.emotionId) && !hasMapped('sleep')));
     const adapter = {
       emotionId: emotionId || '50',
       cancelMappedAction() { uploadedAction=null; },
+      getCodexSpriteAction:codexSpriteAction,
+      getActionDuration(id,owner){const action=owner==='codex'&&codexSpriteAction(id);return action?codexPet.frameMap[action].durations.reduce((sum,ms)=>sum+ms,0):undefined;},
+      whenMotionReady(){return player.whenReady();},
       getInteractionActions() { return CodexPetPlayer.getInteractionActions(codexPet); },
       playUploadedAction(id) { return player.setAction(id, { once: true }); },
       setEmotion(id) {
-        uploadedAction=null;
-        const waking = ['00', '56'].includes(this.emotionId) && !['00', '56'].includes(id);
-        this.emotionId = id; motion = null;
+        if (!isXiaobai()) {
+          uploadedAction = null;
+          const waking = ['00', '56'].includes(this.emotionId) && !['00', '56'].includes(id);
+          this.emotionId = id;
+          motion = null;
+          petElement.dataset.emotion = id;
+          player.setAction(waking && hasMapped('wakeup') && !reducedMotion() ? 'wakeup' : emotionAction(id));
+          syncActive();
+          return this;
+        }
+        const wasSleeping = ['00', '56'].includes(this.emotionId), sleeping = ['00', '56'].includes(id);
+        const restart = sleeping && (newImportedSleep || !wasSleeping);
+        if (restart) {
+          const poses = ['sleep', 'sleep-lying'].filter(hasMapped);
+          importedSleepAction = queuedSleepPose && hasMapped(queuedSleepPose) ? queuedSleepPose
+            : poses[Math.floor(Math.random() * poses.length)] || 'sleep';
+          queuedSleepPose = null;
+          newImportedSleep = false;
+        }
+        const preserve = sleeping && wasSleeping && !restart && player.element.dataset.codexAction === importedSleepAction;
+        if (!preserve) {
+          sleepEpoch++;
+          settledSleepAction = null;
+          desktop.dogDreamState?.({ ready: false, pose: importedSleepAction, restart });
+        }
+        uploadedAction = null;
+        const waking = wasSleeping && !sleeping;
+        this.emotionId = id;
+        motion = null;
         petElement.dataset.emotion = id;
-        player.setAction(waking && hasMapped('wakeup') && !reducedMotion() ? 'wakeup' : emotionAction(id)); syncActive(); return this;
-      },
-      setMotionAction(id, owner, scene) { motion = id; player.setAction(scene === 'wake' && hasMapped('wakeup') ? 'wakeup' : motionAction(id, owner)); return this; },
-      setFacing(side) {
-        direction = side === 'left' ? 'left' : 'right';
-        if (!motion && this.emotionId === '13') player.setAction(`run-${direction}`);
+        if (!preserve) {
+          if (id === '13') runDirection(direction);
+          else player.setAction(waking && hasMapped('wakeup') && !reducedMotion() ? 'wakeup' : emotionAction(id), { once: restart });
+        }
+        syncActive();
+        if (preserve && settledSleepAction) scheduleSleepDream(settledSleepAction);
         return this;
       },
-      setDragDirection(delta) { if (delta) player.setAction(delta < 0 ? 'run-left' : 'run-right'); },
+      setMotionAction(id, owner, scene) {motion=id;const sprite=owner==='codex'&&codexSpriteAction(id);if(sprite){player.setAction(sprite,{once:true});return this;}player.setAction(scene === 'wake' && hasMapped('wakeup') ? 'wakeup' : motionAction(id, owner)); return this; },
+      setFacing(side) {
+        if(isXiaobai() && dragState?.dragged)return this;
+        direction = side === 'left' ? 'left' : 'right';
+        if (!motion && this.emotionId === '13') runDirection(direction);
+        return this;
+      },
+      pauseDreamForDrag() {sleepEpoch++;desktop.dogDreamState?.({ready:false,pose:importedSleepAction,pause:true});},
+      resumeDreamAfterDrag() {if(settledSleepAction&&['00','56'].includes(this.emotionId))scheduleSleepDream(settledSleepAction);},
+      setDragDirection(delta) { if (!isXiaobai()) { if (delta) player.setAction(delta < 0 ? 'run-left' : 'run-right'); return this; } if(delta&&!['00','56'].includes(this.emotionId)){direction=delta<0?'left':'right';runDirection(direction);} },
       setActive(value) { active = Boolean(value); syncActive(); return this; },
       renderStatic() { player.pause(true); return this; },
-      stopMotion() { motion = null; player.setAction(emotionAction(this.emotionId)); return this; },
+      stopMotion() {motion=null;if (!isXiaobai()) { player.setAction(emotionAction(this.emotionId)); return this; }if(this.emotionId==='13'){runDirection(direction);return this;}const action=emotionAction(this.emotionId);if(!(['00','56'].includes(this.emotionId)&&player.element.dataset.codexAction===action))player.setAction(action);return this; },
       // Sprite animations already encode their poses. The host still applies
       // the original window offsets; SVG eye/body transformations do not apply.
       setMotionFrame() { return this; }, setGaze() { return this; }, clearGaze() { return this; },
@@ -362,6 +480,7 @@
       getSpriteCanvas() {return player.element;},
       resize, destroy() { player.destroy(); }
     };
+    petElement.dataset.characterId = isXiaobai() ? 'xiaobai' : '';
     petElement.dataset.engine = 'codex-pet';
     petElement.dataset.spriteEdgeMirror = String(Boolean(codexPet.frameMap));
     petElement.dataset.codexPetId = codexPet.id;
@@ -372,6 +491,7 @@
   }
 
   function createBall(emotionId) {
+    desktop.dogDreamState?.({ready:false,pose:importedSleepAction});
     sheepAutoNap = false; sheepLastNapAt = null; sheepAutomaticWakeUntil = 0;
     sheepLastInteractionAt = performance.now();
     petElement.dataset.autoNap = 'false';
@@ -387,6 +507,8 @@
     if (ball) ball.destroy();
     petElement.replaceChildren();
     petElement.dataset.shape = customization.appearance.shape;
+    syncEdgePeekStyle();
+    petElement.dataset.characterId = '';
     petElement.dataset.avatarAppearance = JSON.stringify(customization.appearance);
     compactMode = nextCompactMode;
     presentationFrozen = false;
@@ -402,6 +524,7 @@
       delete petElement.dataset.codexPetId;delete petElement.dataset.codexAction;delete petElement.dataset.codexFrame;
       petElement.setAttribute('aria-label','可拖动和互动的小宇');
       ball.setEmotion(emotionId||'50');
+      ball.setFacing(visualFacing());
       ball.setActive(!presentationPaused&&presentationMode!=='hidden'&&!lastSample?.locked);
       return;
     }
@@ -509,6 +632,7 @@
   }
 
   function stopMotion(notifyHost = true, preserveSheepClip = false) {
+    if (activeMotion?.spriteAction === 'spin') markSpriteViewportRestore();
     activeMotion = null;
     petElement.dataset.motionOwner = 'none';
     delete petElement.dataset.clickVisual;
@@ -538,10 +662,12 @@
   }
 
   function syncSuppressedAnimation(refresh = false) {
+    if (edgeSlidePacket) return;
     const quiet = presentationMode === 'tucked' && !presentationPaused && !lastSample?.locked;
     if (!quiet && presentationFrozen && !refresh) return;
     const sleeping = companion.manualSleep || currentState.mode === 'sleep' || lastSample?.locked;
-    const emotion = presentationMode === 'tucked' ? (sleeping ? '56' : '55') :
+    const naturalEdge=Boolean(window.EdgePeek?.specFor(customization.appearance.shape));
+    const emotion = presentationMode === 'tucked' ? (naturalEdge?(sleeping?'00':'50'):(sleeping ? '56' : '55')) :
       (sleeping ? '00' : currentState.emotionId);
     if (!quiet) ball.setActive(false);
     const emotionChanged = ball.emotionId !== emotion;
@@ -569,6 +695,12 @@
 
   function updatePresentation(packet) {
     if (!packet || !['free', 'tucked', 'peeked', 'hidden'].includes(packet.mode)) return;
+    const previousPresentation = presentationMode;
+    const sliding = edgeSlidePacket !== null;
+    const originalBodySlide = Boolean(window.EdgePeek?.specFor(customization.appearance.shape)) && customization.appearance.shape === 'blob' && !packet.paused && !packet.dragging && !reducedMotion() &&
+      ['left','right'].includes(packet.side) && ['tucked','peeked'].includes(previousPresentation) && ['tucked','peeked'].includes(packet.mode);
+    if (sliding && originalBodySlide && packet.mode === previousPresentation) { edgeSlidePacket = packet; return; }
+    clearTimeout(edgeSlideTimer); edgeSlideTimer = null; edgeSlidePacket = null;
     const wasSuppressed = presentationSuppressed;
     presentationMode = packet.mode;
     presentationPaused = packet.paused === true;
@@ -577,12 +709,24 @@
     petElement.dataset.presentation = packet.mode;
     petElement.dataset.edge = packet.side === 'left' || packet.side === 'right' ? packet.side : 'none';
     petElement.dataset.dragging = packet.dragging ? 'true' : 'false';
+    if (originalBodySlide && previousPresentation !== packet.mode) {
+      // Preserve the currently painted pose throughout the compositor slide.
+      // renderStatic/stopMotion would otherwise reset the contour mid-flight.
+      edgeSlidePacket = packet;
+      ball.setActive(false);
+      edgeSlideTimer = setTimeout(() => {
+        const latest = edgeSlidePacket;
+        edgeSlidePacket = null; edgeSlideTimer = null;
+        if (latest) updatePresentation(latest);
+      }, 500);
+      return;
+    }
     // 吸边先改宿主位置，活动采样可能尚未到达；由吸附侧直接确定朝向。
     // 仅在朝向实际改变时更新，隐藏/暂停后的重复报文不能重画冻结帧。
-    if (packet.mode === 'tucked' && ['left', 'right'].includes(packet.side)) {
-      const inward = customization.appearance.shape === 'aurora-cloud'
-        ? 'right' : packet.side === 'left' ? 'right' : 'left';
-      if (facing !== inward) {
+    if (['tucked','peeked'].includes(packet.mode) && ['left', 'right'].includes(packet.side)) {
+      const inward = customization.appearance.shape === 'aurora-cloud' ? 'right' :
+        packet.side === 'left' ? 'right' : 'left';
+      if (facing !== inward || customization.appearance.shape==='soft-orb') {
         facing = inward;
         petElement.dataset.facing = facing;
         ball.setFacing(visualFacing());
@@ -683,15 +827,16 @@
     return true;
   }
 
-  function playUploadedInteraction() {
+  function playUploadedInteraction(requestedId) {
     if (customization.appearance.shape !== 'codex-pet' || !ball.getInteractionActions || reducedMotion() ||
         presentationSuppressed || presentationPaused || presentationMode !== 'free' || lastSample?.locked || lastSample?.chatVisible ||
         companion.manualSleep || dragState || focusQuiet || codexActiveTaskCount || activeMotion?.owner === 'codex') return false;
-    const available = ball.getInteractionActions();
+    const explicit = ['wave','tail','groom','bone','jump','spin','happy','walk-right','walk-left','run-right','run-left'];
+    const available = requestedId ? (explicit.includes(requestedId) && codexPet.frameMap?.[requestedId] ? [requestedId] : []) : ball.getInteractionActions();
     const choices = available.filter(id => id !== lastUploadedAction);
     const pool = choices.length ? choices : available;
     if (!pool.length) return false;
-    cancelPendingInteraction(); clearAction(); stopMotion();
+    cancelPendingInteraction();clearAction();if(activeMotion)stopMotion();
     const id = pool[Math.min(pool.length - 1, Math.floor(Math.random() * pool.length))];
     uploadedAction = id; actionUntil = Number.POSITIVE_INFINITY;
     if (!ball.playUploadedAction(id)) { clearAction(); return false; }
@@ -701,6 +846,8 @@
   function updateActivity(sample) {
     const previouslyLocked = lastSample?.locked === true;
     lastSample = sample;
+    if (edgeSlidePacket && !sample.locked) return;
+    if (edgeSlidePacket) { clearTimeout(edgeSlideTimer); edgeSlidePacket = null; edgeSlideTimer = null; }
     syncFacing();
     const now = performance.now();
     const previousMode = currentState.mode;
@@ -745,7 +892,7 @@
       restoreState();
     }
     if (customization.appearance.shape !== 'new-year-sheep' && !focusQuiet && currentState.mode === 'sleep' && previousMode !== 'sleep' && !companion.manualSleep) {
-      desktop.say('sleep');
+      if(!isXiaobai())desktop.say('sleep');
     }
     if (activeMotion) return;
     if (!dragState?.dragged && !companion.manualSleep && currentState.gaze) {
@@ -783,7 +930,8 @@
     else playCompanionReaction('stretch', 'wake');
   }
 
-  function sleep() {
+  function sleep(pose) {
+    if(isXiaobai()){queuedSleepPose=pose||null;newImportedSleep=true;desktop.dogDreamState?.({ready:false,pose:importedSleepAction});}
     clearSheepAutoNap();
     cancelPendingInteraction();
     clearAction();
@@ -792,7 +940,7 @@
     companion.setManualSleep(true, performance.now());
     petElement.dataset.mode = 'manual-sleep';
     ball.clearGaze();
-    showEmotion('00');
+    if(customization.appearance.shape==='codex-pet')ball.setEmotion('00');else showEmotion('00');
     desktop.say('sleep');
   }
 
@@ -809,6 +957,7 @@
       runSingleClickAction();
       return;
     }
+    if (isXiaobai()) { runSingleClickAction(); return; }
     const motion = InteractionMotion.chooseMotion(Math.random(), lastDoubleMotion);
     lastDoubleMotion = motion.id;
     playReaction(motion.id);
@@ -866,6 +1015,7 @@
     }
     if (packet.frame.done === true) {
       const finishedOwner = activeMotion.owner;
+      if (activeMotion?.spriteAction === 'spin') markSpriteViewportRestore();
       activeMotion = null;
       petElement.dataset.motionOwner = 'none';
       delete petElement.dataset.clickVisual;
@@ -937,7 +1087,7 @@
       singleClickTimer = null;
       wakeOnDoubleClick = false;
       runSingleClickAction();
-    }), 260);
+    }),isXiaobai()?500:260);
   }
 
   function runBuddyClick(buddy) {
@@ -953,7 +1103,7 @@
     cancelPendingInteraction();
     stopMotion();
     companion.setManualSleep(false, performance.now());
-    if(customization.appearance.shape==='soft-orb'){const actions=['draw','fan','flip','scan','beam','shock','flight','ship','love'];startSoftOrbInteraction(actions[Math.floor(Math.random()*actions.length)]);return;}
+    if(customization.appearance.shape==='soft-orb'){const actions=['draw','fan','flip','scan','beam','shock','flight','ship','love','complete'];startSoftOrbInteraction(actions[Math.floor(Math.random()*actions.length)]);return;}
     if (customization.appearance.shape === 'codex-pet' && ball.getInteractionActions) {
       clearAction(); currentState = { ...currentState, mode: 'awake', emotionId: '50', welcome: false };
       petElement.dataset.mode = 'awake'; ball.setActive(true); ball.setEmotion('50');
@@ -1009,6 +1159,7 @@
     }
     if (presentationSuppressed || lastSample?.locked) return;
     if (command?.command === 'soft-orb-action') { startSoftOrbInteraction(command.action); return; }
+
     if (command?.command === 'sheep-offer') { sheepOffering?.offer(command.kind); return; }
     if (command?.command === 'sheep-action') { startSheepInteraction(command.action, command.ambient === true); return; }
     if (command?.command === 'again') playReaction(command.motion, false);
@@ -1077,7 +1228,7 @@
     cancelPendingInteraction();
     wakeOnDoubleClick = Boolean(startedSleeping);
     // A click immediately following hover belongs to the same wake, not a new action cancellation.
-    if (!wokeSheep) { clearAction(); stopMotion(); }
+    if(!wokeSheep&&!isXiaobai()){clearAction();stopMotion();}
     petting.reset();
     const point = eventPoint(event);
     dragState = {
@@ -1111,6 +1262,7 @@
     if (!dragState.dragged) {
       dragState.dragged = PetBehavior.isDrag(dragState.start, point);
       if (dragState.dragged) {
+        ball.pauseDreamForDrag?.();
         petElement.classList.add('dragging');
         clearAction();
         stopMotion();
@@ -1139,6 +1291,7 @@
       petElement.releasePointerCapture(event.pointerId);
     }
     desktop.endDrag();
+    if(wasDragged)ball.resumeDreamAfterDrag?.();
     noteInteraction();
     if (wasDragged && !companion.manualSleep) {
       if (!cancelled) playCompanionReaction('land', 'drop');
@@ -1190,11 +1343,12 @@
   });
 
   onWindow('resize', () => {
+    const v=codexSpriteViewport;if(customization.appearance.shape==='codex-pet'&&v&&v.pageEpoch===codexPageEpoch&&innerHeight===v.height&&[v.baseWidth,v.wideWidth].includes(innerWidth)&&(activeMotion?.token===v.token||performance.now()<v.until)){ball.resize?.();return;}
     cancelPendingInteraction();
     clearAction();
     stopMotion();
     const shouldBeCompact = window.innerWidth <= 120;
-    if (shouldBeCompact !== compactMode && customization.appearance.shape !== 'codex-pet') createBall(ball.emotionId);
+    if (shouldBeCompact !== compactMode && !['codex-pet', 'soft-orb'].includes(customization.appearance.shape)) createBall(ball.emotionId);
     else { compactMode = shouldBeCompact; ball.resize?.(); }
     restoreState();
     if (presentationSuppressed) syncSuppressedAnimation(true);

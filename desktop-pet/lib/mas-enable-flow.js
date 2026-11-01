@@ -3,7 +3,7 @@ const PROVIDERS = new Set(['codex', 'zcode', 'workbuddy']);
 const failure=code=>Object.assign(new Error(code),{code});
 // Chat owns its official login. Original-tool data is optional and independently
 // authorized; background restoration never opens a picker or starts a new login.
-function createMasEnableFlow({ ensureDirectory, refreshData, connectChat, revoke, onChange = () => {} }) {
+function createMasEnableFlow({ ensureDirectory, refreshData, connectChat, revoke, canRestoreData = () => true, onChange = () => {} }) {
   const initial=()=>({status:'idle',step:null,message:'尚未启用聊天',chat:{status:'needs-login',loginPending:false,message:'尚未连接，启用授权后完成官方登录'},data:{status:'needs-authorization',message:'原工具任务与额度尚未授权（可选）'}});
   const states=Object.fromEntries([...PROVIDERS].map(p=>[p,initial()]));
   const revisions=Object.fromEntries([...PROVIDERS].map(p=>[p,0])),dataFlights=new Map();
@@ -31,7 +31,7 @@ function createMasEnableFlow({ ensureDirectory, refreshData, connectChat, revoke
     }).finally(()=>{if(dataFlights.get(provider)===promise)dataFlights.delete(provider);});
     dataFlights.set(provider,promise);return promise;
   }
-  function enable(provider,{interactive=true,beforeConnect}={}){
+  function enable(provider,{interactive=true,beforeConnect,restoreData}={}){
     try{check(provider);}catch(error){return Promise.reject(error);}
     if(flight)return typeof beforeConnect!=='function'&&flight.provider===provider&&flight.kind==='chat'?flight.promise:Promise.reject(failure('BUSY'));
     const epoch=revisions[provider];
@@ -47,9 +47,19 @@ function createMasEnableFlow({ ensureDirectory, refreshData, connectChat, revoke
       update(provider,{status:chat.status==='ready'?'ready':'partial',step:null,message:chat.message||'聊天尚未就绪。',chat},epoch);
       // Do not await quota/task queries: they cannot delay the login or make a
       // usable chat appear broken just because optional data was not authorized.
-      void readData(provider,{interactive:false});
+      if(restoreData===true||(restoreData!==false&&canRestoreData(provider)))void readData(provider,{interactive:false});
     }).finally(()=>{if(flight?.promise===promise)flight=null;});
     flight={provider,kind:'chat',promise};return promise;
+  }
+  function enableModelDirectory(provider){
+    try{check(provider);if(provider!=='zcode')throw failure('INVALID_PROVIDER');}catch(error){return Promise.reject(error);}
+    if(flight)return Promise.reject(failure('BUSY'));
+    const epoch=revisions[provider];
+    const promise=Promise.resolve().then(async()=>{
+      const result=await ensureDirectory(provider,{interactive:true,purpose:'chat-model-config'});
+      return valid(provider,epoch)?result:{status:'cancelled'};
+    }).finally(()=>{if(flight?.promise===promise)flight=null;});
+    flight={provider,kind:'model-directory',promise};return promise;
   }
   function enableData(provider){
     try{check(provider);}catch(error){return Promise.reject(error);}
@@ -70,6 +80,6 @@ function createMasEnableFlow({ ensureDirectory, refreshData, connectChat, revoke
   }
   async function restore(provider){if(flight)await flight.promise;if(!closed)return enable(provider,{interactive:false});}
   function close(){closed=true;for(const provider of PROVIDERS)revisions[provider]++;}
-  return{getState,enable,enableData,restore,disable,close};
+  return{getState,enable,enableData,enableModelDirectory,restore,disable,close};
 }
 module.exports={createMasEnableFlow};

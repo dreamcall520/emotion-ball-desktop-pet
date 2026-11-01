@@ -366,17 +366,19 @@ test('右下角气泡只压住角色5px时向下滑14px，不能整组跳到气�
   assert.equal(result.y + result.cardInset.y - 1 - (bubble.y + bubble.height), 8);
 });
 
-test('260px羊半露与外露侧边角色净距约减半，入口200px原生窗不缩水', () => {
+test('260px羊自由与单眼探头均按可见身体保留角色净距，入口200px原生窗不缩水', () => {
   const area = { x: 0, y: 0, width: 1440, height: 300 };
   const pet = { x: 1180, y: 20, width: 260, height: 260 };
   for (const mode of ['free', 'peeked']) {
     const result = quotaLabelBounds(pet, area, null, 'compact', false, 1,
       { shape: 'new-year-sheep', side: 'right', mode }, false, true);
-    assert.equal(result.x, 1000); assert.equal(result.width, 200);
+    if(mode==='free')assert.equal(result.x,1000);
+    else assert.ok(result.x>1000,'探头后卡片随实际身体靠边，不能仍锚定旧半露位置');
+    assert.equal(result.width, 200);
     assert.equal(result.placement, 'left');
-    const paintedPetLeft = pet.x + pet.width * .04;
+    const paintedPetLeft = require('../lib/pet-visual-bounds').petVisualBounds(pet,'new-year-sheep',{side:'right',mode,quotaAnchor:true}).x;
     const roleRight = result.x + 128 + 8 + 22;
-    assert.ok(Math.abs(paintedPetLeft - roleRight - 32.4) < .01, '旧60.4px→32.4px，减少46%');
+    assert.ok(Math.abs(paintedPetLeft - roleRight - 32.4) < 1, '角色与实际身体净距保持，允许像素取整');
     assertInside(result, area);
   }
 });

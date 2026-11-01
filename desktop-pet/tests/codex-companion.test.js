@@ -31,6 +31,7 @@ function fixture(options = {}) {
   const companion = createCodexCompanion({
     now: () => time,
     random: options.random || (() => 0),
+    completionMotions: options.completionMotions,
     schedule: (callback, delay) => { const id = ++nextTimer; timers.set(id, { at: time + delay, callback }); return id; },
     cancel: id => timers.delete(id),
     canPresent: () => options.canPresent ? options.canPresent(companion) : present,
@@ -1805,4 +1806,45 @@ test('真实连接组合：账号切换后即使connected状态去重，后续�
   assert.equal(f.companion.getSnapshot().tasks.state, 'connected');
   f.companion.close();
   assert.equal(f.timers.size, 0);
+});
+
+
+test('小白三动作按三个等宽随机区间派发，默认宠物仍二选一', async () => {
+  const values = [0, .333333, 1 / 3, .666666, 2 / 3, .999999];
+  const expected = ['hop', 'hop', 'spin', 'spin', 'bow', 'bow'];
+  for (const [index, random] of values.entries()) {
+    const f = fixture({ random: () => random, completionMotions: () => ['hop', 'spin', 'bow'] });
+    await f.companion.setEnabled(true);
+    f.task(1, 'active', { baseline: true });
+    f.task(1, 'completed');
+    await f.tick(5000);
+    assert.equal(f.companion.getSnapshot().currentAlert.motion, expected[index]);
+    f.companion.close();
+  }
+  const ordinary = fixture({ random: () => .6 });
+  await ordinary.companion.setEnabled(true);
+  ordinary.task(1, 'active', { baseline: true });
+  ordinary.task(1, 'completed');
+  await ordinary.tick(5000);
+  assert.equal(ordinary.companion.getSnapshot().currentAlert.motion, 'spin');
+  ordinary.companion.close();
+});
+
+test('素材完成截止经过任务刷新仍有效，旧代次不能延长且明确取消立即生效', async () => {
+  const f = fixture();
+  await f.companion.setEnabled(true);
+  f.task(1, 'active', { baseline: true });
+  f.task(1, 'completed');
+  await f.tick(5000);
+  const alert = f.companion.getSnapshot().currentAlert;
+  await f.tick(7000);
+  assert.equal(f.companion.extendCompletedAlert(alert.id, alert.generation + 1, 5063), false);
+  assert.equal(f.companion.extendCompletedAlert(alert.id, alert.generation, 5063), true);
+  f.task(1, 'completed');
+  await f.tick(1200);
+  f.task(1, 'completed');
+  assert.equal(f.companion.getSnapshot().currentAlert.id, alert.id, '刷新不能缩回原8秒自然到期');
+  assert.equal(f.companion.dismiss(alert.id, alert.generation), true);
+  assert.equal(f.companion.getSnapshot().currentAlert, null);
+  f.companion.close();
 });

@@ -4,6 +4,10 @@
 }(typeof window !== 'undefined' ? window : this, function () {
   'use strict';
 
+  function isXiaobaiPet(value) {
+    return value?.characterId === 'xiaobai';
+  }
+
   const FRAME_WIDTH = 192, FRAME_HEIGHT = 208, COLUMNS = 8;
   // Codex stretches idle frames 6x; other actions keep their base timing.
   // Unused columns are deliberately skipped.
@@ -36,8 +40,8 @@
       });
       return Object.freeze({ initialDelayMs: Object.freeze([...value.initialDelayMs]), intervalMs: Object.freeze([...value.intervalMs]), clips: Object.freeze(clips) });
     }
-    const allowed = [...ids, 'sleep', 'wakeup', ...(sheets ? ['tail','groom','stretch'] : [])], result = {};
-    if(sheets && (!record(sheets) || !sheets.base || Object.keys(sheets).length>8 || Object.entries(sheets).some(([id,sheet])=>!/^([a-z][a-z0-9_-]{0,31})$/.test(id)||!record(sheet)||!Number.isInteger(sheet.rows)||sheet.rows<1||sheet.rows>5))) return invalid();
+    const allowed = [...ids, 'sleep', 'wakeup', ...(sheets ? ['tail','groom','stretch','bone','spin','happy','sleep-lying','walk-right','walk-left'] : [])], result = {};
+    if(sheets && (!record(sheets) || !sheets.base || Object.keys(sheets).length>12 || Object.entries(sheets).some(([id,sheet])=>!/^([a-z][a-z0-9_-]{0,31})$/.test(id)||!record(sheet)||!Number.isInteger(sheet.rows)||sheet.rows<1||sheet.rows>5||(sheet.frameWidth!==undefined&&(!Number.isInteger(sheet.frameWidth)||sheet.frameWidth<192||sheet.frameWidth>320))||(id==='base'&&sheet.frameWidth!==undefined&&sheet.frameWidth!==192)))) return invalid();
     for (const [id, entry] of Object.entries(value)) {
       if (!allowed.includes(id) || !record(entry) ||
           Object.keys(entry).some(key => !['start', 'count', 'durations', 'loop', 'flipX', 'variation', ...(sheets?['sheet']:[])].includes(key)) ||
@@ -49,7 +53,7 @@
           (entry.loop !== undefined && typeof entry.loop !== 'boolean') ||
           (entry.flipX !== undefined && typeof entry.flipX !== 'boolean') ||
           (sheets && (typeof entry.sheet!=='string'||!Object.hasOwn(sheets,entry.sheet))) ||
-          (['tail','groom','stretch'].includes(id) && entry.loop!==false)) return invalid();
+          (['tail','groom','stretch','bone','spin','happy','sleep-lying'].includes(id) && entry.loop!==false)) return invalid();
       if (entry.variation !== undefined && entry.loop === false) return invalid();
       const variation = entry.variation === undefined ? undefined : normalizeVariation(entry.variation, (sheets ? sheets[entry.sheet].rows : rows) * COLUMNS);
       result[id] = Object.freeze({ ...(variation ? { variation } : {}), ...(sheets?{sheet:entry.sheet}:{}), start: entry.start, count: entry.count,
@@ -62,8 +66,8 @@
   function getActions(descriptor) {
     const map = normalizeFrameMap(descriptor.frameMap, descriptor.rows, descriptor.version===3?descriptor.sheets:undefined);
     if (!map) return ACTIONS;
-    const base = [...ACTIONS, ...['sleep', 'wakeup','tail','groom','stretch'].filter(id => map[id]).map(id =>
-      ({ id, row: id === 'sleep' ? 9 : 10, name: ({sleep:'睡觉',wakeup:'醒来',tail:'轻轻摇尾',groom:'舔舔爪',stretch:'伸个懒腰'})[id] }))];
+    const base = [...ACTIONS, ...['sleep', 'wakeup','tail','groom','stretch','bone','spin','happy','sleep-lying','walk-right','walk-left'].filter(id => map[id]).map(id =>
+      ({ id, row: id === 'sleep' ? 9 : 10, name: ({sleep:'睡觉',wakeup:'醒来',tail:'轻轻摇尾',groom:'舔舔爪',stretch:'伸个懒腰',bone:'玩骨头',spin:'旋转庆祝',happy:'开心庆祝','sleep-lying':'趴着睡','walk-right':'向右走','walk-left':'向左走'})[id] }))];
     return Object.freeze(base.map(action => map[action.id] ? Object.freeze({ ...action,
       ...(map[action.id].sheet?{sheet:map[action.id].sheet}:{}), ...(map[action.id].variation?{variation:map[action.id].variation}:{}), start: map[action.id].start, loop: map[action.id].loop, flipX: map[action.id].flipX,
       frameDurations: map[action.id].durations,
@@ -72,7 +76,7 @@
 
   function getPreviewActions(descriptor) {
     const actions = getActions(descriptor);
-    const order = ['idle','wave','tail','groom','stretch','jump','run-right','run-left','running','waiting','checking','fail','sleep','wakeup'];
+    const order = ['idle','wave','tail','groom','bone','stretch','jump','spin','happy','walk-right','walk-left','run-right','run-left','running','waiting','checking','fail','sleep','sleep-lying','wakeup'];
     const seen = new Set();
     return Object.freeze(order.flatMap(id => {
       const action = actions.find(item => item.id === id);
@@ -94,7 +98,7 @@
     const visualKey = item => [item.sheet || 'single', item.start ?? item.row * COLUMNS, item.frameDurations.length, Boolean(item.flipX)].join(':');
     const seen = new Set([visualKey(actions.find(item => item.id === 'idle'))]);
     return Object.freeze(actions.filter(item => {
-      if (['idle','sleep','wakeup','run-right','run-left','running','waiting'].includes(item.id)) return false;
+      if (['idle','sleep','sleep-lying','wakeup','running','waiting',...(!isXiaobaiPet(descriptor)?['run-right','run-left']:[]),...(descriptor.sheets?.spin?.frameWidth>192?['spin']:[])].includes(item.id)) return false;
       const key = visualKey(item); if (seen.has(key)) return false; seen.add(key); return true;
     }).map(item => item.id));
   }
@@ -166,7 +170,7 @@
         frameWidth, frameHeight, 0, 0, frameWidth, frameHeight);
       if (action.flipX) context.restore();
       canvas.dataset.codexAction = action.id;
-      canvas.dataset.codexFrame = String(frame);
+      canvas.dataset.codexFrame = String(frame);canvas.dataset.codexClipStart=String(action.start??action.row*COLUMNS);canvas.dataset.codexDuration=String(action.durationMs);canvas.dataset.codexLoop=String(action.loop!==false);
       canvas.dataset.codexVariant = variationIndex === null ? 'base' : String(variationIndex);
       options.onFrame?.(action.id, frame);
     }
@@ -211,27 +215,58 @@
       for(const entry of sheetCache.values()){entry.image.onload=entry.image.onerror=null;entry.image.src='';}
       sheetCache.clear();
     }
+    function cachedSheet(key) {
+      let entry = sheetCache.get(key);
+      if (entry) { sheetCache.delete(key); sheetCache.set(key, entry); return entry; }
+      if (!isXiaobaiPet(descriptor)) {
+        while (sheetCache.size >= 2) {
+          const [oldKey, old] = sheetCache.entries().next().value;
+          old.image.onload = old.image.onerror = null;
+          old.image.src = '';
+          sheetCache.delete(oldKey);
+        }
+      }
+      const sheet = descriptor.sheets[key];
+      entry = { image: new view.Image(), ready: false };
+      sheetCache.set(key, entry);
+      entry.promise = new Promise((resolve, reject) => {
+        entry.image.onload = async () => {
+          try {
+            const scale = entry.image.naturalWidth / ((sheet.frameWidth || FRAME_WIDTH) * COLUMNS);
+            if (!Number.isInteger(scale) || scale < 1 || scale > 3 || entry.image.naturalHeight !== FRAME_HEIGHT * sheet.rows * scale) {
+              throw new Error('Pet action resource dimensions invalid');
+            }
+            if (isXiaobaiPet(descriptor) && entry.image.decode) await entry.image.decode();
+            entry.ready = true;
+            resolve();
+            entry.onReady?.();
+          } catch (error) { reject(error); entry.onError?.(error); }
+        };
+        entry.image.onerror = () => {
+          const error = new Error('Pet action resource could not be loaded');
+          reject(error);
+          entry.onError?.(error);
+        };
+        entry.image.src = sheet.imageURL;
+      });
+      entry.promise.catch(() => {});
+      return entry;
+    }
+    // Decode local sheets before interaction so switching never waits on a cold image.
+    async function preloadSheets() {
+      const generation=descriptor;canvas.dataset.codexPreload='loading';
+      try{for(const key of Object.keys(descriptor.sheets)){if(destroyed||descriptor!==generation)return;await cachedSheet(key).promise;canvas.dataset.codexCachedSheets=String(sheetCache.size);}if(!destroyed&&descriptor===generation)canvas.dataset.codexPreload='ready';}
+      catch(error){if(!destroyed&&descriptor===generation){canvas.dataset.codexPreload='error';options.onError?.(error);}}
+    }
     function loadActionSheet() {
       if(descriptor.version!==3)return;
       stop();loaded=false;canvas.dataset.codexReady='loading';
-      const key=action.sheet,sheet=descriptor.sheets[key],token=++imageGeneration;
-      let entry=sheetCache.get(key);
-      if(entry){sheetCache.delete(key);sheetCache.set(key,entry);}
-      else{
-        while(sheetCache.size>=2){const [oldKey,old]=sheetCache.entries().next().value;old.image.onload=old.image.onerror=null;old.image.src='';sheetCache.delete(oldKey);}
-        entry={image:new view.Image(),ready:false};sheetCache.set(key,entry);
-      }
-      image=entry.image;
-      const ready=()=>{
-        if(destroyed||token!==imageGeneration)return;
-        const scale=image.naturalWidth/(FRAME_WIDTH*COLUMNS);
-        if(!Number.isInteger(scale)||scale<1||scale>3||image.naturalHeight!==FRAME_HEIGHT*sheet.rows*scale){failed();return;}
-        frameWidth=canvas.width=FRAME_WIDTH*scale;frameHeight=canvas.height=FRAME_HEIGHT*scale;
-        loaded=true;canvas.dataset.codexReady='ready';canvas.dataset.codexSheet=key;canvas.dataset.codexCachedSheets=String(sheetCache.size);paint();syncPlayback();
-      };
-      const failed=()=>{if(destroyed||token!==imageGeneration)return;loaded=false;stop();canvas.dataset.codexReady='error';options.onError?.(new Error('Pet action resource could not be loaded'));};
-      if(entry.ready){ready();return;}
-      entry.image.onload=()=>{entry.ready=true;ready();};entry.image.onerror=failed;entry.image.src=sheet.imageURL;
+      const key=action.sheet,token=++imageGeneration,entry=cachedSheet(key);image=entry.image;
+      const ready=()=>{if(destroyed||token!==imageGeneration)return;const logicalWidth=descriptor.sheets[key].frameWidth||FRAME_WIDTH,scale=image.naturalWidth/(logicalWidth*COLUMNS),width=logicalWidth*scale,height=FRAME_HEIGHT*scale;
+        if(canvas.width!==width||canvas.height!==height){frameWidth=canvas.width=width;frameHeight=canvas.height=height;}
+        loaded=true;setSize(logicalSize);canvas.dataset.codexReady='ready';canvas.dataset.codexSheet=key;canvas.dataset.codexCachedSheets=String(sheetCache.size);paint();syncPlayback();};
+      const failed=error=>{if(destroyed||token!==imageGeneration)return;loaded=false;stop();canvas.dataset.codexReady='error';options.onError?.(error);};
+      if(entry.ready)ready();else if(isXiaobaiPet(descriptor))entry.promise.then(ready,failed);else{entry.onReady=ready;entry.onError=failed;}
     }
     function setPet(next) {
       if (destroyed) return false;
@@ -246,7 +281,7 @@
       canvas.dataset.codexPetId = descriptor.id;
       canvas.dataset.codexReady = 'loading';
       canvas.setAttribute('aria-label', descriptor.name);
-      if(descriptor.version===3){loadActionSheet();return true;}
+      if(descriptor.version===3){loadActionSheet();if(isXiaobaiPet(descriptor))void preloadSheets();return true;}
       const nextImage = new view.Image();
       image = nextImage;
       function failed() {
@@ -269,21 +304,27 @@
       nextImage.src = descriptor.imageURL;
       return true;
     }
-    function setAction(id, { once = false } = {}) {
-      if (destroyed) return false;
-      const next = actions.find(item => item.id === id || item.row === id);
-      if (!next) return false;
-      if ((next === action || next === variationBase) && !once) return true;
-      const previousSheet=action.sheet;
-      action = once ? { ...next, loop: false, variation: undefined } : next;
-      variationBase = action.variation ? action : null; variationIndex = null; variationWait = 0; variationDue = null; completed = false; frame = elapsed = 0;
-      if(descriptor.version===3 && (previousSheet!==action.sheet || !loaded)){loadActionSheet();return true;}
-      paint(); syncPlayback();
-      return true;
+    function setAction(id, { once = false, loop, clip, preserveProgress = false } = {}) {
+      if(destroyed)return false;
+      const next=actions.find(item=>item.id===id||item.row===id);if(!next)return false;
+      if(clip&&(!Number.isInteger(clip.start)||!Number.isInteger(clip.count)||clip.start<0||clip.count<1||clip.start+clip.count>next.frameDurations.length))return false;
+      const start=(next.start??next.row*COLUMNS)+(clip?.start||0),durations=clip?next.frameDurations.slice(clip.start,clip.start+clip.count):next.frameDurations,shouldLoop=once?false:loop??next.loop;
+      if(!once&&((next===variationBase&&!clip&&loop===undefined)||(action.id===next.id&&(action.start??action.row*COLUMNS)===start&&action.frameDurations.length===durations.length&&action.loop===shouldLoop)))return true;
+      const previousSheet=action.sheet,keep=preserveProgress&&['run-left','run-right'].includes(action.id)&&['run-left','run-right'].includes(next.id),oldFrame=frame,oldElapsed=elapsed;
+      action=once||clip||loop!==undefined?{...next,start,frameDurations:durations,durationMs:durations.reduce((sum,ms)=>sum+ms,0),loop:shouldLoop,variation:undefined}:next;
+      variationBase=action.variation?action:null;variationIndex=null;variationWait=0;variationDue=null;completed=false;frame=keep?oldFrame%durations.length:0;elapsed=keep?Math.min(oldElapsed,durations[frame]-1):0;
+      if(descriptor.version===3&&(previousSheet!==action.sheet||!loaded)){loadActionSheet();return true;}paint();syncPlayback();return true;
     }
+    function whenReady() {
+      if(destroyed)return Promise.resolve(false);if(loaded)return Promise.resolve(true);
+      const generation=imageGeneration;
+      return descriptor.version===3?cachedSheet(action.sheet).promise.then(()=>!destroyed&&generation===imageGeneration&&loaded,()=>false):Promise.resolve(false);
+    }
+    let logicalSize=options.size??120;
     function setSize(value) {
       if (destroyed || !Number.isFinite(value) || value <= 0 || value > 2048) return false;
-      canvas.style.width = `${value * FRAME_WIDTH / FRAME_HEIGHT}px`;
+      logicalSize=value;
+      canvas.style.width = `${value * frameWidth / frameHeight}px`;
       canvas.style.height = `${value}px`;
       return true;
     }
@@ -309,8 +350,8 @@
     document.addEventListener('visibilitychange', syncPlayback);
     media?.addEventListener?.('change', syncPlayback);
     setSize(options.size ?? 120); setOpacity(options.opacity ?? 1); setPet(options.descriptor);
-    return { element: canvas, setPet, setAction, setSize, setOpacity, pause, destroy };
+    return { element: canvas, setPet, setAction, setSize, setOpacity, pause, whenReady, destroy };
   }
 
-  return Object.freeze({ ACTIONS, FRAME_WIDTH, FRAME_HEIGHT, COLUMNS, normalizeFrameMap, getActions, getPreviewActions, getInteractionActions, validDescriptor, create });
+  return Object.freeze({ isXiaobaiPet, ACTIONS, FRAME_WIDTH, FRAME_HEIGHT, COLUMNS, normalizeFrameMap, getActions, getPreviewActions, getInteractionActions, validDescriptor, create });
 }));

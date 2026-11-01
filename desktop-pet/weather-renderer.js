@@ -101,25 +101,60 @@
   }
   const api = window.qiuqiuWeather;
   const el = id => document.getElementById(id);
-  let state = {}, expanded = false, picker = false, tab = 'today', layout = 'horizontal', searchRevision = 0, locationGeneration = 0, locationWarning = '', searchTimer = null, contentAnimation = null, composing = false;
+  let state = {}, expanded = false, picker = false, tab = 'today', layout = 'horizontal', searchRevision = 0, locationGeneration = 0, locationWarning = '', searchTimer = null, contentAnimation = null, composing = false, resizeKey = '', collapseAnimation = null, collapseToken = 0;
   const text = (id, value) => { el(id).textContent = value; };
   const timezone = () => state.timezone || (state.city?.timezone !== 'auto' ? state.city?.timezone : undefined);
   const time = value => localTime(value, timezone());
   function resize() {
-    if (!expanded) return api.resize({ width: 128, height: 32, expanded: false }).catch(() => {});
-    api.resize({ width: 390, height: Math.min(680, Math.max(picker ? 210 : 280, Math.ceil(el(picker ? 'city-picker' : 'weather-details').getBoundingClientRect().height) + 2)), expanded: true }).catch(() => {});
+    // ResizeObserver also fires while Chromium adopts the native window bounds.
+    // One request per distinct content size avoids re-entering the quota layout.
+    if (collapseAnimation) return Promise.resolve();
+    const size = expanded
+      ? { width: 390, height: Math.min(680, Math.max(picker ? 210 : 280, Math.ceil(el(picker ? 'city-picker' : 'weather-details').getBoundingClientRect().height) + 2)), expanded: true }
+      : { width: 128, height: 32, expanded: false };
+    const key = JSON.stringify(size);
+    if (key === resizeKey) return Promise.resolve();
+    resizeKey = key;
+    return api.resize(size).catch(() => { if (resizeKey === key) resizeKey = ''; });
   }
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   function updateHero() { const current = state.current || {}; el('hero-icon').innerHTML = heroIcon(current.weatherCode, current.isDay !== false && current.isDay !== 0, expanded && !picker); }
-  function fadeContent(target) { if (reducedMotion.matches) return; contentAnimation?.cancel(); contentAnimation = target.animate?.([{ opacity: .55 }, { opacity: 1 }], { duration: 120, easing: 'ease-out' }); }
-  reducedMotion.addEventListener('change', () => { if (reducedMotion.matches) contentAnimation?.cancel(); updateHero(); });
-  function setExpanded(value) {
+  function fadeContent(target, duration = 120) { if (reducedMotion.matches) return; contentAnimation?.cancel(); contentAnimation = target.animate?.([{ opacity: .55 }, { opacity: 1 }], { duration, easing: 'ease-out' }); }
+  function cancelCollapse() {
+    const animation = collapseAnimation;
+    collapseAnimation = null; collapseToken++;
+    animation?.cancel(); delete el('quota-label').dataset.collapsing;
+  }
+  function applyExpanded(value) {
     const wasExpanded = expanded;
     expanded = value; if (!expanded) picker = false;
     el('quota-label').dataset.expanded = String(expanded);
     el('folded').hidden = expanded; el('weather-details').hidden = !expanded || picker; el('city-picker').hidden = !expanded || !picker;
-    el('folded').setAttribute('aria-expanded', String(expanded)); updateHero(); resize(); if (expanded && !wasExpanded) fadeContent(el(picker ? 'city-picker' : 'weather-details'));
+    el('folded').setAttribute('aria-expanded', String(expanded)); updateHero(); resize();
+    if (expanded && !wasExpanded) fadeContent(el(picker ? 'city-picker' : 'weather-details'));
+    if (!expanded && document.documentElement.dataset.inputMode === 'keyboard') el('folded').focus();
   }
+  function setExpanded(value, animateCollapse = false) {
+    if (value || !animateCollapse || reducedMotion.matches || !expanded || typeof api.collapse !== 'function') { if (value && collapseAnimation) resizeKey = ''; cancelCollapse(); applyExpanded(value); return; }
+    if (collapseAnimation) return;
+    contentAnimation?.cancel();
+    const token = ++collapseToken, label = el('quota-label'), request = { cancel() {} };
+    collapseAnimation = request; label.dataset.collapsing = 'true';
+    // Main owns the source/compact snapshots and one fixed transparent union
+    // host; no native window changes size while its surface is interpolating.
+    api.collapse({ reducedMotion: false }).then(result => {
+      if (collapseAnimation !== request || token !== collapseToken) return;
+      collapseAnimation = null; delete label.dataset.collapsing;
+      if (!result?.canceled) applyExpanded(false);
+    }).catch(() => {
+      if (collapseAnimation !== request || token !== collapseToken) return;
+      collapseAnimation = null; delete label.dataset.collapsing; applyExpanded(false);
+    });
+  }
+  reducedMotion.addEventListener('change', () => {
+    if (reducedMotion.matches) { contentAnimation?.cancel(); if (collapseAnimation) { void api.collapse?.({ reducedMotion: true }).catch(() => {}); setExpanded(false); } }
+    updateHero();
+  });
   function showPicker(value) {
     clearTimeout(searchTimer); searchRevision++;
     if (value && !picker) {
@@ -193,7 +228,7 @@
       if (state.city?.mode === 'current') { locationWarning = '定位未更新，沿用上次位置'; render(state); }
     } finally { if (generation === locationGeneration) { el('use-location').disabled = false; resize(); } }
   }
-  el('folded').onclick = () => setExpanded(true); el('collapse').onclick = () => { setExpanded(false); if (document.documentElement.dataset.inputMode === 'keyboard') el('folded').focus(); }; el('city').onclick = () => showPicker(true); el('close-picker').onclick = () => showPicker(false); el('today-tab').onclick = () => selectTab('today'); el('week-tab').onclick = () => selectTab('week');
+  el('folded').onclick = () => setExpanded(true); el('collapse').onclick = () => setExpanded(false, true); el('city').onclick = () => showPicker(true); el('close-picker').onclick = () => showPicker(false); el('today-tab').onclick = () => selectTab('today'); el('week-tab').onclick = () => selectTab('week');
   document.querySelectorAll('#week-layout button').forEach(button => button.onclick = () => { layout = button.dataset.layout; el('week-list').hidden = layout === 'horizontal'; el('week-chart').hidden = layout !== 'horizontal'; document.querySelectorAll('#week-layout button').forEach(item => item.setAttribute('aria-pressed', String(item === button))); resize(); });
   el('refresh').onclick = () => act(() => api.refresh()); el('use-location').onclick = () => locate(true);
   el('empty-city').onclick = () => showPicker(true);
@@ -231,7 +266,7 @@
   document.addEventListener('pointerdown', () => { document.documentElement.dataset.inputMode = 'pointer'; }, true);
   document.addEventListener('keydown', event => { if (['Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) document.documentElement.dataset.inputMode = 'keyboard'; }, true);
   document.querySelector('.tabs').addEventListener('keydown', event => { if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return; event.preventDefault(); selectTab(tab === 'today' ? 'week' : 'today'); el(`${tab}-tab`).focus(); });
-  document.addEventListener('keydown', event => { if (event.key === 'Escape') picker ? showPicker(false) : setExpanded(false); });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') picker ? showPicker(false) : setExpanded(false, true); });
   api.onChooseCity?.(() => showPicker(true));
   api.onCollapse?.(() => { picker = false; clearTimeout(searchTimer); searchRevision++; locationGeneration++; setExpanded(false); });
   let liveRevision = 0;
@@ -245,5 +280,5 @@
   const resetPointerFocus = () => { document.documentElement.dataset.inputMode = 'pointer'; document.activeElement?.blur(); };
   window.addEventListener('blur', resetPointerFocus);
   api.onPointerReset?.(resetPointerFocus);
-  window.addEventListener('unload', () => { clearTimeout(searchTimer); searchRevision++; locationGeneration++; });
+  window.addEventListener('unload', () => { cancelCollapse(); contentAnimation?.cancel(); contentSizeObserver.disconnect(); clearTimeout(searchTimer); searchRevision++; locationGeneration++; });
 })();

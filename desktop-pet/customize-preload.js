@@ -1,6 +1,14 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('petCustomizer', {
+  onPromotionOpen: callback => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, value) => { if (typeof value === 'string') callback(value); };
+    ipcRenderer.on('pet:promotion-open', listener);
+    return () => ipcRenderer.removeListener('pet:promotion-open', listener);
+  },
+  promotionReady: token => { if (typeof token === 'string') ipcRenderer.send('pet:promotion-ready', token); },
+  promotionContact: action => ipcRenderer.invoke('pet:promotion-contact', action),
   onVisibility: callback => {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, visible) => callback(visible === true);
@@ -10,7 +18,7 @@ contextBridge.exposeInMainWorld('petCustomizer', {
   onColorMode: callback => {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, value, appearance, theme) => callback(value === 'accessible' ? 'accessible' : 'standard',
-      ['light', 'dark'].includes(appearance) ? appearance : 'system', theme === 'blue' ? 'blue' : 'green');
+      ['light', 'dark'].includes(appearance) ? appearance : 'system', ['blue', 'purple'].includes(theme) ? theme : 'green');
     ipcRenderer.on('pet:color-mode', listener);
     return () => ipcRenderer.removeListener('pet:color-mode', listener);
   },

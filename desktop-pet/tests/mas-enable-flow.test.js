@@ -30,3 +30,19 @@ test('活跃OAuth等待保留明确标记，恢复时尚未发起登录不冒充
  const {flow}=fixture({connectChat:async(p,{interactive})=>({status:'needs-login',loginPending:interactive,message:interactive?'请本人完成登录':'尚未登录'})});
  await flow.restore('codex');assert.equal(flow.getState().codex.chat.loginPending,false);await flow.enable('codex');assert.equal(flow.getState().codex.chat.loginPending,true);
 });
+
+test('只聊天不读取已授权额度或任务，模型目录用途不会伪装成数据连接',async()=>{
+ const seen=[];let queries=0;const {flow}=fixture({ensureDirectory:async(p,o)=>{seen.push([p,o]);return{status:'stored'};},refreshData:async()=>{queries++;return{available:true};}});
+ await flow.enable('zcode',{restoreData:false});await flush();assert.equal(seen.length,0);assert.equal(queries,0);
+ const result=await flow.enableModelDirectory('zcode');assert.equal(result.status,'stored');assert.deepEqual(seen,[['zcode',{interactive:true,purpose:'chat-model-config'}]]);assert.equal(queries,0);assert.equal(flow.getState().zcode.data.status,'needs-authorization');
+ await flow.enable('zcode',{restoreData:false});await flush();assert.equal(queries,0);
+});
+test('模型目录取消或关闭不会启动额度查询或改变数据状态',async()=>{
+ let release;const {flow}=fixture({ensureDirectory:()=>new Promise(r=>release=r),refreshData:()=>{throw Error('must not run');}});
+ const pending=flow.enableModelDirectory('zcode');await Promise.resolve();await assert.rejects(flow.enable('codex'),{code:'BUSY'});flow.close();release({status:'stored'});assert.deepEqual(await pending,{status:'cancelled'});assert.equal(flow.getState().zcode.data.status,'needs-authorization');
+});
+
+test('重启只聊天用户不会因为已有模型目录而升级成额度任务，原已启用数据仍恢复',async()=>{
+ const seen=[];let allowed=false;const {flow}=fixture({canRestoreData:()=>allowed,ensureDirectory:async(p,o)=>{seen.push(o.interactive);return{status:'stored'};}});
+ await flow.restore('zcode');await flush();assert.deepEqual(seen,[]);allowed=true;await flow.restore('zcode');await flush();assert.deepEqual(seen,[false]);
+});

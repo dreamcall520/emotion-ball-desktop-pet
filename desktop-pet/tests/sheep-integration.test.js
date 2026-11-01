@@ -42,13 +42,13 @@ function fixture({ realClick = false } = {}) {
     uploadedAction:null, ball:null, weatherEffects:null, sheepOffering:null, sheepActionBall:null, actionTimer:null, actionUntil:0,
     customization:{appearance}, companion:{manualSleep:false,
       update:()=>({mode:'sleep',emotionId:'00',gaze:null}), setKeepAwake(){}, setManualSleep(value){this.manualSleep=Boolean(value);}},
-    presentationSuppressed:false, presentationMode:'free', presentationPaused:false, presentationFrozen:false,
+    edgeSlidePacket:null, edgeSlideTimer:null, presentationSuppressed:false, presentationMode:'free', presentationPaused:false, presentationFrozen:false,
     lastSample:{locked:false}, currentState:{mode:'awake',emotionId:'50',gaze:null},
     activeMotion:null, dragState:null, facing:null, focusQuiet:false, codexEnabled:false,
     lastSheepClick:null,lastAuroraClick:null,nextSheepAmbientAt:0,lastSheepAmbient:null,sheepAutoNap:false,sheepLastInteractionAt:0,sheepLastNapAt:null,sheepAutomaticWakeUntil:0,lastWorkAttempt:0,singleClickTimer:null,helloTimer:null,petHovered:false,wakeOnDoubleClick:false,Math:Object.assign(Object.create(Math),{random:()=>0.01}),
     codexActiveTaskCount:0, codexThinking:false, codexThinkingVisible:false, codexThinkingTimer:null, quotaEffects:null, quotaPacket:{config:{}},
     compactMode:null, officialAurora:null, clickVisual:null, codexPet:null, listeners:[],
-    petElement:{dataset:{},querySelector:()=>null,replaceChildren(){},setAttribute(){}},
+    petElement:{dataset:{},style:{setProperty(){},removeProperty(){}},querySelector:()=>null,replaceChildren(){},setAttribute(){}},
     petting:{reset:()=>calls.push(['petting-reset'])},
     document:{hidden:false},window:{innerWidth:180,EB_CUSTOM_SHAPES:{createShape:()=>null}},
     EmotionBall:{create(target,value){options.push(value);return makeBall();}},
@@ -71,7 +71,7 @@ function fixture({ realClick = false } = {}) {
     cancelCodex:command=>calls.push(['codex-cancel',command]),startCodex:command=>calls.push(['codex',command])
   });
   context.PetCustomization={...Customization,auroraReferenceTexture:()=>null};
-  const functions=['startSheepInteraction','runBuddyClick','wakeSheep','clearSheepAutoNap','wakeSheepAutomaticSleep','resetSheepAmbient','maybePlaySheepAmbient','clearAction','stopMotion','showEmotion','createBall','runCommand','sheepOfferingState','playSheepOffering','updatePresentation','updateActivity'];
+  const functions=['syncEdgePeekStyle','startSheepInteraction','runBuddyClick','wakeSheep','clearSheepAutoNap','wakeSheepAutomaticSleep','resetSheepAmbient','maybePlaySheepAmbient','clearAction','stopMotion','showEmotion','createBall','runCommand','sheepOfferingState','playSheepOffering','updatePresentation','updateActivity'];
   vm.runInContext(`'use strict';\n${functions.map(name=>declaration(renderer,name)).join('\n')}`,context);
   vm.runInContext(registration(/listeners\.push\(desktop\.onSettings\(observe\(settings => \{[\s\S]*?\n  \}\)\)\);/),context);
   vm.runInContext(registration(/onWindow\('beforeunload', \(\) => \{[\s\S]*?\n  \}\);/),context);

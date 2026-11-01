@@ -3,19 +3,26 @@
   let busy = false, busyCount=0,lastState=null,cachedPartitions=null,cachedDesktopItems=null,zcodeSourceDraft=null;
   const providers=['codex','zcode','workbuddy'], guideModel=window.ProviderConnectionGuide;
   let guideProvider=null;const skippedSteps=new Map();
-  const flow=window.ProviderAuthorizationFlow.createFlow((state,provider)=>({...guideModel.buildProviderGuide(previewState()||state,provider),steps:guideModel.buildProviderGuide(previewState()||state,provider).steps.filter(step=>!skippedSteps.get(provider)?.has(step.id))}));
+  const flow=window.ProviderAuthorizationFlow.createFlow((state,provider)=>({...providerGuide(previewState()||state,provider),steps:providerGuide(previewState()||state,provider).steps.filter(step=>!skippedSteps.get(provider)?.has(step.id))}));
   let flowRunning=false;
+  const validCapability=value=>['chat','data','all'].includes(value);
+  let defaultCapability='chat',capabilityChoices={};
+  try{const saved=JSON.parse(localStorage.getItem('qiuqiu-capability-selection')||'{}');if(validCapability(saved.default))defaultCapability=saved.default;for(const provider of providers)if(validCapability(saved.providers?.[provider]))capabilityChoices[provider]=saved.providers[provider];}catch(_){}
+  const capabilityFor=provider=>capabilityChoices[provider]||defaultCapability;
+  function saveCapabilities(){try{localStorage.setItem('qiuqiu-capability-selection',JSON.stringify({default:defaultCapability,providers:capabilityChoices}));}catch(_) {}}
+  function providerGuide(state,provider){return guideModel.buildProviderGuide(state,provider,{capability:capabilityFor(provider)});}
+
   function previewState(){
     if(zcodeSourceDraft===null||zcodeSourceDraft===lastState?.zcode?.accountSource)return lastState;
     return {...lastState,zcode:{...lastState.zcode,accountSource:zcodeSourceDraft},zcodeSnapshot:null,providerChats:{...lastState.providerChats,zcode:null},chat:lastState.chat?.source==='zcode'?null:lastState.chat,onboarding:{...lastState.onboarding,zcode:{...lastState.onboarding?.zcode,status:'idle',chat:{status:'idle',message:'请连接所选聊天方式'}}}};
   }
-  function currentGuide(){return guideProvider&&lastState?guideModel.buildProviderGuide(previewState(),guideProvider):null;}
+  function currentGuide(){return guideProvider&&lastState?providerGuide(previewState(),guideProvider):null;}
   function nextGuideStep(guide){const skipped=skippedSteps.get(guideProvider)||new Set();return guide?.steps.find(step=>step.id===guide.nextStepId&&!skipped.has(step.id))||guide?.steps.find(step=>step.status==='needs-authorization'&&!step.optional&&!skipped.has(step.id)&&step.action);}
   function openGuide(provider,preserveSkipped=false){if(!providers.includes(provider))return;guideProvider=provider;if(!preserveSkipped)skippedSteps.set(provider,new Set());el('connection-guide').hidden=false;paintGuide();el('connection-guide').scrollIntoView({block:'start',behavior:'smooth'});el('connection-guide').focus({preventScroll:true});}
   function paintGuide(){
     if(!guideProvider||!lastState)return;const guide=currentGuide(),skipped=skippedSteps.get(guideProvider)||new Set(),next=nextGuideStep(guide);
     const installing=['checking','installing'].includes(lastState.pluginInstallations?.[guideProvider]?.status);el('guide-cancel-install').hidden=!installing;el('guide-cancel-install').disabled=!installing;el('guide-cancel-install').dataset.provider=guideProvider;
-    el('guide-title').textContent=guide.title;el('guide-zcode-source').hidden=guideProvider!=='zcode';
+    el('guide-title').textContent=guide.title;el('guide-zcode-source').hidden=guideProvider!=='zcode'||capabilityFor(guideProvider)==='data';el('guide-capability').value=capabilityFor(guideProvider);el('guide-capability').disabled=busy||flow.active;
     const labels={ready:'已完成',working:'处理中','needs-authorization':'需要确认',unavailable:'暂不可用',unknown:'待更新',cancelled:'已取消',error:'需要处理',blocked:'需要处理'};
     el('guide-steps').replaceChildren(...guide.steps.map(step=>{const li=document.createElement('li');li.dataset.step=step.id;li.dataset.status=step.status;const heading=document.createElement('div'),title=document.createElement('strong'),badge=document.createElement('span'),description=document.createElement('p');title.textContent=step.title;badge.className='step-badge';badge.textContent=skipped.has(step.id)&&step.status!=='ready'?'已暂缓':step.optional&&step.status!=='ready'?'可选':step.status==='blocked'&&!step.action?'暂不可用':step.id==='task-verification'&&step.status!=='ready'?'等待首次任务':labels[step.status]||'待完成';heading.append(title,badge);description.textContent=step.description||'';li.append(heading,description);if(step.action){const action=document.createElement('button');action.className='secondary';action.dataset.action='guide-run';action.dataset.step=step.id;action.textContent=step.actionLabel||(step.status==='ready'?'查看或刷新':'完成这一步');action.disabled=busy||step.status==='working';li.append(action);}return li;}));
     el('guide-next').textContent=next?'继续：'+next.title:'返回工具卡';el('guide-next').disabled=busy||next?.status==='working';el('guide-skip').hidden=!next;el('guide-skip').disabled=busy;el('guide-chat').hidden=guideModel.buildToolCard(lastState,guideProvider).chat.status!=='ready';el('guide-chat').disabled=false;
@@ -137,10 +144,12 @@
   function paintFlow(){
     el('authorization-stop').hidden=!flow.active;el('authorization-stop').disabled=false;
     document.querySelectorAll('input[name=authorization-provider]').forEach(input=>input.disabled=flow.active||busy);
+    el('authorization-capability').disabled=busy||flow.active;
     selectionChanged();
   }
-  function startFlow(selected){
+  function startFlow(selected,fromBatch=false){
     if(busy||flow.active)return;
+    if(fromBatch){for(const provider of selected)if(providers.includes(provider)){capabilityChoices[provider]=defaultCapability;skippedSteps.delete(provider);}saveCapabilities();}
     flow.start(selected);el('authorization-progress').textContent=flow.active?'正在依次连接所选工具；已有授权会跳过，可随时稍后继续。':'请先选择工具。';
     paintFlow();void pumpFlow();
   }
@@ -156,7 +165,7 @@
       const payload={...item.step.payload,provider:item.provider,...(item.step.action==='enable-provider'&&item.provider==='zcode'?{accountSource:el('zcode-account-source').value}:{})};
       const r=await api.command(item.step.action,payload);
       if(r.ok&&item.step.action==='enable-provider'&&item.provider==='zcode')zcodeSourceDraft=null;
-      const after=r.state?guideModel.buildProviderGuide(r.state,item.provider).steps.find(step=>step.id===item.step.id):null;
+      const after=r.state?providerGuide(r.state,item.provider).steps.find(step=>step.id===item.step.id):null;
       if(!r.ok||after?.status==='needs-authorization'||r.state?.onboarding?.[item.provider]?.data?.status==='cancelled'||r.state?.onboarding?.[item.provider]?.status==='cancelled')flow.defer(item.provider);
       if(r.state)paint(r.state);
       el('message').textContent=r.message||(r.ok?'连接状态已更新':'本工具已暂缓，已可用的功能保持。');
@@ -171,10 +180,10 @@
     const button = event.target.closest('button[data-action]'); if (!button || busy && !['cancel-workbuddy-cli','cancel-provider-plugin','authorization-stop','guide-close','open-provider-chat','guide-chat'].includes(button.dataset.action)) return;
     let action=button.dataset.action,guideStep=null;
     if(action==='select-all-providers'){document.querySelectorAll('input[name=authorization-provider]').forEach(input=>input.checked=true);selectionChanged();return;}
-    if(action==='authorize-selected'){startFlow([...document.querySelectorAll('input[name=authorization-provider]:checked')].map(input=>input.value));return;}
+    if(action==='authorize-selected'){startFlow([...document.querySelectorAll('input[name=authorization-provider]:checked')].map(input=>input.value),true);return;}
     if(action==='authorization-stop'){flow.stop();el('authorization-progress').textContent='已暂缓后续连接。当前确认可自行完成，其他工具不会继续弹出授权；已有功能保持。';paintFlow();return;}
     if(action==='cancel-provider-plugin'){flow.defer(button.dataset.provider);}
-    if(action==='install-provider-plugin'&&providers.includes(button.dataset.provider))openGuide(button.dataset.provider);
+    if(action==='install-provider-plugin'&&providers.includes(button.dataset.provider)){capabilityChoices[button.dataset.provider]='data';saveCapabilities();openGuide(button.dataset.provider);}
     if(action==='enable-provider'){openGuide(button.dataset.provider);return;}
     if(action==='guide-close'){flow.stop();paintFlow();el('connection-guide').hidden=true;guideProvider=null;return;}
     if(action==='guide-skip'){const next=nextGuideStep(currentGuide());if(next){const skipped=skippedSteps.get(guideProvider)||new Set();skipped.add(next.id);skippedSteps.set(guideProvider,skipped);}paintGuide();return;}
@@ -195,6 +204,9 @@
     openGuide(provider);
   });
   try{const selected=JSON.parse(localStorage.getItem('qiuqiu-tool-selection')||'[]');document.querySelectorAll('input[name=authorization-provider]').forEach(input=>input.checked=Array.isArray(selected)&&selected.includes(input.value));}catch(_){}
+  el('authorization-capability').value=defaultCapability;
+  el('authorization-capability').addEventListener('change',()=>{if(!validCapability(el('authorization-capability').value))return;defaultCapability=el('authorization-capability').value;saveCapabilities();});
+  el('guide-capability').addEventListener('change',()=>{if(!guideProvider||!validCapability(el('guide-capability').value))return;capabilityChoices[guideProvider]=el('guide-capability').value;skippedSteps.delete(guideProvider);saveCapabilities();paintGuide();});
   document.querySelectorAll('input[name=authorization-provider]').forEach(input=>input.addEventListener('change',selectionChanged));selectionChanged();
   el('zcode-account-source').addEventListener('change',()=>{zcodeSourceDraft=el('zcode-account-source').value;skippedSteps.delete('zcode');paintGuide();});
   el('workbuddy-desktop-partition').addEventListener('change',availability); el('workbuddy-cli-text').addEventListener('input',availability); el('workbuddy-assistant-text').addEventListener('input',availability); api.onChange(refresh); refresh();

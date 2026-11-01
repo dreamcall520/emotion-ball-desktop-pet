@@ -34,3 +34,12 @@ test('OAuth失败后的实时false不会卡住队列，也不在同轮重开已�
  f.start(['codex','workbuddy']);let n=f.next(state);f.attempted(n.provider,n.step);state.onboarding.codex.chat.loginPending=true;state.providerLoginPending.codex=true;assert.equal(f.next(state).waiting,true);
  state.providerLoginPending.codex=false;n=f.next(state);assert.equal(n.provider,'workbuddy');assert.equal(n.step.id,'chat');
 });
+
+test('聊天批量不触发目录/插件；数据批量即使未登录也不启动聊天授权',()=>{
+ const {buildProviderGuide}=require('../lib/provider-connection-guide');const state={onboarding:{codex:{chat:{status:'needs-login'},data:{status:'needs-authorization'}},workbuddy:{chat:{status:'needs-login'},data:{status:'needs-authorization'}}},codex:{directory:'missing'},workbuddyDesktop:{directory:'missing'}};
+ for(const capability of ['chat','data']){
+  const f=createFlow((s,p)=>buildProviderGuide(s,p,{capability}));f.start(['codex','workbuddy']);let next;const actions=[];
+  while(next=f.next(state)){assert.equal(next.waiting,undefined);actions.push(next.step.action);assert.equal(next.step.payload.capability,capability);f.attempted(next.provider,next.step);}
+  if(capability==='chat')assert.deepEqual(actions,['enable-provider','enable-provider']);else assert.equal(actions.includes('enable-provider'),false);
+ }
+});

@@ -10,12 +10,14 @@ test('task open and clear IPC require owned main frame, valid ID and task action
     isDestroyed(){return this.dead;}isVisible(){return this.visible;}setAlwaysOnTop(){}setBounds(){}show(){this.visible=true;}hide(){this.visible=false;}destroy(){this.dead=true;this.emit('closed');}loadFile(file){this.url=pathToFileURL(file).href;return Promise.resolve();}
   }
   const controller=createWorkBuddyDetailsWindow({BrowserWindow:Window,screen:{getDisplayMatching:()=>({workArea:{x:0,y:0,width:1200,height:900}})},getAnchor:()=>({x:400,y:300,width:80,height:80}),onOpenTask:id=>opened.push(id),onClearTasks:()=>cleared++});
-  controller.open({action:'results'});win.webContents.emit('did-finish-load');
+  controller.open({action:'results',tasks:{report:{source:'local-session-cache',scope:'current-account',items:[]}}});win.webContents.emit('did-finish-load');
   const event={sender:win.webContents,senderFrame:win.webContents.mainFrame};
   win.webContents.emit('ipc-message',{...event,senderFrame:{}},'pet:workbuddy-details-open-task','task-one');
   win.webContents.emit('ipc-message',event,'pet:workbuddy-details-open-task','../bad');assert.deepEqual(opened,[]);
   win.webContents.emit('ipc-message',event,'pet:workbuddy-details-open-task','task-one');assert.deepEqual(opened,['task-one']);
   win.webContents.emit('ipc-message',event,'pet:workbuddy-details-clear-tasks');assert.equal(cleared,1);
+  controller.open({action:'results',tasks:{deviceHistory:{source:'workbuddy-session-cache',scope:'authorized-device-cache',items:[]}}});
+  win.webContents.emit('ipc-message',event,'pet:workbuddy-details-open-task','task-two');win.webContents.emit('ipc-message',event,'pet:workbuddy-details-clear-tasks');assert.equal(opened.length,1);assert.equal(cleared,1);
   controller.open({action:'trend'});win.webContents.emit('ipc-message',event,'pet:workbuddy-details-open-task','task-two');win.webContents.emit('ipc-message',event,'pet:workbuddy-details-clear-tasks');assert.equal(opened.length,1);assert.equal(cleared,1);
   controller.close();win.webContents.emit('ipc-message',event,'pet:workbuddy-details-clear-tasks');assert.equal(cleared,1);
 });

@@ -37,6 +37,14 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     ...(weatherNative ? ['desktop-pet/native/weather-location.node'] : []),
     ...(pluginNative ? ['desktop-pet/native/plugin-host.node'] : []),
     'desktop-pet/main.js',
+    'desktop-pet/lib/builtin-pets.js',
+    'desktop-pet/chunye-dream.html',
+    'desktop-pet/chunye-dream.js',
+    'desktop-pet/chunye-dream.css',
+    'desktop-pet/chunye-avatar.png',
+    'desktop-pet/assets/partner-confirmed-reference.png',
+    'desktop-pet/assets/pets/xiaobai/pet.json',
+    ...Object.values(JSON.parse(fs.readFileSync(path.join(root, 'desktop-pet/assets/pets/xiaobai/pet.json'), 'utf8')).sheets).map(sheet => 'desktop-pet/assets/pets/xiaobai/' + sheet.path),
     ...['weather.html','weather.css','weather-preload.js','weather-renderer.js','lib/weather-service.js','lib/weather-window.js','lib/weather-pet-effects.js','lib/weather-context.js','lib/weather-location.js'].map(file => `desktop-pet/${file}`),
     'desktop-pet/scripts/verify-workbuddy-integration.js',
     'desktop-pet/lib/workbuddy-helper.cjs',
@@ -73,12 +81,17 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/global-settings.css',
     'desktop-pet/global-settings-preload.js',
     'desktop-pet/global-settings-renderer.js',
+    'desktop-pet/global-settings-feedback.js',
+    'desktop-pet/lib/feedback-reporting.js',
     'desktop-pet/global-settings-shortcuts.js',
     'desktop-pet/lib/global-settings.js',
     'desktop-pet/color-mode.css',
     'desktop-pet/ui-theme-blue.css',
+    'desktop-pet/ui-theme-purple.css',
     'desktop-pet/color-mode.js',
+    'desktop-pet/theme-preload.js',
     'desktop-pet/lib/color-mode.js',
+    'desktop-pet/lib/popup-quota-visibility.js',
     'desktop-pet/preload.js',
     'desktop-pet/index.html',
     'desktop-pet/pet.css',
@@ -92,11 +105,17 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     ...fs.readdirSync(path.join(root,'desktop-pet/assets/soft-orb/swatches')).filter(file=>/^[a-z]+\.png$/.test(file)).map(file=>`desktop-pet/assets/soft-orb/swatches/${file}`),
     'desktop-pet/customize.html',
     'desktop-pet/customize.css',
+    'desktop-pet/promotion.css',
+    'desktop-pet/promotion-renderer.js',
+    'desktop-pet/promotion-clips.js',
+    'desktop-pet/lib/promotion-player.js',
+    ...['SOURCE.json','chuge.png','spring-festival.png','xiaobai.png','chunye.png','wechat-contact-original.jpg','banner-sheep.png','banner-xiaoyu.png','chuge/base.webp','chuge/wave.webp','chuge/walk.webp','chuge/sleep.webp'].map(file=>'desktop-pet/assets/promotion/'+file),
     'desktop-pet/customize-blue.css',
     'desktop-pet/codex-pets.css',
     'desktop-pet/lib/codex-pets.js',
     'desktop-pet/lib/codex-pet-player.js',
   'desktop-pet/lib/sprite-edge-ink.js',
+  'desktop-pet/lib/edge-peek.js',
     'desktop-pet/customize-preload.js',
     'desktop-pet/customize-renderer.js',
     'desktop-pet/quota-customizer.js',
@@ -184,6 +203,9 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/lib/mas-codex-tasks.js',
     'desktop-pet/lib/mas-provider-runtime.js',
     'desktop-pet/lib/mas-enable-flow.js',
+    'desktop-pet/lib/mas-workbuddy-details.js',
+    'desktop-pet/lib/managed-codex-quota-reader.js',
+    'desktop-pet/lib/login-item-controller.js',
     'desktop-pet/lib/provider-connection-guide.js',
     'desktop-pet/lib/provider-authorization-flow.js',
     'desktop-pet/lib/mas-helper-probe.js',
@@ -209,6 +231,7 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/lib/mas-workbuddy-tasks.js',
     'desktop-pet/lib/workbuddy-local-cli-client.js',
     'desktop-pet/lib/workbuddy-web-quota.js',
+    'desktop-pet/lib/workbuddy-web-usage.js',
     'desktop-pet/lib/workbuddy-website-summary.js',
     'desktop-pet/store-connections.html',
     'desktop-pet/store-connections.css',
@@ -454,7 +477,7 @@ function signWeatherApp(appPath) {
   adhocSign(appPath);
 }
 
-async function packageMac(root = path.resolve(__dirname, '../..'), { website = false, nativeIcon = false, softOrb = false, masCandidate = false, candidateBundleId = null } = {}) {
+async function packageMac(root = path.resolve(__dirname, '../..'), { website = false, nativeIcon = false, softOrb = false, edgePeek = false, masCandidate = false, candidateBundleId = null } = {}) {
   buildWeatherLocation(root);
   if(masCandidate)require('./build-plugin-host').buildPluginHost(root);
   const icon = makeIcon(root);
@@ -469,6 +492,10 @@ async function packageMac(root = path.resolve(__dirname, '../..'), { website = f
     fs.writeFileSync(packageFile,JSON.stringify(pkg,null,2)+'\n');
     options.name='球球桌宠-柔光团候选';options.appBundleId='local.xiaokun.emotionball.pet.softorb';
     options.out=path.join(root,'dist/soft-orb');
+  }
+  if(edgePeek){
+    const file=path.join(staging,'package.json'),pkg=JSON.parse(fs.readFileSync(file,'utf8'));pkg.qiuqiuAcceptance='edge-peek';fs.writeFileSync(file,JSON.stringify(pkg,null,2)+'\n');
+    options.name='球球桌宠-贴边候选';options.appBundleId='local.xiaokun.emotionball.pet.edgepeek';options.out=path.join(root,'dist/edge-peek');
   }
   if (masCandidate) {
     const packageFile = path.join(staging, 'package.json');
@@ -515,7 +542,7 @@ async function packageMac(root = path.resolve(__dirname, '../..'), { website = f
 }
 
 if (require.main === module) {
-  packageMac(undefined, { website: process.argv.includes('--website'), nativeIcon: process.argv.includes('--local-native-icon'), softOrb:process.argv.includes('--soft-orb'), masCandidate:process.argv.includes('--mas-candidate') }).catch(error => {
+  packageMac(undefined, { website: process.argv.includes('--website'), nativeIcon: process.argv.includes('--local-native-icon'), softOrb:process.argv.includes('--soft-orb'), edgePeek:process.argv.includes('--edge-peek'), masCandidate:process.argv.includes('--mas-candidate') }).catch(error => {
     process.stderr.write(`${error.stack || error.message}\n`);
     process.exitCode = 1;
   });

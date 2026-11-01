@@ -51,6 +51,7 @@ const DEFAULTS = Object.freeze({
   codexQuotaFunEnabled: true,
   openaiApiAlwaysVisible: false,
   autoUpdateCheck: true,
+  autoReportErrors: true,
   lastUpdateNotifiedVersion: '',
   codexQuotaPeriod: 'auto',
   codexQuotaLabelSize: 'compact',
@@ -103,7 +104,7 @@ function normalizeSettings(raw = {}) {
     bubblesEnabled:
       typeof raw.bubblesEnabled === 'boolean' ? raw.bubblesEnabled : DEFAULTS.bubblesEnabled,
     colorMode: ['standard', 'accessible'].includes(raw.colorMode) ? raw.colorMode : DEFAULTS.colorMode,
-    uiTheme: ['green', 'blue'].includes(raw.uiTheme) ? raw.uiTheme : DEFAULTS.uiTheme,
+    uiTheme: ['green', 'blue', 'purple'].includes(raw.uiTheme) ? raw.uiTheme : DEFAULTS.uiTheme,
     chatModel: normalizeModelSelection(raw.chatModel),
     chatSource: ['codex', 'zcode', 'workbuddy'].includes(raw.chatSource) ? raw.chatSource : raw.chatProvider === 'workbuddy' ? 'workbuddy' : 'codex',
     zcodeChatModel: normalizeModelSelection(raw.zcodeChatModel),
@@ -143,6 +144,7 @@ function normalizeSettings(raw = {}) {
       ? raw.codexQuotaFunEnabled : DEFAULTS.codexQuotaFunEnabled,
     openaiApiAlwaysVisible: typeof raw.openaiApiAlwaysVisible === 'boolean'
       ? raw.openaiApiAlwaysVisible : DEFAULTS.openaiApiAlwaysVisible,
+    autoReportErrors: typeof raw.autoReportErrors === 'boolean' ? raw.autoReportErrors : DEFAULTS.autoReportErrors,
     autoUpdateCheck: typeof raw.autoUpdateCheck === 'boolean' ? raw.autoUpdateCheck : DEFAULTS.autoUpdateCheck,
     lastUpdateNotifiedVersion: typeof raw.lastUpdateNotifiedVersion === 'string' &&
       /^\d{1,8}\.\d{1,8}\.\d{1,8}$/.test(raw.lastUpdateNotifiedVersion) ? raw.lastUpdateNotifiedVersion : '',

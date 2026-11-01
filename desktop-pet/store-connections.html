@@ -10,12 +10,14 @@
 <section class="connection-guide" aria-labelledby="authorization-selection-title">
 <h2 id="authorization-selection-title">选择要连接的工具</h2>
 <div id="authorization-selection" class="buttons"><label><input type="checkbox" value="codex" name="authorization-provider"> Codex</label><label><input type="checkbox" value="zcode" name="authorization-provider"> ZCode</label><label><input type="checkbox" value="workbuddy" name="authorization-provider"> WorkBuddy</label></div>
+<label for="authorization-capability">这次想用哪些功能？</label><select id="authorization-capability"><option value="chat">只聊天</option><option value="data">额度与任务</option><option value="all">全部</option></select><small>只申请所选功能需要的权限，已可用的功能保持。自定义模型聊天需要访问模型配置所在目录。</small>
 <div class="buttons"><button data-action="select-all-providers" class="secondary">全选</button><button id="authorize-selected" data-action="authorize-selected" class="primary">启用所选授权</button><button id="authorization-stop" data-action="authorization-stop" class="secondary" hidden>稍后继续其他工具</button></div>
 <p id="authorization-progress" role="status" aria-live="polite">可选择一个、多个或全部；不会自动发送消息。官网积分为可选补充。</p>
 </section>
 <section id="connection-guide" class="connection-guide" hidden aria-labelledby="guide-title" tabindex="-1">
 <div class="heading"><div><span class="eyebrow">连接引导</span><h2 id="guide-title">连接你的工具</h2></div><button data-action="guide-close" class="secondary">稍后继续</button></div>
 <p id="guide-intro">已完成的授权会自动跳过。暂不可用的能力不影响其他功能，无需重复授权；可稍后继续。</p>
+<label for="guide-capability">连接哪些功能？</label><select id="guide-capability"><option value="chat">只聊天</option><option value="data">额度与任务</option><option value="all">全部</option></select><small id="guide-capability-note">改变选择不会关闭已可用功能，也不会自动开启新权限。</small>
 <div id="guide-zcode-source" hidden><label for="zcode-account-source">使用哪个账号和球球聊天？</label><select id="zcode-account-source"><option value="official">ZCode 官方套餐</option><option value="configured-custom">已有自定义模型（按原 API 计费）</option></select><small>两种方式分别连接；失败不会自动切换账号或计费来源。</small></div>
 <ol id="guide-steps" class="guide-steps"></ol>
 <p id="guide-result" role="status" aria-live="polite"></p>
@@ -26,12 +28,12 @@
 <section class="tool-card" data-provider-card="codex">
 <div class="heading"><h2>Codex</h2><span id="codex-status" class="badge">未连接</span></div>
 <dl class="capabilities"><div><dt>额度</dt><dd id="codex-capability-quota">尚未连接</dd></div><div><dt>任务</dt><dd id="codex-capability-tasks">尚未连接</dd></div><div><dt>聊天</dt><dd id="codex-capability-chat">尚未连接</dd></div></dl>
-<p id="codex-updated" class="updated"></p><small class="account-scope">额度和原工具任务来自已授权的信息；球球聊天使用独立登录，账号归属尚未核对。</small><details class="task-list"><summary>查看任务详情</summary><p id="codex-task-scope" class="detail"></p><ul id="codex-task-list"></ul></details>
+<p id="codex-updated" class="updated"></p><small class="account-scope">额度使用球球聊天的同一登录；原软件任务来自授权目录，账号归属另行核实。</small><details class="task-list"><summary>查看任务详情</summary><p id="codex-task-scope" class="detail"></p><ul id="codex-task-list"></ul></details>
 <div class="buttons"><button data-action="enable-provider" data-provider="codex" class="primary">启用授权</button><button data-action="open-provider-chat" data-provider="codex" class="secondary">和球球聊天</button></div>
 <details class="tool-advanced"><summary>连接详情与授权管理</summary>
 
 <p id="codex-detail" class="detail"></p><div class="optional-data"><button data-action="enable-provider-data" data-provider="codex" class="secondary">连接原工具任务与额度（可选）</button><p id="codex-data-state" class="detail">尚未授权，不影响聊天</p></div>
-<details class="connection-details"><summary>连接说明与授权管理</summary><small>额度与任务来自你授权的工具目录；聊天使用球球内官方登录的账号，可能与原工具不同。缺少明确运行证据的历史任务会显示为未知。</small><div class="buttons"><button data-action="revoke-chat-data-consent" data-provider="codex" class="secondary">撤销 AI 数据同意</button><button data-action="revoke-provider" data-provider="codex" class="secondary">解除授权</button></div></details>
+<details class="connection-details"><summary>连接说明与授权管理</summary><small>额度使用球球聊天的同一登录；原工具任务来自授权目录，账号归属另行核实。缺少明确运行证据的历史任务会显示为未知。</small><div class="buttons"><button data-action="revoke-chat-data-consent" data-provider="codex" class="secondary">撤销 AI 数据同意</button><button data-action="revoke-provider" data-provider="codex" class="secondary">解除授权</button></div></details>
 </details>
 </section>
 <section class="tool-card" data-provider-card="zcode">

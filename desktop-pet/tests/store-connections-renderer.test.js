@@ -89,6 +89,8 @@ if (process.versions.electron && process.argv.includes('--store-renderer-child')
       const click = async action => { await run(`document.querySelector('button[data-action="${action}"]').click()`); await settle(); };
       const calls = action => run(`fixtureCalls.filter(call => call.action === ${JSON.stringify(action)}).length`);
       await settle();
+      assert.equal(await run('document.getElementById("authorization-capability").value'),'chat','new user defaults to the minimum chat path');
+      await run(`document.getElementById('authorization-capability').value='all';document.getElementById('authorization-capability').dispatchEvent(new Event('change'));`);
 
       // Availability follows the safe state, not whether text happens to be present.
       await input('workbuddy-cli-text', '合成消息');
@@ -170,7 +172,7 @@ if (process.versions.electron && process.argv.includes('--store-renderer-child')
       assert.match(await run('document.getElementById("guide-title").textContent'),/Codex/);
       assert.equal(await calls('enable-provider'),beforeGuide,'opening a guide never authenticates');
       await run(`document.querySelector('[data-action="guide-run"][data-step="chat"]').click()`);await settle();
-      assert.deepEqual(await run(`fixtureCalls.filter(call => call.action === 'enable-provider').at(-1)`), { action: 'enable-provider', payload: { provider: 'codex' } });
+      assert.deepEqual(await run(`fixtureCalls.filter(call => call.action === 'enable-provider').at(-1)`), { action: 'enable-provider', payload: { provider: 'codex', capability: 'all' } });
       assert.equal(await calls('enable-provider-data'),0,'one click never chains further system permissions');
       await set({workbuddyCli:{...base.workbuddyCli,connected:false}});
       for (const provider of ['zcode','workbuddy']) {
@@ -201,7 +203,7 @@ if (process.versions.electron && process.argv.includes('--store-renderer-child')
       await run(`document.querySelector('button[data-action="enable-provider"][data-provider="codex"]').click()`);await settle();
       assert.match(await run('document.getElementById("guide-next").textContent'),/允许读取/,'reopening resumes missing grant, not prior skipped memory');
       await click('guide-next');
-      assert.deepEqual(await run(`fixtureCalls.filter(call=>call.action==='enable-provider-data').at(-1)`),{action:'enable-provider-data',payload:{provider:'codex'}});
+      assert.deepEqual(await run(`fixtureCalls.filter(call=>call.action==='enable-provider-data').at(-1)`),{action:'enable-provider-data',payload:{provider:'codex',capability:'all'}});
       assert.equal(await calls('enable-provider-data'),beforeData+1,'only the requested step runs');
       await set({ onboarding: { codex: { status: 'working', message: '等待系统授权', chat: { status: 'unavailable' } } } });
       assert.equal(await run(`document.querySelector('button[data-action="enable-provider"][data-provider="codex"]').disabled`), true);
@@ -288,7 +290,7 @@ if (process.versions.electron && process.argv.includes('--store-renderer-child')
         assert.match(await run(`document.querySelector('#guide-steps [data-step="tasks"] p').textContent`),/写入许可.*插件.*设置/);
         assert.equal(await run(`document.querySelector('#guide-steps [data-step="tasks"] button').textContent`),'安装并启用');
         await run(`document.querySelector('#guide-steps [data-step="tasks"] button').click()`);await settle();
-        assert.deepEqual(await run(`fixtureCalls.filter(call=>call.action==='install-provider-plugin').at(-1)`),{action:'install-provider-plugin',payload:{provider}});
+        assert.deepEqual(await run(`fixtureCalls.filter(call=>call.action==='install-provider-plugin').at(-1)`),{action:'install-provider-plugin',payload:{provider,capability:'all'}});
         await notify();
         assert.equal(await run(`document.querySelector('#guide-steps [data-step="tasks"] button').disabled`),true,'pending install cannot be duplicated');
         assert.equal(await run(`document.getElementById('${provider}-capability-chat').dataset.status`),'ready','install progress does not disable a ready chat connection');
@@ -374,6 +376,28 @@ if (process.versions.electron && process.argv.includes('--store-renderer-child')
       await run(`fixtureState.onboarding.codex={status:'ready',chat:{status:'ready'},data:{status:'idle'}};fixtureFlowResolve({ok:true,state:structuredClone(fixtureState)});void 0`);for(let i=0;i<10;i++)await settle();
       assert.equal(await calls('enable-provider-data'),0,'stopped batch cannot continue after a late login result');
       assert.equal(await calls('send-workbuddy-cli'),0,'batch never sends a model message');
+      // New minimum path: choosing chat cannot silently request original directories/plugins.
+      await click('guide-close');
+      await set({codex:{directory:'none'},zcode:{directory:'none',accountSource:'official'},workbuddyDesktop:{directory:'none',partitions:[],report:null},providerChats:{},chat:null,pluginInstallationPolicy:{allowed:false},pluginInstallations:{},onboarding:Object.fromEntries(['codex','zcode','workbuddy'].map(provider=>[provider,{status:'idle',chat:{status:'needs-login'},data:{status:'needs-authorization'}}]))});
+      await run(`fixtureCalls=[];window.fixtureFlowMode='success';document.getElementById('authorization-capability').value='chat';document.getElementById('authorization-capability').dispatchEvent(new Event('change'));document.querySelectorAll('input[name=authorization-provider]').forEach(input=>input.checked=['codex','workbuddy'].includes(input.value));`);
+      await click('authorize-selected');for(let i=0;i<15;i++)await settle();
+      assert.deepEqual(await run(`fixtureCalls.filter(c=>c.action==='enable-provider').map(c=>[c.payload.provider,c.payload.capability])`),[['codex','chat'],['workbuddy','chat']]);
+      assert.equal(await calls('enable-provider-data'),0);assert.equal(await calls('install-provider-plugin'),0);assert.equal(await calls('workbuddy-login'),0);
+      assert.match(await run('localStorage.getItem("qiuqiu-capability-selection")'),/"default":"chat"/);
+      const beforeSelection=await run('fixtureCalls.length');
+      await run(`fixtureFocus('codex');document.getElementById('guide-capability').value='data';document.getElementById('guide-capability').dispatchEvent(new Event('change'));`);await settle();
+      assert.equal(await run('fixtureCalls.length'),beforeSelection,'changing intent never grants, revokes or connects');
+      assert.equal(await run(`document.querySelector('#guide-steps [data-step="chat"]')===null`),true);
+      assert.match(await run('localStorage.getItem("qiuqiu-capability-selection")'),/"codex":"data"/);
+      await run(`fixtureFocus('workbuddy');fixtureFocus('codex');`);await settle();
+      assert.equal(await run('document.getElementById("guide-capability").value'),'data','per-tool choice survives another guide');
+      assert.match(await run('document.getElementById("codex-capability-chat").textContent'),/聊天已连接/,'unselected chat remains usable');
+      await set({codex:{directory:'none'},onboarding:{codex:{status:'ready',chat:{status:'ready'},data:{status:'needs-authorization'}}}});
+      await run(`fixtureCalls=[];window.fixtureFlowMode='success';`);
+      await click('guide-next');for(let i=0;i<10;i++)await settle();
+      assert.equal(await calls('enable-provider'),0,'data-only cannot start or renew a chat login');
+      assert.deepEqual(await run(`fixtureCalls.filter(c=>c.action==='enable-provider-data').map(c=>c.payload.capability)`),['data']);
+      assert.equal(await calls('install-provider-plugin'),0,'Codex data path does not install other tool plugins');
       assert.equal(window.isVisible(), false);
       console.log('PASS real Chromium unified cards, guided authorization, source isolation and stale-task boundaries; synthetic state/commands only');
       window.destroy(); app.exit(0);
@@ -412,6 +436,9 @@ if (process.versions.electron && process.argv.includes('--store-renderer-child')
     for(const provider of ['codex','zcode','workbuddy','other','../codex',null])receiveFocus({},provider);
     assert.deepEqual(focused,['codex','zcode','workbuddy']);
     unlisten();assert.equal(listeners.has('pet:store-focus-provider'),false);
+    for(const capability of ['chat','data','all']){await api.command('enable-provider-data',{provider:'zcode',capability});assert.equal(calls.at(-1)[2].capability,capability);}
+    for(const capability of ['everything','',null,{}])await assert.rejects(api.command('enable-provider-data',{provider:'zcode',capability}),/INVALID_CAPABILITY/);
+    await api.command('enable-provider-data',{provider:'codex'});assert.equal(calls.at(-1)[2].capability,undefined,'legacy explicit data entry is not silently expanded');
     for (const accountSource of ['official', 'configured-custom']) {
       await api.command('enable-provider', { provider: 'zcode', accountSource });
       assert.equal(calls.at(-1)[2].accountSource, accountSource);

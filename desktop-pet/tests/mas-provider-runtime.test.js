@@ -494,3 +494,31 @@ test('配对用途不能在升级到可安装构建后静默变成安装许可�
  await store.save('zcode',{directory:f.zcode,bookmark:'synthetic-bookmark',permissionPurpose:'plugin-installation'});
  for(const executable of [false,true]){const r=make(executable);assert.deepEqual(await r.getPluginAuthorizationStatus('zcode'),{status:'stored'});await r.close();}
 });
+
+
+test('完整已匹配插件在原工具运行时直接复用；接收信息不匹配才等待本人退出再写入',async t=>{
+ for(const provider of ['zcode','workbuddy']){
+  let running=false,waits=0,installs=0,launches=0;const f=await runtimeChatFixture(t,{createPluginHost:()=>({getStatus:()=>({known:true,installed:true,running}),isStopped:()=>!running,waitUntilStopped:async()=>{waits++;running=false;},launch:async()=>{launches++;}}),createPluginInstaller:options=>{const actual=require('../lib/managed-plugin-installer').createManagedPluginInstaller(options);return{...actual,install:async value=>{installs++;return actual.install(value);}};}});
+  const target=provider==='zcode'?f.zcode:path.join(f.temp,'.workbuddy');if(provider==='workbuddy')fs.mkdirSync(target);
+  f.selections.push({canceled:false,filePaths:[target]});await f.runtime.installProviderPlugin(provider,{approved:true});assert.equal(installs,1);running=true;
+  const snapshot=()=>{const result=[];function visit(dir){for(const name of fs.readdirSync(dir).sort()){const file=path.join(dir,name),stat=fs.lstatSync(file);result.push([path.relative(target,file),stat.ino,stat.mode,stat.mtimeMs,stat.size]);if(stat.isDirectory())visit(file);else result.at(-1).push(require('node:crypto').createHash('sha256').update(fs.readFileSync(file)).digest('hex'));}}visit(target);return result;};
+  const before=snapshot(),dialogs=f.selections.length;const reused=await f.runtime.installProviderPlugin(provider,{approved:true});assert.equal(reused.reusedExistingInstallation,true);assert.equal(reused.status,'installed');assert.equal(reused.eventVerified,false);assert.equal(running,true);assert.equal(waits,0);assert.equal(installs,1);assert.equal(launches,0);assert.equal(f.selections.length,dialogs);assert.deepEqual(snapshot(),before,'read-only reuse does not rewrite code, metadata, receiver, lock or installed directory');
+  const receiver=provider==='zcode'?path.join(target,'cli/plugins/cache/qiuqiu-zcode-local-review/qiuqiu-zcode-task-events/0.1.0/receiver.json'):path.join(target,'plugins/cache/qiuqiu-local-review/qiuqiu-task-events/0.2.0/receiver.json');const data=JSON.parse(fs.readFileSync(receiver,'utf8'));data.token='different_synthetic_receiver_token_012345678901234567890123';fs.writeFileSync(receiver,JSON.stringify(data));
+  const updated=await f.runtime.installProviderPlugin(provider,{approved:true});assert.equal(updated.reusedExistingInstallation,undefined);assert.equal(waits,1);assert.equal(installs,2);assert.equal(launches,1);assert.equal(updated.status,'installed');
+ }
+});
+
+test('商店Codex额度使用独立聊天profile且公开state不输出身份，失败不回读原账号',async t=>{
+ let closed=0,failing=false,profile;
+ const f=await runtimeChatFixture(t,{createManagedCodexRpc:options=>{profile=options.profileHome;return{start:async()=>{},readRateLimits:async()=>{if(failing)throw Object.assign(new Error('fixture only'),{code:'UNAUTHENTICATED'});return{accountKey:'a'.repeat(64),source:'managed-codex-chat-account-quota',billingScope:'same-chat-login',state:'ready',accountAttributionVerified:true,windows:[{id:'codex:primary',windowMinutes:300,usedPercent:25,resetsAt:100000}],scopes:[],updatedAt:1000};},close:async()=>{closed++;}};}});
+ const result=await f.runtime.readManagedCodexQuota();assert.equal(result.accountKey,'a'.repeat(64));assert.equal(profile,path.join(f.temp,'store-codex-profile'));assert.equal(closed,1);
+ let state=await f.runtime.getState();assert.equal(state.managedCodexQuota.snapshot.windows[0].usedPercent,25);assert.equal(Object.hasOwn(state.managedCodexQuota.snapshot,'accountKey'),false);
+ failing=true;await assert.rejects(f.runtime.readManagedCodexQuota(),{code:'UNAUTHENTICATED'});state=await f.runtime.getState();assert.equal(state.managedCodexQuota.status,'needs-login');assert.equal(state.managedCodexQuota.snapshot,null);assert.equal(closed,2);
+});
+test('商店Codex撤销后迟到额度不得恢复',async t=>{
+ let release;const f=await runtimeChatFixture(t,{createManagedCodexRpc:()=>({start:async()=>{},readRateLimits:()=>new Promise(r=>release=r),close:async()=>{}})});
+ const pending=f.runtime.readManagedCodexQuota();const rejected=assert.rejects(pending,{code:'CANCELLED'});
+ for(let i=0;i<20&&!release;i++)await new Promise(r=>setImmediate(r));assert.equal(typeof release,'function');
+ await f.runtime.revoke('codex');release({accountKey:'a'.repeat(64),state:'ready',windows:[],updatedAt:1000});await rejected;
+ assert.equal((await f.runtime.getState()).managedCodexQuota.snapshot,null);
+});

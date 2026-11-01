@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('qiuqiuWeather', {
   selectCity: city => ipcRenderer.invoke('weather:city', city),
   useLocation: () => ipcRenderer.invoke('weather:location'),
   resize: size => ipcRenderer.invoke('weather:resize', size),
+  collapse: value => ipcRenderer.invoke('weather:collapse', { reducedMotion: value?.reducedMotion === true }),
   onState: callback => {
     const listener = (_event, state) => callback(state);
     ipcRenderer.on('weather:state', listener);

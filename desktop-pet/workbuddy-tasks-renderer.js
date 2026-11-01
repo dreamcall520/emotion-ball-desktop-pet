@@ -38,7 +38,40 @@
     const tools = doc.querySelector('.panel-tools'); tools.parentNode.insertBefore(button, tools);
     return button;
   }
+  function drawDevice() {
+    const host = el('task-view'), tasks = current.tasks || {};
+    title('设备任务记录', null);
+    const clear = el('details-read-all'); if (clear) clear.hidden = true;
+    host.replaceChildren(node('p', 'panel-note', '原工具事件与设备历史分别展示；账号归属未核实，不代表当前聊天账号。'));
+    host.appendChild(node('h3', '', '原工具最近事件'));
+    const live = tasks.liveObservations?.observations || [];
+    const phases = { 'submitted': '已提交请求', 'stop-observed': '已停止，完成待确认', 'session-opened': '会话已打开', 'session-ended': '会话已结束，任务终态未确认', 'failure-observed': '观察到失败事件', 'final-stop-observed': '观察到主回复停止' };
+    const ul = node('ul', 'activity-list');
+    for (const row of live) {
+      const terminal = row.terminalConfirmed === true && row.terminalKind === 'main-reply';
+      const status = terminal ? ({ completed: '原工具主回复已完成', failed: '原工具主回复失败', interrupted: '原工具主回复已中断' }[row.state] || '主回复状态待确认') : phases[row.phase] || '状态待确认';
+      const li = node('li', 'panel-note', `${status}；整体任务状态未确认${row.realtime ? '' : '（上次事件）'} · ${date(row.observedAt)}`); ul.appendChild(li);
+    }
+    host.appendChild(live.length ? ul : node('p', 'empty-state', '尚未收到原工具事件'));
+    host.appendChild(node('h3', '', '设备历史缓存'));
+    const history = tasks.deviceHistory;
+    host.appendChild(node('p', 'panel-note', '仅为所选设备缓存范围；历史完成不代表当前任务完成。'));
+    if (!history) host.appendChild(node('p', 'empty-state', '尚未读取设备历史缓存'));
+    else if (!history.items.length) host.appendChild(node('p', 'empty-state', '所选缓存范围没有可展示的记录'));
+    else {
+      const list = node('ul', 'activity-list');
+      for (const item of history.items) {
+        const li = node('li', 'panel-note'); li.appendChild(node('b', '', item.title));
+        li.appendChild(node('p', '', `${({ 'last-completed': '上次已完成', 'last-interrupted': '上次已中断', 'last-failed': '上次失败' })[item.state] || '历史状态未知'} · ${date(item.updatedAt)}`)); list.appendChild(li);
+      }
+      host.appendChild(list);
+      if (history.truncated) host.appendChild(node('p', 'panel-note', '仅展示部分设备历史记录'));
+    }
+    if (tasks.error) host.appendChild(node('p', 'panel-note', '设备任务记录暂不可用。'));
+    resized();
+  }
   function draw() {
+    if (current.tasks?.deviceHistory || current.tasks?.liveObservations) return drawDevice();
     const state = clean(current.tasks), report = state.report, host = el('task-view');
     const list = mode === 'results' && report ? report.items.filter(item => item.unread) : [];
     title(mode === 'results' ? '待查看' : '进行中', mode === 'results' ? report?.pendingReview ?? null : null);

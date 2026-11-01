@@ -643,7 +643,8 @@ function createManagedPluginInstaller({
   function requireExistingPairing(prepared) {
     if (!prepared.registered || !prepared.enabled ||
         prepared.trees.some(tree => !tree.existing) ||
-        prepared.plans.some(plan => !plan.before.bytes?.equals(plan.after)))
+        prepared.plans.some(plan => !plan.before.bytes?.equals(plan.after)) ||
+        prepared.trees.some(tree => [...tree.files.keys()].some(rel => rel.endsWith('.sh') && !(tree.before.get(rel).mode & 0o100))))
       throw fail("PAIRING_REQUIRES_INSTALLED_PLUGIN");
   }
   function pairingUnchanged(ctx, prepared, committed) {
@@ -668,17 +669,24 @@ function createManagedPluginInstaller({
       prepared.trees.every(
         (t) =>
           t.existing &&
-          [...t.files].every(([rel, b]) => t.before.get(rel).bytes.equals(b)),
+          [...t.files].every(([rel, b]) => t.before.get(rel).bytes.equals(b) && (!rel.endsWith('.sh') || Boolean(t.before.get(rel).mode & 0o100))),
       )
     );
   }
-  async function inspect() {
-    if (flight) return getState();
+  async function inspect({ forReuse = false } = {}) {
+    // A no-write reuse decision must never consume a cached state while an
+    // installation is queued or in progress. Ordinary status callers retain it.
+    if (flight) return forReuse ? null : getState();
     try {
       return await directoryAccess.withAccess(provider, async (root) => {
         const ctx = context(root),
           prepared = prepare(ctx),
           ready = configured(prepared);
+        if (ready && forReuse) {
+          sourceUnchanged(ctx);
+          treesUnchanged(ctx, prepared.trees);
+          for (const plan of prepared.plans) unchanged(ctx.root, plan.file, plan.before);
+        }
         update({
           status: ready ? "installed-configured" : "not-installed",
           installedConfigured: ready,
@@ -804,9 +812,11 @@ function createManagedPluginInstaller({
                 for (const [rel, bytes] of tree.files) {
                   const before = tree.before.get(rel);
                   if (pairOnly && !rel.endsWith("receiver.json")) continue;
-                  if (!before.bytes.equals(bytes))
+                  const missingOwnerExecute = !pairOnly && rel.endsWith('.sh') && !(before.mode & 0o100);
+                  if (!before.bytes.equals(bytes) || missingOwnerExecute)
                     files.push({
                       kind: "file",
+                      ...(missingOwnerExecute ? { mode: before.mode | 0o100 } : {}),
                       file: path.join(tree.dir, rel),
                       before,
                       after: bytes,
@@ -820,7 +830,7 @@ function createManagedPluginInstaller({
               if (f.kind === "file") {
                 f.staged = path.join(stage, "file-" + serial++);
                 fs.writeFileSync(f.staged, f.after, {
-                  mode: pairOnly ? 0o600 : f.before.mode || 0o600,
+                  mode: pairOnly ? 0o600 : f.mode || f.before.mode || 0o600,
                   flag: "wx",
                 });
               }

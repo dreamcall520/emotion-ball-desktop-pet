@@ -184,3 +184,16 @@ test('网站详情显示汇总范围，不伪造消费/刷新/到期；切回个
   assert.equal(get('balance-label').textContent, '可用积分'); assert.equal(get('expiry-note').textContent, '暂无已知即将到期积分');
   assert.equal(get('refresh-note').textContent, '刷新时间暂未知'); assert.equal(get('explanation').hidden, false);
 });
+test('MAS device reports survive details IPC without becoming current-account tasks', () => {
+  const { details, windows } = fixture();
+  details.open({ action: 'tasks', tasks: { report: { source: 'workbuddy-session-cache', scope: 'authorized-device-cache',
+    observedAt: 100, total: 1, items: [{ id: 'cache_1', title: 'Cached', state: 'last-completed', body: 'SECRET' }] },
+    liveObservations: { source: 'workbuddy-desktop-hook', scope: 'authorized-original-workbuddy-hook-metadata', enabled: true,
+      observations: [{ id: 'a'.repeat(32), phase: 'stop-observed', state: 'completed', terminalConfirmed: true, terminalKind: 'main-reply', observedAt: 100, token: 'SECRET' }] } } });
+  const win = windows[0]; win.webContents.emit('did-finish-load');
+  const value = win.messages.at(-1).value;
+  assert.equal(value.tasks.report, null); assert.equal(value.tasks.deviceHistory.scope, 'authorized-device-cache');
+  assert.equal(value.tasks.deviceHistory.accountAttributionVerified, false);
+  assert.equal(value.tasks.liveObservations.observations[0].terminalConfirmed, false);
+  assert.ok(!JSON.stringify(value).includes('SECRET'));
+});
