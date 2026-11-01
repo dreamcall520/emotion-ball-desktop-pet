@@ -1,0 +1,32 @@
+[
+  {
+    "latitude": 39.9075,
+    "longitude": 116.39723,
+    "id": 1816670,
+    "name": "北京",
+    "admin1": "北京市",
+    "country": "中国",
+    "timezone": "Asia/Shanghai",
+    "mode": "manual"
+  },
+  {
+    "latitude": 30.72608,
+    "longitude": 108.67483,
+    "id": 8404324,
+    "name": "北京",
+    "admin1": "重庆市",
+    "country": "中国",
+    "timezone": "Asia/Shanghai",
+    "mode": "manual"
+  },
+  {
+    "latitude": 30.9699,
+    "longitude": 103.94,
+    "id": 10196578,
+    "name": "北京",
+    "admin1": "四川",
+    "country": "中国",
+    "timezone": "Asia/Shanghai",
+    "mode": "manual"
+  }
+]

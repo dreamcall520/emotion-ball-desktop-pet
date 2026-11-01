@@ -113,6 +113,7 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/customize-blue.css',
     'desktop-pet/codex-pets.css',
     'desktop-pet/lib/codex-pets.js',
+    'desktop-pet/lib/mas-codex-pet-library.js',
     'desktop-pet/lib/codex-pet-player.js',
   'desktop-pet/lib/sprite-edge-ink.js',
   'desktop-pet/lib/edge-peek.js',

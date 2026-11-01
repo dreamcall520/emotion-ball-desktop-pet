@@ -142,6 +142,7 @@ let tray = null;
 let settings = null;
 let settingsFile = null;
 let feedbackReporting = null;
+let masCodexPetLibrary = null;
 let codexPets = null, localPetStore = null, localPetImportBusy = false, localPetImportSession = null, localPetDeletingId = null;
 let dragState = null;
 let bounceState = null;
@@ -246,7 +247,8 @@ const windowMotion = createWindowMotion({
 
 app.setName(IS_ACCEPTANCE ? ACCEPTANCE_NAME : APP_NAME);
 if (IS_ACCEPTANCE && !IS_SMOKE_TEST) {
-  const acceptanceData = path.join(app.getPath('appData'), ACCEPTANCE_NAME);
+  const requestedQaData=FIRST_RELEASE&&process.mas===true&&process.qiuqiuMasDevelopmentCandidate===true?app.commandLine.getSwitchValue('user-data-dir'):'';
+  const acceptanceData = FirstRelease.acceptanceDirectory(app.getPath('appData'), ACCEPTANCE_NAME,requestedQaData);
   fs.mkdirSync(acceptanceData, { recursive: true, mode: 0o700 });
   app.setPath('userData', acceptanceData);
 }
@@ -4077,13 +4079,20 @@ function registerIpc() {
       localPetImportBusy = false; localPetImportSession = null; localPetDeletingId = null;
     }
   });
-  ipcMain.handle('pet:codex-pets-list', event => {
+  ipcMain.handle('pet:codex-pets-connect', async event => {
+    const isCurrent=()=>fromCustomizationWindow(event)&&!screenLocked&&event.senderFrame===event.sender.mainFrame&&customizationWindow.isVisible();
+    if(!IS_STORE_BUILD||!masCodexPetLibrary||!isCurrent())return{ok:false,error:'请重新打开定制页后操作'};
+    try{const library=await masCodexPetLibrary.sync({interactive:true,isCurrent});return{ok:true,library,canceled:library.status==='cancelled'};}
+    catch(_){return{ok:false,error:'目录连接未完成，已导入的宠物仍可使用。'};}
+  });
+  ipcMain.handle('pet:codex-pets-list', async event => {
     if (!fromCustomizationWindow(event) || screenLocked) return { ok: false, error: '请重新打开定制页后操作' };
     try {
+      const libraryState=masCodexPetLibrary?await masCodexPetLibrary.sync({isCurrent:()=>fromCustomizationWindow(event)&&!screenLocked}):null;
       const sources = codexPets.list(), imported = codexPets.listImported();
       const library = new Map(sources.pets.map(pet => [pet.importedId, pet]));
       for (const pet of imported.pets) library.set(pet.importedId, { ...pet, imported: true });
-      return { ok: true, skipped: sources.skipped + imported.skipped,
+      return { ok: true, ...(libraryState?{library:libraryState}:{}), skipped: sources.skipped + imported.skipped,
         pets: [...library.values()].map(pet => ({ id: pet.id, name: pet.name, importedId: pet.importedId,
           imported: pet.imported === true, version: pet.version, rows: pet.rows, ...petSheetDescriptor(pet),
           ...(pet.frameMap ? { frameMap: pet.frameMap } : {}),
@@ -4477,6 +4486,9 @@ async function bootstrap() {
     importRoot: path.join(app.getPath('userData'), 'codex-pets'),
     readImageSize: (buffer, extension, size) => extension === '.png' ? nativeImage.createFromBuffer(buffer).getSize() : size
   });
+  if(IS_STORE_BUILD&&require('./lib/mas-codex-pet-library').supportsMasCodexPetLibrary({app,mas:process.mas}))masCodexPetLibrary=require('./lib/mas-codex-pet-library').createMasCodexPetLibrary({app,
+    dialog:{showOpenDialog:options=>dialog.showOpenDialog(customizationWindow,options)},store:codexPets,
+    stateFile:path.join(app.getPath('userData'),'codex-pet-library-grant.json')});
   localPetStore=createCodexPetStore({namespace:'local',canPublishImport:localPetImportIsCurrent,sourceRoot:path.join(app.getPath('userData'),'local-pets'),importRoot:path.join(app.getPath('userData'),'local-pets'),
     readImageSize:(buffer,extension,size)=>extension==='.png'?nativeImage.createFromBuffer(buffer).getSize():size,
     validateImport:async(pet,buffer)=>{
@@ -4934,6 +4946,7 @@ async function bootstrap() {
     getBubbleBounds: quotaObstacleBounds, getPresentation: () => ({ ...quotaLayoutPresentation(), quotaGroupHidden: Boolean(quotaCardCollected('weather') || quotaFreeStackPlan()?.hidden?.includes('weather')), quotaGroupLayout: quotaFreeStackPlan()?.cards.weather }),
     getObstacles: () => [quotaLabel?.getVisibleBounds?.(), apiUsageLabel?.getVisibleBounds?.(), zcodeLink?.getVisibleBounds?.(), workbuddyLabel?.getVisibleBounds?.(), apiBalanceLabel?.getVisibleBounds?.(), quotaCardGroupWindow?.getBounds?.()].filter(Boolean),
     getSuppressed: () => quotaCardGroupInput().suppressed,
+    getCityPickerSuppressed: () => isQuitting || screenLocked || presentationSuppressed(),
     getAppearance: () => settings.codexQuotaAppearance,
     onLayout: () => { syncQuotaLabel(codexCompanion?.getSnapshot()); syncApiBalanceLabel(); syncQuotaFreeStack(); },
     onChange: packet => { syncQuotaCardGroup(); syncQuotaFreeStack(); if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send('pet:weather', packet); },

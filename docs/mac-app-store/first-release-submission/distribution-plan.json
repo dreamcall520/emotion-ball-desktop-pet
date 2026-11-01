@@ -1,0 +1,29 @@
+{
+  "mode": "plan",
+  "platform": "mas",
+  "releaseProfile": "mas-first",
+  "arch": "arm64",
+  "marketingVersion": "0.4.10",
+  "buildVersion": "1793506836",
+  "electronVersion": "43.4.1",
+  "configured": {
+    "MAS_BUNDLE_ID": true,
+    "MAS_TEAM_ID": true,
+    "MAS_PROFILE": true,
+    "MAS_SIGN_IDENTITY": true,
+    "MAS_INSTALLER_IDENTITY": true,
+    "MAS_BUILD_VERSION": true
+  },
+  "missingConfiguration": [],
+  "configurationErrors": [],
+  "configurationReady": true,
+  "runtimeSource": "explicit-pinned-mas-cache",
+  "cachedRuntimeValidated": false,
+  "profileValidated": false,
+  "signingIdentitiesValidated": false,
+  "submissionReady": false,
+  "note": "Read-only discovery of existing public distribution certificates and exact Qiuqiu profile plus pinned MAS cache. No signing, account login, upload, submission, or ownership attestation.",
+  "publicDistributionConfigurationDiscovered": true,
+  "publicProfileAndCertificatesValidated": true,
+  "pinnedRuntimeCacheValidated": true
+}

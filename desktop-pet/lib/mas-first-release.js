@@ -1,4 +1,5 @@
 'use strict';
+const path=require('node:path');
 const CARD_IDS = new Set(['codex', 'weather']);
 const ACTIONS = new Set(['status','refresh-status','enable-provider','enable-provider-data','revoke-provider','revoke-chat-data-consent','open-provider-chat','authorize-codex','revoke-codex','connect-codex','open-chat','refresh-codex']);
 function settingsForFirstRelease(settings) {
@@ -13,4 +14,10 @@ function filterMenu(items) {
 function allowsCommand(action,payload) {
   return ACTIONS.has(action)&&(!payload?.provider||payload.provider==='codex');
 }
-module.exports={settingsForFirstRelease,filterMenu,allowsCommand};
+function acceptanceDirectory(base,name,requested) {
+  const fallback=path.join(base,name);
+  if(typeof requested!=='string'||!path.isAbsolute(requested))return fallback;
+  const resolved=path.resolve(requested),relative=path.relative(base,resolved);
+  return relative&&!relative.startsWith('..')&&!path.isAbsolute(relative)&&path.dirname(resolved)===path.resolve(base)&&path.basename(resolved).startsWith('FirstRelease-QA-')?resolved:fallback;
+}
+module.exports={settingsForFirstRelease,filterMenu,allowsCommand,acceptanceDirectory};

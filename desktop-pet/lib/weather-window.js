@@ -36,7 +36,7 @@ function weatherExpandedBounds(pet, area, size, obstacles = [], previous = null)
   candidates.sort((a, b) => a.overlap - b.overlap || a.distance - b.distance || a.movement - b.movement);
   return candidates[0].bounds;
 }
-function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, getPetWindow, getObstacles = () => [], getStackAnchor = () => null, getCollectionWindow = () => null, getBubbleBounds = () => null, getPresentation = () => null, getSuppressed = () => false, getAppearance = () => 'system', getReducedMotion = () => false, locationBridge = createLocationBridge(), onLayout = () => {}, onChange = () => {}, onError = () => {}, alwaysOnTop = true }) {
+function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, getPetWindow, getObstacles = () => [], getStackAnchor = () => null, getCollectionWindow = () => null, getBubbleBounds = () => null, getPresentation = () => null, getSuppressed = () => false, getCityPickerSuppressed = null, getAppearance = () => 'system', getReducedMotion = () => false, locationBridge = createLocationBridge(), onLayout = () => {}, onChange = () => {}, onError = () => {}, alwaysOnTop = true }) {
   const service = createWeatherService({ fetch });
   let win = null, enabled = false, timer = null, revision = 0, city = null, state = { status: 'unconfigured', city: null }, suspended = false;
   let cardVisible = true, groupTransitionMode = null, groupEpoch = 0, ready = false, cityRequested = false, explicitOpen = false;
@@ -73,7 +73,7 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
     if (closing) { if (collapseUsable(closing)) return; resetExpanded(); }
     if (!win || win.isDestroyed() || groupTransitionMode === 'hold') return;
     const pet = getPetWindow();
-    if (!enabled || (!cardVisible && !explicitOpen) || suspended || ['hold','masked'].includes(groupTransitionMode) || (!explicitOpen && size.width !== 390 && getPresentation()?.quotaGroupHidden) || getSuppressed() || !pet || pet.isDestroyed() || !pet.isVisible()) { win.hide(); return; }
+    if (!enabled || (!cardVisible && !explicitOpen) || suspended || ['hold','masked'].includes(groupTransitionMode) || (!explicitOpen && size.width !== 390 && getPresentation()?.quotaGroupHidden) || (explicitOpen && typeof getCityPickerSuppressed === 'function' ? getCityPickerSuppressed() : getSuppressed()) || !pet || pet.isDestroyed() || !pet.isVisible()) { win.hide(); return; }
     const bounds = pet.getBounds(), area = screen.getDisplayMatching(bounds).workArea;
     const layoutKey = JSON.stringify([bounds, area]);
     if (size.width !== 390) expandedAnchor = null;

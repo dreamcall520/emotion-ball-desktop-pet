@@ -1,0 +1,38 @@
+[
+  {
+    "status": "fulfilled",
+    "value": {
+      "url": "https://qiuqiu.pet/",
+      "status": 200,
+      "title": "球球桌宠｜免费的 macOS 桌面宠物",
+      "mentionsCodex": true,
+      "mentionsWechat": false,
+      "mentionsFeedback": true,
+      "mentionsEmail": false
+    }
+  },
+  {
+    "status": "fulfilled",
+    "value": {
+      "url": "https://qiuqiu.pet/privacy/",
+      "status": 200,
+      "title": "隐私说明 · 球球桌宠",
+      "mentionsCodex": true,
+      "mentionsWechat": false,
+      "mentionsFeedback": true,
+      "mentionsEmail": true
+    }
+  },
+  {
+    "status": "fulfilled",
+    "value": {
+      "url": "https://qiuqiu.pet/feedback/",
+      "status": 200,
+      "title": "意见反馈 · 球球桌宠",
+      "mentionsCodex": false,
+      "mentionsWechat": false,
+      "mentionsFeedback": true,
+      "mentionsEmail": false
+    }
+  }
+]

@@ -1,0 +1,64 @@
+✔ weather IPC denies other windows, child frames and unexpected document URLs (13.713709ms)
+✔ invalid latitude/longitude and empty city names never persist or fetch (8.145583ms)
+✔ late previous-city response cannot replace the newly selected city (9.37825ms)
+✔ destroy during a request prevents late publication and unregisters IPC (2.083ms)
+✔ failed city persistence retains previous city in memory and on disk (2.889125ms)
+✔ expanded layout remains inside small/negative-origin screen and suppression/lock hides it (2.223917ms)
+✔ closing native weather window invalidates pending request publication (1.839708ms)
+✔ restart restores matching disk cache and retains same-city stale values if network fails (14.042042ms)
+✔ disk cache from another city and cache followed by a city change cannot leak old weather (9.017709ms)
+✔ future disk cache timestamp is rejected rather than treated as fresh weather (2.182542ms)
+✔ malformed expanded resize height falls back to finite dimensions without weakening screen clamping (2.387625ms)
+✔ changing weather content keeps a nearby legal side and repeated layout does not move it (4.144292ms)
+✔ weather capsule reuses released quota placement below the pet and dialogue, not above the dialogue (2.544709ms)
+✔ weather follows the last quota card with the same eight-pixel stack gap (6.782959ms)
+✔ weather visibility persists and compact group metrics do not grow with details (2.652584ms)
+✔ native location denial returns a short structured error and preserves selected city (2.521458ms)
+✔ only expansion animates native geometry; compact commit never runs a native shrink animation (1.746791ms)
+✔ native reverse-geocoded city and district persist without replacing them with a placeholder (2.625ms)
+✔ city settings opens its picker after first load even when the compact card is disabled (3.207541ms)
+✔ city settings immediately opens a picker in an already loaded window (3.808625ms)
+✔ successful native location returns immediately while weather fetch remains pending (3.112083ms)
+✔ weather collection captures held card after group hides, but rejects hidden staging (3.963ms)
+✔ weather details and city search retain full requested height at all four corners (10.774334ms)
+✔ expanded weather recomputes the stable envelope after pet and display movement (1.640375ms)
+✔ clicked weather remains visible after the old collection hides, and explicit collapse returns to collected state (1.795667ms)
+✔ expanded weather ignores old quota-stack slots and stays eight pixels above a low pet (10.737958ms)
+✔ near-top weather chooses below or beside the pet instead of clamping a tall panel over it (12.080375ms)
+✔ repeated weather ResizeObserver packets neither touch native bounds nor re-enter quota layout (1.583709ms)
+✔ weather geometry morph keeps source visible until overlay owns it, captures restored compact target, and restores opaque real card before hiding overlay (8.268ms)
+✔ reopen, forced reset, reduced motion, hiding the pet and display changes cancel only their own pending weather morph (18.318208ms)
+✔ collected weather morphs into the real collection bar rather than showing a disappearing compact card (10.442167ms)
+✔ an endpoint collection change cancels a stale morph and a hidden renderer timeout cannot leave closing stuck (609.9045ms)
+✖ 主动选城市不被设置窗口的卡片隐藏规则挡住，安全阻塞和普通卡隐藏仍有效 (5.138166ms)
+ℹ tests 33
+ℹ suites 0
+ℹ pass 32
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 898.258458
+
+✖ failing tests:
+
+test at desktop-pet/tests/weather-window.test.js:351:1
+✖ 主动选城市不被设置窗口的卡片隐藏规则挡住，安全阻塞和普通卡隐藏仍有效 (5.138166ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  false !== true
+  
+      at TestContext.<anonymous> (/Users/allan/Documents/个人创作/emotion-ball-desktop-pet/.worktrees/mas-first-release/desktop-pet/tests/weather-window.test.js:351:307)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)
+      at Test.postRun (node:internal/test_runner/test:1537:19)
+      at Test.run (node:internal/test_runner/test:1462:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

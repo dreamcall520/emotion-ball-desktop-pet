@@ -1218,13 +1218,19 @@
       const result = await bridge.listCodexPets?.();
       if (disposed || revision !== petReadFlight) return;
       if (!result?.ok || !Array.isArray(result.pets)) throw new Error('pets unavailable');
+      if(result.library){
+        $('connect-codex-pets').hidden=false;
+        $('connect-codex-pets').textContent=result.library.status==='connected'?'更换 Codex 宠物目录':'连接 Codex 宠物目录';
+        $('codex-library-state').hidden=false;
+        $('codex-library-state').textContent=result.library.status==='connected'?'已连接素材目录；刷新会导入新素材，原目录不作修改。':'连接一次 Codex 的 pets 素材目录即可导入；已有宠物仍可使用。';
+      }
       pets = result.pets.filter(pet => CodexPetPlayer.validDescriptor(pet));
       for (const pet of pets) {
         codexDescriptors.set(pet.id, pet);
         if (pet.importedId && !codexDescriptors.has(pet.importedId)) codexDescriptors.set(pet.importedId, { ...pet, id: pet.importedId });
       }
       $('pet-read-state').hidden = pets.length > 0;
-      $('pet-read-state').textContent = pets.length ? '' : '还没有 Codex 宠物。在 Codex 里创建后，点击刷新即可选择。';
+      $('pet-read-state').textContent = pets.length ? '' : result.library?(result.library.status==='connected'?'所选素材目录暂无可用宠物。在 Codex 中添加后，点击刷新。':'还没有已导入的 Codex 宠物，请连接 pets 素材目录。'):'还没有 Codex 宠物。在 Codex 里创建后，点击刷新即可选择。';
       $('pet-grid').hidden = !pets.length; if (activePetSource === 'codex') $('pet-settings').hidden = !pets.length;
       $('pet-search-field').hidden = pets.length <= 6;
       $('pet-search').value = ''; renderPets();
@@ -1255,6 +1261,15 @@
     const index = event.key === 'Home' ? 0 : event.key === 'End' ? sourceTabs.length - 1
       : (sourceTabs.indexOf(name) + (event.key === 'ArrowRight' ? 1 : sourceTabs.length - 1)) % sourceTabs.length;
     setSource(sourceTabs[index]); $('source-' + sourceTabs[index]).focus();
+  });
+  $('connect-codex-pets')?.addEventListener('click',async()=>{
+    $('connect-codex-pets').disabled=true;$('refresh-pets').disabled=true;
+    try{const result=await bridge.connectCodexPets?.();if(disposed)return;
+      if(result?.canceled){announce('已取消连接，已有宠物保持。');return;}
+      if(!result?.ok||result.library?.status!=='connected'){announce(result?.error||'请选择 Codex 的 pets 素材目录；已有宠物保持。');return;}
+      await refreshPets();announce(result.library.imported?'素材目录已连接，预览满意后保存。':'素材目录已连接，暂无可导入的宠物。');
+    }catch(_){if(!disposed)announce('目录连接未完成，已有宠物保持。');}
+    finally{if(!disposed){$('connect-codex-pets').disabled=false;$('refresh-pets').disabled=false;}}
   });
   $('refresh-pets').addEventListener('click', refreshPets);
   $('pet-search').addEventListener('input', renderPets);

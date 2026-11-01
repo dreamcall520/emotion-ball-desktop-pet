@@ -1,0 +1,65 @@
+{
+  "tabs": [
+    {
+      "id": "source-codex",
+      "selected": "true"
+    },
+    {
+      "id": "source-local",
+      "selected": "true"
+    },
+    {
+      "id": "source-quota",
+      "selected": "true"
+    },
+    {
+      "id": "source-ball",
+      "selected": "true"
+    }
+  ],
+  "gallery": {
+    "open": true,
+    "actions": 5,
+    "canvasWidth": 576
+  },
+  "contact": {
+    "open": true,
+    "copy": true,
+    "saveQR": true
+  },
+  "overflow": false,
+  "customization": {
+    "appearance": {
+      "shape": "codex-pet",
+      "bodyColor": "#EEEBE4",
+      "eyeColor": "#1A1A1A",
+      "glowPinkColor": "#D05ED6",
+      "glowGoldColor": "#D0AD8A",
+      "eyeScale": 1,
+      "eyeSpacing": 1,
+      "eyeHeight": 0,
+      "auroraTransparency": 0,
+      "auroraStyle": "dimensional",
+      "auroraContour": "original",
+      "shapeTuning": {
+        "width": 1,
+        "height": 1,
+        "softness": 0.5,
+        "asymmetry": 0
+      },
+      "idleEyes": "original",
+      "sheepTheme": "auto",
+      "codexPetId": "codex-08755323e3e82294f95a458a0f0450be2d5ee732632cf1c5802754fd4d786507"
+    },
+    "sequence": [
+      {
+        "action": "peek",
+        "pauseMs": 300
+      },
+      {
+        "action": "jelly",
+        "pauseMs": 300
+      }
+    ]
+  }
+}

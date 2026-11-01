@@ -14,3 +14,5 @@ test('设置和子菜单移除未开放功能，保留Codex大小卡和天气入
  const result=filterMenu([{id:'workbuddy-enabled'},{id:'api-balance-menu'},{id:'customize-open'},{id:'codex-menu',submenu:[{id:'codex-quota-visible'},{id:'openai-api-menu',submenu:[]}]},{id:'weather-open'}]);
  assert.deepEqual(result.map(x=>x.id),['customize-open','codex-menu','weather-open']);assert.deepEqual(result[1].submenu.map(x=>x.id),['codex-quota-visible']);
 });
+
+test('开发沙盒验收目录只允许显式同容器QA子目录，不复用或越出用户资料',()=>{const {acceptanceDirectory}=require('../lib/mas-first-release');const base='/container/Library/Application Support';assert.equal(acceptanceDirectory(base,'Candidate',base+'/FirstRelease-QA-test'),base+'/FirstRelease-QA-test');for(const requested of ['',null,'relative','/tmp/FirstRelease-QA-test',base+'/Candidate',base+'/../FirstRelease-QA-test'])assert.equal(acceptanceDirectory(base,'Candidate',requested),base+'/Candidate');});

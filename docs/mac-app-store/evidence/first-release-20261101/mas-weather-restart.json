@@ -1,0 +1,12 @@
+{
+  "status": "ready",
+  "city": "北京",
+  "temperature": 15.3,
+  "visibility": "visible",
+  "viewport": {
+    "width": 128,
+    "height": 32
+  },
+  "picker": true,
+  "text": "天气\n15°"
+}

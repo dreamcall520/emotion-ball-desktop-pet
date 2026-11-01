@@ -1,0 +1,37 @@
+{
+  "masDevelopment": true,
+  "isolatedProfile": true,
+  "cases": [
+    {
+      "page": "global-settings.html",
+      "result": {
+        "firstRelease": true,
+        "cardSources": [
+          "codex",
+          "weather"
+        ],
+        "disabledProviderEntries": 0
+      }
+    },
+    {
+      "page": "notes.html",
+      "result": {
+        "notes": [
+          ""
+        ],
+        "todos": [
+          "首发验收待办"
+        ],
+        "organizeVisible": false
+      }
+    },
+    {
+      "page": "pomodoro.html",
+      "result": {
+        "running": "running",
+        "remaining": 1500,
+        "paused": "paused"
+      }
+    }
+  ]
+}

@@ -1,8 +1,58 @@
 {
-  "criticalFilesMatch": 8,
-  "workbuddyHelperAbsent": true,
-  "twoPluginAssetTreesAbsent": true,
-  "sourceRevision": "81406a1+uncommitted-first-release",
-  "packageSha256": "50eb57a43eba89855f5f59d0c379bab2012e5e488dbcf66f0df4db7bf221f10e",
-  "appPath": "/Users/allan/Documents/个人创作/emotion-ball-desktop-pet/.worktrees/mas-first-release/dist/mas-development/arm64/球球桌宠-商店沙盒开发候选-mas-arm64/球球桌宠-商店沙盒开发候选.app"
+  "appPath": "/Users/allan/Documents/个人创作/emotion-ball-desktop-pet/.worktrees/mas-first-release/dist/mas-development/arm64/球球桌宠-商店沙盒开发候选-mas-arm64/球球桌宠-商店沙盒开发候选.app",
+  "asarSha256": "01163607986458d8d4c27f40a0597b6a56650b974e7fe75274b44ab909bf162a",
+  "files": [
+    {
+      "file": "desktop-pet/main.js",
+      "sha256": "06f60f2b06c86c07d202cd6c732c585f112ce2087b95d581dc3e725ce661836c",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/lib/mas-first-release.js",
+      "sha256": "01bb1ff0d84a443bf562ef6458d7303946297f410a0a72c2b874dda105225238",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/lib/weather-window.js",
+      "sha256": "2a8e17e2a7ad48a3c0a5bd71629c29bf15fdb069588881b6e386a6d7ca746821",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/lib/mas-codex-pet-library.js",
+      "sha256": "86c2541e2907b32f9aea2daa30f17bdd7cac6665636022e21b308a9c91a40b9a",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/customize.html",
+      "sha256": "79b2eacc85e14f1e582583153beba0bf31bf60f397fcf11f9b9fed999573e945",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/customize-renderer.js",
+      "sha256": "e33bfb93beb14957ed3f3f7798d76fd9f834af4ca485bd566519e182c18d82e7",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/customize-preload.js",
+      "sha256": "a05233179418cf2b8d7cc88572468ce5f212ee7c8401338fdf067306f5466ad5",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/store-connections-first.html",
+      "sha256": "e2ab5e2ddfb900a0f1717c13d157c31d481dca00cf6a21c632a4e038a28278ba",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/store-connections-first-renderer.js",
+      "sha256": "300100a7b93cb4dbd75471d8361a16f5e788a592cf255fca334e67442fdb8774",
+      "matches": true
+    }
+  ],
+  "sourceByteMatch": true,
+  "packagedMetadata": {
+    "version": "0.4.10",
+    "releaseProfile": "mas-first"
+  },
+  "kind": "MAS development only",
+  "submissionReady": false
 }

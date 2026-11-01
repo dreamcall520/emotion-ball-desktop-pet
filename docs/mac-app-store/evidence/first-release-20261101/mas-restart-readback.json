@@ -1,0 +1,21 @@
+{
+  "notes.html": {
+    "notes": [
+      {
+        "title": "",
+        "body": "首发验收便签：重启后保留"
+      }
+    ],
+    "todos": [
+      "首发验收待办"
+    ]
+  },
+  "global-settings.html": {
+    "firstRelease": true,
+    "autoReport": false,
+    "cards": [
+      "codex",
+      "weather"
+    ]
+  }
+}

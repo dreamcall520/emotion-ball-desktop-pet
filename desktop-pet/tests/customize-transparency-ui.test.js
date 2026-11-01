@@ -98,7 +98,8 @@ async function fixture(appearance, startupAppearance = appearance, options = {})
       if (options.presetOperation) return options.presetOperation('delete', { id });
       presetRecords = presetRecords.filter(item=>item.id!==id);return { ok:true, presets:presetRecords };
     },
-    listCodexPets: async () => ({ ok: true, pets: options.pets || [] }),
+    listCodexPets: options.listCodexPets || (async () => ({ ok: true, pets: options.pets || [] })),
+    connectCodexPets: options.connectCodexPets,
     onColorMode: listener => { colorModeListener = listener; return () => { colorModeListener = null; }; },
     onVisibility: listener => { visibilityListener = listener; return () => { visibilityListener = null; }; },
     preview: appearance => avatarPreviews.push({ ...appearance })
@@ -856,5 +857,21 @@ test('Codex 透明度轨道在载入和换宠物时与滑块位置一致', async
   f.get('pet-grid').children[1].dispatch('click');
   assert.equal(Number(f.get('pet-opacity').value), 0);
   assert.equal(f.get('pet-opacity').style['--range-fill'], '0%');
+  f.close();
+});
+
+
+test('商店宠物素材入口不自动授权，取消保留预览，连接后刷新不替换当前草稿',async()=>{
+  const old=codexPet(0,'已有宠物'),added=codexPet(1,'新素材');let connects=0,connected=false,cancel=true;
+  const f=await fixture({shape:'blob',bodyColor:'#123456'},undefined,{
+    listCodexPets:async()=>({ok:true,pets:connected?[old,added]:[old],library:{status:connected?'connected':'needs-authorization'}}),
+    connectCodexPets:async()=>{connects++;if(cancel)return{ok:true,canceled:true,library:{status:'cancelled'}};connected=true;return{ok:true,library:{status:'connected'}};}
+  });
+  assert.equal(connects,0);assert.equal(f.get('connect-codex-pets').hidden,false);assert.equal(f.get('connect-codex-pets').textContent,'连接 Codex 宠物目录');
+  f.get('pet-grid').children[0].dispatch('click');assert.equal(f.get('preview-name').textContent,'已有宠物');
+  await f.get('connect-codex-pets').dispatch('click');assert.equal(connects,1);assert.equal(f.get('pet-grid').children.length,1);assert.equal(f.get('preview-name').textContent,'已有宠物');
+  cancel=false;await f.get('connect-codex-pets').dispatch('click');assert.equal(connects,2);assert.equal(f.get('pet-grid').children.length,2);assert.equal(f.get('preview-name').textContent,'已有宠物');
+  assert.equal(f.get('connect-codex-pets').textContent,'更换 Codex 宠物目录');
+  await f.get('refresh-pets').dispatch('click');assert.equal(connects,2,'ordinary refresh never invokes directory selection');
   f.close();
 });
