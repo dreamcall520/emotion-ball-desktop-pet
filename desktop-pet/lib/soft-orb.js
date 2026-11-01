@@ -10,9 +10,10 @@
     const canvas=document.createElement('canvas');canvas.className='soft-orb-canvas';canvas.setAttribute('aria-label',options.label||'小宇');canvas.setAttribute('role','img');canvas.style.cssText='display:block;width:100%;height:100%;pointer-events:none;';canvas.style.opacity=String(1-Math.min(60,Math.max(0,Number(appearance.auroraTransparency)||0))/100);target.append(canvas);
     const notify=(name,value)=>{for(const fn of events.get(name)||[])fn(value);};
     function size(){const rect=target.getBoundingClientRect();const side=Math.max(24,Math.min(720,Math.round(Math.max(rect.width||80,rect.height||80)*Math.min(root.devicePixelRatio||1,2))));if(canvas.width!==side||canvas.height!==side){canvas.width=side;canvas.height=side;}}
+    const idleLook={cycle:-1,index:-1};
     function pose(){
       const localGaze={x:smoothGaze.x*(facing==='right'?-1:1),y:smoothGaze.y};
-      let p=M.statePose(motion,state,clock,localGaze,clock-stateStart);
+      let p=M.statePose(motion,state,clock,localGaze,clock-stateStart,idleLook);
       if(action){
         const age=clock-actionStart,total=M.duration(action)/1000;
         if(age>=total){action=null;canvas.dataset.action=state;notify('motionend');}
