@@ -10,8 +10,17 @@ const articles = [...html.matchAll(/<article[^>]*data-release-panel[^>]*>([\s\S]
 const downloads = [...html.matchAll(/class="release-download [^"]+" href="([^"]+)"/g)].map(m => m[1]);
 const articleBlocks = html.match(/<article[^>]*data-release-panel[^>]*>[\s\S]*?<\/article>/g);
 
-const globalArticles = articles, globalBlocks = articleBlocks;
-const oldArticles = articles.slice(2), oldBlocks = articleBlocks.slice(2);
+const globalArticles = articles.slice(1), globalBlocks = articleBlocks.slice(1);
+const oldArticles = articles.slice(3), oldBlocks = articleBlocks.slice(3);
+
+test('0.4.10 Apple release preserves every 0.4.09 platform and the retained history',()=>{
+ assert.match(articleBlocks[0], /id="v0\.4\.10-apple"/);
+ assert.match(articles[0], /datetime="2026-11-01"/);
+ for(const text of ['小白加入官方伙伴','反馈与提交记录','晴空蓝与窗口显示','天气与额度卡交互','装扮与专属皮肤案例'])assert.ok(articles[0].includes(text));
+ assert.equal((articles[0].match(/<h4>/g)||[]).length,5);
+ assert.match(articles[0], /v0\.4\.10\/Qiuqiu-0\.4\.10-macOS-arm64\.dmg/);
+ assert.doesNotMatch(articles[0], /macOS-x64\.dmg|Windows-x64-Setup|mac-app-store|Windows r6/);
+});
 
 test('0.4.09 adds weather and card improvements while retaining 0.4.08', () => {
   assert.match(globalBlocks[0], /id="v0\.4\.09-apple"/);
@@ -43,8 +52,8 @@ test('0.4.05 and sixteen earlier historical blocks retain their content with num
   assert.match(html, /<title>球球桌宠 · 更新日志<\/title>/);
   assert.match(html, /rel="canonical" href="https:\/\/qiuqiu.pet\/updates\/"/);
   assert.equal(articles.length, 17);
-  assert.equal((html.match(/data-release-link/g) || []).length, 19);
-  assert.equal((html.match(/<option /g) || []).length, 19);
+  assert.equal((html.match(/data-release-link/g) || []).length, 20);
+  assert.equal((html.match(/<option /g) || []).length, 20);
   assert.doesNotMatch(html, /v0\.4\.03-apple|本次更新仅适用于 Apple 芯片；Intel x64 最新公开构建/);
   assert.match(articleBlocks[0], /id="v0\.4\.05-apple"/);
   assert.deepEqual([...articles[0].matchAll(/<h4>(.*?)<\/h4>/g)].map(m => m[1].replace(/^\d+\.\s*/, '')), ['【新增】悬浮快捷面板', '【新增】番茄钟', '【新增】额度展示定制', '【新增】球球守护战', '【优化】额度预估', '【优化】使用体验']);
@@ -76,8 +85,8 @@ test('0.4.05 and sixteen earlier historical blocks retain their content with num
 });
 
 test('platform installer links and historical downloads stay accurate', () => {
-  assert.equal(downloads.length, 22);
-  assert.equal(new Set(downloads).size, 22);
+  assert.equal(downloads.length, 23);
+  assert.equal(new Set(downloads).size, 23);
   assert.doesNotMatch(html, /release-source|查看 GitHub Release/);
   assert.ok(downloads.every(url => ['https://share.weiyun.com/6WH6LkRl', 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.9-windows/Qiuqiu-0.4.09-Windows-x64-Setup.exe'].includes(url) || /^https:\/\/github\.com\/dreamcall520\/emotion-ball-desktop-pet\/releases\/download\/v[\d.]+\/.+\.(?:zip|dmg)$/.test(url)));
   for (const article of articles) {
