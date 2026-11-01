@@ -47,9 +47,10 @@ html,body{min-width:0;min-height:580px}.studio{max-width:none;margin:0;backgroun
 /* Review revision: bound the library itself, keeping display settings in view. */
 .codex-source .controls{display:flex;flex-direction:column;overflow:hidden}
 .source-switch{flex:none}
-#codex-panel{display:flex;flex-direction:column;flex:1;min-height:0}
+#codex-panel{display:flex;flex-direction:column;flex:1;min-height:0;overflow-y:auto}
 .codex-heading,.pet-search-field,.pet-filter-status,.pet-settings,.saved-pet{flex:none}
 .pet-grid{flex:1;min-height:122px;max-height:248px;grid-auto-rows:118px;align-content:start;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--selected-line) transparent;scrollbar-gutter:stable;padding:1px 3px 1px 1px}
+.codex-source .pet-grid{overscroll-behavior-y:auto}
 .pet-card,.codex-source .pet-card{min-height:118px;padding:6px}
 .codex-source .pet-card .pet-sprite{--sprite-size:72px}
 .pet-search-field{margin:0 0 10px}.pet-search-field input{width:100%;height:32px;padding:6px 11px;border:1px solid var(--line);border-radius:8px;background:var(--input);color:var(--text);font-size:12px}
@@ -84,7 +85,7 @@ html,body{min-width:0;min-height:580px}.studio{max-width:none;margin:0;backgroun
 :root[data-color-mode=accessible][data-accessible-appearance=light] :is(.preview-animation select,#pet-size){background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23455467' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E")}
 
 /* Local partners share the sprite player and display controls with Codex pets. */
-#local-panel { display:flex; flex-direction:column; flex:1; min-height:0; }
+#local-panel { display:flex; flex-direction:column; flex:1; min-height:0; overflow-y:auto; }
 .local-import { align-self:flex-start; margin:0 0 8px; }
 .local-pet-help { flex:none; margin:0 0 12px; font-size:11px; line-height:1.65; color:var(--muted); }
 .source-switch,.codex-source .source-switch { gap:18px; }
