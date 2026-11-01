@@ -1,0 +1,77 @@
+{
+  "candidate": "R25 live acceptance of R24 implementation",
+  "acceptedAt": "2026-11-01",
+  "platform": "mas",
+  "arch": "arm64",
+  "implementationCommit": "a0d64fb",
+  "sourceChanged": false,
+  "asarSha256": "1b38e90679ee36e7f4ea861fd2af9086fc794a8def6e52b8ed4054700c50f0c6",
+  "unchangedR24Artifact": true,
+  "strictSignatureVerified": true,
+  "explicitUserApproval": {
+    "updateBoth": true,
+    "oneSyntheticMessagePerOriginalTool": true
+  },
+  "zcodeFoundInstalledAtStart": true,
+  "workbuddyUpdateViaCandidateUiCompleted": true,
+  "directoryPickerRepeated": false,
+  "newModelMessagesSent": {
+    "zcode": 1,
+    "workbuddy": 1
+  },
+  "testPrompt": "这是球球商店沙盒实时任务联动测试。不要调用工具、读取或修改文件、启动子任务。只回复：球球原软件任务已连接。",
+  "zcode": {
+    "replyVerified": true,
+    "submittedEventVerified": true,
+    "stopEventVerified": true,
+    "finalTaskCompletionConfirmed": false
+  },
+  "workbuddy": {
+    "replyVerified": true,
+    "mainReplyTerminalEventVerified": true,
+    "mainReplyCompletedInCard": true,
+    "overallTaskCompletionConfirmed": false
+  },
+  "restart": {
+    "normalQuitVerified": true,
+    "ownMainProcessCountAfterQuit": 0,
+    "noNewModelMessage": true,
+    "noNewLoginOrDirectoryPrompt": true,
+    "oldEventsNotRestoredAsLiveTasks": true,
+    "guideDoesNotRequestReinstall": true,
+    "pairing": {
+      "zcode": {
+        "installedReceiverCopies": 3,
+        "allMatchCurrentMasGrant": true,
+        "nonEventGetStatus": 405,
+        "installationObservationPersisted": true,
+        "observedAt": 1793493545056
+      },
+      "workbuddy": {
+        "installedReceiverCopies": 2,
+        "allMatchCurrentMasGrant": true,
+        "nonEventGetStatus": 405,
+        "installationObservationPersisted": true,
+        "observedAt": 1793493623511
+      }
+    }
+  },
+  "originalChatBodyExported": false,
+  "accountCredentialsCopied": false,
+  "externalRawHookBodyStored": false,
+  "fullTestsFromUnchangedImplementation": {
+    "passed": 3155,
+    "rerunThisTurn": false
+  },
+  "reviewApproved": false,
+  "formalAppReplaced": false,
+  "pushed": false,
+  "submitted": false,
+  "limits": [
+    "Original task Stop is not overall task final completion",
+    "ZCode official plan remains empty; custom source chat previously verified",
+    "WorkBuddy website remaining credits remains optional separate connection",
+    "No new-user fresh-account end-to-end acceptance or Intel device test",
+    "No independent pre-update full original-settings baseline captured in this turn"
+  ]
+}
