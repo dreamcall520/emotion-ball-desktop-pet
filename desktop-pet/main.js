@@ -4630,11 +4630,18 @@ async function bootstrap() {
     onLayout: () => { syncQuotaLabel(codexCompanion?.getSnapshot()); syncApiBalanceLabel(); syncQuotaFreeStack(); },
     onChange: packet => { syncQuotaCardGroup(); syncQuotaFreeStack(); if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send('pet:weather', packet); },
     onError: error => writeError('天气', error) });
-  petWindow.on('move', () => weatherWindow?.reposition());
-  petWindow.on('show', () => weatherWindow?.reposition());
-  petWindow.on('hide', () => weatherWindow?.reposition());
-  petWindow.webContents.on('did-finish-load', () => { if (weatherWindow) petWindow.webContents.send('pet:weather', { ...weatherWindow.getState(), enabled: weatherWindow.isEnabled() }); });
-  const trackWeatherObstacle = win => { if (win === weatherWindow?.getWindow()) return; for (const event of ['move','resize','show','hide','closed']) win.on(event, () => { if (!isQuitting && win !== weatherWindow?.getWindow()) safelyInvokeWindow('天气避让重排', () => weatherWindow?.reposition()); }); };
+  const weatherPetWindow = petWindow, initialWeatherWindow = weatherWindow;
+  const isCurrentWeatherOwner = () => !isQuitting && petWindow === weatherPetWindow &&
+    weatherWindow === initialWeatherWindow && !weatherPetWindow.isDestroyed() &&
+    !weatherPetWindow.webContents.isDestroyed?.();
+  for (const event of ['move', 'show', 'hide']) weatherPetWindow.on(event, () => {
+    if (isCurrentWeatherOwner()) initialWeatherWindow.reposition();
+  });
+  weatherPetWindow.webContents.on('did-finish-load', () => {
+    if (isCurrentWeatherOwner()) weatherPetWindow.webContents.send('pet:weather',
+      { ...initialWeatherWindow.getState(), enabled: initialWeatherWindow.isEnabled() });
+  });
+  const trackWeatherObstacle = win => { if (win === weatherWindow?.getWindow()) return; for (const event of ['move','resize','show','hide','closed']) win.on(event, () => { if (win === weatherPetWindow && !isCurrentWeatherOwner()) return; if (!isQuitting && win !== weatherWindow?.getWindow()) safelyInvokeWindow('天气避让重排', () => weatherWindow?.reposition()); }); };
   BrowserWindow.getAllWindows().forEach(trackWeatherObstacle);
   app.on('browser-window-created', (_event, win) => trackWeatherObstacle(win));
   weatherWindow.start();
