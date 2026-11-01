@@ -161,12 +161,48 @@
       if (request !== null) view.cancelAnimationFrame(request);
       request = null; previous = null;
     }
+    let blinkCache = null;
+    function continuousIdleBlink() {
+      return isXiaobaiPet(descriptor) && descriptor.origin === 'builtin' && action.id === 'idle' &&
+        variationIndex === null && action.start === 0 && action.sheet === 'base' &&
+        action.frameDurations.length === 1 && action.durationMs === 3400;
+    }
+    function paintIdleBlink() {
+      const w=frameWidth,h=frameHeight;
+      if (!blinkCache || blinkCache.image!==image || blinkCache.w!==w || blinkCache.h!==h) {
+        const open=document.createElement('canvas'),closed=document.createElement('canvas'),layer=document.createElement('canvas'),mask=document.createElement('canvas');
+        for(const c of [open,closed,layer,mask]){c.width=w;c.height=h;}
+        open.getContext('2d').drawImage(image,0,0,w,h,0,0,w,h);
+        closed.getContext('2d').drawImage(image,4*w,0,w,h,0,0,w,h);
+        blinkCache={image,w,h,open,closed,layer,mask,pixels:open.getContext('2d').getImageData(0,0,w,h)};
+      }
+      const c=blinkCache,t=elapsed-2600,smooth=x=>{x=Math.max(0,Math.min(1,x));return x*x*(3-2*x);};
+      const closure=media?.matches||paused?0:t<0?0:t<130?smooth(t/130):t<175?1:t<365?1-smooth((t-175)/190):0;
+      context.putImageData(c.pixels,0,0);canvas.dataset.codexBlink=String(closure);
+      if(!closure)return;
+      const l=c.layer.getContext('2d'),m=c.mask.getContext('2d');
+      for(const eye of [{x:.416,y:.400},{x:.582,y:.400}]){
+        const x=eye.x*w,y=eye.y*h,a=.066*w,b=.055*h;
+        l.clearRect(0,0,w,h);l.globalCompositeOperation='source-over';l.drawImage(c.closed,0,0);
+        m.clearRect(0,0,w,h);m.save();m.translate(x,y);m.scale(a,b);
+        const gradient=m.createRadialGradient(0,0,.70,0,0,1);gradient.addColorStop(0,'#fff');gradient.addColorStop(1,'#ffffff00');
+        m.fillStyle=gradient;m.beginPath();m.arc(0,0,1,0,Math.PI*2);m.fill();m.restore();
+        l.globalCompositeOperation='destination-in';l.drawImage(c.mask,0,0);l.globalCompositeOperation='source-over';context.drawImage(c.layer,x-a,y-b,a*2,b*2,x-a,y-b,a*2,b*2);
+        if(closure<1){
+          const aperture=b*(1-closure),lidY=y+h*.012*closure;
+          context.save();context.beginPath();context.moveTo(x-a,lidY);
+          context.bezierCurveTo(x-a*.55,lidY-aperture*1.3,x+a*.55,lidY-aperture*1.3,x+a,lidY);
+          context.bezierCurveTo(x+a*.55,lidY+aperture*.8,x-a*.55,lidY+aperture*.8,x-a,lidY);context.closePath();context.clip();context.drawImage(c.open,0,0);context.restore();
+        }
+      }
+    }
     function paint() {
       if (destroyed || !loaded) return;
       context.clearRect(0, 0, frameWidth, frameHeight);
       const cell = (action.start ?? action.row * COLUMNS) + frame;
       if (action.flipX) { context.save(); context.translate(frameWidth, 0); context.scale(-1, 1); }
-      context.drawImage(image, cell % COLUMNS * frameWidth, Math.floor(cell / COLUMNS) * frameHeight,
+      if (continuousIdleBlink()) paintIdleBlink();
+      else context.drawImage(image, cell % COLUMNS * frameWidth, Math.floor(cell / COLUMNS) * frameHeight,
         frameWidth, frameHeight, 0, 0, frameWidth, frameHeight);
       if (action.flipX) context.restore();
       canvas.dataset.codexAction = action.id;
@@ -201,7 +237,7 @@
         frame = (frame + 1) % action.frameDurations.length;
         changed = true;
       }
-      if (changed) paint();
+      if (changed || continuousIdleBlink()) paint();
       request = view.requestAnimationFrame(tick);
     }
     function syncPlayback() {
@@ -273,6 +309,7 @@
       if (!validDescriptor(next)) throw new TypeError('Invalid Codex pet descriptor');
       stop(); resetVariation(); lastVariations.clear(); clearSheets();
       if (image) image.onload = image.onerror = null;
+      blinkCache=null;
       descriptor = { ...next }; actions = getActions(descriptor);
       action = actions.find(item => item.id === action.id) || actions[0];
       variationBase = action.variation ? action : null;

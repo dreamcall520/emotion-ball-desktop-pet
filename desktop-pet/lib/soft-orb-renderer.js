@@ -186,7 +186,7 @@ function createSoftOrbRenderer(canvas, assets) {
     }
     if(skin==7){
       float depthInside=max(0.,-contour(q.xy));
-      color=mix(colPrimary,colSecondary,.6)+vec3(.12,.04,.18)*sin(q.x*5.+q.y*7.)*.12;
+      color=mix(colPrimary,colSecondary,.25)+vec3(.12,.04,.18)*sin(q.x*5.+q.y*7.)*.12;
       float stars=pow(noise(floor(q*170.)),100.);
       color+=stars*vec3(.55,.50,.85);
       float rim=exp(-depthInside/.022);
