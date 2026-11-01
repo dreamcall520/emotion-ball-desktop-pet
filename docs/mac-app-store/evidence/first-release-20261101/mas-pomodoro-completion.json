@@ -1,0 +1,45 @@
+{
+  "kind": "genuine MAS development",
+  "profile": "isolated FirstRelease-QA-20261101B",
+  "nativeUiActionsVerified": [
+    "resume 24:58",
+    "pause 24:56",
+    "reset 25:00",
+    "short break 05:00 to04:50",
+    "long break15:00",
+    "set focus1minute and run to completion"
+  ],
+  "result": {
+    "ok": true,
+    "state": {
+      "mode": "focus",
+      "status": "complete",
+      "total": 60,
+      "remaining": 0,
+      "deadline": 0,
+      "completed": 1,
+      "cycleCompleted": 1,
+      "minutes": 1,
+      "date": "2026-11-01",
+      "durations": {
+        "focus": 1,
+        "short": 5,
+        "long": 15
+      },
+      "face": "analog",
+      "intention": "",
+      "pinned": false,
+      "encouragementEnabled": true,
+      "extension": false,
+      "reminder": true,
+      "encouragement": "",
+      "quiet": false,
+      "panelOpen": true
+    }
+  },
+  "notVerified": [
+    "lock/sleep recovery",
+    "encouragement/bubble overlay visibility",
+    "final distribution package"
+  ]
+}

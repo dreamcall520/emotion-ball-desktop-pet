@@ -122,6 +122,7 @@
     const downloading = ['starting', 'downloading', 'retrying'].includes(update.download?.state);
     const failed = ['error', 'cancelled'].includes(update.download?.state);
     $('about-website').disabled = busy || typeof bridge?.openWebsite !== 'function';
+    $('about-privacy').disabled = busy || typeof bridge?.openPrivacy !== 'function';
     $('about-check-updates').hidden = releaseAvailable && update.downloadAvailable !== false && !failed;
     $('about-check-updates').disabled = busy || checking || typeof bridge?.checkUpdates !== 'function';
     $('about-open-release').disabled = busy || checking || downloading || update.downloadAvailable === false || typeof bridge?.downloadUpdate !== 'function';
@@ -198,6 +199,7 @@
     }
   }
 
+  $('about-privacy').addEventListener('click', () => perform('openPrivacy', '', '暂时无法打开隐私说明，请稍后重试。'));
   $('about-website').addEventListener('click', () => perform('openWebsite', '', '暂时无法打开官网，请稍后重试。'));
   $('about-check-updates').addEventListener('click', () => perform('checkUpdates', '正在检查更新…', '暂时无法检查更新，请稍后重试。'));
   $('about-open-release').addEventListener('click', () => perform('downloadUpdate', '正在准备安装包…', '暂时无法下载安装包，请稍后重试。'));

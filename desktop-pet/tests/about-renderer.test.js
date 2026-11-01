@@ -33,6 +33,7 @@ function fixture({ reduced = false, random = .4, hidden = false } = {}) {
     checkUpdates: () => { calls.push('checkUpdates'); }, downloadUpdate: () => { calls.push('downloadUpdate'); },
     openBrowserDownload: async () => { calls.push('openBrowserDownload'); return { ok: true }; },
     openDomesticDownload: async () => { calls.push('openDomesticDownload'); return { ok: true }; },
+    openPrivacy: () => { calls.push('openPrivacy'); },
     openWebsite: () => { calls.push('openWebsite'); }, close: () => { calls.push('close'); },
     onUpdate(fn) { receive = fn; return () => { unsubscribed++; }; } };
   const media = { matches: reduced, addEventListener: (_name, fn) => { mediaChange = fn; }, removeEventListener: () => { mediaChange = null; } };
@@ -300,4 +301,20 @@ test('关于页载入既有真实视觉模块，保留满铺与渐变名，背�
   assert.ok(css.indexOf('background-image: linear-gradient(110deg, #9ed1ed') > css.indexOf('background: linear-gradient(110deg, #557eb6'));
   assert.match(css, /:root\[data-color-mode="accessible"\] h1 \{ background: none; -webkit-text-fill-color: currentColor; \}/);
   assert.match(css, /:root\[data-color-mode="accessible"\] \.about-window::before \{ display: none; \}/);
+});
+
+
+test('隐私说明为可访问按钮并独立调用About bridge，不改变官网或更新入口',async()=>{
+ const f=fixture();await flush();
+ const html=fs.readFileSync(path.join(__dirname,'../about.html'),'utf8');
+ assert.match(html,/<button id="about-privacy"[^>]*type="button"[^>]*role="link"[^>]*aria-label="在浏览器查看球球隐私说明">隐私说明<\/button>/);
+ assert.equal(f.get('about-privacy').disabled,false);
+ await f.get('about-privacy').dispatch('click');await f.get('about-website').dispatch('click');
+ assert.deepEqual(f.calls,['openPrivacy','openWebsite']);
+ f.bridge.openPrivacy=async()=>false;await f.get('about-privacy').dispatch('click');
+ assert.equal(f.get('about-status').textContent,'暂时无法打开隐私说明，请稍后重试。');
+ delete f.bridge.openPrivacy;f.receive({state:'idle'});assert.equal(f.get('about-privacy').disabled,true);
+ let exposed;const calls=[];
+ vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../about-preload.js'),'utf8'),{require:()=>({contextBridge:{exposeInMainWorld:(_name,bridge)=>exposed=bridge},ipcRenderer:{invoke:(...args)=>calls.push(args)}})});
+ exposed.openPrivacy('https://untrusted.invalid/');assert.deepEqual(calls,[['pet:about-privacy']]);
 });

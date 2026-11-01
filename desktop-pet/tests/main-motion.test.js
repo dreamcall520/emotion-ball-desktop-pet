@@ -372,6 +372,10 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
       assert.ok(ipcHandlers.has(channel), `${channel} handler must be registered`);
       return Promise.resolve(ipcHandlers.get(channel)({ sender, senderFrame: sender.mainFrame }, packet, ...args));
     },
+    invokeWithFrame(channel, packet, sender, senderFrame) {
+      assert.ok(ipcHandlers.has(channel));
+      return Promise.resolve(ipcHandlers.get(channel)({sender,senderFrame},packet));
+    },
     send(channel, packet, sender = pet.webContents) {
       // 与实际预加载一致，默认携带当前页面代次；显式传旧值可验迟到报文。
       if (channel.startsWith('pet:codex-') && packet) packet = { pageEpoch: vm.runInContext('typeof codexPageEpoch === "number" ? codexPageEpoch : 1', context), ...packet };
@@ -5090,4 +5094,22 @@ test('bootstrap天气窗口回调只服务当前存活pet和原controller，退�
   }
   f.app.emit('before-quit');
  }
+});
+
+
+test('关于页隐私入口固定URL；非可信sender、子frame、隐藏、锁屏、外来导航均拒绝',async t=>{
+ const f=await fixture();t.after(()=>f.app.emit('before-quit'));menuItem(f,'about-open').click();
+ const win=f.windows.at(-1);win.emit('ready-to-show');const sender=win.webContents;
+ sender.mainFrame={};let url=require('node:url').pathToFileURL(path.resolve(__dirname,'../about.html')).href;sender.getURL=()=>url;
+ assert.equal(await f.invoke('pet:about-privacy','https://untrusted.invalid/',sender),true);
+ assert.deepEqual(f.external,['https://qiuqiu.pet/privacy/']);
+ assert.equal(await f.invoke('pet:about-privacy'),false);
+ assert.equal(await f.invokeWithFrame('pet:about-privacy',null,sender,{}),false);
+ assert.equal(await f.invokeWithFrame('pet:about-privacy',null,sender,undefined),false);
+ win.hide();assert.equal(await f.invoke('pet:about-privacy',null,sender),false);win.show();
+ url='https://untrusted.invalid/';assert.equal(await f.invoke('pet:about-privacy',null,sender),false);
+ url=require('node:url').pathToFileURL(path.resolve(__dirname,'../about.html')).href;
+ f.powerMonitor.emit('lock-screen');assert.equal(await f.invoke('pet:about-privacy',null,sender),false);
+ f.powerMonitor.emit('unlock-screen');
+ assert.deepEqual(f.external,['https://qiuqiu.pet/privacy/']);
 });

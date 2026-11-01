@@ -3911,6 +3911,11 @@ function registerIpc() {
     if (!fromAboutWindow(event, true)) return false;
     return shell.openExternal(APP_WEBSITE).then(() => true, () => false);
   });
+  ipcMain.handle('pet:about-privacy', event => {
+    if(!fromAboutWindow(event,true)||!event.sender.mainFrame||event.senderFrame!==event.sender.mainFrame||
+      event.sender.getURL()!==pathToFileURL(path.join(__dirname,'about.html')).href)return false;
+    return shell.openExternal('https://qiuqiu.pet/privacy/').then(()=>true,()=>false);
+  });
   ipcMain.handle('pet:about-update', async event => {
     if (!fromAboutWindow(event, true)) return false;
     await checkForUpdates(true);
