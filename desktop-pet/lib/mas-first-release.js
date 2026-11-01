@@ -1,9 +1,10 @@
 'use strict';
 const path=require('node:path');
+const {automaticReportingEnabled}=require('./feedback-reporting');
 const CARD_IDS = new Set(['codex', 'weather']);
 const ACTIONS = new Set(['status','refresh-status','enable-provider','enable-provider-data','revoke-provider','revoke-chat-data-consent','open-provider-chat','authorize-codex','revoke-codex','connect-codex','open-chat','refresh-codex']);
 function settingsForFirstRelease(settings) {
-  return {...settings, chatSource:'codex', chatProvider:'codex', zcodeEnabled:false, workbuddyEnabled:false,
+  return {...settings, autoReportErrors:automaticReportingEnabled(settings,true), chatSource:'codex', chatProvider:'codex', zcodeEnabled:false, workbuddyEnabled:false,
     apiBalanceEnabled:false, openaiApiAlwaysVisible:false,
     quotaCardOrder:settings.quotaCardOrder?.filter(id=>CARD_IDS.has(id)),
     quotaCardPinned:settings.quotaCardPinned?.filter(id=>CARD_IDS.has(id))};

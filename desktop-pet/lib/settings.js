@@ -1,4 +1,5 @@
 const fs = require('node:fs');
+const { AUTOMATIC_REPORT_CONSENT_VERSION } = require('./feedback-reporting');
 const path = require('node:path');
 const { normalizeModelSelection } = require('./chat-models');
 const { normalizeAppearance, normalizeCustomization, appearanceContentKey } = require('./customization');
@@ -52,6 +53,7 @@ const DEFAULTS = Object.freeze({
   openaiApiAlwaysVisible: false,
   autoUpdateCheck: true,
   autoReportErrors: true,
+  autoReportErrorsConsentVersion: '',
   lastUpdateNotifiedVersion: '',
   codexQuotaPeriod: 'auto',
   codexQuotaLabelSize: 'compact',
@@ -145,6 +147,7 @@ function normalizeSettings(raw = {}) {
     openaiApiAlwaysVisible: typeof raw.openaiApiAlwaysVisible === 'boolean'
       ? raw.openaiApiAlwaysVisible : DEFAULTS.openaiApiAlwaysVisible,
     autoReportErrors: typeof raw.autoReportErrors === 'boolean' ? raw.autoReportErrors : DEFAULTS.autoReportErrors,
+    autoReportErrorsConsentVersion: raw.autoReportErrorsConsentVersion===AUTOMATIC_REPORT_CONSENT_VERSION?AUTOMATIC_REPORT_CONSENT_VERSION:'',
     autoUpdateCheck: typeof raw.autoUpdateCheck === 'boolean' ? raw.autoUpdateCheck : DEFAULTS.autoUpdateCheck,
     lastUpdateNotifiedVersion: typeof raw.lastUpdateNotifiedVersion === 'string' &&
       /^\d{1,8}\.\d{1,8}\.\d{1,8}$/.test(raw.lastUpdateNotifiedVersion) ? raw.lastUpdateNotifiedVersion : '',

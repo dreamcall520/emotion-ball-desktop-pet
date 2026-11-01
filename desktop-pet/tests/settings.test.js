@@ -119,7 +119,7 @@ test('损坏文件回退且有效设置可回读', t => {
     codexShowExtraCredits: true,
     codexQuotaFunEnabled: true,
     openaiApiAlwaysVisible: false,
-    autoUpdateCheck: true, autoReportErrors: true,
+    autoUpdateCheck: true, autoReportErrors: true, autoReportErrorsConsentVersion: '',
     lastUpdateNotifiedVersion: '',
     codexQuotaPeriod: 'auto',
     codexQuotaLabelSize: 'compact',
@@ -140,7 +140,7 @@ test('旧配置保留尺寸位置置顶并补齐陪伴开关默认值', () => {
     codexShowExtraCredits: true,
     codexQuotaFunEnabled: true,
     openaiApiAlwaysVisible: false,
-    autoUpdateCheck: true, autoReportErrors: true, lastUpdateNotifiedVersion: '',
+    autoUpdateCheck: true, autoReportErrors: true, autoReportErrorsConsentVersion: '', lastUpdateNotifiedVersion: '',
     codexQuotaPeriod: 'auto', codexQuotaLabelSize: 'compact', codexQuotaAppearance: 'system'
   });
 });

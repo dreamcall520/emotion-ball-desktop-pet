@@ -1,6 +1,6 @@
 const { createCodexIconPreference } = require('./lib/codex-icon-preference');
 const { settingsEntries, findSettingsAction } = require('./lib/global-settings');
-const { createFeedbackReporting } = require('./lib/feedback-reporting');
+const { createFeedbackReporting, automaticReportingEnabled, AUTOMATIC_REPORT_CONSENT_VERSION, ENDPOINT: FEEDBACK_ENDPOINT } = require('./lib/feedback-reporting');
 const fs = require('node:fs');
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
@@ -142,6 +142,7 @@ let tray = null;
 let settings = null;
 let settingsFile = null;
 let feedbackReporting = null;
+let feedbackConsentFlight = false, feedbackConsentEpoch = 0;
 let masCodexPetLibrary = null;
 let codexPets = null, localPetStore = null, localPetImportBusy = false, localPetImportSession = null, localPetDeletingId = null;
 let dragState = null;
@@ -3852,17 +3853,31 @@ function registerIpc() {
     try { return await feedbackReporting.submit(value); }
     catch (error) { return { error: error.message || '提交未完成，请稍后重试。' }; }
   });
-  ipcMain.handle('pet:feedback-auto-report', (event, value) => {
+  ipcMain.handle('pet:feedback-auto-report', async (event, value) => {
     if (!fromGlobalSettings(event) || typeof value !== 'boolean' || !feedbackReporting) return { ok: false };
+    if(value&&feedbackConsentFlight)return{ok:false};
+    const epoch=++feedbackConsentEpoch,owner=globalSettingsWindow;
     try {
-      settings = saveSettings(settingsFile, { ...settings, autoReportErrors: value });
-      feedbackReporting.setEnabled(value);
+      if(FIRST_RELEASE&&value&&!automaticReportingEnabled(settings,true)){
+        feedbackConsentFlight=true;
+        const result=await dialog.showMessageBox(owner,{type:'question',title:'自动异常上报',
+          message:'允许球球自动发送异常诊断吗？',
+          detail:'用于排查运行异常、改善稳定性。发送到球球反馈接收服务：'+FEEDBACK_ENDPOINT+'\n发送字段：应用版本、操作系统类型和版本、设备架构、白名单异常模块、错误类型和错误码、首次与末次发生时间、发生次数、错误指纹及单次提交编号。\n不包含聊天、便签、登录凭据、个人文件路径、原始日志、堆栈或截图。关闭后停止自动发送并清除待上报队列，可随时在意见反馈中关闭。',
+          buttons:['暂不开启','同意并开启'],defaultId:0,cancelId:0});
+        if(epoch!==feedbackConsentEpoch||owner!==globalSettingsWindow||!fromGlobalSettings(event))return{ok:false};
+        if(result.response!==1)return{ok:true,state:{...feedbackReporting.getState(),context:feedbackReporting.context()}};
+      }
+      if(FIRST_RELEASE&&!value)feedbackReporting.setEnabled(false);
+      settings = saveSettings(settingsFile, { ...settings, autoReportErrors: value,
+        ...(FIRST_RELEASE?{autoReportErrorsConsentVersion:value?AUTOMATIC_REPORT_CONSENT_VERSION:''}:{}) });
+      feedbackReporting.setEnabled(value,{consentVersion:settings.autoReportErrorsConsentVersion});
       if (feedbackReporting.getState().enabled !== value) {
-        settings = saveSettings(settingsFile, { ...settings, autoReportErrors: false });
+        settings = saveSettings(settingsFile, { ...settings, autoReportErrors: false,...(FIRST_RELEASE?{autoReportErrorsConsentVersion:''}:{}) });
         return { ok: false };
       }
       return { ok: true, state: { ...feedbackReporting.getState(), context: feedbackReporting.context() } };
     } catch (_) { return { ok: false }; }
+    finally{if(value)feedbackConsentFlight=false;}
   });
   ipcMain.handle('pet:global-quota-cards-save',(event,value)=>{
     if(!fromGlobalSettings(event))return {ok:false};
@@ -4517,7 +4532,8 @@ async function bootstrap() {
   if(IS_STORE_BUILD&&!FIRST_RELEASE){void storeRuntime.desktopIntegration.restore().catch(()=>{});void storeRuntime.zcodeDesktopIntegration.restore().catch(()=>{});void storeRuntime.restorePluginInstallations().catch(()=>{});}
   if(IS_STORE_BUILD)await storeRuntime.restoreChatPreferences({codex:settings.codexEnabled,zcode:settings.zcodeEnabled,workbuddy:settings.workbuddyEnabled});
   feedbackReporting = createFeedbackReporting({ directory: path.join(app.getPath('userData'), 'diagnostics'),
-    version: app.getVersion(), enabled: !IS_SMOKE_TEST && settings.autoReportErrors === true,
+    version: app.getVersion(), enabled: !IS_SMOKE_TEST && automaticReportingEnabled(settings,FIRST_RELEASE),
+    requireExplicitAutomaticConsent:FIRST_RELEASE,automaticConsentVersion:settings.autoReportErrorsConsentVersion,
     fetch: (...args) => net.fetch(...args) });
   if(ACCEPTANCE_KIND==='soft-orb'&&!fs.existsSync(settingsFile)){
     const orb=normalizeAppearance({shape:'soft-orb',orbMaterial:'pearl',orbSecondaryColor:'#B7A7EC',bodyColor:'#F9F8FF',eyeColor:'#FDFDFD'});

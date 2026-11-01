@@ -225,7 +225,7 @@ async function fixture({ quotaCardPinned = ['codex','api','zcode','workbuddy'], 
     setTimeout(callback, delay) { timers.set(++serial, { callback, at: now + delay }); return serial; },
     clearTimeout(id) { timers.delete(id); },
     require(name) {
-      if (name === './lib/feedback-reporting') return { createFeedbackReporting: () => ({ context: () => ({diagnostic:{}}), getState: () => ({enabled:false,pending:0}), capture() {}, setEnabled() {}, dispose() {}, submit: async () => ({}) }) };
+      if (name === './lib/feedback-reporting') return { ...require('../lib/feedback-reporting'), createFeedbackReporting: () => ({ context: () => ({diagnostic:{}}), getState: () => ({enabled:false,pending:0}), capture() {}, setEnabled() {}, dispose() {}, submit: async () => ({}) }) };
       if (name === './lib/weather-window') return {createWeatherWindow:options=>{weather.options=options;return weather;}};
       if (name === 'electron') return { app, ipcMain, powerMonitor, nativeTheme, screen, globalShortcut, BrowserWindow: NativeWindow, Tray, net,
         clipboard, dialog: { showMessageBox: (...args) => { dialogs.push(args); return consent(...args); } },

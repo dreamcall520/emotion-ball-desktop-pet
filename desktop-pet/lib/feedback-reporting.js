@@ -4,6 +4,10 @@ const os = require('node:os');
 const { randomUUID, createHash } = require('node:crypto');
 
 const ENDPOINT = 'https://qiuqiu-feedback-entry.pages.dev/api/feedback';
+const AUTOMATIC_REPORT_CONSENT_VERSION = '2026-11-01-mas-diagnostics-v1';
+function automaticReportingEnabled(settings, requireConsent=false) {
+  return settings?.autoReportErrors===true&&(!requireConsent||settings.autoReportErrorsConsentVersion===AUTOMATIC_REPORT_CONSENT_VERSION);
+}
 const UUID = /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i;
 const MAX_IMAGE = 1024 * 1024, MAX_QUEUE = 20, MAX_HISTORY = 100, COOLDOWN = 60 * 60 * 1000;
 const SCOPES = new Set(['应用运行', '窗口崩溃', '窗口无响应', '页面加载失败', '页面脚本错误', '未处理异步错误', '主进程异常',
@@ -59,14 +63,14 @@ function automaticPayload(entry) {
 }
 
 function createFeedbackReporting({ directory, version, fetch = globalThis.fetch, enabled = false, now = Date.now,
-  schedule = setTimeout, cancel = clearTimeout, onChange = () => {} } = {}) {
+  schedule = setTimeout, cancel = clearTimeout, onChange = () => {}, requireExplicitAutomaticConsent = false, automaticConsentVersion = '' } = {}) {
   if (typeof directory !== 'string' || !directory) throw new TypeError('Feedback directory required');
   const file = path.join(directory, 'feedback-outbox.json'), historyFile = path.join(directory, 'feedback-history.json');
   const diagnostic = Object.freeze({ appVersion: /^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(version) ? version : 'unknown',
     platform: process.platform, systemRelease: os.release(), architecture: process.arch,
     electron: process.versions.electron || '', node: process.versions.node });
   const environment = { version: diagnostic.appVersion, os: `${diagnostic.platform} ${diagnostic.systemRelease} ${diagnostic.architecture}`, source: 'app' };
-  let active = enabled === true, disposed = false, queue = [], recent = [], timer = null, flight = null, controller = null;
+  let active = enabled === true && (!requireExplicitAutomaticConsent || automaticConsentVersion === AUTOMATIC_REPORT_CONSENT_VERSION), disposed = false, queue = [], recent = [], timer = null, flight = null, controller = null;
   let lastSentAt = null, lastError = '', epoch = 0, history = [], historyWarning = '';
   const getState = () => ({ enabled: active, pending: queue.length, lastSentAt, lastError,
     history: history.map(item => ({ ...item })), historyWarning });
@@ -234,9 +238,9 @@ function createFeedbackReporting({ directory, version, fetch = globalThis.fetch,
     })().then(() => getState());
     return flight;
   }
-  function setEnabled(value) {
+  function setEnabled(value, {consentVersion}={}) {
     if (disposed) return getState();
-    const next = value === true;
+    const next = value === true && (!requireExplicitAutomaticConsent || consentVersion === AUTOMATIC_REPORT_CONSENT_VERSION);
     if (next === active) return getState();
     active = next;
     stopTimer();
@@ -252,7 +256,12 @@ function createFeedbackReporting({ directory, version, fetch = globalThis.fetch,
   }
   function dispose() { disposed = true; epoch++; stopTimer(); controller?.abort(); controller = null; flight = null; }
   loadHistory();
+  if(requireExplicitAutomaticConsent&&!active){
+    // Never revive an outbox accumulated before explicit consent or after opt-out.
+    try{fs.rmSync(file,{force:true});fs.rmSync(`${file}.tmp`,{force:true});}
+    catch{lastError='旧异常暂存清理未完成；未启用自动上报。';}
+  }
   if (active) { load(); if (queue.length) arm(Math.min(...queue.map(item => item.nextAttemptAt)) - now()); }
   return { context, submit, capture, setEnabled, getState, flush, dispose };
 }
-module.exports = { createFeedbackReporting };
+module.exports = { createFeedbackReporting, automaticReportingEnabled, AUTOMATIC_REPORT_CONSENT_VERSION, ENDPOINT };
