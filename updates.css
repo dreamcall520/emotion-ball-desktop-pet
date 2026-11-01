@@ -42,6 +42,9 @@
 .release-panel ul { margin: 0; padding-left: 1.25em; color: var(--text-soft); }
 .release-panel li { padding-left: 3px; line-height: 1.85; }
 .release-panel li + li { margin-top: 4px; }
+.release-panel.release-panel-compact h4 { margin-bottom: 4px; font-size: 15px; font-weight: 500; }
+.release-panel.release-panel-compact .update-group { margin-top: 18px; }
+.release-panel.release-panel-compact li { font-size: 15px; line-height: 1.75; }
 .release-downloads { display: flex; flex-wrap: wrap; gap: 12px 18px; margin-bottom: 13px; }
 .release-download-group { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .release-download { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; padding: 11px 16px; border-radius: 7px; font-size: 14px; line-height: 1.4; }
