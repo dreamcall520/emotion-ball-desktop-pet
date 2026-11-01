@@ -63,7 +63,7 @@
       p.lookX=clamp(Number(gaze.x)||0,-1,1)*.075;p.lookY=-clamp(Number(gaze.y)||0,-1,1)*.04;
       p.lift=Math.sin(t*.9)*.009;
       if(state==='idle'){
-        const phase=t*2*Math.PI/5.6;
+        const phase=t*2*Math.PI/3.6;
         p.lift=.047*Math.sin(phase+.16*Math.sin(phase))+.006*Math.sin(t*.63);
         p.roll=.018*Math.sin(phase-.65);p.yaw=.012*Math.sin(t*.72);
         const q=t%10,direction=idleDirection(t);
