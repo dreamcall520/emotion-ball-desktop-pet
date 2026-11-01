@@ -244,7 +244,7 @@ if (process.versions.electron && process.argv.includes('--store-renderer-child')
       for(const provider of ['codex','zcode','workbuddy']){
         assert.equal(await run(`document.getElementById('${provider}-task-list').closest('[data-provider-card]').dataset.providerCard`),provider);
       }
-      assert.match(await run(`document.querySelector('[data-provider-card="codex"] .account-scope').textContent`),/独立登录.*账号归属尚未核对/);
+      assert.match(await run(`document.querySelector('[data-provider-card="codex"] .account-scope').textContent`),/额度使用球球聊天的同一登录.*任务来自授权目录/);
       assert.match(await run(`document.querySelector('[data-provider-card="zcode"] .account-scope').textContent`),/官方套餐.*自定义 API.*分别计费/);
       assert.match(await run(`document.querySelector('[data-provider-card="workbuddy"] .account-scope').textContent`),/账号归属.*核/);
       const codexTask={title:'合成任务A',state:'active'};

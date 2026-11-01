@@ -118,6 +118,10 @@ const SoftOrbModel = require('./lib/soft-orb-model');
 const APP_NAME = '球球桌宠';
 const ACCEPTANCE_KIND = require('../package.json').qiuqiuAcceptance;
 const IS_STORE_BUILD = process.mas === true || ACCEPTANCE_KIND === 'mas' || process.argv.includes('--mas-candidate');
+const FIRST_RELEASE = IS_STORE_BUILD && require('../package.json').qiuqiuReleaseProfile === 'mas-first';
+const STORE_PROVIDERS = FIRST_RELEASE ? ['codex'] : ['codex','zcode','workbuddy'];
+const STORE_CONNECTIONS_PAGE = FIRST_RELEASE ? 'store-connections-first.html' : 'store-connections.html';
+const FirstRelease = require('./lib/mas-first-release');
 const IS_ACCEPTANCE = ['zcode', 'combined', 'weather','soft-orb','edge-peek','bubble','feedback','mas'].includes(ACCEPTANCE_KIND) || (IS_STORE_BUILD && process.mas !== true);
 const ACCEPTANCE_NAME = IS_STORE_BUILD ? '球球桌宠-商店联调候选' : ACCEPTANCE_KIND === 'feedback' ? '球球桌宠-反馈验收' : ACCEPTANCE_KIND === 'edge-peek' ? '球球桌宠-贴边候选' : ACCEPTANCE_KIND === 'bubble' ? '球球桌宠-气泡验收' : ACCEPTANCE_KIND === 'soft-orb' ? '球球桌宠-柔光团候选' : ACCEPTANCE_KIND === 'weather' ? '球球桌宠-天气验收' : ACCEPTANCE_KIND === 'combined' ? '球球桌宠-联动整合验收' : '球球桌宠-ZCode验收';
 const APP_WEBSITE = 'https://qiuqiu.pet/';
@@ -560,7 +564,7 @@ function globalSettingsSnapshot() {
     tasks: { active: tasks ? tasks.filter(item => item.state === 'active').length : null,
       waiting: tasks ? tasks.filter(item => item.state === 'waiting').length : null },
     taskActionId: '/codex-menu/codex-tasks-open' };
-  return { feedback: feedbackReporting ? { ...feedbackReporting.getState(), context: feedbackReporting.context() } : null, quotaCards: quotaCardConfig(), petSleepState: petWindow && !petWindow.isDestroyed() ? petSleepState : 'unknown', codexIconPreference: codexIconPreference?.getPreference() || 'codex-system', codexIconDark: codexIconSystemDark(), codexStatus, version: app.getVersion(), entries: settingsEntries(settingsCommandTemplate()),
+  return { firstRelease:FIRST_RELEASE, feedback: feedbackReporting ? { ...feedbackReporting.getState(), context: feedbackReporting.context() } : null, quotaCards: quotaCardConfig(), petSleepState: petWindow && !petWindow.isDestroyed() ? petSleepState : 'unknown', codexIconPreference: codexIconPreference?.getPreference() || 'codex-system', codexIconDark: codexIconSystemDark(), codexStatus, version: app.getVersion(), entries: settingsEntries(settingsCommandTemplate()),
     shortcuts: shortcutRegistrar?.getConfig(), initialView: globalSettingsInitialView,
     summary: [
       { label: '球球状态', value: edgeTuck?.getPresentation().mode === 'hidden' ? '暂时隐藏' : '陪伴中' },
@@ -568,7 +572,7 @@ function globalSettingsSnapshot() {
       { label: 'ZCode 联动', value: zcodeLink?.isEnabled() ? '已启用' : '未启用' },
       { label: 'API 统计', value: apiUsage?.getState().connected ? '已连接' : '未连接' },
       { label: '界面外观', value: { system: '跟随系统', light: '浅色', dark: '深色' }[settings.codexQuotaAppearance] }
-    ] };
+    ].filter(item=>!FIRST_RELEASE||!['ZCode 联动','API 统计'].includes(item.label)) };
 }
 
 function fromGlobalSettings(event, requireVisible = true) {
@@ -618,6 +622,7 @@ function openGlobalSettings(view) {
 }
 
 function openApiUsage() {
+  if(FIRST_RELEASE)return null;
   if (isQuitting || screenLocked) return;
   apiBalanceDetails?.close();
   if (apiUsageWindow && !apiUsageWindow.isDestroyed()) {
@@ -694,8 +699,8 @@ function openAbout() {
 async function storeConnectionState() {
   const state = await storeRuntime.getState();
   const onboarding=storeEnableFlow?.getState();
-  const providerChats=Object.fromEntries(['codex','zcode','workbuddy'].map(provider=>{const source=chat?.getSourceState?.(provider);return[provider,source?{connection:source.connection,modelsStatus:source.modelsStatus,accountMismatch:source.accountMismatch===true,busy:source.busy===true,error:source.error,modelsError:source.modelsError}:null];}));
-  if(onboarding)for(const provider of ['codex','zcode','workbuddy'])if(onboarding[provider].status!=='working'&&storeChatReady(provider)){onboarding[provider]={...onboarding[provider],status:'ready',chat:{status:'ready',message:'聊天已连接。'}};}
+  const providerChats=Object.fromEntries(STORE_PROVIDERS.map(provider=>{const source=chat?.getSourceState?.(provider);return[provider,source?{connection:source.connection,modelsStatus:source.modelsStatus,accountMismatch:source.accountMismatch===true,busy:source.busy===true,error:source.error,modelsError:source.modelsError}:null];}));
+  if(onboarding)for(const provider of STORE_PROVIDERS)if(onboarding[provider].status!=='working'&&storeChatReady(provider)){onboarding[provider]={...onboarding[provider],status:'ready',chat:{status:'ready',message:'聊天已连接。'}};}
   return { ...state, onboarding, providerChats, codexSnapshot: codexCompanion?.getSnapshot(), zcodeSnapshot: zcodeLink?.getSnapshot?.(),
     chat: chat ? { source: chat.getState().source, connection: chat.getState().connection, modelsStatus: chat.getState().modelsStatus, modelsError: chat.getState().modelsError, busy: chat.getState().busy, error: chat.getState().error } : null };
 }
@@ -714,15 +719,16 @@ function openStoreConnections(provider) {
   win.webContents.on('will-navigate', event => event.preventDefault());
   win.once('ready-to-show', () => { if (!win.isDestroyed()) { win.show(); win.focus(); if(['codex','zcode','workbuddy'].includes(provider))win.webContents.send('pet:store-focus-provider',provider); } });
   win.on('closed', () => { if (storeConnectionsWindow === win){storeConnectionsWindow = null;for(const provider of ['zcode','workbuddy'])void storeRuntime.cancelPluginInstallation(provider);} });
-  void win.loadFile(path.join(__dirname, 'store-connections.html'));
+  void win.loadFile(path.join(__dirname, STORE_CONNECTIONS_PAGE));
   return win;
 }
 function registerStoreConnections() {
   ipcMain.handle('pet:store-connections-command', async (event, action, payload) => {
     if (!IS_STORE_BUILD || !storeRuntime || isQuitting || screenLocked || !storeConnectionsWindow || storeConnectionsWindow.isDestroyed() ||
       event.sender !== storeConnectionsWindow.webContents || event.senderFrame !== event.sender.mainFrame ||
-      event.sender.getURL() !== pathToFileURL(path.join(__dirname, 'store-connections.html')).href) return { ok: false };
+      event.sender.getURL() !== pathToFileURL(path.join(__dirname, STORE_CONNECTIONS_PAGE)).href) return { ok: false };
     try {
+      if (FIRST_RELEASE && !FirstRelease.allowsCommand(action,payload)) return {ok:false,message:'首发版本仅提供 Codex 连接。'};
       let message = '连接状态已更新';
       if (action === 'enable-provider') {
         await storeEnableFlow.enable(payload?.provider,{restoreData:payload?.capability!=='chat',beforeConnect:async()=>{if(chat?.getState().busy)throw Object.assign(new Error('BUSY'),{code:'BUSY'});if(payload?.provider==='zcode'&&payload?.accountSource)await storeRuntime.setZcodeAccountSource(payload.accountSource);await storeRuntime.setChatEnabled(payload?.provider,true);}});
@@ -745,6 +751,10 @@ function registerStoreConnections() {
         if(!['codex','zcode','workbuddy'].includes(payload?.provider))return{ok:false};
         if(!storeChatReady(payload.provider)&&!['ready','needs-model','needs-new-chat'].includes(storeEnableFlow.getState()[payload.provider]?.chat.status))return{ok:false,message:'请先启用授权并完成连接。'};
         const selected=await chat.selectSource(payload.provider);if(selected?.accepted===false)return{ok:false,message:selected.error||'请先等待当前回复结束，再切换聊天工具。',state:await storeConnectionState()};openChat();
+      } else if (action === 'refresh-codex') {
+        await storeRuntime.readManagedCodexQuota();
+        if(codexCompanion)await codexCompanion.refresh();
+        message='Codex 同账号额度已刷新。';
       } else if (action === 'authorize-codex') {
         const result = await storeRuntime.authorize('codex');
         if (result.status !== 'stored') return { ok: true, message: '已取消，原授权保持。', state: await storeConnectionState() };
@@ -787,7 +797,7 @@ function registerStoreConnections() {
       else if(action==='cancel-provider-plugin'){if(!['zcode','workbuddy'].includes(payload?.provider))return{ok:false};await storeRuntime.cancelPluginInstallation(payload?.provider);message='已取消本次安装，原有其他连接保持。';}
       else if(action==='install-provider-plugin'){
         const provider=payload?.provider;if(!['zcode','workbuddy'].includes(provider))return{ok:false,message:'该工具不需要安装任务插件。'};const policy=storeRuntime.getPluginInstallationPolicy?.();if(policy?.allowed===false&&policy?.pairingAllowed!==true)return{ok:false,message:policy.message,state:await storeConnectionState()};
-        const origin=storeConnectionsWindow;const active=()=>!isQuitting&&!screenLocked&&origin===storeConnectionsWindow&&!origin.isDestroyed()&&event.sender===origin.webContents&&event.senderFrame===event.sender.mainFrame&&event.sender.getURL()===pathToFileURL(path.join(__dirname,'store-connections.html')).href;
+        const origin=storeConnectionsWindow;const active=()=>!isQuitting&&!screenLocked&&origin===storeConnectionsWindow&&!origin.isDestroyed()&&event.sender===origin.webContents&&event.senderFrame===event.sender.mainFrame&&event.sender.getURL()===pathToFileURL(path.join(__dirname,STORE_CONNECTIONS_PAGE)).href;
         const permission=await storeRuntime.getPluginAuthorizationStatus(provider);if(!active())return{ok:false,message:'安装窗口已关闭，未开始安装。'};
         if(permission.status!=='stored'){
           const pairingOnly=policy?.allowed===false&&policy?.pairingAllowed===true;
@@ -825,7 +835,7 @@ function registerStoreConnections() {
       else if (action === 'disconnect-workbuddy-official') { await storeRuntime.workbuddyOfficial.disconnect(); message='已解除本服务连接；不等同平台侧撤销全部授权。'; }
       else if (action === 'review-workbuddy-unknown') { storeRuntime.workbuddyOfficial.confirmUnknownReviewed(); message='已记录你在原 WorkBuddy 的核对，解除发送锁定。'; }
       else if (action === 'refresh-zcode') { await zcodeLink.refresh?.(); message = '已刷新 ZCode 授权数据。'; }
-      else if (action==='refresh-status') {if(storeRuntime.isChatEnabled('codex'))await storeRuntime.readManagedCodexQuota().catch(()=>{});}
+      else if (action==='refresh-status') {if(storeRuntime.isChatEnabled('codex')){await storeRuntime.readManagedCodexQuota().catch(()=>{});if(FIRST_RELEASE)await codexCompanion?.refresh();}}
       else if (!['status'].includes(action)) return { ok: false };
       return { ok: true, message, state: await storeConnectionState() };
     } catch (error) {
@@ -860,6 +870,7 @@ function codexConsentInfo() {
 }
 
 function requestCodexConsent() {
+  if(FIRST_RELEASE){if(storeRuntime?.isChatEnabled('codex')&&storeChatReady('codex'))return Promise.resolve(true);openStoreConnections('codex');return Promise.resolve(false);}
   if (IS_STORE_BUILD) return storeRuntime.ensureAuthorized('codex');
   if (isQuitting || screenLocked || codexConsentRequest) return Promise.resolve(false);
   const win = new BrowserWindow({
@@ -974,10 +985,10 @@ function requestStoreNotesConsent({win,noteId,contentRevision,getAccountIdentity
 function storeChatReady(provider){const state=chat?.getSourceState?.(provider);return Boolean(state?.connection==='ready'&&!state.accountMismatch&&['ready','provider-managed'].includes(state.modelsStatus));}
 function chatSnapshot(state = activeChat()?.getState()) {
   const storeInfo=IS_STORE_BUILD ? {
-    sources:['codex','zcode','workbuddy'].map(id=>({id,label:id==='codex'?'Codex':id==='zcode'?'ZCode':'WorkBuddy',
+    sources:STORE_PROVIDERS.map(id=>({id,label:id==='codex'?'Codex':id==='zcode'?'ZCode':'WorkBuddy',
       enabled:storeChatReady(id)|| (id==='workbuddy'?storeRuntime?.workbuddyCli.getState().connected===true:
         ['ready','needs-new-chat'].includes(storeEnableFlow?.getState()[id]?.chat.status)||state?.source===id&&state?.connection==='ready'&&state?.modelsStatus==='ready')})),
-    sourceNote:state?.source==='codex'?'聊天使用球球内的独立 Codex 登录；原工具额度和任务来自授权目录。':state?.sourceNote||null,
+    sourceNote:state?.source==='codex'?'额度与聊天使用球球内同一个 Codex 登录；原工具任务来自单独授权的目录。':state?.sourceNote||null,
     billingLabel:state?.source==='zcode'&&storeRuntime?.getZcodeAccountSource()==='configured-custom'?'使用 ZCode 已有自定义模型 · 按原 API 计费':null
   }:{};
   return {...state,...storeInfo,provider:state?.source||'codex',appUpdate:availableUpdate?{latestVersion:availableUpdate.latestVersion}:null};
@@ -1578,7 +1589,7 @@ function quotaExpandedStackPlan() {
     quotaCardVisualInk:currentSheepCapsuleInk()||currentSheepSettledInk(),sheepInk:sheepQuotaInk,sheepTheme:SheepTheme.resolveTheme(settings.customization.appearance.sheepTheme,new Date()),facing:PetFacing.resolve(pet,area)},quotaObstacleBounds());
 }
 function quotaLayoutPresentation() { const p=edgeTuck?.getPresentation(); return p?.dragging||dragState?.moved ? {...p,mode:'free',side:null}:p; }
-function quotaCardConfig() { return normalizeQuotaCards({order:settings?.quotaCardOrder,pinned:settings?.quotaCardPinned}); }
+function quotaCardConfig() { const value=normalizeQuotaCards({order:settings?.quotaCardOrder,pinned:settings?.quotaCardPinned});return FIRST_RELEASE?{...value,order:value.order.filter(id=>['codex','weather'].includes(id)),pinned:value.pinned.filter(id=>['codex','weather'].includes(id))}:value; }
 function quotaCardGroupInput() {
   const display=quotaDisplayConfig();
   return {config:quotaCardConfig(),eligible:[
@@ -2865,9 +2876,9 @@ function menuTemplate() {
   const updateEntry = { id: 'update-check', label: availableUpdate ? `更新球球至 ${availableUpdate.latestVersion}`
     : updateCheck ? '正在检查更新' : '检查更新', enabled: Boolean(availableUpdate) || !updateCheck,
     click: () => { void (availableUpdate ? showUpdateResult(availableUpdate) : checkForUpdates(true)); } };
-  return [
+  const items = [
     ...(availableUpdate ? [updateEntry, { type: 'separator' }] : []),
-    ...(IS_STORE_BUILD ? [{ id: 'store-connections', label: '工具连接（商店接入）', click: openStoreConnections }] : []),
+    ...(IS_STORE_BUILD ? [{ id: 'store-connections', label: FIRST_RELEASE ? '连接 Codex' : '工具连接（商店接入）', click: openStoreConnections }] : []),
     { id: 'global-settings', label: '设置中心', accelerator: 'CommandOrControl+,', click: openGlobalSettings },
     { id: 'feedback-open', label: '意见反馈', click: () => openGlobalSettings('feedback') },
     { id: 'chat-open', label: '和球球聊聊', click: openChat },
@@ -2973,6 +2984,7 @@ function menuTemplate() {
       click: () => app.quit()
     }
   ];
+  return FIRST_RELEASE ? FirstRelease.filterMenu(items) : items;
 }
 
 // Keep the full command catalog for settings; native menus expose destinations and the core Codex toggle.
@@ -4445,10 +4457,10 @@ async function bootstrap() {
   }
   app.setActivationPolicy('accessory');
   if (app.dock) app.dock.hide();
-  if(IS_STORE_BUILD){const applicationMenu=Menu.getApplicationMenu()||Menu.buildFromTemplate([{role:'appMenu'},{role:'editMenu'},{role:'windowMenu'}]);if(!applicationMenu.items.some(item=>item.id==='qiuqiu-store-tools'))applicationMenu.insert(1,new MenuItem({id:'qiuqiu-store-tools',label:'球球工具',submenu:[{label:'工具连接',accelerator:'CommandOrControl+Shift+K',click:()=>openStoreConnections()},{label:'便签与待办',click:()=>notesCompanion?.openPanel()},{label:'番茄钟',click:()=>openPomodoro()},...(process.mas===true&&process.qiuqiuMasDevelopmentCandidate===true?[{label:'验证插件安装（仅空测试目录）',click:async()=>{const result=await require('./lib/mas-plugin-install-probe').probePluginInstallation({app,dialog});fs.writeFileSync(path.join(app.getPath('userData'),'mas-installer-probe-result.json'),JSON.stringify(result),{mode:0o600});await dialog.showMessageBox({type:result.passed?'info':'warning',message:result.passed?'空测试目录插件安装验证通过':'空测试目录验证未通过',detail:'仅测试目录，不代表原软件任务已接通或商店审核通过。'});}}]:[])]}));Menu.setApplicationMenu(applicationMenu);}
+  if(IS_STORE_BUILD){const applicationMenu=Menu.getApplicationMenu()||Menu.buildFromTemplate([{role:'appMenu'},{role:'editMenu'},{role:'windowMenu'}]);if(!applicationMenu.items.some(item=>item.id==='qiuqiu-store-tools'))applicationMenu.insert(1,new MenuItem({id:'qiuqiu-store-tools',label:'球球工具',submenu:[{label:'工具连接',accelerator:'CommandOrControl+Shift+K',click:()=>openStoreConnections()},{label:'便签与待办',click:()=>notesCompanion?.openPanel()},{label:'番茄钟',click:()=>openPomodoro()},...(!FIRST_RELEASE&&process.mas===true&&process.qiuqiuMasDevelopmentCandidate===true?[{label:'验证插件安装（仅空测试目录）',click:async()=>{const result=await require('./lib/mas-plugin-install-probe').probePluginInstallation({app,dialog});fs.writeFileSync(path.join(app.getPath('userData'),'mas-installer-probe-result.json'),JSON.stringify(result),{mode:0o600});await dialog.showMessageBox({type:result.passed?'info':'warning',message:result.passed?'空测试目录插件安装验证通过':'空测试目录验证未通过',detail:'仅测试目录，不代表原软件任务已接通或商店审核通过。'});}}]:[])]}));Menu.setApplicationMenu(applicationMenu);}
   settingsFile = path.join(app.getPath('userData'), 'settings.json');
   if (IS_STORE_BUILD) storeRuntime = require('./lib/mas-provider-runtime').createMasProviderRuntime({
-    app, dialog: {showOpenDialog: options => storeConnectionsWindow && !storeConnectionsWindow.isDestroyed() ? dialog.showOpenDialog(storeConnectionsWindow,options) : dialog.showOpenDialog(options)}, BrowserWindow, session, shell, fetch: (url, options) => net.fetch(url, options), diagnostic: process.mas !== true,
+    firstRelease:FIRST_RELEASE, app, dialog: {showOpenDialog: options => storeConnectionsWindow && !storeConnectionsWindow.isDestroyed() ? dialog.showOpenDialog(storeConnectionsWindow,options) : dialog.showOpenDialog(options)}, BrowserWindow, session, shell, fetch: (url, options) => net.fetch(url, options), diagnostic: process.mas !== true,
     onChange: () => { notifyStoreConnections(); chat?.sourceChanged?.('workbuddy'); if (settings) syncWorkBuddyLabel(); },
     onManagedReady:provider=>{void storeEnableFlow?.restore(provider).catch(()=>{});} });
   codexPets = createCodexPetStore({
@@ -4465,7 +4477,7 @@ async function bootstrap() {
       const dimensions=await owner.webContents.executeJavaScriptInIsolatedWorld(1004,[{code:`new Promise(resolve=>{const image=new Image();const timer=setTimeout(()=>resolve(null),5000);image.onload=async()=>{try{await image.decode();const bitmap=await createImageBitmap(image);bitmap.close();const canvas=document.createElement('canvas');canvas.width=canvas.height=1;canvas.getContext('2d').drawImage(image,0,0,1,1);clearTimeout(timer);resolve({width:image.naturalWidth,height:image.naturalHeight})}catch(_){clearTimeout(timer);resolve(null)}};image.onerror=()=>{clearTimeout(timer);resolve(null)};image.src=${JSON.stringify(`data:${mime};base64,${buffer.toString('base64')}`)}})`}]);
       return localPetImportIsCurrent()&&dimensions?.width===8*(pet.frameWidth||192)*pet.spriteScale&&dimensions?.height===pet.rows*208*pet.spriteScale;
     }});
-  apiUsage = createApiUsage({ filePath: path.join(app.getPath('userData'), 'openai-api-usage.enc'), safeStorage,
+  if(!FIRST_RELEASE) apiUsage = createApiUsage({ filePath: path.join(app.getPath('userData'), 'openai-api-usage.enc'), safeStorage,
     ...(IS_SMOKE_TEST && process.env.PET_SMOKE_API_USAGE_ONLY === '1'
       ? { get: require('./scripts/verify-api-usage-integration').smokeGet,
         safeStorage: require('./scripts/verify-api-usage-integration').smokeStorage } : {}),
@@ -4476,7 +4488,8 @@ async function bootstrap() {
     }
   });
   settings = loadSettings(settingsFile);
-  if(IS_STORE_BUILD){void storeRuntime.desktopIntegration.restore().catch(()=>{});void storeRuntime.zcodeDesktopIntegration.restore().catch(()=>{});void storeRuntime.restorePluginInstallations().catch(()=>{});}
+  if(FIRST_RELEASE)settings=FirstRelease.settingsForFirstRelease(settings);
+  if(IS_STORE_BUILD&&!FIRST_RELEASE){void storeRuntime.desktopIntegration.restore().catch(()=>{});void storeRuntime.zcodeDesktopIntegration.restore().catch(()=>{});void storeRuntime.restorePluginInstallations().catch(()=>{});}
   if(IS_STORE_BUILD)await storeRuntime.restoreChatPreferences({codex:settings.codexEnabled,zcode:settings.zcodeEnabled,workbuddy:settings.workbuddyEnabled});
   feedbackReporting = createFeedbackReporting({ directory: path.join(app.getPath('userData'), 'diagnostics'),
     version: app.getVersion(), enabled: !IS_SMOKE_TEST && settings.autoReportErrors === true,
@@ -4515,7 +4528,7 @@ async function bootstrap() {
   syncPomodoro();
   notesCompanion = createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialog,
     requestOrganizeConsent:IS_STORE_BUILD?requestStoreNotesConsent:null,
-    organizer: createNotesOrganizer({ workspaceDir: path.join(app.getPath('userData'), 'notes-workspace'),
+    organizer: FIRST_RELEASE ? null : createNotesOrganizer({ workspaceDir: path.join(app.getPath('userData'), 'notes-workspace'),
       ...(IS_STORE_BUILD ? { createRpc: options => storeRuntime.createCodexChatRpc(options) } : {}) }),
     filePath: path.join(app.getPath('userData'), 'notes-todos.json'),
     getPetBounds: () => petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null,
@@ -4572,9 +4585,11 @@ async function bootstrap() {
       else if (!screenLocked) chatWindow.update(chatSnapshot(state));
     },
     onAction: performChatAction });
+  let makeWorkbuddyChat;
+  if(!FIRST_RELEASE) {
   workbuddyRun = IS_SMOKE_TEST && process.env.PET_SMOKE_WORKBUDDY_ONLY === '1' && process.env.PET_SMOKE_WORKBUDDY_LIVE !== '1'
     ? require('./scripts/verify-workbuddy-integration').createSmokeWorkBuddyRunner() : runWorkBuddy;
-  const makeWorkbuddyChat = () => (workbuddyChat = createWorkBuddyChat({ getWeatherContext: text => weatherContext(currentWeatherState(), text), store: createChatStore(path.join(app.getPath('userData'), 'workbuddy-chat.json')),
+  makeWorkbuddyChat = () => (workbuddyChat = createWorkBuddyChat({ getWeatherContext: text => weatherContext(currentWeatherState(), text), store: createChatStore(path.join(app.getPath('userData'), 'workbuddy-chat.json')),
     run: workbuddyRun, initialModelSelection: settings.workbuddyModel,
     onModelSelection: workbuddyModel => { settings = saveSettings(settingsFile, { ...settings, workbuddyModel }); },
     onChange: () => chat?.sourceChanged?.('workbuddy'),
@@ -4628,10 +4643,11 @@ async function bootstrap() {
     });
   });
   workbuddyQuota.setEnabled(settings.workbuddyEnabled);
+  }
   chat = createChatSources({ codex: chat, createWorkbuddy: IS_STORE_BUILD ? ()=>require('./lib/workbuddy-cli-chat-companion').createWorkBuddyCliChatCompanion({connection:storeRuntime.workbuddyCli,prepare:options=>storeRuntime.prepareWorkbuddyChat(options),onChange:()=>chat?.sourceChanged('workbuddy')}) : makeWorkbuddyChat,
-    isWorkbuddyEnabled: () => IS_STORE_BUILD ? storeRuntime.isChatEnabled('workbuddy') : settings.workbuddyEnabled === true,
+    isWorkbuddyEnabled: () => !FIRST_RELEASE && (IS_STORE_BUILD ? storeRuntime.isChatEnabled('workbuddy') : settings.workbuddyEnabled === true),
     initialSource: settings.chatSource,
-    isZcodeEnabled: () => IS_STORE_BUILD?storeRuntime.isChatEnabled('zcode'):(zcodeLink ? zcodeLink.isEnabled() : settings.zcodeEnabled === true),
+    isZcodeEnabled: () => !FIRST_RELEASE && (IS_STORE_BUILD?storeRuntime.isChatEnabled('zcode'):(zcodeLink ? zcodeLink.isEnabled() : settings.zcodeEnabled === true)),
     onSelect: chatSource => { settings = saveSettings(settingsFile, { ...settings, chatSource, chatProvider: chatSource === 'workbuddy' ? 'workbuddy' : 'codex' }); },
     onChange: state => { notifyStoreConnections(); if (!screenLocked) chatWindow.update(chatSnapshot(state)); },
     createZcode: () => createChatCompanion({
@@ -4678,6 +4694,7 @@ async function bootstrap() {
         const available=await storeRuntime.prepareChat(provider,{interactive});
         if(available.status!=='ready')return available;
         try{if(interactive){await chat.selectSource(provider);await chat.connect();}else await chat.connectSource(provider);}catch(error){if(error.code==='ACCOUNT_CHANGED')return{status:'needs-new-chat',message:'请打开聊天并开始一段新对话，旧记录会保留。'};throw error;}const state=chat.getSourceState(provider);
+        if(FIRST_RELEASE&&provider==='codex'&&state.connection==='ready'&&state.modelsStatus==='ready'&&!settings.codexEnabled)await setCodexEnabled(true);
         return{status:state.connection==='ready'&&state.modelsStatus==='ready'?'ready':'unavailable',message:state.connection==='ready'&&state.modelsStatus==='ready'?'聊天已连接。':state.error||'聊天尚未就绪，请稍后重试。'};
       },
       revoke:async provider=>{
@@ -4690,7 +4707,7 @@ async function bootstrap() {
       },onChange:notifyStoreConnections
     });
     // Restore only already-enabled providers. No picker, login or account change.
-    void (async()=>{for(const provider of ['codex','zcode','workbuddy']){if(storeRuntime.isChatEnabled(provider))await storeEnableFlow.enable(provider,{interactive:false});}})().catch(()=>{});
+    void (async()=>{for(const provider of STORE_PROVIDERS){if(storeRuntime.isChatEnabled(provider))await storeEnableFlow.enable(provider,{interactive:false});}})().catch(()=>{});
   }
   dialogue = new DialogueDirector({ now: performance.now(), enabled: settings.bubblesEnabled });
   sheepOfferingWindow = createSheepOfferingWindow({BrowserWindow,screen,getPetWindow:()=>petWindow,
@@ -4758,7 +4775,7 @@ async function bootstrap() {
       pomodoroWindows?.sync();
     },
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('守护战窗口', error) });
-  apiUsageLabel = createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
+  if(!FIRST_RELEASE) apiUsageLabel = createApiUsageLabelWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
     getSuppressed: () => quotaPopups.isBlocked(),
     getQuotaWindow: () => quotaLabel?.getWindow(), getObstacleBounds: quotaObstacleBounds,
     getQuotaBounds: () => quotaLabel?.getVisibleBounds(),
@@ -4771,6 +4788,7 @@ async function bootstrap() {
     getAnchor: () => petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null,
     onVisibilityChange: () => { safelyInvokeWindow('Codex 详情显隐时额度卡重排', () => quotaLabel?.reposition()); syncApiUsageLabel(); syncWorkBuddyLabel(); zcodeLink?.sync(); },
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('Codex 详情窗口', error) });
+  if(!FIRST_RELEASE) {
   zcodeConsent = createZcodeConsentWindow({ BrowserWindow, ipcMain,
     getInfo: codexConsentInfo, position: positionFunctionWindow, getAppearance: getNotesAppearance,
     isBlocked: () => isQuitting || screenLocked, onError: error => writeError('ZCode 授权窗口', error?.code || 'CONSENT_UNAVAILABLE') });
@@ -4809,6 +4827,7 @@ async function bootstrap() {
       if (choice.response === 0 && !screenLocked && !isQuitting) await shell.openPath('/Applications/ZCode.app');
     },
     onError: error => writeError('ZCode 联动', error?.code || 'ZCODE_UNAVAILABLE') });
+  }
   edgeNoticeWindow = createEdgeNoticeWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('边缘提示窗口', error) });
   edgeNotice = createEdgeNotice({ now: () => edgeNoticeNow(), ...(IS_SMOKE_TEST && process.env.PET_SMOKE_WORKBUDDY_ONLY === '1' ? { random: () => 0 } : {}), onChange: payload => {
@@ -4818,7 +4837,7 @@ async function bootstrap() {
     }
     safelyInvokeWindow('边缘提示', () => payload ? edgeNoticeWindow.show(payload) : edgeNoticeWindow.hide());
   } });
-  initializeApiBalance();
+  if(!FIRST_RELEASE)initializeApiBalance();
   quotaCardGroupWindow = createQuotaCardGroupWindow({BrowserWindow,screen,ipcMain,onLayout:()=>syncQuotaFreeStack(),getAlwaysOnTop:()=>settings.alwaysOnTop,getPetWindow:()=>petWindow,getPresentation:()=>{
       const pet=petWindow?.getBounds(),area=pet&&screen.getDisplayMatching(pet).workArea;
       const controllers={codex:quotaLabel,api:apiUsageLabel,zcode:zcodeLink,workbuddy:workbuddyLabel,balance:apiBalanceLabel,weather:weatherWindow};
@@ -4929,7 +4948,7 @@ async function bootstrap() {
   if (process.argv.includes('--notes-preview')) notesCompanion.openPanel();
   scheduleUpdateCheck();
   if (settings.codexEnabled) void codexCompanion.setEnabled(true);
-  void zcodeLink.start();
+  void zcodeLink?.start();
 }
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();

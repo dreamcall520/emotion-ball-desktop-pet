@@ -158,7 +158,7 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
       };
       win.on('move', persistBounds); win.on('resize', persistBounds);
     }
-    void win.loadFile(html, { query: { mode, ...(id ? { id } : {}) } }).catch(error => {
+    void win.loadFile(html, { query: { mode, ...(id ? { id } : {}), ...(organizer ? {} : {organizer:'off'}) } }).catch(error => {
       report(error); entry.allowedClose = true; if (alive(win)) win.destroy();
       if (reminder) { summary = true; processingSummary = false; }
     });

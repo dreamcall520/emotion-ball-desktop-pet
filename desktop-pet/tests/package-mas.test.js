@@ -234,3 +234,9 @@ test('错SHA、仅有Darwin归档或链接缓存明确拒绝，在任何编译�
  assert.throws(()=>validateMasRuntimeCache({...config,runtimeZipDir:directory,arch:'x64'}),{code:'MAS_RUNTIME_CACHE_ARCHIVE_UNPINNED'});
  assert.deepEqual(validateMasRuntimeCache(config),{used:false,validated:false});
 });
+
+test('首发分发配置只携带Codex，不授予外部任务插件执行写权限',()=>{
+ const config={...configFor(pkg,env).config,releaseProfile:'mas-first'};
+ assert.deepEqual(packagerOptions('/root',config,'/stage','/icon').extraResource,['/root/desktop-pet/build/qiuqiu-codex']);
+ assert.equal(entitlementsFor(config).main['com.apple.security.files.user-selected.executable'],undefined);
+});

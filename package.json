@@ -19,5 +19,6 @@
   },
   "dependencies": {
     "ws": "^8.22.0"
-  }
+  },
+  "qiuqiuReleaseProfile": "mas-first"
 }

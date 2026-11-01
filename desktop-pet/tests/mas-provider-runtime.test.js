@@ -522,3 +522,33 @@ test('商店Codex撤销后迟到额度不得恢复',async t=>{
  await f.runtime.revoke('codex');release({accountKey:'a'.repeat(64),state:'ready',windows:[],updatedAt:1000});await rejected;
  assert.equal((await f.runtime.getState()).managedCodexQuota.snapshot,null);
 });
+
+test('首发仅恢复Codex，拒绝其他提供商及插件，且不构造原工具集成',async t=>{
+ const {createMasProviderRuntime}=require('../lib/mas-provider-runtime');
+ const f=fixture(t);let calls=0;
+ const forbidden=()=>{calls++;throw Error('disabled integration factory called');};
+ const runtime=createMasProviderRuntime({firstRelease:true,diagnostic:true,
+  app:{getPath:()=>f.temp},dialog:{showOpenDialog:forbidden},BrowserWindow:forbidden,
+  session:{fromPartition:forbidden},shell:{openExternal:forbidden},fetch:forbidden,
+  createPluginHost:forbidden,createPluginInstaller:forbidden,startWorkbuddyHost:forbidden,
+  createManagedCodexRpc:()=>({start:async()=>{},readRateLimits:async()=>({accountKey:'a'.repeat(64),state:'ready',windows:[{windowMinutes:300,usedPercent:20}],updatedAt:100}),close:async()=>{}})});
+ t.after(()=>runtime.close());
+ const preferences=createDirectoryStorage(path.join(f.temp,'store-chat-preferences'));
+ await preferences.save('zcode',{enabled:true,accountSource:'configured-custom'});
+ await preferences.save('workbuddy',{enabled:true});
+ assert.deepEqual(await runtime.restoreChatPreferences({codex:true,zcode:true,workbuddy:true}),{codex:true,zcode:false,workbuddy:false});
+ assert.equal(runtime.isChatEnabled('workbuddy'),false);
+ await runtime.restorePluginInstallations();
+ for(const provider of ['zcode','workbuddy']){
+  for(const action of [()=>runtime.authorize(provider),()=>runtime.ensureDirectory(provider),()=>runtime.ensureAuthorized(provider),()=>runtime.setChatEnabled(provider,true),()=>runtime.prepareChat(provider),()=>runtime.access.authorize(provider),()=>runtime.installProviderPlugin(provider,{approved:true}),()=>runtime.getPluginAuthorizationStatus(provider),()=>runtime.revoke(provider)])await assert.rejects(action(),{code:'INVALID_PROVIDER'});
+ }
+ for(const action of [()=>runtime.prepareWorkbuddyChat(),()=>runtime.importWorkbuddyCliService(),()=>runtime.importZcodeService(),()=>runtime.setZcodeAccountSource('configured-custom'),()=>runtime.probeWorkbuddyDesktop(),()=>runtime.readWorkbuddyDesktop('anything')])await assert.rejects(action(),{code:'INVALID_PROVIDER'});
+ assert.throws(()=>runtime.createZcodeChatRpc(),{code:'INVALID_PROVIDER'});
+ await assert.rejects(runtime.desktopIntegration.restore(),{code:'PROVIDER_NOT_IN_RELEASE'});
+ await runtime.readManagedCodexQuota();
+ const state=await runtime.getState();
+ assert.equal(state.managedCodexQuota.status,'ready');assert.equal(state.zcode.directory,'unavailable');assert.equal(state.workbuddyDesktop.directory,'unavailable');
+ assert.deepEqual(state.pluginInstallations,{});assert.equal(state.pluginInstallationPolicy.allowed,false);assert.equal(state.pluginInstallationPolicy.pairingAllowed,false);
+ assert.equal(calls,0);
+ assert.equal(fs.readdirSync(f.temp).some(name=>/^(workbuddy|zcode-desktop)/.test(name)),false);
+});

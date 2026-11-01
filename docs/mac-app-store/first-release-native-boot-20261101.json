@@ -1,0 +1,8 @@
+{
+  "passed": true,
+  "mode": "darwin-diagnostic-first-release",
+  "onlyCodexUI": true,
+  "statusIPC": true,
+  "modelRequest": false,
+  "notMasAcceptance": true
+}

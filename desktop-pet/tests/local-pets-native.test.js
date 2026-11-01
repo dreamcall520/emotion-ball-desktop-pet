@@ -6,7 +6,7 @@ if(process.versions.electron&&process.argv.includes('--local-pets-native-child')
   const root=process.env.PET_LOCAL_SOURCE_ROOT||path.resolve(__dirname,'../..'),createCodexPetStore=require(path.join(root,'desktop-pet/lib/codex-pets')).createCodexPetStore;
   win=new BrowserWindow({show:false,webPreferences:{contextIsolation:true,sandbox:true,nodeIntegration:false}});await win.loadURL('data:text/html,<html><body></body></html>');
   const scope={localPetImportIsCurrent:()=>true,localPetStore:null,createCodexPetStore,path,app,nativeImage,customizationWindow:win,screenLocked:false,isQuitting:false};
-  const source=fs.readFileSync(path.join(root,'desktop-pet/main.js'),'utf8');const start=source.indexOf('  localPetStore=createCodexPetStore('),end=source.indexOf('  apiUsage = createApiUsage(',start);assert(start>0&&end>start);
+  const source=fs.readFileSync(path.join(root,'desktop-pet/main.js'),'utf8');const start=source.indexOf('  localPetStore=createCodexPetStore('),end=source.indexOf('  if(!FIRST_RELEASE) apiUsage = createApiUsage(',start);assert(start>0&&end>start);
   Function('scope','with(scope){'+source.slice(start,end)+'}')(scope);
   await win.webContents.executeJavaScript(fs.readFileSync(path.join(root,'desktop-pet/lib/codex-pet-player.js'),'utf8'));
   const before=fs.existsSync(path.join(app.getPath('userData'),'settings.json'));

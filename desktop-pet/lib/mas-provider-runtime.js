@@ -68,8 +68,19 @@ function createWorkbuddyConversationStore(root){
   return{read:key=>storeFor(key).read(),write:value=>storeFor(value.accountKey).write(value)};
 }
 function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, fetch,
-  diagnostic = false, onChange = () => {}, onManagedReady = () => {}, resourcesPath = process.resourcesPath,
+  diagnostic = false, firstRelease = false, onChange = () => {}, onManagedReady = () => {}, resourcesPath = process.resourcesPath,
   createManagedCodexRpc=options=>require('./mas-bundled-codex').createBundledCodexChatRpc(options), startWorkbuddyHost=options=>require('./mas-bundled-workbuddy').startBundledWorkBuddy(options), createWorkbuddyAuthClient=createWorkBuddyLocalCliClient,createPluginInstaller=options=>require('./managed-plugin-installer').createManagedPluginInstaller(options),createPluginHost=()=>require('./plugin-host').createPluginHost() } = {}) {
+  const allowedProviders = firstRelease ? new Set(['codex']) : PROVIDERS;
+  const assertProvider = provider => { if (!allowedProviders.has(provider)) throw failure('INVALID_PROVIDER'); };
+  // First-release ports expose observations only: no disabled provider factories,
+  // listeners, databases, subprocesses or original-tool files are initialized.
+  const disabledPort = () => new Proxy({
+    getState: () => ({status:'unavailable',enabled:false,configured:false,connected:false,busy:false,tasks:[],sessions:[],messages:[],observations:[],summary:null}),
+    getCapabilities: () => ({chat:false,quota:false,tasks:false}),
+    getSandboxCapabilities: () => ({known:false}),
+    getUsageState: () => ({busy:false,report:null,error:null,stale:false}),
+    close() {}
+  }, {get:(target,key) => key in target ? target[key] : key === 'then' ? undefined : () => Promise.reject(failure('PROVIDER_NOT_IN_RELEASE'))});
   let closed = false, runtimeClosing = null, managedLogin = null, managedLoginUrl=null, managedEpoch=0, bundledEnabled=false, directZcodeEnabled=false, zcodeAccountSource='official', managedWorkbuddy=null, workbuddyAuthClient=null, workbuddyAuthFlight=null, workbuddyLoginPending=false, workbuddyAuthenticated=false, workbuddyEpoch=0, externalWorkbuddyService=false;
   const managedAbort=new AbortController();
   const managedProfile=path.join(app.getPath('userData'),'store-codex-profile');
@@ -98,23 +109,23 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
   const pluginStorage=createDirectoryStorage(path.join(app.getPath('userData'),'store-plugin-directory-grants'));
   const pluginAccess=diagnostic?createDiagnosticDirectoryAccess({dialog,storage:pluginStorage,home:app.getPath('home'),purpose:'plugin-installation'}):createMasDirectoryAccess({app,dialog,storage:pluginStorage,purpose:'plugin-installation'});
   const pairingAccess=diagnostic?pluginAccess:createMasDirectoryAccess({app,dialog,storage:pluginStorage,purpose:'receiver-pairing'});
-  const pluginFlights=new Map(),pluginAborts=new Map(),pluginWaitStates=new Map();const pluginHost=createPluginHost();
+  const pluginFlights=new Map(),pluginAborts=new Map(),pluginWaitStates=new Map();const pluginHost=firstRelease?disabledPort():createPluginHost();
   let sandboxCapabilities={known:false};try{sandboxCapabilities=pluginHost.getSandboxCapabilities?.()||sandboxCapabilities;}catch{}
   const scopedWrite=sandboxCapabilities.known===true&&sandboxCapabilities.sandbox===true&&sandboxCapabilities.userSelectedReadWrite===true&&sandboxCapabilities.appScopeBookmarks===true;
   const executableWrite=scopedWrite&&sandboxCapabilities.userSelectedExecutable===true;
   // Public sandbox capabilities establish technical eligibility, never App Review approval.
-  const pluginInstallationPolicy={allowed:diagnostic===true||executableWrite,pairingAllowed:diagnostic===true||scopedWrite,
-    mode:diagnostic||executableWrite?'bundled-plugin-install':scopedWrite?'existing-plugin-pairing':'unavailable',
-    status:diagnostic?'isolated-candidate':executableWrite?'sandbox-capable-review-pending':scopedWrite?'data-pairing-only':'sandbox-capability-unavailable',
-    reviewApproved:false,message:diagnostic?'自动安装为隔离联调候选，尚不代表商店审核通过。':executableWrite?'使用随球球捆绑的固定任务插件；仅在你授权的目录安装，商店审核尚未完成。':scopedWrite?'可连接已安装的球球任务插件；新安装暂不可用，聊天和额度可直接使用。':'当前构建无法安装或配对任务插件；聊天和额度可单独连接。'};
-  const workbuddy = createMasWorkBuddyProvider({ BrowserWindow, session, shell, onLoginComplete:()=>{if(!closed)onManagedReady('workbuddy');}, onChange: () => { if (!closed) { for (const notify of quotaPorts) notify(); onChange(); } } });
-  const zcode = createMasZcodeProvider({ directoryAccess: access, fetch });
-  const workbuddyOfficial=createWorkBuddyOfficialConnection({diagnostic,store:createWorkBuddyIntentStore(path.join(app.getPath('userData'),'workbuddy-official-send-intent.json')),openAuthorizationUrl:url=>shell.openExternal(url),onChange:()=>{if(!closed)onChange();}});
-  const workbuddyCli=createWorkBuddyCliConnection({createClient:createWorkBuddyLocalCliClient,store:createWorkBuddyIntentStore(path.join(app.getPath('userData'),'workbuddy-cli-send-intent.json')),conversationStore:createWorkbuddyConversationStore(path.join(app.getPath('userData'),'workbuddy-cli-conversations')),onChange:()=>{if(!closed)onChange();}});
-  const desktopTasks=createMasWorkBuddyTasks({directoryAccess:access});
-  const desktopIntegration=require('./workbuddy-desktop-integration').createWorkBuddyDesktopIntegration({root:path.join(app.getPath('userData'),'workbuddy-desktop-events'),assetRoot:path.join(__dirname,'../assets/workbuddy-desktop-hook'),onChange:()=>{if(!closed)onChange();}});
-  const zcodeDesktopIntegration=require('./zcode-desktop-integration').createZcodeDesktopIntegration({root:path.join(app.getPath('userData'),'zcode-desktop-events'),assetRoot:path.join(__dirname,'../assets/zcode-desktop-hook'),onChange:()=>{if(!closed)onChange();}});
-  const pluginInstallers=Object.fromEntries(['zcode','workbuddy'].map(provider=>[provider,createPluginInstaller({provider,directoryAccess:pluginAccess,assertHostStopped:()=>pluginHost.isStopped(provider),getMarketplaceDirectory:()=>provider==='zcode'?zcodeDesktopIntegration.getMarketplaceDirectory():desktopIntegration.getMarketplaceDirectory(),onChange:()=>{if(!closed)onChange();}})]));
+  const pluginInstallationPolicy={allowed:!firstRelease&&(diagnostic===true||executableWrite),pairingAllowed:!firstRelease&&(diagnostic===true||scopedWrite),
+    mode:firstRelease?'unavailable':diagnostic||executableWrite?'bundled-plugin-install':scopedWrite?'existing-plugin-pairing':'unavailable',
+    status:firstRelease?'not-in-release':diagnostic?'isolated-candidate':executableWrite?'sandbox-capable-review-pending':scopedWrite?'data-pairing-only':'sandbox-capability-unavailable',
+    reviewApproved:false,message:firstRelease?'首发版本不提供任务插件安装。':diagnostic?'自动安装为隔离联调候选，尚不代表商店审核通过。':executableWrite?'使用随球球捆绑的固定任务插件；仅在你授权的目录安装，商店审核尚未完成。':scopedWrite?'可连接已安装的球球任务插件；新安装暂不可用，聊天和额度可直接使用。':'当前构建无法安装或配对任务插件；聊天和额度可单独连接。'};
+  const workbuddy = firstRelease?disabledPort():createMasWorkBuddyProvider({ BrowserWindow, session, shell, onLoginComplete:()=>{if(!closed)onManagedReady('workbuddy');}, onChange: () => { if (!closed) { for (const notify of quotaPorts) notify(); onChange(); } } });
+  const zcode = firstRelease?disabledPort():createMasZcodeProvider({ directoryAccess: access, fetch });
+  const workbuddyOfficial=firstRelease?disabledPort():createWorkBuddyOfficialConnection({diagnostic,store:createWorkBuddyIntentStore(path.join(app.getPath('userData'),'workbuddy-official-send-intent.json')),openAuthorizationUrl:url=>shell.openExternal(url),onChange:()=>{if(!closed)onChange();}});
+  const workbuddyCli=firstRelease?disabledPort():createWorkBuddyCliConnection({createClient:createWorkBuddyLocalCliClient,store:createWorkBuddyIntentStore(path.join(app.getPath('userData'),'workbuddy-cli-send-intent.json')),conversationStore:createWorkbuddyConversationStore(path.join(app.getPath('userData'),'workbuddy-cli-conversations')),onChange:()=>{if(!closed)onChange();}});
+  const desktopTasks=firstRelease?disabledPort():createMasWorkBuddyTasks({directoryAccess:access});
+  const desktopIntegration=firstRelease?disabledPort():require('./workbuddy-desktop-integration').createWorkBuddyDesktopIntegration({root:path.join(app.getPath('userData'),'workbuddy-desktop-events'),assetRoot:path.join(__dirname,'../assets/workbuddy-desktop-hook'),onChange:()=>{if(!closed)onChange();}});
+  const zcodeDesktopIntegration=firstRelease?disabledPort():require('./zcode-desktop-integration').createZcodeDesktopIntegration({root:path.join(app.getPath('userData'),'zcode-desktop-events'),assetRoot:path.join(__dirname,'../assets/zcode-desktop-hook'),onChange:()=>{if(!closed)onChange();}});
+  const pluginInstallers=Object.fromEntries((firstRelease?[]:['zcode','workbuddy']).map(provider=>[provider,createPluginInstaller({provider,directoryAccess:pluginAccess,assertHostStopped:()=>pluginHost.isStopped(provider),getMarketplaceDirectory:()=>provider==='zcode'?zcodeDesktopIntegration.getMarketplaceDirectory():desktopIntegration.getMarketplaceDirectory(),onChange:()=>{if(!closed)onChange();}})]));
   function pluginInstallationState(provider){if(pluginWaitStates.has(provider))return{provider,...pluginWaitStates.get(provider)};const raw=pluginInstallers[provider].getState();const phases={idle:'idle',checking:'checking',working:'installing',staged:'installing',committing:'installing','installed-configured':'installed','not-installed':'idle','needs-authorization':'idle',cancelled:'idle',unavailable:'blocked'};return{...raw,phase:raw.status,status:phases[raw.status]||raw.status};}
   function pluginPurpose(){return pluginInstallationPolicy.allowed?'plugin-installation':'receiver-pairing';}
   function purposeAllows(grant,purpose){return grant?.permissionPurpose==='plugin-installation'||purpose==='receiver-pairing'&&grant?.permissionPurpose==='receiver-pairing';}
@@ -130,7 +141,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
   }
 
   function installProviderPlugin(provider,{approved=false}={}){
-    if(!['zcode','workbuddy'].includes(provider))return Promise.reject(failure('INVALID_PROVIDER'));
+    if(firstRelease||!['zcode','workbuddy'].includes(provider))return Promise.reject(failure('INVALID_PROVIDER'));
     if(!approved)return Promise.reject(failure('CONSENT_REQUIRED'));
     if(!pluginInstallationPolicy.allowed&&!pluginInstallationPolicy.pairingAllowed)return Promise.reject(failure('AUTO_INSTALL_STORE_REVIEW_REQUIRED'));
     if(closed)return Promise.reject(failure('CLOSED'));
@@ -154,12 +165,13 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
       if(pluginInstallationPolicy.allowed)await pluginInstallers[provider].install({approved:true,signal:abort.signal});else await pluginInstallers[provider].rePair({approved:true,signal:abort.signal});completed=true;return pluginInstallationState(provider);
     }).finally(async()=>{pluginWaitStates.delete(provider);if(reopen&&completed&&!closed&&!abort.signal.aborted){try{await pluginHost.launch(provider);}catch{/* Installed files remain; the original tool can be reopened normally. */}}pluginFlights.delete(provider);pluginAborts.delete(provider);if(!closed)onChange();});pluginFlights.set(provider,flight);return flight;
   }
-  async function restorePluginInstallations(){for(const provider of ['zcode','workbuddy']){if(closed)return;const granted=await pluginAccess.getStatus(provider);if(granted.status!=='stored')continue;if(closed)return;const integration=provider==='zcode'?zcodeDesktopIntegration:desktopIntegration;await integration.restore();if(closed)return;await pluginInstallers[provider].inspect();}}
+  async function restorePluginInstallations(){if(firstRelease)return;for(const provider of ['zcode','workbuddy']){if(closed)return;const granted=await pluginAccess.getStatus(provider);if(granted.status!=='stored')continue;if(closed)return;const integration=provider==='zcode'?zcodeDesktopIntegration:desktopIntegration;await integration.restore();if(closed)return;await pluginInstallers[provider].inspect();}}
   async function cancelPluginInstallation(provider){pluginAborts.get(provider)?.abort();await pluginFlights.get(provider)?.catch(()=>{});}
   let desktopCache={partitions:[],probe:null,report:null,error:null,accountAttributionVerified:false};
-  async function probeWorkbuddyDesktop(){try{const probe=await desktopTasks.probe(),groups=await desktopTasks.listPartitions();desktopCache={...desktopCache,probe,partitions:groups.partitions,report:null,error:null};}catch(e){desktopCache={...desktopCache,report:null,error:['DIRECTORY_ACCESS_REQUIRED'].includes(e.code)?'请先授权原WorkBuddy任务目录。':'桌面任务缓存暂不能读取，或数据库格式未支持。'};}onChange();return desktopCache;}
-  async function readWorkbuddyDesktop(partitionId){try{desktopCache={...desktopCache,report:await desktopTasks.read({partitionId}),error:null};}catch(e){desktopCache={...desktopCache,report:null,error:'所选缓存范围暂不能读取，请重新检查授权。'};}onChange();return desktopCache;}
+  async function probeWorkbuddyDesktop(){assertProvider('workbuddy');try{const probe=await desktopTasks.probe(),groups=await desktopTasks.listPartitions();desktopCache={...desktopCache,probe,partitions:groups.partitions,report:null,error:null};}catch(e){desktopCache={...desktopCache,report:null,error:['DIRECTORY_ACCESS_REQUIRED'].includes(e.code)?'请先授权原WorkBuddy任务目录。':'桌面任务缓存暂不能读取，或数据库格式未支持。'};}onChange();return desktopCache;}
+  async function readWorkbuddyDesktop(partitionId){assertProvider('workbuddy');try{desktopCache={...desktopCache,report:await desktopTasks.read({partitionId}),error:null};}catch(e){desktopCache={...desktopCache,report:null,error:'所选缓存范围暂不能读取，请重新检查授权。'};}onChange();return desktopCache;}
   async function importWorkbuddyCliService(){
+    assertProvider('workbuddy');
     if(closed)throw failure('CLOSED');
     const selected=await dialog.showOpenDialog({title:'选择本人已启动的 WorkBuddy / CodeBuddy CLI 连接目录',message:'仅导入专用本机服务连接，不预览其中的口令文件。CLI会话不等同原WorkBuddy桌面任务。',properties:['openDirectory'],securityScopedBookmarks:true});
     if(selected.canceled)return{status:'cancelled'};
@@ -177,7 +189,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
     }catch(e){throw failure(e.code==='CLOSED'?'CLOSED':'INVALID_PAIRING_FILE');}finally{if(fd!==undefined)fs.closeSync(fd);if(typeof stop==='function')stop();}
   }
   async function authorize(provider) {
-    if (!PROVIDERS.has(provider)) throw failure('INVALID_PROVIDER');
+    assertProvider(provider);
     const result = await access.authorize(provider);
     if (result.status === 'stored' && path.basename(result.directory) !== '.' + provider) {
       await access.revoke(provider); throw failure('DIRECTORY_ACCESS_REQUIRED');
@@ -185,7 +197,8 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
     onChange(); return { status: result.status };
   }
   async function getState() {
-    const [codex, zcodeDirectory] = await Promise.all(['codex', 'zcode'].map(p => access.getStatus(p)));
+    const codex = await access.getStatus('codex');
+    const zcodeDirectory = firstRelease ? {status:'unavailable'} : await access.getStatus('zcode');
     const service = chatServices.codex.service, zcodeService = chatServices.zcode.service;
     return { providerLoginPending:{codex:Boolean(managedLogin&&managedLoginUrl),workbuddy:Boolean(workbuddyLoginPending&&workbuddyAuthFlight)},pluginInstallationPolicy:{...pluginInstallationPolicy},pluginInstallations:Object.fromEntries(Object.keys(pluginInstallers).map(provider=>[provider,pluginInstallationState(provider)])),mode: diagnostic ? 'diagnostic-unsandboxed' : 'mas-sandbox',
       managedCodexQuota:structuredClone(managedCodexQuota),
@@ -194,10 +207,10 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
       zcode: { directory: zcodeDirectory.status, capabilities: zcode.getCapabilities(),
         serviceConfigured: Boolean(zcodeService), endpoint: zcodeService?.endpoint || null, accountSource:zcodeService?.accountSource || zcodeAccountSource,
         chat: zcodeService ? 'experimental-configured-unverified' : 'needs-experimental-local-service',
-        publicApiContractVerified: false }, workbuddy: workbuddy.getState(),workbuddyOfficial:workbuddyOfficial.getState(),workbuddyCli:workbuddyCli.getState(),workbuddyDesktopEvents:desktopIntegration.getState(),zcodeDesktopEvents:zcodeDesktopIntegration.getState(),workbuddyDesktop:{...structuredClone(desktopCache),directory:(await access.getStatus('workbuddy')).status} };
+        publicApiContractVerified: false }, workbuddy: workbuddy.getState(),workbuddyOfficial:workbuddyOfficial.getState(),workbuddyCli:workbuddyCli.getState(),workbuddyDesktopEvents:desktopIntegration.getState(),zcodeDesktopEvents:zcodeDesktopIntegration.getState(),workbuddyDesktop:{...structuredClone(desktopCache),directory:firstRelease?'unavailable':(await access.getStatus('workbuddy')).status} };
   }
   async function importLocalService(provider) {
-    if (!PROVIDERS.has(provider)) throw failure('INVALID_PROVIDER');
+    assertProvider(provider);
     if (closed) throw failure('CLOSED');
     const slot = chatServices[provider];
     const directory = await access.getStatus(provider);
@@ -240,6 +253,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
     finally { if (handle !== undefined) fs.closeSync(handle); if (typeof stop === 'function') stop(); }
   }
   function localChat(provider, options = {}) {
+    assertProvider(provider);
     if (closed) throw failure('CLOSED');
     const slot = chatServices[provider];
     let target = null, epoch = -1, ended = false, closing = null;
@@ -288,6 +302,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
     return facade;
   }
   async function prepareWorkbuddyChat({interactive=true}={}) {
+    assertProvider('workbuddy');
     if(closed)throw failure('CLOSED');
     const epoch=workbuddyEpoch;
     if(externalWorkbuddyService&&workbuddyCli.getState().configured&&!managedWorkbuddy)return{status:'ready',message:'已有专用连接，正在核验。'};
@@ -327,7 +342,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
   }
   async function prepareChat(provider,{interactive=true}={}) {
     if(closed)throw failure('CLOSED');
-    if(!PROVIDERS.has(provider))throw failure('INVALID_PROVIDER');
+    assertProvider(provider);
     if(chatServices[provider]?.service)return{status:'ready',message:'已有连接可用，正在验证聊天。'};
     if(provider==='zcode'){
       const saved=await chatPreferences.load('zcode');if(saved?.accountSource==='configured-custom')zcodeAccountSource='configured-custom';
@@ -364,6 +379,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
     }
   }
   function createWorkBuddyQuotaPort({ onChange: changed = () => {} } = {}) {
+    if(firstRelease)return disabledPort();
     let enabled = false, timer = null, controller = null, ended = false;
     const emit = () => changed(port.getState());
     const port = {
@@ -391,6 +407,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
     quotaPorts.add(emit); return port;
   }
   function createWorkBuddyUsagePort({onChange:changed=()=>{}}={}){
+    if(firstRelease)return disabledPort();
     let enabled=false,ended=false;
     const port={getState:()=>enabled?workbuddy.getUsageState():{busy:false,report:null,error:null,stale:false},
       setEnabled(value){enabled=value===true;},
@@ -398,6 +415,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
       close(){ended=true;enabled=false;}};return port;
   }
   function createWorkBuddyTasksPort({onChange:changed=()=>{}}={}){
+    if(firstRelease)return disabledPort();
     let enabled=false,ended=false,flight=null,lastRead=0;
     const port={getState:()=>({busy:Boolean(flight),report:enabled?desktopCache.report:null,error:enabled?desktopCache.error:null}),
       setEnabled(value){enabled=value===true;},
@@ -426,21 +444,23 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
     runtimeClosing = Promise.all(closing).then(() => undefined);
     return runtimeClosing;
   }
-  return { access, authorize, getState,installProviderPlugin,cancelPluginInstallation,restorePluginInstallations,getPluginInstallationPolicy:()=>({...pluginInstallationPolicy}),async getPluginAuthorizationStatus(provider){if(!['zcode','workbuddy'].includes(provider))throw failure('INVALID_PROVIDER');const status=(await pluginAccess.getStatus(provider)).status,grant=await pluginStorage.load(provider);return{status:status==='stored'&&purposeAllows(grant,pluginPurpose())?'stored':'needs-authorization'};},prepareChat,prepareWorkbuddyChat,desktopIntegration,zcodeDesktopIntegration,
-    async restoreChatPreferences(fallback={}){for(const provider of PROVIDERS){let saved;try{saved=await chatPreferences.load(provider);}catch(_){saved=null;}chatEnabled[provider]=typeof saved?.enabled==='boolean'?saved.enabled:fallback[provider]===true;}return{...chatEnabled};},
-    isChatEnabled:provider=>PROVIDERS.has(provider)&&chatEnabled[provider]===true,
-    async setChatEnabled(provider,enabled){if(!PROVIDERS.has(provider))throw failure('INVALID_PROVIDER');const old=await chatPreferences.load(provider);await chatPreferences.save(provider,{...(old||{}),enabled:enabled===true});chatEnabled[provider]=enabled===true;onChange();},async disconnectWorkbuddyChat(){externalWorkbuddyService=false;workbuddyEpoch++;workbuddyAuthenticated=false;workbuddyAuthFlight=null;workbuddyLoginPending=false;await workbuddyAuthClient?.close();workbuddyAuthClient=null;await workbuddyCli.disconnect();const handle=managedWorkbuddy;managedWorkbuddy=null;await handle?.stop();},getZcodeAccountSource:()=>chatServices.zcode.service?.accountSource||zcodeAccountSource,
-    async setZcodeAccountSource(source){if(!['official','configured-custom'].includes(source))throw failure('INVALID_INPUT');const preference=await chatPreferences.load('zcode');await chatPreferences.save('zcode',{...(preference||{}),accountSource:source});if(source===zcodeAccountSource)return;zcodeAccountSource=source;directZcodeEnabled=false;const slot=chatServices.zcode;slot.service=null;slot.generation++;await Promise.all([...slot.clients].map(client=>client.invalidate()));onChange();},
+  const releasedAccess = firstRelease ? Object.fromEntries(['authorize','acquire','withAccess','getStatus','revoke'].map(method=>[method,async(provider,...args)=>{assertProvider(provider);return access[method](provider,...args);}])) : access;
+  return { access:releasedAccess, authorize, getState,installProviderPlugin,cancelPluginInstallation,restorePluginInstallations,getPluginInstallationPolicy:()=>({...pluginInstallationPolicy}),async getPluginAuthorizationStatus(provider){if(firstRelease||!['zcode','workbuddy'].includes(provider))throw failure('INVALID_PROVIDER');const status=(await pluginAccess.getStatus(provider)).status,grant=await pluginStorage.load(provider);return{status:status==='stored'&&purposeAllows(grant,pluginPurpose())?'stored':'needs-authorization'};},prepareChat,prepareWorkbuddyChat,desktopIntegration,zcodeDesktopIntegration,
+    async restoreChatPreferences(fallback={}){for(const provider of allowedProviders){let saved;try{saved=await chatPreferences.load(provider);}catch(_){saved=null;}chatEnabled[provider]=typeof saved?.enabled==='boolean'?saved.enabled:fallback[provider]===true;}return{...chatEnabled};},
+    isChatEnabled:provider=>allowedProviders.has(provider)&&chatEnabled[provider]===true,
+    async setChatEnabled(provider,enabled){assertProvider(provider);const old=await chatPreferences.load(provider);await chatPreferences.save(provider,{...(old||{}),enabled:enabled===true});chatEnabled[provider]=enabled===true;onChange();},async disconnectWorkbuddyChat(){externalWorkbuddyService=false;workbuddyEpoch++;workbuddyAuthenticated=false;workbuddyAuthFlight=null;workbuddyLoginPending=false;await workbuddyAuthClient?.close();workbuddyAuthClient=null;await workbuddyCli.disconnect();const handle=managedWorkbuddy;managedWorkbuddy=null;await handle?.stop();},getZcodeAccountSource:()=>chatServices.zcode.service?.accountSource||zcodeAccountSource,
+    async setZcodeAccountSource(source){assertProvider('zcode');if(!['official','configured-custom'].includes(source))throw failure('INVALID_INPUT');const preference=await chatPreferences.load('zcode');await chatPreferences.save('zcode',{...(preference||{}),accountSource:source});if(source===zcodeAccountSource)return;zcodeAccountSource=source;directZcodeEnabled=false;const slot=chatServices.zcode;slot.service=null;slot.generation++;await Promise.all([...slot.clients].map(client=>client.invalidate()));onChange();},
     importCodexService: () => importLocalService('codex'), importZcodeService: () => importLocalService('zcode'),
     createCodexChatRpc: options => localChat('codex', options), createZcodeChatRpc: options => localChat('zcode', options),
     async ensureDirectory(provider,{interactive=true}={}) {
-      if (!PROVIDERS.has(provider)) throw failure('INVALID_PROVIDER');
+      assertProvider(provider);
       try { const lease=await access.acquire(provider); lease.release(); return {status:'stored'}; } catch(e) { if(!['DIRECTORY_ACCESS_REQUIRED','ENOENT'].includes(e.code))throw e; }
       return interactive ? authorize(provider) : {status:'needs-authorization'};
     },
-    async ensureAuthorized(provider) { try {const lease=await access.acquire(provider);lease.release();return true;} catch(e) {if(!['DIRECTORY_ACCESS_REQUIRED','ENOENT'].includes(e.code))throw e;} return (await authorize(provider)).status === 'stored'; },
+    async ensureAuthorized(provider) { assertProvider(provider);try {const lease=await access.acquire(provider);lease.release();return true;} catch(e) {if(!['DIRECTORY_ACCESS_REQUIRED','ENOENT'].includes(e.code))throw e;} return (await authorize(provider)).status === 'stored'; },
     readManagedCodexQuota, createCodexConnection: options => createMasCodexConnection({ ...options, directoryAccess: access, fetch, readUsage: readManagedCodexQuota }), zcode, workbuddy,workbuddyOfficial,workbuddyCli,importWorkbuddyCliService,probeWorkbuddyDesktop,readWorkbuddyDesktop, createWorkBuddyQuotaPort,createWorkBuddyUsagePort,createWorkBuddyTasksPort,getWorkbuddyDetailsState, unavailableObservation,
     async revoke(provider) {
+      assertProvider(provider);
       await cancelPluginInstallation(provider);if(['zcode','workbuddy'].includes(provider))await pluginAccess.revoke(provider);
       if(provider==='zcode')directZcodeEnabled=false;
       if(provider==='codex'){managedCodexQuota={status:'needs-login',snapshot:null,errorCode:null};bundledEnabled=false;managedEpoch++;await managedLogin?.close();managedLogin=null;managedLoginUrl=null;}

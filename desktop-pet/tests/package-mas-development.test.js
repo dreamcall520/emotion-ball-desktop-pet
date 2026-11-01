@@ -85,3 +85,37 @@ test('macOS开发profile可缺省两个get-task-allow，但必须设备绑定及
 test('MAS helper report must independently confirm isolated metadata transport, not only generic passed',async t=>{const f=buildFixture(t),run=f.deps.command;f.deps.command=(name,args,options)=>args.includes('--qiuqiu-mas-helper-probe')?JSON.stringify({mas:true,ownContainer:true,helper:{passed:true,metadataTransport:{passed:false},modelRequestsSent:false,originalCredentialsRead:false,workbuddy:{vendorAccountVerified:false}}}):run(name,args,options);await assert.rejects(api.buildMasDevelopment({root:f.root,env:f.env},f.deps),{code:'MAS_DEV_HELPER_PROBE_FAILED'});});
 
 test('MAS runtime probe rejects missing actual executable entitlement even when signed plist claims it',async t=>{const f=buildFixture(t),run=f.deps.command;f.deps.command=(name,args,options)=>args.includes('--qiuqiu-mas-runtime-probe')?JSON.stringify({mas:true,ownContainer:true,capabilities:{known:true,sandbox:true,userSelectedReadWrite:true,userSelectedExecutable:false,appScopeBookmarks:true}}):run(name,args,options);await assert.rejects(api.buildMasDevelopment({root:f.root,env:f.env},f.deps),{code:'MAS_DEV_RUNTIME_PROBE_FAILED'});});
+
+test('首发profile只带Codex组件，明确撤销外部插件执行写权限，保留天气和导入权限',()=>{
+ const first=api.configFor({...pkg,qiuqiuReleaseProfile:'mas-first'},env).config;
+ const o=api.packagerOptions('/synthetic',first,'/stage','/icon');
+ assert.deepEqual(o.extraResource,['/synthetic/desktop-pet/build/qiuqiu-codex']);
+ const rights=api.entitlementsFor(first).main;
+ assert.equal(rights['com.apple.security.files.user-selected.executable'],undefined);
+ for(const k of ['com.apple.security.files.user-selected.read-write','com.apple.security.personal-information.location','com.apple.security.files.bookmarks.app-scope','com.apple.security.network.client'])assert.equal(rights[k],true);
+ const entry=api.probeEntry(first.bundleId,first);
+ assert.doesNotMatch(entry,/startBundledWorkBuddy|probeManagedHelpers|probePluginInstallation/);
+ assert.match(entry,/MAS_FIRST_RELEASE_PLUGIN_INSTALL_DISABLED/);
+ assert.match(entry,/unauthenticatedAccountConfirmed/);
+});
+test('首发manifest只刷新Codex，不读取未随包携带的WB组件',t=>{
+ const app=path.join(temp(t),'First.app'),r=resourceFixture(app);
+ fs.rmSync(r.wb,{recursive:true});
+ fs.writeFileSync(path.join(r.codex,'codex'),'first-signed');
+ assert.deepEqual(api.refreshBundledManifests(app,fs,process.arch,{releaseProfile:'mas-first'}),{codexFiles:1,workbuddyFiles:0});
+ assert.equal(JSON.parse(fs.readFileSync(path.join(r.codex,'manifest.json'))).binarySha256,createHash('sha256').update('first-signed').digest('hex'));
+});
+test('首发构建保留profile标记、只验证Codex初始化、不运行两家元数据或插件安装探针',async t=>{
+ const f=buildFixture(t);fs.writeFileSync(path.join(f.root,'package.json'),JSON.stringify({...pkg,qiuqiuReleaseProfile:'mas-first'}));
+ const run=f.deps.command,first=api.configFor({...pkg,qiuqiuReleaseProfile:'mas-first'},f.env).config;
+ f.deps.command=(name,args,opts)=>{
+  if(name==='codesign'&&args[0]==='--display')return plist.build(args.at(-1)===f.app()?api.entitlementsFor(first).main:api.entitlementsFor(first).child);
+  if(args.includes('--qiuqiu-mas-runtime-probe'))return JSON.stringify({mas:true,ownContainer:true,capabilities:{known:true,sandbox:true,userSelectedReadWrite:true,userSelectedExecutable:false,appScopeBookmarks:true}});
+  if(args.includes('--qiuqiu-mas-helper-probe'))return JSON.stringify({mas:true,ownContainer:true,helper:{passed:true,codex:{initialized:true,unauthenticatedAccountConfirmed:true,closed:true},isolatedProfileRemoved:true,modelRequestsSent:false,originalCredentialsRead:false}});
+  return run(name,args,opts);
+ };
+ const result=await api.buildMasDevelopment({root:f.root,env:f.env},f.deps);
+ assert.equal(result.masRuntimeAndContainerProbePassed,true);assert.equal(result.bundledManifestRefresh.workbuddyFiles,0);
+ assert.equal(f.options().extraResource.length,1);
+ assert.equal(JSON.parse(fs.readFileSync(path.join(f.options().dir,'package.json'))).qiuqiuReleaseProfile,'mas-first');
+});

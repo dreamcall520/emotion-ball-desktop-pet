@@ -1,0 +1,37 @@
+{
+  "platform": "mas",
+  "releaseProfile": "mas-first",
+  "purpose": "development-sandbox-validation",
+  "arch": "arm64",
+  "appPath": "/Users/allan/Documents/个人创作/emotion-ball-desktop-pet/.worktrees/mas-first-release/dist/mas-development/arm64/球球桌宠-商店沙盒开发候选-mas-arm64/球球桌宠-商店沙盒开发候选.app",
+  "signedDevelopmentApp": true,
+  "identityValidated": true,
+  "profileValidated": true,
+  "currentDeviceRegistered": true,
+  "bundledManifestRefresh": {
+    "codexFiles": 1,
+    "workbuddyFiles": 0
+  },
+  "masRuntimeAndContainerProbePassed": true,
+  "sandboxCapabilities": {
+    "known": true,
+    "sandbox": true,
+    "userSelectedReadWrite": true,
+    "userSelectedExecutable": false,
+    "appScopeBookmarks": true
+  },
+  "managedHelperInitializationProbe": {
+    "codex": {
+      "initialized": true,
+      "unauthenticatedAccountConfirmed": true,
+      "closed": true
+    },
+    "isolatedProfileRemoved": true,
+    "modelRequestsSent": false,
+    "originalCredentialsRead": false,
+    "passed": true
+  },
+  "chatAndDirectoryAcceptancePassed": false,
+  "submissionReady": false,
+  "note": "Local development build only. Genuine MAS runtime/container initialization is separate from login/chat/task/directory acceptance and App Store review."
+}

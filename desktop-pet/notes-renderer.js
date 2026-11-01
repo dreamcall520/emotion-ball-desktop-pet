@@ -186,7 +186,7 @@ async function openNoteEditor(id){
   $('editor-title').textContent=id?'编辑便签':'新建便签';$('editor-fields').innerHTML='<label class="field">标题（可留空）<input id="edit-note-title" placeholder="用一句话概括"></label><label class="field">正文<textarea id="edit-note-body" class="note-body-input" placeholder="写下想记住的事…"></textarea></label><label class="field">分类<span class="field-select"><select id="edit-note-category" aria-label="便签分类"></select><svg aria-hidden="true" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4"/></svg></span></label><p class="field-hint">停顿 500 毫秒自动保存；标题最多 200 字，正文最多 20,000 字。</p>';
   const d=drafts.get(n.id)||n;$('edit-note-title').value=d.title;$('edit-note-body').value=d.body;categoryOptions($('edit-note-category'),d.categoryId||'');$('edit-note-category').onchange=()=>{const draft=noteDraft(n.id);if(!draft)return;draft.categoryId=$('edit-note-category').value;editorContext.initialNote.categoryId=draft.categoryId;draft.categoryChanged=true;inputNote(n.id,$('edit-note-title').value,$('edit-note-body').value)};$('editor-error').textContent='';$('editor-save').textContent='保存并关闭';$('editor-cancel').textContent='关闭';
   const listener=()=>inputNote(n.id,$('edit-note-title').value,$('edit-note-body').value);$('edit-note-title').oninput=listener;$('edit-note-body').oninput=listener;$('editor').showModal();$('edit-note-title').focus();
-  $('editor-fields').append(button('智能整理',()=>openOrganize(n.id),'text-button organize-entry'));
+  if(new URLSearchParams(location.search).get('organizer')!=='off')$('editor-fields').append(button('智能整理',()=>openOrganize(n.id),'text-button organize-entry'));
 }
 async function openTodo(id,sourceNote=null){
   if($('editor').open&&!await closeEditor())return;const item=id?find('todo',id):M.newTodo(sourceNote?titleOf(sourceNote):'');if(!item||item.deletedAt)return;
@@ -258,7 +258,7 @@ function openActions(kind,id){const item=find(kind,id);if(!item)return;actionsCo
   if(item.deletedAt){add('恢复到列表',()=>action(kind,id,'restore'));add('永久删除…',()=>action(kind,id,'erase'),true)}
   else if(kind==='note'){
     if(mode==='panel'){add(item.desktopOpen?'查看桌面便签':'在桌面显示',()=>openDesktop(id));add('编辑便签',async()=>{$('actions').close();await openNoteEditor(id)});$('actions-list').append(node('hr','action-separator'))}
-    add('智能整理',async()=>{$('actions').close();return openOrganize(id)});add('复制便签',()=>copyNote(id));add('移动到分类…',()=>{openMoveCategory(id);return false});add(item.favorite?'取消收藏':'收藏便签',()=>action(kind,id,'favorite'));add(item.pinned?'取消置顶':'桌面置顶',()=>togglePin(id));
+    if(new URLSearchParams(location.search).get('organizer')!=='off')add('智能整理',async()=>{$('actions').close();return openOrganize(id)});add('复制便签',()=>copyNote(id));add('移动到分类…',()=>{openMoveCategory(id);return false});add(item.favorite?'取消收藏':'收藏便签',()=>action(kind,id,'favorite'));add(item.pinned?'取消置顶':'桌面置顶',()=>togglePin(id));
     add('创建待办…',async()=>{if(!await flushNote(id))return false;$('actions').close();await openTodo(null,find('note',id))});$('actions-list').append(node('hr','action-separator'));add('移到回收站',()=>action(kind,id,'trash'),true);
   }else{
     add('编辑待办',async()=>{$('actions').close();await openTodo(id)});

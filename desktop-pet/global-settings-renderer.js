@@ -385,7 +385,7 @@
     const notes = categories.find(category => category.label === '便签与待办');
     const behaviors = snapshot.shortcuts && notes && (!query ? selected === notes.id : '便签 待办 启动方式'.includes(query)) ? el('div') : null;
     if (behaviors) { sections.push(behaviors); count++; }
-    if (!query && selected === '/codex-menu') {
+    if (!snapshot.firstRelease && !query && selected === '/codex-menu') {
       const tabs = el('div', '', 'integration-tabs'); tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'Codex 与 OpenAI API 设置');
       for (const [id, label] of [['codex', 'Codex'], ['api', 'OpenAI API']]) {
         const button = el('button', label); button.type = 'button'; button.id = `codex-tab-${id}`;

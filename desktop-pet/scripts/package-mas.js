@@ -6,6 +6,7 @@ const path = require('node:path');
 const { createHash, X509Certificate } = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 const DEFAULT_ROOT = path.resolve(__dirname, '../..');
+const release = require('./mas-release-profile');
 const APP_NAME = '球球桌宠';
 // Explicit cache opt-in is pinned to a separately verified official MAS archive.
 const MAS_RUNTIME_SHA256 = Object.freeze({ '43.4.1/arm64': '84e562785040616029df3d562f3193c8b3953948a095d8b8611c990b45a69b98' });
@@ -22,7 +23,7 @@ function configFor(pkg, env = {}, arch = env.MAS_ARCH || 'arm64') {
   const errors = [];
   let version = null;
   try { version = marketingVersion(pkg.version); } catch (_) { errors.push('MAS_VERSION_INVALID'); }
-  const config = { arch, marketingVersion: version, electronVersion: pkg.devDependencies?.electron,
+  const config = { releaseProfile: pkg.qiuqiuReleaseProfile, arch, marketingVersion: version, electronVersion: pkg.devDependencies?.electron,
     bundleId: env.MAS_BUNDLE_ID, teamId: env.MAS_TEAM_ID, profile: env.MAS_PROFILE,
     signIdentity: env.MAS_SIGN_IDENTITY, installerIdentity: env.MAS_INSTALLER_IDENTITY, buildVersion: env.MAS_BUILD_VERSION, runtimeZipDir: env.MAS_ELECTRON_ZIP_DIR };
   if (!['arm64', 'x64'].includes(arch)) errors.push('MAS_ARCH_INVALID');
@@ -40,7 +41,7 @@ function configFor(pkg, env = {}, arch = env.MAS_ARCH || 'arm64') {
 }
 function planFor(pkg, env = {}, arch) {
   const { config, missing, errors } = configFor(pkg, env, arch);
-  return { mode: 'plan', platform: 'mas', arch: config.arch,
+  return { mode: 'plan', platform: 'mas', releaseProfile: config.releaseProfile || null, arch: config.arch,
     marketingVersion: config.marketingVersion, buildVersion: config.buildVersion || null,
     electronVersion: config.electronVersion || null,
     configured: Object.fromEntries(REQUIRED.map(name => [name, !missing.includes(name)])),
@@ -98,13 +99,15 @@ function installerCertificate(pem, fingerprint) {
   throw failure('MAS_INSTALLER_CERTIFICATE_UNAVAILABLE');
 }
 function entitlementsFor(config) {
-  return { main: { 'com.apple.security.app-sandbox': true,
+  const rights = { main: { 'com.apple.security.app-sandbox': true,
     'com.apple.application-identifier': `${config.teamId}.${config.bundleId}`,
     'com.apple.developer.team-identifier': config.teamId, 'com.apple.security.application-groups': [`${config.teamId}.${config.bundleId}`],
     'com.apple.security.files.user-selected.read-write': true, 'com.apple.security.files.user-selected.executable': true,
     'com.apple.security.files.bookmarks.app-scope': true, 'com.apple.security.network.client': true,
     'com.apple.security.network.server': true, 'com.apple.security.personal-information.location': true },
     child: { 'com.apple.security.app-sandbox': true, 'com.apple.security.inherit': true } };
+  if (release.isFirstRelease(config)) delete rights.main['com.apple.security.files.user-selected.executable'];
+  return rights;
 }
 function distributionEntry() { return "'use strict';\nif(process.mas!==true){process.stderr.write('MAS_RUNTIME_REQUIRED\\n');process.exit(2);}else require('./desktop-pet/main.js');\n"; }
 function command(commandName, args) {
@@ -137,7 +140,7 @@ function packagerOptions(root, config, staging, icon, baseOptions = {}) {
     appVersion: config.marketingVersion, buildVersion: config.buildVersion, electronVersion: config.electronVersion,
     appCategoryType: 'public.app-category.entertainment', icon,
     asar: { unpack: '**/*.node' }, overwrite: true, prune: true, quiet: true,
-    extraResource: ['qiuqiu-codex','qiuqiu-workbuddy'].map(name => path.join(root, 'desktop-pet/build', name)),
+    extraResource: release.resourceNames(config).map(name => path.join(root, 'desktop-pet/build', name)),
     extendInfo: { ...baseOptions.extendInfo, ElectronTeamID: config.teamId },
     // Sign explicitly after staging every helper; refresh signed binary hashes
     // before the final outer seal, preserving all nested signatures.
@@ -176,7 +179,7 @@ async function buildMas({ root = DEFAULT_ROOT, env = process.env, arch } = {}, d
   validateProfile(profileInfo, config, application.fingerprint, dependencies.now?.() ?? Date.now());
   validateCertificate(installerCertificate(run('security', ['find-certificate', '-a', '-c', config.installerIdentity, '-p']), installer.fingerprint), config.installerIdentity, config.teamId, 'installer');
   const runtimeCache = validateMasRuntimeCache(config, io);
-  await (dependencies.validateResources || (async () => { const resourcesPath=path.join(root,'desktop-pet/build'); await require('../lib/mas-bundled-codex').resolveBundledCodex({resourcesPath,arch:config.arch}); await require('../lib/mas-bundled-workbuddy').resolveBundledWorkBuddy({resourcesPath}); }))();
+  await (dependencies.validateResources || (async () => { const resourcesPath=path.join(root,'desktop-pet/build'); await require('../lib/mas-bundled-codex').resolveBundledCodex({resourcesPath,arch:config.arch}); if (!release.isFirstRelease(config)) await require('../lib/mas-bundled-workbuddy').resolveBundledWorkBuddy({resourcesPath}); }))();
   // All signing/profile checks precede imports that may download runtimes or build.
   const mac = dependencies.mac || require('./package-mac');
   const makeIcon = dependencies.makeIcon || require('./make-icon').makeIcon;
@@ -194,6 +197,8 @@ async function buildMas({ root = DEFAULT_ROOT, env = process.env, arch } = {}, d
   const stagedPackage = JSON.parse(io.readFileSync(path.join(staging, 'package.json'), 'utf8'));
   stagedPackage.version = config.marketingVersion;
   delete stagedPackage.qiuqiuAcceptance;
+  release.trimStaging(staging, config, io);
+  if (release.isFirstRelease(config)) stagedPackage.qiuqiuReleaseProfile = release.FIRST_RELEASE;
   stagedPackage.qiuqiuDistribution = 'mas'; stagedPackage.main = 'mas-distribution-entry.js';
   io.writeFileSync(path.join(staging,'mas-distribution-entry.js'), distributionEntry());
   io.writeFileSync(path.join(staging, 'package.json'), JSON.stringify(stagedPackage, null, 2) + '\n');
@@ -211,7 +216,7 @@ async function buildMas({ root = DEFAULT_ROOT, env = process.env, arch } = {}, d
   await sign({ app:appPath,platform:'mas',type:'distribution',batchCodesignCalls:true,identity:application.fingerprint,
     identityValidation:true,provisioningProfile:config.profile,preEmbedProvisioningProfile:true,preAutoEntitlements:false,strictVerify:true,
     binaries:[codexBinary],optionsForFile:file=>({entitlements:file===appPath?mainFile:childFile,hardenedRuntime:false}) });
-  let bundledManifestRefresh; try { bundledManifestRefresh = require('./package-mas-development').refreshBundledManifests(appPath,io,config.arch); }
+  let bundledManifestRefresh; try { bundledManifestRefresh = require('./package-mas-development').refreshBundledManifests(appPath,io,config.arch,config); }
   catch (_) { throw failure('MAS_BUNDLED_MANIFEST_REFRESH_FAILED'); }
   run('codesign',['--force','--sign',application.fingerprint,'--entitlements',mainFile,appPath]);
   run('codesign', ['--verify', '--deep', '--strict', appPath]);
@@ -225,7 +230,7 @@ async function buildMas({ root = DEFAULT_ROOT, env = process.env, arch } = {}, d
     identityValidation: true, install: '/Applications' });
   if (!io.existsSync(pkgPath)) throw failure('MAS_PKG_OUTPUT_MISSING');
   run('pkgutil', ['--check-signature', pkgPath]);
-  return { platform: 'mas', arch: config.arch, marketingVersion: config.marketingVersion, buildVersion: config.buildVersion,
+  return { platform: 'mas', releaseProfile: config.releaseProfile || null, arch: config.arch, marketingVersion: config.marketingVersion, buildVersion: config.buildVersion,
     appPath, pkgPath, signedDistributionPackage: true, profileValidated: true, runtimeCache, bundledManifestRefresh, signedEntitlementsValidated:true, runtimeAcceptancePassed:false,
     submissionReady: false, note: 'Signed build only; runtime acceptance, App Store processing/review and release are separate.' };
 }

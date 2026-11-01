@@ -5,13 +5,14 @@ const fs=require('node:fs'),path=require('node:path');
 const {createHash,X509Certificate}=require('node:crypto');
 const {execFileSync}=require('node:child_process');
 const {marketingVersion,identities,argumentsFor}=require('./package-mas');
+const release=require('./mas-release-profile');
 const ROOT=path.resolve(__dirname,'../..'),NAME='球球桌宠-商店沙盒开发候选';
 const REQUIRED=['MAS_DEV_BUNDLE_ID','MAS_DEV_TEAM_ID','MAS_DEV_PROFILE','MAS_DEV_SIGN_IDENTITY','MAS_DEV_BUILD_VERSION','MAS_DEV_ELECTRON_ZIP_DIR'];
 const fail=code=>Object.assign(new Error(code),{code});
 function configFor(pkg,env={},arch=env.MAS_DEV_ARCH||process.arch){
  const missing=REQUIRED.filter(name=>typeof env[name]!=='string'||!env[name].trim()),errors=[];
  let version;try{version=marketingVersion(pkg.version);}catch{errors.push('MAS_DEV_VERSION_INVALID');}
- const config={arch,version,electronVersion:pkg.devDependencies?.electron,bundleId:env.MAS_DEV_BUNDLE_ID,teamId:env.MAS_DEV_TEAM_ID,profile:env.MAS_DEV_PROFILE,identity:env.MAS_DEV_SIGN_IDENTITY,buildVersion:env.MAS_DEV_BUILD_VERSION,zipDir:env.MAS_DEV_ELECTRON_ZIP_DIR};
+ const config={releaseProfile:pkg.qiuqiuReleaseProfile,arch,version,electronVersion:pkg.devDependencies?.electron,bundleId:env.MAS_DEV_BUNDLE_ID,teamId:env.MAS_DEV_TEAM_ID,profile:env.MAS_DEV_PROFILE,identity:env.MAS_DEV_SIGN_IDENTITY,buildVersion:env.MAS_DEV_BUILD_VERSION,zipDir:env.MAS_DEV_ELECTRON_ZIP_DIR};
  if(!['arm64','x64'].includes(arch))errors.push('MAS_DEV_ARCH_INVALID');
  if(!/^\d+\.\d+\.\d+$/.test(config.electronVersion||''))errors.push('MAS_DEV_ELECTRON_VERSION_INVALID');
  if(config.bundleId&&!/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.masdevelopment$/.test(config.bundleId))errors.push('MAS_DEV_ISOLATED_BUNDLE_ID_REQUIRED');
@@ -23,7 +24,7 @@ function configFor(pkg,env={},arch=env.MAS_DEV_ARCH||process.arch){
 }
 function planFor(pkg,env={},arch){
  const {config,missing,errors}=configFor(pkg,env,arch);
- return{mode:'plan',platform:'mas',purpose:'development-sandbox-validation',arch:config.arch,version:config.version||null,electronVersion:config.electronVersion||null,
+ return{mode:'plan',platform:'mas',releaseProfile:config.releaseProfile||null,purpose:'development-sandbox-validation',arch:config.arch,version:config.version||null,electronVersion:config.electronVersion||null,
   configured:Object.fromEntries(REQUIRED.map(name=>[name,!missing.includes(name)])),missingConfiguration:missing,configurationErrors:errors,configurationReady:!missing.length&&!errors.length,
   identityValidated:false,profileValidated:false,currentDeviceRegistered:false,cachedMasRuntimeValidated:false,runtimeSandboxValidated:false,submissionReady:false,
   note:'Plan only. No keychain/profile/device/cache read, runtime download, signing, certificate creation or upload.'};
@@ -66,38 +67,40 @@ function readCurrentDeviceId(run){
  if(typeof id!=='string'||!id.trim())throw fail('MAS_DEV_DEVICE_ID_UNAVAILABLE');return id.trim();
 }
 function entitlementsFor(config){
- return{main:{'com.apple.security.app-sandbox':true,'com.apple.application-identifier':`${config.teamId}.${config.bundleId}`,
+ const rights={main:{'com.apple.security.app-sandbox':true,'com.apple.application-identifier':`${config.teamId}.${config.bundleId}`,
   'com.apple.developer.team-identifier':config.teamId,'com.apple.security.application-groups':[`${config.teamId}.${config.bundleId}`],
   'com.apple.security.get-task-allow':true,'com.apple.security.files.user-selected.read-write':true,'com.apple.security.files.user-selected.executable':true,'com.apple.security.files.bookmarks.app-scope':true,
   'com.apple.security.network.client':true,'com.apple.security.network.server':true,'com.apple.security.personal-information.location':true},
   child:{'com.apple.security.app-sandbox':true,'com.apple.security.inherit':true}};
+ if(release.isFirstRelease(config))delete rights.main['com.apple.security.files.user-selected.executable'];
+ return rights;
 }
 function packagerOptions(root,config,staging,icon,base={}){
  const options={...base,dir:staging,out:path.join(root,'dist/mas-development',config.arch),platform:'mas',arch:config.arch,name:NAME,
   appBundleId:config.bundleId,appVersion:config.version,buildVersion:config.buildVersion,electronVersion:config.electronVersion,electronZipDir:config.zipDir,
   asar:{unpack:'**/*.node'},overwrite:true,prune:true,quiet:true,osxSign:false,
-  extraResource:['qiuqiu-codex','qiuqiu-workbuddy'].map(name=>path.join(root,'desktop-pet/build',name)),
+  extraResource:release.resourceNames(config).map(name=>path.join(root,'desktop-pet/build',name)),
   extendInfo:{...base.extendInfo,ElectronTeamID:config.teamId}};
  delete options.osxNotarize;return options;
 }
 function hashFile(file,io=fs){return createHash('sha256').update(io.readFileSync(file)).digest('hex');}
-function refreshBundledManifests(appPath,io=fs,arch=process.arch){
+function refreshBundledManifests(appPath,io=fs,arch=process.arch,config={}){
  const resources=path.join(appPath,'Contents/Resources'),codexDir=path.join(resources,'qiuqiu-codex',`darwin-${arch}`);
  const codexFile=path.join(codexDir,'manifest.json'),wbDir=path.join(resources,'qiuqiu-workbuddy'),wbFile=path.join(wbDir,'manifest.json');
  const load=file=>{const s=io.lstatSync(file);if(!s.isFile()||s.isSymbolicLink()||s.size>2*1024*1024)throw fail('MAS_DEV_RUNTIME_MANIFEST_INVALID');return JSON.parse(io.readFileSync(file,'utf8'));};
- const cm=load(codexFile),wm=load(wbFile);
- if(cm.provider!=='codex'||cm.binary!=='codex'||wm.provider!=='workbuddy-cli'||!wm.files||typeof wm.files!=='object'||Array.isArray(wm.files)||Object.keys(wm.files).length>10000)throw fail('MAS_DEV_RUNTIME_MANIFEST_INVALID');
+ const cm=load(codexFile),wm=release.isFirstRelease(config)?null:load(wbFile);
+ if(cm.provider!=='codex'||cm.binary!=='codex'||wm&& (wm.provider!=='workbuddy-cli'||!wm.files||typeof wm.files!=='object'||Array.isArray(wm.files)||Object.keys(wm.files).length>10000))throw fail('MAS_DEV_RUNTIME_MANIFEST_INVALID');
  const regular=file=>{const s=io.lstatSync(file);if(!s.isFile()||s.isSymbolicLink())throw fail('MAS_DEV_RUNTIME_MANIFEST_INVALID');return file;};
  cm.binarySha256=hashFile(regular(path.join(codexDir,'codex')),io);
- for(const rel of Object.keys(wm.files)){
+ for(const rel of Object.keys(wm?.files||{})){
   if(!rel.startsWith('node_modules/')||rel.includes('\\')||rel.split('/').some(x=>!x||x==='.'||x==='..'))throw fail('MAS_DEV_RUNTIME_MANIFEST_INVALID');
   let parent=path.dirname(path.join(wbDir,rel));while(parent!==wbDir){const s=io.lstatSync(parent);if(!s.isDirectory()||s.isSymbolicLink())throw fail('MAS_DEV_RUNTIME_MANIFEST_INVALID');parent=path.dirname(parent);}
   wm.files[rel]=hashFile(regular(path.join(wbDir,rel)),io);
  }
- io.writeFileSync(codexFile,JSON.stringify(cm,null,2)+'\n');io.writeFileSync(wbFile,JSON.stringify(wm,null,2)+'\n');
- return{codexFiles:1,workbuddyFiles:Object.keys(wm.files).length};
+ io.writeFileSync(codexFile,JSON.stringify(cm,null,2)+'\n');if(wm)io.writeFileSync(wbFile,JSON.stringify(wm,null,2)+'\n');
+ return{codexFiles:1,workbuddyFiles:Object.keys(wm?.files||{}).length};
 }
-function probeEntry(bundleId){return `'use strict';
+function probeEntry(bundleId,config={}){if(release.isFirstRelease(config))return firstReleaseProbeEntry(bundleId);return `'use strict';
 if(process.mas!==true){process.stderr.write('MAS_RUNTIME_REQUIRED\\n');process.exit(2);}
 const runtimeProbe=process.argv.includes('--qiuqiu-mas-runtime-probe');
 const helperProbe=process.argv.includes('--qiuqiu-mas-helper-probe');
@@ -113,6 +116,33 @@ if(runtimeProbe||helperProbe||installerProbe){const {app}=require('electron');ap
  const helper=await probeManagedHelpers({userData:app.getPath('userData'),resourcesPath:process.resourcesPath,createCodexRpc:createBundledCodexChatRpc,startWorkbuddyHost:startBundledWorkBuddy});
  process.stdout.write(JSON.stringify({mas:true,ownContainer:true,helper})+'\\n');app.exit(helper.passed?0:2);
 }).catch(()=>{process.stdout.write(JSON.stringify({errorCode:'MAS_HELPER_PROBE_ENTRY_FAILED'})+'\\n');app.exit(2);});}else {process.qiuqiuMasDevelopmentCandidate=true;require('./desktop-pet/main.js');}
+`;}
+
+function firstReleaseProbeEntry(bundleId){return `'use strict';
+if(process.mas!==true){process.stderr.write('MAS_RUNTIME_REQUIRED\\n');process.exit(2);}
+const runtimeProbe=process.argv.includes('--qiuqiu-mas-runtime-probe');
+const helperProbe=process.argv.includes('--qiuqiu-mas-helper-probe');
+const installerProbe=process.argv.includes('--qiuqiu-mas-installer-probe');
+if(installerProbe){process.stderr.write('MAS_FIRST_RELEASE_PLUGIN_INSTALL_DISABLED\\n');process.exit(2);}
+else if(runtimeProbe||helperProbe){const {app}=require('electron');app.whenReady().then(async()=>{
+ const ownContainer=app.getPath('userData').includes('/Library/Containers/${bundleId}/Data/');
+ if(!ownContainer){process.stdout.write(JSON.stringify({mas:true,ownContainer:false})+'\\n');app.exit(2);return;}
+ if(runtimeProbe){const capabilities=require('./desktop-pet/lib/plugin-host').createPluginHost().getSandboxCapabilities();process.stdout.write(JSON.stringify({mas:true,ownContainer:true,capabilities})+'\\n');app.exit(0);return;}
+ const fs=require('node:fs/promises'),path=require('node:path');
+ const helper={codex:{initialized:false,unauthenticatedAccountConfirmed:false,closed:false},isolatedProfileRemoved:false,modelRequestsSent:false,originalCredentialsRead:false,passed:false};
+ let scratch,rpc;
+ try{
+  scratch=await fs.mkdtemp(path.join(app.getPath('userData'),'mas-first-helper-probe-'));await fs.chmod(scratch,0o700);
+  rpc=await require('./desktop-pet/lib/mas-bundled-codex').createBundledCodexChatRpc({resourcesPath:process.resourcesPath,profileHome:path.join(scratch,'codex-profile'),workspaceDir:path.join(scratch,'codex-workspace'),env:{PATH:'/usr/bin:/bin:/usr/sbin:/sbin',LANG:'en_US.UTF-8'},timeoutMs:15000});
+  await rpc.start();helper.codex.initialized=true;helper.codex.unauthenticatedAccountConfirmed=(await rpc.readAccount())?.authenticated===false;
+ }catch(_){helper.errorCode='MAS_FIRST_CODEX_PROBE_FAILED';}
+ finally{
+  if(rpc)try{await rpc.close();helper.codex.closed=true;}catch(_){helper.errorCode='MAS_FIRST_CODEX_CLOSE_FAILED';}
+  if(scratch)try{await fs.rm(scratch,{recursive:true,force:true});helper.isolatedProfileRemoved=true;}catch(_){helper.errorCode='MAS_FIRST_CODEX_CLEANUP_FAILED';}
+ }
+ helper.passed=!helper.errorCode&&helper.codex.initialized&&helper.codex.unauthenticatedAccountConfirmed&&helper.codex.closed&&helper.isolatedProfileRemoved;
+ process.stdout.write(JSON.stringify({mas:true,ownContainer:true,helper})+'\\n');app.exit(helper.passed?0:2);
+}).catch(()=>{process.stderr.write('MAS_FIRST_PROBE_FAILED\\n');app.exit(2);});}else{process.qiuqiuMasDevelopmentCandidate=true;require('./desktop-pet/main.js');}
 `;}
 
 async function buildMasDevelopment({root=ROOT,env=process.env,arch}={},deps={}){
@@ -131,14 +161,14 @@ async function buildMasDevelopment({root=ROOT,env=process.env,arch}={},deps={}){
  // Cache-only build: never ask @electron/get to download a runtime or use darwin.
  const zip=path.join(config.zipDir,`electron-v${config.electronVersion}-mas-${config.arch}.zip`);
  try{const s=io.lstatSync(zip);if(!s.isFile()||s.isSymbolicLink()||s.size<1)throw Error();}catch{throw fail('MAS_DEV_CACHED_MAS_RUNTIME_REQUIRED');}
- await (deps.validateResources||(async()=>{const resourcesPath=path.join(root,'desktop-pet/build');await require('../lib/mas-bundled-codex').resolveBundledCodex({resourcesPath,arch:config.arch});await require('../lib/mas-bundled-workbuddy').resolveBundledWorkBuddy({resourcesPath});}))();
+ await (deps.validateResources||(async()=>{const resourcesPath=path.join(root,'desktop-pet/build');await require('../lib/mas-bundled-codex').resolveBundledCodex({resourcesPath,arch:config.arch});if(!release.isFirstRelease(config))await require('../lib/mas-bundled-workbuddy').resolveBundledWorkBuddy({resourcesPath});}))();
  run('xcodebuild',['-version']);
  const mac=deps.mac||require('./package-mac'),makeIcon=deps.makeIcon||require('./make-icon').makeIcon;
  (deps.buildWeatherLocation||require('./build-weather-location').buildWeatherLocation)(root);
  (deps.buildPluginHost||require('./build-plugin-host').buildPluginHost)(root);
  const icon=makeIcon(root),staging=mac.prepareStaging(root,path.join(root,'desktop-pet/build/mas-development-staging',config.arch),{pluginNative:true});
- const staged=JSON.parse(io.readFileSync(path.join(staging,'package.json'),'utf8'));Object.assign(staged,{version:config.version,qiuqiuAcceptance:'mas',qiuqiuDistribution:'mas-development',main:'mas-development-entry.js'});
- io.writeFileSync(path.join(staging,'package.json'),JSON.stringify(staged,null,2)+'\n');io.writeFileSync(path.join(staging,'mas-development-entry.js'),probeEntry(config.bundleId));
+ const staged=JSON.parse(io.readFileSync(path.join(staging,'package.json'),'utf8'));release.trimStaging(staging,config,io);if(release.isFirstRelease(config))staged.qiuqiuReleaseProfile=release.FIRST_RELEASE;Object.assign(staged,{version:config.version,qiuqiuAcceptance:'mas',qiuqiuDistribution:'mas-development',main:'mas-development-entry.js'});
+ io.writeFileSync(path.join(staging,'package.json'),JSON.stringify(staged,null,2)+'\n');io.writeFileSync(path.join(staging,'mas-development-entry.js'),probeEntry(config.bundleId,config));
  const options=packagerOptions(root,config,staging,icon,mac.buildPackagerOptions(root,icon));
  const packageApp=deps.packager||(await import('@electron/packager')).packager,outputs=await packageApp(options);
  if(!Array.isArray(outputs)||outputs.length!==1)throw fail('MAS_DEV_OUTPUT_INVALID');
@@ -151,19 +181,20 @@ async function buildMasDevelopment({root=ROOT,env=process.env,arch}={},deps={}){
  await sign({app:appPath,platform:'mas',type:'development',batchCodesignCalls:true,identity:identity.fingerprint,identityValidation:true,provisioningProfile:config.profile,preEmbedProvisioningProfile:true,preAutoEntitlements:false,strictVerify:true,
   binaries:[path.join(appPath,'Contents/Resources/qiuqiu-codex',`darwin-${config.arch}`,'codex')],
   optionsForFile:file=>({entitlements:file===appPath?mainFile:childFile,hardenedRuntime:false,timestamp:'none'})});
- const resources=refreshBundledManifests(appPath,io,config.arch);
+ const resources=refreshBundledManifests(appPath,io,config.arch,config);
  // Updating a resource invalidates only the outer seal. Preserve nested helper
  // signatures and entitlements: never deep-resign after refreshing the digests.
  run('codesign',['--force','--sign',identity.fingerprint,'--entitlements',mainFile,'--timestamp=none',appPath]);
  run('codesign',['--verify','--deep','--strict',appPath]);
  let sealed;try{sealed=parse(run('codesign',['--display','--entitlements',':-',appPath]));}catch{throw fail('MAS_DEV_ENTITLEMENTS_UNVERIFIED');}
- for(const key of ['com.apple.security.app-sandbox','com.apple.security.network.client','com.apple.security.network.server','com.apple.security.files.bookmarks.app-scope','com.apple.security.files.user-selected.read-write','com.apple.security.files.user-selected.executable'])if(sealed[key]!==true)throw fail('MAS_DEV_ENTITLEMENTS_UNVERIFIED');
+ for(const [key,value]of Object.entries(rights.main))if(JSON.stringify(sealed[key])!==JSON.stringify(value))throw fail('MAS_DEV_ENTITLEMENTS_UNVERIFIED');
  for(const child of [path.join(appPath,'Contents/Resources/qiuqiu-codex',`darwin-${config.arch}`,'codex'),path.join(appPath,'Contents/Frameworks',NAME+' Helper.app')]){let e;try{e=parse(run('codesign',['--display','--entitlements',':-',child]));}catch{throw fail('MAS_DEV_CHILD_ENTITLEMENTS_UNVERIFIED');}if(e['com.apple.security.app-sandbox']!==true||e['com.apple.security.inherit']!==true)throw fail('MAS_DEV_CHILD_ENTITLEMENTS_UNVERIFIED');}
  let probe;try{const text=run(path.join(appPath,'Contents/MacOS',NAME),['--qiuqiu-mas-runtime-probe']);probe=JSON.parse(text.trim());}catch{throw fail('MAS_DEV_RUNTIME_PROBE_FAILED');}
- if(probe?.mas!==true||probe.ownContainer!==true||!['known','sandbox','userSelectedReadWrite','userSelectedExecutable','appScopeBookmarks'].every(k=>probe.capabilities?.[k]===true))throw fail('MAS_DEV_RUNTIME_PROBE_FAILED');
+ if(probe?.mas!==true||probe.ownContainer!==true||!(release.isFirstRelease(config)?['known','sandbox','userSelectedReadWrite','appScopeBookmarks']:['known','sandbox','userSelectedReadWrite','userSelectedExecutable','appScopeBookmarks']).every(k=>probe.capabilities?.[k]===true))throw fail('MAS_DEV_RUNTIME_PROBE_FAILED');
  let helperProbe;try{const text=run(path.join(appPath,'Contents/MacOS',NAME),['--qiuqiu-mas-helper-probe'],{timeout:90000});helperProbe=JSON.parse(text.trim());}catch{throw fail('MAS_DEV_HELPER_PROBE_FAILED');}
- if(helperProbe?.mas!==true||helperProbe.ownContainer!==true||helperProbe.helper?.passed!==true||helperProbe.helper?.metadataTransport?.passed!==true||helperProbe.helper?.modelRequestsSent!==false||helperProbe.helper?.originalCredentialsRead!==false||helperProbe.helper?.workbuddy?.vendorAccountVerified!==false)throw fail('MAS_DEV_HELPER_PROBE_FAILED');
- return{platform:'mas',purpose:'development-sandbox-validation',arch:config.arch,appPath,signedDevelopmentApp:true,identityValidated:true,profileValidated:true,currentDeviceRegistered:true,
+ if(release.isFirstRelease(config)&&(!helperProbe?.helper?.codex?.initialized||!helperProbe?.helper?.codex?.unauthenticatedAccountConfirmed||!helperProbe?.helper?.codex?.closed||!helperProbe?.helper?.isolatedProfileRemoved))throw fail('MAS_DEV_HELPER_PROBE_FAILED');
+ if(helperProbe?.mas!==true||helperProbe.ownContainer!==true||helperProbe.helper?.passed!==true||(!release.isFirstRelease(config)&&helperProbe.helper?.metadataTransport?.passed!==true)||helperProbe.helper?.modelRequestsSent!==false||helperProbe.helper?.originalCredentialsRead!==false||(!release.isFirstRelease(config)&&helperProbe.helper?.workbuddy?.vendorAccountVerified!==false))throw fail('MAS_DEV_HELPER_PROBE_FAILED');
+ return{platform:'mas',releaseProfile:config.releaseProfile||null,purpose:'development-sandbox-validation',arch:config.arch,appPath,signedDevelopmentApp:true,identityValidated:true,profileValidated:true,currentDeviceRegistered:true,
   bundledManifestRefresh:resources,masRuntimeAndContainerProbePassed:true,sandboxCapabilities:probe.capabilities,managedHelperInitializationProbe:helperProbe.helper,chatAndDirectoryAcceptancePassed:false,submissionReady:false,
   note:'Local development build only. Genuine MAS runtime/container initialization is separate from login/chat/task/directory acceptance and App Store review.'};
 }
