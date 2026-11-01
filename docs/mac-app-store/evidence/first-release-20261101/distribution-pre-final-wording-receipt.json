@@ -1,0 +1,27 @@
+{
+  "platform": "mas",
+  "releaseProfile": "mas-first",
+  "arch": "arm64",
+  "marketingVersion": "0.4.10",
+  "buildVersion": "1793508092",
+  "appPath": "/Users/allan/Documents/个人创作/emotion-ball-desktop-pet/.worktrees/mas-first-release/dist/mas/arm64/球球桌宠-mas-arm64/球球桌宠.app",
+  "pkgPath": "/Users/allan/Documents/个人创作/emotion-ball-desktop-pet/.worktrees/mas-first-release/dist/mas/arm64/Qiuqiu-0.4.10-1793508092-mas-arm64.pkg",
+  "signedDistributionPackage": true,
+  "profileValidated": true,
+  "runtimeCache": {
+    "used": true,
+    "validated": true,
+    "archive": "electron-v43.4.1-mas-arm64.zip",
+    "sha256": "84e562785040616029df3d562f3193c8b3953948a095d8b8611c990b45a69b98"
+  },
+  "bundledManifestRefresh": {
+    "codexFiles": 1,
+    "workbuddyFiles": 0
+  },
+  "signedEntitlementsValidated": true,
+  "runtimeAcceptancePassed": false,
+  "submissionReady": false,
+  "note": "Signed build only; runtime acceptance, App Store processing/review and release are separate.",
+  "supersededForFinalConsentWording": true,
+  "uploaded": false
+}
