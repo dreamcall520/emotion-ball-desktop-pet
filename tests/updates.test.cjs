@@ -13,14 +13,14 @@ const articleBlocks = html.match(/<article[^>]*data-release-panel[^>]*>[\s\S]*?<
 const globalArticles = articles.slice(1), globalBlocks = articleBlocks.slice(1);
 const oldArticles = articles.slice(3), oldBlocks = articleBlocks.slice(3);
 
-test('0.4.11 Apple release preserves every 0.4.09 platform and the retained history',()=>{
- assert.match(articleBlocks[0], /id="v0\.4\.11-apple"/);
+test('0.4.12 Apple release preserves every 0.4.09 platform and the retained history',()=>{
+ assert.match(articleBlocks[0], /id="v0\.4\.12-apple"/);
  assert.match(articles[0], /datetime="2026-11-01"/);
  for(const text of ['1.【新增】官方皮肤','新增小白、小宇两款官方皮肤。','2.【新增】主题配色','新增暮光紫主题配色。','3.【新增】意见反馈','支持上传截图、查看提交记录。','4.【新增】官方定制活动上线','让喜欢的它，住进你的桌面。'])assert.ok(articles[0].includes(text));
  assert.equal((articles[0].match(/<h4>/g)||[]).length,4);
  assert.equal((articles[0].match(/<li>/g)||[]).length,4);
  assert.doesNotMatch(articles[0], /release-download-note|Intel|Windows|排在|咩咩之后|小宇之前|等待就绪|回调|首帧|焦点|验收/);
- assert.match(articles[0], /v0\.4\.11\/Qiuqiu-0\.4\.11-macOS-arm64\.dmg/);
+ assert.match(articles[0], /v0\.4\.12\/Qiuqiu-0\.4\.12-macOS-arm64\.dmg/);
  assert.doesNotMatch(articles[0], /macOS-x64\.dmg|Windows-x64-Setup|mac-app-store|Windows r6/);
 });
 

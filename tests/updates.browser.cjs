@@ -50,9 +50,9 @@ fs.mkdirSync(out, { recursive: true });
     for (const theme of ['light', 'dark']) {
       for (const [width, height] of [[1440,900], [1080,800], [390,844], [320,568]]) {
         await page.setViewportSize({ width, height });
-        await page.evaluate(theme => { localStorage.setItem('emotion-ball-site-theme', theme); location.hash = 'v0.4.11-apple'; }, theme);
+        await page.evaluate(theme => { localStorage.setItem('emotion-ball-site-theme', theme); location.hash = 'v0.4.12-apple'; }, theme);
         await page.reload();
-        await page.waitForFunction(() => document.querySelector('[data-release-panel]:not([hidden])').id === 'v0.4.11-apple');
+        await page.waitForFunction(() => document.querySelector('[data-release-panel]:not([hidden])').id === 'v0.4.12-apple');
         const metrics = await page.evaluate(() => {
           const panel = document.querySelector('[data-release-panel]:not([hidden])');
           const headerBottom = document.querySelector('.site-header').getBoundingClientRect().bottom;
@@ -68,7 +68,7 @@ fs.mkdirSync(out, { recursive: true });
           await page.locator('[data-release-select]').selectOption('v0.3.10-hotfix');
           assert.equal(await page.locator('[data-release-panel]:visible h3').innerText(), '0.3.10 Apple 热修复');
           assert.equal(await page.locator('[data-release-panel]:visible .release-download').count(), 1);
-          await page.locator('[data-release-select]').selectOption('v0.4.11-apple');
+          await page.locator('[data-release-select]').selectOption('v0.4.12-apple');
         }
         await page.screenshot({ path:path.join(out, `updates-${width}x${height}-${theme}.png`), fullPage:true });
         report.layouts.push({ theme, width, height, ...metrics });
