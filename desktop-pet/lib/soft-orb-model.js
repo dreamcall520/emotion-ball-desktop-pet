@@ -44,6 +44,16 @@
   }
   function duration(id){return id==='working'?3000:id==='wake'?800:Object.hasOwn(ACTIONS,id)?(ACTIONS[id][1]-ACTIONS[id][0])*1000:0;}
   function stateForEmotion(id){return ['00','56'].includes(id)?'sleep':id==='51'?'working':'idle';}
+  let glanceCycle=-1,glanceIndex=-1;
+  const glanceDirections=[{x:0,y:-1},{x:0,y:1},{x:-1,y:0},{x:1,y:0}];
+  function idleDirection(t){
+    const cycle=Math.floor(t/10);
+    if(cycle!==glanceCycle){
+      const choices=[0,1,2,3].filter(index=>index!==glanceIndex);
+      glanceIndex=choices[Math.floor(Math.random()*choices.length)];glanceCycle=cycle;
+    }
+    return glanceDirections[glanceIndex];
+  }
   function statePose(motion,state,t,gaze={x:0,y:0},stateAge=t){
     const p=motion.at(0);t=Math.max(0,t);
     if(state==='sleep'){
@@ -52,6 +62,16 @@
     }else{
       p.lookX=clamp(Number(gaze.x)||0,-1,1)*.075;p.lookY=-clamp(Number(gaze.y)||0,-1,1)*.04;
       p.lift=Math.sin(t*.9)*.009;
+      if(state==='idle'){
+        const phase=t*2*Math.PI/5.6;
+        p.lift=.047*Math.sin(phase+.16*Math.sin(phase))+.006*Math.sin(t*.63);
+        p.roll=.018*Math.sin(phase-.65);p.yaw=.012*Math.sin(t*.72);
+        const q=t%10,direction=idleDirection(t);
+        const glance=ramp(q,2.4,3.1)*(1-ramp(q,4.3,5.2));
+        const follow=1-Math.min(1,Math.hypot(Number(gaze.x)||0,Number(gaze.y)||0)*2);
+        p.lookX+=.085*direction.x*glance*follow;p.lookY+=.065*direction.y*glance*follow;
+        p.yaw+=.065*direction.x*glance*follow;p.pitch+=.045*direction.y*glance*follow;
+      }
       const blink=t%4.9;p.eyelid=1-.94*ramp(blink,4.45,4.52)*(1-ramp(blink,4.54,4.66));
       if(state==='working'){p.orbit=.28;p.lookY=.03;p.yaw=.025*Math.sin(t*.6);}
     }
