@@ -1,0 +1,21 @@
+Package "Qiuqiu-0.4.10-1793528828-mas-arm64.pkg":
+   Status: signed by a developer certificate issued by Apple (Development)
+   Certificate Chain:
+    1. 3rd Party Mac Developer Installer: ma xiaokun (SUUX53KQQV)
+       Expires: 2027-11-01 00:47:26 +0000
+       SHA256 Fingerprint:
+           4D 6E 5C 92 48 CF 72 8A 7A 89 72 F6 44 F6 52 6D 0F D1 21 33 78 C9 
+           B8 59 CA 8E C9 1B 6A D7 44 58
+       ------------------------------------------------------------------------
+    2. Apple Worldwide Developer Relations Certification Authority
+       Expires: 2030-02-20 00:00:00 +0000
+       SHA256 Fingerprint:
+           DC F2 18 78 C7 7F 41 98 E4 B4 61 4F 03 D6 96 D8 9C 66 C6 60 08 D4 
+           24 4E 1B 99 16 1A AC 91 60 1F
+       ------------------------------------------------------------------------
+    3. Apple Root CA
+       Expires: 2035-02-09 21:40:36 +0000
+       SHA256 Fingerprint:
+           B0 B1 73 0E CB C7 FF 45 05 14 2C 49 F1 29 5E 6E DA 6B CA ED 7E 2C 
+           68 C5 BE 91 B5 A1 10 01 F0 24
+

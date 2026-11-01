@@ -1,0 +1,69 @@
+{
+  "build": "1793528828",
+  "pkg": "/Users/allan/Documents/个人创作/emotion-ball-desktop-pet/.worktrees/mas-first-release/dist/mas/arm64/Qiuqiu-0.4.10-1793528828-mas-arm64.pkg",
+  "pkgSha256": "39a2dc8ed9ae97e80f63977c6dadd040b05f5872d01494b89fd8c691db8f5c23",
+  "files": [
+    {
+      "file": "desktop-pet/main.js",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/lib/mas-first-release.js",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/lib/weather-window.js",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/lib/mas-codex-pet-library.js",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/customize.html",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/customize-renderer.js",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/customize-preload.js",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/store-connections-first.html",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/store-connections-first-renderer.js",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/about.html",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/about-renderer.js",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/about-preload.js",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/lib/chat-data-consent.js",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/lib/mas-provider-runtime.js",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/lib/mas-directory-access.js",
+      "matches": true
+    }
+  ],
+  "sourceByteMatch": true,
+  "uploaded": false
+}
