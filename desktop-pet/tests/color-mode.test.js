@@ -224,9 +224,24 @@ for (const theme of ['blue', 'green', 'purple']) for (const appearance of ['ligh
 test('shared preload reports only actual modal changes, keeping nested modal ownership until the last closes',()=>{
  const ipc=new EventEmitter(),sent=[],observers=[],events={};let modal=false;
  ipc.sendSync=(channel,value)=>{if(channel==='pet:initial-color-mode')return{theme:'blue',appearance:'light'};sent.push([channel,value]);return true;};
- const document={documentElement:{dataset:{}},getElementById:()=>null,querySelector:selector=>{assert.equal(selector,'dialog:modal');return modal?{}:null;},addEventListener:(name,callback)=>{events[name]=callback;}};
+ const document={documentElement:{dataset:{}},getElementById:()=>null,querySelectorAll:selector=>{assert.equal(selector,'dialog:modal');return modal?[{}]:[];},addEventListener:(name,callback)=>{events[name]=callback;}};
  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../theme-preload.js'),'utf8'),{require:()=>({ipcRenderer:ipc,contextBridge:{exposeInMainWorld(){}}}),process:{isMainFrame:true},location:{protocol:'file:'},document,queueMicrotask:fn=>fn(),MutationObserver:class{constructor(callback){observers.push(callback)}observe(){}disconnect(){}}});
  assert.deepEqual(sent,[]);modal=true;observers[1]();assert.deepEqual(sent,[['pet:quota-modal',true]]);
  observers[1]();events.close();assert.equal(sent.length,1,'another modal remains open');modal=false;events.close();assert.deepEqual(sent,[['pet:quota-modal',true],['pet:quota-modal',false]]);
  events.cancel();assert.equal(sent.length,2,'cancel followed by no actual modal change is not a lease');
+});
+for(const page of ['customize.html','global-settings.html','notes.html'])test(`promotion dialog quota exception is scoped to ${page}`,()=>{
+ const ipc=new EventEmitter(),sent=[],observers=[],events={};let dialogs=[];
+ ipc.sendSync=(channel,value)=>{if(channel==='pet:initial-color-mode')return{theme:'blue',appearance:'light'};sent.push([channel,value]);return true};
+ const document={documentElement:{dataset:{}},getElementById:()=>null,querySelector:()=>dialogs[0]||null,querySelectorAll:selector=>{assert.equal(selector,'dialog:modal');return dialogs},addEventListener:(name,callback)=>{events[name]=callback}};
+ vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../theme-preload.js'),'utf8'),{require:()=>({ipcRenderer:ipc,contextBridge:{exposeInMainWorld(){}}}),process:{isMainFrame:true},location:{protocol:'file:',pathname:'/app/desktop-pet/'+page},document,queueMicrotask:fn=>fn(),MutationObserver:class{constructor(callback){observers.push(callback)}observe(){}disconnect(){}}});
+ const show=ids=>{dialogs=ids.map(id=>({id}));observers[1]()};
+ show(['skin-promotion']);show(['skin-promotion','skin-promo-contact']);
+ if(page==='customize.html'){
+  assert.deepEqual(sent,[],'both actual promotion modals coexist with quota cards');
+  show(['skin-promotion','skin-promo-contact','unsaved-confirm']);assert.deepEqual(sent,[['pet:quota-modal',true]],'unrelated real modal still hides cards');
+  show(['skin-promo-contact']);assert.deepEqual(sent,[['pet:quota-modal',true],['pet:quota-modal',false]],'last blocking modal restores while promotional dialog remains');
+  show(['skin-promo-contact-other']);assert.equal(sent.at(-1)[1],true,'similar dialog IDs are not exempt');
+ }else assert.deepEqual(sent,[['pet:quota-modal',true]],'same IDs on other pages remain blocking');
+ show([]);assert.equal(sent.at(-1)[1],false);events.close();assert.equal(sent.at(-1)[1],false);
 });

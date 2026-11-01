@@ -38,8 +38,13 @@ if (process.isMainFrame && location.protocol === 'file:') {
   // DOM modal ownership is reported from this shared isolated preload only;
   // ordinary desktop notes and timer mini/message windows remain companions.
   let modal = false;
+  // Only the customization showcase/contact layers coexist with quota cards;
+  // confirmations and all other pages keep their existing modal ownership.
+  const promotionPage = location.pathname?.endsWith('/customize.html') === true;
+  const promotionDialogs = new Set(['skin-promotion', 'skin-promo-contact']);
   const reportModal = () => {
-    const next = Boolean(document.querySelector?.('dialog:modal'));
+    const next = Array.from(document.querySelectorAll?.('dialog:modal') || []).some(dialog =>
+      !promotionPage || !promotionDialogs.has(dialog.id));
     if (next !== modal) { modal = next; ipcRenderer.sendSync('pet:quota-modal', next); }
   };
   const modalObserver = new MutationObserver(reportModal);
