@@ -117,3 +117,8 @@ dialog.skin-promo-contact{width:min(440px,calc(100vw - 44px));padding:22px 25px}
 #skin-promotion .skin-promo-controls select:focus:not(:focus-visible){outline:none;box-shadow:none}
 
 #skin-promotion #skin-promo-action[data-pointer-focus=true]:focus-visible{outline:none;box-shadow:none}
+
+/* Focus feedback stays inside these controls, without an extra selection ring. */
+#skin-promo-banner:focus-visible{outline:none}
+#skin-promo-banner:focus-visible .skin-promo-cta{filter:brightness(1.08)}
+.skin-promo-dialog .skin-promo-close:focus-visible{outline:none;background:#ffffff16}

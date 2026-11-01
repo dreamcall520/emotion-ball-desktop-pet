@@ -2,7 +2,7 @@
   'use strict';
   const $=id=>document.getElementById(id),detail=$('skin-promotion'),contact=$('skin-promo-contact'),canvas=$('skin-promo-canvas'),stage=$('skin-promo-stage'),api=window.petCustomizer,cases=window.SkinPromotionClips;
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');let paused=reduced.matches,selected=cases[0],action='idle',returnFocus=$('skin-promo-banner'),pendingGhost=null;
-  const labels={idle:'待机',wave:'招手',walk:'行走',sleep:'睡眠',kfc:'肯德基梦境',dumplings:'吃饺子',firecrackers:'放烟花'};
+  const labels={idle:'待机',wave:'招手',walk:'行走',sleep:'睡眠',kfc:'肯德基梦境',dumplings:'吃饺子',firecrackers:'放烟花',groom:'舔爪',bone:'玩骨头',happy:'开心动作'};
   const player=window.SkinPromotionPlayer.create({canvas,loadImage:url=>new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=()=>reject(Error('案例素材加载失败'));image.src=url;}),onReady:()=>{if(pendingGhost){const ghost=pendingGhost;pendingGhost=null;ghost.animate([{opacity:1},{opacity:0}],{duration:300,easing:'ease-out'}).finished.then(()=>ghost.remove(),()=>ghost.remove());canvas.animate([{opacity:0},{opacity:1}],{duration:300,easing:'ease-out'});}},onError:()=>{ghosts();$('skin-promo-error').textContent='案例暂时无法显示，仍可添加微信咨询。';$('skin-promo-error').hidden=false;}});
   function ghosts(){pendingGhost=null;stage.querySelectorAll('.skin-promo-ghost').forEach(node=>{node.getAnimations().forEach(a=>a.cancel());node.remove();});canvas.getAnimations().forEach(a=>a.cancel());}
   function render(){

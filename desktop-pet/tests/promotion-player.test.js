@@ -6,6 +6,10 @@ test('promotion clips reference packaged real sprite sheets with matching frame 
  for(const pet of cases)for(const [id,clip]of Object.entries(pet.clips)){assert(fs.existsSync(path.resolve(__dirname,'..',clip.image)),pet.id+'/'+id);assert(clip.start+clip.durations.length<=clip.columns*clip.rows);assert(clip.durations.every(ms=>Number.isInteger(ms)&&ms>=16));assert.equal(frameAt(clip,0),0);assert.equal(frameAt(clip,clip.durations.reduce((a,b)=>a+b,0)),0);}
  assert.equal(cases[0].clips.kfc.start,24);assert.equal(resolveClip(cases[0],'sleep',2100).action,'kfc');assert.equal(resolveClip(cases[0],'sleep',5100).action,'sleep');assert(cases[1].clips.dumplings&&cases[1].clips.firecrackers);assert.equal(cases[2].clips.kfc,undefined);
 });
+test('小白宣传新增动作沿用正式皮肤帧图和逐帧时长',()=>{
+ const manifest=JSON.parse(fs.readFileSync(path.join(__dirname,'../assets/pets/xiaobai/pet.json'),'utf8')),pet=cases.find(p=>p.id==='xiaobai');
+ for(const id of ['groom','bone','happy']){const source=manifest.frameMap[id],sheet=manifest.sheets[source.sheet],clip=pet.clips[id];assert.ok(clip,id+' is available in promotion');assert.equal(clip.image,'assets/pets/xiaobai/'+sheet.path);assert.equal(clip.rows,sheet.rows);assert.equal(clip.columns,8);assert.equal(clip.start,source.start);assert.equal(clip.durations.length,source.count);assert.deepEqual(clip.durations,source.durations);assert.equal(resolveClip(pet,id,0).action,id);}
+});
 test('rapid case changes ignore late image loads and pause/stop cancel every old animation callback',async()=>{
  let now=0;const callbacks=new Map(),pending=new Map(),draws=[],ready=[];let serial=0;
  const ctx={clearRect(){},save(){},translate(){},scale(){},restore(){},drawImage(img){draws.push(img.key)}};const canvas={width:192,height:208,dataset:{},getContext:()=>ctx};

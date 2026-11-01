@@ -982,7 +982,17 @@
       clickVisual?.set(action, 0, firstFrame, facing || 'right');
     }
     petElement.dataset.lastAction = action;
-    desktop.playMotion({ ...activeMotion });
+    if (isXiaobai() && codexPet.origin === 'builtin' && ball.whenMotionReady) {
+      const receiver = ball, pendingMotion = activeMotion;
+      const startReadyMotion = ready => {
+        if (ball !== receiver || activeMotion !== pendingMotion) return;
+        if (!ready || presentationSuppressed || lastSample?.locked || companion.manualSleep) {
+          stopMotion(); restoreState(); return;
+        }
+        desktop.playMotion({ ...pendingMotion });
+      };
+      receiver.whenMotionReady().then(startReadyMotion, () => startReadyMotion(false));
+    } else desktop.playMotion({ ...activeMotion });
     if (speak) desktop.say({ event: 'play', motion: action });
   }
 
