@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mac App Store 隐私说明 · 球球桌宠</title>
+  <meta name="description" content="球球桌宠 Mac App Store 0.4.12 首发隐私说明：本机记录、Codex 账号与目录授权、聊天数据、素材导入、天气位置及反馈与异常报告。">
+  <link rel="canonical" href="https://qiuqiu.pet/privacy/mac-app-store/">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="zh_CN">
+  <meta property="og:site_name" content="球球官网">
+  <meta property="og:title" content="Mac App Store 隐私说明 · 球球桌宠">
+  <meta property="og:description" content="了解球球桌宠 Mac App Store 0.4.12 首发的数据处理与授权范围。">
+  <meta property="og:url" content="https://qiuqiu.pet/privacy/mac-app-store/">
+  <meta property="og:image" content="https://qiuqiu.pet/assets/hero-social.jpg">
+  <meta property="og:image:alt" content="银白玻璃间的球球，陪你自在一点">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Mac App Store 隐私说明 · 球球桌宠">
+  <meta name="twitter:description" content="了解球球桌宠 Mac App Store 0.4.12 首发的数据处理与授权范围。">
+  <meta name="twitter:image" content="https://qiuqiu.pet/assets/hero-social.jpg">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="../../assets/brand-72.webp" type="image/webp" sizes="72x72">
+  <link rel="stylesheet" href="../../styles.css?v=20261006-clean-anchor">
+  <link rel="stylesheet" href="../../dark-theme.css?v=20261006-native">
+  <link rel="stylesheet" href="../../product-layout.css?v=20261007-final">
+  <link rel="stylesheet" href="../../privacy.css?v=20261007-v2.4">
+  <script src="../../site-protection.js?v=20261008-content"></script>
+  <script>
+    try {
+      const theme = localStorage.getItem('emotion-ball-site-theme');
+      if (theme === 'auto') document.documentElement.removeAttribute('data-theme');
+      else if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+    } catch (_error) {}
+  </script>
+</head>
+<body class="product-redesign privacy-document">
+  <a class="skip-link" href="#main">跳到主要内容</a>
+  <header class="privacy-document-header">
+    <a class="brand" href="../../" aria-label="球球桌宠首页"><img src="../../assets/brand-72.webp" width="32" height="32" alt="">球球桌宠</a>
+    <a href="https://qiuqiu.pet/privacy/">官网隐私说明</a>
+  </header>
+  <main class="privacy-document-main" id="main">
+    <h1>Mac App Store 隐私说明</h1>
+    <p class="privacy-document-date">适用版本：0.4.12 首发构建 · 更新日期：<time datetime="2026-11-01">2026 年 11 月 1 日</time></p>
+    <p class="privacy-document-intro">本说明仅适用于球球桌宠的 Mac App Store 0.4.12 首发构建，说明该构建实际提供功能的数据处理。本文不代表该构建已经在商店上架。</p>
+    <section aria-labelledby="local-data-title">
+      <h2 id="local-data-title">一、本地使用与记录</h2>
+      <p>桌宠、外观定制、便签待办和番茄钟可独立使用，无需先连接 Codex。鼠标位置、系统空闲时长和锁屏状态用于桌宠动作与休息判断，不作为聊天内容发送。</p>
+      <p>外观偏好、已导入素材、便签待办、计时状态和球球聊天记录保存在本机。使用本地工具不会自动将便签正文或素材发送给模型；待办提醒需要球球运行。</p>
+    </section>
+    <section aria-labelledby="codex-access-title">
+      <h2 id="codex-access-title">二、连接本机 Codex</h2>
+      <p>球球通过你已安装的 Codex.app 或 ChatGPT.app 内的官方组件提供 Codex 额度与聊天。首次连接时，通过系统窗口分别选择并授权原应用和本机 <code>.codex</code> 账号目录；球球保存对应系统目录访问书签，之后在授权有效时复用。</p>
+      <p>球球复用原应用已登录的账号，不复制登录凭据，不另建球球专用的 Codex 登录，也不主动替你登录、退出或切换原账号。额度和聊天按原账号的实际服务结果显示。</p>
+      <p>该账号客户端授权并非纯只读：原应用官方组件可能在原 <code>.codex</code> 目录更新运行日志、会话或缓存。球球不会因此修改原应用，也不将原账号凭据复制到自己的登录配置。</p>
+    </section>
+    <section aria-labelledby="chat-data-title">
+      <h2 id="chat-data-title">三、聊天数据与发送同意</h2>
+      <p>连接本身不会自动发送模型消息。首次发送前，球球会说明接收服务、数据范围与计费，并请求你的明确同意；拒绝时不发送消息。账号、接收服务或同意范围变化时，需要按实际情况重新确认。</p>
+      <p>你主动发送的消息及维持当前对话所需的上下文会交由 OpenAI 服务处理；主动问及天气时，也可能附带所选城市和天气摘要。聊天可能消耗原 Codex 账号的服务额度，具体套餐与可用范围由服务方决定。</p>
+      <p>球球聊天记录保存在本机；原应用官方组件也可能在原目录保存会话或缓存。第三方对输入、回复及账号请求的处理和保留，以 <a href="https://openai.com/policies/privacy-policy/" target="_blank" rel="noopener">OpenAI 隐私政策</a>及你的账号设置为准。本机保存不代表第三方服务器不保留数据。</p>
+    </section>
+    <section aria-labelledby="task-data-title">
+      <h2 id="task-data-title">四、可选任务日志同步</h2>
+      <p>原 Codex 任务日志同步是独立的只读用途，需要你另行确认目录访问。球球在本机解析部分任务日志，只提取必要的任务标题、状态和更新时间；这些任务观察记录保存在本机，不作为监控数据上传。</p>
+      <p>该能力不代表覆盖原工具全部任务或全部后台工作的最终状态。取消或关闭任务同步不会阻塞已连接的额度与聊天，也不会替你中断原工具任务。</p>
+    </section>
+    <section aria-labelledby="pet-library-title">
+      <h2 id="pet-library-title">五、定制与素材导入</h2>
+      <p>本地导入由你通过系统窗口选择素材文件夹。球球读取符合格式的 <code>pet.json</code> 及其声明的 PNG／WebP 图集，验证后复制到球球本机资料中用于预览、切换和保存。</p>
+      <p>连接原 Codex 的 <code>pets</code> 素材库时，会单独请求素材用途的目录访问并保存相应系统书签。该用途不与账号客户端或任务日志许可混为一项；只读取所选素材库，不据此读取聊天记录或登录凭据，也不修改原素材目录。素材不会因导入而自动上传。</p>
+    </section>
+    <section aria-labelledby="weather-data-title">
+      <h2 id="weather-data-title">六、天气与位置</h2>
+      <p>天气功能向 Open-Meteo 发送所选位置的经纬度，以查询天气预报和空气质量；搜索城市时，会发送你输入的城市关键词。使用当前位置需要系统定位授权，并调用 macOS 的定位与地名解析服务；也可以拒绝定位并手动选择城市。</p>
+      <p>所选城市与天气缓存保存在本机，关闭天气后停止后台刷新。天气独立于 Codex 连接；天气摘要只有在你主动相关提问时才可能随聊天交给模型。</p>
+    </section>
+    <section aria-labelledby="feedback-data-title">
+      <h2 id="feedback-data-title">七、反馈与异常报告</h2>
+      <p>你主动提交反馈时，填写的内容、可选联系方式、主动选择的图片和勾选的使用环境信息会发送并保存在球球反馈服务，用于处理问题和改进产品。未选择的文件、聊天和便签内容不会自动随反馈上传。</p>
+      <p>有限异常报告在新装时默认开启，可在设置中关闭。启用时，球球发送经过筛选的功能模块、错误名称与错误码、应用版本、系统及架构、发生时间和次数，用于排查稳定性问题；不自动发送截图、原始错误正文或堆栈、文件路径、账号凭据、聊天和便签正文。</p>
+      <p>异常诊断记录会保存在球球反馈服务，本机也保留待发送队列和提交记录；关闭后停止自动发送。反馈与诊断的网络请求仍可能使服务方接触 IP 地址等网络信息。记录处理或删除可按下节联系作者申请。</p>
+    </section>
+    <section aria-labelledby="data-management-title">
+      <h2 id="data-management-title">八、数据管理与联系</h2>
+      <p>你可以在相应功能中管理本机便签待办、聊天记录、导入素材与外观设置，关闭任务同步或异常报告，通过连接管理撤销相应的 Codex 账号客户端与任务目录授权，并通过素材库的连接／更换入口管理素材目录访问。撤销球球权限不等于退出原工具账号、删除原目录中的会话或清除第三方服务器上的记录；这些内容需通过原工具或服务的正式入口管理。</p>
+      <p>如需处理或删除已经提交的反馈、图片或诊断记录，或对本说明有疑问，可通过 <a href="mailto:920022027@qq.com">920022027@qq.com</a> 联系作者，并提供可定位相关记录的信息。</p>
+      <p>本说明不描述官网网页的数据处理；访问官网相关内容时，可另行查看 <a href="https://qiuqiu.pet/privacy/">官网隐私说明</a>。</p>
+    </section>
+  </main>
+  <footer class="site-footer">
+    <span class="credit">球球桌宠 · 由春野设计与开发</span>
+    <div class="footer-links"><a href="https://qiuqiu.pet/privacy/">官网隐私说明</a><a href="../../">返回首页</a></div>
+  </footer>
+</body>
+</html>
