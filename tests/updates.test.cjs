@@ -16,8 +16,8 @@ const oldArticles = articles.slice(3), oldBlocks = articleBlocks.slice(3);
 test('0.4.10 Apple release preserves every 0.4.09 platform and the retained history',()=>{
  assert.match(articleBlocks[0], /id="v0\.4\.10-apple"/);
  assert.match(articles[0], /datetime="2026-11-01"/);
- for(const text of ['【新增】小白伙伴','【新增】意见反馈','【新增】专属皮肤定制'])assert.ok(articles[0].includes(text));
- assert.equal((articles[0].match(/<h4>/g)||[]).length,3);
+ for(const text of ['【新增】官方皮肤小白与小宇','【新增】暮光紫主题色','【新增】意见反馈','【新增】官方定制活动上线'])assert.ok(articles[0].includes(text));
+ assert.equal((articles[0].match(/<h4>/g)||[]).length,4);
  assert.equal((articles[0].match(/<li>/g)||[]).length,3);
  assert.doesNotMatch(articles[0], /排在|咩咩之后|小宇之前|等待就绪|回调|首帧|焦点|验收/);
  assert.match(articles[0], /v0\.4\.10\/Qiuqiu-0\.4\.10-macOS-arm64\.dmg/);
