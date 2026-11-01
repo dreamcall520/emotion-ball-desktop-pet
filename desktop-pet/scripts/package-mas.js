@@ -207,6 +207,7 @@ async function buildMas({ root = DEFAULT_ROOT, env = process.env, arch } = {}, d
   if (!Array.isArray(results) || results.length !== 1) throw failure('MAS_PACKAGE_OUTPUT_INVALID');
   const appPath = path.join(results[0], `${APP_NAME}.app`);
   if (!io.existsSync(appPath)) throw failure('MAS_APP_OUTPUT_MISSING');
+  const languageResources = release.trimElectronLocales(appPath, config, io);
   const plist = dependencies.buildPlist || require('plist').build, parseSealed = dependencies.parsePlist || require('plist').parse;
   const rights = entitlementsFor(config), signingDirectory = path.join(options.out,'signing'); io.mkdirSync(signingDirectory,{recursive:true,mode:0o700});
   const mainFile = path.join(signingDirectory,'main.entitlements.plist'), childFile = path.join(signingDirectory,'child.entitlements.plist');
@@ -231,7 +232,7 @@ async function buildMas({ root = DEFAULT_ROOT, env = process.env, arch } = {}, d
   if (!io.existsSync(pkgPath)) throw failure('MAS_PKG_OUTPUT_MISSING');
   run('pkgutil', ['--check-signature', pkgPath]);
   return { platform: 'mas', releaseProfile: config.releaseProfile || null, arch: config.arch, marketingVersion: config.marketingVersion, buildVersion: config.buildVersion,
-    appPath, pkgPath, signedDistributionPackage: true, profileValidated: true, runtimeCache, bundledManifestRefresh, signedEntitlementsValidated:true, runtimeAcceptancePassed:false,
+    appPath, pkgPath, signedDistributionPackage: true, profileValidated: true, runtimeCache, bundledManifestRefresh, languageResources, signedEntitlementsValidated:true, runtimeAcceptancePassed:false,
     submissionReady: false, note: 'Signed build only; runtime acceptance, App Store processing/review and release are separate.' };
 }
 function argumentsFor(argv) {

@@ -173,6 +173,7 @@ async function buildMasDevelopment({root=ROOT,env=process.env,arch}={},deps={}){
  const packageApp=deps.packager||(await import('@electron/packager')).packager,outputs=await packageApp(options);
  if(!Array.isArray(outputs)||outputs.length!==1)throw fail('MAS_DEV_OUTPUT_INVALID');
  const appPath=path.join(outputs[0],NAME+'.app');if(!io.existsSync(appPath))throw fail('MAS_DEV_APP_MISSING');
+ const languageResources=release.trimElectronLocales(appPath,config,io);
  const plist=deps.buildPlist||require('plist').build,rights=entitlementsFor(config),signDir=path.join(options.out,'signing');io.mkdirSync(signDir,{recursive:true,mode:0o700});
  const mainFile=path.join(signDir,'main.entitlements.plist'),childFile=path.join(signDir,'child.entitlements.plist');io.writeFileSync(mainFile,plist(rights.main));io.writeFileSync(childFile,plist(rights.child));
  io.copyFileSync(config.profile,path.join(appPath,'Contents/embedded.provisionprofile'));
@@ -195,7 +196,7 @@ async function buildMasDevelopment({root=ROOT,env=process.env,arch}={},deps={}){
  if(release.isFirstRelease(config)&&(!helperProbe?.helper?.codex?.initialized||!helperProbe?.helper?.codex?.unauthenticatedAccountConfirmed||!helperProbe?.helper?.codex?.closed||!helperProbe?.helper?.isolatedProfileRemoved))throw fail('MAS_DEV_HELPER_PROBE_FAILED');
  if(helperProbe?.mas!==true||helperProbe.ownContainer!==true||helperProbe.helper?.passed!==true||(!release.isFirstRelease(config)&&helperProbe.helper?.metadataTransport?.passed!==true)||helperProbe.helper?.modelRequestsSent!==false||helperProbe.helper?.originalCredentialsRead!==false||(!release.isFirstRelease(config)&&helperProbe.helper?.workbuddy?.vendorAccountVerified!==false))throw fail('MAS_DEV_HELPER_PROBE_FAILED');
  return{platform:'mas',releaseProfile:config.releaseProfile||null,purpose:'development-sandbox-validation',arch:config.arch,appPath,signedDevelopmentApp:true,identityValidated:true,profileValidated:true,currentDeviceRegistered:true,
-  bundledManifestRefresh:resources,masRuntimeAndContainerProbePassed:true,sandboxCapabilities:probe.capabilities,managedHelperInitializationProbe:helperProbe.helper,chatAndDirectoryAcceptancePassed:false,submissionReady:false,
+  bundledManifestRefresh:resources,languageResources,masRuntimeAndContainerProbePassed:true,sandboxCapabilities:probe.capabilities,managedHelperInitializationProbe:helperProbe.helper,chatAndDirectoryAcceptancePassed:false,submissionReady:false,
   note:'Local development build only. Genuine MAS runtime/container initialization is separate from login/chat/task/directory acceptance and App Store review.'};
 }
 if(require.main===module){(async()=>{const {mode,arch}=argumentsFor(process.argv.slice(2));const value=mode==='plan'?planFor(JSON.parse(fs.readFileSync(path.join(ROOT,'package.json'),'utf8')),process.env,arch):await buildMasDevelopment({arch});process.stdout.write(JSON.stringify(value,null,2)+'\n');})().catch(e=>{process.stderr.write((e.code?.startsWith('MAS_DEV_')?e.code:'MAS_DEV_BUILD_FAILED')+'\n');process.exitCode=2;});}
