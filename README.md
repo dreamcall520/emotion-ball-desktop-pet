@@ -102,7 +102,7 @@ GA4 媒体资源“球球官网”，网站数据流“球球官网 Web”，衡
 
 包内 ASAR SHA-256：`79c849fb8b4427e1fae4ff2a4b0b57968478f3244775de46e2223c2735ce58cd`。
 
-国内入口：[Qiuqiu-0.4.10-macOS-arm64.dmg](https://share.weiyun.com/fdzg4UOY)，单文件分享，无提取码。已通过当前 Chrome 普通下载完整大小与 SHA 核验，无需提取码；不得以旧版分享代替。证据见项目 `验收记录/v0.4.10发布盘点-20261101/final-after-exit-fix/weiyun-public-download.json`。六处国内按钮已同步新入口；Apple 国内 GA4 下载统计精确对应 0.4.10，Intel 0.4.09 分支不变。现有网页演示按各自来源清单保留，不冒称全部升级到0.4.10。
+国内入口：[Qiuqiu-0.4.10-macOS-arm64.dmg](https://share.weiyun.com/fdzg4UOY)，单文件分享，无提取码。已通过当前 Chrome 普通下载完整大小与 SHA 核验，无需提取码；不得以旧版分享代替。证据见项目 `验收记录/v0.4.10-release-20261101/final-after-exit-fix/weiyun-public-download.json`。六处国内按钮已同步新入口；Apple 国内 GA4 下载统计精确对应 0.4.10，Intel 0.4.09 分支不变。现有网页演示按各自来源清单保留，不冒称全部升级到0.4.10。
 
 ### 0.4.09 正式发布（2026-10-29）
 
