@@ -1,0 +1,37 @@
+{
+  "version": "0.4.10",
+  "sourceCommit": "2821611",
+  "stage": "local-candidate-not-submitted",
+  "fullTests": {
+    "pass": 3424,
+    "fail": 0,
+    "concurrency": 4,
+    "log": "/tmp/qiuqiu-r28-full-final.tap"
+  },
+  "lastTargeted": {
+    "pass": 42,
+    "fail": 0,
+    "log": "/tmp/qiuqiu-r28-last-targeted.tap"
+  },
+  "genuineMasDevelopmentBuild": true,
+  "runtimeContainerHelperProbePassed": true,
+  "codexChatLoginQuotaReadVerified": true,
+  "originalQuotaFallback": false,
+  "workbuddyDeviceCache": {
+    "records": 53,
+    "partitions": 1,
+    "accountAttributionVerified": false
+  },
+  "workbuddyWebsiteUsageVerified": false,
+  "waitingFor": "account-holder website login",
+  "zcodeOfficialOrdinaryChatVerified": false,
+  "threeChatLoginsRestored": true,
+  "newModelRequests": 0,
+  "sourcePostBuildChanges": [
+    "Codex secondary source wording",
+    "website usage independent of unavailable quota summary"
+  ],
+  "distributionPackageProduced": false,
+  "uploaded": false,
+  "submitted": false
+}
