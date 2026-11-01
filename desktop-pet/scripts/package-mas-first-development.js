@@ -7,6 +7,7 @@ const {execFileSync}=require('node:child_process');
 const {createHash}=require('node:crypto');
 const {identities,validateMasRuntimeCache}=require('./package-mas');
 const dev=require('./package-mas-development');
+const {formatBuildFailure}=require('./package-mas-first-distribution');
 const ROOT=path.resolve(__dirname,'../..');
 const fail=code=>Object.assign(new Error(code),{code});
 function discoverDevelopmentEnvironment({home=os.homedir(),arch=process.arch,buildVersion=String(Math.floor(Date.now()/1000)),run=(cmd,args)=>execFileSync(cmd,args,{encoding:'utf8',timeout:30000,maxBuffer:8*1024*1024}),parse=require('plist').parse,now=Date.now()}={}){
@@ -39,5 +40,5 @@ async function main(argv){
  const result=argv.includes('--build')?await dev.buildMasDevelopment({root:ROOT,env}):{...dev.planFor(pkg,env),publicDevelopmentConfigurationDiscovered:true,pinnedRuntimeCacheValidated:true,note:'Read-only plan from existing local public certificate/profile metadata and pinned runtime cache. No signing, account login, model requests, upload or submission.'};
  process.stdout.write(JSON.stringify(result,null,2)+'\n');
 }
-if(require.main===module)main(process.argv.slice(2)).catch(e=>{process.stderr.write((e.code?.startsWith('MAS_')?e.code:'MAS_FIRST_DEVELOPMENT_FAILED')+'\n');process.exitCode=2;});
+if(require.main===module)main(process.argv.slice(2)).catch(e=>{process.stderr.write(formatBuildFailure(e,'MAS_FIRST_DEVELOPMENT_FAILED'));process.exitCode=2;});
 module.exports={discoverDevelopmentEnvironment};

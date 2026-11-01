@@ -58,5 +58,23 @@ async function runFirstDistribution(argv,{root=ROOT,io=fs,discover=discoverDistr
  return{...mas.planFor(pkg,env),publicDistributionConfigurationDiscovered:true,publicProfileAndCertificatesValidated:true,pinnedRuntimeCacheValidated:true,
   note:'Read-only discovery of existing public distribution certificates and exact Qiuqiu profile plus pinned MAS cache. No signing, account login, upload, submission, or ownership attestation.'};
 }
-if(require.main===module)runFirstDistribution(process.argv.slice(2)).then(value=>process.stdout.write(JSON.stringify(value,null,2)+'\n')).catch(error=>{process.stderr.write((error.code?.startsWith('MAS_')?error.code:'MAS_FIRST_DISTRIBUTION_FAILED')+'\n');process.exitCode=2;});
-module.exports={BUNDLE_ID,discoverDistributionEnvironment,runFirstDistribution};
+function formatBuildFailure(error,fallback='MAS_FIRST_DISTRIBUTION_FAILED'){
+ const value=error&&typeof error==='object'?error:{};
+ const originalCode=typeof value.code==='string'?value.code.slice(0,100):typeof value.code==='number'&&Number.isFinite(value.code)?value.code:undefined;
+ const code=typeof originalCode==='string'&&/^MAS_[A-Z0-9_]{1,96}$/.test(originalCode)?originalCode:fallback;
+ const text=input=>Buffer.isBuffer(input)?input.subarray(Math.max(0,input.length-16384)).toString('utf8'):typeof input==='string'?input:'';
+ const concise=input=>text(input)
+  .split(/\r?\n/).filter(line=>!/^\s*(?:Command failed(?::| with)|(?:\/[^\s]+\/)?(?:codesign|productbuild|security|xcrun)\s)/.test(line)).join('\n')
+  .replace(/\b(Bearer)\s+[A-Za-z0-9._~+\/-]+/gi,'$1 [REDACTED]')
+  .replace(/\b(password|passwd|token|secret|api[_-]?key)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi,'$1=[REDACTED]')
+  .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g,'').trim().slice(-2000);
+ const reason=concise(value.stderr)||concise(value.message)||concise(typeof error==='string'?error:'');
+ const details={code,...(originalCode!==undefined?{originalCode}:{}),
+  ...(typeof value.status==='number'&&Number.isFinite(value.status)?{status:value.status}:{}),
+  ...(typeof value.signal==='string'&&/^[A-Za-z0-9_-]{1,32}$/.test(value.signal)?{signal:value.signal}:{}),
+  ...(reason?{reason}:{} )};
+ return JSON.stringify(details)+'\n';
+}
+
+if(require.main===module)runFirstDistribution(process.argv.slice(2)).then(value=>process.stdout.write(JSON.stringify(value,null,2)+'\n')).catch(error=>{process.stderr.write(formatBuildFailure(error));process.exitCode=2;});
+module.exports={BUNDLE_ID,discoverDistributionEnvironment,runFirstDistribution,formatBuildFailure};

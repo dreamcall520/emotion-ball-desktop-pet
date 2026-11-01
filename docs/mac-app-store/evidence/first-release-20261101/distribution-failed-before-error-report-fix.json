@@ -1,0 +1,11 @@
+{
+  "session": 2903,
+  "terminalExitCode": 1,
+  "codesignProcessNoLongerPresent": true,
+  "log": "/tmp/qiuqiu-first-privacy-distribution.log",
+  "observedFailure": "CLI catch attempted error.code?.startsWith on non-string code and hid original build/signing error",
+  "underlyingSigningReasonConfirmed": false,
+  "retryBeforeErrorReportingFix": false,
+  "packageProduced": false,
+  "uploaded": false
+}
