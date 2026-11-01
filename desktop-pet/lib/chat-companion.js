@@ -411,7 +411,20 @@ function createChatCompanion({ store, createRpc, workspaceDir, onChange = () => 
     const previous = rpc; rpc = null; connecting = null;
     return retireClient(previous);
   }
-  return { getState: snapshot, connect, send, stop, newChat, selectChat, setModel, refreshModels, close, ownsThread: id => ownedThreads.has(id) };
+  async function getConsentIdentity(text='') {
+    if(closed||!verified||!rpc||!accountKey||active)throw fault('UNAUTHENTICATED');
+    const client=rpc, before=accountKey, revision=epoch, conversationKey=record.chatId;
+    const observed=await client.readAccount();
+    if(closed||client!==rpc||revision!==epoch||!observed?.authenticated||observed.accountKey!==before)throw fault('ACCOUNT_CHANGED');
+    let route=null;
+    if(typeof client.getConsentIdentity==='function'){
+      try{route=await client.getConsentIdentity(resolveModel(models,modelSelection,text));}
+      catch(e){if(e?.code!=='UNSUPPORTED')throw e;}
+    }
+    if(closed||client!==rpc||revision!==epoch||record.chatId!==conversationKey)throw fault('ACCOUNT_CHANGED');
+    return{accountKey:route?.accountKey||before,recipientOrigin:route?.recipientOrigin||null,channel:route?.channel||null,conversationKey,revision};
+  }
+  return { getState: snapshot, getConsentIdentity, connect, send, stop, newChat, selectChat, setModel, refreshModels, close, ownsThread: id => ownedThreads.has(id) };
 }
 
 module.exports = { createChatCompanion, partialReply, finalReply, ACTIONS, ERRORS };

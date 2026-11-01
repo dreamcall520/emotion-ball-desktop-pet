@@ -45,8 +45,8 @@ async function startBundledWorkBuddy({resourcesPath,profileHome,workspaceDir,env
  for(const dir of [profileHome,path.join(profileHome,'profile'),workspaceDir])await privateDirectory(dir);
  const port=await reservePort();if(!Number.isInteger(port)||port<1||port>65535)throw fail('INVALID_INPUT');
  const gatewayPassword=randomBytes(32).toString('base64url'),endpoint=`http://127.0.0.1:${port}`;
- const childEnv=Object.fromEntries(Object.entries(env).filter(([key])=>!/^(CODEBUDDY_|SERVER__|ELECTRON_|ANTHROPIC_|OPENAI_|BIGMODEL_|ZAI_|GEMINI_)/.test(key)&&!['HOME','NODE_OPTIONS','NODE_PATH'].includes(key)));
- Object.assign(childEnv,{HOME:profileHome,CODEBUDDY_CONFIG_DIR:path.join(profileHome,'profile'),DISABLE_AUTOUPDATER:'1',CODEBUDDY_GATEWAY_AUTH:'password',CODEBUDDY_GATEWAY_PASSWORD:gatewayPassword,CODEBUDDY_DISABLE_CRON:'1',CODEBUDDY_CODE_DISABLE_BACKGROUND_TASKS:'1',CODEBUDDY_AGENT_HOME_ORCHESTRATION_ENABLED:'0',BROWSER:path.join(path.dirname(bundle.entry),'qiuqiu-browser-disabled')});
+ const childEnv=Object.fromEntries(Object.entries(env).filter(([key])=>!/^(CODEBUDDY_|SERVER__|ELECTRON_|ANTHROPIC_|OPENAI_|BIGMODEL_|ZAI_|GEMINI_|OTEL_|GALILEO_|CLAUDE_CODE_ENABLE_TELEMETRY$)/.test(key)&&!['HOME','NODE_OPTIONS','NODE_PATH'].includes(key)));
+ Object.assign(childEnv,{HOME:profileHome,CODEBUDDY_CONFIG_DIR:path.join(profileHome,'profile'),DISABLE_AUTOUPDATER:'1',DISABLE_TELEMETRY:'1',DISABLE_GALILEO:'1',CODEBUDDY_GATEWAY_AUTH:'password',CODEBUDDY_GATEWAY_PASSWORD:gatewayPassword,CODEBUDDY_DISABLE_CRON:'1',CODEBUDDY_CODE_DISABLE_BACKGROUND_TASKS:'1',CODEBUDDY_AGENT_HOME_ORCHESTRATION_ENABLED:'0',BROWSER:path.join(path.dirname(bundle.entry),'qiuqiu-browser-disabled')});
  // Electron's signed utility helper provides Node; never use external node/npm,
  // ELECTRON_RUN_AS_NODE, Terminal, shell, or installed WorkBuddy executables.
  const fork=forkProcess||((entry,args,options)=>require('electron').utilityProcess.fork(entry,args,options));

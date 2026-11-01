@@ -88,7 +88,7 @@ function createWorkBuddyOfficialConnection({ createClient=createWorkBuddyRelayCl
   async function disconnect(){if(state.busy)throw failure('BUSY');generation++;await client?.disconnect();update({connected:false,pending:false,assistantOnline:null,tasks:[],messages:[],anchorMessageId:null,status:'disconnected'});}
   function confirmUnknownReviewed(){if(state.busy)throw failure('BUSY');record({pendingSend:false,reviewedInOriginalClient:true,createdAt:now()});update({sendOutcome:null,error:null});}
   function close(){closed=true;generation++;client?.close();}
-  return{configure,beginAuthorization,refresh,refreshMessages,send,disconnect,confirmUnknownReviewed,getState,close};
+  return{getConsentIdentity:()=>({accountKey:null,conversationKey:state.anchorMessageId,revision:generation}),configure,beginAuthorization,refresh,refreshMessages,send,disconnect,confirmUnknownReviewed,getState,close};
 }
 function createWorkBuddyIntentStore(file,{maxBytes=16384}={}){
   if(typeof file!=='string'||!path.isAbsolute(file))throw failure('INVALID_REQUEST');

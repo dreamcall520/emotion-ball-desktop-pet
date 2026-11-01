@@ -51,3 +51,10 @@ test('拒绝profile和workspace软链，不向链接目标写入',async t=>{
  await assert.rejects(createBundledCodexChatRpc({...f,profileHome,workspaceDir:path.join(f.temporary,'workspace')}),{code:'UNSAFE_CONFIG'});
  assert.deepEqual(await fs.promises.readdir(outside),[]);
 });
+
+
+test('随包Codex固定禁非必要遥测，仅净化child环境且保留代理，调用方不能覆盖关闭标记',async t=>{
+ const f=await fixture(t),original=Object.freeze({HOME:'/original',OTEL_EXPORTER_OTLP_ENDPOINT:'https://example.invalid/telemetry',OTEL_METRICS_EXPORTER:'otlp',HTTPS_PROXY:'http://127.0.0.1:10808',NO_PROXY:'127.0.0.1',PATH:'/usr/bin'});let captured;
+ await createBundledCodexChatRpc({...f,profileHome:path.join(f.temporary,'isolated'),workspaceDir:path.join(f.temporary,'workspace'),env:original,disableOptionalTelemetry:false,createRpc:options=>{captured=options;return{};}});
+ assert.equal(captured.disableOptionalTelemetry,true);assert.equal(captured.env.OTEL_EXPORTER_OTLP_ENDPOINT,undefined);assert.equal(captured.env.OTEL_METRICS_EXPORTER,undefined);assert.equal(captured.env.HTTPS_PROXY,original.HTTPS_PROXY);assert.equal(captured.env.NO_PROXY,original.NO_PROXY);assert.equal(original.HOME,'/original');assert.equal(original.OTEL_METRICS_EXPORTER,'otlp');assert.deepEqual(await fs.promises.readdir(path.join(captured.env.HOME,'.codex')),[]);
+});

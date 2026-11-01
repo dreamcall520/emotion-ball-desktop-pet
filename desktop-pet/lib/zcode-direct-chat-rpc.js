@@ -38,7 +38,7 @@ function strictProjection(document){
    if(rules.some(r=>r.config?.enabled===false))continue;
    const modelKey='zcode-direct-'+hash([row.providerId,modelId]).slice(0,32);
    catalog.push({id:modelKey,displayName:`${String(row.providerName||row.providerId).slice(0,100)} · ${modelId}`,supportedReasoningEfforts:['none'],defaultReasoningEffort:'none',isDefault:false});
-   routes.set(modelKey,{endpoint,headers,modelId,protocol});
+   routes.set(modelKey,{endpoint,headers,modelId,protocol,consentAccountKey:hash(['zcode-chat-consent',base.origin,headers])});
   }
  }
  if(!catalog.length)throw fail(codingOnly?'CODING_PLAN_SCOPE_UNSUPPORTED':'DIRECT_CONFIG_INCOMPLETE');
@@ -86,6 +86,7 @@ function createZcodeDirectChatRpc({directoryAccess,workspaceDir,accountSource,fe
  return{
   async start(){await current();},
   async readAccount(){const p=await current();return{authenticated:true,accountKey:p.accountKey};},
+  async getConsentIdentity(selection){const p=await current(),route=p.routes.get(selection?.model);if(!route)throw fail('MODEL_UNAVAILABLE');return{accountKey:route.consentAccountKey,recipientOrigin:new URL(route.endpoint).origin,channel:'configured-custom'};},
   async listModels(){return structuredClone((await current()).catalog);},
   async startThread(){await current();if(active)throw fail('BUSY');thread={version:1,id:'zcd-'+randomUUID(),accountKey:projection.accountKey,messages:[],pending:false};save(thread);return{id:thread.id,status:'idle'};},
   async resumeThread(threadId){await current();if(active)throw fail('BUSY');thread=load(threadId);return{id:thread.id,status:thread.pending?'active':'idle',activeTurnId:thread.pending?'unknown':null};},

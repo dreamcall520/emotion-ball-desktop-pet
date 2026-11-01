@@ -86,10 +86,11 @@ function finishNativeClose(target) {
 }
 
 function createCodexChatRpc({ workspaceDir, fs = nodeFs, spawn = nodeSpawn, homedir = os.homedir, env = process.env,
-  webSocket = null, hostHome, binaryPath,
+  webSocket = null, hostHome, binaryPath, disableOptionalTelemetry = false,
   timeoutMs = 15000, maxFrameBytes = MAX_FRAME_BYTES, purpose = 'chat', getWeatherContext = () => '', onNotification = () => {}, onDisconnect = () => {} } = {}) {
   if (typeof workspaceDir !== 'string' || !path.isAbsolute(workspaceDir) || workspaceDir.includes('\0')) throw chatError('INVALID_INPUT');
   if (!['chat', 'notes'].includes(purpose)) throw chatError('INVALID_INPUT');
+  if (typeof disableOptionalTelemetry !== 'boolean' || disableOptionalTelemetry && webSocket !== null) throw chatError('INVALID_INPUT');
   if (binaryPath !== undefined && (typeof binaryPath !== 'string' || !path.isAbsolute(binaryPath) ||
     binaryPath.includes('\0') || webSocket !== null)) throw chatError('INVALID_INPUT');
   if (webSocket !== null && (!webSocket || typeof webSocket !== 'object' || Array.isArray(webSocket) ||
@@ -309,7 +310,10 @@ function createCodexChatRpc({ workspaceDir, fs = nodeFs, spawn = nodeSpawn, home
         !path.isAbsolute(env.CODEX_HOME) || path.resolve(env.CODEX_HOME) !== defaultCodexHome)) throw chatError('UNSAFE_CONFIG');
       const overrides = [...DISABLED_FEATURES.map(name => `features.${name}=false`),
         'web_search="disabled"', 'project_doc_max_bytes=0', 'skills.include_instructions=false',
-        'features.skip_host_skill_discovery=true'];
+        'features.skip_host_skill_discovery=true',
+        ...(disableOptionalTelemetry ? ['analytics.enabled=false', 'feedback.enabled=false',
+          'otel.exporter="none"', 'otel.trace_exporter="none"', 'otel.metrics_exporter="none"',
+          'otel.log_user_prompt=false', 'otel.log_agent_responses=false', 'otel.log_guardian_assessments=false'] : [])];
       if (webSocket !== null) {
         wsConnection = createCodexChatWsConnection({ ...webSocket, maxFrameBytes: frameLimit, timeoutMs: timeout,
           onPacket: packet => { if (!closed) { try { receive(packet); } catch (_) { shutdown('INVALID_FRAME'); } } },
@@ -330,6 +334,9 @@ function createCodexChatRpc({ workspaceDir, fs = nodeFs, spawn = nodeSpawn, home
         const config = raw?.config;
         if (!config || DISABLED_FEATURES.some(name => config.features?.[name] !== false) ||
           config.web_search !== 'disabled' || config.project_doc_max_bytes !== 0) throw chatError('UNSAFE_CONFIG');
+        if (disableOptionalTelemetry && (config.analytics?.enabled !== false || config.feedback?.enabled !== false ||
+          ['exporter','trace_exporter','metrics_exporter'].some(key => config.otel?.[key] !== 'none') ||
+          ['log_user_prompt','log_agent_responses','log_guardian_assessments'].some(key => config.otel?.[key] !== false))) throw chatError('UNSAFE_CONFIG');
         if (config.mcp_servers !== undefined && (!config.mcp_servers || typeof config.mcp_servers !== 'object' || Array.isArray(config.mcp_servers))) throw chatError('UNSAFE_CONFIG');
         const names = Object.keys(config.mcp_servers || {});
         if (names.length > 200 || names.some(name => !name || name.length > 256 || /[\x00-\x1f]/.test(name))) throw chatError('UNSAFE_CONFIG');

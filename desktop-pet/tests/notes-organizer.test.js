@@ -16,7 +16,7 @@ function harness({raw='{"title":"出行计划","body":"10月3日给张三转账1
     child.stdin.on('data',chunk=>{const p=JSON.parse(chunk);packets.push(p);if(!p.id||p.error)return;if(hold===p.method)return;
       let result={};
       if(p.method==='config/read')result={config:{features:Object.fromEntries(DISABLED_FEATURES.map(key=>[key,false])),web_search:'disabled',project_doc_max_bytes:0,mcp_servers:{}}};
-      if(p.method==='account/read')result={account:account?{type:'chatgpt',email:'notes@example.test'}:null};
+      if(p.method==='account/read'){const identity=typeof account==='function'?account():account;result={account:identity?{type:'chatgpt',email:typeof identity==='string'?identity:'notes@example.test'}:null};}
       if(p.method==='model/list')result={data:['gpt-6-sol','gpt-6-luna'].map(id=>({id,model:id,displayName:id,description:'文字模型',hidden:false,isDefault:false,defaultReasoningEffort:'low',supportedReasoningEfforts:[{reasoningEffort:'low'}]}))};
       if(p.method==='thread/start')result={thread:{id:threadId,environments:[],turns:[],status:{type:'idle'}},cwd:WORKSPACE,approvalPolicy:'never',sandbox:{type:'readOnly',networkAccess:false},instructionSources:[]};
       if(p.method==='turn/start'){
@@ -67,4 +67,17 @@ test('超时不重发；未登录不建线程；close终止pending并禁止再�
   const closed=harness({hold:'config/read'}),answer=closed.organizer.organize(source),rejected=assert.rejects(answer,{code:'CLOSED'});await tick();await closed.organizer.close();await rejected;await assert.rejects(closed.organizer.organize(source),{code:'CLOSED'});
   assert.equal(notesOrganizerMessage(new Error('SECRET')), '整理连接中断，原文未替换，请重试。');
   assert.equal(notesOrganizerMessage({code:'constructor',message:'SECRET'}), '整理连接中断，原文未替换，请重试。');
+});
+
+
+test('便签整理独立同意：拒绝不建线程不发turn，获准仅发当前标题正文',async()=>{
+ const denied=harness();await assert.rejects(denied.organizer.organize(source,{beforeSend:async({getAccountIdentity})=>{assert.match((await getAccountIdentity()).accountKey,/^[a-f0-9]{64}$/);return{accepted:false};}}),{code:'CONSENT_DECLINED'});
+ assert.equal(denied.packets.some(p=>p.method==='thread/start'||p.method==='turn/start'),false);await denied.organizer.close();
+ const allowed=harness();await allowed.organizer.organize(source,{beforeSend:async({getAccountIdentity,send})=>{await getAccountIdentity();return send();}});
+ const turns=allowed.packets.filter(p=>p.method==='turn/start');assert.equal(turns.length,1);assert.deepEqual(JSON.parse(turns[0].params.input[0].text),source);assert.equal(allowed.packets.some(p=>p.method==='thread/resume'),false);await allowed.organizer.close();
+});
+test('便签同意期间账号变化、内容/窗口失效或关闭均不startTurn',async()=>{
+ let identity='first@example.test';const account=harness({account:()=>identity});await assert.rejects(account.organizer.organize(source,{beforeSend:async({getAccountIdentity,send})=>{await getAccountIdentity();identity='other@example.test';return send();}}),{code:'UNAUTHENTICATED'});assert.equal(account.packets.some(p=>p.method==='turn/start'),false);await account.organizer.close();
+ let current=true;const changed=harness();await assert.rejects(changed.organizer.organize(source,{isCurrent:()=>current,beforeSend:async({send})=>{current=false;return send();}}),{code:'CANCELLED'});assert.equal(changed.packets.some(p=>p.method==='turn/start'),false);await changed.organizer.close();
+ let checks=0;const late=harness();await assert.rejects(late.organizer.organize(source,{isCurrent:()=>++checks<3,beforeSend:async({send})=>send()}),{code:'CANCELLED'});assert.equal(late.packets.some(p=>p.method==='turn/start'),false);await late.organizer.close();
 });

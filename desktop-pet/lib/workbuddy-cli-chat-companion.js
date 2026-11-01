@@ -66,7 +66,7 @@ function createWorkBuddyCliChatCompanion({connection,prepare=async()=>({status:'
     finally{emit();}
   }
   function unsupported(message){return Promise.resolve(unavailable(message));}
-  return{getState,connect,send,stop,
+  return{getState,connect,send,stop,getConsentIdentity:()=>connection.getConsentIdentity(),
     newChat:()=>unsupported('当前仅支持继续这段 WorkBuddy 专用聊天，已有记录已保留。'),
     selectChat:id=>closed?unsupported('聊天已关闭。'):id===CURRENT_CHAT&&!connection.getState().busy?Promise.resolve({accepted:true}):unsupported('当前仅可继续这段 WorkBuddy 专用聊天。'),
     setModel:()=>unsupported('WorkBuddy 沿用工具当前模型，暂不支持在此切换。'),

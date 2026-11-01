@@ -32,7 +32,7 @@ function defaultReply(packet) {
 // Ordinary protocol fixtures must not race unrelated CPU load; timeout-specific
 // cases below still pass their explicit 10/25ms budgets.
 function setup({ reply = defaultReply, installed = true, timeoutMs = 2000, maxFrameBytes, onNotification,
-  onDisconnect, fakeFs, env = {}, purpose = 'chat', getWeatherContext, binaryPath } = {}) {
+  onDisconnect, fakeFs, env = {}, purpose = 'chat', getWeatherContext, binaryPath, disableOptionalTelemetry } = {}) {
   const child = fakeChild(), sent = [], probes = [], launches = [], notifications = [], disconnects = [];
   const send = packet => child.stdout.write(JSON.stringify(packet) + '\n');
   child.stdin.on('data', chunk => {
@@ -41,7 +41,7 @@ function setup({ reply = defaultReply, installed = true, timeoutMs = 2000, maxFr
     const response = reply(packet, { send, child });
     if (response !== undefined) queueMicrotask(() => send({ id: packet.id, ...response }));
   });
-  const rpc = createCodexChatRpc({ workspaceDir: WORKSPACE, timeoutMs, maxFrameBytes, env, purpose, getWeatherContext, binaryPath,
+  const rpc = createCodexChatRpc({ workspaceDir: WORKSPACE, timeoutMs, maxFrameBytes, env, purpose, getWeatherContext, binaryPath, disableOptionalTelemetry,
     spawn: (...args) => { launches.push(args); return child; }, homedir: () => '/private/test-user',
     onNotification: value => { notifications.push(value); onNotification?.(value); },
     onDisconnect: value => { disconnects.push(value); onDisconnect?.(value); },
@@ -617,4 +617,18 @@ test('weather context is bounded, evaluated from original text and absent from u
   const plain = setup(); await connected(plain); await plain.rpc.startTurn(ID, '你好');
   assert.equal(plain.sent.find(row => row.method === 'turn/start').params.input[0].text, '你好');
   await plain.rpc.close();
+});
+
+
+test('随包隐私模式只追加固定进程覆盖，核对有效配置后初始化，不调用模型/会话或写用户配置',async t=>{
+ const reply=p=>{if(p.method!=='config/read')return defaultReply(p);const raw=goodConfig();Object.assign(raw.config,{analytics:{enabled:false},feedback:{enabled:false},otel:{exporter:'none',trace_exporter:'none',metrics_exporter:'none',log_user_prompt:false,log_agent_responses:false,log_guardian_assessments:false}});return{result:raw};};
+ const h=setup({disableOptionalTelemetry:true,reply});t.after(()=>h.rpc.close());await h.rpc.start();
+ const args=h.launches[0][1];for(const expected of ['analytics.enabled=false','feedback.enabled=false','otel.exporter="none"','otel.trace_exporter="none"','otel.metrics_exporter="none"','otel.log_user_prompt=false','otel.log_agent_responses=false','otel.log_guardian_assessments=false'])assert.ok(args.includes(expected),expected);
+ assert.deepEqual(h.sent.map(p=>p.method),['initialize','initialized','config/read']);assert.equal(h.sent.some(p=>/thread|turn|model|config\/.*write/.test(p.method)),false);
+ const ordinary=setup();t.after(()=>ordinary.rpc.close());await ordinary.rpc.start();assert.equal(ordinary.launches[0][1].some(s=>s.startsWith('analytics.')||s.startsWith('feedback.')||s.startsWith('otel.')),false);
+});
+test('随包隐私覆盖未能从有效配置证实时拒绝继续，选项不能变成任意远端配置接口',async()=>{
+ const h=setup({disableOptionalTelemetry:true});await assert.rejects(h.rpc.start(),{code:'UNSAFE_CONFIG'});assert.equal(h.sent.some(p=>/thread|turn|model/.test(p.method)),false);
+ for(const value of ['true',1,{},null])assert.throws(()=>setup({disableOptionalTelemetry:value}),{code:'INVALID_INPUT'});
+ assert.throws(()=>createCodexChatRpc({workspaceDir:WORKSPACE,disableOptionalTelemetry:true,webSocket:{endpoint:'ws://127.0.0.1:1'},hostHome:'/private/fixture'}),{code:'INVALID_INPUT'});
 });

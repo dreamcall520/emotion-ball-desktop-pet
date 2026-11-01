@@ -1,6 +1,6 @@
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { randomUUID } = require('node:crypto');
+const { randomUUID, createHash } = require('node:crypto');
 const M = require('./notes-model');
 const { createNotesStore } = require('./notes-store');
 const { petVisualBounds } = require('./pet-visual-bounds');
@@ -22,7 +22,7 @@ function reminderBounds(bounds, area, size, presentation) {
 
 function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialog, filePath,
   getPetBounds, getPetWindow = null, getWindowObstacles = () => [], getPetPresentation = () => null, getDefaultTab = () => 'todo', getAppearance = () => 'light', getColorMode = () => 'standard', onComplete = () => {}, onReminderLayout = () => {}, onError = () => {}, isSuppressed = () => false,
-  organizer = null,
+  organizer = null, requestOrganizeConsent = null,
   now = Date.now, setTimer = setInterval, clearTimer = clearInterval, closeTimeoutMs = 60000 }) {
   const store = createNotesStore(filePath, { onError });
   const html = path.join(__dirname, '..', 'notes.html');
@@ -363,7 +363,15 @@ function createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialo
     if (organizing) return { ok: false, message: '正在整理另一条便签，请稍后再试。' };
     const current = { entry, cancelled: false }; organizing = current;
     try {
-      const result = await organizer.organize({ title: item.title, body: item.body });
+      const isCurrent=()=>{
+        const latest=store.getState().notes.find(note=>note.id===item.id&&!note.deletedAt);
+        return organizing===current&&!current.cancelled&&alive(entry.win)&&entry.win.isVisible()&&!suppressed()&&
+          entries.get(entry.contents)===entry&&latest?.title===snapshot.title&&latest?.body===snapshot.body;
+      };
+      const consentOptions=requestOrganizeConsent?{isCurrent,beforeSend:({getAccountIdentity,send})=>requestOrganizeConsent({
+        win:entry.win,noteId:item.id,contentRevision:createHash('sha256').update(JSON.stringify([snapshot.title,snapshot.body])).digest('hex'),
+        getAccountIdentity,isCurrent,send})}:undefined;
+      const result = await organizer.organize({ title: item.title, body: item.body },consentOptions);
       if (current.cancelled || !alive(entry.win) || suppressed()) return { ok: false, message: '整理已取消，原文保持不变。' };
       return { ok: true, result };
     } catch (error) { return { ok: false, message: error.message || '整理暂时不可用，原文保持不变。' }; }

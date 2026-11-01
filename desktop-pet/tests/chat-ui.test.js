@@ -949,3 +949,17 @@ test('工具管理模型的聊天隐藏模型选择，禁用不支持的新聊�
 test('账号或连接身份变更时保留新聊天入口，但不能直接发送旧会话',async()=>{
  const f=fixture();await flush();f.receive({...stored(),source:'zcode',sources:[{id:'zcode',enabled:true}],accountMismatch:true,canStartNewChat:true,connection:'error'});f.get('message-input').value='不得发到旧会话';f.get('message-input').dispatch('input');assert.equal(f.get('send-message').disabled,true);assert.equal(f.get('new-chat').disabled,false);await f.get('composer').dispatch('submit');assert.deepEqual(f.sent,[]);
 });
+
+
+test('用户取消第三方数据发送显示消息未发送，保留原会话和草稿，不误报连接失败或自动重发',async()=>{
+ let attempts=0,cancelled=true;
+ const f=fixture({send:async()=>{attempts++;return cancelled?{accepted:false,cancelled:true,error:'你已取消，消息未发送。'}:{accepted:true};}});
+ await flush();f.receive(withModels());const before=f.get('messages').children.length;
+ f.get('message-input').value='我还要编辑的草稿';f.get('message-input').dispatch('input');
+ await f.get('composer').dispatch('submit');await flush();
+ assert.equal(attempts,1);assert.equal(f.get('connection-status').textContent,'消息未发送');assert.match(f.get('error-text').textContent,/已取消/);
+ assert.equal(f.get('message-input').value,'我还要编辑的草稿');assert.equal(f.get('messages').children.length,before);assert.equal(f.get('retry-message').hidden,true);
+ f.receive(withModels());assert.equal(attempts,1);assert.equal(f.get('connection-status').textContent,'消息未发送');
+ assert.equal(f.get('send-message').disabled,false);cancelled=false;await f.get('composer').dispatch('submit');await flush();
+ assert.equal(attempts,2);assert.equal(f.get('message-input').value,'');assert.doesNotMatch(f.get('connection-status').textContent,/消息未发送|连接遇到/);
+});

@@ -27,3 +27,12 @@ test('软链profile被拒绝，不读取/写入原工具目录',async t=>{
  const f=await fixture(t),target=path.join(f.root,'outside');await fs.promises.mkdir(target);await fs.promises.symlink(target,f.profileHome);
  await assert.rejects(startBundledWorkBuddy({...f,forkProcess:()=>assert.fail('spawned')}),{code:'UNSAFE_CONFIG'});assert.deepEqual(await fs.promises.readdir(target),[]);
 });
+
+
+test('WorkBuddy仅child禁遥测/Galileo并移除冲突OTel继承，不改父环境/代理，不发模型请求',async t=>{
+ const f=await fixture(t),original=Object.freeze({HOME:'/original',DISABLE_TELEMETRY:'0',DISABLE_GALILEO:'',CODEBUDDY_CODE_ENABLE_TELEMETRY:'1',CLAUDE_CODE_ENABLE_TELEMETRY:'1',GALILEO_ENABLE:'true',GALILEO_SDK_READY:'1',OTEL_EXPORTER_OTLP_ENDPOINT:'https://example.invalid/telemetry',OTEL_LOG_RAW_API_BODIES:'file:/original/raw',HTTPS_PROXY:'http://127.0.0.1:10808',NO_PROXY:'127.0.0.1',PATH:'/usr/bin'});let captured;const urls=[];
+ const child=new EventEmitter();child.stdout=new PassThrough();child.stderr=new PassThrough();child.kill=()=>{queueMicrotask(()=>child.emit('exit',0));return true;};
+ const service=await startBundledWorkBuddy({...f,env:original,reservePort:async()=>48712,forkProcess:(_entry,_args,options)=>{captured=options.env;return child;},request:async url=>{urls.push(url);return Response.json({authEnabled:true,authenticated:true});}});
+ assert.equal(captured.DISABLE_TELEMETRY,'1');assert.equal(captured.DISABLE_GALILEO,'1');for(const key of ['CODEBUDDY_CODE_ENABLE_TELEMETRY','CLAUDE_CODE_ENABLE_TELEMETRY','GALILEO_ENABLE','GALILEO_SDK_READY','OTEL_EXPORTER_OTLP_ENDPOINT','OTEL_LOG_RAW_API_BODIES'])assert.equal(captured[key],undefined,key);
+ assert.equal(captured.HTTPS_PROXY,original.HTTPS_PROXY);assert.equal(captured.NO_PROXY,original.NO_PROXY);assert.equal(original.DISABLE_TELEMETRY,'0');assert.equal(original.CLAUDE_CODE_ENABLE_TELEMETRY,'1');assert.deepEqual(urls,['http://127.0.0.1:48712/api/v1/auth/status']);await service.stop();
+});

@@ -4,14 +4,17 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { createHash } = require('node:crypto');
+const { createHash, X509Certificate } = require('node:crypto');
 const { spawnSync } = require('node:child_process');
-const { marketingVersion, configFor, planFor, identities, validateProfile, packagerOptions, buildMas, argumentsFor } = require('../scripts/package-mas');
+const { marketingVersion, configFor, planFor, identities, validateProfile, validateCertificate, entitlementsFor, distributionEntry, validateMasRuntimeCache, packagerOptions, buildMas, argumentsFor } = require('../scripts/package-mas');
 const pkg = { version: '0.4.09', devDependencies: { electron: '43.4.1' } };
 const env = { MAS_BUNDLE_ID: 'com.example.qiuqiu', MAS_TEAM_ID: 'ABCDEF1234', MAS_PROFILE: '/synthetic/qiuqiu.provisionprofile',
-  MAS_SIGN_IDENTITY: 'Apple Distribution: Synthetic Person (ABCDEF1234)',
-  MAS_INSTALLER_IDENTITY: 'Mac Installer Distribution: Synthetic Person (ABCDEF1234)', MAS_BUILD_VERSION: '1' };
-const certificate = Buffer.from('synthetic-certificate-not-a-real-credential');
+  MAS_SIGN_IDENTITY: 'Apple Distribution: Synthetic Person (PERSON9999)',
+  MAS_INSTALLER_IDENTITY: 'Mac Installer Distribution: Synthetic Person (PERSON9999)', MAS_BUILD_VERSION: '1' };
+// Self-signed public test certificates only; fixture private keys were discarded.
+const publicFixtures = {"application": "MIICNDCCAdmgAwIBAgIUe/xT7KtwZikQH0JJSVDtrgD5W/UwCgYIKoZIzj0EAwIwbzE6MDgGA1UEAwwxQXBwbGUgRGlzdHJpYnV0aW9uOiBTeW50aGV0aWMgUGVyc29uIChQRVJTT045OTk5KTETMBEGA1UECwwKQUJDREVGMTIzNDEcMBoGA1UECgwTU3ludGhldGljIFRlc3QgT25seTAeFw0yNjExMDEwMDQ3NDNaFw0zNjEwMjkwMDQ3NDNaMG8xOjA4BgNVBAMMMUFwcGxlIERpc3RyaWJ1dGlvbjogU3ludGhldGljIFBlcnNvbiAoUEVSU09OOTk5OSkxEzARBgNVBAsMCkFCQ0RFRjEyMzQxHDAaBgNVBAoME1N5bnRoZXRpYyBUZXN0IE9ubHkwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAQG3nrvgYSNOipVtqhwNYuyEoqJR0ctIk1YMy62wGv1p/f43Ew+k+BsSuvQojwHlZY5elSxAn1KwsDsdurGIA4Do1MwUTAdBgNVHQ4EFgQUCvB7qipLJbH3SGhhBAAhR6YZ0eowHwYDVR0jBBgwFoAUCvB7qipLJbH3SGhhBAAhR6YZ0eowDwYDVR0TAQH/BAUwAwEB/zAKBggqhkjOPQQDAgNJADBGAiEAxRw8YoFBSfwGg8gcl0PxpxRPPkJDEUKR9KwH/nilzSYCIQC9/dfWMvhb4weO8aOHTuivHbjHDmtjoz9xcHipeBlG2g==", "installer": "MIICQzCCAemgAwIBAgIUc/COihdyvXHn3S9IZr1iwCWlotwwCgYIKoZIzj0EAwIwdzFCMEAGA1UEAww5TWFjIEluc3RhbGxlciBEaXN0cmlidXRpb246IFN5bnRoZXRpYyBQZXJzb24gKFBFUlNPTjk5OTkpMRMwEQYDVQQLDApBQkNERUYxMjM0MRwwGgYDVQQKDBNTeW50aGV0aWMgVGVzdCBPbmx5MB4XDTI2MTEwMTAwNDc0M1oXDTM2MTAyOTAwNDc0M1owdzFCMEAGA1UEAww5TWFjIEluc3RhbGxlciBEaXN0cmlidXRpb246IFN5bnRoZXRpYyBQZXJzb24gKFBFUlNPTjk5OTkpMRMwEQYDVQQLDApBQkNERUYxMjM0MRwwGgYDVQQKDBNTeW50aGV0aWMgVGVzdCBPbmx5MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEUhsfdChXMmQrAXXsC/GwOF804k7qvcMlMO/jPudzZH0oxF8yzRKJ4IhpinlE9F0pN3tYnywmipeuxiQLQw1zyaNTMFEwHQYDVR0OBBYEFO4+IIJf6WaqiIZSKWD6OZVJRIcvMB8GA1UdIwQYMBaAFO4+IIJf6WaqiIZSKWD6OZVJRIcvMA8GA1UdEwEB/wQFMAMBAf8wCgYIKoZIzj0EAwIDSAAwRQIgGuC5cjnnRW69nHar02m5R6RW2aEbjcOerfihJT7kU9wCIQCI1pue92pUaElxFFWoomYggzf2/vKLyWsWvp42uaAEJA==", "wrongTeam": "MIICMzCCAdmgAwIBAgIUfBa4k6jeqVlBZxFU2R92xfntA0cwCgYIKoZIzj0EAwIwbzE6MDgGA1UEAwwxQXBwbGUgRGlzdHJpYnV0aW9uOiBTeW50aGV0aWMgUGVyc29uIChQRVJTT045OTk5KTETMBEGA1UECwwKWlpaWlpaOTk5OTEcMBoGA1UECgwTU3ludGhldGljIFRlc3QgT25seTAeFw0yNjExMDEwMDQ3NDNaFw0zNjEwMjkwMDQ3NDNaMG8xOjA4BgNVBAMMMUFwcGxlIERpc3RyaWJ1dGlvbjogU3ludGhldGljIFBlcnNvbiAoUEVSU09OOTk5OSkxEzARBgNVBAsMClpaWlpaWjk5OTkxHDAaBgNVBAoME1N5bnRoZXRpYyBUZXN0IE9ubHkwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAQxfiuGfVE0gA6KtA9fQfw53z7VQAnRD4Vw326LjcHAS4fvOIjCupK7PaEIerDLkFsMmoVtUlUPKsqU1Ah0oyDho1MwUTAdBgNVHQ4EFgQUhqvTVyUCO03K/YwsS8Ngu4jwzqUwHwYDVR0jBBgwFoAUhqvTVyUCO03K/YwsS8Ngu4jwzqUwDwYDVR0TAQH/BAUwAwEB/zAKBggqhkjOPQQDAgNIADBFAiBv3iySLmIoipZEtmUmBqBXiqzZAZeGSWl5Wg8FsKB2vAIhAJzryg8Giir5VIpgfJcEw07X0G4L7auP6/ImQTZ0jVrN", "development": "MIICMTCCAdegAwIBAgIUL9KMlU6de645mWZxD2C2JUBqjTUwCgYIKoZIzj0EAwIwbjE5MDcGA1UEAwwwQXBwbGUgRGV2ZWxvcG1lbnQ6IFN5bnRoZXRpYyBQZXJzb24gKFBFUlNPTjk5OTkpMRMwEQYDVQQLDApBQkNERUYxMjM0MRwwGgYDVQQKDBNTeW50aGV0aWMgVGVzdCBPbmx5MB4XDTI2MTEwMTAwNDc0M1oXDTM2MTAyOTAwNDc0M1owbjE5MDcGA1UEAwwwQXBwbGUgRGV2ZWxvcG1lbnQ6IFN5bnRoZXRpYyBQZXJzb24gKFBFUlNPTjk5OTkpMRMwEQYDVQQLDApBQkNERUYxMjM0MRwwGgYDVQQKDBNTeW50aGV0aWMgVGVzdCBPbmx5MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEMl0koXGsx6FpbaQB+nO6J8idQNkYWfs9bFgWRWUYvGWwmRqubJy472hQAh5yj2oOQ03+/jV2moASADqW7/qiMKNTMFEwHQYDVR0OBBYEFM4KqaMeZ+Nm7I0ZrLZu/q5iQ0RNMB8GA1UdIwQYMBaAFM4KqaMeZ+Nm7I0ZrLZu/q5iQ0RNMA8GA1UdEwEB/wQFMAMBAf8wCgYIKoZIzj0EAwIDSAAwRQIhAMKRkwYG6RNpIvF5SGw/pytgGN0dpXTX+7jDpn0Io/JuAiAQR/YEKUKCNR/Hovt4E19Xxvw3oGl5BxaFBsvHWWEwoQ=="};
+const certificate=Buffer.from(publicFixtures.application,'base64'), installerPublic=Buffer.from(publicFixtures.installer,'base64');
+const installerFingerprint=createHash('sha1').update(installerPublic).digest('hex').toUpperCase();
 const fingerprint = createHash('sha1').update(certificate).digest('hex').toUpperCase();
 const config = configFor(pkg, env).config;
 const validProfile = () => ({ ExpirationDate: new Date('2030-01-01T00:00:00Z'), Platform: ['OSX'], TeamIdentifier: [env.MAS_TEAM_ID],
@@ -44,8 +47,8 @@ test('真实CLI --plan接受不存在profile路径且不读profile/钥匙串/下
   assert.equal(result.stderr, '');
 });
 
-test('不接受adhoc/Developer ID/开发证书或不匹配team的签名配置', () => {
-  for (const identity of ['-', 'Developer ID Application: Synthetic Person (ABCDEF1234)', 'Apple Development: Synthetic Person (ABCDEF1234)', 'Apple Distribution: Synthetic Person (OTHER12345)']) {
+test('不接受adhoc/Developer ID/开发证书类型；team归属由公钥OU核对', () => {
+  for (const identity of ['-', 'Developer ID Application: Synthetic Person (ABCDEF1234)', 'Apple Development: Synthetic Person (ABCDEF1234)']) {
     assert.ok(configFor(pkg, { ...env, MAS_SIGN_IDENTITY: identity }).errors.includes('MAS_DISTRIBUTION_IDENTITY_REQUIRED'));
   }
   assert.ok(configFor(pkg, { ...env, MAS_INSTALLER_IDENTITY: 'Developer ID Installer: Synthetic Person (ABCDEF1234)' }).errors.includes('MAS_INSTALLER_DISTRIBUTION_IDENTITY_REQUIRED'));
@@ -84,11 +87,7 @@ test('打包选项强制MASruntime/分发签名/主子权限，不复用Darwin�
   assert.equal(options.appBundleId, env.MAS_BUNDLE_ID); assert.equal(options.extendInfo.ElectronTeamID, env.MAS_TEAM_ID);
   assert.equal(options.extendInfo.NSLocationUsageDescription, 'existing-purpose');
   assert.equal(options.electronZipDir, undefined); assert.equal(options.osxNotarize, undefined);
-  assert.equal(options.osxSign.type, 'distribution'); assert.equal(options.osxSign.identityValidation, true); assert.equal(options.osxSign.preEmbedProvisioningProfile, true);
-  assert.match(options.osxSign.optionsForFile('/out/球球桌宠.app').entitlements, /main\.entitlements\.plist$/);
-  assert.match(options.osxSign.optionsForFile('/out/球球桌宠.app/Contents/Frameworks/球球桌宠 Helper.app').entitlements, /child\.entitlements\.plist$/);
-  assert.match(options.osxSign.optionsForFile('/out/球球桌宠.app/Contents/Resources/native.node').entitlements, /child\.entitlements\.plist$/);
-  assert.equal(options.osxSign.optionsForFile('/out/球球桌宠.app').hardenedRuntime, false);
+  assert.equal(options.osxSign,false);assert.deepEqual(options.extraResource,['/synthetic/desktop-pet/build/qiuqiu-codex','/synthetic/desktop-pet/build/qiuqiu-workbuddy']);
   assert.equal(options.extendInfo.ITSAppUsesNonExemptEncryption, undefined);
 });
 
@@ -99,24 +98,30 @@ function buildFixture(t, overrides = {}) {
   const profilePath = path.join(root, 'synthetic.provisionprofile'); fs.writeFileSync(profilePath, 'synthetic fixture');
   const configured = { ...env, MAS_PROFILE: profilePath };
   const calls = [], captured = {};
+  function resources(app,arch){const base=path.join(app,'Contents/Resources'),codex=path.join(base,'qiuqiu-codex',`darwin-${arch}`),wb=path.join(base,'qiuqiu-workbuddy');fs.mkdirSync(codex,{recursive:true});fs.mkdirSync(path.join(wb,'node_modules/fixture'),{recursive:true});fs.writeFileSync(path.join(codex,'codex'),'before-sign');fs.writeFileSync(path.join(codex,'manifest.json'),JSON.stringify({provider:'codex',binary:'codex',binarySha256:'old'}));fs.writeFileSync(path.join(wb,'node_modules/fixture/native.node'),'before-sign');fs.writeFileSync(path.join(wb,'manifest.json'),JSON.stringify({provider:'workbuddy-cli',files:{'node_modules/fixture/native.node':'old'}}));}
+
   const dep = {
     hostPlatform: 'darwin', hostArch: 'arm64', now: () => Date.parse('2026-10-31'),
     command(name, args) {
       calls.push([name, args]);
+      if(name==='security'&&args[0]==='find-certificate')return new X509Certificate(installerPublic).toString();
+      if(name==='codesign'&&args[0]==='--display'){const rights=captured.sign.optionsForFile(args.at(-1));return fs.readFileSync(rights.entitlements,'utf8');}
       if (name === 'security' && args[0] === 'find-identity') return args.includes('codesigning')
         ? ` 1) ${fingerprint} "${env.MAS_SIGN_IDENTITY}"\n 1 valid identities found`
-        : ` 1) ${'A'.repeat(40)} "${env.MAS_INSTALLER_IDENTITY}"\n 1 valid identities found`;
+        : ` 1) ${installerFingerprint} "${env.MAS_INSTALLER_IDENTITY}"\n 1 valid identities found`;
       return 'synthetic-captured-result';
     },
     parseProfile: () => validProfile(),
     mac: {
-      prepareStaging(_root, staging) { calls.push(['staging']); fs.mkdirSync(staging, { recursive: true }); fs.writeFileSync(path.join(staging, 'package.json'), JSON.stringify({ version: pkg.version, main: 'desktop-pet/main.js' })); captured.staging = staging; return staging; },
+      prepareStaging(_root, staging, flags) { captured.stagingFlags=flags;calls.push(['staging']); fs.mkdirSync(staging, { recursive: true }); fs.writeFileSync(path.join(staging, 'package.json'), JSON.stringify({ version: pkg.version, main: 'desktop-pet/main.js' })); captured.staging = staging; return staging; },
       buildPackagerOptions() { return { platform: 'darwin' }; }
     },
     makeIcon() { calls.push(['icon']); return '/synthetic/icon.icns'; },
     buildWeatherLocation() { calls.push(['weather']); },
-    async packager(options) { calls.push(['packager']); captured.options = options; const output = path.join(options.out, '球球桌宠-mas-' + options.arch); fs.mkdirSync(path.join(output, '球球桌宠.app'), { recursive: true }); return [output]; },
-    signing: { async flat(options) { calls.push(['flat']); captured.flat = options; fs.writeFileSync(options.pkg, 'synthetic-not-a-package'); } },
+    buildPluginHost() { calls.push(['plugin-native']); },
+    validateResources:async()=>{calls.push(['resources-validated']);},
+    async packager(options) { calls.push(['packager']); captured.options = options; const output = path.join(options.out, '球球桌宠-mas-' + options.arch); const app=path.join(output,'球球桌宠.app');fs.mkdirSync(app,{recursive:true});resources(app,options.arch);captured.app=app;return [output]; },
+    signing: { async sign(options){calls.push(['sign']);captured.sign=options;fs.appendFileSync(options.binaries[0],'-signed');fs.appendFileSync(path.join(options.app,'Contents/Resources/qiuqiu-workbuddy/node_modules/fixture/native.node'),'-signed');},async flat(options) { calls.push(['flat']); captured.flat = options; fs.writeFileSync(options.pkg, 'synthetic-not-a-package'); } },
     ...overrides
   };
   return { root, env: configured, calls, captured, dep };
@@ -146,7 +151,10 @@ test('模拟构建严格先验profile和证书，再MAS打包签名与installer�
   assert.equal(h.captured.options.platform, 'mas'); assert.equal(h.captured.flat.platform, 'mas'); assert.equal(h.captured.flat.identity, env.MAS_INSTALLER_IDENTITY);
   assert.equal(h.captured.flat.identityValidation, true); assert.equal(h.captured.flat.install, '/Applications');
   const staged = JSON.parse(fs.readFileSync(path.join(h.captured.staging, 'package.json')));
-  assert.equal(staged.version, '0.4.9'); assert.equal(staged.qiuqiuDistribution, 'mas');
+  assert.equal(staged.version, '0.4.9'); assert.equal(staged.qiuqiuDistribution, 'mas');assert.equal(staged.main,'mas-distribution-entry.js');assert.equal(staged.qiuqiuAcceptance,undefined);assert.deepEqual(h.captured.stagingFlags,{pluginNative:true});
+  assert.equal(h.captured.sign.type,'distribution');assert.equal(h.captured.sign.preAutoEntitlements,false);assert.equal(h.captured.sign.identity,fingerprint);assert.equal(result.signedEntitlementsValidated,true);assert.equal(result.runtimeAcceptancePassed,false);
+  const resources=path.join(h.captured.app,'Contents/Resources');const codex=path.join(resources,'qiuqiu-codex/darwin-arm64');assert.equal(JSON.parse(fs.readFileSync(path.join(codex,'manifest.json'))).binarySha256,createHash('sha256').update(fs.readFileSync(path.join(codex,'codex'))).digest('hex'));const wb=path.join(resources,'qiuqiu-workbuddy');assert.equal(JSON.parse(fs.readFileSync(path.join(wb,'manifest.json'))).files['node_modules/fixture/native.node'],createHash('sha256').update(fs.readFileSync(path.join(wb,'node_modules/fixture/native.node'))).digest('hex'));
+  const outerResign=h.calls.find(([n,a])=>n==='codesign'&&a[0]==='--force');assert.ok(outerResign);assert.equal(outerResign[1].includes('--deep'),false);assert.ok(names.indexOf('sign')<names.indexOf('codesign'));
   assert.equal(names.some(name => /upload|transporter|altool/.test(name)), false);
 });
 
@@ -175,4 +183,54 @@ test('x64参数在匹配的Intel构建host上进入同一MAS链路，不降级Da
   const result = await buildMas({ root: h.root, env: h.env, arch: 'x64' }, h.dep);
   assert.equal(result.arch, 'x64'); assert.equal(h.captured.options.platform, 'mas'); assert.equal(h.captured.options.arch, 'x64');
   assert.match(result.pkgPath, /mas-x64\.pkg$/);
+});
+
+
+test('分发证书严格核对匹配公钥CN/OU，括号个人标识不冒充团队；开发证书不能混入',()=>{
+ assert.equal(configFor(pkg,env).errors.length,0);const wrong=Buffer.from(publicFixtures.wrongTeam,'base64'),development=Buffer.from(publicFixtures.development,'base64');
+ assert.throws(()=>validateCertificate(wrong,env.MAS_SIGN_IDENTITY,env.MAS_TEAM_ID,'application'),{code:'MAS_CERTIFICATE_TEAM_MISMATCH'});
+ assert.throws(()=>validateCertificate(development,'Apple Development: Synthetic Person (PERSON9999)',env.MAS_TEAM_ID,'application'),{code:'MAS_DISTRIBUTION_CERTIFICATE_REQUIRED'});
+ assert.throws(()=>validateCertificate(certificate,'Apple Distribution: Other Person (PERSON9999)',env.MAS_TEAM_ID,'application'),{code:'MAS_CERTIFICATE_IDENTITY_MISMATCH'});
+ assert.throws(()=>validateCertificate(Buffer.from('bad'),env.MAS_SIGN_IDENTITY,env.MAS_TEAM_ID,'application'),{code:'MAS_CERTIFICATE_INVALID'});
+});
+test('生成的分发权限与已审模板一致并有精确AppID/team/group，没有开发调试权限',()=>{
+ const rights=entitlementsFor(config),main=require('plist').parse(fs.readFileSync(path.join(__dirname,'../packaging/mas/main.entitlements.plist'),'utf8'));
+ for(const [key,value]of Object.entries(main))assert.deepEqual(rights.main[key],value);assert.equal(rights.main['com.apple.application-identifier'],env.MAS_TEAM_ID+'.'+env.MAS_BUNDLE_ID);assert.deepEqual(rights.main['com.apple.security.application-groups'],[env.MAS_TEAM_ID+'.'+env.MAS_BUNDLE_ID]);assert.equal(rights.main['com.apple.security.get-task-allow'],undefined);assert.deepEqual(rights.child,{'com.apple.security.app-sandbox':true,'com.apple.security.inherit':true});
+});
+test('正式分发入口拒绝Darwin，不开放开发候选标志或探针',()=>{
+ const entry=distributionEntry();assert.doesNotMatch(entry,/qiuqiuMasDevelopmentCandidate|probe|mas-development/);const output=[];assert.throws(()=>require('node:vm').runInNewContext(entry,{process:{mas:false,stderr:{write:s=>output.push(s)},exit:()=>{throw Error('EXIT');}}}),/EXIT/);assert.equal(output.join(''),'MAS_RUNTIME_REQUIRED\n');
+});
+test('资源缺失、签名API缺失、签后权限不匹配在生成installer前失败',async t=>{
+ const a=buildFixture(t,{validateResources:async()=>{throw Object.assign(Error(),{code:'BUNDLED_RUNTIME_MISSING'});}});await assert.rejects(buildMas({root:a.root,env:a.env},a.dep),{code:'BUNDLED_RUNTIME_MISSING'});assert.equal(a.calls.some(([n])=>['weather','packager','flat'].includes(n)),false);
+ const b=buildFixture(t,{signing:{flat:async()=>assert.fail('must not flat')}});await assert.rejects(buildMas({root:b.root,env:b.env},b.dep),{code:'MAS_SIGN_API_UNAVAILABLE'});
+ const c=buildFixture(t);const original=c.dep.command;c.dep.command=(name,args)=>name==='codesign'&&args[0]==='--display'?require('plist').build({'com.apple.security.app-sandbox':true,'get-task-allow':true}):original(name,args);await assert.rejects(buildMas({root:c.root,env:c.env},c.dep),{code:'MAS_ENTITLEMENTS_UNVERIFIED'});assert.equal(c.calls.some(([n])=>n==='flat'),false);
+});
+
+
+test('installer公钥不匹配或签后manifest损坏时不生成分发包',async t=>{
+ const a=buildFixture(t);const run=a.dep.command;a.dep.command=(name,args)=>name==='security'&&args[0]==='find-certificate'?new X509Certificate(certificate).toString():run(name,args);
+ await assert.rejects(buildMas({root:a.root,env:a.env},a.dep),{code:'MAS_INSTALLER_CERTIFICATE_UNAVAILABLE'});assert.equal(a.calls.some(([n])=>['weather','packager','flat'].includes(n)),false);
+ const b=buildFixture(t),sign=b.dep.signing.sign;b.dep.signing.sign=async options=>{await sign(options);fs.writeFileSync(path.join(options.app,'Contents/Resources/qiuqiu-workbuddy/manifest.json'),'{}');};
+ await assert.rejects(buildMas({root:b.root,env:b.env},b.dep),{code:'MAS_BUNDLED_MANIFEST_REFRESH_FAILED'});assert.equal(b.calls.some(([n])=>n==='flat'),false);
+});
+
+
+test('显式缓存只接收已固定官方SHA的MAS版本架构，不默认复用Darwin缓存',()=>{
+ const custom=configFor(pkg,{...env,MAS_ELECTRON_ZIP_DIR:'/synthetic/verified-mas-cache'});assert.equal(custom.errors.length,0);
+ const options=packagerOptions('/synthetic',custom.config,'/synthetic/stage','/synthetic/icon',{electronZipDir:'/synthetic/darwin-cache'});assert.equal(options.platform,'mas');assert.equal(options.electronZipDir,'/synthetic/verified-mas-cache');
+ assert.equal(packagerOptions('/synthetic',config,'/synthetic/stage','/synthetic/icon',{electronZipDir:'/synthetic/darwin-cache'}).electronZipDir,undefined);
+ assert.equal(planFor(pkg,env).runtimeSource,'official-mas-download');const plan=planFor(pkg,{...env,MAS_ELECTRON_ZIP_DIR:'/synthetic/private-cache-path'});assert.equal(plan.runtimeSource,'explicit-pinned-mas-cache');assert.equal(plan.cachedRuntimeValidated,false);assert.equal(JSON.stringify(plan).includes('/synthetic/private-cache-path'),false);
+ assert.ok(configFor(pkg,{...env,MAS_ELECTRON_ZIP_DIR:'relative'}).errors.includes('MAS_RUNTIME_CACHE_DIRECTORY_INVALID'));
+ assert.ok(configFor(pkg,{...env,MAS_ELECTRON_ZIP_DIR:''}).errors.includes('MAS_RUNTIME_CACHE_DIRECTORY_INVALID'));
+ assert.ok(configFor({...pkg,devDependencies:{electron:'43.4.2'}},{...env,MAS_ELECTRON_ZIP_DIR:'/synthetic'}).errors.includes('MAS_RUNTIME_CACHE_ARCHIVE_UNPINNED'));
+ assert.ok(configFor(pkg,{...env,MAS_ELECTRON_ZIP_DIR:'/synthetic'},'x64').errors.includes('MAS_RUNTIME_CACHE_ARCHIVE_UNPINNED'));
+});
+test('错SHA、仅有Darwin归档或链接缓存明确拒绝，在任何编译打包前停止',async t=>{
+ const h=buildFixture(t),directory=path.join(h.root,'mas-cache');fs.mkdirSync(directory);const configured={...h.env,MAS_ELECTRON_ZIP_DIR:directory};
+ fs.writeFileSync(path.join(directory,'electron-v43.4.1-darwin-arm64.zip'),'not-a-mas-archive');await assert.rejects(buildMas({root:h.root,env:configured},h.dep),{code:'MAS_RUNTIME_CACHE_ARCHIVE_UNAVAILABLE'});
+ const archive=path.join(directory,'electron-v43.4.1-mas-arm64.zip');fs.writeFileSync(archive,'corrupt-or-untrusted-MAS-bytes');await assert.rejects(buildMas({root:h.root,env:configured},h.dep),{code:'MAS_RUNTIME_CACHE_SHA256_MISMATCH'});
+ assert.equal(h.calls.some(([n])=>['weather','plugin-native','resources-validated','packager','flat'].includes(n)),false);
+ fs.unlinkSync(archive);fs.symlinkSync(path.join(directory,'electron-v43.4.1-darwin-arm64.zip'),archive);assert.throws(()=>validateMasRuntimeCache(configFor(pkg,configured).config),{code:'MAS_RUNTIME_CACHE_ARCHIVE_UNAVAILABLE'});
+ assert.throws(()=>validateMasRuntimeCache({...config,runtimeZipDir:directory,arch:'x64'}),{code:'MAS_RUNTIME_CACHE_ARCHIVE_UNPINNED'});
+ assert.deepEqual(validateMasRuntimeCache(config),{used:false,validated:false});
 });

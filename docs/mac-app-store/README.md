@@ -3,7 +3,14 @@
 核验日期：2026-10-31。基线：origin/main b7979ae。独立分支 feature/mac-app-store。
 当前阶段：准备与差异审计；没有可送审包，未上传、送审或上架。
 
-## 已确认
+## 当前状态（2026-11-01，R25/R26）
+
+- 个人开发者会员及开发签名、测试App ID/设备/profile已验证；真实Electron MAS沙盒、三家聊天、原ZCode/WorkBuddy任务事件及重启恢复已通过。详细范围见 original-tool-live-r25-20261101.md。
+- 尚无正式分发证书/安装器签名或App Store Connect构建验收；不能把开发候选当可提交包。
+- R26正在补正式分发链、首次第三方AI发送同意与隐私资料。最新逐项缺口见 submission-readiness-r26-20261101.md。
+- 源代码及部分视觉/动画的App Store分发权利证明仍待核清；现有许可保留不能代替独立授权。未提交或上架。
+
+## 历史基线（2026-10-31任务开始时，非当前状态）
 
 - 用户只有普通 Apple ID，尚未开通 Apple Developer Program。
 - 本机 Xcode 可用；有效代码签名身份数量为 0。详见 preflight-20261031.json。

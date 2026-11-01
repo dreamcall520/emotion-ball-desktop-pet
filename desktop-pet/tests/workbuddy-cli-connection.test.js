@@ -43,3 +43,10 @@ test('明确RPC失败和网络结果未知分别报告，恢复pending不产生�
  }
  const changed=[];const f=fixture({onTaskChange:t=>changed.push(t),store:{read:()=>({pendingSend:true,requestId:'previous',createdAt:1}),write(){}}});assert.equal(f.connection.getState().liveTask.state,'unknown');assert.equal(changed.length,0);await f.connection.close();
 });
+
+test('内部聊天同意身份复用官方账号接口，身份不进公开状态；变更或断开拒绝',async()=>{
+ let current='a'.repeat(64);const f=fixture({client:{getVendorAccount:async()=>({authenticated:true,accountKey:current})}});
+ await f.connection.configure({accountKey:current});await f.connection.connect();const identity=await f.connection.getConsentIdentity();assert.equal(identity.accountKey,current);assert.equal(identity.conversationKey,'owned');
+ assert.equal(JSON.stringify(f.connection.getState()).includes(current),false);assert.equal(f.posted(),0);
+ current='b'.repeat(64);await assert.rejects(f.connection.getConsentIdentity(),{code:'UNAUTHENTICATED'});assert.equal(f.posted(),0);await f.connection.disconnect();await assert.rejects(f.connection.getConsentIdentity(),{code:'AUTHORIZATION_REQUIRED'});await f.connection.close();
+});

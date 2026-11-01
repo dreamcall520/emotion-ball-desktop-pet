@@ -17,6 +17,7 @@ const MESSAGES = {
   CONTEXT_LIMIT: '这条便签超出当前模型的处理范围，原文未替换。',
   TIMEOUT: '整理超时，原文未替换；没有自动重发。',
   CANCELLED: '本次整理已取消，原文未替换。',
+  CONSENT_DECLINED: '便签数据发送未获同意或来源已变化，未发送整理请求，原文未替换。',
   CLOSED: '便签整理已关闭，原文未替换。',
   TOOL_BLOCKED: '本次请求超出纯文字整理范围，已停止，原文未替换。',
   STORAGE: '整理工作目录暂不可用，请检查本机存储后重试。',
@@ -76,7 +77,7 @@ function createNotesOrganizer({ workspaceDir, createRpc = createCodexChatRpc, ti
       } catch (_) { finish(request, null, failure('INVALID_RESPONSE')); }
     } else if (packet.method === 'error' && p.willRetry !== true) finish(request, null, failure(p.error?.code));
   }
-  async function organize(input) {
+  async function organize(input, { beforeSend = null, isCurrent = () => true } = {}) {
     const source = validateText(input, 'INVALID_INPUT');
     if (closed) throw failure('CLOSED');if (active) throw failure('BUSY');
     const request = { client: null, threadId: null, turnId: null, final: '', done: false };
@@ -94,12 +95,27 @@ function createNotesOrganizer({ workspaceDir, createRpc = createCodexChatRpc, ti
         if (!account?.authenticated || !account.accountKey) throw failure('UNAUTHENTICATED');
         const models = await request.client.listModels();if (request.done) return;
         const selection = resolveChatModel(models, 'auto', '整理便签文字');
-        const thread = await request.client.startThread();if (request.done) return;
-        if (typeof thread?.id !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(thread.id) || thread.activeTurnId || thread.status === 'active') throw failure('INVALID_RESPONSE');
-        request.threadId = thread.id;
-        const turn = await request.client.startTurn(thread.id, JSON.stringify(source), selection);if (request.done) return;
-        if (typeof turn?.id !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(turn.id) || request.turnId && request.turnId !== turn.id) throw failure('INVALID_RESPONSE');
-        request.turnId = turn.id;
+        const getAccountIdentity = async () => {
+          if(request.done||!isCurrent())throw failure('CANCELLED');
+          const observed=await request.client.readAccount();
+          if(request.done||!isCurrent())throw failure('CANCELLED');
+          if(!observed?.authenticated||observed.accountKey!==account.accountKey)throw failure('UNAUTHENTICATED');
+          return{accountKey:observed.accountKey};
+        };
+        const dispatch = async () => {
+          if(request.done||!isCurrent())throw failure('CANCELLED');
+          const thread = await request.client.startThread();if (request.done) return;
+          if (typeof thread?.id !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(thread.id) || thread.activeTurnId || thread.status === 'active') throw failure('INVALID_RESPONSE');
+          request.threadId = thread.id;
+          if(beforeSend)await getAccountIdentity();
+          if(request.done||!isCurrent())throw failure('CANCELLED');
+          const turn = await request.client.startTurn(thread.id, JSON.stringify(source), selection);if (request.done) return;
+          if (typeof turn?.id !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(turn.id) || request.turnId && request.turnId !== turn.id) throw failure('INVALID_RESPONSE');
+          request.turnId = turn.id;
+          return{accepted:true};
+        };
+        if(beforeSend){const result=await beforeSend({getAccountIdentity,send:dispatch});if(!request.done&&result?.accepted!==true)throw failure('CONSENT_DECLINED');}
+        else await dispatch();
       } catch (error) { finish(request, null, error); }
     })();
     return answer;

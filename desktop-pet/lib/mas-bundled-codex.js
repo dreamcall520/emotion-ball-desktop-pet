@@ -76,10 +76,10 @@ async function createBundledCodexChatRpc({ resourcesPath, profileHome, workspace
   const codexHome = path.join(profileHome, '.codex');
   for (const dir of [profileHome, codexHome, workspaceDir]) await privateDirectory(dir);
   const childEnv = Object.fromEntries(Object.entries(env).filter(([key]) =>
-    !/^(CODEX_|OPENAI_|ANTHROPIC_|AZURE_OPENAI_|GEMINI_|ZCODE_|CODEBUDDY_)/.test(key) &&
+    !/^(CODEX_|OPENAI_|ANTHROPIC_|AZURE_OPENAI_|GEMINI_|ZCODE_|CODEBUDDY_|OTEL_)/.test(key) &&
     !['HOME', 'NODE_OPTIONS', 'NODE_PATH'].includes(key)));
   Object.assign(childEnv, { HOME: profileHome, CODEX_HOME: codexHome });
   return createRpc({ ...options, workspaceDir, binaryPath: bundle.binaryPath,
-    homedir: () => profileHome, env: childEnv, webSocket: null });
+    homedir: () => profileHome, env: childEnv, webSocket: null, disableOptionalTelemetry: true });
 }
 module.exports = { resolveBundledCodex, createBundledCodexChatRpc, VERSION };

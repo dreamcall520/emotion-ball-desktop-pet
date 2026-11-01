@@ -23,6 +23,7 @@
   let stopping = false;
   let composing = false;
   let localError = '';
+  let localSendCancelled = false;
   let failedDraft = '';
   let stateEvents = 0;
   let historyOpen = false;
@@ -68,7 +69,7 @@
   }
   async function openConnections(id) {
     if (changeBlocked() || typeof api.openConnections !== 'function') return;
-    closeSourceMenu(); pending = true; localError = ''; refreshControls();
+    closeSourceMenu(); pending = true; localError = ''; localSendCancelled = false; refreshControls();
     try {
       const result = await api.openConnections(id);
       if (result?.accepted === false) localError = result.error || '授权页面暂时无法打开，请重试。';
@@ -131,7 +132,7 @@
     if (!choice) return;
     if (choice.enabled !== true) { await openConnections(id); return; }
     closeSourceMenu(); if (id === sourceId()) return;
-    pending = true; localError = ''; refreshControls();
+    pending = true; localError = ''; localSendCancelled = false; refreshControls();
     try {
       const result = await api.setSource(id);
       if (!result?.accepted) localError = result?.error || '聊天来源没有切换，请重试。';
@@ -371,7 +372,7 @@
     const error = localError || snapshot.error || '';
     byId('error-banner').hidden = !error;
     byId('error-text').textContent = error;
-    retryButton.hidden = historyOpen || !error || busy || pending || !(failedDraft || lastUserText());
+    retryButton.hidden = localSendCancelled || historyOpen || !error || busy || pending || !(failedDraft || lastUserText());
     const count = byId('character-count');
     count.hidden = input.value.length < 1800;
     count.textContent = `${input.value.length} / 2000`;
@@ -381,6 +382,7 @@
     status.textContent = snapshot.sourceChanging ? `正在切换到 ${sourceName()}…` : snapshot.connection === 'connecting' ? `正在连接 ${sourceName()}…` : busy
       ? '球球正在想…'
       : sourceNeedsAuthorization() ? `先启用 ${sourceName()} 授权，再开始聊天`
+        : localSendCancelled && !snapshot.error ? '消息未发送'
         : error ? '连接遇到了一点问题'
         : snapshot.hasConversation ? '接着聊，我还记得这一段' : '想说什么，我在听';
     byId('privacy-note').textContent = sourceNeedsAuthorization() ? '完成授权连接后才可发送消息；不会自动发送。' : snapshot.billingLabel || `使用 ${sourceName()} ${sourceId() === 'workbuddy' ? '积分' : '额度'} · 延续同一段聊天`;
@@ -467,13 +469,14 @@
     const text = draft.trim();
     if (!text || draft.length > 2000) return;
     pending = true;
-    localError = '';
+    localError = ''; localSendCancelled = false;
     failedDraft = draft;
     refreshControls();
     try {
       const result = await api.send(text);
       if (!result?.accepted) {
         localError = result?.error || '消息没有发出，请稍后再试。';
+        localSendCancelled = result?.cancelled === true;
       } else {
         failedDraft = '';
         if (input.value === draft) {
@@ -615,7 +618,7 @@
   stopButton.addEventListener('click', async () => {
     if (!snapshot.busy || stopping) return;
     stopping = true;
-    localError = '';
+    localError = ''; localSendCancelled = false;
     refreshControls();
     try {
       await api.stop();
@@ -629,7 +632,7 @@
   async function changeChat(action, fallbackError) {
     if (changeBlocked()) return;
     pending = true;
-    localError = '';
+    localError = ''; localSendCancelled = false;
     refreshControls();
     try {
       const result = await action();
@@ -673,7 +676,7 @@
     newChatFromHistory = historyOpen;
     historyOpen = true;
     confirmingNew = true;
-    localError = '';
+    localError = ''; localSendCancelled = false;
     refreshControls();
     byId('cancel-new-chat').focus();
   });

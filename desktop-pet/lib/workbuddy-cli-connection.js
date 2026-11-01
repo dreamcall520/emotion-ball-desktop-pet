@@ -48,6 +48,13 @@ function createWorkBuddyCliConnection({createClient,onChange=()=>{},store,conver
   function confirmUnknownReviewed(){if(state.busy)throw fail('BUSY');store?.write({pendingSend:false,reviewedInOriginalClient:true,createdAt:now()});update({sendOutcome:null,error:null});}
   async function disconnect(){liveTask.disconnect();activeRequestId=null;epoch++;sessionId=null;const previous=client;client=null;update({configured:false,connected:false,gatewayReachable:false,busy:false,sendOutcome:state.sendOutcome==='sending'?'unknown':state.sendOutcome,tasks:[],sessions:[],messages:[],endpoint:null});await previous?.close();return getState();}
   async function close(){liveTask.disconnect();activeRequestId=null;closed=true;epoch++;sessionId=null;state={...state,connected:false,busy:false,sendOutcome:state.sendOutcome==='sending'?'unknown':state.sendOutcome};await client?.close();}
-  return{configure,refresh,connect,send,cancel,confirmUnknownReviewed,getState,disconnect,close};
+  async function getConsentIdentity(){
+    if(closed||!client||!state.connected||state.busy)throw fail('AUTHORIZATION_REQUIRED');
+    const currentClient=client,currentEpoch=epoch,currentSession=sessionId;
+    const observed=typeof client.getVendorAccount==='function'?await client.getVendorAccount():null;
+    if(!valid(currentEpoch)||client!==currentClient||sessionId!==currentSession||observed&&(!observed.authenticated||accountKey&&accountKey!==observed.accountKey))throw fail('UNAUTHENTICATED');
+    return{accountKey:observed?.accountKey||null,conversationKey:currentSession,revision:currentEpoch};
+  }
+  return{configure,refresh,connect,send,getConsentIdentity,cancel,confirmUnknownReviewed,getState,disconnect,close};
 }
 module.exports={createWorkBuddyCliConnection};

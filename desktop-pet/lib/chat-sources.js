@@ -41,6 +41,7 @@ function createChatSources({ codex, createZcode, isZcodeEnabled = () => false,
     finally { if (transition === token) { switching = false; sourceChanged(source); } }
   }
   const result = { getState, sourceChanged, selectSource,
+    getConsentIdentity:(id,text)=>['codex','zcode','workbuddy'].includes(id)&&typeof companion(id).getConsentIdentity==='function'?companion(id).getConsentIdentity(text):Promise.reject(Object.assign(new Error('UNSUPPORTED'),{code:'UNSUPPORTED'})),
     async connectSource(id){if(closed||!['codex','zcode','workbuddy'].includes(id)||!enabled(id))return{accepted:false};await companion(id).connect();return{accepted:true};},
     getSourceState:id=>['codex','zcode','workbuddy'].includes(id)?companion(id).getState():null, zcodeDisabled: () => sourceDisabled('zcode'), workbuddyDisabled: () => sourceDisabled('workbuddy'),
     ownsThread: id => codex.ownsThread(id),

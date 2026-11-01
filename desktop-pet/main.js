@@ -607,7 +607,10 @@ function registerStoreConnections() {
         if(payload?.provider==='zcode'&&storeEnableFlow.getState().zcode.data.status==='ready'&&storeEnableFlow.getState().zcode.chat.status==='needs-data-authorization')await storeEnableFlow.enable('zcode');
         message='原工具数据授权已按实际结果更新，聊天登录保持。';
       } else if(action==='revoke-provider'){
-        await storeEnableFlow.disable(payload?.provider);message='已停用并撤销本地数据授权。';
+        if(['codex','zcode','workbuddy'].includes(payload?.provider))storeChatDataConsent().revoke(payload.provider);await storeEnableFlow.disable(payload?.provider);message='已停用并撤销本地数据授权及聊天数据同意。';
+      } else if(action==='revoke-chat-data-consent'){
+        if(!['codex','zcode','workbuddy'].includes(payload?.provider))return{ok:false};
+        storeChatDataConsent().revoke(payload.provider);message='AI 数据同意已撤销；下次聊天发送或便签智能整理前会重新询问，不会自动发送。';
       } else if(action==='open-provider-chat'){
         if(!['codex','zcode','workbuddy'].includes(payload?.provider))return{ok:false};
         if(!storeChatReady(payload.provider)&&!['ready','needs-model','needs-new-chat'].includes(storeEnableFlow.getState()[payload.provider]?.chat.status))return{ok:false,message:'请先启用授权并完成连接。'};
@@ -681,13 +684,13 @@ function registerStoreConnections() {
       else if (action === 'import-workbuddy-cli') {const imported=await storeRuntime.importWorkbuddyCliService();message=imported.status==='configured'?'个人账号 CLI 连接已导入，请刷新状态或开始专用聊天。':'已取消。';}
       else if (action === 'refresh-workbuddy-cli') {await storeRuntime.workbuddyCli.refresh();message='已按实际返回更新专用 CLI 会话与任务；不代表原桌面任务。';}
       else if (action === 'connect-workbuddy-cli') {await storeRuntime.workbuddyCli.connect();message=storeRuntime.workbuddyCli.getState().connected?'专用 CLI 会话已创建；实际回复待验证。':'CLI 会话尚未连接，请查看具体状态。';}
-      else if (action === 'send-workbuddy-cli') {await storeRuntime.workbuddyCli.send(payload?.content);message=storeRuntime.workbuddyCli.getState().sendOutcome==='complete'?'WorkBuddy 已完成本次回复。':'本次回复尚未确认，请查看状态。';}
+      else if (action === 'send-workbuddy-cli') {const sent=await storeChatSendWithConsent({event,provider:'workbuddy',content:payload?.content,tools:true,send:()=>storeRuntime.workbuddyCli.send(payload?.content)});if(sent?.accepted===false)return{ok:false,message:sent.error,state:await storeConnectionState()};message=storeRuntime.workbuddyCli.getState().sendOutcome==='complete'?'WorkBuddy 已完成本次回复。':'本次回复尚未确认，请查看状态。';}
       else if (action === 'cancel-workbuddy-cli') {await storeRuntime.workbuddyCli.cancel();message='已请求停止本次 CLI 回复，实际状态以返回为准。';}
       else if (action === 'review-workbuddy-cli-unknown') {storeRuntime.workbuddyCli.confirmUnknownReviewed();message='已记录你核对本次 CLI 会话，解除发送锁定。';}
       else if (action === 'configure-workbuddy-official') { storeRuntime.workbuddyOfficial.configure(payload?.baseUrl); message='服务地址已配置，请开始开放平台授权。'; }
       else if (action === 'authorize-workbuddy-official') { await storeRuntime.workbuddyOfficial.beginAuthorization(); message='请在官方授权页核对应用与权限，完成后刷新任务状态。'; }
       else if (action === 'refresh-workbuddy-official') { await storeRuntime.workbuddyOfficial.refresh(); message='开放平台连接与云端任务已按实际结果更新。'; }
-      else if (action === 'send-workbuddy-assistant') { await storeRuntime.workbuddyOfficial.send(payload?.content); message=storeRuntime.workbuddyOfficial.getState().sendOutcome==='accepted'?'WorkBuddy 已接收消息；回复与完成状态待核验。':'本次发送未确认，请查看状态。'; }
+      else if (action === 'send-workbuddy-assistant') { const sent=await storeChatSendWithConsent({event,provider:'workbuddy',content:payload?.content,tools:true,official:true,send:()=>storeRuntime.workbuddyOfficial.send(payload?.content)});if(sent?.accepted===false)return{ok:false,message:sent.error,state:await storeConnectionState()}; message=storeRuntime.workbuddyOfficial.getState().sendOutcome==='accepted'?'WorkBuddy 已接收消息；回复与完成状态待核验。':'本次发送未确认，请查看状态。'; }
       else if (action === 'read-workbuddy-assistant') { await storeRuntime.workbuddyOfficial.refreshMessages(); message='仅查询本次消息之后的共享助理消息，不能保证均属球球。'; }
       else if (action === 'disconnect-workbuddy-official') { await storeRuntime.workbuddyOfficial.disconnect(); message='已解除本服务连接；不等同平台侧撤销全部授权。'; }
       else if (action === 'review-workbuddy-unknown') { storeRuntime.workbuddyOfficial.confirmUnknownReviewed(); message='已记录你在原 WorkBuddy 的核对，解除发送锁定。'; }
@@ -782,6 +785,60 @@ function aboutReleaseState(result) {
 }
 
 function activeChat() { return chat; }
+
+// Separate from directory/plugin consent: this gate covers sending chat data to AI services.
+let chatDataConsent = null;
+function storeChatDataConsent() {
+  if (!chatDataConsent) {
+    const { createChatDataConsent, createChatDataConsentStore } = require('./lib/chat-data-consent');
+    chatDataConsent = createChatDataConsent({ store: createChatDataConsentStore(path.join(app.getPath('userData'), 'chat-data-consent.json')), request: async () => false });
+  }
+  return chatDataConsent;
+}
+async function storeChatSendWithConsent({ event, provider, content, tools = false, official = false, send }) {
+  if (!IS_STORE_BUILD) return send();
+  const owner = tools ? storeConnectionsWindow : chatWindow?.getWindow();
+  const controller = activeChat();
+  const owns = () => !isQuitting && !screenLocked && owner && !owner.isDestroyed() && owner.isVisible() &&
+    event.sender === owner.webContents && event.senderFrame === event.sender.mainFrame &&
+    event.sender.getURL() === pathToFileURL(path.join(__dirname, tools ? 'store-connections.html' : 'chat.html')).href &&
+    (tools || chatWindow?.getWindow() === owner && !chatProviderChanging && activeChat() === controller && controller?.getState().source === provider);
+  if (typeof content !== 'string' || !content.trim() || content.length > (tools ? 8000 : 2000) || content.includes('\0')) return { accepted: false, error: '请输入有效消息，消息未发送。' };
+  return storeChatDataConsent().run({ isCurrent: owns,
+    requestConsent: async info => owns() && (await dialog.showMessageBox(owner, info)).response === 1,
+    getContext: async () => {
+      let identity, state, channel, recipientOrigin, billing;
+      if (tools && official) {
+        state = storeRuntime.workbuddyOfficial.getState();
+        if (!state.connected || state.busy) throw new Error('CONSENT_CONTEXT');
+        identity = storeRuntime.workbuddyOfficial.getConsentIdentity();
+        channel = 'workbuddy-shared-assistant'; recipientOrigin = new URL(state.baseUrl).origin;
+        billing = '消息经球球任务服务转发给 WorkBuddy 官方共享助理，使用该账号积分；共享助理可能执行工具，审批需你本人在原软件处理。';
+      } else {
+        state = tools ? storeRuntime.workbuddyCli.getState() : controller.getState();
+        identity = tools ? await storeRuntime.workbuddyCli.getConsentIdentity() : await controller.getConsentIdentity(provider, content);
+        if (provider === 'codex') { channel = 'codex-official'; recipientOrigin = 'https://chatgpt.com'; billing = '使用球球内独立登录的 Codex 账号额度；可能与原工具读取额度的账号不同。'; }
+        else if (provider === 'workbuddy') { channel = 'workbuddy-dedicated'; recipientOrigin = 'https://www.codebuddy.cn'; billing = '使用球球内登录的 WorkBuddy / CodeBuddy 官方账号积分；这是球球专用会话，不接管原桌面聊天。'; }
+        else {
+          channel = storeRuntime.getZcodeAccountSource(); recipientOrigin = identity.recipientOrigin;
+          if (!recipientOrigin) throw new Error('CONSENT_RECIPIENT_UNVERIFIED');
+          billing = channel === 'configured-custom' ? '使用你选择的已有自定义模型，按原 API 计费，不自动切换到官方套餐。' : '使用你选择的 ZCode 官方套餐额度，不自动切换到自定义 API 计费。';
+        }
+      }
+      const conversation = require('node:crypto').createHash('sha256').update(JSON.stringify([state.activeChatId || null, state.anchorMessageId || null, state.messages || []])).digest('hex');
+      return { provider, channel, recipientOrigin, billing, accountKey: identity.accountKey,
+        conversationKey: identity.conversationKey, revision: [identity.revision, conversation] };
+    }, send });
+}
+
+
+function requestStoreNotesConsent({win,noteId,contentRevision,getAccountIdentity,isCurrent,send}) {
+  const current=()=>!isQuitting&&!screenLocked&&win&&!win.isDestroyed()&&win.isVisible()&&isCurrent();
+  return storeChatDataConsent().run({isCurrent:current,requestConsent:async info=>current()&&(await dialog.showMessageBox(win,info)).response===1,
+    getContext:async()=>({provider:'codex',channel:'notes-organize',recipientOrigin:'https://chatgpt.com',
+      billing:'使用球球内独立登录的 Codex 账号，可能消耗套餐额度，相关计费以该账号套餐为准。',
+      accountKey:(await getAccountIdentity()).accountKey,conversationKey:noteId,revision:contentRevision}),send});
+}
 
 function storeChatReady(provider){const state=chat?.getSourceState?.(provider);return Boolean(state?.connection==='ready'&&!state.accountMismatch&&['ready','provider-managed'].includes(state.modelsStatus));}
 function chatSnapshot(state = activeChat()?.getState()) {
@@ -3709,7 +3766,8 @@ function registerIpc() {
   });
   ipcMain.handle('pet:chat-send', (event, text) => {
     if (!fromChatWindow(event) || screenLocked || chatProviderChanging || !chatWindow.isVisible()) return { accepted: false, error: '请打开聊天面板并等待来源切换完成后再发送。' };
-    return activeChat().send(text);
+    const provider=activeChat().getState().source||'codex';
+    return storeChatSendWithConsent({event,provider,content:text,send:()=>activeChat().send(text)});
   });
   ipcMain.handle('pet:chat-stop', event => {
     if (fromChatWindow(event)) return activeChat().stop();
@@ -4009,7 +4067,7 @@ async function bootstrap() {
   }
   app.setActivationPolicy('accessory');
   if (app.dock) app.dock.hide();
-  if(IS_STORE_BUILD){const applicationMenu=Menu.getApplicationMenu()||Menu.buildFromTemplate([{role:'appMenu'},{role:'editMenu'},{role:'windowMenu'}]);if(!applicationMenu.items.some(item=>item.id==='qiuqiu-store-tools'))applicationMenu.insert(1,new MenuItem({id:'qiuqiu-store-tools',label:'球球工具',submenu:[{label:'工具连接',accelerator:'CommandOrControl+Shift+K',click:()=>openStoreConnections()},...(process.mas===true&&process.qiuqiuMasDevelopmentCandidate===true?[{label:'验证插件安装（仅空测试目录）',click:async()=>{const result=await require('./lib/mas-plugin-install-probe').probePluginInstallation({app,dialog});fs.writeFileSync(path.join(app.getPath('userData'),'mas-installer-probe-result.json'),JSON.stringify(result),{mode:0o600});await dialog.showMessageBox({type:result.passed?'info':'warning',message:result.passed?'空测试目录插件安装验证通过':'空测试目录验证未通过',detail:'仅测试目录，不代表原软件任务已接通或商店审核通过。'});}}]:[])]}));Menu.setApplicationMenu(applicationMenu);}
+  if(IS_STORE_BUILD){const applicationMenu=Menu.getApplicationMenu()||Menu.buildFromTemplate([{role:'appMenu'},{role:'editMenu'},{role:'windowMenu'}]);if(!applicationMenu.items.some(item=>item.id==='qiuqiu-store-tools'))applicationMenu.insert(1,new MenuItem({id:'qiuqiu-store-tools',label:'球球工具',submenu:[{label:'工具连接',accelerator:'CommandOrControl+Shift+K',click:()=>openStoreConnections()},{label:'便签与待办',click:()=>notesCompanion?.openPanel()},{label:'番茄钟',click:()=>openPomodoro()},...(process.mas===true&&process.qiuqiuMasDevelopmentCandidate===true?[{label:'验证插件安装（仅空测试目录）',click:async()=>{const result=await require('./lib/mas-plugin-install-probe').probePluginInstallation({app,dialog});fs.writeFileSync(path.join(app.getPath('userData'),'mas-installer-probe-result.json'),JSON.stringify(result),{mode:0o600});await dialog.showMessageBox({type:result.passed?'info':'warning',message:result.passed?'空测试目录插件安装验证通过':'空测试目录验证未通过',detail:'仅测试目录，不代表原软件任务已接通或商店审核通过。'});}}]:[])]}));Menu.setApplicationMenu(applicationMenu);}
   settingsFile = path.join(app.getPath('userData'), 'settings.json');
   if (IS_STORE_BUILD) storeRuntime = require('./lib/mas-provider-runtime').createMasProviderRuntime({
     app, dialog: {showOpenDialog: options => storeConnectionsWindow && !storeConnectionsWindow.isDestroyed() ? dialog.showOpenDialog(storeConnectionsWindow,options) : dialog.showOpenDialog(options)}, BrowserWindow, session, shell, fetch: (url, options) => net.fetch(url, options), diagnostic: process.mas !== true,
@@ -4075,6 +4133,7 @@ async function bootstrap() {
     onError: error => writeError('番茄钟窗口', error) });
   syncPomodoro();
   notesCompanion = createNotesCompanion({ BrowserWindow, screen, ipcMain, clipboard, dialog,
+    requestOrganizeConsent:IS_STORE_BUILD?requestStoreNotesConsent:null,
     organizer: createNotesOrganizer({ workspaceDir: path.join(app.getPath('userData'), 'notes-workspace'),
       ...(IS_STORE_BUILD ? { createRpc: options => storeRuntime.createCodexChatRpc(options) } : {}) }),
     filePath: path.join(app.getPath('userData'), 'notes-todos.json'),

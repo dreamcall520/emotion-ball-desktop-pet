@@ -10,7 +10,7 @@ const M = require('../lib/notes-model');
 const { createNotesCompanion, visibleBounds } = require('../lib/notes-companion');
 const { petVisualBounds } = require('../lib/pet-visual-bounds');
 
-function fixture(t, initial, getDefaultTab, organizer, getAppearance, getColorMode, getWindowObstacles, onReminderLayout) {
+function fixture(t, initial, getDefaultTab, organizer, getAppearance, getColorMode, getWindowObstacles, onReminderLayout, requestOrganizeConsent) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qiu-notes-window-'));
   const file = path.join(dir, 'notes.json');
   if (initial) fs.writeFileSync(file, JSON.stringify(initial));
@@ -63,7 +63,7 @@ function fixture(t, initial, getDefaultTab, organizer, getAppearance, getColorMo
     clipboard: { writeText: text => clipboard.push(text) },
     dialog: { showSaveDialog: async () => ({ canceled: true }), showMessageBox: async (...args) => { dialogs.push(args.at(-1)); dialogCalls.push(args); return dialogResult; } },
     getPetBounds: () => pet.destroyed ? null : pet.getBounds(), getPetWindow: () => pet,
-    getWindowObstacles, getPetPresentation: () => ({ shape: 'aurora-cloud' }), getDefaultTab, getAppearance, getColorMode, organizer, onError: error => errors.push(error),
+    getWindowObstacles, getPetPresentation: () => ({ shape: 'aurora-cloud' }), getDefaultTab, getAppearance, getColorMode, organizer, requestOrganizeConsent, onError: error => errors.push(error),
     onComplete: id => completions.push(id), onReminderLayout, now: () => clock,
     setTimer: fn => { tick = fn; return { unref() {} }; }, clearTimer: () => { tick = null; }, closeTimeoutMs: 50 });
   t.after(async () => {
@@ -649,4 +649,18 @@ test('其他功能退出保存失败时，便签尚未拆除，可继续使用�
   assert.equal(f.handlers.has('notes:load'), true);
   assert.equal(await f.controller.close({ beforeCommit: () => true }), true);
   assert.equal(panel.isDestroyed(), true);
+});
+
+
+test('便签发送同意绑定原请求窗口和未变记录，正文/可见/暂停变化使授权guard失效',async t=>{
+ for(const mutation of ['edit','hide','pause']){
+  const note=M.newNote('仅本条','合成正文'),other=M.newNote('其他条','不应传送');let sends=0,received;
+  const organizer={organize:async(input,options)=>{assert.deepEqual(input,{title:note.title,body:note.body});const result=await options.beforeSend({getAccountIdentity:async()=>({accountKey:'a'.repeat(64)}),send:()=>{sends++;return{accepted:true};}});if(!result.accepted)throw Error('未获同意');return input;},cancel:async()=>{},close:async()=>{}};
+  let f,panel;
+  const consent=async info=>{received=info;assert.equal(info.win,panel);assert.equal(info.isCurrent(),true);assert.equal(Object.hasOwn(info,'body'),false);assert.match(info.contentRevision,/^[a-f0-9]{64}$/);
+   if(mutation==='edit')f.controller.getStore().update(state=>{state.notes.find(item=>item.id===note.id).body='已经修改';return state;});
+   if(mutation==='hide')panel.hide();if(mutation==='pause')f.controller.pause();assert.equal(info.isCurrent(),false);return{accepted:false};};
+  f=fixture(t,{schema:1,revision:0,notes:[note,other],todos:[]},undefined,organizer,undefined,undefined,undefined,undefined,consent);panel=f.ready(f.controller.openPanel());
+  assert.equal((await f.call(panel,'notes:organize',{id:note.id,title:note.title,body:note.body})).ok,false);assert.equal(sends,0);assert.equal(received.noteId,note.id);assert.equal(f.controller.getStore().getState().notes.find(item=>item.id===other.id).body,other.body);
+ }
 });

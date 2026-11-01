@@ -28,3 +28,13 @@ test('Anthropic工具返回、意外内容和Coding端点保持拒绝',async t=>
  const f=fixture(t,()=>new Response(JSON.stringify({type:'message',role:'assistant',stop_reason:'tool_use',content:[{type:'tool_use',name:'shell'}]})));const d=doc(),row=d.config.providerConfigRules.providerRules[0];row.config.api={type:'anthropic-messages',baseUrl:'https://anthropic.invalid'};fs.writeFileSync(f.file,JSON.stringify(d));await f.rpc.start();const model=(await f.rpc.listModels())[0],thread=await f.rpc.startThread();await f.rpc.startTurn(thread.id,'test',{model:model.id});await completion(f);assert.equal(f.packets.at(-1).params.turn.errorCode,'TOOL_BLOCKED');
  for(const baseUrl of ['https://api.z.ai/api/anthropic','https://open.bigmodel.cn/api/anthropic','https://api.kimi.com/coding']){const value=doc();value.config.providerConfigRules.providerRules[0].config.api={type:'anthropic-messages',baseUrl};assert.throws(()=>strictProjection(value),{code:'CODING_PLAN_SCOPE_UNSUPPORTED'});}
 });
+
+test('聊天数据同意只按实际origin和凭据身份分域，同服务切模型不重复且不暴露密钥',async t=>{
+ const f=fixture(t),document=doc();document.config.providerConfigRules.providerRules[0].config.personalModelIds.push('another-model');fs.writeFileSync(f.file,JSON.stringify(document));
+ await f.rpc.start();const models=await f.rpc.listModels(),first=await f.rpc.getConsentIdentity({model:models[0].id}),second=await f.rpc.getConsentIdentity({model:models[1].id});
+ assert.equal(first.accountKey,second.accountKey);assert.equal(first.recipientOrigin,'https://fixture.invalid');assert.equal(JSON.stringify(first).includes('fixture-secret'),false);assert.equal(f.calls.length,0);
+ const projection=strictProjection(document),row=document.config.providerConfigRules.providerRules[0];row.config.api.baseUrl='https://other.invalid/v1';const moved=strictProjection(document);
+ assert.notEqual([...projection.routes.values()][0].consentAccountKey,[...moved.routes.values()][0].consentAccountKey);
+ row.config.api.baseUrl='https://fixture.invalid/v1';row.config.access.apiKey='changed-fixture-secret';const changed=strictProjection(document);
+ assert.notEqual([...projection.routes.values()][0].consentAccountKey,[...changed.routes.values()][0].consentAccountKey);
+});

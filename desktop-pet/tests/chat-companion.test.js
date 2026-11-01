@@ -715,3 +715,12 @@ test('解码展示文本但拒绝未知动作和未结束的 JSON', () => {
   assert.equal(finalReply('{"text":"测试","action":"hop"'), null);
   assert.deepEqual(finalReply('{"text":"测试","action":"hop"}'), { text: '测试', action: 'hop' });
 });
+
+test('第三方聊天同意内部身份复核零模型请求，身份不进公开snapshot；静默账号变化拒绝',async t=>{
+ const f=fixture(t);await assert.rejects(f.companion.getConsentIdentity(),{code:'UNAUTHENTICATED'});await f.companion.connect();
+ const identity=await f.companion.getConsentIdentity('仅本机计算所选模型');assert.equal(identity.accountKey,ACCOUNT_A);assert.ok(identity.conversationKey);
+ assert.equal(f.count('startThread'),0);assert.equal(f.count('startTurn'),0);assert.equal(JSON.stringify(f.companion.getState()).includes(ACCOUNT_A),false);
+ const client=f.connections.at(-1);client.getConsentIdentity=async()=>({accountKey:ACCOUNT_B,recipientOrigin:'https://selected.invalid',channel:'configured-custom'});
+ const route=await f.companion.getConsentIdentity();assert.equal(route.recipientOrigin,'https://selected.invalid');assert.equal(route.accountKey,ACCOUNT_B);
+ f.account={authenticated:true,accountKey:ACCOUNT_B};await assert.rejects(f.companion.getConsentIdentity(),{code:'ACCOUNT_CHANGED'});assert.equal(f.count('startTurn'),0);
+});

@@ -253,7 +253,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
       close() { return retire(); },
       invalidate() { return retire('DISCONNECTED'); }
     };
-    for (const method of ['readAccount','startThread','resumeThread','startTurn','listModels','nameThread','readThreadEnvironment','verifyThreadEnvironment','interruptTurn']) {
+    for (const method of ['readAccount','getConsentIdentity','startThread','resumeThread','startTurn','listModels','nameThread','readThreadEnvironment','verifyThreadEnvironment','interruptTurn']) {
       facade[method] = (...args) => {
         if (ended || closed) return Promise.reject(failure('CLOSED'));
         if (!slot.service && !(provider==='codex'&&bundledEnabled) && !(provider==='zcode'&&directZcodeEnabled)) return Promise.reject(failure('MISSING'));

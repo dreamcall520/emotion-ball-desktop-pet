@@ -1,0 +1,233 @@
+{
+  "checkedAt": "2026-11-01",
+  "scope": "Local bundled WorkBuddy node_modules only; package.json name/version/license and LICENSE/LICENCE/NOTICE paths. No license text or account data read.",
+  "sourceRoot": "desktop-pet/build/qiuqiu-workbuddy/node_modules",
+  "summary": {
+    "realPackages": 9,
+    "topLevelPackages": 8,
+    "embeddedPackages": 1,
+    "packageJsonFiles": 28,
+    "excludedSubpathOrTemplateManifests": 19,
+    "missingStandaloneLicenseNoticeFiles": 0,
+    "nonpermissiveOrRestrictedDeclarations": 0,
+    "unknownDeclarations": 1
+  },
+  "packages": [
+    {
+      "name": "@agentclientprotocol/sdk",
+      "version": "1.9.0",
+      "license": "Apache-2.0",
+      "packageJson": "@agentclientprotocol/sdk/package.json",
+      "root": "@agentclientprotocol/sdk",
+      "kind": "top-level-package",
+      "licenseNoticeFiles": [
+        "@agentclientprotocol/sdk/LICENSE"
+      ],
+      "missingStandaloneLicenseNoticeFile": false,
+      "classification": "permissive-declaration"
+    },
+    {
+      "name": "@openai/agents-core",
+      "version": "0.20.0",
+      "license": "MIT",
+      "packageJson": "@openai/agents-core/package.json",
+      "root": "@openai/agents-core",
+      "kind": "top-level-package",
+      "licenseNoticeFiles": [
+        "@openai/agents-core/LICENSE"
+      ],
+      "missingStandaloneLicenseNoticeFile": false,
+      "classification": "permissive-declaration"
+    },
+    {
+      "name": "@standard-schema/spec",
+      "version": "1.1.0",
+      "license": "MIT",
+      "packageJson": "@standard-schema/spec/package.json",
+      "root": "@standard-schema/spec",
+      "kind": "top-level-package",
+      "licenseNoticeFiles": [
+        "@standard-schema/spec/LICENSE"
+      ],
+      "missingStandaloneLicenseNoticeFile": false,
+      "classification": "permissive-declaration"
+    },
+    {
+      "name": "@genie/node-pty-win32",
+      "version": "1.2.0-beta.14-cbc.1",
+      "license": "MIT",
+      "packageJson": "@tencent-ai/codebuddy-code/bin/native/node-pty-win32/package.json",
+      "root": "@tencent-ai/codebuddy-code/bin/native/node-pty-win32",
+      "kind": "embedded-package",
+      "licenseNoticeFiles": [
+        "@tencent-ai/codebuddy-code/bin/native/node-pty-win32/LICENSE"
+      ],
+      "missingStandaloneLicenseNoticeFile": false,
+      "classification": "permissive-declaration"
+    },
+    {
+      "name": "@tencent-ai/codebuddy-code",
+      "version": "2.179.0",
+      "license": "SEE LICENSE IN README.md",
+      "packageJson": "@tencent-ai/codebuddy-code/package.json",
+      "root": "@tencent-ai/codebuddy-code",
+      "kind": "top-level-package",
+      "licenseNoticeFiles": [
+        "@tencent-ai/codebuddy-code/LICENSE.txt"
+      ],
+      "missingStandaloneLicenseNoticeFile": false,
+      "classification": "unknown-declaration",
+      "referencedLicenseFile": {
+        "path": "@tencent-ai/codebuddy-code/README.md",
+        "present": true,
+        "contentReviewed": false
+      }
+    },
+    {
+      "name": "debug",
+      "version": "4.4.3",
+      "license": "MIT",
+      "packageJson": "debug/package.json",
+      "root": "debug",
+      "kind": "top-level-package",
+      "licenseNoticeFiles": [
+        "debug/LICENSE"
+      ],
+      "missingStandaloneLicenseNoticeFile": false,
+      "classification": "permissive-declaration"
+    },
+    {
+      "name": "ms",
+      "version": "2.1.3",
+      "license": "MIT",
+      "packageJson": "ms/package.json",
+      "root": "ms",
+      "kind": "top-level-package",
+      "licenseNoticeFiles": [
+        "ms/license.md"
+      ],
+      "missingStandaloneLicenseNoticeFile": false,
+      "classification": "permissive-declaration"
+    },
+    {
+      "name": "openai",
+      "version": "7.47.0",
+      "license": "Apache-2.0",
+      "packageJson": "openai/package.json",
+      "root": "openai",
+      "kind": "top-level-package",
+      "licenseNoticeFiles": [
+        "openai/LICENSE"
+      ],
+      "missingStandaloneLicenseNoticeFile": false,
+      "classification": "permissive-declaration"
+    },
+    {
+      "name": "zod",
+      "version": "4.6.7",
+      "license": "MIT",
+      "packageJson": "zod/package.json",
+      "root": "zod",
+      "kind": "top-level-package",
+      "licenseNoticeFiles": [
+        "zod/LICENSE"
+      ],
+      "missingStandaloneLicenseNoticeFile": false,
+      "classification": "permissive-declaration"
+    }
+  ],
+  "excludedManifests": [
+    {
+      "packageJson": "@tencent-ai/codebuddy-code/builtin/mod-templates/bundle/package.json",
+      "reason": "uninstantiated bundled mod template"
+    },
+    {
+      "packageJson": "@tencent-ai/codebuddy-code/builtin/mod-templates/bundle/plugins/quick-action/package.json",
+      "reason": "uninstantiated bundled mod template"
+    },
+    {
+      "packageJson": "@tencent-ai/codebuddy-code/builtin/mod-templates/bundle/plugins/workflow/package.json",
+      "reason": "uninstantiated bundled mod template"
+    },
+    {
+      "packageJson": "@tencent-ai/codebuddy-code/builtin/mod-templates/client/package.json",
+      "reason": "uninstantiated bundled mod template"
+    },
+    {
+      "packageJson": "@tencent-ai/codebuddy-code/builtin/mod-templates/dual/package.json",
+      "reason": "uninstantiated bundled mod template"
+    },
+    {
+      "packageJson": "@tencent-ai/codebuddy-code/builtin/mod-templates/host/package.json",
+      "reason": "uninstantiated bundled mod template"
+    },
+    {
+      "packageJson": "@tencent-ai/codebuddy-code/builtin/mod-templates/pet/package.json",
+      "reason": "uninstantiated bundled mod template"
+    },
+    {
+      "packageJson": "@tencent-ai/codebuddy-code/builtin/mod-templates/sidebar/package.json",
+      "reason": "uninstantiated bundled mod template"
+    },
+    {
+      "packageJson": "@tencent-ai/codebuddy-code/builtin/mod-templates/skin/package.json",
+      "reason": "uninstantiated bundled mod template"
+    },
+    {
+      "packageJson": "@tencent-ai/codebuddy-code/builtin/mod-templates/workbench/package.json",
+      "reason": "uninstantiated bundled mod template"
+    },
+    {
+      "packageJson": "zod/locales/package.json",
+      "reason": "subpath manifest without name/version"
+    },
+    {
+      "packageJson": "zod/mini/package.json",
+      "reason": "subpath manifest without name/version"
+    },
+    {
+      "packageJson": "zod/v3/package.json",
+      "reason": "subpath manifest without name/version"
+    },
+    {
+      "packageJson": "zod/v4/classic/package.json",
+      "reason": "subpath manifest without name/version"
+    },
+    {
+      "packageJson": "zod/v4/core/package.json",
+      "reason": "subpath manifest without name/version"
+    },
+    {
+      "packageJson": "zod/v4/locales/package.json",
+      "reason": "subpath manifest without name/version"
+    },
+    {
+      "packageJson": "zod/v4/mini/package.json",
+      "reason": "subpath manifest without name/version"
+    },
+    {
+      "packageJson": "zod/v4/package.json",
+      "reason": "subpath manifest without name/version"
+    },
+    {
+      "packageJson": "zod/v4-mini/package.json",
+      "reason": "subpath manifest without name/version"
+    }
+  ],
+  "findings": [
+    {
+      "name": "@tencent-ai/codebuddy-code",
+      "version": "2.179.0",
+      "packageJson": "@tencent-ai/codebuddy-code/package.json",
+      "missingStandaloneLicenseNoticeFile": false,
+      "classification": "unknown-declaration"
+    }
+  ],
+  "limitations": [
+    "This metadata inventory is not a legal or redistribution approval.",
+    "A permissive package.json declaration does not establish that attribution/NOTICE obligations are satisfied.",
+    "Bundled code without its own package.json, binary-internal components and upstream full dependency trees are not established by this scan.",
+    "Subpath manifests and uninstantiated mod templates are recorded separately, not counted as installed packages.",
+    "The top-level CodeBuddy SEE LICENSE IN README.md declaration remains unresolved under the paths-only review scope, despite a standalone LICENSE.txt being present."
+  ]
+}
