@@ -69,3 +69,7 @@ Codex 联网功能需要本人有效账号及相应服务权限，模型和额�
 | 5 | 天气卡片、便签与番茄钟 | 城市天气与本地效率工具；采集时说明是否为测试资料 |
 
 截图分辨率、最低系统版本、支持芯片和体积待按 App Store Connect 当前要求及最终包填写。
+
+## 当前包的技术字段证据
+
+源码正式Bundle ID为 `local.xiaokun.emotionball.pet`；当前已签开发包为独立 `.masdevelopment`。开发包Info.plist实际最低系统macOS12.0，类别`public.app-category.entertainment`；当前构建arm64，未证明Universal/Intel。最终分发仍需逐字段回读，不能用native编译min11参数承诺支持macOS11。记录见 `bundle-metadata-development.json`。版权法律主体未确认，未填虚构NSHumanReadableCopyright。

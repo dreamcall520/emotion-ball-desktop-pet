@@ -1,0 +1,13 @@
+{
+  "evidenceKind": "Current signed MAS development bundle only",
+  "sourceCommit": "0b1f746",
+  "name": "球球桌宠-商店沙盒开发候选",
+  "version": "0.4.10",
+  "developmentBundleId": "local.xiaokun.emotionball.pet.masdevelopment",
+  "minimumMacOS": "12.0",
+  "category": "public.app-category.entertainment",
+  "humanReadableCopyrightPresent": false,
+  "formalBundleIdFromBuildConfig": "local.xiaokun.emotionball.pet",
+  "distributionBuilt": false,
+  "uploaded": false
+}
