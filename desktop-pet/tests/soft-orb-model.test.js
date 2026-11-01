@@ -47,3 +47,25 @@ test('八材质、两种背景和自定义颜色均产生有限主题色，非�
   assert.notDeepEqual(a.affection,model.colors({}).affection);
   assert.equal(model.palette({orbMaterial:'bad',bodyColor:'url(secret)'}).colors[0],'#F9F8FF');
 });
+test('小宇待机四向观察在单次观察中稳定且不连续重复，回正后不残留偏移',()=>{
+  const directions=new Set();let previous;
+  for(let i=0;i<100;i++){
+    const t=i*10+3.5,p=model.statePose(motion,'idle',t),again=model.statePose(motion,'idle',t+.01);
+    const direction=Math.abs(p.lookX)>.01?'x'+Math.sign(p.lookX):'y'+Math.sign(p.lookY);
+    assert.notEqual(direction,previous);previous=direction;directions.add(direction);
+    assert.equal(p.lookX,again.lookX);assert.equal(p.lookY,again.lookY);
+    const rest=model.statePose(motion,'idle',i*10+6);assert(Math.abs(rest.lookX)<1e-9);assert(Math.abs(rest.lookY)<1e-9);
+    assert(Math.abs(p.lift)<.06);assert.equal(p.modelScale,1);
+  }
+  assert.equal(directions.size,4);
+});
+
+test('桌面与预览小宇的观察方向独立，不因交错渲染重新抽取方向',()=>{
+  const a={cycle:-1,index:-1},b={cycle:-1,index:-1};
+  const first=model.statePose(motion,'idle',3.5,{},3.5,a);
+  for(let i=0;i<20;i++){
+    model.statePose(motion,'idle',i*10+3.5,{},3.5,b);
+    const next=model.statePose(motion,'idle',3.51,{},3.51,a);
+    assert.equal(next.lookX,first.lookX);assert.equal(next.lookY,first.lookY);
+  }
+});
