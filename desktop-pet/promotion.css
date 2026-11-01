@@ -122,3 +122,6 @@ dialog.skin-promo-contact{width:min(440px,calc(100vw - 44px));padding:22px 25px}
 #skin-promo-banner:focus-visible{outline:none}
 #skin-promo-banner:focus-visible .skin-promo-cta{filter:brightness(1.08)}
 .skin-promo-dialog .skin-promo-close:focus-visible{outline:none;background:#ffffff16}
+
+/* A quiet first-release note; the contact content remains the focus. */
+#skin-promo-contact .skin-promo-free-note{margin:12px 0 4px;font-size:11px;line-height:18px;color:#adb5bf;text-align:center;overflow-wrap:anywhere}
