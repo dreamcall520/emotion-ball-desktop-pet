@@ -59,3 +59,13 @@ test('小宇待机四向观察在单次观察中稳定且不连续重复，回�
   }
   assert.equal(directions.size,4);
 });
+
+test('桌面与预览小宇的观察方向独立，不因交错渲染重新抽取方向',()=>{
+  const a={cycle:-1,index:-1},b={cycle:-1,index:-1};
+  const first=model.statePose(motion,'idle',3.5,{},3.5,a);
+  for(let i=0;i<20;i++){
+    model.statePose(motion,'idle',i*10+3.5,{},3.5,b);
+    const next=model.statePose(motion,'idle',3.51,{},3.51,a);
+    assert.equal(next.lookX,first.lookX);assert.equal(next.lookY,first.lookY);
+  }
+});
