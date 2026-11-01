@@ -213,7 +213,7 @@ test('GA4 sends one sanitized page view and only a known source/medium pair, eve
 
 test('current downloads reach GA4 without changing Umami; history, arbitrary links and failures never block navigation', async () => {
   const state = page({ configure(c) { c.document.currentScript.dataset.ga4Id = ga4Id; } });
-  const link = { href: 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.10/Qiuqiu-0.4.10-macOS-arm64.dmg',
+  const link = { href: 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.12/Qiuqiu-0.4.12-macOS-arm64.dmg',
     dataset: { downloadArch: 'arm64', downloadPosition: 'hero', email: 'private@example.test' }, closest: () => null };
   let prevented = false;
   const event = { type: 'click', button: 0, target: { closest: () => link }, preventDefault: () => { prevented = true; } };
@@ -222,18 +222,18 @@ test('current downloads reach GA4 without changing Umami; history, arbitrary lin
   assert.equal(state.calls.length, 1);
   assert.equal(downloads().length, 1);
   assert.equal(downloads()[0][2].architecture, 'arm64');
-  assert.equal(downloads()[0][2].version, '0.4.10');
+  assert.equal(downloads()[0][2].version, '0.4.12');
   assert.equal(downloads()[0][2].download_source, 'github');
   assert.doesNotMatch(JSON.stringify(downloads()), /private|github\.com|\.dmg/);
   link.dataset = {}; // Historical release links have no current-download markers.
   state.listeners.click(event);
   assert.equal(downloads().length, 1);
-  link.href = 'https://share.weiyun.com/fdzg4UOY';
+  link.href = 'https://share.weiyun.com/7K7UEsDa';
   for (const [ancestor, position] of [['nav', 'navigation'], ['.hero-actions', 'hero'], ['', 'download']]) {
     link.closest = selector => selector === ancestor ? {} : null;
     state.listeners.click(event);
     assert.equal(downloads().at(-1)[2].position, position);
-    assert.equal(downloads().at(-1)[2].version, '0.4.10');
+    assert.equal(downloads().at(-1)[2].version, '0.4.12');
     assert.equal(downloads().at(-1)[2].download_source, 'weiyun');
   }
   assert.equal(state.calls.length, 1, 'domestic links do not extend the legacy Umami metric');
@@ -243,7 +243,7 @@ test('current downloads reach GA4 without changing Umami; history, arbitrary lin
   assert.equal(downloads().length, 5);
   link.href = 'https://unrelated.example/file.dmg'; state.listeners.auxclick(event);
   assert.equal(downloads().length, 5);
-  link.href = 'https://share.weiyun.com/fdzg4UOY';
+  link.href = 'https://share.weiyun.com/7K7UEsDa';
   for (const gtag of [undefined, () => { throw Error('blocked'); }, () => Promise.reject(Error('offline'))]) {
     state.window.gtag = gtag;
     assert.doesNotThrow(() => state.listeners.auxclick(event));
@@ -261,7 +261,7 @@ test('Intel domestic remains 0.4.09 while obsolete Apple share is not relabeled'
  link.href='https://share.weiyun.com/EYLnV2WY';link.dataset={};state.listeners.click(event);assert.equal(downloads().length,1,'old Apple share cannot report the new release');
 });
 
-test('all twelve public pages configure GA4, while only the original four retain Umami', () => {
+test('product pages configure GA4 while dedicated App Store privacy remains tracker-free', () => {
   const root = path.join(__dirname, '..');
   const sitemap = readFileSync(path.join(root, 'sitemap.xml'), 'utf8');
   const publicFiles = [...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)].map(match => new URL(match[1]).pathname.slice(1) + 'index.html');
@@ -270,6 +270,7 @@ test('all twelve public pages configure GA4, while only the original four retain
   for (const file of publicFiles) {
     const html = readFileSync(path.join(root, file), 'utf8');
     const tags = [...html.matchAll(/<script[^>]+src="([^"]*analytics\.js[^"]*)"[^>]*><\/script>/g)];
+    if (file === 'privacy/mac-app-store/index.html') { assert.equal(tags.length, 0, file); continue; }
     assert.equal(tags.length, 1, file);
     assert.equal(path.resolve(root, path.dirname(file), tags[0][1].split('?')[0]), path.join(root, 'analytics.js'));
     const value = tags[0][0].match(/data-ga4-id="([^"]*)"/)?.[1];
@@ -277,7 +278,7 @@ test('all twelve public pages configure GA4, while only the original four retain
     ga4Ids.add(value);
     if (tags[0][0].includes('data-website-id=')) umamiCount++;
   }
-  assert.equal(publicFiles.length, 12);
+  assert.equal(publicFiles.filter(file => file !== 'privacy/mac-app-store/index.html').length, 12);
   assert.equal(umamiCount, 4);
   assert.equal(ga4Ids.size, 1, 'all public pages use the same measurement ID');
   for (const file of readdirSync(root, { recursive: true }).filter(file => file.endsWith('.html') && !publicFiles.includes(file))) {

@@ -137,7 +137,7 @@
       track('download', { architecture, position });
       gaTrack('event', 'download_click', { ...page, send_to: ga4Id, architecture, position,
         download_source: 'weiyun', version: '0.4.09' });
-    } else if (link.href === 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.12/Qiuqiu-0.4.12-macOS-arm64.dmg') {
+    } else if (link.href === 'https://share.weiyun.com/7K7UEsDa') {
       const position = link.closest?.('nav') ? 'navigation' : link.closest?.('.hero-actions') ? 'hero' : 'download';
       gaTrack('event', 'download_click', { ...page, send_to: ga4Id, architecture: 'arm64', position,
         download_source: 'weiyun', version: '0.4.12' });
