@@ -18,13 +18,13 @@
     const loginPending=typeof state.providerLoginPending?.[provider]==='boolean'?state.providerLoginPending[provider]:chat?.loginPending===true;
     if(chat?.status==='needs-login'&&loginPending)return part('working',chat.message||'等待本人完成官方登录');
     if(provider==='zcode'&&state.zcode?.accountSource==='official'&&state.zcodeSnapshot?.quota?.balanceState==='empty')return part('unavailable','官方套餐为空，官方账号聊天尚未验证');
-    if(chat?.status==='needs-login')return part('needs-authorization',chat.message||'尚未连接聊天');
+    if(chat?.status==='needs-login')return part('needs-authorization',provider==='codex'&&state.codex?.chat==='installed-codex-runtime'&&onboarding?.status==='idle'?'连接本机 Codex，复用原应用登录':chat.message||'尚未连接聊天');
     if(actual&&chat?.status!=='unavailable'){if(actual.connection!=='ready')return part(actual.connection==='connecting'?'working':'unknown','聊天连接待恢复');return part(actual.modelsStatus==='loading'?'working':'needs-authorization',actual.modelsStatus==='loading'?'正在读取聊天模型':'请选择聊天模型');}
     if(['needs-new-chat'].includes(chat?.status))return part('unknown','账号或聊天范围已变化，请开始新聊天');
     if(chat?.status==='needs-model')return part('needs-authorization','请选择聊天模型');
     if(chat?.status==='ready')return part('ready',provider==='zcode'?(state.zcode?.accountSource==='configured-custom'?'使用已有自定义模型 · 原 API 计费':'使用官方套餐聊天'):'聊天已连接 · 使用球球专用会话');
     if(onboarding?.status==='working')return part('working','正在连接聊天');
-    if(chat?.status==='needs-data-authorization')return part('needs-authorization','需要允许读取已有模型配置');
+    if(chat?.status==='needs-data-authorization')return part('needs-authorization',provider==='codex'?(chat.message||'需要允许使用本机 Codex'):'需要允许读取已有模型配置');
     // A configured endpoint is not evidence of a successful account connection.
     if(chat?.status!=='unavailable'&&selected?.connection==='ready'&&selected.modelsStatus==='ready')return part('ready','聊天已连接');
     if(!actual&&chat?.status!=='unavailable'&&provider==='workbuddy'&&state.workbuddyCli?.connected===true&&state.workbuddyCli?.sendOutcome!=='unknown')return part('ready','聊天已连接 · 使用球球专用会话');
@@ -33,9 +33,10 @@
   }
   function quotaPart(state,provider){
     if(provider==='codex'&&state.managedCodexQuota){
-      const managed=state.managedCodexQuota,snapshot=managed.snapshot;
+      const managed=state.managedCodexQuota,snapshot=managed.snapshot,installed=state.codex?.chat==='installed-codex-runtime';
       const windows=rows(snapshot?.windows).filter(w=>Number.isFinite(w.usedPercent)&&w.usedPercent>=0&&w.usedPercent<=100);
-      if(windows.length&&managed.status==='ready')return part('ready','球球聊天账号 · '+windows.map(w=>(w.windowMinutes===10080?'周额度':w.windowMinutes===300?'5小时额度':'额度')+'剩余 '+pct(100-w.usedPercent)).join('；'),snapshot.updatedAt);
+      if(windows.length&&managed.status==='ready')return part('ready',(installed?'本机 Codex 账号 · ':'球球聊天账号 · ')+windows.map(w=>(w.windowMinutes===10080?'周额度':w.windowMinutes===300?'5小时额度':'额度')+'剩余 '+pct(100-w.usedPercent)).join('；'),snapshot.updatedAt);
+      if(installed)return part(['needs-login','needs-authorization'].includes(managed.status)?'needs-authorization':'unknown',managed.status==='needs-login'?'请先在原 ChatGPT 或 Codex 应用登录，再检查连接':managed.status==='needs-authorization'?'连接本机 Codex 后查看原账号额度':'本机 Codex 账号额度暂未读取成功');
       return part(managed.status==='needs-login'?'needs-authorization':'unknown',managed.status==='needs-login'?'连接球球聊天账号后查看同账号额度，无需原工具目录授权':'球球聊天账号额度暂未读取成功；不会改用原工具账号额度');
     }
     if(provider==='workbuddy'){

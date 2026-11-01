@@ -10,7 +10,7 @@
     const ready = chat?.status === 'ready' || ['needs-model', 'needs-new-chat'].includes(state?.onboarding?.codex?.chat?.status);
     el('open-chat').disabled = busy || !ready;
     el('connect').disabled = busy || state?.onboarding?.codex?.status === 'working';
-    el('connect').textContent = state?.onboarding?.codex?.status === 'working' ? '等待本人完成登录…' : ready ? '检查 Codex 连接' : '连接 Codex';
+    el('connect').textContent = state?.onboarding?.codex?.status === 'working' ? '正在连接本机 Codex…' : ready ? '检查本机 Codex 连接' : '连接本机 Codex';
   }
   function paint(next) {
     if (!next || closed) return;

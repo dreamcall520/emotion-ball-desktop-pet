@@ -3,7 +3,20 @@ const fs = require('node:fs');
 const path = require('node:path');
 const FIRST_RELEASE = 'mas-first';
 const isFirstRelease = config => config?.releaseProfile === FIRST_RELEASE;
-const resourceNames = config => isFirstRelease(config) ? ['qiuqiu-codex'] : ['qiuqiu-codex', 'qiuqiu-workbuddy'];
+const resourceNames = config => isFirstRelease(config) ? [] : ['qiuqiu-codex', 'qiuqiu-workbuddy'];
+const providerRuntimeMetadata=config=>({codexRuntime:isFirstRelease(config)?'user-installed':'bundled',bundled:!isFirstRelease(config),installedProviderAcceptance:false});
+function assertNoBundledProviders(appPath,config,io=fs){
+ if(!isFirstRelease(config))return;
+ for(const provider of ['qiuqiu-codex','qiuqiu-workbuddy'])if(io.existsSync(path.join(appPath,'Contents/Resources',provider)))throw Object.assign(Error('Unexpected bundled provider runtime'),{code:'MAS_FIRST_BUNDLED_RUNTIME_PRESENT'});
+}
+// Own native modules and native LoginItem/Electron helpers remain signed and
+// verified even when no vendor executable is bundled. Never follow symlinks.
+function ownSigningTargets(appPath,io=fs){
+ const targets=[];
+ function walk(directory){if(!io.existsSync(directory))return;for(const name of io.readdirSync(directory)){const full=path.join(directory,name),stat=io.lstatSync(full);if(stat.isSymbolicLink())continue;if(stat.isDirectory()){if(name.endsWith('.app'))targets.push({path:full,entitlements:true});walk(full);}else if(stat.isFile()&&name.endsWith('.node'))targets.push({path:full,entitlements:false});}}
+ for(const child of ['Frameworks','Library/LoginItems','Resources/app.asar.unpacked'])walk(path.join(appPath,'Contents',child));
+ return targets;
+}
 // Build-time filtering only. Runtime modules still statically imported by main
 // remain until their call sites are removed; first-release startup disables them.
 function trimStaging(staging, config, io = fs) {
@@ -54,4 +67,4 @@ function trimElectronLocales(appPath,config,io=fs){
  return report;
 }
 
-module.exports = { FIRST_RELEASE, isFirstRelease, resourceNames, trimStaging, FIRST_RELEASE_LANGUAGES, keepElectronLanguage, trimElectronLocales };
+module.exports = { FIRST_RELEASE, isFirstRelease, resourceNames, providerRuntimeMetadata, assertNoBundledProviders, ownSigningTargets, trimStaging, FIRST_RELEASE_LANGUAGES, keepElectronLanguage, trimElectronLocales };

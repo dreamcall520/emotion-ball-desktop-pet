@@ -120,8 +120,8 @@ function buildFixture(t, overrides = {}) {
     buildWeatherLocation() { calls.push(['weather']); },
     buildPluginHost() { calls.push(['plugin-native']); },
     validateResources:async()=>{calls.push(['resources-validated']);},
-    async packager(options) { calls.push(['packager']); captured.options = options; const output = path.join(options.out, '球球桌宠-mas-' + options.arch); const app=path.join(output,'球球桌宠.app');fs.mkdirSync(app,{recursive:true});resources(app,options.arch);captured.app=app;return [output]; },
-    signing: { async sign(options){calls.push(['sign']);captured.sign=options;fs.appendFileSync(options.binaries[0],'-signed');fs.appendFileSync(path.join(options.app,'Contents/Resources/qiuqiu-workbuddy/node_modules/fixture/native.node'),'-signed');},async flat(options) { calls.push(['flat']); captured.flat = options; fs.writeFileSync(options.pkg, 'synthetic-not-a-package'); } },
+    async packager(options) { calls.push(['packager']); captured.options = options; const output = path.join(options.out, '球球桌宠-mas-' + options.arch); const app=path.join(output,'球球桌宠.app');fs.mkdirSync(app,{recursive:true});if(options.extraResource.length)resources(app,options.arch);else{fs.mkdirSync(path.join(app,'Contents/Resources'),{recursive:true});fs.mkdirSync(path.join(app,'Contents/Frameworks/Fixture Helper.app'),{recursive:true});fs.mkdirSync(path.join(app,'Contents/Library/LoginItems/Fixture Login Helper.app'),{recursive:true});const native=path.join(app,'Contents/Resources/app.asar.unpacked/desktop-pet/native');fs.mkdirSync(native,{recursive:true});fs.writeFileSync(path.join(native,'weather-location.node'),'native');}captured.app=app;return [output]; },
+    signing: { async sign(options){calls.push(['sign']);captured.sign=options;if(options.binaries.length){fs.appendFileSync(options.binaries[0],'-signed');fs.appendFileSync(path.join(options.app,'Contents/Resources/qiuqiu-workbuddy/node_modules/fixture/native.node'),'-signed');}else assert.equal(fs.existsSync(path.join(options.app,'Contents/Resources/qiuqiu-codex')),false);},async flat(options) { calls.push(['flat']); captured.flat = options; fs.writeFileSync(options.pkg, 'synthetic-not-a-package'); } },
     ...overrides
   };
   return { root, env: configured, calls, captured, dep };
@@ -235,8 +235,16 @@ test('错SHA、仅有Darwin归档或链接缓存明确拒绝，在任何编译�
  assert.deepEqual(validateMasRuntimeCache(config),{used:false,validated:false});
 });
 
-test('首发分发配置只携带Codex，不授予外部任务插件执行写权限',()=>{
+test('首发分发配置不携带厂商组件，不授予外部任务插件执行写权限',()=>{
  const config={...configFor(pkg,env).config,releaseProfile:'mas-first'};
- assert.deepEqual(packagerOptions('/root',config,'/stage','/icon').extraResource,['/root/desktop-pet/build/qiuqiu-codex']);
+ assert.deepEqual(packagerOptions('/root',config,'/stage','/icon').extraResource,[]);
  assert.equal(entitlementsFor(config).main['com.apple.security.files.user-selected.executable'],undefined);
 });
+
+ test('首发正式流水线可以无厂商helper产物，并验证自有Electron/native/loginhelper签名',async t=>{
+ const h=buildFixture(t);fs.writeFileSync(path.join(h.root,'package.json'),JSON.stringify({...pkg,qiuqiuReleaseProfile:'mas-first'}));
+ const result=await buildMas({root:h.root,env:h.env},h.dep);
+ assert.equal(result.signedDistributionPackage,true);assert.equal(result.codexRuntime,'user-installed');assert.equal(result.bundled,false);assert.equal(result.installedProviderAcceptance,false);assert.deepEqual(result.bundledManifestRefresh,{codexFiles:0,workbuddyFiles:0});assert.deepEqual(h.captured.options.extraResource,[]);assert.deepEqual(h.captured.sign.binaries,[]);assert.equal(h.calls.some(([name])=>name==='resources-validated'),false);
+ for(const name of ['qiuqiu-codex','qiuqiu-workbuddy'])assert.equal(fs.existsSync(path.join(h.captured.app,'Contents/Resources',name)),false);
+ for(const name of ['Frameworks/Fixture Helper.app','Library/LoginItems/Fixture Login Helper.app','Resources/app.asar.unpacked/desktop-pet/native/weather-location.node'])assert.ok(h.calls.some(([cmd,args])=>cmd==='codesign'&&args[0]==='--verify'&&args.at(-1)===path.join(h.captured.app,'Contents',name)));
+ });

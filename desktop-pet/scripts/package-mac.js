@@ -203,6 +203,8 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/lib/mas-codex-connection.js',
     'desktop-pet/lib/mas-codex-tasks.js',
     'desktop-pet/lib/mas-provider-runtime.js',
+    'desktop-pet/lib/mas-installed-codex.js',
+    'desktop-pet/lib/mas-installed-codex-access.js',
     'desktop-pet/lib/mas-first-release.js',
     'desktop-pet/lib/mas-enable-flow.js',
     'desktop-pet/lib/mas-workbuddy-details.js',

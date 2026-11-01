@@ -1,0 +1,66 @@
+{
+  "accountResponseReceived": true,
+  "appServerStarted": true,
+  "childSandboxCheck": 1,
+  "elapsedSeconds": 0.18944203853607178,
+  "executableRelativePath": "Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+  "initializeSucceeded": true,
+  "kind": "native Apple Development App Sandbox probe, same first-release rights; not Electron MAS acceptance or App Review",
+  "launched": true,
+  "modelRequestsSent": 0,
+  "networkRequestsMadeByProbe": false,
+  "originalApplicationModified": false,
+  "originalCredentialsRead": false,
+  "probeSandboxCheck": 1,
+  "protocolEvents": [
+    {
+      "direction": "sent",
+      "id": 1,
+      "method": "initialize"
+    },
+    {
+      "direction": "sent",
+      "id": null,
+      "method": "initialized"
+    },
+    {
+      "direction": "sent",
+      "id": 2,
+      "method": "account/read"
+    },
+    {
+      "direction": "received",
+      "hasResult": true,
+      "id": 1,
+      "method": null
+    },
+    {
+      "direction": "received",
+      "hasResult": false,
+      "id": null,
+      "method": "remoteControl/status/changed"
+    },
+    {
+      "accountIsNull": true,
+      "direction": "received",
+      "hasResult": true,
+      "id": 2,
+      "method": null,
+      "requiresOpenaiAuth": true,
+      "resultKeys": [
+        "account",
+        "requiresOpenaiAuth",
+        "workspaceRouting"
+      ]
+    }
+  ],
+  "providerConfigurationRead": false,
+  "sandboxCheckMeaning": "sandbox_check(pid,NULL,0): 1 sandboxed, 0 not sandboxed, -1 check error; no entitlement inference",
+  "securityScopeStarted": true,
+  "selectedApplication": "/Applications/ChatGPT.app",
+  "shutdownMethod": "stdin EOF then terminate/kill if still running; no undocumented shutdown RPC",
+  "status": "initialize-and-empty-account-completed",
+  "stderr": "",
+  "timedOut": false,
+  "timestamp": "2026-11-01T12:28:18Z"
+}

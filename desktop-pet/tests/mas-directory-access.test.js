@@ -248,7 +248,7 @@ test('首发Codex任务用途独立说明且只改文案，取消保留原书签
  assert.equal(options.title,'允许球球读取 Codex 任务日志');assert.equal(options.buttonLabel,'允许读取任务');
  assert.equal(options.message,CODEX_TASK_LOG_DISCLOSURE.message);
  assert.match(options.message,/本机解析部分任务日志.*仅提取任务标题、状态和更新时间/);
- assert.match(options.message,/额度与聊天继续使用球球内已登录账号/);
+ assert.match(options.message,/额度与聊天继续使用已连接的原应用账号/);
  assert.match(options.message,/不会读取此目录的登录凭据、修改原目录或自动发送模型消息/);
  assert.match(options.message,/可取消，已连接的额度与聊天保持/);
  assert.doesNotMatch(options.message,/不读取聊天正文|请直接允许连接/);

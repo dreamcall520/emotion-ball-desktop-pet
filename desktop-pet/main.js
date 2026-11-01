@@ -961,7 +961,7 @@ async function storeChatSendWithConsent({ event, provider, content, tools = fals
       } else {
         state = tools ? storeRuntime.workbuddyCli.getState() : controller.getState();
         identity = tools ? await storeRuntime.workbuddyCli.getConsentIdentity() : await controller.getConsentIdentity(provider, content);
-        if (provider === 'codex') { channel = 'codex-official'; recipientOrigin = 'https://chatgpt.com'; billing = '使用球球内独立登录的 Codex 账号额度；可能与原工具读取额度的账号不同。'; }
+        if (provider === 'codex') { channel = 'codex-official'; recipientOrigin = 'https://chatgpt.com'; billing = FIRST_RELEASE?'使用本机原应用已登录的 Codex 账号额度，与额度卡使用同一账号。':'使用球球内独立登录的 Codex 账号额度；可能与原工具读取额度的账号不同。'; }
         else if (provider === 'workbuddy') { channel = 'workbuddy-dedicated'; recipientOrigin = 'https://www.codebuddy.cn'; billing = '使用球球内登录的 WorkBuddy / CodeBuddy 官方账号积分；这是球球专用会话，不接管原桌面聊天。'; }
         else {
           channel = storeRuntime.getZcodeAccountSource(); recipientOrigin = identity.recipientOrigin;
@@ -990,7 +990,7 @@ function chatSnapshot(state = activeChat()?.getState()) {
     sources:STORE_PROVIDERS.map(id=>({id,label:id==='codex'?'Codex':id==='zcode'?'ZCode':'WorkBuddy',
       enabled:storeChatReady(id)|| (id==='workbuddy'?storeRuntime?.workbuddyCli.getState().connected===true:
         ['ready','needs-new-chat'].includes(storeEnableFlow?.getState()[id]?.chat.status)||state?.source===id&&state?.connection==='ready'&&state?.modelsStatus==='ready')})),
-    sourceNote:state?.source==='codex'?'额度与聊天使用球球内同一个 Codex 登录；原工具任务来自单独授权的目录。':state?.sourceNote||null,
+    sourceNote:state?.source==='codex'?(FIRST_RELEASE?'额度与聊天使用本机原应用的同一账号；原工具任务来自单独授权的目录。':'额度与聊天使用球球内同一个 Codex 登录；原工具任务来自单独授权的目录。'):state?.sourceNote||null,
     billingLabel:state?.source==='zcode'&&storeRuntime?.getZcodeAccountSource()==='configured-custom'?'使用 ZCode 已有自定义模型 · 按原 API 计费':null
   }:{};
   return {...state,...storeInfo,provider:state?.source||'codex',appUpdate:availableUpdate?{latestVersion:availableUpdate.latestVersion}:null};
@@ -2883,7 +2883,7 @@ function menuTemplate() {
     click: () => { void (availableUpdate ? showUpdateResult(availableUpdate) : checkForUpdates(true)); } };
   const items = [
     ...(availableUpdate ? [updateEntry, { type: 'separator' }] : []),
-    ...(IS_STORE_BUILD ? [{ id: 'store-connections', label: FIRST_RELEASE ? '连接 Codex' : '工具连接（商店接入）', click: openStoreConnections }] : []),
+    ...(IS_STORE_BUILD ? [{ id: 'store-connections', label: FIRST_RELEASE ? '连接本机 Codex' : '工具连接（商店接入）', click: openStoreConnections }] : []),
     { id: 'global-settings', label: '设置中心', accelerator: 'CommandOrControl+,', click: openGlobalSettings },
     { id: 'feedback-open', label: '意见反馈', click: () => openGlobalSettings('feedback') },
     { id: 'chat-open', label: '和球球聊聊', click: openChat },
@@ -4482,7 +4482,7 @@ async function bootstrap() {
   if(IS_STORE_BUILD){const applicationMenu=Menu.getApplicationMenu()||Menu.buildFromTemplate([{role:'appMenu'},{role:'editMenu'},{role:'windowMenu'}]);if(!applicationMenu.items.some(item=>item.id==='qiuqiu-store-tools'))applicationMenu.insert(1,new MenuItem({id:'qiuqiu-store-tools',label:'球球工具',submenu:[{label:'工具连接',accelerator:'CommandOrControl+Shift+K',click:()=>openStoreConnections()},{label:'便签与待办',click:()=>notesCompanion?.openPanel()},{label:'番茄钟',click:()=>openPomodoro()},...(!FIRST_RELEASE&&process.mas===true&&process.qiuqiuMasDevelopmentCandidate===true?[{label:'验证插件安装（仅空测试目录）',click:async()=>{const result=await require('./lib/mas-plugin-install-probe').probePluginInstallation({app,dialog});fs.writeFileSync(path.join(app.getPath('userData'),'mas-installer-probe-result.json'),JSON.stringify(result),{mode:0o600});await dialog.showMessageBox({type:result.passed?'info':'warning',message:result.passed?'空测试目录插件安装验证通过':'空测试目录验证未通过',detail:'仅测试目录，不代表原软件任务已接通或商店审核通过。'});}}]:[])]}));Menu.setApplicationMenu(applicationMenu);}
   settingsFile = path.join(app.getPath('userData'), 'settings.json');
   if (IS_STORE_BUILD) storeRuntime = require('./lib/mas-provider-runtime').createMasProviderRuntime({
-    firstRelease:FIRST_RELEASE, app, dialog: {showOpenDialog: options => storeConnectionsWindow && !storeConnectionsWindow.isDestroyed() ? dialog.showOpenDialog(storeConnectionsWindow,options) : dialog.showOpenDialog(options)}, BrowserWindow, session, shell, fetch: (url, options) => net.fetch(url, options), diagnostic: process.mas !== true,
+    firstRelease:FIRST_RELEASE, installedCodex:FIRST_RELEASE, app, dialog: {showOpenDialog: options => storeConnectionsWindow && !storeConnectionsWindow.isDestroyed() ? dialog.showOpenDialog(storeConnectionsWindow,options) : dialog.showOpenDialog(options)}, BrowserWindow, session, shell, fetch: (url, options) => net.fetch(url, options), diagnostic: process.mas !== true,
     onChange: () => { notifyStoreConnections(); chat?.sourceChanged?.('workbuddy'); if (settings) syncWorkBuddyLabel(); },
     onManagedReady:provider=>{void storeEnableFlow?.restore(provider).catch(()=>{});} });
   codexPets = createCodexPetStore({

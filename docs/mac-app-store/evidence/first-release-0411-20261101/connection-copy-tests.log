@@ -1,0 +1,46 @@
+✔ missing state cannot appear connected, configured endpoint is not chat evidence (1.794375ms)
+✔ chat success does not invent quota or task readiness (0.127708ms)
+✔ cancelled connection is resumable without pretending ready (0.158458ms)
+✔ fully connected Codex remembers data permission, clearly labels partial log coverage (0.432708ms)
+✔ ZCode configured custom asks for configuration before chat and never treats cache as realtime (0.230291ms)
+✔ empty official plan cannot claim quota or account chat readiness (0.090583ms)
+✔ explicit account mismatch requires new chat even with ready onboarding (0.526209ms)
+✔ needs model and new chat lead into chat UI rather than repeat login (0.099917ms)
+✔ WorkBuddy website summary is its own quota, authorization and fresh event are separate (0.240834ms)
+✔ expired WorkBuddy events remain previous observations, not current realtime (0.139625ms)
+✔ WorkBuddy own response does not imply original task synchronization (0.128417ms)
+✔ shared model loads in renderer without require or Node globals and does not mutate input (3.79225ms)
+✔ per-provider real chat state takes precedence over stale onboarding and selected other provider (0.121167ms)
+✔ verified plugin install survives restart without pretending task realtime (0.11ms)
+✔ provider managed WorkBuddy models are real ready, missing model catalog cannot pass Codex (0.158208ms)
+✔ ZCode原工具事件只报告阶段，不把Stop当最终完成，安装授权跨重启独立 (0.166541ms)
+✔ 已连接积分步骤不重复授权；等待登录的具体说明留在引导内 (0.091ms)
+✔ 已连接的任务同步等新事件不反复引导安装，积分暂时查询失败只重试读取 (0.065958ms)
+✔ 两家插件步骤统一安装动作，首次明确写权限，渲染本身不改变输入 (0.264ms)
+✔ 安装成功与真实事件分开，已安装等待正常使用不重复安装 (0.188708ms)
+✔ 已有真实事件跳过安装，安装中禁用动作，版本冲突及失败保留聊天 (0.191542ms)
+✔ 停止接收后已装插件仍能从同一引导恢复，不会误判任务同步就绪 (0.069875ms)
+✔ 安装等待本人退出说明优先显示，即使已有旧插件连接也不掩盖等待动作 (0.056042ms)
+✔ 真实商店构建未获安装路线确认时不给自动安装动作，也不影响聊天 (0.064291ms)
+✔ 暂无套餐、不支持和等待事件不要求重新授权，能力本身不伪装就绪 (0.084625ms)
+✔ 官网积分是可选补充，未登录不阻塞已装任务和聊天的连接完成 (0.060667ms)
+✔ 已就绪步骤不再提供授权动作，未知读取结果不自动循环查询 (0.053167ms)
+✔ 账号变化需要处理，动作进入新聊天而非重新登录所有能力 (0.088709ms)
+✔ 未启动登录与正在等待本人登录分开，空套餐和真正不支持仍不循环授权 (0.127334ms)
+✔ 实时登录状态明确false覆盖旧pending，失败后不永久卡在等待本人登录 (0.050333ms)
+✔ 数据写入权限只给已有插件配对动作，不能伪装首次自动安装 (0.059416ms)
+✔ 只聊天不申请原目录或任务插件，自定义模型目录是明确必要依赖 (0.177375ms)
+✔ 额度与任务模式不连接聊天，模型目录许可不伪装原数据用途已获准 (0.160542ms)
+✔ 全部仍保留原三类功能与任务插件，未知能力拒绝，旧显式入口不扩大payload (0.299084ms)
+✔ Codex主额度只显示球球聊天同账号额度，无原目录也可用且不会回落原账号 (0.215709ms)
+✔ 首次连接本机Codex复用登录，不请求任务只读目录；任务由独立按钮按需授权 (5.643958ms)
+✔ 同账号额度无任务只读目录也可读，聊天可直接进入；失效历史任务明确不当实时 (19.064375ms)
+✔ 刷新及撤销分别使用额度查询刷新和明确撤销动作，不重新登录或发送 (3.691208ms)
+ℹ tests 38
+ℹ suites 0
+ℹ pass 38
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 109.262709

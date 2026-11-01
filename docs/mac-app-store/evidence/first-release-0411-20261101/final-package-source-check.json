@@ -1,0 +1,56 @@
+{
+  "checks": [
+    {
+      "file": "desktop-pet/main.js",
+      "match": true
+    },
+    {
+      "file": "desktop-pet/lib/mas-provider-runtime.js",
+      "match": true
+    },
+    {
+      "file": "desktop-pet/lib/mas-installed-codex.js",
+      "match": true
+    },
+    {
+      "file": "desktop-pet/lib/mas-installed-codex-access.js",
+      "match": true
+    },
+    {
+      "file": "desktop-pet/lib/soft-orb.js",
+      "match": true
+    },
+    {
+      "file": "desktop-pet/lib/soft-orb-model.js",
+      "match": true
+    },
+    {
+      "file": "desktop-pet/lib/provider-connection-guide.js",
+      "match": true
+    },
+    {
+      "file": "desktop-pet/customize.html",
+      "match": true
+    },
+    {
+      "file": "desktop-pet/promotion.css",
+      "match": true
+    },
+    {
+      "file": "desktop-pet/store-connections-first.html",
+      "match": true
+    },
+    {
+      "file": "desktop-pet/store-connections-first-renderer.js",
+      "match": true
+    },
+    {
+      "file": "desktop-pet/lib/mas-directory-access.js",
+      "match": true
+    }
+  ],
+  "packagedVersion": "0.4.11",
+  "packagedProfile": "mas-first",
+  "packageJsonStagingTransformationExpected": true,
+  "passed": true
+}

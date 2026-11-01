@@ -50,8 +50,8 @@ function buildFixture(t,overrides={}){
  const deps={hostPlatform:'darwin',hostArch:'arm64',now:()=>Date.parse('2026-10-31'),readDeviceId:()=>device,validateResources:async()=>events.push('validate-resources'),
   command(name,args){events.push([name,args]);if(name==='security'&&args[0]==='find-identity')return` 1) ${fingerprint} "${own.MAS_DEV_SIGN_IDENTITY}"\n 1 valid identities found`;if(name==='security'&&args[0]==='cms')return plist.build(profile());if(name==='codesign'&&args[0]==='--display')return plist.build(args.at(-1)===app?api.entitlementsFor(cfg).main:api.entitlementsFor(cfg).child);if(name.endsWith('/Contents/MacOS/球球桌宠-商店沙盒开发候选'))return args.includes('--qiuqiu-mas-helper-probe')?JSON.stringify({mas:true,ownContainer:true,helper:{passed:true,metadataTransport:{passed:true},modelRequestsSent:false,originalCredentialsRead:false,workbuddy:{vendorAccountVerified:false}}}):JSON.stringify({mas:true,ownContainer:true,capabilities:{known:true,sandbox:true,userSelectedReadWrite:true,userSelectedExecutable:true,appScopeBookmarks:true}});return'';},
   mac:{prepareStaging(_root,directory){events.push('staging');fs.mkdirSync(directory,{recursive:true});fs.writeFileSync(path.join(directory,'package.json'),JSON.stringify(pkg));return directory;},buildPackagerOptions:()=>({platform:'darwin'})},makeIcon:()=>'/fixture/icon',buildWeatherLocation:()=>events.push('build-native'),buildPluginHost:()=>events.push('build-plugin-host'),
-  async packager(value){options=value;events.push('packager');const output=path.join(root,'out');app=path.join(output,value.name+'.app');fs.mkdirSync(app,{recursive:true});resourceFixture(app);return[output];},
-  signing:{async signAsync(value){events.push('sign-nested-and-app');assert.equal(value.platform,'mas');assert.equal(value.type,'development');assert.equal(value.optionsForFile(app).timestamp,'none');assert.equal(value.optionsForFile('/fixture/helper').timestamp,'none');assert.equal(value.batchCodesignCalls,true);assert.equal(value.identity,fingerprint);assert.equal(value.preAutoEntitlements,false);assert.equal(value.optionsForFile(app).entitlements.endsWith('main.entitlements.plist'),true);assert.equal(value.optionsForFile('/fixture/helper').entitlements.endsWith('child.entitlements.plist'),true);fs.writeFileSync(path.join(app,'Contents/Resources/qiuqiu-codex/darwin-arm64/codex'),'signed fixture binary');}},...overrides};return{root,env:own,deps,events,options:()=>options,app:()=>app};
+  async packager(value){options=value;events.push('packager');const output=path.join(root,'out');app=path.join(output,value.name+'.app');fs.mkdirSync(app,{recursive:true});if(value.extraResource.length)resourceFixture(app);else{fs.mkdirSync(path.join(app,'Contents/Resources'),{recursive:true});fs.mkdirSync(path.join(app,'Contents/Frameworks/Fixture Helper.app'),{recursive:true});fs.mkdirSync(path.join(app,'Contents/Library/LoginItems/Fixture Login Helper.app'),{recursive:true});const native=path.join(app,'Contents/Resources/app.asar.unpacked/desktop-pet/native');fs.mkdirSync(native,{recursive:true});fs.writeFileSync(path.join(native,'weather-location.node'),'native');}return[output];},
+  signing:{async signAsync(value){events.push('sign-nested-and-app');assert.equal(value.platform,'mas');assert.equal(value.type,'development');assert.equal(value.optionsForFile(app).timestamp,'none');assert.equal(value.optionsForFile('/fixture/helper').timestamp,'none');assert.equal(value.batchCodesignCalls,true);assert.equal(value.identity,fingerprint);assert.equal(value.preAutoEntitlements,false);assert.equal(value.optionsForFile(app).entitlements.endsWith('main.entitlements.plist'),true);assert.equal(value.optionsForFile('/fixture/helper').entitlements.endsWith('child.entitlements.plist'),true);if(value.binaries.length)fs.writeFileSync(path.join(app,'Contents/Resources/qiuqiu-codex/darwin-arm64/codex'),'signed fixture binary');else{assert.deepEqual(value.binaries,[]);assert.equal(fs.existsSync(path.join(app,'Contents/Resources/qiuqiu-codex')),false);}}},...overrides};return{root,env:own,deps,events,options:()=>options,app:()=>app};
 }
 test('缺配置、无开发证书或profile失败发生在构建/缓存/打包前；不产生降级包',async t=>{
  const root=temp(t);fs.writeFileSync(path.join(root,'package.json'),JSON.stringify(pkg));let touched=0;await assert.rejects(api.buildMasDevelopment({root,env:{}},{command(){touched++;},packager(){touched++;}}),{code:'MAS_DEV_CONFIGURATION_REQUIRED'});assert.equal(touched,0);
@@ -86,36 +86,50 @@ test('MAS helper report must independently confirm isolated metadata transport, 
 
 test('MAS runtime probe rejects missing actual executable entitlement even when signed plist claims it',async t=>{const f=buildFixture(t),run=f.deps.command;f.deps.command=(name,args,options)=>args.includes('--qiuqiu-mas-runtime-probe')?JSON.stringify({mas:true,ownContainer:true,capabilities:{known:true,sandbox:true,userSelectedReadWrite:true,userSelectedExecutable:false,appScopeBookmarks:true}}):run(name,args,options);await assert.rejects(api.buildMasDevelopment({root:f.root,env:f.env},f.deps),{code:'MAS_DEV_RUNTIME_PROBE_FAILED'});});
 
-test('首发profile只带Codex组件，明确撤销外部插件执行写权限，保留天气和导入权限',()=>{
+test('首发profile不随包带厂商组件，明确撤销外部插件执行写权限，保留天气和导入权限',()=>{
  const first=api.configFor({...pkg,qiuqiuReleaseProfile:'mas-first'},env).config;
  const o=api.packagerOptions('/synthetic',first,'/stage','/icon');
- assert.deepEqual(o.extraResource,['/synthetic/desktop-pet/build/qiuqiu-codex']);
+ assert.deepEqual(o.extraResource,[]);
  const rights=api.entitlementsFor(first).main;
  assert.equal(rights['com.apple.security.files.user-selected.executable'],undefined);
  for(const k of ['com.apple.security.files.user-selected.read-write','com.apple.security.personal-information.location','com.apple.security.files.bookmarks.app-scope','com.apple.security.network.client'])assert.equal(rights[k],true);
  const entry=api.probeEntry(first.bundleId,first);
  assert.doesNotMatch(entry,/startBundledWorkBuddy|probeManagedHelpers|probePluginInstallation/);
  assert.match(entry,/MAS_FIRST_RELEASE_PLUGIN_INSTALL_DISABLED/);
- assert.match(entry,/unauthenticatedAccountConfirmed/);
+ assert.doesNotMatch(entry,/createBundledCodexChatRpc|readAccount|codex-profile|scratch/);assert.match(entry,/app-sandbox-container-only/);
 });
-test('首发manifest只刷新Codex，不读取未随包携带的WB组件',t=>{
+test('首发不要求任何helper清单，意外残留厂商组件则拒绝而非伪造空组件',t=>{
  const app=path.join(temp(t),'First.app'),r=resourceFixture(app);
- fs.rmSync(r.wb,{recursive:true});
- fs.writeFileSync(path.join(r.codex,'codex'),'first-signed');
- assert.deepEqual(api.refreshBundledManifests(app,fs,process.arch,{releaseProfile:'mas-first'}),{codexFiles:1,workbuddyFiles:0});
- assert.equal(JSON.parse(fs.readFileSync(path.join(r.codex,'manifest.json'))).binarySha256,createHash('sha256').update('first-signed').digest('hex'));
+ assert.throws(()=>api.refreshBundledManifests(app,fs,process.arch,{releaseProfile:'mas-first'}),{code:'MAS_FIRST_BUNDLED_RUNTIME_PRESENT'});
+ fs.rmSync(r.wb,{recursive:true});fs.rmSync(path.dirname(r.codex),{recursive:true});
+ assert.deepEqual(api.refreshBundledManifests(app,fs,process.arch,{releaseProfile:'mas-first'}),{codexFiles:0,workbuddyFiles:0});
 });
-test('首发构建保留profile标记、只验证Codex初始化、不运行两家元数据或插件安装探针',async t=>{
+test('首发构建不携带Codex且只验证自有sandbox容器，不启动外部软件或读取账号',async t=>{
  const f=buildFixture(t);fs.writeFileSync(path.join(f.root,'package.json'),JSON.stringify({...pkg,qiuqiuReleaseProfile:'mas-first'}));
  const run=f.deps.command,first=api.configFor({...pkg,qiuqiuReleaseProfile:'mas-first'},f.env).config;
  f.deps.command=(name,args,opts)=>{
   if(name==='codesign'&&args[0]==='--display')return plist.build(args.at(-1)===f.app()?api.entitlementsFor(first).main:api.entitlementsFor(first).child);
   if(args.includes('--qiuqiu-mas-runtime-probe'))return JSON.stringify({mas:true,ownContainer:true,capabilities:{known:true,sandbox:true,userSelectedReadWrite:true,userSelectedExecutable:false,appScopeBookmarks:true}});
-  if(args.includes('--qiuqiu-mas-helper-probe'))return JSON.stringify({mas:true,ownContainer:true,helper:{passed:true,codex:{initialized:true,unauthenticatedAccountConfirmed:true,closed:true},isolatedProfileRemoved:true,modelRequestsSent:false,originalCredentialsRead:false}});
+  if(args.includes('--qiuqiu-mas-helper-probe'))return JSON.stringify({mas:true,ownContainer:true,codexRuntime:'user-installed',bundled:false,installedProviderAcceptance:false,validationScope:'app-sandbox-container-only',modelRequestsSent:false,originalCredentialsRead:false});
   return run(name,args,opts);
  };
  const result=await api.buildMasDevelopment({root:f.root,env:f.env},f.deps);
  assert.equal(result.masRuntimeAndContainerProbePassed,true);assert.equal(result.bundledManifestRefresh.workbuddyFiles,0);
- assert.equal(f.options().extraResource.length,1);
+ assert.equal(f.options().extraResource.length,0);assert.equal(result.codexRuntime,'user-installed');assert.equal(result.bundled,false);assert.equal(result.installedProviderAcceptance,false);assert.equal(result.managedHelperInitializationProbe,null);assert.equal(f.events.includes('validate-resources'),false);assert.equal(fs.existsSync(path.join(f.app(),'Contents/Resources/qiuqiu-codex')),false);for(const name of ['Frameworks/Fixture Helper.app','Library/LoginItems/Fixture Login Helper.app','Resources/app.asar.unpacked/desktop-pet/native/weather-location.node'])assert.ok(f.events.some(e=>Array.isArray(e)&&e[0]==='codesign'&&e[1][0]==='--verify'&&e[1].at(-1)===path.join(f.app(),'Contents',name)));
  assert.equal(JSON.parse(fs.readFileSync(path.join(f.options().dir,'package.json'))).qiuqiuReleaseProfile,'mas-first');
+});
+
+test('首发helper flag只查询自有容器与原生沙盒能力，不require账号/外部组件或发起模型',async()=>{
+ const vm=require('node:vm'),entry=api.probeEntry(cfg.bundleId,{releaseProfile:'mas-first'});
+ for(const flag of ['--qiuqiu-mas-runtime-probe','--qiuqiu-mas-helper-probe']){
+  const requires=[],output=[];let exit;
+  const process={mas:true,argv:['app',flag],stdout:{write:s=>output.push(s)},stderr:{write:s=>{throw Error(s);}},exit:code=>{exit=code;}};
+  const app={whenReady:()=>Promise.resolve(),getPath:name=>{assert.equal(name,'userData');return '/Users/fixture/Library/Containers/'+cfg.bundleId+'/Data/Library/Application Support/球球';},exit:code=>{exit=code;}};
+  vm.runInNewContext(entry,{process,require:name=>{requires.push(name);if(name==='electron')return{app};if(name==='./desktop-pet/lib/plugin-host')return{createPluginHost:()=>({getSandboxCapabilities:()=>({known:true,sandbox:true,userSelectedReadWrite:true,appScopeBookmarks:true})})};throw Error('Unexpected require '+name);}});
+  await new Promise(resolve=>setImmediate(resolve));assert.equal(exit,0);const result=JSON.parse(output.join(''));assert.equal(result.validationScope,'app-sandbox-container-only');assert.equal(result.codexRuntime,'user-installed');assert.equal(result.bundled,false);assert.equal(result.installedProviderAcceptance,false);assert.equal(result.originalCredentialsRead,false);assert.equal(result.modelRequestsSent,false);assert.deepEqual(requires,['electron','./desktop-pet/lib/plugin-host']);assert.equal(result.helper,undefined);
+ }
+});
+test('首发打包若意外带入空helper目录也在签名前拒绝，不伪造缺省组件',async t=>{
+ const f=buildFixture(t);fs.writeFileSync(path.join(f.root,'package.json'),JSON.stringify({...pkg,qiuqiuReleaseProfile:'mas-first'}));const packager=f.deps.packager;f.deps.packager=async options=>{const results=await packager(options);fs.mkdirSync(path.join(f.app(),'Contents/Resources/qiuqiu-codex'));return results;};
+ await assert.rejects(api.buildMasDevelopment({root:f.root,env:f.env},f.deps),{code:'MAS_FIRST_BUNDLED_RUNTIME_PRESENT'});assert.equal(f.events.includes('sign-nested-and-app'),false);
 });

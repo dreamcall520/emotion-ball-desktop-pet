@@ -1,0 +1,63 @@
+{
+  "platform": "mas",
+  "releaseProfile": "mas-first",
+  "codexRuntime": "user-installed",
+  "bundled": false,
+  "installedProviderAcceptance": false,
+  "arch": "arm64",
+  "marketingVersion": "0.4.11",
+  "buildVersion": "1793537989",
+  "appPath": "/Users/allan/Documents/\u4e2a\u4eba\u521b\u4f5c/emotion-ball-desktop-pet/.worktrees/mas-first-release/dist/mas/arm64/\u7403\u7403\u684c\u5ba0-mas-arm64/\u7403\u7403\u684c\u5ba0.app",
+  "pkgPath": "/Users/allan/Documents/\u4e2a\u4eba\u521b\u4f5c/emotion-ball-desktop-pet/.worktrees/mas-first-release/dist/mas/arm64/Qiuqiu-0.4.11-1793537989-mas-arm64.pkg",
+  "signedDistributionPackage": true,
+  "profileValidated": true,
+  "runtimeCache": {
+    "used": true,
+    "validated": true,
+    "archive": "electron-v43.4.1-mas-arm64.zip",
+    "sha256": "84e562785040616029df3d562f3193c8b3953948a095d8b8611c990b45a69b98"
+  },
+  "bundledManifestRefresh": {
+    "codexFiles": 0,
+    "workbuddyFiles": 0
+  },
+  "languageResources": {
+    "applied": true,
+    "retainedLanguages": [
+      "Base",
+      "en",
+      "en_GB",
+      "en_US",
+      "zh_CN",
+      "zh_TW",
+      "zh_HK",
+      "zh_MO",
+      "zh_SG",
+      "zh_Hans",
+      "zh_Hant"
+    ],
+    "removedDirectories": 267,
+    "removedBytes": 46403745,
+    "updatedPlists": 0
+  },
+  "signedEntitlementsValidated": true,
+  "runtimeAcceptancePassed": false,
+  "submissionReady": false,
+  "note": "Signed build only; runtime acceptance, App Store processing/review and release are separate.",
+  "packageBytes": 235601526,
+  "packageSha256": "135d0d8517451922280ed28cbe9cdac8e5789962b66355ea6f7030295bde5268",
+  "expandedLogicalBytes": 375711298,
+  "previousPackageBytes": 353845560,
+  "savedBytes": 118244034,
+  "savedPercent": 33.41684829958019,
+  "bundledCodexDirectoryExists": false,
+  "bundledWorkbuddyDirectoryExists": false,
+  "developmentAcceptance": {
+    "sameInstalledAccountQuota": true,
+    "singleApprovedModelMessage": true,
+    "reply": "test passed",
+    "restartAuthorizationRestored": true,
+    "restartHistoryRestored": true,
+    "signedDistributionRuntimeTested": false
+  }
+}

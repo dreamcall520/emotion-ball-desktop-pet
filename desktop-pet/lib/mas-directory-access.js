@@ -12,7 +12,7 @@ const MESSAGES = {
 };
 const CODEX_TASK_LOG_DISCLOSURE = Object.freeze({
   title:'允许球球读取 Codex 任务日志',buttonLabel:'允许读取任务',
-  message:'在本机解析部分任务日志，仅提取任务标题、状态和更新时间。额度与聊天继续使用球球内已登录账号；不会读取此目录的登录凭据、修改原目录或自动发送模型消息。可取消，已连接的额度与聊天保持。'
+  message:'在本机解析部分任务日志，仅提取任务标题、状态和更新时间。额度与聊天继续使用已连接的原应用账号；不会读取此目录的登录凭据、修改原目录或自动发送模型消息。可取消，已连接的额度与聊天保持。'
 });
 function accessError(code, reason) {
   const messages = {

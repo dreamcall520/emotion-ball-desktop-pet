@@ -1,0 +1,106 @@
+{
+  "accountResponseReceived": true,
+  "appServerStarted": true,
+  "authenticated": true,
+  "childSandboxCheck": 1,
+  "configurationReadByProbe": false,
+  "credentialsReadByProbe": false,
+  "elapsedSeconds": 1.9752849340438843,
+  "executableRelativePath": "Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+  "initializeSucceeded": true,
+  "kind": "native Apple Development App Sandbox probe, same first-release rights; not Electron MAS acceptance or App Review",
+  "launched": true,
+  "modelRequestsSent": 0,
+  "officialComponentMayReadSelectedProfile": true,
+  "officialComponentMayWriteLogsAndCache": true,
+  "originalApplicationModified": false,
+  "probeSandboxCheck": 1,
+  "profileScopeStarted": true,
+  "protocolEvents": [
+    {
+      "direction": "sent",
+      "id": 1,
+      "method": "initialize"
+    },
+    {
+      "direction": "sent",
+      "id": null,
+      "method": "initialized"
+    },
+    {
+      "direction": "sent",
+      "id": 2,
+      "method": "account/read"
+    },
+    {
+      "direction": "received",
+      "hasResult": true,
+      "id": 1,
+      "method": null
+    },
+    {
+      "direction": "received",
+      "hasResult": false,
+      "id": null,
+      "method": "remoteControl/status/changed"
+    },
+    {
+      "direction": "received",
+      "hasResult": false,
+      "id": null,
+      "method": "account/updated"
+    },
+    {
+      "direction": "sent",
+      "id": 3,
+      "method": "account/rateLimits/read"
+    },
+    {
+      "authenticated": true,
+      "direction": "received",
+      "hasResult": true,
+      "id": 2,
+      "method": null,
+      "requiresOpenaiAuth": true,
+      "resultKeys": [
+        "account",
+        "requiresOpenaiAuth",
+        "workspaceRouting"
+      ]
+    },
+    {
+      "direction": "received",
+      "hasResult": true,
+      "id": 3,
+      "method": null
+    }
+  ],
+  "quota": {
+    "windows": [
+      {
+        "remainingPercent": 1,
+        "resetsAt": 1793887690,
+        "usedPercent": 99,
+        "windowDurationMins": 10080
+      },
+      {
+        "remainingPercent": 1,
+        "resetsAt": 1793887690,
+        "usedPercent": 99,
+        "windowDurationMins": 10080
+      }
+    ]
+  },
+  "quotaRequestMaximum": 1,
+  "quotaRequestsSent": 1,
+  "quotaResponseReceived": true,
+  "sandboxCheckMeaning": "sandbox_check(pid,NULL,0): 1 sandboxed, 0 not sandboxed, -1 check error; no entitlement inference",
+  "securityScopeStarted": true,
+  "selectedApplication": "/Applications/ChatGPT.app",
+  "shutdownMethod": "stdin EOF then terminate/kill if still running; no undocumented shutdown RPC",
+  "status": "account-check-completed",
+  "stderrByteCount": 0,
+  "stderrSuppressed": true,
+  "timedOut": false,
+  "timestamp": "2026-11-01T12:33:58Z"
+}

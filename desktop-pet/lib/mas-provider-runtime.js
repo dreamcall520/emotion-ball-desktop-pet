@@ -68,7 +68,8 @@ function createWorkbuddyConversationStore(root){
   return{read:key=>storeFor(key).read(),write:value=>storeFor(value.accountKey).write(value)};
 }
 function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, fetch,
-  diagnostic = false, firstRelease = false, onChange = () => {}, onManagedReady = () => {}, resourcesPath = process.resourcesPath,
+  diagnostic = false, firstRelease = false, installedCodex = false, onChange = () => {}, onManagedReady = () => {}, resourcesPath = process.resourcesPath,
+  createInstalledCodexRpc=options=>require('./mas-installed-codex').createInstalledCodexChatRpc(options), installedCodexAccess,
   createManagedCodexRpc=options=>require('./mas-bundled-codex').createBundledCodexChatRpc(options), startWorkbuddyHost=options=>require('./mas-bundled-workbuddy').startBundledWorkBuddy(options), createWorkbuddyAuthClient=createWorkBuddyLocalCliClient,createPluginInstaller=options=>require('./managed-plugin-installer').createManagedPluginInstaller(options),createPluginHost=()=>require('./plugin-host').createPluginHost() } = {}) {
   const allowedProviders = firstRelease ? new Set(['codex']) : PROVIDERS;
   const assertProvider = provider => { if (!allowedProviders.has(provider)) throw failure('INVALID_PROVIDER'); };
@@ -85,18 +86,29 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
   const managedAbort=new AbortController();
   const managedProfile=path.join(app.getPath('userData'),'store-codex-profile');
   const managedWorkspace=path.join(app.getPath('userData'),'store-codex-chat-workspace');
-  let managedCodexQuota={status:'needs-login',snapshot:null,errorCode:null};
+  const installedAccess = installedCodex ? installedCodexAccess || require('./mas-installed-codex-access').createMasInstalledCodexAccess({app,dialog,mas:!diagnostic,storage:createDirectoryStorage(path.join(app.getPath('userData'),'store-installed-codex-grants'))}) : null;
+  const installedRpcs=new Set();
+  async function codexRuntimeRpc(options={}) {
+    if(!installedCodex)return createManagedCodexRpc({resourcesPath,profileHome:managedProfile,workspaceDir:managedWorkspace,...options});
+    fs.mkdirSync(managedWorkspace,{recursive:true,mode:0o700});
+    const handle=await createInstalledCodexRpc({...options,workspaceDir:options.workspaceDir||managedWorkspace,installedAppAccess:installedAccess.installedAppAccess,directoryAccess:installedAccess.directoryAccess});
+    if(closed){await handle.close();throw failure('CLOSED');}
+    let closing;const tracked={...handle,close:()=>closing||(closing=Promise.resolve().then(()=>handle.close()).finally(()=>installedRpcs.delete(tracked)))};installedRpcs.add(tracked);return tracked;
+  }
+  let managedCodexQuota={status:installedCodex?'needs-authorization':'needs-login',snapshot:null,errorCode:null};
   async function readManagedCodexQuota({signal,now=Date.now}={}){
     if(closed)throw failure('CLOSED');
+    if(installedCodex)signal=signal?AbortSignal.any([signal,managedAbort.signal]):managedAbort.signal;
     const epoch=managedEpoch;
     try{
+      if(installedCodex&&(await installedAccess.ensure({interactive:false,signal:managedAbort.signal})).status!=='stored')throw failure('DIRECTORY_ACCESS_REQUIRED');
       const snapshot=await require('./managed-codex-quota-reader').readManagedCodexQuota({
-        createRpc:()=>createManagedCodexRpc({resourcesPath,profileHome:managedProfile,workspaceDir:managedWorkspace}),signal,now});
+        createRpc:()=>codexRuntimeRpc(),signal,now});
       if(closed||epoch!==managedEpoch||signal?.aborted)throw failure('CANCELLED');
       const {accountKey:_internal,...safe}=snapshot;
       managedCodexQuota={status:snapshot.state==='unavailable'?'unavailable':'ready',snapshot:safe,errorCode:null};onChange();return snapshot;
     }catch(error){
-      if(!closed&&epoch===managedEpoch&&!signal?.aborted){managedCodexQuota={status:error.code==='UNAUTHENTICATED'?'needs-login':'unavailable',snapshot:null,errorCode:['UNAUTHENTICATED','TIMEOUT','CANCELLED'].includes(error.code)?error.code:'UPDATE_FAILED'};onChange();}
+      if(!closed&&epoch===managedEpoch&&!signal?.aborted){managedCodexQuota={status:installedCodex&&error.code==='DIRECTORY_ACCESS_REQUIRED'?'needs-authorization':error.code==='UNAUTHENTICATED'?'needs-login':'unavailable',snapshot:null,errorCode:installedCodex&&error.code==='DIRECTORY_ACCESS_REQUIRED'?'DIRECTORY_ACCESS_REQUIRED':['UNAUTHENTICATED','TIMEOUT','CANCELLED'].includes(error.code)?error.code:'UPDATE_FAILED'};onChange();}
       throw error;
     }
   }
@@ -204,7 +216,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
     return { providerLoginPending:{codex:Boolean(managedLogin&&managedLoginUrl),workbuddy:Boolean(workbuddyLoginPending&&workbuddyAuthFlight)},pluginInstallationPolicy:{...pluginInstallationPolicy},pluginInstallations:Object.fromEntries(Object.keys(pluginInstallers).map(provider=>[provider,pluginInstallationState(provider)])),mode: diagnostic ? 'diagnostic-unsandboxed' : 'mas-sandbox',
       managedCodexQuota:structuredClone(managedCodexQuota),
       codex: { directory: codex.status, serviceConfigured: Boolean(service), endpoint: service?.endpoint || null,
-        tasks: 'authorized-session-logs', chat: service ? 'configured-unverified' : 'managed-bundled-runtime' },
+        tasks: 'authorized-session-logs', chat: service ? 'configured-unverified' : installedCodex?'installed-codex-runtime':'managed-bundled-runtime' },
       zcode: { directory: zcodeDirectory.status, capabilities: zcode.getCapabilities(),
         serviceConfigured: Boolean(zcodeService), endpoint: zcodeService?.endpoint || null, accountSource:zcodeService?.accountSource || zcodeAccountSource,
         chat: zcodeService ? 'experimental-configured-unverified' : 'needs-experimental-local-service',
@@ -212,6 +224,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
   }
   async function importLocalService(provider) {
     assertProvider(provider);
+    if(installedCodex&&provider==='codex')throw failure('UNSUPPORTED');
     if (closed) throw failure('CLOSED');
     const slot = chatServices[provider];
     const directory = await access.getStatus(provider);
@@ -280,7 +293,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
           target = provider === 'codex'
             ? service ? createCodexChatRpc({ ...options, hostHome: service.hostHome,
               webSocket: { endpoint: service.endpoint, bearerToken: service.bearerToken }, ...callbacks })
-              : await require('./mas-bundled-codex').createBundledCodexChatRpc({ ...options, resourcesPath, profileHome:managedProfile, workspaceDir:options.workspaceDir||managedWorkspace, ...callbacks })
+              : await codexRuntimeRpc({ ...options, workspaceDir:options.workspaceDir||managedWorkspace, ...callbacks })
             : service ? createZcodeChatWsRpc({ ...options, endpoint: service.endpoint, bearerToken: service.bearerToken,accountSource:service.accountSource, ...callbacks })
               : require('./zcode-direct-chat-rpc').createZcodeDirectChatRpc({...options,directoryAccess:access,workspaceDir:options.workspaceDir,accountSource:'configured-custom',fetch,...callbacks});
           epoch = slot.generation;
@@ -353,6 +366,30 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
       }
     }
     if(provider!=='codex')return{status:'unavailable',code:'CODING_PLAN_SCOPE_UNSUPPORTED',message:'ZCode官方编程套餐尚不支持球球普通聊天，开通套餐也不会自动接通；可自行选择已有通用模型，按原API计费。'};
+    if(installedCodex){
+      const granted=await installedAccess.ensure({interactive,signal:managedAbort.signal});
+      if(granted.status!=='stored')return{status:granted.status==='unavailable'?'unavailable':'needs-data-authorization',message:granted.status==='cancelled'?'连接已取消，已有授权保持。':granted.status==='unavailable'?'此运行方式不支持本机 Codex 系统授权，请使用正式沙盒版本。':'请连接本机 Codex，允许使用已安装应用和原账号目录。'};
+      managedCodexQuota={status:'needs-authorization',snapshot:null,errorCode:null};onChange();
+      if(granted.changed===true){
+        // A replacement for an expired bookmark may select another account.
+        // Retire every old source before opening the newly selected profile.
+        managedEpoch++;bundledEnabled=false;
+        const slot=chatServices.codex;slot.service=null;slot.generation++;
+        await Promise.all([...slot.clients].map(client=>client.invalidate()));
+        await Promise.all([...installedRpcs].map(handle=>handle.close()));
+      }
+      let installedRpc;const installedEpoch=managedEpoch;
+      const check=()=>{if(closed||installedEpoch!==managedEpoch)throw failure('CANCELLED');};
+      try{
+        check();
+        installedRpc=await codexRuntimeRpc();await installedRpc.start();check();const account=await installedRpc.readAccount();check();
+        if(!account.authenticated){bundledEnabled=false;managedCodexQuota={status:'needs-login',snapshot:null,errorCode:'UNAUTHENTICATED'};onChange();return{status:'needs-login',loginPending:false,message:'请先在原 ChatGPT 或 Codex 应用登录，再回球球检查连接。'};}
+        await installedRpc.close();installedRpc=null;check();bundledEnabled=true;
+        await readManagedCodexQuota().catch(()=>{});
+        return{status:'ready',message:'已连接本机 Codex；额度与聊天复用原应用同一登录。'};
+      }catch(error){return{status:'unavailable',message:'本机 Codex 暂未连接，请确认原应用已登录，再检查连接。'};}
+      finally{await installedRpc?.close().catch(()=>{});}
+    }
     if(managedLogin){if(interactive&&managedLoginUrl)await shell.openExternal(managedLoginUrl);return{status:'needs-login',loginPending:Boolean(managedLoginUrl),message:'请在已打开的官方页面完成球球独立登录。'};}
     let rpc;
     const epoch=managedEpoch;
@@ -437,7 +474,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
     if (closed) return runtimeClosing;
     closed = true; workbuddyEpoch++; managedAbort.abort();managedEpoch++; void managedLogin?.close();managedLogin=null;managedLoginUrl=null; workbuddy.close();workbuddyOfficial.close();desktopTasks.close(); quotaPorts.clear();
     for(const abort of pluginAborts.values())abort.abort();
-    const closing = [...[...pluginFlights.values()].map(flight=>flight.catch(()=>{})),desktopIntegration.close(),zcodeDesktopIntegration.close(),workbuddyCli.close(),workbuddyAuthClient?.close(),managedWorkbuddy?.stop()];
+    const closing = [...[...installedRpcs].map(rpc=>rpc.close()),...[...pluginFlights.values()].map(flight=>flight.catch(()=>{})),desktopIntegration.close(),zcodeDesktopIntegration.close(),workbuddyCli.close(),workbuddyAuthClient?.close(),managedWorkbuddy?.stop()];
     for (const slot of Object.values(chatServices)) {
       slot.service = null; slot.generation++;
       closing.push(...[...slot.clients].map(client => client.close()));
@@ -464,7 +501,8 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
       assertProvider(provider);
       await cancelPluginInstallation(provider);if(['zcode','workbuddy'].includes(provider))await pluginAccess.revoke(provider);
       if(provider==='zcode')directZcodeEnabled=false;
-      if(provider==='codex'){managedCodexQuota={status:'needs-login',snapshot:null,errorCode:null};bundledEnabled=false;managedEpoch++;await managedLogin?.close();managedLogin=null;managedLoginUrl=null;}
+      if(provider==='codex'){managedCodexQuota={status:installedCodex?'needs-authorization':'needs-login',snapshot:null,errorCode:null};bundledEnabled=false;managedEpoch++;await managedLogin?.close();managedLogin=null;managedLoginUrl=null;if(installedCodex)await Promise.all([...installedRpcs].map(rpc=>rpc.close()));}
+      if(provider==='codex'&&installedCodex)await installedAccess.revoke();
       await access.revoke(provider);
       if(provider==='workbuddy'){workbuddy.revoke();desktopCache={partitions:[],probe:null,report:null,error:null,accountAttributionVerified:false};}
       const slot = chatServices[provider];

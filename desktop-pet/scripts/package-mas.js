@@ -41,7 +41,7 @@ function configFor(pkg, env = {}, arch = env.MAS_ARCH || 'arm64') {
 }
 function planFor(pkg, env = {}, arch) {
   const { config, missing, errors } = configFor(pkg, env, arch);
-  return { mode: 'plan', platform: 'mas', releaseProfile: config.releaseProfile || null, arch: config.arch,
+  return { mode: 'plan', platform: 'mas', releaseProfile: config.releaseProfile || null, ...release.providerRuntimeMetadata(config), arch: config.arch,
     marketingVersion: config.marketingVersion, buildVersion: config.buildVersion || null,
     electronVersion: config.electronVersion || null,
     configured: Object.fromEntries(REQUIRED.map(name => [name, !missing.includes(name)])),
@@ -179,7 +179,7 @@ async function buildMas({ root = DEFAULT_ROOT, env = process.env, arch } = {}, d
   validateProfile(profileInfo, config, application.fingerprint, dependencies.now?.() ?? Date.now());
   validateCertificate(installerCertificate(run('security', ['find-certificate', '-a', '-c', config.installerIdentity, '-p']), installer.fingerprint), config.installerIdentity, config.teamId, 'installer');
   const runtimeCache = validateMasRuntimeCache(config, io);
-  await (dependencies.validateResources || (async () => { const resourcesPath=path.join(root,'desktop-pet/build'); await require('../lib/mas-bundled-codex').resolveBundledCodex({resourcesPath,arch:config.arch}); if (!release.isFirstRelease(config)) await require('../lib/mas-bundled-workbuddy').resolveBundledWorkBuddy({resourcesPath}); }))();
+  if (!release.isFirstRelease(config)) await (dependencies.validateResources || (async () => { const resourcesPath=path.join(root,'desktop-pet/build'); await require('../lib/mas-bundled-codex').resolveBundledCodex({resourcesPath,arch:config.arch}); if (!release.isFirstRelease(config)) await require('../lib/mas-bundled-workbuddy').resolveBundledWorkBuddy({resourcesPath}); }))();
   // All signing/profile checks precede imports that may download runtimes or build.
   const mac = dependencies.mac || require('./package-mac');
   const makeIcon = dependencies.makeIcon || require('./make-icon').makeIcon;
@@ -207,6 +207,7 @@ async function buildMas({ root = DEFAULT_ROOT, env = process.env, arch } = {}, d
   if (!Array.isArray(results) || results.length !== 1) throw failure('MAS_PACKAGE_OUTPUT_INVALID');
   const appPath = path.join(results[0], `${APP_NAME}.app`);
   if (!io.existsSync(appPath)) throw failure('MAS_APP_OUTPUT_MISSING');
+  release.assertNoBundledProviders(appPath, config, io);
   const languageResources = release.trimElectronLocales(appPath, config, io);
   const plist = dependencies.buildPlist || require('plist').build, parseSealed = dependencies.parsePlist || require('plist').parse;
   const rights = entitlementsFor(config), signingDirectory = path.join(options.out,'signing'); io.mkdirSync(signingDirectory,{recursive:true,mode:0o700});
@@ -216,12 +217,14 @@ async function buildMas({ root = DEFAULT_ROOT, env = process.env, arch } = {}, d
   const codexBinary = path.join(appPath,'Contents/Resources/qiuqiu-codex',`darwin-${config.arch}`,'codex');
   await sign({ app:appPath,platform:'mas',type:'distribution',batchCodesignCalls:true,identity:application.fingerprint,
     identityValidation:true,provisioningProfile:config.profile,preEmbedProvisioningProfile:true,preAutoEntitlements:false,strictVerify:true,
-    binaries:[codexBinary],optionsForFile:file=>({entitlements:file===appPath?mainFile:childFile,hardenedRuntime:false}) });
+    binaries:release.isFirstRelease(config)?[]:[codexBinary],optionsForFile:file=>({entitlements:file===appPath?mainFile:childFile,hardenedRuntime:false}) });
   let bundledManifestRefresh; try { bundledManifestRefresh = require('./package-mas-development').refreshBundledManifests(appPath,io,config.arch,config); }
   catch (_) { throw failure('MAS_BUNDLED_MANIFEST_REFRESH_FAILED'); }
   run('codesign',['--force','--sign',application.fingerprint,'--entitlements',mainFile,appPath]);
   run('codesign', ['--verify', '--deep', '--strict', appPath]);
-  for(const file of [appPath,codexBinary,path.join(appPath,'Contents/Frameworks',APP_NAME+' Helper.app')]) {
+  const ownTargets=release.isFirstRelease(config)?release.ownSigningTargets(appPath,io):[];
+  for(const target of ownTargets)run('codesign',['--verify','--strict',target.path]);
+  for(const file of [appPath,...(release.isFirstRelease(config)?ownTargets.filter(t=>t.entitlements).map(t=>t.path):[codexBinary,path.join(appPath,'Contents/Frameworks',APP_NAME+' Helper.app')])]) {
     let actual; try { actual=parseSealed(run('codesign',['--display','--entitlements',':-',file])); } catch (_) { throw failure('MAS_ENTITLEMENTS_UNVERIFIED'); }
     const expected=file===appPath?rights.main:rights.child;
     if(Object.entries(expected).some(([key,value])=>JSON.stringify(actual?.[key])!==JSON.stringify(value))||['get-task-allow','com.apple.security.get-task-allow'].some(key=>actual?.[key]===true))throw failure('MAS_ENTITLEMENTS_UNVERIFIED');
@@ -231,7 +234,7 @@ async function buildMas({ root = DEFAULT_ROOT, env = process.env, arch } = {}, d
     identityValidation: true, install: '/Applications' });
   if (!io.existsSync(pkgPath)) throw failure('MAS_PKG_OUTPUT_MISSING');
   run('pkgutil', ['--check-signature', pkgPath]);
-  return { platform: 'mas', releaseProfile: config.releaseProfile || null, arch: config.arch, marketingVersion: config.marketingVersion, buildVersion: config.buildVersion,
+  return { platform: 'mas', releaseProfile: config.releaseProfile || null, ...release.providerRuntimeMetadata(config), arch: config.arch, marketingVersion: config.marketingVersion, buildVersion: config.buildVersion,
     appPath, pkgPath, signedDistributionPackage: true, profileValidated: true, runtimeCache, bundledManifestRefresh, languageResources, signedEntitlementsValidated:true, runtimeAcceptancePassed:false,
     submissionReady: false, note: 'Signed build only; runtime acceptance, App Store processing/review and release are separate.' };
 }

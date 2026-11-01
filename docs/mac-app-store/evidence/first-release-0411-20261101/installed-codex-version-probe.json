@@ -1,0 +1,21 @@
+{
+  "appServerStarted": false,
+  "elapsedSeconds": 0.02285301685333252,
+  "executableRelativePath": "Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+  "exitCode": 0,
+  "kind": "native Apple Development App Sandbox probe, same first-release rights; not Electron MAS acceptance or App Review",
+  "launched": true,
+  "modelRequestsSent": 0,
+  "networkRequestsMadeByProbe": false,
+  "originalApplicationModified": false,
+  "originalCredentialsRead": false,
+  "providerConfigurationRead": false,
+  "securityScopeStarted": true,
+  "selectedApplication": "/Applications/ChatGPT.app",
+  "status": "version-executed",
+  "stderr": "WARNING: proceeding, even though we could not create PATH aliases: CODEX_HOME points to \"/Users/allan/Library/Containers/local.xiaokun.emotionball.pet.masdevelopment/Data/Library/Application Support/InstalledCodexVersionProbe-20261101/version-only-empty-home/unused-codex-home\", but that path does not exist\n",
+  "stdout": "codex-cli 0.165.0-alpha.1.2\n",
+  "terminationReason": "exit",
+  "timedOut": false,
+  "timestamp": "2026-11-01T12:24:28Z"
+}

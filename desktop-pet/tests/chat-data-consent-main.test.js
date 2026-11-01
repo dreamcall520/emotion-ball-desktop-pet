@@ -47,7 +47,7 @@ test('真实main便签用途不复用聊天同意，披露仅当前便签且拒�
 });
 
 
-test('真实main首发helper只披露聊天用途，拒绝不发送且默认已有scope无需重问',async t=>{
+test('真实main首发原账号来源重新明确同意一次，拒绝不发送且同scope复用',async t=>{
  const normal=fixture(t);normal.approve(true);assert.equal((await normal.run()).accepted,true);
  assert.match(normal.prompts[0].detail,/含聊天与便签整理/);
  const normalRows=JSON.parse(fs.readFileSync(path.join(normal.root,'chat-data-consent.json'),'utf8'));
@@ -57,10 +57,13 @@ test('真实main首发helper只披露聊天用途，拒绝不发送且默认已�
  assert.equal(fs.existsSync(path.join(first.root,'chat-data-consent.json')),false);
  first.approve(true);assert.equal((await first.run()).accepted,true);
  const firstRows=JSON.parse(fs.readFileSync(path.join(first.root,'chat-data-consent.json'),'utf8'));
- assert.deepEqual(firstRows,normalRows,'real main display flag must not change provider, version or scope');
+ assert.equal(firstRows[0].provider,normalRows[0].provider);assert.equal(firstRows[0].version,normalRows[0].version);
+ assert.notEqual(firstRows[0].scope,normalRows[0].scope,'original-account disclosure differs from former independent-profile source');
+ assert.match(first.prompts[0].detail,/本机原应用已登录.*与额度卡使用同一账号/);
  const reopened=fixture(t,{firstRelease:true});
  fs.writeFileSync(path.join(reopened.root,'chat-data-consent.json'),JSON.stringify(normalRows),{mode:0o600});
- assert.equal((await reopened.run()).accepted,true);assert.equal(reopened.prompts.length,0);assert.equal(reopened.sends(),1,'previous default-mode consent remains usable');
+ assert.equal((await reopened.run()).accepted,false);assert.equal(reopened.prompts.length,1);assert.equal(reopened.sends(),0,'former independent-profile consent cannot silently authorize the original account');
+ reopened.approve(true);assert.equal((await reopened.run()).accepted,true);assert.equal((await reopened.run()).accepted,true);assert.equal(reopened.prompts.length,2,'new original-account scope is reused after explicit approval');
  first.approve(false);normal.approve(false);
  assert.equal((await first.notesRun()).accepted,false);assert.equal((await normal.notesRun()).accepted,false);
  assert.deepEqual(first.prompts.at(-1),normal.prompts.at(-1),'notes remain a separate unchanged purpose');

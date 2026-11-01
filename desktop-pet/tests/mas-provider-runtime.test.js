@@ -567,3 +567,71 @@ test('首发runtime向真正沙盒目录层传任务用途，非首发维持原�
   }finally{await runtime.close();}
  }
 });
+
+test('首发installed模式仅明确双授权，恢复无picker，额度与聊天使用同一工厂，未登录不新login',async t=>{
+ const {createMasProviderRuntime}=require('../lib/mas-provider-runtime');const f=fixture(t);
+ let granted=false,authenticated=true,interactiveCalls=0,rpcCount=0,closes=0,revoked=0;const optionsSeen=[];
+ const access={installedAppAccess:{acquire:async()=>assert.fail('fake factory does not read app')},directoryAccess:{acquire:async()=>assert.fail('fake factory does not read credentials')},
+  ensure:async({interactive})=>{if(interactive){interactiveCalls++;granted=true;}return{status:granted?'stored':'needs-authorization'};},revoke:async()=>{granted=false;revoked++;}};
+ const runtime=createMasProviderRuntime({firstRelease:true,installedCodex:true,diagnostic:true,app:{getPath:()=>f.temp},
+  dialog:{showOpenDialog:async()=>assert.fail('task-only picker must not open')},shell:{openExternal:async()=>assert.fail('must not login')},
+  installedCodexAccess:access,createManagedCodexRpc:()=>assert.fail('must not use bundled runtime'),
+  createInstalledCodexRpc:options=>{optionsSeen.push(options);rpcCount++;return{start:async()=>{},readAccount:async()=>({authenticated,accountKey:'a'.repeat(64)}),
+   readRateLimits:async()=>({state:'ready',windows:[{windowMinutes:300,usedPercent:27}],updatedAt:1000,accountKey:'b'.repeat(64)}),
+   startLogin:async()=>assert.fail('must not start login'),listModels:async()=>({data:[]}),close:async()=>{closes++;}};}});
+ t.after(()=>runtime.close());
+ await assert.rejects(runtime.importCodexService(),{code:'UNSUPPORTED'});
+ assert.equal((await runtime.prepareChat('codex',{interactive:false})).status,'needs-data-authorization');assert.equal(rpcCount,0);
+ await assert.rejects(runtime.readManagedCodexQuota(),{code:'DIRECTORY_ACCESS_REQUIRED'});
+ assert.deepEqual((await runtime.getState()).managedCodexQuota,{status:'needs-authorization',snapshot:null,errorCode:'DIRECTORY_ACCESS_REQUIRED'});assert.equal(rpcCount,0);
+ assert.equal((await runtime.prepareChat('codex',{interactive:true})).status,'ready');assert.equal(interactiveCalls,1);assert.equal(rpcCount,2);
+ assert.equal((await runtime.getState()).managedCodexQuota.snapshot.windows[0].usedPercent,27);
+ assert.equal((await runtime.prepareChat('codex',{interactive:false})).status,'ready');assert.equal(interactiveCalls,1);
+ const chat=runtime.createCodexChatRpc({workspaceDir:path.join(f.temp,'chat-workspace')});await chat.start();await chat.listModels();await chat.close();
+ assert.ok(optionsSeen.every(options=>options.directoryAccess===access.directoryAccess&&options.installedAppAccess===access.installedAppAccess));
+ assert.ok(optionsSeen.every(options=>!Object.hasOwn(options,'profileHome')));assert.equal(closes,rpcCount);
+ authenticated=false;assert.equal((await runtime.prepareChat('codex',{interactive:false})).status,'needs-login');assert.equal((await runtime.getState()).managedCodexQuota.snapshot,null);
+ await runtime.revoke('codex');assert.equal(revoked,1);assert.equal((await runtime.prepareChat('codex',{interactive:false})).status,'needs-data-authorization');
+});
+
+test('installed取消授权不启动CLI、不清可用额度，退出关闭正在使用的自有RPC',async t=>{
+ const {createMasProviderRuntime}=require('../lib/mas-provider-runtime');const f=fixture(t);let status='stored',closed=0;
+ const runtime=createMasProviderRuntime({firstRelease:true,installedCodex:true,diagnostic:true,app:{getPath:()=>f.temp},dialog:{showOpenDialog:async()=>assert.fail('no task picker')},
+  installedCodexAccess:{ensure:async()=>({status}),installedAppAccess:{},directoryAccess:{},revoke:async()=>{}},
+  createInstalledCodexRpc:()=>({start:async()=>{},readAccount:async()=>({authenticated:true}),readRateLimits:async()=>({state:'ready',windows:[{usedPercent:10}],updatedAt:1000}),close:async()=>{closed++;}})});
+ await runtime.prepareChat('codex');const before=(await runtime.getState()).managedCodexQuota;status='cancelled';
+ assert.equal((await runtime.prepareChat('codex')).status,'needs-data-authorization');assert.deepEqual((await runtime.getState()).managedCodexQuota,before);
+ const chat=runtime.createCodexChatRpc({});await chat.start();const count=closed;await runtime.close();assert.equal(closed,count+1);
+});
+
+test('过期账号书签明确重选后旧聊天client失效，新额度和新聊天才使用新来源',async t=>{
+ const {createMasProviderRuntime}=require('../lib/mas-provider-runtime');
+ const {createMasInstalledCodexAccess}=require('../lib/mas-installed-codex-access');
+ const f=fixture(t);f.temp=fs.realpathSync(f.temp);f.codex=path.join(f.temp,'.codex');
+ const appDirectory=path.join(f.temp,'ChatGPT.app'),newAccount=path.join(f.temp,'new-home/.codex');
+ fs.mkdirSync(appDirectory);fs.mkdirSync(newAccount,{recursive:true});
+ const storage=createDirectoryStorage(path.join(f.temp,'synthetic-installed-grants')),selections=[],clients=[];
+ const app={getPath:()=>f.temp,startAccessingSecurityScopedResource:bookmark=>{if(bookmark==='expired')throw Error('expired');return()=>{};}};
+ const access=createMasInstalledCodexAccess({app,mas:true,storage,dialog:{showOpenDialog:async()=>{assert.ok(selections.length,'no automatic selection');return selections.shift();}}});
+ const pick=(directory,bookmark)=>({canceled:false,filePaths:[directory],bookmarks:[bookmark]});
+ selections.push(pick(appDirectory,'app'),pick(f.codex,'old-account'));
+ const runtime=createMasProviderRuntime({firstRelease:true,installedCodex:true,diagnostic:false,app,
+  dialog:{showOpenDialog:async()=>assert.fail('must not request task grant')},installedCodexAccess:access,
+  createInstalledCodexRpc:async options=>{
+   const lease=await options.directoryAccess.acquire('codex'),directory=lease.directory;let ended=false;
+   const client={directory,get ended(){return ended;},start:async()=>{},readAccount:async()=>({authenticated:true,accountKey:directory===f.codex?'a'.repeat(64):'b'.repeat(64)}),
+    readRateLimits:async()=>({state:'ready',windows:[{usedPercent:directory===f.codex?10:80}],updatedAt:1000}),
+    close:async()=>{ended=true;lease.release();}};clients.push(client);return client;
+  }});
+ t.after(()=>runtime.close());
+ assert.equal((await runtime.prepareChat('codex',{interactive:true})).status,'ready');
+ const oldChat=runtime.createCodexChatRpc({});await oldChat.start();const oldHandle=clients.at(-1);assert.equal(oldHandle.directory,f.codex);assert.equal(oldHandle.ended,false);
+ const saved=await storage.load('codex');saved.account.bookmark='expired';await storage.save('codex',saved);
+ selections.push(pick(newAccount,'new-account'));
+ assert.equal((await runtime.prepareChat('codex',{interactive:true})).status,'ready');
+ assert.equal(oldHandle.ended,true);await assert.rejects(oldChat.readAccount(),{code:'CLOSED'});
+ assert.equal((await runtime.getState()).managedCodexQuota.snapshot.windows[0].usedPercent,80);
+ const fresh=runtime.createCodexChatRpc({});await fresh.start();assert.equal(clients.at(-1).directory,newAccount);
+ assert.equal((await fresh.readAccount()).accountKey,'b'.repeat(64));assert.equal(selections.length,0);
+ await fresh.close();
+});
