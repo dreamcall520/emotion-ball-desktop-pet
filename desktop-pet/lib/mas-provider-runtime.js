@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
-const { createMasDirectoryAccess } = require('./mas-directory-access');
+const { createMasDirectoryAccess, CODEX_TASK_LOG_DISCLOSURE } = require('./mas-directory-access');
 const { createMasCodexConnection } = require('./mas-codex-connection');
 const { createCodexChatRpc } = require('./codex-chat-rpc');
 const { createZcodeChatWsRpc } = require('./zcode-chat-ws-rpc');
@@ -47,8 +47,8 @@ function createDiagnosticDirectoryAccess({ dialog, storage, home, purpose='read-
   return {
     async authorize(provider) {
       if (!PROVIDERS.has(provider)) throw failure('INVALID_PROVIDER');
-      const selected = await dialog.showOpenDialog({ title: purpose==='plugin-installation'?'允许球球安装任务同步插件':`选择 ${provider === 'codex' ? 'Codex 的 .codex' : provider==='zcode'?'ZCode 的 .zcode':'WorkBuddy 的 .workbuddy（仅任务缓存）'} 数据目录`,
-        buttonLabel:purpose==='plugin-installation'?'允许安装插件':'允许连接', ...(home ? {defaultPath:path.join(home,'.'+provider)} : {}), message: purpose==='plugin-installation'?'允许球球安装自己的任务同步插件，并仅更新插件记录和启用设置。其他配置原样保留，不读取聊天记录或独立登录凭据文件，不发送模型消息。':provider==='workbuddy'?'只读取任务标题、历史状态和未读标记，不读聊天正文或登录凭据。此诊断候选不等同系统沙盒验收。':'读取额度和任务信息；聊天使用球球独立登录，不改原工具设置。此诊断候选不等同系统沙盒验收。', properties: ['openDirectory', 'showHiddenFiles'] });
+      const selected = await dialog.showOpenDialog({ title: purpose==='codex-task-logs'?CODEX_TASK_LOG_DISCLOSURE.title:purpose==='plugin-installation'?'允许球球安装任务同步插件':`选择 ${provider === 'codex' ? 'Codex 的 .codex' : provider==='zcode'?'ZCode 的 .zcode':'WorkBuddy 的 .workbuddy（仅任务缓存）'} 数据目录`,
+        buttonLabel:purpose==='codex-task-logs'?CODEX_TASK_LOG_DISCLOSURE.buttonLabel:purpose==='plugin-installation'?'允许安装插件':'允许连接', ...(home ? {defaultPath:path.join(home,'.'+provider)} : {}), message: purpose==='codex-task-logs'?CODEX_TASK_LOG_DISCLOSURE.message:purpose==='plugin-installation'?'允许球球安装自己的任务同步插件，并仅更新插件记录和启用设置。其他配置原样保留，不读取聊天记录或独立登录凭据文件，不发送模型消息。':provider==='workbuddy'?'只读取任务标题、历史状态和未读标记，不读聊天正文或登录凭据。此诊断候选不等同系统沙盒验收。':'读取额度和任务信息；聊天使用球球独立登录，不改原工具设置。此诊断候选不等同系统沙盒验收。', properties: ['openDirectory', 'showHiddenFiles'] });
       if (selected.canceled) return { status: 'cancelled' };
       const directory = selected.filePaths?.[0];
       if (!directory || !path.isAbsolute(directory) || path.basename(directory) !== '.' + provider) throw failure('DIRECTORY_ACCESS_REQUIRED');
@@ -105,7 +105,8 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
   const chatPreferences=createDirectoryStorage(path.join(app.getPath('userData'),'store-chat-preferences'));
   const chatEnabled={codex:false,zcode:false,workbuddy:false};
   const storage = createDirectoryStorage(path.join(app.getPath('userData'), 'store-directory-grants'));
-  const access = diagnostic ? createDiagnosticDirectoryAccess({ dialog, storage, home:app.getPath('home') }) : createMasDirectoryAccess({ app, dialog, storage });
+  const directoryPurpose=firstRelease?'codex-task-logs':'read-data';
+  const access = diagnostic ? createDiagnosticDirectoryAccess({ dialog, storage, home:app.getPath('home'),purpose:directoryPurpose }) : createMasDirectoryAccess({ app, dialog, storage,purpose:directoryPurpose });
   const pluginStorage=createDirectoryStorage(path.join(app.getPath('userData'),'store-plugin-directory-grants'));
   const pluginAccess=diagnostic?createDiagnosticDirectoryAccess({dialog,storage:pluginStorage,home:app.getPath('home'),purpose:'plugin-installation'}):createMasDirectoryAccess({app,dialog,storage:pluginStorage,purpose:'plugin-installation'});
   const pairingAccess=diagnostic?pluginAccess:createMasDirectoryAccess({app,dialog,storage:pluginStorage,purpose:'receiver-pairing'});

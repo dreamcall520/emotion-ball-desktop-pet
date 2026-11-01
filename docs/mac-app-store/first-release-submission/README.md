@@ -37,3 +37,9 @@ Apple 资料入口：
 
 - [提交审核](https://developer.apple.com/help/app-store-connect/manage-submissions-to-app-review/submit-an-app)
 - [审核指南](https://developer.apple.com/app-store/review/guidelines/)
+
+## 当前接手位置
+
+源码检查点：5119d78（App业务代码沿用0b1f746，后续仅证据及构建错误报告）。新版开发ZIP已更新。本人已在真正 MAS 开发包完成官方 Codex 登录，额度与聊天共用该登录，实际周额度剩余5%；选择 GPT-6-Luna 后，首次发送先拒绝并保留草稿、再同意，仅发1条“你好，请回复测试通过”，实际回复“测试通过”。大小额度卡、手动刷新、退出重启后的登录／额度／会话恢复已取得开发包证据；没有第二次登录，也没有追加模型消息。只读确认 Codex 同意记录仍在，不将其写成第二次发送免同意已经实发验证。可选任务目录取消不影响额度／聊天，任务本轮只授权合成 fixture，未访问用户真实目录，任务展示仍在验证。详见 `development-acceptance-20261101.md` 和 `../evidence/first-release-20261101/mas-real-chat.json`、`mas-real-quota.json`、`mas-real-login-restart.json`。
+
+App Store Connect此前停在本人登录步骤，未上传。代码/形象/动画的实际分发依据仍待确认；不以假定全自研填声明。正式分发构建当前仍在 productbuild 阶段，尚无成功产包回执；旧失败尝试保留，结果以实际进程和日志为准。以上开发验证不替代最终分发包41项验收，仍未上传或送审。

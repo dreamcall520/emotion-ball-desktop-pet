@@ -1,0 +1,15 @@
+{
+  "actualAccountLoginCompletedByUser": true,
+  "sentSyntheticMessages": 1,
+  "prompt": "你好，请回复测试通过",
+  "reply": "测试通过",
+  "modelSelected": "GPT-6-Luna",
+  "consentReceiver": "https://chatgpt.com",
+  "declineVerified": {
+    "sent": false,
+    "draftPreserved": true
+  },
+  "acceptedThenRealReply": true,
+  "taskDirectoryEnabled": false,
+  "kind": "MAS development only"
+}

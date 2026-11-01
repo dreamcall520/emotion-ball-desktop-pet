@@ -743,12 +743,12 @@ function registerStoreConnections() {
           await storeEnableFlow.enableData(payload?.provider);
           if(payload?.capability!=='data'&&payload?.provider==='zcode'&&storeEnableFlow.getState().zcode.data.status==='ready'&&storeEnableFlow.getState().zcode.chat.status==='needs-data-authorization')await storeEnableFlow.enable('zcode');
         }
-        message=payload?.capability==='chat'?'聊天模型配置目录访问已按实际结果更新，额度与任务保持原设置。':'原工具数据授权已按实际结果更新，聊天登录保持。';
+        message=FIRST_RELEASE?'任务目录授权已按实际结果更新；已连接的额度与聊天保持。':payload?.capability==='chat'?'聊天模型配置目录访问已按实际结果更新，额度与任务保持原设置。':'原工具数据授权已按实际结果更新，聊天登录保持。';
       } else if(action==='revoke-provider'){
         if(['codex','zcode','workbuddy'].includes(payload?.provider))storeChatDataConsent().revoke(payload.provider);await storeEnableFlow.disable(payload?.provider);message='已停用并撤销本地数据授权及聊天数据同意。';
       } else if(action==='revoke-chat-data-consent'){
         if(!['codex','zcode','workbuddy'].includes(payload?.provider))return{ok:false};
-        storeChatDataConsent().revoke(payload.provider);message='AI 数据同意已撤销；下次聊天发送或便签智能整理前会重新询问，不会自动发送。';
+        storeChatDataConsent().revoke(payload.provider);message=FIRST_RELEASE?'聊天数据同意已撤销；下次聊天发送前会重新询问，不会自动发送。':'AI 数据同意已撤销；下次聊天发送或便签智能整理前会重新询问，不会自动发送。';
       } else if(action==='open-provider-chat'){
         if(!['codex','zcode','workbuddy'].includes(payload?.provider))return{ok:false};
         if(!storeChatReady(payload.provider)&&!['ready','needs-model','needs-new-chat'].includes(storeEnableFlow.getState()[payload.provider]?.chat.status))return{ok:false,message:'请先启用授权并完成连接。'};
@@ -935,7 +935,7 @@ let chatDataConsent = null;
 function storeChatDataConsent() {
   if (!chatDataConsent) {
     const { createChatDataConsent, createChatDataConsentStore } = require('./lib/chat-data-consent');
-    chatDataConsent = createChatDataConsent({ store: createChatDataConsentStore(path.join(app.getPath('userData'), 'chat-data-consent.json')), request: async () => false });
+    chatDataConsent = createChatDataConsent({ chatOnlyDisclosure:FIRST_RELEASE, store: createChatDataConsentStore(path.join(app.getPath('userData'), 'chat-data-consent.json')), request: async () => false });
   }
   return chatDataConsent;
 }
@@ -4701,7 +4701,7 @@ async function bootstrap() {
       canRestoreData:provider=>settings?.[provider+'Enabled']===true,
       ensureDirectory:(provider,options)=>storeRuntime.ensureDirectory(provider,options),
       refreshData:async(provider,{interactive})=>{
-        if(provider==='codex') {if(!settings.codexEnabled)await setCodexEnabled(true);else await codexCompanion.refresh();const snap=codexCompanion.getSnapshot();return{available:!snap.error,message:'Codex 已授权，额度和任务以实际读取结果为准。'};}
+        if(provider==='codex') {if(!settings.codexEnabled)await setCodexEnabled(true);else await codexCompanion.refresh();const snap=codexCompanion.getSnapshot();return{available:!snap.error,message:FIRST_RELEASE?'Codex 任务目录已授权，仅显示可读取的部分日志任务；额度与聊天保持原连接。':'Codex 已授权，额度和任务以实际读取结果为准。'};}
         if(provider==='zcode'){if(!zcodeLink.isEnabled())await zcodeLink.setEnabled(true);else await zcodeLink.refresh?.();return{available:true,message:'ZCode 已授权；显示已有套餐信息和历史任务，空套餐不代表聊天可用。'};}
         await storeRuntime.probeWorkbuddyDesktop();
         if(!settings.workbuddyEnabled)await setWorkBuddyEnabled(true,{openLogin:false});

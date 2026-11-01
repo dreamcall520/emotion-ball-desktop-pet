@@ -552,3 +552,18 @@ test('首发仅恢复Codex，拒绝其他提供商及插件，且不构造原工
  assert.equal(calls,0);
  assert.equal(fs.readdirSync(f.temp).some(name=>/^(workbuddy|zcode-desktop)/.test(name)),false);
 });
+
+test('首发runtime向真正沙盒目录层传任务用途，非首发维持原用途',async t=>{
+ const {createMasProviderRuntime}=require('../lib/mas-provider-runtime');
+ for(const firstRelease of [true,false]){
+  const f=fixture(t),shown=[];
+  const runtime=createMasProviderRuntime({firstRelease,app:{getPath:()=>f.temp,startAccessingSecurityScopedResource:()=>{throw Error('cancelled scope must not open');}},
+   dialog:{showOpenDialog:async options=>{shown.push(options);return{canceled:true};}},
+   BrowserWindow:function(){throw Error('no website');},session:{fromPartition:()=>({getUserAgent:()=>'',fetch:()=>{throw Error('no network');}})},shell:{openExternal:()=>{throw Error('no login');}},
+   createPluginHost:()=>({getSandboxCapabilities:()=>({known:false})})});
+  try{assert.deepEqual(await runtime.authorize('codex'),{status:'cancelled'});assert.equal(shown.length,1);
+   assert.equal(shown[0].title,firstRelease?'允许球球读取 Codex 任务日志':'允许球球连接 Codex');
+   assert.equal(shown[0].buttonLabel,firstRelease?'允许读取任务':'允许连接');
+  }finally{await runtime.close();}
+ }
+});

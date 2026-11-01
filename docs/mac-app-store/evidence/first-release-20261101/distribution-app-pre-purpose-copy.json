@@ -1,0 +1,12 @@
+{
+  "kind": "Signed distribution app before final wording corrections; not final upload package",
+  "appVersion": "0.4.10",
+  "buildVersion": "1793508092",
+  "bundleId": "local.xiaokun.emotionball.pet",
+  "minimumMacOS": "12.0",
+  "asarSha256": "0bf9a6944debc8e0cb262cb466f76df9d0a1e40b3091c267b845fc19ab7cb31d",
+  "deepStrictSignaturePassed": true,
+  "packageCreationStillRunning": true,
+  "supersededForTaskConsentWording": true,
+  "uploaded": false
+}

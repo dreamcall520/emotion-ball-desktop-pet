@@ -1,10 +1,10 @@
 {
   "appPath": "/Users/allan/Documents/个人创作/emotion-ball-desktop-pet/.worktrees/mas-first-release/dist/mas-development/arm64/球球桌宠-商店沙盒开发候选-mas-arm64/球球桌宠-商店沙盒开发候选.app",
-  "asarSha256": "f3a1ce65e1fee377ea4b861ff4476bddf5419e90e20be112ce3dcc87d67e1ed7",
+  "asarSha256": "534f391146a427e483510bcd4c109db70a1a52cf64f9de4cd771e3c0291af506",
   "files": [
     {
       "file": "desktop-pet/main.js",
-      "sha256": "644144b20e9af7caef6cfe7d4e0ba4d1217a2ce8cbafefcc3e543e8ba77814b1",
+      "sha256": "ae9c50118c5f14f5ad232820d222a6e03907de37f4370420aad69b769c318ef3",
       "matches": true
     },
     {
@@ -60,6 +60,21 @@
     {
       "file": "desktop-pet/about-preload.js",
       "sha256": "8687966e67d1873d91c5ea184ab52df2c708c0b89a5e34121a8e3dabfd0250f4",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/lib/chat-data-consent.js",
+      "sha256": "24b906a9a88a4b2510f0a6a1fb832c1032130206db4453d343de33db7d9e88d5",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/lib/mas-provider-runtime.js",
+      "sha256": "57089c04d7d4d75a9203f4f1d385377988351e8ddb01b848f0efef1d5d492520",
+      "matches": true
+    },
+    {
+      "file": "desktop-pet/lib/mas-directory-access.js",
+      "sha256": "64238841b4c8c1ce507742d1e9c8c5b5d2dba7bc74481014c8032029edc7bf9d",
       "matches": true
     }
   ],

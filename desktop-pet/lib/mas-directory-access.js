@@ -10,6 +10,10 @@ const MESSAGES = {
   zcode: '球球将读取账号套餐、历史任务和已有模型配置。不会自动发送消息；聊天沿用所选来源的计费方式。请直接允许连接。',
   workbuddy: '球球只读取原 WorkBuddy 的任务标题、历史状态和未读标记，不读取聊天正文或登录凭据。请直接允许连接。'
 };
+const CODEX_TASK_LOG_DISCLOSURE = Object.freeze({
+  title:'允许球球读取 Codex 任务日志',buttonLabel:'允许读取任务',
+  message:'在本机解析部分任务日志，仅提取任务标题、状态和更新时间。额度与聊天继续使用球球内已登录账号；不会读取此目录的登录凭据、修改原目录或自动发送模型消息。可取消，已连接的额度与聊天保持。'
+});
 function accessError(code, reason) {
   const messages = {
     INVALID_PROVIDER: '不支持的工具。',
@@ -43,7 +47,7 @@ function createMasDirectoryAccess({ app, dialog, storage, purpose='read-data', v
       !['load', 'save', 'remove'].every(name => typeof storage[name] === 'function')) {
     throw new TypeError('app, dialog and atomic storage load/save/remove are required');
   }
-  if(!['read-data','plugin-installation','receiver-pairing'].includes(purpose))throw new TypeError('Invalid directory authorization purpose');
+  if(!['read-data','codex-task-logs','plugin-installation','receiver-pairing'].includes(purpose))throw new TypeError('Invalid directory authorization purpose');
   const pending = new Map();
   function mutation(provider, operation, recoverPreviousFailure = true) {
     const previous = pending.get(provider) || Promise.resolve();
@@ -78,10 +82,11 @@ function createMasDirectoryAccess({ app, dialog, storage, purpose='read-data', v
   }
   async function authorize(provider) {
     checkProvider(provider);
+    if(purpose==='codex-task-logs'&&provider!=='codex')throw accessError('INVALID_PROVIDER','task-log-purpose-mismatch');
     return mutation(provider, async () => {
       const selection = await dialog.showOpenDialog({
-        title: purpose==='receiver-pairing'?'允许球球连接已有任务插件':purpose==='plugin-installation'?'允许球球安装 '+(provider==='zcode'?'ZCode':'WorkBuddy')+' 任务插件':TITLES[provider], buttonLabel: purpose==='receiver-pairing'?'允许连接插件':purpose==='plugin-installation'?'允许安装插件':'允许连接',
-        defaultPath: path.join(app.getPath('home'), '.' + provider), message: purpose==='receiver-pairing'?'只更新已安装球球插件的本机连接信息，不修改代码、市场、启用设置、聊天记录或账号凭据。':purpose==='plugin-installation'?'球球只安装自己的任务同步插件，并更新相应插件记录与启用设置。其他设置原样保留，不读取聊天记录或独立登录凭据文件，不发送模型消息。':MESSAGES[provider],
+        title: purpose==='codex-task-logs'?CODEX_TASK_LOG_DISCLOSURE.title:purpose==='receiver-pairing'?'允许球球连接已有任务插件':purpose==='plugin-installation'?'允许球球安装 '+(provider==='zcode'?'ZCode':'WorkBuddy')+' 任务插件':TITLES[provider], buttonLabel: purpose==='codex-task-logs'?CODEX_TASK_LOG_DISCLOSURE.buttonLabel:purpose==='receiver-pairing'?'允许连接插件':purpose==='plugin-installation'?'允许安装插件':'允许连接',
+        defaultPath: path.join(app.getPath('home'), '.' + provider), message: purpose==='codex-task-logs'?CODEX_TASK_LOG_DISCLOSURE.message:purpose==='receiver-pairing'?'只更新已安装球球插件的本机连接信息，不修改代码、市场、启用设置、聊天记录或账号凭据。':purpose==='plugin-installation'?'球球只安装自己的任务同步插件，并更新相应插件记录与启用设置。其他设置原样保留，不读取聊天记录或独立登录凭据文件，不发送模型消息。':MESSAGES[provider],
         properties: ['openDirectory', 'showHiddenFiles'], securityScopedBookmarks: true
       });
       if (selection?.canceled) return { status: 'cancelled' };
@@ -132,4 +137,4 @@ function createMasDirectoryAccess({ app, dialog, storage, purpose='read-data', v
   return { authorize, acquire, withAccess, getStatus, revoke };
 }
 
-module.exports = { createMasDirectoryAccess };
+module.exports = { createMasDirectoryAccess, CODEX_TASK_LOG_DISCLOSURE };

@@ -1,0 +1,11 @@
+{
+  "kind": "Latest genuine MAS development build after task/chat wording fixes",
+  "officialLoginNotRepeated": true,
+  "quotaReady": true,
+  "chatReady": true,
+  "syntheticTaskRestored": true,
+  "taskDirectoryPickerNotRepeated": true,
+  "codexConsentRecordRetained": true,
+  "additionalMessagesSent": 0,
+  "text": "球球 · Codex 连接\n登录一次，查看额度和聊天\n\n使用你在球球内登录的同一个 Codex 账号。已有有效登录自动复用，不需要为查看额度授权原工具目录。\n\nCodex\n已连接\n额度\n球球聊天账号 · 周额度剩余 4%\n聊天\n聊天已连接 · 使用球球专用会话\n\n额度更新：2026/11/1 12:57:12\n\n检查 Codex 连接\n刷新额度\n和球球聊天\n首次发送聊天前，会说明发送内容与接收服务并询问同意。连接不会自动发送消息；额度小卡和展开卡均保留。\n原 Codex 任务同步\n可选\n\n只在需要同步原软件的部分任务日志时，确认对应目录权限。原软件任务来源与球球聊天分开，不保证覆盖全部任务或全部后台工作。\n\n本机日志任务 1 项 · 仅覆盖部分日志\n\n合成验收任务（非真实 Codex） · 已完成\n检查任务同步\n授权管理\n\n只处理你选择的操作，取消不会自动发消息。有效登录、账号及接收服务未变时，日常打开和重启无需重复授权。\n\n撤销聊天数据同意\n解除连接\n解除连接会停止球球联动、撤销本地任务目录授权及发送同意；不代表退出官方账号或更换账号。"
+}

@@ -1,0 +1,15 @@
+{
+  "kind": "MAS development",
+  "sameManagedLogin": true,
+  "taskDirectoryEnabled": false,
+  "connectionRefreshSucceeded": true,
+  "compactCaptured": true,
+  "expandedCaptured": true,
+  "state": {
+    "text": "CODEX\n周额度\n本周期剩余\n5%\n用量偏快\n\n4天9小时后重置\n11/5 22:08\n\n重置机会\n暂未提供\n进行中\n—\n待查看\n0\n趋势",
+    "expanded": "true",
+    "state": "ready"
+  },
+  "collapseToCompactVerified": true,
+  "compactAfterCollapseText": "周额度 / 5%"
+}

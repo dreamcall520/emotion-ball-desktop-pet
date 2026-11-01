@@ -240,3 +240,26 @@ test('选错工具或上级目录先拒绝，不访问、不保存且保留旧�
 });
 
 test('安装用途独立明确写入范围，不复用只读文案',async()=>{const f=harness({extra:{purpose:'plugin-installation'},dialog:{showOpenDialog:async()=>({canceled:true})}});await f.access.authorize('workbuddy');const options=f.calls.find(c=>Array.isArray(c)&&c[0]==='dialog');assert.equal(options,undefined);const seen=[];const second=harness({extra:{purpose:'plugin-installation'},dialog:{showOpenDialog:async options=>{seen.push(options);return{canceled:true};}}});await second.access.authorize('zcode');assert.equal(seen[0].buttonLabel,'允许安装插件');assert.match(seen[0].message,/安装.*插件.*启用设置/);assert.match(seen[0].title,/安装 ZCode/);assert.equal(second.calls.includes('save'),false);});
+
+test('首发Codex任务用途独立说明且只改文案，取消保留原书签，默认三家文案不变',async()=>{
+ const {CODEX_TASK_LOG_DISCLOSURE}=require('../lib/mas-directory-access');
+ const f=harness({extra:{purpose:'codex-task-logs'}});await f.access.authorize('codex');
+ const options=f.calls.find(c=>Array.isArray(c)&&c[0]==='dialog')[1];
+ assert.equal(options.title,'允许球球读取 Codex 任务日志');assert.equal(options.buttonLabel,'允许读取任务');
+ assert.equal(options.message,CODEX_TASK_LOG_DISCLOSURE.message);
+ assert.match(options.message,/本机解析部分任务日志.*仅提取任务标题、状态和更新时间/);
+ assert.match(options.message,/额度与聊天继续使用球球内已登录账号/);
+ assert.match(options.message,/不会读取此目录的登录凭据、修改原目录或自动发送模型消息/);
+ assert.match(options.message,/可取消，已连接的额度与聊天保持/);
+ assert.doesNotMatch(options.message,/不读取聊天正文|请直接允许连接/);
+ assert.equal(options.defaultPath,'/synthetic/home/.codex');assert.deepEqual(options.properties,['openDirectory','showHiddenFiles']);assert.equal(options.securityScopedBookmarks,true);
+ assert.deepEqual(f.saved.get('codex'),newGrant,'purpose label does not expand stored grant schema');
+ const cancelled=harness({extra:{purpose:'codex-task-logs'},dialog:{showOpenDialog:async()=>({canceled:true})}});
+ assert.deepEqual(await cancelled.access.authorize('codex'),{status:'cancelled'});assert.deepEqual(cancelled.saved.get('codex'),oldGrant);assert.deepEqual(cancelled.calls,[]);
+ await assert.rejects(f.access.authorize('zcode'),{code:'INVALID_PROVIDER',reason:'task-log-purpose-mismatch'});
+ for(const provider of ['codex','zcode','workbuddy']){
+  let observed;const normal=harness({dialog:{showOpenDialog:async value=>{observed=value;return{canceled:true};}}});await normal.access.authorize(provider);
+  assert.equal(observed.title,'允许球球连接 '+({codex:'Codex',zcode:'ZCode',workbuddy:'WorkBuddy'}[provider]));assert.equal(observed.buttonLabel,'允许连接');
+  if(provider==='codex')assert.equal(observed.message,'球球将读取账号额度和任务日志。不会自动发送消息或执行任务。请直接允许连接。');
+ }
+});
