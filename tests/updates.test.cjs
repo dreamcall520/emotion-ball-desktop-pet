@@ -18,6 +18,7 @@ test('0.4.10 Apple release preserves every 0.4.09 platform and the retained hist
  assert.match(articles[0], /datetime="2026-11-01"/);
  for(const text of ['小白加入官方伙伴','反馈与提交记录','晴空蓝与窗口显示','天气与额度卡交互','装扮与专属皮肤案例'])assert.ok(articles[0].includes(text));
  assert.equal((articles[0].match(/<h4>/g)||[]).length,5);
+ assert.ok(articles[0].includes('等待就绪再完整播放'));assert.ok(articles[0].includes('退出时迟到的天气回调'));
  assert.match(articles[0], /v0\.4\.10\/Qiuqiu-0\.4\.10-macOS-arm64\.dmg/);
  assert.doesNotMatch(articles[0], /macOS-x64\.dmg|Windows-x64-Setup|mac-app-store|Windows r6/);
 });
