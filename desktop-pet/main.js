@@ -1274,14 +1274,17 @@ function clearSpriteMotionTimer() {
   spriteMotionEpoch++;
 }
 
-function dogCodexSpriteClip(action) {
-  const id = { hop: 'jump', spin: 'happy', bow: 'spin' }[action];
+function dogSpriteClip(id) {
   const pet = dogSpriteDescriptor, appearance = effectiveCustomization(settings?.customization).appearance;
   const clip = pet?.frameMap?.[id];
   if (!dogDreamSkinEnabled || appearance.shape !== 'codex-pet' || appearance.codexPetId !== pet?.id ||
-      clip?.sheet !== id || clip.count <= 1) return null;
+      !clip || clip.sheet !== id || clip.count <= 1) return null;
   return { id, frameWidth: pet.sheets[clip.sheet].frameWidth || 192,
     durationMs: clip.durations.reduce((sum, ms) => sum + ms, 0) };
+}
+
+function dogCodexSpriteClip(action) {
+  return dogSpriteClip({ hop: 'jump', spin: 'happy', bow: 'spin' }[action]);
 }
 
 function finishCodexSpriteMotion(request, timedOut = false) {
@@ -4060,8 +4063,13 @@ function registerIpc() {
     const bounds = petWindow.getBounds();
     const side = PetFacing.resolve(bounds, screen.getDisplayMatching(bounds).workArea, request.side);
     const softOrb=effectiveCustomization(settings.customization).appearance.shape==='soft-orb';
+    const userSpriteClip = dogSpriteDescriptor?.id === XIAOBAI_ID && dogSpriteDescriptor.origin === 'builtin'
+      ? dogSpriteClip({ hop: 'jump', jelly: 'jump', sway: 'wave', peek: 'waiting',
+      bow: 'checking', spin: 'wave', dizzy: 'fail', turn: 'checking', nuzzle: 'wave',
+      land: 'checking', stretch: 'jump' }[request.action]) : null;
     if (!windowMotion.start({ token: request.token, action: request.action, side,
-      ...(softOrb?{visualOnly:true,durationMs:SoftOrbModel.duration(SoftOrbModel.actionForMotion(request.action,'user'))}:{}),
+      ...(softOrb?{visualOnly:true,durationMs:SoftOrbModel.duration(SoftOrbModel.actionForMotion(request.action,'user'))}
+        :userSpriteClip?{durationMs:userSpriteClip.durationMs}:{}),
       reducedMotion: request.reducedMotion === true })) hostMotion = null;
   });
 
@@ -4622,11 +4630,18 @@ async function bootstrap() {
     onLayout: () => { syncQuotaLabel(codexCompanion?.getSnapshot()); syncApiBalanceLabel(); syncQuotaFreeStack(); },
     onChange: packet => { syncQuotaCardGroup(); syncQuotaFreeStack(); if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send('pet:weather', packet); },
     onError: error => writeError('天气', error) });
-  petWindow.on('move', () => weatherWindow?.reposition());
-  petWindow.on('show', () => weatherWindow?.reposition());
-  petWindow.on('hide', () => weatherWindow?.reposition());
-  petWindow.webContents.on('did-finish-load', () => { if (weatherWindow) petWindow.webContents.send('pet:weather', { ...weatherWindow.getState(), enabled: weatherWindow.isEnabled() }); });
-  const trackWeatherObstacle = win => { if (win === weatherWindow?.getWindow()) return; for (const event of ['move','resize','show','hide','closed']) win.on(event, () => { if (!isQuitting && win !== weatherWindow?.getWindow()) safelyInvokeWindow('天气避让重排', () => weatherWindow?.reposition()); }); };
+  const weatherPetWindow = petWindow, initialWeatherWindow = weatherWindow;
+  const isCurrentWeatherOwner = () => !isQuitting && petWindow === weatherPetWindow &&
+    weatherWindow === initialWeatherWindow && !weatherPetWindow.isDestroyed() &&
+    !weatherPetWindow.webContents.isDestroyed?.();
+  for (const event of ['move', 'show', 'hide']) weatherPetWindow.on(event, () => {
+    if (isCurrentWeatherOwner()) initialWeatherWindow.reposition();
+  });
+  weatherPetWindow.webContents.on('did-finish-load', () => {
+    if (isCurrentWeatherOwner()) weatherPetWindow.webContents.send('pet:weather',
+      { ...initialWeatherWindow.getState(), enabled: initialWeatherWindow.isEnabled() });
+  });
+  const trackWeatherObstacle = win => { if (win === weatherWindow?.getWindow()) return; for (const event of ['move','resize','show','hide','closed']) win.on(event, () => { if (win === weatherPetWindow && !isCurrentWeatherOwner()) return; if (!isQuitting && win !== weatherWindow?.getWindow()) safelyInvokeWindow('天气避让重排', () => weatherWindow?.reposition()); }); };
   BrowserWindow.getAllWindows().forEach(trackWeatherObstacle);
   app.on('browser-window-created', (_event, win) => trackWeatherObstacle(win));
   weatherWindow.start();

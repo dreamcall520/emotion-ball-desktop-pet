@@ -5033,3 +5033,61 @@ test('shortcut close refreshes collection cards once, preserving single/all-fixe
     f.app.emit('before-quit');
   }
 });
+
+
+test('可信小白用户jump/wave素材决定完整宿主时长，renderer伪造时长与其他形态均不生效', async()=>{
+ for(const [action,id,duration]of [['hop','jump',3000],['spin','wave',1750]]){
+  const f=await fixture();
+  const petId=require('../lib/builtin-pets').XIAOBAI_ID;
+  f.call(`dogDreamSkinEnabled=true;dogSpriteDescriptor={id:${JSON.stringify(petId)},origin:'builtin',sheets:{${id}:{frameWidth:192}},frameMap:{${id}:{sheet:'${id}',count:3,durations:[${duration-200},100,100]}}};settings.customization.appearance={shape:'codex-pet',codexPetId:${JSON.stringify(petId)}}`);
+  f.send('pet:motion-start',{token:1,action,durationMs:10});
+  f.advanceTo(duration-1);
+  assert.equal(f.call('hostMotion?.token'),1,'完整可信素材时长前保持宿主所有权');
+  assert(!f.pet.messages.some(m=>m.channel==='pet:motion-frame'&&m.packet.token===1&&m.packet.frame.done));
+  f.advanceTo(duration+32);
+  assert.equal(f.call('hostMotion'),null);
+  assert(f.pet.messages.some(m=>m.channel==='pet:motion-frame'&&m.packet.token===1&&m.packet.frame.done));
+  f.app.emit('before-quit');
+ }
+ const f=await fixture();f.send('pet:motion-start',{token:9,action:'hop',durationMs:60000});f.advanceTo(1900);assert.equal(f.call('hostMotion'),null,'普通球仍使用原1800ms，不信renderer时长');f.app.emit('before-quit');
+ const imported=await fixture();imported.call("dogDreamSkinEnabled=false;settings.customization.appearance={shape:'codex-pet',codexPetId:'codex-'+ 'b'.repeat(64)}");imported.send('pet:motion-start',{token:10,action:'hop',durationMs:60000});imported.advanceTo(1900);assert.equal(imported.call('hostMotion'),null,'普通导入保持原通用时长');imported.app.emit('before-quit');
+});
+
+test('第三方伪造characterId或builtin origin不能借用官方用户动作时长',async()=>{
+ for(const [id,origin]of [[`codex-${'a'.repeat(64)}`,'codex'],[`codex-${'b'.repeat(64)}`,'builtin'],[require('../lib/builtin-pets').XIAOBAI_ID,'codex']]){
+ const f=await fixture();f.call(`dogDreamSkinEnabled=true;dogSpriteDescriptor={id:${JSON.stringify(id)},origin:${JSON.stringify(origin)},characterId:'xiaobai',sheets:{jump:{frameWidth:192}},frameMap:{jump:{sheet:'jump',count:3,durations:[2800,100,100]}}};settings.customization.appearance={shape:'codex-pet',codexPetId:${JSON.stringify(id)}}`);
+ f.send('pet:motion-start',{token:1,action:'hop'});f.advanceTo(1900);assert.equal(f.call('hostMotion'),null,'身份或origin不匹配不能用3000ms官方时长');f.app.emit('before-quit');
+ }
+});
+
+test('bootstrap天气窗口回调只服务当前存活pet和原controller，退出或迟到load不抛错不投递新窗口',async()=>{
+ for(const stale of ['none','null','destroyed','contents-destroyed','replacement-pet','replacement-weather','quitting']){
+  const f=await fixture(),old=f.pet,load=old.webContents.listeners('did-finish-load').at(-1);
+  const initialMessages=old.messages.filter(m=>m.channel==='pet:weather').length;
+  if(stale==='null')f.call('petWindow=null');
+  if(stale==='destroyed')old.destroyed=true;
+  if(stale==='contents-destroyed')old.webContents.isDestroyed=()=>true;
+  if(stale==='replacement-pet'){old.destroyed=true;f.call('createPetWindow()');}
+  if(stale==='replacement-weather')f.call('weatherWindow={...weatherWindow,repositions:0}');
+  if(stale==='quitting')f.call('isQuitting=true');
+  const current=f.call('petWindow'),newMessages=current?.messages.length||0,repositions=f.call('weatherWindow?.repositions');
+  assert.doesNotThrow(()=>load(),stale+' late did-finish-load');
+  if(stale==='none'){assert.equal(old.messages.filter(m=>m.channel==='pet:weather').length,initialMessages+1,'正常首次加载仍同步weather');for(const event of ['move','show','hide'])old.emit(event);assert(f.call('weatherWindow.repositions')>repositions,'当前存活pet的事件仍重排天气');}
+  else{
+   assert.equal(old.messages.filter(m=>m.channel==='pet:weather').length,initialMessages,'过期owner不发送天气');
+   if(current&&current!==old)assert.equal(current.messages.length,newMessages,'旧load不得给新pet发送');
+   for(const event of ['move','show','hide']){
+    if(stale==='null'||stale==='replacement-pet')assert.doesNotThrow(()=>old.emit(event),stale+' '+event);
+    else{
+     // Other current-pet layout listeners have separate ownership; exercise
+     // the actual bootstrap weather registrations in isolation here.
+     const callbacks=old.listeners(event).filter(fn=>fn.toString().includes('isCurrentWeatherOwner'));
+     assert(callbacks.length>0,'bootstrap weather callback is registered');
+     for(const callback of callbacks)assert.doesNotThrow(()=>callback(),stale+' '+event);
+    }
+   }
+   assert.equal(f.call('weatherWindow?.repositions'),repositions,stale+'旧pet事件不得重排新或退出中的controller');
+  }
+  f.app.emit('before-quit');
+ }
+});
