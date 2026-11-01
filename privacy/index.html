@@ -5,19 +5,19 @@
   <script src="../site-protection.js?v=20261008-content"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>隐私说明 · 球球桌宠</title>
-  <meta name="description" content="了解球球桌宠在本机保存的便签、待办、聊天与偏好，以及可选天气、Codex 联动、AI 内容处理、API 用量查询和主动意见反馈的数据边界。">
+  <meta name="description" content="了解球球桌宠在本机保存的便签、待办、聊天与偏好，以及可选天气、Codex／ZCode／WorkBuddy 联动、第三方 AI 内容处理、API 用量查询和主动意见反馈的数据边界。">
   <link rel="canonical" href="https://qiuqiu.pet/privacy/">
   <meta property="og:type" content="website">
   <meta property="og:locale" content="zh_CN">
   <meta property="og:site_name" content="球球官网">
   <meta property="og:title" content="隐私说明 · 球球桌宠">
-  <meta property="og:description" content="了解球球桌宠在本机保存的便签、待办、聊天与偏好，以及可选天气、Codex 联动、AI 内容处理、API 用量查询和主动意见反馈的数据边界。">
+  <meta property="og:description" content="了解球球桌宠在本机保存的便签、待办、聊天与偏好，以及可选天气、Codex／ZCode／WorkBuddy 联动、第三方 AI 内容处理、API 用量查询和主动意见反馈的数据边界。">
   <meta property="og:url" content="https://qiuqiu.pet/privacy/">
   <meta property="og:image" content="https://qiuqiu.pet/assets/hero-social.jpg">
   <meta property="og:image:alt" content="银白玻璃间的球球，陪你自在一点">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="隐私说明 · 球球桌宠">
-  <meta name="twitter:description" content="了解球球桌宠在本机保存的便签、待办、聊天与偏好，以及可选天气、Codex 联动、AI 内容处理、API 用量查询和主动意见反馈的数据边界。">
+  <meta name="twitter:description" content="了解球球桌宠在本机保存的便签、待办、聊天与偏好，以及可选天气、Codex／ZCode／WorkBuddy 联动、第三方 AI 内容处理、API 用量查询和主动意见反馈的数据边界。">
   <meta name="twitter:image" content="https://qiuqiu.pet/assets/hero-social.jpg">
   <meta name="twitter:image:alt" content="银白玻璃间的球球，陪你自在一点">
 
@@ -46,7 +46,7 @@
   </header>
   <main class="privacy-document-main" id="main">
     <h1>隐私说明</h1>
-    <p class="privacy-document-date">更新日期：<time datetime="2026-10-29">2026 年 10 月 29 日</time></p>
+    <p class="privacy-document-date">更新日期：<time datetime="2026-11-01">2026 年 11 月 1 日</time></p>
     <p class="privacy-document-intro">本说明介绍球球桌宠的本机数据与可选联网能力，并说明官网交互演示与本地设置。不同版本的可用功能，以你安装的版本为准。</p>
 
     <section aria-labelledby="local-data-title">
@@ -61,17 +61,21 @@
       <p>使用便签的智能整理时，内容按第四节所述交由 Codex 处理。</p>
     </section>
     <section aria-labelledby="codex-data-title">
-      <h2 id="codex-data-title">三、可选的 Codex 状态联动</h2>
+      <h2 id="codex-data-title">三、可选的 AI 工具联动</h2>
       <p>默认关闭，关闭后立即停止读取并清理当前监控状态。</p>
       <p>Codex 任务监控只提取必要状态；额度趋势、待查看标记和重置记录仅保存在本机，不上传这些监控记录。</p>
       <p>状态包可能附带已加载聊天内容，正文会立即丢弃；不会创建、发送、审批、中断任务或重置额度。</p>
-      <p>聊天与便签智能整理由你主动发起，按下方说明单独处理。</p>
+      <p>支持连接的商店候选版本还提供 ZCode 与 WorkBuddy 联动。额度与设备任务历史按你选择的工具及授权范围查询；原工具目录的数据读取与任务插件安装是不同用途，原有只读许可不代表已经同意写入插件。官方套餐为空、权限不足或无法核实时，会保留相应提示，不推算可用额度。</p>
+      <p>任务插件需另行确认写入用途，并由系统目录授权允许访问原工具目录。球球仅安装随包提供的固定插件及必要的插件注册和启用设置；安装时需先保存工作并退出原工具。不会要求你配置终端或服务。</p>
+      <p>ZCode 与 WorkBuddy 的 Hook 输入可能包含提示词或上次回复；球球插件只在本机内存中处理、过滤，向本机球球传递会话编号、事件阶段、轮次等必要任务元数据，不把提示词、回复正文、文件路径或登录凭据作为任务事件保存或发送。插件不读取聊天正文文件或独立凭据文件；原工具自身可能按其 Hook 机制生成临时对话文件，其保留与清理由原工具决定。</p>
+      <p>任务停止或主回复结束不一定表示所有任务最终完成，具体状态以工具卡的说明为准。聊天与便签智能整理由你主动发起，按下方说明单独处理。</p>
     </section>
     <section aria-labelledby="ai-data-title">
       <h2 id="ai-data-title">四、聊天与便签智能整理</h2>
-      <p>聊天与便签智能整理需联网，你主动发送的聊天或当前便签内容交由 Codex 处理，并使用 Codex 额度。</p>
-      <p>聊天记录与便签保存在本机；不会读取其他聊天或便签，也不会运行模型返回的代码或命令。</p>
-      <p>相关能力需登录 Codex 并联网。第三方服务中的数据处理与管理方式，请参阅 <a href="https://openai.com/policies/privacy-policy/" target="_blank" rel="noopener">OpenAI 隐私政策</a>及你的账号设置。</p>
+      <p>聊天需联网。你主动发送的消息及延续当前对话所需的上下文，会交由你在球球中选择并授权的 Codex、ZCode、WorkBuddy 或自定义模型服务处理；不同版本的可选工具可能不同。便签智能整理仍由 Codex 处理当前便签内容。聊天或整理会消耗对应第三方账号的套餐、积分或 API 额度，具体计费与可用范围由该服务决定。</p>
+      <p>聊天记录与便签保存在本机。球球不会为了聊天自动读取原工具中的其他对话或其他便签，也不会运行模型返回的代码或命令。你主动问及天气时可能发送所选天气摘要，范围见第六节。</p>
+      <p>包内 Codex 与 WorkBuddy 聊天组件通过各自官方页面由你本人登录，登录状态保存在球球自己的本机配置中，与原桌面工具配置分开。ZCode 与自定义服务按已授权的配置连接；使用自定义服务时，消息会发送至该配置指定的模型服务地址，不应默认视为发送给 OpenAI。</p>
+      <p>发送前请确认所选服务及数据范围。第三方可能根据其服务条款、隐私政策和账号设置处理或保留输入与回复；本机保存不代表第三方服务器不保留数据。Codex 的相关说明见 <a href="https://openai.com/policies/privacy-policy/" target="_blank" rel="noopener">OpenAI 隐私政策</a>；其他服务请在其官方登录页面或你配置的服务方查询相应政策。</p>
     </section>
     <section aria-labelledby="api-data-title">
       <h2 id="api-data-title">五、可选的 API 费用与用量报告</h2>
@@ -85,13 +89,18 @@
       <p>所选位置与天气缓存保存在本机，关闭天气后停止后台刷新。你主动问及天气时，可附带所选城市与天气摘要交由所用聊天服务处理。</p>
     </section>
     <section aria-labelledby="website-data-title">
-      <h2 id="website-data-title">七、官网演示与本地设置</h2>
+      <h2 id="website-data-title">七、官网演示、本地设置与访问统计</h2>
       <p>官网中的聊天、便签、定制与额度界面为交互演示，示例数据仅在网页内存中处理，不连接真实账号、模型或账单；刷新页面会恢复示例。</p>
       <p>官网在浏览器本地保存主题选择。</p>
+      <p>正式官网的指定页面（包括本隐私页）使用 Umami Cloud 与 Google Analytics 4（GA4）统计访问及下载入口点击，用于了解页面使用情况。统计仅在 qiuqiu.pet 的 HTTPS 页面且配置已启用时加载，本地预览与交互演示不加载这些统计脚本。</p>
+      <p>官网统计代码仅发送经过筛选的访问与点击字段：页面路径（Umami 统一汇总为首页）、站外来源网站、浏览器语言、屏幕尺寸，以及下载入口、架构、来源和版本等；GA4 另保留白名单内的推广来源与媒介，不发送完整网址查询参数、页面锚点或表单正文。统计请求本身仍会让服务方接触 IP 地址及浏览器等网络信息；不能将字段过滤理解为没有任何第三方数据处理。</p>
+      <p>GA4 使用第一方 Cookie 区分浏览器和会话，官网配置关闭 Google Signals 与广告个性化信号。服务方也可能利用网络信息生成粗略地区和设备统计；其处理方式参阅 <a href="https://support.google.com/analytics/answer/6004245" target="_blank" rel="noopener">Google Analytics 数据保护说明</a>及 <a href="https://docs.umami.is/docs/metric-definitions" target="_blank" rel="noopener">Umami 指标说明</a>。这些网站统计不发送球球 App 内的聊天、便签或账号资料，也不发送反馈文本、联系方式或所选截图。</p>
+      <p>官网脚本尊重浏览器的 Do Not Track（DNT）信号；检测到 DNT 已启用时不加载上述统计。浏览器本地停用标记也会阻止加载；修改停用设置后需重新加载页面。统计服务不可用不影响页面使用或下载。</p>
     </section>
     <section aria-labelledby="data-management-title">
       <h2 id="data-management-title">八、数据管理与联系</h2>
-      <p>你可以关闭 Codex 状态联动，并在球球的对应功能中管理便签、待办和聊天记录。联网 AI 能力由你主动发起，普通桌宠可继续独立使用。</p>
+      <p>你可以关闭状态联动、断开工具连接或撤销球球保存的目录访问授权，并在对应功能中管理本机便签、待办和聊天记录。联网 AI 能力由你主动发起，普通桌宠可继续独立使用。</p>
+      <p>目录授权记录、球球独立登录配置、聊天记录和任务元数据保存在本机各自的配置或缓存范围。断开接收或撤销目录授权不等于删除已安装在原工具目录中的插件及设置，也不等于清除球球已保存的全部记录、退出原工具账号或删除第三方服务器记录；需要时请分别管理这些记录及原工具插件。第三方账号和服务端数据的删除或撤销，需按对应服务的正式入口处理。</p>
       <p>通过意见反馈主动提交时，你填写的反馈、使用环境、联系方式及选择的截图会发送给球球作者，用于排查问题与改进产品；这些内容不会公开展示。未选择的文件、聊天与便签内容不会随反馈自动上传。</p>
       <p>如对本说明或球球的数据处理方式有疑问，可通过 <a href="mailto:920022027@qq.com">920022027@qq.com</a> 联系作者。</p>
       <p>本说明更新时，会同步标注更新日期。</p>
