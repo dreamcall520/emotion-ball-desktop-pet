@@ -40,12 +40,12 @@ for (const ref of html.matchAll(/(?:src|href)="([^"#][^"]+)"/g)) {
 console.log('Functionality page: retained demos, moved history, release downloads and local resources passed');
 
 for (const page of [html,home]) {
-  const domestic=[...page.matchAll(/<a[^>]*href="#domestic-0\.4\.10-pending"[^>]*>([\s\S]*?)<\/a>/g)];
+  const domestic=[...page.matchAll(/<a[^>]*href="https:\/\/share\.weiyun\.com\/fdzg4UOY"[^>]*>([\s\S]*?)<\/a>/g)];
   assert.equal(domestic.length,3);
   assert.ok(domestic.every(m=>m[0].includes('0.4.10')&&m[0].includes('微云分享页')&&!m[1].includes('旧版')));
   assert.ok(domestic.every(m=>m[0].includes('target="_blank"')&&m[0].includes('rel="noopener"')));
   assert.doesNotMatch(page,/share\.weiyun\.com\/(?:OJvZzed5|rXnnLRhI)/);
-  assert.match(page,/analytics\.js\?v=20261029-release/);
+  assert.match(page,/analytics\.js\?v=20261101-release/);
 }
 assert.match(html,/Intel 芯片版/);
 assert.doesNotMatch(html,/构建候选|尚未在真实 Intel Mac 上验收|尚待实机验收|检查未通过|检查超时/);
@@ -54,7 +54,7 @@ assert.doesNotMatch(html,/构建候选|尚未在真实 Intel Mac 上验收|尚�
 for (const page of [html, home]) {
   const primary = [...page.matchAll(/<a[^>]*class="[^"]*(?:button-primary|download-button)[^"]*"[^>]*data-download-arch="arm64"[^>]*>/g)];
   assert.equal(primary.length, page === html ? 3 : 1);
-  assert.ok(primary.every(m => m[0].includes('href="#domestic-0.4.10-pending"')));
+  assert.ok(primary.every(m => m[0].includes('href="https://share.weiyun.com/fdzg4UOY"')));
   assert.match(page, /GitHub 备用/);
   assert.doesNotMatch(page, /自动加速|免登录下载|不限速/);
 }
