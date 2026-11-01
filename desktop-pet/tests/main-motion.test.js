@@ -5033,3 +5033,29 @@ test('shortcut close refreshes collection cards once, preserving single/all-fixe
     f.app.emit('before-quit');
   }
 });
+
+
+test('可信小白用户jump/wave素材决定完整宿主时长，renderer伪造时长与其他形态均不生效', async()=>{
+ for(const [action,id,duration]of [['hop','jump',3000],['spin','wave',1750]]){
+  const f=await fixture();
+  const petId=require('../lib/builtin-pets').XIAOBAI_ID;
+  f.call(`dogDreamSkinEnabled=true;dogSpriteDescriptor={id:${JSON.stringify(petId)},origin:'builtin',sheets:{${id}:{frameWidth:192}},frameMap:{${id}:{sheet:'${id}',count:3,durations:[${duration-200},100,100]}}};settings.customization.appearance={shape:'codex-pet',codexPetId:${JSON.stringify(petId)}}`);
+  f.send('pet:motion-start',{token:1,action,durationMs:10});
+  f.advanceTo(duration-1);
+  assert.equal(f.call('hostMotion?.token'),1,'完整可信素材时长前保持宿主所有权');
+  assert(!f.pet.messages.some(m=>m.channel==='pet:motion-frame'&&m.packet.token===1&&m.packet.frame.done));
+  f.advanceTo(duration+32);
+  assert.equal(f.call('hostMotion'),null);
+  assert(f.pet.messages.some(m=>m.channel==='pet:motion-frame'&&m.packet.token===1&&m.packet.frame.done));
+  f.app.emit('before-quit');
+ }
+ const f=await fixture();f.send('pet:motion-start',{token:9,action:'hop',durationMs:60000});f.advanceTo(1900);assert.equal(f.call('hostMotion'),null,'普通球仍使用原1800ms，不信renderer时长');f.app.emit('before-quit');
+ const imported=await fixture();imported.call("dogDreamSkinEnabled=false;settings.customization.appearance={shape:'codex-pet',codexPetId:'codex-'+ 'b'.repeat(64)}");imported.send('pet:motion-start',{token:10,action:'hop',durationMs:60000});imported.advanceTo(1900);assert.equal(imported.call('hostMotion'),null,'普通导入保持原通用时长');imported.app.emit('before-quit');
+});
+
+test('第三方伪造characterId或builtin origin不能借用官方用户动作时长',async()=>{
+ for(const [id,origin]of [[`codex-${'a'.repeat(64)}`,'codex'],[`codex-${'b'.repeat(64)}`,'builtin'],[require('../lib/builtin-pets').XIAOBAI_ID,'codex']]){
+ const f=await fixture();f.call(`dogDreamSkinEnabled=true;dogSpriteDescriptor={id:${JSON.stringify(id)},origin:${JSON.stringify(origin)},characterId:'xiaobai',sheets:{jump:{frameWidth:192}},frameMap:{jump:{sheet:'jump',count:3,durations:[2800,100,100]}}};settings.customization.appearance={shape:'codex-pet',codexPetId:${JSON.stringify(id)}}`);
+ f.send('pet:motion-start',{token:1,action:'hop'});f.advanceTo(1900);assert.equal(f.call('hostMotion'),null,'身份或origin不匹配不能用3000ms官方时长');f.app.emit('before-quit');
+ }
+});

@@ -1274,14 +1274,17 @@ function clearSpriteMotionTimer() {
   spriteMotionEpoch++;
 }
 
-function dogCodexSpriteClip(action) {
-  const id = { hop: 'jump', spin: 'happy', bow: 'spin' }[action];
+function dogSpriteClip(id) {
   const pet = dogSpriteDescriptor, appearance = effectiveCustomization(settings?.customization).appearance;
   const clip = pet?.frameMap?.[id];
   if (!dogDreamSkinEnabled || appearance.shape !== 'codex-pet' || appearance.codexPetId !== pet?.id ||
-      clip?.sheet !== id || clip.count <= 1) return null;
+      !clip || clip.sheet !== id || clip.count <= 1) return null;
   return { id, frameWidth: pet.sheets[clip.sheet].frameWidth || 192,
     durationMs: clip.durations.reduce((sum, ms) => sum + ms, 0) };
+}
+
+function dogCodexSpriteClip(action) {
+  return dogSpriteClip({ hop: 'jump', spin: 'happy', bow: 'spin' }[action]);
 }
 
 function finishCodexSpriteMotion(request, timedOut = false) {
@@ -4060,8 +4063,13 @@ function registerIpc() {
     const bounds = petWindow.getBounds();
     const side = PetFacing.resolve(bounds, screen.getDisplayMatching(bounds).workArea, request.side);
     const softOrb=effectiveCustomization(settings.customization).appearance.shape==='soft-orb';
+    const userSpriteClip = dogSpriteDescriptor?.id === XIAOBAI_ID && dogSpriteDescriptor.origin === 'builtin'
+      ? dogSpriteClip({ hop: 'jump', jelly: 'jump', sway: 'wave', peek: 'waiting',
+      bow: 'checking', spin: 'wave', dizzy: 'fail', turn: 'checking', nuzzle: 'wave',
+      land: 'checking', stretch: 'jump' }[request.action]) : null;
     if (!windowMotion.start({ token: request.token, action: request.action, side,
-      ...(softOrb?{visualOnly:true,durationMs:SoftOrbModel.duration(SoftOrbModel.actionForMotion(request.action,'user'))}:{}),
+      ...(softOrb?{visualOnly:true,durationMs:SoftOrbModel.duration(SoftOrbModel.actionForMotion(request.action,'user'))}
+        :userSpriteClip?{durationMs:userSpriteClip.durationMs}:{}),
       reducedMotion: request.reducedMotion === true })) hostMotion = null;
   });
 

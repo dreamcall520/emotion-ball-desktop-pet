@@ -5,11 +5,11 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 // 运行真实 renderer、状态规则和动画引擎；仅替代 DOM、宿主通信及时间。
-function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = null, edgePeek = false, softOrb = null) {
+function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = null, edgePeek = false, softOrb = null, imageDelays = {}) {
   let now = 0;
   let nextTimer = 1;
   let engine;
-  let lastBallOptions;
+  let lastBallOptions, spritePlayer;
   let captured = false;
   const timers = new Map();
   const events = {};
@@ -114,7 +114,7 @@ function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = nul
   pet.ownerDocument = context.document;
   context.Image = class {
     constructor() { images.push(this); this.naturalWidth = 1536; this.naturalHeight = 1872; }
-    set src(_value) { if(!_value)return;if(_value.includes('v2-base'))this.naturalHeight=2288;if(_value.includes('v3-base'))this.naturalHeight=208;context.setTimeout(() => this.onload?.(), 0); }
+    set src(_value) { if(!_value)return;if(_value.includes('v2-base'))this.naturalHeight=2288;if(_value.includes('v3-base'))this.naturalHeight=208;context.setTimeout(() => this.onload?.(), imageDelays[_value] || 0); }
   };
   const run = file => vm.runInContext(
     fs.readFileSync(path.resolve(__dirname, '../..', file), 'utf8'),
@@ -127,6 +127,8 @@ function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = nul
     'desktop-pet/lib/companion-motion.js', 'desktop-pet/lib/pet-facing.js', 'desktop-pet/lib/customization.js',
     'desktop-pet/lib/codex-pet-player.js'
   ]) run(file);
+  const createPlayer = context.CodexPetPlayer.create;
+  context.CodexPetPlayer = { ...context.CodexPetPlayer, create: (...args) => (spritePlayer = createPlayer(...args)) };
   const create = context.EmotionBall.create;
   context.EmotionBall.create = (...args) => {
     lastBallOptions = args[1];
@@ -144,6 +146,7 @@ function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = nul
   activity();
   return {
     host, pet, dream, root, images, systemAppearance, systemListeners, quotaFrames, subscriptions,
+    get player() { return spritePlayer; },
     get engine() { return engine; }, get lastBallOptions() { return lastBallOptions; },
     activity, bounds, events, windowEvents, timers,
     reduceMotion(value){reducedMedia.matches=value;},
@@ -1572,8 +1575,8 @@ test('小白延长点击仲裁并保留pointerdown素材，普通同名导入皮
 });
 
 
-async function createDedicatedCelebrationFixture(xiaobai = true) {
-  const r = createRenderer(0, null, []);
+async function createDedicatedCelebrationFixture(xiaobai = true, imageDelays = {}, origin = 'builtin') {
+  const r = createRenderer(0, null, [], false, null, imageDelays);
   r.viewport(80, 80);
   const ids = ['idle', 'run-right', 'run-left', 'wave', 'jump', 'fail', 'checking', 'waiting', 'running', 'sleep', 'wakeup'];
   const frameMap = Object.fromEntries(ids.map(id => [id,
@@ -1583,10 +1586,11 @@ async function createDedicatedCelebrationFixture(xiaobai = true) {
   for (const id of ['jump', 'happy', 'spin']) {
     frameMap[id] = { sheet: id, start: 0, count: 2, durations: [100, 100], loop: false };
   }
-  r.settings({ keepAwake: true, codexPet: { ...testCodexDescriptor, name: '小白',
-    ...(xiaobai ? { characterId: 'xiaobai' } : {}), version: 3,
+  const identity = xiaobai && origin === 'builtin' ? require('../lib/builtin-pets').XIAOBAI_ID : testCodexPetId;
+  r.settings({ keepAwake: true, codexPet: { ...testCodexDescriptor, id: identity, name: '小白',
+    ...(xiaobai ? { characterId: 'xiaobai', origin } : {}), version: 3,
     rows: 1, imageURL: sheets.base.imageURL, sheets, frameMap },
-    customization: { appearance: { shape: 'codex-pet', codexPetId: testCodexPetId } } });
+    customization: { appearance: { shape: 'codex-pet', codexPetId: identity } } });
   for (let i = 0; i < 12; i++) { r.advanceTo(i); await Promise.resolve(); }
   return { r, canvas: r.pet.children.find(child => child.tag === 'canvas') };
 }
@@ -1596,6 +1600,7 @@ test('真实jump/happy/spin专用sheet且各count=2：聊天可见时小白及�
     const { r } = await createDedicatedCelebrationFixture(xiaobai);
     r.activity(false, { chatVisible: true });
     r.command({ command: 'again', motion });
+    if(xiaobai)for(let i=0;i<4;i++)await Promise.resolve();
     assert.equal(r.host.motions.at(-1)?.action, motion);
     assert.equal(r.pet.dataset.motionOwner, 'user');
     r.windowEvents.beforeunload();
@@ -1618,4 +1623,50 @@ test('小白任务完成三分支继续选择专用真实素材并等待就绪AC
     assert.equal(r.pet.dataset.motionOwner, 'none');
     r.windowEvents.beforeunload();
   }
+});
+
+// Cold local decoding is independent of the 200ms chat gate: no host clock may
+// consume the clip while its first image is still unavailable.
+test('小白用户动作等待超过hop周期的冷sheet后才启动宿主，旧ready在取消后不能复活', async () => {
+  const flushReady=async()=>{for(let i=0;i<8;i++)await Promise.resolve();};
+  for(const cancel of [null,'new','rest','sleep','hide','lock','skin','unload']){
+    const {r,canvas}=await createDedicatedCelebrationFixture(true,{'file:///v3-base-jump.webp':2600});
+    r.command({command:'again',motion:'hop'});
+    assert.equal(r.host.motions.length,0,'素材未就绪不能启动宿主计时');
+    r.advanceTo(2200);await flushReady();
+    assert.equal(r.host.motions.length,0,'超过普通hop周期仍保留排队而非空播');
+    if(cancel==='new')r.command({command:'again',motion:'spin'});
+    if(cancel==='rest'||cancel==='sleep')r.command(cancel);
+    if(cancel==='hide')r.present({mode:'hidden',suppressed:true});
+    if(cancel==='lock')r.activity(true);
+    if(cancel==='skin')r.settings({customization:{appearance:{shape:'blob'}}});
+    if(cancel==='unload')r.windowEvents.beforeunload();
+    r.advanceTo(2700);await flushReady();
+    const hops=r.host.motions.filter(m=>m.action==='hop');
+    assert.equal(hops.length,cancel?0:1,`${cancel||'ready'}不能丢请求或复活旧请求`);
+    if(!cancel){assert.equal(canvas.dataset.codexAction,'jump');assert.equal(canvas.dataset.codexFrame,'0');}
+    r.windowEvents.beforeunload();
+  }
+});
+
+test('第三方伪造characterId小白仍保留原手动动作时序，不进入官方ready延期',async()=>{
+ const {r}=await createDedicatedCelebrationFixture(true,{'file:///v3-base-jump.webp':2600},'codex');
+ r.command({command:'again',motion:'hop'});
+ assert.equal(r.host.motions.length,1,'只有官方builtin身份进入新延期分支');
+ r.windowEvents.beforeunload();
+});
+
+test('官方用户动作ready拒绝只清理自身，已取消或替换的请求拒绝不能干扰新动作',async()=>{
+ for(const cancel of [false,'rest','new']){
+ const {r}=await createDedicatedCelebrationFixture();let reject;
+ r.player.whenReady=()=>new Promise((_resolve,fail)=>{reject=fail;});
+ r.command({command:'again',motion:'hop'});
+ if(cancel==='rest')r.command('rest');
+ if(cancel==='new'){r.player.whenReady=()=>Promise.resolve(true);r.command({command:'again',motion:'spin'});}
+ reject(Error('decode rejected'));
+ for(let i=0;i<8;i++)await Promise.resolve();
+ assert.equal(r.host.motions.length,cancel==='new'?1:0);assert.equal(r.pet.dataset.motionOwner,cancel==='new'?'user':'none');
+ if(cancel==='new')assert.equal(r.host.motions[0].action,'spin');
+ r.windowEvents.beforeunload();
+ }
 });
