@@ -354,7 +354,10 @@
     function runDirection(side) {
       const id = `run-${side === 'left' ? 'left' : 'right'}`, entry = codexPet.frameMap?.[id];
       if (!isXiaobai()) return player.setAction(id);
-      const clip = entry?.count === 33 ? { start: 18, count: 14 } : undefined;
+      const repeat = codexPet.frameMap?.running;
+      const clip = entry && repeat && repeat.sheet === entry.sheet && repeat.start >= entry.start &&
+        repeat.start + repeat.count <= entry.start + entry.count
+        ? { start: repeat.start - entry.start, count: repeat.count } : undefined;
       return player.setAction(id, { loop: true, clip, preserveProgress: true });
     }
     const resize = () => player.setSize(Math.min(window.innerWidth, window.innerHeight || window.innerWidth));

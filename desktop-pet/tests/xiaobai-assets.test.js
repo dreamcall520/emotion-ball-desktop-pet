@@ -36,8 +36,14 @@ test('小白最终素材可独立导入并重读，三种庆祝和宽转圈均�
     assert.equal(clip.durations.reduce((sum, value) => sum + value, 0), 3063);
     assert.ok(pet.frameMap[name]);
   }
-  assert.equal(manifest.frameMap.running.count, 14);
+  assert.equal(manifest.frameMap.running.count, 23);
   assert.equal(manifest.frameMap.running.loop, true);
+  assert.equal(manifest.frameMap.running.durations.reduce((a,b)=>a+b,0),1420);
+  for(const id of ['run-left','run-right']){
+    assert.equal(manifest.frameMap[id].start,manifest.frameMap.running.start);
+    assert.equal(manifest.frameMap[id].count,manifest.frameMap.running.count);
+    assert.deepEqual(manifest.frameMap[id].durations,manifest.frameMap.running.durations);
+  }
   assert.equal(manifest.frameMap.sleep.loop, false);
   assert.equal(manifest.frameMap['sleep-lying'].loop, false);
 
