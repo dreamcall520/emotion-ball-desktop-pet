@@ -239,6 +239,7 @@ test('首发分发配置不携带厂商组件，不授予外部任务插件执�
  const config={...configFor(pkg,env).config,releaseProfile:'mas-first'};
  assert.deepEqual(packagerOptions('/root',config,'/stage','/icon').extraResource,[]);
  assert.equal(entitlementsFor(config).main['com.apple.security.files.user-selected.executable'],undefined);
+ assert.equal(entitlementsFor(config).main['com.apple.security.network.server'],undefined,'first-release stdio Codex transport requires no inbound network server');
 });
 
  test('首发正式流水线可以无厂商helper产物，并验证自有Electron/native/loginhelper签名',async t=>{

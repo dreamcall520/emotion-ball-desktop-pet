@@ -92,6 +92,7 @@ test('首发profile不随包带厂商组件，明确撤销外部插件执行写�
  assert.deepEqual(o.extraResource,[]);
  const rights=api.entitlementsFor(first).main;
  assert.equal(rights['com.apple.security.files.user-selected.executable'],undefined);
+ assert.equal(rights['com.apple.security.network.server'],undefined,'first-release stdio Codex transport requires no inbound network server');
  for(const k of ['com.apple.security.files.user-selected.read-write','com.apple.security.personal-information.location','com.apple.security.files.bookmarks.app-scope','com.apple.security.network.client'])assert.equal(rights[k],true);
  const entry=api.probeEntry(first.bundleId,first);
  assert.doesNotMatch(entry,/startBundledWorkBuddy|probeManagedHelpers|probePluginInstallation/);
