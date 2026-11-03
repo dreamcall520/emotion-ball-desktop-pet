@@ -7,6 +7,7 @@ const ERRORS = Object.freeze({
   LOCATION_DENIED: '定位未授权，可在系统设置中允许球球使用定位，或手动选择城市。',
   LOCATION_RESTRICTED: '系统限制了定位访问，请手动选择城市。',
   LOCATION_SERVICES_DISABLED: '系统定位服务已关闭，请手动选择城市。',
+  LOCATION_NO_FIX: '系统暂时无法确定当前位置，请稍后重试或手动选择城市。',
   LOCATION_TIMEOUT: '定位超时，请重试或手动选择城市。',
   LOCATION_BUSY: '正在获取位置，请稍候。',
   LOCATION_MAIN_THREAD_REQUIRED: '系统定位组件暂不可用，请手动选择城市。',
@@ -15,6 +16,15 @@ const ERRORS = Object.freeze({
 function locationError(code) {
   const safeCode = Object.hasOwn(ERRORS, code) ? code : 'LOCATION_UNAVAILABLE';
   return Object.assign(new Error(ERRORS[safeCode]), { code: safeCode });
+}
+function safeDiagnostic(value) {
+  const result = {};
+  if (['not-determined', 'restricted', 'denied', 'granted', 'unknown'].includes(value?.locationAuthorization)) result.locationAuthorization = value.locationAuthorization;
+  for (const key of ['locationMainThread', 'locationStarted']) if (typeof value?.[key] === 'boolean') result[key] = value[key];
+  for (const key of ['locationCallbacks', 'locationUnknownFailures', 'locationSamplesRejected']) {
+    if (Number.isSafeInteger(value?.[key]) && value[key] >= 0 && value[key] <= 1000000) result[key] = value[key];
+  }
+  return result;
 }
 function createLocationBridge({ native, platform = process.platform } = {}) {
   let binding = native, loaded = native !== undefined, pending = null;
@@ -47,7 +57,11 @@ function createLocationBridge({ native, platform = process.platform } = {}) {
         if (text && text.length <= 80) result[key] = text;
       }
       return result;
-    }).catch(error => { throw locationError(error?.code); }).finally(() => { pending = null; });
+    }).catch(error => {
+      const failure = locationError(error?.code), diagnostic = safeDiagnostic(error?.diagnostic);
+      if (Object.keys(diagnostic).length) failure.diagnostic = diagnostic;
+      throw failure;
+    }).finally(() => { pending = null; });
     return pending;
   }
   return { status, locate };

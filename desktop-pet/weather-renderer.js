@@ -39,7 +39,7 @@
     return { title: name || '选择城市', source: '手动选择' };
   }
   function locationMessage(code) {
-    return ({ LOCATION_DENIED: '定位未授权', LOCATION_RESTRICTED: '定位受系统限制', LOCATION_SERVICES_DISABLED: '系统定位已关闭', LOCATION_TIMEOUT: '定位超时，请重试', LOCATION_BUSY: '定位中…', LOCATION_NATIVE_UNAVAILABLE: '定位暂不可用', LOCATION_UNSUPPORTED: '暂不支持定位', LOCATION_MAIN_THREAD_REQUIRED: '定位暂不可用', LOCATION_UNAVAILABLE: '定位失败，请选城市', denied: '定位未授权', restricted: '定位受系统限制', 'services-disabled': '系统定位已关闭', timeout: '定位超时，请重试', unavailable: '定位失败，请选城市' })[code] || '定位失败，请选城市';
+    return ({ LOCATION_DENIED: '定位未授权', LOCATION_RESTRICTED: '定位受系统限制', LOCATION_SERVICES_DISABLED: '系统定位已关闭', LOCATION_TIMEOUT: '定位超时，请重试或搜索城市', LOCATION_NO_FIX: '系统暂时无法确定位置，请重试或搜索城市', LOCATION_BUSY: '定位中…', LOCATION_NATIVE_UNAVAILABLE: '定位暂不可用', LOCATION_UNSUPPORTED: '暂不支持定位', LOCATION_MAIN_THREAD_REQUIRED: '定位暂不可用', LOCATION_UNAVAILABLE: '定位失败，请选城市', denied: '定位未授权', restricted: '定位受系统限制', 'services-disabled': '系统定位已关闭', timeout: '定位超时，请重试', unavailable: '定位失败，请选城市' })[code] || '定位失败，请选城市';
   }
   function emptyPresentation(state) {
     if (state.status === 'loading') return { kind: 'loading', title: '正在获取天气', message: '', retry: '获取中…' };
@@ -158,9 +158,11 @@
   function showPicker(value) {
     clearTimeout(searchTimer); searchRevision++;
     if (value && !picker) {
+      locationGeneration++; el('use-location').disabled = false;
       el('search-input').value = ''; el('search-results').replaceChildren();
       text('search-status', state.city ? `已选择：${locationLabels(state.city).source === '手动选择' ? state.city.name : locationLabels(state.city).source}` : '');
     }
+    if (!value) { locationGeneration++; el('use-location').disabled = false; }
     picker = value; setExpanded(true); if (picker) el('search-input').focus();
   }
   function selectTab(value) {
@@ -188,21 +190,21 @@
     text('empty-title', empty.title); text('empty-message', empty.message); el('empty-message').hidden = !empty.message; text('empty-retry', empty.retry);
     el('empty-retry').disabled = empty.kind === 'loading';
     el('empty-icon').innerHTML = icon(null);
-    let notice = stale ? '已过期' : state.status === 'loading' ? '更新中' : failed ? '更新失败' : '';
-    if (locationWarning) notice = '定位未更新' + (stale ? ' · 已过期' : '');
+    let notice = stale ? '天气数据较旧' : state.status === 'loading' ? '更新中' : failed ? '更新失败' : '';
+    if (locationWarning) notice = '定位未更新' + (stale ? ' · 天气数据较旧' : '');
     el('notice').dataset.state = failed || stale || locationWarning ? 'cached' : 'normal';
     const quietNotice = (failed || stale || locationWarning || state.status === 'loading') ? notice : '';
     text('notice', quietNotice); el('notice').hidden = !quietNotice; el('folded').title = `${state.city?.name || '天气'} · ${notice}`;
     const formatUpdated = () => { try { return new Intl.DateTimeFormat('zh-CN', { timeZone: timezone(), hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(updated)); } catch { return '未知'; } };
-    text('updated', Number.isFinite(updated) ? `${stale || failed ? '缓存' : '更新'} ${finite(current.time) ? time(current.time) : formatUpdated()}` : '尚未更新');
+    text('updated', Number.isFinite(updated) ? `${stale || failed ? '上次更新' : '更新'} ${finite(current.time) ? time(current.time) : formatUpdated()}` : '尚未更新');
     el('updated').title = Number.isFinite(updated) ? `获取于 ${formatUpdated()}` : '';
     el('refresh').disabled = state.status === 'loading';
-    el('hours').innerHTML = hourly.filter((_, index) => index % 3 === 0).slice(0, 9).map((hour, index) => `<div class="hour"><time>${index ? time(hour.time) : '现在'}</time><span class="mini">${icon(hour.weatherCode, hour.isDay !== false && hour.isDay !== 0)}</span><b>${number(hour.temperature, '°')}</b><span class="rain">${number(hour.precipitationProbability, '%')}</span></div>`).join('') || '<p class="help">暂无小时预报</p>';
+    el('hours').innerHTML = hourly.filter((_, index) => index % 3 === 0).slice(0, 9).map((hour, index) => `<div class="hour"><time>${index ? time(hour.time) : '现在'}</time><span class="mini">${icon(hour.weatherCode, hour.isDay !== false && hour.isDay !== 0)}</span><b>${number(hour.temperature, '°')}</b><span class="rain" title="降雨概率">${number(hour.precipitationProbability, '%')}</span></div>`).join('') || '<p class="help">暂无小时预报</p>';
     const valid = daily.filter(day => finite(day.min) && finite(day.max)), min = valid.length ? Math.min(...valid.map(day => day.min)) : 0, max = valid.length ? Math.max(...valid.map(day => day.max)) : 1, extent = Math.max(1, max - min);
-    el('week-list').innerHTML = daily.map((day, i) => `<div class="day"><span>${dateLabel(day.date, i)}</span><span class="mini">${icon(day.weatherCode)}</span><span class="low">${number(day.min, '°')}</span><span class="range">${finite(day.min) && finite(day.max) ? `<i data-left="${(day.min - min) / extent * 100}" data-width="${Math.max(1, (day.max - day.min) / extent * 100)}"></i>` : ''}</span><span>${number(day.max, '°')}</span><span class="rain">${number(day.precipitationProbability, '%')}</span></div>`).join('') || '<p class="help">暂无一周预报</p>';
+    el('week-list').innerHTML = daily.map((day, i) => `<div class="day"><span>${dateLabel(day.date, i)}</span><span class="mini">${icon(day.weatherCode)}</span><span class="low">${number(day.min, '°')}</span><span class="range">${finite(day.min) && finite(day.max) ? `<i data-left="${(day.min - min) / extent * 100}" data-width="${Math.max(1, (day.max - day.min) / extent * 100)}"></i>` : ''}</span><span>${number(day.max, '°')}</span><span class="rain" title="降雨概率">${number(day.precipitationProbability, '%')}</span></div>`).join('') || '<p class="help">暂无一周预报</p>';
     el('week-list').querySelectorAll('.range i').forEach(bar => { bar.style.left = `${bar.dataset.left}%`; bar.style.width = `${bar.dataset.width}%`; });
     el('week-chart').innerHTML = chart(daily);
-    el('metrics').innerHTML = `<div><small>风速</small>${number(current.windSpeed, ' km/h')}</div><div><small>湿度</small>${number(current.humidity, '%')}</div><div><small>紫外线</small>${number(daily[0]?.uvIndex)}</div><div><small>日落</small>${time(daily[0]?.sunset)}</div>`;
+    el('metrics').innerHTML = `<div><small>风速</small>${number(current.windSpeed, ' 公里/小时')}</div><div><small>湿度</small>${number(current.humidity, '%')}</div><div><small>紫外线指数</small>${number(daily[0]?.uvIndex)}</div><div><small>日落</small>${time(daily[0]?.sunset)}</div>`;
     resize();
   }
   el('source-toggle').onclick = () => { el('source-details').open = !el('source-details').open; };
@@ -211,14 +213,15 @@
   contentSizeObserver.observe(el('weather-details')); contentSizeObserver.observe(el('city-picker'));
   async function act(action) { try { const next = await action(); if (next && !next.needsLocation) render(next); return next; } catch (error) { render({ ...state, status: 'error', error: '暂时无法获取天气' }); return null; } }
   async function locate(openPicker = true) {
-    const generation = ++locationGeneration;
     if (openPicker) { showPicker(true); text('search-status', '定位中…'); }
+    const generation = ++locationGeneration;
     el('use-location').disabled = true;
     try {
       const next = await api.useLocation();
       const failure = next?.locationError || (next?.error?.code && !next?.current ? next.error : null);
       if (failure) throw Object.assign(new Error('location failed'), { code: failure.code });
-      if (generation !== locationGeneration || next?.cancelled) return;
+      if (generation !== locationGeneration) return;
+      if (next?.cancelled) { if (openPicker) text('search-status', '定位已取消，请重试或选择城市'); return; }
       if (next && !next.needsLocation) { locationWarning = ''; render(next); if (openPicker) { text('search-status', ''); showPicker(false); } }
       else if (openPicker) text('search-status', '定位失败，请选城市');
     } catch (error) {
@@ -244,7 +247,7 @@
       cities.forEach(city => {
         const button = document.createElement('button'); button.type = 'button';
         const title = document.createElement('span'); title.textContent = city.name;
-        const detail = document.createElement('small'); detail.textContent = [city.admin1, city.country].filter(Boolean).join(' · ');
+        const detail = document.createElement('small'); detail.textContent = [city.admin1, city.admin2 !== city.admin1 ? city.admin2 : '', city.country].filter(Boolean).join(' · ');
         button.append(title, detail);
         button.onclick = async () => { locationGeneration++; locationWarning = ''; el('use-location').disabled = false; button.disabled = true; const next = await act(() => api.selectCity(city)); if (next) showPicker(false); else button.disabled = false; };
         el('search-results').append(button);

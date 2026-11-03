@@ -83,10 +83,11 @@ test('automatic capture aggregates before sending and uploads no message, stack,
   assert.equal(f.calls.length, 1);
   const detail = JSON.parse(f.calls[0].body.detail);
   assert.equal(detail.occurrences, 3); assert.equal(detail.module, '天气'); assert.equal(detail.errorName, 'TypeError');
-  assert.equal(detail.errorCode, ''); assert.match(detail.fingerprint, /^[a-f0-9]{64}$/);
+  assert.equal(detail.errorCode, 'UNKNOWN_ERROR_CODE'); assert.match(detail.fingerprint, /^[a-f0-9]{64}$/);
   assert.doesNotMatch(JSON.stringify(f.calls[0].body), /secret|private|Users|stack|SECRET/);
   assert.equal(f.service.getState().pending, 0); assert.equal(f.service.getState().lastSentAt, f.now());
-  assert.equal(f.service.capture('天气', new TypeError('different message')), false);
+  assert.equal(f.service.capture('天气', Object.assign(new TypeError('different message'), {code:'SECRET_KEY'})), true);
+  assert.equal(f.service.getState().pending, 1, 'later events are retained for the next aggregation window');
   assert.equal(fs.statSync(f.file).mode & 0o777, 0o600);
 });
 
@@ -278,4 +279,39 @@ test('history load strips extra fields, validates corrupt/oversized files and re
   assert.deepEqual(linked.getState().history, []); assert.match(linked.getState().historyWarning, /无法读取/);
   const saved = await linked.submit(payload()); assert.match(saved.historyWarning, /已提交.*保存失败/);
   assert.equal(fs.readFileSync(target, 'utf8'), 'must remain'); assert.equal(fs.lstatSync(file).isSymbolicLink(), true);
+});
+
+test('structured provider errors retain actionable codes, locations and runtime through disk reload', async t => {
+  const f = fixture(t, {enabled:true});
+  f.service.capture('WorkBuddy 积分查询', {code:'UNSUPPORTED_QUOTA',message:'secret-token'}, {stage:'quota-parse', httpStatus:200, retryable:false, page:'workbuddy-details.html', source:'lib/workbuddy-quota.js', line:112, accountKey:'secret'});
+  f.service.dispose();
+  const next=createFeedbackReporting({...f.config,enabled:true});t.after(()=>next.dispose());
+  f.setTime(f.now()+2000);await next.flush();
+  const d=JSON.parse(f.calls[0].body.detail);
+  assert.equal(d.schemaVersion,2);assert.equal(d.errorCode,'UNSUPPORTED_QUOTA');
+  assert.equal(d.context.stage,'quota-parse');assert.equal(d.context.httpStatus,200);assert.equal(d.context.line,112);
+  assert.equal(d.runtime.node,process.versions.node);assert.doesNotMatch(JSON.stringify(d),/secret|accountKey/);
+});
+
+test('different page/source/code are distinct incidents while retry timing does not split a fault',async t=>{
+  const f=fixture(t,{enabled:true});
+  for(const context of [{page:'index.html',source:'renderer.js',line:1,retryDelayMs:1000},{page:'index.html',source:'renderer.js',line:1,retryDelayMs:5000},{page:'weather.html',source:'weather-renderer.js',line:1}]) f.service.capture('页面控制台错误',{code:'RENDERER_CONSOLE_ERROR'},context);
+  await f.advance(2000);await f.service.flush();
+  assert.equal(f.calls.length,2);const d=f.calls.map(x=>JSON.parse(x.body.detail));
+  assert.notEqual(d[0].fingerprint,d[1].fingerprint);assert.equal(d[0].occurrences,2);
+});
+
+test('cooldown retains subsequent counts and retry-frozen events in a separate exact batch',async t=>{
+  const f=fixture(t,{enabled:true});f.service.capture('天气',{code:'TIMEOUT'});await f.advance(2000);
+  for(let i=0;i<4;i++) f.service.capture('天气',{code:'TIMEOUT'});
+  await f.advance(2000);assert.equal(f.calls.length,1);
+  await f.advance(3600000);assert.equal(f.calls.length,2);assert.equal(JSON.parse(f.calls[1].body.detail).occurrences,4);
+  assert.notEqual(f.calls[0].body.submissionId,f.calls[1].body.submissionId);
+});
+
+test('legacy in-flight queue replays exactly its old payload without schema migration',async t=>{
+ const f=fixture(t,{enabled:true});f.service.dispose();const id=randomUUID();fs.mkdirSync(f.directory,{recursive:true});
+ fs.writeFileSync(f.file,JSON.stringify({schema:1,recent:[],queue:[{id,scope:'天气',name:'Error',code:'',version:'0.4.09',os:'darwin 27.0.0 arm64',firstAt:10,lastAt:10,count:1,sentCount:1,attempts:1,nextAttemptAt:0}]}));
+ const next=createFeedbackReporting({...f.config,enabled:true});t.after(()=>next.dispose());await next.flush();
+ const d=JSON.parse(f.calls[0].body.detail);assert.equal(d.errorCode,'');assert.equal(d.schemaVersion,undefined);assert.equal(d.context,undefined);assert.equal(f.calls[0].body.submissionId,id);
 });

@@ -68,7 +68,18 @@ app.whenReady().then(async () => {
   const reopened = await snapshot();
   assert.equal(reopened.status, '已选择：北京市 · 海淀区');
   assert.equal(reopened.disabled, false); assert(!reopened.status.includes('定位中'));
-  console.log(JSON.stringify({ passed: true, startupLocationCalls: 0, locationCalls, successWhileWeatherLoading: true, successfulReopens: 3, deniedReopen: reopened.status, noNetworkOrDeviceLocation: true }));
+  await click('use-location'); await until(() => locationCalls === 3, 'pending request before close');
+  await click('close-picker'); await click('city');
+  assert.equal((await snapshot()).disabled, false, 'closing an in-flight picker never leaves reopening disabled');
+  assert.equal((await snapshot()).status, '已选择：北京市 · 海淀区');
+  resolveLocation({ locationError: { code: 'LOCATION_TIMEOUT' } });
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal((await snapshot()).status, '已选择：北京市 · 海淀区', 'late prior failure cannot overwrite reopened picker');
+  await click('use-location'); await until(() => locationCalls === 4, 'cancellation response');
+  resolveLocation({ cancelled: true });
+  await until(async () => (await snapshot()).disabled === false, 'cancelled request releases retry');
+  assert.equal((await snapshot()).status, '定位已取消，请重试或选择城市');
+  console.log(JSON.stringify({ passed: true, startupLocationCalls: 0, locationCalls, successWhileWeatherLoading: true, successfulReopens: 3, deniedReopen: reopened.status, staleLocationIgnored: true, cancelledRetryEnabled: true, noNetworkOrDeviceLocation: true }));
 }).catch(error => { console.error(error); process.exitCode = 1; }).finally(() => {
   win?.destroy(); ipcMain.removeHandler('fixture:get'); ipcMain.removeHandler('fixture:location');
   fs.rmSync(directory, { recursive: true, force: true }); app.exit(process.exitCode || 0);

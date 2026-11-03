@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { randomUUID, createHash } = require('node:crypto');
+const { normalizeDiagnostic, sourceLocation } = require('./error-diagnostics');
 
 const ENDPOINT = 'https://qiuqiu-feedback-entry.pages.dev/api/feedback';
 const UUID = /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i;
@@ -13,11 +14,7 @@ const SCOPES = new Set(['应用运行', '窗口崩溃', '窗口无响应', '页�
   '冒烟检查失败', '渲染进程退出', '无法打开桌宠页面', '安装包下载状态', '标记 Codex 结果已读', '读取 Codex 宠物',
   '调整球球尺寸', '校验 Codex 宠物', '番茄钟记录', '番茄钟窗口', '便签与待办', '聊天面板', 'WorkBuddy 积分查询',
   'WorkBuddy 趋势窗口', '咩咩送物窗口', '思考光迹窗口', '气泡窗口', '额度标签窗口', '守护战窗口', 'API 常驻卡片',
-  'Codex 详情窗口', 'ZCode 授权窗口', 'ZCode 联动', '边缘提示窗口', '活动状态检测', '天气', '便签保存后退出', '应用启动失败']);
-const NAMES = new Set(['Error', 'TypeError', 'RangeError', 'ReferenceError', 'SyntaxError', 'URIError', 'EvalError', 'AbortError', 'TimeoutError']);
-const CODES = new Set(['ENOENT', 'EACCES', 'EPERM', 'ENOSPC', 'EIO', 'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND',
-  'EHOSTUNREACH', 'EPIPE', 'WINDOW_UNRESPONSIVE', 'RENDER_PROCESS_GONE', 'PAGE_LOAD_FAILED', 'RENDERER_ERROR', 'ERR_NETWORK', 'ERR_ABORTED', 'ERR_FAILED', 'ERR_INTERNET_DISCONNECTED', 'ERR_NAME_NOT_RESOLVED',
-  'ERR_CONNECTION_REFUSED', 'ERR_CONNECTION_RESET', 'ERR_TIMED_OUT', 'ERR_CERT_DATE_INVALID', 'ERR_CERT_AUTHORITY_INVALID']);
+  'Codex 详情窗口', 'ZCode 授权窗口', 'ZCode 联动', '边缘提示窗口', '活动状态检测', '天气', '便签保存后退出', '应用启动失败', '页面控制台错误', '预加载脚本错误', '弹窗额度清理', '宣传详情', '小白任务庆祝', '弹窗关闭额度区同步', '额度标签重排', '气泡可见性解绑', '气泡可见性绑定', '额度标签状态', '额度标签隐藏', '额度标签同步', '额度标签销毁', '小狗梦境', '额度区整体过渡', '退出时聊天停止']);
 const number = value => Number.isSafeInteger(value) && value >= 0;
 const failure = message => new Error(message);
 function field(value, label, maximum, required = false) {
@@ -49,13 +46,18 @@ function attachments(value = []) {
   });
 }
 function fingerprint(entry) {
-  return createHash('sha256').update(JSON.stringify([entry.scope, entry.name, entry.code, entry.version, entry.os])).digest('hex');
+  return createHash('sha256').update(JSON.stringify([entry.scope, entry.name, entry.code, entry.version, entry.os, ...(entry.schemaVersion === 2 ? [entry.context?.stage, entry.context?.page, entry.context?.source, entry.context?.line, entry.context?.column, entry.context?.reason, entry.context?.netErrorCode] : [])])).digest('hex');
 }
 function automaticPayload(entry) {
   return { submissionId: entry.id, type: 'problem', title: `[自动异常] ${entry.scope}`, contact: '', version: entry.version,
     os: entry.os, source: 'app', attachments: [], detail: JSON.stringify({ kind: 'automatic-error', module: entry.scope,
+      ...(entry.schemaVersion === 2 ? { schemaVersion: 2, context: entry.context, runtime: entry.runtime, counting: 'aggregated-events', sampleWindowMs: COOLDOWN } : {}),
       errorName: entry.name, errorCode: entry.code, fingerprint: fingerprint(entry), firstSeenAt: entry.firstAt,
       lastSeenAt: entry.lastAt, occurrences: entry.sentCount || entry.count }, null, 2) };
+}
+
+function safeRuntime(runtime) {
+  return Object.fromEntries(['electron', 'node'].filter(key => typeof runtime?.[key] === 'string' && /^(?:\d+\.){1,3}\d+(?:[-+][\w.-]+)?$/.test(runtime[key])).map(key => [key, runtime[key]]));
 }
 
 function createFeedbackReporting({ directory, version, fetch = globalThis.fetch, enabled = false, now = Date.now,
@@ -128,10 +130,17 @@ function createFeedbackReporting({ directory, version, fetch = globalThis.fetch,
       const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
       if (stored.schema !== 1 || !Array.isArray(stored.queue) || stored.queue.length > MAX_QUEUE || !Array.isArray(stored.recent) || stored.recent.length > 100) throw failure('invalid');
       queue = stored.queue.map(entry => {
-        if (!entry || !UUID.test(entry.id) || !SCOPES.has(entry.scope) || !NAMES.has(entry.name) || entry.code !== '' && !CODES.has(entry.code) ||
+        if (!entry || !UUID.test(entry.id) || !SCOPES.has(entry.scope) || normalizeDiagnostic('', {name:entry.name}).name !== entry.name || typeof entry.code !== 'string' || (entry.code !== '' && normalizeDiagnostic('', {name:entry.name,code:entry.code}).code !== entry.code) ||
           !/^(?:\d+\.\d+\.\d+(?:[-+][\w.-]+)?|unknown)$/.test(entry.version) || typeof entry.os !== 'string' || !/^(?:darwin|win32|linux|freebsd|openbsd|aix|sunos|android) [\w.+-]{1,80} (?:arm64|x64|ia32|arm|riscv64|ppc64|s390x)$/.test(entry.os) ||
           !['firstAt', 'lastAt', 'count', 'sentCount', 'attempts', 'nextAttemptAt'].every(key => number(entry[key])) || entry.count < 1 || entry.count > 1000000 || entry.sentCount > entry.count || entry.attempts > 1000000) throw failure('invalid');
-        return Object.fromEntries(['id', 'scope', 'name', 'code', 'version', 'os', 'firstAt', 'lastAt', 'count', 'sentCount', 'attempts', 'nextAttemptAt'].map(key => [key, entry[key]]));
+        const clean = Object.fromEntries(['id', 'scope', 'name', 'code', 'version', 'os', 'firstAt', 'lastAt', 'count', 'sentCount', 'attempts', 'nextAttemptAt'].map(key => [key, entry[key]]));
+        if (entry.schemaVersion === 2) {
+          const safe = normalizeDiagnostic(entry.scope, {name:entry.name, code:entry.code}, entry.context);
+          if (safe.name !== entry.name || JSON.stringify(safe.context) !== JSON.stringify(entry.context)) throw failure('invalid');
+          clean.schemaVersion = 2; clean.context = safe.context;
+          clean.runtime = safeRuntime(entry.runtime);
+        }
+        return clean;
       });
       recent = stored.recent.filter(item => item && /^[a-f0-9]{64}$/.test(item.key) && number(item.at) && item.at > now() - COOLDOWN && item.at <= now()).map(item => ({ key: item.key, at: item.at }));
       lastSentAt = number(stored.lastSentAt) ? stored.lastSentAt : null;
@@ -180,24 +189,25 @@ function createFeedbackReporting({ directory, version, fetch = globalThis.fetch,
     timer = schedule(() => { timer = null; void flush(); }, Math.min(COOLDOWN, Math.max(0, delay)));
     timer?.unref?.();
   }
-  function capture(scope, error) {
+  function capture(scope, error, context = {}) {
     if (!active || disposed) return false;
     const at = now(), item = { scope: SCOPES.has(scope) ? scope : '应用运行',
-      name: NAMES.has(error?.name) ? error.name : 'Error', code: CODES.has(error?.code) ? error.code : '',
-      version: environment.version, os: environment.os };
+      ...normalizeDiagnostic(scope, error, { stage: 'operation', ...sourceLocation(error), ...context }),
+      schemaVersion: 2, runtime: safeRuntime(diagnostic), version: environment.version, os: environment.os };
     const key = fingerprint(item);
     recent = recent.filter(entry => entry.at > at - COOLDOWN && entry.at <= at);
-    const existing = queue.find(entry => fingerprint(entry) === key);
+    const existing = queue.find(entry => fingerprint(entry) === key && !entry.attempts);
     if (existing) {
-      // shortcut: Count the initial sample only; add separate counters if full incident totals are needed.
-      if (!existing.attempts) { existing.count = Math.min(1000000, existing.count + 1); existing.lastAt = at; }
+      existing.count = Math.min(1000000, existing.count + 1); existing.lastAt = at;
       if (persist()) arm(Math.min(...queue.map(item => item.nextAttemptAt)) - at);
       notify(); return true;
     }
-    if (recent.some(entry => entry.key === key)) return false;
+    const previous = recent.find(entry => entry.key === key);
+    const frozen = queue.find(entry => fingerprint(entry) === key && entry.attempts);
+    const due = Math.max(at + 2000, previous ? previous.at + COOLDOWN : 0, frozen ? frozen.firstAt + COOLDOWN : 0);
     if (queue.length >= MAX_QUEUE) { lastError = '待上报异常已达暂存上限，稍后将继续发送现有记录。'; notify(); return false; }
-    queue.push({ ...item, id: randomUUID(), firstAt: at, lastAt: at, count: 1, sentCount: 0, attempts: 0, nextAttemptAt: at + 2000 });
-    if (persist()) arm(2000);
+    queue.push({ ...item, id: randomUUID(), firstAt: at, lastAt: at, count: 1, sentCount: 0, attempts: 0, nextAttemptAt: due });
+    if (persist()) arm(Math.min(...queue.map(item => item.nextAttemptAt)) - at);
     notify(); return true;
   }
   function flush() {
@@ -217,7 +227,9 @@ function createFeedbackReporting({ directory, version, fetch = globalThis.fetch,
         await post(automaticPayload(entry), signal);
         if (!active || disposed || epoch !== requestEpoch) return;
         queue = queue.filter(item => item.id !== entry.id);
+        recent = recent.filter(item => item.key !== fingerprint(entry));
         recent.push({ key: fingerprint(entry), at: now() }); recent = recent.slice(-100);
+        for (const next of queue) if (!next.attempts && fingerprint(next) === fingerprint(entry)) next.nextAttemptAt = Math.max(next.nextAttemptAt, now() + COOLDOWN);
         lastSentAt = now(); lastError = ''; persist();
       } catch (error) {
         if (!active || disposed || epoch !== requestEpoch) return;

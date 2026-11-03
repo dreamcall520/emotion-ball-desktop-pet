@@ -76,6 +76,7 @@ test('official billing timestamps accept milliseconds and explicit dates without
   }
 });
 test('personal Pro reconciles summary and unified resources with a scope-safe format error and no model request', async t => {
+  t.mock.method(Date, 'now', () => now);
   const f = fixture([[pro, 1500], [addon, 20]], true), calls = [];
   const auth = { ...sessionIdentity({ account: { type: 'pro', uid: 'fixture-user' }, auth: { domain: 'www.workbuddy.cn' } }), token: 'fixture-not-a-real-token' };
   const previous = global.fetch; t.after(() => { global.fetch = previous; });

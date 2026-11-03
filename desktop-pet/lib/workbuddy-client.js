@@ -51,6 +51,8 @@ function createWorkBuddyRunner({ spawnProcess = spawn, binary = '/Applications/W
             result = packet.result;
           } else if (packet.type === 'error' && !result && !remoteError) {
             remoteError = workBuddyError(packet.code);
+            if (['quota-auth', 'quota-request', 'quota-parse', 'quota-query'].includes(packet.stage)) remoteError.stage = packet.stage;
+            if (Number.isInteger(packet.httpStatus) && packet.httpStatus >= 100 && packet.httpStatus <= 599) remoteError.httpStatus = packet.httpStatus;
             if (/^[0-9a-f]{64}$/.test(packet.accountKey || '')) remoteError.accountKey = packet.accountKey;
           }
           else finish(workBuddyError('INVALID_RESPONSE'));

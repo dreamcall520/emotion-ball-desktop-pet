@@ -4,7 +4,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 
 const ORIGIN = 'https://copilot.tencent.com';
-const fail = code => { throw Object.assign(new Error(code), { code }); };
+const fail = (code, diagnostic = {}) => { throw Object.assign(new Error(code), { code, ...diagnostic }); };
 const check = (condition, code = 'INVALID_RESPONSE') => { if (!condition) fail(code); };
 function base64(value, length) {
   check(typeof value === 'string');
@@ -104,32 +104,45 @@ function headers(auth, conversationId) {
 async function request(auth, route, body, signal, conversationId) {
   auth.verifyCurrent?.();
   const origin = auth.scope === 'enterprise' && route.startsWith('/v2/billing/') ? 'https://www.workbuddy.cn' : ORIGIN;
-  const response = await fetch(origin + route, { method: body === undefined ? 'GET' : 'POST', headers: headers(auth, conversationId),
-    body: body === undefined ? undefined : JSON.stringify(body), signal, redirect: 'error' });
+  let response;
+  try { response = await fetch(origin + route, { method: body === undefined ? 'GET' : 'POST', headers: headers(auth, conversationId),
+    body: body === undefined ? undefined : JSON.stringify(body), signal, redirect: 'error' }); }
+  catch (error) { error.stage = 'quota-request'; throw error; }
   auth.verifyCurrent?.();
   if (!response.ok) {
-    if ([404, 405].includes(response.status)) throw Object.assign(new Error('SERVICE_UNAVAILABLE'), { code: 'SERVICE_UNAVAILABLE', httpStatus: response.status });
-    if (response.status === 401) fail('LOGIN_REQUIRED');
-    if (response.status === 429) fail('RATE_LIMITED');
+    if ([404, 405].includes(response.status)) throw Object.assign(new Error('SERVICE_UNAVAILABLE'), { code: 'SERVICE_UNAVAILABLE', stage: 'quota-request', httpStatus: response.status });
+    if (response.status === 401) fail('LOGIN_REQUIRED', { stage: 'quota-request', httpStatus: response.status });
+    if (response.status === 429) fail('RATE_LIMITED', { stage: 'quota-request', httpStatus: response.status });
     let code;
     try { code = Number((await response.json()).code); } catch (_) {}
-    if (code === 14018) fail('INSUFFICIENT_CREDITS');
-    if (code === 11140) fail('ACCOUNT_RESTRICTED');
-    fail(response.status === 400 ? 'MODEL_UNAVAILABLE' : 'SERVICE_UNAVAILABLE');
+    if (code === 14018) fail('INSUFFICIENT_CREDITS', { stage: 'quota-request', httpStatus: response.status });
+    if (code === 11140) fail('ACCOUNT_RESTRICTED', { stage: 'quota-request', httpStatus: response.status });
+    fail(response.status === 400 ? 'MODEL_UNAVAILABLE' : 'SERVICE_UNAVAILABLE', { stage: 'quota-request', httpStatus: response.status });
   }
   return response;
 }
 async function jsonRequest(auth, route, body, signal) {
   const response = await request(auth, route, body, signal);
   const parts = []; let size = 0;
-  for await (const part of response.body) { size += part.length; check(size <= 4 * 1024 * 1024); parts.push(part); }
-  const raw = Buffer.concat(parts).toString('utf8');
-  auth.verifyCurrent?.();
-  const envelope = JSON.parse(raw);
-  if (Number(envelope.code)) fail(Number(envelope.code) === 14018 ? 'INSUFFICIENT_CREDITS' : 'SERVICE_UNAVAILABLE');
-  check(envelope.data && typeof envelope.data === 'object');
-  return envelope.data;
+  try {
+    for await (const part of response.body) { size += part.length; check(size <= 4 * 1024 * 1024); parts.push(part); }
+  } catch (error) {
+    error.stage ||= error.code === 'INVALID_RESPONSE' ? 'quota-parse' : 'quota-request';
+    error.httpStatus = response.status; throw error;
+  }
+  try {
+    const raw = Buffer.concat(parts).toString('utf8');
+    auth.verifyCurrent?.();
+    const envelope = JSON.parse(raw);
+    if (Number(envelope.code)) fail(Number(envelope.code) === 14018 ? 'INSUFFICIENT_CREDITS' : 'SERVICE_UNAVAILABLE');
+    check(envelope.data && typeof envelope.data === 'object');
+    return envelope.data;
+  } catch (error) {
+    if (error.name === 'SyntaxError' && !error.code) error.code = 'INVALID_RESPONSE';
+    error.stage ||= 'quota-parse'; error.httpStatus = response.status; throw error;
+  }
 }
+
 function amount(value) {
   check((typeof value === 'string' && value.trim() !== '') || typeof value === 'number');
   const number = Number(value); check(Number.isFinite(number) && number >= 0); return number;
@@ -369,10 +382,14 @@ async function readSse(body, onDelta) {
 }
 async function execute(operation, payload, onDelta = () => {}, { authReader = readAuth } = {}) {
   check(['quota', 'models', 'chat', 'tasks', 'task-open', 'usage'].includes(operation), 'INVALID_REQUEST');
-  const auth = authReader(operation === 'usage');
+  let auth;
+  try { auth = authReader(operation === 'usage'); }
+  catch (error) { error.stage = 'quota-auth'; if (!error.code) error.code = 'UNSUPPORTED_AUTH'; throw error; }
   if (auth.scope === 'enterprise' || operation === 'quota') auth.verifyCurrent = () => {
-    const current = authReader(false);
-    check(current.accountKey === auth.accountKey, 'ACCOUNT_CHANGED');
+    try {
+      const current = authReader(false);
+      check(current.accountKey === auth.accountKey, 'ACCOUNT_CHANGED');
+    } catch (error) { error.stage = 'quota-auth'; if (!error.code) error.code = 'UNSUPPORTED_AUTH'; throw error; }
   };
   try {
   if (payload.expectedAccountKey !== undefined) check(payload.expectedAccountKey === auth.accountKey, 'ACCOUNT_CHANGED');
@@ -400,7 +417,7 @@ async function execute(operation, payload, onDelta = () => {}, { authReader = re
   const text = await readSse(response.body, delta => { auth.verifyCurrent?.(); onDelta(delta); });
   auth.verifyCurrent?.();
   return { accountKey: auth.accountKey, text };
-  } catch (error) { error.accountKey = auth.accountKey; throw error; }
+  } catch (error) { error.accountKey = auth.accountKey; error.stage ||= operation === 'quota' ? 'quota-parse' : 'quota-query'; throw error; }
 }
 const SAFE_ERRORS = new Set(['INVALID_RESPONSE', 'LOGIN_REQUIRED', 'UNSUPPORTED_AUTH', 'UNSUPPORTED_PLATFORM', 'UNSUPPORTED_ACCOUNT', 'UNSUPPORTED_QUOTA',
   'RATE_LIMITED', 'INSUFFICIENT_CREDITS', 'ACCOUNT_RESTRICTED', 'MODEL_UNAVAILABLE', 'SERVICE_UNAVAILABLE', 'ACCOUNT_CHANGED',
@@ -418,7 +435,9 @@ if (require.main === module) {
       emit({ type: 'result', result });
     } catch (error) {
       emit({ type: 'error', code: SAFE_ERRORS.has(error.code) ? error.code : error.name === 'TimeoutError' ? 'TIMEOUT' : 'CONNECTION_FAILED',
-        ...(/^[0-9a-f]{64}$/.test(error.accountKey || '') ? { accountKey: error.accountKey } : {}) });
+        ...(/^[0-9a-f]{64}$/.test(error.accountKey || '') ? { accountKey: error.accountKey } : {}),
+        ...(['quota-auth', 'quota-request', 'quota-parse', 'quota-query'].includes(error.stage) ? { stage: error.stage } : {}),
+        ...(Number.isInteger(error.httpStatus) && error.httpStatus >= 100 && error.httpStatus <= 599 ? { httpStatus: error.httpStatus } : {}) });
       process.exitCode = 1;
     }
   });

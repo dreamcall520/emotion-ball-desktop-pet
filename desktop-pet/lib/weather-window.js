@@ -57,16 +57,16 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
   function overlay() { return collapseOverlay ||= createQuotaCardTransitionWindow({ BrowserWindow, ipcMain, getAlwaysOnTop: () => topmost, onError }); }
   function cancelCollapse() { collapseEpoch++; closing = null; if (win && !win.isDestroyed()) win.setOpacity?.(1); collapseOverlay?.hide(); }
   function resetExpanded() { cancelCollapse(); explicitOpen = false; cityRequested = false; size = { width: 128, height: 32 }; expandedAnchor = null; win?.webContents.send('weather:collapse'); }
-  try { const saved = JSON.parse(fs.readFileSync(filePath, 'utf8')); city = validCity(saved.city) ? saved.city : null; enabled = saved.enabled === true; cardVisible = saved.cardVisible !== false; } catch (error) { if (error.code !== 'ENOENT') onError(error); }
+  try { const saved = JSON.parse(fs.readFileSync(filePath, 'utf8')); city = validCity(saved.city) ? saved.city : null; enabled = saved.enabled === true; cardVisible = saved.cardVisible !== false; } catch (error) { if (error.code !== 'ENOENT') onError(error, { stage: 'weather-storage' }); }
   function persist() { fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 }); const temp = filePath + '.tmp'; fs.writeFileSync(temp, JSON.stringify({ enabled, city, cardVisible }), { mode: 0o600 }); fs.renameSync(temp, filePath); }
   const cacheFile = filePath + '.cache';
   try {
     const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
     if (city && cached.city?.latitude === city.latitude && cached.city?.longitude === city.longitude && Number.isFinite(cached.updatedAt) && cached.updatedAt <= Date.now() + 60000 && Number.isFinite(cached.current?.temperature) && Array.isArray(cached.daily) && Array.isArray(cached.hourly)) state = { ...cached, city, status: 'stale', error: '正在尝试更新上次天气' };
-  } catch (error) { if (error.code !== 'ENOENT') onError(error); }
+  } catch (error) { if (error.code !== 'ENOENT') onError(error, { stage: 'weather-storage' }); }
   function saveCache() {
     const temp = cacheFile + '.tmp';
-    try { fs.writeFileSync(temp, JSON.stringify(state), { mode: 0o600 }); fs.renameSync(temp, cacheFile); } catch (error) { onError(error); }
+    try { fs.writeFileSync(temp, JSON.stringify(state), { mode: 0o600 }); fs.renameSync(temp, cacheFile); } catch (error) { onError(error, { stage: 'weather-storage' }); }
   }
   function publish() { const packet = { ...state, enabled, cardVisible, appearance: getAppearance() }; if (win && !win.isDestroyed()) win.webContents.send('weather:state', packet); onChange(packet); return packet; }
   function reposition(animate = false) {
@@ -148,7 +148,7 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
       if (!current()) return { canceled: true };
       closing = null; reposition(); targetWindow.setOpacity?.(1); collapseOverlay.hide(); return { collapsed: true, animated: true };
     } catch (error) {
-      if (closing === record) { closing = null; resetExpanded(); reposition(); onLayout(); onError(Object.assign(Error('天气连续收起 '+record.stage+': '+error.message), { cause: error })); }
+      if (closing === record) { closing = null; resetExpanded(); reposition(); onLayout(); onError(Object.assign(Error('天气连续收起 '+record.stage+': '+error.message), { cause: error }), { stage: 'weather-animation' }); }
       return { collapsed: true, animated: false };
     } finally { if (closing === record && !current()) { closing = null; resetExpanded(); reposition(); onLayout(); } }
   }
@@ -165,7 +165,7 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
     win.webContents.on('will-navigate', event => event.preventDefault());
     win.webContents.on('did-finish-load', () => { if (owner === win) { ready = true; publish(); reposition(); if (cityRequested) { cityRequested = false; owner.webContents.send('weather:choose-city'); owner.show(); owner.focus?.(); } } });
     win.on('closed', () => { if (owner === win) { cancelCollapse(); revision++; ready = false; win = null; } });
-    void win.loadFile(path.join(__dirname, '../weather.html')).catch(onError);
+    void win.loadFile(path.join(__dirname, '../weather.html')).catch(error => onError(error, { stage: 'weather-window' }));
     return win;
   }
   async function refresh(force = false) {
@@ -175,13 +175,14 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
     try {
       const result = await service.getWeather(requested, { force });
       if (token !== revision || !enabled || suspended) return state;
+      if (result.error?.code && result.error.code !== 'DATA_OLD') onError({ code: result.error.code }, { stage: 'weather-refresh', httpStatus: result.error.httpStatus });
       const data = result.data;
       const previous = state;
       state = data ? { ...data, city: { ...requested, timezone: data.timezone || requested.timezone }, status: result.status, error: typeof result.error === 'string' ? result.error : result.error?.message, updatedAt: result.updatedAt || data.updatedAt }
         : { status: 'error', city: requested, error: result.error?.message || result.error || '天气暂时无法获取' };
       if (!data && previous.current && previous.city?.latitude === requested.latitude && previous.city?.longitude === requested.longitude) state = { ...previous, city: requested, status: 'stale', error: state.error };
       if (state.status === 'ready') saveCache();
-    } catch (error) { if (token !== revision || !enabled || suspended) return state; state = { ...state, status: state.current ? 'stale' : 'error', error: '天气更新失败，请稍后重试' }; onError(error); }
+    } catch (error) { if (token !== revision || !enabled || suspended) return state; state = { ...state, status: state.current ? 'stale' : 'error', error: '天气更新失败，请稍后重试' }; onError(error, { stage: 'weather-refresh', httpStatus: error?.httpStatus }); }
     return publish();
   }
   async function select(value, mode = 'manual', waitForWeather = true) {
@@ -193,7 +194,11 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
   const trusted = event => Boolean(win && !win.isDestroyed() && event.sender === win.webContents && event.senderFrame === win.webContents.mainFrame && event.senderFrame.url === pathToFileURL(path.join(__dirname, '../weather.html')).href);
   for (const [channel, handler] of Object.entries({
     'weather:get': () => publish(), 'weather:refresh': () => refresh(true), 'weather:collapse': value => collapseWeather(value),
-    'weather:search': query => typeof query === 'string' && query.trim().length >= 2 && query.length <= 100 ? service.searchCities(query.trim()) : [],
+    'weather:search': async query => {
+      if (typeof query !== 'string' || query.trim().length < 2 || query.length > 100) return [];
+      try { return await service.searchCities(query.trim()); }
+      catch (error) { onError(error, { stage: 'weather-search', httpStatus: error?.httpStatus }); throw error; }
+    },
     'weather:city': value => select(value),
     'weather:location': async value => {
       if (value !== undefined && value !== null) throw new Error('定位仅接受系统位置');
@@ -203,7 +208,10 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
         const coordinates = await locationBridge.locate();
         if (token !== revision || !enabled || !win || win.isDestroyed()) return { cancelled: true };
         return await select({ ...coordinates, name: coordinates.name || '当前位置', displayName: coordinates.locationLabel || coordinates.name }, 'current', false);
-      } catch (error) { return { locationError: { code: error.code || 'LOCATION_UNAVAILABLE', message: error.message } }; }
+      } catch (error) {
+        if (token === revision && enabled && !['LOCATION_DENIED', 'LOCATION_RESTRICTED', 'LOCATION_SERVICES_DISABLED', 'LOCATION_BUSY', 'CANCELLED'].includes(error.code)) onError(error, { stage: 'weather-location', ...error.diagnostic });
+        return { locationError: { code: error.code || 'LOCATION_UNAVAILABLE', message: error.message } };
+      }
     },
     'weather:resize': value => {
       const wasExpanded = size.width === 390, expanded = value === true || value?.expanded === true;

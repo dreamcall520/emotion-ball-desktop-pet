@@ -78,3 +78,17 @@ test('invalid calendar model time does not enter cache', async () => {
   const result = await createWeatherService({ now: () => modelTime, fetch: async url => response(url.includes('air-quality') ? air() : raw) }).getWeather(location);
   assert.equal(result.status, 'error'); assert.equal(result.error.code, 'INVALID_RESPONSE');
 });
+
+test('exact administrative cities outrank same-name villages without a hardcoded city list', async () => {
+  const rows = [
+    { id: 8404324, name: '北京', latitude: 30.72608, longitude: 108.67483, admin1: '重庆市', admin2: '重庆市', feature_code: 'PPL' },
+    { id: 1816670, name: '北京', latitude: 39.9075, longitude: 116.39723, admin1: '北京市', admin2: '北京市', feature_code: 'PPLC' },
+    { id: 10196578, name: '北京', latitude: 30.9699, longitude: 103.94, admin1: '四川', admin2: '成都市', feature_code: 'PPL' }
+  ];
+  const service = createWeatherService({ fetch: async () => response({ results: rows }) });
+  const cities = await service.searchCities('北京');
+  assert.equal(cities.length, 1); assert.equal(cities[0].id, 1816670); assert.equal(cities[0].admin1, '北京市');
+  assert.equal(cities[0].latitude, 39.9075);
+  rows.splice(0, rows.length, { ...rows[0], name: '同名镇' });
+  assert.equal((await service.searchCities('同名镇')).length, 1, 'settlements remain searchable when no administrative center matches');
+});
