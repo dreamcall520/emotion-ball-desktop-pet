@@ -27,6 +27,8 @@ const keyboardAfter=await run("(()=>{const s=document.getElementById('skin-promo
 assert.equal(await run("(()=>{const s=document.getElementById('skin-promo-action');s.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerType:'mouse'}));s.blur();return s.hasAttribute('data-pointer-focus')})()"),false,'blur clears pointer modality');
 win.hide();
 await run("document.getElementById('skin-promo-close').click()");
+// Chromium queues dialog close events; a hidden native host can delay them until after a reopen.
+await until("!promotionPlayer.getState().active",'promotion close event settled before reopening the hidden fixture');
 assert.deepEqual(await run("({tabs:[...document.querySelectorAll('.source-switch button[aria-controls]')].map(e=>e.getAttribute('aria-pressed')),draft:document.getElementById('preset-name').value,current:JSON.stringify(current),saves:saves.length,imports:localPets.length})"),beforePromotion,'promotion entry cannot switch tabs, apply/save/import skins, or replace an unsaved form draft');
 await run("document.getElementById('preset-name').value=''");
 const checkPromotionBadge=async()=>{
