@@ -1,6 +1,8 @@
 const { createCodexIconPreference } = require('./lib/codex-icon-preference');
 const { settingsEntries, findSettingsAction } = require('./lib/global-settings');
 const { createFeedbackReporting } = require('./lib/feedback-reporting');
+const { trackWindowErrors } = require('./lib/window-error-reporting');
+const { sourceLocation } = require('./lib/error-diagnostics');
 const fs = require('node:fs');
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
@@ -249,30 +251,20 @@ const dialog = createQuotaDialogProxy(electronDialog, quotaPopups);
 app.on('browser-window-created', (_event, win) => {
   colorModes.track(win);
   quotaPopups.track(win);
-  const capture = (scope, code) => {
-    if (!isQuitting) { try { feedbackReporting?.capture(scope, { code }); } catch (_) {} }
-  };
-  win.on('unresponsive', () => capture('窗口无响应', 'WINDOW_UNRESPONSIVE'));
-  win.webContents.on('render-process-gone', (_event, details) => {
-    if (['crashed', 'oom', 'abnormal-exit', 'integrity-failure'].includes(details?.reason)) capture('窗口崩溃', 'RENDER_PROCESS_GONE');
-  });
-  win.webContents.on('did-fail-load', (_event, code, _description, _url, isMainFrame) => {
-    if (isMainFrame && code !== -3) capture('页面加载失败', 'PAGE_LOAD_FAILED');
-  });
-  // Console contents can contain chat text or keys; report only a fixed error category.
-  win.webContents.on('console-message', event => {
-    if (event.level === 'error') capture('页面脚本错误', 'RENDERER_ERROR');
-  });
+  trackWindowErrors(win, { isQuitting: () => isQuitting, capture: (scope, error, context) => {
+    try { feedbackReporting?.capture(scope, error, context); } catch (_) {}
+  } });
 });
 process.on('uncaughtExceptionMonitor', (error, origin) => {
-  try { feedbackReporting?.capture(origin === 'unhandledRejection' ? '未处理异步错误' : '主进程异常', error); } catch (_) {}
+  try { feedbackReporting?.capture(origin === 'unhandledRejection' ? '未处理异步错误' : '主进程异常', error, {stage:'main-process',process:'main',severity:'fatal'}); } catch (_) {}
 });
 
-function writeError(scope, error) {
-  const message = error instanceof Error ? error.stack || error.message : String(error);
+function writeError(scope, error, context = {}) {
+  const message = error instanceof Error ? error.stack || error.message : error && typeof error === 'object' ? JSON.stringify({code:error.code, ...context}) : String(error);
+  const caller = {stack: new Error().stack.split('\n').filter((_,index) => index !== 1).join('\n')};
   const line = `[${new Date().toISOString()}] ${scope}: ${message}\n`;
   process.stderr.write(line);
-  if (!isQuitting) { try { feedbackReporting?.capture(scope, error); } catch (_) {} }
+  if (!isQuitting) { try { feedbackReporting?.capture(scope, error, {process: 'main', severity: 'error', ...sourceLocation(caller), ...sourceLocation(error), ...context}); } catch (_) {} }
   try {
     const logFile = path.join(app.getPath('userData'), 'errors.log');
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
@@ -933,7 +925,7 @@ function openCustomization(options = {}) {
   positionFunctionWindow(win);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', event => event.preventDefault());
-  win.webContents.on('did-fail-load', (_event, code, description) => writeError('定制面板加载', `${code} ${description}`));
+  // Window load diagnostics are centralized in trackWindowErrors.
   win.on('closed', () => {
     if (customizationWindow !== win) return;
     cancelCustomizationPromotion(); customizationSession++;
@@ -1296,7 +1288,7 @@ function finishCodexSpriteMotion(request, timedOut = false) {
   clearSpriteMotionTimer();
   hostMotion = null;
   restoreDogSpriteBounds();
-  if (timedOut) writeError('小白任务庆祝', new Error('素材完成回调超时，已释放动作所有权'));
+  if (timedOut) writeError('小白任务庆祝', {code:'ACTION_TIMEOUT'});
   if (petWindow && !petWindow.isDestroyed()) {
     petWindow.webContents.send('pet:motion-frame', { token: state.token, action: state.action, frame: { done: true } });
   }
@@ -1592,7 +1584,7 @@ function initializeApiBalance() {
     historyFile: path.join(app.getPath('userData'), 'api-balance-history.json'),
     onSelectAccount: id => {
       try { settings = saveSettings(settingsFile, { ...settings, apiBalanceSelectedAccountId: id }); }
-      catch (_) { writeError('API 余额账户', 'SELECTION_SAVE_FAILED'); }
+      catch (_) { writeError('API 余额账户', {code:'SELECTION_SAVE_FAILED'}); }
     },
     onChange: () => { apiBalanceDetails?.update(apiBalance.getState()); syncQuotaCardGroup(); syncApiBalanceLabel(); syncQuotaFreeStack(); } });
   apiBalanceLabel = createApiBalanceLabelWindow({ BrowserWindow, screen, ipcMain,
@@ -1607,12 +1599,12 @@ function initializeApiBalance() {
     onLayout: syncQuotaFreeStack, onRefresh: () => { void apiBalance?.refresh(); }, onTrend: openApiBalanceDetails,
     onSelectAccount: id => { void apiBalance?.selectAccount(id); },
     onSettings: () => openGlobalSettings('/api-balance-menu'),
-    onError: () => writeError('API 余额卡', 'BALANCE_WINDOW_FAILED') });
+    onError: () => writeError('API 余额卡', {code:'BALANCE_WINDOW_FAILED'}) });
   apiBalanceDetails = createApiBalanceDetailsWindow({ BrowserWindow, screen,
     getAnchor: () => apiBalanceLabel?.getVisibleBounds() || petWindow?.getBounds(),
     getAppearance: () => settings.codexQuotaAppearance, alwaysOnTop: settings.alwaysOnTop,
     onVisibilityChange: () => { syncQuotaLabel(codexCompanion?.getSnapshot()); syncApiUsageLabel(); syncWorkBuddyLabel(); zcodeLink?.sync(); },
-    onError: () => writeError('API 余额趋势', 'BALANCE_DETAILS_WINDOW_FAILED') });
+    onError: () => writeError('API 余额趋势', {code:'BALANCE_DETAILS_WINDOW_FAILED'}) });
 }
 
 function setWorkBuddyPreference(name, value) {
@@ -2517,7 +2509,7 @@ function setOpenAtLogin(enabled) {
   app.setLoginItemSettings({ openAtLogin: Boolean(enabled) });
   const actual = app.getLoginItemSettings().openAtLogin;
   if (actual !== Boolean(enabled)) {
-    writeError('开机启动回读不一致', `期望 ${Boolean(enabled)}，实际 ${actual}`);
+    writeError('开机启动回读不一致', {code:'LOGIN_SETTING_MISMATCH'});
   }
   refreshTrayMenu();
 }
@@ -3454,7 +3446,7 @@ function createPetWindow() {
   createdPetWindow.webContents.on('will-navigate', event => event.preventDefault());
   createdPetWindow.webContents.on('did-fail-load', (_event, code, description) => {
     if (!isCurrentPetWindow()) return;
-    writeError('页面加载失败', `${code} ${description}`);
+    // The global window observer records the safe network code once.
     if (IS_SMOKE_TEST) app.exit(1);
   });
   createdPetWindow.webContents.on('render-process-gone', (_event, details) => {
@@ -3462,7 +3454,7 @@ function createPetWindow() {
     activityMonitor?.stop();
     invalidateCodexPage();
     if (!isCurrentPetWindow()) return;
-    writeError('渲染进程退出', JSON.stringify(details));
+    // The global window observer records crash reason once.
     if (IS_SMOKE_TEST) { app.exit(1); return; }
     clearTimeout(renderRecoveryTimer);
     if (isQuitting) return;
@@ -3689,18 +3681,20 @@ function registerIpc() {
       downloadFlight = downloadInstaller(event.sender, release.installer, {
         downloadsPath: app.getPath('downloads'),
         onProgress: publish,
-        onDiagnostic: detail => writeError('安装包下载状态', JSON.stringify({ code: detail.code, stage: detail.stage,
-          ...(Number.isInteger(detail.attempt) ? { attempt: detail.attempt } : {}) }))
+        onDiagnostic: detail => {
+          if (!['CANCELLED', 'DOWNLOAD_COMPLETED', 'RESUME_ATTEMPT'].includes(detail.code)) writeError('安装包下载状态', {code:detail.code},
+            {stage:'download',downloadStage:detail.stage,attempt:detail.attempt});
+        }
       });
       const result = await downloadFlight;
       const state = publish(result);
       if (result.state === 'completed' && result.path && !isQuitting && !screenLocked) {
         try { shell.showItemInFolder(result.path); }
-        catch (_) { writeError('安装包下载状态', 'DOWNLOAD_REVEAL_FAILED'); }
+        catch (_) { writeError('安装包下载状态', {code:'DOWNLOAD_REVEAL_FAILED'}); }
       }
       return state;
     } catch (_) {
-      writeError('安装包下载状态', 'DOWNLOAD_UNEXPECTED');
+      writeError('安装包下载状态', {code:'DOWNLOAD_UNEXPECTED'});
       return publish({ state: 'error', code: 'DOWNLOAD_UNEXPECTED', stage: 'download', message: '下载未完成，可选择浏览器下载或国内下载。' });
     } finally { downloadFlight = null; }
   });
@@ -3713,7 +3707,7 @@ function registerIpc() {
     if (!url) return { ok: false, message: '当前版本没有适合本机的此下载入口，请重新检查更新。' };
     try { await shell.openExternal(url); return { ok: true }; }
     catch (_) {
-      writeError('安装包下载状态', 'BROWSER_OPEN_FAILED');
+      writeError('安装包下载状态', {code:'BROWSER_OPEN_FAILED'});
       return { ok: false, message: '暂时无法打开下载页面，请稍后重试。' };
     }
   });
@@ -4348,7 +4342,9 @@ async function bootstrap() {
     onChange: () => { syncWorkBuddyLabel(); workbuddyDetails?.update(workBuddyDetailsState()); } });
   workbuddyQuota = createWorkBuddyQuota({ run: workbuddyRun, historyFile: path.join(app.getPath('userData'), 'workbuddy-quota-history.json'), onChange: state => {
     const diagnostic = state.errorCode ? JSON.stringify({ code: require('./lib/workbuddy-quota-status').errorCode(state.errorCode), nextRetryAt: Number.isSafeInteger(state.nextRetryAt) ? state.nextRetryAt : null }) : '';
-    if (diagnostic && diagnostic !== workbuddyDiagnosticKey) writeError('WorkBuddy 积分查询', diagnostic);
+    if (diagnostic && diagnostic !== workbuddyDiagnosticKey) writeError('WorkBuddy 积分查询', {code:state.errorCode},
+      {stage:'quota-query', ...state.diagnostic, severity: ['LOGIN_REQUIRED','ACCOUNT_CHANGED','UNSUPPORTED_PLATFORM','RATE_LIMITED'].includes(state.errorCode) ? 'warning' : 'error',
+        expected: ['LOGIN_REQUIRED','ACCOUNT_CHANGED','UNSUPPORTED_PLATFORM','RATE_LIMITED'].includes(state.errorCode)});
     workbuddyDiagnosticKey = diagnostic;
     workbuddyTasks.setEnabled(state.enabled); workbuddyUsage.setEnabled(state.enabled); syncWorkBuddyLabel(); workbuddyDetails?.update(workBuddyDetailsState());
     if (state.enabled && !state.busy && !state.error && state.report) { void workbuddyTasks.refresh(false); void workbuddyUsage.refresh(false); }
@@ -4495,7 +4491,7 @@ async function bootstrap() {
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('Codex 详情窗口', error) });
   zcodeConsent = createZcodeConsentWindow({ BrowserWindow, ipcMain,
     getInfo: codexConsentInfo, position: positionFunctionWindow, getAppearance: getNotesAppearance,
-    isBlocked: () => isQuitting || screenLocked, onError: error => writeError('ZCode 授权窗口', error?.code || 'CONSENT_UNAVAILABLE') });
+    isBlocked: () => isQuitting || screenLocked, onError: error => writeError('ZCode 授权窗口', {code:error?.code || 'CONSENT_UNAVAILABLE'}) });
   zcodeLink = createZcodeLink({ BrowserWindow, screen, ipcMain,
     getSettings: () => settings,
     save: patch => { settings = saveSettings(settingsFile, { ...settings, ...patch }); },
@@ -4528,7 +4524,7 @@ async function bootstrap() {
         buttons: ['打开 ZCode', '关闭'], defaultId: 0, cancelId: 1, noLink: true });
       if (choice.response === 0 && !screenLocked && !isQuitting) await shell.openPath('/Applications/ZCode.app');
     },
-    onError: error => writeError('ZCode 联动', error?.code || 'ZCODE_UNAVAILABLE') });
+    onError: error => writeError('ZCode 联动', {code:error?.code || 'ZCODE_UNAVAILABLE'}) });
   edgeNoticeWindow = createEdgeNoticeWindow({ BrowserWindow, screen, getPetWindow: () => petWindow,
     alwaysOnTop: settings.alwaysOnTop, onError: error => writeError('边缘提示窗口', error) });
   edgeNotice = createEdgeNotice({ now: () => edgeNoticeNow(), ...(IS_SMOKE_TEST && process.env.PET_SMOKE_WORKBUDDY_ONLY === '1' ? { random: () => 0 } : {}), onChange: payload => {
@@ -4629,7 +4625,7 @@ async function bootstrap() {
     getAppearance: () => settings.codexQuotaAppearance,
     onLayout: () => { syncQuotaLabel(codexCompanion?.getSnapshot()); syncApiBalanceLabel(); syncQuotaFreeStack(); },
     onChange: packet => { syncQuotaCardGroup(); syncQuotaFreeStack(); if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send('pet:weather', packet); },
-    onError: error => writeError('天气', error) });
+    onError: (error, context) => writeError('天气', error, context) });
   const weatherPetWindow = petWindow, initialWeatherWindow = weatherWindow;
   const isCurrentWeatherOwner = () => !isQuitting && petWindow === weatherPetWindow &&
     weatherWindow === initialWeatherWindow && !weatherPetWindow.isDestroyed() &&

@@ -11,7 +11,7 @@ function fixture(t, { area = { x: 0, y: 0, width: 1000, height: 800 }, petBounds
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qiuqiu-weather-window-')), filePath = path.join(dir, 'weather.json');
   if (saved) fs.writeFileSync(filePath, JSON.stringify(saved));
   if (cached) fs.writeFileSync(filePath + '.cache', JSON.stringify(cached));
-  const handlers = new Map(), windows = [], changes = [], requests = [], layouts = [], module = { exports: {} };
+  const handlers = new Map(), windows = [], changes = [], requests = [], layouts = [], errors = [], module = { exports: {} };
   let groupHidden = false, petVisible = true, layoutHook = () => {};
   let suppressed = false, persistFails = false;
   const service = { searchCities: async () => [], getWeather(city) { const d = deferred(); requests.push({ city, ...d }); return d.promise; } };
@@ -30,11 +30,11 @@ function fixture(t, { area = { x: 0, y: 0, width: 1000, height: 800 }, petBounds
     require: name => name === './quota-card-transition-window' && morph ? { createQuotaCardTransitionWindow: () => morph.overlay } : name === './quota-group-capture' && morph ? { captureQuotaGroupFrames: async options => { morph.captures ||= []; const targets = options.getTargets(); morph.captures.push(targets.map(w => w.getBounds())); if (morph.captureGate && morph.captures.length === 1) await morph.captureGate.promise; return targets.map(w => ({ bounds: w.getBounds(), png: Buffer.from([137,80,78,71,13,10,26,10]) })); } } : name === 'node:fs' ? mockedFs : name === './weather-service' ? { createWeatherService: () => service } : require(name.startsWith('.') ? path.resolve(path.dirname(sourcePath), name) : name) }, { filename: sourcePath });
   const controller = module.exports.createWeatherWindow({ BrowserWindow: Window, ipcMain: { handle: (name, fn) => handlers.set(name, fn), removeHandler: name => handlers.delete(name) },
     locationBridge, screen: { getDisplayMatching: () => ({ workArea: area }) }, filePath, getPetWindow: () => ({ isDestroyed: () => false, isVisible: () => petVisible, getBounds: () => petBounds }),
-    getStackAnchor: () => stackAnchor, getCollectionWindow: () => collection, getBubbleBounds: () => bubbleBounds, getPresentation: () => ({ mode: 'free', quotaGroupHidden: groupHidden }), getSuppressed: () => suppressed, onLayout: () => { layouts.push(true); layoutHook(); }, onChange: state => changes.push(state) });
+    getStackAnchor: () => stackAnchor, getCollectionWindow: () => collection, getBubbleBounds: () => bubbleBounds, getPresentation: () => ({ mode: 'free', quotaGroupHidden: groupHidden }), getSuppressed: () => suppressed, onLayout: () => { layouts.push(true); layoutHook(); }, onChange: state => changes.push(state), onError: (error, context) => errors.push({ error, context }) });
   t.after(() => { controller.destroy(); fs.rmSync(dir, { recursive: true, force: true }); });
   controller.setEnabled(true);
   const event = () => ({ sender: controller.getWindow().webContents, senderFrame: controller.getWindow().webContents.mainFrame });
-  return { controller, handlers, windows, changes, requests, layouts, filePath, event, setPetVisible: value => { petVisible = value; }, setLayoutHook: value => { layoutHook = value; },
+  return { controller, handlers, windows, changes, requests, layouts, errors, service, filePath, event, setPetVisible: value => { petVisible = value; }, setLayoutHook: value => { layoutHook = value; },
     invoke: (name, value, e) => handlers.get('weather:' + name)(e || event(), value), suppress: value => { suppressed = value; }, groupHidden: value => { groupHidden = value; }, failPersist: () => { persistFails = true; } };
 }
 test('weather IPC denies other windows, child frames and unexpected document URLs', t => {
@@ -346,4 +346,21 @@ test('collected weather morphs into the real collection bar rather than showing 
 test('an endpoint collection change cancels a stale morph and a hidden renderer timeout cannot leave closing stuck',async t=>{
  const morph=morphFixture(),f=fixture(t,{morph});f.invoke('resize',{expanded:true,height:400});const pending=f.invoke('collapse');await flushMorph();f.groupHidden(true);morph.gate.resolve();await pending;assert.equal(f.controller.isClosing(),false);assert.equal(f.controller.getWindow().isVisible(),false);
  const hanging=morphFixture();hanging.hangDom=true;const timed=fixture(t,{morph:hanging});timed.invoke('resize',{expanded:true,height:400});const result=await timed.invoke('collapse');assert.equal(result.animated,false);assert.equal(timed.controller.isClosing(),false);assert.equal(timed.controller.getWindow().isVisible(),true,'bounded fallback restores a painted real compact card');
+});
+
+test('weather diagnostics report provider failures by stage without city or query, excluding old cache and expected denial', async t => {
+  const f = fixture(t, { saved: { enabled: true, city: cityA } });
+  f.requests[0].resolve({ status: 'error', error: { code: 'CONNECTION_FAILED', message: 'private response' } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.errors.length, 1);
+  assert.equal(f.errors[0].error.code, 'CONNECTION_FAILED');
+  assert.equal(f.errors[0].context.stage, 'weather-refresh');
+  assert.doesNotMatch(JSON.stringify(f.errors), /private response|latitude|北京/);
+  const refresh = f.invoke('refresh');
+  f.requests.at(-1).resolve({ ...report(cityA), status: 'stale', error: { code: 'DATA_OLD', message: 'old' } });
+  await refresh; assert.equal(f.errors.length, 1);
+  f.service.searchCities = async () => { throw Object.assign(Error('private query'), { code: 'TIMEOUT' }); };
+  await assert.rejects(f.invoke('search', 'private city'), { code: 'TIMEOUT' });
+  assert.equal(f.errors.at(-1).context.stage, 'weather-search');
+  const before = f.errors.length; await f.invoke('location'); assert.equal(f.errors.length, before);
 });

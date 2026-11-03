@@ -1611,7 +1611,7 @@ test('下载过程中不启动浏览器替代下载，外部打开失败返回�
   assert.equal((await f.invoke('pet:about-download-alternative', 'browser', about.webContents)).ok, false); assert.deepEqual(f.external, []);
   finish({ state: 'cancelled', code: 'CANCELLED', stage: 'cancel', message: '已取消下载，可以重新下载。' });
   const result = await first; assert.equal(result.state, 'cancelled'); assert.equal(result.code, 'CANCELLED');
-  f.call('globalThis.downloadErrors=[];writeError=(scope,error)=>downloadErrors.push(scope+": "+String(error))');
+  f.call('globalThis.downloadErrors=[];writeError=(scope,error)=>downloadErrors.push(scope+": "+(error?.code || String(error)))');
   const fallback = await f.invoke('pet:about-download-alternative', 'browser', about.webContents);
   assert.equal(fallback.ok, false); assert.match(fallback.message, /无法打开/); assert.doesNotMatch(JSON.stringify(fallback), /private|secret|token/);
   assert.match(f.call('JSON.stringify(downloadErrors)'), /BROWSER_OPEN_FAILED/); assert.doesNotMatch(f.call('JSON.stringify(downloadErrors)'), /private|secret|token/);
@@ -4941,7 +4941,7 @@ test('所有窗口只上报固定故障类别，正常销毁和被取消加载�
   win.webContents.emit('did-fail-load',{}, -105,'sk-secret','https://private',true);
   win.webContents.emit('console-message',{level:'error',message:'PRIVATE_CHAT sk-secret',sourceId:'/Users/private'});
   const captured=JSON.parse(f.call('JSON.stringify(feedbackReporting.captured)'));
-  assert.deepEqual(captured.map(item=>item.scope),['窗口无响应','窗口崩溃','页面加载失败','页面脚本错误']);
+  assert.deepEqual(captured.map(item=>item.scope),['窗口无响应','窗口崩溃','页面加载失败','页面控制台错误']);
   assert.doesNotMatch(JSON.stringify(captured),/PRIVATE|secret|private/);
   win.webContents.emit('render-process-gone',{}, {reason:'clean-exit'});
   win.webContents.emit('render-process-gone',{}, {reason:'killed'});

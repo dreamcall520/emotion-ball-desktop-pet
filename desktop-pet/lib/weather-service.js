@@ -54,10 +54,11 @@ function createWeatherService({ fetch: fetchImpl = globalThis.fetch, now = Date.
       error: stale ? { code: 'DATA_OLD', message: MESSAGES.DATA_OLD } : null };
   }
   async function request(url) {
-    const controller = new AbortController(); let timer;
+    const controller = new AbortController(); let timer, httpStatus;
     try {
       const response = await Promise.race([fetchImpl(url, { signal: controller.signal, redirect: 'error' }),
         new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(errorFor('TIMEOUT')); }, timeoutMs); })]);
+      if (Number.isInteger(response.status) && response.status >= 100 && response.status <= 599) httpStatus = response.status;
       if (!response.ok) throw errorFor(response.status === 429 ? 'RATE_LIMITED' : 'SERVICE_UNAVAILABLE');
       // Keep the timeout active until the response body has completed too.
       const body = await Promise.race([response.json(), new Promise((_, reject) => {
@@ -65,7 +66,11 @@ function createWeatherService({ fetch: fetchImpl = globalThis.fetch, now = Date.
       })]);
       if (!body || typeof body !== 'object' || body.error) throw errorFor('INVALID_RESPONSE');
       return body;
-    } catch (error) { throw error?.publicMessage ? error : errorFor(controller.signal.aborted ? 'TIMEOUT' : 'CONNECTION_FAILED'); }
+    } catch (error) {
+      const safe = error?.publicMessage ? error : errorFor(controller.signal.aborted ? 'TIMEOUT' : error?.name === 'SyntaxError' ? 'INVALID_RESPONSE' : 'CONNECTION_FAILED');
+      if (httpStatus !== undefined) safe.httpStatus = httpStatus;
+      throw safe;
+    }
     finally { clearTimeout(timer); }
   }
   function url(origin, path, params) { const value = new URL(path, origin); value.search = new URLSearchParams(params).toString(); return value.href; }
@@ -74,7 +79,12 @@ function createWeatherService({ fetch: fetchImpl = globalThis.fetch, now = Date.
     if (query.trim().length > 120) throw errorFor('INVALID_LOCATION');
     const raw = await request(url('https://geocoding-api.open-meteo.com', '/v1/search', { name: query.trim(), count: '10', language: 'zh', format: 'json' }));
     if (raw.results !== undefined && !Array.isArray(raw.results)) throw errorFor('INVALID_RESPONSE');
-    return (raw.results || []).slice(0, 10).flatMap(item => { try { return [normalizeLocation(item)]; } catch { return []; } });
+    const cities = (raw.results || []).slice(0, 10).flatMap(item => {
+      try { return [{ ...normalizeLocation(item), admin2: text(item.admin2), administrative: /^PPL(?:C|A[1-5]?)$/.test(item.feature_code || '') }]; } catch { return []; }
+    });
+    // A city picker should not mistake a same-name village for an administrative city.
+    const centers = cities.filter(city => city.administrative && city.name.replace(/[市县区]$/, '') === query.trim().replace(/[市县区]$/, ''));
+    return centers.length ? centers : cities.sort((a, b) => Number(b.administrative) - Number(a.administrative));
   }
   async function getWeather(value, { force = false } = {}) {
     const location = normalizeLocation(value), key = `${location.latitude},${location.longitude}`;
@@ -101,7 +111,7 @@ function createWeatherService({ fetch: fetchImpl = globalThis.fetch, now = Date.
         return result;
       } catch (error) {
         return { status: entry ? 'stale' : 'error', data: entry ? { ...entry.data, location } : null,
-          updatedAt: entry?.updatedAt ?? null, fromCache: Boolean(entry), error: { code: error.code, message: error.publicMessage } };
+          updatedAt: entry?.updatedAt ?? null, fromCache: Boolean(entry), error: { code: error.code, message: error.publicMessage, ...(Number.isInteger(error.httpStatus) ? { httpStatus: error.httpStatus } : {}) } };
       }
     })();
     pending.set(key, task);

@@ -49,9 +49,9 @@ function weatherReminder(state, context, now = Date.now()) {
   if (current.temperature >= 32 || (Number.isFinite(current.apparentTemperature) && current.apparentTemperature >= 35)) return edge ? '外面有点热，记得喝水呀。' : '玩一会儿也喝口水吧，出门记得防晒。';
   if (Number.isFinite(current.windSpeed) && current.windSpeed >= 28) return edge ? '风有点大，我先贴稳啦。' : '外面风有点大，出门留意一下呀。';
   const air = state.airQuality;
-  if (air?.standard === 'us' && Number.isFinite(air.aqi) && air.aqi > 100) return edge ? `US AQI ${Math.round(air.aqi)}，出门留意空气呀。` : `US AQI ${Math.round(air.aqi)}，出门前看看空气质量呀。`;
+  if (air?.standard === 'us' && Number.isFinite(air.aqi) && air.aqi > 100) return air.aqi <= 150 ? '空气不太好，出门前留意空气质量呀。' : '空气质量差，外出注意防护呀。';
   const probability = state.daily?.[0]?.precipitationProbability;
-  if (Number.isFinite(probability) && probability >= 60 && probability <= 100) return edge ? '今天可能下雨，带把伞呀。' : `今天预报降水概率${Math.round(probability)}%，带把伞更安心。`;
+  if (Number.isFinite(probability) && probability >= 60 && probability <= 100) return edge ? '今天可能下雨，带把伞呀。' : '今天可能下雨，带把伞更安心。';
   return '';
 }
 module.exports = { MAX_AGE, validWeather, weatherName, weatherContext, weatherReminder };

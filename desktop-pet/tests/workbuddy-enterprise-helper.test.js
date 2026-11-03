@@ -59,3 +59,15 @@ test('Chinese and encrypted department authority stays scoped and never enters o
  assert.notEqual(auth(opaque).accountKey,auth(plain).accountKey);let requests=0;withFetch(t,async(_url,options)=>{assert.doesNotThrow(()=>new Headers(options.headers));assert.equal(options.headers['X-Department-Info'],undefined);requests++;return response({limitNum:100,credit:20});});
  for(const value of [plain,opaque]){const a=auth(value);assert.equal((await execute('quota',{},()=>{},{authReader:()=>({...a})})).report.total,80);}assert.equal(requests,2);
 });
+
+test('quota helper distinguishes auth, HTTP request and response parsing failures without response contents', async t => {
+ const options={authReader:()=>auth()};
+ await assert.rejects(execute('quota',{},()=>{},{authReader:()=>{throw Object.assign(Error('private auth'),{code:'LOGIN_REQUIRED'});}}), {code:'LOGIN_REQUIRED',stage:'quota-auth'});
+ const previous=global.fetch;t.after(()=>{global.fetch=previous;});
+ global.fetch=async()=>new Response('private response',{status:429});
+ await assert.rejects(execute('quota',{},()=>{},options), {code:'RATE_LIMITED',stage:'quota-request',httpStatus:429});
+ global.fetch=async()=>new Response('not json',{status:200});
+ await assert.rejects(execute('quota',{},()=>{},options), error=>error.stage==='quota-parse'&&error.httpStatus===200);
+ global.fetch=async()=>{throw Object.assign(Error('private url'),{code:'ECONNRESET'});};
+ await assert.rejects(execute('quota',{},()=>{},options), {code:'ECONNRESET',stage:'quota-request'});
+});
