@@ -11,8 +11,8 @@ assert.equal(arm64.length, 3);
 const githubArm64 = arm64.filter(m => m[1].startsWith('https://github.com/'));
 assert.equal(githubArm64.length, 3);
 assert.ok(githubArm64.every(m => /\/v0\.4\.14\/Qiuqiu-0\.4\.14-macOS-arm64\.dmg$/.test(m[1])));
-assert.match(html, /<dt>版本<\/dt><dd>0\.4\.14<\/dd>/);
-assert.ok(html.includes('<dt>发布日期</dt><dd>2026-11-04</dd>'));
+assert.match(html, /<dt>官网版<\/dt><dd>0\.4\.14<\/dd>/);
+assert.ok(html.includes('<dt>官网版发布日期</dt><dd>2026-11-04</dd>'));
 assert.match(html, /直接选择本机 Codex 自定义宠物/);
 assert.match(html, /9 类动作/);
 assert.match(html, /保存后应用到桌面，并同步聊天头像/);
@@ -46,11 +46,11 @@ for (const page of [html,home]) {
 assert.match(html,/Intel 芯片版/);
 assert.doesNotMatch(html,/构建候选|尚未在真实 Intel Mac 上验收|尚待实机验收|检查未通过|检查超时/);
 
-// Primary Apple downloads always reach the current installer.
+// The store is the primary Mac route, with the current DMG kept as another option.
 for (const page of [html, home]) {
-  const primary = [...page.matchAll(/<a[^>]*class="[^"]*(?:button-primary|download-button)[^"]*"[^>]*data-download-arch="arm64"[^>]*>/g)];
+  const primary = [...page.matchAll(/<a[^>]*class="[^"]*(?:button-primary|download-button)[^"]*"[^>]*href="(https:\/\/apps\.apple\.com[^"]*)"[^>]*>/g)];
   assert.equal(primary.length, page === html ? 3 : 1);
-  assert.ok(primary.every(m => m[0].includes('href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.14/Qiuqiu-0.4.14-macOS-arm64.dmg"')));
+  assert.ok(primary.every(m => m[1] === 'https://apps.apple.com/cn/app/id6829348954?mt=12' && !m[0].includes('data-download-arch')));
   assert.match(page, /安装指南/);
   assert.doesNotMatch(page, /自动加速|免登录下载|不限速/);
 }

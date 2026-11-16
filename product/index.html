@@ -55,7 +55,7 @@
     <link rel="stylesheet" href="../review-refinements.css?v=20261006-type">
     <link rel="stylesheet" href="../native-demos.css?v=20261006-both-edges-floor">
     <link rel="stylesheet" href="../image-preview.css?v=20261006">
-    <link rel="stylesheet" href="../product-layout.css?v=20261026-release">
+    <link rel="stylesheet" href="../product-layout.css?v=20261116-app-store">
     <link rel="stylesheet" href="../flow-border.css?v=20261007-nav-6-6">
     <link rel="stylesheet" href="../feedback-entry.css?v=20261011-refine">
 
@@ -101,10 +101,10 @@
           <p class="hero-lead">免费 · 安静陪伴 · 不打扰你</p>
           <div class="hero-actions">
             <div class="download-split flow-border">
-              <a class="button button-primary" data-download-arch="arm64" data-download-position="hero" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.14/Qiuqiu-0.4.14-macOS-arm64.dmg" aria-label="Apple 芯片版 0.4.14，GitHub 下载"><svg class="apple-logo" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>下载球球</a>
+              <a class="button button-primary app-store-download" href="https://apps.apple.com/cn/app/id6829348954?mt=12"><svg class="apple-logo" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>在 Mac App Store 下载</a>
               <details data-channel-menu>
-                <summary aria-label="安装指南"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></summary>
-                <div class="download-popover" role="group" aria-label="安装帮助"><a class="domestic-download" href="#install">安装指南</a></div>
+                <summary aria-label="其他下载方式"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></summary>
+                <div class="download-popover" role="group" aria-label="其他下载方式"><a class="domestic-download" data-download-arch="arm64" data-download-position="hero" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.14/Qiuqiu-0.4.14-macOS-arm64.dmg">官网下载 0.4.14</a><a class="domestic-download" href="#install">安装指南</a></div>
               </details>
             </div>
             <a class="button button-secondary" href="#features">看看它会什么</a>
@@ -322,25 +322,26 @@
       <section class="download-section section" id="download" aria-labelledby="download-title">
         <div class="download-intro">
           <h2 id="download-title">选择与你的 Mac 匹配的版本</h2>
-          <p class="section-lead">按你的 Mac 芯片选择对应版本。国内下载使用微云，也可选择 GitHub 备用下载。</p>
+          <p class="section-lead">Apple 芯片 Mac 推荐从商店安装；如需 ZCode 或 WorkBuddy 联动，请选择官网版。</p>
         </div>
         <div class="download-grid">
           <article class="download-card download-card-primary">
             <div class="download-card-head">
               <div>
-                <p class="download-status">推荐，已验证</p>
+                <p class="download-status">Mac App Store 优先</p>
                 <h3>Apple 芯片版</h3>
               </div>
               <span class="architecture">arm64</span>
             </div>
             <p>适用于 M1、M2、M3、M4 及后续 Apple 芯片 Mac。需要 macOS 12.0 或更高版本。</p>
             <dl class="release-data">
-              <div><dt>版本</dt><dd>0.4.14</dd></div>
-              <div><dt>发布日期</dt><dd>2026-11-04</dd></div>
+              <div><dt>商店版</dt><dd>1.0.0</dd></div>
+              <div><dt>官网版</dt><dd>0.4.14</dd></div>
+              <div><dt>官网版发布日期</dt><dd>2026-11-04</dd></div>
             </dl>
             <div class="download-actions">
-              <a class="button button-primary" data-download-arch="arm64" data-download-position="download" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.14/Qiuqiu-0.4.14-macOS-arm64.dmg" aria-label="Apple 芯片版 0.4.14，GitHub 下载"><svg class="apple-logo" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>下载球球</a>
-              <a class="button button-secondary domestic-download" href="#install">安装指南</a>
+              <a class="button button-primary app-store-download" href="https://apps.apple.com/cn/app/id6829348954?mt=12"><svg class="apple-logo" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>在 Mac App Store 下载</a>
+              <a class="button button-secondary domestic-download" data-download-arch="arm64" data-download-position="download" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.14/Qiuqiu-0.4.14-macOS-arm64.dmg">官网下载 DMG</a>
             </div>
           </article>
 
@@ -367,7 +368,7 @@
       <section class="install-section section" id="install" aria-labelledby="install-title">
         <div class="install-copy">
           <h2 id="install-title">三步放到桌面上</h2>
-          <p class="section-note">macOS 安装包使用临时签名，未经过 Apple 公证。请确认下载来自本官网。</p>
+          <p class="section-note">以下步骤仅适用于官网下载的 DMG。该安装包使用临时签名，未经过 Apple 公证；商店版请在 Mac App Store 中安装。</p>
           <figure class="install-guide" aria-label="球球安装步骤图示">
             <div class="install-visual-steps">
               <div class="install-visual-step"><b class="install-step-number">01</b><svg viewBox="0 0 48 48" aria-hidden="true"><rect x="6" y="5" width="36" height="38" rx="5" fill="var(--surface-strong)" stroke="var(--line-strong)"></rect><circle cx="24" cy="23" r="11" fill="none" stroke="var(--text-soft)" stroke-width="2"></circle><circle cx="24" cy="23" r="3" fill="none" stroke="var(--text-soft)" stroke-width="2"></circle><path d="M14 38h20" stroke="var(--text-soft)" stroke-width="2"></path></svg><div><strong>下载并打开 DMG</strong><span>双击挂载磁盘镜像</span></div></div>
@@ -407,8 +408,8 @@
       <section class="closing-download" aria-labelledby="closing-download-title">
         <h2 id="closing-download-title">陪你工作，也帮你记事。</h2>
         <p>随手记便签、安排待办，常用应用的额度与进展也有球球替你留意。</p>
-        <a class="button button-primary" data-download-arch="arm64" data-download-position="download" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.14/Qiuqiu-0.4.14-macOS-arm64.dmg" aria-label="Apple 芯片版 0.4.14，GitHub 下载"><svg class="apple-logo" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>下载球球</a>
-        <div class="closing-download-meta"><span>0.4.14 · Apple 芯片</span><a class="domestic-download" href="#install">安装指南</a><a href="#download">Intel Mac / 其他下载</a></div>
+        <a class="button button-primary app-store-download" href="https://apps.apple.com/cn/app/id6829348954?mt=12"><svg class="apple-logo" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>在 Mac App Store 下载</a>
+        <div class="closing-download-meta"><span>1.0.0 · Apple 芯片</span><a class="domestic-download" data-download-arch="arm64" data-download-position="download" href="https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.14/Qiuqiu-0.4.14-macOS-arm64.dmg">官网下载 0.4.14</a><a href="#download">Intel Mac / 其他下载</a></div>
       </section>
     </main>
 
