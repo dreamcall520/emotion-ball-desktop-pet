@@ -50,7 +50,7 @@ assert.doesNotMatch(html,/构建候选|尚未在真实 Intel Mac 上验收|尚�
 for (const page of [html, home]) {
   const primary = [...page.matchAll(/<a[^>]*class="[^"]*(?:button-primary|download-button)[^"]*"[^>]*href="(https:\/\/apps\.apple\.com[^"]*)"[^>]*>/g)];
   assert.equal(primary.length, page === html ? 3 : 1);
-  assert.ok(primary.every(m => m[1] === 'https://apps.apple.com/cn/app/id6829348954?mt=12' && !m[0].includes('data-download-arch')));
+  assert.ok(primary.every(m => m[1] === 'https://apps.apple.com/cn/app/%E7%90%83%E7%90%83%E6%A1%8C%E5%AE%A0/id6829348954?mt=12' && !m[0].includes('data-download-arch')));
   assert.match(page, /安装指南/);
   assert.doesNotMatch(page, /自动加速|免登录下载|不限速/);
 }
