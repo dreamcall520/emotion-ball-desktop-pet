@@ -63,7 +63,7 @@ function createWorkBuddyQuota({ run = runWorkBuddy, onChange = () => {}, now = D
     }
     return histories[key] || [];
   }
-  const emptyState = enabled => ({ enabled, busy: false, error: null, errorCode: null, nextRetryAt: null,
+  const emptyState = enabled => ({ enabled, busy: false, error: null, errorCode: null, nextRetryAt: null, diagnostic: null,
     report: null, accountKey: null, stale: false, history: [], historyError: null });
   let state = emptyState(false);
   let timer = null, controller = null, generation = 0, closed = false, failures = 0;
@@ -103,7 +103,7 @@ function createWorkBuddyQuota({ run = runWorkBuddy, onChange = () => {}, now = D
     timer = null;
     const current = ++generation;
     controller = new AbortController();
-    state.busy = true; state.error = null; state.errorCode = null; state.nextRetryAt = null; notify();
+    state.busy = true; state.error = null; state.errorCode = null; state.nextRetryAt = null; state.diagnostic = null; notify();
     try {
       const result = await run('quota', {}, { signal: controller.signal });
       if (current !== generation) return getState();
@@ -113,14 +113,18 @@ function createWorkBuddyQuota({ run = runWorkBuddy, onChange = () => {}, now = D
       }
       failures = 0;
       const history = appendHistory(result.accountKey, report);
-      state = { ...state, busy: false, error: null, errorCode: null, report, accountKey: result.accountKey, stale: false, history,
+      state = { ...state, busy: false, error: null, errorCode: null, diagnostic: null, report, accountKey: result.accountKey, stale: false, history,
         historyError: historyProblem ? '积分趋势暂时无法保存，本次余额已更新。' : null };
     } catch (error) {
       if (current !== generation) return getState();
       failures++;
       const code = errorCode(error?.code);
       const clear = clearsAccount(code) || Boolean(error?.accountKey && error.accountKey !== state.accountKey);
+      const delay = retryDelay(code, failures);
       state = { ...state, busy: false, error: errorMessage(code), errorCode: code,
+        diagnostic: { failureCount: failures, stage: ['quota-auth', 'quota-request', 'quota-parse', 'quota-query'].includes(error?.stage) ? error.stage : 'quota-query',
+          ...(Number.isInteger(error?.httpStatus) && error.httpStatus >= 100 && error.httpStatus <= 599 ? { httpStatus: error.httpStatus } : {}),
+          retryable: delay !== null, ...(delay !== null ? { retryDelayMs: delay } : {}) },
         history: clear ? [] : state.history, historyError: clear ? null : state.historyError,
         report: clear ? null : state.report, accountKey: clear ? null : state.accountKey, stale: clear ? false : Boolean(state.report) };
     }

@@ -115,3 +115,17 @@ test('quota retains stale results only for transient errors and clears on login/
   await quota.refresh(); assert.equal(quota.getState().report, null); assert.equal(quota.getState().accountKey, null);
   outcome = Object.assign(new Error(), { code: 'ACCOUNT_CHANGED' }); await quota.refresh(); assert.equal(quota.getState().report, null); quota.close();
 });
+
+test('runner accepts only bounded provider diagnostics and never arbitrary packet data', async () => {
+  for (const diagnostic of [{ stage: 'quota-request', httpStatus: 429 }, { stage: 'secret-path', httpStatus: 1000 }]) {
+    const child = fakeChild(), run = createWorkBuddyRunner({ spawnProcess: () => child });
+    const pending = run('quota');
+    child.stdout.write(JSON.stringify({ type: 'error', code: 'RATE_LIMITED', ...diagnostic, message: 'secret', token: 'secret' }) + '\n');
+    child.emit('close', 1);
+    await assert.rejects(pending, error => {
+      assert.equal(error.code, 'RATE_LIMITED'); assert.equal(error.token, undefined);
+      assert.equal(error.stage, diagnostic.stage === 'quota-request' ? 'quota-request' : undefined);
+      assert.equal(error.httpStatus, diagnostic.httpStatus === 429 ? 429 : undefined); return true;
+    });
+  }
+});

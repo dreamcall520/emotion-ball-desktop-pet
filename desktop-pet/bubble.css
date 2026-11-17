@@ -4,7 +4,7 @@
   --bubble-surface: linear-gradient(135deg, #fffffff2, #f2f0f9eb);
   --bubble-text: #3b3c52;
   --bubble-line: #ffffffb3;
-  --bubble-shadow: inset 0 1px 0 #ffffffe6, 0 3px 8px #69659014;
+  --bubble-shadow: 0 3px 8px #69659014;
   --bubble-dot: #f3f1f9eb;
   --bubble-button: linear-gradient(#ece8f6, #e5e0f0);
   --bubble-button-text: #655d82;
@@ -21,7 +21,7 @@
   --bubble-surface: linear-gradient(135deg, #414453f2, #343a4ceb);
   --bubble-text: #f3f0fa;
   --bubble-line: #ffffff20;
-  --bubble-shadow: inset 0 1px 0 #ffffff12, 0 3px 8px #00000026;
+  --bubble-shadow: 0 3px 8px #00000026;
   --bubble-dot: #393e50eb;
   --bubble-button: linear-gradient(#68627d, #5b586f);
   --bubble-button-text: #eee8fb;
@@ -72,7 +72,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif
   align-items: center;
   gap: 9px;
   border: 1px solid var(--bubble-line);
-  border-radius: 30px 34px 26px 32px;
+  border-radius: 30px;
+  background-clip: padding-box;
   background: var(--bubble-surface);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);

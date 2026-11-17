@@ -7,7 +7,15 @@
 #include <memory>
 #include <string>
 
+struct SafeLocationDiagnostic {
+  bool mainThread = false, servicesEnabled = false, locationStarted = false, timedOut = false;
+  unsigned int authorizationCallbacks = 0, locationCallbacks = 0, receivedSamples = 0, staleSamples = 0, invalidSamples = 0, unknownFailures = 0;
+  int nativeErrorCode = 0;
+  const char *authorizationStatus = "unknown";
+};
+static SafeLocationDiagnostic diagnostic;
 static const NSTimeInterval kRequestTimeout = 15.0;
+static const NSTimeInterval kAuthorizationTimeout = 120.0;
 static const NSTimeInterval kGeocodeTimeout = 1.2;
 static const char *StatusName(CLAuthorizationStatus status) {
   switch (status) {
@@ -32,6 +40,19 @@ static napi_value ErrorValue(napi_env env, const char *code) {
 }
 
 
+static napi_value DiagnosticValue(napi_env env, const SafeLocationDiagnostic &value) {
+  napi_value result, authorization; napi_create_object(env, &result);
+  napi_create_string_utf8(env, value.authorizationStatus, NAPI_AUTO_LENGTH, &authorization);
+  napi_set_named_property(env, result, "locationAuthorization", authorization);
+  for (const auto &field : {std::make_pair("locationMainThread", value.mainThread), std::make_pair("locationStarted", value.locationStarted)}) {
+    napi_value flag; napi_get_boolean(env, field.second, &flag); napi_set_named_property(env, result, field.first, flag);
+  }
+  SetNumber(env, result, "locationCallbacks", value.locationCallbacks);
+  SetNumber(env, result, "locationUnknownFailures", value.unknownFailures);
+  SetNumber(env, result, "locationSamplesRejected", value.staleSamples + value.invalidSamples);
+  return result;
+}
+
 struct LocationResult {
   const char *errorCode;
   double latitude;
@@ -39,6 +60,7 @@ struct LocationResult {
   double accuracy;
   std::string name;
   std::string locationLabel;
+  SafeLocationDiagnostic diagnostic;
 };
 struct PromiseContext { napi_deferred deferred; };
 static void DeletePromiseContext(napi_env env, void *data, void *hint) {
@@ -50,7 +72,9 @@ static void ResolveOnJsThread(napi_env env, napi_value callback, void *context, 
   if (!env || !context || !result) return;
   auto *promise = static_cast<PromiseContext *>(context);
   if (result->errorCode) {
-    napi_reject_deferred(env, promise->deferred, ErrorValue(env, result->errorCode));
+    napi_value error = ErrorValue(env, result->errorCode);
+    napi_set_named_property(env, error, "diagnostic", DiagnosticValue(env, result->diagnostic));
+    napi_reject_deferred(env, promise->deferred, error);
   } else {
     napi_value value;
     if (napi_create_object(env, &value) != napi_ok) return;
@@ -96,6 +120,7 @@ static NSString *CleanLocality(NSString *value) {
 - (void)finish:(CLLocation *)location error:(const char *)errorCode {
   if (self.completed) return;
   self.completed = YES;
+  diagnostic.timedOut = errorCode && std::string(errorCode) == "LOCATION_TIMEOUT";
   __attribute__((objc_precise_lifetime)) WeatherLocationRequest *keepAlive = self;
   [self.manager stopUpdatingLocation];
   self.manager.delegate = nil;
@@ -108,7 +133,7 @@ static NSString *CleanLocality(NSString *value) {
     location ? location.coordinate.longitude : 0,
     location ? location.horizontalAccuracy : 0,
     self.locationName ? std::string(self.locationName.UTF8String ?: "") : std::string(),
-    self.locationLabel ? std::string(self.locationLabel.UTF8String ?: "") : std::string()};
+    self.locationLabel ? std::string(self.locationLabel.UTF8String ?: "") : std::string(), diagnostic};
   napi_threadsafe_function completion = self.completion;
   self.completion = nullptr;
   if (!completion || napi_call_threadsafe_function(completion, result, napi_tsfn_nonblocking) != napi_ok) delete result;
@@ -120,6 +145,7 @@ static NSString *CleanLocality(NSString *value) {
   if (self.completed) return;
   if (![CLLocationManager locationServicesEnabled]) { [self finish:nil error:"LOCATION_SERVICES_DISABLED"]; return; }
   CLAuthorizationStatus status = self.manager.authorizationStatus;
+  diagnostic.authorizationStatus = StatusName(status);
   if (status == kCLAuthorizationStatusDenied) { [self finish:nil error:"LOCATION_DENIED"]; return; }
   if (status == kCLAuthorizationStatusRestricted) { [self finish:nil error:"LOCATION_RESTRICTED"]; return; }
   if (status == kCLAuthorizationStatusNotDetermined) {
@@ -129,21 +155,33 @@ static NSString *CleanLocality(NSString *value) {
     }
     return;
   }
-  if (!self.started) { self.started = YES; [self.manager startUpdatingLocation]; }
+  if (!self.started) {
+    self.started = YES;
+    diagnostic.locationStarted = true;
+    // Permission-dialog reading time must not consume the location acquisition deadline.
+    if (self.timer) dispatch_source_set_timer(self.timer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kRequestTimeout * NSEC_PER_SEC)), DISPATCH_TIME_FOREVER, 100 * NSEC_PER_MSEC);
+    [self.manager startUpdatingLocation];
+  }
 }
 - (void)start {
+  diagnostic = SafeLocationDiagnostic{};
+  diagnostic.mainThread = pthread_main_np();
+  diagnostic.servicesEnabled = [CLLocationManager locationServicesEnabled];
   self.manager = [[CLLocationManager alloc] init];
   self.manager.desiredAccuracy = kCLLocationAccuracyKilometer;
   self.manager.distanceFilter = kCLDistanceFilterNone;
-  self.manager.delegate = self;
   self.timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
   __weak WeatherLocationRequest *weakSelf = self;
   dispatch_source_set_event_handler(self.timer, ^{
     WeatherLocationRequest *request = weakSelf;
-    if (request) [request finish:request.resolvedLocation error:request.resolvedLocation ? nullptr : "LOCATION_TIMEOUT"];
+    if (request) {
+      const char *failure = diagnostic.locationStarted && diagnostic.unknownFailures && diagnostic.receivedSamples == 0 ? "LOCATION_NO_FIX" : "LOCATION_TIMEOUT";
+      [request finish:request.resolvedLocation error:request.resolvedLocation ? nullptr : failure];
+    }
   });
-  dispatch_source_set_timer(self.timer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kRequestTimeout * NSEC_PER_SEC)), DISPATCH_TIME_FOREVER, 100 * NSEC_PER_MSEC);
+  dispatch_source_set_timer(self.timer, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kAuthorizationTimeout * NSEC_PER_SEC)), DISPATCH_TIME_FOREVER, 100 * NSEC_PER_MSEC);
   dispatch_resume(self.timer);
+  self.manager.delegate = self;
   [self startIfAuthorized];
 }
 - (void)resolveName:(CLLocation *)location {
@@ -175,19 +213,24 @@ static NSString *CleanLocality(NSString *value) {
     });
   }];
 }
-- (void)locationManagerDidChangeAuthorization:(CLLocationManager *)manager { [self startIfAuthorized]; }
-- (void)locationManager:(CLLocationManager *)manager didChangeAuthorizationStatus:(CLAuthorizationStatus)status { [self startIfAuthorized]; }
+- (void)locationManagerDidChangeAuthorization:(CLLocationManager *)manager { diagnostic.authorizationCallbacks++; [self startIfAuthorized]; }
+- (void)locationManager:(CLLocationManager *)manager didChangeAuthorizationStatus:(CLAuthorizationStatus)status { diagnostic.authorizationCallbacks++; [self startIfAuthorized]; }
 - (void)locationManager:(CLLocationManager *)manager didUpdateLocations:(NSArray<CLLocation *> *)locations {
+  diagnostic.locationCallbacks++;
+  diagnostic.receivedSamples += locations.count;
   for (CLLocation *location in locations.reverseObjectEnumerator) {
     NSTimeInterval age = -location.timestamp.timeIntervalSinceNow;
     if (CLLocationCoordinate2DIsValid(location.coordinate) && std::isfinite(location.horizontalAccuracy) &&
         location.horizontalAccuracy >= 0 && age >= -30 && age <= 300) {
       [self resolveName:location]; return;
     }
+    if (age < -30 || age > 300) diagnostic.staleSamples++;
+    else diagnostic.invalidSamples++;
   }
 }
 - (void)locationManager:(CLLocationManager *)manager didFailWithError:(NSError *)error {
-  if (error.code == kCLErrorLocationUnknown) return;
+  diagnostic.nativeErrorCode = (int)error.code;
+  if (error.code == kCLErrorLocationUnknown) { diagnostic.unknownFailures++; return; }
   [self finish:nil error:error.code == kCLErrorDenied ? "LOCATION_DENIED" : "LOCATION_UNAVAILABLE"];
 }
 - (void)abandon {
@@ -213,6 +256,7 @@ static napi_value Status(napi_env env, napi_callback_info info) {
   napi_set_named_property(env, result, "servicesEnabled", enabled);
   return result;
 }
+static napi_value Diagnostics(napi_env env, napi_callback_info info) { return DiagnosticValue(env, diagnostic); }
 static napi_value Locate(napi_env env, napi_callback_info info) {
   napi_value promise; napi_deferred deferred;
   napi_create_promise(env, &deferred, &promise);
@@ -242,9 +286,10 @@ static void Cleanup(void *data) {
 static napi_value Init(napi_env env, napi_value exports) {
   napi_property_descriptor properties[] = {
     {"status", nullptr, Status, nullptr, nullptr, nullptr, napi_default, nullptr},
+    {"diagnostics", nullptr, Diagnostics, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"locate", nullptr, Locate, nullptr, nullptr, nullptr, napi_default, nullptr}
   };
-  napi_define_properties(env, exports, 2, properties);
+  napi_define_properties(env, exports, sizeof(properties) / sizeof(properties[0]), properties);
   napi_add_env_cleanup_hook(env, Cleanup, env);
   return exports;
 }

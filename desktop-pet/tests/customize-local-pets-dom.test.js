@@ -34,6 +34,7 @@ assert.equal(await run("(()=>{const s=document.getElementById('skin-promo-action
 }finally{await cdp.sendCommand('CSS.forcePseudoState',{nodeId:promotionSelectNode,forcedPseudoClasses:[]});}
 assert.equal(win.isVisible(),false,'focus-visible style regression does not need a visible or active native window');
 await run("document.getElementById('skin-promo-close').click()");
+// Chromium queues dialog close events; a hidden native host can delay them until after a reopen.
 await until("!document.getElementById('skin-promotion').open&&promotionPlayer.getState().active===false",'previous promotion close listener finished');
 assert.deepEqual(await run("({tabs:[...document.querySelectorAll('.source-switch button[aria-controls]')].map(e=>e.getAttribute('aria-pressed')),draft:document.getElementById('preset-name').value,current:JSON.stringify(current),saves:saves.length,imports:localPets.length})"),beforePromotion,'promotion entry cannot switch tabs, apply/save/import skins, or replace an unsaved form draft');
 await run("document.getElementById('preset-name').value=''");

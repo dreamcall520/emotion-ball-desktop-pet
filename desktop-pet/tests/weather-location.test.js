@@ -53,3 +53,26 @@ test('optional real city labels are validated without discarding valid coordinat
   assert.deepEqual(await bridge({ name: 'x'.repeat(81), locationLabel: '' }).locate(), coords);
   assert.deepEqual(await bridge({ name: '北京\n市', locationLabel: '\0' }).locate(), { ...coords, name: '北京 市' });
 });
+
+test('system no-fix errors retain only bounded non-location diagnostic evidence', async () => {
+  const diagnostic = { locationAuthorization: 'granted', locationMainThread: true, locationStarted: true,
+    locationCallbacks: 0, locationUnknownFailures: 1, locationSamplesRejected: 0,
+    latitude: 39.9, longitude: 116.4, name: 'private city', ssid: 'private network', token: 'secret' };
+  const native = binding({ locate: async () => { throw Object.assign(Error('private native detail'), { code: 'LOCATION_NO_FIX', diagnostic }); } });
+  const bridge = createLocationBridge({ platform: 'darwin', native });
+  await assert.rejects(bridge.locate(), error => {
+    assert.equal(error.code, 'LOCATION_NO_FIX');
+    assert.deepEqual(error.diagnostic, { locationAuthorization: 'granted', locationMainThread: true, locationStarted: true,
+      locationCallbacks: 0, locationUnknownFailures: 1, locationSamplesRejected: 0 });
+    assert.match(error.message, /系统暂时无法确定/);
+    assert.doesNotMatch(JSON.stringify(error), /private|secret|latitude|longitude|ssid|token/);
+    return true;
+  });
+});
+test('malformed native diagnostic fields cannot enter a location error', async () => {
+  const bridge = createLocationBridge({ platform: 'darwin', native: binding({ locate: async () => {
+    throw Object.assign(Error('private'), { code: 'LOCATION_TIMEOUT', diagnostic: { locationAuthorization: '/Users/private',
+      locationMainThread: 'true', locationStarted: 1, locationCallbacks: -1, locationUnknownFailures: 1000001, locationSamplesRejected: NaN } });
+  } }) });
+  await assert.rejects(bridge.locate(), error => error.code === 'LOCATION_TIMEOUT' && error.diagnostic === undefined);
+});

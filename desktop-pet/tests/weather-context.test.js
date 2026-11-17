@@ -24,7 +24,7 @@ test('unknown AQI standard is omitted rather than relabeled US AQI', () => {
   assert(!context.includes('美国标准）88'));
 });
 test('reminders are grounded, contextual and suppressible', () => {
-  assert(weatherReminder(state, 'pet', now).includes('预报降水概率80%'));
+  assert(weatherReminder(state, 'pet', now).includes('今天可能下雨'));
   assert(weatherReminder({ ...state, current: { ...state.current, weatherCode: 61 } }, 'play', now).includes('可能有雨'));
   assert(weatherReminder({ ...state, current: { ...state.current, windSpeed: 30 } }, 'edge', now).includes('贴稳'));
   assert.equal(weatherReminder(state, { event: 'pet', quiet: true }, now), '');
@@ -43,7 +43,7 @@ test('rain, cold and air reminders use compact edge copy and natural interaction
  const cases=[
   [{current:{...state.current,weatherCode:61}},'外面可能有雨，带把伞呀。','可能有雨，出门带把伞呀。'],
   [{current:{...state.current,temperature:5}},'外面有点冷，穿暖一点呀。','外面有点冷，出门加件衣服呀。'],
-  [{airQuality:{aqi:155,standard:'us'}},'US AQI 155，出门留意空气呀。','US AQI 155，出门前看看空气质量呀。']
+  [{airQuality:{aqi:155,standard:'us'}},'空气质量差，外出注意防护呀。','空气质量差，外出注意防护呀。']
  ];
  for(const [patch,edge,interaction] of cases){
   const sample={...state,daily:[],...patch};

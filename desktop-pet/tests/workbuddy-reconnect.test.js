@@ -143,3 +143,19 @@ test('native auth directory watcher observes atomic replacement of a temporary f
   }
   await replace(); await replace();
 });
+
+test('quota failures retain only safe stage, status and retry policy and clear diagnostics on recovery', async () => {
+  let broken = true;
+  const f = fixture(async () => {
+    if (broken) throw Object.assign(fail('RATE_LIMITED'), { stage: 'quota-request', httpStatus: 429, token: 'secret' });
+    return success(10);
+  });
+  f.quota.setEnabled(true); await tick();
+  assert.deepEqual(f.quota.getState().diagnostic, { failureCount: 1, stage: 'quota-request', httpStatus: 429, retryable: true, retryDelayMs: 300000 });
+  assert.doesNotMatch(JSON.stringify(f.quota.getState()), /secret/);
+  broken = false; await f.advance(300000);
+  assert.equal(f.quota.getState().diagnostic, null); f.quota.close();
+  const login = fixture(async () => { throw Object.assign(fail('LOGIN_REQUIRED'), { stage: 'secret-stage', httpStatus: 1000 }); });
+  login.quota.setEnabled(true); await tick();
+  assert.deepEqual(login.quota.getState().diagnostic, { failureCount: 1, stage: 'quota-query', retryable: false }); login.quota.close();
+});
