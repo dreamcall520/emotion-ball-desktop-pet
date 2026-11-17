@@ -18,11 +18,11 @@ const oldArticles = articles.slice(5), oldBlocks = articleBlocks.slice(5);
 test('Mac App Store 1.0.0 milestone is the first record and links to the listing', () => {
   assert.match(milestoneBlock, /id="v1\.0\.0-app-store"/);
   assert.match(milestone, /<time datetime="2026-11-16">2026-11-16 <small class="release-milestone">里程碑<\/small><\/time>/);
-  assert.match(milestone, /正式上架 Mac App Store/);
-  assert.match(milestone, /商店版 1\.0\.0/);
+  assert.match(milestone, /<h3 id="v1\.0\.0-app-store-title">1\.0\.0 App Store 版<\/h3>/);
+  assert.match(milestone, /<div class="update-group"><h4>1\.【发布】Mac App Store 首发<\/h4><ul><li>球球桌宠正式上架/);
   assert.equal(downloads[0], storeURL);
-  assert.match(html, /<option value="v1\.0\.0-app-store">[^<]*里程碑<\/option>/);
-  assert.match(html, /href="#v1\.0\.0-app-store" data-release-link>/);
+  assert.match(html, /<option value="v1\.0\.0-app-store">2026-11-16 · 1\.0\.0 App Store 版 · 里程碑<\/option>/);
+  assert.match(html, /href="#v1\.0\.0-app-store" data-release-link>[^\n]*<span>1\.0\.0 App Store 版<\/span>/);
 });
 
 test('0.4.14 improves weather, bubbles and diagnostics',()=>{assert.match(articleBlocks[0],/v0\.4\.14-apple/);for(const text of ['天气','城市搜索结果更清晰','统一圆角与描边','问题诊断'])assert.ok(articles[0].includes(text));});
