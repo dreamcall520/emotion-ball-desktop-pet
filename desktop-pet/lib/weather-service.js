@@ -2,6 +2,7 @@
 
 const CACHE_MS = 30 * 60 * 1000;
 const MAX_DATA_AGE_MS = 90 * 60 * 1000, MAX_FUTURE_MS = 15 * 60 * 1000;
+const FORECAST_RETRY_TIMEOUT_MS = 4000;
 const MESSAGES = { INVALID_LOCATION: '请选择有效城市。', INVALID_RESPONSE: '天气数据不完整，本次未更新。',
   TIMEOUT: '天气查询超时，稍后重试。', RATE_LIMITED: '天气查询较频繁，请稍后重试。',
   DATA_OLD: '数据时间较早', CONNECTION_FAILED: '暂时无法连接天气服务。', SERVICE_UNAVAILABLE: '天气服务暂不可用。' };
@@ -53,11 +54,11 @@ function createWeatherService({ fetch: fetchImpl = globalThis.fetch, now = Date.
     return { status: stale ? 'stale' : 'ready', data: { ...data, location }, updatedAt, fromCache,
       error: stale ? { code: 'DATA_OLD', message: MESSAGES.DATA_OLD } : null };
   }
-  async function request(url) {
+  async function request(url, deadlineMs = timeoutMs) {
     const controller = new AbortController(); let timer, httpStatus;
     try {
       const response = await Promise.race([fetchImpl(url, { signal: controller.signal, redirect: 'error' }),
-        new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(errorFor('TIMEOUT')); }, timeoutMs); })]);
+        new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(errorFor('TIMEOUT')); }, deadlineMs); })]);
       if (Number.isInteger(response.status) && response.status >= 100 && response.status <= 599) httpStatus = response.status;
       if (!response.ok) throw errorFor(response.status === 429 ? 'RATE_LIMITED' : 'SERVICE_UNAVAILABLE');
       // Keep the timeout active until the response body has completed too.
@@ -73,6 +74,16 @@ function createWeatherService({ fetch: fetchImpl = globalThis.fetch, now = Date.
     }
     finally { clearTimeout(timer); }
   }
+  async function requestForecast(endpoint, shouldRetry) {
+    try {
+      return await request(endpoint);
+    } catch (error) {
+      const retryable = error.code === 'TIMEOUT' || error.code === 'CONNECTION_FAILED'
+        || (error.httpStatus >= 500 && error.httpStatus <= 599);
+      if (!retryable || !shouldRetry()) throw error;
+      return request(endpoint, Math.min(timeoutMs, FORECAST_RETRY_TIMEOUT_MS));
+    }
+  }
   function url(origin, path, params) { const value = new URL(path, origin); value.search = new URLSearchParams(params).toString(); return value.href; }
   async function searchCities(query) {
     if (typeof query !== 'string' || query.trim().length < 2) return [];
@@ -86,7 +97,7 @@ function createWeatherService({ fetch: fetchImpl = globalThis.fetch, now = Date.
     const centers = cities.filter(city => city.administrative && city.name.replace(/[市县区]$/, '') === query.trim().replace(/[市县区]$/, ''));
     return centers.length ? centers : cities.sort((a, b) => Number(b.administrative) - Number(a.administrative));
   }
-  async function getWeather(value, { force = false } = {}) {
+  async function getWeather(value, { force = false, shouldRetry = () => true } = {}) {
     const location = normalizeLocation(value), key = `${location.latitude},${location.longitude}`;
     let entry = cache.get(key);
     if (entry && (!Number.isFinite(entry.data.current.time) || entry.data.current.time > now() + MAX_FUTURE_MS)) { cache.delete(key); entry = null; }
@@ -97,10 +108,10 @@ function createWeatherService({ fetch: fetchImpl = globalThis.fetch, now = Date.
       const air = request(url('https://air-quality-api.open-meteo.com', '/v1/air-quality', { ...params, current: 'us_aqi,pm2_5' }))
         .then(parseAirQuality).catch(() => null);
       try {
-        const raw = await request(url('https://api.open-meteo.com', '/v1/forecast', { ...params, forecast_days: '7', wind_speed_unit: 'kmh',
+        const raw = await requestForecast(url('https://api.open-meteo.com', '/v1/forecast', { ...params, forecast_days: '7', wind_speed_unit: 'kmh',
           current: 'temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,is_day,wind_speed_10m,wind_direction_10m',
           hourly: 'temperature_2m,weather_code,precipitation_probability,is_day',
-          daily: 'temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,sunrise,sunset,uv_index_max' }));
+          daily: 'temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,sunrise,sunset,uv_index_max' }), shouldRetry);
         const data = parseForecast(raw, location);
         if (!Number.isFinite(data.current.time) || data.current.time > now() + MAX_FUTURE_MS) throw errorFor('INVALID_RESPONSE');
         data.airQuality = await air;

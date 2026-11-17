@@ -14,7 +14,7 @@ function fixture(t, { area = { x: 0, y: 0, width: 1000, height: 800 }, petBounds
   const handlers = new Map(), windows = [], changes = [], requests = [], layouts = [], errors = [], module = { exports: {} };
   let groupHidden = false, petVisible = true, layoutHook = () => {};
   let suppressed = false, persistFails = false;
-  const service = { searchCities: async () => [], getWeather(city) { const d = deferred(); requests.push({ city, ...d }); return d.promise; } };
+  const service = { searchCities: async () => [], getWeather(city, options) { const d = deferred(); requests.push({ city, options, ...d }); return d.promise; } };
   const mockedFs = Object.create(fs); mockedFs.renameSync = (...args) => { if (persistFails) throw Object.assign(Error('fixture storage unavailable'), { code: 'EACCES' }); return fs.renameSync(...args); };
   class Window extends EventEmitter {
     constructor(options) { super(); this.options = options; this.visible = false; this.dead = false; this.sent = []; this.opacity = 1;
@@ -53,9 +53,25 @@ test('invalid latitude/longitude and empty city names never persist or fetch', a
   }
   assert.equal(f.requests.length, 0); assert.equal(JSON.parse(fs.readFileSync(f.filePath)).city, null);
 });
+test('manual selection confirms the saved city before the forecast and keeps it on failure', async t => {
+  const f = fixture(t);
+  const selected = await f.invoke('city', cityA);
+  assert.equal(selected.status, 'loading');
+  assert.equal(selected.city.name, '北京');
+  assert.equal(JSON.parse(fs.readFileSync(f.filePath)).city.mode, 'manual');
+  f.requests[0].resolve({ status: 'error', error: { code: 'TIMEOUT', message: '天气查询超时，稍后重试。' } });
+  await flushWindow();
+  assert.equal(f.controller.getState().city.name, '北京');
+  assert.equal(f.controller.getState().error, '天气查询超时，稍后重试。');
+  const retry = f.invoke('refresh');
+  f.requests[1].resolve(report(cityA));
+  assert.equal((await retry).status, 'ready');
+});
 test('late previous-city response cannot replace the newly selected city', async t => {
   const f = fixture(t), first = f.invoke('city', cityA), second = f.invoke('city', cityB);
   assert.equal(f.requests.length, 2);
+  assert.equal(f.requests[0].options.shouldRetry(), false);
+  assert.equal(f.requests[1].options.shouldRetry(), true);
   f.requests[1].resolve(report(cityB)); await second;
   const changes = f.changes.length;
   f.requests[0].resolve(report(cityA)); await first;

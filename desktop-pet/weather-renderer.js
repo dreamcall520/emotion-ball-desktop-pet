@@ -44,7 +44,8 @@
   function emptyPresentation(state) {
     if (state.status === 'loading') return { kind: 'loading', title: '正在获取天气', message: '', retry: '获取中…' };
     if (state.status === 'unconfigured' || !state.city) return { kind: 'unconfigured', title: '选择天气位置', message: '使用定位或手动选择', retry: '使用当前位置' };
-    return { kind: 'error', title: '暂时无法获取天气', message: '请重试或选择城市', retry: '重试' };
+    const message = typeof state.error === 'string' && state.error ? state.error : '请重试或选择城市';
+    return { kind: 'error', title: '暂时无法获取天气', message, retry: '重试' };
   }
   function chart(data) {
     const valid = data.filter(day => finite(day.min) && finite(day.max));
@@ -76,6 +77,7 @@
       assert.equal(emptyPresentation({ status: 'loading' }).kind, 'loading');
       assert.equal(emptyPresentation({ status: 'unconfigured' }).retry, '使用当前位置');
       assert.equal(emptyPresentation({ status: 'error', city: { name: '北京' } }).kind, 'error');
+      assert.equal(emptyPresentation({ status: 'error', city: { name: '北京' }, error: '天气查询超时，稍后重试。' }).message, '天气查询超时，稍后重试。');
       assert.deepEqual(locationLabels({ mode: 'current', name: '当前位置', displayName: '北京市 · 朝阳区' }), { title: '当前位置', source: '北京市 · 朝阳区' });
       assert.equal(locationLabels({ mode: 'current', name: '北京' }).source, '北京');
       assert.equal(locationLabels({ mode: 'current', name: '当前位置' }).source, '设备定位');
@@ -217,7 +219,17 @@
   el('source-details').addEventListener('toggle', () => { el('source-toggle').setAttribute('aria-expanded', String(el('source-details').open)); resize(); });
   const contentSizeObserver = new ResizeObserver(resize);
   contentSizeObserver.observe(el('weather-details')); contentSizeObserver.observe(el('city-picker'));
-  async function act(action) { try { const next = await action(); if (next && !next.needsLocation) render(next); return next; } catch (error) { render({ ...state, status: 'error', error: '暂时无法获取天气' }); return null; } }
+  async function act(action) {
+    const revision = liveRevision;
+    try {
+      const next = await action();
+      if (revision === liveRevision && next && !next.needsLocation) render(next);
+      return next;
+    } catch {
+      if (revision === liveRevision) render({ ...state, status: 'error', error: '暂时无法获取天气' });
+      return null;
+    }
+  }
   function requestLocation() {
     if (!state.requireLocationConsent) return locate();
     if (locationConsent.open || el('use-location').disabled) return;

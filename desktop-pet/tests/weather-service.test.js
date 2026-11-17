@@ -49,8 +49,44 @@ test('timeout covers stalled fetch and stalled JSON; rate limits are safe failur
   for (const fetch of [() => new Promise(() => {}), async () => ({ ok: true, json: () => new Promise(() => {}) })]) {
     const result = await createWeatherService({ fetch, timeoutMs: 10 }).getWeather(location); assert.equal(result.error.code, 'TIMEOUT');
   }
-  const result = await createWeatherService({ fetch: async () => ({ ok: false, status: 429 }) }).getWeather(location);
+  let forecastCalls = 0;
+  const result = await createWeatherService({ fetch: async url => {
+    if (url.includes('/v1/forecast')) forecastCalls++;
+    return { ok: false, status: 429 };
+  } }).getWeather(location);
   assert.equal(result.error.code, 'RATE_LIMITED');
+  assert.equal(forecastCalls, 1);
+});
+
+test('a transient forecast failure retries once for the selected city', async () => {
+  for (const failFirst of [
+    () => new Promise(() => {}),
+    () => Promise.reject(new Error('interrupted')),
+    () => Promise.resolve({ ok: false, status: 503 })
+  ]) {
+    const urls = [];
+    const service = createWeatherService({ now: () => modelTime, timeoutMs: 15, fetch: url => {
+      if (url.includes('/v1/air-quality')) return response(air());
+      urls.push(url);
+      return urls.length === 1 ? failFirst() : response(fixture());
+    } });
+    const fresh = await service.getWeather({ ...location, mode: 'manual' });
+    assert.equal(fresh.status, 'ready');
+    assert.equal(fresh.data.current.temperature, -2);
+    assert.equal(urls.length, 2);
+    assert.equal(urls[0], urls[1]);
+  }
+});
+
+test('a forecast for an inactive selection cannot retry', async () => {
+  let calls = 0;
+  const service = createWeatherService({ fetch: async url => {
+    if (url.includes('/v1/forecast')) calls++;
+    return { ok: false, status: 503 };
+  } });
+  const result = await service.getWeather(location, { shouldRetry: () => false });
+  assert.equal(result.error.code, 'SERVICE_UNAVAILABLE');
+  assert.equal(calls, 1);
 });
 
 test('model time ahead by more than 15 minutes is rejected, not relabeled with retrieval time', async () => {

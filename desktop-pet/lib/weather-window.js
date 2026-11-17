@@ -194,10 +194,11 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
   async function refresh(force = false) {
     if (!enabled || suspended || !city) return publish();
     const token = revision, requested = city;
+    const isCurrent = () => token === revision && enabled && !suspended;
     state = { ...state, city, status: 'loading', error: null }; publish();
     try {
-      const result = await service.getWeather(requested, { force });
-      if (token !== revision || !enabled || suspended) return state;
+      const result = await service.getWeather(requested, { force, shouldRetry: isCurrent });
+      if (!isCurrent()) return state;
       if (result.error?.code && result.error.code !== 'DATA_OLD') onError({ code: result.error.code }, { stage: 'weather-refresh', httpStatus: result.error.httpStatus });
       const data = result.data;
       const previous = state;
@@ -205,14 +206,17 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
         : { status: 'error', city: requested, error: result.error?.message || result.error || '天气暂时无法获取' };
       if (!data && previous.current && previous.city?.latitude === requested.latitude && previous.city?.longitude === requested.longitude) state = { ...previous, city: requested, status: 'stale', error: state.error };
       if (state.status === 'ready') saveCache();
-    } catch (error) { if (token !== revision || !enabled || suspended) return state; state = { ...state, status: state.current ? 'stale' : 'error', error: '天气更新失败，请稍后重试' }; onError(error, { stage: 'weather-refresh', httpStatus: error?.httpStatus }); }
+    } catch (error) { if (!isCurrent()) return state; state = { ...state, status: state.current ? 'stale' : 'error', error: '天气更新失败，请稍后重试' }; onError(error, { stage: 'weather-refresh', httpStatus: error?.httpStatus }); }
     return publish();
   }
-  async function select(value, mode = 'manual', waitForWeather = true) {
+  async function select(value, mode = 'manual') {
     if (!validCity(value)) throw new Error('请选择有效城市');
     const previous = city; city = { name: value.name.trim(), latitude: value.latitude, longitude: value.longitude, ...(typeof value.displayName === 'string' && value.displayName.trim() && value.displayName.length <= 100 ? { displayName: value.displayName.trim() } : {}), timezone: typeof value.timezone === 'string' ? value.timezone : 'auto', mode, ...(mode === 'current' && requireLocationConsent ? { locationSharingAccepted: true } : {}) };
     try { persist(); } catch (error) { city = previous; throw error; }
-    revision++; state = { status: 'loading', city }; if (waitForWeather) return refresh(); void refresh(); return publish();
+    revision++;
+    state = { status: 'loading', city };
+    void refresh();
+    return publish();
   }
   const trusted = event => Boolean(win && !win.isDestroyed() && event.sender === win.webContents && event.senderFrame === win.webContents.mainFrame && event.senderFrame.url === pathToFileURL(path.join(__dirname, '../weather.html')).href);
   for (const [channel, handler] of Object.entries({
@@ -231,7 +235,7 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
         win.focus?.();
         const coordinates = await locationBridge.locate();
         if (token !== revision || !enabled || !win?.isVisible()) return { cancelled: true };
-        return await select({ ...coordinates, name: coordinates.name || '当前位置', displayName: coordinates.locationLabel || coordinates.name }, 'current', false);
+        return await select({ ...coordinates, name: coordinates.name || '当前位置', displayName: coordinates.locationLabel || coordinates.name }, 'current');
       } catch (error) {
         if (token === revision && enabled && !['LOCATION_DENIED', 'LOCATION_RESTRICTED', 'LOCATION_SERVICES_DISABLED', 'LOCATION_BUSY', 'CANCELLED'].includes(error.code)) onError(error, { stage: 'weather-location', ...error.diagnostic });
         return { locationError: { code: error.code || 'LOCATION_UNAVAILABLE', message: error.message } };
