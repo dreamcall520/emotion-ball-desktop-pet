@@ -312,10 +312,11 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     assert.equal(await run("document.querySelector('[data-quota-card=weather] [aria-label=启用天气]')"),null);
     assert.equal(await run("document.querySelector('[data-quota-card=weather] [aria-label=天气与城市设置]')"),null);
     assert.equal(await run("document.querySelectorAll('[data-quota-card=weather] input').length"),2,'weather card management contains display and pin only');
-    assert.equal(await run("document.querySelector('#navigation [data-view=weather-settings]').closest('[role=group]').getAttribute('aria-label')"),'外观与显示');
+    assert.equal(await run("document.querySelector('#navigation [data-view=weather-settings]').closest('[role=group]').getAttribute('aria-label')"),'应用与联动');
     await run("document.querySelector('#navigation [data-view=weather-settings]').click()");
     assert.equal(await run("document.querySelector('#navigation [aria-current=page]').textContent"),'天气');
     assert.equal(await run("document.querySelector('[aria-label=启用天气]').getAttribute('role')"),'switch');
+    assert.equal(await run("document.querySelector('[aria-label=天气与城市设置]')"),null);
     await run("document.querySelector('[aria-label=启用天气]').click()");await run('new Promise(resolve=>setTimeout(resolve,10))');
     assert.equal(await run("findEntry('/weather-enabled').checked"),true);
     await run("document.querySelector('[aria-label=天气与城市设置]').click()");await run('new Promise(resolve=>setTimeout(resolve,10))');
@@ -326,6 +327,42 @@ if (process.versions.electron && process.argv.includes('--settings-dom-child')) 
     await run("document.querySelector('[data-quota-card=weather] [aria-label=天气固定展示]').click()");await run('new Promise(resolve=>setTimeout(resolve,10))');
     assert.equal(await run("snapshot.quotaCards.pinned.includes('weather')"),true);
     assert.equal(await run("findEntry('/weather-visible').checked"),false,'pin weather cannot implicitly enable visibility');
+    await run("snapshot.firstReleaseConnection={connected:true,chatReady:true,working:false};navigate('/codex-menu')");
+    assert.equal(await run("document.querySelector('.store-codex-identity').textContent"),'本机 Codex已连接');
+    assert.deepEqual(await run("[...document.querySelectorAll('.store-codex-identity button')].map(e=>e.textContent)"), ['解除连接']);
+    await run("navigate('codex-reconnect')");
+    const consent = await run("document.querySelector('dialog[open]').textContent");
+    assert.match(consent,/授权 Codex 联动.*查看额度.*发送消息.*OpenAI.*同意并连接/s);
+    assert.equal(await run("document.querySelectorAll('dialog[open] .store-codex-terms dd').length"),2);
+    assert.equal(await run("document.activeElement.textContent"),'取消');
+    await run("document.querySelector('dialog[open] button[value=cancel]').click()");
+    await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.equal(await run("document.querySelector('dialog[open]')"),null);
+    assert.equal(await run("document.querySelector('#content').textContent.includes('撤回聊天授权')"),false);
+    await run("window.snapshot.firstReleaseConnection={connected:false,chatReady:false,working:false};window.snapshot.version='fresh-link';window.linkActions=[];window.qiuqiuSettings.codexConnection=async action=>{linkActions.push(action);return {status:'app-authorized'}};window.dispatchEvent(new Event('focus'))");
+    await run('new Promise(resolve=>setTimeout(resolve,30))');
+    await run("document.querySelector('[data-action=store-codex-connection]').click()");
+    await run("document.querySelector('dialog[open] button[value=confirm]').click()");
+    await run('new Promise(resolve=>setTimeout(resolve,30))');
+    const directory = await run("document.querySelector('dialog[open]').textContent");
+    assert.match(directory,/查看额度.*发送消息.*同意并选择目录/s);
+    assert.equal(await run("document.querySelectorAll('.store-codex-terms > div:last-child dd p').length"),1);
+    assert.match(directory,/问天气时可能含城市和天气摘要.*OpenAI.*账号额度/s);
+    assert.deepEqual(await run("[...document.querySelectorAll('dialog[open] button')].map(button=>button.textContent)"),['取消','同意并选择目录']);
+    assert.doesNotMatch(directory,/~\/\.codex|目录选项/);
+    assert.equal(await run("document.querySelector('dialog[open]').scrollWidth <= document.querySelector('dialog[open]').clientWidth"),true);
+    assert.equal(await run("[...document.querySelectorAll('.store-codex-terms > div')].every(group=>{const title=group.querySelector('dt').getBoundingClientRect(),body=group.querySelector('dd').getBoundingClientRect();return title.left===body.left&&title.bottom<=body.top})"),true);
+    if (process.env.PET_SETTINGS_CONSENT_SCREENSHOT) {
+      const rect = await run("(()=>{const r=document.querySelector('dialog[open]').getBoundingClientRect();return {x:Math.floor(r.x)-12,y:Math.floor(r.y)-12,width:Math.ceil(r.width)+24,height:Math.ceil(r.height)+24}})()");
+      fs.writeFileSync(process.env.PET_SETTINGS_CONSENT_SCREENSHOT,(await win.webContents.capturePage(rect)).toPNG());
+    }
+    await run("window.qiuqiuSettings.codexConnection=async action=>{linkActions.push(action);return {status:'invalid-directory'}};document.querySelector('dialog[open] button[value=confirm]').click()");
+    await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.match(await run("document.querySelector('.store-codex-error').textContent"),/选错目录.*~\/\.codex/);
+    await run("document.querySelector('.store-codex-error button').click()");
+    await run("document.querySelector('dialog[open] button[value=cancel]').click()");
+    await run('new Promise(resolve=>setTimeout(resolve,30))');
+    assert.deepEqual(await run('linkActions'),['app','account','cancel']);
     win.destroy(); process.stdout.write('SETTINGS_DOM_OK\n'); app.exit(0);
   }).catch(error => { process.stderr.write(error.stack + '\n'); app.exit(1); });
 } else {

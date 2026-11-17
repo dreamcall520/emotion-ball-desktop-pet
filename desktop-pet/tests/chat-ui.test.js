@@ -601,7 +601,7 @@ test('模型保存失败回到已保存选项，提示与聊天错误分离，�
   await select.dispatch('change');
   assert.equal(select.value, 'gpt-full');
   assert.equal(f.get('model-hint').textContent, '这个模型暂不可用');
-  assert.equal(f.get('model-feedback').className, 'model-feedback');
+  assert.equal(f.get('model-feedback').className, 'model-feedback chat-notice');
   assert.equal(f.get('error-banner').hidden, true);
   throws = true;
   select.value = 'auto';
@@ -917,6 +917,32 @@ test('三家聊天来源始终可见，未授权项打开授权页而不伪装�
   assert.deepEqual(opened, ['zcode', 'workbuddy', 'workbuddy']);
   f.receive({ ...state, sources: state.sources.map(item => ({ ...item, enabled: false })) });
   assert.equal(f.get('source-bar').hidden, false, 'all unready tools still have an authorization entry');
+});
+
+test('未连接时只显示通用连接提示，连接后模型错误提供独立重试', async () => {
+  const opened = [];
+  const f = fixture({ openConnections: async source => { opened.push(source); return { accepted: true }; } });
+  await flush();
+  const disconnected = { ...idle(), source: 'codex', connection: 'error', modelSelection: 'gpt-6-luna', modelsStatus: 'idle',
+    sources: [{ id: 'codex', enabled: false, needsAuthorization: true }], error: '未找到 Codex。' };
+  f.receive(disconnected);
+  assert.equal(f.get('error-banner').hidden, true);
+  assert.equal(f.get('source-feedback').hidden, false);
+  assert.equal(f.get('source-hint').textContent, '连接本机应用后即可聊天。');
+  assert.equal(f.get('empty-source-note').hidden, true);
+  assert.equal(f.get('model-bar').hidden, true);
+  assert.equal(f.get('model-feedback').hidden, true);
+  await f.get('enable-chat-source').dispatch('click');
+  assert.deepEqual(opened, ['codex']);
+
+  const linked = { ...disconnected, connection: 'ready', error: null, sources: [{ id: 'codex', enabled: false, needsAuthorization: false }] };
+  f.receive(linked);
+  assert.equal(f.get('source-feedback').hidden, true);
+  assert.equal(f.get('model-feedback').className, 'sr-only');
+  assert.doesNotMatch(f.get('chat-model').textContent, /暂不可用/);
+  f.receive({ ...linked, modelsStatus: 'error', modelsError: '暂时无法读取模型列表。' });
+  assert.equal(f.get('model-hint').textContent, '暂时无法读取模型列表。');
+  assert.equal(f.get('refresh-models').hidden, false);
 });
 
 test('WorkBuddy跳转专用聊天不改当前来源，授权入口preload只传固定provider', async () => {

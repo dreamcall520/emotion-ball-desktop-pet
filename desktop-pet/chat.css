@@ -104,9 +104,10 @@ h1 { font-size: 16px; line-height: 22px; font-weight: 600; margin: 0; letter-spa
 .model-option-label { display: block; overflow-wrap: anywhere; line-height: 20px; }
 .model-option-description { display: block; margin-top: 1px; color: var(--muted); font-size: 11px; line-height: 17px; white-space: nowrap; }
 .model-menu-separator { height: 1px; margin: 6px 7px; background: var(--line); }
-.model-feedback { display: flex; align-items: center; gap: 6px; min-width: 0; height: 18px; padding: 3px 4px 0; }
-.model-feedback p { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--error); font-size: 9px; line-height: 15px; }
-.model-feedback .text-button { flex: 0 0 auto; margin-left: auto; padding: 0 3px; color: var(--accent); font-size: 9px; line-height: 15px; text-decoration: underline; text-underline-offset: 2px; }
+.chat-notice { display:flex; align-items:center; gap:10px; flex:0 1 auto; min-width:0; margin:0 12px 8px; padding:7px 8px 7px 11px; border:1px solid var(--line); border-radius:10px; background:var(--raised); color:var(--muted); }
+.chat-notice p { min-width:0; margin:0; font-size:11px; line-height:1.55; overflow-wrap:anywhere; }
+.chat-notice .text-button { flex:0 0 auto; margin-inline-start:auto; padding:5px 9px; min-height:26px; border-radius:6px; background:var(--hover); color:var(--accent-text); font-size:11px; }
+.chat-notice .text-button:hover:enabled { background:var(--primary); }
 .conversation { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 14px 12px 12px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 .history-view { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 14px 12px; }
 .history-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 17px; }
@@ -196,7 +197,7 @@ textarea::placeholder { color: var(--muted); }
 /* Same thin input orbit as the approved notes composer. */
 @property --input-beam-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
 @keyframes inputBeamOrbit { to { --input-beam-angle: 1turn; } }
-.composer > :is(textarea,.composer-tools,.model-feedback) { position: relative; z-index: 1; }
+.composer > :is(textarea,.composer-tools) { position: relative; z-index: 1; }
 .composer::before, .composer::after {
   content: ""; position: absolute; inset: 0; z-index: 3; padding: 1px;
   border-radius: 11px; pointer-events: none;

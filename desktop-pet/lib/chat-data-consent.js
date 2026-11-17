@@ -46,7 +46,7 @@ function context(raw) {
     fingerprint: hash([...identity, raw.conversationKey ?? null, raw.revision ?? null]),
     origin: origin.origin, billing: raw.billing, channel: raw.channel };
 }
-function disclosure(value, chatOnlyDisclosure = false) {
+function disclosure(value) {
   const name = { codex: 'Codex', zcode: 'ZCode', workbuddy: 'WorkBuddy' }[value.provider];
   if(value.channel==='notes-organize')return{
     title:'允许将当前便签发送给 Codex 整理？',
@@ -62,11 +62,16 @@ function disclosure(value, chatOnlyDisclosure = false) {
     detail: '接收服务：' + value.origin + '\n' + value.billing +
       '\n这项同意只用于当前工具、账号与服务来源；切换账号或接收服务后需要重新确认。' +
       (value.persistable ? '' : '\n当前账号身份尚未核实，本次同意不会保存，下次发送需重新确认。') +
-      (chatOnlyDisclosure ? '\n拒绝不会发送消息。可随时在工具连接页撤销聊天数据同意，或解除该工具授权。' : '\n拒绝不会发送消息。可随时在工具连接页撤销 AI 数据同意（含聊天与便签整理），或解除该工具授权。'),
+      '\n拒绝不会发送消息。可随时在工具连接页撤销 AI 数据同意（含聊天与便签整理），或解除该工具授权。',
     buttons: ['暂不发送', '同意并发送'], defaultId: 0, cancelId: 0, noLink: true, type: 'question'
   };
 }
-function createChatDataConsent({ store, request, chatOnlyDisclosure = false } = {}) {
+// The link purpose has its own scope so earlier chat-only consents never grant it.
+function codexLinkContext(accountKey) {
+  return { provider: 'codex', channel: 'codex-link', recipientOrigin: 'https://chatgpt.com',
+    billing: '使用当前本机 Codex 账号额度', accountKey };
+}
+function createChatDataConsent({ store, request } = {}) {
   if (!store || typeof store.read !== 'function' || typeof store.write !== 'function' || typeof request !== 'function') throw new TypeError('consent store and request required');
   let pending = false, closed = false;
   const revisions = new Map();
@@ -75,28 +80,33 @@ function createChatDataConsent({ store, request, chatOnlyDisclosure = false } = 
     revisions.set(provider, (revisions.get(provider) || 0) + 1);
     store.write(store.read().filter(row => row.provider !== provider));
   }
-  async function run({ getContext, isCurrent = () => true, send, requestConsent = request } = {}) {
+  const has = value => value.persistable && store.read().some(row =>
+    row.version === VERSION && row.provider === value.provider && row.scope === value.scope);
+  function grant(value) {
+    if (!value.persistable) throw failure('CONSENT_CONTEXT');
+    const latest = store.read().filter(row => row.provider !== value.provider || row.scope !== value.scope);
+    store.write([...latest.slice(-63), { version: VERSION, provider: value.provider, scope: value.scope }]);
+  }
+  async function run({ getContext, isCurrent = () => true, send, requestConsent = request, requireExisting = false } = {}) {
     if (closed || pending) return denied('正在确认聊天发送，请稍候。');
     if (typeof getContext !== 'function' || typeof send !== 'function') return denied('聊天来源暂时无法核对，消息未发送。');
     pending = true;
     try {
       if (!isCurrent()) return denied('聊天窗口或来源已变化，消息未发送。');
       const before = context(await getContext()), revision = revisions.get(before.provider) || 0;
-      const rows = store.read();
-      const known = before.persistable && rows.some(row => row.version === VERSION && row.provider === before.provider && row.scope === before.scope);
-      if (!known && await requestConsent(disclosure(before,chatOnlyDisclosure===true)) !== true) return { ...denied('你已取消，消息未发送。'), cancelled: true };
+      const known = has(before);
+      if (!known && requireExisting) return { ...denied('请完成 Codex 连接授权，再发送消息。'), needsLinkConsent: true };
+      if (!known && await requestConsent(disclosure(before)) !== true) return { ...denied('你已取消，消息未发送。'), cancelled: true };
       const after = context(await getContext());
       if (closed || !isCurrent() || before.fingerprint !== after.fingerprint || revision !== (revisions.get(before.provider) || 0)) return denied('账号、来源或会话已变化，请重新确认后发送。');
-      if (!known && after.persistable) {
-        const latest = store.read().filter(row => row.provider !== after.provider || row.scope !== after.scope);
-        store.write([...latest.slice(-63), { version: VERSION, provider: after.provider, scope: after.scope }]);
-      }
+      if (!known && after.persistable) grant(after);
       // No await between the final owner/context check and the actual send call.
       if (closed || !isCurrent() || revision !== (revisions.get(before.provider) || 0)) return denied('聊天授权已变化，消息未发送。');
       return send();
     } catch (_) { return denied('无法安全核对聊天数据同意，消息未发送。请重新连接后再试。'); }
     finally { pending = false; }
   }
-  return { run, revoke, close() { closed = true; } };
+  return { run, revoke, hasCodexLink: accountKey => has(context(codexLinkContext(accountKey))),
+    grantCodexLink: accountKey => grant(context(codexLinkContext(accountKey))), close() { closed = true; } };
 }
-module.exports = { createChatDataConsent, createChatDataConsentStore, VERSION };
+module.exports = { createChatDataConsent, createChatDataConsentStore, codexLinkContext, VERSION };

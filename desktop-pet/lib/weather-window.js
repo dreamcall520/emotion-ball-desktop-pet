@@ -36,10 +36,11 @@ function weatherExpandedBounds(pet, area, size, obstacles = [], previous = null)
   candidates.sort((a, b) => a.overlap - b.overlap || a.distance - b.distance || a.movement - b.movement);
   return candidates[0].bounds;
 }
-function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, getPetWindow, getObstacles = () => [], getStackAnchor = () => null, getCollectionWindow = () => null, getBubbleBounds = () => null, getPresentation = () => null, getSuppressed = () => false, getCityPickerSuppressed = null, getAppearance = () => 'system', getReducedMotion = () => false, locationBridge = createLocationBridge(), onLayout = () => {}, onChange = () => {}, onError = () => {}, alwaysOnTop = true }) {
+function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, getPetWindow, getObstacles = () => [], getStackAnchor = () => null, getCollectionWindow = () => null, getBubbleBounds = () => null, getPresentation = () => null, getSuppressed = () => false, getCityPickerSuppressed = null, getAppearance = () => 'system', getReducedMotion = () => false, requireLocationConsent = false, locationBridge = createLocationBridge(), onLayout = () => {}, onChange = () => {}, onError = () => {}, alwaysOnTop = true }) {
   const service = createWeatherService({ fetch });
   let win = null, enabled = false, timer = null, revision = 0, city = null, state = { status: 'unconfigured', city: null }, suspended = false;
   let cardVisible = true, groupTransitionMode = null, groupEpoch = 0, ready = false, cityRequested = false, explicitOpen = false;
+  let cityOwner = null;
   let size = { width: 128, height: 32 }, topmost = alwaysOnTop, expandedAnchor = null, requestedBounds = null;
   let closing = null, collapseEpoch = 0, collapseOverlay = null;
   const collapseContext = () => { const pet = getPetWindow(); return pet && !pet.isDestroyed() ? JSON.stringify([pet.getBounds(), screen.getDisplayMatching(pet.getBounds()).workArea]) : ''; };
@@ -56,8 +57,13 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
   async function boundedPaint(promise, label) { let timer; try { return await Promise.race([promise, new Promise((_,reject) => { timer = setTimeout(() => reject(Error('天气收起'+label+'超时')), 600); })]); } finally { clearTimeout(timer); } }
   function overlay() { return collapseOverlay ||= createQuotaCardTransitionWindow({ BrowserWindow, ipcMain, getAlwaysOnTop: () => topmost, onError }); }
   function cancelCollapse() { collapseEpoch++; closing = null; if (win && !win.isDestroyed()) win.setOpacity?.(1); collapseOverlay?.hide(); }
-  function resetExpanded() { cancelCollapse(); explicitOpen = false; cityRequested = false; size = { width: 128, height: 32 }; expandedAnchor = null; win?.webContents.send('weather:collapse'); }
-  try { const saved = JSON.parse(fs.readFileSync(filePath, 'utf8')); city = validCity(saved.city) ? saved.city : null; enabled = saved.enabled === true; cardVisible = saved.cardVisible !== false; } catch (error) { if (error.code !== 'ENOENT') onError(error); }
+  function endCityOpen() {
+    explicitOpen = false;
+    if (cityOwner && !topmost && win && !win.isDestroyed()) win.setAlwaysOnTop(false);
+    cityOwner = null;
+  }
+  function resetExpanded() { cancelCollapse(); endCityOpen(); cityRequested = false; size = { width: 128, height: 32 }; expandedAnchor = null; win?.webContents.send('weather:collapse'); }
+  try { const saved = JSON.parse(fs.readFileSync(filePath, 'utf8')); city = validCity(saved.city) && (!requireLocationConsent || saved.city.mode !== 'current' || saved.city.locationSharingAccepted === true) ? saved.city : null; enabled = saved.enabled === true; cardVisible = saved.cardVisible !== false; } catch (error) { if (error.code !== 'ENOENT') onError(error); }
   function persist() { fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 }); const temp = filePath + '.tmp'; fs.writeFileSync(temp, JSON.stringify({ enabled, city, cardVisible }), { mode: 0o600 }); fs.renameSync(temp, filePath); }
   const cacheFile = filePath + '.cache';
   try {
@@ -68,17 +74,26 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
     const temp = cacheFile + '.tmp';
     try { fs.writeFileSync(temp, JSON.stringify(state), { mode: 0o600 }); fs.renameSync(temp, cacheFile); } catch (error) { onError(error); }
   }
-  function publish() { const packet = { ...state, enabled, cardVisible, appearance: getAppearance() }; if (win && !win.isDestroyed()) win.webContents.send('weather:state', packet); onChange(packet); return packet; }
+  function publish() { const packet = { ...state, enabled, cardVisible, appearance: getAppearance(), requireLocationConsent }; if (win && !win.isDestroyed()) win.webContents.send('weather:state', packet); onChange(packet); return packet; }
   function reposition(animate = false) {
     if (closing) { if (collapseUsable(closing)) return; resetExpanded(); }
-    if (!win || win.isDestroyed() || groupTransitionMode === 'hold') return;
+    if (!win || win.isDestroyed() || (!explicitOpen && groupTransitionMode === 'hold')) return;
     const pet = getPetWindow();
-    if (!enabled || (!cardVisible && !explicitOpen) || suspended || ['hold','masked'].includes(groupTransitionMode) || (!explicitOpen && size.width !== 390 && getPresentation()?.quotaGroupHidden) || (explicitOpen && typeof getCityPickerSuppressed === 'function' ? getCityPickerSuppressed() : getSuppressed()) || !pet || pet.isDestroyed() || !pet.isVisible()) { win.hide(); return; }
-    const bounds = pet.getBounds(), area = screen.getDisplayMatching(bounds).workArea;
+    const owner = cityOwner && !cityOwner.isDestroyed() && cityOwner.isVisible() ? cityOwner : null;
+    const anchor = owner || (pet && !pet.isDestroyed() && (explicitOpen || pet.isVisible()) ? pet : null);
+    if (!enabled || (!cardVisible && !explicitOpen) || suspended || (!explicitOpen && groupTransitionMode === 'masked') || (!explicitOpen && size.width !== 390 && getPresentation()?.quotaGroupHidden) || (explicitOpen && typeof getCityPickerSuppressed === 'function' ? getCityPickerSuppressed() : getSuppressed()) || !anchor) { win.hide(); return; }
+    const bounds = anchor.getBounds(), area = screen.getDisplayMatching(bounds).workArea;
     const layoutKey = JSON.stringify([bounds, area]);
     if (size.width !== 390) expandedAnchor = null;
     let next;
-    if (size.width === 390) {
+    if (owner && explicitOpen) {
+      const width = Math.min(size.width, area.width), height = Math.min(size.height, area.height);
+      next = {
+        x: Math.round(Math.max(area.x, Math.min(bounds.x + (bounds.width - width) / 2, area.x + area.width - width))),
+        y: Math.round(Math.max(area.y, Math.min(bounds.y + (bounds.height - height) / 2, area.y + area.height - height))),
+        width, height
+      };
+    } else if (size.width === 390) {
       // Expanded weather owns the card area. Other quota cards are hidden by
       // onLayout, so their old stack/transparent carriers are not obstacles.
       next = weatherExpandedBounds(bounds, area, size, [getBubbleBounds()], expandedAnchor?.key === layoutKey ? expandedAnchor : null);
@@ -89,14 +104,15 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
     }
     const current = requestedBounds || win.getBounds?.();
     if (!current || ['x','y','width','height'].some(key => current[key] !== next[key])) { requestedBounds = { ...next }; win.setBounds(next, animate && !getReducedMotion()); }
-    if (!win.isVisible() && groupTransitionMode !== 'stage') win.showInactive();
-    win.setIgnoreMouseEvents?.(groupTransitionMode !== null, { forward: true });
+    if (!win.isVisible() && (explicitOpen || groupTransitionMode !== 'stage')) win.showInactive();
+    win.setIgnoreMouseEvents?.(!explicitOpen && groupTransitionMode !== null, { forward: true });
   }
   async function collapseWeather(value) {
     if (closing) { if (value?.reducedMotion === true || getReducedMotion()) { resetExpanded(); reposition(); onLayout(); return { collapsed: true, animated: false }; } return { pending: true }; }
     if (!win || win.isDestroyed() || size.width !== 390 || !win.isVisible() || getReducedMotion() || value?.reducedMotion === true) {
       const wasExpanded = size.width === 390; resetExpanded(); reposition(); if (wasExpanded) onLayout(); return { collapsed: true, animated: false };
     }
+    if (explicitOpen) { resetExpanded(); reposition(); onLayout(); return { collapsed: true, animated: false }; }
     const targetWindow = win, record = { token: ++collapseEpoch, context: collapseContext(), cardVisible };
     closing = record;
     const current = () => closing === record && record.token === collapseEpoch && targetWindow === win && !targetWindow.isDestroyed() && collapseUsable(record);
@@ -152,6 +168,13 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
       return { collapsed: true, animated: false };
     } finally { if (closing === record && !current()) { closing = null; resetExpanded(); reposition(); onLayout(); } }
   }
+  function showCityPicker(target) {
+    cityRequested = false;
+    if (!target.isVisible()) return;
+    target.webContents.send('weather:choose-city');
+    target.moveTop?.();
+    target.focus?.();
+  }
   function ensureWindow() {
     if (win && !win.isDestroyed()) return win;
     win = new BrowserWindow({ ...size, show: false, frame: false, transparent: true, resizable: false, skipTaskbar: true, alwaysOnTop: topmost, hasShadow: false,
@@ -163,8 +186,8 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     win.webContents.on('will-navigate', event => event.preventDefault());
-    win.webContents.on('did-finish-load', () => { if (owner === win) { ready = true; publish(); reposition(); if (cityRequested) { cityRequested = false; owner.webContents.send('weather:choose-city'); owner.show(); owner.focus?.(); } } });
-    win.on('closed', () => { if (owner === win) { cancelCollapse(); revision++; ready = false; win = null; } });
+    win.webContents.on('did-finish-load', () => { if (owner === win) { ready = true; publish(); reposition(); if (cityRequested) showCityPicker(owner); } });
+    win.on('closed', () => { if (owner === win) { cancelCollapse(); revision++; ready = false; cityOwner = null; win = null; } });
     void win.loadFile(path.join(__dirname, '../weather.html')).catch(onError);
     return win;
   }
@@ -186,7 +209,7 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
   }
   async function select(value, mode = 'manual', waitForWeather = true) {
     if (!validCity(value)) throw new Error('请选择有效城市');
-    const previous = city; city = { name: value.name.trim(), latitude: value.latitude, longitude: value.longitude, ...(typeof value.displayName === 'string' && value.displayName.trim() && value.displayName.length <= 100 ? { displayName: value.displayName.trim() } : {}), timezone: typeof value.timezone === 'string' ? value.timezone : 'auto', mode };
+    const previous = city; city = { name: value.name.trim(), latitude: value.latitude, longitude: value.longitude, ...(typeof value.displayName === 'string' && value.displayName.trim() && value.displayName.length <= 100 ? { displayName: value.displayName.trim() } : {}), timezone: typeof value.timezone === 'string' ? value.timezone : 'auto', mode, ...(mode === 'current' && requireLocationConsent ? { locationSharingAccepted: true } : {}) };
     try { persist(); } catch (error) { city = previous; throw error; }
     revision++; state = { status: 'loading', city }; if (waitForWeather) return refresh(); void refresh(); return publish();
   }
@@ -196,19 +219,20 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
     'weather:search': query => typeof query === 'string' && query.trim().length >= 2 && query.length <= 100 ? service.searchCities(query.trim()) : [],
     'weather:city': value => select(value),
     'weather:location': async value => {
-      if (value !== undefined && value !== null) throw new Error('定位仅接受系统位置');
+      if (value !== undefined && value !== null && value !== true) throw new Error('定位仅接受系统位置');
+      if (!enabled || suspended || !win?.isVisible() || (requireLocationConsent && value !== true)) return { cancelled: true };
       const token = revision;
       try {
-        ensureWindow().show(); win.focus?.();
+        win.focus?.();
         const coordinates = await locationBridge.locate();
-        if (token !== revision || !enabled || !win || win.isDestroyed()) return { cancelled: true };
+        if (token !== revision || !enabled || !win?.isVisible()) return { cancelled: true };
         return await select({ ...coordinates, name: coordinates.name || '当前位置', displayName: coordinates.locationLabel || coordinates.name }, 'current', false);
       } catch (error) { return { locationError: { code: error.code || 'LOCATION_UNAVAILABLE', message: error.message } }; }
     },
     'weather:resize': value => {
       const wasExpanded = size.width === 390, expanded = value === true || value?.expanded === true;
       if (expanded && closing) cancelCollapse();
-      if (!expanded) explicitOpen = false;
+      if (!expanded) endCityOpen();
       const next = { width: expanded ? 390 : 128, height: expanded ? Math.max(210, Math.min(720, Math.round(Number.isFinite(value?.height) ? value.height : 620))) : 32 };
       if (next.width === size.width && next.height === size.height) return size;
       size = next;
@@ -220,17 +244,35 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
       return size;
     }
   })) ipcMain.handle(channel, (event, value) => { if (!trusted(event)) return null; return handler(value); });
-  function setEnabled(value) { if (value !== true && closing) resetExpanded(); const previous = enabled; enabled = value === true; try { persist(); } catch (error) { enabled = previous; throw error; } revision++; clearInterval(timer); timer = null; if (enabled) { ensureWindow(); timer = setInterval(() => { if (!suspended) void refresh(); }, 30 * 60 * 1000); timer.unref?.(); void refresh(); } else win?.hide(); publish(); reposition(); onLayout(); }
+  function setEnabled(value) { if (value !== true && (closing || explicitOpen)) resetExpanded(); const previous = enabled; enabled = value === true; try { persist(); } catch (error) { enabled = previous; throw error; } revision++; clearInterval(timer); timer = null; if (enabled) { ensureWindow(); timer = setInterval(() => { if (!suspended) void refresh(); }, 30 * 60 * 1000); timer.unref?.(); void refresh(); } else win?.hide(); publish(); reposition(); onLayout(); }
   return { start() { if (enabled) setEnabled(true); }, setEnabled, isEnabled: () => enabled, getState: () => state, getWindow: () => win, getCollapseWindow: () => collapseOverlay?.getWindow() || null, isClosing: () => closing !== null, isExpanded: () => enabled && (cardVisible || explicitOpen) && size.width === 390, isCardVisible: () => cardVisible,
     setCardVisible(value) { const previous = cardVisible; cardVisible = value === true; try { persist(); } catch (error) { cardVisible = previous; throw error; } publish(); reposition(); onLayout(); },
     getBounds: () => win && !win.isDestroyed() && win.isVisible() ? win.getBounds() : null,
     getVisibleBounds: () => win && !win.isDestroyed() && (win.isVisible() || groupTransitionMode === 'stage') ? win.getBounds() : null,
     getLayoutMetrics: () => enabled && cardVisible ? { width: 128, height: 32, inset: 2 } : null,
     resetExpanded,
-    setGroupTransitionMode(mode) { if (closing && mode !== null) return; if (![null,'hold','stage','masked'].includes(mode) || mode === groupTransitionMode) return; groupTransitionMode = mode; groupEpoch++; if (mode === 'stage' || mode === 'masked') win?.hide(); reposition(); },
+    setGroupTransitionMode(mode) { if (closing && mode !== null) return; if (![null,'hold','stage','masked'].includes(mode) || mode === groupTransitionMode) return; groupTransitionMode = mode; groupEpoch++; if (!explicitOpen && (mode === 'stage' || mode === 'masked')) win?.hide(); reposition(); },
     captureGroupTransitionFrames() { if (closing) return Promise.resolve([]); const target = win, epoch = groupEpoch; return captureQuotaGroupFrames({ getTargets: () => [target], isReady: () => ready && enabled && cardVisible && win === target && !target.isDestroyed(), isCurrent: () => epoch === groupEpoch && win === target && (groupTransitionMode !== 'stage' || !getPresentation()?.quotaGroupHidden) }); },
-    setAlwaysOnTop(value) { topmost = Boolean(value); win?.setAlwaysOnTop(topmost, 'floating'); },
-    openCity() { cancelCollapse(); if (!enabled) setEnabled(true); explicitOpen = true; size = { width: 390, height: 210 }; const target = ensureWindow(); if (ready) { target.webContents.send('weather:choose-city'); target.show(); target.focus?.(); } else cityRequested = true; reposition(); onLayout(); },
+    setAlwaysOnTop(value) { topmost = Boolean(value); win?.setAlwaysOnTop(topmost || Boolean(cityOwner), 'floating'); },
+    openCity(owner) {
+      if (suspended || getCityPickerSuppressed?.()) return false;
+      cancelCollapse();
+      if (!enabled) setEnabled(true);
+      explicitOpen = true;
+      size = { width: 390, height: requireLocationConsent ? 250 : 210 };
+      const target = ensureWindow();
+      if (cityOwner !== owner) {
+        endCityOpen();
+        cityOwner = owner || null;
+        explicitOpen = true;
+        if (cityOwner && !topmost) target.setAlwaysOnTop(true, 'floating');
+      }
+      reposition();
+      if (ready) showCityPicker(target);
+      else cityRequested = true;
+      onLayout();
+      return true;
+    },
     open() { if (!enabled) setEnabled(true); ensureWindow(); reposition(); publish(); }, reposition,
     pause() { if (closing) resetExpanded(); suspended = true; revision++; win?.hide(); }, resume() { suspended = false; reposition(); if (enabled) void refresh(); },
     destroy() { cancelCollapse(); collapseOverlay?.destroy(); revision++; clearInterval(timer); win?.destroy(); win = null; for (const name of ['get','refresh','search','city','location','resize','collapse']) ipcMain.removeHandler('weather:' + name); } };

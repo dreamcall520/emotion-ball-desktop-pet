@@ -271,3 +271,16 @@ test('default HTTPS rejects redirects, errors, malformed and oversized bodies an
     assert.deepEqual(call.options.headers, { 'User-Agent': 'Qiuqiu/0.3.9', Accept: 'application/vnd.github+json' });
   }
 });
+
+test('Mac App Store checks the regional public Mac listing and rejects missing or mismatched listings', async () => {
+  const {checkMacStoreRelease} = require('../lib/app-update');
+  const listing = {trackId: 6829348954, kind: 'mac-software', bundleId: 'local.xiaokun.emotionball.pet', version: '1.0.10'};
+  const get = async url => {
+    assert.equal(new URL(url).searchParams.get('country'), 'cn');
+    return {results: [listing]};
+  };
+  assert.equal((await checkMacStoreRelease('1.0.9', 'CN', {get})).hasUpdate, true);
+  assert.equal((await checkMacStoreRelease('1.0.10', 'CN', {get})).hasUpdate, false);
+  await assert.rejects(checkMacStoreRelease('1.0.9', 'CN', {get: async () => ({results: []})}));
+  await assert.rejects(checkMacStoreRelease('1.0.9', 'CN', {get: async () => ({results: [{...listing, kind: 'software'}]})}));
+});

@@ -47,3 +47,17 @@ test('abort while native selection is pending cannot persist late grants; revoke
 });
 
 test('ordinary Electron cannot claim native MAS authority even if API is present',async t=>{const f=await fixture(t);const access=createMasInstalledCodexAccess({app:f.app,dialog:f.dialog,storage:f.storage,mas:false});assert.equal((await access.ensure({interactive:true})).status,'unavailable');assert.equal(f.requests.length,0);assert.equal(f.events.length,0);});
+
+test('staged authorization retains app choice across an invalid directory and commits a verified pair', async t => {
+ const f = await fixture(t), access = f.make();
+ f.selected.push(f.pick(f.appDir, 'app'), f.pick(f.root, 'wrong'), f.pick(f.accountDir, 'account'));
+ assert.equal((await access.ensure({ interactive:true, step:'app' })).status, 'app-authorized');
+ assert.equal(f.saved, null);
+ assert.equal((await access.ensure({ interactive:true, step:'account' })).status, 'invalid-directory');
+ assert.equal(f.requests[1].defaultPath, f.accountDir);
+ assert.equal(f.saved, null);
+ assert.deepEqual(await access.ensure({ interactive:true, step:'account' }), { status:'stored', changed:true });
+ assert.equal(f.requests[2].defaultPath, f.accountDir);
+ assert.equal(f.saved.account.directory, f.accountDir);
+ assert.equal(f.requests.filter(request => request.properties.includes('openFile')).length, 1);
+});

@@ -103,7 +103,9 @@
     }));
     const workbuddy = snapshot.entries.find(entry => entry.id === '/workbuddy-enabled');
     if (workbuddy) categories.push({ id: 'workbuddy-settings', label: 'WorkBuddy', children: snapshot.entries.filter(entry => /^\/workbuddy-(?:enabled|quota-visible|quota-fun)$/.test(entry.id)) });
-    const weather = snapshot.entries.filter(entry => ['/weather-enabled', '/weather-open'].includes(entry.id));
+    const weatherToggle = snapshot.entries.find(entry => entry.id === '/weather-enabled');
+    const weather = snapshot.entries.filter(entry => entry === weatherToggle ||
+      (entry.id === '/weather-open' && weatherToggle?.checked === true));
     if (weather.length) categories.push({ id: 'weather-settings', label: '天气', children: weather });
     const general = categories.find(entry => entry.label === '常规设置');
     if (general) categories[categories.indexOf(general)] = { ...general, children: [...general.children,
@@ -235,8 +237,8 @@
     const navigationGroups = [
       ['', ['常用设置']],
       ['日常陪伴', ['球球与互动', '和球球聊聊', '便签与待办', '番茄钟']],
-      ['外观与显示', ['定制球球', '球球尺寸', '贴边与显示', '界面配色', '天气']],
-      ['应用与联动', ['Codex', 'ZCode 联动', 'WorkBuddy', 'API 余额', '联动样式管理']],
+      ['外观与显示', ['定制球球', '球球尺寸', '贴边与显示', '界面配色']],
+      ['应用与联动', ['天气', 'Codex', 'ZCode 联动', 'WorkBuddy', 'API 余额', '联动样式管理']],
       ['快捷与常规', ['快捷键', '常规设置', '意见反馈']]
     ];
     $('navigation').replaceChildren(...navigationGroups.map(([label, labels]) => {
@@ -249,7 +251,7 @@
         const button = el('button');
         button.dataset.view = item.id;
         const iconLabel = item.label;
-        button.append(navigationIcon(iconLabel), el('span', item.label));
+        button.append(navigationIcon(iconLabel), el('span', item.label, 'nav-label'));
         if (item.external) { button.append(externalIcon()); button.title = '在独立窗口打开'; button.setAttribute('aria-label', `${item.label}（独立窗口）`); button.disabled = busy || !item.enabled; }
         if (selected === item.id) button.setAttribute('aria-current', 'page');
         button.onclick = () => item.external ? act(item) : selectView(item.id);
@@ -303,9 +305,12 @@
       if (category.id === '/codex-menu' && !query && codexTab === 'api') return apiSections;
       const enable = category.children.find(child => /\/(?:codex|zcode|workbuddy)-enabled$/.test(child.id));
       if (!enable) return apiSections;
-      const sections = [{ ...category, heading: '启用联动', children: [enable] }];
-      if (enable.checked !== true) return sections.concat(apiSections);
-      const children = category.children.filter(child => child !== enable && child !== apiGroup);
+      const storeCodex = category.id === '/codex-menu' && snapshot.firstReleaseConnection;
+      if (storeCodex && !storeCodex.connected) return [];
+      const sections = storeCodex ? [] : [{ ...category, heading: '启用联动', children: [enable] }];
+      if (!storeCodex && enable.checked !== true) return sections.concat(apiSections);
+      const children = category.children.filter(child => child !== enable && child !== apiGroup &&
+        (!storeCodex || !/\/codex-(?:status|tasks-open|trend-open)$/.test(child.id)));
       if (category.id === 'workbuddy-settings') return sections.concat([
         { ...category, heading: '积分卡显示', children: children.filter(child => child.id === '/workbuddy-quota-visible') },
         { ...category, heading: '积分趣味互动', children: children.filter(child => child.id === '/workbuddy-quota-fun') }
@@ -317,6 +322,10 @@
         ...category, heading, children: children.filter(child => module(child) === heading)
       })), apiSections);
     });
+    if (snapshot.firstReleaseConnection && (query ? '启用联动 本机连接 codex 授权 解除连接'.includes(query) : selected === '/codex-menu')) {
+      sections.push(storeCodexSection());
+      count++;
+    }
     for (const category of displayed) {
       if (!query && selected !== category.id) continue;
       const statusEntry = category.children.find(item => item.id.endsWith('/codex-status'));
@@ -339,7 +348,7 @@
         }
         const provider = item.id.startsWith('/zcode-menu/') ? 'zcode' : item.id.includes('/codex-') ? 'codex' : null;
         const providerOff = provider && snapshot.entries.find(entry => entry.id === `/${provider}-menu`)?.children.find(entry => entry.id.endsWith(`/${provider}-enabled`))?.checked === false;
-        const detail = [item.trail.join(' / '), descriptions[item.label], !item.enabled && (providerOff ? `请先开启「启用 ${provider === 'zcode' ? 'ZCode' : 'Codex'} 联动」。` : '当前不可用，请先开启对应功能或满足使用条件。')].filter(Boolean).join(' · ');
+        const detail = [item.trail.join(' / '), descriptions[item.label], !item.enabled && (providerOff && provider === 'codex' && snapshot.firstReleaseConnection ? '请先连接本机 Codex。' : providerOff ? `请先开启「启用 ${provider === 'zcode' ? 'ZCode' : 'Codex'} 联动」。` : '当前不可用，请先开启对应功能或满足使用条件。')].filter(Boolean).join(' · ');
         if (detail) text.append(el('p', detail, 'description'));
         row.append(text);
         if (item.type === 'select') {
@@ -406,6 +415,178 @@
     if (apiSectionRequested) { document.querySelector('[data-settings-section="openai-api"]')?.scrollIntoView({ block: 'start' }); apiSectionRequested = false; }
     if (focusId) Array.from(document.querySelectorAll('[data-action]')).find(node => node.dataset.action === focusId)?.focus();
   }
+  let codexNotice = null;
+  const codexLinkTerms = [
+    ['查看额度', '球球通过你选的目录，使用已登录账号查看额度。', 'Codex 可能更新该目录里的日志、会话或缓存。'],
+    ['发送消息', '发送时，消息和对话上下文（问天气时可能含城市和天气摘要）会发给 OpenAI，并使用当前账号额度。']
+  ];
+  function storeCodexSection() {
+    const state = snapshot.firstReleaseConnection;
+    const section = el('section', '', 'group');
+    section.append(el('h3', '启用联动'));
+    const row = el('div', '', 'row');
+    const info = el('div');
+    const identity = el('div', '', 'store-codex-identity');
+    const icon = el('img');
+    icon.alt = ''; icon.src = 'assets/integrations/codex-default.png';
+    identity.append(icon, el('span', '本机 Codex', 'row-title'));
+    info.append(identity);
+    if (!state.connected && (busy || state.working)) {
+      const progress = el('span', '正在处理连接…', 'store-codex-progress');
+      progress.setAttribute('role', 'status');
+      identity.append(progress);
+    } else {
+      const status = el('span', state.connected ? (!state.chatReady ? '已连接 · 聊天待恢复' : '已连接') : '未连接', 'store-codex-state');
+      if (state.connected) status.dataset.connected = '';
+      status.setAttribute('role', 'status');
+      identity.append(status);
+    }
+    if (!state.connected) {
+      info.append(el('p', '连接后可查看 Codex 额度，也可以和球球聊天。', 'description store-codex-summary'));
+    }
+    row.append(info);
+    const actions = el('div', '', 'store-codex-identity');
+    const button = el('button', state.connected ? '解除连接' : codexNotice?.status === 'retry-connect' ? '重试连接' : '连接', state.connected ? 'action' : 'action store-codex-primary');
+    button.type = 'button';
+    button.dataset.action = 'store-codex-connection';
+    button.disabled = busy || state.working;
+    button.onclick = () => void (state.connected ? disconnectStoreCodex()
+      : connectStoreCodex(codexNotice?.status === 'retry-connect' ? 'confirm' : 'app'));
+    actions.append(button);
+    row.append(actions);
+    section.append(row);
+    if (codexNotice) {
+      const notice = el('div', '', 'store-codex-error');
+      const message = el('p', codexNotice.message, 'description');
+      message.setAttribute('role', 'status');
+      notice.append(message);
+      if (codexNotice.status === 'invalid-directory' && !busy) {
+        const retry = el('button', '重新选择', 'action');
+        retry.type = 'button';
+        retry.onclick = () => void connectStoreCodex('account');
+        notice.append(retry);
+      }
+      section.append(notice);
+    }
+    if (!state.connected) {
+      const disclosure = el('div', '', 'store-codex-disclosure');
+      disclosure.append(el('h4', '授权说明'));
+      const scope = el('dl');
+      for (const [label, description] of [
+        ['访问范围', '访问本机 Codex 应用和你授权的账号目录。'],
+        ['本地数据', 'Codex 可能更新该目录里的日志、会话或缓存。'],
+        ['发送消息', '仅在你主动发送时，将消息和当前对话上下文交给 OpenAI。']
+      ]) scope.append(el('dt', label), el('dd', description));
+      disclosure.append(scope);
+      section.append(disclosure);
+    }
+    return section;
+  }
+
+  function confirmStoreCodex(title, paragraphs, label, { target, path, terms } = {}) {
+    const dialog = el('dialog', '', 'store-codex-dialog');
+    dialog.setAttribute('aria-labelledby', 'store-codex-dialog-title');
+    dialog.setAttribute('aria-describedby', 'store-codex-dialog-copy');
+    const heading = el('h2', title); heading.id = 'store-codex-dialog-title';
+    const copy = el('div'); copy.id = 'store-codex-dialog-copy';
+    copy.append(...paragraphs.map(text => el('p', text)));
+    if (terms) {
+      const list = el('dl', '', 'store-codex-terms');
+      for (const [name, description, detail] of terms) {
+        const group = el('div');
+        const body = el('dd');
+        body.append(el('p', description));
+        if (detail) body.append(el('p', detail, 'store-codex-term-detail'));
+        group.append(el('dt', name), body);
+        list.append(group);
+      }
+      copy.append(list);
+    }
+    const form = el('form'); form.method = 'dialog';
+    form.append(heading, copy);
+    if (target) {
+      const selection = el('div', '', 'store-codex-target');
+      selection.append(el('strong', target), el('small', path));
+      form.append(selection);
+    }
+    const buttons = el('div', '', 'store-codex-buttons');
+    const cancel = el('button', '取消', 'action'); cancel.value = 'cancel';
+    const confirm = el('button', label, 'action store-codex-primary'); confirm.value = 'confirm';
+    cancel.autofocus = true;
+    buttons.append(cancel, confirm);
+    form.append(buttons);
+    dialog.append(form);
+    document.body.append(dialog);
+    return new Promise(resolve => {
+      dialog.addEventListener('close', () => {
+        resolve(dialog.returnValue);
+        dialog.remove();
+      }, { once:true });
+      dialog.showModal();
+    });
+  }
+
+  async function connectStoreCodex(step) {
+    if (busy) return;
+    busy = true;
+    request++;
+    try {
+      if (step === 'app') {
+        if (await confirmStoreCodex('连接本机应用', ['确认使用这台 Mac 上已安装的 ChatGPT。'], '允许使用此应用', { target:'ChatGPT', path:'本机应用' }) !== 'confirm') return;
+        const app = await api.codexConnection('app');
+        if (app?.status !== 'app-authorized') { codexNotice = storeCodexNotice(app); return; }
+      }
+      if (step === 'confirm' && await confirmStoreCodex('授权 Codex 联动', [], '同意并连接', { terms:codexLinkTerms }) !== 'confirm') return;
+      if (step === 'app' || step === 'account') {
+        if (await confirmStoreCodex('授权 Codex 联动', [], '同意并选择目录', { terms:codexLinkTerms }) !== 'confirm') {
+          await api.codexConnection('cancel');
+          codexNotice = null;
+          return;
+        }
+        const directory = await api.codexConnection('account');
+        if (directory?.status !== 'stored') {
+          if (directory?.status === 'cancelled') await api.codexConnection('cancel');
+          codexNotice = storeCodexNotice(directory);
+          return;
+        }
+      }
+      codexNotice = null;
+      render();
+      const result = await api.codexConnection('connect');
+      if (result?.snapshot) snapshot = result.snapshot;
+      codexNotice = result?.status === 'ready' ? null : storeCodexNotice(result);
+    } catch (_) { codexNotice = storeCodexNotice(); }
+    finally { busy = false; render(); void refresh(); }
+  }
+
+  function storeCodexNotice(result) {
+    const status = result?.status;
+    if (status === 'cancelled') return null;
+    const messages = {
+      'invalid-app':'请选择已安装的 ChatGPT.app。',
+      'invalid-directory':'选错目录了。在系统窗口按 ⌘⇧G，输入 ~/.codex。',
+      'needs-app':'应用授权已失效，请重新连接。',
+      'busy':'球球正在处理连接或回复，请稍后重试。'
+    };
+    return { status, message:messages[status] || result?.message || '操作未完成，请稍后重试。' };
+  }
+
+  async function disconnectStoreCodex() {
+    if (busy) return;
+    busy = true;
+    request++;
+    try {
+      if (await confirmStoreCodex('解除 Codex 连接？', [
+        '解除后，球球会撤销联动授权，停止读取 Codex 额度和发送聊天消息。',
+        '再次使用时，请重新连接并授权。'
+      ], '解除连接') !== 'confirm') return;
+      const result = await api.codexConnection('disconnect');
+      if (result?.snapshot) snapshot = result.snapshot;
+      codexNotice = result?.status === 'disconnected' ? null : storeCodexNotice(result);
+    } catch (_) { codexNotice = storeCodexNotice(); }
+    finally { busy = false; render(); void refresh(); }
+  }
+
   async function act(item) {
     if (busy) return;
     busy = true; request++;
@@ -425,11 +606,12 @@
       if (current !== request || busy || !value) return;
       if (latestSleepState !== undefined) value.petSleepState = latestSleepState;
       const serialized = JSON.stringify(value);
-      if (last !== serialized) { if (!snapshot && value.initialView === 'quota-cards') { selected = quotaCardsView(value); quotaSectionRequested = true; }
+      if (last !== serialized) { const reconnect = !snapshot && value.initialView === 'codex-reconnect'; if (!snapshot && value.initialView === 'quota-cards') { selected = quotaCardsView(value); quotaSectionRequested = true; }
+        else if (!snapshot && ['/codex-menu', 'codex-reconnect'].includes(value.initialView)) selected = '/codex-menu';
         else if (!snapshot && value.initialView === 'feedback') selected = 'feedback';
         else if (!snapshot && value.initialView === 'shortcuts') selected = 'shortcuts';
         else if (!snapshot && value.initialView === '/api-balance-menu') selected = '/api-balance-menu';
-        else if (!snapshot && isApiView(value.initialView)) { selected = '/codex-menu'; codexTab = 'api'; apiSectionRequested = true; } snapshot = value; last = serialized; render(); }
+        else if (!snapshot && isApiView(value.initialView)) { selected = '/codex-menu'; codexTab = 'api'; apiSectionRequested = true; } snapshot = value; last = serialized; render(); if (reconnect) void connectStoreCodex('confirm'); }
     } catch (_) { $('feedback').textContent = '暂时无法读取设置，请重新打开窗口。'; }
   }
   function setSearchOpen(open) {
@@ -445,13 +627,16 @@
     if (event.key === 'Escape' && !$('search-panel').hidden) { event.preventDefault(); setSearchOpen(false); }
   });
   api.onNavigate(view => {
+    if (view === 'codex-reconnect') {
+      selected = '/codex-menu'; setSearchOpen(false); void connectStoreCodex('confirm'); return;
+    }
     if (view === 'quota-cards') { selected = quotaCardsView(snapshot); quotaSectionRequested = true; apiSectionRequested = false; $('search').value = ''; $('search-panel').hidden = true; $('search-toggle').setAttribute('aria-expanded', 'false'); render(); return; }
     if (view === '/api-balance-menu') { selected = view; apiSectionRequested = false; quotaSectionRequested = false; $('search').value = ''; $('search-panel').hidden = true; $('search-toggle').setAttribute('aria-expanded', 'false'); render(); document.querySelector('main').scrollTop = 0; return; }
-    if (view !== 'shortcuts' && view !== 'feedback' && !isApiView(view)) return;
+    if (view !== '/codex-menu' && view !== 'shortcuts' && view !== 'feedback' && !isApiView(view)) return;
     apiSectionRequested = isApiView(view); if (apiSectionRequested) codexTab = 'api';
     selected = apiSectionRequested ? '/codex-menu' : view; $('search').value = ''; $('search-panel').hidden = true;
     $('search-toggle').setAttribute('aria-expanded', 'false');
-    render(); if (view === 'shortcuts') document.querySelector('main').scrollTop = 0;
+    render(); if (view === 'shortcuts' || view === '/codex-menu') document.querySelector('main').scrollTop = 0;
   });
   function updateSleepStatus(badge) {
     const state = snapshot?.petSleepState;
