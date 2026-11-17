@@ -6,12 +6,24 @@ const { createHash } = require('node:crypto');
 
 const root = path.join(__dirname, '..');
 const html = fs.readFileSync(path.join(root, 'updates/index.html'), 'utf8');
-const articles = [...html.matchAll(/<article[^>]*data-release-panel[^>]*>([\s\S]*?)<\/article>/g)].map(m => m[1]);
+const [milestone, ...articles] = [...html.matchAll(/<article[^>]*data-release-panel[^>]*>([\s\S]*?)<\/article>/g)].map(m => m[1]);
 const downloads = [...html.matchAll(/class="release-download [^"]+" href="([^"]+)"/g)].map(m => m[1]);
-const articleBlocks = html.match(/<article[^>]*data-release-panel[^>]*>[\s\S]*?<\/article>/g);
+const [milestoneBlock, ...articleBlocks] = html.match(/<article[^>]*data-release-panel[^>]*>[\s\S]*?<\/article>/g);
+
+const storeURL = 'https://apps.apple.com/cn/app/%E7%90%83%E7%90%83%E6%A1%8C%E5%AE%A0/id6829348954?mt=12';
 
 const globalArticles = articles.slice(3), globalBlocks = articleBlocks.slice(3);
 const oldArticles = articles.slice(5), oldBlocks = articleBlocks.slice(5);
+
+test('Mac App Store 1.0.0 milestone is the first record and links to the listing', () => {
+  assert.match(milestoneBlock, /id="v1\.0\.0-app-store"/);
+  assert.match(milestone, /<time datetime="2026-11-16">2026-11-16 <small class="release-milestone">里程碑<\/small><\/time>/);
+  assert.match(milestone, /正式上架 Mac App Store/);
+  assert.match(milestone, /商店版 1\.0\.0/);
+  assert.equal(downloads[0], storeURL);
+  assert.match(html, /<option value="v1\.0\.0-app-store">[^<]*里程碑<\/option>/);
+  assert.match(html, /href="#v1\.0\.0-app-store" data-release-link>/);
+});
 
 test('0.4.14 improves weather, bubbles and diagnostics',()=>{assert.match(articleBlocks[0],/v0\.4\.14-apple/);for(const text of ['天气','城市搜索结果更清晰','统一圆角与描边','问题诊断'])assert.ok(articles[0].includes(text));});
 
@@ -58,8 +70,8 @@ test('0.4.05 and sixteen earlier historical blocks retain their content with num
   assert.match(html, /<title>球球桌宠 · 更新日志<\/title>/);
   assert.match(html, /rel="canonical" href="https:\/\/qiuqiu.pet\/updates\/"/);
   assert.equal(articles.length, 17);
-  assert.equal((html.match(/data-release-link/g) || []).length, 22);
-  assert.equal((html.match(/<option /g) || []).length, 22);
+  assert.equal((html.match(/data-release-link/g) || []).length, 23);
+  assert.equal((html.match(/<option /g) || []).length, 23);
   assert.doesNotMatch(html, /v0\.4\.03-apple|本次更新仅适用于 Apple 芯片；Intel x64 最新公开构建/);
   assert.match(articleBlocks[0], /id="v0\.4\.05-apple"/);
   assert.deepEqual([...articles[0].matchAll(/<h4>(.*?)<\/h4>/g)].map(m => m[1].replace(/^\d+\.\s*/, '')), ['【新增】悬浮快捷面板', '【新增】番茄钟', '【新增】额度展示定制', '【新增】球球守护战', '【优化】额度预估', '【优化】使用体验']);
@@ -83,7 +95,7 @@ test('0.4.05 and sixteen earlier historical blocks retain their content with num
   assert.equal(createHash('sha256').update(wording).digest('hex'), 'f6566a805defa743ecb3eb8a041c4fee7c661b921a30c5090de41072aab3f093');
   for (const title of ['1.【新增】便签与待办', '2.【新增】来定制球球', '3.【新增】自动更新提醒', '4.【升级】额度卡片 2.0', '5.【升级】全局 UI 升级', '6.【修复】已知体验问题']) assert.ok(articles[4].includes(`<h4>${title}</h4>`));
   assert.match(articles[4], /<h4>6.【修复】已知体验问题<\/h4><\/div>/);
-  assert.equal((html.match(/class="release-milestone"/g) || []).length, 4);
+  assert.equal((html.match(/class="release-milestone"/g) || []).length, 6);
   assert.match(html, /0\.4\.00 Apple 芯片版 · 大版本更新<\/option>/);
   for (const version of ['0.3.25', '0.3.24', '0.3.23', '0.3.17', '0.3.14', '0.3.13', '0.3.12', '0.3.11', '0.3.10']) assert.ok(articles.slice(5).some(a => a.includes(version)));
   assert.doesNotMatch(html, /0\.3\.(?:27|28|29|30|31|32)|幻彩云|iframe/);
@@ -91,10 +103,10 @@ test('0.4.05 and sixteen earlier historical blocks retain their content with num
 });
 
 test('platform installer links and historical downloads stay accurate', () => {
-  assert.equal(downloads.length, 25);
-  assert.equal(new Set(downloads).size, 25);
+  assert.equal(downloads.length, 26);
+  assert.equal(new Set(downloads).size, 26);
   assert.doesNotMatch(html, /release-source|查看 GitHub Release/);
-  assert.ok(downloads.every(url => ['https://share.weiyun.com/6WH6LkRl', 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.9-windows/Qiuqiu-0.4.09-Windows-x64-Setup.exe'].includes(url) || /^https:\/\/github\.com\/dreamcall520\/emotion-ball-desktop-pet\/releases\/download\/v[\d.]+\/.+\.(?:zip|dmg)$/.test(url)));
+  assert.ok(downloads.every(url => [storeURL, 'https://share.weiyun.com/6WH6LkRl', 'https://github.com/dreamcall520/emotion-ball-desktop-pet/releases/download/v0.4.9-windows/Qiuqiu-0.4.09-Windows-x64-Setup.exe'].includes(url) || /^https:\/\/github\.com\/dreamcall520\/emotion-ball-desktop-pet\/releases\/download\/v[\d.]+\/.+\.(?:zip|dmg)$/.test(url)));
   for (const article of articles) {
     const title = article.match(/<h3[^>]*>(.*?)<\/h3>/)[1];
     const urls = [...article.matchAll(/class="release-download [^"]+" href="([^"]+)"/g)].map(m => m[1]);
