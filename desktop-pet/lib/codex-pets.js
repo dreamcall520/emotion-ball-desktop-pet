@@ -112,6 +112,9 @@ function createCodexPetStore({ sourceRoot = path.join(process.env.CODEX_HOME || 
         (raw.description !== undefined && (typeof raw.description !== 'string' || raw.description.length > 4000))) throw fail('宠物名称或描述不合法');
     const version = raw.spriteVersionNumber === undefined ? 1 : raw.spriteVersionNumber;
     if(version===3){
+      const { idleFacing, edgeTuck } = raw;
+      if (idleFacing !== undefined && !['left', 'right'].includes(idleFacing)) throw fail('宠物待机朝向不合法');
+      if (edgeTuck !== undefined && (edgeTuck !== 'half' || !idleFacing)) throw fail('宠物贴边设置不合法');
       const sheets=raw.sheets;
       let frameMap;try{frameMap=normalizeFrameMap(raw.frameMap,0,sheets)}catch(_){throw fail('宠物动作映射不合法')}
       if(!frameMap || !sheets || Object.values(sheets).some(sheet=>Object.keys(sheet).some(key=>!['path','rows','frameWidth'].includes(key))))throw fail('宠物资源不合法');
@@ -129,7 +132,7 @@ function createCodexPetStore({ sourceRoot = path.join(process.env.CODEX_HOME || 
         resources.push({file:sheet.path,image,rows:sheet.rows,frameWidth:sheet.frameWidth||192});normalized[key]={path:image.file,rows:sheet.rows,...(sheet.frameWidth?{frameWidth:sheet.frameWidth}:{})};
       }
       const base=resources.find(item=>item.file===sheets.base.path),buffers=resources.map(item=>item.image.buffer);
-      return {descriptor:{id,importedId:namespace?digest(Buffer.from('qiuqiu-local-pet-v1\0'),manifest.buffer,...buffers):digest(manifest.buffer,...buffers),name:raw.displayName.trim(),...(raw.characterId==='xiaobai'?{characterId:'xiaobai'}:{}),description:raw.description||'',version,rows:sheets.base.rows,spriteScale:scale,frameMap,sheets:normalized,spritesheetPath:base.image.file},manifest,image:base.image,resources,raw};
+      return {descriptor:{id,importedId:namespace?digest(Buffer.from('qiuqiu-local-pet-v1\0'),manifest.buffer,...buffers):digest(manifest.buffer,...buffers),name:raw.displayName.trim(),...(raw.characterId==='xiaobai'?{characterId:'xiaobai'}:{}),description:raw.description||'',...(idleFacing?{idleFacing}:{}),...(edgeTuck?{edgeTuck}:{}),version,rows:sheets.base.rows,spriteScale:scale,frameMap,sheets:normalized,spritesheetPath:base.image.file},manifest,image:base.image,resources,raw};
     }
     if (version !== 1 && version !== 2) throw fail('宠物精灵图版本暂不支持');
     const image = readFile(root, raw.spritesheetPath, MAX_IMAGE_BYTES);

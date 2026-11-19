@@ -91,12 +91,12 @@
     if(customization.appearance.shape!=='codex-pet'||!codexPet?.frameMap){if(lastSpriteInkSignature)desktop.spriteEdgeInk(null);lastSpriteInkSignature='';return;}
     if(!['tucked','peeked'].includes(presentationMode))return;
     const canvas=ball?.getSpriteCanvas?.();if(!canvas||canvas.dataset.codexReady!=='ready')return;
-    const signature=[codexPet.id,canvas.dataset.codexAction,canvas.dataset.codexFrame,canvas.width,canvas.height].join(':');if(signature===lastSpriteInkSignature)return;
+    const signature=[codexPet.id,canvas.dataset.codexAction,canvas.dataset.codexFrame,canvas.width,canvas.height,window.innerWidth,window.innerHeight].join(':');if(signature===lastSpriteInkSignature)return;
     try{
       const sample=document.createElement('canvas');sample.width=sample.height=64;const context=sample.getContext('2d',{willReadFrequently:true});context.drawImage(canvas,0,0,64,64);
       const pixels=context.getImageData(0,0,64,64).data,rows=[];
       for(let y=0;y<64;y++){let row='';for(let x=0;x<64;x+=4){let nibble=0;for(let bit=0;bit<4;bit++)if(pixels[(y*64+x+bit)*4+3]>24)nibble|=1<<(3-bit);row+=nibble.toString(16);}rows.push(row);}
-      desktop.spriteEdgeInk({id:codexPet.id,columns:64,rows});lastSpriteInkSignature=signature;
+      desktop.spriteEdgeInk({id:codexPet.id,columns:64,rows,aspect:canvas.width/canvas.height});lastSpriteInkSignature=signature;
     }catch(_){lastSpriteInkSignature='';}
   }
   const weatherEffects = window.WeatherPetEffects?.create(petElement, () => ({
@@ -486,6 +486,10 @@
     petElement.dataset.characterId = isXiaobai() ? 'xiaobai' : '';
     petElement.dataset.engine = 'codex-pet';
     petElement.dataset.spriteEdgeMirror = String(Boolean(codexPet.frameMap));
+    if (['left', 'right'].includes(codexPet.idleFacing)) {
+      petElement.dataset.spriteIdleFacing = codexPet.idleFacing;
+      petElement.style.setProperty('--sprite-edge-tuck', `${codexPet.edgeTuckFraction * 100}%`);
+    }
     petElement.dataset.codexPetId = codexPet.id;
     petElement.setAttribute('aria-label', `可拖动和互动的${codexPet.name}`);
     adapter.setEmotion(adapter.emotionId);
@@ -512,6 +516,10 @@
     petElement.dataset.shape = customization.appearance.shape;
     syncEdgePeekStyle();
     petElement.dataset.characterId = '';
+    delete petElement.dataset.spriteIdleFacing;
+    petElement.style.removeProperty?.('--sprite-edge-tuck');
+    if (lastSpriteInkSignature) desktop.spriteEdgeInk?.(null);
+    lastSpriteInkSignature = '';
     petElement.dataset.avatarAppearance = JSON.stringify(customization.appearance);
     compactMode = nextCompactMode;
     presentationFrozen = false;
@@ -698,6 +706,9 @@
 
   function updatePresentation(packet) {
     if (!packet || !['free', 'tucked', 'peeked', 'hidden'].includes(packet.mode)) return;
+    if (codexPet?.idleFacing && Number.isFinite(packet.spriteTuckFraction)) {
+      petElement.style.setProperty('--sprite-edge-tuck', `${packet.spriteTuckFraction * 100}%`);
+    }
     const previousPresentation = presentationMode;
     const sliding = edgeSlidePacket !== null;
     const originalBodySlide = Boolean(window.EdgePeek?.specFor(customization.appearance.shape)) && customization.appearance.shape === 'blob' && !packet.paused && !packet.dragging && !reducedMotion() &&

@@ -8,7 +8,7 @@ contextBridge.exposeInMainWorld('qiuqiuWeather', {
   refresh: () => ipcRenderer.invoke('weather:refresh'),
   search: query => ipcRenderer.invoke('weather:search', query),
   selectCity: city => ipcRenderer.invoke('weather:city', city),
-  useLocation: () => ipcRenderer.invoke('weather:location'),
+  useLocation: confirmed => ipcRenderer.invoke('weather:location', confirmed === true ? true : undefined),
   resize: size => ipcRenderer.invoke('weather:resize', size),
   collapse: value => ipcRenderer.invoke('weather:collapse', { reducedMotion: value?.reducedMotion === true }),
   onState: callback => {

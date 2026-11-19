@@ -23,7 +23,7 @@ test('两种云贴边保留云轮廓，幻彩云露出侧瓣与部分眼睛', ()
   assert.doesNotMatch(css, /#pet\[data-shape="aurora-cloud"\]\[data-presentation="tucked"\]\s+\.eb-eye\s*\{[^}]*opacity:\s*0/);
 });
 
-function fixture({ size = 80, x = -600, side = null, delay = 650 } = {}) {
+function fixture({ size = 80, x = -600, side = null, delay = 650, getVisibleHitTest = () => null } = {}) {
   assert.equal(typeof api.createEdgeTuck, 'function', '提供可独立验证的边缘状态控制器');
   let bounds = { x, y: 100, width: size, height: size };
   let area = { x: -800, y: 0, width: 800, height: 600 };
@@ -34,7 +34,7 @@ function fixture({ size = 80, x = -600, side = null, delay = 650 } = {}) {
     setPosition(x, y) { bounds.x = x; bounds.y = y; },
     setIgnoreMouseEvents(value) { ignores.push(value); } };
   const controller = api.createEdgeTuck({ getWindow: () => win, getWorkArea: () => area,
-    getRetentionBounds: () => retention, getTuckDelay: () => delay, onChange: packet => packets.push(packet),
+    getRetentionBounds: () => retention, getVisibleHitTest, getTuckDelay: () => delay, onChange: packet => packets.push(packet),
     schedule(callback, delay) { timers.set(++serial, { callback, at: now + delay }); return serial; },
     cancel(id) { timers.delete(id); } });
   if (side) controller.dock(side);
@@ -189,3 +189,41 @@ test('快捷面板与右键菜单分别保留展开，关闭一个不解除另�
 });
 
  test('单眼探头离开保留900ms，重新进入仍取消旧退回回调',()=>{const f=fixture({side:'left',delay:900});f.sample(-780);assert.equal(f.controller.getPresentation().mode,'peeked');f.sample(-500);f.advance(899);assert.equal(f.controller.getPresentation().mode,'peeked');f.advance(900);assert.equal(f.controller.getPresentation().mode,'tucked');f.sample(-780);f.sample(-500);f.advance(1500);f.sample(-780);f.advance(1800);assert.equal(f.controller.getPresentation().mode,'peeked');});
+
+
+test('a directional skin declaring xiaobai uses its explicit tuck geometry', () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../pet.css'), 'utf8');
+  const legacyRules = [...css.matchAll(/([^{}]+)\{[^{}]*translateX\(-?53\.3538461538%\)[^{}]*\}/g)];
+  assert.equal(legacyRules.length, 2);
+  for (const [_, selector] of legacyRules) assert(selector.includes(':not([data-sprite-idle-facing])'));
+});
+
+
+test('revealed alpha controls click-through independently from the tucked hover anchor', () => {
+  for (const side of ['left', 'right']) {
+    let peekOpaque = true;
+    const f = fixture({ size: 120, side,
+      getVisibleHitTest({ bounds, mode, point }) {
+        if (!point) return false;
+        const x = point.x - bounds.x;
+        return mode === 'tucked' ? (side === 'left' ? x < 20 : x > 100)
+          : peekOpaque && x >= 40 && x <= 80;
+      } });
+    const anchor = f.bounds.x + (side === 'left' ? 5 : 115);
+    f.sample(anchor);
+    assert.equal(f.controller.getPresentation().mode, 'peeked');
+    assert.equal(f.ignores.at(-1), true, 'the revealed transparent anchor passes clicks through');
+    f.advance(2000);
+    assert.equal(f.controller.getPresentation().mode, 'peeked', 'the original anchor still retains hover');
+    f.sample(f.bounds.x + 60);
+    assert.equal(f.ignores.at(-1), false, 'currently painted alpha accepts input');
+    peekOpaque = false; f.controller.publish();
+    assert.equal(f.ignores.at(-1), true, 'a new transparent animation frame releases input');
+    peekOpaque = true; f.controller.publish();
+    assert.equal(f.ignores.at(-1), false);
+    f.sample(f.bounds.x + 90);
+    assert.equal(f.ignores.at(-1), true);
+    f.advance(2649); assert.equal(f.controller.getPresentation().mode, 'peeked');
+    f.advance(2650); assert.equal(f.controller.getPresentation().mode, 'tucked');
+  }
+});

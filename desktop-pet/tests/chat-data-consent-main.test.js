@@ -3,7 +3,7 @@ const {pathToFileURL}=require('node:url');
 const source=fs.readFileSync(path.join(__dirname,'../main.js'),'utf8');
 function fixture(t,{firstRelease=false}={}){
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'chat-consent-main-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
- let provider='codex',visible=true,approved=false,afterPrompt=()=>{},sends=0;const prompts=[];
+ let provider='codex',visible=true,approved=false,enabled=true,afterPrompt=()=>{},sends=0,settingsOpens=0;const prompts=[];
  const identity={accountKey:'a'.repeat(64),conversationKey:'fixture-chat',revision:1,recipientOrigin:'https://custom.invalid'};
  const state=()=>({source:provider,activeChatId:'fixture-chat',messages:[]});
  const controller={getState:state,getConsentIdentity:async()=>({...identity})};
@@ -13,14 +13,14 @@ function fixture(t,{firstRelease=false}={}){
   chatWindow:{getWindow:()=>chatOwner,isVisible:()=>visible},storeConnectionsWindow:toolsOwner,app:{getPath:()=>root},path,pathToFileURL,URL,__dirname:path.resolve(__dirname,'..'),
   require:name=>name==='./lib/chat-data-consent'?require('../lib/chat-data-consent'):require(name),
   dialog:{showMessageBox:async(_owner,info)=>{prompts.push(info);afterPrompt();return{response:approved?1:0};}},
-  storeRuntime:{getZcodeAccountSource:()=> 'configured-custom',workbuddyCli:{getState:()=>({connected:true,messages:[]}),getConsentIdentity:async()=>({...identity})},
+  openGlobalSettings:view=>{assert.equal(view,'codex-reconnect');settingsOpens++},storeRuntime:{isChatEnabled:()=>enabled,getZcodeAccountSource:()=> 'configured-custom',workbuddyCli:{getState:()=>({connected:true,messages:[]}),getConsentIdentity:async()=>({...identity})},
    workbuddyOfficial:{getState:()=>({connected:true,busy:false,baseUrl:'https://relay.invalid',messages:[]}),getConsentIdentity:()=>({...identity,accountKey:null})}}
  };
  const helper=source.slice(source.indexOf('function activeChat()'),source.indexOf('function storeChatReady('));
  const api=vm.runInNewContext(helper+';({storeChatSendWithConsent,storeChatDataConsent,requestStoreNotesConsent})',sandbox);
  const run=(extra={})=>{const owner=extra.tools?toolsOwner:chatOwner;return api.storeChatSendWithConsent({event:{sender:owner.webContents,senderFrame:owner.webContents.mainFrame},provider,content:'合成测试消息，不调用模型',send:()=>{sends++;return{accepted:true};},...extra});};
  const notesRun=extra=>api.requestStoreNotesConsent({win:toolsOwner,noteId:'fixture-note',contentRevision:'c'.repeat(64),getAccountIdentity:async()=>({...identity}),isCurrent:()=>true,send:()=>{sends++;return{accepted:true};},...extra});
- return{run,notesRun,api,prompts,identity,setProvider:value=>provider=value,approve:value=>approved=value,hide:()=>visible=false,onPrompt:fn=>afterPrompt=fn,sends:()=>sends,root};
+ return{run,notesRun,api,prompts,identity,setProvider:value=>provider=value,approve:value=>approved=value,hide:()=>visible=false,onPrompt:fn=>afterPrompt=fn,sends:()=>sends,settingsOpens:()=>settingsOpens,disable:()=>{enabled=false;},root};
 }
 test('真实main helper三个商店发送入口均默认拒绝，不调用send/保存；披露使用当前来源',async t=>{
  const f=fixture(t);
@@ -47,25 +47,31 @@ test('真实main便签用途不复用聊天同意，披露仅当前便签且拒�
 });
 
 
-test('真实main首发原账号来源重新明确同意一次，拒绝不发送且同scope复用',async t=>{
- const normal=fixture(t);normal.approve(true);assert.equal((await normal.run()).accepted,true);
- assert.match(normal.prompts[0].detail,/含聊天与便签整理/);
- const normalRows=JSON.parse(fs.readFileSync(path.join(normal.root,'chat-data-consent.json'),'utf8'));
- const first=fixture(t,{firstRelease:true});
- assert.equal((await first.run()).accepted,false);assert.equal(first.sends(),0);
- assert.match(first.prompts[0].detail,/撤销聊天数据同意/);assert.doesNotMatch(first.prompts[0].detail,/便签/);
- assert.equal(fs.existsSync(path.join(first.root,'chat-data-consent.json')),false);
- first.approve(true);assert.equal((await first.run()).accepted,true);
- const firstRows=JSON.parse(fs.readFileSync(path.join(first.root,'chat-data-consent.json'),'utf8'));
- assert.equal(firstRows[0].provider,normalRows[0].provider);assert.equal(firstRows[0].version,normalRows[0].version);
- assert.notEqual(firstRows[0].scope,normalRows[0].scope,'original-account disclosure differs from former independent-profile source');
- assert.match(first.prompts[0].detail,/本机原应用已登录.*与额度卡使用同一账号/);
- const reopened=fixture(t,{firstRelease:true});
- fs.writeFileSync(path.join(reopened.root,'chat-data-consent.json'),JSON.stringify(normalRows),{mode:0o600});
- assert.equal((await reopened.run()).accepted,false);assert.equal(reopened.prompts.length,1);assert.equal(reopened.sends(),0,'former independent-profile consent cannot silently authorize the original account');
- reopened.approve(true);assert.equal((await reopened.run()).accepted,true);assert.equal((await reopened.run()).accepted,true);assert.equal(reopened.prompts.length,2,'new original-account scope is reused after explicit approval');
- first.approve(false);normal.approve(false);
- assert.equal((await first.notesRun()).accepted,false);assert.equal((await normal.notesRun()).accepted,false);
- assert.deepEqual(first.prompts.at(-1),normal.prompts.at(-1),'notes remain a separate unchanged purpose');
- assert.equal(first.sends(),1);assert.equal(normal.sends(),1);
+test('首发仅复用匹配的联动同意，缺少同意则引导设置且不弹出发送授权', async t => {
+  const legacy = fixture(t);
+  legacy.approve(true);
+  await legacy.run();
+  const f = fixture(t, { firstRelease: true });
+  fs.copyFileSync(path.join(legacy.root, 'chat-data-consent.json'), path.join(f.root, 'chat-data-consent.json'));
+  assert.equal((await f.run()).accepted, false);
+  assert.equal(f.settingsOpens(), 1);
+  assert.equal(f.prompts.length, 0);
+  assert.equal(f.sends(), 0);
+
+  const account = f.identity.accountKey;
+  const consent = f.api.storeChatDataConsent();
+  consent.grantCodexLink(account);
+  assert.equal((await f.run()).accepted, true);
+  assert.equal(f.prompts.length, 0);
+  assert.equal(f.sends(), 1);
+  f.identity.accountKey = 'b'.repeat(64);
+  assert.equal((await f.run()).accepted, false);
+  assert.equal(f.settingsOpens(), 2);
+
+  f.identity.accountKey = account;
+  f.disable();
+  assert.equal((await f.run()).accepted, false);
+  consent.revoke('codex');
+  assert.equal(consent.hasCodexLink(account), false);
+  assert.equal(f.sends(), 1);
 });

@@ -22,12 +22,30 @@ function ownSigningTargets(appPath,io=fs){
 function trimStaging(staging, config, io = fs) {
   if (!isFirstRelease(config)) return [];
   const removed = [
+    'desktop-pet/store-connections.html',
+    'desktop-pet/store-connections.css',
+    'desktop-pet/store-connections-renderer.js',
+    'desktop-pet/store-connections-preload.js',
     'desktop-pet/assets/workbuddy-desktop-hook',
     'desktop-pet/assets/zcode-desktop-hook',
     'desktop-pet/lib/mas-plugin-install-probe.js',
     'desktop-pet/lib/mas-helper-probe.js'
   ];
+  for (const directory of ['desktop-pet', 'desktop-pet/lib', 'desktop-pet/scripts', 'desktop-pet/assets/integrations']) {
+    const full = path.join(staging, directory);
+    if (!io.existsSync(full)) continue;
+    for (const name of io.readdirSync(full)) {
+      if (/^(?:mas-(?:bundled-)?)?workbuddy(?:[-.]|$)|^verify-workbuddy-/i.test(name)) {
+        removed.push(path.join(directory, name));
+      }
+    }
+  }
   for (const name of removed) io.rmSync(path.join(staging, name), { recursive: true, force: true });
+  const notice = path.join(staging, 'NOTICE.md');
+  if (io.existsSync(notice)) {
+    const contents = io.readFileSync(notice, 'utf8');
+    io.writeFileSync(notice, contents.replace(/\n## WorkBuddy integration reference\n[\s\S]*?(?=\n## |$)/, ''));
+  }
   return removed;
 }
 // @electron/packager 20.3.0 has no electronLanguages option. Prune complete

@@ -18,14 +18,15 @@ fs.writeFileSync(preload, `const {contextBridge,ipcRenderer}=require('electron')
 contextBridge.exposeInMainWorld('qiuqiuWeather',{
  get:()=>ipcRenderer.invoke('fixture:get'),refresh:()=>ipcRenderer.invoke('fixture:get'),
  search:()=>Promise.resolve([]),selectCity:()=>Promise.reject(Error('not used')),
- useLocation:()=>ipcRenderer.invoke('fixture:location'),resize:()=>Promise.resolve(),
+ useLocation:confirmed=>ipcRenderer.invoke('fixture:location',confirmed),resize:size=>ipcRenderer.invoke('fixture:resize',size),
  onState:()=>()=>{},onColorMode:()=>()=>{},onCollapse:()=>()=>{},onChooseCity:()=>()=>{}
 });`);
 let state = { status: 'ready', city: { name: '当前位置', displayName: '北京市 · 朝阳区', mode: 'current', timezone: 'Asia/Shanghai' }, timezone: 'Asia/Shanghai',
- current: { temperature: 19, apparentTemperature: 18, weatherCode: 2, isDay: 1, time: Date.UTC(2026, 9, 28, 6) }, hourly: [], daily: [], updatedAt: Date.now(), appearance: 'light' };
-let win, locationCalls = 0, resolveLocation;
+ current: { temperature: 19, apparentTemperature: 18, weatherCode: 2, isDay: 1, time: Date.UTC(2026, 9, 28, 6) }, hourly: [], daily: [], updatedAt: Date.now(), appearance: 'light', requireLocationConsent:true };
+let win, locationCalls = 0, resolveLocation, resizeCalls = 0;
+ipcMain.handle('fixture:resize', () => { resizeCalls++; });
 ipcMain.handle('fixture:get', () => state);
-ipcMain.handle('fixture:location', () => { locationCalls++; return new Promise(resolve => { resolveLocation = resolve; }); });
+ipcMain.handle('fixture:location', (_event, confirmed) => { assert.equal(confirmed,true); locationCalls++; return new Promise(resolve => { resolveLocation = resolve; }); });
 const evaluate = code => win.webContents.executeJavaScript(code);
 const click = id => evaluate(`document.getElementById(${JSON.stringify(id)}).click()`);
 async function until(predicate, label) {
@@ -45,10 +46,30 @@ app.whenReady().then(async () => {
   await click('folded'); await click('city');
   assert.equal((await snapshot()).status, '已选择：北京市 · 朝阳区');
   await evaluate(`document.getElementById('search-input').value='旧搜索';document.getElementById('search-results').append(document.createElement('button'));`);
+  const beforeDialog = resizeCalls;
   await click('use-location');
+  const dialog = () => evaluate("document.getElementById('location-consent').open");
+  assert.equal(await dialog(), true);
+  await evaluate(`document.getElementById('search-results').append(document.createElement('button'));
+    window.dispatchEvent(new Event('blur'));
+    new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
+  assert.equal(resizeCalls, beforeDialog, 'consent keeps native bounds fixed even when background content changes');
+  assert.equal(await evaluate('document.activeElement.id'), 'location-cancel');
+  assert.equal(locationCalls, 0);
+  await click('location-cancel');
+  assert.equal(await dialog(), false);
+  assert.equal(locationCalls, 0);
+  const palette = async (theme, appearance) => {
+    await evaluate("Object.assign(document.documentElement.dataset,"+JSON.stringify({uiTheme:theme,appearance})+")");
+    return evaluate("getComputedStyle(document.getElementById('location-consent')).backgroundImage");
+  };
+  assert.notEqual(await palette('blue','light'), await palette('green','light'));
+  assert.notEqual(await palette('green','light'), await palette('green','dark'));
+  assert.notEqual(await palette('green','dark'), await palette('purple','dark'));
+  await click('use-location'); await click('location-confirm');
   await until(() => locationCalls === 1, 'location invoked');
   assert.equal((await snapshot()).status, '定位中…');
-  state = { status: 'loading', city: { name: '当前位置', displayName: '北京市 · 海淀区', mode: 'current', timezone: 'Asia/Shanghai' }, hourly: [], daily: [], appearance: 'light' };
+  state = { status: 'loading', city: { name: '当前位置', displayName: '北京市 · 海淀区', mode: 'current', timezone: 'Asia/Shanghai' }, hourly: [], daily: [], appearance: 'light', requireLocationConsent:true };
   resolveLocation(state);
   await until(async () => (await snapshot()).pickerHidden, 'location success closes picker before weather');
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -58,7 +79,7 @@ app.whenReady().then(async () => {
     assert(!current.status.includes('定位中'));
     await click('close-picker');
   }
-  await click('city'); await click('use-location');
+  await click('city'); await click('use-location'); await click('location-confirm');
   await until(() => locationCalls === 2, 'second location invoked');
   assert.equal((await snapshot()).status, '定位中…');
   resolveLocation({ locationError: { code: 'LOCATION_DENIED' } });
@@ -70,6 +91,6 @@ app.whenReady().then(async () => {
   assert.equal(reopened.disabled, false); assert(!reopened.status.includes('定位中'));
   console.log(JSON.stringify({ passed: true, startupLocationCalls: 0, locationCalls, successWhileWeatherLoading: true, successfulReopens: 3, deniedReopen: reopened.status, noNetworkOrDeviceLocation: true }));
 }).catch(error => { console.error(error); process.exitCode = 1; }).finally(() => {
-  win?.destroy(); ipcMain.removeHandler('fixture:get'); ipcMain.removeHandler('fixture:location');
+  win?.destroy(); ipcMain.removeHandler('fixture:get'); ipcMain.removeHandler('fixture:location'); ipcMain.removeHandler('fixture:resize');
   fs.rmSync(directory, { recursive: true, force: true }); app.exit(process.exitCode || 0);
 });

@@ -216,6 +216,10 @@ async function buildMas({ root = DEFAULT_ROOT, env = process.env, arch } = {}, d
   const rights = entitlementsFor(config), signingDirectory = path.join(options.out,'signing'); io.mkdirSync(signingDirectory,{recursive:true,mode:0o700});
   const mainFile = path.join(signingDirectory,'main.entitlements.plist'), childFile = path.join(signingDirectory,'child.entitlements.plist');
   io.writeFileSync(mainFile,plist(rights.main)); io.writeFileSync(childFile,plist(rights.child));
+  if (release.isFirstRelease(config)) {
+    const manifest = path.join(DEFAULT_ROOT, 'desktop-pet/native/PrivacyInfo.xcprivacy');
+    io.copyFileSync(manifest, path.join(appPath, 'Contents/Resources/PrivacyInfo.xcprivacy'));
+  }
   io.copyFileSync(config.profile,path.join(appPath,'Contents/embedded.provisionprofile'));
   const codexBinary = path.join(appPath,'Contents/Resources/qiuqiu-codex',`darwin-${config.arch}`,'codex');
   await sign({ app:appPath,platform:'mas',type:'distribution',batchCodesignCalls:true,identity:application.fingerprint,

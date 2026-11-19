@@ -105,12 +105,13 @@
   const text = (id, value) => { el(id).textContent = value; };
   const timezone = () => state.timezone || (state.city?.timezone !== 'auto' ? state.city?.timezone : undefined);
   const time = value => localTime(value, timezone());
+  const locationConsent = el('location-consent');
   function resize() {
     // ResizeObserver also fires while Chromium adopts the native window bounds.
     // One request per distinct content size avoids re-entering the quota layout.
-    if (collapseAnimation) return Promise.resolve();
+    if (collapseAnimation || locationConsent.open) return Promise.resolve();
     const size = expanded
-      ? { width: 390, height: Math.min(680, Math.max(picker ? 210 : 280, Math.ceil(el(picker ? 'city-picker' : 'weather-details').getBoundingClientRect().height) + 2)), expanded: true }
+      ? { width: 390, height: Math.min(680, Math.max(picker ? (state.requireLocationConsent ? 250 : 210) : 280, Math.ceil(el(picker ? 'city-picker' : 'weather-details').getBoundingClientRect().height) + 2)), expanded: true }
       : { width: 128, height: 32, expanded: false };
     const key = JSON.stringify(size);
     if (key === resizeKey) return Promise.resolve();
@@ -127,7 +128,11 @@
   }
   function applyExpanded(value) {
     const wasExpanded = expanded;
-    expanded = value; if (!expanded) picker = false;
+    expanded = value;
+    if (!expanded) {
+      picker = false;
+      if (locationConsent.open) locationConsent.close();
+    }
     el('quota-label').dataset.expanded = String(expanded);
     el('folded').hidden = expanded; el('weather-details').hidden = !expanded || picker; el('city-picker').hidden = !expanded || !picker;
     el('folded').setAttribute('aria-expanded', String(expanded)); updateHero(); resize();
@@ -169,8 +174,6 @@
   }
   function render(next) {
     state = next || {}; const current = state.current || {}, daily = Array.isArray(state.daily) ? state.daily.slice(0, 7) : [], hourly = Array.isArray(state.hourly) ? state.hourly : [];
-    if (['light', 'dark', 'system'].includes(state.appearance)) document.documentElement.dataset.appearance = state.appearance;
-    if (state.colorMode) document.documentElement.dataset.colorMode = state.colorMode;
     el('folded').dataset.empty = String(!finite(current.temperature));
     text('small-temperature', finite(current.temperature) ? number(current.temperature, '°') : state.status === 'loading' ? '加载中' : '暂无'); el('quota-label').dataset.empty = String(!finite(current.temperature)); text('temperature', number(current.temperature, '°')); text('condition', description(current.weatherCode)); text('feels', finite(current.apparentTemperature) ? `体感 ${number(current.apparentTemperature, '°')}` : '');
     el('small-icon').innerHTML = icon(current.weatherCode, current.isDay !== false && current.isDay !== 0); updateHero();
@@ -210,29 +213,43 @@
   const contentSizeObserver = new ResizeObserver(resize);
   contentSizeObserver.observe(el('weather-details')); contentSizeObserver.observe(el('city-picker'));
   async function act(action) { try { const next = await action(); if (next && !next.needsLocation) render(next); return next; } catch (error) { render({ ...state, status: 'error', error: '暂时无法获取天气' }); return null; } }
-  async function locate(openPicker = true) {
+  function requestLocation() {
+    if (!state.requireLocationConsent) return locate();
+    if (locationConsent.open || el('use-location').disabled) return;
+    showPicker(true);
+    // Paint inside the weather window's own surface. The native dialog top
+    // layer can drop frames in a transparent macOS window.
+    el('quota-beam').inert = true;
+    locationConsent.show();
+    el('location-cancel').focus();
+  }
+  el('location-cancel').onclick = () => locationConsent.close();
+  el('location-confirm').onclick = () => { locationConsent.close(); void locate(true); };
+  locationConsent.addEventListener('close', () => { if (locationConsent.open) return; el('quota-beam').inert = false; resize(); if (expanded && picker && !el('use-location').disabled) el('use-location').focus(); });
+  async function locate(confirmed = false) {
     const generation = ++locationGeneration;
-    if (openPicker) { showPicker(true); text('search-status', '定位中…'); }
+    showPicker(true); text('search-status', '定位中…');
     el('use-location').disabled = true;
     try {
-      const next = await api.useLocation();
+      const next = await api.useLocation(confirmed);
       const failure = next?.locationError || (next?.error?.code && !next?.current ? next.error : null);
       if (failure) throw Object.assign(new Error('location failed'), { code: failure.code });
-      if (generation !== locationGeneration || next?.cancelled) return;
-      if (next && !next.needsLocation) { locationWarning = ''; render(next); if (openPicker) { text('search-status', ''); showPicker(false); } }
-      else if (openPicker) text('search-status', '定位失败，请选城市');
+      if (generation !== locationGeneration) return;
+      if (next?.cancelled) { text('search-status', ''); return; }
+      if (next && !next.needsLocation) { locationWarning = ''; render(next); text('search-status', ''); showPicker(false); }
+      else text('search-status', '定位失败，请选城市');
     } catch (error) {
       if (generation !== locationGeneration) return;
       const message = locationMessage(error?.code);
-      if (openPicker) text('search-status', message);
+      text('search-status', message);
       if (state.city?.mode === 'current') { locationWarning = '定位未更新，沿用上次位置'; render(state); }
     } finally { if (generation === locationGeneration) { el('use-location').disabled = false; resize(); } }
   }
   el('folded').onclick = () => setExpanded(true); el('collapse').onclick = () => setExpanded(false, true); el('city').onclick = () => showPicker(true); el('close-picker').onclick = () => showPicker(false); el('today-tab').onclick = () => selectTab('today'); el('week-tab').onclick = () => selectTab('week');
   document.querySelectorAll('#week-layout button').forEach(button => button.onclick = () => { layout = button.dataset.layout; el('week-list').hidden = layout === 'horizontal'; el('week-chart').hidden = layout !== 'horizontal'; document.querySelectorAll('#week-layout button').forEach(item => item.setAttribute('aria-pressed', String(item === button))); resize(); });
-  el('refresh').onclick = () => act(() => api.refresh()); el('use-location').onclick = () => locate(true);
+  el('refresh').onclick = () => act(() => api.refresh()); el('use-location').onclick = requestLocation;
   el('empty-city').onclick = () => showPicker(true);
-  el('empty-retry').onclick = () => emptyPresentation(state).kind === 'unconfigured' ? locate(true) : act(() => api.refresh());
+  el('empty-retry').onclick = () => emptyPresentation(state).kind === 'unconfigured' ? requestLocation() : act(() => api.refresh());
   async function searchCities(query, revision) {
     if (!query || query.length < 2) { text('search-status', query ? '至少输入2个字' : ''); resize(); return; }
     text('search-status', '搜索中…');
@@ -266,7 +283,17 @@
   document.addEventListener('pointerdown', () => { document.documentElement.dataset.inputMode = 'pointer'; }, true);
   document.addEventListener('keydown', event => { if (['Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) document.documentElement.dataset.inputMode = 'keyboard'; }, true);
   document.querySelector('.tabs').addEventListener('keydown', event => { if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return; event.preventDefault(); selectTab(tab === 'today' ? 'week' : 'today'); el(`${tab}-tab`).focus(); });
-  document.addEventListener('keydown', event => { if (event.key === 'Escape') picker ? showPicker(false) : setExpanded(false, true); });
+  document.addEventListener('keydown', event => {
+    if (locationConsent.open) {
+      if (event.key === 'Escape') { event.preventDefault(); locationConsent.close(); }
+      if (event.key === 'Tab') {
+        event.preventDefault();
+        el(document.activeElement?.id === 'location-cancel' ? 'location-confirm' : 'location-cancel').focus();
+      }
+      return;
+    }
+    if (event.key === 'Escape') picker ? showPicker(false) : setExpanded(false, true);
+  });
   api.onChooseCity?.(() => showPicker(true));
   api.onCollapse?.(() => { picker = false; clearTimeout(searchTimer); searchRevision++; locationGeneration++; setExpanded(false); });
   let liveRevision = 0;
@@ -277,7 +304,7 @@
     render(next);
     if (next?.status === 'unconfigured') showPicker(true);
   }).catch(() => { render({ status: 'error', city: { name: '天气' } }); });
-  const resetPointerFocus = () => { document.documentElement.dataset.inputMode = 'pointer'; document.activeElement?.blur(); };
+  const resetPointerFocus = () => { document.documentElement.dataset.inputMode = 'pointer'; if (!locationConsent.open) document.activeElement?.blur(); };
   window.addEventListener('blur', resetPointerFocus);
   api.onPointerReset?.(resetPointerFocus);
   window.addEventListener('unload', () => { cancelCollapse(); contentAnimation?.cancel(); contentSizeObserver.disconnect(); clearTimeout(searchTimer); searchRevision++; locationGeneration++; });

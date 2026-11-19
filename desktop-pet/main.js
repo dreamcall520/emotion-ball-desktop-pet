@@ -30,7 +30,7 @@ const { isXiaobaiPet } = require('./lib/codex-pet-player');
 const { loadSettings, saveSettings, normalizePresetName, normalizeAppearancePresets, findDuplicateAppearancePreset } = require('./lib/settings');
 const { createCodexPetStore } = require('./lib/codex-pets');
 const { XIAOBAI_ID, getBuiltinPet } = require('./lib/builtin-pets');
-const { normalizeSpriteEdgeInk, containsSpriteEdgeInk, XIAOBAI_TUCK_FRACTION } = require('./lib/sprite-edge-ink');
+const { normalizeSpriteEdgeInk, containsSpriteEdgeInk, spriteHalfTuckFraction, XIAOBAI_TUCK_FRACTION, DIRECTIONAL_TUCK_FRACTION } = require('./lib/sprite-edge-ink');
 const EdgePeek = require('./lib/edge-peek');
 const {
   SIZES,
@@ -78,14 +78,6 @@ const { createZcodeLink } = require('./lib/zcode-link');
 const { buildZcodeQuotaLabelModel } = require('./lib/zcode-quota-view');
 const { createZcodeConsentWindow } = require('./lib/zcode-consent-window');
 const { createZcodeChatRpc, resolveZcodeChatModel } = require('./lib/zcode-chat-rpc');
-const { runWorkBuddy } = require('./lib/workbuddy-client');
-const { createWorkBuddyQuota } = require('./lib/workbuddy-quota');
-const { createWorkBuddyChat } = require('./lib/workbuddy-chat');
-const { createWorkBuddyLabelWindow, safeState: safeWorkBuddyState } = require('./lib/workbuddy-label-window');
-const { createWorkBuddyDetailsWindow } = require('./lib/workbuddy-details-window');
-const { createWorkBuddyConsent } = require('./lib/workbuddy-consent-window');
-const { createWorkBuddyUsage } = require('./lib/workbuddy-usage');
-const { createWorkBuddyTasks } = require('./lib/workbuddy-tasks');
 const { createNotesCompanion } = require('./lib/notes-companion');
 const { createNotesOrganizer } = require('./lib/notes-organizer');
 const { createPomodoro } = require('./lib/pomodoro');
@@ -97,7 +89,7 @@ const { createApiUsageLabelWindow } = require('./lib/api-usage-label-window');
 const { createApiBalance } = require('./lib/api-balance');
 const { createApiBalanceLabelWindow } = require('./lib/api-balance-label-window');
 const { createApiBalanceDetailsWindow } = require('./lib/api-balance-details-window');
-const { checkLatestRelease, downloadInstaller, getDownloadFallbacks } = require('./lib/app-update');
+const { checkLatestRelease, checkMacStoreRelease, STORE_URL, downloadInstaller, getDownloadFallbacks } = require('./lib/app-update');
 const { createColorModeManager } = require('./lib/color-mode');
 const { createPopupQuotaVisibility, createQuotaDialogProxy } = require('./lib/popup-quota-visibility');
 const { normalizeCustomization, normalizeAppearance, effectiveAppearance } = require('./lib/customization');
@@ -120,7 +112,7 @@ const ACCEPTANCE_KIND = require('../package.json').qiuqiuAcceptance;
 const IS_STORE_BUILD = process.mas === true || ACCEPTANCE_KIND === 'mas' || process.argv.includes('--mas-candidate');
 const FIRST_RELEASE = IS_STORE_BUILD && require('../package.json').qiuqiuReleaseProfile === 'mas-first';
 const STORE_PROVIDERS = FIRST_RELEASE ? ['codex'] : ['codex','zcode','workbuddy'];
-const STORE_CONNECTIONS_PAGE = FIRST_RELEASE ? 'store-connections-first.html' : 'store-connections.html';
+const STORE_CONNECTIONS_PAGE = 'store-connections.html';
 const FirstRelease = require('./lib/mas-first-release');
 const IS_ACCEPTANCE = ['zcode', 'combined', 'weather','soft-orb','edge-peek','bubble','feedback','mas'].includes(ACCEPTANCE_KIND) || (IS_STORE_BUILD && process.mas !== true);
 const ACCEPTANCE_NAME = IS_STORE_BUILD ? '球球桌宠-商店联调候选' : ACCEPTANCE_KIND === 'feedback' ? '球球桌宠-反馈验收' : ACCEPTANCE_KIND === 'edge-peek' ? '球球桌宠-贴边候选' : ACCEPTANCE_KIND === 'bubble' ? '球球桌宠-气泡验收' : ACCEPTANCE_KIND === 'soft-orb' ? '球球桌宠-柔光团候选' : ACCEPTANCE_KIND === 'weather' ? '球球桌宠-天气验收' : ACCEPTANCE_KIND === 'combined' ? '球球桌宠-联动整合验收' : '球球桌宠-ZCode验收';
@@ -132,7 +124,7 @@ const IS_CODEX_SMOKE_ONLY = IS_SMOKE_TEST && (process.env.PET_SMOKE_CODEX_ONLY =
 
 let petWindow = null;
 let edgeTuck = null;
-let spriteEdgeInk=null,spriteEdgeMapped=false;
+let spriteEdgeInk=null,spriteEdgeMapped=false,spriteIdleFacing,spriteTuckFraction,spriteEdgeHalf=false;
 let edgeNotice = null;
 let edgeNoticeWindow = null;
 let edgeNoticeNow = () => performance.now();
@@ -174,7 +166,7 @@ let workbuddyDetails = null;
 let workbuddyConsent = null;
 let workbuddyTasks = null;
 let workbuddyUsage = null;
-let workbuddyRun = runWorkBuddy;
+let workbuddyRun;
 let workbuddyTaskOpener = url => shell.openExternal(url);
 let workbuddyEnablePending = false;
 let workbuddyEnableToken = 0;
@@ -567,7 +559,12 @@ function globalSettingsSnapshot() {
     tasks: { active: tasks ? tasks.filter(item => item.state === 'active').length : null,
       waiting: tasks ? tasks.filter(item => item.state === 'waiting').length : null },
     taskActionId: '/codex-menu/codex-tasks-open' };
-  return { firstRelease:FIRST_RELEASE, feedback: feedbackReporting ? { ...feedbackReporting.getState(), context: feedbackReporting.context() } : null, quotaCards: quotaCardConfig(), petSleepState: petWindow && !petWindow.isDestroyed() ? petSleepState : 'unknown', codexIconPreference: codexIconPreference?.getPreference() || 'codex-system', codexIconDark: codexIconSystemDark(), codexStatus, version: app.getVersion(), entries: settingsEntries(settingsCommandTemplate()),
+  const firstReleaseConnection = FIRST_RELEASE && storeEnableFlow ? {
+    connected: storeRuntime.isChatEnabled('codex') && (storeRuntime.isInstalledCodexConnected() || fresh),
+    chatReady: storeChatReady('codex'),
+    working: storeEnableFlow.getState().codex.status === 'working'
+  } : null;
+  return { firstRelease:FIRST_RELEASE, firstReleaseConnection, feedback: feedbackReporting ? { ...feedbackReporting.getState(), context: feedbackReporting.context() } : null, quotaCards: quotaCardConfig(), petSleepState: petWindow && !petWindow.isDestroyed() ? petSleepState : 'unknown', codexIconPreference: FIRST_RELEASE ? 'app-default' : (codexIconPreference?.getPreference() || 'codex-system'), codexIconDark: codexIconSystemDark(), codexStatus, version: app.getVersion(), entries: settingsEntries(settingsCommandTemplate()),
     shortcuts: shortcutRegistrar?.getConfig(), initialView: globalSettingsInitialView,
     summary: [
       { label: '球球状态', value: edgeTuck?.getPresentation().mode === 'hidden' ? '暂时隐藏' : '陪伴中' },
@@ -585,7 +582,7 @@ function fromGlobalSettings(event, requireVisible = true) {
 }
 
 function openGlobalSettings(view) {
-  const target = ['shortcuts', 'quota-cards', '/api-balance-menu', 'feedback'].includes(view) ? view : null;
+  const target = ['/codex-menu', 'codex-reconnect', 'shortcuts', 'quota-cards', '/api-balance-menu', 'feedback'].includes(view) ? view : null;
   if (isQuitting || screenLocked) return;
   if (globalSettingsWindow && !globalSettingsWindow.isDestroyed()) {
     positionFunctionWindow(globalSettingsWindow);
@@ -617,7 +614,11 @@ function openGlobalSettings(view) {
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', event => event.preventDefault());
   win.webContents.on('will-attach-webview', event => event.preventDefault());
-  win.on('closed', () => { if (globalSettingsWindow === win) globalSettingsWindow = null; });
+  win.on('closed', () => {
+    if (globalSettingsWindow !== win) return;
+    globalSettingsWindow = null;
+    if (FIRST_RELEASE) storeRuntime?.clearPendingInstalledCodexApp();
+  });
   win.once('ready-to-show', () => { if (!isQuitting && !screenLocked && !win.isDestroyed()) { positionFunctionWindow(win); win.show(); } });
   void win.loadFile(path.join(__dirname, 'global-settings.html')).catch(error => {
     writeError('全局设置', error); if (!win.isDestroyed()) win.destroy();
@@ -713,6 +714,7 @@ function notifyStoreConnections() {
 }
 function openStoreConnections(provider) {
   if (!IS_STORE_BUILD || !storeRuntime || isQuitting || screenLocked) return null;
+  if (FIRST_RELEASE) return openGlobalSettings('/codex-menu');
   if (storeConnectionsWindow && !storeConnectionsWindow.isDestroyed()) { storeConnectionsWindow.show(); storeConnectionsWindow.focus(); if(['codex','zcode','workbuddy'].includes(provider))storeConnectionsWindow.webContents.send('pet:store-focus-provider',provider); return storeConnectionsWindow; }
   const win = new BrowserWindow({ width: 840, height: 880, minWidth: 640, minHeight: 560,
     title: '球球 · 工具连接', show: false, backgroundColor: '#EDF4FC',
@@ -727,11 +729,10 @@ function openStoreConnections(provider) {
 }
 function registerStoreConnections() {
   ipcMain.handle('pet:store-connections-command', async (event, action, payload) => {
-    if (!IS_STORE_BUILD || !storeRuntime || isQuitting || screenLocked || !storeConnectionsWindow || storeConnectionsWindow.isDestroyed() ||
+    if (!IS_STORE_BUILD || FIRST_RELEASE || !storeRuntime || isQuitting || screenLocked || !storeConnectionsWindow || storeConnectionsWindow.isDestroyed() ||
       event.sender !== storeConnectionsWindow.webContents || event.senderFrame !== event.sender.mainFrame ||
       event.sender.getURL() !== pathToFileURL(path.join(__dirname, STORE_CONNECTIONS_PAGE)).href) return { ok: false };
     try {
-      if (FIRST_RELEASE && !FirstRelease.allowsCommand(action,payload)) return {ok:false,message:'首发版本仅提供 Codex 连接。'};
       let message = '连接状态已更新';
       if (action === 'enable-provider') {
         await storeEnableFlow.enable(payload?.provider,{restoreData:payload?.capability!=='chat',beforeConnect:async()=>{if(chat?.getState().busy)throw Object.assign(new Error('BUSY'),{code:'BUSY'});if(payload?.provider==='zcode'&&payload?.accountSource)await storeRuntime.setZcodeAccountSource(payload.accountSource);await storeRuntime.setChatEnabled(payload?.provider,true);}});
@@ -921,6 +922,8 @@ function setAboutUpdate(state) {
 }
 
 function aboutReleaseState(result) {
+  if (IS_STORE_BUILD) return { state: 'ready', currentVersion: result.currentVersion,
+    latestVersion: result.latestVersion, hasUpdate: result.hasUpdate, downloadAvailable: false };
   const fallbacks = getDownloadFallbacks(result);
   return { state: 'ready', currentVersion: result.currentVersion, latestVersion: result.latestVersion,
     hasUpdate: result.hasUpdate, downloadAvailable: Boolean(result.installer), downloadMessage: result.downloadMessage,
@@ -931,12 +934,12 @@ function aboutReleaseState(result) {
 
 function activeChat() { return chat; }
 
-// Separate from directory/plugin consent: this gate covers sending chat data to AI services.
+// The sending boundary checks the consent scope recorded by the active release.
 let chatDataConsent = null;
 function storeChatDataConsent() {
   if (!chatDataConsent) {
     const { createChatDataConsent, createChatDataConsentStore } = require('./lib/chat-data-consent');
-    chatDataConsent = createChatDataConsent({ chatOnlyDisclosure:FIRST_RELEASE, store: createChatDataConsentStore(path.join(app.getPath('userData'), 'chat-data-consent.json')), request: async () => false });
+    chatDataConsent = createChatDataConsent({ store: createChatDataConsentStore(path.join(app.getPath('userData'), 'chat-data-consent.json')), request: async () => false });
   }
   return chatDataConsent;
 }
@@ -947,9 +950,10 @@ async function storeChatSendWithConsent({ event, provider, content, tools = fals
   const owns = () => !isQuitting && !screenLocked && owner && !owner.isDestroyed() && owner.isVisible() &&
     event.sender === owner.webContents && event.senderFrame === event.sender.mainFrame &&
     event.sender.getURL() === pathToFileURL(path.join(__dirname, tools ? 'store-connections.html' : 'chat.html')).href &&
+    (!FIRST_RELEASE || (!tools && provider === 'codex' && storeRuntime.isChatEnabled('codex'))) &&
     (tools || chatWindow?.getWindow() === owner && !chatProviderChanging && activeChat() === controller && controller?.getState().source === provider);
   if (typeof content !== 'string' || !content.trim() || content.length > (tools ? 8000 : 2000) || content.includes('\0')) return { accepted: false, error: '请输入有效消息，消息未发送。' };
-  return storeChatDataConsent().run({ isCurrent: owns,
+  const result = await storeChatDataConsent().run({ isCurrent: owns, requireExisting: FIRST_RELEASE,
     requestConsent: async info => owns() && (await dialog.showMessageBox(owner, info)).response === 1,
     getContext: async () => {
       let identity, state, channel, recipientOrigin, billing;
@@ -962,7 +966,7 @@ async function storeChatSendWithConsent({ event, provider, content, tools = fals
       } else {
         state = tools ? storeRuntime.workbuddyCli.getState() : controller.getState();
         identity = tools ? await storeRuntime.workbuddyCli.getConsentIdentity() : await controller.getConsentIdentity(provider, content);
-        if (provider === 'codex') { channel = 'codex-official'; recipientOrigin = 'https://chatgpt.com'; billing = FIRST_RELEASE?'使用本机原应用已登录的 Codex 账号额度，与额度卡使用同一账号。':'使用球球内独立登录的 Codex 账号额度；可能与原工具读取额度的账号不同。'; }
+        if (provider === 'codex') { channel = 'codex-official'; recipientOrigin = 'https://chatgpt.com'; billing = '使用球球内独立登录的 Codex 账号额度；可能与原工具读取额度的账号不同。'; }
         else if (provider === 'workbuddy') { channel = 'workbuddy-dedicated'; recipientOrigin = 'https://www.codebuddy.cn'; billing = '使用球球内登录的 WorkBuddy / CodeBuddy 官方账号积分；这是球球专用会话，不接管原桌面聊天。'; }
         else {
           channel = storeRuntime.getZcodeAccountSource(); recipientOrigin = identity.recipientOrigin;
@@ -971,9 +975,13 @@ async function storeChatSendWithConsent({ event, provider, content, tools = fals
         }
       }
       const conversation = require('node:crypto').createHash('sha256').update(JSON.stringify([state.activeChatId || null, state.anchorMessageId || null, state.messages || []])).digest('hex');
-      return { provider, channel, recipientOrigin, billing, accountKey: identity.accountKey,
-        conversationKey: identity.conversationKey, revision: [identity.revision, conversation] };
+      const scope = FIRST_RELEASE
+        ? require('./lib/chat-data-consent').codexLinkContext(identity.accountKey)
+        : { provider, channel, recipientOrigin, billing, accountKey: identity.accountKey };
+      return { ...scope, conversationKey: identity.conversationKey, revision: [identity.revision, conversation] };
     }, send });
+  if (result?.needsLinkConsent && owns()) openGlobalSettings('codex-reconnect');
+  return result;
 }
 
 
@@ -989,9 +997,11 @@ function storeChatReady(provider){const state=chat?.getSourceState?.(provider);r
 function chatSnapshot(state = activeChat()?.getState()) {
   const storeInfo=IS_STORE_BUILD ? {
     sources:STORE_PROVIDERS.map(id=>({id,label:id==='codex'?'Codex':id==='zcode'?'ZCode':'WorkBuddy',
+      ...(FIRST_RELEASE ? { needsAuthorization: !storeRuntime?.isChatEnabled(id) ||
+        storeEnableFlow?.getState()[id]?.chat.status === 'needs-data-authorization' } : {}),
       enabled:storeChatReady(id)|| (id==='workbuddy'?storeRuntime?.workbuddyCli.getState().connected===true:
         ['ready','needs-new-chat'].includes(storeEnableFlow?.getState()[id]?.chat.status)||state?.source===id&&state?.connection==='ready'&&state?.modelsStatus==='ready')})),
-    sourceNote:state?.source==='codex'?(FIRST_RELEASE?'额度与聊天使用本机原应用的同一账号；原工具任务来自单独授权的目录。':'额度与聊天使用球球内同一个 Codex 登录；原工具任务来自单独授权的目录。'):state?.sourceNote||null,
+    sourceNote:state?.source==='codex'?(FIRST_RELEASE?'聊天使用你在本机应用登录的账号。':'额度与聊天使用球球内同一个 Codex 登录；原工具任务来自单独授权的目录。'):state?.sourceNote||null,
     billingLabel:state?.source==='zcode'&&storeRuntime?.getZcodeAccountSource()==='configured-custom'?'使用 ZCode 已有自定义模型 · 按原 API 计费':null
   }:{};
   return {...state,...storeInfo,provider:state?.source||'codex',appUpdate:availableUpdate?{latestVersion:availableUpdate.latestVersion}:null};
@@ -1017,8 +1027,7 @@ function showUpdateBubble(result) {
 }
 
 function checkForUpdates(manual = false) {
-  if (IS_STORE_BUILD) { if (manual) { openAbout(); setAboutUpdate({ state: 'error', message: '商店版本通过 Mac App Store 更新；联调候选通过独立候选包更新。' }); } return Promise.resolve(); }
-  if (IS_ACCEPTANCE && !IS_SMOKE_TEST) {
+  if (IS_ACCEPTANCE && !IS_SMOKE_TEST && (!IS_STORE_BUILD || process.mas !== true)) {
     if (manual) { openAbout(); setAboutUpdate({ state: 'error', message: '独立验收版通过本次提供的安装包更新。' }); }
     return Promise.resolve();
   }
@@ -1037,9 +1046,10 @@ function checkForUpdates(manual = false) {
   }
   updateCheckManual = manual;
   if (!cached) { lastUpdateCheckAt = Date.now(); lastUpdateResult = null; }
-  updateCheck = Promise.resolve().then(() => cached || checkLatestRelease(app.getVersion(),
+  // shortcut: use macOS region for lookup until the actual App Store storefront is available.
+  updateCheck = Promise.resolve().then(() => cached || (IS_STORE_BUILD ? checkMacStoreRelease(app.getVersion(), app.getLocaleCountryCode()) : checkLatestRelease(app.getVersion(),
     IS_SMOKE_TEST && process.env.PET_SMOKE_CHAT_ONLY === '1'
-      ? { get: require('./scripts/verify-chat-integration').getSmokeRelease } : undefined)).then(async result => {
+      ? { get: require('./scripts/verify-chat-integration').getSmokeRelease } : undefined))).then(async result => {
     lastUpdateResult = result;
     if (isQuitting || screenLocked) return;
     availableUpdate = result.hasUpdate ? result : null;
@@ -1047,19 +1057,29 @@ function checkForUpdates(manual = false) {
     if (updateCheckManual) await showUpdateResult(result);
     else if (settings.autoUpdateCheck !== false && result.hasUpdate &&
       settings.lastUpdateNotifiedVersion !== result.latestVersion) {
-      const handled = pomodoroQuiet || chatWindow?.isVisible() || showUpdateBubble(result) || await showUpdateResult(result);
+      const quiet = pomodoroQuiet || chatWindow?.isVisible();
+      const handled = quiet ? !IS_STORE_BUILD : showUpdateBubble(result) || await showUpdateResult(result);
       if (handled && settings.autoUpdateCheck !== false && !isQuitting) {
         settings.lastUpdateNotifiedVersion = result.latestVersion;
         persistSettings();
       }
     }
-    if (!isQuitting && !screenLocked && (aboutUpdateState.latestVersion !== result.latestVersion ||
+    if (IS_STORE_BUILD && !result.hasUpdate && !updateCheckManual && aboutUpdateState.hasUpdate) {
+      setAboutUpdate({ state: 'idle' });
+    }
+    if ((!IS_STORE_BUILD || result.hasUpdate) && !isQuitting && !screenLocked && (aboutUpdateState.latestVersion !== result.latestVersion ||
       aboutUpdateState.hasUpdate !== result.hasUpdate)) {
       setAboutUpdate(aboutReleaseState(result));
     }
-  }).catch(async () => {
+  }).catch(error => {
+    if (IS_STORE_BUILD && !isQuitting && !screenLocked && availableUpdate) {
+      availableUpdate = null;
+      chatWindow?.update(chatSnapshot());
+      setAboutUpdate({ state: 'idle' });
+    }
     if (updateCheckManual && !isQuitting && !screenLocked)
-      setAboutUpdate({ state: 'error', message: '暂时无法检查更新，请检查网络后重试。' });
+      setAboutUpdate({ state: 'error', message: IS_STORE_BUILD && error?.publicMessage
+        ? error.publicMessage : '暂时无法检查更新，请检查网络后重试。' });
   }).finally(() => {
     updateCheck = null; updateCheckManual = false;
     if (!isQuitting) {
@@ -1072,7 +1092,7 @@ function checkForUpdates(manual = false) {
 }
 
 function scheduleUpdateCheck(delay = 30000) {
-  if (IS_ACCEPTANCE) return;
+  if (IS_ACCEPTANCE && (!IS_STORE_BUILD || process.mas !== true)) return;
   clearTimeout(updateTimer);
   updateTimer = null;
   if (isQuitting || !app.isPackaged || IS_SMOKE_TEST || settings?.autoUpdateCheck === false) return;
@@ -1205,12 +1225,13 @@ function importedPet(id) {
 function fromLocalPetWindow(event) { return fromCustomizationWindow(event)&&customizationWindow.isVisible()&&event.senderFrame===customizationWindow.webContents.mainFrame; }
 function localPetImportIsCurrent() { const s=localPetImportSession;return Boolean(s&&!s.invalid&&customizationWindow===s.owner&&!s.owner.isDestroyed()&&s.owner.isVisible()&&s.owner.webContents.mainFrame===s.frame&&!screenLocked&&!isQuitting); }
 function petSheetDescriptor(pet){return pet.version===3?{sheets:Object.fromEntries(Object.entries(pet.sheets).map(([id,sheet])=>[id,{rows:sheet.rows,...(sheet.frameWidth?{frameWidth:sheet.frameWidth}:{}),imageURL:pathToFileURL(sheet.path).href}]))}:{};}
-function localPetDescriptor(pet) { return {id:pet.id,importedId:pet.importedId,name:pet.name,...(pet.characterId?{characterId:pet.characterId}:{}),version:pet.version,rows:pet.rows,...petSheetDescriptor(pet),...(pet.frameMap?{frameMap:pet.frameMap}:{}),imageURL:pathToFileURL(pet.spritesheetPath).href,imported:true,origin:'local'}; }
+function localPetDescriptor(pet) { return {id:pet.id,importedId:pet.importedId,name:pet.name,...(pet.idleFacing ? { idleFacing: pet.idleFacing, edgeTuck: pet.edgeTuck, edgeTuckFraction: pet.edgeTuck === 'half' ? .5 : DIRECTIONAL_TUCK_FRACTION } : {}),...(pet.characterId?{characterId:pet.characterId}:{}),version:pet.version,rows:pet.rows,...petSheetDescriptor(pet),...(pet.frameMap?{frameMap:pet.frameMap}:{}),imageURL:pathToFileURL(pet.spritesheetPath).href,imported:true,origin:'local'}; }
 function codexPetDescriptor(appearance) {
   if (appearance?.shape !== 'codex-pet' || !codexPets) return null;
   let pet;
   try { pet = importedPet(appearance.codexPetId); } catch (_) { return null; }
   return { id: pet.id, name: pet.name, ...(pet.characterId?{characterId:pet.characterId}:{}), version: pet.version, rows: pet.rows, spriteScale:pet.spriteScale||1, ...petSheetDescriptor(pet), ...(pet.frameMap?{frameMap:pet.frameMap}:{}), origin:pet.origin,
+    ...(pet.idleFacing ? { idleFacing: pet.idleFacing, edgeTuck: pet.edgeTuck, edgeTuckFraction: pet.edgeTuck === 'half' ? .5 : DIRECTIONAL_TUCK_FRACTION } : {}),
     imageURL: pathToFileURL(pet.spritesheetPath).href };
 }
 
@@ -1362,7 +1383,7 @@ function performChatAction(action) {
 
 function sendPresentation(packet) {
   if (!petWindow || petWindow.isDestroyed()) return;
-  try { petWindow.webContents.send('pet:presentation', packet); } catch (_) {}
+  try { petWindow.webContents.send('pet:presentation', { ...packet, ...(spriteIdleFacing ? { spriteTuckFraction } : {}) }); } catch (_) {}
 }
 
 function tickEdgeNotice(force = false) {
@@ -1380,7 +1401,7 @@ function tickEdgeNotice(force = false) {
     appearance: settings?.codexQuotaAppearance,
     quotaModel: visible && quotaEnabled && presentation?.mode === 'tucked'
       ? buildQuotaLabelModel(codexCompanion?.getSnapshot(), { period: settings.codexQuotaPeriod, size: 'compact',
-        showExtraCredits: settings.codexShowExtraCredits }, codexNow()) : null,
+        showExtraCredits: !FIRST_RELEASE && settings.codexShowExtraCredits }, codexNow()) : null,
     zcodeQuotaModel: visible && !screenLocked && zcodeQuotaEnabled && presentation?.mode === 'tucked'
       ? buildZcodeQuotaLabelModel(zcodeLink.getSnapshot(), { size: 'compact' }) : null
   });
@@ -1761,7 +1782,7 @@ function workBuddyCardState() {
 }
 function workBuddyDetailsState(action = workbuddyDetails?.getAction?.() || 'trend') {
   if(IS_STORE_BUILD&&storeRuntime)return storeRuntime.getWorkbuddyDetailsState(action);
-  return { ...safeWorkBuddyState(workBuddyCardState()), action, usage: workbuddyUsage?.getState(), tasks: workbuddyTasks?.getState() };
+  return { ...require('./lib/workbuddy-label-window').safeState(workBuddyCardState()), action, usage: workbuddyUsage?.getState(), tasks: workbuddyTasks?.getState() };
 }
 async function openWorkBuddyTask(id) {
   if (!settings?.workbuddyEnabled || screenLocked || isQuitting || typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(id)) return false;
@@ -2024,9 +2045,9 @@ function quotaLabelModel(snapshot = codexCompanion?.getSnapshot()) {
   const model = buildQuotaLabelModel(snapshot, {
     period: display.style === 'card' ? settings.codexQuotaPeriod : 'auto',
     size: display.style === 'card' ? settings.codexQuotaLabelSize : 'compact',
-    showExtraCredits: display.style === 'card' && settings.codexShowExtraCredits
+    showExtraCredits: !FIRST_RELEASE && display.style === 'card' && settings.codexShowExtraCredits
   }, codexNow());
-  model.codexIconPreference = codexIconPreference?.getPreference() || 'codex-system';
+  model.codexIconPreference = FIRST_RELEASE ? 'app-default' : (codexIconPreference?.getPreference() || 'codex-system');
   model.codexIconDark = codexIconSystemDark();
   const numberPeriods = QuotaDisplay.periods(display, model);
   return display.style === 'card' || numberPeriods.length === 0 ? model : { ...model, display: 'numbers',
@@ -2176,7 +2197,7 @@ function initializeCodexCompanion(options = {}) {
 
 function codexDetailModel(snapshot, action, period) {
   const card = buildQuotaLabelModel(snapshot, { period: quotaDisplayConfig().style === 'card' ? settings?.codexQuotaPeriod : 'auto',
-    size: settings?.codexQuotaLabelSize, showExtraCredits: settings?.codexShowExtraCredits }, codexNow());
+    size: settings?.codexQuotaLabelSize, showExtraCredits: !FIRST_RELEASE && settings?.codexShowExtraCredits }, codexNow());
   const selected = card.items.find(item => item.windowMinutes === period) || card.items[0];
   const model = buildCodexDetailsModel(snapshot, { action, period: selected?.windowMinutes || period,
     appearance: settings?.codexQuotaAppearance }, codexNow());
@@ -2272,7 +2293,7 @@ function setCodexPreference(name, value) {
   if (!settings || settings.codexEnabled !== true || !codexCompanion || isQuitting) return false;
   const allowed = new Set([
     'codexTaskNameInAlerts', 'codexQuotaAlwaysVisible', 'codexQuotaPeriod', 'codexQuotaLabelSize',
-    'codexShowExtraCredits', 'codexQuotaFunEnabled'
+    ...(!FIRST_RELEASE ? ['codexShowExtraCredits'] : []), 'codexQuotaFunEnabled'
   ]);
   if (!allowed.has(name)) return false;
   const previous = settings[name];
@@ -2637,6 +2658,8 @@ function sendCompanionSettings() {
   const descriptor=codexPetDescriptor(settings.customization.appearance);spriteEdgeMapped=Boolean(descriptor?.frameMap);
   dogDreamSkinId=descriptor?.id||null;dogDreamSkinEnabled=isXiaobaiPet(descriptor);dogSpriteDescriptor=dogDreamSkinEnabled?descriptor:null;syncDogDream();
   if(spriteEdgeInk?.id!==descriptor?.id)spriteEdgeInk=null;
+  spriteIdleFacing = descriptor?.idleFacing; spriteEdgeHalf = descriptor?.edgeTuck === 'half';
+  spriteTuckFraction = spriteEdgeHalf ? spriteHalfTuckFraction(spriteEdgeInk, spriteIdleFacing, petWindow.getBounds()) : descriptor?.edgeTuckFraction;
   petWindow.webContents.send('pet:settings', {
     keepAwake: settings.keepAwake,
     focusQuiet: pomodoroQuiet,
@@ -2811,12 +2834,12 @@ function codexMenu() {
           setCodexPreference('codexQuotaFunEnabled', enabled); }
       },
       { id: 'codex-quota-settings', label: '经典额度卡设置', enabled: cardSettingsEnabled, submenu: [
-        {
+        ...(!FIRST_RELEASE ? [{
           id: 'codex-extra-credits', label: '显示额外点数', type: 'checkbox',
           enabled: cardSettingsEnabled, checked: settings.codexShowExtraCredits !== false,
           click: item => { const enabled = item.checked; item.checked = settings.codexShowExtraCredits !== false;
             setCodexPreference('codexShowExtraCredits', enabled); }
-        },
+        }] : []),
         {
           id: 'codex-quota-period', label: '额度周期', enabled: cardSettingsEnabled,
           submenu: [
@@ -2874,7 +2897,9 @@ function settingsCommandTemplate() {
       click: item => { weatherWindow?.setEnabled(item.checked); syncQuotaCardGroup(); syncQuotaFreeStack(); } },
     { id: 'weather-visible', label: '显示天气卡', type: 'checkbox', checked: weatherWindow?.isCardVisible() !== false, enabled: weatherWindow?.isEnabled() === true,
       click: item => { weatherWindow?.setCardVisible(item.checked); syncQuotaCardGroup(); syncQuotaFreeStack(); } },
-    { id: 'weather-open', label: '天气与城市设置', click: () => weatherWindow?.openCity() }
+    { id: 'weather-open', label: '天气与城市设置', click: () => {
+      if (!weatherWindow || weatherWindow.openCity(globalSettingsWindow) === false) throw new Error('天气窗口暂不可用');
+    } }
   ];
 }
 
@@ -2979,7 +3004,7 @@ function menuTemplate() {
         click: item => setOpenAtLogin(item.checked) },
       { type: 'separator' },
       { label: '恢复默认位置', click: resetPosition },
-      { id: 'update-auto', label: '自动提醒新版本', type: 'checkbox', enabled: !IS_STORE_BUILD, checked: !IS_STORE_BUILD && settings.autoUpdateCheck !== false,
+      { id: 'update-auto', label: '自动提醒新版本', type: 'checkbox', enabled: !IS_STORE_BUILD || process.mas === true, checked: settings.autoUpdateCheck !== false,
         click: item => setAutoUpdateCheck(item.checked) }
     ] },
     { type: 'separator' },
@@ -3181,12 +3206,12 @@ async function finishSmokeTest() {
       return;
     }
     if (process.env.PET_SMOKE_CODEX_PETS_ONLY === '1') {
-      if(process.env.PET_CODEX_PETS_QA_PHASE==='edges'){await require('./scripts/verify-small-sprite-edge').verifySmallSpriteEdge({pet:petWindow,edgeTuck,setSize:setPetSize,screen,getMask:()=>spriteEdgeInk});app.quit();return;}
+      if(process.env.PET_CODEX_PETS_QA_PHASE==='edges'){await require('./scripts/verify-small-sprite-edge').verifySmallSpriteEdge({pet:petWindow,edgeTuck,setSize:setPetSize,screen,getMask:()=>spriteEdgeInk,sendCommand,getSettings:()=>settings,getMenu:()=>Menu.buildFromTemplate(menuTemplate()),monitor:activityMonitor});app.quit();return;}
       openCustomization();
       const verifyPets = process.env.PET_CODEX_PETS_QA_PHASE === 'folder'
         ? require('./scripts/verify-local-pet-motion').verifyLocalPetMotion
         : require('./scripts/verify-codex-pets').verifyCodexPets;
-      await verifyPets({ pet: petWindow, localStore: localPetStore, sendCommand, edgeTuck,
+      await verifyPets({ pet: petWindow, localStore: localPetStore, sendCommand, edgeTuck, getMask: () => spriteEdgeInk,
         customize: customizationWindow, openCustomization, openChat,
         getChatWindow: () => chatWindow.getWindow(), getSettings: () => settings,
         setSize: setPetSize, store: codexPets, packaged: app.isPackaged,
@@ -3675,10 +3700,10 @@ function createPetWindow() {
   edgeTuck?.dispose();
 
   petWindow = candidatePetWindow;
-  spriteEdgeInk=null;spriteEdgeMapped=false;
+  spriteEdgeInk=null;spriteEdgeMapped=false;spriteIdleFacing=undefined;spriteTuckFraction=undefined;spriteEdgeHalf=false;
   edgeTuck = createEdgeTuck({ getWindow: () => petWindow,
     getVisibleHitTest: geometry => spriteEdgeMapped
-      ? containsSpriteEdgeInk(spriteEdgeInk, { ...geometry, ...(dogDreamSkinEnabled ? { tuckFraction: XIAOBAI_TUCK_FRACTION } : {}) })
+      ? containsSpriteEdgeInk(spriteEdgeInk, { ...geometry, idleFacing: spriteIdleFacing, tuckFraction: spriteTuckFraction ?? (dogDreamSkinEnabled ? XIAOBAI_TUCK_FRACTION : undefined) })
       : EdgePeek.containsVisibleBody(settings?.customization?.appearance?.shape, geometry),
     getTuckDelay: () => EdgePeek.specFor(settings?.customization?.appearance?.shape)?.delayMs ?? 650,
     getWorkArea: bounds => screen.getDisplayMatching(bounds).workArea,
@@ -3897,6 +3922,44 @@ function registerIpc() {
     if (fromGlobalSettings(event, false) && typeof value === 'boolean') shortcutRegistrar?.setRecording(value && fromGlobalSettings(event));
   });
   ipcMain.handle('pet:global-settings-get', event => fromGlobalSettings(event, false) ? globalSettingsSnapshot() : null);
+  ipcMain.handle('pet:global-codex-connection', async (event, action) => {
+    if (!FIRST_RELEASE || !storeEnableFlow || !fromGlobalSettings(event) ||
+      event.sender.getURL() !== pathToFileURL(path.join(__dirname, 'global-settings.html')).href ||
+      globalSettingsBusy || !['app', 'account', 'connect', 'disconnect', 'cancel'].includes(action)) return { status: 'busy' };
+    globalSettingsBusy = true;
+    try {
+      if (action === 'cancel') {
+        storeRuntime.clearPendingInstalledCodexApp();
+        return { status: 'cancelled' };
+      }
+      if (action === 'app' || action === 'account') {
+        const owner = globalSettingsWindow;
+        const controller = new AbortController();
+        const abort = () => controller.abort();
+        owner.once('closed', abort);
+        try {
+          return await storeRuntime.authorizeInstalledCodex(action, controller.signal);
+        } finally { owner.removeListener('closed', abort); }
+      }
+      if (chat?.getState().busy) return { status: 'busy' };
+      if (action === 'disconnect') {
+        await storeEnableFlow.disable('codex');
+        storeChatDataConsent().revoke('codex');
+        return { status: 'disconnected', snapshot: globalSettingsSnapshot() };
+      }
+      await storeEnableFlow.enable('codex', {
+        interactive: false, restoreData: false,
+        beforeConnect: () => storeRuntime.setChatEnabled('codex', true)
+      });
+      const result = storeEnableFlow.getState().codex.chat;
+      const account = storeRuntime.getInstalledCodexAccountKey();
+      if (account && fromGlobalSettings(event) && storeRuntime.isInstalledCodexConnected()) {
+        storeChatDataConsent().grantCodexLink(account);
+      }
+      return { status: result.status, message: result.message, snapshot: globalSettingsSnapshot() };
+    } catch (_) { return { status: 'error' }; }
+    finally { globalSettingsBusy = false; }
+  });
   ipcMain.handle('pet:global-settings-action', async (event, id, checked) => {
     if (!fromGlobalSettings(event) || globalSettingsBusy || typeof id !== 'string') return { error: '当前无法修改，请稍后重试。' };
     const item = findSettingsAction(settingsCommandTemplate(), id);
@@ -3921,7 +3984,7 @@ function registerIpc() {
     return finishCodexConsent(accepted);
   });
   ipcMain.handle('pet:about-get', event => fromAboutWindow(event)
-    ? { version: app.getVersion(), website: APP_WEBSITE, developer: '春野', update: aboutUpdateState } : null);
+    ? { version: app.getVersion(), website: APP_WEBSITE, developer: '春野', ...(IS_STORE_BUILD ? { storeBuild: true } : {}), update: aboutUpdateState } : null);
   ipcMain.handle('pet:about-website', event => {
     if (!fromAboutWindow(event, true)) return false;
     return shell.openExternal(APP_WEBSITE).then(() => true, () => false);
@@ -3929,7 +3992,7 @@ function registerIpc() {
   ipcMain.handle('pet:about-privacy', event => {
     if(!fromAboutWindow(event,true)||!event.sender.mainFrame||event.senderFrame!==event.sender.mainFrame||
       event.sender.getURL()!==pathToFileURL(path.join(__dirname,'about.html')).href)return false;
-    return shell.openExternal('https://qiuqiu.pet/privacy/').then(()=>true,()=>false);
+    return shell.openExternal(FIRST_RELEASE ? 'https://qiuqiu.pet/privacy/mac-app-store/' : 'https://qiuqiu.pet/privacy/').then(()=>true,()=>false);
   });
   ipcMain.handle('pet:about-update', async event => {
     if (!fromAboutWindow(event, true)) return false;
@@ -3937,8 +4000,11 @@ function registerIpc() {
     return true;
   });
   ipcMain.handle('pet:about-release', async event => {
-    if (IS_STORE_BUILD) return { state: 'error', code: 'STORE_UPDATES_ONLY', message: '请通过 Mac App Store 更新。' };
     if (!fromAboutWindow(event, true)) return false;
+    if (IS_STORE_BUILD) {
+      if (aboutUpdateState.state !== 'ready' || !availableUpdate?.hasUpdate || aboutUpdateState.latestVersion !== availableUpdate.latestVersion) return false;
+      return shell.openExternal(STORE_URL).then(() => true, () => false);
+    }
     if (aboutUpdateState.state !== 'ready' || !availableUpdate || aboutUpdateState.latestVersion !== availableUpdate.latestVersion)
       return { state: 'error', code: 'VERSION_CHANGED', stage: 'prepare', message: '版本信息已变化，请重新检查更新。' };
     if (downloadFlight) return { state: 'error', code: 'DOWNLOAD_BUSY', stage: 'prepare', message: '安装包正在下载，请等待当前下载完成。' };
@@ -4356,7 +4422,9 @@ function registerIpc() {
     if(!fromPetWindow(event))return;
     if(packet===null){spriteEdgeInk=null;return;}
     const mask=normalizeSpriteEdgeInk(packet);if(!mask||!spriteEdgeMapped||mask.id!==settings.customization.appearance.codexPetId)return;
-    spriteEdgeInk=mask;edgeTuck?.publish();
+    spriteEdgeInk = mask;
+    if (spriteEdgeHalf) spriteTuckFraction = spriteHalfTuckFraction(mask, spriteIdleFacing, petWindow.getBounds());
+    edgeTuck?.publish();
   });
 
   ipcMain.on('pet:codex-availability', (event, packet) => {
@@ -4485,6 +4553,15 @@ function registerDisplayRecovery() {
 }
 
 async function bootstrap() {
+  if (process.platform === 'darwin') {
+    // AppKit remembers panel geometry in this application's preferences.
+    for (const mode of ['Open', 'Save']) {
+      const key = 'NSNavPanelExpandedSizeFor' + mode + 'Mode';
+      const saved = systemPreferences?.getUserDefault?.(key, 'string');
+      const width = Number(saved?.match(/^\{([\d.]+),/)?.[1]);
+      if (width > 900) systemPreferences.setUserDefault(key, 'string', '{760, 448}');
+    }
+  }
   if (IS_SMOKE_TEST) {
     const smokeDirectory = app.commandLine.getSwitchValue('user-data-dir');
     if (!smokeDirectory || fs.realpathSync(app.getPath('userData')) !== fs.realpathSync(smokeDirectory)) {
@@ -4494,10 +4571,13 @@ async function bootstrap() {
   }
   app.setActivationPolicy('accessory');
   if (app.dock) app.dock.hide();
-  if(IS_STORE_BUILD){const applicationMenu=Menu.getApplicationMenu()||Menu.buildFromTemplate([{role:'appMenu'},{role:'editMenu'},{role:'windowMenu'}]);if(!applicationMenu.items.some(item=>item.id==='qiuqiu-store-tools'))applicationMenu.insert(1,new MenuItem({id:'qiuqiu-store-tools',label:'球球工具',submenu:[{label:'工具连接',accelerator:'CommandOrControl+Shift+K',click:()=>openStoreConnections()},{label:'便签与待办',click:()=>notesCompanion?.openPanel()},{label:'番茄钟',click:()=>openPomodoro()},...(!FIRST_RELEASE&&process.mas===true&&process.qiuqiuMasDevelopmentCandidate===true?[{label:'验证插件安装（仅空测试目录）',click:async()=>{const result=await require('./lib/mas-plugin-install-probe').probePluginInstallation({app,dialog});fs.writeFileSync(path.join(app.getPath('userData'),'mas-installer-probe-result.json'),JSON.stringify(result),{mode:0o600});await dialog.showMessageBox({type:result.passed?'info':'warning',message:result.passed?'空测试目录插件安装验证通过':'空测试目录验证未通过',detail:'仅测试目录，不代表原软件任务已接通或商店审核通过。'});}}]:[])]}));Menu.setApplicationMenu(applicationMenu);}
+  if(IS_STORE_BUILD){const applicationMenu=Menu.getApplicationMenu()||Menu.buildFromTemplate([{role:'appMenu'},{role:'editMenu'},{role:'windowMenu'}]);if(!applicationMenu.items.some(item=>item.id==='qiuqiu-store-tools'))applicationMenu.insert(1,new MenuItem({id:'qiuqiu-store-tools',label:'球球工具',submenu:[{label:FIRST_RELEASE?'Codex 设置':'工具连接',accelerator:'CommandOrControl+Shift+K',click:()=>openStoreConnections()},{label:'便签与待办',click:()=>notesCompanion?.openPanel()},{label:'番茄钟',click:()=>openPomodoro()},...(!FIRST_RELEASE&&process.mas===true&&process.qiuqiuMasDevelopmentCandidate===true?[{label:'验证插件安装（仅空测试目录）',click:async()=>{const result=await require('./lib/mas-plugin-install-probe').probePluginInstallation({app,dialog});fs.writeFileSync(path.join(app.getPath('userData'),'mas-installer-probe-result.json'),JSON.stringify(result),{mode:0o600});await dialog.showMessageBox({type:result.passed?'info':'warning',message:result.passed?'空测试目录插件安装验证通过':'空测试目录验证未通过',detail:'仅测试目录，不代表原软件任务已接通或商店审核通过。'});}}]:[])]}));Menu.setApplicationMenu(applicationMenu);}
   settingsFile = path.join(app.getPath('userData'), 'settings.json');
   if (IS_STORE_BUILD) storeRuntime = require('./lib/mas-provider-runtime').createMasProviderRuntime({
-    firstRelease:FIRST_RELEASE, installedCodex:FIRST_RELEASE, app, dialog: {showOpenDialog: options => storeConnectionsWindow && !storeConnectionsWindow.isDestroyed() ? dialog.showOpenDialog(storeConnectionsWindow,options) : dialog.showOpenDialog(options)}, BrowserWindow, session, shell, fetch: (url, options) => net.fetch(url, options), diagnostic: process.mas !== true,
+    firstRelease:FIRST_RELEASE, installedCodex:FIRST_RELEASE, app, dialog: {showOpenDialog: options => {
+      const owner = FIRST_RELEASE ? globalSettingsWindow : storeConnectionsWindow;
+      return owner && !owner.isDestroyed() ? dialog.showOpenDialog(owner, options) : dialog.showOpenDialog(options);
+    }}, BrowserWindow, session, shell, fetch: (url, options) => net.fetch(url, options), diagnostic: process.mas !== true,
     onChange: () => { notifyStoreConnections(); chat?.sourceChanged?.('workbuddy'); if (settings) syncWorkBuddyLabel(); },
     onManagedReady:provider=>{void storeEnableFlow?.restore(provider).catch(()=>{});} });
   codexPets = createCodexPetStore({
@@ -4628,6 +4708,13 @@ async function bootstrap() {
     onAction: performChatAction });
   let makeWorkbuddyChat;
   if(!FIRST_RELEASE) {
+  const { createWorkBuddyTasks } = require('./lib/workbuddy-tasks');
+  const { createWorkBuddyUsage } = require('./lib/workbuddy-usage');
+  const { createWorkBuddyConsent } = require('./lib/workbuddy-consent-window');
+  const { createWorkBuddyDetailsWindow } = require('./lib/workbuddy-details-window');
+  const { createWorkBuddyChat } = require('./lib/workbuddy-chat');
+  const { createWorkBuddyQuota } = require('./lib/workbuddy-quota');
+  const { runWorkBuddy } = require('./lib/workbuddy-client');
   workbuddyRun = IS_SMOKE_TEST && process.env.PET_SMOKE_WORKBUDDY_ONLY === '1' && process.env.PET_SMOKE_WORKBUDDY_LIVE !== '1'
     ? require('./scripts/verify-workbuddy-integration').createSmokeWorkBuddyRunner() : runWorkBuddy;
   makeWorkbuddyChat = () => (workbuddyChat = createWorkBuddyChat({ getWeatherContext: text => weatherContext(currentWeatherState(), text), store: createChatStore(path.join(app.getPath('userData'), 'workbuddy-chat.json')),
@@ -4649,7 +4736,7 @@ async function bootstrap() {
     workbuddyTasks.setEnabled(state.enabled); workbuddyUsage.setEnabled(state.enabled); syncWorkBuddyLabel(); workbuddyDetails?.update(workBuddyDetailsState());
     if (state.enabled && !state.busy && !state.error && state.report) { void workbuddyTasks.refresh(false); void workbuddyUsage.refresh(false); }
   } });
-  workbuddyLabel = createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow: () => petWindow, getBubbleBounds: quotaObstacleBounds,
+  workbuddyLabel = require('./lib/workbuddy-label-window').createWorkBuddyLabelWindow({ BrowserWindow, screen, getPetWindow: () => petWindow, getBubbleBounds: quotaObstacleBounds,
     getStackAnchor: () => {
       const api = apiUsageLabel?.getWindow();
       return zcodeLink?.getVisibleBounds?.() || (api && !api.isDestroyed() && api.isVisible() ? api.getBounds() : quotaLabel?.getVisibleBounds?.());
@@ -4732,10 +4819,10 @@ async function bootstrap() {
           await storeRuntime.workbuddyCli.connect();await storeRuntime.workbuddyCli.refresh();
           return{status:storeRuntime.workbuddyCli.getState().connected&&!storeRuntime.workbuddyCli.getState().error&&storeRuntime.workbuddyCli.getState().gatewayReachable?'ready':'unavailable',message:'球球专用聊天；不接管原桌面会话。'};
         }
-        const available=await storeRuntime.prepareChat(provider,{interactive});
+        const available=await storeRuntime.prepareChat(provider,{interactive, deferQuota:FIRST_RELEASE});
         if(available.status!=='ready')return available;
         try{if(interactive){await chat.selectSource(provider);await chat.connect();}else await chat.connectSource(provider);}catch(error){if(error.code==='ACCOUNT_CHANGED')return{status:'needs-new-chat',message:'请打开聊天并开始一段新对话，旧记录会保留。'};throw error;}const state=chat.getSourceState(provider);
-        if(FIRST_RELEASE&&provider==='codex'&&state.connection==='ready'&&state.modelsStatus==='ready'&&!settings.codexEnabled)await setCodexEnabled(true);
+        if(FIRST_RELEASE&&provider==='codex'&&state.connection==='ready'&&state.modelsStatus==='ready'&&!settings.codexEnabled)void setCodexEnabled(true);
         return{status:state.connection==='ready'&&state.modelsStatus==='ready'?'ready':'unavailable',message:state.connection==='ready'&&state.modelsStatus==='ready'?'聊天已连接。':state.error||'聊天尚未就绪，请稍后重试。'};
       },
       revoke:async provider=>{
@@ -4745,7 +4832,10 @@ async function bootstrap() {
         else if(provider==='zcode'){await zcodeLink.setEnabled(false);await storeRuntime.zcodeDesktopIntegration.revoke();}
         else {await setWorkBuddyEnabled(false);await storeRuntime.disconnectWorkbuddyChat();await storeRuntime.desktopIntegration.revoke();}
         await storeRuntime.revoke(provider);
-      },onChange:notifyStoreConnections
+      },onChange:()=>{
+        notifyStoreConnections();
+        if(FIRST_RELEASE&&!screenLocked)chatWindow?.update(chatSnapshot());
+      }
     });
     // Restore only already-enabled providers. No picker, login or account change.
     void (async()=>{for(const provider of STORE_PROVIDERS){if(storeRuntime.isChatEnabled(provider))await storeEnableFlow.enable(provider,{interactive:false});}})().catch(()=>{});
@@ -4955,19 +5045,20 @@ async function bootstrap() {
   powerMonitor.on('unlock-screen', () => powerGuard.setLocked(false));
   powerMonitor.on('resume', () => { powerGuard.setSuspended(false); workbuddyQuota?.recover('resume'); apiBalance?.recover('resume'); });
   registerIpc();
-  if (IS_STORE_BUILD) registerStoreConnections();
+  if (IS_STORE_BUILD && !FIRST_RELEASE) registerStoreConnections();
   apiBalance?.setEnabled(settings.apiBalanceEnabled);
   registerDisplayRecovery();
   initializeCodexCompanion();
   createPetWindow();
   weatherWindow = createWeatherWindow({ BrowserWindow, ipcMain, screen, getReducedMotion: quotaReducedMotion, fetch: (...args) => net.fetch(...args),
+    requireLocationConsent: FIRST_RELEASE,
     getCollectionWindow: () => quotaCardGroupWindow?.getWindow?.(),
     alwaysOnTop: settings.alwaysOnTop, filePath: path.join(app.getPath('userData'), 'weather.json'), getPetWindow: () => petWindow,
     getStackAnchor: () => [quotaLabel?.getVisibleBounds?.(), apiUsageLabel?.getVisibleBounds?.(), zcodeLink?.getVisibleBounds?.(), workbuddyLabel?.getVisibleBounds?.(), apiBalanceLabel?.getVisibleBounds?.(), quotaCardGroupWindow?.getBounds?.()].filter(Boolean).sort((a,b) => b.y+b.height-a.y-a.height)[0] || null,
     getBubbleBounds: quotaObstacleBounds, getPresentation: () => ({ ...quotaLayoutPresentation(), quotaGroupHidden: Boolean(quotaCardCollected('weather') || quotaFreeStackPlan()?.hidden?.includes('weather')), quotaGroupLayout: quotaFreeStackPlan()?.cards.weather }),
     getObstacles: () => [quotaLabel?.getVisibleBounds?.(), apiUsageLabel?.getVisibleBounds?.(), zcodeLink?.getVisibleBounds?.(), workbuddyLabel?.getVisibleBounds?.(), apiBalanceLabel?.getVisibleBounds?.(), quotaCardGroupWindow?.getBounds?.()].filter(Boolean),
     getSuppressed: () => quotaCardGroupInput().suppressed,
-    getCityPickerSuppressed: () => isQuitting || screenLocked || presentationSuppressed(),
+    getCityPickerSuppressed: () => isQuitting || screenLocked,
     getAppearance: () => settings.codexQuotaAppearance,
     onLayout: () => { syncQuotaLabel(codexCompanion?.getSnapshot()); syncApiBalanceLabel(); syncQuotaFreeStack(); },
     onChange: packet => { syncQuotaCardGroup(); syncQuotaFreeStack(); if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send('pet:weather', packet); },

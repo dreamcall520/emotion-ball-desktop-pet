@@ -73,21 +73,14 @@ test('私有同意文件仅保存version/provider/scope，重启恢复、旧版�
  }finally{fs.rmSync(temp,{recursive:true,force:true});}
 });
 
-test('首发仅收准聊天披露，默认及便签独立用途不变，同一已存scope跨模式无需重新授权',async()=>{
- const normal=fixture(),first=fixture({chatOnlyDisclosure:true});
- await normal.run();await first.run();
- assert.match(normal.state().prompts[0].detail,/撤销 AI 数据同意（含聊天与便签整理）/);
- assert.match(first.state().prompts[0].detail,/撤销聊天数据同意/);assert.doesNotMatch(first.state().prompts[0].detail,/便签/);
- assert.deepEqual(first.state().rows,normal.state().rows,'wording-only option cannot alter consent scope or persisted version');
- const normalNotes=fixture(),firstNotes=fixture({chatOnlyDisclosure:true});
- normalNotes.set({channel:'notes-organize'});firstNotes.set({channel:'notes-organize'});
- await normalNotes.run();await firstNotes.run();assert.deepEqual(firstNotes.state().prompts,normalNotes.state().prompts);
- assert.match(firstNotes.state().prompts[0].detail,/便签整理同意与聊天同意独立/);
- assert.notEqual(firstNotes.state().rows[0].scope,first.state().rows[0].scope);
- const rows=normal.state().rows;let requests=0,sent=0;
- const reopened=createChatDataConsent({chatOnlyDisclosure:true,store:{read:()=>structuredClone(rows),write:()=>assert.fail('known consent must not rewrite')},request:async()=>{requests++;return false;}});
- assert.equal((await reopened.run({getContext:async()=>base(),send:()=>{sent++;return{accepted:true};}})).accepted,true);
- assert.equal(requests,0);assert.equal(sent,1);
- const rendererFlag=fixture();rendererFlag.set({chatOnlyDisclosure:true});await rendererFlag.run();
- assert.match(rendererFlag.state().prompts[0].detail,/含聊天与便签整理/,'context data cannot enable the main-process-only display option');
+test('联动同意绑定到已核实账号，旧聊天同意无法替代，解除后失效', async () => {
+  const f = fixture();
+  await f.run();
+  assert.equal(f.gate.hasCodexLink(account), false);
+  assert.throws(() => f.gate.grantCodexLink(null), { code: 'CONSENT_CONTEXT' });
+  f.gate.grantCodexLink(account);
+  assert.equal(f.gate.hasCodexLink(account), true);
+  assert.equal(f.gate.hasCodexLink(other), false);
+  f.gate.revoke('codex');
+  assert.equal(f.gate.hasCodexLink(account), false);
 });

@@ -258,4 +258,19 @@ async function checkLatestRelease(currentVersion, { get = getJson, platform = pr
     downloadMessage: installer ? '' : `暂无适合 ${device} 的新版安装包，请稍后重试。` };
 }
 
-module.exports = { checkLatestRelease, downloadInstaller, getDownloadFallbacks };
+const STORE_ID = 6829348954;
+const STORE_URL = 'macappstore://apps.apple.com/app/id' + STORE_ID;
+
+async function checkMacStoreRelease(currentVersion, country, { get = getJson } = {}) {
+  const current = parseVersion(currentVersion);
+  if (!current || !/^[a-z]{2}$/i.test(country || '')) throw updateError(FORMAT_ERROR);
+  const response = await get(`https://itunes.apple.com/lookup?id=${STORE_ID}&country=${country.toLowerCase()}&entity=macSoftware`);
+  const listing = Array.isArray(response?.results) && response.results.find(item =>
+    item?.trackId === STORE_ID && item.kind === 'mac-software' && item.bundleId === 'local.xiaokun.emotionball.pet');
+  const latest = parseVersion(listing?.version);
+  if (!latest) throw updateError(NOT_FOUND_ERROR);
+  const difference = latest.parts.map((part, index) => part - current.parts[index]).find(value => value !== 0);
+  return { currentVersion: current.version, latestVersion: latest.version, hasUpdate: difference > 0 };
+}
+
+module.exports = { checkMacStoreRelease, STORE_URL, checkLatestRelease, downloadInstaller, getDownloadFallbacks };

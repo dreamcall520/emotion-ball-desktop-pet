@@ -268,3 +268,29 @@ test('四卡管理只使用专属保存IPC并保留真实返回结果', async ()
   assert.equal(await settings.saveQuotaCards(config),result);
   assert.deepEqual(calls,[['pet:global-quota-cards-save',config]]);
 });
+
+
+test('sprite mask aspect survives the real preload boundary and invalid ratios never reach main', () => {
+  let desktop; const sent = [];
+  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '../preload.js'), 'utf8'), {
+    require: () => ({ contextBridge: { exposeInMainWorld(_name, api) { desktop = api; } },
+      ipcRenderer: { send: (...args) => sent.push(args) } })
+  });
+  const base = { id: 'wide', columns: 64, rows: Array(64).fill('ffffffffffffffff') };
+  desktop.spriteEdgeInk({ ...base, aspect: 300 / 208, secret: 'drop' });
+  assert.equal(sent.at(-1)[1].aspect, 300 / 208);
+  assert.equal(sent.at(-1)[1].secret, undefined);
+  const { normalizeSpriteEdgeInk, containsSpriteEdgeInk } = require('../lib/sprite-edge-ink');
+  const mask = normalizeSpriteEdgeInk(sent.at(-1)[1]);
+  assert.equal(mask.aspect, 300 / 208);
+  assert.equal(containsSpriteEdgeInk(mask, { bounds: { x: 0, y: 0, width: 120, height: 120 },
+    side: 'left', idleFacing: 'left', tuckFraction: .5, point: { x: 5, y: 5 } }), false,
+    'the preserved wide aspect makes its actual letterbox transparent');
+  const before = sent.length;
+  for (const aspect of [null, NaN, Infinity, '1', .5, 2]) desktop.spriteEdgeInk({ ...base, aspect });
+  assert.equal(sent.length, before);
+  desktop.spriteEdgeInk(base);
+  assert.equal(Object.hasOwn(sent.at(-1)[1], 'aspect'), false, 'legacy mask packets remain valid');
+  desktop.spriteEdgeInk(null);
+  assert.equal(sent.at(-1)[1], null);
+});

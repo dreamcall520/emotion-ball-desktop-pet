@@ -6,6 +6,7 @@
   let busy = false;
   let update = { state: 'idle' };
   let updateReceived = false;
+  let storeBuild = false;
   let currentVersion = '';
   let releaseAvailable = false;
   const avatar = $('about-avatar');
@@ -125,9 +126,9 @@
     $('about-privacy').disabled = busy || typeof bridge?.openPrivacy !== 'function';
     $('about-check-updates').hidden = releaseAvailable && update.downloadAvailable !== false && !failed;
     $('about-check-updates').disabled = busy || checking || typeof bridge?.checkUpdates !== 'function';
-    $('about-open-release').disabled = busy || checking || downloading || update.downloadAvailable === false || typeof bridge?.downloadUpdate !== 'function';
+    $('about-open-release').disabled = busy || checking || downloading || (!storeBuild && update.downloadAvailable === false) || typeof bridge?.downloadUpdate !== 'function';
     $('about-open-release').hidden = !releaseAvailable;
-    $('about-open-release').textContent = downloading ? '正在下载…' : update.download?.state === 'completed' ? '重新下载安装包' : '下载安装包';
+    $('about-open-release').textContent = storeBuild ? '前往 App Store' : downloading ? '正在下载…' : update.download?.state === 'completed' ? '重新下载安装包' : '下载安装包';
     $('about-browser-download').hidden = !releaseAvailable || update.browserDownloadAvailable !== true;
     $('about-browser-download').disabled = busy || checking || downloading || typeof bridge?.openBrowserDownload !== 'function';
     $('about-domestic-download').hidden = !releaseAvailable || update.domesticDownloadAvailable !== true;
@@ -143,7 +144,7 @@
     status.textContent = value.state === 'checking' ? '正在检查更新…'
       : value.state === 'ready' ? value.hasUpdate
         ? `发现新版本${typeof value.latestVersion === 'string' ? ' ' + value.latestVersion : ''}`
-        : `已是最新版本${version ? '（' + version + '）' : ''}`
+        : storeBuild ? '按 Mac 地区查询，未发现新版本。' : `已是最新版本${version ? '（' + version + '）' : ''}`
         : value.state === 'error' ? typeof value.message === 'string' && value.message ? value.message : '暂时无法检查更新，请稍后重试。'
           : '';
     if (value.state === 'ready' && value.hasUpdate) {
@@ -202,7 +203,7 @@
   $('about-privacy').addEventListener('click', () => perform('openPrivacy', '', '暂时无法打开隐私说明，请稍后重试。'));
   $('about-website').addEventListener('click', () => perform('openWebsite', '', '暂时无法打开官网，请稍后重试。'));
   $('about-check-updates').addEventListener('click', () => perform('checkUpdates', '正在检查更新…', '暂时无法检查更新，请稍后重试。'));
-  $('about-open-release').addEventListener('click', () => perform('downloadUpdate', '正在准备安装包…', '暂时无法下载安装包，请稍后重试。'));
+  $('about-open-release').addEventListener('click', () => storeBuild ? perform('openStoreUpdate', '', '暂时无法打开 App Store。') : perform('downloadUpdate', '正在准备安装包…', '暂时无法下载安装包，请稍后重试。'));
   $('about-browser-download').addEventListener('click', () => perform('openBrowserDownload', '', '暂时无法打开浏览器下载，请稍后重试。'));
   $('about-domestic-download').addEventListener('click', () => perform('openDomesticDownload', '', '暂时无法打开国内下载页面，请稍后重试。'));
   document.addEventListener('keydown', event => {
@@ -237,6 +238,9 @@
     }
     else $('about-version').textContent = '版本暂不可用';
     if (typeof info?.developer === 'string' && info.developer.length > 0 && info.developer.length <= 80) $('about-developer').textContent = `开发者 ${info.developer}`;
+    storeBuild = info?.storeBuild === true;
     if (!updateReceived && info?.update) renderUpdate(info.update);
+    else refreshControls();
+
   }).catch(() => { $('about-version').textContent = '版本暂不可用'; if (update.state === 'idle') status.textContent = '未能读取版本信息，请重新打开。'; });
 })();

@@ -238,8 +238,6 @@ function prepareStaging(root, staging = path.join(root, 'desktop-pet/build/stagi
     'desktop-pet/lib/workbuddy-web-usage.js',
     'desktop-pet/lib/workbuddy-website-summary.js',
     'desktop-pet/store-connections.html',
-    'desktop-pet/store-connections-first.html',
-    'desktop-pet/store-connections-first-renderer.js',
     'desktop-pet/store-connections.css',
     'desktop-pet/store-connections-preload.js',
     'desktop-pet/store-connections-renderer.js',
@@ -446,7 +444,7 @@ function buildPackagerOptions(root, icon, electronZipDir = null) {
     appCategoryType: 'public.app-category.entertainment',
     icon,
     asar: { unpack: '**/*.node' },
-    extendInfo: { NSLocationWhenInUseUsageDescription: '用于显示当前位置天气；也可以不授权并手动选择城市。', NSLocationUsageDescription: '用于获取当前位置天气。' },
+    extendInfo: { NSLocationWhenInUseUsageDescription: '用于查询当前位置的天气和空气质量。经纬度会发送给 Open-Meteo，也可改为手动选城。', NSLocationUsageDescription: '用于向 Open-Meteo 查询当前位置的天气和空气质量。' },
     overwrite: true,
     prune: true,
     quiet: true

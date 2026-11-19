@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('qiuqiuAbout', {
   getInfo: () => ipcRenderer.invoke('pet:about-get'),
   openWebsite: () => ipcRenderer.invoke('pet:about-website'),
+  openStoreUpdate: () => ipcRenderer.invoke('pet:about-release'),
   openPrivacy: () => ipcRenderer.invoke('pet:about-privacy'),
   checkUpdates: () => ipcRenderer.invoke('pet:about-update'),
   downloadUpdate: () => ipcRenderer.invoke('pet:about-release'),

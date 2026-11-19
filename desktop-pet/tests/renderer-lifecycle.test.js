@@ -39,7 +39,7 @@ function createRenderer(randomValue = 0.5, auroraRive = null, quotaUpdates = nul
     dataset: {}, attributes: {},
     setAttribute(key, value) { this.attributes[key] = String(value); },
     classList: { add() {}, remove() {} },
-    style: { setProperty() {} },
+    style: { setProperty(name, value) { this[name] = value; }, removeProperty(name) { delete this[name]; } },
     children: [],
     appendChild(child) { this.children.push(child); child.parentNode = this; },
     prepend(child) { this.children.unshift(child); child.parentNode = this; },
@@ -1669,4 +1669,20 @@ test('官方用户动作ready拒绝只清理自身，已取消或替换的请求
  if(cancel==='new')assert.equal(r.host.motions[0].action,'spin');
  r.windowEvents.beforeunload();
  }
+});
+
+
+test('directional declarations clear when switching to an old skin or a built-in shape', () => {
+  const { r } = createMappedInteractionFixture({ idleFacing: 'left', edgeTuck: 'half', edgeTuckFraction: .5 });
+  assert.equal(r.pet.dataset.spriteIdleFacing, 'left');
+  assert.equal(r.pet.style['--sprite-edge-tuck'], '50%');
+  r.present({ mode: 'tucked', side: 'left', suppressed: true, spriteTuckFraction: .47 });
+  assert.equal(r.pet.style['--sprite-edge-tuck'], '47%');
+  r.settings({ keepAwake: true, codexPet: testCodexDescriptor,
+    customization: { appearance: { shape: 'codex-pet', codexPetId: testCodexPetId } } });
+  assert.equal(r.pet.dataset.spriteIdleFacing, undefined);
+  assert.equal(r.pet.style['--sprite-edge-tuck'], undefined);
+  r.settings({ customization: { appearance: { shape: 'blob' } } });
+  assert.equal(r.pet.dataset.spriteIdleFacing, undefined);
+  r.windowEvents.beforeunload();
 });

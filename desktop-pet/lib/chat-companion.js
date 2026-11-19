@@ -4,7 +4,7 @@ const { normalizeModelSelection, resolveChatModel } = require('./chat-models');
 
 const ACTIONS = new Set(['none', 'hop', 'jelly', 'sway', 'peek', 'bow', 'spin', 'sleep', 'wake', 'dockLeft', 'dockRight', 'restore']);
 const ERRORS = {
-  MISSING: '未找到 Codex。请先安装并登录 Codex，再回来聊天。',
+  MISSING: '暂时无法连接聊天。请检查本机应用是否已安装并登录。',
   UNAUTHENTICATED: '请先在 Codex 中登录，再发送消息。',
   UNSUPPORTED: '当前 Codex 版本或登录方式暂不支持聊天，请更新并使用 ChatGPT 登录。',
   ACCOUNT_CHANGED: 'Codex 账号已变化。请切回原账号继续，或点“新聊天”使用当前账号。',

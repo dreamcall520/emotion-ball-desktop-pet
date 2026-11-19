@@ -65,7 +65,8 @@
     });
   }
   function sourceNeedsAuthorization() {
-    return availableSources().some(item => item.id === sourceId() && item.enabled !== true);
+    const source = availableSources().find(item => item.id === sourceId());
+    return source?.needsAuthorization ?? Boolean(source && source.enabled !== true);
   }
   async function openConnections(id) {
     if (changeBlocked() || typeof api.openConnections !== 'function') return;
@@ -156,13 +157,13 @@
 
   function renderModels() {
     const bar = byId('model-bar');
-    bar.hidden = historyOpen || snapshot.modelSelectionMode==='provider-managed' || snapshot.capabilities?.modelSelection===false;
+    bar.hidden = historyOpen || sourceNeedsAuthorization() || snapshot.modelSelectionMode==='provider-managed' || snapshot.capabilities?.modelSelection===false;
     byId('model-feedback').hidden=bar.hidden;
     if(bar.hidden){closeModelMenu(false);modelSelect.disabled=true;return;}
     const models = availableModels();
     const selected = modelSaving || modelSelection();
     const status = snapshot.modelsStatus || 'idle';
-    const missing = selected !== 'auto' && !models.some(model => model.id === selected);
+    const missing = (status === 'ready' || status === 'error') && selected !== 'auto' && !models.some(model => model.id === selected);
     const choices = [
       { id: 'auto', label: '自动选择' },
       ...models.map(model => ({ id: model.id, label: typeof model.displayName === 'string' && model.displayName.trim() ? model.displayName : model.id }))
@@ -230,7 +231,7 @@
             : '使用所选模型 · 继续当前聊天');
     hint.title = hint.textContent;
     modelSelect.title = `${selectedLabel}\n${hint.textContent}`;
-    byId('model-feedback').className = error || missing ? 'model-feedback' : 'sr-only';
+    byId('model-feedback').className = error || missing ? 'model-feedback chat-notice' : 'sr-only';
     bar.dataset.error = String(Boolean(error || missing));
     modelRetry.hidden = status !== 'error' && !missing;
     modelRetry.disabled = changeBlocked() || modelsRefreshing;
@@ -369,7 +370,8 @@
     stopButton.hidden = !busy;
     stopButton.disabled = stopping;
     byId('stop-message-label').textContent = stopping ? '正在停止…' : '停止';
-    const error = localError || snapshot.error || '';
+    const needsAuthorization = sourceNeedsAuthorization();
+    const error = localError || (needsAuthorization ? '' : snapshot.error) || '';
     byId('error-banner').hidden = !error;
     byId('error-text').textContent = error;
     retryButton.hidden = localSendCancelled || historyOpen || !error || busy || pending || !(failedDraft || lastUserText());
@@ -377,7 +379,15 @@
     count.hidden = input.value.length < 1800;
     count.textContent = `${input.value.length} / 2000`;
     byId('input-hint').hidden = !count.hidden;
-    if (enableSource) { enableSource.hidden = historyOpen || !sourceNeedsAuthorization() || typeof api.openConnections !== 'function'; enableSource.disabled = changeBlocked(); }
+    const showConnectionNotice = needsAuthorization && !historyOpen;
+    byId('source-feedback').hidden = !showConnectionNotice;
+    byId('source-hint').textContent = showConnectionNotice
+      ? snapshot.connection === 'connecting' ? '正在检查连接…' : '连接本机应用后即可聊天。'
+      : '';
+    if (enableSource) {
+      enableSource.hidden = !showConnectionNotice || typeof api.openConnections !== 'function';
+      enableSource.disabled = changeBlocked();
+    }
     const status = byId('connection-status');
     status.textContent = snapshot.sourceChanging ? `正在切换到 ${sourceName()}…` : snapshot.connection === 'connecting' ? `正在连接 ${sourceName()}…` : busy
       ? '球球正在想…'
@@ -388,7 +398,8 @@
     byId('privacy-note').textContent = sourceNeedsAuthorization() ? '完成授权连接后才可发送消息；不会自动发送。' : snapshot.billingLabel || `使用 ${sourceName()} ${sourceId() === 'workbuddy' ? '积分' : '额度'} · 延续同一段聊天`;
     const sourceNote = byId('empty-source-note');
     if (sourceNote) {
-      sourceNote.textContent = snapshot.sourceNote || (sourceNeedsAuthorization() ? `选择已授权的工具，或启用 ${sourceName()} 授权` : `通过 ${sourceName()} 聊天`);
+      sourceNote.hidden = needsAuthorization || !snapshot.sourceNote;
+      sourceNote.textContent = snapshot.sourceNote || '';
     }
     refreshHistory();
     renderSources();

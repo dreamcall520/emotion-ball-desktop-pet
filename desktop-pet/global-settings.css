@@ -178,6 +178,7 @@ img.nav-icon { object-fit:contain; }
 :root[data-appearance=dark] .codex-light-icon { display:none; }
 :root[data-appearance=dark] .codex-dark-icon { display:block; }
 #navigation button span { white-space:nowrap; }
+#navigation .nav-label { display:block; line-height:18px; }
 #navigation button[aria-current=page] .nav-icon { opacity:1; }
 #navigation button:hover .nav-icon { color:var(--accent-text); }
 @media(max-width:760px) {
@@ -206,14 +207,14 @@ header h1 { margin:0; }
 /* Direct feature links share the same quiet navigation rhythm as preferences. */
 #navigation { gap:14px; }
 .nav-group { gap:1px; }
-#navigation button { min-height:32px; padding:6px 11px; gap:9px; }
+#navigation button { display:grid; grid-template-columns:18px minmax(0,1fr) auto; min-height:32px; padding:6px 11px; gap:9px; }
 .brand { padding-bottom:22px; }
 .external-icon { width:13px; height:13px; margin-left:auto; flex:none; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; opacity:.6; }
 .action .external-icon { margin-left:6px; vertical-align:-2px; }
 #about-link { display:flex; align-items:center; gap:10px; padding:0; margin-bottom:8px; font-size:11px; color:var(--muted); }
 #about-link:hover { color:var(--accent-text); }
 footer { padding-top:22px; }
-@media(max-width:760px) { #navigation { gap:12px; } #navigation button { font-size:11px; padding-inline:7px; gap:7px; } }
+@media(max-width:760px) { #navigation { gap:12px; } #navigation button { grid-template-columns:16px minmax(0,1fr) auto; font-size:11px; padding-inline:7px; gap:7px; } }
 .shortcut-settings-group .row { min-height:42px; padding-block:6px; }
 .shortcut-settings-group .description { margin-top:10px; }
 
@@ -357,3 +358,52 @@ body { padding-top:38px; }
 .report-history-body .report-history-receipt { margin:12px 0 0; color:var(--muted); font-size:10px; overflow-wrap:anywhere; }
 .report-history-empty { color:var(--muted); text-align:center; padding:36px 8px; font-size:12px; }
 #report-history-warning:empty { display:none; }
+
+/* Native settings surface for the App Store Codex connection. */
+.store-codex-identity { display:flex; align-items:center; flex-wrap:wrap; gap:7px; }
+.store-codex-identity img { width:20px; height:20px; object-fit:contain; }
+.store-codex-summary { margin-inline-start:27px; }
+.store-codex-state { color:var(--muted); font-size:12px; line-height:1.5; display:inline-flex; align-items:center; gap:5px; }
+.store-codex-state[data-connected], .store-codex-progress { color:var(--accent-text); }
+.store-codex-progress { display:inline-flex; align-items:center; gap:6px; font-size:12px; line-height:1.5; }
+.store-codex-progress::before {
+  content:""; flex:none; width:11px; height:11px; box-sizing:border-box;
+  border:2px solid currentColor; border-right-color:transparent; border-radius:50%;
+  animation:store-codex-spin .8s linear infinite;
+}
+@keyframes store-codex-spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion:reduce) { .store-codex-progress::before { animation:none; } }
+.store-codex-state::before { content:""; flex:none; width:6px; height:6px; border-radius:50%; background:#c44b52; }
+.store-codex-state[data-connected]::before { background:#35966f; }
+:root[data-appearance=dark] .store-codex-state::before { background:#f2868c; }
+:root[data-appearance=dark] .store-codex-state[data-connected]::before { background:#79d7ac; }
+.store-codex-disclosure { padding:12px 0 8px; border-top:1px solid var(--module-line); }
+.store-codex-disclosure h4 { margin:0 0 8px; font-size:11px; }
+.store-codex-disclosure dl { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:5px 12px; margin:0; font-size:11px; line-height:1.65; }
+.store-codex-disclosure dd { margin:0; color:var(--muted); }
+.store-codex-error { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin:0 0 10px; padding:8px 10px; border-radius:9px; background:var(--selected); }
+.store-codex-error p { margin:0; color:var(--text); }
+
+.store-codex-dialog {
+  width:min(388px,calc(100% - 28px)); padding:22px; border:1px solid var(--module-edge); border-radius:24px;
+  color:var(--text); background:linear-gradient(var(--sheet),var(--sheet)),var(--canvas); box-shadow:0 12px 36px #31466224;
+}
+.store-codex-dialog::backdrop { background:#263d592c; }
+.store-codex-dialog h2 { margin:0 0 5px; font-size:17px; color:var(--accent-text); background:var(--title-wash); background-clip:text; -webkit-text-fill-color:transparent; }
+.store-codex-dialog p { margin:0; font-size:12px; line-height:1.6; color:var(--muted); }
+.store-codex-dialog p + p { margin-top:6px; }
+.store-codex-terms { margin:16px 0 0; }
+.store-codex-terms > div + div { margin-top:10px; padding-top:10px; border-top:1px solid var(--module-line); }
+.store-codex-terms dt { margin:0 0 3px; font-size:12px; font-weight:600; line-height:1.5; }
+.store-codex-terms dd { margin:0; }
+.store-codex-dialog .store-codex-terms p { color:var(--text); }
+.store-codex-dialog .store-codex-terms .store-codex-term-detail { margin-top:2px; color:var(--muted); }
+.store-codex-target { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:14px; padding:10px 11px; border:1px solid var(--module-line); border-radius:10px; background:var(--module); font-size:12px; }
+.store-codex-target small { color:var(--muted); }
+.store-codex-buttons { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+.store-codex-buttons button, .store-codex-primary { min-height:32px; padding:5px 13px; }
+button.store-codex-primary { background:#3c68b2; border-color:#3c68b2; color:#fff; }
+button.store-codex-primary:hover:enabled { background:#315a9f; color:#fff; }
+
+/* Center the weather artwork, whose strokes sit above the icon box midpoint. */
+#navigation [data-view="weather-settings"] .nav-icon { transform:translateY(2px); }

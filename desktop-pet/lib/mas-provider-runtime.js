@@ -8,11 +8,6 @@ const { createCodexChatRpc } = require('./codex-chat-rpc');
 const { createZcodeChatWsRpc } = require('./zcode-chat-ws-rpc');
 const { loopbackEndpoint } = require('./codex-ws-transport');
 const { createMasZcodeProvider } = require('./mas-zcode-provider');
-const { createMasWorkBuddyProvider } = require('./mas-workbuddy-provider');
-const {createWorkBuddyOfficialConnection,createWorkBuddyIntentStore}=require('./workbuddy-official-connection');
-const {createWorkBuddyCliConnection}=require('./workbuddy-cli-connection');
-const {createWorkBuddyLocalCliClient}=require('./workbuddy-local-cli-client');
-const {createMasWorkBuddyTasks}=require('./mas-workbuddy-tasks');
 const PROVIDERS = new Set(['codex', 'zcode','workbuddy']);
 const failure = code => Object.assign(new Error(code), { code });
 function createDirectoryStorage(root) {
@@ -64,13 +59,13 @@ function createDiagnosticDirectoryAccess({ dialog, storage, home, purpose='read-
   };
 }
 function createWorkbuddyConversationStore(root){
-  const storeFor=key=>{if(typeof key!=='string'||!/^[a-f0-9]{64}$/.test(key))throw failure('INVALID_ACCOUNT');return createWorkBuddyIntentStore(path.join(root,key+'.json'),{maxBytes:512*1024});};
+  const storeFor=key=>{if(typeof key!=='string'||!/^[a-f0-9]{64}$/.test(key))throw failure('INVALID_ACCOUNT');return require('./workbuddy-official-connection').createWorkBuddyIntentStore(path.join(root,key+'.json'),{maxBytes:512*1024});};
   return{read:key=>storeFor(key).read(),write:value=>storeFor(value.accountKey).write(value)};
 }
 function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, fetch,
   diagnostic = false, firstRelease = false, installedCodex = false, onChange = () => {}, onManagedReady = () => {}, resourcesPath = process.resourcesPath,
   createInstalledCodexRpc=options=>require('./mas-installed-codex').createInstalledCodexChatRpc(options), installedCodexAccess,
-  createManagedCodexRpc=options=>require('./mas-bundled-codex').createBundledCodexChatRpc(options), startWorkbuddyHost=options=>require('./mas-bundled-workbuddy').startBundledWorkBuddy(options), createWorkbuddyAuthClient=createWorkBuddyLocalCliClient,createPluginInstaller=options=>require('./managed-plugin-installer').createManagedPluginInstaller(options),createPluginHost=()=>require('./plugin-host').createPluginHost() } = {}) {
+  createManagedCodexRpc=options=>require('./mas-bundled-codex').createBundledCodexChatRpc(options), startWorkbuddyHost=options=>require('./mas-bundled-workbuddy').startBundledWorkBuddy(options), createWorkbuddyAuthClient=options=>require('./workbuddy-local-cli-client').createWorkBuddyLocalCliClient(options),createPluginInstaller=options=>require('./managed-plugin-installer').createManagedPluginInstaller(options),createPluginHost=()=>require('./plugin-host').createPluginHost() } = {}) {
   const allowedProviders = firstRelease ? new Set(['codex']) : PROVIDERS;
   const assertProvider = provider => { if (!allowedProviders.has(provider)) throw failure('INVALID_PROVIDER'); };
   // First-release ports expose observations only: no disabled provider factories,
@@ -83,6 +78,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
     close() {}
   }, {get:(target,key) => key in target ? target[key] : key === 'then' ? undefined : () => Promise.reject(failure('PROVIDER_NOT_IN_RELEASE'))});
   let closed = false, runtimeClosing = null, managedLogin = null, managedLoginUrl=null, managedEpoch=0, bundledEnabled=false, directZcodeEnabled=false, zcodeAccountSource='official', managedWorkbuddy=null, workbuddyAuthClient=null, workbuddyAuthFlight=null, workbuddyLoginPending=false, workbuddyAuthenticated=false, workbuddyEpoch=0, externalWorkbuddyService=false;
+  let installedCodexAccountKey = null;
   const managedAbort=new AbortController();
   const managedProfile=path.join(app.getPath('userData'),'store-codex-profile');
   const managedWorkspace=path.join(app.getPath('userData'),'store-codex-chat-workspace');
@@ -131,11 +127,11 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
     mode:firstRelease?'unavailable':diagnostic||executableWrite?'bundled-plugin-install':scopedWrite?'existing-plugin-pairing':'unavailable',
     status:firstRelease?'not-in-release':diagnostic?'isolated-candidate':executableWrite?'sandbox-capable-review-pending':scopedWrite?'data-pairing-only':'sandbox-capability-unavailable',
     reviewApproved:false,message:firstRelease?'首发版本不提供任务插件安装。':diagnostic?'自动安装为隔离联调候选，尚不代表商店审核通过。':executableWrite?'使用随球球捆绑的固定任务插件；仅在你授权的目录安装，商店审核尚未完成。':scopedWrite?'可连接已安装的球球任务插件；新安装暂不可用，聊天和额度可直接使用。':'当前构建无法安装或配对任务插件；聊天和额度可单独连接。'};
-  const workbuddy = firstRelease?disabledPort():createMasWorkBuddyProvider({ BrowserWindow, session, shell, onLoginComplete:()=>{if(!closed)onManagedReady('workbuddy');}, onChange: () => { if (!closed) { for (const notify of quotaPorts) notify(); onChange(); } } });
+  const workbuddy = firstRelease?disabledPort():require('./mas-workbuddy-provider').createMasWorkBuddyProvider({ BrowserWindow, session, shell, onLoginComplete:()=>{if(!closed)onManagedReady('workbuddy');}, onChange: () => { if (!closed) { for (const notify of quotaPorts) notify(); onChange(); } } });
   const zcode = firstRelease?disabledPort():createMasZcodeProvider({ directoryAccess: access, fetch });
-  const workbuddyOfficial=firstRelease?disabledPort():createWorkBuddyOfficialConnection({diagnostic,store:createWorkBuddyIntentStore(path.join(app.getPath('userData'),'workbuddy-official-send-intent.json')),openAuthorizationUrl:url=>shell.openExternal(url),onChange:()=>{if(!closed)onChange();}});
-  const workbuddyCli=firstRelease?disabledPort():createWorkBuddyCliConnection({createClient:createWorkBuddyLocalCliClient,store:createWorkBuddyIntentStore(path.join(app.getPath('userData'),'workbuddy-cli-send-intent.json')),conversationStore:createWorkbuddyConversationStore(path.join(app.getPath('userData'),'workbuddy-cli-conversations')),onChange:()=>{if(!closed)onChange();}});
-  const desktopTasks=firstRelease?disabledPort():createMasWorkBuddyTasks({directoryAccess:access});
+  const workbuddyOfficial=firstRelease?disabledPort():require('./workbuddy-official-connection').createWorkBuddyOfficialConnection({diagnostic,store:require('./workbuddy-official-connection').createWorkBuddyIntentStore(path.join(app.getPath('userData'),'workbuddy-official-send-intent.json')),openAuthorizationUrl:url=>shell.openExternal(url),onChange:()=>{if(!closed)onChange();}});
+  const workbuddyCli=firstRelease?disabledPort():require('./workbuddy-cli-connection').createWorkBuddyCliConnection({createClient:createWorkbuddyAuthClient,store:require('./workbuddy-official-connection').createWorkBuddyIntentStore(path.join(app.getPath('userData'),'workbuddy-cli-send-intent.json')),conversationStore:createWorkbuddyConversationStore(path.join(app.getPath('userData'),'workbuddy-cli-conversations')),onChange:()=>{if(!closed)onChange();}});
+  const desktopTasks=firstRelease?disabledPort():require('./mas-workbuddy-tasks').createMasWorkBuddyTasks({directoryAccess:access});
   const desktopIntegration=firstRelease?disabledPort():require('./workbuddy-desktop-integration').createWorkBuddyDesktopIntegration({root:path.join(app.getPath('userData'),'workbuddy-desktop-events'),assetRoot:path.join(__dirname,'../assets/workbuddy-desktop-hook'),onChange:()=>{if(!closed)onChange();}});
   const zcodeDesktopIntegration=firstRelease?disabledPort():require('./zcode-desktop-integration').createZcodeDesktopIntegration({root:path.join(app.getPath('userData'),'zcode-desktop-events'),assetRoot:path.join(__dirname,'../assets/zcode-desktop-hook'),onChange:()=>{if(!closed)onChange();}});
   const pluginInstallers=Object.fromEntries((firstRelease?[]:['zcode','workbuddy']).map(provider=>[provider,createPluginInstaller({provider,directoryAccess:pluginAccess,assertHostStopped:()=>pluginHost.isStopped(provider),getMarketplaceDirectory:()=>provider==='zcode'?zcodeDesktopIntegration.getMarketplaceDirectory():desktopIntegration.getMarketplaceDirectory(),onChange:()=>{if(!closed)onChange();}})]));
@@ -354,7 +350,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
       workbuddyAuthFlight=ownFlight;return first;
     }catch(e){return{status:'unavailable',message:'此候选的 WorkBuddy 直接连接尚未就绪；无需自行配置服务。'};}
   }
-  async function prepareChat(provider,{interactive=true}={}) {
+  async function prepareChat(provider,{interactive=true, deferQuota=false}={}) {
     if(closed)throw failure('CLOSED');
     assertProvider(provider);
     if(chatServices[provider]?.service)return{status:'ready',message:'已有连接可用，正在验证聊天。'};
@@ -378,6 +374,7 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
         await Promise.all([...slot.clients].map(client=>client.invalidate()));
         await Promise.all([...installedRpcs].map(handle=>handle.close()));
       }
+      installedCodexAccountKey = null;
       let installedRpc;const installedEpoch=managedEpoch;
       const check=()=>{if(closed||installedEpoch!==managedEpoch)throw failure('CANCELLED');};
       try{
@@ -385,9 +382,17 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
         installedRpc=await codexRuntimeRpc();await installedRpc.start();check();const account=await installedRpc.readAccount();check();
         if(!account.authenticated){bundledEnabled=false;managedCodexQuota={status:'needs-login',snapshot:null,errorCode:'UNAUTHENTICATED'};onChange();return{status:'needs-login',loginPending:false,message:'请先在原 ChatGPT 或 Codex 应用登录，再回球球检查连接。'};}
         await installedRpc.close();installedRpc=null;check();bundledEnabled=true;
-        await readManagedCodexQuota().catch(()=>{});
+        installedCodexAccountKey = account.accountKey;
+        if (!deferQuota) await readManagedCodexQuota().catch(()=>{});
         return{status:'ready',message:'已连接本机 Codex；额度与聊天复用原应用同一登录。'};
-      }catch(error){return{status:'unavailable',message:'本机 Codex 暂未连接，请确认原应用已登录，再检查连接。'};}
+      } catch (error) {
+        bundledEnabled = false;
+        if (error.code === 'DIRECTORY_ACCESS_REQUIRED') return { status:'needs-data-authorization', message:'本机授权不可用，请重新选择应用和目录。' };
+        if (error.code === 'MISSING') return { status:'unavailable', message:'所选应用缺少 Codex 组件，请更新 ChatGPT 后重试。' };
+        if (error.code === 'UNAUTHENTICATED') return { status:'needs-login', message:'请在 ChatGPT 中登录后重试。' };
+        if (error.code === 'TIMEOUT') return { status:'retry-connect', message:'Codex 响应超时，点击「重试连接」再试一次。' };
+        return { status:'retry-connect', message:'暂时无法启动 Codex，点击「重试连接」再试一次。' };
+      }
       finally{await installedRpc?.close().catch(()=>{});}
     }
     if(managedLogin){if(interactive&&managedLoginUrl)await shell.openExternal(managedLoginUrl);return{status:'needs-login',loginPending:Boolean(managedLoginUrl),message:'请在已打开的官方页面完成球球独立登录。'};}
@@ -484,6 +489,12 @@ function createMasProviderRuntime({ app, dialog, BrowserWindow, session, shell, 
   }
   const releasedAccess = firstRelease ? Object.fromEntries(['authorize','acquire','withAccess','getStatus','revoke'].map(method=>[method,async(provider,...args)=>{assertProvider(provider);return access[method](provider,...args);}])) : access;
   return { access:releasedAccess, authorize, getState,installProviderPlugin,cancelPluginInstallation,restorePluginInstallations,getPluginInstallationPolicy:()=>({...pluginInstallationPolicy}),async getPluginAuthorizationStatus(provider){if(firstRelease||!['zcode','workbuddy'].includes(provider))throw failure('INVALID_PROVIDER');const status=(await pluginAccess.getStatus(provider)).status,grant=await pluginStorage.load(provider);return{status:status==='stored'&&purposeAllows(grant,pluginPurpose())?'stored':'needs-authorization'};},prepareChat,prepareWorkbuddyChat,desktopIntegration,zcodeDesktopIntegration,
+    isInstalledCodexConnected: () => Boolean(installedCodex && bundledEnabled),
+    getInstalledCodexAccountKey: () => bundledEnabled ? installedCodexAccountKey : null,
+    async authorizeInstalledCodex(step, signal) {
+      return installedAccess.ensure({ interactive: true, signal: AbortSignal.any([managedAbort.signal, signal]), step });
+    },
+    clearPendingInstalledCodexApp: () => installedAccess?.clearPendingApp?.(),
     async restoreChatPreferences(fallback={}){for(const provider of allowedProviders){let saved;try{saved=await chatPreferences.load(provider);}catch(_){saved=null;}chatEnabled[provider]=typeof saved?.enabled==='boolean'?saved.enabled:fallback[provider]===true;}return{...chatEnabled};},
     isChatEnabled:provider=>allowedProviders.has(provider)&&chatEnabled[provider]===true,
     async setChatEnabled(provider,enabled){assertProvider(provider);const old=await chatPreferences.load(provider);await chatPreferences.save(provider,{...(old||{}),enabled:enabled===true});chatEnabled[provider]=enabled===true;onChange();},async disconnectWorkbuddyChat(){externalWorkbuddyService=false;workbuddyEpoch++;workbuddyAuthenticated=false;workbuddyAuthFlight=null;workbuddyLoginPending=false;await workbuddyAuthClient?.close();workbuddyAuthClient=null;await workbuddyCli.disconnect();const handle=managedWorkbuddy;managedWorkbuddy=null;await handle?.stop();},getZcodeAccountSource:()=>chatServices.zcode.service?.accountSource||zcodeAccountSource,

@@ -168,7 +168,11 @@ async function buildMasDevelopment({root=ROOT,env=process.env,arch}={},deps={}){
  const languageResources=release.trimElectronLocales(appPath,config,io);
  const plist=deps.buildPlist||require('plist').build,rights=entitlementsFor(config),signDir=path.join(options.out,'signing');io.mkdirSync(signDir,{recursive:true,mode:0o700});
  const mainFile=path.join(signDir,'main.entitlements.plist'),childFile=path.join(signDir,'child.entitlements.plist');io.writeFileSync(mainFile,plist(rights.main));io.writeFileSync(childFile,plist(rights.child));
- io.copyFileSync(config.profile,path.join(appPath,'Contents/embedded.provisionprofile'));
+ if (release.isFirstRelease(config)) {
+    const manifest = path.join(ROOT, 'desktop-pet/native/PrivacyInfo.xcprivacy');
+    io.copyFileSync(manifest, path.join(appPath, 'Contents/Resources/PrivacyInfo.xcprivacy'));
+  }
+  io.copyFileSync(config.profile,path.join(appPath,'Contents/embedded.provisionprofile'));
  const signing=deps.signing||await import('@electron/osx-sign'),sign=signing.signAsync||signing.sign;
  if(typeof sign!=='function')throw fail('MAS_DEV_SIGN_API_UNAVAILABLE');
  await sign({app:appPath,platform:'mas',type:'development',batchCodesignCalls:true,identity:identity.fingerprint,identityValidation:true,provisioningProfile:config.profile,preEmbedProvisioningProfile:true,preAutoEntitlements:false,strictVerify:true,

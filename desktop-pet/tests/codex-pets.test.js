@@ -276,6 +276,19 @@ test('v3 bounded multi-sheet import validates every resource and preserves all a
   assert(fs.existsSync(pet.sheets.motion.path));assert.equal(store.getImported(pet.id).frameMap.tail.count,7);
   fs.writeFileSync(path.join(folder,'motion.png'),png(1536,1040,1));
   const changedPet=await store.importDirectory(folder);assert.notEqual(changedPet.id,pet.id,'every resource contributes to imported identity');
+  assert.equal(pet.idleFacing, undefined);
+  for (const idleFacing of ['left', 'right']) {
+    raw.idleFacing = idleFacing; raw.edgeTuck = 'half'; write();
+    const directional = await store.importDirectory(folder);
+    assert.equal(store.getImported(directional.id).idleFacing, idleFacing);
+    assert.equal(store.getImported(directional.id).edgeTuck, 'half');
+  }
+  for (const fields of [{ idleFacing: 'up', edgeTuck: 'half' }, { edgeTuck: 'half' },
+      { idleFacing: 'left', edgeTuck: 'full' }]) {
+    delete raw.idleFacing; delete raw.edgeTuck; Object.assign(raw, fields); write();
+    await assert.rejects(async () => store.importDirectory(folder), { code: 'INVALID_PET' });
+  }
+  delete raw.idleFacing; delete raw.edgeTuck;
   raw.sheets.motion.path='BASE.png';write();await assert.rejects(async()=>store.importDirectory(folder));
   raw.sheets.motion.path='pet.json';write();await assert.rejects(async()=>store.importDirectory(folder));
   raw.sheets.motion.path='motion.png';
