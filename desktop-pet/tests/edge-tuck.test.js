@@ -189,3 +189,11 @@ test('快捷面板与右键菜单分别保留展开，关闭一个不解除另�
 });
 
  test('单眼探头离开保留900ms，重新进入仍取消旧退回回调',()=>{const f=fixture({side:'left',delay:900});f.sample(-780);assert.equal(f.controller.getPresentation().mode,'peeked');f.sample(-500);f.advance(899);assert.equal(f.controller.getPresentation().mode,'peeked');f.advance(900);assert.equal(f.controller.getPresentation().mode,'tucked');f.sample(-780);f.sample(-500);f.advance(1500);f.sample(-780);f.advance(1800);assert.equal(f.controller.getPresentation().mode,'peeked');});
+
+
+test('a directional skin declaring xiaobai uses its explicit tuck geometry', () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../pet.css'), 'utf8');
+  const legacyRules = [...css.matchAll(/([^{}]+)\{[^{}]*translateX\(-?53\.3538461538%\)[^{}]*\}/g)];
+  assert.equal(legacyRules.length, 2);
+  for (const [_, selector] of legacyRules) assert(selector.includes(':not([data-sprite-idle-facing])'));
+});

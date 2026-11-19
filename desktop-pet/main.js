@@ -30,7 +30,7 @@ const { isXiaobaiPet } = require('./lib/codex-pet-player');
 const { loadSettings, saveSettings, normalizePresetName, normalizeAppearancePresets, findDuplicateAppearancePreset } = require('./lib/settings');
 const { createCodexPetStore } = require('./lib/codex-pets');
 const { XIAOBAI_ID, getBuiltinPet } = require('./lib/builtin-pets');
-const { normalizeSpriteEdgeInk, containsSpriteEdgeInk, XIAOBAI_TUCK_FRACTION } = require('./lib/sprite-edge-ink');
+const { normalizeSpriteEdgeInk, containsSpriteEdgeInk, spriteHalfTuckFraction, XIAOBAI_TUCK_FRACTION, DIRECTIONAL_TUCK_FRACTION } = require('./lib/sprite-edge-ink');
 const EdgePeek = require('./lib/edge-peek');
 const {
   SIZES,
@@ -127,7 +127,7 @@ const IS_CODEX_SMOKE_ONLY = IS_SMOKE_TEST && (process.env.PET_SMOKE_CODEX_ONLY =
 
 let petWindow = null;
 let edgeTuck = null;
-let spriteEdgeInk=null,spriteEdgeMapped=false;
+let spriteEdgeInk=null,spriteEdgeMapped=false,spriteIdleFacing,spriteTuckFraction,spriteEdgeHalf=false;
 let edgeNotice = null;
 let edgeNoticeWindow = null;
 let edgeNoticeNow = () => performance.now();
@@ -968,12 +968,13 @@ function importedPet(id) {
 function fromLocalPetWindow(event) { return fromCustomizationWindow(event)&&customizationWindow.isVisible()&&event.senderFrame===customizationWindow.webContents.mainFrame; }
 function localPetImportIsCurrent() { const s=localPetImportSession;return Boolean(s&&!s.invalid&&customizationWindow===s.owner&&!s.owner.isDestroyed()&&s.owner.isVisible()&&s.owner.webContents.mainFrame===s.frame&&!screenLocked&&!isQuitting); }
 function petSheetDescriptor(pet){return pet.version===3?{sheets:Object.fromEntries(Object.entries(pet.sheets).map(([id,sheet])=>[id,{rows:sheet.rows,...(sheet.frameWidth?{frameWidth:sheet.frameWidth}:{}),imageURL:pathToFileURL(sheet.path).href}]))}:{};}
-function localPetDescriptor(pet) { return {id:pet.id,importedId:pet.importedId,name:pet.name,...(pet.characterId?{characterId:pet.characterId}:{}),version:pet.version,rows:pet.rows,...petSheetDescriptor(pet),...(pet.frameMap?{frameMap:pet.frameMap}:{}),imageURL:pathToFileURL(pet.spritesheetPath).href,imported:true,origin:'local'}; }
+function localPetDescriptor(pet) { return {id:pet.id,importedId:pet.importedId,name:pet.name,...(pet.idleFacing ? { idleFacing: pet.idleFacing, edgeTuck: pet.edgeTuck, edgeTuckFraction: pet.edgeTuck === 'half' ? .5 : DIRECTIONAL_TUCK_FRACTION } : {}),...(pet.characterId?{characterId:pet.characterId}:{}),version:pet.version,rows:pet.rows,...petSheetDescriptor(pet),...(pet.frameMap?{frameMap:pet.frameMap}:{}),imageURL:pathToFileURL(pet.spritesheetPath).href,imported:true,origin:'local'}; }
 function codexPetDescriptor(appearance) {
   if (appearance?.shape !== 'codex-pet' || !codexPets) return null;
   let pet;
   try { pet = importedPet(appearance.codexPetId); } catch (_) { return null; }
   return { id: pet.id, name: pet.name, ...(pet.characterId?{characterId:pet.characterId}:{}), version: pet.version, rows: pet.rows, spriteScale:pet.spriteScale||1, ...petSheetDescriptor(pet), ...(pet.frameMap?{frameMap:pet.frameMap}:{}), origin:pet.origin,
+    ...(pet.idleFacing ? { idleFacing: pet.idleFacing, edgeTuck: pet.edgeTuck, edgeTuckFraction: pet.edgeTuck === 'half' ? .5 : DIRECTIONAL_TUCK_FRACTION } : {}),
     imageURL: pathToFileURL(pet.spritesheetPath).href };
 }
 
@@ -1125,7 +1126,7 @@ function performChatAction(action) {
 
 function sendPresentation(packet) {
   if (!petWindow || petWindow.isDestroyed()) return;
-  try { petWindow.webContents.send('pet:presentation', packet); } catch (_) {}
+  try { petWindow.webContents.send('pet:presentation', { ...packet, ...(spriteIdleFacing ? { spriteTuckFraction } : {}) }); } catch (_) {}
 }
 
 function tickEdgeNotice(force = false) {
@@ -2397,6 +2398,8 @@ function sendCompanionSettings() {
   const descriptor=codexPetDescriptor(settings.customization.appearance);spriteEdgeMapped=Boolean(descriptor?.frameMap);
   dogDreamSkinId=descriptor?.id||null;dogDreamSkinEnabled=isXiaobaiPet(descriptor);dogSpriteDescriptor=dogDreamSkinEnabled?descriptor:null;syncDogDream();
   if(spriteEdgeInk?.id!==descriptor?.id)spriteEdgeInk=null;
+  spriteIdleFacing = descriptor?.idleFacing; spriteEdgeHalf = descriptor?.edgeTuck === 'half';
+  spriteTuckFraction = spriteEdgeHalf ? spriteHalfTuckFraction(spriteEdgeInk, spriteIdleFacing, petWindow.getBounds()) : descriptor?.edgeTuckFraction;
   petWindow.webContents.send('pet:settings', {
     keepAwake: settings.keepAwake,
     focusQuiet: pomodoroQuiet,
@@ -2929,12 +2932,12 @@ async function finishSmokeTest() {
       return;
     }
     if (process.env.PET_SMOKE_CODEX_PETS_ONLY === '1') {
-      if(process.env.PET_CODEX_PETS_QA_PHASE==='edges'){await require('./scripts/verify-small-sprite-edge').verifySmallSpriteEdge({pet:petWindow,edgeTuck,setSize:setPetSize,screen,getMask:()=>spriteEdgeInk});app.quit();return;}
+      if(process.env.PET_CODEX_PETS_QA_PHASE==='edges'){await require('./scripts/verify-small-sprite-edge').verifySmallSpriteEdge({pet:petWindow,edgeTuck,setSize:setPetSize,screen,getMask:()=>spriteEdgeInk,sendCommand,getSettings:()=>settings,getMenu:()=>Menu.buildFromTemplate(menuTemplate()),monitor:activityMonitor});app.quit();return;}
       openCustomization();
       const verifyPets = process.env.PET_CODEX_PETS_QA_PHASE === 'folder'
         ? require('./scripts/verify-local-pet-motion').verifyLocalPetMotion
         : require('./scripts/verify-codex-pets').verifyCodexPets;
-      await verifyPets({ pet: petWindow, localStore: localPetStore, sendCommand, edgeTuck,
+      await verifyPets({ pet: petWindow, localStore: localPetStore, sendCommand, edgeTuck, getMask: () => spriteEdgeInk,
         customize: customizationWindow, openCustomization, openChat,
         getChatWindow: () => chatWindow.getWindow(), getSettings: () => settings,
         setSize: setPetSize, store: codexPets, packaged: app.isPackaged,
@@ -3423,10 +3426,10 @@ function createPetWindow() {
   edgeTuck?.dispose();
 
   petWindow = candidatePetWindow;
-  spriteEdgeInk=null;spriteEdgeMapped=false;
+  spriteEdgeInk=null;spriteEdgeMapped=false;spriteIdleFacing=undefined;spriteTuckFraction=undefined;spriteEdgeHalf=false;
   edgeTuck = createEdgeTuck({ getWindow: () => petWindow,
     getVisibleHitTest: geometry => spriteEdgeMapped
-      ? containsSpriteEdgeInk(spriteEdgeInk, { ...geometry, ...(dogDreamSkinEnabled ? { tuckFraction: XIAOBAI_TUCK_FRACTION } : {}) })
+      ? containsSpriteEdgeInk(spriteEdgeInk, { ...geometry, idleFacing: spriteIdleFacing, tuckFraction: spriteTuckFraction ?? (dogDreamSkinEnabled ? XIAOBAI_TUCK_FRACTION : undefined) })
       : EdgePeek.containsVisibleBody(settings?.customization?.appearance?.shape, geometry),
     getTuckDelay: () => EdgePeek.specFor(settings?.customization?.appearance?.shape)?.delayMs ?? 650,
     getWorkArea: bounds => screen.getDisplayMatching(bounds).workArea,
@@ -4071,7 +4074,9 @@ function registerIpc() {
     if(!fromPetWindow(event))return;
     if(packet===null){spriteEdgeInk=null;return;}
     const mask=normalizeSpriteEdgeInk(packet);if(!mask||!spriteEdgeMapped||mask.id!==settings.customization.appearance.codexPetId)return;
-    spriteEdgeInk=mask;edgeTuck?.publish();
+    spriteEdgeInk = mask;
+    if (spriteEdgeHalf) spriteTuckFraction = spriteHalfTuckFraction(mask, spriteIdleFacing, petWindow.getBounds());
+    edgeTuck?.publish();
   });
 
   ipcMain.on('pet:codex-availability', (event, packet) => {
