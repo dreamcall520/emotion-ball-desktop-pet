@@ -23,7 +23,7 @@ function spriteHalfTuckFraction(mask, idleFacing, bounds = { width: 1, height: 1
 function containsSpriteEdgeInk(mask,{bounds,side,mode='tucked',point,tuckFraction=TUCK_FRACTION,idleFacing}){
  if(!mask||!bounds||!point||!['left','right'].includes(side)||!Number.isFinite(point.x)||!Number.isFinite(point.y)||bounds.width<=0||bounds.height<=0)return false;
  if(!['tucked','peeked'].includes(mode)||point.x<bounds.x||point.x>=bounds.x+bounds.width||point.y<bounds.y||point.y>=bounds.y+bounds.height)return false;
- if(mode==='peeked'&&containsSpriteEdgeInk(mask,{bounds,side,mode:'tucked',point,tuckFraction,idleFacing}))return true;
+ if(mode==='peeked'&&!idleFacing&&containsSpriteEdgeInk(mask,{bounds,side,mode:'tucked',point,tuckFraction,idleFacing}))return true;
  const { width, height } = spriteInkSize(mask, bounds);
  const shift=mode==='tucked'?(side==='left'?-1:1)*bounds.width*tuckFraction:0;
  const left=(bounds.width-width)/2+shift,top=(bounds.height-height)/2;

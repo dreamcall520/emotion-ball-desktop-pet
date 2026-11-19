@@ -173,14 +173,42 @@ async function verifyDeclaredSpriteEdge({pet,getSettings,setSize,getMenu,edgeTuc
       edgeTuck.sampleCursor(anchor.point);
       const peeked=await poll(state,v=>v.mode==='peeked'&&v.edge===side,'actual tucked ink hover reveals');
       assert.equal(matrix(peeked.canvasTransform)[0],sign);
-      await poll(()=>ignored,v=>v===false,'revealed ink accepts native pointer');
       const reveal=await capture(prefix+'-peeked');
       assert.deepEqual(pet.getBounds(),current,'hover reveal keeps its native anchor');
       assert.equal(matrix((await state()).rootTransform)[4],0);
-      edgeTuck.sampleCursor(outside);
-      const afterHover=await poll(state,v=>v.mode==='tucked'&&v.edge===side,'actual tuck after pointer leaves');
+      const inPeeked=point=>containsSpriteEdgeInk(activeInk(),{bounds:current,side,mode:'peeked',point,tuckFraction:actualTuck,idleFacing:manifest.idleFacing});
+      const originalAnchorHit=inPeeked(anchor.point);
+      edgeTuck.sampleCursor(anchor.point);
+      await poll(()=>ignored,value=>value===!originalAnchorHit,'revealed original anchor follows current alpha');
+      let painted,retainedBlank,unretainedBlank;
+      for(let py=2;py<reveal.height-2;py++)for(let px=2;px<reveal.width-2;px++){
+        const point=imagePoint(reveal,current,px,py),alpha=alphaAt(reveal,px,py),hit=inPeeked(point),tuckedHit=inMask(point);
+        const dist=(px-reveal.width/2)**2+(py-reveal.height/2)**2;
+        if(alpha>=247&&hit&&(!painted||dist<painted.dist))painted={point,dist};
+        if(alpha===0&&!hit&&tuckedHit&&alphaAt(after,px,py)>=247&&(!retainedBlank||dist<retainedBlank.dist))retainedBlank={point,dist};
+        if(alpha===0&&!hit&&!tuckedHit&&(!unretainedBlank||dist<unretainedBlank.dist))unretainedBlank={point,dist};
+      }
+      assert(painted,'peeked screenshot includes currently painted native hit point');
+      assert(retainedBlank,'original tucked ink contains a now-transparent retained anchor');
+      assert(unretainedBlank,'peeked screenshot includes transparent point outside retained anchor');
+      edgeTuck.sampleCursor(retainedBlank.point);
+      await poll(()=>ignored,value=>value===true,'peeked transparent retained anchor enables mouse pass-through');
+      for(let sample=0;sample<15;sample++){
+        edgeTuck.sampleCursor(retainedBlank.point);await wait(60);
+        assert.equal((await state()).mode,'peeked','transparent tucked anchor retains reveal beyond tuck delay');
+      }
+      edgeTuck.sampleCursor(painted.point);
+      await poll(()=>ignored,value=>value===false,'currently painted peeked ink accepts native pointer');
+      assert.equal((await state()).mode,'peeked');
+      edgeTuck.sampleCursor(unretainedBlank.point);
+      await poll(()=>ignored,value=>value===true,'peeked transparent area outside anchor enables mouse pass-through');
+      const afterHover=await poll(state,v=>v.mode==='tucked'&&v.edge===side,'actual tuck after pointer leaves painted and retained ink');
       assert.equal(matrix(afterHover.canvasTransform)[0],sign);
-      result.hover={revealed:true,retucked:true,transparentMaskHit:false,transparentNativeMouseIgnored:true,opaqueMaskHit:true,opaqueNativeMouseAccepted:true,visibleLogicalPx:[reveal.metrics.visibleWidth/scale,reveal.metrics.visibleHeight/scale],screenshot:reveal.metrics.file};
+      result.hover={revealed:true,retucked:true,transparentMaskHit:false,transparentNativeMouseIgnored:true,
+        opaqueMaskHit:true,opaqueNativeMouseAccepted:true,originalAnchorHitAfterReveal:originalAnchorHit,
+        transparentRetainedAnchor:retainedBlank.point,transparentRetainedAnchorIgnored:true,retainedBeyondTuckDelay:true,
+        peekedPaintedPoint:painted.point,peekedPaintedPointAccepted:true,peekedUnretainedTransparentPoint:unretainedBlank.point,
+        peekedUnretainedTransparentIgnored:true,visibleLogicalPx:[reveal.metrics.visibleWidth/scale,reveal.metrics.visibleHeight/scale],screenshot:reveal.metrics.file};
     }
     cases.push(result);save(false);console.log('PET_DRAG_IN_CASE '+JSON.stringify({side,mode,size,tuck:final.rootTransform,mirror:sign,retained:result.visibleTuckedWidthFraction}));
     return{prefix,after};

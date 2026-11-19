@@ -81,3 +81,21 @@ test('wide action sheets use the fitted image dimensions for half tuck and alpha
       rows: Array(64).fill('f'.repeat(16)) }), null);
   }
 });
+
+
+test('declared peeked sprites hit only current alpha while legacy skins keep their old hover union', () => {
+  const mask = normalizeSpriteEdgeInk({ id: 'peek', columns: 64,
+    rows: Array(64).fill('0000ffffffff0000') });
+  const bounds = { x: 0, y: 0, width: 120, height: 120 };
+  for (const side of ['left', 'right']) {
+    const anchor = { x: side === 'left' ? 5 : 115, y: 60 };
+    const geometry = { bounds, side, point: anchor, tuckFraction: .5 };
+    assert.equal(containsSpriteEdgeInk(mask, { ...geometry, idleFacing: 'left' }), true);
+    assert.equal(containsSpriteEdgeInk(mask, { ...geometry, mode: 'peeked', idleFacing: 'left' }), false,
+      'the former hover anchor is transparent after the sprite reveals');
+    assert.equal(containsSpriteEdgeInk(mask, { ...geometry, mode: 'peeked' }), true,
+      'a skin without declarations retains its existing union');
+    assert.equal(containsSpriteEdgeInk(mask, { ...geometry, mode: 'peeked', idleFacing: 'left',
+      point: { x: 60, y: 60 } }), true);
+  }
+});

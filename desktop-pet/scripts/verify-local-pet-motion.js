@@ -25,6 +25,10 @@ async function verifyLocalPetMotion({ pet, customize, getSettings, setSize, loca
   };
   const view = () => desktop(`(()=>{const c=document.querySelector('#pet .codex-pet-sprite');return c?{...c.dataset,width:c.width,height:c.height,cssHeight:c.getBoundingClientRect().height,mode:document.querySelector('#pet').dataset.mode}:null})()`);
   const capture = (win, name) => capturePaintedWindow({ win, artifactPath: path.join(output, name + '.png') });
+  const importPreview = () => page(`(()=>{const c=document.querySelector('#stage .codex-pet-sprite');
+    return{selected:document.querySelector('#local-pet-grid .pet-card[aria-pressed=true]')?.dataset.petId,
+      preview:c?.dataset.codexPetId,ready:c?.dataset.codexReady,busy:document.querySelector('#import-local-pet').disabled};})()`);
+
   const errors = [];
   for (const win of [pet, customize]) {
     win.webContents.on('did-fail-load', (_event, code, description) => errors.push({ code, description }));
@@ -60,7 +64,7 @@ async function verifyLocalPetMotion({ pet, customize, getSettings, setSize, loca
     return { canceled: false, filePaths: [folder] };
   };
   try { await pointerClick(customize, '#import-local-pet');
-    await poll(() => page("document.querySelector('#stage .codex-pet-sprite')?.dataset.codexReady"), x => x === 'ready', 'real local import preview');
+    await poll(importPreview, value => !value.busy && value.selected && value.preview === value.selected && value.ready === 'ready', 'actual completed local import preview');
   } finally { dialog.showOpenDialog = originalPicker; }
   assert.equal(pickerCalls, 1); assert.equal(JSON.stringify(getSettings().customization), before, 'import alone does not change desktop');
   const importedId = await page("document.querySelector('#local-pet-grid .pet-card[aria-pressed=true]').dataset.petId");
@@ -227,7 +231,9 @@ async function verifyLocalPetMotion({ pet, customize, getSettings, setSize, loca
         idleFacing:p.dataset.spriteIdleFacing,tuck:p.style.getPropertyValue('--sprite-edge-tuck')};})()`);
     const saved = async (id, declared) => {
       await page("document.getElementById('startup-default').checked=false"); await pointerClick(customize, '#save');
-      const state = await poll(switchedState, value => value.id === id && value.ready === 'ready', 'switch renders replacement skin');
+      await poll(() => getSettings().customization.appearance.codexPetId, value => value === id, 'switch save completes in main process');
+      const state = await poll(switchedState, value => value.id === id && value.ready === 'ready' &&
+        (declared ? value.idleFacing === manifest.idleFacing : value.idleFacing === undefined && value.tuck === ''), 'switch renders replacement skin and declaration');
       if (!declared) { assert.equal(state.idleFacing, undefined); assert.equal(state.tuck, ''); }
       else assert.equal(state.idleFacing, manifest.idleFacing);
       if (getMask) { const mask = getMask(); assert(mask === null || mask.id === id, 'switch clears previous native alpha hit map'); }
@@ -239,10 +245,13 @@ async function verifyLocalPetMotion({ pet, customize, getSettings, setSize, loca
       assert.equal(next.idleFacing, undefined); assert.equal(next.edgeTuck, undefined);
       openCustomization(); await pointerClick(customize, '#source-local');
       const picker = dialog.showOpenDialog; dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [nextFolder] });
+      let selected;
       try { await pointerClick(customize, '#import-local-pet');
-        await poll(() => page("document.querySelector('#stage .codex-pet-sprite')?.dataset.codexReady"), value => value === 'ready', 'compatibility import');
+        selected = await poll(importPreview, value => !value.busy && value.selected && value.selected !== importedId &&
+          value.preview === value.selected && value.ready === 'ready', 'compatibility import completes with new selected preview');
       } finally { dialog.showOpenDialog = picker; }
-      const id = await page("document.querySelector('#local-pet-grid .pet-card[aria-pressed=true]').dataset.petId");
+      const id = selected.selected;
+      assert.equal(localStore.getImported(id).name, next.displayName, 'selected import is the requested compatibility fixture');
       const current = await saved(id, false); skinSwitches.push({ version: next.spriteVersionNumber || 1, name: next.displayName, current });
       openCustomization(); await pointerClick(customize, '#source-local');
       await pointerClick(customize, `[data-pet-id="${importedId}"]`);
@@ -255,7 +264,8 @@ async function verifyLocalPetMotion({ pet, customize, getSettings, setSize, loca
     const dog = await saved(dogId, false); assert.equal(dog.characterId, 'xiaobai'); skinSwitches.push({ builtin: 'xiaobai', current: dog });
     openCustomization(); await pointerClick(customize, '#source-ball'); await pointerClick(customize, '[data-shape=blob]');
     await page("document.getElementById('startup-default').checked=false"); await pointerClick(customize, '#save');
-    const ball = await poll(switchedState, value => !value.id, 'built-in ball clears sprite player');
+    await poll(() => getSettings().customization.appearance.shape, value => value === 'blob', 'built-in ball save completes in main process');
+    const ball = await poll(switchedState, value => !value.id && value.idleFacing === undefined && value.tuck === '', 'built-in ball clears sprite player and declaration');
     assert.equal(ball.idleFacing, undefined); assert.equal(ball.tuck, '');
     if (getMask) assert.equal(getMask(), null, 'built-in ball clears native sprite alpha map');
     skinSwitches.push({ builtin: 'blob', current: ball });
