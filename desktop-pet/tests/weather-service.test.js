@@ -49,8 +49,44 @@ test('timeout covers stalled fetch and stalled JSON; rate limits are safe failur
   for (const fetch of [() => new Promise(() => {}), async () => ({ ok: true, json: () => new Promise(() => {}) })]) {
     const result = await createWeatherService({ fetch, timeoutMs: 10 }).getWeather(location); assert.equal(result.error.code, 'TIMEOUT');
   }
-  const result = await createWeatherService({ fetch: async () => ({ ok: false, status: 429 }) }).getWeather(location);
+  let forecastCalls = 0;
+  const result = await createWeatherService({ fetch: async url => {
+    if (url.includes('/v1/forecast')) forecastCalls++;
+    return { ok: false, status: 429 };
+  } }).getWeather(location);
   assert.equal(result.error.code, 'RATE_LIMITED');
+  assert.equal(forecastCalls, 1);
+});
+
+test('a transient forecast failure retries once for the selected city', async () => {
+  for (const failFirst of [
+    () => new Promise(() => {}),
+    () => Promise.reject(new Error('interrupted')),
+    () => Promise.resolve({ ok: false, status: 503 })
+  ]) {
+    const urls = [];
+    const service = createWeatherService({ now: () => modelTime, timeoutMs: 15, fetch: url => {
+      if (url.includes('/v1/air-quality')) return response(air());
+      urls.push(url);
+      return urls.length === 1 ? failFirst() : response(fixture());
+    } });
+    const fresh = await service.getWeather({ ...location, mode: 'manual' });
+    assert.equal(fresh.status, 'ready');
+    assert.equal(fresh.data.current.temperature, -2);
+    assert.equal(urls.length, 2);
+    assert.equal(urls[0], urls[1]);
+  }
+});
+
+test('a forecast for an inactive selection cannot retry', async () => {
+  let calls = 0;
+  const service = createWeatherService({ fetch: async url => {
+    if (url.includes('/v1/forecast')) calls++;
+    return { ok: false, status: 503 };
+  } });
+  const result = await service.getWeather(location, { shouldRetry: () => false });
+  assert.equal(result.error.code, 'SERVICE_UNAVAILABLE');
+  assert.equal(calls, 1);
 });
 
 test('model time ahead by more than 15 minutes is rejected, not relabeled with retrieval time', async () => {
@@ -91,4 +127,42 @@ test('exact administrative cities outrank same-name villages without a hardcoded
   assert.equal(cities[0].latitude, 39.9075);
   rows.splice(0, rows.length, { ...rows[0], name: '同名镇' });
   assert.equal((await service.searchCities('同名镇')).length, 1, 'settlements remain searchable when no administrative center matches');
+});
+
+
+test('reselecting a city shares its in-flight forecast but keeps the new selection retry alive', async () => {
+  let finishFirst, forecastCalls = 0, active = true;
+  const service = createWeatherService({ now: () => modelTime, fetch: url => {
+    if (url.includes('/v1/air-quality')) return Promise.resolve(response(air()));
+    forecastCalls++;
+    return forecastCalls === 1 ? new Promise(resolve => { finishFirst = resolve; }) : Promise.resolve(response(fixture()));
+  } });
+  const first = service.getWeather(location, { shouldRetry: () => active });
+  active = false;
+  const second = service.getWeather(location, { shouldRetry: () => true });
+  finishFirst({ ok: false, status: 503 });
+  assert.equal((await second).status, 'ready');
+  assert.equal((await first).status, 'ready');
+  assert.equal(forecastCalls, 2, 'one shared failed request and exactly one retry');
+});
+
+
+
+test('weather service retains safe HTTP failures and malformed JSON is not retried', async () => {
+  for (const status of [400, 429, 503]) {
+    let calls = 0;
+    const result = await createWeatherService({ fetch: async url => {
+      if (url.includes('/v1/forecast')) calls++;
+      return { ok: false, status };
+    } }).getWeather(location);
+    assert.equal(result.error.httpStatus, status);
+    assert.equal(calls, status === 503 ? 2 : 1);
+  }
+  let calls = 0;
+  const malformed = await createWeatherService({ fetch: async url => {
+    if (url.includes('/v1/forecast')) calls++;
+    return { ok: true, status: 200, json: async () => { throw new SyntaxError('private response'); } };
+  } }).getWeather(location);
+  assert.equal(malformed.error.code, 'INVALID_RESPONSE'); assert.equal(calls, 1);
+  assert.doesNotMatch(JSON.stringify(malformed), /private response/);
 });

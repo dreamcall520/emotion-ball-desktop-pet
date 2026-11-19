@@ -14,7 +14,7 @@ function fixture(t, { area = { x: 0, y: 0, width: 1000, height: 800 }, petBounds
   const handlers = new Map(), windows = [], changes = [], requests = [], layouts = [], errors = [], module = { exports: {} };
   let groupHidden = false, petVisible = true, layoutHook = () => {};
   let suppressed = false, persistFails = false;
-  const service = { searchCities: async () => [], getWeather(city) { const d = deferred(); requests.push({ city, ...d }); return d.promise; } };
+  const service = { searchCities: async () => [], getWeather(city, options) { const d = deferred(); requests.push({ city, options, ...d }); return d.promise; } };
   const mockedFs = Object.create(fs); mockedFs.renameSync = (...args) => { if (persistFails) throw Object.assign(Error('fixture storage unavailable'), { code: 'EACCES' }); return fs.renameSync(...args); };
   class Window extends EventEmitter {
     constructor(options) { super(); this.options = options; this.visible = false; this.dead = false; this.sent = []; this.opacity = 1;
@@ -363,4 +363,89 @@ test('weather diagnostics report provider failures by stage without city or quer
   await assert.rejects(f.invoke('search', 'private city'), { code: 'TIMEOUT' });
   assert.equal(f.errors.at(-1).context.stage, 'weather-search');
   const before = f.errors.length; await f.invoke('location'); assert.equal(f.errors.length, before);
+});
+
+
+test('city selection confirms its persistence before weather completes and failure retains the selected city', async t => {
+  const f = fixture(t); let confirmation;
+  const selected = f.invoke('city', cityA).then(value => { confirmation = value; });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(confirmation?.status, 'loading');
+  assert.equal(confirmation.city.name, '北京');
+  assert.equal(JSON.parse(fs.readFileSync(f.filePath)).city.mode, 'manual');
+  f.requests[0].resolve({ status: 'error', error: { code: 'TIMEOUT', message: '天气查询超时，稍后重试。' } });
+  await selected; await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.controller.getState().city.name, '北京');
+  assert.equal(f.controller.getState().error, '天气查询超时，稍后重试。');
+});
+
+
+test('forecast retries are bound to the current city/window lifecycle', async t => {
+  const f = fixture(t);
+  void f.invoke('city', cityA); void f.invoke('city', cityB);
+  assert.equal(f.requests[0].options?.shouldRetry?.(), false);
+  assert.equal(f.requests[1].options?.shouldRetry?.(), true);
+  f.controller.pause();
+  assert.equal(f.requests[1].options.shouldRetry(), false);
+  f.requests[0].resolve(report(cityA)); f.requests[1].resolve(report(cityB));
+});
+
+
+
+test('closing the city picker cancels a pending location without fetching or saving its late coordinates', async t => {
+  const location = deferred();
+  const f = fixture(t, { locationBridge: { locate: () => location.promise } });
+  f.controller.openCity();
+  const pending = f.invoke('location');
+  f.invoke('resize', { expanded: true, picker: false, height: 400 });
+  location.resolve({ latitude: 40, longitude: 116, accuracy: 10, name: 'late city' });
+  assert.equal((await pending).cancelled, true);
+  assert.equal(f.requests.length, 0);
+  assert.equal(JSON.parse(fs.readFileSync(f.filePath)).city, null);
+});
+
+
+
+test('real weather preload passes picker cancellation to main without cancelling a normal forecast', async t => {
+  const location = deferred();
+  const f = fixture(t, { requireLocationConsent: true, locationBridge: { locate: () => location.promise } });
+  let api; const calls = [];
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../weather-preload.js'), 'utf8'), {
+    require: () => ({ contextBridge: { exposeInMainWorld(_name, value) { api = value; } },
+      ipcRenderer: { invoke(channel, value) {
+        calls.push({ channel, value }); return Promise.resolve(f.handlers.get(channel)(f.event(), value));
+      } } })
+  });
+  f.controller.openCity();
+  const pending = api.useLocation(true);
+  await api.resize({ expanded: true, picker: false, height: 400, latitude: 123, secret: 'drop' });
+  const sent = calls.at(-1).value;
+  assert.equal(sent.picker, false); assert.equal(sent.secret, undefined); assert.equal(sent.latitude, undefined);
+  location.resolve({ latitude: 40, longitude: 116, accuracy: 10, name: 'late city' });
+  assert.equal((await pending).cancelled, true); assert.equal(f.requests.length, 0);
+  await f.invoke('city', cityA);
+  await api.resize({ expanded: true, picker: false, height: 400 });
+  f.requests[0].resolve(report(cityA)); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.controller.getState().status, 'ready', 'closing location does not cancel the normal weather refresh');
+  assert.throws(() => f.invoke('resize', { expanded: true, picker: 'false' }), /状态不合法/);
+});
+
+
+
+test('weather failure reporting preserves bounded stage/status without promoting stale location failures', async t => {
+  const f = fixture(t);
+  await f.invoke('city', cityA);
+  f.requests[0].resolve({ status: 'error', error: { code: 'SERVICE_UNAVAILABLE', message: '天气服务暂不可用。', httpStatus: 503 } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.errors.at(-1).error.code, 'SERVICE_UNAVAILABLE');
+  assert.equal(f.errors.at(-1).context.stage, 'weather-refresh');
+  assert.equal(f.errors.at(-1).context.httpStatus, 503);
+  let rejectLocation;
+  const pendingLocation = new Promise((_, reject) => { rejectLocation = reject; });
+  const cancelled = fixture(t, { locationBridge: { locate: () => pendingLocation } });
+  const pending = cancelled.invoke('location');
+  cancelled.invoke('resize', { expanded: true, picker: false });
+  rejectLocation(Object.assign(new Error('timeout'), { code: 'LOCATION_TIMEOUT' }));
+  assert.equal((await pending).cancelled, true);
+  assert.equal(cancelled.errors.length, 0, 'a location discarded by its owner is not reported as a user failure');
 });

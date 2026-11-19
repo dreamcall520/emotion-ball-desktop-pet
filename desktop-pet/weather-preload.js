@@ -9,7 +9,11 @@ contextBridge.exposeInMainWorld('qiuqiuWeather', {
   search: query => ipcRenderer.invoke('weather:search', query),
   selectCity: city => ipcRenderer.invoke('weather:city', city),
   useLocation: () => ipcRenderer.invoke('weather:location'),
-  resize: size => ipcRenderer.invoke('weather:resize', size),
+  resize: size => ipcRenderer.invoke('weather:resize', typeof size === 'boolean' ? size : {
+    expanded: size?.expanded === true,
+    ...(Number.isFinite(size?.height) ? { height: size.height } : {}),
+    ...(typeof size?.picker === 'boolean' ? { picker: size.picker } : {})
+  }),
   collapse: value => ipcRenderer.invoke('weather:collapse', { reducedMotion: value?.reducedMotion === true }),
   onState: callback => {
     const listener = (_event, state) => callback(state);

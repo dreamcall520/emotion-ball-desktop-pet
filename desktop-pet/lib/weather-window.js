@@ -38,7 +38,7 @@ function weatherExpandedBounds(pet, area, size, obstacles = [], previous = null)
 }
 function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, getPetWindow, getObstacles = () => [], getStackAnchor = () => null, getCollectionWindow = () => null, getBubbleBounds = () => null, getPresentation = () => null, getSuppressed = () => false, getAppearance = () => 'system', getReducedMotion = () => false, locationBridge = createLocationBridge(), onLayout = () => {}, onChange = () => {}, onError = () => {}, alwaysOnTop = true }) {
   const service = createWeatherService({ fetch });
-  let win = null, enabled = false, timer = null, revision = 0, city = null, state = { status: 'unconfigured', city: null }, suspended = false;
+  let win = null, enabled = false, timer = null, revision = 0, locationRevision = 0, city = null, state = { status: 'unconfigured', city: null }, suspended = false;
   let cardVisible = true, groupTransitionMode = null, groupEpoch = 0, ready = false, cityRequested = false, explicitOpen = false;
   let size = { width: 128, height: 32 }, topmost = alwaysOnTop, expandedAnchor = null, requestedBounds = null;
   let closing = null, collapseEpoch = 0, collapseOverlay = null;
@@ -56,7 +56,7 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
   async function boundedPaint(promise, label) { let timer; try { return await Promise.race([promise, new Promise((_,reject) => { timer = setTimeout(() => reject(Error('天气收起'+label+'超时')), 600); })]); } finally { clearTimeout(timer); } }
   function overlay() { return collapseOverlay ||= createQuotaCardTransitionWindow({ BrowserWindow, ipcMain, getAlwaysOnTop: () => topmost, onError }); }
   function cancelCollapse() { collapseEpoch++; closing = null; if (win && !win.isDestroyed()) win.setOpacity?.(1); collapseOverlay?.hide(); }
-  function resetExpanded() { cancelCollapse(); explicitOpen = false; cityRequested = false; size = { width: 128, height: 32 }; expandedAnchor = null; win?.webContents.send('weather:collapse'); }
+  function resetExpanded() { locationRevision++; cancelCollapse(); explicitOpen = false; cityRequested = false; size = { width: 128, height: 32 }; expandedAnchor = null; win?.webContents.send('weather:collapse'); }
   try { const saved = JSON.parse(fs.readFileSync(filePath, 'utf8')); city = validCity(saved.city) ? saved.city : null; enabled = saved.enabled === true; cardVisible = saved.cardVisible !== false; } catch (error) { if (error.code !== 'ENOENT') onError(error, { stage: 'weather-storage' }); }
   function persist() { fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 }); const temp = filePath + '.tmp'; fs.writeFileSync(temp, JSON.stringify({ enabled, city, cardVisible }), { mode: 0o600 }); fs.renameSync(temp, filePath); }
   const cacheFile = filePath + '.cache';
@@ -171,10 +171,11 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
   async function refresh(force = false) {
     if (!enabled || suspended || !city) return publish();
     const token = revision, requested = city;
+    const isCurrent = () => token === revision && enabled && !suspended;
     state = { ...state, city, status: 'loading', error: null }; publish();
     try {
-      const result = await service.getWeather(requested, { force });
-      if (token !== revision || !enabled || suspended) return state;
+      const result = await service.getWeather(requested, { force, shouldRetry: isCurrent });
+      if (!isCurrent()) return state;
       if (result.error?.code && result.error.code !== 'DATA_OLD') onError({ code: result.error.code }, { stage: 'weather-refresh', httpStatus: result.error.httpStatus });
       const data = result.data;
       const previous = state;
@@ -182,14 +183,17 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
         : { status: 'error', city: requested, error: result.error?.message || result.error || '天气暂时无法获取' };
       if (!data && previous.current && previous.city?.latitude === requested.latitude && previous.city?.longitude === requested.longitude) state = { ...previous, city: requested, status: 'stale', error: state.error };
       if (state.status === 'ready') saveCache();
-    } catch (error) { if (token !== revision || !enabled || suspended) return state; state = { ...state, status: state.current ? 'stale' : 'error', error: '天气更新失败，请稍后重试' }; onError(error, { stage: 'weather-refresh', httpStatus: error?.httpStatus }); }
+    } catch (error) { if (!isCurrent()) return state; state = { ...state, status: state.current ? 'stale' : 'error', error: '天气更新失败，请稍后重试' }; onError(error, { stage: 'weather-refresh', httpStatus: error?.httpStatus }); }
     return publish();
   }
-  async function select(value, mode = 'manual', waitForWeather = true) {
+  async function select(value, mode = 'manual') {
     if (!validCity(value)) throw new Error('请选择有效城市');
     const previous = city; city = { name: value.name.trim(), latitude: value.latitude, longitude: value.longitude, ...(typeof value.displayName === 'string' && value.displayName.trim() && value.displayName.length <= 100 ? { displayName: value.displayName.trim() } : {}), timezone: typeof value.timezone === 'string' ? value.timezone : 'auto', mode };
     try { persist(); } catch (error) { city = previous; throw error; }
-    revision++; state = { status: 'loading', city }; if (waitForWeather) return refresh(); void refresh(); return publish();
+    revision++;
+    state = { status: 'loading', city };
+    void refresh();
+    return publish();
   }
   const trusted = event => Boolean(win && !win.isDestroyed() && event.sender === win.webContents && event.senderFrame === win.webContents.mainFrame && event.senderFrame.url === pathToFileURL(path.join(__dirname, '../weather.html')).href);
   for (const [channel, handler] of Object.entries({
@@ -202,19 +206,23 @@ function createWeatherWindow({ BrowserWindow, ipcMain, screen, fetch, filePath, 
     'weather:city': value => select(value),
     'weather:location': async value => {
       if (value !== undefined && value !== null) throw new Error('定位仅接受系统位置');
-      const token = revision;
+      if (!enabled || suspended || !win?.isVisible()) return { cancelled: true };
+      const token = revision, locationToken = locationRevision;
       try {
-        ensureWindow().show(); win.focus?.();
+        win.focus?.();
         const coordinates = await locationBridge.locate();
-        if (token !== revision || !enabled || !win || win.isDestroyed()) return { cancelled: true };
-        return await select({ ...coordinates, name: coordinates.name || '当前位置', displayName: coordinates.locationLabel || coordinates.name }, 'current', false);
+        if (token !== revision || locationToken !== locationRevision || !enabled || !win?.isVisible()) return { cancelled: true };
+        return await select({ ...coordinates, name: coordinates.name || '当前位置', displayName: coordinates.locationLabel || coordinates.name }, 'current');
       } catch (error) {
-        if (token === revision && enabled && !['LOCATION_DENIED', 'LOCATION_RESTRICTED', 'LOCATION_SERVICES_DISABLED', 'LOCATION_BUSY', 'CANCELLED'].includes(error.code)) onError(error, { stage: 'weather-location', ...error.diagnostic });
+        if (token !== revision || locationToken !== locationRevision || !enabled || !win?.isVisible()) return { cancelled: true };
+        if (!['LOCATION_DENIED', 'LOCATION_RESTRICTED', 'LOCATION_SERVICES_DISABLED', 'LOCATION_BUSY', 'CANCELLED'].includes(error.code)) onError(error, { stage: 'weather-location', ...error.diagnostic });
         return { locationError: { code: error.code || 'LOCATION_UNAVAILABLE', message: error.message } };
       }
     },
     'weather:resize': value => {
+      if (value?.picker !== undefined && typeof value.picker !== 'boolean') throw new Error('天气选择器状态不合法');
       const wasExpanded = size.width === 390, expanded = value === true || value?.expanded === true;
+      if (!expanded || value?.picker === false) locationRevision++;
       if (expanded && closing) cancelCollapse();
       if (!expanded) explicitOpen = false;
       const next = { width: expanded ? 390 : 128, height: expanded ? Math.max(210, Math.min(720, Math.round(Number.isFinite(value?.height) ? value.height : 620))) : 32 };

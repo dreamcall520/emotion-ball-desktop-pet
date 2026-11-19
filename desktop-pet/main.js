@@ -2819,6 +2819,14 @@ async function finishSmokeTest() {
     );
     if (!companionReady) throw new Error('轻陪伴活动感知尚未接入');
 
+    if (IS_SMOKE_TEST && process.env.PET_SMOKE_WEATHER_ONLY === '1') {
+      await require('./scripts/verify-weather-integration').verifyWeatherIntegration({
+        app, pet: petWindow, weather: weatherWindow, net, feedback: feedbackReporting,
+        getSettings: () => structuredClone(settings), getProfile: () => app.getPath('userData')
+      });
+      app.quit(); return;
+    }
+
     if(process.env.PET_SMOKE_SOFT_ORB_ONLY==='1'){
       await require('./scripts/verify-soft-orb-integration').verifySoftOrb({pet:petWindow,monitor:activityMonitor,
         save:saveCustomization,getSettings:()=>settings,readSettings:()=>loadSettings(settingsFile),command:sendCommand,setSize:setPetSize,
@@ -4209,6 +4217,15 @@ async function bootstrap() {
     const smokeDirectory = app.commandLine.getSwitchValue('user-data-dir');
     if (!smokeDirectory || fs.realpathSync(app.getPath('userData')) !== fs.realpathSync(smokeDirectory)) {
       throw new Error(`冒烟检查必须使用独立设置目录：指定=${smokeDirectory} 实际=${app.getPath('userData')}`);
+    }
+    if (process.env.PET_SMOKE_WEATHER_ONLY === '1') {
+      const qaRootPath = process.env.PET_WEATHER_QA_ROOT;
+      if (!qaRootPath || !path.isAbsolute(qaRootPath)) throw new Error('天气检查必须使用专属隔离目录');
+      const qaRoot = fs.realpathSync(qaRootPath);
+      if (!/^qiuqiu-weather-qa-[\w-]+$/.test(path.basename(qaRoot)) ||
+          fs.realpathSync(app.getPath('userData')) !== path.join(qaRoot, 'profile')) {
+        throw new Error('天气检查不能使用正式资料目录或目录链接');
+      }
     }
     process.stdout.write('PET_USER_DATA_OK\n');
   }
